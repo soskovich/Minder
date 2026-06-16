@@ -477,10 +477,10 @@ function setPeriod(p){ SET.insPeriod=p; save(); renderDash(); renderIns(); }
 // geaggregeerde totalen over de actieve periode (gedeeld door dashboard + inzichten)
 function ptot(){
   const pm=periodMonths(), list=periodTx();
-  let income=0; for(const m of pm) income+=totals(m).income;
+  let income=0, est=false; for(const m of pm){ const tm=totals(m); income+=tm.income; if(tm.incomeBasis==='basisnorm'||tm.incomeBasis==='onbekend') est=true; }
   let spend=0; const byCat={};
   for(const t of list){ const c=catOf(t), meta=CATS[c]; byCat[c]=(byCat[c]||0)+t.amount; if(meta.type==='expense'&&t.amount<0) spend+=-t.amount; }
-  return {list, income, spend, budget:income*SET.limit/100, byCat, months:pm.length};
+  return {list, income, spend, budget:income*SET.limit/100, byCat, months:pm.length, incomeEst:est};
 }
 // cirkeldiagram + legenda over een byCat-map
 function renderDonut(byCat){
@@ -586,6 +586,17 @@ function renderLiquidity(){
 /* ----- BUDGET vs WERKELIJK + variantieanalyse ----- */
 function totalBudget(){ const B=SET.budgets||{}; return Object.keys(B).reduce((s,k)=>s+(+B[k]||0),0); }
 function setCatBudget(k,val){ SET.budgets=SET.budgets||{}; if(val===''||+val<=0) delete SET.budgets[k]; else SET.budgets[k]=+val; save(); renderIns(); } // settings niet herrenderen (focus)
+// stel maandbudget per categorie voor op basis van historische uitgaven (mediaan per maand)
+function suggestBudgets(){
+  const ms=months(); SET.budgets=SET.budgets||{};
+  for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense' || k==='overig') continue;
+    const vals=ms.map(m=>catSpendMap(m)[k]||0).filter(v=>v>0).sort((a,b)=>a-b);
+    if(!vals.length) continue;
+    const med=vals[Math.floor(vals.length/2)];
+    SET.budgets[k]=Math.max(Math.round(med/5)*5,5);
+  }
+  save(); render();
+}
 function renderBudgetActual(m){
   const B=SET.budgets||{}; const setKeys=Object.keys(B).filter(k=>+B[k]>0 && CATS[k] && CATS[k].type==='expense');
   if(!setKeys.length){
@@ -670,16 +681,24 @@ function totals(m){
   let inc, basis;
   if(SET.autoIncome){
     if(income>0){ inc=income; basis='gedetecteerd'; }
-    else { inc=avgIncome(); basis = inc>0?'gemiddeld':'onbekend'; }
+    else { inc=baseIncome(); basis = inc>0?'basisnorm':'onbekend'; }
   } else { inc=SET.income||0; basis='handmatig'; }
   const budget = inc*SET.limit/100;
   return {list,income:inc,detectedIncome:income,spend,internal,byCat,budget,incomeBasis:basis};
 }
-// gemiddeld maandinkomen over maanden mét gedetecteerd inkomen (fallback)
-let _avgIncCache=null;
+// mediaan maandinkomen (robuuster dan gemiddelde tegen incidentele pieken zoals vakantiegeld)
 function avgIncome(){
-  const vals=months().map(m=>{let s=0;for(const t of txOfMonth(m)){if(CATS[catOf(t)].type==='income')s+=Math.max(t.amount,0);}return s;}).filter(v=>v>0);
-  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+  const vals=months().map(m=>{let s=0;for(const t of txOfMonth(m)){if(CATS[catOf(t)].type==='income')s+=Math.max(t.amount,0);}return s;}).filter(v=>v>0).sort((a,b)=>a-b);
+  return vals.length?vals[Math.floor(vals.length/2)]:0;
+}
+// basis-inkomen = conservatieve norm: mediaan van de ONDERSTE helft van je maandinkomens.
+// Zo telt een incidentele piek (vakantiegeld, bonus) niet mee en val je terug op je structurele inkomen.
+function baseIncome(){
+  if(!SET.autoIncome) return +SET.income||0;
+  const vals=months().map(m=>{let s=0;for(const t of txOfMonth(m)){if(CATS[catOf(t)].type==='income')s+=Math.max(t.amount,0);}return s;}).filter(v=>v>0).sort((a,b)=>a-b);
+  if(!vals.length) return 0;
+  const lower=vals.slice(0,Math.ceil(vals.length/2));
+  return Math.round(lower[Math.floor(lower.length/2)]);
 }
 // vaste/variabele splitsing over een maand
 function splitFixedVar(m){ let fixed=0,vari=0;
@@ -697,7 +716,7 @@ function forecastModel(){
   const agg=ms.map(monthAgg);
   const last=agg.slice(-3); const avg=k=>last.reduce((s,a)=>s+a[k],0)/last.length;
   const vSlope=regSlope(agg.map(a=>a.vari)), sSlope=regSlope(agg.map(a=>a.spend));
-  const fInc=avg('income'), fFixed=avg('fixed'), fVar=Math.max(avg('vari')+vSlope,0);
+  const fInc=baseIncome()||avg('income'), fFixed=avg('fixed'), fVar=Math.max(avg('vari')+vSlope,0);
   return {agg, fInc, fFixed, fVar, fNet:fInc-fFixed-fVar, vSlope, sSlope, next:nextMonths(ms[ms.length-1],6)};
 }
 // ===== SALDO & LIQUIDITEIT =====
@@ -802,6 +821,43 @@ function renderEmpty(){
   renderSet();
 }
 
+/* ----- DASHBOARD KPI-WIDGETS (compact, met drill-down naar Inzichten) ----- */
+function renderLiquidityKPI(){
+  const {sum,missing}=totalBalance();
+  const L=liquidityDaily(SET.liqDays||60); const buffer=+SET.buffer||0;
+  const troughLow=buffer>0&&L.trough.bal<buffer;
+  return `<div class="card">
+    <div class="row"><b>🏦 Saldo & liquiditeit</b><span class="small muted" onclick="go('ins')" style="cursor:pointer;color:var(--teal)">details ›</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px">
+      <div><div style="font-size:28px;font-weight:800">${euro(sum)}</div><div class="small muted">huidig saldo${missing>0?' ⚠️':''}</div></div>
+      <div style="text-align:right"><div style="font-weight:700;color:${L.net>=0?'var(--teal)':'var(--red)'}">${L.net>=0?'+':''}${euro0(L.net)}/mnd</div><div class="small muted">verwacht netto</div></div>
+    </div>
+    <div class="small muted" style="margin-top:8px">Laagste punt komende ${SET.liqDays||60} dgn: <b style="color:${troughLow?'var(--red)':'var(--txt)'}">${euro0(L.trough.bal)}</b> op ${L.trough.date.getDate()} ${MNAMES[L.trough.date.getMonth()]}.${missing>0?' Vul je saldo in voor een kloppend beeld.':''}</div>
+  </div>`;
+}
+function renderWeekVarKPI(){
+  const m=curMonth, sv=splitFixedVar(m), de=daysElapsed(m), bud=totals(m).budget;
+  const perDay=sv.vari/(de.elapsed||1);
+  const autoDay=Math.max(bud-sv.fixed,0)/de.dim, userDay=+SET.dailyVarBudget||0, tgtDay=userDay>0?userDay:autoDay;
+  const wk=perDay*7, tgt=tgtDay*7, col=wk<=tgt?'var(--green)':wk<=tgt*1.2?'var(--amber)':'var(--red)';
+  return `<div class="card">
+    <div class="row"><b>💸 Variabele uitgave per week</b><span class="small muted" onclick="go('ins')" style="cursor:pointer;color:var(--teal)">details ›</span></div>
+    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:28px;font-weight:800;color:${col}">${euro(wk)}</div><div class="small muted">gem./week · ${userDay>0?'doel':'richtlijn'} ${euro(tgt)}</div></div>
+    <div class="bar-track" style="margin:10px 0 2px"><div class="bar-fill" style="width:${Math.min(wk/(tgt||1)*100,100)}%;background:${col}"></div></div>
+  </div>`;
+}
+function renderBudgetKPI(m){
+  const catB=totalBudget(), t=totals(m); const useCat=catB>0; const budget=useCat?catB:t.budget;
+  const actual=t.spend, pct=budget>0?Math.round(actual/budget*100):0;
+  const col=pct<=85?'var(--green)':pct<=100?'var(--amber)':'var(--red)';
+  const basisTxt=useCat?'categoriebudget':SET.limit+'%-norm';
+  return `<div class="card">
+    <div class="row"><b>📊 Uitgaven vs budget</b><span class="small muted" onclick="go('ins')" style="cursor:pointer;color:var(--teal)">details ›</span></div>
+    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:28px;font-weight:800;color:${col}">${pct}%</div><div class="small muted">${euro0(actual)} van ${euro0(budget)} · ${basisTxt}</div></div>
+    <div class="bar-track" style="margin:10px 0 2px"><div class="bar-fill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div>
+  </div>`;
+}
+
 /* ----- DASHBOARD (periode-gestuurd) ----- */
 function renderDash(){
   const p=SET.insPeriod||'month'; const isM=p==='month';
@@ -831,33 +887,28 @@ function renderDash(){
           <div class="lab">van je ${SET.limit}%-budget</div>
         </div>
       </div>
-      <div class="small" style="margin-top:6px;color:${over?'var(--red)':'var(--mut)'}">
-        ${esc(periodLabel())}${n>1?' · '+n+' mnd':''} — ${over? '⚠️ '+euro(-left)+' boven budget' : '✅ '+euro(left)+' onder budget'}
+      <div class="small center" style="margin-top:8px">
+        <div>Bestedingsruimte (${SET.limit}%): <b>${euro(t.budget)}</b></div>
+        <div style="color:${over?'var(--red)':'var(--mut)'};margin-top:2px">${over? '⚠️ '+euro(-left)+' boven budget' : '✅ nog '+euro(left)+' te besteden'}</div>
       </div>
     </div>
     <div class="kpis">
-      <div class="kpi"><div class="v" style="color:var(--green)">${euro0(t.income)}</div><div class="l">Inkomen</div></div>
+      <div class="kpi"><div class="v" style="color:var(--green)">${euro0(t.income)}</div><div class="l">Inkomen${t.incomeEst?' (schatting)':''}</div></div>
       <div class="kpi"><div class="v">${euro0(t.spend)}</div><div class="l">Uitgegeven</div></div>
       <div class="kpi"><div class="v" style="color:${savedPct>=30?'var(--teal)':'var(--amber)'}">${savedPct}%</div><div class="l">Bespaard</div></div>
     </div>
-    ${n>1?`<div class="small muted center" style="margin-top:8px">Gemiddeld ${euro0(t.spend/n)}/mnd uitgegeven van ${euro0(t.income/n)}/mnd</div>`:''}
+    ${t.incomeEst?`<div class="small muted center" style="margin-top:8px">ℹ️ Inkomen is een schatting (basisnorm uit je terugkerende salaris). Pas je vast inkomen aan bij Instellingen.</div>`
+      :n>1?`<div class="small muted center" style="margin-top:8px">Gemiddeld ${euro0(t.spend/n)}/mnd uitgegeven van ${euro0(t.income/n)}/mnd</div>`:''}
   </div>
 
-  ${renderLiquidity()}
-
+  ${renderBudgetKPI(curMonth)}
+  ${renderLiquidityKPI()}
+  ${isM?renderWeekVarKPI():''}
+  ${renderDonut(t.byCat)}
   ${isM?`<div class="card">
     <h3 style="font-size:15px;margin-bottom:12px">🤖 Signalen deze maand</h3>
     ${coachTips(curMonth).slice(0,3).map(c=>`<div class="coach ${c.t}"><div class="ic">${c.ic}</div><div class="tx">${c.m}</div></div>`).join('')||'<div class="muted small">Nog te weinig data voor tips.</div>'}
-  </div>`:''}
-
-  ${isM ? renderDailyVar(curMonth, totals(curMonth).budget) : renderDailyRolling()}
-
-  ${renderDonut(t.byCat)}
-
-  <div class="card">
-    <div class="row" style="margin-bottom:10px"><b>Top uitgaven</b><span class="small muted" onclick="go('ins')" style="cursor:pointer;color:var(--teal)">details ›</span></div>
-    ${topCats(t,6)}
-  </div>`;
+  </div>`:''}`;
 }
 
 function topCats(t,n){
@@ -1387,7 +1438,9 @@ function renderIns(){
     + (p==='month' ? renderBudgetActual(curMonth) + renderVariance(curMonth) : '')
     + compare
     + renderForecast()
+    + renderLiquidity()
     + renderFixedVariable(pTx, pInc)
+    + (p==='month' ? renderDailyVar(curMonth, totals(curMonth).budget) : '')
     + renderDailyRolling()
     + renderWeekdayPattern(pTx)
     + renderCatBreak(pTx)
@@ -1451,6 +1504,7 @@ function renderSet(){
   <div class="card">
     <div class="row" style="margin-bottom:4px"><b>📊 Maandbudget per categorie</b><span class="small muted">${euro0(totalBudget())} totaal</span></div>
     <div class="small muted" style="margin-bottom:10px">Stel per categorie een maandbudget in. Op Inzichten meet je je werkelijke uitgaven hiertegen, met variantieanalyse.</div>
+    <button class="btn sec" style="margin-bottom:12px" onclick="if(confirm('Maandbudget per categorie voorstellen op basis van je historische uitgaven? Bestaande budgetten worden overschreven.')){suggestBudgets();}">📈 Voorstel op basis van mijn historie</button>
     ${Object.entries(CATS).filter(([k,c])=>c.type==='expense').map(([k,c])=>`
       <div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)">
         <span style="font-size:13.5px">${c.icon} ${c.name}</span>
@@ -1490,7 +1544,7 @@ function renderSet(){
     <button class="btn sec" style="margin-bottom:8px" onclick="document.getElementById('file').click()">📂 Bestand toevoegen (MT940 of CSV)</button>
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (De gekoppelde map blijft bestaan.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">🗑️ Alle transacties wissen</button>
   </div>
-  <div class="center small muted" style="padding:8px 0 20px">Minder · v4.0 — multi-bank + automatische map-import · lokaal & privacyvriendelijk</div>`;
+  <div class="center small muted" style="padding:8px 0 20px">Minder · v5.0 — KPI-dashboard, prognose & budgetvoorstel · lokaal & privacyvriendelijk</div>`;
 }
 
 /* ----- recategorisatie-sheet ----- */
@@ -1614,7 +1668,9 @@ load(); if(TX.length){ applyOwnAccounts(); buildAccMeta(); } render();
 
 /* ---------- PWA: service worker + installeren ---------- */
 if('serviceWorker' in navigator && location.protocol!=='file:'){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').then(reg=>{ try{reg.update();}catch(e){} }).catch(()=>{}));
+  let _reloading=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(_reloading)return; _reloading=true; location.reload(); });
 }
 window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferredPrompt=e; if(TX.length) renderSet(); });
 window.addEventListener('appinstalled',()=>{ deferredPrompt=null; if(TX.length) renderSet(); });
