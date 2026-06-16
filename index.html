@@ -261,6 +261,7 @@ const CATS={
   abonnement:{name:'Abonnementen',icon:'🔁',color:'#c084fc',type:'expense'},
   vakantie:{name:'Vakantie & reizen',icon:'✈️',color:'#38bdf8',type:'expense'},
   bankkosten:{name:'Bankkosten',icon:'🏦',color:'#94a3b8',type:'expense'},
+  persoonlijk:{name:'Persoonlijke overboeking',icon:'👤',color:'#fca5a5',type:'expense'},
   overig:{name:'Overig',icon:'💳',color:'#cbd5e1',type:'expense'},
   inkomen:{name:'Inkomen',icon:'💰',color:'#10b981',type:'income'},
   sparen:{name:'Sparen & beleggen',icon:'📈',color:'#2dd4bf',type:'internal'},
@@ -283,7 +284,8 @@ const RULES=[
   ['shopping',['BOL.COM','AMAZON','COOLBLUE','ZALANDO','FOTO LOOMAN','ACTION','MEDIA MARKT','WEHKAMP','ALIEXPRESS','PRIMARK','ZARA','H&M','C&A','BERSHKA','PULL&BEAR','NIKE','ADIDAS','HEMA','BIJENKORF','DOUGLAS','IKEA','TEMU','SHEIN','MARQT']],
   ['vakantie',['AIRBNB','BOOKING.COM','HOTEL','EXPEDIA','HOSTEL','RESORT']],
   ['bankkosten',['BASISPAKKET','ABN AMRO BANK N.V.','KOSTEN BETALINGSVERKEER']],
-  ['intern',['WESTERN UNION','VE SUMTER','PRIVEREKENING','VINCENT SUMTER','VINCENT ERNST SUMTER','ML MACNACK','SENT FROM N26','EIGEN REKENING','SUMTER VIA TIKKIE','AAB INZ TIKKIE','GELDMAAT','GEA, BETAALPAS','OPNAME','REVOLUT','WISE','N26']]
+  ['persoonlijk',['ML MACNACK']],
+  ['intern',['WESTERN UNION','VE SUMTER','PRIVEREKENING','VINCENT SUMTER','VINCENT ERNST SUMTER','SENT FROM N26','EIGEN REKENING','SUMTER VIA TIKKIE','AAB INZ TIKKIE','GELDMAAT','GEA, BETAALPAS','OPNAME','REVOLUT','WISE','N26']]
 ];
 
 /* ---------- state ---------- */
@@ -585,25 +587,47 @@ function renderLiquidity(){
 
 /* ----- BUDGET vs WERKELIJK + variantieanalyse ----- */
 function totalBudget(){ const B=SET.budgets||{}; return Object.keys(B).reduce((s,k)=>s+(+B[k]||0),0); }
+// is een categorie grotendeels een vaste last? (budget schaalt dan niet mee met inkomen)
+function isFixedCat(k){ return FIXED_CATS.has(k)||k==='vervoer'||k==='zorg'; }
+// dynamisch maandbudget: vaste categorieën constant, variabele categorieën geschaald naar de
+// bestedingsruimte (70%) van het inkomen van DEZE maand → meer inkomen = meer variabel budget.
+function effectiveBudgets(m){
+  const B=SET.budgets||{}, room=totals(m).budget;
+  let fixedB=0, varB=0;
+  for(const k in B){ if(+B[k]<=0) continue; if(isFixedCat(k)) fixedB+=+B[k]; else varB+=+B[k]; }
+  const varRoom=Math.max(room-fixedB,0), scaleV = varB>0 ? varRoom/varB : 0;
+  const out={};
+  for(const k in B){ if(+B[k]<=0) continue; out[k]= isFixedCat(k) ? +B[k] : Math.max(Math.round((+B[k])*scaleV/5)*5,0); }
+  return {out, room, fixedB:Math.round(fixedB), varRoom:Math.round(varRoom), scaleV};
+}
 function setCatBudget(k,val){ SET.budgets=SET.budgets||{}; if(val===''||+val<=0) delete SET.budgets[k]; else SET.budgets[k]=+val; save(); renderIns(); } // settings niet herrenderen (focus)
-// budgetvoorstel: verdeel je bestedingsruimte (limit% van inkomen) naar rato van je historische
-// uitgaven per categorie, met plafond zodat het TOTAAL je bestedingsruimte nooit overschrijdt.
+// budgetvoorstel met VASTE LASTEN als vertrekpunt:
+// - vaste lasten op historisch niveau (committed, niet schalen)
+// - resterende bestedingsruimte verdeeld over variabele lasten (die je zelf beïnvloedt)
 function suggestBudgets(){
-  const ms=months();
+  const ms=months(), med=a=>{const s=a.filter(x=>x>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
   const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
   const room = inc*SET.limit/100;
-  const weights={}; let totalHist=0;
-  for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense' || k==='overig') continue;
-    const vals=ms.map(m=>catSpendMap(m)[k]||0).filter(v=>v>0).sort((a,b)=>a-b);
-    if(!vals.length) continue;
-    const med=vals[Math.floor(vals.length/2)]; weights[k]=med; totalHist+=med;
+  const histF={}, histV={};
+  for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||k==='overig') continue;
+    const fArr=[], vArr=[];
+    for(const m of ms){ let f=0,v=0; for(const t of txOfMonth(m)){ if(catOf(t)===k && t.amount<0){ if(isFixed(t)) f+=-t.amount; else v+=-t.amount; } } fArr.push(f); vArr.push(v); }
+    histF[k]=med(fArr); histV[k]=med(vArr);
   }
-  if(!totalHist){ alert('Nog te weinig historie om een budget voor te stellen.'); return; }
-  // schaal omlaag als je historische uitgaven boven je bestedingsruimte liggen
-  const scale = (room>0 && totalHist>room) ? room/totalHist : 1;
+  const totalFixed=Object.values(histF).reduce((a,b)=>a+b,0);
+  const totalVar=Object.values(histV).reduce((a,b)=>a+b,0);
+  const remaining=Math.max(room-totalFixed,0);
+  const scaleV = totalVar>0 ? Math.min(remaining/totalVar,1) : 0;   // variabel ≤ historisch, past binnen ruimte
   SET.budgets={};
-  for(const k in weights){ SET.budgets[k]=Math.max(Math.round(weights[k]*scale/5)*5,5); }
+  for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||k==='overig') continue;
+    const b=(histF[k]||0)+(histV[k]||0)*scaleV; if(b>=1) SET.budgets[k]=Math.max(Math.round(b/5)*5,5);
+  }
   save(); render();
+  if(totalFixed>room){
+    alert(`Let op: je vaste lasten (€${Math.round(totalFixed)}) zijn al hoger dan je bestedingsruimte (€${Math.round(room)}). Variabele budgetten staan op het minimum. Je vaste lasten verlagen of je inkomen verhogen is nodig om binnen je ${SET.limit}%-norm te blijven.`);
+  } else {
+    alert(`Voorstel klaar. Vaste lasten ≈ €${Math.round(totalFixed)} (vast), resterende ruimte voor variabele uitgaven ≈ €${Math.round(remaining)}. Pas de variabele categorieën gerust handmatig aan.`);
+  }
 }
 function renderBudgetActual(m){
   const B=SET.budgets||{}; const setKeys=Object.keys(B).filter(k=>+B[k]>0 && CATS[k] && CATS[k].type==='expense');
@@ -613,13 +637,14 @@ function renderBudgetActual(m){
       <button class="btn sec" onclick="go('set')">Budget instellen</button></div>`;
   }
   const actual=catSpendMap(m);
+  const EB=effectiveBudgets(m); const B2=EB.out;   // dynamisch geschaald naar inkomen van deze maand
   const cats=[...new Set([...setKeys, ...Object.keys(actual).filter(k=>CATS[k]&&CATS[k].type==='expense')])];
-  const rows=cats.map(k=>({k,bud:+B[k]||0,act:actual[k]||0})).sort((a,b)=>(b.act-b.bud)-(a.act-a.bud));
-  const totB=setKeys.reduce((s,k)=>s+(+B[k]||0),0), totA=cats.reduce((s,k)=>s+(actual[k]||0),0);
+  const rows=cats.map(k=>({k,bud:+B2[k]||0,act:actual[k]||0})).sort((a,b)=>(b.act-b.bud)-(a.act-a.bud));
+  const totB=cats.reduce((s,k)=>s+(+B2[k]||0),0), totA=cats.reduce((s,k)=>s+(actual[k]||0),0);
   const totPct=totB?Math.round(totA/totB*100):0;
   return `<div class="card">
     <div class="row" style="margin-bottom:4px"><b>📊 Budget vs werkelijk</b><span class="small muted" onclick="go('set')" style="cursor:pointer;color:var(--teal)">budget ›</span></div>
-    <div class="small muted" style="margin-bottom:8px">${monthLabel(m)} · <b>${euro(totA)}</b> van ${euro(totB)} budget (${totPct}%)</div>
+    <div class="small muted" style="margin-bottom:8px">${monthLabel(m)} · <b>${euro(totA)}</b> van ${euro(totB)} budget (${totPct}%) · <span title="Dynamisch: variabel budget schaalt mee met je inkomen van deze maand">70%-ruimte ${euro0(EB.room)}</span></div>
     <div class="bar-track" style="height:11px"><div class="bar-fill" style="width:${Math.min(totPct,100)}%;background:${totA<=totB?'var(--green)':'var(--red)'}"></div></div>
     <div style="height:12px"></div>
     ${rows.map(r=>{const c=CATS[r.k];const pct=r.bud?Math.round(r.act/r.bud*100):(r.act>0?null:0);const over=r.bud&&r.act>r.bud;
@@ -643,7 +668,7 @@ function catDriver(m,k){
   return {n,sum,priorN,priorSum,avg:sum/(n||1),priorAvg:priorSum/(priorN||1),merch,biggest};
 }
 function renderVariance(m){
-  const B=SET.budgets||{}; const setKeys=Object.keys(B).filter(k=>+B[k]>0 && CATS[k]);
+  const B=effectiveBudgets(m).out; const setKeys=Object.keys(B).filter(k=>+B[k]>0 && CATS[k]);
   if(!setKeys.length) return '';
   const actual=catSpendMap(m);
   const over=setKeys.map(k=>({k,bud:+B[k],act:actual[k]||0,d:(actual[k]||0)-(+B[k])})).filter(x=>x.d>10 && x.d/x.bud>0.05).sort((a,b)=>b.d-a.d).slice(0,3);
@@ -731,20 +756,25 @@ function forecastModel(){
 function accBalance(acc){ const mb=(SET.manualBal||{})[acc]; if(mb!=null && mb!=='') return +mb; const a=ACCMETA[acc]; return a&&a.balance!=null?a.balance:null; }
 function totalBalance(){ let sum=0, missing=0; for(const acc of OWN){ const b=accBalance(acc); if(b==null) missing++; else sum+=b; } return {sum,missing}; }
 function setBal(acc,val){ SET.manualBal=SET.manualBal||{}; if(val===''||val==null) delete SET.manualBal[acc]; else SET.manualBal[acc]=+val; save(); renderDash(); } // settings niet herrenderen (focus behouden)
+// groeperingssleutel voor terugkerende posten (zelfde logica als recurringSchedule)
+function recurKey(t){ return (t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20); }
 // terugkerend schema: dag van de maand + mediaan bedrag per vaste last / inkomstenbron
 function recurringSchedule(){
   const map={};
   for(const t of TX){ const c=catOf(t), meta=CATS[c]; let type=null;
     if(meta.type==='income' && t.amount>0) type='income';
     else if(meta.type==='expense' && t.amount<0 && isFixed(t)) type='fixed'; else continue;
-    const key=(t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20);
+    const key=recurKey(t);
     if(!key) continue; (map[key]=map[key]||{name:t.name,cat:c,type,occ:[]});
     map[key].occ.push({day:+t.date.slice(8,10), amt:Math.abs(t.amount), ym:t.date.slice(0,7)});
   }
   const med=a=>{const s=[...a].sort((x,y)=>x-y);return s[Math.floor(s.length/2)];};
   const out=[];
-  for(const k in map){ const r=map[k]; if(new Set(r.occ.map(o=>o.ym)).size<2) continue;
-    out.push({name:r.name,cat:r.cat,type:r.type,day:med(r.occ.map(o=>o.day)),amount:med(r.occ.map(o=>o.amt)),count:r.occ.length}); }
+  for(const k in map){ const r=map[k];
+    // per maand de HOOFDbetaling (grootste bedrag) — zo telt de echte maandlast, niet losse kleine overboekingen
+    const byYm={}; for(const o of r.occ){ if(!byYm[o.ym] || o.amt>byYm[o.ym].amt) byYm[o.ym]=o; }
+    const mains=Object.values(byYm); if(mains.length<2) continue;
+    out.push({key:k,name:r.name,cat:r.cat,type:r.type,day:med(mains.map(o=>o.day)),amount:med(mains.map(o=>o.amt)),count:r.occ.length}); }
   return out.sort((a,b)=>a.day-b.day);
 }
 // dag-voor-dag liquiditeitscurve: vaste lasten/inkomen op hun datum + variabele burn
@@ -830,17 +860,144 @@ function renderEmpty(){
 }
 
 /* ----- DASHBOARD KPI-WIDGETS (compact, met drill-down naar Inzichten) ----- */
+// maand-liquiditeit: wat is deze maand NOG niet ontvangen/betaald?
+// "Due" = terugkerende post die deze kalendermaand nog niet in je transacties voorkomt
+// (niet op basis van de typische dag — die kan al gepasseerd zijn terwijl het bedrag nog moet komen).
+function monthLiquidity(){
+  const sched=recurringSchedule(), f=forecastModel();
+  const now=new Date(); const dom=now.getDate(); const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const daysLeft=Math.max(dim-dom,0);
+  const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  // wat is deze maand al langsgekomen?
+  const seen=new Set(); let incomeThisMonth=0;
+  for(const t of txOfMonth(ym)){ const k=recurKey(t); if(k) seen.add(k); if(CATS[catOf(t)].type==='income') incomeThisMonth+=Math.max(t.amount,0); }
+  const fixDueItems=sched.filter(s=>s.type==='fixed' && !seen.has(s.key));
+  const fixDue=fixDueItems.reduce((a,s)=>a+s.amount,0);
+  // verwacht inkomen dat nog moet komen = basisinkomen minus wat al deze maand binnen is
+  const incDue=Math.max(baseIncome()-incomeThisMonth,0);
+  const dailyVar=f?f.fVar/30:0; const varDue=Math.round(dailyVar*daysLeft);
+  const {sum,missing}=totalBalance(); const buffer=+SET.buffer||0;
+  const projected=Math.round(sum+incDue-fixDue-varDue);
+  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems};
+}
 function renderLiquidityKPI(){
-  const {sum,missing}=totalBalance();
-  const L=liquidityDaily(SET.liqDays||60); const buffer=+SET.buffer||0;
-  const troughLow=buffer>0&&L.trough.bal<buffer;
+  // liquiditeit is altijd 'vanaf nu vooruit' → alleen zinvol op de lopende/laatste maand
+  const ms=months(), latest=ms[ms.length-1];
+  if((SET.insPeriod||'month')==='month' && curMonth!==latest){
+    return `<div class="card"><div class="row"><b>🏦 Saldo & liquiditeit</b></div>
+      <div class="small muted" style="margin-top:8px">De liquiditeitsprognose geldt voor de <b>lopende maand</b> en kijkt vooruit vanaf vandaag. Je bekijkt nu ${esc(monthLabel(curMonth))}. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar nu ›</span></div></div>`;
+  }
+  const L=monthLiquidity();
+  const need = L.projected < (L.buffer>0?L.buffer:0);
+  const topUp = Math.max(L.shortfall, L.buffer>0?0:-L.projected);
+  const monthlySaving=monthlySavingTarget();
+  const saveOk = L.projected>=monthlySaving;
   return `<div class="card">
     <div class="row"><b>🏦 Saldo & liquiditeit</b><span class="small muted" onclick="go('ins')" style="cursor:pointer;color:var(--teal)">details ›</span></div>
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px">
-      <div><div style="font-size:28px;font-weight:800">${euro(sum)}</div><div class="small muted">huidig saldo${missing>0?' ⚠️':''}</div></div>
-      <div style="text-align:right"><div style="font-weight:700;color:${L.net>=0?'var(--teal)':'var(--red)'}">${L.net>=0?'+':''}${euro0(L.net)}/mnd</div><div class="small muted">verwacht netto</div></div>
+    <div style="font-size:28px;font-weight:800;margin:8px 0 2px">${euro(L.sum)}</div>
+    <div class="small muted">huidig saldo · prognose t/m einde maand (${L.daysLeft} dagen)${L.missing>0?' · ⚠️ vul ontbrekend saldo in':''}</div>
+    <div style="margin-top:10px">
+      <div class="row" style="padding:5px 0;cursor:pointer" onclick="openFixedDue()"><span class="small">🔒 Nog te betalen vaste lasten (rest mnd)</span><span class="small" style="font-weight:700;color:var(--teal)">${euro(L.fixDue)} ›</span></div>
+      <div class="row" style="padding:5px 0;cursor:pointer" onclick="openVarDue()"><span class="small">🛒 Verwachte variabele uitgaven (rest mnd)</span><span class="small" style="font-weight:700;color:var(--teal)">${euro(L.varDue)} ›</span></div>
+      ${L.incDue>0?`<div class="row" style="padding:5px 0"><span class="small">💰 Verwacht inkomen nog (rest mnd)</span><span class="small" style="font-weight:700;color:var(--green)">+${euro(L.incDue)}</span></div>`:''}
+      <div class="row" style="padding:6px 0 2px;margin-top:4px;border-top:1px solid var(--line)"><span class="small">= Verwacht over einde maand</span><span class="small" style="font-weight:800;color:${L.projected<0?'var(--red)':'var(--txt)'}">${euro(L.projected)}</span></div>
+      ${monthlySaving>0?`<div class="row" style="padding:3px 0"><span class="small">🎯 Beoogde spaarinleg (${savingLabel()})</span><span class="small" style="font-weight:700;color:var(--teal)">${euro(monthlySaving)}</span></div>`:''}
     </div>
-    <div class="small muted" style="margin-top:8px">Laagste punt komende ${SET.liqDays||60} dgn: <b style="color:${troughLow?'var(--red)':'var(--txt)'}">${euro0(L.trough.bal)}</b> op ${L.trough.date.getDate()} ${MNAMES[L.trough.date.getMonth()]}.${missing>0?' Vul je saldo in voor een kloppend beeld.':''}</div>
+    <div class="coach ${need?'bad':(saveOk?'good':'warn')}" style="margin-top:10px"><div class="ic">${need?'⚠️':(saveOk?'✅':'🟡')}</div><div class="tx">${
+      need ? `Niet toereikend: je komt uit op <b>${euro(L.projected)}</b>${L.buffer>0?` (onder je buffer van ${euro0(L.buffer)})`:''}. <b>Vul ±${euro0(topUp)} aan</b> om de maand door te komen.`
+      : saveOk ? `Voldoende: je houdt naar verwachting <b>${euro(L.projected)}</b> over — genoeg voor je spaarinleg van <b>${euro0(monthlySaving)}</b>${L.projected>monthlySaving?` plus ${euro0(L.projected-monthlySaving)} extra`:''}.`
+      : `Je komt de maand door (<b>${euro(L.projected)}</b> over), maar dat is minder dan je beoogde spaarinleg van <b>${euro0(monthlySaving)}</b> — je spaart deze maand ${euro0(monthlySaving-L.projected)} te weinig.`
+    }</div></div>
+  </div>`;
+}
+// drill-down: welke vaste lasten moeten nog betaald worden, en wanneer
+function openFixedDue(){
+  const L=monthLiquidity(); const items=(L.fixDueItems||[]).slice().sort((a,b)=>a.day-b.day);
+  const now=new Date(); const mo=now.getMonth(); const dim=new Date(now.getFullYear(),mo+1,0).getDate();
+  const fmt=day=>Math.min(day,dim)+' '+MNAMES[mo];
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:8px"><div style="font-size:24px">🔒</div><div style="font-weight:800;font-size:16px">Nog te betalen vaste lasten</div>
+      <div class="muted small">rest van ${MFULL[mo]} · ${items.length} post${items.length===1?'':'en'}</div>
+      <div style="font-size:22px;font-weight:800;margin:5px 0">${euro(L.fixDue)}</div></div>
+    ${items.length?items.map(s=>{const c=CATS[s.cat]||CATS.overig;return `<div class="tx" style="cursor:default">
+      <div class="ava" style="background:${c.color}22">${c.icon}</div>
+      <div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">${fmt(s.day)} · ${c.name}</div></div>
+      <div class="amt neg">−${euro(s.amount)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Alle vaste lasten van deze maand zijn al betaald.</div>'}`;
+  $('#sheetBg').classList.add('show');
+}
+// drill-down: verwachte variabele uitgaven onderverdeeld per categoriebudget
+function openVarDue(){
+  const L=monthLiquidity(), m=curMonth, EB=effectiveBudgets(m), B=EB.out;
+  let weights={}, totalW=0;
+  for(const k in B){ if(!isFixedCat(k) && +B[k]>0){ weights[k]=+B[k]; totalW+=+B[k]; } }
+  if(!totalW){ const ms=months();   // fallback: historische variabele uitgave per categorie
+    for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||isFixedCat(k)||k==='overig') continue;
+      let s=0,n=0; for(const mm of ms){ let v=0; for(const t of txOfMonth(mm)){ if(catOf(t)===k && t.amount<0 && !isFixed(t)) v+=-t.amount; } if(v>0){s+=v;n++;} }
+      if(n){ weights[k]=s/n; totalW+=s/n; } }
+  }
+  const rows=Object.keys(weights).map(k=>({k,bud:weights[k],amt: totalW? L.varDue*weights[k]/totalW : 0})).sort((a,b)=>b.amt-a.amt);
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:8px"><div style="font-size:24px">🛒</div><div style="font-weight:800;font-size:16px">Verwachte variabele uitgaven</div>
+      <div class="muted small">rest van de maand · verdeeld naar categoriebudget</div>
+      <div style="font-size:22px;font-weight:800;margin:5px 0">${euro(L.varDue)}</div></div>
+    ${rows.length?rows.map(r=>{const c=CATS[r.k];return `<div class="tx" style="cursor:default">
+      <div class="ava" style="background:${c.color}22">${c.icon}</div>
+      <div class="info"><div class="nm">${c.name}</div><div class="cat">budget ${euro0(r.bud)}/mnd</div></div>
+      <div class="amt neg">${euro(r.amt)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Stel variabele categoriebudgetten in (Instellingen) voor een onderverdeling.</div>'}`;
+  $('#sheetBg').classList.add('show');
+}
+// ===== SPAREN & BUFFER (30%-spaardeel → buffer van Nx maanduitgave) =====
+// beoogde maandelijkse spaarinleg — instelbaar: automatisch (inkomen − bestedingsruimte), vast bedrag, of %
+function monthlySavingTarget(){
+  const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
+  const mode = SET.savingMode||'auto';
+  if(mode==='amount') return +SET.savingAmount||0;
+  if(mode==='percent') return inc*(+SET.savingPercent||0)/100;
+  return Math.max(inc - inc*SET.limit/100, 0);
+}
+function savingLabel(){ const m=SET.savingMode||'auto';
+  if(m==='amount') return 'vast bedrag'; if(m==='percent') return (+SET.savingPercent||0)+'% van inkomen';
+  return (100-SET.limit)+'% van inkomen'; }
+function savingsModel(){
+  const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
+  const room = inc*SET.limit/100;
+  const monthlySaving = monthlySavingTarget();
+  const ms=months(); const med=a=>{const s=a.filter(v=>v>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
+  const avgSpend=med(ms.map(m=>totals(m).spend));
+  const avgFixed=med(ms.map(m=>splitFixedVar(m).fixed));
+  const avgVar=med(ms.map(m=>splitFixedVar(m).vari));
+  // flexibel bufferdoel
+  const basis=SET.bufferBasis||'spend';
+  const mult=+SET.bufferMonths||6;
+  let baseVal, baseLabel;
+  if(basis==='income'){ baseVal=inc; baseLabel='inkomen'; }
+  else if(basis==='fixed'){ baseVal=avgFixed; baseLabel='vaste lasten'; }
+  else if(basis==='variable'){ baseVal=avgVar; baseLabel='variabele lasten'; }
+  else { baseVal=avgSpend; baseLabel='maanduitgave'; }
+  const goal = basis==='amount' ? (+SET.bufferAmount||0) : baseVal*mult;
+  const {sum:cur,missing}=totalBalance();
+  const pct=goal>0?Math.min(cur/goal*100,100):0;
+  const toGo=Math.max(goal-cur,0);
+  const monthsLeft= monthlySaving>0? toGo/monthlySaving : 0;
+  return {inc,room,monthlySaving,avgSpend,avgFixed,avgVar,basis,mult,baseVal,baseLabel,goal,cur,missing,pct,toGo,monthsLeft};
+}
+function renderSavings(){
+  const S=savingsModel(); if(!S.inc) return '';
+  return `<div class="card">
+    <div class="row"><b>💰 Sparen & buffer</b><span class="small muted" onclick="go('set')" style="cursor:pointer;color:var(--teal)">doel ›</span></div>
+    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:24px;font-weight:800;color:var(--teal)">${euro0(S.monthlySaving)}<span style="font-size:13px;font-weight:600">/mnd</span></div><div class="small muted" onclick="go('set')" style="cursor:pointer">beoogde spaarinleg (${savingLabel()}) ›</div></div>
+    <div class="goal-row" style="margin-top:12px"><span class="muted">Bufferdoel ${S.basis==='amount'?'(vast bedrag)':`${S.mult}× gem. ${S.baseLabel} (${euro0(S.baseVal)})`}</span><span><b>${euro0(S.cur)}</b><span class="muted"> / ${euro0(S.goal)}</span></span></div>
+    <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${S.pct}%;background:var(--teal)"></div></div>
+    <div class="small muted" style="margin-top:8px">${S.toGo>0?`Nog <b>${euro0(S.toGo)}</b> te gaan — ±<b>${Math.round(S.monthsLeft)} maanden</b> bij ${euro0(S.monthlySaving)}/mnd.`:`🎉 Je buffer van ${S.months_} maanden is bereikt.`}${S.missing>0?' · vul je saldo\'s in voor een kloppend beeld':''}</div>
+  </div>`;
+}
+// gedetailleerde lijst van komende vaste lasten & inkomsten (Inzichten)
+function renderUpcoming(){
+  const L=liquidityDaily(SET.liqDays||60); const ev=L.events.slice(0,14);
+  if(!ev.length) return '';
+  const fmt=d=>d.getDate()+' '+MNAMES[d.getMonth()];
+  return `<div class="card"><div class="row" style="margin-bottom:8px"><b>📅 Komende vaste lasten & inkomsten</b><span class="small muted">±${SET.liqDays||60} dgn</span></div>
+    ${ev.map(e=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="small">${fmt(e.date)} · ${esc(e.name.slice(0,30))}</span><span class="small" style="font-weight:700;color:${e.amt>0?'var(--green)':'var(--txt)'}">${e.amt>0?'+':''}${euro(e.amt)}</span></div>`).join('')}
   </div>`;
 }
 function renderWeekVarKPI(){
@@ -854,14 +1011,13 @@ function renderWeekVarKPI(){
     <div class="bar-track" style="margin:10px 0 2px"><div class="bar-fill" style="width:${Math.min(wk/(tgt||1)*100,100)}%;background:${col}"></div></div>
   </div>`;
 }
-function renderBudgetKPI(m){
-  const catB=totalBudget(), t=totals(m); const useCat=catB>0; const budget=useCat?catB:t.budget;
-  const actual=t.spend, pct=budget>0?Math.round(actual/budget*100):0;
+function renderBudgetKPI(){
+  // dynamisch: bestedingsruimte = 70% van het inkomen van de getoonde periode (schaalt mee met inkomen)
+  const t=ptot(); const budget=t.budget, actual=t.spend, pct=budget>0?Math.round(actual/budget*100):0;
   const col=pct<=85?'var(--green)':pct<=100?'var(--amber)':'var(--red)';
-  const basisTxt=useCat?'categoriebudget':SET.limit+'%-norm';
   return `<div class="card">
     <div class="row"><b>📊 Uitgaven vs budget</b><span class="small muted" onclick="go('ins')" style="cursor:pointer;color:var(--teal)">details ›</span></div>
-    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:28px;font-weight:800;color:${col}">${pct}%</div><div class="small muted">${euro0(actual)} van ${euro0(budget)} · ${basisTxt}</div></div>
+    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:28px;font-weight:800;color:${col}">${pct}%</div><div class="small muted">${euro0(actual)} van ${euro0(budget)} · ${SET.limit}% van inkomen</div></div>
     <div class="bar-track" style="margin:10px 0 2px"><div class="bar-fill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div>
   </div>`;
 }
@@ -891,8 +1047,7 @@ function renderDash(){
     if(prev){ const tc=totals(curMonth), pt=totals(prev); const diff=tc.spend-pt.spend; const up=diff>0;
       compare=`<div class="card" style="cursor:pointer" onclick="openCompare('${prev}')"><div class="row"><b>Versus ${MFULL[+prev.slice(5,7)-1]}</b><span style="color:${up?'var(--red)':'var(--green)'};font-weight:700">${up?'▲':'▼'} ${euro(Math.abs(diff))} ›</span></div><div class="small muted" style="margin-top:6px">Je gaf deze maand ${up?'meer':'minder'} uit dan vorige maand (${euro0(pt.spend)} → ${euro0(tc.spend)}). Tik voor details per categorie en winkel.</div></div>`; } }
 
-  $('#s-dash').innerHTML=
-  pchips + `
+  const ringCard=`
   <div class="card">
     <div class="ring-wrap">
       <div class="ring">
@@ -918,17 +1073,34 @@ function renderDash(){
     </div>
     ${t.incomeEst?`<div class="small muted center" style="margin-top:8px">ℹ️ Inkomen is een schatting (basisnorm uit je terugkerende salaris). Pas je vast inkomen aan bij Instellingen.</div>`
       :n>1?`<div class="small muted center" style="margin-top:8px">Gemiddeld ${euro0(t.spend/n)}/mnd uitgegeven van ${euro0(t.income/n)}/mnd</div>`:''}
-  </div>
+  </div>`;
 
-  ${renderBudgetKPI(curMonth)}
-  ${renderLiquidityKPI()}
-  ${isM?renderWeekVarKPI():''}
-  ${trendCard}
-  ${compare}
-  ${renderFixedVariable(pTx, t.income)}
-  ${renderWeekdayPattern(pTx)}
-  ${renderDonut(t.byCat)}`;
+  // KPI's eerst, daarna grafieken — elk een widget die je kunt verbergen/toevoegen
+  const widgets=[
+    {id:'ring',label:'Budgetoverzicht',html:ringCard},
+    {id:'budgetKPI',label:'Uitgaven vs budget',html:renderBudgetKPI()},
+    {id:'liquidityKPI',label:'Saldo & liquiditeit',html:renderLiquidityKPI()},
+    {id:'savings',label:'Sparen & buffer',html:renderSavings()},
+    {id:'weekVarKPI',label:'Variabele per week',html:isM?renderWeekVarKPI():''},
+    {id:'trend',label:'Uitgaven per maand',html:trendCard},
+    {id:'compare',label:'Versus vorige maand',html:compare},
+    {id:'fixedVar',label:'Vaste vs variabele',html:renderFixedVariable(pTx,t.income)},
+    {id:'weekday',label:'Variabel per weekdag',html:renderWeekdayPattern(pTx)},
+    {id:'donut',label:'Cirkeldiagram',html:renderDonut(t.byCat)},
+  ];
+  const hidden=SET.dashHidden||[];
+  const editBar=`<div class="row" style="margin:0 2px 6px"><span class="small muted">${SET.dashEdit?'Tik × om een widget te verbergen':''}</span><button class="mini" style="flex:0 0 auto;padding:6px 12px" onclick="toggleDashEdit()">${SET.dashEdit?'✓ Klaar':'✏️ Indeling'}</button></div>`;
+  const body=widgets.filter(w=>w.html && !hidden.includes(w.id)).map(w=>SET.dashEdit
+    ? `<div style="position:relative">${w.html}<button onclick="removeWidget('${w.id}')" title="Verberg" style="position:absolute;top:8px;right:8px;z-index:5;width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--card2);color:var(--red);font-size:15px;line-height:1;cursor:pointer">×</button></div>`
+    : w.html).join('');
+  const addPanel=SET.dashEdit?`<div class="card"><div class="small muted" style="margin-bottom:8px;font-weight:600">Widgets toevoegen</div>${
+    widgets.filter(w=>hidden.includes(w.id)).map(w=>`<button class="mini" style="margin:0 6px 6px 0;display:inline-block;width:auto" onclick="addWidget('${w.id}')">＋ ${w.label}</button>`).join('')||'<div class="small muted">Alle widgets staan al op je dashboard.</div>'
+  }</div>`:'';
+  $('#s-dash').innerHTML = pchips + editBar + body + addPanel;
 }
+function toggleDashEdit(){ SET.dashEdit=!SET.dashEdit; save(); renderDash(); }
+function removeWidget(id){ SET.dashHidden=[...new Set([...(SET.dashHidden||[]),id])]; save(); renderDash(); }
+function addWidget(id){ SET.dashHidden=(SET.dashHidden||[]).filter(x=>x!==id); save(); renderDash(); }
 
 function topCats(t,n){
   const ex=Object.entries(t.byCat).filter(([k,v])=>CATS[k].type==='expense'&&v<0)
@@ -1175,7 +1347,7 @@ function renderActions(){
 }
 
 /* ----- VASTE vs VARIABELE LASTEN ----- */
-const FIXED_CATS=new Set(['verzekering','studie','sport','abonnement','bankkosten']);
+const FIXED_CATS=new Set(['verzekering','studie','sport','abonnement','bankkosten','persoonlijk']);
 function isFixed(t){
   const U=(t.desc||'').toUpperCase(), cat=catOf(t);
   if(/TRAVELCARD|PARKBEE|TANK|SHELL|ESSO|GELDMAAT/.test(U)) return false;       // brandstof/parkeren/opname = variabel
@@ -1258,6 +1430,7 @@ function openCategory(k){
 }
 // inzoomen op een maand vanuit de trendgrafiek
 function drillMonth(m){ curMonth=m; SET.insPeriod='month'; save(); render(); }
+function gotoCurrentMonth(){ const ms=months(); const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); curMonth = ms.includes(ym)?ym:ms[ms.length-1]; SET.insPeriod='month'; save(); render(); }
 function toggleExpand(which){ SET[which]=!SET[which]; save(); renderIns(); }
 // uitgaven per categorie / winkel voor één maand (voor vergelijking)
 function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(t.amount<0 && CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); } return by; }
@@ -1416,18 +1589,31 @@ function renderIns(){
   const signalen = p==='month' ? `<div class="card"><h3 style="font-size:15px;margin-bottom:12px">🤖 Signalen deze maand</h3>
     ${coachTips(curMonth).map(c=>`<div class="coach ${c.t}"><div class="ic">${c.ic}</div><div class="tx">${c.m}</div></div>`).join('')||'<div class="muted small">Nog te weinig data voor tips.</div>'}</div>` : '';
 
-  $('#s-ins').innerHTML=
-    pchips
-    + (p==='month' ? renderBudgetActual(curMonth) + renderVariance(curMonth) : '')
-    + renderForecast()
-    + renderLiquidity()
-    + (p==='month' ? renderDailyVar(curMonth, totals(curMonth).budget) : '')
-    + renderDailyRolling()
-    + renderCatBreak(pTx)
-    + renderMerchants(pTx, periodLabel())
-    + renderInternal(ptot().byCat)
-    + signalen;
+  const widgets=[
+    {id:'budgetActual',label:'Budget vs werkelijk',html:p==='month'?renderBudgetActual(curMonth):''},
+    {id:'variance',label:'Variantieanalyse',html:p==='month'?renderVariance(curMonth):''},
+    {id:'forecast',label:'Prognose',html:renderForecast()},
+    {id:'upcoming',label:'Komende lasten & inkomsten',html:renderUpcoming()},
+    {id:'dailyVar',label:'Variabel per dag',html:p==='month'?renderDailyVar(curMonth,totals(curMonth).budget):''},
+    {id:'dailyRolling',label:'Variabel 30/90 dagen',html:renderDailyRolling()},
+    {id:'catBreak',label:'Per categorie',html:renderCatBreak(pTx)},
+    {id:'merchants',label:'Top winkels',html:renderMerchants(pTx,periodLabel())},
+    {id:'internal',label:'Interne overboekingen',html:renderInternal(ptot().byCat)},
+    {id:'signalen',label:'Signalen',html:signalen},
+  ];
+  const hidden=SET.insHidden||[];
+  const editBar=`<div class="row" style="margin:0 2px 6px"><span class="small muted">${SET.insEdit?'Tik × om een widget te verbergen':''}</span><button class="mini" style="flex:0 0 auto;padding:6px 12px" onclick="toggleInsEdit()">${SET.insEdit?'✓ Klaar':'✏️ Indeling'}</button></div>`;
+  const body=widgets.filter(w=>w.html && !hidden.includes(w.id)).map(w=>SET.insEdit
+    ? `<div style="position:relative">${w.html}<button onclick="removeInsWidget('${w.id}')" title="Verberg" style="position:absolute;top:8px;right:8px;z-index:5;width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--card2);color:var(--red);font-size:15px;line-height:1;cursor:pointer">×</button></div>`
+    : w.html).join('');
+  const addPanel=SET.insEdit?`<div class="card"><div class="small muted" style="margin-bottom:8px;font-weight:600">Widgets toevoegen</div>${
+    widgets.filter(w=>hidden.includes(w.id)).map(w=>`<button class="mini" style="margin:0 6px 6px 0;display:inline-block;width:auto" onclick="addInsWidget('${w.id}')">＋ ${w.label}</button>`).join('')||'<div class="small muted">Alle widgets staan al op Inzichten.</div>'
+  }</div>`:'';
+  $('#s-ins').innerHTML = pchips + editBar + body + addPanel;
 }
+function toggleInsEdit(){ SET.insEdit=!SET.insEdit; save(); renderIns(); }
+function removeInsWidget(id){ SET.insHidden=[...new Set([...(SET.insHidden||[]),id])]; save(); renderIns(); }
+function addInsWidget(id){ SET.insHidden=(SET.insHidden||[]).filter(x=>x!==id); save(); renderIns(); }
 function detectRecurring(){
   const map={};
   for(const t of TX){ if(t.amount>=0) continue; const c=catOf(t); if(CATS[c].type!=='expense'&&c!=='intern')continue;
@@ -1503,6 +1689,19 @@ function renderSet(){
     <label class="fld">Liquiditeitsbuffer (optioneel)</label>
     <input type="number" value="${SET.buffer||''}" placeholder="bv. 1000" oninput="SET.buffer=+this.value||0;save();render();">
     <div class="small muted" style="margin-top:6px">Je gewenste minimale saldo. De liquiditeitsprognose waarschuwt als je eronder dreigt te komen.</div>
+    <label class="fld">Maandelijkse spaarinleg</label>
+    <div class="chips">${[['auto','Automatisch'],['amount','Vast bedrag'],['percent','% van inkomen']].map(([k,l])=>`<span class="chip ${(SET.savingMode||'auto')===k?'on':''}" onclick="SET.savingMode='${k}';save();render();">${l}</span>`).join('')}</div>
+    ${(SET.savingMode||'auto')==='amount'
+      ? `<input type="number" min="0" value="${SET.savingAmount||''}" placeholder="bv. 750" oninput="SET.savingAmount=+this.value||0;save();render();"><div class="small muted" style="margin-top:6px">Een vast bedrag dat je elke maand wilt sparen.</div>`
+      : (SET.savingMode||'auto')==='percent'
+      ? `<input type="number" min="0" max="100" value="${SET.savingPercent||''}" placeholder="bv. 20" oninput="SET.savingPercent=+this.value||0;save();render();"><div class="small muted" style="margin-top:6px">Percentage van je inkomen dat je maandelijks wilt sparen.</div>`
+      : `<div class="small muted">Automatisch = inkomen − bestedingsruimte (${100-SET.limit}% van je inkomen). Verander je ${SET.limit}%-limiet, dan verandert je spaarinleg mee.</div>`}
+    <label class="fld">Bufferdoel — waarop baseren?</label>
+    <div class="chips">${[['spend','Maanduitgave'],['income','Inkomen'],['fixed','Vaste lasten'],['variable','Variabele lasten'],['amount','Vast bedrag']].map(([k,l])=>`<span class="chip ${(SET.bufferBasis||'spend')===k?'on':''}" onclick="SET.bufferBasis='${k}';save();render();">${l}</span>`).join('')}</div>
+    ${(SET.bufferBasis||'spend')==='amount'
+      ? `<label class="fld">Doelbedrag (€)</label><input type="number" min="0" value="${SET.bufferAmount||''}" placeholder="bv. 20000" oninput="SET.bufferAmount=+this.value||0;save();render();">`
+      : `<label class="fld">Aantal keer (×)</label><input type="number" min="1" value="${SET.bufferMonths||6}" placeholder="6" oninput="SET.bufferMonths=+this.value||6;save();render();">`}
+    <div class="small muted" style="margin-top:6px">Je spaardoel = ${(SET.bufferBasis||'spend')==='amount'?'een vast bedrag':`het gekozen aantal × je gemiddelde ${({spend:'maanduitgave',income:'inkomen',fixed:'vaste lasten',variable:'variabele lasten'})[SET.bufferBasis||'spend']}`}. De widget "Sparen & buffer" houdt je voortgang bij met je maandelijkse spaarinleg (${100-SET.limit}% van je inkomen).</div>
   </div>`:''}
   <div class="card">
     <div class="row" style="margin-bottom:6px"><b>📁 Automatische import</b>${SET.folderName?'<span class="tag" style="background:rgba(45,212,191,.15);color:var(--teal)">gekoppeld</span>':(FSA?'':'<span class="tag">browser n.v.t.</span>')}</div>
@@ -1524,7 +1723,7 @@ function renderSet(){
     <button class="btn sec" style="margin-bottom:8px" onclick="document.getElementById('file').click()">📂 Bestand toevoegen (MT940 of CSV)</button>
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (De gekoppelde map blijft bestaan.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">🗑️ Alle transacties wissen</button>
   </div>
-  <div class="center small muted" style="padding:8px 0 20px">Minder · v5.1 — herindeling dashboard/inzichten · lokaal & privacyvriendelijk</div>`;
+  <div class="center small muted" style="padding:8px 0 20px">Minder · v5.9 — instelbare spaarinleg (auto / vast bedrag / %) · lokaal</div>`;
 }
 
 /* ----- recategorisatie-sheet ----- */
@@ -1637,7 +1836,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); if(TX.length){ applyOwnAccounts(); buildAccMeta(); } render();
+load(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
 (async()=>{ // auto-sync bij openen als de map al gekoppeld is en toegang al verleend is
   if(!FSA || !SET.autoSync) return;
   try{ dirHandle=await idbGet('dir');
