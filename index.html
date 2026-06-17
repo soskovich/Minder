@@ -417,8 +417,12 @@ function categorize(t){
   const U=t.desc.toUpperCase();
   const Z=U.replace(/\s/g,'');   // spatieloos: vangt MT940-regelafbrekingen op (SAXO B ANK → SAXOBANK)
   t.id=hash((t.acc||'')+t.date+t.amount.toFixed(2)+t.desc)+'_'+Math.round(Math.abs(t.amount)*100);
+  const match=w=>{ const wu=(w||'').toUpperCase(); if(!wu) return false; const wz=wu.replace(/\s/g,''); return U.includes(wu) || (wz.length>=4 && Z.includes(wz)); };
   let cat='overig';
-  for(const [k,kws] of RULES){ if(kws.some(w=>{ const wz=w.replace(/\s/g,''); return U.includes(w) || (wz.length>=4 && Z.includes(wz)); })){ cat=k; break; } }
+  // 1) eigen regels winnen van de ingebouwde categorisatie
+  for(const r of (typeof SET!=='undefined'&&SET.rules)||[]){ if(CATS[r.cat] && match(r.kw)){ cat=r.cat; break; } }
+  // 2) ingebouwde keyword-regels
+  if(cat==='overig'){ for(const [k,kws] of RULES){ if(kws.some(match)){ cat=k; break; } } }
   if(cat==='overig' && t.amount>0) cat='intern'; // onbekende bijschrijving = meestal eigen overboeking
   t.ruleCat=cat;
   t.autoCat=cat;   // wordt evt. overschreven door applyOwnAccounts()
@@ -1432,6 +1436,42 @@ function smartBlock(k,ctx,eff){
     <div class="sl"><span class="b">T</span><b>Tijdgebonden:</b> Streefdatum ${tdTxt} (over ${weeks} weken).</div>
   </div>`;
 }
+// ===== COACH: deterministische gedragscoaching op je eigen data (client-side, werkt overal incl. mobiel) =====
+function buildCoaching(){
+  if(!TX.length) return '';
+  const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const done=months().filter(m=>m<nowYM).slice(-6);
+  if(done.length<2) return '';
+  const lim=SET.limit, tgtPct=100-lim, mn=m=>MNAMES[+m.slice(5,7)-1];
+  const rows=done.map(m=>{const t=totals(m),sv=splitFixedVar(m);return{m,inc:t.income,sp:t.spend,bud:t.budget,saved:t.income?(t.income-t.spend)/t.income*100:0,over:t.spend>t.budget,vari:sv.vari};});
+  const overN=rows.filter(r=>r.over).length;
+  const avgSaved=Math.round(rows.reduce((s,r)=>s+r.saved,0)/rows.length);
+  const srt=rows.slice().sort((a,b)=>a.saved-b.saved); const worst=srt[0], best=srt[srt.length-1];
+  // lifestyle inflation: meer uitgeven in rijkere maanden
+  const incs=rows.map(r=>r.inc).slice().sort((a,b)=>a-b); const medInc=incs[Math.floor(incs.length/2)];
+  const avg=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:0;
+  const hi=rows.filter(r=>r.inc>medInc), lo=rows.filter(r=>r.inc<=medInc);
+  const spHi=avg(hi.map(r=>r.sp)), spLo=avg(lo.map(r=>r.sp));
+  const lifestyle = hi.length>=1 && lo.length>=1 && spHi>spLo*1.12;
+  // grootste variabele categorie (gem/mnd over de afgeronde maanden)
+  const vc={}; for(const m of done){ for(const t of txOfMonth(m)){ if(t.amount<0 && CATS[catOf(t)].type==='expense' && !isFixed(t)){ const k=catOf(t); vc[k]=(vc[k]||0)+(-t.amount);} } }
+  const topVar=Object.entries(vc).map(([k,v])=>({k,avg:v/done.length})).sort((a,b)=>b.avg-a.avg)[0];
+  const target=Math.round(monthlySavingTarget());
+  const tCur=totals(curMonth); const curPct=tCur.budget?Math.round(tCur.spend/tCur.budget*100):0;
+  const diag=`<div class="small"><b>🔍 Diagnose.</b> ${overN} van ${done.length} maanden boven je ${lim}%-grens · gem. <b>${avgSaved}%</b> gespaard (doel ${tgtPct}%). ${best.saved>=tgtPct?`Je béste maand (${mn(best.m)}, ${Math.round(best.saved)}%) haalde het wél — dus het kán.`:`Zwakste: ${mn(worst.m)} (${Math.round(worst.saved)}%).`}</div>`;
+  const obs=lifestyle?`<div class="coach warn" style="margin:8px 0"><div class="ic">⚠️</div><div class="tx"><b>Lifestyle inflation.</b> In je rijkere maanden geef je ook méér uit (gem. ${euro0(spHi)} vs ${euro0(spLo)} in mindere maanden). Je extra inkomen verdwijnt in uitgaven, niet in je buffer.</div></div>`
+    : (overN>=done.length?`<div class="coach warn" style="margin:8px 0"><div class="ic">⚠️</div><div class="tx"><b>Je plan zegt sparen, je gedrag zegt uitgeven.</b> Elke afgeronde maand zat je boven je grens — je spaart 'wat overblijft', en er blijft te weinig over.</div></div>`:'');
+  const vraag=topVar?`<div class="small" style="margin:8px 0"><b>🧠 Vraag.</b> ${CATS[topVar.k].name} kost je gem. <b>${euro0(topVar.avg)}/mnd</b> — je grootste variabele post. Zou je hier evenveel aan uitgeven als je vandaag vanaf nul koos? <span style="color:var(--teal);cursor:pointer" onclick="openCategory('${topVar.k}')">bekijk ›</span></div>`:'';
+  const acties=`<div class="small muted" style="font-weight:600;margin:12px 0 6px">✅ Je 3 grootste hefbomen</div>
+    <div class="coach" style="margin:0 0 6px"><div class="ic">1</div><div class="tx"><b>Sparen eerst, niet als restje.</b> Zet €${target}/mnd automatisch over op je salarisdag — vóór je het kunt uitgeven.</div></div>
+    ${topVar?`<div class="coach" style="margin:0 0 6px"><div class="ic">2</div><div class="tx"><b>${CATS[topVar.k].name} −15%.</b> Van ${euro0(topVar.avg)} naar ~${euro0(topVar.avg*0.85)}/mnd. <span style="color:var(--teal);cursor:pointer" onclick="go('ins')">zie waar het heen gaat ›</span></div></div>`:''}
+    ${lifestyle?`<div class="coach" style="margin:0"><div class="ic">3</div><div class="tx"><b>Quarantaine voor extra inkomen.</b> Komt er meer binnen dan ${euro0(medInc)}? Zet 80% van het meerdere direct weg.</div></div>`:''}`;
+  const acc=`<div class="coach info" style="margin-top:10px"><div class="ic">🔁</div><div class="tx"><b>Deze maand.</b> Je staat op <b>${curPct}%</b> van je bestedingsruimte. Focus: ${topVar?`houd ${CATS[topVar.k].name} onder ${euro0(topVar.avg*0.85)}`:'blijf onder je grens'} en zet die €${target}-overboeking vast.</div></div>`;
+  return `<div class="card">
+    <div class="row" style="margin-bottom:6px"><b>🎯 Coach</b><span class="small muted">laatste ${done.length} mnd</span></div>
+    ${diag}${obs}${vraag}${acties}${acc}
+  </div>`;
+}
 function renderActions(){
   if(!TX.length) return;
   const m=curMonth; const plan=savingsPlan(m);
@@ -1445,7 +1485,7 @@ function renderActions(){
   const visible=plan.filter(a=>planStatus(a.k)!=='snoozed'||SET.showSnoozed);
   const snz=plan.filter(a=>planStatus(a.k)==='snoozed').length;
   const doneCount=plan.filter(a=>planStatus(a.k)==='done').length;
-  $('#s-act').innerHTML=`
+  $('#s-act').innerHTML=buildCoaching()+`
   <div class="card">
     <div class="plan-head"><b>💪 Actieplan ${monthLabel(m)}</b><span class="pot">${doneCount}/${plan.length} gedaan</span></div>
     <div class="goal-wrap">
@@ -1888,13 +1928,14 @@ function renderSet(){
             <button class="btn" onclick="connectFolder()">📁 Map koppelen</button>`
          : `<div class="small muted">Je browser ondersteunt automatische map-import niet. In <b>Chrome</b> of <b>Edge</b> kun je een map koppelen. Je kunt ook je map of bestanden <b>op het scherm slepen</b>, of hieronder handmatig kiezen.</div>`)}
   </div>
+  ${renderRulesCard()}
   <div class="card">
     <div class="row" style="margin-bottom:4px"><b>Gegevens</b><span class="small muted">${TX.length} transacties · ${months().length} mnd</span></div>
     <div class="small muted" style="margin-bottom:12px">Alles staat lokaal in je browser opgeslagen. Niets wordt naar een server gestuurd.</div>
     <button class="btn sec" style="margin-bottom:8px" onclick="document.getElementById('file').click()">📂 Bestand toevoegen (MT940 of CSV)</button>
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (De gekoppelde map blijft bestaan.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">🗑️ Alle transacties wissen</button>
   </div>
-  <div class="center small muted" style="padding:8px 0 20px">Minder · v6.9 — handmatig 'extra spaargeld' (N26 Spaces buiten PSD2) telt mee voor bufferdoel · lokaal + optioneel live</div>`;
+  <div class="center small muted" style="padding:8px 0 20px">Minder · v7.1 — ingebouwde Coach (gedragscoaching op je eigen data, werkt offline/mobiel) · lokaal + optioneel live</div>`;
 }
 
 /* ----- recategorisatie-sheet ----- */
@@ -1908,13 +1949,47 @@ function openSheet(id){
       <div class="small muted">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}${t.acc?' · '+esc(accLabel(t.acc)):''}</div></div>
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
-    <div class="small muted" style="margin:14px 0 2px">Kies categorie:</div>
+    <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
+    <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
     <div class="catgrid">${Object.entries(CATS).map(([k,c])=>`
       <div class="catpick ${cur===k?'on':''}" onclick="setCat('${id}','${k}')">
         <span style="font-size:18px">${c.icon}</span><span>${c.name}</span></div>`).join('')}</div>`;
   $('#sheetBg').classList.add('show');
 }
-function setCat(id,k){ const t=TX.find(x=>x.id===id); if(t.autoCat===k) delete OVR[id]; else OVR[id]=k; save(); closeSheet(); render(); }
+function setCat(id,k){
+  const t=TX.find(x=>x.id===id); if(!t) return;
+  const mk=document.getElementById('mkrule');
+  if(mk&&mk.checked){   // maak een blijvende regel van deze winkel
+    const kw=((cleanMerch(t.name)||t.name)||'').toUpperCase().trim().slice(0,28);
+    if(kw){ SET.rules=(SET.rules||[]).filter(r=>r.kw!==kw); SET.rules.unshift({kw,cat:k}); delete OVR[id];
+      save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); closeSheet(); render(); toast('Regel: '+kw+' → '+CATS[k].name); return; }
+  }
+  if(t.autoCat===k) delete OVR[id]; else OVR[id]=k; save(); closeSheet(); render();
+}
+// regels beheren
+function addRuleFromInputs(){ const kw=($('#ruleKw').value||'').toUpperCase().trim(); const cat=$('#ruleCat').value; if(!kw){toast('Vul een trefwoord in');return;} if(!CATS[cat])return;
+  SET.rules=(SET.rules||[]).filter(r=>r.kw!==kw); SET.rules.unshift({kw,cat}); save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); render(); toast('Regel toegevoegd: '+kw+' → '+CATS[cat].name); }
+function delRule(i){ (SET.rules||[]).splice(i,1); save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); render(); }
+function fillRule(name){ const el=$('#ruleKw'); if(el){ el.value=(name||'').toUpperCase(); el.focus(); el.scrollIntoView({block:'center'}); } }
+function fillRuleIdx(i){ const m=(window._overigM||[])[i]; if(m) fillRule(m.name); }
+function renderRulesCard(){
+  const rules=SET.rules||[];
+  const overigTx=TX.filter(t=>catOf(t)==='overig' && t.amount<0);
+  const byM=groupMerch(overigTx).slice(0,6); window._overigM=byM;
+  const catOptions=Object.entries(CATS).map(([k,c])=>`<option value="${k}">${c.icon} ${c.name}</option>`).join('');
+  return `<div class="card">
+    <div class="row" style="margin-bottom:6px"><b>🏷️ Categorie-regels</b><span class="tag">eigen</span></div>
+    <div class="small muted" style="margin-bottom:10px">Eigen trefwoord-regels winnen van de ingebouwde categorisatie — handig om terugkerende fouten zelf te corrigeren. Hoofdletters en spaties maken niet uit.</div>
+    ${rules.length?rules.map((r,i)=>`<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line)"><span class="small">${CATS[r.cat]?CATS[r.cat].icon:'•'} <b>${esc(r.kw)}</b> <span class="muted">→ ${CATS[r.cat]?CATS[r.cat].name:esc(r.cat)}</span></span><span onclick="delRule(${i})" title="Verwijder" style="cursor:pointer;color:var(--red);padding:0 6px;font-size:16px">×</span></div>`).join(''):'<div class="small muted">Nog geen eigen regels.</div>'}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <input id="ruleKw" type="text" placeholder="trefwoord, bv. ALBERT HEIJN" style="flex:1;min-width:0">
+      <select id="ruleCat" style="flex:0 0 auto">${catOptions}</select>
+    </div>
+    <button class="btn sec" style="margin-top:8px" onclick="addRuleFromInputs()">+ Regel toevoegen</button>
+    ${byM.length?`<div class="small muted" style="margin:14px 0 4px;font-weight:600">Nog ongecategoriseerd · grootste winkels</div>
+      ${byM.map((m,i)=>`<div class="row" style="padding:4px 0"><span class="small">${esc(m.name)} <span class="muted">· ${euro0(m.s)}</span></span><button class="mini" style="width:auto;flex:0 0 auto;padding:4px 10px" onclick="fillRuleIdx(${i})">→ regel</button></div>`).join('')}`:''}
+  </div>`;
+}
 function closeSheet(){ $('#sheetBg').classList.remove('show'); }
 
 /* ---------- helpers ---------- */
