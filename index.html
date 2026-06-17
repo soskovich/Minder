@@ -305,6 +305,7 @@ function ICON(n){const P={
   fire:'<path d="M12 3c1.2 3-1.6 4.2-1.6 6.6A2.4 2.4 0 0 0 13 11.8c0-1 .7-1.7.7-1.7.7 1 1.6 2.2 1.6 4.1A3.4 3.4 0 0 1 12 18a3.4 3.4 0 0 1-3.3-3.4C8.7 10.8 12 9.4 12 3Z"/>',
   pen:'<path d="M4 20h4L19.5 8.5l-4-4L4 16v4Z"/><path d="M14 6l4 4"/>',
   filter:'<path d="M3 5h18l-7 8v6l-4-2v-4L3 5Z"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
   link:'<path d="M9.5 14.5l5-5"/><path d="M11 7l1.5-1.5a3.5 3.5 0 0 1 5 5L16 12"/><path d="M13 17l-1.5 1.5a3.5 3.5 0 0 1-5-5L8 12"/>'
 };return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:1.15em;height:1.15em;vertical-align:-.17em;flex-shrink:0">${P[n]||''}</svg>`;}
 const CATS={
@@ -359,6 +360,9 @@ let SET={limit:70, income:0, autoIncome:true, hideInternal:true};
 let accFilter='all';
 let curMonth=null;         // 'YYYY-MM'
 let txFilter='all', txSearch='';
+const FSA = ('showDirectoryPicker' in window);   // File System Access API beschikbaar?
+let dirHandle=null;                              // gekoppelde bankmap (FSA)
+const FILE_RX=/\.(sta|940|mt940|csv|txt)$/i;     // ondersteunde bestandstypen
 
 /* ---------- persistentie (localStorage, blijft lokaal op dit apparaat) ---------- */
 function save(){try{
@@ -1245,13 +1249,13 @@ function renderDash(){
   // ---- platte stat-rij (geen kaart) ----
   const tb=totalBalance();
   const statRow=`<div class="row" style="padding:4px 8px 12px;gap:12px">
-    <div onclick="go('ins')" style="cursor:pointer"><div class="small muted">Saldo nu</div><div style="font-weight:700">${euro0(tb.sum)}${tb.missing>0?' ${ICON('warn')}':''} ›</div></div>
+    <div onclick="go('ins')" style="cursor:pointer"><div class="small muted">Saldo nu</div><div style="font-weight:700">${euro0(tb.sum)}${tb.missing>0?` ${ICON('warn')}`:''} ›</div></div>
     <div onclick="go('act')" style="cursor:pointer;text-align:right"><div class="small muted">Deze maand gespaard</div><div style="font-weight:700;color:${savedPct>=(100-SET.limit)?'var(--teal)':'var(--amber)'}">${savedPct}% ›</div></div>
   </div>`;
   // ---- coach: één scherpste regel + één CTA ----
   const top=(isNow&&!SET.coachOff)?coachTips(m)[0]:null;
   const coachBlock = top?`<div class="card"><div class="coach ${top.t}" style="margin:0"><div class="ic">${top.ic}</div><div class="tx">${top.m}</div></div>
-    <button class="btn sec" style="margin-top:10px" onclick="${top.act}">${top.act.indexOf("go('act')")>=0?`${ICON('flag')} Check je plan`:'Bekijk ›'}</button></div>`:'';
+    <button class="btn sec" style="margin-top:10px" onclick="${top.act||''}">${(top.act||'').indexOf("go('act')")>=0?`${ICON('flag')} Check je plan`:'Bekijk ›'}</button></div>`:'';
   // ---- recente transacties (N26-kern) ----
   const recent=TX.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4);
   const txRows=recent.map(x=>{const c=CATS[catOf(x)];const d=new Date(x.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
@@ -1832,19 +1836,20 @@ function renderWeekdayPattern(list){
 }
 
 /* ----- COACH (lichtgewicht AI-regels) ----- */
+
 function coachTips(m){
   const t=totals(m), tips=[];
   const ms=months(), idx=ms.indexOf(m), prev=idx>0?ms[idx-1]:null;
   const pct = t.budget>0?t.spend/t.budget*100:0;
   const items = t.list.filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense');
-  const push=(pri,type,ic,msg,act)=>tips.push({pri,t:type,ic,m:msg,act:act||"go('act')"});
+  const push=(pri,type,ic,msg,act)=>tips.push({pri,t:type,ic,m:msg,act:act||''});
   // inkomen-setup
   if(t.budget<=0) push(9,'info',ICON('gear'),`Geen inkomen herkend voor deze maand. Stel je <b>vast inkomen</b> in bij Instellingen voor een kloppend budget.`,"go('set')");
   // budgetstatus
   if(t.budget>0){
     if(pct<70) push(5,'good',ICON('party'),`Je zit op <b>${Math.round(pct)}%</b> van je bestedingsruimte — ruim binnen je ${SET.limit}%-norm.`);
-    else if(pct<100) push(6,'warn','⏳',`Je zit op <b>${Math.round(pct)}%</b> van je ${SET.limit}%-grens — nog ${euro(t.budget-t.spend)} ruimte.`);
-    else push(9,'bad',ICON('alert'),`Je zit <b>${euro(t.spend-t.budget)}</b> boven je ${SET.limit}%-grens (${Math.round(pct)}%). Dit gaat ten koste van je spaardoel.`);
+    else if(pct<100) push(6,'warn',ICON('clock'),`Je zit op <b>${Math.round(pct)}%</b> van je ${SET.limit}%-grens — nog ${euro(t.budget-t.spend)} ruimte.`,"go('ins')");
+    else push(9,'bad',ICON('alert'),`Je zit <b>${euro(t.spend-t.budget)}</b> boven je ${SET.limit}%-grens (${Math.round(pct)}%). Dit gaat ten koste van je spaardoel.`,"go('act')");
   }
   // vaste lasten als % van inkomen
   const sv=splitFixedVar(m);
@@ -1855,8 +1860,8 @@ function coachTips(m){
   const saved=t.income-t.spend, target=monthlySavingTarget();
   if(t.income>0 && target>0){
     if(saved>=target) push(6,'good',ICON('coins'),`Je spaarde deze maand <b>${euro0(saved)}</b> — je haalt je doel van ${euro0(target)}.`);
-    else if(saved>0) push(7,'warn',ICON('coins'),`Je spaarde <b>${euro0(saved)}</b>, ${euro0(target-saved)} minder dan je doel van ${euro0(target)}.`);
-    else push(8,'bad',ICON('coins'),`Je gaf <b>meer uit dan er binnenkwam</b> (${euro0(-saved)} tekort) — geen ruimte om te sparen deze maand.`);
+    else if(saved>0) push(7,'warn',ICON('coins'),`Je spaarde <b>${euro0(saved)}</b>, ${euro0(target-saved)} minder dan je doel van ${euro0(target)}.`,"go('act')");
+    else push(8,'bad',ICON('coins'),`Je gaf <b>meer uit dan er binnenkwam</b> (${euro0(-saved)} tekort) — geen ruimte om te sparen deze maand.`,"go('act')");
   }
   // grootste stijger vs vorige maand
   if(prev){ const pt=totals(prev); let big=null;
@@ -1883,4 +1888,647 @@ function coachTips(m){
   const S=savingsModel(); if(S.toGo>0 && S.monthlySaving>0 && S.cur>0) push(4,'info',ICON('target'),`Bij ${euro0(S.monthlySaving)}/mnd bereik je je buffer (${euro0(S.goal)}) over ±<b>${Math.round(S.monthsLeft)} maanden</b>.`);
   // ongecategoriseerd
   const uncat=items.filter(x=>catOf(x)==='overig').length;
-  if(uncat>=5) p
+  if(uncat>=5) push(2,'info',ICON('tag'),`<b>${uncat} transacties</b> staan op "Overig" — categoriseer ze voor scherpere inzichten.`,"go('set')");
+  return tips.sort((a,b)=>(b.pri||0)-(a.pri||0)).slice(0,5);
+}
+
+/* ----- TRANSACTIES ----- */
+
+function renderTx(){
+  const filtered = accFilter!=='all'||txFilter!=='all';
+  const ib='background:var(--card2);border:1px solid var(--line);border-radius:10px;width:38px;height:38px;font-size:15px;cursor:pointer;color:inherit';
+  const header=`<div class="row" style="align-items:center;margin:2px 2px 12px"><b style="font-size:18px">Transacties</b>
+    <div style="display:flex;gap:8px">
+      <button onclick="toggleTxSearch()" style="${ib}">${ICON('search')}</button>
+      <button onclick="openTxFilter()" style="position:relative;${ib}">${ICON('filter')}${filtered?'<span style="position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--teal)"></span>':''}</button>
+    </div></div>`;
+  const search = window._txSearchOpen?`<input type="search" placeholder="Zoek transactie of winkel…" value="${esc(txSearch)}" oninput="txSearch=this.value.toLowerCase();renderTxList()" style="margin-bottom:10px">`:'';
+  const pill = filtered?`<div class="small muted" style="margin:0 2px 10px">Filter actief · <span style="color:var(--teal);cursor:pointer" onclick="clearTxFilter()">wis ✕</span></div>`:'';
+  $('#s-tx').innerHTML = header + search + pill + `<div id="txlist"></div>`;
+  renderTxList();
+}
+
+function renderTxList(){
+  const el=document.getElementById('txlist'); if(!el) return;
+  const all=txOfMonth(curMonth);
+  let list=all.slice().sort((a,b)=>b.date.localeCompare(a.date)||0);
+  if(accFilter!=='all') list=list.filter(t=>t.acc===accFilter);
+  if(txFilter!=='all') list=list.filter(t=>catOf(t)===txFilter);
+  if(txSearch) list=list.filter(t=>(t.name+' '+t.desc).toLowerCase().includes(txSearch));
+  const sum={},cnt={}; for(const t of all){ if(t.amount<0&&CATS[catOf(t)].type==='expense'){const k=catOf(t);sum[k]=(sum[k]||0)+(-t.amount);cnt[k]=(cnt[k]||0)+1;} }
+  const catAvg={}; for(const k in sum) catAvg[k]=sum[k]/cnt[k];
+  let body='', lastDay='';
+  for(const t of list){
+    if(t.date!==lastDay){ lastDay=t.date; body+=`<div class="tx-day">${dayHeader(t.date)}</div>`; }
+    const c=CATS[catOf(t)]; const ong=txOutlier(t,catAvg);
+    body+=`<div class="tx" onclick="openSheet('${t.id}')">
+      <div class="ava" style="background:var(--card2)">${c.icon}</div>
+      <div class="info"><div class="nm">${esc(t.name)}</div>${ong?`<div class="cat" style="color:var(--amber)">• ongewoon</div>`:''}</div>
+      <div class="amt ${t.amount>0?'pos':''}" style="font-weight:700">${t.amount>0?'+':''}${euro(t.amount)}</div>
+    </div>`;
+  }
+  el.innerHTML = body||`<div class="muted small center" style="padding:30px">${(accFilter!=='all'||txFilter!=='all'||txSearch)?'Niets gevonden — pas je filter aan.':'Geen transacties deze maand.'}</div>`;
+}
+
+function dayHeader(ds){
+  const d=new Date(ds); d.setHours(0,0,0,0);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const diff=Math.round((today-d)/86400000);
+  if(diff===0) return 'Vandaag'; if(diff===1) return 'Gisteren';
+  return `${['Zo','Ma','Di','Wo','Do','Vr','Za'][d.getDay()]} ${d.getDate()} ${MFULL[d.getMonth()]}`;
+}
+
+function txOutlier(t,catAvg){ const c=CATS[catOf(t)]; if(!(t.amount<0&&c.type==='expense')) return false; const a=catAvg[catOf(t)]; return a && (-t.amount)>Math.max(a*2.2,60) && (-t.amount)>=40; }
+
+function toggleTxSearch(){ window._txSearchOpen=!window._txSearchOpen; if(!window._txSearchOpen) txSearch=''; renderTx(); }
+
+function openTxFilter(){
+  window._setSheet=null; window._txFilterSheet=true;
+  const present=[...new Set(txOfMonth(curMonth).map(catOf))];
+  const accPart = OWN.length>1?`<div class="small muted" style="margin:6px 0 4px;font-weight:600">Rekening</div><div class="chips"><span class="chip ${accFilter==='all'?'on':''}" onclick="setAcc('all')">Alle</span>${OWN.map(a=>`<span class="chip ${accFilter===a?'on':''}" onclick="setAcc('${a}')">${esc(accLabel(a))}</span>`).join('')}</div>`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="margin-bottom:8px"><div style="font-weight:800;font-size:17px">Filter</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    ${accPart}
+    <div class="small muted" style="margin:10px 0 4px;font-weight:600">Categorie</div>
+    <div class="chips"><span class="chip ${txFilter==='all'?'on':''}" onclick="setFilter('all')">Alles</span>${present.map(k=>`<span class="chip ${txFilter===k?'on':''}" onclick="setFilter('${k}')">${CATS[k].icon} ${CATS[k].name}</span>`).join('')}</div>
+    <button class="btn sec" style="margin-top:14px" onclick="clearTxFilter();closeSheet()">Filters wissen</button>`;
+  $('#sheetBg').classList.add('show');
+}
+
+function clearTxFilter(){ accFilter='all'; txFilter='all'; renderTx(); }
+
+function setFilter(k){ txFilter=k; renderTx(); if(window._txFilterSheet) openTxFilter(); }
+
+function renderIns(){
+  if(!TX.length){ $('#s-ins').innerHTML='<div class="card"><div class="small muted">Nog geen transacties — importeer of koppel je bank.</div></div>'; return; }
+  const m=curMonth||months()[months().length-1];
+  const tips=coachTips(m); const hero=tips[0]; const sec=tips.slice(1,4);
+  const heroBlock = hero?`<div class="card">
+      <div class="small muted">Belangrijkste deze maand</div>
+      <div class="coach ${hero.t}" style="margin:8px 0 0"><div class="ic">${hero.ic}</div><div class="tx">${hero.m}</div></div>
+      <button class="btn sec" style="margin-top:10px" onclick="go('act')">${(hero.t==='bad'||hero.t==='warn')?`${ICON('flag')} Naar je plan`:`${ICON('flag')} Open je coach`}</button>
+    </div>`
+    : `<div class="card"><div class="coach good" style="margin:0"><div class="ic">${ICON('check')}</div><div class="tx">Niks bijzonders deze maand — je zit op koers.</div></div></div>`;
+  const secBlock = sec.length?`<div class="card"><div class="small muted" style="margin-bottom:8px">Verder opgevallen</div>
+      ${sec.map(s=>`<div class="coach ${s.t}" style="margin:0 0 8px;cursor:pointer" onclick="go('act')"><div class="ic">${s.ic}</div><div class="tx">${s.m}</div></div>`).join('')}</div>`:'';
+  // Verdieping: alle cijfers & grafieken pas na één tik (progressive disclosure)
+  const exp=!!SET.insDeep;
+  const deepBtn=`<button class="snz" onclick="toggleInsDeep()">${exp?'verberg cijfers ▲':'Verdieping — alle cijfers & grafieken ▼'}</button>`;
+  let deep='';
+  if(exp){
+    const p=SET.insPeriod||'month';
+    const periods=[['month','Maand'],['3m','3 mnd'],['ytd','YTD'],['all','Alles']];
+    const pchips=`<div class="chips" style="margin:4px 0 8px">${periods.map(([k,l])=>`<span class="chip ${p===k?'on':''}" onclick="setPeriod('${k}')">${l}</span>`).join('')}</div>`;
+    const pTx=periodTx();
+    deep = pchips
+      + (p==='month'?renderLiquidityKPI():'')
+      + renderSavings()
+      + (p==='month'?renderBudgetActual(curMonth):'')
+      + renderForecast()
+      + renderUpcoming()
+      + (p==='month'?renderDailyVar(curMonth,totals(curMonth).budget):'')
+      + renderDailyRolling()
+      + renderCatBreak(pTx)
+      + renderMerchants(pTx,periodLabel());
+  }
+  $('#s-ins').innerHTML = heroBlock + secBlock + deepBtn + deep;
+}
+
+function renderCat(){
+  const t=totals(curMonth);
+  const ex=Object.entries(t.byCat).filter(([k,v])=>CATS[k].type==='expense'&&v<0).map(([k,v])=>[k,-v]).sort((a,b)=>b[1]-a[1]);
+  const total=ex.reduce((a,b)=>a+b[1],0);
+  // donut
+  let acc=0; const segs=ex.map(([k,v])=>{const frac=v/total;const s=`${CATS[k].color} ${acc*100}% ${(acc+frac)*100}%`;acc+=frac;return s;});
+  const donut=total>0?`<div style="display:flex;justify-content:center;margin:6px 0 4px">
+    <div style="width:150px;height:150px;border-radius:50%;background:conic-gradient(${segs.join(',')});position:relative">
+      <div style="position:absolute;inset:26px;background:var(--card);border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <div style="font-weight:800;font-size:18px">${euro0(total)}</div><div class="small muted">uitgaven</div>
+      </div></div></div>
+    <div class="legend">${ex.map(([k,v])=>`<span><span class="dot" style="background:${CATS[k].color}"></span>${CATS[k].name} ${Math.round(v/total*100)}%</span>`).join('')}</div>`
+    :'<div class="muted small center" style="padding:20px">Geen uitgaven deze maand.</div>';
+
+  const rows=ex.map(([k,v])=>{const c=CATS[k];const cnt=txOfMonth(curMonth).filter(x=>catOf(x)===k&&x.amount<0).length;return `
+    <div class="cat-row">
+      <div class="ava" style="background:${c.color}22">${c.icon}</div>
+      <div class="g"><div class="t"><span>${c.name} <span class="c">· ${cnt}×</span></span><span>${euro(v)}</span></div>
+        <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${v/ex[0][1]*100}%;background:${c.color}"></div></div></div>
+    </div>`;}).join('');
+
+  // niet-meegerekend
+  const intern=Object.entries(t.byCat).filter(([k,v])=>CATS[k].type==='internal').map(([k,v])=>[k,v]);
+  const internHtml=intern.length?`<div class="card"><div class="small muted" style="margin-bottom:8px">Telt niet mee als uitgave</div>
+    ${intern.map(([k,v])=>`<div class="row" style="padding:5px 0"><span>${CATS[k].icon} ${CATS[k].name}</span><span class="muted">${euro(v)}</span></div>`).join('')}</div>`:'';
+
+  $('#s-cat').innerHTML=`<div class="card">${donut}</div><div class="card">${rows||'<div class="muted small">—</div>'}</div>${internHtml}`;
+}
+
+/* ----- per categorie (over een transactielijst) ----- */
+
+function renderCatBreak(list){
+  const by={}; for(const t of list){ if(t.amount<0 && CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); }
+  const ex=Object.entries(by).sort((a,b)=>b[1]-a[1]); if(!ex.length) return '';
+  const max=ex[0][1], total=ex.reduce((s,e)=>s+e[1],0);
+  const exp=!!SET.expandCat; const shown=exp?ex:ex.slice(0,3);
+  const toggle=ex.length>3?`<button class="snz" onclick="toggleExpand('expandCat')">${exp?'minder ▲':'toon alle '+ex.length+' categorieën ▼'}</button>`:'';
+  return `<div class="card"><div class="row" style="margin-bottom:10px"><b>Per categorie</b><span class="small muted">${euro0(total)}</span></div>
+    ${shown.map(([k,v])=>{const c=CATS[k];const cnt=list.filter(x=>catOf(x)===k&&x.amount<0).length;return `
+      <div class="cat-row" style="cursor:pointer" onclick="openCategory('${k}')"><div class="ava" style="background:${c.color}22">${c.icon}</div>
+        <div class="g"><div class="t"><span>${c.name} <span class="c">· ${cnt}×</span></span><span>${euro(v)} <span class="muted small">${Math.round(v/total*100)}%</span> ›</span></div>
+          <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${v/max*100}%;background:${c.color}"></div></div></div>
+      </div>`;}).join('')}${toggle}</div>`;
+}
+
+/* ----- INZICHTEN (periode-gestuurd) ----- */
+// ===== INZICHTEN (N26-stijl): 1 hoofdinzicht + max 3 signalen (tikbaar) + alles achter 'Verdieping' =====
+
+function addInsWidget(id){ SET.insHidden=(SET.insHidden||[]).filter(x=>x!==id); save(); renderIns(); }
+
+function removeInsWidget(id){ SET.insHidden=[...new Set([...(SET.insHidden||[]),id])]; save(); renderIns(); }
+
+function toggleInsEdit(){ SET.insEdit=!SET.insEdit; save(); renderIns(); }
+
+function toggleInsMore(){ SET.insMore=!SET.insMore; save(); renderIns(); }
+
+function toggleInsDeep(){ SET.insDeep=!SET.insDeep; save(); renderIns(); }
+
+function addWidget(id){ SET.dashHidden=(SET.dashHidden||[]).filter(x=>x!==id); save(); renderDash(); }
+
+function removeWidget(id){ SET.dashHidden=[...new Set([...(SET.dashHidden||[]),id])]; save(); renderDash(); }
+
+function toggleDashEdit(){ SET.dashEdit=!SET.dashEdit; save(); renderDash(); }
+
+function openSheet(id){
+  const t=TX.find(x=>x.id===id); if(!t)return;
+  window._setSheet=null;
+  const cur=catOf(t);
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:4px"><div style="font-size:30px">${CATS[cur].icon}</div>
+      <div style="font-weight:700;margin-top:4px">${esc(t.name)}</div>
+      <div class="${t.amount>0?'amt pos':''}" style="font-size:20px;font-weight:800;margin:4px 0">${t.amount>0?'+':''}${euro(t.amount)}</div>
+      <div class="small muted">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}${t.acc?' · '+esc(accLabel(t.acc)):''}</div></div>
+    <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
+      <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
+    <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
+    <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
+    <div class="catgrid">${Object.entries(CATS).map(([k,c])=>`
+      <div class="catpick ${cur===k?'on':''}" onclick="setCat('${id}','${k}')">
+        <span style="font-size:18px">${c.icon}</span><span>${c.name}</span></div>`).join('')}</div>`;
+  $('#sheetBg').classList.add('show');
+}
+
+function setCat(id,k){
+  const t=TX.find(x=>x.id===id); if(!t) return;
+  const mk=document.getElementById('mkrule');
+  if(mk&&mk.checked){   // maak een blijvende regel van deze winkel
+    const kw=((cleanMerch(t.name)||t.name)||'').toUpperCase().trim().slice(0,28);
+    if(kw){ SET.rules=(SET.rules||[]).filter(r=>r.kw!==kw); SET.rules.unshift({kw,cat:k}); delete OVR[id];
+      save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); closeSheet(); render(); toast('Regel: '+kw+' → '+CATS[k].name); return; }
+  }
+  if(t.autoCat===k) delete OVR[id]; else OVR[id]=k; save(); closeSheet(); render();
+}
+// regels beheren
+
+function addRuleFromInputs(){ const kw=($('#ruleKw').value||'').toUpperCase().trim(); const cat=$('#ruleCat').value; if(!kw){toast('Vul een trefwoord in');return;} if(!CATS[cat])return;
+  SET.rules=(SET.rules||[]).filter(r=>r.kw!==kw); SET.rules.unshift({kw,cat}); save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); render(); toast('Regel toegevoegd: '+kw+' → '+CATS[cat].name); }
+
+function delRule(i){ (SET.rules||[]).splice(i,1); save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); render(); }
+
+function fillRule(name){ const el=$('#ruleKw'); if(el){ el.value=(name||'').toUpperCase(); el.focus(); el.scrollIntoView({block:'center'}); } }
+
+function fillRuleIdx(i){ const m=(window._overigM||[])[i]; if(m) fillRule(m.name); }
+
+function renderRulesCard(){
+  const rules=SET.rules||[];
+  const overigTx=TX.filter(t=>catOf(t)==='overig' && t.amount<0);
+  const byM=groupMerch(overigTx).slice(0,6); window._overigM=byM;
+  const catOptions=Object.entries(CATS).map(([k,c])=>`<option value="${k}">${c.icon} ${c.name}</option>`).join('');
+  return `<div class="card">
+    <div class="row" style="margin-bottom:6px"><b>${ICON('tag')} Categorie-regels</b><span class="tag">eigen</span></div>
+    <div class="small muted" style="margin-bottom:10px">Eigen trefwoord-regels winnen van de ingebouwde categorisatie — handig om terugkerende fouten zelf te corrigeren. Hoofdletters en spaties maken niet uit.</div>
+    ${rules.length?rules.map((r,i)=>`<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line)"><span class="small">${CATS[r.cat]?CATS[r.cat].icon:'•'} <b>${esc(r.kw)}</b> <span class="muted">→ ${CATS[r.cat]?CATS[r.cat].name:esc(r.cat)}</span></span><span onclick="delRule(${i})" title="Verwijder" style="cursor:pointer;color:var(--red);padding:0 6px;font-size:16px">×</span></div>`).join(''):'<div class="small muted">Nog geen eigen regels.</div>'}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <input id="ruleKw" type="text" placeholder="trefwoord, bv. ALBERT HEIJN" style="flex:1;min-width:0">
+      <select id="ruleCat" style="flex:0 0 auto">${catOptions}</select>
+    </div>
+    <button class="btn sec" style="margin-top:8px" onclick="addRuleFromInputs()">+ Regel toevoegen</button>
+    ${byM.length?`<div class="small muted" style="margin:14px 0 4px;font-weight:600">Nog ongecategoriseerd · grootste winkels</div>
+      ${byM.map((m,i)=>`<div class="row" style="padding:4px 0"><span class="small">${esc(m.name)} <span class="muted">· ${euro0(m.s)}</span></span><button class="mini" style="width:auto;flex:0 0 auto;padding:4px 10px" onclick="fillRuleIdx(${i})">→ regel</button></div>`).join('')}`:''}
+  </div>`;
+}
+
+function renderSet(){
+  const open=SET.setOpen||'';
+  const psd2=Object.keys(SET.psd2Accounts||{}).length;
+  const bankSub = psd2?Object.values(SET.psd2Accounts).map(v=>v.bank).filter((v,i,a)=>a.indexOf(v)===i).join(' + '):(SET.folderName?'map gekoppeld':'niet gekoppeld');
+  const cats=[
+    ['budget',ICON('target'),'Budget & doelen',`${SET.limit}% besteden · €${Math.round(monthlySavingTarget())} sparen`,setBudget],
+    ['income',ICON('euro'),'Inkomen & rekeningen',`${euro0(SET.autoIncome?baseIncome():(+SET.income||0))}/mnd · ${OWN.length} rekening${OWN.length===1?'':'en'}`,setIncome],
+    ['bank',ICON('bank'),'Bankkoppeling & import',bankSub,setBank],
+    ['coach',ICON('robot'),'Coach & categorieën',`Coaching ${SET.coachOff?'uit':'aan'} · ${(SET.rules||[]).length} regels`,setCoach],
+    ['privacy',ICON('lock'),'Privacy & gegevens',`${TX.length} transacties · lokaal`,setPrivacy],
+  ];
+  const list=cats.map(([id,ic,label,sub,fn])=>`
+    <div onclick="toggleSet('${id}')" style="display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line);cursor:pointer">
+      <div style="font-size:22px">${ic}</div>
+      <div style="flex:1;min-width:0"><div style="font-weight:600">${label}</div><div class="small muted">${sub}</div></div>
+      <div class="muted" style="font-size:18px">${open===id?'▲':'›'}</div>
+    </div>
+    ${open===id?`<div style="padding:10px 4px 16px;border-bottom:1px solid var(--line)">${fn()}</div>`:''}`).join('');
+  $('#s-set').innerHTML = `<div class="card" style="padding:6px 12px">${list}</div>
+    <div class="center small muted" style="padding:8px 0 20px">Minder · v9.0 — design-system pass: premium tokens, tabulaire cijfers, hairlines, monochrome line-icons · lokaal + optioneel live</div>`;
+}
+
+function openSet(id){ window._setSheet=id; renderSetSheet(); $('#sheetBg').classList.add('show'); }
+
+function renderSetSheet(){
+  const id=window._setSheet; const def=SET_SHEETS[id]; if(!def) return;
+  const [ic,title,fn]=def;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="margin-bottom:12px"><div style="font-weight:800;font-size:17px">${ic} ${title}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    ${fn()}<div style="height:8px"></div>`;
+}
+
+const SET_SHEETS={budget:[ICON('target'),'Budget & doelen',setBudget],income:[ICON('euro'),'Inkomen & rekeningen',setIncome],bank:[ICON('bank'),'Bankkoppeling & import',setBank],coach:[ICON('robot'),'Coach & categorieën',setCoach],privacy:[ICON('lock'),'Privacy & gegevens',setPrivacy]};
+
+function setBudget(){
+  return `
+    <label class="fld">Bestedingslimiet: <b style="color:var(--teal)">${SET.limit}%</b> van inkomen</label>
+    <input type="range" class="slider" min="40" max="100" step="5" value="${SET.limit}" oninput="SET.limit=+this.value;save();render();">
+    <div class="small muted">Besteed max ${SET.limit}% van wat binnenkomt, hou ${100-SET.limit}% over.</div>
+    <label class="fld">Dagbudget variabele uitgaven (optioneel)</label>
+    <input type="number" value="${SET.dailyVarBudget||''}" placeholder="bv. 45" oninput="SET.dailyVarBudget=+this.value||0;save();render();">
+    <div class="small muted" style="margin-top:6px">Je richtbedrag per dag voor vrij besteedbaar geld. Leeg = automatisch uit je budget.</div>
+    <label class="fld">Hoeveel je per maand wilt sparen</label>
+    <div class="chips">${[['auto','Automatisch'],['amount','Vast bedrag'],['percent','% van inkomen']].map(([k,l])=>`<span class="chip ${(SET.savingMode||'auto')===k?'on':''}" onclick="SET.savingMode='${k}';save();render();">${l}</span>`).join('')}</div>
+    ${(SET.savingMode||'auto')==='amount'
+      ? `<input type="number" min="0" value="${SET.savingAmount||''}" placeholder="bv. 750" oninput="SET.savingAmount=+this.value||0;save();render();">`
+      : (SET.savingMode||'auto')==='percent'
+      ? `<input type="number" min="0" max="100" value="${SET.savingPercent||''}" placeholder="bv. 20" oninput="SET.savingPercent=+this.value||0;save();render();">`
+      : `<div class="small muted">Automatisch = ${100-SET.limit}% van je inkomen (verandert mee met je limiet).</div>`}
+    <label class="fld">Bufferdoel</label>
+    <div class="chips">${[['spend','Maanduitgave'],['income','Inkomen'],['fixed','Vaste lasten'],['variable','Variabele lasten'],['amount','Vast bedrag']].map(([k,l])=>`<span class="chip ${(SET.bufferBasis||'spend')===k?'on':''}" onclick="SET.bufferBasis='${k}';save();render();">${l}</span>`).join('')}</div>
+    ${(SET.bufferBasis||'spend')==='amount'
+      ? `<label class="fld">Doelbedrag (€)</label><input type="number" min="0" value="${SET.bufferAmount||''}" placeholder="bv. 20000" oninput="SET.bufferAmount=+this.value||0;save();render();">`
+      : `<label class="fld">Aantal keer (×)</label><input type="number" min="1" value="${SET.bufferMonths||6}" placeholder="6" oninput="SET.bufferMonths=+this.value||6;save();render();">`}
+    <div class="small muted" style="margin-top:6px">Je buffer = ${(SET.bufferBasis||'spend')==='amount'?'een vast bedrag':`${SET.bufferMonths||6}× je gemiddelde ${({spend:'maanduitgave',income:'inkomen',fixed:'vaste lasten',variable:'variabele lasten'})[SET.bufferBasis||'spend']}`}.</div>
+    <label class="fld" style="margin-top:14px">${ICON('chart')} Maandbudget per categorie <span class="small muted">· ${euro0(totalBudget())} totaal</span></label>
+    <button class="btn sec" style="margin:6px 0 10px" onclick="if(confirm('Budget per categorie voorstellen op basis van je historie? Bestaande budgetten worden overschreven.')){suggestBudgets();}">${ICON('trend')} Voorstel uit mijn historie</button>
+    ${Object.entries(CATS).filter(([k,c])=>c.type==='expense').map(([k,c])=>`
+      <div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:13.5px">${c.icon} ${c.name}</span>
+        <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" min="0" step="5" value="${(SET.budgets&&SET.budgets[k])||''}" placeholder="0" style="width:80px;text-align:right;padding:6px 9px" oninput="setCatBudget('${k}',this.value)"></div></div>`).join('')}`;
+}
+
+function setIncome(){
+  const dq=totals(curMonth||(months()[months().length-1]||''));
+  let h=`
+    <div class="toggle"><div><div style="font-weight:600">Inkomen automatisch detecteren</div><div class="small muted">Uit je bijschrijvingen (categorie Inkomen)</div></div>
+      <label class="sw"><input type="checkbox" ${SET.autoIncome?'checked':''} onchange="SET.autoIncome=this.checked;save();render();"><span class="sl"></span></label></div>
+    ${SET.autoIncome?`<div class="small muted" style="margin-top:8px">Gedetecteerd deze maand: <b>${euro(dq.detectedIncome)}</b></div>`
+      :`<label class="fld">Inkomen per maand (€)</label><input type="number" value="${SET.income||''}" placeholder="bv. 2500" oninput="SET.income=+this.value||0;save();render();">`}`;
+  if(OWN.length){ h+=`
+    <label class="fld" style="margin-top:14px">Je rekeningen & saldo <span class="small muted">· ${euro(totalBalance().sum)} totaal</span></label>
+    <div class="small muted" style="margin-bottom:8px">Saldo's uit MT940/PSD2 zijn vooraf ingevuld; vul ontbrekende saldo's bij voor een kloppende prognose.</div>
+    ${OWN.map(a=>{const m=ACCMETA[a]||{};const cnt=TX.filter(t=>t.acc===a).length;const bv=accBalance(a);const det=m.balance!=null;return `
+      <div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)"><div style="min-width:0;flex:1"><div style="font-weight:600">${esc(accShort(a))} <span class="tag">${m.bank||''}</span></div><div class="small muted">${m.role||'Rekening'} · ${cnt} tx${det?' · saldo '+m.date:''}</div></div>
+        <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" step="0.01" value="${bv!=null?bv:''}" placeholder="0,00" style="width:92px;text-align:right;padding:7px 9px" oninput="setBal('${a}',this.value)"></div></div>`;}).join('')}
+    <label class="fld">Minimale buffer (waarschuwing)</label>
+    <input type="number" value="${SET.buffer||''}" placeholder="bv. 1000" oninput="SET.buffer=+this.value||0;save();render();">
+    <div class="small muted" style="margin-top:6px">De prognose waarschuwt als je saldo hieronder dreigt te komen.</div>
+    <label class="fld">Extra spaargeld (potjes buiten PSD2)</label>
+    <input type="number" value="${SET.extraSavings||''}" placeholder="bv. 5000" oninput="SET.extraSavings=+this.value||0;save();render();">
+    <div class="small muted" style="margin-top:6px">Saldo van potjes die niet via PSD2 binnenkomen (bv. N26 Spaces). Telt mee voor je bufferdoel, niet voor je vrij besteedbare ruimte.</div>`; }
+  return h;
+}
+
+function setBank(){
+  const psd2=Object.keys(SET.psd2Accounts||{}).length;
+  return `
+    <div class="small muted" style="margin-bottom:8px"><b>Live bankkoppeling (PSD2)</b> — transacties automatisch via Enable Banking. Vereist je eigen backend (zie psd2-backend/README). Data loopt dan via Enable Banking; ~elke 90 dagen opnieuw inloggen.</div>
+    <label class="fld">Backend-URL</label>
+    <input type="text" inputmode="url" placeholder="https://minder-psd2.JOUW.workers.dev" value="${esc(SET.psd2Url||'')}" oninput="SET.psd2Url=this.value.trim();save();">
+    <label class="fld">App-token</label>
+    <input type="password" placeholder="zelfde geheim als in de backend" value="${esc(SET.psd2Token||'')}" oninput="SET.psd2Token=this.value.trim();save();">
+    ${psd2?`<div class="small muted" style="margin:10px 0 4px;font-weight:600">Gekoppelde rekeningen</div>
+      ${Object.entries(SET.psd2Accounts).map(([k,v])=>`<div class="row" style="padding:4px 0"><span class="small">${ICON('bank')} ${esc(v.bank)} · ${esc(v.label)}</span><span class="small muted">${v.exp?'tot '+new Date(v.exp).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):''}</span></div>`).join('')}
+      ${SET.psd2LastSync?`<div class="small muted" style="margin-top:4px">Laatst gesynchroniseerd ${new Date(SET.psd2LastSync).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}.</div>`:''}`:''}
+    <button class="btn" style="margin-top:10px" onclick="psd2Connect()">${ICON('bank')} ${psd2?'Bank koppelen / verversen':'Koppel je bank'}</button>
+    ${psd2?`<button class="btn sec" style="margin-top:8px" onclick="psd2Disconnect()">✕ Live koppeling vergeten</button>`:''}
+    <div style="border-top:1px solid var(--line);margin:14px 0 10px"></div>
+    <div class="small muted" style="margin-bottom:8px"><b>Automatische map-import</b>${SET.folderName?' · gekoppeld':''}</div>
+    ${SET.folderName
+      ? `<div class="small muted" style="margin-bottom:10px">Map <b>${esc(SET.folderName)}</b>${SET.lastSync?` · laatst ${new Date(SET.lastSync).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}.</div>
+         <button class="btn" style="margin-bottom:8px" onclick="syncFolder(true)">${ICON('sync')} Synchroniseer nu</button>
+         <div class="toggle"><div><div style="font-weight:600">Automatisch bij openen</div><div class="small muted">Map opnieuw scannen zodra je de app opent</div></div>
+           <label class="sw"><input type="checkbox" ${SET.autoSync?'checked':''} onchange="SET.autoSync=this.checked;save();"><span class="sl"></span></label></div>
+         <button class="btn sec" style="margin-top:8px" onclick="connectFolder()">${ICON('folder')} Andere map</button>
+         <button class="btn sec" style="margin-top:8px" onclick="forgetFolder()">✕ Map ontkoppelen</button>`
+      : (FSA?`<div class="small muted" style="margin-bottom:10px">Koppel je bankmap één keer; daarna leest Minder bij elke opening automatisch alle MT940/CSV-bestanden — lokaal.</div><button class="btn" onclick="connectFolder()">${ICON('folder')} Map koppelen</button>`
+            :`<div class="small muted">Map-import werkt in Chrome/Edge. Je kunt ook bestanden op het scherm slepen.</div>`)}
+    <button class="btn sec" style="margin-top:8px" onclick="document.getElementById('file').click()">${ICON('folder')} Bestand toevoegen (MT940 of CSV)</button>`;
+}
+
+function setCoach(){
+  return `
+    <div class="toggle"><div><div style="font-weight:600">Coaching</div><div class="small muted">Coach-tips op je Home & Actieplan</div></div>
+      <label class="sw"><input type="checkbox" ${!SET.coachOff?'checked':''} onchange="SET.coachOff=!this.checked;save();render();"><span class="sl"></span></label></div>
+    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Streak tonen</div><div class="small muted">${ICON('fire')} dagen op rij binnen je dagdoel</div></div>
+      <label class="sw"><input type="checkbox" ${!SET.hideStreak?'checked':''} onchange="SET.hideStreak=!this.checked;save();render();"><span class="sl"></span></label></div>
+    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Interne overboekingen verbergen</div><div class="small muted">Eigen rekeningen & sparen tellen niet als uitgave</div></div>
+      <label class="sw"><input type="checkbox" ${SET.hideInternal?'checked':''} onchange="SET.hideInternal=this.checked;save();render();"><span class="sl"></span></label></div>
+    <div style="height:10px"></div>
+    ${renderRulesCard()}
+    <div class="small muted" style="margin-top:10px">${ICON('info')} <b>Hoe werkt de coach?</b> Geen AI in de cloud — alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.</div>`;
+}
+
+function setPrivacy(){
+  const standalone = (window.matchMedia&&matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
+  return `
+    <div class="small muted" style="margin-bottom:10px"><b>Waar staat mijn data?</b> Alles staat lokaal in je browser op dit toestel — ${TX.length} transacties, ${months().length} maanden. Niets gaat naar een server (behalve de optionele live bankkoppeling via je eigen backend).</div>
+    ${standalone?`<div class="small muted" style="margin-bottom:10px">${ICON('check')} Geïnstalleerd als app — werkt offline.</div>`
+      :(deferredPrompt?`<button class="btn sec" style="margin-bottom:8px" onclick="installApp()">${ICON('install')} Installeer als app</button>`
+        :`<div class="small muted" style="margin-bottom:10px">Installeren via browsermenu: ⋮ → "App installeren" (Chrome/Edge) of Deel → "Zet op beginscherm" (iPhone).</div>`)}
+    <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (${TX.length} transacties op dit toestel.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">${ICON('trash')} Alle gegevens wissen</button>`;
+}
+
+function setAcc(a){accFilter=a;renderTx();}
+
+/* ----- per categorie (over een transactielijst) ----- */
+
+function accLabel(a){ const r=ACCMETA[a]; if(r&&r.label) return r.label; return (a||'').replace(/^N26 /,'N26 ')||'Rekening'; }
+
+function accShort(a){ return (a||'').startsWith('N26 ') ? a.replace(/^N26 /,'') : '··'+(a||'').slice(-4); }
+
+function closeSheet(){ $('#sheetBg').classList.remove('show'); }
+
+/* ---------- helpers ---------- */
+
+function esc(s){return (s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+
+function go(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $('#s-'+name).classList.add('active');
+  document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.go===name));
+  window.scrollTo(0,0);
+}
+
+/* ---------- events ---------- */
+document.querySelectorAll('.nav a').forEach(a=>a.onclick=()=>go(a.dataset.go));
+$('#fab').onclick=()=>$('#file').click();
+$('#sheetBg').onclick=e=>{if(e.target.id==='sheetBg')closeSheet();};
+$('#mPrev').onclick=()=>{const ms=months();const i=ms.indexOf(curMonth);if(i>0){curMonth=ms[i-1];render();}};
+$('#mNext').onclick=()=>{const ms=months();const i=ms.indexOf(curMonth);if(i<ms.length-1){curMonth=ms[i+1];render();}};
+// gedeelde inlees-routine: items = [{name,text}]
+
+function ingest(items){
+  let added=0;
+  const existing=new Set(TX.map(t=>t.id));
+  for(const {name,text} of items){
+    const isCSV = /\.csv$/i.test(name) || /booking date|partner name|account name/i.test(text.slice(0,200));
+    let res; try{ res = isCSV ? parseCSV(text) : parseMT940(text); }catch(e){ continue; }
+    for(const t of res.txns){ if(!existing.has(t.id)){ TX.push(t); existing.add(t.id); added++; } }
+    for(const a in res.balances){ ACCMETA[a]=Object.assign(ACCMETA[a]||{},res.balances[a]); }
+  }
+  TX.sort((a,b)=>a.date.localeCompare(b.date));
+  applyOwnAccounts(); buildAccMeta(); save();
+  return added;
+}
+$('#file').onchange=async e=>{
+  const files=[...e.target.files]; if(!files.length)return;
+  const items=await Promise.all(files.map(async f=>({name:f.name,text:await f.text()})));
+  const added=ingest(items); curMonth=null; render(); e.target.value='';
+  toast(added? `${ICON('check')} ${added} transacties ingelezen over ${OWN.length} rekening${OWN.length>1?'en':''}` : 'Geen nieuwe transacties (al ingelezen)');
+};
+
+/* ---------- automatische map-import (File System Access API) ---------- */
+
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('minder',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+
+async function idbSet(k,v){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
+
+async function idbGet(k){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readonly');const q=t.objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}
+
+async function connectFolder(){
+  if(!FSA){ alert('Automatische map-import werkt in Chrome of Edge. Gebruik anders “Bestand toevoegen” of sleep je map op het scherm.'); return; }
+  try{
+    dirHandle=await window.showDirectoryPicker({id:'minder-bank',mode:'read'});
+    await idbSet('dir',dirHandle);
+    SET.autoSync=true; SET.folderName=dirHandle.name; save();
+    await syncFolder(true);
+  }catch(e){ if(e&&e.name!=='AbortError') alert('Kon de map niet koppelen: '+e.message); }
+}
+
+async function syncFolder(verbose){
+  try{
+    if(!dirHandle) dirHandle=await idbGet('dir');
+    if(!dirHandle){ if(verbose) alert('Koppel eerst een map.'); return; }
+    let p=await dirHandle.queryPermission({mode:'read'});
+    if(p!=='granted'){ if(!verbose) return; p=await dirHandle.requestPermission({mode:'read'}); }
+    if(p!=='granted'){ if(verbose) alert('Geen leestoegang tot de map gegeven.'); return; }
+    const items=[];
+    for await (const [name,h] of dirHandle.entries()){
+      if(h.kind==='file' && FILE_RX.test(name)){ const f=await h.getFile(); items.push({name,text:await f.text()}); }
+    }
+    const added=ingest(items);
+    SET.lastSync=Date.now(); SET.folderName=dirHandle.name; save();
+    curMonth=null; render();
+    if(added) toast(`${ICON('check')} ${added} nieuwe transacties bijgewerkt`); else if(verbose) toast('Bijgewerkt — geen nieuwe transacties');
+  }catch(e){ if(verbose) toast('Synchroniseren mislukt'); }
+}
+
+async function forgetFolder(){ dirHandle=null; SET.autoSync=false; SET.folderName=''; SET.lastSync=0; try{await idbSet('dir',null);}catch(e){} save(); render(); }
+
+/* ---------- PSD2 live koppeling (Enable Banking via eigen backend) ---------- */
+
+function psd2Cfg(){ return { url:(SET.psd2Url||'').replace(/\/+$/,''), token:SET.psd2Token||'' }; }
+
+function psd2Ready(){ const c=psd2Cfg(); return !!(c.url && c.token); }
+
+async function psd2Api(path, opts){
+  opts=opts||{}; const c=psd2Cfg(); if(!c.url) throw new Error('Geen backend-URL ingesteld');
+  const r=await fetch(c.url+path, Object.assign({}, opts, {
+    headers: Object.assign({ 'Authorization':'Bearer '+c.token, 'Content-Type':'application/json' }, opts.headers||{})
+  }));
+  let data=null; try{ data=await r.json(); }catch(e){}
+  if(!r.ok) throw new Error((data&&(data.error||data.detail))||('HTTP '+r.status));
+  return data||{};
+}
+// iban → numeriek rekeningdeel (zelfde vorm als MT940 :25:, voor intern-detectie)
+
+function ibanNum(iban){ const s=(iban||'').replace(/\s/g,''); if(s.length<8) return ''; const d=(s.slice(4).match(/\d+/g)||[]).join(''); return d.replace(/^0+/,''); }
+// 1) bank kiezen → consent starten
+
+async function psd2Connect(){
+  if(!psd2Ready()){ toast('Stel eerst de backend-URL en token in'); go('set'); return; }
+  toast('Banken ophalen…');
+  let banks;
+  try{ const d=await psd2Api('/aspsps?country=NL'); banks=(d.aspsps||d||[]).filter(b=>b&&b.name).sort((a,b)=>a.name.localeCompare(b.name)); }
+  catch(e){ toast('Fout: '+e.message); return; }
+  if(!banks.length){ toast('Geen banken ontvangen'); return; }
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:8px"><div style="font-size:24px">${ICON('bank')}</div><div style="font-weight:800;font-size:16px">Kies je bank</div>
+      <div class="muted small">${banks.length} banken · je logt in bij je bank om toegang te geven</div></div>
+    ${banks.map((b,i)=>`<div class="tx" style="cursor:pointer" onclick="psd2StartAuth(${i})">
+      <div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
+      <div class="info"><div class="nm">${esc(b.name)}</div><div class="cat">${esc(b.country||'NL')}</div></div>
+      <div class="amt" style="color:var(--teal)">›</div></div>`).join('')}`;
+  window._psd2Banks=banks; $('#sheetBg').classList.add('show');
+}
+
+async function psd2StartAuth(idx){
+  const b=(window._psd2Banks||[])[idx]; if(!b) return;
+  const aspsp={ name:b.name, country:b.country||'NL' };
+  const state='mind_'+Math.random().toString(36).slice(2)+Date.now().toString(36);
+  const redirect=location.origin+location.pathname;
+  sessionStorage.setItem('psd2_state', state); closeSheet();
+  toast('Doorsturen naar '+b.name+'…');
+  try{
+    const d=await psd2Api('/auth',{ method:'POST', body:JSON.stringify({ aspsp, state, redirect_url:redirect, valid_days:90 }) });
+    if(d&&d.url){ location.href=d.url; } else { toast('Geen autorisatie-URL ontvangen'); }
+  }catch(e){ toast('Fout: '+e.message); }
+}
+// 2) terug van de bank: ?code=&state=
+
+async function psd2HandleCallback(){
+  const q=new URLSearchParams(location.search);
+  const code=q.get('code'), state=q.get('state');
+  if(!code) return;
+  const expect=sessionStorage.getItem('psd2_state');
+  history.replaceState(null,'',location.origin+location.pathname);
+  if(expect && state && state!==expect){ toast('Sessie kwam niet overeen — probeer opnieuw'); return; }
+  toast('Bankkoppeling afronden…');
+  try{ const s=await psd2Api('/sessions',{ method:'POST', body:JSON.stringify({ code }) }); await psd2IngestSession(s); }
+  catch(e){ toast('Fout bij afronden: '+e.message); }
+}
+// accounts uit de sessie → transacties + saldo ophalen en opslaan
+
+async function psd2IngestSession(s){
+  const accounts = s.accounts || [];
+  if(!accounts.length){ toast('Geen rekeningen ontvangen'); return; }
+  const meta=SET.psd2Accounts||{};
+  const aspspName=(s.aspsp&&s.aspsp.name)||'Bank';
+  const allTx=[]; const balances={};
+  const from=new Date(); from.setMonth(from.getMonth()-24); const fromStr=from.toISOString().slice(0,10);
+  for(const a of accounts){
+    const uid = a.uid || a;
+    const iban = (a.account_id&&a.account_id.iban) || a.iban || '';
+    const accId = ibanNum(iban) || ('psd2_'+String(uid).slice(0,8));
+    const label = (a.name||a.product||'Rekening')+(iban?' ··'+iban.slice(-4):'');
+    meta[accId]={ uid, iban, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'' };
+    let cont=null, guard=0;
+    do{
+      const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
+      let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); }
+      catch(e){ toast('Transacties ophalen mislukt: '+e.message); break; }
+      for(const raw of (d.transactions||[])){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
+      cont=d.continuation_key||null; guard++;
+    } while(cont && guard<40);
+    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:new Date().toISOString().slice(0,10)}; }catch(e){}
+  }
+  SET.psd2Accounts=meta; SET.psd2LastSync=Date.now();
+  const added=commitTx(allTx, balances);
+  curMonth=null; render();
+  toast(added? `${ICON('check')} ${added} transacties gekoppeld van ${aspspName}` : `Koppeling met ${aspspName} ververst (geen nieuwe)`);
+}
+// Enable Banking transactie → intern TX-object (zelfde schema als MT940/CSV)
+
+function mapPsd2Tx(raw, accId){
+  const amtObj = raw.transaction_amount || raw.amount || {};
+  const val = parseFloat(amtObj.amount); if(isNaN(val)) return null;
+  const cdi = (raw.credit_debit_indicator||'').toUpperCase();
+  const amount = cdi==='DBIT' ? -Math.abs(val) : (cdi==='CRDT'? Math.abs(val) : val);
+  const date = (raw.booking_date || raw.value_date || raw.transaction_date || '').slice(0,10);
+  if(!date) return null;
+  const remit = Array.isArray(raw.remittance_information)? raw.remittance_information.join(' ') : (raw.remittance_information||'');
+  const cp = amount<0 ? (raw.creditor||{}) : (raw.debtor||{});
+  const cpAcc = amount<0 ? (raw.creditor_account||{}) : (raw.debtor_account||{});
+  const name = ((cp.name||'').trim() || remit.slice(0,42).trim() || 'Transactie');
+  const desc = [name, remit, (raw.bank_transaction_code&&raw.bank_transaction_code.description)||''].filter(Boolean).join(' ');
+  const t={ date, amount, acc:accId, src:'psd2', desc, name:name.replace(/\s+/g,' ').slice(0,44),
+    refNums: cpAcc.iban? [ibanNum(cpAcc.iban)].filter(Boolean) : [] };
+  categorize(t);
+  return t;
+}
+
+function pickBalance(b){
+  const arr = (b&&(b.balances||b))||[]; if(!Array.isArray(arr)||!arr.length) return null;
+  const pref = arr.find(x=>/CLBD|ITAV|XPCD|PRCD/i.test(x.balance_type||x.type||'')) || arr[0];
+  const v = pref&&(pref.balance_amount||pref.amount); if(!v) return null;
+  const n=parseFloat(v.amount); if(isNaN(n)) return null;
+  return (pref.credit_debit_indicator||'').toUpperCase()==='DBIT' ? -Math.abs(n) : n;
+}
+// gedeelde commit voor kant-en-klare TX-objecten (zelfde dedup als ingest)
+
+function commitTx(newTxns, balances){
+  let added=0; const existing=new Set(TX.map(t=>t.id));
+  for(const t of newTxns){ if(t&&!existing.has(t.id)){ TX.push(t); existing.add(t.id); added++; } }
+  if(balances) for(const a in balances){ ACCMETA[a]=Object.assign(ACCMETA[a]||{}, balances[a]); }
+  TX.sort((a,b)=>a.date.localeCompare(b.date));
+  applyOwnAccounts(); buildAccMeta(); save();
+  return added;
+}
+
+function psd2Disconnect(){
+  if(!confirm('Live koppeling vergeten? (Reeds ingelezen transacties blijven staan.)')) return;
+  SET.psd2Accounts={}; SET.psd2LastSync=0; save(); render();
+}
+
+/* ---------- map/bestanden slepen (werkt ook zonder File System Access API) ---------- */
+
+function detectRecurring(){
+  const map={};
+  for(const t of TX){ if(t.amount>=0) continue; const c=catOf(t); if(CATS[c].type!=='expense'&&c!=='intern')continue;
+    const key=t.name.toUpperCase().replace(/[0-9]/g,'').slice(0,18).trim();
+    if(!key)continue; (map[key]=map[key]||{name:t.name,cat:c,amts:[],mset:new Set()});
+    map[key].amts.push(-t.amount); map[key].mset.add(t.date.slice(0,7));
+  }
+  return Object.values(map).filter(r=>r.mset.size>=2).map(r=>({name:r.name,cat:r.cat,count:r.amts.length,
+    avg:r.amts.reduce((a,b)=>a+b,0)/r.amts.length})).sort((a,b)=>b.avg-a.avg);
+}
+
+/* ----- INSTELLINGEN ----- */
+
+function toggleSet(id){ SET.setOpen = SET.setOpen===id?'':id; save(); renderSet(); }
+
+async function readEntry(entry,items){
+  if(!entry) return;
+  if(entry.isFile){ await new Promise(res=>entry.file(async f=>{ if(FILE_RX.test(f.name)) items.push({name:f.name,text:await f.text()}); res(); },res)); }
+  else if(entry.isDirectory){ const rd=entry.createReader();
+    while(true){ const ents=await new Promise((res,rej)=>rd.readEntries(res,rej)); if(!ents.length) break; for(const e of ents) await readEntry(e,items); } }
+}
+document.addEventListener('dragover',e=>{e.preventDefault();});
+document.addEventListener('drop',async e=>{
+  e.preventDefault();
+  const items=[];
+  const ents=[...(e.dataTransfer.items||[])].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);
+  if(ents.length){ for(const en of ents) await readEntry(en,items); }
+  else { for(const f of e.dataTransfer.files){ if(FILE_RX.test(f.name)) items.push({name:f.name,text:await f.text()}); } }
+  if(items.length){ const added=ingest(items); curMonth=null; render(); toast(added? `${ICON('check')} ${added} transacties geïmporteerd` : 'Geen nieuwe transacties'); }
+});
+
+/* ---------- start ---------- */
+load(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
+if(new URLSearchParams(location.search).get('code')) psd2HandleCallback(); // terug van bank (PSD2-consent)
+(async()=>{ // auto-sync bij openen als de map al gekoppeld is en toegang al verleend is
+  if(!FSA || !SET.autoSync) return;
+  try{ dirHandle=await idbGet('dir');
+    if(dirHandle && await dirHandle.queryPermission({mode:'read'})==='granted'){ await syncFolder(false); }
+    else { render(); }
+  }catch(e){}
+})();
+
+/* ---------- PWA: service worker + installeren ---------- */
+if('serviceWorker' in navigator && location.protocol!=='file:'){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').then(reg=>{ try{reg.update();}catch(e){} }).catch(()=>{}));
+  let _reloading=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(_reloading)return; _reloading=true; location.reload(); });
+}
+window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferredPrompt=e; if(TX.length) renderSet(); });
+window.addEventListener('appinstalled',()=>{ deferredPrompt=null; if(TX.length) renderSet(); });
+async function installApp(){
+  if(!deferredPrompt){ alert('Installeren kan via het browsermenu: ⋮ → “App installeren” (Chrome/Edge) of Deel → “Zet op beginscherm” (iPhone). Mogelijk is de app al geïnstalleerd.'); return; }
+  deferredPrompt.prompt(); try{ await deferredPrompt.userChoice; }catch(e){} deferredPrompt=null; renderSet();
+}
+</script>
+</body>
+</html>
