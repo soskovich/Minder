@@ -328,12 +328,15 @@ function applyOwnAccounts(){
   const ownNames=new Set([...TX.filter(t=>t.src==='csv').map(t=>(t.accName||'').toLowerCase()),
     'main','main account','zakgeld','buffer comfort','buffer rust','instant savings','income sorter',
     've sumter','vincent sumter','vincent ernst sumter'].filter(Boolean));
+  // N26-interne potje-/spaarbewegingen (PSD2 levert geen tegenpartij-IBAN voor Spaces)
+  const N26INT=/\b(income sorter|moved|round[\s-]?up)\b|\b(from|to|naar|van)\s+(main|zakgeld|spaces?|spaarpot|buffer)/i;
   for(const t of TX){
     if(OVR[t.id]) continue;                 // handmatige keuze respecteren
     const rc=t.ruleCat||t.autoCat;
     if(rc==='inkomen'){ t.autoCat='inkomen'; continue; }
-    let intern = (t.refNums||[]).some(n=>OWN.includes(n));               // MT940: eigen IBAN
-    if(!intern && t.src==='csv' && /transfer/i.test(t.typ||'') && ownNames.has((t.partner||'').toLowerCase())) intern=true; // N26: potje↔potje
+    let intern = (t.refNums||[]).some(n=>OWN.includes(n));               // MT940/PSD2: eigen IBAN als tegenpartij
+    if(!intern && t.src==='csv' && /transfer/i.test(t.typ||'') && ownNames.has((t.partner||'').toLowerCase())) intern=true; // N26 CSV: potje↔potje
+    if(!intern && t.src==='psd2'){ const nm=(t.name||'').toLowerCase().trim(); if(ownNames.has(nm) || N26INT.test(t.name||'')) intern=true; } // N26 PSD2: Spaces/eigen naam
     t.autoCat = intern ? 'intern' : rc;
   }
 }
@@ -818,11 +821,13 @@ function avgIncome(){
   const vals=months().map(m=>{let s=0;for(const t of txOfMonth(m)){if(CATS[catOf(t)].type==='income')s+=Math.max(t.amount,0);}return s;}).filter(v=>v>0).sort((a,b)=>a-b);
   return vals.length?vals[Math.floor(vals.length/2)]:0;
 }
-// basis-inkomen = conservatieve norm: mediaan van de ONDERSTE helft van je maandinkomens.
-// Zo telt een incidentele piek (vakantiegeld, bonus) niet mee en val je terug op je structurele inkomen.
+// basis-inkomen = conservatieve norm over je RECENTE maanden (laatste 6): mediaan van de ONDERSTE helft.
+// Recent venster → een salarisverhoging telt meteen mee en oudere/lagere maanden wegen niet meer mee.
+// Onderste helft → incidentele pieken (vakantiegeld, dividend, onkosten) blazen je norm niet op.
 function baseIncome(){
   if(!SET.autoIncome) return +SET.income||0;
-  const vals=months().map(m=>{let s=0;for(const t of txOfMonth(m)){if(CATS[catOf(t)].type==='income')s+=Math.max(t.amount,0);}return s;}).filter(v=>v>0).sort((a,b)=>a-b);
+  const recent=months().slice(-6);
+  const vals=recent.map(m=>{let s=0;for(const t of txOfMonth(m)){if(CATS[catOf(t)].type==='income')s+=Math.max(t.amount,0);}return s;}).filter(v=>v>0).sort((a,b)=>a-b);
   if(!vals.length) return 0;
   const lower=vals.slice(0,Math.ceil(vals.length/2));
   return Math.round(lower[Math.floor(lower.length/2)]);
@@ -1880,7 +1885,7 @@ function renderSet(){
     <button class="btn sec" style="margin-bottom:8px" onclick="document.getElementById('file').click()">📂 Bestand toevoegen (MT940 of CSV)</button>
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (De gekoppelde map blijft bestaan.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">🗑️ Alle transacties wissen</button>
   </div>
-  <div class="center small muted" style="padding:8px 0 20px">Minder · v6.5 — PSD2 live bankkoppeling (Enable Banking, eigen backend) · lokaal + optioneel live</div>`;
+  <div class="center small muted" style="padding:8px 0 20px">Minder · v6.7 — basisinkomen o.b.v. recente 6 mnd (salarisverhoging telt mee) + PSD2 intern-fix · lokaal + optioneel live</div>`;
 }
 
 /* ----- recategorisatie-sheet ----- */
