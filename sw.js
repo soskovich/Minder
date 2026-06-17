@@ -1,7 +1,8 @@
-/* Minder service worker — v2
+/* Minder service worker — v3
    Network-first voor de app-pagina (altijd verse versie als je online bent),
-   cache-first voor statische assets (iconen). Werkt offline via de cache. */
-const CACHE = 'minder-v2';
+   cache-first voor statische assets (iconen). Werkt offline via de cache.
+   v3: backend-/cross-origin-aanroepen (PSD2) NOOIT cachen — altijd live van het netwerk. */
+const CACHE = 'minder-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -28,6 +29,9 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  // cross-origin (bv. de PSD2-backend op workers.dev) niet onderscheppen/cachen → altijd live
+  let _u; try { _u = new URL(e.request.url); } catch (_) { return; }
+  if (_u.origin !== self.location.origin) return;
   const isHTML = e.request.mode === 'navigate' ||
                  (e.request.headers.get('accept') || '').includes('text/html');
   if (isHTML) {
