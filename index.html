@@ -1092,7 +1092,8 @@ function savingsModel(){
   else if(basis==='variable'){ baseVal=avgVar; baseLabel='variabele lasten'; }
   else { baseVal=avgSpend; baseLabel='maanduitgave'; }
   const goal = basis==='amount' ? (+SET.bufferAmount||0) : baseVal*mult;
-  const {sum:cur,missing}=totalBalance();
+  const {sum:bankBal,missing}=totalBalance();
+  const cur=bankBal + (+SET.extraSavings||0);   // + handmatig spaargeld buiten PSD2 (bv. N26 Spaces)
   const pct=goal>0?Math.min(cur/goal*100,100):0;
   const toGo=Math.max(goal-cur,0);
   const monthsLeft= monthlySaving>0? toGo/monthlySaving : 0;
@@ -1843,6 +1844,9 @@ function renderSet(){
     <label class="fld">Liquiditeitsbuffer (optioneel)</label>
     <input type="number" value="${SET.buffer||''}" placeholder="bv. 1000" oninput="SET.buffer=+this.value||0;save();render();">
     <div class="small muted" style="margin-top:6px">Je gewenste minimale saldo. De liquiditeitsprognose waarschuwt als je eronder dreigt te komen.</div>
+    <label class="fld">Extra spaargeld (potjes buiten PSD2)</label>
+    <input type="number" value="${SET.extraSavings||''}" placeholder="bv. 5000" oninput="SET.extraSavings=+this.value||0;save();render();">
+    <div class="small muted" style="margin-top:6px">Saldo van spaarpotjes die niet automatisch via PSD2 binnenkomen (bv. je N26 Spaces zoals Buffer Rust/Comfort). Telt mee voor je <b>bufferdoel</b>, maar niet voor je vrij besteedbare ruimte.</div>
     <label class="fld">Maandelijkse spaarinleg</label>
     <div class="chips">${[['auto','Automatisch'],['amount','Vast bedrag'],['percent','% van inkomen']].map(([k,l])=>`<span class="chip ${(SET.savingMode||'auto')===k?'on':''}" onclick="SET.savingMode='${k}';save();render();">${l}</span>`).join('')}</div>
     ${(SET.savingMode||'auto')==='amount'
@@ -1890,7 +1894,7 @@ function renderSet(){
     <button class="btn sec" style="margin-bottom:8px" onclick="document.getElementById('file').click()">📂 Bestand toevoegen (MT940 of CSV)</button>
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (De gekoppelde map blijft bestaan.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">🗑️ Alle transacties wissen</button>
   </div>
-  <div class="center small muted" style="padding:8px 0 20px">Minder · v6.8 — vaste lasten/prognose alleen actief terugkerend (gestopte abo's vallen af) + inkomen recent + PSD2 intern-fix · lokaal + optioneel live</div>`;
+  <div class="center small muted" style="padding:8px 0 20px">Minder · v6.9 — handmatig 'extra spaargeld' (N26 Spaces buiten PSD2) telt mee voor bufferdoel · lokaal + optioneel live</div>`;
 }
 
 /* ----- recategorisatie-sheet ----- */
