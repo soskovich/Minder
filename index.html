@@ -868,11 +868,16 @@ function recurringSchedule(){
     map[key].occ.push({day:+t.date.slice(8,10), amt:Math.abs(t.amount), ym:t.date.slice(0,7)});
   }
   const med=a=>{const s=[...a].sort((x,y)=>x-y);return s[Math.floor(s.length/2)];};
+  // alleen ACTIEF terugkerende posten: in minstens 2 van de laatste 3 maanden met data.
+  // Zo vallen gestopte abonnementen (bv. Basic Fit) en eenmalige kredieten/overboekingen vanzelf af.
+  const allYms=[...new Set(TX.map(t=>t.date.slice(0,7)))].sort();
+  const last3=new Set(allYms.slice(-3));
   const out=[];
   for(const k in map){ const r=map[k];
     // per maand de HOOFDbetaling (grootste bedrag) — zo telt de echte maandlast, niet losse kleine overboekingen
     const byYm={}; for(const o of r.occ){ if(!byYm[o.ym] || o.amt>byYm[o.ym].amt) byYm[o.ym]=o; }
     const mains=Object.values(byYm); if(mains.length<2) continue;
+    if(mains.filter(o=>last3.has(o.ym)).length<2) continue;   // niet (meer) actief in recente maanden → overslaan
     out.push({key:k,name:r.name,cat:r.cat,type:r.type,day:med(mains.map(o=>o.day)),amount:med(mains.map(o=>o.amt)),count:r.occ.length}); }
   return out.sort((a,b)=>a.day-b.day);
 }
@@ -1885,7 +1890,7 @@ function renderSet(){
     <button class="btn sec" style="margin-bottom:8px" onclick="document.getElementById('file').click()">📂 Bestand toevoegen (MT940 of CSV)</button>
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (De gekoppelde map blijft bestaan.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">🗑️ Alle transacties wissen</button>
   </div>
-  <div class="center small muted" style="padding:8px 0 20px">Minder · v6.7 — basisinkomen o.b.v. recente 6 mnd (salarisverhoging telt mee) + PSD2 intern-fix · lokaal + optioneel live</div>`;
+  <div class="center small muted" style="padding:8px 0 20px">Minder · v6.8 — vaste lasten/prognose alleen actief terugkerend (gestopte abo's vallen af) + inkomen recent + PSD2 intern-fix · lokaal + optioneel live</div>`;
 }
 
 /* ----- recategorisatie-sheet ----- */
