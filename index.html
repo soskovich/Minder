@@ -342,13 +342,15 @@ function buildAccMeta(){
   for(const a of OWN){
     const list=TX.filter(t=>t.acc===a);
     const isCSV=list[0]&&list[0].src==='csv';
+    const isPsd2=list[0]&&list[0].src==='psd2';
+    const pm=isPsd2 ? ((SET.psd2Accounts||{})[a]||null) : null;
     const inc=list.filter(t=>catOf(t)==='inkomen').reduce((s,t)=>s+Math.max(t.amount,0),0);
     const cards=list.filter(t=>/BEA,|GEA,|ECOM,|APPLE PAY|BETAALPAS|Presentment/i.test(t.desc)).length;
     let role = inc>1000 ? 'Salaris / inkomen' : cards>20 ? 'Betaalrekening' : 'Spaarpotje / overig';
-    // label: N26-potjes tonen hun naam, ABN toont rol + laatste 4 cijfers
-    const label = isCSV ? (a.replace(/^N26 /,'')+' · N26') : (role+' ··'+a.slice(-4));
+    // label: PSD2 toont bank + rekeningnaam, N26-potjes hun naam, ABN rol + laatste 4 cijfers
+    const label = pm ? (pm.bank+' · '+pm.label) : isCSV ? (a.replace(/^N26 /,'')+' · N26') : (role+' ··'+a.slice(-4));
     const prev=ACCMETA[a]||{};
-    ACCMETA[a]=Object.assign({},prev,{role,count:list.length,income:inc,label,bank:isCSV?'N26':'ABN AMRO'});
+    ACCMETA[a]=Object.assign({},prev,{role,count:list.length,income:inc,label,bank: pm?pm.bank : isCSV?'N26':'ABN AMRO'});
   }
 }
 
@@ -1846,6 +1848,19 @@ function renderSet(){
     <div class="small muted" style="margin-top:6px">Je spaardoel = ${(SET.bufferBasis||'spend')==='amount'?'een vast bedrag':`het gekozen aantal × je gemiddelde ${({spend:'maanduitgave',income:'inkomen',fixed:'vaste lasten',variable:'variabele lasten'})[SET.bufferBasis||'spend']}`}. De widget "Sparen & buffer" houdt je voortgang bij met je maandelijkse spaarinleg (${100-SET.limit}% van je inkomen).</div>
   </div>`:''}
   <div class="card">
+    <div class="row" style="margin-bottom:6px"><b>🔗 Live bankkoppeling (PSD2)</b>${(Object.keys(SET.psd2Accounts||{}).length)?'<span class="tag" style="background:rgba(45,212,191,.15);color:var(--teal)">gekoppeld</span>':'<span class="tag">beta</span>'}</div>
+    <div class="small muted" style="margin-bottom:10px">Haal transacties automatisch op via Enable Banking — geen handmatige bestanden meer. Vereist je eigen backend (zie <b>psd2-backend/README</b>). Je data loopt dan via Enable Banking i.p.v. 100% lokaal; je logt elke ~90 dagen opnieuw in bij je bank (PSD2-verplichting).</div>
+    <label class="fld">Backend-URL</label>
+    <input type="text" inputmode="url" placeholder="https://minder-psd2.JOUW.workers.dev" value="${esc(SET.psd2Url||'')}" oninput="SET.psd2Url=this.value.trim();save();">
+    <label class="fld">App-token</label>
+    <input type="password" placeholder="zelfde geheim als in de backend" value="${esc(SET.psd2Token||'')}" oninput="SET.psd2Token=this.value.trim();save();">
+    ${Object.keys(SET.psd2Accounts||{}).length?`<div class="small muted" style="margin:10px 0 4px;font-weight:600">Gekoppelde rekeningen</div>
+      ${Object.entries(SET.psd2Accounts).map(([k,v])=>`<div class="row" style="padding:4px 0"><span class="small">🏦 ${esc(v.bank)} · ${esc(v.label)}</span><span class="small muted">${v.exp?'tot '+new Date(v.exp).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):''}</span></div>`).join('')}
+      ${SET.psd2LastSync?`<div class="small muted" style="margin-top:4px">Laatst gesynchroniseerd ${new Date(SET.psd2LastSync).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}.</div>`:''}`:''}
+    <button class="btn" style="margin-top:10px" onclick="psd2Connect()">🏦 ${Object.keys(SET.psd2Accounts||{}).length?'Bank koppelen / verversen':'Koppel je bank'}</button>
+    ${Object.keys(SET.psd2Accounts||{}).length?`<button class="btn sec" style="margin-top:8px" onclick="psd2Disconnect()">✕ Live koppeling vergeten</button>`:''}
+  </div>
+  <div class="card">
     <div class="row" style="margin-bottom:6px"><b>📁 Automatische import</b>${SET.folderName?'<span class="tag" style="background:rgba(45,212,191,.15);color:var(--teal)">gekoppeld</span>':(FSA?'':'<span class="tag">browser n.v.t.</span>')}</div>
     ${SET.folderName
       ? `<div class="small muted" style="margin-bottom:10px">Map <b>${esc(SET.folderName)}</b>${SET.lastSync?` · laatst gesynchroniseerd ${new Date(SET.lastSync).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}. Bij elke keer openen worden nieuwe bestanden automatisch ingelezen.</div>
@@ -1865,7 +1880,7 @@ function renderSet(){
     <button class="btn sec" style="margin-bottom:8px" onclick="document.getElementById('file').click()">📂 Bestand toevoegen (MT940 of CSV)</button>
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (De gekoppelde map blijft bestaan.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">🗑️ Alle transacties wissen</button>
   </div>
-  <div class="center small muted" style="padding:8px 0 20px">Minder · v6.4 — budget-toleranceband: ≤3% geen actie · 4–5% monitoren · &gt;5% actie · lokaal</div>`;
+  <div class="center small muted" style="padding:8px 0 20px">Minder · v6.5 — PSD2 live bankkoppeling (Enable Banking, eigen backend) · lokaal + optioneel live</div>`;
 }
 
 /* ----- recategorisatie-sheet ----- */
@@ -1960,6 +1975,129 @@ async function syncFolder(verbose){
 }
 async function forgetFolder(){ dirHandle=null; SET.autoSync=false; SET.folderName=''; SET.lastSync=0; try{await idbSet('dir',null);}catch(e){} save(); render(); }
 
+/* ---------- PSD2 live koppeling (Enable Banking via eigen backend) ---------- */
+function psd2Cfg(){ return { url:(SET.psd2Url||'').replace(/\/+$/,''), token:SET.psd2Token||'' }; }
+function psd2Ready(){ const c=psd2Cfg(); return !!(c.url && c.token); }
+async function psd2Api(path, opts){
+  opts=opts||{}; const c=psd2Cfg(); if(!c.url) throw new Error('Geen backend-URL ingesteld');
+  const r=await fetch(c.url+path, Object.assign({}, opts, {
+    headers: Object.assign({ 'Authorization':'Bearer '+c.token, 'Content-Type':'application/json' }, opts.headers||{})
+  }));
+  let data=null; try{ data=await r.json(); }catch(e){}
+  if(!r.ok) throw new Error((data&&(data.error||data.detail))||('HTTP '+r.status));
+  return data||{};
+}
+// iban → numeriek rekeningdeel (zelfde vorm als MT940 :25:, voor intern-detectie)
+function ibanNum(iban){ const s=(iban||'').replace(/\s/g,''); if(s.length<8) return ''; const d=(s.slice(4).match(/\d+/g)||[]).join(''); return d.replace(/^0+/,''); }
+// 1) bank kiezen → consent starten
+async function psd2Connect(){
+  if(!psd2Ready()){ toast('Stel eerst de backend-URL en token in'); go('set'); return; }
+  toast('Banken ophalen…');
+  let banks;
+  try{ const d=await psd2Api('/aspsps?country=NL'); banks=(d.aspsps||d||[]).filter(b=>b&&b.name).sort((a,b)=>a.name.localeCompare(b.name)); }
+  catch(e){ toast('Fout: '+e.message); return; }
+  if(!banks.length){ toast('Geen banken ontvangen'); return; }
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:8px"><div style="font-size:24px">🏦</div><div style="font-weight:800;font-size:16px">Kies je bank</div>
+      <div class="muted small">${banks.length} banken · je logt in bij je bank om toegang te geven</div></div>
+    ${banks.map((b,i)=>`<div class="tx" style="cursor:pointer" onclick="psd2StartAuth(${i})">
+      <div class="ava" style="background:var(--card2)">🏦</div>
+      <div class="info"><div class="nm">${esc(b.name)}</div><div class="cat">${esc(b.country||'NL')}</div></div>
+      <div class="amt" style="color:var(--teal)">›</div></div>`).join('')}`;
+  window._psd2Banks=banks; $('#sheetBg').classList.add('show');
+}
+async function psd2StartAuth(idx){
+  const b=(window._psd2Banks||[])[idx]; if(!b) return;
+  const aspsp={ name:b.name, country:b.country||'NL' };
+  const state='mind_'+Math.random().toString(36).slice(2)+Date.now().toString(36);
+  const redirect=location.origin+location.pathname;
+  sessionStorage.setItem('psd2_state', state); closeSheet();
+  toast('Doorsturen naar '+b.name+'…');
+  try{
+    const d=await psd2Api('/auth',{ method:'POST', body:JSON.stringify({ aspsp, state, redirect_url:redirect, valid_days:90 }) });
+    if(d&&d.url){ location.href=d.url; } else { toast('Geen autorisatie-URL ontvangen'); }
+  }catch(e){ toast('Fout: '+e.message); }
+}
+// 2) terug van de bank: ?code=&state=
+async function psd2HandleCallback(){
+  const q=new URLSearchParams(location.search);
+  const code=q.get('code'), state=q.get('state');
+  if(!code) return;
+  const expect=sessionStorage.getItem('psd2_state');
+  history.replaceState(null,'',location.origin+location.pathname);
+  if(expect && state && state!==expect){ toast('Sessie kwam niet overeen — probeer opnieuw'); return; }
+  toast('Bankkoppeling afronden…');
+  try{ const s=await psd2Api('/sessions',{ method:'POST', body:JSON.stringify({ code }) }); await psd2IngestSession(s); }
+  catch(e){ toast('Fout bij afronden: '+e.message); }
+}
+// accounts uit de sessie → transacties + saldo ophalen en opslaan
+async function psd2IngestSession(s){
+  const accounts = s.accounts || [];
+  if(!accounts.length){ toast('Geen rekeningen ontvangen'); return; }
+  const meta=SET.psd2Accounts||{};
+  const aspspName=(s.aspsp&&s.aspsp.name)||'Bank';
+  const allTx=[]; const balances={};
+  const from=new Date(); from.setMonth(from.getMonth()-24); const fromStr=from.toISOString().slice(0,10);
+  for(const a of accounts){
+    const uid = a.uid || a;
+    const iban = (a.account_id&&a.account_id.iban) || a.iban || '';
+    const accId = ibanNum(iban) || ('psd2_'+String(uid).slice(0,8));
+    const label = (a.name||a.product||'Rekening')+(iban?' ··'+iban.slice(-4):'');
+    meta[accId]={ uid, iban, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'' };
+    let cont=null, guard=0;
+    do{
+      const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
+      let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); }
+      catch(e){ toast('Transacties ophalen mislukt: '+e.message); break; }
+      for(const raw of (d.transactions||[])){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
+      cont=d.continuation_key||null; guard++;
+    } while(cont && guard<40);
+    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:new Date().toISOString().slice(0,10)}; }catch(e){}
+  }
+  SET.psd2Accounts=meta; SET.psd2LastSync=Date.now();
+  const added=commitTx(allTx, balances);
+  curMonth=null; render();
+  toast(added? `✅ ${added} transacties gekoppeld van ${aspspName}` : `Koppeling met ${aspspName} ververst (geen nieuwe)`);
+}
+// Enable Banking transactie → intern TX-object (zelfde schema als MT940/CSV)
+function mapPsd2Tx(raw, accId){
+  const amtObj = raw.transaction_amount || raw.amount || {};
+  const val = parseFloat(amtObj.amount); if(isNaN(val)) return null;
+  const cdi = (raw.credit_debit_indicator||'').toUpperCase();
+  const amount = cdi==='DBIT' ? -Math.abs(val) : (cdi==='CRDT'? Math.abs(val) : val);
+  const date = (raw.booking_date || raw.value_date || raw.transaction_date || '').slice(0,10);
+  if(!date) return null;
+  const remit = Array.isArray(raw.remittance_information)? raw.remittance_information.join(' ') : (raw.remittance_information||'');
+  const cp = amount<0 ? (raw.creditor||{}) : (raw.debtor||{});
+  const cpAcc = amount<0 ? (raw.creditor_account||{}) : (raw.debtor_account||{});
+  const name = ((cp.name||'').trim() || remit.slice(0,42).trim() || 'Transactie');
+  const desc = [name, remit, (raw.bank_transaction_code&&raw.bank_transaction_code.description)||''].filter(Boolean).join(' ');
+  const t={ date, amount, acc:accId, src:'psd2', desc, name:name.replace(/\s+/g,' ').slice(0,44),
+    refNums: cpAcc.iban? [ibanNum(cpAcc.iban)].filter(Boolean) : [] };
+  categorize(t);
+  return t;
+}
+function pickBalance(b){
+  const arr = (b&&(b.balances||b))||[]; if(!Array.isArray(arr)||!arr.length) return null;
+  const pref = arr.find(x=>/CLBD|ITAV|XPCD|PRCD/i.test(x.balance_type||x.type||'')) || arr[0];
+  const v = pref&&(pref.balance_amount||pref.amount); if(!v) return null;
+  const n=parseFloat(v.amount); if(isNaN(n)) return null;
+  return (pref.credit_debit_indicator||'').toUpperCase()==='DBIT' ? -Math.abs(n) : n;
+}
+// gedeelde commit voor kant-en-klare TX-objecten (zelfde dedup als ingest)
+function commitTx(newTxns, balances){
+  let added=0; const existing=new Set(TX.map(t=>t.id));
+  for(const t of newTxns){ if(t&&!existing.has(t.id)){ TX.push(t); existing.add(t.id); added++; } }
+  if(balances) for(const a in balances){ ACCMETA[a]=Object.assign(ACCMETA[a]||{}, balances[a]); }
+  TX.sort((a,b)=>a.date.localeCompare(b.date));
+  applyOwnAccounts(); buildAccMeta(); save();
+  return added;
+}
+function psd2Disconnect(){
+  if(!confirm('Live koppeling vergeten? (Reeds ingelezen transacties blijven staan.)')) return;
+  SET.psd2Accounts={}; SET.psd2LastSync=0; save(); render();
+}
+
 /* ---------- map/bestanden slepen (werkt ook zonder File System Access API) ---------- */
 async function readEntry(entry,items){
   if(!entry) return;
@@ -1979,6 +2117,7 @@ document.addEventListener('drop',async e=>{
 
 /* ---------- start ---------- */
 load(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
+if(new URLSearchParams(location.search).get('code')) psd2HandleCallback(); // terug van bank (PSD2-consent)
 (async()=>{ // auto-sync bij openen als de map al gekoppeld is en toegang al verleend is
   if(!FSA || !SET.autoSync) return;
   try{ dirHandle=await idbGet('dir');
