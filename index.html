@@ -1257,11 +1257,17 @@ function renderDash(){
   let lbl,big,col,sub,status;
   if(isNow){
     const L=monthLiquidity(); const sv=monthlySavingTarget(); const free=L.projected-sv;
-    lbl=`Nog vrij te besteden · ${monthName}`;
-    col = free<0?'var(--red)':(pctRaw>100?'var(--red)':pctRaw>85?'var(--amber)':'var(--green)');
-    big=euro(Math.max(free,0));
-    sub = free<0 ? `je haalt je spaardoel ${euro0(sv)} niet — ${euro0(-free)} tekort` : `na vaste lasten én sparen · nog ${L.daysLeft} dgn`;
-    status = free<0?`${ICON('warn')} Even opletten` : pctRaw>100?`${ICON('alert')} Over je grens` : pctRaw<70?`${ICON('check')} Op koers` : `${ICON('warn')} Let op je tempo`;
+    if(free>=0){
+      lbl=`Ruimte boven je spaardoel · ${monthName}`;
+      col='var(--teal)'; big=euro(free);
+      sub=`Boven je spaardoel van ${euro0(sv)} · wat je niet uitgeeft, spaar je extra`;
+      status = pctRaw>100?`${ICON('alert')} Over je grens` : pctRaw<70?`${ICON('check')} Op koers` : `${ICON('warn')} Let op je tempo`;
+    } else {
+      lbl=`Spaardoel in de knel · ${monthName}`;
+      col='var(--red)'; big=euro(0);
+      sub=`Je komt ${euro0(-free)} tekort voor je spaardoel van ${euro0(sv)}`;
+      status=`${ICON('warn')} Even opletten`;
+    }
   } else {
     lbl=`${monthName} — over (binnen ${SET.limit}%)`;
     col = pctRaw<100?'var(--green)':'var(--red)';
@@ -1731,7 +1737,7 @@ function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties — importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
-  $('#s-vooruit').innerHTML = (isNow?vooruitHero():'') + renderUpcoming() + renderForecast() + renderSavings();
+  $('#s-vooruit').innerHTML = (isNow?vooruitHero():'') + renderUpcoming() + renderSavings();
 }
 function hasAutoSaving(){ try{ const ms=months().slice(-3); let n=0; for(const mm of ms){ for(const t of txOfMonth(mm)){ if(catOf(t)==='sparen' || /(monthly|weekly) rule|round[\s-]?up|income sorter/i.test(t.name||'')) n++; } } return n>=2; }catch(_){ return false; } }
 function coachItems(){
