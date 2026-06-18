@@ -972,7 +972,7 @@ function recurKey(t){ return (t.name||'').toUpperCase().replace(/[0-9]/g,'').rep
 function intervalLabel(im){ return im===1?'maandelijks':im===3?'per kwartaal':im===6?'half jaar':im===12?'jaarlijks':'~'+im+ ' mnd'; }
 function recurringSchedule(){
   const map={};
-  for(const t of TX){ const c=catOf(t), meta=CATS[c]; let type=null;
+  for(const t of TX){ if(t.pending) continue; const c=catOf(t), meta=CATS[c]; let type=null;
     if(meta.type==='income' && t.amount>0) type='income';
     else if(meta.type==='expense' && t.amount<0 && isFixed(t)) type='fixed'; else continue;
     const key=recurKey(t); if(!key) continue;
@@ -2078,7 +2078,7 @@ function coachTips(m){
 /* ----- TRANSACTIES ----- */
 
 function quickAdd(){
-  if(Object.keys(SET.psd2Accounts||{}).length) psd2Connect();
+  if(Object.keys(SET.psd2Accounts||{}).length) psd2Refresh(false);
   else if(FSA && SET.folderName) syncFolder(true);
   else document.getElementById('file').click();
 }
@@ -2109,10 +2109,10 @@ function renderTxList(){
   let body='', lastDay='';
   for(const t of list){
     if(t.date!==lastDay){ lastDay=t.date; body+=`<div class="tx-day">${dayHeader(t.date)}</div>`; }
-    const c=CATS[catOf(t)]; const ong=txOutlier(t,catAvg);
-    body+=`<div class="tx" onclick="openSheet('${t.id}')">
+    const c=CATS[catOf(t)]; const ong=txOutlier(t,catAvg); const pnd=t.pending;
+    body+=`<div class="tx" onclick="openSheet('${t.id}')"${pnd?' style="opacity:.62"':''}>
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(t.name)}</div>${ong?`<div class="cat" style="color:var(--amber)">• ongewoon</div>`:''}</div>
+      <div class="info"><div class="nm">${esc(t.name)}</div>${pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--amber)">• ongewoon</div>`:'')}</div>
       <div class="amt ${t.amount>0?'pos':''}" style="font-weight:700">${t.amount>0?'+':''}${euro(t.amount)}</div>
     </div>`;
   }
@@ -2407,7 +2407,9 @@ function setBank(){
     ${psd2?`<div class="small muted" style="margin:10px 0 4px;font-weight:600">Gekoppelde rekeningen</div>
       ${Object.entries(SET.psd2Accounts).map(([k,v])=>`<div class="row" style="padding:4px 0"><span class="small">${ICON('bank')} ${esc(v.bank)} · ${esc(v.label)}</span><span class="small muted">${v.exp?'tot '+new Date(v.exp).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):''}</span></div>`).join('')}
       ${SET.psd2LastSync?`<div class="small muted" style="margin-top:4px">Laatst gesynchroniseerd ${new Date(SET.psd2LastSync).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}.</div>`:''}`:''}
-    <button class="btn" style="margin-top:10px" onclick="psd2Connect()">${ICON('bank')} ${psd2?'Bank koppelen / verversen':'Koppel je bank'}</button>
+    ${psd2?`<button class="btn" style="margin-top:10px" onclick="psd2Refresh(false)">${ICON('sync')} Ververs transacties</button>
+    <button class="btn sec" style="margin-top:8px" onclick="psd2Connect()">${ICON('bank')} Opnieuw koppelen</button>`
+    :`<button class="btn" style="margin-top:10px" onclick="psd2Connect()">${ICON('bank')} Koppel je bank</button>`}
     ${psd2?`<button class="btn sec" style="margin-top:8px" onclick="psd2Disconnect()">✕ Live koppeling vergeten</button>`:''}
     <div style="border-top:1px solid var(--line);margin:14px 0 10px"></div>
     <div class="small muted" style="margin-bottom:8px"><b>Automatische map-import</b>${SET.folderName?' · gekoppeld':''}</div>
@@ -2554,6 +2556,39 @@ async function psd2Api(path, opts){
 function ibanNum(iban){ const s=(iban||'').replace(/\s/g,''); if(s.length<8) return ''; const d=(s.slice(4).match(/\d+/g)||[]).join(''); return d.replace(/^0+/,''); }
 // 1) bank kiezen → consent starten
 
+async function psd2Refresh(silent){
+  const meta=SET.psd2Accounts||{}; const keys=Object.keys(meta);
+  if(!keys.length){ if(!silent) psd2Connect(); return; }
+  if(!psd2Ready()){ if(!silent){ toast('Stel eerst de backend-URL en token in'); go('set'); } return; }
+  if(!silent) toast('Verversen…');
+  const from=new Date(); from.setMonth(from.getMonth()-2); const fromStr=from.toISOString().slice(0,10);
+  const allTx=[]; const balances={}; let authFail=false, anyOk=false;
+  for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue;
+    let cont=null, guard=0;
+    do{
+      const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
+      let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); anyOk=true; }
+      catch(e){ if(/40[13]|verlop|expired|consent|session|unauth/i.test(e.message||'')) authFail=true; break; }
+      for(const raw of (d.transactions||[])){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
+      cont=d.continuation_key||null; guard++;
+    } while(cont && guard<40);
+    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:new Date().toISOString().slice(0,10)}; }catch(e){}
+  }
+  if(authFail && !anyOk){ if(!silent){ toast('Koppeling verlopen — log opnieuw in'); psd2Connect(); } return; }
+  SET.psd2LastSync=Date.now(); save();
+  const added=commitTx(allTx, balances);
+  if(SET.psd2Pending!==false){ const pend=[];
+    for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue;
+      try{ const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fromStr+'&transaction_status=PDNG');
+        for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); }
+      }catch(e){}
+    }
+    applyPending(pend);
+  }
+  curMonth=null; render();
+  if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){}
+  if(!silent) toast(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt — geen nieuwe (van vandaag soms nog niet geboekt)');
+}
 async function psd2Connect(){
   if(!psd2Ready()){ toast('Stel eerst de backend-URL en token in'); go('set'); return; }
   toast('Banken ophalen…');
@@ -2603,7 +2638,7 @@ async function psd2IngestSession(s){
   if(!accounts.length){ toast('Geen rekeningen ontvangen'); return; }
   const meta=SET.psd2Accounts||{};
   const aspspName=(s.aspsp&&s.aspsp.name)||'Bank';
-  const allTx=[]; const balances={};
+  const allTx=[]; const balances={}; const pend=[];
   const from=new Date(); from.setMonth(from.getMonth()-24); const fromStr=from.toISOString().slice(0,10);
   for(const a of accounts){
     const uid = a.uid || a;
@@ -2620,15 +2655,18 @@ async function psd2IngestSession(s){
       cont=d.continuation_key||null; guard++;
     } while(cont && guard<40);
     try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:new Date().toISOString().slice(0,10)}; }catch(e){}
+    if(SET.psd2Pending!==false){ try{ const fp=new Date(); fp.setMonth(fp.getMonth()-1); const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fp.toISOString().slice(0,10)+'&transaction_status=PDNG');
+      for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); } }catch(e){} }
   }
   SET.psd2Accounts=meta; SET.psd2LastSync=Date.now();
   const added=commitTx(allTx, balances);
+  applyPending(pend);
   curMonth=null; render();
   toast(added? `${ICON('check')} ${added} transacties gekoppeld van ${aspspName}` : `Koppeling met ${aspspName} ververst (geen nieuwe)`);
 }
 // Enable Banking transactie → intern TX-object (zelfde schema als MT940/CSV)
 
-function mapPsd2Tx(raw, accId){
+function mapPsd2Tx(raw, accId, pending){
   const amtObj = raw.transaction_amount || raw.amount || {};
   const val = parseFloat(amtObj.amount); if(isNaN(val)) return null;
   const cdi = (raw.credit_debit_indicator||'').toUpperCase();
@@ -2643,6 +2681,7 @@ function mapPsd2Tx(raw, accId){
   const t={ date, amount, acc:accId, src:'psd2', desc, name:name.replace(/\s+/g,' ').slice(0,44),
     refNums: cpAcc.iban? [ibanNum(cpAcc.iban)].filter(Boolean) : [] };
   categorize(t);
+  if(pending){ t.pending=true; t.id+='_p'; }
   return t;
 }
 
@@ -2655,6 +2694,19 @@ function pickBalance(b){
 }
 // gedeelde commit voor kant-en-klare TX-objecten (zelfde dedup als ingest)
 
+function applyPending(list){
+  TX=TX.filter(t=>!t.pending);            // wis vorige pending-snapshot
+  const booked=TX.slice();                // dedup alleen tegen geboekte/geïmporteerde tx
+  let add=0;
+  for(const t of (list||[])){ if(!t) continue;
+    const dup=booked.some(b=>b.acc===t.acc && Math.abs(b.amount-t.amount)<0.01 && Math.abs((new Date(b.date)-new Date(t.date))/86400000)<=6);
+    if(dup) continue;
+    TX.push(t); add++;
+  }
+  TX.sort((a,b)=>a.date.localeCompare(b.date));
+  applyOwnAccounts(); buildAccMeta(); save();
+  return add;
+}
 function commitTx(newTxns, balances){
   let added=0; const existing=new Set(TX.map(t=>t.id));
   for(const t of newTxns){ if(t&&!existing.has(t.id)){ TX.push(t); existing.add(t.id); added++; } }
@@ -2706,6 +2758,7 @@ document.addEventListener('drop',async e=>{
 /* ---------- start ---------- */
 load(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
+try{ if(Object.keys(SET.psd2Accounts||{}).length && (Date.now()-(SET.psd2LastSync||0))>4*3600000) psd2Refresh(true); }catch(_){}
 if(new URLSearchParams(location.search).get('code')) psd2HandleCallback(); // terug van bank (PSD2-consent)
 (async()=>{ // auto-sync bij openen als de map al gekoppeld is en toegang al verleend is
   if(!FSA || !SET.autoSync) return;
