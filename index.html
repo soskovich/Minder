@@ -287,7 +287,6 @@ label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font
 
 <nav class="nav">
   <a data-go="dash" class="on"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></span>Dashboard</a>
-  <a data-go="tx"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg></span>Transacties</a>
   <a data-go="ins"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4"/><path d="M12 2a6 6 0 0 0-3.5 10.9c.9.7 1.5 1.6 1.5 2.6V16h4v-.5c0-1 .6-1.9 1.5-2.6A6 6 0 0 0 12 2Z"/></svg></span>Inzichten</a>
   <a data-go="act"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3"/></svg></span>Actieplan</a>
   <a data-go="vooruit"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>Vooruitblik</a>
@@ -966,6 +965,50 @@ function forecastModel(){
 function accBalance(acc){ const mb=(SET.manualBal||{})[acc]; if(mb!=null && mb!=='') return +mb; const a=ACCMETA[acc]; return a&&a.balance!=null?a.balance:null; }
 function totalBalance(){ let sum=0, missing=0; for(const acc of OWN){ const b=accBalance(acc); if(b==null) missing++; else sum+=b; } return {sum,missing}; }
 function setBal(acc,val){ SET.manualBal=SET.manualBal||{}; if(val===''||val==null) delete SET.manualBal[acc]; else SET.manualBal[acc]=+val; save(); renderDash(); } // settings niet herrenderen (focus behouden)
+
+// N26-spaarpotjes: alle N26-Spaces behalve de betaalrekening (Main) en het potje eindigend op 4840
+function n26SavingsAccounts(){
+  const ps=SET.psd2Accounts||{};
+  return OWN.filter(a=>{
+    const pm=ps[a]||null, m=ACCMETA[a]||{};
+    const isN26=(a||'').startsWith('N26 ')||(pm&&/n26/i.test(pm.bank||''))||/n26/i.test(m.bank||'');
+    if(!isN26) return false;
+    const nm=((a||'').replace(/^N26 /,'')+' '+((pm&&pm.label)||'')+' '+(m.label||'')).toLowerCase();
+    if(/\bmain\b|betaal|checking|hoofdrek/.test(nm)||m.role==='Salaris / inkomen'||m.role==='Betaalrekening') return false;
+    const iban=((pm&&pm.iban)||'').replace(/\s/g,'');
+    if((a||'').replace(/\s/g,'').endsWith('4840')||iban.endsWith('4840')) return false;
+    return true;
+  });
+}
+function totalSaved(){ let sum=0,n=0,missing=0; for(const a of n26SavingsAccounts()){ const b=accBalance(a); if(b==null) missing++; else {sum+=b;n++;} } return {sum:Math.round(sum),n,missing}; }
+// drill-down: rekeningen waaruit je saldo bestaat
+function openBalances(){
+  const rows=OWN.filter(a=>accBalance(a)!=null).map(a=>({a,b:accBalance(a)})).sort((x,y)=>y.b-x.b);
+  const tb=totalBalance();
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('coins')}</div><div style="font-weight:800;font-size:17px">Saldo nu</div>
+      <div class="muted small">${rows.length} rekening${rows.length===1?'':'en'}${tb.missing>0?` · ${tb.missing} zonder saldo`:''}</div>
+      <div style="font-size:22px;font-weight:800;margin:5px 0">${euro(tb.sum)}</div></div>
+    ${rows.length?rows.map(r=>`<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
+      <div class="info"><div class="nm">${esc(accLabel(r.a))}</div><div class="cat">${esc((ACCMETA[r.a]&&ACCMETA[r.a].bank)||'')}</div></div>
+      <div class="amt ${r.b<0?'neg':'pos'}">${euro(r.b)}</div></div>`).join(''):'<div class="muted small center" style="padding:16px">Nog geen saldo bekend. Koppel je bank of vul saldo handmatig in bij Instellingen.</div>'}
+    ${tb.missing>0?`<div class="small muted" style="margin-top:10px">${tb.missing} rekening(en) zonder bekend saldo tellen niet mee.</div>`:''}`;
+  $('#sheetBg').classList.add('show');
+}
+// drill-down: N26-spaarpotjes waaruit 'Totaal gespaard' bestaat
+function openSavingsPots(){
+  const accs=n26SavingsAccounts(); const ts=totalSaved();
+  const rows=accs.map(a=>({a,b:accBalance(a)})).sort((x,y)=>(y.b||0)-(x.b||0));
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('target')}</div><div style="font-weight:800;font-size:17px">Totaal gespaard</div>
+      <div class="muted small">N26-spaarpotjes${ts.missing?` · ${ts.missing} zonder saldo`:''}</div>
+      <div style="font-size:22px;font-weight:800;margin:5px 0">${ts.n?euro(ts.sum):'—'}</div></div>
+    ${rows.length?rows.map(r=>`<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${ICON('target')}</div>
+      <div class="info"><div class="nm">${esc(accLabel(r.a))}</div><div class="cat">N26</div></div>
+      <div class="amt ${r.b==null?'':(r.b<0?'neg':'pos')}">${r.b==null?'—':euro(r.b)}</div></div>`).join(''):'<div class="muted small center" style="padding:16px">Geen N26-spaarpotjes herkend. Koppel je N26 via PSD2 zodat de Spaces met saldo binnenkomen.</div>'}
+    <div class="small muted" style="margin-top:10px">Automatisch: alle N26-Spaces behalve Main en het potje op ··4840.</div>`;
+  $('#sheetBg').classList.add('show');
+}
 // groeperingssleutel voor terugkerende posten (zelfde logica als recurringSchedule)
 function recurKey(t){ return (t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20); }
 // terugkerend schema: dag van de maand + mediaan bedrag per vaste last / inkomstenbron
@@ -1258,17 +1301,13 @@ function renderBudgetKPI(){
 }
 
 /* ----- DASHBOARD (periode-gestuurd) ----- */
-// ===== HOME (N26-stijl): één kerngetal, platte stats, één coachregel + CTA, recente transacties =====
-function renderDash(){
-  const ms=months(); if(!ms.length){ $('#s-dash').innerHTML=renderReminder(); return; }
+// "Ruimte boven je spaardoel" — projectie-hero (staat bovenaan Inzichten)
+function heroProjection(m){
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
-  const t=totals(m);
+  const isNow=m===nowYM; const t=totals(m);
   const pct=t.budget>0?Math.min(t.spend/t.budget*100,100):(t.spend>0?100:0);
   const pctRaw=t.budget>0?Math.round(t.spend/t.budget*100):0;
-  const savedPct=t.income>0?Math.round((t.income-t.spend)/t.income*100):0;
   const monthName=MFULL[+m.slice(5,7)-1];
-  // ---- HERO: één getal ----
   let lbl,big,col,sub,status;
   if(isNow){
     const L=monthLiquidity(); const sv=monthlySavingTarget(); const free=L.projected-sv;
@@ -1289,7 +1328,7 @@ function renderDash(){
     big=euro(Math.max(t.budget-t.spend,0));
     sub=`${euro0(t.spend)} van ${euro0(t.budget)} uitgegeven (${pctRaw}%)`; status='';
   }
-  const hero=`<div class="hero2"${isNow?` onclick="go('vooruit')" style="cursor:pointer"`:''}>
+  return `<div class="hero2"${isNow?` onclick="go('vooruit')" style="cursor:pointer"`:''}>
     <div class="hlbl">${lbl}${t.incomeEst?' <span class="tag">geschat</span>':''}</div>
     <div class="hbig" style="color:${col}">${big}</div>
     <div class="hsub">${sub}</div>
@@ -1297,22 +1336,31 @@ function renderDash(){
     ${status?`<div class="hstat" style="color:${col}">${status}</div>`:''}
     ${isNow?`<div class="small" style="color:var(--teal);margin-top:8px;font-weight:600">Bekijk je vooruitblik ›</div>`:''}
   </div>`;
-  // ---- KPI's: plat op de pagina, op de linkeras ----
-  const tb=totalBalance();
+}
+// ===== HOME (N26-stijl): één kerngetal, platte stats, één coachregel + CTA, recente transacties =====
+function renderDash(){
+  const ms=months(); if(!ms.length){ $('#s-dash').innerHTML=renderReminder(); return; }
+  const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
+  const t=totals(m);
+  const pct=t.budget>0?Math.min(t.spend/t.budget*100,100):(t.spend>0?100:0);
+  const pctRaw=t.budget>0?Math.round(t.spend/t.budget*100):0;
+  const savedPct=t.income>0?Math.round((t.income-t.spend)/t.income*100):0;
+  const monthName=MFULL[+m.slice(5,7)-1];
+  // ---- KPI's: saldo (drill-down), deze maand gespaard (€), totaal gespaard (€) ----
+  const tb=totalBalance(); const savedAbs=Math.round(t.income-t.spend); const tgt=monthlySavingTarget(); const ts=totalSaved();
+  const savedCol = savedAbs<0?'var(--red)':(tgt>0&&savedAbs>=tgt?'var(--teal)':'var(--amber)');
   const kpis=`<div class="hsec kpis">
-    <div class="kpi" onclick="go('ins')" style="cursor:pointer"><div class="kl">Saldo nu</div><div class="kv">${euro0(tb.sum)}${tb.missing>0?` ${ICON('warn')}`:''} ›</div></div>
-    <div class="kpi" onclick="go('act')" style="cursor:pointer"><div class="kl">Deze maand gespaard</div><div class="kv" style="color:${savedPct>=(100-SET.limit)?'var(--teal)':'var(--amber)'}">${savedPct}% ›</div></div>
+    <div class="kpi" onclick="openBalances()" style="cursor:pointer"><div class="kl">Saldo nu</div><div class="kv">${euro0(tb.sum)}${tb.missing>0?` ${ICON('warn')}`:''} ›</div></div>
+    <div class="kpi" onclick="go('act')" style="cursor:pointer"><div class="kl">Deze maand gespaard</div><div class="kv" style="color:${savedCol}">${euro0(savedAbs)} ›</div></div>
+    <div class="kpi" onclick="openSavingsPots()" style="cursor:pointer"><div class="kl">Totaal gespaard</div><div class="kv">${ts.n?euro0(ts.sum):'—'}${ts.missing?` ${ICON('warn')}`:''} ›</div></div>
   </div>`;
-  // ---- coach: één signaal (kleurstreep i.p.v. doos) ----
-  const top=(isNow&&!SET.coachOff)?coachTips(m)[0]:null;
-  const cta = (top&&top.act) ? ` <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="${top.act}">${top.act.indexOf("go('act')")>=0?'Check je plan':'Bekijk'} ›</span>` : '';
-  const coachBlock = top?`<div class="hsec signal ${top.t}"><div class="si">${top.ic}</div><div class="st">${top.m}${cta}</div></div>`:'';
   // ---- recente transacties: sectiekop + platte rijen met haarlijn ----
   const recent=TX.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4);
   const txRows=recent.map(x=>{const c=CATS[catOf(x)];const d=new Date(x.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
     return `<div class="txl" onclick="openSheet('${x.id}')"><div class="ava" style="background:var(--card2);color:var(--mut)">${c.icon}</div><div class="info"><div class="nm">${esc(x.name)}</div><div class="cat">${d} · ${c.name}</div></div><div class="amt ${x.amount>0?'pos':'neg'}">${x.amount>0?'+':''}${euro(x.amount)}</div></div>`;}).join('');
   const recentBlock = recent.length?`<div class="hsec"><div class="row" style="margin-bottom:6px"><div class="hlabel" style="margin:0">Recent</div><span class="small" onclick="go('tx')" style="cursor:pointer;color:var(--teal)">alle transacties ›</span></div>${txRows}</div>`:'';
-  $('#s-dash').innerHTML = renderReminder() + hero + kpis + coachBlock + recentBlock;
+  $('#s-dash').innerHTML = renderReminder() + kpis + recentBlock;
 }
 function renderDash_OLD_UNUSED(){
   const p=SET.insPeriod||'month'; const isM=p==='month';
@@ -2095,7 +2143,7 @@ function quickAdd(){
 function renderTx(){
   const filtered = accFilter!=='all'||txFilter!=='all';
   const ib='background:var(--card2);border:1px solid var(--line);border-radius:10px;width:38px;height:38px;font-size:14px;cursor:pointer;color:inherit';
-  const header=`<div class="row" style="align-items:center;margin:2px 2px 12px"><b style="font-size:17px">Transacties</b>
+  const header=`<div class="row" style="align-items:center;margin:2px 2px 12px;gap:8px"><button onclick="go('dash')" title="Terug naar dashboard" style="${ib}">‹</button><b style="font-size:17px;flex:1">Transacties</b>
     <div style="display:flex;gap:8px">
       <button onclick="quickAdd()" title="Bijwerken / importeren" style="${ib}">${ICON('sync')}</button>
       <button onclick="toggleTxSearch()" style="${ib}">${ICON('search')}</button>
@@ -2185,7 +2233,7 @@ function renderIns(){
       + renderDailyRolling();
     deep = pchips + patterns;
   }
-  $('#s-ins').innerHTML = heroBlock + secBlock + deepBtn + deep;
+  $('#s-ins').innerHTML = heroProjection(m) + heroBlock + secBlock + deepBtn + deep;
 }
 
 function renderCat(){
