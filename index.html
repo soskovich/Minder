@@ -969,12 +969,13 @@ function setBal(acc,val){ SET.manualBal=SET.manualBal||{}; if(val===''||val==nul
 // N26-spaarpotjes: alle N26-Spaces behalve de betaalrekening (Main) en het potje eindigend op 4840
 function n26SavingsAccounts(){
   const ps=SET.psd2Accounts||{};
-  return OWN.filter(a=>{
+  const all=[...new Set([...OWN, ...Object.keys(ps)])];   // ook saldo-only potjes zonder transacties
+  return all.filter(a=>{
     const pm=ps[a]||null, m=ACCMETA[a]||{};
     const isN26=(a||'').startsWith('N26 ')||(pm&&/n26/i.test(pm.bank||''))||/n26/i.test(m.bank||'');
     if(!isN26) return false;
     const nm=((a||'').replace(/^N26 /,'')+' '+((pm&&pm.label)||'')+' '+(m.label||'')).toLowerCase();
-    if(/\bmain\b|betaal|checking|hoofdrek/.test(nm)||m.role==='Salaris / inkomen'||m.role==='Betaalrekening') return false;
+    if(/\bmain\b|betaal|checking|hoofdrek/.test(nm)) return false;   // betaalrekening op naam (rol-detectie sloot potjes met inkomende transfers ten onrechte uit)
     const iban=((pm&&pm.iban)||'').replace(/\s/g,'');
     if((a||'').replace(/\s/g,'').endsWith('4840')||iban.endsWith('4840')) return false;
     return true;
@@ -1097,10 +1098,10 @@ function renderDailyVar(m, budget){
    ============================================================ */
 function render(){
   if(!TX.length){ renderEmpty(); $('#monthPick').style.display='none'; return; }
-  $('#monthPick').style.display='flex';
   const ms=months(); if(!curMonth||!ms.includes(curMonth)) curMonth=ms[ms.length-1];
   $('#mLabel').textContent=monthLabel(curMonth);
   renderDash(); renderTx(); renderIns(); renderActions(); renderVooruit(); renderSet();
+  syncMonthPick();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
   if(window._setSheet && $('#sheetBg').classList.contains('show')) renderSetSheet(); // open instellingen-sheet meeverversen
 }
@@ -1308,19 +1309,21 @@ function heroProjection(m){
   const pct=t.budget>0?Math.min(t.spend/t.budget*100,100):(t.spend>0?100:0);
   const pctRaw=t.budget>0?Math.round(t.spend/t.budget*100):0;
   const monthName=MFULL[+m.slice(5,7)-1];
-  let lbl,big,col,sub,status;
+  let lbl,big,col,sub,status,statCol='';
   if(isNow){
     const L=monthLiquidity(); const sv=monthlySavingTarget(); const free=L.projected-sv;
     if(free>=0){
       lbl=`Ruimte boven je spaardoel · ${monthName}`;
       col='var(--teal)'; big=euro(free);
       sub=`Boven je spaardoel van ${euro0(sv)} · wat je niet uitgeeft, spaar je extra`;
-      status = pctRaw>100?`${ICON('alert')} Over je grens` : pctRaw<70?`${ICON('check')} Op koers` : `${ICON('warn')} Let op je tempo`;
+      if(pctRaw>100){ status=`${ICON('alert')} Over je grens`; statCol='var(--red)'; }
+      else if(pctRaw<70){ status=`${ICON('check')} Op koers`; statCol='var(--green)'; }
+      else { status=`${ICON('warn')} Let op je tempo`; statCol='var(--amber)'; }
     } else {
       lbl=`Spaardoel in de knel · ${monthName}`;
       col='var(--red)'; big=euro(0);
       sub=`Je komt ${euro0(-free)} tekort voor je spaardoel van ${euro0(sv)}${L.fixDue>0?` · ${euro0(L.fixDue)} vaste lasten komen nog`:''}`;
-      status=`${ICON('warn')} Even opletten`;
+      status=`${ICON('warn')} Even opletten`; statCol='var(--amber)';
     }
   } else {
     lbl=`${monthName} — over (binnen ${SET.limit}%)`;
@@ -1328,13 +1331,13 @@ function heroProjection(m){
     big=euro(Math.max(t.budget-t.spend,0));
     sub=`${euro0(t.spend)} van ${euro0(t.budget)} uitgegeven (${pctRaw}%)`; status='';
   }
-  return `<div class="hero2"${isNow?` onclick="go('vooruit')" style="cursor:pointer"`:''}>
+  return `<div class="hero2">
     <div class="hlbl">${lbl}${t.incomeEst?' <span class="tag">geschat</span>':''}</div>
     <div class="hbig" style="color:${col}">${big}</div>
     <div class="hsub">${sub}</div>
     <div class="bar-thin"><div style="width:${pct}%;background:${col}"></div></div>
-    ${status?`<div class="hstat" style="color:${col}">${status}</div>`:''}
-    ${isNow?`<div class="small" style="color:var(--teal);margin-top:8px;font-weight:600">Bekijk je vooruitblik ›</div>`:''}
+    ${status?`<div class="hstat" style="color:${statCol}">${status}</div>`:''}
+    ${isNow?`<div class="small" onclick="go('vooruit')" style="color:var(--teal);margin-top:8px;font-weight:600;cursor:pointer">Bekijk je vooruitblik ›</div>`:''}
   </div>`;
 }
 // ===== HOME (N26-stijl): één kerngetal, platte stats, één coachregel + CTA, recente transacties =====
@@ -2510,7 +2513,7 @@ function setAcc(a){accFilter=a;renderTx();}
 
 /* ----- per categorie (over een transactielijst) ----- */
 
-function accLabel(a){ const r=ACCMETA[a]; if(r&&r.label) return r.label; return (a||'').replace(/^N26 /,'N26 ')||'Rekening'; }
+function accLabel(a){ const r=ACCMETA[a]; if(r&&r.label) return r.label; const pm=(SET.psd2Accounts||{})[a]; if(pm) return (pm.bank?pm.bank+' · ':'')+(pm.label||a); return (a||'').replace(/^N26 /,'N26 ')||'Rekening'; }
 
 function accShort(a){ return (a||'').startsWith('N26 ') ? a.replace(/^N26 /,'') : '··'+(a||'').slice(-4); }
 
@@ -2520,11 +2523,13 @@ function closeSheet(){ $('#sheetBg').classList.remove('show'); }
 
 function esc(s){return (s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 
+function syncMonthPick(){ const a=(document.querySelector('.screen.active')||{}).id; const mp=document.getElementById('monthPick'); if(mp) mp.style.display=(TX.length && a!=='s-dash' && a!=='s-set')?'flex':'none'; }
 function go(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   $('#s-'+name).classList.add('active');
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.go===name));
   const _g=document.getElementById('headGear'); if(_g) _g.classList.toggle('on',name==='set');
+  syncMonthPick();
   window.scrollTo(0,0);
 }
 
