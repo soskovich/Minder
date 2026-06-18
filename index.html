@@ -610,7 +610,7 @@ function ptot(){
   let income=0, est=false; for(const m of pm){ const tm=totals(m); income+=tm.income; if(tm.incomeBasis==='basisnorm'||tm.incomeBasis==='onbekend') est=true; }
   let spend=0; const byCat={};
   for(const t of list){ const c=catOf(t), meta=CATS[c]; byCat[c]=(byCat[c]||0)+t.amount; if(meta.type==='expense'&&t.amount<0) spend+=-t.amount; }
-  return {list, income, spend, budget:income*SET.limit/100, byCat, months:pm.length, incomeEst:est};
+  return {list, income, spend, budget:monthBudget(inc), byCat, months:pm.length, incomeEst:est};
 }
 // cirkeldiagram + legenda over een byCat-map
 function renderDonut(byCat){
@@ -893,6 +893,21 @@ function renderVariance(m){
   </div>`;
 }
 
+function baselineSpend(){
+  const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const recent=months().filter(m=>m<nowYM).slice(-6);
+  const sp=recent.map(m=>{let x=0;for(const t of txOfMonth(m)){const c=catOf(t);if(CATS[c]&&CATS[c].type==='expense'&&t.amount<0)x+=-t.amount;}return x;}).filter(v=>v>0).sort((a,b)=>a-b);
+  if(!sp.length) return 0;
+  const lower=sp.slice(0,Math.ceil(sp.length/2));
+  return Math.round(lower[Math.floor(lower.length/2)]);
+}
+function monthBudget(inc){
+  inc=+inc||0; const pctBud=inc*SET.limit/100; const mode=SET.limitMode||'pct';
+  if(mode==='cap'){ const cap=+SET.spendCap||0; return cap>0?cap:pctBud; }
+  if(mode==='baseline'){ const bl=baselineSpend(); return bl>0?Math.min(bl, pctBud||bl):pctBud; }
+  if(mode==='damper'){ const base=baseIncome()||inc; const a=Math.min(Math.max(+SET.damperPct||30,0),100)/100; return Math.round(base*SET.limit/100 + Math.max(inc-base,0)*a); }
+  return pctBud;
+}
 function totals(m){
   const list=txOfMonth(m);
   let income=0, spend=0, internal=0;
@@ -1165,7 +1180,7 @@ function monthlySavingTarget(){
   const mode = SET.savingMode||'auto';
   if(mode==='amount') return +SET.savingAmount||0;
   if(mode==='percent') return inc*(+SET.savingPercent||0)/100;
-  return Math.max(inc - inc*SET.limit/100, 0);
+  return Math.max(inc - monthBudget(inc), 0);
 }
 function savingLabel(){ const m=SET.savingMode||'auto';
   if(m==='amount') return 'vast bedrag'; if(m==='percent') return (+SET.savingPercent||0)+'% van inkomen';
@@ -1667,6 +1682,17 @@ function scoreNotifs(){
   try{ const tom=new Date(now); tom.setDate(tom.getDate()+1); tom.setHours(0,0,0,0);
     const L=liquidityDaily(45); for(const e of (L.events||[])){ const d=new Date(e.date); d.setHours(0,0,0,0);
       if(d.getTime()===tom.getTime() && e.amt<0 && Math.abs(e.amt)>=25){ push({key:'bill-'+today,score:52,t:'info',ic:ICON('cal'),l1:`Morgen: ${String(e.name||'').slice(0,22)} ${euro(e.amt)}.`,l2:'Zorg dat er saldo is',act:"go('vooruit')"}); break; } } }catch(_){}
+  // --- saldo-tekort vóór lasten binnen 1-2 dagen (hoogste prioriteit) ---
+  try{ const Lq=liquidityDaily(3); const t0=new Date(); t0.setHours(0,0,0,0); const hz=new Date(t0); hz.setDate(hz.getDate()+2);
+    const due=(Lq.events||[]).filter(e=>{const d=new Date(e.date); d.setHours(0,0,0,0); return e.amt<0 && d.getTime()>=t0.getTime() && d.getTime()<=hz.getTime();}).sort((a,b)=>a.date-b.date);
+    const dueAmt=due.reduce((s2,e)=>s2-e.amt,0); const tb=totalBalance();
+    if(dueAmt>0 && tb.missing===0 && tb.sum<dueAmt){
+      const topUp=Math.max(Math.ceil((dueAmt-tb.sum)/5)*5,5); const first=due[0];
+      const dd=Math.round((new Date(first.date).setHours(0,0,0,0)-t0.getTime())/86400000); const when=dd<=0?'vandaag':dd===1?'morgen':'overmorgen';
+      out.push({key:'lowbal-'+today,score:96,t:'bad',ic:ICON('alert'),
+        l1: due.length>1?`Te weinig saldo voor ${due.length} vaste lasten ${when}.`:`Te weinig saldo: ${when} wordt ${esc(String(first.name||'').slice(0,20))} ${euro(-first.amt)} afgeschreven.`,
+        l2:`Vul ±${euro0(topUp)} aan`, act:"go('vooruit')"});
+    } }catch(_){}
   if(isNow && !out.length){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget(); if(L.projected>=tgt && L.daysLeft>0)
     push({key:'room',score:20,t:'good',ic:ICON('check'),l1:'Je ligt op koers deze maand.',l2:'Mooi — hou dit vast',act:"go('vooruit')"}); }catch(_){} }
   out.sort((a,b)=>b.score-a.score);
@@ -2314,7 +2340,17 @@ function setBudget(){
   return `
     <label class="fld">Bestedingslimiet: <b style="color:var(--teal)">${SET.limit}%</b> van inkomen</label>
     <input type="range" class="slider" min="40" max="100" step="5" value="${SET.limit}" oninput="SET.limit=+this.value;save();render();">
-    <div class="small muted">Besteed max ${SET.limit}% van wat binnenkomt, hou ${100-SET.limit}% over.</div>
+    <div class="small muted">De ${SET.limit}%-regel is je bovengrens. Kies hieronder hóe je limiet meebeweegt met je inkomen.</div>
+    <label class="fld">Limiet-model</label>
+    <div class="chips">${[['pct','% van inkomen'],['cap','Vast plafond'],['baseline','Baseline-anker'],['damper','Groei-demper']].map(([k,l])=>`<span class="chip ${(SET.limitMode||'pct')===k?'on':''}" onclick="SET.limitMode='${k}';save();render();">${l}</span>`).join('')}</div>
+    ${(SET.limitMode||'pct')==='cap'
+      ? `<input type="number" min="0" value="${SET.spendCap||''}" placeholder="bv. 2500" oninput="SET.spendCap=+this.value||0;save();render();"><div class="small muted" style="margin-top:6px">Vast maandplafond. Alles boven dit bedrag gaat naar sparen — een loonsverhoging verhoogt je limiet niet.</div>`
+      : (SET.limitMode||'pct')==='damper'
+      ? `<input type="number" min="0" max="100" value="${SET.damperPct||30}" placeholder="30" oninput="SET.damperPct=+this.value||0;save();render();"><div class="small muted" style="margin-top:6px">Van elke euro die je méér verdient dan je basisinkomen (${euro0(baseIncome())}) gaat ${SET.damperPct||30}% naar je limiet, de rest naar sparen.</div>`
+      : (SET.limitMode||'pct')==='baseline'
+      ? `<div class="small muted" style="margin-top:6px">Je limiet ankert op je typische uitgaven (≈ ${euro0(baselineSpend())}/mnd) en groeit niet mee met je inkomen. Meer verdienen → meer sparen.</div>`
+      : `<div class="small muted" style="margin-top:6px">Klassiek: limiet = ${SET.limit}% van je inkomen. Meer inkomen = meer ruimte.</div>`}
+    <div class="small" style="margin-top:8px">Nu: <b>${euro0(monthBudget(baseIncome()))}</b> besteden · <b style="color:var(--teal)">${euro0(monthlySavingTarget())}</b> sparen per maand.</div>
     <label class="fld">Dagbudget variabele uitgaven (optioneel)</label>
     <input type="number" value="${SET.dailyVarBudget||''}" placeholder="bv. 45" oninput="SET.dailyVarBudget=+this.value||0;save();render();">
     <div class="small muted" style="margin-top:6px">Je richtbedrag per dag voor vrij besteedbaar geld. Leeg = automatisch uit je budget.</div>
@@ -2324,7 +2360,7 @@ function setBudget(){
       ? `<input type="number" min="0" value="${SET.savingAmount||''}" placeholder="bv. 750" oninput="SET.savingAmount=+this.value||0;save();render();">`
       : (SET.savingMode||'auto')==='percent'
       ? `<input type="number" min="0" max="100" value="${SET.savingPercent||''}" placeholder="bv. 20" oninput="SET.savingPercent=+this.value||0;save();render();">`
-      : `<div class="small muted">Automatisch = ${100-SET.limit}% van je inkomen (verandert mee met je limiet).</div>`}
+      : `<div class="small muted">Automatisch = je inkomen minus je bestedingslimiet (volgt je gekozen model).</div>`}
     <label class="fld">Bufferdoel</label>
     <div class="chips">${[['spend','Maanduitgave'],['income','Inkomen'],['fixed','Vaste lasten'],['variable','Variabele lasten'],['amount','Vast bedrag']].map(([k,l])=>`<span class="chip ${(SET.bufferBasis||'spend')===k?'on':''}" onclick="SET.bufferBasis='${k}';save();render();">${l}</span>`).join('')}</div>
     ${(SET.bufferBasis||'spend')==='amount'
