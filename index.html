@@ -1280,7 +1280,7 @@ function renderDash(){
     } else {
       lbl=`Spaardoel in de knel · ${monthName}`;
       col='var(--red)'; big=euro(0);
-      sub=`Je komt ${euro0(-free)} tekort voor je spaardoel van ${euro0(sv)}`;
+      sub=`Je komt ${euro0(-free)} tekort voor je spaardoel van ${euro0(sv)}${L.fixDue>0?` · ${euro0(L.fixDue)} vaste lasten komen nog`:''}`;
       status=`${ICON('warn')} Even opletten`;
     }
   } else {
@@ -1289,12 +1289,13 @@ function renderDash(){
     big=euro(Math.max(t.budget-t.spend,0));
     sub=`${euro0(t.spend)} van ${euro0(t.budget)} uitgegeven (${pctRaw}%)`; status='';
   }
-  const hero=`<div class="hero2">
+  const hero=`<div class="hero2"${isNow?` onclick="go('vooruit')" style="cursor:pointer"`:''}>
     <div class="hlbl">${lbl}${t.incomeEst?' <span class="tag">geschat</span>':''}</div>
     <div class="hbig" style="color:${col}">${big}</div>
     <div class="hsub">${sub}</div>
     <div class="bar-thin"><div style="width:${pct}%;background:${col}"></div></div>
     ${status?`<div class="hstat" style="color:${col}">${status}</div>`:''}
+    ${isNow?`<div class="small" style="color:var(--teal);margin-top:8px;font-weight:600">Bekijk je vooruitblik ›</div>`:''}
   </div>`;
   // ---- KPI's: plat op de pagina, op de linkeras ----
   const tb=totalBalance();
@@ -2030,9 +2031,18 @@ function coachTips(m){
   if(t.budget<=0) push(9,'info',ICON('gear'),`Geen inkomen herkend voor deze maand. Stel je <b>vast inkomen</b> in bij Instellingen voor een kloppend budget.`,"go('set')");
   // budgetstatus
   if(t.budget>0){
-    if(pct<70) push(5,'good',ICON('party'),`Je zit op <b>${Math.round(pct)}%</b> van je bestedingsruimte — ruim binnen je ${SET.limit}%-norm.`);
-    else if(pct<100) push(6,'warn',ICON('clock'),`Je zit op <b>${Math.round(pct)}%</b> van je ${SET.limit}%-grens — nog ${euro(t.budget-t.spend)} ruimte.`,"go('ins')");
-    else push(9,'bad',ICON('alert'),`Je zit <b>${euro(t.spend-t.budget)}</b> boven je ${SET.limit}%-grens (${Math.round(pct)}%). Dit gaat ten koste van je spaardoel.`,"go('act')");
+    const _d=new Date(), _nowYM=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0'); const isNowM=(m===_nowYM);
+    const rem=t.budget-t.spend; let fixDue=0; if(isNowM){ try{ fixDue=monthLiquidity().fixDue||0; }catch(_){ fixDue=0; } }
+    const realFree=rem-fixDue;
+    if(pct>=100){
+      push(9,'bad',ICON('alert'),`Je zit <b>${euro(t.spend-t.budget)}</b> boven je ${SET.limit}%-grens (${Math.round(pct)}%). Dit gaat ten koste van je spaardoel.`,"go('act')");
+    } else if(isNowM && fixDue>0 && realFree<0){
+      push(8,'bad',ICON('alert'),`Nog ${euro(rem)} van je ${SET.limit}%-ruimte, maar er komt nog <b>${euro0(fixDue)}</b> aan vaste lasten — dan ga je ${euro0(-realFree)} over je grens.`,"openFixedDue()");
+    } else if(pct<70){
+      push(5,'good',ICON('party'),`Je zit op <b>${Math.round(pct)}%</b> van je bestedingsruimte${isNowM&&fixDue>0?` — na <b>${euro0(fixDue)}</b> komende vaste lasten nog ${euro0(realFree)} echt vrij`:` — ruim binnen je ${SET.limit}%-norm`}.`,(isNowM&&fixDue>0)?"openFixedDue()":'');
+    } else {
+      push(6,'warn',ICON('clock'),`Je zit op <b>${Math.round(pct)}%</b> van je ${SET.limit}%-grens — nog ${euro(rem)} ruimte${isNowM&&fixDue>0?`, waarvan <b>${euro0(fixDue)}</b> naar komende vaste lasten → ${euro0(realFree)} echt vrij`:''}.`,(isNowM&&fixDue>0)?"openFixedDue()":"go('ins')");
+    }
   }
   // vaste lasten als % van inkomen
   const sv=splitFixedVar(m);
