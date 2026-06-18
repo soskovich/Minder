@@ -385,7 +385,7 @@ const CATS={
 // keyword-regels (eerste match telt) — werken op de hele :86:-tekst in hoofdletters
 const RULES=[
   ['inkomen',['DGA','ERNST MANAGEMENT','0143178385','SALARIS',' LOON','UITKERING','AFREKENING PER','STRIPE TECHNOLOGY']],
-  ['sparen',['PEAKS','SAXO BANK','SAXO','BELEGGEN','DEGIRO','BRAND NEW DAY','BUX','FLATEX']],
+  ['sparen',['PEAKS','SAXO BANK','SAXO','BELEGGEN','DEGIRO','BRAND NEW DAY','BUX','FLATEX','MONTHLY RULE','WEEKLY RULE']],
   ['vices',['COFFEESHOP','SMARTSHOP','GROWSHOP','HEADSHOP','SLIJTERIJ','GALL & GALL','GALL EN GALL','MITRA','DRANKENHANDEL','HOLLAND CASINO','UNIBET','TOBACCO','SHISHA','VAPE']],
   ['boodschappen',['PLUS DE GORS','VOMAR','SAFRANA','KRUIDVAT','NIKA SUPERMARKT','SUPERMARKT','ALBERT HEIJN','JUMBO','LIDL','ALDI','DIRK VAN','SPLIF','ISS CATERING','SUMUP']],
   ['uiteten',['MCDONALD','ROOTS HOEKENRODE','MIXED KITCHEN','BAZRONI','PIZZA','ROLLING PIZZA','MARC SIER','LONA','NYPD','RESTAURANT','EETCAFE','CAFE','PASTA','TICKETMASTER','DONER','TOKO','STACH','KEBAB','SHOARMA','SHAWARMA','BURGER','SUSHI','THUISBEZORGD','UBER EATS','TASTE OF']],
@@ -687,12 +687,12 @@ function renderForecast(){
 // prognose drill-down: welke vaste lasten (terugkerende posten per categorie)
 function openForecastFixed(){
   const sched=recurringSchedule().filter(s=>s.type==='fixed').sort((a,b)=>b.amount-a.amount);
-  const tot=sched.reduce((a,s)=>a+s.amount,0);
+  const tot=sched.reduce((a,s)=>a+(s.monthlyEq||s.amount),0);
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('lock')}</div><div style="font-weight:800;font-size:17px">Verwachte vaste lasten</div>
-      <div class="muted small">terugkerend per maand</div><div style="font-size:22px;font-weight:800;margin:5px 0">${euro(tot)}</div></div>
+      <div class="muted small">terugkerend · gemiddeld per maand</div><div style="font-size:22px;font-weight:800;margin:5px 0">${euro(tot)}</div></div>
     ${sched.length?sched.map(s=>{const c=CATS[s.cat]||CATS.overig;return `<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">~dag ${s.day} · ${c.name}</div></div><div class="amt neg">−${euro(s.amount)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Nog te weinig data om vaste lasten te herkennen.</div>'}`;
+      <div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">~dag ${s.day} · ${intervalLabel(s.intervalM)} · ${c.name}</div></div><div class="amt neg">−${euro(s.amount)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Nog te weinig data om vaste lasten te herkennen.</div>'}`;
   $('#sheetBg').classList.add('show');
 }
 // prognose drill-down: variabel per categorie (met grootste winkel)
@@ -954,45 +954,47 @@ function setBal(acc,val){ SET.manualBal=SET.manualBal||{}; if(val===''||val==nul
 // groeperingssleutel voor terugkerende posten (zelfde logica als recurringSchedule)
 function recurKey(t){ return (t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20); }
 // terugkerend schema: dag van de maand + mediaan bedrag per vaste last / inkomstenbron
+function intervalLabel(im){ return im===1?'maandelijks':im===3?'per kwartaal':im===6?'half jaar':im===12?'jaarlijks':'~'+im+ ' mnd'; }
 function recurringSchedule(){
   const map={};
   for(const t of TX){ const c=catOf(t), meta=CATS[c]; let type=null;
     if(meta.type==='income' && t.amount>0) type='income';
     else if(meta.type==='expense' && t.amount<0 && isFixed(t)) type='fixed'; else continue;
-    const key=recurKey(t);
-    if(!key) continue; (map[key]=map[key]||{name:t.name,cat:c,type,occ:[]});
-    map[key].occ.push({day:+t.date.slice(8,10), amt:Math.abs(t.amount), ym:t.date.slice(0,7)});
-  }
-  const med=a=>{const s=[...a].sort((x,y)=>x-y);return s[Math.floor(s.length/2)];};
-  // alleen ACTIEF terugkerende posten: in minstens 2 van de laatste 3 maanden met data.
-  // Zo vallen gestopte abonnementen (bv. Basic Fit) en eenmalige kredieten/overboekingen vanzelf af.
-  const allYms=[...new Set(TX.map(t=>t.date.slice(0,7)))].sort();
-  const last3=new Set(allYms.slice(-3));
+    const key=recurKey(t); if(!key) continue;
+    (map[key]=map[key]||{name:t.name,cat:c,type,occ:[]});
+    map[key].occ.push({date:t.date, amt:Math.abs(t.amount), ym:t.date.slice(0,7)}); }
+  const now=new Date(); now.setHours(0,0,0,0); const today=now.getTime();
   const out=[];
   for(const k in map){ const r=map[k];
-    // per maand de HOOFDbetaling (grootste bedrag) — zo telt de echte maandlast, niet losse kleine overboekingen
-    const byYm={}; for(const o of r.occ){ if(!byYm[o.ym] || o.amt>byYm[o.ym].amt) byYm[o.ym]=o; }
-    const mains=Object.values(byYm); if(mains.length<2) continue;
-    if(mains.filter(o=>last3.has(o.ym)).length<2) continue;   // niet (meer) actief in recente maanden → overslaan
-    out.push({key:k,name:r.name,cat:r.cat,type:r.type,day:med(mains.map(o=>o.day)),amount:med(mains.map(o=>o.amt)),count:r.occ.length}); }
-  return out.sort((a,b)=>a.day-b.day);
+    const byYm={}; for(const o of r.occ){ if(!byYm[o.ym]||o.amt>byYm[o.ym].amt) byYm[o.ym]=o; }
+    const occ=Object.values(byYm).sort((a,b)=>a.date.localeCompare(b.date));
+    if(occ.length<2) continue;
+    const gaps=[]; for(let i=1;i<occ.length;i++) gaps.push((new Date(occ[i].date)-new Date(occ[i-1].date))/86400000);
+    gaps.sort((a,b)=>a-b); const medGap=gaps[Math.floor(gaps.length/2)]||30;
+    const intervalM = medGap<=45?1 : medGap<=135?3 : medGap<=225?6 : 12;
+    const last=occ[occ.length-1]; const lastD=new Date(last.date); lastD.setHours(0,0,0,0);
+    if((today-lastD.getTime())/86400000 > intervalM*30*1.6 + 7) continue;
+    let nx=new Date(lastD); let g=0; do{ nx.setMonth(nx.getMonth()+intervalM); g++; }while(nx.getTime()<=today && g<60);
+    out.push({key:k,name:r.name,cat:r.cat,type:r.type,amount:last.amt,day:lastD.getDate(),intervalM,nextDate:new Date(nx),lastDate:last.date,count:r.occ.length,monthlyEq:Math.round(last.amt/intervalM)});
+  }
+  return out.sort((a,b)=>a.nextDate-b.nextDate);
 }
 // dag-voor-dag liquiditeitscurve: vaste lasten/inkomen op hun datum + variabele burn
 function liquidityDaily(days){
   const sched=recurringSchedule(), f=forecastModel();
-  const fix=sched.filter(s=>s.type==='fixed');
-  const incItems=sched.filter(s=>s.type==='income');
-  const incomeDay=incItems.length?incItems.slice().sort((a,b)=>b.count-a.count)[0].day:25;
-  const fInc=f?f.fInc:0, dailyVar=f?f.fVar/30:0;
-  const {sum}=totalBalance();
   const start=new Date(); start.setHours(0,0,0,0);
-  const dates=[], bal=[], events=[]; let b=sum;
+  const end=new Date(start); end.setDate(start.getDate()+days);
+  const {sum}=totalBalance();
+  const events=[];
+  for(const s of sched){ let d=new Date(s.nextDate); d.setHours(0,0,0,0); let g=0;
+    while(d.getTime()<end.getTime() && g<60){
+      if(d.getTime()>=start.getTime()) events.push({date:new Date(d),name:s.name,amt:s.type==='income'?s.amount:-s.amount,type:s.type,cat:s.cat});
+      d.setMonth(d.getMonth()+s.intervalM); g++; } }
+  events.sort((a,b)=>a.date-b.date);
+  const dailyVar=f?f.fVar/30:0; let b=sum; const dates=[],bal=[];
   for(let i=0;i<days;i++){ const d=new Date(start); d.setDate(start.getDate()+i);
-    const dom=d.getDate(), last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
-    if(fInc>0 && dom===Math.min(incomeDay,last)){ b+=fInc; events.push({date:new Date(d),name:'Salaris / inkomen (verwacht)',amt:fInc,type:'income'}); }
-    for(const s of fix){ if(dom===Math.min(s.day,last)){ b-=s.amount; events.push({date:new Date(d),name:s.name,amt:-s.amount,type:'fixed',cat:s.cat}); } }
-    b-=dailyVar; dates.push(new Date(d)); bal.push(b);
-  }
+    for(const e of events){ if(e.date.getFullYear()===d.getFullYear()&&e.date.getMonth()===d.getMonth()&&e.date.getDate()===d.getDate()) b+=e.amt; }
+    b-=dailyVar; dates.push(new Date(d)); bal.push(b); }
   let ti=0; for(let i=1;i<bal.length;i++) if(bal[i]<bal[ti]) ti=i;
   return {dates,bal,events,trough:{date:dates[ti],bal:bal[ti],i:ti}, net:f?f.fNet:0};
 }
@@ -1073,7 +1075,7 @@ function monthLiquidity(){
   // wat is deze maand al langsgekomen?
   const seen=new Set(); let incomeThisMonth=0;
   for(const t of txOfMonth(ym)){ const k=recurKey(t); if(k) seen.add(k); if(CATS[catOf(t)].type==='income') incomeThisMonth+=Math.max(t.amount,0); }
-  const fixDueItems=sched.filter(s=>s.type==='fixed' && !seen.has(s.key));
+  const fixDueItems=sched.filter(s=>s.type==='fixed' && !seen.has(s.key) && s.nextDate.getFullYear()===now.getFullYear() && s.nextDate.getMonth()===now.getMonth());
   const fixDue=fixDueItems.reduce((a,s)=>a+s.amount,0);
   // verwacht inkomen dat nog moet komen = basisinkomen minus wat al deze maand binnen is
   const incDue=Math.max(baseIncome()-incomeThisMonth,0);
@@ -1731,6 +1733,7 @@ function renderVooruit(){
   const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
   $('#s-vooruit').innerHTML = (isNow?vooruitHero():'') + renderUpcoming() + renderForecast() + renderSavings();
 }
+function hasAutoSaving(){ try{ const ms=months().slice(-3); let n=0; for(const mm of ms){ for(const t of txOfMonth(mm)){ if(catOf(t)==='sparen' || /(monthly|weekly) rule|round[\s-]?up|income sorter/i.test(t.name||'')) n++; } } return n>=2; }catch(_){ return false; } }
 function coachItems(){
   const items=[]; if(!TX.length||SET.coachOff) return items;
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -1746,7 +1749,7 @@ function coachItems(){
     const normal=rows.filter(r=>r.inc<=base*1.15), windfall=rows.filter(r=>r.inc>base*1.15);
     const savNormal=Math.round(avg(normal.map(r=>r.savedEur)));
     // 2) meevaller-afhankelijkheid
-    if(normal.length>=1&&windfall.length>=1&&savNormal<target*0.7&&target>0)
+    if(normal.length>=1&&windfall.length>=1&&savNormal<target*0.7&&target>0&&!hasAutoSaving())
       items.push({t:'bad',insight:'Je leunt op meevallers om je doel te halen',context:`In gewone maanden zet je gemiddeld ${euro0(savNormal)} weg — ${euro0(target-savNormal)} onder je doel van ${euro0(target)}.`,label:`Zet ${euro0(target)}/mnd vast sparen`,fn:"toggleStep('savings')"});
     // 3) lifestyle inflation
     const spW=Math.round(avg(windfall.map(r=>r.sp))), spN=Math.round(avg(normal.map(r=>r.sp)));
@@ -1789,9 +1792,13 @@ function renderActions(){
   // ---- VANDAAG: dagdoel variabel ----
   const t=totals(m), sv=splitFixedVar(m), de=daysElapsed(m);
   const userDay=+SET.dailyVarBudget||0;
-  const dagdoel=Math.round(userDay>0?userDay:Math.max(t.budget-sv.fixed,0)/(de.dim||30));
+  const expInc=SET.autoIncome?baseIncome():(+SET.income||0);
+  const room=Math.round(expInc*SET.limit/100);
+  const fixHist=months().filter(x=>x<nowYM).slice(-3).map(mm=>splitFixedVar(mm).fixed).filter(v=>v>0).sort((a,b)=>a-b);
+  const typFixed=fixHist.length?fixHist[Math.floor(fixHist.length/2)]:sv.fixed;
+  const dagdoel=Math.round(userDay>0?userDay:Math.max(room-typFixed,0)/(de.dim||30));
   let spentToday=0;
-  if(isNow){ const today=now.toISOString().slice(0,10); for(const x of txOfMonth(m)){ if(x.date===today && x.amount<0 && CATS[catOf(x)].type==='expense' && !isFixed(x)) spentToday+=-x.amount; } }
+  if(isNow){ const today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0'); for(const x of txOfMonth(m)){ if(x.date===today && x.amount<0 && CATS[catOf(x)].type==='expense' && !isFixed(x)) spentToday+=-x.amount; } }
   const restToday=Math.max(dagdoel-spentToday,0); const overToday=spentToday>dagdoel;
   const col = !isNow?'var(--mut)':(overToday?'var(--red)':(spentToday>dagdoel*0.8?'var(--amber)':'var(--green)'));
   const streak=computeStreak(dagdoel);
