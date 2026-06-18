@@ -967,19 +967,36 @@ function totalBalance(){ let sum=0, missing=0; for(const acc of OWN){ const b=ac
 function setBal(acc,val){ SET.manualBal=SET.manualBal||{}; if(val===''||val==null) delete SET.manualBal[acc]; else SET.manualBal[acc]=+val; save(); renderDash(); } // settings niet herrenderen (focus behouden)
 
 // N26-spaarpotjes: alle N26-Spaces behalve de betaalrekening (Main) en het potje eindigend op 4840
+// rekening matchen op laatste cijfers (PSD2-acc = IBAN-cijfers, of via opgeslagen IBAN)
+function acctEndsWith(a, ends){
+  const pm=(SET.psd2Accounts||{})[a]; const iban=((pm&&pm.iban)||'').replace(/\s/g,'');
+  const id=(a||'').replace(/\s/g,'');
+  return ends.some(e=> id.endsWith(e) || (iban && iban.endsWith(e)));
+}
+// spaarpotjes = expliciete rekeningnummers (standaard 4323 + 1123); 4840/Zakgeld telt niet mee
 function n26SavingsAccounts(){
-  const ps=SET.psd2Accounts||{};
-  const all=[...new Set([...OWN, ...Object.keys(ps)])];   // ook saldo-only potjes zonder transacties
-  return all.filter(a=>{
-    const pm=ps[a]||null, m=ACCMETA[a]||{};
-    const isN26=(a||'').startsWith('N26 ')||(pm&&/n26/i.test(pm.bank||''))||/n26/i.test(m.bank||'');
-    if(!isN26) return false;
-    const nm=((a||'').replace(/^N26 /,'')+' '+((pm&&pm.label)||'')+' '+(m.label||'')).toLowerCase();
-    if(/\bmain\b|betaal|checking|hoofdrek/.test(nm)) return false;   // betaalrekening op naam (rol-detectie sloot potjes met inkomende transfers ten onrechte uit)
-    const iban=((pm&&pm.iban)||'').replace(/\s/g,'');
-    if((a||'').replace(/\s/g,'').endsWith('4840')||iban.endsWith('4840')) return false;
-    return true;
-  });
+  const ends=(SET.savingsEnds&&SET.savingsEnds.length)?SET.savingsEnds:['4323','1123'];
+  const all=[...new Set([...OWN, ...Object.keys(SET.psd2Accounts||{})])];
+  return all.filter(a=>acctEndsWith(a,ends));
+}
+// "Deze maand gespaard" = netto inleg op het hoofd-spaarpotje (standaard ··4323) deze maand
+function monthSavingsDeposit(){
+  const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const end=SET.savingsDepositEnd||'4323';
+  const accs=[...new Set([...OWN, ...Object.keys(SET.psd2Accounts||{})])].filter(a=>acctEndsWith(a,[end]));
+  const tx=TX.filter(t=>!t.pending && accs.includes(t.acc) && t.date.slice(0,7)===ym);
+  return {sum:Math.round(tx.reduce((sm,t)=>sm+t.amount,0)), tx, end};
+}
+function openMonthSaved(){
+  const md=monthSavingsDeposit(); const rows=md.tx.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('target')}</div><div style="font-weight:800;font-size:17px">Deze maand gespaard</div>
+      <div class="muted small">Inleg op ··${esc(md.end)} deze maand</div>
+      <div style="font-size:22px;font-weight:800;margin:5px 0;color:${md.sum>0?'var(--teal)':'var(--txt)'}">${euro(md.sum)}</div></div>
+    ${rows.length?rows.map(t=>`<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${ICON('target')}</div>
+      <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}</div></div>
+      <div class="amt ${t.amount<0?'neg':'pos'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`).join(''):`<div class="muted small center" style="padding:16px">Nog geen inleg op ··${esc(md.end)} deze maand gevonden. Het potje moet transacties aanleveren via PSD2.</div>`}`;
+  $('#sheetBg').classList.add('show');
 }
 function totalSaved(){ let sum=0,n=0,missing=0; for(const a of n26SavingsAccounts()){ const b=accBalance(a); if(b==null) missing++; else {sum+=b;n++;} } return {sum:Math.round(sum),n,missing}; }
 // drill-down: rekeningen waaruit je saldo bestaat
@@ -1351,11 +1368,11 @@ function renderDash(){
   const savedPct=t.income>0?Math.round((t.income-t.spend)/t.income*100):0;
   const monthName=MFULL[+m.slice(5,7)-1];
   // ---- KPI's: saldo (drill-down), deze maand gespaard (€), totaal gespaard (€) ----
-  const tb=totalBalance(); const savedAbs=Math.round(t.income-t.spend); const tgt=monthlySavingTarget(); const ts=totalSaved();
-  const savedCol = savedAbs<0?'var(--red)':(tgt>0&&savedAbs>=tgt?'var(--teal)':'var(--amber)');
+  const tb=totalBalance(); const md=monthSavingsDeposit(); const ts=totalSaved();
+  const savedCol = md.sum>0?'var(--teal)':'var(--mut)';
   const kpis=`<div class="hsec kpis">
     <div class="kpi" onclick="openBalances()" style="cursor:pointer"><div class="kl">Saldo nu</div><div class="kv">${euro0(tb.sum)}${tb.missing>0?` ${ICON('warn')}`:''} ›</div></div>
-    <div class="kpi" onclick="go('act')" style="cursor:pointer"><div class="kl">Deze maand gespaard</div><div class="kv" style="color:${savedCol}">${euro0(savedAbs)} ›</div></div>
+    <div class="kpi" onclick="openMonthSaved()" style="cursor:pointer"><div class="kl">Deze maand gespaard</div><div class="kv" style="color:${savedCol}">${euro0(md.sum)} ›</div></div>
     <div class="kpi" onclick="openSavingsPots()" style="cursor:pointer"><div class="kl">Totaal gespaard</div><div class="kv">${ts.n?euro0(ts.sum):'—'}${ts.missing?` ${ICON('warn')}`:''} ›</div></div>
   </div>`;
   // ---- recente transacties: sectiekop + platte rijen met haarlijn ----
@@ -2232,11 +2249,10 @@ function renderIns(){
     const pTx=periodTx();
     const patterns = renderCatBreak(pTx)
       + renderMerchants(pTx,periodLabel())
-      + (p==='month'?renderBudgetActual(curMonth):'')
       + renderDailyRolling();
     deep = pchips + patterns;
   }
-  $('#s-ins').innerHTML = heroProjection(m) + heroBlock + secBlock + deepBtn + deep;
+  $('#s-ins').innerHTML = heroProjection(m) + heroBlock + renderBudgetActual(m) + secBlock + deepBtn + deep;
 }
 
 function renderCat(){
