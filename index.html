@@ -118,6 +118,10 @@ h1,h2,h3{margin:0}
 .bc-hypo{font-size:13px;color:var(--mut);line-height:1.5;padding:10px 0;border-top:1px solid var(--line)}
 .bc-hypo:first-of-type{border-top:none}
 .bc-hd{color:var(--txt);font-weight:600}
+.bc-status{font-size:20px;font-weight:800;letter-spacing:-.3px;line-height:1.25}
+.bc-statsub{font-size:13px;color:var(--mut);margin-top:4px}
+.bc-steer{font-size:13.5px;color:var(--mut);margin-top:16px;line-height:1.5}
+.bc-why{font-size:12.5px;color:var(--mut);line-height:1.45;margin-top:6px}
 .actfocus{padding:26px 2px 4px}
 .actfocus .af-ic{font-size:26px;margin-bottom:14px}
 .actfocus .af-ctx{font-size:18px;font-weight:600;line-height:1.4;margin-bottom:22px;max-width:320px}
@@ -129,6 +133,7 @@ h1,h2,h3{margin:0}
 .actfocus .af-open{font-size:19px;font-weight:600;line-height:1.35;margin-bottom:8px;max-width:320px}
 .actfocus .af-mean{font-size:14px;color:var(--mut);line-height:1.5;margin:0 0 20px;max-width:320px}
 .actfocus .af-q{font-size:17px;font-weight:600;line-height:1.4;margin-bottom:15px;max-width:320px}
+.actfocus .af-fwd{font-size:13px;color:var(--teal);margin:-12px 0 20px;max-width:320px}
 .coachchips{display:flex;flex-wrap:wrap;gap:9px}
 .coachchip{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:21px;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;transition:background .15s,border-color .15s}
 .coachchip:active{background:var(--teal);color:#06231c;border-color:var(--teal)}
@@ -959,33 +964,40 @@ function openBudgetCompare(m){
   const rows=Object.keys(EB).filter(k=>+EB[k]>0 && CATS[k] && CATS[k].type==='expense')
     .map(k=>{ const b=+EB[k], a=actual[k]||0; return {k,b,a,diff:a-b,band:budgetBand(b,a)}; })
     .sort((x,y)=>Math.abs(y.diff)-Math.abs(x.diff)).slice(0,5);
-  const overRows=rows.filter(r=>r.band==='action'||r.band==='monitor');
-  const rowHtml=rows.map(r=>{ const c=CATS[r.k], o=r.diff>0;
-    const barCol=bandColor(r.band)==='var(--mut)'?'var(--teal)':bandColor(r.band);
-    const vCol=o?(r.band==='action'?'var(--red)':'var(--amber)'):'var(--green)';
-    const vTxt=o?`${euro0(r.diff)} over`:(r.diff===0?'precies op budget':`${euro0(-r.diff)} onder`);
+  const overRows=rows.filter(r=>r.band==='action'||r.band==='monitor').sort((a,b)=>b.diff-a.diff);
+  const top=rows.slice(0,3);
+  const ratio=bud?act/bud:0;
+  // STATUS als betekenis (geen 'ruimte over')
+  let stTxt,stCol;
+  if(over){ stTxt='Je bent over je budget'; stCol='var(--red)'; }
+  else if(ratio>=0.9){ stTxt='Je zit dicht tegen je budget aan'; stCol='var(--amber)'; }
+  else if(ratio>=0.75){ stTxt='Je houdt je budget goed in de hand'; stCol='var(--teal)'; }
+  else if(ratio>=0.5){ stTxt='Je zit comfortabel binnen je budget'; stCol='var(--teal)'; }
+  else { stTxt='Je zit ruim binnen je budget'; stCol='var(--teal)'; }
+  // 1 subtiele gedragsrichting (geen CTA)
+  const steer = overRows.length
+    ? `${CATS[overRows[0].k].name} is je grootste afwijking deze maand.`
+    : (top.length? `Je grootste post is ${CATS[top[0].k].name.toLowerCase()} — netjes binnen budget.` : '');
+  // categorie-rij = betekenis i.p.v. kale cijfers/bars; reden eronder bij een afwijking
+  const meaning=r=>{ const o=r.diff>0, rt=r.b?r.a/r.b:1;
+    if(o) return r.band==='action'?{t:`${euro0(r.diff)} meer dan gepland`,c:'var(--red)'}:{t:'net iets boven budget',c:'var(--amber)'};
+    if(rt<=0.6) return {t:'ruim onder budget',c:'var(--green)'};
+    if(rt<0.98) return {t:'onder budget',c:'var(--green)'};
+    return {t:'precies op budget',c:'var(--mut)'};
+  };
+  const rowHtml=top.map(r=>{ const c=CATS[r.k], mn=meaning(r), o=(r.band==='action'||r.band==='monitor');
     return `<div class="bc-row" onclick="openVariance('${r.k}')">
-      <div class="bc-rt"><span class="bc-name">${c.icon} ${c.name}</span><span class="bc-amt"><b>${euro0(r.a)}</b> / ${euro0(r.b)}</span></div>
-      <div class="bar-track"><div class="bar-fill" style="width:${Math.min(r.b?r.a/r.b*100:0,100)}%;background:${barCol}"></div></div>
-      <div class="bc-var" style="color:${vCol}">${vTxt}</div></div>`;
+      <div class="bc-rt"><span class="bc-name">${c.icon} ${c.name}</span><span class="bc-var" style="color:${mn.c}">${mn.t}</span></div>
+      ${o?`<div class="bc-why">${catHypo(m,r.k)}</div>`:''}</div>`;
   }).join('');
-  // GEDRAG geïntegreerd — categorie-specifieke verklaring per over-budget categorie (concreet, zacht gebracht).
-  const expl=overRows.slice(0,3).map(r=>({hd:CATS[r.k].name, txt:catHypo(m,r.k)}));
-  const explHtml = expl.length
-    ? expl.map(e=>`<div class="bc-hypo"><span class="bc-hd">${e.hd}:</span> ${e.txt}</div>`).join('')
-    : `<div class="bc-hypo">Je uitgaven volgen je budget mooi deze maand — geen opvallende uitschieters.</div>`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:17px;margin-bottom:2px">Je uitgaven vs budget</div>
-    <div class="small muted" style="margin-bottom:14px">${monthLabel(m)}</div>
-    <div class="bc-sum">
-      <div><div class="bc-k">Budget</div><div class="bc-v">${euro0(bud)}</div></div>
-      <div><div class="bc-k">Uitgegeven</div><div class="bc-v">${euro0(act)}</div></div>
-      <div><div class="bc-k">Status</div><div class="bc-v" style="color:${sCol};font-size:13.5px">${sTxt}</div></div>
-    </div>
-    <div class="bar-track" style="height:9px"><div class="bar-fill" style="width:${Math.min(bud?act/bud*100:0,100)}%;background:${sCol}"></div></div>
-    <div style="font-size:12px;color:var(--mut);margin:6px 2px 0">${over?`${euro0(act-bud)} boven je budget deze maand`:`${euro0(bud-act)} ruimte over deze maand`}</div>
-    ${rows.length?`<div class="hlabel" style="margin:20px 2px 4px">Grootste verschillen</div>${rowHtml}`:`<div class="small muted" style="margin-top:18px">Stel een maandbudget per categorie in om verschillen te zien.</div>`}
-    <div class="hlabel" style="margin:20px 2px 10px">Waarom deze verschillen?</div>${explHtml}`;
+    <div class="small muted" style="margin-bottom:16px">${monthLabel(m)}</div>
+    <div class="bc-status" style="color:${stCol}">${stTxt}</div>
+    <div class="bc-statsub">${euro0(act)} van ${euro0(bud)} uitgegeven</div>
+    <div class="bar-track" style="height:7px;margin:12px 0 0"><div class="bar-fill" style="width:${Math.min(bud?act/bud*100:0,100)}%;background:${stCol}"></div></div>
+    ${steer?`<div class="bc-steer">${steer}</div>`:''}
+    ${top.length?`<div class="hlabel" style="margin:22px 2px 4px">Grootste verschillen</div>${rowHtml}`:`<div class="small muted" style="margin-top:18px">Stel een maandbudget per categorie in om verschillen te zien.</div>`}`;
   $('#sheetBg').classList.add('show');
 }
 function catDriver(m,k){
@@ -1121,14 +1133,14 @@ function n26SavingsAccounts(){
 function totalSaved(){ let sum=0,n=0,missing=0; for(const a of n26SavingsAccounts()){ const b=accBalance(a); if(b==null) missing++; else {sum+=b;n++;} } return {sum:Math.round(sum),n,missing}; }
 // drill-down: rekeningen waaruit je saldo bestaat
 function openBalances(){
-  const rows=OWN.filter(a=>accBalance(a)!=null).map(a=>({a,b:accBalance(a)})).sort((x,y)=>y.b-x.b);
+  const rows=OWN.map(a=>({a,b:accBalance(a)})).filter(r=>r.b!=null && r.b!==0).sort((x,y)=>y.b-x.b);
   const tb=totalBalance();
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('coins')}</div><div style="font-weight:800;font-size:17px">Saldo nu</div>
       <div class="muted small">${rows.length} rekening${rows.length===1?'':'en'}${tb.missing>0?` · ${tb.missing} zonder saldo`:''}</div>
       <div style="font-size:22px;font-weight:800;margin:5px 0">${euro(tb.sum)}</div></div>
     ${rows.length?rows.map(r=>`<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
-      <div class="info"><div class="nm">${esc(accLabel(r.a))}</div><div class="cat">${esc((ACCMETA[r.a]&&ACCMETA[r.a].bank)||'')}</div></div>
+      <div class="info"><div class="nm">${esc(acctNiceName(r.a))}</div><div class="cat">${esc((ACCMETA[r.a]&&ACCMETA[r.a].bank)||'')}</div></div>
       <div class="amt ${r.b<0?'neg':'pos'}">${euro(r.b)}</div></div>`).join(''):'<div class="muted small center" style="padding:16px">Nog geen saldo bekend. Koppel je bank of vul saldo handmatig in bij Instellingen.</div>'}
     ${tb.missing>0?`<div class="small muted" style="margin-top:10px">${tb.missing} rekening(en) zonder bekend saldo tellen niet mee.</div>`:''}`;
   $('#sheetBg').classList.add('show');
@@ -1466,15 +1478,9 @@ function renderDash(){
   const ms=months(); if(!ms.length){ $('#s-dash').innerHTML=renderReminder(); return; }
   const tb=totalBalance(); const ts=totalSaved();
   // ---- HERO: het saldo, groot, zonder kader ----
-  let savLine='';
-  if(ts.n){ let goal=0; try{ goal=savingsModel().goal||0; }catch(_){}
-    const pct=goal>0?Math.round(Math.min(ts.sum/goal*100,100)):0;
-    savLine=`<div class="hh-sub" onclick="event.stopPropagation();openSavingsPots()"><span class="dot"></span>${euro0(ts.sum)} opzij${goal>0?` · ${pct}% van je buffer`:''}</div>`;
-  }
   const hero=`<div class="homehero" onclick="openBalances()">
     <div class="hh-lbl">Totaal saldo</div>
     <div class="hh-big">${euro(tb.sum)}${tb.missing>0?` <span class="hh-warn">${ICON('warn')}</span>`:''}</div>
-    ${savLine}
   </div>`;
   // ---- recente transacties: kale lijst ----
   const recent=TX.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
@@ -2161,7 +2167,7 @@ function renderActions(){
     $('#s-act').innerHTML=`<div class="actfocus">
       <div class="af-ic" style="color:var(--green)">${ICON('check')}</div>
       <div class="af-tag">Klaar</div>
-      <div class="af-action">Niets meer te doen vandaag — goed bezig.</div>
+      <div class="af-action">Je stap staat. Morgen pakken we het weer op.</div>
       ${window._lastActKey?`<div class="af-undo" onclick="undoAction('${window._lastActKey}')">Toch niet gedaan?</div>`:''}
     </div>`;
     return;
@@ -2182,14 +2188,16 @@ function renderActions(){
     </div>`;
     return;
   }
-  // STAP 2 — micro-actie + commitment (na keuze)
+  // STAP 2 — keuze bevestigen + concrete stap + commitment + vooruitblik
   const ans=window._coachAnswer||'';
+  const fwd={dag:'Vanavond weet je of het lukte.',week:'Volgende week zie je het effect.',maand:'Eén keer regelen — de hele maand profijt.'}[sig.scale]||'';
   const steps = sig.scale==='maand' ? `<div class="af-steps" onclick="toggleActDeep()">${SET.actDeep?'Verberg stappen ▲':'Bekijk je stappen ›'}</div>` : '';
   $('#s-act').innerHTML=`<div class="actfocus">
     <div class="coachdots"><i class="on"></i><i class="on"></i></div>
-    <div class="af-tag">${meta.tag} · jouw focus</div>
-    ${ans?`<div class="af-mean">Je koos <b style="color:var(--txt)">${esc(ans).toLowerCase()}</b>. Daar bouwen we op.</div>`:''}
+    <div class="af-tag">${meta.tag} · jouw stap</div>
+    ${ans?`<div class="af-mean">Goede keuze: <b style="color:var(--txt)">${esc(ans).toLowerCase()}</b>.</div>`:''}
     <div class="af-action">${esc(sig.action)}</div>
+    ${fwd?`<div class="af-fwd">${fwd}</div>`:''}
     <button class="if-cta" onclick="coachCommit('${sig.key}','${sig.scale}')">${ICON('check')} Dit doe ik</button>
     <div class="af-undo" onclick="coachReset()">‹ Andere keuze</div>
     ${steps}
@@ -2198,11 +2206,11 @@ function renderActions(){
 // coachvraag + betekenis afgeleid van het signaal (data → gesprek)
 function coachQA(sig){
   if(sig.scale==='dag'){
-    if(sig.tone==='good') return {meaning:'Dat is grip — je geeft bewust uit, niet op de automaat. Geld doet hier wat jij wilt.',question:'Wat hielp je het meest?',chips:['Goed gepland','Minder impuls','Vaker thuis']};
-    return {meaning:'Eén dag zegt niks over je maand. Vandaag pak je het terug — bewust, niet streng.',question:'Waar let je vandaag op?',chips:['Bewuster kiezen','Geen impuls','Klein houden']};
+    if(sig.tone==='good') return {meaning:'Eén dag langer onder je dagdoel en het wordt een gewoonte.',question:'Wat hielp je het meest?',chips:['Goed gepland','Minder impuls','Vaker thuis']};
+    return {meaning:'Eén dag eroverheen — vandaag zo weer terug onder je dagdoel.',question:'Waar let je vandaag op?',chips:['Bewuster kiezen','Geen impuls','Klein houden']};
   }
-  if(sig.scale==='week') return {meaning:'Eén categorie loopt op. Geen ramp — wél het moment om te kiezen waar je geld heen gaat.',question:'Wat past deze week het best bij jou?',chips:['Minder impuls','Beter plannen','Een vast bedrag']};
-  return {meaning:'Dit speelt al langer. Eén knop omzetten verandert je hele maand — kleine stap, groot verschil.',question:'Wat voelt het meest haalbaar?',chips:['Een vaste last','Automatisch sparen','Bewuster kiezen']};
+  if(sig.scale==='week') return {meaning:'Eén categorie loopt op. Een vast bedrag deze week houdt het in de hand.',question:'Wat past deze week het best bij jou?',chips:['Minder impuls','Beter plannen','Een vast bedrag']};
+  return {meaning:'Je spaart al een paar maanden te weinig. Eén vaste last omlaag draait dat om.',question:'Wat voelt het meest haalbaar?',chips:['Een vaste last','Automatisch sparen','Bewuster kiezen']};
 }
 function coachAnswer(c){ window._coachAnswer=c; window._coachStep=1; renderActions(); }
 function coachReset(){ window._coachStep=0; window._coachAnswer=null; renderActions(); }
@@ -2572,7 +2580,7 @@ function renderIns(){
     const pTx=periodTx();
     deep = pchips + insOverview(m) + renderCatBreak(pTx) + renderMerchants(pTx,periodLabel());
   }
-  $('#s-ins').innerHTML = heroProjection(m) + focusBlock + (isNow?dayMiniLine():'') + deepBtn + deep;
+  $('#s-ins').innerHTML = heroProjection(m) + focusBlock + deepBtn + deep;
 }
 
 function renderCat(){
@@ -2891,6 +2899,17 @@ function setAcc(a){accFilter=a;renderTx();}
 function accLabel(a){ const r=ACCMETA[a]; if(r&&r.label) return r.label; const pm=(SET.psd2Accounts||{})[a]; if(pm) return (pm.bank?pm.bank+' · ':'')+(pm.label||a); return (a||'').replace(/^N26 /,'N26 ')||'Rekening'; }
 
 function accShort(a){ return (a||'').startsWith('N26 ') ? a.replace(/^N26 /,'') : '··'+(a||'').slice(-4); }
+// nette, korte rekeningnaam (zonder persoonsnaam) — N26-Spaces zoals in de N26-app, ABN als betaalrekening
+const ACCT_NAMES={'6222':'Main','1123':'Buffer rust','4323':'Spaarpot','4840':'Zakgeld'};
+function acctLast4(a){ const pm=(SET.psd2Accounts||{})[a]; const iban=((pm&&pm.iban)||'').replace(/\D/g,''); const id=(a||'').replace(/\D/g,''); return (iban||id).slice(-4); }
+function acctNiceName(a){
+  const bank=(ACCMETA[a]&&ACCMETA[a].bank)||(((SET.psd2Accounts||{})[a])||{}).bank||'';
+  const last4=acctLast4(a);
+  const ov=(SET.acctNames||{})[last4]; if(ov) return ov;
+  if(/n26/i.test(bank)) return ACCT_NAMES[last4]||('Space ··'+last4);
+  if(/abn/i.test(bank)) return 'Betaalrekening';
+  return last4?('··'+last4):(accLabel(a)||'Rekening');
+}
 
 function closeSheet(){ $('#sheetBg').classList.remove('show'); }
 
