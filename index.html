@@ -958,14 +958,29 @@ function catHypo(m,k){
     return `Opgebouwd uit ${d.n} uitgaven in ${cat}, met ${big} (${euro0(-d.biggest.amount)}) als grootste.`;
   return `${d.n||0} uitgave${d.n===1?'':'n'} in ${cat} deze maand.`;
 }
+// Vervoer & auto bestaat uit deeluitgaven (lease/benzine/parkeren/OV) — splits ze zodat een tip de juiste post raakt
+function vervoerSplit(m){
+  let lease=0,fuel=0,park=0,ov=0,rest=0;
+  for(const t of txOfMonth(m)){ if(catOf(t)!=='vervoer'||t.amount>=0) continue;
+    const U=((t.desc||'')+' '+(t.name||'')).toUpperCase(), a=-t.amount;
+    if(/HILTERMANN|LEASECONTRACT|LEASE|PRIVATE LEASE/.test(U)) lease+=a;
+    else if(/SHELL|ESSO|\bBP\b|TINQ|TOTAL|TANKSTATION|\bTANK\b|GULF|TEXACO|AVIA|FIREZONE|TAMOIL/.test(U)) fuel+=a;
+    else if(/PARKBEE|PARKEER|PARKING|Q-?PARK|TRAVELCARD|YELLOWBRICK|EASYPARK/.test(U)) park+=a;
+    else if(/\bNS\b|OV-?CHIP|GVB|\bRET\b|FLIXBUS|UBER|BOLT|TREIN/.test(U)) ov+=a;
+    else rest+=a;
+  }
+  return {lease,fuel,park,ov,rest};
+}
 // concrete, data-gedreven bespaartip per categorie — max 1 zin, direct uitvoerbaar
 function savingsTip(m,k){
   const d=catDriver(m,k);
   const wk=Math.max(Math.floor((d.sum/4)/5)*5,5); // weekbedrag, afgerond op €5 onder eigen niveau
-  const merch=d.merch?(d.merch.name||''):'';
   if(k==='vervoer'){
-    if(/parkbee|parkeer|parking|q-?park/i.test(merch)) return `Reserveer parkeren vooraf — dat scheelt vaak de helft van het tarief.`;
-    return `Tank een vast bedrag van €${wk} per week en tank bij onbemande stations.`;
+    const s=vervoerSplit(m);
+    if(s.lease>0 && s.lease>=s.fuel && s.lease>=s.park) return `Je lease kost €${Math.round(s.lease)} per maand — kijk of een goedkoper of korter leasecontract kan.`;
+    if(s.park>0 && s.park>=s.fuel) return `Reserveer parkeren vooraf of pak een P+R — dat scheelt vaak de helft.`;
+    if(s.fuel>0){ const fw=Math.max(Math.floor((s.fuel/4)/5)*5,5); return `Tank een vast bedrag van €${fw} per week bij een onbemand station — scheelt op je benzine.`; }
+    return `Pak vaker de fiets of het OV voor korte ritten.`;
   }
   const tips={
     uiteten:`Beperk uit eten tot 1 vaste dag per week — de rest kook je thuis.`,
@@ -1024,7 +1039,7 @@ function openBudgetCompare(m){
     <div class="bar-track" style="height:7px;margin:12px 0 0"><div class="bar-fill" style="width:${Math.min(bud?act/bud*100:0,100)}%;background:${stCol}"></div></div>
     ${steer?`<div class="bc-steer">${steer}</div>`:''}
     ${top.length?`<div class="hlabel" style="margin:22px 2px 4px">Grootste verschillen</div>${rowHtml}`:`<div class="small muted" style="margin-top:18px">Stel een maandbudget per categorie in om verschillen te zien.</div>`}
-    ${overRows.length?`<div class="bc-tip"><span class="bc-tip-l">Tip</span><span>${savingsTip(m,overRows[0].k)}</span></div>`:''}`;
+    ${overRows.length?`<div class="bc-steer" style="margin-top:18px">Je coach geeft je hiervoor een concrete bespaartip.</div>`:''}`;
   $('#sheetBg').classList.add('show');
 }
 function catDriver(m,k){
@@ -2150,19 +2165,29 @@ function markActionDone(key,scale){ SET.actDone=SET.actDone||{}; SET.actDone[key
   const fb={dag:'Goed bezig — houd dit vast.',week:'Mooi. Volgende week weer.',maand:'Sterk — dit verandert je maand.'}[scale]||'Goed bezig!';
   toast(`${ICON('check')} Afgerond · ${fb}`); renderActions(); }
 function undoAction(key){ if(SET.actDone) delete SET.actDone[key]; if(window._lastActKey===key) window._lastActKey=null; save(); renderActions(); }
-// ONE-ACTION met juiste tijdschaal: structureel→maand, herhaald gedrag→week, normaal→dag. Sla afgevinkte over.
+// grootste budget-overschrijding deze maand (categorie waar uitgave het meest boven budget ligt)
+function budgetOverCat(m){
+  const EB=effectiveBudgets(m).out, actual=catSpendMap(m); let best=null;
+  for(const k in EB){ if(+EB[k]<=0||!CATS[k]||CATS[k].type!=='expense') continue;
+    const a=actual[k]||0, b=+EB[k], band=budgetBand(b,a);
+    if(band==='action'||band==='monitor'){ const over=a-b; if(!best||over>best.over) best={k,name:CATS[k].name,over,spent:a,bud:b,band}; } }
+  return best;
+}
+// COACH = budget-afwijkingen sturen met een concrete bespaartip. Structureel→maand, categorie over budget→week, anders onderhoud.
 function actSignal(){
-  const items=(typeof coachItems==='function')?(coachItems()||[]):[]; const cands=[];
+  const cands=[]; const m=curMonth||months()[months().length-1];
+  // 1) grootste budget-overschrijding → concrete, categorie-specifieke bespaartip
+  const ov=budgetOverCat(m);
+  if(ov){ cands.push({tone: ov.band==='action'?'bad':'warn', scale:'week', catKey:ov.k,
+    observation:`Je gaf ${euro0(ov.spent)} aan ${ov.name.toLowerCase()} — ${euro0(ov.over)} boven je budget van ${euro0(ov.bud)}.`,
+    action: savingsTip(m, ov.k) }); }
+  // 2) structureel te weinig sparen (maand)
+  const items=(typeof coachItems==='function')?(coachItems()||[]):[];
   const bad=items.find(i=>i.t==='bad');
-  if(bad){ let label=bad.label||'Pas vandaag je budget aan'; if(/maak een plan/i.test(label)) label='Verlaag vandaag één vaste last';
+  if(bad){ let label=bad.label||'Verlaag één vaste last'; if(/maak een plan/i.test(label)) label='Verlaag vandaag één vaste last';
     cands.push({tone:'bad',scale:'maand',id:label,observation:bad.insight||'Je spaart structureel te weinig.',action:label}); }
-  const el=elevatedCat();
-  if(el){ const wk=weekAction(el);
-    cands.push({tone:'warn',scale:'week',catKey:el.k,observation:`Je gaf deze maand ${euro0(el.spent)} aan ${el.name.toLowerCase()} — ${euro0(el.over)} meer dan normaal.`,action:wk.label}); }
-  const D=dayBudgetNow(); const streak=(typeof computeStreak==='function')?computeStreak(D.dagdoel):0;
-  const dayObs= streak>=2?`Je zat de afgelopen ${streak} dagen binnen je dagdoel.`:(streak===1?'Je zat gisteren binnen je dagdoel.':'Gisteren ging je net over je dagdoel.');
-  const dayAct= streak>=1?`Hou het vandaag onder ${euro0(D.dagdoel)}`:`Pak het terug — blijf vandaag onder ${euro0(D.dagdoel)}`;
-  cands.push({tone: streak>=1?'good':'warn', scale:'dag', observation:dayObs, action:dayAct});
+  // 3) niets boven budget → onderhoud (geen dagdoel-focus meer)
+  cands.push({tone:'good',scale:'maand',id:'op-koers',observation:'Je uitgaven blijven deze maand binnen je budget.',action:'Zet het verschil dat je overhoudt opzij richting je buffer.'});
   for(const c of cands){ c.key=actKey(c); if(!actDone(c.key)) return c; }
   return {done:true};
 }
@@ -2235,11 +2260,8 @@ function renderActions(){
 }
 // coachvraag + betekenis afgeleid van het signaal (data → gesprek)
 function coachQA(sig){
-  if(sig.scale==='dag'){
-    if(sig.tone==='good') return {meaning:'Eén dag langer onder je dagdoel en het wordt een gewoonte.',question:'Wat hielp je het meest?',chips:['Goed gepland','Minder impuls','Vaker thuis']};
-    return {meaning:'Eén dag eroverheen — vandaag zo weer terug onder je dagdoel.',question:'Waar let je vandaag op?',chips:['Bewuster kiezen','Geen impuls','Klein houden']};
-  }
-  if(sig.scale==='week') return {meaning:'Eén categorie loopt op. Een vast bedrag deze week houdt het in de hand.',question:'Wat past deze week het best bij jou?',chips:['Minder impuls','Beter plannen','Een vast bedrag']};
+  if(sig.tone==='good') return {meaning:'Mooi — je bleef binnen je budget. Zo groeit je buffer vanzelf.',question:'Wat hielp je deze maand?',chips:['Goed gepland','Minder impuls','Bewuste keuzes']};
+  if(sig.scale==='week') return {meaning:'Deze categorie loopt over budget. Eén gerichte keuze brengt het terug.',question:'Wat past deze week het best bij jou?',chips:['Minder impuls','Beter plannen','Een vast bedrag']};
   return {meaning:'Je spaart al een paar maanden te weinig. Eén vaste last omlaag draait dat om.',question:'Wat voelt het meest haalbaar?',chips:['Een vaste last','Automatisch sparen','Bewuster kiezen']};
 }
 function coachAnswer(c){ window._coachAnswer=c; window._coachStep=1; renderActions(); }
