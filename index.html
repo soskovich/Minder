@@ -95,11 +95,11 @@ h1,h2,h3{margin:0}
 .fc-chip.on{background:var(--teal);color:#06231c;border-color:var(--teal)}
 .fc-one{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--mut);padding:7px 0}
 .fc-one .x{color:var(--mut);cursor:pointer;padding:0 6px;font-size:14px}
-.fc-input{display:flex;gap:8px;align-items:center}
-.fc-input select,.fc-input input{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:11px;padding:11px 12px;font-size:14px;font-family:inherit;min-width:0}
-.fc-input select{flex:1}
-.fc-input input{width:96px;flex-shrink:0}
-.fc-add{background:var(--teal);color:#06231c;border:none;border-radius:11px;width:44px;height:44px;font-size:22px;font-weight:700;cursor:pointer;flex-shrink:0;line-height:1}
+.fc-input{display:flex;flex-direction:column;gap:9px}
+.fc-input select,.fc-input input{width:100%;box-sizing:border-box;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:13px 14px;font-size:15px;font-family:inherit}
+.fc-input-row{display:flex;gap:9px}
+.fc-input-row input{flex:1;min-width:0}
+.fc-add{background:var(--teal);color:#06231c;border:none;border-radius:12px;padding:0 20px;height:48px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap}
 .ov-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:14.5px}
 .ov-row:last-child{border-bottom:0}
 .beh-row{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line);font-size:14.5px}
@@ -147,6 +147,18 @@ h1,h2,h3{margin:0}
 .coachchip{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:21px;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;transition:background .15s,border-color .15s}
 .coachchip:active{background:var(--teal);color:#06231c;border-color:var(--teal)}
 .coachchip.rec{border-color:var(--teal);color:var(--teal)}
+.actfocus .coachcard{background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:0 13px 13px 0;padding:13px 14px;margin:2px 0 16px;max-width:340px}
+.actfocus .coachcard .cc-obs{font-size:15.5px;font-weight:600;line-height:1.4}
+.actfocus .coachcard .cc-cause{font-size:12.5px;color:var(--mut);line-height:1.5;margin-top:6px}
+.coachproj{background:rgba(45,212,191,.06);border:1px solid rgba(45,212,191,.18);border-radius:14px;padding:14px;margin:0 0 16px;max-width:340px}
+.coachproj .cp-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
+.coachproj .cp-lbl{font-size:11px;color:var(--mut);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.coachproj .cp-pill{font-size:12px;font-weight:600;background:rgba(45,212,191,.14);color:var(--teal);padding:3px 9px;border-radius:20px}
+.coachproj .cp-big{font-size:28px;font-weight:800;letter-spacing:-.5px;line-height:1.1}
+.coachproj .cp-sub{font-size:12px;color:var(--mut);margin-top:1px}
+.coachproj .cp-leg{display:flex;gap:16px;font-size:11px;color:var(--mut);margin-top:6px}
+.coachproj .cp-leg i{width:14px;height:2px;background:var(--teal);display:inline-block;vertical-align:middle;margin-right:5px}
+.coachproj .cp-leg i.dash{background:transparent;border-top:2px dashed var(--mut);height:0}
 .actfocus .af-base{font-size:13px;color:var(--mut);margin:2px 0 12px;max-width:320px}
 .actfocus .af-prop{font-size:14.5px;color:var(--mut);margin:0 0 14px;max-width:320px}
 .actfocus .af-eval{font-size:13px;color:var(--mut);line-height:1.5;margin:0 0 16px;max-width:320px}
@@ -1981,10 +1993,10 @@ function toggleFcCut(k){ SET.fcCuts=SET.fcCuts||[]; const i=SET.fcCuts.indexOf(k
 function addFcOne(k){ const p=FC_ONE.find(o=>o.k===k); if(!p) return; SET.fcOne=SET.fcOne||[]; SET.fcOne.push({k:p.k,label:p.label,amt:p.amt,ahead:1}); save(); renderVooruit(); }
 // vrij invoerbare grote uitgave: categorie + bedrag
 function addFcOneCustom(){
-  const cs=document.getElementById('fcOneCat'), as=document.getElementById('fcOneAmt');
-  const k=cs?cs.value:''; const a=as?Math.round(+as.value||0):0;
+  const cs=document.getElementById('fcOneCat'), ms=document.getElementById('fcOneMon'), as=document.getElementById('fcOneAmt');
+  const k=cs?cs.value:''; const ahead=ms?(+ms.value||1):1; const a=as?Math.round(+as.value||0):0;
   if(a<=0){ toast('Vul eerst een bedrag in'); return; }
-  SET.fcOne=SET.fcOne||[]; SET.fcOne.push({k,label:CATS[k]?CATS[k].name:'Grote uitgave',amt:a,ahead:1}); save(); renderVooruit();
+  SET.fcOne=SET.fcOne||[]; SET.fcOne.push({k,label:CATS[k]?CATS[k].name:'Grote uitgave',amt:a,ahead}); save(); renderVooruit();
 }
 function removeFcOne(i){ if(SET.fcOne){ SET.fcOne.splice(i,1); save(); renderVooruit(); } }
 function resetFc(){ SET.fcCuts=[]; SET.fcOne=[]; save(); renderVooruit(); }
@@ -2023,14 +2035,18 @@ function vooruitForecast(){
       <div class="fc-mo-bal">${euro0(mo.bal)}</div>
     </div>`).join('')}</div>`;
   const catOpts=Object.keys(CATS).filter(k=>CATS[k].type==='expense').map(k=>`<option value="${k}">${CATS[k].name}</option>`).join('');
-  const activeOne=oneoffs.length?`<div style="margin-top:12px">${oneoffs.map((o,i)=>`<div class="fc-one"><span>${esc(o.label)} · ${euro0(o.amt)}</span><span class="x" onclick="removeFcOne(${i})">✕</span></div>`).join('')}</div>`:'';
+  const monOpts=scen.months.map((mo,i)=>`<option value="${i+1}">${fcCap(mo.name)}</option>`).join('');
+  const activeOne=oneoffs.length?`<div style="margin-top:12px">${oneoffs.map((o,i)=>`<div class="fc-one"><span>${esc(o.label)} · ${fcCap(fcMonthName(o.ahead))} · ${euro0(o.amt)}</span><span class="x" onclick="removeFcOne(${i})">✕</span></div>`).join('')}</div>`:'';
   const controls=`<div class="card">
     <div class="hlabel" style="margin:0 0 6px">Verwacht je een grote uitgave?</div>
-    <div class="small muted" style="margin:0 0 12px">Kies een categorie en vul het bedrag in. Je ziet meteen wat het met je saldo doet.</div>
+    <div class="small muted" style="margin:0 0 12px">Kies de categorie, de maand en het bedrag. Je ziet meteen wat het met je saldo doet.</div>
     <div class="fc-input">
       <select id="fcOneCat">${catOpts}</select>
-      <input id="fcOneAmt" type="number" min="0" inputmode="numeric" placeholder="bedrag">
-      <button class="fc-add" onclick="addFcOneCustom()">+</button>
+      <select id="fcOneMon">${monOpts}</select>
+      <div class="fc-input-row">
+        <input id="fcOneAmt" type="number" min="0" inputmode="numeric" placeholder="Bedrag in €">
+        <button class="fc-add" onclick="addFcOneCustom()">Inplannen</button>
+      </div>
     </div>${activeOne}
     ${oneoffs.length?`<button class="snz" onclick="resetFc()">Wissen ✕</button>`:''}</div>`;
   return hero + timeline + controls;
@@ -2229,6 +2245,32 @@ function dayStatusLine(){
   const col=D.over?'var(--amber)':'var(--teal)';
   return `<div class="daystat"><div class="ds-l">Vandaag te besteden</div><div class="ds-v" style="color:${col}">${euro(D.rest)}</div><div class="ds-s">al ${euro0(D.spent)} van ${euro0(D.dagdoel)} vandaag</div></div>`;
 }
+// projectiekaart: lijngrafiek (huidige koers vs met-regel) over de komende maanden, met groot eindbedrag
+function coachProjCard(cut){
+  if(typeof forecastMonths!=='function') return '';
+  const base=forecastMonths(0,[]), imp=forecastMonths(Math.max(+cut||0,0),[]);
+  if(!base||!imp||!imp.months.length) return '';
+  const bvals=base.months.map(x=>x.bal), ivals=imp.months.map(x=>x.bal), n=bvals.length;
+  const last=imp.months[n-1].name, gain=imp.endBal-base.endBal; window._coachGain=gain;
+  const all=bvals.concat(ivals); let lo=Math.min(...all), hi=Math.max(...all); const pad=(hi-lo)*0.18||120; lo-=pad; hi+=pad;
+  const W=280,H=116, px=i=>20+i*((W-36)/Math.max(n-1,1)), py=v=>H-16-((v-lo)/(hi-lo||1))*(H-32);
+  const line=a=>a.map((v,i)=>px(i).toFixed(1)+','+py(v).toFixed(1)).join(' ');
+  const area=`M${px(0).toFixed(1)},${py(ivals[0]).toFixed(1)} `+ivals.map((v,i)=>'L'+px(i).toFixed(1)+','+py(v).toFixed(1)).join(' ')+` L${px(n-1).toFixed(1)},${H-16} L${px(0).toFixed(1)},${H-16} Z`;
+  const labels=imp.months.map((mo,i)=>`<text x="${px(i).toFixed(1)}" y="${H-3}" fill="#8a97ab" font-size="10" text-anchor="middle">${mo.name.slice(0,3)}</text>`).join('');
+  const svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;margin-top:6px" role="img" aria-label="Projectie van je saldo, met regel eindig je hoger">
+    <path d="${area}" fill="rgba(45,212,191,.12)"/>
+    <polyline points="${line(bvals)}" fill="none" stroke="#56627d" stroke-width="2" stroke-dasharray="4 4"/>
+    <polyline points="${line(ivals)}" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>
+    <circle cx="${px(n-1).toFixed(1)}" cy="${py(ivals[n-1]).toFixed(1)}" r="3.5" fill="#2dd4bf"/>
+    ${labels}</svg>`;
+  return `<div class="coachproj">
+    <div class="cp-top"><span class="cp-lbl">Eind ${last}</span>${gain>0?`<span class="cp-pill">+${euro0(gain)}</span>`:''}</div>
+    <div class="cp-big">${euro(imp.endBal)}</div>
+    <div class="cp-sub">Nu koers je op ${euro(base.endBal)}</div>
+    ${svg}
+    <div class="cp-leg"><span><i></i>met regel</span><span><i class="dash"></i>nu</span></div>
+  </div>`;
+}
 // ACTIEPLAN = puur: 1 probleem + 1 actie. Geen cijfers, geen budgetten.
 function renderActions(){
   if(!TX.length){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
@@ -2255,18 +2297,20 @@ function renderActions(){
   // STAP 1 — opening (data) + betekenis + coachvraag (1-tap chips)
   if(step===0){
     const qa=coachQA(sig);
-    let baseLine='', propLine='', best=null;
+    let propLine='', best=null, proj='';
+    const catCol=(sig.catKey&&CATS[sig.catKey])?CATS[sig.catKey].color:meta.col;
     if(sig.scale==='week'){ const prop=coachProposal(m,sig); best=prop.best;
-      if(prop.lastName) baseLine=`<div class="af-base">Verander je niks, dan sta je eind ${prop.lastName} op ${euro(prop.baseEnd)}.</div>`;
-      if(best) propLine=`<div class="af-prop">Mijn voorstel: <b style="color:var(--txt)">${esc(best.label)}</b>.</div>`;
+      if(best){ proj=coachProjCard(best.cut); propLine=`<div class="af-prop">Mijn voorstel: <b style="color:var(--txt)">${esc(best.label)}</b></div>`; }
     }
     const chips=qa.chips.map(c=>`<button class="coachchip${best&&c.label===best.label?' rec':''}" onclick="coachAnswer('${esc(c.label)}',${c.cut||0})">${esc(c.label)}</button>`).join('');
     $('#s-act').innerHTML=`<div class="actfocus">
       <div class="coachdots"><i class="on"></i><i></i></div>
       <div class="af-tag">${meta.tag}</div>
-      <div class="af-open">${sig.observation}</div>
-      ${baseLine}
-      <div class="af-mean">${qa.cause}</div>
+      <div class="coachcard" style="border-left-color:${catCol}">
+        <div class="cc-obs">${sig.observation}</div>
+        <div class="cc-cause">${qa.cause}</div>
+      </div>
+      ${proj}
       ${propLine}
       <div class="af-q">${qa.question}</div>
       <div class="coachchips">${chips}</div>
@@ -2276,7 +2320,7 @@ function renderActions(){
   // STAP 2 — gekozen regel wordt je commitment + follow-up (wanneer kijken we terug)
   const ans=window._coachAnswer||'';
   const fwd={week:'Zondag kijkt je coach of het gelukt is.',maand:'Volgende maand kijken we hoe het ging.'}[sig.scale]||'Je coach komt hierop terug.';
-  const impact = (sig.scale==='week' || (sig.scale==='maand'&&sig.tone!=='good')) ? coachForecastLine(m,sig,window._coachCut) : '';
+  const proj = (sig.scale==='week' || (sig.scale==='maand'&&sig.tone!=='good')) ? coachProjCard(window._coachCut) : '';
   // kritische beoordeling: zwak (klein effect) → beter alternatief; kapitaal-zwaar → kanttekening; anders bevestiging
   let evalHtml='';
   if(sig.scale==='week'){
@@ -2292,7 +2336,7 @@ function renderActions(){
     <div class="coachdots"><i class="on"></i><i class="on"></i></div>
     <div class="af-tag">${meta.tag} · jouw regel</div>
     <div class="af-action">${esc(ans||sig.action)}</div>
-    ${impact?`<div class="af-impact">${impact}</div>`:''}
+    ${proj}
     ${evalHtml}
     <div class="af-fwd">${fwd}</div>
     <button class="if-cta" onclick="coachCommit('${sig.key}','${sig.scale}')">${ICON('check')} Dit spreek ik af</button>
