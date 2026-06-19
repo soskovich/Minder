@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Minder">
-<title>Minder — slimme uitgaventracker</title>
+<title>Minder · slimme uitgaventracker</title>
 <style>
 :root{
   --bg:#0a0f1a; --card:#141b2b; --card2:#1b2336; --line:rgba(255,255,255,.07);
@@ -95,6 +95,11 @@ h1,h2,h3{margin:0}
 .fc-chip.on{background:var(--teal);color:#06231c;border-color:var(--teal)}
 .fc-one{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--mut);padding:7px 0}
 .fc-one .x{color:var(--mut);cursor:pointer;padding:0 6px;font-size:14px}
+.fc-input{display:flex;gap:8px;align-items:center}
+.fc-input select,.fc-input input{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:11px;padding:11px 12px;font-size:14px;font-family:inherit;min-width:0}
+.fc-input select{flex:1}
+.fc-input input{width:96px;flex-shrink:0}
+.fc-add{background:var(--teal);color:#06231c;border:none;border-radius:11px;width:44px;height:44px;font-size:22px;font-weight:700;cursor:pointer;flex-shrink:0;line-height:1}
 .ov-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:14.5px}
 .ov-row:last-child{border-bottom:0}
 .beh-row{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line);font-size:14.5px}
@@ -740,7 +745,7 @@ function renderDailyRolling(){
   const maxV=Math.max(...arr), maxIdx=arr.indexOf(maxV);
   const fmtD=s=>{const d=new Date(s);return d.getDate()+' '+MNAMES[d.getMonth()];};
   return `<div class="card">
-    <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">Variabele uitgaven — laatste ${days} dagen</span></div>
+    <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">Variabele uitgaven (laatste ${days} dagen)</span></div>
     <div class="chips" style="margin:6px 0 2px"><span class="chip ${days===30?'on':''}" onclick="SET.rollDays=30;save();render();">30 dagen</span><span class="chip ${days===90?'on':''}" onclick="SET.rollDays=90;save();render();">90 dagen</span></div>
     <div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 2px"><div style="font-size:22px;font-weight:800">${euro(avg)}</div><div class="small muted">gem./dag · totaal ${euro0(sum)}</div></div>
     <div class="daily">
@@ -768,7 +773,7 @@ function renderForecast(){
       <div class="kpi"><div class="v" style="color:${over?'var(--teal)':'var(--red)'}">${over?'+':''}${euro0(f.fNet)}</div><div class="l">verwacht over</div></div>
     </div>
     <div class="fv-row" style="margin-top:8px;cursor:pointer" onclick="openForecastFixed()"><span class="dot" style="background:var(--blue)"></span><span class="nm">${ICON('lock')} Vaste lasten (terugkerend)</span><span class="amt" style="color:var(--teal)">${euro(f.fFixed)} ›</span></div>
-    <div class="fv-row" style="cursor:pointer" onclick="openForecastVar()"><span class="dot" style="background:var(--amber)"></span><span class="nm">${ICON('cart')} Variabel — ${trendTxt}</span><span class="amt" style="color:var(--teal)">${euro(f.fVar)} ›</span></div>
+    <div class="fv-row" style="cursor:pointer" onclick="openForecastVar()"><span class="dot" style="background:var(--amber)"></span><span class="nm">${ICON('cart')} Variabel · ${trendTxt}</span><span class="amt" style="color:var(--teal)">${euro(f.fVar)} ›</span></div>
     <div class="small muted" style="margin:10px 0 2px">Verwachte uitgaven komende 3 maanden</div>
     <div class="spark" style="margin-top:6px">${nm.map((x,i)=>`<div class="b" style="height:${projVals[i]/maxB*100}%;background:var(--teal-d)"><span class="val">${euro0(projVals[i])}</span><span class="lab">${x.label}</span></div>`).join('')}</div>
     <div style="height:18px"></div>
@@ -800,7 +805,7 @@ function openForecastVar(){
     <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('cart')}</div><div style="font-weight:800;font-size:17px">Verwachte variabele uitgaven</div>
       <div class="muted small">volgende maand · per categorie</div><div style="font-size:22px;font-weight:800;margin:5px 0">${euro(fVar)}</div></div>
     ${rows.length?rows.map(r=>{const c=CATS[r.k];return `<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${c.name}</div><div class="cat">${r.top?'grootste: '+esc(r.top.name):'—'}</div></div><div class="amt neg">${euro(r.amt)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Nog te weinig data.</div>'}`;
+      <div class="info"><div class="nm">${c.name}</div><div class="cat">${r.top?'grootste: '+esc(r.top.name):'geen'}</div></div><div class="amt neg">${euro(r.amt)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Nog te weinig data.</div>'}`;
   $('#sheetBg').classList.add('show');
 }
 
@@ -819,7 +824,7 @@ function renderLiquidity(){
   return `<div class="card">
     <div class="row"><span class="hlabel" style="margin:0;flex:1">Saldo & liquiditeit</span><span class="small muted" onclick="go('set')" style="cursor:pointer;color:var(--teal)">saldo's ›</span></div>
     <div style="font-size:22px;font-weight:800;margin:8px 0 2px">${euro(sum)}</div>
-    <div class="small muted">${missing>0?`${ICON('warn')} ${missing} rekening${missing>1?'en':''} zonder saldo — vul in bij Instellingen voor een kloppende prognose.`:'totaal over je gekoppelde rekeningen'}</div>
+    <div class="small muted">${missing>0?`${ICON('warn')} ${missing} rekening${missing>1?'en':''} zonder saldo. Vul ze in bij Instellingen voor een kloppende prognose.`:'totaal over je gekoppelde rekeningen'}</div>
     <div class="chips" style="margin:10px 0 2px">${[30,60,90].map(d=>`<span class="chip ${days===d?'on':''}" onclick="SET.liqDays=${d};save();render();">${d} dgn</span>`).join('')}</div>
     <div class="daily" style="height:88px">
       ${buffer>0?`<div class="tline" style="bottom:${Math.min(Math.max(bufY,0),99)}%;border-color:var(--red)"></div>`:''}
@@ -923,9 +928,9 @@ function openVariance(k){
   const overEur=act-bud;
   const status = over?(band==='action'?'Over budget':'Let op'):(bud?'Binnen budget':'');
   const stCol = over?(band==='action'?'var(--red)':'var(--amber)'):'var(--green)';
-  const insight = !bud ? `${euro(act)} uitgegeven — nog geen budget ingesteld voor deze categorie.`
+  const insight = !bud ? `${euro(act)} uitgegeven. Je hebt voor deze categorie nog geen budget ingesteld.`
     : over ? `Je gaf ${euro0(overEur)} meer uit dan je ${euro0(bud)}-budget deze maand.`
-    : band==='margin' ? `${euro0(act-bud)} over, binnen je 3%-marge — geen actie nodig.`
+    : band==='margin' ? `${euro0(act-bud)} over, binnen je 3%-marge. Geen actie nodig.`
     : `${euro0(bud-act)} onder je ${euro0(bud)}-budget. Goed bezig.`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:4px"><div style="font-size:22px">${c.icon}</div>
@@ -1023,7 +1028,7 @@ function openBudgetCompare(m){
   // 1 subtiele gedragsrichting (geen CTA)
   const steer = overRows.length
     ? `${CATS[overRows[0].k].name} is je grootste afwijking deze maand.`
-    : (top.length? `Je grootste post is ${CATS[top[0].k].name.toLowerCase()} — netjes binnen budget.` : '');
+    : (top.length? `Je grootste post is ${CATS[top[0].k].name.toLowerCase()}, en die blijft netjes binnen budget.` : '');
   // categorie-rij = betekenis i.p.v. kale cijfers/bars; reden eronder bij een afwijking
   const meaning=r=>{ const o=r.diff>0, rt=r.b?r.a/r.b:1;
     if(o) return r.band==='action'?{t:`${euro0(r.diff)} meer dan gepland`,c:'var(--red)'}:{t:'net iets boven budget',c:'var(--amber)'};
@@ -1066,7 +1071,7 @@ function renderVariance(m){
   const de=daysElapsed(m); const now=new Date(); const todayYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); const partial=m===todayYM;
   if(!over.length){
     return `<div class="card"><div class="row" style="margin-bottom:8px"><span class="hlabel" style="margin:0;flex:1">Variantieanalyse</span></div>
-      <div class="coach good"><div class="ic">${ICON('check')}</div><div class="tx">Geen categorie noemenswaardig over budget deze maand — je zit op koers.</div></div></div>`;
+      <div class="coach good"><div class="ic">${ICON('check')}</div><div class="tx">Geen categorie noemenswaardig over budget deze maand. Je zit op koers.</div></div></div>`;
   }
   return `<div class="card"><div class="row" style="margin-bottom:8px"><span class="hlabel" style="margin:0;flex:1">Variantieanalyse</span><span class="pot">${over.length} afwijking${over.length>1?'en':''}</span></div>
     ${over.map(o=>{const c=CATS[o.k];const dr=catDriver(m,o.k);
@@ -1079,10 +1084,10 @@ function renderVariance(m){
       const recon=Math.abs(o.act-dr.sum)<0.01;
       const qc=[`${recon?'✓':ICON('warn')} Gereconcilieerd met ${dr.n} transacties (${euro(dr.sum)}).`, `✓ Interne overboekingen & vaste lasten uitgesloten.`];
       if(uncat>0) qc.push(`${ICON('warn')} ${uncat} ongecategoriseerde transactie(s) deze maand kunnen het beeld licht vertekenen.`);
-      if(partial) qc.push(`${ICON('warn')} Maand nog niet compleet (dag ${de.elapsed}/${de.dim}) — variantie loopt nog op.`);
+      if(partial) qc.push(`${ICON('warn')} Maand nog niet compleet (dag ${de.elapsed}/${de.dim}). De variantie loopt nog op.`);
       return `<div class="phq">
         <div class="ph-t">${c.icon} ${c.name}</div>
-        <div class="ph-l"><span class="k" style="background:var(--red)">P</span><b>Probleem:</b> ${euro(o.act)} besteed van ${euro(o.bud)} budget — <b style="color:var(--red)">${euro(o.d)} over (${Math.round(o.act/o.bud*100)}%)</b>.</div>
+        <div class="ph-l"><span class="k" style="background:var(--red)">P</span><b>Probleem:</b> ${euro(o.act)} besteed van ${euro(o.bud)} budget. <b style="color:var(--red)">${euro(o.d)} over (${Math.round(o.act/o.bud*100)}%)</b>.</div>
         <div class="ph-l"><span class="k" style="background:var(--amber)">H</span><b>Hypothese:</b> ${hyp}${merchTxt}</div>
         <div class="ph-l"><span class="k" style="background:var(--teal-d)">K</span><b>Kwaliteitscheck:</b> ${qc.join(' ')}</div>
       </div>`;}).join('')}
@@ -1199,10 +1204,10 @@ function openSavingsPots(){
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('target')}</div><div style="font-weight:800;font-size:17px">Totaal gespaard</div>
       <div class="muted small">N26-spaarpotjes${ts.missing?` · ${ts.missing} zonder saldo`:''}</div>
-      <div style="font-size:22px;font-weight:800;margin:5px 0">${ts.n?euro(ts.sum):'—'}</div></div>
+      <div style="font-size:22px;font-weight:800;margin:5px 0">${ts.n?euro(ts.sum):'geen'}</div></div>
     ${rows.length?rows.map(r=>`<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${ICON('target')}</div>
       <div class="info"><div class="nm">${esc(accLabel(r.a))}</div><div class="cat">N26</div></div>
-      <div class="amt ${r.b==null?'':(r.b<0?'neg':'pos')}">${r.b==null?'—':euro(r.b)}</div></div>`).join(''):'<div class="muted small center" style="padding:16px">Geen N26-spaarpotjes herkend. Koppel je N26 via PSD2 zodat de Spaces met saldo binnenkomen.</div>'}
+      <div class="amt ${r.b==null?'':(r.b<0?'neg':'pos')}">${r.b==null?'geen':euro(r.b)}</div></div>`).join(''):'<div class="muted small center" style="padding:16px">Geen N26-spaarpotjes herkend. Koppel je N26 via PSD2 zodat de Spaces met saldo binnenkomen.</div>'}
     <div class="small muted" style="margin-top:10px">Automatisch: alle N26-Spaces behalve Main en het potje op ··4840.</div>`;
   $('#sheetBg').classList.add('show');
 }
@@ -1309,7 +1314,7 @@ function renderEmpty(){
     <p>Koppel je bank en zie meteen waar je geld heen gaat.</p>
     <button class="btn" onclick="psd2Connect()">${ICON('bank')} Koppel je bank</button>
     <div class="small muted" style="margin-top:14px;cursor:pointer" onclick="onboardManual()">Liever handmatig toevoegen ›</div>
-    <p class="small muted" style="margin-top:24px">${ICON('lock')} Alleen inzicht — nooit toegang tot je geld. Alles blijft privé op dit toestel.</p>
+    <p class="small muted" style="margin-top:24px">${ICON('lock')} Alleen inzicht, nooit toegang tot je geld. Alles blijft privé op dit toestel.</p>
   </div>`;
   $('#s-dash').innerHTML=html;
   ['#s-tx','#s-ins','#s-act'].forEach(s=>$(s).innerHTML=html);
@@ -1454,7 +1459,7 @@ function renderSavings(){
     <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:22px;font-weight:800;color:var(--teal)">${euro0(S.monthlySaving)}<span style="font-size:12.5px;font-weight:600">/mnd</span></div><div class="small muted" onclick="go('set')" style="cursor:pointer">beoogde spaarinleg (${savingLabel()}) ›</div></div>
     <div class="goal-row" style="margin-top:12px"><span class="muted">Bufferdoel ${S.basis==='amount'?'(vast bedrag)':`${S.mult}× gem. ${S.baseLabel} (${euro0(S.baseVal)})`}</span><span><b>${euro0(S.cur)}</b><span class="muted"> / ${euro0(S.goal)}</span></span></div>
     <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${S.pct}%;background:var(--teal)"></div></div>
-    <div class="small muted" style="margin-top:8px">${S.toGo>0?`Nog <b>${euro0(S.toGo)}</b> te gaan — ±<b>${Math.round(S.monthsLeft)} maanden</b> bij ${euro0(S.monthlySaving)}/mnd.`:`${ICON('party')} Je buffer van ${S.months_} maanden is bereikt.`}${S.missing>0?' · vul je saldo\'s in voor een kloppend beeld':''}</div>
+    <div class="small muted" style="margin-top:8px">${S.toGo>0?`Nog <b>${euro0(S.toGo)}</b> te gaan, ongeveer <b>${Math.round(S.monthsLeft)} maanden</b> bij ${euro0(S.monthlySaving)}/mnd.`:`${ICON('party')} Je buffer van ${S.months_} maanden is bereikt.`}${S.missing>0?' · vul je saldo\'s in voor een kloppend beeld':''}</div>
   </div>`;
 }
 // gedetailleerde lijst van komende vaste lasten & inkomsten (Inzichten)
@@ -1509,7 +1514,7 @@ function heroProjection(m){
     else { lbl='Tekort voor je spaardoel'; col='var(--red)'; big=euro(-free); }
     sub=`Verwacht eindsaldo deze maand ${euro(L.projected)} · spaardoel ${euro(sv)}`;
   } else {
-    lbl=`${monthName} — over (binnen ${SET.limit}%)`;
+    lbl=`${monthName} · over (binnen ${SET.limit}%)`;
     col = pctRaw<100?'var(--green)':'var(--red)';
     big=euro(Math.max(t.budget-t.spend,0));
     sub=`${euro(t.spend)} uitgegeven van ${euro(t.budget)} budget`;
@@ -1572,7 +1577,7 @@ function renderDash_OLD_UNUSED(){
     heroCol = free<0?'var(--red)':'var(--green)';
     heroBig = euro(Math.max(free,0));
     heroSub = free<0
-      ? `${ICON('warn')} Je haalt je spaardoel van ${euro0(saveH)} niet — je komt ${euro0(-free)} tekort (verwacht saldo eind maand ${euro0(LH.projected)}).`
+      ? `${ICON('warn')} Je haalt je spaardoel van ${euro0(saveH)} niet. Je komt ${euro0(-free)} tekort (verwacht saldo eind maand ${euro0(LH.projected)}).`
       : `verwacht saldo eind maand ${euro0(LH.projected)} − spaardoel ${euro0(saveH)} = vrij na lasten én sparen`;
   } else {
     heroLbl = 'Ruimte over '+(isM?'deze maand':'· '+esc(periodLabel()));
@@ -1661,8 +1666,8 @@ function buildAction(k,total,items){
   if(k==='vervoer'){
     const lease=sumNeg(hasRe(items,/HILTERMANN|LEASE/i)), fuel=sumNeg(hasRe(items,/TRAVELCARD|SHELL|ESSO|\bBP |TINQ|TANK/i)), park=hasRe(items,/PARKBEE|PARKEER|PARKING/i), parkS=sumNeg(park), flight=sumNeg(hasRe(items,/KLM|ESKY|TRANSAVIA|RYANAIR|EASYJET/i));
     const steps=[]; let saving=0;
-    if(lease>0){ steps.push(`Je leaseauto kost <b>${E(lease)}/mnd</b> (Hiltermann) — veruit je grootste vaste last. Reken bij contractverlenging een kleiner model of budget private-lease door; dat scheelt al snel €75–150/mnd.`); saving+=Math.round(lease*0.12); }
-    if(fuel>0){ steps.push(`Tankpas (Travelcard): <b>${E(fuel)}/mnd</b>. Tank bij onbemande pompen (Tinq, TanQyou, Gulf) — een stuk goedkoper.`); saving+=Math.round(fuel*0.08); }
+    if(lease>0){ steps.push(`Je leaseauto kost <b>${E(lease)}/mnd</b> (Hiltermann). Dat is veruit je grootste vaste last. Reken bij contractverlenging een kleiner model of budget private-lease door. Dat scheelt al snel €75 tot €150 per maand.`); saving+=Math.round(lease*0.12); }
+    if(fuel>0){ steps.push(`Tankpas (Travelcard): <b>${E(fuel)}/mnd</b>. Tank bij onbemande pompen zoals Tinq, TanQyou of Gulf. Dat is een stuk goedkoper.`); saving+=Math.round(fuel*0.08); }
     if(parkS>5){ steps.push(`Parkeren: <b>${E(parkS)}</b> over ${park.length} keer. Gebruik P+R met OV of een parkeervergunning i.p.v. losse ParkBee-sessies.`); saving+=Math.round(parkS*0.5); }
     if(flight>40){ steps.push(`Vluchten/reizen: <b>${E(flight)}</b>. Boek 6–8 weken vooruit en zet prijsalerts aan (Google Flights/Skyscanner).`); }
     return steps.length?{k,headline:lease>0?`lease ${E(lease)}/mnd`:(top?top.name:''),steps,saving}:null;
@@ -1670,9 +1675,9 @@ function buildAction(k,total,items){
   if(k==='verzekering'){
     const zorg=sumNeg(hasRe(items,/ZILVEREN KRUIS|ZORGVERZEK/i)), schade=sumNeg(hasRe(items,/ALLIANZ/i)), dela=sumNeg(hasRe(items,/DELA/i));
     const steps=[]; let saving=0;
-    if(zorg>0){ steps.push(`Zorgverzekering (Zilveren Kruis): <b>${E(zorg)}/mnd</b>. Stap vóór 31 december over via een vergelijker — gemiddeld €100–300/jaar besparing, en vraag naar collectiviteitskorting.`); saving+=Math.round(zorg*0.1); }
+    if(zorg>0){ steps.push(`Zorgverzekering (Zilveren Kruis): <b>${E(zorg)}/mnd</b>. Stap vóór 31 december over via een vergelijker. Dat scheelt gemiddeld €100 tot €300 per jaar, en vraag ook naar collectiviteitskorting.`); saving+=Math.round(zorg*0.1); }
     if(schade>0){ steps.push(`Schade/zakelijk (Allianz): <b>${E(schade)}/mnd</b>. Vraag een nieuwe offerte of verhoog je eigen risico voor een lagere premie.`); saving+=Math.round(schade*0.12); }
-    if(dela>0){ steps.push(`Uitvaartverzekering (DELA): controleer of het verzekerde bedrag nog past — verlagen of oversluiten kan lonen.`); }
+    if(dela>0){ steps.push(`Uitvaartverzekering (DELA): controleer of het verzekerde bedrag nog past. Verlagen of oversluiten kan lonen.`); }
     return steps.length?{k,headline:`${E(total)} aan polissen`,steps,saving}:null;
   }
   if(k==='abonnement'){
@@ -1683,22 +1688,22 @@ function buildAction(k,total,items){
   }
   if(k==='uiteten'){ const n=items.length; return {k,headline:`${n}× uit eten/afhalen`,saving:Math.round(total*0.35),steps:[
     `Je gaf <b>${E(total)}</b> uit aan uit eten & afhalen over ${n} keer (gem. ${euro(total/n)}).`,
-    `Kook 2 avonden per week extra thuis i.p.v. afhalen — scheelt ongeveer ${E(total*0.35)}/mnd.`,
+    `Kook 2 avonden per week extra thuis in plaats van afhalen. Dat scheelt ongeveer ${E(total*0.35)} per maand.`,
     `Geef jezelf een vast “uit eten”-budget en betaal dat vanaf een apart potje.`]}; }
   if(k==='boodschappen'){ const n=items.length; return {k,headline:`${n} trips`,saving:Math.round(total*0.12),steps:[
     `<b>${n} boodschappentrips</b> deze maand (gem. ${euro(total/n)}), vooral bij PLUS, Vomar en Safrana.`,
-    `Doe 1 grote weekboodschap met een lijstje i.p.v. veel kleine trips — minder impuls scheelt al gauw ${E(total*0.12)}/mnd.`,
+    `Doe 1 grote weekboodschap met een lijstje in plaats van veel kleine trips. Minder impuls scheelt al gauw ${E(total*0.12)} per maand.`,
     `Kies vaker huismerk: vaak goedkoper voor hetzelfde product.`]}; }
   if(k==='sport'){ return {k,headline:`abonnement ${E(total)}/mnd`,saving:Math.round(total*0.5),steps:[
     `Sportabonnement <b>${E(total)}/mnd</b> (Health Club). Ga je er minder dan 1×/week heen? Een losse 10-rittenkaart is dan goedkoper.`,
     `Anders: vraag of je het in rustige maanden tijdelijk kunt pauzeren.`]}; }
   if(k==='shopping'){ return {k,headline:`${E(total)} winkelen`,saving:Math.round(total*0.25),steps:[
-    `<b>${E(total)}</b> aan winkelen${top?` (o.a. ${top.name})`:''} — grotendeels kleding.`,
+    `<b>${E(total)}</b> aan winkelen${top?` (o.a. ${top.name})`:''}, grotendeels kleding.`,
     `Stel een maandelijks kledingbudget in en hanteer een 48-uurs wachtregel voor niet-essentiële aankopen.`]}; }
   if(k==='goededoel'){ return {k,headline:`${E(total)} aan giften`,saving:0,steps:[
-    `Mooi dat je doneert (${E(total)}/mnd) — niet op bezuinigen. Tip: leg giften vast als periodieke schenking, dan zijn ze aftrekbaar voor de inkomstenbelasting.`]}; }
+    `Mooi dat je doneert (${E(total)}/mnd). Hier hoef je niet op te bezuinigen. Tip: leg giften vast als periodieke schenking, dan zijn ze aftrekbaar voor de inkomstenbelasting.`]}; }
   if(k==='vices'){ const E=v=>euro0(v); const top=groupMerch(items)[0]; return {k,headline:`${E(total)} aan vices`,saving:Math.round(total*0.4),steps:[
-    `<b>${E(total)}</b> deze maand aan vices${top?` (o.a. ${esc(top.name)})`:''}. Minder hier is dubbele winst — voor je saldo én je gezondheid.`,
+    `<b>${E(total)}</b> deze maand aan vices${top?` (o.a. ${esc(top.name)})`:''}. Minder hier is dubbele winst, voor je saldo én je gezondheid.`,
     `Zet een vast weekbudget en neem het contant op: wat op is, is op. Elke week onder je grens telt dubbel.`]}; }
   return null;
 }
@@ -1815,9 +1820,9 @@ function smartBlock(k,ctx,eff){
   let rel='Verbetert je cashflow';
   if(bud&&after<=bud) rel+=` en brengt ${c.name} binnen je budget van ${euro0(bud)}`;
   rel+='.';
-  return `<div class="smart"><div class="st">${ICON('target')} SMART-strategie — ${c.name}</div>
+  return `<div class="smart"><div class="st">${ICON('target')} SMART-strategie voor ${c.name}</div>
     <div class="sl"><span class="b">S</span><b>Specifiek:</b> Verlaag je maandlasten voor ${c.name} via: ${esc(labels.join(', '))}.</div>
-    <div class="sl"><span class="b">M</span><b>Meetbaar:</b> Van ${euro0(ctx.total)} naar ~${euro0(after)}/mnd — verlaging van <b>${euro0(eff)}/mnd</b> (≈ ${euro0(eff*12)}/jaar).</div>
+    <div class="sl"><span class="b">M</span><b>Meetbaar:</b> Van ${euro0(ctx.total)} naar ~${euro0(after)}/mnd. Een verlaging van <b>${euro0(eff)}/mnd</b> (ongeveer ${euro0(eff*12)} per jaar).</div>
     <div class="sl"><span class="b">A</span><b>Haalbaar:</b> Begin met de makkelijkste optie en bouw op; elke stap telt mee in je voortgang.</div>
     <div class="sl"><span class="b">R</span><b>Relevant:</b> ${rel}</div>
     <div class="sl"><span class="b">T</span><b>Tijdgebonden:</b> Streefdatum ${tdTxt} (over ${weeks} weken).</div>
@@ -1852,15 +1857,15 @@ function buildCoaching(){
   const isNow=curMonth===nowYM; const tCur=totals(curMonth); const de=daysElapsed(curMonth); const el=de.elapsed||1;
   const curPct=tCur.budget?Math.round(tCur.spend/tCur.budget*100):0;
   const projPct=tCur.budget?Math.round((tCur.spend/el*de.dim)/tCur.budget*100):0;
-  const pace=(isNow&&curPct>0)?`Dag ${de.today||el}/${de.dim}: je staat op <b>${curPct}%</b> van je ruimte${projPct>105?` — op dit tempo eindig je rond <b style="color:var(--red)">${projPct}%</b>`:''}. `:'';
+  const pace=(isNow&&curPct>0)?`Dag ${de.today||el}/${de.dim}: je staat op <b>${curPct}%</b> van je ruimte${projPct>105?`. Op dit tempo eindig je rond <b style="color:var(--red)">${projPct}%</b>`:''}. `:'';
   // ---- opbouw ----
-  const diag=`<div class="small"><b>${ICON('search')} Diagnose.</b> ${streak>=2?`<b>${streak} maanden op rij</b> boven je ${lim}%-grens`:`${overN}/${done.length} maanden boven je ${lim}%-grens`} · gem. ${Math.round(avg(rows.map(r=>r.saved)))}% gespaard (doel ${tgtPct}%). Zwakst: ${mn(worst.m)} — ${euro0(worst.inc)} binnen, ${euro0(worst.sp)} eruit → <b>${Math.round(worst.saved)}%</b>.</div>`;
-  const obs1=windfallDep?`<div class="coach bad" style="margin:8px 0"><div class="ic">${ICON('warn')}</div><div class="tx"><b>Je doel hangt aan meevallers.</b> In je gewone salarismaanden zet je gemiddeld maar <b>${euro0(savNormal)}</b> weg — ${euro0(target-savNormal)} ónder je ${euro0(target)}-doel. Je haalt het alleen dankzij dividend/vakantiegeld.</div></div>`:'';
+  const diag=`<div class="small"><b>${ICON('search')} Diagnose.</b> ${streak>=2?`<b>${streak} maanden op rij</b> boven je ${lim}%-grens`:`${overN}/${done.length} maanden boven je ${lim}%-grens`} · gem. ${Math.round(avg(rows.map(r=>r.saved)))}% gespaard (doel ${tgtPct}%). Zwakst: ${mn(worst.m)}, ${euro0(worst.inc)} binnen, ${euro0(worst.sp)} eruit → <b>${Math.round(worst.saved)}%</b>.</div>`;
+  const obs1=windfallDep?`<div class="coach bad" style="margin:8px 0"><div class="ic">${ICON('warn')}</div><div class="tx"><b>Je doel hangt aan meevallers.</b> In je gewone salarismaanden zet je gemiddeld maar <b>${euro0(savNormal)}</b> weg. Dat is ${euro0(target-savNormal)} ónder je ${euro0(target)}-doel. Je haalt het alleen dankzij dividend/vakantiegeld.</div></div>`:'';
   const obs2=(!windfallDep&&lifestyle)?`<div class="coach warn" style="margin:8px 0"><div class="ic">${ICON('warn')}</div><div class="tx"><b>Lifestyle inflation.</b> Je rijkere maanden zijn ook je dúurste (gem. ${euro0(spW)} vs ${euro0(spN)}). Extra geld gaat op, niet naar je buffer.</div></div>`:'';
-  const savFix=savN>=2?`<div class="coach info" style="margin:8px 0"><div class="ic">${ICON('tag')}</div><div class="tx"><b>${euro0(savMis)} aan 'Rule'-overboekingen staat als uitgave.</b> Dat is je eigen sparen — het maakt je cijfers slechter dan ze zijn. <span style="color:var(--teal);cursor:pointer;font-weight:700" onclick="fixSavingsRules()">los op met 1 tik ›</span></div></div>`:'';
+  const savFix=savN>=2?`<div class="coach info" style="margin:8px 0"><div class="ic">${ICON('tag')}</div><div class="tx"><b>${euro0(savMis)} aan 'Rule'-overboekingen staat als uitgave.</b> Dat is je eigen sparen. Het maakt je cijfers slechter dan ze zijn. <span style="color:var(--teal);cursor:pointer;font-weight:700" onclick="fixSavingsRules()">los op met 1 tik ›</span></div></div>`:'';
   const vraag=topVar?`<div class="small" style="margin:8px 0"><b>${ICON('bulb')} Vraag.</b> ${CATS[topVar.k].name} kost je gem. <b>${euro0(topVar.avg)}/mnd</b>. Zou je dat vandaag, vanaf nul, opnieuw zo kiezen? <span style="color:var(--teal);cursor:pointer" onclick="openCategory('${topVar.k}')">bekijk ›</span></div>`:'';
   const acties=`<div class="small muted" style="font-weight:600;margin:12px 0 6px">${ICON('check')} Je 3 grootste hefbomen</div>
-    <div class="coach" style="margin:0 0 6px"><div class="ic">1</div><div class="tx"><b>Sparen eerst.</b> €${target}/mnd automatisch weg op je salarisdag — vóór je het kunt uitgeven. Dan zijn je gewone maanden niet meer afhankelijk van meevallers.</div></div>
+    <div class="coach" style="margin:0 0 6px"><div class="ic">1</div><div class="tx"><b>Sparen eerst.</b> €${target}/mnd automatisch weg op je salarisdag, nog vóór je het kunt uitgeven. Dan zijn je gewone maanden niet meer afhankelijk van meevallers.</div></div>
     ${topVar?`<div class="coach" style="margin:0 0 6px"><div class="ic">2</div><div class="tx"><b>${CATS[topVar.k].name} −15%:</b> van ${euro0(topVar.avg)} naar ~${euro0(topVar.avg*0.85)}/mnd. <span style="color:var(--teal);cursor:pointer" onclick="go('ins')">zie waar het heen gaat ›</span></div></div>`:''}
     <div class="coach" style="margin:0"><div class="ic">3</div><div class="tx"><b>Meevaller-quarantaine.</b> Alles boven ${euro0(base)} dat binnenkomt: 80% direct naar je buffer, vóór je het als ruimte ziet.</div></div>`;
   const acc=`<div class="coach info" style="margin-top:10px"><div class="ic">${ICON('repeat')}</div><div class="tx"><b>Deze maand.</b> ${pace}Focus: ${topVar?`houd ${CATS[topVar.k].name} onder ${euro0(topVar.avg*0.85)}`:'blijf onder je grens'} en zet de €${target}-overboeking vast.</div></div>`;
@@ -1917,7 +1922,7 @@ function scoreNotifs(){
         l2:`Vul ±${euro0(topUp)} aan`, act:"go('vooruit')"});
     } }catch(_){}
   if(isNow && !out.length){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget(); if(L.projected>=tgt && L.daysLeft>0)
-    push({key:'room',score:20,t:'good',ic:ICON('check'),l1:'Je ligt op koers deze maand.',l2:'Mooi — hou dit vast',act:"go('vooruit')"}); }catch(_){} }
+    push({key:'room',score:20,t:'good',ic:ICON('check'),l1:'Je ligt op koers deze maand.',l2:'Mooi, hou dit vast',act:"go('vooruit')"}); }catch(_){} }
   out.sort((a,b)=>b.score-a.score);
   const seen=new Set(), uniq=[]; for(const o of out){ if(!seen.has(o.key)){ seen.add(o.key); uniq.push(o); } }
   return uniq;
@@ -1937,7 +1942,7 @@ function pushTopNotif(force){
     const last=SET.notifSent.length?Math.max(...SET.notifSent.map(x=>x.ts)):0;
     const sameRecent=SET.notifSent.some(x=>x.key===top.key && now-x.ts<7*86400000);
     if(!force && (todayN>=2 || (now-last)<2*3600000 || sameRecent)) return;
-    new Notification('Minder', {body: top.l1+' — '+top.l2, tag:top.key});
+    new Notification('Minder', {body: top.l1+' '+top.l2, tag:top.key});
     SET.notifSent.push({key:top.key,ts:now}); SET.notifSent=SET.notifSent.filter(x=>now-x.ts<8*86400000).slice(-20); save();
   }catch(_){}
 }
@@ -1946,7 +1951,7 @@ function openNotifs(){
   const perm=(typeof Notification!=='undefined')?Notification.permission:'denied';
   const enableRow = perm==='default' ? `<div class="small" style="margin:0 0 12px"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="enableNotifs()">Meldingen op dit toestel aanzetten ›</span></div>` : '';
   const body = ns.length? ns.map(n=>`<div class="coach ${n.t}" style="cursor:pointer;margin-bottom:10px" onclick="closeSheet();${n.act}"><div class="ic">${n.ic}</div><div class="tx"><b>${n.l1}</b><br><span class="muted">${n.l2} ›</span></div></div>`).join('')
-    : `<div class="small muted" style="padding:10px 0">Geen meldingen — alles op koers.</div>`;
+    : `<div class="small muted" style="padding:10px 0">Geen meldingen, alles op koers.</div>`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="row" style="margin-bottom:14px"><span class="hlabel" style="margin:0;flex:1">Meldingen</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
     ${enableRow}${body}`;
@@ -1974,15 +1979,22 @@ function forecastMonths(varCut, oneoffs){
 }
 function toggleFcCut(k){ SET.fcCuts=SET.fcCuts||[]; const i=SET.fcCuts.indexOf(k); if(i>=0)SET.fcCuts.splice(i,1); else SET.fcCuts.push(k); save(); renderVooruit(); }
 function addFcOne(k){ const p=FC_ONE.find(o=>o.k===k); if(!p) return; SET.fcOne=SET.fcOne||[]; SET.fcOne.push({k:p.k,label:p.label,amt:p.amt,ahead:1}); save(); renderVooruit(); }
+// vrij invoerbare grote uitgave: categorie + bedrag
+function addFcOneCustom(){
+  const cs=document.getElementById('fcOneCat'), as=document.getElementById('fcOneAmt');
+  const k=cs?cs.value:''; const a=as?Math.round(+as.value||0):0;
+  if(a<=0){ toast('Vul eerst een bedrag in'); return; }
+  SET.fcOne=SET.fcOne||[]; SET.fcOne.push({k,label:CATS[k]?CATS[k].name:'Grote uitgave',amt:a,ahead:1}); save(); renderVooruit();
+}
 function removeFcOne(i){ if(SET.fcOne){ SET.fcOne.splice(i,1); save(); renderVooruit(); } }
 function resetFc(){ SET.fcCuts=[]; SET.fcOne=[]; save(); renderVooruit(); }
 // één actief inzicht dat de forecast vertaalt naar betekenis (geen kale cijfers)
 function vooruitInsight(scen){
   const net=scen.monthlyNet, end=scen.endBal, start=scen.startBal;
   let goal=0,cur=0; try{ const S=savingsModel(); goal=S.goal||0; cur=S.cur||0; }catch(_){}
-  if(end<start) return `Je saldo zakt richting ${euro(end)} — een kleine aanpassing draait dat om.`;
+  if(end<start) return `Je saldo zakt richting ${euro(end)}. Een kleine aanpassing draait dat al om.`;
   if(goal>0 && cur<goal){ const hit=scen.months.find(m=>m.bal>=goal); if(hit) return `Rond ${hit.name} heb je je buffer van ${euro(goal)} bij elkaar.`; }
-  if(net>0) return `Je houdt elke maand zo'n ${euro(net)} over — daar groeit je saldo gestaag mee.`;
+  if(net>0) return `Je houdt elke maand zo'n ${euro(net)} over. Daar groeit je saldo gestaag mee.`;
   return `Je saldo blijft de komende maanden ongeveer gelijk.`;
 }
 function vooruitForecast(){
@@ -1995,7 +2007,7 @@ function vooruitForecast(){
   const insight=vooruitInsight(scen);
   const fb = !hasScn
     ? `<div class="vh-sub">Dit is je koers als je niets verandert. Je coach helpt je dit gericht te verbeteren.</div>`
-    : `<div class="fc-diff" style="color:${diff>=0?'var(--teal)':'var(--amber)'}">${diff>0?`${euro0(diff)} meer dan je oude koers — je spaart sneller.`:diff<0?`${euro0(-diff)} minder — je buffer groeit langzamer.`:'Gelijk aan je huidige koers.'}</div>`;
+    : `<div class="fc-diff" style="color:${diff>=0?'var(--teal)':'var(--amber)'}">${diff>0?`${euro0(diff)} meer dan je oude koers, je spaart sneller.`:diff<0?`${euro0(-diff)} minder, je buffer groeit langzamer.`:'Gelijk aan je huidige koers.'}</div>`;
   const heroLbl = hasScn ? `Met je keuzes sta je eind ${lastName} op` : `Op je huidige koers sta je eind ${lastName} op`;
   const hero=`<div class="vooruit">
     <div class="vh-lbl">${heroLbl}</div>
@@ -2010,12 +2022,16 @@ function vooruitForecast(){
       <div><div class="fc-mo-n">${fcCap(mo.name)}</div>${mo.one?`<div class="fc-mo-tag">−${euro0(mo.one)} eenmalig</div>`:''}</div>
       <div class="fc-mo-bal">${euro0(mo.bal)}</div>
     </div>`).join('')}</div>`;
-  const oneChips=FC_ONE.map(o=>`<button class="fc-chip" onclick="addFcOne('${o.k}')">+ ${o.label} (${euro0(o.amt)})</button>`).join('');
-  const activeOne=oneoffs.length?`<div style="margin-top:8px">${oneoffs.map((o,i)=>`<div class="fc-one"><span>${esc(o.label)} · ${fcCap(fcMonthName(o.ahead))} · ${euro0(o.amt)}</span><span class="x" onclick="removeFcOne(${i})">✕</span></div>`).join('')}</div>`:'';
+  const catOpts=Object.keys(CATS).filter(k=>CATS[k].type==='expense').map(k=>`<option value="${k}">${CATS[k].name}</option>`).join('');
+  const activeOne=oneoffs.length?`<div style="margin-top:12px">${oneoffs.map((o,i)=>`<div class="fc-one"><span>${esc(o.label)} · ${euro0(o.amt)}</span><span class="x" onclick="removeFcOne(${i})">✕</span></div>`).join('')}</div>`:'';
   const controls=`<div class="card">
     <div class="hlabel" style="margin:0 0 6px">Verwacht je een grote uitgave?</div>
-    <div class="small muted" style="margin:0 0 10px">Reken 'm in en zie wat het met je saldo doet.</div>
-    <div class="fc-chips">${oneChips}</div>${activeOne}
+    <div class="small muted" style="margin:0 0 12px">Kies een categorie en vul het bedrag in. Je ziet meteen wat het met je saldo doet.</div>
+    <div class="fc-input">
+      <select id="fcOneCat">${catOpts}</select>
+      <input id="fcOneAmt" type="number" min="0" inputmode="numeric" placeholder="bedrag">
+      <button class="fc-add" onclick="addFcOneCustom()">+</button>
+    </div>${activeOne}
     ${oneoffs.length?`<button class="snz" onclick="resetFc()">Wissen ✕</button>`:''}</div>`;
   return hero + timeline + controls;
 }
@@ -2038,7 +2054,7 @@ function vooruitFocus(){
   let context, ctaLabel, ctaAct;
   if(L.projected<0){ context=`Je komt ${euro0(-L.projected)} tekort om de maand door te komen.`; ctaLabel='Bekijk je lasten'; ctaAct="toggleVooruit('vooruitMeer')"; }
   else if(free<0){ context=`Je komt rond, maar ${euro0(-free)} te weinig voor je spaarinleg van ${euro0(sv)}.`; ctaLabel='Bekijk je lasten'; ctaAct="toggleVooruit('vooruitMeer')"; }
-  else { context=`Genoeg voor je spaarinleg van ${euro0(sv)}${free>0?` — ${euro0(free)} houd je over`:''}.`; ctaLabel=`Zet ${euro0(sv)} opzij`; ctaAct="toggleStep('savings')"; }
+  else { context=`Genoeg voor je spaarinleg van ${euro0(sv)}${free>0?`, ${euro0(free)} houd je over`:''}.`; ctaLabel=`Zet ${euro0(sv)} opzij`; ctaAct="toggleStep('savings')"; }
   return `<div class="insfocus"><div class="if-ctx">${context}</div><button class="if-cta" onclick="${ctaAct}">${ctaLabel} ›</button></div>`;
 }
 function vooruitOpbouw(){
@@ -2077,7 +2093,7 @@ function vooruitDeep(){
   return samenvatting + verdeling + volgende + sparen;
 }
 function renderVooruit(){
-  if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties — importeer of koppel je bank.</div></div>'; return; }
+  if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
   if(!isNow){ $('#s-vooruit').innerHTML = renderUpcoming() + renderSavings(); return; }
@@ -2215,7 +2231,7 @@ function dayStatusLine(){
 }
 // ACTIEPLAN = puur: 1 probleem + 1 actie. Geen cijfers, geen budgetten.
 function renderActions(){
-  if(!TX.length){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Nog geen data — importeer of koppel je bank.</div></div>'; return; }
+  if(!TX.length){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||months()[months().length-1]; const isNow=m===nowYM;
   if(!isNow){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Je actieplan geldt voor de lopende maand. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar nu ›</span></div></div>'; return; }
@@ -2364,7 +2380,7 @@ function computeStreak(dagdoel){
 function renderPlanDetail(){
   if(!TX.length) return '';
   const m=curMonth; const plan=savingsPlan(m);
-  if(!plan.length) return `<div class="card coachfocus good"><div class="cf-tag">Actieplan</div><div class="cf-insight">Niets te doen — je zit goed</div><div class="cf-context">Geen grote bespaarkansen deze maand. Hou vast wat je doet.</div></div>`;
+  if(!plan.length) return `<div class="card coachfocus good"><div class="cf-tag">Actieplan</div><div class="cf-insight">Niets te doen, je zit goed</div><div class="cf-context">Geen grote bespaarkansen deze maand. Hou vast wat je doet.</div></div>`;
   const doneArr=plan.filter(a=>planStatus(a.k)==='done');
   const keptArr=plan.filter(a=>planStatus(a.k)==='kept');
   const snz=plan.filter(a=>planStatus(a.k)==='snoozed');
@@ -2384,9 +2400,9 @@ function renderPlanDetail(){
   const stepNo=doneArr.length+1;
   return `<div class="card coachfocus info">
     <div class="cf-tag">Jouw stap · ${stepNo} van ${total}${realized>0?` · ${euro0(realized)}/mnd gedaan`:''}</div>
-    <div class="cf-insight">${c.icon} ${c.name}${a.saving>0?` — bespaar ±${euro0(a.saving)}/mnd`:''}</div>
+    <div class="cf-insight">${c.icon} ${c.name}${a.saving>0?` · bespaar ±${euro0(a.saving)}/mnd`:''}</div>
     <div class="cf-context">${how}</div>
-    <button class="btn" onclick="markAction('${a.k}','done',${a.saving||0})">Gedaan — volgende stap ›</button>
+    <button class="btn" onclick="markAction('${a.k}','done',${a.saving||0})">Gedaan, volgende stap ›</button>
     <div class="cf-links" style="justify-content:flex-start;gap:18px"><span onclick="markAction('${a.k}','kept')">Dit hou ik zo ›</span><span onclick="markAction('${a.k}','snoozed')">Later ›</span><span onclick="openCategory('${a.k}')">Bekijk ›</span></div>
   </div>`;
 }
@@ -2541,7 +2557,7 @@ function coachTips(m){
     } else if(isNowM && fixDue>0 && realFree<0){
       push(8,'bad',ICON('alert'),`Nog ${euro(rem)} over, maar ${euro0(fixDue)} vaste lasten komt nog. Hou losse uitgaven klein.`,"openFixedDue()");
     } else if(pct<70){
-      push(5,'good',ICON('party'),`Je zit ruim binnen budget${isNowM&&fixDue>0?` — ${euro0(realFree)} echt vrij na je vaste lasten`:''}. Blijf zo doorgaan.`,(isNowM&&fixDue>0)?"openFixedDue()":'');
+      push(5,'good',ICON('party'),`Je zit ruim binnen budget${isNowM&&fixDue>0?`. ${euro0(realFree)} is echt vrij na je vaste lasten`:''}. Blijf zo doorgaan.`,(isNowM&&fixDue>0)?"openFixedDue()":'');
     } else {
       push(6,'warn',ICON('clock'),`Nog ${euro(rem)} te besteden${isNowM&&fixDue>0?`, waarvan ${euro0(realFree)} echt vrij`:''}. Hou je tempo laag.`,(isNowM&&fixDue>0)?"openFixedDue()":"go('ins')");
     }
@@ -2554,7 +2570,7 @@ function coachTips(m){
   // spaarresultaat deze maand
   const saved=t.income-t.spend, target=monthlySavingTarget();
   if(t.income>0 && target>0){
-    if(saved>=target) push(6,'good',ICON('coins'),`Je haalde je spaardoel van ${euro0(target)}. Mooi — hou dit vast.`);
+    if(saved>=target) push(6,'good',ICON('coins'),`Je haalde je spaardoel van ${euro0(target)}. Mooi, hou dit vast.`);
     else if(saved>0) push(7,'warn',ICON('coins'),`Je spaarde ${euro0(target-saved)} minder dan je doel. Zet vandaag wat extra opzij.`,"go('act')");
     else push(8,'bad',ICON('coins'),`Je gaf ${euro0(-saved)} meer uit dan er binnenkwam. Sla vandaag één aankoop over.`,"go('act')");
   }
@@ -2575,7 +2591,7 @@ function coachTips(m){
   }
   // abonnementen
   const subs=items.filter(x=>catOf(x)==='abonnement');
-  if(subs.length>=2){ const s=subs.reduce((a,b)=>a-b.amount,0); push(4,'info',ICON('repeat'),`<b>${subs.length} abonnementen</b> kosten samen ${euro0(s)} deze maand — één opzeggen bespaart direct.`,"openCategory('abonnement')"); }
+  if(subs.length>=2){ const s=subs.reduce((a,b)=>a-b.amount,0); push(4,'info',ICON('repeat'),`<b>${subs.length} abonnementen</b> kosten samen ${euro0(s)} deze maand. Eén opzeggen bespaart direct.`,"openCategory('abonnement')"); }
   // grootste enkele uitgave
   const biggest=items.slice().sort((a,b)=>a.amount-b.amount)[0];
   if(biggest && -biggest.amount>=100) push(2,'info',ICON('card'),`Je grootste enkele uitgave: <b>${esc(biggest.name)}</b> ${euro0(-biggest.amount)}.`,`openSheet('${biggest.id}')`);
@@ -2583,7 +2599,7 @@ function coachTips(m){
   const S=savingsModel(); if(S.toGo>0 && S.monthlySaving>0 && S.cur>0) push(4,'info',ICON('target'),`Bij ${euro0(S.monthlySaving)}/mnd bereik je je buffer (${euro0(S.goal)}) over ±<b>${Math.round(S.monthsLeft)} maanden</b>.`);
   // ongecategoriseerd
   const uncat=items.filter(x=>catOf(x)==='overig').length;
-  if(uncat>=5) push(2,'info',ICON('tag'),`<b>${uncat} transacties</b> staan op "Overig" — categoriseer ze voor scherpere inzichten.`,"go('set')");
+  if(uncat>=5) push(2,'info',ICON('tag'),`<b>${uncat} transacties</b> staan op "Overig". Categoriseer ze voor scherpere inzichten.`,"go('set')");
   return tips.sort((a,b)=>(b.pri||0)-(a.pri||0)).slice(0,5);
 }
 
@@ -2628,7 +2644,7 @@ function renderTxList(){
       <div class="amt ${t.amount>0?'pos':''}" style="font-weight:700">${t.amount>0?'+':''}${euro(t.amount)}</div>
     </div>`;
   }
-  el.innerHTML = body||`<div class="muted small center" style="padding:30px">${(accFilter!=='all'||txFilter!=='all'||txSearch)?'Niets gevonden — pas je filter aan.':'Geen transacties deze maand.'}</div>`;
+  el.innerHTML = body||`<div class="muted small center" style="padding:30px">${(accFilter!=='all'||txFilter!=='all'||txSearch)?'Niets gevonden, pas je filter aan.':'Geen transacties deze maand.'}</div>`;
 }
 
 function dayHeader(ds){
@@ -2664,7 +2680,7 @@ function setFilter(k){ txFilter=k; renderTx(); if(window._txFilterSheet) openTxF
 function insFocus(m){
   const L=monthLiquidity(); const sv=monthlySavingTarget(); const free=Math.round(L.projected-sv);
   if(free>=0){
-    return {type:'ok', context:`Je bent op koers — dit kun je extra sparen.`, ctaLabel:'Bekijk je vooruitblik', ctaAct:"go('vooruit')"};
+    return {type:'ok', context:`Je bent op koers, dit kun je extra sparen.`, ctaLabel:'Bekijk je vooruitblik', ctaAct:"go('vooruit')"};
   }
   const actual=catSpendMap(m), EB=effectiveBudgets(m).out; let worst=null;
   for(const k in EB){ if(+EB[k]>0){ const act=actual[k]||0; if(act>+EB[k]){ const band=budgetBand(+EB[k],act); if(band==='action'||band==='monitor'){ const over=act-(+EB[k]); if(!worst||over>worst.over) worst={k,over}; } } } }
@@ -2685,7 +2701,7 @@ function insInline(m){
   return `<div class="insinline" onclick="openBudgetCompare('${m}')"><span class="ii-dot" style="background:${dot}"></span><span>Hoe doe je het deze maand?</span><span class="ii-go">›</span></div>`;
 }
 function renderIns(){
-  if(!TX.length){ $('#s-ins').innerHTML='<div class="card"><div class="small muted">Nog geen transacties — importeer of koppel je bank.</div></div>'; return; }
+  if(!TX.length){ $('#s-ins').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const m=curMonth||months()[months().length-1];
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); const isNow=(m===nowYM);
   const tips=coachTips(m); const hero=tips[0]; const sec=tips.slice(1,4);
@@ -2693,7 +2709,7 @@ function renderIns(){
       <div class="small muted">Belangrijkste deze maand</div>
       <div class="coach ${hero.t}" style="margin:8px 0 0"><div class="ic">${hero.ic}</div><div class="tx">${hero.m}</div></div>
     </div>`
-    : `<div class="card"><div class="coach good" style="margin:0"><div class="ic">${ICON('check')}</div><div class="tx">Niks bijzonders deze maand — je zit op koers.</div></div></div>`;
+    : `<div class="card"><div class="coach good" style="margin:0"><div class="ic">${ICON('check')}</div><div class="tx">Niks bijzonders deze maand. Je zit op koers.</div></div></div>`;
   const secBlock = sec.length?`<div class="card"><div class="small muted" style="margin-bottom:8px">Verder opgevallen</div>
       ${sec.map(s=>`<div class="coach ${s.t}" style="margin:0 0 8px"><div class="ic">${s.ic}</div><div class="tx">${s.m}</div></div>`).join('')}</div>`:'';
   // ONE-FOCUS: één contextzin + één actie (alleen lopende maand)
@@ -2741,7 +2757,7 @@ function renderCat(){
   const internHtml=intern.length?`<div class="card"><div class="small muted" style="margin-bottom:8px">Telt niet mee als uitgave</div>
     ${intern.map(([k,v])=>`<div class="row" style="padding:5px 0"><span>${CATS[k].icon} ${CATS[k].name}</span><span class="muted">${euro(v)}</span></div>`).join('')}</div>`:'';
 
-  $('#s-cat').innerHTML=`<div class="card">${donut}</div><div class="card">${rows||'<div class="muted small">—</div>'}</div>${internHtml}`;
+  $('#s-cat').innerHTML=`<div class="card">${donut}</div><div class="card">${rows||'<div class="muted small">geen uitgaven</div>'}</div>${internHtml}`;
 }
 
 /* ----- per categorie (over een transactielijst) ----- */
@@ -2845,7 +2861,7 @@ function renderRulesCard(){
   const catOptions=Object.entries(CATS).map(([k,c])=>`<option value="${k}">${c.icon} ${c.name}</option>`).join('');
   return `<div class="card">
     <div class="row" style="margin-bottom:6px"><span class="hlabel" style="margin:0;flex:1">Categorie-regels</span><span class="tag">eigen</span></div>
-    <div class="small muted" style="margin-bottom:10px">Eigen trefwoord-regels winnen van de ingebouwde categorisatie — handig om terugkerende fouten zelf te corrigeren. Hoofdletters en spaties maken niet uit.</div>
+    <div class="small muted" style="margin-bottom:10px">Eigen trefwoord-regels winnen van de ingebouwde categorisatie. Handig om terugkerende fouten zelf te corrigeren. Hoofdletters en spaties maken niet uit.</div>
     ${rules.length?rules.map((r,i)=>`<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line)"><span class="small">${CATS[r.cat]?CATS[r.cat].icon:'•'} <b>${esc(r.kw)}</b> <span class="muted">→ ${CATS[r.cat]?CATS[r.cat].name:esc(r.cat)}</span></span><span onclick="delRule(${i})" title="Verwijder" style="cursor:pointer;color:var(--red);padding:0 6px;font-size:17px">×</span></div>`).join(''):'<div class="small muted">Nog geen eigen regels.</div>'}
     <div style="display:flex;gap:8px;margin-top:12px">
       <input id="ruleKw" type="text" placeholder="trefwoord, bv. ALBERT HEIJN" style="flex:1;min-width:0">
@@ -2899,7 +2915,7 @@ function setBudget(){
     <label class="fld">Limiet-model</label>
     <div class="chips">${[['pct','% van inkomen'],['cap','Vast plafond'],['baseline','Baseline-anker'],['damper','Groei-demper']].map(([k,l])=>`<span class="chip ${(SET.limitMode||'pct')===k?'on':''}" onclick="SET.limitMode='${k}';save();render();">${l}</span>`).join('')}</div>
     ${(SET.limitMode||'pct')==='cap'
-      ? `<input type="number" min="0" value="${SET.spendCap||''}" placeholder="bv. 2500" oninput="SET.spendCap=+this.value||0;save();render();"><div class="small muted" style="margin-top:6px">Vast maandplafond. Alles boven dit bedrag gaat naar sparen — een loonsverhoging verhoogt je limiet niet.</div>`
+      ? `<input type="number" min="0" value="${SET.spendCap||''}" placeholder="bv. 2500" oninput="SET.spendCap=+this.value||0;save();render();"><div class="small muted" style="margin-top:6px">Vast maandplafond. Alles boven dit bedrag gaat naar sparen. Een loonsverhoging verhoogt je limiet niet.</div>`
       : (SET.limitMode||'pct')==='damper'
       ? `<input type="number" min="0" max="100" value="${SET.damperPct||30}" placeholder="30" oninput="SET.damperPct=+this.value||0;save();render();"><div class="small muted" style="margin-top:6px">Van elke euro die je méér verdient dan je basisinkomen (${euro0(baseIncome())}) gaat ${SET.damperPct||30}% naar je limiet, de rest naar sparen.</div>`
       : (SET.limitMode||'pct')==='baseline'
@@ -3011,14 +3027,14 @@ function setCoach(){
       <label class="sw"><input type="checkbox" ${SET.hideInternal?'checked':''} onchange="SET.hideInternal=this.checked;save();render();"><span class="sl"></span></label></div>
     <div style="height:10px"></div>
     ${renderRulesCard()}
-    <div class="small muted" style="margin-top:10px">${ICON('info')} <b>Hoe werkt de coach?</b> Geen AI in de cloud — alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.</div>`;
+    <div class="small muted" style="margin-top:10px">${ICON('info')} <b>Hoe werkt de coach?</b> Geen AI in de cloud. Alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.</div>`;
 }
 
 function setPrivacy(){
   const standalone = (window.matchMedia&&matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
   return `
-    <div class="small muted" style="margin-bottom:10px"><b>Waar staat mijn data?</b> Alles staat lokaal in je browser op dit toestel — ${TX.length} transacties, ${months().length} maanden. Niets gaat naar een server (behalve de optionele live bankkoppeling via je eigen backend).</div>
-    ${standalone?`<div class="small muted" style="margin-bottom:10px">${ICON('check')} Geïnstalleerd als app — werkt offline.</div>`
+    <div class="small muted" style="margin-bottom:10px"><b>Waar staat mijn data?</b> Alles staat lokaal in je browser op dit toestel. ${TX.length} transacties, ${months().length} maanden. Niets gaat naar een server (behalve de optionele live bankkoppeling via je eigen backend).</div>
+    ${standalone?`<div class="small muted" style="margin-bottom:10px">${ICON('check')} Geïnstalleerd als app, werkt offline.</div>`
       :(deferredPrompt?`<button class="btn sec" style="margin-bottom:8px" onclick="installApp()">${ICON('install')} Installeer als app</button>`
         :`<div class="small muted" style="margin-bottom:10px">Installeren via browsermenu: ⋮ → "App installeren" (Chrome/Edge) of Deel → "Zet op beginscherm" (iPhone).</div>`)}
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (${TX.length} transacties op dit toestel.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">${ICON('trash')} Alle gegevens wissen</button>`;
@@ -3118,7 +3134,7 @@ async function syncFolder(verbose){
     SET.lastSync=Date.now(); SET.folderName=dirHandle.name; save();
     curMonth=null; render();
     if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){}
-    if(added) toast(`${ICON('check')} ${added} nieuwe transacties bijgewerkt`); else if(verbose) toast('Bijgewerkt — geen nieuwe transacties');
+    if(added) toast(`${ICON('check')} ${added} nieuwe transacties bijgewerkt`); else if(verbose) toast('Bijgewerkt, geen nieuwe transacties');
   }catch(e){ if(verbose) toast('Synchroniseren mislukt'); }
 }
 
@@ -3162,7 +3178,7 @@ async function psd2Refresh(silent){
     } while(cont && guard<40);
     try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:new Date().toISOString().slice(0,10)}; }catch(e){}
   }
-  if(authFail && !anyOk){ if(!silent){ toast('Koppeling verlopen — log opnieuw in'); psd2Connect(); } return; }
+  if(authFail && !anyOk){ if(!silent){ toast('Koppeling verlopen, log opnieuw in'); psd2Connect(); } return; }
   SET.psd2LastSync=Date.now(); save();
   const added=commitTx(allTx, balances);
   if(SET.psd2Pending!==false){ const pend=[];
@@ -3175,7 +3191,7 @@ async function psd2Refresh(silent){
   }
   curMonth=null; render();
   if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){}
-  if(!silent) toast(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt — geen nieuwe (van vandaag soms nog niet geboekt)');
+  if(!silent) toast(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt, geen nieuwe (van vandaag soms nog niet geboekt)');
 }
 async function psd2Connect(){
   if(!psd2Ready()){ toast('Stel eerst je bank-verbinding in'); SET.advBank=true; SET.setOpen='bank'; save(); go('set'); return; }
