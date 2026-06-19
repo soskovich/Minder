@@ -2237,32 +2237,50 @@ function renderActions(){
       <div class="coachdots"><i class="on"></i><i></i></div>
       <div class="af-tag">${meta.tag}</div>
       <div class="af-open">${sig.observation}</div>
-      <div class="af-mean">${qa.meaning}</div>
+      <div class="af-mean">${qa.cause}</div>
       <div class="af-q">${qa.question}</div>
       <div class="coachchips">${chips}</div>
     </div>`;
     return;
   }
-  // STAP 2 — keuze bevestigen + concrete stap + commitment + vooruitblik
+  // STAP 2 — gekozen regel wordt je commitment + follow-up (wanneer kijken we terug)
   const ans=window._coachAnswer||'';
-  const fwd={dag:'Vanavond weet je of het lukte.',week:'Volgende week zie je het effect.',maand:'Eén keer regelen — de hele maand profijt.'}[sig.scale]||'';
+  const fwd={week:'Zondag kijkt je coach of het gelukt is.',maand:'Volgende maand kijken we hoe het ging.'}[sig.scale]||'Je coach komt hierop terug.';
   const steps = sig.scale==='maand' ? `<div class="af-steps" onclick="toggleActDeep()">${SET.actDeep?'Verberg stappen ▲':'Bekijk je stappen ›'}</div>` : '';
   $('#s-act').innerHTML=`<div class="actfocus">
     <div class="coachdots"><i class="on"></i><i class="on"></i></div>
-    <div class="af-tag">${meta.tag} · jouw stap</div>
-    ${ans?`<div class="af-mean">Goede keuze: <b style="color:var(--txt)">${esc(ans).toLowerCase()}</b>.</div>`:''}
-    <div class="af-action">${esc(sig.action)}</div>
-    ${fwd?`<div class="af-fwd">${fwd}</div>`:''}
-    <button class="if-cta" onclick="coachCommit('${sig.key}','${sig.scale}')">${ICON('check')} Dit doe ik</button>
-    <div class="af-undo" onclick="coachReset()">‹ Andere keuze</div>
+    <div class="af-tag">${meta.tag} · jouw regel</div>
+    <div class="af-action">${esc(ans||sig.action)}</div>
+    <div class="af-fwd">${fwd}</div>
+    <button class="if-cta" onclick="coachCommit('${sig.key}','${sig.scale}')">${ICON('check')} Dit spreek ik af</button>
+    <div class="af-undo" onclick="coachReset()">‹ Andere regel</div>
     ${steps}
   </div>` + (sig.scale==='maand' && SET.actDeep ? renderPlanDetail() : '');
 }
-// coachvraag + betekenis afgeleid van het signaal (data → gesprek)
+// coachvraag = oorzaak (waarom) + concrete gedragsregels om uit te kiezen
 function coachQA(sig){
-  if(sig.tone==='good') return {meaning:'Mooi — je bleef binnen je budget. Zo groeit je buffer vanzelf.',question:'Wat hielp je deze maand?',chips:['Goed gepland','Minder impuls','Bewuste keuzes']};
-  if(sig.scale==='week') return {meaning:'Deze categorie loopt over budget. Eén gerichte keuze brengt het terug.',question:'Wat past deze week het best bij jou?',chips:['Minder impuls','Beter plannen','Een vast bedrag']};
-  return {meaning:'Je spaart al een paar maanden te weinig. Eén vaste last omlaag draait dat om.',question:'Wat voelt het meest haalbaar?',chips:['Een vaste last','Automatisch sparen','Bewuster kiezen']};
+  const m=curMonth||months()[months().length-1];
+  if(sig.tone==='good') return {cause:'Je hield je deze maand netjes aan je budget.',question:'Wat doe je met de ruimte die je overhoudt?',chips:coachRules(m,sig)};
+  if(sig.scale==='week'){ const cause=sig.catKey?catHypo(m,sig.catKey):'Deze categorie liep over je budget.'; return {cause,question:'Welke regel pak je deze week?',chips:coachRules(m,sig)}; }
+  return {cause:'Je houdt al een paar maanden te weinig over om te sparen.',question:'Welke stap zet je deze maand?',chips:coachRules(m,sig)};
+}
+// concrete gedragsregels per signaal — kort, direct uitvoerbaar, niet overlappend
+function coachRules(m,sig){
+  const k=sig.catKey;
+  if(sig.scale==='week' && k){
+    const b=(effectiveBudgets(m).out[k]||0); const wk=Math.max(Math.floor((b/4)/5)*5,5);
+    if(k==='uiteten') return ['Max 1× uit eten','Deze week thuis koken',`Max €${wk} deze week`];
+    if(k==='boodschappen') return ['1 grote weekboodschap',`Max €${wk} deze week`,'Geen losse ritjes'];
+    if(k==='vervoer'){ const s=vervoerSplit(m);
+      if(s.lease>=s.fuel&&s.lease>=s.park) return ['Leasevoorstel opvragen','Vaker carpoolen','Korte ritten op de fiets'];
+      if(s.park>=s.fuel) return ['P+R i.p.v. centrum','Vooraf parkeren boeken','Korte ritten op de fiets'];
+      return [`Tank max €${wk} deze week`,'Bij onbemand station','Korte ritten op de fiets']; }
+    if(k==='shopping') return ['24 uur wachten','Niks op afbetaling',`Max €${wk} deze week`];
+    if(k==='vices') return [`Max €${wk} contant`,'Niet pinnen','2 dagen overslaan'];
+    return [`Max €${wk} deze week`,'1 vaste dag per week','Geen impulsaankopen'];
+  }
+  if(sig.scale==='maand' && sig.tone!=='good') return ['Abonnement opzeggen','Automatisch sparen aanzetten','Een vaste last verlagen'];
+  return ['Naar mijn buffer','Extra aflossen','Laten staan'];
 }
 function coachAnswer(c){ window._coachAnswer=c; window._coachStep=1; renderActions(); }
 function coachReset(){ window._coachStep=0; window._coachAnswer=null; renderActions(); }
