@@ -141,6 +141,10 @@ h1,h2,h3{margin:0}
 .coachchips{display:flex;flex-wrap:wrap;gap:9px}
 .coachchip{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:21px;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;transition:background .15s,border-color .15s}
 .coachchip:active{background:var(--teal);color:#06231c;border-color:var(--teal)}
+.coachchip.rec{border-color:var(--teal);color:var(--teal)}
+.actfocus .af-base{font-size:13px;color:var(--mut);margin:2px 0 12px;max-width:320px}
+.actfocus .af-prop{font-size:14.5px;color:var(--mut);margin:0 0 14px;max-width:320px}
+.actfocus .af-eval{font-size:13px;color:var(--mut);line-height:1.5;margin:0 0 16px;max-width:320px}
 .coachdots{display:flex;gap:6px;margin-bottom:18px}
 .coachdots i{width:6px;height:6px;border-radius:50%;background:var(--card2);display:inline-block}
 .coachdots i.on{background:var(--teal)}
@@ -944,20 +948,20 @@ function catHypo(m,k){
   const big=d.biggest?(esc(cleanMerch(d.biggest.name)||d.biggest.name)):'';
   // 1) één grotere aankoop weegt zwaar mee
   if(d.sum>0 && d.biggest && (-d.biggest.amount)/d.sum>=0.45)
-    return `Vooral één aankoop bij ${big} (${euro0(-d.biggest.amount)}) telt hier mee.`;
+    return `Dit komt vooral door één aankoop bij ${big} van ${euro0(-d.biggest.amount)}.`;
   // 2) één winkel/leverancier is het grootste deel
   if(d.merch && d.sum>0 && d.merch.s/d.sum>=0.4)
-    return `Het meeste ging naar ${esc(d.merch.name)} — ${euro0(d.merch.s)} in ${d.merch.n}×.`;
+    return `Het meeste ging naar ${esc(d.merch.name)}. ${euro0(d.merch.s)} in ${d.merch.n} keer.`;
   // 3) wat vaker iets gekocht in deze categorie
   if(d.priorN>=1 && d.n>=Math.round(d.priorN*1.3))
-    return `Wat meer losse aankopen in ${cat} dan in een gemiddelde maand (${d.n}× vs ~${Math.round(d.priorN)}×).`;
+    return `Je kocht wat vaker iets voor ${cat} dan normaal. ${d.n} keer, meestal is dat rond ${Math.round(d.priorN)}.`;
   // 4) bedragen per keer iets hoger
   if(d.priorAvg>0 && d.avg>=d.priorAvg*1.2)
-    return `De bedragen in ${cat} lagen wat hoger dan je gewend bent — ~${euro0(d.avg)} per keer.`;
+    return `De bedragen voor ${cat} lagen wat hoger dan je gewend bent, zo'n ${euro0(d.avg)} per keer.`;
   // 5) specifiek opgebouwd, met grootste post benoemd
   if(d.biggest && d.n>1)
-    return `Opgebouwd uit ${d.n} uitgaven in ${cat}, met ${big} (${euro0(-d.biggest.amount)}) als grootste.`;
-  return `${d.n||0} uitgave${d.n===1?'':'n'} in ${cat} deze maand.`;
+    return `Het ging om ${d.n} uitgaven voor ${cat}. De grootste was ${big} van ${euro0(-d.biggest.amount)}.`;
+  return `Het ging om ${d.n||0} uitgave${d.n===1?'':'n'} voor ${cat} deze maand.`;
 }
 // Vervoer & auto bestaat uit deeluitgaven (lease/benzine/parkeren/OV) — splits ze zodat een tip de juiste post raakt
 function vervoerSplit(m){
@@ -978,24 +982,24 @@ function savingsTip(m,k){
   const wk=Math.max(Math.floor((d.sum/4)/5)*5,5); // weekbedrag, afgerond op €5 onder eigen niveau
   if(k==='vervoer'){
     const s=vervoerSplit(m);
-    if(s.lease>0 && s.lease>=s.fuel && s.lease>=s.park) return `Je lease kost €${Math.round(s.lease)} per maand — kijk of een goedkoper of korter leasecontract kan.`;
-    if(s.park>0 && s.park>=s.fuel) return `Reserveer parkeren vooraf of pak een P+R — dat scheelt vaak de helft.`;
-    if(s.fuel>0){ const fw=Math.max(Math.floor((s.fuel/4)/5)*5,5); return `Tank een vast bedrag van €${fw} per week bij een onbemand station — scheelt op je benzine.`; }
-    return `Pak vaker de fiets of het OV voor korte ritten.`;
+    if(s.lease>0 && s.lease>=s.fuel && s.lease>=s.park) return `Je lease kost €${Math.round(s.lease)} per maand. Kijk eens of een goedkoper of korter contract kan.`;
+    if(s.park>0 && s.park>=s.fuel) return `Reserveer parkeren vooraf of pak een P+R. Dat scheelt je vaak de helft.`;
+    if(s.fuel>0){ const fw=Math.max(Math.floor((s.fuel/4)/5)*5,5); return `Tank een vast bedrag van €${fw} per week. Bij een onbemand station ben je meestal goedkoper uit.`; }
+    return `Pak voor korte ritten wat vaker de fiets of het OV.`;
   }
   const tips={
-    uiteten:`Beperk uit eten tot 1 vaste dag per week — de rest kook je thuis.`,
-    boodschappen:`Doe één weekboodschap met een lijst i.p.v. losse ritjes.`,
-    abonnement:`Loop je abonnementen na en zeg er deze week één op die je niet gebruikt.`,
-    shopping:`Leg online aankopen 24 uur in je mandje voor je afrekent.`,
-    verzekering:`Vergelijk je polissen één keer per jaar — vaste lasten zijn je grootste knop.`,
-    vices:`Neem een vast weekbudget van €${wk} contant mee i.p.v. pinnen.`,
-    sport:`Check of een losse strippenkaart goedkoper is dan je maandabonnement.`,
-    vakantie:`Zet maandelijks een vast bedrag opzij i.p.v. alles in één keer.`,
-    bankkosten:`Bekijk of een goedkoper rekeningpakket bij je past.`,
+    uiteten:`Houd uit eten op één vaste dag per week. De rest kook je gewoon thuis.`,
+    boodschappen:`Doe één grote weekboodschap met een lijstje. Dan stoppen die losse ritjes vanzelf.`,
+    abonnement:`Loop je abonnementen na en zeg er deze week eentje op die je toch niet gebruikt.`,
+    shopping:`Leg online aankopen eerst 24 uur in je mandje. Vaak hoeft het dan niet meer.`,
+    verzekering:`Vergelijk je polissen een keer per jaar. Daar zit vaak de meeste winst.`,
+    vices:`Neem een vast weekbudget van €${wk} contant mee in plaats van te pinnen.`,
+    sport:`Kijk of een losse strippenkaart goedkoper is dan je maandabonnement.`,
+    vakantie:`Zet er maandelijks een vast bedrag voor opzij in plaats van alles in één keer.`,
+    bankkosten:`Kijk of een goedkoper rekeningpakket beter bij je past.`,
     zorg:`Vraag bij de apotheek naar het goedkopere merkloze alternatief.`
   };
-  return tips[k]||`Zet een weeklimiet van €${wk} voor ${CATS[k]?CATS[k].name.toLowerCase():'deze categorie'}.`;
+  return tips[k]||`Geef jezelf een weeklimiet van €${wk} voor ${CATS[k]?CATS[k].name.toLowerCase():'deze categorie'}.`;
 }
 // BOTTOM SHEET: budget vs uitgaven — samenvatting + top-afwijkingen + hypothese. Status blijft op de pagina, verdieping hier.
 function openBudgetCompare(m){
@@ -1982,7 +1986,7 @@ function vooruitInsight(scen){
   return `Je saldo blijft de komende maanden ongeveer gelijk.`;
 }
 function vooruitForecast(){
-  const varCut=fcVarCut(); const oneoffs=SET.fcOne||[];
+  const varCut=0; const oneoffs=SET.fcOne||[]; // gedrag-scenario's leven nu in de Coach, niet als losse chips hier
   const scen=forecastMonths(varCut, oneoffs); if(!scen) return vooruitHero(); // te weinig historie → val terug op maand-hero
   const base=forecastMonths(0,[]);
   const last=scen.months[scen.months.length-1]; const lastName=last?last.name:'';
@@ -1990,7 +1994,7 @@ function vooruitForecast(){
   const diff = scen.endBal - base.endBal; const hasScn = varCut>0 || oneoffs.length>0;
   const insight=vooruitInsight(scen);
   const fb = !hasScn
-    ? `<div class="vh-sub">Tik hieronder een keuze aan en zie direct wat het met je toekomst doet.</div>`
+    ? `<div class="vh-sub">Dit is je koers als je niets verandert. Je coach helpt je dit gericht te verbeteren.</div>`
     : `<div class="fc-diff" style="color:${diff>=0?'var(--teal)':'var(--amber)'}">${diff>0?`${euro0(diff)} meer dan je oude koers — je spaart sneller.`:diff<0?`${euro0(-diff)} minder — je buffer groeit langzamer.`:'Gelijk aan je huidige koers.'}</div>`;
   const heroLbl = hasScn ? `Met je keuzes sta je eind ${lastName} op` : `Op je huidige koers sta je eind ${lastName} op`;
   const hero=`<div class="vooruit">
@@ -2006,16 +2010,13 @@ function vooruitForecast(){
       <div><div class="fc-mo-n">${fcCap(mo.name)}</div>${mo.one?`<div class="fc-mo-tag">−${euro0(mo.one)} eenmalig</div>`:''}</div>
       <div class="fc-mo-bal">${euro0(mo.bal)}</div>
     </div>`).join('')}</div>`;
-  const cuts=SET.fcCuts||[];
-  const cutChips=FC_CUTS.map(c=>`<button class="fc-chip${cuts.includes(c.k)?' on':''}" onclick="toggleFcCut('${c.k}')">Minder ${c.label.toLowerCase()} (−${euro0(c.amt)})</button>`).join('');
   const oneChips=FC_ONE.map(o=>`<button class="fc-chip" onclick="addFcOne('${o.k}')">+ ${o.label} (${euro0(o.amt)})</button>`).join('');
   const activeOne=oneoffs.length?`<div style="margin-top:8px">${oneoffs.map((o,i)=>`<div class="fc-one"><span>${esc(o.label)} · ${fcCap(fcMonthName(o.ahead))} · ${euro0(o.amt)}</span><span class="x" onclick="removeFcOne(${i})">✕</span></div>`).join('')}</div>`:'';
   const controls=`<div class="card">
-    <div class="hlabel" style="margin:0 0 8px">Wat als je minder uitgeeft?</div>
-    <div class="fc-chips">${cutChips}</div>
-    <div class="hlabel" style="margin:16px 0 8px">Reken een grote uitgave in</div>
+    <div class="hlabel" style="margin:0 0 6px">Verwacht je een grote uitgave?</div>
+    <div class="small muted" style="margin:0 0 10px">Reken 'm in en zie wat het met je saldo doet.</div>
     <div class="fc-chips">${oneChips}</div>${activeOne}
-    ${hasScn?`<button class="snz" onclick="resetFc()">Scenario wissen ✕</button>`:''}</div>`;
+    ${oneoffs.length?`<button class="snz" onclick="resetFc()">Wissen ✕</button>`:''}</div>`;
   return hero + timeline + controls;
 }
 function vooruitHero(){
@@ -2109,7 +2110,7 @@ function coachItems(){
       items.push({t:'warn',insight:'Meer binnen, meer uitgegeven',context:`Zet je extraatje meteen opzij, vóór je het uitgeeft.`,label:'Zet je extraatje opzij',fn:"go('ins')"});
     // 4) streak boven grens
     let streak=0; for(let i=rows.length-1;i>=0;i--){ if(rows[i].over) streak++; else break; }
-    if(streak>=2) items.push({t:'warn',insight:'Je geeft al maanden te veel uit',context:`Tijd om te kantelen — kies vandaag één last om te schrappen.`,label:'Verlaag één vaste last',fn:'toggleActDeep()'});
+    if(streak>=2) items.push({t:'warn',insight:'Je geeft al maanden te veel uit',context:`Tijd om het te kantelen. Kies vandaag één last die eruit kan.`,label:'Verlaag één vaste last',fn:'toggleActDeep()'});
   }
   // 5) grootste variabele hefboom
   const vc={}; for(const m of done){ for(const t of txOfMonth(m)){ if(t.amount<0&&CATS[catOf(t)].type==='expense'&&!isFixed(t)){const k=catOf(t);vc[k]=(vc[k]||0)+(-t.amount);} } }
@@ -2117,7 +2118,7 @@ function coachItems(){
   if(topVar) items.push({t:'info',insight:`${CATS[topVar.k].name} is je grootste knop`,context:`Iets minder hier scheelt ${euro0(Math.round(topVar.avg*0.15))}/mnd. Kies een goedkoper alternatief.`,label:`Bekijk ${CATS[topVar.k].name}`,fn:`openCategory('${topVar.k}')`});
   // fallback: op koers
   if(!items.length){ const t=totals(curMonth); const saved=t.income-t.spend; const pct=t.income?Math.round(saved/t.income*100):0;
-    items.push({t:'good',insight:'Je zit op koers',context:`Je spaarde ${euro0(Math.max(saved,0))} deze maand. Mooi — hou dit vast.`,label:'Zet je volgende stap',fn:'toggleActDeep()'}); }
+    items.push({t:'good',insight:'Je zit op koers',context:`Je spaarde ${euro0(Math.max(saved,0))} deze maand. Mooi, hou dit vast.`,label:'Zet je volgende stap',fn:'toggleActDeep()'}); }
   return items;
 }
 function coachFocus(){
@@ -2163,7 +2164,7 @@ function actKey(c){
 }
 function actDone(key){ return !!(SET.actDone&&SET.actDone[key]); }
 function markActionDone(key,scale){ SET.actDone=SET.actDone||{}; SET.actDone[key]=true; window._lastActKey=key; save();
-  const fb={dag:'Goed bezig — houd dit vast.',week:'Mooi. Volgende week weer.',maand:'Sterk — dit verandert je maand.'}[scale]||'Goed bezig!';
+  const fb={dag:'Mooi, hou dit vast.',week:'Goed bezig. Volgende week weer.',maand:'Sterk. Dit gaat je maand veranderen.'}[scale]||'Goed bezig.';
   toast(`${ICON('check')} Afgerond · ${fb}`); renderActions(); }
 function undoAction(key){ if(SET.actDone) delete SET.actDone[key]; if(window._lastActKey===key) window._lastActKey=null; save(); renderActions(); }
 // grootste budget-overschrijding deze maand (categorie waar uitgave het meest boven budget ligt)
@@ -2180,7 +2181,7 @@ function actSignal(){
   // 1) grootste budget-overschrijding → concrete, categorie-specifieke bespaartip
   const ov=budgetOverCat(m);
   if(ov){ cands.push({tone: ov.band==='action'?'bad':'warn', scale:'week', catKey:ov.k, over:ov.over, spent:ov.spent, bud:ov.bud,
-    observation:`Je gaf ${euro0(ov.spent)} aan ${ov.name.toLowerCase()} — ${euro0(ov.over)} boven je budget van ${euro0(ov.bud)}.`,
+    observation:`Je gaf ${euro0(ov.spent)} aan ${ov.name.toLowerCase()}. Dat is ${euro0(ov.over)} meer dan je budget van ${euro0(ov.bud)}.`,
     action: savingsTip(m, ov.k) }); }
   // 2) structureel te weinig sparen (maand)
   const items=(typeof coachItems==='function')?(coachItems()||[]):[];
@@ -2238,12 +2239,19 @@ function renderActions(){
   // STAP 1 — opening (data) + betekenis + coachvraag (1-tap chips)
   if(step===0){
     const qa=coachQA(sig);
-    const chips=qa.chips.map(c=>`<button class="coachchip" onclick="coachAnswer('${esc(c)}')">${esc(c)}</button>`).join('');
+    let baseLine='', propLine='', best=null;
+    if(sig.scale==='week'){ const prop=coachProposal(m,sig); best=prop.best;
+      if(prop.lastName) baseLine=`<div class="af-base">Verander je niks, dan sta je eind ${prop.lastName} op ${euro(prop.baseEnd)}.</div>`;
+      if(best) propLine=`<div class="af-prop">Mijn voorstel: <b style="color:var(--txt)">${esc(best.label)}</b>.</div>`;
+    }
+    const chips=qa.chips.map(c=>`<button class="coachchip${best&&c.label===best.label?' rec':''}" onclick="coachAnswer('${esc(c.label)}',${c.cut||0})">${esc(c.label)}</button>`).join('');
     $('#s-act').innerHTML=`<div class="actfocus">
       <div class="coachdots"><i class="on"></i><i></i></div>
       <div class="af-tag">${meta.tag}</div>
       <div class="af-open">${sig.observation}</div>
+      ${baseLine}
       <div class="af-mean">${qa.cause}</div>
+      ${propLine}
       <div class="af-q">${qa.question}</div>
       <div class="coachchips">${chips}</div>
     </div>`;
@@ -2252,13 +2260,24 @@ function renderActions(){
   // STAP 2 — gekozen regel wordt je commitment + follow-up (wanneer kijken we terug)
   const ans=window._coachAnswer||'';
   const fwd={week:'Zondag kijkt je coach of het gelukt is.',maand:'Volgende maand kijken we hoe het ging.'}[sig.scale]||'Je coach komt hierop terug.';
-  const impact = (sig.scale==='week') ? coachForecastLine(m,sig) : '';
+  const impact = (sig.scale==='week' || (sig.scale==='maand'&&sig.tone!=='good')) ? coachForecastLine(m,sig,window._coachCut) : '';
+  // kritische beoordeling: zwak (klein effect) → beter alternatief; kapitaal-zwaar → kanttekening; anders bevestiging
+  let evalHtml='';
+  if(sig.scale==='week'){
+    const prop=coachProposal(m,sig); const cut=window._coachCut||0; const chosen=(prop.rules||[]).find(x=>x.label===ans);
+    if(chosen&&chosen.heavy){ evalHtml=`<div class="af-eval">Dit levert flink op. Het kost je wel in één keer geld. Lukt dat, dan is het een sterke zet.</div>`; }
+    else if(prop.best&&prop.best.cut>0&&cut<prop.best.cut*0.75&&prop.best.label!==ans){
+      evalHtml=`<div class="af-eval">Dit helpt een beetje, maar veel verandert er niet. Met <b style="color:var(--txt)">${esc(prop.best.label)}</b> pak je echt meer.</div>
+      <button class="coachchip rec" style="margin-bottom:16px" onclick="coachAnswer('${esc(prop.best.label)}',${prop.best.cut})">Doe liever dit ›</button>`;
+    } else if(cut>0){ evalHtml=`<div class="af-eval">Goeie keuze. Dit is haalbaar en je gaat het merken in je saldo.</div>`; }
+  }
   const steps = sig.scale==='maand' ? `<div class="af-steps" onclick="toggleActDeep()">${SET.actDeep?'Verberg stappen ▲':'Bekijk je stappen ›'}</div>` : '';
   $('#s-act').innerHTML=`<div class="actfocus">
     <div class="coachdots"><i class="on"></i><i class="on"></i></div>
     <div class="af-tag">${meta.tag} · jouw regel</div>
     <div class="af-action">${esc(ans||sig.action)}</div>
     ${impact?`<div class="af-impact">${impact}</div>`:''}
+    ${evalHtml}
     <div class="af-fwd">${fwd}</div>
     <button class="if-cta" onclick="coachCommit('${sig.key}','${sig.scale}')">${ICON('check')} Dit spreek ik af</button>
     <div class="af-undo" onclick="coachReset()">‹ Andere regel</div>
@@ -2269,26 +2288,45 @@ function renderActions(){
 function coachQA(sig){
   const m=curMonth||months()[months().length-1];
   if(sig.tone==='good') return {cause:'Je hield je deze maand netjes aan je budget.',question:'Wat doe je met de ruimte die je overhoudt?',chips:coachRules(m,sig)};
-  if(sig.scale==='week'){ const cause=sig.catKey?catHypo(m,sig.catKey):'Deze categorie liep over je budget.'; return {cause,question:'Welke regel verbetert je vooruitblik?',chips:coachRules(m,sig)}; }
+  if(sig.scale==='week'){ const cause=sig.catKey?catHypo(m,sig.catKey):'Deze categorie liep over je budget.'; return {cause,question:'Pak je mijn voorstel, of kies je zelf?',chips:coachRules(m,sig)}; }
   return {cause:'Je houdt al een paar maanden te weinig over om te sparen.',question:'Welke stap zet je deze maand?',chips:coachRules(m,sig)};
 }
-// concrete gedragsregels per signaal — kort, direct uitvoerbaar, niet overlappend
+// concrete, gekwantificeerde gedragsregels per signaal — elke regel draagt z'n eigen maand-besparing (cut) voor de forecast
 function coachRules(m,sig){
-  const k=sig.catKey;
+  const k=sig.catKey; const over=Math.round(sig.over||0); const r=(label,cut,heavy)=>({label,cut:Math.max(Math.round(cut||0),0),heavy:!!heavy});
   if(sig.scale==='week' && k){
     const b=(effectiveBudgets(m).out[k]||0); const wk=Math.max(Math.floor((b/4)/5)*5,5);
-    if(k==='uiteten') return ['Max 1× uit eten','Deze week thuis koken',`Max €${wk} deze week`];
-    if(k==='boodschappen') return ['1 grote weekboodschap',`Max €${wk} deze week`,'Geen losse ritjes'];
     if(k==='vervoer'){ const s=vervoerSplit(m);
-      if(s.lease>=s.fuel&&s.lease>=s.park) return ['Leasevoorstel opvragen','Vaker carpoolen','Korte ritten op de fiets'];
-      if(s.park>=s.fuel) return ['P+R i.p.v. centrum','Vooraf parkeren boeken','Korte ritten op de fiets'];
-      return [`Tank max €${wk} deze week`,'Bij onbemand station','Korte ritten op de fiets']; }
-    if(k==='shopping') return ['24 uur wachten','Niks op afbetaling',`Max €${wk} deze week`];
-    if(k==='vices') return [`Max €${wk} contant`,'Niet pinnen','2 dagen overslaan'];
-    return [`Max €${wk} deze week`,'1 vaste dag per week','Geen impulsaankopen'];
+      if(s.lease>0 && s.lease>=s.fuel && s.lease>=s.park){ const L=Math.round(s.lease);
+        return [ r('Lease herfinancieren (€75 p/m lager)',75),
+                 r('Kleiner of korter contract (€120 p/m lager)',120),
+                 r(`Lease afkopen (+€${L} p/m cashflow)`,L,true) ]; }
+      if(s.park>0 && s.park>=s.fuel){ const P=Math.round(s.park);
+        return [ r(`P+R in plaats van centrum (€${Math.round(P*0.5)} p/m lager)`,P*0.5),
+                 r(`Parkeren vooraf boeken (€${Math.round(P*0.3)} p/m lager)`,P*0.3),
+                 r(`Vaker met het OV (€${Math.round(P*0.4)} p/m lager)`,P*0.4) ]; }
+      const F=Math.round(s.fuel); const fw=Math.max(Math.floor((F/4)/5)*5,5);
+      return [ r(`Tank max €${fw} per week (€${Math.round(F*0.2)} p/m lager)`,F*0.2),
+               r(`Onbemand tanken (€${Math.round(F*0.06)} p/m lager)`,F*0.06),
+               r(`Korte ritten op de fiets (€${Math.round(F*0.15)} p/m lager)`,F*0.15) ];
+    }
+    if(k==='uiteten') return [ r('Max 1× uit eten per week',over), r('Deze week thuis koken',over), r(`Max €${wk} per week`,over) ];
+    if(k==='boodschappen') return [ r('1 grote weekboodschap',over), r(`Max €${wk} per week`,over), r('Geen losse ritjes',over) ];
+    if(k==='shopping') return [ r('Eerst 24 uur wachten',over), r('Niks op afbetaling',over), r(`Max €${wk} per week`,over) ];
+    if(k==='vices') return [ r(`Max €${wk} contant per week`,over), r('Niet pinnen',over), r('2 dagen per week overslaan',over) ];
+    return [ r(`Max €${wk} per week`,over), r('1 vaste dag per week',over), r('Geen impulsaankopen',over) ];
   }
-  if(sig.scale==='maand' && sig.tone!=='good') return ['Abonnement opzeggen','Automatisch sparen aanzetten','Een vaste last verlagen'];
-  return ['Naar mijn buffer','Extra aflossen','Laten staan'];
+  if(sig.scale==='maand' && sig.tone!=='good') return [ r('Een abonnement opzeggen (€15 p/m)',15), r('Automatisch €100 per maand sparen',0), r('Een vaste last verlagen (€50 p/m)',50) ];
+  return [ r('Naar mijn buffer',0), r('Extra aflossen',0), r('Laten staan',0) ];
+}
+// coach-voorstel: beste realistische (niet-kapitaal) regel + baseline-eindsaldo om tegen af te zetten
+function coachProposal(m,sig){
+  const rules=coachRules(m,sig);
+  const elig=rules.filter(x=>!x.heavy && x.cut>0).sort((a,b)=>b.cut-a.cut);
+  const best=elig[0]||rules.find(x=>x.cut>0)||rules[0];
+  let baseEnd=0,lastName='';
+  if(typeof forecastMonths==='function'){ const b=forecastMonths(0,[]); if(b&&b.months.length){ baseEnd=b.endBal; lastName=b.months[b.months.length-1].name; } }
+  return {rules,best,baseEnd,lastName};
 }
 // maandelijkse besparing die deze regel oplevert (alleen het beïnvloedbare deel)
 function coachCutEstimate(m,sig){
@@ -2297,18 +2335,18 @@ function coachCutEstimate(m,sig){
   return over;
 }
 // causaal verband coach → vooruitblik: wat doet deze regel met je saldo over de komende maanden?
-function coachForecastLine(m,sig){
+function coachForecastLine(m,sig,cut){
   if(typeof forecastMonths!=='function') return '';
-  const cut=coachCutEstimate(m,sig); if(cut<=0) return '';
+  if(cut==null) cut=coachCutEstimate(m,sig); if(!(cut>0)) return '';
   const base=forecastMonths(0,[]), imp=forecastMonths(cut,[]);
   if(!base||!imp||!imp.months.length) return '';
   const last=imp.months[imp.months.length-1].name; const gain=imp.endBal-base.endBal; if(gain<=0) return '';
   window._coachGain=gain;
-  return `Nu koers je naar ${euro(base.endBal)} in ${last}. Houd je dit vast, dan ${euro(imp.endBal)} — ${euro0(gain)} meer.`;
+  return `Zoals het nu gaat, sta je in ${last} op ${euro(base.endBal)}. Houd je dit vol, dan wordt het ${euro(imp.endBal)}. Dat is ${euro0(gain)} meer.`;
 }
-function coachAnswer(c){ window._coachAnswer=c; window._coachStep=1; renderActions(); }
-function coachReset(){ window._coachStep=0; window._coachAnswer=null; renderActions(); }
-function coachCommit(key,scale){ SET.coachLast={rule:window._coachAnswer||'',gain:Math.round(window._coachGain||0),scale,ts:Date.now()}; window._coachStep=0; window._coachAnswer=null; window._coachGain=0; markActionDone(key,scale); }
+function coachAnswer(c,cut){ window._coachAnswer=c; window._coachCut=+cut||0; window._coachStep=1; renderActions(); }
+function coachReset(){ window._coachStep=0; window._coachAnswer=null; window._coachCut=0; renderActions(); }
+function coachCommit(key,scale){ SET.coachLast={rule:window._coachAnswer||'',gain:Math.round(window._coachGain||0),scale,ts:Date.now()}; window._coachStep=0; window._coachAnswer=null; window._coachCut=0; window._coachGain=0; markActionDone(key,scale); }
 function toggleStep(id){ SET.steps=SET.steps||{}; SET.steps[id]=!SET.steps[id]; save(); renderActions(); if(SET.steps[id]) toast('Stap afgevinkt 👍'); }
 function toggleActDeep(){ SET.actDeep=!SET.actDeep; save(); renderActions(); }
 // streak = aaneengesloten recente dagen (t/m gisteren) met variabele uitgave ≤ dagdoel
