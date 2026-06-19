@@ -1923,21 +1923,33 @@ function toggleFcCut(k){ SET.fcCuts=SET.fcCuts||[]; const i=SET.fcCuts.indexOf(k
 function addFcOne(k){ const p=FC_ONE.find(o=>o.k===k); if(!p) return; SET.fcOne=SET.fcOne||[]; SET.fcOne.push({k:p.k,label:p.label,amt:p.amt,ahead:1}); save(); renderVooruit(); }
 function removeFcOne(i){ if(SET.fcOne){ SET.fcOne.splice(i,1); save(); renderVooruit(); } }
 function resetFc(){ SET.fcCuts=[]; SET.fcOne=[]; save(); renderVooruit(); }
+// één actief inzicht dat de forecast vertaalt naar betekenis (geen kale cijfers)
+function vooruitInsight(scen){
+  const net=scen.monthlyNet, end=scen.endBal, start=scen.startBal;
+  let goal=0,cur=0; try{ const S=savingsModel(); goal=S.goal||0; cur=S.cur||0; }catch(_){}
+  if(end<start) return `Je saldo zakt richting ${euro(end)} — een kleine aanpassing draait dat om.`;
+  if(goal>0 && cur<goal){ const hit=scen.months.find(m=>m.bal>=goal); if(hit) return `Rond ${hit.name} heb je je buffer van ${euro(goal)} bij elkaar.`; }
+  if(net>0) return `Je houdt elke maand zo'n ${euro(net)} over — daar groeit je saldo gestaag mee.`;
+  return `Je saldo blijft de komende maanden ongeveer gelijk.`;
+}
 function vooruitForecast(){
   const varCut=fcVarCut(); const oneoffs=SET.fcOne||[];
   const scen=forecastMonths(varCut, oneoffs); if(!scen) return vooruitHero(); // te weinig historie → val terug op maand-hero
   const base=forecastMonths(0,[]);
-  const last=scen.months[scen.months.length-1]; const lastName=fcCap(last?last.name:'');
+  const last=scen.months[scen.months.length-1]; const lastName=last?last.name:'';
   const col = scen.endBal<scen.startBal?'var(--amber)':'var(--teal)';
   const diff = scen.endBal - base.endBal; const hasScn = varCut>0 || oneoffs.length>0;
+  const insight=vooruitInsight(scen);
+  const fb = !hasScn
+    ? `<div class="vh-sub">Tik hieronder een keuze aan en zie direct wat het met je toekomst doet.</div>`
+    : `<div class="fc-diff" style="color:${diff>=0?'var(--teal)':'var(--amber)'}">${diff>=0?`Mooi — zo houd je ${euro0(diff)} extra over tot ${lastName}.`:`Zo kom je ${euro0(-diff)} lager uit${scen.endBal>=0?', maar je blijft positief':''}.`}</div>`;
   const hero=`<div class="vooruit">
-    <div class="vh-lbl">Als je zo doorgaat</div>
+    <div class="vh-lbl">Als je niks verandert, sta je eind ${lastName} op</div>
     <div class="vh-big" style="color:${col}">${euro(scen.endBal)}</div>
-    <div class="vh-status">Verwacht saldo eind ${lastName} · nu ${euro(scen.L.sum)}</div>
-    <div class="vh-sub">${euro(scen.monthlyNet)}/mnd over na vaste & variabele lasten</div>
-    ${hasScn?`<div class="fc-diff" style="color:${diff>=0?'var(--teal)':'var(--amber)'}">Met je keuzes ${diff>=0?'+':''}${euro0(diff)} t.o.v. je huidige koers</div>`:''}
+    <div class="vh-status">${insight}</div>
+    ${fb}
   </div>`;
-  const timeline=`<div class="card"><div class="hlabel" style="margin:0 0 6px">Komende maanden</div>
+  const timeline=`<div class="card"><div class="hlabel" style="margin:0 0 6px">Waar je saldo heen beweegt</div>
     ${scen.months.map(mo=>{ const chg=mo.net-mo.one; return `<div class="fc-mo">
       <div><div class="fc-mo-n">${fcCap(mo.name)}</div>${mo.one?`<div class="fc-mo-tag">−${euro0(mo.one)} eenmalig</div>`:''}</div>
       <div><div class="fc-mo-bal">${euro0(mo.bal)}</div><div class="fc-mo-net" style="color:${chg>=0?'var(--teal)':'var(--amber)'}">${chg>=0?'+':''}${euro0(chg)}</div></div>
@@ -1947,9 +1959,9 @@ function vooruitForecast(){
   const oneChips=FC_ONE.map(o=>`<button class="fc-chip" onclick="addFcOne('${o.k}')">+ ${o.label} ${euro0(o.amt)}</button>`).join('');
   const activeOne=oneoffs.length?`<div style="margin-top:8px">${oneoffs.map((o,i)=>`<div class="fc-one"><span>${esc(o.label)} · ${fcCap(fcMonthName(o.ahead))} · ${euro0(o.amt)}</span><span class="x" onclick="removeFcOne(${i})">✕</span></div>`).join('')}</div>`:'';
   const controls=`<div class="card">
-    <div class="hlabel" style="margin:0 0 8px">Minder variabel uitgeven</div>
+    <div class="hlabel" style="margin:0 0 8px">Wat als je minder uitgeeft?</div>
     <div class="fc-chips">${cutChips}</div>
-    <div class="hlabel" style="margin:16px 0 8px">Eenmalige kosten erbij</div>
+    <div class="hlabel" style="margin:16px 0 8px">Reken een grote uitgave in</div>
     <div class="fc-chips">${oneChips}</div>${activeOne}
     ${hasScn?`<button class="snz" onclick="resetFc()">Scenario wissen ✕</button>`:''}</div>`;
   return hero + timeline + controls;
