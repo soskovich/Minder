@@ -137,6 +137,7 @@ h1,h2,h3{margin:0}
 .actfocus .af-mean{font-size:14px;color:var(--mut);line-height:1.5;margin:0 0 20px;max-width:320px}
 .actfocus .af-q{font-size:17px;font-weight:600;line-height:1.4;margin-bottom:15px;max-width:320px}
 .actfocus .af-fwd{font-size:13px;color:var(--teal);margin:-12px 0 20px;max-width:320px}
+.actfocus .af-impact{font-size:13.5px;color:var(--txt);background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.18);border-radius:12px;padding:11px 13px;margin:0 0 18px;line-height:1.45;max-width:320px}
 .coachchips{display:flex;flex-wrap:wrap;gap:9px}
 .coachchip{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:21px;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;transition:background .15s,border-color .15s}
 .coachchip:active{background:var(--teal);color:#06231c;border-color:var(--teal)}
@@ -2178,7 +2179,7 @@ function actSignal(){
   const cands=[]; const m=curMonth||months()[months().length-1];
   // 1) grootste budget-overschrijding → concrete, categorie-specifieke bespaartip
   const ov=budgetOverCat(m);
-  if(ov){ cands.push({tone: ov.band==='action'?'bad':'warn', scale:'week', catKey:ov.k,
+  if(ov){ cands.push({tone: ov.band==='action'?'bad':'warn', scale:'week', catKey:ov.k, over:ov.over, spent:ov.spent, bud:ov.bud,
     observation:`Je gaf ${euro0(ov.spent)} aan ${ov.name.toLowerCase()} — ${euro0(ov.over)} boven je budget van ${euro0(ov.bud)}.`,
     action: savingsTip(m, ov.k) }); }
   // 2) structureel te weinig sparen (maand)
@@ -2219,10 +2220,15 @@ function renderActions(){
   if(!isNow){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Je actieplan geldt voor de lopende maand. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar nu ›</span></div></div>'; return; }
   const sig = actSignal();
   if(sig.done){
+    const cl=SET.coachLast||null;
+    const when = cl&&cl.scale==='week' ? 'Zondag checken we het opnieuw.' : (cl?'Volgende maand checken we het opnieuw.':'');
+    const acc = cl&&cl.rule
+      ? `<div class="af-action">Je afspraak: ${esc(cl.rule)}.</div>${cl.gain>0?`<div class="af-impact">Dat verbetert je vooruitblik met ${euro0(cl.gain)}.</div>`:''}${when?`<div class="af-fwd">${when}</div>`:''}`
+      : `<div class="af-action">Je stap staat. Morgen pakken we het weer op.</div>`;
     $('#s-act').innerHTML=`<div class="actfocus">
       <div class="af-ic" style="color:var(--green)">${ICON('check')}</div>
-      <div class="af-tag">Klaar</div>
-      <div class="af-action">Je stap staat. Morgen pakken we het weer op.</div>
+      <div class="af-tag">Afgesproken</div>
+      ${acc}
       ${window._lastActKey?`<div class="af-undo" onclick="undoAction('${window._lastActKey}')">Toch niet gedaan?</div>`:''}
     </div>`;
     return;
@@ -2246,11 +2252,13 @@ function renderActions(){
   // STAP 2 — gekozen regel wordt je commitment + follow-up (wanneer kijken we terug)
   const ans=window._coachAnswer||'';
   const fwd={week:'Zondag kijkt je coach of het gelukt is.',maand:'Volgende maand kijken we hoe het ging.'}[sig.scale]||'Je coach komt hierop terug.';
+  const impact = (sig.scale==='week') ? coachForecastLine(m,sig) : '';
   const steps = sig.scale==='maand' ? `<div class="af-steps" onclick="toggleActDeep()">${SET.actDeep?'Verberg stappen ▲':'Bekijk je stappen ›'}</div>` : '';
   $('#s-act').innerHTML=`<div class="actfocus">
     <div class="coachdots"><i class="on"></i><i class="on"></i></div>
     <div class="af-tag">${meta.tag} · jouw regel</div>
     <div class="af-action">${esc(ans||sig.action)}</div>
+    ${impact?`<div class="af-impact">${impact}</div>`:''}
     <div class="af-fwd">${fwd}</div>
     <button class="if-cta" onclick="coachCommit('${sig.key}','${sig.scale}')">${ICON('check')} Dit spreek ik af</button>
     <div class="af-undo" onclick="coachReset()">‹ Andere regel</div>
@@ -2261,7 +2269,7 @@ function renderActions(){
 function coachQA(sig){
   const m=curMonth||months()[months().length-1];
   if(sig.tone==='good') return {cause:'Je hield je deze maand netjes aan je budget.',question:'Wat doe je met de ruimte die je overhoudt?',chips:coachRules(m,sig)};
-  if(sig.scale==='week'){ const cause=sig.catKey?catHypo(m,sig.catKey):'Deze categorie liep over je budget.'; return {cause,question:'Welke regel pak je deze week?',chips:coachRules(m,sig)}; }
+  if(sig.scale==='week'){ const cause=sig.catKey?catHypo(m,sig.catKey):'Deze categorie liep over je budget.'; return {cause,question:'Welke regel verbetert je vooruitblik?',chips:coachRules(m,sig)}; }
   return {cause:'Je houdt al een paar maanden te weinig over om te sparen.',question:'Welke stap zet je deze maand?',chips:coachRules(m,sig)};
 }
 // concrete gedragsregels per signaal — kort, direct uitvoerbaar, niet overlappend
@@ -2282,9 +2290,25 @@ function coachRules(m,sig){
   if(sig.scale==='maand' && sig.tone!=='good') return ['Abonnement opzeggen','Automatisch sparen aanzetten','Een vaste last verlagen'];
   return ['Naar mijn buffer','Extra aflossen','Laten staan'];
 }
+// maandelijkse besparing die deze regel oplevert (alleen het beïnvloedbare deel)
+function coachCutEstimate(m,sig){
+  const over=Math.round(sig.over||0); if(over<=0) return 0;
+  if(sig.catKey==='vervoer'){ const s=vervoerSplit(m); return Math.round(Math.min(over, s.fuel+s.park+s.ov)); } // lease is niet beïnvloedbaar
+  return over;
+}
+// causaal verband coach → vooruitblik: wat doet deze regel met je saldo over de komende maanden?
+function coachForecastLine(m,sig){
+  if(typeof forecastMonths!=='function') return '';
+  const cut=coachCutEstimate(m,sig); if(cut<=0) return '';
+  const base=forecastMonths(0,[]), imp=forecastMonths(cut,[]);
+  if(!base||!imp||!imp.months.length) return '';
+  const last=imp.months[imp.months.length-1].name; const gain=imp.endBal-base.endBal; if(gain<=0) return '';
+  window._coachGain=gain;
+  return `Nu koers je naar ${euro(base.endBal)} in ${last}. Houd je dit vast, dan ${euro(imp.endBal)} — ${euro0(gain)} meer.`;
+}
 function coachAnswer(c){ window._coachAnswer=c; window._coachStep=1; renderActions(); }
 function coachReset(){ window._coachStep=0; window._coachAnswer=null; renderActions(); }
-function coachCommit(key,scale){ window._coachStep=0; window._coachAnswer=null; markActionDone(key,scale); }
+function coachCommit(key,scale){ SET.coachLast={rule:window._coachAnswer||'',gain:Math.round(window._coachGain||0),scale,ts:Date.now()}; window._coachStep=0; window._coachAnswer=null; window._coachGain=0; markActionDone(key,scale); }
 function toggleStep(id){ SET.steps=SET.steps||{}; SET.steps[id]=!SET.steps[id]; save(); renderActions(); if(SET.steps[id]) toast('Stap afgevinkt 👍'); }
 function toggleActDeep(){ SET.actDeep=!SET.actDeep; save(); renderActions(); }
 // streak = aaneengesloten recente dagen (t/m gisteren) met variabele uitgave ≤ dagdoel
