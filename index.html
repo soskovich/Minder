@@ -90,6 +90,13 @@ h1,h2,h3{margin:0}
 .fc-mo-bal{font-size:15px;font-weight:800;text-align:right}
 .fc-mo-net{font-size:12px;font-weight:600;text-align:right;margin-top:2px}
 .fc-savings{font-size:12.5px;color:var(--mut);margin-bottom:10px}
+.vc-leg{display:flex;gap:16px;font-size:11px;color:var(--mut);margin-top:4px}
+.vc-leg i{width:14px;height:2px;background:var(--teal);display:inline-block;vertical-align:middle;margin-right:5px}
+.vc-leg i.dash{background:transparent;border-top:2px dashed var(--mut);height:0}
+.vc-card{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(45,212,191,.06);border:1px solid rgba(45,212,191,.16);border-radius:12px;padding:11px 13px;margin-top:10px}
+.vc-mon{font-size:11px;color:var(--mut);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.vc-plan{font-size:12px;color:var(--mut);margin-top:2px;overflow:hidden;text-overflow:ellipsis}
+.vc-bal{font-size:20px;font-weight:800;letter-spacing:-.4px;flex-shrink:0}
 .fc-chips{display:flex;flex-wrap:wrap;gap:8px}
 .fc-chip{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:20px;padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s,border-color .15s}
 .fc-chip.on{background:var(--teal);color:#06231c;border-color:var(--teal)}
@@ -1174,7 +1181,7 @@ function forecastModel(){
   const last=agg.slice(-3); const avg=k=>last.reduce((s,a)=>s+a[k],0)/last.length;
   const vSlope=regSlope(agg.map(a=>a.vari)), sSlope=regSlope(agg.map(a=>a.spend));
   const fInc=baseIncome()||avg('income'), fFixed=avg('fixed'), fVar=Math.max(avg('vari')+vSlope,0);
-  return {agg, fInc, fFixed, fVar, fNet:fInc-fFixed-fVar, vSlope, sSlope, next:nextMonths(ms[ms.length-1],6)};
+  return {agg, fInc, fFixed, fVar, fNet:fInc-fFixed-fVar, vSlope, sSlope, next:nextMonths(ms[ms.length-1],13)};
 }
 // ===== SALDO & LIQUIDITEIT =====
 function accBalance(acc){ const mb=(SET.manualBal||{})[acc]; if(mb!=null && mb!=='') return +mb; const a=ACCMETA[acc]; return a&&a.balance!=null?a.balance:null; }
@@ -1976,13 +1983,14 @@ const FC_ONE=[{k:'vakantie',label:'Vakantie',amt:600},{k:'tandarts',label:'Tanda
 function fcVarCut(){ const a=SET.fcCuts||[]; return FC_CUTS.filter(c=>a.includes(c.k)).reduce((s,c)=>s+c.amt,0); }
 function fcCap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
 function fcMonthName(ahead){ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()+(+ahead||0)); return MFULL[d.getMonth()]; }
-// projecteer 5 maanden vooruit vanaf het verwachte eindsaldo van deze maand
+// projecteer de resterende maanden van dit jaar vanaf het verwachte eindsaldo van deze maand
 function forecastMonths(varCut, oneoffs){
-  const fm=forecastModel(); if(!fm) return null;
+  const fm=forecastModel(); if(!fm || !fm.next.length) return null;
   const L=monthLiquidity();
   const monthlyNet=Math.round(fm.fInc - fm.fFixed - Math.max(fm.fVar-(+varCut||0),0));
+  const y0=fm.next[0].y; const horizon=Math.max(fm.next.filter(n=>n.y===y0).length,1); // t/m december van het lopende forecast-jaar
   let bal=Math.round(L.projected); const out=[];
-  fm.next.slice(0,5).forEach((nm,i)=>{ const ahead=i+1;
+  fm.next.slice(0,horizon).forEach((nm,i)=>{ const ahead=i+1;
     const one=(oneoffs||[]).filter(o=>+o.ahead===ahead).reduce((s,o)=>s+(+o.amt||0),0);
     bal=bal+monthlyNet-one;
     out.push({name:nm.full.split(' ')[0], ahead, net:monthlyNet, one, bal:Math.round(bal)});
@@ -1996,7 +2004,7 @@ function addFcOneCustom(){
   const cs=document.getElementById('fcOneCat'), ms=document.getElementById('fcOneMon'), as=document.getElementById('fcOneAmt');
   const k=cs?cs.value:''; const ahead=ms?(+ms.value||1):1; const a=as?Math.round(+as.value||0):0;
   if(a<=0){ toast('Vul eerst een bedrag in'); return; }
-  SET.fcOne=SET.fcOne||[]; SET.fcOne.push({k,label:CATS[k]?CATS[k].name:'Grote uitgave',amt:a,ahead}); save(); renderVooruit();
+  SET.fcOne=SET.fcOne||[]; SET.fcOne.push({k,label:CATS[k]?CATS[k].name:'Grote uitgave',amt:a,ahead}); window._vSel=ahead-1; save(); renderVooruit();
 }
 function removeFcOne(i){ if(SET.fcOne){ SET.fcOne.splice(i,1); save(); renderVooruit(); } }
 function resetFc(){ SET.fcCuts=[]; SET.fcOne=[]; save(); renderVooruit(); }
@@ -2008,6 +2016,35 @@ function vooruitInsight(scen){
   if(goal>0 && cur<goal){ const hit=scen.months.find(m=>m.bal>=goal); if(hit) return `Rond ${hit.name} heb je je buffer van ${euro(goal)} bij elkaar.`; }
   if(net>0) return `Je houdt elke maand zo'n ${euro(net)} over. Daar groeit je saldo gestaag mee.`;
   return `Je saldo blijft de komende maanden ongeveer gelijk.`;
+}
+function vSelMonth(i){ window._vSel=+i; renderVooruit(); }
+// area-curve (held) + oude-koers-spooklijn + aantikbare maanden
+function vooruitChart(base,scen,sel){
+  const bvals=base.months.map(x=>x.bal), avals=scen.months.map(x=>x.bal), n=avals.length;
+  const has=scen.months.some(m=>m.one>0);
+  const all=bvals.concat(avals); let lo=Math.min(...all), hi=Math.max(...all); const pad=(hi-lo)*0.18||150; lo-=pad; hi+=pad;
+  const W=300,H=150,LX=22,RX=W-12,bot=H-26;
+  const X=i=>LX+i*((RX-LX)/Math.max(n-1,1)), Y=v=>14+(1-(v-lo)/(hi-lo||1))*(bot-14);
+  const pl=a=>a.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
+  const area=`M${X(0).toFixed(1)},${Y(avals[0]).toFixed(1)} `+avals.map((v,i)=>'L'+X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')+` L${X(n-1).toFixed(1)},${bot} L${X(0).toFixed(1)},${bot} Z`;
+  let dots='';
+  for(let i=0;i<n;i++){ const ph=scen.months[i].one>0, r=i===sel?5.5:4;
+    const fill=ph?'#f0a675':(i===sel?'#2dd4bf':'#0c1322'), stroke=i===sel?'#2dd4bf':(ph?'#f0a675':'#56627d');
+    dots+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(avals[i]).toFixed(1)}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${i===sel?2.5:1.5}"/>`;
+    dots+=`<rect x="${(X(i)-22).toFixed(1)}" y="6" width="44" height="${bot}" fill="transparent" style="cursor:pointer" onclick="vSelMonth(${i})"/>`;
+  }
+  const labels=scen.months.map((mo,i)=>`<text x="${X(i).toFixed(1)}" y="${H-8}" fill="${i===sel?'#e8edf5':'#8a97ab'}" font-size="11" text-anchor="middle">${mo.name.slice(0,3)}</text>`).join('');
+  const ghost=has?`<polyline points="${pl(bvals)}" fill="none" stroke="#56627d" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.7"/>`:'';
+  const indic=`<line x1="${X(sel).toFixed(1)}" y1="10" x2="${X(sel).toFixed(1)}" y2="${bot}" stroke="rgba(255,255,255,.16)" stroke-width="1" stroke-dasharray="3 3"/>`;
+  const leg=has?`<div class="vc-leg"><span><i></i>met plan</span><span><i class="dash"></i>oude koers</span></div>`:'';
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Saldo-curve, tik een maand om te inspecteren">
+    <path d="${area}" fill="rgba(45,212,191,.13)"/>${ghost}${indic}<polyline points="${pl(avals)}" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>${dots}${labels}</svg>${leg}`;
+}
+function vooruitMonthCard(scen,oneoffs,sel){
+  const mo=scen.months[sel]; if(!mo) return '';
+  const ps=(oneoffs||[]).filter(o=>+o.ahead===sel+1);
+  const planTxt=ps.length?ps.map(o=>`<span style="color:var(--amber)">+ ${esc(o.label)} ${euro0(o.amt)}</span>`).join(' · '):'tik een maand om te inspecteren';
+  return `<div class="vc-card"><div style="min-width:0"><div class="vc-mon">${fcCap(mo.name)}</div><div class="vc-plan">${planTxt}</div></div><div class="vc-bal">${euro0(mo.bal)}</div></div>`;
 }
 function vooruitForecast(){
   const varCut=0; const oneoffs=SET.fcOne||[]; // gedrag-scenario's leven nu in de Coach, niet als losse chips hier
@@ -2027,13 +2064,13 @@ function vooruitForecast(){
     <div class="vh-status">${insight}</div>
     ${fb}
   </div>`;
+  const n=scen.months.length; let sel=window._vSel; if(sel==null||sel<0||sel>=n) sel=n-1;
   const saveLine = scen.monthlyNet>=0 ? `Je houdt elke maand ${euro(scen.monthlyNet)} over` : `Je komt elke maand ${euro(-scen.monthlyNet)} tekort`;
-  const timeline=`<div class="card"><div class="hlabel" style="margin:0 0 4px">Waar je saldo heen beweegt</div>
-    <div class="fc-savings">${saveLine}.</div>
-    ${scen.months.map(mo=>`<div class="fc-mo">
-      <div><div class="fc-mo-n">${fcCap(mo.name)}</div>${mo.one?`<div class="fc-mo-tag">−${euro0(mo.one)} eenmalig</div>`:''}</div>
-      <div class="fc-mo-bal">${euro0(mo.bal)}</div>
-    </div>`).join('')}</div>`;
+  const timeline=`<div class="card" style="padding:14px 12px">
+    <div class="hlabel" style="margin:0 0 2px">Waar je saldo heen beweegt</div>
+    <div class="fc-savings" style="margin-bottom:2px">${saveLine}.</div>
+    ${vooruitChart(base,scen,sel)}
+    ${vooruitMonthCard(scen,oneoffs,sel)}</div>`;
   const catOpts=Object.keys(CATS).filter(k=>CATS[k].type==='expense').map(k=>`<option value="${k}">${CATS[k].name}</option>`).join('');
   const monOpts=scen.months.map((mo,i)=>`<option value="${i+1}">${fcCap(mo.name)}</option>`).join('');
   const activeOne=oneoffs.length?`<div style="margin-top:12px">${oneoffs.map((o,i)=>`<div class="fc-one"><span>${esc(o.label)} · ${fcCap(fcMonthName(o.ahead))} · ${euro0(o.amt)}</span><span class="x" onclick="removeFcOne(${i})">✕</span></div>`).join('')}</div>`:'';
