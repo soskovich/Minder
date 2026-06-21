@@ -2326,56 +2326,80 @@ function coachOpening(){
   const nm=(SET.name||'').trim().split(/\s+/)[0];
   const greet=nm?`Hey ${esc(nm)},`:'Hey,';
   const bud=Math.round(t.budget), spent=Math.round(t.spend);
-  // constatering: hoe dicht bij het budgetdoel + dagen resterend
-  let cons, consWarn=false;
+  // 2) constatering: waar sta je nu t.o.v. je budgetdoel + dagen resterend (feitelijk, toon zit in de vooruitblik)
+  let cons;
   if(bud<=0){
-    cons=`ik zie nog geen inkomen, dus je budgetdoel kan ik niet berekenen. Stel je inkomen in bij Instellingen, dan coach ik je gericht.`;
+    cons=`ik zie nog geen inkomen, dus je budgetdoel kan ik nog niet berekenen. Stel je inkomen in bij Instellingen, dan coach ik je gericht.`;
   } else {
-    const pct=Math.round(spent/bud*100);
-    if(spent<=bud){ cons=`je gaf deze maand ${euro0(spent)} van je budget van ${euro0(bud)} uit — dat is ${pct}%. Je hebt nog ${euro0(bud-spent)} en ${L.daysLeft} dagen te gaan.`; }
-    else { cons=`je zit al ${euro0(spent-bud)} boven je budget van ${euro0(bud)} (${pct}%), met nog ${L.daysLeft} dagen te gaan.`; consWarn=true; }
+    cons=`ik zie dat je op ${euro0(spent)} van je ${euro0(bud)}-budget zit, met nog ${L.daysLeft} dagen te gaan deze maand.`;
   }
-  // eerlijke vooruitblik op basis van de aankomende vaste lasten
+  // 3) eerlijke vooruitblik — toon past zich aan de situatie aan: ruimte (nuchter) / op koers (fragiel) / over (eerlijk, niet straffen)
   let outlook='', outWarn=false;
   if(bud>0){
-    const projSpend=spent+L.fixDue+L.varDue; const overBy=projSpend-bud;
-    if(L.fixDue>0||L.varDue>0){
-      if(overBy>0){ outlook=`Reken ik je vaste lasten die nog moeten (${euro0(L.fixDue)})${L.varDue>0?` en je gebruikelijke variabele uitgaven (${euro0(L.varDue)})`:''} mee, dan kom je naar verwachting ${euro0(overBy)} boven budget uit. Eerlijk: zo loopt deze maand uit de pas.`; outWarn=true; }
-      else { outlook=`Tel ik je nog te betalen vaste lasten (${euro0(L.fixDue)}) erbij, dan blijf je binnen budget — met zo'n ${euro0(-overBy)} ruimte. Hou dat vast.`; }
-    } else if(overBy<=0){ outlook=`Er staan geen vaste lasten meer open deze maand. Je blijft binnen budget met ${euro0(-overBy)} ruimte.`; }
+    const projSpend=spent+L.fixDue+L.varDue;
+    const overBy=Math.round(projSpend-bud);
+    const room=Math.round(bud-projSpend);
+    const items=(L.fixDueItems||[]).slice().sort((a,b)=>b.amount-a.amount);
+    const names=items.slice(0,2).map(x=>{const nx=titleCase(cleanMerch(x.name)||''); return nx||(CATS[x.cat]?CATS[x.cat].name:'');}).filter(Boolean);
+    const naming = names.length? `je ${names.join(' en ')} ${names.length>1?'moeten':'moet'} nog van je rekening` : `je vaste lasten moeten nog van je rekening`;
+    if(overBy>0 || spent>bud){
+      // SITUATIE 3 — (gaat) fors over budget: eerlijk over de ernst, niet straffen
+      outWarn=true;
+      const lead = spent>bud
+        ? `je zit op ${euro0(spent)} van je ${euro0(bud)}-budget en je bent er deze maand overheen`
+        : `${naming}, en daarmee ga je deze maand zo'n ${euro0(overBy)} over je budget`;
+      outlook=`Ik ga niet om de hete brij heen: ${lead}. Geen ramp, wél een signaal — hieronder zie je precies waar het lekt en wat de stap is.`;
+    } else if(projSpend >= bud*0.8){
+      // SITUATIE 2 — precies op koers: benoem dat 'op koers' fragiel is en bewaak het
+      outlook=`Je loopt op schema.${L.fixDue<=0?` Je vaste lasten zijn deze maand al binnen, dus de ruimte die je ziet is echt.`:``} Maar eerlijk: "op koers" verlies je het makkelijkst, want het voelt veilig. Eén impulsaankoop en je kantelt. Hou vast aan je regel — geen budget, geen aankoop — dan eindig je mét marge in plaats van op de rand.`;
+    } else {
+      // SITUATIE 1 — ruim binnen budget: nuchter blijven, richten op de volgende bestemming (geen schouderklopje)
+      outlook=`Je houdt naar verwachting zo'n ${euro0(room)} over, en dat is geen toeval. De vraag is nu niet óf je iets leuks mag doen met dat geld, maar waar je het een bestemming geeft. Schuif het naar je spaardoel vóór het vanzelf opgaat — geld zonder bestemming verdwijnt, ook als je het goed deed.`;
+    }
   }
-  const lines=`<div class="cg-line${consWarn?' warn':''}">${cons}</div>${outlook?`<div class="cg-line${outWarn?' warn':''}">${outlook}</div>`:''}`;
+  const lines=`<div class="cg-line">${cons}</div>${outlook?`<div class="cg-line${outWarn?' warn':''}">${outlook}</div>`:''}`;
   return `<div class="coachgreet"><div class="cg-hi">${greet}</div>${lines}</div>`+coachSandwich(m)+coachDiscipline(m);
 }
-// feedback volgens het sandwich-model: goed → risico mitigeren/herhaling voorkomen → perspectief
+// feedback — sandwich: 1) wat ging goed (concreet) → 2) de kern: risico + concrete actie → 3) perspectief (richting, geen waarschuwing)
 function coachSandwich(m){
   let EB={}, act={}; try{ EB=effectiveBudgets(m).out; act=catSpendMap(m); }catch(_){}
+  let S=null; try{ S=savingsModel(); }catch(_){}
+  // 1) wat ging goed — een categorie die je strak onder controle hield
   let good=null;
   for(const k in EB){ const b=+EB[k]; if(b>0){ const a=act[k]||0; if(a>0 && a<=b*0.9){ if(!good||b>good.b) good={k,b,a}; } } }
-  const ov=(typeof budgetOverCat==='function')?budgetOverCat(m):null;
-  let S=null; try{ S=savingsModel(); }catch(_){}
   const goodTxt=good
-    ? `Je hield <b>${CATS[good.k].name.toLowerCase()}</b> netjes binnen budget (${euro0(good.a)} van ${euro0(good.b)}). Dat laat zien dat je het kúnt sturen.`
-    : `Je kijkt naar je geld in plaats van weg — dat is precies de stap die de meeste mensen overslaan.`;
-  const riskTxt=ov
-    ? `<b>${CATS[ov.k].name}</b> liep ${euro0(ov.over)} over budget. Zet voor volgende maand een vast bedrag voor deze categorie en stop zodra het op is — zo voorkom je dezelfde uitschieter.`
-    : `Er liep deze maand niets noemenswaardig over budget. Hou je vaste lasten scherp zodat dat zo blijft.`;
+    ? `Je hield <b>${CATS[good.k].name.toLowerCase()}</b> strak onder controle (${euro0(good.a)} van ${euro0(good.b)}). Daar zat geen impuls in — zo hoort het.`
+    : `Je kijkt naar je geld in plaats van weg. Dat klinkt klein, maar het is precies de gewoonte waar grip begint.`;
+  // 2) de kern — de grootste impuls: grootste losse, niet-vaste uitgave deze maand
+  let imp=null;
+  try{ for(const x of txOfMonth(m)){ const c=CATS[catOf(x)]; if(x.amount<0 && c && c.type==='expense' && !isFixed(x)){ const amt=-x.amount; if(!imp||amt>imp.amt) imp={amt,name:titleCase(cleanMerch(x.name)||x.name||'een aankoop'),k:catOf(x)}; } } }catch(_){}
+  const ov=(typeof budgetOverCat==='function')?budgetOverCat(m):null;
+  let riskTxt;
+  if(imp && imp.amt>=25){
+    const potje=CATS[imp.k]?CATS[imp.k].name.toLowerCase():'die categorie';
+    riskTxt=`Die ${euro0(imp.amt)} bij <b>${esc(imp.name)}</b> zat in geen enkel budget — die kwam uit het niets. De stap voor volgende maand is simpel maar streng: geen budget, geen aankoop. Reserveer vooraf een '${potje}'-potje, en als het op is, is het op.`;
+  } else if(ov){
+    riskTxt=`<b>${CATS[ov.k].name}</b> liep ${euro0(ov.over)} over budget. Geef deze categorie vóór de maand een vast bedrag en stop zodra dat op is — dan verrast hij je niet opnieuw.`;
+  } else {
+    riskTxt=`Er liep deze maand niets uit de hand. Hou het zo: geef elke euro vooraf een bestemming, dan blijft het rustig.`;
+  }
+  // 3) perspectief — richting, niet waarschuwing
   const persTxt=(S&&S.goal>0&&S.toGo>0&&S.monthlySaving>0)
-    ? `Blijf je binnen je grens, dan groeit je buffer richting ${euro0(S.goal)} — nog zo'n ${Math.round(S.monthsLeft)} maanden. Elke maand die je vasthoudt telt.`
-    : `Elke maand die je binnen je grens blijft, brengt je dichter bij je spaardoel. Daar draait het om.`;
+    ? `Hou je dit vol, dan is dit de laatste maand dat je lasten je verrassen — en groeit je buffer richting ${euro0(S.goal)}. Dan werk jíj met je geld, niet andersom.`
+    : `Hou je dit vol, dan is dit de laatste maand dat je lasten je verrassen. Daarna werk jíj met je geld, niet andersom.`;
   const dot=c=>`<span class="cs-dot" style="background:${c}"></span>`;
   return `<div class="cg-sand">
     <div class="cs-row">${dot('var(--teal)')}<div class="cs-t"><span class="cs-lbl">Wat ging goed</span>${goodTxt}</div></div>
-    <div class="cs-row">${dot('var(--amber)')}<div class="cs-t"><span class="cs-lbl">Waar het schuurt — en hoe je het keert</span>${riskTxt}</div></div>
+    <div class="cs-row">${dot('var(--amber)')}<div class="cs-t"><span class="cs-lbl">Waar het misging — en de stap</span>${riskTxt}</div></div>
     <div class="cs-row">${dot('var(--teal)')}<div class="cs-t"><span class="cs-lbl">Vooruit</span>${persTxt}</div></div>
   </div>`;
 }
-// besparingstips die discipline aanleren — geen impulsaankopen, geld krijgt altijd een bestemming
+// discipline — kernprincipe: geen impuls, elke euro een bestemming, geen budget = geen aankoop
 function coachDiscipline(m){
   const rules=[
-    `<b>Geen budget = geen aankoop.</b> Heeft iets geen plek in je budget? Dan koop je het niet — niet deze maand.`,
-    `Elke euro krijgt vooraf een bestemming: leven, vaste lasten of sparen. Geld zonder doel verdwijnt vanzelf.`,
-    `Twijfel je bij een aankoop? Slaap er een nacht over. Een impuls is geen bestemming.`
+    `<b>Geen budget = geen aankoop.</b> De harde regel. Heeft iets geen vooraf bepaalde plek? Dan koop je het niet.`,
+    `Elke euro krijgt éérst een bestemming — leven, vaste lasten of sparen — en gaat dán pas weg.`,
+    `Wen jezelf één vraag aan vóór elke aankoop: "is hier een budget voor?" Geen ja, geen aankoop.`
   ];
   return `<div class="cg-disc"><div class="cd-h">${ICON('target')} Discipline boven impuls</div>${rules.map(r=>`<div class="cd-rule">${r}</div>`).join('')}</div>`;
 }
