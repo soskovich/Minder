@@ -2081,15 +2081,20 @@ function savingsForecast(){
 }
 function vooruitForecast(){
   const F=savingsForecast();
-  const projEnd=F.endBal, goal=F.goal, curSave=F.curSave;
+  const goal=F.goal, curSave=F.curSave;
+  const n=F.months.length;
+  // hero volgt de gekozen maand in de grafiek (vSelMonth); standaard = laatste maand (december)
+  let sel=window._vSel; if(sel==null||sel<0||sel>=n) sel=n-1;
+  const selBal = n? F.months[sel].bal : curSave;
+  const selName = n? F.months[sel].name : F.lastName;
   let hero;
   if(goal>0){
-    const reaches=projEnd>=goal;
+    const reaches=selBal>=goal;
     const gcol=reaches?'var(--teal)':'var(--amber)';
     hero=`<div class="vooruit">
-      <div class="vh-lbl">Je spaardoel eind ${F.lastName}</div>
-      <div class="vh-big" style="color:${gcol}">${euro(projEnd)}</div>
-      <div class="vh-status">${reaches?`Je haalt je spaardoel van ${euro0(goal)}.`:`Nog ${euro0(goal-projEnd)} te gaan tot je doel van ${euro0(goal)}.`}</div>
+      <div class="vh-lbl">Je spaardoel eind ${selName}</div>
+      <div class="vh-big" style="color:${gcol}">${euro(selBal)}</div>
+      <div class="vh-status">${reaches?`Je haalt je spaardoel van ${euro0(goal)}.`:`Nog ${euro0(goal-selBal)} te gaan tot je doel van ${euro0(goal)}.`}</div>
       <div class="vh-sub">Nu ${euro0(curSave)}${F.monthly>0?` · je legt ${euro0(F.monthly)}/mnd in`:''}</div>
     </div>`;
   } else {
@@ -2102,9 +2107,8 @@ function vooruitForecast(){
   }
   // tijdlijn = groei van de spaarpot (zelfde cashflow als de hero), niet het totale banksaldo
   let timeline='';
-  if(F.months.length>=2 && F.monthly>0){
+  if(n>=2 && F.monthly>0){
     const scen={months:F.months, monthlyNet:F.monthly, startBal:F.curSave, endBal:F.endBal};
-    const n=F.months.length; let sel=window._vSel; if(sel==null||sel<0||sel>=n) sel=n-1;
     timeline=`<div class="card" style="padding:14px 12px">
       <div class="hlabel" style="margin:0 0 2px">Zo groeit je spaarpot tot eind ${F.lastName}</div>
       <div class="fc-savings" style="margin-bottom:2px">Je legt elke maand ${euro(F.monthly)} opzij.</div>
