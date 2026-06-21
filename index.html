@@ -68,7 +68,7 @@ h1,h2,h3{margin:0}
 .homelist .hl-all{font-size:13px;color:var(--teal);cursor:pointer}
 .insfocus{padding:16px 2px 4px}
 .insfocus .if-ctx{font-size:14.5px;color:var(--txt);line-height:1.5;margin-bottom:16px;max-width:320px}
-.insfocus .if-cta{display:inline-flex;align-items:center;background:var(--teal);color:#06231c;border:0;border-radius:13px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer}
+.if-cta{display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#06231c;border:0;border-radius:13px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer}
 .daystat{padding:16px 2px 2px;border-top:1px solid var(--line);margin-top:20px}
 .daystat .ds-l{font-size:13px;color:var(--mut)}
 .daystat .ds-v{font-size:26px;font-weight:600;letter-spacing:-.5px;font-variant-numeric:tabular-nums;margin:3px 0 1px}
@@ -157,6 +157,22 @@ h1,h2,h3{margin:0}
 .actfocus .coachcard{background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:0 13px 13px 0;padding:13px 14px;margin:2px 0 16px;max-width:340px}
 .actfocus .coachcard .cc-obs{font-size:15.5px;font-weight:600;line-height:1.4}
 .actfocus .coachcard .cc-cause{font-size:12.5px;color:var(--mut);line-height:1.5;margin-top:6px}
+.coachgreet{margin:2px 0 18px;max-width:340px}
+.coachgreet .cg-hi{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:10px}
+.coachgreet .cg-line{font-size:14.5px;color:var(--txt);line-height:1.55;margin-bottom:8px}
+.coachgreet .cg-line.warn{color:var(--amber)}
+.cg-sand{background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:4px 14px;margin:0 0 18px;max-width:340px}
+.cg-sand .cs-row{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
+.cg-sand .cs-row:last-child{border-bottom:0}
+.cg-sand .cs-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:6px}
+.cg-sand .cs-t{font-size:13.5px;line-height:1.5}
+.cg-sand .cs-t b{font-weight:600}
+.cg-sand .cs-t .cs-lbl{display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:2px}
+.cg-disc{border:1px solid rgba(45,212,191,.2);background:rgba(45,212,191,.06);border-radius:14px;padding:13px 14px;margin:0 0 20px;max-width:340px}
+.cg-disc .cd-h{font-size:13px;font-weight:700;color:var(--teal);margin-bottom:7px}
+.cg-disc .cd-rule{font-size:13.5px;color:var(--txt);line-height:1.55;margin-bottom:5px;padding-left:16px;position:relative}
+.cg-disc .cd-rule:before{content:"·";position:absolute;left:4px;color:var(--teal);font-weight:700}
+.cg-disc .cd-rule:last-child{margin-bottom:0}
 .coachproj{background:rgba(45,212,191,.06);border:1px solid rgba(45,212,191,.18);border-radius:14px;padding:14px;margin:0 0 16px;max-width:340px}
 .coachproj .cp-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
 .coachproj .cp-lbl{font-size:11px;color:var(--mut);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
@@ -1068,7 +1084,7 @@ function openBudgetCompare(m){
     <div class="bar-track" style="height:7px;margin:12px 0 0"><div class="bar-fill" style="width:${Math.min(bud?act/bud*100:0,100)}%;background:${stCol}"></div></div>
     ${steer?`<div class="bc-steer">${steer}</div>`:''}
     ${top.length?`<div class="hlabel" style="margin:22px 2px 4px">Grootste verschillen</div>${rowHtml}`:`<div class="small muted" style="margin-top:18px">Stel een maandbudget per categorie in om verschillen te zien.</div>`}
-    ${overRows.length?`<div class="bc-steer" style="margin-top:18px">Je coach geeft je hiervoor een concrete bespaartip.</div>`:''}`;
+    ${overRows.length?`<button class="if-cta" style="margin-top:20px" onclick="closeSheet();go('act')">${ICON('target')} Vraag je coach om een bespaartip ›</button>`:''}`;
   $('#sheetBg').classList.add('show');
 }
 function catDriver(m,k){
@@ -2054,20 +2070,37 @@ function vooruitForecast(){
   const col = scen.endBal<scen.startBal?'var(--amber)':'var(--teal)';
   const diff = scen.endBal - base.endBal; const hasScn = varCut>0 || oneoffs.length>0;
   const insight=vooruitInsight(scen);
-  const fb = !hasScn
-    ? `<div class="vh-sub">Dit is je koers als je niets verandert. Je coach helpt je dit gericht te verbeteren.</div>`
-    : `<div class="fc-diff" style="color:${diff>=0?'var(--teal)':'var(--amber)'}">${diff>0?`${euro0(diff)} meer dan je oude koers, je spaart sneller.`:diff<0?`${euro0(-diff)} minder, je buffer groeit langzamer.`:'Gelijk aan je huidige koers.'}</div>`;
-  const heroLbl = hasScn ? `Met je keuzes sta je eind ${lastName} op` : `Op je huidige koers sta je eind ${lastName} op`;
-  const hero=`<div class="vooruit">
-    <div class="vh-lbl">${heroLbl}</div>
-    <div class="vh-big" style="color:${col}">${euro(scen.endBal)}</div>
-    <div class="vh-status">${insight}</div>
-    ${fb}
-  </div>`;
+  // FOCUS = het spaardoel, niet het kale eindsaldo: hoe beweegt je buffer tot einde jaar?
+  let S=null; try{ S=savingsModel(); }catch(_){}
+  const extra=+SET.extraSavings||0;
+  const projEnd=scen.endBal+extra;                 // verwachte spaarpot/buffer eind jaar
+  const goal=S?S.goal:0;
+  const curSave=S?S.cur:(scen.startBal+extra);
+  let hero;
+  if(goal>0){
+    const reaches=projEnd>=goal;
+    const pctEnd=Math.min(Math.max(projEnd/goal*100,0),100);
+    const pctNow=Math.min(Math.max(curSave/goal*100,0),100);
+    const gcol=reaches?'var(--teal)':'var(--amber)';
+    hero=`<div class="vooruit">
+      <div class="vh-lbl">Je spaardoel eind ${lastName}</div>
+      <div class="vh-big" style="color:${gcol}">${euro(projEnd)}</div>
+      <div class="vh-status">${reaches?`Je haalt je spaardoel van ${euro0(goal)}.`:`Nog ${euro0(goal-projEnd)} te gaan tot je doel van ${euro0(goal)}.`}</div>
+      <div class="vh-bar"><div class="vh-fill" style="width:${pctEnd}%;background:${gcol}"></div><div class="vh-mark" style="left:${pctNow}%" title="nu"></div></div>
+      <div class="vh-sub">Nu ${euro0(curSave)}${S.monthlySaving>0?` · je legt ${euro0(S.monthlySaving)}/mnd in`:''}</div>
+    </div>`;
+  } else {
+    hero=`<div class="vooruit">
+      <div class="vh-lbl">Op je huidige koers sta je eind ${lastName} op</div>
+      <div class="vh-big" style="color:${col}">${euro(scen.endBal)}</div>
+      <div class="vh-status">${insight}</div>
+      <div class="vh-sub" style="cursor:pointer" onclick="go('set')">Stel een spaardoel in om je voortgang te volgen ›</div>
+    </div>`;
+  }
   const n=scen.months.length; let sel=window._vSel; if(sel==null||sel<0||sel>=n) sel=n-1;
-  const saveLine = scen.monthlyNet>=0 ? `Je houdt elke maand ${euro(scen.monthlyNet)} over` : `Je komt elke maand ${euro(-scen.monthlyNet)} tekort`;
+  const saveLine = scen.monthlyNet>=0 ? `Je legt elke maand ${euro(scen.monthlyNet)} opzij` : `Je komt elke maand ${euro(-scen.monthlyNet)} tekort`;
   const timeline=`<div class="card" style="padding:14px 12px">
-    <div class="hlabel" style="margin:0 0 2px">Waar je saldo heen beweegt</div>
+    <div class="hlabel" style="margin:0 0 2px">Zo beweegt je spaardoel tot eind ${lastName}</div>
     <div class="fc-savings" style="margin-bottom:2px">${saveLine}.</div>
     ${vooruitChart(base,scen,sel)}
     ${vooruitMonthCard(scen,oneoffs,sel)}</div>`;
@@ -2308,6 +2341,66 @@ function coachProjCard(cut){
     <div class="cp-leg"><span><i></i>met regel</span><span><i class="dash"></i>nu</span></div>
   </div>`;
 }
+// COACH-GESPREK (startpunt): persoonlijke groet + constatering + eerlijke vooruitblik
+function coachOpening(){
+  const m=curMonth||months()[months().length-1];
+  const t=totals(m); const L=monthLiquidity();
+  const nm=(SET.name||'').trim().split(/\s+/)[0];
+  const greet=nm?`Hey ${esc(nm)},`:'Hey,';
+  const bud=Math.round(t.budget), spent=Math.round(t.spend);
+  // constatering: hoe dicht bij het budgetdoel + dagen resterend
+  let cons, consWarn=false;
+  if(bud<=0){
+    cons=`ik zie nog geen inkomen, dus je budgetdoel kan ik niet berekenen. Stel je inkomen in bij Instellingen, dan coach ik je gericht.`;
+  } else {
+    const pct=Math.round(spent/bud*100);
+    if(spent<=bud){ cons=`je gaf deze maand ${euro0(spent)} van je budget van ${euro0(bud)} uit — dat is ${pct}%. Je hebt nog ${euro0(bud-spent)} en ${L.daysLeft} dagen te gaan.`; }
+    else { cons=`je zit al ${euro0(spent-bud)} boven je budget van ${euro0(bud)} (${pct}%), met nog ${L.daysLeft} dagen te gaan.`; consWarn=true; }
+  }
+  // eerlijke vooruitblik op basis van de aankomende vaste lasten
+  let outlook='', outWarn=false;
+  if(bud>0){
+    const projSpend=spent+L.fixDue+L.varDue; const overBy=projSpend-bud;
+    if(L.fixDue>0||L.varDue>0){
+      if(overBy>0){ outlook=`Reken ik je vaste lasten die nog moeten (${euro0(L.fixDue)})${L.varDue>0?` en je gebruikelijke variabele uitgaven (${euro0(L.varDue)})`:''} mee, dan kom je naar verwachting ${euro0(overBy)} boven budget uit. Eerlijk: zo loopt deze maand uit de pas.`; outWarn=true; }
+      else { outlook=`Tel ik je nog te betalen vaste lasten (${euro0(L.fixDue)}) erbij, dan blijf je binnen budget — met zo'n ${euro0(-overBy)} ruimte. Hou dat vast.`; }
+    } else if(overBy<=0){ outlook=`Er staan geen vaste lasten meer open deze maand. Je blijft binnen budget met ${euro0(-overBy)} ruimte.`; }
+  }
+  const lines=`<div class="cg-line${consWarn?' warn':''}">${cons}</div>${outlook?`<div class="cg-line${outWarn?' warn':''}">${outlook}</div>`:''}`;
+  return `<div class="coachgreet"><div class="cg-hi">${greet}</div>${lines}</div>`+coachSandwich(m)+coachDiscipline(m);
+}
+// feedback volgens het sandwich-model: goed → risico mitigeren/herhaling voorkomen → perspectief
+function coachSandwich(m){
+  let EB={}, act={}; try{ EB=effectiveBudgets(m).out; act=catSpendMap(m); }catch(_){}
+  let good=null;
+  for(const k in EB){ const b=+EB[k]; if(b>0){ const a=act[k]||0; if(a>0 && a<=b*0.9){ if(!good||b>good.b) good={k,b,a}; } } }
+  const ov=(typeof budgetOverCat==='function')?budgetOverCat(m):null;
+  let S=null; try{ S=savingsModel(); }catch(_){}
+  const goodTxt=good
+    ? `Je hield <b>${CATS[good.k].name.toLowerCase()}</b> netjes binnen budget (${euro0(good.a)} van ${euro0(good.b)}). Dat laat zien dat je het kúnt sturen.`
+    : `Je kijkt naar je geld in plaats van weg — dat is precies de stap die de meeste mensen overslaan.`;
+  const riskTxt=ov
+    ? `<b>${CATS[ov.k].name}</b> liep ${euro0(ov.over)} over budget. Zet voor volgende maand een vast bedrag voor deze categorie en stop zodra het op is — zo voorkom je dezelfde uitschieter.`
+    : `Er liep deze maand niets noemenswaardig over budget. Hou je vaste lasten scherp zodat dat zo blijft.`;
+  const persTxt=(S&&S.goal>0&&S.toGo>0&&S.monthlySaving>0)
+    ? `Blijf je binnen je grens, dan groeit je buffer richting ${euro0(S.goal)} — nog zo'n ${Math.round(S.monthsLeft)} maanden. Elke maand die je vasthoudt telt.`
+    : `Elke maand die je binnen je grens blijft, brengt je dichter bij je spaardoel. Daar draait het om.`;
+  const dot=c=>`<span class="cs-dot" style="background:${c}"></span>`;
+  return `<div class="cg-sand">
+    <div class="cs-row">${dot('var(--teal)')}<div class="cs-t"><span class="cs-lbl">Wat ging goed</span>${goodTxt}</div></div>
+    <div class="cs-row">${dot('var(--amber)')}<div class="cs-t"><span class="cs-lbl">Waar het schuurt — en hoe je het keert</span>${riskTxt}</div></div>
+    <div class="cs-row">${dot('var(--teal)')}<div class="cs-t"><span class="cs-lbl">Vooruit</span>${persTxt}</div></div>
+  </div>`;
+}
+// besparingstips die discipline aanleren — geen impulsaankopen, geld krijgt altijd een bestemming
+function coachDiscipline(m){
+  const rules=[
+    `<b>Geen budget = geen aankoop.</b> Heeft iets geen plek in je budget? Dan koop je het niet — niet deze maand.`,
+    `Elke euro krijgt vooraf een bestemming: leven, vaste lasten of sparen. Geld zonder doel verdwijnt vanzelf.`,
+    `Twijfel je bij een aankoop? Slaap er een nacht over. Een impuls is geen bestemming.`
+  ];
+  return `<div class="cg-disc"><div class="cd-h">${ICON('target')} Discipline boven impuls</div>${rules.map(r=>`<div class="cd-rule">${r}</div>`).join('')}</div>`;
+}
 // ACTIEPLAN = puur: 1 probleem + 1 actie. Geen cijfers, geen budgetten.
 function renderActions(){
   if(!TX.length){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
@@ -2341,6 +2434,7 @@ function renderActions(){
     }
     const chips=qa.chips.map(c=>`<button class="coachchip${best&&c.label===best.label?' rec':''}" onclick="coachAnswer('${esc(c.label)}',${c.cut||0})">${esc(c.label)}</button>`).join('');
     $('#s-act').innerHTML=`<div class="actfocus">
+      ${coachOpening()}
       <div class="coachdots"><i class="on"></i><i></i></div>
       <div class="af-tag">${meta.tag}</div>
       <div class="coachcard" style="border-left-color:${catCol}">
@@ -2528,7 +2622,7 @@ function renderMerchants(list, label){
   const exp=!!SET.expandMerch; const shown=exp?merch:merch.slice(0,3);
   const toggle=merch.length>3?`<button class="snz" onclick="toggleExpand('expandMerch')">${exp?'minder ▲':'toon top '+merch.length+' ▼'}</button>`:'';
   return `<div class="card">
-    <div class="row" style="margin-bottom:10px"><span class="hlabel" style="margin:0;flex:1">Top uitgaven</span><span class="small muted">${label||'deze maand'}</span></div>
+    <div class="row" style="margin-bottom:10px"><span class="hlabel" style="margin:0;flex:1">Top uitgaven</span></div>
     ${shown.map(x=>{const cat=catBestFor(items,x.name);const c=CATS[cat]||CATS.overig;return `
       <div class="cat-row" style="cursor:pointer" onclick="openMerchant('${x.name.toUpperCase().replace(/'/g,'')}')">
         <div class="ava" style="background:var(--card2)">${c.icon}</div>
@@ -2807,7 +2901,7 @@ function renderIns(){
     const pchips=(_years.length>1?`<div class="chips" style="margin:4px 0 6px">${_years.map(y=>`<span class="chip ${y===_yr?'on':''}" onclick="setInsYear('${y}')">${y}</span>`).join('')}</div>`:'')
       +`<div class="chips" style="margin:0 0 10px">${_inYr.map(mm=>`<span class="chip ${_sel.has(mm)?'on':''}" onclick="toggleInsMonth('${mm}')">${_MN[+mm.slice(5,7)-1]}</span>`).join('')}</div>`;
     const pTx=periodTx();
-    deep = pchips + insOverview(m) + renderCatBreak(pTx) + renderMerchants(pTx,periodLabel());
+    deep = pchips + renderCatBreak(pTx) + renderMerchants(pTx,periodLabel());
   }
   $('#s-ins').innerHTML = heroProjection(m) + focusBlock + deepBtn + deep;
 }
@@ -3029,7 +3123,9 @@ function setBudget(){
 function setIncome(){
   const dq=totals(curMonth||(months()[months().length-1]||''));
   let h=`
-    <div class="toggle"><div><div style="font-weight:600">Inkomen automatisch detecteren</div><div class="small muted">Uit je bijschrijvingen (categorie Inkomen)</div></div>
+    <label class="fld">Je naam <span class="small muted">· je coach spreekt je hiermee aan</span></label>
+    <input type="text" value="${esc(SET.name||'')}" placeholder="bv. Vincent" oninput="SET.name=this.value;save();" onchange="render();">
+    <div class="toggle" style="margin-top:14px"><div><div style="font-weight:600">Inkomen automatisch detecteren</div><div class="small muted">Uit je bijschrijvingen (categorie Inkomen)</div></div>
       <label class="sw"><input type="checkbox" ${SET.autoIncome?'checked':''} onchange="SET.autoIncome=this.checked;save();render();"><span class="sl"></span></label></div>
     ${SET.autoIncome?`<div class="small muted" style="margin-top:8px">Gedetecteerd deze maand: <b>${euro(dq.detectedIncome)}</b></div>`
       :`<label class="fld">Inkomen per maand (€)</label><input type="number" value="${SET.income||''}" placeholder="bv. 2500" oninput="SET.income=+this.value||0;save();render();">`}`;
@@ -3154,6 +3250,7 @@ function go(name){
   const _g=document.getElementById('headGear'); if(_g) _g.classList.toggle('on',name==='set');
   if(name==='act'){ window._coachStep=0; window._coachAnswer=null; renderActions(); }
   syncMonthPick();
+  try{ localStorage.setItem('minder_view', name); }catch(_){}
   window.scrollTo(0,0);
 }
 
@@ -3442,6 +3539,8 @@ document.addEventListener('drop',async e=>{
 
 /* ---------- start ---------- */
 load(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
+// blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
+try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
 try{ if(Object.keys(SET.psd2Accounts||{}).length && (Date.now()-(SET.psd2LastSync||0))>4*3600000) psd2Refresh(true); }catch(_){}
 if(new URLSearchParams(location.search).get('code')) psd2HandleCallback(); // terug van bank (PSD2-consent)
