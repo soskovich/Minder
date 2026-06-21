@@ -180,6 +180,34 @@ h1,h2,h3{margin:0}
 .cg-disc .cd-rule{font-size:13.5px;color:var(--txt);line-height:1.55;margin-bottom:5px;padding-left:16px;position:relative}
 .cg-disc .cd-rule:before{content:"·";position:absolute;left:4px;color:var(--teal);font-weight:700}
 .cg-disc .cd-rule:last-child{margin-bottom:0}
+/* ===== Coach-scherm: 4 zones (unified card-systeem) ===== */
+.cz-status{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+.czs-top{display:flex;justify-content:space-between;align-items:baseline}
+.czs-amt .big{font-size:30px;font-weight:700;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+.czs-amt .of{font-size:15px;color:var(--mut)}
+.czs-days{font-size:13px;color:var(--mut);font-weight:500}
+.czs-bar{position:relative;height:8px;border-radius:6px;background:var(--card2);margin:15px 0 13px}
+.czs-fill{height:100%;border-radius:6px;transition:width .4s}
+.czs-pace{position:absolute;top:-3px;width:2px;height:14px;background:var(--txt);opacity:.55;border-radius:1px}
+.czs-chip{display:inline-block;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;border:1px solid}
+.cz-line{font-size:14px;color:var(--txt);line-height:1.55;margin:14px 2px 0;max-width:340px}
+.cz-head{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);margin:26px 2px 11px}
+.cz-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px}
+.cz-card+.cz-card{margin-top:10px}
+.cz-fb{display:flex;gap:11px}
+.cz-fb .ic{font-size:18px;flex-shrink:0;margin-top:1px;line-height:1}
+.cz-fb .tx{font-size:13.5px;line-height:1.5}
+.cz-fb .tx b{font-weight:600}
+.cz-eyebrow{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)}
+.cz-end{font-size:34px;font-weight:700;letter-spacing:-.9px;margin:4px 0 6px;font-variant-numeric:tabular-nums}
+.cz-delta{display:inline-block;font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:20px;background:rgba(45,212,191,.14);color:var(--teal)}
+.cz-delta.amber{background:rgba(240,166,117,.14);color:var(--amber)}
+.cz-rule{display:block;width:100%;text-align:left;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:12px 13px;font-size:13.5px;font-weight:500;cursor:pointer;margin-top:8px}
+.cz-rule.on{border-color:var(--teal);color:var(--teal);background:rgba(45,212,191,.08)}
+.cz-rule .cr-cut{float:right;color:var(--mut);font-weight:600}
+.cz-rule.on .cr-cut{color:var(--teal)}
+.cz-mine{margin-top:26px;opacity:.9}
+.cz-mine .czr-head{font-size:13px;color:var(--mut);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .coachproj{background:rgba(45,212,191,.06);border:1px solid rgba(45,212,191,.18);border-radius:14px;padding:14px;margin:0 0 16px;max-width:340px}
 .coachproj .cp-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
 .coachproj .cp-lbl{font-size:11px;color:var(--mut);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
@@ -2474,79 +2502,140 @@ function coachDiscipline(m){
   ];
   return `<div class="cg-disc"><div class="cd-h">${ICON('target')} Discipline boven impuls</div>${rules.map(r=>`<div class="cd-rule">${r}</div>`).join('')}</div>`;
 }
-// ACTIEPLAN = puur: 1 probleem + 1 actie. Geen cijfers, geen budgetten.
+// ===== COACH-SCHERM (4 zones) — status (time-pacing) · deze week · vooruit (forecast-held) · mijn regels =====
+// 1) STATUS op time-pacing: verwacht tempo = budget × verstreken/dim; incl. nog-te-komen vaste lasten in projEind
+function coachStatus(m){
+  const t=totals(m), L=monthLiquidity(), de=daysElapsed(m);
+  const bud=Math.round(t.budget), spent=Math.round(t.spend);
+  const dim=de.dim, elapsed=de.elapsed, left=Math.max(dim-elapsed,0);
+  const expected=bud>0?Math.round(bud*elapsed/dim):0;            // lineair verwacht tempo tot nu
+  const fm=(typeof forecastModel==='function')?forecastModel():null; const fVar=fm?fm.fVar:0;
+  const variSpent=splitFixedVar(m).vari;
+  const varRest=fVar>0?Math.max(0,Math.min(Math.round((fVar/dim)*left),Math.round(fVar-variSpent))):L.varDue;
+  const projEnd=spent+L.fixDue+varRest;
+  let verdict,vcol,vkey;
+  if(bud<=0){ verdict='stel inkomen in'; vcol='var(--mut)'; vkey='none'; }
+  else if(spent>bud||projEnd>bud){ verdict='over budget'; vcol='var(--amber)'; vkey='over'; }
+  else if(spent<=expected*0.9){ verdict='ruim binnen'; vcol='var(--teal)'; vkey='room'; }
+  else { verdict='op koers'; vcol='var(--teal)'; vkey='track'; }
+  return {bud,spent,left,dim,elapsed,expected,projEnd,verdict,vcol,vkey,
+    pct:bud>0?Math.min(spent/bud*100,100):0, pacePct:bud>0?Math.min(expected/bud*100,100):0};
+}
+// 3) "Wat ging goed" — discretionair onder budget, anders een gedragswinst; nooit een over-budget categorie
+function coachGood(m){
+  let EB={}, act={}; try{ EB=effectiveBudgets(m).out; act=catSpendMap(m); }catch(_){}
+  let good=null;
+  for(const k in EB){ if(isFixedCat(k)) continue; const b=+EB[k]; if(b>0){ const a=act[k]||0; if(a>0 && a<=b*0.9){ if(!good||b>good.b) good={k,b,a}; } } }
+  if(good) return `Je hield <b>${CATS[good.k].name.toLowerCase()}</b> strak onder controle (${euro0(good.a)} van ${euro0(good.b)}). Daar zat geen impuls in.`;
+  // gedragswinst a) discretionaire categorie onder je eigen 3-maands gemiddelde
+  const prev=months().filter(x=>x<m).slice(-3);
+  if(prev.length){ let best=null;
+    for(const k in act){ if(isFixedCat(k)||!CATS[k]||CATS[k].type!=='expense') continue;
+      const avg=prev.reduce((s,mm)=>s+(catSpendMap(mm)[k]||0),0)/prev.length;
+      if(avg>0 && act[k]<avg*0.85){ const drop=Math.round(avg-act[k]); if(!best||drop>best.drop) best={k,drop}; } }
+    if(best) return `Je gaf <b>${euro0(best.drop)}</b> minder uit aan ${CATS[best.k].name.toLowerCase()} dan je gewend bent. Dat is een echte gedragswinst.`;
+  }
+  // gedragswinst b) totaal onder het verwachte tempo
+  const st=coachStatus(m);
+  if(st.bud>0 && st.spent<=st.expected*0.9) return `Je ligt <b>${euro0(st.expected-st.spent)}</b> onder je verwachte tempo voor deze maand. Goed gestuurd.`;
+  return `Je kijkt naar je geld in plaats van weg. Dat is precies de gewoonte waar grip begint.`;
+}
+// "Deze week" — de oorzaak: échte impuls / noodzaak-zonder-potje / over-budget categorie
+function coachWeekRisk(m){
+  let EB={}; try{ EB=effectiveBudgets(m).out; }catch(_){}
+  let imp=null, need=null;
+  try{ for(const x of txOfMonth(m)){ const k=catOf(x), c=CATS[k];
+    if(!(x.amount<0 && c && c.type==='expense' && !isFixed(x))) continue;
+    if(+EB[k]>0) continue;
+    const amt=-x.amount; if(amt<25) continue;
+    const nm=titleCase(cleanMerch(x.name)||x.name||'een aankoop'); const rec=isRecurringMerchant(x.name);
+    if(!isFixedCat(k) && !rec){ if(!imp||amt>imp.amt) imp={amt,name:nm,k}; }
+    else { if(!need||amt>need.amt) need={amt,name:nm,k}; }
+  } }catch(_){}
+  const ov=(typeof budgetOverCat==='function')?budgetOverCat(m):null;
+  if(imp){ const p=CATS[imp.k]?CATS[imp.k].name.toLowerCase():'die categorie';
+    return {tone:'warn',txt:`Die ${euro0(imp.amt)} bij <b>${esc(imp.name)}</b> zat in geen enkel budget — die kwam uit het niets. Geef '${p}' een potje: geen budget, geen aankoop.`}; }
+  if(need){ const p=CATS[need.k]?CATS[need.k].name.toLowerCase():'die uitgave';
+    return {tone:'warn',txt:`<b>${esc(need.name)}</b> (${euro0(need.amt)}) is geen impuls maar een vaste behoefte zónder potje. Geef '${p}' een vast maandbedrag.`}; }
+  if(ov) return {tone:'warn',txt:`<b>${CATS[ov.k].name}</b> liep ${euro0(ov.over)} over budget. Geef het vóór de maand een vast bedrag en stop zodra dat op is.`};
+  return {tone:'ok',txt:`Er liep deze week niets uit de hand. Hou het zo: geef elke euro vooraf een bestemming.`};
+}
+// regel-opties: tikbare gedragsregels die maandelijks geld vrijspelen → buigen de koerslijn omhoog
+function coachRuleOptions(m){
+  const sp=catSpendMap(m); const opts=[];
+  const lab={uit_eten:'Max 1× per week uit eten',boodschappen:'Strakker boodschappen',vrije_tijd:'Eén uitje minder',shoppen:'Geen losse aankopen',vervoer:'Minder losse ritten',overig:'Minder losse uitgaven'};
+  const disc=Object.keys(sp).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k)&&sp[k]>0).sort((a,b)=>sp[b]-sp[a]);
+  for(const k of disc.slice(0,3)){ const cut=Math.max(Math.round(sp[k]*0.25/5)*5,10); opts.push({key:'cut_'+k,label:lab[k]||('Minder '+CATS[k].name.toLowerCase()),cut}); }
+  return opts;
+}
+function toggleCoachRule(key,cut){ SET.coachRules=SET.coachRules||{}; if(SET.coachRules[key]) delete SET.coachRules[key]; else SET.coachRules[key]=cut; save(); renderActions(); }
+function toggleCoachDisc(){ SET.coachDiscOpen=!SET.coachDiscOpen; save(); renderActions(); }
+// forecast-grafiek (2 lijnen): volle discipline (gestippeld) + jouw/gekozen koers (solide)
+function coachForecastChart(M,accent){
+  const MN=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  const vals=[].concat(M.doel,accent).filter(v=>v!=null);
+  let lo=Math.min(0,...vals), hi=Math.max(...vals,1); const pad=(hi-lo)*0.12||100; hi+=pad; if(lo<0) lo-=pad;
+  const W=330,H=150,LX=8,RX=W-8,top=12,bot=H-20;
+  const X=i=>LX+i*((RX-LX)/11), Y=v=>top+(1-(v-lo)/(hi-lo||1))*(bot-top);
+  const seg=a=>{ const p=[]; for(let i=0;i<12;i++){ if(a[i]==null) continue; p.push(X(i).toFixed(1)+','+Y(a[i]).toFixed(1)); } return p.join(' '); };
+  const tx=X(M.cur).toFixed(1);
+  const marker=`<line x1="${tx}" y1="${top}" x2="${tx}" y2="${bot}" stroke="rgba(255,255,255,.2)" stroke-width="1" stroke-dasharray="2 3"/><text x="${tx}" y="${top-3}" fill="#8a97ab" font-size="9" text-anchor="middle">nu</text>`;
+  const lDoel=`<polyline points="${seg(M.doel)}" fill="none" stroke="#56627d" stroke-width="1.4" stroke-dasharray="4 3" opacity=".8"/>`;
+  const lAcc=`<polyline points="${seg(accent)}" fill="none" stroke="#2dd4bf" stroke-width="2.6"/>`;
+  const labels=MN.map((mn,i)=>(i%2===0||i===11)?`<text x="${X(i).toFixed(1)}" y="${H-5}" fill="#8a97ab" font-size="8.5" text-anchor="middle">${mn}</text>`:'').join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Forecast: volle discipline vs jouw koers">${marker}${lDoel}${lAcc}${labels}</svg>`;
+}
 function renderActions(){
   if(!TX.length){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||months()[months().length-1]; const isNow=m===nowYM;
-  if(!isNow){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Je actieplan geldt voor de lopende maand. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar nu ›</span></div></div>'; return; }
-  const sig = actSignal();
-  if(sig.done){
-    const cl=SET.coachLast||null;
-    const when = cl&&cl.scale==='week' ? 'Zondag checken we het opnieuw.' : (cl?'Volgende maand checken we het opnieuw.':'');
-    const acc = cl&&cl.rule
-      ? `<div class="af-action">Je afspraak: ${esc(cl.rule)}.</div>${cl.gain>0?`<div class="af-impact">Dat verbetert je vooruitblik met ${euro0(cl.gain)}.</div>`:''}${when?`<div class="af-fwd">${when}</div>`:''}`
-      : `<div class="af-action">Je stap staat. Morgen pakken we het weer op.</div>`;
-    $('#s-act').innerHTML=`<div class="actfocus">
-      <div class="af-ic" style="color:var(--green)">${ICON('check')}</div>
-      <div class="af-tag">Afgesproken</div>
-      ${acc}
-      ${window._lastActKey?`<div class="af-undo" onclick="undoAction('${window._lastActKey}')">Toch niet gedaan?</div>`:''}
-    </div>`;
-    return;
-  }
-  const meta={maand:{ic:ICON('alert'),col:'var(--amber)',tag:'Deze maand'},week:{ic:ICON('clock'),col:'var(--amber)',tag:'Deze week'},dag:{ic:ICON('check'),col:'var(--green)',tag:'Vandaag'}}[sig.scale]||{ic:ICON('check'),col:'var(--green)',tag:''};
-  const step=window._coachStep||0;
-  // STAP 1 — opening (data) + betekenis + coachvraag (1-tap chips)
-  if(step===0){
-    const qa=coachQA(sig);
-    let propLine='', best=null, proj='';
-    const catCol=(sig.catKey&&CATS[sig.catKey])?CATS[sig.catKey].color:meta.col;
-    if(sig.scale==='week'){ const prop=coachProposal(m,sig); best=prop.best;
-      if(best){ proj=coachProjCard(best.cut); propLine=`<div class="af-prop">Mijn voorstel: <b style="color:var(--txt)">${esc(best.label)}</b></div>`; }
-    }
-    const chips=qa.chips.map(c=>`<button class="coachchip${best&&c.label===best.label?' rec':''}" onclick="coachAnswer('${esc(c.label)}',${c.cut||0})">${esc(c.label)}</button>`).join('');
-    $('#s-act').innerHTML=`<div class="actfocus">
-      ${coachOpening()}
-      <div class="coachdots"><i class="on"></i><i></i></div>
-      <div class="af-tag">${meta.tag}</div>
-      <div class="coachcard" style="border-left-color:${catCol}">
-        <div class="cc-obs">${sig.observation}</div>
-        <div class="cc-cause">${qa.cause}</div>
-      </div>
-      ${proj}
-      ${propLine}
-      <div class="af-q">${qa.question}</div>
-      <div class="coachchips">${chips}</div>
-    </div>`;
-    return;
-  }
-  // STAP 2 — gekozen regel wordt je commitment + follow-up (wanneer kijken we terug)
-  const ans=window._coachAnswer||'';
-  const fwd={week:'Zondag kijkt je coach of het gelukt is.',maand:'Volgende maand kijken we hoe het ging.'}[sig.scale]||'Je coach komt hierop terug.';
-  const proj = (sig.scale==='week' || (sig.scale==='maand'&&sig.tone!=='good')) ? coachProjCard(window._coachCut) : '';
-  // kritische beoordeling: zwak (klein effect) → beter alternatief; kapitaal-zwaar → kanttekening; anders bevestiging
-  let evalHtml='';
-  if(sig.scale==='week'){
-    const prop=coachProposal(m,sig); const cut=window._coachCut||0; const chosen=(prop.rules||[]).find(x=>x.label===ans);
-    if(chosen&&chosen.heavy){ evalHtml=`<div class="af-eval">Dit levert flink op. Het kost je wel in één keer geld. Lukt dat, dan is het een sterke zet.</div>`; }
-    else if(prop.best&&prop.best.cut>0&&cut<prop.best.cut*0.75&&prop.best.label!==ans){
-      evalHtml=`<div class="af-eval">Dit helpt een beetje, maar veel verandert er niet. Met <b style="color:var(--txt)">${esc(prop.best.label)}</b> pak je echt meer.</div>
-      <button class="coachchip rec" style="margin-bottom:16px" onclick="coachAnswer('${esc(prop.best.label)}',${prop.best.cut})">Doe liever dit ›</button>`;
-    } else if(cut>0){ evalHtml=`<div class="af-eval">Goeie keuze. Dit is haalbaar en je gaat het merken in je saldo.</div>`; }
-  }
-  const steps = sig.scale==='maand' ? `<div class="af-steps" onclick="toggleActDeep()">${SET.actDeep?'Verberg stappen ▲':'Bekijk je stappen ›'}</div>` : '';
-  $('#s-act').innerHTML=`<div class="actfocus">
-    <div class="coachdots"><i class="on"></i><i class="on"></i></div>
-    <div class="af-tag">${meta.tag} · jouw regel</div>
-    <div class="af-action">${esc(ans||sig.action)}</div>
-    ${proj}
-    ${evalHtml}
-    <div class="af-fwd">${fwd}</div>
-    <button class="if-cta" onclick="coachCommit('${sig.key}','${sig.scale}')">${ICON('check')} Dit spreek ik af</button>
-    <div class="af-undo" onclick="coachReset()">‹ Andere regel</div>
-    ${steps}
-  </div>` + (sig.scale==='maand' && SET.actDeep ? renderPlanDetail() : '');
+  if(!isNow){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Je coach geldt voor de lopende maand. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar nu ›</span></div></div>'; return; }
+  const st=coachStatus(m);
+  // ---- ZONE "NU" — statusmodule als held + één regel coach-tekst ----
+  const nm=(SET.name||'').trim().split(/\s+/)[0]; const greet=nm?`Hey ${esc(nm)},`:'Hey,';
+  const kern = st.vkey==='over' ? `je gaat richting over budget — hieronder zie je waar het lekt en wat de stap is.`
+    : st.vkey==='room' ? `je loopt vóór op je tempo. Geef die ruimte een bestemming voor ze vanzelf verdampt.`
+    : st.vkey==='track' ? `je loopt op schema — en juist dan kantel je het makkelijkst. Hou je regel vast.`
+    : `stel je inkomen in, dan reken ik je budget en koers uit.`;
+  const zoneNu=`<div class="cz-status">
+    <div class="czs-top">
+      <div class="czs-amt"><span class="big">${euro(st.spent)}</span><span class="of"> / ${euro(st.bud)}</span></div>
+      <div class="czs-days">${st.left} dgn</div>
+    </div>
+    <div class="czs-bar"><div class="czs-fill" style="width:${st.pct}%;background:${st.vcol}"></div>${st.bud>0?`<div class="czs-pace" style="left:${st.pacePct}%"></div>`:''}</div>
+    <div class="czs-chip" style="color:${st.vcol};border-color:${st.vcol}">${st.verdict}</div>
+  </div>
+  <div class="cz-line"><b>${greet}</b> ${kern}</div>`;
+  // ---- ZONE "DEZE WEEK" — constatering (oorzaak) + wat ging goed ----
+  const wk=coachWeekRisk(m); const good=coachGood(m);
+  const zoneWeek=`<div class="cz-head">Deze week</div>
+    <div class="cz-card cz-fb"><div class="ic" style="color:${wk.tone==='warn'?'var(--amber)':'var(--teal)'}">${wk.tone==='warn'?ICON('alert'):ICON('check')}</div><div class="tx">${wk.txt}</div></div>
+    <div class="cz-card cz-fb"><div class="ic" style="color:var(--green)">${ICON('check')}</div><div class="tx">${good}</div></div>`;
+  // ---- ZONE "VOORUIT" — forecast-held met interactieve regel-opties (zelfde engine als spaargrafiek) ----
+  const M=savingsYearModel(); const rem=Math.max(11-M.cur,0);
+  const rules=coachRuleOptions(m); const optKeys=new Set(rules.map(r=>r.key));
+  let totalCut=0; for(const k in (SET.coachRules||{})) if(optKeys.has(k)) totalCut+=+SET.coachRules[k]||0;
+  const baseEnd=M.endKoers; const chosenEnd=Math.round(baseEnd+totalCut*rem);
+  const accent=[]; for(let i=0;i<12;i++){ accent[i]= i<=M.cur ? M.work[i] : Math.round(M.Scur+(M.avgIn+totalCut)*(i-M.cur)); }
+  const gap=chosenEnd-M.doelEnd;
+  const deltaBadge = totalCut>0
+    ? `<span class="cz-delta">+${euro0(chosenEnd-baseEnd)} met je regels</span>`
+    : (gap>=0 ? `<span class="cz-delta">op volle discipline</span>` : `<span class="cz-delta amber">${euro0(-gap)} onder volle discipline</span>`);
+  const ruleBtns = rules.length ? `<div style="margin-top:10px">${rules.map(r=>{const on=!!(SET.coachRules&&SET.coachRules[r.key]); return `<button class="cz-rule${on?' on':''}" onclick="toggleCoachRule('${r.key}',${r.cut})">${on?'✓ ':''}${esc(r.label)}<span class="cr-cut">+${euro0(r.cut)}/mnd</span></button>`;}).join('')}</div>` : '';
+  const zoneVooruit=`<div class="cz-head">Vooruit</div>
+    <div class="cz-card">
+      <div class="cz-eyebrow">EIND DECEMBER</div>
+      <div class="cz-end">${euro(chosenEnd)}</div>
+      <div>${deltaBadge}</div>
+      ${coachForecastChart(M,accent)}
+      <div class="vc-leg" style="margin-top:4px"><span><i class="dash"></i>volle discipline</span><span><i></i>jouw koers</span></div>
+    </div>${ruleBtns}`;
+  // ---- ZONE "MIJN REGELS" — vast principe, gedempt en inklapbaar ----
+  const zoneMine=`<div class="cz-mine">
+    <div class="czr-head" onclick="toggleCoachDisc()"><span>${ICON('target')} Mijn regel: geen budget, geen aankoop</span><span>${SET.coachDiscOpen?'▲':'▼'}</span></div>
+    ${SET.coachDiscOpen?coachDiscipline(m):''}
+  </div>`;
+  $('#s-act').innerHTML = zoneNu + zoneWeek + zoneVooruit + zoneMine;
 }
 // coachvraag = oorzaak (waarom) + concrete gedragsregels om uit te kiezen
 function coachQA(sig){
