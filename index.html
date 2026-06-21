@@ -97,6 +97,13 @@ h1,h2,h3{margin:0}
 .vc-mon{font-size:11px;color:var(--mut);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
 .vc-plan{font-size:12px;color:var(--mut);margin-top:2px;overflow:hidden;text-overflow:ellipsis}
 .vc-bal{font-size:20px;font-weight:800;letter-spacing:-.4px;flex-shrink:0}
+.sc-leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;color:var(--mut);margin-top:8px}
+.sc-leg span{display:inline-flex;align-items:center}
+.sc-leg i{width:15px;height:0;border-top:2px solid var(--teal);display:inline-block;vertical-align:middle;margin-right:5px}
+.sc-leg i.d{border-top-style:dashed}
+.sc-cap{font-size:12.5px;color:var(--txt);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);line-height:1.5}
+.sc-cap b{font-weight:600}
+.sc-cap .mut{color:var(--mut)}
 .fc-chips{display:flex;flex-wrap:wrap;gap:8px}
 .fc-chip{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:20px;padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s,border-color .15s}
 .fc-chip.on{background:var(--teal);color:#06231c;border-color:var(--teal)}
@@ -2062,60 +2069,89 @@ function vooruitMonthCard(scen,oneoffs,sel){
   const planTxt=ps.length?ps.map(o=>`<span style="color:var(--amber)">+ ${esc(o.label)} ${euro0(o.amt)}</span>`).join(' · '):'tik een maand om te inspecteren';
   return `<div class="vc-card"><div style="min-width:0"><div class="vc-mon">${fcCap(mo.name)}</div><div class="vc-plan">${planTxt}</div></div><div class="vc-bal">${euro0(mo.bal)}</div></div>`;
 }
-// SPAARPROJECTIE — één grondslag: je spaarpotjes + je maandelijkse inleg (NIET de totale liquiditeit).
-// "Nu", de lijn en het eindgetal delen exact dezelfde cashflow: curSave + inleg × resterende maanden t/m december.
-function savingsForecast(){
-  const now=new Date(); const y0=now.getFullYear();
-  const extra=+SET.extraSavings||0;
-  const curSave=Math.round(totalSaved().sum + extra);   // huidige saldo spaarpotjes (+ handmatig extra)
-  let S=null; try{ S=savingsModel(); }catch(_){}
-  const monthly=Math.round(S?S.monthlySaving:monthlySavingTarget());  // vaste maandelijkse inleg = (100−limiet)% van inkomen (of vast/percent)
-  const goal=Math.round(S?S.goal:0);
-  const horizon=Math.max(12-(now.getMonth()+1),0);       // volgende maand .. december van dit jaar
-  const names=nextMonths(`${y0}-${String(now.getMonth()+1).padStart(2,'0')}`, horizon);
-  const months=[]; let bal=curSave;
-  for(let i=0;i<horizon;i++){ bal=bal+monthly; months.push({name:(names[i].full.split(' ')[0]), ahead:i+1, one:0, bal:Math.round(bal)}); }
-  const endBal=months.length?months[months.length-1].bal:curSave;
-  const lastName=months.length?months[months.length-1].name:MFULL[now.getMonth()];
-  return {curSave, monthly, goal, horizon, months, endBal, lastName, extra};
+// SPAARMODEL (per kalenderjaar) — grondslag: inleg_m = inkomen_m − uitgaven_m (bevestigd).
+// Cumulatief vanaf €0 in januari. Een over-budget maand vlakt de lijn af; uitgaven boven je inkomen laten 'm dalen.
+function savingsYearModel(){
+  const now=new Date(); const y0=now.getFullYear(); const cur=now.getMonth();   // 0-based maand-index = 'vandaag'
+  const targ=Math.round(monthlySavingTarget());                                  // beoogde inleg per maand = inkomen − budget
+  const has=ym=>months().includes(ym);
+  const ymOf=i=>`${y0}-${String(i+1).padStart(2,'0')}`;
+  // werkelijke inleg per maand jan..vandaag (null = geen data die maand)
+  const realIn=[]; for(let i=0;i<=cur;i++){ const ym=ymOf(i); if(has(ym)){ const t=totals(ym); realIn[i]=Math.round(t.income - t.spend); } else realIn[i]=null; }
+  // cumulatief werkelijk (ontbrekende maanden tellen als 0)
+  const work=[]; let s=0; for(let i=0;i<12;i++){ if(i<=cur){ s+=(realIn[i]||0); work[i]=Math.round(s); } else work[i]=null; }
+  const Scur=cur>=0&&work[cur]!=null?work[cur]:0;
+  // gemiddelde werkelijke inleg = voltooide maanden (huidige, partiële maand uitgesloten)
+  const done=realIn.slice(0,cur).filter(v=>v!=null);
+  const avgIn=done.length?Math.round(done.reduce((a,b)=>a+b,0)/done.length):(realIn[cur]!=null?realIn[cur]:targ);
+  // doel-lijn: cumulatief van de volledige beoogde inleg, jan..dec
+  const doel=[]; for(let i=0;i<12;i++) doel[i]=targ*(i+1);
+  // projecties vanaf het laatste werkelijke punt (Scur), naadloos
+  const budget=[], koers=[];
+  for(let i=0;i<12;i++){ if(i<cur){ budget[i]=null; koers[i]=null; } else if(i===cur){ budget[i]=Scur; koers[i]=Scur; } else { budget[i]=Math.round(Scur+targ*(i-cur)); koers[i]=Math.round(Scur+avgIn*(i-cur)); } }
+  const endKoers=koers[11]!=null?koers[11]:Scur;
+  const doelEnd=doel[11];
+  return {y0,cur,targ,avgIn,Scur,doel,work,budget,koers,endKoers,doelEnd,realIn};
+}
+// vier-lijnen spaargrafiek met vandaag-markering; tik een maand voor de bedragen
+function savingsChart(M,sel){
+  const MN=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  const vals=[].concat(M.doel,M.work,M.budget,M.koers).filter(v=>v!=null);
+  let lo=Math.min(0,...vals), hi=Math.max(...vals,1); const pad=(hi-lo)*0.12||100; hi+=pad; if(lo<0) lo-=pad;
+  const W=330,H=184,LX=8,RX=W-8,top=16,bot=H-22;
+  const X=i=>LX+i*((RX-LX)/11), Y=v=>top+(1-(v-lo)/(hi-lo||1))*(bot-top);
+  const seg=(a,from,to)=>{ const p=[]; for(let i=from;i<=to;i++){ if(a[i]==null) continue; p.push(X(i).toFixed(1)+','+Y(a[i]).toFixed(1)); } return p.join(' '); };
+  const tx=X(M.cur).toFixed(1);
+  const zero = lo<0 ? `<line x1="${LX}" y1="${Y(0).toFixed(1)}" x2="${RX}" y2="${Y(0).toFixed(1)}" stroke="rgba(255,255,255,.10)" stroke-width="1"/>` : '';
+  const marker=`<line x1="${tx}" y1="${top}" x2="${tx}" y2="${bot}" stroke="rgba(255,255,255,.22)" stroke-width="1" stroke-dasharray="2 3"/><text x="${tx}" y="${top-4}" fill="#8a97ab" font-size="9" text-anchor="middle">nu</text>`;
+  const selV=`<line x1="${X(sel).toFixed(1)}" y1="${top}" x2="${X(sel).toFixed(1)}" y2="${bot}" stroke="rgba(255,255,255,.08)" stroke-width="1"/>`;
+  const lDoel=`<polyline points="${seg(M.doel,0,11)}" fill="none" stroke="#56627d" stroke-width="1.4" stroke-dasharray="3 3" opacity=".75"/>`;
+  const lBudget=`<polyline points="${seg(M.budget,M.cur,11)}" fill="none" stroke="#2dd4bf" stroke-width="2" stroke-dasharray="5 4" opacity=".9"/>`;
+  const lKoers=`<polyline points="${seg(M.koers,M.cur,11)}" fill="none" stroke="#f0a675" stroke-width="2" stroke-dasharray="5 4"/>`;
+  const lWork=`<polyline points="${seg(M.work,0,M.cur)}" fill="none" stroke="#2dd4bf" stroke-width="2.6"/>`;
+  const dot=(a,c)=>a[sel]!=null?`<circle cx="${X(sel).toFixed(1)}" cy="${Y(a[sel]).toFixed(1)}" r="3.2" fill="${c}"/>`:'';
+  const dots=dot(M.doel,'#56627d')+(sel>=M.cur?dot(M.budget,'#2dd4bf')+dot(M.koers,'#f0a675'):'')+(sel<=M.cur?dot(M.work,'#2dd4bf'):'');
+  const labels=MN.map((mn,i)=>`<text x="${X(i).toFixed(1)}" y="${H-6}" fill="${i===sel?'#e8edf5':'#8a97ab'}" font-size="9" text-anchor="middle">${mn}</text>`).join('');
+  let taps=''; for(let i=0;i<12;i++){ taps+=`<rect x="${(X(i)-13).toFixed(1)}" y="${top}" width="26" height="${bot-top}" fill="transparent" style="cursor:pointer" onclick="vSelMonth(${i})"/>`; }
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Spaargrafiek: werkelijk, doel en twee projecties">${zero}${marker}${selV}${lDoel}${lBudget}${lKoers}${lWork}${dots}${labels}${taps}</svg>`;
 }
 function vooruitForecast(){
-  const F=savingsForecast();
-  const goal=F.goal, curSave=F.curSave;
-  const n=F.months.length;
-  // hero volgt de gekozen maand in de grafiek (vSelMonth); standaard = laatste maand (december)
-  let sel=window._vSel; if(sel==null||sel<0||sel>=n) sel=n-1;
-  const selBal = n? F.months[sel].bal : curSave;
-  const selName = n? F.months[sel].name : F.lastName;
+  const M=savingsYearModel();
+  let sel=window._vSel; if(sel==null||sel<0||sel>11) sel=M.cur;     // standaard: vandaag
+  // KOPTEKST = spaardoel eind december op je huidige koers
   let hero;
-  if(goal>0){
-    const reaches=selBal>=goal;
-    const gcol=reaches?'var(--teal)':'var(--amber)';
+  if(M.targ>0 || M.Scur!==0){
+    const onTrack=M.endKoers>=M.doelEnd;
+    const gcol=onTrack?'var(--teal)':'var(--amber)';
     hero=`<div class="vooruit">
-      <div class="vh-lbl">Je spaardoel eind ${selName}</div>
-      <div class="vh-big" style="color:${gcol}">${euro(selBal)}</div>
-      <div class="vh-status">${reaches?`Je haalt je spaardoel van ${euro0(goal)}.`:`Nog ${euro0(goal-selBal)} te gaan tot je doel van ${euro0(goal)}.`}</div>
-      <div class="vh-sub">Nu ${euro0(curSave)}${F.monthly>0?` · je legt ${euro0(F.monthly)}/mnd in`:''}</div>
+      <div class="vh-lbl">Spaardoel eind december</div>
+      <div class="vh-big" style="color:${gcol}">${euro(M.endKoers)}</div>
+      <div class="vh-status">${onTrack?`Je haalt je volledige inleg van ${euro0(M.doelEnd)} dit jaar.`:`${euro0(M.doelEnd-M.endKoers)} onder je volledige inleg van ${euro0(M.doelEnd)}.`}</div>
+      <div class="vh-sub">Tot nu ${euro0(M.Scur)} gespaard · gemiddeld ${euro0(M.avgIn)}/mnd opzij</div>
     </div>`;
   } else {
     hero=`<div class="vooruit">
-      <div class="vh-lbl">Je spaarpotjes nu</div>
-      <div class="vh-big">${euro(curSave)}</div>
-      <div class="vh-status">Stel een spaardoel in, dan laat ik je zien hoe je ernaartoe groeit.</div>
-      <div class="vh-sub" style="cursor:pointer" onclick="go('set')">Spaardoel instellen ›</div>
+      <div class="vh-lbl">Spaardoel dit jaar</div>
+      <div class="vh-big">€0</div>
+      <div class="vh-status">Stel je inkomen en limiet in, dan teken ik je spaarkoers tot december.</div>
+      <div class="vh-sub" style="cursor:pointer" onclick="go('set')">Naar instellingen ›</div>
     </div>`;
   }
-  // tijdlijn = groei van de spaarpot (zelfde cashflow als de hero), niet het totale banksaldo
-  let timeline='';
-  if(n>=2 && F.monthly>0){
-    const scen={months:F.months, monthlyNet:F.monthly, startBal:F.curSave, endBal:F.endBal};
-    timeline=`<div class="card" style="padding:14px 12px">
-      <div class="hlabel" style="margin:0 0 2px">Zo groeit je spaarpot tot eind ${F.lastName}</div>
-      <div class="fc-savings" style="margin-bottom:2px">Je legt elke maand ${euro(F.monthly)} opzij.</div>
-      ${vooruitChart(scen,scen,sel)}
-      ${vooruitMonthCard(scen,[],sel)}</div>`;
-  }
-  return hero + timeline;
+  const MNF=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+  const cap=[`werkelijk ${M.work[sel]!=null?euro0(M.work[sel]):'—'}`];
+  if(sel>=M.cur) cap.push(`koers ${euro0(M.koers[sel])}`);
+  cap.push(`doel ${euro0(M.doel[sel])}`);
+  const caption=`<div class="sc-cap"><b>${MNF[sel]}</b> <span class="mut">·</span> ${cap.join(' <span class="mut">·</span> ')}</div>`;
+  const legend=`<div class="sc-leg">
+    <span><i style="border-color:#2dd4bf"></i>werkelijk</span>
+    <span><i class="d" style="border-color:#2dd4bf"></i>budget gehaald</span>
+    <span><i class="d" style="border-color:#f0a675"></i>huidige koers</span>
+    <span><i class="d" style="border-color:#56627d"></i>doel</span></div>`;
+  const chartCard=`<div class="card" style="padding:14px 12px 12px">
+    ${savingsChart(M,sel)}
+    ${legend}
+    ${caption}</div>`;
+  return hero + chartCard;
 }
 function vooruitHero(){
   const L=monthLiquidity(); const sv=monthlySavingTarget(); const free=Math.round(L.projected-sv);
