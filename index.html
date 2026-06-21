@@ -894,7 +894,7 @@ function setCatBudget(k,val){ SET.budgets=SET.budgets||{}; if(val===''||+val<=0)
 function suggestBudgets(){
   const ms=months(), med=a=>{const s=a.filter(x=>x>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
   const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
-  const room = inc*SET.limit/100;
+  const room = monthBudget(inc);
   const histF={}, histV={};
   for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||k==='overig') continue;
     const fArr=[], vArr=[];
@@ -1161,7 +1161,7 @@ function totals(m){
     if(income>0){ inc=income; basis='gedetecteerd'; }
     else { inc=baseIncome(); basis = inc>0?'basisnorm':'onbekend'; }
   } else { inc=SET.income||0; basis='handmatig'; }
-  const budget = inc*SET.limit/100;
+  const budget = monthBudget(inc);
   return {list,income:inc,detectedIncome:income,spend,internal,byCat,budget,incomeBasis:basis};
 }
 // mediaan maandinkomen (robuuster dan gemiddelde tegen incidentele pieken zoals vakantiegeld)
@@ -1465,7 +1465,7 @@ function savingLabel(){ const m=SET.savingMode||'auto';
   return (100-SET.limit)+'% van inkomen'; }
 function savingsModel(){
   const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
-  const room = inc*SET.limit/100;
+  const room = monthBudget(inc);
   const monthlySaving = monthlySavingTarget();
   const ms=months(); const med=a=>{const s=a.filter(v=>v>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
   const avgSpend=med(ms.map(m=>totals(m).spend));
@@ -2086,7 +2086,6 @@ function vooruitForecast(){
       <div class="vh-lbl">Je spaardoel eind ${lastName}</div>
       <div class="vh-big" style="color:${gcol}">${euro(projEnd)}</div>
       <div class="vh-status">${reaches?`Je haalt je spaardoel van ${euro0(goal)}.`:`Nog ${euro0(goal-projEnd)} te gaan tot je doel van ${euro0(goal)}.`}</div>
-      <div class="vh-bar"><div class="vh-fill" style="width:${pctEnd}%;background:${gcol}"></div><div class="vh-mark" style="left:${pctNow}%" title="nu"></div></div>
       <div class="vh-sub">Nu ${euro0(curSave)}${S.monthlySaving>0?` · je legt ${euro0(S.monthlySaving)}/mnd in`:''}</div>
     </div>`;
   } else {
@@ -2104,22 +2103,7 @@ function vooruitForecast(){
     <div class="fc-savings" style="margin-bottom:2px">${saveLine}.</div>
     ${vooruitChart(base,scen,sel)}
     ${vooruitMonthCard(scen,oneoffs,sel)}</div>`;
-  const catOpts=Object.keys(CATS).filter(k=>CATS[k].type==='expense').map(k=>`<option value="${k}">${CATS[k].name}</option>`).join('');
-  const monOpts=scen.months.map((mo,i)=>`<option value="${i+1}">${fcCap(mo.name)}</option>`).join('');
-  const activeOne=oneoffs.length?`<div style="margin-top:12px">${oneoffs.map((o,i)=>`<div class="fc-one"><span>${esc(o.label)} · ${fcCap(fcMonthName(o.ahead))} · ${euro0(o.amt)}</span><span class="x" onclick="removeFcOne(${i})">✕</span></div>`).join('')}</div>`:'';
-  const controls=`<div class="card">
-    <div class="hlabel" style="margin:0 0 6px">Verwacht je een grote uitgave?</div>
-    <div class="small muted" style="margin:0 0 12px">Kies de categorie, de maand en het bedrag. Je ziet meteen wat het met je saldo doet.</div>
-    <div class="fc-input">
-      <select id="fcOneCat">${catOpts}</select>
-      <select id="fcOneMon">${monOpts}</select>
-      <div class="fc-input-row">
-        <input id="fcOneAmt" type="number" min="0" inputmode="numeric" placeholder="Bedrag in €">
-        <button class="fc-add" onclick="addFcOneCustom()">Inplannen</button>
-      </div>
-    </div>${activeOne}
-    ${oneoffs.length?`<button class="snz" onclick="resetFc()">Wissen ✕</button>`:''}</div>`;
-  return hero + timeline + controls;
+  return hero + timeline;
 }
 function vooruitHero(){
   const L=monthLiquidity(); const sv=monthlySavingTarget(); const free=Math.round(L.projected-sv);
@@ -2161,9 +2145,6 @@ function vooruitDeep(){
   const L=monthLiquidity(); const sv=monthlySavingTarget(); let S={goal:0,cur:0}; try{ S=savingsModel(); }catch(_){}
   const mn=MFULL[+(curMonth||months()[months().length-1]).slice(5,7)-1];
   const row=(label,val,vc,onclick)=>`<div class="ov-row"${onclick?` style="cursor:pointer" onclick="${onclick}"`:''}><span>${label}</span><span style="${vc?`color:${vc};`:''}font-weight:600">${val}${onclick?' ›':''}</span></div>`;
-  const samenvatting=`<div class="card"><div class="hlabel" style="margin:0 0 10px">Samenvatting</div>
-    ${row('Huidig saldo', euro0(L.sum))}
-    ${row('Verwacht eind '+mn, euro0(L.projected), L.projected<0?'var(--red)':'var(--teal)')}</div>`;
   const verdeling=`<div class="card"><div class="hlabel" style="margin:0 0 10px">Nog deze maand</div>
     ${row('Vaste lasten', euro0(L.fixDue), '', 'openFixedDue()')}
     ${row('Variabel', euro0(L.varDue), '', 'openVarDue()')}
@@ -2173,10 +2154,7 @@ function vooruitDeep(){
   const volgende=items.length?`<div class="card"><div class="hlabel" style="margin:0 0 10px">Volgende uitgaven</div>
     ${show.map(x=>{const c=CATS[x.cat]||CATS.overig;const dt=x.nextDate?new Date(x.nextDate).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'';return `<div class="beh-row"><span style="font-size:18px;flex-shrink:0">${c.icon}</span><div class="beh-t"><div>${esc(x.name)}</div>${dt?`<div class="muted small">${dt}</div>`:''}</div><span class="muted small">${euro0(x.amount)}</span></div>`;}).join('')}
     ${items.length>4?`<button class="snz" onclick="toggleVooruit('vooruitUpAll')">${allUp?'minder ▲':'en '+(items.length-4)+' meer ▼'}</button>`:''}</div>`:'';
-  const sparen=`<div class="card"><div class="hlabel" style="margin:0 0 10px">Sparen</div>
-    ${row('Spaarinleg', euro0(sv)+'/mnd', 'var(--teal)')}
-    ${S.goal>0?row('Buffer', euro0(S.cur)+' / '+euro0(S.goal)):''}</div>`;
-  return samenvatting + verdeling + volgende + sparen;
+  return verdeling + volgende;
 }
 function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
@@ -2301,7 +2279,7 @@ function dayBudgetNow(){
   const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); const de=daysElapsed(nowYM);
   const userDay=+SET.dailyVarBudget||0;
   const expInc=SET.autoIncome?baseIncome():(+SET.income||0);
-  const room=Math.round(expInc*SET.limit/100);
+  const room=Math.round(monthBudget(expInc));
   const fixHist=months().filter(x=>x<nowYM).slice(-3).map(mm=>splitFixedVar(mm).fixed).filter(v=>v>0).sort((a,b)=>a-b);
   const typFixed=fixHist.length?fixHist[Math.floor(fixHist.length/2)]:splitFixedVar(nowYM).fixed;
   const dagdoel=Math.round(userDay>0?userDay:Math.max(room-typFixed,0)/(de.dim||30));
