@@ -182,16 +182,23 @@ h1,h2,h3{margin:0}
 .cg-disc .cd-rule:last-child{margin-bottom:0}
 /* ===== Coach-scherm: 4 zones (unified card-systeem) ===== */
 .cz-status{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
-.czs-top{display:flex;justify-content:space-between;align-items:baseline}
+.czs-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.czs-amt .czs-lbl{font-size:11px;color:var(--mut);margin-bottom:3px}
 .czs-amt .big{font-size:30px;font-weight:700;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
 .czs-amt .of{font-size:15px;color:var(--mut)}
-.czs-days{font-size:13px;color:var(--mut);font-weight:500}
+.czs-days{text-align:right;flex-shrink:0}
+.czs-days .czs-dnum{font-size:20px;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums}
+.czs-days .czs-dlbl{display:block;font-size:11px;color:var(--mut);margin-top:1px}
+.czs-cap{font-size:12px;color:var(--txt);line-height:1.45;margin:0 0 12px}
+.czs-cap b{font-weight:600}
 .czs-bar{position:relative;height:8px;border-radius:6px;background:var(--card2);margin:15px 0 13px}
 .czs-fill{height:100%;border-radius:6px;transition:width .4s}
 .czs-pace{position:absolute;top:-3px;width:2px;height:14px;background:var(--txt);opacity:.55;border-radius:1px}
 .czs-chip{display:inline-block;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;border:1px solid}
 .cz-line{font-size:14px;color:var(--txt);line-height:1.55;margin:14px 2px 0;max-width:340px}
 .cz-head{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);margin:26px 2px 11px}
+.cz-head-t{cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.cz-chev{font-size:9px;opacity:.8}
 .cz-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px}
 .cz-card+.cz-card{margin-top:10px}
 .cz-fb{display:flex;gap:11px}
@@ -208,6 +215,47 @@ h1,h2,h3{margin:0}
 .cz-rule.on .cr-cut{color:var(--teal)}
 .cz-mine{margin-top:26px;opacity:.9}
 .cz-mine .czr-head{font-size:13px;color:var(--mut);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.cz-pot{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.cz-pot:last-child{border-bottom:0}
+.cz-pot .cp-info{flex:1;min-width:0}
+.cz-pot .cp-nm{font-size:14px;font-weight:600}
+.cz-pot .cp-sub{font-size:12px;color:var(--mut);margin-top:2px}
+.cz-pot .cp-sub.warn{color:var(--amber)}
+.cz-pot .cp-btn{flex-shrink:0;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+.cz-pot .cp-btn.make{border-color:var(--teal);color:var(--teal)}
+.cz-note{font-size:12px;color:var(--mut);line-height:1.5;margin:9px 4px 0}
+.cz-effect{font-size:14px;color:var(--txt);line-height:1.5;margin-bottom:4px}
+.cz-link{font-size:13px;color:var(--teal);cursor:pointer;font-weight:600;margin-top:14px}
+.cothr{display:flex;flex-direction:column}
+.cbub{max-width:86%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.5;margin:5px 0;white-space:pre-wrap}
+.cbub.co{background:var(--card2);border-bottom-left-radius:4px;align-self:flex-start}
+.cbub.me{background:var(--teal);color:#06231c;border-bottom-right-radius:4px;align-self:flex-end;font-weight:500}
+.cfx{align-self:flex-start;font-size:12px;color:var(--teal);border:1px solid rgba(45,212,191,.3);background:rgba(45,212,191,.08);border-radius:20px;padding:4px 11px;margin:4px 0 6px}
+.cdots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--mut);margin:0 2px;animation:cobl 1s infinite}
+.cdots span:nth-child(2){animation-delay:.2s}.cdots span:nth-child(3){animation-delay:.4s}
+@keyframes cobl{0%,60%,100%{opacity:.25}30%{opacity:1}}
+.cch{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;background:rgba(45,212,191,.07);border:1px solid rgba(45,212,191,.42);color:var(--teal);border-radius:12px;padding:11px 13px;margin-top:7px;font-size:13.5px;font-weight:500;cursor:pointer}
+.cch:hover{background:rgba(45,212,191,.15)}
+.cch .cchv{opacity:.7;flex-shrink:0}
+.corow{display:flex;gap:8px;align-items:flex-end;align-self:flex-start;max-width:92%;margin:5px 0}
+.corow .coav{width:28px;height:28px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--card2)}
+.corow .cbub.co{margin:0}
+.coachhead{display:flex;align-items:center;gap:9px;margin:26px 2px 11px;cursor:pointer}
+.coachhead .av{width:30px;height:30px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--card2)}
+.coachhead .nm{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)}
+.coachhead .sw{font-size:11px;color:var(--teal);margin-left:auto}
+.cobuy{display:block;width:100%;text-align:left;background:var(--card2);border:1px solid var(--teal);color:var(--teal);border-radius:12px;padding:12px 13px;margin-top:18px;font-size:13.5px;font-weight:600;cursor:pointer}
+.coinput{width:100%;margin-top:8px;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;box-sizing:border-box}
+.coconf{display:flex;gap:8px;margin-top:10px}
+.coconf-ok{flex:1;background:var(--teal);color:#06231c;border:0;border-radius:11px;padding:11px;font-size:13.5px;font-weight:600;cursor:pointer}
+.coconf-adj{background:transparent;color:var(--mut);border:1px solid var(--line);border-radius:11px;padding:11px 14px;font-size:13.5px;cursor:pointer}
+.cbub.co.acc{border-left:2px solid var(--teal);border-top-left-radius:5px;border-bottom-left-radius:5px}
+.cbub .hl{color:var(--teal);font-weight:600}
+.cbub .warn{color:#e8c372;font-weight:600}
+.cbub .cbsub{color:var(--mut);font-size:12.5px;line-height:1.45;margin-top:6px}
+.cbub .ca-eye{font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:5px}
+.cbub .ca-ctx{font-size:12.5px;color:var(--mut);line-height:1.5;margin-bottom:8px}
+.cbub .ca-act{font-size:14px;color:var(--txt);line-height:1.5}
 .coachproj{background:rgba(45,212,191,.06);border:1px solid rgba(45,212,191,.18);border-radius:14px;padding:14px;margin:0 0 16px;max-width:340px}
 .coachproj .cp-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
 .coachproj .cp-lbl{font-size:11px;color:var(--mut);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
@@ -1077,6 +1125,23 @@ function savingsTip(m,k){
   return tips[k]||`Geef jezelf een weeklimiet van €${wk} voor ${CATS[k]?CATS[k].name.toLowerCase():'deze categorie'}.`;
 }
 // BOTTOM SHEET: budget vs uitgaven — samenvatting + top-afwijkingen + hypothese. Status blijft op de pagina, verdieping hier.
+// herbruikbare status-widget "uitgegeven deze maand" (time-pacing) — leeft nu in Inzichten-drilldown, niet meer bij de coach
+function statusModule(m){
+  const st=coachStatus(m);
+  const paceDiff = st.bud>0 ? st.spent-st.expected : 0;
+  const paceTxt = st.bud<=0 ? '' : (paceDiff<=0
+    ? `Je zit <b>${euro0(-paceDiff)} ónder</b> waar je vandaag zou mogen zitten (${euro0(st.expected)}).`
+    : `Je zit <b>${euro0(paceDiff)} bóven</b> waar je vandaag zou mogen zitten (${euro0(st.expected)}).`);
+  return `<div class="cz-status">
+    <div class="czs-top">
+      <div class="czs-amt"><div class="czs-lbl">Uitgegeven deze maand</div><span class="big">${euro(st.spent)}</span><span class="of"> / ${euro(st.bud)} budget</span></div>
+      <div class="czs-days"><span class="czs-dnum">${st.left}</span><span class="czs-dlbl">dagen te gaan</span></div>
+    </div>
+    <div class="czs-bar"><div class="czs-fill" style="width:${st.pct}%;background:${st.vcol}"></div>${st.bud>0?`<div class="czs-pace" style="left:${st.pacePct}%"></div>`:''}</div>
+    ${paceTxt?`<div class="czs-cap">${paceTxt} <span style="color:var(--mut)">Het streepje is je verwachte tempo voor vandaag.</span></div>`:''}
+    <div class="czs-chip" style="color:${st.vcol};border-color:${st.vcol}">${st.verdict}</div>
+  </div>`;
+}
 function openBudgetCompare(m){
   m=m||curMonth||months()[months().length-1];
   const t=totals(m), bud=Math.round(t.budget), act=Math.round(t.spend), over=act>bud;
@@ -1112,12 +1177,9 @@ function openBudgetCompare(m){
       ${o?`<div class="bc-why">${catHypo(m,r.k)}</div>`:''}</div>`;
   }).join('');
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div style="font-weight:800;font-size:17px;margin-bottom:2px">Je uitgaven vs budget</div>
+    <div style="font-weight:800;font-size:17px;margin-bottom:2px">Hoe doe je het deze maand?</div>
     <div class="small muted" style="margin-bottom:16px">${monthLabel(m)}</div>
-    <div class="bc-status" style="color:${stCol}">${stTxt}</div>
-    <div class="bc-statsub">${euro0(act)} van ${euro0(bud)} uitgegeven</div>
-    <div class="bar-track" style="height:7px;margin:12px 0 0"><div class="bar-fill" style="width:${Math.min(bud?act/bud*100:0,100)}%;background:${stCol}"></div></div>
-    ${steer?`<div class="bc-steer">${steer}</div>`:''}
+    ${statusModule(m)}
     ${top.length?`<div class="hlabel" style="margin:22px 2px 4px">Grootste verschillen</div>${rowHtml}`:`<div class="small muted" style="margin-top:18px">Stel een maandbudget per categorie in om verschillen te zien.</div>`}
     ${overRows.length?`<button class="if-cta" style="margin-top:20px" onclick="closeSheet();go('act')">${ICON('target')} Vraag je coach om een bespaartip ›</button>`:''}`;
   $('#sheetBg').classList.add('show');
@@ -2110,6 +2172,27 @@ function projVarEstimate(){
   const keep=vals.slice(0,Math.max(1,Math.ceil(vals.length*0.9)));   // trim de duurste maand(en): eenmalige pieken
   return Math.round(keep[Math.floor(keep.length/2)]);
 }
+// grootste lek, gestructureerd (voor de coach-dialoog): échte impuls vs noodzaak-zonder-potje vs over-budget
+function coachLeak(m){
+  let EB={}; try{ EB=effectiveBudgets(m).out; }catch(_){}
+  let imp=null, need=null;
+  try{ for(const x of txOfMonth(m)){ const k=catOf(x), c=CATS[k];
+    if(!(x.amount<0 && c && c.type==='expense' && !isFixed(x))) continue;
+    if(+EB[k]>0) continue;
+    const amt=-x.amount; if(amt<25) continue;
+    const nm=titleCase(cleanMerch(x.name)||x.name||'een aankoop'); const rec=isRecurringMerchant(x.name);
+    if(!isFixedCat(k) && !rec){ if(!imp||amt>imp.amt) imp={amt,name:nm,k}; }
+    else { if(!need||amt>need.amt) need={amt,name:nm,k}; }
+  } }catch(_){}
+  if(imp) return {kind:'impulse', name:imp.name, amount:imp.amt, cat:imp.k};
+  if(need) return {kind:'missing-pot', name:need.name, amount:need.amt, cat:need.k};
+  const ov=(typeof budgetOverCat==='function')?budgetOverCat(m):null;
+  if(ov) return {kind:'over-budget', name:CATS[ov.k].name, amount:Math.round(ov.over), cat:ov.k};
+  return null;
+}
+// coach-geheugen: log van afspraken/beslissingen (voedt de terugblik volgende keer)
+function coachLogAdd(entry){ SET.coachLog=SET.coachLog||[]; SET.coachLog.unshift(Object.assign({ts:Date.now()},entry)); if(SET.coachLog.length>50) SET.coachLog.length=50; save(); }
+function coachLastText(){ const l=(SET.coachLog||[])[0]; return l?l.text:''; }
 function financeModel(){
   const now=new Date(); const year=now.getFullYear(); const curIdx=now.getMonth();
   const cm=`${year}-${String(curIdx+1).padStart(2,'0')}`; const has=ym=>months().includes(ym);
@@ -2140,26 +2223,31 @@ function financeModel(){
   // ---- huidige maand (canoniek via coachStatus) ----
   const st=coachStatus(cm); const fixDueR=Math.round(monthLiquidity().fixDue);
   const current={spent:st.spent,budget:st.bud,dim:st.dim,elapsed:st.elapsed,left:st.left,expectedOnPace:st.expected,
+    paceDelta:Math.round(st.expected-st.spent),
     fixedDueRemaining:fixDueR,varRemaining:Math.max(st.projEnd-st.spent-fixDueR,0),forecastEndOfMonth:st.projEnd,status:st.vkey};
   // ---- projectie (Vooruitblik én Coach lezen dit) ----
-  const trajectory=months_.map(x=>x.balance);
+  const setAside=Math.round(+SET.coachSetAside||0);                       // eenmalig opzijgezet (coach-actie)
   const optKeys=new Set((coachRuleOptions(cm)||[]).map(r=>r.key)); let totalCut=0;
   for(const k in (SET.coachRules||{})) if(optKeys.has(k)) totalCut+=+SET.coachRules[k]||0;
-  const ruleCourse=months_.map((x,i)=> i<=curIdx? x.balance : Math.round(x.balance+totalCut*(i-curIdx)));
-  const projection={endBalanceDecember:months_[11].balance,savingsTrajectory:trajectory,currentCourse:trajectory.slice(),
-    ruleCourse,ruleDelta:ruleCourse[11]-months_[11].balance,totalCut};
+  // ÉÉN gecommitteerde koers: werkelijk t/m nu, daarna + eenmalig opzijgezet + actieve maandregels
+  const trajectory=months_.map((x,i)=> i<curIdx ? x.balance : Math.round(x.balance+setAside+totalCut*(i-curIdx)));
+  const endDec=trajectory[11];
+  const projection={endBalanceDecember:endDec,savingsTrajectory:trajectory,currentCourse:trajectory.slice(),
+    ruleCourse:trajectory.slice(),ruleDelta:0,totalCut,setAside};
   return {meta:{year,todayYM:cm,curIdx,day:now.getDate(),dim:st.dim,elapsed:st.elapsed,left:st.left},
     assumptions:{baseIncome:baseInc,irregularIncome,monthlyFixed,annualFixed,projVariable,varMethod:'median-trimmed',openingBalance},
-    months:months_,current,projection,coach:{projection:months_[11].balance}};
+    months:months_,current,projection,
+    coach:{projection:endDec, leak:(typeof coachLeak==='function'?coachLeak(cm):null), lastAction:(typeof coachLastText==='function'?coachLastText():'')}};
 }
 // SPAARMODEL = dunne afgeleide van de motor (4-lijnen grafiek leest hieruit; geen eigen som meer)
 function savingsYearModel(){
   const M=financeModel(); const cur=M.meta.curIdx; const targ=Math.round(monthlySavingTarget());
   const opening=M.assumptions.openingBalance;
   const doel=[]; { let d=opening; for(let i=0;i<12;i++){ d+=targ; doel[i]=Math.round(d); } }   // volle-discipline referentie, zelfde anker
+  const traj=M.projection.savingsTrajectory;
   const work=M.months.map(x=> x.kind==='actual'? x.balance : null);                            // werkelijk
-  const koers=M.months.map((x,i)=> i<cur? null : x.balance);                                    // huidige koers (canoniek)
-  const Scur=M.months[cur].balance;
+  const koers=traj.map((v,i)=> i<cur? null : v);                                                // huidige koers (canoniek, incl. opzijgezet)
+  const Scur=traj[cur];
   const budget=M.months.map((x,i)=> i<cur? null : (i===cur? Scur : Math.round(Scur+targ*(i-cur))));  // budget-gehaald
   const fut=M.months.filter(x=>x.kind==='projection').map(x=>x.margin); const avgIn=fut.length?Math.round(fut.reduce((a,b)=>a+b,0)/fut.length):targ;
   return {y0:M.meta.year,cur,targ,avgIn,Scur,doel,work,budget,koers,endKoers:M.projection.endBalanceDecember,doelEnd:doel[11]};
@@ -2613,6 +2701,7 @@ function coachRuleOptions(m){
 }
 function toggleCoachRule(key,cut){ SET.coachRules=SET.coachRules||{}; if(SET.coachRules[key]) delete SET.coachRules[key]; else SET.coachRules[key]=cut; save(); renderActions(); }
 function toggleCoachDisc(){ SET.coachDiscOpen=!SET.coachDiscOpen; save(); renderActions(); }
+function togglePotjes(){ SET.potOpen = !(SET.potOpen!==false); save(); renderActions(); }
 // forecast-grafiek (2 lijnen): volle discipline (gestippeld) + jouw/gekozen koers (solide)
 function coachForecastChart(M,accent){
   const MN=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
@@ -2633,52 +2722,254 @@ function renderActions(){
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||months()[months().length-1]; const isNow=m===nowYM;
   if(!isNow){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Je coach geldt voor de lopende maand. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar nu ›</span></div></div>'; return; }
-  const st=coachStatus(m);
-  // ---- ZONE "NU" — statusmodule als held + één regel coach-tekst ----
-  const nm=(SET.name||'').trim().split(/\s+/)[0]; const greet=nm?`Hey ${esc(nm)},`:'Hey,';
-  const kern = st.vkey==='over' ? `je gaat richting over budget — hieronder zie je waar het lekt en wat de stap is.`
-    : st.vkey==='room' ? `je loopt vóór op je tempo. Geef die ruimte een bestemming voor ze vanzelf verdampt.`
-    : st.vkey==='track' ? `je loopt op schema — en juist dan kantel je het makkelijkst. Hou je regel vast.`
-    : `stel je inkomen in, dan reken ik je budget en koers uit.`;
-  const zoneNu=`<div class="cz-status">
-    <div class="czs-top">
-      <div class="czs-amt"><span class="big">${euro(st.spent)}</span><span class="of"> / ${euro(st.bud)}</span></div>
-      <div class="czs-days">${st.left} dgn</div>
-    </div>
-    <div class="czs-bar"><div class="czs-fill" style="width:${st.pct}%;background:${st.vcol}"></div>${st.bud>0?`<div class="czs-pace" style="left:${st.pacePct}%"></div>`:''}</div>
-    <div class="czs-chip" style="color:${st.vcol};border-color:${st.vcol}">${st.verdict}</div>
-  </div>
-  <div class="cz-line"><b>${greet}</b> ${kern}</div>`;
-  // ---- ZONE "DEZE WEEK" — constatering (oorzaak) + wat ging goed ----
-  const wk=coachWeekRisk(m); const good=coachGood(m);
-  const zoneWeek=`<div class="cz-head">Deze week</div>
-    <div class="cz-card cz-fb"><div class="ic" style="color:${wk.tone==='warn'?'var(--amber)':'var(--teal)'}">${wk.tone==='warn'?ICON('alert'):ICON('check')}</div><div class="tx">${wk.txt}</div></div>
-    <div class="cz-card cz-fb"><div class="ic" style="color:var(--green)">${ICON('check')}</div><div class="tx">${good}</div></div>`;
-  // ---- ZONE "VOORUIT" — forecast-held met interactieve regel-opties (zelfde engine als spaargrafiek) ----
-  const M=savingsYearModel(); const rem=Math.max(11-M.cur,0);
-  const rules=coachRuleOptions(m); const optKeys=new Set(rules.map(r=>r.key));
-  let totalCut=0; for(const k in (SET.coachRules||{})) if(optKeys.has(k)) totalCut+=+SET.coachRules[k]||0;
-  const baseEnd=M.endKoers; const chosenEnd=Math.round(baseEnd+totalCut*rem);
-  const accent=[]; for(let i=0;i<12;i++){ accent[i]= i<=M.cur ? M.work[i] : Math.round(M.koers[i]+totalCut*(i-M.cur)); }
-  const gap=chosenEnd-M.doelEnd;
-  const deltaBadge = totalCut>0
-    ? `<span class="cz-delta">+${euro0(chosenEnd-baseEnd)} met je regels</span>`
-    : (gap>=0 ? `<span class="cz-delta">op volle discipline</span>` : `<span class="cz-delta amber">${euro0(-gap)} onder volle discipline</span>`);
-  const ruleBtns = rules.length ? `<div style="margin-top:10px">${rules.map(r=>{const on=!!(SET.coachRules&&SET.coachRules[r.key]); return `<button class="cz-rule${on?' on':''}" onclick="toggleCoachRule('${r.key}',${r.cut})">${on?'✓ ':''}${esc(r.label)}<span class="cr-cut">+${euro0(r.cut)}/mnd</span></button>`;}).join('')}</div>` : '';
-  const zoneVooruit=`<div class="cz-head">Vooruit</div>
-    <div class="cz-card">
-      <div class="cz-eyebrow">EIND DECEMBER</div>
-      <div class="cz-end">${euro(chosenEnd)}</div>
-      <div>${deltaBadge}</div>
-      ${coachForecastChart(M,accent)}
-      <div class="vc-leg" style="margin-top:4px"><span><i class="dash"></i>volle discipline</span><span><i></i>jouw koers</span></div>
-    </div>${ruleBtns}`;
-  // ---- ZONE "MIJN REGELS" — vast principe, gedempt en inklapbaar ----
   const zoneMine=`<div class="cz-mine">
     <div class="czr-head" onclick="toggleCoachDisc()"><span>${ICON('target')} Mijn regel: geen budget, geen aankoop</span><span>${SET.coachDiscOpen?'▲':'▼'}</span></div>
     ${SET.coachDiscOpen?coachDiscipline(m):''}
   </div>`;
-  $('#s-act').innerHTML = zoneNu + zoneWeek + zoneVooruit + zoneMine;
+  // ---- "JE POTJES" — budget als zichtbaar coach-onderdeel (lek → potje), inklapbaar ----
+  const sp=catSpendMap(m); const B=SET.budgets||{};
+  const potCats=Object.keys(sp).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k)&&sp[k]>0).sort((a,b)=>sp[b]-sp[a]).slice(0,5);
+  const potRows=potCats.map(k=>{ const has=+B[k]>0; const spent=Math.round(sp[k]); const over=has&&spent>+B[k];
+    return `<div class="cz-pot"><div class="cp-info"><div class="cp-nm">${CATS[k].icon||''} ${CATS[k].name}</div>
+      <div class="cp-sub${(!has||over)?' warn':''}">${has?`${euro0(spent)} van ${euro0(B[k])}${over?' · over':''}`:`${euro0(spent)} deze maand · nog geen potje`}</div></div>
+      <button class="cp-btn${has?'':' make'}" onclick="openPotje('${k}')">${has?'bewerk':'Maak potje'}</button></div>`;}).join('');
+  const potOpen=SET.potOpen!==false;
+  const zonePotjes = potCats.length ? `<div class="cz-head cz-head-t" onclick="togglePotjes()">Je potjes <span class="cz-chev">${potOpen?'▲':'▼'}</span></div>${potOpen?`<div class="cz-card" style="padding:4px 14px">${potRows}</div><div class="cz-note">Geen potje = geen aankoop. Geef elke categorie vooraf een bedrag — is het op, dan is het op.</div>`:''}` : '';
+  $('#s-act').innerHTML = `<div class="coachhead" onclick="openCoachAvatar()"><div class="av">${coachAvatar()}</div><span class="nm">Je coach</span><span class="sw">wissel ›</span></div>`
+    + `<div class="cothr" id="coThr"></div><div id="coCh"></div>`
+    + `<button class="cobuy" id="buyBtn">${ICON('cart')} Ik wil iets kopen</button>`
+    + zonePotjes + zoneMine;
+  const bb=document.getElementById('buyBtn'); if(bb) bb.onclick=openBuy;
+  startCoachTalk(m);
+}
+/* ---------- COACH-DIALOOG (tik-door gesprek, leest/voert uit via de motor) ---------- */
+let _coT=null,_coC=null;
+const AV_V=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="#2b2440"/><path d="M8 27c0-7 4-12 10-12s10 5 10 12z" fill="#caa6c4"/><circle cx="18" cy="15" r="6.6" fill="#f1c9a6"/><path d="M11 14c0-5 3-7.5 7-7.5s7 2.5 7 7.5c-1.6-2.2-3.6-3.2-7-3.2s-5.4 1-7 3.2z" fill="#caa6c4"/></svg>`;
+const AV_M=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="#21314a"/><path d="M9 28c0-6 4-10 9-10s9 4 9 10z" fill="#5a8fc0"/><circle cx="18" cy="15" r="6.6" fill="#e9b994"/><path d="M11.4 13c0-4.2 3-6.2 6.6-6.2s6.6 2 6.6 6.2c-2-2-4-2.6-6.6-2.6s-4.6.6-6.6 2.6z" fill="#3a4a5e"/></svg>`;
+function coachAvatar(){ return SET.coachAvatar==='m'?AV_M:AV_V; }
+function openCoachAvatar(){
+  const cur=SET.coachAvatar==='m'?'m':'v';
+  const opt=(k,svg,lbl)=>`<div onclick="setCoachAvatar('${k}')" style="text-align:center;cursor:pointer">
+    <div style="width:68px;height:68px;border-radius:50%;overflow:hidden;margin:0 auto 8px;border:2px solid ${cur===k?'var(--teal)':'transparent'}">${svg}</div>
+    <div class="small" style="color:${cur===k?'var(--teal)':'var(--mut)'};font-weight:600">${lbl}</div></div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:17px;margin-bottom:16px;text-align:center">Kies je coach</div>
+    <div style="display:flex;gap:28px;justify-content:center">${opt('v',AV_V,'Sara')}${opt('m',AV_M,'Daan')}</div>
+    <div class="small muted" style="text-align:center;margin-top:14px">Alleen het uiterlijk verandert. De toon blijft hetzelfde: eerlijk, geen cheerleader.</div>`;
+  $('#sheetBg').classList.add('show');
+}
+function setCoachAvatar(k){ SET.coachAvatar=k; save(); closeSheet(); renderActions(); }
+function coWait(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function coReset(){ _coT=document.getElementById('coThr'); _coC=document.getElementById('coCh'); if(_coT)_coT.innerHTML=''; if(_coC)_coC.innerHTML=''; }
+function coBub(cls,txt,o){ if(!_coT)return; o=o||{};
+  const set=(el)=>{ if(o.html) el.innerHTML=txt; else el.textContent=txt; };
+  if(cls==='co'){ const row=document.createElement('div'); row.className='corow'; const av=document.createElement('div'); av.className='coav'; av.innerHTML=coachAvatar(); const d=document.createElement('div'); d.className='cbub co'+(o.accent?' acc':''); set(d); row.appendChild(av); row.appendChild(d); _coT.appendChild(row); }
+  else { const d=document.createElement('div'); d.className='cbub '+cls; set(d); _coT.appendChild(d); }
+  try{window.scrollTo(0,document.body.scrollHeight);}catch(_){}}
+function coFx(txt){ if(!_coT)return; const d=document.createElement('div'); d.className='cfx'; d.textContent='✓ '+txt; _coT.appendChild(d); }
+async function coSay(txt,o){ if(!_coT)return; const row=document.createElement('div'); row.className='corow'; const av=document.createElement('div'); av.className='coav'; av.innerHTML=coachAvatar(); const e=document.createElement('div'); e.className='cbub co cdots'; e.innerHTML='<span></span><span></span><span></span>'; row.appendChild(av); row.appendChild(e); _coT.appendChild(row); await coWait(520); if(!document.body.contains(row))return; row.remove(); coBub('co',txt,o); await coWait(110); }
+function coChoices(opts){ if(!_coC)return; _coC.innerHTML=''; opts.forEach(o=>{ const b=document.createElement('button'); b.className='cch'; const s=document.createElement('span'); s.textContent=o.l; const c=document.createElement('span'); c.className='cchv'; c.textContent='›'; b.appendChild(s); b.appendChild(c); b.onclick=()=>{ _coC.innerHTML=''; coBub('me',o.l); o.act(); }; _coC.appendChild(b); }); }
+function coEnd(){ if(_coC)_coC.innerHTML=''; }
+// observatie-tekst per leksoort (leest coach.leak)
+function coObsLeak(leak){
+  if(leak.kind==='impulse') return `Die ${euro0(leak.amount)} bij ${leak.name} zat in geen budget. Kwam uit het niets.`;
+  if(leak.kind==='missing-pot') return `${leak.name} liep weer langs zonder potje. ${euro0(leak.amount)}. Dat overvalt je elke maand.`;
+  return `${leak.name} liep ${euro0(leak.amount)} over budget deze maand.`;
+}
+function coSuggestPot(cat){ const vals=months().map(ym=>catSpendMap(ym)[cat]||0).filter(v=>v>0).sort((a,b)=>a-b); const med=vals.length?vals[Math.floor(vals.length/2)]:0; return Math.max(Math.round(med/5)*5,10); }
+// SPOOR 1 — structureel gesprek (vier fases, gecomprimeerd op de lopende maand)
+// MAANDGESPREK (prototype, 6 stappen): doel → win → lek+stakes → reflectie → optie→actie → borgen
+async function startCoachTalk(m){
+  coReset(); if(!_coT)return;
+  const M=financeModel(); const leak=M.coach.leak; const last=M.coach.lastAction;
+  let goal=0, spaar=0; try{ const S=savingsModel(); goal=Math.round(S.goal); spaar=Math.round(S.monthlySaving); }catch(_){}
+  // 1) doel herankeren (accent + teal bedrag)
+  if(goal>0) await coSay(`Je doel: <span class="hl">${euro0(goal)} buffer</span>. Even kijken hoe je maand daaraan bijdroeg.`,{html:true,accent:true});
+  else await coSay(`Even kijken naar je maand.`);
+  // 2) win erkennen (alleen met vorige afspraak, accent + teal afspraak)
+  if(last) await coSay(`Vorige keer hield je dit aan: <span class="hl">${esc(last)}</span>. Dat werkte.`,{html:true,accent:true});
+  // randgeval: geen lek → kort erkennen en afsluiten
+  if(!leak){ await coSay(`Geen lek deze maand. Je hield je aan je plan. Mooi, tot volgende keer.`); coEnd(); return; }
+  // 3) lek + stakes in één bubbel (over-budget goud, stakes gedimd, geen schuld)
+  const afw=Math.round(leak.amount);
+  await coSay(coLekHTML(leak,afw,spaar),{html:true});
+  // 4) reflectievraag → 5) vier opties (Spontaan vooraan: veel intentie=nu)
+  await coSay(`Wat was er anders toen je dat deed?`);
+  coChoices(coMaandOpties(leak));
+}
+function coLekHTML(leak,afw,spaar){
+  const cn=CATS[leak.cat]?CATS[leak.cat].name.toLowerCase():'die categorie';
+  let main;
+  if(leak.kind==='over-budget') main=`Eén lek: ${cn}, <span class="warn">${euro0(afw)} over budget</span>.`;
+  else if(leak.kind==='missing-pot') main=`${esc(leak.name)} liep langs zonder potje. <span class="warn">${euro0(afw)}</span>.`;
+  else main=`Die <span class="warn">${euro0(afw)}</span> bij ${esc(leak.name)} zat in geen budget.`;
+  let sub='';
+  if(spaar>0){ const weken=Math.max(Math.round(afw*12/spaar),1); sub=`<div class="cbsub">Klein, maar terugkerend is dat ${euro0(afw*12)} per jaar. Zo'n ${weken} ${weken===1?'week':'weken'} later bij je doel.</div>`; }
+  return main+sub;
+}
+function coMaandOpties(leak){
+  const cn=CATS[leak.cat]?CATS[leak.cat].name.toLowerCase():'die categorie'; const afw=Math.round(leak.amount);
+  return [
+    {l:'Spontaan',act:()=>coShowAction({eyebrow:'Eén regel vooraf',context:`Spontaan overkomt iedereen. Eén check vooraf vangt het op.`,title:`Als ik spontaan ${cn} wil, dan check ik eerst mijn ${cn}-potje.`,afspraak:`als ik spontaan ${cn} wil, check ik eerst mijn ${cn}-potje`})},
+    {l:'Geen potje gepland',act:()=>coShowAction({eyebrow:'Geef het een plek',context:`Zonder potje grijp je naar de makkelijkste optie. Plan het vooraf.`,title:`Hoeveel zet je volgende maand apart voor ${cn}?`,input:{type:'number',ph:'bv. 175'},potCat:leak.cat,afspraak:v=>`ik zet ${euro0(+v||0)} per maand apart voor ${cn}`})},
+    {l:"Leek 't waard",act:()=>coShowAction({eyebrow:'Budget klopt misschien niet',context:`Was het 't waard, dan hoort het in je plan, als keuze.`,title:`Verhoog je ${cn}-potje met ${euro0(afw)} en haal dat ergens weg.`,q:`Waar mag het vandaan komen?`,select:potOptions(leak.cat),shiftCat:leak.cat,shiftAmt:afw,afspraak:v=>`verhoog ${cn} met ${euro0(afw)}, weg bij ${potName(v)}`})},
+    {l:'Anders, zeg ik zelf',act:()=>coShowAction({eyebrow:'Jouw woorden',context:`Zeg het zelf, ik maak er één afspraak van.`,title:`Wat spreek je met jezelf af?`,input:{type:'text',ph:'In je eigen woorden'},afspraak:v=>(v||'eigen afspraak')})}
+  ];
+}
+// toont één voorgestelde actie als accent-kaart (eyebrow + context + actie) + [Vastgelegd] / [Pas aan]
+async function coShowAction(opt){
+  const eye=opt.eyebrow?`<div class="ca-eye">${esc(opt.eyebrow)}</div>`:'';
+  const ctx=opt.context?`<div class="ca-ctx">${esc(opt.context)}</div>`:'';
+  const act=`<div class="ca-act">${opt.title}${opt.q?` <span class="hl">${esc(opt.q)}</span>`:''}</div>`;
+  await coSay(eye+ctx+act,{html:true,accent:true}); if(!_coC) return; _coC.innerHTML='';
+  let inp=null;
+  if(opt.input){ inp=document.createElement('input'); inp.type=opt.input.type; inp.inputMode=opt.input.type==='number'?'numeric':'text'; inp.placeholder=opt.input.ph; inp.className='coinput'; _coC.appendChild(inp); }
+  else if(opt.select){ inp=document.createElement('select'); inp.className='coinput'; (opt.select||[]).forEach(o=>{const e=document.createElement('option');e.value=o.v;e.textContent=o.t;inp.appendChild(e);}); _coC.appendChild(inp); }
+  const row=document.createElement('div'); row.className='coconf';
+  const ok=document.createElement('button'); ok.className='coconf-ok'; ok.textContent='✓ Vastgelegd voor volgende maand';
+  const adj=document.createElement('button'); adj.className='coconf-adj'; adj.textContent='Pas aan';
+  ok.onclick=async()=>{ const v=inp?inp.value:''; const tekst=(typeof opt.afspraak==='function')?opt.afspraak(v):opt.afspraak;
+    _coC.innerHTML=''; coBub('me','Zo spreken we af');
+    if(opt.potCat && +v>0){ SET.budgets=SET.budgets||{}; SET.budgets[opt.potCat]=Math.round(+v); save(); coFx(`potje '${(CATS[opt.potCat].name||'').toLowerCase()}' · ${euro0(+v)}/mnd`); }
+    if(opt.shiftCat && v){ SET.budgets=SET.budgets||{}; SET.budgets[v]=Math.round((+SET.budgets[v]||0)-opt.shiftAmt); SET.budgets[opt.shiftCat]=Math.round((+SET.budgets[opt.shiftCat]||0)+opt.shiftAmt); save(); coFx(`${euro0(opt.shiftAmt)} verschoven uit ${potName(v)}`); }
+    coachLogAdd({type:'afspraak',text:tekst}); coFx('afspraak vastgelegd');
+    await coSay(`Genoteerd. Volgende maand kom ik hierop terug.`); coEnd();
+  };
+  adj.onclick=()=>{ _coC.innerHTML=''; const lk=financeModel().coach.leak; if(lk) coChoices(coMaandOpties(lk)); };
+  row.appendChild(ok); row.appendChild(adj); _coC.appendChild(row);
+}
+function potOptions(exclude){ const B=SET.budgets||{}; const m=curMonth||months()[months().length-1];
+  let ks=Object.keys(B).filter(k=>+B[k]>0 && k!==exclude && CATS[k]);
+  if(!ks.length) ks=Object.keys(CATS).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k)&&k!==exclude);
+  return ks.map(k=>{ const rest=(+B[k]>0)?Math.max(Math.round((+B[k])-(catSpendMap(m)[k]||0)),0):null; return {v:k,t:CATS[k].name+(rest!=null?` · nog ${euro0(rest)}`:'')}; }); }
+function potName(k){ return CATS[k]?CATS[k].name.toLowerCase():'een ander potje'; }
+function coReasonChips(m,leak){
+  const conf={Spontaan:`Spontaan dus. Logisch, dat overkomt iedereen. Geen falen, wel een patroon om op voor te bereiden.`,
+    'Geen potje gepland':`Geen potje, dan grijp je naar de makkelijkste optie. Da's te fixen.`,
+    "Leek 't waard":`Kan. Soms is iets het waard. Zolang je 't bewust kiest en niet elke keer ongemerkt.`};
+  const opts=['Spontaan','Geen potje gepland',"Leek 't waard"].map(r=>({l:r,act:async()=>{ await coSay(conf[r]); await coOfferAction(m,leak); }}));
+  opts.push({l:'Anders, zeg ik zelf',act:()=>coTextSheet('Wat was er anders?','In je eigen woorden',async v=>{ if(v){ coBub('me',v); coachLogAdd({type:'reflectie',text:v}); } await coSay(`Oké. Goed dat je 't benoemt. Hou 't even in de gaten.`); await coOfferAction(m,leak); })});
+  return opts;
+}
+async function coOfferAction(m,leak){
+  if(leak && (leak.kind==='missing-pot'||leak.kind==='impulse')){
+    const cn=CATS[leak.cat]?CATS[leak.cat].name.toLowerCase():'die categorie';
+    await coSay(`Zal ik een potje voor ${cn} maken? Geen potje, geen aankoop.`);
+    coChoices([
+      {l:'Ja, maak een potje',act:async()=>{ const amt=coSuggestPot(leak.cat); SET.budgets=SET.budgets||{}; SET.budgets[leak.cat]=amt; save(); TX.forEach(categorize); coFx(`potje '${cn}' · ${euro0(amt)}/mnd`); coachLogAdd({type:'potje',text:`een potje voor ${cn}`}); await coSay(`Staat. ${euro0(amt)} per maand. Volgende keer dat 't langskomt, weet je waar 't vandaan komt.`); await coAfspraak(m); }},
+      {l:'Was eenmalig',act:async()=>{ await coSay(`Kan. Al zag ik 't vaker langskomen. Maar goed, jij kent 't 't best.`); await coAfspraak(m); }}
+    ]);
+  } else { await coAfspraak(m); }
+}
+async function coAfspraak(m){
+  await coSay(`Maak er een als-dan van voor de komende tijd.`);
+  coChoices([
+    {l:'Als ik iets buiten budget wil, dan slaap ik er een nacht over',act:()=>coCommit(`als ik iets buiten budget wil, dan slaap ik er een nacht over`)},
+    {l:'Als een potje leeg is, dan stopt het daar',act:()=>coCommit(`als een potje leeg is, dan stopt het`)},
+    {l:'Zelf bedenken',act:()=>coTextSheet('Jouw als-dan','als ... dan ...',v=>coCommit(v||'eigen afspraak'))}
+  ]);
+}
+async function coCommit(txt){ coachLogAdd({type:'afspraak',text:txt}); coFx(`afspraak vastgelegd`); await coSay(`Genoteerd. Daar kom ik volgende keer op terug.`); coEnd(); }
+function coRoomChoices(m,C){
+  const room=Math.max(Math.round(C.paceDelta),0);
+  return [
+    {l:`Opzij zetten (${euro0(room)})`,act:async()=>{ const before=financeModel().projection.endBalanceDecember; SET.coachSetAside=(+SET.coachSetAside||0)+room; save(); const after=financeModel().projection.endBalanceDecember; coFx(`spaardoel ${euro0(before)} → ${euro0(after)}`); coachLogAdd({type:'spaarregel',text:`${euro0(room)} opzijgezet`}); await coSay(`Goed. Dat tikt aan. Tot volgende keer.`); coEnd(); }},
+    {l:`Hou ik aan`,act:async()=>{ const end=financeModel().projection.endBalanceDecember; await coSay(`Prima, blijf je op koers. Eind december rond de ${euro0(end)}.`); coEnd(); }},
+    {l:`Iets leuks`,act:async()=>{ await coSay(`Kan. Maar dan ben je die ${euro0(room)} zo kwijt. Zet desnoods de helft opzij, dan heb je allebei.`); coChoices([
+        {l:`Goed, de helft`,act:async()=>{ const half=Math.round(room/2); const before=financeModel().projection.endBalanceDecember; SET.coachSetAside=(+SET.coachSetAside||0)+half; save(); const after=financeModel().projection.endBalanceDecember; coFx(`spaardoel ${euro0(before)} → ${euro0(after)}`); coachLogAdd({type:'spaarregel',text:`${euro0(half)} opzijgezet`}); await coSay(`Slim. Half opzij, half vrij.`); coEnd(); }},
+        {l:`Nee, echt iets leuks`,act:async()=>{ await coSay(`Jij beslist. Maar geen budget, geen aankoop. Maak er dan bewust een potje 'leuk' van.`); coEnd(); }}
+      ]); }}
+  ];
+}
+function coRuleChoices(m){
+  const rules=coachRuleOptions(m);
+  const opts=rules.map(r=>({l:`${r.label} (+${euro0(r.cut)}/mnd)`,act:async()=>{ const before=financeModel().projection.endBalanceDecember; SET.coachRules=SET.coachRules||{}; SET.coachRules[r.key]=r.cut; save(); const after=financeModel().projection.endBalanceDecember; coFx(`spaardoel ${euro0(before)} → ${euro0(after)}`); coachLogAdd({type:'regel',text:r.label}); await coSay(`Mooi. Dat zie je terug op je vooruitblik.`); coEnd(); }}));
+  opts.push({l:`Toon mijn grootste lek`,act:async()=>{ const leak=financeModel().coach.leak; if(leak){ await coSay(coObsLeak(leak)); await coOfferAction(m,leak);} else { await coSay(`Niks groots eigenlijk. Hou 't zo.`); coEnd(); } }});
+  return opts;
+}
+// BESLISMOMENT (prototype, 4 stappen): invoer → binaire check → vertakking (regie bij gebruiker) → altijd vastleggen
+function openBuy(){
+  const cats=Object.keys(CATS).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k));
+  const B=SET.budgets||{}; const m=curMonth||months()[months().length-1];
+  const optHtml=cats.map(k=>{ const has=+B[k]>0; const rest=has?Math.max(Math.round(+B[k]-(catSpendMap(m)[k]||0)),0):null; return `<option value="${k}">${CATS[k].name}${has?` · nog ${euro0(rest)}`:' · geen potje'}</option>`; }).join('');
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:17px;margin-bottom:2px">Ik wil iets kopen</div>
+    <div class="small muted" style="margin-bottom:14px">Even checken of er budget voor is.</div>
+    <label class="fld">Wat?</label>
+    <input id="buyItem" type="text" placeholder="bv. koptelefoon" style="width:100%">
+    <label class="fld" style="margin-top:10px">Bedrag (€)</label>
+    <input id="buyAmt" type="number" min="0" inputmode="numeric" placeholder="bv. 120" style="width:100%">
+    <label class="fld" style="margin-top:10px">Uit welk potje?</label>
+    <select id="buyCat" style="width:100%">${optHtml}</select>
+    <button class="btn" style="margin-top:14px;width:100%" onclick="startBuy()">${ICON('cart')} Check</button>`;
+  $('#sheetBg').classList.add('show');
+}
+function startBuy(){ const item=((document.getElementById('buyItem')||{}).value||'').trim(); const amt=Math.round(+((document.getElementById('buyAmt')||{}).value)||0); const cat=(document.getElementById('buyCat')||{}).value; closeSheet(); if(amt>0&&cat) buyFlow(cat,amt,item); else toast('Vul een bedrag in'); }
+function coBuyLog(item,amt,cat,uitkomst,intentie){ coachLogAdd({type:'beslis',item:item||'',bedrag:amt,potjeId:cat,uitkomst,intentie,text:`${euro0(amt)} ${potName(cat)} · ${uitkomst}`}); }
+// sub-flow verschuiven: budget verplaatsen tussen potjes, totaal blijft kloppen
+function coBuyShift(item,amt,cat){
+  const opts=potOptions(cat);
+  if(!opts.length){ coSay('Geen ander potje om uit te halen. Stel eerst budgetten in.').then(coEnd); return; }
+  coBub('me','Haal uit ander potje');
+  coSay('Waar mag het vandaan komen?').then(()=>{
+    coChoices(opts.map(o=>({l:`Uit ${o.t}`,act:async()=>{ SET.budgets=SET.budgets||{}; SET.budgets[o.v]=Math.round((+SET.budgets[o.v]||0)-amt); SET.budgets[cat]=Math.round((+SET.budgets[cat]||0)+amt); save(); coBuyLog(item,amt,cat,'verschoven','n.v.t.'); coFx(`${euro0(amt)} verschoven uit ${potName(o.v)}`); await coSay(`Geregeld. ${potName(o.v)} levert in, ${potName(cat)} krijgt ruimte. Totaal blijft kloppen.`); coEnd(); }}))
+      .concat([{l:'Toch niet',act:async()=>{ coBuyLog(item,amt,cat,'geannuleerd','n.v.t.'); coFx('vastgelegd · geannuleerd'); await coSay('Ook goed. Dan blijft alles staan.'); coEnd(); }}]));
+  });
+}
+async function buyFlow(cat,amt,item){
+  coReset(); if(!_coT)return;
+  const cn=potName(cat);
+  coBub('me',`Ik wil ${item?esc(item)+' ':''}voor ${euro0(amt)} (${cn}).`);
+  await coWait(180);
+  const m=curMonth||months()[months().length-1]; const B=SET.budgets||{}; const has=+B[cat]>0;
+  const rest=has?Math.round(+B[cat]-(catSpendMap(m)[cat]||0)):0;
+  // 2) binaire check — groene weg, geen wrijving
+  if(has && amt<=rest){
+    await coSay(`Past binnen ${cn}, nog ${euro0(rest-amt)} over daarna. Ga je gang, dit hoort bij je plan.`);
+    coBuyLog(item,amt,cat,'gepland','n.v.t.'); coFx('vastgelegd · gepland'); coEnd(); return;
+  }
+  await coSay(`Hier is geen budget meer voor. ${CATS[cat].name} staat op ${euro0(Math.max(rest,0))}.`);
+  await coSay(`Wil je dit echt, of wil je het nú?`);
+  // 3) vertakking — regie bij gebruiker, nooit een verbod
+  coChoices([
+    {l:`Ik wil het écht`,act:async()=>{ await coSay(`Hoe regelen we het?`); coChoices([
+      {l:`Plan voor volgende maand`,act:async()=>{ coBuyLog(item,amt,cat,'ingepland','echt'); coFx('vastgelegd · ingepland'); await coSay(`Staat klaar voor volgende maand. Dan koop je 't met budget.`); coEnd(); }},
+      {l:`Haal uit ander potje`,act:()=>coBuyShift(item,amt,cat)},
+      {l:`Toch niet`,act:async()=>{ coBuyLog(item,amt,cat,'geannuleerd','echt'); coFx('vastgelegd · geannuleerd'); await coSay(`Helder. Niks mis mee.`); coEnd(); }}
+    ]); }},
+    {l:`Ik wil het nú`,act:async()=>{ await coSay(`Eén ademhaling. Wat doe je?`); coChoices([
+      {l:`Even wachten tot morgen`,act:async()=>{ coBuyLog(item,amt,cat,'geparkeerd','nu'); coFx('vastgelegd · geparkeerd'); await coSay(`Goed. Staat 't morgen nog, dan plannen we 't echt.`); coEnd(); }},
+      {l:`Haal uit ander potje`,act:()=>coBuyShift(item,amt,cat)},
+      {l:`Toch doen, ik weet wat het kost`,act:async()=>{ coBuyLog(item,amt,cat,'doorgezet','nu'); coFx('⚠ vastgelegd · doorgezet'); await coSay(`Doorgezet. Jij houdt de regie, ik leg 't vast. Geen oordeel.`); coEnd(); }}
+    ]); }}
+  ]);
+}
+// gedeeld tekst-sheet voor de 'zeg ik zelf'-momenten (enige plek waar typen mag)
+function coTextSheet(title,ph,cb){
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:17px;margin-bottom:12px">${esc(title)}</div>
+    <input id="coTxt" type="text" placeholder="${esc(ph)}" style="width:100%">
+    <button class="btn" style="margin-top:14px;width:100%" onclick="coTextSave()">${ICON('check')} Vastleggen</button>`;
+  window._coTextCb=cb; $('#sheetBg').classList.add('show');
+}
+function coTextSave(){ const v=((document.getElementById('coTxt')||{}).value||'').trim(); closeSheet(); const cb=window._coTextCb; window._coTextCb=null; if(cb) cb(v); }
+// budget als coach-actie: potje zetten/bewerken via een sheet (geen live-render, focus blijft)
+function openPotje(k){
+  const c=CATS[k]; if(!c) return; const B=SET.budgets||{}; const cur=+B[k]||'';
+  const sp=Math.round((catSpendMap(curMonth||months()[months().length-1])[k])||0);
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:17px;margin-bottom:2px">${c.icon||''} ${c.name}-potje</div>
+    <div class="small muted" style="margin-bottom:14px">Deze maand al ${euro0(sp)} besteed. Zet een vast maandbedrag — is het op, dan is het op.</div>
+    <label class="fld">Maandbudget (€)</label>
+    <input id="potInput" type="number" min="0" inputmode="numeric" value="${cur}" placeholder="bv. 150" style="width:100%">
+    <button class="btn" style="margin-top:14px;width:100%" onclick="savePotje('${k}')">${ICON('check')} Vastzetten</button>
+    ${cur?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="savePotje('${k}',true)">Potje verwijderen</div>`:''}`;
+  $('#sheetBg').classList.add('show');
+}
+function savePotje(k,del){
+  const v=del?'':((document.getElementById('potInput')||{}).value||'');
+  setCatBudget(k, del?'':v); closeSheet(); renderActions();
+  if(!del && +v>0) toast(`${ICON('check')} ${CATS[k].name}-potje gezet op ${euro0(+v)}`);
 }
 // coachvraag = oorzaak (waarom) + concrete gedragsregels om uit te kiezen
 function coachQA(sig){
@@ -2801,19 +3092,17 @@ function isFixed(t){
 function renderFixedVariable(list, inc){
   const items=list.filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense');
   let fixed=0,vari=0; for(const x of items){ if(isFixed(x)) fixed+=-x.amount; else vari+=-x.amount; }
-  inc=inc||0; const spend=fixed+vari, over=Math.max(inc-spend,0);
-  const pc=v=>inc?Math.round(v/inc*100):0;
-  const w=v=>inc?Math.max(v/inc*100,0):(spend?v/spend*100:0);
+  const spend=fixed+vari; if(spend<=0) return '';
+  const pc=v=>Math.round(v/spend*100);
+  const w=v=>v/spend*100;
   return `<div class="card">
-    <div class="row"><span class="hlabel" style="margin:0;flex:1">Vaste vs variabele lasten</span><span class="small muted">% van inkomen</span></div>
+    <div class="row"><span class="hlabel" style="margin:0;flex:1">Vaste vs variabele lasten</span><span class="small muted">% van uitgaven</span></div>
     <div class="stack">
       <div style="width:${w(fixed)}%;background:var(--blue)">${pc(fixed)>=8?pc(fixed)+'%':''}</div>
       <div style="width:${w(vari)}%;background:var(--amber)">${pc(vari)>=8?pc(vari)+'%':''}</div>
-      <div style="width:${w(over)}%;background:var(--teal)">${pc(over)>=8?pc(over)+'%':''}</div>
     </div>
     <div class="fv-row"><span class="dot" style="background:var(--blue)"></span><span class="nm">${ICON('lock')} Vaste lasten</span><span class="amt">${euro(fixed)}</span><span class="pc">${pc(fixed)}%</span></div>
     <div class="fv-row"><span class="dot" style="background:var(--amber)"></span><span class="nm">${ICON('cart')} Variabele uitgaven</span><span class="amt">${euro(vari)}</span><span class="pc">${pc(vari)}%</span></div>
-    <div class="fv-row"><span class="dot" style="background:var(--teal)"></span><span class="nm">${ICON('coins')} Overgehouden</span><span class="amt">${euro(over)}</span><span class="pc">${pc(over)}%</span></div>
     <div class="small muted" style="margin-top:6px">Vaste lasten liggen grotendeels vast (verzekeringen, lease, abonnementen, studie). Op je <b>variabele</b> uitgaven kun je het snelst sturen.</div>
   </div>`;
 }
@@ -3106,7 +3395,8 @@ function renderIns(){
     const pchips=(_years.length>1?`<div class="chips" style="margin:4px 0 6px">${_years.map(y=>`<span class="chip ${y===_yr?'on':''}" onclick="setInsYear('${y}')">${y}</span>`).join('')}</div>`:'')
       +`<div class="chips" style="margin:0 0 10px">${_inYr.map(mm=>`<span class="chip ${_sel.has(mm)?'on':''}" onclick="toggleInsMonth('${mm}')">${_MN[+mm.slice(5,7)-1]}</span>`).join('')}</div>`;
     const pTx=periodTx();
-    deep = pchips + renderCatBreak(pTx) + renderMerchants(pTx,periodLabel());
+    const pInc=periodMonths().reduce((s,mm)=>s+totals(mm).income,0);
+    deep = pchips + renderCatBreak(pTx) + renderFixedVariable(pTx,pInc) + renderMerchants(pTx,periodLabel());
   }
   $('#s-ins').innerHTML = heroProjection(m) + focusBlock + deepBtn + deep;
 }
