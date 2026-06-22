@@ -2759,6 +2759,23 @@ function openCoachAvatar(){
   $('#sheetBg').classList.add('show');
 }
 function setCoachAvatar(k){ SET.coachAvatar=k; save(); closeSheet(); renderActions(); }
+/* ---------- AI-coach (hybride): motor rekent, taalmodel verwoordt. Standaard UIT. Via je Worker /coach. ---------- */
+const COACH_SPEC=`Je bent de coach in Minder, een Nederlandstalige personal-finance app. Je bent een EERLIJKE SPIEGEL, geen cheerleader, geen adviesbot. Je praat weinig, je-vorm, kort en rustig, één gedachte per bericht. Confronteer met een patroon, nooit met een mislukking. Druk afwijkingen uit als stakes (weken vertraging van het doel), nooit als schuld. Eigenaarschap bij de gebruiker. Geen emoji, geen uitroeptekens, geen gedachtestreepjes, geen lijstjes met tips. Kernprincipe: geen budget, geen aankoop. OPDRACHT: herschrijf de gegeven 'draft' in deze toon. Behoud ALLE bedragen en getallen exact zoals in de draft; verzin geen nieuwe getallen. Eén of twee korte zinnen. Antwoord met alleen de herschreven zin, niets anders.`;
+function coStripTags(s){ return (s||'').replace(/<[^>]+>/g,''); }
+function coAmounts(s){ return (String(s).match(/€\s?\d{1,3}(?:\.\d{3})*(?:,\d{2})?/g)||[]).map(x=>x.replace(/\s/g,'')); }
+function coHi(text,tone){ return text.replace(/€\s?\d{1,3}(?:\.\d{3})*(?:,\d{2})?/g, m=>`<span class="${tone==='gold'?'warn':'hl'}">${m}</span>`); }
+async function coachAI(draft){
+  if(!SET.aiCoach) return null;
+  const url=(SET.psd2Url||'').replace(/\/+$/,''); const tok=SET.psd2Token||'';
+  if(!url||!tok||!draft) return null;
+  try{
+    const r=await fetch(url+'/coach',{method:'POST',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},
+      body:JSON.stringify({spec:COACH_SPEC,facts:window._coFacts||{},draft,model:SET.aiModel||''})});
+    if(!r.ok) return null; const d=await r.json(); const t=((d&&d.text)||'').trim(); if(!t) return null;
+    const da=coAmounts(draft); for(const a of coAmounts(t)){ if(!da.includes(a)) return null; }  // geen verzonnen bedrag
+    return t;
+  }catch(_){ return null; }
+}
 function coWait(ms){ return new Promise(r=>setTimeout(r,ms)); }
 function coReset(){ _coT=document.getElementById('coThr'); _coC=document.getElementById('coCh'); if(_coT)_coT.innerHTML=''; if(_coC)_coC.innerHTML=''; }
 function coBub(cls,txt,o){ if(!_coT)return; o=o||{};
@@ -2767,7 +2784,12 @@ function coBub(cls,txt,o){ if(!_coT)return; o=o||{};
   else { const d=document.createElement('div'); d.className='cbub '+cls; set(d); _coT.appendChild(d); }
   try{window.scrollTo(0,document.body.scrollHeight);}catch(_){}}
 function coFx(txt){ if(!_coT)return; const d=document.createElement('div'); d.className='cfx'; d.textContent='✓ '+txt; _coT.appendChild(d); }
-async function coSay(txt,o){ if(!_coT)return; const row=document.createElement('div'); row.className='corow'; const av=document.createElement('div'); av.className='coav'; av.innerHTML=coachAvatar(); const e=document.createElement('div'); e.className='cbub co cdots'; e.innerHTML='<span></span><span></span><span></span>'; row.appendChild(av); row.appendChild(e); _coT.appendChild(row); await coWait(520); if(!document.body.contains(row))return; row.remove(); coBub('co',txt,o); await coWait(110); }
+async function coSay(txt,o){ o=o||{}; if(!_coT)return;
+  const row=document.createElement('div'); row.className='corow'; const av=document.createElement('div'); av.className='coav'; av.innerHTML=coachAvatar(); const e=document.createElement('div'); e.className='cbub co cdots'; e.innerHTML='<span></span><span></span><span></span>'; row.appendChild(av); row.appendChild(e); _coT.appendChild(row);
+  let out=txt, html=o.html;
+  if(o.ai && SET.aiCoach){ const ai=await coachAI(coStripTags(typeof txt==='string'?txt:'')); if(ai!=null){ out=coHi(esc(ai),(o.ai&&o.ai.tone)||'teal'); html=true; } else { await coWait(280); } }
+  else { await coWait(520); }
+  if(!document.body.contains(row))return; row.remove(); coBub('co',out,{html,accent:o.accent}); await coWait(110); }
 function coChoices(opts){ if(!_coC)return; _coC.innerHTML=''; opts.forEach(o=>{ const b=document.createElement('button'); b.className='cch'; const s=document.createElement('span'); s.textContent=o.l; const c=document.createElement('span'); c.className='cchv'; c.textContent='›'; b.appendChild(s); b.appendChild(c); b.onclick=()=>{ _coC.innerHTML=''; coBub('me',o.l); o.act(); }; _coC.appendChild(b); }); }
 function coEnd(){ if(_coC)_coC.innerHTML=''; }
 // observatie-tekst per leksoort (leest coach.leak)
@@ -2783,18 +2805,22 @@ async function startCoachTalk(m){
   coReset(); if(!_coT)return;
   const M=financeModel(); const leak=M.coach.leak; const last=M.coach.lastAction;
   let goal=0, spaar=0; try{ const S=savingsModel(); goal=Math.round(S.goal); spaar=Math.round(S.monthlySaving); }catch(_){}
+  const afw=leak?Math.round(leak.amount):0; const weken=spaar>0?Math.max(Math.round(afw*12/spaar),1):0;
+  // facts voor de AI-laag (motor = waarheid; LLM verwoordt alleen)
+  window._coFacts={ context:'maandgesprek', doel:{bedrag:goal, naam:'buffer', maandelijkseSpaarsnelheid:spaar},
+    lek: leak?{categorie:(CATS[leak.cat]?CATS[leak.cat].name:leak.name), afwijking:afw, perJaar:afw*12, wekenVertraging:weken}:null,
+    vorigeAfspraak:last||null };
   // 1) doel herankeren (accent + teal bedrag)
-  if(goal>0) await coSay(`Je doel: <span class="hl">${euro0(goal)} buffer</span>. Even kijken hoe je maand daaraan bijdroeg.`,{html:true,accent:true});
-  else await coSay(`Even kijken naar je maand.`);
+  if(goal>0) await coSay(`Je doel: <span class="hl">${euro0(goal)} buffer</span>. Even kijken hoe je maand daaraan bijdroeg.`,{html:true,accent:true,ai:{tone:'teal'}});
+  else await coSay(`Even kijken naar je maand.`,{ai:true});
   // 2) win erkennen (alleen met vorige afspraak, accent + teal afspraak)
-  if(last) await coSay(`Vorige keer hield je dit aan: <span class="hl">${esc(last)}</span>. Dat werkte.`,{html:true,accent:true});
+  if(last) await coSay(`Vorige keer hield je dit aan: <span class="hl">${esc(last)}</span>. Dat werkte.`,{html:true,accent:true,ai:{tone:'teal'}});
   // randgeval: geen lek → kort erkennen en afsluiten
-  if(!leak){ await coSay(`Geen lek deze maand. Je hield je aan je plan. Mooi, tot volgende keer.`); coEnd(); return; }
+  if(!leak){ await coSay(`Geen lek deze maand. Je hield je aan je plan. Mooi, tot volgende keer.`,{ai:true}); coEnd(); return; }
   // 3) lek + stakes in één bubbel (over-budget goud, stakes gedimd, geen schuld)
-  const afw=Math.round(leak.amount);
-  await coSay(coLekHTML(leak,afw,spaar),{html:true});
+  await coSay(coLekHTML(leak,afw,spaar),{html:true,ai:{tone:'gold'}});
   // 4) reflectievraag → 5) vier opties (Spontaan vooraan: veel intentie=nu)
-  await coSay(`Wat was er anders toen je dat deed?`);
+  await coSay(`Wat was er anders toen je dat deed?`,{ai:true});
   coChoices(coMaandOpties(leak));
 }
 function coLekHTML(leak,afw,spaar){
@@ -3697,9 +3723,14 @@ function setCoach(){
       <label class="sw"><input type="checkbox" ${!SET.hideStreak?'checked':''} onchange="SET.hideStreak=!this.checked;save();render();"><span class="sl"></span></label></div>
     <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Interne overboekingen verbergen</div><div class="small muted">Eigen rekeningen & sparen tellen niet als uitgave</div></div>
       <label class="sw"><input type="checkbox" ${SET.hideInternal?'checked':''} onchange="SET.hideInternal=this.checked;save();render();"><span class="sl"></span></label></div>
+    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">AI-coach (via je Worker)</div><div class="small muted">Taalmodel verwoordt het coach-gesprek. Stuurt coach-data naar je eigen backend. Standaard uit.</div></div>
+      <label class="sw"><input type="checkbox" ${SET.aiCoach?'checked':''} onchange="SET.aiCoach=this.checked;save();render();"><span class="sl"></span></label></div>
+    ${SET.aiCoach?`<label class="fld" style="margin-top:8px">Model (optioneel)</label>
+      <input type="text" value="${esc(SET.aiModel||'')}" placeholder="bv. claude-3-5-haiku-latest" oninput="SET.aiModel=this.value;save();">
+      <div class="small muted" style="margin-top:6px">Gebruikt je PSD2-Worker (Bankkoppeling → Geavanceerd) als proxy. Voeg daar het <b>/coach</b>-endpoint toe en zet je LLM-key als secret. Cijfers en flow blijven uit de lokale motor; bij geen net valt 'ie terug op de lokale coach.</div>`:''}
     <div style="height:10px"></div>
     ${renderRulesCard()}
-    <div class="small muted" style="margin-top:10px">${ICON('info')} <b>Hoe werkt de coach?</b> Geen AI in de cloud. Alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.</div>`;
+    <div class="small muted" style="margin-top:10px">${ICON('info')} ${SET.aiCoach?`<b>AI-coach staat aan.</b> Een taalmodel verwoordt de zinnen via je eigen Worker. De bedragen komen nog steeds uit de lokale motor. Zet uit voor 100% lokaal.`:`<b>Hoe werkt de coach?</b> Geen AI in de cloud. Alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.`}</div>`;
 }
 
 function setPrivacy(){
