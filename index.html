@@ -2289,11 +2289,25 @@ function savingsChart(M,sel){
   let taps=''; for(let i=0;i<12;i++){ taps+=`<rect x="${(X(i)-13).toFixed(1)}" y="${top}" width="26" height="${bot-top}" fill="transparent" style="cursor:pointer" onclick="vSelMonth(${i})"/>`; }
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Spaargrafiek: werkelijk, doel en twee projecties">${zero}${marker}${selV}${lDoel}${lBudget}${lKoers}${lWork}${dots}${labels}${taps}</svg>`;
 }
+// grafiek = voortgang naar je bufferdoel (niet je totale liquiditeit): spaarkoers stijgt tot de doellijn
+function bufferChart(ingelegd, doel, maandTotal){
+  if(!(doel>0)) return '';
+  const toGo=Math.max(doel-ingelegd,0);
+  const monthsToGoal = maandTotal>0 ? Math.ceil(toGo/maandTotal) : 0;
+  const horizon=Math.max(Math.min(monthsToGoal||6,36),6);
+  const W=330,H=160,LX=8,RX=W-8,top=14,bot=H-22; const hi=doel*1.08, lo=0;
+  const X=k=>LX+k*((RX-LX)/horizon), Y=v=>top+(1-(v-lo)/(hi-lo||1))*(bot-top);
+  const pts=[]; for(let k=0;k<=horizon;k++) pts.push(X(k).toFixed(1)+','+Y(Math.min(ingelegd+maandTotal*k,doel)).toFixed(1));
+  const gy=Y(doel).toFixed(1);
+  const goalLine=`<line x1="${LX}" y1="${gy}" x2="${RX}" y2="${gy}" stroke="#56627d" stroke-width="1.4" stroke-dasharray="4 3"/><text x="${RX}" y="${(+gy-4).toFixed(1)}" fill="#8a97ab" font-size="9" text-anchor="end">doel ${euro0(doel)}</text>`;
+  let marker='';
+  if(monthsToGoal>0 && monthsToGoal<=horizon){ const mx=X(monthsToGoal).toFixed(1); marker=`<circle cx="${mx}" cy="${gy}" r="3.5" fill="#2dd4bf"/><text x="${mx}" y="${(+gy-7).toFixed(1)}" fill="#2dd4bf" font-size="9" text-anchor="middle">~${monthsToGoal} mnd</text>`; }
+  const now=new Date(); const step=Math.max(Math.round(horizon/4),1); let lab='';
+  for(let k=0;k<=horizon;k+=step){ const d=new Date(now.getFullYear(),now.getMonth()+k,1); lab+=`<text x="${X(k).toFixed(1)}" y="${H-6}" fill="#8a97ab" font-size="8.5" text-anchor="middle">${k===0?'nu':MNAMES[d.getMonth()]}</text>`; }
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Spaarkoers naar je bufferdoel">${goalLine}<polyline points="${pts.join(' ')}" fill="none" stroke="#2dd4bf" stroke-width="2.6"/>${marker}${lab}</svg>`;
+}
 function vooruitForecast(){
-  const M=savingsYearModel();
-  let sel=window._vSel; if(sel==null||sel<0||sel>11) sel=M.cur;     // standaard: vandaag
-  // KOPTEKST = spaardoel eind december op je huidige koers
-  // HERO = voortgang naar je bufferdoel: ingelegd (spaarpotjes) vs doel
+  // HERO = voortgang naar je bufferdoel; grafiek klimt naar de doellijn
   let S=null; try{ S=savingsModel(); }catch(_){}
   const ingelegd=totalSaved().sum;
   const doel=S?Math.round(S.goal):0;
@@ -2301,13 +2315,13 @@ function vooruitForecast(){
   const toGo=Math.max(doel-ingelegd,0);
   const pct=doel>0?Math.min(Math.round(ingelegd/doel*100),100):0;
   const maanden=maand>0?Math.round(toGo/maand):0;
-  // hefboom: minder uitgeven → sneller bij je doel. Tikbare besparingen, gekoppeld aan dezelfde coachRules.
+  // hefboom + grafiek delen dezelfde actieve besparing (coachRules)
+  const m2=curMonth||months()[months().length-1];
+  const rules=(typeof coachRuleOptions==='function')?coachRuleOptions(m2):[];
+  const optKeys=new Set(rules.map(r=>r.key)); let cut=0;
+  for(const k in (SET.coachRules||{})) if(optKeys.has(k)) cut+=+SET.coachRules[k]||0;
   let hefboom='';
   if(doel>0 && maand>0 && toGo>0){
-    const m2=curMonth||months()[months().length-1];
-    const rules=(typeof coachRuleOptions==='function')?coachRuleOptions(m2):[];
-    const optKeys=new Set(rules.map(r=>r.key)); let cut=0;
-    for(const k in (SET.coachRules||{})) if(optKeys.has(k)) cut+=+SET.coachRules[k]||0;
     const exactBase=toGo/maand, exactCut=cut>0?toGo/(maand+cut):exactBase; const diff=exactBase-exactCut;
     let eff;
     if(cut<=0) eff=`Tik een besparing aan, dan zie je hoeveel eerder je je doel haalt.`;
@@ -2333,20 +2347,9 @@ function vooruitForecast(){
       <div class="vh-sub" style="cursor:pointer" onclick="go('set')">Naar instellingen ›</div>
     </div>`;
   }
-  const MNF=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
-  const cap=[`werkelijk ${M.work[sel]!=null?euro0(M.work[sel]):'—'}`];
-  if(sel>=M.cur) cap.push(`koers ${euro0(M.koers[sel])}`);
-  cap.push(`doel ${euro0(M.doel[sel])}`);
-  const caption=`<div class="sc-cap"><b>${MNF[sel]}</b> <span class="mut">·</span> ${cap.join(' <span class="mut">·</span> ')}</div>`;
-  const legend=`<div class="sc-leg">
-    <span><i style="border-color:#2dd4bf"></i>werkelijk</span>
-    <span><i class="d" style="border-color:#2dd4bf"></i>budget gehaald</span>
-    <span><i class="d" style="border-color:#f0a675"></i>huidige koers</span>
-    <span><i class="d" style="border-color:#56627d"></i>doel</span></div>`;
-  const chartCard=`<div class="card" style="padding:14px 12px 12px">
-    ${savingsChart(M,sel)}
-    ${legend}
-    ${caption}</div>`;
+  const chartCard = doel>0 ? `<div class="card" style="padding:14px 12px 10px">
+    ${bufferChart(ingelegd, doel, maand+cut)}
+    <div class="sc-leg" style="margin-top:6px"><span><i style="border-color:#2dd4bf"></i>jouw spaarkoers</span><span><i class="d" style="border-color:#56627d"></i>bufferdoel</span></div></div>` : '';
   return hero + chartCard;
 }
 function vooruitHero(){
@@ -2734,7 +2737,10 @@ function coachRuleOptions(m){
   const sp=catSpendMap(m); const opts=[];
   const lab={uit_eten:'Max 1× per week uit eten',boodschappen:'Strakker boodschappen',vrije_tijd:'Eén uitje minder',shoppen:'Geen losse aankopen',vervoer:'Minder losse ritten',overig:'Minder losse uitgaven'};
   const disc=Object.keys(sp).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k)&&sp[k]>0).sort((a,b)=>sp[b]-sp[a]);
-  for(const k of disc.slice(0,3)){ const cut=Math.max(Math.round(sp[k]*0.25/5)*5,10); opts.push({key:'cut_'+k,label:lab[k]||('Minder '+CATS[k].name.toLowerCase()),cut}); }
+  for(const k of disc.slice(0,3)){ const meta=(SET.potMeta||{})[k];
+    if(meta && meta.type==='freq' && +meta.per>0){ opts.push({key:'cut_'+k, label:`1× minder ${CATS[k].name.toLowerCase()}`, cut:Math.round(meta.per)}); }   // frequentie-potje → tastbare cut
+    else { const cut=Math.max(Math.round(sp[k]*0.25/5)*5,10); opts.push({key:'cut_'+k,label:lab[k]||('Minder '+CATS[k].name.toLowerCase()),cut}); }
+  }
   return opts;
 }
 function toggleCoachRule(key,cut){ SET.coachRules=SET.coachRules||{}; if(SET.coachRules[key]) delete SET.coachRules[key]; else SET.coachRules[key]=cut; save(); renderActions(); }
@@ -2771,9 +2777,9 @@ function renderActions(){
     .filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k))
     .sort((a,b)=>{ const ha=+B[a]>0?1:0, hb=+B[b]>0?1:0; if(ha!==hb) return ha-hb; return (sp[b]||0)-(sp[a]||0); }).slice(0,6);
   const withPot=potCats.filter(k=>+B[k]>0).length;
-  const potRows=potCats.map(k=>{ const has=+B[k]>0; const spent=Math.round(sp[k]||0); const over=has&&spent>+B[k];
+  const potRows=potCats.map(k=>{ const has=+B[k]>0; const spent=Math.round(sp[k]||0); const over=has&&spent>+B[k]; const pa=potAssumptionLabel(k);
     return `<div class="cz-pot"><div class="cp-info"><div class="cp-nm">${CATS[k].icon||''} ${CATS[k].name}</div>
-      <div class="cp-sub${(!has||over)?' warn':''}">${has?`${euro0(spent)} van ${euro0(B[k])}${over?' · over':''}`:`${euro0(spent)} deze maand · nog geen potje`}</div></div>
+      <div class="cp-sub${(!has||over)?' warn':''}">${has?`${euro0(spent)} van ${euro0(B[k])}${pa?' · '+pa:''}${over?' · over':''}`:`${euro0(spent)} deze maand · nog geen potje`}</div></div>
       <button class="cp-btn${has?'':' make'}" onclick="openPotje('${k}')">${has?'bewerk':'Maak potje'}</button></div>`;}).join('');
   const potOpen=SET.potOpen!==false;
   const potHdr=`<div class="cz-head cz-head-t" onclick="togglePotjes()">Je potjes${potCats.length?` · ${withPot} van ${potCats.length}`:''} <span class="cz-chev">${potOpen?'▲':'▼'}</span></div>`;
@@ -2842,6 +2848,19 @@ function coObsLeak(leak){
   return `${leak.name} liep ${euro0(leak.amount)} over budget deze maand.`;
 }
 function coSuggestPot(cat){ const vals=months().map(ym=>catSpendMap(ym)[cat]||0).filter(v=>v>0).sort((a,b)=>a-b); const med=vals.length?vals[Math.floor(vals.length/2)]:0; return Math.max(Math.round(med/5)*5,10); }
+// aantal 'keer' in een categorie deze maand (= aantal uitgave-transacties) — voor frequentie-coaching
+function potjeKeer(m,cat){ let n=0; for(const x of txOfMonth(m)){ const c=CATS[catOf(x)]; if(x.amount<0 && c && c.type==='expense' && catOf(x)===cat) n++; } return n; }
+// effect van €extra/maand op je bufferdoel (zelfde rekenwijze als de hefboom op Vooruitblik); null als niet kwantificeerbaar
+function coGoalEffect(extra){
+  if(!(extra>0)) return null;
+  let S=null; try{ S=savingsModel(); }catch(_){}
+  if(!S || !(S.goal>0)) return null;
+  const ingelegd=totalSaved().sum; const toGo=Math.max(Math.round(S.goal)-ingelegd,0); const maand=Math.round(S.monthlySaving);
+  if(toGo<=0 || maand<=0) return null;
+  const base=toGo/maand, met=toGo/(maand+extra); const diff=base-met;
+  if(diff>=1){ const mm=Math.round(diff); return `Dat is ${euro0(extra)} per maand extra, ~${mm} ${mm===1?'maand':'maanden'} eerder bij je doel.`; }
+  const wk=Math.max(Math.round(diff*4.33),1); return `Dat is ${euro0(extra)} per maand extra, ~${wk} ${wk===1?'week':'weken'} eerder bij je doel.`;
+}
 // SPOOR 1 — structureel gesprek (vier fases, gecomprimeerd op de lopende maand)
 // MAANDGESPREK (prototype, 6 stappen): doel → win → lek+stakes → reflectie → optie→actie → borgen
 async function startCoachTalk(m){
@@ -2858,9 +2877,13 @@ async function startCoachTalk(m){
   const M=financeModel(); const leak=M.coach.leak; const last=M.coach.lastAction;
   let goal=0, spaar=0; try{ const S=savingsModel(); goal=Math.round(S.goal); spaar=Math.round(S.monthlySaving); }catch(_){}
   const afw=leak?Math.round(leak.amount):0; const weken=spaar>0?Math.max(Math.round(afw*12/spaar),1):0;
+  // frequentie-coaching: heeft de lek-categorie een 'aantal keer'-potje en ging je vaker dan gepland?
+  const lekMeta = leak ? (SET.potMeta||{})[leak.cat] : null;
+  let freqOver=null;
+  if(leak && lekMeta && lekMeta.type==='freq'){ const did=potjeKeer(m, leak.cat); if(did>lekMeta.n) freqOver={planned:lekMeta.n, did, diff:did-lekMeta.n}; }
   // facts voor de AI-laag (motor = waarheid; LLM verwoordt alleen)
   window._coFacts={ context:'maandgesprek', doel:{bedrag:goal, naam:'buffer', maandelijkseSpaarsnelheid:spaar},
-    lek: leak?{categorie:(CATS[leak.cat]?CATS[leak.cat].name:leak.name), afwijking:afw, perJaar:afw*12, wekenVertraging:weken}:null,
+    lek: leak?{categorie:(CATS[leak.cat]?CATS[leak.cat].name:leak.name), afwijking:afw, perJaar:afw*12, wekenVertraging:weken, gepland:freqOver?freqOver.planned:null, gedaan:freqOver?freqOver.did:null}:null,
     vorigeAfspraak:last||null };
   // 1) doel herankeren (accent + teal bedrag)
   if(goal>0) await coSay(`Je doel: <span class="hl">${euro0(goal)} buffer</span>. Even kijken hoe je maand daaraan bijdroeg.`,{html:true,accent:true,ai:{tone:'teal'}});
@@ -2869,16 +2892,17 @@ async function startCoachTalk(m){
   if(last) await coSay(`Vorige keer hield je dit aan: <span class="hl">${esc(last)}</span>. Dat werkte.`,{html:true,accent:true,ai:{tone:'teal'}});
   // randgeval: geen lek → kort erkennen en afsluiten
   if(!leak){ await coSay(`Geen lek deze maand. Je hield je aan je plan. Mooi, tot volgende keer.`,{ai:true}); coEnd(); return; }
-  // 3) lek + stakes in één bubbel (over-budget goud, stakes gedimd, geen schuld)
-  await coSay(coLekHTML(leak,afw,spaar),{html:true,ai:{tone:'gold'}});
-  // 4) reflectievraag → 5) vier opties (Spontaan vooraan: veel intentie=nu)
-  await coSay(`Wat was er anders toen je dat deed?`,{ai:true});
+  // 3) lek + stakes in één bubbel (frequentie als er een 'aantal keer'-potje is, anders €; stakes gedimd, geen schuld)
+  await coSay(coLekHTML(leak,afw,spaar,freqOver),{html:true,ai:{tone:'gold'}});
+  // 4) reflectievraag → 5) vier opties (bij frequentie: confronteer met de laatste paar keer)
+  await coSay(freqOver?`Wat was er anders bij die laatste ${freqOver.diff===1?'keer':freqOver.diff+' keer'}?`:`Wat was er anders toen je dat deed?`,{ai:true});
   coChoices(coMaandOpties(leak));
 }
-function coLekHTML(leak,afw,spaar){
+function coLekHTML(leak,afw,spaar,freqOver){
   const cn=CATS[leak.cat]?CATS[leak.cat].name.toLowerCase():'die categorie';
   let main;
-  if(leak.kind==='over-budget') main=`Eén lek: ${cn}, <span class="warn">${euro0(afw)} over budget</span>.`;
+  if(freqOver) main=`Je plande <span class="warn">${freqOver.planned}×</span> ${cn}, het werden er <span class="warn">${freqOver.did}</span>.`;
+  else if(leak.kind==='over-budget') main=`Eén lek: ${cn}, <span class="warn">${euro0(afw)} over budget</span>.`;
   else if(leak.kind==='missing-pot') main=`${esc(leak.name)} liep langs zonder potje. <span class="warn">${euro0(afw)}</span>.`;
   else main=`Die <span class="warn">${euro0(afw)}</span> bij ${esc(leak.name)} zat in geen budget.`;
   let sub='';
@@ -2912,7 +2936,12 @@ async function coShowAction(opt){
     if(opt.shiftCat && v){ SET.budgets=SET.budgets||{}; SET.budgets[v]=Math.round((+SET.budgets[v]||0)-opt.shiftAmt); SET.budgets[opt.shiftCat]=Math.round((+SET.budgets[opt.shiftCat]||0)+opt.shiftAmt); save(); coFx(`${euro0(opt.shiftAmt)} verschoven uit ${potName(v)}`); }
     SET.coachLog=(SET.coachLog||[]).filter(l=>!(l.type==='afspraak' && coSameMonth(l.ts)));   // vervang de afspraak van deze maand
     coachLogAdd({type:'afspraak',text:tekst}); coFx('afspraak vastgelegd');
-    await coSay(`Genoteerd. Volgende maand kom ik hierop terug.`); coEnd();
+    await coSay(`Genoteerd. Volgende maand kom ik hierop terug.`);
+    // cirkel rond: koppel terug wat het scheelt bij je doel (alleen waar kwantificeerbaar)
+    const extra = (opt.potCat && +v>0) ? Math.max(coSuggestPot(opt.potCat)-Math.round(+v),0) : 0;
+    const ge = coGoalEffect(extra);
+    if(ge) await coSay(coHi(esc(ge),'teal'),{html:true}); else await coSay(`Hou je dit vol, dan schuift je doel langzaam naar voren.`);
+    coEnd();
   };
   adj.onclick=()=>{ _coC.innerHTML=''; const lk=financeModel().coach.leak; if(lk) coChoices(coMaandOpties(lk)); };
   row.appendChild(ok); row.appendChild(adj); _coC.appendChild(row);
@@ -3002,6 +3031,9 @@ async function buyFlow(cat,amt,item){
   await coWait(180);
   const m=curMonth||months()[months().length-1]; const B=SET.budgets||{}; const has=+B[cat]>0;
   const rest=has?Math.round(+B[cat]-(catSpendMap(m)[cat]||0)):0;
+  // frequentie-reactie: heeft de categorie een 'aantal keer'-potje, benoem de telling
+  const fmeta=(SET.potMeta||{})[cat];
+  if(fmeta && fmeta.type==='freq'){ const did=potjeKeer(m,cat); const nextN=did+1; await coSay(`Dit wordt je ${nextN}e keer ${cn} deze maand${nextN>fmeta.n?`. Je plande er ${fmeta.n}.`:` van je ${fmeta.n} geplande.`}`); }
   // 2) binaire check — groene weg, geen wrijving
   if(has && amt<=rest){
     await coSay(`Past binnen ${cn}, nog ${euro0(rest-amt)} over daarna. Ga je gang, dit hoort bij je plan.`);
@@ -3037,19 +3069,40 @@ function coTextSheet(title,ph,cb){
 }
 function coTextSave(){ const v=((document.getElementById('coTxt')||{}).value||'').trim(); closeSheet(); const cb=window._coTextCb; window._coTextCb=null; if(cb) cb(v); }
 // budget als coach-actie: potje zetten/bewerken via een sheet (geen live-render, focus blijft)
+// een potje draagt een AANNAME (basis): frequentie × bedrag, per week, of vast. Het maandbedrag volgt eruit.
+function potDraftTotal(){ const d=window._potDraft||{}; if(d.type==='freq') return Math.round((+d.n||0)*(+d.per||0)); if(d.type==='week') return Math.round((+d.per||0)*4.345); return Math.round(+d.vast||0); }
+function potAssumptionLabel(k){ const meta=(SET.potMeta||{})[k]; if(!meta) return ''; if(meta.type==='freq') return `${meta.n}× à ${euro0(meta.per)}`; if(meta.type==='week') return `${euro0(meta.per)}/week`; return ''; }
 function openPotje(k){
-  const c=CATS[k]; if(!c) return; const B=SET.budgets||{}; const cur=+B[k]||0;
+  const c=CATS[k]; if(!c) return; const meta=(SET.potMeta||{})[k]||{}; const cur=+(SET.budgets||{})[k]||0; const sug=coSuggestPot(k);
+  if(meta.type) window._potDraft={...meta};
+  else window._potDraft={type:'vast', vast: cur||sug||''};
+  renderPotSheet(k); $('#sheetBg').classList.add('show');
+}
+function potSetType(k,t){ const d=window._potDraft=window._potDraft||{}; d.type=t; const sug=coSuggestPot(k);
+  if(t==='freq' && d.n==null){ d.n=4; d.per=Math.round((sug||40)/4); }
+  if(t==='week' && d.per==null){ d.per=Math.round((sug||0)/4.345)||0; }
+  if(t==='vast' && d.vast==null){ d.vast=sug||''; }
+  renderPotSheet(k);
+}
+function potDraftSet(field,val){ window._potDraft=window._potDraft||{}; window._potDraft[field]=val; const el=document.getElementById('potTotal'); if(el) el.textContent=euro0(potDraftTotal()); }
+function renderPotSheet(k){
+  const c=CATS[k]; const d=window._potDraft||{type:'vast'};
   const sp=Math.round((catSpendMap(curMonth||months()[months().length-1])[k])||0);
-  const sug=coSuggestPot(k);                                   // voorgesteld bedrag = mediane uitgave
-  const val=cur||sug||'';                                      // vul vooraf in, dan hoef je alleen te bevestigen
+  const chip=(t,l)=>`<span class="chip ${d.type===t?'on':''}" onclick="potSetType('${k}','${t}')">${l}</span>`;
+  let fields='';
+  if(d.type==='freq') fields=`<div style="display:flex;gap:10px">
+      <div style="flex:1"><label class="fld">Keer per maand</label><input type="number" min="0" inputmode="numeric" value="${d.n??''}" oninput="potDraftSet('n',this.value)" style="width:100%"></div>
+      <div style="flex:1"><label class="fld">Per keer (€)</label><input type="number" min="0" inputmode="numeric" value="${d.per??''}" oninput="potDraftSet('per',this.value)" style="width:100%"></div></div>`;
+  else if(d.type==='week') fields=`<label class="fld">Bedrag per week (€)</label><input type="number" min="0" inputmode="numeric" value="${d.per??''}" oninput="potDraftSet('per',this.value)" style="width:100%">`;
+  else fields=`<label class="fld">Maandbudget (€)</label><input type="number" min="0" inputmode="numeric" value="${d.vast??''}" oninput="potDraftSet('vast',this.value)" style="width:100%">`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:17px;margin-bottom:2px">${c.icon||''} ${c.name}-potje</div>
-    <div class="small muted" style="margin-bottom:14px">${sp>0?`Deze maand al ${euro0(sp)} besteed. `:''}${(!cur&&sug)?`Je gaf gemiddeld zo'n ${euro0(sug)} per maand uit, dat heb ik vast ingevuld.`:`Zet een vast maandbedrag, is het op, dan is het op.`}</div>
-    <label class="fld">Maandbudget (€)</label>
-    <input id="potInput" type="number" min="0" inputmode="numeric" value="${val}" placeholder="bv. 150" style="width:100%">
+    <div class="small muted" style="margin-bottom:12px">${sp>0?`Deze maand al ${euro0(sp)} besteed. `:''}Waarop baseer je dit potje?</div>
+    <div class="chips" style="margin:0 0 12px">${chip('freq','Aantal keer')}${chip('week','Per week')}${chip('vast','Vast bedrag')}</div>
+    ${fields}
+    <div class="small" style="margin-top:12px">Maandbudget: <b style="color:var(--teal)" id="potTotal">${euro0(potDraftTotal())}</b>${d.type==='week'?' (per week × 4,3)':''}</div>
     <button class="btn" style="margin-top:14px;width:100%" onclick="savePotje('${k}')">${ICON('check')} Vastzetten</button>
-    ${cur?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="savePotje('${k}',true)">Potje verwijderen</div>`:''}`;
-  $('#sheetBg').classList.add('show');
+    ${(+(SET.budgets||{})[k]>0)?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="savePotje('${k}',true)">Potje verwijderen</div>`:''}`;
 }
 // kies een categorie om een nieuw potje voor te maken (categorieën zonder potje)
 function openPotjePick(){
@@ -3060,11 +3113,20 @@ function openPotjePick(){
   $('#sheetBg').classList.add('show');
 }
 function savePotje(k,del){
-  const v=del?'':((document.getElementById('potInput')||{}).value||'');
-  setCatBudget(k, del?'':v); closeSheet();
+  if(del){ if(SET.budgets) delete SET.budgets[k]; if(SET.potMeta) delete SET.potMeta[k]; save(); }
+  else {
+    const d=window._potDraft||{type:'vast'}; const total=potDraftTotal();
+    SET.budgets=SET.budgets||{}; if(total>0) SET.budgets[k]=total; else delete SET.budgets[k];
+    SET.potMeta=SET.potMeta||{};
+    if(d.type==='freq' && +d.n>0 && +d.per>0) SET.potMeta[k]={type:'freq',n:Math.round(+d.n),per:Math.round(+d.per)};
+    else if(d.type==='week' && +d.per>0) SET.potMeta[k]={type:'week',per:Math.round(+d.per)};
+    else delete SET.potMeta[k];
+    save();
+  }
+  closeSheet();
   const after=window._potAfter; window._potAfter=null;
   if(after){ try{ after(); }catch(_){ renderActions(); } } else { renderActions(); }
-  if(!del && +v>0) toast(`${ICON('check')} ${CATS[k].name}-potje gezet op ${euro0(+v)}`);
+  if(!del) toast(`${ICON('check')} ${CATS[k].name}-potje gezet`);
 }
 // coachvraag = oorzaak (waarom) + concrete gedragsregels om uit te kiezen
 function coachQA(sig){
