@@ -2184,11 +2184,17 @@ function coachLeak(m){
     if(!isFixedCat(k) && !rec){ if(!imp||amt>imp.amt) imp={amt,name:nm,k}; }
     else { if(!need||amt>need.amt) need={amt,name:nm,k}; }
   } }catch(_){}
-  if(imp) return {kind:'impulse', name:imp.name, amount:imp.amt, cat:imp.k};
-  if(need) return {kind:'missing-pot', name:need.name, amount:need.amt, cat:need.k};
+  // grootste lek ZONDER potje (de hele uitgave wijkt af van plan, want er was geen plan)
+  let noPot=null;
+  if(imp && need) noPot = (imp.amt>=need.amt) ? {kind:'impulse',name:imp.name,amount:imp.amt,cat:imp.k} : {kind:'missing-pot',name:need.name,amount:need.amt,cat:need.k};
+  else if(imp) noPot={kind:'impulse',name:imp.name,amount:imp.amt,cat:imp.k};
+  else if(need) noPot={kind:'missing-pot',name:need.name,amount:need.amt,cat:need.k};
+  // grootste overschrijding MÉT potje (alleen het deel boven budget wijkt af)
   const ov=(typeof budgetOverCat==='function')?budgetOverCat(m):null;
-  if(ov) return {kind:'over-budget', name:CATS[ov.k].name, amount:Math.round(ov.over), cat:ov.k};
-  return null;
+  const over = ov ? {kind:'over-budget',name:CATS[ov.k].name,amount:Math.round(ov.over),cat:ov.k} : null;
+  // hybride: het grootste verschil in euro's wint
+  if(noPot && over) return over.amount>noPot.amount ? over : noPot;
+  return noPot || over || null;
 }
 // coach-geheugen: log van afspraken/beslissingen (voedt de terugblik volgende keer)
 function coachLogAdd(entry){ SET.coachLog=SET.coachLog||[]; SET.coachLog.unshift(Object.assign({ts:Date.now()},entry)); if(SET.coachLog.length>50) SET.coachLog.length=50; save(); }
