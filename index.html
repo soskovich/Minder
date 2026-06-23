@@ -2842,9 +2842,9 @@ function coLekHTML(leak,afw,spaar){
 function coMaandOpties(leak){
   const cn=CATS[leak.cat]?CATS[leak.cat].name.toLowerCase():'die categorie'; const afw=Math.round(leak.amount);
   return [
-    {l:'Spontaan',act:()=>coShowAction({eyebrow:'Eén regel vooraf',context:`Spontaan overkomt iedereen. Eén check vooraf vangt het op.`,title:`Als ik spontaan ${cn} wil, dan check ik eerst mijn ${cn}-potje.`,afspraak:`als ik spontaan ${cn} wil, check ik eerst mijn ${cn}-potje`})},
-    {l:'Geen potje gepland',act:()=>coShowAction({eyebrow:'Geef het een plek',context:`Zonder potje grijp je naar de makkelijkste optie. Plan het vooraf.`,title:`Hoeveel zet je volgende maand apart voor ${cn}?`,input:{type:'number',ph:'bv. 175'},potCat:leak.cat,afspraak:v=>`ik zet ${euro0(+v||0)} per maand apart voor ${cn}`})},
-    {l:"Leek 't waard",act:()=>coShowAction({eyebrow:'Budget klopt misschien niet',context:`Was het 't waard, dan hoort het in je plan, als keuze.`,title:`Verhoog je ${cn}-potje met ${euro0(afw)} en haal dat ergens weg.`,q:`Waar mag het vandaan komen?`,select:potOptions(leak.cat),shiftCat:leak.cat,shiftAmt:afw,afspraak:v=>`verhoog ${cn} met ${euro0(afw)}, weg bij ${potName(v)}`})},
+    {l:'Spontaan',act:()=>coShowAction({eyebrow:'Eén regel vooraf',context:`Spontaan overkomt iedereen. Met één check vooraf hou je 't in de hand.`,title:`Voor ik spontaan aan ${cn} begin, kijk ik eerst wat er in m'n potje zit.`,afspraak:`voor ik spontaan aan ${cn} begin, kijk ik eerst in m'n potje`})},
+    {l:'Geen potje gepland',act:()=>coShowAction({eyebrow:'Geef het een plek',context:`Zonder potje pak je al gauw de makkelijkste keuze. Geef 't vooraf een vast bedrag.`,title:`Hoeveel zet je volgende maand apart voor ${cn}?`,input:{type:'number',ph:'bv. 175'},potCat:leak.cat,afspraak:v=>`ik zet ${euro0(+v||0)} per maand apart voor ${cn}`})},
+    {l:"Leek 't waard",act:()=>coShowAction({eyebrow:'Budget klopt misschien niet',context:`Was het dat waard? Zet het dan bewust in je plan.`,title:`Verhoog je ${cn}-potje met ${euro0(afw)} en haal dat ergens weg.`,q:`Waar mag het vandaan komen?`,select:potOptions(leak.cat),shiftCat:leak.cat,shiftAmt:afw,afspraak:v=>`verhoog ${cn} met ${euro0(afw)}, weg bij ${potName(v)}`})},
     {l:'Anders, zeg ik zelf',act:()=>coShowAction({eyebrow:'Jouw woorden',context:`Zeg het zelf, ik maak er één afspraak van.`,title:`Wat spreek je met jezelf af?`,input:{type:'text',ph:'In je eigen woorden'},afspraak:v=>(v||'eigen afspraak')})}
   ];
 }
