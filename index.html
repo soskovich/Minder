@@ -984,6 +984,27 @@ function renderLiquidity(){
 
 /* ----- BUDGET vs WERKELIJK + variantieanalyse ----- */
 function totalBudget(){ const B=SET.budgets||{}; return Object.keys(B).reduce((s,k)=>s+(+B[k]||0),0); }
+// geplande potjes = huidige budgets met de 'volgende maand'-laag erbovenop (= wat je aan het plannen bent)
+function plannedBudgets(){ const B=Object.assign({}, SET.budgets||{}); const N=SET.budgetsNext||{}; for(const k in N){ const v=+N[k]; if(v>0) B[k]=v; else delete B[k]; } return B; }
+function plannedTotalBudget(){ const B=plannedBudgets(); return Object.keys(B).reduce((s,k)=>s+(+B[k]||0),0); }
+// 70%-budget (o.b.v. inkomen) + geschatte vaste lasten (mediaan over je maanden) → basis voor 'nog vrij voor potjes'
+function potRoomBase(){
+  const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
+  const budget = monthBudget(inc);
+  const ms=months(); const med=a=>{const s=a.filter(x=>x>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
+  let fixed=0;
+  for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||k==='overig') continue;
+    fixed+=med(ms.map(m=>{let f=0;for(const t of txOfMonth(m)){ if(catOf(t)===k && t.amount<0 && isFixed(t)) f+=-t.amount; } return f;})); }
+  return {budget:Math.round(budget), fixed:Math.round(fixed)};
+}
+// één regel: som van je potjes + hoeveel er nog vrij is binnen je grens (na vaste lasten)
+function potRoomLineHTML(potTotal){ const b=potRoomBase();
+  if(b.budget<=0) return `Samen al je potjes: <b>${euro0(potTotal)}</b> per maand`;
+  const free=Math.round(b.budget-b.fixed-potTotal);
+  return free>=0
+    ? `Samen al je potjes: <b>${euro0(potTotal)}</b>/mnd · nog <b style="color:var(--teal)">${euro0(free)}</b> vrij binnen je ${SET.limit}%-grens`
+    : `Samen al je potjes: <b>${euro0(potTotal)}</b>/mnd · <b style="color:var(--amber)">${euro0(-free)}</b> óver je ${SET.limit}%-grens`;
+}
 // is een categorie grotendeels een vaste last? (budget schaalt dan niet mee met inkomen)
 function isFixedCat(k){ return FIXED_CATS.has(k)||k==='vervoer'||k==='zorg'; }
 // dynamisch maandbudget: vaste categorieën constant, variabele categorieën geschaald naar de
@@ -1002,7 +1023,7 @@ function setCatBudget(k,val){ // bestaand potje wijzigen = vanaf volgende maand;
   const v = (val===''||+val<=0) ? 0 : +val;
   if(exists){ SET.budgetsNext=SET.budgetsNext||{}; if(v===(+(SET.budgets||{})[k]||0)) delete SET.budgetsNext[k]; else SET.budgetsNext[k]=v; }
   else { SET.budgets=SET.budgets||{}; if(v>0) SET.budgets[k]=v; else delete SET.budgets[k]; }
-  save(); renderIns(); } // settings niet herrenderen (focus)
+  save(); const g=document.getElementById('potGridTotal'); if(g) g.innerHTML=potRoomLineHTML(plannedTotalBudget()); renderIns(); } // settings niet herrenderen (focus)
 // budgetvoorstel met VASTE LASTEN als vertrekpunt:
 // - vaste lasten op historisch niveau (committed, niet schalen)
 // - resterende bestedingsruimte verdeeld over variabele lasten (die je zelf beïnvloedt)
@@ -2808,7 +2829,8 @@ function renderActions(){
       <button class="cp-btn${has?'':' make'}" onclick="openPotje('${k}')">${has?'bewerk':'Maak potje'}</button></div>`;}).join('');
   const potOpen=SET.potOpen!==false;
   const potHdr=`<div class="cz-head cz-head-t" onclick="togglePotjes()">Je potjes${potCats.length?` · ${withPot} van ${potCats.length}`:''} <span class="cz-chev">${potOpen?'▲':'▼'}</span></div>`;
-  const zonePotjes = potHdr + (potOpen?`<div class="cz-card" style="padding:4px 14px">${potRows||'<div class="cz-pot"><div class="cp-info"><div class="cp-sub">Nog geen potjes. Geef je categorieën een vast maandbedrag.</div></div></div>'}<button class="cp-add" onclick="openPotjePick()">+ Potje voor een categorie</button></div><div class="cz-note">Geen potje = geen aankoop. Is het op, dan is het op.</div>`:'');
+  const potTotLine = withPot>0?`<div class="cz-note" style="border-top:1px solid var(--line);margin-top:2px;padding-top:8px">${potRoomLineHTML(totalBudget())}</div>`:'';
+  const zonePotjes = potHdr + (potOpen?`<div class="cz-card" style="padding:4px 14px">${potRows||'<div class="cz-pot"><div class="cp-info"><div class="cp-sub">Nog geen potjes. Geef je categorieën een vast maandbedrag.</div></div></div>'}<button class="cp-add" onclick="openPotjePick()">+ Potje voor een categorie</button></div>${potTotLine}<div class="cz-note">Geen potje = geen aankoop. Is het op, dan is het op.</div>`:'');
   $('#s-act').innerHTML = `<div class="coachhead" onclick="openCoachAvatar()"><div class="av">${coachAvatar()}</div><span class="nm">Je coach</span><span class="sw">wissel ›</span></div>`
     + `<div class="cothr" id="coThr"></div><div id="coCh"></div>`
     + `<button class="cobuy" id="buyBtn">${ICON('cart')} Ik wil iets kopen</button>`
@@ -3116,11 +3138,14 @@ function potSetType(k,t){ const d=window._potDraft=window._potDraft||{}; d.type=
   if(t==='vast' && d.vast==null){ d.vast=sug||''; }
   renderPotSheet(k);
 }
-function potDraftSet(field,val){ window._potDraft=window._potDraft||{}; window._potDraft[field]=val; const el=document.getElementById('potTotal'); if(el) el.textContent=euro0(potDraftTotal()); }
+function potDraftSet(field,val){ window._potDraft=window._potDraft||{}; window._potDraft[field]=val;
+  const el=document.getElementById('potTotal'); if(el) el.textContent=euro0(potDraftTotal());
+  const rl=document.getElementById('potRoomLine'); if(rl) rl.innerHTML=potRoomLineHTML((window._potOthers||0)+potDraftTotal()); }
 function renderPotSheet(k){
   const c=CATS[k]; const d=window._potDraft||{type:'vast'};
   const sp=Math.round((catSpendMap(curMonth||months()[months().length-1])[k])||0);
   const exists=+(SET.budgets||{})[k]>0; const cur=+(SET.budgets||{})[k]||0; const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
+  const _pb=plannedBudgets(); window._potOthers = plannedTotalBudget() - (+_pb[k]||0);   // som van je ANDERE potjes (dit potje telt live mee via de draft)
   const chip=(t,l)=>`<span class="chip ${d.type===t?'on':''}" onclick="potSetType('${k}','${t}')">${l}</span>`;
   let fields='';
   if(d.type==='freq') fields=`<div style="display:flex;gap:10px">
@@ -3134,6 +3159,7 @@ function renderPotSheet(k){
     <div class="chips" style="margin:0 0 12px">${chip('freq','Aantal keer')}${chip('week','Per week')}${chip('vast','Vast bedrag')}</div>
     ${fields}
     <div class="small" style="margin-top:12px">Maandbudget: <b style="color:var(--teal)" id="potTotal">${euro0(potDraftTotal())}</b>${d.type==='week'?' (per week × 4,3)':''}</div>
+    <div class="small muted" id="potRoomLine" style="margin-top:6px">${potRoomLineHTML((window._potOthers||0)+potDraftTotal())}</div>
     ${exists?`<div class="small muted" style="margin-top:8px">Deze maand blijft je potje op ${euro0(cur)}. De wijziging geldt vanaf <b style="color:var(--teal)">${vanaf}</b>.</div>`:''}
     <button class="btn" style="margin-top:14px;width:100%" onclick="savePotje('${k}')">${ICON('check')} ${exists?`Vastzetten vanaf ${vanaf}`:'Vastzetten'}</button>
     ${exists?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="savePotje('${k}',true)">Potje stoppen vanaf ${vanaf}</div>`:''}`;
@@ -3818,8 +3844,9 @@ function setBudget(){
       ? `<label class="fld">Doelbedrag (€)</label><input type="number" min="0" value="${SET.bufferAmount||''}" placeholder="bv. 20000" oninput="SET.bufferAmount=+this.value||0;save();render();">`
       : `<label class="fld">Aantal keer (×)</label><input type="number" min="1" value="${SET.bufferMonths||6}" placeholder="6" oninput="SET.bufferMonths=+this.value||6;save();render();">`}
     <div class="small muted" style="margin-top:6px">Je buffer = ${(SET.bufferBasis||'spend')==='amount'?'een vast bedrag':`${SET.bufferMonths||6}× je gemiddelde ${({spend:'maanduitgave',income:'inkomen',fixed:'vaste lasten',variable:'variabele lasten'})[SET.bufferBasis||'spend']}`}.</div>
-    <label class="fld" style="margin-top:14px">${ICON('chart')} Maandbudget per categorie <span class="small muted">· ${euro0(totalBudget())} totaal</span></label>
-    <div class="small muted" style="margin:-2px 0 8px">Een wijziging aan een bestaand potje geldt vanaf ${ymFull(nextYM(SET.budgetMonth||thisYM()))}. De lopende maand ligt vast.</div>
+    <label class="fld" style="margin-top:14px">${ICON('chart')} Maandbudget per categorie</label>
+    <div class="small" id="potGridTotal" style="margin:2px 0 4px">${potRoomLineHTML(plannedTotalBudget())}</div>
+    <div class="small muted" style="margin:0 0 8px">Een wijziging aan een bestaand potje geldt vanaf ${ymFull(nextYM(SET.budgetMonth||thisYM()))}. De lopende maand ligt vast.</div>
     <button class="btn sec" style="margin:6px 0 10px" onclick="if(confirm('Budget per categorie voorstellen op basis van je historie? Bestaande budgetten worden overschreven.')){suggestBudgets();}">${ICON('trend')} Voorstel uit mijn historie</button>
     ${Object.entries(CATS).filter(([k,c])=>c.type==='expense').map(([k,c])=>{
       const pend=(SET.budgetsNext&&SET.budgetsNext[k]!=null)?+SET.budgetsNext[k]:null;
