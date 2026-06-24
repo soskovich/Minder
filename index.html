@@ -999,11 +999,9 @@ function potRoomBase(){
 }
 // één regel: som van je potjes + hoeveel er nog vrij is binnen je grens (na vaste lasten)
 function potRoomLineHTML(potTotal){ const b=potRoomBase();
-  if(b.budget<=0) return `Samen al je potjes: <b>${euro0(potTotal)}</b> per maand`;
   const free=Math.round(b.budget-b.fixed-potTotal);
-  return free>=0
-    ? `Samen al je potjes: <b>${euro0(potTotal)}</b>/mnd · nog <b style="color:var(--teal)">${euro0(free)}</b> vrij binnen je ${SET.limit}%-grens`
-    : `Samen al je potjes: <b>${euro0(potTotal)}</b>/mnd · <b style="color:var(--amber)">${euro0(-free)}</b> óver je ${SET.limit}%-grens`;
+  if(b.budget<=0 || free<0) return `Samen al je potjes: <b>${euro0(potTotal)}</b> per maand`;
+  return `Samen al je potjes: <b>${euro0(potTotal)}</b>/mnd · nog <b style="color:var(--teal)">${euro0(free)}</b> vrij binnen je budget`;
 }
 // is een categorie grotendeels een vaste last? (budget schaalt dan niet mee met inkomen)
 function isFixedCat(k){ return FIXED_CATS.has(k)||k==='vervoer'||k==='zorg'; }
