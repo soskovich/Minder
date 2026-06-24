@@ -656,6 +656,26 @@ function load(){try{
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
 }catch(e){TX=[];OVR={};OWN=[];}}
 
+/* ---------- maand-gebonden potjes (licht) ----------
+ * SET.budgets      = het vastgezette plan voor de LOPENDE kalendermaand (alle lezers gebruiken dit).
+ * SET.budgetsNext  = wijzigingen die klaarstaan voor de VOLGENDE maand (idem SET.potMetaNext voor de aanname).
+ * SET.budgetMonth  = de 'YYYY-MM' waar SET.budgets op geankerd staat.
+ * Bij maandwissel promoveert rolloverBudgets() de 'next'-laag naar actief. Niets gewijzigd = carry-forward. */
+function thisYM(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function nextYM(ym){ let [y,mo]=String(ym).split('-').map(Number); mo++; if(mo>12){mo=1;y++;} return y+'-'+String(mo).padStart(2,'0'); }
+function ymFull(ym){ const mo=+String(ym).split('-')[1]; return MFULL[mo-1]||''; }
+function rolloverBudgets(){
+  const ym=thisYM();
+  if(!SET.budgetMonth){ SET.budgetMonth=ym; save(); return; }
+  if(SET.budgetMonth===ym) return;
+  const N=SET.budgetsNext||{}, NM=SET.potMetaNext||{};
+  if(Object.keys(N).length){ SET.budgets=SET.budgets||{};
+    for(const k in N){ const v=+N[k]; if(v>0) SET.budgets[k]=v; else delete SET.budgets[k]; } }
+  if(Object.keys(NM).length){ SET.potMeta=SET.potMeta||{};
+    for(const k in NM){ if(NM[k]) SET.potMeta[k]=NM[k]; else delete SET.potMeta[k]; } }
+  SET.budgetsNext={}; SET.potMetaNext={}; SET.budgetMonth=ym; save();
+}
+
 // Overboekingen tussen eigen rekeningen → 'intern' (tellen niet als inkomen/uitgave).
 // Salaris/inkomen blijft inkomen, ook al staat het op een eigen rekening.
 function applyOwnAccounts(){
@@ -977,7 +997,12 @@ function effectiveBudgets(m){
   for(const k in B){ if(+B[k]<=0) continue; out[k]= isFixedCat(k) ? +B[k] : Math.max(Math.round((+B[k])*scaleV/5)*5,0); }
   return {out, room, fixedB:Math.round(fixedB), varRoom:Math.round(varRoom), scaleV};
 }
-function setCatBudget(k,val){ SET.budgets=SET.budgets||{}; if(val===''||+val<=0) delete SET.budgets[k]; else SET.budgets[k]=+val; save(); renderIns(); } // settings niet herrenderen (focus)
+function setCatBudget(k,val){ // bestaand potje wijzigen = vanaf volgende maand; nieuw potje = meteen actief
+  const exists = +(SET.budgets||{})[k] > 0;
+  const v = (val===''||+val<=0) ? 0 : +val;
+  if(exists){ SET.budgetsNext=SET.budgetsNext||{}; if(v===(+(SET.budgets||{})[k]||0)) delete SET.budgetsNext[k]; else SET.budgetsNext[k]=v; }
+  else { SET.budgets=SET.budgets||{}; if(v>0) SET.budgets[k]=v; else delete SET.budgets[k]; }
+  save(); renderIns(); } // settings niet herrenderen (focus)
 // budgetvoorstel met VASTE LASTEN als vertrekpunt:
 // - vaste lasten op historisch niveau (committed, niet schalen)
 // - resterende bestedingsruimte verdeeld over variabele lasten (die je zelf beïnvloedt)
@@ -2932,8 +2957,11 @@ async function coShowAction(opt){
   const adj=document.createElement('button'); adj.className='coconf-adj'; adj.textContent='Pas aan';
   ok.onclick=async()=>{ const v=inp?inp.value:''; const tekst=(typeof opt.afspraak==='function')?opt.afspraak(v):opt.afspraak;
     _coC.innerHTML=''; coBub('me','Zo spreken we af');
-    if(opt.potCat && +v>0){ SET.budgets=SET.budgets||{}; SET.budgets[opt.potCat]=Math.round(+v); save(); coFx(`potje '${(CATS[opt.potCat].name||'').toLowerCase()}' · ${euro0(+v)}/mnd`); }
-    if(opt.shiftCat && v){ SET.budgets=SET.budgets||{}; SET.budgets[v]=Math.round((+SET.budgets[v]||0)-opt.shiftAmt); SET.budgets[opt.shiftCat]=Math.round((+SET.budgets[opt.shiftCat]||0)+opt.shiftAmt); save(); coFx(`${euro0(opt.shiftAmt)} verschoven uit ${potName(v)}`); }
+    if(opt.potCat && +v>0){ SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[opt.potCat]=Math.round(+v); save(); coFx(`potje '${(CATS[opt.potCat].name||'').toLowerCase()}' · ${euro0(+v)}/mnd vanaf volgende maand`); }
+    if(opt.shiftCat && v){ SET.budgetsNext=SET.budgetsNext||{};
+      const baseV=(SET.budgetsNext[v]!=null?+SET.budgetsNext[v]:(+(SET.budgets||{})[v]||0));
+      const baseT=(SET.budgetsNext[opt.shiftCat]!=null?+SET.budgetsNext[opt.shiftCat]:(+(SET.budgets||{})[opt.shiftCat]||0));
+      SET.budgetsNext[v]=Math.round(baseV-opt.shiftAmt); SET.budgetsNext[opt.shiftCat]=Math.round(baseT+opt.shiftAmt); save(); coFx(`${euro0(opt.shiftAmt)} verschoven uit ${potName(v)} vanaf volgende maand`); }
     SET.coachLog=(SET.coachLog||[]).filter(l=>!(l.type==='afspraak' && coSameMonth(l.ts)));   // vervang de afspraak van deze maand
     coachLogAdd({type:'afspraak',text:tekst}); coFx('afspraak vastgelegd');
     await coSay(`Genoteerd. Volgende maand kom ik hierop terug.`);
@@ -3073,7 +3101,11 @@ function coTextSave(){ const v=((document.getElementById('coTxt')||{}).value||''
 function potDraftTotal(){ const d=window._potDraft||{}; if(d.type==='freq') return Math.round((+d.n||0)*(+d.per||0)); if(d.type==='week') return Math.round((+d.per||0)*4.345); return Math.round(+d.vast||0); }
 function potAssumptionLabel(k){ const meta=(SET.potMeta||{})[k]; if(!meta) return ''; if(meta.type==='freq') return `${meta.n}× à ${euro0(meta.per)}`; if(meta.type==='week') return `${euro0(meta.per)}/week`; return ''; }
 function openPotje(k){
-  const c=CATS[k]; if(!c) return; const meta=(SET.potMeta||{})[k]||{}; const cur=+(SET.budgets||{})[k]||0; const sug=coSuggestPot(k);
+  const c=CATS[k]; if(!c) return;
+  const pendMeta=(SET.potMetaNext||{})[k]; const pendAmt=(SET.budgetsNext||{})[k];   // bewerk je een al geplande wijziging, begin daar dan vanaf
+  const meta = (pendMeta!==undefined) ? (pendMeta||{}) : ((SET.potMeta||{})[k]||{});
+  const cur  = (pendAmt!=null) ? +pendAmt : (+(SET.budgets||{})[k]||0);
+  const sug=coSuggestPot(k);
   if(meta.type) window._potDraft={...meta};
   else window._potDraft={type:'vast', vast: cur||sug||''};
   renderPotSheet(k); $('#sheetBg').classList.add('show');
@@ -3088,6 +3120,7 @@ function potDraftSet(field,val){ window._potDraft=window._potDraft||{}; window._
 function renderPotSheet(k){
   const c=CATS[k]; const d=window._potDraft||{type:'vast'};
   const sp=Math.round((catSpendMap(curMonth||months()[months().length-1])[k])||0);
+  const exists=+(SET.budgets||{})[k]>0; const cur=+(SET.budgets||{})[k]||0; const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
   const chip=(t,l)=>`<span class="chip ${d.type===t?'on':''}" onclick="potSetType('${k}','${t}')">${l}</span>`;
   let fields='';
   if(d.type==='freq') fields=`<div style="display:flex;gap:10px">
@@ -3101,8 +3134,9 @@ function renderPotSheet(k){
     <div class="chips" style="margin:0 0 12px">${chip('freq','Aantal keer')}${chip('week','Per week')}${chip('vast','Vast bedrag')}</div>
     ${fields}
     <div class="small" style="margin-top:12px">Maandbudget: <b style="color:var(--teal)" id="potTotal">${euro0(potDraftTotal())}</b>${d.type==='week'?' (per week × 4,3)':''}</div>
-    <button class="btn" style="margin-top:14px;width:100%" onclick="savePotje('${k}')">${ICON('check')} Vastzetten</button>
-    ${(+(SET.budgets||{})[k]>0)?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="savePotje('${k}',true)">Potje verwijderen</div>`:''}`;
+    ${exists?`<div class="small muted" style="margin-top:8px">Deze maand blijft je potje op ${euro0(cur)}. De wijziging geldt vanaf <b style="color:var(--teal)">${vanaf}</b>.</div>`:''}
+    <button class="btn" style="margin-top:14px;width:100%" onclick="savePotje('${k}')">${ICON('check')} ${exists?`Vastzetten vanaf ${vanaf}`:'Vastzetten'}</button>
+    ${exists?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="savePotje('${k}',true)">Potje stoppen vanaf ${vanaf}</div>`:''}`;
 }
 // kies een categorie om een nieuw potje voor te maken (categorieën zonder potje)
 function openPotjePick(){
@@ -3113,20 +3147,39 @@ function openPotjePick(){
   $('#sheetBg').classList.add('show');
 }
 function savePotje(k,del){
-  if(del){ if(SET.budgets) delete SET.budgets[k]; if(SET.potMeta) delete SET.potMeta[k]; save(); }
-  else {
+  const exists = +(SET.budgets||{})[k] > 0;          // bestaat dit potje al deze maand?
+  const vanaf = ymFull(nextYM(SET.budgetMonth||thisYM()));
+  let msg;
+  if(del){
+    if(exists){ // bestaand potje weghalen = grens loslaten → pas volgende maand
+      SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[k]=0;
+      SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[k]=null; save();
+      msg=`${CATS[k].name}-potje stopt vanaf ${vanaf}`;
+    } else { // alleen een geplande wijziging of nieuw concept → meteen weg
+      if(SET.budgetsNext) delete SET.budgetsNext[k];
+      if(SET.potMetaNext) delete SET.potMetaNext[k];
+      if(SET.budgets) delete SET.budgets[k]; if(SET.potMeta) delete SET.potMeta[k]; save();
+      msg=`${CATS[k].name}-potje verwijderd`;
+    }
+  } else {
     const d=window._potDraft||{type:'vast'}; const total=potDraftTotal();
-    SET.budgets=SET.budgets||{}; if(total>0) SET.budgets[k]=total; else delete SET.budgets[k];
-    SET.potMeta=SET.potMeta||{};
-    if(d.type==='freq' && +d.n>0 && +d.per>0) SET.potMeta[k]={type:'freq',n:Math.round(+d.n),per:Math.round(+d.per)};
-    else if(d.type==='week' && +d.per>0) SET.potMeta[k]={type:'week',per:Math.round(+d.per)};
-    else delete SET.potMeta[k];
-    save();
+    let meta=null;
+    if(d.type==='freq' && +d.n>0 && +d.per>0) meta={type:'freq',n:Math.round(+d.n),per:Math.round(+d.per)};
+    else if(d.type==='week' && +d.per>0) meta={type:'week',per:Math.round(+d.per)};
+    if(exists){ // wijziging aan bestaand potje → de meetlat blijft deze maand staan, geldt vanaf volgende maand
+      SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[k]= total>0?total:0;
+      SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[k]= meta; save();
+      msg=`${CATS[k].name}-potje: ${euro0(total)}/mnd vanaf ${vanaf}`;
+    } else { // nieuw potje → meteen actief (er is nog geen grens om te verschuiven)
+      SET.budgets=SET.budgets||{}; if(total>0) SET.budgets[k]=total; else delete SET.budgets[k];
+      SET.potMeta=SET.potMeta||{}; if(meta) SET.potMeta[k]=meta; else delete SET.potMeta[k]; save();
+      msg=`${CATS[k].name}-potje gezet`;
+    }
   }
   closeSheet();
   const after=window._potAfter; window._potAfter=null;
   if(after){ try{ after(); }catch(_){ renderActions(); } } else { renderActions(); }
-  if(!del) toast(`${ICON('check')} ${CATS[k].name}-potje gezet`);
+  toast(`${ICON('check')} ${msg}`);
 }
 // coachvraag = oorzaak (waarom) + concrete gedragsregels om uit te kiezen
 function coachQA(sig){
@@ -3766,10 +3819,14 @@ function setBudget(){
       : `<label class="fld">Aantal keer (×)</label><input type="number" min="1" value="${SET.bufferMonths||6}" placeholder="6" oninput="SET.bufferMonths=+this.value||6;save();render();">`}
     <div class="small muted" style="margin-top:6px">Je buffer = ${(SET.bufferBasis||'spend')==='amount'?'een vast bedrag':`${SET.bufferMonths||6}× je gemiddelde ${({spend:'maanduitgave',income:'inkomen',fixed:'vaste lasten',variable:'variabele lasten'})[SET.bufferBasis||'spend']}`}.</div>
     <label class="fld" style="margin-top:14px">${ICON('chart')} Maandbudget per categorie <span class="small muted">· ${euro0(totalBudget())} totaal</span></label>
+    <div class="small muted" style="margin:-2px 0 8px">Een wijziging aan een bestaand potje geldt vanaf ${ymFull(nextYM(SET.budgetMonth||thisYM()))}. De lopende maand ligt vast.</div>
     <button class="btn sec" style="margin:6px 0 10px" onclick="if(confirm('Budget per categorie voorstellen op basis van je historie? Bestaande budgetten worden overschreven.')){suggestBudgets();}">${ICON('trend')} Voorstel uit mijn historie</button>
-    ${Object.entries(CATS).filter(([k,c])=>c.type==='expense').map(([k,c])=>`
-      <div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:14px">${c.icon} ${c.name}</span>
-        <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" min="0" step="5" value="${(SET.budgets&&SET.budgets[k])||''}" placeholder="0" style="width:80px;text-align:right;padding:6px 9px" oninput="setCatBudget('${k}',this.value)"></div></div>`).join('')}`;
+    ${Object.entries(CATS).filter(([k,c])=>c.type==='expense').map(([k,c])=>{
+      const pend=(SET.budgetsNext&&SET.budgetsNext[k]!=null)?+SET.budgetsNext[k]:null;
+      const shown=(pend!=null?pend:((SET.budgets&&SET.budgets[k])||''))||'';
+      const note=(pend!=null && pend!==((+(SET.budgets||{})[k])||0))?`<span class="small" style="color:var(--teal);margin-left:6px">vanaf vlg. mnd</span>`:'';
+      return `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:14px">${c.icon} ${c.name}${note}</span>
+        <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" min="0" step="5" value="${shown}" placeholder="0" style="width:80px;text-align:right;padding:6px 9px" oninput="setCatBudget('${k}',this.value)"></div></div>`;}).join('')}`;
 }
 
 function setIncome(){
@@ -4195,7 +4252,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
+load(); rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
