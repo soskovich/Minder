@@ -1513,13 +1513,29 @@ function render(){
 }
 
 function onboardManual(){ if(FSA){ connectFolder(); } else { document.getElementById('file').click(); } }
+function impGuideToggle(){ window._impOpen=!window._impOpen; renderEmpty(); }
+function impGuideTab(t){ window._impTab=t; window._impOpen=true; renderEmpty(); }
 function renderEmpty(){
+  const open=!!window._impOpen, tab=window._impTab||'abn';
+  const chip=(k,l)=>`<span class="chip ${tab===k?'on':''}" onclick="impGuideTab('${k}')">${l}</span>`;
+  const steps=ar=>`<ol style="margin:8px 0 0;padding-left:18px;font-size:12.5px;line-height:1.65;color:var(--txt)">${ar.map(s=>`<li>${s}</li>`).join('')}</ol>`;
+  const abn=steps(['Log in op ABN AMRO Internetbankieren.','Ga naar <b>Saldo&#39;s en transacties</b>.','Kies <b>Exporteren</b> en als formaat <b>MT940</b>.','Bewaar het <b>.STA</b>-bestand en upload het hier.']);
+  const n26=steps(['Open de N26 web-app (app.n26.com) op je computer.','Ga naar je transacties en kies <b>Downloaden</b>.','Kies als formaat <b>CSV</b>.','Bewaar het bestand en upload het hier.']);
+  const guide=`<div style="max-width:360px;margin:18px auto 0;text-align:left">
+    <div onclick="impGuideToggle()" style="cursor:pointer;font-size:13px;font-weight:600;color:var(--teal);display:flex;align-items:center;justify-content:space-between;padding:8px 2px">
+      <span>Hoe exporteer ik mijn bankbestand?</span><span>${open?'▲':'▼'}</span></div>
+    ${open?`<div class="card" style="margin:0;padding:12px">
+      <div class="chips" style="margin:0 0 4px">${chip('abn','ABN AMRO')}${chip('n26','N26')}</div>
+      ${tab==='abn'?abn:n26}</div>`:''}
+  </div>`;
   const html=`<div class="empty">
-    <div class="big">${ICON('bank')}</div>
+    <div class="big">${ICON('folder')}</div>
     <h2>Welkom bij Minder</h2>
-    <p>Koppel je bank en zie meteen waar je geld heen gaat.</p>
-    <button class="btn" onclick="psd2Connect()">${ICON('bank')} Koppel je bank</button>
-    <div class="small muted" style="margin-top:14px;cursor:pointer" onclick="onboardManual()">Liever handmatig toevoegen ›</div>
+    <p>Importeer je bankbestand en zie meteen waar je geld heen gaat.</p>
+    <button class="btn" onclick="document.getElementById('file').click()">${ICON('folder')} Importeer je transacties</button>
+    <div class="small muted" style="margin-top:8px">MT940 (ABN AMRO) of CSV (N26) · een bestand-import, geen live koppeling</div>
+    ${guide}
+    <button class="btn sec" style="margin-top:18px" onclick="onboardManual()">Liever handmatig toevoegen</button>
     <p class="small muted" style="margin-top:24px">${ICON('lock')} Alleen inzicht, nooit toegang tot je geld. Alles blijft privé op dit toestel.</p>
   </div>`;
   $('#s-dash').innerHTML=html;
@@ -1547,6 +1563,14 @@ function monthLiquidity(){
   const {sum,missing}=totalBalance(); const buffer=+SET.buffer||0;
   const projected=Math.round(sum+incDue-fixDue-varDue);
   return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems};
+}
+// Veilig te besteden = saldo - nog-niet-betaalde vaste lasten deze maand - nog gereserveerde potjes (budget minus al uitgegeven)
+function safeToSpend(){
+  const tb=totalBalance(); const L=monthLiquidity();
+  const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const sp=catSpendMap(ym); const B=SET.budgets||{};
+  let reserved=0; for(const k in B){ const bud=+B[k]||0; if(bud>0) reserved+=Math.max(bud-(sp[k]||0),0); }
+  return {saldo:tb.sum, missing:tb.missing, fixDue:L.fixDue, reserved:Math.round(reserved), safe:Math.round(tb.sum-L.fixDue-reserved)};
 }
 function renderLiquidityKPI(){
   // liquiditeit is altijd 'vanaf nu vooruit' → alleen zinvol op de lopende/laatste maand
@@ -1736,9 +1760,11 @@ function renderDash(){
   const ms=months(); if(!ms.length){ $('#s-dash').innerHTML=renderReminder(); return; }
   const tb=totalBalance(); const ts=totalSaved();
   // ---- HERO: het saldo, groot, zonder kader ----
-  const hero=`<div class="homehero" onclick="openBalances()">
-    <div class="hh-lbl">Totaal saldo</div>
-    <div class="hh-big">${euro(tb.sum)}${tb.missing>0?` <span class="hh-warn">${ICON('warn')}</span>`:''}</div>
+  const S2=safeToSpend(); const sWarn=S2.missing>0;
+  const hero = `<div class="homehero" onclick="openBalances()">
+    <div class="hh-lbl">Veilig te besteden</div>
+    <div class="hh-big" style="color:${S2.safe<0?'var(--red)':'var(--teal)'}">${euro(S2.safe)}${sWarn?` <span class="hh-warn">${ICON('warn')}</span>`:''}</div>
+    <div style="font-size:12.5px;color:var(--mut);margin-top:4px">na vaste lasten &amp; potjes · totaal saldo ${euro(S2.saldo)}${sWarn?' · saldo deels onbekend':''}</div>
   </div>`;
   // ---- recente transacties: kale lijst ----
   const recent=TX.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
@@ -1837,7 +1863,7 @@ function renderReminder(){
   const lab=(FSA&&SET.folderName)?'Synchroniseer map':'Bestand toevoegen';
   return `<div class="signal warn" style="margin-bottom:2px"><div class="si">${ICON('clock')}</div><div class="st"><b>Je data is ${days} dagen oud.</b> Importeer je nieuwste bankbestand voor een actueel beeld. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="${act}">${lab} ›</span></div></div>`;
 }
-function toast(msg){ let el=document.getElementById('toast'); if(!el){ el=document.createElement('div'); el.id='toast'; document.body.appendChild(el); } el.textContent=msg; el.className='show'; clearTimeout(window._tt); window._tt=setTimeout(()=>{el.className='';},3500); }
+function toast(msg){ let el=document.getElementById('toast'); if(!el){ el=document.createElement('div'); el.id='toast'; document.body.appendChild(el); } el.innerHTML=msg; el.className='show'; clearTimeout(window._tt); window._tt=setTimeout(()=>{el.className='';},3500); }
 
 function topCats(t,n){
   const ex=Object.entries(t.byCat).filter(([k,v])=>CATS[k].type==='expense'&&v<0)
@@ -3346,6 +3372,8 @@ function renderPlanDetail(){
 /* ----- VASTE vs VARIABELE LASTEN ----- */
 const FIXED_CATS=new Set(['verzekering','studie','sport','abonnement','bankkosten','persoonlijk']);
 function isFixed(t){
+  const ov=(SET.fixOvr||{})[t.id]; if(ov) return ov==='fixed';                   // handmatige override: deze transactie
+  const ovm=(SET.fixOvrM||{})[recurKey(t)]; if(ovm) return ovm==='fixed';        // handmatige override: alle van deze winkel
   const U=(t.desc||'').toUpperCase(), cat=catOf(t);
   if(/TRAVELCARD|PARKBEE|TANK|SHELL|ESSO|GELDMAAT/.test(U)) return false;       // brandstof/parkeren/opname = variabel
   if(FIXED_CATS.has(cat)) return true;
@@ -3374,6 +3402,7 @@ function renderFixedVariable(list, inc){
 }
 // drill-down vanuit het 'Vaste vs variabele lasten'-widget: toon de transacties van die splitsing (zelfde periode)
 function openFixedVarDrill(kind){
+  window._fvDrillKind=kind;
   const list=window._fvTx||txOfMonth(curMonth); const fixed=(kind==='fixed');
   const items=list.filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense' && (fixed?isFixed(x):!isFixed(x))).sort((a,b)=>b.date.localeCompare(a.date));
   const tot=items.reduce((s,t)=>s-t.amount,0);
@@ -3381,11 +3410,32 @@ function openFixedVarDrill(kind){
     <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${fixed?ICON('lock'):ICON('cart')}</div><div style="font-weight:800;font-size:17px">${fixed?'Vaste lasten':'Variabele uitgaven'}</div>
       <div class="muted small">${esc(periodLabel())} · ${items.length} transacties</div>
       <div style="font-size:22px;font-weight:800;margin:5px 0">${euro(tot)}</div></div>
-    ${fixed?`<div class="small muted" style="margin:-2px 0 10px;text-align:center">Terugkerende, grotendeels vaste posten: verzekeringen, lease, abonnementen, studie en dergelijke.</div>`:`<div class="small muted" style="margin:-2px 0 10px;text-align:center">Wisselende uitgaven die je het snelst kunt sturen.</div>`}
-    ${items.length?items.map(t=>{const c=CATS[catOf(t)];return `<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${c.icon}</div>
+    <div class="small muted" style="margin:-2px 0 10px;text-align:center">Klopt een classificatie niet? Tik op een transactie om 'm naar ${fixed?'variabel':'vast'} te verplaatsen.</div>
+    ${items.length?items.map(t=>{const c=CATS[catOf(t)];return `<div class="tx" style="cursor:pointer" onclick="fixFlipAsk('${t.id}')"><div class="ava" style="background:var(--card2)">${c.icon}</div>
       <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} · ${c.name}${OWN.length>1?' · '+esc(accShort(t.acc)):''}</div></div>
-      <div class="amt neg">${euro(t.amount)}</div></div>`;}).join(''):`<div class="muted small center" style="padding:16px">Geen ${fixed?'vaste lasten':'variabele uitgaven'} in deze periode.</div>`}`;
+      <div class="amt neg">${euro(t.amount)}</div><span style="color:var(--mut);margin-left:8px;font-size:15px">⇄</span></div>`;}).join(''):`<div class="muted small center" style="padding:16px">Geen ${fixed?'vaste lasten':'variabele uitgaven'} in deze periode.</div>`}`;
   $('#sheetBg').classList.add('show');
+}
+// classificatie aanpassen: vraag of het alleen deze transactie is of alles van die winkel
+function fixFlipAsk(id){
+  const t=TX.find(x=>x.id===id); if(!t){ openFixedVarDrill(window._fvDrillKind||'fixed'); return; }
+  const nowFixed=isFixed(t); const target=nowFixed?'var':'fixed'; const targetLbl=nowFixed?'variabel':'vast';
+  const merch=cleanMerch(t.name)||(t.name||'deze winkel');
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:17px;margin-bottom:4px">Naar ${targetLbl} verplaatsen</div>
+    <div class="small muted" style="margin-bottom:14px">${esc(merch)} staat nu als <b>${nowFixed?'vaste last':'variabele uitgave'}</b>. Wat wil je verplaatsen?</div>
+    <button class="btn" style="width:100%;margin-bottom:8px" onclick="fixFlip('${id}','${target}',false)">${ICON('check')} Alleen deze transactie</button>
+    <button class="btn sec" style="width:100%;margin-bottom:8px" onclick="fixFlip('${id}','${target}',true)">Alle van ${esc(merch)}</button>
+    <div class="small muted" style="text-align:center;cursor:pointer;margin-top:6px" onclick="openFixedVarDrill(window._fvDrillKind||'fixed')">Annuleren</div>`;
+}
+function fixFlip(id,target,allMerch){
+  const t=TX.find(x=>x.id===id); if(!t){ openFixedVarDrill(window._fvDrillKind||'fixed'); return; }
+  if(allMerch){ SET.fixOvrM=SET.fixOvrM||{}; const mk=recurKey(t); SET.fixOvrM[mk]=target;
+    if(SET.fixOvr){ for(const x of TX){ if(recurKey(x)===mk) delete SET.fixOvr[x.id]; } } }   // winkel-override wint → losse overrides van die winkel opruimen
+  else { SET.fixOvr=SET.fixOvr||{}; SET.fixOvr[id]=target; }
+  save(); try{ renderIns(); }catch(_){}
+  toast(`${ICON('check')} ${cleanMerch(t.name)||'Transactie'} → ${target==='fixed'?'vast':'variabel'}`);
+  openFixedVarDrill(window._fvDrillKind||'fixed');
 }
 
 /* ----- UITGAVEN PER WINKEL / LEVERANCIER ----- */
@@ -3665,7 +3715,7 @@ function renderIns(){
   // ONE-FOCUS: één contextzin + één actie (alleen lopende maand)
   const focusBlock = isNow ? insInline(m) : '';
   // Progressive disclosure: alle insights, afwijkingen en cijfers achter 'bekijk meer'
-  const exp=!!SET.insDeep;
+  const exp=SET.insDeep!==false;   // Inzichten standaard uitgeklapt; 'minder ▲' klapt in
   const deepBtn=`<button class="snz" onclick="toggleInsDeep()">${exp?'minder ▲':'Bekijk meer ▼'}</button>`;
   let deep='';
   if(exp){
@@ -3756,7 +3806,7 @@ function toggleInsEdit(){ SET.insEdit=!SET.insEdit; save(); renderIns(); }
 
 function toggleInsMore(){ SET.insMore=!SET.insMore; save(); renderIns(); }
 
-function toggleInsDeep(){ SET.insDeep=!SET.insDeep; save(); renderIns(); }
+function toggleInsDeep(){ SET.insDeep=(SET.insDeep===false); save(); renderIns(); }
 function toggleInsFwd(){ SET.insFwd=!SET.insFwd; save(); renderIns(); }
 
 function addWidget(id){ SET.dashHidden=(SET.dashHidden||[]).filter(x=>x!==id); save(); renderDash(); }
@@ -4062,7 +4112,7 @@ $('#file').onchange=async e=>{
   const files=[...e.target.files]; if(!files.length)return;
   const items=await Promise.all(files.map(async f=>({name:f.name,text:await f.text()})));
   const added=ingest(items); curMonth=null; render(); e.target.value='';
-  toast(added? `${ICON('check')} ${added} transacties ingelezen over ${OWN.length} rekening${OWN.length>1?'en':''}` : 'Geen nieuwe transacties (al ingelezen)');
+  toast(added? `${ICON('check')} ${added} transacties ingelezen · alles blijft op dit toestel` : 'Geen nieuwe transacties (al ingelezen)');
 };
 
 /* ---------- automatische map-import (File System Access API) ---------- */
@@ -4320,7 +4370,7 @@ document.addEventListener('drop',async e=>{
   const ents=[...(e.dataTransfer.items||[])].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);
   if(ents.length){ for(const en of ents) await readEntry(en,items); }
   else { for(const f of e.dataTransfer.files){ if(FILE_RX.test(f.name)) items.push({name:f.name,text:await f.text()}); } }
-  if(items.length){ const added=ingest(items); curMonth=null; render(); if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){} toast(added? `${ICON('check')} ${added} transacties geïmporteerd` : 'Geen nieuwe transacties'); }
+  if(items.length){ const added=ingest(items); curMonth=null; render(); if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){} toast(added? `${ICON('check')} ${added} transacties ingelezen · alles blijft op dit toestel` : 'Geen nieuwe transacties'); }
 });
 
 /* ---------- start ---------- */
