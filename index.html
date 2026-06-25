@@ -1771,7 +1771,12 @@ function renderDash(){
   const txRows=recent.map(x=>{const c=CATS[catOf(x)];const d=new Date(x.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
     return `<div class="txl" onclick="openSheet('${x.id}')"><div class="ava" style="background:var(--card2);color:var(--mut)">${c.icon}</div><div class="info"><div class="nm">${esc(x.name)}</div><div class="cat">${d} · ${c.name}</div></div><div class="amt ${x.amount>0?'pos':'neg'}">${x.amount>0?'+':''}${euro(x.amount)}</div></div>`;}).join('');
   const recentBlock = recent.length?`<div class="homelist"><div class="hl-head"><span>Recent</span><span class="hl-all" onclick="go('tx')">Alle transacties ›</span></div>${txRows}</div>`:'';
-  $('#s-dash').innerHTML = renderReminder() + hero + recentBlock;
+  let modeTop='', modeBot='';
+  try{
+    if(isMode('rustig')){ const _ms=months(); const _cur=totals(_ms[_ms.length-1]).spend; const _prev=_ms.length>1?totals(_ms[_ms.length-2]).spend:null; const _t=(_prev!=null&&_cur<_prev)?'Je geeft het rustiger aan dan vorige maand.':'Stap voor stap. Je houdt het overzicht.'; modeTop=`<div class="small muted" style="margin:2px 2px 12px">${_t}</div>`; }
+    else if(isMode('expert')){ const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0">deze maand · uit ${euro(_tt.spend)} · in ${euro(_tt.income)} · saldo ${euro(S2.saldo)}</div>`; }
+  }catch(_){ }
+  $('#s-dash').innerHTML = renderReminder() + modeTop + hero + recentBlock + modeBot;
 }
 function renderDash_OLD_UNUSED(){
   const p=SET.insPeriod||'month'; const isM=p==='month';
@@ -3161,6 +3166,7 @@ async function buyFlow(cat,amt,item){
   const cn=potName(cat);
   coBub('me',`Ik wil ${item?esc(item)+' ':''}voor ${euro0(amt)} (${cn}).`);
   await coWait(180);
+  if(isMode('expert')){ try{ const _S=savingsModel(); const _pd=_S.monthlySaving>0?_S.monthlySaving/30:0; if(_pd>0){ const _d=Math.round(amt/_pd); await coSay(`In doel-termen: <span class="hl">~${_d} ${_d===1?'dag':'dagen'}</span> langer tot je buffer.`,{html:true}); } }catch(_){ } }
   const m=curMonth||months()[months().length-1]; const B=SET.budgets||{}; const has=+B[cat]>0;
   const rest=has?Math.round(+B[cat]-(catSpendMap(m)[cat]||0)):0;
   // frequentie-reactie: heeft de categorie een 'aantal keer'-potje, benoem de telling
@@ -3727,6 +3733,7 @@ function insInline(m){
   } else if(free<0){ extra=' · spaardoel krap'; }
   return `<div class="insinline" onclick="openBudgetCompare('${m}')"><span class="ii-dot" style="background:${dot}"></span><span>Hoe doe je het deze maand?</span><span class="ii-go">›</span></div>`;
 }
+function isMode(x){ return (SET.mode||'begeleid')===x; }
 function renderIns(){
   if(!TX.length){ $('#s-ins').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const m=curMonth||months()[months().length-1];
@@ -3742,7 +3749,7 @@ function renderIns(){
   // ONE-FOCUS: één contextzin + één actie (alleen lopende maand)
   const focusBlock = isNow ? insInline(m) : '';
   // Progressive disclosure: alle insights, afwijkingen en cijfers achter 'bekijk meer'
-  const exp=SET.insDeep!==false;   // Inzichten standaard uitgeklapt; 'minder ▲' klapt in
+  const exp=(SET.insDeep!==undefined)?SET.insDeep:!isMode('rustig');   // standaard open; in rustige modus standaard ingeklapt
   const deepBtn=`<button class="snz" onclick="toggleInsDeep()">${exp?'minder ▲':'Bekijk meer ▼'}</button>`;
   let deep='';
   if(exp){
@@ -3754,7 +3761,7 @@ function renderIns(){
       +`<div class="chips" style="margin:0 0 10px">${_inYr.map(mm=>`<span class="chip ${_sel.has(mm)?'on':''}" onclick="toggleInsMonth('${mm}')">${_MN[+mm.slice(5,7)-1]}</span>`).join('')}</div>`;
     const pTx=periodTx();
     const pInc=periodMonths().reduce((s,mm)=>s+totals(mm).income,0);
-    deep = pchips + renderCatBreak(pTx) + renderFixedVariable(pTx,pInc) + renderMerchants(pTx,periodLabel());
+    deep = (isMode('begeleid')?`<div class="card"><div class="small muted">${ICON('info')} Vuistregel 50/30/20: ~50% vaste lasten, ~20% sparen, ~30% vrij besteden. Handig om je percentages tegen af te zetten.</div></div>`:'') + pchips + renderCatBreak(pTx) + renderFixedVariable(pTx,pInc) + renderMerchants(pTx,periodLabel());
   }
   $('#s-ins').innerHTML = heroProjection(m) + focusBlock + deepBtn + deep;
 }
@@ -4054,6 +4061,9 @@ function bankAdvTap(){
 
 function setCoach(){
   return `
+    <label class="fld">Modus</label>
+    <div class="chips">${[['rustig','Rustig'],['begeleid','Begeleid'],['expert','Expert']].map(([k,l])=>`<span class="chip ${(SET.mode||'begeleid')===k?'on':''}" onclick="SET.mode='${k}';save();render();">${l}</span>`).join('')}</div>
+    <div class="small muted" style="margin-bottom:12px">Rustig: minder cijfers, zachte toon. Begeleid: uitleg &amp; tips (standaard). Expert: compact, cijfers eerst.</div>
     <div class="toggle"><div><div style="font-weight:600">Coaching</div><div class="small muted">Coach-tips op je Home & Actieplan</div></div>
       <label class="sw"><input type="checkbox" ${!SET.coachOff?'checked':''} onchange="SET.coachOff=!this.checked;save();render();"><span class="sl"></span></label></div>
     <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Streak tonen</div><div class="small muted">${ICON('fire')} dagen op rij binnen je dagdoel</div></div>
@@ -4077,8 +4087,14 @@ function setPrivacy(){
     ${standalone?`<div class="small muted" style="margin-bottom:10px">${ICON('check')} Geïnstalleerd als app, werkt offline.</div>`
       :(deferredPrompt?`<button class="btn sec" style="margin-bottom:8px" onclick="installApp()">${ICON('install')} Installeer als app</button>`
         :`<div class="small muted" style="margin-bottom:10px">Installeren via browsermenu: ⋮ → "App installeren" (Chrome/Edge) of Deel → "Zet op beginscherm" (iPhone).</div>`)}
+    <div class="small muted" style="margin:8px 0 6px"><b>Exporteren (lokaal):</b> een CSV-bestand, gemaakt op dit toestel.</div>
+    <button class="btn sec" style="margin-bottom:8px" onclick="exportTxCSV()">${ICON('folder')} Exporteer transacties (CSV)</button>
+    <button class="btn sec" style="margin-bottom:8px" onclick="exportPotjesCSV()">${ICON('target')} Exporteer potjes/budgetten (CSV)</button>
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (${TX.length} transacties op dit toestel.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">${ICON('trash')} Alle gegevens wissen</button>`;
 }
+function csvDownload(name,rows){ const csv=rows.map(r=>r.map(c=>{ c=(c==null?'':String(c)); return /[";\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c; }).join(';')).join('\r\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
+function exportTxCSV(){ if(!TX.length){ toast('Geen transacties'); return; } const rows=[['datum','bedrag','categorie','omschrijving','rekening']]; TX.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>rows.push([t.date,(+t.amount).toFixed(2).replace('.',','),(CATS[catOf(t)]?CATS[catOf(t)].name:catOf(t)),(t.name||t.desc||''),(t.acc||'')])); csvDownload('minder-transacties.csv',rows); toast(`${ICON('check')} ${TX.length} transacties geexporteerd`); }
+function exportPotjesCSV(){ const B=SET.budgets||{}; const ks=Object.keys(B).filter(k=>+B[k]>0); if(!ks.length){ toast('Nog geen potjes'); return; } const rows=[['categorie','maandbudget']]; ks.forEach(k=>rows.push([(CATS[k]?CATS[k].name:k),(+B[k]).toFixed(2).replace('.',',')])); csvDownload('minder-potjes.csv',rows); toast(`${ICON('check')} potjes geexporteerd`); }
 
 function setAcc(a){accFilter=a;renderTx();}
 
