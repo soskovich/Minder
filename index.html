@@ -3360,16 +3360,32 @@ function renderFixedVariable(list, inc){
   const spend=fixed+vari; if(spend<=0) return '';
   const pc=v=>Math.round(v/spend*100);
   const w=v=>v/spend*100;
+  window._fvTx=list;   // exact dezelfde periode-lijst die de widget toont → drill-down klopt voor maand én jaar
   return `<div class="card">
     <div class="row"><span class="hlabel" style="margin:0;flex:1">Vaste vs variabele lasten</span><span class="small muted">% van uitgaven</span></div>
     <div class="stack">
       <div style="width:${w(fixed)}%;background:var(--blue)">${pc(fixed)>=8?pc(fixed)+'%':''}</div>
       <div style="width:${w(vari)}%;background:var(--amber)">${pc(vari)>=8?pc(vari)+'%':''}</div>
     </div>
-    <div class="fv-row"><span class="dot" style="background:var(--blue)"></span><span class="nm">${ICON('lock')} Vaste lasten</span><span class="amt">${euro(fixed)}</span><span class="pc">${pc(fixed)}%</span></div>
-    <div class="fv-row"><span class="dot" style="background:var(--amber)"></span><span class="nm">${ICON('cart')} Variabele uitgaven</span><span class="amt">${euro(vari)}</span><span class="pc">${pc(vari)}%</span></div>
-    <div class="small muted" style="margin-top:6px">Vaste lasten liggen grotendeels vast (verzekeringen, lease, abonnementen, studie). Op je <b>variabele</b> uitgaven kun je het snelst sturen.</div>
+    <div class="fv-row" style="cursor:pointer" onclick="openFixedVarDrill('fixed')"><span class="dot" style="background:var(--blue)"></span><span class="nm">${ICON('lock')} Vaste lasten</span><span class="amt">${euro(fixed)}</span><span class="pc">${pc(fixed)}%</span><span style="color:var(--teal);font-weight:700;margin-left:6px">›</span></div>
+    <div class="fv-row" style="cursor:pointer" onclick="openFixedVarDrill('var')"><span class="dot" style="background:var(--amber)"></span><span class="nm">${ICON('cart')} Variabele uitgaven</span><span class="amt">${euro(vari)}</span><span class="pc">${pc(vari)}%</span><span style="color:var(--teal);font-weight:700;margin-left:6px">›</span></div>
+    <div class="small muted" style="margin-top:6px">Tik op een regel om te zien welke transacties eronder vallen. Vaste lasten liggen grotendeels vast (verzekeringen, lease, abonnementen, studie); op je <b>variabele</b> uitgaven kun je het snelst sturen.</div>
   </div>`;
+}
+// drill-down vanuit het 'Vaste vs variabele lasten'-widget: toon de transacties van die splitsing (zelfde periode)
+function openFixedVarDrill(kind){
+  const list=window._fvTx||txOfMonth(curMonth); const fixed=(kind==='fixed');
+  const items=list.filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense' && (fixed?isFixed(x):!isFixed(x))).sort((a,b)=>b.date.localeCompare(a.date));
+  const tot=items.reduce((s,t)=>s-t.amount,0);
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${fixed?ICON('lock'):ICON('cart')}</div><div style="font-weight:800;font-size:17px">${fixed?'Vaste lasten':'Variabele uitgaven'}</div>
+      <div class="muted small">${esc(periodLabel())} · ${items.length} transacties</div>
+      <div style="font-size:22px;font-weight:800;margin:5px 0">${euro(tot)}</div></div>
+    ${fixed?`<div class="small muted" style="margin:-2px 0 10px;text-align:center">Terugkerende, grotendeels vaste posten: verzekeringen, lease, abonnementen, studie en dergelijke.</div>`:`<div class="small muted" style="margin:-2px 0 10px;text-align:center">Wisselende uitgaven die je het snelst kunt sturen.</div>`}
+    ${items.length?items.map(t=>{const c=CATS[catOf(t)];return `<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${c.icon}</div>
+      <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} · ${c.name}${OWN.length>1?' · '+esc(accShort(t.acc)):''}</div></div>
+      <div class="amt neg">${euro(t.amount)}</div></div>`;}).join(''):`<div class="muted small center" style="padding:16px">Geen ${fixed?'vaste lasten':'variabele uitgaven'} in deze periode.</div>`}`;
+  $('#sheetBg').classList.add('show');
 }
 
 /* ----- UITGAVEN PER WINKEL / LEVERANCIER ----- */
