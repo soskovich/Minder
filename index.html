@@ -1000,8 +1000,8 @@ function potRoomBase(){
 // één regel: som van je potjes + hoeveel er nog vrij is binnen je grens (na vaste lasten)
 function potRoomLineHTML(potTotal){ const b=potRoomBase();
   if(b.budget<=0) return `Samen al je potjes: <b>${euro0(potTotal)}</b> per maand`;
-  const free=Math.round(b.budget-b.fixed-potTotal);
-  if(free<0) return `<span style="color:var(--amber)">${ICON('warn')} Je potjes (${euro0(potTotal)}) en vaste lasten (${euro0(b.fixed)}) samen zijn <b>${euro0(-free)}</b> meer dan je bestedingslimiet (${euro0(b.budget)}). Verlaag een potje of je vaste lasten, of pas je limiet aan.</span>`;
+  const free=Math.round(b.budget-potTotal);
+  if(free<0) return `<span style="color:var(--amber)">${ICON('warn')} Je potjes (${euro0(potTotal)}) zijn <b>${euro0(-free)}</b> meer dan je bestedingslimiet (${euro0(b.budget)}). Verlaag een potje of pas je limiet aan.</span>`;
   return `Samen al je potjes: <b>${euro0(potTotal)}</b>/mnd · nog <b style="color:var(--teal)">${euro0(free)}</b> vrij binnen je budget`;
 }
 // is een categorie grotendeels een vaste last? (budget schaalt dan niet mee met inkomen)
@@ -1406,7 +1406,7 @@ function recurringSchedule(){
     else if(meta.type==='expense' && t.amount<0 && isFixed(t)) type='fixed'; else continue;
     const key=recurKey(t); if(!key) continue;
     (map[key]=map[key]||{name:t.name,cat:c,type,occ:[]});
-    map[key].occ.push({date:t.date, amt:Math.abs(t.amount), ym:t.date.slice(0,7)}); }
+    map[key].occ.push({date:t.date, amt:Math.abs(t.amount), ym:t.date.slice(0,7), acc:t.acc}); }
   const now=new Date(); now.setHours(0,0,0,0); const today=now.getTime();
   const out=[];
   for(const k in map){ const r=map[k];
@@ -1419,9 +1419,31 @@ function recurringSchedule(){
     const last=occ[occ.length-1]; const lastD=new Date(last.date); lastD.setHours(0,0,0,0);
     if((today-lastD.getTime())/86400000 > intervalM*30*1.6 + 7) continue;
     let nx=new Date(lastD); let g=0; do{ nx.setMonth(nx.getMonth()+intervalM); g++; }while(nx.getTime()<=today && g<60);
-    out.push({key:k,name:r.name,cat:r.cat,type:r.type,amount:last.amt,day:lastD.getDate(),intervalM,nextDate:new Date(nx),lastDate:last.date,count:r.occ.length,monthlyEq:Math.round(last.amt/intervalM)});
+    out.push({key:k,name:r.name,cat:r.cat,type:r.type,amount:last.amt,day:lastD.getDate(),intervalM,nextDate:new Date(nx),lastDate:last.date,count:r.occ.length,monthlyEq:Math.round(last.amt/intervalM),acc:last.acc});
   }
   return out.sort((a,b)=>a.nextDate-b.nextDate);
+}
+// per-rekening saldo-check: dekt het huidige saldo de aankomende incasso's tot het volgende inkomen op DIE rekening?
+// alleen rekeningen met een bekend saldo; venster = tot je volgende verwachte inkomen op die rekening (anders 35 dagen).
+function accountShortfalls(){
+  if(OWN.length<1) return [];
+  const sched=recurringSchedule();
+  const t0=new Date(); t0.setHours(0,0,0,0); const today=t0.getTime();
+  const MAXH=35*86400000;
+  const out=[];
+  for(const acc of OWN){
+    const bal=accBalance(acc); if(bal==null) continue;
+    let incT=null;
+    for(const r of sched){ if(r.type==='income' && r.acc===acc){ const d=new Date(r.nextDate).setHours(0,0,0,0); if(d>today && (incT==null||d<incT)) incT=d; } }
+    const horizon = incT!=null ? incT : today+MAXH;
+    const debits=sched.filter(r=>r.type==='fixed' && r.acc===acc && r.amount>0)
+      .map(r=>({name:r.name,amt:r.amount,t:new Date(r.nextDate).setHours(0,0,0,0),cat:r.cat}))
+      .filter(e=>e.t>=today && e.t<horizon).sort((a,b)=>a.t-b.t);
+    if(!debits.length) continue;
+    let run=bal;
+    for(const e of debits){ run-=e.amt; if(run<0){ out.push({acc,name:e.name,amt:e.amt,t:e.t,balance:Math.round(bal),shortfall:Math.round(-run),cat:e.cat}); break; } }
+  }
+  return out.sort((a,b)=>a.t-b.t);
 }
 // dag-voor-dag liquiditeitscurve: vaste lasten/inkomen op hun datum + variabele burn
 function liquidityDaily(days){
@@ -2104,6 +2126,14 @@ function scoreNotifs(){
       out.push({key:'lowbal-'+today,score:96,t:'bad',ic:ICON('alert'),
         l1: due.length>1?`Te weinig saldo voor ${due.length} vaste lasten ${when}.`:`Te weinig saldo: ${when} wordt ${esc(String(first.name||'').slice(0,20))} ${euro(-first.amt)} afgeschreven.`,
         l2:`Vul ±${euro0(topUp)} aan`, act:"go('vooruit')"});
+    } }catch(_){}
+  // --- per-rekening: aankomende vaste last die het saldo van DIE rekening niet dekt ---
+  try{ const t0=new Date().setHours(0,0,0,0);
+    for(const s of accountShortfalls()){
+      const dd=Math.round((s.t-t0)/86400000); const when=dd<=0?'vandaag':dd===1?'morgen':`over ${dd} dagen`;
+      out.push({key:'accshort-'+s.acc+'-'+new Date(s.t).toISOString().slice(0,10), score:94, t:'bad', ic:ICON('alert'),
+        l1:`${esc(accShort(s.acc))}: ${esc(String(s.name||'').slice(0,18))} ${euro(s.amt)} ${when}, maar er staat ${euro(s.balance)}.`,
+        l2:`Tekort ${euro0(s.shortfall)} · vul aan of schuif over`, act:"go('vooruit')"});
     } }catch(_){}
   if(isNow && !out.length){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget(); if(L.projected>=tgt && L.daysLeft>0)
     push({key:'room',score:20,t:'good',ic:ICON('check'),l1:'Je ligt op koers deze maand.',l2:'Mooi, hou dit vast',act:"go('vooruit')"}); }catch(_){} }
