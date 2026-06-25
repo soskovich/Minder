@@ -607,7 +607,7 @@ const RULES=[
   ['sparen',['PEAKS','SAXO BANK','SAXO','BELEGGEN','DEGIRO','BRAND NEW DAY','BUX','FLATEX','MONTHLY RULE','WEEKLY RULE']],
   ['vices',['COFFEESHOP','SMARTSHOP','GROWSHOP','HEADSHOP','SLIJTERIJ','GALL & GALL','GALL EN GALL','MITRA','DRANKENHANDEL','HOLLAND CASINO','UNIBET','TOBACCO','SHISHA','VAPE']],
   ['boodschappen',['PLUS DE GORS','VOMAR','SAFRANA','KRUIDVAT','NIKA SUPERMARKT','SUPERMARKT','ALBERT HEIJN','JUMBO','LIDL','ALDI','DIRK VAN','SPLIF','ISS CATERING','SUMUP']],
-  ['uiteten',['MCDONALD','ROOTS HOEKENRODE','MIXED KITCHEN','BAZRONI','PIZZA','ROLLING PIZZA','MARC SIER','LONA','NYPD','RESTAURANT','EETCAFE','CAFE','PASTA','TICKETMASTER','DONER','TOKO','STACH','KEBAB','SHOARMA','SHAWARMA','BURGER','SUSHI','THUISBEZORGD','UBER EATS','TASTE OF']],
+  ['uiteten',['MCDONALD','ROOTS HOEKENRODE','MIXED KITCHEN','BAZRONI','PIZZA','ROLLING PIZZA','MARC SIER','LONA','NYPD','RESTAURANT','EETCAFE','CAFE','PASTA','TICKETMASTER','DONER','TOKO','STACH','KEBAB','SHOARMA','SHAWARMA','BURGER','SUSHI','THUISBEZORGD','UBER EATS','TASTE OF','STARBUCKS','COFFEE COMPANY','DUNKIN','COSTA COFFEE','BAGELS','DOPPIO','BARISTA','KOFFIE']],
   ['vervoer',['TRAVELCARD','PARKBEE','PARKEER','PARKING','HILTERMANN','LEASECONTRACT','SHELL','TANKSTATION','NS GROEP','OV-CHIP','ESSO','BP ','TINQ','TOTAL','KLM','ESKY','TRANSAVIA','RYANAIR','EASYJET','TAXIS ON','TAXI','BOLT.EU','UBER','GVB','RET','NS INTERN','FLIXBUS']],
   ['verzekering',['ALLIANZ','DELA NATURA','ALICIA INSURANCE','VERZEKER','POLIS','INSHARED','CENTRAAL BEHEER']],
   ['zorg',['ZILVEREN KRUIS','ZORGVERZEK','INFOMEDICS','APOTHEEK','TANDARTS','HUISARTS','ZIEKENHUIS','RIVERTY','CLINIC','KLINIEK','FYSIO','OPTIEK','HANS ANDERS','SPECSAVERS']],
@@ -2965,8 +2965,35 @@ function coGoalEffect(extra){
 }
 // SPOOR 1 — structureel gesprek (vier fases, gecomprimeerd op de lopende maand)
 // MAANDGESPREK (prototype, 6 stappen): doel → win → lek+stakes → reflectie → optie→actie → borgen
+/* ---- Begeleide eerste-potje-flow: 0 potjes -> help de gebruiker er een maken ---- */
+function potCount(){ const B=SET.budgets||{}; return Object.keys(B).filter(k=>+B[k]>0&&CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k)).length; }
+function coFirstPotCat(m){
+  // 1) gebruik de bestaande coach-leaklogica (filtert vaste lasten + terugkerende incasso's eruit)
+  try{ const lk=coachLeak(m); if(lk && lk.cat && CATS[lk.cat] && !isFixedCat(lk.cat) && lk.cat!=='belasting'){ const sp=Math.round((catSpendMap(m)[lk.cat])||lk.amount||0); if(sp>0) return {cat:lk.cat, spend:sp}; } }catch(_){}
+  // 2) fallback: grootste discretionaire categorie deze maand (geen vaste/niet-stuurbare posten)
+  const block=new Set(['belasting','goededoel','inkomen','sparen','intern']);
+  const sp=catSpendMap(m); const cats=Object.keys(sp).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k)&&!block.has(k)&&sp[k]>0);
+  if(!cats.length) return null; cats.sort((a,b)=>sp[b]-sp[a]); return {cat:cats[0], spend:Math.round(sp[cats[0]])};
+}
+async function coFirstPotFlow(m){
+  const v=coFirstPotCat(m); if(!v) return false;
+  const cl=CATS[v.cat].name.toLowerCase();
+  const sug=Math.max(Math.round(v.spend/5)*5,5);
+  const nm0=(SET.name||'').trim().split(/\s+/)[0];
+  await coSay(`${nm0?'Hey '+nm0+'. ':''}Je hebt nog geen enkel potje — en dat is precies waar grip begint.`,{ai:true});
+  await coSay(`Je grootste stuurbare uitgave deze maand was <span class="hl">${cl}</span>: <span class="warn">${euro0(v.spend)}</span>. Zullen we daar je eerste potje van maken?`,{html:true,accent:true});
+  await coSay(`Dan weet je voortaan precies waar 't vandaan komt — en de koopcheck rekent met jouw plan.`,{ai:true});
+  coChoices([
+    {l:`Ja, stel ${cl} in op ${euro0(sug)}`, act:async()=>{ SET.budgets=SET.budgets||{}; SET.budgets[v.cat]=sug; SET.firstPotDone=true; save(); try{TX.forEach(categorize);}catch(_){ } coFx(`eerste potje '${cl}' · ${euro0(sug)}/mnd`); coachLogAdd({type:'potje',text:`eerste potje voor ${cl}`}); await coSay(`Mooi. Je eerste potje staat — <span class="hl">${cl}</span> heeft nu een plan.`,{html:true,accent:true}); await coSay(`Test 'm meteen: tik <span class="hl">'Ik wil iets kopen'</span> en zie wat er gebeurt.`,{html:true}); coEnd(); setTimeout(()=>renderActions(),2200); }},
+    {l:`Ik kies zelf het bedrag`, act:()=>{ SET.firstPotDone=true; save(); window._potAfter=()=>renderActions(); openPotje(v.cat); }},
+    {l:`Nu even niet`, act:async()=>{ SET.firstPotSkipMonth=m; save(); await coSay(`Geen probleem. Ik wijs 't je later nog wel eens aan.`); startCoachTalk(m); }}
+  ]);
+  return true;
+}
 async function startCoachTalk(m){
   coReset(); if(!_coT)return;
+  // begeleide eerste-potje-flow: nog geen enkel potje -> help er een te maken (anker = grootste variabele lek)
+  if(TX.length && potCount()===0 && !SET.firstPotDone && SET.firstPotSkipMonth!==m){ if(await coFirstPotFlow(m)) return; }
   // al een afspraak deze maand? Toon de klaar-staat i.p.v. het gesprek opnieuw te voeren.
   const reeds=coachThisMonthAfspraak();
   if(reeds){
