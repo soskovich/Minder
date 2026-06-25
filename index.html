@@ -2136,6 +2136,10 @@ function scoreNotifs(){
   if(isNow){ try{ const t=totals(m), de=daysElapsed(m), el=de.elapsed||1;
     if(t.budget>0 && el>=5 && (t.spend/el*de.dim)>t.budget*1.07) push({key:'tempo',score:66,t:'warn',ic:ICON('clock'),l1:'Op dit tempo ga je deze maand over je grens.',l2:'Verlaag je dagdoel',act:"go('act')"}); }catch(_){} }
   if(isNow){ try{ const v=(catSpendMap(m).vices)||0; if(v>=20) push({key:'vice',score:58+Math.min(v/5,22),t:'warn',ic:CATS.vices.icon,l1:`€${Math.round(v)} aan vices deze maand.`,l2:'Zet een weekgrens',act:"openCategory('vices')"}); }catch(_){} }
+  // cooling-off terugkomprompt: parkeerde je iets ('wachten tot morgen'), kom er na ~1 dag op terug
+  try{ const log=SET.coachLog||[]; const nowMs=Date.now();
+    const park=log.find(l=>l.type==='beslis' && l.uitkomst==='geparkeerd' && (nowMs-l.ts)>=18*36e5 && (nowMs-l.ts)<=7*864e5);
+    if(park){ const it=String(park.item||'die aankoop').slice(0,24); push({key:'park-'+park.ts, score:84, t:'warn', ic:ICON('clock'), l1:`Je parkeerde ${it} (${euro0(park.bedrag||0)}). Staat 't er nog?`, l2:'Open je coach', act:"go('act')"}); } }catch(_){}
   try{ const lim=new Date(now); lim.setDate(lim.getDate()-7);
     const recent=TX.filter(x=>x.amount<0 && new Date(x.date)>=lim && CATS[catOf(x)].type==='expense' && !isFixed(x));
     const byCat={}; for(const mm of months().slice(-4)){ for(const x of txOfMonth(mm)){ if(x.amount<0&&CATS[catOf(x)].type==='expense'){ (byCat[catOf(x)]=byCat[catOf(x)]||[]).push(-x.amount); } } }
@@ -2867,6 +2871,38 @@ function coachForecastChart(M,accent){
   const labels=MN.map((mn,i)=>(i%2===0||i===11)?`<text x="${X(i).toFixed(1)}" y="${H-5}" fill="#8a97ab" font-size="8.5" text-anchor="middle">${mn}</text>`:'').join('');
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Forecast: volle discipline vs jouw koers">${marker}${lDoel}${lAcc}${labels}</svg>`;
 }
+function coachPattern(){
+  // 1) weekdag-concentratie van discretionaire uitgaven (laatste ~8 weken)
+  try{ const lim=Date.now()-56*864e5; const days=[0,0,0,0,0,0,0]; const nm=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag']; let tot=0;
+    for(const t of TX){ if(t.amount>=0) continue; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixedCat(c)) continue; const dt=new Date(t.date); if(isNaN(dt)||dt.getTime()<lim) continue; const a=-t.amount; days[dt.getDay()]+=a; tot+=a; }
+    if(tot>0){ let mi=0; for(let i=1;i<7;i++) if(days[i]>days[mi]) mi=i; const share=days[mi]/tot; if(share>=0.28 && days[mi]>=40) return `je discretionaire uitgaven pieken op <b>${nm[mi]}</b> (${Math.round(share*100)}%).`; }
+  }catch(_){}
+  // 2) 'in het moment'-patroon uit de koopcheck-historie
+  try{ const dec=(SET.coachLog||[]).filter(l=>l.type==='beslis'); const nu=dec.filter(l=>l.intentie==='nu').length; if(dec.length>=3 && nu/dec.length>=0.5) return `je koopchecks zijn vaker '<b>ik wil het nú</b>' dan gepland.`; }catch(_){}
+  return '';
+}
+function coachMirrorCard(){
+  const log=SET.coachLog||[]; const wk=Date.now()-7*864e5;
+  const dec=log.filter(l=>l.type==='beslis' && l.ts>=wk);
+  const wins=[];
+  try{ const D=dayBudgetNow(); if(D.dagdoel>0){ const st=computeStreak(D.dagdoel); if(st>=2) wins.push(`${ICON('fire')} ${st} dagen op rij onder je dagdoel`); } }catch(_){}
+  try{ const pc=potCount(); if(pc>=1) wins.push(`${ICON('check')} Je hebt ${pc} ${pc===1?'potje':'potjes'} lopen`); }catch(_){}
+  try{ const S=savingsModel(); if(S.goal>0 && S.pct>=10){ const mls=S.pct>=50?50:(S.pct>=25?25:10); wins.push(`${ICON('target')} ${mls}%+ van je buffer bereikt (${euro0(S.cur)})`); } }catch(_){}
+  const pat=coachPattern();
+  if(!dec.length && !wins.length && !pat) return '';
+  let body='';
+  if(dec.length){
+    const cnt={}; let saved=0;
+    dec.forEach(d=>{ cnt[d.uitkomst]=(cnt[d.uitkomst]||0)+1; if(d.uitkomst==='geparkeerd'||d.uitkomst==='geannuleerd') saved+=(+d.bedrag||0); });
+    const held=(cnt['geparkeerd']||0)+(cnt['geannuleerd']||0)+(cnt['ingepland']||0);
+    body+=`<div class="small" style="margin-bottom:4px"><b>${dec.length}</b> ${dec.length===1?'koopcheck':'koopchecks'} deze week · <span style="color:var(--teal)">${held}× geremd</span>${cnt['doorgezet']?` · ${cnt['doorgezet']}× doorgezet`:''}</div>`;
+    if(saved>0) body+=`<div class="small muted">Daarmee ${euro0(saved)} niet ongepland uitgegeven.</div>`;
+  }
+  let winHtml='';
+  if(wins.length) winHtml=`<div style="margin-top:${dec.length?'10px':'0'};display:flex;flex-direction:column;gap:5px">${wins.map(w=>`<div class="small" style="color:var(--green)">${w}</div>`).join('')}</div>`;
+  const patHtml=pat?`<div class="small muted" style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">${ICON('search')} Patroon: ${pat}</div>`:'';
+  return `<div class="card"><div class="small muted" style="margin-bottom:8px;font-weight:600">${ICON('target')} Zo deed je het deze week</div>${body}${winHtml}${patHtml}</div>`;
+}
 function renderActions(){
   if(!TX.length){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -2894,12 +2930,12 @@ function renderActions(){
   $('#s-act').innerHTML = `<div class="coachhead" onclick="openCoachAvatar()"><div class="av">${coachAvatar()}</div><span class="nm">Je coach</span><span class="sw">wissel ›</span></div>`
     + `<div class="cothr" id="coThr"></div><div id="coCh"></div>`
     + `<button class="cobuy" id="buyBtn">${ICON('cart')} Ik wil iets kopen</button>`
-    + zonePotjes + zoneMine;
+    + coachMirrorCard() + zonePotjes + zoneMine;
   const bb=document.getElementById('buyBtn'); if(bb) bb.onclick=openBuy;
   startCoachTalk(m);
 }
 /* ---------- COACH-DIALOOG (tik-door gesprek, leest/voert uit via de motor) ---------- */
-let _coT=null,_coC=null;
+let _coT=null,_coC=null,_coGen=0;
 const AV_V=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="#2b2440"/><path d="M8 27c0-7 4-12 10-12s10 5 10 12z" fill="#caa6c4"/><circle cx="18" cy="15" r="6.6" fill="#f1c9a6"/><path d="M11 14c0-5 3-7.5 7-7.5s7 2.5 7 7.5c-1.6-2.2-3.6-3.2-7-3.2s-5.4 1-7 3.2z" fill="#caa6c4"/></svg>`;
 const AV_M=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="#21314a"/><path d="M9 28c0-6 4-10 9-10s9 4 9 10z" fill="#5a8fc0"/><circle cx="18" cy="15" r="6.6" fill="#e9b994"/><path d="M11.4 13c0-4.2 3-6.2 6.6-6.2s6.6 2 6.6 6.2c-2-2-4-2.6-6.6-2.6s-4.6.6-6.6 2.6z" fill="#3a4a5e"/></svg>`;
 function coachAvatar(){ return SET.coachAvatar==='m'?AV_M:AV_V; }
@@ -2933,19 +2969,19 @@ async function coachAI(draft){
   }catch(_){ return null; }
 }
 function coWait(ms){ return new Promise(r=>setTimeout(r,ms)); }
-function coReset(){ _coT=document.getElementById('coThr'); _coC=document.getElementById('coCh'); if(_coT)_coT.innerHTML=''; if(_coC)_coC.innerHTML=''; }
+function coReset(){ _coGen++; _coT=document.getElementById('coThr'); _coC=document.getElementById('coCh'); if(_coT)_coT.innerHTML=''; if(_coC)_coC.innerHTML=''; }
 function coBub(cls,txt,o){ if(!_coT)return; o=o||{};
   const set=(el)=>{ if(o.html) el.innerHTML=txt; else el.textContent=txt; };
   if(cls==='co'){ const row=document.createElement('div'); row.className='corow'; const av=document.createElement('div'); av.className='coav'; av.innerHTML=coachAvatar(); const d=document.createElement('div'); d.className='cbub co'+(o.accent?' acc':''); set(d); row.appendChild(av); row.appendChild(d); _coT.appendChild(row); }
   else { const d=document.createElement('div'); d.className='cbub '+cls; set(d); _coT.appendChild(d); }
   try{window.scrollTo(0,document.body.scrollHeight);}catch(_){}}
 function coFx(txt){ if(!_coT)return; const d=document.createElement('div'); d.className='cfx'; d.textContent='✓ '+txt; _coT.appendChild(d); }
-async function coSay(txt,o){ o=o||{}; if(!_coT)return;
+async function coSay(txt,o){ o=o||{}; if(!_coT)return; const _g=_coGen;
   const row=document.createElement('div'); row.className='corow'; const av=document.createElement('div'); av.className='coav'; av.innerHTML=coachAvatar(); const e=document.createElement('div'); e.className='cbub co cdots'; e.innerHTML='<span></span><span></span><span></span>'; row.appendChild(av); row.appendChild(e); _coT.appendChild(row);
   let out=txt, html=o.html;
   if(o.ai && SET.aiCoach){ const ai=await coachAI(coStripTags(typeof txt==='string'?txt:'')); if(ai!=null){ out=coHi(esc(ai),(o.ai&&o.ai.tone)||'teal'); html=true; } else { await coWait(280); } }
   else { await coWait(520); }
-  if(!document.body.contains(row))return; row.remove(); coBub('co',out,{html,accent:o.accent}); await coWait(110); }
+  if(_g!==_coGen || !document.body.contains(row)){ try{row.remove();}catch(_){ } return; } row.remove(); coBub('co',out,{html,accent:o.accent}); await coWait(110); }
 function coChoices(opts){ if(!_coC)return; _coC.innerHTML=''; opts.forEach(o=>{ const b=document.createElement('button'); b.className='cch'; const s=document.createElement('span'); s.textContent=o.l; const c=document.createElement('span'); c.className='cchv'; c.textContent='›'; b.appendChild(s); b.appendChild(c); b.onclick=()=>{ _coC.innerHTML=''; coBub('me',o.l); o.act(); }; _coC.appendChild(b); }); }
 function coEnd(){ if(_coC)_coC.innerHTML=''; }
 // observatie-tekst per leksoort (leest coach.leak)
@@ -2982,12 +3018,14 @@ function coFirstPotCat(m){
 }
 async function coFirstPotFlow(m){
   const v=coFirstPotCat(m); if(!v) return false;
+  const _gen=_coGen;
   const cl=CATS[v.cat].name.toLowerCase();
   const sug=Math.max(Math.round(v.spend/5)*5,5);
   const nm0=(SET.name||'').trim().split(/\s+/)[0];
-  await coSay(`${nm0?'Hey '+nm0+'. ':''}Je hebt nog geen enkel potje — en dat is precies waar grip begint.`,{ai:true});
-  await coSay(`Je grootste stuurbare uitgave deze maand was <span class="hl">${cl}</span>: <span class="warn">${euro0(v.spend)}</span>. Zullen we daar je eerste potje van maken?`,{html:true,accent:true});
+  await coSay(`${nm0?'Hey '+nm0+'. ':''}Je hebt nog geen enkel potje — en dat is precies waar grip begint.`,{ai:true}); if(_gen!==_coGen)return true;
+  await coSay(`Je grootste stuurbare uitgave deze maand was <span class="hl">${cl}</span>: <span class="warn">${euro0(v.spend)}</span>. Zullen we daar je eerste potje van maken?`,{html:true,accent:true}); if(_gen!==_coGen)return true;
   await coSay(`Dan weet je voortaan precies waar 't vandaan komt — en de koopcheck rekent met jouw plan.`,{ai:true});
+  if(_gen!==_coGen)return true;
   coChoices([
     {l:`Ja, stel ${cl} in op ${euro0(sug)}`, act:async()=>{ SET.budgets=SET.budgets||{}; SET.budgets[v.cat]=sug; SET.firstPotDone=true; save(); try{TX.forEach(categorize);}catch(_){ } coFx(`eerste potje '${cl}' · ${euro0(sug)}/mnd`); coachLogAdd({type:'potje',text:`eerste potje voor ${cl}`}); await coSay(`Mooi. Je eerste potje staat — <span class="hl">${cl}</span> heeft nu een plan.`,{html:true,accent:true}); await coSay(`Test 'm meteen: tik <span class="hl">'Ik wil iets kopen'</span> en zie wat er gebeurt.`,{html:true}); coEnd(); setTimeout(()=>renderActions(),2200); }},
     {l:`Ik kies zelf het bedrag`, act:()=>{ SET.firstPotDone=true; save(); window._potAfter=()=>renderActions(); openPotje(v.cat); }},
@@ -2996,7 +3034,7 @@ async function coFirstPotFlow(m){
   return true;
 }
 async function startCoachTalk(m){
-  coReset(); if(!_coT)return;
+  coReset(); if(!_coT)return; const _g=_coGen;
   // begeleide eerste-potje-flow: nog geen enkel potje -> help er een te maken (anker = grootste variabele lek)
   if(TX.length && potCount()===0 && !SET.firstPotDone && SET.firstPotSkipMonth!==m){ if(await coFirstPotFlow(m)) return; }
   // al een afspraak deze maand? Toon de klaar-staat i.p.v. het gesprek opnieuw te voeren.
@@ -3004,7 +3042,9 @@ async function startCoachTalk(m){
   if(reeds){
     const nm0=(SET.name||'').trim().split(/\s+/)[0];
     await coSay(`${nm0?'Hey '+nm0+'. ':''}Je afspraak voor deze maand staat al.`,{ai:true});
+    if(_g!==_coGen)return;
     await coSay(`<span class="hl">${esc(reeds.text)}</span>. Volgende maand kom ik hierop terug.`,{html:true,accent:true});
+    if(_g!==_coGen)return;
     coChoices([{l:'Afspraak aanpassen',act:()=>{ SET.coachLog=(SET.coachLog||[]).filter(l=>!(l.type==='afspraak' && coSameMonth(l.ts))); save(); startCoachTalk(m); }}]);
     return;
   }
@@ -3022,14 +3062,18 @@ async function startCoachTalk(m){
   // 1) doel herankeren (accent + teal bedrag)
   if(goal>0) await coSay(`Je doel: <span class="hl">${euro0(goal)} buffer</span>. Even kijken hoe je maand daaraan bijdroeg.`,{html:true,accent:true,ai:{tone:'teal'}});
   else await coSay(`Even kijken naar je maand.`,{ai:true});
+  if(_g!==_coGen)return;
   // 2) win erkennen (alleen met vorige afspraak, accent + teal afspraak)
-  if(last) await coSay(`Vorige keer hield je dit aan: <span class="hl">${esc(last)}</span>. Dat werkte.`,{html:true,accent:true,ai:{tone:'teal'}});
+  if(last){ await coSay(`Vorige keer hield je dit aan: <span class="hl">${esc(last)}</span>. Dat werkte.`,{html:true,accent:true,ai:{tone:'teal'}}); if(_g!==_coGen)return; }
   // randgeval: geen lek → kort erkennen en afsluiten
   if(!leak){ await coSay(`Geen lek deze maand. Je hield je aan je plan. Mooi, tot volgende keer.`,{ai:true}); coEnd(); return; }
   // 3) lek + stakes in één bubbel (frequentie als er een 'aantal keer'-potje is, anders €; stakes gedimd, geen schuld)
   await coSay(coLekHTML(leak,afw,spaar,freqOver),{html:true,ai:{tone:'gold'}});
+  if(_g!==_coGen)return;
   // 4) reflectievraag → 5) vier opties (bij frequentie: confronteer met de laatste paar keer)
+  const _pat=coachPattern(); if(_pat){ await coSay('Ik zie een patroon. '+_pat,{html:true}); if(_g!==_coGen)return; }
   await coSay(freqOver?`Wat was er anders bij die laatste ${freqOver.diff===1?'keer':freqOver.diff+' keer'}?`:`Wat was er anders toen je dat deed?`,{ai:true});
+  if(_g!==_coGen)return;
   coChoices(coMaandOpties(leak));
 }
 function coLekHTML(leak,afw,spaar,freqOver){
@@ -3166,7 +3210,7 @@ async function buyFlow(cat,amt,item){
   const cn=potName(cat);
   coBub('me',`Ik wil ${item?esc(item)+' ':''}voor ${euro0(amt)} (${cn}).`);
   await coWait(180);
-  if(isMode('expert')){ try{ const _S=savingsModel(); const _pd=_S.monthlySaving>0?_S.monthlySaving/30:0; if(_pd>0){ const _d=Math.round(amt/_pd); await coSay(`In doel-termen: <span class="hl">~${_d} ${_d===1?'dag':'dagen'}</span> langer tot je buffer.`,{html:true}); } }catch(_){ } }
+  { try{ const _S=savingsModel(); const _pd=_S.monthlySaving>0?_S.monthlySaving/30:0; if(_pd>0){ const _d=Math.round(amt/_pd); await coSay(`In doel-termen: <span class="hl">~${_d} ${_d===1?'dag':'dagen'}</span> langer tot je buffer.`,{html:true}); } }catch(_){ } }
   const m=curMonth||months()[months().length-1]; const B=SET.budgets||{}; const has=+B[cat]>0;
   const rest=has?Math.round(+B[cat]-(catSpendMap(m)[cat]||0)):0;
   // frequentie-reactie: heeft de categorie een 'aantal keer'-potje, benoem de telling
