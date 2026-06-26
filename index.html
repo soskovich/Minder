@@ -502,6 +502,7 @@ label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font
 <section class="screen" id="s-vooruit"></section>
 <!-- INSTELLINGEN -->
 <section class="screen" id="s-set"></section>
+<section class="screen" id="s-vermogen"></section>
 
 <input type="file" id="file" accept=".sta,.STA,.940,.txt,.mt940,.csv,.CSV" multiple style="display:none">
 
@@ -1506,7 +1507,7 @@ function renderDailyVar(m, budget){
 function render(){
   if(!TX.length){ renderEmpty(); return; }
   const ms=months(); if(!curMonth||!ms.includes(curMonth)) curMonth=ms[ms.length-1];
-  renderDash(); renderTx(); renderIns(); renderActions(); renderVooruit(); renderSet();
+  renderDash(); renderTx(); renderIns(); renderActions(); renderVooruit(); renderVermogen(); renderSet();
   syncMonthPick();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
   if(window._setSheet && $('#sheetBg').classList.contains('show')) renderSetSheet(); // open instellingen-sheet meeverversen
@@ -1767,6 +1768,7 @@ function heroProjection(m){
   return `<div class="hero2">
     <div class="hlbl">${lbl}${t.incomeEst?' <span class="tag">geschat</span>':''}</div>
     <div class="hbig" style="color:${col}">${big}</div>
+    ${t.budget>0?`<div style="height:6px;border-radius:6px;background:var(--card2);max-width:340px;margin:4px 0 6px;overflow:hidden"><div style="height:100%;border-radius:6px;background:${pctRaw<100?'var(--teal)':'var(--red)'};width:${Math.min(pctRaw,100)}%"></div></div>`:''}
     <div class="hsub">${sub}</div>
   </div>`;
 }
@@ -1791,7 +1793,7 @@ function renderDash(){
     if(isMode('rustig')){ const _ms=months(); const _cur=totals(_ms[_ms.length-1]).spend; const _prev=_ms.length>1?totals(_ms[_ms.length-2]).spend:null; const _t=(_prev!=null&&_cur<_prev)?'Je geeft het rustiger aan dan vorige maand.':'Stap voor stap. Je houdt het overzicht.'; modeTop=`<div class="small muted" style="margin:2px 2px 12px">${_t}</div>`; }
     else if(isMode('expert')){ const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0">deze maand · uit ${euro(_tt.spend)} · in ${euro(_tt.income)} · saldo ${euro(S2.saldo)}</div>`; }
   }catch(_){ }
-  $('#s-dash').innerHTML = renderReminder() + modeTop + hero + recentBlock + modeBot;
+  $('#s-dash').innerHTML = renderReminder() + modeTop + hero + vermogenCard() + recentBlock + modeBot;
 }
 function renderDash_OLD_UNUSED(){
   const p=SET.insPeriod||'month'; const isM=p==='month';
@@ -2486,10 +2488,8 @@ function vooruitForecast(){
     hero=`<div class="vooruit">
       <div class="vh-lbl">Je spaardoel</div>
       <div class="vh-big"><span style="color:var(--teal)">${euro0(ingelegd)}</span><span style="font-size:21px;color:var(--mut);font-weight:500"> van ${euro0(doel)}</span></div>
-      <div style="font-size:11.5px;color:var(--mut2);margin:0 0 8px">je beschikbare saldo telt mee naar je bufferdoel</div>
-      <div style="position:relative;height:9px;border-radius:6px;background:var(--card2);max-width:340px;margin:2px 0 ${pct>=25?'4px':'12px'}"><div style="height:100%;border-radius:6px;background:var(--teal);width:${pct}%"></div>${[25,50,75].map(mp=>`<div style="position:absolute;left:${mp}%;top:0;width:2px;height:100%;background:var(--bg);opacity:.85"></div>`).join('')}</div>
-      ${pct>=25?`<div style="font-size:12px;color:var(--green);margin:0 0 10px">${ICON('party')} ${pct>=75?75:pct>=50?50:25}% van je bufferdoel bereikt</div>`:''}
-      <div class="vh-status">${toGo>0?`Nog ${euro0(toGo)} te gaan${maand>0?` · ~${maanden} ${maanden===1?'maand':'maanden'} op ${euro0(maand)}/mnd`:''}.`:`Je hebt je doel van ${euro0(doel)} bereikt.`}</div>
+      <div style="position:relative;height:9px;border-radius:6px;background:var(--card2);max-width:340px;margin:6px 0 8px"><div style="height:100%;border-radius:6px;background:var(--teal);width:${pct}%"></div>${[25,50,75].map(mp=>`<div style="position:absolute;left:${mp}%;top:0;width:2px;height:100%;background:var(--bg);opacity:.85"></div>`).join('')}</div>
+      <div class="vh-status">${pct>=25?`<span style="color:var(--green)">${pct>=75?75:pct>=50?50:25}% bereikt</span> · `:''}${toGo>0?`nog ${euro0(toGo)}${maand>0?` · ~${maanden} mnd`:''}`:'doel bereikt'}<span style="display:block;font-size:11px;color:var(--mut2);font-weight:400;margin-top:2px">je saldo telt mee naar je bufferdoel</span></div>
       ${hefboom}
     </div>`;
   } else {
@@ -2590,9 +2590,9 @@ function saveGoal(id){
   const g={id:id||('g'+Date.now().toString(36)), naam, doel, perMaand:Math.round(+v('gMnd')||0), gespaard:Math.round(+v('gNu')||0)};
   SET.goals=SET.goals||[]; const i=SET.goals.findIndex(x=>x.id===id);
   if(i>=0) SET.goals[i]=g; else SET.goals.push(g);
-  save(); closeSheet(); renderVooruit(); toast(`${ICON('check')} Doel opgeslagen`);
+  save(); closeSheet(); render(); toast(`${ICON('check')} Doel opgeslagen`);
 }
-function deleteGoal(id){ SET.goals=(SET.goals||[]).filter(x=>x.id!==id); save(); closeSheet(); renderVooruit(); }
+function deleteGoal(id){ SET.goals=(SET.goals||[]).filter(x=>x.id!==id); save(); closeSheet(); render(); }
 function payoffMonths(rest, per, jr){ if(per<=0||rest<=0) return 0; const r=(+jr||0)/100/12; if(r<=0) return Math.ceil(rest/per); if(per<=rest*r+0.001) return Infinity; return Math.ceil(-Math.log(1-rest*r/per)/Math.log(1+r)); }
 function renderDebts(){
   const ds=SET.debts||[];
@@ -2630,9 +2630,99 @@ function saveDebt(id){
   const d={id:id||('d'+Date.now().toString(36)), naam, start, rest, perMaand:Math.round(+v('dMnd')||0), rente:(+String(v('dRente')||'').replace(',','.'))||0};
   SET.debts=SET.debts||[]; const i=SET.debts.findIndex(x=>x.id===id);
   if(i>=0) SET.debts[i]=d; else SET.debts.push(d);
-  save(); closeSheet(); renderVooruit(); toast(`${ICON('check')} Schuld opgeslagen`);
+  save(); closeSheet(); render(); toast(`${ICON('check')} Schuld opgeslagen`);
 }
-function deleteDebt(id){ SET.debts=(SET.debts||[]).filter(x=>x.id!==id); save(); closeSheet(); renderVooruit(); }
+function deleteDebt(id){ SET.debts=(SET.debts||[]).filter(x=>x.id!==id); save(); closeSheet(); render(); }
+/* ----- BEZITTINGEN & NETTO VERMOGEN ----- */
+function netWorth(){
+  const liq=totalBalance().sum;
+  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0);
+  const bez=liq+overig;
+  const sch=(SET.debts||[]).reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
+  return {liq,overig,bez,sch,netto:bez-sch};
+}
+function renderNetWorth(){
+  const w=netWorth();
+  if(w.overig<=0 && w.sch<=0) return '';   // pas tonen zodra er bezittingen of schulden zijn ingevuld
+  return `<div class="card" style="margin-top:18px">
+    <div class="row" style="margin-bottom:6px"><span class="hlabel" style="margin:0;flex:1">Netto vermogen</span></div>
+    <div style="font-size:24px;font-weight:800;color:${w.netto>=0?'var(--teal)':'var(--red)'}">${euro0(w.netto)}</div>
+    <div class="row" style="margin-top:10px;padding:5px 0;border-top:1px solid var(--line)"><span class="small">Bezittingen</span><span class="small" style="font-weight:700;color:var(--green)">${euro0(w.bez)}</span></div>
+    <div class="row" style="padding:5px 0"><span class="small">− Schulden</span><span class="small" style="font-weight:700;color:${w.sch>0?'var(--amber)':'var(--mut)'}">${euro0(w.sch)}</span></div>
+  </div>`;
+}
+function renderAssets(){
+  const liq=totalBalance().sum; const as=SET.assets||[];
+  const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+a.waarde||0)}</span><span class="muted">›</span></div></div>`).join('');
+  return `<div style="margin-top:14px">
+    <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Bezittingen</span></div>
+    <div class="cz-card" style="padding:2px 14px">
+      <div class="cz-pot"><div class="cp-info"><div class="cp-nm">${ICON('bank')} Saldo (rekeningen)</div><div class="cp-sub">automatisch uit je transacties</div></div><span class="small" style="font-weight:700">${euro0(liq)}</span></div>
+      ${rows}
+      <button class="cp-add" onclick="openAsset()">+ Bezitting toevoegen</button>
+    </div>
+    <div class="small muted" style="margin:6px 2px">Voeg spaargeld, beleggingen, je auto of woning toe voor je netto vermogen.</div>
+  </div>`;
+}
+function openAsset(id){
+  const as=SET.assets||[]; const a0=id?as.find(x=>x.id===id):null; const isNew=!a0; const a=a0||{naam:'',waarde:''};
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:17px;margin-bottom:12px">${isNew?'Nieuwe bezitting':'Bezitting bewerken'}</div>
+    <label class="fld">Wat is het?</label><input id="aNaam" type="text" value="${esc(a.naam||'')}" placeholder="bv. Spaarrekening, Beleggingen, Auto" style="width:100%">
+    <label class="fld" style="margin-top:10px">Huidige waarde (€)</label><input id="aWaarde" type="number" inputmode="numeric" value="${a.waarde||''}" placeholder="bv. 5000" style="width:100%">
+    <button class="btn" style="margin-top:14px;width:100%" onclick="saveAsset('${id||''}')">${ICON('check')} Opslaan</button>
+    ${a0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteAsset('${id}')">Bezitting verwijderen</div>`:''}
+    <div style="height:8px"></div>`;
+  $('#sheetBg').classList.add('show');
+}
+function saveAsset(id){
+  const v=x=>(document.getElementById(x)||{}).value;
+  const naam=(v('aNaam')||'').trim(); const waarde=Math.round(+v('aWaarde')||0);
+  if(!naam || waarde===0){ toast('Vul een naam en waarde in'); return; }
+  const a={id:id||('a'+Date.now().toString(36)), naam, waarde};
+  SET.assets=SET.assets||[]; const i=SET.assets.findIndex(x=>x.id===id);
+  if(i>=0) SET.assets[i]=a; else SET.assets.push(a);
+  save(); closeSheet(); render(); toast(`${ICON('check')} Bezitting opgeslagen`);
+}
+function deleteAsset(id){ SET.assets=(SET.assets||[]).filter(x=>x.id!==id); save(); closeSheet(); render(); }
+function netWorthSeries(){
+  const ms=months(); if(ms.length<2) return [];
+  const cur=totalBalance().sum; const flow={}; ms.forEach(m=>flow[m]=0);
+  for(const t of TX){ const m=t.date.slice(0,7); if(flow[m]!==undefined) flow[m]+=t.amount; }
+  const balEnd={}; let runs=cur;
+  for(let i=ms.length-1;i>=0;i--){ balEnd[ms[i]]=runs; runs-=flow[ms[i]]; }
+  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0);
+  const sch=(SET.debts||[]).reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
+  return ms.map(m=>({m,nw:Math.round(balEnd[m]+overig-sch)}));
+}
+function nwChart(series){
+  if(series.length<2) return '';
+  const W=330,H=110,L=8,R=W-8,T=12,B=H-18; const vals=series.map(s=>s.nw);
+  const mn=Math.min(...vals,0), mx=Math.max(...vals,1); const span=(mx-mn)||1;
+  const X=i=>L+(i/(series.length-1))*(R-L); const Y=v=>B-((v-mn)/span)*(B-T);
+  const pts=series.map((s,i)=>`${X(i).toFixed(1)},${Y(s.nw).toFixed(1)}`).join(' ');
+  const MN=['','jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  const step=Math.max(Math.ceil(series.length/5),1);
+  const labs=series.map((s,i)=>(i%step===0||i===series.length-1)?`<text x="${X(i).toFixed(1)}" y="${H-4}" fill="#8a97ab" font-size="8.5" text-anchor="middle">${MN[+s.m.slice(5,7)]}</text>`:'').join('');
+  const zero=mn<0?`<line x1="${L}" y1="${Y(0).toFixed(1)}" x2="${R}" y2="${Y(0).toFixed(1)}" stroke="#56627d" stroke-dasharray="3 3"/>`:'';
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${zero}<polyline points="${pts}" fill="none" stroke="#2dd4bf" stroke-width="2.4"/></svg>`+`<div style="display:flex;justify-content:space-between;margin-top:-14px">${labs?'':''}</div>`;
+}
+function vermogenCard(){ const w=netWorth(); const has=(SET.assets||[]).length||(SET.debts||[]).length;
+  return `<div class="card" style="cursor:pointer;margin-top:4px" onclick="go('vermogen')"><div class="row"><span style="font-weight:600">${ICON('chart')} Netto vermogen</span><span class="small" style="color:${w.netto>=0?'var(--teal)':'var(--red)'};font-weight:700">${euro0(w.netto)} ›</span></div><div class="small muted" style="margin-top:4px">${has?'bezittingen − schulden · bekijk &amp; beheer':'voeg je bezittingen &amp; schulden toe'}</div></div>`; }
+function renderVermogen(){
+  if(!TX.length){ $('#s-vermogen').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
+  const w=netWorth(); const series=netWorthSeries();
+  const ib='background:none;border:none;color:var(--teal);font-size:24px;cursor:pointer;padding:0 8px 0 0;line-height:1';
+  const head=`<div class="row" style="align-items:center;margin:2px 2px 14px;gap:6px"><button onclick="go('dash')" title="Terug" style="${ib}">‹</button><b style="font-size:17px;flex:1">Vermogen</b><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="go('dash')">Klaar</span></div>`;
+  const nwCard=`<div class="card">
+    <div class="small muted">Netto vermogen</div>
+    <div style="font-size:28px;font-weight:800;color:${w.netto>=0?'var(--teal)':'var(--red)'}">${euro0(w.netto)}</div>
+    ${series.length>1?`<div style="margin-top:8px">${nwChart(series)}</div><div class="small muted" style="font-size:11px;margin-top:2px">Verloop o.b.v. je saldo · bezittingen &amp; schulden als huidige waarde.</div>`:''}
+    <div class="row" style="margin-top:10px;padding:6px 0;border-top:1px solid var(--line)"><span class="small">Bezittingen</span><span class="small" style="font-weight:700;color:var(--green)">${euro0(w.bez)}</span></div>
+    <div class="row" style="padding:6px 0"><span class="small">− Schulden</span><span class="small" style="font-weight:700;color:${w.sch>0?'var(--amber)':'var(--mut)'}">${euro0(w.sch)}</span></div>
+  </div>`;
+  $('#s-vermogen').innerHTML = head + nwCard + renderAssets() + renderDebts();
+}
 function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -2641,7 +2731,7 @@ function renderVooruit(){
   const exp=(SET.vooruitMeer!==undefined)?SET.vooruitMeer:isMode('expert');   // expert: standaard uitgeklapt
   const deepBtn=`<button class="snz" onclick="toggleVooruit('vooruitMeer')">${exp?'minder ▲':'Deze maand in detail ▼'}</button>`;
   const deep = exp ? vooruitDeep() : '';
-  $('#s-vooruit').innerHTML = vooruitForecast() + renderGoals() + renderDebts() + deepBtn + deep;
+  $('#s-vooruit').innerHTML = vooruitForecast() + renderGoals() + deepBtn + deep;
 }
 function hasAutoSaving(){ try{ const ms=months().slice(-3); let n=0; for(const mm of ms){ for(const t of txOfMonth(mm)){ if(catOf(t)==='sparen' || /(monthly|weekly) rule|round[\s-]?up|income sorter/i.test(t.name||'')) n++; } } return n>=2; }catch(_){ return false; } }
 function coachItems(){
@@ -3923,23 +4013,25 @@ function monthVsPrevCard(m){
   for(let i=lastFull;i>=1;i--){ const cur=sum(steerSpendUpTo(ms[i],99)), pr=sum(steerSpendUpTo(ms[i-1],99)); if(cur>0&&pr>0&&cur<pr) streak++; else break; }
   const col=minder?'var(--green)':'var(--red)';
   const rustig=isMode('rustig');
+  const chip=(arr,kind)=>arr.map(x=>`<span style="font-size:12px;${kind==='down'?'background:rgba(45,212,191,.12);color:var(--teal)':'background:rgba(255,255,255,.05);color:var(--mut)'};padding:3px 9px;border-radius:20px;white-space:nowrap">${kind==='down'?'↓':'↑'} ${CATS[x.k].name.toLowerCase()} ${euro0(Math.abs(x.d))}</span>`).join('');
   return `<div class="card">
-    <div class="small muted" style="margin-bottom:6px;font-weight:600">${ICON('trend')} Maand-over-maand${partial?` · tot nu toe (dag ${day})`:''}</div>
-    <div style="font-size:20px;font-weight:800;color:${col}">${minder?'−':'+'}${euro0(Math.abs(delta))}<span style="font-size:13px;color:var(--mut);font-weight:500"> ${minder?'minder':'meer'} dan vorige maand${tPrev>0?` (${pct}%)`:''}</span></div>
-    ${streak>=2?`<div class="small" style="color:var(--green);margin-top:3px">${ICON('fire')} ${streak} maanden op rij minder uitgegeven</div>`:''}
-    ${(!rustig&&downs.length)?`<div class="small" style="margin-top:8px"><b style="color:var(--teal)">Vooral minder:</b> ${downs.map(x=>`${CATS[x.k].name.toLowerCase()} −${euro0(-x.d)}`).join(' · ')}</div>`:''}
-    ${(!rustig&&ups.length)?`<div class="small muted" style="margin-top:3px">Omhoog: ${ups.map(x=>`${CATS[x.k].name.toLowerCase()} +${euro0(x.d)}`).join(' · ')}</div>`:''}
-    <div class="small muted" style="margin-top:6px">${partial?'Vergeleken t/m dezelfde dag vorige maand. ':''}Alleen stuurbare (variabele) uitgaven.</div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div style="font-size:21px;font-weight:800;color:${col}">${minder?'↓':'↑'} ${euro0(Math.abs(delta))}<span style="font-size:12.5px;color:var(--mut);font-weight:500"> vs vorige maand${tPrev>0?` · ${pct}%`:''}</span></div>
+      ${streak>=2?`<span class="small" style="color:var(--green);white-space:nowrap">${ICON('fire')} ${streak} mnd op rij</span>`:''}
+    </div>
+    ${(!rustig&&(downs.length||ups.length))?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${chip(downs,'down')}${chip(ups,'up')}</div>`:''}
+    <div class="small muted" style="margin-top:8px;font-size:11px">Maand-over-maand · ${partial?`t/m dag ${day} · `:''}stuurbare uitgaven</div>
   </div>`;
 }
 function yearReview(year){
   const yms=months().filter(m=>m.slice(0,4)===year);
-  let inc=0,sp=0; const cat={};
-  for(const m of yms){ const a=monthAgg(m); inc+=a.income; sp+=a.spend; const cm=catSpendMap(m); for(const k in cm) cat[k]=(cat[k]||0)+cm[k]; }
+  let inc=0,sp=0,naarSparen=0; const cat={};
+  for(const m of yms){ const a=monthAgg(m); inc+=a.income; sp+=a.spend; const cm=catSpendMap(m); for(const k in cm) cat[k]=(cat[k]||0)+cm[k];
+    for(const t of txOfMonth(m)){ if(t.amount<0 && catOf(t)==='sparen') naarSparen+=-t.amount; } }
   const saved=inc-sp; const quote=inc>0?Math.round(saved/inc*100):0;
   const tops=Object.entries(cat).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const perMonth=yms.map(m=>({m,spend:Math.round(monthAgg(m).spend)}));
-  return {yms,inc:Math.round(inc),sp:Math.round(sp),saved:Math.round(saved),quote,tops,perMonth};
+  return {yms,inc:Math.round(inc),sp:Math.round(sp),saved:Math.round(saved),quote,tops,perMonth,naarSparen:Math.round(naarSparen),opRekening:Math.round(saved-naarSparen)};
 }
 function yearCard(){ const ys=[...new Set(months().map(m=>m.slice(0,4)))]; if(!ys.length) return ''; const y=ys.sort()[ys.length-1];
   return `<div class="card" style="cursor:pointer" onclick="openYearReview()"><div class="row"><span style="font-weight:600">${ICON('chart')} Jaaroverzicht ${y}</span><span class="small" style="color:var(--teal);font-weight:600">bekijk ›</span></div><div class="small muted" style="margin-top:4px">In/uit, spaarquote &amp; grootste categorieën</div></div>`; }
@@ -3954,9 +4046,11 @@ function openYearReview(year){
     <div class="row" style="gap:8px;margin-bottom:4px">
       <div class="card" style="flex:1;text-align:center;padding:12px 6px"><div class="small muted">Binnen</div><div style="font-weight:800;color:var(--green)">${euro0(r.inc)}</div></div>
       <div class="card" style="flex:1;text-align:center;padding:12px 6px"><div class="small muted">Uit</div><div style="font-weight:800">${euro0(r.sp)}</div></div>
-      <div class="card" style="flex:1;text-align:center;padding:12px 6px"><div class="small muted">Gespaard</div><div style="font-weight:800;color:${r.saved>=0?'var(--teal)':'var(--red)'}">${euro0(r.saved)}</div></div>
+      <div class="card" style="flex:1;text-align:center;padding:12px 6px"><div class="small muted">Overschot</div><div style="font-weight:800;color:${r.saved>=0?'var(--teal)':'var(--red)'}">${euro0(r.saved)}</div></div>
     </div>
     <div class="small muted" style="margin:8px 2px">Spaarquote: <b style="color:var(--teal)">${r.quote}%</b> van je inkomen over ${r.yms.length} ${r.yms.length===1?'maand':'maanden'}.</div>
+    ${r.naarSparen>0?`<div class="small muted" style="margin:2px 2px">Waarvan <b>${euro0(r.naarSparen)}</b> naar sparen/beleggen · <b>${euro0(r.opRekening)}</b> bleef op je rekening.</div>`:''}
+    <div class="small muted" style="margin:8px 2px;font-style:italic">Overschot = inkomsten − uitgaven over deze periode. Dit wijkt af van je saldo in Vooruitblik: dat telt ook je beginsaldo en je overboekingen naar sparen/beleggen mee.</div>
     <div class="small muted" style="margin:14px 2px 6px;font-weight:600">Uitgaven per maand</div>
     <div style="display:flex;align-items:flex-end;gap:5px;height:92px;padding:0 2px">${r.perMonth.map(x=>{const h=Math.round(x.spend/maxSp*78)+2;const mo=+x.m.slice(5,7);return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div title="${euro0(x.spend)}" style="width:100%;height:${h}px;background:var(--teal);border-radius:3px;opacity:.85"></div><div style="font-size:9px;color:var(--mut2)">${MN[mo]}</div></div>`;}).join('')}</div>
     <div class="small muted" style="margin:16px 2px 4px;font-weight:600">Grootste categorieën</div>
@@ -4363,7 +4457,7 @@ function closeSheet(){ $('#sheetBg').classList.remove('show'); }
 
 function esc(s){return (s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 
-function syncMonthPick(){ const a=(document.querySelector('.screen.active')||{}).id; const mp=document.getElementById('monthPick'); if(mp) mp.style.display=(TX.length && a!=='s-dash' && a!=='s-set')?'flex':'none'; }
+function syncMonthPick(){ const a=(document.querySelector('.screen.active')||{}).id; const mp=document.getElementById('monthPick'); if(mp) mp.style.display=(TX.length && a!=='s-dash' && a!=='s-set' && a!=='s-vermogen')?'flex':'none'; }
 function go(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   $('#s-'+name).classList.add('active');
@@ -4640,31 +4734,36 @@ function detectRecurring(){
 
 /* ----- ABONNEMENTEN / VASTE LASTEN CHECK ----- */
 function subscriptionsList(){
+  // alleen ECHTE, opzegbare abonnementen (geen vaste lasten als verzekering/huur/bankkosten/zorg/studie)
+  const recent3=months().slice(-3); const r3=new Set(recent3);
   const map={};
   for(const t of TX){ if(t.amount>=0) continue; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense') continue;
+    const ym=t.date.slice(0,7); if(!r3.has(ym)) continue;                       // alleen laatste 3 maanden
     const key=(t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').slice(0,20).trim(); if(!key) continue;
-    const m=(map[key]=map[key]||{name:t.name,cat:c,amts:[],ms:new Set(),last:''}); m.amts.push(-t.amount); m.ms.add(t.date.slice(0,7)); if(t.date>m.last)m.last=t.date; }
-  const subCats=new Set(['abonnement','verzekering','sport','studie','goededoel','bankkosten','zorg']);
+    const m=(map[key]=map[key]||{name:t.name,cat:c,byM:{},last:''}); m.byM[ym]=(m.byM[ym]||0)+(-t.amount); if(t.date>m.last)m.last=t.date; m.cat=c; }
+  const subCats=new Set(['abonnement','sport','goededoel']);                    // opzegbaar
+  const med=a=>{const z=a.slice().sort((x,y)=>x-y);return z.length?(z.length%2?z[(z.length-1)/2]:(z[z.length/2-1]+z[z.length/2])/2):0;};
   const out=[];
-  for(const k in map){ const r=map[k]; if(r.ms.size<2) continue;
-    const mean=r.amts.reduce((a,b)=>a+b,0)/r.amts.length; const sd=Math.sqrt(r.amts.reduce((s,a)=>s+(a-mean)**2,0)/r.amts.length); const cv=mean>0?sd/mean:1;
-    const varCats=new Set(['shopping','boodschappen','uiteten','vervoer','vices']);
-    if(!(subCats.has(r.cat) || (cv<0.15 && !varCats.has(r.cat)))) continue;   // abonnementachtig: vaste-last-categorie, of stabiel bedrag in een niet-variabele categorie
-    out.push({key:k,name:r.name,cat:r.cat,monthly:Math.round(mean),months:r.ms.size,last:r.last}); }
+  for(const k in map){ const r=map[k];
+    const vals=recent3.map(m=>r.byM[m]||0).filter(v=>v>0);
+    if(vals.length<2) continue;                                                 // terugkerend: in >=2 van de laatste 3 maanden
+    const mean=vals.reduce((a,b)=>a+b,0)/vals.length; const sd=Math.sqrt(vals.reduce((s,a)=>s+(a-mean)**2,0)/vals.length); const cv=mean>0?sd/mean:1;
+    if(!(subCats.has(r.cat) || (r.cat==='overig' && cv<0.12))) continue;        // opzegbare categorie, of uncategorized maar stabiel
+    out.push({key:k,name:r.name,cat:r.cat,monthly:Math.round(med(vals)),months:vals.length,last:r.last}); }   // bedrag = mediaan laatste 3 mnd
   return out.sort((a,b)=>b.monthly-a.monthly);
 }
 function subsCard(){ const list=subscriptionsList(); if(!list.length) return ''; const total=list.reduce((s,x)=>s+x.monthly,0);
-  return `<div class="card" style="cursor:pointer" onclick="openSubs()"><div class="row"><span style="font-weight:600">${ICON('repeat')} Abonnementen &amp; vaste lasten</span><span class="small" style="color:var(--teal);font-weight:600">${euro0(total)}/mnd ›</span></div><div class="small muted" style="margin-top:4px">${list.length} terugkerende lasten · check wat je nog gebruikt</div></div>`; }
+  return `<div class="card" style="cursor:pointer" onclick="openSubs()"><div class="row"><span style="font-weight:600">${ICON('repeat')} Abonnementen</span><span class="small" style="color:var(--teal);font-weight:600">${euro0(total)}/mnd ›</span></div><div class="small muted" style="margin-top:4px">${list.length} ${list.length===1?'abonnement':'abonnementen'} · check wat je nog gebruikt</div></div>`; }
 function toggleCancel(k){ SET.cancelFlags=SET.cancelFlags||{}; if(SET.cancelFlags[k]) delete SET.cancelFlags[k]; else SET.cancelFlags[k]=true; save(); openSubs(); }
 function openSubs(){
   const list=subscriptionsList(); const flags=SET.cancelFlags||{};
   const total=list.reduce((s,x)=>s+x.monthly,0); const saving=list.filter(x=>flags[x.key]).reduce((s,x)=>s+x.monthly,0);
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="row" style="margin-bottom:4px"><div style="font-weight:800;font-size:17px">${ICON('repeat')} Abonnementen &amp; vaste lasten</div><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="small muted" style="margin-bottom:10px">${list.length} terugkerende lasten · samen ${euro0(total)}/mnd. Markeer wat je niet meer gebruikt.</div>
+    <div class="row" style="margin-bottom:4px"><div style="font-weight:800;font-size:17px">${ICON('repeat')} Abonnementen</div><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="small muted" style="margin-bottom:10px">${list.length} ${list.length===1?'abonnement':'abonnementen'} · samen ${euro0(total)}/mnd. Markeer wat je niet meer gebruikt. <span style="display:block;margin-top:4px">Bedrag = mediaan van de laatste 3 maanden.</span></div>
     ${list.map(x=>{const on=!!flags[x.key]; return `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);${on?'opacity:.55':''}">
       <div style="min-width:0;flex:1"><div style="font-weight:600;font-size:14px">${CATS[x.cat].icon||''} ${esc(x.name)}</div><div class="small muted">${euro0(x.monthly)}/mnd · ${x.months} mnd gezien</div></div>
-      <button class="chip ${on?'on':''}" style="flex-shrink:0" onclick="toggleCancel('${x.key}')">${on?'✓ opzeggen':'opzeggen?'}</button></div>`;}).join('')||'<div class="small muted">Nog geen terugkerende lasten herkend.</div>'}
+      <button class="chip ${on?'on':''}" style="flex-shrink:0" onclick="toggleCancel('${x.key}')">${on?'✓ opzeggen':'opzeggen?'}</button></div>`;}).join('')||'<div class="small muted">Nog geen abonnementen herkend.</div>'}
     ${saving>0?`<div style="margin-top:12px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.35);border-radius:10px;padding:12px 14px;font-size:14px">Door deze op te zeggen bespaar je <b style="color:var(--green)">${euro0(saving)}/mnd</b> (${euro0(saving*12)}/jaar).</div>`:''}
     <div style="height:8px"></div>`;
   $('#sheetBg').classList.add('show');
