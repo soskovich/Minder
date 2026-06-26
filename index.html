@@ -1555,11 +1555,24 @@ function monthLiquidity(){
   // wat is deze maand al langsgekomen?
   const seen=new Set(); let incomeThisMonth=0;
   for(const t of txOfMonth(ym)){ const k=recurKey(t); if(k) seen.add(k); if(CATS[catOf(t)].type==='income') incomeThisMonth+=Math.max(t.amount,0); }
-  const fixDueItems=sched.filter(s=>s.type==='fixed' && !seen.has(s.key) && s.nextDate.getFullYear()===now.getFullYear() && s.nextDate.getMonth()===now.getMonth());
+  // maandelijkse vaste last die deze maand nog niet langskwam = komt deze maand nog (de afschrijfdatum kan een paar dagen variëren,
+  // dus niet uitsluiten omdat de voorspelde dag al voorbij is). Kwartaal/jaar blijven op de voorspelde maand.
+  const fixDueItems=sched.filter(s=>{
+    if(s.type!=='fixed' || seen.has(s.key)) return false;
+    if(s.intervalM===1) return true;
+    return s.nextDate.getFullYear()===now.getFullYear() && s.nextDate.getMonth()===now.getMonth();
+  });
   const fixDue=fixDueItems.reduce((a,s)=>a+s.amount,0);
   // verwacht inkomen dat nog moet komen = basisinkomen minus wat al deze maand binnen is
   const incDue=Math.max(baseIncome()-incomeThisMonth,0);
-  const dailyVar=f?f.fVar/30:0; const varDue=Math.round(dailyVar*daysLeft);
+  // variabel resterend = tempo-bewust: blend historisch gemiddelde (per dag) met je werkelijke tempo deze maand
+  const spentVarMtd=splitFixedVar(ym).vari;        // al variabel uitgegeven deze maand
+  const elapsedM=Math.max(dom,1);
+  const histDaily=f?f.fVar/dim:0;                  // historisch gemiddelde per dag (werkelijke dagen in de maand)
+  const actualDaily=spentVarMtd/elapsedM;          // jouw tempo deze maand
+  const wPace=Math.min(elapsedM/dim,1);            // later in de maand telt je eigen tempo zwaarder
+  const dailyVar=(elapsedM>=3)?(wPace*actualDaily+(1-wPace)*histDaily):histDaily;
+  const varDue=Math.round(dailyVar*daysLeft);
   const {sum,missing}=totalBalance(); const buffer=+SET.buffer||0;
   const projected=Math.round(sum+incDue-fixDue-varDue);
   return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems};
@@ -2544,6 +2557,82 @@ function vooruitDeep(){
     ${items.length>4?`<button class="snz" onclick="toggleVooruit('vooruitUpAll')">${allUp?'minder ▲':'en '+(items.length-4)+' meer ▼'}</button>`:''}</div>`:'';
   return verdeling + volgende;
 }
+function renderGoals(){
+  const gs=SET.goals||[];
+  const rows=gs.map(g=>{ const doel=+g.doel||0, nu=+g.gespaard||0, per=+g.perMaand||0;
+    const pct=doel>0?Math.min(Math.round(nu/doel*100),100):0; const toGo=Math.max(doel-nu,0); const mnd=per>0?Math.ceil(toGo/per):0;
+    return `<div class="card" style="padding:13px 15px;margin-bottom:8px;cursor:pointer" onclick="openGoal('${g.id}')">
+      <div class="row"><span style="font-weight:700">${esc(g.naam||'Doel')}</span><span class="small muted">${euro0(nu)} / ${euro0(doel)}</span></div>
+      <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:var(--teal)"></div></div>
+      <div class="small muted" style="margin-top:6px">${toGo>0?`Nog ${euro0(toGo)}${per>0?` · ~${mnd} ${mnd===1?'maand':'maanden'} op ${euro0(per)}/mnd`:''}`:`${ICON('party')} Doel bereikt!`}</div></div>`;}).join('');
+  return `<div style="margin-top:18px">
+    <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Mijn doelen</span></div>
+    ${rows||'<div class="small muted" style="margin:0 2px 8px">Nog geen losse spaardoelen. Voeg er een toe naast je buffer — bv. een vakantie of een nieuwe laptop.</div>'}
+    <button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button></div>`;
+}
+function openGoal(id){
+  const gs=SET.goals||[]; const g=id?gs.find(x=>x.id===id):null; const isNew=!g; const d=g||{naam:'',doel:'',perMaand:'',gespaard:''};
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:17px;margin-bottom:12px">${isNew?'Nieuw spaardoel':'Spaardoel bewerken'}</div>
+    <label class="fld">Waarvoor spaar je?</label><input id="gNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Vakantie" style="width:100%">
+    <label class="fld" style="margin-top:10px">Doelbedrag (€)</label><input id="gDoel" type="number" inputmode="numeric" value="${d.doel||''}" placeholder="bv. 1500" style="width:100%">
+    <label class="fld" style="margin-top:10px">Per maand opzij (€)</label><input id="gMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 150" style="width:100%">
+    <label class="fld" style="margin-top:10px">Al gespaard (€)</label><input id="gNu" type="number" inputmode="numeric" value="${d.gespaard||''}" placeholder="0" style="width:100%">
+    <button class="btn" style="margin-top:14px;width:100%" onclick="saveGoal('${id||''}')">${ICON('check')} Opslaan</button>
+    ${g?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteGoal('${id}')">Doel verwijderen</div>`:''}
+    <div style="height:8px"></div>`;
+  $('#sheetBg').classList.add('show');
+}
+function saveGoal(id){
+  const v=x=>(document.getElementById(x)||{}).value;
+  const naam=(v('gNaam')||'').trim(); const doel=Math.round(+v('gDoel')||0);
+  if(!naam || doel<=0){ toast('Vul een naam en doelbedrag in'); return; }
+  const g={id:id||('g'+Date.now().toString(36)), naam, doel, perMaand:Math.round(+v('gMnd')||0), gespaard:Math.round(+v('gNu')||0)};
+  SET.goals=SET.goals||[]; const i=SET.goals.findIndex(x=>x.id===id);
+  if(i>=0) SET.goals[i]=g; else SET.goals.push(g);
+  save(); closeSheet(); renderVooruit(); toast(`${ICON('check')} Doel opgeslagen`);
+}
+function deleteGoal(id){ SET.goals=(SET.goals||[]).filter(x=>x.id!==id); save(); closeSheet(); renderVooruit(); }
+function payoffMonths(rest, per, jr){ if(per<=0||rest<=0) return 0; const r=(+jr||0)/100/12; if(r<=0) return Math.ceil(rest/per); if(per<=rest*r+0.001) return Infinity; return Math.ceil(-Math.log(1-rest*r/per)/Math.log(1+r)); }
+function renderDebts(){
+  const ds=SET.debts||[];
+  const rows=ds.map(d=>{ const start=+d.start||0, rest=Math.max(+d.rest||0,0), per=+d.perMaand||0, jr=+d.rente||0;
+    const afgelost=Math.max(start-rest,0); const pct=start>0?Math.min(Math.round(afgelost/start*100),100):0;
+    const mnd=payoffMonths(rest,per,jr);
+    const mTxt = rest<=0?`${ICON('party')} Afgelost!` : (mnd===Infinity?`<span style="color:var(--red)">Je aflossing dekt amper de rente — zo lost dit nauwelijks af.</span>`:`Nog ${euro0(rest)}${per>0?` · ~${mnd} ${mnd===1?'maand':'maanden'} op ${euro0(per)}/mnd`:''}${jr>0?` · ${jr}% rente`:''}`);
+    return `<div class="card" style="padding:13px 15px;margin-bottom:8px;cursor:pointer" onclick="openDebt('${d.id}')">
+      <div class="row"><span style="font-weight:700">${esc(d.naam||'Schuld')}</span><span class="small muted">${start>0?`${euro0(afgelost)} / ${euro0(start)} afgelost`:euro0(rest)}</span></div>
+      ${start>0?`<div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:var(--amber)"></div></div>`:''}
+      <div class="small muted" style="margin-top:6px">${mTxt}</div></div>`;}).join('');
+  return `<div style="margin-top:18px">
+    <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Schulden &amp; aflossing</span></div>
+    ${rows}
+    <button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div>`;
+}
+function openDebt(id){
+  const ds=SET.debts||[]; const d0=id?ds.find(x=>x.id===id):null; const isNew=!d0; const d=d0||{naam:'',start:'',rest:'',perMaand:'',rente:''};
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:17px;margin-bottom:12px">${isNew?'Nieuwe schuld':'Schuld bewerken'}</div>
+    <label class="fld">Wat voor schuld?</label><input id="dNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Studieschuld DUO" style="width:100%">
+    <label class="fld" style="margin-top:10px">Oorspronkelijk bedrag (€) <span class="small muted">· optioneel, voor voortgang</span></label><input id="dStart" type="number" inputmode="numeric" value="${d.start||''}" placeholder="bv. 12000" style="width:100%">
+    <label class="fld" style="margin-top:10px">Huidige restschuld (€)</label><input id="dRest" type="number" inputmode="numeric" value="${d.rest||''}" placeholder="bv. 8000" style="width:100%">
+    <label class="fld" style="margin-top:10px">Maandaflossing (€)</label><input id="dMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 120" style="width:100%">
+    <label class="fld" style="margin-top:10px">Rente per jaar (%) <span class="small muted">· optioneel</span></label><input id="dRente" type="text" inputmode="decimal" value="${d.rente||''}" placeholder="bv. 2,5" style="width:100%">
+    <button class="btn" style="margin-top:14px;width:100%" onclick="saveDebt('${id||''}')">${ICON('check')} Opslaan</button>
+    ${d0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteDebt('${id}')">Schuld verwijderen</div>`:''}
+    <div style="height:8px"></div>`;
+  $('#sheetBg').classList.add('show');
+}
+function saveDebt(id){
+  const v=x=>(document.getElementById(x)||{}).value;
+  const naam=(v('dNaam')||'').trim(); const rest=Math.round(+v('dRest')||0); const start=Math.round(+v('dStart')||0)||rest;
+  if(!naam || rest<=0){ toast('Vul een naam en restschuld in'); return; }
+  const d={id:id||('d'+Date.now().toString(36)), naam, start, rest, perMaand:Math.round(+v('dMnd')||0), rente:(+String(v('dRente')||'').replace(',','.'))||0};
+  SET.debts=SET.debts||[]; const i=SET.debts.findIndex(x=>x.id===id);
+  if(i>=0) SET.debts[i]=d; else SET.debts.push(d);
+  save(); closeSheet(); renderVooruit(); toast(`${ICON('check')} Schuld opgeslagen`);
+}
+function deleteDebt(id){ SET.debts=(SET.debts||[]).filter(x=>x.id!==id); save(); closeSheet(); renderVooruit(); }
 function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -2552,7 +2641,7 @@ function renderVooruit(){
   const exp=(SET.vooruitMeer!==undefined)?SET.vooruitMeer:isMode('expert');   // expert: standaard uitgeklapt
   const deepBtn=`<button class="snz" onclick="toggleVooruit('vooruitMeer')">${exp?'minder ▲':'Deze maand in detail ▼'}</button>`;
   const deep = exp ? vooruitDeep() : '';
-  $('#s-vooruit').innerHTML = vooruitForecast() + deepBtn + deep;
+  $('#s-vooruit').innerHTML = vooruitForecast() + renderGoals() + renderDebts() + deepBtn + deep;
 }
 function hasAutoSaving(){ try{ const ms=months().slice(-3); let n=0; for(const mm of ms){ for(const t of txOfMonth(mm)){ if(catOf(t)==='sparen' || /(monthly|weekly) rule|round[\s-]?up|income sorter/i.test(t.name||'')) n++; } } return n>=2; }catch(_){ return false; } }
 function coachItems(){
@@ -3807,6 +3896,74 @@ function insInline(m){
   } else if(free<0){ extra=' · spaardoel krap'; }
   return `<div class="insinline" onclick="openBudgetCompare('${m}')"><span class="ii-dot" style="background:${dot}"></span><span>Hoe doe je het deze maand?</span><span class="ii-go">›</span></div>`;
 }
+function steerSpendUpTo(m, day){ // stuurbare (variabele) uitgaven per categorie in maand m t/m dag 'day' (99 = hele maand)
+  const by={};
+  for(const t of txOfMonth(m)){ if(t.amount>=0) continue; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixedCat(c)) continue; const d=+t.date.slice(8,10); if(d>day) continue; by[c]=(by[c]||0)+(-t.amount); }
+  return by;
+}
+function monthVsPrevCard(m){
+  const ms=months(); const idx=ms.indexOf(m); if(idx<1) return '';
+  const prev=ms[idx-1];
+  const now=new Date(); const todayYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const partial=(m===todayYM);
+  const dim=new Date(+m.slice(0,4),+m.slice(5,7),0).getDate();
+  const day=partial?Math.min(now.getDate(),dim):99;
+  const sum=o=>Math.round(Object.values(o).reduce((s,v)=>s+v,0));
+  const a=steerSpendUpTo(m,day), b=steerSpendUpTo(prev,day);
+  const tThis=sum(a), tPrev=sum(b);
+  if(tPrev<=0 && tThis<=0) return '';
+  const delta=tThis-tPrev, minder=delta<0;
+  const pct=tPrev>0?Math.round(Math.abs(delta)/tPrev*100):0;
+  const keys=new Set([...Object.keys(a),...Object.keys(b)]);
+  const diffs=[...keys].map(k=>({k,d:Math.round((a[k]||0)-(b[k]||0))})).filter(x=>Math.abs(x.d)>=5 && CATS[x.k]);
+  const downs=diffs.filter(x=>x.d<0).sort((x,y)=>x.d-y.d).slice(0,3);
+  const ups=diffs.filter(x=>x.d>0).sort((x,y)=>y.d-x.d).slice(0,2);
+  // streak op volledige maanden (hele maand vs hele maand), exclusief een lopende maand
+  let streak=0; const lastFull=partial?idx-1:idx;
+  for(let i=lastFull;i>=1;i--){ const cur=sum(steerSpendUpTo(ms[i],99)), pr=sum(steerSpendUpTo(ms[i-1],99)); if(cur>0&&pr>0&&cur<pr) streak++; else break; }
+  const col=minder?'var(--green)':'var(--red)';
+  const rustig=isMode('rustig');
+  return `<div class="card">
+    <div class="small muted" style="margin-bottom:6px;font-weight:600">${ICON('trend')} Maand-over-maand${partial?` · tot nu toe (dag ${day})`:''}</div>
+    <div style="font-size:20px;font-weight:800;color:${col}">${minder?'−':'+'}${euro0(Math.abs(delta))}<span style="font-size:13px;color:var(--mut);font-weight:500"> ${minder?'minder':'meer'} dan vorige maand${tPrev>0?` (${pct}%)`:''}</span></div>
+    ${streak>=2?`<div class="small" style="color:var(--green);margin-top:3px">${ICON('fire')} ${streak} maanden op rij minder uitgegeven</div>`:''}
+    ${(!rustig&&downs.length)?`<div class="small" style="margin-top:8px"><b style="color:var(--teal)">Vooral minder:</b> ${downs.map(x=>`${CATS[x.k].name.toLowerCase()} −${euro0(-x.d)}`).join(' · ')}</div>`:''}
+    ${(!rustig&&ups.length)?`<div class="small muted" style="margin-top:3px">Omhoog: ${ups.map(x=>`${CATS[x.k].name.toLowerCase()} +${euro0(x.d)}`).join(' · ')}</div>`:''}
+    <div class="small muted" style="margin-top:6px">${partial?'Vergeleken t/m dezelfde dag vorige maand. ':''}Alleen stuurbare (variabele) uitgaven.</div>
+  </div>`;
+}
+function yearReview(year){
+  const yms=months().filter(m=>m.slice(0,4)===year);
+  let inc=0,sp=0; const cat={};
+  for(const m of yms){ const a=monthAgg(m); inc+=a.income; sp+=a.spend; const cm=catSpendMap(m); for(const k in cm) cat[k]=(cat[k]||0)+cm[k]; }
+  const saved=inc-sp; const quote=inc>0?Math.round(saved/inc*100):0;
+  const tops=Object.entries(cat).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const perMonth=yms.map(m=>({m,spend:Math.round(monthAgg(m).spend)}));
+  return {yms,inc:Math.round(inc),sp:Math.round(sp),saved:Math.round(saved),quote,tops,perMonth};
+}
+function yearCard(){ const ys=[...new Set(months().map(m=>m.slice(0,4)))]; if(!ys.length) return ''; const y=ys.sort()[ys.length-1];
+  return `<div class="card" style="cursor:pointer" onclick="openYearReview()"><div class="row"><span style="font-weight:600">${ICON('chart')} Jaaroverzicht ${y}</span><span class="small" style="color:var(--teal);font-weight:600">bekijk ›</span></div><div class="small muted" style="margin-top:4px">In/uit, spaarquote &amp; grootste categorieën</div></div>`; }
+function openYearReview(year){
+  const years=[...new Set(months().map(m=>m.slice(0,4)))].sort(); if(!years.length) return;
+  year=year||years[years.length-1]; const r=yearReview(year);
+  const maxSp=Math.max(...r.perMonth.map(x=>x.spend),1); const MN=['','jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  const yearChips=years.length>1?`<div class="chips" style="margin-bottom:12px">${years.map(y=>`<span class="chip ${y===year?'on':''}" onclick="openYearReview('${y}')">${y}</span>`).join('')}</div>`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:17px">${ICON('chart')} Jaaroverzicht ${year}</div><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    ${yearChips}
+    <div class="row" style="gap:8px;margin-bottom:4px">
+      <div class="card" style="flex:1;text-align:center;padding:12px 6px"><div class="small muted">Binnen</div><div style="font-weight:800;color:var(--green)">${euro0(r.inc)}</div></div>
+      <div class="card" style="flex:1;text-align:center;padding:12px 6px"><div class="small muted">Uit</div><div style="font-weight:800">${euro0(r.sp)}</div></div>
+      <div class="card" style="flex:1;text-align:center;padding:12px 6px"><div class="small muted">Gespaard</div><div style="font-weight:800;color:${r.saved>=0?'var(--teal)':'var(--red)'}">${euro0(r.saved)}</div></div>
+    </div>
+    <div class="small muted" style="margin:8px 2px">Spaarquote: <b style="color:var(--teal)">${r.quote}%</b> van je inkomen over ${r.yms.length} ${r.yms.length===1?'maand':'maanden'}.</div>
+    <div class="small muted" style="margin:14px 2px 6px;font-weight:600">Uitgaven per maand</div>
+    <div style="display:flex;align-items:flex-end;gap:5px;height:92px;padding:0 2px">${r.perMonth.map(x=>{const h=Math.round(x.spend/maxSp*78)+2;const mo=+x.m.slice(5,7);return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div title="${euro0(x.spend)}" style="width:100%;height:${h}px;background:var(--teal);border-radius:3px;opacity:.85"></div><div style="font-size:9px;color:var(--mut2)">${MN[mo]}</div></div>`;}).join('')}</div>
+    <div class="small muted" style="margin:16px 2px 4px;font-weight:600">Grootste categorieën</div>
+    ${r.tops.map(([k,v])=>`<div class="row" style="padding:6px 2px;border-top:1px solid var(--line)"><span class="small">${CATS[k]?CATS[k].icon:''} ${CATS[k]?CATS[k].name:k}</span><span class="small" style="font-weight:700">${euro0(Math.round(v))}</span></div>`).join('')}
+    <div style="height:8px"></div>`;
+  $('#sheetBg').classList.add('show');
+}
 function isMode(x){ return (SET.mode||'begeleid')===x; }
 function renderIns(){
   if(!TX.length){ $('#s-ins').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
@@ -3837,7 +3994,7 @@ function renderIns(){
     const pInc=periodMonths().reduce((s,mm)=>s+totals(mm).income,0);
     deep = (isMode('begeleid')?`<div class="card"><div class="small muted">${ICON('info')} Vuistregel 50/30/20: ~50% vaste lasten, ~20% sparen, ~30% vrij besteden. Handig om je percentages tegen af te zetten.</div></div>`:'') + pchips + renderCatBreak(pTx) + renderFixedVariable(pTx,pInc) + renderMerchants(pTx,periodLabel());
   }
-  $('#s-ins').innerHTML = heroProjection(m) + focusBlock + deepBtn + deep;
+  $('#s-ins').innerHTML = heroProjection(m) + focusBlock + monthVsPrevCard(m) + subsCard() + yearCard() + deepBtn + deep;
 }
 
 function renderCat(){
@@ -4479,6 +4636,38 @@ function detectRecurring(){
   }
   return Object.values(map).filter(r=>r.mset.size>=2).map(r=>({name:r.name,cat:r.cat,count:r.amts.length,
     avg:r.amts.reduce((a,b)=>a+b,0)/r.amts.length})).sort((a,b)=>b.avg-a.avg);
+}
+
+/* ----- ABONNEMENTEN / VASTE LASTEN CHECK ----- */
+function subscriptionsList(){
+  const map={};
+  for(const t of TX){ if(t.amount>=0) continue; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense') continue;
+    const key=(t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').slice(0,20).trim(); if(!key) continue;
+    const m=(map[key]=map[key]||{name:t.name,cat:c,amts:[],ms:new Set(),last:''}); m.amts.push(-t.amount); m.ms.add(t.date.slice(0,7)); if(t.date>m.last)m.last=t.date; }
+  const subCats=new Set(['abonnement','verzekering','sport','studie','goededoel','bankkosten','zorg']);
+  const out=[];
+  for(const k in map){ const r=map[k]; if(r.ms.size<2) continue;
+    const mean=r.amts.reduce((a,b)=>a+b,0)/r.amts.length; const sd=Math.sqrt(r.amts.reduce((s,a)=>s+(a-mean)**2,0)/r.amts.length); const cv=mean>0?sd/mean:1;
+    const varCats=new Set(['shopping','boodschappen','uiteten','vervoer','vices']);
+    if(!(subCats.has(r.cat) || (cv<0.15 && !varCats.has(r.cat)))) continue;   // abonnementachtig: vaste-last-categorie, of stabiel bedrag in een niet-variabele categorie
+    out.push({key:k,name:r.name,cat:r.cat,monthly:Math.round(mean),months:r.ms.size,last:r.last}); }
+  return out.sort((a,b)=>b.monthly-a.monthly);
+}
+function subsCard(){ const list=subscriptionsList(); if(!list.length) return ''; const total=list.reduce((s,x)=>s+x.monthly,0);
+  return `<div class="card" style="cursor:pointer" onclick="openSubs()"><div class="row"><span style="font-weight:600">${ICON('repeat')} Abonnementen &amp; vaste lasten</span><span class="small" style="color:var(--teal);font-weight:600">${euro0(total)}/mnd ›</span></div><div class="small muted" style="margin-top:4px">${list.length} terugkerende lasten · check wat je nog gebruikt</div></div>`; }
+function toggleCancel(k){ SET.cancelFlags=SET.cancelFlags||{}; if(SET.cancelFlags[k]) delete SET.cancelFlags[k]; else SET.cancelFlags[k]=true; save(); openSubs(); }
+function openSubs(){
+  const list=subscriptionsList(); const flags=SET.cancelFlags||{};
+  const total=list.reduce((s,x)=>s+x.monthly,0); const saving=list.filter(x=>flags[x.key]).reduce((s,x)=>s+x.monthly,0);
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="margin-bottom:4px"><div style="font-weight:800;font-size:17px">${ICON('repeat')} Abonnementen &amp; vaste lasten</div><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="small muted" style="margin-bottom:10px">${list.length} terugkerende lasten · samen ${euro0(total)}/mnd. Markeer wat je niet meer gebruikt.</div>
+    ${list.map(x=>{const on=!!flags[x.key]; return `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);${on?'opacity:.55':''}">
+      <div style="min-width:0;flex:1"><div style="font-weight:600;font-size:14px">${CATS[x.cat].icon||''} ${esc(x.name)}</div><div class="small muted">${euro0(x.monthly)}/mnd · ${x.months} mnd gezien</div></div>
+      <button class="chip ${on?'on':''}" style="flex-shrink:0" onclick="toggleCancel('${x.key}')">${on?'✓ opzeggen':'opzeggen?'}</button></div>`;}).join('')||'<div class="small muted">Nog geen terugkerende lasten herkend.</div>'}
+    ${saving>0?`<div style="margin-top:12px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.35);border-radius:10px;padding:12px 14px;font-size:14px">Door deze op te zeggen bespaar je <b style="color:var(--green)">${euro0(saving)}/mnd</b> (${euro0(saving*12)}/jaar).</div>`:''}
+    <div style="height:8px"></div>`;
+  $('#sheetBg').classList.add('show');
 }
 
 /* ----- INSTELLINGEN ----- */
