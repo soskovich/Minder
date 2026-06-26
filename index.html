@@ -1563,6 +1563,12 @@ function monthLiquidity(){
     if(s.intervalM===1) return true;
     return s.nextDate.getFullYear()===now.getFullYear() && s.nextDate.getMonth()===now.getMonth();
   });
+  // robuust vangnet: vaste lasten die VORIGE maand langskwamen maar deze maand nog niet (vangt incasso's die het strikte schema mist door wisselende omschrijvingen of korte historie)
+  try{ const _ms=months(); const _idx=_ms.indexOf(ym); const _prev=_idx>0?_ms[_idx-1]:null;
+    if(_prev){ const _have=new Set(fixDueItems.map(s=>s.key)); const _byk={};
+      for(const t of txOfMonth(_prev)){ if(t.amount<0 && isFixed(t)){ const k=recurKey(t); if(!k) continue; const dd=+t.date.slice(8,10); const e=(_byk[k]=_byk[k]||{amt:0,name:t.name,day:dd}); e.amt+=-t.amount; if(dd>e.day) e.day=dd; } }
+      for(const k in _byk){ if(seen.has(k)||_have.has(k)) continue; const it=_byk[k]; if(it.amt<5) continue; fixDueItems.push({key:k,name:it.name,amount:Math.round(it.amt),day:it.day,type:'fixed',intervalM:1}); }
+    } }catch(_){}
   const fixDue=fixDueItems.reduce((a,s)=>a+s.amount,0);
   // verwacht inkomen dat nog moet komen = basisinkomen minus wat al deze maand binnen is
   const incDue=Math.max(baseIncome()-incomeThisMonth,0);
@@ -4733,11 +4739,17 @@ function detectRecurring(){
 }
 
 /* ----- ABONNEMENTEN / VASTE LASTEN CHECK ----- */
+function isIncasso(t){ const U=((t.desc||'')+' '+(t.name||'')).toUpperCase();
+  if(/\bBEA\b|BEA,|\bGEA\b|GEA,|ECOM|BETAALPAS|APPLE PAY|GOOGLE PAY|\bIDEAL\b|TIKKIE|CONTACTLOOS/.test(U)) return false;   // kaart/pin/online betaling = geen incasso
+  if(t.src==='csv' && /(direct ?debit|incasso)/i.test(t.typ||'')) return true;                                            // N26 CSV: Type-veld
+  return /INCASSO|DOORLOPENDE MACHTIGING|MACHTIGING|SEPA DD|DIRECT DEBIT/.test(U);
+}
 function subscriptionsList(){
-  // alleen ECHTE, opzegbare abonnementen (geen vaste lasten als verzekering/huur/bankkosten/zorg/studie)
+  // alleen ECHTE, opzegbare abonnementen via AUTOMATISCHE INCASSO (geen losse betalingen, geen vaste lasten als verzekering/huur)
   const recent3=months().slice(-3); const r3=new Set(recent3);
   const map={};
   for(const t of TX){ if(t.amount>=0) continue; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense') continue;
+    if(!isIncasso(t)) continue;                                                 // alleen automatische incasso's
     const ym=t.date.slice(0,7); if(!r3.has(ym)) continue;                       // alleen laatste 3 maanden
     const key=(t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').slice(0,20).trim(); if(!key) continue;
     const m=(map[key]=map[key]||{name:t.name,cat:c,byM:{},last:''}); m.byM[ym]=(m.byM[ym]||0)+(-t.amount); if(t.date>m.last)m.last=t.date; m.cat=c; }
@@ -4760,7 +4772,7 @@ function openSubs(){
   const total=list.reduce((s,x)=>s+x.monthly,0); const saving=list.filter(x=>flags[x.key]).reduce((s,x)=>s+x.monthly,0);
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="row" style="margin-bottom:4px"><div style="font-weight:800;font-size:17px">${ICON('repeat')} Abonnementen</div><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="small muted" style="margin-bottom:10px">${list.length} ${list.length===1?'abonnement':'abonnementen'} · samen ${euro0(total)}/mnd. Markeer wat je niet meer gebruikt. <span style="display:block;margin-top:4px">Bedrag = mediaan van de laatste 3 maanden.</span></div>
+    <div class="small muted" style="margin-bottom:10px">${list.length} ${list.length===1?'abonnement':'abonnementen'} · samen ${euro0(total)}/mnd. Markeer wat je niet meer gebruikt. <span style="display:block;margin-top:4px">Alleen automatische incasso&#39;s &middot; bedrag = mediaan van de laatste 3 maanden.</span></div>
     ${list.map(x=>{const on=!!flags[x.key]; return `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);${on?'opacity:.55':''}">
       <div style="min-width:0;flex:1"><div style="font-weight:600;font-size:14px">${CATS[x.cat].icon||''} ${esc(x.name)}</div><div class="small muted">${euro0(x.monthly)}/mnd · ${x.months} mnd gezien</div></div>
       <button class="chip ${on?'on':''}" style="flex-shrink:0" onclick="toggleCancel('${x.key}')">${on?'✓ opzeggen':'opzeggen?'}</button></div>`;}).join('')||'<div class="small muted">Nog geen abonnementen herkend.</div>'}
