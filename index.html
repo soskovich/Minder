@@ -1569,6 +1569,12 @@ function monthLiquidity(){
       for(const t of txOfMonth(_prev)){ if(t.amount<0 && isFixed(t)){ const k=recurKey(t); if(!k) continue; const dd=+t.date.slice(8,10); const e=(_byk[k]=_byk[k]||{amt:0,name:t.name,day:dd}); e.amt+=-t.amount; if(dd>e.day) e.day=dd; } }
       for(const k in _byk){ if(seen.has(k)||_have.has(k)) continue; const it=_byk[k]; if(it.amt<5) continue; fixDueItems.push({key:k,name:it.name,amount:Math.round(it.amt),day:it.day,type:'fixed',intervalM:1}); }
     } }catch(_){}
+  // provider-dedupe: schreef ditzelfde bedrijf deze maand al iets af (ook een afwijkend/incidenteel bedrag), dan die vaste last niet nog eens voorspellen
+  try{ const _cl=x=>(x||'').toUpperCase().replace(/[0-9]/g,'').replace(/[^A-Z ]/g,'').replace(/\s+/g,' ').trim();
+    const _paid=txOfMonth(ym).filter(t=>t.amount<0).map(t=>_cl(t.name)).filter(x=>x.length>=5);
+    const _match=name=>{ const a=_cl(name); if(a.length<5) return false; return _paid.some(bb=>{ const sh=a.length<=bb.length?a:bb, lo=a.length<=bb.length?bb:a; return sh.length>=5 && lo.startsWith(sh.slice(0,Math.min(sh.length,16))); }); };
+    for(let i=fixDueItems.length-1;i>=0;i--){ if(_match(fixDueItems[i].name)) fixDueItems.splice(i,1); }
+  }catch(_){}
   const fixDue=fixDueItems.reduce((a,s)=>a+s.amount,0);
   // verwacht inkomen dat nog moet komen = basisinkomen minus wat al deze maand binnen is
   const incDue=Math.max(baseIncome()-incomeThisMonth,0);
