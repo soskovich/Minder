@@ -4254,10 +4254,30 @@ function openWeekCompare(){
   const movers=keys.map(k=>({k,d:Math.round((cn[k]||0)-(cp[k]||0))})).filter(x=>Math.abs(x.d)>=5).sort((a,b)=>Math.abs(b.d)-Math.abs(a.d)).slice(0,4);
   const topUp=movers.filter(x=>x.d>0).sort((a,b)=>b.d-a.d)[0];
   const fmtRange=(sd,ed)=>`${sd.getDate()} ${MNAMES[sd.getMonth()]} \u2013 ${ed.getDate()} ${MNAMES[ed.getMonth()]}`;
+  // hypothese i.p.v. beschrijving: een tentatieve verklaring + implicatie
   let insight;
-  if(thisSum<=0 && lastSum<=0) insight='Geen losse uitgaven in deze of vorige week.';
-  else if(delta===0) insight='Je gaf deze week evenveel uit als vorige week.';
-  else insight=`Je piek ligt op <b>${dayFull[peak]}</b>${up&&topUp?`, en de stijging komt vooral van <b>${CATS[topUp.k].name.toLowerCase()}</b>`:''}. ${up?'E\u00e9n rustige dag deze week brengt je terug op je gemiddelde.':'Mooi, je hield het deze week lager dan vorige week.'}`;
+  const topMover=movers.length?movers.slice().sort((x,y)=>Math.abs(y.d)-Math.abs(x.d))[0]:null;
+  const peakShare=thisSum>0?days[peak]/thisSum:0;
+  const big=thisTx.slice().sort((x,y)=>x.amount-y.amount)[0];
+  const bigShare=(thisSum>0&&big)?(-big.amount)/thisSum:0;
+  if(thisSum<10 && lastSum>=30){
+    insight='Deze week staat er nog bijna niets. Waarschijnlijk is de week net begonnen of heb je je uitgaven al gedaan, te weinig om er een conclusie aan te hangen.';
+  } else if(thisSum<=0 && lastSum<=0){
+    insight='Geen losse uitgaven in deze of vorige week.';
+  } else if(up && topMover && topMover.d>0){
+    const cat=CATS[topMover.k].name.toLowerCase();
+    if(bigShare>=0.5 && big){ insight=`De stijging komt bijna helemaal door \u00e9\u00e9n aankoop bij <b>${esc(cleanMerch(big.name)||big.name)}</b>. Was dat eenmalig, dan is volgende week waarschijnlijk weer rustig.`; }
+    else if(topMover.k==='boodschappen'){ insight='Je gaf meer uit aan <b>boodschappen</b>. Als je hebt ingeslagen, betaalt dat zich volgende week terug in een lagere boodschappenweek.'; }
+    else { insight=`De stijging zit vooral in <b>${cat}</b>. Is dit een vaste gewoonte, dan helpt een kleine weekgrens; was het eenmalig, dan trekt het volgende week vanzelf bij.`; }
+  } else if(!up && topMover && topMover.d<0){
+    const cat=CATS[topMover.k].name.toLowerCase();
+    if(topMover.k==='boodschappen'){ insight='Je gaf minder uit aan <b>boodschappen</b>. Goede kans dat je vorige week groot inkocht en nu op voorraad teert, dan zegt deze week weinig over je tempo.'; }
+    else { insight=`Je hield <b>${cat}</b> lager dan vorige week. Was dat bewust, dan hou je dit met een kleine weekgrens makkelijk vast.`; }
+  } else if(peakShare>=0.5){
+    insight=`Je uitgaven clusteren sterk op <b>${dayFull[peak]}</b>. Zulke pieken zijn vaak gewoonte, dus \u00e9\u00e9n bewuste ${dayFull[peak]} doorbreekt het al.`;
+  } else {
+    insight='Je uitgaven liggen deze week dicht bij vorige week, geen bijzonder patroon.';
+  }
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:6px">
       <div style="font-weight:800;font-size:17px">Deze week vs vorige week</div>
