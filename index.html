@@ -1807,10 +1807,10 @@ function renderDash(){
   const tb=totalBalance(); const ts=totalSaved();
   // ---- HERO: het saldo, groot, zonder kader ----
   const S2=safeToSpend(); const sWarn=S2.missing>0;
-  const hero = `<div class="homehero" onclick="openSafeToSpend()">
+  const hero = `<div class="homehero">
     <div class="hh-lbl">Veilig te besteden</div>
-    <div class="hh-big" style="color:${S2.safe<0?'var(--red)':'var(--teal)'}">${euro(S2.safe)}${sWarn?` <span class="hh-warn">${ICON('warn')}</span>`:''}</div>
-    <div style="font-size:12.5px;color:var(--mut);margin-top:4px">totaal saldo ${euro(S2.saldo)}${sWarn?' · saldo deels onbekend':''} · <span style="color:var(--teal)">tik voor de opbouw \u203a</span></div>
+    <div class="hh-big" style="color:${S2.safe<0?'var(--red)':'var(--teal)'};cursor:pointer" onclick="openSafeToSpend()">${euro(S2.safe)}</div>
+    <div style="font-size:12.5px;color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openBalances()">totaal saldo ${euro(S2.saldo)} <span style="color:var(--teal)">\u203a</span></div>
   </div>`;
   // ---- recente transacties: kale lijst ----
   const recent=TX.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
@@ -4893,6 +4893,7 @@ function setPrivacy(){
     <button class="btn sec" style="margin-bottom:8px" onclick="restoreBackupPick()">${ICON('sync')} Herstel uit back-up</button>
     <div class="small muted" style="margin:14px 0 6px"><b>Bescherm tegen automatisch wissen:</b> vraag de browser je gegevens te bewaren. Werkt het best als Minder als app is geïnstalleerd.</div>
     <button class="btn sec" style="margin-bottom:8px" onclick="requestPersistUI()">${ICON('shield')} Bescherm mijn gegevens</button>
+    ${(function(){try{return findDuplicateIds().size;}catch(_){return 0;}})()? `<button class="btn sec" style="margin-bottom:8px" onclick="cleanupDuplicates()">${ICON('filter')} Dubbele transacties opruimen (${(function(){try{return findDuplicateIds().size;}catch(_){return 0;}})()})</button>`:''}
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (${TX.length} transacties op dit toestel.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">${ICON('trash')} Alle gegevens wissen</button>`;
 }
 function csvDownload(name,rows){ const csv=rows.map(r=>r.map(c=>{ c=(c==null?'':String(c)); return /[";\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c; }).join(';')).join('\r\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
@@ -5199,14 +5200,32 @@ function applyPending(list){
   applyOwnAccounts(); buildAccMeta(); save();
   return add;
 }
+function _softKey(t){ const n=((t.name||t.desc||'').toUpperCase().match(/[A-Z]/g)||[]).join('').slice(0,8); return t.date+'|'+(+t.amount).toFixed(2)+'|'+n; }
 function commitTx(newTxns, balances){
   let added=0; const existing=new Set(TX.map(t=>t.id));
-  for(const t of newTxns){ if(t&&!existing.has(t.id)){ TX.push(t); existing.add(t.id); added++; } }
+  const soft=new Map(); for(const t of TX){ soft.set(_softKey(t), t.acc); }
+  for(const t of newTxns){ if(!t) continue; if(existing.has(t.id)) continue;
+    const sk=_softKey(t), ex=soft.get(sk);
+    if(ex!==undefined && ex!==t.acc) continue;   // zelfde transactie via een andere rekening-id/bron → dubbel, overslaan
+    TX.push(t); existing.add(t.id); soft.set(sk,t.acc); added++; }
   if(balances) for(const a in balances){ ACCMETA[a]=Object.assign(ACCMETA[a]||{}, balances[a]); }
   TX.sort((a,b)=>a.date.localeCompare(b.date));
   applyOwnAccounts(); buildAccMeta(); save();
   if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){}
   return added;
+}
+function findDuplicateIds(){
+  const order=TX.slice().sort((a,b)=>(b.src==='psd2'?1:0)-(a.src==='psd2'?1:0)); // psd2 (live) als origineel houden
+  const seen=new Map(), remove=new Set();
+  for(const t of order){ const sk=_softKey(t); if(seen.has(sk)){ if(seen.get(sk)!==t.acc) remove.add(t.id); } else seen.set(sk,t.acc); }
+  return remove;
+}
+function cleanupDuplicates(){
+  const rm=findDuplicateIds();
+  if(!rm.size){ toast('Geen dubbele transacties gevonden'); return; }
+  if(!confirm(`${rm.size} waarschijnlijk dubbele transactie(s) verwijderen? (zelfde datum, bedrag en winkel via een andere rekening-id)`)) return;
+  TX=TX.filter(t=>!rm.has(t.id)); applyOwnAccounts(); buildAccMeta(); save(); curMonth=null; render();
+  toast(`${ICON('check')} ${rm.size} dubbele transactie(s) verwijderd`);
 }
 
 function psd2Disconnect(){
