@@ -4813,11 +4813,13 @@ function setBank(){
     if(expired){
       head=`<div style="display:flex;align-items:center;font-weight:600">${dot('var(--amber)')}Verbinding verlopen</div>
         <div class="small muted" style="margin:3px 0 14px 17px">Je bank vroeg om opnieuw in te loggen.</div>
-        <button class="btn" onclick="psd2Connect()">${ICON('bank')} Opnieuw verbinden</button>`;
+        <button class="btn" onclick="psd2Connect()">${ICON('bank')} Opnieuw verbinden</button>
+        <button class="btn sec" style="margin-top:8px" onclick="psd2Connect()">${ICON('bank')} Nog een bank toevoegen</button>`;
     } else {
       head=`<div style="display:flex;align-items:center;font-weight:600">${dot('var(--green)')}Bank gekoppeld</div>
         <div class="small muted" style="margin:3px 0 14px 17px">${esc(banks)}${last?' · '+last+' bijgewerkt':' · nog niet bijgewerkt'}</div>
-        <button class="btn" onclick="psd2Refresh(false)">${ICON('sync')} Verbinding vernieuwen</button>`;
+        <button class="btn" onclick="psd2Refresh(false)">${ICON('sync')} Verbinding vernieuwen</button>
+        <button class="btn sec" style="margin-top:8px" onclick="psd2Connect()">${ICON('bank')} Nog een bank toevoegen</button>`;
     }
   } else {
     head=`<div style="display:flex;align-items:center;font-weight:600">${dot('var(--mut)')}Nog geen bank gekoppeld</div>
@@ -5077,20 +5079,24 @@ async function psd2Refresh(silent){
 }
 async function psd2Connect(){
   if(!psd2Ready()){ toast('Stel eerst je bank-verbinding in'); SET.advBank=true; SET.setOpen='bank'; save(); go('set'); return; }
+  const country=SET.psd2Country||'NL';
   toast('Banken ophalen…');
-  let banks;
-  try{ const d=await psd2Api('/aspsps?country=NL'); banks=(d.aspsps||d||[]).filter(b=>b&&b.name).sort((a,b)=>a.name.localeCompare(b.name)); }
+  let banks=[];
+  try{ const d=await psd2Api('/aspsps?country='+country); banks=(d.aspsps||d||[]).filter(b=>b&&b.name).sort((a,b)=>a.name.localeCompare(b.name)); }
   catch(e){ toast('Fout: '+e.message); return; }
-  if(!banks.length){ toast('Geen banken ontvangen'); return; }
+  const lands=[['NL','Nederland'],['DE','Duitsland · N26'],['BE','Belgi\u00eb'],['FR','Frankrijk']];
+  const chips=lands.map(([c,n])=>`<span class="chip ${c===country?'on':''}" style="cursor:pointer" onclick="psd2SetCountry('${c}')">${n}</span>`).join('');
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('bank')}</div><div style="font-weight:800;font-size:17px">Kies je bank</div>
-      <div class="muted small">${banks.length} banken · je logt in bij je bank om toegang te geven</div></div>
-    ${banks.map((b,i)=>`<div class="tx" style="cursor:pointer" onclick="psd2StartAuth(${i})">
+    <div class="center" style="margin-bottom:10px"><div style="font-size:22px">${ICON('bank')}</div><div style="font-weight:800;font-size:17px">Kies je bank</div>
+      <div class="muted small">Kies eerst het land, dan je bank. Meerdere banken? Koppel ze \u00e9\u00e9n voor \u00e9\u00e9n.</div></div>
+    <div class="chips" style="margin-bottom:12px">${chips}</div>
+    ${banks.length? banks.map((b,i)=>`<div class="tx" style="cursor:pointer" onclick="psd2StartAuth(${i})">
       <div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
-      <div class="info"><div class="nm">${esc(b.name)}</div><div class="cat">${esc(b.country||'NL')}</div></div>
-      <div class="amt" style="color:var(--teal)">›</div></div>`).join('')}`;
+      <div class="info"><div class="nm">${esc(b.name)}</div><div class="cat">${esc(b.country||country)}</div></div>
+      <div class="amt" style="color:var(--teal)">\u203a</div></div>`).join('') : `<div class="small muted center" style="padding:16px">Geen banken gevonden voor dit land.</div>`}`;
   window._psd2Banks=banks; $('#sheetBg').classList.add('show');
 }
+function psd2SetCountry(c){ SET.psd2Country=c; save(); psd2Connect(); }
 
 async function psd2StartAuth(idx){
   const b=(window._psd2Banks||[])[idx]; if(!b) return;
