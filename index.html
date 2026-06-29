@@ -1562,7 +1562,7 @@ function renderEmpty(){
     <p class="small muted" style="margin-top:24px">${ICON('lock')} Alleen inzicht, nooit toegang tot je geld. Alles blijft privé op dit toestel.</p>
   </div>`;
   $('#s-dash').innerHTML=html;
-  ['#s-tx','#s-ins','#s-act'].forEach(s=>$(s).innerHTML=html);
+  ['#s-tx','#s-ins','#s-act','#s-vooruit','#s-vermogen'].forEach(s=>{const el=$(s); if(el) el.innerHTML=html;});
   renderSet();
 }
 
@@ -2094,7 +2094,7 @@ function buildAction(k,total,items){
     `Sportabonnement <b>${E(total)}/mnd</b> (Health Club). Ga je er minder dan 1×/week heen? Een losse 10-rittenkaart is dan goedkoper.`,
     `Anders: vraag of je het in rustige maanden tijdelijk kunt pauzeren.`]}; }
   if(k==='shopping'){ return {k,headline:`${E(total)} winkelen`,saving:Math.round(total*0.25),steps:[
-    `<b>${E(total)}</b> aan winkelen${top?` (o.a. ${top.name})`:''}, grotendeels kleding.`,
+    `<b>${E(total)}</b> aan winkelen${top?` (o.a. ${esc(top.name)})`:''}, grotendeels kleding.`,
     `Stel een maandelijks kledingbudget in en hanteer een 48-uurs wachtregel voor niet-essentiële aankopen.`]}; }
   if(k==='goededoel'){ return {k,headline:`${E(total)} aan giften`,saving:0,steps:[
     `Mooi dat je doneert (${E(total)}/mnd). Hier hoef je niet op te bezuinigen. Tip: leg giften vast als periodieke schenking, dan zijn ze aftrekbaar voor de inkomstenbelasting.`]}; }
@@ -3433,9 +3433,9 @@ function coChoices(opts){ if(!_coC)return; _coC.innerHTML=''; opts.forEach(o=>{ 
 function coEnd(){ if(_coC)_coC.innerHTML=''; }
 // observatie-tekst per leksoort (leest coach.leak)
 function coObsLeak(leak){
-  if(leak.kind==='impulse') return `Die ${euro0(leak.amount)} bij ${leak.name} zat in geen budget. Kwam uit het niets.`;
-  if(leak.kind==='missing-pot') return `${leak.name} liep weer langs zonder potje. ${euro0(leak.amount)}. Dat overvalt je elke maand.`;
-  return `${leak.name} liep ${euro0(leak.amount)} over budget deze maand.`;
+  if(leak.kind==='impulse') return `Die ${euro0(leak.amount)} bij ${esc(leak.name)} zat in geen budget. Kwam uit het niets.`;
+  if(leak.kind==='missing-pot') return `${esc(leak.name)} liep weer langs zonder potje. ${euro0(leak.amount)}. Dat overvalt je elke maand.`;
+  return `${esc(leak.name)} liep ${euro0(leak.amount)} over budget deze maand.`;
 }
 function coSuggestPot(cat){ const vals=months().map(ym=>catSpendMap(ym)[cat]||0).filter(v=>v>0).sort((a,b)=>a-b); const med=vals.length?vals[Math.floor(vals.length/2)]:0; return Math.max(Math.round(med/5)*5,10); }
 // aantal 'keer' in een categorie deze maand (= aantal uitgave-transacties), voor frequentie-coaching
@@ -4647,14 +4647,6 @@ function renderIns(){
   if(!TX.length){ $('#s-ins').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const m=curMonth||months()[months().length-1];
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); const isNow=(m===nowYM);
-  const tips=coachTips(m); const hero=tips[0]; const sec=tips.slice(1,4);
-  const heroBlock = hero?`<div class="card">
-      <div class="small muted">Belangrijkste deze maand</div>
-      <div class="coach ${hero.t}" style="margin:8px 0 0"><div class="ic">${hero.ic}</div><div class="tx">${hero.m}</div></div>
-    </div>`
-    : `<div class="card"><div class="coach good" style="margin:0"><div class="ic">${ICON('check')}</div><div class="tx">Niks bijzonders deze maand. Je zit op koers.</div></div></div>`;
-  const secBlock = sec.length?`<div class="card"><div class="small muted" style="margin-bottom:8px">Verder opgevallen</div>
-      ${sec.map(s=>`<div class="coach ${s.t}" style="margin:0 0 8px"><div class="ic">${s.ic}</div><div class="tx">${s.m}</div></div>`).join('')}</div>`:'';
   // gecombineerde status-kaart (koers + budget) voor de lopende maand; vorige maanden houden hun budget-hero
   const statusBlock = isNow ? monthStatusCard(m) : heroProjection(m);
   // Progressive disclosure: alle insights, afwijkingen en cijfers achter 'bekijk meer'
