@@ -4477,7 +4477,41 @@ function openWeekCompare(){
     <div style="height:18px"></div>
     ${movers.length?`<div class="hlabel" style="margin:12px 2px 6px">Grootste verschuivingen</div>${moverRows}`:''}
     <div class="wvo-insight"><span class="h">Wat dit betekent</span>${insight}</div>`;
+  $('#sheetBg').classList.add('show');
+}
+// gecombineerde status-kaart: koers op spaardoel + budget-tempo in één kaart (alleen lopende maand)
+function monthStatusCard(m){
+  let koersHtml='';
+  try{
+    const L=monthLiquidity(); const sv=Math.round(monthlySavingTarget()); const projected=Math.round(L.projected); const free=projected-sv;
+    if(sv>0){
+      const onTrack=free>=0;
+      const barFill=onTrack?100:Math.max(0,Math.min(Math.round(projected/sv*100),100));
+      const goalPos=onTrack?Math.max(4,Math.min(Math.round(sv/Math.max(projected,1)*100),100)):100;
+      const cbg=onTrack?'rgba(52,211,153,.14)':'rgba(251,191,36,.14)', cfg=onTrack?'var(--green)':'var(--amber)';
+      koersHtml=`<div class="row" style="gap:8px;cursor:pointer;margin-bottom:2px" onclick="openProjection()"><span style="flex:1;font-weight:700;font-size:13px">Koers op je spaardoel</span><span style="display:inline-flex;align-items:center;font-size:11px;font-weight:700;border-radius:20px;padding:3px 9px;background:${cbg};color:${cfg}">${onTrack?'Op koers':'Niet op koers'}</span></div>
+        <div style="height:7px;border-radius:5px;background:var(--card2);overflow:hidden;position:relative;margin:7px 0 4px"><div style="height:100%;border-radius:5px;background:${onTrack?'var(--teal)':'var(--amber)'};width:${barFill}%"></div><div style="position:absolute;top:-2px;bottom:-2px;left:${goalPos}%;width:2px;background:var(--txt);opacity:.65"></div></div>
+        <div class="row" style="justify-content:space-between"><span class="small" style="color:var(--mut2)">${onTrack?euro0(free)+' boven doel':euro0(free)+' tekort'}</span><span class="small" style="color:var(--mut2)">eindsaldo ${euro0(projected)}</span></div>`;
+    } else {
+      koersHtml=`<div class="row" style="gap:8px;cursor:pointer" onclick="openProjection()"><span style="flex:1;font-weight:700;font-size:13px">Verwacht eindsaldo</span><span style="font-weight:800;color:${projected<0?'var(--red)':'var(--teal)'}">${euro(projected)}</span><span style="color:var(--teal)">›</span></div>`;
+    }
+  }catch(_){}
+  let budHtml='';
+  const t=totals(m); const bud=Math.round(t.budget), sp=Math.round(t.spend);
+  if(bud<=0){
+    budHtml=`<div class="row" style="cursor:pointer" onclick="go('set')"><span style="flex:1;font-weight:700;font-size:13px">Budget deze maand</span><span class="small muted">stel in ›</span></div>`;
+  } else {
+    const usedPct=Math.round(sp/bud*100), over=sp>bud, room=bud-sp;
+    const now=new Date(); const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate(); const dom=Math.min(now.getDate(),dim);
+    const dayPct=Math.round(dom/dim*100); const ahead=usedPct>dayPct+8;
+    const barCol=over?'var(--red)':(ahead?'var(--amber)':'var(--teal)');
+    const kn=over?`${euro0(sp-bud)} over`:`${euro0(room)} over`;
+    budHtml=`<div class="row" style="gap:8px;cursor:pointer;margin-bottom:2px" onclick="openBudgetCompare('${m}')"><span style="flex:1;font-weight:700;font-size:13px">Budget deze maand</span><span class="small" style="color:${over?'var(--red)':'var(--teal)'};font-weight:700">${kn} ›</span></div>
+      <div style="height:7px;border-radius:5px;background:var(--card2);overflow:hidden;position:relative;margin:7px 0 4px"><div style="height:100%;border-radius:5px;background:${barCol};width:${Math.min(usedPct,100)}%"></div><div style="position:absolute;top:-2px;bottom:-2px;left:${dayPct}%;width:2px;background:var(--txt);opacity:.65"></div></div>
+      <div class="row" style="justify-content:space-between"><span class="small" style="color:var(--mut2)">${usedPct}% gebruikt</span><span class="small" style="color:var(--mut2)">dag ${dom} van ${dim}</span></div>`;
   }
+  return `<div class="card">${koersHtml}${koersHtml&&budHtml?'<div style="height:1px;background:var(--line);margin:11px 0"></div>':''}${budHtml}</div>`;
+}
 function whatStandsOutCard(m,isNow){
   const mv=monthVsPrevInner(m);
   const exclude=new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
@@ -4497,8 +4531,14 @@ function whatStandsOutCard(m,isNow){
   const insight = (top&&top.hyp)? `<div class="wvo-insight"><span class="h">Wat dit betekent</span>${top.hyp} <b>${top.imp}</b></div>`:'';
   let weekRow='';
   try{ const D=weekCompareData(); if(D && (D.thisSum>0||D.lastSum>0)) weekRow=`<div class="beh-row" style="cursor:pointer;border-top:1px solid var(--line);margin-top:14px;padding-top:13px" onclick="openWeekCompare()"><span class="beh-t" style="flex:1;font-weight:600">Deze week vs vorige week</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">bekijken \u203a</span></div>`; }catch(_){}
-  return `<div class="card">
-    <div class="row" style="margin-bottom:10px"><span class="hlabel" style="margin:0;flex:1">${ICON('bulb')} Wat valt op</span></div>
+  const open=!!SET.openStandsOut;
+  const topChip = (top&&top.chip)? `<span class="wvo-chip ${top.chip.type}" style="margin:0">${esc(top.kpiLabel)} ${top.chip.text}</span>`:'';
+  const header = `<div class="row" style="margin-bottom:${open?'10px':'0'};cursor:pointer;gap:8px" onclick="toggleCollap('openStandsOut')"><span class="hlabel" style="margin:0;flex:1">${ICON('bulb')} Wat valt op</span>${topChip}<span class="muted" style="font-size:16px;width:13px;text-align:center">${open?'▲':'›'}</span></div>`;
+  if(!open){
+    const teaser = top? `grootste: ${esc(top.kpiLabel)}${top.kpiSub?` · ${top.kpiSub}`:''}` : 'tik om te bekijken';
+    return `<div class="card">${header}<div class="small" style="color:var(--mut2);margin-top:7px">${teaser}</div></div>`;
+  }
+  return `<div class="card">${header}
     ${mv.has?`<div style="${(n||insight)?'padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:4px':''}">${mv.html}</div>`:''}
     ${tiles}
     ${insight}
@@ -4615,8 +4655,8 @@ function renderIns(){
     : `<div class="card"><div class="coach good" style="margin:0"><div class="ic">${ICON('check')}</div><div class="tx">Niks bijzonders deze maand. Je zit op koers.</div></div></div>`;
   const secBlock = sec.length?`<div class="card"><div class="small muted" style="margin-bottom:8px">Verder opgevallen</div>
       ${sec.map(s=>`<div class="coach ${s.t}" style="margin:0 0 8px"><div class="ic">${s.ic}</div><div class="tx">${s.m}</div></div>`).join('')}</div>`:'';
-  // ONE-FOCUS: één contextzin + één actie (alleen lopende maand)
-  const focusBlock = isNow ? insInline(m) : '';
+  // gecombineerde status-kaart (koers + budget) voor de lopende maand; vorige maanden houden hun budget-hero
+  const statusBlock = isNow ? monthStatusCard(m) : heroProjection(m);
   // Progressive disclosure: alle insights, afwijkingen en cijfers achter 'bekijk meer'
   const exp=(SET.insDeep!==undefined)?SET.insDeep:!isMode('rustig');   // standaard open; in rustige modus standaard ingeklapt
   const deepBtn=`<button class="snz" onclick="toggleInsDeep()">${exp?'minder ▲':'Bekijk meer ▼'}</button>`;
@@ -4632,7 +4672,7 @@ function renderIns(){
     deep = insSection('Je verdeling') + pchips + (!isMode('rustig')?ruleOfThumbCard():'')
          + insSection('Waar gaat je geld heen') + renderCatBreak(pTx) + renderMerchants(pTx,periodLabel());
   }
-  $('#s-ins').innerHTML = insSection('Deze maand') + heroProjection(m) + focusBlock + whatStandsOutCard(m,isNow)
+  $('#s-ins').innerHTML = insSection('Deze maand') + statusBlock + whatStandsOutCard(m,isNow)
     + deepBtn + deep
     + insSection('Meer') + subsCard() + yearCard();
 }
