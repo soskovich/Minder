@@ -1621,9 +1621,9 @@ function safeToSpend(){
   // wat al op je spaarrekening(en) staat valt buiten 'veilig te besteden': dat is geen vrij besteedbaar geld
   let savedBal=0; try{ savedBal=totalSaved().sum||0; }catch(_){}
   const spendSaldo = tb.sum - savedBal;
-  // reserveer het deel van je maanddoel dat je deze maand nog niet naar je spaarrekening overmaakte
-  let saveRemaining=0, saveTarget=0, savedSoFar=0; try{ saveTarget=Math.round(monthlySavingTarget()); savedSoFar=savedThisMonth(ym); saveRemaining=Math.max(saveTarget-savedSoFar,0); }catch(_){ }
-  return {saldo:tb.sum, savedBal:Math.round(savedBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, fixDue:L.fixDue, reserved:Math.round(reserved), saveReserved:saveRemaining, saveTarget, savedSoFar, safe:Math.round(spendSaldo-L.fixDue-reserved-saveRemaining)};
+  // nog te sparen deze maand = maandbedrag min wat al op je spaarrekening staat (dekt het saldo je maandbedrag, dan niets meer)
+  let saveRemaining=0, saveTarget=0; try{ saveTarget=Math.round(monthlySavingTarget()); saveRemaining=Math.max(saveTarget-savedBal,0); }catch(_){ }
+  return {saldo:tb.sum, savedBal:Math.round(savedBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, fixDue:L.fixDue, reserved:Math.round(reserved), saveReserved:saveRemaining, saveTarget, safe:Math.round(spendSaldo-L.fixDue-reserved-saveRemaining)};
 }
 function renderLiquidityKPI(){
   // liquiditeit is altijd 'vanaf nu vooruit' → alleen zinvol op de lopende/laatste maand
@@ -1923,6 +1923,12 @@ function homeHook(){
     return `<div class="home-hook" onclick="go('ins')"><span class="hh-ic">${ICON('bulb')}</span><span class="hh-tx">${s0.txt}</span><span class="hh-go">\u203a</span></div>`;
   }catch(_){ return ''; }
 }
+function adjustSaveTarget(d){
+  const cur=Math.round(monthlySavingTarget());
+  SET.savingMode='amount'; SET.savingAmount=Math.max(0,cur+d); save();
+  openSafeToSpend(); try{ renderDash(); }catch(_){}
+}
+function toggleSaveEdit(){ window._stsEdit=!window._stsEdit; openSafeToSpend(); }
 function openSafeToSpend(){
   const S=safeToSpend();
   let incDue=0; try{ incDue=Math.round(monthLiquidity().incDue||0); }catch(_){}
@@ -1940,7 +1946,24 @@ function openSafeToSpend(){
     ${S.savedBal>0?line('Al op je spaarrekening', S.savedBal, 'var(--mut)', "closeSheet();openSavingsPots()", 'staat apart om te sparen, niet vrij besteedbaar'):''}
     ${S.fixDue>0?line('Vaste lasten die nog komen', S.fixDue, 'var(--mut)', 'openFixedDue()', 'wat deze maand nog wordt afgeschreven'):''}
     ${S.reserved>0?line('Gereserveerd in je potjes', S.reserved, 'var(--mut)', "closeSheet();go('coach')", 'budget dat je per categorie apart zette'):''}
-    ${S.saveReserved>0?line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', '', `je maanddoel ${euro0(S.saveTarget||0)}${(S.savedSoFar||0)>0?` min ${euro0(S.savedSoFar)} die je deze maand al naar je spaarrekening zette`:`, daar is deze maand nog niets van overgemaakt`}`):''}
+    ${(function(){
+      const tgt=S.saveTarget||0, onSav=Math.min(S.savedBal||0,tgt);
+      if(window._stsEdit){
+        const pct=tgt>0?Math.min(Math.round((S.savedBal||0)/tgt*100),100):0;
+        const bn=(d,s)=>`<div onclick="adjustSaveTarget(${d})" style="width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;cursor:pointer">${s}</div>`;
+        return `<div style="background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin:8px 0 2px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:2px">Nog te sparen deze maand</div>
+          <div style="display:flex;align-items:center;gap:13px;margin:9px 0 4px">${bn(-25,'−')}<div style="font-size:22px;font-weight:800;min-width:84px;text-align:center;color:var(--teal)">${euro0(tgt)}</div>${bn(25,'+')}<div class="small muted" style="margin-left:2px">maandbedrag</div></div>
+          <div style="height:7px;border-radius:5px;background:var(--card);overflow:hidden;margin:9px 0 3px"><div style="height:100%;width:${pct}%;background:var(--teal);border-radius:5px"></div></div>
+          <div class="small muted">${euro0(onSav)} van ${euro0(tgt)} maandbedrag staat al op je spaarrekening</div>
+          <div class="row" style="padding:8px 0 0;border-bottom:none"><div style="flex:1" class="small">Nog te sparen deze maand</div><div style="font-weight:800;color:${S.saveReserved>0?'var(--txt)':'var(--green)'}">${euro0(S.saveReserved)}</div></div>
+          <div style="text-align:right;margin-top:6px"><span onclick="toggleSaveEdit()" style="color:var(--teal);font-weight:700;font-size:13px;cursor:pointer">Klaar</span></div>
+        </div>`;
+      }
+      if(S.saveReserved>0) return line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', 'toggleSaveEdit()', `je maandbedrag ${euro0(tgt)}${onSav>0?` min ${euro0(onSav)} al op je spaarrekening`:``}`);
+      if(tgt>0) return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="toggleSaveEdit()"><div style="flex:1"><div style="font-size:14px">Nog te sparen deze maand</div><div class="small" style="color:var(--green)">je maandbedrag van ${euro0(tgt)} staat al op je spaarrekening</div></div><div style="font-weight:700;color:var(--green)">${euro0(0)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`;
+      return '';
+    })()}
     <div class="row" style="gap:10px;padding:13px 0;margin-top:4px;border-top:2px solid var(--line)">
       <div style="flex:1;font-weight:800;font-size:15px">Veilig te besteden</div>
       <div style="font-weight:800;font-size:16px;color:${S.safe<0?'var(--red)':'var(--teal)'}">${euro0(S.safe)}</div></div>
@@ -4977,7 +5000,7 @@ function acctNiceName(a){
   return last4?('··'+last4):(accLabel(a)||'Rekening');
 }
 
-function closeSheet(){ $('#sheetBg').classList.remove('show'); }
+function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; }
 
 /* ---------- helpers ---------- */
 
