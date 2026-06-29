@@ -1366,11 +1366,17 @@ function acctEndsWith(a, ends){
 }
 // spaarpotjes = expliciete rekeningnummers (standaard 4323 + 1123); 4840/Zakgeld telt niet mee
 function n26SavingsAccounts(){
-  const ends=(SET.savingsEnds&&SET.savingsEnds.length)?SET.savingsEnds:['4323','1123'];
+  const ends=Array.isArray(SET.savingsEnds)?SET.savingsEnds:['4323','1123'];
   const all=[...new Set([...OWN, ...Object.keys(SET.psd2Accounts||{})])];
   return all.filter(a=>acctEndsWith(a,ends));
 }
 function totalSaved(){ let sum=0,n=0,missing=0; for(const a of n26SavingsAccounts()){ const b=accBalance(a); if(b==null) missing++; else {sum+=b;n++;} } return {sum:Math.round(sum),n,missing}; }
+// hoeveel ging deze maand netto naar je spaarrekening(en) — afgeleid uit de bijschrijvingen op die rekening, niet uit een categorie
+function savedThisMonth(ym){
+  const sav=new Set(n26SavingsAccounts()); if(!sav.size) return 0;
+  let net=0; for(const t of txOfMonth(ym)){ if(sav.has(t.acc)) net+=t.amount; }
+  return Math.max(Math.round(net),0);
+}
 // drill-down: rekeningen waaruit je saldo bestaat
 function openBalances(){
   const rows=OWN.map(a=>({a,b:accBalance(a)})).filter(r=>r.b!=null && r.b!==0).sort((x,y)=>y.b-x.b);
@@ -1613,8 +1619,8 @@ function safeToSpend(){
   const sp=catSpendMap(ym); const B=SET.budgets||{};
   let reserved=0; for(const k in B){ const bud=+B[k]||0; if(bud>0) reserved+=Math.max(bud-(sp[k]||0),0); }
   // spaardoel: reserveer het deel van je maanddoel dat nog niet opzij is gezet (al gespaard = 'sparen'-categorie deze maand)
-  let saveRemaining=0; try{ const saveTarget=monthlySavingTarget(); let savedThisMonth=0; for(const t of txOfMonth(ym)){ if(t.amount<0 && catOf(t)==='sparen') savedThisMonth+=-t.amount; } saveRemaining=Math.max(Math.round(saveTarget-savedThisMonth),0); }catch(_){ }
-  return {saldo:tb.sum, missing:tb.missing, fixDue:L.fixDue, reserved:Math.round(reserved), saveReserved:saveRemaining, safe:Math.round(tb.sum-L.fixDue-reserved-saveRemaining)};
+  let saveRemaining=0, saveTarget=0, savedSoFar=0; try{ saveTarget=Math.round(monthlySavingTarget()); savedSoFar=savedThisMonth(ym); saveRemaining=Math.max(saveTarget-savedSoFar,0); }catch(_){ }
+  return {saldo:tb.sum, missing:tb.missing, fixDue:L.fixDue, reserved:Math.round(reserved), saveReserved:saveRemaining, saveTarget, savedSoFar, safe:Math.round(tb.sum-L.fixDue-reserved-saveRemaining)};
 }
 function renderLiquidityKPI(){
   // liquiditeit is altijd 'vanaf nu vooruit' → alleen zinvol op de lopende/laatste maand
@@ -1930,12 +1936,12 @@ function openSafeToSpend(){
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
     ${S.fixDue>0?line('Vaste lasten die nog komen', S.fixDue, 'var(--mut)', 'openFixedDue()', 'wat deze maand nog wordt afgeschreven'):''}
     ${S.reserved>0?line('Gereserveerd in je potjes', S.reserved, 'var(--mut)', "closeSheet();go('coach')", 'budget dat je per categorie apart zette'):''}
-    ${S.saveReserved>0?line('Spaarinleg die nog moet', S.saveReserved, 'var(--mut)', '', 'het deel van je maanddoel dat nog niet opzij staat'):''}
+    ${S.saveReserved>0?line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', '', `je maanddoel ${euro0(S.saveTarget||0)}${(S.savedSoFar||0)>0?` min ${euro0(S.savedSoFar)} die je deze maand al naar je spaarrekening zette`:`, daar is deze maand nog niets van overgemaakt`}`):''}
     <div class="row" style="gap:10px;padding:13px 0;margin-top:4px;border-top:2px solid var(--line)">
       <div style="flex:1;font-weight:800;font-size:15px">Veilig te besteden</div>
       <div style="font-weight:800;font-size:16px;color:${S.safe<0?'var(--red)':'var(--teal)'}">${euro0(S.safe)}</div></div>
     ${S.safe<0?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:var(--mut)">Je vaste verplichtingen zijn nu groter dan je saldo.${incDue>0?` Er komt deze maand nog ${euro0(incDue)} inkomen binnen dat hier bewust niet in meetelt, daarna ziet dit er beter uit.`:''}</div>`:(incDue>0?`<div class="small muted" style="margin-top:12px">${euro0(incDue)} verwacht inkomen deze maand telt hier bewust niet mee, zodat het bedrag voorzichtig blijft.</div>`:'')}
-    <div class="small muted" style="margin-top:12px">Je saldo, min de vaste lasten die nog komen, je potjes en je spaarinleg. Wat overblijft kun je vrij uitgeven.</div>`;
+    <div class="small muted" style="margin-top:12px">Je saldo, min de vaste lasten die nog komen, je potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven.</div>`;
   $('#sheetBg').classList.add('show');
 }
 function openProjection(){
@@ -4802,6 +4808,26 @@ function setIncome(){
   return h;
 }
 
+function toggleSavingsAcct(l4){
+  let ends=Array.isArray(SET.savingsEnds)?SET.savingsEnds.slice():['4323','1123'];
+  if(ends.includes(l4)) ends=ends.filter(e=>e!==l4); else ends.push(l4);
+  SET.savingsEnds=ends; save(); SET.setOpen='bank'; renderSet(); try{renderDash();}catch(_){}
+}
+function accountsCard(){
+  if(!OWN.length) return '<div class="small muted">Nog geen rekeningen. Koppel je bank of voeg een bestand toe.</div>';
+  const sav=new Set(n26SavingsAccounts());
+  const rows=OWN.map(a=>{ const b=accBalance(a); const l4=acctLast4(a);
+    const cnt=(ACCMETA[a]&&ACCMETA[a].count)||TX.filter(t=>t.acc===a).length;
+    return {a,b,l4,cnt,isSav:sav.has(a),name:acctNiceName(a),bank:(ACCMETA[a]&&ACCMETA[a].bank)||''}; })
+    .sort((x,y)=>(y.b||0)-(x.b||0));
+  return rows.map(r=>`<div class="row" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">${esc(r.name)}</div>
+        <div class="small muted">${esc(r.bank||'')}${r.bank?' · ':''}${r.b!=null?euro(r.b):'saldo onbekend'} · ${r.cnt} transacties${r.l4?' · ··'+esc(r.l4):''}</div></div>
+      <div style="text-align:right"><div class="small muted" style="margin-bottom:2px">spaar&shy;rekening</div>
+        <label class="sw"><input type="checkbox" ${r.isSav?'checked':''} onchange="toggleSavingsAcct('${r.l4}')"><span class="sl"></span></label></div>
+    </div>`).join('') +
+    `<div class="small muted" style="margin-top:9px">Zet de schakelaar aan bij je <b>spaarrekening(en)</b>. Daaraan ziet Minder hoeveel je deze maand al spaarde. Klopt een naam niet? Pas die aan via de rekening in het saldo-overzicht.</div>`;
+}
 function setBank(){
   const ps=SET.psd2Accounts||{}; const psd2=Object.keys(ps).length; const adv=!!SET.advBank;
   const dot=c=>`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:9px;vertical-align:middle"></span>`;
@@ -4846,7 +4872,11 @@ function setBank(){
          <button class="btn sec" style="margin-top:8px" onclick="forgetFolder()">Map ontkoppelen</button>`
       : (FSA?`<button class="btn sec" onclick="connectFolder()">${ICON('folder')} Map koppelen</button>`:'')}
     <button class="btn sec" style="margin-top:8px" onclick="document.getElementById('file').click()">${ICON('folder')} Bestand toevoegen</button>` : '';
-  return head + advHtml;
+  const accHtml = OWN.length ? `
+    <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
+    <div class="small muted" style="margin-bottom:8px;font-weight:600">Je rekeningen</div>
+    ${accountsCard()}` : '';
+  return head + accHtml + advHtml;
 }
 function bankAdvTap(){
   window._advTaps=(window._advTaps||0)+1; clearTimeout(window._advTapT);
