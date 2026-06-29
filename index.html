@@ -5272,17 +5272,33 @@ function commitTx(newTxns, balances){
   return added;
 }
 function findDuplicateIds(){
-  const order=TX.slice().sort((a,b)=>(b.src==='psd2'?1:0)-(a.src==='psd2'?1:0)); // psd2 (live) als origineel houden
-  const seen=new Map(), remove=new Set();
-  for(const t of order){ const sk=_softKey(t); if(seen.has(sk)){ if(seen.get(sk)!==t.acc) remove.add(t.id); } else seen.set(sk,t.acc); }
+  // dubbel = zelfde datum, bedrag en winkel — ongeacht rekening-id, bron of pending-status.
+  // we houden het 'beste' exemplaar: geboekt vóór pending, live (psd2) vóór import.
+  const order=TX.slice().sort((a,b)=> (a.pending?1:0)-(b.pending?1:0) || (b.src==='psd2'?1:0)-(a.src==='psd2'?1:0) );
+  const seen=new Set(), remove=new Set();
+  for(const t of order){ const sk=_softKey(t); if(seen.has(sk)) remove.add(t.id); else seen.add(sk); }
   return remove;
 }
-function cleanupDuplicates(){
+function cleanupDuplicates(){   // toon een controlelijst i.p.v. blind verwijderen
   const rm=findDuplicateIds();
   if(!rm.size){ toast('Geen dubbele transacties gevonden'); return; }
-  if(!confirm(`${rm.size} waarschijnlijk dubbele transactie(s) verwijderen? (zelfde datum, bedrag en winkel via een andere rekening-id)`)) return;
-  TX=TX.filter(t=>!rm.has(t.id)); applyOwnAccounts(); buildAccMeta(); save(); curMonth=null; render();
-  toast(`${ICON('check')} ${rm.size} dubbele transactie(s) verwijderd`);
+  const rows=TX.filter(t=>rm.has(t.id)).sort((a,b)=>b.date.localeCompare(a.date));
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('filter')}</div>
+      <div style="font-weight:800;font-size:17px">Mogelijke dubbele transacties</div>
+      <div class="muted small">${rows.length} gevonden · zelfde datum, bedrag en winkel</div></div>
+    <div class="small muted" style="margin-bottom:10px">Hieronder staat wat er verwijderd wordt; van elk paar blijft één exemplaar staan. Loop het even na of er geen echte losse aankoop tussen zit.</div>
+    ${rows.map(t=>`<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
+      <div class="info"><div class="nm">${esc(t.name||t.desc||'Transactie')}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}${t.acc?' · '+esc(accShort(t.acc)):''}${t.pending?' · in afwachting':''}</div></div>
+      <div class="amt ${t.amount<0?'neg':'pos'}">${euro(t.amount)}</div></div>`).join('')}
+    <button class="btn" style="margin-top:14px" onclick="confirmCleanupDuplicates()">${ICON('trash')} Verwijder deze ${rows.length}</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeSheet()">Annuleren</button>`;
+  $('#sheetBg').classList.add('show');
+}
+function confirmCleanupDuplicates(){
+  const rm=findDuplicateIds(); if(!rm.size){ closeSheet(); return; }
+  const n=rm.size; TX=TX.filter(t=>!rm.has(t.id)); applyOwnAccounts(); buildAccMeta(); save(); curMonth=null; closeSheet(); render();
+  toast(`${ICON('check')} ${n} dubbele transactie(s) verwijderd`);
 }
 
 function psd2Disconnect(){
