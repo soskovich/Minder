@@ -1618,9 +1618,12 @@ function safeToSpend(){
   const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const sp=catSpendMap(ym); const B=SET.budgets||{};
   let reserved=0; for(const k in B){ const bud=+B[k]||0; if(bud>0) reserved+=Math.max(bud-(sp[k]||0),0); }
-  // spaardoel: reserveer het deel van je maanddoel dat nog niet opzij is gezet (al gespaard = 'sparen'-categorie deze maand)
+  // wat al op je spaarrekening(en) staat valt buiten 'veilig te besteden': dat is geen vrij besteedbaar geld
+  let savedBal=0; try{ savedBal=totalSaved().sum||0; }catch(_){}
+  const spendSaldo = tb.sum - savedBal;
+  // reserveer het deel van je maanddoel dat je deze maand nog niet naar je spaarrekening overmaakte
   let saveRemaining=0, saveTarget=0, savedSoFar=0; try{ saveTarget=Math.round(monthlySavingTarget()); savedSoFar=savedThisMonth(ym); saveRemaining=Math.max(saveTarget-savedSoFar,0); }catch(_){ }
-  return {saldo:tb.sum, missing:tb.missing, fixDue:L.fixDue, reserved:Math.round(reserved), saveReserved:saveRemaining, saveTarget, savedSoFar, safe:Math.round(tb.sum-L.fixDue-reserved-saveRemaining)};
+  return {saldo:tb.sum, savedBal:Math.round(savedBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, fixDue:L.fixDue, reserved:Math.round(reserved), saveReserved:saveRemaining, saveTarget, savedSoFar, safe:Math.round(spendSaldo-L.fixDue-reserved-saveRemaining)};
 }
 function renderLiquidityKPI(){
   // liquiditeit is altijd 'vanaf nu vooruit' → alleen zinvol op de lopende/laatste maand
@@ -1926,7 +1929,7 @@ function openSafeToSpend(){
   const line=(label,val,col,act,note)=>`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)${act?';cursor:pointer':''}" ${act?`onclick="${act}"`:''}>
       <div style="flex:1"><div style="font-size:14px">${label}</div>${note?`<div class="small muted">${note}</div>`:''}</div>
       <div style="font-weight:700;white-space:nowrap;color:${col||'var(--txt)'}">${euro0(val)}</div>${act?'<span style="color:var(--teal);font-weight:700;margin-left:4px">\u203a</span>':'<span style="width:8px"></span>'}</div>`;
-  const aftrek=S.fixDue+S.reserved+S.saveReserved;
+  const aftrek=(S.savedBal||0)+S.fixDue+S.reserved+S.saveReserved;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:14px">
       <div class="muted small">Veilig te besteden</div>
@@ -1934,6 +1937,7 @@ function openSafeToSpend(){
       <div class="muted small">zo is dit opgebouwd</div></div>
     ${line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':'al je gekoppelde rekeningen')}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
+    ${S.savedBal>0?line('Al op je spaarrekening', S.savedBal, 'var(--mut)', "closeSheet();openSavingsPots()", 'staat apart om te sparen, niet vrij besteedbaar'):''}
     ${S.fixDue>0?line('Vaste lasten die nog komen', S.fixDue, 'var(--mut)', 'openFixedDue()', 'wat deze maand nog wordt afgeschreven'):''}
     ${S.reserved>0?line('Gereserveerd in je potjes', S.reserved, 'var(--mut)', "closeSheet();go('coach')", 'budget dat je per categorie apart zette'):''}
     ${S.saveReserved>0?line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', '', `je maanddoel ${euro0(S.saveTarget||0)}${(S.savedSoFar||0)>0?` min ${euro0(S.savedSoFar)} die je deze maand al naar je spaarrekening zette`:`, daar is deze maand nog niets van overgemaakt`}`):''}
@@ -1941,7 +1945,7 @@ function openSafeToSpend(){
       <div style="flex:1;font-weight:800;font-size:15px">Veilig te besteden</div>
       <div style="font-weight:800;font-size:16px;color:${S.safe<0?'var(--red)':'var(--teal)'}">${euro0(S.safe)}</div></div>
     ${S.safe<0?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:var(--mut)">Je vaste verplichtingen zijn nu groter dan je saldo.${incDue>0?` Er komt deze maand nog ${euro0(incDue)} inkomen binnen dat hier bewust niet in meetelt, daarna ziet dit er beter uit.`:''}</div>`:(incDue>0?`<div class="small muted" style="margin-top:12px">${euro0(incDue)} verwacht inkomen deze maand telt hier bewust niet mee, zodat het bedrag voorzichtig blijft.</div>`:'')}
-    <div class="small muted" style="margin-top:12px">Je saldo, min de vaste lasten die nog komen, je potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven.</div>`;
+    <div class="small muted" style="margin-top:12px">Je totale saldo, min wat al op je spaarrekening staat, de vaste lasten die nog komen, je potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven. Geld naar je spaarrekening overmaken verandert dit bedrag dus niet.</div>`;
   $('#sheetBg').classList.add('show');
 }
 function openProjection(){
