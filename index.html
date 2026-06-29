@@ -505,6 +505,7 @@ label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font
 <section class="screen" id="s-vermogen"></section>
 
 <input type="file" id="file" accept=".sta,.STA,.940,.txt,.mt940,.csv,.CSV" multiple style="display:none">
+<input type="file" id="backupFile" accept=".json,application/json" style="display:none" onchange="if(this.files&&this.files[0])restoreBackup(this.files[0])">
 
 <nav class="nav">
   <a data-go="dash" class="on"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></span>Home</a>
@@ -4885,9 +4886,38 @@ function setPrivacy(){
     <div class="small muted" style="margin:8px 0 6px"><b>Exporteren (lokaal):</b> een CSV-bestand, gemaakt op dit toestel.</div>
     <button class="btn sec" style="margin-bottom:8px" onclick="exportTxCSV()">${ICON('folder')} Exporteer transacties (CSV)</button>
     <button class="btn sec" style="margin-bottom:8px" onclick="exportPotjesCSV()">${ICON('target')} Exporteer potjes/budgetten (CSV)</button>
+    <div class="small muted" style="margin:14px 0 6px"><b>Back-up &amp; herstel:</b> één bestand met al je gegevens (transacties, potjes, doelen, schulden, instellingen). Handig vóór je browsergegevens wist of een nieuw toestel.</div>
+    <button class="btn sec" style="margin-bottom:8px" onclick="exportBackup()">${ICON('doc')} Volledige back-up maken</button>
+    <button class="btn sec" style="margin-bottom:8px" onclick="restoreBackupPick()">${ICON('sync')} Herstel uit back-up</button>
+    <div class="small muted" style="margin:14px 0 6px"><b>Bescherm tegen automatisch wissen:</b> vraag de browser je gegevens te bewaren. Werkt het best als Minder als app is geïnstalleerd.</div>
+    <button class="btn sec" style="margin-bottom:8px" onclick="requestPersistUI()">${ICON('shield')} Bescherm mijn gegevens</button>
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (${TX.length} transacties op dit toestel.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">${ICON('trash')} Alle gegevens wissen</button>`;
 }
 function csvDownload(name,rows){ const csv=rows.map(r=>r.map(c=>{ c=(c==null?'':String(c)); return /[";\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c; }).join(';')).join('\r\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
+async function requestPersist(){ try{ if(navigator.storage && navigator.storage.persist){ if(!(await navigator.storage.persisted())) return await navigator.storage.persist(); return true; } }catch(_){} return false; }
+async function requestPersistUI(){ const ok=await requestPersist(); toast(ok?`${ICON('check')} Beschermd: de browser wist je gegevens niet meer zomaar`:`${ICON('warn')} Niet gelukt. Installeer Minder als app voor de beste bescherming`); }
+function exportBackup(){
+  const data={app:'minder',v:1,ts:Date.now(),tx:TX,ovr:OVR,own:OWN,accmeta:ACCMETA,plan:PLAN,set:SET};
+  const blob=new Blob([JSON.stringify(data)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  const d=new Date(); const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  a.href=url; a.download='minder-backup-'+ds+'.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+  toast(`${ICON('check')} Back-up gemaakt (${TX.length} transacties)`);
+}
+function restoreBackupPick(){ const el=document.getElementById('backupFile'); if(el){ el.value=''; el.click(); } }
+function restoreBackup(file){
+  const r=new FileReader();
+  r.onload=()=>{ try{
+    const d=JSON.parse(r.result);
+    if(!d || d.app!=='minder' || !Array.isArray(d.tx)){ toast('Geen geldig Minder-back-upbestand'); return; }
+    if(TX.length && !confirm(`Je huidige gegevens (${TX.length} transacties) worden vervangen door de back-up van ${d.ts?new Date(d.ts).toLocaleDateString('nl-NL'):'onbekende datum'}. Doorgaan?`)) return;
+    TX=Array.isArray(d.tx)?d.tx:[]; OVR=d.ovr||{}; OWN=Array.isArray(d.own)?d.own:[]; ACCMETA=d.accmeta||{}; PLAN=d.plan||{};
+    SET=Object.assign({limit:70,income:0,autoIncome:true,hideInternal:true}, d.set||{});
+    save(); try{ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); }catch(_){}
+    curMonth=null; render(); closeSheet&&closeSheet();
+    toast(`${ICON('check')} Hersteld: ${TX.length} transacties`);
+  }catch(e){ toast('Kon de back-up niet lezen'); } };
+  r.readAsText(file);
+}
 function exportTxCSV(){ if(!TX.length){ toast('Geen transacties'); return; } const rows=[['datum','bedrag','categorie','omschrijving','rekening']]; TX.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>rows.push([t.date,(+t.amount).toFixed(2).replace('.',','),(CATS[catOf(t)]?CATS[catOf(t)].name:catOf(t)),(t.name||t.desc||''),(t.acc||'')])); csvDownload('minder-transacties.csv',rows); toast(`${ICON('check')} ${TX.length} transacties geexporteerd`); }
 function exportPotjesCSV(){ const B=SET.budgets||{}; const ks=Object.keys(B).filter(k=>+B[k]>0); if(!ks.length){ toast('Nog geen potjes'); return; } const rows=[['categorie','maandbudget']]; ks.forEach(k=>rows.push([(CATS[k]?CATS[k].name:k),(+B[k]).toFixed(2).replace('.',',')])); csvDownload('minder-potjes.csv',rows); toast(`${ICON('check')} potjes geexporteerd`); }
 
@@ -5255,7 +5285,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
+load(); try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
