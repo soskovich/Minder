@@ -2308,6 +2308,11 @@ function mentalAccountingSignal(){
   const renteJaar=Math.round(inzet*((+d.rente)/100 - spaarRente));
   return {surplus, debt:d, inzet, renteJaar};
 }
+/* ---- Demo-modus: toont de drie mechanismen geforceerd, schrijft NIETS weg. Zet uit na bekijken. ---- */
+function demoNotifs(){ return [
+  {key:'budget-demo', score:71, t:'warn', ic:ICON('warn'), l1:'(demo) Je vices gaan €40 over je potje deze maand.', l2:'Zo kantelt je marge', act:"openCategory('vices')"},
+  {key:'rente-demo', score:60, t:'info', ic:ICON('coins'), l1:'(demo) €450 staat stil terwijl Creditcard 14% rente kost.', l2:'Boven je buffer · dat deel kan ~€63/jr dempen', act:"go('vermogen')"}
+]; }
 function scoreNotifs(){
   const out=[]; if(!TX.length) return out;
   const ms=months(); if(!ms.length) return out;
@@ -2315,6 +2320,7 @@ function scoreNotifs(){
   const now=new Date(); const today=now.toISOString().slice(0,10);
   const isNow=m===(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
   const push=o=>{ if(o&&o.l1) out.push(o); };
+  if(SET.demoMechanismen){ demoNotifs().forEach(push); }
   if(isNow){ try{ const {out:eb}=effectiveBudgets(m); const spend=catSpendMap(m); const B=SET.budgets||{}; const overs=[];
     const keys=new Set([...Object.keys(eb||{}), ...Object.keys(B).filter(k=>+B[k]>0)]);
     for(const k of keys){ if(!CATS[k]||CATS[k].type!=='expense') continue; const act=spend[k]||0; const potje=+B[k]||0;
@@ -2386,7 +2392,7 @@ function scoreNotifs(){
   let lossLeft=Math.max(MAXLOSS-lossFramesToday(),0);
   const seen=new Set(), uniq=[];
   for(const o of filt){ if(seen.has(o.key)) continue;
-    if(isLossFrame(o.key)){ if(lossLeft<=0) continue; lossLeft--; }
+    if(isLossFrame(o.key) && !/-demo$/.test(o.key)){ if(lossLeft<=0) continue; lossLeft--; }
     seen.add(o.key); uniq.push(o); }
   return uniq;
 }
@@ -3764,7 +3770,9 @@ function coParkResolve(entry,uitkomst,intentie){ entry.resolved=true;
   coBuyLog(entry.item, +entry.bedrag||0, entry.potjeId, uitkomst, intentie||'nu'); save(); }
 // koude her-keuze; geeft true terug als er iets te beslissen viel (anders draait het normale coachgesprek)
 async function coParkReturn(m){
-  const p=coParkDue(); if(!p) return false;
+  let p=coParkDue();
+  if(!p && SET.demoMechanismen){ const dc=Object.keys(CATS).find(k=>CATS[k]&&CATS[k].type==='expense')||'vices'; p={__demo:true,type:'beslis',item:'koptelefoon',bedrag:120,potjeId:dc,uitkomst:'geparkeerd',intentie:'nu',parkN:1,ts:Date.now()-19*36e5}; }
+  if(!p) return false;
   coReset(); if(!_coT) return false;
   const cn=potName(p.potjeId), amt=+p.bedrag||0, it=String(p.item||'').trim(), n=(+p.parkN||1);
   coBub('co',`Een tijdje terug parkeerde je ${it?`<b>${esc(it)}</b> `:''}voor ${euro0(amt)} (${cn}).`,{html:true,accent:true});
@@ -3776,11 +3784,11 @@ async function coParkReturn(m){
   if(n>=PARK_SIGNAL_N){ await coSay(`Je parkeert dit nu ${n} keer. Dat telkens uitstellen is ook een antwoord.`); }
   await coSay(`Doen, of laten?`);
   coChoices([
-    {l:`Nu doen`, act:async()=>{ coBub('me','Nu doen'); coParkResolve(p,'doorgezet','nu'); coFx('vastgelegd, doorgezet'); await coSay(`Doorgezet. Jij houdt de regie, ik leg 't vast. Geen oordeel.`); coEnd(); }},
-    {l:`Nog even parkeren`, act:async()=>{ coBub('me','Nog even parkeren'); p.resolved=true;
-        coachLogAdd({type:'beslis',item:p.item,bedrag:amt,potjeId:p.potjeId,uitkomst:'geparkeerd',intentie:'nu',parkN:n+1,text:`${euro0(amt)} ${cn} · geparkeerd`});
-        save(); coFx('opnieuw geparkeerd'); await coSay(`Goed. Ik kom er nog een keer op terug.`); coEnd(); }},
-    {l:`Laten gaan`, act:async()=>{ coBub('me','Laten gaan'); coParkResolve(p,'geannuleerd','nu'); coFx('vastgelegd, losgelaten'); await coSay(`Helder. Dan was het de impuls, niet de aankoop.`); coEnd(); }}
+    {l:`Nu doen`, act:async()=>{ coBub('me','Nu doen'); if(!p.__demo) coParkResolve(p,'doorgezet','nu'); coFx('vastgelegd, doorgezet'); await coSay(`Doorgezet. Jij houdt de regie, ik leg 't vast. Geen oordeel.`); coEnd(); }},
+    {l:`Nog even parkeren`, act:async()=>{ coBub('me','Nog even parkeren'); if(!p.__demo){ p.resolved=true;
+        coachLogAdd({type:'beslis',item:p.item,bedrag:amt,potjeId:p.potjeId,uitkomst:'geparkeerd',intentie:'nu',parkN:n+1,text:`${euro0(amt)} ${cn} · geparkeerd`}); save(); }
+        coFx('opnieuw geparkeerd'); await coSay(`Goed. Ik kom er nog een keer op terug.`); coEnd(); }},
+    {l:`Laten gaan`, act:async()=>{ coBub('me','Laten gaan'); if(!p.__demo) coParkResolve(p,'geannuleerd','nu'); coFx('vastgelegd, losgelaten'); await coSay(`Helder. Dan was het de impuls, niet de aankoop.`); coEnd(); }}
   ]);
   return true; }
 // sub-flow verschuiven: budget verplaatsen tussen potjes, totaal blijft kloppen
@@ -5163,8 +5171,10 @@ function setCoach(){
     ${SET.aiCoach?`<label class="fld" style="margin-top:8px">Model (optioneel)</label>
       <input type="text" value="${esc(SET.aiModel||'')}" placeholder="bv. claude-3-5-haiku-latest" oninput="SET.aiModel=this.value;save();">
       <div class="small muted" style="margin-top:6px">Gebruikt je PSD2-Worker (Bankkoppeling → Geavanceerd) als proxy. Voeg daar het <b>/coach</b>-endpoint toe en zet je LLM-key als secret. Cijfers en flow blijven uit de lokale motor; bij geen net valt 'ie terug op de lokale coach.</div>`:''}
+    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Demo: mechanismen tonen</div><div class="small muted">Toont de parkeer-terugkeer, een loss-frame en het rente-signaal geforceerd. Schrijft niets weg. Zet daarna weer uit.</div></div>
+      <label class="sw"><input type="checkbox" ${SET.demoMechanismen?'checked':''} onchange="SET.demoMechanismen=this.checked;save();render();"><span class="sl"></span></label></div>
+    ${SET.demoMechanismen?`<div class="small muted" style="margin-top:6px">${ICON('info')} Open je <b>meldingen</b> (belletje) voor het loss-frame en het rente-signaal, en de <b>Coach</b>-tab voor de parkeer-terugkeer.</div>`:''}
     <div style="height:10px"></div>
-    ${renderRulesCard()}
     <div class="small muted" style="margin-top:10px">${ICON('info')} ${SET.aiCoach?`<b>AI-coach staat aan.</b> Een taalmodel verwoordt de zinnen via je eigen Worker. De bedragen komen nog steeds uit de lokale motor. Zet uit voor 100% lokaal.`:`<b>Hoe werkt de coach?</b> Geen AI in de cloud. Alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.`}</div>`;
 }
 
