@@ -584,6 +584,7 @@ function ICON(n){const P={
 };return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:1.15em;height:1.15em;vertical-align:-.17em;flex-shrink:0">${P[n]||''}</svg>`;}
 const CATS={
   boodschappen:{name:'Boodschappen',icon:ICON('cart'),color:'#34d399',type:'expense'},
+  huur:{name:'Huur',icon:ICON('home'),color:'#fb7185',type:'expense'},
   uiteten:{name:'Uit eten & café',icon:ICON('fork'),color:'#fbbf24',type:'expense'},
   vervoer:{name:'Vervoer & auto',icon:ICON('car'),color:'#60a5fa',type:'expense'},
   shopping:{name:'Online shopping',icon:ICON('bag'),color:'#a78bfa',type:'expense'},
@@ -621,7 +622,8 @@ const RULES=[
   ['shopping',['BOL.COM','AMAZON','COOLBLUE','ZALANDO','FOTO LOOMAN','ACTION','MEDIA MARKT','WEHKAMP','ALIEXPRESS','PRIMARK','ZARA','H&M','C&A','BERSHKA','PULL&BEAR','NIKE','ADIDAS','HEMA','BIJENKORF','DOUGLAS','IKEA','TEMU','SHEIN','MARQT']],
   ['vakantie',['AIRBNB','BOOKING.COM','HOTEL','EXPEDIA','HOSTEL','RESORT']],
   ['bankkosten',['BASISPAKKET','ABN AMRO BANK N.V.','KOSTEN BETALINGSVERKEER']],
-  ['persoonlijk',['ML MACNACK']],
+  ['huur',['ML MACNACK','HUURBETALING','HUUR ',' HUUR','VERHUUR','WONINGSTICHTING','VESTEDA','BOUWINVEST','WOONSTAD','WOONCORPORATIE']],
+  ['persoonlijk',[]],
   ['intern',['WESTERN UNION','VE SUMTER','PRIVEREKENING','VINCENT SUMTER','VINCENT ERNST SUMTER','SENT FROM N26','EIGEN REKENING','SUMTER VIA TIKKIE','AAB INZ TIKKIE','GELDMAAT','GEA, BETAALPAS','OPNAME','REVOLUT','WISE','N26']]
 ];
 
@@ -1533,6 +1535,7 @@ function render(){
   syncMonthPick();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
   if(window._setSheet && $('#sheetBg').classList.contains('show')) renderSetSheet(); // open instellingen-sheet meeverversen
+  if(window._nfSheet && $('#sheetBg').classList.contains('show')) renderNfSheet();
 }
 
 function onboardManual(){ if(FSA){ connectFolder(); } else { document.getElementById('file').click(); } }
@@ -3010,6 +3013,85 @@ function nogDezeMaandCard(){
     <div class="ndm-net"><span>Onderaan de streep</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>
   </div>`;
 }
+/* ===================== NOODFONDS =====================
+ * Essentiele maandlast (crisisniveau) -> noodfonds-doel. Driedeling per categorie,
+ * mediaan voor variabel, uitsmeren voor periodieke vaste lasten, crisis-vloer instelbaar.
+ * Voedt het buffer-DOEL (SET.bufferAmount), niet de heilige vloer (SET.buffer). */
+const NF_KLASSE_DEFAULT={
+  huur:'vast', verzekering:'vast', belasting:'vast', studie:'vast', bankkosten:'vast',
+  boodschappen:'var', vervoer:'var', zorg:'var',
+  uiteten:'comfort', shopping:'comfort', sport:'comfort', goededoel:'comfort',
+  abonnement:'comfort', vakantie:'comfort', vices:'comfort',
+  persoonlijk:'exclude', overig:'exclude'
+};
+const NF_PERIODIEK=new Set(['verzekering','belasting']);          // jaar/lumpy -> uitsmeren
+const NF_CRISIS_DEFAULT={ boodschappen:80, vervoer:65, zorg:100 }; // % dat in crisis overblijft
+function nfKlasse(c){ return (SET.nfKlasse&&SET.nfKlasse[c])||NF_KLASSE_DEFAULT[c]||'exclude'; }
+function nfCrisis(c){ const o=SET.nfCrisis||{}; return o[c]!=null?o[c]:(NF_CRISIS_DEFAULT[c]!=null?NF_CRISIS_DEFAULT[c]:100); }
+function nfMaanden(){ return +SET.nfMaanden||4; }
+function nfMedian(a){ if(!a.length)return 0; const s=[...a].sort((x,y)=>x-y),n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; }
+function noodfondsModel(){
+  const win=months().slice(-12); const maps=win.map(m=>catSpendMap(m)); const n=win.length||1;
+  let vast=0,varNormaal=0,varCrisis=0,huurGevonden=false; const detail=[],comfort=[],rek=[];
+  for(const cat in NF_KLASSE_DEFAULT){
+    const reeks=maps.map(sm=>sm[cat]||0); const kl=nfKlasse(cat);
+    const med=nfMedian(reeks), gem=reeks.reduce((a,b)=>a+b,0)/n, mx=Math.max(...reeks,0);
+    if(cat==='huur'&&med>0) huurGevonden=true;
+    if(kl==='vast'){ const b=NF_PERIODIEK.has(cat)?gem:med; if(b>0){ vast+=b; detail.push(['vast',cat,b,b]); } }
+    else if(kl==='var'){ const cr=med*(nfCrisis(cat)/100); varNormaal+=med; varCrisis+=cr; detail.push(['var',cat,med,cr]); if(mx>0) rek.push([cat,mx-med,med,mx]); }
+    else if(kl==='comfort'){ if(med>0||mx>0) comfort.push([cat,med,mx]); }
+  }
+  comfort.sort((a,b)=>b[1]-a[1]); rek.sort((a,b)=>b[1]-a[1]);
+  const essNormaal=vast+varNormaal, essCrisis=vast+varCrisis, maanden=nfMaanden(), doel=Math.round(essCrisis*maanden);
+  let spaar=null; try{ const s=totalSaved(); spaar=s.missing?null:s.sum; }catch(_){}
+  const pct=(spaar!=null&&doel>0)?Math.min(100,Math.round(spaar/doel*100)):null;
+  const comfortTot=comfort.reduce((a,c)=>a+c[1],0);
+  return {win,n,vast,varNormaal,varCrisis,essNormaal,essCrisis,maanden,doel,spaar,pct,detail,comfort,rek,comfortTot,huurGevonden};
+}
+function noodfondsNaarBuffer(doel){ SET.bufferBasis='amount'; SET.bufferAmount=Math.round(doel); save(); render(); toast(`${ICON('check')} Buffer-doel ingesteld op ${euro0(doel)}`); }
+function noodfondsCard(){
+  const M=noodfondsModel();
+  const chips=[3,4,6].map(x=>`<span class="chip ${M.maanden===x?'on':''}" onclick="SET.nfMaanden=${x};save();renderVooruit()">${x} mnd</span>`).join('');
+  const prog=M.pct!=null
+    ? `<div class="bar" style="margin-top:8px"><i style="width:${M.pct}%"></i></div><div class="small muted" style="margin-top:6px">${euro0(M.spaar)} van ${euro0(M.doel)} · ${M.pct}% gevuld</div>`
+    : `<div class="small muted" style="margin-top:8px">Koppel je spaarrekening om je voortgang te zien.</div>`;
+  const huurNote=!M.huurGevonden
+    ? `<div class="small" style="color:var(--amber);margin-top:8px">${ICON('alert')} Huur nog niet herkend. Je grootste vaste last kan ontbreken, <span style="text-decoration:underline;cursor:pointer" onclick="go('vermogen')">controleer je schulden/lasten</span>.</div>` : '';
+  const bez=M.comfort.length
+    ? M.comfort.map(([c,med])=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)"><span class="small">${CATS[c]?CATS[c].name:c}</span><span class="small" style="font-weight:600">${euro0(med)}/mnd</span></div>`).join('')
+    : '<div class="small muted">Geen comfort-uitgaven gevonden.</div>';
+  return `<div class="card" id="nfCard">
+    <div class="row" style="justify-content:space-between"><div class="small" style="font-weight:700;color:var(--teal);letter-spacing:.04em;text-transform:uppercase">${ICON('home')} Noodfonds</div><span class="small muted" style="cursor:pointer" onclick="openNoodfondsPanel()">Verfijnen ›</span></div>
+    <div style="font-size:30px;font-weight:800;letter-spacing:-1px;margin:8px 0 2px">${euro0(M.essCrisis)}<span class="small muted" style="font-weight:600"> /mnd</span></div>
+    <div class="small muted">essentiële crisis-last${M.huurGevonden?', huur inbegrepen':''}</div>
+    ${huurNote}
+    <div class="chips" style="margin-top:11px">${chips}</div>
+    <div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-top:13px">Doel · ${M.maanden} mnd</div>
+    <div style="font-size:22px;font-weight:800;margin-top:3px">${euro0(M.doel)}</div>
+    ${prog}
+    <button class="btn" style="margin-top:12px;width:100%" onclick="noodfondsNaarBuffer(${M.doel})">${ICON('target')} Neem ${euro0(M.doel)} over als buffer-doel</button>
+    <details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Bezuinigingsruimte · ${euro0(M.comfortTot)}/mnd</summary><div style="margin-top:8px">${bez}</div></details>
+  </div>`;
+}
+function openNoodfondsPanel(){ window._setSheet=null; window._nfSheet=true; renderNfSheet(); $('#sheetBg').classList.add('show'); }
+function renderNfSheet(){
+  const M=noodfondsModel();
+  const chips=[3,4,6].map(x=>`<span class="chip ${M.maanden===x?'on':''}" onclick="SET.nfMaanden=${x};save();renderNfSheet();renderVooruit()">${x} mnd</span>`).join('');
+  const sliders=['boodschappen','vervoer','zorg'].filter(c=>CATS[c]).map(c=>{ const v=nfCrisis(c); const mn=c==='vervoer'?30:50;
+    return `<div class="row" style="justify-content:space-between;margin-top:9px"><span class="small">${CATS[c].name}</span><span class="small muted">${v}%</span></div>
+      <input type="range" min="${mn}" max="100" value="${v}" oninput="SET.nfCrisis=SET.nfCrisis||{};SET.nfCrisis['${c}']=+this.value;save();renderNfSheet();renderVooruit()" style="width:100%">`; }).join('');
+  const det=M.detail.map(([k,c,nrm,cr])=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span class="small ${k==='var'?'':'muted'}">${CATS[c]?CATS[c].name:c}${k==='vast'?' (vast)':''}</span><span class="small" style="font-weight:600">${euro0(cr)}</span></div>`).join('');
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:17px">${ICON('home')} Noodfonds verfijnen</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="card" style="text-align:center"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;color:var(--teal)">Doel</div>
+      <div style="font-size:32px;font-weight:800;letter-spacing:-1px;margin:4px 0">${euro0(M.doel)}</div>
+      <div class="small muted">${M.maanden} mnd × ${euro0(M.essCrisis)}/mnd essentieel</div>
+      <div class="chips" style="margin-top:10px">${chips}</div></div>
+    <div class="card"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600">Crisis-vloer · wat blijft over</div>${sliders}<div class="small muted" style="margin-top:8px">Hoeveel van deze uitgave je in een crisis nog kunt afknijpen. Lager = kleiner noodfonds nodig.</div></div>
+    <div class="card"><div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span class="small muted">Vast (incl. huur)</span><span class="small" style="font-weight:700">${euro0(M.vast)}</span></div>${det}<div class="row" style="justify-content:space-between;padding:8px 0"><span class="small" style="font-weight:800">per maand</span><span class="small" style="font-weight:800;color:var(--teal)">${euro0(M.essCrisis)}</span></div></div>
+    <button class="btn" style="width:100%" onclick="noodfondsNaarBuffer(${M.doel});closeSheet()">${ICON('target')} Neem ${euro0(M.doel)} over als buffer-doel</button>
+    <div style="height:8px"></div>`;
+}
 function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -3018,7 +3100,7 @@ function renderVooruit(){
   const exp=(SET.vooruitMeer!==undefined)?SET.vooruitMeer:isMode('expert');   // expert: standaard uitgeklapt
   const deepBtn=`<button class="snz" onclick="toggleVooruit('vooruitMeer')">${exp?'minder ▲':'Deze maand in detail ▼'}</button>`;
   const deep = exp ? vooruitDeep() : '';
-  $('#s-vooruit').innerHTML = vooruitForecast() + nogDezeMaandCard() + goalCoachCard() + renderGoals() + deepBtn + deep;
+  $('#s-vooruit').innerHTML = vooruitForecast() + noodfondsCard() + nogDezeMaandCard() + goalCoachCard() + renderGoals() + deepBtn + deep;
 }
 function hasAutoSaving(){ try{ const ms=months().slice(-3); let n=0; for(const mm of ms){ for(const t of txOfMonth(mm)){ if(catOf(t)==='sparen' || /(monthly|weekly) rule|round[\s-]?up|income sorter/i.test(t.name||'')) n++; } } return n>=2; }catch(_){ return false; } }
 function coachItems(){
@@ -4045,7 +4127,7 @@ function renderPlanDetail(){
 }
 
 /* ----- VASTE vs VARIABELE LASTEN ----- */
-const FIXED_CATS=new Set(['verzekering','studie','sport','abonnement','bankkosten','persoonlijk']);
+const FIXED_CATS=new Set(['huur','verzekering','studie','sport','abonnement','bankkosten','persoonlijk']);
 function isFixed(t){
   const ov=(SET.fixOvr||{})[t.id]; if(ov) return ov==='fixed';                   // handmatige override: deze transactie
   const ovm=(SET.fixOvrM||{})[recurKey(t)]; if(ovm) return ovm==='fixed';        // handmatige override: alle van deze winkel
@@ -5243,7 +5325,7 @@ function acctNiceName(a){
   return last4?('··'+last4):(accLabel(a)||'Rekening');
 }
 
-function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; }
+function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; window._nfSheet=false; }
 
 /* ---------- helpers ---------- */
 
