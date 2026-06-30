@@ -823,7 +823,7 @@ function hash(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;
 function catOf(t){ return OVR[t.id]||t.autoCat; }
 
 /* ---------- maand-helpers ---------- */
-function months(){ return [...new Set(TX.map(t=>t.date.slice(0,7)))].sort(); }
+function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!base.length) return []; const s=new Set(base); const n=new Date(); s.add(n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')); return [...s].sort(); }
 function txOfMonth(m){ return TX.filter(t=>t.date.slice(0,7)===m); }
 function monthLabel(m){ const [y,mo]=m.split('-'); return MFULL[+mo-1]+' '+y; }
 
@@ -1348,7 +1348,8 @@ function regSlope(arr){ const n=arr.length; if(n<2) return 0; const xm=(n-1)/2; 
 function nextMonths(m,k){ const out=[]; let [y,mo]=m.split('-').map(Number); for(let i=0;i<k;i++){ mo++; if(mo>12){mo=1;y++;} out.push({y,mo,label:MNAMES[mo-1],full:MFULL[mo-1]+' '+y}); } return out; }
 function forecastModel(){
   const ms=months(); if(ms.length<2) return null;
-  const agg=ms.map(monthAgg);
+  const agg=ms.map(monthAgg).filter(a=>a.spend>0||a.income>0);   // (nog) lege maanden tellen niet mee in de statistiek
+  if(agg.length<2) return null;
   const last=agg.slice(-3); const avg=k=>last.reduce((s,a)=>s+a[k],0)/last.length;
   const vSlope=regSlope(agg.map(a=>a.vari)), sSlope=regSlope(agg.map(a=>a.spend));
   const fInc=baseIncome()||avg('income'), fFixed=avg('fixed'), fVar=Math.max(avg('vari')+vSlope,0);
@@ -1620,13 +1621,29 @@ function safeToSpend(){
   const tb=totalBalance(); const L=monthLiquidity();
   const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const sp=catSpendMap(ym); const B=SET.budgets||{};
-  let reserved=0; for(const k in B){ const bud=+B[k]||0; if(bud>0) reserved+=Math.max(bud-(sp[k]||0),0); }
-  // wat al op je spaarrekening(en) staat valt buiten 'veilig te besteden': dat is geen vrij besteedbaar geld
+  // potjes-reservering: variabele potjes apart van vaste lasten (die lopen via fixDue) -> geen dubbeltelling
+  let reservedVar=0, fixedBudgetUnspent=0;
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0) continue; const rest=Math.max(bud-(sp[k]||0),0);
+    if(FIXED_CATS.has(k)) fixedBudgetUnspent+=rest; else reservedVar+=rest; }
+  // vangnet: een vaste last die (nog) niet als recurring herkend is, telt toch mee via het budget (neem de grootste schatting)
+  const fixedStillToGo=Math.max(Math.round(L.fixDue||0), Math.round(fixedBudgetUnspent));
+  // wat al op je spaarrekening(en) staat valt buiten 'veilig te besteden': geen vrij besteedbaar geld
   let savedBal=0; try{ savedBal=totalSaved().sum||0; }catch(_){}
   const spendSaldo = tb.sum - savedBal;
-  // nog te sparen deze maand = maandbedrag min wat al op je spaarrekening staat (dekt het saldo je maandbedrag, dan niets meer)
-  let saveRemaining=0, saveTarget=0; try{ saveTarget=Math.round(monthlySavingTarget()); saveRemaining=Math.max(saveTarget-savedBal,0); }catch(_){ }
-  return {saldo:tb.sum, savedBal:Math.round(savedBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, fixDue:L.fixDue, reserved:Math.round(reserved), saveReserved:saveRemaining, saveTarget, safe:Math.round(spendSaldo-L.fixDue-reserved-saveRemaining)};
+  // verwacht inkomen dat deze maand nog binnenkomt telt MEE (consistent met de maandlasten die we aftrekken)
+  const incDue=Math.round(L.incDue||0);
+  // nog te sparen deze maand = maandbedrag min wat je DEZE MAAND al hebt weggezet (niet je totale spaarsaldo)
+  let saveTarget=0, savedThisMonth=0;
+  try{ saveTarget=Math.round(monthlySavingTarget());
+    const sav=(typeof n26SavingsAccounts==='function')?new Set(n26SavingsAccounts()):new Set();
+    if(sav.size){ for(const t of txOfMonth(ym)){ if(sav.has(t.acc) && t.amount>0) savedThisMonth+=t.amount; } }
+    else { for(const t of txOfMonth(ym)){ if(t.amount<0 && catOf(t)==='sparen') savedThisMonth+=-t.amount; } }
+    savedThisMonth=Math.round(savedThisMonth);
+  }catch(_){}
+  const saveRemaining=Math.max(saveTarget-savedThisMonth,0);
+  const safe=Math.round(spendSaldo + incDue - fixedStillToGo - reservedVar - saveRemaining);
+  return {saldo:tb.sum, savedBal:Math.round(savedBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing,
+    incDue, fixDue:fixedStillToGo, reserved:Math.round(reservedVar), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
 }
 function renderLiquidityKPI(){
   // liquiditeit is altijd 'vanaf nu vooruit' → alleen zinvol op de lopende/laatste maand
@@ -1967,33 +1984,34 @@ function openSafeToSpend(){
       <div style="font-size:30px;font-weight:800;color:${S.safe<0?'var(--red)':'var(--teal)'}">${euro(S.safe)}</div>
       <div class="muted small">zo is dit opgebouwd</div></div>
     ${line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':'al je gekoppelde rekeningen')}
+    ${S.incDue>0?`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:14px">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
     ${S.savedBal>0?line('Al op je spaarrekening', S.savedBal, 'var(--mut)', "closeSheet();openSavingsPots()", 'staat apart om te sparen, niet vrij besteedbaar'):''}
     ${S.fixDue>0?line('Vaste lasten die nog komen', S.fixDue, 'var(--mut)', 'openFixedDue()', 'wat deze maand nog wordt afgeschreven'):''}
     ${S.reserved>0?line('Gereserveerd in je potjes', S.reserved, 'var(--mut)', "closeSheet();go('coach')", 'budget dat je per categorie apart zette'):''}
     ${(function(){
-      const tgt=S.saveTarget||0, onSav=Math.min(S.savedBal||0,tgt);
+      const tgt=S.saveTarget||0, onSav=Math.min(S.savedThisMonth||0,tgt);
       if(window._stsEdit){
-        const pct=tgt>0?Math.min(Math.round((S.savedBal||0)/tgt*100),100):0;
+        const pct=tgt>0?Math.min(Math.round((S.savedThisMonth||0)/tgt*100),100):0;
         const bn=(d,s)=>`<div onclick="adjustSaveTarget(${d})" style="width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;cursor:pointer">${s}</div>`;
         return `<div style="background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin:8px 0 2px">
           <div style="font-size:13px;font-weight:700;margin-bottom:2px">Nog te sparen deze maand</div>
           <div style="display:flex;align-items:center;gap:13px;margin:9px 0 4px">${bn(-25,'−')}<div style="font-size:22px;font-weight:800;min-width:84px;text-align:center;color:var(--teal)">${euro0(tgt)}</div>${bn(25,'+')}<div class="small muted" style="margin-left:2px">maandbedrag</div></div>
           <div style="height:7px;border-radius:5px;background:var(--card);overflow:hidden;margin:9px 0 3px"><div style="height:100%;width:${pct}%;background:var(--teal);border-radius:5px"></div></div>
-          <div class="small muted">${euro0(onSav)} van ${euro0(tgt)} maandbedrag staat al op je spaarrekening</div>
+          <div class="small muted">${euro0(onSav)} van ${euro0(tgt)} maandbedrag heb je deze maand al gespaard</div>
           <div class="row" style="padding:8px 0 0;border-bottom:none"><div style="flex:1" class="small">Nog te sparen deze maand</div><div style="font-weight:800;color:${S.saveReserved>0?'var(--txt)':'var(--green)'}">${euro0(S.saveReserved)}</div></div>
           <div style="text-align:right;margin-top:6px"><span onclick="toggleSaveEdit()" style="color:var(--teal);font-weight:700;font-size:13px;cursor:pointer">Klaar</span></div>
         </div>`;
       }
-      if(S.saveReserved>0) return line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', 'toggleSaveEdit()', `je maandbedrag ${euro0(tgt)}${onSav>0?` min ${euro0(onSav)} al op je spaarrekening`:``}`);
-      if(tgt>0) return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="toggleSaveEdit()"><div style="flex:1"><div style="font-size:14px">Nog te sparen deze maand</div><div class="small" style="color:var(--green)">je maandbedrag van ${euro0(tgt)} staat al op je spaarrekening</div></div><div style="font-weight:700;color:var(--green)">${euro0(0)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`;
+      if(S.saveReserved>0) return line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', 'toggleSaveEdit()', `je maandbedrag ${euro0(tgt)}${onSav>0?` min ${euro0(onSav)} deze maand al gespaard`:``}`);
+      if(tgt>0) return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="toggleSaveEdit()"><div style="flex:1"><div style="font-size:14px">Nog te sparen deze maand</div><div class="small" style="color:var(--green)">je maandbedrag van ${euro0(tgt)} heb je deze maand al gespaard</div></div><div style="font-weight:700;color:var(--green)">${euro0(0)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`;
       return '';
     })()}
     <div class="row" style="gap:10px;padding:13px 0;margin-top:4px;border-top:2px solid var(--line)">
       <div style="flex:1;font-weight:800;font-size:15px">Veilig te besteden</div>
       <div style="font-weight:800;font-size:16px;color:${S.safe<0?'var(--red)':'var(--teal)'}">${euro0(S.safe)}</div></div>
-    ${S.safe<0?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:var(--mut)">Je vaste verplichtingen zijn nu groter dan je saldo.${incDue>0?` Er komt deze maand nog ${euro0(incDue)} inkomen binnen dat hier bewust niet in meetelt, daarna ziet dit er beter uit.`:''}</div>`:(incDue>0?`<div class="small muted" style="margin-top:12px">${euro0(incDue)} verwacht inkomen deze maand telt hier bewust niet mee, zodat het bedrag voorzichtig blijft.</div>`:'')}
-    <div class="small muted" style="margin-top:12px">Je totale saldo, min wat al op je spaarrekening staat, de vaste lasten die nog komen, je potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven. Geld naar je spaarrekening overmaken verandert dit bedrag dus niet.</div>`;
+    ${S.safe<0?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:var(--mut)">Zelfs met het verwachte inkomen erbij zijn je verplichtingen deze maand groter dan wat er binnenkomt. Kijk of je een potje of je spaarinleg kunt bijstellen.</div>`:(incDue>0?`<div class="small muted" style="margin-top:12px">Inclusief ${euro0(incDue)} verwacht inkomen dat deze maand nog binnenkomt.</div>`:'')}
+    <div class="small muted" style="margin-top:12px">Je totale saldo plus het inkomen dat nog binnenkomt, min wat al op je spaarrekening staat, de vaste lasten die nog komen, je variabele potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven. Geld naar je spaarrekening overmaken verandert dit bedrag dus niet.</div>`;
   $('#sheetBg').classList.add('show');
 }
 function openProjection(){
@@ -3096,7 +3114,7 @@ function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
-  if(!isNow){ $('#s-vooruit').innerHTML = renderUpcoming() + renderSavings(); return; }
+  if(!isNow){ $('#s-vooruit').innerHTML = renderSavings() + renderUpcoming() + renderGoals(); return; }
   const exp=(SET.vooruitMeer!==undefined)?SET.vooruitMeer:isMode('expert');   // expert: standaard uitgeklapt
   const deepBtn=`<button class="snz" onclick="toggleVooruit('vooruitMeer')">${exp?'minder ▲':'Deze maand in detail ▼'}</button>`;
   const deep = exp ? vooruitDeep() : '';
@@ -3485,7 +3503,7 @@ function renderActions(){
   if(!TX.length){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||months()[months().length-1]; const isNow=m===nowYM;
-  if(!isNow){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Je coach geldt voor de lopende maand. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar nu ›</span></div></div>'; return; }
+  if(!isNow){ $('#s-act').innerHTML=`<div class="card"><div class="small muted">Je coach werkt op de lopende maand (${esc(monthLabel(nowYM))}). Je bekijkt nu ${esc(monthLabel(m))}. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar ${esc(monthLabel(nowYM))} ›</span></div></div>`; return; }
   const zoneMine=`<div class="cz-mine">
     <div class="czr-head" onclick="toggleCoachDisc()"><span>${ICON('target')} Mijn regel: geen budget, geen aankoop</span><span>${SET.coachDiscOpen?'▲':'▼'}</span></div>
     ${SET.coachDiscOpen?coachDiscipline(m):''}
