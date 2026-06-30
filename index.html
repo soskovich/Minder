@@ -3398,6 +3398,66 @@ function openCoachAvatar(){
   $('#sheetBg').classList.add('show');
 }
 function setCoachAvatar(k){ SET.coachAvatar=k; save(); closeSheet(); renderActions(); }
+/* ============================================================
+   MECHANISM_SPEC — de regels waaronder de coach MAG spreken.
+   Drie gedragsmechanismen, elk met een vuurconditie en een guard.
+   Meta-principe: elke guard beschermt de buffer. De mechanismen
+   dienen de marge, ze overrulen hem nooit. De noodbuffer is heilig.
+   Naast COACH_SPEC (die de TOON regelt) bepaalt dit WANNEER en HOE VAAK.
+   ============================================================ */
+const MECHANISM_SPEC = {
+  // 1 · MENTAL ACCOUNTING
+  // Een potje is gezond zolang het je helpt plannen, en schadelijk
+  // zodra het duurdere schuld verbergt.
+  mentalAccounting: {
+    regel: 'Potje gezond = helpt plannen. Potje schadelijk = verbergt duurdere schuld.',
+    vuurt: 'Stilstaand geld in laag-/nulrente-potje terwijl er schuld/rood staat tegen hogere rente.',
+    condities: {
+      minRenteVerschil: 0.05,   // schuldrente minus potjesopbrengst moet hier boven liggen
+      minBedrag: 50             // materialiteitsdrempel: niet vuren onder dit bedrag
+    },
+    zwijgt: [
+      'Het potje doet zijn werk (bewust gepland, concurreert niet met dure schuld).',
+      'NOODBUFFER IS HEILIG — nooit voorstellen die leeg te halen om schuld af te lossen.'
+    ],
+    state: ['potje.saldo', 'potje.opbrengst', 'potje.doelTag(plannen|stilstaand)', 'potje.isNoodbuffer', 'schuld.saldo', 'schuld.rente']
+  },
+
+  // 2 · LOSS AVERSION
+  // Een schijnwerper, geen plafondlamp. Alleen bij een echte afwijking,
+  // hooguit één keer, nooit op een vooraf bewust geplande uitgave.
+  lossAversion: {
+    regel: 'Frame verlies alleen bij een echte afwijking. Als stakes (dagen marge / weken vertraging), nooit als euro schuld.',
+    vuurt: 'Uitgave buiten elk potje ("kwam uit het niets"), of buffer onder veilige marge, of herhaalde lekkage in één categorie.',
+    condities: {
+      maxFramesPerDag: 1,       // harde frequentielimiet, nooit stapelen
+      vereistPositieveSpiegel: true  // voor elk loss-moment moet de positieve spiegel óók bestaan
+    },
+    zwijgt: [
+      'Geplande uitgave uit een vooraf gevuld potje = succes, geen lek. App is stil of bevestigend.',
+      'Frequentielimiet bereikt — geen tweede loss-frame dezelfde dag.'
+    ],
+    state: ['lossFramesVandaag', 'uitgave.gepland(zat in potje: ja|nee)']
+  },
+
+  // 3 · TEMPORAL DISCOUNTING
+  // Een parkeerknop is alleen een belofte als de app hem nakomt.
+  // De lus moet sluiten, anders is parkeren gewoon uitstel.
+  temporalDiscounting: {
+    regel: 'Parkeren plant een echte terugkeer in koude staat. Dichtbij reken in tijd, veraf maak het doel levendig.',
+    vuurt: 'Gebruiker parkeert een discretionaire uitgave → engine plant terugkeer op het beloofde moment en toont dezelfde keuze opnieuw (doen / nog eens parkeren / laten gaan).',
+    condities: {
+      herhaalParkeerSignaal: 4, // na zoveel keer parkeren zonder beslissen: zacht spiegelen "dit telkens parkeren is ook een antwoord"
+      projectieWijstNaarDoel: true // €-projectie verwijst waar mogelijk naar een door de gebruiker benoemde bestemming, niet een kaal getal
+    },
+    zwijgt: [
+      'Geen betrouwbare terugkeer te bouwen? Lever dan "niet nu" i.p.v. een nep-commitment device.',
+      'Dwing nooit een beslissing af bij herparkeren — benoem het patroon, laat de keuze.'
+    ],
+    state: ['geparkeerd[]{item, bedrag, terugkeerDatum, aantalKeerGeparkeerd}', 'gebruikersdoel.bestemming']
+  }
+};
+
 /* ---------- AI-coach (hybride): motor rekent, taalmodel verwoordt. Standaard UIT. Via je Worker /coach. ---------- */
 const COACH_SPEC=`Je bent de coach in Minder, een Nederlandstalige personal-finance app. Je bent een EERLIJKE SPIEGEL, geen cheerleader, geen adviesbot. Je praat weinig, je-vorm, kort en rustig, één gedachte per bericht. Confronteer met een patroon, nooit met een mislukking. Druk afwijkingen uit als stakes (weken vertraging van het doel), nooit als schuld. Eigenaarschap bij de gebruiker. Geen emoji, geen uitroeptekens, geen gedachtestreepjes, geen lijstjes met tips. Kernprincipe: geen budget, geen aankoop. OPDRACHT: herschrijf de gegeven 'draft' in deze toon. Behoud ALLE bedragen en getallen exact zoals in de draft; verzin geen nieuwe getallen. Eén of twee korte zinnen. Antwoord met alleen de herschreven zin, niets anders.`;
 function coStripTags(s){ return (s||'').replace(/<[^>]+>/g,''); }
