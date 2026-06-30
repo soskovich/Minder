@@ -2278,6 +2278,36 @@ function fixSavingsRules(){
 }
 // ===== ACTIEPLAN (N26-stijl): Vandaag + streak + 3 tikbare maandstappen; volledige coach/strategieën achter 'Verdieping' =====
 function headerSearch(){ go('tx'); if(!window._txSearchOpen) toggleTxSearch(); setTimeout(()=>{const el=document.querySelector('#s-tx input[type=search]'); if(el) el.focus();},60); }
+/* ---- Loss-aversion dosering: state + helpers (MECHANISM_SPEC.lossAversion) ----
+ * Een loss-frame is een discretionair stakes-signaal (potje over, tempo, vices,
+ * ongewoon grote uitgave, spaardoel-risico). Liquiditeitsalarmen (lowbal/accshort)
+ * en positieve noten vallen hier NADRUKKELIJK buiten: dat is geen loss aversion.
+ * Doel: hooguit maxFramesPerDag per dag, nooit gestapeld, zodat de app geen
+ * uitgaven-angst traint. lossFrames = {ymd, n, keys} houdt de dagteller bij. */
+const LOSS_GROUPS=new Set(['budget','tempo','vice','big','save']);
+function isLossFrame(key){ return LOSS_GROUPS.has(String(key||'').split('-')[0]); }
+function lossFramesToday(){ const d=new Date().toISOString().slice(0,10); const lf=SET.lossFrames; return (lf&&lf.ymd===d)?(+lf.n||0):0; }
+function noteLossSeen(key){ if(!isLossFrame(key)) return; const d=new Date().toISOString().slice(0,10); let lf=SET.lossFrames;
+  if(!lf||lf.ymd!==d){ lf=SET.lossFrames={ymd:d,n:0,keys:{}}; } lf.keys=lf.keys||{};
+  if(!lf.keys[key]){ lf.keys[key]=1; lf.n=(+lf.n||0)+1; } }
+/* ---- Mental accounting: stilstaand surplus boven de heilige buffer vs. dure schuld (MECHANISM_SPEC.mentalAccounting) ----
+ * De noodbuffer = SET.buffer (de liquiditeitsondergrens, de rode lijn). Die is HEILIG: alleen het
+ * bedrag dat BOVEN de buffer stilstaat telt mee, en de app stelt nooit voor de buffer leeg te halen.
+ * Goedkope schuld (lage rente) vuurt niet; alleen wanneer de rente de spaaropbrengst met
+ * minRenteVerschil overstijgt en er minstens minBedrag stilstaat boven de buffer. */
+function noodbuffer(){ return Math.max(+SET.buffer||0,0); }
+function stilstaandSurplus(){ try{ const s=totalSaved(); if(s.missing) return null; return Math.max(Math.round(s.sum - noodbuffer()),0); }catch(_){ return null; } }
+function duursteSchuld(){ const ds=(SET.debts||[]).filter(d=>(+d.rest>0)&&(+d.rente>0)); if(!ds.length) return null; ds.sort((a,b)=>(+b.rente)-(+a.rente)); return ds[0]; }
+function mentalAccountingSignal(){
+  const C=MECHANISM_SPEC.mentalAccounting.condities;
+  const surplus=stilstaandSurplus(); if(surplus==null || surplus<(C.minBedrag||50)) return null;   // niets stilstaand boven de buffer
+  const d=duursteSchuld(); if(!d) return null;
+  const spaarRente=(+SET.spaarRente||0)/100;                                   // standaard 0% (nulrente-potje)
+  if(((+d.rente)/100 - spaarRente) < (C.minRenteVerschil||0.05)) return null;   // goedkope schuld: niet vuren
+  const inzet=Math.min(surplus, Math.max(+d.rest||0,0));
+  const renteJaar=Math.round(inzet*((+d.rente)/100 - spaarRente));
+  return {surplus, debt:d, inzet, renteJaar};
+}
 function scoreNotifs(){
   const out=[]; if(!TX.length) return out;
   const ms=months(); if(!ms.length) return out;
@@ -2300,7 +2330,7 @@ function scoreNotifs(){
   if(isNow){ try{ const v=(catSpendMap(m).vices)||0; if(v>=20){ const ack=(SET.chronicAck||{}).vice; if(!(ack && ack.ym===m && v < ack.val*1.25)) push({key:'vice',score:58+Math.min(v/5,22),t:'warn',ic:CATS.vices.icon,l1:`€${Math.round(v)} aan vices deze maand.`,l2:'Zet een weekgrens',act:"openCategory('vices')",chronic:{key:'vice',ym:m,val:Math.round(v)}}); } }catch(_){} }
   // cooling-off terugkomprompt: parkeerde je iets ('wachten tot morgen'), kom er na ~1 dag op terug
   try{ const log=SET.coachLog||[]; const nowMs=Date.now();
-    const park=log.find(l=>l.type==='beslis' && l.uitkomst==='geparkeerd' && (nowMs-l.ts)>=18*36e5 && (nowMs-l.ts)<=7*864e5);
+    const park=log.find(l=>l.type==='beslis' && l.uitkomst==='geparkeerd' && !l.resolved && (nowMs-l.ts)>=18*36e5 && (nowMs-l.ts)<=7*864e5);
     if(park){ const it=String(park.item||'die aankoop').slice(0,24); push({key:'park-'+park.ts, score:84, t:'warn', ic:ICON('clock'), l1:`Je parkeerde ${it} (${euro0(park.bedrag||0)}). Staat 't er nog?`, l2:'Open je coach', act:"go('act')"}); } }catch(_){}
   try{ const lim=new Date(now); lim.setDate(lim.getDate()-7);
     const recent=TX.filter(x=>x.amount<0 && new Date(x.date)>=lim && CATS[catOf(x)].type==='expense' && !isFixed(x));
@@ -2332,10 +2362,16 @@ function scoreNotifs(){
         l1:`${esc(accShort(s.acc))}: ${esc(String(s.name||'').slice(0,18))} ${euro(s.amt)} ${when}, maar er staat ${euro(s.balance)}.`,
         l2:`Tekort ${euro0(s.shortfall)} · vul aan of schuif over`, act:"go('vooruit')"});
     } }catch(_){}
+  // mentale-rekening: stilstaand surplus BOVEN de buffer terwijl dure schuld rente kost (observatie, geen alarm)
+  try{ const ma=mentalAccountingSignal();
+    if(ma) push({key:'rente-'+(ma.debt.id||'x'), score:60, t:'info', ic:ICON('coins'),
+      l1:`${euro0(ma.inzet)} staat stil terwijl ${esc(ma.debt.naam)} ${ma.debt.rente}% rente kost.`,
+      l2:`Boven je buffer · dat deel kan ~${euro0(ma.renteJaar)}/jr dempen`, act:"go('vermogen')"});
+  }catch(_){}
   // positieve noot: altijd minstens iets goeds tonen als het er is (balans, niet alleen als fallback)
   if(isNow){ try{ let pos=null;
     const wk=Date.now()-7*864e5; const dec=(SET.coachLog||[]).filter(l=>l.type==='beslis'&&l.ts>=wk);
-    let saved=0; dec.forEach(d=>{ if(d.uitkomst==='geparkeerd'||d.uitkomst==='geannuleerd') saved+=(+d.bedrag||0); });
+    let saved=0; dec.forEach(d=>{ if((d.uitkomst==='geparkeerd'&&!d.resolved)||d.uitkomst==='geannuleerd') saved+=(+d.bedrag||0); });
     if(saved>=20) pos={key:'win-saved',score:24,t:'good',ic:ICON('check'),l1:`${euro0(saved)} niet ongepland uitgegeven deze week.`,l2:'Zo hou je grip',act:"go('act')"};
     if(!pos){ try{ const D=dayBudgetNow(); if(D.dagdoel>0){ const st=computeStreak(D.dagdoel); if(st>=3) pos={key:'win-streak',score:23,t:'good',ic:ICON('fire'),l1:`${st} dagen op rij onder je dagdoel.`,l2:'Hou dit vast',act:"go('act')"}; } }catch(_){} }
     if(!pos){ const L=monthLiquidity(), tgt=monthlySavingTarget(); if(L.projected>=tgt && L.daysLeft>0) pos={key:'room',score:20,t:'good',ic:ICON('check'),l1:'Je ligt op koers deze maand.',l2:'Mooi, hou dit vast',act:"go('vooruit')"}; }
@@ -2344,7 +2380,14 @@ function scoreNotifs(){
   const muted=SET.notifMuted||{}, snz=SET.notifSnooze||{}, nowMs=Date.now(); const CRIT=new Set(['lowbal','accshort']);
   const filt=out.filter(o=>{ const g=(o.key||'').split('-')[0]; if(CRIT.has(g)) return true; if(muted[g]) return false; if(snz[g]&&nowMs<snz[g]) return false; return true; });
   filt.sort((a,b)=>b.score-a.score);
-  const seen=new Set(), uniq=[]; for(const o of filt){ if(!seen.has(o.key)){ seen.add(o.key); uniq.push(o); } }
+  // Loss-aversion dosering: hooguit maxFramesPerDag loss-frames, nooit gestapeld.
+  // CRIT en positieve noten passen ongemoeid; alleen discretionaire stakes worden gedoseerd.
+  const MAXLOSS=(MECHANISM_SPEC.lossAversion.condities.maxFramesPerDag)||1;
+  let lossLeft=Math.max(MAXLOSS-lossFramesToday(),0);
+  const seen=new Set(), uniq=[];
+  for(const o of filt){ if(seen.has(o.key)) continue;
+    if(isLossFrame(o.key)){ if(lossLeft<=0) continue; lossLeft--; }
+    seen.add(o.key); uniq.push(o); }
   return uniq;
 }
 function notifList(){ const all=scoreNotifs(); const top=all.slice(0,5);
@@ -2359,7 +2402,7 @@ function notifResetMutes(){ SET.notifMuted={}; SET.notifSnooze={}; save(); updat
 function notifUnseen(){ const seen=SET.notifSeen||{}, now=Date.now(); return notifList().filter(n=>{const ts=seen[n.key]; return !ts||(now-ts)>3*86400000;}).length; }
 function notifCount(){ try{ return notifUnseen(); }catch(_){ return 0; } }
 function updateNotifBadge(){ try{ const nb=document.getElementById('notifBadge'); if(!nb) return; const c=notifUnseen(); nb.textContent=c>9?'9+':c; nb.style.display=c>0?'flex':'none'; }catch(_){} }
-function markNotifsSeen(){ SET.notifSeen=SET.notifSeen||{}; SET.chronicAck=SET.chronicAck||{}; const now=Date.now(); for(const n of notifList()){ SET.notifSeen[n.key]=now; if(n.chronic) SET.chronicAck[n.chronic.key]={ym:n.chronic.ym,val:n.chronic.val}; } for(const k in SET.notifSeen){ if(now-SET.notifSeen[k]>30*86400000) delete SET.notifSeen[k]; } save(); }
+function markNotifsSeen(){ SET.notifSeen=SET.notifSeen||{}; SET.chronicAck=SET.chronicAck||{}; const now=Date.now(); for(const n of notifList()){ SET.notifSeen[n.key]=now; noteLossSeen(n.key); if(n.chronic) SET.chronicAck[n.chronic.key]={ym:n.chronic.ym,val:n.chronic.val}; } for(const k in SET.notifSeen){ if(now-SET.notifSeen[k]>30*86400000) delete SET.notifSeen[k]; } save(); }
 function enableNotifs(){ try{ if(typeof Notification==='undefined'){ toast('Meldingen niet ondersteund op dit toestel'); return; } Notification.requestPermission().then(p=>{ if(p==='granted'){ toast('Meldingen aan'); pushTopNotif(true); } openNotifs(); }); }catch(_){} }
 function pushTopNotif(force){
   try{
@@ -3379,7 +3422,7 @@ function renderActions(){
     + `<button class="cobuy" id="buyBtn">${ICON('cart')} Ik wil iets kopen</button>`
     + coachMirrorCard() + zonePotjes + zoneMine;
   const bb=document.getElementById('buyBtn'); if(bb) bb.onclick=openBuy;
-  startCoachTalk(m);
+  coParkReturn(m).then(handled=>{ if(!handled) startCoachTalk(m); });
 }
 /* ---------- COACH-DIALOOG (tik-door gesprek, leest/voert uit via de motor) ---------- */
 let _coT=null,_coC=null,_coGen=0;
@@ -3702,6 +3745,44 @@ function openBuy(){
 }
 function startBuy(){ const item=((document.getElementById('buyItem')||{}).value||'').trim(); const amt=Math.round(+((document.getElementById('buyAmt')||{}).value)||0); const cat=(document.getElementById('buyCat')||{}).value; closeSheet(); if(amt>0&&cat) buyFlow(cat,amt,item); else toast('Vul een bedrag in'); }
 function coBuyLog(item,amt,cat,uitkomst,intentie){ coachLogAdd({type:'beslis',item:item||'',bedrag:amt,potjeId:cat,uitkomst,intentie,text:`${euro0(amt)} ${potName(cat)} · ${uitkomst}`}); }
+
+/* ---- Temporal discounting: de parkeer-lus sluiten. Volgt MECHANISM_SPEC.temporalDiscounting ----
+ * Parkeren is alleen een belofte als de app hem nakomt. Bij terugkeer presenteert de coach
+ * dezelfde keuze opnieuw in koude staat: nu doen / nog even parkeren / laten gaan.
+ * parkN telt hoe vaak hetzelfde item geparkeerd is; na herhaalParkeerSignaal keer wordt
+ * het patroon zacht teruggespiegeld, zonder een beslissing af te dwingen. */
+const PARK_RETURN_MS = 18*36e5;  // beloofde terugkeer (~na 'morgen'); gelijk aan de notificatie-drempel
+const PARK_SIGNAL_N  = (MECHANISM_SPEC.temporalDiscounting.condities.herhaalParkeerSignaal)||4;
+// oudste nog-openstaande geparkeerde beslissing die toe is aan terugkeer (log is nieuw→oud)
+function coParkDue(){ const log=SET.coachLog||[]; const now=Date.now();
+  for(let i=log.length-1;i>=0;i--){ const l=log[i];
+    if(l && l.type==='beslis' && l.uitkomst==='geparkeerd' && !l.resolved
+       && (now-l.ts)>=PARK_RETURN_MS && (now-l.ts)<=7*864e5) return l; }
+  return null; }
+// sluit een parkeer-beslissing af met een echte uitkomst (doorgezet/geannuleerd)
+function coParkResolve(entry,uitkomst,intentie){ entry.resolved=true;
+  coBuyLog(entry.item, +entry.bedrag||0, entry.potjeId, uitkomst, intentie||'nu'); save(); }
+// koude her-keuze; geeft true terug als er iets te beslissen viel (anders draait het normale coachgesprek)
+async function coParkReturn(m){
+  const p=coParkDue(); if(!p) return false;
+  coReset(); if(!_coT) return false;
+  const cn=potName(p.potjeId), amt=+p.bedrag||0, it=String(p.item||'').trim(), n=(+p.parkN||1);
+  coBub('co',`Een tijdje terug parkeerde je ${it?`<b>${esc(it)}</b> `:''}voor ${euro0(amt)} (${cn}).`,{html:true,accent:true});
+  // gevolg in dagen marge, zelfde rekenwijze als de koopcheck
+  try{ const _S=savingsModel(); const _pd=_S.monthlySaving>0?_S.monthlySaving/30:0;
+    if(_pd>0){ const _d=Math.round(amt/_pd); await coSay(`Het kost nog steeds <span class="hl">~${_d} ${_d===1?'dag':'dagen'}</span> langer tot je buffer.`,{html:true}); }
+    else { await coWait(140); } }catch(_){ }
+  // herhaal-parkeer-signaal: zacht spiegelen, geen dwang
+  if(n>=PARK_SIGNAL_N){ await coSay(`Je parkeert dit nu ${n} keer. Dat telkens uitstellen is ook een antwoord.`); }
+  await coSay(`Doen, of laten?`);
+  coChoices([
+    {l:`Nu doen`, act:async()=>{ coBub('me','Nu doen'); coParkResolve(p,'doorgezet','nu'); coFx('vastgelegd, doorgezet'); await coSay(`Doorgezet. Jij houdt de regie, ik leg 't vast. Geen oordeel.`); coEnd(); }},
+    {l:`Nog even parkeren`, act:async()=>{ coBub('me','Nog even parkeren'); p.resolved=true;
+        coachLogAdd({type:'beslis',item:p.item,bedrag:amt,potjeId:p.potjeId,uitkomst:'geparkeerd',intentie:'nu',parkN:n+1,text:`${euro0(amt)} ${cn} · geparkeerd`});
+        save(); coFx('opnieuw geparkeerd'); await coSay(`Goed. Ik kom er nog een keer op terug.`); coEnd(); }},
+    {l:`Laten gaan`, act:async()=>{ coBub('me','Laten gaan'); coParkResolve(p,'geannuleerd','nu'); coFx('vastgelegd, losgelaten'); await coSay(`Helder. Dan was het de impuls, niet de aankoop.`); coEnd(); }}
+  ]);
+  return true; }
 // sub-flow verschuiven: budget verplaatsen tussen potjes, totaal blijft kloppen
 function coBuyShift(item,amt,cat){
   const opts=potOptions(cat);
@@ -3717,9 +3798,11 @@ async function buyFlow(cat,amt,item){
   const cn=potName(cat);
   coBub('me',`Ik wil ${item?esc(item)+' ':''}voor ${euro0(amt)} (${cn}).`);
   await coWait(180);
-  { try{ const _S=savingsModel(); const _pd=_S.monthlySaving>0?_S.monthlySaving/30:0; if(_pd>0){ const _d=Math.round(amt/_pd); await coSay(`In doel-termen: <span class="hl">~${_d} ${_d===1?'dag':'dagen'}</span> langer tot je buffer.`,{html:true}); } }catch(_){ } }
   const m=curMonth||months()[months().length-1]; const B=SET.budgets||{}; const has=+B[cat]>0;
   const rest=has?Math.round(+B[cat]-(catSpendMap(m)[cat]||0)):0;
+  const planned=has && amt<=rest;   // geplande aankoop uit een gevuld potje = succes, geen loss-frame (MECHANISM_SPEC.lossAversion)
+  // stakes (dagen tot buffer) alleen tonen als het géén schone geplande aankoop is
+  if(!planned){ try{ const _S=savingsModel(); const _pd=_S.monthlySaving>0?_S.monthlySaving/30:0; if(_pd>0){ const _d=Math.round(amt/_pd); await coSay(`In doel-termen: <span class="hl">~${_d} ${_d===1?'dag':'dagen'}</span> langer tot je buffer.`,{html:true}); } }catch(_){ } }
   // frequentie-reactie: heeft de categorie een 'aantal keer'-potje, benoem de telling
   const fmeta=(SET.potMeta||{})[cat];
   if(fmeta && fmeta.type==='freq'){ const did=potjeKeer(m,cat); const nextN=did+1; await coSay(`Dit wordt je ${nextN}e keer ${cn} deze maand${nextN>fmeta.n?`. Je plande er ${fmeta.n}.`:` van je ${fmeta.n} geplande.`}`); }
