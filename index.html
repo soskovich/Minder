@@ -1766,6 +1766,96 @@ function renderSavings(){
   </div>`;
 }
 // gedetailleerde lijst van komende vaste lasten & inkomsten (Inzichten)
+/* ---- Fresh start (MECHANISM_SPEC.freshStart): één rustig vooruitblik-moment bij een nieuwe maand.
+ * Kijkt vooruit, nooit terug. Eén keer per maand, makkelijk weg te tikken, "niet nu" zonder gevolg. ---- */
+function nowYMstr(){ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
+function freshStartDue(){
+  const ym=nowYMstr();
+  if(SET.freshStartSeen===ym) return false;            // deze maand al begroet of weggetikt
+  if(SET.demoMechanismen) return true;                 // demo: tonen tot je 'm wegtikt
+  if(!TX.length) return false;                         // niet voor een lege app
+  if(new Date().getDate()>7) return false;             // alleen het frisse-start-venster (eerste week)
+  return months().filter(m=>m<ym).length>0;            // alleen als er een vorige maand met data was
+}
+function freshStartCard(){
+  const now=new Date(); const mn=MFULL[now.getMonth()]; const cap=mn.charAt(0).toUpperCase()+mn.slice(1);
+  let nood=''; try{ const M=noodfondsModel(); if(M&&M.spaar!=null) nood=` Je noodfonds staat op ${euro0(M.spaar)}.`; }catch(_){}
+  const catOpts=Object.keys(CATS).filter(k=>CATS[k].type==='expense').map(k=>`<option value="${k}">${esc(CATS[k].name)}</option>`).join('');
+  return `<div class="card" style="border-left:3px solid var(--teal);border-radius:0 16px 16px 0;padding:16px 15px">
+    <div style="font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--teal);font-weight:600">Nieuwe maand</div>
+    <div style="font-size:17px;font-weight:700;line-height:1.35;margin:9px 0 4px">${cap} begint schoon. Je speelruimte staat weer vol.${nood}</div>
+    <div class="small muted" style="line-height:1.5">Wat wil je deze maand anders doen? Eén voornemen is genoeg.</div>
+    <input id="freshVoornemen" placeholder="Bijv. minder vaak bestellen bij uit eten" style="width:100%;margin-top:12px;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;color:var(--txt);font:inherit;font-size:13px;box-sizing:border-box" />
+    <span id="freshCoupleLink" onclick="freshToggleCouple()" style="color:var(--teal);font-size:12.5px;font-weight:600;cursor:pointer;margin-top:10px;display:inline-block">+ Koppel aan een bedrag &amp; categorie (optioneel)</span>
+    <div id="freshCouple" style="display:none;margin-top:8px">
+      <div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:6px 0 5px">Onder bedrag (€)</div>
+      <input id="freshBedrag" type="number" inputmode="numeric" placeholder="150" style="width:100%;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;color:var(--txt);font:inherit;font-size:13px;box-sizing:border-box" />
+      <div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:10px 0 5px">Bij categorie</div>
+      <select id="freshCat" style="width:100%;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;color:var(--txt);font:inherit;font-size:13px;box-sizing:border-box">${catOpts}</select>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button style="flex:1;background:var(--teal-d);color:#fff;border:none;border-radius:12px;padding:12px;font:inherit;font-weight:700;cursor:pointer" onclick="freshStartSave()">Zet mijn voornemen</button>
+      <button style="width:92px;background:transparent;border:none;color:var(--mut);font:inherit;font-weight:600;cursor:pointer" onclick="freshStartDismiss()">Niet nu</button>
+    </div>
+  </div>`;
+}
+function freshToggleCouple(){ const c=document.getElementById('freshCouple'), l=document.getElementById('freshCoupleLink'); if(!c)return;
+  const show=c.style.display==='none'; c.style.display=show?'block':'none';
+  if(l) l.textContent=show?'− Koppeling verbergen':'+ Koppel aan een bedrag & categorie (optioneel)'; }
+function freshStartDismiss(){ SET.freshStartSeen=nowYMstr(); const v=SET.maandVoornemen; if(v && v.ym<nowYMstr()) SET.voornemenReflectedFor=v.ym; save(); renderDash(); }
+function freshStartSave(){
+  const el=document.getElementById('freshVoornemen'); const txt=el?el.value.trim():''; const ym=nowYMstr();
+  SET.freshStartSeen=ym;
+  if(txt){ const v={ym,text:txt};
+    const cpl=document.getElementById('freshCouple');
+    if(cpl && cpl.style.display!=='none'){
+      const b=parseInt((document.getElementById('freshBedrag')||{}).value,10);
+      const c=(document.getElementById('freshCat')||{}).value;
+      if(b>0 && c && CATS[c]){ v.bedrag=b; v.cat=c; }
+    }
+    SET.maandVoornemen=v;   // overschrijft het oude voornemen; de terugblik toonde dat al
+  }
+  save(); renderDash(); toast(`${ICON('check')} Voornemen vastgelegd`);
+}
+/* ---- Fresh start, tweede helft: het maandeinde-moment dat je voornemen eerlijk terugspiegelt ----
+ * Legt je woord naast het cijfer (als je koppelde en de categorie nog bestaat) en laat JOU wegen.
+ * Guard: categorie weg? Dan terug naar alleen de tekst, nooit een verzonnen getal. */
+function capMonth(ym){ const mo=+ym.split('-')[1]-1; const n=MFULL[mo]||''; return n.charAt(0).toUpperCase()+n.slice(1); }
+function prevYM(ym){ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-2,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+let _demoReflHidden=false;
+function demoReflHide(){ _demoReflHidden=true; renderDash(); }
+function voornemenCarry(){ const v=SET.maandVoornemen; const ym=nowYMstr(); if(v&&!v.__demo){ SET.maandVoornemen={ym,text:v.text,cat:v.cat,bedrag:v.bedrag}; SET.voornemenReflectedFor=ym; } SET.freshStartSeen=ym; save(); renderDash(); toast(`${ICON('check')} Meegenomen naar ${capMonth(ym)}`); }
+function voornemenReflectDone(){ const v=SET.maandVoornemen; if(v&&!v.__demo) SET.voornemenReflectedFor=v.ym; save(); renderDash(); }
+function freshStartReflection(){
+  const ym=nowYMstr(); let v=SET.maandVoornemen; let demo=false;
+  const real = v && v.text && v.ym<ym && SET.voornemenReflectedFor!==v.ym;
+  if(!real){
+    if(SET.demoMechanismen && !_demoReflHidden){ v={ym:prevYM(ym),text:'Minder vaak bestellen bij uit eten',cat:'uiteten',bedrag:150,__demo:true}; demo=true; }
+    else return '';
+  }
+  let cijfer;
+  if(v.cat && v.bedrag && CATS[v.cat]){
+    const actual=Math.round(((catSpendMap(v.ym)||{})[v.cat])||0);
+    cijfer=`<div style="display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-top:1px solid var(--line);margin-top:10px">
+      <span class="small muted">Gekoppeld · onder ${euro0(v.bedrag)} bij ${esc(CATS[v.cat].name)}</span>
+      <span style="font-weight:800;font-size:16px">${euro0(actual)}</span></div>
+      <div class="small muted" style="line-height:1.5;margin-top:6px">Jij weet of dat de moeite waard was. Geen oordeel van mij.</div>`;
+  } else {
+    cijfer=`<div class="small muted" style="line-height:1.5;margin-top:8px">Hoe kijk je erop terug? Alleen jij weet of het gelukt is.</div>`;
+  }
+  const carry = demo?'demoReflHide()':'voornemenCarry()';
+  const done  = demo?'demoReflHide()':'voornemenReflectDone()';
+  return `<div class="card" style="border-left:3px solid var(--blue);border-radius:0 16px 16px 0;padding:15px 15px">
+    <div style="font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:var(--blue);font-weight:600">${capMonth(v.ym)} · je voornemen</div>
+    <div class="small muted" style="margin-top:8px">Je nam je voor:</div>
+    <div style="font-size:15px;font-style:italic;line-height:1.4;background:var(--card2);border-radius:10px;padding:11px 13px;margin:8px 0 2px">\u201c${esc(v.text)}\u201d</div>
+    ${cijfer}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button style="flex:1;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:11px;font:inherit;font-weight:600;cursor:pointer" onclick="${carry}">Neem mee naar ${capMonth(ym)}</button>
+      <button style="width:84px;background:transparent;border:none;color:var(--mut);font:inherit;font-weight:600;cursor:pointer" onclick="${done}">Klaar</button>
+    </div>
+  </div>`;
+}
 function renderUpcoming(){
   const L=liquidityDaily(SET.liqDays||60); const ev=L.events.slice(0,30);
   if(!ev.length) return '';
@@ -1873,7 +1963,7 @@ function renderDash(){
     if(isMode('rustig')){ const _ms=months(); const _cur=totals(_ms[_ms.length-1]).spend; const _prev=_ms.length>1?totals(_ms[_ms.length-2]).spend:null; const _t=(_prev!=null&&_cur<_prev)?'Je geeft het rustiger aan dan vorige maand.':'Stap voor stap. Je houdt het overzicht.'; modeTop=`<div class="small muted" style="margin:2px 2px 12px">${_t}</div>`; }
     else if(isMode('expert')){ const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0">deze maand · uit ${euro(_tt.spend)} · in ${euro(_tt.income)} · saldo ${euro(S2.saldo)}</div>`; }
   }catch(_){ }
-  $('#s-dash').innerHTML = renderReminder() + modeTop + hero + vermogenCard() + recentBlock + modeBot;
+  $('#s-dash').innerHTML = renderReminder() + (freshStartDue()?(freshStartReflection()+freshStartCard()):'') + modeTop + hero + vermogenCard() + recentBlock + modeBot;
 }
 function renderDash_OLD_UNUSED(){
   const p=SET.insPeriod||'month'; const isM=p==='month';
@@ -1938,7 +2028,7 @@ function renderDash_OLD_UNUSED(){
   // MEER (ingeklapt): de analytische widgets
   const moreWidgets=[ isM?renderWeekVarKPI():'', trendCard, compare, renderFixedVariable(pTx,t.income), renderWeekdayPattern(pTx), renderDonut(t.byCat),
     `<div class="card"><div class="row" style="margin-bottom:10px"><span class="hlabel" style="margin:0;flex:1">Top uitgaven</span><span class="small muted" onclick="go('ins')" style="cursor:pointer;color:var(--teal)">details ›</span></div>${topCats(t,6)}</div>` ].filter(Boolean).join('');
-  $('#s-dash').innerHTML = pchips + renderReminder() + heroCard + renderLiquidityCard() + renderSavings() + actionCard
+  $('#s-dash').innerHTML = pchips + renderReminder() + (freshStartDue()?freshStartCard():'') + heroCard + renderLiquidityCard() + renderSavings() + actionCard
     + `<button class="snz" onclick="toggleDashMore()">${SET.dashMore?'minder ▲':'meer op dashboard ▼'}</button>`
     + (SET.dashMore?moreWidgets:'');
 }
@@ -3604,6 +3694,48 @@ const MECHANISM_SPEC = {
       'Dwing nooit een beslissing af bij herparkeren — benoem het patroon, laat de keuze.'
     ],
     state: ['geparkeerd[]{item, bedrag, terugkeerDatum, aantalKeerGeparkeerd}', 'gebruikersdoel.bestemming']
+  },
+
+  // 4 · DEFAULT-EFFECT
+  // De kracht zit in wat er gebeurt als de gebruiker NIETS kiest. Elke default staat
+  // zo dat nietsdoen de gezonde uitkomst is, en blijft altijd zichtbaar en omkeerbaar.
+  defaultEffect: {
+    regel: 'Zet elke default zo dat nietsdoen de gezonde keuze is. Altijd zichtbaar, altijd in één tik omkeerbaar.',
+    vuurt: 'Geen melding. Dit is een ontwerpprincipe op bestaande beginwaarden, niet een signaal dat afgaat.',
+    plekken: [
+      'onboarding spaarinleg: slider start op een verstandig percentage (bv. 30% doel), niet op nul',
+      'noodfonds-multiplier: een onderbouwde default (bv. 4 mnd), niet leeg',
+      'koopcheck: knoppen bewust gelijk-gewicht, geen voorgeselecteerde koop-actie',
+      'categorie-indeling noodfonds: verstandige defaults (huur=vast, uiteten=comfort)'
+    ],
+    condities: {
+      zichtbaar: true,       // de gebruiker ziet de default bij de eerste aanraking
+      omkeerbaarInEenTik: true
+    },
+    zwijgt: [
+      'Nooit een default die geld beweegt of een doel zet zonder dat de gebruiker het meteen ziet.',
+      'Dark pattern = default verbergen of afwijken moeilijk maken. Dat nooit; anders is het geen spiegel.'
+    ],
+    state: ['default overschreven? (dan niet opnieuw voorstellen)']
+  },
+
+  // 5 · FRESH START EFFECT
+  // Op een temporeel ijkpunt (eerste van de maand) is de gebruiker het meest
+  // ontvankelijk voor een voornemen. Bied dan EEN rustig vooruitblik-moment.
+  freshStart: {
+    regel: 'Op de eerste opening in een nieuwe maand: nodig uit om vooruit te kijken. Nooit terugwijzen op wat misging.',
+    vuurt: 'Eerste app-opening in een kalendermaand die nog geen freshStartGezien-markering heeft (binnen de eerste dagen).',
+    condities: {
+      eenPerPeriode: true,           // hooguit één fresh-start-moment per maand
+      kijktVooruitNietTerug: true,   // geen loss-frame over de vorige maand
+      uitnodigendNietVerplicht: true // "niet nu" mag, wordt niet als falen geregistreerd
+    },
+    zwijgt: [
+      'Geen terugblik-schuld: de vorige maand niet inwrijven, dat dooft juist de frisse start.',
+      'Respecteer de stilte-principes: na een zware maand geen opgewekte "nieuwe kansen"-toon.',
+      'Makkelijk weg te tikken. Een frisse start die zeurt is geen frisse start.'
+    ],
+    state: ['freshStartGezien{ymd}', 'maandVoornemen (optioneel, om de lus met het maandeinde te sluiten)']
   }
 };
 
