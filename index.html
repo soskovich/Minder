@@ -584,7 +584,6 @@ function ICON(n){const P={
 };return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:1.15em;height:1.15em;vertical-align:-.17em;flex-shrink:0">${P[n]||''}</svg>`;}
 const CATS={
   boodschappen:{name:'Boodschappen',icon:ICON('cart'),color:'#34d399',type:'expense'},
-  huur:{name:'Huur',icon:ICON('home'),color:'#fb7185',type:'expense'},
   uiteten:{name:'Uit eten & café',icon:ICON('fork'),color:'#fbbf24',type:'expense'},
   vervoer:{name:'Vervoer & auto',icon:ICON('car'),color:'#60a5fa',type:'expense'},
   shopping:{name:'Online shopping',icon:ICON('bag'),color:'#a78bfa',type:'expense'},
@@ -622,8 +621,7 @@ const RULES=[
   ['shopping',['BOL.COM','AMAZON','COOLBLUE','ZALANDO','FOTO LOOMAN','ACTION','MEDIA MARKT','WEHKAMP','ALIEXPRESS','PRIMARK','ZARA','H&M','C&A','BERSHKA','PULL&BEAR','NIKE','ADIDAS','HEMA','BIJENKORF','DOUGLAS','IKEA','TEMU','SHEIN','MARQT']],
   ['vakantie',['AIRBNB','BOOKING.COM','HOTEL','EXPEDIA','HOSTEL','RESORT']],
   ['bankkosten',['BASISPAKKET','ABN AMRO BANK N.V.','KOSTEN BETALINGSVERKEER']],
-  ['huur',['ML MACNACK','HUURBETALING','HUUR ',' HUUR','VERHUUR','WONINGSTICHTING','VESTEDA','BOUWINVEST','WOONSTAD','WOONCORPORATIE']],
-  ['persoonlijk',[]],
+  ['persoonlijk',['ML MACNACK']],
   ['intern',['WESTERN UNION','VE SUMTER','PRIVEREKENING','VINCENT SUMTER','VINCENT ERNST SUMTER','SENT FROM N26','EIGEN REKENING','SUMTER VIA TIKKIE','AAB INZ TIKKIE','GELDMAAT','GEA, BETAALPAS','OPNAME','REVOLUT','WISE','N26']]
 ];
 
@@ -823,7 +821,7 @@ function hash(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;
 function catOf(t){ return OVR[t.id]||t.autoCat; }
 
 /* ---------- maand-helpers ---------- */
-function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!base.length) return []; const s=new Set(base); const n=new Date(); s.add(n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')); return [...s].sort(); }
+function months(){ return [...new Set(TX.map(t=>t.date.slice(0,7)))].sort(); }
 function txOfMonth(m){ return TX.filter(t=>t.date.slice(0,7)===m); }
 function monthLabel(m){ const [y,mo]=m.split('-'); return MFULL[+mo-1]+' '+y; }
 
@@ -1348,8 +1346,7 @@ function regSlope(arr){ const n=arr.length; if(n<2) return 0; const xm=(n-1)/2; 
 function nextMonths(m,k){ const out=[]; let [y,mo]=m.split('-').map(Number); for(let i=0;i<k;i++){ mo++; if(mo>12){mo=1;y++;} out.push({y,mo,label:MNAMES[mo-1],full:MFULL[mo-1]+' '+y}); } return out; }
 function forecastModel(){
   const ms=months(); if(ms.length<2) return null;
-  const agg=ms.map(monthAgg).filter(a=>a.spend>0||a.income>0);   // (nog) lege maanden tellen niet mee in de statistiek
-  if(agg.length<2) return null;
+  const agg=ms.map(monthAgg);
   const last=agg.slice(-3); const avg=k=>last.reduce((s,a)=>s+a[k],0)/last.length;
   const vSlope=regSlope(agg.map(a=>a.vari)), sSlope=regSlope(agg.map(a=>a.spend));
   const fInc=baseIncome()||avg('income'), fFixed=avg('fixed'), fVar=Math.max(avg('vari')+vSlope,0);
@@ -1536,7 +1533,6 @@ function render(){
   syncMonthPick();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
   if(window._setSheet && $('#sheetBg').classList.contains('show')) renderSetSheet(); // open instellingen-sheet meeverversen
-  if(window._nfSheet && $('#sheetBg').classList.contains('show')) renderNfSheet();
 }
 
 function onboardManual(){ if(FSA){ connectFolder(); } else { document.getElementById('file').click(); } }
@@ -1621,29 +1617,13 @@ function safeToSpend(){
   const tb=totalBalance(); const L=monthLiquidity();
   const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const sp=catSpendMap(ym); const B=SET.budgets||{};
-  // potjes-reservering: variabele potjes apart van vaste lasten (die lopen via fixDue) -> geen dubbeltelling
-  let reservedVar=0, fixedBudgetUnspent=0;
-  for(const k in B){ const bud=+B[k]||0; if(bud<=0) continue; const rest=Math.max(bud-(sp[k]||0),0);
-    if(FIXED_CATS.has(k)) fixedBudgetUnspent+=rest; else reservedVar+=rest; }
-  // vangnet: een vaste last die (nog) niet als recurring herkend is, telt toch mee via het budget (neem de grootste schatting)
-  const fixedStillToGo=Math.max(Math.round(L.fixDue||0), Math.round(fixedBudgetUnspent));
-  // wat al op je spaarrekening(en) staat valt buiten 'veilig te besteden': geen vrij besteedbaar geld
+  let reserved=0; for(const k in B){ const bud=+B[k]||0; if(bud>0) reserved+=Math.max(bud-(sp[k]||0),0); }
+  // wat al op je spaarrekening(en) staat valt buiten 'veilig te besteden': dat is geen vrij besteedbaar geld
   let savedBal=0; try{ savedBal=totalSaved().sum||0; }catch(_){}
   const spendSaldo = tb.sum - savedBal;
-  // verwacht inkomen dat deze maand nog binnenkomt telt MEE (consistent met de maandlasten die we aftrekken)
-  const incDue=Math.round(L.incDue||0);
-  // nog te sparen deze maand = maandbedrag min wat je DEZE MAAND al hebt weggezet (niet je totale spaarsaldo)
-  let saveTarget=0, savedThisMonth=0;
-  try{ saveTarget=Math.round(monthlySavingTarget());
-    const sav=(typeof n26SavingsAccounts==='function')?new Set(n26SavingsAccounts()):new Set();
-    if(sav.size){ for(const t of txOfMonth(ym)){ if(sav.has(t.acc) && t.amount>0) savedThisMonth+=t.amount; } }
-    else { for(const t of txOfMonth(ym)){ if(t.amount<0 && catOf(t)==='sparen') savedThisMonth+=-t.amount; } }
-    savedThisMonth=Math.round(savedThisMonth);
-  }catch(_){}
-  const saveRemaining=Math.max(saveTarget-savedThisMonth,0);
-  const safe=Math.round(spendSaldo + incDue - fixedStillToGo - reservedVar - saveRemaining);
-  return {saldo:tb.sum, savedBal:Math.round(savedBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing,
-    incDue, fixDue:fixedStillToGo, reserved:Math.round(reservedVar), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
+  // nog te sparen deze maand = maandbedrag min wat al op je spaarrekening staat (dekt het saldo je maandbedrag, dan niets meer)
+  let saveRemaining=0, saveTarget=0; try{ saveTarget=Math.round(monthlySavingTarget()); saveRemaining=Math.max(saveTarget-savedBal,0); }catch(_){ }
+  return {saldo:tb.sum, savedBal:Math.round(savedBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, fixDue:L.fixDue, reserved:Math.round(reserved), saveReserved:saveRemaining, saveTarget, safe:Math.round(spendSaldo-L.fixDue-reserved-saveRemaining)};
 }
 function renderLiquidityKPI(){
   // liquiditeit is altijd 'vanaf nu vooruit' → alleen zinvol op de lopende/laatste maand
@@ -1766,96 +1746,6 @@ function renderSavings(){
   </div>`;
 }
 // gedetailleerde lijst van komende vaste lasten & inkomsten (Inzichten)
-/* ---- Fresh start (MECHANISM_SPEC.freshStart): één rustig vooruitblik-moment bij een nieuwe maand.
- * Kijkt vooruit, nooit terug. Eén keer per maand, makkelijk weg te tikken, "niet nu" zonder gevolg. ---- */
-function nowYMstr(){ const n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
-function freshStartDue(){
-  const ym=nowYMstr();
-  if(SET.freshStartSeen===ym) return false;            // deze maand al begroet of weggetikt
-  if(SET.demoMechanismen) return true;                 // demo: tonen tot je 'm wegtikt
-  if(!TX.length) return false;                         // niet voor een lege app
-  if(new Date().getDate()>7) return false;             // alleen het frisse-start-venster (eerste week)
-  return months().filter(m=>m<ym).length>0;            // alleen als er een vorige maand met data was
-}
-function freshStartCard(){
-  const now=new Date(); const mn=MFULL[now.getMonth()]; const cap=mn.charAt(0).toUpperCase()+mn.slice(1);
-  let nood=''; try{ const M=noodfondsModel(); if(M&&M.spaar!=null) nood=` Je noodfonds staat op ${euro0(M.spaar)}.`; }catch(_){}
-  const catOpts=Object.keys(CATS).filter(k=>CATS[k].type==='expense').map(k=>`<option value="${k}">${esc(CATS[k].name)}</option>`).join('');
-  return `<div class="card" style="border-left:3px solid var(--teal);border-radius:0 16px 16px 0;padding:16px 15px">
-    <div style="font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--teal);font-weight:600">Nieuwe maand</div>
-    <div style="font-size:17px;font-weight:700;line-height:1.35;margin:9px 0 4px">${cap} begint schoon. Je speelruimte staat weer vol.${nood}</div>
-    <div class="small muted" style="line-height:1.5">Wat wil je deze maand anders doen? Eén voornemen is genoeg.</div>
-    <input id="freshVoornemen" placeholder="Bijv. minder vaak bestellen bij uit eten" style="width:100%;margin-top:12px;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;color:var(--txt);font:inherit;font-size:13px;box-sizing:border-box" />
-    <span id="freshCoupleLink" onclick="freshToggleCouple()" style="color:var(--teal);font-size:12.5px;font-weight:600;cursor:pointer;margin-top:10px;display:inline-block">+ Koppel aan een bedrag &amp; categorie (optioneel)</span>
-    <div id="freshCouple" style="display:none;margin-top:8px">
-      <div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:6px 0 5px">Onder bedrag (€)</div>
-      <input id="freshBedrag" type="number" inputmode="numeric" placeholder="150" style="width:100%;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;color:var(--txt);font:inherit;font-size:13px;box-sizing:border-box" />
-      <div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:10px 0 5px">Bij categorie</div>
-      <select id="freshCat" style="width:100%;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;color:var(--txt);font:inherit;font-size:13px;box-sizing:border-box">${catOpts}</select>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button style="flex:1;background:var(--teal-d);color:#fff;border:none;border-radius:12px;padding:12px;font:inherit;font-weight:700;cursor:pointer" onclick="freshStartSave()">Zet mijn voornemen</button>
-      <button style="width:92px;background:transparent;border:none;color:var(--mut);font:inherit;font-weight:600;cursor:pointer" onclick="freshStartDismiss()">Niet nu</button>
-    </div>
-  </div>`;
-}
-function freshToggleCouple(){ const c=document.getElementById('freshCouple'), l=document.getElementById('freshCoupleLink'); if(!c)return;
-  const show=c.style.display==='none'; c.style.display=show?'block':'none';
-  if(l) l.textContent=show?'− Koppeling verbergen':'+ Koppel aan een bedrag & categorie (optioneel)'; }
-function freshStartDismiss(){ SET.freshStartSeen=nowYMstr(); const v=SET.maandVoornemen; if(v && v.ym<nowYMstr()) SET.voornemenReflectedFor=v.ym; save(); renderDash(); }
-function freshStartSave(){
-  const el=document.getElementById('freshVoornemen'); const txt=el?el.value.trim():''; const ym=nowYMstr();
-  SET.freshStartSeen=ym;
-  if(txt){ const v={ym,text:txt};
-    const cpl=document.getElementById('freshCouple');
-    if(cpl && cpl.style.display!=='none'){
-      const b=parseInt((document.getElementById('freshBedrag')||{}).value,10);
-      const c=(document.getElementById('freshCat')||{}).value;
-      if(b>0 && c && CATS[c]){ v.bedrag=b; v.cat=c; }
-    }
-    SET.maandVoornemen=v;   // overschrijft het oude voornemen; de terugblik toonde dat al
-  }
-  save(); renderDash(); toast(`${ICON('check')} Voornemen vastgelegd`);
-}
-/* ---- Fresh start, tweede helft: het maandeinde-moment dat je voornemen eerlijk terugspiegelt ----
- * Legt je woord naast het cijfer (als je koppelde en de categorie nog bestaat) en laat JOU wegen.
- * Guard: categorie weg? Dan terug naar alleen de tekst, nooit een verzonnen getal. */
-function capMonth(ym){ const mo=+ym.split('-')[1]-1; const n=MFULL[mo]||''; return n.charAt(0).toUpperCase()+n.slice(1); }
-function prevYM(ym){ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-2,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
-let _demoReflHidden=false;
-function demoReflHide(){ _demoReflHidden=true; renderDash(); }
-function voornemenCarry(){ const v=SET.maandVoornemen; const ym=nowYMstr(); if(v&&!v.__demo){ SET.maandVoornemen={ym,text:v.text,cat:v.cat,bedrag:v.bedrag}; SET.voornemenReflectedFor=ym; } SET.freshStartSeen=ym; save(); renderDash(); toast(`${ICON('check')} Meegenomen naar ${capMonth(ym)}`); }
-function voornemenReflectDone(){ const v=SET.maandVoornemen; if(v&&!v.__demo) SET.voornemenReflectedFor=v.ym; save(); renderDash(); }
-function freshStartReflection(){
-  const ym=nowYMstr(); let v=SET.maandVoornemen; let demo=false;
-  const real = v && v.text && v.ym<ym && SET.voornemenReflectedFor!==v.ym;
-  if(!real){
-    if(SET.demoMechanismen && !_demoReflHidden){ v={ym:prevYM(ym),text:'Minder vaak bestellen bij uit eten',cat:'uiteten',bedrag:150,__demo:true}; demo=true; }
-    else return '';
-  }
-  let cijfer;
-  if(v.cat && v.bedrag && CATS[v.cat]){
-    const actual=Math.round(((catSpendMap(v.ym)||{})[v.cat])||0);
-    cijfer=`<div style="display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-top:1px solid var(--line);margin-top:10px">
-      <span class="small muted">Gekoppeld · onder ${euro0(v.bedrag)} bij ${esc(CATS[v.cat].name)}</span>
-      <span style="font-weight:800;font-size:16px">${euro0(actual)}</span></div>
-      <div class="small muted" style="line-height:1.5;margin-top:6px">Jij weet of dat de moeite waard was. Geen oordeel van mij.</div>`;
-  } else {
-    cijfer=`<div class="small muted" style="line-height:1.5;margin-top:8px">Hoe kijk je erop terug? Alleen jij weet of het gelukt is.</div>`;
-  }
-  const carry = demo?'demoReflHide()':'voornemenCarry()';
-  const done  = demo?'demoReflHide()':'voornemenReflectDone()';
-  return `<div class="card" style="border-left:3px solid var(--blue);border-radius:0 16px 16px 0;padding:15px 15px">
-    <div style="font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:var(--blue);font-weight:600">${capMonth(v.ym)} · je voornemen</div>
-    <div class="small muted" style="margin-top:8px">Je nam je voor:</div>
-    <div style="font-size:15px;font-style:italic;line-height:1.4;background:var(--card2);border-radius:10px;padding:11px 13px;margin:8px 0 2px">\u201c${esc(v.text)}\u201d</div>
-    ${cijfer}
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button style="flex:1;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:11px;font:inherit;font-weight:600;cursor:pointer" onclick="${carry}">Neem mee naar ${capMonth(ym)}</button>
-      <button style="width:84px;background:transparent;border:none;color:var(--mut);font:inherit;font-weight:600;cursor:pointer" onclick="${done}">Klaar</button>
-    </div>
-  </div>`;
-}
 function renderUpcoming(){
   const L=liquidityDaily(SET.liqDays||60); const ev=L.events.slice(0,30);
   if(!ev.length) return '';
@@ -1963,7 +1853,7 @@ function renderDash(){
     if(isMode('rustig')){ const _ms=months(); const _cur=totals(_ms[_ms.length-1]).spend; const _prev=_ms.length>1?totals(_ms[_ms.length-2]).spend:null; const _t=(_prev!=null&&_cur<_prev)?'Je geeft het rustiger aan dan vorige maand.':'Stap voor stap. Je houdt het overzicht.'; modeTop=`<div class="small muted" style="margin:2px 2px 12px">${_t}</div>`; }
     else if(isMode('expert')){ const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0">deze maand · uit ${euro(_tt.spend)} · in ${euro(_tt.income)} · saldo ${euro(S2.saldo)}</div>`; }
   }catch(_){ }
-  $('#s-dash').innerHTML = renderReminder() + (freshStartDue()?(freshStartReflection()+freshStartCard()):'') + modeTop + hero + vermogenCard() + recentBlock + modeBot;
+  $('#s-dash').innerHTML = renderReminder() + modeTop + hero + vermogenCard() + recentBlock + modeBot;
 }
 function renderDash_OLD_UNUSED(){
   const p=SET.insPeriod||'month'; const isM=p==='month';
@@ -2028,7 +1918,7 @@ function renderDash_OLD_UNUSED(){
   // MEER (ingeklapt): de analytische widgets
   const moreWidgets=[ isM?renderWeekVarKPI():'', trendCard, compare, renderFixedVariable(pTx,t.income), renderWeekdayPattern(pTx), renderDonut(t.byCat),
     `<div class="card"><div class="row" style="margin-bottom:10px"><span class="hlabel" style="margin:0;flex:1">Top uitgaven</span><span class="small muted" onclick="go('ins')" style="cursor:pointer;color:var(--teal)">details ›</span></div>${topCats(t,6)}</div>` ].filter(Boolean).join('');
-  $('#s-dash').innerHTML = pchips + renderReminder() + (freshStartDue()?freshStartCard():'') + heroCard + renderLiquidityCard() + renderSavings() + actionCard
+  $('#s-dash').innerHTML = pchips + renderReminder() + heroCard + renderLiquidityCard() + renderSavings() + actionCard
     + `<button class="snz" onclick="toggleDashMore()">${SET.dashMore?'minder ▲':'meer op dashboard ▼'}</button>`
     + (SET.dashMore?moreWidgets:'');
 }
@@ -2074,34 +1964,33 @@ function openSafeToSpend(){
       <div style="font-size:30px;font-weight:800;color:${S.safe<0?'var(--red)':'var(--teal)'}">${euro(S.safe)}</div>
       <div class="muted small">zo is dit opgebouwd</div></div>
     ${line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':'al je gekoppelde rekeningen')}
-    ${S.incDue>0?`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:14px">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
     ${S.savedBal>0?line('Al op je spaarrekening', S.savedBal, 'var(--mut)', "closeSheet();openSavingsPots()", 'staat apart om te sparen, niet vrij besteedbaar'):''}
     ${S.fixDue>0?line('Vaste lasten die nog komen', S.fixDue, 'var(--mut)', 'openFixedDue()', 'wat deze maand nog wordt afgeschreven'):''}
     ${S.reserved>0?line('Gereserveerd in je potjes', S.reserved, 'var(--mut)', "closeSheet();go('coach')", 'budget dat je per categorie apart zette'):''}
     ${(function(){
-      const tgt=S.saveTarget||0, onSav=Math.min(S.savedThisMonth||0,tgt);
+      const tgt=S.saveTarget||0, onSav=Math.min(S.savedBal||0,tgt);
       if(window._stsEdit){
-        const pct=tgt>0?Math.min(Math.round((S.savedThisMonth||0)/tgt*100),100):0;
+        const pct=tgt>0?Math.min(Math.round((S.savedBal||0)/tgt*100),100):0;
         const bn=(d,s)=>`<div onclick="adjustSaveTarget(${d})" style="width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;cursor:pointer">${s}</div>`;
         return `<div style="background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin:8px 0 2px">
           <div style="font-size:13px;font-weight:700;margin-bottom:2px">Nog te sparen deze maand</div>
           <div style="display:flex;align-items:center;gap:13px;margin:9px 0 4px">${bn(-25,'−')}<div style="font-size:22px;font-weight:800;min-width:84px;text-align:center;color:var(--teal)">${euro0(tgt)}</div>${bn(25,'+')}<div class="small muted" style="margin-left:2px">maandbedrag</div></div>
           <div style="height:7px;border-radius:5px;background:var(--card);overflow:hidden;margin:9px 0 3px"><div style="height:100%;width:${pct}%;background:var(--teal);border-radius:5px"></div></div>
-          <div class="small muted">${euro0(onSav)} van ${euro0(tgt)} maandbedrag heb je deze maand al gespaard</div>
+          <div class="small muted">${euro0(onSav)} van ${euro0(tgt)} maandbedrag staat al op je spaarrekening</div>
           <div class="row" style="padding:8px 0 0;border-bottom:none"><div style="flex:1" class="small">Nog te sparen deze maand</div><div style="font-weight:800;color:${S.saveReserved>0?'var(--txt)':'var(--green)'}">${euro0(S.saveReserved)}</div></div>
           <div style="text-align:right;margin-top:6px"><span onclick="toggleSaveEdit()" style="color:var(--teal);font-weight:700;font-size:13px;cursor:pointer">Klaar</span></div>
         </div>`;
       }
-      if(S.saveReserved>0) return line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', 'toggleSaveEdit()', `je maandbedrag ${euro0(tgt)}${onSav>0?` min ${euro0(onSav)} deze maand al gespaard`:``}`);
-      if(tgt>0) return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="toggleSaveEdit()"><div style="flex:1"><div style="font-size:14px">Nog te sparen deze maand</div><div class="small" style="color:var(--green)">je maandbedrag van ${euro0(tgt)} heb je deze maand al gespaard</div></div><div style="font-weight:700;color:var(--green)">${euro0(0)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`;
+      if(S.saveReserved>0) return line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', 'toggleSaveEdit()', `je maandbedrag ${euro0(tgt)}${onSav>0?` min ${euro0(onSav)} al op je spaarrekening`:``}`);
+      if(tgt>0) return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="toggleSaveEdit()"><div style="flex:1"><div style="font-size:14px">Nog te sparen deze maand</div><div class="small" style="color:var(--green)">je maandbedrag van ${euro0(tgt)} staat al op je spaarrekening</div></div><div style="font-weight:700;color:var(--green)">${euro0(0)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`;
       return '';
     })()}
     <div class="row" style="gap:10px;padding:13px 0;margin-top:4px;border-top:2px solid var(--line)">
       <div style="flex:1;font-weight:800;font-size:15px">Veilig te besteden</div>
       <div style="font-weight:800;font-size:16px;color:${S.safe<0?'var(--red)':'var(--teal)'}">${euro0(S.safe)}</div></div>
-    ${S.safe<0?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:var(--mut)">Zelfs met het verwachte inkomen erbij zijn je verplichtingen deze maand groter dan wat er binnenkomt. Kijk of je een potje of je spaarinleg kunt bijstellen.</div>`:(incDue>0?`<div class="small muted" style="margin-top:12px">Inclusief ${euro0(incDue)} verwacht inkomen dat deze maand nog binnenkomt.</div>`:'')}
-    <div class="small muted" style="margin-top:12px">Je totale saldo plus het inkomen dat nog binnenkomt, min wat al op je spaarrekening staat, de vaste lasten die nog komen, je variabele potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven. Geld naar je spaarrekening overmaken verandert dit bedrag dus niet.</div>`;
+    ${S.safe<0?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:var(--mut)">Je vaste verplichtingen zijn nu groter dan je saldo.${incDue>0?` Er komt deze maand nog ${euro0(incDue)} inkomen binnen dat hier bewust niet in meetelt, daarna ziet dit er beter uit.`:''}</div>`:(incDue>0?`<div class="small muted" style="margin-top:12px">${euro0(incDue)} verwacht inkomen deze maand telt hier bewust niet mee, zodat het bedrag voorzichtig blijft.</div>`:'')}
+    <div class="small muted" style="margin-top:12px">Je totale saldo, min wat al op je spaarrekening staat, de vaste lasten die nog komen, je potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven. Geld naar je spaarrekening overmaken verandert dit bedrag dus niet.</div>`;
   $('#sheetBg').classList.add('show');
 }
 function openProjection(){
@@ -2389,41 +2278,6 @@ function fixSavingsRules(){
 }
 // ===== ACTIEPLAN (N26-stijl): Vandaag + streak + 3 tikbare maandstappen; volledige coach/strategieën achter 'Verdieping' =====
 function headerSearch(){ go('tx'); if(!window._txSearchOpen) toggleTxSearch(); setTimeout(()=>{const el=document.querySelector('#s-tx input[type=search]'); if(el) el.focus();},60); }
-/* ---- Loss-aversion dosering: state + helpers (MECHANISM_SPEC.lossAversion) ----
- * Een loss-frame is een discretionair stakes-signaal (potje over, tempo, vices,
- * ongewoon grote uitgave, spaardoel-risico). Liquiditeitsalarmen (lowbal/accshort)
- * en positieve noten vallen hier NADRUKKELIJK buiten: dat is geen loss aversion.
- * Doel: hooguit maxFramesPerDag per dag, nooit gestapeld, zodat de app geen
- * uitgaven-angst traint. lossFrames = {ymd, n, keys} houdt de dagteller bij. */
-const LOSS_GROUPS=new Set(['budget','tempo','vice','big','save']);
-function isLossFrame(key){ return LOSS_GROUPS.has(String(key||'').split('-')[0]); }
-function lossFramesToday(){ const d=new Date().toISOString().slice(0,10); const lf=SET.lossFrames; return (lf&&lf.ymd===d)?(+lf.n||0):0; }
-function noteLossSeen(key){ if(!isLossFrame(key)) return; const d=new Date().toISOString().slice(0,10); let lf=SET.lossFrames;
-  if(!lf||lf.ymd!==d){ lf=SET.lossFrames={ymd:d,n:0,keys:{}}; } lf.keys=lf.keys||{};
-  if(!lf.keys[key]){ lf.keys[key]=1; lf.n=(+lf.n||0)+1; } }
-/* ---- Mental accounting: stilstaand surplus boven de heilige buffer vs. dure schuld (MECHANISM_SPEC.mentalAccounting) ----
- * De noodbuffer = SET.buffer (de liquiditeitsondergrens, de rode lijn). Die is HEILIG: alleen het
- * bedrag dat BOVEN de buffer stilstaat telt mee, en de app stelt nooit voor de buffer leeg te halen.
- * Goedkope schuld (lage rente) vuurt niet; alleen wanneer de rente de spaaropbrengst met
- * minRenteVerschil overstijgt en er minstens minBedrag stilstaat boven de buffer. */
-function noodbuffer(){ return Math.max(+SET.buffer||0,0); }
-function stilstaandSurplus(){ try{ const s=totalSaved(); if(s.missing) return null; return Math.max(Math.round(s.sum - noodbuffer()),0); }catch(_){ return null; } }
-function duursteSchuld(){ const ds=(SET.debts||[]).filter(d=>(+d.rest>0)&&(+d.rente>0)); if(!ds.length) return null; ds.sort((a,b)=>(+b.rente)-(+a.rente)); return ds[0]; }
-function mentalAccountingSignal(){
-  const C=MECHANISM_SPEC.mentalAccounting.condities;
-  const surplus=stilstaandSurplus(); if(surplus==null || surplus<(C.minBedrag||50)) return null;   // niets stilstaand boven de buffer
-  const d=duursteSchuld(); if(!d) return null;
-  const spaarRente=(+SET.spaarRente||0)/100;                                   // standaard 0% (nulrente-potje)
-  if(((+d.rente)/100 - spaarRente) < (C.minRenteVerschil||0.05)) return null;   // goedkope schuld: niet vuren
-  const inzet=Math.min(surplus, Math.max(+d.rest||0,0));
-  const renteJaar=Math.round(inzet*((+d.rente)/100 - spaarRente));
-  return {surplus, debt:d, inzet, renteJaar};
-}
-/* ---- Demo-modus: toont de drie mechanismen geforceerd, schrijft NIETS weg. Zet uit na bekijken. ---- */
-function demoNotifs(){ return [
-  {key:'budget-demo', score:71, t:'warn', ic:ICON('warn'), l1:'(demo) Je vices gaan €40 over je potje deze maand.', l2:'Zo kantelt je marge', act:"openCategory('vices')"},
-  {key:'rente-demo', score:60, t:'info', ic:ICON('coins'), l1:'(demo) €450 staat stil terwijl Creditcard 14% rente kost.', l2:'Boven je buffer · dat deel kan ~€63/jr dempen', act:"go('vermogen')"}
-]; }
 function scoreNotifs(){
   const out=[]; if(!TX.length) return out;
   const ms=months(); if(!ms.length) return out;
@@ -2431,7 +2285,6 @@ function scoreNotifs(){
   const now=new Date(); const today=now.toISOString().slice(0,10);
   const isNow=m===(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
   const push=o=>{ if(o&&o.l1) out.push(o); };
-  if(SET.demoMechanismen){ demoNotifs().forEach(push); }
   if(isNow){ try{ const {out:eb}=effectiveBudgets(m); const spend=catSpendMap(m); const B=SET.budgets||{}; const overs=[];
     const keys=new Set([...Object.keys(eb||{}), ...Object.keys(B).filter(k=>+B[k]>0)]);
     for(const k of keys){ if(!CATS[k]||CATS[k].type!=='expense') continue; const act=spend[k]||0; const potje=+B[k]||0;
@@ -2447,7 +2300,7 @@ function scoreNotifs(){
   if(isNow){ try{ const v=(catSpendMap(m).vices)||0; if(v>=20){ const ack=(SET.chronicAck||{}).vice; if(!(ack && ack.ym===m && v < ack.val*1.25)) push({key:'vice',score:58+Math.min(v/5,22),t:'warn',ic:CATS.vices.icon,l1:`€${Math.round(v)} aan vices deze maand.`,l2:'Zet een weekgrens',act:"openCategory('vices')",chronic:{key:'vice',ym:m,val:Math.round(v)}}); } }catch(_){} }
   // cooling-off terugkomprompt: parkeerde je iets ('wachten tot morgen'), kom er na ~1 dag op terug
   try{ const log=SET.coachLog||[]; const nowMs=Date.now();
-    const park=log.find(l=>l.type==='beslis' && l.uitkomst==='geparkeerd' && !l.resolved && (nowMs-l.ts)>=18*36e5 && (nowMs-l.ts)<=7*864e5);
+    const park=log.find(l=>l.type==='beslis' && l.uitkomst==='geparkeerd' && (nowMs-l.ts)>=18*36e5 && (nowMs-l.ts)<=7*864e5);
     if(park){ const it=String(park.item||'die aankoop').slice(0,24); push({key:'park-'+park.ts, score:84, t:'warn', ic:ICON('clock'), l1:`Je parkeerde ${it} (${euro0(park.bedrag||0)}). Staat 't er nog?`, l2:'Open je coach', act:"go('act')"}); } }catch(_){}
   try{ const lim=new Date(now); lim.setDate(lim.getDate()-7);
     const recent=TX.filter(x=>x.amount<0 && new Date(x.date)>=lim && CATS[catOf(x)].type==='expense' && !isFixed(x));
@@ -2479,16 +2332,10 @@ function scoreNotifs(){
         l1:`${esc(accShort(s.acc))}: ${esc(String(s.name||'').slice(0,18))} ${euro(s.amt)} ${when}, maar er staat ${euro(s.balance)}.`,
         l2:`Tekort ${euro0(s.shortfall)} · vul aan of schuif over`, act:"go('vooruit')"});
     } }catch(_){}
-  // mentale-rekening: stilstaand surplus BOVEN de buffer terwijl dure schuld rente kost (observatie, geen alarm)
-  try{ const ma=mentalAccountingSignal();
-    if(ma) push({key:'rente-'+(ma.debt.id||'x'), score:60, t:'info', ic:ICON('coins'),
-      l1:`${euro0(ma.inzet)} staat stil terwijl ${esc(ma.debt.naam)} ${ma.debt.rente}% rente kost.`,
-      l2:`Boven je buffer · dat deel kan ~${euro0(ma.renteJaar)}/jr dempen`, act:"go('vermogen')"});
-  }catch(_){}
   // positieve noot: altijd minstens iets goeds tonen als het er is (balans, niet alleen als fallback)
   if(isNow){ try{ let pos=null;
     const wk=Date.now()-7*864e5; const dec=(SET.coachLog||[]).filter(l=>l.type==='beslis'&&l.ts>=wk);
-    let saved=0; dec.forEach(d=>{ if((d.uitkomst==='geparkeerd'&&!d.resolved)||d.uitkomst==='geannuleerd') saved+=(+d.bedrag||0); });
+    let saved=0; dec.forEach(d=>{ if(d.uitkomst==='geparkeerd'||d.uitkomst==='geannuleerd') saved+=(+d.bedrag||0); });
     if(saved>=20) pos={key:'win-saved',score:24,t:'good',ic:ICON('check'),l1:`${euro0(saved)} niet ongepland uitgegeven deze week.`,l2:'Zo hou je grip',act:"go('act')"};
     if(!pos){ try{ const D=dayBudgetNow(); if(D.dagdoel>0){ const st=computeStreak(D.dagdoel); if(st>=3) pos={key:'win-streak',score:23,t:'good',ic:ICON('fire'),l1:`${st} dagen op rij onder je dagdoel.`,l2:'Hou dit vast',act:"go('act')"}; } }catch(_){} }
     if(!pos){ const L=monthLiquidity(), tgt=monthlySavingTarget(); if(L.projected>=tgt && L.daysLeft>0) pos={key:'room',score:20,t:'good',ic:ICON('check'),l1:'Je ligt op koers deze maand.',l2:'Mooi, hou dit vast',act:"go('vooruit')"}; }
@@ -2497,14 +2344,7 @@ function scoreNotifs(){
   const muted=SET.notifMuted||{}, snz=SET.notifSnooze||{}, nowMs=Date.now(); const CRIT=new Set(['lowbal','accshort']);
   const filt=out.filter(o=>{ const g=(o.key||'').split('-')[0]; if(CRIT.has(g)) return true; if(muted[g]) return false; if(snz[g]&&nowMs<snz[g]) return false; return true; });
   filt.sort((a,b)=>b.score-a.score);
-  // Loss-aversion dosering: hooguit maxFramesPerDag loss-frames, nooit gestapeld.
-  // CRIT en positieve noten passen ongemoeid; alleen discretionaire stakes worden gedoseerd.
-  const MAXLOSS=(MECHANISM_SPEC.lossAversion.condities.maxFramesPerDag)||1;
-  let lossLeft=Math.max(MAXLOSS-lossFramesToday(),0);
-  const seen=new Set(), uniq=[];
-  for(const o of filt){ if(seen.has(o.key)) continue;
-    if(isLossFrame(o.key) && !/-demo$/.test(o.key)){ if(lossLeft<=0) continue; lossLeft--; }
-    seen.add(o.key); uniq.push(o); }
+  const seen=new Set(), uniq=[]; for(const o of filt){ if(!seen.has(o.key)){ seen.add(o.key); uniq.push(o); } }
   return uniq;
 }
 function notifList(){ const all=scoreNotifs(); const top=all.slice(0,5);
@@ -2519,7 +2359,7 @@ function notifResetMutes(){ SET.notifMuted={}; SET.notifSnooze={}; save(); updat
 function notifUnseen(){ const seen=SET.notifSeen||{}, now=Date.now(); return notifList().filter(n=>{const ts=seen[n.key]; return !ts||(now-ts)>3*86400000;}).length; }
 function notifCount(){ try{ return notifUnseen(); }catch(_){ return 0; } }
 function updateNotifBadge(){ try{ const nb=document.getElementById('notifBadge'); if(!nb) return; const c=notifUnseen(); nb.textContent=c>9?'9+':c; nb.style.display=c>0?'flex':'none'; }catch(_){} }
-function markNotifsSeen(){ SET.notifSeen=SET.notifSeen||{}; SET.chronicAck=SET.chronicAck||{}; const now=Date.now(); for(const n of notifList()){ SET.notifSeen[n.key]=now; noteLossSeen(n.key); if(n.chronic) SET.chronicAck[n.chronic.key]={ym:n.chronic.ym,val:n.chronic.val}; } for(const k in SET.notifSeen){ if(now-SET.notifSeen[k]>30*86400000) delete SET.notifSeen[k]; } save(); }
+function markNotifsSeen(){ SET.notifSeen=SET.notifSeen||{}; SET.chronicAck=SET.chronicAck||{}; const now=Date.now(); for(const n of notifList()){ SET.notifSeen[n.key]=now; if(n.chronic) SET.chronicAck[n.chronic.key]={ym:n.chronic.ym,val:n.chronic.val}; } for(const k in SET.notifSeen){ if(now-SET.notifSeen[k]>30*86400000) delete SET.notifSeen[k]; } save(); }
 function enableNotifs(){ try{ if(typeof Notification==='undefined'){ toast('Meldingen niet ondersteund op dit toestel'); return; } Notification.requestPermission().then(p=>{ if(p==='granted'){ toast('Meldingen aan'); pushTopNotif(true); } openNotifs(); }); }catch(_){} }
 function pushTopNotif(force){
   try{
@@ -2905,6 +2745,22 @@ function saveGoal(id){
 }
 function deleteGoal(id){ SET.goals=(SET.goals||[]).filter(x=>x.id!==id); save(); closeSheet(); render(); }
 function payoffMonths(rest, per, jr){ if(per<=0||rest<=0) return 0; const r=(+jr||0)/100/12; if(r<=0) return Math.ceil(rest/per); if(per<=rest*r+0.001) return Infinity; return Math.ceil(-Math.log(1-rest*r/per)/Math.log(1+r)); }
+// fase B: verwacht netto rendement uit je beleggingen (voor de aflossen-vs-beleggen-afweging)
+function expectedReturnPct(){ const gs=(SET.assets||[]).filter(a=>a.grow&&(+a.rend||0)>0); return gs.length?Math.max(...gs.map(a=>+a.rend||0)):null; }
+function dTypeChange(){ const t=((document.getElementById('dType')||{}).value)||'lening';
+  const sw=document.getElementById('dslotwrap'); if(sw) sw.style.display=(t==='financiallease')?'block':'none';
+  const aw=document.getElementById('dautowrap'); if(aw) aw.style.display=(t==='financiallease')?'block':'none';
+  const nt=document.getElementById('dtypenote'); if(nt) nt.innerHTML=(t==='studie')?'Studieschuld heeft vaak een lage rente en lange looptijd — versneld aflossen is dan lang niet altijd de slimste zet.':(t==='financiallease')?'Bij financial lease is de auto jouw bezitting en de lease een aflosbare schuld met een slottermijn.':'';
+}
+function dEstimateDagwaarde(){
+  const g=x=>(+((document.getElementById(x)||{}).value)||0);
+  const aankoop=g('dAankoop'), bj=g('dBouwjaar'), af=g('dAfschr')||18;
+  if(aankoop<=0||bj<=0){ toast('Vul aankoopwaarde en bouwjaar in'); return; }
+  const leeftijd=Math.max(new Date().getFullYear()-bj,0);
+  const dw=Math.round(aankoop*Math.pow(1-af/100,leeftijd));
+  const el=document.getElementById('dDag'); if(el) el.value=dw;
+  const pv=document.getElementById('dDagPrev'); if(pv) pv.textContent='Geschat: '+euro0(dw)+' · afschrijving '+af+'%/jr over '+leeftijd+' jaar';
+}
 function renderDebts(){
   const ds=SET.debts||[];
   const rows=ds.map(d=>{ const start=+d.start||0, rest=Math.max(+d.rest||0,0), per=+d.perMaand||0, jr=+d.rente||0;
@@ -2914,21 +2770,52 @@ function renderDebts(){
     return `<div class="card" style="padding:13px 15px;margin-bottom:8px;cursor:pointer" onclick="openDebt('${d.id}')">
       <div class="row"><span style="font-weight:700">${esc(d.naam||'Schuld')}</span><span class="small muted">${start>0?`${euro0(afgelost)} / ${euro0(start)} afgelost`:euro0(rest)}</span></div>
       ${start>0?`<div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:var(--amber)"></div></div>`:''}
-      <div class="small muted" style="margin-top:6px">${mTxt}</div></div>`;}).join('');
+      <div class="small muted" style="margin-top:6px">${mTxt}</div>${(d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0)?`<div class="small" style="margin-top:5px;color:var(--teal);font-size:11.5px">Auto ${euro0(+d.dagwaarde)} meegerekend als bezitting · eigen deel ${euro0((+d.dagwaarde||0)-rest)}</div>`:''}</div>`;}).join('');
+  const wr=ds.filter(d=>(+d.rente||0)>0 && Math.max(+d.rest||0,0)>0).sort((a,b)=>(+b.rente||0)-(+a.rente||0));
+  const prio = wr.length>=2 ? `<div class="card" style="margin-bottom:8px"><div class="hlabel" style="margin-bottom:6px">Wat eerst? · hoogste rente bespaart het meest</div>${wr.map((d,i)=>`<div class="row" style="justify-content:space-between;padding:6px 0${i<wr.length-1?';border-bottom:1px solid var(--line)':''}"><span><span style="font-size:10.5px;font-weight:700;color:#06231c;background:var(--teal);border-radius:6px;padding:1px 7px;margin-right:7px">${i+1}</span>${esc(d.naam||'Schuld')}</span><span style="font-size:11.5px;font-weight:700;color:${(+d.rente>=5)?'var(--red)':'var(--green)'}">${d.rente}%</span></div>`).join('')}<div class="small muted" style="font-size:11px;margin-top:8px">Zet je extra euro op de bovenste. Liever motivatie? Kleinste schuld eerst kan ook — jij kiest. Geen advies.</div></div>` : '';
   return `<div style="margin-top:18px">
     <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Schulden &amp; aflossing</span></div>
-    ${rows}
+    ${prio}${rows}
     <button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div>`;
 }
 function openDebt(id){
   const ds=SET.debts||[]; const d0=id?ds.find(x=>x.id===id):null; const isNew=!d0; const d=d0||{naam:'',start:'',rest:'',perMaand:'',rente:''};
+  const dtype=d.type || (/duo|studie/i.test(d.naam||'')?'studie':(/lease/i.test(d.naam||'')?'financiallease':'lening'));
+  const rest=Math.max(+d.rest||0,0), per=+d.perMaand||0, jr=+d.rente||0; const baseM=payoffMonths(rest,per,jr); const expR=expectedReturnPct();
+  const opt=(vv,l)=>`<option value="${vv}"${dtype===vv?' selected':''}>${l}</option>`;
+  const typeNote=(dtype==='studie')?'Studieschuld heeft vaak een lage rente en lange looptijd — versneld aflossen is dan lang niet altijd de slimste zet.':(dtype==='financiallease')?'Bij financial lease is de auto jouw bezitting en de lease een aflosbare schuld met een slottermijn.':'';
+  const extraTable=(rest>0&&per>0&&jr>0&&isFinite(baseM)&&baseM>1)?`
+    <div class="hlabel" style="margin-top:16px;margin-bottom:2px">Wat levert extra aflossen op?</div>
+    ${[25,50,100].map(x=>{const m2=payoffMonths(rest,per+x,jr);const sv=Math.max(baseM-m2,0);const iv=Math.max(Math.round((per*baseM-rest)-((per+x)*m2-rest)),0);return `<div class="row" style="justify-content:space-between;font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--line)"><span style="font-weight:600">+${euro0(x)}/mnd</span><span class="muted">~${sv} mnd eerder · ± ${euro0(iv)} rente bespaard</span></div>`;}).join('')}`:'';
+  const vsBel=(jr>0&&expR!=null)?`<div class="small muted" style="margin-top:12px;font-size:11.5px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px"><b>Aflossen of beleggen?</b> Je schuldrente ${jr}% is ${jr>expR?'hoger':'lager'} dan je verwachte rendement ${expR}%. ${jr>expR?'Aflossen levert dan gegarandeerd meer op dan beleggen.':'Dan is het een afweging tussen zekerheid (aflossen) en risico (beleggen).'} Geen advies.</div>`:'';
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:17px;margin-bottom:12px">${isNew?'Nieuwe schuld':'Schuld bewerken'}</div>
     <label class="fld">Wat voor schuld?</label><input id="dNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Studieschuld DUO" style="width:100%">
+    <label class="fld" style="margin-top:10px">Type</label>
+    <select id="dType" onchange="dTypeChange()" style="width:100%">${opt('lening','Lening / krediet')}${opt('studie','Studieschuld')}${opt('financiallease','Financial lease (auto)')}</select>
+    <div id="dtypenote" class="small muted" style="font-size:11px;margin-top:6px">${typeNote}</div>
     <label class="fld" style="margin-top:10px">Oorspronkelijk bedrag (€) <span class="small muted">· optioneel, voor voortgang</span></label><input id="dStart" type="number" inputmode="numeric" value="${d.start||''}" placeholder="bv. 12000" style="width:100%">
     <label class="fld" style="margin-top:10px">Huidige restschuld (€)</label><input id="dRest" type="number" inputmode="numeric" value="${d.rest||''}" placeholder="bv. 8000" style="width:100%">
     <label class="fld" style="margin-top:10px">Maandaflossing (€)</label><input id="dMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 120" style="width:100%">
     <label class="fld" style="margin-top:10px">Rente per jaar (%) <span class="small muted">· optioneel</span></label><input id="dRente" type="text" inputmode="decimal" value="${d.rente||''}" placeholder="bv. 2,5" style="width:100%">
+    <div id="dslotwrap" style="display:${dtype==='financiallease'?'block':'none'}"><label class="fld" style="margin-top:10px">Slottermijn aan het eind (€) <span class="small muted">· financial lease</span></label><input id="dSlot" type="number" inputmode="numeric" value="${d.slot||''}" placeholder="bv. 3000" style="width:100%"></div>
+    <div id="dautowrap" style="display:${dtype==='financiallease'?'block':'none'}">
+      <label class="row" style="gap:9px;cursor:pointer;border-top:1px solid var(--line);padding:11px 0;margin-top:12px"><input type="checkbox" id="dAuto" ${d.autoBezit!==false?'checked':''}><span style="flex:1"><span style="font-weight:600;font-size:13px">Auto meerekenen als bezitting</span><span class="small muted" style="display:block">Telt mee in je vermogen · auto − restschuld = je eigen deel</span></span></label>
+      <label class="fld">Dagwaarde auto (€)</label><input id="dDag" type="number" inputmode="numeric" value="${d.dagwaarde||''}" placeholder="bv. 16000" style="width:100%">
+      <div id="dDagPrev" class="small muted" style="font-size:11px;margin-top:4px"></div>
+      <details style="margin-top:8px"${(d.aankoop||d.bouwjaar)?' open':''}><summary class="small" style="color:var(--teal);cursor:pointer">Geen dagwaarde? Schat 'm via afschrijving (lokaal)</summary>
+        <div class="row" style="gap:8px;margin-top:8px">
+          <div style="flex:1"><label class="fld" style="margin-top:0">Aankoopwaarde (€)</label><input id="dAankoop" type="number" inputmode="numeric" value="${d.aankoop||''}" placeholder="24000" style="width:100%"></div>
+          <div style="flex:1"><label class="fld" style="margin-top:0">Bouwjaar</label><input id="dBouwjaar" type="number" inputmode="numeric" value="${d.bouwjaar||''}" placeholder="2022" style="width:100%"></div>
+        </div>
+        <div class="row" style="gap:8px;margin-top:8px;align-items:flex-end">
+          <div style="flex:1"><label class="fld" style="margin-top:0">Afschrijving (%/jr)</label><input id="dAfschr" type="number" inputmode="decimal" value="${d.afschr||18}" style="width:100%"></div>
+          <button class="btn sec" style="flex:1;margin:0;padding:9px" onclick="dEstimateDagwaarde()">Bereken</button>
+        </div>
+        <div class="small muted" style="font-size:11px;margin-top:6px">Schatting — niets verlaat je toestel. Vul 'm daarna gerust handmatig aan.</div>
+      </details>
+    </div>
+    ${extraTable}${vsBel}
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveDebt('${id||''}')">${ICON('check')} Opslaan</button>
     ${d0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteDebt('${id}')">Schuld verwijderen</div>`:''}
     <div style="height:8px"></div>`;
@@ -2938,16 +2825,18 @@ function saveDebt(id){
   const v=x=>(document.getElementById(x)||{}).value;
   const naam=(v('dNaam')||'').trim(); const rest=Math.round(+v('dRest')||0); const start=Math.round(+v('dStart')||0)||rest;
   if(!naam || rest<=0){ toast('Vul een naam en restschuld in'); return; }
-  const d={id:id||('d'+Date.now().toString(36)), naam, start, rest, perMaand:Math.round(+v('dMnd')||0), rente:(+String(v('dRente')||'').replace(',','.'))||0};
+  const d={id:id||('d'+Date.now().toString(36)), naam, start, rest, perMaand:Math.round(+v('dMnd')||0), rente:(+String(v('dRente')||'').replace(',','.'))||0, type:(v('dType')||'lening'), slot:Math.round(+v('dSlot')||0),
+    autoBezit:!!((document.getElementById('dAuto')||{}).checked), dagwaarde:Math.round(+v('dDag')||0), aankoop:Math.round(+v('dAankoop')||0), bouwjaar:Math.round(+v('dBouwjaar')||0), afschr:(+v('dAfschr')||0)};
   SET.debts=SET.debts||[]; const i=SET.debts.findIndex(x=>x.id===id);
   if(i>=0) SET.debts[i]=d; else SET.debts.push(d);
   save(); closeSheet(); render(); toast(`${ICON('check')} Schuld opgeslagen`);
 }
 function deleteDebt(id){ SET.debts=(SET.debts||[]).filter(x=>x.id!==id); save(); closeSheet(); render(); }
 /* ----- BEZITTINGEN & NETTO VERMOGEN ----- */
+function leaseAutoTotal(){ return (SET.debts||[]).reduce((s,d)=>s+((d.type==='financiallease'&&d.autoBezit)?(+d.dagwaarde||0):0),0); }
 function netWorth(){
   const liq=totalBalance().sum;
-  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0);
+  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0)+leaseAutoTotal();
   const bez=liq+overig;
   const sch=(SET.debts||[]).reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
   return {liq,overig,bez,sch,netto:bez-sch};
@@ -2964,23 +2853,39 @@ function renderNetWorth(){
 }
 function renderAssets(){
   const liq=totalBalance().sum; const as=SET.assets||[];
-  const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+a.waarde||0)}</span><span class="muted">›</span></div></div>`).join('');
+  const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}${a.grow?' <span style="color:var(--teal);font-size:10.5px">· groeit</span>':''}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+a.waarde||0)}</span><span class="muted">›</span></div></div>`).join('');
+  const leaseRows=(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).map(d=>`<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Auto')} <span style="color:var(--mut2);font-size:10.5px">· via financial lease</span></div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+d.dagwaarde)}</span><span class="muted">›</span></div></div>`).join('');
   return `<div style="margin-top:14px">
     <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Bezittingen</span></div>
     <div class="cz-card" style="padding:2px 14px">
       <div class="cz-pot"><div class="cp-info"><div class="cp-nm">${ICON('bank')} Saldo (rekeningen)</div><div class="cp-sub">automatisch uit je transacties</div></div><span class="small" style="font-weight:700">${euro0(liq)}</span></div>
-      ${rows}
+      ${rows}${leaseRows}
       <button class="cp-add" onclick="openAsset()">+ Bezitting toevoegen</button>
     </div>
     <div class="small muted" style="margin:6px 2px">Voeg spaargeld, beleggingen, je auto of woning toe voor je netto vermogen.</div>
   </div>`;
 }
 function openAsset(id){
-  const as=SET.assets||[]; const a0=id?as.find(x=>x.id===id):null; const isNew=!a0; const a=a0||{naam:'',waarde:''};
+  const as=SET.assets||[]; const a0=id?as.find(x=>x.id===id):null; const isNew=!a0; const a=a0||{naam:'',waarde:''}; const g=!!a.grow;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:17px;margin-bottom:12px">${isNew?'Nieuwe bezitting':'Bezitting bewerken'}</div>
     <label class="fld">Wat is het?</label><input id="aNaam" type="text" value="${esc(a.naam||'')}" placeholder="bv. Spaarrekening, Beleggingen, Auto" style="width:100%">
     <label class="fld" style="margin-top:10px">Huidige waarde (€)</label><input id="aWaarde" type="number" inputmode="numeric" value="${a.waarde||''}" placeholder="bv. 5000" style="width:100%">
+    <label class="row" style="gap:9px;cursor:pointer;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:11px 0;margin:12px 0">
+      <input type="checkbox" id="aGrow" ${g?'checked':''} onchange="document.getElementById('agrowf').style.display=this.checked?'block':'none'">
+      <span style="flex:1"><span style="font-weight:600;font-size:13px">Groeit dit? (belegging/spaargeld)</span><span class="small muted" style="display:block">Toon een verwachte-waarde-projectie</span></span></label>
+    <div id="agrowf" style="display:${g?'block':'none'}">
+      <div class="row" style="gap:8px">
+        <div style="flex:1"><label class="fld">Netto rendement (%/jr)</label><input id="aRend" type="number" inputmode="decimal" value="${a.rend||''}" placeholder="5" style="width:100%"></div>
+        <div style="flex:1"><label class="fld">Inflatie (%/jr)</label><input id="aInfl" type="number" inputmode="decimal" value="${a.infl||''}" placeholder="2" style="width:100%"></div>
+      </div>
+      <label class="fld" style="margin-top:10px">Horizon (jaren)</label><input id="aHor" type="number" inputmode="numeric" value="${a.horizon||''}" placeholder="20" style="width:100%">
+      <div class="row" style="gap:8px;margin-top:10px">
+        <div style="flex:1"><label class="fld">Eenmalige inleg (€)</label><input id="aEen" type="number" inputmode="numeric" value="${a.eenmalig||''}" placeholder="0" style="width:100%"></div>
+        <div style="flex:1"><label class="fld">Periodieke inleg (€/mnd)</label><input id="aPer" type="number" inputmode="numeric" value="${a.per||''}" placeholder="0" style="width:100%"></div>
+      </div>
+      <div class="small muted" style="font-size:11px;margin-top:8px">"Netto" = na kosten en belasting. Met inflatie tonen we ook de koopkracht van nu. Rendement is niet gegarandeerd — geen advies.</div>
+    </div>
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveAsset('${id||''}')">${ICON('check')} Opslaan</button>
     ${a0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteAsset('${id}')">Bezitting verwijderen</div>`:''}
     <div style="height:8px"></div>`;
@@ -2990,19 +2895,51 @@ function saveAsset(id){
   const v=x=>(document.getElementById(x)||{}).value;
   const naam=(v('aNaam')||'').trim(); const waarde=Math.round(+v('aWaarde')||0);
   if(!naam || waarde===0){ toast('Vul een naam en waarde in'); return; }
-  const a={id:id||('a'+Date.now().toString(36)), naam, waarde};
+  const grow=!!((document.getElementById('aGrow')||{}).checked);
+  const a={id:id||('a'+Date.now().toString(36)), naam, waarde, grow};
+  if(grow){ a.rend=+v('aRend')||0; a.infl=+v('aInfl')||0; a.horizon=+v('aHor')||0; a.eenmalig=Math.round(+v('aEen')||0); a.per=Math.round(+v('aPer')||0); }
   SET.assets=SET.assets||[]; const i=SET.assets.findIndex(x=>x.id===id);
   if(i>=0) SET.assets[i]=a; else SET.assets.push(a);
   save(); closeSheet(); render(); toast(`${ICON('check')} Bezitting opgeslagen`);
 }
 function deleteAsset(id){ SET.assets=(SET.assets||[]).filter(x=>x.id!==id); save(); closeSheet(); render(); }
+// ===== Fase A: beleggingsprojectie (toekomstwaarde, nominaal + koopkracht) =====
+function fvProject(P, PMT, ratePct, years){
+  const r=(+ratePct||0)/100/12, n=Math.round((+years||0)*12);
+  if(n<=0) return P;
+  if(Math.abs(r)<1e-9) return P + PMT*n;
+  return P*Math.pow(1+r,n) + PMT*((Math.pow(1+r,n)-1)/r);
+}
+function assetProjection(a){
+  const P0=(+a.waarde||0)+(+a.eenmalig||0), PMT=(+a.per||0), yr=(+a.horizon||0), rend=(+a.rend||0), infl=(+a.infl||0);
+  const mid=fvProject(P0,PMT,rend,yr), low=fvProject(P0,PMT,rend-2,yr), high=fvProject(P0,PMT,rend+2,yr);
+  const ownIn=P0+PMT*Math.round(yr*12);
+  const koop=infl>0? mid/Math.pow(1+infl/100,yr) : mid;
+  return {PMT,yr,rend,infl,mid:Math.round(mid),low:Math.round(low),high:Math.round(high),ownIn:Math.round(ownIn),growth:Math.round(mid-ownIn),koop:Math.round(koop)};
+}
+function assetProjectionCard(a){
+  const pr=assetProjection(a); if(pr.yr<=0) return '';
+  const ownPct=pr.mid>0?Math.max(3,Math.min(Math.round(pr.ownIn/pr.mid*100),100)):100; const growPct=Math.max(0,100-ownPct);
+  const sc=(l,v,r,on)=>`<div style="flex:1;background:var(--card2);border:1px solid ${on?'var(--teal)':'var(--line)'};border-radius:11px;padding:9px 6px;text-align:center"><div style="font-size:10px;color:var(--mut2);text-transform:uppercase;letter-spacing:.3px">${l}</div><div style="font-size:13px;font-weight:800;margin:2px 0${on?';color:var(--teal)':''}">${euro0(v)}</div><div style="font-size:10px;color:var(--mut2)">${r}%</div></div>`;
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between"><span class="hlabel" style="margin:0">Verwachte waarde · ${esc(a.naam||'Belegging')}</span><span class="small muted">over ${pr.yr} jaar</span></div>
+    <div style="font-size:26px;font-weight:800;color:var(--teal);margin:8px 0 2px">± ${euro0(pr.mid)}</div>
+    <div class="small muted">nominaal · verwacht${pr.PMT>0?' · '+euro0(pr.PMT)+'/mnd':''} · ${pr.rend}%/jr netto</div>
+    ${pr.infl>0?`<div style="margin-top:7px;font-size:15px"><b>≈ ${euro0(pr.koop)}</b> <span class="small" style="color:var(--mut2)">in koopkracht van nu · na ${pr.infl}% inflatie</span></div>`:''}
+    <div style="display:flex;gap:8px;margin-top:10px">${sc('Voorzichtig',pr.low,pr.rend-2,false)}${sc('Verwacht',pr.mid,pr.rend,true)}${sc('Optimistisch',pr.high,pr.rend+2,false)}</div>
+    <div style="height:12px;border-radius:6px;overflow:hidden;display:flex;margin:12px 0 6px"><div style="width:${ownPct}%;background:var(--blue)"></div><div style="width:${growPct}%;background:var(--teal)"></div></div>
+    <div class="row" style="justify-content:space-between;font-size:11.5px;color:var(--mut)"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--blue);margin-right:5px"></span>Eigen inleg ${euro0(pr.ownIn)}</span><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);margin-right:5px"></span>Groei ± ${euro0(pr.growth)}</span></div>
+    <div style="font-size:11px;color:var(--mut2);margin-top:11px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Rekenvoorbeeld met jouw aannames, geen advies of belofte. Nominaal = toekomstige euro's; koopkracht = geld van nu. Rendement kan hoger of lager uitvallen; beleggen kent risico.</div>
+  </div>`;
+}
+function renderAssetProjections(){ return (SET.assets||[]).filter(a=>a.grow && (+a.horizon||0)>0).map(a=>assetProjectionCard(a)).join(''); }
 function netWorthSeries(){
   const ms=months(); if(ms.length<2) return [];
   const cur=totalBalance().sum; const flow={}; ms.forEach(m=>flow[m]=0);
   for(const t of TX){ const m=t.date.slice(0,7); if(flow[m]!==undefined) flow[m]+=t.amount; }
   const balEnd={}; let runs=cur;
   for(let i=ms.length-1;i>=0;i--){ balEnd[ms[i]]=runs; runs-=flow[ms[i]]; }
-  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0);
+  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0)+leaseAutoTotal();
   const sch=(SET.debts||[]).reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
   return ms.map(m=>({m,nw:Math.round(balEnd[m]+overig-sch)}));
 }
@@ -3032,7 +2969,7 @@ function renderVermogen(){
     <div class="row" style="margin-top:10px;padding:6px 0;border-top:1px solid var(--line)"><span class="small">Bezittingen</span><span class="small" style="font-weight:700;color:var(--green)">${euro0(w.bez)}</span></div>
     <div class="row" style="padding:6px 0"><span class="small">− Schulden</span><span class="small" style="font-weight:700;color:${w.sch>0?'var(--amber)':'var(--mut)'}">${euro0(w.sch)}</span></div>
   </div>`;
-  $('#s-vermogen').innerHTML = head + nwCard + renderAssets() + renderDebts();
+  $('#s-vermogen').innerHTML = head + nwCard + renderAssets() + renderAssetProjections() + renderDebts();
 }
 // ===== Coach-gedreven 'Sneller bij je doel?' =====
 // concrete, op patronen gebaseerde manieren HOE je mindert (geen generiek 'geef minder uit')
@@ -3121,94 +3058,15 @@ function nogDezeMaandCard(){
     <div class="ndm-net"><span>Onderaan de streep</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>
   </div>`;
 }
-/* ===================== NOODFONDS =====================
- * Essentiele maandlast (crisisniveau) -> noodfonds-doel. Driedeling per categorie,
- * mediaan voor variabel, uitsmeren voor periodieke vaste lasten, crisis-vloer instelbaar.
- * Voedt het buffer-DOEL (SET.bufferAmount), niet de heilige vloer (SET.buffer). */
-const NF_KLASSE_DEFAULT={
-  huur:'vast', verzekering:'vast', belasting:'vast', studie:'vast', bankkosten:'vast',
-  boodschappen:'var', vervoer:'var', zorg:'var',
-  uiteten:'comfort', shopping:'comfort', sport:'comfort', goededoel:'comfort',
-  abonnement:'comfort', vakantie:'comfort', vices:'comfort',
-  persoonlijk:'exclude', overig:'exclude'
-};
-const NF_PERIODIEK=new Set(['verzekering','belasting']);          // jaar/lumpy -> uitsmeren
-const NF_CRISIS_DEFAULT={ boodschappen:80, vervoer:65, zorg:100 }; // % dat in crisis overblijft
-function nfKlasse(c){ return (SET.nfKlasse&&SET.nfKlasse[c])||NF_KLASSE_DEFAULT[c]||'exclude'; }
-function nfCrisis(c){ const o=SET.nfCrisis||{}; return o[c]!=null?o[c]:(NF_CRISIS_DEFAULT[c]!=null?NF_CRISIS_DEFAULT[c]:100); }
-function nfMaanden(){ return +SET.nfMaanden||4; }
-function nfMedian(a){ if(!a.length)return 0; const s=[...a].sort((x,y)=>x-y),n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; }
-function noodfondsModel(){
-  const win=months().slice(-12); const maps=win.map(m=>catSpendMap(m)); const n=win.length||1;
-  let vast=0,varNormaal=0,varCrisis=0,huurGevonden=false; const detail=[],comfort=[],rek=[];
-  for(const cat in NF_KLASSE_DEFAULT){
-    const reeks=maps.map(sm=>sm[cat]||0); const kl=nfKlasse(cat);
-    const med=nfMedian(reeks), gem=reeks.reduce((a,b)=>a+b,0)/n, mx=Math.max(...reeks,0);
-    if(cat==='huur'&&med>0) huurGevonden=true;
-    if(kl==='vast'){ const b=NF_PERIODIEK.has(cat)?gem:med; if(b>0){ vast+=b; detail.push(['vast',cat,b,b]); } }
-    else if(kl==='var'){ const cr=med*(nfCrisis(cat)/100); varNormaal+=med; varCrisis+=cr; detail.push(['var',cat,med,cr]); if(mx>0) rek.push([cat,mx-med,med,mx]); }
-    else if(kl==='comfort'){ if(med>0||mx>0) comfort.push([cat,med,mx]); }
-  }
-  comfort.sort((a,b)=>b[1]-a[1]); rek.sort((a,b)=>b[1]-a[1]);
-  const essNormaal=vast+varNormaal, essCrisis=vast+varCrisis, maanden=nfMaanden(), doel=Math.round(essCrisis*maanden);
-  let spaar=null; try{ const s=totalSaved(); spaar=s.missing?null:s.sum; }catch(_){}
-  const pct=(spaar!=null&&doel>0)?Math.min(100,Math.round(spaar/doel*100)):null;
-  const comfortTot=comfort.reduce((a,c)=>a+c[1],0);
-  return {win,n,vast,varNormaal,varCrisis,essNormaal,essCrisis,maanden,doel,spaar,pct,detail,comfort,rek,comfortTot,huurGevonden};
-}
-function noodfondsNaarBuffer(doel){ SET.bufferBasis='amount'; SET.bufferAmount=Math.round(doel); save(); render(); toast(`${ICON('check')} Buffer-doel ingesteld op ${euro0(doel)}`); }
-function noodfondsCard(){
-  const M=noodfondsModel();
-  const chips=[3,4,6].map(x=>`<span class="chip ${M.maanden===x?'on':''}" onclick="SET.nfMaanden=${x};save();renderVooruit()">${x} mnd</span>`).join('');
-  const prog=M.pct!=null
-    ? `<div class="bar" style="margin-top:8px"><i style="width:${M.pct}%"></i></div><div class="small muted" style="margin-top:6px">${euro0(M.spaar)} van ${euro0(M.doel)} · ${M.pct}% gevuld</div>`
-    : `<div class="small muted" style="margin-top:8px">Koppel je spaarrekening om je voortgang te zien.</div>`;
-  const huurNote=!M.huurGevonden
-    ? `<div class="small" style="color:var(--amber);margin-top:8px">${ICON('alert')} Huur nog niet herkend. Je grootste vaste last kan ontbreken, <span style="text-decoration:underline;cursor:pointer" onclick="go('vermogen')">controleer je schulden/lasten</span>.</div>` : '';
-  const bez=M.comfort.length
-    ? M.comfort.map(([c,med])=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)"><span class="small">${CATS[c]?CATS[c].name:c}</span><span class="small" style="font-weight:600">${euro0(med)}/mnd</span></div>`).join('')
-    : '<div class="small muted">Geen comfort-uitgaven gevonden.</div>';
-  return `<div class="card" id="nfCard">
-    <div class="row" style="justify-content:space-between"><div class="small" style="font-weight:700;color:var(--teal);letter-spacing:.04em;text-transform:uppercase">${ICON('home')} Noodfonds</div><span class="small muted" style="cursor:pointer" onclick="openNoodfondsPanel()">Verfijnen ›</span></div>
-    <div style="font-size:30px;font-weight:800;letter-spacing:-1px;margin:8px 0 2px">${euro0(M.essCrisis)}<span class="small muted" style="font-weight:600"> /mnd</span></div>
-    <div class="small muted">essentiële crisis-last${M.huurGevonden?', huur inbegrepen':''}</div>
-    ${huurNote}
-    <div class="chips" style="margin-top:11px">${chips}</div>
-    <div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-top:13px">Doel · ${M.maanden} mnd</div>
-    <div style="font-size:22px;font-weight:800;margin-top:3px">${euro0(M.doel)}</div>
-    ${prog}
-    <button class="btn" style="margin-top:12px;width:100%" onclick="noodfondsNaarBuffer(${M.doel})">${ICON('target')} Neem ${euro0(M.doel)} over als buffer-doel</button>
-    <details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Bezuinigingsruimte · ${euro0(M.comfortTot)}/mnd</summary><div style="margin-top:8px">${bez}</div></details>
-  </div>`;
-}
-function openNoodfondsPanel(){ window._setSheet=null; window._nfSheet=true; renderNfSheet(); $('#sheetBg').classList.add('show'); }
-function renderNfSheet(){
-  const M=noodfondsModel();
-  const chips=[3,4,6].map(x=>`<span class="chip ${M.maanden===x?'on':''}" onclick="SET.nfMaanden=${x};save();renderNfSheet();renderVooruit()">${x} mnd</span>`).join('');
-  const sliders=['boodschappen','vervoer','zorg'].filter(c=>CATS[c]).map(c=>{ const v=nfCrisis(c); const mn=c==='vervoer'?30:50;
-    return `<div class="row" style="justify-content:space-between;margin-top:9px"><span class="small">${CATS[c].name}</span><span class="small muted">${v}%</span></div>
-      <input type="range" min="${mn}" max="100" value="${v}" oninput="SET.nfCrisis=SET.nfCrisis||{};SET.nfCrisis['${c}']=+this.value;save();renderNfSheet();renderVooruit()" style="width:100%">`; }).join('');
-  const det=M.detail.map(([k,c,nrm,cr])=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span class="small ${k==='var'?'':'muted'}">${CATS[c]?CATS[c].name:c}${k==='vast'?' (vast)':''}</span><span class="small" style="font-weight:600">${euro0(cr)}</span></div>`).join('');
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:17px">${ICON('home')} Noodfonds verfijnen</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="card" style="text-align:center"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;color:var(--teal)">Doel</div>
-      <div style="font-size:32px;font-weight:800;letter-spacing:-1px;margin:4px 0">${euro0(M.doel)}</div>
-      <div class="small muted">${M.maanden} mnd × ${euro0(M.essCrisis)}/mnd essentieel</div>
-      <div class="chips" style="margin-top:10px">${chips}</div></div>
-    <div class="card"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600">Crisis-vloer · wat blijft over</div>${sliders}<div class="small muted" style="margin-top:8px">Hoeveel van deze uitgave je in een crisis nog kunt afknijpen. Lager = kleiner noodfonds nodig.</div></div>
-    <div class="card"><div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span class="small muted">Vast (incl. huur)</span><span class="small" style="font-weight:700">${euro0(M.vast)}</span></div>${det}<div class="row" style="justify-content:space-between;padding:8px 0"><span class="small" style="font-weight:800">per maand</span><span class="small" style="font-weight:800;color:var(--teal)">${euro0(M.essCrisis)}</span></div></div>
-    <button class="btn" style="width:100%" onclick="noodfondsNaarBuffer(${M.doel});closeSheet()">${ICON('target')} Neem ${euro0(M.doel)} over als buffer-doel</button>
-    <div style="height:8px"></div>`;
-}
 function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
-  if(!isNow){ $('#s-vooruit').innerHTML = renderSavings() + renderUpcoming() + renderGoals(); return; }
+  if(!isNow){ $('#s-vooruit').innerHTML = renderUpcoming() + renderSavings(); return; }
   const exp=(SET.vooruitMeer!==undefined)?SET.vooruitMeer:isMode('expert');   // expert: standaard uitgeklapt
   const deepBtn=`<button class="snz" onclick="toggleVooruit('vooruitMeer')">${exp?'minder ▲':'Deze maand in detail ▼'}</button>`;
   const deep = exp ? vooruitDeep() : '';
-  $('#s-vooruit').innerHTML = vooruitForecast() + noodfondsCard() + nogDezeMaandCard() + goalCoachCard() + renderGoals() + deepBtn + deep;
+  $('#s-vooruit').innerHTML = vooruitForecast() + nogDezeMaandCard() + goalCoachCard() + renderGoals() + deepBtn + deep;
 }
 function hasAutoSaving(){ try{ const ms=months().slice(-3); let n=0; for(const mm of ms){ for(const t of txOfMonth(mm)){ if(catOf(t)==='sparen' || /(monthly|weekly) rule|round[\s-]?up|income sorter/i.test(t.name||'')) n++; } } return n>=2; }catch(_){ return false; } }
 function coachItems(){
@@ -3593,7 +3451,7 @@ function renderActions(){
   if(!TX.length){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||months()[months().length-1]; const isNow=m===nowYM;
-  if(!isNow){ $('#s-act').innerHTML=`<div class="card"><div class="small muted">Je coach werkt op de lopende maand (${esc(monthLabel(nowYM))}). Je bekijkt nu ${esc(monthLabel(m))}. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar ${esc(monthLabel(nowYM))} ›</span></div></div>`; return; }
+  if(!isNow){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Je coach geldt voor de lopende maand. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar nu ›</span></div></div>'; return; }
   const zoneMine=`<div class="cz-mine">
     <div class="czr-head" onclick="toggleCoachDisc()"><span>${ICON('target')} Mijn regel: geen budget, geen aankoop</span><span>${SET.coachDiscOpen?'▲':'▼'}</span></div>
     ${SET.coachDiscOpen?coachDiscipline(m):''}
@@ -3618,7 +3476,7 @@ function renderActions(){
     + `<button class="cobuy" id="buyBtn">${ICON('cart')} Ik wil iets kopen</button>`
     + coachMirrorCard() + zonePotjes + zoneMine;
   const bb=document.getElementById('buyBtn'); if(bb) bb.onclick=openBuy;
-  coParkReturn(m).then(handled=>{ if(!handled) startCoachTalk(m); });
+  startCoachTalk(m);
 }
 /* ---------- COACH-DIALOOG (tik-door gesprek, leest/voert uit via de motor) ---------- */
 let _coT=null,_coC=null,_coGen=0;
@@ -3637,108 +3495,6 @@ function openCoachAvatar(){
   $('#sheetBg').classList.add('show');
 }
 function setCoachAvatar(k){ SET.coachAvatar=k; save(); closeSheet(); renderActions(); }
-/* ============================================================
-   MECHANISM_SPEC — de regels waaronder de coach MAG spreken.
-   Drie gedragsmechanismen, elk met een vuurconditie en een guard.
-   Meta-principe: elke guard beschermt de buffer. De mechanismen
-   dienen de marge, ze overrulen hem nooit. De noodbuffer is heilig.
-   Naast COACH_SPEC (die de TOON regelt) bepaalt dit WANNEER en HOE VAAK.
-   ============================================================ */
-const MECHANISM_SPEC = {
-  // 1 · MENTAL ACCOUNTING
-  // Een potje is gezond zolang het je helpt plannen, en schadelijk
-  // zodra het duurdere schuld verbergt.
-  mentalAccounting: {
-    regel: 'Potje gezond = helpt plannen. Potje schadelijk = verbergt duurdere schuld.',
-    vuurt: 'Stilstaand geld in laag-/nulrente-potje terwijl er schuld/rood staat tegen hogere rente.',
-    condities: {
-      minRenteVerschil: 0.05,   // schuldrente minus potjesopbrengst moet hier boven liggen
-      minBedrag: 50             // materialiteitsdrempel: niet vuren onder dit bedrag
-    },
-    zwijgt: [
-      'Het potje doet zijn werk (bewust gepland, concurreert niet met dure schuld).',
-      'NOODBUFFER IS HEILIG — nooit voorstellen die leeg te halen om schuld af te lossen.'
-    ],
-    state: ['potje.saldo', 'potje.opbrengst', 'potje.doelTag(plannen|stilstaand)', 'potje.isNoodbuffer', 'schuld.saldo', 'schuld.rente']
-  },
-
-  // 2 · LOSS AVERSION
-  // Een schijnwerper, geen plafondlamp. Alleen bij een echte afwijking,
-  // hooguit één keer, nooit op een vooraf bewust geplande uitgave.
-  lossAversion: {
-    regel: 'Frame verlies alleen bij een echte afwijking. Als stakes (dagen marge / weken vertraging), nooit als euro schuld.',
-    vuurt: 'Uitgave buiten elk potje ("kwam uit het niets"), of buffer onder veilige marge, of herhaalde lekkage in één categorie.',
-    condities: {
-      maxFramesPerDag: 1,       // harde frequentielimiet, nooit stapelen
-      vereistPositieveSpiegel: true  // voor elk loss-moment moet de positieve spiegel óók bestaan
-    },
-    zwijgt: [
-      'Geplande uitgave uit een vooraf gevuld potje = succes, geen lek. App is stil of bevestigend.',
-      'Frequentielimiet bereikt — geen tweede loss-frame dezelfde dag.'
-    ],
-    state: ['lossFramesVandaag', 'uitgave.gepland(zat in potje: ja|nee)']
-  },
-
-  // 3 · TEMPORAL DISCOUNTING
-  // Een parkeerknop is alleen een belofte als de app hem nakomt.
-  // De lus moet sluiten, anders is parkeren gewoon uitstel.
-  temporalDiscounting: {
-    regel: 'Parkeren plant een echte terugkeer in koude staat. Dichtbij reken in tijd, veraf maak het doel levendig.',
-    vuurt: 'Gebruiker parkeert een discretionaire uitgave → engine plant terugkeer op het beloofde moment en toont dezelfde keuze opnieuw (doen / nog eens parkeren / laten gaan).',
-    condities: {
-      herhaalParkeerSignaal: 4, // na zoveel keer parkeren zonder beslissen: zacht spiegelen "dit telkens parkeren is ook een antwoord"
-      projectieWijstNaarDoel: true // €-projectie verwijst waar mogelijk naar een door de gebruiker benoemde bestemming, niet een kaal getal
-    },
-    zwijgt: [
-      'Geen betrouwbare terugkeer te bouwen? Lever dan "niet nu" i.p.v. een nep-commitment device.',
-      'Dwing nooit een beslissing af bij herparkeren — benoem het patroon, laat de keuze.'
-    ],
-    state: ['geparkeerd[]{item, bedrag, terugkeerDatum, aantalKeerGeparkeerd}', 'gebruikersdoel.bestemming']
-  },
-
-  // 4 · DEFAULT-EFFECT
-  // De kracht zit in wat er gebeurt als de gebruiker NIETS kiest. Elke default staat
-  // zo dat nietsdoen de gezonde uitkomst is, en blijft altijd zichtbaar en omkeerbaar.
-  defaultEffect: {
-    regel: 'Zet elke default zo dat nietsdoen de gezonde keuze is. Altijd zichtbaar, altijd in één tik omkeerbaar.',
-    vuurt: 'Geen melding. Dit is een ontwerpprincipe op bestaande beginwaarden, niet een signaal dat afgaat.',
-    plekken: [
-      'onboarding spaarinleg: slider start op een verstandig percentage (bv. 30% doel), niet op nul',
-      'noodfonds-multiplier: een onderbouwde default (bv. 4 mnd), niet leeg',
-      'koopcheck: knoppen bewust gelijk-gewicht, geen voorgeselecteerde koop-actie',
-      'categorie-indeling noodfonds: verstandige defaults (huur=vast, uiteten=comfort)'
-    ],
-    condities: {
-      zichtbaar: true,       // de gebruiker ziet de default bij de eerste aanraking
-      omkeerbaarInEenTik: true
-    },
-    zwijgt: [
-      'Nooit een default die geld beweegt of een doel zet zonder dat de gebruiker het meteen ziet.',
-      'Dark pattern = default verbergen of afwijken moeilijk maken. Dat nooit; anders is het geen spiegel.'
-    ],
-    state: ['default overschreven? (dan niet opnieuw voorstellen)']
-  },
-
-  // 5 · FRESH START EFFECT
-  // Op een temporeel ijkpunt (eerste van de maand) is de gebruiker het meest
-  // ontvankelijk voor een voornemen. Bied dan EEN rustig vooruitblik-moment.
-  freshStart: {
-    regel: 'Op de eerste opening in een nieuwe maand: nodig uit om vooruit te kijken. Nooit terugwijzen op wat misging.',
-    vuurt: 'Eerste app-opening in een kalendermaand die nog geen freshStartGezien-markering heeft (binnen de eerste dagen).',
-    condities: {
-      eenPerPeriode: true,           // hooguit één fresh-start-moment per maand
-      kijktVooruitNietTerug: true,   // geen loss-frame over de vorige maand
-      uitnodigendNietVerplicht: true // "niet nu" mag, wordt niet als falen geregistreerd
-    },
-    zwijgt: [
-      'Geen terugblik-schuld: de vorige maand niet inwrijven, dat dooft juist de frisse start.',
-      'Respecteer de stilte-principes: na een zware maand geen opgewekte "nieuwe kansen"-toon.',
-      'Makkelijk weg te tikken. Een frisse start die zeurt is geen frisse start.'
-    ],
-    state: ['freshStartGezien{ymd}', 'maandVoornemen (optioneel, om de lus met het maandeinde te sluiten)']
-  }
-};
-
 /* ---------- AI-coach (hybride): motor rekent, taalmodel verwoordt. Standaard UIT. Via je Worker /coach. ---------- */
 const COACH_SPEC=`Je bent de coach in Minder, een Nederlandstalige personal-finance app. Je bent een EERLIJKE SPIEGEL, geen cheerleader, geen adviesbot. Je praat weinig, je-vorm, kort en rustig, één gedachte per bericht. Confronteer met een patroon, nooit met een mislukking. Druk afwijkingen uit als stakes (weken vertraging van het doel), nooit als schuld. Eigenaarschap bij de gebruiker. Geen emoji, geen uitroeptekens, geen gedachtestreepjes, geen lijstjes met tips. Kernprincipe: geen budget, geen aankoop. OPDRACHT: herschrijf de gegeven 'draft' in deze toon. Behoud ALLE bedragen en getallen exact zoals in de draft; verzin geen nieuwe getallen. Eén of twee korte zinnen. Antwoord met alleen de herschreven zin, niets anders.`;
 function coStripTags(s){ return (s||'').replace(/<[^>]+>/g,''); }
@@ -3983,46 +3739,6 @@ function openBuy(){
 }
 function startBuy(){ const item=((document.getElementById('buyItem')||{}).value||'').trim(); const amt=Math.round(+((document.getElementById('buyAmt')||{}).value)||0); const cat=(document.getElementById('buyCat')||{}).value; closeSheet(); if(amt>0&&cat) buyFlow(cat,amt,item); else toast('Vul een bedrag in'); }
 function coBuyLog(item,amt,cat,uitkomst,intentie){ coachLogAdd({type:'beslis',item:item||'',bedrag:amt,potjeId:cat,uitkomst,intentie,text:`${euro0(amt)} ${potName(cat)} · ${uitkomst}`}); }
-
-/* ---- Temporal discounting: de parkeer-lus sluiten. Volgt MECHANISM_SPEC.temporalDiscounting ----
- * Parkeren is alleen een belofte als de app hem nakomt. Bij terugkeer presenteert de coach
- * dezelfde keuze opnieuw in koude staat: nu doen / nog even parkeren / laten gaan.
- * parkN telt hoe vaak hetzelfde item geparkeerd is; na herhaalParkeerSignaal keer wordt
- * het patroon zacht teruggespiegeld, zonder een beslissing af te dwingen. */
-const PARK_RETURN_MS = 18*36e5;  // beloofde terugkeer (~na 'morgen'); gelijk aan de notificatie-drempel
-const PARK_SIGNAL_N  = (MECHANISM_SPEC.temporalDiscounting.condities.herhaalParkeerSignaal)||4;
-// oudste nog-openstaande geparkeerde beslissing die toe is aan terugkeer (log is nieuw→oud)
-function coParkDue(){ const log=SET.coachLog||[]; const now=Date.now();
-  for(let i=log.length-1;i>=0;i--){ const l=log[i];
-    if(l && l.type==='beslis' && l.uitkomst==='geparkeerd' && !l.resolved
-       && (now-l.ts)>=PARK_RETURN_MS && (now-l.ts)<=7*864e5) return l; }
-  return null; }
-// sluit een parkeer-beslissing af met een echte uitkomst (doorgezet/geannuleerd)
-function coParkResolve(entry,uitkomst,intentie){ entry.resolved=true;
-  coBuyLog(entry.item, +entry.bedrag||0, entry.potjeId, uitkomst, intentie||'nu'); save(); }
-// koude her-keuze; geeft true terug als er iets te beslissen viel (anders draait het normale coachgesprek)
-async function coParkReturn(m){
-  let p=coParkDue();
-  if(!p && SET.demoMechanismen){ const dc=Object.keys(CATS).find(k=>CATS[k]&&CATS[k].type==='expense')||'vices'; p={__demo:true,type:'beslis',item:'koptelefoon',bedrag:120,potjeId:dc,uitkomst:'geparkeerd',intentie:'nu',parkN:1,ts:Date.now()-19*36e5}; }
-  if(!p) return false;
-  coReset(); if(!_coT) return false;
-  const cn=potName(p.potjeId), amt=+p.bedrag||0, it=String(p.item||'').trim(), n=(+p.parkN||1);
-  coBub('co',`Een tijdje terug parkeerde je ${it?`<b>${esc(it)}</b> `:''}voor ${euro0(amt)} (${cn}).`,{html:true,accent:true});
-  // gevolg in dagen marge, zelfde rekenwijze als de koopcheck
-  try{ const _S=savingsModel(); const _pd=_S.monthlySaving>0?_S.monthlySaving/30:0;
-    if(_pd>0){ const _d=Math.round(amt/_pd); await coSay(`Het kost nog steeds <span class="hl">~${_d} ${_d===1?'dag':'dagen'}</span> langer tot je buffer.`,{html:true}); }
-    else { await coWait(140); } }catch(_){ }
-  // herhaal-parkeer-signaal: zacht spiegelen, geen dwang
-  if(n>=PARK_SIGNAL_N){ await coSay(`Je parkeert dit nu ${n} keer. Dat telkens uitstellen is ook een antwoord.`); }
-  await coSay(`Doen, of laten?`);
-  coChoices([
-    {l:`Nu doen`, act:async()=>{ coBub('me','Nu doen'); if(!p.__demo) coParkResolve(p,'doorgezet','nu'); coFx('vastgelegd, doorgezet'); await coSay(`Doorgezet. Jij houdt de regie, ik leg 't vast. Geen oordeel.`); coEnd(); }},
-    {l:`Nog even parkeren`, act:async()=>{ coBub('me','Nog even parkeren'); if(!p.__demo){ p.resolved=true;
-        coachLogAdd({type:'beslis',item:p.item,bedrag:amt,potjeId:p.potjeId,uitkomst:'geparkeerd',intentie:'nu',parkN:n+1,text:`${euro0(amt)} ${cn} · geparkeerd`}); save(); }
-        coFx('opnieuw geparkeerd'); await coSay(`Goed. Ik kom er nog een keer op terug.`); coEnd(); }},
-    {l:`Laten gaan`, act:async()=>{ coBub('me','Laten gaan'); if(!p.__demo) coParkResolve(p,'geannuleerd','nu'); coFx('vastgelegd, losgelaten'); await coSay(`Helder. Dan was het de impuls, niet de aankoop.`); coEnd(); }}
-  ]);
-  return true; }
 // sub-flow verschuiven: budget verplaatsen tussen potjes, totaal blijft kloppen
 function coBuyShift(item,amt,cat){
   const opts=potOptions(cat);
@@ -4038,11 +3754,9 @@ async function buyFlow(cat,amt,item){
   const cn=potName(cat);
   coBub('me',`Ik wil ${item?esc(item)+' ':''}voor ${euro0(amt)} (${cn}).`);
   await coWait(180);
+  { try{ const _S=savingsModel(); const _pd=_S.monthlySaving>0?_S.monthlySaving/30:0; if(_pd>0){ const _d=Math.round(amt/_pd); await coSay(`In doel-termen: <span class="hl">~${_d} ${_d===1?'dag':'dagen'}</span> langer tot je buffer.`,{html:true}); } }catch(_){ } }
   const m=curMonth||months()[months().length-1]; const B=SET.budgets||{}; const has=+B[cat]>0;
   const rest=has?Math.round(+B[cat]-(catSpendMap(m)[cat]||0)):0;
-  const planned=has && amt<=rest;   // geplande aankoop uit een gevuld potje = succes, geen loss-frame (MECHANISM_SPEC.lossAversion)
-  // stakes (dagen tot buffer) alleen tonen als het géén schone geplande aankoop is
-  if(!planned){ try{ const _S=savingsModel(); const _pd=_S.monthlySaving>0?_S.monthlySaving/30:0; if(_pd>0){ const _d=Math.round(amt/_pd); await coSay(`In doel-termen: <span class="hl">~${_d} ${_d===1?'dag':'dagen'}</span> langer tot je buffer.`,{html:true}); } }catch(_){ } }
   // frequentie-reactie: heeft de categorie een 'aantal keer'-potje, benoem de telling
   const fmeta=(SET.potMeta||{})[cat];
   if(fmeta && fmeta.type==='freq'){ const did=potjeKeer(m,cat); const nextN=did+1; await coSay(`Dit wordt je ${nextN}e keer ${cn} deze maand${nextN>fmeta.n?`. Je plande er ${fmeta.n}.`:` van je ${fmeta.n} geplande.`}`); }
@@ -4277,7 +3991,7 @@ function renderPlanDetail(){
 }
 
 /* ----- VASTE vs VARIABELE LASTEN ----- */
-const FIXED_CATS=new Set(['huur','verzekering','studie','sport','abonnement','bankkosten','persoonlijk']);
+const FIXED_CATS=new Set(['verzekering','studie','sport','abonnement','bankkosten','persoonlijk']);
 function isFixed(t){
   const ov=(SET.fixOvr||{})[t.id]; if(ov) return ov==='fixed';                   // handmatige override: deze transactie
   const ovm=(SET.fixOvrM||{})[recurKey(t)]; if(ovm) return ovm==='fixed';        // handmatige override: alle van deze winkel
@@ -5403,10 +5117,8 @@ function setCoach(){
     ${SET.aiCoach?`<label class="fld" style="margin-top:8px">Model (optioneel)</label>
       <input type="text" value="${esc(SET.aiModel||'')}" placeholder="bv. claude-3-5-haiku-latest" oninput="SET.aiModel=this.value;save();">
       <div class="small muted" style="margin-top:6px">Gebruikt je PSD2-Worker (Bankkoppeling → Geavanceerd) als proxy. Voeg daar het <b>/coach</b>-endpoint toe en zet je LLM-key als secret. Cijfers en flow blijven uit de lokale motor; bij geen net valt 'ie terug op de lokale coach.</div>`:''}
-    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Demo: mechanismen tonen</div><div class="small muted">Toont de parkeer-terugkeer, een loss-frame en het rente-signaal geforceerd. Schrijft niets weg. Zet daarna weer uit.</div></div>
-      <label class="sw"><input type="checkbox" ${SET.demoMechanismen?'checked':''} onchange="SET.demoMechanismen=this.checked;save();render();"><span class="sl"></span></label></div>
-    ${SET.demoMechanismen?`<div class="small muted" style="margin-top:6px">${ICON('info')} Open je <b>meldingen</b> (belletje) voor het loss-frame en het rente-signaal, en de <b>Coach</b>-tab voor de parkeer-terugkeer.</div>`:''}
     <div style="height:10px"></div>
+    ${renderRulesCard()}
     <div class="small muted" style="margin-top:10px">${ICON('info')} ${SET.aiCoach?`<b>AI-coach staat aan.</b> Een taalmodel verwoordt de zinnen via je eigen Worker. De bedragen komen nog steeds uit de lokale motor. Zet uit voor 100% lokaal.`:`<b>Hoe werkt de coach?</b> Geen AI in de cloud. Alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.`}</div>`;
 }
 
@@ -5475,7 +5187,7 @@ function acctNiceName(a){
   return last4?('··'+last4):(accLabel(a)||'Rekening');
 }
 
-function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; window._nfSheet=false; }
+function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; }
 
 /* ---------- helpers ---------- */
 
