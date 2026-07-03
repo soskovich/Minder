@@ -2906,6 +2906,22 @@ function saveGoal(id){
 }
 function deleteGoal(id){ SET.goals=(SET.goals||[]).filter(x=>x.id!==id); save(); closeSheet(); render(); }
 function payoffMonths(rest, per, jr){ if(per<=0||rest<=0) return 0; const r=(+jr||0)/100/12; if(r<=0) return Math.ceil(rest/per); if(per<=rest*r+0.001) return Infinity; return Math.ceil(-Math.log(1-rest*r/per)/Math.log(1+r)); }
+// fase B: verwacht netto rendement uit je beleggingen (voor de aflossen-vs-beleggen-afweging)
+function expectedReturnPct(){ const gs=(SET.assets||[]).filter(a=>a.grow&&(+a.rend||0)>0); return gs.length?Math.max(...gs.map(a=>+a.rend||0)):null; }
+function dTypeChange(){ const t=((document.getElementById('dType')||{}).value)||'lening';
+  const sw=document.getElementById('dslotwrap'); if(sw) sw.style.display=(t==='financiallease')?'block':'none';
+  const aw=document.getElementById('dautowrap'); if(aw) aw.style.display=(t==='financiallease')?'block':'none';
+  const nt=document.getElementById('dtypenote'); if(nt) nt.innerHTML=(t==='studie')?'Studieschuld heeft vaak een lage rente en lange looptijd — versneld aflossen is dan lang niet altijd de slimste zet.':(t==='financiallease')?'Bij financial lease is de auto jouw bezitting en de lease een aflosbare schuld met een slottermijn.':'';
+}
+function dEstimateDagwaarde(){
+  const g=x=>(+((document.getElementById(x)||{}).value)||0);
+  const aankoop=g('dAankoop'), bj=g('dBouwjaar'), af=g('dAfschr')||18;
+  if(aankoop<=0||bj<=0){ toast('Vul aankoopwaarde en bouwjaar in'); return; }
+  const leeftijd=Math.max(new Date().getFullYear()-bj,0);
+  const dw=Math.round(aankoop*Math.pow(1-af/100,leeftijd));
+  const el=document.getElementById('dDag'); if(el) el.value=dw;
+  const pv=document.getElementById('dDagPrev'); if(pv) pv.textContent='Geschat: '+euro0(dw)+' · afschrijving '+af+'%/jr over '+leeftijd+' jaar';
+}
 function renderDebts(){
   const ds=SET.debts||[];
   const rows=ds.map(d=>{ const start=+d.start||0, rest=Math.max(+d.rest||0,0), per=+d.perMaand||0, jr=+d.rente||0;
@@ -2915,21 +2931,52 @@ function renderDebts(){
     return `<div class="card" style="padding:13px 15px;margin-bottom:8px;cursor:pointer" onclick="openDebt('${d.id}')">
       <div class="row"><span style="font-weight:700">${esc(d.naam||'Schuld')}</span><span class="small muted">${start>0?`${euro0(afgelost)} / ${euro0(start)} afgelost`:euro0(rest)}</span></div>
       ${start>0?`<div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:var(--amber)"></div></div>`:''}
-      <div class="small muted" style="margin-top:6px">${mTxt}</div></div>`;}).join('');
+      <div class="small muted" style="margin-top:6px">${mTxt}</div>${(d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0)?`<div class="small" style="margin-top:5px;color:var(--teal);font-size:11.5px">Auto ${euro0(+d.dagwaarde)} meegerekend als bezitting · eigen deel ${euro0((+d.dagwaarde||0)-rest)}</div>`:''}</div>`;}).join('');
+  const wr=ds.filter(d=>(+d.rente||0)>0 && Math.max(+d.rest||0,0)>0).sort((a,b)=>(+b.rente||0)-(+a.rente||0));
+  const prio = wr.length>=2 ? `<div class="card" style="margin-bottom:8px"><div class="hlabel" style="margin-bottom:6px">Wat eerst? · hoogste rente bespaart het meest</div>${wr.map((d,i)=>`<div class="row" style="justify-content:space-between;padding:6px 0${i<wr.length-1?';border-bottom:1px solid var(--line)':''}"><span><span style="font-size:10.5px;font-weight:700;color:#06231c;background:var(--teal);border-radius:6px;padding:1px 7px;margin-right:7px">${i+1}</span>${esc(d.naam||'Schuld')}</span><span style="font-size:11.5px;font-weight:700;color:${(+d.rente>=5)?'var(--red)':'var(--green)'}">${d.rente}%</span></div>`).join('')}<div class="small muted" style="font-size:11px;margin-top:8px">Zet je extra euro op de bovenste. Liever motivatie? Kleinste schuld eerst kan ook — jij kiest. Geen advies.</div></div>` : '';
   return `<div style="margin-top:18px">
     <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Schulden &amp; aflossing</span></div>
-    ${rows}
+    ${prio}${rows}
     <button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div>`;
 }
 function openDebt(id){
   const ds=SET.debts||[]; const d0=id?ds.find(x=>x.id===id):null; const isNew=!d0; const d=d0||{naam:'',start:'',rest:'',perMaand:'',rente:''};
+  const dtype=d.type || (/duo|studie/i.test(d.naam||'')?'studie':(/lease/i.test(d.naam||'')?'financiallease':'lening'));
+  const rest=Math.max(+d.rest||0,0), per=+d.perMaand||0, jr=+d.rente||0; const baseM=payoffMonths(rest,per,jr); const expR=expectedReturnPct();
+  const opt=(vv,l)=>`<option value="${vv}"${dtype===vv?' selected':''}>${l}</option>`;
+  const typeNote=(dtype==='studie')?'Studieschuld heeft vaak een lage rente en lange looptijd — versneld aflossen is dan lang niet altijd de slimste zet.':(dtype==='financiallease')?'Bij financial lease is de auto jouw bezitting en de lease een aflosbare schuld met een slottermijn.':'';
+  const extraTable=(rest>0&&per>0&&jr>0&&isFinite(baseM)&&baseM>1)?`
+    <div class="hlabel" style="margin-top:16px;margin-bottom:2px">Wat levert extra aflossen op?</div>
+    ${[25,50,100].map(x=>{const m2=payoffMonths(rest,per+x,jr);const sv=Math.max(baseM-m2,0);const iv=Math.max(Math.round((per*baseM-rest)-((per+x)*m2-rest)),0);return `<div class="row" style="justify-content:space-between;font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--line)"><span style="font-weight:600">+${euro0(x)}/mnd</span><span class="muted">~${sv} mnd eerder · ± ${euro0(iv)} rente bespaard</span></div>`;}).join('')}`:'';
+  const vsBel=(jr>0&&expR!=null)?`<div class="small muted" style="margin-top:12px;font-size:11.5px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px"><b>Aflossen of beleggen?</b> Je schuldrente ${jr}% is ${jr>expR?'hoger':'lager'} dan je verwachte rendement ${expR}%. ${jr>expR?'Aflossen levert dan gegarandeerd meer op dan beleggen.':'Dan is het een afweging tussen zekerheid (aflossen) en risico (beleggen).'} Geen advies.</div>`:'';
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:17px;margin-bottom:12px">${isNew?'Nieuwe schuld':'Schuld bewerken'}</div>
     <label class="fld">Wat voor schuld?</label><input id="dNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Studieschuld DUO" style="width:100%">
+    <label class="fld" style="margin-top:10px">Type</label>
+    <select id="dType" onchange="dTypeChange()" style="width:100%">${opt('lening','Lening / krediet')}${opt('studie','Studieschuld')}${opt('financiallease','Financial lease (auto)')}</select>
+    <div id="dtypenote" class="small muted" style="font-size:11px;margin-top:6px">${typeNote}</div>
     <label class="fld" style="margin-top:10px">Oorspronkelijk bedrag (€) <span class="small muted">· optioneel, voor voortgang</span></label><input id="dStart" type="number" inputmode="numeric" value="${d.start||''}" placeholder="bv. 12000" style="width:100%">
     <label class="fld" style="margin-top:10px">Huidige restschuld (€)</label><input id="dRest" type="number" inputmode="numeric" value="${d.rest||''}" placeholder="bv. 8000" style="width:100%">
     <label class="fld" style="margin-top:10px">Maandaflossing (€)</label><input id="dMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 120" style="width:100%">
     <label class="fld" style="margin-top:10px">Rente per jaar (%) <span class="small muted">· optioneel</span></label><input id="dRente" type="text" inputmode="decimal" value="${d.rente||''}" placeholder="bv. 2,5" style="width:100%">
+    <div id="dslotwrap" style="display:${dtype==='financiallease'?'block':'none'}"><label class="fld" style="margin-top:10px">Slottermijn aan het eind (€) <span class="small muted">· financial lease</span></label><input id="dSlot" type="number" inputmode="numeric" value="${d.slot||''}" placeholder="bv. 3000" style="width:100%"></div>
+    <div id="dautowrap" style="display:${dtype==='financiallease'?'block':'none'}">
+      <label class="row" style="gap:9px;cursor:pointer;border-top:1px solid var(--line);padding:11px 0;margin-top:12px"><input type="checkbox" id="dAuto" ${d.autoBezit!==false?'checked':''}><span style="flex:1"><span style="font-weight:600;font-size:13px">Auto meerekenen als bezitting</span><span class="small muted" style="display:block">Telt mee in je vermogen · auto − restschuld = je eigen deel</span></span></label>
+      <label class="fld">Dagwaarde auto (€)</label><input id="dDag" type="number" inputmode="numeric" value="${d.dagwaarde||''}" placeholder="bv. 16000" style="width:100%">
+      <div id="dDagPrev" class="small muted" style="font-size:11px;margin-top:4px"></div>
+      <details style="margin-top:8px"${(d.aankoop||d.bouwjaar)?' open':''}><summary class="small" style="color:var(--teal);cursor:pointer">Geen dagwaarde? Schat 'm via afschrijving (lokaal)</summary>
+        <div class="row" style="gap:8px;margin-top:8px">
+          <div style="flex:1"><label class="fld" style="margin-top:0">Aankoopwaarde (€)</label><input id="dAankoop" type="number" inputmode="numeric" value="${d.aankoop||''}" placeholder="24000" style="width:100%"></div>
+          <div style="flex:1"><label class="fld" style="margin-top:0">Bouwjaar</label><input id="dBouwjaar" type="number" inputmode="numeric" value="${d.bouwjaar||''}" placeholder="2022" style="width:100%"></div>
+        </div>
+        <div class="row" style="gap:8px;margin-top:8px;align-items:flex-end">
+          <div style="flex:1"><label class="fld" style="margin-top:0">Afschrijving (%/jr)</label><input id="dAfschr" type="number" inputmode="decimal" value="${d.afschr||18}" style="width:100%"></div>
+          <button class="btn sec" style="flex:1;margin:0;padding:9px" onclick="dEstimateDagwaarde()">Bereken</button>
+        </div>
+        <div class="small muted" style="font-size:11px;margin-top:6px">Schatting — niets verlaat je toestel. Vul 'm daarna gerust handmatig aan.</div>
+      </details>
+    </div>
+    ${extraTable}${vsBel}
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveDebt('${id||''}')">${ICON('check')} Opslaan</button>
     ${d0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteDebt('${id}')">Schuld verwijderen</div>`:''}
     <div style="height:8px"></div>`;
@@ -2939,16 +2986,18 @@ function saveDebt(id){
   const v=x=>(document.getElementById(x)||{}).value;
   const naam=(v('dNaam')||'').trim(); const rest=Math.round(+v('dRest')||0); const start=Math.round(+v('dStart')||0)||rest;
   if(!naam || rest<=0){ toast('Vul een naam en restschuld in'); return; }
-  const d={id:id||('d'+Date.now().toString(36)), naam, start, rest, perMaand:Math.round(+v('dMnd')||0), rente:(+String(v('dRente')||'').replace(',','.'))||0};
+  const d={id:id||('d'+Date.now().toString(36)), naam, start, rest, perMaand:Math.round(+v('dMnd')||0), rente:(+String(v('dRente')||'').replace(',','.'))||0, type:(v('dType')||'lening'), slot:Math.round(+v('dSlot')||0),
+    autoBezit:!!((document.getElementById('dAuto')||{}).checked), dagwaarde:Math.round(+v('dDag')||0), aankoop:Math.round(+v('dAankoop')||0), bouwjaar:Math.round(+v('dBouwjaar')||0), afschr:(+v('dAfschr')||0)};
   SET.debts=SET.debts||[]; const i=SET.debts.findIndex(x=>x.id===id);
   if(i>=0) SET.debts[i]=d; else SET.debts.push(d);
   save(); closeSheet(); render(); toast(`${ICON('check')} Schuld opgeslagen`);
 }
 function deleteDebt(id){ SET.debts=(SET.debts||[]).filter(x=>x.id!==id); save(); closeSheet(); render(); }
 /* ----- BEZITTINGEN & NETTO VERMOGEN ----- */
+function leaseAutoTotal(){ return (SET.debts||[]).reduce((s,d)=>s+((d.type==='financiallease'&&d.autoBezit)?(+d.dagwaarde||0):0),0); }
 function netWorth(){
   const liq=totalBalance().sum;
-  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0);
+  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0)+leaseAutoTotal();
   const bez=liq+overig;
   const sch=(SET.debts||[]).reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
   return {liq,overig,bez,sch,netto:bez-sch};
@@ -2965,23 +3014,39 @@ function renderNetWorth(){
 }
 function renderAssets(){
   const liq=totalBalance().sum; const as=SET.assets||[];
-  const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+a.waarde||0)}</span><span class="muted">›</span></div></div>`).join('');
+  const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}${a.grow?' <span style="color:var(--teal);font-size:10.5px">· groeit</span>':''}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+a.waarde||0)}</span><span class="muted">›</span></div></div>`).join('');
+  const leaseRows=(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).map(d=>`<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Auto')} <span style="color:var(--mut2);font-size:10.5px">· via financial lease</span></div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+d.dagwaarde)}</span><span class="muted">›</span></div></div>`).join('');
   return `<div style="margin-top:14px">
     <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Bezittingen</span></div>
     <div class="cz-card" style="padding:2px 14px">
       <div class="cz-pot"><div class="cp-info"><div class="cp-nm">${ICON('bank')} Saldo (rekeningen)</div><div class="cp-sub">automatisch uit je transacties</div></div><span class="small" style="font-weight:700">${euro0(liq)}</span></div>
-      ${rows}
+      ${rows}${leaseRows}
       <button class="cp-add" onclick="openAsset()">+ Bezitting toevoegen</button>
     </div>
     <div class="small muted" style="margin:6px 2px">Voeg spaargeld, beleggingen, je auto of woning toe voor je netto vermogen.</div>
   </div>`;
 }
 function openAsset(id){
-  const as=SET.assets||[]; const a0=id?as.find(x=>x.id===id):null; const isNew=!a0; const a=a0||{naam:'',waarde:''};
+  const as=SET.assets||[]; const a0=id?as.find(x=>x.id===id):null; const isNew=!a0; const a=a0||{naam:'',waarde:''}; const g=!!a.grow;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:17px;margin-bottom:12px">${isNew?'Nieuwe bezitting':'Bezitting bewerken'}</div>
     <label class="fld">Wat is het?</label><input id="aNaam" type="text" value="${esc(a.naam||'')}" placeholder="bv. Spaarrekening, Beleggingen, Auto" style="width:100%">
     <label class="fld" style="margin-top:10px">Huidige waarde (€)</label><input id="aWaarde" type="number" inputmode="numeric" value="${a.waarde||''}" placeholder="bv. 5000" style="width:100%">
+    <label class="row" style="gap:9px;cursor:pointer;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:11px 0;margin:12px 0">
+      <input type="checkbox" id="aGrow" ${g?'checked':''} onchange="document.getElementById('agrowf').style.display=this.checked?'block':'none'">
+      <span style="flex:1"><span style="font-weight:600;font-size:13px">Groeit dit? (belegging/spaargeld)</span><span class="small muted" style="display:block">Toon een verwachte-waarde-projectie</span></span></label>
+    <div id="agrowf" style="display:${g?'block':'none'}">
+      <div class="row" style="gap:8px">
+        <div style="flex:1"><label class="fld">Netto rendement (%/jr)</label><input id="aRend" type="number" inputmode="decimal" value="${a.rend||''}" placeholder="5" style="width:100%"></div>
+        <div style="flex:1"><label class="fld">Inflatie (%/jr)</label><input id="aInfl" type="number" inputmode="decimal" value="${a.infl||''}" placeholder="2" style="width:100%"></div>
+      </div>
+      <label class="fld" style="margin-top:10px">Horizon (jaren)</label><input id="aHor" type="number" inputmode="numeric" value="${a.horizon||''}" placeholder="20" style="width:100%">
+      <div class="row" style="gap:8px;margin-top:10px">
+        <div style="flex:1"><label class="fld">Eenmalige inleg (€)</label><input id="aEen" type="number" inputmode="numeric" value="${a.eenmalig||''}" placeholder="0" style="width:100%"></div>
+        <div style="flex:1"><label class="fld">Periodieke inleg (€/mnd)</label><input id="aPer" type="number" inputmode="numeric" value="${a.per||''}" placeholder="0" style="width:100%"></div>
+      </div>
+      <div class="small muted" style="font-size:11px;margin-top:8px">"Netto" = na kosten en belasting. Met inflatie tonen we ook de koopkracht van nu. Rendement is niet gegarandeerd — geen advies.</div>
+    </div>
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveAsset('${id||''}')">${ICON('check')} Opslaan</button>
     ${a0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteAsset('${id}')">Bezitting verwijderen</div>`:''}
     <div style="height:8px"></div>`;
@@ -2991,19 +3056,51 @@ function saveAsset(id){
   const v=x=>(document.getElementById(x)||{}).value;
   const naam=(v('aNaam')||'').trim(); const waarde=Math.round(+v('aWaarde')||0);
   if(!naam || waarde===0){ toast('Vul een naam en waarde in'); return; }
-  const a={id:id||('a'+Date.now().toString(36)), naam, waarde};
+  const grow=!!((document.getElementById('aGrow')||{}).checked);
+  const a={id:id||('a'+Date.now().toString(36)), naam, waarde, grow};
+  if(grow){ a.rend=+v('aRend')||0; a.infl=+v('aInfl')||0; a.horizon=+v('aHor')||0; a.eenmalig=Math.round(+v('aEen')||0); a.per=Math.round(+v('aPer')||0); }
   SET.assets=SET.assets||[]; const i=SET.assets.findIndex(x=>x.id===id);
   if(i>=0) SET.assets[i]=a; else SET.assets.push(a);
   save(); closeSheet(); render(); toast(`${ICON('check')} Bezitting opgeslagen`);
 }
 function deleteAsset(id){ SET.assets=(SET.assets||[]).filter(x=>x.id!==id); save(); closeSheet(); render(); }
+// ===== Fase A: beleggingsprojectie (toekomstwaarde, nominaal + koopkracht) =====
+function fvProject(P, PMT, ratePct, years){
+  const r=(+ratePct||0)/100/12, n=Math.round((+years||0)*12);
+  if(n<=0) return P;
+  if(Math.abs(r)<1e-9) return P + PMT*n;
+  return P*Math.pow(1+r,n) + PMT*((Math.pow(1+r,n)-1)/r);
+}
+function assetProjection(a){
+  const P0=(+a.waarde||0)+(+a.eenmalig||0), PMT=(+a.per||0), yr=(+a.horizon||0), rend=(+a.rend||0), infl=(+a.infl||0);
+  const mid=fvProject(P0,PMT,rend,yr), low=fvProject(P0,PMT,rend-2,yr), high=fvProject(P0,PMT,rend+2,yr);
+  const ownIn=P0+PMT*Math.round(yr*12);
+  const koop=infl>0? mid/Math.pow(1+infl/100,yr) : mid;
+  return {PMT,yr,rend,infl,mid:Math.round(mid),low:Math.round(low),high:Math.round(high),ownIn:Math.round(ownIn),growth:Math.round(mid-ownIn),koop:Math.round(koop)};
+}
+function assetProjectionCard(a){
+  const pr=assetProjection(a); if(pr.yr<=0) return '';
+  const ownPct=pr.mid>0?Math.max(3,Math.min(Math.round(pr.ownIn/pr.mid*100),100)):100; const growPct=Math.max(0,100-ownPct);
+  const sc=(l,v,r,on)=>`<div style="flex:1;background:var(--card2);border:1px solid ${on?'var(--teal)':'var(--line)'};border-radius:11px;padding:9px 6px;text-align:center"><div style="font-size:10px;color:var(--mut2);text-transform:uppercase;letter-spacing:.3px">${l}</div><div style="font-size:13px;font-weight:800;margin:2px 0${on?';color:var(--teal)':''}">${euro0(v)}</div><div style="font-size:10px;color:var(--mut2)">${r}%</div></div>`;
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between"><span class="hlabel" style="margin:0">Verwachte waarde · ${esc(a.naam||'Belegging')}</span><span class="small muted">over ${pr.yr} jaar</span></div>
+    <div style="font-size:26px;font-weight:800;color:var(--teal);margin:8px 0 2px">± ${euro0(pr.mid)}</div>
+    <div class="small muted">nominaal · verwacht${pr.PMT>0?' · '+euro0(pr.PMT)+'/mnd':''} · ${pr.rend}%/jr netto</div>
+    ${pr.infl>0?`<div style="margin-top:7px;font-size:15px"><b>≈ ${euro0(pr.koop)}</b> <span class="small" style="color:var(--mut2)">in koopkracht van nu · na ${pr.infl}% inflatie</span></div>`:''}
+    <div style="display:flex;gap:8px;margin-top:10px">${sc('Voorzichtig',pr.low,pr.rend-2,false)}${sc('Verwacht',pr.mid,pr.rend,true)}${sc('Optimistisch',pr.high,pr.rend+2,false)}</div>
+    <div style="height:12px;border-radius:6px;overflow:hidden;display:flex;margin:12px 0 6px"><div style="width:${ownPct}%;background:var(--blue)"></div><div style="width:${growPct}%;background:var(--teal)"></div></div>
+    <div class="row" style="justify-content:space-between;font-size:11.5px;color:var(--mut)"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--blue);margin-right:5px"></span>Eigen inleg ${euro0(pr.ownIn)}</span><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);margin-right:5px"></span>Groei ± ${euro0(pr.growth)}</span></div>
+    <div style="font-size:11px;color:var(--mut2);margin-top:11px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Rekenvoorbeeld met jouw aannames, geen advies of belofte. Nominaal = toekomstige euro's; koopkracht = geld van nu. Rendement kan hoger of lager uitvallen; beleggen kent risico.</div>
+  </div>`;
+}
+function renderAssetProjections(){ return (SET.assets||[]).filter(a=>a.grow && (+a.horizon||0)>0).map(a=>assetProjectionCard(a)).join(''); }
 function netWorthSeries(){
   const ms=months(); if(ms.length<2) return [];
   const cur=totalBalance().sum; const flow={}; ms.forEach(m=>flow[m]=0);
   for(const t of TX){ const m=t.date.slice(0,7); if(flow[m]!==undefined) flow[m]+=t.amount; }
   const balEnd={}; let runs=cur;
   for(let i=ms.length-1;i>=0;i--){ balEnd[ms[i]]=runs; runs-=flow[ms[i]]; }
-  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0);
+  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0)+leaseAutoTotal();
   const sch=(SET.debts||[]).reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
   return ms.map(m=>({m,nw:Math.round(balEnd[m]+overig-sch)}));
 }
@@ -3033,7 +3130,7 @@ function renderVermogen(){
     <div class="row" style="margin-top:10px;padding:6px 0;border-top:1px solid var(--line)"><span class="small">Bezittingen</span><span class="small" style="font-weight:700;color:var(--green)">${euro0(w.bez)}</span></div>
     <div class="row" style="padding:6px 0"><span class="small">− Schulden</span><span class="small" style="font-weight:700;color:${w.sch>0?'var(--amber)':'var(--mut)'}">${euro0(w.sch)}</span></div>
   </div>`;
-  $('#s-vermogen').innerHTML = head + nwCard + renderAssets() + renderDebts();
+  $('#s-vermogen').innerHTML = head + nwCard + renderAssets() + renderAssetProjections() + renderDebts();
 }
 // ===== Coach-gedreven 'Sneller bij je doel?' =====
 // concrete, op patronen gebaseerde manieren HOE je mindert (geen generiek 'geef minder uit')
@@ -4950,6 +5047,7 @@ function healthSplit(){
   for(const m of periodMonths()){ const a=monthAgg(m); inc+=a.income; fixed+=a.fixed; vari+=a.vari;
     if(hasSav){ naarSpaar+=savedThisMonth(m); }                                                 // sparen = instroom op je spaarrekening (zelfde bron als 'veilig te besteden')
     else { for(const t of txOfMonth(m)){ if(t.amount<0 && catOf(t)==='sparen') naarSpaar+=-t.amount; } } }  // geen spaarrekening gemarkeerd: val terug op de categorie
+  if(inc<=0 && SET.autoIncome) inc=baseIncome();   // lopende maand zonder salaris: val terug op je basisinkomen
   return {inc,fixed,vari,net:inc-fixed-vari,naarSpaar};
 }
 function ruleOfThumbCard(){
