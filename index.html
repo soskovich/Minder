@@ -1602,7 +1602,11 @@ function monthLiquidity(){
     const _match=name=>{ const a=_cl(name); if(a.length<5) return false; return _paid.some(bb=>{ const sh=a.length<=bb.length?a:bb, lo=a.length<=bb.length?bb:a; return sh.length>=5 && lo.startsWith(sh.slice(0,Math.min(sh.length,16))); }); };
     for(let i=fixDueItems.length-1;i>=0;i--){ if(_match(fixDueItems[i].name)) fixDueItems.splice(i,1); }
   }catch(_){}
-  const fixDue=fixDueItems.reduce((a,s)=>a+s.amount,0);
+  // door de gebruiker uitgesloten posten (opgezegd/niet meer terugkerend) — onthouden per incasso-sleutel
+  const _fdExcl=SET.fixDueExcl||{};
+  fixDueItems.forEach(s=>{ s.excl=!!_fdExcl[s.key]; });
+  const fixDue=fixDueItems.filter(s=>!s.excl).reduce((a,s)=>a+s.amount,0);
+  const fixDueExclCount=fixDueItems.reduce((a,s)=>a+(s.excl?1:0),0);
   // verwacht inkomen dat nog moet komen = basisinkomen minus wat al deze maand binnen is
   const incDue=Math.max(baseIncome()-incomeThisMonth,0);
   // variabel resterend = tempo-bewust: blend historisch gemiddelde (per dag) met je werkelijke tempo deze maand
@@ -1615,7 +1619,7 @@ function monthLiquidity(){
   const varDue=Math.round(dailyVar*daysLeft);
   const {sum,missing}=totalBalance(); const buffer=+SET.buffer||0;
   const projected=Math.round(sum+incDue-fixDue-varDue);
-  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems};
+  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems,fixDueExclCount};
 }
 // Veilig te besteden = saldo - nog-niet-betaalde vaste lasten deze maand - nog gereserveerde potjes (budget minus al uitgegeven)
 function safeToSpend(){
@@ -1673,19 +1677,27 @@ function renderLiquidityKPI(){
 }
 // drill-down: welke vaste lasten moeten nog betaald worden, en wanneer
 function openFixedDue(){
-  const L=monthLiquidity(); const items=(L.fixDueItems||[]).slice().sort((a,b)=>a.day-b.day);
+  const L=monthLiquidity(); const all=(L.fixDueItems||[]).slice().sort((a,b)=>a.day-b.day);
+  const active=all.filter(s=>!s.excl), excl=all.filter(s=>s.excl);
   const now=new Date(); const mo=now.getMonth(); const dim=new Date(now.getFullYear(),mo+1,0).getDate();
   const fmt=day=>Math.min(day,dim)+' '+MNAMES[mo];
+  const sw=(isExcl)=>`<div style="width:40px;height:24px;border-radius:13px;flex-shrink:0;position:relative;cursor:pointer;background:${isExcl?'var(--card2)':'rgba(45,212,191,.3)'};border:1px solid ${isExcl?'var(--line)':'var(--teal)'}"><i style="position:absolute;top:2px;width:18px;height:18px;border-radius:50%;${isExcl?'left:2px;background:var(--mut2)':'left:19px;background:var(--teal)'}"></i></div>`;
+  const row=(s,isExcl)=>{const c=CATS[s.cat]||CATS.overig; const kk=(s.key||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div class="tx" style="cursor:default${isExcl?';opacity:.55':''}">
+      <div class="ava" style="background:var(--card2)">${c.icon}</div>
+      <div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">${isExcl?'niet meer terugkerend':fmt(s.day)+' · '+c.name}</div></div>
+      <div class="amt neg" style="margin-right:10px${isExcl?';text-decoration:line-through;color:var(--mut2)':''}">−${euro(s.amount)}</div>
+      <div onclick="toggleFixDueExcl('${kk}')" title="${isExcl?'Weer meetellen':'Uitsluiten'}">${sw(isExcl)}</div></div>`;};
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('lock')}</div><div style="font-weight:800;font-size:17px">Nog te betalen vaste lasten</div>
-      <div class="muted small">rest van ${MFULL[mo]} · ${items.length} post${items.length===1?'':'en'}</div>
-      <div style="font-size:22px;font-weight:800;margin:5px 0">${euro(L.fixDue)}</div></div>
-    ${items.length?items.map(s=>{const c=CATS[s.cat]||CATS.overig;return `<div class="tx" style="cursor:default">
-      <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">${fmt(s.day)} · ${c.name}</div></div>
-      <div class="amt neg">−${euro(s.amount)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Alle vaste lasten van deze maand zijn al betaald.</div>'}`;
+      <div class="muted small">rest van ${MFULL[mo]} · ${active.length} post${active.length===1?'':'en'} die meetell${active.length===1?'t':'en'}</div>
+      <div style="font-size:22px;font-weight:800;margin:5px 0;color:var(--teal)">${euro(L.fixDue)}</div></div>
+    ${active.length?active.map(s=>row(s,false)).join(''):'<div class="muted small center" style="padding:16px">Geen vaste lasten die deze maand nog meetellen.</div>'}
+    ${excl.length?`<div style="font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Uitgesloten · telt niet mee</div>${excl.map(s=>row(s,true)).join('')}`:''}
+    <div style="font-size:11.5px;color:var(--mut2);margin-top:14px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:9px">Ken je een post die niet meer terugkeert (opgezegd of eenmalig)? Zet 'm uit met de schakelaar. Uitgesloten posten tellen niet mee in 'nog te betalen' en 'veilig te besteden', en worden volgende maand niet opnieuw voorspeld. Terugzetten kan altijd.</div>`;
   $('#sheetBg').classList.add('show');
 }
+function toggleFixDueExcl(key){ if(!key) return; SET.fixDueExcl=SET.fixDueExcl||{}; if(SET.fixDueExcl[key]) delete SET.fixDueExcl[key]; else SET.fixDueExcl[key]=1; save(); try{render();}catch(_){}; openFixedDue(); toast(SET.fixDueExcl[key]?`${ICON('check')} Post uitgesloten · onthouden`:'Post telt weer mee'); }
 // drill-down: verwachte variabele uitgaven onderverdeeld per categoriebudget
 function openVarDue(){
   const L=monthLiquidity(), m=curMonth, EB=effectiveBudgets(m), B=EB.out;
@@ -2862,14 +2874,14 @@ function vooruitDeep(){
     ${row('Vaste lasten', euro0(L.fixDue), '', 'openFixedDue()')}
     ${row('Variabel', euro0(L.varDue), '', 'openVarDue()')}
     ${L.incDue>0?row('Inkomen nog te komen', '+'+euro0(L.incDue), 'var(--green)'):''}</div>`;
-  const items=(L.fixDueItems||[]).slice().sort((a,b)=>(a.day||0)-(b.day||0));
+  const items=(L.fixDueItems||[]).filter(s=>!s.excl).slice().sort((a,b)=>(a.day||0)-(b.day||0));
   const allUp=!!SET.vooruitUpAll; const show=allUp?items:items.slice(0,4);
   const volgende=items.length?`<div class="card"><div class="hlabel" style="margin:0 0 10px">Volgende uitgaven</div>
     ${show.map(x=>{const c=CATS[x.cat]||CATS.overig;const dt=x.nextDate?new Date(x.nextDate).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'';return `<div class="beh-row"><span style="font-size:18px;flex-shrink:0">${c.icon}</span><div class="beh-t"><div>${esc(x.name)}</div>${dt?`<div class="muted small">${dt}</div>`:''}</div><span class="muted small">${euro0(x.amount)}</span></div>`;}).join('')}
     ${items.length>4?`<button class="snz" onclick="toggleVooruit('vooruitUpAll')">${allUp?'minder ▲':'en '+(items.length-4)+' meer ▼'}</button>`:''}</div>`:'';
   return volgende;
 }
-function renderGoals(){
+function renderGoals(bare){
   const gs=SET.goals||[];
   const rows=gs.map(g=>{ const doel=+g.doel||0, nu=+g.gespaard||0, per=+g.perMaand||0;
     const pct=doel>0?Math.min(Math.round(nu/doel*100),100):0; const toGo=Math.max(doel-nu,0); const mnd=per>0?Math.ceil(toGo/per):0;
@@ -2877,10 +2889,12 @@ function renderGoals(){
       <div class="row"><span style="font-weight:700">${esc(g.naam||'Doel')}</span><span class="small muted">${euro0(nu)} / ${euro0(doel)}</span></div>
       <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:var(--teal)"></div></div>
       <div class="small muted" style="margin-top:6px">${toGo>0?`Nog ${euro0(toGo)}${per>0?` · ~${mnd} ${mnd===1?'maand':'maanden'} op ${euro0(per)}/mnd`:''}`:`${ICON('party')} Doel bereikt!`}</div></div>`;}).join('');
+  const inner=`${rows||'<div class="small muted" style="margin:0 2px 8px">Nog geen losse spaardoelen. Voeg er een toe naast je buffer, bv. een vakantie of een nieuwe laptop.</div>'}
+    <button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  if(bare) return inner;
   return `<div style="margin-top:18px">
     <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Mijn doelen</span></div>
-    ${rows||'<div class="small muted" style="margin:0 2px 8px">Nog geen losse spaardoelen. Voeg er een toe naast je buffer, bv. een vakantie of een nieuwe laptop.</div>'}
-    <button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button></div>`;
+    ${inner}</div>`;
 }
 function openGoal(id){
   const gs=SET.goals||[]; const g=id?gs.find(x=>x.id===id):null; const isNew=!g; const d=g||{naam:'',doel:'',perMaand:'',gespaard:''};
@@ -2925,19 +2939,21 @@ function dEstimateDagwaarde(){
 function renderDebts(){
   const ds=SET.debts||[];
   const rows=ds.map(d=>{ const start=+d.start||0, rest=Math.max(+d.rest||0,0), per=+d.perMaand||0, jr=+d.rente||0;
-    const afgelost=Math.max(start-rest,0); const pct=start>0?Math.min(Math.round(afgelost/start*100),100):0;
-    const mnd=payoffMonths(rest,per,jr);
-    const mTxt = rest<=0?`${ICON('party')} Afgelost!` : (mnd===Infinity?`<span style="color:var(--red)">Je aflossing dekt amper de rente, zo lost dit nauwelijks af.</span>`:`Nog ${euro0(rest)}${per>0?` · ~${mnd} ${mnd===1?'maand':'maanden'} op ${euro0(per)}/mnd`:''}${jr>0?` · ${jr}% rente`:''}`);
-    return `<div class="card" style="padding:13px 15px;margin-bottom:8px;cursor:pointer" onclick="openDebt('${d.id}')">
-      <div class="row"><span style="font-weight:700">${esc(d.naam||'Schuld')}</span><span class="small muted">${start>0?`${euro0(afgelost)} / ${euro0(start)} afgelost`:euro0(rest)}</span></div>
-      ${start>0?`<div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:var(--amber)"></div></div>`:''}
-      <div class="small muted" style="margin-top:6px">${mTxt}</div>${(d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0)?`<div class="small" style="margin-top:5px;color:var(--teal);font-size:11.5px">Auto ${euro0(+d.dagwaarde)} meegerekend als bezitting · eigen deel ${euro0((+d.dagwaarde||0)-rest)}</div>`:''}</div>`;}).join('');
+    const mnd=payoffMonths(rest,per,jr); const warn=(rest>0&&mnd===Infinity);
+    let sub;
+    if(rest<=0) sub='Afgelost';
+    else if(mnd===Infinity) sub='Aflossing dekt amper de rente';
+    else { const p=[]; if(per>0&&isFinite(mnd)) p.push(`~${mnd} mnd op ${euro0(per)}/mnd`); if(jr>0) p.push(`${jr}% rente`); sub=p.join(' · '); }
+    const coupled=(d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0);
+    if(coupled){ sub+=(sub?' · ':'')+`eigen deel ${euro0((+d.dagwaarde||0)-rest)}`; }
+    const nmLabel=coupled?' <span style="color:var(--mut2);font-size:10.5px">· gekoppeld aan bezitting</span>':'';
+    return `<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Schuld')}${nmLabel}</div><div class="cp-sub"${warn?' style="color:var(--red)"':''}>${sub}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700;color:${rest<=0?'var(--green)':'var(--txt)'}">${rest<=0?euro0(0):'Nog '+euro0(rest)}</span><span class="muted">›</span></div></div>`;}).join('');
   const wr=ds.filter(d=>(+d.rente||0)>0 && Math.max(+d.rest||0,0)>0).sort((a,b)=>(+b.rente||0)-(+a.rente||0));
   const prio = wr.length>=2 ? `<div class="card" style="margin-bottom:8px"><div class="hlabel" style="margin-bottom:6px">Wat eerst? · hoogste rente bespaart het meest</div>${wr.map((d,i)=>`<div class="row" style="justify-content:space-between;padding:6px 0${i<wr.length-1?';border-bottom:1px solid var(--line)':''}"><span><span style="font-size:10.5px;font-weight:700;color:#06231c;background:var(--teal);border-radius:6px;padding:1px 7px;margin-right:7px">${i+1}</span>${esc(d.naam||'Schuld')}</span><span style="font-size:11.5px;font-weight:700;color:${(+d.rente>=5)?'var(--red)':'var(--green)'}">${d.rente}%</span></div>`).join('')}<div class="small muted" style="font-size:11px;margin-top:8px">Zet je extra euro op de bovenste. Liever motivatie? Kleinste schuld eerst kan ook — jij kiest. Geen advies.</div></div>` : '';
   return `<div style="margin-top:18px">
     <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Schulden &amp; aflossing</span></div>
-    ${prio}${rows}
-    <button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div>`;
+    ${prio}
+    <div class="cz-card" style="padding:2px 14px">${rows}<button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div></div>`;
 }
 function openDebt(id){
   const ds=SET.debts||[]; const d0=id?ds.find(x=>x.id===id):null; const isNew=!d0; const d=d0||{naam:'',start:'',rest:'',perMaand:'',rente:''};
@@ -3019,7 +3035,7 @@ function renderAssets(){
   return `<div style="margin-top:14px">
     <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Bezittingen</span></div>
     <div class="cz-card" style="padding:2px 14px">
-      <div class="cz-pot"><div class="cp-info"><div class="cp-nm">${ICON('bank')} Saldo (rekeningen)</div><div class="cp-sub">automatisch uit je transacties</div></div><span class="small" style="font-weight:700">${euro0(liq)}</span></div>
+      <div class="cz-pot"><div class="cp-info"><div class="cp-nm">${ICON('bank')} Saldo (rekeningen) <span style="color:var(--mut2);font-size:10.5px">· automatisch</span></div><div class="cp-sub">uit je transacties, altijd actueel</div></div><span class="small" style="font-weight:700">${euro0(liq)}</span></div>
       ${rows}${leaseRows}
       <button class="cp-add" onclick="openAsset()">+ Bezitting toevoegen</button>
     </div>
@@ -3078,15 +3094,44 @@ function assetProjection(a){
   const koop=infl>0? mid/Math.pow(1+infl/100,yr) : mid;
   return {PMT,yr,rend,infl,mid:Math.round(mid),low:Math.round(low),high:Math.round(high),ownIn:Math.round(ownIn),growth:Math.round(mid-ownIn),koop:Math.round(koop)};
 }
+function projFanChart(a){
+  const P0=(+a.waarde||0)+(+a.eenmalig||0), PMT=(+a.per||0), yr=Math.round(+a.horizon||0), rend=(+a.rend||0), infl=(+a.infl||0);
+  if(yr<=0) return '';
+  const low=[],mid=[],high=[],koop=[],inleg=[];
+  for(let y=0;y<=yr;y++){ const m=y*12;
+    low.push(fvProject(P0,PMT,rend-2,y)); mid.push(fvProject(P0,PMT,rend,y)); high.push(fvProject(P0,PMT,rend+2,y));
+    koop.push(infl>0? fvProject(P0,PMT,rend,y)/Math.pow(1+infl/100,y) : fvProject(P0,PMT,rend,y));
+    inleg.push(P0+PMT*m); }
+  const W=340,H=158,x0=6,x1=W-58,yT=12,yB=H-20; const maxV=Math.max(high[yr]*1.02,1);
+  const X=y=>x0+(y/yr)*(x1-x0), Y=v=>yB-(Math.max(v,0)/maxV)*(yB-yT);
+  const pts=arr=>arr.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
+  const band=high.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).concat(low.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).reverse()).join(' ');
+  const lbl=(v,txt,col,wt)=>`<text x="${x1+5}" y="${(Y(v)+3).toFixed(1)}" fill="${col}" font-size="9.5"${wt?' font-weight="700"':''}>${txt}</text>`;
+  const xt=[0,Math.round(yr/2),yr].filter((v,i,arr)=>arr.indexOf(v)===i && v>=0);
+  let s=`<polygon points="${band}" fill="rgba(45,212,191,.16)"/>`;
+  s+=`<polyline points="${pts(high)}" fill="none" stroke="rgba(45,212,191,.5)" stroke-width="1"/><polyline points="${pts(low)}" fill="none" stroke="rgba(45,212,191,.5)" stroke-width="1"/>`;
+  s+=`<polyline points="${pts(inleg)}" fill="none" stroke="#60a5fa" stroke-width="1.6"/>`;
+  if(infl>0) s+=`<polyline points="${pts(koop)}" fill="none" stroke="#9fb0c7" stroke-width="1.6" stroke-dasharray="4 4"/>`;
+  s+=`<polyline points="${pts(mid)}" fill="none" stroke="#2dd4bf" stroke-width="2.6"/>`;
+  s+=`<circle cx="${X(yr).toFixed(1)}" cy="${Y(high[yr]).toFixed(1)}" r="2.6" fill="#2dd4bf" opacity=".6"/><circle cx="${X(yr).toFixed(1)}" cy="${Y(mid[yr]).toFixed(1)}" r="3.4" fill="#2dd4bf"/><circle cx="${X(yr).toFixed(1)}" cy="${Y(low[yr]).toFixed(1)}" r="2.6" fill="#2dd4bf" opacity=".6"/>`;
+  s+=lbl(high[yr],euro0(Math.round(high[yr])),'#7fe6d8',0)+lbl(mid[yr],euro0(Math.round(mid[yr])),'#2dd4bf',1)+lbl(low[yr],euro0(Math.round(low[yr])),'#8aa0bb',0);
+  s+=xt.map(y=>`<text x="${X(y).toFixed(1)}" y="${H-6}" fill="#6b7c95" font-size="8.5" text-anchor="${y===0?'start':'middle'}">${y===0?'nu':'+'+y+'j'}</text>`).join('');
+  const leg=`<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--mut);margin-top:6px"><span><span style="display:inline-block;width:11px;height:8px;border-radius:2px;background:rgba(45,212,191,.18);border:1px solid rgba(45,212,191,.4);vertical-align:middle;margin-right:4px"></span>band ${rend-2}–${rend+2}%</span><span><span style="display:inline-block;width:13px;border-top:2px solid var(--teal);vertical-align:middle;margin-right:4px"></span>verwacht</span>${infl>0?`<span><span style="display:inline-block;width:13px;border-top:2px dashed var(--mut);vertical-align:middle;margin-right:4px"></span>koopkracht</span>`:''}<span><span style="display:inline-block;width:13px;border-top:2px solid var(--blue);vertical-align:middle;margin-right:4px"></span>inleg</span></div>`;
+  return `<div style="margin-top:12px"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none">${s}</svg>${leg}</div>`;
+}
 function assetProjectionCard(a){
   const pr=assetProjection(a); if(pr.yr<=0) return '';
+  if(!((SET.projOpen||{})[a.id])){
+    return `<div class="card" style="cursor:pointer" onclick="toggleProj('${a.id}')"><div class="row" style="justify-content:space-between;align-items:flex-start"><div style="min-width:0"><div class="hlabel" style="margin:0">Verwachte waarde · ${esc(a.naam||'Belegging')}</div><div style="font-size:20px;font-weight:800;color:var(--teal);margin-top:4px">± ${euro0(pr.mid)} <span class="small muted" style="font-weight:400">over ${pr.yr} jr</span></div>${pr.infl>0?`<div class="small muted" style="margin-top:1px">≈ ${euro0(pr.koop)} in koopkracht van nu</div>`:''}</div><span style="color:var(--mut2);font-size:16px;margin-left:8px">›</span></div></div>`;
+  }
   const ownPct=pr.mid>0?Math.max(3,Math.min(Math.round(pr.ownIn/pr.mid*100),100)):100; const growPct=Math.max(0,100-ownPct);
   const sc=(l,v,r,on)=>`<div style="flex:1;background:var(--card2);border:1px solid ${on?'var(--teal)':'var(--line)'};border-radius:11px;padding:9px 6px;text-align:center"><div style="font-size:10px;color:var(--mut2);text-transform:uppercase;letter-spacing:.3px">${l}</div><div style="font-size:13px;font-weight:800;margin:2px 0${on?';color:var(--teal)':''}">${euro0(v)}</div><div style="font-size:10px;color:var(--mut2)">${r}%</div></div>`;
   return `<div class="card">
-    <div class="row" style="justify-content:space-between"><span class="hlabel" style="margin:0">Verwachte waarde · ${esc(a.naam||'Belegging')}</span><span class="small muted">over ${pr.yr} jaar</span></div>
+    <div class="row" style="justify-content:space-between;cursor:pointer" onclick="toggleProj('${a.id}')"><span class="hlabel" style="margin:0">Verwachte waarde · ${esc(a.naam||'Belegging')}</span><span class="small muted">over ${pr.yr} jaar ▲</span></div>
     <div style="font-size:26px;font-weight:800;color:var(--teal);margin:8px 0 2px">± ${euro0(pr.mid)}</div>
     <div class="small muted">nominaal · verwacht${pr.PMT>0?' · '+euro0(pr.PMT)+'/mnd':''} · ${pr.rend}%/jr netto</div>
     ${pr.infl>0?`<div style="margin-top:7px;font-size:15px"><b>≈ ${euro0(pr.koop)}</b> <span class="small" style="color:var(--mut2)">in koopkracht van nu · na ${pr.infl}% inflatie</span></div>`:''}
+    ${projFanChart(a)}
     <div style="display:flex;gap:8px;margin-top:10px">${sc('Voorzichtig',pr.low,pr.rend-2,false)}${sc('Verwacht',pr.mid,pr.rend,true)}${sc('Optimistisch',pr.high,pr.rend+2,false)}</div>
     <div style="height:12px;border-radius:6px;overflow:hidden;display:flex;margin:12px 0 6px"><div style="width:${ownPct}%;background:var(--blue)"></div><div style="width:${growPct}%;background:var(--teal)"></div></div>
     <div class="row" style="justify-content:space-between;font-size:11.5px;color:var(--mut)"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--blue);margin-right:5px"></span>Eigen inleg ${euro0(pr.ownIn)}</span><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);margin-right:5px"></span>Groei ± ${euro0(pr.growth)}</span></div>
@@ -3094,6 +3139,7 @@ function assetProjectionCard(a){
   </div>`;
 }
 function renderAssetProjections(){ return (SET.assets||[]).filter(a=>a.grow && (+a.horizon||0)>0).map(a=>assetProjectionCard(a)).join(''); }
+function toggleProj(id){ SET.projOpen=SET.projOpen||{}; SET.projOpen[id]=!SET.projOpen[id]; save(); renderVermogen(); }
 function netWorthSeries(){
   const ms=months(); if(ms.length<2) return [];
   const cur=totalBalance().sum; const flow={}; ms.forEach(m=>flow[m]=0);
@@ -3174,7 +3220,7 @@ function goalDualChart(ingelegd,doel,maand,cut,baseMonths,newMonths){
   return `<div class="gc-dual"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none">${goalLine}${baseLine}${accelLine}</svg>
     <div class="gc-leg"><span><i style="background:#2dd4bf"></i>jouw koers</span><span><i class="d" style="border-color:#56627d"></i>huidig tempo</span></div></div>`;
 }
-function goalCoachCard(){
+function goalCoachCard(bare){
   let S=null; try{S=savingsModel();}catch(_){}
   if(!S||!S.goal||S.goal<=0) return '';
   const ingelegd=Math.round(S.cur),doel=Math.round(S.goal),maand=Math.round(S.monthlySaving),toGo=Math.max(doel-ingelegd,0);
@@ -3196,7 +3242,7 @@ function goalCoachCard(){
   const commitBtn=cut>0?`<button class="gc-commit${committed?' done':''}" onclick="commitGoalCut(${cut})">${committed?`Vastgelegd, ${euro0(cut)} per maand`:`Leg ${euro0(cut)} per maand vast, dan help ik je eraan denken`}</button>`:'';
   const reinforce=committed?`<div class="small muted" style="margin-top:9px">Mooi dat je dit aangaat. Ik help je eraan denken en we kijken samen hoe het gaat. Een mindere week is niet erg, vooruitgang weegt zwaarder dan perfectie.</div>`:'';
   return `<div class="card">
-    <div class="row" style="margin-bottom:7px"><span class="hlabel" style="margin:0;flex:1">${ICON('bulb')} Sneller bij je doel?</span></div>
+    ${bare?'':`<div class="row" style="margin-bottom:7px"><span class="hlabel" style="margin:0;flex:1">${ICON('bulb')} Sneller bij je doel?</span></div>`}
     <div class="gc-bighead">Klaar ${dlabel}${chip}</div>
     <div class="small muted" style="margin-top:2px">${sub}</div>
     ${goalDualChart(ingelegd,doel,maand,cut,baseMonths,newMonths)}
@@ -3210,7 +3256,7 @@ function nogDezeMaandCard(){
   let L=null; try{ L=monthLiquidity(); }catch(_){ return ''; }
   if(!L||!(L.fixDue>0||L.varDue>0||L.incDue>0)) return '';
   const teBetalen=Math.round(L.fixDue+L.varDue), teOntvangen=Math.round(L.incDue), netto=teOntvangen-teBetalen;
-  const sub=`${L.fixDue>0?`vast ${euro0(L.fixDue)}`:''}${(L.fixDue>0&&L.varDue>0)?' \u00b7 ':''}${L.varDue>0?`variabel ${euro0(L.varDue)}`:''}`;
+  const sub=`${L.fixDue>0?`vast ${euro0(L.fixDue)}`:''}${(L.fixDue>0&&L.varDue>0)?' \u00b7 ':''}${L.varDue>0?`variabel ${euro0(L.varDue)}`:''}${(L.fixDueExclCount>0)?` \u00b7 ${L.fixDueExclCount} uitgesloten`:''}`;
   return `<div class="card"><div class="hlabel" style="margin:0 0 12px">Nog deze maand</div>
     <div class="wvo-tiles" style="grid-template-columns:1fr 1fr">
       <div class="wvo-tile"${teBetalen>0?' style="cursor:pointer" onclick="openFixedDue()"':''}><div class="wvo-tl">Nog te betalen</div><div class="wvo-tv" style="color:var(--red)">${euro0(teBetalen)}</div>${sub?`<div class="wvo-ts">${sub}</div>`:''}</div>
@@ -3234,25 +3280,28 @@ const NF_PERIODIEK=new Set(['verzekering','belasting']);          // jaar/lumpy 
 const NF_CRISIS_DEFAULT={ boodschappen:80, vervoer:65, zorg:100 }; // % dat in crisis overblijft
 function nfKlasse(c){ return (SET.nfKlasse&&SET.nfKlasse[c])||NF_KLASSE_DEFAULT[c]||'exclude'; }
 function nfCrisis(c){ const o=SET.nfCrisis||{}; return o[c]!=null?o[c]:(NF_CRISIS_DEFAULT[c]!=null?NF_CRISIS_DEFAULT[c]:100); }
+function nfAmount(c){ const o=SET.nfAmount||{}; return (o[c]!=null && o[c]!=='')?+o[c]:null; }   // handmatig crisisbedrag (euro) per categorie, of null = automatisch
+function nfNote(c){ return (SET.nfNote||{})[c]||''; }
 function nfMaanden(){ return +SET.nfMaanden||4; }
 function nfMedian(a){ if(!a.length)return 0; const s=[...a].sort((x,y)=>x-y),n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; }
 function noodfondsModel(){
   const win=months().slice(-12); const maps=win.map(m=>catSpendMap(m)); const n=win.length||1;
-  let vast=0,varNormaal=0,varCrisis=0,huurGevonden=false; const detail=[],comfort=[],rek=[];
+  let vast=0,varNormaal=0,varCrisis=0,huurGevonden=false,essCrisis=0; const detail=[],comfort=[],rek=[],crisisRows=[];
   for(const cat in NF_KLASSE_DEFAULT){
     const reeks=maps.map(sm=>sm[cat]||0); const kl=nfKlasse(cat);
     const med=nfMedian(reeks), gem=reeks.reduce((a,b)=>a+b,0)/n, mx=Math.max(...reeks,0);
     if(cat==='huur'&&med>0) huurGevonden=true;
-    if(kl==='vast'){ const b=NF_PERIODIEK.has(cat)?gem:med; if(b>0){ vast+=b; detail.push(['vast',cat,b,b]); } }
-    else if(kl==='var'){ const cr=med*(nfCrisis(cat)/100); varNormaal+=med; varCrisis+=cr; detail.push(['var',cat,med,cr]); if(mx>0) rek.push([cat,mx-med,med,mx]); }
+    const man=nfAmount(cat);   // handmatige override in euro's, of null
+    if(kl==='vast'){ const b=NF_PERIODIEK.has(cat)?gem:med; if(b>0||man!=null){ const auto=Math.round(b); const cr=man!=null?man:auto; vast+=b; essCrisis+=cr; detail.push(['vast',cat,b,cr]); crisisRows.push({kl:'vast',cat,auto,crisis:Math.round(cr),man:man!=null,note:nfNote(cat)}); } }
+    else if(kl==='var'){ const auto=Math.round(med*(nfCrisis(cat)/100)); const cr=man!=null?man:auto; varNormaal+=med; varCrisis+=cr; essCrisis+=cr; detail.push(['var',cat,med,cr]); if(med>0||man!=null) crisisRows.push({kl:'var',cat,auto,crisis:Math.round(cr),man:man!=null,note:nfNote(cat)}); if(mx>0) rek.push([cat,mx-med,med,mx]); }
     else if(kl==='comfort'){ if(med>0||mx>0) comfort.push([cat,med,mx]); }
   }
   comfort.sort((a,b)=>b[1]-a[1]); rek.sort((a,b)=>b[1]-a[1]);
-  const essNormaal=vast+varNormaal, essCrisis=vast+varCrisis, maanden=nfMaanden(), doel=Math.round(essCrisis*maanden);
+  const essNormaal=vast+varNormaal, maanden=nfMaanden(), doel=Math.round(essCrisis*maanden);
   let spaar=null; try{ const s=totalSaved(); spaar=s.missing?null:s.sum; }catch(_){}
   const pct=(spaar!=null&&doel>0)?Math.min(100,Math.round(spaar/doel*100)):null;
   const comfortTot=comfort.reduce((a,c)=>a+c[1],0);
-  return {win,n,vast,varNormaal,varCrisis,essNormaal,essCrisis,maanden,doel,spaar,pct,detail,comfort,rek,comfortTot,huurGevonden};
+  return {win,n,vast,varNormaal,varCrisis,essNormaal,essCrisis,maanden,doel,spaar,pct,detail,comfort,rek,comfortTot,huurGevonden,crisisRows};
 }
 function noodfondsNaarBuffer(doel){ SET.bufferBasis='amount'; SET.bufferAmount=Math.round(doel); save(); render(); toast(`${ICON('check')} Buffer-doel ingesteld op ${euro0(doel)}`); }
 function noodfondsCard(){
@@ -3283,21 +3332,44 @@ function openNoodfondsPanel(){ window._setSheet=null; window._nfSheet=true; rend
 function renderNfSheet(){
   const M=noodfondsModel();
   const chips=[3,4,6].map(x=>`<span class="chip ${M.maanden===x?'on':''}" onclick="SET.nfMaanden=${x};save();renderNfSheet();renderVooruit()">${x} mnd</span>`).join('');
-  const sliders=['boodschappen','vervoer','zorg'].filter(c=>CATS[c]).map(c=>{ const v=nfCrisis(c); const mn=c==='vervoer'?30:50;
-    return `<div class="row" style="justify-content:space-between;margin-top:9px"><span class="small">${CATS[c].name}</span><span class="small muted">${v}%</span></div>
-      <input type="range" min="${mn}" max="100" value="${v}" oninput="SET.nfCrisis=SET.nfCrisis||{};SET.nfCrisis['${c}']=+this.value;save();renderNfSheet();renderVooruit()" style="width:100%">`; }).join('');
-  const det=M.detail.map(([k,c,nrm,cr])=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span class="small ${k==='var'?'':'muted'}">${CATS[c]?CATS[c].name:c}${k==='vast'?' (vast)':''}</span><span class="small" style="font-weight:600">${euro0(cr)}</span></div>`).join('');
+  const rows=M.crisisRows||[]; const open=!!SET.nfListOpen; const nOpen=SET.nfNoteOpen||{};
+  const nNote=rows.reduce((a,r)=>a+(r.note?1:0),0);
+  const grpName={vast:'Vaste lasten',var:'Variabel'}; let last='';
+  const rowHtml=rows.map(r=>{
+    const nm=CATS[r.cat]?CATS[r.cat].name:r.cat;
+    const grp = r.kl!==last ? `<div style="font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:12px 2px 2px">${grpName[r.kl]||''}</div>` : '';
+    last=r.kl;
+    const penOn=(!!r.note)||!!nOpen[r.cat];
+    const noteLine=r.note?`<div style="font-size:11.5px;color:var(--teal);margin-top:2px">${esc(r.note)}</div>`:'';
+    const editor=nOpen[r.cat]?`<div style="background:var(--card2);border:1px solid var(--teal);border-radius:10px;padding:8px 10px;margin:6px 0 2px"><div style="font-size:11px;color:var(--mut2);margin-bottom:4px">Notitie · waarom dit bedrag?</div><input type="text" value="${esc(r.note)}" placeholder="bv. alleen basis" onchange="setNfNote('${r.cat}',this.value)" style="width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;color:var(--txt)">${r.man?`<div style="font-size:10.5px;color:var(--mut2);cursor:pointer;text-decoration:underline;margin-top:7px;display:inline-block" onclick="resetNfAmount('${r.cat}')">↺ terug naar automatisch (${euro0(r.auto)})</div>`:''}</div>`:'';
+    return `${grp}<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px">${nm}</div><div style="font-size:11px;color:var(--mut2)">auto ${euro0(r.auto)}</div>${noteLine}</div>
+      <div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid ${r.man?'var(--teal)':'var(--line)'};border-radius:9px;padding:3px 9px;width:88px"><span style="color:var(--mut2);font-weight:600">€</span><input type="number" inputmode="numeric" min="0" value="${r.crisis}" onchange="setNfAmount('${r.cat}',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;padding:2px 0"></div>
+      <div onclick="toggleNfNote('${r.cat}')" title="Notitie" style="width:28px;height:28px;border-radius:8px;background:var(--card2);border:1px solid ${penOn?'var(--teal)':'var(--line)'};display:flex;align-items:center;justify-content:center;font-size:13px;color:${penOn?'var(--teal)':'var(--mut2)'};flex-shrink:0;cursor:pointer">✎</div>
+    </div>${editor}`;
+  }).join('');
+  const listCard=`<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleNfList()">
+      <div><div style="font-weight:600;font-size:14px">Minimaal nodig in crisis</div>${!open?`<div style="font-size:11.5px;color:var(--mut2);margin-top:2px">${rows.length} categorieën${nNote?` · ${nNote} met notitie`:''}</div>`:''}</div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:var(--teal);font-size:14px">${euro0(M.essCrisis)}/mnd</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'›'}</span></div>
+    </div>
+    ${open?`${rowHtml}<div style="font-size:11px;color:var(--mut2);margin-top:11px">Vul in wat je in een crisis écht nog uitgeeft — variabel én vast. Leeg of ‘terug naar automatisch’ = de schatting uit je transacties.</div>`:''}
+  </div>`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:17px">${ICON('home')} Noodfonds verfijnen</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="card" style="text-align:center"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;color:var(--teal)">Doel</div>
+    <div class="card" style="text-align:center"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;color:var(--teal)">Doel · ${M.maanden} mnd</div>
       <div style="font-size:32px;font-weight:800;letter-spacing:-1px;margin:4px 0">${euro0(M.doel)}</div>
-      <div class="small muted">${M.maanden} mnd × ${euro0(M.essCrisis)}/mnd essentieel</div>
+      <div class="small muted">${euro0(M.essCrisis)}/mnd essentieel</div>
       <div class="chips" style="margin-top:10px">${chips}</div></div>
-    <div class="card"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600">Crisis-vloer · wat blijft over</div>${sliders}<div class="small muted" style="margin-top:8px">Hoeveel van deze uitgave je in een crisis nog kunt afknijpen. Lager = kleiner noodfonds nodig.</div></div>
-    <div class="card"><div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span class="small muted">Vast (incl. huur)</span><span class="small" style="font-weight:700">${euro0(M.vast)}</span></div>${det}<div class="row" style="justify-content:space-between;padding:8px 0"><span class="small" style="font-weight:800">per maand</span><span class="small" style="font-weight:800;color:var(--teal)">${euro0(M.essCrisis)}</span></div></div>
+    ${listCard}
     <button class="btn" style="width:100%" onclick="noodfondsNaarBuffer(${M.doel});closeSheet()">${ICON('target')} Neem ${euro0(M.doel)} over als buffer-doel</button>
     <div style="height:8px"></div>`;
 }
+function setNfAmount(c,v){ SET.nfAmount=SET.nfAmount||{}; const s=(''+v).trim(); if(s===''||isNaN(+s)) delete SET.nfAmount[c]; else SET.nfAmount[c]=Math.max(0,Math.round(+s)); save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
+function resetNfAmount(c){ if(SET.nfAmount) delete SET.nfAmount[c]; if(SET.nfNoteOpen) delete SET.nfNoteOpen[c]; save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
+function setNfNote(c,v){ SET.nfNote=SET.nfNote||{}; const s=(''+v).trim(); if(s==='') delete SET.nfNote[c]; else SET.nfNote[c]=s.slice(0,80); save(); renderNfSheet(); }
+function toggleNfNote(c){ SET.nfNoteOpen=SET.nfNoteOpen||{}; SET.nfNoteOpen[c]=!SET.nfNoteOpen[c]; save(); renderNfSheet(); }
+function toggleNfList(){ SET.nfListOpen=!SET.nfListOpen; save(); renderNfSheet(); }
 function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -3306,7 +3378,19 @@ function renderVooruit(){
   const exp=(SET.vooruitMeer!==undefined)?SET.vooruitMeer:isMode('expert');   // expert: standaard uitgeklapt
   const deepBtn=`<button class="snz" onclick="toggleVooruit('vooruitMeer')">${exp?'minder ▲':'Deze maand in detail ▼'}</button>`;
   const deep = exp ? vooruitDeep() : '';
-  $('#s-vooruit').innerHTML = vooruitForecast() + noodfondsCard() + nogDezeMaandCard() + goalCoachCard() + renderGoals() + deepBtn + deep;
+  // ontdicht: de ring draagt de status; projectie en doelen zitten één tik dieper
+  const proj=goalCoachCard(true), goals=renderGoals(true);
+  const projOpen=(SET.vooruitProjOpen!==undefined)?SET.vooruitProjOpen:isMode('expert');
+  const doelOpen=(SET.vooruitDoelOpen!==undefined)?SET.vooruitDoelOpen:isMode('expert');
+  let projTeaser=''; try{ const S=savingsModel(); if(S&&S.goal>0){ const toGo=Math.max(S.goal-S.cur,0),mnd=S.monthlySaving; if(mnd>0&&toGo>0){ const bm=Math.ceil(toGo/mnd); const nd=new Date(); nd.setMonth(nd.getMonth()+bm); projTeaser='klaar '+nd.toLocaleDateString('nl-NL',{month:'short',year:'numeric'}); } } }catch(_){}
+  const nGoals=(SET.goals||[]).length; const doelTeaser=nGoals?`${nGoals} ${nGoals===1?'doel':'doelen'}`:'nog geen';
+  const projZone=proj?vooruitZone('vooruitProjOpen','Sneller bij je doel',projTeaser,projOpen,proj):'';
+  const doelZone=vooruitZone('vooruitDoelOpen','Mijn doelen',doelTeaser,doelOpen,goals);
+  $('#s-vooruit').innerHTML = vooruitForecast() + noodfondsCard() + nogDezeMaandCard() + projZone + doelZone + deepBtn + deep;
+}
+function vooruitZone(key,label,teaser,open,content){
+  const bar=`<div class="card" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px${open?';margin-bottom:8px':''}" onclick="toggleVooruit('${key}')"><span style="font-weight:600;font-size:14px">${label}${teaser?` <span class="small muted" style="font-weight:400">· ${teaser}</span>`:''}</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'›'}</span></div>`;
+  return open?bar+content:bar;
 }
 function hasAutoSaving(){ try{ const ms=months().slice(-3); let n=0; for(const mm of ms){ for(const t of txOfMonth(mm)){ if(catOf(t)==='sparen' || /(monthly|weekly) rule|round[\s-]?up|income sorter/i.test(t.name||'')) n++; } } return n>=2; }catch(_){ return false; } }
 function coachItems(){
@@ -3488,7 +3572,7 @@ function coachOpening(){
     const projSpend=spent+L.fixDue+varRemain;
     const overBy=Math.round(projSpend-bud);
     const room=Math.round(bud-projSpend);
-    const items=(L.fixDueItems||[]).slice().sort((a,b)=>b.amount-a.amount);
+    const items=(L.fixDueItems||[]).filter(s=>!s.excl).slice().sort((a,b)=>b.amount-a.amount);
     const names=items.slice(0,2).map(x=>{const nx=titleCase(cleanMerch(x.name)||''); return nx||(CATS[x.cat]?CATS[x.cat].name:'');}).filter(Boolean);
     const naming = names.length? `je ${names.join(' en ')} ${names.length>1?'moeten':'moet'} nog van je rekening` : `je vaste lasten moeten nog van je rekening`;
     if(overBy>0 || spent>bud){
@@ -3951,8 +4035,20 @@ async function startCoachTalk(m){
   if(_g!==_coGen)return;
   // 2) win erkennen (alleen met vorige afspraak, accent + teal afspraak)
   if(last){ await coSay(`Vorige keer hield je dit aan: <span class="hl">${esc(last)}</span>. Dat werkte.`,{html:true,accent:true,ai:{tone:'teal'}}); if(_g!==_coGen)return; }
-  // randgeval: geen lek → kort erkennen en afsluiten
-  if(!leak){ await coSay(`Geen lek deze maand. Je hield je aan je plan. Mooi, tot volgende keer.`,{ai:true}); coEnd(); return; }
+  // randgeval: geen lek → erken de goede maand en geef tóch één vooruitblik-tip
+  if(!leak){
+    await coSay(`Geen lek deze maand. Je hield je aan je plan, mooi werk.`,{ai:true}); if(_g!==_coGen)return;
+    let ftip=null; try{ const ts=goalCoachTips(m); ftip=ts&&ts.length?ts[0]:null; }catch(_){}
+    if(ftip && goal>0 && spaar>0){
+      await coSay(`Eén ding om vooruit te kijken: ${ftip.how}`,{html:true,ai:{tone:'teal'}}); if(_g!==_coGen)return;
+      coChoices([
+        {l:`${ftip.label} · +${euro0(ftip.save)}/mnd`, act:()=>{ toggleVooruitCut(ftip.key, ftip.save); go('vooruit'); }},
+        {l:'Nu even niet', act:()=>coEnd()}
+      ]);
+      return;
+    }
+    await coSay(`Tot volgende keer.`,{ai:true}); coEnd(); return;
+  }
   // 3) lek + stakes in één bubbel (frequentie als er een 'aantal keer'-potje is, anders €; stakes gedimd, geen schuld)
   await coSay(coLekHTML(leak,afw,spaar,freqOver),{html:true,ai:{tone:'gold'}});
   if(_g!==_coGen)return;
@@ -4726,23 +4822,6 @@ function insFocus(m){
   return {type:'bad', context:`Je geeft meer uit dan je norm deze maand.`, ctaLabel:'Bekijk je vooruitblik', ctaAct:"go('vooruit')"};
 }
 // statische inline-insight (budget vs werkelijk + status), geen navigatie
-function insInline(m){
-  const t=totals(m); const bud=Math.round(t.budget), sp=Math.round(t.spend);
-  if(bud<=0){ return `<div class="hdj" onclick="go('set')"><div class="hdj-top"><span class="hdj-lab">Hoe doe je het deze maand?</span><span class="hdj-go">\u203a</span></div><div class="small muted" style="margin-top:6px">Stel een maandbudget in om je tempo te zien.</div></div>`; }
-  const usedPct=Math.round(sp/bud*100), over=sp>bud, room=bud-sp;
-  const now=new Date(); const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate(); const dom=Math.min(now.getDate(),dim);
-  const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); const isNowM=m===nowYM;
-  const dayPct=isNowM?Math.round(dom/dim*100):100;
-  const ahead=isNowM && usedPct>dayPct+8;
-  const barCol=over?'var(--red)':(ahead?'var(--amber)':'var(--teal)');
-  const kn=over?`${euro0(sp-bud)} over budget`:`${euro0(room)} ruimte over`;
-  return `<div class="hdj" onclick="openBudgetCompare('${m}')">
-    <div class="hdj-top"><span class="hdj-lab">Hoe doe je het deze maand?</span><span class="hdj-go">\u203a</span></div>
-    <div class="hdj-kn" style="color:${over?'var(--red)':'var(--teal)'}">${kn} <span class="u">van ${euro0(bud)} budget</span></div>
-    <div class="hdj-bar"><div class="f" style="width:${Math.min(usedPct,100)}%;background:${barCol}"></div>${isNowM?`<div class="now" style="left:${dayPct}%"></div>`:''}</div>
-    <div class="hdj-lbl"><span>${usedPct}% gebruikt</span>${isNowM?`<span>dag ${dom} van ${dim}</span>`:''}</div>
-  </div>`;
-}
 function steerSpendUpTo(m, day){ // stuurbare (variabele) uitgaven per categorie in maand m t/m dag 'day' (99 = hele maand)
   const by={};
   for(const t of txOfMonth(m)){ if(t.amount>=0) continue; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixedCat(c)) continue; const d=+t.date.slice(8,10); if(d>day) continue; by[c]=(by[c]||0)+(-t.amount); }
