@@ -1,0 +1,55 @@
+# Minder — lokale, privacyvriendelijke uitgaventracker (PWA)
+
+## Wat dit is
+**Minder** is een single-file PWA voor het bijhouden van uitgaven, budgetten en liquiditeit.
+Je importeert **MT940 (ABN AMRO)** en **N26 CSV**; alles wordt **lokaal in de browser** geparsed en opgeslagen. **Niets verlaat het apparaat** — dat privacymodel is de kern.
+
+Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dragen** (lichamelijke gezondheid). Die horen in hun eigen mappen; verwar hun concepten niet met deze code.
+
+## Bestanden
+- `index.html` — de complete app (~6.460 regels, ~515 functies): HTML + inline `<style>` + inline `<script>`. Dit is het product.
+- `sw.js` — service worker. `const CACHE = 'minder-v16'`. **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
+- `manifest.webmanifest` — PWA-manifest (naam "Minder — uitgaventracker", standalone, `start_url` `./index.html`).
+- `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — iconen (staan ook in de SW-`ASSETS`-lijst).
+- `Open-banking-koppeling-plan.md` — referentieplan voor een latere live PSD2-bankkoppeling. **Nog niet gebouwd**; de MT940/CSV-import blijft voorlopig de basis.
+
+## Opslag & datamodel (localStorage)
+Sleutels: `minder_tx`, `minder_ovr`, `minder_set`, `minder_own`, `minder_accmeta`, `minder_plan`, `minder_view`.
+Globale state in `index.html`:
+- `TX` — transacties · `OVR` — categorie-overrides per transactie · `OWN` — eigen rekeningen · `ACCMETA` — rekening-metadata/saldi · `SET` — instellingen incl. budgetten · `PLAN` — plandata.
+- `CATS` / `FIXED_CATS` — categorie-definities · `MNAMES` / `MFULL` — maandnamen.
+Persistentie: `save()` schrijft alle sleutels, `load()` leest ze terug.
+
+## Schermen (tabs)
+Navigatie via `go(name)` → toont `#s-<name>`, markeert de nav. Zichtbaar in de onderbalk:
+- `dash` → **Home** (overzicht) · `ins` → **Inzichten** · `act` → **Coach** · `vooruit` → **Vooruitblik**.
+Overige (via knoppen bereikbaar): `tx` → Transacties · `vermogen` → Vermogen · `set` → Instellingen.
+Laatst bekeken scherm wordt bewaard in `minder_view`.
+
+## Functiekaart (kernankers in index.html)
+- **State:** `save()`, `load()`.
+- **Import/parsing:** `ingest()` (gedeelde inlees-routine), `parseMT940()`, `parseCSV()`, `splitCSVLine()`, `finalize()`, `categorize()`, `catOf()`, `hash()`.
+- **Render per scherm:** `renderDash()`, `renderIns()`, `renderTx()`/`renderTxList()`, `renderSet()`/`renderSetSheet()`, `renderActions()` (Coach), `renderVooruit()`, `renderVermogen()`/`renderNetWorth()`.
+- **Budget:** `effectiveBudgets()`, `plannedBudgets()`, `budgetBand()`, `bandColor()`, `setCatBudget()`, `suggestBudgets()`, `totals()`, `renderBudgetActual()`, `renderVariance()`.
+- **Liquiditeit/prognose:** `renderLiquidity()`, `forecastModel()`, `renderForecast()`, `dailyRollingSeries()`, `recurringSchedule()`, `accountShortfalls()`.
+- **Saldi:** `accBalance()`, `totalBalance()`, `totalSaved()`, `n26SavingsAccounts()`.
+- **PSD2 (open banking, referentie-stub):** `psd2Cfg()`, `psd2Connect()`, `psd2StartAuth()`, `psd2HandleCallback()`, `psd2IngestSession()`, `psd2Refresh()`, `psd2Disconnect()`.
+- **Gedragslaag:** `MECHANISM_SPEC` met o.a. `lossAversion`-dosering (hooguit `maxFramesPerDag` loss-frames, geplande aankoop uit een gevuld potje telt niet als loss).
+
+## Service worker & versiebeleid
+- Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
+- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v16` → `minder-v17`, …). De oude cache wordt in `activate` opgeruimd.
+- De `v10/v11/v13`-strings boven in `index.html` zijn inline-SVG-icoonversies, **geen** app-versie.
+
+## Syntax-check
+Trek het inline `<script>` uit `index.html` en controleer met **`node --check`** vóór commit.
+
+## Werkconventies
+- Nederlands, beknopt, direct.
+- Privacy-first: geen enkele gebruikersdata mag het apparaat verlaten (behalve bewust via een toekomstige PSD2-backend uit `Open-banking-koppeling-plan.md`).
+- Alles zit in `index.html`; hou de inline structuur (HTML/CSS/JS in één bestand) intact.
+- Wijzig je de SW-`ASSETS` of cachegedrag, hoog dan `CACHE` op.
+
+## Changelog
+*(per wijziging aanvullen — wat, waarom, effect)*
+- …
