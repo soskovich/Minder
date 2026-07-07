@@ -34,7 +34,10 @@ Laatst bekeken scherm wordt bewaard in `minder_view`.
 - **Liquiditeit/prognose:** `renderLiquidity()`, `forecastModel()`, `renderForecast()`, `dailyRollingSeries()`, `recurringSchedule()`, `accountShortfalls()`.
 - **Saldi:** `accBalance()`, `totalBalance()`, `totalSaved()`, `n26SavingsAccounts()`.
 - **PSD2 (open banking, referentie-stub):** `psd2Cfg()`, `psd2Connect()`, `psd2StartAuth()`, `psd2HandleCallback()`, `psd2IngestSession()`, `psd2Refresh()`, `psd2Disconnect()`.
-- **Gedragslaag:** `MECHANISM_SPEC` met o.a. `lossAversion`-dosering (hooguit `maxFramesPerDag` loss-frames, geplande aankoop uit een gevuld potje telt niet als loss).
+- **Gedragslaag:** `MECHANISM_SPEC` (`index.html:4220`) — de regels waaronder de coach mag spreken. Drie keys:
+  - `mentalAccounting` (`index.html:4224`) — stilstaand surplus boven de heilige buffer vs. dure schuld.
+  - `lossAversion` (`index.html:4241`) — dosering: hooguit `condities.maxFramesPerDag` loss-frames per dag, nooit gestapeld; een geplande aankoop uit een gevuld potje telt niet als loss.
+  - `freshStart` (`index.html:4298`) — één rustig vooruitblik-moment bij een nieuwe maand.
 
 ## Service worker & versiebeleid
 - Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
