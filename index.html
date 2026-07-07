@@ -3225,18 +3225,36 @@ function reisState(){
   }catch(_){}
   if(!defExp && fm) defExp=Math.round((fm.fFixed+fm.fVar)*12);
   const defPmt = fm? Math.max(Math.round(fm.fNet),0) : 0;
+  // jaaruitgaven-basis voor FIRE: 'auto' = geëxtrapoleerd uit je uitgaven, 'eigen' = zelf ingevuld maandbedrag
+  const expMode=(r.expMode==='eigen')?'eigen':'auto';
+  const expMonthly=r.expMonthly!=null?Math.max(0,Math.round(+r.expMonthly)):0;
+  const annualExp=(expMode==='eigen'&&expMonthly>0)?expMonthly*12:defExp;
+  // restsaldo-waterval: 'auto' = inleg volgt je surplus (inkomen − uitgaven), 'manual' = zelf getypt bedrag
+  const inlegMode=(r.inlegMode==='manual')?'manual':'auto';
+  const surplus=Math.max(defPmt,0);
+  const fInc=fm?Math.round(fm.fInc):0, fExp=fm?Math.round(fm.fFixed+fm.fVar):0;
+  // groei-handling zet het rendement: cash 0% · sparen 1,5% · beleggen 5% · verdelen = gewogen
+  const REND_SPAAR=1.5, REND_BELEG=5;
+  const growMode=['cash','sparen','beleggen','verdelen'].includes(r.growMode)?r.growMode:'beleggen';
+  const splitBeleg=r.splitBeleg!=null?Math.max(0,Math.min(100,Math.round(+r.splitBeleg))):60;
+  const rendFromGrow=growMode==='cash'?0:growMode==='sparen'?REND_SPAAR:growMode==='beleggen'?REND_BELEG:Math.round((REND_SPAAR*(100-splitBeleg)+REND_BELEG*splitBeleg)/100*10)/10;
   return { open:!!r.open, setOpen:!!r.setOpen, band:!!r.band, koop:!!r.koop, showInk:r.showInk!==false,
-    rend:r.rend!=null?+r.rend:5, infl:r.infl!=null?+r.infl:2,
-    pmt:r.pmt!=null?+r.pmt:defPmt, grow:+r.grow||0, een:+r.een||0,
+    rend:(inlegMode==='auto')?rendFromGrow:(r.rend!=null?+r.rend:REND_BELEG), infl:r.infl!=null?+r.infl:2,
+    pmt:(inlegMode==='auto')?surplus:(r.pmt!=null?+r.pmt:defPmt), grow:+r.grow||0, een:+r.een||0,
     birth:r.birth||null, override:r.override||null, ton:r.ton!=null?+r.ton:100000,
     fireMult:+r.fireMult||25, fireCustom:!!r.fireCustom, incGoal:r.incGoal!=null?+r.incGoal:2000, incExpl:!!r.incExpl,
     sigma:r.sigma!=null?+r.sigma:13, haalOpen:!!r.haalOpen,
     steps:Array.isArray(r.steps)?r.steps:[], customMs:Array.isArray(r.customMs)?r.customMs:[],
-    annualExp:r.annualExp!=null?+r.annualExp:defExp };
+    expMode, expMonthly, autoExp:defExp, annualExp,
+    inlegMode, surplus, fInc, fExp, growMode, splitBeleg, rendFromGrow };
 }
 function reisSet(k,v){ SET.reis=SET.reis||{}; if(v===''||v==null) delete SET.reis[k]; else SET.reis[k]=v; save(); renderVermogen(); }
 function reisToggle(k){ SET.reis=SET.reis||{}; const cur=reisState(); SET.reis[k]=!cur[k]; save(); renderVermogen(); }
 function reisFire(m){ SET.reis=SET.reis||{}; SET.reis.fireCustom=(m==='eigen'); if(m!=='eigen') SET.reis.fireMult=m; save(); renderVermogen(); }
+function reisExpMode(m){ SET.reis=SET.reis||{}; SET.reis.expMode=(m==='eigen')?'eigen':'auto'; save(); renderVermogen(); }
+function reisInlegMode(m){ SET.reis=SET.reis||{}; SET.reis.inlegMode=(m==='manual')?'manual':'auto'; save(); renderVermogen(); }
+function reisGrow(mode){ SET.reis=SET.reis||{}; if(['cash','sparen','beleggen','verdelen'].includes(mode)) SET.reis.growMode=mode; save(); renderVermogen(); }
+function reisSplit(v){ SET.reis=SET.reis||{}; SET.reis.splitBeleg=Math.max(0,Math.min(100,Math.round(+v||0))); save(); renderVermogen(); }
 function reisAddStep(){ const y=+prompt('Vanaf welk jaar verandert je inleg?', (new Date().getFullYear()+6)); if(!y) return; const a=prompt('Nieuwe periodieke inleg (€/mnd)?','1000'); if(a==null) return; SET.reis=SET.reis||{}; SET.reis.steps=(SET.reis.steps||[]).concat([{from:y,amt:Math.max(0,Math.round(+a||0))}]); save(); renderVermogen(); }
 function reisRemoveStep(i){ SET.reis=SET.reis||{}; SET.reis.steps=(SET.reis.steps||[]); SET.reis.steps.splice(i,1); save(); renderVermogen(); }
 function reisAddCustom(){ const nm=prompt('Naam van je mijlpaal?','Nieuwe auto'); if(!nm) return; const b=+prompt('Streefbedrag (€)?','25000'); if(!b) return; SET.reis=SET.reis||{}; SET.reis.customMs=(SET.reis.customMs||[]).concat([{id:'rm'+Date.now().toString(36),nm:nm.slice(0,40),target:Math.round(b)}]); save(); renderVermogen(); }
@@ -3259,20 +3277,30 @@ function reisModel(){
   const mid=[P0],low=[P0],high=[P0],koop=[P0]; let bm=P0,bl=P0,bh=P0;
   for(let y=0;y<HZ;y++){ const p=pmtFor(nowY+y); for(let m=0;m<12;m++){ bm=bm*(1+rM)+p; bl=bl*(1+rL)+p; bh=bh*(1+rH)+p; } mid.push(bm);low.push(bl);high.push(bh);koop.push(bm/Math.pow(1+R.infl/100,y+1)); }
   const reach=t=>{ for(let y=0;y<=HZ;y++){ if(mid[y]>=t) return y; } return null; };
-  // noodfonds-mijlpaal = hetzelfde actieve bufferdoel als in Vooruitblik (savingsModel().goal), niet een losse berekening
-  const noodDoel=(function(){ try{ const s=savingsModel(); if(s&&s.goal>0) return Math.round(s.goal); }catch(_){} return (+SET.bufferAmount||0)||(function(){ try{return noodfondsModel().doel;}catch(_){return 0;} })(); })();
+  // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Vooruitblik (noodfondsModel().doel)
+  const noodDoel=(function(){ try{ const d=noodfondsModel().doel; if(d>0) return Math.round(d); }catch(_){} try{ const s=savingsModel(); if(s&&s.goal>0) return Math.round(s.goal); }catch(_){} return (+SET.bufferAmount||0)||0; })();
   const FIRE=(R.annualExp||0)*R.fireMult;
-  let debtYr=null; try{ const ds=(SET.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0); if(ds.length){ let mx=0,inf=false; ds.forEach(d=>{ const mo=payoffMonths(Math.max(+d.rest||0,0),+d.perMaand||0,+d.rente||0); if(mo===Infinity)inf=true; else mx=Math.max(mx,mo); }); if(!inf&&mx>0) debtYr=nowY+Math.ceil(mx/12); } }catch(_){}
+  // per-schuld aflossing: elk type een eigen aflosjaar (getoond in de afbouw-strook + mijlpaal-lijst)
+  const DEBTCOL=['#fbbf24','#60a5fa','#f472b6','#a78bfa','#f87171','#38bdf8'];
+  let debtPay=[], debtYr=null;
+  try{ const ds=(SET.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0);
+    ds.forEach((d,i)=>{ const rest=Math.max(+d.rest||0,0), mo=payoffMonths(rest,+d.perMaand||0,+d.rente||0);
+      const yr=(mo===Infinity||mo<=0)?null:nowY+Math.ceil(mo/12);
+      debtPay.push({nm:d.naam||'Schuld',rest,per:+d.perMaand||0,rente:+d.rente||0,mo:(mo===Infinity?null:mo),yr,col:DEBTCOL[i%DEBTCOL.length]}); });
+    const fin=debtPay.filter(x=>x.yr!=null); if(fin.length && fin.length===debtPay.length) debtYr=Math.max(...fin.map(x=>x.yr));
+  }catch(_){}
   const ms=[];
   if(noodDoel>0) ms.push({key:'nood',nm:'Noodfonds',target:Math.round(noodDoel),col:'#34d399',icon:'shield',sub:'buffer compleet'});
-  if(debtYr) ms.push({key:'debt',nm:'Schuldenvrij',target:null,yr:debtYr,col:'#60a5fa',icon:'check',sub:'alle schulden af'});
+  if(debtPay.length===1){ const d0=debtPay[0]; if(d0.yr) ms.push({key:'debt',nm:'Schuldenvrij',target:null,yr:d0.yr,col:d0.col,icon:'check',sub:'alle schulden af'}); }
+  else if(debtPay.length>1){ debtPay.forEach((d,i)=>ms.push({key:'debt'+i,nm:d.nm+' afgelost',target:null,yr:d.yr,col:d.col,icon:'check',sub:d.yr?'lening afgelost':'aflossing te laag',debtSub:true}));
+    if(debtYr) ms.push({key:'debt',nm:'Volledig schuldenvrij',target:null,yr:debtYr,col:'#60a5fa',icon:'check',sub:'alle schulden af'}); }
   // "Belegd geld werkt": vermogen groot genoeg dat het rendement (opnameregel = 1/factor) ~een kwart van je uitgaven dekt
   if(FIRE>0){ const werk=Math.round(FIRE*0.25); const pm=Math.round((R.annualExp||0)*0.25/12); ms.push({key:'werk',nm:'Belegd geld werkt',target:werk,col:'#2dd4bf',icon:'flag',sub:`rendement dekt ~${euro0(pm)}/mnd · ¼ van je uitgaven`}); }
   R.customMs.forEach(c=>ms.push({key:c.id,nm:c.nm,target:+c.target,col:'#f472b6',icon:'star',sub:euro0(+c.target),custom:true}));
   if(FIRE>0) ms.push({key:'fire',nm:'FIRE-getal',target:FIRE,col:'#a78bfa',icon:'flame',sub:R.fireMult+'× uitgaven = '+euro0(FIRE)});
   ms.push({key:'pens',nm:'Pensioen',target:null,yr:targetYear,col:'#9fb0c7',icon:'sun',sub:(R.override?'jouw streefjaar':(R.birth?'AOW · 67 jaar':'stel geboortejaar in'))});
   ms.forEach(m=>{ if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); } else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; } });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,reach,ms,FIRE,pmtFor};
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,reach,ms,FIRE,pmtFor,debtPay};
 }
 // ---- Monte Carlo: slagingskans + percentiel-band (lokaal, op verzoek) ----
 function reisRandn(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
@@ -3343,13 +3371,82 @@ function reisChartSVG(M){
   if(R.koop){ s+=`<polyline points="${pts(M.koop)}" fill="none" stroke="#9fb0c7" stroke-width="1.5" stroke-dasharray="4 4"/>`; }
   if(R.showInk && reqCap>0 && reqCap<=niceMax){ const yy=Y(reqCap); s+=`<line x1="${x0}" y1="${yy.toFixed(1)}" x2="${x1}" y2="${yy.toFixed(1)}" stroke="#f472b6" stroke-width="1.2" stroke-dasharray="4 3"/><text x="${x1}" y="${(yy-4).toFixed(1)}" fill="#f472b6" font-size="8" text-anchor="end">inkomensdoel ${kf(reqCap)}</text>`; }
   s+=`<polyline points="${pts(M.mid)}" fill="none" stroke="#2dd4bf" stroke-width="2.8" stroke-linejoin="round"/>`;
-  M.ms.filter(m=>m.tIdx!=null&&m.tIdx>=0&&m.tIdx<=HZ).forEach(m=>{ const vy=(m.target!=null)?m.target:M.mid[m.tIdx]; const px=X(m.tIdx), py=Y(vy);
-    s+=`<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${px.toFixed(1)}" y2="${yB}" stroke="${m.col}" stroke-width="1" stroke-dasharray="2 3" opacity=".35"/>`;
+  M.ms.filter(m=>!m.debtSub&&m.tIdx!=null&&m.tIdx>=0&&m.tIdx<=HZ).forEach(m=>{ const vy=(m.target!=null)?m.target:M.mid[m.tIdx]; const px=X(m.tIdx), py=Y(vy);
+    s+=`<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${px.toFixed(1)}" y2="${yB}" stroke="${m.col}" stroke-width="1" stroke-dasharray="2 3" opacity=".3"/>`;
+    // jaartal-pil boven het punt: 'nu' als behaald, anders het jaar
+    const yr=m.reached?'nu':(m.yr!=null?(''+m.yr):('na '+M.targetYear)); const pw=yr.length*5.4+10; const pxL=Math.max(x0,Math.min(px-pw/2,x1-pw)); const pyT=Math.max(1,py-24);
+    s+=`<rect x="${pxL.toFixed(1)}" y="${pyT.toFixed(1)}" width="${pw.toFixed(1)}" height="13" rx="6.5" fill="${m.col}" opacity="0.16"/><text x="${(pxL+pw/2).toFixed(1)}" y="${(pyT+9.4).toFixed(1)}" fill="${m.col}" font-size="8.5" font-weight="700" text-anchor="middle">${yr}</text>`;
     if(m.reached){ s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="${m.col}"/>${reisGlyph(m.icon,px,py,'#0b1220')}`; }
     else { s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="#0b1220" stroke="${m.col}" stroke-width="1.3"/>${reisGlyph(m.icon,px,py,m.col)}`; } });
   const stepY=HZ<=12?4:(HZ<=25?5:10); const ticks=[]; for(let t=0;t<=HZ;t+=stepY) ticks.push(t); if(ticks[ticks.length-1]!==HZ) ticks.push(HZ);
   ticks.forEach(t=>{ s+=`<text x="${X(t).toFixed(1)}" y="${yB+15}" fill="#6b7c95" font-size="8.5" text-anchor="${t===0?'start':(t===HZ?'end':'middle')}">${t===0?'nu':(nowY+t)}</text>`; });
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="margin-top:10px">${s}</svg>`;
+}
+function reisDebtSVG(M){
+  const ds=(M.debtPay||[]).filter(d=>d.rest>0); if(ds.length<2) return '';
+  const nowY=M.nowY; const fin=ds.filter(d=>d.yr!=null); const maxYr=fin.length?Math.max(...fin.map(d=>d.yr)):nowY+10; const span=Math.max(maxYr-nowY,1);
+  const maxRest=Math.max(...ds.map(d=>d.rest),1);
+  const W=360,H=104,x0=8,x1=W-8,yT=10,yB=H-22;
+  const X=yr=>x0+((yr-nowY)/span)*(x1-x0), Y=v=>yB-(v/maxRest)*(yB-yT);
+  let s=`<line x1="${x0}" y1="${yB}" x2="${x1}" y2="${yB}" stroke="rgba(159,176,199,.18)"/>`;
+  const step=span<=6?2:(span<=12?3:5); const ticks=[]; for(let y=nowY;y<=maxYr;y+=step) ticks.push(y); if(ticks[ticks.length-1]!==maxYr) ticks.push(maxYr);
+  ticks.forEach(yr=>{ s+=`<text x="${X(yr).toFixed(1)}" y="${yB+13}" fill="#6b7c95" font-size="8" text-anchor="middle">${yr===nowY?'nu':yr}</text>`; });
+  ds.forEach(d=>{ const xN=X(nowY), yN=Y(d.rest);
+    if(d.yr==null){ s+=`<line x1="${xN.toFixed(1)}" y1="${yN.toFixed(1)}" x2="${x1}" y2="${yN.toFixed(1)}" stroke="${d.col}" stroke-width="2" stroke-dasharray="3 3" opacity=".8"/><text x="${(xN+4).toFixed(1)}" y="${(yN-4).toFixed(1)}" fill="${d.col}" font-size="8.5" font-weight="700">${esc(d.nm)} · aflossing te laag</text>`; return; }
+    const xP=X(d.yr);
+    s+=`<line x1="${xN.toFixed(1)}" y1="${yN.toFixed(1)}" x2="${xP.toFixed(1)}" y2="${yB.toFixed(1)}" stroke="${d.col}" stroke-width="2.2" stroke-linecap="round"/>`;
+    s+=`<circle cx="${xN.toFixed(1)}" cy="${yN.toFixed(1)}" r="2.6" fill="${d.col}"/><circle cx="${xP.toFixed(1)}" cy="${yB.toFixed(1)}" r="3.4" fill="${d.col}"/>`;
+    s+=`<text x="${(xN+4).toFixed(1)}" y="${(yN-4).toFixed(1)}" fill="${d.col}" font-size="8.5" font-weight="700">${esc(d.nm)}</text>`;
+    s+=`<text x="${xP.toFixed(1)}" y="${(yB-5).toFixed(1)}" fill="${d.col}" font-size="8.5" font-weight="700" text-anchor="${xP>W-42?'end':'middle'}">vrij ${d.yr}</text>`; });
+  return `<div style="margin-top:14px"><div class="hlabel">Schulden afbouw · per type</div><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="margin-top:8px">${s}</svg><div class="small mut2" style="font-size:10.5px;margin-top:2px">Rechte lijn ter indicatie · elke lening apart naar € 0 bij je huidige aflossing.</div></div>`;
+}
+function reisRestsaldo(M){
+  const R=M.R, surplus=R.surplus;
+  const modeChip=(id,lab)=>`<span onclick="reisInlegMode('${id}')" class="chip ${R.inlegMode===id?'on':''}" style="flex:1;text-align:center">${lab}</span>`;
+  // breakdown inkomen − uitgaven = restsaldo
+  const breakdown=`<div style="margin:10px 0 2px;padding:11px 12px;background:var(--card2);border-radius:11px">
+    <div class="row"><span class="small muted">Inkomen − uitgaven</span><span class="small mut2">uit je data</span></div>
+    <div class="row" style="margin-top:3px;align-items:baseline"><span style="font-weight:800;font-size:20px;color:${surplus>0?'var(--teal)':'var(--amber)'}">${euro0(surplus)}</span><span class="small muted">${surplus>0?'/mnd over':'/mnd — niets over'}</span></div>
+    ${(R.fInc>0)?`<div class="small mut2" style="font-size:11px;margin-top:3px">${euro0(R.fInc)} in · ${euro0(R.fExp)} uit</div>`:''}
+  </div>`;
+  const modeRow=`<div class="chips" style="margin-top:10px">${modeChip('auto','Uit je restsaldo')}${modeChip('manual','Zelf invullen')}</div>`;
+  if(R.inlegMode!=='auto'){
+    return `<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}
+      <div class="small mut2" style="font-size:11px;margin-top:8px">Je vult hieronder zelf een vast bedrag in bij <b>Periodieke inleg</b>.</div>`;
+  }
+  if(!(surplus>0)){
+    return `<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}
+      <div style="margin-top:10px;padding:10px 12px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:11px;font-size:12px">Er blijft nu niets over om te laten werken. Breng eerst je uitgaven onder je inkomen — daarna kan dit geld voor je gaan werken.</div>`;
+  }
+  // stap 1 — noodfonds
+  let nfDoel=0,nfCur=0; try{ const nf=noodfondsModel(); nfDoel=Math.round(nf.doel||0); nfCur=(nf.spaar!=null?Math.round(nf.spaar):0); }catch(_){}
+  if(!nfCur){ try{ const s=savingsModel(); nfCur=Math.round(s.cur||0); if(!nfDoel) nfDoel=Math.round(s.goal||0); }catch(_){} }
+  const nfToGo=Math.max(nfDoel-nfCur,0), nfFull=(nfDoel<=0)||nfToGo<=0, nfPct=nfDoel>0?Math.min(100,Math.round(nfCur/nfDoel*100)):0;
+  const nfMonths=(nfToGo>0)?Math.ceil(nfToGo/surplus):0;
+  const num=(n,c1,c2)=>`<div class="num" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;background:${c1};color:${c2}">${n}</div>`;
+  const stepWrap=(rail,inner,last)=>`<div style="display:flex;gap:11px;padding:10px 0">${rail}<div style="flex:1;min-width:0">${inner}</div></div>`;
+  const rail=(n,c1,c2,last)=>`<div style="width:26px;flex-shrink:0;display:flex;flex-direction:column;align-items:center">${num(n,c1,c2)}${last?'':`<div style="width:2px;flex:1;background:var(--line);margin-top:4px"></div>`}</div>`;
+  const step1=stepWrap(rail('1','var(--green)','#06231c',false),
+    nfFull
+    ? `<div class="row"><span style="font-weight:700;font-size:14px">Noodfonds</span><span style="font-weight:800;font-size:12.5px;color:var(--green)">vol ✓</span></div><div class="small mut2" style="font-size:11.5px">je buffer is compleet — dit deel gaat door naar groei</div>`
+    : `<div class="row"><span style="font-weight:700;font-size:14px">Noodfonds eerst</span><span style="font-weight:800;font-size:12.5px;color:var(--green)">tot ${euro0(nfDoel)}</span></div><div class="small mut2" style="font-size:11.5px">vullen tot je doel — stopt vanzelf als het vol is</div><div class="bar-track" style="margin:7px 0 2px"><div class="bar-fill" style="width:${nfPct}%;background:var(--green)"></div></div><div class="small mut2" style="font-size:11px">${euro0(nfCur)} / ${euro0(nfDoel)}${nfMonths>0?' · nog ± '+nfMonths+' mnd':''}</div>`);
+  // stap 2 — schuld (informatief, alleen als er schuld is)
+  const debts=(SET.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0); const debtPer=debts.reduce((s,d)=>s+(+d.perMaand||0),0);
+  const step2= debts.length? stepWrap(rail('2','var(--amber)','#2a1e00',false),
+    `<div class="row"><span style="font-weight:700;font-size:14px">Schuld loopt mee</span><span style="font-weight:800;font-size:12.5px;color:var(--amber)">${euro0(debtPer)}/mnd</span></div><div class="small mut2" style="font-size:11.5px">je aflossing zit al in je uitgaven — het restsaldo is wat daarná overblijft</div>`) : '';
+  // stap 3 — de rest laten groeien
+  const g=(id,lab,r)=>`<span onclick="reisGrow('${id}')" class="chip ${R.growMode===id?'on':''}" style="text-align:center">${lab} <span style="opacity:.75">${r}</span></span>`;
+  const vRend=(''+R.rendFromGrow).replace('.',',');
+  const growChips=`<div class="chips" style="margin-top:8px">${g('cash','Laten staan','0%')}${g('sparen','Sparen','~1,5%')}${g('beleggen','Beleggen','~5%')}${g('verdelen','Verdelen','~'+vRend+'%')}</div>`;
+  const splitUI=R.growMode==='verdelen'
+    ? `<div style="margin-top:9px"><div style="height:12px;border-radius:7px;overflow:hidden;display:flex;background:var(--card2)"><div style="width:${100-R.splitBeleg}%;background:var(--green)"></div><div style="width:${R.splitBeleg}%;background:var(--purple)"></div></div>
+       <div class="row small" style="margin-top:5px"><span><span style="color:var(--green)">●</span> Sparen ${100-R.splitBeleg}%</span><span><span style="color:var(--purple)">●</span> Beleggen ${R.splitBeleg}%</span></div>
+       <input type="range" min="0" max="100" step="10" value="${R.splitBeleg}" oninput="reisSplit(this.value)" style="width:100%;margin-top:6px;accent-color:var(--purple)"></div>`
+    : '';
+  const step3=stepWrap(rail('3','var(--teal)','#06231c',true),
+    `<div class="row"><span style="font-weight:700;font-size:14px">De rest laten groeien</span><span style="font-weight:800;font-size:12.5px;color:var(--teal)">${euro0(surplus)}/mnd</span></div><div class="small mut2" style="font-size:11.5px">${nfFull?'je volledige restsaldo':'zodra je noodfonds vol is'} · tegen ~${vRend}%</div>${growChips}${splitUI}`);
+  const note=`<div class="small mut2" style="font-size:10.5px;margin-top:8px">In je Vermogensreis groeit je hele restsaldo mee zodra je noodfonds vol is${debts.length?' en je schuld is afgelost':''}. Rendementen zijn voorbeelden, geen belofte — jij kiest de verdeling en het risico.</div>`;
+  return `<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}<div style="margin-top:6px">${step1}${step2}${step3}</div>${note}`;
 }
 function reisCard(){
   let M; try{ M=reisModel(); }catch(_){ return ''; }
@@ -3371,32 +3468,48 @@ function reisCard(){
   const list=M.ms.map(m=>{ const yrtxt=m.reached?'<span style="color:var(--green)">behaald</span>':(m.yr!=null?m.yr:('na '+M.targetYear));
     const rm=m.custom?`<span onclick="reisRemoveCustom('${m.key}')" style="color:var(--mut2);cursor:pointer;font-weight:700;margin-left:8px">×</span>`:'';
     return `<div class="row" style="gap:10px;padding:9px 0;border-top:1px solid var(--line)">${reisListIcon(m.icon,m.col)}<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px">${esc(m.nm)}</div><div class="small" style="color:var(--mut2)">${m.sub}${(m.target!=null&&!m.reached&&m.target>curNW)?' · nog '+euro0(m.target-curNW):''}</div></div><div style="font-weight:800;font-size:12.5px;text-align:right;white-space:nowrap">${yrtxt}</div>${rm}</div>`; }).join('');
-  const fl=(lab,val,attrs,suffix)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1">${lab}</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:138px"><span class="small muted" style="flex-shrink:0">€</span><input ${attrs} style="flex:1;min-width:0;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none">${suffix||''}</div></div>`;
+  // mobiel-veilige invoerrij: label mag krimpen, invoerblok begrensd op 128px (past altijd binnen de kaart)
+  const fl=(lab,attrs,suffix)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lab}</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;flex:0 0 128px;max-width:128px"><span class="small muted" style="flex-shrink:0;font-size:12px">€</span><input ${attrs} style="flex:1;min-width:0;width:100%;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none">${suffix?`<span class="small muted" style="flex-shrink:0;font-size:11px">${suffix}</span>`:''}</div></div>`;
+  const nl=(lab,attrs,suffix)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lab}</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;flex:0 0 128px;max-width:128px"><input ${attrs} style="flex:1;min-width:0;width:100%;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none">${suffix?`<span class="small muted" style="flex-shrink:0;font-size:11px">${suffix}</span>`:''}</div></div>`;
   const stepList=(R.steps||[]).slice().sort((a,b)=>(+a.from)-(+b.from)).map(s0=>{ const idx=R.steps.indexOf(s0); return `<div class="row" style="gap:8px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:7px 10px;margin-top:7px;font-size:12.5px"><span style="flex:1">vanaf <b>${s0.from}</b> · ${euro0(+s0.amt)}/mnd</span><span onclick="reisRemoveStep(${idx})" style="color:var(--mut2);cursor:pointer;font-weight:700">×</span></div>`; }).join('');
   const fireChips=[{m:25,w:'4%'},{m:30,w:'3,3%'},{m:'eigen'}].map(o=>{ if(o.m==='eigen') return `<span onclick="reisFire('eigen')" class="chip ${R.fireCustom?'on':''}" style="flex:1">Eigen</span>`; return `<span onclick="reisFire(${o.m})" class="chip ${(!R.fireCustom&&R.fireMult===o.m)?'on':''}" style="flex:1">${o.m}×</span>`; }).join('');
   const reqCap=(+R.incGoal||0)*12*R.fireMult; const it=M.reach(reqCap); const gap=M.mid[M.HZ]-reqCap; const ft=M.reach(M.FIRE);
+  const roRow=(lab,val,note)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1;min-width:0">${lab}</label><div style="background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:6px 11px;font-weight:700;font-size:14px;white-space:nowrap">${val}</div></div>${note?`<div class="small mut2" style="font-size:11px;margin-top:4px">${note}</div>`:''}`;
   const settings = R.setOpen ? `
-    <div style="margin-top:11px"><div class="hlabel">Inleg · hiermee groeit je vermogen</div>
-      ${fl('Periodieke inleg (nu)','type="number" min="0" step="25" value="'+R.pmt+'" onchange="reisSet(\'pmt\',Math.max(0,Math.round(+this.value||0)))"','<span class="small muted" style="font-size:11px">/mnd</span>')}
+    <div style="margin-top:11px">${reisRestsaldo(M)}</div>
+    <div style="margin-top:15px"><div class="hlabel">Inleg · hiermee groeit je vermogen</div>
+      ${R.inlegMode==='auto'
+        ? roRow('Periodieke inleg', euro0(R.pmt)+'/mnd', 'Uit je restsaldo (auto). Kies hierboven "Zelf invullen" voor een vast bedrag.')
+        : fl('Periodieke inleg (nu)','type="number" min="0" step="25" value="'+R.pmt+'" onchange="reisSet(\'pmt\',Math.max(0,Math.round(+this.value||0)))"','/mnd')}
       ${stepList}
       <button class="cp-add" style="margin-top:8px" onclick="reisAddStep()">+ Inleg-wijziging vanaf jaar</button>
-      <div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1">Of: inleg groeit</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:132px"><input type="number" min="0" step="0.5" value="${R.grow}" onchange="reisSet('grow',+this.value||0)" style="flex:1;min-width:0;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"><span class="small muted" style="font-size:11px">%/jr</span></div></div>
+      ${nl('Of: inleg groeit','type="number" min="0" step="0.5" value="'+R.grow+'" onchange="reisSet(\'grow\',+this.value||0)"','%/jr')}
       ${fl('Eenmalige inleg nu','type="number" min="0" step="500" value="'+R.een+'" onchange="reisSet(\'een\',Math.max(0,Math.round(+this.value||0)))"')}
-      <div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1">Netto rendement</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:132px"><input type="number" min="0" step="0.5" value="${R.rend}" onchange="reisSet('rend',+this.value||0)" style="flex:1;min-width:0;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"><span class="small muted" style="font-size:11px">%/jr</span></div></div>
-      <div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1">Inflatie</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:132px"><input type="number" min="0" step="0.5" value="${R.infl}" onchange="reisSet('infl',+this.value||0)" style="flex:1;min-width:0;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"><span class="small muted" style="font-size:11px">%/jr</span></div></div>
+      ${R.inlegMode==='auto'
+        ? roRow('Netto rendement', (''+R.rend).replace('.',',')+'%/jr', 'Volgt je keuze bij "De rest laten groeien".')
+        : nl('Netto rendement','type="number" min="0" step="0.5" value="'+R.rend+'" onchange="reisSet(\'rend\',+this.value||0)"','%/jr')}
+      ${nl('Inflatie','type="number" min="0" step="0.5" value="'+R.infl+'" onchange="reisSet(\'infl\',+this.value||0)"','%/jr')}
     </div>
     <div style="margin-top:13px"><div class="hlabel">Leeftijd &amp; pensioen</div>
-      <div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1">Geboortejaar</label><div style="background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:132px"><input type="number" min="1940" max="2010" value="${R.birth||''}" placeholder="bv. 1990" onchange="reisSet('birth',this.value?+this.value:'')" style="flex:1;min-width:0;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"></div></div>
-      <div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1">Eigen streefjaar · optioneel</label><div style="background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:132px"><input type="number" min="2027" value="${R.override||''}" placeholder="auto" onchange="reisSet('override',this.value?+this.value:'')" style="flex:1;min-width:0;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"></div></div>
+      ${nl('Geboortejaar','type="number" min="1940" max="2010" value="'+(R.birth||'')+'" placeholder="bv. 1990" onchange="reisSet(\'birth\',this.value?+this.value:\'\')"')}
+      ${nl('Eigen streefjaar · optioneel','type="number" min="2027" value="'+(R.override||'')+'" placeholder="auto" onchange="reisSet(\'override\',this.value?+this.value:\'\')"')}
       <div class="small muted" style="margin-top:7px;font-size:11px">${R.birth?('AOW rond '+(+R.birth+67)+' (67 jaar, indicatie)'):'Vul je geboortejaar in voor een AOW-mijlpaal.'}${R.override?(' · streefjaar '+R.override):''}</div>
     </div>
-    <div style="margin-top:13px"><div class="hlabel">FIRE-getal · × jaaruitgaven ${R.annualExp>0?'('+euro0(R.annualExp)+'/jr)':''}</div>
+    <div style="margin-top:13px"><div class="hlabel">Jaaruitgaven · basis voor FIRE</div>
+      <div class="chips" style="margin-top:8px">
+        <span onclick="reisExpMode('auto')" class="chip ${R.expMode!=='eigen'?'on':''}" style="flex:1;text-align:center">Auto${R.autoExp>0?' · '+euro0(R.autoExp)+'/jr':''}</span>
+        <span onclick="reisExpMode('eigen')" class="chip ${R.expMode==='eigen'?'on':''}" style="flex:1;text-align:center">Eigen maandbedrag</span>
+      </div>
+      ${R.expMode==='eigen'?fl('Verwachte uitgaven','type="number" min="0" step="50" value="'+(R.expMonthly||'')+'" placeholder="0" onchange="reisSet(\'expMonthly\',Math.max(0,Math.round(+this.value||0)))"','/mnd'):''}
+      <div class="small muted" style="margin-top:7px;font-size:11.5px">${R.expMode==='eigen'?(R.expMonthly>0?('= <b style="color:var(--txt)">'+euro0(R.annualExp)+'</b>/jaar'):'Vul je verwachte maanduitgaven in.'):'Geschat uit je recente uitgaven.'}</div>
+    </div>
+    <div style="margin-top:13px"><div class="hlabel">FIRE-factor · × jaaruitgaven</div>
       <div class="chips" style="margin-top:8px">${fireChips}</div>
-      ${R.fireCustom?`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1">Eigen factor</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:132px"><input type="number" min="10" value="${R.fireMult}" onchange="reisSet('fireMult',+this.value||25)" style="flex:1;min-width:0;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"><span class="small muted">×</span></div></div>`:''}
+      ${R.fireCustom?nl('Eigen factor','type="number" min="10" value="'+R.fireMult+'" onchange="reisSet(\'fireMult\',+this.value||25)"','×'):''}
       <div class="small muted" style="margin-top:7px;font-size:11.5px">Nodig: <b style="color:var(--txt)">${euro0(M.FIRE)}</b> · verwacht ${ft!=null?('rond '+(nowY+ft)):('na '+M.targetYear)}.</div>
     </div>
     <div style="margin-top:13px"><div class="hlabel">Maandinkomen bij pensioen</div>
-      ${fl('Gewenst per maand','type="number" min="0" step="100" value="'+R.incGoal+'" onchange="reisSet(\'incGoal\',Math.max(0,Math.round(+this.value||0)))"')}
+      ${fl('Gewenst per maand','type="number" min="0" step="100" value="'+R.incGoal+'" onchange="reisSet(\'incGoal\',Math.max(0,Math.round(+this.value||0)))"','/mnd')}
       <div class="small muted" style="margin-top:7px;font-size:11.5px">Benodigd kapitaal <b style="color:var(--txt)">${euro0(reqCap)}</b> (× 12 × ${R.fireMult}). ${it!=null?('Op koers rond '+(nowY+it)):('Niet gehaald in '+M.targetYear)} · in ${M.targetYear} ${gap>=0?('<span style="color:var(--teal)">overschot '+euro0(gap)+'</span>'):('<span style="color:var(--amber)">tekort '+euro0(-gap)+'</span>')}.</div>
     </div>` : '';
   return `<div class="card" style="margin-top:14px">
@@ -3404,6 +3517,7 @@ function reisCard(){
     ${reisChartSVG(M)}
     <div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">${tg('band','Bandbreedte')}${tg('koop','Koopkracht')}${tg('showInk','Inkomensdoel')}</div>
     ${reisHaalbaarheid(M)}
+    ${reisDebtSVG(M)}
     <div class="row" style="margin:14px 2px 0"><span class="hlabel" style="margin:0">Mijlpalen</span></div>
     ${list}
     <button class="cp-add" style="margin-top:9px" onclick="reisAddCustom()">+ Eigen mijlpaal</button>
