@@ -5002,9 +5002,9 @@ function openSavingsFlowDrill(){
   $('#sheetBg').classList.add('show');
 }
 function openCategory(k){
-  const items=periodTx().filter(x=>x.amount<0 && catOf(x)===k).sort((a,b)=>b.date.localeCompare(a.date));
+  const items=periodTx().filter(x=>catOf(x)===k).sort((a,b)=>b.date.localeCompare(a.date));   // beide tekens: ook terugstortingen tonen
   if(!items.length) return; const c=CATS[k];
-  const tot=items.reduce((s,t)=>s-t.amount,0);
+  const tot=items.reduce((s,t)=>s-t.amount,0);   // netto: een terugstorting verlaagt het categorietotaal
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${c.icon}</div>
       <div style="font-weight:800;font-size:17px">${c.name}</div>
@@ -5014,7 +5014,7 @@ function openCategory(k){
     ${items.map(t=>`<div class="tx" style="cursor:default">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
       <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})}${OWN.length>1?' · '+esc(accShort(t.acc)):''}</div></div>
-      <div class="amt neg">${euro(t.amount)}</div></div>`).join('')}`;
+      <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`).join('')}`;
   $('#sheetBg').classList.add('show');
 }
 // inzoomen op een maand vanuit de trendgrafiek
@@ -5520,7 +5520,7 @@ function whatStandsOutCard(m,isNow){
 // mini-sparkline: verloop van één categorie over de laatste maanden (voor de drill-down)
 function catSparkline(k){
   const ms=months(); const last=ms.slice(-6); if(last.length<2) return '';
-  const vals=last.map(mm=>{ let s=0; for(const t of txOfMonth(mm)){ if(t.amount<0 && catOf(t)===k) s+=-t.amount; } return s; });
+  const vals=last.map(mm=>{ let s=0; for(const t of txOfMonth(mm)){ if(catOf(t)===k) s+=-t.amount; } return Math.max(s,0); });   // netto per maand; terugstorting verlaagt
   if(Math.max(...vals)<=0) return '';
   const max=Math.max(...vals,1); const MN=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
   const curM=(curMonth&&last.includes(curMonth))?curMonth:last[last.length-1];
