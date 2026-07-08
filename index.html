@@ -3936,7 +3936,7 @@ function dayBudgetNow(){
   const typFixed=fixHist.length?fixHist[Math.floor(fixHist.length/2)]:splitFixedVar(nowYM).fixed;
   const dagdoel=Math.round(userDay>0?userDay:Math.max(room-typFixed,0)/(de.dim||30));
   let spent=0; const today=nowYM+'-'+String(now.getDate()).padStart(2,'0');
-  for(const x of txOfMonth(nowYM)){ if(x.date===today && x.amount<0 && CATS[catOf(x)].type==='expense' && !isFixed(x)) spent+=-x.amount; }
+  for(const x of txOfMonth(nowYM)){ if(x.date===today && isExpenseTx(x) && !isFixed(x)) spent+=-x.amount; }   // netto: een terugstorting van vandaag verlaagt de dagteller
   return {dagdoel, spent:Math.round(spent), rest:Math.max(dagdoel-spent,0), over:spent>dagdoel};
 }
 function dayMiniLine(){ const D=dayBudgetNow(); if(!(D.dagdoel>0)) return ''; const dd=euro0(D.dagdoel); const streak=(typeof computeStreak==='function')?computeStreak(D.dagdoel):0; const txt=D.over?`Vandaag ging je over je dagdoel van ${dd}`:(streak>=2?`Al ${streak} dagen op rij onder je dagdoel van ${dd}`:`Vandaag onder je dagdoel van ${dd}`); return `<div class="daymini">${txt}</div>`; }
