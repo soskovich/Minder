@@ -34,10 +34,12 @@ Laatst bekeken scherm wordt bewaard in `minder_view`.
 - **Liquiditeit/prognose:** `renderLiquidity()`, `forecastModel()`, `renderForecast()`, `dailyRollingSeries()`, `recurringSchedule()`, `accountShortfalls()`.
 - **Saldi:** `accBalance()`, `totalBalance()`, `totalSaved()`, `n26SavingsAccounts()`.
 - **PSD2 (open banking, referentie-stub):** `psd2Cfg()`, `psd2Connect()`, `psd2StartAuth()`, `psd2HandleCallback()`, `psd2IngestSession()`, `psd2Refresh()`, `psd2Disconnect()`.
-- **Gedragslaag:** `MECHANISM_SPEC` (`index.html:4220`) — de regels waaronder de coach mag spreken. Drie keys:
-  - `mentalAccounting` (`index.html:4224`) — stilstaand surplus boven de heilige buffer vs. dure schuld.
-  - `lossAversion` (`index.html:4241`) — dosering: hooguit `condities.maxFramesPerDag` loss-frames per dag, nooit gestapeld; een geplande aankoop uit een gevuld potje telt niet als loss.
-  - `freshStart` (`index.html:4298`) — één rustig vooruitblik-moment bij een nieuwe maand.
+- **Gedragslaag:** `MECHANISM_SPEC` (`index.html:4245`) — de regels waaronder de coach mag spreken. Vijf keys:
+  - `mentalAccounting` (`index.html:4249`) — stilstaand surplus boven de heilige buffer vs. dure schuld; vuurt bij een renteverschil ≥5% en bedrag ≥€50, maar stelt nooit voor de noodbuffer leeg te halen.
+  - `lossAversion` (`index.html:4266`) — dosering: hooguit `condities.maxFramesPerDag` loss-frames per dag, nooit gestapeld, en alleen met een verplichte positieve spiegel; verlies als stakes (weken vertraging), nooit als schuld. Een geplande aankoop uit een gevuld potje telt niet als loss.
+  - `temporalDiscounting` (`index.html:4283`) — de parkeer-lus sluiten: een geparkeerde aankoop keert in koude staat terug met dezelfde keuze (doen / nog eens parkeren / laten gaan). Na `condities.herhaalParkeerSignaal` (4) keer parkeren wordt het patroon zacht gespiegeld, zonder een beslissing af te dwingen.
+  - `defaultEffect` (`index.html:4300`) — ontwerpprincipe (geen signaal): elke default staat zo dat nietsdoen de gezonde keuze is, altijd zichtbaar en in één tik omkeerbaar. Nooit een default die stilletjes geld beweegt of een doel zet; geen dark patterns.
+  - `freshStart` (`index.html:4323`) — één rustig vooruitblik-moment bij een nieuwe maand; kijkt vooruit, wrijft de vorige maand nooit in, uitnodigend en makkelijk weg te tikken.
 
 ## Service worker & versiebeleid
 - Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
