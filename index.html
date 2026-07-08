@@ -1766,7 +1766,7 @@ function openVarDue(){
 }
 // drill-down: de werkelijke variabele transacties van deze maand (waarop de variabele uitgave is gebaseerd)
 function openVarTx(){
-  const m=curMonth; const items=txOfMonth(m).filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense' && !isFixed(x)).sort((a,b)=>b.date.localeCompare(a.date));
+  const m=curMonth; const items=txOfMonth(m).filter(x=>isExpenseTx(x) && !isFixed(x)).sort((a,b)=>b.date.localeCompare(a.date));   // incl. terugstortingen: netto totaal
   const tot=items.reduce((s,t)=>s-t.amount,0);
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${ICON('cart')}</div><div style="font-weight:800;font-size:17px">Variabele uitgaven</div>
@@ -1774,7 +1774,7 @@ function openVarTx(){
       <div style="font-size:22px;font-weight:800;margin:5px 0">${euro(tot)}</div></div>
     ${items.length?items.map(t=>{const c=CATS[catOf(t)];return `<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${c.icon}</div>
       <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} · ${c.name}</div></div>
-      <div class="amt neg">${euro(t.amount)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Geen variabele uitgaven deze maand.</div>'}`;
+      <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Geen variabele uitgaven deze maand.</div>'}`;
   $('#sheetBg').classList.add('show');
 }
 // ===== SPAREN & BUFFER (30%-spaardeel → buffer van Nx maanduitgave) =====
@@ -4902,7 +4902,7 @@ function isFixed(t){
   return false;
 }
 function renderFixedVariable(list, inc){
-  const items=list.filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense');
+  const items=list.filter(x=>isExpenseTx(x));   // incl. terugstortingen: netto vast/variabel
   let fixed=0,vari=0; for(const x of items){ if(isFixed(x)) fixed+=-x.amount; else vari+=-x.amount; }
   const spend=fixed+vari; if(spend<=0) return '';
   const pc=v=>Math.round(v/spend*100);
@@ -4923,7 +4923,7 @@ function renderFixedVariable(list, inc){
 function openFixedVarDrill(kind){
   window._fvDrillKind=kind;
   const list=window._fvTx||txOfMonth(curMonth); const fixed=(kind==='fixed');
-  const items=list.filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense' && (fixed?isFixed(x):!isFixed(x))).sort((a,b)=>b.date.localeCompare(a.date));
+  const items=list.filter(x=>isExpenseTx(x) && (fixed?isFixed(x):!isFixed(x))).sort((a,b)=>b.date.localeCompare(a.date));   // incl. terugstortingen: netto totaal
   const tot=items.reduce((s,t)=>s-t.amount,0);
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:22px">${fixed?ICON('lock'):ICON('cart')}</div><div style="font-weight:800;font-size:17px">${fixed?'Vaste lasten':'Variabele uitgaven'}</div>
@@ -4932,7 +4932,7 @@ function openFixedVarDrill(kind){
     <div class="small muted" style="margin:-2px 0 10px;text-align:center">Klopt een classificatie niet? Tik op een transactie om 'm naar ${fixed?'variabel':'vast'} te verplaatsen.</div>
     ${items.length?items.map(t=>{const c=CATS[catOf(t)];return `<div class="tx" style="cursor:pointer" onclick="fixFlipAsk('${t.id}')"><div class="ava" style="background:var(--card2)">${c.icon}</div>
       <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} · ${c.name}${OWN.length>1?' · '+esc(accShort(t.acc)):''}</div></div>
-      <div class="amt neg">${euro(t.amount)}</div><span style="color:var(--mut);margin-left:8px;display:inline-flex">${ICON('swap')}</span></div>`;}).join(''):`<div class="muted small center" style="padding:16px">Geen ${fixed?'vaste lasten':'variabele uitgaven'} in deze periode.</div>`}`;
+      <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div><span style="color:var(--mut);margin-left:8px;display:inline-flex">${ICON('swap')}</span></div>`;}).join(''):`<div class="muted small center" style="padding:16px">Geen ${fixed?'vaste lasten':'variabele uitgaven'} in deze periode.</div>`}`;
   $('#sheetBg').classList.add('show');
 }
 // classificatie aanpassen: vraag of het alleen deze transactie is of alles van die winkel
@@ -5787,8 +5787,8 @@ function fillRuleIdx(i){ const m=(window._overigM||[])[i]; if(m) fillRule(m.name
 
 function renderRulesCard(){
   const rules=SET.rules||[];
-  const overigTx=TX.filter(t=>catOf(t)==='overig' && t.amount<0);
-  const byM=groupMerch(overigTx).slice(0,6); window._overigM=byM;
+  const overigTx=TX.filter(t=>catOf(t)==='overig');   // incl. terugstortingen: netto per winkel
+  const byM=groupMerch(overigTx).filter(x=>x.s>0).slice(0,6); window._overigM=byM;
   const catOptions=Object.entries(CATS).map(([k,c])=>`<option value="${k}">${c.icon} ${c.name}</option>`).join('');
   return `<div class="card">
     <div class="row" style="margin-bottom:6px"><span class="hlabel" style="margin:0;flex:1">Categorie-regels</span><span class="tag">eigen</span></div>
