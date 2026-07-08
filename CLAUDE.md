@@ -55,4 +55,4 @@ Trek het inline `<script>` uit `index.html` en controleer met **`node --check`**
 
 ## Changelog
 *(per wijziging aanvullen — wat, waarom, effect)*
-- …
+- **Terugstortingen netto in uitgaven per categorie** (`34c5858`): een positief bedrag binnen een expense-categorie (bv. een tank-terugstorting na een hogere reservering) verlaagde de uitgave nergens, omdat de optellingen op `t.amount<0` filterden. Nu tellen positieve bedragen netto mee in `totals().spend`, `ptot().spend`, `splitFixedVar()`, `catSpendMap()` en `renderCatBreak()`; `catSpendMap` clamt een netto-negatieve categorie weg, `renderCatBreak` toont alleen netto > 0. Effect: −150 en +100 in dezelfde categorie tonen netto €50. NB: een terugstorting bij een niet-herkende tegenpartij wordt via `categorize()` (`index.html:786`) nog als `intern` bestempeld; die moet handmatig of via een eigen regel in de uitgavencategorie komen om mee te netten.
