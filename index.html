@@ -903,7 +903,7 @@ function dailyRollingSeries(days){
   const all=TX.map(t=>t.date).filter(Boolean).sort(); if(!all.length) return {arr:[],start:'',end:''};
   const end=all[all.length-1]; const endD=new Date(end); const startD=new Date(endD); startD.setDate(startD.getDate()-(days-1));
   const arr=new Array(days).fill(0);
-  for(const t of TX){ if(t.amount<0 && CATS[catOf(t)].type==='expense' && !isFixed(t)){ const d=new Date(t.date); const idx=Math.round((d-startD)/86400000); if(idx>=0&&idx<days) arr[idx]+=-t.amount; } }
+  for(const t of TX){ if(isExpenseTx(t) && !isFixed(t)){ const d=new Date(t.date); const idx=Math.round((d-startD)/86400000); if(idx>=0&&idx<days) arr[idx]+=-t.amount; } }   // netto: terugstorting verlaagt de dag
   return {arr, start:startD.toISOString().slice(0,10), end};
 }
 function renderDailyRolling(){
@@ -967,7 +967,7 @@ function openForecastVar(){
   let weights={}, tops={}, totalW=0;
   for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||isFixedCat(k)||k==='overig') continue;
     let s=0,n=0; const items=[];
-    for(const mm of ms){ let v=0; for(const t of txOfMonth(mm)){ if(catOf(t)===k && t.amount<0 && !isFixed(t)){ v+=-t.amount; items.push(t); } } if(v>0){s+=v;n++;} }
+    for(const mm of ms){ let v=0; for(const t of txOfMonth(mm)){ if(catOf(t)===k && !isFixed(t)){ v+=-t.amount; items.push(t); } } if(v>0){s+=v;n++;} }   // netto per maand
     if(n){ weights[k]=s/n; totalW+=s/n; tops[k]=groupMerch(items)[0]; }
   }
   const rows=Object.keys(weights).map(k=>({k,amt: totalW? fVar*weights[k]/totalW : 0, top:tops[k]})).sort((a,b)=>b.amt-a.amt);
@@ -1019,7 +1019,7 @@ function potRoomBase(){
   const ms=months(); const med=a=>{const s=a.filter(x=>x>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
   let fixed=0;
   for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||k==='overig') continue;
-    fixed+=med(ms.map(m=>{let f=0;for(const t of txOfMonth(m)){ if(catOf(t)===k && t.amount<0 && isFixed(t)) f+=-t.amount; } return f;})); }
+    fixed+=med(ms.map(m=>{let f=0;for(const t of txOfMonth(m)){ if(catOf(t)===k && isFixed(t)) f+=-t.amount; } return f;})); }   // netto
   return {budget:Math.round(budget), fixed:Math.round(fixed)};
 }
 // één regel: som van je potjes + hoeveel er nog vrij is binnen je grens (na vaste lasten)
@@ -1058,7 +1058,7 @@ function suggestBudgets(){
   const histF={}, histV={};
   for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||k==='overig') continue;
     const fArr=[], vArr=[];
-    for(const m of ms){ let f=0,v=0; for(const t of txOfMonth(m)){ if(catOf(t)===k && t.amount<0){ if(isFixed(t)) f+=-t.amount; else v+=-t.amount; } } fArr.push(f); vArr.push(v); }
+    for(const m of ms){ let f=0,v=0; for(const t of txOfMonth(m)){ if(catOf(t)===k){ if(isFixed(t)) f+=-t.amount; else v+=-t.amount; } } fArr.push(f); vArr.push(v); }   // netto
     histF[k]=med(fArr); histV[k]=med(vArr);
   }
   const totalFixed=Object.values(histF).reduce((a,b)=>a+b,0);
@@ -1306,7 +1306,7 @@ function renderVariance(m){
 function baselineSpend(){
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const recent=months().filter(m=>m<nowYM).slice(-6);
-  const sp=recent.map(m=>{let x=0;for(const t of txOfMonth(m)){const c=catOf(t);if(CATS[c]&&CATS[c].type==='expense'&&t.amount<0)x+=-t.amount;}return x;}).filter(v=>v>0).sort((a,b)=>a-b);
+  const sp=recent.map(m=>netSpend(txOfMonth(m))).filter(v=>v>0).sort((a,b)=>a-b);   // netto maand-uitgave
   if(!sp.length) return 0;
   const lower=sp.slice(0,Math.ceil(sp.length/2));
   return Math.round(lower[Math.floor(lower.length/2)]);
@@ -1516,7 +1516,7 @@ function daysElapsed(m){ const [y,mo]=m.split('-').map(Number); const dim=new Da
 // variabele uitgaven per dag van de maand
 function dailyVarSeries(m){ const [y,mo]=m.split('-').map(Number); const dim=new Date(y,mo,0).getDate();
   const arr=new Array(dim).fill(0);
-  for(const t of txOfMonth(m)){ if(t.amount<0 && CATS[catOf(t)].type==='expense' && !isFixed(t)){ const d=+t.date.slice(8,10); if(d>=1&&d<=dim) arr[d-1]+=-t.amount; } }
+  for(const t of txOfMonth(m)){ if(isExpenseTx(t) && !isFixed(t)){ const d=+t.date.slice(8,10); if(d>=1&&d<=dim) arr[d-1]+=-t.amount; } }   // netto
   return arr; }
 function renderDailyVar(m, budget){
   const sv=splitFixedVar(m), de=daysElapsed(m), series=dailyVarSeries(m);
@@ -1750,7 +1750,7 @@ function openVarDue(){
   for(const k in B){ if(!isFixedCat(k) && +B[k]>0){ weights[k]=+B[k]; totalW+=+B[k]; } }
   if(!totalW){ const ms=months();   // fallback: historische variabele uitgave per categorie
     for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||isFixedCat(k)||k==='overig') continue;
-      let s=0,n=0; for(const mm of ms){ let v=0; for(const t of txOfMonth(mm)){ if(catOf(t)===k && t.amount<0 && !isFixed(t)) v+=-t.amount; } if(v>0){s+=v;n++;} }
+      let s=0,n=0; for(const mm of ms){ let v=0; for(const t of txOfMonth(mm)){ if(catOf(t)===k && !isFixed(t)) v+=-t.amount; } if(v>0){s+=v;n++;} }   // netto
       if(n){ weights[k]=s/n; totalW+=s/n; } }
   }
   const rows=Object.keys(weights).map(k=>({k,bud:weights[k],amt: totalW? L.varDue*weights[k]/totalW : 0})).sort((a,b)=>b.amt-a.amt);
