@@ -8,7 +8,7 @@ Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dra
 
 ## Bestanden
 - `index.html` — de complete app (~6.460 regels, ~515 functies): HTML + inline `<style>` + inline `<script>`. Dit is het product.
-- `sw.js` — service worker. `const CACHE = 'minder-v26'`. **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
+- `sw.js` — service worker. `const CACHE = 'minder-v27'`. **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
 - `manifest.webmanifest` — PWA-manifest (naam "Minder — uitgaventracker", standalone, `start_url` `./index.html`). Bevat een app-shortcut "Koopcheck" → `./index.html?action=buy`.
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — iconen (staan ook in de SW-`ASSETS`-lijst).
 - `Open-banking-koppeling-plan.md` — referentieplan voor een latere live PSD2-bankkoppeling. **Nog niet gebouwd**; de MT940/CSV-import blijft voorlopig de basis.
@@ -43,7 +43,7 @@ Laatst bekeken scherm wordt bewaard in `minder_view`.
 
 ## Service worker & versiebeleid
 - Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
-- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v26` → `minder-v27`, …). De oude cache wordt in `activate` opgeruimd.
+- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v27` → `minder-v28`, …). De oude cache wordt in `activate` opgeruimd.
 - De `v10/v11/v13`-strings boven in `index.html` zijn inline-SVG-icoonversies, **geen** app-versie.
 
 ## Syntax-check
@@ -68,3 +68,4 @@ Trek het inline `<script>` uit `index.html` en controleer met **`node --check`**
 - **Netto centraliseren, Cluster 2** (`minder-v24`): prognose & budget-basis gemigreerd naar netto: `dailyRollingSeries`, `dailyVarSeries` (dag-reeksen), `openForecastVar`, `openVarDue` (variabele prognose per categorie), `potRoomBase`, `suggestBudgets` (historische vast/variabel-basis) en `baselineSpend` (nu via `netSpend`). Telkens `t.amount<0`-filter verwijderd zodat een terugstorting netto verrekent; `isExpenseTx`/`netSpend` gebruikt waar passend. Volgende: Inzichten-restwidgets, coach, meldingen.
 - **Netto centraliseren, Cluster 3** (`minder-v25`): Inzichten-restwidgets gemigreerd naar netto: `renderFixedVariable` + `openFixedVarDrill` (vast/variabel-splitsing, terugstorting zichtbaar en groen), `openVarTx` (variabele-transactielijst) en de "Overig"-winkellijst in `renderRulesCard` (netto per winkel, `x.s>0` gefilterd). Volgende: coach, meldingen.
 - **Netto centraliseren, Cluster 4a** (`minder-v26`): coach-totalen/dag-sommen gemigreerd naar netto: vices-categorietotalen in `buildCoaching` & `coachItems`, piekdag in `goalCoachTips`, weekdag in `coachPattern`, `computeStreak` (netto, terugstorting helpt de streak) en `coachTips` (items → merch/weekdag netto; "Overig"-telling op afschrijvingen). Cluster 4b (losse-transactie-impulsvinders `coachLeak`/`coachSandwich`/`coachWeekRisk` + "grootste enkele uitgave") is bewust apart gehouden: dat vergt een merchant-net herontwerp dat de coach-dialoog raakt, wacht op expliciete keuze. Volgende: meldingen.
+- **Netto centraliseren, Cluster 4b** (`minder-v27`): de losse-transactie-impulsvinders herontworpen naar **netto per winkel** (Optie A). Nieuwe gedeelde helper `noPotLeak(m)` (grootste netto uitgave per winkel zonder potje, gesplitst impuls vs vaste behoefte) vervangt de drie identieke inline-loops in `coachLeak`, `coachSandwich`, `coachWeekRisk` — één bron, geen drift meer. `coachTips`' single-transactie-tip "grootste enkele uitgave" verwijderd (de netto "grootste uitgavebestemming" dekt dat al). Coach-copy geneutraliseerd ("kwam uit het niets" weg) omdat een netto-som over meerdere bezoeken kan lopen. Blijft spiegel→gevolg→keuze; een terugbetaalde aankoop wordt niet meer als groot lek geframed. Volgende: meldingen (`scoreNotifs`).

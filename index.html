@@ -2720,17 +2720,25 @@ function projVarEstimate(){
   return Math.round(keep[Math.floor(keep.length/2)]);
 }
 // grootste lek, gestructureerd (voor de coach-dialoog): échte impuls vs noodzaak-zonder-potje vs over-budget
-function coachLeak(m){
+function noPotLeak(m){   // grootste NETTO uitgave per winkel zonder potje, gesplitst in impuls vs vaste behoefte (gedeeld door coachLeak/coachSandwich/coachWeekRisk)
   let EB={}; try{ EB=effectiveBudgets(m).out; }catch(_){}
+  const byM={};
+  for(const x of txOfMonth(m)){
+    if(!(isExpenseTx(x) && !isFixed(x))) continue;
+    if(+EB[catOf(x)]>0) continue;                        // categorie heeft al een potje → valt onder budget-logica
+    const nm=titleCase(cleanMerch(x.name)||x.name||'een aankoop');
+    const e=(byM[nm]=byM[nm]||{name:nm,net:0,k:catOf(x),rec:isRecurringMerchant(x.name)});
+    e.net+=-x.amount;                                    // netto: terugstorting verrekent per winkel
+  }
   let imp=null, need=null;
-  try{ for(const x of txOfMonth(m)){ const k=catOf(x), c=CATS[k];
-    if(!(x.amount<0 && c && c.type==='expense' && !isFixed(x))) continue;
-    if(+EB[k]>0) continue;
-    const amt=-x.amount; if(amt<25) continue;
-    const nm=titleCase(cleanMerch(x.name)||x.name||'een aankoop'); const rec=isRecurringMerchant(x.name);
-    if(!isFixedCat(k) && !rec){ if(!imp||amt>imp.amt) imp={amt,name:nm,k}; }
-    else { if(!need||amt>need.amt) need={amt,name:nm,k}; }
-  } }catch(_){}
+  for(const nm in byM){ const e=byM[nm]; if(e.net<25) continue;
+    if(!isFixedCat(e.k) && !e.rec){ if(!imp||e.net>imp.amt) imp={amt:Math.round(e.net),name:e.name,k:e.k}; }   // echte impuls: discretionair, niet terugkerend, zonder potje
+    else { if(!need||e.net>need.amt) need={amt:Math.round(e.net),name:e.name,k:e.k}; }                          // noodzaak / terugkerend zonder potje
+  }
+  return {imp,need};
+}
+function coachLeak(m){
+  const {imp,need}=noPotLeak(m);
   // grootste lek ZONDER potje (de hele uitgave wijkt af van plan, want er was geen plan)
   let noPot=null;
   if(imp && need) noPot = (imp.amt>=need.amt) ? {kind:'impulse',name:imp.name,amount:imp.amt,cat:imp.k} : {kind:'missing-pot',name:need.name,amount:need.amt,cat:need.k};
@@ -4026,21 +4034,13 @@ function coachSandwich(m){
   const goodTxt=good
     ? `Je hield <b>${CATS[good.k].name.toLowerCase()}</b> strak onder controle (${euro0(good.a)} van ${euro0(good.b)}). Daar zat geen impuls in, zo hoort het.`
     : `Je kijkt naar je geld in plaats van weg. Dat klinkt klein, maar het is precies de gewoonte waar grip begint.`;
-  // 2) de kern, onderscheid: échte impuls (discretionair én niet-terugkerend) vs noodzaak zonder potje (terugkerend/niet-discretionair variabel)
-  let imp=null, need=null;
-  try{ for(const x of txOfMonth(m)){ const k=catOf(x), c=CATS[k];
-    if(!(x.amount<0 && c && c.type==='expense' && !isFixed(x))) continue;
-    if(+EB[k]>0) continue;                          // categorie heeft al een potje → valt onder budget-logica, niet 'zonder potje'
-    const amt=-x.amount; if(amt<25) continue;
-    const nm=titleCase(cleanMerch(x.name)||x.name||'een aankoop'); const rec=isRecurringMerchant(x.name);
-    if(!isFixedCat(k) && !rec){ if(!imp||amt>imp.amt) imp={amt,name:nm,k}; }   // echte impuls: discretionair, niet terugkerend, zonder potje
-    else { if(!need||amt>need.amt) need={amt,name:nm,k}; }                      // noodzaak / terugkerend zonder potje
-  } }catch(_){}
+  // 2) de kern: grootste netto lek per winkel zonder potje (impuls vs vaste behoefte)
+  const {imp,need}=noPotLeak(m);
   const ov=(typeof budgetOverCat==='function')?budgetOverCat(m):null;
   let riskTxt;
   if(imp){
     const potje=CATS[imp.k]?CATS[imp.k].name.toLowerCase():'die categorie';
-    riskTxt=`Die ${euro0(imp.amt)} bij <b>${esc(imp.name)}</b> zat in geen enkel budget, die kwam uit het niets. De stap voor volgende maand is simpel maar streng: geen budget, geen aankoop. Reserveer vooraf een '${potje}'-potje, en als het op is, is het op.`;
+    riskTxt=`Die ${euro0(imp.amt)} bij <b>${esc(imp.name)}</b> zat in geen enkel budget. De stap voor volgende maand is simpel maar streng: geen budget, geen aankoop. Reserveer vooraf een '${potje}'-potje, en als het op is, is het op.`;
   } else if(need){
     const potje=CATS[need.k]?CATS[need.k].name.toLowerCase():'die uitgave';
     riskTxt=`<b>${esc(need.name)}</b> (${euro0(need.amt)}) is geen impuls, het is een vaste behoefte die elke maand terugkomt, maar nog zónder potje. Geef '${potje}' een vast maandbedrag, dan is het ingepland in plaats van een verrassing.`;
@@ -4110,19 +4110,10 @@ function coachGood(m){
 }
 // "Deze week", de oorzaak: échte impuls / noodzaak-zonder-potje / over-budget categorie
 function coachWeekRisk(m){
-  let EB={}; try{ EB=effectiveBudgets(m).out; }catch(_){}
-  let imp=null, need=null;
-  try{ for(const x of txOfMonth(m)){ const k=catOf(x), c=CATS[k];
-    if(!(x.amount<0 && c && c.type==='expense' && !isFixed(x))) continue;
-    if(+EB[k]>0) continue;
-    const amt=-x.amount; if(amt<25) continue;
-    const nm=titleCase(cleanMerch(x.name)||x.name||'een aankoop'); const rec=isRecurringMerchant(x.name);
-    if(!isFixedCat(k) && !rec){ if(!imp||amt>imp.amt) imp={amt,name:nm,k}; }
-    else { if(!need||amt>need.amt) need={amt,name:nm,k}; }
-  } }catch(_){}
+  const {imp,need}=noPotLeak(m);
   const ov=(typeof budgetOverCat==='function')?budgetOverCat(m):null;
   if(imp){ const p=CATS[imp.k]?CATS[imp.k].name.toLowerCase():'die categorie';
-    return {tone:'warn',txt:`Die ${euro0(imp.amt)} bij <b>${esc(imp.name)}</b> zat in geen enkel budget, die kwam uit het niets. Geef '${p}' een potje: geen budget, geen aankoop.`}; }
+    return {tone:'warn',txt:`Die ${euro0(imp.amt)} bij <b>${esc(imp.name)}</b> zat in geen enkel budget. Geef '${p}' een potje: geen budget, geen aankoop.`}; }
   if(need){ const p=CATS[need.k]?CATS[need.k].name.toLowerCase():'die uitgave';
     return {tone:'warn',txt:`<b>${esc(need.name)}</b> (${euro0(need.amt)}) is geen impuls maar een vaste behoefte zónder potje. Geef '${p}' een vast maandbedrag.`}; }
   if(ov) return {tone:'warn',txt:`<b>${CATS[ov.k].name}</b> liep ${euro0(ov.over)} over budget. Geef het vóór de maand een vast bedrag en stop zodra dat op is.`};
@@ -5145,9 +5136,6 @@ function coachTips(m){
   // abonnementen
   const subs=items.filter(x=>catOf(x)==='abonnement');
   if(subs.length>=2){ const s=subs.reduce((a,b)=>a-b.amount,0); push(4,'info',ICON('repeat'),`<b>${subs.length} abonnementen</b> kosten samen ${euro0(s)} deze maand. Eén opzeggen bespaart direct.`,"openCategory('abonnement')"); }
-  // grootste enkele uitgave
-  const biggest=items.slice().sort((a,b)=>a.amount-b.amount)[0];
-  if(biggest && -biggest.amount>=100) push(2,'info',ICON('card'),`Je grootste enkele uitgave: <b>${esc(biggest.name)}</b> ${euro0(-biggest.amount)}.`,`openSheet('${biggest.id}')`);
   // buffer-ETA
   const S=savingsModel(); if(S.toGo>0 && S.monthlySaving>0 && S.cur>0) push(4,'info',ICON('target'),`Bij ${euro0(S.monthlySaving)}/mnd bereik je je buffer (${euro0(S.goal)}) over ±<b>${Math.round(S.monthsLeft)} maanden</b>.`);
   // ongecategoriseerd
