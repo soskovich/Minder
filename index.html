@@ -837,6 +837,11 @@ function parseCSV(text){
 }
 function hash(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;}return Math.abs(h).toString(36);}
 function catOf(t){ return OVR[t.id]||t.autoCat; }
+// === centrale netto-uitgave-definitie (terugstorting binnen een uitgavencategorie verrekend) ===
+// isExpenseTx: hoort deze transactie tot een uitgavencategorie? netSpend: netto uitgave over een lijst
+// (positief bedrag = terugstorting, verlaagt de som). Nog nergens aangeroepen; puur additief.
+function isExpenseTx(t){ const c=CATS[catOf(t)]; return !!c && c.type==='expense'; }
+function netSpend(txns){ let s=0; for(const t of txns){ if(isExpenseTx(t)) s+=-t.amount; } return s; }
 
 /* ---------- maand-helpers ---------- */
 function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!base.length) return []; const s=new Set(base); const n=new Date(); s.add(n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')); return [...s].sort(); }
