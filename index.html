@@ -690,6 +690,7 @@ function applyOwnAccounts(){
     've sumter','vincent sumter','vincent ernst sumter'].filter(Boolean));
   // N26-interne potje-/spaarbewegingen (PSD2 levert geen tegenpartij-IBAN voor Spaces)
   const N26INT=/\b(income sorter|moved|round[\s-]?up)\b|\b(from|to|naar|van)\s+(main|zakgeld|spaces?|spaarpot|buffer)/i;
+  const cands=[];   // terugstortingen bij een niet-herkende tegenpartij (fix 2): later koppelen aan een eerdere afschrijving
   for(const t of TX){
     if(OVR[t.id]) continue;                 // handmatige keuze respecteren
     const rc=t.ruleCat||t.autoCat;
@@ -698,6 +699,21 @@ function applyOwnAccounts(){
     if(!intern && t.src==='csv' && /transfer/i.test(t.typ||'') && ownNames.has((t.partner||'').toLowerCase())) intern=true; // N26 CSV: potje↔potje
     if(!intern && t.src==='psd2'){ const nm=(t.name||'').toLowerCase().trim(); if(ownNames.has(nm) || N26INT.test(t.name||'')) intern=true; } // N26 PSD2: Spaces/eigen naam
     t.autoCat = intern ? 'intern' : rc;
+    if(!intern && rc==='intern' && t.amount>0) cands.push(t);   // positief + alleen 'intern' door de onbekende-bijschrijving-heuristiek
+  }
+  // Fix 2: een terugstorting (bv. een tank-reservering die deels terugkomt) erft de uitgavencategorie van
+  // de meest recente afschrijving bij dezelfde tegenpartij, i.p.v. als 'intern' te blijven staan.
+  if(cands.length){
+    const norm=s=>(s||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20);
+    const debits={};
+    for(const d of TX){ if(d.amount<0){ const c=catOf(d); if(CATS[c]&&CATS[c].type==='expense'){ const k=norm(d.name); if(k.length>=3) (debits[k]||(debits[k]=[])).push(d); } } }
+    for(const t of cands){
+      const arr=debits[norm(t.name)]; if(!arr) continue;
+      let best=null;
+      for(const d of arr){ if(d.date<=t.date){ if(!best||d.date>best.date) best=d; } }   // meest recente afschrijving op/vóór de retourdatum
+      if(!best) for(const d of arr){ if(!best||d.date<best.date) best=d; }                 // anders: de dichtstbijzijnde latere (bank boekt de retour soms eerder)
+      if(best && Math.abs(new Date(t.date)-new Date(best.date))/86400000<=100) t.autoCat=catOf(best);
+    }
   }
 }
 // rol + label per rekening afleiden
