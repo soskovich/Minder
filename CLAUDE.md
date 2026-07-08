@@ -8,7 +8,7 @@ Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dra
 
 ## Bestanden
 - `index.html` — de complete app (~6.460 regels, ~515 functies): HTML + inline `<style>` + inline `<script>`. Dit is het product.
-- `sw.js` — service worker. `const CACHE = 'minder-v25'`. **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
+- `sw.js` — service worker. `const CACHE = 'minder-v26'`. **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
 - `manifest.webmanifest` — PWA-manifest (naam "Minder — uitgaventracker", standalone, `start_url` `./index.html`). Bevat een app-shortcut "Koopcheck" → `./index.html?action=buy`.
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — iconen (staan ook in de SW-`ASSETS`-lijst).
 - `Open-banking-koppeling-plan.md` — referentieplan voor een latere live PSD2-bankkoppeling. **Nog niet gebouwd**; de MT940/CSV-import blijft voorlopig de basis.
@@ -43,7 +43,7 @@ Laatst bekeken scherm wordt bewaard in `minder_view`.
 
 ## Service worker & versiebeleid
 - Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
-- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v25` → `minder-v26`, …). De oude cache wordt in `activate` opgeruimd.
+- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v26` → `minder-v27`, …). De oude cache wordt in `activate` opgeruimd.
 - De `v10/v11/v13`-strings boven in `index.html` zijn inline-SVG-icoonversies, **geen** app-versie.
 
 ## Syntax-check
@@ -67,3 +67,4 @@ Trek het inline `<script>` uit `index.html` en controleer met **`node --check`**
 - **Netto centraliseren, stap 1 + Cluster 1** (`minder-v23`): centrale netto-definitie toegevoegd (`isExpenseTx`, `netSpend` bij `index.html:840`) — additief, nog niet overal aangeroepen. Cluster 1 (budget-detail) gemigreerd naar netto: `vervoerSplit` (deelposten netto), `catDriver`/`catHypo`/`renderVariance` (netto som + grootste **netto per winkel** i.p.v. losse transactie, Optie A; `biggest`-veld verwijderd, telling blijft op afschrijvingen). Migratie loopt incrementeel per cluster (volgende: prognose & budget-basis, Inzichten-restwidgets, coach, meldingen); debit-only-plekken (spaar-/inkomen-/abonnement-detectie, tellingen, uitschieter-vlag) blijven bewust ongemoeid.
 - **Netto centraliseren, Cluster 2** (`minder-v24`): prognose & budget-basis gemigreerd naar netto: `dailyRollingSeries`, `dailyVarSeries` (dag-reeksen), `openForecastVar`, `openVarDue` (variabele prognose per categorie), `potRoomBase`, `suggestBudgets` (historische vast/variabel-basis) en `baselineSpend` (nu via `netSpend`). Telkens `t.amount<0`-filter verwijderd zodat een terugstorting netto verrekent; `isExpenseTx`/`netSpend` gebruikt waar passend. Volgende: Inzichten-restwidgets, coach, meldingen.
 - **Netto centraliseren, Cluster 3** (`minder-v25`): Inzichten-restwidgets gemigreerd naar netto: `renderFixedVariable` + `openFixedVarDrill` (vast/variabel-splitsing, terugstorting zichtbaar en groen), `openVarTx` (variabele-transactielijst) en de "Overig"-winkellijst in `renderRulesCard` (netto per winkel, `x.s>0` gefilterd). Volgende: coach, meldingen.
+- **Netto centraliseren, Cluster 4a** (`minder-v26`): coach-totalen/dag-sommen gemigreerd naar netto: vices-categorietotalen in `buildCoaching` & `coachItems`, piekdag in `goalCoachTips`, weekdag in `coachPattern`, `computeStreak` (netto, terugstorting helpt de streak) en `coachTips` (items → merch/weekdag netto; "Overig"-telling op afschrijvingen). Cluster 4b (losse-transactie-impulsvinders `coachLeak`/`coachSandwich`/`coachWeekRisk` + "grootste enkele uitgave") is bewust apart gehouden: dat vergt een merchant-net herontwerp dat de coach-dialoog raakt, wacht op expliciete keuze. Volgende: meldingen.

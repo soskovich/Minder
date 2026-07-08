@@ -2420,7 +2420,7 @@ function buildCoaching(){
   const spW=Math.round(avg(windfall.map(r=>r.sp))), spN=Math.round(avg(normal.map(r=>r.sp)));
   const lifestyle = windfall.length>=1 && normal.length>=1 && spW>spN*1.12;
   // grootste variabele categorie (gem/mnd)
-  const vc={}; for(const m of done){ for(const t of txOfMonth(m)){ if(t.amount<0 && CATS[catOf(t)].type==='expense' && !isFixed(t)){ const k=catOf(t); vc[k]=(vc[k]||0)+(-t.amount);} } }
+  const vc={}; for(const m of done){ for(const t of txOfMonth(m)){ if(isExpenseTx(t) && !isFixed(t)){ const k=catOf(t); vc[k]=(vc[k]||0)+(-t.amount);} } }   // netto per categorie
   const topVar=Object.entries(vc).map(([k,v])=>({k,avg:v/done.length})).sort((a,b)=>b.avg-a.avg)[0];
   // spaarautomatisering die nog als uitgave staat (N26 'Rules')
   const savRx=/monthly rule|weekly rule/i; let savMis=0,savN=0;
@@ -3601,7 +3601,7 @@ function goalCoachTips(m){
     if(subs.length>=2 && tot>=15){ const save=Math.max(Math.round(tot*0.3/5)*5,10);
       tips.push({key:'tip_subs',icon:ICON('repeat'),how:`Je hebt <b>${subs.length} abonnementen</b>, samen ${euro0(tot)} per maand. Loop ze eens na, want meestal zit er eentje bij die je niet meer echt gebruikt.`,save,label:'Abonnementen nalopen'}); } }catch(_){}
   try{ const days=[0,0,0,0,0,0,0]; const nm=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag']; let tot=0;
-    for(const t of txOfMonth(m)){ if(t.amount>=0)continue; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixed(t))continue; days[new Date(t.date).getDay()]+=-t.amount; tot+=-t.amount; }
+    for(const t of txOfMonth(m)){ const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixed(t))continue; days[new Date(t.date).getDay()]+=-t.amount; tot+=-t.amount; }   // netto per dag
     if(tot>0){ let mi=0; for(let i=1;i<7;i++) if(days[i]>days[mi])mi=i; const share=days[mi]/tot;
       if(share>=0.28 && days[mi]>=40){ const save=Math.max(Math.round(days[mi]*0.4/5)*5,10);
         tips.push({key:'tip_peak',icon:ICON('cal'),how:`Je losse uitgaven lopen vooral op <b>${nm[mi]}</b> op (${Math.round(share*100)}%). E\u00e9n rustige ${nm[mi]} per week scheelt al gauw wat.`,save,label:nm[mi]+' rustiger'}); } } }catch(_){}
@@ -3837,7 +3837,7 @@ function coachItems(){
     if(streak>=2) items.push({t:'warn',insight:'Je geeft al maanden te veel uit',context:`Tijd om het te kantelen. Kies vandaag één last die eruit kan.`,label:'Verlaag één vaste last',fn:'toggleActDeep()'});
   }
   // 5) grootste variabele hefboom
-  const vc={}; for(const m of done){ for(const t of txOfMonth(m)){ if(t.amount<0&&CATS[catOf(t)].type==='expense'&&!isFixed(t)){const k=catOf(t);vc[k]=(vc[k]||0)+(-t.amount);} } }
+  const vc={}; for(const m of done){ for(const t of txOfMonth(m)){ if(isExpenseTx(t)&&!isFixed(t)){const k=catOf(t);vc[k]=(vc[k]||0)+(-t.amount);} } }   // netto per categorie
   const topVar=Object.entries(vc).map(([k,v])=>({k,avg:v/(done.length||1)})).sort((a,b)=>b.avg-a.avg)[0];
   if(topVar) items.push({t:'info',insight:`${CATS[topVar.k].name} is je grootste knop`,context:`Iets minder hier scheelt ${euro0(Math.round(topVar.avg*0.15))}/mnd. Kies een goedkoper alternatief.`,label:`Bekijk ${CATS[topVar.k].name}`,fn:`openCategory('${topVar.k}')`});
   // fallback: op koers
@@ -4160,7 +4160,7 @@ function coachForecastChart(M,accent){
 function coachPattern(){
   // 1) weekdag-concentratie van discretionaire uitgaven (laatste ~8 weken)
   try{ const lim=Date.now()-56*864e5; const days=[0,0,0,0,0,0,0]; const nm=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag']; let tot=0;
-    for(const t of TX){ if(t.amount>=0) continue; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixedCat(c)) continue; const dt=new Date(t.date); if(isNaN(dt)||dt.getTime()<lim) continue; const a=-t.amount; days[dt.getDay()]+=a; tot+=a; }
+    for(const t of TX){ const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixedCat(c)) continue; const dt=new Date(t.date); if(isNaN(dt)||dt.getTime()<lim) continue; const a=-t.amount; days[dt.getDay()]+=a; tot+=a; }   // netto per dag
     if(tot>0){ let mi=0; for(let i=1;i<7;i++) if(days[i]>days[mi]) mi=i; const share=days[mi]/tot; if(share>=0.28 && days[mi]>=40) return `je discretionaire uitgaven pieken op <b>${nm[mi]}</b> (${Math.round(share*100)}%).`; }
   }catch(_){}
   // 2) 'in het moment'-patroon uit de koopcheck-historie
@@ -4850,7 +4850,7 @@ function toggleActDeep(){ SET.actDeep=!SET.actDeep; save(); renderActions(); }
 function computeStreak(dagdoel){
   if(!(dagdoel>0)||!TX.length) return 0;
   const byDay={}; let first='9999-99-99';
-  for(const x of TX){ if(x.date<first) first=x.date; if(x.amount<0 && CATS[catOf(x)].type==='expense' && !isFixed(x)){ byDay[x.date]=(byDay[x.date]||0)+(-x.amount); } }
+  for(const x of TX){ if(x.date<first) first=x.date; if(isExpenseTx(x) && !isFixed(x)){ byDay[x.date]=(byDay[x.date]||0)+(-x.amount); } }   // netto per dag (terugstorting helpt de streak)
   const today=new Date(); today.setHours(0,0,0,0); let streak=0;
   for(let i=1;i<=120;i++){ const d=new Date(today); d.setDate(d.getDate()-i); const ds=d.toISOString().slice(0,10);
     if(ds<first) break;
@@ -5096,7 +5096,7 @@ function coachTips(m){
   const t=totals(m), tips=[];
   const ms=months(), idx=ms.indexOf(m), prev=idx>0?ms[idx-1]:null;
   const pct = t.budget>0?t.spend/t.budget*100:0;
-  const items = t.list.filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense');
+  const items = t.list.filter(x=>isExpenseTx(x));   // incl. terugstortingen: merch/weekdag netto
   const push=(pri,type,ic,msg,act)=>tips.push({pri,t:type,ic,m:msg,act:act||''});
   // inkomen-setup
   if(t.budget<=0) push(9,'info',ICON('gear'),`Geen inkomen herkend voor deze maand. Stel je <b>vast inkomen</b> in bij Instellingen voor een kloppend budget.`,"go('set')");
@@ -5151,7 +5151,7 @@ function coachTips(m){
   // buffer-ETA
   const S=savingsModel(); if(S.toGo>0 && S.monthlySaving>0 && S.cur>0) push(4,'info',ICON('target'),`Bij ${euro0(S.monthlySaving)}/mnd bereik je je buffer (${euro0(S.goal)}) over ±<b>${Math.round(S.monthsLeft)} maanden</b>.`);
   // ongecategoriseerd
-  const uncat=items.filter(x=>catOf(x)==='overig').length;
+  const uncat=items.filter(x=>catOf(x)==='overig'&&x.amount<0).length;
   if(uncat>=5) push(2,'info',ICON('tag'),`<b>${uncat} transacties</b> staan op "Overig". Categoriseer ze voor scherpere inzichten.`,"go('set')");
   return tips.sort((a,b)=>(b.pri||0)-(a.pri||0)).slice(0,5);
 }
