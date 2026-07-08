@@ -3567,7 +3567,7 @@ function renderVermogen(){
       const _X=i=>_x0+(i/(_ser.length-1))*(_x1-_x0), _Y=v=>_yB-((v-_mn)/_rng)*(_yB-_yT);
       const _P=_ser.map((v,i)=>_X(i).toFixed(1)+','+_Y(v).toFixed(1)).join(' ');
       const _col=_delta>=0?'#2dd4bf':'#f87171';
-      _nwTrend=`<div style="margin-top:13px;padding-top:11px;border-top:1px solid var(--line)"><div class="row" style="margin-bottom:4px"><span class="small" style="font-weight:700">Opbouw · ${_win.length} mnd</span><span class="small" style="font-weight:700;color:${_col}">${_delta>=0?'+':''}${euro0(_delta)}</span></div><svg viewBox="0 0 ${_W} ${_H}" width="100%" height="${_H}"><defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${_delta>=0?'rgba(45,212,191,.28)':'rgba(248,113,113,.28)'}"/><stop offset="1" stop-color="rgba(45,212,191,0)"/></linearGradient></defs><polygon points="${_X(0).toFixed(1)},${_yB} ${_P} ${_X(_ser.length-1).toFixed(1)},${_yB}" fill="url(#nwg)"/><polyline points="${_P}" fill="none" stroke="${_col}" stroke-width="2" stroke-linejoin="round"/><circle cx="${_X(_ser.length-1).toFixed(1)}" cy="${_Y(_ser[_ser.length-1]).toFixed(1)}" r="3" fill="${_col}"/></svg><div class="small mut2" style="font-size:10.5px;margin-top:2px">o.b.v. inkomen − uitgaven · koersen van beleggingen niet meegerekend</div></div>`;
+      _nwTrend=`<div style="margin-top:13px;padding-top:11px;border-top:1px solid var(--line)"><div class="row" style="margin-bottom:4px"><span class="small" style="font-weight:700">Opbouw · ${_win.length} mnd</span><span class="small" style="font-weight:700;color:${_col}">${_delta>=0?'+':''}${euro0(_delta)}</span></div><svg viewBox="0 0 ${_W} ${_H}" width="100%" height="${_H}"><defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${_delta>=0?'rgba(45,212,191,.28)':'rgba(248,113,113,.28)'}"/><stop offset="1" stop-color="rgba(45,212,191,0)"/></linearGradient></defs><polygon points="${_X(0).toFixed(1)},${_yB} ${_P} ${_X(_ser.length-1).toFixed(1)},${_yB}" fill="url(#nwg)"/><polyline points="${_P}" fill="none" stroke="${_col}" stroke-width="2" stroke-linejoin="round"/><circle cx="${_X(_ser.length-1).toFixed(1)}" cy="${_Y(_ser[_ser.length-1]).toFixed(1)}" r="3" fill="${_col}"/></svg><div class="small" style="font-weight:600;margin-top:6px;color:${_col}">${_delta>=0?'Wat je minder uitgeeft, blijft hier staan als vermogen.':'De laatste maanden ging er meer uit dan er binnenkwam, dus je vermogen daalde.'}</div><div class="small mut2" style="font-size:10.5px;margin-top:2px">o.b.v. inkomen − uitgaven · koersen van beleggingen niet meegerekend</div></div>`;
     }
   }catch(_){}
   const nwCard=`<div class="card" style="background:linear-gradient(165deg,rgba(45,212,191,.06),transparent)">
@@ -3577,7 +3577,7 @@ function renderVermogen(){
     ${_nwBar}
     ${_nwTrend}
   </div>`;
-  $('#s-vermogen').innerHTML = head + nwCard + reisCard() + renderAssets() + renderDebts();
+  $('#s-vermogen').innerHTML = head + nwCard + (SET.reisEnabled ? reisCard() : '') + renderAssets() + renderDebts();   // Vermogensreis/FIRE-simulator geparkeerd achter een vlag; kern = 'minder'
 }
 // ===== Coach-gedreven 'Sneller bij je doel?' =====
 // concrete, op patronen gebaseerde manieren HOE je mindert (geen generiek 'geef minder uit')
