@@ -2227,7 +2227,7 @@ function cleanMerch(s){ return (s||'').replace(/\s+/g,' ')
   .replace(/BCK\*|CCV\*|SUMUP ?\*|ZTL\*/gi,'')
   .replace(/[^A-Za-z0-9 &.\-]/g,'').replace(/\s+/g,' ').trim(); }
 function titleCase(s){ return s.replace(/\b([A-Z])([A-Z0-9]+)\b/g,(m,a,b)=>a+b.toLowerCase()); }
-function groupMerch(items){ const by={}; for(const x of items){ const disp=cleanMerch(x.name)||'Overig'; const key=disp.toUpperCase(); (by[key]=by[key]||{name:titleCase(disp),n:0,s:0}); by[key].n++; by[key].s+=-x.amount; } return Object.values(by).sort((a,b)=>b.s-a.s); }
+function groupMerch(items){ const by={}; for(const x of items){ const disp=cleanMerch(x.name)||'Overig'; const key=disp.toUpperCase(); (by[key]=by[key]||{name:titleCase(disp),n:0,s:0}); if(x.amount<0) by[key].n++; by[key].s+=-x.amount; } return Object.values(by).sort((a,b)=>b.s-a.s); }   // n telt afschrijvingen; s is netto (terugstorting verrekend)
 function hasRe(items,re){ return items.filter(x=>re.test((x.desc||'')+' '+(x.name||''))); }
 function sumNeg(arr){ return arr.reduce((a,b)=>a-b.amount,0); }
 
@@ -4957,8 +4957,8 @@ function fixFlip(id,target,allMerch){
 
 /* ----- UITGAVEN PER WINKEL / LEVERANCIER ----- */
 function renderMerchants(list, label){
-  const items=list.filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense');
-  const all=groupMerch(items).filter(x=>x.name&&x.name!=='Overig');
+  const items=list.filter(x=>CATS[catOf(x)].type==='expense');   // incl. terugstortingen: netto per winkel
+  const all=groupMerch(items).filter(x=>x.name&&x.name!=='Overig'&&x.s>0);
   if(!all.length) return '';
   const merch=all.slice(0,15); const max=merch[0].s;
   const open=!!SET.openMerch;
@@ -4979,18 +4979,19 @@ function renderMerchants(list, label){
 function catBestFor(items,merchName){ const u=merchName.toUpperCase(); const it=items.find(x=>cleanMerch(x.name).toUpperCase()===u); return it?catOf(it):'overig'; }
 // alle transacties van één winkel in de huidige periode tonen
 function openMerchant(key){
-  const items=periodTx().filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense' && cleanMerch(x.name).toUpperCase()===key).sort((a,b)=>b.date.localeCompare(a.date));
+  const items=periodTx().filter(x=>CATS[catOf(x)].type==='expense' && cleanMerch(x.name).toUpperCase()===key).sort((a,b)=>b.date.localeCompare(a.date));   // incl. terugstortingen: netto totaal
   if(!items.length) return;
   const tot=items.reduce((s,t)=>s-t.amount,0);
+  const cnt=items.filter(t=>t.amount<0).length||items.length;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-weight:800;font-size:17px">${esc(titleCase(cleanMerch(items[0].name)))}</div>
       <div class="muted small">${items.length} transacties · ${esc(periodLabel())}</div>
       <div style="font-size:22px;font-weight:800;margin:5px 0">${euro(tot)}</div>
-      <div class="muted small">gem. ${euro(tot/items.length)} per keer</div></div>
+      <div class="muted small">gem. ${euro(tot/cnt)} per keer</div></div>
     ${items.map(t=>{const c=CATS[catOf(t)];return `<div class="tx" style="cursor:default">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
       <div class="info"><div class="nm">${new Date(t.date).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})}${OWN.length>1?' · '+esc(accShort(t.acc)):''}</div><div class="cat">${c.name}</div></div>
-      <div class="amt neg">${euro(t.amount)}</div></div>`;}).join('')}`;
+      <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`;}).join('')}`;
   $('#sheetBg').classList.add('show');
 }
 // alle transacties van één categorie in de huidige periode
@@ -5033,7 +5034,7 @@ function toggleExpand(which){ SET[which]=!SET[which]; save(); renderIns(); }
 function toggleCollap(which){ SET[which]=!SET[which]; save(); renderIns(); }
 // uitgaven per categorie / winkel voor één maand (voor vergelijking)
 function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
-function merchSpendMap(m){ const items=txOfMonth(m).filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense'); const by={}; for(const x of groupMerch(items)) by[x.name.toUpperCase()]={name:x.name,s:x.s}; return by; }
+function merchSpendMap(m){ const items=txOfMonth(m).filter(x=>CATS[catOf(x)].type==='expense'); const by={}; for(const x of groupMerch(items)){ if(x.s>0) by[x.name.toUpperCase()]={name:x.name,s:x.s}; } return by; }   // netto per winkel (terugstorting verrekend)
 // vergelijking huidige maand vs vorige: waar bespaard / meer uitgegeven
 function openCompare(prev){
   const cur=curMonth;
@@ -5071,8 +5072,9 @@ function pctWord(p){
 function renderWeekdayPattern(list){
   const items=list.filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense' && !isFixed(x));
   if(items.length<5) return '';
-  const sum=[0,0,0,0,0,0,0], cnt=[0,0,0,0,0,0,0], names=['ma','di','wo','do','vr','za','zo'];
-  for(const x of items){ const idx=(new Date(x.date).getDay()+6)%7; sum[idx]+=-x.amount; cnt[idx]++; }
+  const itemsAll=list.filter(x=>CATS[catOf(x)].type==='expense' && !isFixed(x));   // incl. terugstortingen: netto per dag
+  const sum=[0,0,0,0,0,0,0], names=['ma','di','wo','do','vr','za','zo'];
+  for(const x of itemsAll){ sum[(new Date(x.date).getDay()+6)%7]+=-x.amount; }
   const max=Math.max(...sum,1), peak=sum.indexOf(max), totalV=sum.reduce((a,b)=>a+b,0);
   const weekend=sum[5]+sum[6], wkPct=totalV?Math.round(weekend/totalV*100):0;
   return `<div class="card">
@@ -5181,8 +5183,8 @@ function renderTxList(){
   if(accFilter!=='all') list=list.filter(t=>t.acc===accFilter);
   if(txFilter!=='all') list=list.filter(t=>catOf(t)===txFilter);
   if(txSearch) list=list.filter(t=>(t.name+' '+t.desc).toLowerCase().includes(txSearch));
-  const sum={},cnt={}; for(const t of all){ if(t.amount<0&&CATS[catOf(t)].type==='expense'){const k=catOf(t);sum[k]=(sum[k]||0)+(-t.amount);cnt[k]=(cnt[k]||0)+1;} }
-  const catAvg={}; for(const k in sum) catAvg[k]=sum[k]/cnt[k];
+  const sum={},cnt={}; for(const t of all){ const k=catOf(t); if(CATS[k]&&CATS[k].type==='expense'){ sum[k]=(sum[k]||0)+(-t.amount); if(t.amount<0) cnt[k]=(cnt[k]||0)+1; } }   // netto som, gemiddelde over afschrijvingen
+  const catAvg={}; for(const k in sum){ if(cnt[k]) catAvg[k]=sum[k]/cnt[k]; }
   let body='', lastDay='';
   for(const t of list){
     if(t.date!==lastDay){ lastDay=t.date; body+=`<div class="tx-day">${dayHeader(t.date)}</div>`; }
@@ -5240,7 +5242,7 @@ function insFocus(m){
 // statische inline-insight (budget vs werkelijk + status), geen navigatie
 function steerSpendUpTo(m, day){ // stuurbare (variabele) uitgaven per categorie in maand m t/m dag 'day' (99 = hele maand)
   const by={};
-  for(const t of txOfMonth(m)){ if(t.amount>=0) continue; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixedCat(c)) continue; const d=+t.date.slice(8,10); if(d>day) continue; by[c]=(by[c]||0)+(-t.amount); }
+  for(const t of txOfMonth(m)){ const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixedCat(c)) continue; const d=+t.date.slice(8,10); if(d>day) continue; by[c]=(by[c]||0)+(-t.amount); }   // positieven netto meegerekend: terugstorting verlaagt de categorie
   return by;
 }
 function monthVsPrevInner(m){
@@ -5323,7 +5325,7 @@ function openYearReview(year){
 function isMode(x){ return (SET.mode||'begeleid')===x; }
 
 /* ===== OPVALLEND DEZE MAAND, data-gedreven hypotheses (van 'wat' naar 'dus-wat') ===== */
-function _catSpendOf(mm){ const by={}; for(const t of txOfMonth(mm)){ if(t.amount<0 && CATS[catOf(t)] && CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); } return by; }
+function _catSpendOf(mm){ return catSpendMap(mm); }   // netto per categorie (terugstorting verrekend); gelijk aan catSpendMap, geen duplicaat-logica meer
 function insSignals(m,exclude){
   exclude=exclude||new Set();
   const ms=months(); const idx=ms.indexOf(m); if(idx<0) return [];
@@ -5357,24 +5359,26 @@ function insSignals(m,exclude){
         chip:{text:mult>=1.4?(mult.toFixed(1).replace('.',',')+'\u00d7 normaal'):'bovengemiddeld',type:'up'},
         hyp:`Aan ${CATS[best.k].name.toLowerCase()} ben je dit keer veel meer kwijt dan je gewend bent.`, imp:`Check of het eenmalig was; anders een grens op ${CATS[best.k].name.toLowerCase()}.`}); }
   }
-  // 3) piekdag (variabele uitgaven)
+  // 3) piekdag (variabele uitgaven) \u2014 netto per dag: telpoort op afschrijvingen, dag-sommen incl. terugstortingen
   const vis=txOfMonth(m).filter(x=>x.amount<0 && CATS[catOf(x)] && CATS[catOf(x)].type==='expense' && !isFixed(x));
+  const visAll=txOfMonth(m).filter(x=>CATS[catOf(x)] && CATS[catOf(x)].type==='expense' && !isFixed(x));
   if(vis.length>=6){
-    const sumd=[0,0,0,0,0,0,0]; for(const x of vis){ sumd[(new Date(x.date).getDay()+6)%7]+=-x.amount; }
+    const sumd=[0,0,0,0,0,0,0]; for(const x of visAll){ sumd[(new Date(x.date).getDay()+6)%7]+=-x.amount; }
     const tot=sumd.reduce((a,b)=>a+b,0), peak=sumd.indexOf(Math.max(...sumd));
-    const share=tot?Math.round(sumd[peak]/tot*100):0;
+    const share=tot>0?Math.round(sumd[peak]/tot*100):0;
     if(share>=24) out.push({pri:5,tone:'info',act:'',
       kpiLabel:'Piekdag', kpiVal:dn[peak], kpiSub:`${share}% van je losse geld`, chip:{text:'patroon',type:'n'},
       hyp:`${pctWord(share)?pctWord(share).charAt(0).toUpperCase()+pctWord(share).slice(1):('Ongeveer '+share+'%')} van je losse geld gaat op ${dn[peak]}.`, imp:`Zo'n vaste piek is gewoonte; \u00e9\u00e9n bewuste ${dn[peak]} levert de meeste winst.`});
   }
-  // 4) ongewoon grote losse uitgave
+  // 4) grootste netto uitgave per winkel (terugstorting verrekend) i.p.v. \u00e9\u00e9n losse transactie
   if(vis.length>=5){
-    const amts=vis.map(x=>-x.amount).sort((a,b)=>a-b); const med=amts[Math.floor(amts.length/2)]||0;
-    const big=vis.slice().sort((a,b)=>a.amount-b.amount)[0];
-    if(big && med>0 && (-big.amount)>=med*4 && (-big.amount)>=40)
+    const byM={}; for(const x of visAll){ const nm=cleanMerch(x.name)||x.name||'onbekend'; byM[nm]=(byM[nm]||0)+(-x.amount); }
+    const arr=Object.entries(byM).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+    const vals=arr.map(e=>e[1]).sort((a,b)=>a-b); const med=vals[Math.floor(vals.length/2)]||0;
+    if(arr.length && med>0 && arr[0][1]>=med*4 && arr[0][1]>=40)
       out.push({pri:6,tone:'warn',act:'',
-        kpiLabel:'Grootste uitgave', kpiVal:euro0(-big.amount), kpiSub:esc(cleanMerch(big.name)||big.name||'onbekend'), chip:{text:'losse aankoop',type:'n'},
-        hyp:`E\u00e9n aankoop domineert je losse uitgaven.`, imp:`Reken je deze maand niet rijk of arm aan dit ene bedrag.`});
+        kpiLabel:'Grootste uitgave', kpiVal:euro0(arr[0][1]), kpiSub:esc(arr[0][0]), chip:{text:'grootste winkel',type:'n'},
+        hyp:`E\u00e9n winkel domineert je losse uitgaven.`, imp:`Reken je deze maand niet rijk of arm aan dit ene bedrag.`});
   }
   return out;
 }
@@ -5387,7 +5391,7 @@ function weekBoundsFromAnchor(anchor, weeksBack){
   const sun=new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+6,23,59,59,999);
   return {start:mon,end:sun};
 }
-function weekVarTx(start,end){ return TX.filter(t=>{ if(t.amount>=0)return false; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixed(t))return false; const dt=new Date(t.date); return dt>=start&&dt<=end; }); }
+function weekVarTx(start,end){ return TX.filter(t=>{ const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixed(t))return false; const dt=new Date(t.date); return dt>=start&&dt<=end; }); }   // incl. terugstortingen: sommen (−amount) worden netto; tellingen filteren zelf op afschrijving
 function weekCompareData(){
   if(!TX.length) return null;
   const latest=TX.reduce((a,b)=>a.date>b.date?a:b).date;
@@ -5445,7 +5449,7 @@ function openWeekCompare(){
     <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:8px">
       <div style="font-size:28px;font-weight:800;letter-spacing:-.5px;color:${heroCol}">${heroTxt}<span style="font-size:12.5px;color:var(--mut);font-weight:500"> deze week</span></div>${deltaChip}</div>
     <div class="wvo-tiles" style="grid-template-columns:1fr 1fr;margin-top:14px">
-      <div class="wvo-tile"><div class="wvo-tl">Deze week</div><div class="wvo-tv">${euro0(thisSum)}</div><div class="wvo-ts">${thisTx.length} losse uitgaven</div></div>
+      <div class="wvo-tile"><div class="wvo-tl">Deze week</div><div class="wvo-tv">${euro0(thisSum)}</div><div class="wvo-ts">${thisTx.filter(t=>t.amount<0).length} losse uitgaven</div></div>
       <div class="wvo-tile"><div class="wvo-tl">Vorige week</div><div class="wvo-tv" style="color:var(--mut)">${euro0(lastSum)}</div><div class="wvo-ts">${normAvg>0?`normaal ~${euro0(normAvg)}`:'vorige week'}</div></div>
     </div>
     <div class="hlabel" style="margin:18px 2px 6px">Per dag</div>
