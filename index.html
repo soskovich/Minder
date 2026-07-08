@@ -1117,7 +1117,7 @@ function renderBudgetActual(m){
 function openVariance(k){
   const m=curMonth, c=CATS[k];
   const bud=+effectiveBudgets(m).out[k]||0;
-  const items=txOfMonth(m).filter(x=>catOf(x)===k && x.amount<0).sort((a,b)=>b.date.localeCompare(a.date));
+  const items=txOfMonth(m).filter(x=>catOf(x)===k).sort((a,b)=>b.date.localeCompare(a.date));   // incl. terugstortingen: netto
   const act=items.reduce((s,t)=>s-t.amount,0);
   const band=budgetBand(bud,act); const over=band==='action'||band==='monitor';
   const overEur=act-bud;
@@ -1138,7 +1138,7 @@ function openVariance(k){
     <div class="hlabel" style="margin:4px 2px 8px">Transacties</div>
     ${items.map(t=>`<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${c.icon}</div>
       <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}${OWN.length>1?' · '+esc(accShort(t.acc)):''}</div></div>
-      <div class="amt neg">${euro(t.amount)}</div></div>`).join('')}`;
+      <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`).join('')}`;
   $('#sheetBg').classList.add('show');
 }
 // voorzichtige, data-gedreven hypothese voor één over-budget categorie (geen aannames als feit)
@@ -2285,7 +2285,7 @@ function savingsPlan(m){
   const plan=[];
   for(const [k,total] of cats){
     if(total<25) continue;
-    const items=txOfMonth(m).filter(x=>catOf(x)===k && x.amount<0);
+    const items=txOfMonth(m).filter(x=>catOf(x)===k);   // incl. terugstortingen: netto deelposten (total komt al netto uit byCat)
     const a=buildAction(k,total,items);
     if(a){ a.total=total; plan.push(a); }
     if(plan.length>=4) break;
@@ -2362,7 +2362,7 @@ const LEVERS={
   ],
 };
 function leverCtx(k,m){
-  const items=txOfMonth(m).filter(x=>catOf(x)===k && x.amount<0);
+  const items=txOfMonth(m).filter(x=>catOf(x)===k);   // incl. terugstortingen: netto totaal + deelposten
   const total=items.reduce((s,t)=>s-t.amount,0);
   const sub=re=>items.filter(x=>re.test((x.desc||'')+' '+(x.name||''))).reduce((s,t)=>s-t.amount,0);
   return {total, lease:sub(/HILTERMANN|LEASE/i), fuel:sub(/TRAVELCARD|SHELL|ESSO|\bBP |TINQ|TANK/i), park:sub(/PARKBEE|PARKEER|PARKING/i)};
