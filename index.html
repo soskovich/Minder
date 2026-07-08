@@ -854,7 +854,7 @@ function ptot(){
   const pm=periodMonths(), list=periodTx();
   let income=0, est=false; for(const m of pm){ const tm=totals(m); income+=tm.income; if(tm.incomeBasis==='basisnorm'||tm.incomeBasis==='onbekend') est=true; }
   let spend=0; const byCat={};
-  for(const t of list){ const c=catOf(t), meta=CATS[c]; byCat[c]=(byCat[c]||0)+t.amount; if(meta.type==='expense'&&t.amount<0) spend+=-t.amount; }
+  for(const t of list){ const c=catOf(t), meta=CATS[c]; byCat[c]=(byCat[c]||0)+t.amount; if(meta.type==='expense') spend+=-t.amount; }   // netto: terugstorting verlaagt de uitgave
   return {list, income, spend, budget:monthBudget(inc), byCat, months:pm.length, incomeEst:est};
 }
 // cirkeldiagram + legenda over een byCat-map
@@ -1308,7 +1308,7 @@ function totals(m){
     const c=catOf(t), meta=CATS[c];
     byCat[c]=(byCat[c]||0)+t.amount;
     if(meta.type==='income') income+=Math.max(t.amount,0);
-    else if(meta.type==='expense' && t.amount<0) spend+=-t.amount;
+    else if(meta.type==='expense') spend+=-t.amount;   // netto: een terugstorting binnen een uitgavencategorie verlaagt de uitgave
     else if(meta.type==='internal') internal+=t.amount;
   }
   let inc, basis;
@@ -1338,7 +1338,7 @@ function baseIncome(){
 }
 // vaste/variabele splitsing over een maand
 function splitFixedVar(m){ let fixed=0,vari=0;
-  for(const x of txOfMonth(m)){ if(x.amount<0 && CATS[catOf(x)].type==='expense'){ if(isFixed(x)) fixed+=-x.amount; else vari+=-x.amount; } }
+  for(const x of txOfMonth(m)){ if(CATS[catOf(x)].type==='expense'){ if(isFixed(x)) fixed+=-x.amount; else vari+=-x.amount; } }   // netto: terugstorting verlaagt vast/variabel
   return {fixed,vari};
 }
 // ===== PROGNOSE (lichtgewicht AI: gemiddelden + trend) =====
@@ -5007,7 +5007,7 @@ function gotoCurrentMonth(){ const ms=months(); const now=new Date(); const ym=n
 function toggleExpand(which){ SET[which]=!SET[which]; save(); renderIns(); }
 function toggleCollap(which){ SET[which]=!SET[which]; save(); renderIns(); }
 // uitgaven per categorie / winkel voor één maand (voor vergelijking)
-function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(t.amount<0 && CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); } return by; }
+function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
 function merchSpendMap(m){ const items=txOfMonth(m).filter(x=>x.amount<0 && CATS[catOf(x)].type==='expense'); const by={}; for(const x of groupMerch(items)) by[x.name.toUpperCase()]={name:x.name,s:x.s}; return by; }
 // vergelijking huidige maand vs vorige: waar bespaard / meer uitgegeven
 function openCompare(prev){
@@ -5676,8 +5676,8 @@ function renderBehavior(m){
   return `<div class="card"><div class="hlabel" style="margin:0 0 4px">Gedrag</div>${body}</div>`;
 }
 function renderCatBreak(list){
-  const by={}; for(const t of list){ if(t.amount<0 && CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); }
-  const ex=Object.entries(by).sort((a,b)=>b[1]-a[1]); if(!ex.length) return '';
+  const by={}; for(const t of list){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); }   // netto: terugstorting verlaagt de categorie
+  const ex=Object.entries(by).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]); if(!ex.length) return '';
   const max=ex[0][1], total=ex.reduce((s,e)=>s+e[1],0);
   const open=!!SET.openCatBreak;
   const head=`<div class="row" style="gap:10px;cursor:pointer" onclick="toggleCollap('openCatBreak')"><span class="hlabel" style="margin:0;flex:1">Categorieën</span><span class="small muted"><b style="color:var(--txt);font-size:15px">${euro0(total)}</b> totaal</span><span class="muted" style="font-size:17px;width:14px;text-align:center">${open?'▲':'›'}</span></div>`;
