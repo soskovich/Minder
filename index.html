@@ -1580,6 +1580,15 @@ function renderEmpty(){
     <div class="small muted" style="margin-top:8px">MT940 (ABN AMRO) of CSV (N26) · een bestand-import, geen live koppeling</div>
     ${guide}
     <button class="btn sec" style="margin-top:18px" onclick="onboardManual()">Liever handmatig toevoegen</button>
+    <div style="max-width:360px;margin:26px auto 0;text-align:left;border-top:1px solid var(--line);padding-top:16px">
+      <div class="small" style="font-weight:600;margin:0 2px 8px">Hoe wil je starten?</div>
+      <div class="chips" style="margin:0">
+        <span class="chip ${SET.mode==='rustig'?'on':''}" onclick="SET.mode='rustig';save();renderEmpty()">Rustig starten</span>
+        <span class="chip ${(SET.mode||'begeleid')==='begeleid'?'on':''}" onclick="SET.mode='begeleid';save();renderEmpty()">Begeleid (standaard)</span>
+      </div>
+      <div class="small muted" style="margin-top:9px;line-height:1.7"><b>Rustig:</b> minder cijfers, zachtere toon, fijn als geld stress geeft.<br><b>Begeleid:</b> uitleg, tips &amp; benchmarks.</div>
+      <div class="small muted" style="margin-top:6px">Je kunt dit later altijd wijzigen bij Instellingen.</div>
+    </div>
     <p class="small muted" style="margin-top:24px">${ICON('lock')} Alleen inzicht, nooit toegang tot je geld. Alles blijft privé op dit toestel.</p>
   </div>`;
   $('#s-dash').innerHTML=html;
