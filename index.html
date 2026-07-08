@@ -1145,28 +1145,25 @@ function openVariance(k){
 function catHypo(m,k){
   const d=catDriver(m,k);
   const cat=CATS[k]?CATS[k].name.toLowerCase():'deze categorie';
-  const big=d.biggest?(esc(cleanMerch(d.biggest.name)||d.biggest.name)):'';
-  // 1) één grotere aankoop weegt zwaar mee
-  if(d.sum>0 && d.biggest && (-d.biggest.amount)/d.sum>=0.45)
-    return `Dit komt vooral door één aankoop bij ${big} van ${euro0(-d.biggest.amount)}.`;
-  // 2) één winkel/leverancier is het grootste deel
-  if(d.merch && d.sum>0 && d.merch.s/d.sum>=0.4)
-    return `Het meeste ging naar ${esc(d.merch.name)}. ${euro0(d.merch.s)} in ${d.merch.n} keer.`;
-  // 3) wat vaker iets gekocht in deze categorie
+  const mnaam=d.merch?esc(d.merch.name):'';
+  // 1) één winkel is netto het grootste deel (Optie A: netto per winkel, geen losse transactie)
+  if(d.merch && d.sum>0 && d.merch.s/d.sum>=0.45)
+    return `Dit komt vooral door ${mnaam}: ${euro0(d.merch.s)} in ${d.merch.n} keer.`;
+  // 2) wat vaker iets gekocht in deze categorie
   if(d.priorN>=1 && d.n>=Math.round(d.priorN*1.3))
     return `Je kocht wat vaker iets voor ${cat} dan normaal. ${d.n} keer, meestal is dat rond ${Math.round(d.priorN)}.`;
-  // 4) bedragen per keer iets hoger
+  // 3) bedragen per keer iets hoger
   if(d.priorAvg>0 && d.avg>=d.priorAvg*1.2)
     return `De bedragen voor ${cat} lagen wat hoger dan je gewend bent, zo'n ${euro0(d.avg)} per keer.`;
-  // 5) specifiek opgebouwd, met grootste post benoemd
-  if(d.biggest && d.n>1)
-    return `Het ging om ${d.n} uitgaven voor ${cat}. De grootste was ${big} van ${euro0(-d.biggest.amount)}.`;
+  // 4) specifiek opgebouwd, met grootste winkel benoemd
+  if(d.merch && d.n>1)
+    return `Het ging om ${d.n} uitgaven voor ${cat}. De grootste was ${mnaam} (${euro0(d.merch.s)}).`;
   return `Het ging om ${d.n||0} uitgave${d.n===1?'':'n'} voor ${cat} deze maand.`;
 }
 // Vervoer & auto bestaat uit deeluitgaven (lease/benzine/parkeren/OV), splits ze zodat een tip de juiste post raakt
 function vervoerSplit(m){
   let lease=0,fuel=0,park=0,ov=0,rest=0;
-  for(const t of txOfMonth(m)){ if(catOf(t)!=='vervoer'||t.amount>=0) continue;
+  for(const t of txOfMonth(m)){ if(catOf(t)!=='vervoer') continue;   // incl. terugstortingen: a=-amount verrekent netto per deelpost
     const U=((t.desc||'')+' '+(t.name||'')).toUpperCase(), a=-t.amount;
     if(/HILTERMANN|LEASECONTRACT|LEASE|PRIVATE LEASE/.test(U)) lease+=a;
     else if(/SHELL|ESSO|\bBP\b|TINQ|TOTAL|TANKSTATION|\bTANK\b|GULF|TEXACO|AVIA|FIREZONE|TAMOIL/.test(U)) fuel+=a;
@@ -1264,14 +1261,14 @@ function openBudgetCompare(m){
   $('#sheetBg').classList.add('show');
 }
 function catDriver(m,k){
-  const items=txOfMonth(m).filter(x=>catOf(x)===k && x.amount<0);
-  const n=items.length, sum=items.reduce((s,t)=>s-t.amount,0);
+  const all=txOfMonth(m).filter(x=>catOf(x)===k);              // incl. terugstortingen (netto via netSpend/groupMerch)
+  const n=all.filter(t=>t.amount<0).length;                    // telling op afschrijvingen
+  const sum=netSpend(all);                                     // netto categorie-uitgave
   const pm=months().filter(mm=>mm<m).slice(-3);
   const priorN=pm.length?pm.reduce((s,mm)=>s+txOfMonth(mm).filter(x=>catOf(x)===k&&x.amount<0).length,0)/pm.length:n;
   const priorSum=pm.length?pm.reduce((s,mm)=>s+(catSpendMap(mm)[k]||0),0)/pm.length:sum;
-  const merch=groupMerch(items)[0];
-  const biggest=items.slice().sort((a,b)=>a.amount-b.amount)[0];
-  return {n,sum,priorN,priorSum,avg:sum/(n||1),priorAvg:priorSum/(priorN||1),merch,biggest};
+  const merch=groupMerch(all)[0];                              // grootste netto winkel (Optie A, geen losse transactie)
+  return {n,sum,priorN,priorSum,avg:sum/(n||1),priorAvg:priorSum/(priorN||1),merch};
 }
 function renderVariance(m){
   const B=effectiveBudgets(m).out; const setKeys=Object.keys(B).filter(k=>+B[k]>0 && CATS[k]);
@@ -1286,12 +1283,12 @@ function renderVariance(m){
   }
   return `<div class="card"><div class="row" style="margin-bottom:8px"><span class="hlabel" style="margin:0;flex:1">Variantieanalyse</span><span class="pot">${over.length} afwijking${over.length>1?'en':''}</span></div>
     ${over.map(o=>{const c=CATS[o.k];const dr=catDriver(m,o.k);
-      let hyp;
-      if(dr.biggest && (-dr.biggest.amount) > o.act*0.4) hyp=`<b>Eén grote uitgave</b> domineert: ${esc(dr.biggest.name)} ${euro(-dr.biggest.amount)} (${Math.round(-dr.biggest.amount/o.act*100)}% van de categorie).`;
+      let hyp, merchNamed=false;
+      if(dr.merch && dr.merch.s > o.act*0.4){ hyp=`<b>Eén winkel</b> domineert: ${esc(dr.merch.name)} ${euro0(dr.merch.s)} (${Math.round(dr.merch.s/o.act*100)}% van de categorie).`; merchNamed=true; }
       else if(dr.n>dr.priorN*1.25) hyp=`Je deed <b>meer aankopen</b> dan gebruikelijk (${dr.n}× vs gemiddeld ${Math.round(dr.priorN)}× de vorige maanden).`;
       else if(dr.avg>dr.priorAvg*1.2) hyp=`Je gaf <b>per keer meer</b> uit (gem. ${euro(dr.avg)} vs ${euro(dr.priorAvg)} eerder).`;
       else hyp=`Structureel iets hoger dan je gemiddelde van ${euro0(dr.priorSum)}/mnd.`;
-      const merchTxt=dr.merch?` Grootste winkel: ${esc(dr.merch.name)} (${euro0(dr.merch.s)}).`:'';
+      const merchTxt=(dr.merch&&!merchNamed)?` Grootste winkel: ${esc(dr.merch.name)} (${euro0(dr.merch.s)}).`:'';
       const recon=Math.abs(o.act-dr.sum)<0.01;
       const qc=[`${recon?ICON('check'):ICON('warn')} Gereconcilieerd met ${dr.n} transacties (${euro(dr.sum)}).`, `${ICON('check')} Interne overboekingen & vaste lasten uitgesloten.`];
       if(uncat>0) qc.push(`${ICON('warn')} ${uncat} ongecategoriseerde transactie(s) deze maand kunnen het beeld licht vertekenen.`);
