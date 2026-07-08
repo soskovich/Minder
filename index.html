@@ -6463,6 +6463,8 @@ try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && documen
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
 try{ if(Object.keys(SET.psd2Accounts||{}).length && (Date.now()-(SET.psd2LastSync||0))>4*3600000) psd2Refresh(true); }catch(_){}
 if(new URLSearchParams(location.search).get('code')) psd2HandleCallback(); // terug van bank (PSD2-consent)
+// snelkoppeling koopcheck (PWA-shortcut / bookmark ./index.html?action=buy): open direct de check; lege app opent gewoon normaal
+try{ if(TX.length && new URLSearchParams(location.search).get('action')==='buy'){ openBuy(); history.replaceState(null,'',location.pathname); } }catch(_){}
 (async()=>{ // auto-sync bij openen als de map al gekoppeld is en toegang al verleend is
   if(!FSA || !SET.autoSync) return;
   try{ dirHandle=await idbGet('dir');
