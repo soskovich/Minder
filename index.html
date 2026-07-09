@@ -3396,7 +3396,7 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,reach,ms,FIRE,pmtFor,debtPay,restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur},missing:inputs.missing};
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,reach,ms,FIRE,pmtFor,debtPay,restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},missing:inputs.missing};
 }
 function reisModel(){ const inputs=fireInputs(); return fireModel(fireState(inputs, SET.reis||{}), inputs); }   // wrapper: inputs één keer, ongewijzigde uitkomst
 // ---- Monte Carlo: slagingskans + percentiel-band (lokaal, op verzoek) ----
@@ -3503,14 +3503,15 @@ function reisRestsaldo(M){
   // stap 1 — noodfonds
   const nfDoel=M.restsaldo.nfDoel, nfCur=M.restsaldo.nfCur;   // via Laag B (fireInputs), niet meer direct uit Minder
   const nfToGo=Math.max(nfDoel-nfCur,0), nfFull=(nfDoel<=0)||nfToGo<=0, nfPct=nfDoel>0?Math.min(100,Math.round(nfCur/nfDoel*100)):0;
-  const nfMonths=(nfToGo>0)?Math.ceil(nfToGo/surplus):0;
+  const nfFill=M.restsaldo.monthlySaving||0;   // tempo = je maandelijkse spaarinleg (niet je hele restsaldo), gelijk aan de noodfonds-mijlpaal en de "Sparen & buffer"-kaart
+  const nfMonths=(nfToGo>0 && nfFill>0)?Math.ceil(nfToGo/nfFill):0;
   const num=(n,c1,c2)=>`<div class="num" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;background:${c1};color:${c2}">${n}</div>`;
   const stepWrap=(rail,inner,last)=>`<div style="display:flex;gap:11px;padding:10px 0">${rail}<div style="flex:1;min-width:0">${inner}</div></div>`;
   const rail=(n,c1,c2,last)=>`<div style="width:26px;flex-shrink:0;display:flex;flex-direction:column;align-items:center">${num(n,c1,c2)}${last?'':`<div style="width:2px;flex:1;background:var(--line);margin-top:4px"></div>`}</div>`;
   const step1=stepWrap(rail('1','var(--green)','#06231c',false),
     nfFull
     ? `<div class="row"><span style="font-weight:700;font-size:14px">Noodfonds</span><span style="font-weight:800;font-size:12.5px;color:var(--green)">vol ✓</span></div><div class="small mut2" style="font-size:11.5px">je buffer is compleet, dit deel gaat door naar groei</div>`
-    : `<div class="row"><span style="font-weight:700;font-size:14px">Noodfonds eerst</span><span style="font-weight:800;font-size:12.5px;color:var(--green)">tot ${euro0(nfDoel)}</span></div><div class="small mut2" style="font-size:11.5px">vullen tot je doel, stopt vanzelf als het vol is</div><div class="bar-track" style="margin:7px 0 2px"><div class="bar-fill" style="width:${nfPct}%;background:var(--green)"></div></div><div class="small mut2" style="font-size:11px">${euro0(nfCur)} / ${euro0(nfDoel)}${nfMonths>0?' · nog ± '+nfMonths+' mnd':''}</div>`);
+    : `<div class="row"><span style="font-weight:700;font-size:14px">Noodfonds eerst</span><span style="font-weight:800;font-size:12.5px;color:var(--green)">tot ${euro0(nfDoel)}</span></div><div class="small mut2" style="font-size:11.5px">vullen tot je doel, stopt vanzelf als het vol is</div><div class="bar-track" style="margin:7px 0 2px"><div class="bar-fill" style="width:${nfPct}%;background:var(--green)"></div></div><div class="small mut2" style="font-size:11px">${euro0(nfCur)} / ${euro0(nfDoel)}${nfMonths>0?' · nog ± '+nfMonths+' mnd':''}</div><div class="small mut2" style="font-size:10.5px;margin-top:2px">${nfFill>0?`Vult met je spaarinleg (${euro0(nfFill)}/mnd); je overige restsaldo kan elders heen.`:'Stel je maandelijkse spaarinleg in voor een tijdsschatting.'}</div>`);
   // stap 2 — schuld (informatief, alleen als er schuld is); laatste stap in de waterval — de groeikeuze verhuist naar "Rendement & inflatie"
   const debts=M.debtPay; const debtPer=debts.reduce((s,d)=>s+(+d.per||0),0);   // via Laag B (M.debtPay), niet meer direct uit SET.debts
   const step2= debts.length? stepWrap(rail('2','var(--amber)','#2a1e00',true),
