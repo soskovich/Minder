@@ -3265,16 +3265,28 @@ function nwChart(series){
 function vermogenCard(){ const w=netWorth(); const has=(SET.assets||[]).length||(SET.debts||[]).length;
   return `<div class="card" style="cursor:pointer;margin-top:4px" onclick="go('vermogen')"><div class="row"><span style="font-weight:600">${ICON('chart')} Netto vermogen</span><span class="small" style="color:${w.netto>=0?'var(--teal)':'var(--red)'};font-weight:700">${euro0(w.netto)} ›</span></div><div class="small muted" style="margin-top:4px">${has?'bezittingen − schulden · bekijk &amp; beheer':'voeg je bezittingen &amp; schulden toe'}</div></div>`; }
 /* ===================== VERMOGENSREIS (projectie + milestones) ===================== */
-function reisState(){
-  const r=SET.reis||{}; let fm=null; try{ fm=forecastModel(); }catch(_){}
+// ===== FIRE-laag =====
+// GRENS: fireInputs() is de ENIGE plek die Minder-data leest voor de FIRE-kern. fireState/fireModel/
+// fireMonteCarlo zijn puur en werken alleen op (inputs, cfg) — geen directe Minder-aanroepen. Zo kan
+// de FIRE-sectie later verzelfstandigd worden door alleen fireInputs() te vervangen. reis*-functies
+// blijven als dunne aliassen bestaan (config-namespace SET.reis blijft, geen datamigratie).
+function fireInputs(){
+  let fm=null; try{ fm=forecastModel(); }catch(_){}
   // jaaruitgaven voor FIRE: extrapoleer de laatste 3 (afgeronde) maanden — volgt de actuele kostenontwikkeling beter dan een jaargemiddelde
-  let defExp=0;
+  let autoAnnualExp=0;
   try{ const nowYM=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
     let rec=months().filter(mm=>mm<nowYM).slice(-3); if(!rec.length) rec=months().slice(-3);
-    if(rec.length){ let s=0; for(const mm of rec){ const sf=splitFixedVar(mm); s+=(+sf.fixed||0)+(+sf.vari||0); } defExp=Math.round(s/rec.length*12); }
+    if(rec.length){ let s=0; for(const mm of rec){ const sf=splitFixedVar(mm); s+=(+sf.fixed||0)+(+sf.vari||0); } autoAnnualExp=Math.round(s/rec.length*12); }
   }catch(_){}
-  if(!defExp && fm) defExp=Math.round((fm.fFixed+fm.fVar)*12);
-  const defPmt = fm? Math.max(Math.round(fm.fNet),0) : 0;
+  if(!autoAnnualExp && fm) autoAnnualExp=Math.round((fm.fFixed+fm.fVar)*12);
+  const surplus = fm? Math.max(Math.round(fm.fNet),0) : 0;
+  const fInc=fm?Math.round(fm.fInc):0, fExp=fm?Math.round(fm.fFixed+fm.fVar):0;
+  const netWorthNow=netWorth().netto;
+  const emergencyGoal=(function(){ try{ const d=noodfondsModel().doel; if(d>0) return Math.round(d); }catch(_){} try{ const s=savingsModel(); if(s&&s.goal>0) return Math.round(s.goal); }catch(_){} return (+SET.bufferAmount||0)||0; })();
+  return { autoAnnualExp, surplus, fInc, fExp, netWorth:netWorthNow, emergencyGoal, debts:SET.debts||[] };
+}
+function fireState(inputs, cfg){
+  const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
   // jaaruitgaven-basis voor FIRE: 'auto' = geëxtrapoleerd uit je uitgaven, 'eigen' = zelf ingevuld maandbedrag
   const expMode=(r.expMode==='eigen')?'eigen':'auto';
   const expMonthly=r.expMonthly!=null?Math.max(0,Math.round(+r.expMonthly)):0;
@@ -3282,7 +3294,7 @@ function reisState(){
   // restsaldo-waterval: 'auto' = inleg volgt je surplus (inkomen − uitgaven), 'manual' = zelf getypt bedrag
   const inlegMode=(r.inlegMode==='manual')?'manual':'auto';
   const surplus=Math.max(defPmt,0);
-  const fInc=fm?Math.round(fm.fInc):0, fExp=fm?Math.round(fm.fFixed+fm.fVar):0;
+  const fInc=inputs.fInc, fExp=inputs.fExp;
   // groei-handling zet het rendement: cash 0% · sparen 1,5% · beleggen 5% · verdelen = gewogen
   const REND_SPAAR=1.5, REND_BELEG=5;
   const growMode=['cash','sparen','beleggen','verdelen'].includes(r.growMode)?r.growMode:'beleggen';
@@ -3298,6 +3310,7 @@ function reisState(){
     expMode, expMonthly, autoExp:defExp, annualExp,
     inlegMode, surplus, fInc, fExp, growMode, splitBeleg, rendFromGrow };
 }
+function reisState(){ return fireState(fireInputs(), SET.reis||{}); }   // alias, ongewijzigde uitkomst
 function reisSet(k,v){ SET.reis=SET.reis||{}; if(v===''||v==null) delete SET.reis[k]; else SET.reis[k]=v; save(); renderVermogen(); }
 function reisToggle(k){ SET.reis=SET.reis||{}; const cur=reisState(); SET.reis[k]=!cur[k]; save(); renderVermogen(); }
 function reisFire(m){ SET.reis=SET.reis||{}; SET.reis.fireCustom=(m==='eigen'); if(m!=='eigen') SET.reis.fireMult=m; save(); renderVermogen(); }
@@ -3319,21 +3332,21 @@ function reisGlyph(kind,cx,cy,col){ const sw=1.3;
   return `<path d="${reisStarPath(cx,cy,4.4,1.9)}" fill="none" stroke="${col}" stroke-width="1.2"/>`;
 }
 function reisListIcon(kind,col){ return `<svg width="17" height="17" viewBox="0 0 17 17" style="flex-shrink:0">${reisGlyph(kind,8.5,8.5,col)}</svg>`; }
-function reisModel(){
-  const R=reisState(); const nowY=new Date().getFullYear(); const curNW=netWorth().netto;
+function fireModel(R, inputs){
+  const nowY=new Date().getFullYear(); const curNW=inputs.netWorth;
   const aowYear=R.birth?(+R.birth+67):null; const targetYear=R.override||aowYear||(nowY+30); const HZ=Math.max(targetYear-nowY,1);
   const P0=curNW+(+R.een||0); const rM=R.rend/100/12, rL=(R.rend-2)/100/12, rH=(R.rend+2)/100/12;
   const pmtFor=year=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY); return a; };
   const mid=[P0],low=[P0],high=[P0],koop=[P0]; let bm=P0,bl=P0,bh=P0;
   for(let y=0;y<HZ;y++){ const p=pmtFor(nowY+y); for(let m=0;m<12;m++){ bm=bm*(1+rM)+p; bl=bl*(1+rL)+p; bh=bh*(1+rH)+p; } mid.push(bm);low.push(bl);high.push(bh);koop.push(bm/Math.pow(1+R.infl/100,y+1)); }
   const reach=t=>{ for(let y=0;y<=HZ;y++){ if(mid[y]>=t) return y; } return null; };
-  // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Vooruitblik (noodfondsModel().doel)
-  const noodDoel=(function(){ try{ const d=noodfondsModel().doel; if(d>0) return Math.round(d); }catch(_){} try{ const s=savingsModel(); if(s&&s.goal>0) return Math.round(s.goal); }catch(_){} return (+SET.bufferAmount||0)||0; })();
+  // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Vooruitblik (via fireInputs.emergencyGoal)
+  const noodDoel=inputs.emergencyGoal;
   const FIRE=(R.annualExp||0)*R.fireMult;
   // per-schuld aflossing: elk type een eigen aflosjaar (getoond in de afbouw-strook + mijlpaal-lijst)
   const DEBTCOL=['#fbbf24','#60a5fa','#f472b6','#a78bfa','#f87171','#38bdf8'];
   let debtPay=[], debtYr=null;
-  try{ const ds=(SET.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0);
+  try{ const ds=(inputs.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0);
     ds.forEach((d,i)=>{ const rest=Math.max(+d.rest||0,0), mo=payoffMonths(rest,+d.perMaand||0,+d.rente||0);
       const yr=(mo===Infinity||mo<=0)?null:nowY+Math.ceil(mo/12);
       debtPay.push({nm:d.naam||'Schuld',rest,per:+d.perMaand||0,rente:+d.rente||0,mo:(mo===Infinity?null:mo),yr,col:DEBTCOL[i%DEBTCOL.length]}); });
@@ -3352,10 +3365,11 @@ function reisModel(){
   ms.forEach(m=>{ if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); } else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; } });
   return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,reach,ms,FIRE,pmtFor,debtPay};
 }
+function reisModel(){ const inputs=fireInputs(); return fireModel(fireState(inputs, SET.reis||{}), inputs); }   // wrapper: inputs één keer, ongewijzigde uitkomst
 // ---- Monte Carlo: slagingskans + percentiel-band (lokaal, op verzoek) ----
 function reisRandn(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
-let _reisMC=null;
-function reisMonteCarlo(M){
+let _fireMC=null;
+function fireMonteCarlo(M){
   const R=M.R, nowY=M.nowY, HZ=M.HZ, P0=M.curNW+(+R.een||0); const goal=M.FIRE; if(!(goal>0)) return null;
   const mu=R.rend/100, sigma=(R.sigma!=null?+R.sigma:13)/100, SIMS=2000, DELTA=150;
   const byY=Array.from({length:HZ+1},()=>new Float64Array(SIMS)); let succ=0, succPlus=0;
@@ -3367,12 +3381,14 @@ function reisMonteCarlo(M){
   for(let y=0;y<=HZ;y++){ const col=Array.from(byY[y]).sort((a,b)=>a-b); p10.push(col[Math.floor(0.10*SIMS)]); p50.push(col[Math.floor(0.50*SIMS)]); p90.push(col[Math.floor(0.90*SIMS)]); }
   return {p10,p50,p90,succ:Math.round(succ/SIMS*100),succPlus:Math.round(succPlus/SIMS*100),goal};
 }
-function reisMCcached(M){
+function fireMCcached(M){
   const R=M.R; const sig=[Math.round(M.curNW),R.een,R.pmt,R.grow,R.rend,R.sigma,R.fireMult,R.annualExp,M.HZ,JSON.stringify(R.steps)].join('|');
-  if(_reisMC && _reisMC.sig===sig) return _reisMC.res;
-  let res=null; try{ res=reisMonteCarlo(M); }catch(_){}
-  _reisMC={sig,res}; return res;
+  if(_fireMC && _fireMC.sig===sig) return _fireMC.res;
+  let res=null; try{ res=fireMonteCarlo(M); }catch(_){}
+  _fireMC={sig,res}; return res;
 }
+function reisMonteCarlo(M){ return fireMonteCarlo(M); }   // alias
+function reisMCcached(M){ return fireMCcached(M); }        // alias
 function reisFanSVG(M,mc){
   const nowY=M.nowY,HZ=M.HZ; const W=360,H=150,x0=34,x1=W-10,yT=12,yB=H-22;
   const niceMax=Math.max(Math.ceil(Math.max(mc.p90[HZ],M.FIRE)*1.05/100000)*100000,100000);
