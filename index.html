@@ -3353,7 +3353,7 @@ function reisListIcon(kind,col){ return `<svg width="17" height="17" viewBox="0 
 // de aanroepplekken in fireModel + reisMonteCarlo blijven letterlijk gelijk.
 function fireBelasting(R, saldo){ const p=+R.taxPct||0; return (p>0&&saldo>0)? saldo*p/100 : 0; }
 function fireModel(R, inputs){
-  const nowY=new Date().getFullYear(); const curNW=inputs.netWorth;
+  const nowY=new Date().getFullYear(), nowMo=new Date().getMonth(); const curNW=inputs.netWorth;
   const aowYear=R.birth?(+R.birth+67):null; const targetYear=R.override||aowYear||(nowY+30); const HZ=Math.max(targetYear-nowY,1);
   const P0=curNW+(+R.een||0); const rM=R.rend/100/12, rL=(R.rend-2)/100/12, rH=(R.rend+2)/100/12;
   const pmtFor=year=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY); return a; };
@@ -3385,8 +3385,15 @@ function fireModel(R, inputs){
   R.customMs.forEach(c=>ms.push({key:c.id,nm:c.nm,target:+c.target,col:'#f472b6',icon:'star',sub:euro0(+c.target),custom:true}));
   if(FIRE>0) ms.push({key:'fire',nm:'FIRE-getal',target:FIRE,col:'#a78bfa',icon:'flame',sub:R.fireMult+'× uitgaven = '+euro0(FIRE)});
   ms.push({key:'pens',nm:'Pensioen',target:null,yr:targetYear,col:'#9fb0c7',icon:'sun',sub:(R.override?'jouw streefjaar':(R.birth?'AOW · 67 jaar':'stel geboortejaar in'))});
-  // Fase 3: de noodfonds-mijlpaal meet voortgang op je spaargeld (nfCur) — dezelfde teller als de Noodfonds-kaart; overige mijlpalen op netto vermogen
-  ms.forEach(m=>{ if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); const have=(m.key==='nood'?(inputs.nfCur||0):curNW); m.reached=(have>=m.target); } else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; } });
+  // De noodfonds-mijlpaal hoort bij het vullen-uit-je-restsaldo (stap 1 van de waterval), niet bij de vermogensgroei-lijn:
+  // voortgang op spaargeld (nfCur), jaar op hoe snel je maandelijkse restsaldo het vult — zelfde bron als "nog ± X mnd" in de waterval.
+  ms.forEach(m=>{
+    if(m.key==='nood'){ const have=inputs.nfCur||0; m.reached=(have>=m.target);
+      const need=Math.max(m.target-have,0), mo=(R.surplus>0)?Math.ceil(need/R.surplus):Infinity;
+      m.tIdx=m.reached?0:(mo===Infinity?null:Math.floor((nowMo+mo)/12)); m.yr=(m.tIdx!=null?nowY+m.tIdx:null); }
+    else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
+    else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
+  });
   return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,reach,ms,FIRE,pmtFor,debtPay,restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur},missing:inputs.missing};
 }
 function reisModel(){ const inputs=fireInputs(); return fireModel(fireState(inputs, SET.reis||{}), inputs); }   // wrapper: inputs één keer, ongewijzigde uitkomst
