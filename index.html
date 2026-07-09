@@ -3296,8 +3296,9 @@ function fireInputs(){
   if(!nfDoel){ try{ nfDoel=Math.round(savingsModel().goal||0); }catch(_){} }
   if(!nfCur){ try{ nfCur=Math.round(savingsModel().cur||0); }catch(_){} }
   const emergencyGoal=nfDoel;   // FIRE-mijlpaal = restsaldo-waterval = Noodfonds-kaart
+  let monthlySaving=0; try{ monthlySaving=Math.round(monthlySavingTarget()||0); }catch(_){}   // beoogde maandelijkse spaarinleg — het tempo waarop het noodfonds vult (zelfde bron als Vooruitblik)
   let missBal=false; try{ missBal=((totalBalance().missing||0)>0); }catch(_){}   // eerlijk over onbekende input (C2-noot)
-  return { autoAnnualExp, surplus, fInc, fExp, netWorth:netWorthNow, emergencyGoal, nfDoel, nfCur, debts:SET.debts||[], missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
+  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, emergencyGoal, nfDoel, nfCur, debts:SET.debts||[], missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
 function fireState(inputs, cfg){
   const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
@@ -3389,7 +3390,7 @@ function fireModel(R, inputs){
   // voortgang op spaargeld (nfCur), jaar op hoe snel je maandelijkse restsaldo het vult — zelfde bron als "nog ± X mnd" in de waterval.
   ms.forEach(m=>{
     if(m.key==='nood'){ const have=inputs.nfCur||0; m.reached=(have>=m.target);
-      const need=Math.max(m.target-have,0), mo=(R.surplus>0)?Math.ceil(need/R.surplus):Infinity;
+      const need=Math.max(m.target-have,0), mo=(inputs.monthlySaving>0)?Math.ceil(need/inputs.monthlySaving):Infinity;   // tempo = maandelijkse spaarinleg, niet je hele restsaldo
       m.tIdx=m.reached?0:(mo===Infinity?null:Math.floor((nowMo+mo)/12)); m.yr=(m.tIdx!=null?nowY+m.tIdx:null); }
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
