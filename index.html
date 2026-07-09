@@ -644,7 +644,9 @@ let dirHandle=null;                              // gekoppelde bankmap (FSA)
 const FILE_RX=/\.(sta|940|mt940|csv|txt)$/i;     // ondersteunde bestandstypen
 
 /* ---------- persistentie (localStorage, blijft lokaal op dit apparaat) ---------- */
+let _dataGen=0;   // bumpt bij elke mutatie; invalideert lichte caches (o.a. noodfondsModel)
 function save(){try{
+  _dataGen++;
   localStorage.setItem('minder_tx',JSON.stringify(TX));
   localStorage.setItem('minder_ovr',JSON.stringify(OVR));
   localStorage.setItem('minder_set',JSON.stringify(SET));
@@ -659,7 +661,7 @@ function load(){try{
   ACCMETA=JSON.parse(localStorage.getItem('minder_accmeta')||'{}');
   PLAN=JSON.parse(localStorage.getItem('minder_plan')||'{}');
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
-}catch(e){TX=[];OVR={};OWN=[];}}
+}catch(e){TX=[];OVR={};OWN=[];} _dataGen++; }
 
 /* ---------- maand-gebonden potjes (licht) ----------
  * SET.budgets      = het vastgezette plan voor de LOPENDE kalendermaand (alle lezers gebruiken dit).
@@ -1806,7 +1808,9 @@ function savingsModel(){
   else if(basis==='fixed'){ baseVal=avgFixed; baseLabel='vaste lasten'; }
   else if(basis==='variable'){ baseVal=avgVar; baseLabel='variabele lasten'; }
   else { baseVal=avgSpend; baseLabel='maanduitgave'; }
-  const goal = basis==='amount' ? (+SET.bufferAmount||0) : baseVal*mult;
+  // Richting A: het buffer-doel volgt de crisis-noodfonds (één bron). Oude formule alleen nog als terugval bij lege data.
+  let nfDoel=0; try{ nfDoel=Math.round(noodfondsModel().doel||0); }catch(_){}
+  const goal = nfDoel>0 ? nfDoel : (basis==='amount' ? (+SET.bufferAmount||0) : baseVal*mult);
   // Het spaardoel meet wat er op je spaarrekening(en) staat (+ handmatig spaargeld), niet je hele saldo:
   // je betaalrekening bevat immers geld voor nog te betalen lasten en is geen buffer.
   const {sum:bankBal,missing:bankMissing}=totalBalance();
@@ -1818,14 +1822,14 @@ function savingsModel(){
   const pct=goal>0?Math.min(cur/goal*100,100):0;
   const toGo=Math.max(goal-cur,0);
   const monthsLeft= monthlySaving>0? toGo/monthlySaving : 0;
-  return {inc,room,monthlySaving,avgSpend,avgFixed,avgVar,basis,mult,baseVal,baseLabel,goal,cur,missing,pct,toGo,monthsLeft};
+  return {inc,room,monthlySaving,avgSpend,avgFixed,avgVar,basis,mult,baseVal,baseLabel,goal,goalSrc:(nfDoel>0?'nood':'formule'),cur,missing,pct,toGo,monthsLeft};
 }
 function renderSavings(){
   const S=savingsModel(); if(!S.inc) return '';
   return `<div class="card">
     <div class="row"><span class="hlabel" style="margin:0;flex:1">Sparen & buffer</span><span class="small muted" onclick="go('set')" style="cursor:pointer;color:var(--teal)">doel ›</span></div>
     <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:22px;font-weight:800;color:var(--teal)">${euro0(S.monthlySaving)}<span style="font-size:12.5px;font-weight:600">/mnd</span></div><div class="small muted" onclick="go('set')" style="cursor:pointer">beoogde spaarinleg (${savingLabel()}) ›</div></div>
-    <div class="goal-row" style="margin-top:12px"><span class="muted">Bufferdoel ${S.basis==='amount'?'(vast bedrag)':`${S.mult}× gem. ${S.baseLabel} (${euro0(S.baseVal)})`}</span><span><b>${euro0(S.cur)}</b><span class="muted"> / ${euro0(S.goal)}</span></span></div>
+    <div class="goal-row" style="margin-top:12px"><span class="muted">Bufferdoel ${S.goalSrc==='nood'?`· volgt je noodfonds (${nfMaanden()} mnd crisislast)`:(S.basis==='amount'?'(vast bedrag)':`${S.mult}× gem. ${S.baseLabel} (${euro0(S.baseVal)})`)}</span><span><b>${euro0(S.cur)}</b><span class="muted"> / ${euro0(S.goal)}</span></span></div>
     <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${S.pct}%;background:var(--teal)"></div></div>
     <div class="small muted" style="margin-top:8px">${S.toGo>0?`Nog <b>${euro0(S.toGo)}</b> te gaan, ongeveer <b>${Math.round(S.monthsLeft)} maanden</b> bij ${euro0(S.monthlySaving)}/mnd.`:`${ICON('party')} Je buffer van ${S.months_} maanden is bereikt.`}${S.missing>0?' · vul je saldo\'s in voor een kloppend beeld':''}</div>
   </div>`;
@@ -3287,10 +3291,11 @@ function fireInputs(){
   const surplus = fm? Math.max(Math.round(fm.fNet),0) : 0;
   const fInc=fm?Math.round(fm.fInc):0, fExp=fm?Math.round(fm.fFixed+fm.fVar):0;
   const netWorthNow=netWorth().netto;
-  const emergencyGoal=(function(){ try{ const d=noodfondsModel().doel; if(d>0) return Math.round(d); }catch(_){} try{ const s=savingsModel(); if(s&&s.goal>0) return Math.round(s.goal); }catch(_){} return (+SET.bufferAmount||0)||0; })();
-  // noodfonds-doel/-stand voor de restsaldo-waterval (exact dezelfde logica die reisRestsaldo eerst zelf deed)
+  // Richting A: één noodfonds/buffer-doel voor zowel de FIRE-mijlpaal als de restsaldo-waterval (geen fallback-scheefstand meer)
   let nfDoel=0,nfCur=0; try{ const nf=noodfondsModel(); nfDoel=Math.round(nf.doel||0); nfCur=(nf.spaar!=null?Math.round(nf.spaar):0); }catch(_){}
-  if(!nfCur){ try{ const s=savingsModel(); nfCur=Math.round(s.cur||0); if(!nfDoel) nfDoel=Math.round(s.goal||0); }catch(_){} }
+  if(!nfDoel){ try{ nfDoel=Math.round(savingsModel().goal||0); }catch(_){} }
+  if(!nfCur){ try{ nfCur=Math.round(savingsModel().cur||0); }catch(_){} }
+  const emergencyGoal=nfDoel;   // FIRE-mijlpaal = restsaldo-waterval = Noodfonds-kaart
   let missBal=false; try{ missBal=((totalBalance().missing||0)>0); }catch(_){}   // eerlijk over onbekende input (C2-noot)
   return { autoAnnualExp, surplus, fInc, fExp, netWorth:netWorthNow, emergencyGoal, nfDoel, nfCur, debts:SET.debts||[], missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
@@ -3380,7 +3385,8 @@ function fireModel(R, inputs){
   R.customMs.forEach(c=>ms.push({key:c.id,nm:c.nm,target:+c.target,col:'#f472b6',icon:'star',sub:euro0(+c.target),custom:true}));
   if(FIRE>0) ms.push({key:'fire',nm:'FIRE-getal',target:FIRE,col:'#a78bfa',icon:'flame',sub:R.fireMult+'× uitgaven = '+euro0(FIRE)});
   ms.push({key:'pens',nm:'Pensioen',target:null,yr:targetYear,col:'#9fb0c7',icon:'sun',sub:(R.override?'jouw streefjaar':(R.birth?'AOW · 67 jaar':'stel geboortejaar in'))});
-  ms.forEach(m=>{ if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); } else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; } });
+  // Fase 3: de noodfonds-mijlpaal meet voortgang op je spaargeld (nfCur) — dezelfde teller als de Noodfonds-kaart; overige mijlpalen op netto vermogen
+  ms.forEach(m=>{ if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); const have=(m.key==='nood'?(inputs.nfCur||0):curNW); m.reached=(have>=m.target); } else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; } });
   return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,reach,ms,FIRE,pmtFor,debtPay,restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur},missing:inputs.missing};
 }
 function reisModel(){ const inputs=fireInputs(); return fireModel(fireState(inputs, SET.reis||{}), inputs); }   // wrapper: inputs één keer, ongewijzigde uitkomst
@@ -3539,7 +3545,8 @@ function renderFire(){
   const tg=(k,l)=>`<span onclick="reisToggle('${k}')" style="font-size:11px;font-weight:600;border:1px solid ${R[k]?'var(--teal)':'var(--line)'};background:${R[k]?'rgba(45,212,191,.12)':'var(--card2)'};color:${R[k]?'var(--teal)':'var(--mut)'};border-radius:16px;padding:4px 11px;cursor:pointer">${l}</span>`;
   const list=M.ms.map(m=>{ const yrtxt=m.reached?'<span style="color:var(--green)">behaald</span>':(m.yr!=null?m.yr:('na '+M.targetYear));
     const rm=m.custom?`<span onclick="reisRemoveCustom('${m.key}')" style="color:var(--mut2);cursor:pointer;font-weight:700;margin-left:8px">×</span>`:'';
-    return `<div class="row" style="gap:10px;padding:9px 0;border-top:1px solid var(--line)">${reisListIcon(m.icon,m.col)}<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px">${esc(m.nm)}</div><div class="small" style="color:var(--mut2)">${m.sub}${(m.target!=null&&!m.reached&&m.target>curNW)?' · nog '+euro0(m.target-curNW):''}</div></div><div style="font-weight:800;font-size:12.5px;text-align:right;white-space:nowrap">${yrtxt}</div>${rm}</div>`; }).join('');
+    const have=(m.key==='nood'?(M.restsaldo.nfCur||0):curNW);   // noodfonds op spaargeld, rest op netto vermogen (zelfde teller als reached)
+    return `<div class="row" style="gap:10px;padding:9px 0;border-top:1px solid var(--line)">${reisListIcon(m.icon,m.col)}<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px">${esc(m.nm)}</div><div class="small" style="color:var(--mut2)">${m.sub}${(m.target!=null&&!m.reached&&m.target>have)?' · nog '+euro0(m.target-have):''}</div></div><div style="font-weight:800;font-size:12.5px;text-align:right;white-space:nowrap">${yrtxt}</div>${rm}</div>`; }).join('');
   // mobiel-veilige invoerrij: label mag krimpen, invoerblok begrensd op 128px (past altijd binnen de kaart)
   const fl=(lab,attrs,suffix)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lab}</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;flex:0 0 128px;max-width:128px"><span class="small muted" style="flex-shrink:0;font-size:12px">€</span><input ${attrs} style="flex:1;min-width:0;width:100%;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none">${suffix?`<span class="small muted" style="flex-shrink:0;font-size:11px">${suffix}</span>`:''}</div></div>`;
   const nl=(lab,attrs,suffix)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lab}</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;flex:0 0 128px;max-width:128px"><input ${attrs} style="flex:1;min-width:0;width:100%;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none">${suffix?`<span class="small muted" style="flex-shrink:0;font-size:11px">${suffix}</span>`:''}</div></div>`;
@@ -3750,7 +3757,9 @@ function nfAmount(c){ const o=SET.nfAmount||{}; return (o[c]!=null && o[c]!=='')
 function nfNote(c){ return (SET.nfNote||{})[c]||''; }
 function nfMaanden(){ return +SET.nfMaanden||4; }
 function nfMedian(a){ if(!a.length)return 0; const s=[...a].sort((x,y)=>x-y),n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; }
+let _nfGen=-1,_nfCache=null;   // lichte memo: hergebruik binnen dezelfde datageneratie (Richting A maakt savingsModel afhankelijk van noodfondsModel)
 function noodfondsModel(){
+  if(_nfCache && _nfGen===_dataGen) return _nfCache;
   const win=months().slice(-12); const maps=win.map(m=>catSpendMap(m)); const n=win.length||1;
   let vast=0,varNormaal=0,varCrisis=0,huurGevonden=false,essCrisis=0; const detail=[],comfort=[],rek=[],crisisRows=[];
   for(const cat in NF_KLASSE_DEFAULT){
@@ -3767,17 +3776,10 @@ function noodfondsModel(){
   let spaar=null; try{ const s=totalSaved(); spaar=s.missing?null:s.sum; }catch(_){}
   const pct=(spaar!=null&&doel>0)?Math.min(100,Math.round(spaar/doel*100)):null;
   const comfortTot=comfort.reduce((a,c)=>a+c[1],0);
-  return {win,n,vast,varNormaal,varCrisis,essNormaal,essCrisis,maanden,doel,spaar,pct,detail,comfort,rek,comfortTot,huurGevonden,crisisRows};
+  _nfCache={win,n,vast,varNormaal,varCrisis,essNormaal,essCrisis,maanden,doel,spaar,pct,detail,comfort,rek,comfortTot,huurGevonden,crisisRows}; _nfGen=_dataGen;
+  return _nfCache;
 }
-function noodfondsNaarBuffer(doel){ SET.bufferBasis='amount'; SET.bufferAmount=Math.round(doel); save(); render(); toast(`${ICON('check')} Buffer-doel ingesteld op ${euro0(doel)}`); }
-function noodfondsBufferBtn(doel, closeAfter){
-  doel=Math.round(doel);
-  const chosen=(SET.bufferBasis==='amount' && Math.round(+SET.bufferAmount||0)===doel);
-  if(chosen) return `<div class="row" style="justify-content:center;gap:7px;margin-top:12px;padding:11px;background:rgba(45,212,191,.1);border:1px solid rgba(45,212,191,.3);border-radius:12px;color:var(--teal);font-weight:600;font-size:13px">${ICON('check')} Ingesteld als buffer-doel · ${euro0(doel)}</div>`;
-  const hasOther=(SET.bufferBasis==='amount' && (+SET.bufferAmount||0)>0);
-  const label=hasOther?`Werk buffer-doel bij naar ${euro0(doel)}`:`Neem ${euro0(doel)} over als buffer-doel`;
-  return `<button class="btn" style="width:100%;margin-top:12px" onclick="noodfondsNaarBuffer(${doel})${closeAfter?';closeSheet()':''}">${ICON('target')} ${label}</button>`;
-}
+// Richting A: noodfonds ís de buffer, dus geen aparte "overnemen als buffer-doel"-knop meer (die veroorzaakte de drift tussen twee doelen)
 function noodfondsCard(){
   const M=noodfondsModel();
   const chips=[3,4,6].map(x=>`<span class="chip ${M.maanden===x?'on':''}" onclick="SET.nfMaanden=${x};save();renderVooruit()">${x} mnd</span>`).join('');
@@ -3798,7 +3800,6 @@ function noodfondsCard(){
     <div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-top:13px">Doel · ${M.maanden} mnd</div>
     <div style="font-size:22px;font-weight:800;margin-top:3px">${euro0(M.doel)}</div>
     ${prog}
-    ${noodfondsBufferBtn(M.doel, false)}
     <details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Bezuinigingsruimte · ${euro0(M.comfortTot)}/mnd</summary><div style="margin-top:8px"><div class="small muted" style="font-size:11px;margin-bottom:8px">Comfort-uitgaven die je in een crisis kunt schrappen — daarom tellen ze niet mee in je crisis-minimum.</div>${bez}</div></details>
   </div>`;
 }
@@ -3836,7 +3837,6 @@ function renderNfSheet(){
       <div class="small muted">${euro0(M.essCrisis)}/mnd essentieel</div>
       <div class="chips" style="margin-top:10px">${chips}</div></div>
     ${listCard}
-    ${noodfondsBufferBtn(M.doel, true)}
     <div style="height:8px"></div>`;
 }
 function setNfAmount(c,v){ SET.nfAmount=SET.nfAmount||{}; const s=(''+v).trim(); if(s===''||isNaN(+s)) delete SET.nfAmount[c]; else SET.nfAmount[c]=Math.max(0,Math.round(+s)); save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
@@ -5890,12 +5890,9 @@ function setBudget(){
     <input type="number" value="${SET.dailyVarBudget||''}" placeholder="bv. 45" oninput="SET.dailyVarBudget=+this.value||0;save();render();">
     <div class="small muted" style="margin-top:6px">Je richtbedrag per dag voor vrij besteedbaar geld. Leeg = automatisch uit je budget.</div>
     <label class="fld">Bufferdoel</label>
-    <div class="small muted" style="margin-bottom:6px">Waarop baseer je hoeveel buffer je wilt opbouwen?</div>
-    <div class="chips">${[['spend','Maanduitgave'],['income','Inkomen'],['fixed','Vaste lasten'],['variable','Variabele lasten'],['amount','Vast bedrag']].map(([k,l])=>`<span class="chip ${(SET.bufferBasis||'spend')===k?'on':''}" onclick="SET.bufferBasis='${k}';save();render();">${l}</span>`).join('')}</div>
-    ${(SET.bufferBasis||'spend')==='amount'
-      ? `<label class="fld">Doelbedrag (€)</label><input type="number" min="0" value="${SET.bufferAmount||''}" placeholder="bv. 20000" oninput="SET.bufferAmount=+this.value||0;save();render();">`
-      : `<label class="fld">Aantal keer (×)</label><input type="number" min="1" value="${SET.bufferMonths||6}" placeholder="6" oninput="SET.bufferMonths=+this.value||6;save();render();">`}
-    <div class="small muted" style="margin-top:6px">Je buffer = ${(SET.bufferBasis||'spend')==='amount'?'een vast bedrag':`${SET.bufferMonths||6}× je gemiddelde ${({spend:'maanduitgave',income:'inkomen',fixed:'vaste lasten',variable:'variabele lasten'})[SET.bufferBasis||'spend']}`}.</div>
+    <div class="small muted" style="margin-bottom:6px">Je buffer volgt je noodfonds: essentiële crisis-last × het aantal maanden. Verfijnen doe je op Vooruitblik ▸ Noodfonds.</div>
+    <div class="chips">${[3,4,6].map(x=>`<span class="chip ${nfMaanden()===x?'on':''}" onclick="SET.nfMaanden=${x};save();render();">${x} mnd</span>`).join('')}</div>
+    <div class="small muted" style="margin-top:6px">Doel nu: <b>${euro0((function(){try{return noodfondsModel().doel}catch(_){return 0}})())}</b> · ${nfMaanden()} mnd essentiële crisis-last.</div>
     <label class="fld" style="margin-top:14px">${ICON('chart')} Maandbudget per categorie</label>
     <div class="small muted" style="margin:0 0 6px">Dit zijn dezelfde <b>potjes</b> als bij je Coach, wijzig ze hier of daar, het is één systeem.</div>
     <div class="small" id="potGridTotal" style="margin:2px 0 4px">${potRoomLineHTML(plannedTotalBudget())}</div>
