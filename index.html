@@ -3396,7 +3396,15 @@ function fireModel(R, inputs){
   const nowY=new Date().getFullYear(), nowMo=new Date().getMonth(); const curNW=inputs.netWorth;
   const aowYear=R.birth?(+R.birth+67):null; const targetYear=R.override||aowYear||(nowY+30); const HZ=Math.max(targetYear-nowY,1);
   const P0=curNW+(+R.een||0); const rM=R.rend/100/12, rL=(R.rend-2)/100/12, rH=(R.rend+2)/100/12;
-  const pmtFor=year=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY); return a; };
+  // Twee-fasen-inleg (spiegel, geen advies): tot het noodfonds vol is gaat 'vrij' naar het veilige noodfonds
+  // en nog niet naar de groei-inleg; vanaf het vol-jaar komt het vrij (step omhoog). Alleen in auto-inleg.
+  const _msav=inputs.monthlySaving||0, _nfCur=inputs.nfCur||0, _nfDoel=inputs.emergencyGoal||0;
+  const vrij = (R.inlegMode==='auto') ? Math.max(0, Math.min(_msav, +R.pmt||0)) : 0;
+  let volYear=nowY;   // jaar waarin het noodfonds vol is (nowY = nu al vol → geen vul-fase)
+  if(vrij>0 && _nfDoel>0 && _nfCur<_nfDoel && _msav>0){ const needM=Math.ceil((_nfDoel-_nfCur)/_msav); volYear=nowY+Math.floor((nowMo+needM)/12); }
+  const pmtFor=year=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY);
+    if(vrij>0 && year<volYear) a=Math.max(a-vrij,0);   // vul-fase: 'vrij' gaat nog naar het noodfonds
+    return a; };
   const mid=[P0],low=[P0],high=[P0],koop=[P0],midGross=[P0]; let bm=P0,bl=P0,bh=P0,bg=P0;
   for(let y=0;y<HZ;y++){ const p=pmtFor(nowY+y);
     for(let m=0;m<12;m++){ bm=bm*(1+rM)+p; bl=bl*(1+rL)+p; bh=bh*(1+rH)+p; bg=bg*(1+rM)+p; }
@@ -3434,7 +3442,7 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,reach,ms,FIRE,pmtFor,debtPay,restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},missing:inputs.missing};
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,reach,ms,FIRE,pmtFor,debtPay,restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},missing:inputs.missing};
 }
 function reisModel(){ const inputs=fireInputs(); return fireModel(fireState(inputs, SET.reis||{}), inputs); }   // wrapper: inputs één keer, ongewijzigde uitkomst
 // ---- Monte Carlo: slagingskans + percentiel-band (lokaal, op verzoek) ----
@@ -3506,6 +3514,7 @@ function reisChartSVG(M){
   if(R.band){ const band=M.high.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).concat(M.low.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).reverse()).join(' '); s+=`<polygon points="${band}" fill="rgba(45,212,191,.13)"/>`; }
   else { s+=`<polygon points="${X(0).toFixed(1)},${yB} ${pts(M.mid)} ${X(HZ).toFixed(1)},${yB}" fill="url(#reisg)"/>`; }
   (R.steps||[]).forEach(sp=>{ const t=(+sp.from)-nowY; if(t<=0||t>HZ) return; const px=X(t); s+=`<line x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="#9fb0c7" stroke-width="1" stroke-dasharray="1 3" opacity=".45"/>`; });
+  if(M.freed && M.freed.vrij>0 && M.freed.volYear>nowY){ const t=M.freed.volYear-nowY; if(t>0&&t<=HZ){ const px=X(t); s+=`<line x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="#34d399" stroke-width="1" stroke-dasharray="2 3" opacity=".55"/><text x="${px.toFixed(1)}" y="${(yT-3).toFixed(1)}" fill="#34d399" font-size="7.5" text-anchor="middle">noodfonds vol</text>`; } }
   if(R.koop){ s+=`<polyline points="${pts(M.koop)}" fill="none" stroke="#9fb0c7" stroke-width="1.5" stroke-dasharray="4 4"/>`; }
   if(R.showInk && reqCap>0 && reqCap<=niceMax){ const yy=Y(reqCap); s+=`<line x1="${x0}" y1="${yy.toFixed(1)}" x2="${x1}" y2="${yy.toFixed(1)}" stroke="#f472b6" stroke-width="1.2" stroke-dasharray="4 3"/><text x="${x1}" y="${(yy-4).toFixed(1)}" fill="#f472b6" font-size="8" text-anchor="end">inkomensdoel ${kf(reqCap)}</text>`; }
   s+=`<polyline points="${pts(M.mid)}" fill="none" stroke="#2dd4bf" stroke-width="2.8" stroke-linejoin="round"/>`;
@@ -3577,6 +3586,39 @@ function reisRestsaldo(M){
   const note=`<div class="small mut2" style="font-size:10.5px;margin-top:8px">Zodra je noodfonds vol is${debts.length?' en je schuld is afgelost':''}, groeit je hele restsaldo mee. De groeikeuze stel je in bij "Rendement &amp; inflatie".</div>`;
   return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}<div style="margin-top:6px">${step1}${step2}</div>${note}`, groei:`${growChips}${splitUI}` };
 }
+// Spiegel (geen advies): toont dat er ruimte vrijkomt zodra het noodfonds vol is, en wat 'vrij'/mnd doet
+// bij twee bestemmingen (aflossen vs beleggen) — puur ter vergelijking, de keuze blijft bij de gebruiker.
+function fireFreedBlock(M){
+  const R=M.R, f=M.freed||{}; const vrij=+f.vrij||0;
+  if(vrij<=0 || !(M.restsaldo && M.restsaldo.nfDoel>0)) return '';
+  const nowY=M.nowY, volYear=f.volYear||nowY, future=volYear>nowY;
+  // beleggen: 'vrij'/mnd samengesteld van het vol-jaar tot pensioen, tegen je rendement
+  const Mmo=Math.max(M.targetYear-volYear,0)*12, rM=R.rend/100/12;
+  const belegFV = Mmo>0 ? (rM>0 ? vrij*((Math.pow(1+rM,Mmo)-1)/rM) : vrij*Mmo) : 0;
+  // aflossen: 'vrij'/mnd extra op je (gezamenlijke) schuld
+  const ds=(M.debtPay||[]).filter(d=>d.rest>0);
+  const totRest=ds.reduce((s,d)=>s+d.rest,0), totPer=ds.reduce((s,d)=>s+(+d.per||0),0);
+  const blendR = totRest>0 ? ds.reduce((s,d)=>s+d.rest*(+d.rente||0),0)/totRest : 0;
+  let aflosTxt='';
+  if(totRest>0 && totPer>0){
+    const baseMo=payoffMonths(totRest,totPer,blendR), fastMo=payoffMonths(totRest,totPer+vrij,blendR);
+    if(isFinite(baseMo)&&isFinite(fastMo)){ const moSaved=Math.max(baseMo-fastMo,0);
+      const intSaved=Math.max(Math.round((totPer*baseMo-totRest)-((totPer+vrij)*fastMo-totRest)),0);
+      aflosTxt=`~${moSaved} mnd eerder schuldenvrij${intSaved>0?', ~'+euro0(intSaved)+' minder rente':''}`;
+    } else aflosTxt='je schuld daalt sneller';
+  }
+  const rows=[];
+  if(aflosTxt) rows.push(`<div class="row" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="font-weight:600">Aflossen</span><span class="small mut2" style="text-align:right">${aflosTxt}</span></div>`);
+  if(belegFV>0) rows.push(`<div class="row" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="font-weight:600">Beleggen</span><span class="small mut2" style="text-align:right">tegen ${(''+R.rend).replace('.',',')}% tot ${M.targetYear}: +${euro0(belegFV)}</span></div>`);
+  const lead = future
+    ? `Rond ${volYear} is je noodfonds vol. Vanaf dan komt <b>${euro0(vrij)}/mnd</b> vrij voor een volgende bestemming.`
+    : `Je noodfonds is vol, dus <b>${euro0(vrij)}/mnd</b> is vrij voor een volgende bestemming.`;
+  return `<div style="margin-top:12px;padding:11px 12px;background:var(--card2);border-radius:11px">
+    <div class="small" style="font-weight:700">${ICON('swap')} Ruimte die vrijkomt</div>
+    <div class="small mut2" style="font-size:11.5px;margin-top:3px">${lead}</div>
+    ${rows.length?`<div style="margin-top:6px">${rows.join('')}</div><div class="small mut2" style="font-size:10.5px;margin-top:6px">Twee mogelijkheden ter vergelijking, bij benadering. Jij kiest; dit is geen advies.</div>`:''}
+  </div>`;
+}
 function renderFire(){
   const ib='background:none;border:none;color:var(--teal);font-size:24px;cursor:pointer;padding:0 8px 0 0;line-height:1';
   const head=`<div class="row" style="align-items:center;margin:2px 2px 14px;gap:6px"><button onclick="go('vermogen')" title="Terug" style="${ib}">‹</button><b style="font-size:17px;flex:1">Vermogensreis</b><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="go('vermogen')">Klaar</span></div>`;
@@ -3647,6 +3689,7 @@ function renderFire(){
     <div class="small mut2" style="font-size:12px;margin-top:8px">Op de lange termijn ${ft!=null?('kom je rond '+(nowY+ft)+' bij je FIRE-getal. Een band, geen belofte.'):('haal je je FIRE-getal niet vóór '+M.targetYear+'.')}</div>
     ${R.taxPct>0?`<div class="small mut2" style="font-size:11px;margin-top:3px">In ${M.targetYear} staat er in dit voorbeeld ${euro0(M.mid[M.HZ])}. Zonder belasting zou dat rond ${euro0(M.midGross[M.HZ])} liggen.</div>`:''}
     ${reisHaalbaarheid(M)}
+    ${fireFreedBlock(M)}
     <div class="row" style="justify-content:space-between;align-items:center;margin:14px 2px 0;cursor:pointer" onclick="reisMsToggle()"><span class="hlabel" style="margin:0">Mijlpalen</span><span style="color:var(--mut2);font-size:16px">${msOpen?'▲':'›'}</span></div>
     ${msOpen?`${list}
     <button class="cp-add" style="margin-top:9px" onclick="reisAddCustom()">+ Eigen mijlpaal</button>`:''}
