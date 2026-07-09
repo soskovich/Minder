@@ -3330,6 +3330,7 @@ function reisState(){ return fireState(fireInputs(), SET.reis||{}); }   // alias
 function reisSet(k,v){ SET.reis=SET.reis||{}; if(v===''||v==null) delete SET.reis[k]; else SET.reis[k]=v; save(); renderFire(); }
 function reisToggle(k){ SET.reis=SET.reis||{}; const cur=reisState(); SET.reis[k]=!cur[k]; save(); renderFire(); }
 function reisGroep(k){ SET.reis=SET.reis||{}; SET.reis['g_'+k]=!SET.reis['g_'+k]; save(); renderFire(); }   // accordeon: meerdere groepen tegelijk open
+function reisMsToggle(){ SET.reis=SET.reis||{}; SET.reis.msClosed=!SET.reis.msClosed; save(); renderFire(); }   // mijlpalen in-/uitklappen (standaard open)
 function reisFire(m){ SET.reis=SET.reis||{}; SET.reis.fireCustom=(m==='eigen'); if(m!=='eigen') SET.reis.fireMult=m; save(); renderFire(); }
 function reisExpMode(m){ SET.reis=SET.reis||{}; SET.reis.expMode=(m==='eigen')?'eigen':'auto'; save(); renderFire(); }
 function reisInlegMode(m){ SET.reis=SET.reis||{}; SET.reis.inlegMode=(m==='manual')?'manual':'auto'; save(); renderFire(); }
@@ -3481,24 +3482,6 @@ function reisChartSVG(M){
   ticks.forEach(t=>{ s+=`<text x="${X(t).toFixed(1)}" y="${yB+15}" fill="#6b7c95" font-size="8.5" text-anchor="${t===0?'start':(t===HZ?'end':'middle')}">${t===0?'nu':(nowY+t)}</text>`; });
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="margin-top:10px">${s}</svg>`;
 }
-function reisDebtSVG(M){
-  const ds=(M.debtPay||[]).filter(d=>d.rest>0); if(ds.length<2) return '';
-  const nowY=M.nowY; const fin=ds.filter(d=>d.yr!=null); const maxYr=fin.length?Math.max(...fin.map(d=>d.yr)):nowY+10; const span=Math.max(maxYr-nowY,1);
-  const maxRest=Math.max(...ds.map(d=>d.rest),1);
-  const W=360,H=104,x0=8,x1=W-8,yT=10,yB=H-22;
-  const X=yr=>x0+((yr-nowY)/span)*(x1-x0), Y=v=>yB-(v/maxRest)*(yB-yT);
-  let s=`<line x1="${x0}" y1="${yB}" x2="${x1}" y2="${yB}" stroke="rgba(159,176,199,.18)"/>`;
-  const step=span<=6?2:(span<=12?3:5); const ticks=[]; for(let y=nowY;y<=maxYr;y+=step) ticks.push(y); if(ticks[ticks.length-1]!==maxYr) ticks.push(maxYr);
-  ticks.forEach(yr=>{ s+=`<text x="${X(yr).toFixed(1)}" y="${yB+13}" fill="#6b7c95" font-size="8" text-anchor="middle">${yr===nowY?'nu':yr}</text>`; });
-  ds.forEach(d=>{ const xN=X(nowY), yN=Y(d.rest);
-    if(d.yr==null){ s+=`<line x1="${xN.toFixed(1)}" y1="${yN.toFixed(1)}" x2="${x1}" y2="${yN.toFixed(1)}" stroke="${d.col}" stroke-width="2" stroke-dasharray="3 3" opacity=".8"/><text x="${(xN+4).toFixed(1)}" y="${(yN-4).toFixed(1)}" fill="${d.col}" font-size="8.5" font-weight="700">${esc(d.nm)} · aflossing te laag</text>`; return; }
-    const xP=X(d.yr);
-    s+=`<line x1="${xN.toFixed(1)}" y1="${yN.toFixed(1)}" x2="${xP.toFixed(1)}" y2="${yB.toFixed(1)}" stroke="${d.col}" stroke-width="2.2" stroke-linecap="round"/>`;
-    s+=`<circle cx="${xN.toFixed(1)}" cy="${yN.toFixed(1)}" r="2.6" fill="${d.col}"/><circle cx="${xP.toFixed(1)}" cy="${yB.toFixed(1)}" r="3.4" fill="${d.col}"/>`;
-    s+=`<text x="${(xN+4).toFixed(1)}" y="${(yN-4).toFixed(1)}" fill="${d.col}" font-size="8.5" font-weight="700">${esc(d.nm)}</text>`;
-    s+=`<text x="${xP.toFixed(1)}" y="${(yB-5).toFixed(1)}" fill="${d.col}" font-size="8.5" font-weight="700" text-anchor="${xP>W-42?'end':'middle'}">vrij ${d.yr}</text>`; });
-  return `<div style="margin-top:14px"><div class="hlabel">Schulden afbouw · per type</div><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="margin-top:8px">${s}</svg><div class="small mut2" style="font-size:10.5px;margin-top:2px">Rechte lijn ter indicatie · elke lening apart naar € 0 bij je huidige aflossing.</div></div>`;
-}
 function reisRestsaldo(M){
   const R=M.R, surplus=R.surplus;
   const modeChip=(id,lab)=>`<span onclick="reisInlegMode('${id}')" class="chip ${R.inlegMode===id?'on':''}" style="flex:1;text-align:center">${lab}</span>`;
@@ -3604,6 +3587,7 @@ function renderFire(){
     ${groep('uitgaven','Jaaruitgaven',`${euro0(R.annualExp)}/jr · ${R.expMode==='eigen'?'eigen':'auto'}`,uitgavenContent)}
     ${groep('factor','FIRE-factor',`${R.fireMult}× · doel ${euro0(M.FIRE)}`,factorContent)}
     ${groep('inkomen','Inkomen bij pensioen',`${euro0(R.incGoal)}/mnd gewenst`,inkomenContent)}`;
+  const msOpen=!(SET.reis&&SET.reis.msClosed);   // mijlpalen standaard open, onthoudt inklap-keuze
   const missing=M.missing||{};
   const missNote=(missing.balances||missing.assets)?`<div class="small mut2" style="font-size:11px;margin-top:8px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">${missing.balances?'Je vermogen leunt deels op nog onbekende rekeningsaldi. ':''}${missing.assets?'Je hebt nog geen bezittingen ingevuld. ':''}Het startpunt kan dus lager of hoger liggen.</div>`:'';
   const html=head+`<div class="small mut2" style="margin:-10px 2px 12px;font-size:11.5px">van nu (${nowY}) tot ~${M.targetYear}</div><div class="card">
@@ -3613,10 +3597,9 @@ function renderFire(){
     <div class="small mut2" style="font-size:12px;margin-top:8px">Op de lange termijn ${ft!=null?('kom je rond '+(nowY+ft)+' bij je FIRE-getal. Een band, geen belofte.'):('haal je je FIRE-getal niet vóór '+M.targetYear+'.')}</div>
     ${R.taxPct>0?`<div class="small mut2" style="font-size:11px;margin-top:3px">In ${M.targetYear} staat er in dit voorbeeld ${euro0(M.mid[M.HZ])}. Zonder belasting zou dat rond ${euro0(M.midGross[M.HZ])} liggen.</div>`:''}
     ${reisHaalbaarheid(M)}
-    ${reisDebtSVG(M)}
-    <div class="row" style="margin:14px 2px 0"><span class="hlabel" style="margin:0">Mijlpalen</span></div>
-    ${list}
-    <button class="cp-add" style="margin-top:9px" onclick="reisAddCustom()">+ Eigen mijlpaal</button>
+    <div class="row" style="justify-content:space-between;align-items:center;margin:14px 2px 0;cursor:pointer" onclick="reisMsToggle()"><span class="hlabel" style="margin:0">Mijlpalen</span><span style="color:var(--mut2);font-size:16px">${msOpen?'▲':'›'}</span></div>
+    ${msOpen?`${list}
+    <button class="cp-add" style="margin-top:9px" onclick="reisAddCustom()">+ Eigen mijlpaal</button>`:''}
     ${aannames}
     <div style="font-size:11px;color:var(--mut2);margin-top:13px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Rekenvoorbeeld met jouw aannames. Geen advies of belofte. De lijn rekent maand-voor-maand met je inleg (incl. wijzigingen). Je bruto salaris telt niet mee, alleen wat je opzij zet. AOW is een indicatie; koopkracht = geld van nu.</div>
   </div>`;
