@@ -3021,6 +3021,35 @@ function dEstimateDagwaarde(){
   const el=document.getElementById('dDag'); if(el) el.value=dw;
   const pv=document.getElementById('dDagPrev'); if(pv) pv.textContent='Geschat: '+euro0(dw)+' · afschrijving '+af+'%/jr over '+leeftijd+' jaar';
 }
+// Detecteert of de maandaflossing van een schuld terugkomt in je transacties, en of die in je uitgaven zit
+// (isExpenseTx → telt in je restsaldo) of erbuiten loopt (intern / anders). On-the-fly, geen opslag.
+function debtInExpenses(d){
+  const per=+((d&&d.perMaand)||0); if(per<=0) return {status:'geen'};
+  const tol=Math.max(per*0.12,15);
+  const win=new Set(months().slice(-6));
+  const groups={};
+  for(const t of TX){ if(t.pending||!(t.amount<0)) continue;
+    if(!win.has(t.date.slice(0,7))) continue;
+    const key=recurKey(t); if(!key) continue;
+    const g=(groups[key]=groups[key]||{amts:[],yms:new Set(),expense:0,intern:0,other:0});
+    g.amts.push(Math.abs(t.amount)); g.yms.add(t.date.slice(0,7));
+    if(isExpenseTx(t)) g.expense++; else if(catOf(t)==='intern') g.intern++; else g.other++;
+  }
+  const dn=recurKey({name:(d&&d.naam)||''});
+  const med=a=>{ const s=[...a].sort((x,y)=>x-y),n=s.length; return n?(n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2):0; };
+  let best=null;
+  for(const k in groups){ const g=groups[k]; if(g.yms.size<2) continue;   // ≥2 maanden = terugkerend
+    const m=med(g.amts), amtMatch=Math.abs(m-per)<=tol, nameMatch=!!(dn&&k&&(k.indexOf(dn)>=0||dn.indexOf(k)>=0));
+    if(!amtMatch&&!nameMatch) continue;
+    const cls=(g.expense>=g.intern&&g.expense>=g.other)?'expense':(g.intern>=g.other?'intern':'other');
+    const score=(nameMatch?2:0)+(amtMatch?1:0);
+    if(!best||score>best.score) best={cls,score,amtMatch,nameMatch,m};
+  }
+  if(!best) return {status:'niet-gevonden'};
+  const conf=best.nameMatch&&best.amtMatch?'hoog':(best.amtMatch?'waarschijnlijk':'mogelijk');
+  const status=best.cls==='expense'?'in-uitgaven':(best.cls==='intern'?'intern':'buiten-uitgaven');
+  return {status,conf,bedrag:Math.round(best.m)};
+}
 function renderDebts(){
   const ds=SET.debts||[];
   const _now=new Date();
@@ -3046,7 +3075,15 @@ function renderDebts(){
     const coupled=(d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0);
     if(coupled && rest>0){ sub+=(sub?' · ':'')+`eigen deel ${euro0((+d.dagwaarde||0)-rest)}`; }
     const nmLabel=coupled?' <span style="color:var(--mut2);font-size:10.5px">· gekoppeld aan bezitting</span>':'';
-    return `<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Schuld')}${nmLabel}</div><div class="cp-sub"${warn?' style="color:var(--red)"':''}>${sub}</div>${fwd?`<div class="cp-sub" style="color:var(--mut2);margin-top:2px">${fwd}</div>`:''}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700;color:${rest<=0?'var(--green)':'var(--txt)'}">${rest<=0?euro0(0):'Nog '+euro0(rest)}</span><span class="muted">›</span></div></div>`;}).join('');
+    // detectie: zit de maandaflossing in je uitgaven?
+    let inExpTxt='',inExpCol='var(--mut2)';
+    if(rest>0){ const det=debtInExpenses(d);
+      if(det.status==='in-uitgaven'){ inExpTxt=(det.conf==='hoog'?'aflossing herkend in je uitgaven':'aflossing lijkt in je uitgaven te zitten'); inExpCol='var(--green)'; }
+      else if(det.status==='intern'){ inExpTxt='loopt als interne overboeking · niet in je uitgaven'; inExpCol='var(--amber)'; }
+      else if(det.status==='buiten-uitgaven'){ inExpTxt='afschrijving valt buiten je uitgaven'; inExpCol='var(--amber)'; }
+      else if(det.status==='niet-gevonden'){ inExpTxt='aflossing niet teruggevonden in je uitgaven'; inExpCol='var(--mut2)'; }
+    }
+    return `<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Schuld')}${nmLabel}</div><div class="cp-sub"${warn?' style="color:var(--red)"':''}>${sub}</div>${fwd?`<div class="cp-sub" style="color:var(--mut2);margin-top:2px">${fwd}</div>`:''}${inExpTxt?`<div class="cp-sub" style="color:${inExpCol};margin-top:2px;font-size:10.5px">${inExpTxt}</div>`:''}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700;color:${rest<=0?'var(--green)':'var(--txt)'}">${rest<=0?euro0(0):'Nog '+euro0(rest)}</span><span class="muted">›</span></div></div>`;}).join('');
   const totLine = (nSchuld>=2) ? (alleEindig ? `Op dit tempo ben je overal vanaf rond <b>${svDatum(laatsteN)}</b>.` : `Eén of meer schulden dalen op dit tempo niet, dus een schuldenvrij-datum is er nog niet.`) : '';
   const wr=ds.filter(d=>(+d.rente||0)>0 && Math.max(+d.rest||0,0)>0).sort((a,b)=>(+b.rente||0)-(+a.rente||0));
   const prio = wr.length>=2 ? `<div class="card" style="margin-bottom:8px"><div class="hlabel" style="margin-bottom:6px">Wat eerst? · hoogste rente bespaart het meest</div>${wr.map((d,i)=>`<div class="row" style="justify-content:space-between;padding:6px 0${i<wr.length-1?';border-bottom:1px solid var(--line)':''}"><span><span style="font-size:10.5px;font-weight:700;color:#06231c;background:var(--teal);border-radius:6px;padding:1px 7px;margin-right:7px">${i+1}</span>${esc(d.naam||'Schuld')}</span><span style="font-size:11.5px;font-weight:700;color:${(+d.rente>=5)?'var(--red)':'var(--green)'}">${d.rente}%</span></div>`).join('')}<div class="small muted" style="font-size:11px;margin-top:8px">Zet je extra euro op de bovenste. Liever motivatie? Kleinste schuld eerst kan ook. Jij kiest. Geen advies.</div></div>` : '';
@@ -3298,7 +3335,8 @@ function fireInputs(){
   const emergencyGoal=nfDoel;   // FIRE-mijlpaal = restsaldo-waterval = Noodfonds-kaart
   let monthlySaving=0; try{ monthlySaving=Math.round(monthlySavingTarget()||0); }catch(_){}   // beoogde maandelijkse spaarinleg — het tempo waarop het noodfonds vult (zelfde bron als Vooruitblik)
   let missBal=false; try{ missBal=((totalBalance().missing||0)>0); }catch(_){}   // eerlijk over onbekende input (C2-noot)
-  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, emergencyGoal, nfDoel, nfCur, debts:SET.debts||[], missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
+  const debtsEnriched=(SET.debts||[]).map(d=>Object.assign({},d,{inExp:debtInExpenses(d)}));   // detectie: zit de aflossing in je uitgaven?
+  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, emergencyGoal, nfDoel, nfCur, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
 function fireState(inputs, cfg){
   const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
@@ -3374,7 +3412,7 @@ function fireModel(R, inputs){
   try{ const ds=(inputs.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0);
     ds.forEach((d,i)=>{ const rest=Math.max(+d.rest||0,0), mo=payoffMonths(rest,+d.perMaand||0,+d.rente||0);
       const yr=(mo===Infinity||mo<=0)?null:nowY+Math.ceil(mo/12);
-      debtPay.push({nm:d.naam||'Schuld',rest,per:+d.perMaand||0,rente:+d.rente||0,mo:(mo===Infinity?null:mo),yr,col:DEBTCOL[i%DEBTCOL.length]}); });
+      debtPay.push({nm:d.naam||'Schuld',rest,per:+d.perMaand||0,rente:+d.rente||0,mo:(mo===Infinity?null:mo),yr,col:DEBTCOL[i%DEBTCOL.length],inExp:d.inExp}); });
     const fin=debtPay.filter(x=>x.yr!=null); if(fin.length && fin.length===debtPay.length) debtYr=Math.max(...fin.map(x=>x.yr));
   }catch(_){}
   const ms=[];
@@ -3514,8 +3552,19 @@ function reisRestsaldo(M){
     : `<div class="row"><span style="font-weight:700;font-size:14px">Noodfonds eerst</span><span style="font-weight:800;font-size:12.5px;color:var(--green)">tot ${euro0(nfDoel)}</span></div><div class="small mut2" style="font-size:11.5px">vullen tot je doel, stopt vanzelf als het vol is</div><div class="bar-track" style="margin:7px 0 2px"><div class="bar-fill" style="width:${nfPct}%;background:var(--green)"></div></div><div class="small mut2" style="font-size:11px">${euro0(nfCur)} / ${euro0(nfDoel)}${nfMonths>0?' · nog ± '+nfMonths+' mnd':''}</div><div class="small mut2" style="font-size:10.5px;margin-top:2px">${nfFill>0?`Vult met je spaarinleg (${euro0(nfFill)}/mnd); je overige restsaldo kan elders heen.`:'Stel je maandelijkse spaarinleg in voor een tijdsschatting.'}</div>`);
   // stap 2 — schuld (informatief, alleen als er schuld is); laatste stap in de waterval — de groeikeuze verhuist naar "Rendement & inflatie"
   const debts=M.debtPay; const debtPer=debts.reduce((s,d)=>s+(+d.per||0),0);   // via Laag B (M.debtPay), niet meer direct uit SET.debts
+  // detectie-aggregaat: zit de aflossing echt in je uitgaven? (anders staat het restsaldo te hoog)
+  const dStat=debts.map(d=>(d.inExp&&d.inExp.status)||'geen').filter(s=>s!=='geen');
+  const nIn=dStat.filter(s=>s==='in-uitgaven').length, nIntern=dStat.filter(s=>s==='intern').length, nConcern=dStat.length-nIn;
+  let debtNote,debtWarn=false;
+  if(!dStat.length){ debtNote='je aflossing zit al in je uitgaven, het restsaldo is wat daarná overblijft'; }
+  else if(nConcern===0){ debtNote='je aflossing zit in je uitgaven, dus je restsaldo is al ná aflossing'; }
+  else { debtWarn=true;
+    const wat=(nConcern===dStat.length&&dStat.length===1)?'je aflossing':`${nConcern} van je ${dStat.length} aflossingen`;
+    const intern=nIntern>0?` (${nIntern===1?'1 loopt':nIntern+' lopen'} als interne overboeking)`:'';
+    debtNote=`we vinden ${wat} niet terug in je uitgaven${intern}; je restsaldo kan te hoog staan`;
+  }
   const step2= debts.length? stepWrap(rail('2','var(--amber)','#2a1e00',true),
-    `<div class="row"><span style="font-weight:700;font-size:14px">Schuld loopt mee</span><span style="font-weight:800;font-size:12.5px;color:var(--amber)">${euro0(debtPer)}/mnd</span></div><div class="small mut2" style="font-size:11.5px">je aflossing zit al in je uitgaven, het restsaldo is wat daarná overblijft</div>`) : '';
+    `<div class="row"><span style="font-weight:700;font-size:14px">Schuld loopt mee</span><span style="font-weight:800;font-size:12.5px;color:var(--amber)">${euro0(debtPer)}/mnd</span></div><div class="small mut2" style="font-size:11.5px${debtWarn?';color:var(--amber)':''}">${debtNote}</div>`) : '';
   // groeikeuze — los blokje (rs.groei) voor de groep "Rendement & inflatie"
   const g=(id,lab,r)=>`<span onclick="reisGrow('${id}')" class="chip ${R.growMode===id?'on':''}" style="text-align:center">${lab} <span style="opacity:.75">${r}</span></span>`;
   const vRend=(''+R.rendFromGrow).replace('.',',');
