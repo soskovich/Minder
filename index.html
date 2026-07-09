@@ -3018,23 +3018,38 @@ function dEstimateDagwaarde(){
 }
 function renderDebts(){
   const ds=SET.debts||[];
+  const _now=new Date();
+  const svDatum=n=>{ const d=new Date(_now.getFullYear(), _now.getMonth()+n, 1); return MNAMES[d.getMonth()]+' '+d.getFullYear(); };   // vandaag + n maanden → "mnd jaar"
+  let laatsteN=0, alleEindig=true; const nSchuld=ds.filter(d=>Math.max(+d.rest||0,0)>0).length;
   const rows=ds.map(d=>{ const start=+d.start||0, rest=Math.max(+d.rest||0,0), per=+d.perMaand||0, jr=+d.rente||0;
-    const mnd=payoffMonths(rest,per,jr); const warn=(rest>0&&mnd===Infinity);
-    let sub;
-    if(rest<=0) sub='Afgelost';
-    else if(mnd===Infinity) sub='Aflossing dekt amper de rente';
-    else { const p=[]; if(per>0&&isFinite(mnd)) p.push(`~${mnd} mnd op ${euro0(per)}/mnd`); if(jr>0) p.push(`${jr}% rente`); sub=p.join(' · '); }
+    const mnd=payoffMonths(rest,per,jr); const rentePerMnd=Math.round(rest*(jr/100/12));
+    let sub, fwd='', warn=false;
+    if(rest<=0){ sub='Afgelost'; }
+    else {
+      const prog=(start>rest)?`${euro0(start-rest)} van ${euro0(start)} afgelost`:'';   // voortgang op eigen invoer (start − rest)
+      if(per<=0){ sub=[prog,'nog geen maandaflossing ingevuld'].filter(Boolean).join(' · '); alleEindig=false; }
+      else if(mnd===Infinity){ warn=true; alleEindig=false;   // aflossing ≤ maandrente: schuld daalt niet
+        sub = (per>=rentePerMnd)
+          ? `Je aflossing dekt precies de rente. De schuld blijft op ${euro0(rest)} staan.`
+          : `Je lost ${euro0(per)} per maand af, maar er komt ${euro0(rentePerMnd)} rente bij. Zo daalt ${esc(d.naam||'deze schuld')} niet, hij groeit met ±${euro0(rentePerMnd-per)} per maand.`;
+      } else {
+        const p=[]; if(prog) p.push(prog); p.push(`~${mnd} mnd op ${euro0(per)}/mnd`); if(jr>0) p.push(`${jr}% rente`); sub=p.join(' · ');
+        fwd=`Op dit tempo schuldenvrij rond <b>${svDatum(mnd)}</b>${jr>0?'':' (zonder rente gerekend)'}.`;
+        if(mnd>laatsteN) laatsteN=mnd;
+      }
+    }
     const coupled=(d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0);
-    if(coupled){ sub+=(sub?' · ':'')+`eigen deel ${euro0((+d.dagwaarde||0)-rest)}`; }
+    if(coupled && rest>0){ sub+=(sub?' · ':'')+`eigen deel ${euro0((+d.dagwaarde||0)-rest)}`; }
     const nmLabel=coupled?' <span style="color:var(--mut2);font-size:10.5px">· gekoppeld aan bezitting</span>':'';
-    return `<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Schuld')}${nmLabel}</div><div class="cp-sub"${warn?' style="color:var(--red)"':''}>${sub}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700;color:${rest<=0?'var(--green)':'var(--txt)'}">${rest<=0?euro0(0):'Nog '+euro0(rest)}</span><span class="muted">›</span></div></div>`;}).join('');
+    return `<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Schuld')}${nmLabel}</div><div class="cp-sub"${warn?' style="color:var(--red)"':''}>${sub}</div>${fwd?`<div class="cp-sub" style="color:var(--mut2);margin-top:2px">${fwd}</div>`:''}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700;color:${rest<=0?'var(--green)':'var(--txt)'}">${rest<=0?euro0(0):'Nog '+euro0(rest)}</span><span class="muted">›</span></div></div>`;}).join('');
+  const totLine = (nSchuld>=2) ? (alleEindig ? `Op dit tempo ben je overal vanaf rond <b>${svDatum(laatsteN)}</b>.` : `Eén of meer schulden dalen op dit tempo niet, dus een schuldenvrij-datum is er nog niet.`) : '';
   const wr=ds.filter(d=>(+d.rente||0)>0 && Math.max(+d.rest||0,0)>0).sort((a,b)=>(+b.rente||0)-(+a.rente||0));
   const prio = wr.length>=2 ? `<div class="card" style="margin-bottom:8px"><div class="hlabel" style="margin-bottom:6px">Wat eerst? · hoogste rente bespaart het meest</div>${wr.map((d,i)=>`<div class="row" style="justify-content:space-between;padding:6px 0${i<wr.length-1?';border-bottom:1px solid var(--line)':''}"><span><span style="font-size:10.5px;font-weight:700;color:#06231c;background:var(--teal);border-radius:6px;padding:1px 7px;margin-right:7px">${i+1}</span>${esc(d.naam||'Schuld')}</span><span style="font-size:11.5px;font-weight:700;color:${(+d.rente>=5)?'var(--red)':'var(--green)'}">${d.rente}%</span></div>`).join('')}<div class="small muted" style="font-size:11px;margin-top:8px">Zet je extra euro op de bovenste. Liever motivatie? Kleinste schuld eerst kan ook — jij kiest. Geen advies.</div></div>` : '';
   const totalSch=ds.reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
   const open=SET.openSchuld===true;
   return `<div style="margin-top:18px">
     <div class="row" style="margin:0 2px 8px;cursor:pointer" onclick="toggleVerm('openSchuld')"><span class="hlabel" style="margin:0;flex:1">Schulden &amp; aflossing</span><span class="small muted">${euro0(totalSch)}</span><span class="muted" style="font-size:15px;margin-left:8px">${open?'▲':'›'}</span></div>
-    ${open?`${prio}<div class="cz-card" style="padding:2px 14px">${rows}<button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div>`:''}
+    ${open?`${prio}<div class="cz-card" style="padding:2px 14px">${rows}${totLine?`<div class="small muted" style="padding:9px 2px 3px">${totLine}</div>`:''}<button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div>`:''}
   </div>`;
 }
 function toggleVerm(k){ SET[k]=(SET[k]!==true); save(); renderVermogen(); }
