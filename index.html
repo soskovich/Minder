@@ -3327,7 +3327,7 @@ function fireInputs(){
   if(!autoAnnualExp && fm) autoAnnualExp=Math.round((fm.fFixed+fm.fVar)*12);
   const surplus = fm? Math.max(Math.round(fm.fNet),0) : 0;
   const fInc=fm?Math.round(fm.fInc):0, fExp=fm?Math.round(fm.fFixed+fm.fVar):0;
-  const netWorthNow=netWorth().netto;
+  const _w=netWorth(); const netWorthNow=_w.netto;   // liq = cash/saldi (vlak), overig = beleggingen (groeien) — voor de aparte projectie (Fase 1)
   // Richting A: één noodfonds/buffer-doel voor zowel de FIRE-mijlpaal als de restsaldo-waterval (geen fallback-scheefstand meer)
   let nfDoel=0,nfCur=0; try{ const nf=noodfondsModel(); nfDoel=Math.round(nf.doel||0); nfCur=(nf.spaar!=null?Math.round(nf.spaar):0); }catch(_){}
   if(!nfDoel){ try{ nfDoel=Math.round(savingsModel().goal||0); }catch(_){} }
@@ -3336,7 +3336,7 @@ function fireInputs(){
   let monthlySaving=0; try{ monthlySaving=Math.round(monthlySavingTarget()||0); }catch(_){}   // beoogde maandelijkse spaarinleg — het tempo waarop het noodfonds vult (zelfde bron als Vooruitblik)
   let missBal=false; try{ missBal=((totalBalance().missing||0)>0); }catch(_){}   // eerlijk over onbekende input (C2-noot)
   const debtsEnriched=(SET.debts||[]).map(d=>Object.assign({},d,{inExp:debtInExpenses(d)}));   // detectie: zit de aflossing in je uitgaven?
-  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, emergencyGoal, nfDoel, nfCur, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
+  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd:_w.overig, emergencyGoal, nfDoel, nfCur, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
 function fireState(inputs, cfg){
   const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
@@ -3394,10 +3394,18 @@ function reisListIcon(kind,col){ return `<svg width="17" height="17" viewBox="0 
 // Naad voor niveau 2 (Box 3): vervang alleen deze body door max(saldo-vrijstelling,0)*forfait;
 // de aanroepplekken in fireModel + reisMonteCarlo blijven letterlijk gelijk.
 function fireBelasting(R, saldo){ const p=+R.taxPct||0; return (p>0&&saldo>0)? saldo*p/100 : 0; }
+// Schuld-afloscurve (Fase 1): totale resterende schuld per jaar [0..HZ]; elke schuld amortiseert maandelijks met rente tot 0.
+function fireDebtSeries(debts, HZ){
+  const st=(debts||[]).map(d=>({rest:Math.max(+d.rest||0,0), per:+d.per||0, r:(+d.rente||0)/1200}));
+  const out=[];
+  for(let y=0;y<=HZ;y++){ out.push(st.reduce((s,d)=>s+Math.max(d.rest,0),0));
+    if(y<HZ) for(let m=0;m<12;m++) st.forEach(d=>{ if(d.rest>0){ d.rest=d.rest*(1+d.r)-d.per; if(d.rest<0) d.rest=0; } }); }
+  return out;
+}
 function fireModel(R, inputs){
   const nowY=new Date().getFullYear(), nowMo=new Date().getMonth(); const curNW=inputs.netWorth;
   const aowYear=R.birth?(+R.birth+67):null; const targetYear=R.override||aowYear||(nowY+30); const HZ=Math.max(targetYear-nowY,1);
-  const P0=curNW+(+R.een||0); const rM=R.rend/100/12, rL=(R.rend-2)/100/12, rH=(R.rend+2)/100/12;
+  const rM=R.rend/100/12, rL=(R.rend-2)/100/12, rH=(R.rend+2)/100/12;
   // Twee-fasen-inleg (spiegel, geen advies): tot het noodfonds vol is gaat 'vrij' naar het veilige noodfonds
   // en nog niet naar de groei-inleg; vanaf het vol-jaar komt het vrij (step omhoog). Alleen in auto-inleg.
   const _msav=inputs.monthlySaving||0, _nfCur=inputs.nfCur||0, _nfDoel=inputs.emergencyGoal||0;
@@ -3407,11 +3415,19 @@ function fireModel(R, inputs){
   const pmtFor=year=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY);
     if(vrij>0 && year<volYear) a=Math.max(a-vrij,0);   // vul-fase: 'vrij' gaat nog naar het noodfonds
     return a; };
-  const mid=[P0],low=[P0],high=[P0],koop=[P0],midGross=[P0]; let bm=P0,bl=P0,bh=P0,bg=P0;
-  for(let y=0;y<HZ;y++){ const p=pmtFor(nowY+y);
-    for(let m=0;m<12;m++){ bm=bm*(1+rM)+p; bl=bl*(1+rL)+p; bh=bh*(1+rH)+p; bg=bg*(1+rM)+p; }
-    bm=Math.max(bm-fireBelasting(R,bm),0); bl=Math.max(bl-fireBelasting(R,bl),0); bh=Math.max(bh-fireBelasting(R,bh),0);
-    mid.push(bm);low.push(bl);high.push(bh);midGross.push(bg);koop.push(bm/Math.pow(1+R.infl/100,y+1)); }
+  // Fase 1: bezittingen (cash vlak + belegd groeit op rendement) en schuld (afloscurve) apart; vermogen = bezittingen − schuld.
+  const liq0=inputs.liq||0, belegd0=(inputs.belegd||0)+(+R.een||0);   // eenmalige inleg telt als belegd
+  const _ds=(inputs.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0).map(d=>({rest:Math.max(+d.rest||0,0),per:+d.perMaand||0,rente:+d.rente||0}));
+  const debt=fireDebtSeries(_ds, HZ);   // totale schuld per jaar [0..HZ]
+  let Im=belegd0,Il=belegd0,Ih=belegd0,Ig=belegd0, C=liq0;   // belegde potjes (mid/low/high/bruto) + cash
+  const A0=liq0+belegd0;
+  const mid=[A0-debt[0]],low=[A0-debt[0]],high=[A0-debt[0]],koop=[A0-debt[0]],midGross=[A0-debt[0]],assets=[A0];
+  for(let y=0;y<HZ;y++){ const p=pmtFor(nowY+y), fill=(nowY+y<volYear)?vrij:0;
+    for(let m=0;m<12;m++){ Im=Im*(1+rM)+p; Il=Il*(1+rL)+p; Ih=Ih*(1+rH)+p; Ig=Ig*(1+rM)+p; C+=fill; }   // cash blijft vlak; alleen de noodfonds-vulling komt erbij
+    Im=Math.max(Im-fireBelasting(R,Im),0); Il=Math.max(Il-fireBelasting(R,Il),0); Ih=Math.max(Ih-fireBelasting(R,Ih),0);   // belasting op het belegde potje
+    const dy=debt[y+1], Ay=C+Im;
+    mid.push(Ay-dy); low.push(C+Il-dy); high.push(C+Ih-dy); midGross.push(C+Ig-dy); assets.push(Ay);
+    koop.push((Ay-dy)/Math.pow(1+R.infl/100,y+1)); }
   const reach=t=>{ for(let y=0;y<=HZ;y++){ if(mid[y]>=t) return y; } return null; };
   // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Vooruitblik (via fireInputs.emergencyGoal)
   const noodDoel=inputs.emergencyGoal;
@@ -3444,27 +3460,31 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,reach,ms,FIRE,pmtFor,debtPay,restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},missing:inputs.missing};
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},missing:inputs.missing};
 }
 function reisModel(){ const inputs=fireInputs(); return fireModel(fireState(inputs, SET.reis||{}), inputs); }   // wrapper: inputs één keer, ongewijzigde uitkomst
 // ---- Monte Carlo: slagingskans + percentiel-band (lokaal, op verzoek) ----
 function reisRandn(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
 let _fireMC=null;
 function fireMonteCarlo(M){
-  const R=M.R, nowY=M.nowY, HZ=M.HZ, P0=M.curNW+(+R.een||0); const goal=M.FIRE; if(!(goal>0)) return null;
+  const R=M.R, nowY=M.nowY, HZ=M.HZ; const goal=M.FIRE; if(!(goal>0)) return null;
+  const sim=M.sim||{}, liq0=sim.liq0||0, belegd0=sim.belegd0||0, vrij=sim.vrij||0, volYear=(sim.volYear!=null?sim.volYear:nowY), debt=M.debt||[];
   const mu=R.rend/100, sigma=(R.sigma!=null?+R.sigma:13)/100, SIMS=2000, DELTA=150;
   const byY=Array.from({length:HZ+1},()=>new Float64Array(SIMS)); let succ=0, succPlus=0;
-  for(let s=0;s<SIMS;s++){ let b=P0, bp=P0; byY[0][s]=b;
+  // spiegelt het deterministische model: belegd potje stochastisch, schuld deterministisch aflossend, cash vlak (+noodfonds), vermogen = verschil
+  for(let s=0;s<SIMS;s++){ let I=belegd0, Ip=belegd0, C=liq0; let netEnd=(C+I)-(debt[0]||0), netPlusEnd=netEnd; byY[0][s]=netEnd;
     for(let y=0;y<HZ;y++){ const pmt=M.pmtFor(nowY+y), r=mu+sigma*reisRandn();
-      b=Math.max(b*(1+r)+pmt*12,0); bp=Math.max(bp*(1+r)+(pmt+DELTA)*12,0);
-      b=Math.max(b-fireBelasting(R,b),0); bp=Math.max(bp-fireBelasting(R,bp),0); byY[y+1][s]=b; }
-    if(b>=goal) succ++; if(bp>=goal) succPlus++; }
+      if(nowY+y<volYear) C+=vrij*12;
+      I=Math.max(I*(1+r)+pmt*12,0); Ip=Math.max(Ip*(1+r)+(pmt+DELTA)*12,0);
+      I=Math.max(I-fireBelasting(R,I),0); Ip=Math.max(Ip-fireBelasting(R,Ip),0);
+      const dy=debt[y+1]||0; netEnd=(C+I)-dy; netPlusEnd=(C+Ip)-dy; byY[y+1][s]=netEnd; }
+    if(netEnd>=goal) succ++; if(netPlusEnd>=goal) succPlus++; }
   const p10=[],p50=[],p90=[];
   for(let y=0;y<=HZ;y++){ const col=Array.from(byY[y]).sort((a,b)=>a-b); p10.push(col[Math.floor(0.10*SIMS)]); p50.push(col[Math.floor(0.50*SIMS)]); p90.push(col[Math.floor(0.90*SIMS)]); }
   return {p10,p50,p90,succ:Math.round(succ/SIMS*100),succPlus:Math.round(succPlus/SIMS*100),goal};
 }
 function fireMCcached(M){
-  const R=M.R; const sig=[Math.round(M.curNW),R.een,R.pmt,R.grow,R.rend,R.sigma,R.fireMult,R.annualExp,R.taxPct,M.HZ,JSON.stringify(R.steps)].join('|');
+  const R=M.R; const sig=[Math.round(M.curNW),R.een,R.pmt,R.grow,R.rend,R.sigma,R.fireMult,R.annualExp,R.taxPct,M.HZ,JSON.stringify(R.steps),Math.round(M.sim.liq0),Math.round(M.sim.belegd0),M.sim.volYear,JSON.stringify((M.debtPay||[]).map(d=>[d.rest,d.per,d.rente]))].join('|');
   if(_fireMC && _fireMC.sig===sig) return _fireMC.res;
   let res=null; try{ res=fireMonteCarlo(M); }catch(_){}
   _fireMC={sig,res}; return res;
