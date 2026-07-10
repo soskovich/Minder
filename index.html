@@ -3354,6 +3354,7 @@ function fireState(inputs, cfg){
   const splitBeleg=r.splitBeleg!=null?Math.max(0,Math.min(100,Math.round(+r.splitBeleg))):60;
   const rendFromGrow=growMode==='cash'?0:growMode==='sparen'?REND_SPAAR:growMode==='beleggen'?REND_BELEG:Math.round((REND_SPAAR*(100-splitBeleg)+REND_BELEG*splitBeleg)/100*10)/10;
   return { open:!!r.open, setOpen:!!r.setOpen, band:!!r.band, koop:!!r.koop, showInk:r.showInk!==false,
+    chartZoom:(['5','full'].includes(r.chartZoom)?r.chartZoom:'3'),   // grafiek-venster (render-vlag): 3/5 jaar of hele reis
     rend:(inlegMode==='auto')?rendFromGrow:(r.rend!=null?+r.rend:REND_BELEG), infl:r.infl!=null?+r.infl:2,
     taxPct:(r.taxPct!=null?Math.max(0,+r.taxPct):1.2),
     pmt:(inlegMode==='auto')?surplus:(r.pmt!=null?+r.pmt:defPmt), grow:+r.grow||0, een:+r.een||0,
@@ -3369,6 +3370,7 @@ function reisSet(k,v){ SET.reis=SET.reis||{}; if(v===''||v==null) delete SET.rei
 function reisToggle(k){ SET.reis=SET.reis||{}; const cur=reisState(); SET.reis[k]=!cur[k]; save(); renderFire(); }
 function reisGroep(k){ SET.reis=SET.reis||{}; SET.reis['g_'+k]=!SET.reis['g_'+k]; save(); renderFire(); }   // accordeon: meerdere groepen tegelijk open
 function reisMsToggle(){ SET.reis=SET.reis||{}; SET.reis.msClosed=!SET.reis.msClosed; save(); renderFire(); }   // mijlpalen in-/uitklappen (standaard open)
+function reisZoom(v){ SET.reis=SET.reis||{}; SET.reis.chartZoom=(['5','full'].includes(v)?v:'3'); save(); renderFire(); }   // grafiek-venster: 3/5 jaar of hele reis (puur weergave)
 function reisFire(m){ SET.reis=SET.reis||{}; SET.reis.fireCustom=(m==='eigen'); if(m!=='eigen') SET.reis.fireMult=m; save(); renderFire(); }
 function reisExpMode(m){ SET.reis=SET.reis||{}; SET.reis.expMode=(m==='eigen')?'eigen':'auto'; save(); renderFire(); }
 function reisInlegMode(m){ SET.reis=SET.reis||{}; SET.reis.inlegMode=(m==='manual')?'manual':'auto'; save(); renderFire(); }
@@ -3501,32 +3503,37 @@ function reisHaalbaarheid(M){
     <div style="font-size:11px;color:var(--mut2);margin-top:9px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Kans-inschatting o.b.v. ~2.000 doorgerekende marktverlopen met je gekozen beweeglijkheid. Geen advies of belofte; markten kunnen anders lopen.</div>
   </div>`;
 }
+// nette bovengrens voor de near-view y-as (1/1.5/2/2.5/3/4/5/6/8/10 × 10^k), zodat de lijn de hoogte vult
+function reisNiceCeil(v){ if(!(v>0)) return 1000; const p=Math.pow(10,Math.floor(Math.log10(v))); for(const m of [1,1.5,2,2.5,3,4,5,6,8,10]){ if(v<=m*p) return Math.round(m*p); } return Math.round(10*p); }
 function reisChartSVG(M){
   const R=M.R, kf=v=>v>=1000?('€'+Math.round(v/1000)+'k'):('€'+Math.round(v));
   const W=360,H=210,x0=36,x1=W-12,yT=18,yB=H-40, nowY=M.nowY, HZ=M.HZ;
+  const zoom=(['5','full'].includes(R.chartZoom)?R.chartZoom:'3');   // grafiek-venster (puur weergave)
+  const VH = zoom==='full' ? HZ : Math.min(+zoom, HZ);
   const reqCap=(+R.incGoal||0)*12*R.fireMult;
-  let rawMax=Math.max(M.high[HZ], M.FIRE, (R.showInk?reqCap:0), ...R.customMs.map(c=>+c.target||0))*1.06;
-  const niceMax=Math.max(Math.ceil(rawMax/100000)*100000,100000);
-  const X=y=>x0+(y/HZ)*(x1-x0), Y=v=>yB-(Math.max(v,0)/niceMax)*(yB-yT);
-  const pts=a=>a.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
+  let niceMax;
+  if(zoom==='full'){ const rawMax=Math.max(M.high[HZ], M.FIRE, (R.showInk?reqCap:0), ...R.customMs.map(c=>+c.target||0))*1.06; niceMax=Math.max(Math.ceil(rawMax/100000)*100000,100000); }
+  else { const top=R.band?M.high:M.mid; let vis=0; for(let y=0;y<=VH;y++) vis=Math.max(vis, top[y]||0); niceMax=Math.max(reisNiceCeil(vis*1.08), 1000); }   // near: schaal past op het gekozen venster
+  const X=y=>x0+(y/VH)*(x1-x0), Y=v=>yB-(Math.max(v,0)/niceMax)*(yB-yT);
+  const pts=a=>a.slice(0,VH+1).map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
   let s=`<defs><linearGradient id="reisg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(45,212,191,.30)"/><stop offset="1" stop-color="rgba(45,212,191,0)"/></linearGradient></defs>`;
   for(let i=0;i<=4;i++){ const val=niceMax*i/4, yy=Y(val); s+=`<line x1="${x0}" y1="${yy.toFixed(1)}" x2="${x1}" y2="${yy.toFixed(1)}" stroke="rgba(159,176,199,.10)"/><text x="${x0-5}" y="${(yy+3).toFixed(1)}" fill="#6b7c95" font-size="8.5" text-anchor="end">${i===0?'€0':kf(val)}</text>`; }
-  if(R.band){ const band=M.high.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).concat(M.low.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).reverse()).join(' '); s+=`<polygon points="${band}" fill="rgba(45,212,191,.13)"/>`; }
-  else { s+=`<polygon points="${X(0).toFixed(1)},${yB} ${pts(M.mid)} ${X(HZ).toFixed(1)},${yB}" fill="url(#reisg)"/>`; }
-  (R.steps||[]).forEach(sp=>{ const t=(+sp.from)-nowY; if(t<=0||t>HZ) return; const px=X(t); s+=`<line x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="#9fb0c7" stroke-width="1" stroke-dasharray="1 3" opacity=".45"/>`; });
-  if(M.freed && M.freed.vrij>0 && M.freed.volYear>nowY){ const t=M.freed.volYear-nowY; if(t>0&&t<=HZ){ const px=X(t); s+=`<line x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="#34d399" stroke-width="1" stroke-dasharray="2 3" opacity=".55"/><text x="${px.toFixed(1)}" y="${(yT-3).toFixed(1)}" fill="#34d399" font-size="7.5" text-anchor="middle">noodfonds vol</text>`; } }
+  if(R.band){ const band=M.high.slice(0,VH+1).map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).concat(M.low.slice(0,VH+1).map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).reverse()).join(' '); s+=`<polygon points="${band}" fill="rgba(45,212,191,.13)"/>`; }
+  else { s+=`<polygon points="${X(0).toFixed(1)},${yB} ${pts(M.mid)} ${X(VH).toFixed(1)},${yB}" fill="url(#reisg)"/>`; }
+  (R.steps||[]).forEach(sp=>{ const t=(+sp.from)-nowY; if(t<=0||t>VH) return; const px=X(t); s+=`<line x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="#9fb0c7" stroke-width="1" stroke-dasharray="1 3" opacity=".45"/>`; });
+  if(M.freed && M.freed.vrij>0 && M.freed.volYear>nowY){ const t=M.freed.volYear-nowY; if(t>0&&t<=VH){ const px=X(t); s+=`<line x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="#34d399" stroke-width="1" stroke-dasharray="2 3" opacity=".55"/><text x="${px.toFixed(1)}" y="${(yT-3).toFixed(1)}" fill="#34d399" font-size="7.5" text-anchor="middle">noodfonds vol</text>`; } }
   if(R.koop){ s+=`<polyline points="${pts(M.koop)}" fill="none" stroke="#9fb0c7" stroke-width="1.5" stroke-dasharray="4 4"/>`; }
   if(R.showInk && reqCap>0 && reqCap<=niceMax){ const yy=Y(reqCap); s+=`<line x1="${x0}" y1="${yy.toFixed(1)}" x2="${x1}" y2="${yy.toFixed(1)}" stroke="#f472b6" stroke-width="1.2" stroke-dasharray="4 3"/><text x="${x1}" y="${(yy-4).toFixed(1)}" fill="#f472b6" font-size="8" text-anchor="end">inkomensdoel ${kf(reqCap)}</text>`; }
   s+=`<polyline points="${pts(M.mid)}" fill="none" stroke="#2dd4bf" stroke-width="2.8" stroke-linejoin="round"/>`;
-  M.ms.filter(m=>!m.debtSub&&m.tIdx!=null&&m.tIdx>=0&&m.tIdx<=HZ).forEach(m=>{ const vy=(m.target!=null)?m.target:M.mid[m.tIdx]; const px=X(m.tIdx), py=Y(vy);
+  M.ms.filter(m=>!m.debtSub&&m.tIdx!=null&&m.tIdx>=0&&m.tIdx<=VH&&(zoom==='full'||m.target==null||m.target<=niceMax)).forEach(m=>{ const vy=(m.target!=null)?m.target:M.mid[m.tIdx]; const px=X(m.tIdx), py=Y(vy);
     s+=`<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${px.toFixed(1)}" y2="${yB}" stroke="${m.col}" stroke-width="1" stroke-dasharray="2 3" opacity=".3"/>`;
     // jaartal-pil boven het punt: 'nu' als behaald, anders het jaar
     const yr=m.reached?'nu':(m.yr!=null?(''+m.yr):('na '+M.targetYear)); const pw=yr.length*5.4+10; const pxL=Math.max(x0,Math.min(px-pw/2,x1-pw)); const pyT=Math.max(1,py-24);
     s+=`<rect x="${pxL.toFixed(1)}" y="${pyT.toFixed(1)}" width="${pw.toFixed(1)}" height="13" rx="6.5" fill="${m.col}" opacity="0.16"/><text x="${(pxL+pw/2).toFixed(1)}" y="${(pyT+9.4).toFixed(1)}" fill="${m.col}" font-size="8.5" font-weight="700" text-anchor="middle">${yr}</text>`;
     if(m.reached){ s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="${m.col}"/>${reisGlyph(m.icon,px,py,'#0b1220')}`; }
     else { s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="#0b1220" stroke="${m.col}" stroke-width="1.3"/>${reisGlyph(m.icon,px,py,m.col)}`; } });
-  const stepY=HZ<=12?4:(HZ<=25?5:10); const ticks=[]; for(let t=0;t<=HZ;t+=stepY) ticks.push(t); if(ticks[ticks.length-1]!==HZ) ticks.push(HZ);
-  ticks.forEach(t=>{ s+=`<text x="${X(t).toFixed(1)}" y="${yB+15}" fill="#6b7c95" font-size="8.5" text-anchor="${t===0?'start':(t===HZ?'end':'middle')}">${t===0?'nu':(nowY+t)}</text>`; });
+  const stepY = zoom==='full' ? (HZ<=12?4:(HZ<=25?5:10)) : 1; const ticks=[]; for(let t=0;t<=VH;t+=stepY) ticks.push(t); if(ticks[ticks.length-1]!==VH) ticks.push(VH);
+  ticks.forEach(t=>{ s+=`<text x="${X(t).toFixed(1)}" y="${yB+15}" fill="#6b7c95" font-size="8.5" text-anchor="${t===0?'start':(t===VH?'end':'middle')}">${t===0?'nu':(nowY+t)}</text>`; });
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="margin-top:10px">${s}</svg>`;
 }
 function reisRestsaldo(M){
@@ -3626,6 +3633,7 @@ function renderFire(){
   const R=M.R, nowY=M.nowY, curNW=M.curNW;
   // scherm-body (ongewijzigd t.o.v. de oude uitgeklapte kaart; alleen de inklap-laag is weg)
   const tg=(k,l)=>`<span onclick="reisToggle('${k}')" style="font-size:11px;font-weight:600;border:1px solid ${R[k]?'var(--teal)':'var(--line)'};background:${R[k]?'rgba(45,212,191,.12)':'var(--card2)'};color:${R[k]?'var(--teal)':'var(--mut)'};border-radius:16px;padding:4px 11px;cursor:pointer">${l}</span>`;
+  const zc=(v,l)=>`<span onclick="reisZoom('${v}')" style="font-size:11px;font-weight:600;border:1px solid ${R.chartZoom===v?'var(--teal)':'var(--line)'};background:${R.chartZoom===v?'rgba(45,212,191,.12)':'var(--card2)'};color:${R.chartZoom===v?'var(--teal)':'var(--mut)'};border-radius:16px;padding:4px 11px;cursor:pointer">${l}</span>`;
   const list=M.ms.map(m=>{ const yrtxt=m.reached?'<span style="color:var(--green)">behaald</span>':(m.yr!=null?m.yr:('na '+M.targetYear));
     const rm=m.custom?`<span onclick="reisRemoveCustom('${m.key}')" style="color:var(--mut2);cursor:pointer;font-weight:700;margin-left:8px">×</span>`:'';
     const have=(m.key==='nood'?(M.restsaldo.nfCur||0):curNW);   // noodfonds op spaargeld, rest op netto vermogen (zelfde teller als reached)
@@ -3684,6 +3692,7 @@ function renderFire(){
   const missNote=(missing.balances||missing.assets)?`<div class="small mut2" style="font-size:11px;margin-top:8px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">${missing.balances?'Je vermogen leunt deels op nog onbekende rekeningsaldi. ':''}${missing.assets?'Je hebt nog geen bezittingen ingevuld. ':''}Het startpunt kan dus lager of hoger liggen.</div>`:'';
   const html=head+`<div class="small mut2" style="margin:-10px 2px 12px;font-size:11.5px">van nu (${nowY}) tot ~${M.targetYear}</div><div class="card">
     ${reisChartSVG(M)}
+    <div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">${zc('3','3 jaar')}${zc('5','5 jaar')}${zc('full','Hele reis')}</div>
     ${missNote}
     <div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">${tg('band','Bandbreedte')}${tg('koop','Koopkracht')}${tg('showInk','Inkomensdoel')}</div>
     <div class="small mut2" style="font-size:12px;margin-top:8px">Op de lange termijn ${ft!=null?('kom je rond '+(nowY+ft)+' bij je FIRE-getal. Een band, geen belofte.'):('haal je je FIRE-getal niet vóór '+M.targetYear+'.')}</div>
