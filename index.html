@@ -3336,7 +3336,8 @@ function fireInputs(){
   let monthlySaving=0; try{ monthlySaving=Math.round(monthlySavingTarget()||0); }catch(_){}   // beoogde maandelijkse spaarinleg — het tempo waarop het noodfonds vult (zelfde bron als Vooruitblik)
   let missBal=false; try{ missBal=((totalBalance().missing||0)>0); }catch(_){}   // eerlijk over onbekende input (C2-noot)
   const debtsEnriched=(SET.debts||[]).map(d=>Object.assign({},d,{inExp:debtInExpenses(d)}));   // detectie: zit de aflossing in je uitgaven?
-  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd:_w.overig, emergencyGoal, nfDoel, nfCur, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
+  const belegdItems=(SET.assets||[]).map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0)})); const _lease=leaseAutoTotal(); if(_lease>0) belegdItems.push({naam:'Auto (lease)', waarde:_lease});   // losse bezittingen voor de opbouw-weergave (som = belegd)
+  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd:_w.overig, belegdItems, emergencyGoal, nfDoel, nfCur, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
 function fireState(inputs, cfg){
   const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
@@ -3385,8 +3386,9 @@ function reisScrubTo(i){ const s=window._reisScrub; if(!s) return; i=Math.max(0,
   if(out){ let html = s.hasDebt
       ? `<b>${s.nowY+i}</b> — Bezittingen ${euro0(s.assets[i])} · Schuld ${euro0(s.debt[i])} · Vermogen ${euro0(s.mid[i])}`
       : `<b>${s.nowY+i}</b> — Vermogen ${euro0(s.mid[i])}`;
-    if(s.hasDebt && s.debtParts && s.debtParts.length>=2){   // opbouw: waaruit de schuld op dit jaar bestaat
-      html += `<div class="small mut2" style="font-size:10.5px;margin-top:2px">Schuld: ${s.debtParts.map(d=>`<span style="color:${d.col}">●</span> ${esc(d.naam)} ${euro0(d.series[i]||0)}`).join(' · ')}</div>`; }
+    const brk=(lab,parts)=>`<div class="small mut2" style="font-size:10.5px;margin-top:2px">${lab}: ${parts.map(d=>`<span style="color:${d.col}">●</span> ${esc(d.naam)} ${euro0(d.series[i]||0)}`).join(' · ')}</div>`;
+    if(s.assetParts && s.assetParts.length>=2) html += brk('Bezittingen', s.assetParts);   // waaruit je bezit op dit jaar bestaat
+    if(s.hasDebt && s.debtParts && s.debtParts.length>=2) html += brk('Schuld', s.debtParts);   // waaruit je schuld op dit jaar bestaat
     out.innerHTML = html; }
 }
 function reisFire(m){ SET.reis=SET.reis||{}; SET.reis.fireCustom=(m==='eigen'); if(m!=='eigen') SET.reis.fireMult=m; save(); renderFire(); renderSet(); }
@@ -3437,14 +3439,14 @@ function fireModel(R, inputs){
   const liq0=inputs.liq||0, belegd0=(inputs.belegd||0)+(+R.een||0);   // eenmalige inleg telt als belegd
   const _ds=(inputs.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0).map(d=>({naam:d.naam||'Schuld',rest:Math.max(+d.rest||0,0),per:+d.perMaand||0,rente:+d.rente||0}));
   const _debtS=fireDebtSeries(_ds, HZ); const debt=_debtS.total;   // debt = totaal per jaar (ongewijzigd); _debtS.parts = per-schuld opbouw
-  let Im=belegd0,Il=belegd0,Ih=belegd0,Ig=belegd0, C=liq0;   // belegde potjes (mid/low/high/bruto) + cash
+  let Im=belegd0,Il=belegd0,Ih=belegd0,Ig=belegd0, C=liq0, Ib=belegd0;   // belegde potjes (mid/low/high/bruto) + cash + Ib = startkapitaal zonder maandinleg (voor de opbouw)
   const A0=liq0+belegd0;
-  const mid=[A0-debt[0]],low=[A0-debt[0]],high=[A0-debt[0]],koop=[A0-debt[0]],midGross=[A0-debt[0]],assets=[A0];
+  const mid=[A0-debt[0]],low=[A0-debt[0]],high=[A0-debt[0]],koop=[A0-debt[0]],midGross=[A0-debt[0]],assets=[A0], bser=[belegd0], cser=[liq0];   // bser/cser: additief voor de bezittingen-opbouw
   for(let y=0;y<HZ;y++){ const p=pmtFor(nowY+y), fill=(nowY+y<volYear)?vrij:0;
-    for(let m=0;m<12;m++){ Im=Im*(1+rM)+p; Il=Il*(1+rL)+p; Ih=Ih*(1+rH)+p; Ig=Ig*(1+rM)+p; C+=fill; }   // cash blijft vlak; alleen de noodfonds-vulling komt erbij
-    Im=Math.max(Im-fireBelasting(R,Im),0); Il=Math.max(Il-fireBelasting(R,Il),0); Ih=Math.max(Ih-fireBelasting(R,Ih),0);   // belasting op het belegde potje
+    for(let m=0;m<12;m++){ Im=Im*(1+rM)+p; Il=Il*(1+rL)+p; Ih=Ih*(1+rH)+p; Ig=Ig*(1+rM)+p; Ib=Ib*(1+rM); C+=fill; }   // cash blijft vlak; alleen de noodfonds-vulling komt erbij; Ib groeit zonder inleg
+    Im=Math.max(Im-fireBelasting(R,Im),0); Il=Math.max(Il-fireBelasting(R,Il),0); Ih=Math.max(Ih-fireBelasting(R,Ih),0); Ib=Math.max(Ib-fireBelasting(R,Ib),0);   // belasting op het belegde potje (proportioneel, dus ook op Ib)
     const dy=debt[y+1], Ay=C+Im;
-    mid.push(Ay-dy); low.push(C+Il-dy); high.push(C+Ih-dy); midGross.push(C+Ig-dy); assets.push(Ay);
+    mid.push(Ay-dy); low.push(C+Il-dy); high.push(C+Ih-dy); midGross.push(C+Ig-dy); assets.push(Ay); bser.push(Ib); cser.push(C);
     koop.push((Ay-dy)/Math.pow(1+R.infl/100,y+1)); }
   const reach=t=>{ for(let y=0;y<=HZ;y++){ if(mid[y]>=t) return y; } return null; };
   // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Vooruitblik (via fireInputs.emergencyGoal)
@@ -3460,6 +3462,14 @@ function fireModel(R, inputs){
     const fin=debtPay.filter(x=>x.yr!=null); if(fin.length && fin.length===debtPay.length) debtYr=Math.max(...fin.map(x=>x.yr));
   }catch(_){}
   const debtParts=_debtS.parts.map((p,i)=>({naam:p.naam, col:DEBTCOL[i%DEBTCOL.length], series:p.series}));   // per-schuld opbouw, kleur matcht de schuld-mijlpalen
+  // Bezittingen-opbouw (mirror van debtParts): elke belegging via de uniforme groeivoet (bser), plus cash en nieuwe inleg. Som === assets[i].
+  const ASSETCOL=['#10b981','#4ade80','#059669','#6ee7b7','#16a34a','#22c55e'];
+  const assetParts=(function(){ const items=(inputs.belegdItems||[]).slice(); if((+R.een||0)>0) items.push({naam:'Eenmalige inleg', waarde:+R.een||0});
+    const parts=[];
+    if(belegd0>0) items.forEach((it,i)=>{ const share=(+it.waarde||0)/belegd0; parts.push({naam:it.naam, kind:'belegging', col:ASSETCOL[i%ASSETCOL.length], series:bser.map(b=>b*share)}); });
+    if(cser.some(v=>v>0.5)) parts.push({naam:'Spaargeld / cash', kind:'cash', col:'#94a3b8', series:cser.slice()});
+    const inleg=assets.map((a,i)=>Math.max(a-cser[i]-bser[i],0)); if(inleg.some(v=>v>0.5)) parts.push({naam:'Nieuwe inleg', kind:'inleg', col:'#818cf8', series:inleg});
+    return parts; })();
   const ms=[];
   if(noodDoel>0) ms.push({key:'nood',nm:'Noodfonds',target:Math.round(noodDoel),col:'#34d399',icon:'shield',sub:'buffer compleet'});
   if(debtPay.length===1){ const d0=debtPay[0]; if(d0.yr) ms.push({key:'debt',nm:'Schuldenvrij',target:null,yr:d0.yr,col:d0.col,icon:'check',sub:'alle schulden af'}); }
@@ -3479,7 +3489,7 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},missing:inputs.missing};
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},missing:inputs.missing};
 }
 function reisModel(){ const inputs=fireInputs(); return fireModel(fireState(inputs, SET.reis||{}), inputs); }   // wrapper: inputs één keer, ongewijzigde uitkomst
 // ---- Monte Carlo: slagingskans + percentiel-band (lokaal, op verzoek) ----
@@ -3583,7 +3593,7 @@ function reisChartSVG(M){
     if(compose) s+=`<circle id="reisDotA" cx="${px.toFixed(1)}" cy="${Y(M.assets[i0]).toFixed(1)}" r="3.4" fill="#a78bfa"/><circle id="reisDotS" cx="${px.toFixed(1)}" cy="${Y(M.debt[i0]).toFixed(1)}" r="3.4" fill="#fbbf24"/>`;
     s+=`<circle id="reisDotV" cx="${px.toFixed(1)}" cy="${Y(M.mid[i0]).toFixed(1)}" r="3.6" fill="#2dd4bf"/>`;
   }
-  try{ window._reisScrub={nowY,VH,x0,x1,yB,yT,niceMax,hasDebt:compose,assets:M.assets,debt:M.debt,mid:M.mid,debtParts:M.debtParts}; }catch(_){}
+  try{ window._reisScrub={nowY,VH,x0,x1,yB,yT,niceMax,hasDebt:compose,assets:M.assets,debt:M.debt,mid:M.mid,debtParts:M.debtParts,assetParts:M.assetParts}; }catch(_){}
   const _sw=(c,dash)=>`<span style="display:inline-block;width:14px;border-top:2px ${dash?'dashed':'solid'} ${c};vertical-align:middle;margin-right:4px"></span>`;
   const legend = compose?`<div class="row" style="gap:14px;margin-top:6px;font-size:10.5px;flex-wrap:wrap;color:var(--mut)"><span>${_sw('#2dd4bf')}Vermogen</span><span>${_sw('#a78bfa')}Bezittingen</span><span>${_sw('#fbbf24',1)}Schuld</span></div>`:'';
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="margin-top:10px">${s}</svg>${legend}`;
@@ -3717,7 +3727,9 @@ function renderFire(){
   const VHui = R.chartZoom==='full' ? M.HZ : Math.min(+R.chartZoom||3, M.HZ);   // venster voor de scrub-schuifbalk
   const compose0 = R.compose && (M.debt[0]||0)>0;
   let scrubInit = compose0 ? `<b>${nowY}</b> — Bezittingen ${euro0(M.assets[0])} · Schuld ${euro0(M.debt[0])} · Vermogen ${euro0(M.mid[0])}` : `<b>${nowY}</b> — Vermogen ${euro0(M.mid[0])}`;
-  if(compose0 && M.debtParts && M.debtParts.length>=2) scrubInit += `<div class="small mut2" style="font-size:10.5px;margin-top:2px">Schuld: ${M.debtParts.map(d=>`<span style="color:${d.col}">●</span> ${esc(d.naam)} ${euro0(d.series[0]||0)}`).join(' · ')}</div>`;
+  const _brk0=(lab,parts)=>`<div class="small mut2" style="font-size:10.5px;margin-top:2px">${lab}: ${parts.map(d=>`<span style="color:${d.col}">●</span> ${esc(d.naam)} ${euro0(d.series[0]||0)}`).join(' · ')}</div>`;
+  if(M.assetParts && M.assetParts.length>=2) scrubInit += _brk0('Bezittingen', M.assetParts);
+  if(compose0 && M.debtParts && M.debtParts.length>=2) scrubInit += _brk0('Schuld', M.debtParts);
   const missing=M.missing||{};
   const missNote=(missing.balances||missing.assets)?`<div class="small mut2" style="font-size:11px;margin-top:8px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">${missing.balances?'Je vermogen leunt deels op nog onbekende rekeningsaldi. ':''}${missing.assets?'Je hebt nog geen bezittingen ingevuld. ':''}Het startpunt kan dus lager of hoger liggen.</div>`:'';
   const html=head+`<div class="small mut2" style="margin:-10px 2px 12px;font-size:11.5px">van nu (${nowY}) tot ~${M.targetYear}</div><div class="card">
