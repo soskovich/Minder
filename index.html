@@ -599,6 +599,7 @@ const CATS={
   vakantie:{name:'Vakantie & reizen',icon:ICON('plane'),color:'#38bdf8',type:'expense'},
   bankkosten:{name:'Bankkosten',icon:ICON('card'),color:'#94a3b8',type:'expense'},
   persoonlijk:{name:'Persoonlijke overboeking',icon:ICON('user'),color:'#fca5a5',type:'expense'},
+  contant:{name:'Contant geld',icon:ICON('wallet'),color:'#d4a54a',type:'expense'},
   vices:{name:'Vices',icon:ICON('vice'),color:'#d98c5f',type:'expense'},
   overig:{name:'Overig',icon:ICON('card'),color:'#cbd5e1',type:'expense'},
   inkomen:{name:'Inkomen',icon:ICON('wallet'),color:'#10b981',type:'income'},
@@ -608,6 +609,7 @@ const CATS={
 // keyword-regels (eerste match telt), werken op de hele :86:-tekst in hoofdletters
 const RULES=[
   ['inkomen',['DGA','ERNST MANAGEMENT','0143178385','SALARIS',' LOON','UITKERING','AFREKENING PER','STRIPE TECHNOLOGY']],
+  ['contant',['GELDMAAT','GEA, BETAALPAS','OPNAME']],   // pinopname = contant geld, telt als uitgave (staat vóór de locatie-keywords zodat de opname-markering wint)
   ['sparen',['PEAKS','SAXO BANK','SAXO','BELEGGEN','DEGIRO','BRAND NEW DAY','BUX','FLATEX','MONTHLY RULE','WEEKLY RULE','SPAARREKENING','SPAARDEPOSITO','SPAARDEPOT','SPAARGELD','SPAARPOT','DEPOSITO','SAVINGS','VERMOGENSREKENING','NAAR SPAREN','EIGEN SPAAR']],
   ['vices',['COFFEESHOP','SMARTSHOP','GROWSHOP','HEADSHOP','SLIJTERIJ','GALL & GALL','GALL EN GALL','MITRA','DRANKENHANDEL','HOLLAND CASINO','UNIBET','TOBACCO','SHISHA','VAPE']],
   ['boodschappen',['PLUS DE GORS','VOMAR','SAFRANA','KRUIDVAT','NIKA SUPERMARKT','SUPERMARKT','ALBERT HEIJN','JUMBO','LIDL','ALDI','DIRK VAN','SPLIF','ISS CATERING','SUMUP']],
@@ -625,7 +627,7 @@ const RULES=[
   ['bankkosten',['BASISPAKKET','ABN AMRO BANK N.V.','KOSTEN BETALINGSVERKEER']],
   ['huur',['ML MACNACK','HUURBETALING','HUUR ',' HUUR','VERHUUR','WONINGSTICHTING','VESTEDA','BOUWINVEST','WOONSTAD','WOONCORPORATIE']],
   ['persoonlijk',[]],
-  ['intern',['WESTERN UNION','VE SUMTER','PRIVEREKENING','VINCENT SUMTER','VINCENT ERNST SUMTER','SENT FROM N26','EIGEN REKENING','SUMTER VIA TIKKIE','AAB INZ TIKKIE','GELDMAAT','GEA, BETAALPAS','OPNAME','REVOLUT','WISE','N26']]
+  ['intern',['WESTERN UNION','VE SUMTER','PRIVEREKENING','VINCENT SUMTER','VINCENT ERNST SUMTER','SENT FROM N26','EIGEN REKENING','SUMTER VIA TIKKIE','AAB INZ TIKKIE','REVOLUT','WISE','N26']]
 ];
 
 /* ---------- state ---------- */
