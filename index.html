@@ -3336,8 +3336,13 @@ function fireInputs(){
   let monthlySaving=0; try{ monthlySaving=Math.round(monthlySavingTarget()||0); }catch(_){}   // beoogde maandelijkse spaarinleg — het tempo waarop het noodfonds vult (zelfde bron als Vooruitblik)
   let missBal=false; try{ missBal=((totalBalance().missing||0)>0); }catch(_){}   // eerlijk over onbekende input (C2-noot)
   const debtsEnriched=(SET.debts||[]).map(d=>Object.assign({},d,{inExp:debtInExpenses(d)}));   // detectie: zit de aflossing in je uitgaven?
-  const belegdItems=(SET.assets||[]).map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0)})); const _lease=leaseAutoTotal(); if(_lease>0) belegdItems.push({naam:'Auto (lease)', waarde:_lease});   // losse bezittingen voor de opbouw-weergave (som = belegd)
-  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd:_w.overig, belegdItems, emergencyGoal, nfDoel, nfCur, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
+  // Bezittingen splitsen op de 'groeit'-vlag: groeiende → belegd (groeit op FIRE-rendement), niet-groeiende + lease → flat (vlak)
+  const _grow=(SET.assets||[]).filter(a=>a.grow), _flatA=(SET.assets||[]).filter(a=>!a.grow), _lease=leaseAutoTotal();
+  const belegd=_grow.reduce((s,a)=>s+Math.max(+a.waarde||0,0),0);
+  const flat=_flatA.reduce((s,a)=>s+Math.max(+a.waarde||0,0),0)+_lease;
+  const belegdItems=_grow.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0)}));
+  const flatItems=_flatA.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0)})); if(_lease>0) flatItems.push({naam:'Auto (lease)', waarde:_lease});
+  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, emergencyGoal, nfDoel, nfCur, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
 function fireState(inputs, cfg){
   const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
@@ -3436,17 +3441,17 @@ function fireModel(R, inputs){
     if(vrij>0 && year<volYear) a=Math.max(a-vrij,0);   // vul-fase: 'vrij' gaat nog naar het noodfonds
     return a; };
   // Fase 1: bezittingen (cash vlak + belegd groeit op rendement) en schuld (afloscurve) apart; vermogen = bezittingen − schuld.
-  const liq0=inputs.liq||0, belegd0=(inputs.belegd||0)+(+R.een||0);   // eenmalige inleg telt als belegd
+  const liq0=inputs.liq||0, belegd0=(inputs.belegd||0)+(+R.een||0), flat0=inputs.flat||0;   // eenmalige inleg telt als belegd; flat0 = niet-groeiende bezittingen (vlak)
   const _ds=(inputs.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0).map(d=>({naam:d.naam||'Schuld',rest:Math.max(+d.rest||0,0),per:+d.perMaand||0,rente:+d.rente||0}));
   const _debtS=fireDebtSeries(_ds, HZ); const debt=_debtS.total;   // debt = totaal per jaar (ongewijzigd); _debtS.parts = per-schuld opbouw
   let Im=belegd0,Il=belegd0,Ih=belegd0,Ig=belegd0, C=liq0, Ib=belegd0;   // belegde potjes (mid/low/high/bruto) + cash + Ib = startkapitaal zonder maandinleg (voor de opbouw)
-  const A0=liq0+belegd0;
+  const A0=liq0+belegd0+flat0;
   const mid=[A0-debt[0]],low=[A0-debt[0]],high=[A0-debt[0]],koop=[A0-debt[0]],midGross=[A0-debt[0]],assets=[A0], bser=[belegd0], cser=[liq0];   // bser/cser: additief voor de bezittingen-opbouw
   for(let y=0;y<HZ;y++){ const p=pmtFor(nowY+y), fill=(nowY+y<volYear)?vrij:0;
     for(let m=0;m<12;m++){ Im=Im*(1+rM)+p; Il=Il*(1+rL)+p; Ih=Ih*(1+rH)+p; Ig=Ig*(1+rM)+p; Ib=Ib*(1+rM); C+=fill; }   // cash blijft vlak; alleen de noodfonds-vulling komt erbij; Ib groeit zonder inleg
     Im=Math.max(Im-fireBelasting(R,Im),0); Il=Math.max(Il-fireBelasting(R,Il),0); Ih=Math.max(Ih-fireBelasting(R,Ih),0); Ib=Math.max(Ib-fireBelasting(R,Ib),0);   // belasting op het belegde potje (proportioneel, dus ook op Ib)
-    const dy=debt[y+1], Ay=C+Im;
-    mid.push(Ay-dy); low.push(C+Il-dy); high.push(C+Ih-dy); midGross.push(C+Ig-dy); assets.push(Ay); bser.push(Ib); cser.push(C);
+    const dy=debt[y+1], Ay=C+flat0+Im;
+    mid.push(Ay-dy); low.push(C+flat0+Il-dy); high.push(C+flat0+Ih-dy); midGross.push(C+flat0+Ig-dy); assets.push(Ay); bser.push(Ib); cser.push(C);
     koop.push((Ay-dy)/Math.pow(1+R.infl/100,y+1)); }
   const reach=t=>{ for(let y=0;y<=HZ;y++){ if(mid[y]>=t) return y; } return null; };
   // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Vooruitblik (via fireInputs.emergencyGoal)
@@ -3467,8 +3472,9 @@ function fireModel(R, inputs){
   const assetParts=(function(){ const items=(inputs.belegdItems||[]).slice(); if((+R.een||0)>0) items.push({naam:'Eenmalige inleg', waarde:+R.een||0});
     const parts=[];
     if(belegd0>0) items.forEach((it,i)=>{ const share=(+it.waarde||0)/belegd0; parts.push({naam:it.naam, kind:'belegging', col:ASSETCOL[i%ASSETCOL.length], series:bser.map(b=>b*share)}); });
+    (inputs.flatItems||[]).forEach(it=>{ const w=+it.waarde||0; if(w>0) parts.push({naam:it.naam, kind:'flat', col:'#a8a29e', series:bser.map(_=>w)}); });   // niet-groeiende bezittingen: constant = waarde
     if(cser.some(v=>v>0.5)) parts.push({naam:'Spaargeld / cash', kind:'cash', col:'#94a3b8', series:cser.slice()});
-    const inleg=assets.map((a,i)=>Math.max(a-cser[i]-bser[i],0)); if(inleg.some(v=>v>0.5)) parts.push({naam:'Nieuwe inleg', kind:'inleg', col:'#818cf8', series:inleg});
+    const inleg=assets.map((a,i)=>Math.max(a-cser[i]-flat0-bser[i],0)); if(inleg.some(v=>v>0.5)) parts.push({naam:'Nieuwe inleg', kind:'inleg', col:'#818cf8', series:inleg});
     return parts; })();
   const ms=[];
   if(noodDoel>0) ms.push({key:'nood',nm:'Noodfonds',target:Math.round(noodDoel),col:'#34d399',icon:'shield',sub:'buffer compleet'});
@@ -3489,7 +3495,7 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},missing:inputs.missing};
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},missing:inputs.missing};
 }
 function reisModel(){ const inputs=fireInputs(); return fireModel(fireState(inputs, SET.reis||{}), inputs); }   // wrapper: inputs één keer, ongewijzigde uitkomst
 // ---- Monte Carlo: slagingskans + percentiel-band (lokaal, op verzoek) ----
@@ -3497,23 +3503,23 @@ function reisRandn(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.ran
 let _fireMC=null;
 function fireMonteCarlo(M){
   const R=M.R, nowY=M.nowY, HZ=M.HZ; const goal=M.FIRE; if(!(goal>0)) return null;
-  const sim=M.sim||{}, liq0=sim.liq0||0, belegd0=sim.belegd0||0, vrij=sim.vrij||0, volYear=(sim.volYear!=null?sim.volYear:nowY), debt=M.debt||[];
+  const sim=M.sim||{}, liq0=sim.liq0||0, belegd0=sim.belegd0||0, flat0=sim.flat0||0, vrij=sim.vrij||0, volYear=(sim.volYear!=null?sim.volYear:nowY), debt=M.debt||[];
   const mu=R.rend/100, sigma=(R.sigma!=null?+R.sigma:13)/100, SIMS=2000, DELTA=150;
   const byY=Array.from({length:HZ+1},()=>new Float64Array(SIMS)); let succ=0, succPlus=0;
   // spiegelt het deterministische model: belegd potje stochastisch, schuld deterministisch aflossend, cash vlak (+noodfonds), vermogen = verschil
-  for(let s=0;s<SIMS;s++){ let I=belegd0, Ip=belegd0, C=liq0; let netEnd=(C+I)-(debt[0]||0), netPlusEnd=netEnd; byY[0][s]=netEnd;
+  for(let s=0;s<SIMS;s++){ let I=belegd0, Ip=belegd0, C=liq0; let netEnd=(C+flat0+I)-(debt[0]||0), netPlusEnd=netEnd; byY[0][s]=netEnd;
     for(let y=0;y<HZ;y++){ const pmt=M.pmtFor(nowY+y), r=mu+sigma*reisRandn();
       if(nowY+y<volYear) C+=vrij*12;
       I=Math.max(I*(1+r)+pmt*12,0); Ip=Math.max(Ip*(1+r)+(pmt+DELTA)*12,0);
       I=Math.max(I-fireBelasting(R,I),0); Ip=Math.max(Ip-fireBelasting(R,Ip),0);
-      const dy=debt[y+1]||0; netEnd=(C+I)-dy; netPlusEnd=(C+Ip)-dy; byY[y+1][s]=netEnd; }
+      const dy=debt[y+1]||0; netEnd=(C+flat0+I)-dy; netPlusEnd=(C+flat0+Ip)-dy; byY[y+1][s]=netEnd; }
     if(netEnd>=goal) succ++; if(netPlusEnd>=goal) succPlus++; }
   const p10=[],p50=[],p90=[];
   for(let y=0;y<=HZ;y++){ const col=Array.from(byY[y]).sort((a,b)=>a-b); p10.push(col[Math.floor(0.10*SIMS)]); p50.push(col[Math.floor(0.50*SIMS)]); p90.push(col[Math.floor(0.90*SIMS)]); }
   return {p10,p50,p90,succ:Math.round(succ/SIMS*100),succPlus:Math.round(succPlus/SIMS*100),goal};
 }
 function fireMCcached(M){
-  const R=M.R; const sig=[Math.round(M.curNW),R.een,R.pmt,R.grow,R.rend,R.sigma,R.fireMult,R.annualExp,R.taxPct,M.HZ,JSON.stringify(R.steps),Math.round(M.sim.liq0),Math.round(M.sim.belegd0),M.sim.volYear,JSON.stringify((M.debtPay||[]).map(d=>[d.rest,d.per,d.rente]))].join('|');
+  const R=M.R; const sig=[Math.round(M.curNW),R.een,R.pmt,R.grow,R.rend,R.sigma,R.fireMult,R.annualExp,R.taxPct,M.HZ,JSON.stringify(R.steps),Math.round(M.sim.liq0),Math.round(M.sim.belegd0),Math.round(M.sim.flat0),M.sim.volYear,JSON.stringify((M.debtPay||[]).map(d=>[d.rest,d.per,d.rente]))].join('|');
   if(_fireMC && _fireMC.sig===sig) return _fireMC.res;
   let res=null; try{ res=fireMonteCarlo(M); }catch(_){}
   _fireMC={sig,res}; return res;
