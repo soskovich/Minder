@@ -6559,6 +6559,16 @@ function applyPending(list){
   return add;
 }
 function _softKey(t){ const n=((t.name||t.desc||'').toUpperCase().match(/[A-Z]/g)||[]).join('').slice(0,8); return t.date+'|'+(+t.amount).toFixed(2)+'|'+n; }
+// onderscheidende referentie uit de omschrijving (Tikkie-ID / Kenmerk / mandaat): een cijferreeks ≥6 telt als uniek kenmerk
+function _refTokens(t){ const m=((t.desc||t.name||'').match(/\d{6,}/g)||[]); return [...new Set(m)].sort().join(','); }
+// dedup-vingerafdruk voor de opschoontool: primair een stabiel bank-id (descriptor-drift = zelfde tx);
+// anders datum|bedrag|naam-begin + de referentie-set, zodat losse betalingen met een eigen referentie (bv. 4× Tikkie €15) niet samensmelten,
+// maar een pinopname met alleen een gedrifte automaatnaam (Geldmaat "Zwanebloem 9" ↔ "GM Zwanebloe", geen referentie) wél als dubbel telt.
+function _dupSig(t){
+  if(t.bankRef) return 'B|'+(t.acc||'')+'|'+t.bankRef;
+  const n=((t.name||t.desc||'').toUpperCase().match(/[A-Z]/g)||[]).join('').slice(0,8);
+  return 'H|'+t.date+'|'+(+t.amount).toFixed(2)+'|'+n+'|'+_refTokens(t);
+}
 function commitTx(newTxns, balances){
   let added=0; const existing=new Set(TX.map(t=>t.id));
   const soft=new Map(); for(const t of TX){ soft.set(_softKey(t), {acc:t.acc, src:t.src}); }
@@ -6573,11 +6583,12 @@ function commitTx(newTxns, balances){
   return added;
 }
 function findDuplicateIds(){
-  // dubbel = zelfde datum, bedrag en winkel — ongeacht rekening-id, bron of pending-status.
+  // dubbel = zelfde datum, bedrag en winkel — ongeacht rekening-id, bron of pending-status,
+  // maar met dezelfde onderscheidende referentie (anders zijn het losse betalingen, bv. meerdere Tikkies van eenzelfde bedrag op één dag).
   // we houden het 'beste' exemplaar: geboekt vóór pending, live (psd2) vóór import.
   const order=TX.slice().sort((a,b)=> (a.pending?1:0)-(b.pending?1:0) || (b.src==='psd2'?1:0)-(a.src==='psd2'?1:0) );
   const seen=new Set(), remove=new Set();
-  for(const t of order){ const sk=_softKey(t); if(seen.has(sk)) remove.add(t.id); else seen.add(sk); }
+  for(const t of order){ const sk=_dupSig(t); if(seen.has(sk)) remove.add(t.id); else seen.add(sk); }
   return remove;
 }
 function cleanupDuplicates(){   // toon een controlelijst i.p.v. blind verwijderen
