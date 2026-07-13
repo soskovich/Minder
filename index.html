@@ -6561,11 +6561,11 @@ function applyPending(list){
 function _softKey(t){ const n=((t.name||t.desc||'').toUpperCase().match(/[A-Z]/g)||[]).join('').slice(0,8); return t.date+'|'+(+t.amount).toFixed(2)+'|'+n; }
 function commitTx(newTxns, balances){
   let added=0; const existing=new Set(TX.map(t=>t.id));
-  const soft=new Map(); for(const t of TX){ soft.set(_softKey(t), t.acc); }
+  const soft=new Map(); for(const t of TX){ soft.set(_softKey(t), {acc:t.acc, src:t.src}); }
   for(const t of newTxns){ if(!t) continue; if(existing.has(t.id)) continue;
     const sk=_softKey(t), ex=soft.get(sk);
-    if(ex!==undefined && ex!==t.acc) continue;   // zelfde transactie via een andere rekening-id/bron → dubbel, overslaan
-    TX.push(t); existing.add(t.id); soft.set(sk,t.acc); added++; }
+    if(ex && ex.acc!==t.acc && ex.src!==t.src) continue;   // dedup alleen over verschillende bronnen (bv. CSV↔PSD2); twee PSD2-rekeningen (Main/Zakgeld) worden niet meer tegen elkaar weggegooid
+    TX.push(t); existing.add(t.id); soft.set(sk,{acc:t.acc,src:t.src}); added++; }
   if(balances) for(const a in balances){ ACCMETA[a]=Object.assign(ACCMETA[a]||{}, balances[a]); }
   TX.sort((a,b)=>a.date.localeCompare(b.date));
   applyOwnAccounts(); buildAccMeta(); save();
