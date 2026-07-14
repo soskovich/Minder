@@ -6246,6 +6246,9 @@ function setPrivacy(){
     <div class="small muted" style="margin:8px 0 6px"><b>Exporteren (lokaal):</b> een CSV-bestand, gemaakt op dit toestel.</div>
     <button class="btn sec" style="margin-bottom:8px" onclick="exportTxCSV()">${ICON('folder')} Exporteer transacties (CSV)</button>
     <button class="btn sec" style="margin-bottom:8px" onclick="exportPotjesCSV()">${ICON('target')} Exporteer potjes/budgetten (CSV)</button>
+    <div class="small muted" style="margin:14px 0 6px"><b>Briefing:</b> schrijf je financiële signalen (safe-to-spend, afwijkende uitgave, aankomende verplichting, Vermogensreis) naar je CommandCenter-map. Je dagelijkse briefing leest ze daar in. Kies de map één keer; daarna exporteert Minder ook automatisch bij openen.</div>
+    <button class="btn sec" style="margin-bottom:8px" onclick="kiesMinderExportMap()">${ICON('folder')} Kies exportmap (eenmalig)${SET.briefingFolder?` · ${esc(SET.briefingFolder)}`:''}</button>
+    <button class="btn sec" style="margin-bottom:8px" onclick="exporteerMinderSignalen(false)">${ICON('check')} Exporteer signalen naar briefing</button>
     <div class="small muted" style="margin:14px 0 6px"><b>Back-up &amp; herstel:</b> één bestand met al je gegevens (transacties, potjes, doelen, schulden, instellingen). Handig vóór je browsergegevens wist of een nieuw toestel.</div>
     <button class="btn sec" style="margin-bottom:8px" onclick="exportBackup()">${ICON('doc')} Volledige back-up maken</button>
     <button class="btn sec" style="margin-bottom:8px" onclick="restoreBackupPick()">${ICON('sync')} Herstel uit back-up</button>
@@ -6281,6 +6284,112 @@ function restoreBackup(file){
 }
 function exportTxCSV(){ if(!TX.length){ toast('Geen transacties'); return; } const rows=[['datum','bedrag','categorie','omschrijving','rekening']]; TX.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>rows.push([t.date,(+t.amount).toFixed(2).replace('.',','),(CATS[catOf(t)]?CATS[catOf(t)].name:catOf(t)),(t.name||t.desc||''),(t.acc||'')])); csvDownload('minder-transacties.csv',rows); toast(`${ICON('check')} ${TX.length} transacties geexporteerd`); }
 function exportPotjesCSV(){ const B=SET.budgets||{}; const ks=Object.keys(B).filter(k=>+B[k]>0); if(!ks.length){ toast('Nog geen potjes'); return; } const rows=[['categorie','maandbudget']]; ks.forEach(k=>rows.push([(CATS[k]?CATS[k].name:k),(+B[k]).toFixed(2).replace('.',',')])); csvDownload('minder-potjes.csv',rows); toast(`${ICON('check')} potjes geexporteerd`); }
+
+/* ============================================================================
+   BRIEFING-EXPORT: financiële signalen naar de dagelijkse briefing.
+   Schrijft minder-signalen.json in het blokformaat van briefing-spec.md naar
+   je CommandCenter-map. Geporteerd uit minderBriefingExport.js (de spec/referentie)
+   en aangesloten op de echte app-functies. Zie minder-signalen-export.md.
+   ========================================================================== */
+
+// Vermogensreis op koers? Spiegel van je eigen cijfers, geen advies.
+// true = FIRE-getal wordt gehaald op of vóór je streefjaar, false = niet/te laat,
+// undefined = geen oordeel (geen FIRE-getal ingesteld of saldo onvolledig).
+function fireOpKoers(){
+  let M; try{ M=reisModel(); }catch(_){ return undefined; }
+  if(!M || !(M.FIRE>0)) return undefined;
+  if(M.missing) return undefined;
+  const fire=(M.ms||[]).find(m=>m.key==='fire');
+  if(!fire) return undefined;
+  if(fire.yr==null) return false;
+  return fire.yr <= M.targetYear;
+}
+
+// Adapter: echte Minder-data → het platte blokformaat dat de signalen verwachten.
+function minderBriefingState(){
+  const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const num=fn=>{ try{ const v=fn(); return (typeof v==='number'&&isFinite(v))?v:NaN; }catch(_){ return NaN; } };
+  let verpl=[];
+  try{ const today=new Date(); today.setHours(0,0,0,0);
+    verpl=(liquidityDaily(10).events||[])
+      .filter(e=>e.type==='fixed' && e.amt<0)
+      .map(e=>({naam:e.name, bedrag:-e.amt, dagenTotVervaldag:Math.round((e.date-today)/86400000)}))
+      .filter(v=>v.dagenTotVervaldag>=0);
+  }catch(_){}
+  return {
+    safeToSpend: num(()=>safeToSpend().safe),
+    safeToSpendBuffer: +SET.stsBuffer||0,
+    netSpendPeriode: num(()=>netSpend(txOfMonth(ym))),
+    netSpendPatroon: num(()=>baselineSpend()),
+    verplichtingen: verpl,
+    fireOpKoers: fireOpKoers()
+  };
+}
+
+function _signaalSafeToSpend(state){
+  const rest=state.safeToSpend, buffer=state.safeToSpendBuffer??0;
+  if(!isFinite(rest)) return null;
+  if(rest>buffer) return null;
+  return { sectie:'financien', prioriteit:rest<0?'hoog':'midden',
+    samenvatting:rest<0?`Je zit deze periode ${Math.abs(Math.round(rest))} euro over je safe-to-spend.`:`Je safe-to-spend is nog ${Math.round(rest)} euro, dat begint te knellen.`,
+    actie:'Houd de rest van de periode kort.', detail:null };
+}
+function _signaalAfwijkendeUitgave(state){
+  const nu=state.netSpendPeriode, patroon=state.netSpendPatroon;
+  if(!isFinite(nu)||!isFinite(patroon)||patroon<=0) return null;
+  const ratio=nu/patroon; if(ratio<1.15) return null;
+  const procent=Math.round((ratio-1)*100);
+  return { sectie:'financien', prioriteit:ratio>=1.4?'hoog':'midden',
+    samenvatting:`Je uitgaven liggen deze periode ${procent} procent boven je patroon.`,
+    actie:'Bekijk of dit bewust is.', detail:`netSpend ${Math.round(nu)} versus patroon ${Math.round(patroon)}` };
+}
+function _signaalVerplichting(state){
+  const dagen=5;
+  const komende=(state.verplichtingen||[]).filter(v=>v.dagenTotVervaldag<=dagen).sort((a,b)=>a.dagenTotVervaldag-b.dagenTotVervaldag);
+  if(!komende.length) return null;
+  const e=komende[0];
+  return { sectie:'financien', prioriteit:'midden',
+    samenvatting:`${e.naam} van ${Math.round(e.bedrag)} euro vervalt over ${e.dagenTotVervaldag} dagen.`,
+    actie:'Zorg dat er dekking is.', detail:komende.length>1?`${komende.length} verplichtingen in de komende ${dagen} dagen`:null };
+}
+function _signaalVermogensreis(state){
+  const opKoers=state.fireOpKoers; if(opKoers===undefined) return null;
+  if(opKoers) return { sectie:'financien', prioriteit:'laag', samenvatting:'Je Vermogensreis ligt op koers.', actie:null, detail:null };
+  return { sectie:'financien', prioriteit:'midden', samenvatting:'Je Vermogensreis raakt uit koers ten opzichte van je plan.', actie:'Kijk of dit tijdelijk is of om bijsturen vraagt.', detail:null };
+}
+function bouwMinderBriefingPayload(){
+  const state=minderBriefingState();
+  const blokken=[_signaalSafeToSpend(state),_signaalAfwijkendeUitgave(state),_signaalVerplichting(state),_signaalVermogensreis(state)].filter(Boolean);
+  return { bron:'minder', versie:1, gegenereerd_op:new Date().toISOString(), blokken };
+}
+
+// Eenmalig: kies de CommandCenter-map. Vereist een klik (browserregel).
+async function kiesMinderExportMap(){
+  if(!FSA){ alert('Exporteren naar een map werkt in Chrome of Edge. Anders kun je het bestand niet automatisch wegschrijven.'); return; }
+  try{
+    const h=await window.showDirectoryPicker({id:'minder-briefing',mode:'readwrite'});
+    await idbSet('briefingDir',h);
+    SET.briefingFolder=h.name; save();
+    toast(`${ICON('check')} Exportmap gekozen: ${h.name}`);
+    await exporteerMinderSignalen(false);
+  }catch(e){ if(e&&e.name!=='AbortError') alert('Kon de map niet kiezen: '+e.message); }
+}
+// Schrijf de actuele signalen weg. silent=true bij automatische export (geen toasts, geen permissieprompt).
+async function exporteerMinderSignalen(silent){
+  try{
+    const h=await idbGet('briefingDir');
+    if(!h){ if(!silent) toast('Kies eerst een exportmap'); return; }
+    let p=await h.queryPermission({mode:'readwrite'});
+    if(p!=='granted'){ if(silent) return; p=await h.requestPermission({mode:'readwrite'}); }
+    if(p!=='granted'){ if(!silent) toast('Geen schrijftoegang tot de map'); return; }
+    const payload=bouwMinderBriefingPayload();
+    const fh=await h.getFileHandle('minder-signalen.json',{create:true});
+    const w=await fh.createWritable(); await w.write(JSON.stringify(payload,null,2)); await w.close();
+    if(!silent) toast(`${ICON('check')} ${payload.blokken.length} ${payload.blokken.length===1?'signaal':'signalen'} geëxporteerd`);
+  }catch(e){ if(!silent) toast('Export mislukt'); }
+}
+// Automatische export bij openen van de app: alleen als er data is en de map al toestemming heeft.
+window.addEventListener('load',()=>{ try{ if(typeof TX!=='undefined' && TX && TX.length) exporteerMinderSignalen(true); }catch(_){} });
 
 function setAcc(a){accFilter=a;renderTx();}
 
