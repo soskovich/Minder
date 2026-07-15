@@ -6319,7 +6319,7 @@ function minderBriefingState(){
   return {
     safeToSpend: num(()=>safeToSpend().safe),
     safeToSpendBuffer: +SET.stsBuffer||0,
-    netSpendPeriode: num(()=>netSpend(txOfMonth(ym))),
+    netSpendPeriode: num(()=>{ const de=daysElapsed(ym); if(!de.elapsed||de.elapsed<7) return NaN; return netSpend(txOfMonth(ym))*de.dim/de.elapsed; }),  // tempo-gecorrigeerd: lopende uitgave -> verwachte volledige maand (pas vanaf dag 7)
     netSpendPatroon: num(()=>baselineSpend()),
     verplichtingen: verpl,
     fireOpKoers: fireOpKoers()
@@ -6340,8 +6340,8 @@ function _signaalAfwijkendeUitgave(state){
   const ratio=nu/patroon; if(ratio<1.15) return null;
   const procent=Math.round((ratio-1)*100);
   return { sectie:'financien', prioriteit:ratio>=1.4?'hoog':'midden',
-    samenvatting:`Je uitgaven liggen deze periode ${procent} procent boven je patroon.`,
-    actie:'Bekijk of dit bewust is.', detail:`netSpend ${Math.round(nu)} versus patroon ${Math.round(patroon)}` };
+    samenvatting:`In dit tempo kom je deze maand ${procent} procent boven je patroon uit.`,
+    actie:'Bekijk of dit bewust is.', detail:`verwachte maanduitgave ${Math.round(nu)} versus patroon ${Math.round(patroon)}` };
 }
 function _signaalVerplichting(state){
   const dagen=5;
