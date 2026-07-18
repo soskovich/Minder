@@ -876,10 +876,11 @@ function toggleInsMonth(m){ SET.insMonths=(SET.insMonths||[]).slice(); const i=S
 // geaggregeerde totalen over de actieve periode (gedeeld door dashboard + inzichten)
 function ptot(){
   const pm=periodMonths(), list=periodTx();
-  let income=0, est=false; for(const m of pm){ const tm=totals(m); income+=tm.income; if(tm.incomeBasis==='basisnorm'||tm.incomeBasis==='onbekend') est=true; }
+  let income=0, budget=0, limit=0, est=false;
+  for(const m of pm){ const tm=totals(m); income+=tm.income; budget+=tm.budget; limit+=tm.limit; if(tm.incomeBasis==='basisnorm'||tm.incomeBasis==='onbekend') est=true; }   // periode-budget = som van de maand-budgetten (potjes-som per maand); limiet idem als referentie
   let spend=0; const byCat={};
   for(const t of list){ const c=catOf(t), meta=CATS[c]; byCat[c]=(byCat[c]||0)+t.amount; if(meta.type==='expense') spend+=-t.amount; }   // netto: terugstorting verlaagt de uitgave
-  return {list, income, spend, budget:monthBudget(inc), byCat, months:pm.length, incomeEst:est};
+  return {list, income, spend, budget, limit, byCat, months:pm.length, incomeEst:est};
 }
 // cirkeldiagram + legenda over een byCat-map
 function renderDonut(byCat){
@@ -1027,23 +1028,22 @@ function potRoomBase(){
 }
 // één regel: som van je potjes + hoeveel er nog vrij is binnen je grens (na vaste lasten)
 function potRoomLineHTML(potTotal){ const b=potRoomBase();
-  if(b.budget<=0) return `Samen al je potjes: <b>${euro0(potTotal)}</b> per maand`;
+  if(b.budget<=0) return `Samen al je potjes: <b>${euro0(potTotal)}</b> per maand · dit is je maandbudget`;
+  const over=Math.round(potTotal-b.budget);
+  if(over>0) return `<span style="color:var(--amber)">${ICON('warn')} Samen zijn je potjes <b>${euro0(potTotal)}</b> — dat is je maandbudget, en <b>${euro0(over)}</b> boven je inkomen-limiet (${euro0(b.budget)}, ${SET.limit}%). Dat mag: je plant meer dan je limiet, wat ten koste kan gaan van sparen. Verlaag een potje, of pas je limiet aan.</span>`;
   const free=Math.round(b.budget-potTotal);
-  if(free<0) return `<span style="color:var(--amber)">${ICON('warn')} Je potjes (${euro0(potTotal)}) zijn <b>${euro0(-free)}</b> meer dan je bestedingslimiet (${euro0(b.budget)}). Verlaag een potje of pas je limiet aan.</span>`;
-  return `Samen al je potjes: <b>${euro0(potTotal)}</b>/mnd · nog <b style="color:var(--teal)">${euro0(free)}</b> vrij binnen je budget`;
+  return `Samen al je potjes: <b>${euro0(potTotal)}</b>/mnd · dit is je maandbudget, <b style="color:var(--teal)">${euro0(free)}</b> onder je inkomen-limiet`;
 }
 // is een categorie grotendeels een vaste last? (budget schaalt dan niet mee met inkomen)
 function isFixedCat(k){ return FIXED_CATS.has(k)||k==='vervoer'||k==='zorg'; }
-// dynamisch maandbudget: vaste categorieën constant, variabele categorieën geschaald naar de
-// bestedingsruimte (70%) van het inkomen van DEZE maand → meer inkomen = meer variabel budget.
+// per-categorie budget = je RAUWE potje (potjes leidend). Sinds het maandtotaal de potjes-som is,
+// verviel de oude neerwaartse scaling naar de inkomens-ruimte; effectief budget = precies wat je instelde.
+// varRoom = som van je variabele potjes (basis voor het dag-/weektempo).
 function effectiveBudgets(m){
-  const B=SET.budgets||{}, room=totals(m).budget;
-  let fixedB=0, varB=0;
-  for(const k in B){ if(+B[k]<=0) continue; if(isFixedCat(k)) fixedB+=+B[k]; else varB+=+B[k]; }
-  const varRoom=Math.max(room-fixedB,0), scaleV = varB>0 ? varRoom/varB : 0;
-  const out={};
-  for(const k in B){ if(+B[k]<=0) continue; out[k]= isFixedCat(k) ? +B[k] : Math.max(Math.round((+B[k])*scaleV/5)*5,0); }
-  return {out, room, fixedB:Math.round(fixedB), varRoom:Math.round(varRoom), scaleV};
+  const B=SET.budgets||{};
+  let fixedB=0, varB=0; const out={};
+  for(const k in B){ if(+B[k]<=0) continue; out[k]=+B[k]; if(isFixedCat(k)) fixedB+=+B[k]; else varB+=+B[k]; }
+  return {out, room:fixedB+varB, fixedB:Math.round(fixedB), varRoom:Math.round(varB), scaleV:1};
 }
 function setCatBudget(k,val){ // bestaand potje wijzigen = vanaf volgende maand; nieuw potje = meteen actief
   const exists = +(SET.budgets||{})[k] > 0;
@@ -1314,6 +1314,8 @@ function baselineSpend(){
   const lower=sp.slice(0,Math.ceil(sp.length/2));
   return Math.round(lower[Math.floor(lower.length/2)]);
 }
+// inkomen-limiet (SET.limit% van inkomen, of cap/baseline/damper). ROL sinds potjes leidend zijn: dit is
+// niet meer het maandtotaal, maar de REFERENTIE voor de spiegel én de basis voor sparen/liquiditeit.
 function monthBudget(inc){
   inc=+inc||0; const pctBud=inc*SET.limit/100; const mode=SET.limitMode||'pct';
   if(mode==='cap'){ const cap=+SET.spendCap||0; return cap>0?cap:pctBud; }
@@ -1337,8 +1339,10 @@ function totals(m){
     if(income>0){ inc=income; basis='gedetecteerd'; }
     else { inc=baseIncome(); basis = inc>0?'basisnorm':'onbekend'; }
   } else { inc=SET.income||0; basis='handmatig'; }
-  const budget = monthBudget(inc);
-  return {list,income:inc,detectedIncome:income,spend,internal,byCat,budget,incomeBasis:basis};
+  const limit = monthBudget(inc);      // inkomen-limiet: sinds potjes leidend zijn is dit de REFERENTIE voor de spiegel, niet meer het plafond
+  const pot = totalBudget();           // som van je potjes = leidend maandtotaal
+  const budget = pot>0 ? pot : limit;  // geen potjes? val terug op de inkomen-limiet, zodat de app niet zonder budget valt
+  return {list,income:inc,detectedIncome:income,spend,internal,byCat,budget,limit,potTotal:pot,incomeBasis:basis};
 }
 // mediaan maandinkomen (robuuster dan gemiddelde tegen incidentele pieken zoals vakantiegeld)
 function avgIncome(){
@@ -1941,9 +1945,11 @@ function renderUpcoming(){
   </div>`;
 }
 function renderWeekVarKPI(){
-  const m=curMonth, sv=splitFixedVar(m), de=daysElapsed(m), bud=totals(m).budget;
+  const m=curMonth, sv=splitFixedVar(m), de=daysElapsed(m), eb=effectiveBudgets(m);
   const perDay=sv.vari/(de.elapsed||1);
-  const autoDay=Math.max(bud-sv.fixed,0)/de.dim, userDay=+SET.dailyVarBudget||0, tgtDay=userDay>0?userDay:autoDay;
+  // dagtempo op je variabele potjes; geen potjes → val terug op de inkomen-limiet minus vaste lasten
+  const varPool = totalBudget()>0 ? eb.varRoom : Math.max(totals(m).limit - sv.fixed, 0);
+  const autoDay=Math.max(varPool,0)/de.dim, userDay=+SET.dailyVarBudget||0, tgtDay=userDay>0?userDay:autoDay;
   const wk=perDay*7, tgt=tgtDay*7, col=wk<=tgt?'var(--green)':wk<=tgt*1.2?'var(--amber)':'var(--red)';
   return `<div class="card">
     <div class="row"><span class="hlabel" style="margin:0;flex:1">Variabele uitgave per week</span><span class="small muted" onclick="openVarTx()" style="cursor:pointer;color:var(--teal)">transacties ›</span></div>
@@ -1998,12 +2004,13 @@ function heroProjection(m){
       <div style="font-size:20px;font-weight:800;color:${projected<0?'var(--red)':'var(--teal)'};margin:4px 0 2px">${euro(projected)}</div>
       <div style="font-size:12px;color:var(--mut)">Stel een spaardoel in om je koers te volgen. ›</div></div>`;
   }
-  // andere maanden: budget-over hero (ongewijzigd)
+  // andere maanden: budget-over hero (budget = je potjes-som; inkomen-limiet als spiegel)
   const pctRaw=t.budget>0?Math.round(t.spend/t.budget*100):0;
-  const lbl=`${monthName} · over (binnen ${SET.limit}%)`;
+  const overLimit=t.budget>t.limit && t.limit>0;
+  const lbl=`${monthName} · over`;
   const col = pctRaw<100?'var(--green)':'var(--red)';
   const big=euro(Math.max(t.budget-t.spend,0));
-  const sub=`${euro(t.spend)} uitgegeven van ${euro(t.budget)} budget`;
+  const sub=`${euro(t.spend)} uitgegeven van ${euro(t.budget)} budget${overLimit?` · ${euro0(t.budget-t.limit)} boven limiet`:''}`;
   return `<div class="hero2">
     <div class="hlbl">${lbl}${t.incomeEst?' <span class="tag">geschat</span>':''}</div>
     <div class="hbig" style="color:${col}">${big}</div>
@@ -4123,10 +4130,11 @@ function dayBudgetNow(){
   const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); const de=daysElapsed(nowYM);
   const userDay=+SET.dailyVarBudget||0;
   const expInc=SET.autoIncome?baseIncome():(+SET.income||0);
-  const room=Math.round(monthBudget(expInc));
   const fixHist=months().filter(x=>x<nowYM).slice(-3).map(mm=>splitFixedVar(mm).fixed).filter(v=>v>0).sort((a,b)=>a-b);
   const typFixed=fixHist.length?fixHist[Math.floor(fixHist.length/2)]:splitFixedVar(nowYM).fixed;
-  const dagdoel=Math.round(userDay>0?userDay:Math.max(room-typFixed,0)/(de.dim||30));
+  // dagtempo op je variabele potjes; geen potjes → inkomen-limiet minus typische vaste lasten (als vanouds)
+  const varPool = totalBudget()>0 ? effectiveBudgets(nowYM).varRoom : Math.max(Math.round(monthBudget(expInc))-typFixed,0);
+  const dagdoel=Math.round(userDay>0?userDay:varPool/(de.dim||30));
   let spent=0; const today=nowYM+'-'+String(now.getDate()).padStart(2,'0');
   for(const x of txOfMonth(nowYM)){ if(x.date===today && isExpenseTx(x) && !isFixed(x)) spent+=-x.amount; }   // netto: een terugstorting van vandaag verlaagt de dagteller
   return {dagdoel, spent:Math.round(spent), rest:Math.max(dagdoel-spent,0), over:spent>dagdoel};
@@ -5676,6 +5684,7 @@ function monthStatusCard(m){
         ${kv('Maandbudget', euro0(bud))}
         ${kv('Tempo', tempo, col)}
         ${kv('Dag', dom+' van '+dim)}
+        ${t.budget>t.limit&&t.limit>0?`<div class="row" style="justify-content:space-between;padding:5px 0;font-size:11px;border-top:1px solid var(--line);color:var(--amber)"><span>boven inkomen-limiet</span><span style="font-weight:700">${euro0(t.budget-t.limit)} (${SET.limit}%)</span></div>`:''}
       </div>
     </div></div>`;
 }
