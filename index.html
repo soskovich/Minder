@@ -1609,6 +1609,21 @@ function renderEmpty(){
 // maand-liquiditeit: wat is deze maand NOG niet ontvangen/betaald?
 // "Due" = terugkerende post die deze kalendermaand nog niet in je transacties voorkomt
 // (niet op basis van de typische dag, die kan al gepasseerd zijn terwijl het bedrag nog moet komen).
+// Onbestede variabele potjes deze maand (potjes = je plan; gedeeld door de liquiditeitskaart en safeToSpend).
+function varPlanRemaining(ym){
+  const sp=catSpendMap(ym), B=SET.budgets||{}; let v=0;
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0||FIXED_CATS.has(k)) continue; v+=Math.max(bud-(sp[k]||0),0); }
+  return Math.round(v);
+}
+// Spiegel (Optie B): je variabele plan (potjes) vs je verwachte tempo (prognose). Leeg als het gat niet materieel is.
+// kind 'safe' = amber (op de Veilig-te-besteden-opbouw), anders teal (op de liquiditeitskaart). Geen blokkade, alleen spiegel.
+function varTempoMirror(plan, tempo, kind){
+  plan=Math.round(plan||0); tempo=Math.round(tempo||0);
+  if(!(tempo-plan >= Math.max(50, tempo*0.2))) return '';
+  const gap=tempo-plan;
+  if(kind==='safe') return `<div style="font-size:11.5px;line-height:1.45;color:#e8c372;background:rgba(232,195,114,.08);border:1px solid rgba(232,195,114,.28);border-radius:9px;padding:8px 10px;margin:8px 0 2px">Je variabele potjes hebben nog ${euro0(plan)}; op je tempo geef je deze maand naar verwachting ~${euro0(tempo)} uit (${euro0(gap)} meer).</div>`;
+  return `<div style="font-size:11.5px;line-height:1.45;color:var(--teal);background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.28);border-radius:9px;padding:8px 10px;margin-top:8px">Je plan (variabele potjes) reserveert hiervan ${euro0(plan)}; het verschil van ${euro0(gap)} is je tempo boven je plan.</div>`;
+}
 function monthLiquidity(){
   const sched=recurringSchedule(), f=forecastModel();
   const now=new Date(); const dom=now.getDate(); const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
@@ -1652,8 +1667,9 @@ function monthLiquidity(){
   const dailyVar=(elapsedM>=3)?(wPace*actualDaily+(1-wPace)*histDaily):histDaily;
   const varDue=Math.round(dailyVar*daysLeft);
   const {sum,missing}=totalBalance(); const buffer=+SET.buffer||0;
-  const projected=Math.round(sum+incDue-fixDue-varDue);
-  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems,fixDueExclCount};
+  const projected=Math.round(sum+incDue-fixDue-varDue);   // forecast blijft de eerlijke voorspelling (Optie B)
+  const varPlan=varPlanRemaining(ym);                      // je variabele plan (potjes), voor de spiegel op de kaart
+  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,varPlan,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems,fixDueExclCount};
 }
 // Veilig te besteden = saldo - nog-niet-betaalde vaste lasten deze maand - nog gereserveerde potjes (budget minus al uitgegeven)
 function safeToSpend(){
@@ -1664,8 +1680,13 @@ function safeToSpend(){
   let reservedVar=0, fixedBudgetUnspent=0;
   for(const k in B){ const bud=+B[k]||0; if(bud<=0) continue; const rest=Math.max(bud-(sp[k]||0),0);
     if(FIXED_CATS.has(k)) fixedBudgetUnspent+=rest; else reservedVar+=rest; }
-  // vangnet: een vaste last die (nog) niet als recurring herkend is, telt toch mee via het budget (neem de grootste schatting)
-  const fixedStillToGo=Math.max(Math.round(L.fixDue||0), Math.round(fixedBudgetUnspent));
+  // vangnet BEGRENSD (Optie B, Kant B): een vaste last die (nog) niet als recurring herkend is telt mee via het budget,
+  // maar nooit meer dan wat op basis van je typische vaste lasten realistisch nog komt — geen gepad budget reserveren.
+  let typicalFixed=0; try{ const fm=forecastModel(); typicalFixed=fm?Math.round(fm.fFixed||0):0; }catch(_){}
+  if(!(typicalFixed>0)){ try{ const _v=months().map(mm=>splitFixedVar(mm).fixed).filter(v=>v>0).sort((a,b)=>a-b); typicalFixed=_v.length?Math.round(_v[Math.floor(_v.length/2)]):0; }catch(_){} }
+  let fixedPaid=0; try{ fixedPaid=Math.round(splitFixedVar(ym).fixed); }catch(_){}
+  const fixedStillExpected=Math.max(typicalFixed-fixedPaid,0);
+  const fixedStillToGo=Math.max(Math.round(L.fixDue||0), Math.min(Math.round(fixedBudgetUnspent), fixedStillExpected));
   // wat al op je spaarrekening(en) staat valt buiten 'veilig te besteden': geen vrij besteedbaar geld
   let savedBal=0; try{ savedBal=totalSaved().sum||0; }catch(_){}
   const spendSaldo = tb.sum - savedBal;
@@ -1682,7 +1703,7 @@ function safeToSpend(){
   const saveRemaining=Math.max(saveTarget-savedThisMonth,0);
   const safe=Math.round(spendSaldo + incDue - fixedStillToGo - reservedVar - saveRemaining);
   return {saldo:tb.sum, savedBal:Math.round(savedBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing,
-    incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), fixDueBudgetExtra:Math.max(fixedStillToGo-Math.round(L.fixDue||0),0), reserved:Math.round(reservedVar), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
+    incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), fixDueBudgetExtra:Math.max(fixedStillToGo-Math.round(L.fixDue||0),0), reserved:Math.round(reservedVar), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
 }
 function renderLiquidityKPI(){
   // liquiditeit is altijd 'vanaf nu vooruit' → alleen zinvol op de lopende/laatste maand
@@ -1702,10 +1723,11 @@ function renderLiquidityKPI(){
     <div class="small muted">huidig saldo · rest van de maand (${L.daysLeft} dgn)${L.missing>0?` · ${ICON('warn')} saldo onvolledig`:''}</div>
     <div style="margin-top:10px">
       <div class="row" style="padding:5px 0;cursor:pointer;gap:8px" onclick="openFixedDue()"><span class="small" style="min-width:0">${ICON('lock')} Vaste lasten (resterend)</span><span class="small" style="font-weight:700;color:var(--teal);flex-shrink:0">${euro(L.fixDue)} ›</span></div>
-      <div class="row" style="padding:5px 0;cursor:pointer;gap:8px" onclick="openVarDue()"><span class="small" style="min-width:0">${ICON('cart')} Variabel (resterend)</span><span class="small" style="font-weight:700;color:var(--teal);flex-shrink:0">${euro(L.varDue)} ›</span></div>
+      <div class="row" style="padding:5px 0;cursor:pointer;gap:8px" onclick="openVarDue()"><span class="small" style="min-width:0">${ICON('cart')} Variabel · op je tempo</span><span class="small" style="font-weight:700;color:var(--teal);flex-shrink:0">${euro(L.varDue)} ›</span></div>
       ${L.incDue>0?`<div class="row" style="padding:5px 0;gap:8px"><span class="small" style="min-width:0">${ICON('coins')} Inkomen nog te komen</span><span class="small" style="font-weight:700;color:var(--green);flex-shrink:0">+${euro(L.incDue)}</span></div>`:''}
-      <div class="row" style="padding:6px 0 2px;margin-top:4px;border-top:1px solid var(--line);gap:8px"><span class="small" style="min-width:0">= Verwacht over einde maand</span><span class="small" style="font-weight:800;flex-shrink:0;color:${L.projected<0?'var(--red)':'var(--txt)'}">${euro(L.projected)}</span></div>
+      <div class="row" style="padding:6px 0 2px;margin-top:4px;border-top:1px solid var(--line);gap:8px"><span class="small" style="min-width:0">= Verwacht eindsaldo</span><span class="small" style="font-weight:800;flex-shrink:0;color:${L.projected<0?'var(--red)':'var(--txt)'}">${euro(L.projected)}</span></div>
       ${monthlySaving>0?`<div class="row" style="padding:3px 0;gap:8px"><span class="small" style="min-width:0">${ICON('target')} Spaarinleg (${savingLabel()})</span><span class="small" style="font-weight:700;color:var(--teal);flex-shrink:0">${euro(monthlySaving)}</span></div>`:''}
+      ${varTempoMirror(L.varPlan, L.varDue, 'card')}
     </div>
   </div>`;
 }
@@ -2156,6 +2178,7 @@ function openSafeToSpend(){
     ${S.fixDueRecurring>0?line('Vaste lasten die nog komen', S.fixDueRecurring, 'var(--mut)', 'openFixedDue()', 'wat deze maand nog wordt afgeschreven'):''}
     ${S.fixDueBudgetExtra>0?line('Vaste lasten uit je budget', S.fixDueBudgetExtra, 'var(--mut)', '', 'budget voor vaste categorieën waar nog geen incasso voor is herkend'):''}
     ${S.reserved>0?line('Gereserveerd in je potjes', S.reserved, 'var(--mut)', "openReservedPotjes()", 'budget dat je per categorie apart zette'):''}
+    ${varTempoMirror(S.reserved, S.varForecast, 'safe')}
     ${(function(){
       const tgt=S.saveTarget||0, onSav=Math.min(S.savedThisMonth||0,tgt);
       if(window._stsEdit){
@@ -2951,7 +2974,7 @@ function vooruitOpbouw(){
   return `<div class="card"><div class="small muted" style="margin-bottom:6px">Opbouw</div>
     ${r('Huidig saldo'+(L.missing>0?' (onvolledig)':''), euro(L.sum), 'var(--mut)')}
     <div class="row" style="padding:5px 0;cursor:pointer;gap:8px" onclick="openFixedDue()"><span class="small">${ICON('lock')} Vaste lasten (resterend)</span><span class="small" style="font-weight:700;color:var(--teal);flex-shrink:0">${euro(L.fixDue)} ›</span></div>
-    <div class="row" style="padding:5px 0;cursor:pointer;gap:8px" onclick="openVarDue()"><span class="small">${ICON('cart')} Variabel (resterend)</span><span class="small" style="font-weight:700;color:var(--teal);flex-shrink:0">${euro(L.varDue)} ›</span></div>
+    <div class="row" style="padding:5px 0;cursor:pointer;gap:8px" onclick="openVarDue()"><span class="small">${ICON('cart')} Variabel · op je tempo</span><span class="small" style="font-weight:700;color:var(--teal);flex-shrink:0">${euro(L.varDue)} ›</span></div>
     ${L.incDue>0?r(ICON('coins')+' Inkomen nog te komen','+'+euro(L.incDue),'var(--green)'):''}
     ${sv>0?r(ICON('target')+' Spaarinleg',euro(sv),'var(--teal)'):''}
     ${r('= Verwacht eind '+mn, euro(L.projected), col)}</div>`;
@@ -2964,7 +2987,7 @@ function vooruitDeep(){
   const row=(label,val,vc,onclick)=>`<div class="ov-row"${onclick?` style="cursor:pointer" onclick="${onclick}"`:''}><span>${label}</span><span style="${vc?`color:${vc};`:''}font-weight:600">${val}${onclick?' ›':''}</span></div>`;
   const verdeling=`<div class="card"><div class="hlabel" style="margin:0 0 10px">Nog deze maand</div>
     ${row('Vaste lasten', euro0(L.fixDue), '', 'openFixedDue()')}
-    ${row('Variabel', euro0(L.varDue), '', 'openVarDue()')}
+    ${row('Variabel · op je tempo', euro0(L.varDue), '', 'openVarDue()')}
     ${L.incDue>0?row('Inkomen nog te komen', '+'+euro0(L.incDue), 'var(--green)'):''}</div>`;
   const items=(L.fixDueItems||[]).filter(s=>!s.excl).slice().sort((a,b)=>(a.day||0)-(b.day||0));
   const allUp=!!SET.vooruitUpAll; const show=allUp?items:items.slice(0,4);
@@ -3882,7 +3905,7 @@ function nogDezeMaandCard(){
   let L=null; try{ L=monthLiquidity(); }catch(_){ return ''; }
   if(!L||!(L.fixDue>0||L.varDue>0||L.incDue>0)) return '';
   const teBetalen=Math.round(L.fixDue+L.varDue), teOntvangen=Math.round(L.incDue), netto=teOntvangen-teBetalen;
-  const sub=`${L.fixDue>0?`vast ${euro0(L.fixDue)}`:''}${(L.fixDue>0&&L.varDue>0)?' \u00b7 ':''}${L.varDue>0?`variabel ${euro0(L.varDue)}`:''}${(L.fixDueExclCount>0)?` \u00b7 ${L.fixDueExclCount} uitgesloten`:''}`;
+  const sub=`${L.fixDue>0?`vast ${euro0(L.fixDue)}`:''}${(L.fixDue>0&&L.varDue>0)?' \u00b7 ':''}${L.varDue>0?`variabel ${euro0(L.varDue)} (tempo)`:''}${(L.fixDueExclCount>0)?` \u00b7 ${L.fixDueExclCount} uitgesloten`:''}`;
   return `<div class="card"><div class="hlabel" style="margin:0 0 12px">Nog deze maand</div>
     <div class="wvo-tiles" style="grid-template-columns:1fr 1fr">
       <div class="wvo-tile"${teBetalen>0?' style="cursor:pointer" onclick="openFixedDue()"':''}><div class="wvo-tl">Nog te betalen</div><div class="wvo-tv" style="color:var(--red)">${euro0(teBetalen)}</div>${sub?`<div class="wvo-ts">${sub}</div>`:''}</div>
