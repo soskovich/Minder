@@ -1042,7 +1042,8 @@ function isFixedCat(k){ return FIXED_CATS.has(k)||k==='vervoer'||k==='zorg'; }
 function effectiveBudgets(m){
   const B=SET.budgets||{};
   let fixedB=0, varB=0; const out={};
-  for(const k in B){ if(+B[k]<=0) continue; out[k]=+B[k]; if(isFixedCat(k)) fixedB+=+B[k]; else varB+=+B[k]; }
+  const _rc=recurringCats();
+  for(const k in B){ if(+B[k]<=0) continue; out[k]=+B[k]; if(_rc.has(k)) fixedB+=+B[k]; else varB+=+B[k]; }   // D1: vast = herkende-recurring categorie (loopt via fixDue); rest variabel; dag-/weektempo op de variabele potjes
   return {out, room:fixedB+varB, fixedB:Math.round(fixedB), varRoom:Math.round(varB), scaleV:1};
 }
 function setCatBudget(k,val){ // bestaand potje wijzigen = vanaf volgende maand; nieuw potje = meteen actief
@@ -1443,11 +1444,11 @@ function recurringSchedule(){
   const map={};
   for(const t of TX){ if(t.pending) continue; const c=catOf(t), meta=CATS[c]; let type=null;
     if(meta.type==='income' && t.amount>0) type='income';
-    else if(meta.type==='expense' && t.amount<0 && (isFixed(t) || isIncasso(t))) type='fixed'; else continue;   // vaste last = vaste-categorie OF automatische incasso
+    else if(meta.type==='expense' && t.amount<0 && (isIncasso(t) || isPeriodicTransfer(t))) type='fixed'; else continue;   // vaste last = herkende terugkerende betaling (incasso OF periodieke overboeking), niet de betaalvorm
     const key=recurKey(t); if(!key) continue;
-    const m=(map[key]=map[key]||{name:t.name,cat:c,type,occ:[],inc:0,tot:0});
+    const m=(map[key]=map[key]||{name:t.name,cat:c,type,occ:[],inc:0,per:0,tot:0});
     m.occ.push({date:t.date, amt:Math.abs(t.amount), ym:t.date.slice(0,7), acc:t.acc});
-    m.tot++; if(isIncasso(t)) m.inc++; }
+    m.tot++; if(isIncasso(t)) m.inc++; if(isPeriodicTransfer(t)) m.per++; }
   const now=new Date(); now.setHours(0,0,0,0); const today=now.getTime();
   const ym0=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const out=[];
@@ -1470,9 +1471,25 @@ function recurringSchedule(){
       nx=new Date(lastD); let g=0; do{ nx.setMonth(nx.getMonth()+intervalM); g++; }while(nx.getTime()<=today && g<60);
     }
     nx=shiftWeekendToMonday(nx);                                // incasso in het weekend -> maandag erna
-    out.push({key:k,name:r.name,cat:r.cat,type:r.type,amount:last.amt,day:lastD.getDate(),intervalM,nextDate:new Date(nx),lastDate:last.date,count:r.occ.length,monthlyEq:Math.round(last.amt/intervalM),acc:last.acc,incasso:(r.tot>0 && r.inc/r.tot>=0.5)});
+    out.push({key:k,name:r.name,cat:r.cat,type:r.type,amount:last.amt,day:lastD.getDate(),intervalM,nextDate:new Date(nx),lastDate:last.date,count:r.occ.length,monthlyEq:Math.round(last.amt/intervalM),acc:last.acc,incasso:(r.tot>0 && r.inc/r.tot>=0.5),periodic:(r.tot>0 && r.per/r.tot>=0.5)});
   }
   return out.sort((a,b)=>a.nextDate-b.nextDate);
+}
+// Herkende herhaling: sleutels van de gedetecteerde terugkerende vaste betalingen (incasso/periodieke overboeking, >=2x, regelmatig).
+// Bron van waarheid voor isFixed. Licht gememoïseerd op _dataGen (recurringSchedule loopt over alle TX; roept isFixed NIET aan -> geen circulariteit).
+let _recurKeys=null, _recurKeysGen=-1;
+function recurringKeys(){
+  if(_recurKeysGen===_dataGen && _recurKeys) return _recurKeys;
+  const s=new Set(); try{ for(const r of recurringSchedule()){ if(r.type==='fixed') s.add(r.key); } }catch(_){}
+  _recurKeys=s; _recurKeysGen=_dataGen; return s;
+}
+// Categorieën met een herkende terugkerende vaste betaling. Hun potjes lopen via fixDue (vast); overige potjes = variabel plan.
+// Gebruikt door safeToSpend/varPlanRemaining/effectiveBudgets om dubbeltelling met fixDue te vermijden.
+let _recurCats=null, _recurCatsGen=-1;
+function recurringCats(){
+  if(_recurCatsGen===_dataGen && _recurCats) return _recurCats;
+  const s=new Set(); try{ for(const r of recurringSchedule()){ if(r.type==='fixed' && r.cat) s.add(r.cat); } }catch(_){}
+  _recurCats=s; _recurCatsGen=_dataGen; return s;
 }
 // per-rekening saldo-check: dekt het huidige saldo de aankomende incasso's tot het volgende inkomen op DIE rekening?
 // alleen rekeningen met een bekend saldo; venster = tot je volgende verwachte inkomen op die rekening (anders 35 dagen).
@@ -1612,7 +1629,8 @@ function renderEmpty(){
 // Onbestede variabele potjes deze maand (potjes = je plan; gedeeld door de liquiditeitskaart en safeToSpend).
 function varPlanRemaining(ym){
   const sp=catSpendMap(ym), B=SET.budgets||{}; let v=0;
-  for(const k in B){ const bud=+B[k]||0; if(bud<=0||FIXED_CATS.has(k)) continue; v+=Math.max(bud-(sp[k]||0),0); }
+  const rc=recurringCats();
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; v+=Math.max(bud-(sp[k]||0),0); }   // potjes van niet-recurring categorieën = variabel plan; recurring loopt via fixDue (geen dubbeltelling)
   return Math.round(v);
 }
 // Spiegel (Optie B): je variabele plan (potjes) vs je verwachte tempo (prognose). Leeg als het gat niet materieel is.
@@ -1635,14 +1653,14 @@ function monthLiquidity(){
   // maandelijkse vaste last die deze maand nog niet langskwam = komt deze maand nog (de afschrijfdatum kan een paar dagen variëren,
   // dus niet uitsluiten omdat de voorspelde dag al voorbij is). Kwartaal/jaar blijven op de voorspelde maand.
   const fixDueItems=sched.filter(s=>{
-    if(s.type!=='fixed' || seen.has(s.key) || !s.incasso) return false;
+    if(s.type!=='fixed' || seen.has(s.key) || !(s.incasso||s.periodic)) return false;
     if(s.intervalM===1) return true;
     return s.nextDate.getFullYear()===now.getFullYear() && s.nextDate.getMonth()===now.getMonth();
   });
   // robuust vangnet: vaste lasten die VORIGE maand langskwamen maar deze maand nog niet (vangt incasso's die het strikte schema mist door wisselende omschrijvingen of korte historie)
   try{ const _ms=months(); const _idx=_ms.indexOf(ym); const _prev=_idx>0?_ms[_idx-1]:null;
     if(_prev){ const _have=new Set(fixDueItems.map(s=>s.key)); const _byk={};
-      for(const t of txOfMonth(_prev)){ if(t.amount<0 && isFixed(t) && isIncasso(t)){ const k=recurKey(t); if(!k) continue; const dd=+t.date.slice(8,10); const e=(_byk[k]=_byk[k]||{amt:0,name:t.name,day:dd}); e.amt+=-t.amount; if(dd>e.day) e.day=dd; } }
+      for(const t of txOfMonth(_prev)){ if(t.amount<0 && (isIncasso(t)||isPeriodicTransfer(t))){ const k=recurKey(t); if(!k) continue; const dd=+t.date.slice(8,10); const e=(_byk[k]=_byk[k]||{amt:0,name:t.name,day:dd}); e.amt+=-t.amount; if(dd>e.day) e.day=dd; } }
       for(const k in _byk){ if(seen.has(k)||_have.has(k)) continue; const it=_byk[k]; if(it.amt<5) continue; fixDueItems.push({key:k,name:it.name,amount:Math.round(it.amt),day:it.day,type:'fixed',intervalM:1}); }
     } }catch(_){}
   // provider-dedupe: schreef ditzelfde bedrijf deze maand al iets af (ook een afwijkend/incidenteel bedrag), dan die vaste last niet nog eens voorspellen
@@ -1676,17 +1694,11 @@ function safeToSpend(){
   const tb=totalBalance(); const L=monthLiquidity();
   const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const sp=catSpendMap(ym); const B=SET.budgets||{};
-  // potjes-reservering: variabele potjes apart van vaste lasten (die lopen via fixDue) -> geen dubbeltelling
-  let reservedVar=0, fixedBudgetUnspent=0;
-  for(const k in B){ const bud=+B[k]||0; if(bud<=0) continue; const rest=Math.max(bud-(sp[k]||0),0);
-    if(FIXED_CATS.has(k)) fixedBudgetUnspent+=rest; else reservedVar+=rest; }
-  // vangnet BEGRENSD (Optie B, Kant B): een vaste last die (nog) niet als recurring herkend is telt mee via het budget,
-  // maar nooit meer dan wat op basis van je typische vaste lasten realistisch nog komt — geen gepad budget reserveren.
-  let typicalFixed=0; try{ const fm=forecastModel(); typicalFixed=fm?Math.round(fm.fFixed||0):0; }catch(_){}
-  if(!(typicalFixed>0)){ try{ const _v=months().map(mm=>splitFixedVar(mm).fixed).filter(v=>v>0).sort((a,b)=>a-b); typicalFixed=_v.length?Math.round(_v[Math.floor(_v.length/2)]):0; }catch(_){} }
-  let fixedPaid=0; try{ fixedPaid=Math.round(splitFixedVar(ym).fixed); }catch(_){}
-  const fixedStillExpected=Math.max(typicalFixed-fixedPaid,0);
-  const fixedStillToGo=Math.max(Math.round(L.fixDue||0), Math.min(Math.round(fixedBudgetUnspent), fixedStillExpected));
+  // Potjes van niet-recurring categorieën = variabel plan; recurring categorieën lopen via fixDue (geen dubbeltelling).
+  // Vast = uitsluitend de herkende terugkerende incasso/periodieke overboeking (L.fixDue). Het budget-vangnet + v54-cap vervallen.
+  let reservedVar=0; const _rc=recurringCats();
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0||_rc.has(k)) continue; reservedVar+=Math.max(bud-(sp[k]||0),0); }
+  const fixedStillToGo=Math.round(L.fixDue||0);
   // wat al op je spaarrekening(en) staat valt buiten 'veilig te besteden': geen vrij besteedbaar geld
   let savedBal=0; try{ savedBal=totalSaved().sum||0; }catch(_){}
   const spendSaldo = tb.sum - savedBal;
@@ -1759,7 +1771,8 @@ function openReservedPotjes(){
   const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const sp=catSpendMap(ym); const B=SET.budgets||{};
   const rows=[];
-  for(const k in B){ const bud=+B[k]||0; if(bud<=0||FIXED_CATS.has(k)) continue; const spent=sp[k]||0; const rest=Math.max(bud-spent,0); rows.push({k,bud,spent,rest}); }
+  const rc=recurringCats();
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; const spent=sp[k]||0; const rest=Math.max(bud-spent,0); rows.push({k,bud,spent,rest}); }   // potjes van niet-recurring categorieën = variabel plan
   rows.sort((a,b)=>b.rest-a.rest);
   const tot=rows.reduce((a,r)=>a+r.rest,0);
   $('#sheet').innerHTML=`<div class="grab"></div>
@@ -5107,13 +5120,8 @@ const FIXED_CATS=new Set(['huur','verzekering','studie','sport','abonnement','ba
 function isFixed(t){
   const ov=(SET.fixOvr||{})[t.id]; if(ov) return ov==='fixed';                   // handmatige override: deze transactie
   const ovm=(SET.fixOvrM||{})[recurKey(t)]; if(ovm) return ovm==='fixed';        // handmatige override: alle van deze winkel
-  const U=(t.desc||'').toUpperCase(), cat=catOf(t);
-  if(/TRAVELCARD|PARKBEE|TANK|SHELL|ESSO|GELDMAAT/.test(U)) return false;       // brandstof/parkeren/opname = variabel
-  if(FIXED_CATS.has(cat)) return true;
-  if(cat==='zorg' && /INCASSO|ZILVEREN KRUIS|PREMIE/.test(U)) return true;       // zorgpremie = vast, losse zorg = variabel
-  if(/HILTERMANN|LEASECONTRACT/.test(U)) return true;                            // leaseauto
-  if(/INCASSO ALGEMEEN DOORLOPEND|PERIODIEKE OVERB|HUUR|HYPOTHEEK|BASISPAKKET|DUO /.test(U)) return true;
-  return false;
+  const c=CATS[catOf(t)]; if(!c || c.type!=='expense') return false;
+  return recurringKeys().has(recurKey(t));   // vast = HERKENDE HERHALING (incasso OF periodieke overboeking, >=2x regelmatig); niet de categorie of betaalvorm
 }
 function renderFixedVariable(list, inc){
   const items=list.filter(x=>isExpenseTx(x));   // incl. terugstortingen: netto vast/variabel
@@ -6777,6 +6785,12 @@ function isIncasso(t){ const U=((t.desc||'')+' '+(t.name||'')).toUpperCase();
   if(/\bBEA\b|BEA,|\bGEA\b|GEA,|ECOM|BETAALPAS|APPLE PAY|GOOGLE PAY|\bIDEAL\b|TIKKIE|CONTACTLOOS/.test(U)) return false;   // kaart/pin/online betaling = geen incasso
   if(t.src==='csv' && /(direct ?debit|incasso)/i.test(t.typ||'')) return true;                                            // N26 CSV: Type-veld
   return /INCASSO|DOORLOPENDE MACHTIGING|MACHTIGING|SEPA DD|DIRECT DEBIT/.test(U);
+}
+// Periodieke overboeking (standing order): óók een herkende terugkerende betaling, andere betaalvorm dan incasso (D3).
+function isPeriodicTransfer(t){ const U=((t.desc||'')+' '+(t.name||'')).toUpperCase();
+  if(/\bBEA\b|BEA,|\bGEA\b|GEA,|ECOM|BETAALPAS|APPLE PAY|GOOGLE PAY|\bIDEAL\b|TIKKIE|CONTACTLOOS/.test(U)) return false;   // kaart/pin = geen periodieke overboeking
+  if(t.src==='csv' && /(standing ?order|periodic)/i.test(t.typ||'')) return true;                                          // N26 CSV: Type-veld
+  return /PERIODIEKE OVERB|PERIODIEKE OVERSCHR|DOORLOPENDE OPDRACHT|STANDING ORDER|PERIODIEKE SEPA/.test(U);
 }
 function subscriptionsList(){
   // alleen ECHTE, opzegbare abonnementen via AUTOMATISCHE INCASSO (geen losse betalingen, geen vaste lasten als verzekering/huur)
