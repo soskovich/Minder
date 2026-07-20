@@ -1,0 +1,13 @@
+{
+  "name": "minder",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Minder, lokale privacyvriendelijke uitgaventracker (PWA)",
+  "scripts": {
+    "check": "node check.js",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  }
+}
