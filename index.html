@@ -1417,6 +1417,9 @@ function savedThisMonth(ym){
   let net=0; for(const t of txOfMonth(ym)){ if(sav.has(t.acc)) net+=t.amount; }
   return Math.max(Math.round(net),0);
 }
+// Saldo-invoer: Instellingen ▸ Inkomen & rekeningen, waar je per rekening een saldo invult.
+// Eén bestemming voor elke "vul je saldo aan"-CTA, zodat de onbekend-staat nooit doodloopt.
+function openSaldoInvoer(){ closeSheet(); go('set'); openSet('income'); }
 // drill-down: rekeningen waaruit je saldo bestaat
 function openBalances(){
   const rows=OWN.map(a=>({a,b:accBalance(a)})).filter(r=>r.b!=null && r.b!==0).sort((x,y)=>y.b-x.b);
@@ -2089,20 +2092,26 @@ function renderDash(){
   const S2=safeToSpend(); const sWarn=S2.missing>0;
   // Geen bekend saldo (bv. vlak na een pure bestand-import): dan is het saldo onbekend, geen stellige \u20ac0,00.
   const balKnown=S2.known>0;
-  const balLine=balKnown
-    ? `totaal saldo ${euro(S2.saldo)} <span style="color:var(--teal)">\u203a</span>`
-    : `totaal saldo <b style="color:var(--mut)">onbekend</b> <span style="color:var(--teal)">voeg toe \u203a</span>`;
   // Rustig-modus: een tekort blijft zichtbaar, maar niet als groot alarmrood getal. Spiegel, gevolg, keuze.
   const krapRustig=isMode('rustig') && S2.safe<0;
   const safeCol=krapRustig?'var(--amber)':(S2.safe<0?'var(--red)':'var(--teal)');
   const krapNote=krapRustig
     ? `<div style="font-size:12.5px;color:var(--mut);margin-top:8px">Je zit deze maand krap. E\u00e9n potje geeft je grip op waar het heen gaat. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="openPotjePick()">Maak potje \u203a</span></div>`
     : '';
-  const hero = `<div class="homehero">
+  // Zonder \u00e9\u00e9n bekend saldo rekent safeToSpend met 0. Dat getal dan groot tonen is even onwaar als "totaal saldo \u20ac0,00":
+  // het hoofdgetal gaat mee in de onbekend-staat, met de saldo-invoer als volgende stap. De berekening blijft ongemoeid.
+  const hero = balKnown
+    ? `<div class="homehero">
     <div class="hh-lbl">Veilig te besteden</div>
     <div class="hh-big" style="color:${safeCol};cursor:pointer" onclick="openSafeToSpend()">${euro(S2.safe)}</div>
-    <div style="font-size:12.5px;color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openBalances()">${balLine}</div>
+    <div style="font-size:12.5px;color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openBalances()">totaal saldo ${euro(S2.saldo)} <span style="color:var(--teal)">\u203a</span></div>
     ${krapNote}
+  </div>`
+    : `<div class="homehero" style="cursor:default">
+    <div class="hh-lbl">Veilig te besteden</div>
+    <div class="hh-big" style="color:var(--mut);font-size:26px;letter-spacing:-.4px">onbekend</div>
+    <div style="font-size:12.5px;color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openSaldoInvoer()">totaal saldo <b style="color:var(--mut)">onbekend</b> <span style="color:var(--teal);font-weight:600">vul je saldo aan \u203a</span></div>
+    <div style="font-size:12.5px;color:var(--mut);margin-top:8px;max-width:34em">Je transacties zijn binnen, je saldo nog niet: een bestand bevat dat niet. Zolang we niet weten wat er op je rekening staat, kunnen we ook niet zeggen wat er vrij is. Je uitgaven en potjes werken gewoon.</div>
   </div>`;
   // ---- recente transacties: kale lijst ----
   const recent=TX.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
@@ -2219,12 +2228,16 @@ function openSafeToSpend(){
       <div style="flex:1"><div style="font-size:14px">${label}</div>${note?`<div class="small muted">${note}</div>`:''}</div>
       <div style="font-weight:700;white-space:nowrap;color:${col||'var(--txt)'}">${euro0(val)}</div>${act?'<span style="color:var(--teal);font-weight:700;margin-left:4px">\u203a</span>':'<span style="width:8px"></span>'}</div>`;
   const aftrek=(S.savedBal||0)+S.fixDue+S.reserved+S.saveReserved;
+  const balUnknown=!(S.known>0);   // geen enkel bekend saldo: dezelfde onbekend-staat als op Home, nooit het één stellig en het ander onbekend
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:14px">
       <div class="muted small">Veilig te besteden</div>
-      <div style="font-size:30px;font-weight:800;color:${S.safe<0?'var(--red)':'var(--teal)'}">${euro(S.safe)}</div>
-      <div class="muted small">zo is dit opgebouwd</div></div>
-    ${line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':'al je gekoppelde rekeningen')}
+      <div style="font-size:${balUnknown?'26px':'30px'};font-weight:800;color:${balUnknown?'var(--mut)':(S.safe<0?'var(--red)':'var(--teal)')}">${balUnknown?'onbekend':euro(S.safe)}</div>
+      <div class="muted small">${balUnknown?'we missen je saldo':'zo is dit opgebouwd'}</div></div>
+    ${balUnknown?`<div style="background:rgba(159,176,199,.07);border-radius:10px;padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:var(--mut)">Een bankbestand bevat geen saldo, dus we weten niet wat er op je rekening staat. De posten hieronder kloppen wel; alleen het startpunt ontbreekt. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="openSaldoInvoer()">Vul je saldo aan ›</span></div>`:''}
+    ${balUnknown
+      ? `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openSaldoInvoer()"><div style="flex:1"><div style="font-size:14px">Totaal saldo</div><div class="small muted">nog geen enkel saldo bekend</div></div><div style="font-weight:700;white-space:nowrap;color:var(--mut)">onbekend</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`
+      : line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':'al je gekoppelde rekeningen')}
     ${S.incDue>0?`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:14px">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
     ${S.savedBal>0?line('Al op je spaarrekening', S.savedBal, 'var(--mut)', "closeSheet();openSavingsPots()", 'staat apart om te sparen, niet vrij besteedbaar'):''}
@@ -2252,8 +2265,8 @@ function openSafeToSpend(){
     })()}
     <div class="row" style="gap:10px;padding:13px 0;margin-top:4px;border-top:2px solid var(--line)">
       <div style="flex:1;font-weight:800;font-size:15px">Veilig te besteden</div>
-      <div style="font-weight:800;font-size:16px;color:${S.safe<0?'var(--red)':'var(--teal)'}">${euro0(S.safe)}</div></div>
-    ${S.safe<0?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:var(--mut)">Wat er deze maand nog vanaf moet, is samen groter dan je saldo plus het inkomen dat nog komt. Vrij besteedbaar is er dan even niet, want elke uitgave gaat nu ten koste van een potje of van wat je opzij wilde zetten. Waar je aan schuift, is aan jou. Je kunt een potje verlagen, je spaardoel deze maand versoepelen, of het zo laten en er bewust rekening mee houden.</div>`:(incDue>0?`<div class="small muted" style="margin-top:12px">Inclusief ${euro0(incDue)} verwacht inkomen dat deze maand nog binnenkomt.</div>`:'')}
+      <div style="font-weight:800;font-size:16px;color:${balUnknown?'var(--mut)':(S.safe<0?'var(--red)':'var(--teal)')}">${balUnknown?'onbekend':euro0(S.safe)}</div></div>
+    ${(!balUnknown && S.safe<0)?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:12.5px;color:var(--mut)">Wat er deze maand nog vanaf moet, is samen groter dan je saldo plus het inkomen dat nog komt. Vrij besteedbaar is er dan even niet, want elke uitgave gaat nu ten koste van een potje of van wat je opzij wilde zetten. Waar je aan schuift, is aan jou. Je kunt een potje verlagen, je spaardoel deze maand versoepelen, of het zo laten en er bewust rekening mee houden.</div>`:(incDue>0?`<div class="small muted" style="margin-top:12px">Inclusief ${euro0(incDue)} verwacht inkomen dat deze maand nog binnenkomt.</div>`:'')}
     <div class="small muted" style="margin-top:12px">Je totale saldo plus het inkomen dat nog binnenkomt, min wat al op je spaarrekening staat, de vaste lasten die nog komen, je variabele potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven. Geld naar je spaarrekening overmaken verandert dit bedrag dus niet.</div>`;
   showSheetBg();
 }
