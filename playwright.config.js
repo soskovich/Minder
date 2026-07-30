@@ -2,6 +2,10 @@ const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests',
+  // tests/wip/ staat buiten de standaardrun: specs voor features die nog niet gebouwd zijn (die lopen
+  // dus in timeouts) en losse diagnostiek. Wel draaien:  WIP=1 npx playwright test tests/wip
+  // PowerShell:  $env:WIP=1; npx playwright test tests/wip
+  testIgnore: process.env.WIP ? [] : '**/wip/**',
   timeout: 30000,
   fullyParallel: false,
   reporter: 'list',
