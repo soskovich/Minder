@@ -161,9 +161,8 @@ test.describe('v55 vast = herkende herhaling', () => {
     expect(r.split).toEqual({ fixed: 20, vari: 425 });
   });
 
-  // BEKEND ROOD: fixDue klopt (900 + 20), maar de Greenpeace-post komt binnen via het vangnet-pad in
-  // monthLiquidity (index.html, "robuust vangnet") en dat maakt items aan zonder incasso/periodic te zetten.
-  // Bedrag en aanwezigheid zijn dus goed, alleen de metadata ontbreekt op fallback-items.
+  // Greenpeace komt hier binnen via het vangnet-pad in monthLiquidity ("robuust vangnet"), niet via het
+  // strikte schema. Deze test bewaakt dat ook die route de betaalvorm meegeeft, niet alleen het bedrag.
   test('fixDue telt incasso en periodieke overboeking', async ({ page }) => {
     await open(page, seed({ giftCharged: false }));
     const r = await page.evaluate(() => {
