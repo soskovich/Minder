@@ -5,7 +5,11 @@ module.exports = defineConfig({
   timeout: 30000,
   fullyParallel: false,
   reporter: 'list',
-  use: { baseURL: 'http://localhost:5599' },
+  // serviceWorkers:'block' geldt voor alle specs. Zonder dit registreert index.html sw.js, wordt de pagina
+  // overgenomen en herlaadt de controllerchange-handler midden in een test ("Execution context was destroyed",
+  // sheets die nooit verschijnen). page.route('**/sw.js') helpt daar niet tegen: dat onderschept het
+  // worker-script niet. De service worker zelf testen we hier niet.
+  use: { baseURL: 'http://localhost:5599', serviceWorkers: 'block' },
   webServer: {
     command: 'node tests/serve.js',
     url: 'http://localhost:5599',

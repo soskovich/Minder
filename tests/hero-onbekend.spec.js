@@ -3,9 +3,7 @@
 // Bewust zelfstandig (eigen seed, geen gedeelde fixture) zodat deze spec los te draaien is.
 const { test, expect } = require('@playwright/test');
 
-// De service worker neemt de pagina anders over en `controllerchange` herlaadt midden in de test.
-// page.route('**/sw.js') helpt niet: dat onderschept het worker-script niet.
-test.use({ serviceWorkers: 'block' });
+// De service worker staat globaal uit via playwright.config.js (anders herlaadt controllerchange midden in de test).
 
 const now = new Date();
 const YM = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
@@ -110,7 +108,8 @@ test.describe('wél een bekend saldo', () => {
 test('hero-hoofdgetal en saldoregel zitten altijd in dezelfde staat', async ({ browser }) => {
   const seen = [];
   for (const bal of [null, 2500]) {
-    const ctx = await browser.newContext({ serviceWorkers: 'block' });
+    // handmatige context: opties uit playwright.config.js gelden hier niet automatisch, dus expliciet meegeven
+    const ctx = await browser.newContext({ baseURL: 'http://localhost:5599', serviceWorkers: 'block' });
     const page = await ctx.newPage();
     await open(page, bal);
     const r = await page.evaluate(() => {
