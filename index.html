@@ -5941,6 +5941,127 @@ function ruleOfThumbCard(){
 }
 function toggle503020(){ SET.show503020=!SET.show503020; save(); renderIns(); }
 
+/* ============================================================
+   INZICHTEN · KERNCIJFERS + UITGAVEN VS BUDGET
+   Alles komt uit bestaande helpers (totals/splitFixedVar/insSignals); geen nieuwe databron,
+   geen rekenlogica elders geraakt. Vier afgeleide cijfers + een verloopgrafiek.
+   ============================================================ */
+
+// Kleur is een spiegel, geen rapportcijfer: in Rustig geen alarmrood en een gedempt midden.
+function kpiCol(state){
+  const r=isMode('rustig');
+  if(state==='good') return 'var(--teal)';
+  if(state==='bad')  return r?'var(--amber)':'var(--red)';
+  if(state==='mid')  return r?'var(--mut)':'var(--amber)';
+  return 'var(--txt)';
+}
+const _pct0=n=>Math.round(n)+'%';
+const _sign=n=>(n<0?'−':'+')+euro0(Math.abs(n));   // echte min-tekens, zoals elders in de app
+
+// Vier KPI's voor maand m. Onbekend = '—' i.p.v. een verzonnen getal; een lopende maand
+// wordt nooit als goed/slecht gekleurd waar de vergelijking partieel is.
+function insKpis(m){
+  const t=totals(m);
+  const ms=months(); const p=prevYM(m); const tp=ms.includes(p)?totals(p):null;
+  const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const partial=(m===nowYM);
+  const pm=MFULL[+p.slice(5,7)-1]||'vorige maand';
+
+  // 1) bespaarquote: wat je van je inkomen overhoudt (richtband 50/30/20 -> 20%)
+  const q  = t.income>0 ? (t.income-t.spend)/t.income*100 : null;
+  const qp = (tp&&tp.income>0) ? (tp.income-tp.spend)/tp.income*100 : null;
+  const dq = (q!=null&&qp!=null) ? Math.round(q-qp) : null;
+  const spaar={ label:'Bespaarquote', raw:q,
+    val: q==null?'—':_pct0(q),
+    sub: q==null?'inkomen onbekend':(dq!=null?`${dq>=0?'+':'−'}${Math.abs(dq)} pp vs ${pm}`:'richtband: 20% of meer'),
+    state: q==null?'n':(partial?'n':(q>=20?'good':(q>=10?'mid':'bad'))) };
+
+  // 2) budgetnaleving: welk deel van je maandbudget op is. Herkomst erbij, anders is het getal misleidend.
+  const b = t.budget>0 ? t.spend/t.budget*100 : null;
+  const bron = t.potTotal>0 ? 'van je potjes' : 'van je inkomen-limiet';
+  const budget={ label:'Budgetnaleving', raw:b, src:t.potTotal>0?'potjes':'limiet',
+    val: b==null?'—':_pct0(b),
+    sub: b==null?'nog geen budget':`${bron} (${euro0(t.budget)})`,
+    state: b==null?'n':(partial?'n':(b<=100?'good':(b<=110?'mid':'bad'))) };
+
+  // 3) uitgaven vs vorige maand
+  const dS = tp ? t.spend-tp.spend : null;
+  const dSp = (tp&&tp.spend>0) ? Math.round(Math.abs(dS)/tp.spend*100) : null;
+  const vsPrev={ label:'Uitgaven vs vorige maand', raw:dS,
+    val: dS==null?'—':_sign(dS),
+    sub: dS==null?'nog geen vorige maand':(partial?`tot nu toe vs heel ${pm}`:`${dSp!=null?dSp+'% ':''}vs ${pm}`),
+    state: dS==null?'n':(partial?'n':(dS<=0?'good':'bad')) };
+
+  // 4) vaste-lasten-druk (vast = herkende herhaling, zie v55) als deel van je inkomen
+  const f = splitFixedVar(m).fixed;
+  const v = t.income>0 ? f/t.income*100 : null;
+  const vast={ label:'Vaste-lasten-druk', raw:v,
+    val: v==null?'—':_pct0(v),
+    sub: v==null?'inkomen onbekend':`${euro0(f)} vast · richt: onder 50%`,
+    state: v==null?'n':(v<50?'good':(v<=65?'mid':'bad')) };
+
+  return {m,partial,spaar,budget,vsPrev,vast};
+}
+
+function insKpiStrip(m){
+  const K=insKpis(m);
+  const tile=k=>`<div class="wvo-tile"><div class="wvo-tl">${k.label}</div><div class="wvo-tv" style="color:${kpiCol(k.state)}">${k.val}</div><div class="wvo-ts">${k.sub}</div></div>`;
+  return `<div class="card" id="insKpiStrip">
+    <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">${ICON('chart')} Kerncijfers</span></div>
+    <div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${[K.spaar,K.budget,K.vsPrev,K.vast].map(tile).join('')}</div>
+    ${K.partial?`<div class="small" style="color:var(--mut2);font-size:11px;margin-top:10px">Deze maand loopt nog: dit gaat over de dagen tot nu toe.</div>`:''}
+  </div>`;
+}
+
+// Kolomgrafiek uitgaven per maand met je maandbudget als gestreepte referentie.
+// viewBox + width:100% => schaalt mee, kapt nooit af op smalle schermen.
+function spendVsBudgetChart(){
+  const ms=months();
+  const head=`<div class="row" style="margin-bottom:8px"><span class="hlabel" style="margin:0;flex:1">${ICON('trend')} Uitgaven vs budget</span></div>`;
+  if(ms.length<2) return `<div class="card">${head}<div class="small muted">Na twee maanden zie je hier je verloop.</div></div>`;
+  const last=ms.slice(-12);
+  const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const rows=last.map(mm=>{ const t=totals(mm); return {m:mm, spend:Math.max(t.spend,0), budget:Math.max(t.budget,0), now:mm===nowYM}; });
+  const W=320, H=150, L=4, R=4, TOP=8, BASE=108;
+  const max=Math.max(...rows.map(r=>Math.max(r.spend,r.budget)),1)*1.12;
+  const slot=(W-L-R)/rows.length, bw=Math.min(slot*0.62,34);
+  const y=v=>BASE-Math.max(v,0)/max*(BASE-TOP);
+  const bars=rows.map((r,i)=>{
+    const cx=L+slot*i+slot/2, x=cx-bw/2, yy=y(r.spend), h=Math.max(BASE-yy,1.5);
+    const over=r.budget>0 && r.spend>r.budget;
+    const col=over?kpiCol('bad'):'var(--teal)';
+    const bar=`<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${col}"${r.now?' fill-opacity=".42" stroke="'+col+'" stroke-width="1" stroke-dasharray="3 2"':''}/>`;
+    const bud=r.budget>0?`<line x1="${(L+slot*i+1).toFixed(1)}" x2="${(L+slot*(i+1)-1).toFixed(1)}" y1="${y(r.budget).toFixed(1)}" y2="${y(r.budget).toFixed(1)}" stroke="#56627d" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
+    const lab=`<text x="${cx.toFixed(1)}" y="${BASE+16}" font-size="9" fill="#8f9bb0" text-anchor="middle">${MNAMES[+r.m.slice(5,7)-1]}</text>`;
+    const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+22).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="openBudgetCompare('${r.m}')"><title>${MFULL[+r.m.slice(5,7)-1]} ${r.m.slice(0,4)} · ${euro0(r.spend)}</title></rect>`;
+    return bud+bar+lab+hit;
+  }).join('');
+  const hasNow=rows.some(r=>r.now);
+  return `<div class="card">${head}
+    <svg id="insSpendChart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block">
+      <line x1="${L}" x2="${W-R}" y1="${BASE}" y2="${BASE}" stroke="rgba(255,255,255,.09)" stroke-width="1"/>
+      ${bars}
+    </svg>
+    <div class="gc-leg"><span><i style="background:var(--teal)"></i>binnen budget</span><span><i style="background:${kpiCol('bad')}"></i>erboven</span><span><i class="d"></i>maandbudget</span></div>
+    <div class="small" style="color:var(--mut2);font-size:11px;margin-top:6px">${hasNow?'De gestreepte kolom is deze maand tot nu toe. ':''}Tik een maand voor de details.</div>
+  </div>`;
+}
+
+// Compacte één-regel-versie van "Wat valt op": alleen het topsignaal, met dezelfde tik-actie.
+function whatStandsOutLine(m){
+  const mv=monthVsPrevInner(m);
+  const exclude=new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
+  let sig; try{ sig=insSignals(m,exclude); }catch(_){ sig=[]; }
+  sig.sort((a,b)=>b.pri-a.pri);
+  const top=sig[0]; if(!top) return '';
+  const act=top.act||'';
+  return `<div class="card" id="wvoLine" style="padding:12px 14px${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}>
+    <div class="row" style="gap:8px">
+      <span style="flex:1;min-width:0;font-size:13px">${ICON('bulb')} <span class="muted">Valt op:</span> <b>${esc(top.kpiLabel)}</b> · ${top.kpiVal}${top.kpiSub?` <span class="muted">(${esc(top.kpiSub)})</span>`:''}</span>
+      ${act?'<span style="color:var(--teal);font-weight:700">›</span>':''}
+    </div></div>`;
+}
+
 function insSection(t){ return `<div class="inssec">${t}</div>`; }
 function renderIns(){
   if(!TX.length){ $('#s-ins').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
@@ -5963,7 +6084,8 @@ function renderIns(){
     deep = insSection('Je verdeling') + pchips + (!isMode('rustig')?ruleOfThumbCard():'')
          + insSection('Waar gaat je geld heen') + renderCatBreak(pTx) + renderMerchants(pTx,periodLabel());
   }
-  $('#s-ins').innerHTML = insSection('Deze maand') + statusBlock + whatStandsOutCard(m,isNow)
+  $('#s-ins').innerHTML = insSection('Deze maand') + statusBlock
+    + insKpiStrip(m) + spendVsBudgetChart() + whatStandsOutLine(m)
     + deepBtn + deep
     + insSection('Meer') + subsCard();
 }
