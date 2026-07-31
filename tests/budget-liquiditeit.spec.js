@@ -94,7 +94,9 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     expect(kpi).toContain('Verwacht eindsaldo');
     expect(kpi).not.toContain('Verwacht over einde maand');
     expect(await page.evaluate(() => vooruitOpbouw())).toContain('Variabel · op je tempo');
-    expect(await page.evaluate(() => vooruitDeep())).not.toContain('Verwacht over einde maand');
+    // vooruitDeep() ("Volgende uitgaven") is sinds v70 niet meer in beeld; het label leeft nu
+    // in nogDezeMaandCard, dus daar bewaken we het.
+    expect(await page.evaluate(() => nogDezeMaandCard())).not.toContain('Verwacht over einde maand');
     await page.evaluate(() => go('vooruit'));
     expect(await text(page, '#s-vooruit')).toMatch(/variabel €[\d.]+ \(tempo\)/);
   });

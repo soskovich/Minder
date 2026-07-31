@@ -3093,8 +3093,10 @@ function vooruitHero(){
 function vooruitFocus(){
   const L=monthLiquidity(); const sv=monthlySavingTarget(); const free=Math.round(L.projected-sv);
   let context, ctaLabel, ctaAct;
-  if(L.projected<0){ context=`Je komt ${euro0(-L.projected)} tekort om de maand door te komen.`; ctaLabel='Bekijk je lasten'; ctaAct="toggleVooruit('vooruitMeer')"; }
-  else if(free<0){ context=`Je komt rond, maar ${euro0(-free)} te weinig voor je spaarinleg van ${euro0(sv)}.`; ctaLabel='Bekijk je lasten'; ctaAct="toggleVooruit('vooruitMeer')"; }
+  // "Bekijk je lasten" wees naar de detailzone; die is met de "Volgende uitgaven"-kaart vervallen (v70),
+  // dus de knop gaat nu direct naar de vaste-lasten-sheet zelf.
+  if(L.projected<0){ context=`Je komt ${euro0(-L.projected)} tekort om de maand door te komen.`; ctaLabel='Bekijk je lasten'; ctaAct="openFixedDue()"; }
+  else if(free<0){ context=`Je komt rond, maar ${euro0(-free)} te weinig voor je spaarinleg van ${euro0(sv)}.`; ctaLabel='Bekijk je lasten'; ctaAct="openFixedDue()"; }
   else { context=`Genoeg voor je spaarinleg van ${euro0(sv)}${free>0?`, ${euro0(free)} houd je over`:''}.`; ctaLabel=`Zet ${euro0(sv)} opzij`; ctaAct="toggleStep('savings')"; }
   return `<div class="insfocus"><div class="if-ctx">${context}</div><button class="if-cta" onclick="${ctaAct}">${ctaLabel} ›</button></div>`;
 }
@@ -4334,10 +4336,9 @@ function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
-  if(!isNow){ $('#s-vooruit').innerHTML = renderSavings() + renderUpcoming() + renderPlan(); return; }
-  const exp=(SET.vooruitMeer!==undefined)?SET.vooruitMeer:isMode('expert');   // expert: standaard uitgeklapt
-  const deepBtn=`<button class="snz" onclick="toggleVooruit('vooruitMeer')">${exp?'minder ▲':'Deze maand in detail ▼'}</button>`;
-  const deep = exp ? vooruitDeep() : '';
+  // v70: ook op een afgeronde maand geen komende-lasten-lijst meer (renderUpcoming), consistent
+  // met de lopende maand waar "Volgende uitgaven" verviel.
+  if(!isNow){ $('#s-vooruit').innerHTML = renderSavings() + renderPlan(); return; }
   // ontdicht: de ring draagt de status; doelen zitten één tik dieper.
   // "Sneller sparen?" is geen kaart meer maar een af-en-toe coach-melding (zie saveFasterTip in scoreNotifs).
   const goals=renderPlan(true);
@@ -4347,7 +4348,10 @@ function renderVooruit(){
   const doelZone=vooruitZone('vooruitDoelOpen','Mijn plan',doelTeaser,doelOpen,goals);
   // noodfondsCard() is hier weg: het noodfonds is een plan-item geworden en "verfijnen" opent
   // vanaf dát item (planOpen -> openNoodfondsPanel), dus de kaart stond dubbel.
-  $('#s-vooruit').innerHTML = vooruitForecast() + nogDezeMaandCard() + doelZone + deepBtn + deep;
+  // "Volgende uitgaven" (vooruitDeep) is weg, dus ook de knop "Deze maand in detail" — anders
+  // bleef er een toggle staan die niets meer opende. De vaste lasten zelf blijven bereikbaar
+  // via "Nog deze maand" en via openFixedDue().
+  $('#s-vooruit').innerHTML = vooruitForecast() + nogDezeMaandCard() + doelZone;
 }
 function vooruitZone(key,label,teaser,open,content){
   const bar=`<div class="card" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px${open?';margin-bottom:8px':''}" onclick="toggleVooruit('${key}')"><span style="font-weight:600;font-size:14px">${label}${teaser?` <span class="small muted" style="font-weight:400">· ${teaser}</span>`:''}</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'›'}</span></div>`;
@@ -4668,7 +4672,6 @@ function coachRuleOptions(m){
 }
 function toggleCoachRule(key,cut){ SET.coachRules=SET.coachRules||{}; if(SET.coachRules[key]) delete SET.coachRules[key]; else SET.coachRules[key]=cut; save(); renderActions(); }
 function toggleCoachDisc(){ SET.coachDiscOpen=!SET.coachDiscOpen; save(); renderActions(); }
-function togglePotjes(){ SET.potOpen = !(SET.potOpen!==false); save(); renderActions(); }
 // forecast-grafiek (2 lijnen): volle discipline (gestippeld) + jouw/gekozen koers (solide)
 function coachForecastChart(M,accent){
   const MN=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
@@ -4725,25 +4728,13 @@ function renderActions(){
     <div class="czr-head" onclick="toggleCoachDisc()"><span>${ICON('target')} Mijn regel: geen budget, geen aankoop</span><span>${SET.coachDiscOpen?'▲':'▼'}</span></div>
     ${SET.coachDiscOpen?coachDiscipline(m):''}
   </div>`;
-  // ---- "JE POTJES", budget als zichtbaar coach-onderdeel (lek → potje), inklapbaar ----
-  const sp=catSpendMap(m); const B=SET.budgets||{};
-  // toon categorieën mét uitgave deze maand óf met een potje; gaten (zonder potje) bovenaan
-  const potCats=[...new Set([...Object.keys(sp).filter(k=>sp[k]>0), ...Object.keys(B).filter(k=>+B[k]>0)])]
-    .filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k))
-    .sort((a,b)=>{ const ha=+B[a]>0?1:0, hb=+B[b]>0?1:0; if(ha!==hb) return ha-hb; return (sp[b]||0)-(sp[a]||0); }).slice(0,6);
-  const withPot=potCats.filter(k=>+B[k]>0).length;
-  const potRows=potCats.map(k=>{ const has=+B[k]>0; const spent=Math.round(sp[k]||0); const over=has&&spent>+B[k]; const pa=potAssumptionLabel(k);
-    return `<div class="cz-pot"><div class="cp-info"><div class="cp-nm">${CATS[k].icon||''} ${CATS[k].name}</div>
-      <div class="cp-sub${(!has||over)?' warn':''}">${has?`${euro0(spent)} van ${euro0(B[k])}${pa?' · '+pa:''}${over?' · over':''}`:`${euro0(spent)} deze maand · nog geen potje`}</div></div>
-      <button class="cp-btn${has?'':' make'}" onclick="openPotje('${k}')">${has?'bewerk':'Maak potje'}</button></div>`;}).join('');
-  const potOpen=SET.potOpen!==false;
-  const potHdr=`<div class="cz-head cz-head-t" onclick="togglePotjes()">Je potjes${potCats.length?` · ${withPot} van ${potCats.length}`:''} <span class="cz-chev">${potOpen?'▲':'▼'}</span></div>`;
-  const potTotLine = withPot>0?`<div class="cz-note" style="border-top:1px solid var(--line);margin-top:2px;padding-top:8px">${potRoomLineHTML(totalBudget())}</div>`:'';
-  const zonePotjes = potHdr + (potOpen?`<div class="cz-card" style="padding:4px 14px">${potRows||'<div class="cz-pot"><div class="cp-info"><div class="cp-sub">Nog geen potjes. Geef je categorieën een vast maandbedrag.</div></div></div>'}<button class="cp-add" onclick="openPotjePick()">+ Potje voor een categorie</button></div>${potTotLine}<div class="cz-note">Geen potje = geen aankoop. Is het op, dan is het op.</div>`:'');
+  // v70: de "Je potjes"-widget is hier weg. Potjes blijven bewerkbaar via de budget-bottomsheet
+  // (Inzichten ▸ Deze maand ▸ Maandbudget) en via openPotje/openPotjePick elders; alleen deze
+  // coach-weergave verviel, het potjes-systeem zelf niet.
   $('#s-act').innerHTML = `<div class="coachhead" onclick="openCoachAvatar()"><div class="av">${coachAvatar()}</div><span class="nm">Je coach</span><span class="sw">wissel ›</span></div>`
     + `<div class="cothr" id="coThr"></div><div id="coCh"></div>`
     + `<button class="cobuy" id="buyBtn">${ICON('cart')} Ik wil iets kopen</button>`
-    + coachMirrorCard() + zonePotjes + zoneMine;
+    + coachMirrorCard() + zoneMine;
   const bb=document.getElementById('buyBtn'); if(bb) bb.onclick=openBuy;
   coParkReturn(m).then(handled=>{ if(!handled) startCoachTalk(m); });
 }
