@@ -6019,16 +6019,32 @@ function whatStandsOutCard(m,isNow){
   </div>`;
 }
 // mini-sparkline: verloop van één categorie over de laatste maanden (voor de drill-down)
+// Eén sparkline-implementatie voor de hele app: een waarden-array in, staafjes eruit.
+// null = onbekende maand (geen staaf); opts.colorAt geeft per maand een kleur (bv. binnen/buiten je band).
+function miniSpark(values, opts){
+  opts=opts||{};
+  const vals=(values||[]).map(v=>(v==null||isNaN(v))?null:+v);
+  if(vals.filter(v=>v!=null).length<2) return '';
+  const max=Math.max(...vals.map(v=>Math.max(v||0,0)),1);
+  const hi=opts.highlight!=null?opts.highlight:vals.length-1;
+  const bars=vals.map((v,i)=>{
+    if(v==null) return `<div class="b" style="height:3%;background:var(--card2)"></div>`;
+    const h=Math.max(Math.max(v,0)/max*100,3);
+    const col=opts.colorAt?opts.colorAt(v,i):(i===hi?'var(--teal)':'var(--teal-d)');
+    return `<div class="b" style="height:${h}%;background:${col}${i===hi&&opts.dashLast?';opacity:.55':''}">`
+      +`${opts.showVals?`<span class="val">${opts.fmt?opts.fmt(v):v}</span>`:''}`
+      +`${opts.labels?`<span class="lab">${opts.labels[i]||''}</span>`:''}</div>`;
+  }).join('');
+  return `<div class="spark" style="height:${opts.height||30}px;gap:${opts.gap||6}px;margin:${opts.margin||'6px 0 0'}">${bars}</div>`;
+}
 function catSparkline(k){
   const ms=months(); const last=ms.slice(-6); if(last.length<2) return '';
   const vals=last.map(mm=>{ let s=0; for(const t of txOfMonth(mm)){ if(catOf(t)===k) s+=-t.amount; } return Math.max(s,0); });   // netto per maand; terugstorting verlaagt
   if(Math.max(...vals)<=0) return '';
-  const max=Math.max(...vals,1); const MN=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
   const curM=(curMonth&&last.includes(curMonth))?curMonth:last[last.length-1];
-  return `<div class="small muted" style="margin:2px 0 2px">Verloop laatste ${last.length} maanden</div>
-    <div class="spark" style="margin:8px 0 18px">${last.map((mm,i)=>`
-      <div class="b" style="height:${Math.max(vals[i]/max*100,3)}%;background:${mm===curM?'var(--teal)':'var(--teal-d)'}">
-        <span class="val">${vals[i]>0?euro0(vals[i]):''}</span><span class="lab">${MN[+mm.slice(5,7)-1]}</span></div>`).join('')}</div>`;
+  return `<div class="small muted" style="margin:2px 0 2px">Verloop laatste ${last.length} maanden</div>`
+    + miniSpark(vals,{height:90,margin:'8px 0 18px',showVals:true,fmt:v=>v>0?euro0(v):'',
+        labels:last.map(mm=>MNAMES[+mm.slice(5,7)-1]), highlight:last.indexOf(curM)});
 }
 
 // 50/30/20: standaard ingeklapt achter "wat betekent dit?", introduceert anders een extra %-basis (% van inkomen)
@@ -6133,59 +6149,146 @@ function kpiCol(state){
 const _pct0=n=>Math.round(n)+'%';
 const _sign=n=>(n<0?'−':'+')+euro0(Math.abs(n));   // echte min-tekens, zoals elders in de app
 
-// Vier KPI's voor maand m. Onbekend = '—' i.p.v. een verzonnen getal; een lopende maand
-// wordt nooit als goed/slecht gekleurd waar de vergelijking partieel is.
-function insKpis(m){
-  const t=totals(m);
-  const ms=months(); const p=prevYM(m); const tp=ms.includes(p)?totals(p):null;
+// Wat elke KPI betekent en waartegen hij zich meet. Een kaal getal zonder band zegt niets,
+// dus band + oordeel + uitleg horen bij de definitie, niet bij de opmaak.
+const KPI_META={
+  spaar: {label:'Bespaarquote',       bandTxt:'doel 20% of meer', band:20,  dir:'up',
+    uitleg:'Welk deel van je inkomen je overhoudt: (inkomen − uitgaven) ÷ inkomen. De 50/30/20-vuistregel houdt 20% aan als richtpunt — een ijkpunt, geen wet.'},
+  budget:{label:'Budgetnaleving',     bandTxt:'doel 100% of minder', band:100, dir:'down',
+    uitleg:'Welk deel van je maandbudget je hebt uitgegeven: uitgaven ÷ budget. Je budget is de som van je potjes; heb je die niet, dan je inkomen-limiet.'},
+  niveau:{label:'Uitgaven-niveau',    bandTxt:'', band:null, dir:'down',
+    uitleg:'Je netto-uitgaven per maand, terugstortingen verrekend. De referentie is je eigen gemiddelde over de getoonde maanden, niet een norm van buiten.'},
+  vast:  {label:'Vaste-lasten-druk',  bandTxt:'doel onder 50%', band:50, dir:'down',
+    uitleg:'Welk deel van je inkomen naar herkende terugkerende lasten gaat: vaste lasten ÷ inkomen. Onder de helft houd je ruimte over om te sturen.'}
+};
+const KPI_WOORD={good:'goed',mid:'krap',bad:'let op'};
+function kpiState(key,v,ref){
+  if(v==null) return 'n';
+  if(key==='spaar')  return v>=20?'good':(v>=10?'mid':'bad');
+  if(key==='budget') return v<=100?'good':(v<=110?'mid':'bad');
+  if(key==='vast')   return v<50?'good':(v<=65?'mid':'bad');
+  if(key==='niveau') return ref>0?(v<=ref*0.98?'good':(v<=ref*1.10?'mid':'bad')):'n';
+  return 'n';
+}
+// reeksen per maand, in één pass over months(); n=0 -> volledige historie
+function insKpiSeries(n){
+  const all=months(); const ms=(n===0)?all:all.slice(-(n||12));
+  const S={ms,spaar:[],budget:[],niveau:[],vast:[]};
+  for(const mm of ms){
+    const t=totals(mm), f=splitFixedVar(mm).fixed;
+    S.spaar.push(t.income>0?(t.income-t.spend)/t.income*100:null);
+    S.budget.push(t.budget>0?t.spend/t.budget*100:null);
+    S.niveau.push(Math.max(Math.round(t.spend),0));
+    S.vast.push(t.income>0?f/t.income*100:null);
+  }
+  return S;
+}
+// Vier KPI's voor maand m, elk met waarde, band, oordeel én historische reeks.
+// Onbekend = '—' i.p.v. een verzonnen getal; een lopende maand krijgt geen oordeel:
+// een halve maand is per definitie "zuinig" en dat is geen verdienste.
+function insKpis(m,n){
+  const t=totals(m), S=insKpiSeries(n);
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const partial=(m===nowYM);
-  const pm=MFULL[+p.slice(5,7)-1]||'vorige maand';
+  const i=S.ms.indexOf(m); const upto=a=>i>=0?a.slice(0,i+1):a.slice();
+  const labels=upto(S.ms).map(x=>MNAMES[+x.slice(5,7)-1]);
+  const maanden=upto(S.ms);
+  // gemiddelde over de AFGERONDE maanden: een lopende maand zou de lat kunstmatig verlagen
+  const afgerond=upto(S.niveau).filter((v,k)=>v!=null && !(partial && k===upto(S.niveau).length-1));
+  const niveauRef=afgerond.length?Math.round(afgerond.reduce((a,b)=>a+b,0)/afgerond.length):0;
 
-  // 1) bespaarquote: wat je van je inkomen overhoudt (richtband 50/30/20 -> 20%)
-  const q  = t.income>0 ? (t.income-t.spend)/t.income*100 : null;
-  const qp = (tp&&tp.income>0) ? (tp.income-tp.spend)/tp.income*100 : null;
-  const dq = (q!=null&&qp!=null) ? Math.round(q-qp) : null;
-  const spaar={ label:'Bespaarquote', raw:q,
-    val: q==null?'—':_pct0(q),
-    sub: q==null?'inkomen onbekend':(dq!=null?`${dq>=0?'+':'−'}${Math.abs(dq)} pp vs ${pm}`:'richtband: 20% of meer'),
-    state: q==null?'n':(partial?'n':(q>=20?'good':(q>=10?'mid':'bad'))) };
-
-  // 2) budgetnaleving: welk deel van je maandbudget op is. Herkomst erbij, anders is het getal misleidend.
-  const b = t.budget>0 ? t.spend/t.budget*100 : null;
-  const bron = t.potTotal>0 ? 'van je potjes' : 'van je inkomen-limiet';
-  const budget={ label:'Budgetnaleving', raw:b, src:t.potTotal>0?'potjes':'limiet',
-    val: b==null?'—':_pct0(b),
-    sub: b==null?'nog geen budget':`${bron} (${euro0(t.budget)})`,
-    state: b==null?'n':(partial?'n':(b<=100?'good':(b<=110?'mid':'bad'))) };
-
-  // 3) uitgaven vs vorige maand
-  const dS = tp ? t.spend-tp.spend : null;
-  const dSp = (tp&&tp.spend>0) ? Math.round(Math.abs(dS)/tp.spend*100) : null;
-  const vsPrev={ label:'Uitgaven vs vorige maand', raw:dS,
-    val: dS==null?'—':_sign(dS),
-    sub: dS==null?'nog geen vorige maand':(partial?`tot nu toe vs heel ${pm}`:`${dSp!=null?dSp+'% ':''}vs ${pm}`),
-    state: dS==null?'n':(partial?'n':(dS<=0?'good':'bad')) };
-
-  // 4) vaste-lasten-druk (vast = herkende herhaling, zie v55) als deel van je inkomen
-  const f = splitFixedVar(m).fixed;
-  const v = t.income>0 ? f/t.income*100 : null;
-  const vast={ label:'Vaste-lasten-druk', raw:v,
-    val: v==null?'—':_pct0(v),
-    sub: v==null?'inkomen onbekend':`${euro0(f)} vast · richt: onder 50%`,
-    state: v==null?'n':(v<50?'good':(v<=65?'mid':'bad')) };
-
-  return {m,partial,spaar,budget,vsPrev,vast};
+  const t_f=splitFixedVar(m).fixed;
+  const waarde={
+    spaar:  t.income>0?(t.income-t.spend)/t.income*100:null,
+    budget: t.budget>0?t.spend/t.budget*100:null,
+    niveau: Math.max(Math.round(t.spend),0),
+    vast:   t.income>0?t_f/t.income*100:null
+  };
+  const mk=key=>{
+    const M=KPI_META[key], v=waarde[key], ref=key==='niveau'?niveauRef:null;
+    const fmt=key==='niveau'?euro0:_pct0;
+    const st=kpiState(key,v,ref);
+    let band=M.bandTxt;
+    if(key==='budget') band=`${M.bandTxt} · ${t.potTotal>0?'je potjes':'je inkomen-limiet'}`;
+    if(key==='niveau') band=niveauRef>0?`gem. ${euro0(niveauRef)}/mnd`:'nog geen gemiddelde';
+    if(v==null) band=(key==='budget')?'nog geen budget':'inkomen onbekend';
+    return {key, label:M.label, raw:v, ref, val:v==null?'—':fmt(v), band, uitleg:M.uitleg, fmt, partial,
+            oordeel: v==null?'':(partial?'loopt nog':(KPI_WOORD[st]||'')),
+            state: (v==null||partial)?'n':st,      // kleur van het cijfer
+            trendState: st,                         // oordeel los van de lopende maand
+            src: key==='budget'?(t.potTotal>0?'potjes':'limiet'):undefined,
+            budgetBedrag: key==='budget'?Math.round(t.budget):undefined,
+            series: upto(S[key]), labels, maanden};
+  };
+  const items=['spaar','budget','niveau','vast'].map(mk);
+  const by={}; for(const k of items) by[k.key]=k;
+  return Object.assign({m,partial,items,niveauRef},by);
 }
+
+// staafkleur per maand = binnen of buiten je band; zo draagt de trend zelf het oordeel
+function kpiBarColor(k){ return (v,idx)=>{ const c=kpiCol(kpiState(k.key,v,k.ref)); return (k.partial&&idx===k.series.length-1)?'var(--mut)':c; }; }
 
 function insKpiStrip(m){
   const K=insKpis(m);
-  const tile=k=>`<div class="wvo-tile"><div class="wvo-tl">${k.label}</div><div class="wvo-tv" style="color:${kpiCol(k.state)}">${k.val}</div><div class="wvo-ts">${k.sub}</div></div>`;
+  const tiles=K.items.map(k=>{
+    const col=kpiCol(k.state);
+    const spark=miniSpark(k.series,{height:26,gap:3,margin:'9px 0 0',colorAt:kpiBarColor(k)});
+    return `<div class="wvo-tile" style="cursor:pointer" onclick="openKpiDetail('${k.key}')" data-kpi="${k.key}">
+      <div class="wvo-tl">${k.label}</div>
+      <div class="wvo-tv" style="color:${col}">${k.val}</div>
+      <div class="wvo-ts">${k.band}${k.oordeel?` · <b style="color:${col}">${k.oordeel}</b>`:''}</div>
+      ${spark||`<div class="small" style="color:var(--mut2);font-size:10px;margin-top:9px">na 2 maanden zie je hier je verloop</div>`}
+    </div>`;
+  }).join('');
   return `<div class="card" id="insKpiStrip">
     <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">${ICON('chart')} Kerncijfers</span></div>
-    <div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${[K.spaar,K.budget,K.vsPrev,K.vast].map(tile).join('')}</div>
-    ${K.partial?`<div class="small" style="color:var(--mut2);font-size:11px;margin-top:10px">Deze maand loopt nog: dit gaat over de dagen tot nu toe.</div>`:''}
+    <div class="small muted" style="margin:0 0 4px">Hoe gezond je financiën ervoor staan — en of het de goede kant op beweegt.</div>
+    <div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${tiles}</div>
+    <div class="small" style="color:var(--mut2);font-size:11px;margin-top:10px">${K.partial?'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus nog zonder oordeel. ':''}Tik een cijfer voor de uitleg en je volledige historie.</div>
   </div>`;
+}
+
+// volledige historie van één KPI, met je band als gestreepte lijn
+function kpiHistChart(k){
+  const vals=k.series, labs=k.labels, ms=k.maanden;
+  if(vals.filter(v=>v!=null).length<2) return `<div class="small muted" style="margin:14px 0 4px">Na twee maanden zie je hier je verloop.</div>`;
+  const band=KPI_META[k.key].band!=null?KPI_META[k.key].band:(k.ref||0);
+  const W=320,H=150,L=4,R=4,TOP=8,BASE=108;
+  const max=Math.max(...vals.map(v=>Math.max(v||0,0)),band||0,1)*1.12;
+  const slot=(W-L-R)/vals.length, bw=Math.min(slot*0.62,34);
+  const y=v=>BASE-Math.max(v,0)/max*(BASE-TOP);
+  const col=kpiBarColor(k);
+  const every=Math.ceil(vals.length/12);
+  const bars=vals.map((v,i)=>{
+    const cx=L+slot*i+slot/2, x=cx-bw/2;
+    const bar=v==null?'':`<rect x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(BASE-y(v),1.5).toFixed(1)}" rx="3" fill="${col(v,i)}"${(k.partial&&i===vals.length-1)?' fill-opacity=".45"':''}/>`;
+    const lab=(i%every===0||i===vals.length-1)?`<text x="${cx.toFixed(1)}" y="${BASE+16}" font-size="9" fill="#8f9bb0" text-anchor="middle">${labs[i]}</text>`:'';
+    const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+22).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="closeSheet();openBudgetCompare('${ms[i]}')"><title>${labs[i]} · ${v==null?'onbekend':k.fmt(v)}</title></rect>`;
+    return bar+lab+hit;
+  }).join('');
+  const bandLine=band>0?`<line x1="${L}" x2="${W-R}" y1="${y(band).toFixed(1)}" y2="${y(band).toFixed(1)}" stroke="#56627d" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
+  return `<svg id="kpiHist" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:12px">
+      <line x1="${L}" x2="${W-R}" y1="${BASE}" y2="${BASE}" stroke="rgba(255,255,255,.09)" stroke-width="1"/>
+      ${bandLine}${bars}
+    </svg>
+    <div class="gc-leg"><span><i class="d"></i>${k.key==='niveau'?`je gemiddelde (${euro0(band)})`:KPI_META[k.key].bandTxt}</span><span><i style="background:var(--teal)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
+}
+function openKpiDetail(key){
+  const m=curMonth||months()[months().length-1];
+  const K=insKpis(m,0); const k=K[key]; if(!k) return;                    // n=0: volledige historie
+  window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" id="kpiDetailHead" style="margin-bottom:6px"><div style="font-weight:800;font-size:17px">${k.label}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="small muted" style="line-height:1.5">${k.uitleg}</div>
+    <div style="display:flex;align-items:baseline;gap:9px;margin-top:13px;flex-wrap:wrap">
+      <div style="font-size:28px;font-weight:800;letter-spacing:-.5px;color:${kpiCol(k.state)}">${k.val}</div>
+      <div class="small muted">${esc(monthLabel(m))}${k.partial?' · tot nu toe':''}</div>
+    </div>
+    <div class="small" style="color:var(--mut2);margin-top:3px">${k.band}${k.key==='budget'&&k.budgetBedrag>0?` · ${euro0(k.budgetBedrag)}`:''}${k.oordeel&&!k.partial?` · ${k.oordeel}`:''}</div>
+    ${kpiHistChart(k)}
+    <div class="small" style="color:var(--mut2);font-size:11px;margin-top:8px">Volledige historie · tik een maand voor de details.</div>
+    <div style="height:8px"></div>`;
+  showSheetBg();
 }
 
 // Kolomgrafiek uitgaven per maand met je maandbudget als gestreepte referentie.
