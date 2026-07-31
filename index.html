@@ -1789,21 +1789,33 @@ function openFixedDue(){
 function toggleFixDueExcl(key){ if(!key) return; SET.fixDueExcl=SET.fixDueExcl||{}; if(SET.fixDueExcl[key]) delete SET.fixDueExcl[key]; else SET.fixDueExcl[key]=1; save(); try{render();}catch(_){}; openFixedDue(); toast(SET.fixDueExcl[key]?`${ICON('check')} Post uitgesloten · onthouden`:'Post telt weer mee'); }
 // drill-down: verwachte variabele uitgaven onderverdeeld per categoriebudget
 // drill vanuit 'Uitgegeven' op de budgetkaart: waar ging je geld deze maand heen (per categorie → openCategory).
+// Maand-drill-down: hier wonen sinds v66 de categorieën én de top uitgaven, met een segment-toggle
+// ertussen. Dezelfde renderers als voorheen op Inzichten; hun inklap-vlag wordt hier tijdelijk
+// opengezet (zonder save) zodat de gekozen kant meteen zichtbaar is.
+function msDrill(){ return SET.msDrill==='top'?'top':'cat'; }
+function setMsDrill(v){ SET.msDrill=(v==='top'?'top':'cat'); save(); openMonthSpend(window._msMonth); }
+function _renderOpen(flag,fn){ const prev=SET[flag]; SET[flag]=true; try{ return fn(); } finally { SET[flag]=prev; } }
 function openMonthSpend(m){
   m=m||curMonth||months()[months().length-1];
+  window._msMonth=m;
   const list=txOfMonth(m);
-  const by={}; for(const t of list){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); }   // netto: terugstorting verlaagt de categorie
-  const ex=Object.entries(by).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
-  const total=ex.reduce((s,e)=>s+e[1],0), max=ex.length?ex[0][1]:1;
+  let total=0; for(const t of list){ if(CATS[catOf(t)].type==='expense') total+=-t.amount; }   // netto: terugstorting verlaagt
+  const kant=msDrill();
+  const seg=`<div class="chips" style="margin:0 0 10px;justify-content:center">
+    <span class="chip ${kant==='cat'?'on':''}" style="flex:1;text-align:center" onclick="setMsDrill('cat')">Categorieën</span>
+    <span class="chip ${kant==='top'?'on':''}" style="flex:1;text-align:center" onclick="setMsDrill('top')">Top uitgaven</span></div>`;
+  const body = kant==='top'
+    ? _renderOpen('openMerch',   ()=>renderMerchants(list, monthLabel(m)))
+    : _renderOpen('openCatBreak',()=>renderCatBreak(list));
+  const leeg = kant==='top'
+    ? 'Geen winkels om te tonen deze maand.'
+    : 'Geen uitgaven deze maand.';
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:10px"><div style="font-size:22px">${ICON('cart')}</div><div style="font-weight:800;font-size:17px">Uitgegeven deze maand</div>
       <div class="muted small">${esc(monthLabel(m))} · waar ging je geld heen</div>
-      <div style="font-size:22px;font-weight:800;margin:5px 0;color:var(--teal)">${euro(total)}</div></div>
-    ${ex.length?ex.map(([k,v])=>{const c=CATS[k];const cnt=list.filter(x=>catOf(x)===k&&x.amount<0).length;return `
-      <div class="cat-row" style="cursor:pointer" onclick="openCategory('${k}')"><div class="ava" style="background:var(--card2)">${c.icon}</div>
-        <div class="g"><div class="t"><span>${c.name} <span class="c">· ${cnt}×</span></span><span>${euro(v)} <span class="muted small">${Math.round(v/total*100)}%</span> ›</span></div>
-          <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${v/max*100}%;background:var(--teal)"></div></div></div>
-      </div>`;}).join(''):'<div class="muted small center" style="padding:16px">Geen uitgaven deze maand.</div>'}`;
+      <div style="font-size:22px;font-weight:800;margin:5px 0;color:var(--teal)">${euro(Math.max(total,0))}</div></div>
+    ${seg}
+    <div id="msBody">${body||`<div class="muted small center" style="padding:16px">${leeg}</div>`}</div>`;
   showSheetBg();
 }
 function openReservedPotjes(){
@@ -3257,6 +3269,7 @@ function renderPlan(bare){
       </div>
       <div class="row" style="margin-top:8px;gap:12px">
         <span class="small" style="color:var(--mut2);cursor:pointer" onclick="planTogglePause('${p.id}')">${planPaused(p.id)?'hervatten':'pauzeren'}</span>
+        ${p.type==='noodfonds'?`<span class="small" style="color:var(--teal);cursor:pointer" onclick="openNoodfondsPanel()">verfijnen ›</span>`:''}
         ${p.type==='aflossen'?`<span class="small" style="color:var(--mut2);cursor:pointer" onclick="planRemove('${p.id}')">uit plan halen</span>`:''}
       </div>
     </div>`;
@@ -4258,7 +4271,13 @@ function noodfondsCard(){
 function openNoodfondsPanel(){ window._setSheet=null; window._nfSheet=true; renderNfSheet(); showSheetBg(); }
 function renderNfSheet(){
   const M=noodfondsModel();
-  const chips=[3,4,6].map(x=>`<span class="chip ${M.maanden===x?'on':''}" onclick="SET.nfMaanden=${x};save();renderNfSheet();renderVooruit()">${x} mnd</span>`).join('');
+  const eigen=![3,4,6].includes(M.maanden);   // eigen aantal maanden: geen chip actief, het veld is dan de bron
+  const chips=[3,4,6].map(x=>`<span class="chip ${(!eigen&&M.maanden===x)?'on':''}" onclick="SET.nfMaanden=${x};save();renderNfSheet();renderVooruit()">${x} mnd</span>`).join('')
+    +`<span class="chip ${eigen?'on':''}" style="display:flex;align-items:center;gap:5px;cursor:default">eigen
+       <input id="nfEigen" type="number" inputmode="numeric" min="1" max="24" step="1" value="${M.maanden}"
+         onchange="setNfMaanden(this.value)" onclick="event.stopPropagation()"
+         style="width:42px;background:var(--bg);border:1px solid var(--line);border-radius:7px;color:var(--txt);font-size:12.5px;font-weight:700;text-align:center;padding:2px 4px">
+       mnd</span>`;
   const rows=M.crisisRows||[]; const open=!!SET.nfListOpen; const nOpen=SET.nfNoteOpen||{};
   const nNote=rows.reduce((a,r)=>a+(r.note?1:0),0);
   const grpName={vast:'Vaste lasten',var:'Variabel'}; let last='';
@@ -4291,6 +4310,12 @@ function renderNfSheet(){
     ${listCard}
     <div style="height:8px"></div>`;
 }
+// eigen aantal buffer-maanden (1..24, geheel). Leeg of onzin -> laatste geldige waarde blijft staan.
+function setNfMaanden(v){
+  const n=Math.round(+v);
+  if(!isFinite(n)||n<1||n>24){ renderNfSheet(); return; }
+  SET.nfMaanden=n; save(); renderNfSheet(); try{renderVooruit();}catch(_){}
+}
 function setNfAmount(c,v){ SET.nfAmount=SET.nfAmount||{}; const s=(''+v).trim(); if(s===''||isNaN(+s)) delete SET.nfAmount[c]; else SET.nfAmount[c]=Math.max(0,Math.round(+s)); save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
 function resetNfAmount(c){ if(SET.nfAmount) delete SET.nfAmount[c]; if(SET.nfNoteOpen) delete SET.nfNoteOpen[c]; save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
 function setNfNote(c,v){ SET.nfNote=SET.nfNote||{}; const s=(''+v).trim(); if(s==='') delete SET.nfNote[c]; else SET.nfNote[c]=s.slice(0,80); save(); renderNfSheet(); }
@@ -4311,7 +4336,9 @@ function renderVooruit(){
   const P=(()=>{ try{ return planItems(); }catch(_){ return []; } })();
   const top=P[0]; const doelTeaser=top?`#1 ${top.naam}${P.length>1?` · +${P.length-1}`:''}`:'nog geen';
   const doelZone=vooruitZone('vooruitDoelOpen','Mijn plan',doelTeaser,doelOpen,goals);
-  $('#s-vooruit').innerHTML = vooruitForecast() + noodfondsCard() + nogDezeMaandCard() + doelZone + deepBtn + deep;
+  // noodfondsCard() is hier weg: het noodfonds is een plan-item geworden en "verfijnen" opent
+  // vanaf dát item (planOpen -> openNoodfondsPanel), dus de kaart stond dubbel.
+  $('#s-vooruit').innerHTML = vooruitForecast() + nogDezeMaandCard() + doelZone + deepBtn + deep;
 }
 function vooruitZone(key,label,teaser,open,content){
   const bar=`<div class="card" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px${open?';margin-bottom:8px':''}" onclick="toggleVooruit('${key}')"><span style="font-weight:600;font-size:14px">${label}${teaser?` <span class="small muted" style="font-weight:400">· ${teaser}</span>`:''}</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'›'}</span></div>`;
@@ -6347,24 +6374,12 @@ function renderIns(){
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); const isNow=(m===nowYM);
   // gecombineerde status-kaart (koers + budget) voor de lopende maand; vorige maanden houden hun budget-hero
   const statusBlock = isNow ? monthStatusCard(m) : heroProjection(m);
-  // Progressive disclosure: alle insights, afwijkingen en cijfers achter 'bekijk meer'
-  const exp=(SET.insDeep!==undefined)?SET.insDeep:!isMode('rustig');   // standaard open; in rustige modus standaard ingeklapt
-  const deepBtn=`<button class="snz" onclick="toggleInsDeep()">${exp?'minder ▲':'Bekijk meer ▼'}</button>`;
-  let deep='';
-  if(exp){
-    const _ms=months(); const _years=[...new Set(_ms.map(x=>x.slice(0,4)))].sort();
-    const _cm=(curMonth&&_ms.includes(curMonth))?curMonth:_ms[_ms.length-1]; const _yr=SET.insYear||_cm.slice(0,4);
-    const _inYr=_ms.filter(x=>x.slice(0,4)===_yr); const _sel=new Set(periodMonths());
-    const _MN=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-    const pchips=(_years.length>1?`<div class="chips" style="margin:4px 0 6px">${_years.map(y=>`<span class="chip ${y===_yr?'on':''}" onclick="setInsYear('${y}')">${y}</span>`).join('')}</div>`:'')
-      +`<div class="chips wrap" style="margin:0 0 10px">${_inYr.map(mm=>`<span class="chip ${_sel.has(mm)?'on':''}" onclick="toggleInsMonth('${mm}')">${_MN[+mm.slice(5,7)-1]}</span>`).join('')}</div>`;
-    const pTx=periodTx();
-    deep = insSection('Je verdeling') + pchips + (!isMode('rustig')?ruleOfThumbCard():'')
-         + insSection('Waar gaat je geld heen') + renderCatBreak(pTx) + renderMerchants(pTx,periodLabel());
-  }
+  // v66: "Hoe gezond is jouw verdeling?" (gedekt door de Kerncijfers) en de standalone sectie
+  // "Waar gaat je geld heen" (verhuisd naar de maand-drill-down) zijn hier weg. Daarmee had de
+  // "Bekijk meer"-zone geen inhoud meer, dus die is met de periode-chips mee vervallen;
+  // periodMonths() valt terug op de getoonde maand, waar de drill-downs al mee rekenen.
   $('#s-ins').innerHTML = insSection('Deze maand') + statusBlock
     + insKpiStrip(m) + spendVsBudgetChart() + whatStandsOutLine(m)
-    + deepBtn + deep
     + insSection('Meer') + subsCard();
 }
 
