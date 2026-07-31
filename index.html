@@ -430,6 +430,9 @@ h1,h2,h3{margin:0}
 input[type=search],input[type=number]{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:11px 13px;font-size:14px;outline:none}
 .chips{display:flex;gap:7px;overflow-x:auto;padding:4px 0 8px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
+/* modifier: rij breekt af i.p.v. horizontaal scrollen. Voor rijen waar alles zichtbaar moet zijn
+   (maand-pillen), want de scrollbar is verborgen en afgekapte chips lezen als "dit is alles". */
+.chips.wrap{flex-wrap:wrap;overflow-x:visible}
 .chip{flex-shrink:0;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:999px;padding:6px 13px;font-size:12.5px;cursor:pointer;white-space:nowrap}
 .chip.on{background:var(--teal-d);border-color:var(--teal);color:#fff}
 .btn{display:block;width:100%;background:var(--teal-d);color:#fff;border:none;border-radius:13px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;text-align:center}
@@ -5955,7 +5958,7 @@ function renderIns(){
     const _inYr=_ms.filter(x=>x.slice(0,4)===_yr); const _sel=new Set(periodMonths());
     const _MN=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
     const pchips=(_years.length>1?`<div class="chips" style="margin:4px 0 6px">${_years.map(y=>`<span class="chip ${y===_yr?'on':''}" onclick="setInsYear('${y}')">${y}</span>`).join('')}</div>`:'')
-      +`<div class="chips" style="margin:0 0 10px">${_inYr.map(mm=>`<span class="chip ${_sel.has(mm)?'on':''}" onclick="toggleInsMonth('${mm}')">${_MN[+mm.slice(5,7)-1]}</span>`).join('')}</div>`;
+      +`<div class="chips wrap" style="margin:0 0 10px">${_inYr.map(mm=>`<span class="chip ${_sel.has(mm)?'on':''}" onclick="toggleInsMonth('${mm}')">${_MN[+mm.slice(5,7)-1]}</span>`).join('')}</div>`;
     const pTx=periodTx();
     deep = insSection('Je verdeling') + pchips + (!isMode('rustig')?ruleOfThumbCard():'')
          + insSection('Waar gaat je geld heen') + renderCatBreak(pTx) + renderMerchants(pTx,periodLabel());
