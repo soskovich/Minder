@@ -229,6 +229,9 @@ h1,h2,h3{margin:0}
 .cz-pot .cp-sub.warn{color:var(--amber)}
 .cz-pot .cp-btn{flex-shrink:0;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
 .cz-pot .cp-btn.make{border-color:var(--teal);color:var(--teal)}
+.plan-mv{width:34px;height:30px;border-radius:8px;background:var(--card2);border:1px solid var(--line);color:var(--mut);font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.plan-mv.off{opacity:.22}
+.plan-1{display:inline-block;background:var(--teal);color:#06231c;font-weight:800;font-size:10px;border-radius:5px;padding:1px 6px;vertical-align:1px}
 .cp-add{display:block;width:100%;text-align:left;background:transparent;border:1px dashed rgba(79,214,196,.45);color:var(--teal);border-radius:10px;padding:10px 12px;margin:10px 0 4px;font-size:13px;font-weight:600;cursor:pointer}
 .cz-note{font-size:12px;color:var(--mut);line-height:1.5;margin:9px 4px 0}
 .cz-effect{font-size:14px;color:var(--txt);line-height:1.5;margin-bottom:4px}
@@ -1894,10 +1897,21 @@ function savingsModel(){
     if(ts.n>0){ cur=ts.sum+(+SET.extraSavings||0); missing=ts.missing>0; }
     else { cur=bankBal+(+SET.extraSavings||0); missing=bankMissing; }   // geen spaarrekening gemarkeerd: val terug op totaal saldo
   }catch(_){ cur=bankBal+(+SET.extraSavings||0); missing=bankMissing; }
-  const pct=goal>0?Math.min(cur/goal*100,100):0;
-  const toGo=Math.max(goal-cur,0);
-  const monthsLeft= monthlySaving>0? toGo/monthlySaving : 0;
-  return {inc,room,monthlySaving,avgSpend,avgFixed,avgVar,basis,mult,baseVal,baseLabel,goal,goalSrc:(nfDoel>0?'nood':'formule'),cur,missing,pct,toGo,monthsLeft};
+  // prioriteit-laag: het #1-item uit Mijn plan bepaalt het doel. Staat het noodfonds bovenaan
+  // (de standaard), dan blijven alle cijfers hierboven precies zoals ze waren.
+  let plan1=null, planAlloc=0;
+  // bereikte of gepauzeerde items schuiven door: de hero toont waar je spaarruimte nú heen gaat
+  try{ const P=allocatePlan(); plan1=P.find(x=>x.status!=='bereikt'&&x.status!=='gepauzeerd')||P[0]||null; if(plan1) planAlloc=plan1.alloc; }catch(_){}
+  let goal2=goal, cur2=cur, missing2=missing, src=(nfDoel>0?'nood':'formule');
+  if(plan1 && plan1.type!=='noodfonds'){
+    goal2=Math.max(Math.round(plan1.doel),0); cur2=Math.max(Math.round(plan1.gespaard),0); missing2=false; src='plan';
+  }
+  const rate=planAlloc>0?planAlloc:monthlySaving;
+  const pct=goal2>0?Math.min(cur2/goal2*100,100):0;
+  const toGo=Math.max(goal2-cur2,0);
+  const monthsLeft= src==='plan' ? (rate>0? toGo/rate : 0) : (monthlySaving>0? toGo/monthlySaving : 0);
+  return {inc,room,monthlySaving,avgSpend,avgFixed,avgVar,basis,mult,baseVal,baseLabel,goal:goal2,goalSrc:src,cur:cur2,missing:missing2,pct,toGo,monthsLeft,
+          planItem:plan1,planAlloc:rate,planNaam:plan1?plan1.naam:''};
 }
 function renderSavings(){
   const S=savingsModel(); if(!S.inc) return '';
@@ -2992,7 +3006,7 @@ function vooruitForecast(){
   let S=null; try{ S=savingsModel(); }catch(_){}
   const ingelegd = S ? Math.round(S.cur) : totalSaved().sum;   // heel saldo (+ extra spaargeld), consistent met savingsModel
   const doel=S?Math.round(S.goal):0;
-  const maand=S?Math.round(S.monthlySaving):0;
+  const maand=S?Math.round(S.planAlloc>0?S.planAlloc:S.monthlySaving):0;   // tempo van het #1-plan-item
   const toGo=Math.max(doel-ingelegd,0);
   const pct=doel>0?Math.min(Math.round(ingelegd/doel*100),100):0;
   const maanden=maand>0?Math.round(toGo/maand):0;
@@ -3014,8 +3028,9 @@ function vooruitForecast(){
   let hero;
   if(doel>0){
     const eta=(maand>0 && toGo>0)?(function(){const d=new Date(); d.setMonth(d.getMonth()+maanden); return d.toLocaleDateString('nl-NL',{month:'long',year:'numeric'});})():'';
+    const planLbl=(S&&S.goalSrc==='plan')?`${esc(S.planNaam)} <span style="opacity:.6">· #1 in je plan</span>`:'Je spaardoel';
     hero=`<div class="vooruit">
-      <div class="vh-lbl">Je spaardoel</div>
+      <div class="vh-lbl">${planLbl}</div>
       <div class="goalring">
         <div class="gr-ring">
           <svg viewBox="0 0 36 36" width="108" height="108" aria-hidden="true">
@@ -3028,7 +3043,7 @@ function vooruitForecast(){
           <div class="gr-a">${euro0(ingelegd)} <span class="u">van ${euro0(doel)}</span></div>
           ${toGo>0?(eta?`<div class="gr-e">${ingelegd>0?'Op koers':'Op dit tempo'}, klaar rond ${eta}</div><div class="gr-p" style="opacity:.8">op basis van je huidige tempo, geen belofte</div>`:''):`<div class="gr-e">Doel bereikt</div>`}
           ${toGo>0?`<div class="gr-p">nog ${euro0(toGo)} te gaan${maand>0?` · ~${maanden} mnd`:''}</div>`:''}
-          <div class="gr-f">Je saldo telt mee naar dit doel.</div>
+          <div class="gr-f">${(S&&S.goalSrc==='plan')?'Je #1 in Mijn plan · je spaarruimte gaat hier eerst heen.':'Je saldo telt mee naar dit doel.'}</div>
         </div>
       </div>
     </div>`;
@@ -3113,6 +3128,7 @@ function openGoal(id){
   const gs=SET.goals||[]; const g=id?gs.find(x=>x.id===id):null; const isNew=!g; const d=g||{naam:'',doel:'',perMaand:'',gespaard:''};
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:17px;margin-bottom:12px">${isNew?'Nieuw spaardoel':'Spaardoel bewerken'}</div>
+    ${isNew?debtNudgeCard():''}
     <label class="fld">Waarvoor spaar je?</label><input id="gNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Vakantie" style="width:100%">
     <label class="fld" style="margin-top:10px">Doelbedrag (€)</label><input id="gDoel" type="number" inputmode="numeric" value="${d.doel||''}" placeholder="bv. 1500" style="width:100%">
     <label class="fld" style="margin-top:10px">Per maand opzij (€)</label><input id="gMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 150" style="width:100%">
@@ -3131,7 +3147,165 @@ function saveGoal(id){
   if(i>=0) SET.goals[i]=g; else SET.goals.push(g);
   save(); closeSheet(); render(); toast(`${ICON('check')} Doel opgeslagen`);
 }
-function deleteGoal(id){ SET.goals=(SET.goals||[]).filter(x=>x.id!==id); save(); closeSheet(); render(); }
+function deleteGoal(id){ SET.goals=(SET.goals||[]).filter(x=>x.id!==id); planForget(id); save(); closeSheet(); render(); }
+
+/* ============================================================
+   PLAN-LAAG · prioriteit + waterfall
+   Dunne laag over het bestaande noodfonds, SET.goals en SET.debts: SET.planOrder bepaalt de
+   volgorde, SET.planPaused wat even stilligt. Geen enkele onderliggende berekening verandert;
+   het noodfonds is hier één herordenbaar item i.p.v. het hardgecodeerde hoofddoel.
+   ============================================================ */
+const PLAN_NF='noodfonds';
+const planDebtKey=id=>'af:'+id;
+function planOrderList(){ return Array.isArray(SET.planOrder)?SET.planOrder.filter(x=>typeof x==='string'):[]; }
+function planPaused(id){ return !!(SET.planPaused||{})[id]; }
+function planForget(id){ if(SET.planOrder) SET.planOrder=planOrderList().filter(x=>x!==id); if(SET.planPaused) delete SET.planPaused[id]; }
+
+// alle mogelijke plan-items, genormaliseerd (nog zonder volgorde)
+function planMap(){
+  const by={};
+  let nfDoel=0; try{ nfDoel=Math.round(noodfondsModel().doel||0); }catch(_){}
+  let saved=0;  try{ const ts=totalSaved(); saved=Math.round(ts.sum||0); }catch(_){}
+  // buffer blijft heilig: de voortgang van het noodfonds meet je spaargeld, geclamd op het doel
+  by[PLAN_NF]={id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,gespaard:nfDoel>0?Math.min(saved,nfDoel):saved,perMaand:0};
+  for(const g of (SET.goals||[])) if(g&&g.id)
+    by[g.id]={id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,perMaand:+g.perMaand||0};
+  // aflos-items bestaan alleen als ze in de volgorde staan; de schuld zelf blijft onaangeroerd
+  for(const key of planOrderList()){
+    if(key.slice(0,3)!=='af:') continue;
+    const d=(SET.debts||[]).find(x=>String(x.id)===key.slice(3)); if(!d) continue;     // schuld verwijderd -> item vervalt
+    const rest=Math.max(+d.rest||0,0), start=Math.max(+d.start||0,0);
+    const doel=start>rest?start:rest;
+    by[key]={id:key,type:'aflossen',naam:'Aflossen: '+(d.naam||'schuld'),doel,gespaard:Math.max(doel-rest,0),perMaand:0,
+             debtId:String(d.id),rest,rente:+d.rente||0,debtPer:+d.perMaand||0};
+  }
+  return by;
+}
+// geordende planlijst: SET.planOrder leidt, noodfonds staat standaard bovenaan,
+// onbekende ids sluiten achteraan aan en verwijderde ids worden genegeerd.
+function planItems(){
+  const by=planMap(); const seen=new Set(); const out=[];
+  for(const id of planOrderList()) if(by[id]&&!seen.has(id)){ out.push(by[id]); seen.add(id); }
+  if(!seen.has(PLAN_NF)){ out.unshift(by[PLAN_NF]); seen.add(PLAN_NF); }
+  for(const id in by) if(!seen.has(id)){ out.push(by[id]); seen.add(id); }
+  return out;
+}
+// maandelijkse spaarruimte; zonder spaardoel val terug op je bezuinigingsruimte
+function planCapacity(){
+  let cap=Math.round(monthlySavingTarget()||0);
+  if(!(cap>0)){ try{ cap=Math.round(noodfondsModel().comfortTot||0); }catch(_){} }
+  return Math.max(cap,0);
+}
+// waterfall: van boven naar beneden. Een expliciet maandbedrag wordt gerespecteerd,
+// een item zonder maandbedrag neemt wat er nog is, en de rest zakt door naar het volgende.
+function allocatePlan(){
+  let left=planCapacity();
+  return planItems().map(it=>{
+    const rest=Math.max(Math.round(it.doel-it.gespaard),0);
+    let alloc=0, status='';
+    if(planPaused(it.id)) status='gepauzeerd';
+    else if(rest<=0) status='bereikt';
+    else {
+      const wens=it.perMaand>0?Math.min(it.perMaand,rest):rest;
+      alloc=Math.max(Math.min(wens,left),0); left-=alloc;
+      if(alloc<=0) status='wacht op capaciteit';
+    }
+    let eta=null;
+    if(alloc>0){
+      if(it.type==='aflossen'){ const mm=payoffMonths(it.rest,(it.debtPer||0)+alloc,it.rente); eta=isFinite(mm)&&mm>0?mm:null; }
+      else eta=Math.ceil(rest/alloc);
+    }
+    return Object.assign({},it,{rest,alloc,eta,status});
+  });
+}
+function planMove(id,dir){
+  const ids=planItems().map(x=>x.id); const i=ids.indexOf(id); const j=i+dir;
+  if(i<0||j<0||j>=ids.length) return;
+  ids.splice(j,0,ids.splice(i,1)[0]);
+  SET.planOrder=ids; save(); render();
+}
+function planTogglePause(id){ SET.planPaused=SET.planPaused||{}; if(SET.planPaused[id]) delete SET.planPaused[id]; else SET.planPaused[id]=true; save(); render(); }
+function planRemove(id){ if(id===PLAN_NF) return; planForget(id); save(); render(); }   // noodfonds is niet verwijderbaar
+function planOpen(it){
+  if(it.type==='noodfonds') return 'openNoodfondsPanel()';
+  if(it.type==='aflossen')  return `openDebt('${it.debtId}')`;
+  return `openGoal('${it.id}')`;
+}
+function planSub(p){
+  if(p.status==='bereikt') return `${ICON('party')} Bereikt`;
+  if(p.status==='gepauzeerd') return 'Gepauzeerd · krijgt nu niets';
+  if(p.status==='wacht op capaciteit') return 'Wacht op capaciteit · alles gaat eerst naar de doelen erboven';
+  const eta=p.eta?` · op dit tempo ~${p.eta} ${p.eta===1?'maand':'maanden'}`:'';
+  return `${euro0(p.alloc)}/mnd${eta}`;
+}
+// "Mijn plan": de geordende lijst met op/neer-knoppen (betrouwbaar op mobiel; drag kan later)
+function renderPlan(bare){
+  const P=allocatePlan(); const cap=planCapacity(); const n=P.length;
+  const rows=P.map((p,i)=>{
+    const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
+    const col=p.status==='gepauzeerd'?'var(--mut)':(p.status==='bereikt'?'var(--green)':'var(--teal)');
+    const up=i>0?`<button class="plan-mv" onclick="planMove('${p.id}',-1)" aria-label="Hoger">▲</button>`:'<span class="plan-mv off">▲</span>';
+    const dn=i<n-1?`<button class="plan-mv" onclick="planMove('${p.id}',1)" aria-label="Lager">▼</button>`:'<span class="plan-mv off">▼</span>';
+    return `<div class="card plan-item" data-id="${p.id}" style="padding:12px 13px;margin-bottom:8px">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <div style="flex:1;min-width:0;cursor:pointer" onclick="${planOpen(p)}">
+          <div class="row"><span style="font-weight:700;font-size:14px">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${euro0(p.gespaard)} / ${euro0(p.doel)}</span></div>
+          <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>
+          <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${up}${dn}</div>
+      </div>
+      <div class="row" style="margin-top:8px;gap:12px">
+        <span class="small" style="color:var(--mut2);cursor:pointer" onclick="planTogglePause('${p.id}')">${planPaused(p.id)?'hervatten':'pauzeren'}</span>
+        ${p.type==='aflossen'?`<span class="small" style="color:var(--mut2);cursor:pointer" onclick="planRemove('${p.id}')">uit plan halen</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  const head=`<div class="small muted" style="margin:0 2px 8px">Je spaarruimte gaat van boven naar beneden: ${cap>0?`<b>${euro0(cap)}/mnd</b> te verdelen`:'nog geen spaarruimte bekend'}. Zet met ▲▼ wat eerst moet.</div>`;
+  const inner=head+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  if(bare) return inner;
+  return `<div style="margin-top:18px"><div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Mijn plan</span></div>${inner}</div>`;
+}
+
+/* ---- Deel 2: optioneel dure-schuld-advies bij een nieuw doel (nooit verplicht) ---- */
+function duurSchuldNudge(){
+  const C=MECHANISM_SPEC.mentalAccounting.condities;
+  const d=duursteSchuld(); if(!d) return null;
+  const spaarRente=(+SET.spaarRente||0)/100;
+  const verschil=(+d.rente)/100-spaarRente;
+  if(verschil<(C.minRenteVerschil||0.05)) return null;              // alleen dúre schuld; studieschuld/hypotheek vallen af
+  if(planOrderList().includes(planDebtKey(d.id))) return null;      // staat al in je plan
+  const n=SET.debtNudge;                                           // niet zeuren: zelfde schuld pas na 3 maanden opnieuw
+  if(n && String(n.debtId)===String(d.id) && !((+d.rente)>(+n.rente||0)+0.01)){
+    if((Date.now()-(+n.ts||0))/(1000*60*60*24*30.44) < 3) return null;
+  }
+  return {d, verschil, pct:Math.round(verschil*1000)/10};
+}
+function debtNudgeCard(){
+  const N=duurSchuldNudge(); if(!N) return '';
+  const d=N.d, rente=(''+(+d.rente)).replace('.',',');
+  const kort=isMode('rustig');
+  return `<div class="card" id="debtNudge" style="border:1px solid rgba(251,191,36,.3);background:rgba(251,191,36,.06);padding:13px 14px;margin-bottom:14px">
+    <div class="small" style="font-weight:700;color:var(--amber);letter-spacing:.04em;text-transform:uppercase">${ICON('coins')} Voordat je spaart</div>
+    <div style="font-size:13.5px;margin-top:7px;line-height:1.5"><b>${esc(d.naam||'Je schuld')}</b> kost je ${rente}% rente${(+d.rest>0)?` over ${euro0(+d.rest)}`:''}.
+      ${kort?'':`Elke €100 die je daar aflost levert ${N.pct.toString().replace('.',',')}% zeker op &mdash; meer dan sparen nu oplevert. `}Je noodbuffer blijft staan.</div>
+    <div class="small" style="color:var(--mut2);margin-top:7px">Een suggestie, geen advies &mdash; jij kiest.</div>
+    <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+      <button class="btn" style="flex:1 1 150px;width:auto;padding:10px" onclick="planPromoteDebt('${d.id}')">Aflossen als doel #1</button>
+      <button class="btn sec" style="flex:1 1 130px;width:auto;padding:10px" onclick="dismissDebtNudge('${d.id}')">Nee, ik wil sparen</button>
+    </div></div>`;
+}
+function planPromoteDebt(debtId){
+  const key=planDebtKey(debtId);
+  const ids=planItems().map(x=>x.id).filter(x=>x!==key);
+  SET.planOrder=[key].concat(ids); save(); closeSheet(); render();
+  toast(`${ICON('check')} Aflossen staat nu bovenaan je plan`);
+}
+function dismissDebtNudge(debtId){
+  const d=(SET.debts||[]).find(x=>String(x.id)===String(debtId));
+  SET.debtNudge={debtId:String(debtId), rente:d?+d.rente||0:0, ts:Date.now()}; save();
+  const el=document.getElementById('debtNudge'); if(el) el.remove();     // formulier blijft staan, inclusief wat je al typte
+}
 function payoffMonths(rest, per, jr){ if(per<=0||rest<=0) return 0; const r=(+jr||0)/100/12; if(r<=0) return Math.ceil(rest/per); if(per<=rest*r+0.001) return Infinity; return Math.ceil(-Math.log(1-rest*r/per)/Math.log(1+r)); }
 // fase B: verwacht netto rendement uit je beleggingen (voor de aflossen-vs-beleggen-afweging)
 function expectedReturnPct(){ const gs=(SET.assets||[]).filter(a=>a.grow&&(+a.rend||0)>0); return gs.length?Math.max(...gs.map(a=>+a.rend||0)):null; }
@@ -4126,16 +4300,17 @@ function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
-  if(!isNow){ $('#s-vooruit').innerHTML = renderSavings() + renderUpcoming() + renderGoals(); return; }
+  if(!isNow){ $('#s-vooruit').innerHTML = renderSavings() + renderUpcoming() + renderPlan(); return; }
   const exp=(SET.vooruitMeer!==undefined)?SET.vooruitMeer:isMode('expert');   // expert: standaard uitgeklapt
   const deepBtn=`<button class="snz" onclick="toggleVooruit('vooruitMeer')">${exp?'minder ▲':'Deze maand in detail ▼'}</button>`;
   const deep = exp ? vooruitDeep() : '';
   // ontdicht: de ring draagt de status; doelen zitten één tik dieper.
   // "Sneller sparen?" is geen kaart meer maar een af-en-toe coach-melding (zie saveFasterTip in scoreNotifs).
-  const goals=renderGoals(true);
+  const goals=renderPlan(true);
   const doelOpen=(SET.vooruitDoelOpen!==undefined)?SET.vooruitDoelOpen:isMode('expert');
-  const nGoals=(SET.goals||[]).length; const doelTeaser=nGoals?`${nGoals} ${nGoals===1?'doel':'doelen'}`:'nog geen';
-  const doelZone=vooruitZone('vooruitDoelOpen','Mijn doelen',doelTeaser,doelOpen,goals);
+  const P=(()=>{ try{ return planItems(); }catch(_){ return []; } })();
+  const top=P[0]; const doelTeaser=top?`#1 ${top.naam}${P.length>1?` · +${P.length-1}`:''}`:'nog geen';
+  const doelZone=vooruitZone('vooruitDoelOpen','Mijn plan',doelTeaser,doelOpen,goals);
   $('#s-vooruit').innerHTML = vooruitForecast() + noodfondsCard() + nogDezeMaandCard() + doelZone + deepBtn + deep;
 }
 function vooruitZone(key,label,teaser,open,content){
