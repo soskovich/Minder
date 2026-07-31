@@ -286,4 +286,35 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
     expect(r.item).toBe(Math.min(r.spaar.cur, r.doel));
     expect(r.hero).toBe(r.item);
   });
+
+  // v68: ook noodfondsModel().spaar volgt nu spaarSaldo(), zodat de FIRE-mijlpaal en de
+  // coach-regel "Je noodfonds staat op X" hetzelfde bedrag noemen als de Vooruitblik.
+  test('ook het noodfonds-model en de FIRE-mijlpaal lezen dezelfde bron', async ({ page }) => {
+    await openV(page, tweak((s) => { s.extraSavings = 500; s.goals = doelen(); }));
+    const r = await page.evaluate(() => ({
+      model: noodfondsModel().spaar,
+      spaar: Math.round(spaarSaldo().cur),
+      ts: totalSaved().sum,
+      fire: fireInputs().nfCur,
+      pct: noodfondsModel().pct,
+      doel: Math.round(noodfondsModel().doel),
+    }));
+    expect(r.spaar).toBe(r.ts + 500);
+    expect(r.model).toBe(r.spaar);                       // was totalSaved().sum, zonder extra spaargeld
+    expect(r.fire).toBe(r.spaar);                        // FIRE-noodfonds-mijlpaal volgt mee
+    expect(r.pct).toBe(Math.min(100, Math.round(r.spaar / r.doel * 100)));
+  });
+
+  test('zonder gemarkeerde spaarrekening volgt het model de terugval', async ({ page }) => {
+    await openV(page, tweak((s) => { s.savingsEnds = []; s.nfMaanden = 12; s.goals = doelen(); }));
+    const r = await page.evaluate(() => ({
+      model: noodfondsModel().spaar,
+      bank: totalBalance().sum,
+      fire: fireInputs().nfCur,
+      item: planItems().find((x) => x.id === 'noodfonds').gespaard,
+    }));
+    expect(r.model).toBe(r.bank);
+    expect(r.fire).toBe(r.bank);
+    expect(r.item).toBe(r.bank);                         // vier lezers, één getal
+  });
 });

@@ -4245,7 +4245,9 @@ function noodfondsModel(){
   }
   comfort.sort((a,b)=>b[1]-a[1]); rek.sort((a,b)=>b[1]-a[1]);
   const essNormaal=vast+varNormaal, maanden=nfMaanden(), doel=Math.round(essCrisis*maanden);
-  let spaar=null; try{ const s=totalSaved(); spaar=s.missing?null:s.sum; }catch(_){}
+  // voortgang uit dezelfde bron als de hero en het plan-item (v67/v68): spaarrekening + extra
+  // spaargeld, met terugval op je totale saldo. null = saldi onbekend, dan tonen we geen percentage.
+  let spaar=null; try{ const s=spaarSaldo(); spaar=s.missing?null:Math.round(s.cur); }catch(_){}
   const pct=(spaar!=null&&doel>0)?Math.min(100,Math.round(spaar/doel*100)):null;
   const comfortTot=comfort.reduce((a,c)=>a+c[1],0);
   _nfCache={win,n,vast,varNormaal,varCrisis,essNormaal,essCrisis,maanden,doel,spaar,pct,detail,comfort,rek,comfortTot,huurGevonden,crisisRows}; _nfGen=_dataGen;
