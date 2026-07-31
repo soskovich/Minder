@@ -1882,6 +1882,18 @@ function monthlySavingTarget(){
 function savingLabel(){ const m=SET.savingMode||'auto';
   if(m==='amount') return 'vast bedrag'; if(m==='percent') return (+SET.savingPercent||0)+'% van inkomen';
   return (100-SET.limit)+'% van inkomen'; }
+// Wat er "gespaard" staat richting je buffer: je spaarrekening(en) + handmatig extra spaargeld.
+// Is er geen spaarrekening gemarkeerd, dan val je terug op je totale saldo — je betaalrekening
+// bevat dan immers ook je buffer. Eén bron voor de hero (savingsModel) én het noodfonds-plan-item,
+// die anders twee bedragen voor hetzelfde doel toonden.
+function spaarSaldo(){
+  const {sum:bankBal,missing:bankMissing}=totalBalance();
+  const extra=+SET.extraSavings||0;
+  try{ const ts=totalSaved();
+    if(ts.n>0) return {cur:ts.sum+extra, missing:ts.missing>0, bron:'spaarrekening'};
+  }catch(_){}
+  return {cur:bankBal+extra, missing:bankMissing, bron:'saldo'};
+}
 function savingsModel(){
   const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
   const room = monthBudget(inc);
@@ -1903,12 +1915,7 @@ function savingsModel(){
   const goal = nfDoel>0 ? nfDoel : (basis==='amount' ? (+SET.bufferAmount||0) : baseVal*mult);
   // Het spaardoel meet wat er op je spaarrekening(en) staat (+ handmatig spaargeld), niet je hele saldo:
   // je betaalrekening bevat immers geld voor nog te betalen lasten en is geen buffer.
-  const {sum:bankBal,missing:bankMissing}=totalBalance();
-  let cur, missing;
-  try{ const ts=totalSaved();
-    if(ts.n>0){ cur=ts.sum+(+SET.extraSavings||0); missing=ts.missing>0; }
-    else { cur=bankBal+(+SET.extraSavings||0); missing=bankMissing; }   // geen spaarrekening gemarkeerd: val terug op totaal saldo
-  }catch(_){ cur=bankBal+(+SET.extraSavings||0); missing=bankMissing; }
+  const {cur,missing}=spaarSaldo();
   // prioriteit-laag: het #1-item uit Mijn plan bepaalt het doel. Staat het noodfonds bovenaan
   // (de standaard), dan blijven alle cijfers hierboven precies zoals ze waren.
   let plan1=null, planAlloc=0;
@@ -3177,7 +3184,7 @@ function planForget(id){ if(SET.planOrder) SET.planOrder=planOrderList().filter(
 function planMap(){
   const by={};
   let nfDoel=0; try{ nfDoel=Math.round(noodfondsModel().doel||0); }catch(_){}
-  let saved=0;  try{ const ts=totalSaved(); saved=Math.round(ts.sum||0); }catch(_){}
+  let saved=0;  try{ saved=Math.round(spaarSaldo().cur||0); }catch(_){}   // zelfde bron als de hero
   // buffer blijft heilig: de voortgang van het noodfonds meet je spaargeld, geclamd op het doel
   by[PLAN_NF]={id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,gespaard:nfDoel>0?Math.min(saved,nfDoel):saved,perMaand:0};
   for(const g of (SET.goals||[])) if(g&&g.id)

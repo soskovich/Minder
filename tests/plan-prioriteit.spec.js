@@ -243,3 +243,47 @@ test.describe('d/e · dure-schuld-advies bij een nieuw doel', () => {
     expect(await page.locator('#debtNudge').count()).toBe(0);
   });
 });
+
+// v67: hero en noodfonds-plan-item lazen twee verschillende bronnen voor dezelfde voortgang.
+// Sinds spaarSaldo() delen ze er één, inclusief de terugval op je totale saldo.
+test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () => {
+  const meet = (page) => page.evaluate(() => ({
+    hero: Math.round(savingsModel().cur),
+    item: planItems().find((x) => x.id === 'noodfonds').gespaard,
+    doel: Math.round(noodfondsModel().doel),
+    spaar: spaarSaldo(),
+    ts: totalSaved(),
+    bank: totalBalance().sum,
+  }));
+
+  test('met een gemarkeerde spaarrekening', async ({ page }) => {
+    await openV(page);
+    const r = await meet(page);
+    expect(r.ts.n).toBeGreaterThan(0);
+    expect(r.spaar.bron).toBe('spaarrekening');
+    expect(r.spaar.cur).toBe(r.ts.sum);
+    expect(r.item).toBe(Math.min(r.spaar.cur, r.doel));
+    expect(r.hero).toBe(r.item);                         // noodfonds is #1 en nog niet vol
+  });
+
+  // nfMaanden 12 houdt het noodfonds onvol, zodat het #1 blijft en de hero het écht toont
+  // (een bereikt item schuift door naar het volgende doel, zie hierboven).
+  test('zonder gemarkeerde spaarrekening valt beide kanten terug op je saldo', async ({ page }) => {
+    await openV(page, tweak((s) => { s.savingsEnds = []; s.nfMaanden = 12; s.goals = doelen(); }));
+    const r = await meet(page);
+    expect(r.ts.n).toBe(0);
+    expect(r.spaar.bron).toBe('saldo');
+    expect(r.spaar.cur).toBe(r.bank);                    // terugval op het totale saldo
+    expect(r.item).toBe(Math.min(r.spaar.cur, r.doel));
+    expect(r.item).toBeGreaterThan(0);                   // was 0: dát was de tegenspraak
+    expect(r.hero).toBe(r.item);                         // hero en plan-item zeggen hetzelfde
+  });
+
+  test('extra spaargeld telt aan beide kanten mee', async ({ page }) => {
+    await openV(page, tweak((s) => { s.extraSavings = 500; s.goals = doelen(); }));
+    const r = await meet(page);
+    expect(r.spaar.cur).toBe(r.ts.sum + 500);
+    expect(r.item).toBe(Math.min(r.spaar.cur, r.doel));
+    expect(r.hero).toBe(r.item);
+  });
+});
