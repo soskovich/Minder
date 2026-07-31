@@ -6297,10 +6297,12 @@ function kpiHistChart(k){
   const every=Math.ceil(vals.length/12);
   const bars=vals.map((v,i)=>{
     const cx=L+slot*i+slot/2, x=cx-bw/2;
-    const bar=v==null?'':`<rect x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(BASE-y(v),1.5).toFixed(1)}" rx="3" fill="${col(v,i)}"${(k.partial&&i===vals.length-1)?' fill-opacity=".45"':''}/>`;
+    // Bewust géén tik-doel: dit detail gaat over één KPI. Een tik hier sprong eerder naar
+    // "Hoe doe je het deze maand?" — een andere metriek, in een sheet die de KPI-uitleg wegdrukte.
+    const t=`<title>${labs[i]} · ${v==null?'onbekend':k.fmt(v)}</title>`;
+    const bar=v==null?'':`<rect x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(BASE-y(v),1.5).toFixed(1)}" rx="3" fill="${col(v,i)}"${(k.partial&&i===vals.length-1)?' fill-opacity=".45"':''}>${t}</rect>`;
     const lab=(i%every===0||i===vals.length-1)?`<text x="${cx.toFixed(1)}" y="${BASE+16}" font-size="9" fill="#8f9bb0" text-anchor="middle">${labs[i]}</text>`:'';
-    const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+22).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="closeSheet();openBudgetCompare('${ms[i]}')"><title>${labs[i]} · ${v==null?'onbekend':k.fmt(v)}</title></rect>`;
-    return bar+lab+hit;
+    return bar+lab;
   }).join('');
   const bandLine=band>0?`<line x1="${L}" x2="${W-R}" y1="${y(band).toFixed(1)}" y2="${y(band).toFixed(1)}" stroke="#56627d" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
   return `<svg id="kpiHist" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:12px">
@@ -6322,7 +6324,7 @@ function openKpiDetail(key){
     </div>
     <div class="small" style="color:var(--mut2);margin-top:3px">${k.band}${k.key==='budget'&&k.budgetBedrag>0?` · ${euro0(k.budgetBedrag)}`:''}${k.oordeel&&!k.partial?` · ${k.oordeel}`:''}</div>
     ${kpiHistChart(k)}
-    <div class="small" style="color:var(--mut2);font-size:11px;margin-top:8px">Volledige historie · tik een maand voor de details.</div>
+    <div class="small" style="color:var(--mut2);font-size:11px;margin-top:8px">Je volledige historie van deze metriek.</div>
     <div style="height:8px"></div>`;
   showSheetBg();
 }

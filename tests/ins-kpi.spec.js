@@ -156,7 +156,7 @@ test.describe('c · tik op een tegel', () => {
     expect(sheet).toContain('(inkomen − uitgaven) ÷ inkomen');            // hoe hij berekend is
     expect(sheet).toContain('50/30/20');
     expect(sheet).toContain('doel 20% of meer');
-    expect(sheet).toContain('Volledige historie');
+    expect(sheet).toContain('volledige historie van deze metriek');
     expect(await page.locator('#kpiHist').count()).toBe(1);
     expect(await page.locator('#kpiHist rect[rx="3"]').count()).toBe(3);  // één staaf per maand
     expect(await page.locator('#kpiHist line[stroke-dasharray]').count()).toBe(1);   // je band als lijn
@@ -172,16 +172,37 @@ test.describe('c · tik op een tegel', () => {
     expect(sheet).toContain('uitgaven ÷ budget');
   });
 
-  test('een staaf in de historie opent die maand', async ({ page }) => {
+  // v69: de historie in het KPI-detail is niet meer aantikbaar. Twaalf onzichtbare hitvlakken
+  // over de hele grafiek sprongen naar "Hoe doe je het deze maand?" — een ándere metriek, die
+  // de KPI-uitleg wegdrukte. De maandsheet blijft bereikbaar via de "Uitgaven vs budget"-grafiek.
+  test('de historie in het detail springt niet naar de maand-sheet', async ({ page }) => {
     await openIns(page);
     await tegel(page, 'niveau').click();
     await page.waitForSelector('#kpiHist');
-    const label = await page.evaluate((m) => monthLabel(m), M1);
-    await page.locator(`#kpiHist rect[onclick*="${M1}"]`).click();
-    await page.waitForSelector('#sheetBg.show');
-    const sheet = await page.locator('#sheet').innerText();
-    expect(sheet).toMatch(/hoe doe je het deze maand\?/i);
-    expect(sheet.toLowerCase()).toContain(label.toLowerCase());
+    expect(await page.locator('#kpiHist rect[onclick]').count()).toBe(0);
+    expect(await page.evaluate(() => document.getElementById('kpiHist').innerHTML.includes('openBudgetCompare'))).toBe(false);
+    expect(await page.locator('#kpiHist title').count()).toBeGreaterThan(0);   // maand + waarde blijft leesbaar
+
+    // een tik middenin de grafiek laat het detail gewoon staan
+    const box = await page.locator('#kpiHist').boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(150);
+    expect(await page.locator('#sheet').innerText()).toContain('Uitgaven-niveau');
+  });
+
+  test('geen enkele KPI-tegel opent nog de maand-sheet', async ({ page }) => {
+    await openIns(page);
+    const titels = [];
+    for (const key of ['spaar', 'budget', 'niveau', 'vast']) {
+      await tegel(page, key).click();
+      await page.waitForSelector('#kpiDetailHead');
+      const sheet = await page.locator('#sheet').innerText();
+      expect(sheet, key).not.toMatch(/hoe doe je het deze maand\?/i);
+      titels.push(sheet.split('\n')[0]);
+      await page.evaluate(() => closeSheet());
+    }
+    expect(new Set(titels).size).toBe(4);                                      // vier verschillende koppen
+    expect(titels).toEqual(['Bespaarquote', 'Budgetnaleving', 'Uitgaven-niveau', 'Vaste-lasten-druk']);
   });
 });
 
