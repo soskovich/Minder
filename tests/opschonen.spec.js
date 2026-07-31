@@ -11,7 +11,7 @@ async function boot(page, scherm) {
 }
 async function openPlanZone(page) {
   if (await page.locator('#s-vooruit .plan-item').count() === 0) {
-    await page.locator('#s-vooruit >> text=Mijn plan').first().click();
+    await page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]').click();
   }
   await page.waitForSelector('#s-vooruit .plan-item');
 }
@@ -25,8 +25,8 @@ test.describe('a · noodfonds-widget weg, verfijnen blijft bereikbaar', () => {
     expect(v).not.toMatch(/bezuinigingsruimte/i);
     // de functie zelf blijft bestaan, hij wordt alleen niet meer samengesteld
     expect(await page.evaluate(() => typeof noodfondsCard)).toBe('function');
-    // de samenstelling zelf: forecast gaat nu direct door naar "nog deze maand"
-    expect(await page.evaluate(() => /innerHTML\s*=\s*vooruitForecast\(\)\s*\+\s*nogDezeMaandCard\(\)/.test(renderVooruit.toString()))).toBe(true);
+    // de samenstelling zelf: sinds v71 opent Vooruitblik met "Nog deze maand"
+    expect(await page.evaluate(() => /innerHTML\s*=\s*nogDezeMaandCard\(\)\s*\+\s*vooruitForecast\(\)/.test(renderVooruit.toString()))).toBe(true);
   });
 
   test('het noodfonds-plan-item is de ingang naar verfijnen', async ({ page }) => {
@@ -74,8 +74,8 @@ test.describe('b · eigen aantal buffer-maanden', () => {
     const sheet = await page.locator('#sheet').innerText();
     expect(sheet).toMatch(/doel · 9 mnd/i);          // de kop staat op uppercase
     // geen chip actief bij een eigen waarde
-    expect(await page.locator('#sheet .chip.on:not(:has(#nfEigen))').count()).toBe(0);
-    expect(await page.locator('#sheet .chip.on:has(#nfEigen)').count()).toBe(1);
+    expect(await page.locator('#nfMaandChips .chip.on:not(:has(#nfEigen))').count()).toBe(0);
+    expect(await page.locator('#nfMaandChips .chip.on:has(#nfEigen)').count()).toBe(1);
   });
 
   test('de chips blijven werken en zetten het veld mee', async ({ page }) => {

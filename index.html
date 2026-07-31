@@ -3145,25 +3145,50 @@ function renderGoals(bare){
     <div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Mijn doelen</span></div>
     ${inner}</div>`;
 }
+// verdeelmodus-chips, gedeeld door de doel-editor en de noodfonds-sheet
+function planModeChips(mode, handler){
+  return `<div class="chips" style="margin:2px 0 0">${PLAN_MODES.map(([k,l])=>
+    `<span class="chip ${mode===k?'on':''}" style="flex:1;text-align:center" onclick="${handler}('${k}')">${l}</span>`).join('')}</div>`;
+}
+function goalMode(v){ window._goalMode=v; const g=(SET.goals||[]).find(x=>x.id===window._goalEdit)||null; renderGoalSheet(window._goalEdit, g, v); }
 function openGoal(id){
-  const gs=SET.goals||[]; const g=id?gs.find(x=>x.id===id):null; const isNew=!g; const d=g||{naam:'',doel:'',perMaand:'',gespaard:''};
+  const g=id?(SET.goals||[]).find(x=>x.id===id):null;
+  window._goalEdit=id||''; window._goalMode=null;
+  renderGoalSheet(id, g, null);
+  showSheetBg();
+}
+function renderGoalSheet(id, g, modeOverride){
+  const isNew=!g; const d=g||{naam:'',doel:'',perMaand:'',gespaard:'',pct:''};
+  const A=planAllocOf(d); const mode=modeOverride||window._goalMode||A.mode;
+  window._goalMode=mode;
+  const bedrag = mode==='fixed'
+    ? `<label class="fld" style="margin-top:10px">Per maand opzij (€)</label><input id="gMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 150" style="width:100%">`
+    : mode==='pct'
+    ? `<label class="fld" style="margin-top:10px">Deel van je spaarruimte (%)</label><input id="gPct" type="number" inputmode="numeric" min="0" max="100" value="${d.pct||''}" placeholder="bv. 30" style="width:100%">
+       <div class="small muted" style="margin-top:6px">${planCapacity()>0?`${euro0(planCapacity())}/mnd te verdelen · dit doel krijgt ${euro0(Math.round(planCapacity()*(+d.pct||0)/100))}`:'Nog geen spaarruimte bekend.'}</div>`
+    : `<div class="small muted" style="margin-top:8px">Dit doel krijgt wat er op zijn plek in de rij nog over is.</div>`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:17px;margin-bottom:12px">${isNew?'Nieuw spaardoel':'Spaardoel bewerken'}</div>
     ${isNew?debtNudgeCard():''}
     <label class="fld">Waarvoor spaar je?</label><input id="gNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Vakantie" style="width:100%">
     <label class="fld" style="margin-top:10px">Doelbedrag (€)</label><input id="gDoel" type="number" inputmode="numeric" value="${d.doel||''}" placeholder="bv. 1500" style="width:100%">
-    <label class="fld" style="margin-top:10px">Per maand opzij (€)</label><input id="gMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 150" style="width:100%">
+    <label class="fld" style="margin-top:12px">Hoeveel gaat hier maandelijks heen?</label>
+    <div id="gModes">${planModeChips(mode,'goalMode')}</div>
+    ${bedrag}
     <label class="fld" style="margin-top:10px">Al gespaard (€)</label><input id="gNu" type="number" inputmode="numeric" value="${d.gespaard||''}" placeholder="0" style="width:100%">
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveGoal('${id||''}')">${ICON('check')} Opslaan</button>
     ${g?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteGoal('${id}')">Doel verwijderen</div>`:''}
     <div style="height:8px"></div>`;
-  showSheetBg();
 }
 function saveGoal(id){
   const v=x=>(document.getElementById(x)||{}).value;
   const naam=(v('gNaam')||'').trim(); const doel=Math.round(+v('gDoel')||0);
   if(!naam || doel<=0){ toast('Vul een naam en doelbedrag in'); return; }
-  const g={id:id||('g'+Date.now().toString(36)), naam, doel, perMaand:Math.round(+v('gMnd')||0), gespaard:Math.round(+v('gNu')||0)};
+  const mode=window._goalMode||'auto';
+  const oud=(SET.goals||[]).find(x=>x.id===id)||{};
+  const g={id:id||('g'+Date.now().toString(36)), naam, doel, gespaard:Math.round(+v('gNu')||0), allocMode:mode,
+    perMaand: mode==='fixed' ? Math.round(+v('gMnd')||0) : (+oud.perMaand||0),      // bewaren, niet wissen bij een moduswissel
+    pct:      mode==='pct'   ? Math.max(0,Math.min(100,Math.round(+v('gPct')||0))) : (+oud.pct||0) };
   SET.goals=SET.goals||[]; const i=SET.goals.findIndex(x=>x.id===id);
   if(i>=0) SET.goals[i]=g; else SET.goals.push(g);
   save(); closeSheet(); render(); toast(`${ICON('check')} Doel opgeslagen`);
@@ -3183,22 +3208,40 @@ function planPaused(id){ return !!(SET.planPaused||{})[id]; }
 function planForget(id){ if(SET.planOrder) SET.planOrder=planOrderList().filter(x=>x!==id); if(SET.planPaused) delete SET.planPaused[id]; }
 
 // alle mogelijke plan-items, genormaliseerd (nog zonder volgorde)
+// Verdeelmodus per plan-item. Doelen dragen 'm zelf (g.allocMode/perMaand/pct); noodfonds en
+// aflos-items hebben geen eigen record, die staan in SET.planAlloc[id]. Eén genormaliseerde vorm
+// {mode, perMaand, pct} zodat de allocatie-engine maar één ding hoeft te kennen.
+// Terugval: een bestaand doel met perMaand > 0 en zónder modus blijft 'fixed' — anders zou een
+// oud doel na deze update ineens de hele spaarruimte opslokken.
+function planAllocOf(o){
+  const mode=o&&o.allocMode;
+  const per=Math.max(Math.round(+((o||{}).perMaand)||0),0);
+  const pct=Math.max(+((o||{}).pct)||0,0);
+  if(mode==='fixed'||mode==='pct'||mode==='auto') return {mode,perMaand:per,pct};
+  return {mode:per>0?'fixed':'auto', perMaand:per, pct};
+}
+function planAllocCfg(id){ return ((SET.planAlloc||{})[id])||{}; }
+function setPlanAlloc(id,patch){
+  SET.planAlloc=SET.planAlloc||{}; SET.planAlloc[id]=Object.assign({},SET.planAlloc[id]||{},patch);
+  save(); try{render();}catch(_){}
+}
 function planMap(){
   const by={};
   let nfDoel=0; try{ nfDoel=Math.round(noodfondsModel().doel||0); }catch(_){}
   let saved=0;  try{ saved=Math.round(spaarSaldo().cur||0); }catch(_){}   // zelfde bron als de hero
   // buffer blijft heilig: de voortgang van het noodfonds meet je spaargeld, geclamd op het doel
-  by[PLAN_NF]={id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,gespaard:nfDoel>0?Math.min(saved,nfDoel):saved,perMaand:0};
+  by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,gespaard:nfDoel>0?Math.min(saved,nfDoel):saved},
+    planAllocOf(planAllocCfg(PLAN_NF)));
   for(const g of (SET.goals||[])) if(g&&g.id)
-    by[g.id]={id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,perMaand:+g.perMaand||0};
+    by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0}, planAllocOf(g));
   // aflos-items bestaan alleen als ze in de volgorde staan; de schuld zelf blijft onaangeroerd
   for(const key of planOrderList()){
     if(key.slice(0,3)!=='af:') continue;
     const d=(SET.debts||[]).find(x=>String(x.id)===key.slice(3)); if(!d) continue;     // schuld verwijderd -> item vervalt
     const rest=Math.max(+d.rest||0,0), start=Math.max(+d.start||0,0);
     const doel=start>rest?start:rest;
-    by[key]={id:key,type:'aflossen',naam:'Aflossen: '+(d.naam||'schuld'),doel,gespaard:Math.max(doel-rest,0),perMaand:0,
-             debtId:String(d.id),rest,rente:+d.rente||0,debtPer:+d.perMaand||0};
+    by[key]=Object.assign({id:key,type:'aflossen',naam:'Aflossen: '+(d.naam||'schuld'),doel,gespaard:Math.max(doel-rest,0),
+             debtId:String(d.id),rest,rente:+d.rente||0,debtPer:+d.perMaand||0}, planAllocOf(planAllocCfg(key)));
   }
   return by;
 }
@@ -3217,17 +3260,22 @@ function planCapacity(){
   if(!(cap>0)){ try{ cap=Math.round(noodfondsModel().comfortTot||0); }catch(_){} }
   return Math.max(cap,0);
 }
-// waterfall: van boven naar beneden. Een expliciet maandbedrag wordt gerespecteerd,
-// een item zonder maandbedrag neemt wat er nog is, en de rest zakt door naar het volgende.
+// Waterfall in prioriteitsvolgorde, met een verdeelmodus per doel:
+//   fixed → min(perMaand, wat er nog is) · pct → min(pct% van de héle capaciteit, wat er nog is)
+//   auto  → neemt de rest die op dat moment overblijft
+// Nooit meer dan wat het doel nog nodig heeft; wat overblijft zakt door naar het volgende item.
 function allocatePlan(){
-  let left=planCapacity();
+  const cap=planCapacity(); let left=cap;
   return planItems().map(it=>{
     const rest=Math.max(Math.round(it.doel-it.gespaard),0);
     let alloc=0, status='';
     if(planPaused(it.id)) status='gepauzeerd';
     else if(rest<=0) status='bereikt';
     else {
-      const wens=it.perMaand>0?Math.min(it.perMaand,rest):rest;
+      let wens;
+      if(it.mode==='fixed')    wens=Math.min(it.perMaand,rest);
+      else if(it.mode==='pct') wens=Math.min(Math.round(cap*it.pct/100),rest);
+      else                     wens=rest;                       // auto: pakt wat er nog is
       alloc=Math.max(Math.min(wens,left),0); left-=alloc;
       if(alloc<=0) status='wacht op capaciteit';
     }
@@ -3252,12 +3300,33 @@ function planOpen(it){
   if(it.type==='aflossen')  return `openDebt('${it.debtId}')`;
   return `openGoal('${it.id}')`;
 }
+const PLAN_MODES=[['auto','Auto'],['fixed','Vast bedrag'],['pct','Percentage']];
+function planModeLabel(p){
+  if(p.mode==='fixed') return `vast ${euro0(p.perMaand)}`;
+  if(p.mode==='pct')   return `${(''+p.pct).replace('.',',')}% van je spaarruimte`;
+  return 'auto · pakt wat er nog is';
+}
 function planSub(p){
   if(p.status==='bereikt') return `${ICON('party')} Bereikt`;
   if(p.status==='gepauzeerd') return 'Gepauzeerd · krijgt nu niets';
-  if(p.status==='wacht op capaciteit') return 'Wacht op capaciteit · alles gaat eerst naar de doelen erboven';
+  if(p.status==='wacht op capaciteit') return `Wacht op capaciteit · ${planModeLabel(p)}, maar alles gaat eerst naar de doelen erboven`;
   const eta=p.eta?` · op dit tempo ~${p.eta} ${p.eta===1?'maand':'maanden'}`:'';
-  return `${euro0(p.alloc)}/mnd${eta}`;
+  const mod=p.mode==='pct'?`${(''+p.pct).replace('.',',')}% · `:(p.mode==='fixed'?'vast · ':'');
+  return `${mod}${euro0(p.alloc)}/mnd${eta}`;
+}
+// Zachte spiegel: verdeel je meer dan er is, dan zeggen we dat. Nooit blokkeren.
+function planAllocWarning(){
+  const cap=planCapacity();
+  let vast=0, pct=0;
+  for(const it of planItems()){
+    if(planPaused(it.id)) continue;
+    if(it.mode==='fixed') vast+=Math.max(it.perMaand,0);
+    else if(it.mode==='pct') pct+=Math.max(it.pct,0);
+  }
+  const geclaimd=Math.round(vast+cap*pct/100);
+  if(pct>100) return {vast,pct,cap,geclaimd,txt:`Je percentages tellen op tot ${Math.round(pct)}% van je spaarruimte. Wat er niet is kan niet verdeeld worden — de doelen onderaan wachten.`};
+  if(cap>0 && geclaimd>cap) return {vast,pct,cap,geclaimd,txt:`Je verdeelt ${euro0(geclaimd)} terwijl er ${euro0(cap)} is. Dat mag; de doelen onderaan wachten dan op capaciteit.`};
+  return null;
 }
 // "Mijn plan": de geordende lijst met op/neer-knoppen (betrouwbaar op mobiel; drag kan later)
 function renderPlan(bare){
@@ -3284,7 +3353,9 @@ function renderPlan(bare){
     </div>`;
   }).join('');
   const head=`<div class="small muted" style="margin:0 2px 8px">Je spaarruimte gaat van boven naar beneden: ${cap>0?`<b>${euro0(cap)}/mnd</b> te verdelen`:'nog geen spaarruimte bekend'}. Zet met ▲▼ wat eerst moet.</div>`;
-  const inner=head+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  const W=planAllocWarning();
+  const warn=W?`<div id="planWarn" class="small" style="color:${isMode('rustig')?'var(--mut)':'var(--amber)'};background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 11px;margin:0 2px 9px;line-height:1.45">${W.txt}</div>`:'';
+  const inner=head+warn+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
   if(bare) return inner;
   return `<div style="margin-top:18px"><div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Mijn plan</span></div>${inner}</div>`;
 }
@@ -4317,9 +4388,28 @@ function renderNfSheet(){
     <div class="card" style="text-align:center"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;color:var(--teal)">Doel · ${M.maanden} mnd</div>
       <div style="font-size:32px;font-weight:800;letter-spacing:-1px;margin:4px 0">${euro0(M.doel)}</div>
       <div class="small muted">${euro0(M.essCrisis)}/mnd essentieel</div>
-      <div class="chips" style="margin-top:10px">${chips}</div></div>
+      <div class="chips" id="nfMaandChips" style="margin-top:10px">${chips}</div></div>
+    ${nfAllocCard()}
     ${listCard}
     <div style="height:8px"></div>`;
+}
+// het noodfonds heeft dezelfde verdeelmodus als een spaardoel; het is immers gewoon plan-item #1
+function nfAllocCard(){
+  const A=planAllocOf(planAllocCfg(PLAN_NF)); const cap=planCapacity();
+  const veld = A.mode==='fixed'
+    ? `<div class="row" style="gap:8px;margin-top:9px"><label class="small muted" style="flex:1">Vast bedrag per maand</label><div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:110px"><span class="small muted">€</span><input id="nfPer" type="number" inputmode="numeric" min="0" value="${A.perMaand||''}" placeholder="0" onchange="setNfAlloc('perMaand',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"></div></div>`
+    : A.mode==='pct'
+    ? `<div class="row" style="gap:8px;margin-top:9px"><label class="small muted" style="flex:1">Deel van je spaarruimte</label><div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:110px"><input id="nfPct" type="number" inputmode="numeric" min="0" max="100" value="${A.pct||''}" placeholder="0" onchange="setNfAlloc('pct',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"><span class="small muted">%</span></div></div>
+       <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd te verdelen · dit doel krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarruimte bekend.'}</div>`
+    : `<div class="small muted" style="margin-top:9px">Het noodfonds krijgt wat er op zijn plek in de rij nog over is.</div>`;
+  return `<div class="card"><div class="small" style="font-weight:600">Hoeveel gaat hier maandelijks heen?</div>
+    ${planModeChips(A.mode,'setNfAllocMode')}${veld}</div>`;
+}
+function setNfAllocMode(v){ setPlanAlloc(PLAN_NF,{allocMode:v}); renderNfSheet(); }
+function setNfAlloc(veld,v){
+  const n=Math.max(0,Math.round(+v||0));
+  setPlanAlloc(PLAN_NF, veld==='pct'?{pct:Math.min(n,100)}:{perMaand:n});
+  renderNfSheet();
 }
 // eigen aantal buffer-maanden (1..24, geheel). Leeg of onzin -> laatste geldige waarde blijft staan.
 function setNfMaanden(v){
@@ -4351,10 +4441,12 @@ function renderVooruit(){
   // "Volgende uitgaven" (vooruitDeep) is weg, dus ook de knop "Deze maand in detail" — anders
   // bleef er een toggle staan die niets meer opende. De vaste lasten zelf blijven bereikbaar
   // via "Nog deze maand" en via openFixedDue().
-  $('#s-vooruit').innerHTML = vooruitForecast() + nogDezeMaandCard() + doelZone;
+  // v71: "Nog deze maand" staat bovenaan — wat er deze maand nog moet gebeuren gaat vóór de
+  // langetermijn-hero. Alleen de volgorde wijzigde, de kaarten zelf niet.
+  $('#s-vooruit').innerHTML = nogDezeMaandCard() + vooruitForecast() + doelZone;
 }
 function vooruitZone(key,label,teaser,open,content){
-  const bar=`<div class="card" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px${open?';margin-bottom:8px':''}" onclick="toggleVooruit('${key}')"><span style="font-weight:600;font-size:14px">${label}${teaser?` <span class="small muted" style="font-weight:400">· ${teaser}</span>`:''}</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'›'}</span></div>`;
+  const bar=`<div class="card" data-zone="${key}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px${open?';margin-bottom:8px':''}" onclick="toggleVooruit('${key}')"><span style="font-weight:600;font-size:14px">${label}${teaser?` <span class="small muted" style="font-weight:400">· ${teaser}</span>`:''}</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'›'}</span></div>`;
   return open?bar+content:bar;
 }
 function hasAutoSaving(){ try{ const ms=months().slice(-3); let n=0; for(const mm of ms){ for(const t of txOfMonth(mm)){ if(catOf(t)==='sparen' || /(monthly|weekly) rule|round[\s-]?up|income sorter/i.test(t.name||'')) n++; } } return n>=2; }catch(_){ return false; } }

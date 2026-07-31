@@ -29,7 +29,7 @@ async function openV(page, payload) {
 // de planlijst zit achter de zone "Mijn plan"; expert-modus klapt hem standaard open
 async function openPlanZone(page) {
   if (await page.locator('#s-vooruit .plan-item').count() === 0) {
-    await page.locator('#s-vooruit >> text=Mijn plan').first().click();
+    await page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]').click();
   }
   await page.waitForSelector('#s-vooruit .plan-item');
 }
