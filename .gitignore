@@ -3,3 +3,10 @@ test-results/
 playwright-report/
 .playwright/
 .claude/worktrees/
+
+# Losse werkdocumenten (mockups, opdracht-prompts, reviews). Die bevatten vaak schermbeelden
+# of bedragen uit echte data en deze repo is publiek, dus ze blijven lokaal.
+# Ontwerpdocumenten die wel de geschiedenis in horen (bv. minder-*-brief.md) vallen hier bewust buiten.
+Minder_*Mockup.html
+Minder_*Review*.html
+Minder_*Prompt.md
