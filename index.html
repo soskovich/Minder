@@ -4877,13 +4877,23 @@ function openCoachAvatar(){
   const opt=(k,svg,lbl)=>`<div onclick="setCoachAvatar('${k}')" style="text-align:center;cursor:pointer">
     <div style="width:68px;height:68px;border-radius:50%;overflow:hidden;margin:0 auto 8px;border:2px solid ${cur===k?'var(--teal)':'transparent'}">${svg}</div>
     <div class="small" style="color:${cur===k?'var(--teal)':'var(--mut)'};font-weight:600">${lbl}</div></div>`;
+  const tn=coachTone();
+  const voorbeeld={direct:'Even kijken naar je maand.', zacht:'Fijn dat je kijkt. We nemen je maand rustig door.', zakelijk:'Je maand tot nu toe.'};
+  const chips=[['direct','Direct'],['zacht','Zacht'],['zakelijk','Zakelijk']]
+    .map(([k,l])=>`<span class="chip ${tn===k?'on':''}" style="flex:1;text-align:center" onclick="setCoachTone('${k}')">${l}</span>`).join('');
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div style="font-weight:800;font-size:17px;margin-bottom:16px;text-align:center">Kies je coach</div>
+    <div style="font-weight:800;font-size:17px;margin-bottom:6px;text-align:center">Kies je coach</div>
+    <div class="small muted" style="text-align:center;margin-bottom:16px">Kies hoe je coach klinkt, en hoe hij eruitziet. De cijfers blijven in elke toon hetzelfde.</div>
     <div style="display:flex;gap:28px;justify-content:center">${opt('v',AV_V,'Sara')}${opt('m',AV_M,'Daan')}</div>
-    <div class="small muted" style="text-align:center;margin-top:14px">Alleen het uiterlijk verandert. De toon blijft hetzelfde: eerlijk, geen cheerleader.</div>`;
+    <div class="fld" style="margin-top:18px">Toon</div>
+    <div class="chips" id="coachToneChips" style="margin:2px 0 0">${chips}</div>
+    <div class="small" id="coachToneVb" style="color:var(--mut2);margin-top:10px;font-style:italic">“${esc(voorbeeld[tn])}”</div>
+    <div class="small muted" style="margin-top:10px">Eerlijk blijft eerlijk: een zachtere toon verzacht de woorden, niet je cijfers.</div>
+    <div style="height:8px"></div>`;
   showSheetBg();
 }
 function setCoachAvatar(k){ SET.coachAvatar=k; save(); closeSheet(); renderActions(); }
+function setCoachTone(k){ SET.coachTone=(k==='zacht'||k==='zakelijk')?k:'direct'; save(); openCoachAvatar(); try{renderActions();}catch(_){} }
 /* ============================================================
    MECHANISM_SPEC — de regels waaronder de coach MAG spreken.
    Drie gedragsmechanismen, elk met een vuurconditie en een guard.
@@ -4988,6 +4998,49 @@ const MECHANISM_SPEC = {
 
 /* ---------- AI-coach (hybride): motor rekent, taalmodel verwoordt. Standaard UIT. Via je Worker /coach. ---------- */
 const COACH_SPEC=`Je bent de coach in Minder, een Nederlandstalige personal-finance app. Je bent een EERLIJKE SPIEGEL, geen cheerleader, geen adviesbot. Je praat weinig, je-vorm, kort en rustig, één gedachte per bericht. Confronteer met een patroon, nooit met een mislukking. Druk afwijkingen uit als stakes (weken vertraging van het doel), nooit als schuld. Eigenaarschap bij de gebruiker. Geen emoji, geen uitroeptekens, geen gedachtestreepjes, geen lijstjes met tips. Kernprincipe: geen budget, geen aankoop. OPDRACHT: herschrijf de gegeven 'draft' in deze toon. Behoud ALLE bedragen en getallen exact zoals in de draft; verzin geen nieuwe getallen. Eén of twee korte zinnen. Antwoord met alleen de herschreven zin, niets anders.`;
+/* ---------- Toon-profielen: de coach-wissel kiest hoe je coach KLINKT, niet alleen hoe hij eruitziet.
+   Alle drie blijven eerlijk: toon verandert de verwoording, nooit de inhoud of de cijfers. De guards
+   van MECHANISM_SPEC (wanneer, hoe vaak, buffer heilig, geen dwang) gelden onverkort. ---------- */
+function coachTone(){ const t=SET.coachTone; return (t==='zacht'||t==='zakelijk')?t:'direct'; }
+function coachVoice(tone){
+  if(tone==='zacht') return COACH_SPEC
+    .replace('Je bent een EERLIJKE SPIEGEL, geen cheerleader, geen adviesbot.','Je bent een EERLIJKE SPIEGEL die warm en geruststellend klinkt, geen cheerleader en geen adviesbot: je verzacht nooit de cijfers, wel de toon.')
+    .replace('Confronteer met een patroon, nooit met een mislukking.','Confronteer met een patroon, nooit met een mislukking. Erken eerst dat het begrijpelijk is, benoem daarna wat je ziet, en laat merken dat het oplosbaar is.');
+  if(tone==='zakelijk') return COACH_SPEC
+    .replace('Je praat weinig, je-vorm, kort en rustig, één gedachte per bericht.','Je praat minimaal, je-vorm, cijfers eerst, geen omhaal, één gedachte per bericht en zo kort mogelijk.')
+    .replace('Eigenaarschap bij de gebruiker.','Eigenaarschap bij de gebruiker. Geen geruststelling, geen inleiding, geen afsluitende beleefdheden.');
+  return COACH_SPEC;
+}
+// De toon-dragende momenten in de gewone (niet-AI) copy. Bewust een handvol zinnen: opening,
+// stakes-framing en afsluiter. De rest van de teksten is feitelijk en verandert niet mee.
+const COACH_TONE_COPY={
+  direct:{
+    groet:  nm=>`${nm?'Hey '+nm+'. ':''}Even kijken naar je maand.`,
+    stakes:(perJr,weken)=>`Klein, maar terugkerend is dat ${euro0(perJr)} per jaar. Zo'n ${weken} ${weken===1?'week':'weken'} later bij je doel.`,
+    slot:   ()=>'',
+    doelVraag:'Waar werk je nu naartoe?',
+    menuIntro:'Waar wil je het over hebben?'
+  },
+  zacht:{
+    groet:  nm=>`${nm?'Fijn dat je kijkt, '+nm+'. ':'Fijn dat je kijkt. '}We nemen je maand rustig door.`,
+    stakes:(perJr,weken)=>`Terugkerend is dat ${euro0(perJr)} per jaar, zo'n ${weken} ${weken===1?'week':'weken'} later bij je doel. Geen ramp, wel goed om te weten.`,
+    slot:   ()=>'Je hoeft dit niet vandaag op te lossen.',
+    doelVraag:'Waar werk je op dit moment naartoe?',
+    menuIntro:'Waar wil je het over hebben? Alles mag je overslaan.'
+  },
+  zakelijk:{
+    groet:  ()=>`Je maand tot nu toe.`,
+    stakes:(perJr,weken)=>`${euro0(perJr)}/jaar · ${weken} ${weken===1?'week':'weken'} later bij je doel.`,
+    slot:   ()=>'',
+    doelVraag:'Doel?',
+    menuIntro:'Onderwerp:'
+  }
+};
+function coTone(key,...args){
+  const set=COACH_TONE_COPY[coachTone()]||COACH_TONE_COPY.direct;
+  const v=set[key]!==undefined?set[key]:COACH_TONE_COPY.direct[key];
+  return typeof v==='function'?v(...args):v;
+}
 function coStripTags(s){ return (s||'').replace(/<[^>]+>/g,''); }
 function coAmounts(s){ return (String(s).match(/€\s?\d{1,3}(?:\.\d{3})*(?:,\d{2})?/g)||[]).map(x=>x.replace(/\s/g,'')); }
 function coHi(text,tone){ return text.replace(/€\s?\d{1,3}(?:\.\d{3})*(?:,\d{2})?/g, m=>`<span class="${tone==='gold'?'warn':'hl'}">${m}</span>`); }
@@ -4997,7 +5050,7 @@ async function coachAI(draft){
   if(!url||!tok||!draft) return null;
   try{
     const r=await fetch(url+'/coach',{method:'POST',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},
-      body:JSON.stringify({spec:COACH_SPEC,facts:window._coFacts||{},draft,model:SET.aiModel||''})});
+      body:JSON.stringify({spec:coachVoice(coachTone()),facts:window._coFacts||{},draft,model:SET.aiModel||''})});
     if(!r.ok) return null; const d=await r.json(); const t=((d&&d.text)||'').trim(); if(!t) return null;
     const da=coAmounts(draft); for(const a of coAmounts(t)){ if(!da.includes(a)) return null; }  // geen verzonnen bedrag
     return t;
@@ -5083,45 +5136,146 @@ async function startCoachTalk(m){
     coChoices([{l:'Afspraak aanpassen',act:()=>{ SET.coachLog=(SET.coachLog||[]).filter(l=>!(l.type==='afspraak' && coSameMonth(l.ts))); save(); startCoachTalk(m); }}]);
     return;
   }
-  const M=financeModel(); const leak=M.coach.leak; const last=M.coach.lastAction;
-  let goal=0, spaar=0; try{ const S=savingsModel(); goal=Math.round(S.goal); spaar=Math.round(S.monthlySaving); }catch(_){}
-  const afw=leak?Math.round(leak.amount):0; const weken=spaar>0?Math.max(Math.round(afw*12/spaar),1):0;
-  // frequentie-coaching: heeft de lek-categorie een 'aantal keer'-potje en ging je vaker dan gepland?
-  const lekMeta = leak ? (SET.potMeta||{})[leak.cat] : null;
-  let freqOver=null;
-  if(leak && lekMeta && lekMeta.type==='freq'){ const did=potjeKeer(m, leak.cat); if(did>lekMeta.n) freqOver={planned:lekMeta.n, did, diff:did-lekMeta.n}; }
-  // facts voor de AI-laag (motor = waarheid; LLM verwoordt alleen)
-  window._coFacts={ context:'maandgesprek', doel:{bedrag:goal, naam:'buffer', maandelijkseSpaarsnelheid:spaar},
-    lek: leak?{categorie:(CATS[leak.cat]?CATS[leak.cat].name:leak.name), afwijking:afw, perJaar:afw*12, wekenVertraging:weken, gepland:freqOver?freqOver.planned:null, gedaan:freqOver?freqOver.did:null}:null,
-    vorigeAfspraak:last||null };
-  // 1) doel herankeren (accent + teal bedrag)
-  if(goal>0) await coSay(`Je doel: <span class="hl">${euro0(goal)} buffer</span>. Even kijken hoe je maand daaraan bijdroeg.`,{html:true,accent:true,ai:{tone:'teal'}});
-  else await coSay(`Even kijken naar je maand.`,{ai:true});
-  if(_g!==_coGen)return;
-  // 2) win erkennen (alleen met vorige afspraak, accent + teal afspraak)
+  const last=financeModel().coach.lastAction;
+  const D=coachDoel();
+  let spaar=0; try{ spaar=Math.round(savingsModel().monthlySaving); }catch(_){}
+  // facts voor de AI-laag (motor = waarheid; LLM verwoordt alleen). Het lek komt erbij zodra
+  // je het onderwerp Budget & potjes kiest; daar wordt het pas besproken.
+  window._coFacts={ context:'maandgesprek', doel: D?{bedrag:D.bedrag, naam:D.naam, maandelijkseSpaarsnelheid:D.per||spaar}:null,
+    lek:null, vorigeAfspraak:last||null };
+  const nm=(SET.name||'').trim().split(/\s+/)[0];
+  await coSay(coTone('groet',nm),{ai:true}); if(_g!==_coGen)return;
   if(last){ await coSay(`Vorige keer hield je dit aan: <span class="hl">${esc(last)}</span>. Dat werkte.`,{html:true,accent:true,ai:{tone:'teal'}}); if(_g!==_coGen)return; }
-  // randgeval: geen lek → erken de goede maand en geef tóch één vooruitblik-tip
-  if(!leak){
-    await coSay(`Geen lek deze maand. Je hield je aan je plan, mooi werk.`,{ai:true}); if(_g!==_coGen)return;
-    let ftip=null; try{ const ts=goalCoachTips(m); ftip=ts&&ts.length?ts[0]:null; }catch(_){}
-    if(ftip && goal>0 && spaar>0){
-      await coSay(`Eén ding om vooruit te kijken: ${ftip.how}`,{html:true,ai:{tone:'teal'}}); if(_g!==_coGen)return;
-      coChoices([
-        {l:`${ftip.label} · +${euro0(ftip.save)}/mnd`, act:()=>{ toggleVooruitCut(ftip.key, ftip.save); go('vooruit'); }},
-        {l:'Nu even niet', act:()=>coEnd()}
-      ]);
-      return;
-    }
-    await coSay(`Tot volgende keer.`,{ai:true}); coEnd(); return;
+  // Laag 2 — doel-first: één keer vragen waar je naartoe werkt, daarna alleen kort herbevestigen.
+  if(!SET.coachGoalConfirmed && D){
+    await coSay(coTone('doelVraag'),{ai:true}); if(_g!==_coGen)return;
+    coChoices([
+      {l:`${D.naam}${D.bedrag>0?' · '+euro0(D.bedrag):''}`, act:async()=>{ SET.coachGoalConfirmed=D.id; save(); await coSay(`Goed. Daar hou ik het gesprek omheen.`,{ai:true}); coachMenu(m); }},
+      {l:'Iets anders · kies het in mijn plan', act:()=>{ coEnd(); go('vooruit'); }},
+      {l:'Weet ik nog niet', act:async()=>{ SET.coachGoalConfirmed='onbekend'; save(); await coSay(`Prima, een doel kan later. We beginnen bij je potjes.`,{ai:true}); coTopic('potjes',m); }}
+    ]);
+    return;
   }
-  // 3) lek + stakes in één bubbel (frequentie als er een 'aantal keer'-potje is, anders €; stakes gedimd, geen schuld)
-  await coSay(coLekHTML(leak,afw,spaar,freqOver),{html:true,ai:{tone:'gold'}});
-  if(_g!==_coGen)return;
-  // 4) reflectievraag → 5) vier opties (bij frequentie: confronteer met de laatste paar keer)
+  if(D && SET.coachGoalConfirmed && SET.coachGoalConfirmed!=='onbekend'){
+    await coSay(`Je werkt aan <span class="hl">${esc(D.naam)}</span>${D.bedrag>0?`: ${euro0(D.bedrag)}`:''}.`,{html:true,accent:true}); if(_g!==_coGen)return;
+  }
+  coachMenu(m);
+}
+/* ---------- Laag 2: het doel waar het gesprek omheen wordt gekaderd ----------
+   #1 uit je plan (v64), met savingsModel als terugval zolang er geen plan-lijst is. */
+function coachDoel(){
+  try{ const P=allocatePlan(); const top=P.find(x=>x.status!=='bereikt'&&x.status!=='gepauzeerd')||P[0];
+    if(top && top.doel>0) return {id:top.id, naam:top.naam, bedrag:Math.round(top.doel), per:Math.round(top.alloc||0)};
+  }catch(_){}
+  try{ const S=savingsModel(); if(S.goal>0) return {id:'buffer', naam:'je buffer', bedrag:Math.round(S.goal), per:Math.round(S.monthlySaving)}; }catch(_){}
+  return null;
+}
+// alleen dúre schuld opent het schuld-onderwerp; zelfde drempel als mentalAccountingSignal
+function coachDureSchuld(){
+  try{ const d=duursteSchuld(); if(!d) return null;
+    const C=MECHANISM_SPEC.mentalAccounting.condities;
+    return (((+d.rente)/100 - ((+SET.spaarRente||0)/100)) >= (C.minRenteVerschil||0.05)) ? d : null;
+  }catch(_){ return null; }
+}
+/* ---------- Laag 1: onderwerpenmenu. Eén onderwerp per keer, alles overslaanbaar. ---------- */
+async function coachMenu(m){
+  const _g=_coGen;
+  await coSay(coTone('menuIntro')); if(_g!==_coGen)return;
+  const opts=[
+    {l:'Bespaartips', act:()=>coTopic('tips',m)},
+    {l:'Budget & potjes', act:()=>coTopic('potjes',m)},
+    {l:'Vaste lasten & abonnementen', act:()=>coTopic('vast',m)},
+    {l:'Grip op impulsen', act:()=>coTopic('impuls',m)}
+  ];
+  if(coachDureSchuld()) opts.push({l:'Schuld aflossen', act:()=>coTopic('schuld',m)});
+  opts.push({l:'Liever zelf kijken · naar mijn cijfers', act:()=>{ coEnd(); go('ins'); }});
+  coChoices(opts);
+}
+function coTopic(k,m){
+  SET.coachTopic=k; save();
+  const fn={tips:coTopicTips, potjes:coTopicPotjes, vast:coTopicVast, impuls:coTopicImpuls, schuld:coTopicSchuld}[k];
+  (fn||coachMenu)(m);
+}
+const coTerug=m=>({l:'Terug naar de onderwerpen', act:()=>coachMenu(m)});
+// hoeveel maanden eerder ben je bij je doel met +save/mnd erbij (alleen waar het te rekenen valt)
+function coDoelEffect(save){
+  const D=coachDoel(); if(!D||!(save>0)) return '';
+  const per=D.per||0; if(!(per>0)||!(D.bedrag>0)) return '';
+  let gespaard=0; try{ const P=allocatePlan().find(x=>x.id===D.id); gespaard=P?P.gespaard:0; }catch(_){}
+  const rest=Math.max(D.bedrag-gespaard,0); if(rest<=0) return '';
+  const eerder=Math.max(Math.ceil(rest/per)-Math.ceil(rest/(per+save)),0);
+  return eerder>=1?` ≈ ${eerder} ${eerder===1?'maand':'maanden'} eerder bij ${D.naam}`:'';
+}
+async function coTopicTips(m){
+  const _g=_coGen; let tips=[];
+  try{ tips=(goalCoachTips(m)||[]).filter(t=>t&&t.save>0).slice(0,2); }catch(_){}
+  if(!tips.length){ try{ const sf=saveFasterTip(); if(sf&&sf.save>0) tips=[{key:'', label:sf.label, save:sf.save, how:''}]; }catch(_){} }
+  if(!tips.length){ await coSay(`Ik heb nu te weinig historie voor een concrete bespaartip. Over een maand of twee wel.`,{ai:true}); coChoices([coTerug(m)]); return; }
+  await coSay(`Twee dingen die vandaag kunnen. Je kiest zelf of er iets van komt.`,{ai:true}); if(_g!==_coGen)return;
+  for(const t of tips){ await coSay(`<span class="hl">${esc(t.label)}</span> · <span class="hl">+${euro0(t.save)}/mnd</span>${esc(coDoelEffect(t.save))}`,{html:true}); if(_g!==_coGen)return; }
+  coChoices(tips.map(t=>({l:`${t.label} · +${euro0(t.save)}/mnd`, act:()=>{ if(t.key) toggleVooruitCut(t.key,t.save); coachLogAdd({type:'tip',text:t.label}); coEnd(); go('vooruit'); }}))
+    .concat([coTerug(m),{l:'Nu even niet',act:()=>coEnd()}]));
+}
+async function coTopicPotjes(m){
+  const _g=_coGen;
+  if(TX.length && potCount()===0){ if(await coFirstPotFlow(m)) return; }
+  const M=financeModel(); const leak=M.coach.leak;
+  if(!leak){
+    let cat=null; try{ const sp=catSpendMap(m), B=SET.budgets||{};
+      const kk=Object.keys(sp).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k)&&!(+B[k]>0)).sort((a,b)=>sp[b]-sp[a]);
+      cat=kk[0]||null; }catch(_){}
+    if(cat){ const sug=coSuggestPot(cat); const cn=CATS[cat].name.toLowerCase();
+      await coSay(`Je potjes houden stand deze maand. <span class="hl">${CATS[cat].name}</span> heeft er nog geen; meestal gaat daar ${euro0(sug)} heen.`,{html:true}); if(_g!==_coGen)return;
+      coChoices([
+        {l:`Potje ${cn} · ${euro0(sug)}`, act:()=>coShowAction({eyebrow:'Geef het een plek',context:`Een potje maakt zichtbaar wat je van plan was.`,title:`Hoeveel zet je volgende maand apart voor ${cn}?`,input:{type:'number',ph:'bv. '+sug},potCat:cat,afspraak:v=>`ik zet ${euro0(+v||0)} per maand apart voor ${cn}`})},
+        coTerug(m), {l:'Nu even niet',act:()=>coEnd()}
+      ]); return;
+    }
+    await coSay(`Je potjes houden stand deze maand. Niets te repareren.`,{ai:true}); coChoices([coTerug(m)]); return;
+  }
+  // het bestaande lek-script blijft intact, nu als dit onderwerp
+  let spaar=0; try{ spaar=Math.round(savingsModel().monthlySaving); }catch(_){}
+  const afw=Math.round(leak.amount); const weken=spaar>0?Math.max(Math.round(afw*12/spaar),1):0;
+  const lekMeta=(SET.potMeta||{})[leak.cat]; let freqOver=null;
+  if(lekMeta && lekMeta.type==='freq'){ const did=potjeKeer(m, leak.cat); if(did>lekMeta.n) freqOver={planned:lekMeta.n, did, diff:did-lekMeta.n}; }
+  try{ window._coFacts=Object.assign({},window._coFacts||{},{lek:{categorie:(CATS[leak.cat]?CATS[leak.cat].name:leak.name), afwijking:afw, perJaar:afw*12, wekenVertraging:weken, gepland:freqOver?freqOver.planned:null, gedaan:freqOver?freqOver.did:null}}); }catch(_){}
+  await coSay(coLekHTML(leak,afw,spaar,freqOver),{html:true,ai:{tone:'gold'}}); if(_g!==_coGen)return;
   const _pat=coachPattern(); if(_pat){ await coSay('Ik zie een patroon. '+_pat,{html:true}); if(_g!==_coGen)return; }
-  await coSay(freqOver?`Wat was er anders bij die laatste ${freqOver.diff===1?'keer':freqOver.diff+' keer'}?`:`Wat was er anders toen je dat deed?`,{ai:true});
-  if(_g!==_coGen)return;
-  coChoices(coMaandOpties(leak));
+  await coSay(freqOver?`Wat was er anders bij die laatste ${freqOver.diff===1?'keer':freqOver.diff+' keer'}?`:`Wat was er anders toen je dat deed?`,{ai:true}); if(_g!==_coGen)return;
+  coChoices(coMaandOpties(leak).concat([coTerug(m)]));
+}
+async function coTopicVast(m){
+  const _g=_coGen; let subs=[];
+  try{ subs=(subscriptionsList()||[]).slice(0,3); }catch(_){}
+  if(!subs.length){ await coSay(`Ik herken nog geen abonnementen in je afschrijvingen.`,{ai:true}); coChoices([coTerug(m)]); return; }
+  const tot=Math.round(subs.reduce((s,x)=>s+(x.monthly||0),0));
+  await coSay(`Je grootste vaste posten: ${subs.map(s=>`<span class="hl">${esc(s.name)}</span> ${euro0(s.monthly)}`).join(', ')}.`,{html:true}); if(_g!==_coGen)return;
+  await coSay(`Samen ${euro0(tot)} per maand, ${euro0(tot*12)} per jaar. Hier snijd je in kosten, niet in je gedrag.`,{ai:true}); if(_g!==_coGen)return;
+  coChoices([
+    {l:'Ik zeg er één op', act:()=>coShowAction({eyebrow:'Eén post minder',context:`Opzeggen kost even tijd en levert elke maand op.`,title:`Welke zeg je op?`,input:{type:'text',ph:'bv. '+subs[0].name},afspraak:v=>`ik zeg ${(v||'één abonnement')} op`})},
+    {l:'Bekijk al mijn abonnementen', act:()=>{ coEnd(); go('ins'); }},
+    coTerug(m), {l:'Nu even niet',act:()=>coEnd()}
+  ]);
+}
+async function coTopicImpuls(m){
+  const _g=_coGen; const pat=coachPattern();
+  await coSay(pat?('Ik zie een patroon. '+pat):`Ik zie nog geen duidelijk impuls-patroon. De koopcheck helpt sowieso op het moment zelf.`,{html:!!pat}); if(_g!==_coGen)return;
+  coChoices([
+    {l:'Koopcheck als vaste stap', act:()=>coShowAction({eyebrow:'Eén regel vooraf',context:`Niet minder willen, wel even kijken voor je koopt.`,title:`Voor een ongeplande aankoop open ik eerst de koopcheck.`,afspraak:`voor een ongeplande aankoop open ik eerst de koopcheck`})},
+    {l:'Nu iets kopen? Check het', act:()=>{ coEnd(); openBuy(); }},
+    coTerug(m), {l:'Nu even niet',act:()=>coEnd()}
+  ]);
+}
+async function coTopicSchuld(m){
+  const _g=_coGen; const d=coachDureSchuld();
+  if(!d){ await coSay(`Je hebt geen dure schuld staan.`,{ai:true}); coChoices([coTerug(m)]); return; }
+  const rest=Math.max(+d.rest||0,0), rente=(''+(+d.rente)).replace('.',',');
+  await coSay(`<span class="hl">${esc(d.naam||'Je schuld')}</span> kost ${rente}% rente${rest>0?` over ${euro0(rest)}`:''}.`,{html:true}); if(_g!==_coGen)return;
+  await coSay(`Elke euro die daarheen gaat levert ${rente}% zeker op. Je noodbuffer blijft staan; dit is een suggestie, geen advies.`,{ai:true}); if(_g!==_coGen)return;
+  coChoices([
+    {l:'Zet aflossen bovenaan mijn plan', act:()=>{ try{ planPromoteDebt(d.id); }catch(_){} coEnd(); }},
+    coTerug(m), {l:'Nu even niet',act:()=>coEnd()}
+  ]);
 }
 function coLekHTML(leak,afw,spaar,freqOver){
   const cn=CATS[leak.cat]?CATS[leak.cat].name.toLowerCase():'die categorie';
@@ -5131,7 +5285,7 @@ function coLekHTML(leak,afw,spaar,freqOver){
   else if(leak.kind==='missing-pot') main=`${esc(leak.name)} liep langs zonder potje. <span class="warn">${euro0(afw)}</span>.`;
   else main=`Die <span class="warn">${euro0(afw)}</span> bij ${esc(leak.name)} zat in geen budget.`;
   let sub='';
-  if(spaar>0){ const weken=Math.max(Math.round(afw*12/spaar),1); sub=`<div class="cbsub">Klein, maar terugkerend is dat ${euro0(afw*12)} per jaar. Zo'n ${weken} ${weken===1?'week':'weken'} later bij je doel.</div>`; }
+  if(spaar>0){ const weken=Math.max(Math.round(afw*12/spaar),1); sub=`<div class="cbsub">${coTone('stakes',afw*12,weken)}</div>`; }
   return main+sub;
 }
 function coMaandOpties(leak){
@@ -5169,6 +5323,7 @@ async function coShowAction(opt){
     const extra = (opt.potCat && +v>0) ? Math.max(coSuggestPot(opt.potCat)-Math.round(+v),0) : 0;
     const ge = coGoalEffect(extra);
     if(ge) await coSay(coHi(esc(ge),'teal'),{html:true}); else await coSay(`Hou je dit vol, dan schuift je doel langzaam naar voren.`);
+    const _slot=coTone('slot'); if(_slot) await coSay(_slot);      // zachte toon sluit geruststellend af
     coEnd();
   };
   adj.onclick=()=>{ _coC.innerHTML=''; const lk=financeModel().coach.leak; if(lk) coChoices(coMaandOpties(lk)); };
