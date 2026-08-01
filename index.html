@@ -1426,6 +1426,8 @@ function savedThisMonth(ym){
 // Saldo-invoer: Instellingen ▸ Inkomen & rekeningen, waar je per rekening een saldo invult.
 // Eén bestemming voor elke "vul je saldo aan"-CTA, zodat de onbekend-staat nooit doodloopt.
 function openSaldoInvoer(){ closeSheet(); go('set'); openSet('income'); }
+// saldo-nudge: tik = naar de invoer én deze maand niet meer vragen
+function balNudgeGo(){ try{ const ms=months(); SET.balNudge={ym:ms[ms.length-1]||''}; save(); }catch(_){} openSaldoInvoer(); }
 // drill-down: rekeningen waaruit je saldo bestaat
 function openBalances(){
   const rows=OWN.map(a=>({a,b:accBalance(a)})).filter(r=>r.b!=null && r.b!==0).sort((x,y)=>y.b-x.b);
@@ -2624,7 +2626,7 @@ function headerSearch(){ go('tx'); if(!window._txSearchOpen) toggleTxSearch(); s
  * en positieve noten vallen hier NADRUKKELIJK buiten: dat is geen loss aversion.
  * Doel: hooguit maxFramesPerDag per dag, nooit gestapeld, zodat de app geen
  * uitgaven-angst traint. lossFrames = {ymd, n, keys} houdt de dagteller bij. */
-const LOSS_GROUPS=new Set(['budget','tempo','vice','big','save']);
+const LOSS_GROUPS=new Set(['budget','tempo','discr','big','save']);   // 'discr' verving de oude vices-melding
 function isLossFrame(key){ return LOSS_GROUPS.has(String(key||'').split('-')[0]); }
 function lossFramesToday(){ const d=new Date().toISOString().slice(0,10); const lf=SET.lossFrames; return (lf&&lf.ymd===d)?(+lf.n||0):0; }
 function noteLossSeen(key){ if(!isLossFrame(key)) return; const d=new Date().toISOString().slice(0,10); let lf=SET.lossFrames;
@@ -2684,11 +2686,37 @@ function scoreNotifs(){
     overs.sort((a,b)=>b.d-a.d);
     overs.slice(0,2).forEach((o,i)=>push({key:'budget-'+o.k,score:72+Math.min(o.d/10,24)-i*6,t:o.band==='action'?'bad':'warn',ic:CATS[o.k].icon,
       l1:`Je ${CATS[o.k].name.toLowerCase()} ${o.potje?'is over je potje':'gaat over budget'} deze maand.`,l2:'Bekijk waar het heen ging',act:`openVariance('${o.k}')`})); }catch(_){} }
+  // save-risk krijgt dezelfde chronic-ack als tempo: pas opnieuw als het tekort merkbaar groeit.
+  let saveRiskPushed=false;
   if(isNow){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget();
-    if(tgt>0 && L.projected<tgt) push({key:'save-risk',score:82,t:'bad',ic:ICON('coins'),l1:'Je haalt je spaardoel deze maand niet.',l2:'Bekijk je vooruitblik',act:"go('vooruit')"}); }catch(_){} }
-  if(isNow){ try{ const t=totals(m), de=daysElapsed(m), el=de.elapsed||1;
+    if(tgt>0 && L.projected<tgt){ const tekort=Math.max(Math.round(tgt-L.projected),1); const ack=(SET.chronicAck||{}).saverisk;
+      if(!(ack && ack.ym===m && tekort < ack.val*1.10)){
+        push({key:'save-risk',score:82,t:'bad',ic:ICON('coins'),l1:'Je haalt je spaardoel deze maand niet.',l2:'Bekijk je vooruitblik',act:"go('vooruit')",chronic:{key:'saverisk',ym:m,val:tekort}});
+        saveRiskPushed=true;
+      } } }catch(_){} }
+  // tempo zegt hetzelfde als save-risk ("je geeft te snel uit"); één boodschap is genoeg
+  if(isNow && !saveRiskPushed){ try{ const t=totals(m), de=daysElapsed(m), el=de.elapsed||1;
     if(t.budget>0 && el>=5 && (t.spend/el*de.dim)>t.budget*1.07){ const proj=Math.round(t.spend/el*de.dim); const ack=(SET.chronicAck||{}).tempo; if(!(ack && ack.ym===m && proj < ack.val*1.10)) push({key:'tempo',score:66,t:'warn',ic:ICON('clock'),l1:'Op dit tempo ga je deze maand over je grens.',l2:'Verlaag je dagdoel',act:"go('act')",chronic:{key:'tempo',ym:m,val:proj}}); } }catch(_){} }
-  if(isNow){ try{ const v=(catSpendMap(m).vices)||0; if(v>=20){ const ack=(SET.chronicAck||{}).vice; if(!(ack && ack.ym===m && v < ack.val*1.25)) push({key:'vice',score:58+Math.min(v/5,22),t:'warn',ic:CATS.vices.icon,l1:`€${Math.round(v)} aan vices deze maand.`,l2:'Zet een weekgrens',act:"openCategory('vices')",chronic:{key:'vice',ym:m,val:Math.round(v)}}); } }catch(_){} }
+  // Categorie-neutraal i.p.v. de oude vices-melding: welke stuurbare categorie ligt het sterkst
+  // boven zijn éígen mediaan? Geen categorie wordt apart aangewezen; de maatstaf is je eigen normaal.
+  if(isNow){ try{ const cur=catSpendMap(m); const B=SET.budgets||{};
+    const hist=months().filter(x=>x<m).slice(-6); const maps=hist.map(x=>catSpendMap(x));
+    if(hist.length>=2){
+      const med=a=>{ const z=a.slice().sort((x,y)=>x-y); return z.length?z[Math.floor(z.length/2)]:0; };
+      let best=null;
+      for(const k in cur){
+        if(!CATS[k]||CATS[k].type!=='expense'||isFixedCat(k)) continue;   // vaste lasten stuur je niet vandaag bij
+        if(+B[k]>0) continue;                                             // heeft een potje -> dekt de budget-melding al
+        const v=Math.round(cur[k]||0), mref=Math.round(med(maps.map(sm=>sm[k]||0)));
+        if(mref<=0 || v<mref*1.5 || v-mref<25) continue;
+        if(!best || (v-mref)>best.d) best={k,v,mref,d:v-mref};
+      }
+      if(best){ const ack=(SET.chronicAck||{}).discr;
+        if(!(ack && ack.ym===m && best.v < ack.val*1.25))
+          push({key:'discr-'+best.k, score:58+Math.min(best.d/10,22), t:'warn', ic:CATS[best.k].icon,
+            l1:`${CATS[best.k].name} ligt deze maand boven je normaal: ${euro0(best.v)} tegen meestal ${euro0(best.mref)}.`,
+            l2:'Bekijk waar het heen ging', act:`openCategory('${best.k}')`, chronic:{key:'discr',ym:m,val:best.v}});
+      } } }catch(_){} }
   // af-en-toe: concrete manier om sneller bij je spaardoel te komen (vervangt de oude 'Sneller bij je doel'-kaart)
   if(isNow){ try{ const sf=saveFasterTip(); if(sf && sf.earlier>=1 && sf.save>=10){
     push({key:'savefaster-'+m, score:34, t:'good', ic:ICON('coins'),
@@ -2713,12 +2741,21 @@ function scoreNotifs(){
   try{ const Lq=liquidityDaily(3); const t0=new Date(); t0.setHours(0,0,0,0); const hz=new Date(t0); hz.setDate(hz.getDate()+2);
     const due=(Lq.events||[]).filter(e=>{const d=new Date(e.date); d.setHours(0,0,0,0); return e.amt<0 && d.getTime()>=t0.getTime() && d.getTime()<=hz.getTime();}).sort((a,b)=>a.date-b.date);
     const dueAmt=due.reduce((s2,e)=>s2-e.amt,0); const tb=totalBalance();
-    if(dueAmt>0 && tb.missing===0 && tb.sum<dueAmt){
+    // Reken met wat je wél weet: tb.sum telt alleen rekeningen met een bekend saldo. Eerder vuurde
+    // dit alarm alleen bij álle saldi bekend, waardoor de sterkste bescherming een live koppeling eiste.
+    if(dueAmt>0 && tb.known>0 && tb.sum<dueAmt){
       const topUp=Math.max(Math.ceil((dueAmt-tb.sum)/5)*5,5); const first=due[0];
       const dd=Math.round((new Date(first.date).setHours(0,0,0,0)-t0.getTime())/86400000); const when=dd<=0?'vandaag':dd===1?'morgen':'overmorgen';
       out.push({key:'lowbal-'+today,score:96,t:'bad',ic:ICON('alert'),
         l1: due.length>1?`Te weinig saldo voor ${due.length} vaste lasten ${when}.`:`Te weinig saldo: ${when} wordt ${esc(String(first.name||'').slice(0,20))} ${euro(-first.amt)} afgeschreven.`,
-        l2:`Vul ±${euro0(topUp)} aan`, act:"go('vooruit')"});
+        l2:`Vul ±${euro0(topUp)} aan${tb.missing>0?` · gerekend met ${tb.known} van je ${tb.known+tb.missing} rekeningen`:''}`, act:"go('vooruit')"});
+    }
+    // Ontbreekt er saldo, dan kán dit alarm niet betrouwbaar zijn. Eén rustige uitnodiging
+    // i.p.v. een waarschuwing die we niet kunnen onderbouwen; per maand hooguit één keer.
+    if(dueAmt>=50 && tb.missing>0 && (SET.balNudge||{}).ym!==m){
+      out.push({key:'balnudge-'+m, score:44, t:'info', ic:ICON('wallet'),
+        l1: tb.known>0?'Van een deel van je rekeningen kennen we het saldo niet.':'We kennen je saldo niet, dus we kunnen niet waarschuwen.',
+        l2:'Voeg je saldo toe, dan waarschuwt Minder je als er te weinig staat', act:'balNudgeGo()'});
     } }catch(_){}
   // --- per-rekening: aankomende vaste last die het saldo van DIE rekening niet dekt ---
   try{ const t0=new Date().setHours(0,0,0,0);
