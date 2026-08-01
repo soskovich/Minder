@@ -4963,13 +4963,19 @@ function renderActions(){
   // v70: de "Je potjes"-widget is hier weg. Potjes blijven bewerkbaar via de budget-bottomsheet
   // (Inzichten ▸ Deze maand ▸ Maandbudget) en via openPotje/openPotjePick elders; alleen deze
   // coach-weergave verviel, het potjes-systeem zelf niet.
+  // v82: een render() tijdens een lopend gesprek mag de draad niet wegvegen of het gesprek
+  // herstarten. Alleen bij het (opnieuw) openen van Coach bouwen we de schil opnieuw op.
+  const _thr=document.getElementById('coThr');
+  const _bezig=window._coLive && _thr && _thr.children.length;
+  if(_bezig && !window._coReopen) return;
+  window._coReopen=false;
   $('#s-act').innerHTML = `<div class="coachhead" onclick="openCoachAvatar()"><div class="av">${coachAvatar()}</div><span class="nm">Je coach</span><span class="sw">wissel ›</span></div>`
     + `<div class="cothr" id="coThr"></div><div id="coCh"></div>`
     + `<button class="cobuy" id="buyBtn">${ICON('cart')} Ik wil iets kopen</button>`
     + coachMirrorCard() + zoneMine
     + `<div class="scr-foot">Je coach spreekt alleen als er iets te zeggen valt.</div>`;
   const bb=document.getElementById('buyBtn'); if(bb) bb.onclick=openBuy;
-  coParkReturn(m).then(handled=>{ if(!handled) startCoachTalk(m); });
+  coOpen(m);
 }
 /* ---------- COACH-DIALOOG (tik-door gesprek, leest/voert uit via de motor) ---------- */
 let _coT=null,_coC=null,_coGen=0;
@@ -5121,6 +5127,7 @@ function coachVoice(tone){
 // stakes-framing en afsluiter. De rest van de teksten is feitelijk en verandert niet mee.
 const COACH_TONE_COPY={
   direct:{
+    groetOpen: nm=>nm?`Hi ${nm}, waarmee kan ik je helpen vandaag?`:`Hoi, waarmee kan ik je helpen vandaag?`,
     groet:  nm=>`${nm?'Hey '+nm+'. ':''}Even kijken naar je maand.`,
     stakes:(perJr,weken)=>`Klein, maar terugkerend is dat ${euro0(perJr)} per jaar. Zo'n ${weken} ${weken===1?'week':'weken'} later bij je doel.`,
     slot:   ()=>'',
@@ -5128,6 +5135,7 @@ const COACH_TONE_COPY={
     menuIntro:'Waar wil je het over hebben?'
   },
   zacht:{
+    groetOpen: nm=>nm?`Hoi ${nm}, fijn dat je er bent. Waarmee kan ik je helpen vandaag?`:`Fijn dat je er bent. Waarmee kan ik je helpen vandaag?`,
     groet:  nm=>`${nm?'Fijn dat je kijkt, '+nm+'. ':'Fijn dat je kijkt. '}We nemen je maand rustig door.`,
     stakes:(perJr,weken)=>`Terugkerend is dat ${euro0(perJr)} per jaar, zo'n ${weken} ${weken===1?'week':'weken'} later bij je doel. Geen ramp, wel goed om te weten.`,
     slot:   ()=>'Je hoeft dit niet vandaag op te lossen.',
@@ -5135,6 +5143,7 @@ const COACH_TONE_COPY={
     menuIntro:'Waar wil je het over hebben? Alles mag je overslaan.'
   },
   zakelijk:{
+    groetOpen: nm=>nm?`${nm}, waarmee kan ik je helpen?`:`Waarmee kan ik je helpen?`,
     groet:  ()=>`Je maand tot nu toe.`,
     stakes:(perJr,weken)=>`${euro0(perJr)}/jaar · ${weken} ${weken===1?'week':'weken'} later bij je doel.`,
     slot:   ()=>'',
@@ -5163,7 +5172,7 @@ async function coachAI(draft){
   }catch(_){ return null; }
 }
 function coWait(ms){ return new Promise(r=>setTimeout(r,ms)); }
-function coReset(){ _coGen++; _coT=document.getElementById('coThr'); _coC=document.getElementById('coCh'); if(_coT)_coT.innerHTML=''; if(_coC)_coC.innerHTML=''; }
+function coReset(){ _coGen++; window._coLive=true; _coT=document.getElementById('coThr'); _coC=document.getElementById('coCh'); if(_coT)_coT.innerHTML=''; if(_coC)_coC.innerHTML=''; }
 function coBub(cls,txt,o){ if(!_coT)return; o=o||{};
   const set=(el)=>{ if(o.html) el.innerHTML=txt; else el.textContent=txt; };
   if(cls==='co'){ const row=document.createElement('div'); row.className='corow'; const av=document.createElement('div'); av.className='coav'; av.innerHTML=coachAvatar(); const d=document.createElement('div'); d.className='cbub co'+(o.accent?' acc':''); set(d); row.appendChild(av); row.appendChild(d); _coT.appendChild(row); }
@@ -5177,7 +5186,7 @@ async function coSay(txt,o){ o=o||{}; if(!_coT)return; const _g=_coGen;
   else { await coWait(520); }
   if(_g!==_coGen || !document.body.contains(row)){ try{row.remove();}catch(_){ } return; } row.remove(); coBub('co',out,{html,accent:o.accent}); await coWait(110); }
 function coChoices(opts){ if(!_coC)return; _coC.innerHTML=''; opts.forEach(o=>{ const b=document.createElement('button'); b.className='cch'; const s=document.createElement('span'); s.textContent=o.l; const c=document.createElement('span'); c.className='cchv'; c.textContent='›'; b.appendChild(s); b.appendChild(c); b.onclick=()=>{ _coC.innerHTML=''; coBub('me',o.l); o.act(); }; _coC.appendChild(b); }); }
-function coEnd(){ if(_coC)_coC.innerHTML=''; }
+function coEnd(){ if(_coC)_coC.innerHTML=''; window._coLive=false; }
 // observatie-tekst per leksoort (leest coach.leak)
 function coObsLeak(leak){
   if(leak.kind==='impulse') return `Die ${euro0(leak.amount)} bij ${esc(leak.name)} zat in geen budget. Kwam uit het niets.`;
@@ -5227,21 +5236,48 @@ async function coFirstPotFlow(m){
   ]);
   return true;
 }
-async function startCoachTalk(m){
+// De enige ingang van het coach-gesprek: eerst de groet, daarna precies één pad
+// (geparkeerde aankoop als er een openstaat, anders de gewone flow).
+function coVoornaam(){ return (SET.name||'').trim().split(/\s+/)[0]||''; }
+async function coOpen(m){
   coReset(); if(!_coT)return; const _g=_coGen;
+  await coSay(coTone('groetOpen',coVoornaam())); if(_g!==_coGen)return;
+  if(await coParkReturn(m,true)) return;                       // geparkeerde aankoop = relevante context
+  startCoachTalk(m,true);
+}
+// Een vastgelegde afspraak halen we alleen terug als hij nú ergens op slaat: dezelfde categorie
+// is opnieuw je grootste lek, of het is een nieuwe maand. Eén keer per maand, daarna zwijgen we.
+function coRecall(m){
+  const af=(SET.coachLog||[]).find(l=>l.type==='afspraak'); if(!af) return null;
+  const ym=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
+  const R=SET.coachRecall; if(R && String(R.ts)===String(af.ts) && R.ym===ym) return null;
+  let leak=null; try{ leak=financeModel().coach.leak; }catch(_){}
+  let reden=null, regel='';
+  if(leak && af.cat && leak.cat===af.cat){ reden='lek';
+    regel=`Je sprak af: <span class="hl">${esc(af.text)}</span>. ${esc(CATS[af.cat]?CATS[af.cat].name:'Die post')} is deze maand opnieuw je grootste lek.`; }
+  else if(!coSameMonth(af.ts)){ reden='maandwissel';
+    regel=`Vorige maand sprak je dit af: <span class="hl">${esc(af.text)}</span>. Nieuwe maand — zullen we kijken of het nog past?`; }
+  if(!reden) return null;
+  SET.coachRecall={ts:af.ts, ym}; save();
+  return {reden, regel, af};
+}
+// De afspraak van deze maand blijft bereikbaar, maar wordt niet meer als opening afgedwongen.
+async function coAfspraakOpen(m){
+  const _g=_coGen; const af=coachThisMonthAfspraak();
+  if(!af){ coachMenu(m); return; }
+  await coSay(`<span class="hl">${esc(af.text)}</span> — dat sprak je deze maand af.`,{html:true,accent:true}); if(_g!==_coGen)return;
+  coChoices([
+    {l:'Afspraak aanpassen', act:()=>{ SET.coachLog=(SET.coachLog||[]).filter(l=>!(l.type==='afspraak' && coSameMonth(l.ts))); save(); coTopic('potjes',m); }},
+    coTerug(m), {l:'Nu even niet',act:()=>coEnd()}
+  ]);
+}
+async function startCoachTalk(m,keep){
+  if(!keep) coReset();
+  if(!_coT)return; const _g=_coGen;
   // begeleide eerste-potje-flow: nog geen enkel potje -> help er een te maken (anker = grootste variabele lek)
   if(TX.length && potCount()===0 && !SET.firstPotDone && SET.firstPotSkipMonth!==m){ if(await coFirstPotFlow(m)) return; }
-  // al een afspraak deze maand? Toon de klaar-staat i.p.v. het gesprek opnieuw te voeren.
-  const reeds=coachThisMonthAfspraak();
-  if(reeds){
-    const nm0=(SET.name||'').trim().split(/\s+/)[0];
-    await coSay(`${nm0?'Hey '+nm0+'. ':''}Je afspraak voor deze maand staat al.`,{ai:true});
-    if(_g!==_coGen)return;
-    await coSay(`<span class="hl">${esc(reeds.text)}</span>. Volgende maand kom ik hierop terug.`,{html:true,accent:true});
-    if(_g!==_coGen)return;
-    coChoices([{l:'Afspraak aanpassen',act:()=>{ SET.coachLog=(SET.coachLog||[]).filter(l=>!(l.type==='afspraak' && coSameMonth(l.ts))); save(); startCoachTalk(m); }}]);
-    return;
-  }
+  // v82: de afspraak van deze maand wordt niet meer als opening gereplayd. Hij staat als keuze
+  // in het menu en komt via coRecall alleen naar voren als hij nú ergens op slaat.
   const last=financeModel().coach.lastAction;
   const D=coachDoel();
   let spaar=0; try{ spaar=Math.round(savingsModel().monthlySaving); }catch(_){}
@@ -5249,9 +5285,7 @@ async function startCoachTalk(m){
   // je het onderwerp Budget & potjes kiest; daar wordt het pas besproken.
   window._coFacts={ context:'maandgesprek', doel: D?{bedrag:D.bedrag, naam:D.naam, maandelijkseSpaarsnelheid:D.per||spaar}:null,
     lek:null, vorigeAfspraak:last||null };
-  const nm=(SET.name||'').trim().split(/\s+/)[0];
-  await coSay(coTone('groet',nm),{ai:true}); if(_g!==_coGen)return;
-  if(last){ await coSay(`Vorige keer hield je dit aan: <span class="hl">${esc(last)}</span>. Dat werkte.`,{html:true,accent:true,ai:{tone:'teal'}}); if(_g!==_coGen)return; }
+  if(!keep){ await coSay(coTone('groet',coVoornaam()),{ai:true}); if(_g!==_coGen)return; }
   // Laag 2 — doel-first: één keer vragen waar je naartoe werkt, daarna alleen kort herbevestigen.
   if(!SET.coachGoalConfirmed && D){
     await coSay(coTone('doelVraag'),{ai:true}); if(_g!==_coGen)return;
@@ -5286,6 +5320,8 @@ function coachDureSchuld(){
 /* ---------- Laag 1: onderwerpenmenu. Eén onderwerp per keer, alles overslaanbaar. ---------- */
 async function coachMenu(m){
   const _g=_coGen;
+  const R=coRecall(m);                                          // alleen als het nú relevant is
+  if(R){ await coSay(R.regel,{html:true,accent:true}); if(_g!==_coGen)return; }
   await coSay(coTone('menuIntro')); if(_g!==_coGen)return;
   const opts=[
     {l:'Bespaartips', act:()=>coTopic('tips',m)},
@@ -5294,6 +5330,7 @@ async function coachMenu(m){
     {l:'Grip op impulsen', act:()=>coTopic('impuls',m)}
   ];
   if(coachDureSchuld()) opts.push({l:'Schuld aflossen', act:()=>coTopic('schuld',m)});
+  if(coachThisMonthAfspraak()) opts.push({l:'Je afspraak staat nog · aanpassen', act:()=>coAfspraakOpen(m)});
   opts.push({l:'Liever zelf kijken · naar mijn cijfers', act:()=>{ coEnd(); go('ins'); }});
   coChoices(opts);
 }
@@ -5431,7 +5468,7 @@ async function coShowAction(opt){
       const baseT=(SET.budgetsNext[opt.shiftCat]!=null?+SET.budgetsNext[opt.shiftCat]:(+(SET.budgets||{})[opt.shiftCat]||0));
       SET.budgetsNext[v]=Math.round(baseV-opt.shiftAmt); SET.budgetsNext[opt.shiftCat]=Math.round(baseT+opt.shiftAmt); save(); coFx(`${euro0(opt.shiftAmt)} verschoven uit ${potName(v)} vanaf volgende maand`); }
     SET.coachLog=(SET.coachLog||[]).filter(l=>!(l.type==='afspraak' && coSameMonth(l.ts)));   // vervang de afspraak van deze maand
-    coachLogAdd({type:'afspraak',text:tekst}); coFx('afspraak vastgelegd');
+    coachLogAdd({type:'afspraak',text:tekst,cat:opt.potCat||opt.shiftCat||null}); coFx('afspraak vastgelegd');
     await coSay(`Genoteerd. Volgende maand kom ik hierop terug.`);
     // cirkel rond: koppel terug wat het scheelt bij je doel (alleen waar kwantificeerbaar)
     const extra = (opt.potCat && +v>0) ? Math.max(coSuggestPot(opt.potCat)-Math.round(+v),0) : 0;
@@ -5529,11 +5566,12 @@ function coParkDue(){ const log=SET.coachLog||[]; const now=Date.now();
 function coParkResolve(entry,uitkomst,intentie){ entry.resolved=true;
   coBuyLog(entry.item, +entry.bedrag||0, entry.potjeId, uitkomst, intentie||'nu'); save(); }
 // koude her-keuze; geeft true terug als er iets te beslissen viel (anders draait het normale coachgesprek)
-async function coParkReturn(m){
+async function coParkReturn(m,keep){
   let p=coParkDue();
   if(!p && SET.demoMechanismen){ const dc=Object.keys(CATS).find(k=>CATS[k]&&CATS[k].type==='expense')||'vices'; p={__demo:true,type:'beslis',item:'koptelefoon',bedrag:120,potjeId:dc,uitkomst:'geparkeerd',intentie:'nu',parkN:1,ts:Date.now()-19*36e5}; }
   if(!p) return false;
-  coReset(); if(!_coT) return false;
+  if(!keep) coReset();
+  if(!_coT) return false;
   const cn=potName(p.potjeId), amt=+p.bedrag||0, it=String(p.item||'').trim(), n=(+p.parkN||1);
   coBub('co',`Een tijdje terug parkeerde je ${it?`<b>${esc(it)}</b> `:''}voor ${euro0(amt)} (${cn}).`,{html:true,accent:true});
   // gevolg in dagen marge, zelfde rekenwijze als de koopcheck
@@ -7711,7 +7749,7 @@ function go(name){
   $('#s-'+name).classList.add('active');
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.go===name));
   const _g=document.getElementById('headGear'); if(_g) _g.classList.toggle('on',name==='set');
-  if(name==='act'){ window._coachStep=0; window._coachAnswer=null; renderActions(); }
+  if(name==='act'){ window._coachStep=0; window._coachAnswer=null; window._coReopen=true; renderActions(); }
   syncMonthPick();
   try{ localStorage.setItem('minder_view', name); }catch(_){}
   window.scrollTo(0,0);

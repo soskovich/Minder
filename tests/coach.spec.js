@@ -127,10 +127,15 @@ test.describe('b · onderwerpenmenu', () => {
     }
   });
 
-  test('de bestaande afspraak-staat blijft voorgaan', async ({ page }) => {
-    await coach(page, metDoel((s) => { s.coachLog = [{ ts: Date.now(), type: 'afspraak', text: 'ik zet €150 apart voor uit eten' }]; }));
-    await wachtKeuze(page, 'Afspraak aanpassen');                 // pas ná beide bubbels
-    expect(await draad(page)).toMatch(/afspraak voor deze maand staat al/i);
+  // v82: de afspraak van deze maand is geen geforceerde opening meer, maar staat als keuze in het menu
+  test('de bestaande afspraak is bereikbaar via het menu, niet als opening', async ({ page }) => {
+    await coach(page, metDoel((s) => { s.coachLog = [{ ts: Date.now(), type: 'afspraak', text: 'ik zet €150 apart voor uit eten' }]; s.coachGoalConfirmed = 'gA'; }));
+    await wachtKeuze(page, 'Je afspraak staat nog');
+    expect(await draad(page)).not.toMatch(/afspraak voor deze maand staat al/i);
+    expect(await draad(page)).not.toContain('ik zet €150 apart voor uit eten');
+
+    await kies(page, 'Je afspraak staat nog');
+    await wachtKeuze(page, 'Afspraak aanpassen');
     expect(await draad(page)).toContain('ik zet €150 apart voor uit eten');
   });
 });
@@ -209,7 +214,7 @@ test.describe('c · toon-wissel werkt zonder AI-laag', () => {
   test('de gekozen toon is te horen in het echte gesprek', async ({ page }) => {
     await coach(page, metDoel((s) => { s.coachTone = 'zacht'; }));
     await wachtKeuze(page, 'Kosten koper huis');
-    expect(await draad(page)).toMatch(/fijn dat je kijkt/i);
+    expect(await draad(page)).toMatch(/fijn dat je er bent/i);      // de zachte opening (v82)
     expect(await page.evaluate(() => SET.aiCoach)).toBeFalsy();   // aantoonbaar zonder AI-laag
   });
 });
