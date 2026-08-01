@@ -424,6 +424,13 @@ h1,h2,h3{margin:0}
 
 /* lists */
 .tx-day{font-size:12.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:14px 4px 6px;font-weight:600}
+.tx-mhead{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:800;margin:20px 4px 2px}
+.txbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 2px 8px}
+.fchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 10px;border-radius:var(--r-pill);background:var(--card2);border:1px solid var(--line);color:var(--mut);cursor:pointer;white-space:nowrap}
+.fchip.on{border-color:var(--teal);color:var(--teal);background:rgba(59,179,164,.10)}
+.fchip .x{display:inline-flex;opacity:.7}.fchip .x svg{width:12px;height:12px}
+.tx-clear{font-size:12px;color:var(--teal);font-weight:600;cursor:pointer;padding:5px 4px}
+.fsec{font-size:12.5px;color:var(--mut);font-weight:600;margin:14px 0 6px}
 .tx{display:flex;align-items:center;gap:12px;padding:11px 0;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;cursor:pointer}
 .tx:active{background:var(--card2)}
 .tx .ava{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
@@ -669,7 +676,13 @@ let deferredPrompt=null;   // PWA install-prompt
 let SET={limit:70, income:0, autoIncome:true, hideInternal:true};
 let accFilter='all';
 let curMonth=null;         // 'YYYY-MM'
-let txFilter='all', txSearch='';
+let txSearch='';
+/* Transactie-periode + filters (weergave-state, niet opgeslagen; default = deze maand) */
+let txPeriod='month';        // 'month' | '3m' | 'ytd' | 'all' | 'YYYY-MM'
+let txCats=new Set();        // leeg = alle categorieen
+let txType='all';            // 'all' | 'exp' | 'inc'
+let txMin=null, txMax=null;  // bedrag-bereik (absoluut)
+const TXPAGE=250; let txLimit=TXPAGE;
 const FSA = ('showDirectoryPicker' in window);   // File System Access API beschikbaar?
 let dirHandle=null;                              // gekoppelde bankmap (FSA)
 const FILE_RX=/\.(sta|940|mt940|csv|txt)$/i;     // ondersteunde bestandstypen
@@ -5996,33 +6009,97 @@ function quickAdd(){
   else if(FSA && SET.folderName) syncFolder(true);
   else document.getElementById('file').click();
 }
+/* ---------- Transacties: periode-keuze + filters ---------- */
+// Welke maanden vallen in de gekozen periode? 'month' volgt curMonth (de maand die je elders koos).
+function txMonthsForPeriod(){
+  const ms=months(); if(!ms.length) return [];
+  const cm=(curMonth&&ms.includes(curMonth))?curMonth:ms[ms.length-1];
+  // een gekozen maand die na een import niet meer bestaat valt netjes terug op deze maand
+  if(/^\d{4}-\d{2}$/.test(txPeriod)){ if(ms.includes(txPeriod)) return [txPeriod]; txPeriod='month'; }
+  if(txPeriod==='all') return ms.slice();
+  if(txPeriod==='ytd') return ms.filter(m=>m.slice(0,4)===cm.slice(0,4)&&m<=cm);
+  if(txPeriod==='3m'){ const i=ms.indexOf(cm); return ms.slice(Math.max(0,i-2),i+1); }
+  return [cm];
+}
+function txForPeriod(){ const set=new Set(txMonthsForPeriod()); return TX.filter(t=>set.has(t.date.slice(0,7))); }
+function txPeriodLabel(){
+  if(/^\d{4}-\d{2}$/.test(txPeriod)) return monthLabel(txPeriod);
+  if(txPeriod==='all') return 'Alles';
+  if(txPeriod==='ytd') return 'Dit jaar';
+  if(txPeriod==='3m') return '3 maanden';
+  const ms=txMonthsForPeriod(), n=new Date(), nowYM=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  return (!ms.length||ms[0]===nowYM)?'Deze maand':monthLabel(ms[0]);
+}
+// De filters die nu aan staan, als losse chips (elk met een eigen x).
+function txActiveFilters(){
+  const out=[];
+  if(txPeriod!=='month') out.push({k:'period', lab:txPeriodLabel()});
+  if(txType!=='all') out.push({k:'type', lab:txType==='exp'?'Uitgaven':'Inkomsten'});
+  [...txCats].forEach(k=>{ if(CATS[k]) out.push({k:'cat:'+k, lab:CATS[k].name}); });
+  if(accFilter!=='all') out.push({k:'acc', lab:esc(accLabel(accFilter))});
+  if(txMin!=null||txMax!=null) out.push({k:'amt', lab:(txMin!=null?euro0(txMin):'€0')+'–'+(txMax!=null?euro0(txMax):'∞')});
+  if(txSearch) out.push({k:'zoek', lab:'“'+esc(txSearch)+'”'});
+  return out;
+}
+function removeTxFilter(k){
+  if(k==='period') txPeriod='month';
+  else if(k.slice(0,4)==='cat:') txCats.delete(k.slice(4));
+  else if(k==='type') txType='all';
+  else if(k==='acc') accFilter='all';
+  else if(k==='amt'){ txMin=null; txMax=null; }
+  else if(k==='zoek') txSearch='';
+  txLimit=TXPAGE; renderTx(); if(window._txFilterSheet) openTxFilter();
+}
+// De getoonde set: periode -> rekening -> type -> categorie -> bedrag -> zoek.
+function txFiltered(){
+  let list=txForPeriod().slice().sort((a,b)=>b.date.localeCompare(a.date)||0);
+  if(accFilter!=='all') list=list.filter(t=>t.acc===accFilter);
+  if(txType==='exp') list=list.filter(t=>t.amount<0);
+  if(txType==='inc') list=list.filter(t=>t.amount>0);
+  if(txCats.size) list=list.filter(t=>txCats.has(catOf(t)));
+  if(txMin!=null) list=list.filter(t=>Math.abs(t.amount)>=txMin);
+  if(txMax!=null) list=list.filter(t=>Math.abs(t.amount)<=txMax);
+  if(txSearch) list=list.filter(t=>(t.name+' '+t.desc).toLowerCase().includes(txSearch));
+  return list;
+}
 function renderTx(){
-  const filtered = accFilter!=='all'||txFilter!=='all';
   const ib='background:var(--card2);border:1px solid var(--line);border-radius:10px;width:38px;height:38px;font-size:14px;cursor:pointer;color:inherit';
   const header=`<div class="row" style="align-items:center;margin:2px 2px 12px;gap:8px"><button onclick="go('dash')" title="Terug naar dashboard" style="${ib}">‹</button><b style="font-size:17px;flex:1">Transacties</b>
     <div style="display:flex;gap:8px">
       <button onclick="quickAdd()" title="Bijwerken / importeren" style="${ib}">${ICON('sync')}</button>
       <button onclick="toggleTxSearch()" style="${ib}">${ICON('search')}</button>
-      <button onclick="openTxFilter()" style="position:relative;${ib}">${ICON('filter')}${filtered?'<span style="position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--teal)"></span>':''}</button>
+      <button onclick="openTxFilter()" style="position:relative;${ib}">${ICON('filter')}${txActiveFilters().length?'<span style="position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--teal)"></span>':''}</button>
     </div></div>`;
-  const search = window._txSearchOpen?`<input type="search" placeholder="Zoek transactie of winkel…" value="${esc(txSearch)}" oninput="txSearch=this.value.toLowerCase();renderTxList()" style="margin-bottom:10px">`:'';
-  const pill = filtered?`<div class="small muted" style="margin:0 2px 10px">Filter actief · <span style="color:var(--teal);cursor:pointer" onclick="clearTxFilter()">wis ${ICON('x')}</span></div>`:'';
-  $('#s-tx').innerHTML = header + search + pill + `<div id="txlist"></div>`;
-  renderTxList();
+  const search = window._txSearchOpen?`<input type="search" placeholder="Zoek transactie of winkel…" value="${esc(txSearch)}" oninput="txSearch=this.value.toLowerCase();txLimit=TXPAGE;renderTxList();txPatchBar()" style="margin-bottom:10px">`:'';
+  $('#s-tx').innerHTML = header + search + `<div id="txBar"></div><div id="txSum" class="small" style="color:var(--mut2);margin:0 2px 10px"></div><div id="txlist"></div>`;
+  txPatchBar(); renderTxList();
 }
-
+// Alleen de filterbalk + samenvatting hertekenen, zodat een zoekveld zijn focus houdt.
+function txPatchBar(){
+  const bar=document.getElementById('txBar'); if(!bar) return;
+  const act=txActiveFilters();
+  bar.innerHTML=`<div class="txbar">
+    <span class="fchip on" onclick="openTxFilter()">${esc(txPeriodLabel())} ▾${txPeriod!=='month'?`<span class="x" onclick="event.stopPropagation();removeTxFilter('period')">${ICON('x')}</span>`:''}</span>
+    ${act.filter(f=>f.k!=='period').map(f=>`<span class="fchip" onclick="removeTxFilter('${f.k}')">${f.lab}<span class="x">${ICON('x')}</span></span>`).join('')}
+    ${act.length?`<span class="tx-clear" onclick="clearTxFilter()">wis alles</span>`:''}
+  </div>`;
+  const sum=document.getElementById('txSum'); if(!sum) return;
+  const list=txFiltered(); const net=list.reduce((a,t)=>a+t.amount,0);
+  sum.innerHTML=list.length?`${list.length} ${list.length===1?'transactie':'transacties'} · netto ${euro0(net)}`:'';
+}
 function renderTxList(){
   const el=document.getElementById('txlist'); if(!el) return;
-  const all=txOfMonth(curMonth);
-  let list=all.slice().sort((a,b)=>b.date.localeCompare(a.date)||0);
-  if(accFilter!=='all') list=list.filter(t=>t.acc===accFilter);
-  if(txFilter!=='all') list=list.filter(t=>catOf(t)===txFilter);
-  if(txSearch) list=list.filter(t=>(t.name+' '+t.desc).toLowerCase().includes(txSearch));
+  const all=txForPeriod();
+  const list=txFiltered();
   const sum={},cnt={}; for(const t of all){ const k=catOf(t); if(CATS[k]&&CATS[k].type==='expense'){ sum[k]=(sum[k]||0)+(-t.amount); if(t.amount<0) cnt[k]=(cnt[k]||0)+1; } }   // netto som, gemiddelde over afschrijvingen
   const catAvg={}; for(const k in sum){ if(cnt[k]) catAvg[k]=sum[k]/cnt[k]; }
-  let body='', lastDay='';
-  for(const t of list){
-    if(t.date!==lastDay){ lastDay=t.date; body+=`<div class="tx-day">${dayHeader(t.date)}</div>`; }
+  const multi=txMonthsForPeriod().length>1;                          // meer maanden in beeld -> maandcontext tonen
+  const toon=list.slice(0,txLimit);
+  let body='', lastDay='', lastMo='';
+  for(const t of toon){
+    const mo=t.date.slice(0,7);
+    if(multi&&mo!==lastMo){ lastMo=mo; body+=`<div class="tx-mhead">${monthLabel(mo)}</div>`; }
+    if(t.date!==lastDay){ lastDay=t.date; body+=`<div class="tx-day">${dayHeader(t.date,multi)}</div>`; }
     const c=CATS[catOf(t)]; const ong=txOutlier(t,catAvg); const pnd=t.pending;
     body+=`<div class="tx" onclick="openSheet('${t.id}')"${pnd?' style="opacity:.62"':''}>
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
@@ -6030,15 +6107,20 @@ function renderTxList(){
       <div class="amt ${t.amount>0?'pos':''}" style="font-weight:700">${t.amount>0?'+':''}${euro(t.amount)}</div>
     </div>`;
   }
-  el.innerHTML = body||`<div class="muted small center" style="padding:30px">${(accFilter!=='all'||txFilter!=='all'||txSearch)?'Niets gevonden, pas je filter aan.':'Geen transacties deze maand.'}</div>`;
+  if(list.length>toon.length) body+=`<button class="btn sec" style="margin-top:12px" onclick="txMore()">Nog ${list.length-toon.length} transacties laden</button>`;
+  el.innerHTML = body||`<div class="muted small center" style="padding:30px">${txActiveFilters().length?'Niets gevonden, pas je filter aan.':'Geen transacties in deze periode.'}</div>`;
 }
+function txMore(){ txLimit+=TXPAGE; renderTxList(); }
 
-function dayHeader(ds){
+function dayHeader(ds,withMonth){
   const d=new Date(ds); d.setHours(0,0,0,0);
   const today=new Date(); today.setHours(0,0,0,0);
   const diff=Math.round((today-d)/86400000);
-  if(diff===0) return 'Vandaag'; if(diff===1) return 'Gisteren';
-  return `${['Zo','Ma','Di','Wo','Do','Vr','Za'][d.getDay()]} ${d.getDate()} ${MFULL[d.getMonth()]}`;
+  // bij een meer-maands-periode draagt de maandband erboven het jaartal; de dagkop houdt de maand
+  const lang=`${['Zo','Ma','Di','Wo','Do','Vr','Za'][d.getDay()]} ${d.getDate()} ${MFULL[d.getMonth()]}`;
+  if(diff===0) return withMonth?`Vandaag · ${lang}`:'Vandaag';
+  if(diff===1) return withMonth?`Gisteren · ${lang}`:'Gisteren';
+  return lang;
 }
 
 function txOutlier(t,catAvg){ const c=CATS[catOf(t)]; if(!(t.amount<0&&c.type==='expense')) return false; const a=catAvg[catOf(t)]; return a && (-t.amount)>Math.max(a*2.2,60) && (-t.amount)>=40; }
@@ -6047,20 +6129,48 @@ function toggleTxSearch(){ window._txSearchOpen=!window._txSearchOpen; if(!windo
 
 function openTxFilter(){
   window._setSheet=null; window._txFilterSheet=true;
-  const present=[...new Set(txOfMonth(curMonth).map(catOf))];
-  const accPart = OWN.length>1?`<div class="small muted" style="margin:6px 0 4px;font-weight:600">Rekening</div><div class="chips"><span class="chip ${accFilter==='all'?'on':''}" onclick="setAcc('all')">Alle</span>${OWN.map(a=>`<span class="chip ${accFilter===a?'on':''}" onclick="setAcc('${a}')">${esc(accLabel(a))}</span>`).join('')}</div>`:'';
+  const ms=months(), meer=ms.length>1;
+  const seg=(v,lab)=>`<span class="chip ${txPeriod===v?'on':''}" onclick="setTxPeriod('${v}')">${lab}</span>`;
+  const gekozen=/^\d{4}-\d{2}$/.test(txPeriod);
+  const maandKeuze=(window._txMonthPick||gekozen)&&meer
+    ? `<div class="chips wrap" style="margin-top:6px">${ms.slice().reverse().slice(0,24).map(m=>`<span class="chip ${txPeriod===m?'on':''}" onclick="setTxPeriod('${m}')">${monthLabel(m)}</span>`).join('')}</div>` : '';
+  const periode=`<div class="fsec">Periode</div>
+    <div class="chips wrap">${seg('month','Deze maand')}${meer?seg('3m','3 mnd')+seg('ytd','Dit jaar')+seg('all','Alles'):''}
+      ${meer?`<span class="chip ${gekozen?'on':''}" onclick="txMonthPick()">Kies maand</span>`:''}</div>${maandKeuze}`;
+  const type=`<div class="fsec">Type</div>
+    <div class="chips"><span class="chip ${txType==='all'?'on':''}" onclick="setTxType('all')">Alles</span><span class="chip ${txType==='exp'?'on':''}" onclick="setTxType('exp')">Uitgaven</span><span class="chip ${txType==='inc'?'on':''}" onclick="setTxType('inc')">Inkomsten</span></div>`;
+  const present=[...new Set(txForPeriod().map(catOf))].filter(k=>CATS[k]).sort((a,b)=>CATS[a].name.localeCompare(CATS[b].name));
+  const cats=`<div class="fsec">Categorie${txCats.size?` · <span style="color:var(--teal)">${txCats.size} gekozen</span>`:''}</div>
+    <div class="chips wrap"><span class="chip ${txCats.size?'':'on'}" onclick="clearTxCats()">Alles</span>${present.map(k=>`<span class="chip ${txCats.has(k)?'on':''}" onclick="toggleTxCat('${k}')">${CATS[k].icon} ${CATS[k].name}</span>`).join('')}</div>`;
+  const acc = OWN.length>1?`<div class="fsec">Rekening</div><div class="chips wrap"><span class="chip ${accFilter==='all'?'on':''}" onclick="setAcc('all')">Alle</span>${OWN.map(a=>`<span class="chip ${accFilter===a?'on':''}" onclick="setAcc('${a}')">${esc(accLabel(a))}</span>`).join('')}</div>`:'';
+  const bedrag=`<div class="fsec">Bedrag</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="number" inputmode="decimal" placeholder="min" value="${txMin!=null?txMin:''}" oninput="setTxAmount('min',this.value)" style="flex:1">
+      <span class="small" style="color:var(--mut2)">tot</span>
+      <input type="number" inputmode="decimal" placeholder="max" value="${txMax!=null?txMax:''}" oninput="setTxAmount('max',this.value)" style="flex:1">
+    </div>`;
+  const zoek=`<div class="fsec">Zoek</div><input type="search" placeholder="Naam of omschrijving…" value="${esc(txSearch)}" oninput="txSearch=this.value.toLowerCase();txLimit=TXPAGE;renderTxList();txPatchBar()">`;
+  const n=txFiltered().length;
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="row" style="margin-bottom:8px"><div style="font-weight:800;font-size:17px">Filter</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    ${accPart}
-    <div class="small muted" style="margin:10px 0 4px;font-weight:600">Categorie</div>
-    <div class="chips"><span class="chip ${txFilter==='all'?'on':''}" onclick="setFilter('all')">Alles</span>${present.map(k=>`<span class="chip ${txFilter===k?'on':''}" onclick="setFilter('${k}')">${CATS[k].icon} ${CATS[k].name}</span>`).join('')}</div>
-    <button class="btn sec" style="margin-top:14px" onclick="clearTxFilter();closeSheet()">Filters wissen</button>`;
+    <div class="row" style="margin-bottom:2px"><div id="txFilterHead" style="font-weight:800;font-size:17px">Filter</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="small" style="color:var(--mut2);margin-bottom:6px">${n} ${n===1?'transactie':'transacties'} in je selectie</div>
+    ${periode}${type}${cats}${acc}${bedrag}${zoek}
+    <button class="btn sec" style="margin-top:16px" onclick="clearTxFilter();closeSheet()">Filters wissen</button>`;
   showSheetBg();
 }
-
-function clearTxFilter(){ accFilter='all'; txFilter='all'; renderTx(); }
-
-function setFilter(k){ txFilter=k; renderTx(); if(window._txFilterSheet) openTxFilter(); }
+function refreshTxFilter(){ txLimit=TXPAGE; renderTx(); if(window._txFilterSheet) openTxFilter(); }
+function setTxPeriod(p){ txPeriod=p; window._txMonthPick=false; refreshTxFilter(); }
+function txMonthPick(){ window._txMonthPick=!window._txMonthPick; if(window._txFilterSheet) openTxFilter(); }
+function setTxType(t){ txType=t; refreshTxFilter(); }
+function toggleTxCat(k){ txCats.has(k)?txCats.delete(k):txCats.add(k); refreshTxFilter(); }
+function clearTxCats(){ txCats.clear(); refreshTxFilter(); }
+function setTxAmount(which,v){
+  const n=v===''?null:Math.abs(parseFloat(String(v).replace(',','.')));
+  const val=(n==null||isNaN(n))?null:n;
+  if(which==='min') txMin=val; else txMax=val;
+  txLimit=TXPAGE; renderTxList(); txPatchBar();                       // sheet niet hertekenen: het veld houdt focus
+}
+function clearTxFilter(){ accFilter='all'; txCats.clear(); txType='all'; txMin=null; txMax=null; txSearch=''; txPeriod='month'; window._txMonthPick=false; txLimit=TXPAGE; renderTx(); if(window._txFilterSheet) openTxFilter(); }
 
 // ONE-FOCUS: kies de éne boodschap + actie voor het Inzichten-hoofdscherm
 function insFocus(m){
