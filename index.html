@@ -14,10 +14,17 @@
 <title>Minder · slimme uitgaventracker</title>
 <style>
 :root{
-  --bg:#0a0f1a; --card:#141b2b; --card2:#1b2336; --line:rgba(255,255,255,.07);
-  --txt:#eaf0fb; --mut:#8f9bb0; --teal:#2dd4bf; --teal-d:#0f766e;
-  --green:#34d399; --amber:#f5b544; --red:#f06d6d; --blue:#60a5fa; --violet:#a78bfa;
-  --shadow:none;
+  /* Design-systeem (v75). Alles cascadeert vanaf hier: kleur, diepte, ritme, radius. */
+  --bg:#0a0f1a; --card:#141b2b; --card2:#1b2336; --line:rgba(255,255,255,.07); --ln2:rgba(255,255,255,.12);
+  /* tekst: --mut is leesbaar secundair, --mut2 alleen écht tertiair */
+  --txt:#eaf0fb; --mut:#a6b2c6; --mut2:#7f8ba1;
+  /* teal is gereserveerd: actieve tab, primaire knop, hero-bedrag, één accent per kaart */
+  --teal:#3bb3a4; --teal-d:#0f766e;
+  --green:#34d399; --amber:#f5b544; --red:#e2685f; --blue:#60a5fa; --violet:#a78bfa;
+  --bar:#39445e;                       /* neutrale datakleur: staven zonder alarm */
+  --shadow:0 1px 2px rgba(0,0,0,.28), 0 6px 20px rgba(0,0,0,.22);
+  --s1:8px; --s2:16px; --s3:24px; --s4:32px;
+  --r-card:16px; --r-inner:12px; --r-pill:999px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -26,7 +33,8 @@ body{
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
   font-size:14px; line-height:1.45; padding-bottom:78px; max-width:520px; margin:0 auto;
   min-height:100vh; position:relative;
-  font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  font-variant-numeric:tabular-nums; font-feature-settings:'tnum';   /* cijfers lijnen overal uit */
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
   letter-spacing:-.01em;
 }
 svg{display:inline-block}
@@ -46,7 +54,7 @@ h1,h2,h3{margin:0}
 .screen{display:none;padding:8px 16px 16px;animation:fade .25s ease}
 .screen.active{display:block}
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 16px;margin-bottom:14px;box-shadow:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);padding:var(--s2);margin-bottom:var(--s2);box-shadow:var(--shadow)}
 .muted{color:var(--mut)}
 /* ===== v10 systeem, home pilot: geen dozen, ruimte + typografie ===== */
 .hsec{margin-top:30px}
@@ -232,7 +240,7 @@ h1,h2,h3{margin:0}
 .plan-mv{width:34px;height:30px;border-radius:8px;background:var(--card2);border:1px solid var(--line);color:var(--mut);font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .plan-mv.off{opacity:.22}
 .plan-1{display:inline-block;background:var(--teal);color:#06231c;font-weight:800;font-size:10px;border-radius:5px;padding:1px 6px;vertical-align:1px}
-.cp-add{display:block;width:100%;text-align:left;background:transparent;border:1px dashed rgba(79,214,196,.45);color:var(--teal);border-radius:10px;padding:10px 12px;margin:10px 0 4px;font-size:13px;font-weight:600;cursor:pointer}
+.cp-add{display:block;width:100%;text-align:left;background:transparent;border:1px solid var(--ln2);color:var(--txt);border-radius:var(--r-inner);padding:11px 13px;margin:var(--s1) 0 4px;font-size:13px;font-weight:600;cursor:pointer}
 .cz-note{font-size:12px;color:var(--mut);line-height:1.5;margin:9px 4px 0}
 .cz-effect{font-size:14px;color:var(--txt);line-height:1.5;margin-bottom:4px}
 .cz-link{font-size:13px;color:var(--teal);cursor:pointer;font-weight:600;margin-top:14px}
@@ -370,6 +378,7 @@ h1,h2,h3{margin:0}
 .goal-row{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;margin-bottom:6px}
 .goal-row .big{font-size:22px;font-weight:800;color:var(--teal)}
 .snz{display:block;width:100%;text-align:center;background:none;border:none;color:var(--mut);font-size:12.5px;padding:8px;cursor:pointer;text-decoration:underline}
+.scr-foot{text-align:center;color:var(--mut2);font-size:11px;letter-spacing:.02em;padding:var(--s3) 0 var(--s2);opacity:.85}
 #toast{position:fixed;left:50%;bottom:84px;transform:translate(-50%,20px);max-width:90%;background:var(--teal-d);color:#fff;padding:11px 16px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.25s;z-index:80;text-align:center}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 .note{background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.22);border-radius:10px;padding:8px 10px;margin-top:9px;font-size:12.5px;color:var(--txt);white-space:pre-wrap;word-break:break-word}
@@ -436,11 +445,11 @@ input[type=search],input[type=number]{width:100%;background:var(--card2);border:
 /* modifier: rij breekt af i.p.v. horizontaal scrollen. Voor rijen waar alles zichtbaar moet zijn
    (maand-pillen), want de scrollbar is verborgen en afgekapte chips lezen als "dit is alles". */
 .chips.wrap{flex-wrap:wrap;overflow-x:visible}
-.chip{flex-shrink:0;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:999px;padding:6px 13px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.chip{flex-shrink:0;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:var(--r-pill);padding:6px 13px;font-size:12.5px;cursor:pointer;white-space:nowrap}
 .chip.on{background:var(--teal-d);border-color:var(--teal);color:#fff}
-.btn{display:block;width:100%;background:var(--teal-d);color:#fff;border:none;border-radius:13px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;text-align:center}
+.btn{display:block;width:100%;background:var(--teal);color:#06231c;border:none;border-radius:var(--r-inner);padding:13px;font-size:14px;font-weight:700;cursor:pointer;text-align:center}
 .btn:active{filter:brightness(1.1)}
-.btn.sec{background:var(--card2);border:1px solid var(--line)}
+.btn.sec{background:transparent;border:1px solid var(--ln2);color:var(--txt);font-weight:600}
 .btn.danger{background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.4);color:var(--red)}
 .slider{width:100%;accent-color:var(--teal)}
 label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font-weight:600}
@@ -454,11 +463,11 @@ label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font
 .sw input:checked + .sl:before{transform:translateX(19px)}
 
 /* bottom nav */
-.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:520px;background:rgba(13,20,34,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:50}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:520px;background:rgba(13,20,34,.72);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);border-top:1px solid var(--ln2);box-shadow:0 -6px 24px rgba(0,0,0,.28);display:flex;justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:50}
 .nav a{flex:1;text-align:center;color:var(--mut);text-decoration:none;font-size:10px;letter-spacing:.02em;font-weight:500;padding:4px 0;cursor:pointer;opacity:.7;transition:opacity .15s ease,color .15s ease}
 .nav a .i{display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 16px;margin-bottom:3px;border-radius:15px;line-height:1;transition:background .18s ease}
-.nav a.on{color:var(--teal);opacity:1;font-weight:600}
-.nav a.on .i{background:rgba(45,212,191,.13)}
+.nav a.on{color:var(--teal);opacity:1;font-weight:600;background:rgba(59,179,164,.12);border-radius:var(--r-pill)}
+.nav a.on .i{background:transparent}
 
 /* empty / upload */
 .empty{text-align:center;padding:50px 24px}
@@ -490,7 +499,7 @@ label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font
 .spark .b{flex:1;background:var(--teal-d);border-radius:5px 5px 0 0;position:relative;min-height:3px;transition:height .4s}
 .spark .b .lab{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:11px;color:var(--mut)}
 .spark .b .val{position:absolute;top:-15px;left:0;right:0;text-align:center;font-size:11px;color:var(--mut)}
-.bchip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap}.bchip.ok{background:rgba(52,211,153,.16);color:var(--green)}.bchip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.bchip.lo{background:rgba(248,113,113,.14);color:#f9a8a8}.inssec{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:800;margin:20px 4px 9px}.inssec:first-child{margin-top:4px}.home-hook{display:flex;align-items:center;gap:9px;background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.3);border-radius:12px;padding:11px 13px;margin-bottom:11px;cursor:pointer}.home-hook .hh-ic{color:var(--teal);display:flex}.home-hook .hh-tx{flex:1;font-size:13px}.home-hook .hh-tx b{color:var(--txt)}.home-hook .hh-go{color:var(--teal);font-weight:700}.gc-coach{display:flex;gap:8px;align-items:flex-start;background:rgba(45,212,191,.07);border-radius:9px;padding:9px 11px;font-size:12.5px;color:var(--mut);margin-bottom:10px}.gc-coach b{color:var(--txt)}.gc-coach svg{color:var(--teal);flex-shrink:0;margin-top:1px}.gc-out{font-size:13px;font-weight:600;margin-bottom:10px}.gc-tip{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:8px;cursor:pointer}.gc-tip.on{border-color:var(--teal);background:rgba(45,212,191,.06)}.gc-tip .gc-ic{font-size:16px;flex-shrink:0}.gc-bd{flex:1}.gc-how{font-size:12.5px;color:var(--mut);line-height:1.45}.gc-how b{color:var(--txt)}.gc-save{font-size:12px;color:var(--teal);font-weight:700;margin-top:4px}.gc-tip .gc-sw{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#06231c;font-weight:900;font-size:13px}.gc-tip.on .gc-sw{background:var(--teal);border-color:var(--teal)}.gc-commit{width:100%;margin:4px 0 2px;background:var(--teal);color:#06231c;border:0;border-radius:9px;padding:11px;font-weight:800;font-size:13px;cursor:pointer}.gc-commit.done{background:var(--green)}.wvo-tiles{display:grid;gap:9px;margin-top:14px}.wvo-tile{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:11px 12px}.wvo-tl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);font-weight:700;line-height:1.25}.wvo-tv{font-size:18px;font-weight:800;margin-top:5px;letter-spacing:-.3px}.wvo-ts{font-size:11px;color:var(--mut);margin-top:2px}.wvo-chip{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;margin-top:7px}.wvo-chip.up{background:rgba(248,113,113,.16);color:var(--red)}.wvo-chip.dn{background:rgba(52,211,153,.16);color:var(--green)}.wvo-chip.n{background:rgba(96,165,250,.14);color:var(--blue)}.wvo-chip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.wvo-insight{background:rgba(45,212,191,.07);border:1px solid rgba(45,212,191,.22);border-radius:12px;padding:12px 14px;margin-top:14px;font-size:13px;color:var(--mut)}.wvo-insight b{color:var(--txt)}.wvo-insight .h{color:var(--teal);font-weight:800;font-size:11px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px}.wk-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.wk-row:last-of-type{border-bottom:0}.wk-row .ic{width:26px;height:26px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center}.wk-row .nm{flex:1;font-size:13.5px}.hdj{background:linear-gradient(180deg,#16233b,#121d31);border:1px solid var(--ln2);border-radius:13px;padding:13px 14px;cursor:pointer}.hdj-top{display:flex;align-items:center;gap:8px}.hdj-lab{flex:1;font-size:13.5px;font-weight:600}.hdj-go{color:var(--teal);font-weight:700}.hdj-kn{font-size:18px;font-weight:800;letter-spacing:-.3px;margin-top:8px}.hdj-kn .u{font-size:12px;color:var(--mut);font-weight:500}.hdj-bar{height:7px;border-radius:6px;background:var(--card2);margin-top:9px;position:relative;overflow:hidden}.hdj-bar .f{height:100%;border-radius:6px}.hdj-bar .now{position:absolute;top:-2px;width:2px;height:11px;background:#fff;opacity:.65}.hdj-lbl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut2);margin-top:6px}.goalring{display:flex;align-items:center;gap:18px;margin-top:12px}.gr-ring{position:relative;width:108px;height:108px;flex-shrink:0}.gr-ring svg{display:block}.gr-ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}.gr-ctr .p{font-size:24px;font-weight:800;letter-spacing:-.5px;color:var(--teal)}.gr-ctr .l{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut2);font-weight:700;margin-top:1px}.gr-info{min-width:0}.gr-a{font-size:18px;font-weight:800;letter-spacing:-.3px}.gr-a .u{font-size:13px;color:var(--mut);font-weight:500}.gr-e{font-size:13.5px;color:var(--teal);font-weight:600;margin-top:7px}.gr-p{font-size:12px;color:var(--mut);margin-top:3px}.gr-f{font-size:10.5px;color:var(--mut2);margin-top:8px}.ndm-net{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:11px;border-top:1px solid var(--line);font-size:13.5px;font-weight:700}.gc-bighead{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-top:4px}.gc-chipd{display:inline-block;font-size:11px;font-weight:800;color:var(--teal);background:rgba(45,212,191,.14);padding:3px 9px;border-radius:20px;margin-left:8px;vertical-align:middle}.gc-dual{margin-top:12px}.gc-dual svg{display:block}.gc-leg{display:flex;gap:14px;margin-top:4px;font-size:10.5px;color:var(--mut)}.gc-leg span{display:flex;align-items:center;gap:5px}.gc-leg i{width:16px;height:3px;border-radius:2px;display:inline-block}.gc-leg i.d{height:0;border-top:2px dashed #56627d;background:none}</style>
+.bchip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap}.bchip.ok{background:rgba(52,211,153,.16);color:var(--green)}.bchip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.bchip.lo{background:rgba(248,113,113,.14);color:#f9a8a8}.inssec{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:800;margin:20px 4px 9px}.inssec:first-child{margin-top:4px}.home-hook{display:flex;align-items:center;gap:9px;background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.3);border-radius:12px;padding:11px 13px;margin-bottom:11px;cursor:pointer}.home-hook .hh-ic{color:var(--teal);display:flex}.home-hook .hh-tx{flex:1;font-size:13px}.home-hook .hh-tx b{color:var(--txt)}.home-hook .hh-go{color:var(--teal);font-weight:700}.gc-coach{display:flex;gap:8px;align-items:flex-start;background:rgba(45,212,191,.07);border-radius:9px;padding:9px 11px;font-size:12.5px;color:var(--mut);margin-bottom:10px}.gc-coach b{color:var(--txt)}.gc-coach svg{color:var(--teal);flex-shrink:0;margin-top:1px}.gc-out{font-size:13px;font-weight:600;margin-bottom:10px}.gc-tip{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:8px;cursor:pointer}.gc-tip.on{border-color:var(--teal);background:rgba(45,212,191,.06)}.gc-tip .gc-ic{font-size:16px;flex-shrink:0}.gc-bd{flex:1}.gc-how{font-size:12.5px;color:var(--mut);line-height:1.45}.gc-how b{color:var(--txt)}.gc-save{font-size:12px;color:var(--teal);font-weight:700;margin-top:4px}.gc-tip .gc-sw{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#06231c;font-weight:900;font-size:13px}.gc-tip.on .gc-sw{background:var(--teal);border-color:var(--teal)}.gc-commit{width:100%;margin:4px 0 2px;background:var(--teal);color:#06231c;border:0;border-radius:9px;padding:11px;font-weight:800;font-size:13px;cursor:pointer}.gc-commit.done{background:var(--green)}.wvo-tiles{display:grid;gap:var(--s2);margin-top:14px}.wvo-tile{background:transparent;border:0;border-radius:var(--r-inner);padding:0}.wvo-tl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);font-weight:700;line-height:1.3}.wvo-tv{font-size:18px;font-weight:800;margin-top:5px;letter-spacing:-.3px}.wvo-ts{font-size:11.5px;color:var(--mut);margin-top:3px;line-height:1.5}.wvo-chip{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;margin-top:7px}.wvo-chip.up{background:rgba(248,113,113,.16);color:var(--red)}.wvo-chip.dn{background:rgba(52,211,153,.16);color:var(--green)}.wvo-chip.n{background:rgba(96,165,250,.14);color:var(--blue)}.wvo-chip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.wvo-insight{background:rgba(45,212,191,.07);border:1px solid rgba(45,212,191,.22);border-radius:12px;padding:12px 14px;margin-top:14px;font-size:13px;color:var(--mut)}.wvo-insight b{color:var(--txt)}.wvo-insight .h{color:var(--teal);font-weight:800;font-size:11px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px}.wk-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.wk-row:last-of-type{border-bottom:0}.wk-row .ic{width:26px;height:26px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center}.wk-row .nm{flex:1;font-size:13.5px}.hdj{background:linear-gradient(180deg,#16233b,#121d31);border:1px solid var(--ln2);border-radius:13px;padding:13px 14px;cursor:pointer}.hdj-top{display:flex;align-items:center;gap:8px}.hdj-lab{flex:1;font-size:13.5px;font-weight:600}.hdj-go{color:var(--teal);font-weight:700}.hdj-kn{font-size:18px;font-weight:800;letter-spacing:-.3px;margin-top:8px}.hdj-kn .u{font-size:12px;color:var(--mut);font-weight:500}.hdj-bar{height:7px;border-radius:6px;background:var(--card2);margin-top:9px;position:relative;overflow:hidden}.hdj-bar .f{height:100%;border-radius:6px}.hdj-bar .now{position:absolute;top:-2px;width:2px;height:11px;background:#fff;opacity:.65}.hdj-lbl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut2);margin-top:6px}.goalring{display:flex;align-items:center;gap:18px;margin-top:12px}.gr-ring{position:relative;width:108px;height:108px;flex-shrink:0}.gr-ring svg{display:block}.gr-ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}.gr-ctr .p{font-size:24px;font-weight:800;letter-spacing:-.5px;color:var(--teal)}.gr-ctr .l{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut2);font-weight:700;margin-top:1px}.gr-info{min-width:0}.gr-a{font-size:18px;font-weight:800;letter-spacing:-.3px}.gr-a .u{font-size:13px;color:var(--mut);font-weight:500}.gr-e{font-size:13.5px;color:var(--teal);font-weight:600;margin-top:7px}.gr-p{font-size:12px;color:var(--mut);margin-top:3px}.gr-f{font-size:10.5px;color:var(--mut2);margin-top:8px}.ndm-net{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:11px;border-top:1px solid var(--line);font-size:13.5px;font-weight:700}.gc-bighead{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-top:4px}.gc-chipd{display:inline-block;font-size:11px;font-weight:800;color:var(--teal);background:rgba(45,212,191,.14);padding:3px 9px;border-radius:20px;margin-left:8px;vertical-align:middle}.gc-dual{margin-top:12px}.gc-dual svg{display:block}.gc-leg{display:flex;gap:14px;margin-top:4px;font-size:10.5px;color:var(--mut)}.gc-leg span{display:flex;align-items:center;gap:5px}.gc-leg i{width:16px;height:3px;border-radius:2px;display:inline-block}.gc-leg i.d{height:0;border-top:2px dashed #56627d;background:none}</style>
 </head>
 <body>
 
@@ -536,7 +545,12 @@ label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font
    ============================================================ */
 const $=s=>document.querySelector(s);
 const euro=n=>'€'+(n<0?'-':'')+Math.abs(n).toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2});
-const euro0=n=>'€'+Math.round(Math.abs(n)).toLocaleString('nl-NL');
+// v75: het minteken bleef eerder achter Math.abs hangen, waardoor een negatief bedrag als positief las.
+const euro0=n=>{ const v=Math.round(Math.abs(+n||0)); return '€'+((+n<0&&v>0)?'-':'')+v.toLocaleString('nl-NL'); };
+// compacte notatie voor grafiek-labels; één stijl in de hele app: Nederlandse komma, hoofdletter K
+const euroK=n=>{ const a=Math.abs(+n||0); const s=(+n<0&&Math.round(a)>0)?'-':'';
+  if(a<1000) return euro0(n);
+  const k=Math.round(a/100)/10; return '€'+s+(k>=100?Math.round(k):(''+k).replace('.',','))+'K'; };
 const MNAMES=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
 const MFULL=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
 
@@ -1090,9 +1104,9 @@ function suggestBudgets(){
   }
   save(); render();
   if(totalFixed>room){
-    alert(`Let op: je vaste lasten (€${Math.round(totalFixed)}) zijn al hoger dan je bestedingsruimte (€${Math.round(room)}). Variabele budgetten staan op het minimum. Je vaste lasten verlagen of je inkomen verhogen is nodig om binnen je ${SET.limit}%-norm te blijven.`);
+    alert(`Let op: je vaste lasten (${euro0(totalFixed)}) zijn al hoger dan je bestedingsruimte (${euro0(room)}). Variabele budgetten staan op het minimum. Je vaste lasten verlagen of je inkomen verhogen is nodig om binnen je ${SET.limit}%-norm te blijven.`);
   } else {
-    alert(`Voorstel klaar. Vaste lasten ≈ €${Math.round(totalFixed)} (vast), resterende ruimte voor variabele uitgaven ≈ €${Math.round(remaining)}. Pas de variabele categorieën gerust handmatig aan.`);
+    alert(`Voorstel klaar. Vaste lasten ≈ ${euro0(totalFixed)} (vast), resterende ruimte voor variabele uitgaven ≈ ${euro0(remaining)}. Pas de variabele categorieën gerust handmatig aan.`);
   }
 }
 // richtlijn-band o.b.v. % over budget: ≤3% geen actie (marge) · 4–5% monitoren · >5% actie
@@ -1198,9 +1212,9 @@ function savingsTip(m,k){
   const wk=Math.max(Math.floor((d.sum/4)/5)*5,5); // weekbedrag, afgerond op €5 onder eigen niveau
   if(k==='vervoer'){
     const s=vervoerSplit(m);
-    if(s.lease>0 && s.lease>=s.fuel && s.lease>=s.park) return `Je lease kost €${Math.round(s.lease)} per maand. Kijk eens of een goedkoper of korter contract kan.`;
+    if(s.lease>0 && s.lease>=s.fuel && s.lease>=s.park) return `Je lease kost ${euro0(s.lease)} per maand. Kijk eens of een goedkoper of korter contract kan.`;
     if(s.park>0 && s.park>=s.fuel) return `Reserveer parkeren vooraf of pak een P+R. Dat scheelt je vaak de helft.`;
-    if(s.fuel>0){ const fw=Math.max(Math.floor((s.fuel/4)/5)*5,5); return `Tank een vast bedrag van €${fw} per week. Bij een onbemand station ben je meestal goedkoper uit.`; }
+    if(s.fuel>0){ const fw=Math.max(Math.floor((s.fuel/4)/5)*5,5); return `Tank een vast bedrag van ${euro0(fw)} per week. Bij een onbemand station ben je meestal goedkoper uit.`; }
     return `Pak voor korte ritten wat vaker de fiets of het OV.`;
   }
   const tips={
@@ -1209,13 +1223,13 @@ function savingsTip(m,k){
     abonnement:`Loop je abonnementen na en zeg er deze week eentje op die je toch niet gebruikt.`,
     shopping:`Leg online aankopen eerst 24 uur in je mandje. Vaak hoeft het dan niet meer.`,
     verzekering:`Vergelijk je polissen een keer per jaar. Daar zit vaak de meeste winst.`,
-    vices:`Neem een vast weekbudget van €${wk} contant mee in plaats van te pinnen.`,
+    vices:`Neem een vast weekbudget van ${euro0(wk)} contant mee in plaats van te pinnen.`,
     sport:`Kijk of een losse strippenkaart goedkoper is dan je maandabonnement.`,
     vakantie:`Zet er maandelijks een vast bedrag voor opzij in plaats van alles in één keer.`,
     bankkosten:`Kijk of een goedkoper rekeningpakket beter bij je past.`,
     zorg:`Vraag bij de apotheek naar het goedkopere merkloze alternatief.`
   };
-  return tips[k]||`Geef jezelf een weeklimiet van €${wk} voor ${CATS[k]?CATS[k].name.toLowerCase():'deze categorie'}.`;
+  return tips[k]||`Geef jezelf een weeklimiet van ${euro0(wk)} voor ${CATS[k]?CATS[k].name.toLowerCase():'deze categorie'}.`;
 }
 // BOTTOM SHEET: budget vs uitgaven, samenvatting + top-afwijkingen + hypothese. Status blijft op de pagina, verdieping hier.
 // herbruikbare status-widget "uitgegeven deze maand" (time-pacing), leeft nu in Inzichten-drilldown, niet meer bij de coach
@@ -2603,10 +2617,10 @@ function buildCoaching(){
   const savFix=savN>=2?`<div class="coach info" style="margin:8px 0"><div class="ic">${ICON('tag')}</div><div class="tx"><b>${euro0(savMis)} aan 'Rule'-overboekingen staat als uitgave.</b> Dat is je eigen sparen. Het maakt je cijfers slechter dan ze zijn. <span style="color:var(--teal);cursor:pointer;font-weight:700" onclick="fixSavingsRules()">los op met 1 tik ›</span></div></div>`:'';
   const vraag=topVar?`<div class="small" style="margin:8px 0"><b>${ICON('bulb')} Vraag.</b> ${CATS[topVar.k].name} kost je gem. <b>${euro0(topVar.avg)}/mnd</b>. Zou je dat vandaag, vanaf nul, opnieuw zo kiezen? <span style="color:var(--teal);cursor:pointer" onclick="openCategory('${topVar.k}')">bekijk ›</span></div>`:'';
   const acties=`<div class="small muted" style="font-weight:600;margin:12px 0 6px">${ICON('check')} Je 3 grootste hefbomen</div>
-    <div class="coach" style="margin:0 0 6px"><div class="ic">1</div><div class="tx"><b>Sparen eerst.</b> €${target}/mnd automatisch weg op je salarisdag, nog vóór je het kunt uitgeven. Dan zijn je gewone maanden niet meer afhankelijk van meevallers.</div></div>
+    <div class="coach" style="margin:0 0 6px"><div class="ic">1</div><div class="tx"><b>Sparen eerst.</b> ${euro0(target)}/mnd automatisch weg op je salarisdag, nog vóór je het kunt uitgeven. Dan zijn je gewone maanden niet meer afhankelijk van meevallers.</div></div>
     ${topVar?`<div class="coach" style="margin:0 0 6px"><div class="ic">2</div><div class="tx"><b>${CATS[topVar.k].name} −15%:</b> van ${euro0(topVar.avg)} naar ~${euro0(topVar.avg*0.85)}/mnd. <span style="color:var(--teal);cursor:pointer" onclick="go('ins')">zie waar het heen gaat ›</span></div></div>`:''}
     <div class="coach" style="margin:0"><div class="ic">3</div><div class="tx"><b>Meevaller-quarantaine.</b> Alles boven ${euro0(base)} dat binnenkomt: 80% direct naar je buffer, vóór je het als ruimte ziet.</div></div>`;
-  const acc=`<div class="coach info" style="margin-top:10px"><div class="ic">${ICON('repeat')}</div><div class="tx"><b>Deze maand.</b> ${pace}Focus: ${topVar?`houd ${CATS[topVar.k].name} onder ${euro0(topVar.avg*0.85)}`:'blijf onder je grens'} en zet de €${target}-overboeking vast.</div></div>`;
+  const acc=`<div class="coach info" style="margin-top:10px"><div class="ic">${ICON('repeat')}</div><div class="tx"><b>Deze maand.</b> ${pace}Focus: ${topVar?`houd ${CATS[topVar.k].name} onder ${euro0(topVar.avg*0.85)}`:'blijf onder je grens'} en zet de ${euro0(target)}-overboeking vast.</div></div>`;
   return `<div class="card">
     <div class="row" style="margin-bottom:6px"><span class="hlabel" style="margin:0;flex:1">Coach</span><span class="small muted">laatste ${done.length} mnd</span></div>
     ${diag}${obs1}${obs2}${savFix}${vraag}${acties}${acc}
@@ -3971,7 +3985,7 @@ function reisFanSVG(M,mc){
   const niceMax=Math.max(Math.ceil(Math.max(mc.p90[HZ],M.FIRE)*1.05/100000)*100000,100000);
   const X=y=>x0+(y/HZ)*(x1-x0), Y=v=>yB-(Math.max(v,0)/niceMax)*(yB-yT);
   const pts=a=>a.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
-  const kf=v=>'€'+Math.round(v/1000)+'k';
+  const kf=v=>euroK(v);   // v75: één compacte notatie in de hele app
   let s='';
   for(let i=0;i<=3;i++){ const val=niceMax*i/3, yy=Y(val); s+=`<line x1="${x0}" y1="${yy.toFixed(1)}" x2="${x1}" y2="${yy.toFixed(1)}" stroke="rgba(159,176,199,.10)"/><text x="${x0-4}" y="${(yy+3).toFixed(1)}" fill="#6b7c95" font-size="8" text-anchor="end">${i===0?'€0':kf(val)}</text>`; }
   const gy=Y(M.FIRE); s+=`<line x1="${x0}" y1="${gy.toFixed(1)}" x2="${x1}" y2="${gy.toFixed(1)}" stroke="#f472b6" stroke-width="1.1" stroke-dasharray="4 3"/><text x="${x1}" y="${(gy-3).toFixed(1)}" fill="#f472b6" font-size="8" text-anchor="end">doel ${kf(M.FIRE)}</text>`;
@@ -4001,7 +4015,7 @@ function reisHaalbaarheid(M){
 // nette bovengrens voor de near-view y-as (1/1.5/2/2.5/3/4/5/6/8/10 × 10^k), zodat de lijn de hoogte vult
 function reisNiceCeil(v){ if(!(v>0)) return 1000; const p=Math.pow(10,Math.floor(Math.log10(v))); for(const m of [1,1.5,2,2.5,3,4,5,6,8,10]){ if(v<=m*p) return Math.round(m*p); } return Math.round(10*p); }
 function reisChartSVG(M){
-  const R=M.R, kf=v=>v>=1000?('€'+Math.round(v/1000)+'k'):('€'+Math.round(v));
+  const R=M.R, kf=v=>euroK(v);
   const W=360,H=210,x0=36,x1=W-12,yT=18,yB=H-40, nowY=M.nowY, HZ=M.HZ;
   const zoom=(['5','full'].includes(R.chartZoom)?R.chartZoom:'3');   // grafiek-venster (puur weergave)
   const VH = zoom==='full' ? HZ : Math.min(+zoom, HZ);
@@ -4459,13 +4473,14 @@ function resetNfAmount(c){ if(SET.nfAmount) delete SET.nfAmount[c]; if(SET.nfNot
 function setNfNote(c,v){ SET.nfNote=SET.nfNote||{}; const s=(''+v).trim(); if(s==='') delete SET.nfNote[c]; else SET.nfNote[c]=s.slice(0,80); save(); renderNfSheet(); }
 function toggleNfNote(c){ SET.nfNoteOpen=SET.nfNoteOpen||{}; SET.nfNoteOpen[c]=!SET.nfNoteOpen[c]; save(); renderNfSheet(); }
 function toggleNfList(){ SET.nfListOpen=!SET.nfListOpen; save(); renderNfSheet(); }
+const VOORUIT_FOOT=`<div class="scr-foot">Vooruitkijken is een schatting, geen belofte.</div>`;
 function renderVooruit(){
   if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
   // v70: ook op een afgeronde maand geen komende-lasten-lijst meer (renderUpcoming), consistent
   // met de lopende maand waar "Volgende uitgaven" verviel.
-  if(!isNow){ $('#s-vooruit').innerHTML = renderSavings() + renderPlan(); return; }
+  if(!isNow){ $('#s-vooruit').innerHTML = renderSavings() + renderPlan() + VOORUIT_FOOT; return; }
   // ontdicht: de ring draagt de status; doelen zitten één tik dieper.
   // "Sneller sparen?" is geen kaart meer maar een af-en-toe coach-melding (zie saveFasterTip in scoreNotifs).
   const goals=renderPlan(true);
@@ -4480,7 +4495,7 @@ function renderVooruit(){
   // via "Nog deze maand" en via openFixedDue().
   // v71: "Nog deze maand" staat bovenaan — wat er deze maand nog moet gebeuren gaat vóór de
   // langetermijn-hero. Alleen de volgorde wijzigde, de kaarten zelf niet.
-  $('#s-vooruit').innerHTML = nogDezeMaandCard() + vooruitForecast() + doelZone;
+  $('#s-vooruit').innerHTML = nogDezeMaandCard() + vooruitForecast() + doelZone + VOORUIT_FOOT;
 }
 function vooruitZone(key,label,teaser,open,content){
   const bar=`<div class="card" data-zone="${key}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px${open?';margin-bottom:8px':''}" onclick="toggleVooruit('${key}')"><span style="font-weight:600;font-size:14px">${label}${teaser?` <span class="small muted" style="font-weight:400">· ${teaser}</span>`:''}</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'›'}</span></div>`;
@@ -4863,14 +4878,17 @@ function renderActions(){
   $('#s-act').innerHTML = `<div class="coachhead" onclick="openCoachAvatar()"><div class="av">${coachAvatar()}</div><span class="nm">Je coach</span><span class="sw">wissel ›</span></div>`
     + `<div class="cothr" id="coThr"></div><div id="coCh"></div>`
     + `<button class="cobuy" id="buyBtn">${ICON('cart')} Ik wil iets kopen</button>`
-    + coachMirrorCard() + zoneMine;
+    + coachMirrorCard() + zoneMine
+    + `<div class="scr-foot">Je coach spreekt alleen als er iets te zeggen valt.</div>`;
   const bb=document.getElementById('buyBtn'); if(bb) bb.onclick=openBuy;
   coParkReturn(m).then(handled=>{ if(!handled) startCoachTalk(m); });
 }
 /* ---------- COACH-DIALOOG (tik-door gesprek, leest/voert uit via de motor) ---------- */
 let _coT=null,_coC=null,_coGen=0;
-const AV_V=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="#2b2440"/><path d="M8 27c0-7 4-12 10-12s10 5 10 12z" fill="#caa6c4"/><circle cx="18" cy="15" r="6.6" fill="#f1c9a6"/><path d="M11 14c0-5 3-7.5 7-7.5s7 2.5 7 7.5c-1.6-2.2-3.6-3.2-7-3.2s-5.4 1-7 3.2z" fill="#caa6c4"/></svg>`;
-const AV_M=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="#21314a"/><path d="M9 28c0-6 4-10 9-10s9 4 9 10z" fill="#5a8fc0"/><circle cx="18" cy="15" r="6.6" fill="#e9b994"/><path d="M11.4 13c0-4.2 3-6.2 6.6-6.2s6.6 2 6.6 6.2c-2-2-4-2.6-6.6-2.6s-4.6.6-6.6 2.6z" fill="#3a4a5e"/></svg>`;
+/* v75: merk-eigen geometrische marks i.p.v. generieke silhouetten. Twee varianten die als
+   coach-keuze herkenbaar verschillen (boog vs. ring), beide strak en in de merkkleur. */
+const AV_V=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="#123b38"/><path d="M10 24.5V15a8 8 0 0 1 16 0v9.5" fill="none" stroke="#3bb3a4" stroke-width="3" stroke-linecap="round"/><circle cx="18" cy="24.5" r="2.4" fill="#3bb3a4"/></svg>`;
+const AV_M=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="#132a3f"/><circle cx="18" cy="18" r="7.5" fill="none" stroke="#6aa9d8" stroke-width="3"/><path d="M18 10.5V18l5 3" fill="none" stroke="#6aa9d8" stroke-width="3" stroke-linecap="round"/></svg>`;
 function coachAvatar(){ return SET.coachAvatar==='m'?AV_M:AV_V; }
 function openCoachAvatar(){
   const cur=SET.coachAvatar==='m'?'m':'v';
@@ -5599,21 +5617,21 @@ function coachRules(m,sig){
       if(s.lease>0 && s.lease>=s.fuel && s.lease>=s.park){ const L=Math.round(s.lease);
         return [ r('Lease herfinancieren (€75 p/m lager)',75),
                  r('Kleiner of korter contract (€120 p/m lager)',120),
-                 r(`Lease afkopen (+€${L} p/m cashflow)`,L,true) ]; }
+                 r(`Lease afkopen (+${euro0(L)} p/m cashflow)`,L,true) ]; }
       if(s.park>0 && s.park>=s.fuel){ const P=Math.round(s.park);
-        return [ r(`P+R in plaats van centrum (€${Math.round(P*0.5)} p/m lager)`,P*0.5),
-                 r(`Parkeren vooraf boeken (€${Math.round(P*0.3)} p/m lager)`,P*0.3),
-                 r(`Vaker met het OV (€${Math.round(P*0.4)} p/m lager)`,P*0.4) ]; }
+        return [ r(`P+R in plaats van centrum (${euro0(P*0.5)} p/m lager)`,P*0.5),
+                 r(`Parkeren vooraf boeken (${euro0(P*0.3)} p/m lager)`,P*0.3),
+                 r(`Vaker met het OV (${euro0(P*0.4)} p/m lager)`,P*0.4) ]; }
       const F=Math.round(s.fuel); const fw=Math.max(Math.floor((F/4)/5)*5,5);
-      return [ r(`Tank max €${fw} per week (€${Math.round(F*0.2)} p/m lager)`,F*0.2),
-               r(`Onbemand tanken (€${Math.round(F*0.06)} p/m lager)`,F*0.06),
-               r(`Korte ritten op de fiets (€${Math.round(F*0.15)} p/m lager)`,F*0.15) ];
+      return [ r(`Tank max ${euro0(fw)} per week (${euro0(F*0.2)} p/m lager)`,F*0.2),
+               r(`Onbemand tanken (${euro0(F*0.06)} p/m lager)`,F*0.06),
+               r(`Korte ritten op de fiets (${euro0(F*0.15)} p/m lager)`,F*0.15) ];
     }
-    if(k==='uiteten') return [ r('Max 1× uit eten per week',over), r('Deze week thuis koken',over), r(`Max €${wk} per week`,over) ];
-    if(k==='boodschappen') return [ r('1 grote weekboodschap',over), r(`Max €${wk} per week`,over), r('Geen losse ritjes',over) ];
-    if(k==='shopping') return [ r('Eerst 24 uur wachten',over), r('Niks op afbetaling',over), r(`Max €${wk} per week`,over) ];
-    if(k==='vices') return [ r(`Max €${wk} contant per week`,over), r('Niet pinnen',over), r('2 dagen per week overslaan',over) ];
-    return [ r(`Max €${wk} per week`,over), r('1 vaste dag per week',over), r('Geen impulsaankopen',over) ];
+    if(k==='uiteten') return [ r('Max 1× uit eten per week',over), r('Deze week thuis koken',over), r(`Max ${euro0(wk)} per week`,over) ];
+    if(k==='boodschappen') return [ r('1 grote weekboodschap',over), r(`Max ${euro0(wk)} per week`,over), r('Geen losse ritjes',over) ];
+    if(k==='shopping') return [ r('Eerst 24 uur wachten',over), r('Niks op afbetaling',over), r(`Max ${euro0(wk)} per week`,over) ];
+    if(k==='vices') return [ r(`Max ${euro0(wk)} contant per week`,over), r('Niet pinnen',over), r('2 dagen per week overslaan',over) ];
+    return [ r(`Max ${euro0(wk)} per week`,over), r('1 vaste dag per week',over), r('Geen impulsaankopen',over) ];
   }
   if(sig.scale==='maand' && sig.tone!=='good') return [ r('Een abonnement opzeggen (€15 p/m)',15), r('Automatisch €100 per maand sparen',0), r('Een vaste last verlagen (€50 p/m)',50) ];
   return [ r('Naar mijn buffer',0), r('Extra aflossen',0), r('Laten staan',0) ];
@@ -6341,7 +6359,7 @@ function miniSpark(values, opts){
   const bars=vals.map((v,i)=>{
     if(v==null) return `<div class="b" style="height:3%;background:var(--card2)"></div>`;
     const h=Math.max(Math.max(v,0)/max*100,3);
-    const col=opts.colorAt?opts.colorAt(v,i):(i===hi?'var(--teal)':'var(--teal-d)');
+    const col=opts.colorAt?opts.colorAt(v,i):(i===hi?'var(--teal)':'var(--bar)');
     return `<div class="b" style="height:${h}%;background:${col}${i===hi&&opts.dashLast?';opacity:.55':''}">`
       +`${opts.showVals?`<span class="val">${opts.fmt?opts.fmt(v):v}</span>`:''}`
       +`${opts.labels?`<span class="lab">${opts.labels[i]||''}</span>`:''}</div>`;
@@ -6537,7 +6555,11 @@ function insKpis(m,n){
 }
 
 // staafkleur per maand = binnen of buiten je band; zo draagt de trend zelf het oordeel
-function kpiBarColor(k){ return (v,idx)=>{ const c=kpiCol(kpiState(k.key,v,k.ref)); return (k.partial&&idx===k.series.length-1)?'var(--mut)':c; }; }
+function kpiBarColor(k){ return (v,idx)=>{
+  if(k.partial&&idx===k.series.length-1) return 'var(--teal)';        // de lopende maand is de highlight
+  const st=kpiState(k.key,v,k.ref);
+  return st==='bad'?kpiCol('bad'):'var(--bar)';                       // alleen écht buiten de band kleurt; amber blijft spaarzaam
+}; }
 
 function insKpiStrip(m){
   const K=insKpis(m);
@@ -6562,7 +6584,7 @@ function insKpiStrip(m){
 /* ---- Gedeelde bouwstenen voor de staafgrafieken: as met waarden, labels boven de staven
        en een tik-uitlezing. Puur weergave; de reeksen zelf blijven zoals ze zijn. ---- */
 const CHART_GEO={W:320,H:172,L:34,R:6,TOP:16,BASE:126,XLAB:142};   // L = gutter voor de y-labels
-const chartK=v=>Math.abs(v)>=1000?('€'+(Math.round(v/100)/10).toString().replace('.',',')+'k'):euro0(v);
+const chartK=v=>euroK(v);   // één compacte notatie in de hele app (euroK)
 // welke staven een vast label krijgen: bij weinig maanden alle, anders eerste/laatste/hoogste/laagste
 function chartLabelIdx(vals){
   const idx=vals.map((v,i)=>v==null?-1:i).filter(i=>i>=0);
@@ -6576,10 +6598,9 @@ function chartYAxis(niceTop, fmt){
   const G=CHART_GEO; const out=[];
   for(const f of [1,0.5]){
     const v=niceTop*f, yy=G.BASE-f*(G.BASE-G.TOP);
-    out.push(`<line x1="${G.L}" x2="${G.W-G.R}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,.07)" stroke-width="1"/>`
-      +`<text x="${G.L-5}" y="${(yy+3).toFixed(1)}" font-size="8.5" fill="#6b7a91" text-anchor="end">${fmt(v)}</text>`);
+    out.push(`<text x="${G.L-5}" y="${(yy+3).toFixed(1)}" font-size="8.5" fill="#7f8ba1" text-anchor="end">${fmt(v)}</text>`);
   }
-  out.push(`<text x="${G.L-5}" y="${G.BASE+3}" font-size="8.5" fill="#6b7a91" text-anchor="end">0</text>`);
+  out.push(`<text x="${G.L-5}" y="${G.BASE+3}" font-size="8.5" fill="#7f8ba1" text-anchor="end">0</text>`);
   return out.join('');
 }
 // tik-uitlezing: vult een regel onder de grafiek, zonder re-render
@@ -6625,7 +6646,7 @@ function kpiHistChart(k){
       ${bars}${bandLine}
     </svg>
     <div id="kpiRead" class="small" style="color:var(--mut2);font-size:11px;margin-top:2px;min-height:15px">Tik een staaf voor de exacte waarde.${k.partial?' De maand met * loopt nog.':''}</div>
-    <div class="gc-leg"><span><i class="d"></i>${k.key==='niveau'?`je gemiddelde (${euro0(band)})`:KPI_META[k.key].bandTxt}</span><span><i style="background:var(--teal)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
+    <div class="gc-leg"><span><i class="d"></i>${k.key==='niveau'?`je gemiddelde (${euro0(band)})`:KPI_META[k.key].bandTxt}</span><span><i style="background:var(--bar)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
 }
 function openKpiDetail(key){
   const m=curMonth||months()[months().length-1];
@@ -6666,7 +6687,8 @@ function spendVsBudgetChart(){
   const bars=rows.map((r,i)=>{
     const cx=L+slot*i+slot/2, x=cx-bw/2, yy=y(r.spend), h=Math.max(BASE-yy,1.5);
     const over=r.budget>0 && r.spend>r.budget;
-    const col=over?kpiCol('bad'):'var(--teal)';
+    // rustige staven: neutraal grijs, teal alleen voor de lopende maand, rood alleen bij echt over budget
+    const col=over?kpiCol('bad'):(r.now?'var(--teal)':'var(--bar)');
     const bar=`<rect class="cbar" x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${col}"${r.now?' fill-opacity=".42" stroke="'+col+'" stroke-width="1" stroke-dasharray="3 2"':''}/>`;
     const bud=r.budget>0?`<line x1="${(L+slot*i+1).toFixed(1)}" x2="${(L+slot*(i+1)-1).toFixed(1)}" y1="${y(r.budget).toFixed(1)}" y2="${y(r.budget).toFixed(1)}" stroke="#8b97ad" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
     const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="8.5" font-weight="700" fill="#c7d2e2" text-anchor="middle">${chartK(r.spend)}</text>`:'';
@@ -6686,7 +6708,7 @@ function spendVsBudgetChart(){
       ${budNu>0?chartTagRight(W-R, y(budNu)-4, 'budget '+chartK(budNu), '#8b97ad'):''}
     </svg>
     <div id="spendRead" class="small" style="color:var(--teal);font-size:11px;margin-top:2px;min-height:15px;cursor:pointer" onclick="if(window._spendPick)openBudgetCompare(window._spendPick)"><span style="color:var(--mut2)">Tik een maand voor het bedrag.${hasNow?' De maand met * loopt nog.':''}</span></div>
-    <div class="gc-leg"><span><i style="background:var(--teal)"></i>binnen budget</span><span><i style="background:${kpiCol('bad')}"></i>erboven</span><span><i class="d"></i>maandbudget</span></div>
+    <div class="gc-leg"><span><i style="background:var(--bar)"></i>binnen budget</span><span><i style="background:${kpiCol('bad')}"></i>erboven</span><span><i class="d"></i>maandbudget</span></div>
   </div>`;
 }
 
