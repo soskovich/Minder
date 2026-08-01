@@ -46,7 +46,8 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
       const txt = await t.innerText();
       expect(txt, key).toMatch(/[\d—]/);                                  // een waarde (of het eerlijke —)
       expect(txt.split('\n').length, key).toBeGreaterThanOrEqual(3);      // label + cijfer + bandregel
-      expect(await t.locator('.spark .b').count(), key).toBe(3);          // 3 maanden historie
+      expect(await t.locator('svg.spk').count(), key).toBe(1);           // richting A: één lijn-sparkline
+      expect(await t.locator('svg.spk path').count(), key).toBe(1);
     }
     const s = await strip(page);
     expect(s).toContain('doel 20% of meer');
@@ -92,6 +93,58 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
       eigen: splitFixedVar(m).fixed / totals(m).income * 100,
     }), CUR);
     expect(r.kpi).toBeCloseTo(r.eigen, 6);
+  });
+});
+
+test.describe('a2 · richting A: één datataal in de tegels', () => {
+  test('elke tegel: één-kleurige lijn, open teal punt op de lopende maand, geen ring', async ({ page }) => {
+    await openIns(page);
+    for (const key of ['spaar', 'budget', 'niveau', 'vast']) {
+      const t = tegel(page, key);
+      const lijn = t.locator('svg.spk path');
+      await expect(lijn).toHaveCount(1);
+      expect(await lijn.getAttribute('stroke'), key).toBe('var(--bar)');   // één rustige datakleur
+      expect(await t.locator('svg.spk rect, svg.spk polygon').count(), key).toBe(0);  // geen staafjes meer
+      expect(await t.locator('.gr-ring, .goalring').count(), key).toBe(0); // ring blijft voor de hero
+      // de lopende maand is een open teal punt, en alleen dat punt is teal
+      const punt = t.locator('.spk-in i.spk-nu');
+      await expect(punt).toHaveCount(1);
+      const stijl = await punt.evaluate((e) => {
+        const cs = getComputedStyle(e);
+        const teal = getComputedStyle(document.documentElement).getPropertyValue('--teal').trim();
+        const naarRgb = (c) => { const d = document.createElement('i'); d.style.color = c; document.body.appendChild(d); const r = getComputedStyle(d).color; d.remove(); return r; };
+        return { rand: cs.borderTopColor, vul: cs.backgroundColor, teal: naarRgb(teal) };
+      });
+      expect(stijl.rand, key).toBe(stijl.teal);                             // teal rand
+      expect(stijl.vul, key).not.toBe(stijl.teal);                          // open, niet gevuld
+      const box = await punt.boundingBox();
+      expect(Math.abs(box.width - box.height), key).toBeLessThan(1.2);     // rond, niet uitgerekt
+    }
+    const strip = await page.locator('#insKpiStrip').innerHTML();
+    expect((strip.match(/var\(--teal\)/g) || []).length).toBe(0);         // geen teal in de lijnen zelf
+    expect(await page.locator('#insKpiStrip .spk-nu').count()).toBe(4);    // alleen de eindpunten
+    expect(strip).not.toContain('class="spark"');                          // geen bonte staafjes meer
+  });
+
+  test('de doellijn wijkt zodra hij de eigen beweging zou platdrukken', async ({ page }) => {
+    await openIns(page);
+    const r = await page.evaluate(() => ({
+      dichtbij: miniSparkLine([18, 22, 19], { target: 20 }),
+      verweg: miniSparkLine([18, 22, 19], { target: 500 }),
+      kort: miniSparkLine([20], { target: 20 }),
+    }));
+    expect(r.dichtbij).toContain('stroke-dasharray');
+    expect(r.verweg).not.toContain('stroke-dasharray');                    // band staat in het label
+    expect(r.kort).toBe('');                                               // <2 maanden = geen sparkline
+  });
+
+  test('sparklines staan per rij op dezelfde hoogte, ook als de bandregel wrapt', async ({ page }) => {
+    await openIns(page);
+    const bodems = await page.evaluate(() => [...document.querySelectorAll('#insKpiStrip svg.spk')]
+      .map((e) => Math.round(e.getBoundingClientRect().bottom)));
+    expect(bodems.length).toBe(4);
+    expect(bodems[0]).toBe(bodems[1]);
+    expect(bodems[2]).toBe(bodems[3]);
   });
 });
 
@@ -142,6 +195,27 @@ test.describe('b · historische reeksen', () => {
     const s = await strip(page);
     expect(s).toContain('je inkomen-limiet');
     expect(s).not.toContain('je potjes');
+  });
+});
+
+test.describe('b2 · maandgrafiek', () => {
+  test('één datakleur, alleen de uitschieter gelabeld, tooltip op elke maand', async ({ page }) => {
+    await openIns(page);
+    const c = page.locator('#insSpendChart');
+    const kleuren = await c.locator('rect.cbar').evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('fill')))]);
+    expect(kleuren.sort()).toEqual(['var(--bar)', 'var(--teal)']);          // neutraal + accent lopende maand
+    expect(await c.locator('rect.cbar[rx="3"]').count()).toBe(await c.locator('rect.cbar').count());
+
+    const nu = c.locator('rect.cbar[fill="var(--teal)"]');
+    expect(await nu.getAttribute('stroke-dasharray')).toBeTruthy();         // voorlopig gemarkeerd
+    expect(await page.locator('#insSpendChart').innerHTML()).toContain('*</text>');
+
+    // labels: alleen de uitschieter (plus het budget-tag), tooltip op elke maand
+    const vals = await c.locator('text[font-weight="700"]').evaluateAll((els) => els.map((e) => e.textContent));
+    expect(vals.filter((t) => !/budget/.test(t)).length).toBeLessThanOrEqual(1);   // alleen de uitschieter
+    expect(await c.locator('rect[fill="transparent"] title').count()).toBe(await c.locator('rect.cbar').count());
+    expect(await page.locator('#insSpendChart line[stroke-dasharray]').count()).toBeGreaterThan(0);   // referentielijn
+    expect(await page.locator('#insSpendChart line:not([stroke-dasharray])').count()).toBe(1);        // alleen de basislijn
   });
 });
 
@@ -262,11 +336,14 @@ test.describe('d · uitgaven-vs-budget-grafiek', () => {
 });
 
 test.describe('e · rustige modus en "Wat valt op"', () => {
-  test('Rustig vervangt alarmrood door amber, ook in de sparklines', async ({ page }) => {
-    await openIns(page, tweak((set) => { set.budgets = { boodschappen: 300 }; set.budgetsNext = {}; }));
+  // sinds richting A dragen de sparkline en de maandgrafiek geen status-kleur meer: één datakleur,
+  // status staat in het label. Rood blijft alleen bestaan als oordeel-kleur (en wordt amber in Rustig).
+  test('status zit in het label, niet in de datakleur; Rustig kent geen alarmrood', async ({ page }) => {
+    await openIns(page, tweak((set) => { set.budgets = { boodschappen: 300 }; set.budgetsNext = {} }));
     const begeleid = await page.evaluate((m) => ({ bad: kpiCol('bad'), strip: insKpiStrip(m), chart: spendVsBudgetChart() }), CUR);
     expect(begeleid.bad).toBe('var(--red)');
-    expect(begeleid.strip).toContain('var(--red)');                       // een maand buiten de band
+    expect(begeleid.chart).not.toContain('var(--red)');                   // grafiek: één datakleur
+    expect((begeleid.strip.match(/var\(--bar\)/g) || []).length).toBeGreaterThanOrEqual(4);   // vier neutrale lijnen
 
     const rustig = await page.evaluate((m) => { SET.mode = 'rustig'; save(); return { bad: kpiCol('bad'), strip: insKpiStrip(m), chart: spendVsBudgetChart() }; }, CUR);
     expect(rustig.bad).toBe('var(--amber)');
