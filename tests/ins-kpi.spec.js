@@ -158,7 +158,7 @@ test.describe('c · tik op een tegel', () => {
     expect(sheet).toContain('doel 20% of meer');
     expect(sheet).toContain('volledige historie van deze metriek');
     expect(await page.locator('#kpiHist').count()).toBe(1);
-    expect(await page.locator('#kpiHist rect[rx="3"]').count()).toBe(3);  // één staaf per maand
+    expect(await page.locator('#kpiHist rect.cbar').count()).toBe(3);     // één staaf per maand
     expect(await page.locator('#kpiHist line[stroke-dasharray]').count()).toBe(1);   // je band als lijn
   });
 
@@ -175,19 +175,33 @@ test.describe('c · tik op een tegel', () => {
   // v69: de historie in het KPI-detail is niet meer aantikbaar. Twaalf onzichtbare hitvlakken
   // over de hele grafiek sprongen naar "Hoe doe je het deze maand?" — een ándere metriek, die
   // de KPI-uitleg wegdrukte. De maandsheet blijft bereikbaar via de "Uitgaven vs budget"-grafiek.
-  test('de historie in het detail springt niet naar de maand-sheet', async ({ page }) => {
+  test('een tik in de historie leest de waarde uit en verlaat het detail niet', async ({ page }) => {
     await openIns(page);
     await tegel(page, 'niveau').click();
     await page.waitForSelector('#kpiHist');
-    expect(await page.locator('#kpiHist rect[onclick]').count()).toBe(0);
+    // wel aantikbaar, maar nooit naar de maand-sheet
+    expect(await page.locator('#kpiHist rect[onclick]').count()).toBeGreaterThan(0);
     expect(await page.evaluate(() => document.getElementById('kpiHist').innerHTML.includes('openBudgetCompare'))).toBe(false);
-    expect(await page.locator('#kpiHist title').count()).toBeGreaterThan(0);   // maand + waarde blijft leesbaar
+    expect(await page.locator('#kpiHist title').count()).toBeGreaterThan(0);
 
-    // een tik middenin de grafiek laat het detail gewoon staan
-    const box = await page.locator('#kpiHist').boundingBox();
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.locator('#kpiHist rect[onclick]').first().click();
     await page.waitForTimeout(150);
+    const read = await page.locator('#kpiRead').innerText();
+    expect(read).toMatch(/€/);
+    expect(read).toMatch(/\d{4}/);                                            // maand + jaar
     expect(await page.locator('#sheet').innerText()).toContain('Uitgaven-niveau');
+  });
+
+  test('de historie heeft een y-as, waardelabels en een gelabelde band', async ({ page }) => {
+    await openIns(page);
+    await tegel(page, 'spaar').click();
+    await page.waitForSelector('#kpiHist');
+    const svg = await page.locator('#kpiHist').innerHTML();
+    expect(svg).toContain('>0<');                                             // nullijn-label
+    expect((svg.match(/text-anchor="end"/g) || []).length).toBeGreaterThanOrEqual(3);   // y-labels + bandlabel
+    expect(svg).toContain('doel 20% of meer');                                // gelabelde bandlijn
+    expect((svg.match(/font-weight="700"/g) || []).length).toBeGreaterThan(0); // waardelabels boven de staven
+    expect(svg).toMatch(/>(jan|feb|mrt|apr|mei|jun|jul|aug|sep|okt|nov|dec)\*?</);     // maandlabels
   });
 
   test('geen enkele KPI-tegel opent nog de maand-sheet', async ({ page }) => {
@@ -211,16 +225,27 @@ test.describe('d · uitgaven-vs-budget-grafiek', () => {
     await openIns(page);
     const n = await page.evaluate(() => months().length);
     const html = await page.evaluate(() => spendVsBudgetChart());
-    expect((html.match(/<rect [^>]*rx="3"/g) || []).length).toBe(n);
-    expect((html.match(/stroke-dasharray="4 3"/g) || []).length).toBe(n);
-    expect((html.match(/fill-opacity=".42"/g) || []).length).toBe(1);
-    expect(html).toContain('De gestreepte kolom is deze maand tot nu toe.');
+    expect((html.match(/<rect class="cbar"/g) || []).length).toBe(n);
+    expect((html.match(/stroke-dasharray="4 3"/g) || []).length).toBe(n);      // budgetlijn per maand
+    expect((html.match(/fill-opacity=".42"/g) || []).length).toBe(1);          // alleen de lopende maand
+    expect(html).toContain('De maand met * loopt nog.');
+    expect(html).toMatch(/>aug\*</);                                          // lopende maand gemarkeerd op de x-as
+    expect(html).toContain('budget €');                                        // gelabelde budgetlijn
+    expect(html).toContain('>0<');                                             // y-as met nullijn
+    expect((html.match(/font-weight="700"/g) || []).length).toBeGreaterThan(0); // waardelabels
   });
 
-  test('een tik op een kolom opent openBudgetCompare voor díe maand', async ({ page }) => {
+  test('een tik op een kolom leest hem uit; de uitlezing opent die maand', async ({ page }) => {
     await openIns(page);
     const label = await page.evaluate((m) => monthLabel(m), M1);
-    await page.locator(`#insSpendChart rect[onclick="openBudgetCompare('${M1}')"]`).click();
+    await page.locator(`#insSpendChart rect[onclick*="${M1}"]`).click();
+    await page.waitForTimeout(150);
+    const read = await page.locator('#spendRead').innerText();
+    expect(read.toLowerCase()).toContain(label.toLowerCase());                 // exacte maand
+    expect(read).toContain('€1.495');                                          // exact bedrag
+    expect(read).toContain('bekijk maand');
+
+    await page.locator('#spendRead').click();                                  // en van daaruit de maand-sheet
     await page.waitForSelector('#sheetBg.show');
     expect((await page.locator('#sheet').innerText()).toLowerCase()).toContain(label.toLowerCase());
   });

@@ -6367,31 +6367,72 @@ function insKpiStrip(m){
   </div>`;
 }
 
-// volledige historie van één KPI, met je band als gestreepte lijn
+/* ---- Gedeelde bouwstenen voor de staafgrafieken: as met waarden, labels boven de staven
+       en een tik-uitlezing. Puur weergave; de reeksen zelf blijven zoals ze zijn. ---- */
+const CHART_GEO={W:320,H:172,L:34,R:6,TOP:16,BASE:126,XLAB:142};   // L = gutter voor de y-labels
+const chartK=v=>Math.abs(v)>=1000?('€'+(Math.round(v/100)/10).toString().replace('.',',')+'k'):euro0(v);
+// welke staven een vast label krijgen: bij weinig maanden alle, anders eerste/laatste/hoogste/laagste
+function chartLabelIdx(vals){
+  const idx=vals.map((v,i)=>v==null?-1:i).filter(i=>i>=0);
+  if(!idx.length) return new Set();
+  if(idx.length<=6) return new Set(idx);
+  let hi=idx[0], lo=idx[0];
+  for(const i of idx){ if(vals[i]>vals[hi]) hi=i; if(vals[i]<vals[lo]) lo=i; }
+  return new Set([idx[0], idx[idx.length-1], hi, lo]);
+}
+function chartYAxis(niceTop, fmt){
+  const G=CHART_GEO; const out=[];
+  for(const f of [1,0.5]){
+    const v=niceTop*f, yy=G.BASE-f*(G.BASE-G.TOP);
+    out.push(`<line x1="${G.L}" x2="${G.W-G.R}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,.07)" stroke-width="1"/>`
+      +`<text x="${G.L-5}" y="${(yy+3).toFixed(1)}" font-size="8.5" fill="#6b7a91" text-anchor="end">${fmt(v)}</text>`);
+  }
+  out.push(`<text x="${G.L-5}" y="${G.BASE+3}" font-size="8.5" fill="#6b7a91" text-anchor="end">0</text>`);
+  return out.join('');
+}
+// tik-uitlezing: vult een regel onder de grafiek, zonder re-render
+function chartRead(id,txt){ const el=document.getElementById(id); if(el) el.innerHTML=txt; }
+// label voor een referentielijn, rechts uitgelijnd, met een dekkend plaatje eronder zodat het
+// leesbaar blijft als er staven achter langs lopen
+function chartTagRight(xr,yy,txt,col){
+  const w=txt.length*4.7+8;
+  return `<rect x="${(xr-w).toFixed(1)}" y="${(yy-8.5).toFixed(1)}" width="${w.toFixed(1)}" height="11.5" rx="3" fill="var(--card2)" fill-opacity=".95"/>`
+    +`<text x="${(xr-4).toFixed(1)}" y="${yy.toFixed(1)}" font-size="8.5" font-weight="700" fill="${col}" text-anchor="end">${txt}</text>`;
+}
+
+// volledige historie van één KPI: staven met waarde, maandlabels, y-as en je band als gelabelde lijn
 function kpiHistChart(k){
   const vals=k.series, labs=k.labels, ms=k.maanden;
   if(vals.filter(v=>v!=null).length<2) return `<div class="small muted" style="margin:14px 0 4px">Na twee maanden zie je hier je verloop.</div>`;
   const band=KPI_META[k.key].band!=null?KPI_META[k.key].band:(k.ref||0);
-  const W=320,H=150,L=4,R=4,TOP=8,BASE=108;
-  const max=Math.max(...vals.map(v=>Math.max(v||0,0)),band||0,1)*1.12;
+  const G=CHART_GEO, {W,R,L,TOP,BASE,XLAB,H}=G;
+  const ruw=Math.max(...vals.map(v=>Math.max(v||0,0)),band||0,1);
+  const niceTop=k.key==='niveau'?reisNiceCeil(ruw*1.08):Math.max(Math.ceil(ruw*1.08/10)*10,10);
   const slot=(W-L-R)/vals.length, bw=Math.min(slot*0.62,34);
-  const y=v=>BASE-Math.max(v,0)/max*(BASE-TOP);
+  const y=v=>BASE-Math.max(v,0)/niceTop*(BASE-TOP);
   const col=kpiBarColor(k);
   const every=Math.ceil(vals.length/12);
+  const toon=chartLabelIdx(vals);
+  const kort=v=>k.key==='niveau'?chartK(v):k.fmt(v);
   const bars=vals.map((v,i)=>{
-    const cx=L+slot*i+slot/2, x=cx-bw/2;
-    // Bewust géén tik-doel: dit detail gaat over één KPI. Een tik hier sprong eerder naar
-    // "Hoe doe je het deze maand?" — een andere metriek, in een sheet die de KPI-uitleg wegdrukte.
-    const t=`<title>${labs[i]} · ${v==null?'onbekend':k.fmt(v)}</title>`;
-    const bar=v==null?'':`<rect x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(BASE-y(v),1.5).toFixed(1)}" rx="3" fill="${col(v,i)}"${(k.partial&&i===vals.length-1)?' fill-opacity=".45"':''}>${t}</rect>`;
-    const lab=(i%every===0||i===vals.length-1)?`<text x="${cx.toFixed(1)}" y="${BASE+16}" font-size="9" fill="#8f9bb0" text-anchor="middle">${labs[i]}</text>`:'';
-    return bar+lab;
+    const cx=L+slot*i+slot/2, x=cx-bw/2, nu=(k.partial&&i===vals.length-1);
+    if(v==null) return `<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="#8f9bb0" text-anchor="middle">${labs[i]}</text>`;
+    const yy=y(v);
+    const bar=`<rect class="cbar" x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(BASE-yy,1.5).toFixed(1)}" rx="3" fill="${col(v,i)}"${nu?' fill-opacity=".45" stroke="'+col(v,i)+'" stroke-width="1" stroke-dasharray="3 2"':''}/>`;
+    const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="8.5" font-weight="700" fill="#c7d2e2" text-anchor="middle">${kort(v)}</text>`:'';
+    const lab=(i%every===0||i===vals.length-1)?`<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="#8f9bb0" text-anchor="middle">${labs[i]}${nu?'*':''}</text>`:'';
+    const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+18).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="chartRead('kpiRead','&lt;b&gt;${esc(monthLabel(ms[i]))}&lt;/b&gt; · ${k.fmt(v)}${nu?' · tot nu toe':''}')"><title>${labs[i]} · ${k.fmt(v)}</title></rect>`;
+    return bar+val+lab+hit;
   }).join('');
-  const bandLine=band>0?`<line x1="${L}" x2="${W-R}" y1="${y(band).toFixed(1)}" y2="${y(band).toFixed(1)}" stroke="#56627d" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
+  const bandTxt=k.key==='niveau'?`gemiddeld ${chartK(band)}`:KPI_META[k.key].bandTxt;
+  const bandLine=band>0&&band<=niceTop?`<line x1="${L}" x2="${W-R}" y1="${y(band).toFixed(1)}" y2="${y(band).toFixed(1)}" stroke="#8b97ad" stroke-width="1.4" stroke-dasharray="4 3"/>`
+    +chartTagRight(W-R, y(band)-4, bandTxt, '#8b97ad'):'';
   return `<svg id="kpiHist" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:12px">
-      <line x1="${L}" x2="${W-R}" y1="${BASE}" y2="${BASE}" stroke="rgba(255,255,255,.09)" stroke-width="1"/>
-      ${bandLine}${bars}
+      ${chartYAxis(niceTop, kort)}
+      <line x1="${L}" x2="${W-R}" y1="${BASE}" y2="${BASE}" stroke="rgba(255,255,255,.14)" stroke-width="1"/>
+      ${bars}${bandLine}
     </svg>
+    <div id="kpiRead" class="small" style="color:var(--mut2);font-size:11px;margin-top:2px;min-height:15px">Tik een staaf voor de exacte waarde.${k.partial?' De maand met * loopt nog.':''}</div>
     <div class="gc-leg"><span><i class="d"></i>${k.key==='niveau'?`je gemiddelde (${euro0(band)})`:KPI_META[k.key].bandTxt}</span><span><i style="background:var(--teal)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
 }
 function openKpiDetail(key){
@@ -6421,28 +6462,39 @@ function spendVsBudgetChart(){
   const last=ms.slice(-12);
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const rows=last.map(mm=>{ const t=totals(mm); return {m:mm, spend:Math.max(t.spend,0), budget:Math.max(t.budget,0), now:mm===nowYM}; });
-  const W=320, H=150, L=4, R=4, TOP=8, BASE=108;
-  const max=Math.max(...rows.map(r=>Math.max(r.spend,r.budget)),1)*1.12;
+  const G=CHART_GEO, {W,H,L,R,TOP,BASE,XLAB}=G;
+  const niceTop=reisNiceCeil(Math.max(...rows.map(r=>Math.max(r.spend,r.budget)),1)*1.08);
   const slot=(W-L-R)/rows.length, bw=Math.min(slot*0.62,34);
-  const y=v=>BASE-Math.max(v,0)/max*(BASE-TOP);
+  const y=v=>BASE-Math.max(v,0)/niceTop*(BASE-TOP);
+  const toon=chartLabelIdx(rows.map(r=>r.spend));
+  // het budget-label staat rechtsboven; botst het waardelabel van de laatste staaf ermee,
+  // dan wint het budget-label (dat geldt voor de hele grafiek)
+  const yBudLab=rows[rows.length-1].budget>0?y(rows[rows.length-1].budget)-4:-99;
+  if(Math.abs(Math.max(y(rows[rows.length-1].spend)-4,TOP-4)-yBudLab)<11) toon.delete(rows.length-1);
   const bars=rows.map((r,i)=>{
     const cx=L+slot*i+slot/2, x=cx-bw/2, yy=y(r.spend), h=Math.max(BASE-yy,1.5);
     const over=r.budget>0 && r.spend>r.budget;
     const col=over?kpiCol('bad'):'var(--teal)';
-    const bar=`<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${col}"${r.now?' fill-opacity=".42" stroke="'+col+'" stroke-width="1" stroke-dasharray="3 2"':''}/>`;
-    const bud=r.budget>0?`<line x1="${(L+slot*i+1).toFixed(1)}" x2="${(L+slot*(i+1)-1).toFixed(1)}" y1="${y(r.budget).toFixed(1)}" y2="${y(r.budget).toFixed(1)}" stroke="#56627d" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
-    const lab=`<text x="${cx.toFixed(1)}" y="${BASE+16}" font-size="9" fill="#8f9bb0" text-anchor="middle">${MNAMES[+r.m.slice(5,7)-1]}</text>`;
-    const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+22).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="openBudgetCompare('${r.m}')"><title>${MFULL[+r.m.slice(5,7)-1]} ${r.m.slice(0,4)} · ${euro0(r.spend)}</title></rect>`;
-    return bud+bar+lab+hit;
+    const bar=`<rect class="cbar" x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${col}"${r.now?' fill-opacity=".42" stroke="'+col+'" stroke-width="1" stroke-dasharray="3 2"':''}/>`;
+    const bud=r.budget>0?`<line x1="${(L+slot*i+1).toFixed(1)}" x2="${(L+slot*(i+1)-1).toFixed(1)}" y1="${y(r.budget).toFixed(1)}" y2="${y(r.budget).toFixed(1)}" stroke="#8b97ad" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
+    const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="8.5" font-weight="700" fill="#c7d2e2" text-anchor="middle">${chartK(r.spend)}</text>`:'';
+    const lab=`<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="#8f9bb0" text-anchor="middle">${MNAMES[+r.m.slice(5,7)-1]}${r.now?'*':''}</text>`;
+    // let op: geen aanhalingstekens in deze string — hij zit in een onclick-attribuut
+    const uit=`&lt;b&gt;${esc(monthLabel(r.m))}&lt;/b&gt; · ${euro0(r.spend)}${r.budget>0?` van ${euro0(r.budget)}`:''}${r.now?' · tot nu toe':''} · bekijk maand ›`;
+    const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+18).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="chartRead('spendRead','${uit}');window._spendPick='${r.m}'"><title>${MFULL[+r.m.slice(5,7)-1]} ${r.m.slice(0,4)} · ${euro0(r.spend)}</title></rect>`;
+    return bud+bar+val+lab+hit;
   }).join('');
   const hasNow=rows.some(r=>r.now);
+  const budNu=rows[rows.length-1].budget;
   return `<div class="card">${head}
     <svg id="insSpendChart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block">
-      <line x1="${L}" x2="${W-R}" y1="${BASE}" y2="${BASE}" stroke="rgba(255,255,255,.09)" stroke-width="1"/>
+      ${chartYAxis(niceTop, chartK)}
+      <line x1="${L}" x2="${W-R}" y1="${BASE}" y2="${BASE}" stroke="rgba(255,255,255,.14)" stroke-width="1"/>
       ${bars}
+      ${budNu>0?chartTagRight(W-R, y(budNu)-4, 'budget '+chartK(budNu), '#8b97ad'):''}
     </svg>
+    <div id="spendRead" class="small" style="color:var(--teal);font-size:11px;margin-top:2px;min-height:15px;cursor:pointer" onclick="if(window._spendPick)openBudgetCompare(window._spendPick)"><span style="color:var(--mut2)">Tik een maand voor het bedrag.${hasNow?' De maand met * loopt nog.':''}</span></div>
     <div class="gc-leg"><span><i style="background:var(--teal)"></i>binnen budget</span><span><i style="background:${kpiCol('bad')}"></i>erboven</span><span><i class="d"></i>maandbudget</span></div>
-    <div class="small" style="color:var(--mut2);font-size:11px;margin-top:6px">${hasNow?'De gestreepte kolom is deze maand tot nu toe. ':''}Tik een maand voor de details.</div>
   </div>`;
 }
 
