@@ -631,7 +631,10 @@ const CATS={
   overig:{name:'Overig',icon:ICON('card'),color:'#cbd5e1',type:'expense'},
   inkomen:{name:'Inkomen',icon:ICON('wallet'),color:'#10b981',type:'income'},
   sparen:{name:'Sparen & beleggen',icon:ICON('trend'),color:'#2dd4bf',type:'internal'},
-  intern:{name:'Eigen rekening / overboeking',icon:ICON('swap'),color:'#64748b',type:'internal'}
+  intern:{name:'Eigen rekening / overboeking',icon:ICON('swap'),color:'#64748b',type:'internal'},
+  // doorstroomposten: geen uitgave, maar een vordering (uitgeleend) of schuld (geleend)
+  uitgeleend:{name:'Uitgeleend',icon:ICON('coins'),color:'#7cb8e8',type:'internal'},
+  geleend:{name:'Geleend',icon:ICON('card'),color:'#d8a657',type:'internal'}
 };
 // keyword-regels (eerste match telt), werken op de hele :86:-tekst in hoofdletters
 const RULES=[
@@ -3539,7 +3542,7 @@ function renderDebts(){
   const open=SET.openSchuld===true;
   return `<div style="margin-top:18px">
     <div class="row" style="margin:0 2px 8px;cursor:pointer" onclick="toggleVerm('openSchuld')"><span class="hlabel" style="margin:0;flex:1">Schulden &amp; aflossing</span><span class="small muted">${euro0(totalSch)}</span><span class="muted" style="font-size:15px;margin-left:8px">${open?'▲':'›'}</span></div>
-    ${open?`${prio}<div class="cz-card" style="padding:2px 14px">${rows}${totLine?`<div class="small muted" style="padding:9px 2px 3px">${totLine}</div>`:''}<button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div>`:''}
+    ${open?`${prio}<div class="cz-card" style="padding:2px 14px">${rows}${loanRowsHTML('in')}${totLine?`<div class="small muted" style="padding:9px 2px 3px">${totLine}</div>`:''}<button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div>`:''}
   </div>`;
 }
 function toggleVerm(k){ SET[k]=(SET[k]!==true); save(); renderVermogen(); }
@@ -3602,13 +3605,15 @@ function leaseAutoTotal(){ return (SET.debts||[]).reduce((s,d)=>s+((d.type==='fi
 function netWorth(){
   const liq=totalBalance().sum;
   const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0)+leaseAutoTotal();
-  const bez=liq+overig;
-  const sch=(SET.debts||[]).reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
-  return {liq,overig,bez,sch,netto:bez-sch};
+  // doorstroomposten: uitgeleend geld is een vordering (bezitting), geleend geld een schuld
+  const LT=loanTotals();
+  const bez=liq+overig+LT.uit;
+  const sch=(SET.debts||[]).reduce((s,d)=>s+Math.max(+d.rest||0,0),0)+LT.in;
+  return {liq,overig,vord:LT.uit,leen:LT.in,bez,sch,netto:bez-sch};
 }
 function renderNetWorth(){
   const w=netWorth();
-  if(w.overig<=0 && w.sch<=0) return '';   // pas tonen zodra er bezittingen of schulden zijn ingevuld
+  if(w.overig<=0 && w.sch<=0 && w.vord<=0) return '';   // pas tonen zodra er bezittingen, schulden of vorderingen zijn
   return `<div class="card" style="margin-top:18px">
     <div class="row" style="margin-bottom:6px"><span class="hlabel" style="margin:0;flex:1">Netto vermogen</span></div>
     <div style="font-size:24px;font-weight:800;color:${w.netto>=0?'var(--teal)':'var(--red)'}">${euro0(w.netto)}</div>
@@ -3616,17 +3621,30 @@ function renderNetWorth(){
     <div class="row" style="padding:5px 0"><span class="small">− Schulden</span><span class="small" style="font-weight:700;color:${w.sch>0?'var(--amber)':'var(--mut)'}">${euro0(w.sch)}</span></div>
   </div>`;
 }
+// Uitgeleend geld staat apart van je echte bezittingen: het is van jou, maar het ligt elders.
+function loanRowsHTML(richting){
+  const ls=loans().filter(l=>(l.richting==='in'?'in':'uit')===richting && (+l.open||0)>0);
+  if(!ls.length) return '';
+  const kop=richting==='uit'?'Uitgeleend · te ontvangen':'Geleend · terug te betalen';
+  return `<div class="small" style="color:var(--mut2);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:12px 2px 2px;font-size:10px">${kop}</div>`
+    + ls.map(l=>{
+        const dt=l.terug?new Date(l.terug):null;
+        const laat=dt && dt.getTime()<Date.now();
+        const sub=`${new Date(l.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}${l.terug?` · terug ${dt.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}${laat?' (verstreken)':''}`:''}${l.soort==='borg'?' · borg':''}`;
+        return `<div class="cz-pot" style="cursor:pointer" onclick="openLoan('${l.id}')"><div class="cp-info"><div class="cp-nm">${esc(l.naam)}</div><div class="cp-sub${laat?' warn':''}">${sub}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+l.open||0)}</span><span class="muted">›</span></div></div>`;
+      }).join('');
+}
 function renderAssets(){
   const liq=totalBalance().sum; const as=SET.assets||[];
   const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}${a.grow?' <span style="color:var(--teal);font-size:10.5px">· groeit</span>':''}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+a.waarde||0)}</span><span class="muted">›</span></div></div>`).join('');
   const leaseRows=(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).map(d=>`<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Auto')} <span style="color:var(--mut2);font-size:10.5px">· via financial lease</span></div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+d.dagwaarde)}</span><span class="muted">›</span></div></div>`).join('');
-  const totalBez=(liq||0)+as.reduce((s,a)=>s+(+a.waarde||0),0)+(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).reduce((s,d)=>s+(+d.dagwaarde||0),0);
+  const totalBez=(liq||0)+as.reduce((s,a)=>s+(+a.waarde||0),0)+(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).reduce((s,d)=>s+(+d.dagwaarde||0),0)+loanTotals().uit;
   const open=SET.openBez===true;
   return `<div style="margin-top:14px">
     <div class="row" style="margin:0 2px 8px;cursor:pointer" onclick="toggleVerm('openBez')"><span class="hlabel" style="margin:0;flex:1">Bezittingen</span><span class="small muted">${euro0(totalBez)}</span><span class="muted" style="font-size:15px;margin-left:8px">${open?'▲':'›'}</span></div>
     ${open?`<div class="cz-card" style="padding:2px 14px">
       <div class="cz-pot"><div class="cp-info"><div class="cp-nm">${ICON('bank')} Saldo (rekeningen) <span style="color:var(--mut2);font-size:10.5px">· automatisch</span></div><div class="cp-sub">uit je transacties, altijd actueel</div></div><span class="small" style="font-weight:700">${euro0(liq)}</span></div>
-      ${rows}${leaseRows}
+      ${rows}${leaseRows}${loanRowsHTML('uit')}
       <button class="cp-add" onclick="openAsset()">+ Bezitting toevoegen</button>
     </div>
     <div class="small muted" style="margin:6px 2px">Voeg spaargeld, beleggingen, je auto of woning toe voor je netto vermogen.</div>`:''}
@@ -3791,7 +3809,8 @@ function fireInputs(){
   // Bezittingen splitsen: groeiende → belegd (groeit op FIRE-rendement), niet-groeiende → flat (vlak), lease-auto('s) → leaseItems (schrijven af)
   const _grow=(SET.assets||[]).filter(a=>a.grow), _flatA=(SET.assets||[]).filter(a=>!a.grow);
   const belegd=_grow.reduce((s,a)=>s+Math.max(+a.waarde||0,0),0);
-  const flat=_flatA.reduce((s,a)=>s+Math.max(+a.waarde||0,0),0);
+  const _LT=loanTotals();   // doorstroomposten groeien niet: vlak meenemen, zodat assets − debt === netto blijft
+  const flat=_flatA.reduce((s,a)=>s+Math.max(+a.waarde||0,0),0)+_LT.uit-_LT.in;
   const belegdItems=_grow.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0)}));
   const flatItems=_flatA.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0)}));
   const leaseItems=(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).map(d=>({naam:d.naam||'Auto', dagwaarde:+d.dagwaarde||0, afschr:(+d.afschr||0)>0?+d.afschr:18}));   // afschrijving %/jr (declining balance, default 18)
@@ -6833,6 +6852,132 @@ function removeWidget(id){ SET.dashHidden=[...new Set([...(SET.dashHidden||[]),i
 
 function toggleDashEdit(){ SET.dashEdit=!SET.dashEdit; save(); renderDash(); }
 
+/* ============================================================
+   DOORSTROOMPOSTEN — uitgeleend / geleend / borg
+   Niet elke afschrijving is een uitgave. Een gemarkeerde transactie krijgt een internal-categorie
+   (dus buiten spend/income) en komt als vordering of schuld in je netto vermogen. Een latere
+   terugbetaling verlaagt de openstaande post; het is nooit inkomen.
+   Grootboek: SET.loans = [{id,txId,naam,richting:'uit'|'in',soort:'lening'|'borg',bedrag,open,datum,terug}]
+   ============================================================ */
+const LOAN_CAT={uit:'uitgeleend', in:'geleend'};
+function loans(){ return Array.isArray(SET.loans)?SET.loans:[]; }
+function loanFor(txId){ return loans().find(l=>l.txId===txId)||null; }
+function loanTotals(){
+  let uit=0, inn=0;
+  for(const l of loans()){ const o=Math.max(+l.open||0,0); if(l.richting==='in') inn+=o; else uit+=o; }
+  return {uit:Math.round(uit), in:Math.round(inn)};
+}
+// markeren: categorie omzetten én een post in het grootboek. Eén tik is genoeg; de rest is optioneel.
+function markLoan(txId, richting, soort){
+  const t=TX.find(x=>x.id===txId); if(!t) return;
+  const bedrag=Math.round(Math.abs(+t.amount||0)); if(!(bedrag>0)) return;
+  SET.loans=loans().filter(l=>l.txId!==txId);
+  SET.loans.push({id:'l'+Date.now().toString(36)+Math.floor(Math.random()*1e3).toString(36),
+    txId, naam:(cleanMerch(t.name)||t.name||'onbekend').slice(0,40), richting:(richting==='in'?'in':'uit'),
+    soort:(soort==='borg'?'borg':'lening'), bedrag, open:bedrag, datum:t.date, terug:''});
+  OVR[txId]=LOAN_CAT[richting==='in'?'in':'uit'];
+  save(); closeSheet(); render();
+  toast(`${ICON('check')} ${richting==='in'?'Geleend':(soort==='borg'?'Borg':'Uitgeleend')} · ${euro0(bedrag)}`);
+}
+function unmarkLoan(txId){ if(!loanFor(txId)) return false; SET.loans=loans().filter(l=>l.txId!==txId); return true; }
+function setLoanField(id,veld,val){
+  const l=loans().find(x=>x.id===id); if(!l) return;
+  if(veld==='naam') l.naam=String(val||'').slice(0,40);
+  else if(veld==='terug') l.terug=String(val||'').slice(0,10);
+  else if(veld==='open'){ const v=Math.max(Math.round(+val||0),0); l.open=Math.min(v,Math.max(+l.bedrag||0,v)); }
+  save(); render(); openLoan(id);
+}
+// terugbetaling: verlaagt de openstaande post. Geen inkomen; het geld kwam alleen terug.
+function loanRepay(id, bedrag, txId){
+  const l=loans().find(x=>x.id===id); if(!l) return;
+  const b=Math.max(Math.round(+bedrag||0),0);
+  l.open=Math.max(Math.round((+l.open||0)-b),0);
+  if(txId){ OVR[txId]=LOAN_CAT[l.richting]; l.terugTx=(l.terugTx||[]).concat([txId]); }
+  save(); closeSheet(); render();
+  toast(l.open>0?`${ICON('check')} Nog ${euro0(l.open)} open`:`${ICON('check')} Volledig terugbetaald`);
+}
+// kwijtschelden: de post sluit én de oorspronkelijke transactie wordt alsnog een échte uitgave,
+// op dít moment. Dat is eerlijk: pas nu is het geld echt weg.
+function loanWriteOff(id, cat){
+  const l=loans().find(x=>x.id===id); if(!l) return;
+  if(l.txId){ OVR[l.txId]=cat||'persoonlijk'; }
+  SET.loans=loans().filter(x=>x.id!==id);
+  save(); closeSheet(); render(); toast(`${ICON('check')} Als uitgave geboekt`);
+}
+function loanDelete(id){
+  const l=loans().find(x=>x.id===id); if(!l) return;
+  if(l.txId && OVR[l.txId] && (OVR[l.txId]==='uitgeleend'||OVR[l.txId]==='geleend')) delete OVR[l.txId];
+  SET.loans=loans().filter(x=>x.id!==id);
+  save(); closeSheet(); render();
+}
+// Stap 3: een binnenkomende betaling die bij een open post past. Suggestie, nooit automatisch.
+function loanMatch(t){
+  if(!t || !(+t.amount>0)) return null;
+  const nm=(cleanMerch(t.name)||'').toUpperCase();
+  const bedrag=Math.round(+t.amount);
+  const kand=loans().filter(l=>(+l.open||0)>0 && (l.richting==='uit') && l.datum<=t.date);
+  if(!kand.length) return null;
+  const score=l=>{
+    const zelfde=nm && (l.naam||'').toUpperCase().slice(0,8)===nm.slice(0,8);
+    const dicht=Math.abs((+l.open||0)-bedrag);
+    return (zelfde?0:1000)+dicht;                      // zelfde tegenpartij eerst, dan dichtst bij het bedrag
+  };
+  const beste=kand.slice().sort((a,b)=>score(a)-score(b))[0];
+  const zelfde=nm && (beste.naam||'').toUpperCase().slice(0,8)===nm.slice(0,8);
+  if(!zelfde && Math.abs((+beste.open||0)-bedrag)>Math.max((+beste.open||0)*0.1,5)) return null;
+  return {loan:beste, bedrag:Math.min(bedrag,+beste.open||0), deels:bedrag<(+beste.open||0)};
+}
+// het blok in de transactie-sheet: één tik om te zeggen "dit was geen uitgave"
+function loanBlokHTML(t){
+  const L=loanFor(t.id);
+  if(L){
+    const rest=Math.max(+L.open||0,0);
+    return `<div class="card" style="margin:10px 0 6px;padding:12px 13px">
+      <div class="small" style="font-weight:700;color:var(--teal)">${L.richting==='in'?'Geleend':(L.soort==='borg'?'Borg / voorschot':'Uitgeleend')} · ${esc(L.naam)}</div>
+      <div class="small muted" style="margin-top:4px">Telt niet als ${L.richting==='in'?'inkomen':'uitgave'}. Nog open: <b style="color:var(--txt)">${euro0(rest)}</b> van ${euro0(L.bedrag)}.</div>
+      <div class="row" style="margin-top:9px;gap:12px">
+        <span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openLoan('${L.id}')">Bewerken ›</span>
+        <span class="small" style="color:var(--mut2);cursor:pointer" onclick="loanDelete('${L.id}')">Toch een uitgave</span>
+      </div></div>`;
+  }
+  // binnenkomend geld dat bij een open vordering past: bied aan het als terugbetaling te boeken
+  if(+t.amount>0){
+    const m=loanMatch(t);
+    if(m) return `<div class="card" style="margin:10px 0 6px;padding:12px 13px;border-color:rgba(59,179,164,.35)">
+      <div class="small" style="font-weight:700;color:var(--teal)">Is dit een terugbetaling?</div>
+      <div class="small muted" style="margin-top:4px">Je hebt nog ${euro0(m.loan.open)} open bij <b style="color:var(--txt)">${esc(m.loan.naam)}</b>. Boek je dit zo, dan telt het niet als inkomen.</div>
+      <button class="btn" style="margin-top:10px" onclick="loanRepay('${m.loan.id}',${m.bedrag},'${t.id}')">Ja, ${euro0(m.bedrag)} terugbetaald${m.deels?' (deels)':''}</button>
+    </div>`;
+    return '';
+  }
+  const b=Math.round(Math.abs(+t.amount||0)); if(!(b>0)) return '';
+  const knop=(lab,sub,fn)=>`<div class="cz-pot" style="cursor:pointer" onclick="${fn}"><div class="cp-info"><div class="cp-nm">${lab}</div><div class="cp-sub">${sub}</div></div><span class="muted">›</span></div>`;
+  return `<div style="margin:10px 0 6px">
+    <div class="small" style="font-weight:700;margin:0 2px 6px">Dit was geen uitgave →</div>
+    <div class="cz-card" style="padding:2px 14px">
+      ${knop('Geld uitgeleend','ik krijg dit terug',`markLoan('${t.id}','uit','lening')`)}
+      ${knop('Geld geleend','ik moet dit terugbetalen',`markLoan('${t.id}','in','lening')`)}
+      ${knop('Borg / voorschot','komt later terug',`markLoan('${t.id}','uit','borg')`)}
+      ${knop('Eigen overboeking','tussen je eigen rekeningen',`setCat('${t.id}','intern')`)}
+    </div></div>`;
+}
+function openLoan(id){
+  const l=loans().find(x=>x.id===id); if(!l) return;
+  const uit=l.richting!=='in';
+  window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" id="loanHead" style="margin-bottom:2px"><div style="font-weight:800;font-size:17px">${uit?(l.soort==='borg'?'Borg / voorschot':'Uitgeleend'):'Geleend'}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="small muted" style="margin-bottom:12px">${uit?'Een vordering: dit geld is van jou, het staat alleen ergens anders.':'Een schuld: dit geld is niet van jou.'} Het telt niet mee als ${uit?'uitgave':'inkomen'}.</div>
+    <label class="fld">Van wie / aan wie</label><input id="loanNaam" type="text" value="${esc(l.naam||'')}" onchange="setLoanField('${l.id}','naam',this.value)" style="width:100%">
+    <label class="fld" style="margin-top:10px">Nog open (€)</label><input id="loanOpen" type="number" inputmode="numeric" min="0" value="${Math.max(+l.open||0,0)}" onchange="setLoanField('${l.id}','open',this.value)" style="width:100%">
+    <div class="small muted" style="margin-top:6px">Oorspronkelijk ${euro0(l.bedrag)} op ${new Date(l.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}.</div>
+    <label class="fld" style="margin-top:10px">Verwacht terug (optioneel)</label><input id="loanTerug" type="date" value="${esc(l.terug||'')}" onchange="setLoanField('${l.id}','terug',this.value)" style="width:100%">
+    <button class="btn" style="margin-top:14px" onclick="loanRepay('${l.id}',${Math.max(+l.open||0,0)})">${ICON('check')} Helemaal terugbetaald</button>
+    ${uit?`<button class="btn sec" style="margin-top:8px" onclick="loanWriteOff('${l.id}','persoonlijk')">Kwijtgescholden · boek als uitgave</button>`:''}
+    <div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="loanDelete('${l.id}')">Markering ongedaan maken</div>
+    <div style="height:8px"></div>`;
+  showSheetBg();
+}
 function openSheet(id){
   const t=TX.find(x=>x.id===id); if(!t)return;
   window._setSheet=null;
@@ -6845,6 +6990,7 @@ function openSheet(id){
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
+    ${loanBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
     <div class="catgrid">${Object.entries(CATS).map(([k,c])=>`
       <div class="catpick ${cur===k?'on':''}" onclick="setCat('${id}','${k}')">
@@ -6854,6 +7000,7 @@ function openSheet(id){
 
 function setCat(id,k){
   const t=TX.find(x=>x.id===id); if(!t) return;
+  if(k!=='uitgeleend' && k!=='geleend' && unmarkLoan(id)) save();   // terug naar uitgave: post opruimen
   const mk=document.getElementById('mkrule');
   if(mk&&mk.checked){   // maak een blijvende regel van deze winkel
     const kw=((cleanMerch(t.name)||t.name)||'').toUpperCase().trim().slice(0,28);
