@@ -81,7 +81,6 @@ test.describe('b · Vooruitblik zonder komende-uitgaven-lijsten', () => {
     const v = await page.locator('#s-vooruit').innerText();
     expect(v).toMatch(/nog deze maand/i);                        // liquiditeitskaart
     expect(v).toMatch(/mijn plan/i);                             // prioriteitenlijst
-    expect(await page.locator('#s-vooruit .vooruit').count()).toBeGreaterThan(0);   // hero
   });
 
   test('"Bekijk je lasten" gaat nu direct naar de vaste-lasten-sheet', async ({ page }) => {

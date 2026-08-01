@@ -227,12 +227,15 @@ test.describe('d · "Nog deze maand" bovenaan', () => {
     await openV(page, seed());
     const eerste = await page.locator('#s-vooruit > *').first().innerText();
     expect(eerste).toMatch(/nog deze maand/i);
-    // de hero staat er nog, maar eronder
+    // v80: geen spaardoel-hero meer; direct daarna komt de plan-zone
     const idx = await page.evaluate(() => {
       const kids = [...document.getElementById('s-vooruit').children];
-      return { nog: kids.findIndex((k) => /nog deze maand/i.test(k.innerText)), hero: kids.findIndex((k) => k.classList.contains('vooruit')) };
+      return { nog: kids.findIndex((k) => /nog deze maand/i.test(k.innerText)),
+               plan: kids.findIndex((k) => k.getAttribute('data-zone') === 'vooruitDoelOpen'),
+               hero: kids.filter((k) => k.classList.contains('vooruit')).length };
     });
     expect(idx.nog).toBe(0);
-    expect(idx.hero).toBeGreaterThan(idx.nog);
+    expect(idx.hero).toBe(0);
+    expect(idx.plan).toBeGreaterThan(idx.nog);
   });
 });

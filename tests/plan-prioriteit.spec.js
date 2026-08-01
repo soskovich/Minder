@@ -93,13 +93,16 @@ test.describe('a · planItems en de waterfall', () => {
   });
 });
 
-test.describe('b · herordenen en de hero', () => {
-  test('standaard volgt de hero het noodfonds, precies als voorheen', async ({ page }) => {
+test.describe('b · herordenen en het plan', () => {
+  test('standaard volgt het model het noodfonds, precies als voorheen', async ({ page }) => {
     await openV(page);
     const S = await page.evaluate(() => ({ src: savingsModel().goalSrc, goal: savingsModel().goal, nf: Math.round(noodfondsModel().doel) }));
     expect(S.src).toBe('nood');
     expect(S.goal).toBe(S.nf);
-    expect(await page.locator('#s-vooruit .vh-lbl').first().innerText()).toMatch(/je spaardoel/i);
+    // v80: de spaardoel-hero is weg; het bovenste plan-item draagt het doel
+    expect(await page.locator('#s-vooruit .vooruit').count()).toBe(0);
+    await openPlanZone(page);
+    expect(await page.locator('#s-vooruit .plan-item').first().getAttribute('data-id')).toBe('noodfonds');
   });
 
   test('▲ verandert SET.planOrder en de hero volgt het nieuwe #1', async ({ page }) => {
@@ -117,10 +120,11 @@ test.describe('b · herordenen en de hero', () => {
     expect(S.planAlloc).toBe(100);                                  // ETA op het eigen maandbedrag
     expect(Math.round(S.monthsLeft)).toBe(10);
 
-    const hero = await page.locator('#s-vooruit .vooruit').first().innerText();
-    expect(hero).toContain('Kosten koper huis');
-    expect(hero).toContain('#1 in je plan');
-    expect(hero).toContain('€1.000');
+    const eerste = page.locator('#s-vooruit .plan-item').first();
+    expect(await eerste.getAttribute('data-id')).toBe('gA');
+    const tekst = await eerste.innerText();
+    expect(tekst).toContain('Kosten koper huis');
+    expect(tekst).toContain('€1.000');
   });
 
   test('een bereikt #1 schuift door naar het volgende item', async ({ page }) => {

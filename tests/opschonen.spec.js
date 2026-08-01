@@ -25,8 +25,8 @@ test.describe('a · noodfonds-widget weg, verfijnen blijft bereikbaar', () => {
     expect(v).not.toMatch(/bezuinigingsruimte/i);
     // de functie zelf blijft bestaan, hij wordt alleen niet meer samengesteld
     expect(await page.evaluate(() => typeof noodfondsCard)).toBe('function');
-    // de samenstelling zelf: sinds v71 opent Vooruitblik met "Nog deze maand"
-    expect(await page.evaluate(() => /innerHTML\s*=\s*nogDezeMaandCard\(\)\s*\+\s*vooruitForecast\(\)/.test(renderVooruit.toString()))).toBe(true);
+    // de samenstelling zelf: sinds v71 opent Vooruitblik met "Nog deze maand", sinds v80 zonder hero
+    expect(await page.evaluate(() => /innerHTML\s*=\s*nogDezeMaandCard\(\)\s*\+\s*doelZone/.test(renderVooruit.toString()))).toBe(true);
   });
 
   test('het noodfonds-plan-item is de ingang naar verfijnen', async ({ page }) => {
