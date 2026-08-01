@@ -14,14 +14,15 @@ test.describe('a · Nederlandse getalnotatie', () => {
   test('euro0 houdt het minteken vast', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => ({
-      pos: euro0(8439), neg: euro0(-8439), nul: euro0(0), minNul: euro0(-0.2), decimaal: euro(8439.5), negDec: euro(-1050),
+      pos: euro0(8439), neg: euro0(-8439), nul: euro0(0), minNul: euro0(-0.2), decimaal: euro(8439.5), negDec: euro(-1050), minNulDec: euro(-0.001),
     }));
     expect(r.pos).toBe('€8.439');
-    expect(r.neg).toBe('€-8.439');                 // was €8.439: het teken viel weg
+    expect(r.neg).toBe('-€8.439');                 // teken behouden én vóór het euroteken
     expect(r.nul).toBe('€0');
     expect(r.minNul).toBe('€0');                   // geen "€-0"
     expect(r.decimaal).toBe('€8.439,50');
-    expect(r.negDec).toBe('€-1.050,00');
+    expect(r.negDec).toBe('-€1.050,00');            // minteken vóór het euroteken
+    expect(r.minNulDec).toBe('€0,00');              // geen "-€0,00" bij afronding naar nul
   });
 
   test('euroK is één compacte notatie met Nederlandse komma', async ({ page }) => {
@@ -31,7 +32,7 @@ test.describe('a · Nederlandse getalnotatie', () => {
     expect(r.rond).toBe('€2K');
     expect(r.klein).toBe('€940');                  // onder 1000 gewoon voluit
     expect(r.groot).toBe('€120K');
-    expect(r.neg).toBe('€-4,4K');
+    expect(r.neg).toBe('-€4,4K');
     expect(r.chart).toBe(r.k);                     // grafieken gebruiken dezelfde notatie
   });
 
