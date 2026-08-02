@@ -19,17 +19,59 @@
   /* tekst: --mut is leesbaar secundair, --mut2 alleen écht tertiair */
   --txt:#eaf0fb; --mut:#a6b2c6; --mut2:#7f8ba1;
   /* teal is gereserveerd: actieve tab, primaire knop, hero-bedrag, één accent per kaart */
-  --teal:#3bb3a4; --teal-d:#0f766e;
+  --accent:#3bb3a4; --accent-d:#0f766e; --on-accent:#06231c;
+  --teal:var(--accent); --teal-d:var(--accent-d);      /* oude namen blijven werken */
   --green:#34d399; --amber:#f5b544; --red:#e2685f; --blue:#60a5fa; --violet:#a78bfa;
   --bar:#39445e;                       /* neutrale datakleur: staven zonder alarm */
   --shadow:0 1px 2px rgba(0,0,0,.28), 0 6px 20px rgba(0,0,0,.22);
   --s1:8px; --s2:16px; --s3:24px; --s4:32px;
   --r-card:16px; --r-inner:12px; --r-pill:999px;
+  /* thema-haken: standaard = de huidige donkere look, thema's overschrijven ze hieronder */
+  --ref:#56627d;                       /* referentie-/doellijnen in grafieken */
+  --lab:#8a97ab;                       /* as- en maandlabels in grafieken */
+  --nav-bg:rgba(13,20,34,.72);
+  --surface:var(--card);               /* dekkend oppervlak voor sheets en popovers */
+  --font-head:inherit;                 /* koppen + hero; Privé zet hier een serif */
+  --hero-gradient:none;                /* Aurora zet hier een verloop voor het hero-bedrag */
+  --card-blur:none;                    /* Aurora zet hier de glas-blur */
+  --aurora:none;                       /* Aurora zet hier de gloed-overlay */
+}
+/* ---------- Thema 1: Privé — licht & editorial ---------- */
+[data-theme="prive"]{
+  --bg:#f6f2e9; --card:#fffdf9; --card2:#f0ebe0;
+  --line:rgba(0,0,0,.06); --ln2:rgba(0,0,0,.10);
+  --txt:#1c2b26; --mut:#5b685f; --mut2:#767f78;
+  --accent:#1f5c46; --accent-d:#16452f; --on-accent:#fffdf9;
+  --green:#2f7d5b; --amber:#9a6b1f; --red:#a8402f; --blue:#2c5d86; --violet:#5d4b96;
+  --bar:#cdd6cf; --ref:#9aa79f; --lab:#5b685f;
+  --nav-bg:rgba(255,253,249,.86); --surface:#fffdf9;
+  --shadow:0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.06);
+  --font-head:Georgia,'Iowan Old Style','Times New Roman',serif;
+  color-scheme:light;
+}
+/* ---------- Thema 2: Neo-Dark Aurora — donker & glas ---------- */
+[data-theme="aurora"]{
+  --bg:#0a0e17; --card:rgba(255,255,255,.045); --card2:rgba(255,255,255,.075);
+  --line:rgba(255,255,255,.08); --ln2:rgba(255,255,255,.14);
+  --txt:#eaf0fb; --mut:#9aa6bd; --mut2:#7e8ba4;
+  --accent:#34e0c4; --accent-d:#0e8f7c; --on-accent:#05221c;
+  --bar:#37455f; --ref:#5b6a86; --lab:#93a2ba;
+  --nav-bg:rgba(10,14,23,.66); --surface:#121826;
+  --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.32);
+  --hero-gradient:linear-gradient(90deg,#34e0c4,var(--violet));
+  --card-blur:blur(14px);
+  --aurora:radial-gradient(120% 55% at 12% -8%, rgba(52,224,196,.13), transparent 62%),
+           radial-gradient(100% 45% at 92% -2%, rgba(167,139,250,.12), transparent 60%);
+  color-scheme:dark;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
+html{background:var(--bg)}
+/* de aurora-gloed is een overlay achter de app; in de andere thema's staat hij op none */
+body::before{content:'';position:fixed;inset:0;background:var(--aurora);pointer-events:none;z-index:-1}
 body{
-  background:var(--bg); color:var(--txt);
+  /* de basiskleur staat op <html>, zodat de aurora-overlay (body::before) er niet onder verdwijnt */
+  background:transparent; color:var(--txt);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
   font-size:14px; line-height:1.45; padding-bottom:78px; max-width:520px; margin:0 auto;
   min-height:100vh; position:relative;
@@ -54,7 +96,12 @@ h1,h2,h3{margin:0}
 .screen{display:none;padding:8px 16px 16px;animation:fade .25s ease}
 .screen.active{display:block}
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);padding:var(--s2);margin-bottom:var(--s2);box-shadow:var(--shadow)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);padding:var(--s2);margin-bottom:var(--s2);box-shadow:var(--shadow);backdrop-filter:var(--card-blur);-webkit-backdrop-filter:var(--card-blur)}
+/* koppen en grote bedragen volgen het thema-lettertype (Privé = serif) */
+h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-ctr .p,.wvo-tv{font-family:var(--font-head)}
+/* Aurora geeft het hero-bedrag een verloop; alleen als het niet zijn eigen (alarm)kleur draagt */
+.hh-big.grad{color:var(--accent)}
+[data-theme="aurora"] .homehero .hh-big.grad{background:var(--hero-gradient);-webkit-background-clip:text;background-clip:text;color:transparent}
 .muted{color:var(--mut)}
 /* ===== v10 systeem, home pilot: geen dozen, ruimte + typografie ===== */
 .hsec{margin-top:30px}
@@ -76,7 +123,7 @@ h1,h2,h3{margin:0}
 .homelist .hl-all{font-size:13px;color:var(--teal);cursor:pointer}
 .insfocus{padding:16px 2px 4px}
 .insfocus .if-ctx{font-size:14.5px;color:var(--txt);line-height:1.5;margin-bottom:16px;max-width:320px}
-.if-cta{display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:#06231c;border:0;border-radius:13px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer}
+.if-cta{display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:var(--on-accent);border:0;border-radius:13px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer}
 .daystat{padding:16px 2px 2px;border-top:1px solid var(--line);margin-top:20px}
 .daystat .ds-l{font-size:13px;color:var(--mut)}
 .daystat .ds-v{font-size:26px;font-weight:600;letter-spacing:-.5px;font-variant-numeric:tabular-nums;margin:3px 0 1px}
@@ -92,8 +139,8 @@ h1,h2,h3{margin:0}
 .vooruit .vh-sub{font-size:12.5px;color:var(--mut);margin-top:-8px;margin-bottom:4px}
 .vh-hef{margin-top:16px;max-width:340px}
 .vh-hef .vh-hef-h{font-size:12px;font-weight:600;color:var(--mut);margin-bottom:8px}
-.vh-chip{display:inline-block;background:rgba(45,212,191,.07);border:1px solid rgba(45,212,191,.4);color:var(--teal);border-radius:18px;padding:6px 11px;margin:0 6px 6px 0;font-size:12.5px;font-weight:500;cursor:pointer}
-.vh-chip.on{background:var(--teal);color:#06231c;border-color:var(--teal)}
+.vh-chip{display:inline-block;background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--teal);border-radius:18px;padding:6px 11px;margin:0 6px 6px 0;font-size:12.5px;font-weight:500;cursor:pointer}
+.vh-chip.on{background:var(--teal);color:var(--on-accent);border-color:var(--teal)}
 .vh-eff{font-size:12.5px;color:var(--txt);line-height:1.5;margin-top:4px}
 .vh-eff b{font-weight:600;color:var(--teal)}
 .fc-diff{font-size:13px;font-weight:700;margin-top:12px}
@@ -107,7 +154,7 @@ h1,h2,h3{margin:0}
 .vc-leg{display:flex;gap:16px;font-size:11px;color:var(--mut);margin-top:4px}
 .vc-leg i{width:14px;height:2px;background:var(--teal);display:inline-block;vertical-align:middle;margin-right:5px}
 .vc-leg i.dash{background:transparent;border-top:2px dashed var(--mut);height:0}
-.vc-card{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(45,212,191,.06);border:1px solid rgba(45,212,191,.16);border-radius:12px;padding:11px 13px;margin-top:10px}
+.vc-card{display:flex;justify-content:space-between;align-items:center;gap:10px;background:color-mix(in srgb,var(--accent) 6%,transparent);border:1px solid color-mix(in srgb,var(--accent) 16%,transparent);border-radius:12px;padding:11px 13px;margin-top:10px}
 .vc-mon{font-size:11px;color:var(--mut);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
 .vc-plan{font-size:12px;color:var(--mut);margin-top:2px;overflow:hidden;text-overflow:ellipsis}
 .vc-bal{font-size:20px;font-weight:800;letter-spacing:-.4px;flex-shrink:0}
@@ -120,14 +167,14 @@ h1,h2,h3{margin:0}
 .sc-cap .mut{color:var(--mut)}
 .fc-chips{display:flex;flex-wrap:wrap;gap:8px}
 .fc-chip{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:20px;padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s,border-color .15s}
-.fc-chip.on{background:var(--teal);color:#06231c;border-color:var(--teal)}
+.fc-chip.on{background:var(--teal);color:var(--on-accent);border-color:var(--teal)}
 .fc-one{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--mut);padding:7px 0}
 .fc-one .x{color:var(--mut);cursor:pointer;padding:0 6px;font-size:14px}
 .fc-input{display:flex;flex-direction:column;gap:9px}
 .fc-input select,.fc-input input{width:100%;box-sizing:border-box;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:13px 14px;font-size:15px;font-family:inherit}
 .fc-input-row{display:flex;gap:9px}
 .fc-input-row input{flex:1;min-width:0}
-.fc-add{background:var(--teal);color:#06231c;border:none;border-radius:12px;padding:0 20px;height:48px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap}
+.fc-add{background:var(--teal);color:var(--on-accent);border:none;border-radius:12px;padding:0 20px;height:48px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap}
 .ov-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:14.5px}
 .ov-row:last-child{border-bottom:0}
 .beh-row{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line);font-size:14.5px}
@@ -156,7 +203,7 @@ h1,h2,h3{margin:0}
 .bc-statsub{font-size:13px;color:var(--mut);margin-top:4px}
 .bc-steer{font-size:13.5px;color:var(--mut);margin-top:16px;line-height:1.5}
 .bc-why{font-size:12.5px;color:var(--mut);line-height:1.45;margin-top:6px}
-.bc-tip{display:flex;gap:10px;align-items:flex-start;background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.18);border-radius:13px;padding:12px 13px;margin-top:18px;font-size:13.5px;line-height:1.45}
+.bc-tip{display:flex;gap:10px;align-items:flex-start;background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 18%,transparent);border-radius:13px;padding:12px 13px;margin-top:18px;font-size:13.5px;line-height:1.45}
 .bc-tip .bc-tip-l{color:var(--teal);font-weight:700;flex-shrink:0}
 .actfocus{padding:26px 2px 4px}
 .actfocus .af-ic{font-size:26px;margin-bottom:14px}
@@ -170,10 +217,10 @@ h1,h2,h3{margin:0}
 .actfocus .af-mean{font-size:14px;color:var(--mut);line-height:1.5;margin:0 0 20px;max-width:320px}
 .actfocus .af-q{font-size:17px;font-weight:600;line-height:1.4;margin-bottom:15px;max-width:320px}
 .actfocus .af-fwd{font-size:13px;color:var(--teal);margin:-12px 0 20px;max-width:320px}
-.actfocus .af-impact{font-size:13.5px;color:var(--txt);background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.18);border-radius:12px;padding:11px 13px;margin:0 0 18px;line-height:1.45;max-width:320px}
+.actfocus .af-impact{font-size:13.5px;color:var(--txt);background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 18%,transparent);border-radius:12px;padding:11px 13px;margin:0 0 18px;line-height:1.45;max-width:320px}
 .coachchips{display:flex;flex-wrap:wrap;gap:9px}
 .coachchip{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:21px;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;transition:background .15s,border-color .15s}
-.coachchip:active{background:var(--teal);color:#06231c;border-color:var(--teal)}
+.coachchip:active{background:var(--teal);color:var(--on-accent);border-color:var(--teal)}
 .coachchip.rec{border-color:var(--teal);color:var(--teal)}
 .actfocus .coachcard{background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:0 13px 13px 0;padding:13px 14px;margin:2px 0 16px;max-width:340px}
 .actfocus .coachcard .cc-obs{font-size:15.5px;font-weight:600;line-height:1.4}
@@ -189,7 +236,7 @@ h1,h2,h3{margin:0}
 .cg-sand .cs-t{font-size:13.5px;line-height:1.5}
 .cg-sand .cs-t b{font-weight:600}
 .cg-sand .cs-t .cs-lbl{display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:2px}
-.cg-disc{border:1px solid rgba(45,212,191,.2);background:rgba(45,212,191,.06);border-radius:14px;padding:13px 14px;margin:0 0 20px;max-width:340px}
+.cg-disc{border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);background:color-mix(in srgb,var(--accent) 6%,transparent);border-radius:14px;padding:13px 14px;margin:0 0 20px;max-width:340px}
 .cg-disc .cd-h{font-size:13px;font-weight:700;color:var(--teal);margin-bottom:7px}
 .cg-disc .cd-rule{font-size:13.5px;color:var(--txt);line-height:1.55;margin-bottom:5px;padding-left:16px;position:relative}
 .cg-disc .cd-rule:before{content:"·";position:absolute;left:4px;color:var(--teal);font-weight:700}
@@ -221,10 +268,10 @@ h1,h2,h3{margin:0}
 .cz-fb .tx b{font-weight:600}
 .cz-eyebrow{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)}
 .cz-end{font-size:34px;font-weight:700;letter-spacing:-.9px;margin:4px 0 6px;font-variant-numeric:tabular-nums}
-.cz-delta{display:inline-block;font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:20px;background:rgba(45,212,191,.14);color:var(--teal)}
+.cz-delta{display:inline-block;font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:20px;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--teal)}
 .cz-delta.amber{background:rgba(240,166,117,.14);color:var(--amber)}
 .cz-rule{display:block;width:100%;text-align:left;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:12px 13px;font-size:13.5px;font-weight:500;cursor:pointer;margin-top:8px}
-.cz-rule.on{border-color:var(--teal);color:var(--teal);background:rgba(45,212,191,.08)}
+.cz-rule.on{border-color:var(--teal);color:var(--teal);background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .cz-rule .cr-cut{float:right;color:var(--mut);font-weight:600}
 .cz-rule.on .cr-cut{color:var(--teal)}
 .cz-mine{margin-top:26px;opacity:.9}
@@ -239,7 +286,7 @@ h1,h2,h3{margin:0}
 .cz-pot .cp-btn.make{border-color:var(--teal);color:var(--teal)}
 .plan-mv{width:34px;height:30px;border-radius:8px;background:var(--card2);border:1px solid var(--line);color:var(--mut);font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .plan-mv.off{opacity:.22}
-.plan-1{display:inline-block;background:var(--teal);color:#06231c;font-weight:800;font-size:10px;border-radius:5px;padding:1px 6px;vertical-align:1px}
+.plan-1{display:inline-block;background:var(--teal);color:var(--on-accent);font-weight:800;font-size:10px;border-radius:5px;padding:1px 6px;vertical-align:1px}
 .cp-add{display:block;width:100%;text-align:left;background:transparent;border:1px solid var(--ln2);color:var(--txt);border-radius:var(--r-inner);padding:11px 13px;margin:var(--s1) 0 4px;font-size:13px;font-weight:600;cursor:pointer}
 .cz-note{font-size:12px;color:var(--mut);line-height:1.5;margin:9px 4px 0}
 .cz-effect{font-size:14px;color:var(--txt);line-height:1.5;margin-bottom:4px}
@@ -247,13 +294,13 @@ h1,h2,h3{margin:0}
 .cothr{display:flex;flex-direction:column}
 .cbub{max-width:86%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.5;margin:5px 0;white-space:pre-wrap}
 .cbub.co{background:var(--card2);border-bottom-left-radius:4px;align-self:flex-start}
-.cbub.me{background:var(--teal);color:#06231c;border-bottom-right-radius:4px;align-self:flex-end;font-weight:500}
-.cfx{align-self:flex-start;font-size:12px;color:var(--teal);border:1px solid rgba(45,212,191,.3);background:rgba(45,212,191,.08);border-radius:20px;padding:4px 11px;margin:4px 0 6px}
+.cbub.me{background:var(--teal);color:var(--on-accent);border-bottom-right-radius:4px;align-self:flex-end;font-weight:500}
+.cfx{align-self:flex-start;font-size:12px;color:var(--teal);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);background:color-mix(in srgb,var(--accent) 8%,transparent);border-radius:20px;padding:4px 11px;margin:4px 0 6px}
 .cdots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--mut);margin:0 2px;animation:cobl 1s infinite}
 .cdots span:nth-child(2){animation-delay:.2s}.cdots span:nth-child(3){animation-delay:.4s}
 @keyframes cobl{0%,60%,100%{opacity:.25}30%{opacity:1}}
-.cch{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;background:rgba(45,212,191,.07);border:1px solid rgba(45,212,191,.42);color:var(--teal);border-radius:12px;padding:11px 13px;margin-top:7px;font-size:13.5px;font-weight:500;cursor:pointer}
-.cch:hover{background:rgba(45,212,191,.15)}
+.cch{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 42%,transparent);color:var(--teal);border-radius:12px;padding:11px 13px;margin-top:7px;font-size:13.5px;font-weight:500;cursor:pointer}
+.cch:hover{background:color-mix(in srgb,var(--accent) 15%,transparent)}
 .cch .cchv{opacity:.7;flex-shrink:0}
 .corow{display:flex;gap:8px;align-items:flex-end;align-self:flex-start;max-width:92%;margin:5px 0}
 .corow .coav{width:28px;height:28px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--card2)}
@@ -265,7 +312,7 @@ h1,h2,h3{margin:0}
 .cobuy{display:block;width:100%;text-align:left;background:var(--card2);border:1px solid var(--teal);color:var(--teal);border-radius:12px;padding:12px 13px;margin-top:18px;font-size:13.5px;font-weight:600;cursor:pointer}
 .coinput{width:100%;margin-top:8px;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;box-sizing:border-box}
 .coconf{display:flex;gap:8px;margin-top:10px}
-.coconf-ok{flex:1;background:var(--teal);color:#06231c;border:0;border-radius:11px;padding:11px;font-size:13.5px;font-weight:600;cursor:pointer}
+.coconf-ok{flex:1;background:var(--teal);color:var(--on-accent);border:0;border-radius:11px;padding:11px;font-size:13.5px;font-weight:600;cursor:pointer}
 .coconf-adj{background:transparent;color:var(--mut);border:1px solid var(--line);border-radius:11px;padding:11px 14px;font-size:13.5px;cursor:pointer}
 .cbub.co.acc{border-left:2px solid var(--teal);border-top-left-radius:5px;border-bottom-left-radius:5px}
 .cbub .hl{color:var(--teal);font-weight:600}
@@ -274,10 +321,10 @@ h1,h2,h3{margin:0}
 .cbub .ca-eye{font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:5px}
 .cbub .ca-ctx{font-size:12.5px;color:var(--mut);line-height:1.5;margin-bottom:8px}
 .cbub .ca-act{font-size:14px;color:var(--txt);line-height:1.5}
-.coachproj{background:rgba(45,212,191,.06);border:1px solid rgba(45,212,191,.18);border-radius:14px;padding:14px;margin:0 0 16px;max-width:340px}
+.coachproj{background:color-mix(in srgb,var(--accent) 6%,transparent);border:1px solid color-mix(in srgb,var(--accent) 18%,transparent);border-radius:14px;padding:14px;margin:0 0 16px;max-width:340px}
 .coachproj .cp-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
 .coachproj .cp-lbl{font-size:11px;color:var(--mut);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
-.coachproj .cp-pill{font-size:12px;font-weight:600;background:rgba(45,212,191,.14);color:var(--teal);padding:3px 9px;border-radius:20px}
+.coachproj .cp-pill{font-size:12px;font-weight:600;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--teal);padding:3px 9px;border-radius:20px}
 .coachproj .cp-big{font-size:28px;font-weight:800;letter-spacing:-.5px;line-height:1.1}
 .coachproj .cp-sub{font-size:12px;color:var(--mut);margin-top:1px}
 .coachproj .cp-leg{display:flex;gap:16px;font-size:11px;color:var(--mut);margin-top:6px}
@@ -356,13 +403,13 @@ h1,h2,h3{margin:0}
 .cf-context{font-size:12.5px;color:var(--mut);line-height:1.55;margin-bottom:15px}
 .cf-links{display:flex;justify-content:space-between;margin-top:13px}
 .cf-links span{font-size:12.5px;color:var(--teal);cursor:pointer;font-weight:600}
-.plan-head .pot{background:rgba(45,212,191,.14);border:1px solid rgba(45,212,191,.4);color:var(--teal);border-radius:999px;padding:4px 11px;font-size:12.5px;font-weight:700;white-space:nowrap}
+.plan-head .pot{background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--teal);border-radius:999px;padding:4px 11px;font-size:12.5px;font-weight:700;white-space:nowrap}
 .action{border:0;border-top:1px solid var(--line);border-radius:0;padding:16px 0;margin-bottom:0;background:transparent}
 .action .ah{display:flex;align-items:flex-start;gap:11px;margin-bottom:9px}
 .action .ico{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
 .action .at{font-weight:700;font-size:14px}
 .action .asub{font-size:12.5px;color:var(--mut);margin-top:1px}
-.action .save{margin-left:auto;font-size:11px;font-weight:700;color:var(--green);background:rgba(52,211,153,.12);border-radius:999px;padding:3px 9px;white-space:nowrap;flex-shrink:0}
+.action .save{margin-left:auto;font-size:11px;font-weight:700;color:var(--green);background:color-mix(in srgb,var(--green) 12%,transparent);border-radius:999px;padding:3px 9px;white-space:nowrap;flex-shrink:0}
 .steps{list-style:none;margin:0;padding:0}
 .steps li{position:relative;padding:5px 0 5px 24px;font-size:12.5px;line-height:1.45}
 .steps li:before{content:"→";position:absolute;left:4px;top:5px;color:var(--teal);font-weight:700}
@@ -370,10 +417,10 @@ h1,h2,h3{margin:0}
 .act-btns{display:flex;gap:8px;margin-top:11px}
 .mini{flex:1;border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:10px;padding:9px;font-size:12.5px;font-weight:600;cursor:pointer}
 .mini:active{filter:brightness(1.15)}
-.mini.go{background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.45);color:var(--green)}
+.mini.go{background:color-mix(in srgb,var(--green) 14%,transparent);border-color:color-mix(in srgb,var(--green) 45%,transparent);color:var(--green)}
 .action.done{opacity:.72}
 .action.done .at{text-decoration:line-through;color:var(--mut)}
-.action.done .ico{background:rgba(52,211,153,.16)!important}
+.action.done .ico{background:color-mix(in srgb,var(--green) 16%,transparent)!important}
 .goal-wrap{margin:2px 0 4px}
 .goal-row{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;margin-bottom:6px}
 .goal-row .big{font-size:22px;font-weight:800;color:var(--teal)}
@@ -385,7 +432,7 @@ h1,h2,h3{margin:0}
 .mini.note-btn{flex:0 0 44px}
 /* gestapelde balk vast/variabel */
 .stack{display:flex;height:26px;border-radius:8px;overflow:hidden;margin:10px 0 12px;background:var(--card2)}
-.stack > div{height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0b1220;white-space:nowrap;min-width:0}
+.stack > div{height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--on-accent);white-space:nowrap;min-width:0}
 .fv-row{display:flex;align-items:center;gap:9px;margin:7px 0}
 .fv-row .dot{width:11px;height:11px;border-radius:3px;flex-shrink:0}
 .fv-row .nm{flex:1;font-size:14px}
@@ -410,14 +457,14 @@ h1,h2,h3{margin:0}
 .bud-line{font-size:12.5px;margin-top:3px;font-weight:600}
 /* actieplan-hefbomen + SMART */
 .lever{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer;background:var(--card)}
-.lever.on{border-color:var(--teal);background:rgba(45,212,191,.08)}
+.lever.on{border-color:var(--teal);background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .lever .chk{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--line);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:#fff}
 .lever.on .chk{background:var(--teal-d);border-color:var(--teal)}
 .lever .lv{flex:1;min-width:0}
 .lever .lv .lt{font-weight:600;font-size:14px}
 .lever .lv .ld{font-size:11px;color:var(--mut)}
 .lever .ef{font-size:12.5px;font-weight:700;color:var(--green);white-space:nowrap}
-.smart{border:1px solid rgba(45,212,191,.3);background:rgba(45,212,191,.06);border-radius:12px;padding:12px;margin-top:10px}
+.smart{border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);background:color-mix(in srgb,var(--accent) 6%,transparent);border-radius:12px;padding:12px;margin-top:10px}
 .smart .st{font-weight:700;font-size:14px;margin-bottom:6px}
 .smart .sl{font-size:12.5px;line-height:1.5;margin:5px 0;padding-left:26px;position:relative}
 .smart .sl .b{position:absolute;left:0;top:1px;font-weight:800;font-size:11px;width:20px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:var(--teal-d);color:#fff;letter-spacing:.3px}
@@ -427,7 +474,7 @@ h1,h2,h3{margin:0}
 .tx-mhead{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:800;margin:20px 4px 2px}
 .txbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 2px 8px}
 .fchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 10px;border-radius:var(--r-pill);background:var(--card2);border:1px solid var(--line);color:var(--mut);cursor:pointer;white-space:nowrap}
-.fchip.on{border-color:var(--teal);color:var(--teal);background:rgba(59,179,164,.10)}
+.fchip.on{border-color:var(--teal);color:var(--teal);background:color-mix(in srgb,var(--accent) 10%,transparent)}
 .fchip .x{display:inline-flex;opacity:.7}.fchip .x svg{width:12px;height:12px}
 .tx-clear{font-size:12px;color:var(--teal);font-weight:600;cursor:pointer;padding:5px 4px}
 .fsec{font-size:12.5px;color:var(--mut);font-weight:600;margin:14px 0 6px}
@@ -454,7 +501,7 @@ input[type=search],input[type=number]{width:100%;background:var(--card2);border:
 .chips.wrap{flex-wrap:wrap;overflow-x:visible}
 .chip{flex-shrink:0;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:var(--r-pill);padding:6px 13px;font-size:12.5px;cursor:pointer;white-space:nowrap}
 .chip.on{background:var(--teal-d);border-color:var(--teal);color:#fff}
-.btn{display:block;width:100%;background:var(--teal);color:#06231c;border:none;border-radius:var(--r-inner);padding:13px;font-size:14px;font-weight:700;cursor:pointer;text-align:center}
+.btn{display:block;width:100%;background:var(--teal);color:var(--on-accent);border:none;border-radius:var(--r-inner);padding:13px;font-size:14px;font-weight:700;cursor:pointer;text-align:center}
 .btn:active{filter:brightness(1.1)}
 .btn.sec{background:transparent;border:1px solid var(--ln2);color:var(--txt);font-weight:600}
 .btn.danger{background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.4);color:var(--red)}
@@ -470,10 +517,10 @@ label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font
 .sw input:checked + .sl:before{transform:translateX(19px)}
 
 /* bottom nav */
-.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:520px;background:rgba(13,20,34,.72);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);border-top:1px solid var(--ln2);box-shadow:0 -6px 24px rgba(0,0,0,.28);display:flex;justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:50}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:520px;background:var(--nav-bg);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);border-top:1px solid var(--ln2);box-shadow:0 -6px 24px rgba(0,0,0,.28);display:flex;justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:50}
 .nav a{flex:1;text-align:center;color:var(--mut);text-decoration:none;font-size:10px;letter-spacing:.02em;font-weight:500;padding:4px 0;cursor:pointer;opacity:.7;transition:opacity .15s ease,color .15s ease}
 .nav a .i{display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 16px;margin-bottom:3px;border-radius:15px;line-height:1;transition:background .18s ease}
-.nav a.on{color:var(--teal);opacity:1;font-weight:600;background:rgba(59,179,164,.12);border-radius:var(--r-pill)}
+.nav a.on{color:var(--teal);opacity:1;font-weight:600;background:color-mix(in srgb,var(--accent) 12%,transparent);border-radius:var(--r-pill)}
 .nav a.on .i{background:transparent}
 
 /* empty / upload */
@@ -486,7 +533,7 @@ label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font
 /* sheet */
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:90;display:none}   /* boven de toast (80): een open sheet mag nooit afgedekt worden */
 .sheet-bg.show{display:block}
-.sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:520px;background:var(--card);border-radius:20px 20px 0 0;border:1px solid var(--line);padding:18px 16px calc(20px + env(safe-area-inset-bottom));max-height:80vh;overflow:auto;animation:up .25s ease}
+.sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:520px;background:var(--surface);border-radius:20px 20px 0 0;border:1px solid var(--line);padding:18px 16px calc(20px + env(safe-area-inset-bottom));max-height:80vh;overflow:auto;animation:up .25s ease}
 @keyframes up{from{transform:translate(-50%,100%)}to{transform:translate(-50%,0)}}
 .grab{width:40px;height:4px;background:var(--line);border-radius:3px;margin:0 auto 14px}
 .catgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px}
@@ -497,7 +544,7 @@ label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font
 .jrg{border-bottom:1px dotted currentColor;cursor:help}
 .jrg::after{content:"\00a0\24D8";font-size:.9em;opacity:.75}
 .jrg:focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:3px}
-#tipPop{position:fixed;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:12px;line-height:1.45;box-shadow:0 8px 28px rgba(0,0,0,.5);z-index:120;display:none}
+#tipPop{position:fixed;background:var(--surface);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:12px;line-height:1.45;box-shadow:0 8px 28px rgba(0,0,0,.5);z-index:120;display:none}
 #tipPop.show{display:block}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;color:var(--mut);margin-top:10px}
 .legend span{display:flex;align-items:center;gap:5px}
@@ -506,7 +553,7 @@ label.fld{display:block;font-size:12.5px;color:var(--mut);margin:14px 0 6px;font
 .spark .b{flex:1;background:var(--teal-d);border-radius:5px 5px 0 0;position:relative;min-height:3px;transition:height .4s}
 .spark .b .lab{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:11px;color:var(--mut)}
 .spark .b .val{position:absolute;top:-15px;left:0;right:0;text-align:center;font-size:11px;color:var(--mut)}
-.bchip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap}.bchip.ok{background:rgba(52,211,153,.16);color:var(--green)}.bchip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.bchip.lo{background:rgba(248,113,113,.14);color:#f9a8a8}.inssec{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:800;margin:20px 4px 9px}.inssec:first-child{margin-top:4px}.home-hook{display:flex;align-items:center;gap:9px;background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.3);border-radius:12px;padding:11px 13px;margin-bottom:11px;cursor:pointer}.home-hook .hh-ic{color:var(--teal);display:flex}.home-hook .hh-tx{flex:1;font-size:13px}.home-hook .hh-tx b{color:var(--txt)}.home-hook .hh-go{color:var(--teal);font-weight:700}.gc-coach{display:flex;gap:8px;align-items:flex-start;background:rgba(45,212,191,.07);border-radius:9px;padding:9px 11px;font-size:12.5px;color:var(--mut);margin-bottom:10px}.gc-coach b{color:var(--txt)}.gc-coach svg{color:var(--teal);flex-shrink:0;margin-top:1px}.gc-out{font-size:13px;font-weight:600;margin-bottom:10px}.gc-tip{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:8px;cursor:pointer}.gc-tip.on{border-color:var(--teal);background:rgba(45,212,191,.06)}.gc-tip .gc-ic{font-size:16px;flex-shrink:0}.gc-bd{flex:1}.gc-how{font-size:12.5px;color:var(--mut);line-height:1.45}.gc-how b{color:var(--txt)}.gc-act{font-size:12.5px;color:var(--txt);font-weight:600;margin-top:5px;line-height:1.45}.gc-save{font-size:12px;color:var(--teal);font-weight:700;margin-top:4px}.gc-eff{color:var(--mut);font-weight:500}.gc-verg{font-size:11.5px;color:var(--mut2);margin-top:3px;line-height:1.45}.gc-tip .gc-sw{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#06231c;font-weight:900;font-size:13px}.gc-tip.on .gc-sw{background:var(--teal);border-color:var(--teal)}.gc-commit{width:100%;margin:4px 0 2px;background:var(--teal);color:#06231c;border:0;border-radius:9px;padding:11px;font-weight:800;font-size:13px;cursor:pointer}.gc-commit.done{background:var(--green)}.wvo-tiles{display:grid;gap:var(--s2);margin-top:14px}.wvo-tile{background:transparent;border:0;border-radius:var(--r-inner);padding:0;display:flex;flex-direction:column}.spk-in{position:relative;line-height:0}.spk-in i{position:absolute;border-radius:50%;transform:translate(-50%,-50%)}.spk-nu{width:4px;height:4px;border:1.6px solid var(--teal);background:var(--card)}.spk-eind{width:4.5px;height:4.5px;background:var(--bar)}.spk-wrap,.spk-na{margin-top:9px}.wvo-tile .spk-wrap,.wvo-tile .spk-na{margin-top:auto;padding-top:9px}.wvo-tl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);font-weight:700;line-height:1.3}.wvo-tv{font-size:18px;font-weight:800;margin-top:5px;letter-spacing:-.3px}.wvo-ts{font-size:11.5px;color:var(--mut);margin-top:3px;line-height:1.5}.wvo-chip{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;margin-top:7px}.wvo-chip.up{background:rgba(248,113,113,.16);color:var(--red)}.wvo-chip.dn{background:rgba(52,211,153,.16);color:var(--green)}.wvo-chip.n{background:rgba(96,165,250,.14);color:var(--blue)}.wvo-chip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.wvo-insight{background:rgba(45,212,191,.07);border:1px solid rgba(45,212,191,.22);border-radius:12px;padding:12px 14px;margin-top:14px;font-size:13px;color:var(--mut)}.wvo-insight b{color:var(--txt)}.wvo-insight .h{color:var(--teal);font-weight:800;font-size:11px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px}.wk-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.wk-row:last-of-type{border-bottom:0}.wk-row .ic{width:26px;height:26px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center}.wk-row .nm{flex:1;font-size:13.5px}.hdj{background:linear-gradient(180deg,#16233b,#121d31);border:1px solid var(--ln2);border-radius:13px;padding:13px 14px;cursor:pointer}.hdj-top{display:flex;align-items:center;gap:8px}.hdj-lab{flex:1;font-size:13.5px;font-weight:600}.hdj-go{color:var(--teal);font-weight:700}.hdj-kn{font-size:18px;font-weight:800;letter-spacing:-.3px;margin-top:8px}.hdj-kn .u{font-size:12px;color:var(--mut);font-weight:500}.hdj-bar{height:7px;border-radius:6px;background:var(--card2);margin-top:9px;position:relative;overflow:hidden}.hdj-bar .f{height:100%;border-radius:6px}.hdj-bar .now{position:absolute;top:-2px;width:2px;height:11px;background:#fff;opacity:.65}.hdj-lbl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut2);margin-top:6px}.goalring{display:flex;align-items:center;gap:18px;margin-top:12px}.gr-ring{position:relative;width:108px;height:108px;flex-shrink:0}.gr-ring svg{display:block}.gr-ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}.gr-ctr .p{font-size:24px;font-weight:800;letter-spacing:-.5px;color:var(--teal)}.gr-ctr .l{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut2);font-weight:700;margin-top:1px}.gr-info{min-width:0}.gr-a{font-size:18px;font-weight:800;letter-spacing:-.3px}.gr-a .u{font-size:13px;color:var(--mut);font-weight:500}.gr-e{font-size:13.5px;color:var(--teal);font-weight:600;margin-top:7px}.gr-p{font-size:12px;color:var(--mut);margin-top:3px}.gr-f{font-size:10.5px;color:var(--mut2);margin-top:8px}.ndm-net{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:11px;border-top:1px solid var(--line);font-size:13.5px;font-weight:700}.gc-bighead{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-top:4px}.gc-chipd{display:inline-block;font-size:11px;font-weight:800;color:var(--teal);background:rgba(45,212,191,.14);padding:3px 9px;border-radius:20px;margin-left:8px;vertical-align:middle}.gc-dual{margin-top:12px}.gc-dual svg{display:block}.gc-leg{display:flex;gap:14px;margin-top:4px;font-size:10.5px;color:var(--mut)}.gc-leg span{display:flex;align-items:center;gap:5px}.gc-leg i{width:16px;height:3px;border-radius:2px;display:inline-block}.gc-leg i.d{height:0;border-top:2px dashed #56627d;background:none}</style>
+.bchip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap}.bchip.ok{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}.bchip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.bchip.lo{background:rgba(248,113,113,.14);color:var(--red)}.inssec{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:800;margin:20px 4px 9px}.inssec:first-child{margin-top:4px}.home-hook{display:flex;align-items:center;gap:9px;background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:12px;padding:11px 13px;margin-bottom:11px;cursor:pointer}.home-hook .hh-ic{color:var(--teal);display:flex}.home-hook .hh-tx{flex:1;font-size:13px}.home-hook .hh-tx b{color:var(--txt)}.home-hook .hh-go{color:var(--teal);font-weight:700}.gc-coach{display:flex;gap:8px;align-items:flex-start;background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:9px;padding:9px 11px;font-size:12.5px;color:var(--mut);margin-bottom:10px}.gc-coach b{color:var(--txt)}.gc-coach svg{color:var(--teal);flex-shrink:0;margin-top:1px}.gc-out{font-size:13px;font-weight:600;margin-bottom:10px}.gc-tip{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:8px;cursor:pointer}.gc-tip.on{border-color:var(--teal);background:color-mix(in srgb,var(--accent) 6%,transparent)}.gc-tip .gc-ic{font-size:16px;flex-shrink:0}.gc-bd{flex:1}.gc-how{font-size:12.5px;color:var(--mut);line-height:1.45}.gc-how b{color:var(--txt)}.gc-act{font-size:12.5px;color:var(--txt);font-weight:600;margin-top:5px;line-height:1.45}.gc-save{font-size:12px;color:var(--teal);font-weight:700;margin-top:4px}.gc-eff{color:var(--mut);font-weight:500}.gc-verg{font-size:11.5px;color:var(--mut2);margin-top:3px;line-height:1.45}.gc-tip .gc-sw{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--on-accent);font-weight:900;font-size:13px}.gc-tip.on .gc-sw{background:var(--teal);border-color:var(--teal)}.gc-commit{width:100%;margin:4px 0 2px;background:var(--teal);color:var(--on-accent);border:0;border-radius:9px;padding:11px;font-weight:800;font-size:13px;cursor:pointer}.gc-commit.done{background:var(--green)}.wvo-tiles{display:grid;gap:var(--s2);margin-top:14px}.wvo-tile{background:transparent;border:0;border-radius:var(--r-inner);padding:0;display:flex;flex-direction:column}.spk-in{position:relative;line-height:0}.spk-in i{position:absolute;border-radius:50%;transform:translate(-50%,-50%)}.spk-nu{width:4px;height:4px;border:1.6px solid var(--teal);background:var(--card)}.spk-eind{width:4.5px;height:4.5px;background:var(--bar)}.spk-wrap,.spk-na{margin-top:9px}.wvo-tile .spk-wrap,.wvo-tile .spk-na{margin-top:auto;padding-top:9px}.wvo-tl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);font-weight:700;line-height:1.3}.wvo-tv{font-size:18px;font-weight:800;margin-top:5px;letter-spacing:-.3px}.wvo-ts{font-size:11.5px;color:var(--mut);margin-top:3px;line-height:1.5}.wvo-chip{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;margin-top:7px}.wvo-chip.up{background:rgba(248,113,113,.16);color:var(--red)}.wvo-chip.dn{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}.wvo-chip.n{background:rgba(96,165,250,.14);color:var(--blue)}.wvo-chip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.wvo-insight{background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:12px;padding:12px 14px;margin-top:14px;font-size:13px;color:var(--mut)}.wvo-insight b{color:var(--txt)}.wvo-insight .h{color:var(--teal);font-weight:800;font-size:11px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px}.wk-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.wk-row:last-of-type{border-bottom:0}.wk-row .ic{width:26px;height:26px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center}.wk-row .nm{flex:1;font-size:13.5px}.hdj{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--ln2);border-radius:13px;padding:13px 14px;cursor:pointer}.hdj-top{display:flex;align-items:center;gap:8px}.hdj-lab{flex:1;font-size:13.5px;font-weight:600}.hdj-go{color:var(--teal);font-weight:700}.hdj-kn{font-size:18px;font-weight:800;letter-spacing:-.3px;margin-top:8px}.hdj-kn .u{font-size:12px;color:var(--mut);font-weight:500}.hdj-bar{height:7px;border-radius:6px;background:var(--card2);margin-top:9px;position:relative;overflow:hidden}.hdj-bar .f{height:100%;border-radius:6px}.hdj-bar .now{position:absolute;top:-2px;width:2px;height:11px;background:#fff;opacity:.65}.hdj-lbl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut2);margin-top:6px}.goalring{display:flex;align-items:center;gap:18px;margin-top:12px}.gr-ring{position:relative;width:108px;height:108px;flex-shrink:0}.gr-ring svg{display:block}.gr-ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}.gr-ctr .p{font-size:24px;font-weight:800;letter-spacing:-.5px;color:var(--teal)}.gr-ctr .l{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut2);font-weight:700;margin-top:1px}.gr-info{min-width:0}.gr-a{font-size:18px;font-weight:800;letter-spacing:-.3px}.gr-a .u{font-size:13px;color:var(--mut);font-weight:500}.gr-e{font-size:13.5px;color:var(--teal);font-weight:600;margin-top:7px}.gr-p{font-size:12px;color:var(--mut);margin-top:3px}.gr-f{font-size:10.5px;color:var(--mut2);margin-top:8px}.ndm-net{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:11px;border-top:1px solid var(--line);font-size:13.5px;font-weight:700}.gc-bighead{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-top:4px}.gc-chipd{display:inline-block;font-size:11px;font-weight:800;color:var(--teal);background:color-mix(in srgb,var(--accent) 14%,transparent);padding:3px 9px;border-radius:20px;margin-left:8px;vertical-align:middle}.gc-dual{margin-top:12px}.gc-dual svg{display:block}.gc-leg{display:flex;gap:14px;margin-top:4px;font-size:10.5px;color:var(--mut)}.gc-leg span{display:flex;align-items:center;gap:5px}.gc-leg i{width:16px;height:3px;border-radius:2px;display:inline-block}.gc-leg i.d{height:0;border-top:2px dashed var(--ref);background:none}</style>
 </head>
 <body>
 
@@ -569,6 +616,7 @@ const MFULL=['januari','februari','maart','april','mei','juni','juli','augustus'
 function ICON(n){const P={
   home:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',
   list:'<path d="M8 6h13M8 12h13M8 18h13"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
+  palet:'<circle cx="12" cy="12" r="9"/><circle cx="9" cy="9.5" r="1.1"/><circle cx="14.5" cy="9" r="1.1"/><circle cx="9.5" cy="15" r="1.1"/>',
   bulb:'<path d="M9 18h6M10 22h4"/><path d="M12 2a6 6 0 0 0-3.5 10.9c.9.7 1.5 1.6 1.5 2.6V16h4v-.5c0-1 .6-1.9 1.5-2.6A6 6 0 0 0 12 2Z"/>',
   target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3"/>',
   gear:'<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.4 3H9.6l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4.8l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/>',
@@ -637,7 +685,7 @@ const CATS={
   vices:{name:'Vices',icon:ICON('vice'),color:'#d98c5f',type:'expense'},
   overig:{name:'Overig',icon:ICON('card'),color:'#cbd5e1',type:'expense'},
   inkomen:{name:'Inkomen',icon:ICON('wallet'),color:'#10b981',type:'income'},
-  sparen:{name:'Sparen & beleggen',icon:ICON('trend'),color:'#2dd4bf',type:'internal'},
+  sparen:{name:'Sparen & beleggen',icon:ICON('trend'),color:'var(--accent)',type:'internal'},
   intern:{name:'Eigen rekening / overboeking',icon:ICON('swap'),color:'#64748b',type:'internal'},
   // doorstroomposten: geen uitgave, maar een vordering (uitgeleend) of schuld (geleend)
   uitgeleend:{name:'Uitgeleend',icon:ICON('coins'),color:'#7cb8e8',type:'internal'},
@@ -1694,7 +1742,7 @@ function varTempoMirror(plan, tempo, kind){
   if(!(tempo-plan >= Math.max(50, tempo*0.2))) return '';
   const gap=tempo-plan;
   if(kind==='safe') return `<div style="font-size:11.5px;line-height:1.45;color:#e8c372;background:rgba(232,195,114,.08);border:1px solid rgba(232,195,114,.28);border-radius:9px;padding:8px 10px;margin:8px 0 2px">Je variabele potjes hebben nog ${euro0(plan)}; op je tempo geef je deze maand naar verwachting ~${euro0(tempo)} uit (${euro0(gap)} meer).</div>`;
-  return `<div style="font-size:11.5px;line-height:1.45;color:var(--teal);background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.28);border-radius:9px;padding:8px 10px;margin-top:8px">Je plan (variabele potjes) reserveert hiervan ${euro0(plan)}; het verschil van ${euro0(gap)} is je tempo boven je plan.</div>`;
+  return `<div style="font-size:11.5px;line-height:1.45;color:var(--teal);background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:9px;padding:8px 10px;margin-top:8px">Je plan (variabele potjes) reserveert hiervan ${euro0(plan)}; het verschil van ${euro0(gap)} is je tempo boven je plan.</div>`;
 }
 function monthLiquidity(){
   const sched=recurringSchedule(), f=forecastModel();
@@ -1804,7 +1852,7 @@ function openFixedDue(){
   const active=all.filter(s=>!s.excl), excl=all.filter(s=>s.excl);
   const now=new Date(); const mo=now.getMonth(); const dim=new Date(now.getFullYear(),mo+1,0).getDate();
   const fmt=day=>Math.min(day,dim)+' '+MNAMES[mo];
-  const sw=(isExcl)=>`<div style="width:40px;height:24px;border-radius:13px;flex-shrink:0;position:relative;cursor:pointer;background:${isExcl?'var(--card2)':'rgba(45,212,191,.3)'};border:1px solid ${isExcl?'var(--line)':'var(--teal)'}"><i style="position:absolute;top:2px;width:18px;height:18px;border-radius:50%;${isExcl?'left:2px;background:var(--mut2)':'left:19px;background:var(--teal)'}"></i></div>`;
+  const sw=(isExcl)=>`<div style="width:40px;height:24px;border-radius:13px;flex-shrink:0;position:relative;cursor:pointer;background:${isExcl?'var(--card2)':'color-mix(in srgb,var(--accent) 30%,transparent)'};border:1px solid ${isExcl?'var(--line)':'var(--teal)'}"><i style="position:absolute;top:2px;width:18px;height:18px;border-radius:50%;${isExcl?'left:2px;background:var(--mut2)':'left:19px;background:var(--teal)'}"></i></div>`;
   const row=(s,isExcl)=>{const c=CATS[s.cat]||CATS.overig; const kk=(s.key||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     return `<div class="tx" style="cursor:default${isExcl?';opacity:.55':''}">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
@@ -2120,7 +2168,7 @@ function heroProjection(m){
       const barFill=onTrack?100:Math.max(0,Math.min(Math.round(projected/sv*100),100));
       const goalPos=onTrack?Math.max(4,Math.min(Math.round(sv/Math.max(projected,1)*100),100)):100;
       const chip=onTrack
-        ? `<span style="display:inline-flex;align-items:center;font-size:12px;font-weight:700;border-radius:20px;padding:4px 11px;background:rgba(52,211,153,.14);color:var(--green)">Op koers</span>`
+        ? `<span style="display:inline-flex;align-items:center;font-size:12px;font-weight:700;border-radius:20px;padding:4px 11px;background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)">Op koers</span>`
         : `<span style="display:inline-flex;align-items:center;font-size:12px;font-weight:700;border-radius:20px;padding:4px 11px;background:rgba(251,191,36,.14);color:var(--amber)">Nog niet op koers</span>`;
       const sentence=onTrack
         ? `Je eindigt deze maand naar verwachting <b style="color:var(--teal)">${euro0(free)} boven</b> je spaardoel.`
@@ -2175,7 +2223,7 @@ function renderDash(){
   const hero = balKnown
     ? `<div class="homehero">
     <div class="hh-lbl">Veilig te besteden</div>
-    <div class="hh-big" style="color:${safeCol};cursor:pointer" onclick="openSafeToSpend()">${euro(S2.safe)}</div>
+    <div class="hh-big${safeCol==='var(--teal)'?' grad':''}" style="${safeCol==='var(--teal)'?'':`color:${safeCol};`}cursor:pointer" onclick="openSafeToSpend()">${euro(S2.safe)}</div>
     <div style="font-size:12.5px;color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openBalances()">totaal saldo ${euro(S2.saldo)} <span style="color:var(--teal)">\u203a</span></div>
     ${krapNote}
   </div>`
@@ -2929,16 +2977,16 @@ function vooruitChart(base,scen,sel){
   const area=`M${X(0).toFixed(1)},${Y(avals[0]).toFixed(1)} `+avals.map((v,i)=>'L'+X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')+` L${X(n-1).toFixed(1)},${bot} L${X(0).toFixed(1)},${bot} Z`;
   let dots='';
   for(let i=0;i<n;i++){ const ph=scen.months[i].one>0, r=i===sel?5.5:4;
-    const fill=ph?'#f0a675':(i===sel?'#2dd4bf':'#0c1322'), stroke=i===sel?'#2dd4bf':(ph?'#f0a675':'#56627d');
+    const fill=ph?'#f0a675':(i===sel?'var(--accent)':'var(--card2)'), stroke=i===sel?'var(--accent)':(ph?'#f0a675':'var(--ref)');
     dots+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(avals[i]).toFixed(1)}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${i===sel?2.5:1.5}"/>`;
     dots+=`<rect x="${(X(i)-22).toFixed(1)}" y="6" width="44" height="${bot}" fill="transparent" style="cursor:pointer" onclick="vSelMonth(${i})"/>`;
   }
-  const labels=scen.months.map((mo,i)=>`<text x="${X(i).toFixed(1)}" y="${H-8}" fill="${i===sel?'#e8edf5':'#8a97ab'}" font-size="11" text-anchor="middle">${mo.name.slice(0,3)}</text>`).join('');
-  const ghost=has?`<polyline points="${pl(bvals)}" fill="none" stroke="#56627d" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.7"/>`:'';
+  const labels=scen.months.map((mo,i)=>`<text x="${X(i).toFixed(1)}" y="${H-8}" fill="${i===sel?'var(--txt)':'var(--lab)'}" font-size="11" text-anchor="middle">${mo.name.slice(0,3)}</text>`).join('');
+  const ghost=has?`<polyline points="${pl(bvals)}" fill="none" stroke="var(--ref)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.7"/>`:'';
   const indic=`<line x1="${X(sel).toFixed(1)}" y1="10" x2="${X(sel).toFixed(1)}" y2="${bot}" stroke="rgba(255,255,255,.16)" stroke-width="1" stroke-dasharray="3 3"/>`;
   const leg=has?`<div class="vc-leg"><span><i></i>met plan</span><span><i class="dash"></i>oude koers</span></div>`:'';
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Saldo-curve, tik een maand om te inspecteren">
-    <path d="${area}" fill="rgba(45,212,191,.13)"/>${ghost}${indic}<polyline points="${pl(avals)}" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>${dots}${labels}</svg>${leg}`;
+    <path d="${area}" fill="color-mix(in srgb,var(--accent) 13%,transparent)"/>${ghost}${indic}<polyline points="${pl(avals)}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>${dots}${labels}</svg>${leg}`;
 }
 function vooruitMonthCard(scen,oneoffs,sel){
   const mo=scen.months[sel]; if(!mo) return '';
@@ -3065,15 +3113,15 @@ function savingsChart(M,sel){
   const seg=(a,from,to)=>{ const p=[]; for(let i=from;i<=to;i++){ if(a[i]==null) continue; p.push(X(i).toFixed(1)+','+Y(a[i]).toFixed(1)); } return p.join(' '); };
   const tx=X(M.cur).toFixed(1);
   const zero = lo<0 ? `<line x1="${LX}" y1="${Y(0).toFixed(1)}" x2="${RX}" y2="${Y(0).toFixed(1)}" stroke="rgba(255,255,255,.10)" stroke-width="1"/>` : '';
-  const marker=`<line x1="${tx}" y1="${top}" x2="${tx}" y2="${bot}" stroke="rgba(255,255,255,.22)" stroke-width="1" stroke-dasharray="2 3"/><text x="${tx}" y="${top-4}" fill="#8a97ab" font-size="9" text-anchor="middle">nu</text>`;
+  const marker=`<line x1="${tx}" y1="${top}" x2="${tx}" y2="${bot}" stroke="rgba(255,255,255,.22)" stroke-width="1" stroke-dasharray="2 3"/><text x="${tx}" y="${top-4}" fill="var(--lab)" font-size="9" text-anchor="middle">nu</text>`;
   const selV=`<line x1="${X(sel).toFixed(1)}" y1="${top}" x2="${X(sel).toFixed(1)}" y2="${bot}" stroke="rgba(255,255,255,.08)" stroke-width="1"/>`;
-  const lDoel=`<polyline points="${seg(M.doel,0,11)}" fill="none" stroke="#56627d" stroke-width="1.4" stroke-dasharray="3 3" opacity=".75"/>`;
-  const lBudget=`<polyline points="${seg(M.budget,M.cur,11)}" fill="none" stroke="#2dd4bf" stroke-width="2" stroke-dasharray="5 4" opacity=".9"/>`;
+  const lDoel=`<polyline points="${seg(M.doel,0,11)}" fill="none" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="3 3" opacity=".75"/>`;
+  const lBudget=`<polyline points="${seg(M.budget,M.cur,11)}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 4" opacity=".9"/>`;
   const lKoers=`<polyline points="${seg(M.koers,M.cur,11)}" fill="none" stroke="#f0a675" stroke-width="2" stroke-dasharray="5 4"/>`;
-  const lWork=`<polyline points="${seg(M.work,0,M.cur)}" fill="none" stroke="#2dd4bf" stroke-width="2.6"/>`;
+  const lWork=`<polyline points="${seg(M.work,0,M.cur)}" fill="none" stroke="var(--accent)" stroke-width="2.6"/>`;
   const dot=(a,c)=>a[sel]!=null?`<circle cx="${X(sel).toFixed(1)}" cy="${Y(a[sel]).toFixed(1)}" r="3.2" fill="${c}"/>`:'';
-  const dots=dot(M.doel,'#56627d')+(sel>=M.cur?dot(M.budget,'#2dd4bf')+dot(M.koers,'#f0a675'):'')+(sel<=M.cur?dot(M.work,'#2dd4bf'):'');
-  const labels=MN.map((mn,i)=>`<text x="${X(i).toFixed(1)}" y="${H-6}" fill="${i===sel?'#e8edf5':'#8a97ab'}" font-size="9" text-anchor="middle">${mn}</text>`).join('');
+  const dots=dot(M.doel,'var(--ref)')+(sel>=M.cur?dot(M.budget,'var(--accent)')+dot(M.koers,'#f0a675'):'')+(sel<=M.cur?dot(M.work,'var(--accent)'):'');
+  const labels=MN.map((mn,i)=>`<text x="${X(i).toFixed(1)}" y="${H-6}" fill="${i===sel?'var(--txt)':'var(--lab)'}" font-size="9" text-anchor="middle">${mn}</text>`).join('');
   let taps=''; for(let i=0;i<12;i++){ taps+=`<rect x="${(X(i)-13).toFixed(1)}" y="${top}" width="26" height="${bot-top}" fill="transparent" style="cursor:pointer" onclick="vSelMonth(${i})"/>`; }
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Spaargrafiek: werkelijk, doel en twee projecties">${zero}${marker}${selV}${lDoel}${lBudget}${lKoers}${lWork}${dots}${labels}${taps}</svg>`;
 }
@@ -3087,12 +3135,12 @@ function bufferChart(ingelegd, doel, maandTotal){
   const X=k=>LX+k*((RX-LX)/horizon), Y=v=>top+(1-(v-lo)/(hi-lo||1))*(bot-top);
   const pts=[]; for(let k=0;k<=horizon;k++) pts.push(X(k).toFixed(1)+','+Y(Math.min(ingelegd+maandTotal*k,doel)).toFixed(1));
   const gy=Y(doel).toFixed(1);
-  const goalLine=`<line x1="${LX}" y1="${gy}" x2="${RX}" y2="${gy}" stroke="#56627d" stroke-width="1.4" stroke-dasharray="4 3"/><text x="${RX}" y="${(+gy-4).toFixed(1)}" fill="#8a97ab" font-size="9" text-anchor="end">doel ${euro0(doel)}</text>`;
+  const goalLine=`<line x1="${LX}" y1="${gy}" x2="${RX}" y2="${gy}" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="4 3"/><text x="${RX}" y="${(+gy-4).toFixed(1)}" fill="var(--lab)" font-size="9" text-anchor="end">doel ${euro0(doel)}</text>`;
   let marker='';
-  if(monthsToGoal>0 && monthsToGoal<=horizon){ const mx=X(monthsToGoal).toFixed(1); marker=`<circle cx="${mx}" cy="${gy}" r="3.5" fill="#2dd4bf"/><text x="${mx}" y="${(+gy-7).toFixed(1)}" fill="#2dd4bf" font-size="9" text-anchor="middle">~${monthsToGoal} mnd</text>`; }
+  if(monthsToGoal>0 && monthsToGoal<=horizon){ const mx=X(monthsToGoal).toFixed(1); marker=`<circle cx="${mx}" cy="${gy}" r="3.5" fill="var(--accent)"/><text x="${mx}" y="${(+gy-7).toFixed(1)}" fill="var(--accent)" font-size="9" text-anchor="middle">~${monthsToGoal} mnd</text>`; }
   const now=new Date(); const step=Math.max(Math.round(horizon/4),1); let lab='';
-  for(let k=0;k<=horizon;k+=step){ const d=new Date(now.getFullYear(),now.getMonth()+k,1); lab+=`<text x="${X(k).toFixed(1)}" y="${H-6}" fill="#8a97ab" font-size="8.5" text-anchor="middle">${k===0?'nu':MNAMES[d.getMonth()]}</text>`; }
-  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Spaarkoers naar je bufferdoel">${goalLine}<polyline points="${pts.join(' ')}" fill="none" stroke="#2dd4bf" stroke-width="2.6"/>${marker}${lab}</svg>`;
+  for(let k=0;k<=horizon;k+=step){ const d=new Date(now.getFullYear(),now.getMonth()+k,1); lab+=`<text x="${X(k).toFixed(1)}" y="${H-6}" fill="var(--lab)" font-size="8.5" text-anchor="middle">${k===0?'nu':MNAMES[d.getMonth()]}</text>`; }
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Spaarkoers naar je bufferdoel">${goalLine}<polyline points="${pts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.6"/>${marker}${lab}</svg>`;
 }
 function vooruitForecast(){
   // HERO = voortgang naar je bufferdoel; grafiek klimt naar de doellijn
@@ -3563,7 +3611,7 @@ function renderDebts(){
     return `<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Schuld')}${nmLabel}</div><div class="cp-sub"${warn?' style="color:var(--red)"':''}>${sub}</div>${fwd?`<div class="cp-sub" style="color:var(--mut2);margin-top:2px">${fwd}</div>`:''}${inExpTxt?`<div class="cp-sub" style="color:${inExpCol};margin-top:2px;font-size:10.5px">${inExpTxt}</div>`:''}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700;color:${rest<=0?'var(--green)':'var(--txt)'}">${rest<=0?euro0(0):'Nog '+euro0(rest)}</span><span class="muted">›</span></div></div>`;}).join('');
   const totLine = (nSchuld>=2) ? (alleEindig ? `Op dit tempo ben je overal vanaf rond <b>${svDatum(laatsteN)}</b>.` : `Eén of meer schulden dalen op dit tempo niet, dus een schuldenvrij-datum is er nog niet.`) : '';
   const wr=ds.filter(d=>(+d.rente||0)>0 && Math.max(+d.rest||0,0)>0).sort((a,b)=>(+b.rente||0)-(+a.rente||0));
-  const prio = wr.length>=2 ? `<div class="card" style="margin-bottom:8px"><div class="hlabel" style="margin-bottom:6px">Wat eerst? · hoogste rente bespaart het meest</div>${wr.map((d,i)=>`<div class="row" style="justify-content:space-between;padding:6px 0${i<wr.length-1?';border-bottom:1px solid var(--line)':''}"><span><span style="font-size:10.5px;font-weight:700;color:#06231c;background:var(--teal);border-radius:6px;padding:1px 7px;margin-right:7px">${i+1}</span>${esc(d.naam||'Schuld')}</span><span style="font-size:11.5px;font-weight:700;color:${(+d.rente>=5)?'var(--red)':'var(--green)'}">${d.rente}%</span></div>`).join('')}<div class="small muted" style="font-size:11px;margin-top:8px">Zet je extra euro op de bovenste. Liever motivatie? Kleinste schuld eerst kan ook. Jij kiest. Geen advies.</div></div>` : '';
+  const prio = wr.length>=2 ? `<div class="card" style="margin-bottom:8px"><div class="hlabel" style="margin-bottom:6px">Wat eerst? · hoogste rente bespaart het meest</div>${wr.map((d,i)=>`<div class="row" style="justify-content:space-between;padding:6px 0${i<wr.length-1?';border-bottom:1px solid var(--line)':''}"><span><span style="font-size:10.5px;font-weight:700;color:var(--on-accent);background:var(--teal);border-radius:6px;padding:1px 7px;margin-right:7px">${i+1}</span>${esc(d.naam||'Schuld')}</span><span style="font-size:11.5px;font-weight:700;color:${(+d.rente>=5)?'var(--red)':'var(--green)'}">${d.rente}%</span></div>`).join('')}<div class="small muted" style="font-size:11px;margin-top:8px">Zet je extra euro op de bovenste. Liever motivatie? Kleinste schuld eerst kan ook. Jij kiest. Geen advies.</div></div>` : '';
   const totalSch=ds.reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
   const open=SET.openSchuld===true;
   return `<div style="margin-top:18px">
@@ -3742,15 +3790,15 @@ function projFanChart(a){
   const band=high.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).concat(low.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).reverse()).join(' ');
   const lbl=(v,txt,col,wt)=>`<text x="${x1+5}" y="${(Y(v)+3).toFixed(1)}" fill="${col}" font-size="9.5"${wt?' font-weight="700"':''}>${txt}</text>`;
   const xt=[0,Math.round(yr/2),yr].filter((v,i,arr)=>arr.indexOf(v)===i && v>=0);
-  let s=`<polygon points="${band}" fill="rgba(45,212,191,.16)"/>`;
-  s+=`<polyline points="${pts(high)}" fill="none" stroke="rgba(45,212,191,.5)" stroke-width="1"/><polyline points="${pts(low)}" fill="none" stroke="rgba(45,212,191,.5)" stroke-width="1"/>`;
+  let s=`<polygon points="${band}" fill="color-mix(in srgb,var(--accent) 16%,transparent)"/>`;
+  s+=`<polyline points="${pts(high)}" fill="none" stroke="color-mix(in srgb,var(--accent) 50%,transparent)" stroke-width="1"/><polyline points="${pts(low)}" fill="none" stroke="color-mix(in srgb,var(--accent) 50%,transparent)" stroke-width="1"/>`;
   s+=`<polyline points="${pts(inleg)}" fill="none" stroke="#60a5fa" stroke-width="1.6"/>`;
-  if(infl>0) s+=`<polyline points="${pts(koop)}" fill="none" stroke="#9fb0c7" stroke-width="1.6" stroke-dasharray="4 4"/>`;
-  s+=`<polyline points="${pts(mid)}" fill="none" stroke="#2dd4bf" stroke-width="2.6"/>`;
-  s+=`<circle cx="${X(yr).toFixed(1)}" cy="${Y(high[yr]).toFixed(1)}" r="2.6" fill="#2dd4bf" opacity=".6"/><circle cx="${X(yr).toFixed(1)}" cy="${Y(mid[yr]).toFixed(1)}" r="3.4" fill="#2dd4bf"/><circle cx="${X(yr).toFixed(1)}" cy="${Y(low[yr]).toFixed(1)}" r="2.6" fill="#2dd4bf" opacity=".6"/>`;
-  s+=lbl(high[yr],euro0(Math.round(high[yr])),'#7fe6d8',0)+lbl(mid[yr],euro0(Math.round(mid[yr])),'#2dd4bf',1)+lbl(low[yr],euro0(Math.round(low[yr])),'#8aa0bb',0);
-  s+=xt.map(y=>`<text x="${X(y).toFixed(1)}" y="${H-6}" fill="#6b7c95" font-size="8.5" text-anchor="${y===0?'start':'middle'}">${y===0?'nu':'+'+y+'j'}</text>`).join('');
-  const leg=`<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--mut);margin-top:6px"><span><span style="display:inline-block;width:11px;height:8px;border-radius:2px;background:rgba(45,212,191,.18);border:1px solid rgba(45,212,191,.4);vertical-align:middle;margin-right:4px"></span>band ${rend-2}–${rend+2}%</span><span><span style="display:inline-block;width:13px;border-top:2px solid var(--teal);vertical-align:middle;margin-right:4px"></span>verwacht</span>${infl>0?`<span><span style="display:inline-block;width:13px;border-top:2px dashed var(--mut);vertical-align:middle;margin-right:4px"></span>koopkracht</span>`:''}<span><span style="display:inline-block;width:13px;border-top:2px solid var(--blue);vertical-align:middle;margin-right:4px"></span>inleg</span></div>`;
+  if(infl>0) s+=`<polyline points="${pts(koop)}" fill="none" stroke="var(--lab)" stroke-width="1.6" stroke-dasharray="4 4"/>`;
+  s+=`<polyline points="${pts(mid)}" fill="none" stroke="var(--accent)" stroke-width="2.6"/>`;
+  s+=`<circle cx="${X(yr).toFixed(1)}" cy="${Y(high[yr]).toFixed(1)}" r="2.6" fill="var(--accent)" opacity=".6"/><circle cx="${X(yr).toFixed(1)}" cy="${Y(mid[yr]).toFixed(1)}" r="3.4" fill="var(--accent)"/><circle cx="${X(yr).toFixed(1)}" cy="${Y(low[yr]).toFixed(1)}" r="2.6" fill="var(--accent)" opacity=".6"/>`;
+  s+=lbl(high[yr],euro0(Math.round(high[yr])),'var(--accent)',0)+lbl(mid[yr],euro0(Math.round(mid[yr])),'var(--accent)',1)+lbl(low[yr],euro0(Math.round(low[yr])),'var(--lab)',0);
+  s+=xt.map(y=>`<text x="${X(y).toFixed(1)}" y="${H-6}" fill="var(--lab)" font-size="8.5" text-anchor="${y===0?'start':'middle'}">${y===0?'nu':'+'+y+'j'}</text>`).join('');
+  const leg=`<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--mut);margin-top:6px"><span><span style="display:inline-block;width:11px;height:8px;border-radius:2px;background:color-mix(in srgb,var(--accent) 18%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);vertical-align:middle;margin-right:4px"></span>band ${rend-2}–${rend+2}%</span><span><span style="display:inline-block;width:13px;border-top:2px solid var(--teal);vertical-align:middle;margin-right:4px"></span>verwacht</span>${infl>0?`<span><span style="display:inline-block;width:13px;border-top:2px dashed var(--mut);vertical-align:middle;margin-right:4px"></span>koopkracht</span>`:''}<span><span style="display:inline-block;width:13px;border-top:2px solid var(--blue);vertical-align:middle;margin-right:4px"></span>inleg</span></div>`;
   return `<div style="margin-top:12px"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none">${s}</svg>${leg}</div>`;
 }
 function assetProjectionCard(a){
@@ -3792,9 +3840,9 @@ function nwChart(series){
   const pts=series.map((s,i)=>`${X(i).toFixed(1)},${Y(s.nw).toFixed(1)}`).join(' ');
   const MN=['','jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
   const step=Math.max(Math.ceil(series.length/5),1);
-  const labs=series.map((s,i)=>(i%step===0||i===series.length-1)?`<text x="${X(i).toFixed(1)}" y="${H-4}" fill="#8a97ab" font-size="8.5" text-anchor="middle">${MN[+s.m.slice(5,7)]}</text>`:'').join('');
-  const zero=mn<0?`<line x1="${L}" y1="${Y(0).toFixed(1)}" x2="${R}" y2="${Y(0).toFixed(1)}" stroke="#56627d" stroke-dasharray="3 3"/>`:'';
-  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${zero}<polyline points="${pts}" fill="none" stroke="#2dd4bf" stroke-width="2.4"/></svg>`+`<div style="display:flex;justify-content:space-between;margin-top:-14px">${labs?'':''}</div>`;
+  const labs=series.map((s,i)=>(i%step===0||i===series.length-1)?`<text x="${X(i).toFixed(1)}" y="${H-4}" fill="var(--lab)" font-size="8.5" text-anchor="middle">${MN[+s.m.slice(5,7)]}</text>`:'').join('');
+  const zero=mn<0?`<line x1="${L}" y1="${Y(0).toFixed(1)}" x2="${R}" y2="${Y(0).toFixed(1)}" stroke="var(--ref)" stroke-dasharray="3 3"/>`:'';
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${zero}<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.4"/></svg>`+`<div style="display:flex;justify-content:space-between;margin-top:-14px">${labs?'':''}</div>`;
 }
 function vermogenCard(){ const w=netWorth(); const has=(SET.assets||[]).length||(SET.debts||[]).length;
   // Zonder bezittingen/schulden én zonder bekend saldo is het vermogen onbekend; dan geen stellige €0 als hoofdgetal.
@@ -3983,10 +4031,10 @@ function fireModel(R, inputs){
   else if(debtPay.length>1){ debtPay.forEach((d,i)=>ms.push({key:'debt'+i,nm:d.nm+' afgelost',target:null,yr:d.yr,col:d.col,icon:'check',sub:d.yr?'lening afgelost':'aflossing te laag',debtSub:true}));
     if(debtYr) ms.push({key:'debt',nm:'Volledig schuldenvrij',target:null,yr:debtYr,col:'#60a5fa',icon:'check',sub:'alle schulden af'}); }
   // "Belegd geld werkt": vermogen groot genoeg dat het rendement (opnameregel = 1/factor) ~een kwart van je uitgaven dekt
-  if(FIRE>0){ const werk=Math.round(FIRE*0.25); const pm=Math.round((R.annualExp||0)*0.25/12); ms.push({key:'werk',nm:'Belegd geld werkt',target:werk,col:'#2dd4bf',icon:'flag',sub:`rendement dekt ~${euro0(pm)}/mnd · ¼ van je uitgaven`}); }
+  if(FIRE>0){ const werk=Math.round(FIRE*0.25); const pm=Math.round((R.annualExp||0)*0.25/12); ms.push({key:'werk',nm:'Belegd geld werkt',target:werk,col:'var(--accent)',icon:'flag',sub:`rendement dekt ~${euro0(pm)}/mnd · ¼ van je uitgaven`}); }
   R.customMs.forEach(c=>ms.push({key:c.id,nm:c.nm,target:+c.target,col:'#f472b6',icon:'star',sub:euro0(+c.target),custom:true}));
   if(FIRE>0) ms.push({key:'fire',nm:'FIRE-getal',target:FIRE,col:'#a78bfa',icon:'flame',sub:R.fireMult+'× uitgaven = '+euro0(FIRE)});
-  ms.push({key:'pens',nm:'Pensioen',target:null,yr:targetYear,col:'#9fb0c7',icon:'sun',sub:(R.override?'jouw streefjaar':(R.birth?'AOW · 67 jaar':'stel geboortejaar in'))});
+  ms.push({key:'pens',nm:'Pensioen',target:null,yr:targetYear,col:'var(--lab)',icon:'sun',sub:(R.override?'jouw streefjaar':(R.birth?'AOW · 67 jaar':'stel geboortejaar in'))});
   // De noodfonds-mijlpaal hoort bij het vullen-uit-je-restsaldo (stap 1 van de waterval), niet bij de vermogensgroei-lijn:
   // voortgang op spaargeld (nfCur), jaar op hoe snel je maandelijkse restsaldo het vult — zelfde bron als "nog ± X mnd" in de waterval.
   ms.forEach(m=>{
@@ -4034,11 +4082,11 @@ function reisFanSVG(M,mc){
   const pts=a=>a.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
   const kf=v=>euroK(v);   // v75: één compacte notatie in de hele app
   let s='';
-  for(let i=0;i<=3;i++){ const val=niceMax*i/3, yy=Y(val); s+=`<line x1="${x0}" y1="${yy.toFixed(1)}" x2="${x1}" y2="${yy.toFixed(1)}" stroke="rgba(159,176,199,.10)"/><text x="${x0-4}" y="${(yy+3).toFixed(1)}" fill="#6b7c95" font-size="8" text-anchor="end">${i===0?'€0':kf(val)}</text>`; }
+  for(let i=0;i<=3;i++){ const val=niceMax*i/3, yy=Y(val); s+=`<line x1="${x0}" y1="${yy.toFixed(1)}" x2="${x1}" y2="${yy.toFixed(1)}" stroke="rgba(159,176,199,.10)"/><text x="${x0-4}" y="${(yy+3).toFixed(1)}" fill="var(--lab)" font-size="8" text-anchor="end">${i===0?'€0':kf(val)}</text>`; }
   const gy=Y(M.FIRE); s+=`<line x1="${x0}" y1="${gy.toFixed(1)}" x2="${x1}" y2="${gy.toFixed(1)}" stroke="#f472b6" stroke-width="1.1" stroke-dasharray="4 3"/><text x="${x1}" y="${(gy-3).toFixed(1)}" fill="#f472b6" font-size="8" text-anchor="end">doel ${kf(M.FIRE)}</text>`;
   const band=mc.p90.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).concat(mc.p10.map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).reverse()).join(' ');
-  s+=`<polygon points="${band}" fill="rgba(45,212,191,.16)"/><polyline points="${pts(mc.p50)}" fill="none" stroke="#2dd4bf" stroke-width="2.4"/>`;
-  [0,Math.round(HZ/2),HZ].forEach(t=>{ s+=`<text x="${X(t).toFixed(1)}" y="${H-6}" fill="#6b7c95" font-size="8.5" text-anchor="${t===0?'start':(t===HZ?'end':'middle')}">${t===0?'nu':(nowY+t)}</text>`; });
+  s+=`<polygon points="${band}" fill="color-mix(in srgb,var(--accent) 16%,transparent)"/><polyline points="${pts(mc.p50)}" fill="none" stroke="var(--accent)" stroke-width="2.4"/>`;
+  [0,Math.round(HZ/2),HZ].forEach(t=>{ s+=`<text x="${X(t).toFixed(1)}" y="${H-6}" fill="var(--lab)" font-size="8.5" text-anchor="${t===0?'start':(t===HZ?'end':'middle')}">${t===0?'nu':(nowY+t)}</text>`; });
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="margin-top:10px">${s}</svg><div class="small" style="color:var(--mut2);margin-top:4px">In ${nowY+HZ}: meestal tussen <b>${kf(mc.p10[HZ])}</b> en <b>${kf(mc.p90[HZ])}</b>, mediaan <b class="teal">${kf(mc.p50[HZ])}</b>.</div>`;
 }
 function reisHaalbaarheid(M){
@@ -4055,7 +4103,7 @@ function reisHaalbaarheid(M){
     <div style="display:flex;align-items:center;gap:13px;margin:10px 0 2px"><div style="font-size:30px;font-weight:800;letter-spacing:-1px;color:${col}">~${k}%</div><div style="min-width:0"><div style="font-weight:700;font-size:13.5px;color:${col}">${word}</div><div class="small" style="color:var(--mut2)">kans dat je FIRE ${euro0(M.FIRE)} haalt vóór ${M.targetYear}</div></div></div>
     <div class="chips" style="margin-top:8px">${presets}</div>
     ${reisFanSVG(M,mc)}
-    <div style="font-size:11.5px;color:var(--mut);margin-top:10px;padding:9px 11px;background:rgba(45,212,191,.07);border:1px solid rgba(45,212,191,.2);border-radius:9px"><b>€ 150/mnd extra</b> zou je kans van ~${k}% naar ~${mc.succPlus}% brengen. Een langere horizon of een rustiger profiel schuift dezelfde kant op.</div>
+    <div style="font-size:11.5px;color:var(--mut);margin-top:10px;padding:9px 11px;background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);border-radius:9px"><b>€ 150/mnd extra</b> zou je kans van ~${k}% naar ~${mc.succPlus}% brengen. Een langere horizon of een rustiger profiel schuift dezelfde kant op.</div>
     <div style="font-size:11px;color:var(--mut2);margin-top:9px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Kans-inschatting o.b.v. ~2.000 doorgerekende marktverlopen met je gekozen beweeglijkheid. Geen advies of belofte; markten kunnen anders lopen.</div>
   </div>`;
 }
@@ -4073,36 +4121,36 @@ function reisChartSVG(M){
   else { const top=compose?M.assets:(R.band?M.high:M.mid); let vis=0; for(let y=0;y<=VH;y++) vis=Math.max(vis, top[y]||0); niceMax=Math.max(reisNiceCeil(vis*1.08), 1000); }   // near: schaal past op het gekozen venster (bezittingen = bovenste lijn)
   const X=y=>x0+(y/VH)*(x1-x0), Y=v=>yB-(Math.max(v,0)/niceMax)*(yB-yT);
   const pts=a=>a.slice(0,VH+1).map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
-  let s=`<defs><linearGradient id="reisg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(45,212,191,.30)"/><stop offset="1" stop-color="rgba(45,212,191,0)"/></linearGradient></defs>`;
-  for(let i=0;i<=4;i++){ const val=niceMax*i/4, yy=Y(val); s+=`<line x1="${x0}" y1="${yy.toFixed(1)}" x2="${x1}" y2="${yy.toFixed(1)}" stroke="rgba(159,176,199,.10)"/><text x="${x0-5}" y="${(yy+3).toFixed(1)}" fill="#6b7c95" font-size="8.5" text-anchor="end">${i===0?'€0':kf(val)}</text>`; }
-  if(R.band && !compose){ const band=M.high.slice(0,VH+1).map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).concat(M.low.slice(0,VH+1).map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).reverse()).join(' '); s+=`<polygon points="${band}" fill="rgba(45,212,191,.13)"/>`; }
+  let s=`<defs><linearGradient id="reisg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="color-mix(in srgb,var(--accent) 30%,transparent)"/><stop offset="1" stop-color="color-mix(in srgb,var(--accent) 0%,transparent)"/></linearGradient></defs>`;
+  for(let i=0;i<=4;i++){ const val=niceMax*i/4, yy=Y(val); s+=`<line x1="${x0}" y1="${yy.toFixed(1)}" x2="${x1}" y2="${yy.toFixed(1)}" stroke="rgba(159,176,199,.10)"/><text x="${x0-5}" y="${(yy+3).toFixed(1)}" fill="var(--lab)" font-size="8.5" text-anchor="end">${i===0?'€0':kf(val)}</text>`; }
+  if(R.band && !compose){ const band=M.high.slice(0,VH+1).map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).concat(M.low.slice(0,VH+1).map((v,y)=>X(y).toFixed(1)+','+Y(v).toFixed(1)).reverse()).join(' '); s+=`<polygon points="${band}" fill="color-mix(in srgb,var(--accent) 13%,transparent)"/>`; }
   else if(!compose){ s+=`<polygon points="${X(0).toFixed(1)},${yB} ${pts(M.mid)} ${X(VH).toFixed(1)},${yB}" fill="url(#reisg)"/>`; }
-  (R.steps||[]).forEach(sp=>{ const t=(+sp.from)-nowY; if(t<=0||t>VH) return; const px=X(t); s+=`<line x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="#9fb0c7" stroke-width="1" stroke-dasharray="1 3" opacity=".45"/>`; });
+  (R.steps||[]).forEach(sp=>{ const t=(+sp.from)-nowY; if(t<=0||t>VH) return; const px=X(t); s+=`<line x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="var(--lab)" stroke-width="1" stroke-dasharray="1 3" opacity=".45"/>`; });
   if(M.freed && M.freed.vrij>0 && M.freed.volYear>nowY){ const t=M.freed.volYear-nowY; if(t>0&&t<=VH){ const px=X(t); s+=`<line x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="#34d399" stroke-width="1" stroke-dasharray="2 3" opacity=".55"/><text x="${px.toFixed(1)}" y="${(yT-3).toFixed(1)}" fill="#34d399" font-size="7.5" text-anchor="middle">noodfonds vol</text>`; } }
-  if(R.koop){ s+=`<polyline points="${pts(M.koop)}" fill="none" stroke="#9fb0c7" stroke-width="1.5" stroke-dasharray="4 4"/>`; }
+  if(R.koop){ s+=`<polyline points="${pts(M.koop)}" fill="none" stroke="var(--lab)" stroke-width="1.5" stroke-dasharray="4 4"/>`; }
   if(R.showInk && reqCap>0 && reqCap<=niceMax){ const yy=Y(reqCap); s+=`<line x1="${x0}" y1="${yy.toFixed(1)}" x2="${x1}" y2="${yy.toFixed(1)}" stroke="#f472b6" stroke-width="1.2" stroke-dasharray="4 3"/><text x="${x1}" y="${(yy-4).toFixed(1)}" fill="#f472b6" font-size="8" text-anchor="end">inkomensdoel ${kf(reqCap)}</text>`; }
   if(compose){
     s+=`<polyline points="${pts(M.assets)}" fill="none" stroke="#a78bfa" stroke-width="1.8" stroke-linejoin="round"/>`;   // bezittingen (violet)
     s+=`<polyline points="${pts(M.debt)}" fill="none" stroke="#fbbf24" stroke-width="1.6" stroke-dasharray="5 3" stroke-linejoin="round"/>`;   // schuld (amber, gestreept)
   }
-  s+=`<polyline points="${pts(M.mid)}" fill="none" stroke="#2dd4bf" stroke-width="2.8" stroke-linejoin="round"/>`;
+  s+=`<polyline points="${pts(M.mid)}" fill="none" stroke="var(--accent)" stroke-width="2.8" stroke-linejoin="round"/>`;
   M.ms.filter(m=>!m.debtSub&&m.tIdx!=null&&m.tIdx>=0&&m.tIdx<=VH&&(zoom==='full'||m.target==null||m.target<=niceMax)).forEach(m=>{ const vy=(m.target!=null)?m.target:M.mid[m.tIdx]; const px=X(m.tIdx), py=Y(vy);
     s+=`<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${px.toFixed(1)}" y2="${yB}" stroke="${m.col}" stroke-width="1" stroke-dasharray="2 3" opacity=".3"/>`;
     // jaartal-pil boven het punt: 'nu' als behaald, anders het jaar
     const yr=m.reached?'nu':(m.yr!=null?(''+m.yr):('na '+M.targetYear)); const pw=yr.length*5.4+10; const pxL=Math.max(x0,Math.min(px-pw/2,x1-pw)); const pyT=Math.max(1,py-24);
     s+=`<rect x="${pxL.toFixed(1)}" y="${pyT.toFixed(1)}" width="${pw.toFixed(1)}" height="13" rx="6.5" fill="${m.col}" opacity="0.16"/><text x="${(pxL+pw/2).toFixed(1)}" y="${(pyT+9.4).toFixed(1)}" fill="${m.col}" font-size="8.5" font-weight="700" text-anchor="middle">${yr}</text>`;
-    if(m.reached){ s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="${m.col}"/>${reisGlyph(m.icon,px,py,'#0b1220')}`; }
-    else { s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="#0b1220" stroke="${m.col}" stroke-width="1.3"/>${reisGlyph(m.icon,px,py,m.col)}`; } });
+    if(m.reached){ s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="${m.col}"/>${reisGlyph(m.icon,px,py,'var(--bg)')}`; }
+    else { s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="9" fill="var(--bg)" stroke="${m.col}" stroke-width="1.3"/>${reisGlyph(m.icon,px,py,m.col)}`; } });
   const stepY = zoom==='full' ? (HZ<=12?4:(HZ<=25?5:10)) : 1; const ticks=[]; for(let t=0;t<=VH;t+=stepY) ticks.push(t); if(ticks[ticks.length-1]!==VH) ticks.push(VH);
-  ticks.forEach(t=>{ s+=`<text x="${X(t).toFixed(1)}" y="${yB+15}" fill="#6b7c95" font-size="8.5" text-anchor="${t===0?'start':(t===VH?'end':'middle')}">${t===0?'nu':(nowY+t)}</text>`; });
+  ticks.forEach(t=>{ s+=`<text x="${X(t).toFixed(1)}" y="${yB+15}" fill="var(--lab)" font-size="8.5" text-anchor="${t===0?'start':(t===VH?'end':'middle')}">${t===0?'nu':(nowY+t)}</text>`; });
   if(R.scrub){ const i0=0, px=X(i0);   // cursor + stippen op startpositie 'nu' (0); reisScrubTo verplaatst ze zonder re-render
-    s+=`<line id="reisCross" x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="#9fb0c7" stroke-width="1" stroke-dasharray="3 2" opacity=".7"/>`;
+    s+=`<line id="reisCross" x1="${px.toFixed(1)}" y1="${yT}" x2="${px.toFixed(1)}" y2="${yB}" stroke="var(--lab)" stroke-width="1" stroke-dasharray="3 2" opacity=".7"/>`;
     if(compose) s+=`<circle id="reisDotA" cx="${px.toFixed(1)}" cy="${Y(M.assets[i0]).toFixed(1)}" r="3.4" fill="#a78bfa"/><circle id="reisDotS" cx="${px.toFixed(1)}" cy="${Y(M.debt[i0]).toFixed(1)}" r="3.4" fill="#fbbf24"/>`;
-    s+=`<circle id="reisDotV" cx="${px.toFixed(1)}" cy="${Y(M.mid[i0]).toFixed(1)}" r="3.6" fill="#2dd4bf"/>`;
+    s+=`<circle id="reisDotV" cx="${px.toFixed(1)}" cy="${Y(M.mid[i0]).toFixed(1)}" r="3.6" fill="var(--accent)"/>`;
   }
   try{ window._reisScrub={nowY,VH,x0,x1,yB,yT,niceMax,hasDebt:compose,assets:M.assets,debt:M.debt,mid:M.mid,debtParts:M.debtParts,assetParts:M.assetParts}; }catch(_){}
   const _sw=(c,dash)=>`<span style="display:inline-block;width:14px;border-top:2px ${dash?'dashed':'solid'} ${c};vertical-align:middle;margin-right:4px"></span>`;
-  const legend = compose?`<div class="row" style="gap:14px;margin-top:6px;font-size:10.5px;flex-wrap:wrap;color:var(--mut)"><span>${_sw('#2dd4bf')}Vermogen</span><span>${_sw('#a78bfa')}Bezittingen</span><span>${_sw('#fbbf24',1)}Schuld</span></div>`:'';
+  const legend = compose?`<div class="row" style="gap:14px;margin-top:6px;font-size:10.5px;flex-wrap:wrap;color:var(--mut)"><span>${_sw('var(--accent)')}Vermogen</span><span>${_sw('#a78bfa')}Bezittingen</span><span>${_sw('#fbbf24',1)}Schuld</span></div>`:'';
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="margin-top:10px">${s}</svg>${legend}`;
 }
 function reisRestsaldo(M){
@@ -4131,7 +4179,7 @@ function reisRestsaldo(M){
   const num=(n,c1,c2)=>`<div class="num" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;background:${c1};color:${c2}">${n}</div>`;
   const stepWrap=(rail,inner,last)=>`<div style="display:flex;gap:11px;padding:10px 0">${rail}<div style="flex:1;min-width:0">${inner}</div></div>`;
   const rail=(n,c1,c2,last)=>`<div style="width:26px;flex-shrink:0;display:flex;flex-direction:column;align-items:center">${num(n,c1,c2)}${last?'':`<div style="width:2px;flex:1;background:var(--line);margin-top:4px"></div>`}</div>`;
-  const step1=stepWrap(rail('1','var(--green)','#06231c',false),
+  const step1=stepWrap(rail('1','var(--green)','var(--on-accent)',false),
     nfFull
     ? `<div class="row"><span style="font-weight:700;font-size:14px">Noodfonds</span><span style="font-weight:800;font-size:12.5px;color:var(--green)">vol ✓</span></div><div class="small mut2" style="font-size:11.5px">je buffer is compleet, dit deel gaat door naar groei</div>`
     : `<div class="row"><span style="font-weight:700;font-size:14px">Noodfonds eerst</span><span style="font-weight:800;font-size:12.5px;color:var(--green)">tot ${euro0(nfDoel)}</span></div><div class="small mut2" style="font-size:11.5px">vullen tot je doel, stopt vanzelf als het vol is</div><div class="bar-track" style="margin:7px 0 2px"><div class="bar-fill" style="width:${nfPct}%;background:var(--green)"></div></div><div class="small mut2" style="font-size:11px">${euro0(nfCur)} / ${euro0(nfDoel)}${nfMonths>0?' · nog ± '+nfMonths+' mnd':''}</div><div class="small mut2" style="font-size:10.5px;margin-top:2px">${nfFill>0?`Vult met je spaarinleg (${euro0(nfFill)}/mnd); je overige restsaldo kan elders heen.`:'Stel je maandelijkse spaarinleg in voor een tijdsschatting.'}</div>`);
@@ -4201,8 +4249,8 @@ function renderFire(){
   let M; try{ M=reisModel(); }catch(_){ const h=head+'<div class="card"><div class="small muted">Nog geen gegevens voor je vermogensreis.</div></div>'; $('#s-fire').innerHTML=h; return h; }
   const R=M.R, nowY=M.nowY, curNW=M.curNW;
   // scherm-body (ongewijzigd t.o.v. de oude uitgeklapte kaart; alleen de inklap-laag is weg)
-  const tg=(k,l)=>`<span onclick="reisToggle('${k}')" style="font-size:11px;font-weight:600;border:1px solid ${R[k]?'var(--teal)':'var(--line)'};background:${R[k]?'rgba(45,212,191,.12)':'var(--card2)'};color:${R[k]?'var(--teal)':'var(--mut)'};border-radius:16px;padding:4px 11px;cursor:pointer">${l}</span>`;
-  const zc=(v,l)=>`<span onclick="reisZoom('${v}')" style="font-size:11px;font-weight:600;border:1px solid ${R.chartZoom===v?'var(--teal)':'var(--line)'};background:${R.chartZoom===v?'rgba(45,212,191,.12)':'var(--card2)'};color:${R.chartZoom===v?'var(--teal)':'var(--mut)'};border-radius:16px;padding:4px 11px;cursor:pointer">${l}</span>`;
+  const tg=(k,l)=>`<span onclick="reisToggle('${k}')" style="font-size:11px;font-weight:600;border:1px solid ${R[k]?'var(--teal)':'var(--line)'};background:${R[k]?'color-mix(in srgb,var(--accent) 12%,transparent)':'var(--card2)'};color:${R[k]?'var(--teal)':'var(--mut)'};border-radius:16px;padding:4px 11px;cursor:pointer">${l}</span>`;
+  const zc=(v,l)=>`<span onclick="reisZoom('${v}')" style="font-size:11px;font-weight:600;border:1px solid ${R.chartZoom===v?'var(--teal)':'var(--line)'};background:${R.chartZoom===v?'color-mix(in srgb,var(--accent) 12%,transparent)':'var(--card2)'};color:${R.chartZoom===v?'var(--teal)':'var(--mut)'};border-radius:16px;padding:4px 11px;cursor:pointer">${l}</span>`;
   const list=M.ms.map(m=>{ const yrtxt=m.reached?'<span style="color:var(--green)">behaald</span>':(m.yr!=null?m.yr:('na '+M.targetYear));
     const rm=m.custom?`<span onclick="reisRemoveCustom('${m.key}')" style="color:var(--mut2);cursor:pointer;font-weight:700;margin-left:8px">×</span>`:'';
     const have=(m.key==='nood'?(M.restsaldo.nfCur||0):curNW);   // noodfonds op spaargeld, rest op netto vermogen (zelfde teller als reached)
@@ -4281,11 +4329,11 @@ function renderVermogen(){
       const _W=320,_H=64,_x0=2,_x1=_W-2,_yT=8,_yB=_H-4; const _mn=Math.min(..._ser),_mx=Math.max(..._ser),_rng=(_mx-_mn)||1;
       const _X=i=>_x0+(i/(_ser.length-1))*(_x1-_x0), _Y=v=>_yB-((v-_mn)/_rng)*(_yB-_yT);
       const _P=_ser.map((v,i)=>_X(i).toFixed(1)+','+_Y(v).toFixed(1)).join(' ');
-      const _col=_delta>=0?'#2dd4bf':'#f87171';
-      _nwTrend=`<div style="margin-top:13px;padding-top:11px;border-top:1px solid var(--line)"><div class="row" style="margin-bottom:4px"><span class="small" style="font-weight:700">Opbouw · ${_win.length} mnd</span><span class="small" style="font-weight:700;color:${_col}">${_delta>=0?'+':''}${euro0(_delta)}</span></div><svg viewBox="0 0 ${_W} ${_H}" width="100%" height="${_H}"><defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${_delta>=0?'rgba(45,212,191,.28)':'rgba(248,113,113,.28)'}"/><stop offset="1" stop-color="rgba(45,212,191,0)"/></linearGradient></defs><polygon points="${_X(0).toFixed(1)},${_yB} ${_P} ${_X(_ser.length-1).toFixed(1)},${_yB}" fill="url(#nwg)"/><polyline points="${_P}" fill="none" stroke="${_col}" stroke-width="2" stroke-linejoin="round"/><circle cx="${_X(_ser.length-1).toFixed(1)}" cy="${_Y(_ser[_ser.length-1]).toFixed(1)}" r="3" fill="${_col}"/></svg><div class="small" style="font-weight:600;margin-top:6px;color:${_col}">${_delta>=0?'Wat je minder uitgeeft, blijft hier staan als vermogen.':'De laatste maanden ging er meer uit dan er binnenkwam, dus je vermogen daalde.'}</div><div class="small mut2" style="font-size:10.5px;margin-top:2px">o.b.v. inkomen − uitgaven · koersen van beleggingen niet meegerekend</div></div>`;
+      const _col=_delta>=0?'var(--accent)':'#f87171';
+      _nwTrend=`<div style="margin-top:13px;padding-top:11px;border-top:1px solid var(--line)"><div class="row" style="margin-bottom:4px"><span class="small" style="font-weight:700">Opbouw · ${_win.length} mnd</span><span class="small" style="font-weight:700;color:${_col}">${_delta>=0?'+':''}${euro0(_delta)}</span></div><svg viewBox="0 0 ${_W} ${_H}" width="100%" height="${_H}"><defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${_delta>=0?'color-mix(in srgb,var(--accent) 28%,transparent)':'rgba(248,113,113,.28)'}"/><stop offset="1" stop-color="color-mix(in srgb,var(--accent) 0%,transparent)"/></linearGradient></defs><polygon points="${_X(0).toFixed(1)},${_yB} ${_P} ${_X(_ser.length-1).toFixed(1)},${_yB}" fill="url(#nwg)"/><polyline points="${_P}" fill="none" stroke="${_col}" stroke-width="2" stroke-linejoin="round"/><circle cx="${_X(_ser.length-1).toFixed(1)}" cy="${_Y(_ser[_ser.length-1]).toFixed(1)}" r="3" fill="${_col}"/></svg><div class="small" style="font-weight:600;margin-top:6px;color:${_col}">${_delta>=0?'Wat je minder uitgeeft, blijft hier staan als vermogen.':'De laatste maanden ging er meer uit dan er binnenkwam, dus je vermogen daalde.'}</div><div class="small mut2" style="font-size:10.5px;margin-top:2px">o.b.v. inkomen − uitgaven · koersen van beleggingen niet meegerekend</div></div>`;
     }
   }catch(_){}
-  const nwCard=`<div class="card" style="background:linear-gradient(165deg,rgba(45,212,191,.06),transparent)">
+  const nwCard=`<div class="card" style="background:linear-gradient(165deg,color-mix(in srgb,var(--accent) 6%,transparent),transparent)">
     <div class="row" style="justify-content:space-between"><span class="small muted">Netto vermogen</span>${_nwChip}</div>
     <div style="font-size:30px;font-weight:800;letter-spacing:-.5px;color:${_nwUnder?'var(--red)':'var(--teal)'};margin:2px 0 0">${euro0(w.netto)}</div>
     ${(_nwBez>0)?`<div class="small muted" style="margin-top:2px">van ${euro0(_nwBez)} aan bezittingen</div>`:''}
@@ -4348,7 +4396,7 @@ function goalCoachTips(m){
   return tips.slice(0,3);
 }
 function goalChartInner(ingelegd,doel,maandTotal){
-  return `${bufferChart(ingelegd,doel,maandTotal)}<div class="sc-leg" style="margin-top:6px"><span><i style="border-color:#2dd4bf"></i>jouw spaarkoers</span><span><i class="d" style="border-color:#56627d"></i>bufferdoel</span></div>`;
+  return `${bufferChart(ingelegd,doel,maandTotal)}<div class="sc-leg" style="margin-top:6px"><span><i style="border-color:var(--accent)"></i>jouw spaarkoers</span><span><i class="d" style="border-color:var(--ref)"></i>bufferdoel</span></div>`;
 }
 function goalChartCard(){ let S=null; try{S=savingsModel();}catch(_){} if(!S||!S.goal||S.goal<=0) return '';
   const ingelegd=Math.round(S.cur),doel=Math.round(S.goal),maand=Math.round(S.monthlySaving);
@@ -4364,11 +4412,11 @@ function goalDualChart(ingelegd,doel,maand,cut,baseMonths,newMonths){
   const bX=X(baseMonths), nX=X(newMonths);
   const accel = cut>0 && newMonths<baseMonths;
   const dShort=mn=>{const d=new Date();d.setMonth(d.getMonth()+mn);return d.toLocaleDateString('nl-NL',{month:'short'});};
-  const goalLine=`<line x1="${x0}" y1="${yT}" x2="${x1}" y2="${yT}" stroke="#39496a" stroke-width="1.4" stroke-dasharray="4 4"/><text x="${x1}" y="${yT-5}" fill="#8a97ab" font-size="9" text-anchor="end">doel ${euro0(doel)}</text>`;
-  const baseLine=`<line x1="${X(0)}" y1="${startY}" x2="${bX}" y2="${yT}" stroke="#56627d" stroke-width="2" stroke-dasharray="5 4"/><circle cx="${bX}" cy="${yT}" r="3.2" fill="#56627d"/><text x="${bX}" y="${H-6}" fill="#8a97ab" font-size="9" text-anchor="${bX>W-30?'end':'middle'}">${dShort(baseMonths)}</text>`;
-  const accelLine=accel?`<line x1="${X(0)}" y1="${startY}" x2="${nX}" y2="${yT}" stroke="#2dd4bf" stroke-width="2.6"/><circle cx="${nX}" cy="${yT}" r="4" fill="#2dd4bf"/><text x="${nX}" y="${H-6}" fill="#2dd4bf" font-size="9" font-weight="700" text-anchor="middle">${dShort(newMonths)}</text>`:'';
+  const goalLine=`<line x1="${x0}" y1="${yT}" x2="${x1}" y2="${yT}" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="4 4"/><text x="${x1}" y="${yT-5}" fill="var(--lab)" font-size="9" text-anchor="end">doel ${euro0(doel)}</text>`;
+  const baseLine=`<line x1="${X(0)}" y1="${startY}" x2="${bX}" y2="${yT}" stroke="var(--ref)" stroke-width="2" stroke-dasharray="5 4"/><circle cx="${bX}" cy="${yT}" r="3.2" fill="var(--ref)"/><text x="${bX}" y="${H-6}" fill="var(--lab)" font-size="9" text-anchor="${bX>W-30?'end':'middle'}">${dShort(baseMonths)}</text>`;
+  const accelLine=accel?`<line x1="${X(0)}" y1="${startY}" x2="${nX}" y2="${yT}" stroke="var(--accent)" stroke-width="2.6"/><circle cx="${nX}" cy="${yT}" r="4" fill="var(--accent)"/><text x="${nX}" y="${H-6}" fill="var(--accent)" font-size="9" font-weight="700" text-anchor="middle">${dShort(newMonths)}</text>`:'';
   return `<div class="gc-dual"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none">${goalLine}${baseLine}${accelLine}</svg>
-    <div class="gc-leg"><span><i style="background:#2dd4bf"></i>jouw koers</span><span><i class="d" style="border-color:#56627d"></i>huidig tempo</span></div></div>`;
+    <div class="gc-leg"><span><i style="background:var(--accent)"></i>jouw koers</span><span><i class="d" style="border-color:var(--ref)"></i>huidig tempo</span></div></div>`;
 }
 function goalCoachCard(bare){
   let S=null; try{S=savingsModel();}catch(_){}
@@ -4728,12 +4776,12 @@ function coachProjCard(cut){
   const W=280,H=116, px=i=>20+i*((W-36)/Math.max(n-1,1)), py=v=>H-16-((v-lo)/(hi-lo||1))*(H-32);
   const line=a=>a.map((v,i)=>px(i).toFixed(1)+','+py(v).toFixed(1)).join(' ');
   const area=`M${px(0).toFixed(1)},${py(ivals[0]).toFixed(1)} `+ivals.map((v,i)=>'L'+px(i).toFixed(1)+','+py(v).toFixed(1)).join(' ')+` L${px(n-1).toFixed(1)},${H-16} L${px(0).toFixed(1)},${H-16} Z`;
-  const labels=imp.months.map((mo,i)=>`<text x="${px(i).toFixed(1)}" y="${H-3}" fill="#8a97ab" font-size="10" text-anchor="middle">${mo.name.slice(0,3)}</text>`).join('');
+  const labels=imp.months.map((mo,i)=>`<text x="${px(i).toFixed(1)}" y="${H-3}" fill="var(--lab)" font-size="10" text-anchor="middle">${mo.name.slice(0,3)}</text>`).join('');
   const svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;margin-top:6px" role="img" aria-label="Projectie van je saldo, met regel eindig je hoger">
-    <path d="${area}" fill="rgba(45,212,191,.12)"/>
-    <polyline points="${line(bvals)}" fill="none" stroke="#56627d" stroke-width="2" stroke-dasharray="4 4"/>
-    <polyline points="${line(ivals)}" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>
-    <circle cx="${px(n-1).toFixed(1)}" cy="${py(ivals[n-1]).toFixed(1)}" r="3.5" fill="#2dd4bf"/>
+    <path d="${area}" fill="color-mix(in srgb,var(--accent) 12%,transparent)"/>
+    <polyline points="${line(bvals)}" fill="none" stroke="var(--ref)" stroke-width="2" stroke-dasharray="4 4"/>
+    <polyline points="${line(ivals)}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+    <circle cx="${px(n-1).toFixed(1)}" cy="${py(ivals[n-1]).toFixed(1)}" r="3.5" fill="var(--accent)"/>
     ${labels}</svg>`;
   return `<div class="coachproj">
     <div class="cp-top"><span class="cp-lbl">Eind ${last}</span>${gain>0?`<span class="cp-pill">+${euro0(gain)}</span>`:''}</div>
@@ -4913,10 +4961,10 @@ function coachForecastChart(M,accent){
   const X=i=>LX+i*((RX-LX)/11), Y=v=>top+(1-(v-lo)/(hi-lo||1))*(bot-top);
   const seg=a=>{ const p=[]; for(let i=0;i<12;i++){ if(a[i]==null) continue; p.push(X(i).toFixed(1)+','+Y(a[i]).toFixed(1)); } return p.join(' '); };
   const tx=X(M.cur).toFixed(1);
-  const marker=`<line x1="${tx}" y1="${top}" x2="${tx}" y2="${bot}" stroke="rgba(255,255,255,.2)" stroke-width="1" stroke-dasharray="2 3"/><text x="${tx}" y="${top-3}" fill="#8a97ab" font-size="9" text-anchor="middle">nu</text>`;
-  const lDoel=`<polyline points="${seg(M.doel)}" fill="none" stroke="#56627d" stroke-width="1.4" stroke-dasharray="4 3" opacity=".8"/>`;
-  const lAcc=`<polyline points="${seg(accent)}" fill="none" stroke="#2dd4bf" stroke-width="2.6"/>`;
-  const labels=MN.map((mn,i)=>(i%2===0||i===11)?`<text x="${X(i).toFixed(1)}" y="${H-5}" fill="#8a97ab" font-size="8.5" text-anchor="middle">${mn}</text>`:'').join('');
+  const marker=`<line x1="${tx}" y1="${top}" x2="${tx}" y2="${bot}" stroke="rgba(255,255,255,.2)" stroke-width="1" stroke-dasharray="2 3"/><text x="${tx}" y="${top-3}" fill="var(--lab)" font-size="9" text-anchor="middle">nu</text>`;
+  const lDoel=`<polyline points="${seg(M.doel)}" fill="none" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="4 3" opacity=".8"/>`;
+  const lAcc=`<polyline points="${seg(accent)}" fill="none" stroke="var(--accent)" stroke-width="2.6"/>`;
+  const labels=MN.map((mn,i)=>(i%2===0||i===11)?`<text x="${X(i).toFixed(1)}" y="${H-5}" fill="var(--lab)" font-size="8.5" text-anchor="middle">${mn}</text>`:'').join('');
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Forecast: volle discipline vs jouw koers">${marker}${lDoel}${lAcc}${labels}</svg>`;
 }
 function coachPattern(){
@@ -4981,8 +5029,8 @@ function renderActions(){
 let _coT=null,_coC=null,_coGen=0;
 /* v75: merk-eigen geometrische marks i.p.v. generieke silhouetten. Twee varianten die als
    coach-keuze herkenbaar verschillen (boog vs. ring), beide strak en in de merkkleur. */
-const AV_V=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="#123b38"/><path d="M10 24.5V15a8 8 0 0 1 16 0v9.5" fill="none" stroke="#3bb3a4" stroke-width="3" stroke-linecap="round"/><circle cx="18" cy="24.5" r="2.4" fill="#3bb3a4"/></svg>`;
-const AV_M=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="#132a3f"/><circle cx="18" cy="18" r="7.5" fill="none" stroke="#6aa9d8" stroke-width="3"/><path d="M18 10.5V18l5 3" fill="none" stroke="#6aa9d8" stroke-width="3" stroke-linecap="round"/></svg>`;
+const AV_V=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="var(--card2)"/><path d="M10 24.5V15a8 8 0 0 1 16 0v9.5" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/><circle cx="18" cy="24.5" r="2.4" fill="var(--accent)"/></svg>`;
+const AV_M=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="var(--card2)"/><circle cx="18" cy="18" r="7.5" fill="none" stroke="var(--blue)" stroke-width="3"/><path d="M18 10.5V18l5 3" fill="none" stroke="var(--blue)" stroke-width="3" stroke-linecap="round"/></svg>`;
 function coachAvatar(){ return SET.coachAvatar==='m'?AV_M:AV_V; }
 function openCoachAvatar(){
   const cur=SET.coachAvatar==='m'?'m':'v';
@@ -6513,7 +6561,7 @@ function monthStatusCard(m){
   const usedPct=Math.round(sp/bud*100), over=sp>bud, room=bud-sp;
   const now=new Date(); const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate(); const dom=Math.min(now.getDate(),dim);
   const dayPct=Math.round(dom/dim*100); const ahead=!over && usedPct>dayPct+8;
-  const col=over?'#f87171':(ahead?'#fbbf24':'#2dd4bf');
+  const col=over?'#f87171':(ahead?'#fbbf24':'var(--accent)');
   const tempo=over?'over budget':(ahead?'sneller dan de maand':'op schema');
   const centerBig=euro0(over?sp-bud:room);
   const centerSub=over?('over budget · '+usedPct+'%'):('over · '+usedPct+'% gebruikt');
@@ -6521,9 +6569,9 @@ function monthStatusCard(m){
   const a=(dayPct/100)*2*Math.PI, mx=(56+R*Math.cos(a)).toFixed(1), my=(56+R*Math.sin(a)).toFixed(1);
   const ring=`<div style="position:relative;width:112px;height:112px;flex-shrink:0">
     <svg width="112" height="112" viewBox="0 0 112 112" style="transform:rotate(-90deg)">
-      <circle cx="56" cy="56" r="${R}" fill="none" stroke="#1b2740" stroke-width="10"/>
+      <circle cx="56" cy="56" r="${R}" fill="none" stroke="var(--card2)" stroke-width="10"/>
       <circle cx="56" cy="56" r="${R}" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} ${(C-dash).toFixed(1)}"/>
-      <circle cx="${mx}" cy="${my}" r="3.4" fill="#eaf0f8" stroke="#0b1220" stroke-width="1.6"/>
+      <circle cx="${mx}" cy="${my}" r="3.4" fill="var(--txt)" stroke="var(--bg)" stroke-width="1.6"/>
     </svg>
     <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
       <div style="font-size:20px;font-weight:800;letter-spacing:-.4px;color:${col}">${centerBig}</div>
@@ -6642,7 +6690,7 @@ function ruleOfThumbCard(){
     else { dotc='var(--amber)'; statusCls='no'; statusLbl='Bijna op schema'; const cap=iss[0].charAt(0).toUpperCase()+iss[0].slice(1); head=`<b>Bijna op schema.</b> ${[cap,...iss.slice(1)].join(', ')}.`; }
   }
   window._fvTx=periodTx();   // drill-down gebruikt exact deze periode
-  const cbg={ok:'rgba(52,211,153,.14)',no:'rgba(251,191,36,.14)',bad:'rgba(248,113,113,.14)'};
+  const cbg={ok:'color-mix(in srgb,var(--green) 14%,transparent)',no:'rgba(251,191,36,.14)',bad:'rgba(248,113,113,.14)'};
   const cfg={ok:'var(--green)',no:'var(--amber)',bad:'var(--red)'};
   const ohealth=!!SET.openHealth;
   const chip=`<span style="display:inline-flex;align-items:center;font-size:11.5px;font-weight:700;border-radius:20px;padding:3px 10px;background:${cbg[statusCls]};color:${cfg[statusCls]}">${statusLbl}</span>`;
@@ -6653,7 +6701,7 @@ function ruleOfThumbCard(){
         <div style="width:${wV}%;background:var(--blue)"></div><div style="width:${wR}%;background:var(--amber)"></div><div style="width:${wS}%;background:var(--teal)"></div></div></div>`;
   }
   const aFix="openFixedVarDrill('fixed')", aVar="openFixedVarDrill('var')", aSpar=(ns>0?'openSavingsFlowDrill()':'');
-  const seg=(w,c,p,act)=>`<div style="width:${w}%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#06231c;background:${c}${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}>${(w>=12&&p!=null)?p+'%':''}</div>`;
+  const seg=(w,c,p,act)=>`<div style="width:${w}%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--on-accent);background:${c}${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}>${(w>=12&&p!=null)?p+'%':''}</div>`;
   const leg=(c,nm,p,act)=>`<div style="display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:5px 9px;font-size:12px${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}><span style="width:8px;height:8px;border-radius:50%;background:${c}"></span>${nm} <b>${p}%</b>${act?'<span style="color:var(--teal);font-weight:700">›</span>':''}</div>`;
   return `<div class="card">${header}
     <div style="font-size:13px;margin:11px 0 11px">${head}</div>
@@ -6860,9 +6908,9 @@ function chartYAxis(niceTop, fmt){
   const G=CHART_GEO; const out=[];
   for(const f of [1,0.5]){
     const v=niceTop*f, yy=G.BASE-f*(G.BASE-G.TOP);
-    out.push(`<text x="${G.L-5}" y="${(yy+3).toFixed(1)}" font-size="8.5" fill="#7f8ba1" text-anchor="end">${fmt(v)}</text>`);
+    out.push(`<text x="${G.L-5}" y="${(yy+3).toFixed(1)}" font-size="8.5" fill="var(--lab)" text-anchor="end">${fmt(v)}</text>`);
   }
-  out.push(`<text x="${G.L-5}" y="${G.BASE+3}" font-size="8.5" fill="#7f8ba1" text-anchor="end">0</text>`);
+  out.push(`<text x="${G.L-5}" y="${G.BASE+3}" font-size="8.5" fill="var(--lab)" text-anchor="end">0</text>`);
   return out.join('');
 }
 // tik-uitlezing: vult een regel onder de grafiek, zonder re-render
@@ -6891,17 +6939,17 @@ function kpiHistChart(k){
   const kort=v=>k.key==='niveau'?chartK(v):k.fmt(v);
   const bars=vals.map((v,i)=>{
     const cx=L+slot*i+slot/2, x=cx-bw/2, nu=(k.partial&&i===vals.length-1);
-    if(v==null) return `<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="#8f9bb0" text-anchor="middle">${labs[i]}</text>`;
+    if(v==null) return `<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="var(--lab)" text-anchor="middle">${labs[i]}</text>`;
     const yy=y(v);
     const bar=`<rect class="cbar" x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(BASE-yy,1.5).toFixed(1)}" rx="3" fill="${col(v,i)}"${nu?' fill-opacity=".45" stroke="'+col(v,i)+'" stroke-width="1" stroke-dasharray="3 2"':''}/>`;
-    const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="8.5" font-weight="700" fill="#c7d2e2" text-anchor="middle">${kort(v)}</text>`:'';
-    const lab=(i%every===0||i===vals.length-1)?`<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="#8f9bb0" text-anchor="middle">${labs[i]}${nu?'*':''}</text>`:'';
+    const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="8.5" font-weight="700" fill="var(--txt)" text-anchor="middle">${kort(v)}</text>`:'';
+    const lab=(i%every===0||i===vals.length-1)?`<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="var(--lab)" text-anchor="middle">${labs[i]}${nu?'*':''}</text>`:'';
     const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+18).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="chartRead('kpiRead','&lt;b&gt;${esc(monthLabel(ms[i]))}&lt;/b&gt; · ${k.fmt(v)}${nu?' · tot nu toe':''}')"><title>${labs[i]} · ${k.fmt(v)}</title></rect>`;
     return bar+val+lab+hit;
   }).join('');
   const bandTxt=k.key==='niveau'?`gemiddeld ${chartK(band)}`:KPI_META[k.key].bandTxt;
-  const bandLine=band>0&&band<=niceTop?`<line x1="${L}" x2="${W-R}" y1="${y(band).toFixed(1)}" y2="${y(band).toFixed(1)}" stroke="#8b97ad" stroke-width="1.4" stroke-dasharray="4 3"/>`
-    +chartTagRight(W-R, y(band)-4, bandTxt, '#8b97ad'):'';
+  const bandLine=band>0&&band<=niceTop?`<line x1="${L}" x2="${W-R}" y1="${y(band).toFixed(1)}" y2="${y(band).toFixed(1)}" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="4 3"/>`
+    +chartTagRight(W-R, y(band)-4, bandTxt, 'var(--ref)'):'';
   return `<svg id="kpiHist" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:12px">
       ${chartYAxis(niceTop, kort)}
       <line x1="${L}" x2="${W-R}" y1="${BASE}" y2="${BASE}" stroke="rgba(255,255,255,.14)" stroke-width="1"/>
@@ -6952,9 +7000,9 @@ function spendVsBudgetChart(){
     // aan de gestreepte budgetlijn — geen tweede kleur nodig.
     const col=r.now?'var(--teal)':'var(--bar)';
     const bar=`<rect class="cbar" x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${col}"${r.now?' fill-opacity=".42" stroke="'+col+'" stroke-width="1" stroke-dasharray="3 2"':''}/>`;
-    const bud=r.budget>0?`<line x1="${(L+slot*i+1).toFixed(1)}" x2="${(L+slot*(i+1)-1).toFixed(1)}" y1="${y(r.budget).toFixed(1)}" y2="${y(r.budget).toFixed(1)}" stroke="#8b97ad" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
-    const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="8.5" font-weight="700" fill="#c7d2e2" text-anchor="middle">${chartK(r.spend)}</text>`:'';
-    const lab=`<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="#8f9bb0" text-anchor="middle">${MNAMES[+r.m.slice(5,7)-1]}${r.now?'*':''}</text>`;
+    const bud=r.budget>0?`<line x1="${(L+slot*i+1).toFixed(1)}" x2="${(L+slot*(i+1)-1).toFixed(1)}" y1="${y(r.budget).toFixed(1)}" y2="${y(r.budget).toFixed(1)}" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
+    const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="8.5" font-weight="700" fill="var(--txt)" text-anchor="middle">${chartK(r.spend)}</text>`:'';
+    const lab=`<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="var(--lab)" text-anchor="middle">${MNAMES[+r.m.slice(5,7)-1]}${r.now?'*':''}</text>`;
     // let op: geen aanhalingstekens in deze string — hij zit in een onclick-attribuut
     const uit=`&lt;b&gt;${esc(monthLabel(r.m))}&lt;/b&gt; · ${euro0(r.spend)}${r.budget>0?` van ${euro0(r.budget)}`:''}${r.now?' · tot nu toe':''} · bekijk maand ›`;
     const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+18).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="chartRead('spendRead','${uit}');window._spendPick='${r.m}'"><title>${MFULL[+r.m.slice(5,7)-1]} ${r.m.slice(0,4)} · ${euro0(r.spend)}</title></rect>`;
@@ -6967,7 +7015,7 @@ function spendVsBudgetChart(){
       ${chartYAxis(niceTop, chartK)}
       <line x1="${L}" x2="${W-R}" y1="${BASE}" y2="${BASE}" stroke="rgba(255,255,255,.14)" stroke-width="1"/>
       ${bars}
-      ${budNu>0?chartTagRight(W-R, y(budNu)-4, 'budget '+chartK(budNu), '#8b97ad'):''}
+      ${budNu>0?chartTagRight(W-R, y(budNu)-4, 'budget '+chartK(budNu), 'var(--ref)'):''}
     </svg>
     <div id="spendRead" class="small" style="color:var(--teal);font-size:11px;margin-top:2px;min-height:15px;cursor:pointer" onclick="if(window._spendPick)openBudgetCompare(window._spendPick)"><span style="color:var(--mut2)">Tik een maand voor het bedrag.${hasNow?' De maand met * loopt nog.':''}</span></div>
     <div class="gc-leg"><span><i style="background:var(--bar)"></i>per maand</span><span><i style="background:var(--teal)"></i>deze maand</span><span><i class="d"></i>maandbudget</span></div>
@@ -7184,7 +7232,7 @@ function loanBlokHTML(t){
   // binnenkomend geld dat bij een open vordering past: bied aan het als terugbetaling te boeken
   if(+t.amount>0){
     const m=loanMatch(t);
-    if(m) return `<div class="card" style="margin:10px 0 6px;padding:12px 13px;border-color:rgba(59,179,164,.35)">
+    if(m) return `<div class="card" style="margin:10px 0 6px;padding:12px 13px;border-color:color-mix(in srgb,var(--accent) 35%,transparent)">
       <div class="small" style="font-weight:700;color:var(--teal)">Is dit een terugbetaling?</div>
       <div class="small muted" style="margin-top:4px">Je hebt nog ${euro0(m.loan.open)} open bij <b style="color:var(--txt)">${esc(m.loan.naam)}</b>. Boek je dit zo, dan telt het niet als inkomen.</div>
       <button class="btn" style="margin-top:10px" onclick="loanRepay('${m.loan.id}',${m.bedrag},'${t.id}')">Ja, ${euro0(m.bedrag)} terugbetaald${m.deels?' (deels)':''}</button>
@@ -7330,6 +7378,7 @@ function renderSet(){
   const cats=[
     ['budget',ICON('target'),'Budget & doelen',`Je spaart ${euro0(monthlySavingTarget())} per maand`,setBudget,''],
     ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
+    ['look',ICON('palet'),'Uiterlijk',THEMES[themeKey()].naam,setLook,''],
     ['modus',ICON('filter'),'Weergave & modus',({rustig:'Rustig',begeleid:'Begeleid',expert:'Expert'})[SET.mode||'begeleid'],setModus,''],
     ['income',ICON('euro'),'Inkomen & rekeningen',`Je ontvangt ${euro0(inc)} per maand`,setIncome,''],
     ['bank',ICON('bank'),'Bankkoppeling',psd2?'Je bank is gekoppeld':'Nog geen bank gekoppeld',setBank,psd2?'':'var(--amber)'],
@@ -7352,6 +7401,59 @@ function renderSet(){
     <div class="center small muted" style="padding:8px 0 20px;cursor:default" onclick="bankAdvTap()">Minder · veilig &amp; lokaal</div>`;
 }
 
+/* ---------- Uiterlijk: thema's ----------
+   Alles loopt via de tokens, dus één attribuut op <html> verandert de hele app:
+   pagina's, kaarten, sheets, grafieken en de onderbalk. Geen herladen nodig. */
+const THEMES={
+  standaard:{naam:'Standaard', sub:'De donkere look van Minder', bg:'#0a0f1a', card:'#141b2b', accent:'#3bb3a4', txt:'#eaf0fb', serif:false},
+  prive:{naam:'Privé', sub:'Licht & editorial — ivoor, serif, diep groen', bg:'#f6f2e9', card:'#fffdf9', accent:'#1f5c46', txt:'#1c2b26', serif:true},
+  aurora:{naam:'Neo-Dark Aurora', sub:'Donker & glas — gloed, mint en violet', bg:'#0a0e17', card:'rgba(255,255,255,.06)', accent:'#34e0c4', txt:'#eaf0fb', serif:false, glow:true}
+};
+function themeKey(){ const k=SET.theme; return THEMES[k]?k:'standaard'; }
+function applyTheme(){
+  const k=themeKey();
+  if(k==='standaard') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme=k;
+}
+function setTheme(k){
+  if(!THEMES[k]) return;
+  SET.theme=k; save(); applyTheme(); render();
+  if(window._setSheet==='look') renderSetSheet();
+  toast(`${ICON('check')} Thema: ${THEMES[k].naam}`);
+}
+// mini-voorbeeld per thema: dezelfde bouwstenen als de app (kaart, hero-bedrag, staafje, pill)
+function themePreview(k){
+  const t=THEMES[k];
+  const heroKleur=k==='aurora'?'background:linear-gradient(90deg,#34e0c4,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent':`color:${t.accent}`;
+  return `<div style="background:${t.bg};border-radius:10px;padding:10px 11px;border:1px solid rgba(128,128,128,.18);overflow:hidden">
+    ${t.glow?`<div style="height:0;position:relative"><div style="position:absolute;left:-20%;top:-24px;width:90%;height:56px;background:radial-gradient(60% 100% at 30% 0%,rgba(52,224,196,.30),transparent 70%);filter:blur(2px)"></div></div>`:''}
+    <div style="font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:${t.accent};font-weight:700;position:relative">Minder</div>
+    <div style="font-size:19px;font-weight:800;letter-spacing:-.6px;margin:3px 0 5px;position:relative;${heroKleur};${t.serif?"font-family:Georgia,'Times New Roman',serif":''}">€1.240</div>
+    <div style="background:${t.card};border:1px solid rgba(128,128,128,.16);border-radius:7px;padding:6px 7px;display:flex;align-items:flex-end;gap:3px;height:30px">
+      ${[10,16,12,20,14].map((h,i)=>`<div style="flex:1;height:${h}px;border-radius:2px;background:${i===4?t.accent:(t.serif?'#cdd6cf':'#37455f')}"></div>`).join('')}
+    </div>
+    <div style="margin-top:6px;display:flex;gap:4px">
+      <span style="font-size:8px;padding:2px 7px;border-radius:999px;background:${t.accent};color:${t.serif?'#fffdf9':'#05221c'};font-weight:700">Home</span>
+      <span style="font-size:8px;padding:2px 7px;border-radius:999px;color:${t.txt};opacity:.55">Inzichten</span>
+    </div>
+  </div>`;
+}
+function setLook(){
+  const cur=themeKey();
+  const kaart=k=>{ const t=THEMES[k], on=cur===k;
+    return `<div onclick="setTheme('${k}')" data-theme-card="${k}" style="cursor:pointer;border:1.5px solid ${on?'var(--accent)':'var(--line)'};border-radius:var(--r-inner);padding:10px;margin-bottom:10px;background:${on?'color-mix(in srgb,var(--accent) 7%,transparent)':'transparent'}">
+      ${themePreview(k)}
+      <div class="row" style="margin-top:9px;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14px">${t.naam}</div>
+          <div class="small muted">${t.sub}</div>
+        </div>
+        <span class="small" style="color:${on?'var(--accent)':'var(--mut2)'};font-weight:700;white-space:nowrap">${on?'actief':'kiezen ›'}</span>
+      </div>
+    </div>`; };
+  return `<div class="small muted" style="margin-bottom:10px">Kies hoe Minder eruitziet. De hele app verandert meteen mee · je cijfers blijven precies hetzelfde.</div>
+    ${kaart('prive')}${kaart('aurora')}${kaart('standaard')}`;
+}
 function openSet(id){ window._setSheet=id; renderSetSheet(); showSheetBg(); }
 
 function renderSetSheet(){
@@ -7386,7 +7488,7 @@ function renderBudgetSheet(){
   el.scrollTop = sc;
 }
 
-const SET_SHEETS={budget:[ICON('target'),'Budget & doelen',setBudget],fire:[ICON('trend'),'Vermogensreis · aannames',setFireAannames],modus:[ICON('filter'),'Weergave & modus',setModus],income:[ICON('euro'),'Inkomen & rekeningen',setIncome],bank:[ICON('bank'),'Bankkoppeling & import',setBank],coach:[ICON('robot'),'Coach & categorieën',setCoach],privacy:[ICON('lock'),'Privacy & gegevens',setPrivacy]};
+const SET_SHEETS={look:[ICON('palet'),'Uiterlijk',setLook],budget:[ICON('target'),'Budget & doelen',setBudget],fire:[ICON('trend'),'Vermogensreis · aannames',setFireAannames],modus:[ICON('filter'),'Weergave & modus',setModus],income:[ICON('euro'),'Inkomen & rekeningen',setIncome],bank:[ICON('bank'),'Bankkoppeling & import',setBank],coach:[ICON('robot'),'Coach & categorieën',setCoach],privacy:[ICON('lock'),'Privacy & gegevens',setPrivacy]};
 
 function setBudget(){
   const adv=!!SET.budgetAdv;
@@ -8115,7 +8217,7 @@ function openSubs(){
     ${list.map(x=>{const on=!!flags[x.key]; return `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);${on?'opacity:.55':''}">
       <div style="min-width:0;flex:1"><div style="font-weight:600;font-size:14px">${CATS[x.cat].icon||''} ${esc(x.name)}</div><div class="small muted">${euro0(x.monthly)}/mnd · ${x.months} mnd gezien</div></div>
       <button class="chip ${on?'on':''}" style="flex-shrink:0" onclick="toggleCancel('${x.key}')">${on?'opzeggen':'opzeggen?'}</button></div>`;}).join('')||'<div class="small muted">Nog geen abonnementen herkend.</div>'}
-    ${saving>0?`<div style="margin-top:12px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.35);border-radius:10px;padding:12px 14px;font-size:14px">Door deze op te zeggen bespaar je <b style="color:var(--green)">${euro0(saving)}/mnd</b> (${euro0(saving*12)}/jaar).</div>`:''}
+    ${saving>0?`<div style="margin-top:12px;background:color-mix(in srgb,var(--green) 10%,transparent);border:1px solid color-mix(in srgb,var(--green) 35%,transparent);border-radius:10px;padding:12px 14px;font-size:14px">Door deze op te zeggen bespaar je <b style="color:var(--green)">${euro0(saving)}/mnd</b> (${euro0(saving*12)}/jaar).</div>`:''}
     <div style="height:8px"></div>`;
   showSheetBg();
 }
@@ -8141,7 +8243,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}

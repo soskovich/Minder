@@ -55,7 +55,8 @@ test.describe('a · Nederlandse getalnotatie', () => {
 test.describe('b · tokens en kleurgebruik', () => {
   test('de design-tokens staan in :root', async ({ page }) => {
     await boot(page);
-    for (const [naam, verwacht] of [['--teal', '#3bb3a4'], ['--red', '#e2685f'], ['--bar', '#39445e'], ['--mut', '#a6b2c6'], ['--mut2', '#7f8ba1']]) {
+    // v83: --teal loopt via --accent, zodat een thema één token hoeft te overschrijven
+    for (const [naam, verwacht] of [['--accent', '#3bb3a4'], ['--teal', '#3bb3a4'], ['--red', '#e2685f'], ['--bar', '#39445e'], ['--mut', '#a6b2c6'], ['--mut2', '#7f8ba1']]) {
       expect(await token(page, naam), naam).toBe(verwacht);
     }
     expect(await token(page, '--shadow')).not.toBe('none');
@@ -143,7 +144,7 @@ test.describe('d · scherm-afronding en avatar', () => {
   test('de coach-avatar is een geometrische mark, geen silhouet', async ({ page }) => {
     await boot(page);
     const av = await page.evaluate(() => ({ v: coachAvatar(), m: (SET.coachAvatar = 'm', coachAvatar()) }));
-    expect(av.v).toContain('#3bb3a4');                                  // merkkleur
+    expect(av.v).toContain('var(--accent)');                            // merkkleur via het thema-token
     expect(av.v).not.toContain('#f1c9a6');                              // geen huidskleur-silhouet meer
     expect(av.m).not.toContain('#e9b994');
     expect(av.v).not.toBe(av.m);                                        // twee herkenbare varianten
