@@ -3570,18 +3570,26 @@ function debtInExpenses(d){
   for(const t of TX){ if(t.pending||!(t.amount<0)) continue;
     if(!win.has(t.date.slice(0,7))) continue;
     const key=recurKey(t); if(!key) continue;
-    const g=(groups[key]=groups[key]||{amts:[],yms:new Set(),expense:0,intern:0,other:0});
+    const g=(groups[key]=groups[key]||{amts:[],yms:new Set(),expense:0,intern:0,other:0,isLease:false});
     g.amts.push(Math.abs(t.amount)); g.yms.add(t.date.slice(0,7));
     if(isExpenseTx(t)) g.expense++; else if(catOf(t)==='intern') g.intern++; else g.other++;
+    // op naam+desc, niet op de afgekapte recurKey: "LEASE" kan voorbij de eerste 20 tekens staan
+    if(!g.isLease && LEASE_RX.test((t.name||'')+' '+(t.desc||''))) g.isLease=true;
   }
   const dn=recurKey({name:(d&&d.naam)||''});
   const med=a=>{ const s=[...a].sort((x,y)=>x-y),n=s.length; return n?(n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2):0; };
+  // Alleen-op-bedrag matchen pakt soms de verkeerde groep: binnen de tolerantie kan een interne
+  // overboeking van toevallig hetzelfde bedrag staan, en bij een gelijke stand won de eerst gevonden.
+  // Twee voorkeuren maken de keuze betrouwbaar, zonder een status af te dwingen:
+  const leaseDebt=!!(d && d.type==='financiallease');
   let best=null;
   for(const k in groups){ const g=groups[k]; if(g.yms.size<2) continue;   // ≥2 maanden = terugkerend
     const m=med(g.amts), amtMatch=Math.abs(m-per)<=tol, nameMatch=!!(dn&&k&&(k.indexOf(dn)>=0||dn.indexOf(k)>=0));
     if(!amtMatch&&!nameMatch) continue;
     const cls=(g.expense>=g.intern&&g.expense>=g.other)?'expense':(g.intern>=g.other?'intern':'other');
-    const score=(nameMatch?2:0)+(amtMatch?1:0);
+    let score=(nameMatch?2:0)+(amtMatch?1:0);
+    if(leaseDebt && g.isLease) score+=2;      // (a) een herkende lease-termijn hoort bij een financial-lease-schuld
+    if(cls==='expense') score+=0.5;           // (b) een aflossing is eerder een echte betaling dan een interne overboeking
     if(!best||score>best.score) best={cls,score,amtMatch,nameMatch,m};
   }
   if(!best) return {status:'niet-gevonden'};
