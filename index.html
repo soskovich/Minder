@@ -3575,6 +3575,37 @@ function debtInExpenses(d){
   const status=best.cls==='expense'?'in-uitgaven':(best.cls==='intern'?'intern':'buiten-uitgaven');
   return {status,conf,bedrag:Math.round(best.m)};
 }
+/* ----- Terugkerende auto-lease: aanbod om te koppelen aan een financial-lease-schuld -----
+ * Puur detectie + aanbod. Categorisering, netWorth en debtInExpenses blijven ongemoeid: zonder
+ * koppeling blijft de lease gewoon een vervoer-uitgave. Na koppeling doet het bestaande
+ * financial-lease-mechanisme (aflossing + auto als bezitting) zijn werk. */
+const LEASE_RX=/HILTERMANN|LEASECONTRACT|PRIVATE ?LEASE|\bLEASE/i;
+function leaseLinkOffer(t){
+  if(!t || !(t.amount<0) || t.pending) return null;
+  if(!LEASE_RX.test((t.name||'')+' '+(t.desc||''))) return null;
+  if(!isFixed(t)) return null;                                   // alleen een herkende, terugkerende betaling
+  const key=recurKey(t); if(!key) return null;
+  if((SET.leaseLinkOff||{})[key]) return null;                   // afgewezen: niet blijven vragen
+  for(const d of (SET.debts||[])){                               // al gekoppeld? dan zwijgen we
+    if(d.type!=='financiallease') continue;
+    const dn=recurKey({name:d.naam||''});
+    if(dn && (dn.indexOf(key)>=0 || key.indexOf(dn)>=0)) return null;
+    const per=+d.perMaand||0;
+    if(per>0 && Math.abs(per-Math.abs(t.amount))<=Math.max(per*0.12,15)) return null;
+  }
+  let per=Math.round(Math.abs(t.amount));                        // maandbedrag uit het schema, niet deze ene termijn
+  try{ const s=recurringSchedule().find(x=>x.key===key && x.type==='fixed'); if(s&&s.amount>0) per=Math.round(s.amount); }catch(_){}
+  return {key, txId:t.id, naam:titleCase(cleanMerch(t.name)||t.name||'Lease'), per};
+}
+function leaseLinkStart(txId){
+  const t=TX.find(x=>x.id===txId); const o=t?leaseLinkOffer(t):null; if(!o) return;
+  openDebt(null,{naam:o.naam, perMaand:o.per, type:'financiallease'});   // bestaande invoer, voorgevuld
+}
+function leaseLinkDismiss(txId){
+  const t=TX.find(x=>x.id===txId); const o=t?leaseLinkOffer(t):null; if(!o) return;
+  SET.leaseLinkOff=SET.leaseLinkOff||{}; SET.leaseLinkOff[o.key]=1; save();
+  openSheet(txId);                                               // aanbod weg, de rest van de sheet blijft staan
+}
 function renderDebts(){
   const ds=SET.debts||[];
   const _now=new Date();
@@ -3620,8 +3651,9 @@ function renderDebts(){
   </div>`;
 }
 function toggleVerm(k){ SET[k]=(SET[k]!==true); save(); renderVermogen(); }
-function openDebt(id){
-  const ds=SET.debts||[]; const d0=id?ds.find(x=>x.id===id):null; const isNew=!d0; const d=d0||{naam:'',start:'',rest:'',perMaand:'',rente:''};
+function openDebt(id,pre){
+  const ds=SET.debts||[]; const d0=id?ds.find(x=>x.id===id):null; const isNew=!d0;
+  const d=d0||Object.assign({naam:'',start:'',rest:'',perMaand:'',rente:''},pre||{});   // pre = voorgevuld (bv. vanuit het lease-aanbod)
   const dtype=d.type || (/duo|studie/i.test(d.naam||'')?'studie':(/lease/i.test(d.naam||'')?'financiallease':'lening'));
   const rest=Math.max(+d.rest||0,0), per=+d.perMaand||0, jr=+d.rente||0; const baseM=payoffMonths(rest,per,jr); const expR=expectedReturnPct();
   const opt=(vv,l)=>`<option value="${vv}"${dtype===vv?' selected':''}>${l}</option>`;
@@ -6283,7 +6315,34 @@ function dayHeader(ds,withMonth){
   return lang;
 }
 
-function txOutlier(t,catAvg){ const c=CATS[catOf(t)]; if(!(t.amount<0&&c.type==='expense')) return false; const a=catAvg[catOf(t)]; return a && (-t.amount)>Math.max(a*2.2,60) && (-t.amount)>=40; }
+/* Eigen historie per winkel (laatste 12 maanden), op dezelfde sleutel als de terugkerend-detectie
+   (recurKey), zodat elke lease-/huurtermijn als één winkel telt. Licht gememoïseerd op _dataGen. */
+let _merchStats=null,_merchStatsGen=-1;
+function merchHistory(){
+  if(_merchStatsGen===_dataGen && _merchStats) return _merchStats;
+  const win=new Set(months().slice(-12)); const by={};
+  for(const t of TX){ if(t.pending||!(t.amount<0)) continue;
+    if(!win.has(t.date.slice(0,7))) continue;
+    const k=catOf(t); if(!CATS[k]||CATS[k].type!=='expense') continue;
+    const mk=recurKey(t); if(!mk) continue;
+    (by[mk]=by[mk]||[]).push(-t.amount);
+  }
+  const out={};
+  for(const mk in by){ const s=by[mk].sort((a,b)=>a-b), n=s.length; out[mk]={n, med:n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2}; }
+  _merchStats=out; _merchStatsGen=_dataGen; return out;
+}
+/* "Ongewoon" = afwijkend van wat jij normaal doet. Twee temperingen op de oude categorie-toets:
+   een herkende vaste last is per definitie niet ongewoon, en wie eigen historie bij dezelfde winkel
+   heeft wordt daartegen gemeten — een maandelijkse lease valt dan niet meer op tussen kleine ritjes. */
+function txOutlier(t,catAvg){
+  const c=CATS[catOf(t)]; if(!(t.amount<0&&c.type==='expense')) return false;
+  const bedrag=-t.amount; if(bedrag<40) return false;
+  if(isFixed(t)) return false;                                    // herkende herhaling (incasso/periodieke overboeking)
+  const m=merchHistory()[recurKey(t)];
+  if(m && m.n>=3 && m.med>0) return bedrag>Math.max(m.med*1.8,60);  // eigen mediaan van deze winkel
+  const a=catAvg[catOf(t)];                                        // te weinig eigen historie: categorie-toets zoals voorheen
+  return !!a && bedrag>Math.max(a*2.2,60);
+}
 
 function toggleTxSearch(){ window._txSearchOpen=!window._txSearchOpen; if(!window._txSearchOpen) txSearch=''; renderTx(); }
 
@@ -7469,6 +7528,17 @@ function openLoan(id){
     <div style="height:8px"></div>`;
   showSheetBg();
 }
+// Zacht aanbod bij een herkende, terugkerende lease-betaling: wegklikbaar, en na afwijzen weg.
+function leaseBlokHTML(t){
+  const o=leaseLinkOffer(t); if(!o) return '';
+  return `<div class="card" id="leaseOffer" style="margin:10px 0 6px;padding:12px 13px;border-color:color-mix(in srgb,var(--accent) 35%,transparent)">
+    <div class="small" style="font-weight:700;color:var(--teal)">Dit lijkt een auto-lease</div>
+    <div class="small muted" style="margin-top:4px">Koppel je 'm als financial lease, dan telt een deel van de <b style="color:var(--txt)">${euro0(o.per)}</b> per maand als <b style="color:var(--txt)">aflossing</b> en telt je auto als bezitting mee in je netto vermogen. Doe je niets, dan blijft het gewoon een vervoer-uitgave.</div>
+    <div class="row" style="margin-top:9px;gap:14px">
+      <span class="small" id="leaseLinkGo" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="leaseLinkStart('${t.id}')">Koppelen ›</span>
+      <span class="small" id="leaseLinkNo" style="color:var(--mut2);cursor:pointer" onclick="leaseLinkDismiss('${t.id}')">Niet nu</span>
+    </div></div>`;
+}
 function openSheet(id){
   const t=TX.find(x=>x.id===id); if(!t)return;
   window._setSheet=null;
@@ -7481,7 +7551,7 @@ function openSheet(id){
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
-    ${loanBlokHTML(t)}
+    ${loanBlokHTML(t)}${leaseBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
     <div class="catgrid">${Object.entries(CATS).map(([k,c])=>`
       <div class="catpick ${cur===k?'on':''}" onclick="setCat('${id}','${k}')">
