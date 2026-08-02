@@ -146,8 +146,11 @@ test.describe('d · dubbele widgets zijn weg uit Inzichten', () => {
     const ins = await page.locator('#s-ins').innerText();
     expect(ins).not.toMatch(/hoe gezond is jouw verdeling/i);
     expect(ins).not.toMatch(/waar gaat je geld heen/i);
-    expect(ins).not.toMatch(/50\/30\/20/);
+    expect(ins).not.toMatch(/tik een balkdeel/i);          // het verdeling-blok zelf, niet de norm-naam
+    expect(ins).not.toMatch(/wat betekent 50\/30\/20/i);
     expect(ins).not.toMatch(/bekijk meer/i);
+    // v84: "50/30/20" mag hier wél staan als naam van de actieve referentie-verdeling
+    expect(ins).toMatch(/gemeten tegen: 50\/30\/20/i);
     // wat blijft
     expect(ins).toMatch(/kerncijfers/i);
     expect(ins).toMatch(/uitgaven vs budget/i);

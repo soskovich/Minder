@@ -6655,22 +6655,217 @@ function catSparkline(k){
         labels:last.map(mm=>MNAMES[+mm.slice(5,7)-1]), highlight:last.indexOf(curM)});
 }
 
-// 50/30/20: standaard ingeklapt achter "wat betekent dit?", introduceert anders een extra %-basis (% van inkomen)
-// "Hoe gezond is jouw verdeling?", jouw werkelijke verdeling afgezet tegen 50/30/20 (meten is weten).
-function healthSplit(){
+/* ============================================================
+   REFERENTIE-VERDELING · waartegen meet je je verdeling?
+   50/30/20 is een ijkpunt, geen wet. Je kiest zelf het kader, neemt een voorstel uit je
+   eigen historie over, of zet je eigen percentages. Alle banden (kerncijfers bespaarquote/
+   vaste-lasten-druk en "Hoe gezond is jouw verdeling?") wijzen naar splitTarget().
+   De rekenbronnen (healthSplit/splitFixedVar/totals/monthAgg) blijven onaangeroerd —
+   alleen de norm waar tegenaan gemeten wordt, is nu van jou.
+   ============================================================ */
+const SPLIT_FRAMES={
+  '503020':   {naam:'50/30/20',              sub:'De algemene vuistregel · een goede start',   t:{fixed:50,vari:30,save:20}},
+  '60':       {naam:'60%-oplossing',         sub:'Vaste verplichtingen als één blok sturen',   t:{fixed:60,vari:25,save:15}},
+  'payfirst': {naam:'Pay-yourself-first',    sub:'Sparen eerst · vast blijft je werkelijke',   t:null},
+  'fire':     {naam:'Aggressief · FIRE',     sub:'Hoog spaardoel, ver vooruit',                t:{fixed:50,vari:20,save:30}},
+  'ophistorie':{naam:'Op maat · uit jouw data', sub:'Eén haalbare stap vanaf waar je nu staat', t:null},
+  'custom':   {naam:'Zelf instellen',        sub:'Je eigen percentages',                       t:null}
+};
+// Een norm telt altijd tot 100%: wat je intikt wordt geschaald, niet afgekeurd.
+function splitNorm(o){
+  let f=Math.max(+((o||{}).fixed)||0,0), v=Math.max(+((o||{}).vari)||0,0), s=Math.max(+((o||{}).save)||0,0);
+  const som=f+v+s;
+  if(!(som>0)) return {fixed:50,vari:30,save:20};
+  if(Math.round(som)!==100){ f=f/som*100; v=v/som*100; s=s/som*100; }
+  f=Math.round(f); s=Math.round(s);
+  return {fixed:f, vari:Math.max(100-f-s,0), save:s};
+}
+function splitMode(){ return SPLIT_FRAMES[SET.splitMode]?SET.splitMode:'503020'; }
+// Pay-yourself-first: sparen staat vast (20%), je vaste lasten zijn wat ze zijn, de rest is vrij.
+function payfirstTarget(){
+  const save=20; let fix=50;
+  try{ const A=splitActual(6); if(A&&A.inc>0) fix=Math.min(Math.max(A.fixP,0),100-save); }catch(_){}
+  return {fixed:fix, vari:Math.max(100-fix-save,0), save};
+}
+function frameTarget(k){
+  if(k==='payfirst') return payfirstTarget();
+  if(k==='ophistorie'){ const V=splitVoorstel(); return V?V.target:(SET.splitMode==='ophistorie'?splitNorm(SET.splitTarget):null); }
+  if(k==='custom') return splitNorm(SET.splitTarget);
+  return splitNorm((SPLIT_FRAMES[k]||SPLIT_FRAMES['503020']).t);
+}
+let _stCache=null,_stKey='';
+function splitTarget(){
+  const mode=splitMode();
+  const key=_dataGen+'|'+mode+'|'+JSON.stringify(SET.splitTarget||null);
+  if(_stCache && _stKey===key) return _stCache;
+  const F=SPLIT_FRAMES[mode];
+  const t=(mode==='ophistorie'||mode==='custom')?splitNorm(SET.splitTarget):frameTarget(mode);
+  _stCache=Object.assign(t,{mode, naam:F.naam, label:`${t.fixed}/${t.vari}/${t.save}`}); _stKey=key;
+  return _stCache;
+}
+// De werkelijke verdeling over een reeks maanden. Dezelfde bronnen als healthSplit (monthAgg +
+// savedThisMonth); alleen het venster verschilt, zodat de norm-laag niets herrekent.
+function healthSplitOver(ms){
   let inc=0,fixed=0,vari=0,naarSpaar=0;
   const hasSav=(typeof n26SavingsAccounts==='function') && n26SavingsAccounts().length>0;
-  for(const m of periodMonths()){ const a=monthAgg(m); inc+=a.income; fixed+=a.fixed; vari+=a.vari;
+  for(const m of ms){ const a=monthAgg(m); inc+=a.income; fixed+=a.fixed; vari+=a.vari;
     if(hasSav){ naarSpaar+=savedThisMonth(m); }                                                 // sparen = instroom op je spaarrekening (zelfde bron als 'veilig te besteden')
     else { for(const t of txOfMonth(m)){ if(t.amount<0 && catOf(t)==='sparen') naarSpaar+=-t.amount; } } }  // geen spaarrekening gemarkeerd: val terug op de categorie
+  return {inc,fixed,vari,naarSpaar};
+}
+// Je werkelijke verdeling over de laatste n AFGERONDE maanden: de lopende maand is per definitie
+// half en zou zowel je uitgaven als je spaarquote vertekenen.
+function splitActual(n){
+  const ym=nowYMstr();
+  const ms=months().filter(m=>m<ym).slice(-(n||6));
+  if(!ms.length) return null;
+  const H=healthSplitOver(ms);
+  if(!(H.inc>0)) return {ms, n:ms.length, inc:0};
+  const ns=Math.max(H.naarSpaar,0);
+  return {ms, n:ms.length, inc:H.inc, fixed:H.fixed, vari:H.vari, naarSpaar:ns, incM:H.inc/ms.length,
+          fixP:Math.round(H.fixed/H.inc*100), varP:Math.round(H.vari/H.inc*100), savP:Math.round(ns/H.inc*100)};
+}
+/* Op maat: één haalbare stap vanaf waar je nu staat, geen ideaalplaatje.
+   - vaste lasten laten we staan (kort termijn stuur je daar weinig aan; wel een zachte vlag boven 55%)
+   - de hefboom is vrij -> sparen, met een stap uit je aantoonbare bezuinigingsruimte (2-5 procentpunt)
+   - nooit lager dan wat je nu al spaart, en begrensd op 20% (25% als je daar al boven zit) */
+function splitVoorstel(){
+  const A=splitActual(6);
+  if(!A || A.n<3 || !(A.inc>0)) return null;               // <3 afgeronde maanden: nog niet voorstellen
+  const incM=A.incM;
+  let ruimtePct=0; try{ const c=noodfondsModel().comfortTot||0; if(incM>0) ruimtePct=c/incM*100; }catch(_){}
+  const stap=Math.max(2,Math.min(5,Math.round(ruimtePct/4)));   // een kwart van je bezuinigingsruimte, begrensd
+  const cap=A.savP>=20?25:20;
+  const ruimteVrij=Math.max(100-A.fixP-A.savP,0);               // meer dan er 'vrij' is, kan niet
+  const save=Math.max(A.savP, Math.min(A.savP+stap, cap, A.savP+ruimteVrij));
+  const fixed=A.fixP, vari=Math.max(100-fixed-save,0);
+  const deltaP=Math.max(save-A.savP,0);
+  const extra=Math.round(incM*deltaP/100);
+  const varShift=A.varP>0?Math.round(deltaP/A.varP*100):0;      // ~x% van je vrije uitgaven verschuiven
+  let effect=null; try{ if(extra>0) effect=tipEffect(extra); }catch(_){}
+  return {nu:{fixed:A.fixP,vari:A.varP,save:A.savP}, target:{fixed,vari,save}, n:A.n,
+          incM:Math.round(incM), extra, deltaP, varShift, stap, effect,
+          hoogVast:A.fixP>55, boven100:(A.fixP+A.varP)>100, geenRuimte:deltaP<=0};
+}
+
+/* ---- Norm-keuze (Instellingen ▸ Referentie-verdeling, en vanuit de Kerncijfers) ---- */
+function splitBar(t,h){
+  const w=v=>Math.max(Math.min(+v||0,100),0);
+  return `<div style="height:${h||9}px;border-radius:5px;overflow:hidden;display:flex;background:var(--card2)">
+    <div style="width:${w(t.fixed)}%;background:var(--blue)"></div><div style="width:${w(t.vari)}%;background:var(--amber)"></div><div style="width:${w(t.save)}%;background:var(--teal)"></div></div>`;
+}
+const splitLabel=t=>`vast ${t.fixed}% · vrij ${t.vari}% · sparen ${t.save}%`;
+// je werkelijke verdeling telt vaak niet tot 100: wat je niet uitgeeft en niet overmaakt naar je
+// spaarrekening blijft gewoon staan. Dat benoemen we, anders lijkt de norm-balk iets te beloven.
+const splitRest=a=>Math.max(100-a.fixed-a.vari-a.save,0);
+const splitNuLabel=a=>`${splitLabel(a)}${splitRest(a)>=1?` · rest ${splitRest(a)}% blijft staan`:''}`;
+// altijd zichtbaar waar tegenaan gemeten wordt — en in één tik aan te passen
+function splitNormLine(){
+  const T=splitTarget();
+  return `<div class="small" id="splitNormLine" style="color:var(--mut2);font-size:11px;margin-top:6px">Gemeten tegen: ${T.naam}${T.naam===T.label?'':` · ${T.label}`} — een ijkpunt, geen wet.
+    <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openSplitNorm()">aanpassen ›</span></div>`;
+}
+function openSplitNorm(){ window._budgetSheet=null; window._nfSheet=null; openSet('norm'); }
+function setSplitMode(k){
+  const F=SPLIT_FRAMES[k]; if(!F) return;
+  if(k==='custom') SET.splitTarget=splitNorm(SET.splitTarget||splitTarget());
+  if(k==='ophistorie'){ const V=splitVoorstel(); if(!V) return; SET.splitTarget=Object.assign({},V.target); }
+  SET.splitMode=k; save(); render();
+  toast(`${ICON('check')} Je norm: ${splitTarget().label}`);
+}
+function splitVoorstelAanpassen(){
+  const V=splitVoorstel();
+  SET.splitTarget=V?Object.assign({},V.target):splitNorm(SET.splitTarget||splitTarget());
+  SET.splitMode='custom'; save(); render();
+}
+// tijdens het typen alleen de som-regel en de balk bijwerken: de invoervelden zelf blijven staan
+function setSplitCustomVal(k,v){
+  const cur=Object.assign({fixed:50,vari:30,save:20},SET.splitTarget||{});
+  cur[k]=Math.max(0,Math.min(100,Math.round(+v||0)));
+  SET.splitTarget=cur; SET.splitMode='custom'; save();
+  const raw=cur, som=Math.round((+raw.fixed||0)+(+raw.vari||0)+(+raw.save||0)), N=splitNorm(raw);
+  const s=document.getElementById('splitCustomSom'); if(s) s.textContent=som===100?'Samen 100%.':`Samen ${som}% · we rekenen met ${N.fixed}/${N.vari}/${N.save}.`;
+  const b=document.getElementById('splitCustomBar'); if(b) b.innerHTML=splitBar(N);
+  try{ renderIns(); if(SET.setOpen!=='norm') renderSet(); }catch(_){}   // banden volgen meteen; de invoer blijft staan
+}
+function splitKaart(k){
+  const F=SPLIT_FRAMES[k], t=frameTarget(k), on=splitMode()===k;
+  if(!t) return '';
+  return `<div onclick="setSplitMode('${k}')" data-split="${k}" style="cursor:pointer;border:1.5px solid ${on?'var(--accent)':'var(--line)'};border-radius:var(--r-inner);padding:10px 11px;margin-bottom:9px;background:${on?'color-mix(in srgb,var(--accent) 7%,transparent)':'transparent'}">
+    <div class="row" style="align-items:flex-start">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">${F.naam}</div><div class="small muted">${F.sub}</div></div>
+      <span class="small" style="color:${on?'var(--accent)':'var(--mut2)'};font-weight:700;white-space:nowrap">${on?'actief':'kiezen ›'}</span>
+    </div>
+    <div style="margin-top:8px">${splitBar(t)}</div>
+    <div class="small" style="color:var(--mut2);margin-top:5px">${splitLabel(t)}</div>
+  </div>`;
+}
+/* Het op-maat-voorstel: meet-me-where-you-are. Vaste lasten blijven staan, de stap zit in
+   vrij -> sparen, in euro's en gekoppeld aan je spaardoel. Geen oordeel, geen dwang. */
+function splitVoorstelBlok(){
+  const F=SPLIT_FRAMES['ophistorie'], V=splitVoorstel(), on=splitMode()==='ophistorie', zacht=isMode('rustig');
+  const schil=body=>`<div data-split="ophistorie" style="border:1.5px solid ${on?'var(--accent)':'var(--line)'};border-radius:var(--r-inner);padding:10px 11px;margin-bottom:9px;background:${on?'color-mix(in srgb,var(--accent) 7%,transparent)':'transparent'}">
+    <div class="row" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">${F.naam}</div><div class="small muted">${F.sub}</div></div>
+    ${on?'<span class="small" style="color:var(--accent);font-weight:700">actief</span>':''}</div>${body}</div>`;
+  if(!V) return schil(`<div class="small muted" style="margin-top:7px" id="splitVoorstelLeeg">Na drie afgeronde maanden stelt Minder een norm voor uit je eigen cijfers. Tot dan meet je tegen 50/30/20 — een ijkpunt, geen wet.</div>`);
+  const T=V.target, N=V.nu;
+  const eff=(V.effect&&V.effect.eerder>=1)?`<div class="small" style="color:var(--teal);margin-top:5px">${V.effect.vergelijk||V.effect.txt}</div>`:'';
+  const vlag=(V.hoogVast&&!zacht)?`<div class="small muted" style="margin-top:5px">Je vaste lasten zijn met ${N.fixed}% aan de hoge kant. Op korte termijn verander je daar weinig aan; op lange termijn is dat wél de grootste knop.</div>`:'';
+  // eerlijk als er meer uitging dan er binnenkwam: dan is er niets te verschuiven, en dat zeggen we
+  const over=V.boven100?`<div class="small muted" style="margin-top:5px">Je vaste lasten en vrije uitgaven waren samen hoger dan je inkomen. Dat laten we staan zoals het is — een norm verandert daar niets aan.</div>`:'';
+  const kern=V.geenRuimte
+    ? `Je zet al ${N.save}% opzij. Het voorstel houdt dat vast — we duwen niet.`
+    : `Je vaste lasten liggen grotendeels vast (${N.fixed}%), dus daar sturen we niet op. De haalbare stap zit in <b>vrij → sparen</b>: ${V.varShift>0?`~${V.varShift}% van je vrije uitgaven verschuiven = `:''}<b>+${euro0(V.extra)}/mnd</b> sparen.${zacht?'':' Realistisch, niet het boekje.'}`;
+  return schil(`
+    <div class="small muted" style="margin-top:7px">Voorstel op basis van je laatste ${V.n} ${V.n===1?'maand':'maanden'}</div>
+    <div class="small" style="color:var(--mut2);margin-top:4px">Nu · ${splitNuLabel(N)}</div>
+    <div style="margin-top:6px">${splitBar(T)}</div>
+    <div class="small" style="margin-top:5px"><b>Voorgesteld doel</b> · ${splitLabel(T)}</div>
+    ${T.vari>N.vari+5?`<div class="small" style="color:var(--mut2);margin-top:3px">"Vrij" is wat er ná vast en sparen overblijft — een bovengrens, geen aansporing om meer uit te geven.</div>`:''}
+    <div class="small" style="margin-top:7px" id="splitVoorstelKern">${kern}</div>${eff}${vlag}${over}
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn" style="flex:2;padding:11px" onclick="setSplitMode('ophistorie')">Gebruik dit als mijn norm</button>
+      <button class="btn sec" style="flex:1;padding:11px" onclick="splitVoorstelAanpassen()">Aanpassen</button></div>`);
+}
+function splitCustomBlok(){
+  const F=SPLIT_FRAMES['custom'], on=splitMode()==='custom';
+  if(!on) return splitKaart('custom');
+  const raw=Object.assign({fixed:50,vari:30,save:20},SET.splitTarget||{});
+  const som=Math.round((+raw.fixed||0)+(+raw.vari||0)+(+raw.save||0)), N=splitNorm(raw);
+  const veld=(k,l)=>`<div style="flex:1;min-width:86px"><label class="fld" style="margin:0 0 3px">${l}</label>
+    <input type="number" min="0" max="100" step="1" id="splitCustom-${k}" value="${Math.round(+raw[k]||0)}" oninput="setSplitCustomVal('${k}',this.value)"></div>`;
+  return `<div data-split="custom" style="border:1.5px solid var(--accent);border-radius:var(--r-inner);padding:10px 11px;margin-bottom:9px;background:color-mix(in srgb,var(--accent) 7%,transparent)">
+    <div class="row" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">${F.naam}</div><div class="small muted">${F.sub}</div></div>
+      <span class="small" style="color:var(--accent);font-weight:700">actief</span></div>
+    <div style="display:flex;gap:8px;margin-top:9px">${veld('fixed','Vast %')}${veld('vari','Vrij %')}${veld('save','Sparen %')}</div>
+    <div class="small" style="color:var(--mut2);margin-top:6px" id="splitCustomSom">${som===100?'Samen 100%.':`Samen ${som}% · we rekenen met ${N.fixed}/${N.vari}/${N.save}.`}</div>
+    <div style="margin-top:8px" id="splitCustomBar">${splitBar(N)}</div></div>`;
+}
+function setSplitNorm(){
+  const A=splitActual(6);
+  const nu=(A&&A.inc>0)
+    ? `<div class="small muted" style="margin-bottom:10px" id="splitNu">Nu · ${splitNuLabel({fixed:A.fixP,vari:A.varP,save:A.savP})} <span style="color:var(--mut2)">(je laatste ${A.n} ${A.n===1?'maand':'maanden'})</span></div>`
+    : `<div class="small muted" style="margin-bottom:10px" id="splitNu">Nog te weinig historie om je eigen verdeling te tonen. De norm hieronder is een ijkpunt, geen oordeel.</div>`;
+  return `<div class="small muted" style="margin-bottom:8px">Waartegen meet je je verdeling? Je kerncijfers (bespaarquote, vaste-lasten-druk) meten tegen de norm die je hier kiest. Een ijkpunt, geen wet — je verandert er geen cent mee.</div>
+    ${nu}
+    ${splitKaart('503020')}${splitKaart('60')}${splitKaart('payfirst')}${splitKaart('fire')}
+    ${splitVoorstelBlok()}
+    ${splitCustomBlok()}`;
+}
+
+// "Hoe gezond is jouw verdeling?", jouw werkelijke verdeling afgezet tegen je gekozen norm (meten is weten).
+function healthSplit(){
+  const H=healthSplitOver(periodMonths());
+  let inc=H.inc;
   if(inc<=0 && SET.autoIncome) inc=baseIncome();   // lopende maand zonder salaris: val terug op je basisinkomen
-  return {inc,fixed,vari,net:inc-fixed-vari,naarSpaar};
+  return {inc,fixed:H.fixed,vari:H.vari,net:inc-H.fixed-H.vari,naarSpaar:H.naarSpaar};
 }
 function ruleOfThumbCard(){
-  const H=healthSplit();
+  const H=healthSplit(), T=splitTarget();
   if(H.inc<=0){
+    // inkomen onbekend: geen norm forceren, we weten de basis niet waarop we zouden meten
     return `<div class="card"><div class="row" style="cursor:pointer" onclick="go('set')">
-      <span class="small muted" style="flex:1">${ICON('info')} Stel je inkomen in om je verdeling te meten tegen 50/30/20.</span>
+      <span class="small muted" style="flex:1">${ICON('info')} Stel je inkomen in om je verdeling te meten tegen je norm.</span>
       <span class="small muted">›</span></div></div>`;
   }
   const ns=Math.max(H.naarSpaar||0,0);   // Sparen = instroom op je spaarrekening deze periode
@@ -6680,13 +6875,15 @@ function ruleOfThumbCard(){
   const wV=Math.round(H.fixed/den*100), wR=Math.round(H.vari/den*100), wS=Math.round(ns/den*100);
   const wRest=Math.max(100-wV-wR-wS,0);
   let dotc,head,statusLbl,statusCls;
-  if(overspend){ dotc='var(--red)'; statusCls='bad'; statusLbl='Let op'; head=`<b>Je gaf deze periode meer uit dan er binnenkwam.</b> Vaste lasten en vrije uitgaven samen (${euro0(consumed)}) zijn hoger dan je inkomen.${ns>0?' Wat je opzij zette, kwam dus uit je buffer.':''}`; }
+  // de drempels volgen je norm: een kleine marge eromheen, zodat 1-2 punten geen oordeel worden
+  const zacht=isMode('rustig');
+  if(overspend){ dotc=zacht?'var(--amber)':'var(--red)'; statusCls=zacht?'no':'bad'; statusLbl='Let op'; head=`<b>Je gaf deze periode meer uit dan er binnenkwam.</b> Vaste lasten en vrije uitgaven samen (${euro0(consumed)}) zijn hoger dan je inkomen.${ns>0?' Wat je opzij zette, kwam dus uit je buffer.':''}`; }
   else {
     const iss=[];
-    if(pVast>55) iss.push(`je vaste lasten zijn aan de hoge kant (${pVast}%)`);
-    if(pVrij>35) iss.push(`je geeft relatief veel vrij uit (${pVrij}%)`);
-    if(pSpar<18) iss.push(ns>0?`je zette ${pSpar}% opzij, onder de richtlijn van 20%`:'je zette deze periode niets opzij');
-    if(!iss.length){ dotc='var(--green)'; statusCls='ok'; statusLbl='Gezond'; head=`<b>Gezonde verdeling.</b> Je zit mooi rond 50/30/20, vaste lasten ${pVast}%, vrij ${pVrij}%, sparen ${pSpar}%.`; }
+    if(pVast>T.fixed+5) iss.push(`je vaste lasten liggen boven je norm van ${T.fixed}% (${pVast}%)`);
+    if(pVrij>T.vari+5) iss.push(`je geeft relatief veel vrij uit (${pVrij}%, je norm is ${T.vari}%)`);
+    if(pSpar<T.save-2) iss.push(ns>0?`je zette ${pSpar}% opzij, onder je spaarnorm van ${T.save}%`:'je zette deze periode niets opzij');
+    if(!iss.length){ dotc='var(--green)'; statusCls='ok'; statusLbl='Gezond'; head=`<b>Gezonde verdeling.</b> Je zit mooi rond je norm ${T.label}, vaste lasten ${pVast}%, vrij ${pVrij}%, sparen ${pSpar}%.`; }
     else { dotc='var(--amber)'; statusCls='no'; statusLbl='Bijna op schema'; const cap=iss[0].charAt(0).toUpperCase()+iss[0].slice(1); head=`<b>Bijna op schema.</b> ${[cap,...iss.slice(1)].join(', ')}.`; }
   }
   window._fvTx=periodTx();   // drill-down gebruikt exact deze periode
@@ -6701,41 +6898,20 @@ function ruleOfThumbCard(){
         <div style="width:${wV}%;background:var(--blue)"></div><div style="width:${wR}%;background:var(--amber)"></div><div style="width:${wS}%;background:var(--teal)"></div></div></div>`;
   }
   const aFix="openFixedVarDrill('fixed')", aVar="openFixedVarDrill('var')", aSpar=(ns>0?'openSavingsFlowDrill()':'');
+  // doellijn = jouw norm, op de schaal van de balk (die loopt over `den`, niet altijd over je inkomen)
+  const nx=p=>Math.min(Math.max(p/100*H.inc/den*100,0),100);
+  const mark=(p,lbl)=>`<div style="position:absolute;top:0;left:${nx(p).toFixed(1)}%;width:2px;height:100%;background:repeating-linear-gradient(var(--txt) 0 3px,transparent 3px 6px);opacity:.55" title="${lbl}"></div>`;
   const seg=(w,c,p,act)=>`<div style="width:${w}%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--on-accent);background:${c}${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}>${(w>=12&&p!=null)?p+'%':''}</div>`;
   const leg=(c,nm,p,act)=>`<div style="display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:5px 9px;font-size:12px${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}><span style="width:8px;height:8px;border-radius:50%;background:${c}"></span>${nm} <b>${p}%</b>${act?'<span style="color:var(--teal);font-weight:700">›</span>':''}</div>`;
   return `<div class="card">${header}
     <div style="font-size:13px;margin:11px 0 11px">${head}</div>
     <div style="position:relative;height:30px;border-radius:8px;overflow:hidden;display:flex;background:var(--card2)">
-      ${seg(wV,'var(--blue)',pVast,aFix)}${seg(wR,'var(--amber)',pVrij,aVar)}${seg(wS,'var(--teal)',pSpar,aSpar)}${wRest>=1?`<div style="width:${wRest}%;height:100%;background:var(--card2)"></div>`:''}</div>
-    <div style="color:var(--mut2);text-align:center;margin-top:7px;font-size:11px">tik een balkdeel voor de transacties</div>
+      ${seg(wV,'var(--blue)',pVast,aFix)}${seg(wR,'var(--amber)',pVrij,aVar)}${seg(wS,'var(--teal)',pSpar,aSpar)}${wRest>=1?`<div style="width:${wRest}%;height:100%;background:var(--card2)"></div>`:''}
+      ${mark(T.fixed,`je norm: vast ${T.fixed}%`)}${mark(T.fixed+T.vari,`je norm: vrij tot ${T.fixed+T.vari}%`)}</div>
+    <div style="color:var(--mut2);text-align:center;margin-top:7px;font-size:11px">tik een balkdeel voor de transacties · de stippellijnen zijn je norm</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:11px">${leg('var(--blue)','Vast',pVast,aFix)}${leg('var(--amber)','Vrij',pVrij,aVar)}${leg('var(--teal)','Sparen',pSpar,aSpar)}</div>
-    <div class="small muted" style="font-size:11px;margin-top:11px">Richtlijn 50/30/20 van je inkomen (${euro0(H.inc)}) · een ijkpunt, geen wet. Sparen = wat er naar je spaarrekening ging.</div>
-  </div>`;
-  const rowHtml=rows.map(([nm,ic,c,val,p,tgt,j,act])=>`
-    <div class="row" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)${act?';cursor:pointer':''}" ${act?`onclick="${act}"`:''}>
-      <span style="width:26px;height:26px;border-radius:7px;background:${c}22;color:${c};display:flex;align-items:center;justify-content:center;flex-shrink:0">${ic}</span>
-      <div style="flex:1"><div style="font-size:13.5px;font-weight:600">${nm}</div><div class="small muted">${euro0(val)} · richtlijn ${tgt}${act?' · tik voor transacties':''}</div></div>
-      <div style="font-weight:700;font-size:13.5px;min-width:38px;text-align:right">${p}%</div>
-      <span class="bchip ${j[0]}">${j[1]}</span>${act?'<span style="color:var(--teal);font-weight:700;margin-left:2px">›</span>':'<span style="width:8px"></span>'}
-    </div>`).join('');
-  const open=!!SET.show503020;
-  return `<div class="card">
-    <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">Hoe gezond is jouw verdeling?</span></div>
-    <div class="row" style="gap:9px;align-items:flex-start;margin:10px 0 14px"><span style="width:10px;height:10px;border-radius:50%;background:${dotc};margin-top:5px;flex-shrink:0"></span><span style="font-size:13.5px">${head}</span></div>
-    <div style="position:relative;height:30px;border-radius:8px;overflow:hidden;display:flex;background:var(--card2)">
-      ${seg(wV,'var(--blue)',pVast)}${seg(wR,'var(--amber)',pVrij)}${seg(wS,'var(--teal)',pSpar)}${wRest>=1?`<div style="width:${wRest}%;height:100%;background:var(--card2)"></div>`:''}
-      <div style="position:absolute;top:0;left:50%;width:2px;height:100%;background:repeating-linear-gradient(#fff 0 3px,transparent 3px 6px);opacity:.6"></div>
-      <div style="position:absolute;top:0;left:80%;width:2px;height:100%;background:repeating-linear-gradient(#fff 0 3px,transparent 3px 6px);opacity:.6"></div>
-    </div>
-    <div style="position:relative;height:15px;margin-top:3px;font-size:9.5px;color:var(--mut2)">
-      <span style="position:absolute;left:50%;transform:translateX(-50%)">richtlijn 50%</span>
-      <span style="position:absolute;left:80%;transform:translateX(-50%)">80%</span></div>
-    <div style="margin-top:12px">${rowHtml}</div>
-    <div class="small muted" style="font-size:11px;margin-top:10px">Richtlijn 50/30/20 van je inkomen (${euro0(H.inc)}) · een ijkpunt, geen wet.</div>
-    <div class="small muted" style="font-size:11px;margin-top:4px">${(function(){let t = ns>0?`Sparen telt het geld dat je deze periode naar je spaarrekening of beleggingen overmaakte (${euro0(ns)}).`:'Sparen telt het geld dat je naar je spaarrekening of beleggingen overmaakt. Deze periode was dat \u20ac0.';if(rest>=20) t+=` Daarnaast bleef ongeveer ${euro0(rest)} op je rekening staan, dat kun je eventueel ook opzij zetten.`;else if(rest<=-20) t+=' Samen met je uitgaven zette je meer in dan er binnenkwam, het verschil kwam uit je buffer.';return t+' Je totale spaarsaldo staat bij Vermogen.';})()}</div>
-    <div class="row" style="cursor:pointer;margin-top:11px;padding-top:11px;border-top:1px solid var(--line)" onclick="toggle503020()">
-      <span class="small muted" style="flex:1">${ICON('info')} Wat betekent 50/30/20?</span><span class="small muted">${open?'▲':'▼'}</span></div>
-    ${open?`<div class="small muted" style="margin-top:8px">Een veelgebruikte vuistregel: ongeveer de helft van je <b>inkomen</b> naar vaste lasten, een vijfde naar sparen en de rest vrij besteedbaar. Geen wet, maar handig als ijkpunt.</div>`:''}
+    <div class="small muted" style="font-size:11px;margin-top:11px">Gemeten tegen ${T.naam} · ${T.label} van je inkomen (${euro0(H.inc)}) · een ijkpunt, geen wet. Sparen = wat er naar je spaarrekening ging.
+      <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openSplitNorm()">norm aanpassen ›</span></div>
   </div>`;
 }
 function toggle503020(){ SET.show503020=!SET.show503020; save(); renderIns(); }
@@ -6761,20 +6937,32 @@ const _sign=n=>(n<0?'−':'+')+euro0(Math.abs(n));   // echte min-tekens, zoals 
 // dus band + oordeel + uitleg horen bij de definitie, niet bij de opmaak.
 const KPI_META={
   spaar: {label:'Bespaarquote',       bandTxt:'doel 20% of meer', band:20,  dir:'up',
-    uitleg:'Welk deel van je inkomen je overhoudt: (inkomen − uitgaven) ÷ inkomen. De 50/30/20-vuistregel houdt 20% aan als richtpunt — een ijkpunt, geen wet.'},
+    uitleg:'Welk deel van je inkomen je overhoudt: (inkomen − uitgaven) ÷ inkomen. Het richtpunt komt uit je referentie-verdeling.'},
   budget:{label:'Budgetnaleving',     bandTxt:'doel 100% of minder', band:100, dir:'down',
     uitleg:'Welk deel van je maandbudget je hebt uitgegeven: uitgaven ÷ budget. Je budget is de som van je potjes; heb je die niet, dan je inkomen-limiet.'},
   niveau:{label:'Uitgaven-niveau',    bandTxt:'', band:null, dir:'down',
     uitleg:'Je netto-uitgaven per maand, terugstortingen verrekend. De referentie is je eigen gemiddelde over de getoonde maanden, niet een norm van buiten.'},
   vast:  {label:'Vaste-lasten-druk',  bandTxt:'doel onder 50%', band:50, dir:'down',
-    uitleg:'Welk deel van je inkomen naar herkende terugkerende lasten gaat: vaste lasten ÷ inkomen. Onder de helft houd je ruimte over om te sturen.'}
+    uitleg:'Welk deel van je inkomen naar herkende terugkerende lasten gaat: vaste lasten ÷ inkomen. Het richtpunt komt uit je referentie-verdeling.'}
 };
+// De band van bespaarquote en vaste-lasten-druk volgt je gekozen referentie-verdeling
+// (default 50/30/20 → precies de oude 20% en 50%). Budget en niveau meten tegen jezelf.
+function kpiBand(key){
+  if(key==='spaar') return splitTarget().save;
+  if(key==='vast')  return splitTarget().fixed;
+  return KPI_META[key].band;
+}
+function kpiBandTxt(key){
+  if(key==='spaar') return `doel ${splitTarget().save}% of meer`;
+  if(key==='vast')  return `doel onder ${splitTarget().fixed}%`;
+  return KPI_META[key].bandTxt;
+}
 const KPI_WOORD={good:'goed',mid:'krap',bad:'let op'};
 function kpiState(key,v,ref){
   if(v==null) return 'n';
-  if(key==='spaar')  return v>=20?'good':(v>=10?'mid':'bad');
+  if(key==='spaar'){ const B=kpiBand('spaar'); return v>=B?'good':(v>=B*0.5?'mid':'bad'); }
   if(key==='budget') return v<=100?'good':(v<=110?'mid':'bad');
-  if(key==='vast')   return v<50?'good':(v<=65?'mid':'bad');
+  if(key==='vast'){  const B=kpiBand('vast');  return v<B?'good':(v<=B*1.3?'mid':'bad'); }
   if(key==='niveau') return ref>0?(v<=ref*0.98?'good':(v<=ref*1.10?'mid':'bad')):'n';
   return 'n';
 }
@@ -6816,8 +7004,8 @@ function insKpis(m,n){
     const M=KPI_META[key], v=waarde[key], ref=key==='niveau'?niveauRef:null;
     const fmt=key==='niveau'?euro0:_pct0;
     const st=kpiState(key,v,ref);
-    let band=M.bandTxt;
-    if(key==='budget') band=`${M.bandTxt} · ${t.potTotal>0?'je potjes':'je inkomen-limiet'}`;
+    let band=kpiBandTxt(key);
+    if(key==='budget') band=`${kpiBandTxt(key)} · ${t.potTotal>0?'je potjes':'je inkomen-limiet'}`;
     if(key==='niveau') band=niveauRef>0?`gem. ${euro0(niveauRef)}/mnd`:'nog geen gemiddelde';
     if(v==null) band=(key==='budget')?'nog geen budget':'inkomen onbekend';
     return {key, label:M.label, raw:v, ref, val:v==null?'—':fmt(v), band, uitleg:M.uitleg, fmt, partial,
@@ -6873,7 +7061,7 @@ function insKpiStrip(m){
   const K=insKpis(m);
   const tiles=K.items.map(k=>{
     const col=kpiCol(k.state);
-    const doel=k.key==='niveau'?(k.ref>0?k.ref:null):(KPI_META[k.key].band!=null?KPI_META[k.key].band:null);
+    const doel=k.key==='niveau'?(k.ref>0?k.ref:null):(kpiBand(k.key)!=null?kpiBand(k.key):null);
     const sl=miniSparkLine(k.series,{target:doel, running:k.partial});
     const spark=sl?`<div class="spk-wrap">${sl}</div>`:'';
     return `<div class="wvo-tile" style="cursor:pointer" onclick="openKpiDetail('${k.key}')" data-kpi="${k.key}">
@@ -6888,6 +7076,7 @@ function insKpiStrip(m){
     <div class="small muted" style="margin:0 0 4px">Hoe gezond je financiën ervoor staan — en of het de goede kant op beweegt.</div>
     <div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${tiles}</div>
     <div class="small" style="color:var(--mut2);font-size:11px;margin-top:10px">${K.partial?'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus nog zonder oordeel. ':''}Tik een cijfer voor de uitleg en je volledige historie.</div>
+    ${splitNormLine()}
   </div>`;
 }
 
@@ -6927,7 +7116,7 @@ function chartTagRight(xr,yy,txt,col){
 function kpiHistChart(k){
   const vals=k.series, labs=k.labels, ms=k.maanden;
   if(vals.filter(v=>v!=null).length<2) return `<div class="small muted" style="margin:14px 0 4px">Na twee maanden zie je hier je verloop.</div>`;
-  const band=KPI_META[k.key].band!=null?KPI_META[k.key].band:(k.ref||0);
+  const band=kpiBand(k.key)!=null?kpiBand(k.key):(k.ref||0);
   const G=CHART_GEO, {W,R,L,TOP,BASE,XLAB,H}=G;
   const ruw=Math.max(...vals.map(v=>Math.max(v||0,0)),band||0,1);
   const niceTop=k.key==='niveau'?reisNiceCeil(ruw*1.08):Math.max(Math.ceil(ruw*1.08/10)*10,10);
@@ -6947,7 +7136,7 @@ function kpiHistChart(k){
     const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+18).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="chartRead('kpiRead','&lt;b&gt;${esc(monthLabel(ms[i]))}&lt;/b&gt; · ${k.fmt(v)}${nu?' · tot nu toe':''}')"><title>${labs[i]} · ${k.fmt(v)}</title></rect>`;
     return bar+val+lab+hit;
   }).join('');
-  const bandTxt=k.key==='niveau'?`gemiddeld ${chartK(band)}`:KPI_META[k.key].bandTxt;
+  const bandTxt=k.key==='niveau'?`gemiddeld ${chartK(band)}`:kpiBandTxt(k.key);
   const bandLine=band>0&&band<=niceTop?`<line x1="${L}" x2="${W-R}" y1="${y(band).toFixed(1)}" y2="${y(band).toFixed(1)}" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="4 3"/>`
     +chartTagRight(W-R, y(band)-4, bandTxt, 'var(--ref)'):'';
   return `<svg id="kpiHist" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:12px">
@@ -6956,7 +7145,7 @@ function kpiHistChart(k){
       ${bars}${bandLine}
     </svg>
     <div id="kpiRead" class="small" style="color:var(--mut2);font-size:11px;margin-top:2px;min-height:15px">Tik een staaf voor de exacte waarde.${k.partial?' De maand met * loopt nog.':''}</div>
-    <div class="gc-leg"><span><i class="d"></i>${k.key==='niveau'?`je gemiddelde (${euro0(band)})`:KPI_META[k.key].bandTxt}</span><span><i style="background:var(--bar)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
+    <div class="gc-leg"><span><i class="d"></i>${k.key==='niveau'?`je gemiddelde (${euro0(band)})`:kpiBandTxt(k.key)}</span><span><i style="background:var(--bar)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
 }
 function openKpiDetail(key){
   const m=curMonth||months()[months().length-1];
@@ -6972,6 +7161,7 @@ function openKpiDetail(key){
     <div class="small" style="color:var(--mut2);margin-top:3px">${k.band}${k.key==='budget'&&k.budgetBedrag>0?` · ${euro0(k.budgetBedrag)}`:''}${k.oordeel&&!k.partial?` · ${k.oordeel}`:''}</div>
     ${kpiHistChart(k)}
     <div class="small" style="color:var(--mut2);font-size:11px;margin-top:8px">Je volledige historie van deze metriek.</div>
+    ${(key==='spaar'||key==='vast')?`<div style="margin-top:8px">${splitNormLine()}</div>`:''}
     <div style="height:8px"></div>`;
   showSheetBg();
 }
@@ -7377,6 +7567,7 @@ function renderSet(){
   const _frSub=_fr?`${(''+_fr.rend).replace('.',',')}% rendement · factor ${_fr.fireMult} · pensioen ${_fr.override||(_fr.birth?(+_fr.birth+67):'—')}`:'aannames voor je vermogensreis';
   const cats=[
     ['budget',ICON('target'),'Budget & doelen',`Je spaart ${euro0(monthlySavingTarget())} per maand`,setBudget,''],
+    ['norm',ICON('flag'),'Referentie-verdeling',`${splitTarget().naam}${splitTarget().naam===splitTarget().label?'':' · '+splitTarget().label}`,setSplitNorm,''],
     ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
     ['look',ICON('palet'),'Uiterlijk',THEMES[themeKey()].naam,setLook,''],
     ['modus',ICON('filter'),'Weergave & modus',({rustig:'Rustig',begeleid:'Begeleid',expert:'Expert'})[SET.mode||'begeleid'],setModus,''],
@@ -7488,7 +7679,7 @@ function renderBudgetSheet(){
   el.scrollTop = sc;
 }
 
-const SET_SHEETS={look:[ICON('palet'),'Uiterlijk',setLook],budget:[ICON('target'),'Budget & doelen',setBudget],fire:[ICON('trend'),'Vermogensreis · aannames',setFireAannames],modus:[ICON('filter'),'Weergave & modus',setModus],income:[ICON('euro'),'Inkomen & rekeningen',setIncome],bank:[ICON('bank'),'Bankkoppeling & import',setBank],coach:[ICON('robot'),'Coach & categorieën',setCoach],privacy:[ICON('lock'),'Privacy & gegevens',setPrivacy]};
+const SET_SHEETS={look:[ICON('palet'),'Uiterlijk',setLook],budget:[ICON('target'),'Budget & doelen',setBudget],norm:[ICON('flag'),'Referentie-verdeling',setSplitNorm],fire:[ICON('trend'),'Vermogensreis · aannames',setFireAannames],modus:[ICON('filter'),'Weergave & modus',setModus],income:[ICON('euro'),'Inkomen & rekeningen',setIncome],bank:[ICON('bank'),'Bankkoppeling & import',setBank],coach:[ICON('robot'),'Coach & categorieën',setCoach],privacy:[ICON('lock'),'Privacy & gegevens',setPrivacy]};
 
 function setBudget(){
   const adv=!!SET.budgetAdv;

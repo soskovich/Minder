@@ -120,8 +120,10 @@ test.describe('a2 · richting A: één datataal in de tegels', () => {
       const box = await punt.boundingBox();
       expect(Math.abs(box.width - box.height), key).toBeLessThan(1.2);     // rond, niet uitgerekt
     }
+    // geen teal in de lijnen zelf (de norm-regel eronder heeft wél een teal "aanpassen ›"-link)
+    const sparks = await page.locator('#insKpiStrip .spk-wrap').evaluateAll((els) => els.map((e) => e.innerHTML).join(''));
+    expect((sparks.match(/var\(--teal\)/g) || []).length).toBe(0);
     const strip = await page.locator('#insKpiStrip').innerHTML();
-    expect((strip.match(/var\(--teal\)/g) || []).length).toBe(0);         // geen teal in de lijnen zelf
     expect(await page.locator('#insKpiStrip .spk-nu').count()).toBe(4);    // alleen de eindpunten
     expect(strip).not.toContain('class="spark"');                          // geen bonte staafjes meer
   });
