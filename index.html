@@ -4463,12 +4463,24 @@ function nogDezeMaandCard(){
   if(!L||!(L.fixDue>0||L.varDue>0||L.incDue>0)) return '';
   const teBetalen=Math.round(L.fixDue+L.varDue), teOntvangen=Math.round(L.incDue), netto=teOntvangen-teBetalen;
   const sub=`${L.fixDue>0?`vast ${euro0(L.fixDue)}`:''}${(L.fixDue>0&&L.varDue>0)?' \u00b7 ':''}${L.varDue>0?`variabel ${euro0(L.varDue)} (tempo)`:''}${(L.fixDueExclCount>0)?` \u00b7 ${L.fixDueExclCount} uitgesloten`:''}`;
+  // Nog te sparen: exact het bedrag dat 'veilig te besteden' al reserveert (saveReserved), zodat de twee
+  // schermen nooit uiteen kunnen lopen. Niets herberekend; geen spaartarget = geen tegel.
+  let S=null; try{ S=safeToSpend(); }catch(_){}
+  const spaarOn=!!(S && S.saveTarget>0);
+  const nogSparen=spaarOn?Math.max(S.saveReserved,0):0, gehaald=spaarOn&&nogSparen<=0;
+  const spaarTegel=spaarOn?`
+      <div class="wvo-tile" style="cursor:pointer" onclick="openSafeToSpend()"><div class="wvo-tl">Nog te sparen</div>
+        <div class="wvo-tv" style="color:${gehaald?'var(--green)':'var(--teal)'}">${euro0(nogSparen)}</div>
+        <div class="wvo-ts">${gehaald?`${ICON('check')} gehaald \u00b7 ${euro0(S.savedThisMonth)} opzij`:`van ${euro0(S.saveTarget)}${S.savedThisMonth>0?` \u00b7 ${euro0(S.savedThisMonth)} opzij`:''}`}</div></div>`:'';
+  // spiegel, geen tweede berekening: wat er van 'onderaan de streep' overblijft als je je spaardoel haalt.
+  // Alleen bij een positief netto \u2014 "vrij n\u00e1 sparen" bij een tekort zou een belofte suggereren die er niet is.
+  const naSparen=(spaarOn&&nogSparen>0&&netto>0)?`<div class="small" style="color:var(--mut2);font-size:11px;margin-top:5px;text-align:right">${euro0(netto-nogSparen)} vrij n\u00e1 sparen</div>`:'';
   return `<div class="card"><div class="hlabel" style="margin:0 0 12px">Nog deze maand</div>
-    <div class="wvo-tiles" style="grid-template-columns:1fr 1fr">
+    <div class="wvo-tiles" style="grid-template-columns:${spaarOn?'1fr 1fr 1fr':'1fr 1fr'}">
       <div class="wvo-tile"${teBetalen>0?' style="cursor:pointer" onclick="openFixedDue()"':''}><div class="wvo-tl">Nog te betalen</div><div class="wvo-tv" style="color:var(--red)">${euro0(teBetalen)}</div>${sub?`<div class="wvo-ts">${sub}</div>`:''}</div>
-      <div class="wvo-tile"><div class="wvo-tl">Nog te ontvangen</div><div class="wvo-tv" style="color:${teOntvangen>0?'var(--green)':'var(--mut)'}">${euro0(teOntvangen)}</div><div class="wvo-ts">inkomen</div></div>
+      <div class="wvo-tile"><div class="wvo-tl">Nog te ontvangen</div><div class="wvo-tv" style="color:${teOntvangen>0?'var(--green)':'var(--mut)'}">${euro0(teOntvangen)}</div><div class="wvo-ts">inkomen</div></div>${spaarTegel}
     </div>
-    <div class="ndm-net"><span>Onderaan de streep</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>
+    <div class="ndm-net"><span>Onderaan de streep</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>${naSparen}
   </div>`;
 }
 /* ===================== NOODFONDS =====================
