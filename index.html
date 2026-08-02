@@ -2807,6 +2807,20 @@ function scoreNotifs(){
       l1:sf.action||`Sneller bij je spaardoel? ${sf.label.charAt(0).toUpperCase()+sf.label.slice(1)} kan.`,
       l2:`+${euro0(sf.save)}/mnd (${euro0(sf.perYear)}/jr) · ~${sf.earlier} ${sf.earlier===1?'maand':'maanden'} eerder, rond ${sf.datumNew}`,
       act:"go('vooruit')"}); } }catch(_){} }
+  // uitgeleend geld met een afgesproken datum: een paar dagen vooraf één rustige herinnering.
+  // Stabiele key per lening, dus snooze/mute/dedup werken; de app verstuurt nooit zelf iets.
+  try{ const zacht=isMode('rustig');
+    for(const {l,dagen,laat} of loanDueList().slice(0,3)){
+      const dat=loanDatumKort(l.terug), bedrag=euro0(Math.max(+l.open||0,0)), wie=String(l.naam||'').trim();
+      const wanneer = laat ? (dagen===-1?'was gisteren':`was ${-dagen} dagen geleden`)
+                           : (dagen===0?'vandaag':dagen===1?'morgen':`over ${dagen} dagen`);
+      const voor = `${laat?'was vóór':'vóór'} ${dat}`;
+      const kop = zacht
+        ? `${wie?wie+' moet':'Er moet'} je nog ${bedrag} terugbetalen${dat?` · ${voor}`:''}.`
+        : `${wie?wie+' moet':'Er moet'} je nog ${bedrag} terugbetalen — ${voor} (${wanneer}).`;
+      push({key:'loandue-'+l.id, score:laat?70:66, t:(laat&&!zacht)?'warn':'info', ic:ICON('coins'),
+        l1:kop, l2:'Stuur betaalverzoek', act:`loanShare('${l.id}')`});
+    } }catch(_){}
   // cooling-off terugkomprompt: parkeerde je iets ('wachten tot morgen'), kom er na ~1 dag op terug
   try{ const log=SET.coachLog||[]; const nowMs=Date.now();
     const park=log.find(l=>l.type==='beslis' && l.uitkomst==='geparkeerd' && !l.resolved && (nowMs-l.ts)>=18*36e5 && (nowMs-l.ts)<=7*864e5);
@@ -2913,7 +2927,7 @@ function openNotifs(){
   const CRITN=new Set(['lowbal','accshort']);
   const body = ns.length? ns.map(n=>{ const g=notifGrp(n.key); const crit=CRITN.has(g);
     return `<div class="coach ${n.t}" style="margin-bottom:${crit?'10px':'2px'}"><div class="ic">${n.ic}</div><div class="tx" style="cursor:pointer" onclick="closeSheet();${n.act}"><b>${n.l1}</b><br><span class="muted">${n.l2} ›</span></div></div>`
-      + (crit?'':`<div style="display:flex;gap:16px;margin:0 0 12px 40px"><span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifSnooze('${g}')">Snooze 7d</span><span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifMute('${g}')">Niet meer tonen</span></div>`);
+      + (crit?'':`<div style="display:flex;gap:16px;margin:0 0 12px 40px;flex-wrap:wrap">${g==='loandue'?`<span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanRepaidFromNotif('${n.key.replace(/^loandue-/,'')}')">Terugbetaald</span>`:''}<span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifSnooze('${g}')">Snooze 7d</span><span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifMute('${g}')">Niet meer tonen</span></div>`);
   }).join('')
     : `<div class="small muted" style="padding:10px 0">Geen meldingen, alles op koers.</div>`;
   const nMute=Object.keys(SET.notifMuted||{}).length, nSnz=Object.keys(SET.notifSnooze||{}).filter(k=>(SET.notifSnooze||{})[k]>Date.now()).length;
@@ -7434,8 +7448,53 @@ function setLoanField(id,veld,val){
   const l=loans().find(x=>x.id===id); if(!l) return;
   if(veld==='naam') l.naam=String(val||'').slice(0,40);
   else if(veld==='terug') l.terug=String(val||'').slice(0,10);
+  else if(veld==='waarvoor') l.waarvoor=String(val||'').slice(0,60);          // voor het betaalverzoek-bericht
+  else if(veld==='link') l.link=String(val||'').trim().slice(0,200);          // eigen Tikkie-/betaallink, optioneel
   else if(veld==='open'){ const v=Math.max(Math.round(+val||0),0); l.open=Math.min(v,Math.max(+l.bedrag||0,v)); }
   save(); render(); openLoan(id);
+}
+/* Betaalverzoek: de app verstuurt niets zelf (serverloze PWA, niets draait op de achtergrond).
+   We zetten een kant-en-klaar bericht klaar en laten het toestel delen; de gebruiker kiest zelf
+   Tikkie/WhatsApp/mail en verstuurt. Ontbrekende velden vallen netjes weg, nooit "€undefined". */
+function loanDatumKort(iso){ const d=iso?new Date(iso):null; return (d&&!isNaN(d))?d.toLocaleDateString('nl-NL',{day:'numeric',month:'long'}):''; }
+function loanShareText(l){
+  if(!l) return '';
+  const naam=String(l.naam||'').trim(), open=Math.max(Math.round(+l.open||0),0), waarvoor=String(l.waarvoor||'').trim();
+  let s=naam?`Hoi ${naam}, `:'Hoi, ';
+  s+= open>0 ? `wil je me ${euro0(open)} terugbetalen` : 'wil je me het geleende bedrag terugbetalen';
+  if(waarvoor) s+=` voor ${waarvoor}`;
+  const dat=loanDatumKort(l.terug); if(dat) s+=` (graag vóór ${dat})`;
+  s+='? Dank je!';
+  const link=String(l.link||'').trim(); if(link) s+=' '+link;
+  return s;
+}
+async function loanShare(id){
+  const l=loans().find(x=>x.id===id); if(!l) return;
+  const text=loanShareText(l);
+  try{
+    if(navigator.share){ await navigator.share({title:'Betaalverzoek', text}); toast(`${ICON('check')} Betaalverzoek gedeeld`); return; }
+  }catch(e){ if(e && e.name==='AbortError') return; }        // zelf geannuleerd: geen ruis, geen fallback
+  try{ await navigator.clipboard.writeText(text); toast(`${ICON('check')} Betaalverzoek gekopieerd — plak het in Tikkie of WhatsApp`); }
+  catch(_){ toast('Kopiëren lukt niet op dit toestel'); }
+}
+/* Herinnering een paar dagen vóór de afgesproken datum. Alleen wat JIJ terugkrijgt (een
+   betaalverzoek slaat nergens op bij geleend geld), alleen met een datum, alleen als er nog
+   iets openstaat. Al gepasseerd = "was vóór X", geen alarm. */
+const LOAN_REMIND_DAYS=3;
+function loanDueList(){
+  const t0=new Date(); t0.setHours(0,0,0,0); const out=[];
+  for(const l of loans()){
+    if((l.richting==='in')||!(+l.open>0)||!l.terug) continue;
+    const d=new Date(l.terug); if(isNaN(d)) continue; d.setHours(0,0,0,0);
+    const dagen=Math.round((d.getTime()-t0.getTime())/86400000);
+    if(dagen>LOAN_REMIND_DAYS) continue;                     // nog ver weg: nog even niets
+    out.push({l, dagen, laat:dagen<0});
+  }
+  return out.sort((a,b)=>a.dagen-b.dagen);
+}
+function loanRepaidFromNotif(id){
+  const l=loans().find(x=>x.id===id); if(!l) return;
+  loanRepay(id, Math.max(+l.open||0,0));
 }
 // terugbetaling: verlaagt de openstaande post. Geen inkomen; het geld kwam alleen terug.
 function loanRepay(id, bedrag, txId){
@@ -7484,9 +7543,10 @@ function loanBlokHTML(t){
     const rest=Math.max(+L.open||0,0);
     return `<div class="card" style="margin:10px 0 6px;padding:12px 13px">
       <div class="small" style="font-weight:700;color:var(--teal)">${L.richting==='in'?'Geleend':(L.soort==='borg'?'Borg / voorschot':'Uitgeleend')} · ${esc(L.naam)}</div>
-      <div class="small muted" style="margin-top:4px">Telt niet als ${L.richting==='in'?'inkomen':'uitgave'}. Nog open: <b style="color:var(--txt)">${euro0(rest)}</b> van ${euro0(L.bedrag)}.</div>
+      <div class="small muted" style="margin-top:4px">Telt niet als ${L.richting==='in'?'inkomen':'uitgave'}. Nog open: <b style="color:var(--txt)">${euro0(rest)}</b> van ${euro0(L.bedrag)}.${L.terug?` Terug vóór <b style="color:var(--txt)">${loanDatumKort(L.terug)}</b>${(new Date(L.terug)<new Date(new Date().toDateString()))?' (verstreken)':''}.`:''}</div>
       <div class="row" style="margin-top:9px;gap:12px">
         <span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openLoan('${L.id}')">Bewerken ›</span>
+        ${(L.richting!=='in'&&rest>0)?`<span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanShare('${L.id}')">Betaalverzoek ›</span>`:''}
         <span class="small" style="color:var(--mut2);cursor:pointer" onclick="loanDelete('${L.id}')">Toch een uitgave</span>
       </div></div>`;
   }
@@ -7521,8 +7581,13 @@ function openLoan(id){
     <label class="fld">Van wie / aan wie</label><input id="loanNaam" type="text" value="${esc(l.naam||'')}" onchange="setLoanField('${l.id}','naam',this.value)" style="width:100%">
     <label class="fld" style="margin-top:10px">Nog open (€)</label><input id="loanOpen" type="number" inputmode="numeric" min="0" value="${Math.max(+l.open||0,0)}" onchange="setLoanField('${l.id}','open',this.value)" style="width:100%">
     <div class="small muted" style="margin-top:6px">Oorspronkelijk ${euro0(l.bedrag)} op ${new Date(l.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}.</div>
-    <label class="fld" style="margin-top:10px">Verwacht terug (optioneel)</label><input id="loanTerug" type="date" value="${esc(l.terug||'')}" onchange="setLoanField('${l.id}','terug',this.value)" style="width:100%">
-    <button class="btn" style="margin-top:14px" onclick="loanRepay('${l.id}',${Math.max(+l.open||0,0)})">${ICON('check')} Helemaal terugbetaald</button>
+    <label class="fld" style="margin-top:10px">Terug te ontvangen vóór (optioneel)</label><input id="loanTerug" type="date" value="${esc(l.terug||'')}" onchange="setLoanField('${l.id}','terug',this.value)" style="width:100%">
+    <div class="small muted" style="margin-top:6px">${l.terug?(uit?`Je krijgt hier ${LOAN_REMIND_DAYS} dagen van tevoren een herinnering, met een betaalverzoek dat je zelf verstuurt.`:'Je krijgt hier een herinnering als de datum in zicht komt.'):'Laat leeg als er geen afspraak is; dan komt er ook geen herinnering.'}</div>
+    ${uit?`<label class="fld" style="margin-top:10px">Waarvoor (optioneel)</label><input id="loanWaarvoor" type="text" value="${esc(l.waarvoor||'')}" placeholder="bv. concertkaartjes" onchange="setLoanField('${l.id}','waarvoor',this.value)" style="width:100%">
+    <label class="fld" style="margin-top:10px">Eigen betaallink (optioneel)</label><input id="loanLink" type="text" value="${esc(l.link||'')}" placeholder="bv. je Tikkie-link" onchange="setLoanField('${l.id}','link',this.value)" style="width:100%">
+    <div class="small muted" style="margin-top:6px">Minder verstuurt zelf niets. "Stuur betaalverzoek" zet dit bericht klaar: <span style="color:var(--txt)" id="loanShareVb">${esc(loanShareText(l))}</span></div>
+    <button class="btn sec" id="loanShareBtn" style="margin-top:12px" onclick="loanShare('${l.id}')">${ICON('swap')} Stuur betaalverzoek</button>`:''}
+    <button class="btn" style="margin-top:${uit?'8px':'14px'}" onclick="loanRepay('${l.id}',${Math.max(+l.open||0,0)})">${ICON('check')} Helemaal terugbetaald</button>
     ${uit?`<button class="btn sec" style="margin-top:8px" onclick="loanWriteOff('${l.id}','persoonlijk')">Kwijtgescholden · boek als uitgave</button>`:''}
     <div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="loanDelete('${l.id}')">Markering ongedaan maken</div>
     <div style="height:8px"></div>`;
