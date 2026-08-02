@@ -174,7 +174,7 @@ test.describe('e · KPI-detail is per KPI verschillend', () => {
   test('elke tegel opent zijn eigen uitleg en eigen reeks', async ({ page }) => {
     await boot(page, 'ins');
     const gezien = {};
-    for (const key of ['spaar', 'budget', 'niveau', 'vast']) {
+    for (const key of ['spaar', 'budget', 'vari', 'vast']) {
       await page.locator(`#insKpiStrip .wvo-tile[data-kpi="${key}"]`).click();
       await page.waitForSelector('#kpiDetailHead');
       gezien[key] = await page.locator('#sheet').innerText();
@@ -184,8 +184,8 @@ test.describe('e · KPI-detail is per KPI verschillend', () => {
     expect(gezien.spaar).toContain('(inkomen − uitgaven) ÷ inkomen');
     expect(gezien.budget).toContain('Budgetnaleving');
     expect(gezien.budget).toContain('uitgaven ÷ budget');
-    expect(gezien.niveau).toContain('Uitgaven-niveau');
-    expect(gezien.niveau).toContain('netto-uitgaven per maand');
+    expect(gezien.vari).toContain('Variabele-lasten-druk');
+    expect(gezien.vari).toContain('variabele uitgaven ÷ inkomen');
     expect(gezien.vast).toContain('Vaste-lasten-druk');
     expect(gezien.vast).toContain('vaste lasten ÷ inkomen');
 
@@ -198,11 +198,12 @@ test.describe('e · KPI-detail is per KPI verschillend', () => {
     await boot(page, 'ins');
     const r = await page.evaluate((m) => {
       const K = insKpis(m, 0);
-      return { spaar: K.spaar.series, niveau: K.niveau.series, vast: K.vast.series, budget: K.budget.series };
+      return { spaar: K.spaar.series, vari: K.vari.series, vast: K.vast.series, budget: K.budget.series };
     }, CUR);
-    expect(r.spaar).not.toEqual(r.niveau);
+    expect(r.spaar).not.toEqual(r.vari);
+    expect(r.vari).not.toEqual(r.vast);
     expect(r.budget).not.toEqual(r.vast);
-    expect(r.niveau.every((v) => v >= 100)).toBe(true);      // euro's, geen percentages
     expect(r.spaar.every((v) => v <= 100)).toBe(true);       // percentages
+    expect(r.vari.every((v) => v >= 0 && v <= 100)).toBe(true);
   });
 });

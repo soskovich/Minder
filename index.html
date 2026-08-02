@@ -7033,21 +7033,24 @@ const KPI_META={
     uitleg:'Welk deel van je inkomen je overhoudt: (inkomen − uitgaven) ÷ inkomen. Het richtpunt komt uit je referentie-verdeling.'},
   budget:{label:'Budgetnaleving',     bandTxt:'doel 100% of minder', band:100, dir:'down',
     uitleg:'Welk deel van je maandbudget je hebt uitgegeven: uitgaven ÷ budget. Je budget is de som van je potjes; heb je die niet, dan je inkomen-limiet.'},
-  niveau:{label:'Uitgaven-niveau',    bandTxt:'', band:null, dir:'down',
-    uitleg:'Je netto-uitgaven per maand, terugstortingen verrekend. De referentie is je eigen gemiddelde over de getoonde maanden, niet een norm van buiten.'},
+  vari:  {label:'Variabele-lasten-druk', bandTxt:'doel onder 30%', band:30, dir:'down',
+    uitleg:'Welk deel van je inkomen naar variabele (niet-vaste) uitgaven gaat: variabele uitgaven ÷ inkomen. Het richtpunt komt uit je referentie-verdeling.'},
   vast:  {label:'Vaste-lasten-druk',  bandTxt:'doel onder 50%', band:50, dir:'down',
     uitleg:'Welk deel van je inkomen naar herkende terugkerende lasten gaat: vaste lasten ÷ inkomen. Het richtpunt komt uit je referentie-verdeling.'}
 };
-// De band van bespaarquote en vaste-lasten-druk volgt je gekozen referentie-verdeling
-// (default 50/30/20 → precies de oude 20% en 50%). Budget en niveau meten tegen jezelf.
+// Drie van de vier banden volgen je gekozen referentie-verdeling (default 50/30/20 → precies de
+// oude 20%, 30% en 50%), zodat vast/variabel/sparen samen het hele ijkpunt spiegelen.
+// Alleen budgetnaleving meet tegen je eigen potjes.
 function kpiBand(key){
   if(key==='spaar') return splitTarget().save;
   if(key==='vast')  return splitTarget().fixed;
+  if(key==='vari')  return splitTarget().vari;
   return KPI_META[key].band;
 }
 function kpiBandTxt(key){
   if(key==='spaar') return `doel ${splitTarget().save}% of meer`;
   if(key==='vast')  return `doel onder ${splitTarget().fixed}%`;
+  if(key==='vari')  return `doel onder ${splitTarget().vari}%`;
   return KPI_META[key].bandTxt;
 }
 const KPI_WOORD={good:'goed',mid:'krap',bad:'let op'};
@@ -7056,19 +7059,19 @@ function kpiState(key,v,ref){
   if(key==='spaar'){ const B=kpiBand('spaar'); return v>=B?'good':(v>=B*0.5?'mid':'bad'); }
   if(key==='budget') return v<=100?'good':(v<=110?'mid':'bad');
   if(key==='vast'){  const B=kpiBand('vast');  return v<B?'good':(v<=B*1.3?'mid':'bad'); }
-  if(key==='niveau') return ref>0?(v<=ref*0.98?'good':(v<=ref*1.10?'mid':'bad')):'n';
+  if(key==='vari'){  const B=kpiBand('vari');  return v<B?'good':(v<=B*1.3?'mid':'bad'); }   // drukmetriek: lager is gezonder
   return 'n';
 }
 // reeksen per maand, in één pass over months(); n=0 -> volledige historie
 function insKpiSeries(n){
   const all=months(); const ms=(n===0)?all:all.slice(-(n||12));
-  const S={ms,spaar:[],budget:[],niveau:[],vast:[]};
+  const S={ms,spaar:[],budget:[],vari:[],vast:[]};
   for(const mm of ms){
-    const t=totals(mm), f=splitFixedVar(mm).fixed;
+    const t=totals(mm), sf=splitFixedVar(mm);
     S.spaar.push(t.income>0?(t.income-t.spend)/t.income*100:null);
     S.budget.push(t.budget>0?t.spend/t.budget*100:null);
-    S.niveau.push(Math.max(Math.round(t.spend),0));
-    S.vast.push(t.income>0?f/t.income*100:null);
+    S.vari.push(t.income>0?sf.vari/t.income*100:null);
+    S.vast.push(t.income>0?sf.fixed/t.income*100:null);
   }
   return S;
 }
@@ -7082,24 +7085,19 @@ function insKpis(m,n){
   const i=S.ms.indexOf(m); const upto=a=>i>=0?a.slice(0,i+1):a.slice();
   const labels=upto(S.ms).map(x=>MNAMES[+x.slice(5,7)-1]);
   const maanden=upto(S.ms);
-  // gemiddelde over de AFGERONDE maanden: een lopende maand zou de lat kunstmatig verlagen
-  const afgerond=upto(S.niveau).filter((v,k)=>v!=null && !(partial && k===upto(S.niveau).length-1));
-  const niveauRef=afgerond.length?Math.round(afgerond.reduce((a,b)=>a+b,0)/afgerond.length):0;
-
-  const t_f=splitFixedVar(m).fixed;
+  const sf=splitFixedVar(m);
   const waarde={
     spaar:  t.income>0?(t.income-t.spend)/t.income*100:null,
     budget: t.budget>0?t.spend/t.budget*100:null,
-    niveau: Math.max(Math.round(t.spend),0),
-    vast:   t.income>0?t_f/t.income*100:null
+    vari:   t.income>0?sf.vari/t.income*100:null,
+    vast:   t.income>0?sf.fixed/t.income*100:null
   };
   const mk=key=>{
-    const M=KPI_META[key], v=waarde[key], ref=key==='niveau'?niveauRef:null;
-    const fmt=key==='niveau'?euro0:_pct0;
+    const M=KPI_META[key], v=waarde[key], ref=null;
+    const fmt=_pct0;
     const st=kpiState(key,v,ref);
     let band=kpiBandTxt(key);
     if(key==='budget') band=`${kpiBandTxt(key)} · ${t.potTotal>0?'je potjes':'je inkomen-limiet'}`;
-    if(key==='niveau') band=niveauRef>0?`gem. ${euro0(niveauRef)}/mnd`:'nog geen gemiddelde';
     if(v==null) band=(key==='budget')?'nog geen budget':'inkomen onbekend';
     return {key, label:M.label, raw:v, ref, val:v==null?'—':fmt(v), band, uitleg:M.uitleg, fmt, partial,
             oordeel: v==null?'':(partial?'loopt nog':(KPI_WOORD[st]||'')),
@@ -7109,9 +7107,9 @@ function insKpis(m,n){
             budgetBedrag: key==='budget'?Math.round(t.budget):undefined,
             series: upto(S[key]), labels, maanden};
   };
-  const items=['spaar','budget','niveau','vast'].map(mk);
+  const items=['spaar','budget','vari','vast'].map(mk);   // vari en vast naast elkaar: het hele ijkpunt
   const by={}; for(const k of items) by[k.key]=k;
-  return Object.assign({m,partial,items,niveauRef},by);
+  return Object.assign({m,partial,items},by);
 }
 
 // staafkleur per maand = binnen of buiten je band; zo draagt de trend zelf het oordeel
@@ -7154,7 +7152,7 @@ function insKpiStrip(m){
   const K=insKpis(m);
   const tiles=K.items.map(k=>{
     const col=kpiCol(k.state);
-    const doel=k.key==='niveau'?(k.ref>0?k.ref:null):(kpiBand(k.key)!=null?kpiBand(k.key):null);
+    const doel=kpiBand(k.key)!=null?kpiBand(k.key):null;
     const sl=miniSparkLine(k.series,{target:doel, running:k.partial});
     const spark=sl?`<div class="spk-wrap">${sl}</div>`:'';
     return `<div class="wvo-tile" style="cursor:pointer" onclick="openKpiDetail('${k.key}')" data-kpi="${k.key}">
@@ -7212,13 +7210,13 @@ function kpiHistChart(k){
   const band=kpiBand(k.key)!=null?kpiBand(k.key):(k.ref||0);
   const G=CHART_GEO, {W,R,L,TOP,BASE,XLAB,H}=G;
   const ruw=Math.max(...vals.map(v=>Math.max(v||0,0)),band||0,1);
-  const niceTop=k.key==='niveau'?reisNiceCeil(ruw*1.08):Math.max(Math.ceil(ruw*1.08/10)*10,10);
+  const niceTop=Math.max(Math.ceil(ruw*1.08/10)*10,10);
   const slot=(W-L-R)/vals.length, bw=Math.min(slot*0.62,34);
   const y=v=>BASE-Math.max(v,0)/niceTop*(BASE-TOP);
   const col=kpiBarColor(k);
   const every=Math.ceil(vals.length/12);
   const toon=chartLabelIdx(vals);
-  const kort=v=>k.key==='niveau'?chartK(v):k.fmt(v);
+  const kort=v=>k.fmt(v);
   const bars=vals.map((v,i)=>{
     const cx=L+slot*i+slot/2, x=cx-bw/2, nu=(k.partial&&i===vals.length-1);
     if(v==null) return `<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="var(--lab)" text-anchor="middle">${labs[i]}</text>`;
@@ -7229,7 +7227,7 @@ function kpiHistChart(k){
     const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+18).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="chartRead('kpiRead','&lt;b&gt;${esc(monthLabel(ms[i]))}&lt;/b&gt; · ${k.fmt(v)}${nu?' · tot nu toe':''}')"><title>${labs[i]} · ${k.fmt(v)}</title></rect>`;
     return bar+val+lab+hit;
   }).join('');
-  const bandTxt=k.key==='niveau'?`gemiddeld ${chartK(band)}`:kpiBandTxt(k.key);
+  const bandTxt=kpiBandTxt(k.key);
   const bandLine=band>0&&band<=niceTop?`<line x1="${L}" x2="${W-R}" y1="${y(band).toFixed(1)}" y2="${y(band).toFixed(1)}" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="4 3"/>`
     +chartTagRight(W-R, y(band)-4, bandTxt, 'var(--ref)'):'';
   return `<svg id="kpiHist" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block;margin-top:12px">
@@ -7238,7 +7236,7 @@ function kpiHistChart(k){
       ${bars}${bandLine}
     </svg>
     <div id="kpiRead" class="small" style="color:var(--mut2);font-size:11px;margin-top:2px;min-height:15px">Tik een staaf voor de exacte waarde.${k.partial?' De maand met * loopt nog.':''}</div>
-    <div class="gc-leg"><span><i class="d"></i>${k.key==='niveau'?`je gemiddelde (${euro0(band)})`:kpiBandTxt(k.key)}</span><span><i style="background:var(--bar)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
+    <div class="gc-leg"><span><i class="d"></i>${kpiBandTxt(k.key)}</span><span><i style="background:var(--bar)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
 }
 function openKpiDetail(key){
   const m=curMonth||months()[months().length-1];
@@ -7254,7 +7252,7 @@ function openKpiDetail(key){
     <div class="small" style="color:var(--mut2);margin-top:3px">${k.band}${k.key==='budget'&&k.budgetBedrag>0?` · ${euro0(k.budgetBedrag)}`:''}${k.oordeel&&!k.partial?` · ${k.oordeel}`:''}</div>
     ${kpiHistChart(k)}
     <div class="small" style="color:var(--mut2);font-size:11px;margin-top:8px">Je volledige historie van deze metriek.</div>
-    ${(key==='spaar'||key==='vast')?`<div style="margin-top:8px">${splitNormLine()}</div>`:''}
+    ${(key==='spaar'||key==='vast'||key==='vari')?`<div style="margin-top:8px">${splitNormLine()}</div>`:''}
     <div style="height:8px"></div>`;
   showSheetBg();
 }
