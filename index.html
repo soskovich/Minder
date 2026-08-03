@@ -4387,12 +4387,12 @@ function renderVermogen(){
     ? `<div style="height:16px;border-radius:9px;overflow:hidden;margin:12px 0 8px;background:var(--red)"></div><div class="small muted">${_dot('var(--red)')}Je schuld ${euro0(_nwSch)} is groter dan je bezit ${euro0(_nwBez)}. Aflossen brengt dit weer boven nul.</div>`
     : `<div style="height:16px;border-radius:9px;overflow:hidden;display:flex;margin:12px 0 8px;background:var(--card2)"><div style="width:${_nwEig}%;background:var(--teal)"></div><div style="width:${_nwSchP}%;background:var(--amber)"></div></div><div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><span>${_dot('var(--teal)')}Eigen deel <b>${euro0(w.netto)}</b>${_nwBez>0?' · '+_nwEig+'%':''}</span>${_nwSch>0?`<span>${_dot('var(--amber)')}Schuld <b>${euro0(_nwSch)}</b> · ${_nwSchP}%</span>`:''}</div>`);
   // vermogensopbouw-verloop (optie 2): cumulatief overschto (inkomen − uitgaven), verankerd op huidig netto vermogen
-  let _nwTrend='';
+  let _nwTrend='', _tDelta=null, _tMnd=0;
   try{ const _win=months().slice(-12);
     if(_win.length>=3){
       let _acc=0; const _ser=_win.map(mm=>{ const t=totals(mm); _acc+=((t.income||0)-(t.spend||0)); return _acc; });
       const _off=w.netto-_ser[_ser.length-1]; for(let i=0;i<_ser.length;i++) _ser[i]+=_off;
-      const _delta=Math.round(_ser[_ser.length-1]-_ser[0]);
+      const _delta=Math.round(_ser[_ser.length-1]-_ser[0]); _tDelta=_delta; _tMnd=_win.length;
       const _W=320,_H=64,_x0=2,_x1=_W-2,_yT=8,_yB=_H-4; const _mn=Math.min(..._ser),_mx=Math.max(..._ser),_rng=(_mx-_mn)||1;
       const _X=i=>_x0+(i/(_ser.length-1))*(_x1-_x0), _Y=v=>_yB-((v-_mn)/_rng)*(_yB-_yT);
       const _P=_ser.map((v,i)=>_X(i).toFixed(1)+','+_Y(v).toFixed(1)).join(' ');
@@ -4400,6 +4400,24 @@ function renderVermogen(){
       _nwTrend=`<div style="margin-top:13px;padding-top:11px;border-top:1px solid var(--line)"><div class="row" style="margin-bottom:4px"><span class="small" style="font-weight:700">Opbouw · ${_win.length} mnd</span><span class="small" style="font-weight:700;color:${_col}">${_delta>=0?'+':''}${euro0(_delta)}</span></div><svg viewBox="0 0 ${_W} ${_H}" width="100%" height="${_H}"><defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${_delta>=0?'color-mix(in srgb,var(--accent) 28%,transparent)':'rgba(248,113,113,.28)'}"/><stop offset="1" stop-color="color-mix(in srgb,var(--accent) 0%,transparent)"/></linearGradient></defs><polygon points="${_X(0).toFixed(1)},${_yB} ${_P} ${_X(_ser.length-1).toFixed(1)},${_yB}" fill="url(#nwg)"/><polyline points="${_P}" fill="none" stroke="${_col}" stroke-width="2" stroke-linejoin="round"/><circle cx="${_X(_ser.length-1).toFixed(1)}" cy="${_Y(_ser[_ser.length-1]).toFixed(1)}" r="3" fill="${_col}"/></svg><div class="small" style="font-weight:600;margin-top:6px;color:${_col}">${_delta>=0?'Wat je minder uitgeeft, blijft hier staan als vermogen.':'De laatste maanden ging er meer uit dan er binnenkwam, dus je vermogen daalde.'}</div><div class="small mut2" style="font-size:10.5px;margin-top:2px">o.b.v. inkomen − uitgaven · koersen van beleggingen niet meegerekend</div></div>`;
     }
   }catch(_){}
+  // Gewone taal bovenaan: dezelfde getallen als de kaart eronder, in één zin. Geen nieuw model —
+  // netto vermogen uit netWorth() en de opbouw uit precies de reeks die de grafiek al tekent.
+  const samenvatting=(()=>{
+    const kort=isMode('rustig'); const bd=v=>`<b style="color:var(--txt)">${v}</b>`;
+    let tb=null; try{ tb=totalBalance(); }catch(_){}
+    const onbekend = tb && tb.known===0 && !(SET.assets||[]).length && !(SET.debts||[]).length;
+    if(onbekend) return `<div class="small muted" id="vermSam" style="margin:0 2px 12px;line-height:1.5">Je saldo staat er nog niet bij, dus je netto vermogen kennen we nog niet. <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openSaldoInvoer()">Saldo invullen ›</span></div>`;
+    let z=`Je netto vermogen is ${bd(euro0(w.netto))}.`;
+    if(!kort && _tDelta!=null && _tMnd>0){
+      const perMnd=Math.round(Math.abs(_tDelta)/_tMnd);
+      z += _tDelta>=0
+        ? ` De laatste ${_tMnd} maanden kwam daar ${bd(euro0(_tDelta))} bij, gemiddeld zo'n ${bd(euro0(perMnd))} per maand.`
+        : ` De laatste ${_tMnd} maanden ging daar ${bd(euro0(Math.abs(_tDelta)))} vanaf, gemiddeld zo'n ${bd(euro0(perMnd))} per maand.`;
+    } else if(!kort){
+      z += ` Na een paar maanden zie je hier ook of het groeit.`;
+    }
+    return `<div class="small muted" id="vermSam" style="margin:0 2px 12px;line-height:1.5">${z}</div>`;
+  })();
   const nwCard=`<div class="card" style="background:linear-gradient(165deg,color-mix(in srgb,var(--accent) 6%,transparent),transparent)">
     <div class="row" style="justify-content:space-between"><span class="small muted">Netto vermogen</span>${_nwChip}</div>
     <div style="font-size:30px;font-weight:800;letter-spacing:-.5px;color:${_nwUnder?'var(--red)':'var(--teal)'};margin:2px 0 0">${euro0(w.netto)}</div>
@@ -4407,7 +4425,7 @@ function renderVermogen(){
     ${_nwBar}
     ${_nwTrend}
   </div>`;
-  $('#s-vermogen').innerHTML = head + nwCard + `<div class="card" style="cursor:pointer" onclick="go('fire')"><div class="row"><span style="flex:1;font-weight:700;font-size:14px">${ICON('trend')} Vermogensreis</span><span class="small" style="color:var(--teal);font-weight:600">bekijk ›</span></div></div>` + renderAssets() + renderDebts();   // FIRE-sectie is nu een eigen scherm (#s-fire); entree-knop altijd zichtbaar
+  $('#s-vermogen').innerHTML = head + samenvatting + nwCard + `<div class="card" style="cursor:pointer" onclick="go('fire')"><div class="row"><span style="flex:1;font-weight:700;font-size:14px">${ICON('trend')} Vermogensreis</span><span class="small" style="color:var(--teal);font-weight:600">bekijk ›</span></div></div>` + renderAssets() + renderDebts();   // FIRE-sectie is nu een eigen scherm (#s-fire); entree-knop altijd zichtbaar
 }
 // ===== Coach-gedreven 'Sneller bij je doel?' =====
 // concrete, op patronen gebaseerde manieren HOE je mindert (geen generiek 'geef minder uit')
