@@ -6096,7 +6096,16 @@ function openCategory(k){
 function drillMonth(m){ curMonth=m; SET.insPeriod='month'; save(); render(); }
 function gotoCurrentMonth(){ const ms=months(); const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); curMonth = ms.includes(ym)?ym:ms[ms.length-1]; SET.insPeriod='month'; save(); render(); }
 function toggleExpand(which){ SET[which]=!SET[which]; save(); renderIns(); }
-function toggleCollap(which){ SET[which]=!SET[which]; save(); renderIns(); }
+/* Inklap-vlaggen zijn drietrap: undefined = nog geen keuze (dan beslist de modus), true/false = de
+   gebruiker heeft zelf gekozen en dat wint altijd. Zo start Rustig rustiger zonder iets te overrulen.
+   Vlaggen zonder ingang in COLLAP_DEF houden hun bestaande default (dicht). */
+const COLLAP_DEF={ openSpendChart:{rustig:false, rest:true} };
+function collapOpen(flag){
+  const v=SET[flag]; if(v===true||v===false) return v;
+  const d=COLLAP_DEF[flag]; if(!d) return false;
+  return isMode('rustig')?d.rustig:d.rest;
+}
+function toggleCollap(which){ SET[which]=!collapOpen(which); save(); renderIns(); }
 // uitgaven per categorie / winkel voor één maand (voor vergelijking)
 function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
 function merchSpendMap(m){ const items=txOfMonth(m).filter(x=>CATS[catOf(x)].type==='expense'); const by={}; for(const x of groupMerch(items)){ if(x.s>0) by[x.name.toUpperCase()]={name:x.name,s:x.s}; } return by; }   // netto per winkel (terugstorting verrekend)
@@ -7150,7 +7159,11 @@ function miniSparkLine(values, opts){
 }
 function insKpiStrip(m){
   const K=insKpis(m);
-  const tiles=K.items.map(k=>{
+  // Rustig: drie cijfers tegelijk is genoeg om te lezen; de rest staat één tik verderop.
+  const rustig=isMode('rustig'), alles=!rustig||!!SET.kpiAll;
+  const items=alles?K.items:K.items.slice(0,3);
+  const meer=rustig?`<button class="snz" id="kpiMeer" onclick="toggleExpand('kpiAll')">${alles?'minder ▲':`toon alle ${K.items.length} kerncijfers ▾`}</button>`:'';
+  const tiles=items.map(k=>{
     const col=kpiCol(k.state);
     const doel=kpiBand(k.key)!=null?kpiBand(k.key):null;
     const sl=miniSparkLine(k.series,{target:doel, running:k.partial});
@@ -7165,7 +7178,7 @@ function insKpiStrip(m){
   return `<div class="card" id="insKpiStrip">
     <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">${ICON('chart')} Kerncijfers</span></div>
     <div class="small muted" style="margin:0 0 4px">Hoe gezond je financiën ervoor staan — en of het de goede kant op beweegt.</div>
-    <div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${tiles}</div>
+    <div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${tiles}</div>${meer}
     <div class="small" style="color:var(--mut2);font-size:11px;margin-top:10px">${K.partial?'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus nog zonder oordeel. ':''}Tik een cijfer voor de uitleg en je volledige historie.</div>
     ${splitNormLine()}
   </div>`;
@@ -7261,8 +7274,12 @@ function openKpiDetail(key){
 // viewBox + width:100% => schaalt mee, kapt nooit af op smalle schermen.
 function spendVsBudgetChart(){
   const ms=months();
-  const head=`<div class="row" style="margin-bottom:8px"><span class="hlabel" style="margin:0;flex:1">${ICON('trend')} Uitgaven vs budget</span></div>`;
-  if(ms.length<2) return `<div class="card">${head}<div class="small muted">Na twee maanden zie je hier je verloop.</div></div>`;
+  // In Rustig start deze twaalf-maands grafiek ingeklapt: één tik en hij staat er, maar hij
+  // overvalt je niet. Een eigen keuze (open of dicht) wint altijd van die default.
+  const open=collapOpen('openSpendChart');
+  const head=`<div class="row" style="margin-bottom:${open?'8px':'0'};cursor:pointer" onclick="toggleCollap('openSpendChart')"><span class="hlabel" style="margin:0;flex:1">${ICON('trend')} Uitgaven vs budget</span><span class="muted" style="font-size:17px;width:14px;text-align:center">${open?'▲':'›'}</span></div>`;
+  if(ms.length<2) return `<div class="card">${head}${open?'<div class="small muted">Na twee maanden zie je hier je verloop.</div>':''}</div>`;
+  if(!open) return `<div class="card" id="insSpendCard">${head}<div class="small" style="color:var(--mut2);margin-top:6px">Je uitgaven per maand naast je budget · tik om te bekijken</div></div>`;
   const last=ms.slice(-12);
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const rows=last.map(mm=>{ const t=totals(mm); return {m:mm, spend:Math.max(t.spend,0), budget:Math.max(t.budget,0), now:mm===nowYM}; });
