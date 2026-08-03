@@ -35,7 +35,8 @@ const idVan = (page, name, ym) => page.evaluate(([n, m]) => {
   const t = TX.find((x) => x.name === n && x.date.slice(0, 7) === m); return t ? t.id : '';
 }, [name, ym]);
 const rij = (page, id) => page.locator(`#txlist .tx[onclick="openSheet('${id}')"]`);
-const ongewoon = async (page, id) => (await rij(page, id).innerText()).includes('ongewoon');
+// v93: de vlag heet sinds de UX-review "afwijkend bedrag"; de detectie (txOutlier) is dezelfde
+const ongewoon = async (page, id) => (await rij(page, id).innerText()).includes('afwijkend bedrag');
 
 test.describe('a · "ongewoon" tempert bij vaste lasten en eigen historie', () => {
   test('de terugkerende lease is niet meer ongewoon, de eenmalige piek nog wél', async ({ page }) => {

@@ -2435,6 +2435,7 @@ const JARGON={
   nogtesparen:'Het deel van je spaarinleg voor deze maand dat je nog opzij moet zetten: je maandbedrag min wat er deze maand al naar je spaarrekening ging.',
   spaarinleg:'Wat je per maand opzij wilt zetten. Dit is het bedrag dat je doelen verdeelt, niet alles wat er aan het eind van de maand overblijft.',
   restsaldo:'Je inkomen min je uitgaven in een maand. Je spaarinleg komt hieruit; wat er daarnaast overblijft kan ergens anders heen.',
+  afwijkendbedrag:'Hoger dan je gebruikelijke bedrag bij deze winkel — of, als we die historie nog niet hebben, hoger dan het gemiddelde in deze categorie. Een signaal om even te kijken, geen oordeel.',
   stuurbaar:'Uitgaven waar je zelf aan kunt draaien, zoals boodschappen, uit eten of shoppen; je vaste lasten vallen erbuiten.',
   bezuinigingsruimte:'Comfort-uitgaven die je in een crisismaand kunt schrappen, dus het bedrag dat je maandlast tijdelijk lager maakt.',
   crisislast:'Wat je per maand echt kwijt bent om rond te komen als je inkomen wegvalt, zonder comfort-uitgaven.',
@@ -2842,7 +2843,7 @@ function scoreNotifs(){
     const byCat={}; for(const mm of months().slice(-4)){ for(const x of txOfMonth(mm)){ if(x.amount<0&&CATS[catOf(x)].type==='expense'){ (byCat[catOf(x)]=byCat[catOf(x)]||[]).push(-x.amount); } } }
     const med=a=>{const z=a.slice().sort((x,y)=>x-y);return z.length?z[Math.floor(z.length/2)]:0;};
     let big=null; for(const x of recent){ const a=-x.amount, mref=med(byCat[catOf(x)]||[a]); if(a>=75 && a>=mref*2.5 && (!big||a>-big.amount)) big=x; }
-    if(big) push({key:'big-'+big.id,score:56,t:'info',ic:ICON('alert'),l1:`Ongewoon grote uitgave bij ${cleanMerch(big.name)}.`,l2:'Klopt dit? Bekijk',act:`openSheet('${big.id}')`}); }catch(_){}
+    if(big) push({key:'big-'+big.id,score:56,t:'info',ic:ICON('alert'),l1:`Grote uitgave bij ${cleanMerch(big.name)}, hoger dan je gebruikelijk.`,l2:'Klopt dit? Bekijk',act:`openSheet('${big.id}')`}); }catch(_){}
   if(isNow){ try{ const inc=txOfMonth(m).find(x=>x.amount>0 && CATS[catOf(x)].type==='income' && x.date===today);
     if(inc){ const tgt=Math.round(monthlySavingTarget()); push({key:'salary-'+today,score:76,t:'good',ic:ICON('wallet'),l1:'Je salaris staat erop.',l2:tgt>0?`Zet nu ${euro0(tgt)} opzij`:'Zet eerst je sparen apart',act:"go('act')"}); } }catch(_){} }
   try{ const tom=new Date(now); tom.setDate(tom.getDate()+1); tom.setHours(0,0,0,0);
@@ -6347,7 +6348,7 @@ function renderTxList(){
     const c=CATS[catOf(t)]; const ong=txOutlier(t,catAvg); const pnd=t.pending;
     body+=`<div class="tx" onclick="openSheet('${t.id}')"${pnd?' style="opacity:.62"':''}>
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(t.name)}</div>${pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--amber)">• ongewoon</div>`:'')}</div>
+      <div class="info"><div class="nm">${esc(t.name)}</div>${pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--mut)">• ${jrg('afwijkendbedrag','afwijkend bedrag')}</div>`:'')}</div>
       <div class="amt ${t.amount>0?'pos':''}" style="font-weight:700">${t.amount>0?'+':''}${euro(t.amount)}</div>
     </div>`;
   }
