@@ -5258,7 +5258,8 @@ const COACH_TONE_COPY={
     stakes:(perJr,weken)=>`Klein, maar terugkerend is dat ${euro0(perJr)} per jaar. Zo'n ${weken} ${weken===1?'week':'weken'} later bij je doel.`,
     slot:   ()=>'',
     doelVraag:'Waar werk je nu naartoe?',
-    menuIntro:'Waar wil je het over hebben?'
+    menuIntro:'Waar wil je het over hebben?',
+    welkom:'Even zodat je weet wat ik doe: ik kan <b>een aankoop met je wegen</b> vóór je hem doet, <b>je grootste bespaarkans</b> zoeken, en <b>je vaste lasten doorlichten</b>. Jij kiest wat we oppakken — of niets.'
   },
   zacht:{
     groetOpen: nm=>nm?`Hoi ${nm}, fijn dat je er bent. Waarmee kan ik je helpen vandaag?`:`Fijn dat je er bent. Waarmee kan ik je helpen vandaag?`,
@@ -5266,7 +5267,8 @@ const COACH_TONE_COPY={
     stakes:(perJr,weken)=>`Terugkerend is dat ${euro0(perJr)} per jaar, zo'n ${weken} ${weken===1?'week':'weken'} later bij je doel. Geen ramp, wel goed om te weten.`,
     slot:   ()=>'Je hoeft dit niet vandaag op te lossen.',
     doelVraag:'Waar werk je op dit moment naartoe?',
-    menuIntro:'Waar wil je het over hebben? Alles mag je overslaan.'
+    menuIntro:'Waar wil je het over hebben? Alles mag je overslaan.',
+    welkom:'Fijn dat je er bent. Even zodat je weet wat je aan me hebt: ik kan <b>een aankoop rustig met je wegen</b>, <b>je grootste bespaarkans</b> zoeken of <b>je vaste lasten doorlopen</b>. Je hoeft niets te kiezen; rondkijken mag ook.'
   },
   zakelijk:{
     groetOpen: nm=>nm?`${nm}, waarmee kan ik je helpen?`:`Waarmee kan ik je helpen?`,
@@ -5274,7 +5276,8 @@ const COACH_TONE_COPY={
     stakes:(perJr,weken)=>`${euro0(perJr)}/jaar · ${weken} ${weken===1?'week':'weken'} later bij je doel.`,
     slot:   ()=>'',
     doelVraag:'Doel?',
-    menuIntro:'Onderwerp:'
+    menuIntro:'Onderwerp:',
+    welkom:'Wat ik kan: <b>aankoop wegen</b>, <b>bespaarkans zoeken</b>, <b>vaste lasten doorlichten</b>. Kies hieronder.'
   }
 };
 function coTone(key,...args){
@@ -5368,6 +5371,12 @@ function coVoornaam(){ return (SET.name||'').trim().split(/\s+/)[0]||''; }
 async function coOpen(m){
   coReset(); if(!_coT)return; const _g=_coGen;
   await coSay(coTone('groetOpen',coVoornaam())); if(_g!==_coGen)return;
+  // Allereerste keer: één warme bubbel die laat zien wát je aan de coach hebt. Daarna nooit meer;
+  // een lege "ik spreek alleen als er iets te zeggen valt"-opening voelt bij stap één als niets.
+  if(!SET.coachSeen){
+    await coSay(coTone('welkom'),{html:true}); if(_g!==_coGen)return;
+    SET.coachSeen=1; save();
+  }
   if(await coParkReturn(m,true)) return;                       // geparkeerde aankoop = relevante context
   startCoachTalk(m,true);
 }
