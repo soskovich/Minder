@@ -2222,13 +2222,13 @@ function renderDash(){
   // het hoofdgetal gaat mee in de onbekend-staat, met de saldo-invoer als volgende stap. De berekening blijft ongemoeid.
   const hero = balKnown
     ? `<div class="homehero">
-    <div class="hh-lbl">Veilig te besteden</div>
+    <div class="hh-lbl">${jrg('veiligtebesteden','Veilig te besteden')}</div>
     <div class="hh-big${safeCol==='var(--teal)'?' grad':''}" style="${safeCol==='var(--teal)'?'':`color:${safeCol};`}cursor:pointer" onclick="openSafeToSpend()">${euro(S2.safe)}</div>
     <div style="font-size:12.5px;color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openBalances()">totaal saldo ${euro(S2.saldo)} <span style="color:var(--teal)">\u203a</span></div>
     ${krapNote}
   </div>`
     : `<div class="homehero" style="cursor:default">
-    <div class="hh-lbl">Veilig te besteden</div>
+    <div class="hh-lbl">${jrg('veiligtebesteden','Veilig te besteden')}</div>
     <div class="hh-big" style="color:var(--mut);font-size:26px;letter-spacing:-.4px">onbekend</div>
     <div style="font-size:12.5px;color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openSaldoInvoer()">totaal saldo <b style="color:var(--mut)">onbekend</b> <span style="color:var(--teal);font-weight:600">vul je saldo aan \u203a</span></div>
     <div style="font-size:12.5px;color:var(--mut);margin-top:8px;max-width:34em">Je transacties zijn binnen, je saldo nog niet: een bestand bevat dat niet. Zolang we niet weten wat er op je rekening staat, kunnen we ook niet zeggen wat er vrij is. Je uitgaven en potjes werken gewoon.</div>
@@ -2430,6 +2430,11 @@ function toast(msg){ let el=document.getElementById('toast'); if(!el){ el=docume
    Eén herbruikbaar element: jrg('sleutel','zichtbaar woord') maakt de term onderstippeld en aantikbaar (ook met toetsenbord).
    De uitleg is één zin en verschijnt in een mini-popover; bewust geen alert/confirm, die blokkeren de app en de extensie. */
 const JARGON={
+  veiligtebesteden:'Wat er van je saldo vrij is voor de rest van de maand: je saldo min je vaste lasten die nog komen, min wat er in je potjes gereserveerd staat, min je spaarinleg.',
+  onderaandestreep:'Wat er deze maand nog binnenkomt min wat er nog af moet; het gaat alleen over de dagen die nog komen, niet over je hele saldo.',
+  nogtesparen:'Het deel van je spaarinleg voor deze maand dat je nog opzij moet zetten: je maandbedrag min wat er deze maand al naar je spaarrekening ging.',
+  spaarinleg:'Wat je per maand opzij wilt zetten. Dit is het bedrag dat je doelen verdeelt, niet alles wat er aan het eind van de maand overblijft.',
+  restsaldo:'Je inkomen min je uitgaven in een maand. Je spaarinleg komt hieruit; wat er daarnaast overblijft kan ergens anders heen.',
   stuurbaar:'Uitgaven waar je zelf aan kunt draaien, zoals boodschappen, uit eten of shoppen; je vaste lasten vallen erbuiten.',
   bezuinigingsruimte:'Comfort-uitgaven die je in een crisismaand kunt schrappen, dus het bedrag dat je maandlast tijdelijk lager maakt.',
   crisislast:'Wat je per maand echt kwijt bent om rond te komen als je inkomen wegvalt, zonder comfort-uitgaven.',
@@ -2442,12 +2447,19 @@ function showTip(e,key){
   try{ e.preventDefault(); e.stopPropagation(); }catch(_){}                 // niet de <details> eronder open-/dichtklappen
   let p=document.getElementById('tipPop');
   if(!p){ p=document.createElement('div'); p.id='tipPop'; p.setAttribute('role','tooltip'); document.body.appendChild(p); }
-  p.textContent=u; p.className='show';
-  const el=e.currentTarget||e.target; const r=el.getBoundingClientRect();
-  const w=Math.min(260,window.innerWidth-24); p.style.width=w+'px';
-  p.style.left=Math.max(12,Math.min(r.left,window.innerWidth-w-12))+'px';
-  const h=p.offsetHeight;
-  p.style.top=((r.bottom+8+h>window.innerHeight)?Math.max(12,r.top-h-8):(r.bottom+8))+'px';
+  p.textContent=u; p.className='show'; window._tipTs=Date.now();
+  // Een tik zet ook focus, en de browser kan de term dan net in beeld scrollen. Daarom plaatsen we
+  // de popover nog een keer in de volgende frame (anders staat hij scheef) en negeert de
+  // scroll-sluiter die ene eigen scroll (anders klapt de uitleg meteen weer dicht).
+  const el=e.currentTarget||e.target;
+  const plaats=()=>{
+    const r=el.getBoundingClientRect();
+    const w=Math.min(260,window.innerWidth-24); p.style.width=w+'px';
+    p.style.left=Math.max(12,Math.min(r.left,window.innerWidth-w-12))+'px';
+    const h=p.offsetHeight;
+    p.style.top=((r.bottom+8+h>window.innerHeight)?Math.max(12,r.top-h-8):(r.bottom+8))+'px';
+  };
+  plaats(); try{ requestAnimationFrame(plaats); }catch(_){}
 }
 function hideTip(){ try{ const p=document.getElementById('tipPop'); if(p) p.className=''; }catch(_){} }
 
@@ -3198,7 +3210,7 @@ function vooruitForecast(){
           <div class="gr-a">${euro0(ingelegd)} <span class="u">van ${euro0(doel)}</span></div>
           ${toGo>0?(eta?`<div class="gr-e">${ingelegd>0?'Op koers':'Op dit tempo'}, klaar rond ${eta}</div><div class="gr-p" style="opacity:.8">op basis van je huidige tempo, geen belofte</div>`:''):`<div class="gr-e">Doel bereikt</div>`}
           ${toGo>0?`<div class="gr-p">nog ${euro0(toGo)} te gaan${maand>0?` · ~${maanden} mnd`:''}</div>`:''}
-          <div class="gr-f">${(S&&S.goalSrc==='plan')?'Je #1 in Mijn plan · je spaarruimte gaat hier eerst heen.':'Je saldo telt mee naar dit doel.'}</div>
+          <div class="gr-f">${(S&&S.goalSrc==='plan')?'Je #1 in Mijn plan · je spaarinleg gaat hier eerst heen.':'Je saldo telt mee naar dit doel.'}</div>
         </div>
       </div>
     </div>`;
@@ -3300,8 +3312,8 @@ function renderGoalSheet(id, g, modeOverride){
   const bedrag = mode==='fixed'
     ? `<label class="fld" style="margin-top:10px">Per maand opzij (€)</label><input id="gMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 150" style="width:100%">`
     : mode==='pct'
-    ? `<label class="fld" style="margin-top:10px">Deel van je spaarruimte (%)</label><input id="gPct" type="number" inputmode="numeric" min="0" max="100" value="${d.pct||''}" placeholder="bv. 30" style="width:100%">
-       <div class="small muted" style="margin-top:6px">${planCapacity()>0?`${euro0(planCapacity())}/mnd te verdelen · dit doel krijgt ${euro0(Math.round(planCapacity()*(+d.pct||0)/100))}`:'Nog geen spaarruimte bekend.'}</div>`
+    ? `<label class="fld" style="margin-top:10px">Deel van je spaarinleg (%)</label><input id="gPct" type="number" inputmode="numeric" min="0" max="100" value="${d.pct||''}" placeholder="bv. 30" style="width:100%">
+       <div class="small muted" style="margin-top:6px">${planCapacity()>0?`${euro0(planCapacity())}/mnd te verdelen · dit doel krijgt ${euro0(Math.round(planCapacity()*(+d.pct||0)/100))}`:'Nog geen spaarinleg bekend.'}</div>`
     : `<div class="small muted" style="margin-top:8px">Dit doel krijgt wat er op zijn plek in de rij nog over is.</div>`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:17px;margin-bottom:12px">${isNew?'Nieuw spaardoel':'Spaardoel bewerken'}</div>
@@ -3439,7 +3451,7 @@ function planOpen(it){
 const PLAN_MODES=[['auto','Auto'],['fixed','Vast bedrag'],['pct','Percentage']];
 function planModeLabel(p){
   if(p.mode==='fixed') return `vast ${euro0(p.perMaand)}`;
-  if(p.mode==='pct')   return `${(''+p.pct).replace('.',',')}% van je spaarruimte`;
+  if(p.mode==='pct')   return `${(''+p.pct).replace('.',',')}% van je spaarinleg`;
   return 'auto · pakt wat er nog is';
 }
 // "over ~8 maanden" wordt pas concreet met een datum erbij. Zelfde patroon als de oude hero:
@@ -3468,7 +3480,7 @@ function planAllocWarning(){
     else if(it.mode==='pct') pct+=Math.max(it.pct,0);
   }
   const geclaimd=Math.round(vast+cap*pct/100);
-  if(pct>100) return {vast,pct,cap,geclaimd,txt:`Je percentages tellen op tot ${Math.round(pct)}% van je spaarruimte. Wat er niet is kan niet verdeeld worden — de doelen onderaan wachten.`};
+  if(pct>100) return {vast,pct,cap,geclaimd,txt:`Je percentages tellen op tot ${Math.round(pct)}% van je spaarinleg. Wat er niet is kan niet verdeeld worden — de doelen onderaan wachten.`};
   if(cap>0 && geclaimd>cap) return {vast,pct,cap,geclaimd,txt:`Je verdeelt ${euro0(geclaimd)} terwijl er ${euro0(cap)} is. Dat mag; de doelen onderaan wachten dan op capaciteit.`};
   return null;
 }
@@ -3496,7 +3508,7 @@ function renderPlan(bare){
       </div>
     </div>`;
   }).join('');
-  const head=`<div class="small muted" style="margin:0 2px 8px">Je spaarruimte gaat van boven naar beneden: ${cap>0?`<b>${euro0(cap)}/mnd</b> te verdelen`:'nog geen spaarruimte bekend'}. Zet met ▲▼ wat eerst moet.</div>`;
+  const head=`<div class="small muted" style="margin:0 2px 8px">Je ${jrg('spaarinleg','spaarinleg')} gaat van boven naar beneden: ${cap>0?`<b>${euro0(cap)}/mnd</b> te verdelen`:'nog geen spaarinleg bekend'}. Zet met ▲▼ wat eerst moet.</div>`;
   const W=planAllocWarning();
   const warn=W?`<div id="planWarn" class="small" style="color:${isMode('rustig')?'var(--mut)':'var(--amber)'};background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 11px;margin:0 2px 9px;line-height:1.45">${W.txt}</div>`:'';
   const inner=head+warn+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
@@ -4212,7 +4224,7 @@ function reisRestsaldo(M){
   const modeChip=(id,lab)=>`<span onclick="reisInlegMode('${id}')" class="chip ${R.inlegMode===id?'on':''}" style="flex:1;text-align:center">${lab}</span>`;
   // breakdown inkomen − uitgaven = restsaldo
   const breakdown=`<div style="margin:10px 0 2px;padding:11px 12px;background:var(--card2);border-radius:11px">
-    <div class="row"><span class="small muted">Inkomen − uitgaven</span><span class="small mut2">uit je data</span></div>
+    <div class="row"><span class="small muted">Inkomen − uitgaven (${jrg('restsaldo','restsaldo')})</span><span class="small mut2">uit je data</span></div>
     <div class="row" style="margin-top:3px;align-items:baseline"><span style="font-weight:800;font-size:20px;color:${surplus>0?'var(--teal)':'var(--amber)'}">${euro0(surplus)}</span><span class="small muted">${surplus>0?'/mnd over':'/mnd, niets over'}</span></div>
     ${(R.fInc>0)?`<div class="small mut2" style="font-size:11px;margin-top:3px">${euro0(R.fInc)} in · ${euro0(R.fExp)} uit</div>`:''}
   </div>`;
@@ -4523,7 +4535,7 @@ function nogDezeMaandCard(){
   const spaarOn=!!(S && S.saveTarget>0);
   const nogSparen=spaarOn?Math.max(S.saveReserved,0):0, gehaald=spaarOn&&nogSparen<=0;
   const spaarTegel=spaarOn?`
-      <div class="wvo-tile" style="cursor:pointer" onclick="openSafeToSpend()"><div class="wvo-tl">Nog te sparen</div>
+      <div class="wvo-tile" style="cursor:pointer" onclick="openSafeToSpend()"><div class="wvo-tl">${jrg('nogtesparen','Nog te sparen')}</div>
         <div class="wvo-tv" style="color:${gehaald?'var(--green)':'var(--teal)'}">${euro0(nogSparen)}</div>
         <div class="wvo-ts">${gehaald?`${ICON('check')} gehaald \u00b7 ${euro0(S.savedThisMonth)} opzij`:`van ${euro0(S.saveTarget)}${S.savedThisMonth>0?` \u00b7 ${euro0(S.savedThisMonth)} opzij`:''}`}</div></div>`:'';
   // spiegel, geen tweede berekening: wat er van 'onderaan de streep' overblijft als je je spaardoel haalt.
@@ -4534,7 +4546,7 @@ function nogDezeMaandCard(){
       <div class="wvo-tile"${teBetalen>0?' style="cursor:pointer" onclick="openFixedDue()"':''}><div class="wvo-tl">Nog te betalen</div><div class="wvo-tv" style="color:var(--red)">${euro0(teBetalen)}</div>${sub?`<div class="wvo-ts">${sub}</div>`:''}</div>
       <div class="wvo-tile"><div class="wvo-tl">Nog te ontvangen</div><div class="wvo-tv" style="color:${teOntvangen>0?'var(--green)':'var(--mut)'}">${euro0(teOntvangen)}</div><div class="wvo-ts">inkomen</div></div>${spaarTegel}
     </div>
-    <div class="ndm-net"><span>Onderaan de streep</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>${naSparen}
+    <div class="ndm-net"><span>${jrg('onderaandestreep','Onderaan de streep')}</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>${naSparen}
   </div>`;
 }
 /* ===================== NOODFONDS =====================
@@ -4653,8 +4665,8 @@ function nfAllocCard(){
   const veld = A.mode==='fixed'
     ? `<div class="row" style="gap:8px;margin-top:9px"><label class="small muted" style="flex:1">Vast bedrag per maand</label><div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:110px"><span class="small muted">€</span><input id="nfPer" type="number" inputmode="numeric" min="0" value="${A.perMaand||''}" placeholder="0" onchange="setNfAlloc('perMaand',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"></div></div>`
     : A.mode==='pct'
-    ? `<div class="row" style="gap:8px;margin-top:9px"><label class="small muted" style="flex:1">Deel van je spaarruimte</label><div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:110px"><input id="nfPct" type="number" inputmode="numeric" min="0" max="100" value="${A.pct||''}" placeholder="0" onchange="setNfAlloc('pct',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"><span class="small muted">%</span></div></div>
-       <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd te verdelen · dit doel krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarruimte bekend.'}</div>`
+    ? `<div class="row" style="gap:8px;margin-top:9px"><label class="small muted" style="flex:1">Deel van je spaarinleg</label><div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:110px"><input id="nfPct" type="number" inputmode="numeric" min="0" max="100" value="${A.pct||''}" placeholder="0" onchange="setNfAlloc('pct',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:14px;font-weight:700;text-align:right;outline:none"><span class="small muted">%</span></div></div>
+       <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd te verdelen · dit doel krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarinleg bekend.'}</div>`
     : `<div class="small muted" style="margin-top:9px">Het noodfonds krijgt wat er op zijn plek in de rij nog over is.</div>`;
   return `<div class="card"><div class="small" style="font-weight:600">Hoeveel gaat hier maandelijks heen?</div>
     ${planModeChips(A.mode,'setNfAllocMode')}${veld}</div>`;
@@ -8224,7 +8236,7 @@ $('#sheetBg').onclick=e=>{if(e.target.id==='sheetBg')closeSheet();};
 // micro-uitleg sluit bij de volgende tik, bij Escape en bij scrollen (de popover staat fixed)
 document.addEventListener('click',hideTip);
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') hideTip(); });
-window.addEventListener('scroll',hideTip,true);
+window.addEventListener('scroll',()=>{ if(Date.now()-(window._tipTs||0)>400) hideTip(); },true);   // niet sluiten door de focus-scroll van de tik zelf
 // gedeelde inlees-routine: items = [{name,text}]
 
 function ingest(items){
