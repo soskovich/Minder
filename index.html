@@ -3513,6 +3513,48 @@ function planWachtHint(p){
   return `<div class="plan-hint small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${txt}
     <span style="color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();${planAllocOpen(b)}">maandbedrag instellen ›</span></div>`;
 }
+/* Spaargeld boven je noodfonds-doel (v99).
+   Het noodfonds-plan-item klemt zijn voortgang op het doel (planMap), en de voortgang van een
+   spaardoel is en blijft het handmatige veld "Al gespaard". Geld dat bóven je buffer op je
+   spaarrekening staat viel daardoor tussen wal en schip: het telde nergens mee. Dit maakt het
+   zichtbaar en toewijsbaar; het rekent niets automatisch mee. Wat je al bij je doelen hebt
+   ingevuld gaat eraf, zodat hetzelfde geld nooit twee keer als "vrij" wordt aangeboden. */
+function spaarVrij(){
+  let doel=0; try{ doel=Math.round(noodfondsModel().doel||0); }catch(_){}
+  let S={cur:0,missing:true}; try{ S=spaarSaldo(); }catch(_){}
+  if(S.missing||!(doel>0)) return {vrij:0,saved:0,doel,toegewezen:0};
+  const saved=Math.round(S.cur||0);
+  const toegewezen=(SET.goals||[]).reduce((a,g)=>a+Math.max(Math.round(+g.gespaard||0),0),0);
+  return {vrij:Math.max(saved-doel-toegewezen,0), saved, doel, toegewezen};
+}
+// bestemming: het bovenste lopende spaardoel — alleen een 'goal' draagt handmatig spaargeld
+// (een aflos-item leidt zijn voortgang af uit de restschuld en mag je niet zomaar ophogen)
+function spaarVrijDoel(P){
+  return (P||allocatePlan()).find(x=>x.type==='goal'&&x.status!=='bereikt'&&x.status!=='gepauzeerd')||null;
+}
+function spaarVrijLine(p,P){
+  if(!p||p.type!=='noodfonds') return '';
+  const V=spaarVrij(); if(!(V.vrij>0)) return '';
+  const t=spaarVrijDoel(P); const kort=isMode('rustig');
+  const txt=kort
+    ? `${euro0(V.vrij)} staat boven je noodfonds-doel.`
+    : `${euro0(V.vrij)} van je spaargeld staat boven je noodfonds-doel en hoort nog bij geen enkel doel.`;
+  const cta=t
+    ? `<span style="color:var(--teal);cursor:pointer" onclick="event.stopPropagation();spaarVrijToe('${t.id}')">toewijzen aan ${esc(t.naam)} ›</span>`
+    : `<span style="color:var(--teal);cursor:pointer" onclick="event.stopPropagation();openGoal()">voeg een doel toe ›</span>`;
+  return `<div class="spaar-vrij small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${txt} ${cta}</div>`;
+}
+// telt het vrije spaargeld op bij "Al gespaard" van dat doel — nooit meer dan het doel nog nodig
+// heeft; de rest blijft staan voor een volgend doel. Omkeerbaar: het veld blijft bewerkbaar.
+function spaarVrijToe(id){
+  const g=(SET.goals||[]).find(x=>x.id===id); if(!g) return;
+  const V=spaarVrij(); if(!(V.vrij>0)) return;
+  const rest=Math.max(Math.round((+g.doel||0)-(+g.gespaard||0)),0); if(rest<=0) return;
+  const bij=Math.min(V.vrij,rest);
+  g.gespaard=Math.round((+g.gespaard||0)+bij);
+  save(); render();
+  toast(`${ICON('check')} ${euro0(bij)} toegewezen aan ${g.naam||'je doel'}`);
+}
 // waar stel je het maandbedrag/percentage van dít item in?
 function planAllocOpen(it){
   if(it.type==='noodfonds') return 'openNoodfondsPanel()';
@@ -3571,7 +3613,7 @@ function renderPlan(bare){
           <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${euro0(p.gespaard)} / ${euro0(p.doel)}</span></div>
           <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>
           <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
-          ${planWachtHint(p)}
+          ${planWachtHint(p)}${spaarVrijLine(p,P)}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${up}${dn}</div>
       </div>
