@@ -3417,9 +3417,12 @@ function planCapacity(){
 //   fixed → min(perMaand, wat er nog is) · pct → min(pct% van de héle capaciteit, wat er nog is)
 //   auto  → neemt de rest die op dat moment overblijft
 // Nooit meer dan wat het doel nog nodig heeft; wat overblijft zakt door naar het volgende item.
+// Ronde 2 (v98): wat na ronde 1 nog over is blijft niet liggen maar zakt top-down door naar het
+// eerstvolgende lopende doel, ook voorbij zijn vaste maandbedrag. Per item: base = ronde 1,
+// extra = wat er is doorgezakt, alloc = de som (waarop status en eta gerekend worden).
 function allocatePlan(){
   const cap=planCapacity(); let left=cap;
-  return planItems().map(it=>{
+  const P=planItems().map(it=>{
     const rest=Math.max(Math.round(it.doel-it.gespaard),0);
     let alloc=0, status='';
     if(planPaused(it.id)) status='gepauzeerd';
@@ -3430,15 +3433,37 @@ function allocatePlan(){
       else if(it.mode==='pct') wens=Math.min(Math.round(cap*it.pct/100),rest);
       else                     wens=rest;                       // auto: pakt wat er nog is
       alloc=Math.max(Math.min(wens,left),0); left-=alloc;
-      if(alloc<=0) status='wacht op capaciteit';
     }
-    let eta=null;
-    if(alloc>0){
-      if(it.type==='aflossen'){ const mm=payoffMonths(it.rest,(it.debtPer||0)+alloc,it.rente); eta=isFinite(mm)&&mm>0?mm:null; }
-      else eta=Math.ceil(rest/alloc);
-    }
-    return Object.assign({},it,{rest,alloc,eta,status});
+    return Object.assign({},it,{rest,alloc,base:alloc,extra:0,status});
   });
+  // ronde 2: het restant vult de lopende doelen bij, in dezelfde prioriteitsvolgorde
+  for(const p of P){
+    if(left<=0) break;
+    if(p.status==='gepauzeerd'||p.rest<=0) continue;            // gepauzeerd en bereikt slaan we over
+    const ruimte=p.rest-p.alloc; if(ruimte<=0) continue;        // dit doel heeft al wat het nodig heeft
+    const bij=Math.min(ruimte,left); p.alloc+=bij; p.extra+=bij; left-=bij;
+  }
+  // status + eta op de definitieve toewijzing; en bij "wacht op capaciteit": wie het opmaakt
+  let auto1=null;
+  for(const p of P){
+    if(p.status==='gepauzeerd'||p.status==='bereikt'){ p.eta=null; continue; }
+    p.status=p.alloc>0?'':'wacht op capaciteit';
+    p.eta=null;
+    if(p.alloc>0){
+      if(p.type==='aflossen'){ const mm=payoffMonths(p.rest,(p.debtPer||0)+p.alloc,p.rente); p.eta=isFinite(mm)&&mm>0?mm:null; }
+      else p.eta=Math.ceil(p.rest/p.alloc);
+    }
+    // een auto-doel erboven pakt alles wat er nog was — dát is waarom dit item niets krijgt
+    if(p.status==='wacht op capaciteit'&&auto1) p.blokkeerder={id:auto1.id,naam:auto1.naam,type:auto1.type};
+    if(p.mode==='auto'&&p.alloc>0) auto1=p;
+  }
+  return P;
+}
+// wat er ná het bijvullen van alle lopende doelen nog over is (verdwijnt nergens: zie renderPlan)
+function planVrij(P){
+  P=P||allocatePlan();
+  const used=P.reduce((a,x)=>a+(+x.alloc||0),0);
+  return Math.max(planCapacity()-used,0);
 }
 function planMove(id,dir){
   const ids=planItems().map(x=>x.id); const i=ids.indexOf(id); const j=i+dir;
@@ -3473,7 +3498,50 @@ function planSub(p){
   const dat=p.eta?etaDatum(p.eta):'';
   const eta=p.eta?` · op dit tempo ~${p.eta} ${p.eta===1?'maand':'maanden'}${dat?` · rond ${dat}`:''}`:'';
   const mod=p.mode==='pct'?`${(''+p.pct).replace('.',',')}% · `:(p.mode==='fixed'?'vast · ':'');
-  return `${mod}${euro0(p.alloc)}/mnd${eta}`;
+  // maak zichtbaar dat een deel is doorgezakt uit wat er boven overbleef
+  const dz=(+p.extra>0&&p.mode!=='auto')?` · waarvan ${euro0(p.extra)} doorgezakt`:'';
+  return `${mod}${euro0(p.alloc)}/mnd${dz}${eta}`;
+}
+// Waaróm krijgt dit doel niets? Een auto-doel erboven pakt wat er overblijft; met een maandbedrag
+// of percentage daarop zakt de rest hierheen door. Uitleg + tik naar díe invoer, geen dwang.
+function planWachtHint(p){
+  const b=p&&p.status==='wacht op capaciteit'&&p.blokkeerder; if(!b) return '';
+  const kort=isMode('rustig');
+  const txt=kort
+    ? `‘${esc(b.naam)}’ pakt nu wat er overblijft.`
+    : `‘${esc(b.naam)}’ pakt nu alles wat er overblijft. Geef dat doel een maandbedrag of %, dan zakt de rest hierheen door.`;
+  return `<div class="plan-hint small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${txt}
+    <span style="color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();${planAllocOpen(b)}">maandbedrag instellen ›</span></div>`;
+}
+// waar stel je het maandbedrag/percentage van dít item in?
+function planAllocOpen(it){
+  if(it.type==='noodfonds') return 'openNoodfondsPanel()';
+  if(it.type==='aflossen')  return `openPlanAlloc('${it.id}')`;
+  return `openGoal('${it.id}')`;
+}
+// Aflos-items hebben geen eigen record en dus geen editor voor hun maandbedrag; deze kleine sheet
+// geeft ze dezelfde keuze als een spaardoel, zodat de hint hierboven altijd ergens op uitkomt.
+function openPlanAlloc(id){ window._planAllocId=id; renderPlanAllocSheet(); showSheetBg(); }
+function renderPlanAllocSheet(){
+  const id=window._planAllocId; const it=planMap()[id]; if(!it){ closeSheet(); return; }
+  const A=planAllocOf(planAllocCfg(id)); const cap=planCapacity();
+  const veld = A.mode==='fixed'
+    ? `<label class="fld" style="margin-top:10px">Per maand extra (€)</label><input id="paPer" type="number" inputmode="numeric" min="0" value="${A.perMaand||''}" placeholder="bv. 100" onchange="setPlanAllocVeld('perMaand',this.value)" style="width:100%">`
+    : A.mode==='pct'
+    ? `<label class="fld" style="margin-top:10px">Deel van je spaarinleg (%)</label><input id="paPct" type="number" inputmode="numeric" min="0" max="100" value="${A.pct||''}" placeholder="bv. 30" onchange="setPlanAllocVeld('pct',this.value)" style="width:100%">
+       <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd te verdelen · dit item krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarinleg bekend.'}</div>`
+    : `<div class="small muted" style="margin-top:9px">Dit item krijgt wat er op zijn plek in de rij nog over is.</div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg);flex:1">${esc(it.naam)}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="card"><div class="small" style="font-weight:600">Hoeveel gaat hier maandelijks heen?</div>
+      <div id="paModes">${planModeChips(A.mode,'setPlanAllocMode')}</div>${veld}</div>
+    <div style="height:8px"></div>`;
+}
+function setPlanAllocMode(v){ setPlanAlloc(window._planAllocId,{allocMode:v}); renderPlanAllocSheet(); }
+function setPlanAllocVeld(veld,v){
+  const n=Math.max(0,Math.round(+v||0));
+  setPlanAlloc(window._planAllocId, veld==='pct'?{pct:Math.min(n,100)}:{perMaand:n});
+  renderPlanAllocSheet();
 }
 // Zachte spiegel: verdeel je meer dan er is, dan zeggen we dat. Nooit blokkeren.
 function planAllocWarning(){
@@ -3503,6 +3571,7 @@ function renderPlan(bare){
           <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${euro0(p.gespaard)} / ${euro0(p.doel)}</span></div>
           <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>
           <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
+          ${planWachtHint(p)}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${up}${dn}</div>
       </div>
@@ -3516,7 +3585,11 @@ function renderPlan(bare){
   const head=`<div class="small muted" style="margin:0 2px 8px">Je ${jrg('spaarinleg','spaarinleg')} gaat van boven naar beneden: ${cap>0?`<b>${euro0(cap)}/mnd</b> te verdelen`:'nog geen spaarinleg bekend'}. Zet met ▲▼ wat eerst moet.</div>`;
   const W=planAllocWarning();
   const warn=W?`<div id="planWarn" class="small" style="color:${isMode('rustig')?'var(--mut)':'var(--amber)'};background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 11px;margin:0 2px 9px;line-height:1.45">${W.txt}</div>`:'';
-  const inner=head+warn+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  // niets blijft liggen: is er ná het bijvullen van álle lopende doelen nog capaciteit over,
+  // dan zeggen we dat rustig i.p.v. het geruisloos te laten verdwijnen
+  const vrij=planVrij(P);
+  const vrijLine=vrij>0?`<div id="planVrij" class="small muted" style="margin:0 2px 9px;line-height:1.45"><b>${euro0(vrij)}/mnd</b> nog vrij${isMode('rustig')?'':' — al je doelen krijgen wat ze nodig hebben'} · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></div>`:'';
+  const inner=head+warn+vrijLine+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
   if(bare) return inner;
   return `<div style="margin-top:18px"><div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Mijn plan</span></div>${inner}</div>`;
 }

@@ -205,10 +205,15 @@ test.describe('c · de editors', () => {
     await page.locator('#nfPer').press('Tab');
     await page.waitForFunction(() => (SET.planAlloc || {}).noodfonds && SET.planAlloc.noodfonds.perMaand === 80);
 
-    const P = await alloc(page);
+    const P = await page.evaluate(() => allocatePlan().map((x) => ({ id: x.id, mode: x.mode, base: x.base, extra: x.extra, alloc: x.alloc })));
     const nf = P.find((x) => x.id === 'noodfonds');
     expect(nf.mode).toBe('fixed');
-    expect(nf.alloc).toBe(80);                                   // niet meer de hele spaarruimte
+    expect(nf.base).toBe(80);                                    // ronde 1: niet meer de hele spaarruimte
+    // v98: er is hier geen ander lopend doel, dus het restant zakt door naar het noodfonds zelf
+    // i.p.v. ongebruikt te blijven liggen. Zodra er een tweede doel staat, gaat het daarheen.
+    expect(P.length).toBe(1);
+    expect(nf.extra).toBe(nf.alloc - 80);
+    expect(await page.evaluate(() => planVrij())).toBe(0);
   });
 
   test('de plan-lijst benoemt de modus en het bedrag', async ({ page }) => {
