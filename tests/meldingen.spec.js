@@ -165,12 +165,39 @@ test.describe('c · save-risk: ack en ontdubbeling', () => {
 
   test('zonder save-risk mag tempo gewoon vuren', async ({ page }) => {
     await boot(page, seed({ savingMode: 'amount', savingAmount: 0, manualBal: { [MAIN]: 5000, [TWEEDE]: 0 } }));
-    const ks = await keys(page);
-    expect(ks.includes('save-risk')).toBe(false);
-    const t = await page.evaluate(() => { const d = daysElapsed(months()[months().length - 1]); return d.elapsed; });
+    expect((await keys(page)).includes('save-risk')).toBe(false);
+
+    // 'tempo' en 'discr' zitten allebei in LOSS_GROUPS en de dosering laat er maar één per dag
+    // door (MECHANISM_SPEC.lossAversion). Vanaf dag 5 van de maand haalt de hoger scorende
+    // discr-melding dat ene slot weg, en dan zegt de aanwezigheid van 'tempo' niets meer over de
+    // save-risk-ontdubbeling die deze test bedoelt. Ruim het dagbudget op, dan meet ze dat wel.
+    // De dosering zelf staat in de test hieronder.
+    const ks = await page.evaluate(() => {
+      MECHANISM_SPEC.lossAversion.condities.maxFramesPerDag = 99;
+      SET.lossFrames = null;
+      return scoreNotifs().map((n) => n.key);
+    });
+    const t = await page.evaluate(() => daysElapsed(months()[months().length - 1]).elapsed);
     if (t >= 5) {
       const tempoMogelijk = await page.evaluate(() => { const m = months()[months().length - 1], tt = totals(m), d = daysElapsed(m); return tt.budget > 0 && (tt.spend / (d.elapsed || 1) * d.dim) > tt.budget * 1.07; });
       expect(ks.includes('tempo')).toBe(tempoMogelijk);
     }
+  });
+
+  // De keerzijde van bovenstaande: de dosering mag juist niet wegvallen. Hooguit
+  // maxFramesPerDag loss-frames, nooit gestapeld, en het hoogst scorende frame wint.
+  test('de loss-dosering laat maar één stakes-melding per dag door', async ({ page }) => {
+    await boot(page, seed({ savingMode: 'amount', savingAmount: 0, manualBal: { [MAIN]: 5000, [TWEEDE]: 0 } }));
+    const r = await page.evaluate(() => {
+      SET.lossFrames = null;
+      const max = MECHANISM_SPEC.lossAversion.condities.maxFramesPerDag || 1;
+      const gedoseerd = scoreNotifs().filter((n) => isLossFrame(n.key));
+      MECHANISM_SPEC.lossAversion.condities.maxFramesPerDag = 99;
+      const alles = scoreNotifs().filter((n) => isLossFrame(n.key));
+      return { max, gedoseerd: gedoseerd.map((n) => n.key), n: alles.length, top: alles.length ? alles[0].key : null };
+    });
+    expect(r.n).toBeGreaterThan(1);                                      // er ligt echt meer klaar
+    expect(r.gedoseerd.length).toBe(r.max);                              // maar er komt er één door
+    expect(r.gedoseerd[0]).toBe(r.top);                                  // en dat is de hoogst scorende
   });
 });
