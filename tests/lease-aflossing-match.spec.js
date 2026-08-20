@@ -75,7 +75,10 @@ test.describe('a · het gemelde geval', () => {
     expect(det.bedrag).toBe(537);                                    // de echte termijn (537,33 -> afgerond)
 
     const scherm = await page.locator('#s-vermogen').innerText();
-    expect(scherm).toContain('aflossing');
+    // v100: deze regel heette "aflossing herkend in je uitgaven" en las alsof de schuldstand was
+    // bijgewerkt. Ze gaat over de MAANDBETALING in je uitgaven; de stand blijft handmatig.
+    // Zie tests/restschuld-bijwerken.spec.js.
+    expect(scherm).toContain('maandbetaling');
     expect(scherm).not.toContain('loopt als interne overboeking');
   });
 

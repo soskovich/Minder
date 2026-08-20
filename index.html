@@ -3785,15 +3785,19 @@ function renderDebts(){
     const coupled=(d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0);
     if(coupled && rest>0){ sub+=(sub?' · ':'')+`eigen deel ${euro0((+d.dagwaarde||0)-rest)}`; }
     const nmLabel=coupled?' <span style="color:var(--mut2);font-size:10.5px">· gekoppeld aan bezitting</span>':'';
-    // detectie: zit de maandaflossing in je uitgaven?
+    // Detectie: zit de MAANDBETALING in je uitgaven? (v100) Die groene regel zei "aflossing …",
+    // wat las alsof de schuldstand was bijgewerkt. Dat gebeurt nergens: `rest` is en blijft je
+    // eigen invoer. Daarom expliciet "maandbetaling", plus de hint dat je de stand zelf bijwerkt.
     let inExpTxt='',inExpCol='var(--mut2)';
     if(rest>0){ const det=debtInExpenses(d);
-      if(det.status==='in-uitgaven'){ inExpTxt=(det.conf==='hoog'?'aflossing herkend in je uitgaven':'aflossing lijkt in je uitgaven te zitten'); inExpCol='var(--green)'; }
-      else if(det.status==='intern'){ inExpTxt='loopt als interne overboeking · niet in je uitgaven'; inExpCol='var(--amber)'; }
-      else if(det.status==='buiten-uitgaven'){ inExpTxt='afschrijving valt buiten je uitgaven'; inExpCol='var(--amber)'; }
-      else if(det.status==='niet-gevonden'){ inExpTxt='aflossing niet teruggevonden in je uitgaven'; inExpCol='var(--mut2)'; }
+      if(det.status==='in-uitgaven'){ inExpTxt=(det.conf==='hoog'?'maandbetaling herkend in je uitgaven':'maandbetaling lijkt in je uitgaven te zitten'); inExpCol='var(--green)'; }
+      else if(det.status==='intern'){ inExpTxt='maandbetaling loopt als interne overboeking · niet in je uitgaven'; inExpCol='var(--amber)'; }
+      else if(det.status==='buiten-uitgaven'){ inExpTxt='maandbetaling valt buiten je uitgaven'; inExpCol='var(--amber)'; }
+      else if(det.status==='niet-gevonden'){ inExpTxt='maandbetaling niet teruggevonden in je uitgaven'; inExpCol='var(--mut2)'; }
     }
-    return `<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Schuld')}${nmLabel}</div><div class="cp-sub"${warn?' style="color:var(--red)"':''}>${sub}</div>${fwd?`<div class="cp-sub" style="color:var(--mut2);margin-top:2px">${fwd}</div>`:''}${inExpTxt?`<div class="cp-sub" style="color:${inExpCol};margin-top:2px;font-size:10.5px">${inExpTxt}</div>`:''}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700;color:${rest<=0?'var(--green)':'var(--txt)'}">${rest<=0?euro0(0):'Nog '+euro0(rest)}</span><span class="muted">›</span></div></div>`;}).join('');
+    const zelfHint=rest>0?`<span class="debt-zelf" style="color:var(--mut2);cursor:pointer" onclick="event.stopPropagation();openDebtUpdate('${d.id}')">${inExpTxt?' · ':''}restschuld werk je zelf bij</span>`:'';
+    const bijwerk=rest>0?`<span class="small debt-upd" style="color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();openDebtUpdate('${d.id}')">bijwerken ›</span>`:'';
+    return `<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Schuld')}${nmLabel}</div><div class="cp-sub"${warn?' style="color:var(--red)"':''}>${sub}</div>${fwd?`<div class="cp-sub" style="color:var(--mut2);margin-top:2px">${fwd}</div>`:''}${(inExpTxt||zelfHint)?`<div class="cp-sub" style="color:${inExpCol};margin-top:2px;font-size:10.5px">${inExpTxt}${zelfHint}</div>`:''}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700;color:${rest<=0?'var(--green)':'var(--txt)'}">${rest<=0?euro0(0):'Nog '+euro0(rest)}</span>${bijwerk}<span class="muted">›</span></div></div>`;}).join('');
   const totLine = (nSchuld>=2) ? (alleEindig ? `Op dit tempo ben je overal vanaf rond <b>${svDatum(laatsteN)}</b>.` : `Eén of meer schulden dalen op dit tempo niet, dus een schuldenvrij-datum is er nog niet.`) : '';
   const wr=ds.filter(d=>(+d.rente||0)>0 && Math.max(+d.rest||0,0)>0).sort((a,b)=>(+b.rente||0)-(+a.rente||0));
   const prio = wr.length>=2 ? `<div class="card" style="margin-bottom:8px"><div class="hlabel" style="margin-bottom:6px">Wat eerst? · hoogste rente bespaart het meest</div>${wr.map((d,i)=>`<div class="row" style="justify-content:space-between;padding:6px 0${i<wr.length-1?';border-bottom:1px solid var(--line)':''}"><span><span style="font-size:10.5px;font-weight:700;color:var(--on-accent);background:var(--teal);border-radius:6px;padding:1px 7px;margin-right:7px">${i+1}</span>${esc(d.naam||'Schuld')}</span><span style="font-size:11.5px;font-weight:700;color:${(+d.rente>=5)?'var(--red)':'var(--green)'}">${d.rente}%</span></div>`).join('')}<div class="small muted" style="font-size:var(--fs-xs);margin-top:8px">Zet je extra euro op de bovenste. Liever motivatie? Kleinste schuld eerst kan ook. Jij kiest. Geen advies.</div></div>` : '';
@@ -3818,6 +3822,7 @@ function openDebt(id,pre){
   const vsBel=(jr>0&&expR!=null)?`<div class="small muted" style="margin-top:12px;font-size:11.5px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px"><b>Aflossen of beleggen?</b> Je schuldrente ${jr}% is ${jr>expR?'hoger':'lager'} dan je verwachte rendement ${expR}%. ${jr>expR?'Aflossen levert dan gegarandeerd meer op dan beleggen.':'Dan is het een afweging tussen zekerheid (aflossen) en risico (beleggen).'} Geen advies.</div>`:'';
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px">${isNew?'Nieuwe schuld':'Schuld bewerken'}</div>
+    ${(d0&&rest>0)?`<button class="btn sec" style="margin:0 0 14px;width:100%" onclick="openDebtUpdate('${id}')">Alleen de restschuld bijwerken</button>`:''}
     <label class="fld">Wat voor schuld?</label><input id="dNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Studieschuld DUO" style="width:100%">
     <label class="fld" style="margin-top:10px">Type</label>
     <select id="dType" onchange="dTypeChange()" style="width:100%">${opt('lening','Lening / krediet')}${opt('studie','Studieschuld')}${opt('financiallease','Financial lease (auto)')}</select>
@@ -3848,6 +3853,49 @@ function openDebt(id,pre){
     ${d0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteDebt('${id}')">Schuld verwijderen</div>`:''}
     <div style="height:8px"></div>`;
   showSheetBg();
+}
+/* ----- Restschuld snel zelf bijwerken (v100) -----
+   `rest` is en blijft je eigen invoer: nergens verlaagt code de schuldstand op grond van
+   betalingen. Deze lichte sheet maakt bijwerken makkelijk zonder de volledige editor te openen,
+   en raakt alleen `rest` aan (en `start`, als de nieuwe stand daarboven ligt). */
+function debtVloer(d){ return (d && d.type==='financiallease') ? Math.max(+d.slot||0,0) : 0; }   // lease zakt niet onder de slottermijn
+function debtRestSet(id,nieuw){
+  const ds=SET.debts||[]; const i=ds.findIndex(x=>x.id===id); if(i<0) return null;
+  const d=ds[i]; const r=Math.max(Math.round(+nieuw||0),0);
+  d.rest=r;
+  if(r>(+d.start||0)) d.start=r;    // anders zou "afgelost = start − rest" negatief worden
+  save(); return r;
+}
+function openDebtUpdate(id){
+  const d=(SET.debts||[]).find(x=>x.id===id); if(!d) return;
+  const rest=Math.max(+d.rest||0,0), per=+d.perMaand||0, vloer=debtVloer(d);
+  const afboek=(per>0&&rest>vloer)?`
+    <button class="btn sec" style="margin-top:12px;width:100%" onclick="debtAfboeken('${id}')">Boek maandaflossing af − ${euro0(per)}</button>
+    <div class="small muted" style="font-size:var(--fs-xs);margin-top:6px">Bij benadering — rente is hier niet meegerekend. Vul gerust de exacte stand van je bank in.</div>`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg);flex:1">${esc(d.naam||'Schuld')}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    ${isMode('rustig')?'':`<div class="small muted" style="margin-bottom:12px">Je restschuld daalt niet vanzelf mee met je betalingen — die stand houd je zelf bij.</div>`}
+    <label class="fld">Restschuld nu (€)</label><input id="duRest" type="number" inputmode="numeric" min="0" value="${rest||''}" placeholder="bv. 8000" style="width:100%">
+    ${vloer>0?`<div class="small muted" style="font-size:var(--fs-xs);margin-top:6px">Slottermijn ${euro0(vloer)} · daaronder boekt deze knop niet verder af.</div>`:''}
+    ${afboek}
+    <button class="btn" style="margin-top:14px;width:100%" onclick="saveDebtRest('${id}')">${ICON('check')} Opslaan</button>
+    <div class="small" style="margin-top:12px;text-align:center;color:var(--mut2);cursor:pointer" onclick="openDebt('${id}')">Alle gegevens bewerken</div>
+    <div style="height:8px"></div>`;
+  showSheetBg();
+}
+function debtAfboeken(id){
+  const d=(SET.debts||[]).find(x=>x.id===id); if(!d) return;
+  const per=+d.perMaand||0; if(per<=0) return;
+  const r=debtRestSet(id, Math.max(Math.max(+d.rest||0,0)-per, debtVloer(d)));
+  if(r===null) return;
+  render(); openDebtUpdate(id);   // sheet opnieuw opbouwen met de nieuwe stand
+  toast(`${ICON('check')} Restschuld nu ${euro0(r)}`);
+}
+function saveDebtRest(id){
+  const el=document.getElementById('duRest'); const v=el?el.value:'';
+  if(String(v).trim()===''){ toast('Vul de restschuld in'); return; }
+  const r=debtRestSet(id,v); if(r===null) return;
+  closeSheet(); render(); toast(`${ICON('check')} Restschuld bijgewerkt`);
 }
 function saveDebt(id){
   const v=x=>(document.getElementById(x)||{}).value;
