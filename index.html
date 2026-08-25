@@ -4753,6 +4753,11 @@ function nfCrisis(c){ const o=SET.nfCrisis||{}; return o[c]!=null?o[c]:(NF_CRISI
 function nfAmount(c){ const o=SET.nfAmount||{}; return (o[c]!=null && o[c]!=='')?+o[c]:null; }   // handmatig crisisbedrag (euro) per categorie, of null = automatisch
 function nfNote(c){ return (SET.nfNote||{})[c]||''; }
 function nfMaanden(){ return +SET.nfMaanden||4; }
+/* v101: het doel mag ook een getal van jezelf zijn. Zonder dit schuift het doel mee met elke
+   import, want essCrisis leunt op medianen over je laatste 12 maanden. null = automatisch
+   (de default; nietsdoen houdt het gedrag dat er altijd was). Een bedrag <= 0 telt als niet
+   gezet, zodat je nooit met een doel van nul en een onbruikbaar percentage achterblijft. */
+function nfDoelVast(){ const v=SET.nfDoelVast; if(v==null||v==='') return null; const n=Math.round(+v); return (isFinite(n)&&n>0)?n:null; }
 function nfMedian(a){ if(!a.length)return 0; const s=[...a].sort((x,y)=>x-y),n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; }
 let _nfGen=-1,_nfCache=null;   // lichte memo: hergebruik binnen dezelfde datageneratie (Richting A maakt savingsModel afhankelijk van noodfondsModel)
 function noodfondsModel(){
@@ -4769,13 +4774,17 @@ function noodfondsModel(){
     else if(kl==='comfort'){ if(med>0||mx>0) comfort.push([cat,med,mx]); }
   }
   comfort.sort((a,b)=>b[1]-a[1]); rek.sort((a,b)=>b[1]-a[1]);
-  const essNormaal=vast+varNormaal, maanden=nfMaanden(), doel=Math.round(essCrisis*maanden);
+  // Eén bron blijft één bron: de handmatige waarde vervangt hier het doel, zodat elke lezer
+  // (hero, plan-item, mijlpaal, coach) hetzelfde getal ziet. doelAuto blijft naast doel staan
+  // zodat de sheet eerlijk kan tonen wat de schatting nú zou zeggen.
+  const essNormaal=vast+varNormaal, maanden=nfMaanden(), doelAuto=Math.round(essCrisis*maanden);
+  const doelVast=nfDoelVast(), doel=(doelVast!=null)?doelVast:doelAuto;
   // voortgang uit dezelfde bron als de hero en het plan-item (v67/v68): spaarrekening + extra
   // spaargeld, met terugval op je totale saldo. null = saldi onbekend, dan tonen we geen percentage.
   let spaar=null; try{ const s=spaarSaldo(); spaar=s.missing?null:Math.round(s.cur); }catch(_){}
   const pct=(spaar!=null&&doel>0)?Math.min(100,Math.round(spaar/doel*100)):null;
   const comfortTot=comfort.reduce((a,c)=>a+c[1],0);
-  _nfCache={win,n,vast,varNormaal,varCrisis,essNormaal,essCrisis,maanden,doel,spaar,pct,detail,comfort,rek,comfortTot,huurGevonden,crisisRows}; _nfGen=_dataGen;
+  _nfCache={win,n,vast,varNormaal,varCrisis,essNormaal,essCrisis,maanden,doel,doelAuto,doelVast,spaar,pct,detail,comfort,rek,comfortTot,huurGevonden,crisisRows}; _nfGen=_dataGen;
   return _nfCache;
 }
 // Richting A: noodfonds ís de buffer, dus geen aparte "overnemen als buffer-doel"-knop meer (die veroorzaakte de drift tussen twee doelen)
@@ -4796,7 +4805,7 @@ function noodfondsCard(){
     <div class="small muted">${jrg('crisislast','essentiële crisis-last')}${M.huurGevonden?', huur inbegrepen':''}</div>
     ${huurNote}
     <div class="chips" style="margin-top:11px">${chips}</div>
-    <div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-top:13px">Doel · ${M.maanden} mnd</div>
+    <div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-top:13px">Doel · ${M.doelVast!=null?'door jou vastgezet':M.maanden+' mnd'}</div>
     <div style="font-size:var(--fs-xl);font-weight:800;margin-top:3px">${euro0(M.doel)}</div>
     ${prog}
     <details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">${jrg('bezuinigingsruimte','Bezuinigingsruimte')} · ${euro0(M.comfortTot)}/mnd</summary><div style="margin-top:8px"><div class="small muted" style="font-size:var(--fs-xs);margin-bottom:8px">Comfort-uitgaven die je in een crisis kunt schrappen — daarom tellen ze niet mee in je crisis-minimum.</div>${bez}</div></details>
@@ -4837,13 +4846,30 @@ function renderNfSheet(){
   </div>`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg)">${ICON('home')} Noodfonds verfijnen</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="card" style="text-align:center"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;color:var(--teal)">Doel · ${M.maanden} mnd</div>
+    <div class="card" style="text-align:center"><div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;color:var(--teal)">Doel · ${M.doelVast!=null?'door jou vastgezet':M.maanden+' mnd'}</div>
       <div style="font-size:32px;font-weight:800;letter-spacing:-1px;margin:4px 0">${euro0(M.doel)}</div>
       <div class="small muted">${euro0(M.essCrisis)}/mnd essentieel</div>
-      <div class="chips" id="nfMaandChips" style="margin-top:10px">${chips}</div></div>
+      <div class="chips" id="nfMaandChips" style="margin-top:10px">${chips}</div>
+      ${nfDoelVastRij(M)}</div>
     ${nfAllocCard()}
     ${listCard}
     <div style="height:8px"></div>`;
+}
+/* De keuze tussen "schat het" en "ik bepaal het". Default is de schatting: laat je dit veld leeg,
+   dan verandert er niets aan het oude gedrag. Staat er een bedrag, dan zeggen we er eerlijk bij
+   wat de schatting nú zou zeggen, en is het in één tik terug te draaien (MECHANISM_SPEC.defaultEffect). */
+function nfDoelVastRij(M){
+  const v=M.doelVast;
+  const veld=`<div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid ${v!=null?'var(--teal)':'var(--line)'};border-radius:9px;padding:4px 9px;width:118px">
+      <span class="small muted">€</span>
+      <input id="nfDoelVast" type="number" inputmode="numeric" min="0" value="${v!=null?v:''}" placeholder="${M.doelAuto}" onchange="setNfDoelVast(this.value)"
+        style="flex:1;min-width:0;background:transparent;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;padding:0"></div>`;
+  const noot=(v!=null)
+    ? `<div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">Dit doel schuift niet meer mee met je transacties. De schatting zou nu ${euro0(M.doelAuto)} zeggen. <span style="color:var(--teal);cursor:pointer" onclick="resetNfDoelVast()">terug naar automatisch</span></div>`
+    : `<div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">Leeg = geschat uit je laatste 12 maanden, dus het beweegt mee met nieuwe transacties. Vul een bedrag in om het vast te zetten.</div>`;
+  return `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:11px">
+    <div class="row" style="gap:8px;align-items:center"><label class="small muted" style="flex:1;text-align:left">Doel zelf bepalen</label>${veld}</div>
+    ${noot}</div>`;
 }
 // het noodfonds heeft dezelfde verdeelmodus als een spaardoel; het is immers gewoon plan-item #1
 function nfAllocCard(){
@@ -4869,6 +4895,13 @@ function setNfMaanden(v){
   if(!isFinite(n)||n<1||n>24){ renderNfSheet(); return; }
   SET.nfMaanden=n; save(); renderNfSheet(); try{renderVooruit();}catch(_){}
 }
+// Doel zelf vastzetten. Leeg, nul of onzin -> terug naar de schatting; nooit een stille nul.
+function setNfDoelVast(v){
+  const s=(''+v).trim(), n=Math.round(+s);
+  if(s===''||!isFinite(n)||n<=0) delete SET.nfDoelVast; else SET.nfDoelVast=n;
+  save(); renderNfSheet(); try{renderVooruit();}catch(_){}
+}
+function resetNfDoelVast(){ delete SET.nfDoelVast; save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
 function setNfAmount(c,v){ SET.nfAmount=SET.nfAmount||{}; const s=(''+v).trim(); if(s===''||isNaN(+s)) delete SET.nfAmount[c]; else SET.nfAmount[c]=Math.max(0,Math.round(+s)); save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
 function resetNfAmount(c){ if(SET.nfAmount) delete SET.nfAmount[c]; if(SET.nfNoteOpen) delete SET.nfNoteOpen[c]; save(); renderNfSheet(); try{renderVooruit();}catch(_){} }
 function setNfNote(c,v){ SET.nfNote=SET.nfNote||{}; const s=(''+v).trim(); if(s==='') delete SET.nfNote[c]; else SET.nfNote[c]=s.slice(0,80); save(); renderNfSheet(); }
@@ -8080,7 +8113,11 @@ function setBudget(){
     <label class="fld">Bufferdoel</label>
     <div class="small muted" style="margin-bottom:6px">Je buffer volgt je noodfonds: essentiële crisis-last × het aantal maanden. Verfijnen doe je op Vooruitblik ▸ Noodfonds.</div>
     <div class="chips">${[3,4,6].map(x=>`<span class="chip ${nfMaanden()===x?'on':''}" onclick="SET.nfMaanden=${x};save();render();">${x} mnd</span>`).join('')}</div>
-    <div class="small muted" style="margin-top:6px">Doel nu: <b>${euro0((function(){try{return noodfondsModel().doel}catch(_){return 0}})())}</b> · ${nfMaanden()} mnd essentiële crisis-last.</div>
+    <div class="small muted" style="margin-top:6px">${(function(){try{const M=noodfondsModel();
+      return M.doelVast!=null
+        ? `Doel nu: <b>${euro0(M.doel)}</b> · door jou vastgezet, dus de maandkeuze hierboven stuurt het niet. De schatting zou ${euro0(M.doelAuto)} zeggen.`
+        : `Doel nu: <b>${euro0(M.doel)}</b> · ${M.maanden} mnd essentiële crisis-last.`;
+    }catch(_){return '';}})()}</div>
     <label class="fld" style="margin-top:14px">${ICON('chart')} Maandbudget per categorie</label>
     <div class="small muted" style="margin:0 0 6px">Dit zijn dezelfde <b>potjes</b> als bij je Coach, wijzig ze hier of daar, het is één systeem.</div>
     <div class="small" id="potGridTotal" style="margin:2px 0 4px">${potRoomLineHTML(totalBudget(), plannedTotalBudget())}</div>
