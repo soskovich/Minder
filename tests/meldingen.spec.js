@@ -41,16 +41,32 @@ async function boot(page, payload) {
 }
 
 test.describe('a · saldo-alarm zonder volledig bekende saldi', () => {
-  // huur van morgen (dag+1) zodat lowbal iets te vergelijken heeft
-  const morgen = () => {
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    return String(d.getDate()).padStart(2, '0');
+  // De huur moet MORGEN vallen, welke dag het vandaag ook is. Twee drempels maken dit
+  // datumgevoelig, en met de vaste dag-02-huur uit de fixture liep de test daar tegenaan:
+  //  - liquidityDaily(3) kijkt drie DAGEN vooruit, dus een last verderop telt niet mee;
+  //  - recurringSchedule (index.html:1568) laat een maandreeks vallen die meer dan 55 dagen
+  //    stilligt, en dag 02 van de vórige maand passeert die grens rond dag 25 van deze maand.
+  // Vandaar: zet de huur van de historische maanden op de dag van morgen (per maand geclamd op
+  // het aantal dagen) en laat die van deze maand weg. Dan is de laatste betaling ~30 dagen oud
+  // en plant recurringSchedule de volgende op morgen — op elke dag van het jaar.
+  // De reeks is verankerd aan MORGEN, niet aan de huidige maand: morgen minus 1, 2 en 3 maanden.
+  // Anker je aan de maand, dan zet de laatste dag van de maand de huur op dag 01 en ligt de
+  // vorige betaling 61 dagen terug — dan vervalt de reeks alsnog. Nagerekend voor elke dag in
+  // 2026-2028 (incl. schrikkeljaar): laatste betaling altijd ~30 dagen oud, volgende op morgen.
+  const dstr = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const maandTerug = (k) => {
+    const n = new Date(); n.setDate(n.getDate() + 1); n.setHours(0, 0, 0, 0);        // morgen
+    const dim = new Date(n.getFullYear(), n.getMonth() - k + 1, 0).getDate();
+    return dstr(new Date(n.getFullYear(), n.getMonth() - k, Math.min(n.getDate(), dim)));
   };
-  // de huur staat op dag 02 en is deze maand nog niet afgeschreven -> recurringSchedule ziet hem
-  // als aankomend. Zonder dat is er niets om een saldo-alarm tegen af te zetten.
   const metLast = (extraSet) => {
     const p = seed(extraSet);
-    const tx = JSON.parse(p.minder_tx).filter((t) => !(t.id === 'huur-' + CUR));
+    let k = 0;
+    const tx = JSON.parse(p.minder_tx)
+      .filter((t) => t.id !== 'huur-' + CUR)                          // deze maand nog niet afgeschreven
+      .reverse()                                                      // nieuwste huur eerst -> k = 1, 2, 3
+      .map((t) => (t.id.indexOf('huur-') === 0 ? Object.assign({}, t, { date: maandTerug(++k) }) : t))
+      .reverse();
     p.minder_tx = JSON.stringify(tx);
     return p;
   };
