@@ -23,8 +23,9 @@ test.describe('a · noodfonds-widget weg, verfijnen blijft bereikbaar', () => {
     const v = await page.locator('#s-vooruit').innerText();
     expect(v).not.toMatch(/essentiële crisis-last/i);
     expect(v).not.toMatch(/bezuinigingsruimte/i);
-    // de functie zelf blijft bestaan, hij wordt alleen niet meer samengesteld
-    expect(await page.evaluate(() => typeof noodfondsCard)).toBe('function');
+    // v103: de functie bleef eerst staan omdat ze alleen niet meer werd samengesteld. Ze is nu
+    // opgeruimd; de sheet (openNoodfondsPanel) is de enige plek waar het noodfonds nog rendert.
+    expect(await page.evaluate(() => typeof noodfondsCard)).toBe('undefined');
     // de samenstelling zelf: sinds v71 opent Vooruitblik met "Nog deze maand", sinds v80 zonder hero
     expect(await page.evaluate(() => /innerHTML\s*=\s*nogDezeMaandCard\(\)\s*\+\s*doelZone/.test(renderVooruit.toString()))).toBe(true);
   });

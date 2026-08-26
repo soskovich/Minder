@@ -4835,30 +4835,9 @@ function noodfondsModel(){
   _nfCache={win,n,vast,varNormaal,varCrisis,essNormaal,essCrisis,maanden,doel,doelAuto,doelVast,spaar,pct,detail,comfort,rek,comfortTot,huurGevonden,crisisRows}; _nfGen=_dataGen;
   return _nfCache;
 }
-// Richting A: noodfonds ís de buffer, dus geen aparte "overnemen als buffer-doel"-knop meer (die veroorzaakte de drift tussen twee doelen)
-function noodfondsCard(){
-  const M=noodfondsModel();
-  const chips=[3,4,6].map(x=>`<span class="chip ${M.maanden===x?'on':''}" onclick="SET.nfMaanden=${x};save();renderVooruit()">${x} mnd</span>`).join('');
-  const prog=M.pct!=null
-    ? `<div class="bar" style="margin-top:8px"><i style="width:${M.pct}%"></i></div><div class="small muted" style="margin-top:6px">${euro0(M.spaar)} van ${euro0(M.doel)} · ${M.pct}% gevuld</div>`
-    : `<div class="small muted" style="margin-top:8px">Koppel je spaarrekening om je voortgang te zien.</div>`;
-  const huurNote=!M.huurGevonden
-    ? `<div class="small" style="color:var(--amber);margin-top:8px">${ICON('alert')} Huur nog niet herkend. Je grootste vaste last kan ontbreken, <span style="text-decoration:underline;cursor:pointer" onclick="go('vermogen')">controleer je schulden/lasten</span>.</div>` : '';
-  const bez=M.comfort.length
-    ? M.comfort.map(([c,med])=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)"><span class="small">${CATS[c]?CATS[c].name:c}</span><span class="small" style="font-weight:600">${euro0(med)}/mnd</span></div>`).join('')
-    : '<div class="small muted">Geen comfort-uitgaven gevonden.</div>';
-  return `<div class="card" id="nfCard">
-    <div class="row" style="justify-content:space-between"><div class="small" style="font-weight:700;color:var(--teal);letter-spacing:.04em;text-transform:uppercase">${ICON('home')} Noodfonds</div><span class="small muted" style="cursor:pointer" onclick="openNoodfondsPanel()">Verfijnen ›</span></div>
-    <div style="font-size:30px;font-weight:800;letter-spacing:-1px;margin:8px 0 2px">${euro0(M.essCrisis)}<span class="small muted" style="font-weight:600"> /mnd</span></div>
-    <div class="small muted">${jrg('crisislast','essentiële crisis-last')}${M.huurGevonden?', huur inbegrepen':''}</div>
-    ${huurNote}
-    <div class="chips" style="margin-top:11px">${chips}</div>
-    <div class="small muted" style="text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-top:13px">Doel · ${M.doelVast!=null?'door jou vastgezet':M.maanden+' mnd'}</div>
-    <div style="font-size:var(--fs-xl);font-weight:800;margin-top:3px">${euro0(M.doel)}</div>
-    ${prog}
-    <details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">${jrg('bezuinigingsruimte','Bezuinigingsruimte')} · ${euro0(M.comfortTot)}/mnd</summary><div style="margin-top:8px"><div class="small muted" style="font-size:var(--fs-xs);margin-bottom:8px">Comfort-uitgaven die je in een crisis kunt schrappen — daarom tellen ze niet mee in je crisis-minimum.</div>${bez}</div></details>
-  </div>`;
-}
+// noodfondsCard() is hier weg (v103): sinds het noodfonds een plan-item werd, rendert het
+// Vooruitblik-scherm die kaart niet meer. "Verfijnen" bij het plan-item opent openNoodfondsPanel().
+// tests/opschonen.spec.js bewaakt dat #nfCard niet terugkomt.
 function openNoodfondsPanel(){ window._setSheet=null; window._nfSheet=true; renderNfSheet(); showSheetBg(); }
 function renderNfSheet(){
   const M=noodfondsModel();
