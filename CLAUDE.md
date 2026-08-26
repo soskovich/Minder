@@ -8,7 +8,7 @@ Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dra
 
 ## Bestanden
 - `index.html` — de complete app (~8.760 regels, ~660 functies): HTML + inline `<style>` + inline `<script>`. Dit is het product.
-- `sw.js` — service worker. `const CACHE = 'minder-v101'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
+- `sw.js` — service worker. `const CACHE = 'minder-v102'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
 - `manifest.webmanifest` — PWA-manifest (naam "Minder — uitgaventracker", standalone, `start_url` `./index.html`). Bevat een app-shortcut "Koopcheck" → `./index.html?action=buy`.
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — iconen (staan ook in de SW-`ASSETS`-lijst).
 - `Open-banking-koppeling-plan.md` — referentieplan voor een latere live PSD2-bankkoppeling. **Nog niet gebouwd**; de MT940/CSV-import blijft voorlopig de basis.
@@ -43,7 +43,7 @@ Laatst bekeken scherm wordt bewaard in `minder_view`.
 
 ## Service worker & versiebeleid
 - Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
-- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v101` → `minder-v102`, …). De oude cache wordt in `activate` opgeruimd.
+- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v102` → `minder-v103`, …). De oude cache wordt in `activate` opgeruimd.
 - De `v10/v11/v13`-strings boven in `index.html` zijn inline-SVG-icoonversies, **geen** app-versie.
 
 ## Syntax-check
@@ -69,6 +69,7 @@ Trek het inline `<script>` uit `index.html` en controleer met **`node --check`**
 - **Spaargeld boven het noodfonds-doel is zichtbaar, niet automatisch** (`v99`): het noodfonds-item klemt zijn voortgang op het doel en de voortgang van een spaardoel blijft het handmatige veld "Al gespaard". Geld dat daarboven op je spaarrekening staat wordt getoond (`spaarVrij()`) en is in één tik toe te wijzen aan het bovenste lopende **spaardoel** — nooit aan een aflos-item, nooit meer dan dat doel nog nodig heeft, en wat al bij doelen staat gaat eraf zodat hetzelfde geld niet twee keer als vrij verschijnt. Reken saldo-overschot nooit stilzwijgend mee in een doel.
 - **De restschuld is handmatig, en dat zeggen we ook zo** (`v100`): `rest` daalt nergens automatisch mee met betalingen — het is en blijft je eigen invoer. De statusregel bij een schuld gaat daarom over de **maandbetaling** in je uitgaven, nooit over de schuldstand; het woord "aflossing" is daar bewust weg. Bijwerken loopt via `openDebtUpdate()`/`debtRestSet()`, dat alleen `rest` aanraakt en `start` meetrekt als de nieuwe stand daarboven ligt (anders wordt "afgelost" negatief). Afboeken stopt op een vloer: de slottermijn bij `financiallease`, anders nul. Introduceer hier geen automatische schatting.
 - **Het noodfonds-doel mag ook een getal van jezelf zijn** (`v101`): `noodfondsModel()` blijft de enige bron, maar kent nu naast `doelAuto` (essCrisis × maanden) een `doelVast` uit `SET.nfDoelVast`; `doel` is de vaste waarde als die er is, anders de schatting. Alle lezers (hero, plan-item, mijlpaal, Instellingen) hangen aan `doel` en volgen dus vanzelf — voeg geen tweede formule toe. Leeg, nul, negatief of onzin telt als niet gezet, zodat er nooit een doel van nul ontstaat met een onbruikbaar percentage. Default blijft de schatting: nietsdoen verandert niets, de override staat zichtbaar in het noodfonds-paneel en is in één tik terug te draaien. Waar het doel vaststaat mag geen tekst meer "N mnd" beweren.
+- **Dezelfde euro mag nooit bij twee doelen staan** (`v102`): de voortgang van het noodfonds wordt telkens herrekend uit je saldo (`planMap`: `min(saved, doel)`), terwijl "Al gespaard" van een spaardoel handmatige invoer is. Gaat het noodfonds-doel omhoog nadat je vrij spaargeld aan een doel gaf, dan claimen ze samen meer dan er staat. `spaarOver()` meet dat verschil, `spaarOverLine()` meldt het bij het noodfonds-item en `spaarOverAf()` haalt het weg — van de laagste prioriteit naar boven, spiegelbeeld van `spaarVrijToe()`, dat juist aan het bovenste doel geeft. Verlaag nooit automatisch: de app meldt en de gebruiker tikt. Het noodfonds zelf wordt hierbij niet aangeraakt, en bij onbekende saldi volgt geen melding.
 
 ### FIRE-laag
 - **`fireInputs()` is de enige naad** (`v32`): laag A leest Minder, laag B (`fireState`/`fireModel`/`fireMonteCarlo`) is puur, laag C rendert. Laat laag B nooit direct uit Minder-state lezen.
