@@ -7551,6 +7551,46 @@ function kpiHistChart(k){
     <div id="kpiRead" class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:2px;min-height:15px">Tik een staaf voor de exacte waarde.${k.partial?' De maand met * loopt nog.':''}</div>
     <div class="gc-leg"><span><i class="d"></i>${kpiBandTxt(k.key)}</span><span><i style="background:var(--bar)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
 }
+/* Welke transacties maken dit kerncijfer? (v104) Elk cijfer heeft een scherp afgebakende
+   verzameling, en die gebruiken we hier letterlijk: dezelfde predicaten als totals() en
+   splitFixedVar(). Zo telt de lijst per definitie op tot het getal erboven. Een lijst die iets
+   anders zegt dan het cijfer zou een nieuw vertrouwensprobleem zijn in plaats van een opgelost. */
+function kpiTx(key,m){
+  const list=txOfMonth(m);
+  if(key==='vast')   return list.filter(x=>isExpenseTx(x)&&isFixed(x));
+  if(key==='vari')   return list.filter(x=>isExpenseTx(x)&&!isFixed(x));
+  if(key==='budget') return list.filter(isExpenseTx);
+  if(key==='spaar')  return list.filter(isExpenseTx);      // het inkomen staat apart, zie hieronder
+  return [];
+}
+/* Het inkomen in de bespaarquote komt uit totals() en dat is lang niet altijd de som van je
+   inkomsten-transacties: met autoIncome uit is het je eigen instelling (index.html:1441).
+   Doen alsof de transacties dat getal maken zou onwaar zijn, dus we noemen de bron. */
+const KPI_INCBRON={handmatig:'zelf ingesteld', gedetecteerd:'herkend uit je transacties', basisnorm:'je basisnorm uit eerdere maanden', onbekend:'onbekend'};
+function kpiTxLijst(key,m){
+  const items=kpiTx(key,m).slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const uit=netSpend(items);
+  const t=totals(m);
+  const kop=(key==='spaar')
+    ? `${euro0(t.income)} inkomen − ${euro0(uit)} uitgaven = ${euro0(t.income-uit)} overgehouden`
+    : (key==='budget')
+    ? `${euro0(uit)} uitgegeven van ${euro0(t.budget)} budget`
+    : `${euro0(uit)} aan ${key==='vast'?'vaste lasten':'variabele uitgaven'}`;
+  const incRegel=(key==='spaar')
+    ? `<div class="row" style="justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
+         <span class="small">Inkomen · <span style="color:var(--mut2)">${KPI_INCBRON[t.incomeBasis]||t.incomeBasis}</span></span>
+         <span class="small" style="font-weight:700">${euro0(t.income)}</span></div>`
+    : '';
+  const rijen=items.length?items.map(t2=>{const c=CATS[catOf(t2)];
+    return `<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${c.icon}</div>
+      <div class="info"><div class="nm">${esc(t2.name)}</div><div class="cat">${new Date(t2.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} · ${c.name}</div></div>
+      <div class="amt ${t2.amount>0?'pos':'neg'}">${t2.amount>0?'+':''}${euro(t2.amount)}</div></div>`;}).join('')
+    : `<div class="small muted" style="padding:12px 0">Geen transacties in deze maand.</div>`;
+  return `<details class="kpi-tx" style="margin-top:14px">
+    <summary class="small" style="color:var(--teal);cursor:pointer">Welke transacties zitten hierin? · ${items.length}</summary>
+    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin:8px 0 2px">${kop}</div>
+    ${incRegel}${rijen}</details>`;
+}
 /* De stand tegen het doel in één beeld (v103). Neutrale datakleur; amber alleen als je er echt
    buiten valt (v93), en niet in een lopende maand — een halve maand is geen eindoordeel.
    De markering staat in een wrapper omdat .bar-track overflow:hidden heeft. */
@@ -7585,6 +7625,7 @@ function openKpiDetail(key){
     </div>
     <div class="small" style="color:var(--mut2);margin-top:3px">${k.band}${k.key==='budget'&&k.budgetBedrag>0?` · ${euro0(k.budgetBedrag)}`:''}${k.oordeel&&!k.partial?` · ${k.oordeel}`:''}</div>
     ${kpiDoelBalk(k)}
+    ${kpiTxLijst(key,m)}
     ${kpiHistChart(k)}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:8px">Je volledige historie van deze metriek.</div>
     ${(key==='spaar'||key==='vast'||key==='vari')?`<div style="margin-top:8px">${splitNormLine()}</div>`:''}
