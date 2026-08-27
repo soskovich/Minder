@@ -49,13 +49,18 @@ test.describe('a · saldo-alarm zonder volledig bekende saldi', () => {
   // Vandaar: zet de huur van de historische maanden op de dag van morgen (per maand geclamd op
   // het aantal dagen) en laat die van deze maand weg. Dan is de laatste betaling ~30 dagen oud
   // en plant recurringSchedule de volgende op morgen — op elke dag van het jaar.
-  // De reeks is verankerd aan MORGEN, niet aan de huidige maand: morgen minus 1, 2 en 3 maanden.
-  // Anker je aan de maand, dan zet de laatste dag van de maand de huur op dag 01 en ligt de
-  // vorige betaling 61 dagen terug — dan vervalt de reeks alsnog. Nagerekend voor elke dag in
-  // 2026-2028 (incl. schrikkeljaar): laatste betaling altijd ~30 dagen oud, volgende op morgen.
+  // De reeks is verankerd aan VANDAAG: vandaag minus 1, 2 en 3 maanden. Drie drempels bepalen dat:
+  //  - recurringSchedule (index.html:1568) laat een maandreeks vallen die > 55 dagen stilligt,
+  //    dus ankeren aan een vaste dag van de maand werkt niet;
+  //  - het lowbal-alarm kijkt tot vandaag + 2 dagen;
+  //  - shiftWeekendToMonday (index.html:1547) duwt een betaling in het weekend naar maandag.
+  // Die laatste maakt "morgen" onbruikbaar: op een vrijdag wordt morgen zaterdag en dus maandag,
+  // drie dagen verderop en daarmee buiten de horizon. Vandaag verschuift hooguit +2 (zaterdag)
+  // of +1 (zondag) en blijft dus altijd binnen bereik. Nagerekend inclusief die verschuiving voor
+  // elke dag in 2026-2028: "morgen" faalt op 155 dagen, "vandaag" op geen enkele.
   const dstr = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   const maandTerug = (k) => {
-    const n = new Date(); n.setDate(n.getDate() + 1); n.setHours(0, 0, 0, 0);        // morgen
+    const n = new Date(); n.setHours(0, 0, 0, 0);
     const dim = new Date(n.getFullYear(), n.getMonth() - k + 1, 0).getDate();
     return dstr(new Date(n.getFullYear(), n.getMonth() - k, Math.min(n.getDate(), dim)));
   };
