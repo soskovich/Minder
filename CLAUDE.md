@@ -8,7 +8,7 @@ Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dra
 
 ## Bestanden
 - `index.html` — de complete app (~8.760 regels, ~660 functies): HTML + inline `<style>` + inline `<script>`. Dit is het product.
-- `sw.js` — service worker. `const CACHE = 'minder-v106'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
+- `sw.js` — service worker. `const CACHE = 'minder-v107'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
 - `manifest.webmanifest` — PWA-manifest (naam "Minder — uitgaventracker", standalone, `start_url` `./index.html`). Bevat een app-shortcut "Koopcheck" → `./index.html?action=buy`.
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — iconen (staan ook in de SW-`ASSETS`-lijst).
 - `Open-banking-koppeling-plan.md` — referentieplan voor een latere live PSD2-bankkoppeling. **Nog niet gebouwd**; de MT940/CSV-import blijft voorlopig de basis.
@@ -43,7 +43,7 @@ Laatst bekeken scherm wordt bewaard in `minder_view`.
 
 ## Service worker & versiebeleid
 - Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
-- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v106` → `minder-v107`, …). De oude cache wordt in `activate` opgeruimd.
+- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v107` → `minder-v108`, …). De oude cache wordt in `activate` opgeruimd.
 - De `v10/v11/v13`-strings boven in `index.html` zijn inline-SVG-icoonversies, **geen** app-versie.
 
 ## Syntax-check
@@ -74,6 +74,7 @@ Trek het inline `<script>` uit `index.html` en controleer met **`node --check`**
 - **De transactielijst achter een kerncijfer telt op tot dat cijfer** (`v104`): `kpiTx(key,m)` selecteert met exact dezelfde predicaten als `totals()` en `splitFixedVar()` (`isExpenseTx`, `isFixed`), zodat de lijst per definitie klopt met het getal erboven. Bouw hier nooit een tweede filter: een lijst die iets anders zegt dan het cijfer is erger dan geen lijst. Vast en variabel zijn samen precies de budget-lijst — geen overlap, geen gat — en doorstroomposten vallen er automatisch buiten (`v77`). Het **inkomen** in de bespaarquote komt uit `totals()` en is met `autoIncome` uit je eigen instelling, niet de som van je inkomsten-transacties; het staat daarom als aparte regel met zijn bron (`KPI_INCBRON`) in plaats van tussen de transacties.
 - **De bijdrage per transactie deelt de noemer van het cijfer** (`v105`): `kpiBijdrage(key,t,basis)` gebruikt `kpiAfstand().basis` — je potjes bij budgetnaleving, anders je inkomen — zodat de punten optellen tot het getal erboven: recht voor de drukmetrieken, en `100 + som` voor de bespaarquote. Het teken volgt de betekenis via `dir`: een uitgave duwt je bespaarquote omlaag en een drukmetriek omhoog, en een terugstorting draait dat vanzelf om. De lijst staat op gewicht, niet op datum; bij gelijk gewicht wint de nieuwste. Één uitleg boven de lijst via `jrg('procentpunt')`, nooit per regel.
 - **Een verschuiving splitst in teller en noemer** (`v106`): elk kerncijfer is teken × X/B, en `kpiDelta()` splitst de verandering exact in een **teller-effect** `(X1−X0)/B1` (wat je anders uitgaf, en dat splitst verder per categorie) en een **noemer-effect** `X0·(1/B1−1/B0)` (wat je inkomen of budget deed). Samen zijn ze de hele verschuiving. Sla die tweedeling nooit over: zonder het noemer-effect leest een gedaald inkomen als "je gaf meer uit", en dat is onwaar. `kpiCatSom()` clampt bewust niet zoals `catSpendMap()`, anders telt een netto-negatieve categorie niet mee en klopt de optelling niet meer. Bij een lopende maand volgt geen vergelijking: een halve maand tegen een hele zegt niets.
+- **Het noodfonds schat op afgeronde maanden** (`v107`): `noodfondsModel()` rekent over `months().filter(m => m < de lopende maand).slice(-12)`. `months()` telt de lopende maand altijd mee en die is niet af; bij `NF_PERIODIEK` (verzekering, belasting) wordt het **gemiddelde** genomen, dus een halve maand drukte het doel omlaag en liet het binnen de maand vanzelf oplopen. Is er nog geen afgeronde maand, dan blijft de lopende de enige bron (`winLopend`) — anders levert een verse import geen doel op — en de sheet zegt er dan bij dat het nog verschuift.
 
 ### FIRE-laag
 - **`fireInputs()` is de enige naad** (`v32`): laag A leest Minder, laag B (`fireState`/`fireModel`/`fireMonteCarlo`) is puur, laag C rendert. Laat laag B nooit direct uit Minder-state lezen.

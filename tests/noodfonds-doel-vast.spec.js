@@ -126,7 +126,9 @@ test.describe('d · het staat er eerlijk bij', () => {
     await boot(page);
     await page.evaluate(() => openNoodfondsPanel());
     const s = await page.locator('#sheet').innerText();
-    expect(s).toContain('beweegt mee met nieuwe transacties');
+    // v107: de schatting rust op afgeronde maanden; de lopende telt niet meer mee.
+    expect(s).toMatch(/geschat uit je .*afgeronde maand/);
+    expect(s).toContain('nog niet af');
     expect(s).not.toMatch(/door jou vastgezet/i);
   });
 
