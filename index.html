@@ -7333,6 +7333,30 @@ function kpiBandTxt(key){
   return KPI_META[key].bandTxt;
 }
 const KPI_WOORD={good:'goed',mid:'krap',bad:'let op'};
+/* Hoe ver sta je van je doel? (v103) De tegel toonde het cijfer en de band als losse teksten,
+   dus de vergelijking moest je zelf maken. Dit zet ze in verhouding: het verschil in procent-
+   punten én vertaald naar euro's, want daar denk je in. Bewust GEEN eigen sommen: `t` en `sf`
+   zijn dezelfde totals(m)/splitFixedVar(m) waar het percentage uit komt, zodat bedrag en
+   percentage nooit uit elkaar kunnen lopen. null = we weten het niet (v59/v73). */
+function kpiAfstand(key,v,t,sf){
+  if(v==null) return null;
+  const B=kpiBand(key); if(!(B>0)) return null;
+  const dir=(KPI_META[key]||{}).dir||'down';
+  const pt=(dir==='up')?(v-B):(B-v);                      // >0 = aan de goede kant van je doel
+  const basis=(key==='budget')?(+t.budget||0):(+t.income||0);   // budgetnaleving meet tegen je potjes
+  const bedrag=basis>0?Math.round(Math.abs(pt)/100*basis):null;
+  return {pt:Math.round(pt*10)/10, bedrag, basis, goed:pt>=0};
+}
+// Eén formulering per kerncijfer; "meer" is bij sparen goed en bij een druk-metriek juist niet,
+// dus de woorden volgen de betekenis, niet het teken.
+function kpiAfstandTxt(key,A,kort){
+  if(!A||A.bedrag==null) return '';
+  const e=euro0(A.bedrag);
+  if(Math.abs(A.pt)<0.05) return kort?'op je doel':'precies op je doel';
+  if(key==='spaar')  return A.goed?`${e} meer dan je doel`:`${e} minder dan je doel`;
+  if(key==='budget') return A.goed?`${e} onder je budget`:`${e} over je budget`;
+  return A.goed?`${e} onder je doel`:`${e} boven je doel`;
+}
 function kpiState(key,v,ref){
   if(v==null) return 'n';
   if(key==='spaar'){ const B=kpiBand('spaar'); return v>=B?'good':(v>=B*0.5?'mid':'bad'); }
@@ -7378,7 +7402,8 @@ function insKpis(m,n){
     let band=kpiBandTxt(key);
     if(key==='budget') band=`${kpiBandTxt(key)} · ${t.potTotal>0?'je potjes':'je inkomen-limiet'}`;
     if(v==null) band=(key==='budget')?'nog geen budget':'inkomen onbekend';
-    return {key, label:M.label, raw:v, ref, val:v==null?'—':fmt(v), band, uitleg:M.uitleg, fmt, partial,
+    const afst=kpiAfstand(key,v,t,sf);
+    return {key, label:M.label, raw:v, ref, val:v==null?'—':fmt(v), band, uitleg:M.uitleg, fmt, partial, afst,
             oordeel: v==null?'':(partial?'loopt nog':(KPI_WOORD[st]||'')),
             state: (v==null||partial)?'n':st,      // kleur van het cijfer
             trendState: st,                         // oordeel los van de lopende maand
@@ -7409,19 +7434,23 @@ function miniSparkLine(values, opts){
   // breedte ~ de echte tegelbreedte op mobiel, zodat het eindpunt rond blijft i.p.v. uitgerekt
   const W=150, H=26, P=3;
   let doel=(opts.target!=null && isFinite(opts.target))?+opts.target:null;
-  // een doel ver buiten je eigen bereik zou de lijn platdrukken; dan laten we de referentie weg
-  // (de band staat sowieso in het label erboven)
+  // Een doel ver buiten je eigen bereik drukt de lijn plat. Eerder lieten we de referentie dan
+  // weg, maar juist wie ver van zijn doel staat verloor 'm zo uit beeld (v103). Nu blijft de
+  // schaal van je eigen cijfers en tekenen we de doellijn op de rand: de trend blijft leesbaar
+  // en je ziet aan welke kant je doel ligt.
+  let doelBuiten=false;
   if(doel!=null){
     const dl=Math.min(...pts.map(p=>p.v)), dh=Math.max(...pts.map(p=>p.v)), dr=(dh-dl)||Math.abs(dh)||1;
-    if(doel<dl-1.2*dr || doel>dh+1.2*dr) doel=null;
+    if(doel<dl-1.2*dr || doel>dh+1.2*dr) doelBuiten=true;
   }
-  const alles=pts.map(p=>p.v).concat(doel!=null?[doel]:[]);
+  const alles=pts.map(p=>p.v).concat((doel!=null&&!doelBuiten)?[doel]:[]);
   const lo=Math.min(...alles), hi=Math.max(...alles), span=(hi-lo)||1;
   const x=i=>P+(W-2*P)*(vals.length<2?0:i/(vals.length-1));
   const y=v=>H-P-((v-lo)/span)*(H-2*P);
   const pad=pts.map((p,k)=>`${k?'L':'M'}${x(p.i).toFixed(1)} ${y(p.v).toFixed(1)}`).join(' ');
   const laatste=pts[pts.length-1];
-  const lijn=doel!=null?`<line x1="${P}" x2="${W-P}" y1="${y(doel).toFixed(1)}" y2="${y(doel).toFixed(1)}" stroke="var(--mut2)" stroke-width="1" stroke-dasharray="3 3" opacity=".45" vector-effect="non-scaling-stroke"/>`:'';
+  const dy=doel!=null?Math.min(Math.max(y(doel),P),H-P):null;   // buiten bereik -> op de rand
+  const lijn=doel!=null?`<line x1="${P}" x2="${W-P}" y1="${dy.toFixed(1)}" y2="${dy.toFixed(1)}" stroke="var(--mut2)" stroke-width="1" stroke-dasharray="${doelBuiten?'2 4':'3 3'}" opacity="${doelBuiten?'.32':'.45'}" vector-effect="non-scaling-stroke"/>`:'';
   const px=(x(laatste.i)/W*100).toFixed(2), py=(y(laatste.v)/H*100).toFixed(2);
   const punt=`<i class="${opts.running?'spk-nu':'spk-eind'}" style="left:${px}%;top:${py}%"></i>`;
   return `<div class="spk-in"><svg class="spk" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
@@ -7442,6 +7471,7 @@ function insKpiStrip(m){
       <div class="wvo-tl">${k.label}</div>
       <div class="wvo-tv" style="color:${col}">${k.val}</div>
       <div class="wvo-ts">${k.band}${k.oordeel?` · <b style="color:${col}">${k.oordeel}</b>`:''}</div>
+      ${(!k.partial&&kpiAfstandTxt(k.key,k.afst,true))?`<div class="wvo-ts kpi-afst" style="color:var(--mut2)">${kpiAfstandTxt(k.key,k.afst,true)}</div>`:''}
       ${spark||`<div class="small spk-na" style="color:var(--mut2);font-size:10px">na 2 maanden zie je hier je verloop</div>`}
     </div>`;
   }).join('');
@@ -7521,6 +7551,27 @@ function kpiHistChart(k){
     <div id="kpiRead" class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:2px;min-height:15px">Tik een staaf voor de exacte waarde.${k.partial?' De maand met * loopt nog.':''}</div>
     <div class="gc-leg"><span><i class="d"></i>${kpiBandTxt(k.key)}</span><span><i style="background:var(--bar)"></i>binnen</span><span><i style="background:${kpiCol('bad')}"></i>erbuiten</span></div>`;
 }
+/* De stand tegen het doel in één beeld (v103). Neutrale datakleur; amber alleen als je er echt
+   buiten valt (v93), en niet in een lopende maand — een halve maand is geen eindoordeel.
+   De markering staat in een wrapper omdat .bar-track overflow:hidden heeft. */
+function kpiDoelBalk(k){
+  const A=k.afst; if(!A) return '';
+  const B=kpiBand(k.key), v=k.raw; if(!(B>0)||v==null) return '';
+  const top=Math.max(v,B)*1.25||1;
+  const pv=Math.max(Math.min(v/top*100,100),0), pd=Math.max(Math.min(B/top*100,100),0);
+  const col=(k.state==='bad')?'var(--amber)':'var(--bar)';
+  const pt=Math.abs(A.pt), ptTxt=pt>=0.05?`${String(pt).replace('.',',')} pt · `:'';
+  return `<div class="kpi-doel" style="margin-top:13px">
+    <div style="position:relative">
+      <div class="bar-track"><div class="bar-fill" style="width:${pv.toFixed(1)}%;background:${col}"></div></div>
+      <i title="je doel" style="position:absolute;top:5px;height:15px;left:${pd.toFixed(1)}%;width:2px;background:var(--mut2);border-radius:1px"></i>
+    </div>
+    <div class="row" style="justify-content:space-between;gap:10px;align-items:flex-start">
+      <span class="small" style="color:var(--mut2);font-size:var(--fs-xs)">nu ${k.val} · doel ${_pct0(B)}</span>
+      <span class="small" style="color:var(--mut2);font-size:var(--fs-xs);text-align:right">${ptTxt}${kpiAfstandTxt(k.key,A,false)}</span>
+    </div>
+    ${k.partial?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:5px">Tussenstand: de maand loopt nog, dus dit is nog geen eindoordeel.</div>`:''}</div>`;
+}
 function openKpiDetail(key){
   const m=curMonth||months()[months().length-1];
   const K=insKpis(m,0); const k=K[key]; if(!k) return;                    // n=0: volledige historie
@@ -7533,6 +7584,7 @@ function openKpiDetail(key){
       <div class="small muted">${esc(monthLabel(m))}${k.partial?' · tot nu toe':''}</div>
     </div>
     <div class="small" style="color:var(--mut2);margin-top:3px">${k.band}${k.key==='budget'&&k.budgetBedrag>0?` · ${euro0(k.budgetBedrag)}`:''}${k.oordeel&&!k.partial?` · ${k.oordeel}`:''}</div>
+    ${kpiDoelBalk(k)}
     ${kpiHistChart(k)}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:8px">Je volledige historie van deze metriek.</div>
     ${(key==='spaar'||key==='vast'||key==='vari')?`<div style="margin-top:8px">${splitNormLine()}</div>`:''}

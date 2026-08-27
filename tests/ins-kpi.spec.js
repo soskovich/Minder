@@ -128,7 +128,11 @@ test.describe('a2 · richting A: één datataal in de tegels', () => {
     expect(strip).not.toContain('class="spark"');                          // geen bonte staafjes meer
   });
 
-  test('de doellijn wijkt zodra hij de eigen beweging zou platdrukken', async ({ page }) => {
+  // v103: dit legde eerst vast dat de doellijn wég moest zodra hij de lijn zou platdrukken.
+  // Dat werkte averechts: juist wie ver van zijn doel staat verloor de referentie uit beeld.
+  // De schaal blijft nu van je eigen cijfers en de doellijn wordt op de rand geklemd, zodat de
+  // trend leesbaar blijft én je ziet aan welke kant je doel ligt. Zie tests/kpi-afstand.spec.js.
+  test('de doellijn blijft zichtbaar, ook ver buiten de eigen beweging', async ({ page }) => {
     await openIns(page);
     const r = await page.evaluate(() => ({
       dichtbij: miniSparkLine([18, 22, 19], { target: 20 }),
@@ -136,7 +140,8 @@ test.describe('a2 · richting A: één datataal in de tegels', () => {
       kort: miniSparkLine([20], { target: 20 }),
     }));
     expect(r.dichtbij).toContain('stroke-dasharray');
-    expect(r.verweg).not.toContain('stroke-dasharray');                    // band staat in het label
+    expect(r.verweg).toContain('stroke-dasharray');                        // geklemd, niet weggelaten
+    expect(r.verweg).toContain('2 4');                                     // en zwakker gestreept
     expect(r.kort).toBe('');                                               // <2 maanden = geen sparkline
   });
 
