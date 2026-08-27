@@ -7612,6 +7612,56 @@ function kpiTxLijst(key,m){
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin:8px 0 2px">${kop}</div>
     ${ptUitleg}${incRegel}${rijen}</details>`;
 }
+/* Wat veranderde er sinds vorige maand, en wat verklaart dat? (v106)
+   Elk kerncijfer is teken × X/B: X is wat je uitgaf, B je inkomen (of je potjes bij
+   budgetnaleving). De verschuiving splitst dan exact in twee delen:
+     teller-effect  (X1 − X0)/B1        — wat je anders uitgaf
+     noemer-effect  X0·(1/B1 − 1/B0)    — wat je inkomen of budget deed
+   Samen zijn ze de hele verandering, en alleen het teller-effect splitst per categorie. Zonder
+   die tweedeling zou een gedaald inkomen als "je gaf meer uit" lezen, en dat is niet waar. */
+function kpiXB(key,m){
+  const t=totals(m);
+  return {X:netSpend(kpiTx(key,m)), B:(key==='budget')?(+t.budget||0):(+t.income||0)};
+}
+function kpiCatSom(key,m){                     // niet clampen: een netto-negatieve categorie telt gewoon mee
+  const by={}; for(const t of kpiTx(key,m)){ const c=catOf(t); by[c]=(by[c]||0)+(-t.amount); } return by;
+}
+function kpiDelta(key,m){
+  const ms=months(), i=ms.indexOf(m); if(i<1) return null;
+  const vorige=ms[i-1];
+  const a=kpiXB(key,m), b=kpiXB(key,vorige);
+  if(!(a.B>0)||!(b.B>0)) return null;                     // zonder basis geen vergelijking (v59/v73)
+  const teken=((KPI_META[key]||{}).dir==='up')?-1:1;
+  const nu=teken*a.X/a.B*100, was=teken*b.X/b.B*100;
+  const tel=teken*(a.X-b.X)/a.B*100;
+  const noem=teken*b.X*(1/a.B-1/b.B)*100;
+  const c1=kpiCatSom(key,m), c0=kpiCatSom(key,vorige);
+  const cats=[...new Set([...Object.keys(c1),...Object.keys(c0)])]
+    .map(c=>({cat:c, euro:(c1[c]||0)-(c0[c]||0), pt:teken*((c1[c]||0)-(c0[c]||0))/a.B*100}))
+    .filter(x=>Math.abs(x.pt)>=0.05).sort((x,y)=>Math.abs(y.pt)-Math.abs(x.pt));
+  return {vorige, was, nu, dpt:nu-was, tel, noem, cats, basisVan:b.B, basisNaar:a.B};
+}
+function kpiDeltaBlok(key,m,partial){
+  // Een halve maand tegen een hele leggen zegt niets; dat wachten we af (zie ook de tegel in v103).
+  if(partial) return `<div class="kpi-delta small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:13px">De vergelijking met vorige maand volgt zodra deze maand rond is.</div>`;
+  const D=kpiDelta(key,m); if(!D) return '';
+  if(Math.abs(D.dpt)<0.05) return `<div class="kpi-delta small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:13px">Vrijwel gelijk aan ${esc(monthLabel(D.vorige))}.</div>`;
+  const TOP=4, top=D.cats.slice(0,TOP), rest=D.cats.slice(TOP);
+  const restPt=rest.reduce((s,x)=>s+x.pt,0);
+  const rij=(nm,pt,eu)=>`<div class="row" style="justify-content:space-between;gap:10px;padding:4px 0">
+    <span class="small">${nm}</span><span class="small" style="color:var(--mut2);white-space:nowrap">${eu!=null?`${euro0(Math.abs(eu))} ${eu>0?'meer':'minder'} · `:''}${kpiPt(pt)}</span></div>`;
+  const noemRij=Math.abs(D.noem)>=0.05
+    ? rij(`Je ${key==='budget'?'budget':'inkomen'} ging van ${euro0(D.basisVan)} naar ${euro0(D.basisNaar)}`, D.noem, null)
+    : '';
+  return `<div class="kpi-delta" style="margin-top:14px;border-top:1px solid var(--line);padding-top:11px">
+    <div class="row" style="justify-content:space-between;gap:10px">
+      <span class="small" style="font-weight:600">Ten opzichte van ${esc(monthLabel(D.vorige))}</span>
+      <span class="small" style="font-weight:700">${_pct0(D.was)} → ${_pct0(D.nu)} · ${kpiPt(D.dpt)}</span></div>
+    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin:6px 0 2px">Wat die verschuiving verklaart:</div>
+    ${top.map(x=>rij(CATS[x.cat]?CATS[x.cat].name:x.cat, x.pt, x.euro)).join('')}
+    ${rest.length?rij(`Overige ${rest.length}`,restPt,null):''}
+    ${noemRij}</div>`;
+}
 /* De stand tegen het doel in één beeld (v103). Neutrale datakleur; amber alleen als je er echt
    buiten valt (v93), en niet in een lopende maand — een halve maand is geen eindoordeel.
    De markering staat in een wrapper omdat .bar-track overflow:hidden heeft. */
@@ -7646,6 +7696,7 @@ function openKpiDetail(key){
     </div>
     <div class="small" style="color:var(--mut2);margin-top:3px">${k.band}${k.key==='budget'&&k.budgetBedrag>0?` · ${euro0(k.budgetBedrag)}`:''}${k.oordeel&&!k.partial?` · ${k.oordeel}`:''}</div>
     ${kpiDoelBalk(k)}
+    ${kpiDeltaBlok(key,m,k.partial)}
     ${kpiTxLijst(key,m)}
     ${kpiHistChart(k)}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:8px">Je volledige historie van deze metriek.</div>
