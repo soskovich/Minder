@@ -54,3 +54,6 @@ Deze bestanden staan niet in git (gitignored of untracked), dus dit log is de en
 2026-08-20 | files.zip -> _onbekend/files.zip (duplicaat van CLAUDE.md + CHANGELOG.md, 2026-08-19; niet verwijderd)
 2026-08-20 | (bijgewerkt) .gitignore -> docs/Minder_Strategie_TweeEdities.html blijft lokaal (strategienotitie)
 2026-08-20 | (bijgewerkt) .gitignore -> Minder_Landing_OffGrid.html blijft lokaal (concept-landing)
+2026-08-28 | (uit branch budget-potjes-leidend) minder-spaarcoach-brief.md -> docs/minder-spaarcoach-brief.md
+2026-08-28 | (uit branch budget-potjes-leidend) minder-spaarcoach-bouwopdracht.md -> docs/minder-spaarcoach-bouwopdracht.md
+2026-08-28 | (nieuw) docs/archief/onafgemaakt-werk-juli-2026.md - waar het onafgemaakte juli-werk ligt
