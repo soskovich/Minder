@@ -134,9 +134,9 @@ test.describe('c · de twee cijfers horen bij elkaar', () => {
   test('de bandtekst verschilt per metriek', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => ({ spaar: kpiBandTxt('spaar'), inleg: kpiBandTxt('inleg'), band: [kpiBand('spaar'), kpiBand('inleg')] }));
-    expect(r.spaar).toContain('overhouden');
-    expect(r.inleg).toContain('opzij');
-    expect(r.band[0]).toBe(r.band[1]);             // dezelfde norm, zoals de referentie-verdeling
+    expect(r.spaar).toContain('ruimte');            // v110: afgeleid uit vast en variabel
+    expect(r.inleg).toContain('doel');              // de norm-post "sparen" zelf
+    expect(r.band[0]).toBe(r.band[1]);              // numeriek gelijk, want de norm telt naar 100%
   });
 
   test('de afstand gebruikt de woorden van de spaarquote', async ({ page }) => {

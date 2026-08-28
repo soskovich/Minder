@@ -47,9 +47,13 @@ test.describe('b · de naam zegt nu wat het meet', () => {
     expect(strip).not.toMatch(/bespaarquote/i);
   });
 
-  test('de band zegt waar de drempel over gaat', async ({ page }) => {
+  test('de band is een afgeleide ruimte, geen eigen doel', async ({ page }) => {
     await boot(page);
-    expect(await page.evaluate(() => kpiBandTxt('spaar'))).toContain('overhouden');
+    const r = await page.evaluate(() => ({ txt: kpiBandTxt('spaar'), band: kpiBand('spaar'), T: splitTarget() }));
+    expect(r.txt).toContain('ruimte');
+    expect(r.txt).toContain('overlaat');
+    expect(r.txt).not.toContain('doel');                    // v110: het doel hangt aan de spaarquote
+    expect(r.band).toBe(100 - r.T.fixed - r.T.vari);        // afgeleid uit de andere twee posten
   });
 
   test('de uitleg waarschuwt expliciet dat dit niet je spaarinleg is', async ({ page }) => {
@@ -94,5 +98,49 @@ test.describe('c · het verschil dat fase 2 gaat tonen', () => {
     // de spaarboeking hoort niet in dit cijfer: het is een doorstroompost, geen uitgave (v77)
     const inLijst = await page.evaluate((m) => kpiTx('spaar', m).some((t) => catOf(t) === 'sparen'), M1);
     expect(inLijst).toBe(false);
+  });
+});
+
+test.describe('d · drie normposten, vier kerncijfers (v110)', () => {
+  // De referentie-verdeling verdeelt je inkomen in drie posten die naar 100% tellen. Vier
+  // kerncijfers hingen aan die drie: spaar en inleg toetsten allebei tegen splitTarget().save.
+  // De norm-post "sparen" hoort bij de spaarquote — daar gaat de vuistregel over, en dat is wat
+  // ruleOfThumbCard meet. Het restsaldo is geen vierde post maar een afgeleide van de andere twee.
+  test('elke normpost heeft precies één drager', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const T = splitTarget();
+      return { T, vast: kpiBand('vast'), vari: kpiBand('vari'), inleg: kpiBand('inleg'), spaar: kpiBand('spaar') };
+    });
+    expect(r.T.fixed + r.T.vari + r.T.save).toBe(100);
+    expect(r.vast).toBe(r.T.fixed);
+    expect(r.vari).toBe(r.T.vari);
+    expect(r.inleg).toBe(r.T.save);                          // de norm-post zelf
+    expect(r.spaar).toBe(100 - r.T.fixed - r.T.vari);        // afgeleid, geen eigen post
+  });
+
+  test('de afgeleide is numeriek gelijk aan de norm-post, en dat is geen toeval', async ({ page }) => {
+    await boot(page);
+    // zolang de norm naar 100% telt is save per definitie 100 - fixed - vari; de teksten moeten
+    // het verschil dragen, niet de getallen
+    for (const mode of ['503020', '60', 'fire']) {
+      const r = await page.evaluate((m) => {
+        SET.splitMode = m; save();
+        const T = splitTarget();
+        return { som: T.fixed + T.vari + T.save, inleg: kpiBand('inleg'), spaar: kpiBand('spaar'), spaarTxt: kpiBandTxt('spaar'), inlegTxt: kpiBandTxt('inleg') };
+      }, mode);
+      expect(r.som, mode).toBe(100);
+      expect(r.spaar, mode).toBe(r.inleg);
+      expect(r.spaarTxt, mode).toContain('ruimte');
+      expect(r.inlegTxt, mode).toContain('doel');
+      expect(r.spaarTxt, mode).not.toBe(r.inlegTxt);
+    }
+  });
+
+  test('een andere norm verschuift beide, elk met zijn eigen woorden', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => { SET.splitMode = 'fire'; save(); return { spaar: kpiBandTxt('spaar'), inleg: kpiBandTxt('inleg') }; });
+    expect(r.spaar).toBe('ruimte 30% · wat 50/20 overlaat');
+    expect(r.inleg).toBe('doel 30% of meer opzij');
   });
 });

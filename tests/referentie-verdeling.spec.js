@@ -57,7 +57,7 @@ test.describe('a · een andere norm kiezen, en de banden volgen mee', () => {
     expect({ f: r.t.fixed, v: r.t.vari, s: r.t.save }).toEqual({ f: 50, v: 30, s: 20 });
     expect(r.spaar).toBe(20);
     expect(r.vast).toBe(50);
-    expect(r.spaarTxt).toBe('doel 20% of meer overhouden');   // v108: de band zegt nu wat hij toetst
+    expect(r.spaarTxt).toBe('ruimte 20% · wat 50/30 overlaat');   // v110: afgeleid, geen eigen doel
     expect(r.vastTxt).toBe('doel onder 50%');
   });
 
@@ -82,7 +82,8 @@ test.describe('a · een andere norm kiezen, en de banden volgen mee', () => {
 
     await page.evaluate(() => { closeSheet(); go('ins'); });
     await page.waitForSelector('#insKpiStrip');
-    expect(await tegel(page, 'spaar').innerText()).toContain('doel 15% of meer');
+    expect(await tegel(page, 'spaar').innerText()).toContain('ruimte 15% · wat 60/25 overlaat');
+    expect(await tegel(page, 'inleg').innerText()).toContain('doel 15% of meer opzij');   // de norm-post zelf
     expect(await tegel(page, 'vast').innerText()).toContain('doel onder 60%');
   });
 
@@ -116,13 +117,16 @@ test.describe('a · een andere norm kiezen, en de banden volgen mee', () => {
 
   test('de KPI-historie tekent je band, niet de vaste 20%', async ({ page }) => {
     await boot(page, tweak(seed(), (s) => { s.splitMode = 'fire'; }));
-    await tegel(page, 'spaar').click();
+    await tegel(page, 'inleg').click();                                 // v110: de spaarquote draagt het doel
     await page.waitForSelector('#kpiHist');
     const sheet = await page.locator('#sheet').innerText();
-    expect(sheet).toContain('doel 30% of meer');                       // FIRE: 50/20/30
+    expect(sheet).toContain('doel 30% of meer opzij');                 // FIRE: 50/20/30
     expect(sheet).not.toContain('doel 20% of meer');
     expect(await page.locator('#kpiHist line[stroke-dasharray]').count()).toBe(1);
-    expect(await page.locator('#kpiHist').innerHTML()).toContain('doel 30% of meer');   // gelabelde bandlijn
+    expect(await page.locator('#kpiHist').innerHTML()).toContain('doel 30% of meer opzij');   // gelabelde bandlijn
+    // en het restsaldo toont diezelfde verschuiving als afgeleide ruimte
+    await page.evaluate(() => closeSheet());
+    expect(await tegel(page, 'spaar').innerText()).toContain('ruimte 30% · wat 50/20 overlaat');
   });
 });
 
@@ -175,7 +179,7 @@ test.describe('b · op maat uit de eigen historie', () => {
 
     await page.evaluate(() => { closeSheet(); go('ins'); });
     await page.waitForSelector('#insKpiStrip');
-    expect(await tegel(page, 'spaar').innerText()).toContain(`doel ${V.target.save}% of meer`);
+    expect(await tegel(page, 'inleg').innerText()).toContain(`doel ${V.target.save}% of meer opzij`);   // v110: de norm-post
     expect(await page.locator('#splitNormLine').innerText()).toContain(`Op maat · uit jouw data · ${V.target.fixed}/${V.target.vari}/${V.target.save}`);
   });
 

@@ -237,7 +237,7 @@ test.describe('c · tik op een tegel', () => {
     expect(sheet).toContain('Restsaldo-quote');
     expect(sheet).toContain('(inkomen − uitgaven) ÷ inkomen');            // hoe hij berekend is
     expect(sheet).toContain('50/30/20');
-    expect(sheet).toContain('doel 20% of meer');
+    expect(sheet).toContain('ruimte 20%');                                    // v110: afgeleide band
     expect(sheet).toContain('volledige historie van deze metriek');
     expect(await page.locator('#kpiHist').count()).toBe(1);
     expect(await page.locator('#kpiHist rect.cbar').count()).toBe(3);     // één staaf per maand
@@ -281,7 +281,7 @@ test.describe('c · tik op een tegel', () => {
     const svg = await page.locator('#kpiHist').innerHTML();
     expect(svg).toContain('>0<');                                             // nullijn-label
     expect((svg.match(/text-anchor="end"/g) || []).length).toBeGreaterThanOrEqual(3);   // y-labels + bandlabel
-    expect(svg).toContain('doel 20% of meer');                                // gelabelde bandlijn
+    expect(svg).toContain('ruimte 20%');                                      // gelabelde bandlijn (v110: afgeleid)
     expect((svg.match(/font-weight="700"/g) || []).length).toBeGreaterThan(0); // waardelabels boven de staven
     expect(svg).toMatch(/>(jan|feb|mrt|apr|mei|jun|jul|aug|sep|okt|nov|dec)\*?</);     // maandlabels
   });

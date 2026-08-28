@@ -7347,7 +7347,7 @@ const KPI_META={
   // het tegendeel en botste met de referentie-verdeling, die "sparen" wél als instroom op je
   // spaarrekening leest (healthSplitOver). Eén term per begrip (v91): dit is het restsaldo.
   spaar: {label:'Restsaldo-quote',    bandTxt:'doel 20% of meer', band:20,  dir:'up',   sign:-1, base:100,
-    uitleg:'Welk deel van je inkomen je overhoudt: (inkomen − uitgaven) ÷ inkomen. Dat is niet hetzelfde als wat je opzij zette — geld dat op je betaalrekening blijft staan telt hier gewoon mee. Je spaarinleg komt hieruit. Het richtpunt komt uit je referentie-verdeling.'},
+    uitleg:'Welk deel van je inkomen je overhoudt: (inkomen − uitgaven) ÷ inkomen. Dat is niet hetzelfde als wat je opzij zette — geld dat op je betaalrekening blijft staan telt hier gewoon mee. Je spaarinleg komt hieruit. Dit is geen apart doel: houd je je aan je referentie-verdeling voor vaste en variabele lasten, dan volgt deze ruimte vanzelf. Het spaardoel zelf hangt aan je spaarquote.'},
   inleg: {label:'Spaarquote',         bandTxt:'doel 20% of meer', band:20,  dir:'up',   sign:1,  base:0,
     uitleg:'Welk deel van je inkomen er écht naar je spaarrekening ging: gestort ÷ inkomen. Anders dan je restsaldo-quote telt geld dat op je betaalrekening blijft staan hier niet mee. Zonder gemarkeerde spaarrekening valt dit terug op je spaar-categorie.'},
   budget:{label:'Budgetnaleving',     bandTxt:'doel 100% of minder', band:100, dir:'down', sign:1, base:0,
@@ -7361,13 +7361,14 @@ const KPI_META={
 // oude 20%, 30% en 50%), zodat vast/variabel/sparen samen het hele ijkpunt spiegelen.
 // Alleen budgetnaleving meet tegen je eigen potjes.
 function kpiBand(key){
-  if(key==='spaar'||key==='inleg') return splitTarget().save;
+  if(key==='inleg') return splitTarget().save;                    // de norm-post zelf
+  if(key==='spaar'){ const T=splitTarget(); return Math.max(100-T.fixed-T.vari,0); }   // afgeleid: wat vast en variabel overlaten
   if(key==='vast')  return splitTarget().fixed;
   if(key==='vari')  return splitTarget().vari;
   return KPI_META[key].band;
 }
 function kpiBandTxt(key){
-  if(key==='spaar') return `doel ${splitTarget().save}% of meer overhouden`;
+  if(key==='spaar'){ const T=splitTarget(); return `ruimte ${Math.max(100-T.fixed-T.vari,0)}% · wat ${T.fixed}/${T.vari} overlaat`; }
   if(key==='inleg') return `doel ${splitTarget().save}% of meer opzij`;
   if(key==='vast')  return `doel onder ${splitTarget().fixed}%`;
   if(key==='vari')  return `doel onder ${splitTarget().vari}%`;

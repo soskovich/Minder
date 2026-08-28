@@ -8,7 +8,7 @@ Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dra
 
 ## Bestanden
 - `index.html` — de complete app (~8.760 regels, ~660 functies): HTML + inline `<style>` + inline `<script>`. Dit is het product.
-- `sw.js` — service worker. `const CACHE = 'minder-v109'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
+- `sw.js` — service worker. `const CACHE = 'minder-v110'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
 - `manifest.webmanifest` — PWA-manifest (naam "Minder — uitgaventracker", standalone, `start_url` `./index.html`). Bevat een app-shortcut "Koopcheck" → `./index.html?action=buy`.
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — iconen (staan ook in de SW-`ASSETS`-lijst).
 - `Open-banking-koppeling-plan.md` — referentieplan voor een latere live PSD2-bankkoppeling. **Nog niet gebouwd**; de MT940/CSV-import blijft voorlopig de basis.
@@ -43,7 +43,7 @@ Laatst bekeken scherm wordt bewaard in `minder_view`.
 
 ## Service worker & versiebeleid
 - Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
-- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v109` → `minder-v110`, …). De oude cache wordt in `activate` opgeruimd.
+- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v110` → `minder-v111`, …). De oude cache wordt in `activate` opgeruimd.
 - De `v10/v11/v13`-strings boven in `index.html` zijn inline-SVG-icoonversies, **geen** app-versie.
 
 ## Syntax-check
@@ -93,6 +93,7 @@ Trek het inline `<script>` uit `index.html` en controleer met **`node --check`**
 - **Een term per begrip** (`v91`): "spaarinleg", niet "spaarruimte". "restsaldo" is een eigen begrip (inkomen min uitgaven) en blijft bestaan. Uitleg loopt uitsluitend via het bestaande `jrg()` + `JARGON` + `#tipPop`-mechanisme; bouw er geen tweede naast.
 - **Overhouden is niet sparen** (`v108`): het kerncijfer `spaar` meet `(inkomen − uitgaven) / inkomen` en heet daarom **Restsaldo-quote**, niet Bespaarquote — geld dat op je betaalrekening blijft staan telt er volledig in mee. Wat je écht opzij zette is de instroom op je spaarrekening (`savedThisMonth()`), en dat is wat de referentie-verdeling onder "sparen" verstaat (`healthSplitOver`). Laat die twee tellers nooit dezelfde naam dragen; ze worden wel aan dezelfde norm getoetst (`splitTarget().save`).
 - **`dir` zegt welke kant beter is, `sign`/`base` hoe de teller in het cijfer landt** (`v109`): bij de eerste vier kerncijfers vielen die samen, bij de spaarquote niet meer — daar telt een storting juist pósitief terwijl hoger ook beter is. Elk cijfer is nu `base + sign × X/B × 100`, met `kpiTxWaarde()` als enige plek waar de per-transactie-waarde bepaald wordt (uitgave `-amount`, spaarinleg `+amount`). Leid het teken nooit meer af uit `dir`. De spaarquote heeft een eigen bron `savedNet()`: zelfde meting als `savedThisMonth()` maar zonder de clamp op ≥ 0, want ontsparen moet zichtbaar zijn; zonder gemarkeerde spaarrekening valt hij terug op de categorie `sparen` en zonder enige spaarboeking blijft hij `null`.
+- **Drie normposten, één drager per post** (`v110`): de referentie-verdeling verdeelt je inkomen in **drie** posten die naar 100% tellen (`SPLIT_FRAMES`, "een norm telt altijd tot 100%"). De post **sparen** hoort bij de spaarquote — daar gaat de vuistregel over en dat is wat `ruleOfThumbCard` meet (`H.naarSpaar`). De restsaldo-quote is geen vierde post maar een **afgeleide**: `kpiBand('spaar')` = `100 − fixed − vari`, met een bandtekst die dat zegt ("ruimte 20% · wat 50/30 overlaat") in plaats van een doel te suggereren. Numeriek is die afgeleide gelijk aan `save` — onvermijdelijk zolang de norm naar 100% telt — dus het verschil moet in de **woorden** zitten, niet in het getal. Hang nooit twee kerncijfers als doel aan dezelfde normpost.
 - **Getalnotatie** (`v75`, `v76`): NL-notatie, minteken voor het euroteken (`-€128,00`), nul-guard tegen `-€0,00`, en `euroK()` als enige compacte vorm. `euro`, `euro0` en `euroK` volgen altijd dezelfde conventie.
 
 ### Visuele taal
