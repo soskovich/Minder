@@ -8,7 +8,7 @@ Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dra
 
 ## Bestanden
 - `index.html` — de complete app (~8.760 regels, ~660 functies): HTML + inline `<style>` + inline `<script>`. Dit is het product.
-- `sw.js` — service worker. `const CACHE = 'minder-v110'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
+- `sw.js` — service worker. `const CACHE = 'minder-v111'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
 - `manifest.webmanifest` — PWA-manifest (naam "Minder — uitgaventracker", standalone, `start_url` `./index.html`). Bevat een app-shortcut "Koopcheck" → `./index.html?action=buy`.
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — iconen (staan ook in de SW-`ASSETS`-lijst).
 - `Open-banking-koppeling-plan.md` — referentieplan voor een latere live PSD2-bankkoppeling. **Nog niet gebouwd**; de MT940/CSV-import blijft voorlopig de basis.
@@ -43,7 +43,7 @@ Laatst bekeken scherm wordt bewaard in `minder_view`.
 
 ## Service worker & versiebeleid
 - Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
-- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v110` → `minder-v111`, …). De oude cache wordt in `activate` opgeruimd.
+- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v111` → `minder-v112`, …). De oude cache wordt in `activate` opgeruimd.
 - De `v10/v11/v13`-strings boven in `index.html` zijn inline-SVG-icoonversies, **geen** app-versie.
 
 ## Syntax-check
@@ -62,6 +62,7 @@ Trek het inline `<script>` uit `index.html` en controleer met **`node --check`**
 - **Netto per categorie** (`v18`-`v28`): een positief bedrag binnen een expense-categorie verlaagt de uitgave. Elke categorie-/uitgave-som is netto. Resterende `amount<0`-filters zijn bewust debit-only (uitschieter-vlag, spaar-/inkomen-detectie, parsing) en mogen niet zomaar netto gemaakt worden.
 - **Doorstroomposten zijn geen uitgave** (`v77`): `uitgeleend`/`geleend`/borg/eigen overboeking zijn `internal`-categorieen en vallen daardoor automatisch buiten `totals().spend/income`, veilig-te-besteden, bespaarquote en budgetnaleving. Kwijtschelden is het enige moment waarop het weer een echte uitgave wordt.
 - **Vast = herkende herhaling, niet de categorie** (`v55`): een uitgave is vast als het een herkende terugkerende betaling is (incasso of periodieke overboeking, minstens 2x regelmatig). `isFixed()` leunt op `recurringKeys()`, niet op `FIXED_CATS`. `isFixedCat` blijft bewust wel `FIXED_CATS`-gebaseerd voor coach-stuurbaarheid. Let bij wijzigingen op dubbeltelling tussen `fixDue` en recurring potjes.
+- **Een overschreden potje reserveert door** (`v111`): `potjeRest(bud, uitgegeven, dim, daysLeft)` is de enige bron voor "wat heeft dit potje nog nodig" — gebruikt door `varPlanRemaining()`, `safeToSpend()` én `openReservedPotjes()`, zodat de drill-down het hoofdgetal niet kan tegenspreken. Binnen budget: het onbestede deel. Overschreden: het **geplande dagtempo** van dat potje maal de resterende dagen, niet nul — anders wordt veilig-te-besteden juist ruimer naarmate je verder over je budget gaat, terwijl het uitgeven doorloopt. Bewust het plan als maat en niet het tempo van déze maand: na één grote aankoop projecteert dat absurd hoog. Aan het eind van de maand is `daysLeft` 0, dus dan reserveert een leeg potje weer niets.
 - **Potjes zijn leidend, de inkomen-limiet is een spiegel** (`v53`): `totals().budget` is de som van je potjes. `monthBudget` is referentie (`totals().limit`), geen plafond; potjes worden nooit stilletjes naar beneden geschaald. De spaar-/liquiditeitslaag leest `monthBudget`/`SET.budgets` direct en breekt dus niet als de potjes het inkomen overstijgen.
 - **Maandbudget = nu-actief** (`v56`): overal het nu-actieve potjes-totaal als hoofdgetal, het geplande bedrag (`budgetsNext`) alleen als gelabelde noot.
 - **Noodfonds heeft een enkele bron** (`v36`, `v38`, `v67`): het doel komt uit `noodfondsModel().doel`, de voortgang uit `spaarSaldo()`, en de mijlpaal-projectie vult op de beoogde **spaarinleg** (`monthlySavingTarget`), niet op het restsaldo. Voeg nooit een tweede formule voor hetzelfde getal toe.

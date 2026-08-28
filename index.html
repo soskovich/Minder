@@ -1754,11 +1754,23 @@ function renderEmpty(){
 // maand-liquiditeit: wat is deze maand NOG niet ontvangen/betaald?
 // "Due" = terugkerende post die deze kalendermaand nog niet in je transacties voorkomt
 // (niet op basis van de typische dag, die kan al gepasseerd zijn terwijl het bedrag nog moet komen).
+/* Wat heeft dit potje de rest van de maand nog nodig? (v111)
+   Zolang er ruimte is: het onbestede deel. Maar een OVERSCHREDEN potje reserveerde nul, en
+   daardoor werd "veilig te besteden" juist ruimer naarmate je verder over je budget ging -
+   terwijl het uitgeven natuurlijk gewoon doorloopt. Voor de resterende dagen rekenen we dan met
+   het geplande dagtempo van dat potje: je eigen plan als maat. Bewust niet het tempo van déze
+   maand; na één grote aankoop is dat onbruikbaar hoog (700 in 6 dagen zou 2.800 projecteren).
+   Aan het eind van de maand is daysLeft 0, dus dan reserveert een leeg potje weer niets. */
+function potjeRest(bud, uitgegeven, dim, daysLeft){
+  bud=+bud||0; uitgegeven=+uitgegeven||0;
+  if(uitgegeven<=bud) return bud-uitgegeven;
+  return Math.round(bud/Math.max(dim,1)*Math.max(daysLeft,0));
+}
 // Onbestede variabele potjes deze maand (potjes = je plan; gedeeld door de liquiditeitskaart en safeToSpend).
 function varPlanRemaining(ym){
   const sp=catSpendMap(ym), B=SET.budgets||{}; let v=0;
-  const rc=recurringCats();
-  for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; v+=Math.max(bud-(sp[k]||0),0); }   // potjes van niet-recurring categorieën = variabel plan; recurring loopt via fixDue (geen dubbeltelling)
+  const rc=recurringCats(); const d=daysElapsed(ym), daysLeft=Math.max(d.dim-d.elapsed,0);
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; v+=potjeRest(bud, sp[k]||0, d.dim, daysLeft); }   // potjes van niet-recurring categorieën = variabel plan; recurring loopt via fixDue (geen dubbeltelling)
   return Math.round(v);
 }
 // Spiegel (Optie B): je variabele plan (potjes) vs je verwachte tempo (prognose). Leeg als het gat niet materieel is.
@@ -1825,8 +1837,12 @@ function safeToSpend(){
   const sp=catSpendMap(ym); const B=SET.budgets||{};
   // Potjes van niet-recurring categorieën = variabel plan; recurring categorieën lopen via fixDue (geen dubbeltelling).
   // Vast = uitsluitend de herkende terugkerende incasso/periodieke overboeking (L.fixDue). Het budget-vangnet + v54-cap vervallen.
-  let reservedVar=0; const _rc=recurringCats();
-  for(const k in B){ const bud=+B[k]||0; if(bud<=0||_rc.has(k)) continue; reservedVar+=Math.max(bud-(sp[k]||0),0); }
+  let reservedVar=0, potOver=0; const _rc=recurringCats();
+  const _d=daysElapsed(ym), _left=Math.max(_d.dim-_d.elapsed,0);
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0||_rc.has(k)) continue;
+    reservedVar+=potjeRest(bud, sp[k]||0, _d.dim, _left);
+    potOver+=Math.max((sp[k]||0)-bud,0);                       // hoeveel je al over je potjes ging
+  }
   const fixedStillToGo=Math.round(L.fixDue||0);
   // wat al op je spaarrekening(en) staat valt buiten 'veilig te besteden': geen vrij besteedbaar geld
   let savedBal=0; try{ savedBal=totalSaved().sum||0; }catch(_){}
@@ -1844,7 +1860,7 @@ function safeToSpend(){
   const saveRemaining=Math.max(saveTarget-savedThisMonth,0);
   const safe=Math.round(spendSaldo + incDue - fixedStillToGo - reservedVar - saveRemaining);
   return {saldo:tb.sum, savedBal:Math.round(savedBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, known:tb.known,
-    incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), fixDueBudgetExtra:Math.max(fixedStillToGo-Math.round(L.fixDue||0),0), reserved:Math.round(reservedVar), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
+    incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), fixDueBudgetExtra:Math.max(fixedStillToGo-Math.round(L.fixDue||0),0), reserved:Math.round(reservedVar), potOver:Math.round(potOver), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
 }
 function renderLiquidityKPI(){
   // liquiditeit is altijd 'vanaf nu vooruit' → alleen zinvol op de lopende/laatste maand
@@ -1931,7 +1947,9 @@ function openReservedPotjes(){
   const sp=catSpendMap(ym); const B=SET.budgets||{};
   const rows=[];
   const rc=recurringCats();
-  for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; const spent=sp[k]||0; const rest=Math.max(bud-spent,0); rows.push({k,bud,spent,rest}); }   // potjes van niet-recurring categorieën = variabel plan
+  const d=daysElapsed(ym), daysLeft=Math.max(d.dim-d.elapsed,0);
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; const spent=sp[k]||0;
+    rows.push({k,bud,spent,rest:potjeRest(bud,spent,d.dim,daysLeft),over:spent>bud}); }   // potjes van niet-recurring categorieën = variabel plan
   rows.sort((a,b)=>b.rest-a.rest);
   const tot=rows.reduce((a,r)=>a+r.rest,0);
   $('#sheet').innerHTML=`<div class="grab"></div>
@@ -1940,8 +1958,8 @@ function openReservedPotjes(){
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0;color:var(--teal)">${euro(tot)}</div></div>
     ${rows.length?rows.map(r=>{const c=CATS[r.k]||CATS.overig;return `<div class="tx" style="cursor:default">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${c.name}</div><div class="cat">${euro0(r.spent)} van ${euro0(r.bud)} gebruikt</div></div>
-      <div class="amt" style="font-weight:700;color:${r.rest>0?'var(--teal)':'var(--mut)'}">${euro(r.rest)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Nog geen variabele potjes met budget. Geef je categorieën een maandbedrag bij de Coach.</div>'}
+      <div class="info"><div class="nm">${c.name}</div><div class="cat">${euro0(r.spent)} van ${euro0(r.bud)} gebruikt${r.over?` · potje op, gerekend op je eigen dagtempo voor de resterende dagen`:''}</div></div>
+      <div class="amt" style="font-weight:700;color:${r.over?'var(--amber)':(r.rest>0?'var(--teal)':'var(--mut)')}">${euro(r.rest)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Nog geen variabele potjes met budget. Geef je categorieën een maandbedrag bij de Coach.</div>'}
     <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Dit is het deel van je variabele potjes dat je deze maand nog niet hebt uitgegeven. Het staat apart, zodat 'veilig te besteden' je potjes respecteert.</div>`;
   showSheetBg();
 }
