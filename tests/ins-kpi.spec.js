@@ -35,12 +35,12 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
     expect(s).toMatch(/kerncijfers/i);
     expect(s).toContain('Hoe gezond je financiën ervoor staan');
     expect(s).toContain('Tik een cijfer voor de uitleg en je volledige historie.');
-    expect(await page.locator('#insKpiStrip .wvo-tile').count()).toBe(4);
+    expect(await page.locator('#insKpiStrip .wvo-tile').count()).toBe(5);   // v109: spaarquote erbij
   });
 
   test('elke tegel toont waarde, band, oordeel én een sparkline', async ({ page }) => {
     await openIns(page);
-    for (const key of ['spaar', 'budget', 'vari', 'vast']) {
+    for (const key of ['spaar', 'inleg', 'budget', 'vari', 'vast']) {
       const t = tegel(page, key);
       await expect(t).toHaveCount(1);
       const txt = await t.innerText();
@@ -66,7 +66,7 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
     expect(Math.round(K.budget.raw)).toBe(Math.round(SPEND_CUR / POTJES * 100));       // 19%
     expect(K.vari.raw).toBeCloseTo(splitVari_CUR / INK * 100, 6);                      // variabel / inkomen
     expect(K.budget.src).toBe('potjes');
-    expect(K.items.map((x) => x.key)).toEqual(['spaar', 'budget', 'vari', 'vast']);
+    expect(K.items.map((x) => x.key)).toEqual(['spaar', 'inleg', 'budget', 'vari', 'vast']);
 
     expect(K.partial).toBe(true);
     for (const k of K.items) {
@@ -99,7 +99,7 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
 test.describe('a2 · richting A: één datataal in de tegels', () => {
   test('elke tegel: één-kleurige lijn, open teal punt op de lopende maand, geen ring', async ({ page }) => {
     await openIns(page);
-    for (const key of ['spaar', 'budget', 'vari', 'vast']) {
+    for (const key of ['spaar', 'inleg', 'budget', 'vari', 'vast']) {
       const t = tegel(page, key);
       const lijn = t.locator('svg.spk path');
       await expect(lijn).toHaveCount(1);
@@ -124,7 +124,7 @@ test.describe('a2 · richting A: één datataal in de tegels', () => {
     const sparks = await page.locator('#insKpiStrip .spk-wrap').evaluateAll((els) => els.map((e) => e.innerHTML).join(''));
     expect((sparks.match(/var\(--teal\)/g) || []).length).toBe(0);
     const strip = await page.locator('#insKpiStrip').innerHTML();
-    expect(await page.locator('#insKpiStrip .spk-nu').count()).toBe(4);    // alleen de eindpunten
+    expect(await page.locator('#insKpiStrip .spk-nu').count()).toBe(5);    // alleen de eindpunten
     expect(strip).not.toContain('class="spark"');                          // geen bonte staafjes meer
   });
 
@@ -149,7 +149,7 @@ test.describe('a2 · richting A: één datataal in de tegels', () => {
     await openIns(page);
     const bodems = await page.evaluate(() => [...document.querySelectorAll('#insKpiStrip svg.spk')]
       .map((e) => Math.round(e.getBoundingClientRect().bottom)));
-    expect(bodems.length).toBe(4);
+    expect(bodems.length).toBe(5);
     expect(bodems[0]).toBe(bodems[1]);
     expect(bodems[2]).toBe(bodems[3]);
   });
@@ -289,7 +289,7 @@ test.describe('c · tik op een tegel', () => {
   test('geen enkele KPI-tegel opent nog de maand-sheet', async ({ page }) => {
     await openIns(page);
     const titels = [];
-    for (const key of ['spaar', 'budget', 'vari', 'vast']) {
+    for (const key of ['spaar', 'inleg', 'budget', 'vari', 'vast']) {
       await tegel(page, key).click();
       await page.waitForSelector('#kpiDetailHead');
       const sheet = await page.locator('#sheet').innerText();
@@ -297,8 +297,8 @@ test.describe('c · tik op een tegel', () => {
       titels.push(sheet.split('\n')[0]);
       await page.evaluate(() => closeSheet());
     }
-    expect(new Set(titels).size).toBe(4);                                      // vier verschillende koppen
-    expect(titels).toEqual(['Restsaldo-quote', 'Budgetnaleving', 'Variabele-lasten-druk', 'Vaste-lasten-druk']);
+    expect(new Set(titels).size).toBe(5);                                      // vijf verschillende koppen
+    expect(titels).toEqual(['Restsaldo-quote', 'Spaarquote', 'Budgetnaleving', 'Variabele-lasten-druk', 'Vaste-lasten-druk']);
   });
 });
 
@@ -351,7 +351,7 @@ test.describe('e · rustige modus en "Wat valt op"', () => {
     const begeleid = await page.evaluate((m) => ({ bad: kpiCol('bad'), strip: insKpiStrip(m), chart: spendVsBudgetChart() }), CUR);
     expect(begeleid.bad).toBe('var(--red)');
     expect(begeleid.chart).not.toContain('var(--red)');                   // grafiek: één datakleur
-    expect((begeleid.strip.match(/var\(--bar\)/g) || []).length).toBeGreaterThanOrEqual(4);   // vier neutrale lijnen
+    expect((begeleid.strip.match(/var\(--bar\)/g) || []).length).toBeGreaterThanOrEqual(5);   // vijf neutrale lijnen
 
     const rustig = await page.evaluate((m) => { SET.mode = 'rustig'; save(); return { bad: kpiCol('bad'), strip: insKpiStrip(m), chart: spendVsBudgetChart() }; }, CUR);
     expect(rustig.bad).toBe('var(--amber)');

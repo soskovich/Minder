@@ -44,7 +44,7 @@ test.describe('a · de nieuwe tegel', () => {
     expect(r.band).toBe(30);
     expect(r.band).toBe(r.norm);
     expect(r.bandTxt).toBe('doel onder 30%');
-    expect(r.volgorde).toEqual(['spaar', 'budget', 'vari', 'vast']);  // vari en vast naast elkaar
+    expect(r.volgorde).toEqual(['spaar', 'inleg', 'budget', 'vari', 'vast']);  // v109: de twee spaarcijfers naast elkaar, daarna vari en vast
   });
 
   test('oordeelt als drukmetriek: lager is gezonder', async ({ page }) => {
@@ -150,8 +150,8 @@ test.describe('d · opgeruimd en de rest ongewijzigd', () => {
         strip: insKpiStrip(m),
       };
     }, CUR);
-    expect(r.meta.sort()).toEqual(['budget', 'spaar', 'vari', 'vast']);
-    expect(r.reeksen.sort()).toEqual(['budget', 'spaar', 'vari', 'vast']);
+    expect(r.meta.sort()).toEqual(['budget', 'inleg', 'spaar', 'vari', 'vast']);
+    expect(r.reeksen.sort()).toEqual(['budget', 'inleg', 'spaar', 'vari', 'vast']);
     expect(r.niveau).toBe(true);
     expect(r.ref).toBe(true);
     expect(r.state).toBe('n');                                        // geen aparte niveau-tak meer
@@ -187,7 +187,7 @@ test.describe('d · opgeruimd en de rest ongewijzigd', () => {
   });
 });
 
-test('e · vier tegels passen nog steeds op 360px', async ({ page }) => {
+test('e · vijf tegels passen nog steeds op 360px', async ({ page }) => {
   await openIns(page);
   await page.setViewportSize({ width: 360, height: 900 });
   await page.evaluate(() => renderIns());
@@ -203,6 +203,6 @@ test('e · vier tegels passen nog steeds op 360px', async ({ page }) => {
   });
   expect(r.pagina).toBe(0);
   expect(r.buiten).toBe(0);
-  expect(r.n).toBe(4);
-  expect(r.sparks).toBe(4);
+  expect(r.n).toBe(5);        // v109: restsaldo-quote en spaarquote naast elkaar
+  expect(r.sparks).toBe(5);
 });

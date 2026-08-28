@@ -19,25 +19,25 @@ test.describe('a · kerncijfers: drie tegelijk in Rustig', () => {
     await openIns(page, 'rustig');
     await expect(tegels(page)).toHaveCount(3);
     const keys = await tegels(page).evaluateAll((els) => els.map((e) => e.dataset.kpi));
-    expect(keys).toEqual(['spaar', 'budget', 'vari']);              // volgorde onaangeroerd
+    expect(keys).toEqual(['spaar', 'inleg', 'budget']);             // v109: Rustig toont de eerste drie van vijf
     const knop = page.locator('#kpiMeer');
     await expect(knop).toHaveCount(1);
-    expect(await knop.innerText()).toContain('toon alle 4 kerncijfers');
+    expect(await knop.innerText()).toContain('toon alle 5 kerncijfers');
 
     await knop.click();
-    await page.waitForFunction(() => document.querySelectorAll('#insKpiStrip .wvo-tile').length === 4);
+    await page.waitForFunction(() => document.querySelectorAll('#insKpiStrip .wvo-tile').length === 5);
     expect(await page.evaluate(() => SET.kpiAll)).toBe(true);
     expect(await page.locator('#kpiMeer').innerText()).toContain('minder');
 
     // en na een re-render blijft het uitgeklapt
     await page.evaluate(() => renderIns());
-    await expect(tegels(page)).toHaveCount(4);
+    await expect(tegels(page)).toHaveCount(5);
   });
 
-  test('Begeleid en Expert tonen alle vier, zonder uitklap', async ({ page }) => {
+  test('Begeleid en Expert tonen ze alle vijf, zonder uitklap', async ({ page }) => {
     for (const mode of ['begeleid', 'expert']) {
       await openIns(page, mode);
-      await expect(tegels(page), mode).toHaveCount(4);
+      await expect(tegels(page), mode).toHaveCount(5);
       expect(await page.locator('#kpiMeer').count(), mode).toBe(0);
     }
   });
@@ -114,7 +114,7 @@ test.describe('c · niets anders verandert', () => {
     expect(strip.toLowerCase()).toContain('restsaldo-quote');
     expect(strip).toContain('doel 20% of meer');
     expect(strip).toContain('Gemeten tegen: 50/30/20');
-    expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // de KPI's zelf blijven vier
+    expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(5);   // v109: vijf kerncijfers
     // de samenstelling van Inzichten is niet veranderd: alleen wát er open staat
     expect(await page.evaluate(() => /insKpiStrip\(m\)\s*\+\s*spendVsBudgetChart\(\)\s*\+\s*whatStandsOutLine\(m\)/.test(renderIns.toString()))).toBe(true);
   });
