@@ -234,7 +234,7 @@ test.describe('c · tik op een tegel', () => {
     await page.waitForSelector('#kpiDetailHead');
     const sheet = await page.locator('#sheet').innerText();
 
-    expect(sheet).toContain('Bespaarquote');
+    expect(sheet).toContain('Restsaldo-quote');
     expect(sheet).toContain('(inkomen − uitgaven) ÷ inkomen');            // hoe hij berekend is
     expect(sheet).toContain('50/30/20');
     expect(sheet).toContain('doel 20% of meer');
@@ -298,7 +298,7 @@ test.describe('c · tik op een tegel', () => {
       await page.evaluate(() => closeSheet());
     }
     expect(new Set(titels).size).toBe(4);                                      // vier verschillende koppen
-    expect(titels).toEqual(['Bespaarquote', 'Budgetnaleving', 'Variabele-lasten-druk', 'Vaste-lasten-druk']);
+    expect(titels).toEqual(['Restsaldo-quote', 'Budgetnaleving', 'Variabele-lasten-druk', 'Vaste-lasten-druk']);
   });
 });
 

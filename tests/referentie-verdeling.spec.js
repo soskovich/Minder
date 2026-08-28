@@ -57,7 +57,7 @@ test.describe('a · een andere norm kiezen, en de banden volgen mee', () => {
     expect({ f: r.t.fixed, v: r.t.vari, s: r.t.save }).toEqual({ f: 50, v: 30, s: 20 });
     expect(r.spaar).toBe(20);
     expect(r.vast).toBe(50);
-    expect(r.spaarTxt).toBe('doel 20% of meer');
+    expect(r.spaarTxt).toBe('doel 20% of meer overhouden');   // v108: de band zegt nu wat hij toetst
     expect(r.vastTxt).toBe('doel onder 50%');
   });
 

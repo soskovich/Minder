@@ -171,7 +171,7 @@ test.describe('d · opgeruimd en de rest ongewijzigd', () => {
       };
     }, { M1 });
     expect(r.spaar).toBeCloseTo(r.spaarEigen, 6);
-    expect(r.spaarBand).toBe('doel 20% of meer');
+    expect(r.spaarBand).toBe('doel 20% of meer overhouden');   // v108: de band zegt wat hij toetst
     expect(r.budget).toBeCloseTo(r.budgetEigen, 6);
     expect(r.budgetBand).toBe('doel 100% of minder');
     expect(r.src).toBe('potjes');

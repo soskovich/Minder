@@ -43,7 +43,7 @@ test.describe('a · markeren haalt het uit de uitgaven', () => {
     expect(await page.evaluate(() => CATS.uitgeleend.type)).toBe('internal');
   });
 
-  test('de afgeleide cijfers bewegen mee: bespaarquote en budgetnaleving', async ({ page }) => {
+  test('de afgeleide cijfers bewegen mee: restsaldo-quote en budgetnaleving', async ({ page }) => {
     await boot(page, [LEEN]);
     const voor = await page.evaluate((m) => ({ q: insKpis(m).spaar.raw, b: insKpis(m).budget.raw }), CUR);
     await page.evaluate((i) => markLoan(i, 'uit', 'lening'), await UIT(page));

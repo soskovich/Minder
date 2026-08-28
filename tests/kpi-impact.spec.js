@@ -30,7 +30,7 @@ test.describe('a · de bijdragen tellen op tot het cijfer', () => {
     });
   }
 
-  test('bespaarquote: honderd min de som van de punten is het cijfer', async ({ page }) => {
+  test('restsaldo-quote: honderd min de som van de punten is het cijfer', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate((m) => {
       const basis = insKpis(m).spaar.afst.basis;
@@ -43,7 +43,7 @@ test.describe('a · de bijdragen tellen op tot het cijfer', () => {
 });
 
 test.describe('b · het teken volgt de betekenis', () => {
-  test('een uitgave verlaagt je bespaarquote en verhoogt een drukmetriek', async ({ page }) => {
+  test('een uitgave verlaagt je restsaldo-quote en verhoogt een drukmetriek', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate((m) => {
       const t = kpiTx('vast', m)[0];
@@ -139,7 +139,7 @@ test.describe('d · de weergave', () => {
     expect(await page.locator('#sheet .kpi-tx span.jrg').count()).toBe(1);
     const html = await page.locator('#sheet').innerHTML();
     expect(html).toContain("showTip(event,'procentpunt')");
-    expect(await page.locator('#sheet').innerText()).toContain('Een uitgave duwt je bespaarquote omlaag');
+    expect(await page.locator('#sheet').innerText()).toContain('Een uitgave duwt je restsaldo-quote omlaag');
   });
 
   test('een drukmetriek legt het andersom uit', async ({ page }) => {

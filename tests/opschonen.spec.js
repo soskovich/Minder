@@ -181,7 +181,7 @@ test.describe('e · KPI-detail is per KPI verschillend', () => {
       gezien[key] = await page.locator('#sheet').innerText();
       await page.evaluate(() => closeSheet());
     }
-    expect(gezien.spaar).toContain('Bespaarquote');
+    expect(gezien.spaar).toContain('Restsaldo-quote');
     expect(gezien.spaar).toContain('(inkomen − uitgaven) ÷ inkomen');
     expect(gezien.budget).toContain('Budgetnaleving');
     expect(gezien.budget).toContain('uitgaven ÷ budget');

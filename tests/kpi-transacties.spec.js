@@ -33,7 +33,7 @@ test.describe('a · de lijst telt op tot het cijfer', () => {
     expect(r.lijst).toBe(r.cijfer);
   });
 
-  test('bespaarquote: inkomen min de lijst is wat je overhield', async ({ page }) => {
+  test('restsaldo-quote: inkomen min de lijst is wat je overhield', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate((m) => { const t = totals(m); return { over: t.income - netSpend(kpiTx('spaar', m)), cijfer: t.income - t.spend, pct: insKpis(m).spaar.raw, income: t.income }; }, M1);
     expect(r.over).toBe(r.cijfer);

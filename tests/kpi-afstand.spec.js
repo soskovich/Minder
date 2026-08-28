@@ -17,7 +17,7 @@ const kpi = (page, key, m) => page.evaluate(([k, mm]) => {
 }, [key, m || M1]);
 
 test.describe('a · de afstand rekent uit één bron', () => {
-  test('bespaarquote: hoger dan het doel is de goede kant op', async ({ page }) => {
+  test('restsaldo-quote: hoger dan het doel is de goede kant op', async ({ page }) => {
     await boot(page);
     const k = await kpi(page, 'spaar');
     expect(k.afst.goed).toBe(true);
@@ -46,7 +46,7 @@ test.describe('a · de afstand rekent uit één bron', () => {
 
   test('het bedrag komt overeen met de som die het percentage maakt', async ({ page }) => {
     await boot(page);
-    // bespaarquote: het verschil in euro's is wat je meer overhield dan het doel vraagt
+    // restsaldo-quote: het verschil in euro's is wat je meer overhield dan het doel vraagt
     const r = await page.evaluate((m) => {
       const t = totals(m), B = kpiBand('spaar');
       const overgehouden = t.income - t.spend;

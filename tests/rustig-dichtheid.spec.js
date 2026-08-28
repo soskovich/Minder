@@ -111,7 +111,7 @@ test.describe('c · niets anders verandert', () => {
   test('de cijfers en de norm-regel blijven in Rustig gewoon staan', async ({ page }) => {
     await openIns(page, 'rustig');
     const strip = await page.locator('#insKpiStrip').innerText();
-    expect(strip.toLowerCase()).toContain('bespaarquote');
+    expect(strip.toLowerCase()).toContain('restsaldo-quote');
     expect(strip).toContain('doel 20% of meer');
     expect(strip).toContain('Gemeten tegen: 50/30/20');
     expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // de KPI's zelf blijven vier

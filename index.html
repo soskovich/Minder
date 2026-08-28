@@ -2444,7 +2444,7 @@ const JARGON={
   bezuinigingsruimte:'Comfort-uitgaven die je in een crisismaand kunt schrappen, dus het bedrag dat je maandlast tijdelijk lager maakt.',
   crisislast:'Wat je per maand echt kwijt bent om rond te komen als je inkomen wegvalt, zonder comfort-uitgaven.',
   firefactor:'Hoeveel keer je jaaruitgaven je als vermogen aanhoudt; factor 25 hoort bij een onttrekking van 4% per jaar.',
-  procentpunt:'Het verschil tussen twee percentages. Gaat je bespaarquote van 20% naar 22%, dan is dat 2 procentpunt. Zo zie je wat één transactie aan een kerncijfer heeft gedaan.'
+  procentpunt:'Het verschil tussen twee percentages. Gaat je restsaldo-quote van 20% naar 22%, dan is dat 2 procentpunt. Zo zie je wat één transactie aan een kerncijfer heeft gedaan.'
 };
 function jrg(key,label){ const u=JARGON[key]; if(!u) return label;
   return `<span class="jrg" tabindex="0" role="button" aria-label="Uitleg: ${esc(u)}" onclick="showTip(event,'${key}')" onkeydown="if(event.key==='Enter'||event.key===' '){showTip(event,'${key}')}">${label}</span>`; }
@@ -7042,7 +7042,7 @@ function catSparkline(k){
 /* ============================================================
    REFERENTIE-VERDELING · waartegen meet je je verdeling?
    50/30/20 is een ijkpunt, geen wet. Je kiest zelf het kader, neemt een voorstel uit je
-   eigen historie over, of zet je eigen percentages. Alle banden (kerncijfers bespaarquote/
+   eigen historie over, of zet je eigen percentages. Alle banden (kerncijfers restsaldo-quote/
    vaste-lasten-druk en "Hoe gezond is jouw verdeling?") wijzen naar splitTarget().
    De rekenbronnen (healthSplit/splitFixedVar/totals/monthAgg) blijven onaangeroerd —
    alleen de norm waar tegenaan gemeten wordt, is nu van jou.
@@ -7230,7 +7230,7 @@ function setSplitNorm(){
   const nu=(A&&A.inc>0)
     ? `<div class="small muted" style="margin-bottom:10px" id="splitNu">Nu · ${splitNuLabel({fixed:A.fixP,vari:A.varP,save:A.savP})} <span style="color:var(--mut2)">(je laatste ${A.n} ${A.n===1?'maand':'maanden'})</span></div>`
     : `<div class="small muted" style="margin-bottom:10px" id="splitNu">Nog te weinig historie om je eigen verdeling te tonen. De norm hieronder is een ijkpunt, geen oordeel.</div>`;
-  return `<div class="small muted" style="margin-bottom:8px">Waartegen meet je je verdeling? Je kerncijfers (bespaarquote, vaste-lasten-druk) meten tegen de norm die je hier kiest. Een ijkpunt, geen wet — je verandert er geen cent mee.</div>
+  return `<div class="small muted" style="margin-bottom:8px">Waartegen meet je je verdeling? Je kerncijfers (restsaldo-quote, vaste-lasten-druk) meten tegen de norm die je hier kiest. Een ijkpunt, geen wet — je verandert er geen cent mee.</div>
     ${nu}
     ${splitKaart('503020')}${splitKaart('60')}${splitKaart('payfirst')}${splitKaart('fire')}
     ${splitVoorstelBlok()}
@@ -7320,8 +7320,12 @@ const _sign=n=>(n<0?'−':'+')+euro0(Math.abs(n));   // echte min-tekens, zoals 
 // Wat elke KPI betekent en waartegen hij zich meet. Een kaal getal zonder band zegt niets,
 // dus band + oordeel + uitleg horen bij de definitie, niet bij de opmaak.
 const KPI_META={
-  spaar: {label:'Bespaarquote',       bandTxt:'doel 20% of meer', band:20,  dir:'up',
-    uitleg:'Welk deel van je inkomen je overhoudt: (inkomen − uitgaven) ÷ inkomen. Het richtpunt komt uit je referentie-verdeling.'},
+  // v108: heette "Bespaarquote", maar meet je restsaldo — wat je overhoudt, niet wat je opzij
+  // zette. Geld dat op je betaalrekening blijft staan telt hier volledig mee. De naam suggereerde
+  // het tegendeel en botste met de referentie-verdeling, die "sparen" wél als instroom op je
+  // spaarrekening leest (healthSplitOver). Eén term per begrip (v91): dit is het restsaldo.
+  spaar: {label:'Restsaldo-quote',    bandTxt:'doel 20% of meer', band:20,  dir:'up',
+    uitleg:'Welk deel van je inkomen je overhoudt: (inkomen − uitgaven) ÷ inkomen. Dat is niet hetzelfde als wat je opzij zette — geld dat op je betaalrekening blijft staan telt hier gewoon mee. Je spaarinleg komt hieruit. Het richtpunt komt uit je referentie-verdeling.'},
   budget:{label:'Budgetnaleving',     bandTxt:'doel 100% of minder', band:100, dir:'down',
     uitleg:'Welk deel van je maandbudget je hebt uitgegeven: uitgaven ÷ budget. Je budget is de som van je potjes; heb je die niet, dan je inkomen-limiet.'},
   vari:  {label:'Variabele-lasten-druk', bandTxt:'doel onder 30%', band:30, dir:'down',
@@ -7339,7 +7343,7 @@ function kpiBand(key){
   return KPI_META[key].band;
 }
 function kpiBandTxt(key){
-  if(key==='spaar') return `doel ${splitTarget().save}% of meer`;
+  if(key==='spaar') return `doel ${splitTarget().save}% of meer overhouden`;
   if(key==='vast')  return `doel onder ${splitTarget().fixed}%`;
   if(key==='vari')  return `doel onder ${splitTarget().vari}%`;
   return KPI_META[key].bandTxt;
@@ -7575,7 +7579,7 @@ function kpiTx(key,m){
   if(key==='spaar')  return list.filter(isExpenseTx);      // het inkomen staat apart, zie hieronder
   return [];
 }
-/* Het inkomen in de bespaarquote komt uit totals() en dat is lang niet altijd de som van je
+/* Het inkomen in de restsaldo-quote komt uit totals() en dat is lang niet altijd de som van je
    inkomsten-transacties: met autoIncome uit is het je eigen instelling (index.html:1441).
    Doen alsof de transacties dat getal maken zou onwaar zijn, dus we noemen de bron. */
 const KPI_INCBRON={handmatig:'zelf ingesteld', gedetecteerd:'herkend uit je transacties', basisnorm:'je basisnorm uit eerdere maanden', onbekend:'onbekend'};
@@ -7616,7 +7620,7 @@ function kpiTxLijst(key,m){
     : `<div class="small muted" style="padding:12px 0">Geen transacties in deze maand.</div>`;
   // de uitleg hoort bij de eenheid, niet bij elke regel: één zin boven de lijst
   const ptUitleg=(basis>0&&items.length)
-    ? `<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin:2px 0 6px">Achter elk bedrag staat wat die transactie aan dit cijfer deed, in ${jrg('procentpunt','procentpunten')}. ${key==='spaar'?'Een uitgave duwt je bespaarquote omlaag.':'Een uitgave duwt dit cijfer omhoog.'}</div>`
+    ? `<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin:2px 0 6px">Achter elk bedrag staat wat die transactie aan dit cijfer deed, in ${jrg('procentpunt','procentpunten')}. ${key==='spaar'?'Een uitgave duwt je restsaldo-quote omlaag.':'Een uitgave duwt dit cijfer omhoog.'}</div>`
     : '';
   return `<details class="kpi-tx" style="margin-top:14px">
     <summary class="small" style="color:var(--teal);cursor:pointer">Welke transacties zitten hierin? · ${items.length}</summary>
