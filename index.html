@@ -1168,15 +1168,33 @@ function suggestBudgets(){
   const totalVar=Object.values(histV).reduce((a,b)=>a+b,0);
   const remaining=Math.max(room-totalFixed,0);
   const scaleV = totalVar>0 ? Math.min(remaining/totalVar,1) : 0;   // variabel ≤ historisch, past binnen ruimte
-  SET.budgets={};
+  // het voorstel is een wijziging als elke andere: een bestaand potje verschuift naar de
+  // 'volgende maand'-laag, de lopende maand ligt vast. Alleen een nieuw potje start meteen.
+  const voorstel={};
   for(const k of Object.keys(CATS)){ if(CATS[k].type!=='expense'||k==='overig') continue;
-    const b=(histF[k]||0)+(histV[k]||0)*scaleV; if(b>=1) SET.budgets[k]=Math.max(Math.round(b/5)*5,5);
+    const b=(histF[k]||0)+(histV[k]||0)*scaleV; voorstel[k]= b>=1 ? Math.max(Math.round(b/5)*5,5) : 0;
+  }
+  SET.budgets=SET.budgets||{}; SET.budgetsNext=SET.budgetsNext||{};
+  for(const k of Object.keys(SET.budgets)) if(!(k in voorstel)) voorstel[k]=0;   // potjes buiten het voorstel vervallen ook pas volgende maand
+  let nieuw=0, gepland=0;
+  for(const k in voorstel){
+    const v=voorstel[k], nu=+SET.budgets[k]||0;
+    if(nu>0){ if(v===nu) delete SET.budgetsNext[k]; else { SET.budgetsNext[k]=v; gepland++; } }
+    else if(v>0){ SET.budgets[k]=v; nieuw++; }
   }
   save(); render();
+  const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
+  const wanneer = gepland
+    ? `${gepland} bestaand${gepland===1?' potje gaat':'e potjes gaan'} mee vanaf ${vanaf}; de lopende maand blijft zoals hij stond.${nieuw?` ${nieuw} nieuw potje${nieuw===1?'':'s'} staat meteen aan.`:''}`
+    : (nieuw ? `${nieuw} nieuw potje${nieuw===1?'':'s'} staat meteen aan; aan je lopende maand verandert verder niets.` : 'Je potjes stonden al op het voorstel, er verandert niets.');
   if(totalFixed>room){
-    alert(`Let op: je vaste lasten (${euro0(totalFixed)}) zijn al hoger dan je bestedingsruimte (${euro0(room)}). Variabele budgetten staan op het minimum. Je vaste lasten verlagen of je inkomen verhogen is nodig om binnen je ${SET.limit}%-norm te blijven.`);
+    alert(`Let op: je vaste lasten (${euro0(totalFixed)}) zijn al hoger dan je bestedingsruimte (${euro0(room)}). Variabele budgetten staan op het minimum. Je vaste lasten verlagen of je inkomen verhogen is nodig om binnen je ${SET.limit}%-norm te blijven.
+
+${wanneer}`);
   } else {
-    alert(`Voorstel klaar. Vaste lasten ≈ ${euro0(totalFixed)} (vast), resterende ruimte voor variabele uitgaven ≈ ${euro0(remaining)}. Pas de variabele categorieën gerust handmatig aan.`);
+    alert(`Voorstel klaar. Vaste lasten ≈ ${euro0(totalFixed)} (vast), resterende ruimte voor variabele uitgaven ≈ ${euro0(remaining)}. Pas de variabele categorieën gerust handmatig aan.
+
+${wanneer}`);
   }
 }
 // richtlijn-band o.b.v. % over budget: ≤3% geen actie (marge) · 4–5% monitoren · >5% actie
@@ -8422,7 +8440,7 @@ function setBudget(){
     <div class="small muted" style="margin:0 0 6px">Dit zijn dezelfde <b>potjes</b> als bij je Coach, wijzig ze hier of daar, het is één systeem.</div>
     <div class="small" id="potGridTotal" style="margin:2px 0 4px">${potRoomLineHTML(totalBudget(), plannedTotalBudget())}</div>
     <div class="small muted" style="margin:0 0 8px">Een wijziging aan een bestaand potje geldt vanaf ${ymFull(nextYM(SET.budgetMonth||thisYM()))}. De lopende maand ligt vast.</div>
-    <button class="btn sec" style="margin:6px 0 10px" onclick="if(confirm('Budget per categorie voorstellen op basis van je historie? Bestaande budgetten worden overschreven.')){suggestBudgets();}">${ICON('trend')} Voorstel uit mijn historie</button>
+    <button class="btn sec" style="margin:6px 0 10px" onclick="if(confirm('Budget per categorie voorstellen op basis van je historie? Bestaande potjes worden overschreven vanaf volgende maand; de lopende maand blijft staan.')){suggestBudgets();}">${ICON('trend')} Voorstel uit mijn historie</button>
     ${Object.entries(CATS).filter(([k,c])=>c.type==='expense').map(([k,c])=>{
       const pend=(SET.budgetsNext&&SET.budgetsNext[k]!=null)?+SET.budgetsNext[k]:null;
       const shown=(pend!=null?pend:((SET.budgets&&SET.budgets[k])||''))||'';
