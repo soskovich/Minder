@@ -8683,7 +8683,11 @@ function setBank(){
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
     <div class="small muted" style="margin-bottom:8px;font-weight:600">Je rekeningen</div>
     ${accountsCard()}` : '';
-  return head + accHtml + advHtml;
+  const diagHtml = (OWN.length||psd2) ? `
+    <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
+    <button class="snz" onclick="bankDiagToggle()">${SET.bankDiag?'Naamdiagnose verbergen ▲':'Waarom heet een rekening zo? ▾'}</button>
+    ${SET.bankDiag?bankDiagHTML():''}` : '';
+  return head + accHtml + diagHtml + advHtml;
 }
 function bankAdvTap(){
   window._advTaps=(window._advTaps||0)+1; clearTimeout(window._advTapT);
@@ -8882,13 +8886,77 @@ function accShort(a){ return (a||'').startsWith('N26 ') ? a.replace(/^N26 /,'') 
 // nette, korte rekeningnaam (zonder persoonsnaam), N26-Spaces zoals in de N26-app, ABN als betaalrekening
 const ACCT_NAMES={'6222':'Main','1123':'Buffer rust','4323':'Spaarpot','4840':'Zakgeld'};
 function acctLast4(a){ const pm=(SET.psd2Accounts||{})[a]; const iban=((pm&&pm.iban)||'').replace(/\D/g,''); const id=(a||'').replace(/\D/g,''); return (iban||id).slice(-4); }
-function acctNiceName(a){
+/* v118: dezelfde naamkeuze als altijd, maar nu met de gekozen bron erbij. Het diagnose-blokje in
+   Instellingen leest die bron, zodat het niet zijn eigen kopie van deze regels hoeft te hebben -
+   een tweede kopie zou vroeg of laat iets anders beweren dan het scherm. acctNiceName() is
+   ongewijzigd van gedrag: het is exact acctNaam().naam. */
+function acctNaam(a){
   const bank=(ACCMETA[a]&&ACCMETA[a].bank)||(((SET.psd2Accounts||{})[a])||{}).bank||'';
   const last4=acctLast4(a);
-  const ov=(SET.acctNames||{})[last4]; if(ov) return ov;
-  if(/n26/i.test(bank)) return ACCT_NAMES[last4]||('Space ··'+last4);
-  if(/abn/i.test(bank)) return 'Betaalrekening';
-  return last4?('··'+last4):(accLabel(a)||'Rekening');
+  const ov=(SET.acctNames||{})[last4]; if(ov) return {naam:ov, bron:'eigen naam'};
+  if(/n26/i.test(bank)) return ACCT_NAMES[last4]
+    ? {naam:ACCT_NAMES[last4], bron:'vaste tabel in de app'}
+    : {naam:'Space ··'+last4, bron: last4?'terugval op de laatste cijfers':'geen naam beschikbaar'};
+  if(/abn/i.test(bank)) return {naam:'Betaalrekening', bron:'vaste regel voor ABN'};
+  return last4?{naam:'··'+last4, bron:'laatste cijfers'}:{naam:(accLabel(a)||'Rekening'), bron:'label van de koppeling'};
+}
+function acctNiceName(a){ return acctNaam(a).naam; }
+
+/* Read-only diagnose (v118): waar komt de naam van elke rekening vandaan? Gemeld werd dat sommige
+   N26-potjes hun juiste naam tonen en andere geen naam, terwijl in N26 elk potje een naam heeft.
+   Dit blokje laat per rekening zien wat de app toont, waar dat vandaan komt en welke naam de
+   koppeling zelf heeft opgeslagen - zonder iets te wijzigen. Rekeningen zonder transacties horen
+   er ook bij (die staan niet in OWN maar wel in psd2Accounts), juist omdat dat een van de
+   verdachten is. Niets verlaat het toestel; kopieren zet het op je klembord, meer niet. */
+function bankDiagRows(){
+  const ps=SET.psd2Accounts||{};
+  const all=[...new Set([...OWN, ...Object.keys(ps)])];
+  return all.map(a=>{
+    const pm=ps[a]||null, meta=ACCMETA[a]||{}, N=acctNaam(a);
+    return {a, toont:N.naam, bron:N.bron,
+            opgeslagen:(pm&&pm.label)||meta.label||'',
+            bank:meta.bank||(pm&&pm.bank)||'',
+            l4:acctLast4(a), iban:!!(pm&&pm.iban),
+            tx:TX.filter(t=>t.acc===a).length};
+  }).sort((x,y)=>y.tx-x.tx);
+}
+function bankDiagText(){
+  return bankDiagRows().map(r=>
+    `${r.toont||'(geen naam)'} | bron: ${r.bron} | bank: ${r.bank||'?'} | IBAN: ${r.iban?'ja ··'+r.l4:'nee'} | ${r.tx} tx | van de koppeling: ${r.opgeslagen||'-'}`
+  ).join('\n');
+}
+async function bankDiagCopy(){
+  try{ await navigator.clipboard.writeText(bankDiagText()); toast(`${ICON('check')} Diagnose gekopieerd`); }
+  catch(e){ toast('Kopieren lukte niet'); }
+}
+function bankDiagToggle(){ SET.bankDiag=!SET.bankDiag; save(); try{ renderSetSheet(); }catch(_){} try{ renderSet(); }catch(_){} }
+function bankDiagHTML(){
+  const rows=bankDiagRows();
+  if(!rows.length) return '<div class="small muted" style="margin-top:8px">Nog geen rekeningen om te tonen.</div>';
+  const n=(k,ev,mv)=>`${k} rekening${k===1?'':'en'} ${k===1?ev:mv}`;
+  const zonderNaam=rows.filter(r=>r.bron==='geen naam beschikbaar').length;
+  const tabel=rows.filter(r=>r.bron==='vaste tabel in de app').length;
+  const terugval=rows.filter(r=>r.bron==='terugval op de laatste cijfers').length;
+  const geenTx=rows.filter(r=>r.tx===0).length;
+  // Twee rekeningen met dezelfde getoonde naam is geen schoonheidsfout: de spaarrekening-schakelaar
+  // en je eigen namen hangen aan diezelfde laatste vier cijfers, dus die delen ze dan ook.
+  const tel={}; for(const r of rows) tel[r.toont]=(tel[r.toont]||0)+1;
+  const dubbel=Object.entries(tel).filter(([,c])=>c>1);
+  const bevind=[];
+  if(tabel) bevind.push(n(tabel,'krijgt','krijgen')+` de naam uit een vaste tabel in de app, niet uit je bank`);
+  if(terugval) bevind.push(n(terugval,'toont','tonen')+` alleen "Space ··cijfers", terwijl de opgeslagen naam er wel is`);
+  if(zonderNaam) bevind.push(n(zonderNaam,'heeft','hebben')+` geen cijfers om op terug te vallen en blijft daardoor naamloos`);
+  if(geenTx) bevind.push(n(geenTx,'heeft','hebben')+` geen transacties in het venster en krijgt daardoor geen rekening-metadata`);
+  if(dubbel.length) bevind.push(`${dubbel.map(([k,c])=>`${c}× "${esc(k)}"`).join(', ')} — die delen ook hun spaarrekening-schakelaar, want die hangt aan dezelfde laatste cijfers`);
+  return `<div class="small muted" style="margin:8px 0 10px">Per rekening: wat de app toont, waar die naam vandaan komt, en welke naam de koppeling zelf heeft opgeslagen. Alleen lezen — er verandert niets.</div>
+    ${rows.map(r=>`<div style="padding:9px 0;border-bottom:1px solid var(--line)">
+      <div style="font-weight:600;font-size:var(--fs-md)">${esc(r.toont||'(geen naam)')}</div>
+      <div class="small muted">bron: ${esc(r.bron)} · ${esc(r.bank||'bank onbekend')} · IBAN ${r.iban?'ja ··'+esc(r.l4):'nee'} · ${r.tx} transactie${r.tx===1?'':'s'}</div>
+      <div class="small" style="color:var(--mut2)">van de koppeling: ${r.opgeslagen?esc(r.opgeslagen):'—'}</div>
+    </div>`).join('')}
+    ${bevind.length?`<div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:12px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">${bevind.map(b=>'· '+b).join('<br>')}</div>`:''}
+    <button class="btn sec" style="margin-top:10px" onclick="bankDiagCopy()">${ICON('doc')} Kopieer deze lijst</button>
+    <div class="small muted" style="margin-top:6px">Kopieren zet het op je klembord. Het verlaat je toestel pas als je het zelf ergens plakt.</div>`;
 }
 
 // Eén ingang voor "sheet openen": zet de sheet zichtbaar en ruimt de toast op, die anders over de invoervelden bleef liggen.
