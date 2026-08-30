@@ -1943,8 +1943,30 @@ function toggleFixDueExcl(key){ if(!key) return; SET.fixDueExcl=SET.fixDueExcl||
 // Maand-drill-down: hier wonen sinds v66 de categorieën én de top uitgaven, met een segment-toggle
 // ertussen. Dezelfde renderers als voorheen op Inzichten; hun inklap-vlag wordt hier tijdelijk
 // opengezet (zonder save) zodat de gekozen kant meteen zichtbaar is.
-function msDrill(){ return SET.msDrill==='top'?'top':'cat'; }
-function setMsDrill(v){ SET.msDrill=(v==='top'?'top':'cat'); save(); openMonthSpend(window._msMonth); }
+const MS_DRILL=['cat','top','fv'];   // v116: vast/variabel als derde kant van dezelfde maand
+function msDrill(){ return MS_DRILL.includes(SET.msDrill)?SET.msDrill:'cat'; }
+function setMsDrill(v){ SET.msDrill=MS_DRILL.includes(v)?v:'cat'; save(); openMonthSpend(window._msMonth); }
+/* De vast/variabel-kant van de Uitgegeven-drill: dezelfde splitsing als het widget op Inzichten
+   (isFixed, v55), maar begrensd tot deze maand. De rijen openen openFixedVarDrill met de maand mee,
+   zodat de transactielijst en het omzetten (fixFlipAsk/fixFlip) op diezelfde maand slaan. Een
+   tweede ingang naar een bestaand mechanisme, geen tweede classificatie. */
+function msFixedVar(m, list){
+  const items=list.filter(x=>isExpenseTx(x));   // incl. terugstortingen: netto (v18-v28)
+  let fixed=0, vari=0, nf=0, nv=0;
+  for(const x of items){ if(isFixed(x)){ fixed+=-x.amount; nf++; } else { vari+=-x.amount; nv++; } }
+  const spend=fixed+vari; if(spend<=0) return '';
+  const pc=v=>Math.round(v/spend*100), w=v=>v/spend*100;
+  return `<div class="card">
+    <div class="row"><span class="hlabel" style="margin:0;flex:1">Vast vs variabel</span><span class="small muted">% van uitgaven</span></div>
+    <div class="stack">
+      <div style="width:${w(fixed)}%;background:var(--blue)"></div>
+      <div style="width:${w(vari)}%;background:var(--amber)"></div>
+    </div>
+    <div class="fv-row" style="cursor:pointer" onclick="openFixedVarDrill('fixed','${m}')"><span class="dot" style="background:var(--blue)"></span><span class="nm">${ICON('lock')} Vaste lasten <span class="muted small">· ${nf}×</span></span><span class="amt">${euro(fixed)}</span><span class="pc">${pc(fixed)}%</span><span style="color:var(--teal);font-weight:700;margin-left:6px">›</span></div>
+    <div class="fv-row" style="cursor:pointer" onclick="openFixedVarDrill('var','${m}')"><span class="dot" style="background:var(--amber)"></span><span class="nm">${ICON('cart')} Variabele uitgaven <span class="muted small">· ${nv}×</span></span><span class="amt">${euro(vari)}</span><span class="pc">${pc(vari)}%</span><span style="color:var(--teal);font-weight:700;margin-left:6px">›</span></div>
+    <div class="small muted" style="margin-top:6px">Vast = een herkende terugkerende betaling, niet de categorie. Tik een regel voor de transacties; daar zet je een post naar vast of variabel.</div>
+  </div>`;
+}
 function _renderOpen(flag,fn){ const prev=SET[flag]; SET[flag]=true; try{ return fn(); } finally { SET[flag]=prev; } }
 function openMonthSpend(m){
   m=m||curMonth||months()[months().length-1];
@@ -1954,12 +1976,17 @@ function openMonthSpend(m){
   const kant=msDrill();
   const seg=`<div class="chips" style="margin:0 0 10px;justify-content:center">
     <span class="chip ${kant==='cat'?'on':''}" style="flex:1;text-align:center" onclick="setMsDrill('cat')">Categorieën</span>
-    <span class="chip ${kant==='top'?'on':''}" style="flex:1;text-align:center" onclick="setMsDrill('top')">Top uitgaven</span></div>`;
+    <span class="chip ${kant==='top'?'on':''}" style="flex:1;text-align:center" onclick="setMsDrill('top')">Top uitgaven</span>
+    <span class="chip ${kant==='fv'?'on':''}" style="flex:1;text-align:center" onclick="setMsDrill('fv')">Vast/variabel</span></div>`;
   const body = kant==='top'
     ? _renderOpen('openMerch',   ()=>renderMerchants(list, monthLabel(m)))
+    : kant==='fv'
+    ? msFixedVar(m, list)
     : _renderOpen('openCatBreak',()=>renderCatBreak(list));
   const leeg = kant==='top'
     ? 'Geen winkels om te tonen deze maand.'
+    : kant==='fv'
+    ? 'Geen uitgaven om te splitsen deze maand.'
     : 'Geen uitgaven deze maand.';
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:10px"><div style="font-size:var(--fs-xl)">${ICON('cart')}</div><div style="font-weight:800;font-size:var(--fs-lg)">Uitgegeven deze maand</div>
@@ -6397,24 +6424,28 @@ function renderFixedVariable(list, inc){
   </div>`;
 }
 // drill-down vanuit het 'Vaste vs variabele lasten'-widget: toon de transacties van die splitsing (zelfde periode)
-function openFixedVarDrill(kind){
-  window._fvDrillKind=kind;
-  const list=window._fvTx||txOfMonth(curMonth); const fixed=(kind==='fixed');
+function openFixedVarDrill(kind, m){
+  // m gezet = de maand-drill vanuit "Uitgegeven"; leeg = het Inzichten-widget over de hele periode.
+  // _fvMonth wordt alleen hier gezet, dus een tussentijdse renderIns() (bv. na een omzetting) kan de
+  // scope niet omgooien - met _fvTx zou dat wel gebeuren, want dat schrijft renderFixedVariable.
+  window._fvDrillKind=kind; window._fvMonth=m||null;
+  const list=m?txOfMonth(m):(window._fvTx||txOfMonth(curMonth)); const fixed=(kind==='fixed');
   const items=list.filter(x=>isExpenseTx(x) && (fixed?isFixed(x):!isFixed(x))).sort((a,b)=>b.date.localeCompare(a.date));   // incl. terugstortingen: netto totaal
   const tot=items.reduce((s,t)=>s-t.amount,0);
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${fixed?ICON('lock'):ICON('cart')}</div><div style="font-weight:800;font-size:var(--fs-lg)">${fixed?'Vaste lasten':'Variabele uitgaven'}</div>
-      <div class="muted small">${esc(periodLabel())} · ${items.length} transacties</div>
+      <div class="muted small">${esc(m?monthLabel(m):periodLabel())} · ${items.length} transacties</div>
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${euro(tot)}</div></div>
     <div class="small muted" style="margin:-2px 0 10px;text-align:center">Klopt een classificatie niet? Tik op een transactie om 'm naar ${fixed?'variabel':'vast'} te verplaatsen.</div>
     ${items.length?items.map(t=>{const c=CATS[catOf(t)];return `<div class="tx" style="cursor:pointer" onclick="fixFlipAsk('${t.id}')"><div class="ava" style="background:var(--card2)">${c.icon}</div>
       <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} · ${c.name}${OWN.length>1?' · '+esc(accShort(t.acc)):''}</div></div>
-      <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div><span style="color:var(--mut);margin-left:8px;display:inline-flex">${ICON('swap')}</span></div>`;}).join(''):`<div class="muted small center" style="padding:16px">Geen ${fixed?'vaste lasten':'variabele uitgaven'} in deze periode.</div>`}`;
+      <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div><span style="color:var(--mut);margin-left:8px;display:inline-flex">${ICON('swap')}</span></div>`;}).join(''):`<div class="muted small center" style="padding:16px">Geen ${fixed?'vaste lasten':'variabele uitgaven'} in deze ${m?'maand':'periode'}.</div>`}
+    ${m?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="openMonthSpend('${m}')">‹ Terug naar uitgegeven</div>`:''}`;
   showSheetBg();
 }
 // classificatie aanpassen: vraag of het alleen deze transactie is of alles van die winkel
 function fixFlipAsk(id){
-  const t=TX.find(x=>x.id===id); if(!t){ openFixedVarDrill(window._fvDrillKind||'fixed'); return; }
+  const t=TX.find(x=>x.id===id); if(!t){ openFixedVarDrill(window._fvDrillKind||'fixed', window._fvMonth||undefined); return; }
   const nowFixed=isFixed(t); const target=nowFixed?'var':'fixed'; const targetLbl=nowFixed?'variabel':'vast';
   const merch=cleanMerch(t.name)||(t.name||'deze winkel');
   $('#sheet').innerHTML=`<div class="grab"></div>
@@ -6422,16 +6453,16 @@ function fixFlipAsk(id){
     <div class="small muted" style="margin-bottom:14px">${esc(merch)} staat nu als <b>${nowFixed?'vaste last':'variabele uitgave'}</b>. Wat wil je verplaatsen?</div>
     <button class="btn" style="width:100%;margin-bottom:8px" onclick="fixFlip('${id}','${target}',false)">${ICON('check')} Alleen deze transactie</button>
     <button class="btn sec" style="width:100%;margin-bottom:8px" onclick="fixFlip('${id}','${target}',true)">Alle van ${esc(merch)}</button>
-    <div class="small muted" style="text-align:center;cursor:pointer;margin-top:6px" onclick="openFixedVarDrill(window._fvDrillKind||'fixed')">Annuleren</div>`;
+    <div class="small muted" style="text-align:center;cursor:pointer;margin-top:6px" onclick="openFixedVarDrill(window._fvDrillKind||'fixed', window._fvMonth||undefined)">Annuleren</div>`;
 }
 function fixFlip(id,target,allMerch){
-  const t=TX.find(x=>x.id===id); if(!t){ openFixedVarDrill(window._fvDrillKind||'fixed'); return; }
+  const t=TX.find(x=>x.id===id); if(!t){ openFixedVarDrill(window._fvDrillKind||'fixed', window._fvMonth||undefined); return; }
   if(allMerch){ SET.fixOvrM=SET.fixOvrM||{}; const mk=recurKey(t); SET.fixOvrM[mk]=target;
     if(SET.fixOvr){ for(const x of TX){ if(recurKey(x)===mk) delete SET.fixOvr[x.id]; } } }   // winkel-override wint → losse overrides van die winkel opruimen
   else { SET.fixOvr=SET.fixOvr||{}; SET.fixOvr[id]=target; }
   save(); try{ renderIns(); }catch(_){}
   toast(`${ICON('check')} ${cleanMerch(t.name)||'Transactie'} → ${target==='fixed'?'vast':'variabel'}`);
-  openFixedVarDrill(window._fvDrillKind||'fixed');
+  openFixedVarDrill(window._fvDrillKind||'fixed', window._fvMonth||undefined);
 }
 
 /* ----- UITGAVEN PER WINKEL / LEVERANCIER ----- */
