@@ -2989,6 +2989,9 @@ function scoreNotifs(){
     overs.sort((a,b)=>b.d-a.d);
     overs.slice(0,2).forEach((o,i)=>push({key:'budget-'+o.k,score:72+Math.min(o.d/10,24)-i*6,t:o.band==='action'?'bad':'warn',ic:CATS[o.k].icon,
       l1:`Je ${CATS[o.k].name.toLowerCase()} ${o.potje?'is over je potje':'gaat over budget'} deze maand.`,l2:'Bekijk waar het heen ging',act:`openVariance('${o.k}')`})); }catch(_){} }
+  // v128: één controlemoment op de reserveringenlijst, hooguit één keer per maand (resCheck).
+  try{ if(resCheckDue()) push({key:'res-check',score:34,t:'info',ic:ICON('cal'),
+    l1:'Klopt je lijst met reserveringen nog?',l2:'Premies en aanslagen veranderen',act:'openReserveringen()'}); }catch(_){}
   // save-risk krijgt dezelfde chronic-ack als tempo: pas opnieuw als het tekort merkbaar groeit.
   let saveRiskPushed=false;
   if(isNow){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget();
@@ -3655,6 +3658,226 @@ function doelTempoLine(p){
     return wrap(`Je huidige inleg haalt de datum${staart}.`);
   }
   return wrap(`Je legt nu ${euro0(p.alloc)} per maand in. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig. Je komt ${euro0(T.gat)} per maand tekort.`);
+}
+/* ---------- RESERVERINGEN EN DEKKING (v128) ----------
+   De dekkingsvraag: is mijn reserveringenpot toereikend voor de kosten die de komende twaalf
+   maanden aankomen maar niet maandelijks vallen? Dat is een andere vraag dan de liquiditeitsvraag
+   (krijgt mijn saldo een dip), en daarom een los pad: recurringSchedule() en liquidityDaily()
+   worden hier NIET aangeroepen en blijven ongewijzigd. Verplichtingen voer je zelf in; er wordt
+   niets uit je transacties gedetecteerd.
+   De inleg is nadrukkelijk GEEN spaardoel: benodigdPerMaand komt niet in planItems(),
+   allocatePlan() of planCapacity(), anders concurreert de reservering met je spaardoelen en wordt
+   hij dubbel geteld. */
+function resLijst(){ return Array.isArray(SET.reserveringen)?SET.reserveringen:[]; }
+function resAccId(){ const a=SET.resAcc; return (a && allAccounts().includes(a))?a:''; }
+function resSaldo(){ const a=resAccId(); if(!a) return null; const b=accBalance(a); return b==null?null:Math.round(b); }
+const RES_INTERVAL=[[0,'eenmalig'],[1,'maandelijks'],[3,'per kwartaal'],[6,'half jaar'],[12,'jaarlijks']];
+function resIntervalLabel(iv){ const r=RES_INTERVAL.find(x=>x[0]===Math.max(Math.round(+iv||0),0)); return r?r[1]:'eenmalig'; }
+function resYmPlus(o){ const n=new Date(); const d=new Date(n.getFullYear(), n.getMonth()+Math.round(+o||0), 1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+/* Eerstvolgende voorkomen als offset in maanden vanaf deze maand, of null.
+   Verstreken vervalmaand met een interval rolt door naar de volgende cyclus; een verstreken
+   eenmalige post vervalt volledig. */
+function resVolgende(v){
+  const o=doelMaandenTot((v||{}).vervalmaand); if(o==null) return null;
+  const iv=Math.max(Math.round(+((v||{}).intervalM)||0),0);
+  if(o>=0) return o;
+  if(!iv) return null;
+  return o + Math.ceil(-o/iv)*iv;
+}
+/* Rolt de lijst uit over de horizon. Een kwartaalpost verschijnt dus vier keer in een jaar.
+   Posten zonder bedrag rollen niet uit (ze zetten wel `volledig` op false in dekking()).
+   `offset` staat er naast `maand` bij omdat de dekkingssom erop rekent. */
+function verplichtingen(maanden){
+  const H=Math.max(Math.round(+maanden||12),1); const uit=[];
+  for(const v of resLijst()){
+    if(!v||!v.id) continue;
+    const bedrag=Math.round(+v.bedrag||0); if(!(bedrag>0)) continue;
+    const iv=Math.max(Math.round(+v.intervalM||0),0);
+    let o=resVolgende(v); if(o==null) continue;
+    let guard=0;
+    while(o<H && guard++<200){ uit.push({id:v.id, naam:v.naam||'Verplichting', bedrag, maand:resYmPlus(o), offset:o, intervalM:iv, cat:v.cat||''}); if(!iv) break; o+=iv; }
+  }
+  return uit.sort((a,b)=>a.offset-b.offset || String(a.naam).localeCompare(String(b.naam)));
+}
+/* De dekkingssom.
+   benodigdPerMaand : per voorkomen bedrag / maanden tot die maand. Valt de post deze maand, dan heb
+                      je hem nu in zijn geheel nodig, vandaar max(offset,1).
+   benodigdeStand   : het OPGEBOUWDE deel van het eerstvolgende voorkomen per post:
+                      bedrag x (interval - maanden tot vervaldag) / interval, geklemd op 0..bedrag.
+                      Latere voorkomens binnen de horizon tellen niet mee - de kwartalen van volgend
+                      jaar hoef je nu nog niet te hebben. Een eenmalige post draagt niets bij aan de
+                      stand: een kostenpost die je vandaag invoert geeft geen achterstand die er
+                      nooit was.
+   gedektTot        : chronologisch aftellen vanaf de huidige stand; de laatste maand die je nog
+                      volledig kunt betalen. `gat` is het eerste voorkomen dat niet meer past.
+   Nooit doorrekenen op een onbekend saldo, nooit een schatting invullen (v59/v73). */
+function dekking(maanden){
+  const H=Math.max(Math.round(+maanden||12),1);
+  const lijst=resLijst();
+  const V=verplichtingen(H);
+  const zonderBedrag=lijst.filter(v=>v&&!(Math.round(+v.bedrag||0)>0));
+  const acc=resAccId(); const stand=resSaldo();
+  const eerste={}; for(const x of V) if(eerste[x.id]==null) eerste[x.id]=x.offset;
+  let benodigdPerMaand=0, benodigdeStand=0; const regels=[];
+  for(const x of V){
+    const perMaand=x.bedrag/Math.max(x.offset,1);
+    benodigdPerMaand+=perMaand;
+    let opgebouwd=0;
+    if(x.intervalM>0 && eerste[x.id]===x.offset)
+      opgebouwd=x.bedrag*Math.min(Math.max(x.intervalM-x.offset,0),x.intervalM)/x.intervalM;
+    benodigdeStand+=opgebouwd;
+    regels.push({soort:'post', id:x.id, naam:x.naam, bedrag:x.bedrag, maand:x.maand, offset:x.offset,
+                 intervalM:x.intervalM, cat:x.cat, perMaand:Math.round(perMaand), opgebouwd:Math.round(opgebouwd)});
+  }
+  benodigdPerMaand=Math.round(benodigdPerMaand); benodigdeStand=Math.round(benodigdeStand);
+  let gedektTot=null, gat=null, graad=null, tekort=0;
+  if(stand!=null){
+    let run=stand, vorige=null;
+    for(const x of V){
+      if(run-x.bedrag<0){ gat={maand:x.maand, naam:x.naam, bedrag:x.bedrag, tekort:Math.round(x.bedrag-run)}; break; }
+      run-=x.bedrag; vorige=x.maand;
+    }
+    gedektTot = gat ? vorige : (V.length?V[V.length-1].maand:null);
+    graad = benodigdeStand>0 ? Math.round(stand/benodigdeStand*100) : null;
+    tekort = Math.max(benodigdeStand-stand,0);
+    regels.push({soort:'rekening', id:acc, naam:acctNiceName(acc), bedrag:stand});
+  }
+  const volledig = !!acc && stand!=null && zonderBedrag.length===0;
+  return {benodigdPerMaand, benodigdeStand, werkelijkeStand:stand, graad, gedektTot, gat, tekort,
+          regels, volledig, zonderBedrag:zonderBedrag.map(v=>v.naam||'Verplichting'), aantal:lijst.length, horizon:H};
+}
+function resMaandLabel(ym){ const m=+String(ym||'').slice(5,7); return m?(MFULL[m-1]+' '+String(ym).slice(0,4)):''; }
+// De zin: spiegel, gevolg, keuze. Geen oordeel, geen felicitatie.
+function dekkingTekst(D){
+  if(!D) return '';
+  if(!D.aantal) return 'Je hebt nog geen verplichtingen ingevoerd.';
+  if(!D.volledig){
+    if(!resAccId()) return `Voor wat er dit jaar nog aankomt heb je ${euro0(D.benodigdPerMaand)} per maand nodig. Wijs een reserveringsrekening aan, dan zie je of je pot toereikend is.`;
+    if(D.werkelijkeStand==null) return 'Het saldo van je reserveringsrekening is nog onbekend, dus de dekking is niet te berekenen.';
+    return `${D.zonderBedrag.join(' en ')} ${D.zonderBedrag.length===1?'heeft':'hebben'} nog geen bedrag, dus de dekking klopt nog niet.`;
+  }
+  if(!D.regels.some(r=>r.soort==='post')) return 'Er komt de komende twaalf maanden niets aan uit je lijst.';
+  const perM=`Voor wat er dit jaar nog aankomt heb je ${euro0(D.benodigdPerMaand)} per maand nodig.`;
+  if(!D.gat) return `Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}. ${perM}`;
+  const tot=D.gedektTot?`Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}.`:'Je pot dekt de eerstvolgende post nu al niet.';
+  return `${tot} In ${resMaandLabel(D.gat.maand)} komt ${euro0(D.gat.bedrag)} en dan kom je ${euro0(D.gat.tekort)} tekort. ${perM}`;
+}
+function resDekkingCard(){
+  const D=dekking(12);
+  if(!D.aantal) return `<div class="card" style="cursor:pointer" onclick="openReserveringen()"><div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span><span class="small" style="color:var(--teal)">instellen \u203a</span></div>
+    <div class="small muted" style="margin-top:4px">Kosten die niet elke maand vallen, zoals aanslagen, premies en onderhoud.</div></div>`;
+  const kop=D.volledig&&D.graad!=null?`${D.graad}%`:(D.werkelijkeStand!=null?euro0(D.werkelijkeStand):'onbekend');
+  return `<div class="card" style="cursor:pointer" onclick="openReserveringen()">
+    <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span><span class="small muted">${esc(kop)} \u00b7 <span style="color:var(--teal)">bekijk \u203a</span></span></div>
+    <div class="small muted" style="margin-top:5px;line-height:1.5">${esc(dekkingTekst(D))}</div>
+    ${resCheckLine()}</div>`;
+}
+/* Eén controlemoment op de lijst zelf: handmatige invoer drijft weg zodra een premie verandert.
+   Hooguit één keer per maand, en weg te tikken zonder iets te wijzigen. */
+function resCheckDue(){ return resLijst().length>0 && SET.resCheck!==thisYM(); }
+function resCheckOk(){ SET.resCheck=thisYM(); save(); render(); }
+function resCheckLine(){
+  if(!resCheckDue()) return '';
+  return `<div class="small" style="margin-top:8px;color:var(--mut2);line-height:1.45">Klopt je lijst nog? Premies en aanslagen veranderen.
+    <span style="color:var(--teal);cursor:pointer" onclick="event.stopPropagation();openReserveringen()">nalopen \u203a</span>
+    <span style="color:var(--mut2);cursor:pointer;margin-left:8px" onclick="event.stopPropagation();resCheckOk()">klopt nog</span></div>`;
+}
+/* ---- beheer ---- */
+function openReserveringen(){ renderResSheet(); showSheetBg(); }
+function renderResSheet(){
+  const D=dekking(12); const acc=resAccId(); const stand=resSaldo();
+  const lijst=resLijst().slice().sort((a,b)=>{ const oa=resVolgende(a), ob=resVolgende(b);
+    return (oa==null?999:oa)-(ob==null?999:ob) || String(a.naam||'').localeCompare(String(b.naam||'')); });
+  const spaarBotst = acc && (typeof isSavingsAcc==='function') && isSavingsAcc(acc);
+  const accRij = acc
+    ? `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openResAccPick()"><span class="small" style="flex:1;min-width:0">${esc(acctNiceName(acc))}</span><span class="small" style="font-weight:700;white-space:nowrap">${stand==null?'saldo onbekend':euro0(stand)} <span style="color:var(--teal)">\u203a</span></span></div>`
+    : `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openResAccPick()"><span class="small muted" style="flex:1">Nog geen rekening aangewezen</span><span class="small" style="color:var(--teal)">kiezen \u203a</span></div>`;
+  const botsing = spaarBotst
+    ? `<div class="small" style="margin-top:8px;color:var(--mut2);line-height:1.5">Deze rekening staat ook aangemerkt als spaarrekening. Dan telt elke storting mee als sparen, terwijl dit geld al vergeven is aan je aanslagen en je tandarts. Je spaarquote en je totaal gespaard meten dan iets anders dan ze horen te meten.
+       <span style="color:var(--teal);cursor:pointer" onclick="toggleSavingsAcct('${esc(String(acc).replace(/'/g,"\\'"))}');renderResSheet()">spaarvlag uitzetten \u203a</span></div>`
+    : '';
+  const rij=v=>{ const o=resVolgende(v); const bed=Math.round(+v.bedrag||0);
+    return `<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openReservering('${esc(String(v.id).replace(/'/g,"\\'"))}')">
+      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(v.naam||'Verplichting')}</div>
+        <div class="small muted">${o==null?'verstreken':resMaandLabel(resYmPlus(o))} \u00b7 ${esc(resIntervalLabel(v.intervalM))}${v.cat&&CATS[v.cat]?' \u00b7 '+esc(CATS[v.cat].name):''}</div></div>
+      <div class="small" style="font-weight:700;white-space:nowrap">${bed>0?euro0(bed):'geen bedrag'} <span style="color:var(--teal)">\u203a</span></div></div>`; };
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="resHead">Reserveringen</div>
+    <div class="small muted" style="margin-bottom:12px">Kosten die de komende twaalf maanden aankomen maar niet elke maand vallen. Je voert ze zelf in.</div>
+    <div class="small" style="color:var(--mut2);line-height:1.55;margin-bottom:10px">${esc(dekkingTekst(D))}</div>
+    <div class="hlabel" style="margin:14px 2px 4px">Reserveringsrekening</div>
+    ${accRij}${botsing}
+    <div class="hlabel" style="margin:16px 2px 4px">Verplichtingen</div>
+    ${lijst.length?lijst.map(rij).join(''):'<div class="small muted" style="padding:8px 0">Nog niets ingevoerd.</div>'}
+    <button class="cp-add" style="margin-top:10px" onclick="openReservering()">+ Verplichting toevoegen</button>
+    ${D.aantal?`<div class="hlabel" style="margin:18px 2px 4px">De opbouw</div>
+      <div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="small" style="flex:1">Nodig per maand</span><span class="small" style="font-weight:700">${euro0(D.benodigdPerMaand)}</span></div>
+      <div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="small" style="flex:1">Hoort nu in de pot te staan</span><span class="small" style="font-weight:700">${euro0(D.benodigdeStand)}</span></div>
+      <div class="row" style="padding:7px 0"><span class="small" style="flex:1">Staat er nu</span><span class="small" style="font-weight:700">${D.werkelijkeStand==null?'onbekend':euro0(D.werkelijkeStand)}</span></div>
+      ${D.volledig&&D.tekort>0?`<div class="row" style="padding:9px 0 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;font-weight:700">Tekort</span><span class="small" style="font-weight:800">${euro0(D.tekort)}</span></div>`:''}`:''}
+    <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Deze lijst voed je zelf; Minder leest hem niet uit je transacties. De reserveringsinleg staat los van je spaardoelen en verdeelt je spaarinleg niet mee.</div>`;
+}
+function openResAccPick(){
+  const acc=resAccId(); const rijen=allAccounts();
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="resAccHead">Reserveringsrekening</div>
+    <div class="small muted" style="margin-bottom:12px">De pot is een echte rekening, geen toewijzing op papier: er stroomt geld uit. Kies er precies één.</div>
+    ${rijen.map(a=>{const b=accBalance(a); const aan=(a===acc);
+      return `<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="resAccSet('${esc(String(a).replace(/'/g,"\\'"))}')">
+        <span class="small" style="flex:1;min-width:0">${esc(acctNiceName(a))}${aan?' <span style="color:var(--teal)">\u00b7 gekozen</span>':''}</span>
+        <span class="small muted" style="white-space:nowrap">${b==null?'saldo onbekend':euro0(b)}</span></div>`;}).join('')}
+    ${acc?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="resAccSet('')">Geen reserveringsrekening</div>`:''}
+    <div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="openReserveringen()">\u2039 Terug</div>`;
+  showSheetBg();
+}
+function resAccSet(a){ if(a) SET.resAcc=a; else delete SET.resAcc; save(); render(); renderResSheet(); }
+function openReservering(id){
+  window._resEdit=id||'';
+  const v=id?resLijst().find(x=>x.id===id):null;
+  const d=v||{naam:'',bedrag:'',vervalmaand:'',intervalM:12,cat:''};
+  const iv=Math.max(Math.round(+d.intervalM||0),0);
+  const chips=RES_INTERVAL.map(([w,l])=>`<span class="chip ${iv===w?'on':''}" onclick="resIntervalPick(${w})">${l}</span>`).join('');
+  const cats=Object.entries(CATS).filter(([k,c])=>c.type==='expense');
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px" id="resEditHead">${v?'Verplichting bewerken':'Nieuwe verplichting'}</div>
+    <label class="fld">Waarvoor?</label><input id="rNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Gemeentelijke aanslag" style="width:100%">
+    <label class="fld" style="margin-top:10px">Bedrag (€)</label><input id="rBedrag" type="number" inputmode="numeric" value="${d.bedrag||''}" placeholder="bv. 480" style="width:100%">
+    <label class="fld" style="margin-top:10px">Eerstvolgende vervalmaand</label><input id="rMaand" type="month" value="${esc(d.vervalmaand||'')}" style="width:100%">
+    <label class="fld" style="margin-top:12px">Hoe vaak?</label>
+    <div class="chips" id="rModes">${chips}</div>
+    <label class="fld" style="margin-top:12px">Categorie (optioneel)</label>
+    <select id="rCat" style="width:100%"><option value="">geen</option>${cats.map(([k,c])=>`<option value="${k}"${d.cat===k?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
+    <button class="btn" style="margin-top:14px;width:100%" onclick="saveReservering('${esc(String(id||'').replace(/'/g,"\\'"))}')">${ICON('check')} Opslaan</button>
+    ${v?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteReservering('${esc(String(id).replace(/'/g,"\\'"))}')">Verwijderen</div>`:''}
+    <div class="small muted" style="margin-top:12px;text-align:center;cursor:pointer" onclick="openReserveringen()">\u2039 Terug</div>`;
+  showSheetBg();
+  window._resIv=iv;
+}
+function resIntervalPick(w){ window._resIv=Math.max(Math.round(+w||0),0);
+  const box=document.getElementById('rModes'); if(!box) return;
+  box.innerHTML=RES_INTERVAL.map(([x,l])=>`<span class="chip ${window._resIv===x?'on':''}" onclick="resIntervalPick(${x})">${l}</span>`).join('');
+}
+function saveReservering(id){
+  const v=x=>(document.getElementById(x)||{}).value;
+  const naam=String(v('rNaam')||'').trim();
+  if(!naam){ toast('Vul een naam in'); return; }
+  const maand=String(v('rMaand')||'').trim();
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(maand)){ toast('Kies een vervalmaand'); return; }
+  const oud=resLijst().find(x=>x.id===id)||{};
+  const g={ id:id||('r'+Date.now().toString(36)), naam,
+    bedrag:Math.round(+v('rBedrag')||0),
+    vervalmaand:maand,
+    intervalM:(window._resIv!=null?window._resIv:(+oud.intervalM||0)),
+    cat:String(v('rCat')||'') };
+  SET.reserveringen=resLijst().slice();
+  const i=SET.reserveringen.findIndex(x=>x.id===id);
+  if(i>=0) SET.reserveringen[i]=g; else SET.reserveringen.push(g);
+  save(); render(); renderResSheet(); toast(`${ICON('check')} Verplichting opgeslagen`);
+}
+function deleteReservering(id){
+  SET.reserveringen=resLijst().filter(x=>x.id!==id);
+  save(); render(); renderResSheet(); toast('Verplichting verwijderd');
 }
 // geordende planlijst: SET.planOrder leidt, noodfonds staat standaard bovenaan,
 // onbekende ids sluiten achteraan aan en verwijderde ids worden genegeerd.
@@ -5340,7 +5563,7 @@ function renderVooruit(){
   // "Volgende uitgaven" (vooruitDeep) is weg, dus ook de knop "Deze maand in detail" — anders
   // bleef er een toggle staan die niets meer opende. De vaste lasten zelf blijven bereikbaar
   // via "Nog deze maand" en via openFixedDue().
-  $('#s-vooruit').innerHTML = nogDezeMaandCard() + doelZone + VOORUIT_FOOT;
+  $('#s-vooruit').innerHTML = nogDezeMaandCard() + doelZone + resDekkingCard() + VOORUIT_FOOT;
 }
 function vooruitZone(key,label,teaser,open,content){
   const bar=`<div class="card" data-zone="${key}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px${open?';margin-bottom:8px':''}" onclick="toggleVooruit('${key}')"><span style="font-weight:600;font-size:var(--fs-md)">${label}${teaser?` <span class="small muted" style="font-weight:400">· ${teaser}</span>`:''}</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'›'}</span></div>`;
