@@ -154,7 +154,12 @@ test.describe('c · read-only en ingeklapt', () => {
     expect(txt.split('\n').length).toBe(r.length);
     expect(txt).toContain('bron: terugval op de laatste cijfers');
     expect(txt).toContain('van de koppeling: Nieuwe wasmachine');
-    expect(txt).toContain('IBAN: nee');
+    // v119: de herkomst leest nu eerlijk — "IBAN: nee" suggereerde dat een bestandsimport er wél
+    // een had moeten hebben, terwijl daar simpelweg geen koppeling achter zit
+    expect(txt).toContain('uit een bestand');
+    expect(txt).toContain('gekoppeld, geen IBAN');
+    expect(txt).toContain('IBAN ··6222');
+    expect(txt).toContain('| spaarrekening |');
   });
 });
 

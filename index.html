@@ -1521,11 +1521,38 @@ function acctEndsWith(a, ends){
   const id=(a||'').replace(/\s/g,'');
   return ends.some(e=> id.endsWith(e) || (iban && iban.endsWith(e)));
 }
-// spaarpotjes = expliciete rekeningnummers (standaard 4323 + 1123); 4840/Zakgeld telt niet mee
-function n26SavingsAccounts(){
-  const ends=Array.isArray(SET.savingsEnds)?SET.savingsEnds:['4323','1123'];
-  const all=[...new Set([...OWN, ...Object.keys(SET.psd2Accounts||{})])];
-  return all.filter(a=>acctEndsWith(a,ends));
+/* Welke rekeningen zijn spaarrekeningen? (v119)
+   Dit hing aan `SET.savingsEnds`: een lijstje laatste-vier-cijfers, getoetst met `id.endsWith(...)`.
+   Dat werkt voor een PSD2-rekening, waarvan de id de IBAN-cijfers zijn, maar niet voor een
+   CSV-rekening als 'N26 Buffer Rust' - die eindigt op "Rust". De schakelaar in de rekeningenlijst
+   schreef daar `acctLast4()` weg, en dat is voor élk N26-CSV-potje '26' (uit "N26"), waar geen
+   enkele id op eindigt. De schakelaar deed dus niets en sprong terug, en de stortingen naar die
+   potjes telden nergens mee - ook niet in savedThisMonth/savedNet, en dus niet in je spaarquote.
+   Nu per rekening-id, drietraps zoals de inklap-vlaggen (v20/v90): geen keuze = de oude standaard
+   beslist, een eigen keuze wint altijd. Zo verandert er niets voor wie nooit iets omzette, en
+   blijft een nieuw potje dat op 4323/1123 eindigt vanzelf herkend. */
+const SAV_DEFAULT_ENDS=['4323','1123'];   // standaard: Spaarpot + Buffer rust; 4840/Zakgeld niet
+function allAccounts(){ return [...new Set([...OWN, ...Object.keys(SET.psd2Accounts||{})])]; }
+function isSavingsAcc(a){
+  const m=SET.savingsAcc||{};
+  if(Object.prototype.hasOwnProperty.call(m,a)) return !!m[a];   // eigen keuze wint
+  return acctEndsWith(a, SAV_DEFAULT_ENDS);
+}
+function n26SavingsAccounts(){ return allAccounts().filter(isSavingsAcc); }
+/* Eenmalige migratie van savingsEnds naar keuzes per rekening. Alleen waar jouw lijstje iets
+   anders zei dan de standaard wordt een expliciete keuze weggeschreven; de rest blijft aan de
+   default hangen. savingsEnds blijft staan, ongebruikt, zodat er niets onherstelbaar verdwijnt. */
+function migrateSavingsAcc(){
+  if(SET.savingsAccMigrated) return;
+  const ends=Array.isArray(SET.savingsEnds)?SET.savingsEnds:null;
+  if(ends){ const m=SET.savingsAcc||{};
+    for(const a of allAccounts()){
+      const oud=acctEndsWith(a,ends), std=acctEndsWith(a,SAV_DEFAULT_ENDS);
+      if(oud!==std && !Object.prototype.hasOwnProperty.call(m,a)) m[a]=oud;
+    }
+    SET.savingsAcc=m;
+  }
+  SET.savingsAccMigrated=1; save();
 }
 function totalSaved(){ let sum=0,n=0,missing=0; for(const a of n26SavingsAccounts()){ const b=accBalance(a); if(b==null) missing++; else {sum+=b;n++;} } return {sum:Math.round(sum),n,missing}; }
 // hoeveel ging deze maand netto naar je spaarrekening(en) — afgeleid uit de bijschrijvingen op die rekening, niet uit een categorie
@@ -8615,10 +8642,10 @@ function setIncome(){
   return h;
 }
 
-function toggleSavingsAcct(l4){
-  let ends=Array.isArray(SET.savingsEnds)?SET.savingsEnds.slice():['4323','1123'];
-  if(ends.includes(l4)) ends=ends.filter(e=>e!==l4); else ends.push(l4);
-  SET.savingsEnds=ends; save(); SET.setOpen='bank'; renderSet(); try{renderDash();}catch(_){}
+function toggleSavingsAcct(a){
+  SET.savingsAcc=SET.savingsAcc||{};
+  SET.savingsAcc[a]=!isSavingsAcc(a);
+  save(); SET.setOpen='bank'; renderSet(); try{renderSetSheet();}catch(_){} try{renderDash();}catch(_){}
 }
 function accountsCard(){
   if(!OWN.length) return '<div class="small muted">Nog geen rekeningen. Koppel je bank of voeg een bestand toe.</div>';
@@ -8631,7 +8658,7 @@ function accountsCard(){
       <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.name)}</div>
         <div class="small muted">${esc(r.bank||'')}${r.bank?' · ':''}${r.b!=null?euro(r.b):'saldo onbekend'} · ${r.cnt} transacties${r.l4?' · ··'+esc(r.l4):''}</div></div>
       <div style="text-align:right"><div class="small muted" style="margin-bottom:2px">spaar&shy;rekening</div>
-        <label class="sw"><input type="checkbox" ${r.isSav?'checked':''} onchange="toggleSavingsAcct('${r.l4}')"><span class="sl"></span></label></div>
+        <label class="sw"><input type="checkbox" ${r.isSav?'checked':''} onchange="toggleSavingsAcct('${esc(String(r.a).replace(/'/g,"\\'"))}')"><span class="sl"></span></label></div>
     </div>`).join('') +
     `<div class="small muted" style="margin-top:9px">Zet de schakelaar aan bij je <b>spaarrekening(en)</b>. Daaraan ziet Minder hoeveel je deze maand al spaarde. Klopt een naam niet? Pas die aan via de rekening in het saldo-overzicht.</div>`;
 }
@@ -8916,13 +8943,13 @@ function bankDiagRows(){
     return {a, toont:N.naam, bron:N.bron,
             opgeslagen:(pm&&pm.label)||meta.label||'',
             bank:meta.bank||(pm&&pm.bank)||'',
-            l4:acctLast4(a), iban:!!(pm&&pm.iban),
+            l4:acctLast4(a), iban:!!(pm&&pm.iban), viaBank:!!pm, spaar:isSavingsAcc(a),
             tx:TX.filter(t=>t.acc===a).length};
   }).sort((x,y)=>y.tx-x.tx);
 }
 function bankDiagText(){
   return bankDiagRows().map(r=>
-    `${r.toont||'(geen naam)'} | bron: ${r.bron} | bank: ${r.bank||'?'} | IBAN: ${r.iban?'ja ··'+r.l4:'nee'} | ${r.tx} tx | van de koppeling: ${r.opgeslagen||'-'}`
+    `${r.toont||'(geen naam)'} | bron: ${r.bron} | bank: ${r.bank||'?'} | ${r.viaBank?(r.iban?'IBAN ··'+r.l4:'gekoppeld, geen IBAN'):'uit een bestand'} | ${r.tx} tx${r.spaar?' | spaarrekening':''} | van de koppeling: ${r.opgeslagen||'-'}`
   ).join('\n');
 }
 async function bankDiagCopy(){
@@ -8951,7 +8978,7 @@ function bankDiagHTML(){
   return `<div class="small muted" style="margin:8px 0 10px">Per rekening: wat de app toont, waar die naam vandaan komt, en welke naam de koppeling zelf heeft opgeslagen. Alleen lezen — er verandert niets.</div>
     ${rows.map(r=>`<div style="padding:9px 0;border-bottom:1px solid var(--line)">
       <div style="font-weight:600;font-size:var(--fs-md)">${esc(r.toont||'(geen naam)')}</div>
-      <div class="small muted">bron: ${esc(r.bron)} · ${esc(r.bank||'bank onbekend')} · IBAN ${r.iban?'ja ··'+esc(r.l4):'nee'} · ${r.tx} transactie${r.tx===1?'':'s'}</div>
+      <div class="small muted">bron: ${esc(r.bron)} · ${esc(r.bank||'bank onbekend')} · ${r.viaBank?(r.iban?'IBAN ··'+esc(r.l4):'gekoppeld, geen IBAN'):'uit een bestand'} · ${r.tx} transactie${r.tx===1?'':'s'}${r.spaar?' · spaarrekening':''}</div>
       <div class="small" style="color:var(--mut2)">van de koppeling: ${r.opgeslagen?esc(r.opgeslagen):'—'}</div>
     </div>`).join('')}
     ${bevind.length?`<div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:12px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">${bevind.map(b=>'· '+b).join('<br>')}</div>`:''}
@@ -9365,7 +9392,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
