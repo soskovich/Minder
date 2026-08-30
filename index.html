@@ -581,6 +581,7 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
 <section class="screen" id="s-vooruit"></section>
 <!-- INSTELLINGEN -->
 <section class="screen" id="s-set"></section>
+<section class="screen" id="s-maand"></section>
 <section class="screen" id="s-vermogen"></section>
 <section class="screen" id="s-fire"></section>
 
@@ -591,6 +592,7 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
   <a data-go="dash" class="on"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></span>Home</a>
   <a data-go="ins"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4"/><path d="M12 2a6 6 0 0 0-3.5 10.9c.9.7 1.5 1.6 1.5 2.6V16h4v-.5c0-1 .6-1.9 1.5-2.6A6 6 0 0 0 12 2Z"/></svg></span>Inzichten</a>
   <a data-go="act"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3"/></svg></span>Coach</a>
+  <a data-go="maand"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>Maand</a>
   <a data-go="vooruit"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>Vooruitblik</a>
 </nav>
 
@@ -1768,7 +1770,7 @@ function renderDailyVar(m, budget){
 function render(){
   if(!TX.length){ renderEmpty(); return; }
   const ms=months(); if(!curMonth||!ms.includes(curMonth)) curMonth=ms[ms.length-1];
-  renderDash(); renderTx(); renderIns(); renderActions(); renderVooruit(); renderVermogen(); renderFire(); renderSet();
+  renderDash(); renderTx(); renderIns(); renderActions(); renderVooruit(); renderMaand(); renderVermogen(); renderFire(); renderSet();
   syncMonthPick();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
   if(window._setSheet && $('#sheetBg').classList.contains('show')) renderSetSheet(); // open instellingen-sheet meeverversen
@@ -2997,7 +2999,10 @@ function scoreNotifs(){
       if(potje>0){ if(act-potje>=15) overs.push({k,d:act-potje,band:act>potje*1.1?'action':'monitor',potje:true}); }
       else { const bud=eb[k]; if(bud>0){ const band=budgetBand(bud,act); if((band==='action'||band==='monitor')&&(act-bud)>=15) overs.push({k,d:act-bud,band,potje:false}); } } }
     overs.sort((a,b)=>b.d-a.d);
+    // v130 additief: cat/bedrag/boven erbij zodat het maandscherm het verband kan leggen zonder
+    // zelf te rekenen. Geen bestaande waarde of tekst verandert.
     overs.slice(0,2).forEach((o,i)=>push({key:'budget-'+o.k,score:72+Math.min(o.d/10,24)-i*6,t:o.band==='action'?'bad':'warn',ic:CATS[o.k].icon,
+      cat:o.k, bedrag:Math.round(spend[o.k]||0), boven:Math.round(o.d),
       l1:`Je ${CATS[o.k].name.toLowerCase()} ${o.potje?'is over je potje':'gaat over budget'} deze maand.`,l2:'Bekijk waar het heen ging',act:`openVariance('${o.k}')`})); }catch(_){} }
   // v128: één controlemoment op de reserveringenlijst, hooguit één keer per maand (resCheck).
   try{ if(resCheckDue()) push({key:'res-check',score:34,t:'info',ic:ICON('cal'),
@@ -3030,6 +3035,7 @@ function scoreNotifs(){
       if(best){ const ack=(SET.chronicAck||{}).discr;
         if(!(ack && ack.ym===m && best.v < ack.val*1.25))
           push({key:'discr-'+best.k, score:58+Math.min(best.d/10,22), t:'warn', ic:CATS[best.k].icon,
+            cat:best.k, bedrag:best.v, boven:best.d,
             l1:`${CATS[best.k].name} ligt deze maand boven je normaal: ${euro0(best.v)} tegen meestal ${euro0(best.mref)}.`,
             l2:'Bekijk waar het heen ging', act:`openCategory('${best.k}')`, chronic:{key:'discr',ym:m,val:best.v}});
       } } }catch(_){} }
@@ -3668,6 +3674,190 @@ function doelTempoLine(p){
     return wrap(`Je huidige inleg haalt de datum${staart}.`);
   }
   return wrap(`Je legt nu ${euro0(p.alloc)} per maand in. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig. Je komt ${euro0(T.gat)} per maand tekort.`);
+}
+/* ---------- MAANDSCHERM (v130) ----------
+   Eén scherm dat je één keer per maand opent, met de vijf getallen die samen zeggen of je
+   geldsysteem gezond is. De samenhang is het punt: 60% dekking betekent iets anders naast een
+   buffer van zes maanden dan naast een buffer van één.
+   Dit scherm REKENT NIETS ZELF. Het roept bestaande functies aan, stelt hun uitkomsten samen en
+   sorteert ze. Valt een bron weg, dan valt die regel weg - zonder foutmelding en zonder
+   placeholder; het scherm werkt met drie van de vijf. */
+const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0 };   // de rest volgt nfMaanden()
+const MAAND_VERBANDEN = true;                                          // beide verbandzinnen in één keer uit
+const MAAND_PATROON = ['budget-','discr-','tempo'];                    // uitgavenpatronen; geen incasso's, geen saldo-nudges
+const MAAND_VOLGORDE = ['dekking','buffer','aansluiting','doel','patroon'];
+const MAAND_ERNST = {tekort:0, 'let op':1, ok:2, onbekend:3};
+
+/* De enige nieuwe som op dit scherm, en met opzet niet meer dan een deling van twee bestaande
+   uitkomsten: hoeveel maanden essentiële crisis-last dekt je spaargeld? null zodra een van beide
+   ontbreekt - nooit een schatting (v59/v73). */
+function bufferMaanden(){
+  let ess=0, sp=null;
+  try{ const M=noodfondsModel(); ess=Math.round(M.essCrisis||0); sp=(M.spaar!=null)?Math.round(M.spaar):null; }catch(_){ return null; }
+  if(sp==null||!(ess>0)) return null;
+  return sp/ess;
+}
+// het patroon-signaal met de hoogste score, of null
+function maandPatroon(){
+  try{ return (scoreNotifs()||[])
+    .filter(n=>n&&n.key&&MAAND_PATROON.some(p=>String(n.key).indexOf(p)===0))
+    .sort((a,b)=>(b.score||0)-(a.score||0))[0]||null; }catch(_){ return null; }
+}
+// het eerste doel in het plan met een streefdatum
+function maandDoel(){
+  try{ const P=allocatePlan();
+    const p=P.find(x=>x.type==='goal'&&x.streefdatum&&x.status!=='bereikt'&&x.status!=='gepauzeerd');
+    if(!p) return null; const T=doelTempo(p,p.alloc); return T?{p,T}:{p,T:null};
+  }catch(_){ return null; }
+}
+/* De vijf regels. Elke bron in zijn eigen try: gooit er een, dan valt alleen die regel weg. */
+function maandRegels(){
+  const uit=[];
+  // 1. dekking
+  try{ const D=dekking(12);
+    if(D && D.aantal>0){
+      const st = !D.volledig ? 'onbekend' : (D.graad!=null && D.graad>=MAAND_DREMPEL.dekkingOk ? 'ok' : 'tekort');
+      uit.push({key:'dekking', naam:'Dekking reserveringen', status:st,
+        waarde: D.graad!=null?(D.graad+'%'):'onbekend', eenheid:'van wat er nu hoort te staan',
+        maand: (st==='tekort'&&D.gedektTot)?D.gedektTot:null,
+        gevolg: st==='onbekend' ? 'Er ontbreekt nog een bedrag of een saldo, dus dit is niet te beoordelen.'
+              : st==='ok' ? `Je pot dekt wat er aankomt. Je legt hier ${euro0(D.benodigdPerMaand)} per maand voor opzij.`
+              : (D.gat ? `Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}. In ${resMaandLabel(D.gat.maand)} komt ${euro0(D.gat.bedrag)} en dan kom je ${euro0(D.gat.tekort)} tekort.`
+                       : `Er hoort ${euro0(D.benodigdeStand)} te staan en er staat ${euro0(D.werkelijkeStand)}.`),
+        tekortPerMaand: st==='tekort'?Math.max(D.tekort,0):0, act:'openReserveringen()'});
+    } }catch(_){}
+  // 2. buffer
+  try{ const bm=bufferMaanden();
+    if(bm!=null){
+      const richt=nfMaanden();
+      const st = bm<MAAND_DREMPEL.bufferKritiek ? 'tekort' : (bm<richt ? 'let op' : 'ok');
+      const n=Math.round(bm*10)/10;
+      uit.push({key:'buffer', naam:'Buffer in maanden', status:st,
+        waarde:String(n).replace('.',',') , eenheid:`maanden · je richt staat op ${richt}`,
+        gevolg: st==='ok' ? `Je buffer dekt ${String(n).replace('.',',')} maanden essentiële lasten, op of boven je eigen richtbedrag.`
+              : st==='let op' ? `Je buffer dekt ${String(n).replace('.',',')} maanden. Je richt staat op ${richt}.`
+              : `Je buffer dekt ${String(n).replace('.',',')} maanden essentiële lasten. Onder de drie maanden vangt hij weinig op.`,
+        act:'openNoodfondsPanel()'});
+    } }catch(_){}
+  // 3. aansluiting
+  try{ const V=spaarVrij(), O=spaarOver();
+    const bekend=!(V.vrij===0&&O.over===0&&V.saved===0);
+    if(bekend||V.saved>0){
+      const st=(V.vrij>0||O.over>0)?'let op':'ok';
+      uit.push({key:'aansluiting', naam:'Aansluiting spaargeld', status:st,
+        waarde: st==='ok'?'sluit aan':euro0(V.vrij>0?V.vrij:O.over), eenheid: st==='ok'?'toewijzingen en saldo gelijk':(V.vrij>0?'niet toegewezen':'te veel geclaimd'),
+        gevolg: st==='ok' ? 'Je toewijzingen en je spaarsaldo lopen gelijk.'
+              : (V.vrij>0 ? `Er staat ${euro0(V.vrij)} spaargeld dat nog bij geen enkel doel hoort.`
+                          : `Je doelen claimen samen ${euro0(O.over)} meer dan er op je spaarrekening staat.`),
+        vrij:V.vrij, act:"go('vooruit')"});
+    } }catch(_){}
+  // 4. aankoopdoel
+  try{ const d=maandDoel();
+    if(d){
+      const T=d.T;
+      const st = !T ? 'onbekend' : (T.gat>MAAND_DREMPEL.doelOk ? 'tekort' : 'ok');
+      uit.push({key:'doel', naam:d.p.naam||'Aankoopdoel', status:st,
+        waarde: T?euro0(T.benodigd):'onbekend', eenheid: T?`per maand nodig · nu ${euro0(d.p.alloc)}`:'geen streefdatum',
+        gevolg: !T ? 'Zonder streefdatum valt er niets terug te rekenen.'
+              : st==='ok' ? `Je huidige inleg haalt de datum.`
+              : `Je legt nu ${euro0(d.p.alloc)} per maand in en je hebt ${euro0(T.benodigd)} nodig. Je komt ${euro0(T.gat)} per maand tekort.`,
+        tekortPerMaand: st==='tekort'?T.gat:0, act:`openGoal('${d.p.id}')`});
+    } }catch(_){}
+  // 5. patroon
+  try{ const n=maandPatroon();
+    uit.push({key:'patroon', naam:'Patroon van de maand', status:n?'let op':'ok',
+      waarde: n&&n.bedrag!=null?euro0(n.bedrag):(n?'let op':'rustig'), eenheid: n&&n.boven!=null?`${euro0(n.boven)} boven je normaal`:(n?'gesignaleerd':'geen signaal'),
+      gevolg: n?String(n.l1||'').replace(/<[^>]*>/g,''):'Er springt deze maand geen uitgavenpatroon uit.',
+      sig:n, act:n&&n.act?n.act:"go('ins')"});
+  }catch(_){}
+  return uit.sort((a,b)=>MAAND_VOLGORDE.indexOf(a.key)-MAAND_VOLGORDE.indexOf(b.key));
+}
+/* Het oordeel: deterministisch, in deze volgorde. Geen vrije formulering, geen voorspelling die
+   verder gaat dan de cijfers, geen aanmoediging en geen compliment. */
+function maandOordeel(R){
+  const tekort=R.filter(r=>r.status==='tekort');
+  const letop=R.filter(r=>r.status==='let op');
+  const ok=R.filter(r=>r.status==='ok');
+  const onb=R.filter(r=>r.status==='onbekend');
+  if(R.length && onb.length>R.length/2)
+    return {zin:'Er ontbreekt te veel om een oordeel te geven.', sub:`Onbekend: ${onb.map(r=>r.naam.toLowerCase()).join(', ')}.`};
+  const metMaand=tekort.find(r=>r.maand);
+  let zin;
+  if(metMaand) zin=`Je systeem houdt stand tot ${resMaandLabel(metMaand.maand)}. Daarna loopt het vast op je ${metMaand.naam.toLowerCase()}.`;
+  else if(tekort.length===1) zin=`Er is deze maand één ding dat een beslissing vraagt: ${tekort[0].naam.toLowerCase()}.`;
+  else if(tekort.length>1) zin=`Er zijn deze maand ${tekort.length} dingen die een beslissing vragen.`;
+  else if(letop.length) zin=`Er is niets dat vastloopt. ${letop.length} ${letop.length===1?'regel vraagt':'regels vragen'} aandacht.`;
+  else zin='Alle vijf de regels staan goed.';
+  const sub = ok.length
+    ? `${ok.map(r=>r.naam.toLowerCase()).join(' en ')} ${ok.length===1?'is':'zijn'} in orde.`
+    : '';
+  return {zin, sub:sub.charAt(0).toUpperCase()+sub.slice(1)};
+}
+/* Precies twee vaste verbandregels. Niets afgeleid met een model of heuristiek. */
+function maandVerband(R){
+  if(!MAAND_VERBANDEN) return '';
+  const pat=R.find(r=>r.key==='patroon'&&r.sig&&r.sig.boven>0&&r.sig.cat);
+  const gaten=R.filter(r=>r.status==='tekort'&&(r.key==='dekking'||r.key==='doel')&&r.tekortPerMaand>0)
+               .sort((a,b)=>a.tekortPerMaand-b.tekortPerMaand);
+  // 1) een uitgave boven normaal dekt het gat
+  if(pat && gaten.length){
+    const g=gaten[0];
+    if(g.tekortPerMaand<=pat.sig.boven)
+      return `${euro0(g.tekortPerMaand)} per maand extra naar ${esc(g.naam.toLowerCase())} sluit het gat. Dat is ongeveer wat je ${esc((CATS[pat.sig.cat]||{}).name||pat.sig.cat).toLowerCase()} boven je normaal ligt.`;
+  }
+  // 2) niet-toegewezen geld dekt het gat
+  const aan=R.find(r=>r.key==='aansluiting');
+  const doel=R.find(r=>r.key==='doel'&&r.status==='tekort'&&r.tekortPerMaand>0);
+  if(aan&&aan.vrij>0&&doel){
+    const n=Math.floor(aan.vrij/doel.tekortPerMaand);
+    if(n>0) return `Er staat ${euro0(aan.vrij)} niet toegewezen. Dat dekt ${n} ${n===1?'maand':'maanden'} van je tekort.`;
+  }
+  return '';
+}
+function maandDot(st){
+  const c = st==='tekort'?'var(--red)':st==='let op'?'var(--amber)':st==='ok'?'var(--green)':'var(--bar)';
+  return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};flex-shrink:0;margin-top:6px"></span>`;
+}
+function maandRij(r,compact){
+  if(compact) return `<div class="row" style="gap:9px;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${r.act}">
+    ${maandDot(r.status)}<span class="small" style="flex:1;min-width:0">${esc(r.naam)}</span>
+    <span class="small" style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</span></div>`;
+  return `<div class="row" style="gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${r.act}">
+    ${maandDot(r.status)}
+    <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.naam)}</div>
+      <div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg)}</div></div>
+    <div style="text-align:right;flex-shrink:0"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
+      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${esc(r.eenheid)}</div></div></div>`;
+}
+function maandGelezen(){
+  const d=SET.maandGelezen; if(!d) return '';
+  const dt=new Date(d); if(isNaN(dt)) return '';
+  return `<div class="small" style="color:var(--mut2);text-align:center;margin-top:14px">Gelezen op ${dt.getDate()} ${MFULL[dt.getMonth()]} ${dt.getFullYear()}.</div>`;
+}
+function renderMaand(){
+  const R=maandRegels();
+  if(!R.length){
+    $('#s-maand').innerHTML=`<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
+    return;
+  }
+  const O=maandOordeel(R);
+  const beslis=R.filter(r=>r.status==='tekort'||r.status==='let op')
+                .sort((a,b)=>MAAND_ERNST[a.status]-MAAND_ERNST[b.status] || MAAND_VOLGORDE.indexOf(a.key)-MAAND_VOLGORDE.indexOf(b.key));
+  const goed=R.filter(r=>r.status==='ok');
+  const verband=maandVerband(R);
+  $('#s-maand').innerHTML=`
+    <div class="card">
+      <div class="hlabel" style="margin:0 0 6px">Je maand</div>
+      <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
+      ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
+    </div>
+    ${beslis.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt een beslissing</div>
+      ${beslis.map(r=>maandRij(r,false)).join('')}
+      ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}</div>`:''}
+    ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
+      ${goed.map(r=>maandRij(r,true)).join('')}</div>`:''}
+    ${maandGelezen()}
+    <div style="height:12px"></div>`;
 }
 /* ---------- RESERVERINGEN EN DEKKING (v128) ----------
    De dekkingsvraag: is mijn reserveringenpot toereikend voor de kosten die de komende twaalf
@@ -9479,6 +9669,8 @@ function go(name){
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.go===name));
   const _g=document.getElementById('headGear'); if(_g) _g.classList.toggle('on',name==='set');
   if(name==='act'){ window._coachStep=0; window._coachAnswer=null; window._coReopen=true; renderActions(); }
+  // leesmoment: alleen de datum, geen streak, geen teller, geen herinnering (v130)
+  if(name==='maand'){ try{ renderMaand(); SET.maandGelezen=new Date().toISOString().slice(0,10); save(); }catch(_){} }
   syncMonthPick();
   try{ localStorage.setItem('minder_view', name); }catch(_){}
   window.scrollTo(0,0);
