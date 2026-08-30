@@ -3527,6 +3527,9 @@ function renderGoalSheet(id, g, modeOverride){
     ${isNew?debtNudgeCard():''}
     <label class="fld">Waarvoor spaar je?</label><input id="gNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Vakantie" style="width:100%">
     <label class="fld" style="margin-top:10px">Doelbedrag (€)</label><input id="gDoel" type="number" inputmode="numeric" value="${d.doel||''}" placeholder="bv. 1500" style="width:100%">
+    <label class="fld" style="margin-top:10px">Streefdatum (optioneel)</label><input id="gDatum" type="month" value="${esc(d.streefdatum||'')}" style="width:100%">
+    <div class="small muted" style="margin-top:6px">Laat leeg als je geen datum wilt. Met een datum rekent Minder terug wat je per maand nodig hebt.</div>
+    ${(function(){ try{ const pi=id?allocatePlan().find(x=>x.id===id):null; return pi?doelTempoLine(pi):''; }catch(_){ return ''; } })()}
     <label class="fld" style="margin-top:12px">Hoeveel gaat hier maandelijks heen?</label>
     <div id="gModes">${planModeChips(mode,'goalMode')}</div>
     ${bedrag}
@@ -3541,9 +3544,11 @@ function saveGoal(id){
   if(!naam || doel<=0){ toast('Vul een naam en doelbedrag in'); return; }
   const mode=window._goalMode||'auto';
   const oud=(SET.goals||[]).find(x=>x.id===id)||{};
+  const sd=String(v('gDatum')||'').trim();
   const g={id:id||('g'+Date.now().toString(36)), naam, doel, gespaard:Math.round(+v('gNu')||0), allocMode:mode,
     perMaand: mode==='fixed' ? Math.round(+v('gMnd')||0) : (+oud.perMaand||0),      // bewaren, niet wissen bij een moduswissel
     pct:      mode==='pct'   ? Math.max(0,Math.min(100,Math.round(+v('gPct')||0))) : (+oud.pct||0) };
+  if(/^\d{4}-(0[1-9]|1[0-2])$/.test(sd)) g.streefdatum=sd;      // leeg of onzin: sleutel blijft weg (v123)
   SET.goals=SET.goals||[]; const i=SET.goals.findIndex(x=>x.id===id);
   if(i>=0) SET.goals[i]=g; else SET.goals.push(g);
   save(); closeSheet(); render(); toast(`${ICON('check')} Doel opgeslagen`);
@@ -3588,7 +3593,8 @@ function planMap(){
   by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,gespaard:nfDoel>0?Math.min(saved,nfDoel):saved},
     planAllocOf(planAllocCfg(PLAN_NF)));
   for(const g of (SET.goals||[])) if(g&&g.id)
-    by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0}, planAllocOf(g));
+    by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,
+             streefdatum:g.streefdatum||''}, planAllocOf(g));   // v123: leeg = gedraagt zich als voorheen
   // aflos-items bestaan alleen als ze in de volgorde staan; de schuld zelf blijft onaangeroerd
   for(const key of planOrderList()){
     if(key.slice(0,3)!=='af:') continue;
@@ -3599,6 +3605,56 @@ function planMap(){
              debtId:String(d.id),rest,rente:+d.rente||0,debtPer:+d.perMaand||0}, planAllocOf(planAllocCfg(key)));
   }
   return by;
+}
+/* Terugrekenen vanaf een streefdatum (v123).
+   allocatePlan() rekent van bedrag en tempo naar een datum (eta = ceil(rest/alloc)). Dit is de
+   andere richting: je geeft een maand op en de app zegt wat je dan per maand nodig hebt en hoeveel
+   dat scheelt met wat er nu heen gaat. Puur, zonder state en zonder afronding naar iets
+   optimistischers: benodigd rondt naar boven af, want een tekort van een halve euro per maand is
+   nog steeds een tekort. null betekent: hier valt niets over te zeggen. */
+function doelMaandenTot(ym){
+  const m=/^(\d{4})-(\d{2})$/.exec(String(ym||'')); if(!m) return null;
+  const mo=+m[2]; if(mo<1||mo>12) return null;
+  const nu=new Date();
+  return (+m[1]-nu.getFullYear())*12 + (mo-(nu.getMonth()+1));
+}
+function doelDatumLabel(ym){
+  const m=/^(\d{4})-(\d{2})$/.exec(String(ym||'')); if(!m) return '';
+  const mo=+m[2]; if(mo<1||mo>12) return '';
+  return MFULL[mo-1]+' '+m[1];
+}
+function doelTempo(goal, alloc){
+  const g=goal||{};
+  const maandenTot=doelMaandenTot(g.streefdatum);
+  if(maandenTot==null || maandenTot<=0) return null;             // geen datum, of verstreken
+  const rest=(g.rest!=null)?Math.max(Math.round(+g.rest||0),0)
+                           :Math.max(Math.round((+g.doel||0)-(+g.gespaard||0)),0);
+  if(rest<=0) return null;                                        // al bereikt: niets terug te rekenen
+  const benodigd=Math.ceil(rest/maandenTot);
+  const gat=benodigd-Math.max(Math.round(+alloc||0),0);
+  return {maandenTot, benodigd, gat, haalbaar:gat<=0};
+}
+/* De zin eromheen: spiegel (wat je nu doet), gevolg (wat de datum vraagt), keuze (het verschil).
+   Geen oordeel, geen aanmoediging. Spreekt eta niet tegen: beide lezen dezelfde rest en alloc,
+   dus "haalbaar" betekent per definitie dat eta binnen het aantal maanden past. */
+function doelTempoLine(p){
+  if(!p || p.type!=='goal' || !p.streefdatum) return '';
+  if(p.status==='gepauzeerd') return '';
+  const lbl=doelDatumLabel(p.streefdatum); if(!lbl) return '';
+  const rest=(p.rest!=null)?p.rest:Math.max(Math.round((+p.doel||0)-(+p.gespaard||0)),0);
+  if(rest<=0) return '';                                          // bereikt: geen tempo-regel
+  const n=doelMaandenTot(p.streefdatum);
+  const wrap=t=>`<div class="doel-tempo small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${t}</div>`;
+  if(n<=0) return wrap(`Je streefdatum ${lbl} is verstreken. Er wordt hier niets meer teruggerekend.`);
+  const T=doelTempo(p, p.alloc); if(!T) return '';
+  const bedrag=(rest===Math.round(+p.doel||0))?euro0(p.doel):`de resterende ${euro0(rest)}`;
+  if(!(p.alloc>0)) return wrap(`Er gaat op dit moment niets naar dit doel. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig.`);
+  if(T.haalbaar){
+    const sp=(p.eta!=null)?(T.maandenTot-p.eta):null;
+    const staart=(sp!=null&&sp>0)?`, met ${sp} ${sp===1?'maand':'maanden'} speling`:(sp===0?', precies op de datum':'');
+    return wrap(`Je huidige inleg haalt de datum${staart}.`);
+  }
+  return wrap(`Je legt nu ${euro0(p.alloc)} per maand in. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig. Je komt ${euro0(T.gat)} per maand tekort.`);
 }
 // geordende planlijst: SET.planOrder leidt, noodfonds staat standaard bovenaan,
 // onbekende ids sluiten achteraan aan en verwijderde ids worden genegeerd.
@@ -3863,7 +3919,7 @@ function renderPlan(bare){
           <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${euro0(p.gespaard)} / ${euro0(p.doel)}</span></div>
           <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>
           <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
-          ${planWachtHint(p)}${spaarVrijLine(p,P)}${spaarOverLine(p,P)}
+          ${doelTempoLine(p)}${planWachtHint(p)}${spaarVrijLine(p,P)}${spaarOverLine(p,P)}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${up}${dn}</div>
       </div>
