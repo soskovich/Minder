@@ -1,4 +1,5 @@
 // v99: spaargeld boven je noodfonds-doel wordt zichtbaar en is in één tik toe te wijzen
+// v126: de regel is verhuisd van de noodfonds-plan-rij naar planniveau; de selector volgt mee.
 // aan het bovenste lopende spaardoel. De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
@@ -33,10 +34,11 @@ const meet = (page) => page.evaluate(() => ({
   vrij: spaarVrij(), saved: Math.round(spaarSaldo().cur), doel: Math.round(noodfondsModel().doel),
   nf: allocatePlan().find((x) => x.id === 'noodfonds'),
 }));
-const regel = (page) => page.locator('#s-vooruit .plan-item[data-id="noodfonds"] .spaar-vrij');
+// v126: de regel staat niet meer binnen de noodfonds-rij maar op planniveau, boven de rijen
+const regel = (page) => page.locator('#s-vooruit .spaar-vrij');
 
 test.describe('a · het bedrag klopt en is zichtbaar', () => {
-  test('spaargeld boven het bereikte doel staat als regel bij het noodfonds', async ({ page }) => {
+  test('spaargeld boven het bereikte doel staat als regel boven je plan', async ({ page }) => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Kosten koper', doel: 20000, gespaard: 0, allocMode: 'auto' }]));
     const r = await meet(page);
     expect(r.nf.status).toBe('bereikt');                       // doel gehaald
@@ -48,6 +50,8 @@ test.describe('a · het bedrag klopt en is zichtbaar', () => {
     expect(t).toContain(await page.evaluate((v) => euro0(v), r.vrij.vrij));
     expect(t).toMatch(/boven je noodfonds-doel/i);
     expect(t).toContain('toewijzen aan Kosten koper');
+    // v126: buiten de plan-rijen, dus hij overleeft een gepauzeerd of ontbrekend noodfonds
+    expect(await page.locator('#s-vooruit .plan-item .spaar-vrij').count()).toBe(0);
   });
 
   test('wat al bij een doel staat telt niet nog een keer als vrij', async ({ page }) => {

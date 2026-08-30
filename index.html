@@ -3780,7 +3780,7 @@ function planWachtHint(p){
 function spaarVrij(){
   let doel=0; try{ doel=Math.round(noodfondsModel().doel||0); }catch(_){}
   let S={cur:0,missing:true}; try{ S=spaarSaldo(); }catch(_){}
-  if(S.missing||!(doel>0)) return {vrij:0,saved:0,doel,toegewezen:0};
+  if(S.missing) return {vrij:0,saved:0,doel,toegewezen:0};   // v126: geen noodfonds-doel is doel 0, geen reden om te zwijgen
   const saved=Math.round(S.cur||0);
   const toegewezen=(SET.goals||[]).reduce((a,g)=>a+Math.max(Math.round(+g.gespaard||0),0),0);
   return {vrij:Math.max(saved-doel-toegewezen,0), saved, doel, toegewezen};
@@ -3790,17 +3790,30 @@ function spaarVrij(){
 function spaarVrijDoel(P){
   return (P||allocatePlan()).find(x=>x.type==='goal'&&x.status!=='bereikt'&&x.status!=='gepauzeerd')||null;
 }
-function spaarVrijLine(p,P){
-  if(!p||p.type!=='noodfonds') return '';
+/* vrij en over zijn twee kanten van hetzelfde verschil en kunnen per definitie niet allebei
+   positief zijn. Gebeurt dat toch, dan klopt de rekensom niet en zwijgen we liever dan iets
+   tegenstrijdigs te tonen; de console zegt waar het misging. */
+function spaarStil(V,O){
+  if(V.vrij>0 && O.over>0){ try{ console.warn('[Minder] spaarVrij en spaarOver allebei positief', V, O); }catch(_){} return true; }
+  return false;
+}
+/* v126: deze twee regels hingen aan het noodfonds-plan-item, want ze werden binnen de plan-rij
+   gerenderd en begonnen met een type-guard. Zonder noodfondsitem, of zodra het gepauzeerd, bereikt
+   of uit het plan was, verdween de controle geruisloos - precies wanneer je buffer op peil is en
+   alles naar je doelen gaat. Ze staan nu op planniveau, naast de andere plan-brede regels. */
+function spaarVrijLine(P){
   const V=spaarVrij(); if(!(V.vrij>0)) return '';
-  const t=spaarVrijDoel(P); const kort=isMode('rustig');
-  const txt=kort
-    ? `${euro0(V.vrij)} staat boven je noodfonds-doel.`
-    : `${euro0(V.vrij)} van je spaargeld staat boven je noodfonds-doel en hoort nog bij geen enkel doel.`;
+  if(spaarStil(V,spaarOver())) return '';
+  const t=spaarVrijDoel(P); const kort=isMode('rustig'); const nf=V.doel>0;
+  const txt=nf
+    ? (kort ? `${euro0(V.vrij)} staat boven je noodfonds-doel.`
+            : `${euro0(V.vrij)} van je spaargeld staat boven je noodfonds-doel en hoort nog bij geen enkel doel.`)
+    : (kort ? `${euro0(V.vrij)} hoort nog bij geen enkel doel.`
+            : `${euro0(V.vrij)} van je spaargeld hoort nog bij geen enkel doel.`);
   const cta=t
     ? `<span style="color:var(--teal);cursor:pointer" onclick="event.stopPropagation();spaarVrijToe('${t.id}')">toewijzen aan ${esc(t.naam)} ›</span>`
     : `<span style="color:var(--teal);cursor:pointer" onclick="event.stopPropagation();openGoal()">voeg een doel toe ›</span>`;
-  return `<div class="spaar-vrij small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${txt} ${cta}</div>`;
+  return `<div class="spaar-vrij small" style="margin:0 2px 9px;color:var(--mut2);line-height:1.45">${txt} ${cta}</div>`;
 }
 // telt het vrije spaargeld op bij "Al gespaard" van dat doel — nooit meer dan het doel nog nodig
 // heeft; de rest blijft staan voor een volgend doel. Omkeerbaar: het veld blijft bewerkbaar.
@@ -3824,7 +3837,11 @@ function spaarOver(){
   let S={cur:0,missing:true}; try{ S=spaarSaldo(); }catch(_){}
   if(S.missing) return {over:0,saved:0,doel,toegewezen:0,nf:0};
   const saved=Math.round(S.cur||0);
-  const nf=doel>0?Math.min(saved,doel):saved;                 // wat het noodfonds nu claimt
+  // v126: zonder noodfonds-doel claimt het noodfonds NIETS. Stond hier eerst `saved`, waardoor
+  // over = nf + toegewezen - saved neerkwam op `toegewezen` en dus altijd positief was. Dat bleef
+  // verborgen omdat de melding alleen op het noodfonds-item rendeerde; zonder die guard zou de app
+  // bij iedereen zonder noodfonds een tekort melden dat er niet is.
+  const nf=doel>0?Math.min(saved,doel):0;                     // wat het noodfonds nu claimt
   const toegewezen=(SET.goals||[]).reduce((a,g)=>a+Math.max(Math.round(+g.gespaard||0),0),0);
   return {over:Math.max(nf+toegewezen-saved,0), saved, doel, toegewezen, nf};
 }
@@ -3833,16 +3850,18 @@ function spaarOver(){
 function spaarOverDoelen(P){
   return (P||allocatePlan()).filter(x=>x.type==='goal'&&(+x.gespaard||0)>0).reverse();
 }
-function spaarOverLine(p,P){
-  if(!p||p.type!=='noodfonds') return '';
+function spaarOverLine(P){
   const V=spaarOver(); if(!(V.over>0)) return '';
+  if(spaarStil(spaarVrij(),V)) return '';
   const rij=spaarOverDoelen(P); if(!rij.length) return '';
-  const kort=isMode('rustig');
-  const txt=kort
-    ? `Je doelen claimen ${euro0(V.over)} meer dan er staat.`
-    : `Je doelen claimen samen ${euro0(V.nf+V.toegewezen)}, terwijl er ${euro0(V.saved)} op je spaarrekening staat. Je noodfonds-doel ging omhoog, dus ${euro0(V.over)} zit nu bij twee doelen tegelijk.`;
+  const kort=isMode('rustig'); const nf=V.doel>0;
+  const txt=nf
+    ? (kort ? `Je doelen claimen ${euro0(V.over)} meer dan er staat.`
+            : `Je doelen claimen samen ${euro0(V.nf+V.toegewezen)}, terwijl er ${euro0(V.saved)} op je spaarrekening staat. Je noodfonds-doel ging omhoog, dus ${euro0(V.over)} zit nu bij twee doelen tegelijk.`)
+    : (kort ? `Je doelen claimen ${euro0(V.over)} meer dan er staat.`
+            : `Je doelen claimen samen ${euro0(V.toegewezen)}, terwijl er ${euro0(V.saved)} op je spaarrekening staat.`);
   const naam=rij.length===1?esc(rij[0].naam):'je doelen';
-  return `<div class="spaar-over small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${txt}
+  return `<div class="spaar-over small" style="margin:0 2px 9px;color:var(--mut2);line-height:1.45">${txt}
     <span style="color:var(--teal);cursor:pointer" onclick="event.stopPropagation();spaarOverAf()">haal ${euro0(V.over)} weg bij ${naam} ›</span></div>`;
 }
 // Haalt het teveel van onderaf weg uit "Al gespaard". Nooit onder nul, nooit meer dan het teveel;
@@ -3919,7 +3938,7 @@ function renderPlan(bare){
           <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${euro0(p.gespaard)} / ${euro0(p.doel)}</span></div>
           <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>
           <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
-          ${doelTempoLine(p)}${planWachtHint(p)}${spaarVrijLine(p,P)}${spaarOverLine(p,P)}
+          ${doelTempoLine(p)}${planWachtHint(p)}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${up}${dn}</div>
       </div>
@@ -3937,7 +3956,7 @@ function renderPlan(bare){
   // dan zeggen we dat rustig i.p.v. het geruisloos te laten verdwijnen
   const vrij=planVrij(P);
   const vrijLine=vrij>0?`<div id="planVrij" class="small muted" style="margin:0 2px 9px;line-height:1.45"><b>${euro0(vrij)}/mnd</b> nog vrij${isMode('rustig')?'':' — al je doelen krijgen wat ze nodig hebben'} · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></div>`:'';
-  const inner=head+warn+vrijLine+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  const inner=head+warn+vrijLine+spaarVrijLine(P)+spaarOverLine(P)+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
   if(bare) return inner;
   return `<div style="margin-top:18px"><div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Mijn plan</span></div>${inner}</div>`;
 }
