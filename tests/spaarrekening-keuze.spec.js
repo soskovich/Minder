@@ -89,8 +89,11 @@ test.describe('a · de schakelaar werkt nu voor elk potje', () => {
   test('de schakelaar in de rekeningenlijst blijft staan waar je hem zet', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { go('set'); openSet('bank'); });
+    // exact op de rekening selecteren: 'Buffer Rust' (CSV) en 'Buffer rust' (PSD2 ··1123) staan
+    // allebei in de lijst, en hasText is hoofdletterongevoelig
+    const rij = page.locator('#sheet .row', { has: page.locator(`input[onchange*="${CSVPOT}"]`) });
+    await expect(rij).toContainText('Buffer Rust');        // v120: de naam uit de bestandsimport
     // de checkbox zelf is visueel verborgen achter de schuif; je klikt het label (.sw)
-    const rij = page.locator('#sheet .row', { hasText: 'Space ··26' }).first();
     await rij.locator('label.sw').click();
     await page.waitForFunction((a) => isSavingsAcc(a), CSVPOT);
     // opnieuw renderen: de schakelaar mag niet terugspringen

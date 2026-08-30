@@ -15,8 +15,8 @@ const CUR = ym(now);
 //  4323  psd2, IBAN, staat in de vaste tabel      -> 'Spaarpot'
 //  9911  psd2, IBAN, staat er NIET in, geen tx    -> 'Space ··9911'
 //  psd2_zz  psd2, geen IBAN, geen tx              -> 'Space ··2'  (de 2 komt uit "psd2")
-//  N26 Vakantiepot  csv  -> 'Space ··26'  (de 26 komt uit "N26")
-//  N26 Autokosten   csv  -> 'Space ··26'  ook, dus twee rekeningen met dezelfde naam
+//  N26 Vakantiepot  csv  -> 'Vakantiepot'  (v120: de naam staat in de id)
+//  N26 Autokosten   csv  -> 'Autokosten'
 const ACC = { main: '6222', spaar: '4323', space: '9911', geenIban: 'psd2_zz', csv: 'N26 Vakantiepot', csv2: 'N26 Autokosten' };
 
 function seedBank({ acctNames } = {}) {
@@ -77,10 +77,22 @@ test.describe('a · acctNaam is de enige bron', () => {
     expect(per.space).toEqual({ naam: 'Space ··9911', bron: 'terugval op de laatste cijfers' });
     // zonder IBAN worden de cijfers uit de id geschraapt — "psd2" levert er zelf al één
     expect(per.geenIban).toEqual({ naam: 'Space ··2', bron: 'terugval op de laatste cijfers' });
-    // een CSV-potje heeft de naam letterlijk in zijn id staan, maar acctLast4 schraapt daar de
-    // cijfers uit "N26" uit — dus elk CSV-potje heet hetzelfde
-    expect(per.csv).toEqual({ naam: 'Space ··26', bron: 'terugval op de laatste cijfers' });
-    expect(per.csv2).toEqual(per.csv);
+    // v120: een CSV-potje heeft zijn naam letterlijk in de id staan; die gaat voor op de cijfers
+    // uit "N26", die anders elk CSV-potje 'Space ··26' zouden noemen
+    expect(per.csv).toEqual({ naam: 'Vakantiepot', bron: 'naam uit je bestandsimport' });
+    expect(per.csv2).toEqual({ naam: 'Autokosten', bron: 'naam uit je bestandsimport' });
+  });
+
+  test('twee CSV-potjes zijn uit elkaar te houden, en de PSD2-kant niet', async ({ page }) => {
+    await boot(page);
+    const r = await rijen(page);
+    const namen = r.map((x) => x.toont);
+    expect(new Set(namen.filter((n) => /Vakantiepot|Autokosten/.test(n))).size).toBe(2);
+    // de gekoppelde potjes hebben nog steeds geen bruikbare naam: N26 stuurt via PSD2 de
+    // rekeninghouder mee, niet de naam van het potje
+    const psd2 = r.find((x) => x.a === ACC.space);
+    expect(psd2.toont).toBe('Space ··9911');
+    expect(psd2.opgeslagen).toBe('Vakantie ··9911');
   });
 
   test('een eigen naam wint van alles', async ({ page }) => {
@@ -109,7 +121,7 @@ test.describe('b · wat het blokje toont', () => {
     expect(t).toContain('Space ··9911');             // wat de app ervan maakt
     expect(t).toContain('Nieuwe wasmachine');
     expect(t).toContain('bron: vaste tabel in de app');
-    expect(t).toContain('Space ··26');
+    expect(t).toContain('bron: naam uit je bestandsimport');
   });
 
   test('de samenvatting telt de gevallen op', async ({ page }) => {
@@ -117,10 +129,9 @@ test.describe('b · wat het blokje toont', () => {
     await openBlok(page);
     const t = await page.locator('#sheet').innerText();
     expect(t).toMatch(/2 rekeningen krijgen de naam uit een vaste tabel/);
-    expect(t).toMatch(/4 rekeningen tonen alleen "Space ··cijfers"/);
+    expect(t).toMatch(/2 rekeningen tonen alleen "Space ··cijfers"/);   // alleen nog de PSD2-kant
     expect(t).toMatch(/2 rekeningen hebben geen transacties/);
-    expect(t).toMatch(/2× "Space ··26"/);                      // duplicaat wordt gemeld
-    expect(t).toContain('spaarrekening-schakelaar');
+    expect(t).not.toContain('spaarrekening-schakelaar');       // geen dubbele namen meer
   });
 });
 

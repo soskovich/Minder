@@ -8921,6 +8921,11 @@ function acctNaam(a){
   const bank=(ACCMETA[a]&&ACCMETA[a].bank)||(((SET.psd2Accounts||{})[a])||{}).bank||'';
   const last4=acctLast4(a);
   const ov=(SET.acctNames||{})[last4]; if(ov) return {naam:ov, bron:'eigen naam'};
+  // v120: een N26-potje uit een bestandsimport draagt zijn naam in de id ('N26 Buffer Rust'),
+  // precies zoals in de N26-app. Die werd weggegooid ten gunste van 'Space ··'+acctLast4(), en dat
+  // is voor elk CSV-potje '26' (uit "N26") - vier potjes met dezelfde naam dus. De naam die we
+  // hebben gaat voor op cijfers die we verzinnen. accShort() knipte 'N26 ' er al net zo af.
+  if(/^N26 /.test(a||'')){ const n=String(a).slice(4).trim(); if(n) return {naam:n, bron:'naam uit je bestandsimport'}; }
   if(/n26/i.test(bank)) return ACCT_NAMES[last4]
     ? {naam:ACCT_NAMES[last4], bron:'vaste tabel in de app'}
     : {naam:'Space ··'+last4, bron: last4?'terugval op de laatste cijfers':'geen naam beschikbaar'};
