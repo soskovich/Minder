@@ -8,7 +8,7 @@ Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dra
 
 ## Bestanden
 - `index.html` — de complete app (~8.760 regels, ~660 functies): HTML + inline `<style>` + inline `<script>`. Dit is het product.
-- `sw.js` — service worker. `const CACHE = 'minder-v123'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
+- `sw.js` — service worker. `const CACHE = 'minder-v124'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
 - `manifest.webmanifest` — PWA-manifest (naam "Minder — uitgaventracker", standalone, `start_url` `./index.html`). Bevat een app-shortcut "Koopcheck" → `./index.html?action=buy`.
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — iconen (staan ook in de SW-`ASSETS`-lijst).
 - `Open-banking-koppeling-plan.md` — referentieplan voor een latere live PSD2-bankkoppeling. **Nog niet gebouwd**; de MT940/CSV-import blijft voorlopig de basis.
@@ -43,7 +43,7 @@ Laatst bekeken scherm wordt bewaard in `minder_view`.
 
 ## Service worker & versiebeleid
 - Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
-- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v123` → `minder-v124`, …). De oude cache wordt in `activate` opgeruimd.
+- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v124` → `minder-v125`, …). De oude cache wordt in `activate` opgeruimd.
 - De `v10/v11/v13`-strings boven in `index.html` zijn inline-SVG-icoonversies, **geen** app-versie.
 
 ## Syntax-check
@@ -89,6 +89,7 @@ Trek het inline `<script>` uit `index.html` en controleer met **`node --check`**
 ### FIRE-laag
 - **`fireInputs()` is de enige naad** (`v32`): laag A leest Minder, laag B (`fireState`/`fireModel`/`fireMonteCarlo`) is puur, laag C rendert. Laat laag B nooit direct uit Minder-state lezen.
 - **Bezittingen, schuld en vermogen apart** (`v44`, `v49`): belegd groeit, cash is vlak, schuld amortiseert. De `grow`-vlag per bezitting wordt gerespecteerd (niet-groeiend gaat naar het vlakke potje). Harde invariant, vastgelegd in een test: `netto === bezittingen - schuld` op elk punt, ook in de Monte Carlo.
+- **Een scenario grijpt aan op de naad, nooit in de projectie** (`v124`): `reisModel(ovr)` neemt een optionele override (`{vermogenDelta}`) en past die toe op een **kopie** van het inputs-object, tussen laag A en laag B in. `fireInputs()` blijft de enige plek die Minder leest en `fireState`/`fireModel` blijven puur (`v32`); zonder argument gaat exact hetzelfde object door als voorheen, dus dan is er niets veranderd. De delta landt op `belegd` — alleen die laag compoundeert — met `netWorth` mee voor wat er daadwerkelijk af kon en `belegdItems` proportioneel geschaald, anders tellen de aandelen in `assetParts` op tot meer dan één. Uitgaven en inleg blijven ongemoeid: geld opnemen verandert die niet. `onttrekkingKosten(bedrag)` draait het model twee keer en geeft `{maandenLater, jaarNu, jaarNa, bedrag}`, of `null` zodra er iets ontbreekt. Let op: **`M.missing` is een object** `{balances, assets}` en dus altijd truthy — toets de velden, niet het object. De jaartallen komen uit de bestaande FIRE-mijlpaal (één bron), het maandverschil uit `fireKruisMaanden()`, dat het kruispunt lineair interpoleert binnen het jaar; `reach()` werkt op hele jaren en zou twee scenario's altijd een veelvoud van 12 maanden uit elkaar zetten.
 - **Belasting loopt via `fireBelasting()`** (`v35`): de enige plek voor vermogensheffing, opschaalbaar naar Box 3. De default is een zichtbare plaatshouder, gelabeld als benadering en uitdrukkelijk geen fiscaal advies.
 
 ### Import en data

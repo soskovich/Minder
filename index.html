@@ -4586,7 +4586,63 @@ function fireModel(R, inputs){
   });
   return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},missing:inputs.missing};
 }
-function reisModel(){ const inputs=fireInputs(); return fireModel(fireState(inputs, SET.reis||{}), inputs); }   // wrapper: inputs één keer, ongewijzigde uitkomst
+/* v124: reisModel neemt een optionele override, bv. reisModel({vermogenDelta:-4000}).
+   De override grijpt bewust TUSSEN laag A en laag B aan, op een kopie van het inputs-object:
+   fireInputs() blijft de enige plek die Minder leest en fireState/fireModel blijven puur (v32).
+   Zonder argument gaat exact hetzelfde object door als voorheen, dus dan is er niets veranderd. */
+function reisModel(ovr){
+  const inputs=fireInputs();
+  const d=(ovr&&+ovr.vermogenDelta)||0;
+  const inp=d?fireInputsDelta(inputs,d):inputs;
+  return fireModel(fireState(inp, SET.reis||{}), inp);
+}
+/* Alleen de belegde laag compoundeert (belegd0 groeit maand op maand), dus daar landt de delta.
+   netWorth schuift mee met wat er daadwerkelijk af kon, zodat curNW en de reeksen niet uit elkaar
+   lopen, en belegdItems schaalt proportioneel mee, anders tellen de aandelen in assetParts op tot
+   meer dan één. Uitgaven en inleg blijven ongemoeid: geld opnemen verandert die niet. */
+function fireInputsDelta(inputs, delta){
+  const oud=Math.max(+inputs.belegd||0,0);
+  const nieuw=Math.max(Math.round(oud+delta),0);
+  const toegepast=nieuw-oud;
+  const schaal=oud>0?nieuw/oud:0;
+  return Object.assign({}, inputs, {
+    belegd:nieuw,
+    netWorth:Math.round((+inputs.netWorth||0)+toegepast),
+    belegdItems:(inputs.belegdItems||[]).map(it=>({naam:it.naam, waarde:Math.max(Math.round((+it.waarde||0)*schaal),0)}))
+  });
+}
+/* Wanneer kruist de vermogenslijn je FIRE-getal? reach() werkt op hele jaren, dus twee scenario's
+   verschillen daar altijd een veelvoud van 12 maanden. Hier lineair geïnterpoleerd binnen het jaar,
+   zodat een onttrekking ook een verschil van een paar maanden kan opleveren. null = niet bereikt. */
+function fireKruisMaanden(M){
+  const t=M&&M.FIRE; if(!(t>0)) return null;
+  const mid=(M.mid)||[];
+  for(let y=0;y<mid.length;y++){
+    if(mid[y]>=t){
+      if(y===0) return 0;
+      const a=mid[y-1], b=mid[y];
+      const f=(b>a)?Math.min(Math.max((t-a)/(b-a),0),1):1;
+      return Math.round((y-1+f)*12);
+    }
+  }
+  return null;
+}
+/* Wat kost het om geld uit je belegde laag te halen? Niet in euro's maar in maanden: het
+   samengestelde rendement over dat bedrag is het echte verlies. Puur: draait het model twee keer
+   en vergelijkt. null zodra er iets ontbreekt - geen schatting op halve data (v59/v73).
+   Let op: M.missing is een object {balances,assets}, dus altijd truthy; toets de velden. */
+function onttrekkingKosten(bedrag){
+  const b=Math.round(+bedrag||0); if(!(b>0)) return null;
+  let A,B; try{ A=reisModel(); B=reisModel({vermogenDelta:-b}); }catch(_){ return null; }
+  if(!A||!B) return null;
+  const mis=A.missing||{}; if(mis.balances||mis.assets) return null;
+  if(!(A.FIRE>0)||!(B.FIRE>0)) return null;
+  const fA=(A.ms||[]).find(m=>m.key==='fire'), fB=(B.ms||[]).find(m=>m.key==='fire');
+  if(!fA||!fB||fA.yr==null||fB.yr==null) return null;
+  const kA=fireKruisMaanden(A), kB=fireKruisMaanden(B);
+  if(kA==null||kB==null) return null;
+  return {maandenLater:kB-kA, jaarNu:fA.yr, jaarNa:fB.yr, bedrag:b};
+}
 // ---- Monte Carlo: slagingskans + percentiel-band (lokaal, op verzoek) ----
 function reisRandn(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
 let _fireMC=null;
@@ -4836,6 +4892,8 @@ function renderFire(){
     <div class="small mut2" style="font-size:12px;margin-top:8px">Op de lange termijn ${ft!=null?('kom je rond '+(nowY+ft)+' bij je FIRE-getal. Een band, geen belofte.'):('haal je je FIRE-getal niet vóór '+M.targetYear+'.')}</div>
     ${R.taxPct>0?`<div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">In ${M.targetYear} staat er in dit voorbeeld ${euro0(M.mid[M.HZ])}. Zonder belasting zou dat rond ${euro0(M.midGross[M.HZ])} liggen.</div>`:''}
     ${reisHaalbaarheid(M)}
+    ${M.FIRE>0?`<div class="row" style="justify-content:space-between;align-items:center;margin:14px 2px 0;cursor:pointer" onclick="openOnttrekking()"><span class="hlabel" style="margin:0">Wat kost een onttrekking?</span><span style="color:var(--teal);font-size:16px">›</span></div>
+    <div class="small mut2" style="font-size:var(--fs-xs);margin:2px 2px 0">Geld uit je belegde laag, uitgedrukt in maanden op je horizon.</div>`:''}
     ${fireFreedBlock(M)}
     <div class="row" style="justify-content:space-between;align-items:center;margin:14px 2px 0;cursor:pointer" onclick="reisMsToggle()"><span class="hlabel" style="margin:0">Mijlpalen</span><span style="color:var(--mut2);font-size:16px">${msOpen?'▲':'›'}</span></div>
     ${msOpen?`${list}
@@ -4844,6 +4902,45 @@ function renderFire(){
     <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:13px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Rekenvoorbeeld met jouw aannames. Geen advies of belofte. De lijn rekent maand-voor-maand met je inleg (incl. wijzigingen). Je bruto salaris telt niet mee, alleen wat je opzij zet. AOW is een indicatie; koopkracht = geld van nu.</div>
   </div>`;
   $('#s-fire').innerHTML=html; return html;
+}
+/* Eén ingang, vanaf het FIRE-scherm: vul een bedrag in en zie het gevolg in maanden.
+   Spiegel (wat je weghaalt), gevolg (waar je horizon heen schuift), keuze (die is aan jou).
+   Geen waarschuwing, geen advies, geen ontrading. */
+function openOnttrekking(){
+  window._onttrBedrag=window._onttrBedrag||'';
+  renderOnttrekkingSheet(); showSheetBg();
+  setTimeout(()=>{ const el=document.getElementById('onttrInp'); if(el){ el.focus(); el.select(); } },60);
+}
+function onttrekkingReken(){
+  const el=document.getElementById('onttrInp');
+  window._onttrBedrag=String((el&&el.value)||'').trim();
+  renderOnttrekkingSheet();
+  setTimeout(()=>{ const e2=document.getElementById('onttrInp'); if(e2) e2.focus(); },30);
+}
+function onttrekkingUitkomst(K){
+  if(!K) return '';
+  const n=K.maandenLater;
+  const jr=(K.jaarNa===K.jaarNu)
+    ? `Je FIRE-jaar blijft ${K.jaarNu}`
+    : `Je FIRE-jaar verschuift van ${K.jaarNu} naar ${K.jaarNa}`;
+  const staart=(n>0)
+    ? `, ongeveer ${n} ${n===1?'maand':'maanden'} later.`
+    : (n<0 ? `, ongeveer ${-n} ${n===-1?'maand':'maanden'} eerder.` : '. Op deze schaal verschuift er niets.');
+  return `<div class="small" style="margin-top:12px;color:var(--txt);line-height:1.6">${euro0(K.bedrag)} uit je belegde laag. ${jr}${staart} Wat je hiermee doet is aan jou.</div>`;
+}
+function renderOnttrekkingSheet(){
+  const ruw=window._onttrBedrag||'';
+  const b=Math.round(+ruw||0);
+  const K=b>0?onttrekkingKosten(b):null;
+  const geen=(b>0&&!K)?`<div class="small muted" style="margin-top:12px;line-height:1.6">Hier valt nog niets over te zeggen. Vul je saldi en bezittingen aan en zet een FIRE-getal, dan rekent dit terug.</div>`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="onttrHead">Wat kost een onttrekking?</div>
+    <div class="small muted" style="margin-bottom:12px">Geld uit je belegde laag komt niet terug in euro's maar in tijd: het rendement dat je erover misloopt.</div>
+    <label class="fld">Bedrag (€)</label>
+    <input id="onttrInp" type="number" inputmode="numeric" min="0" step="100" value="${esc(ruw)}" placeholder="bv. 4000" style="width:100%">
+    <button class="btn" style="margin-top:12px;width:100%" onclick="onttrekkingReken()">${ICON('trend')} Reken door</button>
+    ${onttrekkingUitkomst(K)}${geen}
+    <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Rekenvoorbeeld met je eigen aannames uit de vermogensreis. Je uitgaven en maandinleg blijven hierbij gelijk. Geen advies of belofte.</div>`;
 }
 function renderVermogen(){
   if(!TX.length){ $('#s-vermogen').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
