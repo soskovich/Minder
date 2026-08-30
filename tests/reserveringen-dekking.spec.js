@@ -404,3 +404,62 @@ test.describe('h · weergave', () => {
     });
   }
 });
+
+test.describe('i · de pot valt buiten veilig te besteden (v129)', () => {
+  const S = (page) => page.evaluate(() => safeToSpend());
+
+  test('het saldo van de pot gaat van je vrij besteedbare geld af', async ({ page }) => {
+    await boot(page);
+    const a = await S(page);
+    expect(a.saldo).toBe(8000);              // 2000 main + 1000 pot + 5000 spaar
+    expect(a.savedBal).toBe(5000);           // de echte spaarrekening
+    expect(a.resBal).toBe(1000);             // de reserveringspot
+    expect(a.spendSaldo).toBe(2000);         // alleen je betaalrekening blijft over
+
+    await page.evaluate(() => { delete SET.resAcc; save(); });
+    const b = await S(page);
+    expect(b.resBal).toBe(0);
+    expect(b.spendSaldo).toBe(3000);         // zonder aangewezen pot telt hij weer mee
+    expect(b.safe - a.safe).toBe(1000);
+  });
+
+  test('een pot die ook spaarrekening is wordt niet twee keer afgetrokken', async ({ page }) => {
+    await boot(page, seedRes({ savingsAcc: { [RES]: true } }));
+    const a = await S(page);
+    expect(a.savedBal).toBe(6000);           // 5000 + de pot, want die telt nu als spaarrekening
+    expect(a.resBal).toBe(0);                // dus niet nog eens
+    expect(a.spendSaldo).toBe(2000);
+  });
+
+  test('een onbekend potsaldo verandert niets', async ({ page }) => {
+    await boot(page, seedRes({}, { geenSaldo: true }));
+    const a = await S(page);
+    expect(a.resBal).toBe(0);
+    expect(a.spendSaldo).toBe(2000);         // 7000 saldo min 5000 spaar; de pot zit er niet in
+  });
+
+  test('een negatieve pot wordt op nul geklemd, niet bijgeteld', async ({ page }) => {
+    await boot(page);
+    await page.evaluate((x) => { SET.manualBal[x] = -200; save(); }, RES);
+    const a = await S(page);
+    expect(a.saldo).toBe(6800);              // de roodstand telt gewoon mee in je totale saldo
+    expect(a.resBal).toBe(0);                // maar je reserveert geen negatief bedrag
+    expect(a.spendSaldo).toBe(1800);
+  });
+
+  test('de opbouw-sheet noemt de post met een tik naar het beheer', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => openSafeToSpend());
+    const t = await page.locator('#sheet').innerText();
+    expect(t).toContain('In je reserveringspot');
+    expect(t).toContain('al vergeven aan posten die nog moeten komen');
+    await page.locator('#sheet >> text=In je reserveringspot').click();
+    await page.waitForSelector('#resHead');
+  });
+
+  test('zonder pot staat de regel er niet', async ({ page }) => {
+    await boot(page, seedRes({}, { geenAcc: true }));
+    await page.evaluate(() => openSafeToSpend());
+    expect(await page.locator('#sheet').innerText()).not.toContain('In je reserveringspot');
+  });
+});

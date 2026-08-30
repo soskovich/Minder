@@ -1912,7 +1912,16 @@ function safeToSpend(){
   const fixedStillToGo=Math.round(L.fixDue||0);
   // wat al op je spaarrekening(en) staat valt buiten 'veilig te besteden': geen vrij besteedbaar geld
   let savedBal=0; try{ savedBal=totalSaved().sum||0; }catch(_){}
-  const spendSaldo = tb.sum - savedBal;
+  /* v129: wat er in je reserveringspot staat is al vergeven aan posten die nog moeten komen
+     (aanslagen, premies, tandarts), dus het is geen vrij besteedbaar geld. Drie klemmen:
+     staat de pot ook als spaarrekening aangemerkt, dan zit hij al in savedBal en trekken we hem
+     niet twee keer af; een onbekend saldo zit sowieso niet in tb.sum; en een negatief saldo
+     klemmen we op nul - je kunt geen negatief bedrag reserveren, en de roodstand zelf blijft
+     gewoon als negatief saldo in tb.sum staan. */
+  let resBal=0; try{ const ra=resAccId();
+    if(ra && !((typeof isSavingsAcc==='function') && isSavingsAcc(ra))){ const rb=resSaldo(); if(rb!=null) resBal=Math.max(rb,0); }
+  }catch(_){}
+  const spendSaldo = tb.sum - savedBal - resBal;
   // verwacht inkomen dat deze maand nog binnenkomt telt MEE (consistent met de maandlasten die we aftrekken)
   const incDue=Math.round(L.incDue||0);
   // nog te sparen deze maand = maandbedrag min wat je DEZE MAAND al hebt weggezet (niet je totale spaarsaldo)
@@ -1925,7 +1934,7 @@ function safeToSpend(){
   }catch(_){}
   const saveRemaining=Math.max(saveTarget-savedThisMonth,0);
   const safe=Math.round(spendSaldo + incDue - fixedStillToGo - reservedVar - saveRemaining);
-  return {saldo:tb.sum, savedBal:Math.round(savedBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, known:tb.known,
+  return {saldo:tb.sum, savedBal:Math.round(savedBal), resBal:Math.round(resBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, known:tb.known,
     incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), fixDueBudgetExtra:Math.max(fixedStillToGo-Math.round(L.fixDue||0),0), reserved:Math.round(reservedVar), potOver:Math.round(potOver), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
 }
 function renderLiquidityKPI(){
@@ -2552,7 +2561,7 @@ function openSafeToSpend(){
   const line=(label,val,col,act,note)=>`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)${act?';cursor:pointer':''}" ${act?`onclick="${act}"`:''}>
       <div style="flex:1"><div style="font-size:var(--fs-md)">${label}</div>${note?`<div class="small muted">${note}</div>`:''}</div>
       <div style="font-weight:700;white-space:nowrap;color:${col||'var(--txt)'}">${euro0(val)}</div>${act?'<span style="color:var(--teal);font-weight:700;margin-left:4px">\u203a</span>':'<span style="width:8px"></span>'}</div>`;
-  const aftrek=(S.savedBal||0)+S.fixDue+S.reserved+S.saveReserved;
+  const aftrek=(S.savedBal||0)+(S.resBal||0)+S.fixDue+S.reserved+S.saveReserved;
   const balUnknown=!(S.known>0);   // geen enkel bekend saldo: dezelfde onbekend-staat als op Home, nooit het één stellig en het ander onbekend
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:14px">
@@ -2566,6 +2575,7 @@ function openSafeToSpend(){
     ${S.incDue>0?`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:var(--fs-md)">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
     ${S.savedBal>0?line('Al op je spaarrekening', S.savedBal, 'var(--mut)', "closeSheet();openSavingsPots()", 'staat apart om te sparen, niet vrij besteedbaar'):''}
+    ${S.resBal>0?line('In je reserveringspot', S.resBal, 'var(--mut)', "openReserveringen()", 'al vergeven aan posten die nog moeten komen'):''}
     ${S.fixDueRecurring>0?line('Vaste lasten die nog komen', S.fixDueRecurring, 'var(--mut)', 'openFixedDue()', 'wat deze maand nog wordt afgeschreven'):''}
     ${S.fixDueBudgetExtra>0?line('Vaste lasten uit je budget', S.fixDueBudgetExtra, 'var(--mut)', '', 'budget voor vaste categorieën waar nog geen incasso voor is herkend'):''}
     ${S.reserved>0?line('Gereserveerd in je potjes', S.reserved, 'var(--mut)', "openReservedPotjes()", 'budget dat je per categorie apart zette'):''}
