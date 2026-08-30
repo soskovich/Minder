@@ -1990,66 +1990,72 @@ function openReservedPotjes(){
     <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Dit is het deel van je variabele potjes dat je deze maand nog niet hebt uitgegeven. Het staat apart, zodat 'veilig te besteden' je potjes respecteert.</div>`;
   showSheetBg();
 }
-/* Read-only drill-down achter het maandbudget-getal op Inzichten (v114): hoe je plan verdeeld is,
-   nu en vanaf volgende maand. Bewust GEEN besteding per potje - dat is openBudgetCompare, en twee
-   sheets die hetzelfde zeggen is er een te veel. Bewerken blijft openPotje/setBudget: geen tweede
-   editor, alleen een extra ingang. Bronnen ongewijzigd: totalBudget() voor de lopende maand
-   (nu-actief, v56) en plannedBudgets()/plannedTotalBudget() voor de wachtlaag (v112). De som van de
-   rijen is per constructie het getal in de kop - dezelfde eis als v104/v111. */
-function openPotjesVerdeling(m){
+/* Read-only drill-downs achter de budgetkaart op Inzichten (v114, gesplitst in v115): het getal
+   "Maandbudget" toont je potjes van DEZE maand, de regel "vanaf volgende maand" die van VOLGENDE
+   maand. Twee getallen die dezelfde sheet openden was dubbelzinnig: je wist niet welk van de twee
+   je aan het lezen was. Eén functie, twee delen, elk met zijn eigen kop, bron en totaal.
+   Bewust GEEN besteding per potje - dat is openBudgetCompare, en twee sheets die hetzelfde zeggen
+   is er een te veel. Bewerken blijft openPotje/setBudget: een extra ingang, geen tweede editor.
+   Bronnen ongewijzigd: totalBudget() voor nu (nu-actief, v56), plannedBudgets()/plannedTotalBudget()
+   voor de wachtlaag (v112). De som van de rijen is per constructie het getal in de kop (v104/v111). */
+function openPotjesVerdeling(m, deel){
   m = m || curMonth || months()[months().length-1] || thisYM();
   const isNow = m===thisYM();
+  const vanaf = ymFull(nextYM(SET.budgetMonth||thisYM()));
   const B=SET.budgets||{}, P=plannedBudgets();
   const tot=totalBudget(), totP=plannedTotalBudget();
-  const rc=recurringCats(), vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
+  const ks=Object.keys(B).filter(k=>+B[k]>0 && CATS[k]).sort((a,b)=>(+B[b])-(+B[a]));
+  const kp=Object.keys(P).filter(k=>+P[k]>0 && CATS[k]).sort((a,b)=>(+P[b])-(+P[a]));
+  const gestopt=ks.filter(k=>!(+P[k]>0));
+  const anders = kp.some(k=>(+P[k])!==(+B[k]||0)) || gestopt.length>0;
+  const next = deel==='next' && isNow;   // de volgende-maand-lijst bestaat alleen naast de lopende maand
   const rij=(k,bedrag,sub)=>{ const c=CATS[k]||CATS.overig; return `<div class="tx" style="cursor:pointer" onclick="openPotje('${k}')">
     <div class="ava" style="background:var(--card2)">${c.icon||''}</div>
     <div class="info"><div class="nm">${c.name}</div><div class="cat">${sub}</div></div>
     <div class="amt" style="font-weight:700">${euro0(bedrag)}</div></div>`; };
   const kop=(l,v)=>`<div class="row" style="margin:16px 2px 4px"><span class="hlabel" style="margin:0;flex:1">${l}</span><span class="small muted">${euro0(v)}</span></div>`;
+  const link=(txt,act)=>`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="${act}">${txt} ›</div>`;
 
-  // sectie 1 - deze maand
-  const ks=Object.keys(B).filter(k=>+B[k]>0 && CATS[k]).sort((a,b)=>(+B[b])-(+B[a]));
-  const som=a=>a.reduce((x,k)=>x+(+B[k]||0),0);
-  const sub1=k=>{ const d=[], lab=potAssumptionLabel(k); if(lab) d.push(lab);
-    if(tot>0) d.push(`${Math.round(+B[k]/tot*100)}% van je potjes`);
-    const pl=+P[k]||0; if(isNow && pl!==+B[k]) d.push(`<span style="color:var(--teal)">vanaf ${vanaf} ${pl>0?euro0(pl):'gestopt'}</span>`);
-    return d.join(' · '); };
-  const vast=ks.filter(k=>rc.has(k)), vari=ks.filter(k=>!rc.has(k));
-  const lijst1 = !ks.length
-    ? `<div class="muted small center" style="padding:16px">Nog geen potjes. Geef je categorieën een maandbedrag, dan zie je hier de verdeling.</div>`
-    : (vast.length && vari.length)
-      ? kop('Vast', som(vast))+vast.map(k=>rij(k,+B[k],sub1(k))).join('')+kop('Variabel', som(vari))+vari.map(k=>rij(k,+B[k],sub1(k))).join('')
-      : ks.map(k=>rij(k,+B[k],sub1(k))).join('');
-
-  // sectie 2 - vanaf volgende maand; alleen zinvol voor de lopende maand, want potjes zijn een
-  // instelling van nu en geen momentopname per maand (v59/v73: niet beweren wat we niet weten)
-  let sectie2='';
-  if(isNow){
-    const kp=Object.keys(P).filter(k=>+P[k]>0 && CATS[k]).sort((a,b)=>(+P[b])-(+P[a]));
-    const gestopt=ks.filter(k=>!(+P[k]>0));
-    const anders=kp.some(k=>(+P[k])!==(+B[k]||0)) || gestopt.length>0;
-    const sub2=k=>{ const nu=+B[k]||0, pl=+P[k]||0;
+  let titel, subtitel, groot, lijst, voet, noot, uitleg;
+  if(next){
+    titel=`Potjes vanaf ${vanaf}`; subtitel='wat er klaarstaat voor volgende maand'; groot=totP;
+    const sub=k=>{ const nu=+B[k]||0, pl=+P[k]||0;
       if(!nu) return `<span style="color:var(--teal)">nieuw potje</span>`;
       if(pl!==nu) return `nu ${euro0(nu)} · <span style="color:var(--teal)">${pl>nu?'+':''}${euro0(pl-nu)}</span>`;
       return 'ongewijzigd'; };
-    sectie2 = anders
-      ? `<div class="row" style="margin:22px 2px 4px"><span class="hlabel" style="margin:0;flex:1">Vanaf ${vanaf}</span><span class="small" style="font-weight:700;color:var(--teal)">${euro0(totP)}</span></div>
-         ${kp.map(k=>rij(k,+P[k],sub2(k))).join('')}
-         ${gestopt.map(k=>rij(k,0,`nu ${euro0(+B[k])} · <span style="color:var(--amber)">stopt</span>`)).join('')}`
-      : `<div class="row" style="margin:22px 2px 4px"><span class="hlabel" style="margin:0;flex:1">Vanaf ${vanaf}</span></div>
-         <div class="small muted" style="padding:2px 2px 0">Er staat niets klaar voor ${vanaf}; je potjes blijven zoals ze nu staan.</div>`;
+    lijst = kp.map(k=>rij(k,+P[k],sub(k))).join('')
+          + gestopt.map(k=>rij(k,0,`nu ${euro0(+B[k])} · <span style="color:var(--amber)">stopt</span>`)).join('');
+    if(!kp.length && !gestopt.length) lijst=`<div class="muted small center" style="padding:16px">Nog geen potjes.</div>`;
+    noot = anders ? '' : `<div class="small muted" style="margin-top:14px">Er staat niets klaar voor ${vanaf}: dit is dezelfde verdeling als deze maand.</div>`;
+    voet = link('Terug naar deze maand', `openPotjesVerdeling('${m}')`);
+    uitleg = `Dit is wat er klaarstaat, nog niet je huidige budget — deze maand blijft staan zoals hij staat. Tik een potje om de wijziging aan te passen.`;
+  } else {
+    titel='Maandbudget'; subtitel=`${esc(monthLabel(m))} · zo staat je plan verdeeld`; groot=tot;
+    const rc=recurringCats();
+    const som=a=>a.reduce((x,k)=>x+(+B[k]||0),0);
+    const sub=k=>{ const d=[], lab=potAssumptionLabel(k); if(lab) d.push(lab);
+      if(tot>0) d.push(`${Math.round(+B[k]/tot*100)}% van je potjes`);
+      const pl=+P[k]||0; if(isNow && pl!==+B[k]) d.push(`<span style="color:var(--teal)">vanaf ${vanaf} ${pl>0?euro0(pl):'gestopt'}</span>`);
+      return d.join(' · '); };
+    const vast=ks.filter(k=>rc.has(k)), vari=ks.filter(k=>!rc.has(k));
+    lijst = !ks.length
+      ? `<div class="muted small center" style="padding:16px">Nog geen potjes. Geef je categorieën een maandbedrag, dan zie je hier de verdeling.</div>`
+      : (vast.length && vari.length)
+        ? kop('Vast', som(vast))+vast.map(k=>rij(k,+B[k],sub(k))).join('')+kop('Variabel', som(vari))+vari.map(k=>rij(k,+B[k],sub(k))).join('')
+        : ks.map(k=>rij(k,+B[k],sub(k))).join('');
+    // potjes zijn een instelling van nu, geen momentopname per maand (v59/v73: niet beweren wat we niet weten)
+    noot = isNow ? '' : `<div class="small muted" style="margin-top:14px">Je potjes zijn een instelling van nu, geen momentopname van ${esc(monthLabel(m))}.</div>`;
+    voet = (isNow && anders) ? link(`Bekijk je potjes vanaf ${vanaf} · ${euro0(totP)}`, `openPotjesVerdeling('${m}','next')`) : '';
+    uitleg = `Dit is je plan, niet je besteding. Hoe je ervoor staat deze maand zie je via de ring op Inzichten. Tik een potje om het te wijzigen — dat geldt dan vanaf ${vanaf}.`;
   }
 
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('target')}</div><div style="font-weight:800;font-size:var(--fs-lg)">Maandbudget</div>
-      <div class="muted small">${esc(monthLabel(m))} · zo staat je plan verdeeld</div>
-      <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0;color:var(--teal)">${euro0(tot)}</div></div>
-    ${lijst1}
-    ${sectie2}
-    ${isNow?'':`<div class="small muted" style="margin-top:14px">Je potjes zijn een instelling van nu, geen momentopname van ${esc(monthLabel(m))}. Daarom staat hier geen verdeling voor de maand erna.</div>`}
-    <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Dit is je plan, niet je besteding. Hoe je ervoor staat deze maand zie je via de ring op Inzichten. Tik een potje om het te wijzigen — dat geldt dan vanaf ${vanaf}.</div>
-    <div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="openBudgetEditor('${m}')">Potjes en limiet instellen ›</div>`;
+    <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('target')}</div><div style="font-weight:800;font-size:var(--fs-lg)">${titel}</div>
+      <div class="muted small">${subtitel}</div>
+      <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0;color:var(--teal)">${euro0(groot)}</div></div>
+    ${lijst}${noot}
+    <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">${uitleg}</div>
+    ${voet}${link('Potjes en limiet instellen', `openBudgetEditor('${m}')`)}`;
   showSheetBg();
 }
 function openVarDue(){
@@ -7099,7 +7105,7 @@ function monthStatusCard(m){
         <div class="row" style="justify-content:space-between;margin-bottom:6px;cursor:pointer" onclick="openBudgetCompare('${m}')"><span style="font-weight:700;font-size:13px">Budget deze maand</span><span style="color:var(--teal)">›</span></div>
         ${kv('Uitgegeven', euro0(sp), '', `openMonthSpend('${m}')`)}
         ${kv('Maandbudget', euro0(bud), '', `openPotjesVerdeling('${m}')`)}
-        ${(()=>{ const tb=totalBudget(), pb=plannedTotalBudget(); return (tb>0 && pb!==tb) ? `<div class="row" style="justify-content:space-between;padding:2px 0 5px;font-size:var(--fs-xs);color:var(--mut2);cursor:pointer" onclick="openPotjesVerdeling('${m}')"><span style="margin-left:2px">↳ vanaf volgende maand</span><span style="font-weight:700;color:var(--teal)">${euro0(pb)}</span></div>` : ''; })()}
+        ${(()=>{ const tb=totalBudget(), pb=plannedTotalBudget(); return (tb>0 && pb!==tb) ? `<div class="row" style="justify-content:space-between;padding:2px 0 5px;font-size:var(--fs-xs);color:var(--mut2);cursor:pointer" onclick="openPotjesVerdeling('${m}','next')"><span style="margin-left:2px">↳ vanaf volgende maand</span><span style="font-weight:700;color:var(--teal)">${euro0(pb)}</span></div>` : ''; })()}
         ${kv('Tempo', tempo, tempoCol)}
         ${kv('Dag', dom+' van '+dim)}
         ${t.budget>t.limit&&t.limit>0?`<div class="row" style="justify-content:space-between;padding:5px 0;font-size:var(--fs-xs);border-top:1px solid var(--line);color:var(--mut2)"><span>boven inkomen-limiet</span><span style="font-weight:700">${euro0(t.budget-t.limit)} (${SET.limit}%)</span></div>`:''}

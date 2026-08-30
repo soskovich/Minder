@@ -1,13 +1,19 @@
 // v114: het maandbudget-getal op Inzichten opende de volledige budget-editor (bestedingslimiet,
 // spaarmodus, alle invoervelden), terwijl de buren op dezelfde kaart een read-only drill-down
-// openen. Nu opent het openPotjesVerdeling(): je plan, verdeeld over je potjes, met de
-// 'volgende maand'-laag (v112) als volwaardige tweede lijst. Bewerken blijft openPotje/setBudget.
+// openen. Nu opent het openPotjesVerdeling(): je plan, verdeeld over je potjes.
+// v115: de twee getallen krijgen elk hun eigen lijst — "Maandbudget" toont alleen deze maand,
+// "vanaf volgende maand" alleen volgende maand. Twee ingangen naar dezelfde sheet was dubbelzinnig:
+// je wist niet welk van de twee getallen je aan het lezen was. Bewerken blijft openPotje/setBudget.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR } = require('./budget-fixture');
 
 const SHEET = '#sheetBg.show';
 const sheetTxt = (page) => page.locator('#sheet').innerText();
+
+// de sheet toont per keer precies één lijst: tel alle .tx-bedragen erin op
+const rijSom = (page) => page.$$eval('#sheet .tx .amt', (els) =>
+  els.reduce((s, e) => s + Math.round(Number(e.textContent.replace(/[^\d,-]/g, '').replace(',', '.')) || 0), 0));
 
 async function openVerdeling(page, payload) {
   await open(page, payload || seed());
@@ -17,16 +23,12 @@ async function openVerdeling(page, payload) {
   await page.waitForSelector(SHEET);
 }
 
-// splits de sheet-kinderen op de kop "Vanaf ..." en tel de .tx-bedragen per helft
-async function secties(page) {
-  return page.evaluate(() => {
-    const eur = (el) => Math.round(Number(el.querySelector('.amt').textContent.replace(/[^\d,-]/g, '').replace(',', '.')) || 0);
-    const kids = [...document.querySelector('#sheet').children];
-    const grens = kids.findIndex((el) => /^vanaf /i.test((el.innerText || '').trim()));
-    const tel = (arr) => arr.filter((el) => el.classList.contains('tx'))
-      .reduce((a, el) => ({ som: a.som + eur(el), n: a.n + 1 }), { som: 0, n: 0 });
-    return { een: tel(kids.slice(0, grens < 0 ? kids.length : grens)), twee: tel(grens < 0 ? [] : kids.slice(grens)) };
-  });
+async function openVolgende(page, payload) {
+  await open(page, payload || seed());
+  await page.evaluate(() => go('ins'));
+  await page.waitForSelector('#s-ins .card');
+  await page.locator('#s-ins >> text=vanaf volgende maand').first().click();
+  await page.waitForSelector(SHEET);
 }
 
 test.describe('a · de ingang', () => {
@@ -46,25 +48,30 @@ test.describe('a · de ingang', () => {
     await page.locator('#s-ins >> text=Budget deze maand').first().click();
     await page.waitForSelector(SHEET);
     const s = await sheetTxt(page);
-    expect(s).toMatch(/hoe doe je het deze maand\?/i);   // de kop rendert uppercase
-    expect(s).not.toContain('zo staat je plan verdeeld');   // de twee drill-downs blijven gescheiden
+    expect(s).toMatch(/hoe doe je het deze maand\?/i);      // de kop rendert uppercase
+    expect(s).not.toContain('zo staat je plan verdeeld');   // de drill-downs blijven gescheiden
   });
 
-  test('de regel "vanaf volgende maand" opent dezelfde sheet', async ({ page }) => {
-    await open(page);
-    await page.evaluate(() => go('ins'));
-    await page.locator('#s-ins >> text=vanaf volgende maand').first().click();
-    await page.waitForSelector(SHEET);
-    expect(await sheetTxt(page)).toContain('zo staat je plan verdeeld');
+  test('de twee getallen openen elk hun eigen lijst, niet dezelfde', async ({ page }) => {
+    await openVerdeling(page);
+    const nu = await sheetTxt(page);
+    expect(nu).toContain('zo staat je plan verdeeld');
+    expect(nu).not.toContain('wat er klaarstaat voor volgende maand');
+
+    await openVolgende(page);
+    const vlg = await sheetTxt(page);
+    expect(vlg).toMatch(/potjes vanaf \w+/i);
+    expect(vlg).toContain('wat er klaarstaat voor volgende maand');
+    expect(vlg).not.toContain('zo staat je plan verdeeld');
+    expect(nu).not.toBe(vlg);
   });
 });
 
 test.describe('b · de lijst telt op tot het hoofdgetal', () => {
-  test('sectie 1 is exact totalBudget()', async ({ page }) => {
+  test('de lijst bij Maandbudget is exact totalBudget()', async ({ page }) => {
     await openVerdeling(page);
     const verwacht = await page.evaluate(() => totalBudget());
-    const { een } = await secties(page);
-    expect(een.som).toBe(verwacht);
+    expect(await rijSom(page)).toBe(verwacht);
     expect(await sheetTxt(page)).toContain('€' + verwacht.toLocaleString('nl-NL'));
   });
 
@@ -82,7 +89,6 @@ test.describe('b · de lijst telt op tot het hoofdgetal', () => {
         const t = (el.innerText || '').trim();
         if (/^vast\b/i.test(t)) cur = 'Vast';
         else if (/^variabel\b/i.test(t)) cur = 'Variabel';
-        else if (/^vanaf /i.test(t)) cur = null;
         else if (cur && el.classList.contains('tx')) uit[cur].push(el.querySelector('.nm').textContent);
       }
       return uit;
@@ -92,35 +98,42 @@ test.describe('b · de lijst telt op tot het hoofdgetal', () => {
   });
 });
 
-test.describe('c · de volgende maand als eigen lijst', () => {
-  test('sectie 2 toont alle potjes van volgende maand en telt op tot plannedTotalBudget()', async ({ page }) => {
-    await openVerdeling(page);
+test.describe('c · de volgende maand is een eigen lijst', () => {
+  test('telt op tot plannedTotalBudget() en toont alle potjes van die maand', async ({ page }) => {
+    await openVolgende(page);
     const verwacht = await page.evaluate(() => plannedTotalBudget());
     const nu = await page.evaluate(() => Object.keys(SET.budgets).filter((k) => +SET.budgets[k] > 0).length);
-    const { twee } = await secties(page);
-    expect(twee.som).toBe(verwacht);
-    expect(twee.n).toBe(nu);            // volledige lijst, niet alleen de wijziging
+    expect(await rijSom(page)).toBe(verwacht);
+    expect(await page.locator('#sheet .tx').count()).toBe(nu);   // volledige lijst, niet alleen de wijziging
   });
 
   test('alleen het gewijzigde potje draagt het verschil', async ({ page }) => {
-    await openVerdeling(page);
+    await openVolgende(page);
     const s = await sheetTxt(page);
     expect(s).toMatch(/nu €800 · \+€50/);   // fixture: boodschappen 800 -> 850
     expect(s).toContain('ongewijzigd');
-    expect(s).toMatch(/vanaf \w+ €850/);              // en als vooruitblik bij de rij van nu
   });
 
-  test('zonder geplande wijziging: één rustige regel, geen tweede lijst', async ({ page }) => {
+  test('deze maand kondigt de wijziging per rij aan, zonder tweede lijst', async ({ page }) => {
+    await openVerdeling(page);
+    const s = await sheetTxt(page);
+    expect(s).toMatch(/vanaf \w+ €850/);                   // vooruitblik bij de rij zelf
+    expect(s).not.toContain('ongewijzigd');                // maar geen volgende-maand-lijst
+    const nu = await page.evaluate(() => Object.keys(SET.budgets).filter((k) => +SET.budgets[k] > 0).length);
+    expect(await page.locator('#sheet .tx').count()).toBe(nu);
+  });
+
+  test('zonder geplande wijziging: geen doorverwijzing, en de lijst zegt dat het gelijk blijft', async ({ page }) => {
     const p = seed();
     const set = JSON.parse(p.minder_set);
     set.budgetsNext = {};
     p.minder_set = JSON.stringify(set);
     await openVerdeling(page, p);
-    const s = await sheetTxt(page);
-    expect(s).toMatch(/Er staat niets klaar voor \w+; je potjes blijven zoals ze nu staan\./);
-    expect(s).not.toContain('ongewijzigd');
-    const nu = await page.evaluate(() => Object.keys(SET.budgets).filter((k) => +SET.budgets[k] > 0).length);
-    expect(await page.locator('#sheet .tx').count()).toBe(nu);   // precies één lijst
+    expect(await sheetTxt(page)).not.toMatch(/Bekijk je potjes vanaf/);
+    expect(await page.locator('#s-ins').innerText()).not.toContain('vanaf volgende maand');
+
+    await page.evaluate(() => openPotjesVerdeling(null, 'next'));
+    expect(await sheetTxt(page)).toMatch(/Er staat niets klaar voor \w+: dit is dezelfde verdeling als deze maand\./);
   });
 
   test('een gestopt potje staat er met "stopt", niet stilzwijgend weg', async ({ page }) => {
@@ -128,10 +141,18 @@ test.describe('c · de volgende maand als eigen lijst', () => {
     const set = JSON.parse(p.minder_set);
     set.budgetsNext = { shopping: 0 };
     p.minder_set = JSON.stringify(set);
+    await openVolgende(page, p);
+    expect(await sheetTxt(page)).toContain('stopt');
     await openVerdeling(page, p);
-    const s = await sheetTxt(page);
-    expect(s).toContain('stopt');
-    expect(s).toMatch(/vanaf \w+ gestopt/);
+    expect(await sheetTxt(page)).toMatch(/vanaf \w+ gestopt/);   // en als vooruitblik bij de rij van nu
+  });
+
+  test('de doorverwijzing heen en terug werkt', async ({ page }) => {
+    await openVerdeling(page);
+    await page.locator('#sheet >> text=Bekijk je potjes vanaf').click();
+    expect(await sheetTxt(page)).toContain('wat er klaarstaat voor volgende maand');
+    await page.locator('#sheet >> text=Terug naar deze maand').click();
+    expect(await sheetTxt(page)).toContain('zo staat je plan verdeeld');
   });
 });
 
@@ -143,12 +164,17 @@ test.describe('d · bewerken blijft waar het was', () => {
     expect(await sheetTxt(page)).toContain('Boodschappen-potje');
   });
 
-  test('de voetlink opent de volledige editor', async ({ page }) => {
+  test('de voetlink opent de volledige editor, ook vanuit de volgende maand', async ({ page }) => {
     await openVerdeling(page);
     await page.locator('#sheet >> text=Potjes en limiet instellen').click();
     await page.waitForSelector('#budgetSheetHead');
     expect(await sheetTxt(page)).toContain('Bestedingslimiet');
     expect(await page.evaluate(() => window._budgetSheet)).toBe(CUR);
+
+    await openVolgende(page);
+    await page.locator('#sheet >> text=Potjes en limiet instellen').click();
+    await page.waitForSelector('#budgetSheetHead');
+    expect(await sheetTxt(page)).toContain('Bestedingslimiet');
   });
 });
 
@@ -159,8 +185,8 @@ test.describe('e · eerlijkheid en layout', () => {
     await page.waitForSelector(SHEET);
     const s = await sheetTxt(page);
     expect(s).toContain('geen momentopname van');
-    const { twee } = await secties(page);
-    expect(twee.n).toBe(0);
+    expect(s).not.toMatch(/Bekijk je potjes vanaf/);
+    expect(await rijSom(page)).toBe(await page.evaluate(() => totalBudget()));
   });
 
   for (const w of [360, 390]) {
