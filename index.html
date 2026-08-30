@@ -1556,6 +1556,18 @@ function savedTx(ym){
   if(sav.size) return txOfMonth(ym).filter(t=>sav.has(t.acc));
   return txOfMonth(ym).filter(t=>catOf(t)==='sparen'&&t.amount<0);
 }
+/* Waar kwam je spaarinleg vandaan? (v117) De spaarquote meet wat er naar je spaarrekening ging,
+   niet waar dat geld vandaan kwam. Stort je meer dan je die maand overhield, dan kwam het verschil
+   uit je buffer: je zette wel geld opzij, maar je vermogen groeide er niet mee - en dan kan de
+   spaarquote op groen staan terwijl je over je bestedingslimiet ging. Eén bron voor het oordeel,
+   de tegel en de brug-zin, zodat die elkaar niet kunnen tegenspreken. null = onbekend (v59/v73). */
+function spaarDekking(m){
+  const g=savedNet(m); if(g==null) return null;
+  const t=totals(m); if(!(t.income>0)) return null;
+  const over=Math.round(t.income-t.spend), gestort=Math.round(g);
+  return {over, gestort, uitBuffer:Math.max(gestort-over,0), gedekt:Math.min(gestort,over)};
+}
+
 // Saldo-invoer: Instellingen ▸ Inkomen & rekeningen, waar je per rekening een saldo invult.
 // Eén bestemming voor elke "vul je saldo aan"-CTA, zodat de onbekend-staat nooit doodloopt.
 function openSaldoInvoer(){ closeSheet(); go('set'); openSet('income'); }
@@ -7587,13 +7599,20 @@ function insKpis(m,n){
   const mk=key=>{
     const M=KPI_META[key], v=waarde[key], ref=null;
     const fmt=_pct0;
-    const st=kpiState(key,v,ref);
+    let st=kpiState(key,v,ref);
+    // v117: haalde je je spaardoel met geld uit je buffer, dan is dat geen 'goed'. Bewust hier en
+    // niet via kpiState(ref): kpiBarColor() kleurt de historie met dezelfde ref, en die dekking
+    // geldt alleen voor deze maand.
+    const dek=(key==='inleg')?spaarDekking(m):null;
+    const uitBuf=(dek&&dek.uitBuffer>0)?dek.uitBuffer:0;
+    if(uitBuf>0&&st==='good') st='mid';
     let band=kpiBandTxt(key);
     if(key==='budget') band=`${kpiBandTxt(key)} · ${t.potTotal>0?'je potjes':'je inkomen-limiet'}`;
     if(v==null) band=(key==='budget')?'nog geen budget':(key==='inleg'&&t.income>0)?'geen spaarrekening bekend':'inkomen onbekend';
     const afst=kpiAfstand(key,v,t,sf);
     return {key, label:M.label, raw:v, ref, val:v==null?'—':fmt(v), band, uitleg:M.uitleg, fmt, partial, afst,
-            oordeel: v==null?'':(partial?'loopt nog':(KPI_WOORD[st]||'')),
+            uitBuffer: uitBuf, dekTxt: uitBuf>0?`${euro0(uitBuf)} kwam uit je buffer`:'',
+            oordeel: v==null?'':(partial?'loopt nog':(uitBuf>0?'deels uit buffer':(KPI_WOORD[st]||''))),
             state: (v==null||partial)?'n':st,      // kleur van het cijfer
             trendState: st,                         // oordeel los van de lopende maand
             src: key==='budget'?(t.potTotal>0?'potjes':'limiet'):undefined,
@@ -7663,7 +7682,8 @@ function insKpiStrip(m){
       <div class="wvo-tl">${k.label}</div>
       <div class="wvo-tv" style="color:${col}">${k.val}</div>
       <div class="wvo-ts">${k.band}${k.oordeel?` · <b style="color:${col}">${k.oordeel}</b>`:''}</div>
-      ${(!k.partial&&kpiAfstandTxt(k.key,k.afst,true))?`<div class="wvo-ts kpi-afst" style="color:var(--mut2)">${kpiAfstandTxt(k.key,k.afst,true)}</div>`:''}
+      ${(()=>{ const e=k.dekTxt||(!k.partial?kpiAfstandTxt(k.key,k.afst,true):'');   // buffer-melding gaat voor: 'op je doel' erbij zou elkaar tegenspreken
+        return e?`<div class="wvo-ts kpi-afst" style="color:var(--mut2)">${e}</div>`:''; })()}
       ${spark||`<div class="small spk-na" style="color:var(--mut2);font-size:10px">na 2 maanden zie je hier je verloop</div>`}
     </div>`;
   }).join('');
@@ -7890,10 +7910,10 @@ function kpiSpaarBrug(key,m){
   if(key!=='spaar'&&key!=='inleg') return '';
   const K=insKpis(m), rest=K.spaar?K.spaar.raw:null, inleg=K.inleg?K.inleg.raw:null;
   if(rest==null||inleg==null) return '';
-  const t=totals(m), over=Math.round(t.income-t.spend), gestort=savedNet(m);
-  if(gestort==null) return '';
-  const staart=(gestort>over)
-    ? ` Dat is meer dan je overhield, dus een deel kwam uit eerder spaargeld.`
+  const D=spaarDekking(m); if(!D) return '';
+  const over=D.over, gestort=D.gestort;
+  const staart=(D.uitBuffer>0)
+    ? ` Dat is ${euro0(D.uitBuffer)} meer dan je overhield: dat deel kwam uit je buffer, dus je vermogen groeide er niet mee.`
     : (gestort<0 ? ` Je nam deze maand netto op.` : ` Het verschil bleef op je betaalrekening staan.`);
   return `<div class="kpi-brug small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:11px;line-height:1.5">
     Je hield ${_pct0(rest)} over (${euro0(over)}) en zette ${_pct0(inleg)} opzij (${euro0(gestort)}).${staart}</div>`;
