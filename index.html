@@ -3590,7 +3590,15 @@ function planMap(){
   let nfDoel=0; try{ nfDoel=Math.round(noodfondsModel().doel||0); }catch(_){}
   let saved=0;  try{ saved=Math.round(spaarSaldo().cur||0); }catch(_){}   // zelfde bron als de hero
   // buffer blijft heilig: de voortgang van het noodfonds meet je spaargeld, geclamd op het doel
-  by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,gespaard:nfDoel>0?Math.min(saved,nfDoel):saved},
+  /* v125: zolang buffer en doelen op aparte rekeningen staan is 'saved' een prima maat voor je
+     buffer. Houd je ze op één rekening, dan telt het geld van je doelen mee als buffer en zegt het
+     noodfonds ten onrechte 'bereikt'. Daarom: heb je een eigen bufferbedrag ingevuld, dan is dát de
+     voortgang. Leeg = de oude afleiding, dus voor wie niets invult verandert er niets (v20/v90).
+     Het plan-item blijft klemmen op het doel (v99); de aansluiting rekent met het onbeknotte
+     bedrag, anders zou geld boven je doel uit de administratie verdwijnen. */
+  const _bt=bufferToegewezen();
+  const _nfHave=(_bt!=null)?_bt:saved;
+  by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,gespaard:nfDoel>0?Math.min(_nfHave,nfDoel):_nfHave},
     planAllocOf(planAllocCfg(PLAN_NF)));
   for(const g of (SET.goals||[])) if(g&&g.id)
     by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,
@@ -3655,6 +3663,145 @@ function doelTempoLine(p){
     return wrap(`Je huidige inleg haalt de datum${staart}.`);
   }
   return wrap(`Je legt nu ${euro0(p.alloc)} per maand in. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig. Je komt ${euro0(T.gat)} per maand tekort.`);
+}
+/* ---------- AANSLUITING (v125) ----------
+   Zodra je buffer en je doelen op één fysieke rekening staan, is de verdeling in Minder een
+   subadministratie op een echt banksaldo. Die hoort aan te sluiten: som van je toewijzingen ==
+   saldo van de rekeningen waar dat geld op staat. Nul betekent dat het klopt; alles anders betekent
+   dat er iets verplaatst is zonder toewijzing. Niets wordt automatisch rechtgetrokken - dan zou
+   precies de informatie verdwijnen waarvoor dit bestaat. */
+
+// Het expliciete bufferbedrag. null = niet gezet, dan blijft alles zoals het was.
+function bufferToegewezen(){
+  const v=SET.bufferToegewezen;
+  if(v===''||v==null) return null;
+  const n=Math.round(+v); return isNaN(n)?null:n;
+}
+function bufferToegewezenSet(val){
+  const t=String(val==null?'':val).trim();
+  if(t==='') delete SET.bufferToegewezen; else { const n=Math.round(+t); if(!isNaN(n)) SET.bufferToegewezen=n; }
+  save(); render();
+}
+/* Scope per rekening, standaard uit. Zonder afbakening telt je betaalrekening mee, is het verschil
+   nooit nul en wordt de regel binnen twee maanden genegeerd. */
+function isAansluitAcc(a){ return !!(SET.aansluitAcc||{})[a]; }
+function aansluitAccs(){ return OWN.filter(isAansluitAcc); }
+function toggleAansluitAcc(a){
+  SET.aansluitAcc=SET.aansluitAcc||{};
+  if(SET.aansluitAcc[a]) delete SET.aansluitAcc[a]; else SET.aansluitAcc[a]=true;
+  save(); SET.setOpen='income'; renderSet(); try{ renderSetSheet(); }catch(_){} try{ render(); }catch(_){}
+}
+/* De berekening. Puur: leest, rekent niets terug en schrijft nergens.
+   Aflos-items tellen NIET mee: hun 'gespaard' is doel min restschuld, dus hoeveel schuld je al hebt
+   afgelost. Dat is geen geld dat op een spaarrekening staat, en de restschuld is bovendien
+   handmatige invoer (v100). Optellen zou de aansluiting structureel scheeftrekken.
+   Doelen met status 'bereikt' of 'gepauzeerd' tellen wél mee zolang gespaard > 0: dat geld staat er
+   nog steeds. */
+function aansluiting(){
+  const accs=aansluitAccs();
+  if(!accs.length) return null;
+  const regels=[]; let saldo=0, volledig=true; const zonder=[];
+  for(const a of accs){
+    const b=accBalance(a);
+    if(b==null){ volledig=false; zonder.push(a); regels.push({soort:'rekening', id:a, naam:acctNiceName(a), bedrag:null}); continue; }
+    saldo+=b; regels.push({soort:'rekening', id:a, naam:acctNiceName(a), bedrag:Math.round(b)});
+  }
+  let toegewezen=0;
+  const bt=bufferToegewezen();
+  if(bt!=null){ toegewezen+=bt; regels.push({soort:'buffer', id:PLAN_NF, naam:'Noodfonds', bedrag:bt}); }
+  for(const g of (SET.goals||[])){
+    const v=Math.round(+((g||{}).gespaard)||0);
+    if(!(v>0)) continue;
+    toegewezen+=v; regels.push({soort:'doel', id:g.id, naam:g.naam||'Doel', bedrag:v});
+  }
+  saldo=Math.round(saldo); toegewezen=Math.round(toegewezen);
+  return {toegewezen, saldo, verschil:saldo-toegewezen, regels, volledig, zonder};
+}
+// De zin bij een verschil. Benoemt bedrag en richting, zonder oordeel.
+function aansluitTekst(A){
+  if(!A) return '';
+  if(!A.volledig) return 'De aansluiting is niet te maken: van minstens één rekening is het saldo nog onbekend.';
+  const v=A.verschil;
+  if(v===0) return 'Je toewijzingen sluiten aan op je saldo.';
+  if(v>0) return `Er staat ${euro0(v)} meer op je rekening dan je hebt toegewezen.`;
+  return `Je doelen claimen samen ${euro0(-v)} meer dan er op je rekening staat.`;
+}
+function aansluitRegel(){
+  const A=aansluiting(); if(!A) return '';
+  const bedrag=A.volledig?(A.verschil===0?'sluit aan':euro0(Math.abs(A.verschil))):'onbekend';
+  return `<div class="aansluit small" style="margin:0 2px 9px;color:var(--mut2);line-height:1.45;cursor:pointer" onclick="openAansluiting()">
+    ${esc(aansluitTekst(A))} <span style="color:var(--teal);white-space:nowrap">${esc(bedrag)} \u203a</span></div>`;
+}
+/* De sheet: beide kanten van de optelling, en de handmatige uitweg. Alleen de gebruiker beslist;
+   er wordt niets stil verrekend. */
+function openAansluiting(){ renderAansluitSheet(); showSheetBg(); }
+function aansluitDoelen(){
+  const uit=[];
+  const bt=bufferToegewezen();
+  if(bt!=null) uit.push({id:PLAN_NF, naam:'Noodfonds', bedrag:bt, soort:'buffer'});
+  for(const g of (SET.goals||[])) if(g&&g.id) uit.push({id:g.id, naam:g.naam||'Doel', bedrag:Math.round(+g.gespaard||0), soort:'doel', rest:Math.max(Math.round((+g.doel||0)-(+g.gespaard||0)),0)});
+  return uit;
+}
+function aansluitBedragIn(){ const el=document.getElementById('aanslInp'); return Math.round(+((el&&el.value)||0))||0; }
+// positief verschil: toewijzen. Nooit meer dan het verschil, en bij een doel niet voorbij wat dat
+// doel nog nodig heeft (zelfde klem als spaarVrijToe, v99).
+function aansluitToe(id){
+  const A=aansluiting(); if(!A||!A.volledig||A.verschil<=0) return;
+  let b=aansluitBedragIn(); if(!(b>0)) b=A.verschil;
+  b=Math.min(b,A.verschil);
+  if(id===PLAN_NF){ const bt=bufferToegewezen()||0; SET.bufferToegewezen=bt+b; }
+  else { const g=(SET.goals||[]).find(x=>x.id===id); if(!g) return;
+    const rest=Math.max(Math.round((+g.doel||0)-(+g.gespaard||0)),0); if(rest<=0) return;
+    b=Math.min(b,rest); g.gespaard=Math.round((+g.gespaard||0)+b); }
+  save(); render(); renderAansluitSheet();
+  toast(`${ICON('check')} ${euro0(b)} toegewezen`);
+}
+// negatief verschil: een pot verlagen. Nooit verder dan wat er in die pot staat.
+function aansluitAf(id){
+  const A=aansluiting(); if(!A||!A.volledig||A.verschil>=0) return;
+  const tekort=-A.verschil;
+  let b=aansluitBedragIn(); if(!(b>0)) b=tekort;
+  b=Math.min(b,tekort);
+  if(id===PLAN_NF){ const bt=bufferToegewezen()||0; b=Math.min(b,bt); if(!(b>0)) return; SET.bufferToegewezen=bt-b; }
+  else { const g=(SET.goals||[]).find(x=>x.id===id); if(!g) return;
+    const cur=Math.round(+g.gespaard||0); b=Math.min(b,cur); if(!(b>0)) return; g.gespaard=cur-b; }
+  save(); render(); renderAansluitSheet();
+  toast(`${ICON('check')} ${euro0(b)} teruggenomen`);
+}
+function renderAansluitSheet(){
+  const A=aansluiting();
+  if(!A){ $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="aanslHead">Aansluiting</div>
+    <div class="small muted" style="margin-top:8px;line-height:1.6">Er staat nog geen rekening in de aansluiting. Zet bij Instellingen ▸ Inkomen &amp; rekeningen aan welke rekeningen het toegewezen geld dragen.</div>`; return; }
+  const rij=(nm,bedrag,extra)=>`<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="small" style="flex:1;min-width:0">${esc(nm)}${extra?` <span style="color:var(--mut2)">${esc(extra)}</span>`:''}</span><span class="small" style="font-weight:700;white-space:nowrap">${bedrag==null?'onbekend':euro0(bedrag)}</span></div>`;
+  const rek=A.regels.filter(r=>r.soort==='rekening');
+  const toe=A.regels.filter(r=>r.soort!=='rekening');
+  const knop=(t,act)=>`<button class="btn sec" style="margin-top:6px;width:100%" onclick="${act}">${esc(t)}</button>`;
+  let uitweg='';
+  if(A.volledig && A.verschil!==0){
+    const D=aansluitDoelen();
+    const pos=A.verschil>0;
+    const kies=D.filter(d=>pos?(d.soort==='buffer'||d.rest>0):(d.bedrag>0))
+      .map(d=>knop((pos?'Toewijzen aan ':'Terugnemen van ')+d.naam, (pos?`aansluitToe('${d.id}')`:`aansluitAf('${d.id}')`))).join('');
+    uitweg=`<div class="hlabel" style="margin:16px 2px 6px">${pos?'Toewijzen':'Corrigeren'}</div>
+      <label class="fld">Bedrag (€) <span class="small muted">· leeg = het hele verschil</span></label>
+      <input id="aanslInp" type="number" inputmode="numeric" min="0" placeholder="${Math.abs(A.verschil)}" style="width:100%">
+      ${kies||`<div class="small muted" style="margin-top:8px">Geen pot om dit ${pos?'aan toe te wijzen':'van terug te nemen'}. Voeg een doel toe of vul je bufferbedrag in.</div>`}`;
+  }
+  const mis=(!A.volledig)?`<div class="small muted" style="margin-top:10px;line-height:1.5">Vul het saldo aan van ${A.zonder.map(a=>esc(acctNiceName(a))).join(', ')}. <span style="color:var(--teal);cursor:pointer" onclick="openSaldoInvoer()">saldo invullen ›</span></div>`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="aanslHead">Aansluiting</div>
+    <div class="small muted" style="margin-bottom:12px">Je verdeling in Minder tegenover het echte saldo van de rekeningen die je hebt aangewezen.</div>
+    <div class="hlabel" style="margin:6px 2px 4px">Toegewezen</div>
+    ${toe.length?toe.map(r=>rij(r.naam,r.bedrag,r.soort==='buffer'?'buffer':'')).join(''):'<div class="small muted" style="padding:7px 0">Nog niets toegewezen.</div>'}
+    ${rij('Samen',A.toegewezen)}
+    <div class="hlabel" style="margin:16px 2px 4px">Op je rekeningen</div>
+    ${rek.map(r=>rij(r.naam,r.bedrag)).join('')}
+    ${rij('Samen',A.volledig?A.saldo:null)}
+    <div class="row" style="padding:11px 0 0;margin-top:6px;border-top:1px solid var(--line)"><span style="flex:1;font-weight:700">Verschil</span><span style="font-weight:800">${A.volledig?euro0(A.verschil):'onbekend'}</span></div>
+    <div class="small" style="margin-top:8px;color:var(--mut2);line-height:1.55">${esc(aansluitTekst(A))}</div>
+    ${mis}${uitweg}
+    <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Minder verrekent hier niets uit zichzelf. Een verschil blijft staan tot jij het toewijst of corrigeert.</div>`;
 }
 // geordende planlijst: SET.planOrder leidt, noodfonds staat standaard bovenaan,
 // onbekende ids sluiten achteraan aan en verwijderde ids worden genegeerd.
@@ -3937,7 +4084,7 @@ function renderPlan(bare){
   // dan zeggen we dat rustig i.p.v. het geruisloos te laten verdwijnen
   const vrij=planVrij(P);
   const vrijLine=vrij>0?`<div id="planVrij" class="small muted" style="margin:0 2px 9px;line-height:1.45"><b>${euro0(vrij)}/mnd</b> nog vrij${isMode('rustig')?'':' — al je doelen krijgen wat ze nodig hebben'} · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></div>`:'';
-  const inner=head+warn+vrijLine+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  const inner=head+aansluitRegel()+warn+vrijLine+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
   if(bare) return inner;
   return `<div style="margin-top:18px"><div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Mijn plan</span></div>${inner}</div>`;
 }
@@ -8785,7 +8932,13 @@ function setIncome(){
     <div class="small muted" style="margin-bottom:8px">Saldo's uit MT940/PSD2 zijn vooraf ingevuld; vul ontbrekende saldo's bij voor een kloppende prognose.</div>
     ${OWN.map(a=>{const m=ACCMETA[a]||{};const cnt=TX.filter(t=>t.acc===a).length;const bv=accBalance(a);const det=m.balance!=null;return `
       <div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)"><div style="min-width:0;flex:1"><div style="font-weight:600">${esc(accShort(a))} <span class="tag">${m.bank||''}</span></div><div class="small muted">${m.role||'Rekening'} · ${cnt} tx${det?' · saldo '+m.date:''}</div></div>
-        <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" step="0.01" value="${bv!=null?bv:''}" placeholder="0,00" style="width:92px;text-align:right;padding:7px 9px" oninput="setBal('${a}',this.value)"></div></div>`;}).join('')}
+        <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" step="0.01" value="${bv!=null?bv:''}" placeholder="0,00" style="width:92px;text-align:right;padding:7px 9px" oninput="setBal('${a}',this.value)"></div></div>
+      <div class="row" style="padding:0 0 9px"><span class="small muted" style="flex:1;min-width:0">telt mee in de aansluiting</span>
+        <label class="sw"><input type="checkbox" ${isAansluitAcc(a)?'checked':''} onchange="toggleAansluitAcc('${esc(String(a).replace(/'/g,"\\'"))}')"><span class="sl"></span></label></div>`;}).join('')}
+    <div class="small muted" style="margin:2px 0 10px">Zet dit aan bij de rekeningen waarop je toegewezen geld staat, dus niet bij je betaalrekening voor vaste lasten of je leefgeld. Anders is het verschil nooit nul.</div>
+    <label class="fld">Toegewezen aan je noodfonds (€)</label>
+    <input type="number" value="${bufferToegewezen()!=null?bufferToegewezen():''}" placeholder="leeg = afleiden uit je spaarsaldo" oninput="bufferToegewezenSet(this.value)">
+    <div class="small muted" style="margin-top:6px">Vul dit in als je buffer en doelen op één rekening staan. Zolang het leeg is leidt Minder je buffer af uit je spaarsaldo, zoals voorheen.</div>
     <label class="fld">Minimale buffer (waarschuwing)</label>
     <input type="number" value="${SET.buffer||''}" placeholder="bv. 1000" oninput="SET.buffer=+this.value||0;save();render();">
     <div class="small muted" style="margin-top:6px">De prognose waarschuwt als je saldo hieronder dreigt te komen.</div>
