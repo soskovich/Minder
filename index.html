@@ -1155,7 +1155,15 @@ function setCatBudget(k,val){ // bestaand potje wijzigen = vanaf volgende maand;
 // - vaste lasten op historisch niveau (committed, niet schalen)
 // - resterende bestedingsruimte verdeeld over variabele lasten (die je zelf beïnvloedt)
 function suggestBudgets(){
-  const ms=months(), med=a=>{const s=a.filter(x=>x>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
+  /* v113: alleen AFGERONDE maanden in de mediaan, zoals `noodfondsModel()` (v107). `months()` telt
+     de lopende maand altijd mee en die is niet af: een categorie waaraan je deze maand pas de helft
+     uitgaf trok het voorstel omlaag, en dat liep binnen de maand vanzelf weer op. Is er nog géén
+     afgeronde maand, dan blijft de lopende de enige bron (`msLopend`) - anders levert een verse
+     import helemaal geen voorstel op, en dan zeggen we er ook bij dat het nog verschuift. */
+  const _af=months().filter(m=>m<nowYMstr());
+  const msLopend=_af.length===0;
+  const ms=msLopend?months():_af;
+  const med=a=>{const s=a.filter(x=>x>0).sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:0;};
   const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
   const room = monthBudget(inc);
   const histF={}, histV={};
@@ -1187,14 +1195,15 @@ function suggestBudgets(){
   const wanneer = gepland
     ? `${gepland} bestaand${gepland===1?' potje gaat':'e potjes gaan'} mee vanaf ${vanaf}; de lopende maand blijft zoals hij stond.${nieuw?` ${nieuw} nieuw potje${nieuw===1?'':'s'} staat meteen aan.`:''}`
     : (nieuw ? `${nieuw} nieuw potje${nieuw===1?'':'s'} staat meteen aan; aan je lopende maand verandert verder niets.` : 'Je potjes stonden al op het voorstel, er verandert niets.');
+  const bron = msLopend ? ' Let op: je hebt nog geen afgeronde maand, dus dit voorstel leunt op de lopende maand en verschuift nog.' : '';
   if(totalFixed>room){
     alert(`Let op: je vaste lasten (${euro0(totalFixed)}) zijn al hoger dan je bestedingsruimte (${euro0(room)}). Variabele budgetten staan op het minimum. Je vaste lasten verlagen of je inkomen verhogen is nodig om binnen je ${SET.limit}%-norm te blijven.
 
-${wanneer}`);
+${wanneer}${bron}`);
   } else {
     alert(`Voorstel klaar. Vaste lasten ≈ ${euro0(totalFixed)} (vast), resterende ruimte voor variabele uitgaven ≈ ${euro0(remaining)}. Pas de variabele categorieën gerust handmatig aan.
 
-${wanneer}`);
+${wanneer}${bron}`);
   }
 }
 // richtlijn-band o.b.v. % over budget: ≤3% geen actie (marge) · 4–5% monitoren · >5% actie
