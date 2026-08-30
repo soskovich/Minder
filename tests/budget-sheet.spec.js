@@ -1,5 +1,7 @@
 // Budget invullen als bottomsheet (v61): de editor opent in-context vanuit Inzichten,
 // niet meer via een sprong naar het Instellingen-tabblad. Eén editor (setBudget), twee ingangen.
+// v114: de rij "Maandbudget" opent eerst de read-only verdeling; de editor zit daar achter de
+// voetlink "Potjes en limiet instellen". De weg blijft dus in-context, hij is één tik langer.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR } = require('./budget-fixture');
@@ -15,14 +17,28 @@ async function openIns(page, payload) {
   await page.waitForSelector('#s-ins .card');
 }
 
+// vanuit Inzichten naar de editor: Maandbudget -> verdeling -> voetlink
+async function openEditor(page, payload) {
+  await openIns(page, payload);
+  await page.locator('#s-ins >> text=Maandbudget').first().click();
+  await page.waitForSelector(SHEET);
+  await page.locator('#sheet >> text=Potjes en limiet instellen').click();
+  await page.waitForSelector('#budgetSheetHead');
+}
+
 const actief = (page, id) => page.evaluate((s) => document.querySelector(s).classList.contains('active'), '#s-' + id);
 
-test('a · tik op Maandbudget opent de budget-sheet en navigeert niet naar Instellingen', async ({ page }) => {
+test('a · de weg vanuit Inzichten naar de editor navigeert niet naar Instellingen', async ({ page }) => {
   await openIns(page);
   expect(await page.evaluate(() => window._budgetSheet || null)).toBeNull();
 
   await page.locator('#s-ins >> text=Maandbudget').first().click();
   await page.waitForSelector(SHEET);
+  expect(await sheetTxt(page)).toContain('zo staat je plan verdeeld');      // eerst de verdeling
+  expect(await page.evaluate(() => window._budgetSheet || null)).toBeNull();
+
+  await page.locator('#sheet >> text=Potjes en limiet instellen').click();
+  await page.waitForSelector('#budgetSheetHead');
 
   const s = await sheetTxt(page);
   expect(s).toContain('Budget deze maand');
@@ -45,9 +61,7 @@ test('a2 · ring en titel blijven de read-only vergelijking openen', async ({ pa
 });
 
 test('b · de limiet-slider werkt de sheet én de widget live bij', async ({ page }) => {
-  await openIns(page);
-  await page.locator('#s-ins >> text=Maandbudget').first().click();
-  await page.waitForSelector(SHEET);
+  await openEditor(page);
 
   expect(await sheetTxt(page)).toContain('Bestedingslimiet: 70%');
   expect(await page.locator('#s-ins').innerText()).toContain('(70%)');         // 2400 - 2100 = 300 boven de limiet
@@ -73,9 +87,7 @@ test('b · de limiet-slider werkt de sheet én de widget live bij', async ({ pag
 });
 
 test('c · een categorie-potje behoudt focus tijdens typen', async ({ page }) => {
-  await openIns(page);
-  await page.locator('#s-ins >> text=Maandbudget').first().click();
-  await page.waitForSelector(SHEET);
+  await openEditor(page);
 
   const inp = page.locator('#sheet .row', { hasText: 'Online shopping' }).locator('input[type="number"]').first();
   await inp.click();
@@ -105,9 +117,7 @@ test('d · Instellingen ▸ Budget & doelen opent dezelfde sheet, niet de accord
 });
 
 test('e · Klaar en de achtergrond sluiten de sheet en ruimen de vlag op', async ({ page }) => {
-  await openIns(page);
-  await page.locator('#s-ins >> text=Maandbudget').first().click();
-  await page.waitForSelector(SHEET);
+  await openEditor(page);
 
   await page.locator('#sheet >> text=Klaar').first().click();
   await page.waitForSelector('#sheetBg.show', { state: 'detached' });
@@ -116,6 +126,8 @@ test('e · Klaar en de achtergrond sluiten de sheet en ruimen de vlag op', async
   // opnieuw openen en via de achtergrond sluiten
   await page.locator('#s-ins >> text=Maandbudget').first().click();
   await page.waitForSelector(SHEET);
+  await page.locator('#sheet >> text=Potjes en limiet instellen').click();
+  await page.waitForSelector('#budgetSheetHead');
   await page.locator('#sheetBg').click({ position: { x: 5, y: 5 } });
   await page.waitForSelector('#sheetBg.show', { state: 'detached' });
   expect(await page.evaluate(() => window._budgetSheet)).toBeNull();

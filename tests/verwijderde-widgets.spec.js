@@ -41,7 +41,9 @@ test.describe('a · Coach zonder potjes-widget', () => {
   test('potjes blijven bewerkbaar via de budget-bottomsheet', async ({ page }) => {
     await boot(page, 'ins');
     await page.waitForSelector('#insKpiStrip');
-    await page.locator('#s-ins >> text=Maandbudget').first().click();
+    await page.locator('#s-ins >> text=Maandbudget').first().click();      // v114: eerst de verdeling
+    await page.waitForSelector('#sheetBg.show');
+    await page.locator('#sheet >> text=Potjes en limiet instellen').click();
     await page.waitForSelector('#budgetSheetHead');
     const sheet = await page.locator('#sheet').innerText();
     expect(sheet).toContain('Budget deze maand');
