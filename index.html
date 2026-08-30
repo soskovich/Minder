@@ -8942,21 +8942,31 @@ function acctNiceName(a){ return acctNaam(a).naam; }
    koppeling zelf heeft opgeslagen - zonder iets te wijzigen. Rekeningen zonder transacties horen
    er ook bij (die staan niet in OWN maar wel in psd2Accounts), juist omdat dat een van de
    verdachten is. Niets verlaat het toestel; kopieren zet het op je klembord, meer niet. */
+const DIAG_HERKOMST={psd2:'koppeling', csv:'CSV-import', mt940:'MT940-bestand'};
+function diagMaand(d){ const m=+String(d||'').slice(5,7); return m?(MNAMES[m-1]+' '+String(d).slice(0,4)):''; }
+// de overlap-toets kijkt op de dag; toon dan ook de dag, anders leest "t/m apr, begint apr - geen
+// overlap" als een tegenspraak
+function diagDatum(d){ const m=+String(d||'').slice(5,7); return m?(+String(d).slice(8,10)+' '+MNAMES[m-1]+' '+String(d).slice(0,4)):''; }
 function bankDiagRows(){
   const ps=SET.psd2Accounts||{};
   const all=[...new Set([...OWN, ...Object.keys(ps)])];
   return all.map(a=>{
     const pm=ps[a]||null, meta=ACCMETA[a]||{}, N=acctNaam(a);
+    // periode + herkomst in één pass: MT940-transacties hebben geen src, die zijn dus 'mt940'
+    let van='', tot='', tx=0; const srcs=new Set();
+    for(const t of TX){ if(t.acc!==a) continue; tx++; srcs.add(t.src||'mt940');
+      if(!van||t.date<van) van=t.date; if(!tot||t.date>tot) tot=t.date; }
     return {a, toont:N.naam, bron:N.bron,
             opgeslagen:(pm&&pm.label)||meta.label||'',
             bank:meta.bank||(pm&&pm.bank)||'',
             l4:acctLast4(a), iban:!!(pm&&pm.iban), viaBank:!!pm, spaar:isSavingsAcc(a),
-            tx:TX.filter(t=>t.acc===a).length};
+            tx, van, tot, srcs:[...srcs], live:srcs.has('psd2'),
+            herkomst:[...srcs].map(x=>DIAG_HERKOMST[x]||x).join(' + ')};
   }).sort((x,y)=>y.tx-x.tx);
 }
 function bankDiagText(){
   return bankDiagRows().map(r=>
-    `${r.toont||'(geen naam)'} | bron: ${r.bron} | bank: ${r.bank||'?'} | ${r.viaBank?(r.iban?'IBAN ··'+r.l4:'gekoppeld, geen IBAN'):'uit een bestand'} | ${r.tx} tx${r.spaar?' | spaarrekening':''} | van de koppeling: ${r.opgeslagen||'-'}`
+    `${r.toont||'(geen naam)'} | bron: ${r.bron} | bank: ${r.bank||'?'} | ${r.viaBank?(r.iban?'IBAN ··'+r.l4:'gekoppeld, geen IBAN'):'uit een bestand'} | ${r.herkomst||'-'} | ${r.tx} tx | ${r.van?diagMaand(r.van)+' t/m '+diagMaand(r.tot):'geen transacties'}${r.spaar?' | spaarrekening':''} | van de koppeling: ${r.opgeslagen||'-'}`
   ).join('\n');
 }
 async function bankDiagCopy(){
@@ -8982,10 +8992,23 @@ function bankDiagHTML(){
   if(zonderNaam) bevind.push(n(zonderNaam,'heeft','hebben')+` geen cijfers om op terug te vallen en blijft daardoor naamloos`);
   if(geenTx) bevind.push(n(geenTx,'heeft','hebben')+` geen transacties in het venster en krijgt daardoor geen rekening-metadata`);
   if(dubbel.length) bevind.push(`${dubbel.map(([k,c])=>`${c}× "${esc(k)}"`).join(', ')} — die delen ook hun spaarrekening-schakelaar, want die hangt aan dezelfde laatste cijfers`);
+  /* De vraag achter de dubbele rekeningen: draagt de bestandsimport alleen de oudere maanden, of
+     lopen ze door elkaar? Alleen bij een schone knip is samenvoegen zonder risico. Per bank, want
+     N26-CSV naast N26-koppeling zegt iets anders dan een ABN-bestand ernaast. */
+  const perBank={};
+  for(const r of rows){ if(!r.van) continue;
+    const e=perBank[r.bank||'?']=perBank[r.bank||'?']||{};
+    const k=r.live?'live':'file'; const x=e[k]=e[k]||{van:r.van,tot:r.tot};
+    if(r.van<x.van) x.van=r.van; if(r.tot>x.tot) x.tot=r.tot; }
+  for(const b in perBank){ const e=perBank[b]; if(!(e.live&&e.file)) continue;
+    bevind.push(e.file.tot>=e.live.van
+      ? `${esc(b)}: je bestand loopt t/m ${diagDatum(e.file.tot)} en je koppeling begint ${diagDatum(e.live.van)} — die perioden overlappen`
+      : `${esc(b)}: je bestand loopt t/m ${diagDatum(e.file.tot)}, je koppeling begint ${diagDatum(e.live.van)} — geen overlap, de een neemt het van de ander over`); }
   return `<div class="small muted" style="margin:8px 0 10px">Per rekening: wat de app toont, waar die naam vandaan komt, en welke naam de koppeling zelf heeft opgeslagen. Alleen lezen — er verandert niets.</div>
     ${rows.map(r=>`<div style="padding:9px 0;border-bottom:1px solid var(--line)">
       <div style="font-weight:600;font-size:var(--fs-md)">${esc(r.toont||'(geen naam)')}</div>
       <div class="small muted">bron: ${esc(r.bron)} · ${esc(r.bank||'bank onbekend')} · ${r.viaBank?(r.iban?'IBAN ··'+esc(r.l4):'gekoppeld, geen IBAN'):'uit een bestand'} · ${r.tx} transactie${r.tx===1?'':'s'}${r.spaar?' · spaarrekening':''}</div>
+      <div class="small muted">${r.van?esc(diagMaand(r.van))+' t/m '+esc(diagMaand(r.tot)):'geen transacties'}${r.herkomst?' · '+esc(r.herkomst):''}</div>
       <div class="small" style="color:var(--mut2)">van de koppeling: ${r.opgeslagen?esc(r.opgeslagen):'—'}</div>
     </div>`).join('')}
     ${bevind.length?`<div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:12px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">${bevind.map(b=>'· '+b).join('<br>')}</div>`:''}

@@ -9,6 +9,7 @@ const { test, expect } = require('@playwright/test');
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 const CUR = ym(now);
+const OUD = ym(new Date(now.getFullYear(), now.getMonth() - 4, 1));
 
 // Vier N26-rekeningen die samen alle naamgevings-uitkomsten dekken:
 //  6222  psd2, IBAN, staat in de vaste tabel      -> 'Main'
@@ -24,8 +25,9 @@ function seedBank({ acctNames } = {}) {
     { id: 't1', date: `${CUR}-05`, amount: 3000, acc: ACC.main, name: 'Werkgever', desc: 'SALARIS LOON', typ: '', ref: '', src: 'psd2', refNums: [] },
     { id: 't2', date: `${CUR}-06`, amount: -40, acc: ACC.main, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN', typ: '', ref: '', src: 'psd2', refNums: [] },
     { id: 't3', date: `${CUR}-07`, amount: 200, acc: ACC.spaar, name: 'Spaarpot', desc: 'NAAR SPAREN', typ: '', ref: '', src: 'psd2', refNums: [] },
-    { id: 't4', date: `${CUR}-08`, amount: 50, acc: ACC.csv, accName: 'Vakantiepot', name: 'Vakantiepot', desc: 'NAAR SPAREN', typ: '', ref: '', src: 'csv', refNums: [] },
-    { id: 't5', date: `${CUR}-09`, amount: 30, acc: ACC.csv2, accName: 'Autokosten', name: 'Autokosten', desc: 'NAAR SPAREN', typ: '', ref: '', src: 'csv', refNums: [] },
+    // de CSV-kant draagt de oudere maanden: dat is precies wat de overlap-regel moet vaststellen
+    { id: 't4', date: `${OUD}-08`, amount: 50, acc: ACC.csv, accName: 'Vakantiepot', name: 'Vakantiepot', desc: 'NAAR SPAREN', typ: '', ref: '', src: 'csv', refNums: [] },
+    { id: 't5', date: `${OUD}-09`, amount: 30, acc: ACC.csv2, accName: 'Autokosten', name: 'Autokosten', desc: 'NAAR SPAREN', typ: '', ref: '', src: 'csv', refNums: [] },
   ];
   const set = {
     limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 3000, setOpen: 'bank',
@@ -135,6 +137,41 @@ test.describe('b · wat het blokje toont', () => {
   });
 });
 
+test.describe('b2 · periode en herkomst', () => {
+  test('elke rekening toont van wanneer tot wanneer, en waar de boekingen vandaan komen', async ({ page }) => {
+    await boot(page);
+    const r = await rijen(page);
+    const csv = r.find((x) => x.a === ACC.csv);
+    expect(csv.herkomst).toBe('CSV-import');
+    expect(csv.van.slice(0, 7)).toBe(OUD);
+    expect(csv.live).toBe(false);
+    const psd2 = r.find((x) => x.a === ACC.main);
+    expect(psd2.herkomst).toBe('koppeling');
+    expect(psd2.live).toBe(true);
+    const leeg = r.find((x) => x.a === ACC.space);
+    expect(leeg.van).toBe('');                       // geen transacties, dus geen periode
+  });
+
+  test('de samenvatting zegt of bestand en koppeling elkaar overlappen', async ({ page }) => {
+    await boot(page);
+    await openBlok(page);
+    const t = await page.locator('#sheet').innerText();
+    expect(t).toMatch(/geen overlap, de een neemt het van de ander over/);
+    // met de dag erbij, anders leest "t/m apr, begint apr - geen overlap" als een tegenspraak
+    expect(t).toMatch(/je bestand loopt t\/m \d{1,2} \w{3} \d{4}, je koppeling begint \d{1,2} \w{3} \d{4}/);
+  });
+
+  test('bij overlappende perioden zegt hij dat ook', async ({ page }) => {
+    const p = seedBank();
+    const tx = JSON.parse(p.minder_tx);
+    tx.push({ id: 't6', date: `${CUR}-20`, amount: -10, acc: ACC.csv, accName: 'Vakantiepot', name: 'Vakantiepot', desc: 'BETAALPAS', typ: '', ref: '', src: 'csv', refNums: [] });
+    p.minder_tx = JSON.stringify(tx);
+    await boot(page, p);
+    await openBlok(page);
+    expect(await page.locator('#sheet').innerText()).toMatch(/die perioden overlappen/);
+  });
+});
+
 test.describe('c · read-only en ingeklapt', () => {
   test('standaard ingeklapt, en openen wijzigt geen enkele rekening', async ({ page }) => {
     await boot(page);
@@ -171,6 +208,9 @@ test.describe('c · read-only en ingeklapt', () => {
     expect(txt).toContain('gekoppeld, geen IBAN');
     expect(txt).toContain('IBAN ··6222');
     expect(txt).toContain('| spaarrekening |');
+    expect(txt).toContain('| CSV-import |');
+    expect(txt).toMatch(/\| \w{3} \d{4} t\/m \w{3} \d{4} \|/);
+    expect(txt).toContain('geen transacties');
   });
 });
 
