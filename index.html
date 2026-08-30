@@ -1608,8 +1608,8 @@ function openBalances(){
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('coins')}</div><div style="font-weight:800;font-size:var(--fs-lg)">Saldo nu</div>
       <div class="muted small">${rows.length} rekening${rows.length===1?'':'en'}${tb.missing>0?` · ${tb.missing} zonder saldo`:''}</div>
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${euro(tb.sum)}</div></div>
-    ${rows.length?rows.map(r=>`<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
-      <div class="info"><div class="nm">${esc(acctNiceName(r.a))}</div><div class="cat">${esc((ACCMETA[r.a]&&ACCMETA[r.a].bank)||'')}</div></div>
+    ${rows.length?rows.map(r=>`<div class="tx" style="cursor:pointer" onclick="acctRenameOpen('${esc(String(r.a).replace(/'/g,"\\'"))}')"><div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
+      <div class="info"><div class="nm">${esc(acctNiceName(r.a))}</div><div class="cat">${esc((ACCMETA[r.a]&&ACCMETA[r.a].bank)||'')} \u00b7 naam aanpassen \u203a</div></div>
       <div class="amt ${r.b<0?'neg':'pos'}">${euro(r.b)}</div></div>`).join(''):'<div class="muted small center" style="padding:16px">Nog geen saldo bekend. Koppel je bank of vul saldo handmatig in bij Instellingen.</div>'}
     ${tb.missing>0?`<div class="small muted" style="margin-top:10px">${tb.missing} rekening(en) zonder bekend saldo tellen niet mee.</div>`:''}`;
   showSheetBg();
@@ -1623,7 +1623,7 @@ function openSavingsPots(){
       <div class="muted small">N26-spaarpotjes${ts.missing?` · ${ts.missing} zonder saldo`:''}</div>
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${ts.n?euro(ts.sum):'geen'}</div></div>
     ${rows.length?rows.map(r=>`<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${ICON('target')}</div>
-      <div class="info"><div class="nm">${esc(accLabel(r.a))}</div><div class="cat">N26</div></div>
+      <div class="info"><div class="nm">${esc(acctNiceName(r.a))}</div><div class="cat">N26</div></div>
       <div class="amt ${r.b==null?'':(r.b<0?'neg':'pos')}">${r.b==null?'geen':euro(r.b)}</div></div>`).join(''):'<div class="muted small center" style="padding:16px">Geen N26-spaarpotjes herkend. Koppel je N26 via PSD2 zodat de Spaces met saldo binnenkomen.</div>'}
     <div class="small muted" style="margin-top:10px">Automatisch: alle N26-Spaces behalve Main en het potje op ··4840.</div>`;
   showSheetBg();
@@ -8655,12 +8655,12 @@ function accountsCard(){
     return {a,b,l4,cnt,isSav:sav.has(a),name:acctNiceName(a),bank:(ACCMETA[a]&&ACCMETA[a].bank)||''}; })
     .sort((x,y)=>(y.b||0)-(x.b||0));
   return rows.map(r=>`<div class="row" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
-      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.name)}</div>
-        <div class="small muted">${esc(r.bank||'')}${r.bank?' · ':''}${r.b!=null?euro(r.b):'saldo onbekend'} · ${r.cnt} transacties${r.l4?' · ··'+esc(r.l4):''}</div></div>
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="acctRenameOpen('${esc(String(r.a).replace(/'/g,"\\'"))}')"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.name)} <span style="color:var(--teal);font-weight:700">\u203a</span></div>
+        <div class="small muted">${esc(r.bank||'')}${r.bank?' · ':''}${r.b!=null?euro(r.b):'saldo onbekend'} · ${r.cnt} transactie${r.cnt===1?'':'s'}${r.l4?' · ··'+esc(r.l4):''}</div></div>
       <div style="text-align:right"><div class="small muted" style="margin-bottom:2px">spaar&shy;rekening</div>
         <label class="sw"><input type="checkbox" ${r.isSav?'checked':''} onchange="toggleSavingsAcct('${esc(String(r.a).replace(/'/g,"\\'"))}')"><span class="sl"></span></label></div>
     </div>`).join('') +
-    `<div class="small muted" style="margin-top:9px">Zet de schakelaar aan bij je <b>spaarrekening(en)</b>. Daaraan ziet Minder hoeveel je deze maand al spaarde. Klopt een naam niet? Pas die aan via de rekening in het saldo-overzicht.</div>`;
+    `<div class="small muted" style="margin-top:9px">Zet de schakelaar aan bij je <b>spaarrekening(en)</b>. Daaraan ziet Minder hoeveel je deze maand al spaarde. Tik op een naam om die zelf aan te passen.</div>`;
 }
 function setBank(){
   const ps=SET.psd2Accounts||{}; const psd2=Object.keys(ps).length; const adv=!!SET.advBank;
@@ -8907,7 +8907,8 @@ function setAcc(a){accFilter=a;renderTx();}
 
 /* ----- per categorie (over een transactielijst) ----- */
 
-function accLabel(a){ const r=ACCMETA[a]; if(r&&r.label) return r.label; const pm=(SET.psd2Accounts||{})[a]; if(pm) return (pm.bank?pm.bank+' · ':'')+(pm.label||a); return (a||'').replace(/^N26 /,'N26 ')||'Rekening'; }
+function accLabel(a){ const eig=(SET.acctName||{})[a]; if(eig) return eig;   // v121: je eigen naam wint ook hier
+  const r=ACCMETA[a]; if(r&&r.label) return r.label; const pm=(SET.psd2Accounts||{})[a]; if(pm) return (pm.bank?pm.bank+' · ':'')+(pm.label||a); return (a||'').replace(/^N26 /,'N26 ')||'Rekening'; }
 
 function accShort(a){ return (a||'').startsWith('N26 ') ? a.replace(/^N26 /,'') : '··'+(a||'').slice(-4); }
 // nette, korte rekeningnaam (zonder persoonsnaam), N26-Spaces zoals in de N26-app, ABN als betaalrekening
@@ -8920,7 +8921,8 @@ function acctLast4(a){ const pm=(SET.psd2Accounts||{})[a]; const iban=((pm&&pm.i
 function acctNaam(a){
   const bank=(ACCMETA[a]&&ACCMETA[a].bank)||(((SET.psd2Accounts||{})[a])||{}).bank||'';
   const last4=acctLast4(a);
-  const ov=(SET.acctNames||{})[last4]; if(ov) return {naam:ov, bron:'eigen naam'};
+  const eig=(SET.acctName||{})[a]; if(eig) return {naam:eig, bron:'eigen naam'};
+  const ov=(SET.acctNames||{})[last4]; if(ov) return {naam:ov, bron:'eigen naam'};   // oude sleutel, blijft leesbaar
   // v120: een N26-potje uit een bestandsimport draagt zijn naam in de id ('N26 Buffer Rust'),
   // precies zoals in de N26-app. Die werd weggegooid ten gunste van 'Space ··'+acctLast4(), en dat
   // is voor elk CSV-potje '26' (uit "N26") - vier potjes met dezelfde naam dus. De naam die we
@@ -8991,6 +8993,49 @@ function bankDiagHTML(){
     <div class="small muted" style="margin-top:6px">Kopieren zet het op je klembord. Het verlaat je toestel pas als je het zelf ergens plakt.</div>`;
 }
 
+/* Een rekening zelf een naam geven (v121). Tot nu toe stond `SET.acctNames` alleen in de leeskant
+   van acctNaam(): er was geen enkele plek die hem schreef, terwijl de rekeningenlijst wel naar het
+   saldo-overzicht verwees om "de naam aan te passen". Nu op **account-id**, niet op last4: die
+   laatste is bij een rekening zonder IBAN voor elk N26-CSV-potje '26', dus je zou met één naam
+   vier potjes tegelijk hernoemen. Leeg laten zet hem terug op automatisch; nietsdoen verandert
+   niets en de keuze is in één tik omkeerbaar (defaultEffect). */
+function acctRenameOpen(a){
+  window._renAcc=a;
+  const N=acctNaam(a), pm=(SET.psd2Accounts||{})[a]||null, meta=ACCMETA[a]||{};
+  const eigen=(SET.acctName||{})[a]||'';
+  const bank=meta.bank||(pm&&pm.bank)||'';
+  const opgeslagen=(pm&&pm.label)||meta.label||'';
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="renHead">Naam van deze rekening</div>
+    <div class="small muted" style="margin-bottom:12px">Nu: <b>${esc(N.naam)}</b> · ${esc(N.bron)}${bank?' · '+esc(bank):''}</div>
+    <label class="fld">Eigen naam</label>
+    <input type="text" id="renInp" maxlength="28" value="${esc(eigen)}" placeholder="${esc(N.naam)}" style="width:100%">
+    ${(opgeslagen && opgeslagen!==N.naam)?`<div class="small muted" style="margin-top:8px">${pm?'Je bank noemt deze rekening':'In je import heet deze rekening'} <b>${esc(opgeslagen)}</b>.</div>`:''}
+    <button class="btn" style="margin-top:14px;width:100%" onclick="acctRenameSave()">${ICON('check')} Opslaan</button>
+    ${eigen?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="acctRenameSave(true)">Terug naar de automatische naam</div>`:''}`;
+  showSheetBg();
+  setTimeout(()=>{ const el=document.getElementById('renInp'); if(el){ el.focus(); el.select(); } },60);
+}
+function acctRenameSave(wis){
+  const a=window._renAcc; if(!a){ closeSheet(); return; }
+  const el=document.getElementById('renInp');
+  const v=wis?'':String((el&&el.value)||'').trim().slice(0,28);
+  SET.acctName=SET.acctName||{};
+  if(v) SET.acctName[a]=v; else delete SET.acctName[a];
+  save(); window._renAcc=null; closeSheet(); render();
+  toast(v?`${ICON('check')} Rekening heet nu ${v}`:'Naam teruggezet op automatisch');
+}
+/* Eenmalig: bestaande namen op last4 verhuizen naar de account-id. SET.acctNames had geen schrijver,
+   dus dit raakt in de praktijk niemand - maar een handmatig gezette waarde mag niet stil vervallen. */
+function migrateAcctNames(){
+  if(SET.acctNameMigrated) return;
+  const oud=SET.acctNames||{};
+  if(Object.keys(oud).length){ const m=SET.acctName||{};
+    for(const a of allAccounts()){ const v=oud[acctLast4(a)]; if(v && !m[a]) m[a]=v; }
+    SET.acctName=m;
+  }
+  SET.acctNameMigrated=1; save();
+}
 // Eén ingang voor "sheet openen": zet de sheet zichtbaar en ruimt de toast op, die anders over de invoervelden bleef liggen.
 function showSheetBg(){ $('#sheetBg').classList.add('show'); try{ const _t=document.getElementById('toast'); if(_t){ _t.className=''; clearTimeout(window._tt); } }catch(_){} hideTip(); }
 function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; hideTip(); }
@@ -9397,7 +9442,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
