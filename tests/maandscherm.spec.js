@@ -177,7 +177,8 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     const d = await dek(page);
     expect(d.status).toBe('tekort');
     expect(d.waarde).toBe('40%');                                       // v132: percentage van die post
-    expect(d.eenheid).toMatch(/^van de post in \w+ \d{4} · €15 tekort$/);
+    expect(d.eenheid).toBe('van de eerstvolgende post');                // v133: kort, de kolom is smal
+    expect(d.gevolg).toMatch(/€15 tekort/);                             // het bedrag staat in de zin
     expect(d.gevolg).not.toMatch(/gedekt tot en met \./);               // geen lege maand meer
   });
 
@@ -204,13 +205,15 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
     let d = await dek(page);
     expect(d.waarde).toBe('40%');                                        // 10 van 25
-    expect(d.eenheid).toMatch(/^van de post in \w+ \d{4} · €15 tekort$/);
+    expect(d.eenheid).toBe('van de eerstvolgende post');
+    expect(d.gevolg).toMatch(/€15 tekort/);                              // bedrag in de zin, niet dubbel
 
-    // met opbouw-eis: percentage van wat er nu hoort te staan, bedrag erbij
+    // met opbouw-eis: percentage van wat nu nodig is
     await boot(page, seedM({ reserveringen: [{ id: 'a', naam: 'Aanslag', bedrag: 600, vervalmaand: over(3), intervalM: 12 }], manualBal: { [MAIN]: 1500, [RES]: 200, [SAV]: 20000 } }));
     d = await dek(page);
     expect(d.waarde).toBe('44%');                                        // 200 van 450
-    expect(d.eenheid).toBe('van wat er nu hoort te staan · €400 tekort');
+    expect(d.eenheid).toBe('van wat nu nodig is');
+    expect(d.gevolg).toMatch(/€400 tekort/);
   });
 
   test('gedektPct komt uit dekking(), niet uit een som op het scherm', async ({ page }) => {
@@ -223,7 +226,8 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 0, [SAV]: 20000 } }));
     const d = await dek(page);
     expect(d.waarde).toBe('0%');
-    expect(d.eenheid).toMatch(/€25 tekort$/);
+    expect(d.eenheid).toBe('van de eerstvolgende post');
+    expect(d.gevolg).toMatch(/€25 tekort/);
   });
 
   test('zonder tekort blijft de eenheid schoon', async ({ page }) => {
@@ -429,6 +433,22 @@ test.describe('g · leesmoment en robuustheid', () => {
     expect(r).not.toContain('dekking');
     expect(r).toContain('buffer');
     expect(r.length).toBe(4);
+  });
+
+  test('de waardekolom blijft een kolom, geen verticale strook', async ({ page }) => {
+    // v133: een lange eenheid perste zich in de ongelimiteerde rechterkolom tot een woord per regel
+    await page.setViewportSize({ width: 360, height: 780 });
+    await boot(page, seedM({ reserveringen: [{ id: 'a', naam: 'Gemeentelijke aanslag', bedrag: 25, vervalmaand: over(3), intervalM: 0 }], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 4000 } }));
+    await page.evaluate(() => go('maand'));
+    const uit = await page.evaluate(() => {
+      const rij = [...document.querySelectorAll('#s-maand .row')]
+        .find((r) => /dekking reserveringen/i.test(r.innerText));
+      const rechts = rij.lastElementChild.getBoundingClientRect();
+      return { breedte: Math.round(rechts.width), hoogte: Math.round(rechts.height), rij: Math.round(rij.getBoundingClientRect().width) };
+    });
+    expect(uit.breedte / uit.rij).toBeLessThanOrEqual(0.45);   // begrensd, dus de zin houdt ruimte
+    expect(uit.breedte).toBeGreaterThan(80);                   // maar breed genoeg voor twee woorden
+    expect(uit.hoogte).toBeLessThanOrEqual(60);                // hooguit een paar regels, geen strook
   });
 
   for (const w of [360, 390]) {

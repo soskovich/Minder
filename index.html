@@ -3732,9 +3732,11 @@ function maandRegels(){
               : (D.gat && D.gat.gedektPct!=null) ? (D.gat.gedektPct+'%')
               : D.gat ? euro0(D.gat.tekort)
               : komt ? 'op peil' : 'geen',
+        // v133: de eenheid staat in een smalle kolom, dus kort houden. Het tekortbedrag staat al in
+        // de zin ernaast zodra er een gat is; alleen zonder gat noemen we het hier.
         eenheid: !D.volledig ? 'niet te beoordelen'
-               : D.graad!=null ? `van wat er nu hoort te staan${D.gat?` · ${euro0(D.gat.tekort)} tekort`:''}`
-               : D.gat ? `van de post in ${resMaandLabel(D.gat.maand)} · ${euro0(D.gat.tekort)} tekort`
+               : D.graad!=null ? `van wat nu nodig is${D.gat?'':` · ${euro0(D.tekort)} tekort`}`
+               : D.gat ? 'van de eerstvolgende post'
                : komt ? 'er hoeft nu nog niets opzij' : 'niets aankomend dit jaar',
         maand: (st==='tekort'&&D.gedektTot)?D.gedektTot:null,
         // de zin komt uit dekkingTekst(): die kent alle takken al, inclusief een pot die de
@@ -3843,8 +3845,8 @@ function maandRij(r,compact){
     ${maandDot(r.status)}
     <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.naam)}</div>
       <div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg)}</div></div>
-    <div style="text-align:right;flex-shrink:0"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
-      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${esc(r.eenheid)}</div></div></div>`;
+    <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:42%"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
+      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>`;
 }
 function maandGelezen(){
   const d=SET.maandGelezen; if(!d) return '';
