@@ -161,7 +161,7 @@ test.describe('c · Vooruitblik blijft ongewijzigd', () => {
 });
 
 test.describe('d · de verdieping', () => {
-  test('vier kaarten onder Verdieping, met de juiste standen', async ({ page }) => {
+  test('de kaarten onder Verdieping, met de juiste standen', async ({ page }) => {
     await boot(page);
     const b = await beeld(page);
     expect(b.secties).toEqual(['Deze maand', 'Verdieping']);
@@ -169,8 +169,9 @@ test.describe('d · de verdieping', () => {
     expect(b.tekst).toMatch(/uitgaven vs budget/i);
     // v90 blijft gelden: de grafiek is dicht in Rustig en open in Begeleid, ook onder Verdieping
     expect(b.tekst).not.toMatch(/tik om te bekijken/);
-    expect(b.tekst).toMatch(/categorie/i);
-    expect(b.tekst).toMatch(/grootste:/);                                // categorieën dicht, met samenvatting
+    // v136: de Categorieen-kaart is weg van de pagina; die verdeling staat achter "Uitgegeven"
+    expect(b.tekst).not.toMatch(/^categorieën/im);
+    expect(b.tekst).not.toMatch(/grootste:/)
   });
 
   test('de kerncijfers zijn in te klappen en tonen dan een samenvatting', async ({ page }) => {

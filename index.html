@@ -2032,7 +2032,7 @@ function openMonthSpend(m){
     ? _renderOpen('openMerch',   ()=>renderMerchants(list, monthLabel(m)))
     : kant==='fv'
     ? msFixedVar(m, list)
-    : _renderOpen('openCatBreak',()=>renderCatBreak(list));
+    : renderCatBreak(list);
   const leeg = kant==='top'
     ? 'Geen winkels om te tonen deze maand.'
     : kant==='fv'
@@ -8763,9 +8763,11 @@ function renderIns(){
   else { const H=insHeroKaart(m); hero = H || (statusBlock + nogDezeMaandCard()); }
   let beh=''; try{ beh=renderBehavior(m); }catch(_){}
   const behN=(beh.match(/beh-row/g)||[]).length;
+  /* v136: geen Categorieen-kaart meer op de pagina zelf. Diezelfde verdeling staat al achter
+     "Uitgegeven" (openMonthSpend, eerste chip), en dat is de plek waar de vraag "waar ging mijn
+     geld heen" hoort (v114/v115). Twee weergaven van hetzelfde is geen keuze maar ruis. */
   const verdieping = insVouw('openKpiCard','Kerncijfers',ICON('chart'),insKpiSamenvatting(m),insKpiStrip(m))
     + spendVsBudgetChart()
-    + renderCatBreak(txOfMonth(m))
     + insVouw('openBehavior','Gedrag',ICON('bulb'),behN?`${behN} ${behN===1?'observatie':'observaties'}`:'',beh)
     + subsCard();
   $('#s-ins').innerHTML = insSection('Deze maand') + hero + whatStandsOutLine(m)
@@ -8825,10 +8827,9 @@ function renderCatBreak(list){
   const by={}; for(const t of list){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); }   // netto: terugstorting verlaagt de categorie
   const ex=Object.entries(by).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]); if(!ex.length) return '';
   const max=ex[0][1], total=ex.reduce((s,e)=>s+e[1],0);
-  const open=!!SET.openCatBreak;
-  const head=`<div class="row" style="gap:10px;cursor:pointer" onclick="toggleCollap('openCatBreak')"><span class="hlabel" style="margin:0;flex:1">Categorieën</span><span class="small muted"><b style="color:var(--txt);font-size:15px">${euro0(total)}</b> totaal</span><span class="muted" style="font-size:var(--fs-lg);width:14px;text-align:center">${open?'▲':'›'}</span></div>`;
-  if(!open){ const top=ex.slice(0,3).map(([k])=>CATS[k].name).join(', ');
-    return `<div class="card">${head}<div class="small" style="color:var(--mut2);margin-top:6px">grootste: ${top}${ex.length>3?` · +${ex.length-3} meer`:''}</div></div>`; }
+  /* v136: de kaart woont alleen nog in de Uitgegeven-drill, waar de chip hem al opent. Een
+     inklap-kop zou daar een dode knop zijn die wel SET schrijft maar niets meer stuurt. */
+  const head=`<div class="row" style="gap:10px"><span class="hlabel" style="margin:0;flex:1">Categorieën</span><span class="small muted"><b style="color:var(--txt);font-size:15px">${euro0(total)}</b> totaal</span></div>`;
   const exp=!!SET.expandCat; const shown=exp?ex:ex.slice(0,3);
   const toggle=ex.length>3?`<button class="snz" onclick="toggleExpand('expandCat')">${exp?'minder ▲':'toon alle '+ex.length+' categorieën ▼'}</button>`:'';
   return `<div class="card">${head}
