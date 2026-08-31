@@ -8,7 +8,7 @@ Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dra
 
 ## Bestanden
 - `index.html` — de complete app (~8.760 regels, ~660 functies): HTML + inline `<style>` + inline `<script>`. Dit is het product.
-- `sw.js` — service worker. `const CACHE = 'minder-v137'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
+- `sw.js` — service worker. `const CACHE = 'minder-v138'` (het actuele nummer staat altijd in `sw.js` zelf). **Network-first** voor de app-pagina (verse versie online, val terug op cache offline), **cache-first** voor iconen, en **cross-origin/PSD2-backend wordt nooit gecachet** (altijd live).
 - `manifest.webmanifest` — PWA-manifest (naam "Minder — uitgaventracker", standalone, `start_url` `./index.html`). Bevat een app-shortcut "Koopcheck" → `./index.html?action=buy`.
 - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` — iconen (staan ook in de SW-`ASSETS`-lijst).
 - `Open-banking-koppeling-plan.md` — referentieplan voor een latere live PSD2-bankkoppeling. **Nog niet gebouwd**; de MT940/CSV-import blijft voorlopig de basis.
@@ -43,7 +43,7 @@ Laatst bekeken scherm wordt bewaard in `minder_view`.
 
 ## Service worker & versiebeleid
 - Registratie: `index.html` rond regel 6450 — `navigator.serviceWorker.register('sw.js')` + `reg.update()`; bij `controllerchange` volgt een eenmalige `location.reload()` (met `_reloading`-guard).
-- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v137` → `minder-v138`, …). De oude cache wordt in `activate` opgeruimd.
+- **Bij elke release die de cache moet verversen: hoog `CACHE` in `sw.js` op** (`minder-v138` → `minder-v139`, …). De oude cache wordt in `activate` opgeruimd.
 - De `v10/v11/v13`-strings boven in `index.html` zijn inline-SVG-icoonversies, **geen** app-versie.
 
 ## Syntax-check
@@ -117,6 +117,9 @@ Trek het inline `<script>` uit `index.html` en controleer met **`node --check`**
 - **Status zit in het label, niet in de kleur** (`v78`, `v93`): een neutrale datakleur (`--bar`), geen gridlijnen, en amber uitsluitend voor echte aandacht (over budget, tekort, verstreken terugbetaaldatum). Informatieve signalen dragen `--mut`/`--mut2`. De ring is gereserveerd voor de hero.
 - **Data-paletten zijn identiteit, geen status** (`v83`): categoriekleuren, `DEBTCOL` en `ASSETCOL` houden hun eigen kleur en volgen het thema niet.
 - **Thema's** (`v83`, `v97`): de donkere look blijft de default (leeg `SET.theme`). Nieuwe kleuren in het Privé-thema worden nagerekend tegen WCAG AA (tekst 4,5:1 op zowel `--bg` als `--card`), niet op het oog beoordeeld.
+
+- **Een instellingsregel klapt uit, tenzij hij een eigen sheet heeft** (`v137`): de `cats`-tabel in `renderSet()` kent een optioneel zevende veld met een sheet-aanroep. Staat dat er, dan opent de regel die sheet en klapt hij nooit inline uit; staat het er niet, dan geldt `toggleSet(id)` zoals altijd. Dat veld dragen precies de regels waarvan de sheet **ook ergens anders** de ingang is: budget (ook vanuit Inzichten) en de coach-avatar (ook vanuit de coachkop op `s-act`). Eén oppervlak per editor, meerdere ingangen (`v61`). Bouw daar geen `id===`-uitzondering meer naast.
+- **Wie vanaf twee plekken te wisselen is, tekent het hele scherm opnieuw** (`v137`): `setCoachTone()` en `setCoachAvatar()` riepen `renderActions()` aan en gingen er dus van uit dat je op de Coach-tab stond. Nu loopt dat via `coachHerteken()` — `render()`, of `renderSet()` als er nog geen transacties zijn, want dan valt `render()` terug op `renderEmpty()` en zou de instellingsregel blijven staan. `openCoachAvatar()` maakt `_setSheet`/`_nfSheet`/`_budgetSheet` leeg, net als `openBudgetEditor()`: zonder dat tekent de `render()` erna een eerder geopende sheet over de coach-sheet heen. De namen van de avatars staan in `COACH_AV_NAAM` en de toon in `COACH_TOON_NAAM`, zodat de sheet en de samenvatting op de instellingsregel (`coachSamenvatting()`) niet uiteen kunnen lopen. De `.coachhead` op `s-act` blijft voorlopig staan: beide ingangen werken naast elkaar tot dat scherm wordt opgeheven.
 
 ### Modus
 - **Rustig toont minder, rekent nooit anders** (`v20`, `v90`): default is `begeleid`, de keuze is altijd omkeerbaar. Inklap-vlaggen zijn drietraps via `collapOpen()`: geen keuze betekent dat de modus beslist, een expliciete keuze van de gebruiker wint altijd.

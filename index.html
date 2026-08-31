@@ -6202,7 +6202,16 @@ let _coT=null,_coC=null,_coGen=0;
 const AV_V=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="var(--card2)"/><path d="M10 24.5V15a8 8 0 0 1 16 0v9.5" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/><circle cx="18" cy="24.5" r="2.4" fill="var(--accent)"/></svg>`;
 const AV_M=`<svg viewBox="0 0 36 36" width="100%" height="100%" aria-hidden="true"><rect width="36" height="36" rx="18" fill="var(--card2)"/><circle cx="18" cy="18" r="7.5" fill="none" stroke="var(--blue)" stroke-width="3"/><path d="M18 10.5V18l5 3" fill="none" stroke="var(--blue)" stroke-width="3" stroke-linecap="round"/></svg>`;
 function coachAvatar(){ return SET.coachAvatar==='m'?AV_M:AV_V; }
+/* v137: de namen stonden alleen in de sheet. Instellingen toont dezelfde keuze als samenvatting,
+   dus lezen beide plekken nu dezelfde constante in plaats van elk hun eigen letterlijke tekst. */
+const COACH_AV_NAAM={v:'Sara', m:'Daan'};
+const COACH_TOON_NAAM={direct:'directe', zacht:'zachte', zakelijk:'zakelijke'};
+function coachSamenvatting(){ return `${COACH_AV_NAAM[SET.coachAvatar==='m'?'m':'v']} · ${COACH_TOON_NAAM[coachTone()]} toon`; }
+/* v137: de sheet is nu ook vanuit Instellingen te openen, dus neemt hij het sheet-oppervlak
+   uitdrukkelijk over. Anders tekent een latere render() de vorige sheet er overheen, precies
+   zoals openBudgetEditor() dat al voorkwam. */
 function openCoachAvatar(){
+  window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;
   const cur=SET.coachAvatar==='m'?'m':'v';
   const opt=(k,svg,lbl)=>`<div onclick="setCoachAvatar('${k}')" style="text-align:center;cursor:pointer">
     <div style="width:68px;height:68px;border-radius:50%;overflow:hidden;margin:0 auto 8px;border:2px solid ${cur===k?'var(--teal)':'transparent'}">${svg}</div>
@@ -6214,7 +6223,7 @@ function openCoachAvatar(){
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:6px;text-align:center">Kies je coach</div>
     <div class="small muted" style="text-align:center;margin-bottom:16px">Kies hoe je coach klinkt, en hoe hij eruitziet. De cijfers blijven in elke toon hetzelfde.</div>
-    <div style="display:flex;gap:28px;justify-content:center">${opt('v',AV_V,'Sara')}${opt('m',AV_M,'Daan')}</div>
+    <div style="display:flex;gap:28px;justify-content:center">${opt('v',AV_V,COACH_AV_NAAM.v)}${opt('m',AV_M,COACH_AV_NAAM.m)}</div>
     <div class="fld" style="margin-top:18px">Toon</div>
     <div class="chips" id="coachToneChips" style="margin:2px 0 0">${chips}</div>
     <div class="small" id="coachToneVb" style="color:var(--mut2);margin-top:10px;font-style:italic">“${esc(voorbeeld[tn])}”</div>
@@ -6222,8 +6231,12 @@ function openCoachAvatar(){
     <div style="height:8px"></div>`;
   showSheetBg();
 }
-function setCoachAvatar(k){ SET.coachAvatar=k; save(); closeSheet(); renderActions(); }
-function setCoachTone(k){ SET.coachTone=(k==='zacht'||k==='zakelijk')?k:'direct'; save(); openCoachAvatar(); try{renderActions();}catch(_){} }
+/* v137: wisselen kan vanaf de coachkop en vanuit Instellingen, dus tekenen we het scherm dat je
+   voor je hebt opnieuw in plaats van alleen de Coach-tab. Zonder transacties valt render() terug
+   op renderEmpty(); dan blijft de instellingsregel achter, dus die tekenen we daar zelf. */
+function coachHerteken(){ try{ TX.length ? render() : renderSet(); }catch(_){} }
+function setCoachAvatar(k){ SET.coachAvatar=k; save(); closeSheet(); coachHerteken(); }
+function setCoachTone(k){ SET.coachTone=(k==='zacht'||k==='zakelijk')?k:'direct'; save(); openCoachAvatar(); coachHerteken(); }
 /* ============================================================
    MECHANISM_SPEC — de regels waaronder de coach MAG spreken.
    Drie gedragsmechanismen, elk met een vuurconditie en een guard.
@@ -9158,7 +9171,7 @@ function renderSet(){
   let _fr=null; try{ _fr=reisState(); }catch(_){}
   const _frSub=_fr?`${(''+_fr.rend).replace('.',',')}% rendement · factor ${_fr.fireMult} · pensioen ${_fr.override||(_fr.birth?(+_fr.birth+67):'—')}`:'aannames voor je vermogensreis';
   const cats=[
-    ['budget',ICON('target'),'Budget & doelen',`Je spaart ${euro0(monthlySavingTarget())} per maand`,setBudget,''],
+    ['budget',ICON('target'),'Budget & doelen',`Je spaart ${euro0(monthlySavingTarget())} per maand`,setBudget,'','openBudgetEditor()'],
     ['norm',ICON('flag'),'Referentie-verdeling',`${splitTarget().naam}${splitTarget().naam===splitTarget().label?'':' · '+splitTarget().label}`,setSplitNorm,''],
     ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
     ['look',ICON('palet'),'Uiterlijk',THEMES[themeKey()].naam,setLook,''],
@@ -9166,13 +9179,15 @@ function renderSet(){
     ['income',ICON('euro'),'Inkomen & rekeningen',`Je ontvangt ${euro0(inc)} per maand`,setIncome,''],
     ['bank',ICON('bank'),'Bankkoppeling',psd2?'Je bank is gekoppeld':'Nog geen bank gekoppeld',setBank,psd2?'':'var(--amber)'],
     ['coach',ICON('robot'),'Coach & categorieën',`Je coach staat ${SET.coachOff?'uit':'aan'}`,setCoach,''],
+    ['coachlook',ICON('user'),'Coach-avatar & toon',coachSamenvatting(),null,'','openCoachAvatar()'],
     ['privacy',ICON('lock'),'Privacy & gegevens','Alles blijft op dit toestel',setPrivacy,''],
   ];
-  const list=cats.map(([id,ic,label,sub,fn,col])=>{
-    // Budget heeft één editor-oppervlak: de bottomsheet (ook vanuit Inzichten). De overige secties blijven inline uitklappen.
-    const isB = id==='budget';
-    const act = isB ? 'openBudgetEditor()' : `toggleSet('${id}')`;
-    const op  = !isB && open===id;
+  const list=cats.map(([id,ic,label,sub,fn,col,sheet])=>{
+    /* Twee soorten regels. De meeste klappen inline uit met fn(). Een regel met een eigen sheet
+       klapt nooit uit: die sheet is namelijk ook ergens anders de ingang, en dan hoort er één
+       oppervlak te zijn. Budget komt ook vanuit Inzichten, de coach-avatar ook vanuit de coachkop. */
+    const act = sheet || `toggleSet('${id}')`;
+    const op  = !sheet && open===id;
     return `
     <div onclick="${act}" style="display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line);cursor:pointer">
       <div style="font-size:var(--fs-xl)">${ic}</div>
