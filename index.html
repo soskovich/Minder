@@ -3397,6 +3397,27 @@ function bufferChart(ingelegd, doel, maandTotal){
   for(let k=0;k<=horizon;k+=step){ const d=new Date(now.getFullYear(),now.getMonth()+k,1); lab+=`<text x="${X(k).toFixed(1)}" y="${H-6}" fill="var(--lab)" font-size="8.5" text-anchor="middle">${k===0?'nu':MNAMES[d.getMonth()]}</text>`; }
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Spaarkoers naar je bufferdoel">${goalLine}<polyline points="${pts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.6"/>${marker}${lab}</svg>`;
 }
+/* v140: de ingang naar het onderwerp 'horizon'. Bedoeld was: bij de besparingschips op de
+   vooruitblik. Die chips staan er niet meer - zowel vooruitForecast() als goalCoachCard() viel in
+   v80 uit de samenstelling en beide zijn dode code. De dichtstbijzijnde plek waar hetzelfde
+   onderwerp wél leeft is het plan-blok, tussen de doelen waar de streefdatum en het tempo al
+   staan, op planniveau naast vrijLine en spaarVrijLine (v126). Een vraag over de afstand tot je
+   doel of je jaartal, geen neutrale knop naar de coach. Leeg zodra coHorizonBron() niets geeft, en
+   dus nooit een lege staat. Alle getallen komen daarvandaan; hier wordt niets gerekend. */
+function coHorizonVraag(m){
+  const H=coHorizonBron(); if(!H) return '';
+  const mm=m||curMonth||months()[months().length-1];
+  let vraag;
+  if(H.soort==='doel'){
+    vraag=`Je legt ${euro0(H.T.gat)} per maand te weinig in voor ${esc(H.p.naam||'dit doel')}. Wil je kijken waar dat vandaan kan komen?`;
+  } else if(H.verschil>0){
+    const n=H.verschil;
+    vraag=`Je projectie komt ${n} ${n===1?'jaar':'jaar'} na ${H.doelJaar} uit. Wil je kijken wat dat verschuift?`;
+  } else {
+    vraag=`Je projectie komt uit op ${H.bereik}. Wil je kijken wat een besparing daaraan verschuift?`;
+  }
+  return `<div id="vooruitHorizon" class="small muted" style="margin:2px 2px 9px;line-height:1.45;cursor:pointer" onclick="coStart('horizon','${esc(mm)}')">${vraag} <span style="color:var(--teal);font-weight:700">›</span></div>`;
+}
 function vooruitForecast(){
   // HERO = voortgang naar je bufferdoel; grafiek klimt naar de doellijn
   let S=null; try{ S=savingsModel(); }catch(_){}
@@ -4414,7 +4435,7 @@ function renderPlan(bare){
   // dan zeggen we dat rustig i.p.v. het geruisloos te laten verdwijnen
   const vrij=planVrij(P);
   const vrijLine=vrij>0?`<div id="planVrij" class="small muted" style="margin:0 2px 9px;line-height:1.45"><b>${euro0(vrij)}/mnd</b> nog vrij${isMode('rustig')?'':' — al je doelen krijgen wat ze nodig hebben'} · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></div>`:'';
-  const inner=head+warn+vrijLine+spaarVrijLine(P)+spaarOverLine(P)+rows+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  const inner=head+warn+vrijLine+spaarVrijLine(P)+spaarOverLine(P)+rows+coHorizonVraag()+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
   if(bare) return inner;
   return `<div style="margin-top:18px"><div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Mijn plan</span></div>${inner}</div>`;
 }
@@ -6414,7 +6435,11 @@ function coReset(){ _coGen++; window._coLive=true; _coT=document.getElementById(
    bouwstenen (coBub/coSay/coChoices) onveranderd blijven werken: die kennen alleen _coT en _coC.
    coStart() is de enige ingang. Andere onderwerpen komen later; de parameter bestaat nu al zodat
    de ingangen die erbij komen hem meteen kunnen meegeven. */
-const CO_ONDERWERPEN={algemeen:1, lek:1};
+/* Elk onderwerp verklaart zelf of het een maandafspraak mag vastleggen. Een terloops gesprek dat
+   bij een cijfer begint hoort dat niet te doen, en een onderwerp dat er later bijkomt moet die
+   keuze maken in plaats van hem te erven. Een onbekend onderwerp staat hier niet in en gedraagt
+   zich daarom als voorheen. */
+const CO_ONDERWERPEN={algemeen:{afspraak:true}, lek:{afspraak:false}, horizon:{afspraak:false}};
 function coSheetShell(){ $('#sheet').innerHTML=`<div class="grab"></div><div class="cothr" id="coThr"></div><div id="coCh"></div>`; }
 function coStart(onderwerp,m){
   coAfbreken();                                                            // een lopend gesprek eerst netjes af
@@ -6424,6 +6449,7 @@ function coStart(onderwerp,m){
   m=m||curMonth||months()[months().length-1];
   coSheetShell(); showSheetBg();
   if(onderwerp==='lek'){ coReset(); return coTopicLek(m); }
+  if(onderwerp==='horizon'){ coReset(); return coTopicHorizon(m); }
   return coOpen(m);                                                        // coOpen() doet zelf coReset()
 }
 /* v139: 'lek' is een terloops gesprek dat vanaf Inzichten begint, niet het maandgesprek. Het mag
@@ -6432,13 +6458,14 @@ function coStart(onderwerp,m){
    en niet in elk pad afzonderlijk, zodat een pad dat er later bijkomt hem niet kan omzeilen.
    Gecontroleerd op de drie plekken die een afspraak schrijven of wissen: coachLogAdd (de enige
    schrijfroute), coAfspraakOpen en coShowAction (de twee die eerst wissen). */
-function coMagAfspraak(){ return !(window._coLive && window._coOnderwerp==='lek'); }
+function coMagAfspraak(){ const o=CO_ONDERWERPEN[window._coOnderwerp]; return !(window._coLive && o && o.afspraak===false); }
 /* Afbreken doet precies wat coEnd() doet, plus _coGen omhoog zodat een nog lopende await niets
    meer in een weggehaalde draad schrijft. Er wordt hier nooit iets vastgelegd en nooit iets uit
    SET.coachLog gehaald: een afgebroken gesprek laat je afspraken ongemoeid. */
 function coAfbreken(){
   if(!window._coLive && !window._coPark) return;
   _coGen++; coEnd();
+  window._coOnderwerp=null;   // v140: hier wel loslaten, in coEnd() niet (dat ontwapent de guard)
   window._coPark=null; window._coTextCb=null;
   _coT=null; _coC=null;
 }
@@ -6473,7 +6500,10 @@ async function coSay(txt,o){ o=o||{}; if(!_coT)return; const _g=_coGen;
   else { await coWait(520); }
   if(_g!==_coGen || !document.body.contains(row)){ try{row.remove();}catch(_){ } return; } row.remove(); coBub('co',out,{html,accent:o.accent}); await coWait(110); }
 function coChoices(opts){ if(!_coC)return; _coC.innerHTML=''; opts.forEach(o=>{ const b=document.createElement('button'); b.className='cch'; const s=document.createElement('span'); s.textContent=o.l; const c=document.createElement('span'); c.className='cchv'; c.textContent='›'; b.appendChild(s); b.appendChild(c); b.onclick=()=>{ _coC.innerHTML=''; coBub('me',o.l); o.act(); }; _coC.appendChild(b); }); }
-function coEnd(){ if(_coC)_coC.innerHTML=''; window._coLive=false; window._coOnderwerp=null; }
+/* v140: _coOnderwerp wordt hier bewust NIET gewist. Een weigering in coAfspraakOpen/coShowAction
+   zou anders het onderwerp loslaten en daarmee de volgende poging weer toelaten. coAfbreken()
+   wist hem wel; coStart() zet hem bij elk nieuw gesprek. */
+function coEnd(){ if(_coC)_coC.innerHTML=''; window._coLive=false; }
 // observatie-tekst per leksoort (leest coach.leak)
 function coObsLeak(leak){
   if(leak.kind==='impulse') return `Die ${euro0(leak.amount)} bij ${esc(leak.name)} zat in geen budget. Kwam uit het niets.`;
@@ -6556,7 +6586,7 @@ function coRecall(m){
 }
 // De afspraak van deze maand blijft bereikbaar, maar wordt niet meer als opening afgedwongen.
 async function coAfspraakOpen(m){
-  if(!coMagAfspraak()){ coEnd(); return; }   // v139: niet bereikbaar vanuit 'lek', en zo blijft dat
+  if(!coMagAfspraak()) return;   // v139: niet bereikbaar vanuit een terloops onderwerp, en zo blijft dat
   const _g=_coGen; const af=coachThisMonthAfspraak();
   if(!af){ coachMenu(m); return; }
   await coSay(`<span class="hl">${esc(af.text)}</span> — dat sprak je deze maand af.`,{html:true,accent:true}); if(_g!==_coGen)return;
@@ -6642,6 +6672,59 @@ async function coTopicLek(m){
   const opts=rules.map(r=>({l:`${r.label} (+${euro0(r.cut)}/mnd)`, act:async()=>{
     toggleVooruitCut(r.key,r.cut);                            // dezelfde omzetting als op de vooruitblik
     coachLogAdd({type:'tip',text:r.label});                   // nooit type 'afspraak' vanaf deze ingang
+    await coSay(`Mooi. Dat zie je terug op je vooruitblik.`);
+    const _slot=coTone('slot'); if(_slot) await coSay(_slot);
+    coEnd();
+  }}));
+  opts.push({l:'Nu even niet',act:()=>coEnd()});
+  coChoices(opts);
+}
+/* De bron voor het onderwerp 'horizon': eerst een doel met een streefdatum en een gat, anders het
+   verschil tussen je bereikjaar en je streefjaar. Puur, en null zodra er niets te zeggen valt -
+   dan verschijnt de ingang ook niet. Er wordt hier niets gerekend: maandDoel() levert het doel met
+   doelTempo() erbij, reisModel() de twee jaartallen. Het streefjaar telt alleen als je het zelf
+   hebt bepaald (eigen streefjaar of geboortejaar); anders valt targetYear terug op nu + 30 jaar en
+   zou het gesprek een jaartal noemen dat niemand heeft gekozen. */
+function coHorizonBron(){
+  try{ const D=maandDoel(); if(D && D.T && D.T.gat>0) return {soort:'doel', p:D.p, T:D.T}; }catch(_){}
+  try{ const M=reisModel();
+    /* M.missing is een object {balances, assets} en dus altijd truthy (v124): toets het veld.
+       Een onbekend saldo diskwalificeert de projectie (v59/v73); geen bezittingen is geen onbekende
+       maar een lege laag, en de projectie loopt dan gewoon door op je banksaldo. */
+    if(M && M.missing && !M.missing.balances && M.FIRE>0 && M.targetYear && (M.R.override || M.aowYear)){
+      const f=(M.ms||[]).find(x=>x.key==='fire');
+      if(f && f.yr!=null) return {soort:'jaar', bereik:f.yr, doelJaar:M.targetYear, verschil:f.yr-M.targetYear};
+    }
+  }catch(_){}
+  return null;
+}
+/* Het onderwerp 'horizon': gaat over gevolg, niet over een uitgave die net is gedaan. Opent met de
+   bestaande formulering (doelTempoLine bij een doel, de twee jaartallen bij de vermogensreis) en
+   biedt daarna dezelfde besparingen als de chips op de vooruitblik. Alleen regels die nu uit
+   staan: toggleVooruitCut() schakelt om, dus een regel die al aan staat zou juist uitgaan.
+   Onttrekkingen horen hier niet; die hebben hun eigen ingang op het vermogensscherm. */
+async function coTopicHorizon(m){
+  const _g=_coGen; if(!_coT) return;
+  const H=coHorizonBron(); if(!H){ coEnd(); return; }
+  if(H.soort==='doel'){
+    const zin=doelTempoLine(H.p);
+    if(!zin){ coEnd(); return; }
+    await coSay(zin,{html:true,accent:true}); if(_g!==_coGen)return;
+  } else {
+    const n=Math.abs(H.verschil);
+    const zin = H.verschil===0
+      ? `Je projectie komt uit op <b>${H.bereik}</b>, het jaar waar je op mikt. Een band, geen belofte.`
+      : `Je projectie komt uit op <b>${H.bereik}</b>, ${n} ${n===1?'jaar':'jaar'} ${H.verschil>0?'later':'eerder'} dan de ${H.doelJaar} waar je op mikt. Een band, geen belofte.`;
+    await coSay(zin,{html:true,accent:true}); if(_g!==_coGen)return;
+  }
+  let rules=[]; try{ rules=(coachRuleOptions(m)||[]).filter(r=>!(SET.coachRules&&SET.coachRules[r.key])); }catch(_){}
+  const opts=rules.map(r=>({l:`${r.label} (+${euro0(r.cut)}/mnd)`, act:async()=>{
+    let before=null, after=null;
+    try{ before=financeModel().projection.endBalanceDecember; }catch(_){}
+    toggleVooruitCut(r.key,r.cut);                       // dezelfde route als de chips op de vooruitblik
+    try{ after=financeModel().projection.endBalanceDecember; }catch(_){}
+    if(before!=null && after!=null) coFx(`spaardoel ${euro0(before)} → ${euro0(after)}`);
+    coachLogAdd({type:'tip',text:r.label});              // nooit type 'afspraak' vanaf deze ingang
     await coSay(`Mooi. Dat zie je terug op je vooruitblik.`);
     const _slot=coTone('slot'); if(_slot) await coSay(_slot);
     coEnd();
@@ -6765,7 +6848,7 @@ function coMaandOpties(leak){
 }
 // toont één voorgestelde actie als accent-kaart (eyebrow + context + actie) + [Vastgelegd] / [Pas aan]
 async function coShowAction(opt){
-  if(!coMagAfspraak()){ coEnd(); return; }   // v139: deze stap wist de maandafspraak vóór hij schrijft
+  if(!coMagAfspraak()) return;   // v139: deze stap wist de maandafspraak vóór hij schrijft
   const eye=opt.eyebrow?`<div class="ca-eye">${esc(opt.eyebrow)}</div>`:'';
   const ctx=opt.context?`<div class="ca-ctx">${esc(opt.context)}</div>`:'';
   const act=`<div class="ca-act">${opt.title}${opt.q?` <span class="hl">${esc(opt.q)}</span>`:''}</div>`;
