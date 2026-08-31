@@ -3108,6 +3108,47 @@ function scoreNotifs(){
       l1:`${euro0(ma.inzet)} staat stil terwijl ${esc(ma.debt.naam)} ${ma.debt.rente}% rente kost.`,
       l2:`Boven je buffer · dat deel kan ~${euro0(ma.renteJaar)}/jr dempen`, act:"go('vermogen')"});
   }catch(_){}
+  /* v143 deel A: vier regels verhuisd uit coachItems(), het scherm s-act wordt opgeheven. Dit is
+     een verplaatsing: dezelfde drempels, dezelfde teksten, dezelfde acties. Wat de signaal-vorm
+     erbij vraagt en coachItems niet had, is een icoon en een score; die staan bewust onder de
+     acute meldingen (saldo 94, parkeren 84, budget 72+). De knoplabels vervallen: een meldingrij
+     heeft geen knop, en elk label herhaalde de zin uit `context` al. coachItems() blijft in deel A
+     onaangeroerd, dus beide bronnen draaien nu naast elkaar om te vergelijken.
+     Regel 5 (grootste variabele hefboom) en de fallback ('Je zit op koers') zijn NIET verhuisd:
+     zie de inventarisatie, die vervallen wegens overlap met coachRuleOptions() en met de
+     positieve noot 'room' hieronder. */
+  try{ if(TX.length && !SET.coachOff){
+    const doneA=months().filter(x=>x<(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'))).slice(-6);
+    const baseA=baseIncome(), targetA=Math.round(monthlySavingTarget());
+    const avgA=a=>a.length?a.reduce((s2,x)=>s2+x,0)/a.length:0;
+    // 1) spaar-Rules als uitgave (1-tik fix) - een correctie, geen inzicht
+    const savRx=/monthly rule|weekly rule/i; let savMis=0,savN=0;
+    for(const mm of doneA.concat([curMonth])){ for(const t of txOfMonth(mm)){ if(t.amount<0&&CATS[catOf(t)].type==='expense'&&savRx.test(t.name||'')){savMis+=-t.amount;savN++;} } }
+    if(savN>=2) push({key:'savrules', score:58, t:'info', ic:ICON('sync'),
+      l1:'Je spaarstortingen tellen als uitgave',
+      l2:`${euro0(savMis)} aan eigen overboekingen telt mee. Tik om dit recht te zetten.`, act:'fixSavingsRules()'});
+    if(doneA.length>=2){
+      const rowsA=doneA.map(mm=>{const t=totals(mm);return{inc:t.income,sp:t.spend,savedEur:t.income-t.spend,over:t.spend>t.budget};});
+      const normalA=rowsA.filter(r=>r.inc<=baseA*1.15), windfallA=rowsA.filter(r=>r.inc>baseA*1.15);
+      const savNormalA=Math.round(avgA(normalA.map(r=>r.savedEur)));
+      // 2) meevaller-afhankelijkheid
+      if(normalA.length>=1&&windfallA.length>=1&&savNormalA<targetA*0.7&&targetA>0&&!hasAutoSaving())
+        push({key:'meevaller', score:62, t:'bad', ic:ICON('coins'),
+          l1:'Zonder meevaller spaar je te weinig',
+          l2:`Zet ${euro0(targetA)} automatisch opzij zodra je salaris binnen is.`, act:"toggleStep('savings')"});
+      // 3) lifestyle inflation
+      const spWA=Math.round(avgA(windfallA.map(r=>r.sp))), spNA=Math.round(avgA(normalA.map(r=>r.sp)));
+      if(windfallA.length>=1&&normalA.length>=1&&spWA>spNA*1.12)
+        push({key:'inflatie', score:44, t:'warn', ic:ICON('trend'),
+          l1:'Meer binnen, meer uitgegeven',
+          l2:`Zet je extraatje meteen opzij, vóór je het uitgeeft.`, act:"go('ins')"});
+      // 4) streak boven grens
+      let streakA=0; for(let i=rowsA.length-1;i>=0;i--){ if(rowsA[i].over) streakA++; else break; }
+      if(streakA>=2) push({key:'overstreak', score:68, t:'warn', ic:ICON('warn'),
+        l1:'Je geeft al maanden te veel uit',
+        l2:`Tijd om het te kantelen. Kies vandaag één last die eruit kan.`, act:'toggleActDeep()'});
+    }
+  } }catch(_){}
   // positieve noot: altijd minstens iets goeds tonen als het er is (balans, niet alleen als fallback)
   if(isNow){ try{ let pos=null;
     const wk=Date.now()-7*864e5; const dec=(SET.coachLog||[]).filter(l=>l.type==='beslis'&&l.ts>=wk);
