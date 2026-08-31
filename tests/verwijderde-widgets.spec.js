@@ -33,6 +33,9 @@ test.describe('a · Coach zonder potjes-widget', () => {
     expect(act).toMatch(/ik wil iets kopen/i);
     expect(act).toMatch(/mijn regel: geen budget, geen aankoop/i);
 
+    // v138: Coach openen start het gesprek in de sheet, die het scherm afdekt. Eerst dicht,
+    // dan is s-act weer bereikbaar; de kop, de koopknop en de spiegelkaart staan er onveranderd.
+    await page.evaluate(() => closeSheet());
     await page.locator('#buyBtn').click();                       // koopcheck opent nog
     await page.waitForSelector('#sheetBg.show');
     expect(await page.locator('#sheet').innerText()).toMatch(/kopen|aankoop/i);

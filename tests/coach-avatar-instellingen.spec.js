@@ -81,6 +81,8 @@ test.describe('b · wisselen werkt vanaf beide plekken', () => {
 
   test('wisselen vanaf de coachkop werkt nog steeds', async ({ page }) => {
     await boot(page, 'act');
+    // v138: het gesprek start nu in de sheet en dekt s-act af; die eerst dicht om bij de kop te komen
+    await page.evaluate(() => closeSheet());
     await page.locator('#s-act .coachhead').click();
     await page.waitForSelector('#sheetBg.show');
     expect(await page.locator('#sheet').innerText()).toContain('Kies je coach');

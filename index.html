@@ -6181,19 +6181,17 @@ function renderActions(){
   // v70: de "Je potjes"-widget is hier weg. Potjes blijven bewerkbaar via de budget-bottomsheet
   // (Inzichten ▸ Deze maand ▸ Maandbudget) en via openPotje/openPotjePick elders; alleen deze
   // coach-weergave verviel, het potjes-systeem zelf niet.
-  // v82: een render() tijdens een lopend gesprek mag de draad niet wegvegen of het gesprek
-  // herstarten. Alleen bij het (opnieuw) openen van Coach bouwen we de schil opnieuw op.
-  const _thr=document.getElementById('coThr');
-  const _bezig=window._coLive && _thr && _thr.children.length;
-  if(_bezig && !window._coReopen) return;
-  window._coReopen=false;
+  /* v138: de draad staat niet meer in dit scherm maar in de sheet, dus een render() kan hem niet
+     meer wegvegen en de guard uit v82 heeft hier niets meer te beschermen. Wat wel blijft: het
+     gesprek start alleen als je Coach echt opent (go('act') zet _coReopen), niet bij elke render.
+     Anders zou de sheet vanzelf openklappen terwijl je op een ander scherm staat. */
+  const _open=!!window._coReopen; window._coReopen=false;
   $('#s-act').innerHTML = `<div class="coachhead" onclick="openCoachAvatar()"><div class="av">${coachAvatar()}</div><span class="nm">Je coach</span><span class="sw">wissel ›</span></div>`
-    + `<div class="cothr" id="coThr"></div><div id="coCh"></div>`
     + `<button class="cobuy" id="buyBtn">${ICON('cart')} Ik wil iets kopen</button>`
     + coachMirrorCard() + zoneMine
     + `<div class="scr-foot">Je coach spreekt alleen als er iets te zeggen valt.</div>`;
   const bb=document.getElementById('buyBtn'); if(bb) bb.onclick=openBuy;
-  coOpen(m);
+  if(_open) coStart('algemeen', m);
 }
 /* ---------- COACH-DIALOOG (tik-door gesprek, leest/voert uit via de motor) ---------- */
 let _coT=null,_coC=null,_coGen=0;
@@ -6407,6 +6405,49 @@ async function coachAI(draft){
 }
 function coWait(ms){ return new Promise(r=>setTimeout(r,ms)); }
 function coReset(){ _coGen++; window._coLive=true; _coT=document.getElementById('coThr'); _coC=document.getElementById('coCh'); if(_coT)_coT.innerHTML=''; if(_coC)_coC.innerHTML=''; }
+/* ---------- v138: het gesprek draait in de sheet ----------
+   De draad zat in s-act en was daarmee aan dat scherm vastgeklonken. Hij staat nu in de sheet, met
+   exact dezelfde twee containers en dezelfde klassen, zodat hij er hetzelfde uitziet en alle
+   bouwstenen (coBub/coSay/coChoices) onveranderd blijven werken: die kennen alleen _coT en _coC.
+   coStart() is de enige ingang. Andere onderwerpen komen later; de parameter bestaat nu al zodat
+   de ingangen die erbij komen hem meteen kunnen meegeven. */
+const CO_ONDERWERPEN={algemeen:1};
+function coSheetShell(){ $('#sheet').innerHTML=`<div class="grab"></div><div class="cothr" id="coThr"></div><div id="coCh"></div>`; }
+function coStart(onderwerp,m){
+  coAfbreken();                                                            // een lopend gesprek eerst netjes af
+  window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;   // deze sheet is nu van het gesprek
+  if(!CO_ONDERWERPEN[onderwerp]) onderwerp='algemeen';                     // onbekend onderwerp = het gewone gesprek
+  m=m||curMonth||months()[months().length-1];
+  coSheetShell(); showSheetBg();
+  return coOpen(m);                                                        // coOpen() doet zelf coReset()
+}
+/* Afbreken doet precies wat coEnd() doet, plus _coGen omhoog zodat een nog lopende await niets
+   meer in een weggehaalde draad schrijft. Er wordt hier nooit iets vastgelegd en nooit iets uit
+   SET.coachLog gehaald: een afgebroken gesprek laat je afspraken ongemoeid. */
+function coAfbreken(){
+  if(!window._coLive && !window._coPark) return;
+  _coGen++; coEnd();
+  window._coPark=null; window._coTextCb=null;
+  _coT=null; _coC=null;
+}
+/* coTextSheet() gebruikt dezelfde sheet als het gesprek. In plaats van de draad te overschrijven
+   halen we de twee nodes er even uit en hangen we ze daarna terug. Het blijven dezelfde elementen,
+   dus _coT en _coC blijven geldig en de draad overleeft het invoerscherm. */
+function coParkeerDraad(){
+  if(!window._coLive || !_coT || !_coC) return false;
+  window._coPark=[_coT,_coC];
+  try{ _coT.remove(); _coC.remove(); }catch(_){}
+  return true;
+}
+function coHerstelDraad(){
+  const p=window._coPark; window._coPark=null;
+  if(!p) return false;
+  const sh=$('#sheet'); sh.innerHTML='<div class="grab"></div>';
+  sh.appendChild(p[0]); sh.appendChild(p[1]);
+  _coT=p[0]; _coC=p[1];
+  showSheetBg();
+  return true;
+}
 function coBub(cls,txt,o){ if(!_coT)return; o=o||{};
   const set=(el)=>{ if(o.html) el.innerHTML=txt; else el.textContent=txt; };
   if(cls==='co'){ const row=document.createElement('div'); row.className='corow'; const av=document.createElement('div'); av.className='coav'; av.innerHTML=coachAvatar(); const d=document.createElement('div'); d.className='cbub co'+(o.accent?' acc':''); set(d); row.appendChild(av); row.appendChild(d); _coT.appendChild(row); }
@@ -6751,6 +6792,13 @@ async function coAfspraak(m){
     {l:'Zelf bedenken',act:()=>coTextSheet('Jouw als-dan','als ... dan ...',v=>coCommit(v||'eigen afspraak'))}
   ]);
 }
+/* v138: coCommit() en coAfspraakOpen() mogen uitsluitend vanuit een lopend gesprek worden
+   aangeroepen. Ze zijn de enige plek waar een afspraak ontstaat, en een afspraak hoort altijd bij
+   een keuze die je zelf in het gesprek maakt. Roep ze nergens anders aan: afbreken (coAfbreken)
+   schrijft en verwijdert bewust niets, dus buiten een gesprek zou er een afspraak ontstaan die
+   niemand heeft gemaakt. Let op de volgorde in coAfspraakOpen: de keuze 'Afspraak aanpassen' wist
+   de afspraak van deze maand voordat het vervolggesprek begint, dus breek je daarna af, dan is de
+   oude weg zonder dat er een nieuwe staat. */
 async function coCommit(txt){ coachLogAdd({type:'afspraak',text:txt}); coFx(`afspraak vastgelegd`); await coSay(`Genoteerd. Daar kom ik volgende keer op terug.`); coEnd(); }
 function coRoomChoices(m,C){
   const room=Math.max(Math.round(C.paceDelta),0);
@@ -6879,13 +6927,17 @@ async function buyFlow(cat,amt,item){
 }
 // gedeeld tekst-sheet voor de 'zeg ik zelf'-momenten (enige plek waar typen mag)
 function coTextSheet(title,ph,cb){
+  coParkeerDraad();                       // v138: de draad blijft bestaan, hij hangt er even uit
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px">${esc(title)}</div>
     <input id="coTxt" type="text" placeholder="${esc(ph)}" style="width:100%">
     <button class="btn" style="margin-top:14px;width:100%" onclick="coTextSave()">${ICON('check')} Vastleggen</button>`;
   window._coTextCb=cb; showSheetBg();
 }
-function coTextSave(){ const v=((document.getElementById('coTxt')||{}).value||'').trim(); closeSheet(); const cb=window._coTextCb; window._coTextCb=null; if(cb) cb(v); }
+function coTextSave(){ const v=((document.getElementById('coTxt')||{}).value||'').trim();
+  const cb=window._coTextCb; window._coTextCb=null;
+  if(!coHerstelDraad()) closeSheet();     // buiten een gesprek gedraagt hij zich als vanouds
+  if(cb) cb(v); }
 // budget als coach-actie: potje zetten/bewerken via een sheet (geen live-render, focus blijft)
 // een potje draagt een AANNAME (basis): frequentie × bedrag, per week, of vast. Het maandbedrag volgt eruit.
 function potDraftTotal(){ const d=window._potDraft||{}; if(d.type==='freq') return Math.round((+d.n||0)*(+d.per||0)); if(d.type==='week') return Math.round((+d.per||0)*4.345); return Math.round(+d.vast||0); }
@@ -9782,7 +9834,9 @@ function migrateAcctNames(){
 }
 // Eén ingang voor "sheet openen": zet de sheet zichtbaar en ruimt de toast op, die anders over de invoervelden bleef liggen.
 function showSheetBg(){ $('#sheetBg').classList.add('show'); try{ const _t=document.getElementById('toast'); if(_t){ _t.className=''; clearTimeout(window._tt); } }catch(_){} hideTip(); }
-function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; hideTip(); }
+function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; hideTip();
+  try{ coAfbreken(); }catch(_){}   // v138: de sheet dicht midden in een gesprek = coEnd(), zonder iets vast te leggen
+}
 
 /* ---------- helpers ---------- */
 
