@@ -3716,14 +3716,28 @@ function maandRegels(){
   // 1. dekking
   try{ const D=dekking(12);
     if(D && D.aantal>0){
-      const st = !D.volledig ? 'onbekend' : (D.graad!=null && D.graad>=MAAND_DREMPEL.dekkingOk ? 'ok' : 'tekort');
+      /* v131: graad kan null zijn zonder dat er iets onbekend is. Bij een eenmalige post, of een
+         jaarpost die nog twaalf maanden of verder weg ligt, is benodigdeStand nul en is er dus geen
+         percentage te delen - maar er hoeft dan ook niets opgebouwd te zijn. Eerder las dit als
+         'onbekend' met status tekort. De vraag van deze regel is "ben ik gedekt", dus het gat weegt
+         mee: is er een voorkomen dat niet meer past, dan is het tekort, ook als de opbouw op peil is. */
+      const st = !D.volledig ? 'onbekend'
+               : (D.gat || (D.graad!=null && D.graad<MAAND_DREMPEL.dekkingOk)) ? 'tekort' : 'ok';
+      const komt = D.regels.some(r=>r.soort==='post');   // valt er dit jaar iets binnen de horizon?
       uit.push({key:'dekking', naam:'Dekking reserveringen', status:st,
-        waarde: D.graad!=null?(D.graad+'%'):'onbekend', eenheid:'van wat er nu hoort te staan',
+        waarde: !D.volledig ? 'onbekend'
+              : D.graad!=null ? (D.graad+'%')
+              : D.gat ? euro0(D.gat.tekort)
+              : komt ? 'op peil' : 'geen',
+        eenheid: !D.volledig ? 'niet te beoordelen'
+               : D.graad!=null ? 'van wat er nu hoort te staan'
+               : D.gat ? `tekort in ${resMaandLabel(D.gat.maand)}`
+               : komt ? 'er hoeft nu nog niets opzij' : 'niets aankomend dit jaar',
         maand: (st==='tekort'&&D.gedektTot)?D.gedektTot:null,
-        gevolg: st==='onbekend' ? 'Er ontbreekt nog een bedrag of een saldo, dus dit is niet te beoordelen.'
-              : st==='ok' ? `Je pot dekt wat er aankomt. Je legt hier ${euro0(D.benodigdPerMaand)} per maand voor opzij.`
-              : (D.gat ? `Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}. In ${resMaandLabel(D.gat.maand)} komt ${euro0(D.gat.bedrag)} en dan kom je ${euro0(D.gat.tekort)} tekort.`
-                       : `Er hoort ${euro0(D.benodigdeStand)} te staan en er staat ${euro0(D.werkelijkeStand)}.`),
+        // de zin komt uit dekkingTekst(): die kent alle takken al, inclusief een pot die de
+        // eerstvolgende post nu al niet dekt en een lijst waar dit jaar niets uit valt. Hier een
+        // eigen variant schrijven zou een tweede formulering van hetzelfde zijn.
+        gevolg: dekkingTekst(D),
         tekortPerMaand: st==='tekort'?Math.max(D.tekort,0):0, act:'openReserveringen()'});
     } }catch(_){}
   // 2. buffer

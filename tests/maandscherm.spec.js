@@ -154,6 +154,61 @@ test.describe('c · de statussen', () => {
   });
 });
 
+test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
+  // gemeld: pot 50, verplichting 25, en toch "onbekend". Bij een eenmalige post of een jaarpost die
+  // twaalf maanden of verder weg ligt is benodigdeStand nul, dus geeft dekking() terecht graad null.
+  // Dat las het maandscherm als onbekend, met status tekort. Er is niets onbekends: er hoeft alleen
+  // nog niets opgebouwd te zijn.
+  const eenmalig = (bedrag, o) => ({ id: 'a', naam: 'Post', bedrag, vervalmaand: over(o), intervalM: 0 });
+  const dek = async (page) => (await R(page)).find((r) => r.key === 'dekking');
+
+  test('een eenmalige post die je kunt betalen is ok, niet onbekend', async ({ page }) => {
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 50, [SAV]: 20000 } }));
+    const d = await dek(page);
+    expect(await page.evaluate(() => dekking(12).graad)).toBeNull();     // geen percentage te delen
+    expect(d.status).toBe('ok');
+    expect(d.waarde).toBe('op peil');
+    expect(d.waarde).not.toBe('onbekend');
+    expect(d.eenheid).toBe('er hoeft nu nog niets opzij');
+  });
+
+  test('kun je hem niet betalen, dan is het tekort, met de maand erbij', async ({ page }) => {
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
+    const d = await dek(page);
+    expect(d.status).toBe('tekort');
+    expect(d.waarde).toBe('€15');
+    expect(d.eenheid).toMatch(/^tekort in \w+ \d{4}$/);
+    expect(d.gevolg).not.toMatch(/gedekt tot en met \./);               // geen lege maand meer
+  });
+
+  test('valt er dit jaar niets, dan zegt hij dat en niet "onbekend"', async ({ page }) => {
+    await boot(page, seedM({ reserveringen: [{ id: 'a', naam: 'Post', bedrag: 25, vervalmaand: over(12), intervalM: 12 }] }));
+    const d = await dek(page);
+    expect(d.status).toBe('ok');
+    expect(d.waarde).toBe('geen');
+    expect(d.eenheid).toBe('niets aankomend dit jaar');
+    expect(d.gevolg).toBe('Er komt de komende twaalf maanden niets aan uit je lijst.');
+  });
+
+  test('een gat weegt mee, ook als de opbouw op peil is', async ({ page }) => {
+    // 600 over 1 maand: benodigdeStand 550, pot 560 -> graad 102%, maar de 600 past niet
+    await boot(page, seedM({ reserveringen: [{ id: 'a', naam: 'Post', bedrag: 600, vervalmaand: over(1), intervalM: 12 }], manualBal: { [MAIN]: 1500, [RES]: 560, [SAV]: 20000 } }));
+    const d = await dek(page);
+    expect(await page.evaluate(() => dekking(12).graad)).toBeGreaterThanOrEqual(100);
+    expect(d.status).toBe('tekort');                                     // want er is een gat
+    expect(d.gevolg).toMatch(/tekort\./);
+  });
+
+  test('de zin komt uit dekkingTekst, niet uit een tweede formulering', async ({ page }) => {
+    await boot(page);
+    const uit = await page.evaluate(() => ({
+      regel: maandRegels().find((r) => r.key === 'dekking').gevolg,
+      bron: dekkingTekst(dekking(12)),
+    }));
+    expect(uit.regel).toBe(uit.bron);
+  });
+});
+
 test.describe('d · het oordeel', () => {
   test('a: tekort met een maand noemt die maand', async ({ page }) => {
     // een kleine post die nog wél past, zodat er een 'gedekt tot'-maand is

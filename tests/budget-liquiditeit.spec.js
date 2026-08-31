@@ -98,7 +98,13 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     // in nogDezeMaandCard, dus daar bewaken we het.
     expect(await page.evaluate(() => nogDezeMaandCard())).not.toContain('Verwacht over einde maand');
     await page.evaluate(() => go('vooruit'));
-    expect(await text(page, '#s-vooruit')).toMatch(/variabel €[\d.]+ \(tempo\)/);
+    // varDue = tempo x resterende dagen, dus op de laatste dag van de maand is hij nul en toont
+    // nogDezeMaandCard die post terecht niet. De assertie volgt dat, anders faalt deze test een dag
+    // per maand op iets wat juist klopt.
+    const rest = await page.evaluate(() => { const d = daysElapsed(curMonth); return d.dim - d.elapsed; });
+    const t = await text(page, '#s-vooruit');
+    if (rest > 0) expect(t).toMatch(/variabel €[\d.]+ \(tempo\)/);
+    else expect(t).not.toMatch(/\(tempo\)/);
   });
 
   test('spiegel vuurt op drempel max(€50, 20%) en spreekt plan vs tempo aan', async ({ page }) => {
