@@ -63,7 +63,7 @@ test.describe('a · de draad staat in de sheet', () => {
 test.describe('b · coStart is de enige ingang', () => {
   test('een onbekend onderwerp valt terug op het gewone gesprek', async ({ page }) => {
     await open(page, metDoel());
-    expect(await page.evaluate(() => CO_ONDERWERPEN)).toEqual({ algemeen: 1 });
+    expect(await page.evaluate(() => CO_ONDERWERPEN)).toEqual({ algemeen: 1, lek: 1 });   // v139: 'lek' erbij
     await page.evaluate(() => coStart('bestaatniet'));
     await wachtKeuze(page, 'Kosten koper huis');
     expect(await page.locator('#coThr').innerText()).toMatch(/waar werk je/i);

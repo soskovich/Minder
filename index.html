@@ -3292,7 +3292,10 @@ function coachLeak(m){
   return noPot || over || null;
 }
 // coach-geheugen: log van afspraken/beslissingen (voedt de terugblik volgende keer)
-function coachLogAdd(entry){ SET.coachLog=SET.coachLog||[]; SET.coachLog.unshift(Object.assign({ts:Date.now()},entry)); if(SET.coachLog.length>50) SET.coachLog.length=50; save(); }
+function coachLogAdd(entry){
+  // v139: een terloops gesprek (onderwerp 'lek') legt nooit de maandafspraak vast
+  if(entry && entry.type==='afspraak' && typeof coMagAfspraak==='function' && !coMagAfspraak()){ try{ console.warn('[coach] afspraak geweigerd: onderwerp', window._coOnderwerp); }catch(_){} return; }
+  SET.coachLog=SET.coachLog||[]; SET.coachLog.unshift(Object.assign({ts:Date.now()},entry)); if(SET.coachLog.length>50) SET.coachLog.length=50; save(); }
 function coachLastText(){ const l=(SET.coachLog||[])[0]; return l?l.text:''; }
 function coSameMonth(ts){ if(!ts) return false; const d=new Date(ts), n=new Date(); return d.getFullYear()===n.getFullYear() && d.getMonth()===n.getMonth(); }
 function coachThisMonthAfspraak(){ return (SET.coachLog||[]).find(l=>l.type==='afspraak' && coSameMonth(l.ts)) || null; }   // maandgesprek = één keer per maand
@@ -6411,16 +6414,25 @@ function coReset(){ _coGen++; window._coLive=true; _coT=document.getElementById(
    bouwstenen (coBub/coSay/coChoices) onveranderd blijven werken: die kennen alleen _coT en _coC.
    coStart() is de enige ingang. Andere onderwerpen komen later; de parameter bestaat nu al zodat
    de ingangen die erbij komen hem meteen kunnen meegeven. */
-const CO_ONDERWERPEN={algemeen:1};
+const CO_ONDERWERPEN={algemeen:1, lek:1};
 function coSheetShell(){ $('#sheet').innerHTML=`<div class="grab"></div><div class="cothr" id="coThr"></div><div id="coCh"></div>`; }
 function coStart(onderwerp,m){
   coAfbreken();                                                            // een lopend gesprek eerst netjes af
   window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;   // deze sheet is nu van het gesprek
   if(!CO_ONDERWERPEN[onderwerp]) onderwerp='algemeen';                     // onbekend onderwerp = het gewone gesprek
+  window._coOnderwerp=onderwerp;
   m=m||curMonth||months()[months().length-1];
   coSheetShell(); showSheetBg();
+  if(onderwerp==='lek'){ coReset(); return coTopicLek(m); }
   return coOpen(m);                                                        // coOpen() doet zelf coReset()
 }
+/* v139: 'lek' is een terloops gesprek dat vanaf Inzichten begint, niet het maandgesprek. Het mag
+   de maandafspraak daarom nooit raken: coachThisMonthAfspraak() laat er één per maand toe en
+   coAfspraakOpen() wist de bestaande vóór hij een nieuwe schrijft. De regel staat op het gesprek
+   en niet in elk pad afzonderlijk, zodat een pad dat er later bijkomt hem niet kan omzeilen.
+   Gecontroleerd op de drie plekken die een afspraak schrijven of wissen: coachLogAdd (de enige
+   schrijfroute), coAfspraakOpen en coShowAction (de twee die eerst wissen). */
+function coMagAfspraak(){ return !(window._coLive && window._coOnderwerp==='lek'); }
 /* Afbreken doet precies wat coEnd() doet, plus _coGen omhoog zodat een nog lopende await niets
    meer in een weggehaalde draad schrijft. Er wordt hier nooit iets vastgelegd en nooit iets uit
    SET.coachLog gehaald: een afgebroken gesprek laat je afspraken ongemoeid. */
@@ -6461,7 +6473,7 @@ async function coSay(txt,o){ o=o||{}; if(!_coT)return; const _g=_coGen;
   else { await coWait(520); }
   if(_g!==_coGen || !document.body.contains(row)){ try{row.remove();}catch(_){ } return; } row.remove(); coBub('co',out,{html,accent:o.accent}); await coWait(110); }
 function coChoices(opts){ if(!_coC)return; _coC.innerHTML=''; opts.forEach(o=>{ const b=document.createElement('button'); b.className='cch'; const s=document.createElement('span'); s.textContent=o.l; const c=document.createElement('span'); c.className='cchv'; c.textContent='›'; b.appendChild(s); b.appendChild(c); b.onclick=()=>{ _coC.innerHTML=''; coBub('me',o.l); o.act(); }; _coC.appendChild(b); }); }
-function coEnd(){ if(_coC)_coC.innerHTML=''; window._coLive=false; }
+function coEnd(){ if(_coC)_coC.innerHTML=''; window._coLive=false; window._coOnderwerp=null; }
 // observatie-tekst per leksoort (leest coach.leak)
 function coObsLeak(leak){
   if(leak.kind==='impulse') return `Die ${euro0(leak.amount)} bij ${esc(leak.name)} zat in geen budget. Kwam uit het niets.`;
@@ -6544,6 +6556,7 @@ function coRecall(m){
 }
 // De afspraak van deze maand blijft bereikbaar, maar wordt niet meer als opening afgedwongen.
 async function coAfspraakOpen(m){
+  if(!coMagAfspraak()){ coEnd(); return; }   // v139: niet bereikbaar vanuit 'lek', en zo blijft dat
   const _g=_coGen; const af=coachThisMonthAfspraak();
   if(!af){ coachMenu(m); return; }
   await coSay(`<span class="hl">${esc(af.text)}</span> — dat sprak je deze maand af.`,{html:true,accent:true}); if(_g!==_coGen)return;
@@ -6613,6 +6626,27 @@ async function coachMenu(m){
   if(coachDureSchuld()) opts.push({l:'Schuld aflossen', act:()=>coTopic('schuld',m)});
   if(coachThisMonthAfspraak()) opts.push({l:'Je afspraak staat nog · aanpassen', act:()=>coAfspraakOpen(m)});
   opts.push({l:'Liever zelf kijken · naar mijn cijfers', act:()=>{ coEnd(); go('ins'); }});
+  coChoices(opts);
+}
+/* Het onderwerp 'lek': begint bij de bevinding zelf in plaats van bij een groet. Elke zin en elk
+   getal komt uit een bestaande functie - coachWeekRisk() levert de openingszin met bedrag en
+   categorie, coachRuleOptions() de keuzes, toggleVooruitCut() de omzetting. Er wordt hier niets
+   gerekend en er ontstaat nooit een afspraak: hooguit een entry van het type 'tip', net als in
+   coTopicTips. */
+async function coTopicLek(m){
+  const _g=_coGen; if(!_coT) return;
+  let R=null; try{ R=coachWeekRisk(m); }catch(_){}
+  if(!R || R.tone!=='warn'){ coEnd(); return; }              // geen lek: hier valt niets te bespreken
+  await coSay(R.txt,{html:true,accent:true}); if(_g!==_coGen)return;
+  let rules=[]; try{ rules=coachRuleOptions(m)||[]; }catch(_){}
+  const opts=rules.map(r=>({l:`${r.label} (+${euro0(r.cut)}/mnd)`, act:async()=>{
+    toggleVooruitCut(r.key,r.cut);                            // dezelfde omzetting als op de vooruitblik
+    coachLogAdd({type:'tip',text:r.label});                   // nooit type 'afspraak' vanaf deze ingang
+    await coSay(`Mooi. Dat zie je terug op je vooruitblik.`);
+    const _slot=coTone('slot'); if(_slot) await coSay(_slot);
+    coEnd();
+  }}));
+  opts.push({l:'Nu even niet',act:()=>coEnd()});
   coChoices(opts);
 }
 function coTopic(k,m){
@@ -6731,6 +6765,7 @@ function coMaandOpties(leak){
 }
 // toont één voorgestelde actie als accent-kaart (eyebrow + context + actie) + [Vastgelegd] / [Pas aan]
 async function coShowAction(opt){
+  if(!coMagAfspraak()){ coEnd(); return; }   // v139: deze stap wist de maandafspraak vóór hij schrijft
   const eye=opt.eyebrow?`<div class="ca-eye">${esc(opt.eyebrow)}</div>`:'';
   const ctx=opt.context?`<div class="ca-ctx">${esc(opt.context)}</div>`:'';
   const act=`<div class="ca-act">${opt.title}${opt.q?` <span class="hl">${esc(opt.q)}</span>`:''}</div>`;
@@ -8782,6 +8817,23 @@ function insBudgetBlok(m){
     <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${over?'var(--red)':'var(--accent)'}"></div></div>
     <div class="small" style="color:var(--mut2);margin-top:5px">de maand is ${dayPct}% voorbij</div>${spiegel}</div>`;
 }
+/* v139: de eerste ingang naar het coachgesprek buiten het coachscherm. Hij haakt aan op de
+   bevinding erboven en stelt er een vraag over in plaats van neutraal naar de coach te wijzen.
+   Alleen zichtbaar als er echt een lek is: geen lek, geen regel, en geen uitleg waarom er niets
+   staat. De woorden en de getallen komen uit coachLeak(); hier wordt niets gerekend. */
+function insLekVraag(m){
+  let R=null; try{ R=coachWeekRisk(m); }catch(_){ return ''; }
+  if(!R || R.tone!=='warn') return '';
+  let L=null; try{ L=coachLeak(m); }catch(_){}
+  if(!L) return '';
+  const wat=L.name?esc(L.name):(CATS[L.cat]?esc(CATS[L.cat].name):'');
+  if(!wat) return '';
+  return `<div class="card" id="insLekVraag" style="padding:12px 14px;cursor:pointer" onclick="coStart('lek','${m}')">
+    <div class="row" style="gap:8px">
+      <span style="flex:1;min-width:0;font-size:13px"><b>${wat}</b> (${euro0(L.amount)}) viel op. Wil je kijken wat je daaraan kunt doen?</span>
+      <span style="color:var(--teal);font-weight:700">›</span>
+    </div></div>`;
+}
 function insHeroKaart(m){
   const A=insBudgetBlok(m);
   if(!A) return '';   // geen budget: de beller toont de budget-prompt met de losse kaart eronder
@@ -8835,7 +8887,7 @@ function renderIns(){
     + spendVsBudgetChart()
     + insVouw('openBehavior','Gedrag',ICON('bulb'),behN?`${behN} ${behN===1?'observatie':'observaties'}`:'',beh)
     + subsCard();
-  $('#s-ins').innerHTML = insSection('Deze maand') + hero + whatStandsOutLine(m)
+  $('#s-ins').innerHTML = insSection('Deze maand') + hero + whatStandsOutLine(m) + insLekVraag(m)
     + (verdieping?insSection('Verdieping')+verdieping:'');
 }
 
