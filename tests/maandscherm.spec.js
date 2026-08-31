@@ -310,27 +310,58 @@ test.describe('d · het oordeel', () => {
 });
 
 test.describe('e · indeling', () => {
-  test('twee kaarten, gesorteerd op ernst en daarna op vaste volgorde', async ({ page }) => {
+  test('de kaarten scheiden beslissing van aandacht', async ({ page }) => {
     await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 } }));
     await page.evaluate(() => go('maand'));
     const t = await page.locator('#s-maand').innerText();
     expect(t).toMatch(/vraagt een beslissing/i);      // .hlabel rendert uppercase
-    expect(t).toMatch(/staat goed/i);
-    const volgorde = await page.evaluate(() => {
-      const R2 = maandRegels().filter((r) => r.status === 'tekort' || r.status === 'let op')
-        .sort((a, b) => MAAND_ERNST[a.status] - MAAND_ERNST[b.status] || MAAND_VOLGORDE.indexOf(a.key) - MAAND_VOLGORDE.indexOf(b.key));
-      return R2.map((r) => r.status + ':' + r.key);
+    const R2 = await R(page);
+    if (R2.some((r) => r.status === 'let op')) expect(t).toMatch(/vraagt aandacht/i);
+    if (R2.some((r) => r.status === 'ok')) expect(t).toMatch(/staat goed/i);
+  });
+
+  test('de zin telt precies wat er in de beslissingskaart staat', async ({ page }) => {
+    // v134: de zin telde alleen de tekorten terwijl de kaart ook de let-op-regels toonde
+    await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 } }));
+    await page.evaluate(() => go('maand'));
+    const uit = await page.evaluate(() => {
+      const R3 = maandRegels();
+      const kaarten = [...document.querySelectorAll('#s-maand .card')];
+      const kaart = kaarten.find((c) => /vraagt een beslissing/i.test(c.innerText));
+      return { zin: maandOordeel(R3).zin, tekort: R3.filter((r) => r.status === 'tekort').length,
+        letop: R3.filter((r) => r.status === 'let op').length,
+        inKaart: kaart ? kaart.querySelectorAll('.row').length : 0 };
     });
-    const eersteLetop = volgorde.findIndex((x) => x.startsWith('let op'));
-    const laatsteTekort = volgorde.map((x) => x.startsWith('tekort')).lastIndexOf(true);
-    if (eersteLetop >= 0 && laatsteTekort >= 0) expect(laatsteTekort).toBeLessThan(eersteLetop);
+    expect(uit.tekort).toBeGreaterThan(1);
+    expect(uit.letop).toBeGreaterThan(0);                       // er zijn ook aandacht-regels
+    expect(uit.inKaart).toBe(uit.tekort);                       // maar die staan er niet in
+    expect(uit.zin).toBe(`Er zijn deze maand ${uit.tekort} dingen die een beslissing vragen.`);
+  });
+
+  test('elke kaart houdt de vaste volgorde aan', async ({ page }) => {
+    await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 } }));
+    await page.evaluate(() => go('maand'));
+    const uit = await page.evaluate(() => {
+      const namen = maandRegels().reduce((m, r) => (m[r.naam.toLowerCase()] = r.key, m), {});
+      const lees = (titel) => {
+        const kaart = [...document.querySelectorAll('#s-maand .card')].find((c) => new RegExp(titel, 'i').test(c.innerText));
+        if (!kaart) return [];
+        return [...kaart.querySelectorAll('.row')].map((r) => namen[(/^[^\n]*/.exec(r.innerText) || [''])[0].trim().toLowerCase()]);
+      };
+      return { beslis: lees('vraagt een beslissing'), aandacht: lees('vraagt aandacht'), volgorde: MAAND_VOLGORDE };
+    });
+    for (const lijst of [uit.beslis, uit.aandacht]) {
+      const idx = lijst.filter(Boolean).map((k) => uit.volgorde.indexOf(k));
+      expect(idx).toEqual(idx.slice().sort((a, b) => a - b));
+    }
   });
 
   test('een lege kaart wordt weggelaten', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { SET.nfDoelVast = 19000; save(); go('maand'); });
     const t = await page.locator('#s-maand').innerText();
-    expect(t).not.toMatch(/vraagt een beslissing/i);   // alles ok, dus die kaart valt weg
+    expect(t).not.toMatch(/vraagt een beslissing/i);   // alles ok, dus die kaarten vallen weg
+    expect(t).not.toMatch(/vraagt aandacht/i);
     expect(t).toMatch(/staat goed/i);
   });
 

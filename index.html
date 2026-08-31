@@ -3860,8 +3860,13 @@ function renderMaand(){
     return;
   }
   const O=maandOordeel(R);
-  const beslis=R.filter(r=>r.status==='tekort'||r.status==='let op')
-                .sort((a,b)=>MAAND_ERNST[a.status]-MAAND_ERNST[b.status] || MAAND_VOLGORDE.indexOf(a.key)-MAAND_VOLGORDE.indexOf(b.key));
+  /* v134: beslissing en aandacht zijn twee dingen, en de beslisboom gebruikt die woorden al zo -
+     tekort vraagt een beslissing, let op vraagt aandacht. Stonden ze samen onder één kop, dan telde
+     de zin (alleen de tekorten) iets anders dan wat eronder stond. Nu een kaart per betekenis; een
+     lege kaart valt weg, dus in de praktijk zie je zelden drie kaarten. */
+  const opVolgorde=a=>MAAND_VOLGORDE.indexOf(a.key);
+  const beslis=R.filter(r=>r.status==='tekort').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
+  const aandacht=R.filter(r=>r.status==='let op').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
   const goed=R.filter(r=>r.status==='ok');
   const verband=maandVerband(R);
   $('#s-maand').innerHTML=`
@@ -3873,6 +3878,9 @@ function renderMaand(){
     ${beslis.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt een beslissing</div>
       ${beslis.map(r=>maandRij(r,false)).join('')}
       ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}</div>`:''}
+    ${aandacht.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt aandacht</div>
+      ${aandacht.map(r=>maandRij(r,false)).join('')}
+      ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}</div>`:''}
     ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
       ${goed.map(r=>maandRij(r,true)).join('')}</div>`:''}
     ${maandGelezen()}
