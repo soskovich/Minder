@@ -3725,13 +3725,16 @@ function maandRegels(){
                : (D.gat || (D.graad!=null && D.graad<MAAND_DREMPEL.dekkingOk)) ? 'tekort' : 'ok';
       const komt = D.regels.some(r=>r.soort==='post');   // valt er dit jaar iets binnen de horizon?
       uit.push({key:'dekking', naam:'Dekking reserveringen', status:st,
+        // v132: bij een tekort horen het percentage en het bedrag allebei zichtbaar te zijn, met de
+        // noemer erbij - anders staat hetzelfde woord voor twee verschillende verhoudingen.
         waarde: !D.volledig ? 'onbekend'
               : D.graad!=null ? (D.graad+'%')
+              : (D.gat && D.gat.gedektPct!=null) ? (D.gat.gedektPct+'%')
               : D.gat ? euro0(D.gat.tekort)
               : komt ? 'op peil' : 'geen',
         eenheid: !D.volledig ? 'niet te beoordelen'
-               : D.graad!=null ? 'van wat er nu hoort te staan'
-               : D.gat ? `tekort in ${resMaandLabel(D.gat.maand)}`
+               : D.graad!=null ? `van wat er nu hoort te staan${D.gat?` · ${euro0(D.gat.tekort)} tekort`:''}`
+               : D.gat ? `van de post in ${resMaandLabel(D.gat.maand)} · ${euro0(D.gat.tekort)} tekort`
                : komt ? 'er hoeft nu nog niets opzij' : 'niets aankomend dit jaar',
         maand: (st==='tekort'&&D.gedektTot)?D.gedektTot:null,
         // de zin komt uit dekkingTekst(): die kent alle takken al, inclusief een pot die de
@@ -3949,7 +3952,12 @@ function dekking(maanden){
   if(stand!=null){
     let run=stand, vorige=null;
     for(const x of V){
-      if(run-x.bedrag<0){ gat={maand:x.maand, naam:x.naam, bedrag:x.bedrag, tekort:Math.round(x.bedrag-run)}; break; }
+      if(run-x.bedrag<0){
+        // gedektPct: welk deel van DEZE post je pot nog draagt. Een eigen noemer naast graad, want
+        // zonder opbouw-eis (benodigdeStand 0) is graad null en valt er niets te delen (v132).
+        gat={maand:x.maand, naam:x.naam, bedrag:x.bedrag, tekort:Math.round(x.bedrag-run),
+             gedektPct: x.bedrag>0?Math.max(Math.round(Math.max(run,0)/x.bedrag*100),0):null};
+        break; }
       run-=x.bedrag; vorige=x.maand;
     }
     gedektTot = gat ? vorige : (V.length?V[V.length-1].maand:null);

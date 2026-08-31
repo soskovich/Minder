@@ -176,8 +176,8 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
     const d = await dek(page);
     expect(d.status).toBe('tekort');
-    expect(d.waarde).toBe('€15');
-    expect(d.eenheid).toMatch(/^tekort in \w+ \d{4}$/);
+    expect(d.waarde).toBe('40%');                                       // v132: percentage van die post
+    expect(d.eenheid).toMatch(/^van de post in \w+ \d{4} · €15 tekort$/);
     expect(d.gevolg).not.toMatch(/gedekt tot en met \./);               // geen lege maand meer
   });
 
@@ -197,6 +197,40 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     expect(await page.evaluate(() => dekking(12).graad)).toBeGreaterThanOrEqual(100);
     expect(d.status).toBe('tekort');                                     // want er is een gat
     expect(d.gevolg).toMatch(/tekort\./);
+  });
+
+  test('bij een tekort staan het percentage en het bedrag er allebei, met de noemer', async ({ page }) => {
+    // zonder opbouw-eis: percentage van de post die niet past
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
+    let d = await dek(page);
+    expect(d.waarde).toBe('40%');                                        // 10 van 25
+    expect(d.eenheid).toMatch(/^van de post in \w+ \d{4} · €15 tekort$/);
+
+    // met opbouw-eis: percentage van wat er nu hoort te staan, bedrag erbij
+    await boot(page, seedM({ reserveringen: [{ id: 'a', naam: 'Aanslag', bedrag: 600, vervalmaand: over(3), intervalM: 12 }], manualBal: { [MAIN]: 1500, [RES]: 200, [SAV]: 20000 } }));
+    d = await dek(page);
+    expect(d.waarde).toBe('44%');                                        // 200 van 450
+    expect(d.eenheid).toBe('van wat er nu hoort te staan · €400 tekort');
+  });
+
+  test('gedektPct komt uit dekking(), niet uit een som op het scherm', async ({ page }) => {
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
+    const g = await page.evaluate(() => dekking(12).gat);
+    expect(g).toMatchObject({ bedrag: 25, tekort: 15, gedektPct: 40 });
+  });
+
+  test('een lege pot is 0 procent, geen verzonnen getal', async ({ page }) => {
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 0, [SAV]: 20000 } }));
+    const d = await dek(page);
+    expect(d.waarde).toBe('0%');
+    expect(d.eenheid).toMatch(/€25 tekort$/);
+  });
+
+  test('zonder tekort blijft de eenheid schoon', async ({ page }) => {
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 50, [SAV]: 20000 } }));
+    const d = await dek(page);
+    expect(d.eenheid).toBe('er hoeft nu nog niets opzij');
+    expect(d.eenheid).not.toMatch(/tekort/);
   });
 
   test('de zin komt uit dekkingTekst, niet uit een tweede formulering', async ({ page }) => {
