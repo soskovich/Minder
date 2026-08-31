@@ -3907,8 +3907,30 @@ function renderMaand(){
       ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}</div>`:''}
     ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
       ${goed.map(r=>maandRij(r,true)).join('')}</div>`:''}
+    ${maandCoachIngang(R)}
     ${maandGelezen()}
     <div style="height:12px"></div>`;
+}
+/* v141: de ingang naar het maandgesprek, onder de vijf regels. Geen neutrale knop: de zin zegt
+   waar het over gaat, afgeleid van de zwaarste regel, in de woorden die het scherm zelf gebruikt
+   (tekort vraagt een beslissing, let op vraagt aandacht). Staat er al een afspraak voor deze maand,
+   dan staat die hier in plaats van de ingang: één afspraak per maand, dus niet twee wegen naar een
+   nieuwe. Alleen onbekende regels betekent geen ingang. */
+function maandCoachIngang(R){
+  const m=curMonth||months()[months().length-1];
+  const af=(typeof coachThisMonthAfspraak==='function')?coachThisMonthAfspraak():null;
+  if(af) return `<div class="card">
+    <div class="hlabel" style="margin:0 0 6px">Je afspraak deze maand</div>
+    <div style="line-height:1.45">${esc(af.text||'')}</div>
+    <div class="small" style="margin-top:8px;color:var(--teal);cursor:pointer;font-weight:600" onclick="coStart('maand','${esc(m)}')">Aanpassen ›</div></div>`;
+  const z=coMaandZwaarste(R);
+  if(z) return `<div class="card" style="cursor:pointer" onclick="coStart('maand','${esc(m)}','${esc(z.key)}')">
+    <div class="row" style="gap:8px"><span style="flex:1;min-width:0;line-height:1.45">${esc(z.naam)} ${z.status==='tekort'?'vraagt een beslissing':'vraagt aandacht'}. Zullen we dat doorlopen?</span>
+      <span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+  if(R.some(r=>r.status==='ok')) return `<div class="card" style="cursor:pointer" onclick="coStart('algemeen','${esc(m)}')">
+    <div class="row" style="gap:8px"><span style="flex:1;min-width:0;line-height:1.45" class="muted">Er valt deze maand niets te beslissen. Wil je toch iets doornemen?</span>
+      <span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+  return '';
 }
 /* ---------- RESERVERINGEN EN DEKKING (v128) ----------
    De dekkingsvraag: is mijn reserveringenpot toereikend voor de kosten die de komende twaalf
@@ -6439,9 +6461,9 @@ function coReset(){ _coGen++; window._coLive=true; _coT=document.getElementById(
    bij een cijfer begint hoort dat niet te doen, en een onderwerp dat er later bijkomt moet die
    keuze maken in plaats van hem te erven. Een onbekend onderwerp staat hier niet in en gedraagt
    zich daarom als voorheen. */
-const CO_ONDERWERPEN={algemeen:{afspraak:true}, lek:{afspraak:false}, horizon:{afspraak:false}};
+const CO_ONDERWERPEN={algemeen:{afspraak:true}, lek:{afspraak:false}, horizon:{afspraak:false}, maand:{afspraak:true}};
 function coSheetShell(){ $('#sheet').innerHTML=`<div class="grab"></div><div class="cothr" id="coThr"></div><div id="coCh"></div>`; }
-function coStart(onderwerp,m){
+function coStart(onderwerp,m,arg){
   coAfbreken();                                                            // een lopend gesprek eerst netjes af
   window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;   // deze sheet is nu van het gesprek
   if(!CO_ONDERWERPEN[onderwerp]) onderwerp='algemeen';                     // onbekend onderwerp = het gewone gesprek
@@ -6450,6 +6472,7 @@ function coStart(onderwerp,m){
   coSheetShell(); showSheetBg();
   if(onderwerp==='lek'){ coReset(); return coTopicLek(m); }
   if(onderwerp==='horizon'){ coReset(); return coTopicHorizon(m); }
+  if(onderwerp==='maand'){ coReset(); return coTopicMaand(m,arg); }
   return coOpen(m);                                                        // coOpen() doet zelf coReset()
 }
 /* v139: 'lek' is een terloops gesprek dat vanaf Inzichten begint, niet het maandgesprek. Het mag
@@ -6591,7 +6614,9 @@ async function coAfspraakOpen(m){
   if(!af){ coachMenu(m); return; }
   await coSay(`<span class="hl">${esc(af.text)}</span> — dat sprak je deze maand af.`,{html:true,accent:true}); if(_g!==_coGen)return;
   coChoices([
-    {l:'Afspraak aanpassen', act:()=>{ SET.coachLog=(SET.coachLog||[]).filter(l=>!(l.type==='afspraak' && coSameMonth(l.ts))); save(); coTopic('potjes',m); }},
+    // v141: de oude blijft staan tot de nieuwe is geschreven (coAfspraakSchrijf). Breek je hier af,
+    // dan heb je nog steeds je afspraak van deze maand.
+    {l:'Afspraak aanpassen', act:()=>{ coTopic('potjes',m); }},
     coTerug(m), {l:'Nu even niet',act:()=>coEnd()}
   ]);
 }
@@ -6732,6 +6757,69 @@ async function coTopicHorizon(m){
   opts.push({l:'Nu even niet',act:()=>coEnd()});
   coChoices(opts);
 }
+/* Het onderwerp 'maand': het maandgesprek, en het enige terloopse onderwerp dat wél een afspraak
+   mag vastleggen. Dat is het punt ervan. Het opent bij één regel van het maandscherm, in de zin
+   die daar al staat (r.gevolg), en eindigt in een expliciete bevestigingsstap. Een keuze die een
+   coachRule aanzet is nadrukkelijk geen afspraak: die schrijft {type:'tip'}, net als elders. */
+function coMaandRegel(key){
+  try{ const R=maandRegels(); return R.find(r=>r.key===key) || null; }catch(_){ return null; }
+}
+/* De zwaarste regel: tekort boven let op, en daarbinnen de vaste volgorde van het maandscherm. */
+function coMaandZwaarste(R){
+  const op=a=>MAAND_VOLGORDE.indexOf(a.key);
+  const t=R.filter(r=>r.status==='tekort').sort((a,b)=>op(a)-op(b));
+  const l=R.filter(r=>r.status==='let op').sort((a,b)=>op(a)-op(b));
+  return t[0]||l[0]||null;
+}
+/* De tekst van de afspraak moet over een maand leesbaar zijn zonder het gesprek erbij. */
+function coMaandAfspraakTekst(R, r){
+  const nm=(R.naam||'deze maand').toLowerCase();
+  if(r) return `${r.label} (${euro0(r.cut)} per maand), voor ${nm}`;
+  if(R.tekortPerMaand>0) return `Ik leg ${euro0(R.tekortPerMaand)} per maand extra opzij voor ${nm}`;
+  return `Ik pak ${nm} deze maand op`;
+}
+function coMaandCat(r){ const k=r?String(r.key||'').replace(/^cut_/,''):''; return CATS[k]?k:null; }
+/* Stap drie: de enige plek waar de afspraak ontstaat. Zonder deze tik is er geen afspraak. */
+async function coMaandBevestig(R, r){
+  const _g=_coGen;
+  const tekst=coMaandAfspraakTekst(R,r);
+  await coSay(`Zullen we dit vastleggen als je afspraak voor deze maand?`); if(_g!==_coGen)return;
+  await coSay(`<span class="hl">${esc(tekst)}</span>`,{html:true,accent:true}); if(_g!==_coGen)return;
+  coChoices([
+    {l:'Zo spreken we af', act:async()=>{ await coCommit(tekst,{regel:R.key, cat:coMaandCat(r)}); }},
+    {l:'Nu even niet', act:()=>coEnd()}
+  ]);
+}
+const CO_MAAND_REGELS=['dekking','buffer','aansluiting','doel','patroon'];
+async function coTopicMaand(m, key){
+  const _g=_coGen; if(!_coT) return;
+  // zonder regel: staat er al een afspraak, dan is dit het aanpas-pad; anders de zwaarste regel
+  if(!CO_MAAND_REGELS.includes(key)){
+    if(coachThisMonthAfspraak()) return coAfspraakOpen(m);
+    let alle=[]; try{ alle=maandRegels(); }catch(_){}
+    const z=coMaandZwaarste(alle); if(!z){ coEnd(); return; }
+    key=z.key;
+  }
+  const R=coMaandRegel(key); if(!R){ coEnd(); return; }
+  await coSay(`<b>${esc(R.naam)}</b> · ${esc(R.gevolg)}`,{html:true,accent:true}); if(_g!==_coGen)return;
+  const opts=[];
+  if(key==='buffer' || key==='aansluiting'){
+    // de actie die op het maandscherm al achter deze regel hangt
+    const lbl = key==='buffer' ? 'Mijn buffer verfijnen' : 'Naar mijn plan';
+    const doe = key==='buffer' ? ()=>openNoodfondsPanel() : ()=>go('vooruit');
+    opts.push({l:lbl, act:()=>{ coEnd(); try{ doe(); }catch(_){} }});
+  } else {
+    let rules=[]; try{ rules=(coachRuleOptions(m)||[]).filter(x=>!(SET.coachRules&&SET.coachRules[x.key])); }catch(_){}
+    for(const r of rules) opts.push({l:`${r.label} (+${euro0(r.cut)}/mnd)`, act:async()=>{
+      toggleVooruitCut(r.key,r.cut);                     // een regel, nog geen afspraak
+      coachLogAdd({type:'tip',text:r.label});
+      await coMaandBevestig(R,r);
+    }});
+  }
+  opts.push({l:'Alleen vastleggen', act:()=>coMaandBevestig(R,null)});
+  opts.push({l:'Nu even niet', act:()=>coEnd()});
+  coChoices(opts);
+}
 function coTopic(k,m){
   SET.coachTopic=k; save();
   const fn={tips:coTopicTips, potjes:coTopicPotjes, vast:coTopicVast, impuls:coTopicImpuls, schuld:coTopicSchuld}[k];
@@ -6866,8 +6954,7 @@ async function coShowAction(opt){
       const baseV=(SET.budgetsNext[v]!=null?+SET.budgetsNext[v]:(+(SET.budgets||{})[v]||0));
       const baseT=(SET.budgetsNext[opt.shiftCat]!=null?+SET.budgetsNext[opt.shiftCat]:(+(SET.budgets||{})[opt.shiftCat]||0));
       SET.budgetsNext[v]=Math.round(baseV-opt.shiftAmt); SET.budgetsNext[opt.shiftCat]=Math.round(baseT+opt.shiftAmt); save(); coFx(`${euro0(opt.shiftAmt)} verschoven uit ${potName(v)} vanaf volgende maand`); }
-    SET.coachLog=(SET.coachLog||[]).filter(l=>!(l.type==='afspraak' && coSameMonth(l.ts)));   // vervang de afspraak van deze maand
-    coachLogAdd({type:'afspraak',text:tekst,cat:opt.potCat||opt.shiftCat||null}); coFx('afspraak vastgelegd');
+    coAfspraakSchrijf(tekst,{cat:opt.potCat||opt.shiftCat||null, regel:opt.regel||null}); coFx('afspraak vastgelegd');   // v141: één route
     await coSay(`Genoteerd. Volgende maand kom ik hierop terug.`);
     // cirkel rond: koppel terug wat het scheelt bij je doel (alleen waar kwantificeerbaar)
     const extra = (opt.potCat && +v>0) ? Math.max(coSuggestPot(opt.potCat)-Math.round(+v),0) : 0;
@@ -6917,7 +7004,19 @@ async function coAfspraak(m){
    niemand heeft gemaakt. Let op de volgorde in coAfspraakOpen: de keuze 'Afspraak aanpassen' wist
    de afspraak van deze maand voordat het vervolggesprek begint, dus breek je daarna af, dan is de
    oude weg zonder dat er een nieuwe staat. */
-async function coCommit(txt){ coachLogAdd({type:'afspraak',text:txt}); coFx(`afspraak vastgelegd`); await coSay(`Genoteerd. Daar kom ik volgende keer op terug.`); coEnd(); }
+/* v141: één afspraak per maand, en de oude verdwijnt pas op het moment dat de nieuwe er staat.
+   Wissen en schrijven staan hier direct naast elkaar zonder await ertussen, dus dit pad kan niet
+   halverwege afbreken. coAfspraakOpen() wist daarom niets meer vooraf: brak het gesprek daarna af,
+   dan was je oude afspraak weg zonder dat er een nieuwe stond, en dat merk je pas een maand later.
+   `extra` draagt de regelKey en waar van toepassing de categorie, zodat de afspraak over een maand
+   leesbaar is zonder de context van het gesprek. */
+function coAfspraakSchrijf(txt, extra){
+  if(!coMagAfspraak()) return false;
+  SET.coachLog=(SET.coachLog||[]).filter(l=>!(l.type==='afspraak' && coSameMonth(l.ts)));
+  coachLogAdd(Object.assign({type:'afspraak', text:txt}, extra||{}));
+  return true;
+}
+async function coCommit(txt, extra){ if(!coAfspraakSchrijf(txt, extra)) return; coFx(`afspraak vastgelegd`); await coSay(`Genoteerd. Daar kom ik volgende keer op terug.`); coEnd(); }
 function coRoomChoices(m,C){
   const room=Math.max(Math.round(C.paceDelta),0);
   return [
