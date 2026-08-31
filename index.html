@@ -5587,7 +5587,7 @@ function goalCoachCard(bare){
   </div>`;
 }
 function commitGoalCut(cut){ SET.goalCommit={cut,ts:Date.now()}; save(); try{renderVooruit();}catch(_){}; toast(`${ICON('check')} Vastgelegd, ${euro0(cut)}/mnd richting je doel`); }
-function nogDezeMaandCard(){
+function nogDezeMaandBody(){
   let L=null; try{ L=monthLiquidity(); }catch(_){ return ''; }
   if(!L||!(L.fixDue>0||L.varDue>0||L.incDue>0)) return '';
   const teBetalen=Math.round(L.fixDue+L.varDue), teOntvangen=Math.round(L.incDue), netto=teOntvangen-teBetalen;
@@ -5604,13 +5604,19 @@ function nogDezeMaandCard(){
   // spiegel, geen tweede berekening: wat er van 'onderaan de streep' overblijft als je je spaardoel haalt.
   // Alleen bij een positief netto \u2014 "vrij n\u00e1 sparen" bij een tekort zou een belofte suggereren die er niet is.
   const naSparen=(spaarOn&&nogSparen>0&&netto>0)?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:5px;text-align:right">${euro0(netto-nogSparen)} vrij n\u00e1 sparen</div>`:'';
-  return `<div class="card"><div class="hlabel" style="margin:0 0 12px">Nog deze maand</div>
-    <div class="wvo-tiles" style="grid-template-columns:${spaarOn?'1fr 1fr 1fr':'1fr 1fr'}">
+  return `<div class="wvo-tiles" style="grid-template-columns:${spaarOn?'1fr 1fr 1fr':'1fr 1fr'}">
       <div class="wvo-tile"${teBetalen>0?' style="cursor:pointer" onclick="openFixedDue()"':''}><div class="wvo-tl">Nog te betalen</div><div class="wvo-tv" style="color:var(--red)">${euro0(teBetalen)}</div>${sub?`<div class="wvo-ts">${sub}</div>`:''}</div>
       <div class="wvo-tile"><div class="wvo-tl">Nog te ontvangen</div><div class="wvo-tv" style="color:${teOntvangen>0?'var(--green)':'var(--mut)'}">${euro0(teOntvangen)}</div><div class="wvo-ts">inkomen</div></div>${spaarTegel}
     </div>
-    <div class="ndm-net"><span>${jrg('onderaandestreep','Onderaan de streep')}</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>${naSparen}
-  </div>`;
+    <div class="ndm-net"><span>${jrg('onderaandestreep','Onderaan de streep')}</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>${naSparen}`;
+}
+/* v135: de kaart is gesplitst in body en omhulsel, zodat Inzichten de tegels in zijn eigen
+   herokaart kan zetten zonder een kaart in een kaart. Vooruitblik roept nogDezeMaandCard() aan en
+   krijgt exact wat hij altijd kreeg. Alle guards en de koppeling met safeToSpend().saveReserved
+   zitten onveranderd in de body. */
+function nogDezeMaandCard(){
+  const body=nogDezeMaandBody(); if(!body) return '';
+  return `<div class="card"><div class="hlabel" style="margin:0 0 12px">Nog deze maand</div>${body}</div>`;
 }
 /* ===================== NOODFONDS =====================
  * Essentiele maandlast (crisisniveau) -> noodfonds-doel. Driedeling per categorie,
@@ -7210,7 +7216,11 @@ function toggleExpand(which){ SET[which]=!SET[which]; save(); renderIns(); }
 /* Inklap-vlaggen zijn drietrap: undefined = nog geen keuze (dan beslist de modus), true/false = de
    gebruiker heeft zelf gekozen en dat wint altijd. Zo start Rustig rustiger zonder iets te overrulen.
    Vlaggen zonder ingang in COLLAP_DEF houden hun bestaande default (dicht). */
-const COLLAP_DEF={ openSpendChart:{rustig:false, rest:true} };
+const COLLAP_DEF={
+  openSpendChart:{rustig:false, rest:false},   // v135: onder Verdieping, dus standaard dicht
+  openKpiCard:{rustig:true, rest:true},        // kerncijfers blijven standaard open
+  openBehavior:{rustig:false, rest:false}
+};
 function collapOpen(flag){
   const v=SET[flag]; if(v===true||v===false) return v;
   const d=COLLAP_DEF[flag]; if(!d) return false;
@@ -8678,6 +8688,54 @@ function whatStandsOutLine(m){
     </div></div>`;
 }
 
+/* Herokaart op Inzichten (v135): budgetstand en "Nog deze maand" beantwoorden dezelfde vraag -
+   hoe sta ik er halverwege de maand voor - dus staan ze in één kaart. Bewust twee blokken die elk
+   los kunnen ontbreken, niet één blok met optionele stukken: zo kan de kaart nooit half leeg of
+   misleidend renderen. Er wordt hier niets uitgerekend; alle getallen komen uit totals(),
+   daysElapsed() en de body van nogDezeMaandCard. De status-chip uit monthStatusCard staat er
+   bewust NIET bij: die logica woont daar en zou hier een tweede bron worden. */
+function insBudgetBlok(m){
+  let t=null; try{ t=totals(m); }catch(_){ return ''; }
+  const bud=Math.round(t.budget), sp=Math.round(t.spend);
+  if(!(bud>0)) return '';
+  const d=daysElapsed(m);
+  const usedPct=Math.round(sp/bud*100), dayPct=Math.round(d.elapsed/d.dim*100);
+  const over=sp>bud;
+  return `<div style="cursor:pointer" onclick="openBudgetCompare('${m}')">
+    <div class="row" style="gap:8px"><span class="hlabel" style="margin:0;flex:1">${esc(monthLabel(m))}</span><span class="small muted">dag ${d.elapsed} van ${d.dim}</span></div>
+    <div class="row" style="align-items:baseline;gap:8px;margin-top:8px">
+      <span style="font-size:var(--fs-xl);font-weight:800">${euro0(sp)}</span>
+      <span class="small muted" style="flex:1;min-width:0">van ${euro0(bud)} budget</span>
+      <span style="font-weight:700;white-space:nowrap;color:${over?'var(--red)':'var(--txt)'}">${usedPct}%</span></div>
+    <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${over?'var(--red)':'var(--accent)'}"></div></div>
+    <div class="small" style="color:var(--mut2);margin-top:5px">de maand is ${dayPct}% voorbij</div></div>`;
+}
+function insHeroKaart(m){
+  const A=insBudgetBlok(m);
+  if(!A) return '';   // geen budget: de beller toont de budget-prompt met de losse kaart eronder
+  let B=''; try{ B=nogDezeMaandBody(); }catch(_){ B=''; }
+  if(!B) return `<div class="card">${A}</div>`;   // niets meer open: geen scheidingslijn, geen lege tegels
+  return `<div class="card">${A}
+    <div style="border-top:1px solid var(--line);margin:14px 0 12px"></div>
+    <div class="hlabel" style="margin:0 0 12px">Nog deze maand</div>${B}</div>`;
+}
+/* Eén inklap-omhulsel voor kaarten die er zelf geen hebben. Ingeklapt: kop met samenvatting.
+   Uitgeklapt: de kaart zelf, met een rustige regel om weer dicht te klappen. */
+function insVouw(flag, titel, icoon, samenvatting, inhoud){
+  if(!inhoud) return '';
+  if(collapOpen(flag)) return inhoud +
+    `<div class="small muted" style="margin:-2px 2px 10px;text-align:center;cursor:pointer" onclick="toggleCollap('${flag}')">${esc(titel)} inklappen \u25b2</div>`;
+  return `<div class="card" style="cursor:pointer" onclick="toggleCollap('${flag}')">
+    <div class="row" style="gap:10px"><span class="hlabel" style="margin:0;flex:0 0 auto;white-space:nowrap">${icoon} ${esc(titel)}</span>
+      ${samenvatting?`<span class="small muted" style="flex:1;min-width:0;text-align:right">${esc(samenvatting)}</span>`:'<span style="flex:1"></span>'}
+      <span class="muted" style="font-size:var(--fs-lg);width:14px;text-align:center">\u203a</span></div></div>`;
+}
+// samenvatting van de kerncijfers, uit dezelfde bron die de strip vult
+function insKpiSamenvatting(m){
+  try{ const K=insKpis(m);
+    return ['inleg','budget'].map(k=>K[k]&&K[k].raw!=null?`${K[k].label.toLowerCase()} ${K[k].val}`:'').filter(Boolean).join(' \u00b7 ');
+  }catch(_){ return ''; }
+}
 function insSection(t){ return `<div class="inssec">${t}</div>`; }
 function renderIns(){
   if(!TX.length){ $('#s-ins').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
@@ -8689,9 +8747,22 @@ function renderIns(){
   // "Waar gaat je geld heen" (verhuisd naar de maand-drill-down) zijn hier weg. Daarmee had de
   // "Bekijk meer"-zone geen inhoud meer, dus die is met de periode-chips mee vervallen;
   // periodMonths() valt terug op de getoonde maand, waar de drill-downs al mee rekenen.
-  $('#s-ins').innerHTML = insSection('Deze maand') + statusBlock
-    + insKpiStrip(m) + spendVsBudgetChart() + whatStandsOutLine(m)
-    + insSection('Meer') + subsCard();
+  /* v135: budgetstand en "Nog deze maand" samen in één herokaart, daaronder één regel met wat
+     opviel, en de rest ingeklapt onder Verdieping. Terugval: geen lopende maand -> de bestaande
+     hero zonder nog-deze-maand; geen budget -> de budget-prompt van monthStatusCard met de
+     nog-deze-maand-kaart er los onder. */
+  let hero;
+  if(!isNow) hero=statusBlock;
+  else { const H=insHeroKaart(m); hero = H || (statusBlock + nogDezeMaandCard()); }
+  let beh=''; try{ beh=renderBehavior(m); }catch(_){}
+  const behN=(beh.match(/beh-row/g)||[]).length;
+  const verdieping = insVouw('openKpiCard','Kerncijfers',ICON('chart'),insKpiSamenvatting(m),insKpiStrip(m))
+    + spendVsBudgetChart()
+    + renderCatBreak(txOfMonth(m))
+    + insVouw('openBehavior','Gedrag',ICON('bulb'),behN?`${behN} ${behN===1?'observatie':'observaties'}`:'',beh)
+    + subsCard();
+  $('#s-ins').innerHTML = insSection('Deze maand') + hero + whatStandsOutLine(m)
+    + (verdieping?insSection('Verdieping')+verdieping:'');
 }
 
 function renderCat(){
