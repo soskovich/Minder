@@ -3894,6 +3894,7 @@ function renderMaand(){
   const goed=R.filter(r=>r.status==='ok');
   const verband=maandVerband(R);
   $('#s-maand').innerHTML=`
+    ${maandAfspraakLus()}
     <div class="card">
       <div class="hlabel" style="margin:0 0 6px">Je maand</div>
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
@@ -3931,6 +3932,96 @@ function maandCoachIngang(R){
     <div class="row" style="gap:8px"><span style="flex:1;min-width:0;line-height:1.45" class="muted">Er valt deze maand niets te beslissen. Wil je toch iets doornemen?</span>
       <span style="color:var(--teal);font-weight:700">›</span></div></div>`;
   return '';
+}
+/* ---------- DE AFSPRAAKLUS (v142) ----------
+   Een afspraak die nooit wordt teruggelezen blijft een losse opmerking. Het maandscherm opent
+   daarom met de uitkomst van de afspraak van vorige maand.
+
+   Wat toetsbaar is: alleen een afspraak met een categorie. Die ontstaat als je in het gesprek een
+   besparingsregel koos (`cut_<categorie>`) of via coShowAction een potje zette of verschoof.
+   Wat niet toetsbaar is: alles wat alleen een regelKey draagt. Geen van de vijf functies achter de
+   maandregels is maand-gebonden - bufferMaanden(), dekking(12), spaarVrij(), maandDoel() en
+   maandPatroon() beschrijven de stand van nu, niet die van een afgelopen maand. Er is dus geen
+   manier om ze op de afspraakmaand te meten zonder een tweede meetmethode te bouwen, en dat zou
+   het maandscherm tegenspreken. 'niet te toetsen' is daarom het hoofdpad, geen foutgeval: dan
+   vraagt de app het je zelf. Er wordt nooit geraden en nooit uit de tekst afgeleid.
+
+   De vergelijking loopt over twee AFGERONDE maanden: de maand vóór de afspraakmaand tegen de
+   afspraakmaand zelf. De lopende maand is geen meetbasis (v107/v113); een volle maand tegen een
+   halve zetten laat elke categorie dalen en zou stelselmatig 'gelukt' melden. */
+const AFSPRAAK_MARGE = 0.02;   // een daling telt pas als daling boven 2% van de referentiemaand
+function coYm(ts){ const d=new Date(ts); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+/* Precies één maand terug, niet verder: is er vorige maand geen afspraak gemaakt, dan valt er
+   niets terug te koppelen. De log staat nieuwste eerst (coachLogAdd unshift), dus find() geeft de
+   meest recente. Zelfde maandlogica als coSameMonth: Date + getFullYear/getMonth. */
+function vorigeAfspraak(){
+  const n=new Date(); const v=new Date(n.getFullYear(), n.getMonth()-1, 1);
+  const ym=v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0');
+  return (SET.coachLog||[]).find(l=>l && l.type==='afspraak' && l.ts && coYm(l.ts)===ym) || null;
+}
+// de zelfopgegeven uitkomst bij een afspraak, of null
+function afspraakZelf(af){
+  if(!af||!af.ts) return null;
+  const r=(SET.coachLog||[]).find(l=>l && l.type==='reflectie' && String(l.af)===String(af.ts));
+  return r?String(r.text||''):null;
+}
+function afspraakUitkomst(af){
+  const leeg={status:'niet te toetsen', tekst:(af&&af.text)||'', toen:null, nu:null};
+  if(!af||!af.ts) return leeg;
+  if(!af.cat || !CATS[af.cat]) return leeg;                 // geen categorie: niets objectiefs te meten
+  const nuM=coYm(af.ts);
+  const d=new Date(af.ts); const p=new Date(d.getFullYear(), d.getMonth()-1, 1);
+  const toenM=p.getFullYear()+'-'+String(p.getMonth()+1).padStart(2,'0');
+  let ms=[]; try{ ms=months(); }catch(_){ return leeg; }
+  if(!ms.includes(nuM) || !ms.includes(toenM)) return leeg;  // een van beide maanden heeft geen data
+  let a=null,b=null;
+  try{ a=catSpendMap(toenM)[af.cat]; b=catSpendMap(nuM)[af.cat]; }catch(_){ return leeg; }
+  if(a==null||b==null) return leeg;
+  a=Math.round(a); b=Math.round(b);
+  if(!(a>0)) return leeg;                                    // geen basis om tegen af te zetten
+  return {status: (b < a*(1-AFSPRAAK_MARGE)) ? 'gelukt' : 'niet gelukt',
+    tekst: af.text||'', toen:{maand:toenM, bedrag:a}, nu:{maand:nuM, bedrag:b}};
+}
+/* Eén keer per maand, in dezelfde vorm als coachRecall: dezelfde afspraak, dezelfde maand, dan
+   niet nog eens. De regel valt ook weg zodra je de afspraak van deze maand hebt gemaakt. */
+function afspraakGezien(af){
+  const G=SET.afspraakGezien; const ym=coYm(Date.now());
+  return !!(G && af && String(G.ts)===String(af.ts) && G.ym===ym);
+}
+function afspraakSluit(){
+  const af=vorigeAfspraak(); if(!af) return;
+  SET.afspraakGezien={ts:af.ts, ym:coYm(Date.now())}; save(); renderMaand();
+}
+function afspraakZelfZet(uitkomst){
+  const af=vorigeAfspraak(); if(!af) return;
+  const u=(uitkomst==='gelukt')?'gelukt':'niet gelukt';
+  coachLogAdd({type:'reflectie', text:u, af:af.ts});
+  renderMaand();
+}
+/* De regel: spiegel (wat spraken we af), gevolg (wat deed het cijfer), keuze (alleen waar er iets
+   te kiezen valt). Geen oordeel over de persoon, geen verwijt, geen aanmoediging, geen streak. */
+function maandAfspraakLus(){
+  const af=vorigeAfspraak(); if(!af) return '';
+  if(afspraakGezien(af)) return '';
+  try{ if(coachThisMonthAfspraak()) return ''; }catch(_){}
+  const U=afspraakUitkomst(af);
+  const kop=`<div class="hlabel" style="margin:0 0 6px">Je afspraak van vorige maand</div>`;
+  const spiegel=`<div style="line-height:1.45">Vorige maand sprak je af: <span class="hl">${esc(U.tekst)}</span>.</div>`;
+  const sluit=`<div class="small" style="margin-top:10px;color:var(--mut2);cursor:pointer" onclick="afspraakSluit()">Gezien</div>`;
+  if(U.status!=='niet te toetsen'){
+    const nm=CATS[af.cat]?CATS[af.cat].name:'die categorie';
+    return `<div class="card">${kop}${spiegel}
+      <div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${esc(nm)} ging van ${euro0(U.toen.bedrag)} naar ${euro0(U.nu.bedrag)}.</div>${sluit}</div>`;
+  }
+  const zelf=afspraakZelf(af);
+  if(zelf) return `<div class="card">${kop}${spiegel}
+    <div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">Je gaf zelf aan: ${esc(zelf)}.</div>${sluit}</div>`;
+  return `<div class="card">${kop}${spiegel}
+    <div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">Deze afspraak is niet uit je cijfers af te lezen. Is het gelukt?</div>
+    <div class="chips" style="margin-top:9px">
+      <span class="chip" style="flex:1;text-align:center" onclick="afspraakZelfZet('gelukt')">Gelukt</span>
+      <span class="chip" style="flex:1;text-align:center" onclick="afspraakZelfZet('niet gelukt')">Niet gelukt</span>
+    </div>${sluit}</div>`;
 }
 /* ---------- RESERVERINGEN EN DEKKING (v128) ----------
    De dekkingsvraag: is mijn reserveringenpot toereikend voor de kosten die de komende twaalf
