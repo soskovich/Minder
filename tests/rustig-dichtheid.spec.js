@@ -115,8 +115,10 @@ test.describe('c · niets anders verandert', () => {
     expect(strip).toContain('doel 20% of meer');
     expect(strip).toContain('Gemeten tegen: 50/30/20');
     expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(5);   // v109: vijf kerncijfers
-    // de samenstelling van Inzichten is niet veranderd: alleen wát er open staat
-    expect(await page.evaluate(() => /insKpiStrip\(m\)\s*\+\s*spendVsBudgetChart\(\)\s*\+\s*whatStandsOutLine\(m\)/.test(renderIns.toString()))).toBe(true);
+    // v135: de samenstelling is herschikt (hero, dan wat opviel, dan Verdieping), maar de grafiek
+    // houdt zijn drietraps default uit v90 en de strip staat er onveranderd in
+    expect(await page.evaluate(() => /insSection\('Deze maand'\)\s*\+\s*hero\s*\+\s*whatStandsOutLine\(m\)/.test(renderIns.toString()))).toBe(true);
+    expect(await page.evaluate(() => COLLAP_DEF.openSpendChart)).toEqual({ rustig: false, rest: true });
   });
 
   test('Rustig past op 360px zonder overflow', async ({ page }) => {

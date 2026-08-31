@@ -56,7 +56,7 @@ test.describe('v53 potjes leidend, inkomen-limiet als spiegel', () => {
     await open(page);
     await page.evaluate(() => go('ins'));
     const t = await text(page, '#s-ins');
-    expect(t).toContain('Maandbudget');
+    expect(t).toMatch(/maandbudget/i);   // v135: staat nu in de zin "van €2.400 maandbudget"
     expect(t).toContain('€2.400');
     expect(t).toContain('boven inkomen-limiet');
     expect(t).toContain('€300 (70%)');
@@ -212,7 +212,8 @@ test.describe('v55 vast = herkende herhaling', () => {
 test('budgetrij "Uitgegeven" opent het maand-detail vanaf Inzichten', async ({ page }) => {
   await open(page);
   await page.evaluate(() => go('ins'));
-  await page.locator('#s-ins .row', { hasText: 'Uitgegeven' }).first().click();
+  // v135: de rij draagt twee ingangen (uitgegeven en maandbudget), dus mikken we op het woord
+  await page.locator('#s-ins >> text=uitgegeven').first().click();
   await page.waitForSelector('#sheetBg.show');
   const t = await text(page, '#sheet');
   expect(t).toContain('€445');

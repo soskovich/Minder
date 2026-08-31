@@ -54,7 +54,8 @@ test('a · de weg vanuit Inzichten naar de editor navigeert niet naar Instelling
 
 test('a2 · ring en titel blijven de read-only vergelijking openen', async ({ page }) => {
   await openIns(page);
-  await page.locator('#s-ins >> text=Budget deze maand').first().click();
+  // v135: de maandnaam is de ingang naar de read-only vergelijking
+  await page.locator('#s-ins .hlabel').first().click();
   await page.waitForSelector(SHEET);
   expect(await page.evaluate(() => window._budgetSheet || null)).toBeNull();   // niet de editor
   expect(await sheetTxt(page)).not.toContain('Bestedingslimiet');

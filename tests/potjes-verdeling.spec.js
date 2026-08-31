@@ -45,7 +45,8 @@ test.describe('a · de ingang', () => {
   test('de ring en de titel blijven de vergelijking openen', async ({ page }) => {
     await open(page);
     await page.evaluate(() => go('ins'));
-    await page.locator('#s-ins >> text=Budget deze maand').first().click();
+    // v135: de ring en de titel zijn op de lopende maand vervangen door de maandnaam als ingang
+    await page.locator('#s-ins .hlabel').first().click();
     await page.waitForSelector(SHEET);
     const s = await sheetTxt(page);
     expect(s).toMatch(/hoe doe je het deze maand\?/i);      // de kop rendert uppercase
