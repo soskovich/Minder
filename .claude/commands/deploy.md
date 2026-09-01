@@ -24,7 +24,7 @@ Gebruik de commit-boodschap uit `$ARGUMENTS`. Is die leeg, vraag de gebruiker er
 - Bekijk eerst `git status` en stage bewust de bedoelde wijzigingen (de app-edits, plus `sw.js`/`CLAUDE.md` als er gebumpt is). Stage geen ongerelateerde rommel.
 - Als je op de default branch (`main`) zit: dat is hier bewust de werkwijze, dus commit direct op `main`.
 - Sluit de commit-boodschap af met:
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
+  `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
 
 ## 4. Pushen
 `git push origin main`.
