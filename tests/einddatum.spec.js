@@ -32,8 +32,8 @@ test.describe('a · de spaardoel-hero is weg', () => {
     expect(v).not.toMatch(/sneller bij je doel/i);
     expect(await page.locator('#s-vooruit .vooruit, #s-vooruit .goalring, #s-vooruit .gr-ring').count()).toBe(0);
     expect(await page.locator('#s-vooruit .vh-hef, #s-vooruit .vh-chip, #s-vooruit .vh-lbl').count()).toBe(0);
-    // wat blijft: "Nog deze maand" en het plan zelf
-    expect(v).toMatch(/nog deze maand/i);
+    // wat blijft: het plan zelf ("Nog deze maand" is sinds v144 alleen nog een Inzichten-kaart)
+    expect(v).not.toMatch(/nog deze maand/i);
     expect(await page.locator('#s-vooruit .plan-item').count()).toBeGreaterThan(0);
   });
 

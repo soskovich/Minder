@@ -227,20 +227,19 @@ test.describe('c · de editors', () => {
   });
 });
 
-test.describe('d · "Nog deze maand" bovenaan', () => {
-  test('is de eerste kaart op Vooruitblik', async ({ page }) => {
+// v144: "Nog deze maand" stond hier én in de Inzichten-hero. Vooruitblik opent nu met de plan-zone.
+test.describe('d · Vooruitblik opent met het plan', () => {
+  test('de plan-zone is de eerste kaart, zonder "Nog deze maand"', async ({ page }) => {
     await openV(page, seed());
-    const eerste = await page.locator('#s-vooruit > *').first().innerText();
-    expect(eerste).toMatch(/nog deze maand/i);
-    // v80: geen spaardoel-hero meer; direct daarna komt de plan-zone
+    const v = await page.locator('#s-vooruit').innerText();
+    expect(v).not.toMatch(/nog deze maand/i);
+    // v80: geen spaardoel-hero meer; de plan-zone staat vooraan
     const idx = await page.evaluate(() => {
       const kids = [...document.getElementById('s-vooruit').children];
-      return { nog: kids.findIndex((k) => /nog deze maand/i.test(k.innerText)),
-               plan: kids.findIndex((k) => k.getAttribute('data-zone') === 'vooruitDoelOpen'),
+      return { plan: kids.findIndex((k) => k.getAttribute('data-zone') === 'vooruitDoelOpen'),
                hero: kids.filter((k) => k.classList.contains('vooruit')).length };
     });
-    expect(idx.nog).toBe(0);
+    expect(idx.plan).toBe(0);
     expect(idx.hero).toBe(0);
-    expect(idx.plan).toBeGreaterThan(idx.nog);
   });
 });

@@ -97,12 +97,12 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     // vooruitDeep() ("Volgende uitgaven") is sinds v70 niet meer in beeld; het label leeft nu
     // in nogDezeMaandCard, dus daar bewaken we het.
     expect(await page.evaluate(() => nogDezeMaandCard())).not.toContain('Verwacht over einde maand');
-    await page.evaluate(() => go('vooruit'));
+    await page.evaluate(() => go('ins'));   // v144: de tegels wonen alleen nog in de Inzichten-hero
     // varDue = tempo x resterende dagen, dus op de laatste dag van de maand is hij nul en toont
-    // nogDezeMaandCard die post terecht niet. De assertie volgt dat, anders faalt deze test een dag
+    // de kaart die post terecht niet. De assertie volgt dat, anders faalt deze test een dag
     // per maand op iets wat juist klopt.
     const rest = await page.evaluate(() => { const d = daysElapsed(curMonth); return d.dim - d.elapsed; });
-    const t = await text(page, '#s-vooruit');
+    const t = await text(page, '#s-ins');
     if (rest > 0) expect(t).toMatch(/variabel €[\d.]+ \(tempo\)/);
     else expect(t).not.toMatch(/\(tempo\)/);
   });

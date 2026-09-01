@@ -1,5 +1,6 @@
 // "Nog deze maand" (v85): de derde tegel "Nog te sparen" — hoeveel je deze maand nog opzij moet
 // zetten voor je maanddoel. Hergebruikt safeToSpend().saveReserved; geen eigen berekening.
+// v144: de tegels wonen alleen nog in de Inzichten-herokaart, dus daar meten we ze nu.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR } = require('./budget-fixture');
@@ -19,10 +20,10 @@ function tweak(fn) {
 
 async function boot(page, payload) {
   await open(page, payload || seed());
-  await page.evaluate(() => go('vooruit'));
-  await page.waitForSelector('#s-vooruit .card');
+  await page.evaluate(() => go('ins'));
+  await page.waitForSelector('#s-ins .card');
 }
-const kaart = (page) => page.locator('#s-vooruit .card').first();
+const kaart = (page) => page.locator('#s-ins .card').first();
 const tegels = (page) => kaart(page).locator('.wvo-tile');
 const spaarTegel = (page) => tegels(page).nth(2);
 
@@ -131,10 +132,10 @@ test('d · drie tegels passen op 360 en 390px', async ({ page }) => {
   await boot(page);
   for (const w of [360, 390]) {
     await page.setViewportSize({ width: w, height: 900 });
-    await page.evaluate(() => renderVooruit());
+    await page.evaluate(() => renderIns());
     await page.waitForTimeout(80);
     const r = await page.evaluate(() => {
-      const card = document.querySelector('#s-vooruit .card');
+      const card = document.querySelector('#s-ins .card');
       const cb = card.getBoundingClientRect();
       return {
         pagina: document.documentElement.scrollWidth - document.documentElement.clientWidth,

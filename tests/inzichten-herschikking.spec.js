@@ -134,7 +134,9 @@ test.describe('b · terugvallen', () => {
   });
 });
 
-test.describe('c · Vooruitblik blijft ongewijzigd', () => {
+// v144: "Nog deze maand" is van Vooruitblik af; het omhulsel blijft de terugval van renderIns()
+// wanneer er geen budget is. Dat Vooruitblik hem niet meer toont staat in nog-deze-maand-eenmaal.
+test.describe('c · het omhulsel blijft bestaan', () => {
   test('nogDezeMaandCard is de body in zijn eigen omhulsel', async ({ page }) => {
     await boot(page);
     const uit = await page.evaluate(() => {
@@ -144,14 +146,6 @@ test.describe('c · Vooruitblik blijft ongewijzigd', () => {
     });
     expect(uit.body).not.toBe('');
     expect(uit.klopt).toBe(true);
-  });
-
-  test('en hij staat nog bovenaan Vooruitblik', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => go('vooruit'));
-    const t = await page.locator('#s-vooruit').innerText();
-    expect(t).toMatch(/NOG DEZE MAAND/);
-    expect(t).toMatch(/Onderaan de streep/);
   });
 
   test('een lege body geeft ook een lege kaart', async ({ page }) => {

@@ -5789,9 +5789,10 @@ function nogDezeMaandBody(){
     <div class="ndm-net"><span>${jrg('onderaandestreep','Onderaan de streep')}</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>${naSparen}`;
 }
 /* v135: de kaart is gesplitst in body en omhulsel, zodat Inzichten de tegels in zijn eigen
-   herokaart kan zetten zonder een kaart in een kaart. Vooruitblik roept nogDezeMaandCard() aan en
-   krijgt exact wat hij altijd kreeg. Alle guards en de koppeling met safeToSpend().saveReserved
-   zitten onveranderd in de body. */
+   herokaart kan zetten zonder een kaart in een kaart. Alle guards en de koppeling met
+   safeToSpend().saveReserved zitten onveranderd in de body.
+   v144: Vooruitblik toont deze kaart niet meer; het omhulsel blijft de terugval van renderIns()
+   wanneer er geen budget is en de herokaart dus leeg zou blijven. */
 function nogDezeMaandCard(){
   const body=nogDezeMaandBody(); if(!body) return '';
   return `<div class="card"><div class="hlabel" style="margin:0 0 12px">Nog deze maand</div>${body}</div>`;
@@ -5977,9 +5978,12 @@ function renderVooruit(){
   // noodfondsCard() is hier weg: het noodfonds is een plan-item geworden en "verfijnen" opent
   // vanaf dát item (planOpen -> openNoodfondsPanel), dus de kaart stond dubbel.
   // "Volgende uitgaven" (vooruitDeep) is weg, dus ook de knop "Deze maand in detail" — anders
-  // bleef er een toggle staan die niets meer opende. De vaste lasten zelf blijven bereikbaar
-  // via "Nog deze maand" en via openFixedDue().
-  $('#s-vooruit').innerHTML = nogDezeMaandCard() + doelZone + resDekkingCard() + VOORUIT_FOOT;
+  // bleef er een toggle staan die niets meer opende.
+  // v144: "Nog deze maand" stond hier én in de Inzichten-hero (v135). Dezelfde tegels op twee
+  // schermen laten je niet zien welke je leest, en de vraag die ze beantwoorden ("hoe sta ik er
+  // halverwege de maand voor") hoort bij de budgetstand, niet bij een vooruitblik over maanden.
+  // De vaste lasten blijven bereikbaar via openFixedDue() vanuit die hero.
+  $('#s-vooruit').innerHTML = doelZone + resDekkingCard() + VOORUIT_FOOT;
 }
 function vooruitZone(key,label,teaser,open,content){
   const bar=`<div class="card" data-zone="${key}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px${open?';margin-bottom:8px':''}" onclick="toggleVooruit('${key}')"><span style="font-weight:600;font-size:var(--fs-md)">${label}${teaser?` <span class="small muted" style="font-weight:400">· ${teaser}</span>`:''}</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'›'}</span></div>`;

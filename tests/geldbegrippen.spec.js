@@ -26,9 +26,10 @@ test.describe('a · tik-voor-uitleg op de kernbegrippen', () => {
     expect(await page.locator('#sheetBg.show').count()).toBe(0);      // geen sheet mee-geopend
   });
 
-  test('"Onderaan de streep" en "Nog te sparen" op Vooruitblik ook', async ({ page }) => {
-    await boot(page, 'vooruit');
-    const kaart = page.locator('#s-vooruit .card').first();
+  // v144: "Nog deze maand" stond op Vooruitblik en op Inzichten; alleen de Inzichten-hero bleef.
+  test('"Onderaan de streep" en "Nog te sparen" in de Inzichten-hero ook', async ({ page }) => {
+    await boot(page, 'ins');
+    const kaart = page.locator('#s-ins .card').first();
     const termen = await kaart.locator('.jrg').evaluateAll((els) => els.map((e) => e.textContent));
     expect(termen).toContain('Nog te sparen');
     expect(termen).toContain('Onderaan de streep');
@@ -39,7 +40,7 @@ test.describe('a · tik-voor-uitleg op de kernbegrippen', () => {
     expect(await page.locator('#tipPop').innerText()).toContain('opzij moet zetten');
     expect(await page.locator('#sheetBg.show').count()).toBe(0);
 
-    await page.locator('#s-vooruit .ndm-net .jrg').click();
+    await page.locator('#s-ins .ndm-net .jrg').click();
     await page.waitForSelector('#tipPop.show');
     expect(await page.locator('#tipPop').innerText()).toContain('nog binnenkomt');
   });

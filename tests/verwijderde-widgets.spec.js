@@ -84,7 +84,7 @@ test.describe('b · Vooruitblik zonder komende-uitgaven-lijsten', () => {
   test('de rest van Vooruitblik blijft staan', async ({ page }) => {
     await boot(page, 'vooruit');
     const v = await page.locator('#s-vooruit').innerText();
-    expect(v).toMatch(/nog deze maand/i);                        // liquiditeitskaart
+    expect(v).not.toMatch(/nog deze maand/i);                    // v144: alleen nog op Inzichten
     expect(v).toMatch(/mijn plan/i);                             // prioriteitenlijst
   });
 

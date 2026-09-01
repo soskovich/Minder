@@ -311,7 +311,11 @@ test.describe('d · uitgaven-vs-budget-grafiek', () => {
     expect((html.match(/stroke-dasharray="4 3"/g) || []).length).toBe(n);      // budgetlijn per maand
     expect((html.match(/fill-opacity=".42"/g) || []).length).toBe(1);          // alleen de lopende maand
     expect(html).toContain('De maand met * loopt nog.');
-    expect(html).toMatch(/>aug\*</);                                          // lopende maand gemarkeerd op de x-as
+    // het label komt uit MNAMES, dus lezen we het daar ook uit: hardcoderen laat deze test
+    // elf maanden per jaar slagen om de verkeerde reden en in de twaalfde falen op de kalender.
+    const nu = await page.evaluate((m) => MNAMES[+m.slice(5, 7) - 1], CUR);
+    expect(html).toContain(`>${nu}*<`);                                        // lopende maand gemarkeerd op de x-as
+    expect((html.match(/\*</g) || []).length).toBe(1);                         // en alleen die
     expect(html).toContain('budget €');                                        // gelabelde budgetlijn
     expect(html).toContain('>0<');                                             // y-as met nullijn
     expect((html.match(/font-weight="700"/g) || []).length).toBeGreaterThan(0); // waardelabels

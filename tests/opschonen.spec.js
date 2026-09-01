@@ -26,8 +26,9 @@ test.describe('a · noodfonds-widget weg, verfijnen blijft bereikbaar', () => {
     // v103: de functie bleef eerst staan omdat ze alleen niet meer werd samengesteld. Ze is nu
     // opgeruimd; de sheet (openNoodfondsPanel) is de enige plek waar het noodfonds nog rendert.
     expect(await page.evaluate(() => typeof noodfondsCard)).toBe('undefined');
-    // de samenstelling zelf: sinds v71 opent Vooruitblik met "Nog deze maand", sinds v80 zonder hero
-    expect(await page.evaluate(() => /innerHTML\s*=\s*nogDezeMaandCard\(\)\s*\+\s*doelZone/.test(renderVooruit.toString()))).toBe(true);
+    // de samenstelling zelf: sinds v80 zonder hero, sinds v144 zonder "Nog deze maand"
+    expect(await page.evaluate(() => /innerHTML\s*=\s*doelZone\s*\+\s*resDekkingCard\(\)/.test(renderVooruit.toString()))).toBe(true);
+    expect(await page.evaluate(() => /nogDezeMaand/.test(renderVooruit.toString()))).toBe(false);
   });
 
   test('het noodfonds-plan-item is de ingang naar verfijnen', async ({ page }) => {
