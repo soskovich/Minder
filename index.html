@@ -9834,11 +9834,20 @@ function rekeningOverlap(){
   }
   return uit.sort((x,y)=>y.gedeeld-x.gedeeld);
 }
+/* v152: een rekening die je bank wel deelt maar waarop nog geen boekingen staan, bestaat nergens
+   in beeld - OWN wordt uit TX afgeleid (v122), dus zo'n rekening valt overal buiten, ook uit deze
+   sheet. Juist die is de verdachte als je een rekening mist. allAccounts() telt psd2Accounts mee. */
+function rekZonderBoekingen(){
+  try{ return allAccounts().filter(a=>!OWN.includes(a)); }catch(_){ return []; }
+}
 function rekOverlapRegel(){
-  let ov=[]; try{ ov=rekeningOverlap(); }catch(_){ return ''; }
-  if(!ov.length) return '';
-  const n=ov.length;
-  return `<div class="small" style="margin-top:9px;color:var(--amber);cursor:pointer" onclick="openRekOverlap()">${ICON('warn')} ${n===1?'Twee rekeningen bevatten dezelfde boekingen':n+' paren rekeningen bevatten dezelfde boekingen'} ›</div>`;
+  let ov=[], leeg=[];
+  try{ ov=rekeningOverlap(); leeg=rekZonderBoekingen(); }catch(_){ return ''; }
+  if(ov.length){ const n=ov.length;
+    return `<div class="small" style="margin-top:9px;color:var(--amber);cursor:pointer" onclick="openRekOverlap()">${ICON('warn')} ${n===1?'Twee rekeningen bevatten dezelfde boekingen':n+' paren rekeningen bevatten dezelfde boekingen'} ›</div>`; }
+  if(leeg.length){ const n=leeg.length;
+    return `<div class="small muted" style="margin-top:9px;cursor:pointer" onclick="openRekOverlap()">${n===1?'1 gekoppelde rekening zonder boekingen':n+' gekoppelde rekeningen zonder boekingen'} ›</div>`; }
+  return '';
 }
 /* Wat de app per rekening weet, in woorden. Eén bron voor de sheet en voor de kopieertekst, zodat
    wat je leest en wat je plakt niet uiteen kunnen lopen. */
@@ -9863,7 +9872,7 @@ function rekOverlapTekst(){
   return [...ov.map(o=>`OVERLAP: ${o.gedeeld} gedeelde boekingen (van ${o.aN} en ${o.bN})
   ${regel(rekFeiten(o.a))}
   ${regel(rekFeiten(o.b))}`),
-    '', 'ALLE REKENINGEN:', ...OWN.map(a=>'  '+regel(rekFeiten(a)))].join('\n');
+    '', 'ALLE REKENINGEN:', ...allAccounts().map(a=>'  '+regel(rekFeiten(a))+(OWN.includes(a)?'':'  <-- gekoppeld, geen boekingen'))].join('\n');
 }
 async function rekOverlapCopy(){
   try{ await navigator.clipboard.writeText(rekOverlapTekst()); toast(`${ICON('check')} Gekopieerd`); }
@@ -9944,8 +9953,13 @@ function openRekOverlap(){
       <div class="small muted" style="margin-top:8px">Zijn dit dezelfde rekening, dan telt je totale saldo er een dubbel. Verschillende machtigingen wijzen daarop; dezelfde machtiging betekent meestal twee echte rekeningen.</div>
       <button class="btn sec" style="margin-top:8px" onclick="rekSamenvoegVraag('${esc(String(o.a).replace(/'/g,"\'"))}','${esc(String(o.b).replace(/'/g,"\'"))}')">Samenvoegen tot één rekening</button>
     </div>`).join(''):'<div class="small muted">Geen overlap meer gevonden.</div>'}
+    ${(()=>{ const leeg=rekZonderBoekingen(); return leeg.length?`<div class="card" style="margin-bottom:10px">
+      <div class="small" style="margin-bottom:6px;font-weight:600">Gekoppeld, maar nog zonder boekingen</div>
+      ${leeg.map(a=>kaart(rekFeiten(a))).join('')}
+      <div class="small muted" style="margin-top:8px">Je bank deelt deze rekening wel, maar er kwam nog geen enkele boeking mee. Daardoor staat hij nergens anders in de app.</div>
+    </div>`:''; })()}
     <div class="small muted" style="margin:12px 0 6px;font-weight:600">Al je rekeningen</div>
-    ${OWN.map(a=>kaart(rekFeiten(a))).join('')}
+    ${allAccounts().map(a=>kaart(rekFeiten(a))).join('')}
     <button class="btn sec" style="margin-top:12px" onclick="rekOverlapCopy()">${ICON('doc')} Kopieer deze lijst</button>
     <div class="small muted" style="margin-top:6px">Kopieren zet het op je klembord. Het verlaat je toestel pas als je het zelf ergens plakt.</div>`;
   showSheetBg();

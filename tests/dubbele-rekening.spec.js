@@ -128,6 +128,49 @@ test.describe('b · de melding', () => {
   });
 });
 
+// v152: een rekening die de bank wél deelt maar zonder boekingen valt buiten OWN (v122) en stond
+// dus ook buiten deze sheet — precies de verdachte als je een rekening mist.
+test.describe('b2 · gekoppeld, nog zonder boekingen', () => {
+  const LEEG = 'psd2h_abcdef0123456789';
+  const metLege = () => {
+    const p = seed({ zelfde: false });
+    const set = JSON.parse(p.minder_set);
+    set.psd2Accounts = Object.assign({}, set.psd2Accounts, {
+      [LEEG]: { uid: 'u-leeg', iban: '', hash: 'abcdef0123456789', label: 'V SUMTER', bank: 'N26', exp: '2026-12-01' },
+    });
+    p.minder_set = JSON.stringify(set);
+    return p;
+  };
+
+  test('hij staat niet in OWN maar wel in de sheet', async ({ page }) => {
+    await boot(page, metLege());
+    expect(await page.evaluate((x) => OWN.includes(x), LEEG)).toBe(false);
+    expect(await page.evaluate(() => rekZonderBoekingen())).toEqual([LEEG]);
+    await page.evaluate(() => openRekOverlap());
+    const sheet = await page.locator('#sheet').innerText();
+    expect(sheet).toContain('Gekoppeld, maar nog zonder boekingen');
+    expect(sheet).toContain('0 transacties');
+  });
+
+  test('de regel verschijnt ook zonder overlap', async ({ page }) => {
+    await boot(page, metLege());
+    expect(await page.evaluate(() => rekeningOverlap())).toEqual([]);   // geen overlap
+    expect(await page.evaluate(() => rekOverlapRegel())).toContain('1 gekoppelde rekening zonder boekingen');
+  });
+
+  test('de kopieertekst markeert hem', async ({ page }) => {
+    await boot(page, metLege());
+    const t = await page.evaluate(() => rekOverlapTekst());
+    expect(t).toContain('gekoppeld, geen boekingen');
+  });
+
+  test('niets gekoppeld zonder boekingen: geen regel', async ({ page }) => {
+    await boot(page, seed({ zelfde: false }));
+    expect(await page.evaluate(() => rekZonderBoekingen())).toEqual([]);
+    expect(await page.evaluate(() => rekOverlapRegel())).toBe('');
+  });
+});
+
 test.describe('c · read-only', () => {
   test('kijken verandert niets', async ({ page }) => {
     await boot(page);
