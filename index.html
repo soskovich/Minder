@@ -783,17 +783,12 @@ function rolloverBudgets(){
 
 // Overboekingen tussen eigen rekeningen → 'intern' (tellen niet als inkomen/uitgave).
 // Salaris/inkomen blijft inkomen, ook al staat het op een eigen rekening.
-/* De namen waaronder je eigen rekeningen langskomen: de Account Name-kolom uit je CSV-import plus
-   vaste aliassen voor N26-potjes en je eigen tenaamstelling. Eén bron (v146), gedeeld met
-   tegenrekSterk(); twee kopieën zouden vroeg of laat iets anders herkennen. */
-function ownNameSet(){
-  return new Set([...TX.filter(t=>t.src==='csv').map(t=>(t.accName||'').toLowerCase()),
-    'main','main account','zakgeld','buffer comfort','buffer rust','instant savings','income sorter',
-    've sumter','vincent sumter','vincent ernst sumter'].filter(Boolean));
-}
 function applyOwnAccounts(){
   OWN=[...new Set(TX.map(t=>t.acc).filter(Boolean))];
-  const ownNames=ownNameSet();
+  // namen van eigen N26-potjes (uit Account Name) + vaste aliassen voor onderlinge overboekingen
+  const ownNames=new Set([...TX.filter(t=>t.src==='csv').map(t=>(t.accName||'').toLowerCase()),
+    'main','main account','zakgeld','buffer comfort','buffer rust','instant savings','income sorter',
+    've sumter','vincent sumter','vincent ernst sumter'].filter(Boolean));
   // N26-interne potje-/spaarbewegingen (PSD2 levert geen tegenpartij-IBAN voor Spaces)
   const N26INT=/\b(income sorter|moved|round[\s-]?up)\b|\b(from|to|naar|van)\s+(main|zakgeld|spaces?|spaarpot|buffer)/i;
   const cands=[];   // terugstortingen bij een niet-herkende tegenpartij (fix 2): later koppelen aan een eerdere afschrijving
@@ -3012,12 +3007,6 @@ function scoreNotifs(){
   // v128: één controlemoment op de reserveringenlijst, hooguit één keer per maand (resCheck).
   try{ if(resCheckDue()) push({key:'res-check',score:34,t:'info',ic:ICON('cal'),
     l1:'Klopt je lijst met reserveringen nog?',l2:'Premies en aanslagen veranderen',act:'openReserveringen()'}); }catch(_){}
-  /* v146: een rekening waarmee je boekt maar die je bank niet deelt. Alleen bij de harde aanwijzing
-     uit tegenrekSterk(); zonder die toets zou elke winkel een melding worden. */
-  try{ const r=ontbrekendeRekening();
-    if(r) push({key:'ontbrek-'+r.num,score:44,t:'info',ic:ICON('bank'),
-      l1:`Rekening ${tegenrekLabel(r.num)} zit niet in je koppeling.`,
-      l2:'Opnieuw autoriseren haalt hem binnen',act:'openBankSet()'}); }catch(_){}
   // save-risk krijgt dezelfde chronic-ack als tempo: pas opnieuw als het tekort merkbaar groeit.
   let saveRiskPushed=false;
   if(isNow){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget();
@@ -9885,10 +9874,7 @@ function setBank(){
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
     <div class="small muted" style="margin-bottom:8px;font-weight:600">Je rekeningen</div>
     ${accountsCard()}` : '';
-  // v146: de ontbrekende rekening staat tussen je rekeningen en de naamdiagnose, want dat is waar
-  // je heen gaat als er een rekening mist. Rendert '' zodra er niets vast te stellen valt.
-  let ontbHtml=''; try{ ontbHtml=ontbrekendeRekBlok(); }catch(_){ ontbHtml=''; }
-  return head + accHtml + ontbHtml + advHtml;
+  return head + accHtml + advHtml;
 }
 function bankAdvTap(){
   window._advTaps=(window._advTaps||0)+1; clearTimeout(window._advTapT);
@@ -10110,63 +10096,6 @@ function acctNaam(a){
 }
 function acctNiceName(a){ return acctNaam(a).naam; }
 
-/* ===== Een rekening die je bank niet meer deelt (v146) =====
- * Bij Enable Banking ligt de rekeninglijst vast op het moment dat je autoriseert, en psd2Refresh()
- * loopt bovendien alleen over de uids in SET.psd2Accounts. Een rekening die daarna bij je bank bij
- * komt - een N26-Space die een eigen IBAN krijgt, bijvoorbeeld - komt er dus nooit vanzelf bij,
- * hoe vaak je ook vernieuwt. Alleen psd2Connect() -> psd2IngestSession() schrijft nieuwe sleutels.
- *
- * De app kan hem wel zien: mapPsd2Tx() bewaart de IBAN van de tegenpartij in refNums, dus een
- * overboeking erheen draagt het rekeningnummer mee. Deze laag herkent dat zelf en biedt de enige
- * echte oplossing aan - opnieuw autoriseren - in een tik.
- *
- * Bewust GEEN automatische classificatie: een tegenrekening zelf als 'van jou' boeken zou een
- * uitgave laten verdwijnen die je wel deed. Verkeer in twee richtingen lijkt sterk bewijs, maar een
- * deels terugbetaalde aankoop (-80, +30) ziet er precies zo uit; die als intern boeken haalt 50 aan
- * echte uitgaven weg. Zodra de rekening echt gekoppeld is staat hij in OWN en volgt de
- * intern-detectie via de bestaande regel (refNums in OWN), zonder enige heuristiek. */
-function onbekendeTegenrekeningen(){
-  const map=new Map();
-  for(const t of TX){
-    for(const n of (t.refNums||[])){
-      if(!n || OWN.includes(n)) continue;
-      let r=map.get(n);
-      if(!r){ r={num:n, n:0, uit:0, in:0, bedrag:0, van:'', tot:'', namen:[]}; map.set(n,r); }
-      r.n++; r.bedrag+=Math.abs(t.amount);
-      if(t.amount<0) r.uit++; else r.in++;
-      if(!r.van || t.date<r.van) r.van=t.date;
-      if(!r.tot || t.date>r.tot) r.tot=t.date;
-      const nm=(t.name||'').trim();
-      if(nm && r.namen.length<4 && !r.namen.includes(nm)) r.namen.push(nm);
-    }
-  }
-  return [...map.values()].sort((a,b)=>b.bedrag-a.bedrag);
-}
-/* Wanneer is zo'n tegenrekening aantoonbaar van jezelf? Eén harde aanwijzing, geen weging en geen
-   score: een tenaamstelling die we al als jouw naam kennen (ownNameSet, dezelfde bron als de
-   intern-detectie). Verkeer in twee richtingen staat hier bewust NIET bij - zie de toelichting
-   hierboven: een deels terugbetaalde aankoop is niet van een eigen overboeking te onderscheiden. */
-function tegenrekSterk(r){
-  if(!r || !r.namen.length) return '';
-  const own=ownNameSet();
-  return r.namen.some(n=>own.has(n.toLowerCase())) ? 'staat op jouw naam' : '';
-}
-/* De enige bron voor beide ingangen (de kaart in Instellingen en de melding), zodat ze niet
-   verschillende rekeningen kunnen noemen. null zodra er niets vast te stellen valt. */
-function ontbrekendeRekening(){
-  try{ return onbekendeTegenrekeningen().find(r=>tegenrekSterk(r)) || null; }catch(_){ return null; }
-}
-function tegenrekLabel(num){ return '··'+String(num||'').slice(-4); }
-function openBankSet(){ SET.setOpen='bank'; save(); go('set'); }
-/* De kaart in Instellingen. Geen lijst en geen keuze: één vaststelling en één knop. Rendert ''
-   zodra er niets vast te stellen valt - geen lege staat, geen uitleg waarom er niets staat. */
-function ontbrekendeRekBlok(){
-  const r=ontbrekendeRekening(); if(!r) return '';
-  return `<div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
-    <div class="small muted" style="margin-bottom:4px;font-weight:600">Er ontbreekt een rekening</div>
-    <div class="small muted" style="margin-bottom:8px">Je hebt boekingen met <b>${tegenrekLabel(r.num)}</b> — ${esc(r.namen[0])} — maar die rekening zit niet in je koppeling. Je bank deelt alleen wat je bij het inloggen goedkeurde; een rekening die daarna bij kwam komt er niet vanzelf bij, ook niet als je vernieuwt.</div>
-    <button class="btn sec" onclick="psd2Connect()">${ICON('bank')} Opnieuw autoriseren</button>`;
-}
 
 
 /* Een rekening zelf een naam geven (v121). Tot nu toe stond `SET.acctNames` alleen in de leeskant
