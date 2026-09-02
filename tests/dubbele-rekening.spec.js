@@ -106,6 +106,18 @@ test.describe('b · de melding', () => {
     expect(t).not.toContain('dezelfde boekingen');
   });
 
+  test('uid en consent-vervaldatum staan erbij', async ({ page }) => {
+    // v150: twee ids zonder IBAN krijgen hun id uit de uid, en een uid is per sessie. Dat veld is
+    // het enige dat 'twee echte Spaces' van 'dezelfde Space uit twee consents' onderscheidt.
+    await boot(page);
+    const f = await page.evaluate((a) => rekFeiten(a), LIVE);
+    expect(f.uid).toBe('u1');
+    expect(f.eigenIban).toBe(true);
+    const t = await page.evaluate(() => rekOverlapTekst());
+    expect(t).toContain('uid u1');
+    expect(t).toContain('geen eigen IBAN');            // de CSV-kant heeft er geen
+  });
+
   test('de sheet toont wat de bank stuurde, per rekening', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => openRekOverlap());

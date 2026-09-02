@@ -9845,13 +9845,21 @@ function rekOverlapRegel(){
 function rekFeiten(a){
   const pm=(SET.psd2Accounts||{})[a]||null, meta=ACCMETA[a]||{};
   const L=TX.filter(t=>t.acc===a), d=L.map(t=>t.date).sort();
+  /* uid en de vervaldatum van de consent horen erbij (v150): twee rekeningen zonder IBAN krijgen hun
+     id uit de uid ('psd2_'+uid.slice(0,8)), en een uid is per sessie. Autoriseer je opnieuw, dan
+     krijgt dezelfde Space een nieuwe uid en dus een tweede id - met dezelfde boekingen, want de
+     soft-dedup laat twee PSD2-rekeningen bewust met rust (v51). Verschillende uid met dezelfde
+     vervaldatum betekent twee echte rekeningen uit één consent; verschillende vervaldata betekent
+     twee consents, en dan is dezelfde rekening twee keer ingelezen het waarschijnlijkst. */
   return { a, naam:acctNiceName(a), vanBank:pm?(pm.label||'(geen naam van de bank)'):'(niet via de koppeling)',
     l4:pm&&pm.iban?pm.iban.slice(-4):'', bank:meta.bank||'', saldo:accBalance(a), tx:L.length,
-    van:d[0]||'', tot:d[d.length-1]||'', bron:[...new Set(L.map(t=>t.src||'mt940'))].join(' + ') };
+    van:d[0]||'', tot:d[d.length-1]||'', bron:[...new Set(L.map(t=>t.src||'mt940'))].join(' + '),
+    uid:pm?String(pm.uid||''):'', exp:pm&&pm.exp?String(pm.exp).slice(0,10):'',
+    eigenIban:!!(pm&&pm.iban) };
 }
 function rekOverlapTekst(){
   const ov=rekeningOverlap();
-  const regel=f=>`${f.naam} | id ${f.a} | van de bank: ${f.vanBank} | IBAN ${f.l4?'··'+f.l4:'-'} | ${f.bank||'?'} | saldo ${f.saldo!=null?f.saldo:'onbekend'} | ${f.tx} tx | ${f.van||'-'} t/m ${f.tot||'-'} | ${f.bron||'-'}`;
+  const regel=f=>`${f.naam} | id ${f.a} | van de bank: ${f.vanBank} | IBAN ${f.l4?'··'+f.l4:'geen eigen IBAN'} | ${f.bank||'?'} | saldo ${f.saldo!=null?f.saldo:'onbekend'} | ${f.tx} tx | ${f.van||'-'} t/m ${f.tot||'-'} | ${f.bron||'-'} | uid ${f.uid||'-'} | consent tot ${f.exp||'-'}`;
   return [...ov.map(o=>`OVERLAP: ${o.gedeeld} gedeelde boekingen (van ${o.aN} en ${o.bN})
   ${regel(rekFeiten(o.a))}
   ${regel(rekFeiten(o.b))}`),
@@ -9865,7 +9873,8 @@ function openRekOverlap(){
   const ov=(()=>{ try{ return rekeningOverlap(); }catch(_){ return []; } })();
   const kaart=f=>`<div style="padding:8px 0;border-bottom:1px solid var(--line)">
     <div style="font-weight:600">${esc(f.naam)}</div>
-    <div class="small muted">van de bank: ${esc(f.vanBank)}${f.l4?' · IBAN ··'+esc(f.l4):''}</div>
+    <div class="small muted">van de bank: ${esc(f.vanBank)} · ${f.l4?'IBAN ··'+esc(f.l4):'<b>geen eigen IBAN</b>'}</div>
+    ${f.uid?`<div style="font-size:var(--fs-xs);color:var(--mut2)">uid ${esc(f.uid)}${f.exp?' · consent tot '+esc(f.exp):''}</div>`:''}
     <div class="small muted">${f.saldo!=null?euro(f.saldo):'saldo onbekend'} · ${f.tx} transactie${f.tx===1?'':'s'}${f.van?' · '+esc(f.van)+' t/m '+esc(f.tot):''}${f.bron?' · '+esc(f.bron):''}</div>
     <div style="font-size:var(--fs-xs);color:var(--mut2);word-break:break-all">id: ${esc(f.a)}</div></div>`;
   $('#sheet').innerHTML=`<div class="grab"></div>
