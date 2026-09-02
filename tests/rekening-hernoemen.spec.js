@@ -161,14 +161,28 @@ test.describe('c · migratie van de oude last4-sleutel', () => {
   });
 });
 
-test.describe('d · diagnose en layout', () => {
-  test('het diagnose-blokje noemt "eigen naam" als bron', async ({ page }) => {
+test.describe('d · bron en layout', () => {
+  // v146: het diagnose-blokje is uit Instellingen verwijderd. acctNaam().bron blijft bestaan en
+  // heeft nog één lezer: de hernoem-sheet zelf, die 'Nu: <naam> · <bron>' toont.
+  test('de hernoem-sheet noemt "eigen naam" als bron', async ({ page }) => {
     await boot(page);
     await hernoem(page, POT1, 'Noodfonds');
-    const r = await page.evaluate(() => bankDiagRows());
-    const rij = r.find((x) => x.a === POT1);
-    expect(rij.toont).toBe('Noodfonds');
-    expect(rij.bron).toBe('eigen naam');
+    const n = await page.evaluate((a) => acctNaam(a), POT1);
+    expect(n.naam).toBe('Noodfonds');
+    expect(n.bron).toBe('eigen naam');
+    await page.evaluate((a) => acctRenameOpen(a), POT1);
+    await page.waitForSelector('#renInp');
+    const sheet = await page.locator('#sheet').innerText();
+    expect(sheet).toContain('Noodfonds');
+    expect(sheet).toContain('eigen naam');
+  });
+
+  test('de naamdiagnose bestaat niet meer', async ({ page }) => {
+    await boot(page);
+    expect(await page.evaluate(() => typeof bankDiagRows)).toBe('undefined');
+    expect(await page.evaluate(() => typeof bankDiagHTML)).toBe('undefined');
+    await page.evaluate(() => { go('set'); toggleSet('bank'); });
+    expect(await page.locator('#s-set').innerText()).not.toMatch(/waarom heet een rekening zo/i);
   });
 
   for (const w of [360, 390]) {

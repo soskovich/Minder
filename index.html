@@ -9784,9 +9784,10 @@ function setIncome(){
   if(OWN.length){ h+=`
     <label class="fld" style="margin-top:14px">Je rekeningen & saldo <span class="small muted">· ${euro(totalBalance().sum)} totaal</span></label>
     <div class="small muted" style="margin-bottom:8px">Saldo's uit MT940/PSD2 zijn vooraf ingevuld; vul ontbrekende saldo's bij voor een kloppende prognose.</div>
-    ${OWN.map(a=>{const m=ACCMETA[a]||{};const cnt=TX.filter(t=>t.acc===a).length;const bv=accBalance(a);const det=m.balance!=null;return `
+    ${zichtbareRek().map(a=>{const m=ACCMETA[a]||{};const cnt=TX.filter(t=>t.acc===a).length;const bv=accBalance(a);const det=m.balance!=null;return `
       <div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)"><div style="min-width:0;flex:1"><div style="font-weight:600">${esc(accShort(a))} <span class="tag">${m.bank||''}</span></div><div class="small muted">${m.role||'Rekening'} · ${cnt} tx${det?' · saldo '+m.date:''}</div></div>
         <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" step="0.01" value="${bv!=null?bv:''}" placeholder="0,00" style="width:92px;text-align:right;padding:7px 9px" oninput="setBal('${a}',this.value)"></div></div>`;}).join('')}
+    ${legeRekRegel()}
     <label class="fld">Minimale buffer (waarschuwing)</label>
     <input type="number" value="${SET.buffer||''}" placeholder="bv. 1000" oninput="SET.buffer=+this.value||0;save();render();">
     <div class="small muted" style="margin-top:6px">De prognose waarschuwt als je saldo hieronder dreigt te komen.</div>
@@ -9801,10 +9802,29 @@ function toggleSavingsAcct(a){
   SET.savingsAcc[a]=!isSavingsAcc(a);
   save(); SET.setOpen='bank'; renderSet(); try{renderSetSheet();}catch(_){} try{renderDash();}catch(_){}
 }
+/* v146: rekeningen zonder bekend saldo staan standaard niet in Instellingen. Het zijn in de praktijk
+   rekeningen die je niet meer gebruikt, en ze vulden allebei de lijsten met regels waar niets aan te
+   doen valt. Bewust verbergen en niet verwijderen: een rekening bestaat zolang er boekingen met die
+   id zijn (v122), dus wegnemen zou transacties moeten wissen en dat is een heel andere ingreep.
+   Eén tik zet ze terug (defaultEffect), en er verandert niets aan enige berekening - totalBalance(),
+   accBalance() en de onbekend-staten (v59/v73) lezen onverkort OWN.
+   Guard: is er geen enkel bekend saldo, dan valt er niets te verbergen zonder de lijst leeg te
+   maken, en juist daar moet je je eerste saldo kunnen invullen. Dan tonen we alles. */
+function rekMetSaldo(){ return OWN.filter(a=>accBalance(a)!=null); }
+function rekZonderSaldo(){ return OWN.filter(a=>accBalance(a)==null); }
+function toonAlleRek(){ return !!SET.toonLegeRek || !rekMetSaldo().length; }
+function zichtbareRek(){ return toonAlleRek()?OWN.slice():rekMetSaldo(); }
+function toggleLegeRek(){ SET.toonLegeRek=!SET.toonLegeRek; save(); renderSet(); try{renderSetSheet();}catch(_){} }
+function legeRekRegel(){
+  const n=rekZonderSaldo().length; if(!n || !rekMetSaldo().length) return '';
+  return `<div class="small muted" style="margin-top:9px;cursor:pointer" onclick="toggleLegeRek()">${SET.toonLegeRek
+    ? `▲ ${n} rekening${n===1?'':'en'} zonder saldo verbergen`
+    : `› ${n} rekening${n===1?'':'en'} zonder saldo tonen`}</div>`;
+}
 function accountsCard(){
   if(!OWN.length) return '<div class="small muted">Nog geen rekeningen. Koppel je bank of voeg een bestand toe.</div>';
   const sav=new Set(n26SavingsAccounts());
-  const rows=OWN.map(a=>{ const b=accBalance(a); const l4=acctLast4(a);
+  const rows=zichtbareRek().map(a=>{ const b=accBalance(a); const l4=acctLast4(a);
     const cnt=(ACCMETA[a]&&ACCMETA[a].count)||TX.filter(t=>t.acc===a).length;
     return {a,b,l4,cnt,isSav:sav.has(a),name:acctNiceName(a),bank:(ACCMETA[a]&&ACCMETA[a].bank)||''}; })
     .sort((x,y)=>(y.b||0)-(x.b||0));
@@ -9814,7 +9834,8 @@ function accountsCard(){
       <div style="text-align:right"><div class="small muted" style="margin-bottom:2px">spaar&shy;rekening</div>
         <label class="sw"><input type="checkbox" ${r.isSav?'checked':''} onchange="toggleSavingsAcct('${esc(String(r.a).replace(/'/g,"\\'"))}')"><span class="sl"></span></label></div>
     </div>`).join('') +
-    `<div class="small muted" style="margin-top:9px">Zet de schakelaar aan bij je <b>spaarrekening(en)</b>. Daaraan ziet Minder hoeveel je deze maand al spaarde. Tik op een naam om die zelf aan te passen.</div>`;
+    `<div class="small muted" style="margin-top:9px">Zet de schakelaar aan bij je <b>spaarrekening(en)</b>. Daaraan ziet Minder hoeveel je deze maand al spaarde. Tik op een naam om die zelf aan te passen.</div>`
+    + legeRekRegel();
 }
 function setBank(){
   const ps=SET.psd2Accounts||{}; const psd2=Object.keys(ps).length; const adv=!!SET.advBank;
@@ -9864,14 +9885,10 @@ function setBank(){
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
     <div class="small muted" style="margin-bottom:8px;font-weight:600">Je rekeningen</div>
     ${accountsCard()}` : '';
-  const diagHtml = (OWN.length||psd2) ? `
-    <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
-    <button class="snz" onclick="bankDiagToggle()">${SET.bankDiag?'Naamdiagnose verbergen ▲':'Waarom heet een rekening zo? ▾'}</button>
-    ${SET.bankDiag?bankDiagHTML():''}` : '';
   // v146: de ontbrekende rekening staat tussen je rekeningen en de naamdiagnose, want dat is waar
   // je heen gaat als er een rekening mist. Rendert '' zodra er niets vast te stellen valt.
   let ontbHtml=''; try{ ontbHtml=ontbrekendeRekBlok(); }catch(_){ ontbHtml=''; }
-  return head + accHtml + ontbHtml + diagHtml + advHtml;
+  return head + accHtml + ontbHtml + advHtml;
 }
 function bankAdvTap(){
   window._advTaps=(window._advTaps||0)+1; clearTimeout(window._advTapT);
@@ -10151,85 +10168,6 @@ function ontbrekendeRekBlok(){
     <button class="btn sec" onclick="psd2Connect()">${ICON('bank')} Opnieuw autoriseren</button>`;
 }
 
-/* Read-only diagnose (v118): waar komt de naam van elke rekening vandaan? Gemeld werd dat sommige
-   N26-potjes hun juiste naam tonen en andere geen naam, terwijl in N26 elk potje een naam heeft.
-   Dit blokje laat per rekening zien wat de app toont, waar dat vandaan komt en welke naam de
-   koppeling zelf heeft opgeslagen - zonder iets te wijzigen. Rekeningen zonder transacties horen
-   er ook bij (die staan niet in OWN maar wel in psd2Accounts), juist omdat dat een van de
-   verdachten is. Niets verlaat het toestel; kopieren zet het op je klembord, meer niet. */
-const DIAG_HERKOMST={psd2:'koppeling', csv:'CSV-import', mt940:'MT940-bestand'};
-function diagMaand(d){ const m=+String(d||'').slice(5,7); return m?(MNAMES[m-1]+' '+String(d).slice(0,4)):''; }
-// de overlap-toets kijkt op de dag; toon dan ook de dag, anders leest "t/m apr, begint apr - geen
-// overlap" als een tegenspraak
-function diagDatum(d){ const m=+String(d||'').slice(5,7); return m?(+String(d).slice(8,10)+' '+MNAMES[m-1]+' '+String(d).slice(0,4)):''; }
-function bankDiagRows(){
-  const ps=SET.psd2Accounts||{};
-  const all=[...new Set([...OWN, ...Object.keys(ps)])];
-  return all.map(a=>{
-    const pm=ps[a]||null, meta=ACCMETA[a]||{}, N=acctNaam(a);
-    // periode + herkomst in één pass: MT940-transacties hebben geen src, die zijn dus 'mt940'
-    let van='', tot='', tx=0; const srcs=new Set();
-    for(const t of TX){ if(t.acc!==a) continue; tx++; srcs.add(t.src||'mt940');
-      if(!van||t.date<van) van=t.date; if(!tot||t.date>tot) tot=t.date; }
-    return {a, toont:N.naam, bron:N.bron,
-            opgeslagen:(pm&&pm.label)||meta.label||'',
-            bank:meta.bank||(pm&&pm.bank)||'',
-            l4:acctLast4(a), iban:!!(pm&&pm.iban), viaBank:!!pm, spaar:isSavingsAcc(a),
-            tx, van, tot, srcs:[...srcs], live:srcs.has('psd2'),
-            herkomst:[...srcs].map(x=>DIAG_HERKOMST[x]||x).join(' + ')};
-  }).sort((x,y)=>y.tx-x.tx);
-}
-function bankDiagText(){
-  return bankDiagRows().map(r=>
-    `${r.toont||'(geen naam)'} | bron: ${r.bron} | bank: ${r.bank||'?'} | ${r.viaBank?(r.iban?'IBAN ··'+r.l4:'gekoppeld, geen IBAN'):'uit een bestand'} | ${r.herkomst||'-'} | ${r.tx} tx | ${r.van?diagMaand(r.van)+' t/m '+diagMaand(r.tot):'geen transacties'}${r.spaar?' | spaarrekening':''} | van de koppeling: ${r.opgeslagen||'-'}`
-  ).join('\n');
-}
-async function bankDiagCopy(){
-  try{ await navigator.clipboard.writeText(bankDiagText()); toast(`${ICON('check')} Diagnose gekopieerd`); }
-  catch(e){ toast('Kopieren lukte niet'); }
-}
-function bankDiagToggle(){ SET.bankDiag=!SET.bankDiag; save(); try{ renderSetSheet(); }catch(_){} try{ renderSet(); }catch(_){} }
-function bankDiagHTML(){
-  const rows=bankDiagRows();
-  if(!rows.length) return '<div class="small muted" style="margin-top:8px">Nog geen rekeningen om te tonen.</div>';
-  const n=(k,ev,mv)=>`${k} rekening${k===1?'':'en'} ${k===1?ev:mv}`;
-  const zonderNaam=rows.filter(r=>r.bron==='geen naam beschikbaar').length;
-  const tabel=rows.filter(r=>r.bron==='vaste tabel in de app').length;
-  const terugval=rows.filter(r=>r.bron==='terugval op de laatste cijfers').length;
-  const geenTx=rows.filter(r=>r.tx===0).length;
-  // Twee rekeningen met dezelfde getoonde naam is geen schoonheidsfout: de spaarrekening-schakelaar
-  // en je eigen namen hangen aan diezelfde laatste vier cijfers, dus die delen ze dan ook.
-  const tel={}; for(const r of rows) tel[r.toont]=(tel[r.toont]||0)+1;
-  const dubbel=Object.entries(tel).filter(([,c])=>c>1);
-  const bevind=[];
-  if(tabel) bevind.push(n(tabel,'krijgt','krijgen')+` de naam uit een vaste tabel in de app, niet uit je bank`);
-  if(terugval) bevind.push(n(terugval,'toont','tonen')+` alleen "Space ··cijfers", terwijl de opgeslagen naam er wel is`);
-  if(zonderNaam) bevind.push(n(zonderNaam,'heeft','hebben')+` geen cijfers om op terug te vallen en blijft daardoor naamloos`);
-  if(geenTx) bevind.push(n(geenTx,'heeft','hebben')+` geen transacties in het venster en krijgt daardoor geen rekening-metadata`);
-  if(dubbel.length) bevind.push(`${dubbel.map(([k,c])=>`${c}× "${esc(k)}"`).join(', ')} — die delen ook hun spaarrekening-schakelaar, want die hangt aan dezelfde laatste cijfers`);
-  /* De vraag achter de dubbele rekeningen: draagt de bestandsimport alleen de oudere maanden, of
-     lopen ze door elkaar? Alleen bij een schone knip is samenvoegen zonder risico. Per bank, want
-     N26-CSV naast N26-koppeling zegt iets anders dan een ABN-bestand ernaast. */
-  const perBank={};
-  for(const r of rows){ if(!r.van) continue;
-    const e=perBank[r.bank||'?']=perBank[r.bank||'?']||{};
-    const k=r.live?'live':'file'; const x=e[k]=e[k]||{van:r.van,tot:r.tot};
-    if(r.van<x.van) x.van=r.van; if(r.tot>x.tot) x.tot=r.tot; }
-  for(const b in perBank){ const e=perBank[b]; if(!(e.live&&e.file)) continue;
-    bevind.push(e.file.tot>=e.live.van
-      ? `${esc(b)}: je bestand loopt t/m ${diagDatum(e.file.tot)} en je koppeling begint ${diagDatum(e.live.van)} — die perioden overlappen`
-      : `${esc(b)}: je bestand loopt t/m ${diagDatum(e.file.tot)}, je koppeling begint ${diagDatum(e.live.van)} — geen overlap, de een neemt het van de ander over`); }
-  return `<div class="small muted" style="margin:8px 0 10px">Per rekening: wat de app toont, waar die naam vandaan komt, en welke naam de koppeling zelf heeft opgeslagen. Alleen lezen — er verandert niets.</div>
-    ${rows.map(r=>`<div style="padding:9px 0;border-bottom:1px solid var(--line)">
-      <div style="font-weight:600;font-size:var(--fs-md)">${esc(r.toont||'(geen naam)')}</div>
-      <div class="small muted">bron: ${esc(r.bron)} · ${esc(r.bank||'bank onbekend')} · ${r.viaBank?(r.iban?'IBAN ··'+esc(r.l4):'gekoppeld, geen IBAN'):'uit een bestand'} · ${r.tx} transactie${r.tx===1?'':'s'}${r.spaar?' · spaarrekening':''}</div>
-      <div class="small muted">${r.van?esc(diagMaand(r.van))+' t/m '+esc(diagMaand(r.tot)):'geen transacties'}${r.herkomst?' · '+esc(r.herkomst):''}</div>
-      <div class="small" style="color:var(--mut2)">van de koppeling: ${r.opgeslagen?esc(r.opgeslagen):'—'}</div>
-    </div>`).join('')}
-    ${bevind.length?`<div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:12px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">${bevind.map(b=>'· '+b).join('<br>')}</div>`:''}
-    <button class="btn sec" style="margin-top:10px" onclick="bankDiagCopy()">${ICON('doc')} Kopieer deze lijst</button>
-    <div class="small muted" style="margin-top:6px">Kopieren zet het op je klembord. Het verlaat je toestel pas als je het zelf ergens plakt.</div>`;
-}
 
 /* Een rekening zelf een naam geven (v121). Tot nu toe stond `SET.acctNames` alleen in de leeskant
    van acctNaam(): er was geen enkele plek die hem schreef, terwijl de rekeningenlijst wel naar het
