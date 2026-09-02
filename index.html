@@ -783,22 +783,12 @@ function rolloverBudgets(){
 
 // Overboekingen tussen eigen rekeningen → 'intern' (tellen niet als inkomen/uitgave).
 // Salaris/inkomen blijft inkomen, ook al staat het op een eigen rekening.
-/* De namen waaronder je eigen rekeningen langskomen: de Account Name-kolom uit je CSV-import plus
-   vaste aliassen voor N26-potjes en je eigen tenaamstelling. Eén bron (v146), want zowel de
-   intern-detectie hieronder als tegenrekSterk() leunt erop; twee kopieën zouden vroeg of laat
-   iets anders herkennen. */
-function ownNameSet(){
-  return new Set([...TX.filter(t=>t.src==='csv').map(t=>(t.accName||'').toLowerCase()),
-    'main','main account','zakgeld','buffer comfort','buffer rust','instant savings','income sorter',
-    've sumter','vincent sumter','vincent ernst sumter'].filter(Boolean));
-}
 function applyOwnAccounts(){
   OWN=[...new Set(TX.map(t=>t.acc).filter(Boolean))];
-  const ownNames=ownNameSet();
-  /* v146: een rekening die je zelf bevestigd hebt telt hier mee als eigen, ook al levert je bank er
-     geen boekingen van. Alleen voor de intern-toets: OWN blijft afgeleid uit TX (v122), dus er
-     ontstaat geen rekening zonder transacties en nergens een saldo dat we niet kennen. */
-  const eigenRek=new Set([...OWN, ...(SET.eigenRek||[])]);
+  // namen van eigen N26-potjes (uit Account Name) + vaste aliassen voor onderlinge overboekingen
+  const ownNames=new Set([...TX.filter(t=>t.src==='csv').map(t=>(t.accName||'').toLowerCase()),
+    'main','main account','zakgeld','buffer comfort','buffer rust','instant savings','income sorter',
+    've sumter','vincent sumter','vincent ernst sumter'].filter(Boolean));
   // N26-interne potje-/spaarbewegingen (PSD2 levert geen tegenpartij-IBAN voor Spaces)
   const N26INT=/\b(income sorter|moved|round[\s-]?up)\b|\b(from|to|naar|van)\s+(main|zakgeld|spaces?|spaarpot|buffer)/i;
   const cands=[];   // terugstortingen bij een niet-herkende tegenpartij (fix 2): later koppelen aan een eerdere afschrijving
@@ -806,7 +796,7 @@ function applyOwnAccounts(){
     if(OVR[t.id]) continue;                 // handmatige keuze respecteren
     const rc=t.ruleCat||t.autoCat;
     if(rc==='inkomen'){ t.autoCat='inkomen'; continue; }
-    let intern = (t.refNums||[]).some(n=>eigenRek.has(n));               // MT940/PSD2: eigen IBAN als tegenpartij
+    let intern = (t.refNums||[]).some(n=>OWN.includes(n));               // MT940/PSD2: eigen IBAN als tegenpartij
     if(!intern && t.src==='csv' && /transfer/i.test(t.typ||'') && ownNames.has((t.partner||'').toLowerCase())) intern=true; // N26 CSV: potje↔potje
     if(!intern && t.src==='psd2'){ const nm=(t.name||'').toLowerCase().trim(); if(ownNames.has(nm) || N26INT.test(t.name||'')) intern=true; } // N26 PSD2: Spaces/eigen naam
     t.autoCat = intern ? 'intern' : rc;
@@ -3017,13 +3007,6 @@ function scoreNotifs(){
   // v128: één controlemoment op de reserveringenlijst, hooguit één keer per maand (resCheck).
   try{ if(resCheckDue()) push({key:'res-check',score:34,t:'info',ic:ICON('cal'),
     l1:'Klopt je lijst met reserveringen nog?',l2:'Premies en aanslagen veranderen',act:'openReserveringen()'}); }catch(_){}
-  /* v146: een tegenrekening die aantoonbaar van jou is maar niet gekoppeld. Alleen bij een harde
-     aanwijzing uit tegenrekSterk() - de volle lijst hoort in Instellingen, niet in je meldingen,
-     anders wordt elke winkel een signaal. De tweede regel zegt wat het nú kost (v77/v128). */
-  try{ const r=(onbekendeTegenrekeningen()||[]).find(x=>tegenrekSterk(x));   // de zwaarste kandidaat kan een winkel zijn
-    if(r) push({key:'eigenrek-'+r.num,score:44,t:'info',ic:ICON('bank'),
-      l1:`Rekening ${tegenrekLabel(r.num)} lijkt van jou, maar is niet gekoppeld.`,
-      l2:'Een overboeking erheen telt nu als uitgave',act:'openBankSet()'}); }catch(_){}
   // save-risk krijgt dezelfde chronic-ack als tempo: pas opnieuw als het tekort merkbaar groeit.
   let saveRiskPushed=false;
   if(isNow){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget();
@@ -9874,10 +9857,7 @@ function setBank(){
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
     <button class="snz" onclick="bankDiagToggle()">${SET.bankDiag?'Naamdiagnose verbergen ▲':'Waarom heet een rekening zo? ▾'}</button>
     ${SET.bankDiag?bankDiagHTML():''}` : '';
-  // v146: de niet-gekoppelde tegenrekeningen staan tussen je rekeningen en de naamdiagnose, want
-  // dat is waar je heen gaat als er een rekening ontbreekt. Rendert '' zodra er niets te kiezen is.
-  let onbHtml=''; try{ onbHtml=onbekendeRekBlok(); }catch(_){ onbHtml=''; }
-  return head + accHtml + onbHtml + diagHtml + advHtml;
+  return head + accHtml + diagHtml + advHtml;
 }
 function bankAdvTap(){
   window._advTaps=(window._advTaps||0)+1; clearTimeout(window._advTapT);
@@ -10098,89 +10078,6 @@ function acctNaam(a){
   return last4?{naam:'··'+last4, bron:'laatste cijfers'}:{naam:(accLabel(a)||'Rekening'), bron:'label van de koppeling'};
 }
 function acctNiceName(a){ return acctNaam(a).naam; }
-
-/* ===== Een tegenrekening die je niet gekoppeld hebt (v146) =====
- * Bij Enable Banking ligt de rekeninglijst vast op het moment dat je autoriseert: een rekening die
- * daarna bij je bank bij komt (een N26-Space die een eigen IBAN krijgt, bijvoorbeeld) komt nooit via
- * psd2Refresh() binnen, want die loopt alleen over de uids die al in SET.psd2Accounts staan. De app
- * kan hem wél zien: mapPsd2Tx() bewaart de IBAN van de tegenpartij in refNums, dus een overboeking
- * erheen draagt het rekeningnummer mee.
- * Deze laag stelt alleen vast. Ze koppelt niets, haalt niets op en verzint niets; zolang jij een
- * nummer niet bevestigt verandert er geen cijfer. Bevestigen doet precies één ding: de intern-toets
- * in applyOwnAccounts() herkent het nummer, waarmee een overboeking erheen ophoudt een uitgave te
- * zijn (v77). Het maakt géén rekening aan - daarvoor zijn boekingen nodig (v122) - en dus ook geen
- * saldo dat we niet kennen (v59/v73). */
-function onbekendeTegenrekeningen(){
-  const eigen=new Set([...OWN, ...(SET.eigenRek||[])]);
-  const weg=new Set(SET.eigenRekNiet||[]);
-  const map=new Map();
-  for(const t of TX){
-    for(const n of (t.refNums||[])){
-      if(!n || eigen.has(n) || weg.has(n)) continue;
-      let r=map.get(n);
-      if(!r){ r={num:n, n:0, uit:0, in:0, bedrag:0, van:'', tot:'', namen:[]}; map.set(n,r); }
-      r.n++; r.bedrag+=Math.abs(t.amount);
-      if(t.amount<0) r.uit++; else r.in++;
-      if(!r.van || t.date<r.van) r.van=t.date;
-      if(!r.tot || t.date>r.tot) r.tot=t.date;
-      const nm=(t.name||'').trim();
-      if(nm && r.namen.length<4 && !r.namen.includes(nm)) r.namen.push(nm);
-    }
-  }
-  return [...map.values()].sort((a,b)=>b.bedrag-a.bedrag);
-}
-/* Wanneer is zo'n tegenrekening aantoonbaar van jezelf? Twee harde aanwijzingen, geen weging en
-   geen score: geld dat beide kanten op gaat, of een tenaamstelling die we al als jouw naam kennen
-   (ownNameSet, dezelfde bron als de intern-detectie). Een winkel voldoet aan geen van beide.
-   Alleen hierop mag een melding vuren. De lijst in Instellingen toont álle kandidaten, want daar
-   kies jij zelf en is een winkel ertussen geen fout maar een regel die je wegtikt. */
-function tegenrekSterk(r){
-  if(!r) return '';
-  if(r.uit>0 && r.in>0) return 'geld gaat beide kanten op';
-  const own=ownNameSet();
-  if(r.namen.some(n=>own.has(n.toLowerCase()))) return 'staat op jouw naam';
-  return '';
-}
-function tegenrekLabel(num){ return '··'+String(num||'').slice(-4); }
-function eigenRekJa(num){
-  const l=(SET.eigenRek||[]).slice(); if(!l.includes(num)) l.push(num);
-  SET.eigenRek=l; SET.eigenRekNiet=(SET.eigenRekNiet||[]).filter(x=>x!==num);
-  save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); render();
-  toast(`${ICON('check')} ${tegenrekLabel(num)} telt nu als je eigen rekening`);
-}
-function eigenRekNee(num){
-  const l=(SET.eigenRekNiet||[]).slice(); if(!l.includes(num)) l.push(num);
-  SET.eigenRekNiet=l; SET.eigenRek=(SET.eigenRek||[]).filter(x=>x!==num);
-  save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); render();
-}
-function openBankSet(){ SET.setOpen='bank'; save(); go('set'); }
-/* De kaart in Instellingen. Rendert '' zodra er niets te kiezen valt: geen kandidaten, geen lege
-   staat en geen uitleg waarom er niets staat. De zin zegt wat er is en wat het nu kost, en de
-   tik naar opnieuw autoriseren staat erbij omdat bevestigen de rekening zelf niet ophaalt. */
-function onbekendeRekBlok(){
-  let rs=[]; try{ rs=onbekendeTegenrekeningen(); }catch(_){ return ''; }
-  rs=rs.filter(r=>r.n>=1).slice(0,4);
-  if(!rs.length) return '';
-  const rij=r=>{
-    const w=tegenrekSterk(r);
-    const namen=r.namen.length?esc(r.namen.slice(0,2).join(', ')):'geen tenaamstelling';
-    return `<div class="row" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
-      <div style="min-width:0;flex:1">
-        <div style="font-weight:600">${tegenrekLabel(r.num)}${w?` <span class="tag">${esc(w)}</span>`:''}</div>
-        <div class="small muted">${namen} · ${r.n} ${r.n===1?'boeking':'boekingen'} · ${euro0(r.bedrag)}</div>
-      </div>
-      <div style="display:flex;gap:6px;flex:0 0 auto">
-        <span class="chip" style="cursor:pointer" onclick="eigenRekJa('${esc(r.num)}')">Van mij</span>
-        <span class="chip" style="cursor:pointer" onclick="eigenRekNee('${esc(r.num)}')">Nee</span>
-      </div></div>`;
-  };
-  return `<div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
-    <div class="small muted" style="margin-bottom:4px;font-weight:600">Tegenrekeningen die je niet gekoppeld hebt</div>
-    <div class="small muted" style="margin-bottom:8px">Je bank deelt alleen de rekeningen die je bij het inloggen goedkeurde. Een rekening die daarna bij kwam komt er niet vanzelf bij, ook niet als je vernieuwt.</div>
-    ${rs.map(rij).join('')}
-    <div class="small muted" style="margin-top:8px">Van jou? Dan telt een overboeking erheen niet meer als uitgave. Om de rekening zelf te zien — met saldo en boekingen — moet je opnieuw autoriseren.</div>
-    <button class="btn sec" style="margin-top:8px" onclick="psd2Connect()">${ICON('bank')} Opnieuw autoriseren</button>`;
-}
 
 /* Read-only diagnose (v118): waar komt de naam van elke rekening vandaan? Gemeld werd dat sommige
    N26-potjes hun juiste naam tonen en andere geen naam, terwijl in N26 elk potje een naam heeft.
