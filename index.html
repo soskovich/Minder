@@ -9869,6 +9869,63 @@ async function rekOverlapCopy(){
   try{ await navigator.clipboard.writeText(rekOverlapTekst()); toast(`${ICON('check')} Gekopieerd`); }
   catch(e){ toast('Kopieren lukte niet'); }
 }
+/* Samenvoegen (v151). Twee ids die dezelfde rekening blijken te zijn: de boekingen van de ene
+   verhuizen naar de andere, en wat er dubbel staat valt weg op _softKey - dezelfde sleutel als de
+   dedup, nooit een tweede definitie. Wat verdwijnt is een id, niet je geschiedenis: een boeking die
+   alleen op de opgeheven rekening stond gaat gewoon mee.
+   Onomkeerbaar, dus uitsluitend na een bevestiging die per stuk noemt wat er gebeurt, en nooit
+   automatisch - welke van de twee de echte is weet alleen de gebruiker. De doelrekening is die met
+   de nieuwste machtiging; staat die er niet, dan die met de meeste boekingen. */
+function rekSamenvoegPlan(van, naar){
+  const houd=new Set(TX.filter(t=>t.acc===naar).map(_softKey));
+  const mee=TX.filter(t=>t.acc===van && !houd.has(_softKey(t)));
+  const weg=TX.filter(t=>t.acc===van && houd.has(_softKey(t)));
+  return {van, naar, mee:mee.length, weg:weg.length, saldoVan:accBalance(van), saldoNaar:accBalance(naar)};
+}
+function rekSamenvoeg(van, naar){
+  if(!van||!naar||van===naar) return;
+  const houd=new Set(TX.filter(t=>t.acc===naar).map(_softKey));
+  TX=TX.filter(t=>!(t.acc===van && houd.has(_softKey(t))));      // dubbel: weg
+  for(const t of TX) if(t.acc===van) t.acc=naar;                 // de rest verhuist
+  const ps=SET.psd2Accounts||{}; delete ps[van]; SET.psd2Accounts=ps;
+  if(SET.manualBal) delete SET.manualBal[van];
+  if(SET.acctName) delete SET.acctName[van];
+  if(SET.savingsAcc) delete SET.savingsAcc[van];
+  delete ACCMETA[van];
+  TX.sort((a,b)=>a.date.localeCompare(b.date));
+  applyOwnAccounts(); buildAccMeta(); save();
+  curMonth=null; closeSheet(); render();
+  toast(`${ICON('check')} Samengevoegd tot één rekening`);
+}
+function rekSamenvoegVraag(a, b){
+  const fa=rekFeiten(a), fb=rekFeiten(b);
+  // doel = de nieuwste machtiging, anders de meeste boekingen
+  const naarA=(fa.exp&&fb.exp&&fa.exp!==fb.exp) ? (fa.exp>fb.exp) : (fa.tx>=fb.tx);
+  const naar=naarA?a:b, van=naarA?b:a;
+  const P=rekSamenvoegPlan(van, naar), F=rekFeiten(naar), V=rekFeiten(van);
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:10px"><div style="font-size:var(--fs-xl)">${ICON('warn')}</div>
+      <div style="font-weight:800;font-size:var(--fs-lg)">Samenvoegen tot één rekening</div>
+      <div class="muted small">Dit is niet terug te draaien.</div></div>
+    <div class="card">
+      <div class="small muted" style="margin-bottom:6px">Blijft bestaan</div>
+      <div style="font-weight:600">${esc(F.naam)}</div>
+      <div class="small muted">${F.tx} boekingen · ${F.saldo!=null?euro(F.saldo):'saldo onbekend'}${F.exp?' · machtiging tot '+esc(F.exp):''}</div>
+      <div style="border-top:1px solid var(--line);margin:10px 0"></div>
+      <div class="small muted" style="margin-bottom:6px">Vervalt</div>
+      <div style="font-weight:600">${esc(V.naam)}</div>
+      <div class="small muted">${V.tx} boekingen · ${V.saldo!=null?euro(V.saldo):'saldo onbekend'}${V.exp?' · machtiging tot '+esc(V.exp):''}</div>
+    </div>
+    <div class="small muted" style="margin:10px 2px">
+      · ${P.weg} dubbele boeking${P.weg===1?'':'en'} ${P.weg===1?'valt':'vallen'} weg<br>
+      · ${P.mee} boeking${P.mee===1?'':'en'} ${P.mee===1?'verhuist':'verhuizen'} mee, je geschiedenis blijft compleet<br>
+      · het saldo telt daarna nog één keer mee${P.saldoVan!=null?' ('+euro(P.saldoVan)+' minder in je totaal)':''}<br>
+      · de naam en instellingen van de vervallen rekening verdwijnen
+    </div>
+    <button class="btn" onclick="rekSamenvoeg('${esc(String(van).replace(/'/g,"\'"))}','${esc(String(naar).replace(/'/g,"\'"))}')">${ICON('check')} Samenvoegen</button>
+    <button class="btn sec" style="margin-top:8px" onclick="openRekOverlap()">Annuleren</button>`;
+  showSheetBg();
+}
 function openRekOverlap(){
   const ov=(()=>{ try{ return rekeningOverlap(); }catch(_){ return []; } })();
   const kaart=f=>`<div style="padding:8px 0;border-bottom:1px solid var(--line)">
@@ -9884,7 +9941,8 @@ function openRekOverlap(){
     ${ov.length?ov.map(o=>`<div class="card" style="margin-bottom:10px">
       <div class="small" style="color:var(--amber);margin-bottom:6px">${o.gedeeld} gedeelde boekingen · van ${o.aN} en ${o.bN}</div>
       ${kaart(rekFeiten(o.a))}${kaart(rekFeiten(o.b))}
-      <div class="small muted" style="margin-top:8px">Zijn dit dezelfde rekening, dan telt je totale saldo er een dubbel.</div>
+      <div class="small muted" style="margin-top:8px">Zijn dit dezelfde rekening, dan telt je totale saldo er een dubbel. Verschillende machtigingen wijzen daarop; dezelfde machtiging betekent meestal twee echte rekeningen.</div>
+      <button class="btn sec" style="margin-top:8px" onclick="rekSamenvoegVraag('${esc(String(o.a).replace(/'/g,"\'"))}','${esc(String(o.b).replace(/'/g,"\'"))}')">Samenvoegen tot één rekening</button>
     </div>`).join(''):'<div class="small muted">Geen overlap meer gevonden.</div>'}
     <div class="small muted" style="margin:12px 0 6px;font-weight:600">Al je rekeningen</div>
     ${OWN.map(a=>kaart(rekFeiten(a))).join('')}
@@ -10426,9 +10484,20 @@ async function psd2IngestSession(s){
   for(const a of accounts){
     const uid = a.uid || a;
     const iban = (a.account_id&&a.account_id.iban) || a.iban || '';
-    const accId = ibanNum(iban) || ('psd2_'+String(uid).slice(0,8));
+    /* v151: de id van een rekening zonder IBAN hing aan de uid, en die is per sessie - de API zegt
+       het met zoveel woorden: "valid only until the session ... is in the AUTHORIZED status".
+       Elke nieuwe machtiging gaf zo'n rekening dus een nieuwe id en daarmee een tweede exemplaar,
+       met dezelfde boekingen en een dubbel geteld saldo. identification_hash is precies daarvoor
+       bedoeld: "can be used for matching accounts between multiple sessions". Volgorde: IBAN (het
+       stabielst en al in gebruik), dan de hash, dan pas de uid als er niets anders is. */
+    const hash = a.identification_hash || (Array.isArray(a.identification_hashes)?a.identification_hashes[0]:'') || '';
+    // een rekening die we al kennen aan zijn hash houdt zijn bestaande id, ook als die nog uit de
+    // uid-tijd komt; anders zou juist deze fix een derde exemplaar maken
+    let bekend='';
+    if(hash) for(const k in meta){ if(meta[k] && meta[k].hash===hash){ bekend=k; break; } }
+    const accId = bekend || ibanNum(iban) || (hash?'psd2h_'+String(hash).slice(0,16):'psd2_'+String(uid).slice(0,8));
     const label = (a.name||a.product||'Rekening')+(iban?' ··'+iban.slice(-4):'');
-    meta[accId]={ uid, iban, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'' };
+    meta[accId]={ uid, iban, hash, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'' };
     let cont=null, guard=0;
     do{
       const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
