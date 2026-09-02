@@ -2907,7 +2907,7 @@ function buildCoaching(){
   const overN=rows.filter(r=>r.over).length;
   const srt=rows.slice().sort((a,b)=>a.saved-b.saved); const worst=srt[0];
   // windfall-afhankelijkheid: sparen in gewone salarismaanden vs meevallermaanden
-  const normal=rows.filter(r=>r.inc<=base*1.15), windfall=rows.filter(r=>r.inc>base*1.15);
+  const normal=rows.filter(r=>r.inc<=base*MEEVALLER_FACTOR), windfall=rows.filter(r=>r.inc>base*MEEVALLER_FACTOR);
   const savNormal=Math.round(avg(normal.map(r=>r.savedEur)));
   const windfallDep = normal.length>=1 && windfall.length>=1 && savNormal<target*0.7;
   const spW=Math.round(avg(windfall.map(r=>r.sp))), spN=Math.round(avg(normal.map(r=>r.sp)));
@@ -3023,6 +3023,15 @@ function scoreNotifs(){
   // v128: één controlemoment op de reserveringenlijst, hooguit één keer per maand (resCheck).
   try{ if(resCheckDue()) push({key:'res-check',score:34,t:'info',ic:ICON('cal'),
     l1:'Klopt je lijst met reserveringen nog?',l2:'Premies en aanslagen veranderen',act:'openReserveringen()'}); }catch(_){}
+  /* v155: een meevaller die binnenkomt, met het voorstel uit je eigen verdeelregel. De sleutel
+     hangt aan de transactie, dus een keer per meevaller en niet per dag; snooze en mute lopen via
+     de groep 'meeval'. Geen felicitatie, geen bedrag in de kop: dat staat in de sheet. */
+  try{ const mv=meevallerTx();
+    if(mv){ const P=meevallerPlan(Math.round(mv.amount));
+      if(P.volledig) push({key:'meeval-'+String(mv.id||mv.date),score:58,t:'info',ic:ICON('coins'),
+        l1:'Er kwam meer binnen dan je normale maandinkomen.',
+        l2:'Bekijk de verdeling volgens je regel',
+        act:`openMeevaller(${Math.round(mv.amount)},'transactie')`}); } }catch(_){}
   // save-risk krijgt dezelfde chronic-ack als tempo: pas opnieuw als het tekort merkbaar groeit.
   let saveRiskPushed=false;
   if(isNow){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget();
@@ -3145,7 +3154,7 @@ function scoreNotifs(){
       l2:`${euro0(savMis)} aan eigen overboekingen telt mee. Tik om dit recht te zetten.`, act:'fixSavingsRules()'});
     if(doneA.length>=2){
       const rowsA=doneA.map(mm=>{const t=totals(mm);return{inc:t.income,sp:t.spend,savedEur:t.income-t.spend,over:t.spend>t.budget};});
-      const normalA=rowsA.filter(r=>r.inc<=baseA*1.15), windfallA=rowsA.filter(r=>r.inc>baseA*1.15);
+      const normalA=rowsA.filter(r=>r.inc<=baseA*MEEVALLER_FACTOR), windfallA=rowsA.filter(r=>r.inc>baseA*MEEVALLER_FACTOR);
       const savNormalA=Math.round(avgA(normalA.map(r=>r.savedEur)));
       // 2) meevaller-afhankelijkheid
       if(normalA.length>=1&&windfallA.length>=1&&savNormalA<targetA*0.7&&targetA>0&&!hasAutoSaving())
@@ -3763,7 +3772,10 @@ function doelTempoLine(p){
    Dit scherm REKENT NIETS ZELF. Het roept bestaande functies aan, stelt hun uitkomsten samen en
    sorteert ze. Valt een bron weg, dan valt die regel weg - zonder foutmelding en zonder
    placeholder; het scherm werkt met drie van de vijf. */
-const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0 };   // de rest volgt nfMaanden()
+const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0 };
+/* v155: de meevallerdrempel stond als kaal 1.15 op drie plekken. Eén naam, dezelfde waarde, zodat
+   de verdeelregel niet zijn eigen drempel krijgt. Geen gedragswijziging. */
+const MEEVALLER_FACTOR = 1.15;   // de rest volgt nfMaanden()
 const MAAND_VERBANDEN = true;                                          // beide verbandzinnen in één keer uit
 const MAAND_PATROON = ['budget-','discr-','tempo'];                    // uitgavenpatronen; geen incasso's, geen saldo-nudges
 const MAAND_VOLGORDE = ['dekking','buffer','aansluiting','doel','patroon'];
@@ -6256,7 +6268,7 @@ function coachItems(){
   if(savN>=2) items.push({t:'info',insight:'Je spaarstortingen tellen als uitgave',context:`${euro0(savMis)} aan eigen overboekingen telt mee. Tik om dit recht te zetten.`,label:'Zet recht met 1 tik',fn:'fixSavingsRules()'});
   if(done.length>=2){
     const rows=done.map(m=>{const t=totals(m);return{inc:t.income,sp:t.spend,savedEur:t.income-t.spend,over:t.spend>t.budget};});
-    const normal=rows.filter(r=>r.inc<=base*1.15), windfall=rows.filter(r=>r.inc>base*1.15);
+    const normal=rows.filter(r=>r.inc<=base*MEEVALLER_FACTOR), windfall=rows.filter(r=>r.inc>base*MEEVALLER_FACTOR);
     const savNormal=Math.round(avg(normal.map(r=>r.savedEur)));
     // 2) meevaller-afhankelijkheid
     if(normal.length>=1&&windfall.length>=1&&savNormal<target*0.7&&target>0&&!hasAutoSaving())
@@ -10059,6 +10071,9 @@ function setBudget(){
       ? `<input type="number" min="0" max="100" value="${SET.savingPercent||''}" placeholder="bv. 20" oninput="SET.savingPercent=+this.value||0;save();render();">`
       : `<div class="small muted">Automatisch = je inkomen minus je bestedingslimiet.</div>`}
     <div class="small" style="margin-top:8px">Nu: <b>${euro0(monthBudget(baseIncome()))}</b> besteden · <b style="color:var(--teal)">${euro0(monthlySavingTarget())}</b> sparen per maand.</div>
+    <label class="fld">Meevallers: deel dat vrij blijft (%)</label>
+    <input type="number" min="0" max="100" value="${SET.meevallerVrijPct!=null&&SET.meevallerVrijPct!==''?SET.meevallerVrijPct:''}" placeholder="${MEEVALLER_VRIJ_DEFAULT}" oninput="SET.meevallerVrijPct=this.value===''?'':+this.value;save();">
+    <div class="small muted" style="margin-top:6px">Bij bonus, vakantiegeld of een nabetaling blijft <b>${meevallerVrijPct()}%</b> vrij besteedbaar. De rest gaat naar de eerste voorwaarde die nog niet gehaald is: eerst je reserveringen tot ze gedekt zijn, dan je buffer tot ${MAAND_DREMPEL.bufferKritiek} maanden, dan je aankoopdoel. Je legt de regel nu vast; bij binnenkomst zie je het voorstel en bevestig je zelf per post. <span style="color:var(--teal);cursor:pointer" onclick="openMeevaller(0,'handmatig')">Nu doorrekenen ›</span></div>
     <button class="snz" style="margin-top:14px" onclick="SET.budgetAdv=${!adv};save();render();">${adv?'Minder opties ▲':'Geavanceerd: limiet-model, bufferdoel & categorie-budgetten ▼'}</button>
     ${adv?advBlock:''}`;
 }
