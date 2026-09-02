@@ -1737,6 +1737,22 @@ function dailyVarSeries(m){ const [y,mo]=m.split('-').map(Number); const dim=new
   const arr=new Array(dim).fill(0);
   for(const t of txOfMonth(m)){ if(isExpenseTx(t) && !isFixed(t)){ const d=+t.date.slice(8,10); if(d>=1&&d<=dim) arr[d-1]+=-t.amount; } }   // netto
   return arr; }
+/* Eén bron voor het dagtarget (v153). Het target werd op vier plekken afgeleid, elk met een eigen
+   terugval, en stond nergens in beeld. Deze functie is puur en volgt de afleiding van
+   renderDailyVar: je eigen dagbudget als je dat hebt ingesteld, anders je maandbudget min je vaste
+   lasten, gedeeld over de dagen van de maand.
+   `over` telt de dagen boven target en kijkt in de lopende maand niet vooruit, net als renderDailyVar. */
+function dagTarget(m){
+  const de=daysElapsed(m), sv=splitFixedVar(m), series=dailyVarSeries(m);
+  const monthVar=series.reduce((a,b)=>a+b,0);
+  const avgDay=monthVar/(de.elapsed||1);
+  const userDay=+SET.dailyVarBudget||0;
+  const budget=totals(m).budget;
+  const autoDay=Math.max(budget - sv.fixed,0)/de.dim;
+  const target=userDay>0?userDay:autoDay;
+  const over=series.filter((v,i)=>(de.today?i<de.today:true)&&v>target).length;
+  return {target, bron:userDay>0?'ingesteld':'afgeleid', avgDay, dim:de.dim, elapsed:de.elapsed, over};
+}
 function renderDailyVar(m, budget){
   const sv=splitFixedVar(m), de=daysElapsed(m), series=dailyVarSeries(m);
   const monthVar=series.reduce((a,b)=>a+b,0), avgDay=monthVar/(de.elapsed||1);
@@ -7637,7 +7653,8 @@ function toggleExpand(which){ SET[which]=!SET[which]; save(); renderIns(); }
 const COLLAP_DEF={
   openSpendChart:{rustig:false, rest:true},    // v90 blijft: dicht in Rustig, open in Begeleid
   openKpiCard:{rustig:true, rest:true},        // kerncijfers blijven standaard open
-  openBehavior:{rustig:false, rest:false}
+  openBehavior:{rustig:false, rest:false},
+  openDagVar:{rustig:false, rest:false}        // v153: het dagbedrag staat ingeklapt onder Verdieping
 };
 function collapOpen(flag){
   const v=SET[flag]; if(v===true||v===false) return v;
@@ -9152,6 +9169,52 @@ function insLekVraag(m){
       <span style="color:var(--teal);font-weight:700">›</span>
     </div></div>`;
 }
+/* De gevoeligheidsregel (v153). Wat doet een euro per dag, in beide richtingen? Er wordt hier
+   niets nieuws uitgerekend: het bedrag per dag en het target komen uit dagTarget(m), de ruimte van
+   deze maand uit safeToSpend() en het gevolg voor je doel uit doelTempo(). Een horizon waarvoor de
+   onderliggende functie niets teruggeeft, valt weg - geen aanname, geen ingevuld getal.
+   Spiegel, gevolg, keuze: beide richtingen even neutraal, geen aanmoediging en geen advies. */
+const DAG_EURO_JAAR=365, DAG_EURO_MAAND=30;
+function dagGevoeligheid(m){
+  let D=null; try{ D=dagTarget(m); }catch(_){ return ''; }
+  if(!D || !(D.target>0)) return '';
+  const regels=[];
+  // a · deze maand: de euro maal de dagen die nog komen, tegen wat safeToSpend() nu vrij noemt
+  const restDagen=Math.max(D.dim-D.elapsed,0);
+  if(restDagen>0){
+    let S=null; try{ S=safeToSpend(); }catch(_){}
+    if(S && S.known>0) regels.push(`Deze maand: ${euro0(restDagen)} over de ${restDagen} dagen die nog komen, op ${euro0(S.safe)} die je nu vrij hebt.`);
+  }
+  // b · je aankoopdoel: de euro maal 30 als maandbedrag, door doelTempo() heen
+  let G=null; try{ G=maandDoel(); }catch(_){}
+  if(G && G.p && G.T){
+    const alloc=Math.max(Math.round(+G.p.alloc||0),0);
+    const meer=doelTempo(G.p, alloc+DAG_EURO_MAAND), minder=doelTempo(G.p, alloc-DAG_EURO_MAAND);   // doelTempo klemt alloc zelf op 0
+    if(meer && minder){
+      const naam=esc(String(G.p.naam||'je doel'));
+      const zeg=t=>t.gat<=0?`${euro0(-t.gat)} over`:`${euro0(t.gat)} tekort`;
+      regels.push(`${naam}: dat vraagt ${euro0(G.T.benodigd)} per maand en je legt ${euro0(alloc)} in, dus ${zeg(G.T)}. Een euro per dag erbij maakt dat ${zeg(meer)}, eraf ${zeg(minder)}.`);
+    }
+  }
+  if(!regels.length) return '';
+  const bron=D.bron==='ingesteld'?'een target van':'een richtlijn van';
+  return `<div class="card" style="padding:12px 14px">
+    <div class="small" style="margin-bottom:6px">Je zit op <b>${euro(D.avgDay)}</b> per dag, tegen ${bron} <b>${euro(D.target)}</b>. Eén euro per dag is ${euro0(DAG_EURO_JAAR)} per jaar.</div>
+    ${regels.map(r=>`<div class="small muted" style="margin-top:4px">${r}</div>`).join('')}
+  </div>`;
+}
+/* Samenvatting op de ingeklapte kop: hetzelfde dagbedrag en target als in de kaart, uit dezelfde
+   bron, zodat kop en inhoud elkaar niet kunnen tegenspreken. */
+function dagVarSamenvatting(m){
+  try{ const D=dagTarget(m); return D&&D.target>0?`${euro(D.avgDay)} per dag · ${D.bron==='ingesteld'?'target':'richtlijn'} ${euro(D.target)}`:''; }catch(_){ return ''; }
+}
+function dagVarBlok(m){
+  let D=null; try{ D=dagTarget(m); }catch(_){ return ''; }
+  if(!D || !(D.target>0)) return '';
+  let kaart=''; try{ kaart=renderDailyVar(m, totals(m).budget); }catch(_){ return ''; }
+  if(!kaart) return '';
+  return kaart + dagGevoeligheid(m);
+}
 function insHeroKaart(m){
   const A=insBudgetBlok(m);
   if(!A) return '';   // geen budget: de beller toont de budget-prompt met de losse kaart eronder
@@ -9202,6 +9265,7 @@ function renderIns(){
      "Uitgegeven" (openMonthSpend, eerste chip), en dat is de plek waar de vraag "waar ging mijn
      geld heen" hoort (v114/v115). Twee weergaven van hetzelfde is geen keuze maar ruis. */
   const verdieping = insVouw('openKpiCard','Kerncijfers',ICON('chart'),insKpiSamenvatting(m),insKpiStrip(m))
+    + insVouw('openDagVar','Per dag',ICON('clock'),dagVarSamenvatting(m),dagVarBlok(m))
     + spendVsBudgetChart()
     + insVouw('openBehavior','Gedrag',ICON('bulb'),behN?`${behN} ${behN===1?'observatie':'observaties'}`:'',beh)
     + subsCard();
