@@ -3872,6 +3872,243 @@ function maandRegels(){
   }catch(_){}
   return uit.sort((a,b)=>MAAND_VOLGORDE.indexOf(a.key)-MAAND_VOLGORDE.indexOf(b.key));
 }
+/* ===== De voorwaarden voor beleggen (v154) =====
+ * Beleggen hoort met geld dat je op korte termijn niet nodig hebt, en dat is pas zo als drie dingen
+ * kloppen: de buffer staat, de bekende toekomstige kosten zijn gedekt, en de concrete geldbehoefte
+ * op korte termijn staat apart. Zolang een van die drie niet klopt bestaat dat geld niet, hoe hoog
+ * het saldo ook is.
+ *
+ * Alle drie staan al als losse regel op dit scherm. Deze laag stelt alleen de SAMENSTELLING vast en
+ * rekent zelf niets: hij leest de rijen die maandRegels() al opleverde en roept dekking(),
+ * bufferMaanden() en doelTempo() dus geen tweede keer aan. De drempels komen uit MAAND_DREMPEL,
+ * dezelfde constante die de vijf statussen bepaalt.
+ *
+ * Buffer haalt de voorwaarde ook bij status 'let op': die stand betekent boven de drie maanden maar
+ * onder je eigen richtbedrag, en de voorwaarde is de drie maanden. Bij dekking en doel is 'ok' de
+ * enige stand die haalt.
+ *
+ * KRITIEK - zwijgen bij onvolledigheid. Ontbreekt een van de drie rijen, of staat er 'onbekend',
+ * dan is er GEEN uitspraak: geen 'bijna', geen 'waarschijnlijk nog niet', geen gedeeltelijke
+ * uitkomst. Een verkeerd groen licht hier kost geld dat binnen een jaar nodig is. */
+const BELEGGEN_VOORWAARDEN=[
+  {key:'buffer',  label:'buffer',                drempel:()=>`${MAAND_DREMPEL.bufferKritiek} maanden`},
+  {key:'dekking', label:'dekking reserveringen', drempel:()=>`${MAAND_DREMPEL.dekkingOk}%`},
+  {key:'doel',    label:'',                      drempel:()=>euro0(MAAND_DREMPEL.doelOk)},
+];
+function beleggenWaarde(key, r){
+  if(key==='buffer') return `${r.waarde} maanden`;
+  if(key==='doel')   return (r.tekortPerMaand>0)?`${euro0(r.tekortPerMaand)} tekort`:'geen tekort';
+  return String(r.waarde);
+}
+function beleggenKlaar(R){
+  const rijen=Array.isArray(R)?R:[];
+  const voorwaarden=[]; let volledig=true;
+  for(const v of BELEGGEN_VOORWAARDEN){
+    const r=rijen.find(x=>x.key===v.key);
+    if(!r || r.status==='onbekend'){
+      volledig=false;
+      voorwaarden.push({key:v.key, naam:v.label||(r?r.naam:v.key), gehaald:false, ontbreekt:true,
+        waarde:'onbekend', drempel:v.drempel(), status:'onbekend', eenheid:r?r.eenheid:''});
+      continue;
+    }
+    const gehaald = v.key==='buffer' ? r.status!=='tekort' : r.status==='ok';
+    voorwaarden.push({key:v.key, naam:v.label||r.naam, gehaald, ontbreekt:false,
+      waarde:beleggenWaarde(v.key,r), drempel:v.drempel(), status:r.status, eenheid:r.eenheid});
+  }
+  const blokkade=voorwaarden.find(v=>!v.gehaald)||null;   // vaste volgorde: buffer, dekking, doel
+  return {klaar: volledig && voorwaarden.every(v=>v.gehaald), voorwaarden, blokkade, volledig};
+}
+/* Wie geen enkel spaardoel en geen vermogensinstelling heeft, heeft geen beleggingsambitie en
+   hoeft deze regel niet te zien. */
+function beleggenZichtbaar(){
+  try{ return ((SET.goals||[]).length>0) || ((SET.assets||[]).length>0); }catch(_){ return false; }
+}
+/* De regel op het maandscherm. Stelt vast, raadt niets aan: geen bedrag, geen product, geen
+   percentage, geen aanmoediging bij groen. Bij niet-klaar alleen de EERSTE blokkade, want een ding
+   tegelijk. De cijfers van de drie regels worden hier niet herhaald - die staan er al los boven;
+   in de sheet mag de opbouw wel volledig staan. */
+function maandBeleggenRegel(R){
+  if(!beleggenZichtbaar()) return '';
+  let B=null; try{ B=beleggenKlaar(R); }catch(_){ return ''; }
+  if(!B) return '';
+  const kop=`<div class="hlabel" style="margin:0 0 2px">Voorwaarden voor beleggen</div>`;
+  if(!B.volledig){
+    const mist=B.voorwaarden.filter(v=>v.ontbreekt).map(v=>v.naam).filter(Boolean);
+    if(!mist.length) return '';
+    return `<div class="card">${kop}
+      <div class="row" style="gap:9px;align-items:flex-start;padding:7px 0">
+        ${maandDot('onbekend')}
+        <div class="small muted" style="flex:1;min-width:0;line-height:1.45">Niet te beoordelen zolang ${esc(mist.join(' en '))} ontbreekt.</div>
+      </div></div>`;
+  }
+  const zin = B.klaar
+    ? 'Je drie voorwaarden voor beleggen zijn alle drie gehaald.'
+    : `Nog niet aan je voorwaarden voor beleggen: ${B.blokkade.naam} ${B.blokkade.waarde} tegen ${B.blokkade.drempel}.`;
+  return `<div class="card" style="cursor:pointer" onclick="openBeleggenVoorwaarden()">${kop}
+    <div class="row" style="gap:9px;align-items:flex-start;padding:7px 0">
+      ${maandDot(B.klaar?'ok':B.blokkade.status)}
+      <div style="flex:1;min-width:0;line-height:1.45">${esc(zin)}</div>
+      <span style="color:var(--teal);font-weight:700">›</span>
+    </div></div>`;
+}
+function openBeleggenVoorwaarden(){
+  let B=null; try{ B=beleggenKlaar(maandRegels()); }catch(_){}
+  if(!B) return;
+  const rij=v=>`<div class="row" style="gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)">
+    ${maandDot(v.ontbreekt?'onbekend':(v.gehaald?'ok':v.status))}
+    <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(v.naam)}</div>
+      ${v.eenheid?`<div class="small muted" style="line-height:1.4;margin-top:2px">${esc(v.eenheid)}</div>`:''}</div>
+    <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:44%">
+      <div style="font-weight:700;white-space:nowrap">${esc(v.waarde)}</div>
+      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">tegen ${esc(v.drempel)}</div></div></div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg)">Voorwaarden voor beleggen</div>
+      <div class="muted small">Beleggen hoort met geld dat je op korte termijn niet nodig hebt.</div></div>
+    ${B.voorwaarden.map(rij).join('')}
+    <div class="small muted" style="margin-top:12px;line-height:1.5">${B.volledig
+      ? (B.klaar ? 'Alle drie gehaald.' : `Eerst ${esc(B.blokkade.naam)}.`)
+      : 'Zolang een van de drie niet te beoordelen is, staat er geen uitkomst.'}</div>`;
+  showSheetBg();
+}
+/* ===== De verdeelregel voor onregelmatig inkomen (v155) =====
+ * Bonus, vakantiegeld, dertiende maand of een nabetaling landt zonder regel stil in vrij
+ * besteedbaar. De regel wordt daarom vooraf vastgelegd, terwijl het geld er nog niet is: een vast
+ * klein deel blijft vrij, de rest gaat naar de eerste voorwaarde die nog niet gehaald is.
+ *
+ * De volgorde hier is reserveringen, buffer, aankoopdoel. Dat is bewust een ANDERE volgorde dan
+ * BELEGGEN_VOORWAARDEN, die met de buffer begint: daar is de vraag "wat blokkeert je", hier "waar
+ * hoort dit geld als eerste heen". Wie ze gelijk wil trekken, moet dat op een plek doen.
+ *
+ * Geen enkel bedrag wordt hier gemodelleerd; ze komen alle drie uit bestaande uitkomsten. Twee
+ * ervan vragen wel een omrekening, en die is zo klein mogelijk gehouden:
+ *  - buffer: nergens bestaat een bedrag in euro's. bufferMaanden() is spaar/essCrisis; het bedrag
+ *    om de drempel te halen is de omkering daarvan, met dezelfde twee waarden uit noodfondsModel()
+ *    en de drempel uit MAAND_DREMPEL.
+ *  - doel: doelTempo().gat is PER MAAND. Een tekort van 50 per maand is niet gedicht met 50
+ *    eenmalig, dus het bedrag is gat maal maandenTot, beide uit diezelfde ene aanroep.
+ * Zonder die twee omrekeningen zou het voorstel een bedrag noemen dat de voorwaarde niet haalt.
+ *
+ * KRITIEK - netto, nooit bruto. Komt het bedrag uit een herkende transactie, dan is het per
+ * definitie netto. Voert de gebruiker zelf in, dan vragen we expliciet om het nettobedrag en zeggen
+ * erbij wat een brutobedrag oplevert. Er wordt nergens netto uit bruto geschat.
+ * KRITIEK - nooit automatisch verdelen (MECHANISM_SPEC.defaultEffect). Er beweegt geen geld, geen
+ * saldo en geen doelbedrag. Vastleggen noteert de toewijzing alleen in de administratie.
+ * KRITIEK - zwijgen zodra beleggenKlaar() onvolledig is: geen gedeeltelijke verdeling en geen
+ * aanname voor de ontbrekende voorwaarde. */
+const MEEVALLER_VOLGORDE = ['dekking', 'buffer', 'doel'];
+const MEEVALLER_VRIJ_DEFAULT = 10;
+function meevallerVrijPct(){
+  const v = SET.meevallerVrijPct;
+  if (v == null || v === '') return MEEVALLER_VRIJ_DEFAULT;
+  const n = Math.round(+v);
+  return (isFinite(n) && n >= 0 && n <= 100) ? n : MEEVALLER_VRIJ_DEFAULT;
+}
+/* Wat is er nodig om deze voorwaarde te halen, in euro's? null zodra de bron het niet weet. */
+function meevallerNodig(key, rijen){
+  const r = (rijen || []).find(x => x.key === key);
+  if (key === 'dekking') return r ? Math.max(Math.round(r.tekortPerMaand || 0), 0) : null;
+  if (key === 'buffer'){
+    let M = null; try { M = noodfondsModel(); } catch(_){ return null; }
+    if (!M || M.spaar == null || !(M.essCrisis > 0)) return null;
+    return Math.max(Math.round(MAAND_DREMPEL.bufferKritiek * M.essCrisis - M.spaar), 0);
+  }
+  if (key === 'doel'){
+    let d = null; try { d = maandDoel(); } catch(_){ return null; }
+    if (!d || !d.T) return null;
+    return Math.max(Math.round(d.T.gat * d.T.maandenTot), 0);
+  }
+  return null;
+}
+function meevallerNaam(key, rijen){
+  if (key === 'dekking') return 'reserveringen';
+  if (key === 'buffer') return 'buffer';
+  const r = (rijen || []).find(x => x.key === key);
+  return r ? (r.naam || 'aankoopdoel') : 'aankoopdoel';
+}
+function meevallerPlan(nettoBedrag){
+  const bedrag = Math.max(Math.round(+nettoBedrag || 0), 0);
+  const leeg = { vrij: 0, posten: [], rest: 0, volledig: false };
+  let R = null, B = null;
+  try { R = maandRegels(); B = beleggenKlaar(R); } catch(_){}
+  if (!B || !B.volledig) return leeg;
+  const vrij = Math.round(bedrag * meevallerVrijPct() / 100);
+  let restant = Math.max(bedrag - vrij, 0);
+  const posten = [];
+  for (const key of MEEVALLER_VOLGORDE){
+    const v = B.voorwaarden.find(x => x.key === key);
+    if (!v || v.gehaald) continue;
+    const nodig = meevallerNodig(key, R);
+    if (nodig == null) return leeg;
+    if (nodig <= 0) continue;
+    const toegewezen = Math.min(nodig, restant);
+    if (toegewezen > 0) posten.push({ key, naam: meevallerNaam(key, R), nodig, toegewezen, volledigGedekt: toegewezen >= nodig });
+    restant -= toegewezen;
+    if (restant <= 0) break;
+  }
+  return { vrij, posten, rest: Math.max(Math.round(restant), 0), volledig: true };
+}
+/* De meevaller zelf: een inkomensboeking van deze maand boven baseIncome() maal dezelfde drempel
+   die de coachlaag gebruikt. Geen tweede drempel en geen eigen soort-detectie. */
+function meevallerTx(){
+  try {
+    const base = baseIncome(); if (!(base > 0)) return null;
+    const m = curMonth || months()[months().length - 1];
+    const grens = base * MEEVALLER_FACTOR;
+    return txOfMonth(m).filter(t => t.amount > grens && CATS[catOf(t)] && CATS[catOf(t)].type === 'income')
+      .sort((a, b) => b.amount - a.amount)[0] || null;
+  } catch(_){ return null; }
+}
+/* Wat er de vorige keer werd gekozen, uit de coachlog. Type tip, dus nooit de maandafspraak. */
+function meevallerVorige(){
+  try { return (SET.coachLog || []).find(l => l && l.type === 'tip' && l.meevaller) || null; } catch(_){ return null; }
+}
+function openMeevaller(bedrag, bron){
+  const b = Math.max(Math.round(+bedrag || 0), 0);
+  const P = b > 0 ? meevallerPlan(b) : null;
+  const vorige = meevallerVorige();
+  const invoer = `<label class="fld">Nettobedrag</label>
+    <input type="number" id="mvInp" value="${b > 0 ? b : ''}" placeholder="bv. 1800" style="width:100%">
+    <div class="small muted" style="margin-top:6px">Vul in wat er daadwerkelijk op je rekening komt. Vul je een brutobedrag in, dan verdeelt het voorstel geld dat je niet krijgt en komt de verdeling niet uit.</div>
+    <button class="btn sec" style="margin-top:8px" onclick="openMeevaller(document.getElementById('mvInp').value,'handmatig')">Bereken de verdeling</button>`;
+  let body = '';
+  if (!P){ body = `<div class="small muted">Vul het nettobedrag in.</div>`; }
+  else if (!P.volledig){
+    body = `<div class="small muted">Er is nog geen verdeling te maken: een van je drie voorwaarden is niet te beoordelen. Zolang dat zo is, doet de app geen voorstel.</div>`;
+  } else {
+    const rij = (naam, bedragP, noot, key) => `<div class="row" style="gap:9px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(naam)}</div>
+        ${noot ? `<div class="small muted" style="line-height:1.4;margin-top:2px">${esc(noot)}</div>` : ''}</div>
+      <div style="text-align:right;flex:0 0 auto"><div style="font-weight:700;white-space:nowrap">${euro0(bedragP)}</div>
+        ${key ? `<div class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="meevallerVastleggen('${esc(key)}',${bedragP},${b})">Vastleggen</div>` : ''}</div></div>`;
+    body = `${rij('Vrij besteedbaar', P.vrij, `${meevallerVrijPct()}% van ${euro0(b)}`, '')}
+      ${P.posten.map(p => rij(p.naam, p.toegewezen, p.volledigGedekt ? 'dekt deze voorwaarde volledig' : `${euro0(p.toegewezen)} van de ${euro0(p.nodig)} die nodig is`, p.key)).join('')}
+      ${P.rest > 0 ? rij('Blijft over', P.rest, 'je drie voorwaarden zijn gedekt', '') : ''}
+      <div class="small muted" style="margin-top:10px;line-height:1.5">Dit is een voorstel. Er wordt geen geld verplaatst en geen saldo aangepast; vastleggen noteert alleen de toewijzing. De overboekingen doe je zelf bij je bank.</div>`;
+  }
+  $('#sheet').innerHTML = `<div class="grab"></div>
+    <div class="center" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg)">Verdeling van je meevaller</div>
+      <div class="muted small">${bron === 'transactie' ? 'Uit een herkende bijschrijving, dus netto.' : 'Je eigen invoer.'}</div></div>
+    ${vorige ? `<div class="small muted" style="margin-bottom:10px">Vorige keer: ${esc(vorige.text || '')}</div>` : ''}
+    ${body}
+    <div style="border-top:1px solid var(--line);margin:14px 0 10px"></div>
+    ${invoer}
+    <div class="small muted" style="margin-top:10px">Je regel: ${meevallerVrijPct()}% blijft vrij, de rest gaat naar de eerste voorwaarde die nog niet gehaald is. <span style="color:var(--teal);cursor:pointer" onclick="closeSheet();go('set')">Aanpassen ›</span></div>`;
+  showSheetBg();
+}
+/* Vastleggen doet precies een ding: de toewijzing noteren. Geen saldo, geen doelbedrag, geen
+   overboeking. Type tip, zodat de maandafspraak onaangeroerd blijft (v139/v140). */
+function meevallerVastleggen(key, bedrag, totaal){
+  const b = Math.max(Math.round(+bedrag || 0), 0); if (!b) return;
+  let R = null; try { R = maandRegels(); } catch(_){}
+  const naam = meevallerNaam(key, R);
+  SET.meevallerLog = SET.meevallerLog || [];
+  SET.meevallerLog.unshift({ ts: Date.now(), key, naam, bedrag: b, totaal: Math.round(+totaal || 0) });
+  if (SET.meevallerLog.length > 50) SET.meevallerLog.length = 50;
+  save();
+  coachLogAdd({ type: 'tip', meevaller: true, text: `Van ${euro0(totaal)} ging ${euro0(b)} naar ${naam}.` });
+  toast(`${ICON('check')} Toegewezen aan ${naam} genoteerd`);
+  openMeevaller(totaal, 'handmatig');
+}
 /* Het oordeel: deterministisch, in deze volgorde. Geen vrije formulering, geen voorspelling die
    verder gaat dan de cijfers, geen aanmoediging en geen compliment. */
 function maandOordeel(R){
@@ -3965,6 +4202,7 @@ function renderMaand(){
       ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}</div>`:''}
     ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
       ${goed.map(r=>maandRij(r,true)).join('')}</div>`:''}
+    ${maandBeleggenRegel(R)}
     ${maandCoachIngang(R)}
     ${maandGelezen()}
     <div style="height:12px"></div>`;
