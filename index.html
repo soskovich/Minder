@@ -3020,6 +3020,14 @@ function scoreNotifs(){
     overs.slice(0,2).forEach((o,i)=>push({key:'budget-'+o.k,score:72+Math.min(o.d/10,24)-i*6,t:o.band==='action'?'bad':'warn',ic:CATS[o.k].icon,
       cat:o.k, bedrag:Math.round(spend[o.k]||0), boven:Math.round(o.d),
       l1:`Je ${CATS[o.k].name.toLowerCase()} ${o.potje?'is over je potje':'gaat over budget'} deze maand.`,l2:'Bekijk waar het heen ging',act:`openVariance('${o.k}')`})); }catch(_){} }
+  /* v157: je zet geld opzij bij een partij die niet bij je bezittingen staat. Alleen vaststellen -
+     de app kent de waarde van die belegging niet en verzint er geen. De sleutel hangt aan de naam,
+     dus snooze en mute lopen per partij via de groep 'bezit'. */
+  try{ const B=(beleggingZonderBezitting()||[])[0];
+    if(B) push({key:'bezit-'+B.naam.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12), score:36, t:'info', ic:ICON('trend'),
+      l1:`Je zet geld opzij bij ${B.naam}, maar dat staat niet bij je bezittingen.`,
+      l2:'Voeg de waarde toe voor je netto vermogen',
+      act:`openAsset(null,'${esc(String(B.naam).replace(/'/g,"\'"))}')`}); }catch(_){}
   // v128: één controlemoment op de reserveringenlijst, hooguit één keer per maand (resCheck).
   try{ if(resCheckDue()) push({key:'res-check',score:34,t:'info',ic:ICON('cal'),
     l1:'Klopt je lijst met reserveringen nog?',l2:'Premies en aanslagen veranderen',act:'openReserveringen()'}); }catch(_){}
@@ -5182,8 +5190,58 @@ function renderAssets(){
     <div class="small muted" style="margin:6px 2px">Voeg spaargeld, beleggingen, je auto of woning toe voor je netto vermogen.</div>`:''}
   </div>`;
 }
-function openAsset(id){
-  const as=SET.assets||[]; const a0=id?as.find(x=>x.id===id):null; const isNew=!a0; const a=a0||{naam:'',waarde:''}; const g=!!a.grow;
+/* ===== Geld opzij bij een partij die niet bij je bezittingen staat (v157) =====
+ * Boek je inleg naar een beleggingspartij als 'sparen', dan telt hij terecht niet meer als uitgave
+ * (v77) - maar daarmee weet de app nog steeds niet wat die belegging waard IS. Bezittingen zijn
+ * handmatige invoer (SET.assets); er is geen koppeling en er valt niets af te leiden.
+ *
+ * Deze laag STELT ALLEEN VAST dat er zo'n partij is en verzint geen bedrag. Uit de stromen valt de
+ * waarde ook niet te reconstrueren: opnames kunnen een positie afromen die is opgebouwd voor je
+ * data begint, en marktbeweging komt nooit langs je bankrekening. In de praktijkdata liep het netto
+ * zelfs negatief (4.918 in, 8.245 uit), en een saldo kan niet negatief zijn. Een geschat bedrag
+ * hier zou dus stellig en fout zijn.
+ *
+ * Wat er buiten valt: een overboeking naar je eigen rekening (tegenrekening in OWN), een partij die
+ * de naam van een eigen rekening draagt, en een partij die al als bezitting bestaat.
+ * Bekende grens, dezelfde als v128: OWN wordt uit TX afgeleid (v122), dus een eigen rekening die
+ * zelf geen boekingen in je data heeft is niet als eigen te herkennen. Zo'n overboeking kan hier
+ * dus als externe partij opduiken; de melding stelt alleen vast en wijzigt niets, dus dat kost
+ * hooguit een tik om hem weg te zetten. */
+const BEZIT_MIN_POSTEN = 3;      // minder dan dit is geen patroon maar een incident
+function beleggingZonderBezitting(){
+  let eigen, eigenNamen;
+  try {
+    eigen = new Set(OWN);
+    eigenNamen = new Set(OWN.map(a => String(acctNiceName(a) || '').toLowerCase()).filter(Boolean));
+  } catch(_) { return []; }
+  const assets = ((SET.assets || []).map(a => String(a.naam || '').trim().toLowerCase()).filter(Boolean));
+  const per = new Map();
+  for (const t of TX) {
+    if (!(t.amount < 0)) continue;
+    let c = ''; try { c = catOf(t); } catch(_) { continue; }
+    if (c !== 'sparen') continue;
+    if ((t.refNums || []).some(n => eigen.has(n))) continue;          // naar je eigen rekening
+    const naam = String((typeof cleanMerch === 'function' ? cleanMerch(t.name) : t.name) || t.name || '').trim();
+    if (!naam) continue;
+    const k = naam.toLowerCase();
+    if (eigenNamen.has(k)) continue;                                  // je eigen potje onder eigen naam
+    const r = per.get(k) || { naam, n: 0, som: 0, eerste: '', laatste: '' };
+    r.n++; r.som += -t.amount;
+    if (!r.eerste || t.date < r.eerste) r.eerste = t.date;
+    if (t.date > r.laatste) r.laatste = t.date;
+    per.set(k, r);
+  }
+  return [...per.values()]
+    .filter(r => r.n >= BEZIT_MIN_POSTEN)
+    .filter(r => !assets.some(a => a.includes(r.naam.toLowerCase()) || r.naam.toLowerCase().includes(a)))
+    .map(r => ({ ...r, som: Math.round(r.som) }))
+    .sort((a, b) => b.som - a.som);
+}
+function openAsset(id, naamVoorstel){
+  // v157: een nieuwe bezitting mag met een naam beginnen als je hier vanuit een signaal komt.
+  // Alleen de naam; het bedrag vul jij in, want de app kent de waarde niet.
+  const as=SET.assets||[]; const a0=id?as.find(x=>x.id===id):null; const isNew=!a0;
+  const a=a0||{naam:(isNew&&naamVoorstel)?String(naamVoorstel):'',waarde:''}; const g=!!a.grow;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px">${isNew?'Nieuwe bezitting':'Bezitting bewerken'}</div>
     <label class="fld">Wat is het?</label><input id="aNaam" type="text" value="${esc(a.naam||'')}" placeholder="bv. Spaarrekening, Beleggingen, Auto" style="width:100%">
