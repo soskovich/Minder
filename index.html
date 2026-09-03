@@ -10964,7 +10964,7 @@ function peaksHerkenning(){
 }
 function peaksAudit(){
   const H = peaksHerkenning();
-  const pakket = [], inleg = [], onduidelijk = [];
+  const pakket = [], inleg = [], onduidelijk = [], opnames = [];
   // hoe vaak komt een exact bedrag terug, en in hoeveel verschillende maanden?
   const perBedrag = {}, perBedragTel = {};
   for (const t of H.posten) {
@@ -10975,7 +10975,10 @@ function peaksAudit(){
   for (const t of H.posten) {
     const reden = (r) => onduidelijk.push({ t, reden: r });
     if (H.zwak.has(t.id)) { reden('alleen herkend aan de tegenrekening, niet aan de omschrijving'); continue; }
-    if (t.amount > 0) { reden('bijschrijving vanaf Peaks, dus geen inleg'); continue; }
+    /* v156 deel B: een bijschrijving vanaf Peaks is een opname uit je belegging. Hij hoort niet
+       bij 'inleg', maar hij is ook niet onduidelijk: staat hij in een uitgavecategorie, dan valt
+       hij daar netto weg tegen je uitgaven (v18-v28) en levert dat onmogelijke maandtotalen op. */
+    if (t.amount > 0) { opnames.push(t); continue; }
     if (Math.abs(t.amount + PEAKS_PAKKET) < 0.005) { pakket.push(t); continue; }
     /* Een pakketprijs komt hooguit EEN keer per maand. Een bedrag dat vaker terugkomt dan het
        aantal maanden waarin het voorkomt heeft een week- of dagritme en is dus inleg. Zonder die
@@ -10992,11 +10995,12 @@ function peaksAudit(){
   const perMaand = {};
   const tel = (groep, t) => {
     const m = maandKey(t);
-    const r = perMaand[m] = perMaand[m] || { pakket: 0, pakketEur: 0, inleg: 0, inlegEur: 0, onduidelijk: 0 };
-    r[groep]++; if (groep !== 'onduidelijk') r[groep + 'Eur'] += -t.amount;
+    const r = perMaand[m] = perMaand[m] || { pakket: 0, pakketEur: 0, inleg: 0, inlegEur: 0, opnames: 0, opnamesEur: 0, onduidelijk: 0 };
+    r[groep]++; if (groep !== 'onduidelijk') r[groep + 'Eur'] += Math.abs(t.amount);
   };
   pakket.forEach(t => tel('pakket', t));
   inleg.forEach(t => tel('inleg', t));
+  opnames.forEach(t => tel('opnames', t));
   onduidelijk.forEach(x => tel('onduidelijk', x.t));
   const huidigeCats = {};
   let viaOvr = 0;
@@ -11008,7 +11012,8 @@ function peaksAudit(){
   const regels = ((typeof SET !== 'undefined' && SET.rules) || [])
     .filter(r => r && r.kw && /PEAKS/i.test(r.kw))
     .map(r => ({ kw: r.kw, cat: r.cat }));
-  return { pakket, inleg, onduidelijk, perMaand, totaalInleg: Math.round(inleg.reduce((a, t) => a + -t.amount, 0)),
+  return { pakket, inleg, opnames, onduidelijk, perMaand, totaalInleg: Math.round(inleg.reduce((a, t) => a + -t.amount, 0)),
+    totaalOpnames: Math.round(opnames.reduce((a, t) => a + t.amount, 0)),
     huidigeCats, bron: { regels, viaOvr }, herkenning: H };
 }
 /* De doorrekening. Draait de bestaande functies met een gewijzigde kopie van OVR en zet die daarna
@@ -11017,7 +11022,7 @@ function peaksAudit(){
    want die hangt aan _dataGen en dat verandert hier niet. */
 function peaksImpact(){
   const A = peaksAudit();
-  if (!A.pakket.length && !A.inleg.length) return null;
+  if (!A.pakket.length && !A.inleg.length && !A.opnames.length) return null;
   const meet = () => {
     const ms = months();
     const perM = {};
@@ -11034,6 +11039,7 @@ function peaksImpact(){
     const kopie = Object.assign({}, OVR);
     for (const t of A.pakket) kopie[t.id] = 'bankkosten';
     for (const t of A.inleg) kopie[t.id] = 'sparen';
+    for (const t of A.opnames) kopie[t.id] = 'sparen';
     OVR = kopie;
     na = meet();
   } finally {
@@ -11062,6 +11068,7 @@ function peaksRapport(){
   const groepen = `<div class="small muted" style="margin:14px 0 6px;font-weight:600">Wat het zijn</div>
     ${rij(`Pakketprijs (${euro(PEAKS_PAKKET)})`, `${A.pakket.length} posten`)}
     ${rij('Inleg', `${A.inleg.length} posten · ${euro0(A.totaalInleg)}`)}
+    ${rij('Opnames uit je belegging', `${A.opnames.length} posten · ${euro0(A.totaalOpnames)}`)}
     ${rij('Onduidelijk', `${A.onduidelijk.length} posten`)}
     <div class="small muted" style="margin-top:6px">Nu geboekt als: ${Object.entries(A.huidigeCats).map(([k, n]) => `${CATS[k] ? esc(CATS[k].name) : esc(k)} (${n})`).join(', ')}</div>`;
   const onduid = A.onduidelijk.length ? `<div class="small muted" style="margin:14px 0 6px;font-weight:600">Onduidelijk, blijft ongemoeid</div>
@@ -11114,13 +11121,15 @@ function peaksRapportTekst(){
   L.push('GROEPEN');
   L.push('  pakket (' + euro(PEAKS_PAKKET) + '): ' + A.pakket.length + ' posten');
   L.push('  inleg: ' + A.inleg.length + ' posten, ' + euro0(A.totaalInleg));
+  L.push('  opnames: ' + A.opnames.length + ' posten, ' + euro0(A.totaalOpnames));
   L.push('  onduidelijk: ' + A.onduidelijk.length + ' posten');
   L.push('  nu geboekt als: ' + Object.entries(A.huidigeCats).map(([k, n]) => (CATS[k] ? CATS[k].name : k) + ' (' + n + ')').join(', '));
   L.push('');
-  L.push('PER MAAND (pakket / inleg / onduidelijk)');
+  L.push('PER MAAND (pakket / inleg / opnames / onduidelijk)');
   for (const m of Object.keys(A.perMaand).sort()) {
     const r = A.perMaand[m];
-    L.push('  ' + m + ': ' + r.pakket + ' x ' + euro0(r.pakketEur) + ' / ' + r.inleg + ' x ' + euro0(r.inlegEur) + ' / ' + r.onduidelijk);
+    L.push('  ' + m + ': ' + r.pakket + ' x ' + euro0(r.pakketEur) + ' / ' + r.inleg + ' x ' + euro0(r.inlegEur)
+      + ' / ' + (r.opnames || 0) + ' x ' + euro0(r.opnamesEur || 0) + ' / ' + r.onduidelijk);
   }
   if (I) {
     L.push('');
@@ -11137,6 +11146,17 @@ function peaksRapportTekst(){
      en zonder override moet een ingebouwd keyword de categorie bepalen. Een paar voorbeelden per
      huidige categorie maken zichtbaar welk woord dat is; zonder die tekst valt het niet vast te
      stellen. Afgekapt op 140 tekens en drie posten per categorie. */
+  L.push('');
+  L.push('EIGEN REGELS (een eigen regel wint van de ingebouwde tabel)');
+  const RG = peaksRegels();
+  if (!RG.length) L.push('  geen eigen regels ingesteld');
+  for (const r of RG) L.push('  ' + (r.raakt ? '>> ' : '   ') + r.kw + ' -> ' + r.cat + (r.raakt ? '  (raakt ' + r.raakt + ' Peaks-posten)' : ''));
+  const SV = peaksSavrulesCheck();
+  L.push('');
+  L.push('SIGNAAL "spaarstortingen tellen als uitgave"');
+  L.push('  patroon: ' + SV.patroon);
+  L.push('  raakt hiervan: ' + SV.raakt + ' posten');
+  L.push('  namen in je data: ' + SV.namen.join(', '));
   L.push('');
   L.push('VOORBEELDEN PER HUIDIGE CATEGORIE (omschrijving afgekapt)');
   const perCat = {};
@@ -11159,11 +11179,100 @@ async function peaksRapportCopy(){
   try { await navigator.clipboard.writeText(peaksRapportTekst()); toast(`${ICON('check')} Rapport gekopieerd`); }
   catch(e){ toast('Kopieren lukte niet'); }
 }
+/* ===== Peaks-correctie (v156, deel B) =====
+ * Route voor de inleg: categorie 'sparen'. Die bestaat al en heeft type 'internal', dus hij valt
+ * automatisch buiten totals().spend, netSpend() en baselineSpend() (v77). Er hoeft geen categorie
+ * bij en Peaks hoeft geen eigen rekening te zijn; een interne overboeking zou vragen dat Peaks in
+ * OWN staat, en dat is niet zo.
+ *
+ * De correctie schrijft per transactie een override in OVR, precies zoals setCat() dat doet, maar
+ * in een keer voor de hele groep. Er wordt geen transactie verwijderd, geen bedrag en geen datum
+ * aangeraakt. De groep 'onduidelijk' blijft ongemoeid.
+ *
+ * Uitvoeren gebeurt nooit vanzelf: peaksCorrectieVraag() toont per groep wat er gebeurt en pas een
+ * tik daar voert het uit (MECHANISM_SPEC.defaultEffect). */
+function peaksCorrectiePlan(){
+  const A = peaksAudit();
+  return {
+    pakket:  { posten: A.pakket,  naar: 'bankkosten', uitleg: 'blijft een echte uitgave en een vaste last' },
+    inleg:   { posten: A.inleg,   naar: 'sparen',     uitleg: 'vermogensopbouw, telt niet meer als uitgave' },
+    opnames: { posten: A.opnames, naar: 'sparen',     uitleg: 'geld terug uit je belegging, valt niet meer weg tegen je uitgaven' },
+    onduidelijk: A.onduidelijk,
+    totaal: A.pakket.length + A.inleg.length + A.opnames.length,
+  };
+}
+function peaksCorrectieUitvoeren(){
+  const P = peaksCorrectiePlan();
+  if (!P.totaal) { toast('Niets te corrigeren'); return; }
+  let n = 0;
+  for (const g of ['pakket', 'inleg', 'opnames']) {
+    for (const t of P[g].posten) { OVR[t.id] = P[g].naar; n++; }
+  }
+  SET.peaksCorrectie = { ts: Date.now(), pakket: P.pakket.posten.length, inleg: P.inleg.posten.length,
+    opnames: P.opnames.posten.length, onduidelijk: P.onduidelijk.length };
+  save(); applyOwnAccounts(); buildAccMeta(); curMonth = null; closeSheet(); render();
+  toast(`${ICON('check')} ${n} posten omgeboekt`);
+}
+/* Welke eigen regel vangt deze posten? categorize() laat een eigen regel winnen van de ingebouwde
+   tabel, en daar staat sparen al voor bankkosten. Staat een Peaks-post toch op bankkosten, dan komt
+   dat dus uit zo'n regel. We toetsen met een eenvoudige bevat-test op de omschrijving; categorize()
+   kent daarnaast een spatieloze variant, dus een enkele regel kan hier ontbreken. Daarom staan
+   alle regels in de lijst, met de matchende gemarkeerd. */
+function peaksRegels(){
+  const A = peaksAudit();
+  const descs = A.herkenning.posten.map(t => String(t.desc || '').toUpperCase());
+  return ((typeof SET !== 'undefined' && SET.rules) || []).map((r, i) => {
+    const kw = String((r && r.kw) || '').toUpperCase();
+    const raakt = kw ? descs.filter(d => d.includes(kw)).length : 0;
+    return { i, kw: r.kw, cat: r.cat, raakt };
+  });
+}
+function peaksRegelNaarSparen(i){
+  const R = (SET.rules || [])[i]; if (!R) return;
+  R.cat = 'sparen';
+  save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); render();
+  toast(`${ICON('check')} Regel ${R.kw} gaat nu naar Sparen & beleggen`);
+  openPeaksAudit();
+}
+/* Punt 8: slaat het bestaande signaal over verkeerd geboekte spaarstortingen op deze posten aan?
+   Dat zoekt op 'monthly rule' of 'weekly rule' in t.name. Puur vaststellen; coachItems() en het
+   signaal blijven onaangeroerd. */
+function peaksSavrulesCheck(){
+  const A = peaksAudit();
+  const rx = /monthly rule|weekly rule/i;
+  const raakt = A.herkenning.posten.filter(t => rx.test(t.name || '')).length;
+  const namen = [...new Set(A.herkenning.posten.map(t => (t.name || '').trim()).filter(Boolean))];
+  return { raakt, namen, patroon: "monthly rule | weekly rule, op t.name" };
+}
+function peaksCorrectieVraag(){
+  const P = peaksCorrectiePlan();
+  const rij = (label, g) => g.posten.length ? `<div class="row" style="gap:9px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)">
+    <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(label)} → ${esc(CATS[g.naar].name)}</div>
+      <div class="small muted" style="line-height:1.4;margin-top:2px">${esc(g.uitleg)}</div></div>
+    <div style="text-align:right;flex:0 0 auto;font-weight:700;white-space:nowrap">${g.posten.length}</div></div>` : '';
+  $('#sheet').innerHTML = `<div class="grab"></div>
+    <div class="center" style="margin-bottom:10px"><div style="font-size:var(--fs-xl)">${ICON('warn')}</div>
+      <div style="font-weight:800;font-size:var(--fs-lg)">Correctie uitvoeren</div>
+      <div class="muted small">Dit past de categorie aan van ${P.totaal} posten.</div></div>
+    ${rij('Pakketprijs', P.pakket)}
+    ${rij('Inleg', P.inleg)}
+    ${rij('Opnames', P.opnames)}
+    <div class="small muted" style="margin:10px 2px;line-height:1.5">
+      · Er wordt geen transactie verwijderd, en geen bedrag of datum gewijzigd.<br>
+      · ${P.onduidelijk.length} onduidelijke ${P.onduidelijk.length === 1 ? 'post blijft' : 'posten blijven'} staan zoals ${P.onduidelijk.length === 1 ? 'hij' : 'ze'} nu ${P.onduidelijk.length === 1 ? 'staat' : 'staan'}.<br>
+      · Je budgetinstelling en je limiet-model blijven ongemoeid.
+    </div>
+    <button class="btn" onclick="peaksCorrectieUitvoeren()">${ICON('check')} Ja, boek deze ${P.totaal} posten om</button>
+    <button class="btn sec" style="margin-top:8px" onclick="openPeaksAudit()">Annuleren</button>`;
+  showSheetBg();
+}
 function openPeaksAudit(){
   $('#sheet').innerHTML = `<div class="grab"></div>
     <div class="center" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg)">Peaks-audit</div>
       <div class="muted small">Alleen vaststellen, nog niets wijzigen.</div></div>
     ${peaksRapport()}
+    ${(()=>{ try{ const P=peaksCorrectiePlan(); return P.totaal?`<button class="btn" style="margin-top:14px" onclick="peaksCorrectieVraag()">${ICON('check')} Correctie uitvoeren (${P.totaal} posten)</button>`:''; }catch(_){ return ''; } })()}
+    ${(()=>{ try{ const R=peaksRegels().filter(r=>r.raakt&&r.cat!=='sparen'); return R.length?R.map(r=>`<div class="small muted" style="margin-top:8px;line-height:1.5">Je regel <b>${esc(r.kw)}</b> zet ${r.raakt} van deze posten op ${CATS[r.cat]?esc(CATS[r.cat].name):esc(r.cat)}. Zolang die staat, landt nieuwe inleg daar weer. <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="peaksRegelNaarSparen(${r.i})">Zet de regel op Sparen ›</span></div>`).join(''):''; }catch(_){ return ''; } })()}
     ${peaksHerkenning().treffers?`<button class="btn sec" style="margin-top:12px" onclick="peaksRapportCopy()">${ICON('doc')} Kopieer dit rapport</button>
     <div class="small muted" style="margin-top:6px">Kopieren zet het op je klembord. Het verlaat je toestel pas als je het zelf ergens plakt.</div>`:''}`;
   showSheetBg();

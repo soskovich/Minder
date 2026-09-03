@@ -58,7 +58,8 @@ async function boot(page, payload) {
 }
 const audit = (page) => page.evaluate(() => {
   const A = peaksAudit();
-  return { pakket: A.pakket.length, inleg: A.inleg.length, onduidelijk: A.onduidelijk.map((x) => x.reden),
+  return { pakket: A.pakket.length, inleg: A.inleg.length, opnames: A.opnames.length,
+    totaalOpnames: A.totaalOpnames, onduidelijk: A.onduidelijk.map((x) => x.reden),
     totaalInleg: A.totaalInleg, perMaand: A.perMaand, huidigeCats: A.huidigeCats,
     velden: A.herkenning.velden, treffers: A.herkenning.treffers };
 });
@@ -114,10 +115,11 @@ test.describe('b · de indeling is voorzichtig', () => {
     expect(A.inleg).toBe(8 + 9);
   });
 
-  test('een bijschrijving vanaf Peaks is geen inleg', async ({ page }) => {
+  test('een bijschrijving vanaf Peaks is een opname, geen inleg', async ({ page }) => {
     await boot(page, seed({ terug: true }));
     const A = await audit(page);
-    expect(A.onduidelijk.some((r) => /bijschrijving vanaf Peaks/.test(r))).toBe(true);
+    expect(A.opnames).toBe(1);
+    expect(A.onduidelijk).toEqual([]);      // een opname is niet onduidelijk, hij is iets anders
   });
 
   test('per maand en de huidige categorie staan erbij', async ({ page }) => {
@@ -228,5 +230,124 @@ test.describe('d · het rapport', () => {
     expect(await page.evaluate(() => peaksRapport())).toMatch(/Geen transacties gevonden/);
     expect(await page.evaluate(() => peaksRapportTekst())).toMatch(/Geen transacties gevonden/);
     expect(await page.evaluate(() => { openPeaksAudit(); return document.getElementById('sheet').innerHTML; })).not.toContain('peaksRapportCopy()');
+  });
+});
+
+// ---- deel B: corrigeren ----
+test.describe('e · de correctie', () => {
+  const plan = (page) => page.evaluate(() => {
+    const P = peaksCorrectiePlan();
+    return { pakket: P.pakket.posten.length, inleg: P.inleg.posten.length, opnames: P.opnames.posten.length,
+      onduidelijk: P.onduidelijk.length, totaal: P.totaal,
+      naar: { pakket: P.pakket.naar, inleg: P.inleg.naar, opnames: P.opnames.naar } };
+  });
+
+  test('de route is de bestaande categorie sparen, en die telt niet als uitgave', async ({ page }) => {
+    await boot(page);
+    expect(await page.evaluate(() => CATS.sparen.type)).toBe('internal');
+    expect(await page.evaluate(() => CATS.bankkosten.type)).toBe('expense');
+    const P = await plan(page);
+    expect(P.naar).toEqual({ pakket: 'bankkosten', inleg: 'sparen', opnames: 'sparen' });
+  });
+
+  test('niets gebeurt zonder bevestiging', async ({ page }) => {
+    await boot(page);
+    const voor = await page.evaluate(() => ({ ovr: JSON.stringify(OVR), tx: TX.length, set: JSON.stringify(SET) }));
+    await page.evaluate(() => { peaksCorrectiePlan(); peaksCorrectieVraag(); });
+    expect(await page.evaluate(() => ({ ovr: JSON.stringify(OVR), tx: TX.length, set: JSON.stringify(SET) }))).toEqual(voor);
+  });
+
+  test('uitvoeren boekt elke groep om, en laat onduidelijk staan', async ({ page }) => {
+    await boot(page, seed({ terug: true, prijsverhoging: true }));
+    const P = await plan(page);
+    const voorOnd = await page.evaluate(() => peaksAudit().onduidelijk.map((x) => x.t.id));
+    await page.evaluate(() => peaksCorrectieUitvoeren());
+    const na = await page.evaluate(() => {
+      const A = peaksAudit();
+      return { pakketCats: A.pakket.map((t) => catOf(t)), inlegCats: A.inleg.map((t) => catOf(t)),
+        opnameCats: A.opnames.map((t) => catOf(t)), ondCats: A.onduidelijk.map((t) => catOf(t.t)) };
+    });
+    expect(new Set(na.pakketCats)).toEqual(new Set(['bankkosten']));
+    expect(new Set(na.inlegCats)).toEqual(new Set(['sparen']));
+    expect(new Set(na.opnameCats)).toEqual(new Set(['sparen']));
+    expect(na.ondCats.every((c) => c !== 'sparen')).toBe(true);   // ongemoeid
+    expect(voorOnd.length).toBe(P.onduidelijk);
+  });
+
+  test('geen transactie verdwijnt, geen bedrag en geen datum wijzigt', async ({ page }) => {
+    await boot(page);
+    const voor = await page.evaluate(() => TX.map((t) => t.date + '|' + t.amount).sort().join(';'));
+    const n = await page.evaluate(() => TX.length);
+    await page.evaluate(() => peaksCorrectieUitvoeren());
+    expect(await page.evaluate(() => TX.length)).toBe(n);
+    expect(await page.evaluate(() => TX.map((t) => t.date + '|' + t.amount).sort().join(';'))).toBe(voor);
+  });
+
+  test('de uitgaven dalen precies met de inleg, en het budget blijft ongemoeid', async ({ page }) => {
+    await boot(page);
+    const m = MS[0];
+    const voor = await page.evaluate((x) => ({ spend: Math.round(netSpend(txOfMonth(x))),
+      limitMode: SET.limitMode, budget: Math.round(totals(x).budget) }), m);
+    const inleg = await page.evaluate((x) => peaksAudit().inleg.filter((t) => t.date.slice(0, 7) === x)
+      .reduce((a, t) => a + -t.amount, 0), m);
+    await page.evaluate(() => peaksCorrectieUitvoeren());
+    const na = await page.evaluate((x) => ({ spend: Math.round(netSpend(txOfMonth(x))),
+      limitMode: SET.limitMode, budget: Math.round(totals(x).budget) }), m);
+    expect(voor.spend - na.spend).toBe(Math.round(inleg));
+    expect(na.limitMode).toBe(voor.limitMode);
+    expect(na.budget).toBe(voor.budget);
+  });
+
+  test('de correctie is vastgelegd en de audit is daarna leeg', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => peaksCorrectieUitvoeren());
+    const log = await page.evaluate(() => SET.peaksCorrectie);
+    expect(log.pakket).toBeGreaterThan(0);
+    expect(log.inleg).toBeGreaterThan(0);
+    // opnieuw uitvoeren verandert niets meer
+    const voor = await page.evaluate(() => JSON.stringify(OVR));
+    await page.evaluate(() => peaksCorrectieUitvoeren());
+    expect(await page.evaluate(() => JSON.stringify(OVR))).toBe(voor);
+  });
+});
+
+test.describe('f · de regel voor de toekomst', () => {
+  test('een eigen regel die deze posten vangt wordt gemeld', async ({ page }) => {
+    await boot(page, seed({ set: { rules: [{ kw: 'PEAKS', cat: 'bankkosten' }] } }));
+    const R = await page.evaluate(() => peaksRegels());
+    const raak = R.filter((r) => r.raakt);
+    expect(raak.length).toBe(1);
+    expect(raak[0].cat).toBe('bankkosten');
+    expect(raak[0].raakt).toBeGreaterThan(0);
+    const h = await page.evaluate(() => { openPeaksAudit(); return document.getElementById('sheet').innerHTML; });
+    expect(h).toContain('peaksRegelNaarSparen(');
+  });
+
+  test('de regel omzetten laat toekomstige inleg goed landen', async ({ page }) => {
+    await boot(page, seed({ set: { rules: [{ kw: 'PEAKS', cat: 'bankkosten' }] } }));
+    await page.evaluate(() => peaksRegelNaarSparen(0));
+    expect(await page.evaluate(() => SET.rules[0].cat)).toBe('sparen');
+    // en de inleg staat daarna vanzelf goed, zonder override
+    const cats = await page.evaluate(() => peaksAudit().inleg.map((t) => t.autoCat));
+    expect(new Set(cats)).toEqual(new Set(['sparen']));
+  });
+
+  test('zonder eigen regel valt er niets om te zetten', async ({ page }) => {
+    await boot(page, seed({ geenRegel: true }));
+    expect(await page.evaluate(() => peaksRegels().filter((r) => r.raakt).length)).toBe(0);
+  });
+});
+
+test.describe('g · punt 8: het bestaande spaarstortingen-signaal', () => {
+  test('slaat niet aan op deze posten, en dat wordt gemeld', async ({ page }) => {
+    await boot(page);
+    const SV = await page.evaluate(() => peaksSavrulesCheck());
+    expect(SV.raakt).toBe(0);
+    expect(SV.patroon).toMatch(/monthly rule/);
+    expect(SV.namen).toContain('Peaks');
+    // coachItems zelf is onaangeroerd
+    const src = await page.evaluate(() => coachItems.toString());
+    expect(src).toContain('monthly rule|weekly rule');
+    expect(src).not.toContain('peaks');
   });
 });
