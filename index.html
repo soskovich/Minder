@@ -10398,6 +10398,7 @@ function setPrivacy(){
     <div class="small muted" style="margin:14px 0 6px"><b>Bescherm tegen automatisch wissen:</b> vraag de browser je gegevens te bewaren. Werkt het best als Minder als app is geïnstalleerd.</div>
     <button class="btn sec" style="margin-bottom:8px" onclick="requestPersistUI()">${ICON('shield')} Bescherm mijn gegevens</button>
     ${(function(){try{return findDuplicateIds().size;}catch(_){return 0;}})()? `<button class="btn sec" style="margin-bottom:8px" onclick="cleanupDuplicates()">${ICON('filter')} Dubbele transacties opruimen (${(function(){try{return findDuplicateIds().size;}catch(_){return 0;}})()})</button>`:''}
+    ${(function(){try{return peaksHerkenning().treffers;}catch(_){return 0;}})()? `<button class="btn sec" style="margin-bottom:8px" onclick="openPeaksAudit()">${ICON('trend')} Peaks-audit bekijken (${(function(){try{return peaksHerkenning().treffers;}catch(_){return 0;}})()})</button>`:''}
     <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (${TX.length} transacties op dit toestel.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">${ICON('trash')} Alle gegevens wissen</button>`;
 }
 function csvDownload(name,rows){ const csv=rows.map(r=>r.map(c=>{ c=(c==null?'':String(c)); return /[";\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c; }).join(';')).join('\r\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
@@ -10922,6 +10923,176 @@ function findDuplicateIds(){
   const seen=new Set(), remove=new Set();
   for(const t of order){ const sk=_dupSig(t); if(seen.has(sk)) remove.add(t.id); else seen.add(sk); }
   return remove;
+}
+/* ===== Peaks-audit (v156, deel A: alleen rapporteren) =====
+ * Peaks rondde uitgaven af en belegde het wisselgeld. De maandelijkse pakketprijs is een echte
+ * bankkost; elk ander bedrag is inleg en dus vermogensopbouw, en hoort niet als uitgave te tellen.
+ * Staat dat verkeerd, dan staat je uitgavenniveau te hoog, je spaarquote te laag en is
+ * baselineSpend() opgeblazen, wat doorwerkt in monthBudget() en safeToSpend().
+ *
+ * Deze laag STELT ALLEEN VAST. Ze wijzigt geen categorie, geen bedrag, geen datum en geen enkele
+ * transactie; de doorrekening draait op een kopie van OVR en zet die daarna terug.
+ *
+ * Het herkenningspatroon wordt uit je eigen transacties afgeleid, niet aangenomen: peaksHerkenning()
+ * laat zien welk veld matchte en op hoeveel posten. Bij twijfel gaat een post naar 'onduidelijk',
+ * nooit naar 'inleg' - een verkeerd omgeboekte transactie valt later niet meer op. */
+const PEAKS_PAKKET = 2.99;
+const PEAKS_KLEIN = 10;          // grens waaronder een terugkerend vast bedrag op een abonnement lijkt
+const PEAKS_MAANDEN = 3;         // in zoveel maanden moet dat bedrag terugkomen om verdacht te zijn
+
+function peaksMatchTekst(t){
+  const s = ((t.desc || '') + ' ' + (t.name || '')).toUpperCase();
+  return s.includes('PEAKS') || s.replace(/\s/g, '').includes('PEAKS');
+}
+/* Het patroon uit de data zelf. Naast de tekst kijken we of er een tegenrekening is die bij die
+   posten hoort: die vangt boekingen op waar 'Peaks' niet in de omschrijving staat. Zo'n post telt
+   bewust NIET automatisch mee als inleg; hij gaat naar 'onduidelijk'. */
+function peaksHerkenning(){
+  const opTekst = TX.filter(peaksMatchTekst);
+  const refTel = {};
+  for (const t of opTekst) for (const n of (t.refNums || [])) { if (n) refTel[n] = (refTel[n] || 0) + 1; }
+  const refs = Object.keys(refTel).filter(n => refTel[n] >= 2);
+  const opRef = refs.length ? TX.filter(t => !peaksMatchTekst(t) && (t.refNums || []).some(n => refs.includes(n))) : [];
+  const namen = [...new Set(opTekst.map(t => (t.name || '').trim()).filter(Boolean))].slice(0, 6);
+  return {
+    velden: { tekst: opTekst.length, tegenrekening: opRef.length },
+    refs, namen,
+    posten: opTekst.concat(opRef),
+    zwak: new Set(opRef.map(t => t.id)),
+    treffers: opTekst.length + opRef.length,
+  };
+}
+function peaksAudit(){
+  const H = peaksHerkenning();
+  const pakket = [], inleg = [], onduidelijk = [];
+  // hoe vaak komt een exact bedrag terug, en in hoeveel verschillende maanden?
+  const perBedrag = {};
+  for (const t of H.posten) {
+    const k = t.amount.toFixed(2);
+    (perBedrag[k] = perBedrag[k] || new Set()).add(t.date.slice(0, 7));
+  }
+  for (const t of H.posten) {
+    const reden = (r) => onduidelijk.push({ t, reden: r });
+    if (H.zwak.has(t.id)) { reden('alleen herkend aan de tegenrekening, niet aan de omschrijving'); continue; }
+    if (t.amount > 0) { reden('bijschrijving vanaf Peaks, dus geen inleg'); continue; }
+    if (Math.abs(t.amount + PEAKS_PAKKET) < 0.005) { pakket.push(t); continue; }
+    const maanden = (perBedrag[t.amount.toFixed(2)] || new Set()).size;
+    if (Math.abs(t.amount) <= PEAKS_KLEIN && maanden >= PEAKS_MAANDEN) {
+      reden(`vast bedrag dat in ${maanden} maanden terugkomt, lijkt een pakketprijs maar is geen ${euro(PEAKS_PAKKET)}`);
+      continue;
+    }
+    inleg.push(t);
+  }
+  const maandKey = t => t.date.slice(0, 7);
+  const perMaand = {};
+  const tel = (groep, t) => {
+    const m = maandKey(t);
+    const r = perMaand[m] = perMaand[m] || { pakket: 0, pakketEur: 0, inleg: 0, inlegEur: 0, onduidelijk: 0 };
+    r[groep]++; if (groep !== 'onduidelijk') r[groep + 'Eur'] += -t.amount;
+  };
+  pakket.forEach(t => tel('pakket', t));
+  inleg.forEach(t => tel('inleg', t));
+  onduidelijk.forEach(x => tel('onduidelijk', x.t));
+  const huidigeCats = {};
+  let viaOvr = 0;
+  for (const t of H.posten) { const c = catOf(t); huidigeCats[c] = (huidigeCats[c] || 0) + 1; if (OVR[t.id]) viaOvr++; }
+  /* Waar komt de huidige boeking vandaan? Een eigen regel in SET.rules wint van de ingebouwde
+     keyword-regels (categorize stap 1), en de ingebouwde tabel kent PEAKS al als 'sparen'. Staat
+     alles op bankkosten, dan komt dat dus vrijwel zeker uit zo'n regel en niet uit losse
+     overrides - die hangen aan t.id, en categorize() herschrijft die id bij elke boot. */
+  const regels = ((typeof SET !== 'undefined' && SET.rules) || [])
+    .filter(r => r && r.kw && /PEAKS/i.test(r.kw))
+    .map(r => ({ kw: r.kw, cat: r.cat }));
+  return { pakket, inleg, onduidelijk, perMaand, totaalInleg: Math.round(inleg.reduce((a, t) => a + -t.amount, 0)),
+    huidigeCats, bron: { regels, viaOvr }, herkenning: H };
+}
+/* De doorrekening. Draait de bestaande functies met een gewijzigde kopie van OVR en zet die daarna
+   terug, zodat het exact dezelfde netSpend(), baselineSpend() en savedNet() zijn die het scherm
+   gebruikt. Er wordt niets opgeslagen; de noodfonds-memo wordt voor de zekerheid ongeldig gemaakt,
+   want die hangt aan _dataGen en dat verandert hier niet. */
+function peaksImpact(){
+  const A = peaksAudit();
+  if (!A.pakket.length && !A.inleg.length) return null;
+  const meet = () => {
+    const ms = months();
+    const perM = {};
+    for (const m of ms) {
+      let inc = 0; try { inc = Math.round(totals(m).income); } catch(_){}
+      perM[m] = { spend: Math.round(netSpend(txOfMonth(m))), spaar: savedNet(m), inkomen: inc };
+    }
+    return { perM, baseline: baselineSpend() };
+  };
+  const voor = meet();
+  const origOVR = OVR;
+  let na = null;
+  try {
+    const kopie = Object.assign({}, OVR);
+    for (const t of A.pakket) kopie[t.id] = 'bankkosten';
+    for (const t of A.inleg) kopie[t.id] = 'sparen';
+    OVR = kopie;
+    na = meet();
+  } finally {
+    OVR = origOVR;
+    try { _nfGen = -1; } catch(_){}
+  }
+  return { voor, na, limitMode: SET.limitMode || 'pct',
+    baselineTelt: (SET.limitMode || 'pct') === 'baseline',
+    spaarBron: (typeof n26SavingsAccounts === 'function' && n26SavingsAccounts().length) ? 'spaarrekening' : 'categorie' };
+}
+function peaksRapport(){
+  const A = peaksAudit();
+  if (!A.herkenning.treffers) return `<div class="small muted">Geen transacties gevonden die op Peaks wijzen.</div>`;
+  const I = peaksImpact();
+  const q = (s, i) => (s == null || !(i > 0)) ? null : Math.round(s / i * 100);
+  const maanden = Object.keys(A.perMaand).sort();
+  const rij = (l, r) => `<div class="row" style="gap:9px;padding:6px 0;border-bottom:1px solid var(--line)">
+    <span class="small" style="flex:1;min-width:0">${l}</span><span class="small" style="font-weight:700;white-space:nowrap">${r}</span></div>`;
+  const patroon = `<div class="small muted" style="margin-bottom:6px;font-weight:600">Hoe Peaks herkend is</div>
+    ${rij('op de omschrijving of winkelnaam', A.herkenning.velden.tekst + ' posten')}
+    ${A.herkenning.velden.tegenrekening ? rij('alleen op de tegenrekening', A.herkenning.velden.tegenrekening + ' posten') : ''}
+    ${A.herkenning.namen.length ? `<div class="small muted" style="margin-top:6px">Namen in je data: ${esc(A.herkenning.namen.join(', '))}</div>` : ''}
+    ${A.herkenning.refs.length ? `<div class="small muted">Tegenrekening: ${A.herkenning.refs.map(n => '··' + String(n).slice(-4)).join(', ')}</div>` : ''}
+    ${A.bron.regels.length ? `<div class="small muted" style="margin-top:6px">Je hebt een eigen regel: ${A.bron.regels.map(r => `<b>${esc(r.kw)}</b> → ${CATS[r.cat] ? esc(CATS[r.cat].name) : esc(r.cat)}`).join(', ')}. Die wint van de ingebouwde regel, en die kent PEAKS al als Sparen &amp; beleggen.</div>` : ''}
+    ${A.bron.viaOvr ? `<div class="small muted">${A.bron.viaOvr} posten hebben daarnaast een eigen categorie per transactie.</div>` : ''}`;
+  const groepen = `<div class="small muted" style="margin:14px 0 6px;font-weight:600">Wat het zijn</div>
+    ${rij(`Pakketprijs (${euro(PEAKS_PAKKET)})`, `${A.pakket.length} posten`)}
+    ${rij('Inleg', `${A.inleg.length} posten · ${euro0(A.totaalInleg)}`)}
+    ${rij('Onduidelijk', `${A.onduidelijk.length} posten`)}
+    <div class="small muted" style="margin-top:6px">Nu geboekt als: ${Object.entries(A.huidigeCats).map(([k, n]) => `${CATS[k] ? esc(CATS[k].name) : esc(k)} (${n})`).join(', ')}</div>`;
+  const onduid = A.onduidelijk.length ? `<div class="small muted" style="margin:14px 0 6px;font-weight:600">Onduidelijk, blijft ongemoeid</div>
+    ${A.onduidelijk.slice(0, 12).map(x => `<div class="row" style="gap:9px;padding:6px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><div class="small">${esc(x.t.name || x.t.desc || 'Transactie')}</div>
+        <div class="small muted" style="line-height:1.35">${esc(x.t.date)} · ${esc(x.reden)}</div></div>
+      <span class="small" style="font-weight:700;white-space:nowrap">${euro(x.t.amount)}</span></div>`).join('')}
+    ${A.onduidelijk.length > 12 ? `<div class="small muted" style="margin-top:6px">en nog ${A.onduidelijk.length - 12}</div>` : ''}` : '';
+  let impact = '';
+  if (I) {
+    const rows = maanden.map(m => {
+      const v = I.voor.perM[m] || {}, n = I.na.perM[m] || {};
+      const qv = q(v.spaar, v.inkomen), qn = q(n.spaar, n.inkomen);
+      return `<div class="row" style="gap:9px;padding:6px 0;border-bottom:1px solid var(--line)">
+        <span class="small" style="flex:1;min-width:0">${esc(monthLabel(m))}</span>
+        <span class="small" style="white-space:nowrap">${euro0(v.spend)} → <b>${euro0(n.spend)}</b>${qv != null || qn != null ? ` · spaarquote ${qv == null ? '-' : qv + '%'} → <b>${qn == null ? '-' : qn + '%'}</b>` : ''}</span></div>`;
+    }).join('');
+    impact = `<div class="small muted" style="margin:14px 0 6px;font-weight:600">Wat er verandert, doorgerekend zonder te wijzigen</div>
+      ${rows}
+      ${rij('baselineSpend', `${euro0(I.voor.baseline)} → <b>${euro0(I.na.baseline)}</b>`)}
+      <div class="small muted" style="margin-top:8px;line-height:1.5">Je limiet-model staat op <b>${esc(I.limitMode)}</b>. ${I.baselineTelt
+        ? 'Dat model ankert op je baseline, dus je maandbudget beweegt hierdoor mee.'
+        : 'Dat model leest je baseline niet, dus je maandbudget verandert hier niet door.'}</div>
+      <div class="small muted" style="margin-top:4px;line-height:1.5">Je spaarquote leest ${I.spaarBron === 'spaarrekening'
+        ? 'de instroom op je gemarkeerde spaarrekening, niet de categorie. Omboeken naar Sparen verandert dat cijfer dus niet, tenzij Peaks een gemarkeerde rekening is.'
+        : 'de categorie Sparen, want je hebt geen spaarrekening gemarkeerd. Omboeken verhoogt je spaarquote dus wel.'}</div>`;
+  }
+  return patroon + groepen + impact + onduid +
+    `<div class="small muted" style="margin-top:14px;line-height:1.5">Dit is een rapport. Er is niets gewijzigd: geen categorie, geen bedrag, geen datum.</div>`;
+}
+function openPeaksAudit(){
+  $('#sheet').innerHTML = `<div class="grab"></div>
+    <div class="center" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg)">Peaks-audit</div>
+      <div class="muted small">Alleen vaststellen, nog niets wijzigen.</div></div>
+    ${peaksRapport()}`;
+  showSheetBg();
 }
 function cleanupDuplicates(){   // toon een controlelijst i.p.v. blind verwijderen
   const rm=findDuplicateIds();
