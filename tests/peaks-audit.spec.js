@@ -98,6 +98,22 @@ test.describe('b · de indeling is voorzichtig', () => {
     expect(A.inleg).toBe(8);                    // de 3,99-posten zijn er niet bij gekomen
   });
 
+  test('een wekelijkse inleg van een vast bedrag is inleg, geen pakketprijs', async ({ page }) => {
+    // komt vaker terug dan het aantal maanden waarin het voorkomt, dus geen maandabonnement
+    const p = seed();
+    const tx = JSON.parse(p.minder_tx);
+    let d = 0;
+    for (const m of MS) for (const dag of ['07', '14', '21']) {
+      tx.push({ id: 'wk' + (d++), date: `${m}-${dag}`, amount: -5.25, acc: MAIN, name: 'Peaks',
+        desc: 'SEPA INCASSO PEAKS AFRONDING', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
+    }
+    p.minder_tx = JSON.stringify(tx);
+    await boot(page, p);
+    const A = await audit(page);
+    expect(A.onduidelijk.filter((r) => /pakketprijs/.test(r)).length).toBe(0);
+    expect(A.inleg).toBe(8 + 9);
+  });
+
   test('een bijschrijving vanaf Peaks is geen inleg', async ({ page }) => {
     await boot(page, seed({ terug: true }));
     const A = await audit(page);

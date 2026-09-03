@@ -10966,19 +10966,24 @@ function peaksAudit(){
   const H = peaksHerkenning();
   const pakket = [], inleg = [], onduidelijk = [];
   // hoe vaak komt een exact bedrag terug, en in hoeveel verschillende maanden?
-  const perBedrag = {};
+  const perBedrag = {}, perBedragTel = {};
   for (const t of H.posten) {
     const k = t.amount.toFixed(2);
     (perBedrag[k] = perBedrag[k] || new Set()).add(t.date.slice(0, 7));
+    perBedragTel[k] = (perBedragTel[k] || 0) + 1;
   }
   for (const t of H.posten) {
     const reden = (r) => onduidelijk.push({ t, reden: r });
     if (H.zwak.has(t.id)) { reden('alleen herkend aan de tegenrekening, niet aan de omschrijving'); continue; }
     if (t.amount > 0) { reden('bijschrijving vanaf Peaks, dus geen inleg'); continue; }
     if (Math.abs(t.amount + PEAKS_PAKKET) < 0.005) { pakket.push(t); continue; }
-    const maanden = (perBedrag[t.amount.toFixed(2)] || new Set()).size;
-    if (Math.abs(t.amount) <= PEAKS_KLEIN && maanden >= PEAKS_MAANDEN) {
-      reden(`vast bedrag dat in ${maanden} maanden terugkomt, lijkt een pakketprijs maar is geen ${euro(PEAKS_PAKKET)}`);
+    /* Een pakketprijs komt hooguit EEN keer per maand. Een bedrag dat vaker terugkomt dan het
+       aantal maanden waarin het voorkomt heeft een week- of dagritme en is dus inleg. Zonder die
+       tweede eis viel een wekelijkse automatische inleg ten onrechte in 'onduidelijk'. */
+    const kb = t.amount.toFixed(2);
+    const maanden = (perBedrag[kb] || new Set()).size, keer = perBedragTel[kb] || 0;
+    if (Math.abs(t.amount) <= PEAKS_KLEIN && maanden >= PEAKS_MAANDEN && keer === maanden) {
+      reden(`vast bedrag, een keer per maand in ${maanden} maanden, lijkt een pakketprijs maar is geen ${euro(PEAKS_PAKKET)}`);
       continue;
     }
     inleg.push(t);
@@ -11127,6 +11132,21 @@ function peaksRapportTekst(){
     L.push('  baselineSpend: ' + euro0(I.voor.baseline) + ' -> ' + euro0(I.na.baseline));
     L.push('  limitMode: ' + I.limitMode + (I.baselineTelt ? ' (leest de baseline, je budget beweegt mee)' : ' (leest de baseline niet, je budget verandert niet)'));
     L.push('  spaarquote-bron: ' + (I.spaarBron === 'spaarrekening' ? 'gemarkeerde spaarrekening, omboeken verandert dit cijfer niet' : 'categorie sparen, omboeken verhoogt de spaarquote'));
+  }
+  /* Waarom staat een post waar hij staat? categorize() leest alleen t.desc, dus zonder eigen regel
+     en zonder override moet een ingebouwd keyword de categorie bepalen. Een paar voorbeelden per
+     huidige categorie maken zichtbaar welk woord dat is; zonder die tekst valt het niet vast te
+     stellen. Afgekapt op 140 tekens en drie posten per categorie. */
+  L.push('');
+  L.push('VOORBEELDEN PER HUIDIGE CATEGORIE (omschrijving afgekapt)');
+  const perCat = {};
+  for (const t of A.herkenning.posten) { const c = catOf(t); (perCat[c] = perCat[c] || []).push(t); }
+  for (const c of Object.keys(perCat)) {
+    L.push('  [' + (CATS[c] ? CATS[c].name : c) + ']');
+    for (const t of perCat[c].slice(0, 3)) {
+      L.push('    ' + t.date + ' | ' + euro(t.amount) + ' | naam: ' + (t.name || '-'));
+      L.push('    desc: ' + String(t.desc || '').replace(/\s+/g, ' ').slice(0, 140));
+    }
   }
   if (A.onduidelijk.length) {
     L.push('');
