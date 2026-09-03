@@ -173,6 +173,35 @@ test.describe('d · het rapport', () => {
     expect(h).toMatch(/Er is niets gewijzigd/);
   });
 
+  test('het rapport is te kopieren, met dezelfde feiten als de sheet', async ({ page }) => {
+    await boot(page, seed({ terug: true, prijsverhoging: true }));
+    const t = await page.evaluate(() => peaksRapportTekst());
+    const A = await audit(page);
+    expect(t).toContain('PEAKS-AUDIT');
+    expect(t).toContain('HERKENNING');
+    expect(t).toContain('GROEPEN');
+    expect(t).toContain('PER MAAND');
+    expect(t).toContain('DOORGEREKEND');
+    expect(t).toContain('baselineSpend');
+    expect(t).toContain('ONDUIDELIJK, BLIJFT ONGEMOEID');
+    // dezelfde aantallen als de audit, geen tweede telling
+    expect(t).toContain('inleg: ' + A.inleg + ' posten');
+    expect(t).toContain('onduidelijk: ' + A.onduidelijk.length + ' posten');
+    // elke onduidelijke post staat er volledig in, want die moet je zelf nalopen
+    const regels = t.split(String.fromCharCode(10)).filter((l) => /^ {2}\d{4}-\d{2}-\d{2} \|/.test(l));
+    expect(regels.length).toBe(A.onduidelijk.length);
+    // en de knop staat in de sheet
+    const h = await page.evaluate(() => { openPeaksAudit(); return document.getElementById('sheet').innerHTML; });
+    expect(h).toContain('peaksRapportCopy()');
+  });
+
+  test('kopieren wijzigt niets', async ({ page }) => {
+    await boot(page);
+    const voor = await page.evaluate(() => ({ ovr: JSON.stringify(OVR), tx: TX.length, set: JSON.stringify(SET) }));
+    await page.evaluate(() => peaksRapportTekst());
+    expect(await page.evaluate(() => ({ ovr: JSON.stringify(OVR), tx: TX.length, set: JSON.stringify(SET) }))).toEqual(voor);
+  });
+
   test('zonder Peaks-posten geen knop en geen rapport', async ({ page }) => {
     const p = seed();
     const tx = JSON.parse(p.minder_tx).filter((t) => !/PEAKS/.test(t.desc));
@@ -181,5 +210,7 @@ test.describe('d · het rapport', () => {
     expect(await page.evaluate(() => peaksHerkenning().treffers)).toBe(0);
     expect(await page.evaluate(() => peaksImpact())).toBe(null);
     expect(await page.evaluate(() => peaksRapport())).toMatch(/Geen transacties gevonden/);
+    expect(await page.evaluate(() => peaksRapportTekst())).toMatch(/Geen transacties gevonden/);
+    expect(await page.evaluate(() => { openPeaksAudit(); return document.getElementById('sheet').innerHTML; })).not.toContain('peaksRapportCopy()');
   });
 });

@@ -11087,11 +11087,65 @@ function peaksRapport(){
   return patroon + groepen + impact + onduid +
     `<div class="small muted" style="margin-top:14px;line-height:1.5">Dit is een rapport. Er is niets gewijzigd: geen categorie, geen bedrag, geen datum.</div>`;
 }
+/* De kopieertekst leest exact dezelfde peaksAudit() en peaksImpact() als de sheet, zodat wat je
+   leest en wat je plakt niet uiteen kunnen lopen. Alles blijft op je toestel tot je het zelf
+   ergens plakt. De onduidelijke posten staan er volledig in: juist die moet je zelf nalopen. */
+function peaksRapportTekst(){
+  const A = peaksAudit();
+  if (!A.herkenning.treffers) return 'Geen transacties gevonden die op Peaks wijzen.';
+  const I = peaksImpact();
+  const L = [];
+  const q = (sp, inc) => (sp == null || !(inc > 0)) ? '-' : (Math.round(sp / inc * 100) + '%');
+  L.push('PEAKS-AUDIT (rapport, er is niets gewijzigd)');
+  L.push('');
+  L.push('HERKENNING');
+  L.push('  op omschrijving/winkelnaam: ' + A.herkenning.velden.tekst + ' posten');
+  L.push('  alleen op tegenrekening:    ' + A.herkenning.velden.tegenrekening + ' posten');
+  if (A.herkenning.namen.length) L.push('  namen in je data: ' + A.herkenning.namen.join(', '));
+  if (A.herkenning.refs.length) L.push('  tegenrekening: ' + A.herkenning.refs.map(n => '··' + String(n).slice(-4)).join(', '));
+  if (A.bron.regels.length) L.push('  eigen regel: ' + A.bron.regels.map(r => r.kw + ' -> ' + r.cat).join(', '));
+  L.push('  eigen categorie per transactie: ' + A.bron.viaOvr + ' posten');
+  L.push('');
+  L.push('GROEPEN');
+  L.push('  pakket (' + euro(PEAKS_PAKKET) + '): ' + A.pakket.length + ' posten');
+  L.push('  inleg: ' + A.inleg.length + ' posten, ' + euro0(A.totaalInleg));
+  L.push('  onduidelijk: ' + A.onduidelijk.length + ' posten');
+  L.push('  nu geboekt als: ' + Object.entries(A.huidigeCats).map(([k, n]) => (CATS[k] ? CATS[k].name : k) + ' (' + n + ')').join(', '));
+  L.push('');
+  L.push('PER MAAND (pakket / inleg / onduidelijk)');
+  for (const m of Object.keys(A.perMaand).sort()) {
+    const r = A.perMaand[m];
+    L.push('  ' + m + ': ' + r.pakket + ' x ' + euro0(r.pakketEur) + ' / ' + r.inleg + ' x ' + euro0(r.inlegEur) + ' / ' + r.onduidelijk);
+  }
+  if (I) {
+    L.push('');
+    L.push('DOORGEREKEND (nu -> straks)');
+    for (const m of Object.keys(I.voor.perM).sort()) {
+      const v = I.voor.perM[m], n = I.na.perM[m];
+      L.push('  ' + m + ': uitgaven ' + euro0(v.spend) + ' -> ' + euro0(n.spend) + ' | spaarquote ' + q(v.spaar, v.inkomen) + ' -> ' + q(n.spaar, n.inkomen));
+    }
+    L.push('  baselineSpend: ' + euro0(I.voor.baseline) + ' -> ' + euro0(I.na.baseline));
+    L.push('  limitMode: ' + I.limitMode + (I.baselineTelt ? ' (leest de baseline, je budget beweegt mee)' : ' (leest de baseline niet, je budget verandert niet)'));
+    L.push('  spaarquote-bron: ' + (I.spaarBron === 'spaarrekening' ? 'gemarkeerde spaarrekening, omboeken verandert dit cijfer niet' : 'categorie sparen, omboeken verhoogt de spaarquote'));
+  }
+  if (A.onduidelijk.length) {
+    L.push('');
+    L.push('ONDUIDELIJK, BLIJFT ONGEMOEID');
+    for (const x of A.onduidelijk) L.push('  ' + x.t.date + ' | ' + euro(x.t.amount) + ' | ' + (x.t.name || x.t.desc || '') + ' | ' + x.reden);
+  }
+  return L.join('\n');
+}
+async function peaksRapportCopy(){
+  try { await navigator.clipboard.writeText(peaksRapportTekst()); toast(`${ICON('check')} Rapport gekopieerd`); }
+  catch(e){ toast('Kopieren lukte niet'); }
+}
 function openPeaksAudit(){
   $('#sheet').innerHTML = `<div class="grab"></div>
     <div class="center" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg)">Peaks-audit</div>
       <div class="muted small">Alleen vaststellen, nog niets wijzigen.</div></div>
-    ${peaksRapport()}`;
+    ${peaksRapport()}
+    ${peaksHerkenning().treffers?`<button class="btn sec" style="margin-top:12px" onclick="peaksRapportCopy()">${ICON('doc')} Kopieer dit rapport</button>
+    <div class="small muted" style="margin-top:6px">Kopieren zet het op je klembord. Het verlaat je toestel pas als je het zelf ergens plakt.</div>`:''}`;
   showSheetBg();
 }
 function cleanupDuplicates(){   // toon een controlelijst i.p.v. blind verwijderen
