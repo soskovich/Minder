@@ -89,13 +89,8 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
 
   test('de labels benoemen welk model je ziet', async ({ page }) => {
     await open(page);
-    const kpi = await page.evaluate(() => renderLiquidityKPI());
-    expect(kpi).toContain('Variabel · op je tempo');
-    expect(kpi).toContain('Verwacht eindsaldo');
-    expect(kpi).not.toContain('Verwacht over einde maand');
-    expect(await page.evaluate(() => vooruitOpbouw())).toContain('Variabel · op je tempo');
-    // vooruitDeep() ("Volgende uitgaven") is sinds v70 niet meer in beeld; het label leeft nu
-    // in nogDezeMaandCard, dus daar bewaken we het.
+    // v164: renderLiquidityKPI(), vooruitOpbouw() en vooruitDeep() waren al onbereikbaar en zijn
+    // opgeruimd. Het label leeft nog in nogDezeMaandBody(), dus daar bewaken we het.
     expect(await page.evaluate(() => nogDezeMaandCard())).not.toContain('Verwacht over einde maand');
     await page.evaluate(() => go('ins'));   // v144: de tegels wonen alleen nog in de Inzichten-hero
     // varDue = tempo x resterende dagen, dus op de laatste dag van de maand is hij nul en toont
@@ -129,15 +124,13 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     await page.evaluate(() => openSafeToSpend());
     await page.waitForSelector('#sheetBg.show');
     const r = await page.evaluate(() => {
-      const L = monthLiquidity(), S = safeToSpend();
+      const S = safeToSpend();
       return {
-        cardFires: varTempoMirror(L.varPlan, L.varDue, 'card') !== '',
-        cardShows: renderLiquidityKPI().includes('is je tempo boven je plan'),
         safeFires: varTempoMirror(S.reserved, S.varForecast, 'safe') !== '',
         safeShows: document.getElementById('sheet').innerHTML.includes('Je variabele potjes hebben nog'),
       };
     });
-    expect(r.cardShows).toBe(r.cardFires);
+    // de 'card'-kant had zijn lezer al verloren met renderLiquidityKPI(); alleen 'safe' rendert nog
     expect(r.safeShows).toBe(r.safeFires);
   });
 });

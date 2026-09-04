@@ -95,18 +95,6 @@ test.describe('b · einddatum per doel', () => {
     expect(rij).not.toMatch(/rond /);
   });
 
-  test('de losse doelenlijst (renderGoals) toont dezelfde datum', async ({ page }) => {
-    await openV(page, tweak((s) => { s.goals = [{ id: 'g1', naam: 'Vakantie', doel: 1000, perMaand: 200, gespaard: 200 }]; }));
-    const html = await page.evaluate(() => renderGoals(true));
-    expect(html).toContain('~4 maanden');                                 // (1000-200)/200
-    expect(html).toContain(`rond ${await datumOver(page, 4)}`);
-
-    // doel bereikt -> geen looptijd, geen datum
-    const klaar = await page.evaluate(() => { SET.goals = [{ id: 'g2', naam: 'Klaar', doel: 500, perMaand: 100, gespaard: 500 }]; return renderGoals(true); });
-    expect(klaar).not.toContain('rond ');
-    expect(klaar).toContain('Doel bereikt');
-  });
-
   test('etaDatum rekent vanaf vandaag en zwijgt bij nul', async ({ page }) => {
     await openV(page, tweak((s) => { s.goals = []; }));
     const r = await page.evaluate(() => {

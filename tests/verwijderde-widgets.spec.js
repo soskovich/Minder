@@ -88,21 +88,18 @@ test.describe('b · Vooruitblik zonder komende-uitgaven-lijsten', () => {
     expect(v).toMatch(/mijn plan/i);                             // prioriteitenlijst
   });
 
-  test('"Bekijk je lasten" gaat nu direct naar de vaste-lasten-sheet', async ({ page }) => {
-    // krap scenario: weinig saldo, zodat vooruitFocus de tekort-tak pakt
+  // v164: vooruitFocus() had geen aanroeper meer en is opgeruimd. Wat overeind blijft is de vraag
+  // die deze test stelde: de vaste-lasten-sheet moet bereikbaar zijn en zijn eigen inhoud tonen.
+  test('de vaste-lasten-sheet opent en toont zijn eigen inhoud', async ({ page }) => {
     const p = seed();
     const set = JSON.parse(p.minder_set);
     set.manualBal = { 'NL01MAIN0000001111': 50, 'NL01SAVE0000004323': 0 };
     p.minder_set = JSON.stringify(set);
     await boot(page, 'vooruit', p);
 
-    const html = await page.evaluate(() => vooruitFocus());
-    expect(html).not.toContain('vooruitMeer');                   // geen verwijzing naar de dode zone
-    if (html.includes('Bekijk je lasten')) {
-      expect(html).toContain('openFixedDue()');
-      await page.evaluate(() => { $('#sheet').innerHTML = ''; openFixedDue(); });
-      await page.waitForSelector('#sheetBg.show');
-      expect(await page.locator('#sheet').innerText()).toMatch(/vaste lasten|nog te betalen/i);
-    }
+    await page.evaluate(() => { $('#sheet').innerHTML = ''; openFixedDue(); });
+    await page.waitForSelector('#sheetBg.show');
+    expect(await page.locator('#sheet').innerText()).toMatch(/vaste lasten|nog te betalen/i);
+    expect(await page.locator('#sheet').innerHTML()).not.toContain('vooruitMeer');   // geen dode zone
   });
 });

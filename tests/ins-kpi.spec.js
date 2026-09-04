@@ -408,7 +408,7 @@ test.describe('e · rustige modus en "Wat valt op"', () => {
 
     // en het oude tegelblok is weg
     expect(await page.locator('#s-ins').innerText()).not.toContain('Wat dit betekent');
-    expect(await page.evaluate(() => typeof whatStandsOutCard)).toBe('function');
+    expect(await page.evaluate(() => typeof whatStandsOutCard)).toBe('undefined');   // v164: opgeruimd
   });
 });
 

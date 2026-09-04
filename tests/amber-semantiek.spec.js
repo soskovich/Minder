@@ -80,8 +80,8 @@ test.describe('c · échte aandacht houdt zijn kleur', () => {
   test('over-budget-categorieën, tekorten en verstreken data blijven amber of rood', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate((m) => {
-      // categorie-banden: 'monitor' en 'action' blijven aandacht
-      const banden = { monitor: bandColor('monitor'), action: bandColor('action'), ok: bandColor('ok') };
+      // v164: bandColor() is weg, dus we toetsen de band zelf. De kleurvertaling had geen lezer meer.
+      const banden = { monitor: budgetBand(100, 105), action: budgetBand(100, 130), ok: budgetBand(100, 40) };
       // een verstreken terugbetaaldatum blijft amber via .cp-sub.warn
       const t = TX.find((x) => x.amount < 0);
       markLoan(t.id, 'uit', 'lening');
@@ -89,9 +89,9 @@ test.describe('c · échte aandacht houdt zijn kleur', () => {
       const rijen = loanRowsHTML('uit');
       return { banden, rijen, css: [...document.styleSheets].length > 0 };
     }, CUR);
-    expect(r.banden.action).toBe('var(--red)');
-    expect(r.banden.monitor).toBe('var(--amber)');                     // over/naar budget = aandacht
-    expect(r.banden.ok).toBe('var(--green)');
+    expect(r.banden.action).toBe('action');                            // ver over budget
+    expect(r.banden.monitor).toBe('monitor');                          // over/naar budget = aandacht
+    expect(r.banden.ok).toBe('under');                                  // ruim binnen budget
     expect(r.rijen).toContain('verstreken');
     expect(r.rijen).toContain('warn');                                 // amber via de bestaande klasse
   });
