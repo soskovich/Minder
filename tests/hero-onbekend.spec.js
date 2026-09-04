@@ -84,11 +84,14 @@ test.describe('geen bekend saldo', () => {
 test.describe('wél een bekend saldo', () => {
   test('hero toont het echte bedrag weer', async ({ page }) => {
     await open(page, 2500);
-    const s = await page.evaluate(() => ({ known: safeToSpend().known, safe: safeToSpend().safe, txt: euro(safeToSpend().safe) }));
+    // v171: hele euro's waar het bedrag een samenvatting is. Centen blijven waar het bedrag exact
+    // en waargenomen is: de transactielijst, en de saldo-drill-down per rekening.
+    const s = await page.evaluate(() => ({ known: safeToSpend().known, safe: safeToSpend().safe, txt: euro0(safeToSpend().safe) }));
     expect(s.known).toBe(1);
     expect((await heroBig(page)).trim()).toBe(s.txt);
     const hero = await page.locator('#s-dash .homehero').innerText();
-    expect(hero).toContain('totaal saldo €2.500,00');
+    expect(hero).toContain('totaal saldo €2.500');
+    expect(hero).not.toContain('€2.500,00');
     expect(hero).not.toContain('onbekend');
   });
 

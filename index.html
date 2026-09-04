@@ -2023,8 +2023,8 @@ function renderDash(){
   const hero = balKnown
     ? `<div class="homehero">
     <div class="hh-lbl">${jrg('veiligtebesteden','Veilig te besteden')}</div>
-    <div class="hh-big${safeCol==='var(--teal)'?' grad':''}" style="${safeCol==='var(--teal)'?'':`color:${safeCol};`}cursor:pointer" onclick="openSafeToSpend()">${euro(S2.safe)}</div>
-    <div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openBalances()">totaal saldo ${euro(S2.saldo)} <span style="color:var(--teal)">\u203a</span></div>
+    <div class="hh-big${safeCol==='var(--teal)'?' grad':''}" style="${safeCol==='var(--teal)'?'':`color:${safeCol};`}cursor:pointer" onclick="openSafeToSpend()">${euro0(S2.safe)}</div>
+    <div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openBalances()">totaal saldo ${euro0(S2.saldo)} <span style="color:var(--teal)">\u203a</span></div>
     ${vrijPerDagLine()}
     ${krapNote}
   </div>`
@@ -2042,7 +2042,7 @@ function renderDash(){
   let modeTop='', modeBot='';
   try{
     if(isMode('rustig')){ const _ms=months(); const _cur=totals(_ms[_ms.length-1]).spend; const _prev=_ms.length>1?totals(_ms[_ms.length-2]).spend:null; const _t=(_prev!=null&&_cur<_prev)?'Je geeft het rustiger aan dan vorige maand.':'Stap voor stap. Je houdt het overzicht.'; modeTop=`<div class="small muted" style="margin:2px 2px 12px">${_t}</div>`; }
-    else if(isMode('expert')){ const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0">deze maand · uit ${euro(_tt.spend)} · in ${euro(_tt.income)} · saldo ${euro(S2.saldo)}</div>`; }
+    else if(isMode('expert')){ const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0">deze maand · uit ${euro0(_tt.spend)} · in ${euro0(_tt.income)}</div>`; }   // saldo stond hierboven al
   }catch(_){ }
   $('#s-dash').innerHTML = renderReminder() + (freshStartDue()?(freshStartReflection()+freshStartCard()):'') + modeTop + hero + vermogenCard() + recentBlock + modeBot;
 }
@@ -4360,12 +4360,19 @@ function netWorthSeries(){
   const sch=(SET.debts||[]).reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
   return ms.map(m=>({m,nw:Math.round(balEnd[m]+overig-sch)}));
 }
-function vermogenCard(){ const w=netWorth(); const has=(SET.assets||[]).length||(SET.debts||[]).length;
-  // Zonder bezittingen/schulden én zonder bekend saldo is het vermogen onbekend; dan geen stellige €0 als hoofdgetal.
-  const known=!!has || (function(){ try{ return totalBalance().known>0; }catch(_){ return false; } })();
-  const val=known?`<span class="small" style="color:${w.netto>=0?'var(--teal)':'var(--red)'};font-weight:700">${euro0(w.netto)} ›</span>`
-                 :`<span class="small" style="color:var(--teal);font-weight:700">voeg toe ›</span>`;
-  return `<div class="card" style="cursor:pointer;margin-top:4px" onclick="go('vermogen')"><div class="row"><span style="font-weight:600">${ICON('chart')} Netto vermogen</span>${val}</div><div class="small muted" style="margin-top:4px">${has?'bezittingen − schulden · bekijk &amp; beheer':'voeg je bezittingen &amp; schulden toe'}</div></div>`; }
+/* v171: hier stond het netto vermogen, vijftien pixels onder "totaal saldo". Twee namen voor
+   getallen die alleen gelijk zijn zolang bezittingen, schulden en uitgeleend geld leeg zijn, en
+   die daarna stil uiteen lopen zonder dat het label zegt welk je leest. Home beantwoordt "wat kan
+   ik nu doen", en dat leunt op je rekeningen; het vermogen staat een keer, op zijn eigen scherm.
+   Deze kaart blijft de ingang: hij zegt of je bezittingen en schulden al hebt ingevuld, en verder
+   niets. Geen bedrag, dus ook geen kop die iets belooft wat het getal niet is. */
+function vermogenCard(){
+  const nA=(SET.assets||[]).length, nS=(SET.debts||[]).length;
+  const sub=(nA||nS)
+    ? `${nA} ${nA===1?'bezitting':'bezittingen'} · ${nS} ${nS===1?'schuld':'schulden'}`
+    : 'nog niets ingevuld';
+  return `<div class="card" style="cursor:pointer;margin-top:4px" onclick="go('vermogen')"><div class="row"><span style="font-weight:600">${ICON('chart')} Bezittingen &amp; schulden</span><span class="small" style="color:var(--teal);font-weight:700">${(nA||nS)?'bekijk':'voeg toe'} ›</span></div><div class="small muted" style="margin-top:4px">${sub}</div></div>`;
+}
 /* ===================== VERMOGENSREIS (projectie + milestones) ===================== */
 // ===== FIRE-laag =====
 // GRENS: fireInputs() is de ENIGE plek die Minder-data leest voor de FIRE-kern. fireState/fireModel/
