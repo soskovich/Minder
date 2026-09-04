@@ -23,11 +23,13 @@ async function openVerdeling(page, payload) {
   await page.waitForSelector(SHEET);
 }
 
+/* v178: 'vanaf volgende maand' gaat over een periode die nog niet begon en staat sindsdien op
+   Maand, in maandPlanRegels. De sheet en de ingang zijn onveranderd, alleen het scherm verschilt. */
 async function openVolgende(page, payload) {
   await open(page, payload || seed());
-  await page.evaluate(() => go('ins'));
-  await page.waitForSelector('#s-ins .card');
-  await page.locator('#s-ins >> text=vanaf volgende maand').first().click();
+  await page.evaluate(() => go('maand'));
+  await page.waitForSelector('#s-maand .card');
+  await page.locator('#s-maand >> text=Je potjes vanaf volgende maand').first().click();
   await page.waitForSelector(SHEET);
 }
 
@@ -134,6 +136,7 @@ test.describe('c · de volgende maand is een eigen lijst', () => {
     await openVerdeling(page, p);
     expect(await sheetTxt(page)).not.toMatch(/Bekijk je potjes vanaf/);
     expect(await page.locator('#s-ins').innerText()).not.toContain('vanaf volgende maand');
+    expect(await page.evaluate(() => maandPlanRegels())).not.toContain('vanaf volgende maand');
 
     await page.evaluate(() => openPotjesVerdeling(null, 'next'));
     expect(await sheetTxt(page)).toMatch(/Er staat niets klaar voor \w+: dit is dezelfde verdeling als deze maand\./);

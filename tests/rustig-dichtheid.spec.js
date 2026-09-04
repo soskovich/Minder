@@ -13,6 +13,15 @@ async function openIns(page, mode) {
 }
 const tegels = (page) => page.locator('#insKpiStrip .wvo-tile');
 const grafiek = (page) => page.locator('#insSpendChart');
+/* v178: de maandgrafiek zet deze maand naast eerdere maanden, en dat is een structurele vraag.
+   Hij staat sindsdien op Maand; de drietraps default uit v90 verhuist ongewijzigd mee. */
+async function openMaand(page, mode) {
+  const p = seed();
+  const set = JSON.parse(p.minder_set); set.mode = mode; p.minder_set = JSON.stringify(set);
+  await open(page, p);
+  await page.evaluate(() => go('maand'));
+  await page.waitForSelector('#s-maand .card');
+}
 
 test.describe('a · kerncijfers: drie tegelijk in Rustig', () => {
   // v161: Inzichten draagt nog twee kerncijfers, de andere twee staan op het maandscherm.
@@ -45,7 +54,7 @@ test.describe('a · kerncijfers: drie tegelijk in Rustig', () => {
 
 test.describe('b · maandgrafiek ingeklapt in Rustig', () => {
   test('Rustig start dicht, met een tikbare kop', async ({ page }) => {
-    await openIns(page, 'rustig');
+    await openMaand(page, 'rustig');
     expect(await grafiek(page).count()).toBe(0);                    // geen 12-maands grafiek in beeld
     const kaart = page.locator('#insSpendCard');
     await expect(kaart).toHaveCount(1);
@@ -59,24 +68,25 @@ test.describe('b · maandgrafiek ingeklapt in Rustig', () => {
   });
 
   test('Begeleid staat gewoon open, en een eigen keuze wint in beide modi', async ({ page }) => {
-    await openIns(page, 'begeleid');
+    await openMaand(page, 'begeleid');
     await expect(grafiek(page)).toHaveCount(1);
 
     // de gebruiker klapt hem zelf dicht: dan blijft hij dicht, ook in Begeleid
-    await page.locator('#insSpendCard .row, #s-ins .card .row').first().click().catch(() => {});
+    /* De open variant draagt geen #insSpendCard, alleen de ingeklapte; de tik op de kop is
+       hierboven al getest. Hier gaat het om de vlag, dus roepen we de toggle rechtstreeks aan. */
     await page.evaluate(() => { toggleCollap('openSpendChart'); });
     await page.waitForTimeout(120);
     expect(await page.evaluate(() => SET.openSpendChart)).toBe(false);
     expect(await grafiek(page).count()).toBe(0);
 
     // en in Rustig wint een expliciet "open" van de ingeklapte default
-    await page.evaluate(() => { SET.mode = 'rustig'; SET.openSpendChart = true; save(); renderIns(); });
+    await page.evaluate(() => { SET.mode = 'rustig'; SET.openSpendChart = true; save(); renderMaand(); });
     await page.waitForTimeout(120);
     await expect(grafiek(page)).toHaveCount(1);
   });
 
   test('collapOpen is drietraps en raakt bestaande vlaggen niet', async ({ page }) => {
-    await openIns(page, 'begeleid');
+    await openMaand(page, 'begeleid');
     const r = await page.evaluate(() => {
       const uit = {};
       delete SET.openSpendChart;

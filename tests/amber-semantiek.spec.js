@@ -18,7 +18,10 @@ async function boot(page, payload) {
 }
 // v166: de ring-tak van monthStatusCard() werd berekend en weggegooid - de enige aanroeper is de
 // terugval in renderIns(), en die vuurt alleen zonder budget. De budgetstand woont in de hero.
+/* v178: 'boven inkomen-limiet' is een oordeel over je plan en staat op Maand (maandPlanRegels).
+   De budgetstand op Inzichten toont alleen nog hoe deze maand loopt. */
 const kaartHtml = (page) => page.evaluate((m) => insBudgetBlok(m), CUR);
+const planHtml = (page) => page.evaluate(() => maandPlanRegels());
 
 test.describe('a · de budget-kaart', () => {
   test('binnen budget kleurt nooit amber, ook niet als je sneller gaat dan de maand', async ({ page }) => {
@@ -52,8 +55,8 @@ test.describe('a · de budget-kaart', () => {
 
   test('"boven inkomen-limiet" is een spiegel, geen waarschuwing', async ({ page }) => {
     await boot(page);                                                  // fixture: potjes 2400 vs limiet 2100
-    const html = await kaartHtml(page);
-    expect(html).toContain('boven inkomen-limiet');
+    const html = await planHtml(page);
+    expect(html).toContain('Boven je inkomen-limiet');
     expect(html).toContain('var(--mut2)');
     expect(html).not.toMatch(AMBER);
     // het bedrag blijft gewoon staan

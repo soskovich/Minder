@@ -65,8 +65,11 @@ test('b · de limiet-slider werkt de sheet én de widget live bij', async ({ pag
   await openEditor(page);
 
   expect(await sheetTxt(page)).toContain('Bestedingslimiet: 70%');
-  expect(await page.locator('#s-ins').innerText()).toContain('(70%)');         // 2400 - 2100 = 300 boven de limiet
-  expect(await page.locator('#s-ins').innerText()).toContain('€300');
+  // v178: de limiet-spiegel staat op Maand; de sheet en die regel moeten samen bijwerken
+  const spiegel = () => page.evaluate(() => { const d = document.createElement('div');
+    d.innerHTML = maandPlanRegels(); return d.innerText.replace(/\s+/g, ' '); });
+  expect(await spiegel()).toContain('(70%)');                                  // 2400 - 2100 = 300 boven de limiet
+  expect(await spiegel()).toContain('€300');
 
   // de echte oninput-handler van de slider afvuren (SET.limit=..;save();render();)
   await page.evaluate(() => {
@@ -82,9 +85,9 @@ test('b · de limiet-slider werkt de sheet én de widget live bij', async ({ pag
   expect(await page.evaluate(() => SET.limit)).toBe(50);
   expect(await page.evaluate(() => document.querySelector('#sheetBg').classList.contains('show'))).toBe(true);
 
-  const ins = await page.locator('#s-ins').innerText();
-  expect(ins).toContain('(50%)');                                              // 2400 - 1500 = 900
-  expect(ins).toContain('€900');
+  const na = await spiegel();
+  expect(na).toContain('(50%)');                                               // 2400 - 1500 = 900
+  expect(na).toContain('€900');
 });
 
 test('c · een categorie-potje behoudt focus tijdens typen', async ({ page }) => {

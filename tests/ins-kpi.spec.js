@@ -17,6 +17,13 @@ async function openIns(page, payload) {
   await page.evaluate(() => go('ins'));
   await page.waitForSelector('#insKpiStrip');
 }
+/* v178: de meermaands-grafiek zet deze maand naast eerdere maanden en staat sindsdien op Maand.
+   De grafiek zelf is onveranderd, alleen het scherm waar hij op staat verschilt. */
+async function openGrafiek(page, payload) {
+  await open(page, payload || seed());
+  await page.evaluate(() => go('maand'));
+  await page.waitForSelector('#s-maand .card');
+}
 
 function tweak(fn) {
   const p = seed();
@@ -213,10 +220,12 @@ test.describe('b · historische reeksen', () => {
     }));
     expect(await page.evaluate(() => months().length)).toBe(1);
     const s = await strip(page);
-    // v173: die mededeling stond per tegel en nog eens onder de maandgrafiek, drie keer op één
-    // scherm. De grafiek zegt het nu als enige, dus de tegel toont alleen geen sparkline.
-    const pagina = await page.evaluate(() => $('#s-ins').innerText);
+    /* v173: die mededeling stond per tegel en nog eens onder de maandgrafiek, drie keer op één
+       scherm. De grafiek zegt het nu als enige. v178: die grafiek staat op Maand, dus de zin komt
+       in de hele app precies één keer voor, en niet op het scherm met de tegels. */
+    const pagina = await page.evaluate(() => $('#s-ins').innerText + ' ' + $('#s-maand').innerText);
     expect((pagina.match(/maanden zie je hier je verloop/gi) || []).length).toBe(1);
+    expect(await page.evaluate(() => $('#s-ins').innerText)).not.toMatch(/zie je hier je verloop/i);
     expect(s).not.toMatch(/zie je hier je verloop/i);   // niet meer per tegel
     expect(await page.locator('#insKpiStrip .spark').count()).toBe(0);
     expect(s).toMatch(/\d+%/);                                            // de waarde staat er wél
@@ -243,7 +252,7 @@ test.describe('b · historische reeksen', () => {
 
 test.describe('b2 · maandgrafiek', () => {
   test('één datakleur, alleen de uitschieter gelabeld, tooltip op elke maand', async ({ page }) => {
-    await openIns(page);
+    await openGrafiek(page);
     const c = page.locator('#insSpendChart');
     const kleuren = await c.locator('rect.cbar').evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('fill')))]);
     expect(kleuren.sort()).toEqual(['var(--bar)', 'var(--teal)']);          // neutraal + accent lopende maand
@@ -357,7 +366,7 @@ test.describe('d · uitgaven-vs-budget-grafiek', () => {
   });
 
   test('een tik op een kolom leest hem uit; de uitlezing opent die maand', async ({ page }) => {
-    await openIns(page);
+    await openGrafiek(page);
     const label = await page.evaluate((m) => monthLabel(m), M1);
     await page.locator(`#insSpendChart rect[onclick*="${M1}"]`).click();
     await page.waitForTimeout(150);

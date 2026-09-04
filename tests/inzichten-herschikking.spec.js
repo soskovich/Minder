@@ -173,8 +173,8 @@ test.describe('d · de verdieping', () => {
     const b = await beeld(page);
     expect(b.secties).toEqual(['Deze maand', 'Verdieping']);
     expect(b.kpiOpen).toBe(true);                                        // kerncijfers standaard open
-    expect(b.tekst).toMatch(/uitgaven vs budget/i);
-    // v90 blijft gelden: de grafiek is dicht in Rustig en open in Begeleid, ook onder Verdieping
+    // v178: de meermaands-grafiek en de abonnementenkaart staan op Maand
+    expect(b.tekst).not.toMatch(/uitgaven vs budget/i);
     expect(b.tekst).not.toMatch(/tik om te bekijken/);
     // v136: de Categorieen-kaart is weg van de pagina; die verdeling staat achter "Uitgegeven"
     expect(b.tekst).not.toMatch(/^categorieën/im);

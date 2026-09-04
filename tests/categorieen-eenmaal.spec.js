@@ -26,7 +26,10 @@ test.describe('a · de pagina', () => {
     const t = await page.locator('#s-ins').innerText();
     expect(t).toMatch(/verdieping/i);
     expect(t).toMatch(/kerncijfers/i);
-    expect(t).toMatch(/uitgaven vs budget/i);
+    // v178: de meermaands-grafiek is naar Maand verhuisd, want die vergelijkt maanden
+    expect(t).not.toMatch(/uitgaven vs budget/i);
+    await page.evaluate(() => go('maand'));
+    expect(await page.locator('#s-maand').innerText()).toMatch(/uitgaven vs budget/i);
   });
 });
 

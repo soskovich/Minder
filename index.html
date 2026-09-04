@@ -3062,7 +3062,8 @@ function maandRegels(){
         waarde: st==='ok'?'sluit aan':euro0(V.vrij), eenheid: st==='ok'?'alles toegewezen':'staat nog niet toegewezen',
         gevolg: st==='ok' ? 'Al je spaargeld is aan een item in je plan toegewezen.'
                           : `Er staat ${euro0(V.vrij)} op je spaarrekening dat aan geen enkel item is toegewezen.`,
-        vrij:V.vrij, act:"go('vooruit')"});
+        // v178: was go('vooruit'); het gevolg staat nu in een sheet, dus je blijft op Maand
+        vrij:V.vrij, act:"openAansluiting()"});
     } }catch(_){}
   // 4. aankoopdoel
   try{ const d=maandDoel();
@@ -3083,7 +3084,10 @@ function maandRegels(){
     uit.push({key:'patroon', naam:'Patroon van de maand', status:n?'let op':'ok',
       waarde: n&&n.bedrag!=null?euro0(n.bedrag):(n?'let op':'rustig'), eenheid: n&&n.boven!=null?`${euro0(n.boven)} boven je normaal`:(n?'gesignaleerd':'geen signaal'),
       gevolg: n?String(n.l1||'').replace(/<[^>]*>/g,''):'Er springt deze maand geen uitgavenpatroon uit.',
-      sig:n, act:n&&n.act?n.act:"go('ins')"}); }
+      /* v178: de terugval was go('ins'), midden in je maandmoment naar een ander scherm. Het
+         signaal draagt meestal zijn eigen tik (een drill-down in een sheet); zonder die tik opent
+         de uitgaven van deze maand, ook een sheet. Je blijft op Maand. */
+      sig:n, act:n&&n.act?n.act:`openMonthSpend('${kijkMaand()}')`}); }
   }catch(_){}
   return uit.sort((a,b)=>MAAND_VOLGORDE.indexOf(a.key)-MAAND_VOLGORDE.indexOf(b.key));
 }
@@ -3392,6 +3396,47 @@ function maandRij(r,compact){
     <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:42%"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>`;
 }
+/* v178: twee oordelen over je plan die op Inzichten in het blok over deze maand stonden. Het
+   eerste gaat over een periode die nog niet begon, het tweede weegt je potjes tegen je
+   inkomen-limiet (v53: een spiegel, geen plafond). Allebei structureel, dus horen ze hier.
+   Categorie c: ze lezen je instellingen van NU, dus bij een afgesloten maand staan ze er niet -
+   renderMaand komt daar niet eens langs. */
+/* v178: de aansluiting-regel sprong met go('vooruit') naar een ander scherm. Het gevolg staat nu
+   hier: hetzelfde bedrag uit spaarVrij() en dezelfde tik als spaarVrijLine op je plan. Er wordt
+   niets herrekend en er is geen tweede route naar een toewijzing (v172). */
+function openAansluiting(){
+  let V=null; try{ V=spaarVrij(); }catch(_){}
+  if(!V){ return; }
+  let t=null; try{ t=spaarVrijDoel(); }catch(_){}
+  const cta=(V.vrij>0 && t)
+    ? `<button class="btn" style="margin-top:14px" onclick="closeSheet();spaarVrijToe('${esc(t.id)}')">Toewijzen aan ${esc(t.naam)}</button>`
+    : (V.vrij>0 ? `<button class="btn" style="margin-top:14px" onclick="closeSheet();openGoal()">Voeg een doel toe</button>` : '');
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg)">Aansluiting spaargeld</div>
+      <div class="muted small">je saldo naast je toewijzingen</div></div>
+    <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
+      <span class="small">Op je spaarrekening</span><span class="small" style="font-weight:700">${euro0(V.saved)}</span></div>
+    <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
+      <span class="small">Toegewezen aan je plan</span><span class="small" style="font-weight:700">${euro0(V.toegewezen)}</span></div>
+    <div class="row" style="justify-content:space-between;padding:8px 0">
+      <span class="small">Nog niet toegewezen</span><span class="small" style="font-weight:700;color:${V.vrij>0?'var(--teal)':'var(--mut)'}">${euro0(V.vrij)}</span></div>
+    ${cta}
+    <button class="btn sec" style="margin-top:8px" onclick="closeSheet()">Klaar</button>`;
+  showSheetBg();
+}
+function maandPlanRegels(){
+  let tb=0, pb=0, t=null;
+  try{ tb=totalBudget(); pb=plannedTotalBudget(); t=totals(kijkMaand()); }catch(_){ return ''; }
+  const rijen=[];
+  if(tb>0 && pb!==tb) rijen.push(`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openPotjesVerdeling('${esc(kijkMaand())}','next')">
+    <span class="small">Je potjes vanaf volgende maand</span>
+    <span class="small" style="font-weight:700;color:var(--teal)">${euro0(pb)} ›</span></div>`);
+  if(t && t.budget>t.limit && t.limit>0) rijen.push(`<div class="row" style="justify-content:space-between;padding:6px 0">
+    <span class="small">Boven je inkomen-limiet</span>
+    <span class="small" style="font-weight:700;color:var(--mut2)">${euro0(t.budget-t.limit)} (${SET.limit}%)</span></div>`);
+  if(!rijen.length) return '';
+  return `<div class="card"><div class="hlabel" style="margin:0 0 2px">Je plan</div>${rijen.join('')}</div>`;
+}
 function maandGelezen(){
   const d=SET.maandGelezen; if(!d) return '';
   const dt=new Date(d); if(isNaN(dt)) return '';
@@ -3462,6 +3507,9 @@ function renderMaand(){
     ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
       ${goed.map(r=>maandRij(r,true)).join('')}</div>`:''}
     ${maandKpiBlok(m)}
+    ${maandPlanRegels()}
+    ${spendVsBudgetChart()}
+    ${subsCard()}
     ${maandBeleggenRegel(R)}
     ${maandCoachIngang(RO)}
     ${maandGelezen()}
@@ -6207,7 +6255,7 @@ async function coTopicVast(m){
   await coSay(`Samen ${euro0(tot)} per maand, ${euro0(tot*12)} per jaar. Hier snijd je in kosten, niet in je gedrag.`,{ai:true}); if(_g!==_coGen)return;
   coChoices([
     {l:'Ik zeg er één op', act:()=>coShowAction({eyebrow:'Eén post minder',context:`Opzeggen kost even tijd en levert elke maand op.`,title:`Welke zeg je op?`,input:{type:'text',ph:'bv. '+subs[0].name},afspraak:v=>`ik zeg ${(v||'één abonnement')} op`})},
-    {l:'Bekijk al mijn abonnementen', act:()=>{ coEnd(); go('ins'); }},
+    {l:'Bekijk al mijn abonnementen', act:()=>{ coEnd(); go('maand'); }},   // v178: de lijst staat op Maand
     coTerug(m), {l:'Nu even niet',act:()=>coEnd()}
   ]);
 }
@@ -6686,7 +6734,9 @@ function collapOpen(flag){
   const d=COLLAP_DEF[flag]; if(!d) return false;
   return isMode('rustig')?d.rustig:d.rest;
 }
-function toggleCollap(which){ SET[which]=!collapOpen(which); save(); renderIns(); }
+/* v178: dit deed renderIns() en ging er dus van uit dat elke inklap op Inzichten staat. De
+   maandgrafiek staat nu op Maand, dus de toggle tekent het scherm waar je op staat (v137). */
+function toggleCollap(which){ SET[which]=!collapOpen(which); save(); render(); }
 // uitgaven per categorie / winkel voor één maand (voor vergelijking)
 function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
 
@@ -7793,17 +7843,15 @@ function insBudgetBlok(m){
   const over=sp>bud;
   /* Drie ingangen, elk op zijn eigen woorden - de ring en de titel van monthStatusCard vielen weg
      op de lopende maand, dus de kop en de twee bedragen nemen die rol over (v135). */
-  const spiegel=(t.budget>t.limit&&t.limit>0)
-    ? `<div class="row" style="justify-content:space-between;margin-top:6px;font-size:var(--fs-xs);color:var(--mut2)"><span>boven inkomen-limiet</span><span style="font-weight:700">${euro0(t.budget-t.limit)} (${SET.limit}%)</span></div>`
-    : '';
+  /* v178: 'boven inkomen-limiet' is een oordeel over je plan, niet over hoe deze maand loopt.
+     Het staat nu op Maand (maandPlanRegels), samen met 'vanaf volgende maand'. */
+  const spiegel='';
   return `<div>
     <div class="row" style="gap:8px">${maandKiezerKop(m)}<span class="small muted" style="cursor:pointer" onclick="openBudgetCompare('${m}')">${isLopendeMaand(m)?`dag ${d.elapsed} van ${d.dim}`:'hele maand'} ›</span></div>
     <div class="row" style="align-items:baseline;gap:8px;margin-top:8px">
       <span style="cursor:pointer" onclick="openMonthSpend('${m}')"><span style="font-size:var(--fs-xl);font-weight:800">${euro0(sp)}</span> <span class="small muted">uitgegeven</span></span>
       <span class="small muted" style="flex:1;min-width:0;cursor:pointer" onclick="openPotjesVerdeling('${m}')">van ${euro0(bud)} ${t.potTotal>0?'maandbudget':'je inkomen-limiet'} ›</span>
       <span style="font-weight:700;white-space:nowrap;color:${over?'var(--red)':'var(--txt)'}">${usedPct}%</span></div>
-    ${(()=>{ const tb=totalBudget(), pb=plannedTotalBudget();   // v115-ingang naar de volgende-maand-lijst
-      return (tb>0 && pb!==tb) ? `<div class="row" style="justify-content:space-between;padding:4px 0 0;font-size:var(--fs-xs);color:var(--mut2);cursor:pointer" onclick="openPotjesVerdeling('${m}','next')"><span style="margin-left:2px">↳ vanaf volgende maand</span><span style="font-weight:700;color:var(--teal)">${euro0(pb)}</span></div>` : ''; })()}
     <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${over?'var(--red)':'var(--accent)'}"></div></div>
     <div class="small" style="color:var(--mut2);margin-top:5px">de maand is ${dayPct}% voorbij</div>${spiegel}</div>`;
 }
@@ -7847,7 +7895,9 @@ function insVouw(flag, titel, icoon, samenvatting, inhoud){
 // samenvatting van de kerncijfers, uit dezelfde bron die de strip vult
 function insKpiSamenvatting(m){
   try{ const K=insKpis(m);
-    return ['inleg','budget'].map(k=>K[k]&&K[k].raw!=null?`${K[k].label.toLowerCase()} ${K[k].val}`:'').filter(Boolean).join(' \u00b7 ');
+    /* v178: dit las 'inleg', de spaarquote, terwijl diezelfde kaart uitgeklapt zegt dat de
+       spaarquote op het maandscherm staat (v161). De kop noemt nu wat er onder staat. */
+    return ['budget','vari'].map(k=>K[k]&&K[k].raw!=null?`${K[k].label.toLowerCase()} ${K[k].val}`:'').filter(Boolean).join(' \u00b7 ');
   }catch(_){ return ''; }
 }
 function insSection(t){ return `<div class="inssec">${t}</div>`; }
@@ -7921,10 +7971,11 @@ function renderIns(){
   /* v136: geen Categorieen-kaart meer op de pagina zelf. Diezelfde verdeling staat al achter
      "Uitgegeven" (openMonthSpend, eerste chip), en dat is de plek waar de vraag "waar ging mijn
      geld heen" hoort (v114/v115). Twee weergaven van hetzelfde is geen keuze maar ruis. */
+  /* v178: de meermaands-grafiek en de abonnementenkaart staan nu op Maand. De eerste zet deze
+     maand naast eerdere maanden en dat is een structurele vraag; de tweede is een lastenlijst die
+     niet over deze maand gaat. Beide stonden hier op een operationeel scherm. */
   const verdieping = insVouw('openKpiCard','Kerncijfers',ICON('chart'),insKpiSamenvatting(m),insKpiStrip(m))
-    + spendVsBudgetChart()
-    + insVouw('openBehavior','Gedrag',ICON('bulb'),behN?`${behN} ${behN===1?'observatie':'observaties'}`:'',beh)
-    + (nu?subsCard():'');   // abonnementen gaan over wat er nu loopt
+    + insVouw('openBehavior','Gedrag',ICON('bulb'),behN?`${behN} ${behN===1?'observatie':'observaties'}`:'',beh);
   /* De lek-vraag opent een coachgesprek over een stap die je nu kunt zetten; op een afgesloten
      maand nodigt dat uit tot een keuze over iets wat voorbij is (v139: alleen kijken). */
   $('#s-ins').innerHTML = afgeslotenMaandBanner(m) + insSection(nu?'Deze maand':'Terugblik')

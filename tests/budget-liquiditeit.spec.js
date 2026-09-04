@@ -58,8 +58,13 @@ test.describe('v53 potjes leidend, inkomen-limiet als spiegel', () => {
     const t = await text(page, '#s-ins');
     expect(t).toMatch(/maandbudget/i);   // v135: staat nu in de zin "van €2.400 maandbudget"
     expect(t).toContain('€2.400');
-    expect(t).toContain('boven inkomen-limiet');
-    expect(t).toContain('€300 (70%)');
+    /* v178: de limiet-spiegel is een oordeel over je plan en staat op Maand. Inzichten toont
+       alleen nog hoe deze maand loopt. */
+    expect(t).not.toContain('inkomen-limiet');
+    const plan = await page.evaluate(() => { const d = document.createElement('div');
+      d.innerHTML = maandPlanRegels(); return d.innerText.replace(/\s+/g, ' '); });
+    expect(plan).toContain('Boven je inkomen-limiet');
+    expect(plan).toContain('€300 (70%)');
     const kaart = await page.evaluate((m) => monthStatusCard(m), CUR);
     expect(kaart).not.toContain('€2.100');   // de limiet staat nergens als maandbudget
   });
