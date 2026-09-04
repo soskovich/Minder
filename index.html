@@ -8698,12 +8698,16 @@ const KPI_WOORD={good:'goed',mid:'krap',bad:'let op'};
    punten én vertaald naar euro's, want daar denk je in. Bewust GEEN eigen sommen: `t` en `sf`
    zijn dezelfde totals(m)/splitFixedVar(m) waar het percentage uit komt, zodat bedrag en
    percentage nooit uit elkaar kunnen lopen. null = we weten het niet (v59/v73). */
+/* v161: de noemer van een cijfer staat los van zijn band. Sinds de norm 50/30/20 de kerncijfers
+   niet meer stuurt heeft alleen budgetnaleving nog een doel, maar de noemer bestaat voor alle vier
+   - kpiBijdrage() leunt erop en zou anders met drie cijfers niets meer kunnen. Eén bron. */
+function kpiBasis(key,t){ return (key==='budget')?(+t.budget||0):(+t.income||0); }
 function kpiAfstand(key,v,t,sf){
   if(v==null) return null;
   const B=kpiBand(key); if(!(B>0)) return null;
   const dir=(KPI_META[key]||{}).dir||'down';
   const pt=(dir==='up')?(v-B):(B-v);                      // >0 = aan de goede kant van je doel
-  const basis=(key==='budget')?(+t.budget||0):(+t.income||0);   // budgetnaleving meet tegen je potjes
+  const basis=kpiBasis(key,t);
   const bedrag=basis>0?Math.round(Math.abs(pt)/100*basis):null;
   return {pt:Math.round(pt*10)/10, bedrag, basis, goed:pt>=0};
 }
@@ -9045,7 +9049,7 @@ function kpiTxWaarde(key,t){
 function kpiSom(key,items){ return items.reduce((s,t)=>s+kpiTxWaarde(key,t),0); }
 function kpiTxLijst(key,m){
   const t=totals(m);
-  const K=insKpis(m), basis=(K[key]&&K[key].afst)?K[key].afst.basis:0;
+  const basis=kpiBasis(key,t);   // v161: los van de band, want die is er nog maar voor budgetnaleving
   // v105: op gewicht, niet op datum. De vraag is welke transactie dit cijfer maakt, en dan is
   // "de zwaarste eerst" het antwoord; de datum staat er per regel toch bij.
   const items=kpiTx(key,m).slice().map(x=>({t:x,pt:kpiBijdrage(key,x,basis)}))
