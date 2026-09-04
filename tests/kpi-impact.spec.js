@@ -1,18 +1,20 @@
 // v105 (fase 3): de lijst achter een kerncijfer stond op datum en zei niets over gewicht.
 // kpiBijdrage() rekent per transactie uit wat ze aan het cijfer deed, in procentpunten, met
 // dezelfde noemer als het cijfer zelf — zodat de bijdragen optellen tot het getal erboven.
+// v161: de basis komt uit kpiBasis(), niet uit kpiAfstand().basis — er is nog maar één cijfer met
+// een band, dus een afstand is er meestal niet, terwijl de noemer er altijd is.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
-const { seed, open, M1, INKOMEN, POTJES } = require('./budget-fixture');
+const { seed, open, CUR, M1, INKOMEN, POTJES } = require('./budget-fixture');
 
-async function boot(page) {
+async function boot(page, maand) {
   await open(page, seed());
-  await page.evaluate((m) => { curMonth = m; save(); go('ins'); renderIns(); }, M1);
+  await page.evaluate((m) => { curMonth = m; save(); go('ins'); renderIns(); }, maand || M1);
   await page.waitForTimeout(60);
 }
 // alle bijdragen van één kerncijfer, in de volgorde waarin de lijst ze toont
 const bijdragen = (page, key) => page.evaluate(([k, m]) => {
-  const basis = insKpis(m)[k].afst.basis;
+  const basis = kpiBasis(k, totals(m));
   return kpiTx(k, m).map((t) => ({ naam: t.name, bedrag: t.amount, pt: kpiBijdrage(k, t, basis) }))
     .sort((a, b) => Math.abs(b.pt) - Math.abs(a.pt));
 }, [key, M1]);
@@ -22,7 +24,7 @@ test.describe('a · de bijdragen tellen op tot het cijfer', () => {
     test(`${key}: de som van de punten is het cijfer`, async ({ page }) => {
       await boot(page);
       const r = await page.evaluate(([k, m]) => {
-        const basis = insKpis(m)[k].afst.basis;
+        const basis = kpiBasis(k, totals(m));
         const som = kpiTx(k, m).reduce((s, t) => s + kpiBijdrage(k, t, basis), 0);
         return { som, cijfer: insKpis(m)[k].raw };
       }, [key, M1]);
@@ -30,30 +32,30 @@ test.describe('a · de bijdragen tellen op tot het cijfer', () => {
     });
   }
 
-  test('restsaldo-quote: honderd min de som van de punten is het cijfer', async ({ page }) => {
-    await boot(page);
+  test('spaarquote: de stortingen tellen op tot het cijfer', async ({ page }) => {
+    await boot(page, CUR);
     const r = await page.evaluate((m) => {
-      const basis = insKpis(m).spaar.afst.basis;
-      const som = kpiTx('spaar', m).reduce((s, t) => s + kpiBijdrage('spaar', t, basis), 0);
-      return { som, cijfer: insKpis(m).spaar.raw };
-    }, M1);
-    expect(100 + r.som).toBeCloseTo(r.cijfer, 6);       // elke uitgave duwt de quote omlaag
-    expect(r.som).toBeLessThan(0);
+      const basis = kpiBasis('inleg', totals(m));
+      const rijen = kpiTx('inleg', m);
+      const som = rijen.reduce((s, t) => s + kpiBijdrage('inleg', t, basis), 0);
+      return { n: rijen.length, som, cijfer: insKpis(m).inleg.raw };
+    }, CUR);
+    expect(r.n).toBeGreaterThan(0);
+    expect(r.som).toBeCloseTo(r.cijfer, 6);      // sign 1, base 0: de punten zijn het cijfer zelf
   });
+
 });
 
 test.describe('b · het teken volgt de betekenis', () => {
-  test('een uitgave verlaagt je restsaldo-quote en verhoogt een drukmetriek', async ({ page }) => {
+  test('een uitgave verhoogt een drukmetriek en je budgetnaleving', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate((m) => {
       const t = kpiTx('vast', m)[0];
       return {
-        spaar: kpiBijdrage('spaar', t, insKpis(m).spaar.afst.basis),
-        vast: kpiBijdrage('vast', t, insKpis(m).vast.afst.basis),
-        budget: kpiBijdrage('budget', t, insKpis(m).budget.afst.basis),
+        vast: kpiBijdrage('vast', t, kpiBasis('vast', totals(m))),
+        budget: kpiBijdrage('budget', t, kpiBasis('budget', totals(m))),
       };
     }, M1);
-    expect(r.spaar).toBeLessThan(0);
     expect(r.vast).toBeGreaterThan(0);
     expect(r.budget).toBeGreaterThan(0);
   });
@@ -63,7 +65,7 @@ test.describe('b · het teken volgt de betekenis', () => {
     const r = await page.evaluate((m) => {
       const t = { id: 'retour', date: `${m}-15`, amount: 60, acc: OWN[0], name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN RETOUR', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] };
       TX.push(t); categorize(t); save();
-      const basis = insKpis(m).vari.afst.basis;
+      const basis = kpiBasis('vari', totals(m));
       const rij = kpiTx('vari', m).find((x) => x.amount === 60);
       const som = kpiTx('vari', m).reduce((s, x) => s + kpiBijdrage('vari', x, basis), 0);
       return { pt: kpiBijdrage('vari', rij, basis), som, cijfer: insKpis(m).vari.raw };
@@ -76,7 +78,7 @@ test.describe('b · het teken volgt de betekenis', () => {
     await boot(page);
     const r = await page.evaluate((m) => {
       const t = kpiTx('vast', m).find((x) => Math.abs(x.amount) === 900);
-      return { budget: kpiBijdrage('budget', t, insKpis(m).budget.afst.basis), vast: kpiBijdrage('vast', t, insKpis(m).vast.afst.basis) };
+      return { budget: kpiBijdrage('budget', t, kpiBasis('budget', totals(m))), vast: kpiBijdrage('vast', t, kpiBasis('vast', totals(m))) };
     }, M1);
     expect(r.budget).toBeCloseTo(900 / POTJES * 100, 6);
     expect(r.vast).toBeCloseTo(900 / INKOMEN * 100, 6);
@@ -84,7 +86,7 @@ test.describe('b · het teken volgt de betekenis', () => {
 
   test('zonder basis geen bijdrage', async ({ page }) => {
     await boot(page);
-    const r = await page.evaluate((m) => kpiBijdrage('spaar', kpiTx('spaar', m)[0], 0), M1);
+    const r = await page.evaluate((m) => kpiBijdrage('vast', kpiTx('vast', m)[0], 0), M1);
     expect(r).toBe(null);
   });
 });
@@ -93,11 +95,11 @@ test.describe('c · de zwaarste staat boven', () => {
   test('de lijst is op gewicht gesorteerd, niet op datum', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate((m) => {
-      const html = kpiTxLijst('spaar', m);
+      const html = kpiTxLijst('vast', m);
       const namen = [...html.matchAll(/class="nm">([^<]+)</g)].map((x) => x[1]);
-      const basis = insKpis(m).spaar.afst.basis;
-      const verwacht = kpiTx('spaar', m).slice()
-        .sort((a, b) => Math.abs(kpiBijdrage('spaar', b, basis)) - Math.abs(kpiBijdrage('spaar', a, basis)))
+      const basis = kpiBasis('vast', totals(m));
+      const verwacht = kpiTx('vast', m).slice()
+        .sort((a, b) => Math.abs(kpiBijdrage('vast', b, basis)) - Math.abs(kpiBijdrage('vast', a, basis)))
         .map((t) => t.name);
       return { namen, verwacht };
     }, M1);
@@ -132,22 +134,22 @@ test.describe('d · de weergave', () => {
 
   test('de eenheid wordt één keer uitgelegd, via het bestaande jargon-mechanisme', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => openKpiDetail('spaar'));
+    await page.evaluate(() => openKpiDetail('vast'));
     await page.waitForTimeout(60);
     await page.locator('#sheet details.kpi-tx').evaluate((e) => { e.open = true; });
     // jrg() zet showTip zowel op onclick als op onkeydown, dus tellen doen we op de span
     expect(await page.locator('#sheet .kpi-tx span.jrg').count()).toBe(1);
     const html = await page.locator('#sheet').innerHTML();
     expect(html).toContain("showTip(event,'procentpunt')");
-    expect(await page.locator('#sheet').innerText()).toContain('Een uitgave duwt je restsaldo-quote omlaag');
+    expect(await page.locator('#sheet').innerText()).toContain('Een uitgave duwt dit cijfer omhoog');
   });
 
-  test('een drukmetriek legt het andersom uit', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => openKpiDetail('vast'));
+  test('de spaarquote legt het andersom uit: een storting duwt hem omhoog', async ({ page }) => {
+    await boot(page, CUR);
+    await page.evaluate(() => openKpiDetail('inleg'));
     await page.waitForTimeout(60);
     await page.locator('#sheet details.kpi-tx').evaluate((e) => { e.open = true; });
-    expect(await page.locator('#sheet').innerText()).toContain('Een uitgave duwt dit cijfer omhoog');
+    expect(await page.locator('#sheet').innerText()).toContain('Elke storting duwt dit cijfer omhoog');
   });
 
   test('punten in NL-notatie, met een echt minteken', async ({ page }) => {
@@ -164,7 +166,7 @@ test.describe('e · smalle mobiel', () => {
     test(`de lijst met bijdragen past op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 880 });
       await boot(page);
-      await page.evaluate(() => openKpiDetail('spaar'));
+      await page.evaluate(() => openKpiDetail('vast'));
       await page.waitForTimeout(60);
       await page.locator('#sheet details.kpi-tx').evaluate((e) => { e.open = true; });
       await page.waitForTimeout(60);

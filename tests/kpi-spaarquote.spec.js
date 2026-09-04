@@ -1,7 +1,9 @@
-// v109 (fase 2 van 2): naast de restsaldo-quote staat nu de spaarquote — wat er écht naar je
-// spaarrekening ging, gedeeld door je inkomen. Het gemelde geval: 30% overhouden terwijl er maar
-// 10% gestort werd. Beide worden aan dezelfde norm getoetst (splitTarget().save), zoals de
-// referentie-verdeling dat al deed. De service worker staat globaal uit via playwright.config.js.
+// v109: de spaarquote meet wat er écht opzij ging, gedeeld door je inkomen.
+// v161: de restsaldo-quote ernaast is vervallen, de spaarquote telt nu de hele vermogensopbouw en
+// staat op het maandscherm in plaats van bij de kerncijfers op Inzichten. Er hoort geen norm meer
+// bij, dus geen band en geen afstand. De brug bleef: spaarDekking() zegt nog steeds of je storting
+// gedekt was door je overschot, maar stelt het cijfer niet bij (v117 ingetrokken in v161).
+// De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { open, CUR, M1, M2, MAIN, SAV } = require('./budget-fixture');
 
@@ -33,14 +35,25 @@ async function boot(page, opts) {
 const kpi = (page, key, m) => page.evaluate(([k, mm]) => { const x = insKpis(mm)[k]; return { raw: x.raw, val: x.val, band: x.band, state: x.state, afst: x.afst }; }, [key, m || M1]);
 
 test.describe('a · het gemelde geval', () => {
-  test('30% overhouden, 10% opzij — en beide staan er', async ({ page }) => {
+  test('10% opzij, en dat staat op het maandscherm', async ({ page }) => {
     await boot(page);
-    const rest = await kpi(page, 'spaar'), inleg = await kpi(page, 'inleg');
-    expect(Math.round(rest.raw)).toBe(30);
-    expect(Math.round(inleg.raw)).toBe(10);
-    const strip = await page.locator('#insKpiStrip').innerText();
-    expect(strip).toMatch(/restsaldo-quote/i);
-    expect(strip).toMatch(/spaarquote/i);
+    const inleg = await kpi(page, 'inleg');
+    expect(Math.round(inleg.raw)).toBe(10);          // 300 van 3000, niet 600: één kant van de overboeking
+    const blok = await page.evaluate((m) => {
+      const d = document.createElement('div'); d.innerHTML = maandKpiBlok(m); return d.textContent;
+    }, M1);
+    expect(blok).toMatch(/spaarquote/i);
+    expect(await page.locator('#insKpiStrip').innerText()).not.toMatch(/spaarquote/i);
+  });
+
+  test('beide kanten van een eigen overboeking tellen één keer', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate((m) => ({
+      V: vermogensInleg(m), bel: beleggingsInleg(m), gestort: savedNet(m),
+    }), M1);
+    expect(r.gestort).toBe(300);
+    expect(r.bel).toBe(0);                           // de afschrijving is de spiegel, geen belegging
+    expect(r.V.totaal).toBe(300);
   });
 
   test('de spaarquote leest de spaarrekening, niet je uitgaven', async ({ page }) => {
@@ -69,7 +82,7 @@ test.describe('a · het gemelde geval', () => {
   test('de bijdragen tellen op tot het cijfer, met het juiste teken', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate((m) => {
-      const basis = insKpis(m).inleg.afst.basis;
+      const basis = kpiBasis('inleg', totals(m));
       const pts = kpiTx('inleg', m).map((t) => kpiBijdrage('inleg', t, basis));
       return { som: pts.reduce((a, b) => a + b, 0), cijfer: insKpis(m).inleg.raw, eerste: pts[0] };
     }, M1);
@@ -110,15 +123,22 @@ test.describe('b · ontsparen en onbekend', () => {
 });
 
 test.describe('c · de twee cijfers horen bij elkaar', () => {
-  test('de brug staat in beide sheets en noemt het verschil', async ({ page }) => {
+  test('de brug staat in de spaarquote-sheet en noemt het verschil in euro\'s', async ({ page }) => {
     await boot(page);
-    for (const key of ['spaar', 'inleg']) {
-      await page.evaluate((k) => openKpiDetail(k), key);
-      await page.waitForTimeout(50);
-      const s = await page.locator('#sheet').innerText();
-      expect(s, key).toMatch(/Je hield \d+% over .* en zette \d+% opzij/);
-      expect(s, key).toContain('bleef op je betaalrekening staan');
-    }
+    await page.evaluate(() => openKpiDetail('inleg'));
+    await page.waitForTimeout(50);
+    const s = await page.locator('#sheet').innerText();
+    expect(s).toMatch(/Je hield .* over en zette .* opzij/);
+    expect(s).toContain('bleef op je betaalrekening staan');
+    expect(s).not.toMatch(/restsaldo-quote/i);
+  });
+
+  test('de brug hangt niet aan een tweede cijfer', async ({ page }) => {
+    await boot(page);
+    const src = await page.evaluate(() => kpiSpaarBrug.toString());
+    expect(src).toContain('spaarDekking(m)');
+    expect(src).not.toContain('insKpis(');           // één bron, en die is niet het cijfer zelf
+    expect(await page.evaluate((m) => kpiSpaarBrug('budget', m), M1)).toBe('');
   });
 
   test('meer storten dan overhouden heet interen op eerder spaargeld', async ({ page }) => {
@@ -131,48 +151,18 @@ test.describe('c · de twee cijfers horen bij elkaar', () => {
     expect(await page.locator('#sheet').innerText()).toContain('meer dan je overhield');
   });
 
-  test('de bandtekst verschilt per metriek', async ({ page }) => {
+  test('de bandtekst benoemt wat er geteld wordt, niet een norm', async ({ page }) => {
     await boot(page);
-    const r = await page.evaluate(() => ({ spaar: kpiBandTxt('spaar'), inleg: kpiBandTxt('inleg'), band: [kpiBand('spaar'), kpiBand('inleg')] }));
-    expect(r.spaar).toContain('ruimte');            // v110: afgeleid uit vast en variabel
-    expect(r.inleg).toContain('doel');              // de norm-post "sparen" zelf
-    expect(r.band[0]).toBe(r.band[1]);              // numeriek gelijk, want de norm telt naar 100%
-  });
-
-  test('de afstand gebruikt de woorden van de spaarquote', async ({ page }) => {
-    await boot(page);
-    const s = await page.evaluate((m) => { const k = insKpis(m).inleg; return kpiAfstandTxt('inleg', k.afst, false); }, M1);
-    expect(s).toContain('minder opzij dan je doel');
-  });
-});
-
-test.describe('d · de eenmalige uitleg', () => {
-  test('verschijnt de eerste keer en is met één tik weg', async ({ page }) => {
-    await boot(page);
-    expect(await page.locator('#insKpiStrip .kpi-nieuw').count()).toBe(1);
-    expect(await page.locator('#insKpiStrip').innerText()).toContain('Nieuw: Spaarquote');
-    await page.evaluate(() => dismissInlegNoot());
-    await page.waitForTimeout(60);
-    expect(await page.locator('#insKpiStrip .kpi-nieuw').count()).toBe(0);
-    expect(await page.evaluate(() => SET.inlegSeen)).toBe(1);
-  });
-
-  test('blijft weg na herstart', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => dismissInlegNoot());
-    const opslag = await page.evaluate(() => JSON.parse(localStorage.getItem('minder_set') || '{}').inlegSeen);
-    expect(opslag).toBe(1);
-  });
-
-  test('komt niet als er geen spaarquote te tonen is', async ({ page }) => {
-    await boot(page, { stort: {}, gemarkeerd: false, spaarRekening: false });
-    expect(await page.locator('#insKpiStrip .kpi-nieuw').count()).toBe(0);
+    const r = await page.evaluate(() => ({ txt: kpiBandTxt('inleg'), band: kpiBand('inleg') }));
+    expect(r.txt).toBe('wat je opzij zette en belegde');
+    expect(r.txt).not.toMatch(/doel|norm/);
+    expect(r.band).toBe(null);                       // geen band is null, niet nul
   });
 });
 
 test.describe('e · smalle mobiel', () => {
   for (const w of [360, 390]) {
-    test(`vijf tegels en de nieuwe sheet passen op ${w}px`, async ({ page }) => {
+    test(`de tegels en de spaarquote-sheet passen op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 900 });
       await boot(page);
       const strip = await page.evaluate(() => { const e = document.getElementById('insKpiStrip'); return e.scrollWidth - e.clientWidth; });

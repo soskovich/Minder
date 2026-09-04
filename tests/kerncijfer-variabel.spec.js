@@ -120,8 +120,8 @@ test.describe('d · opgeruimd en de rest ongewijzigd', () => {
         strip: insKpiStrip(m),
       };
     }, CUR);
-    expect(r.meta.sort()).toEqual(['budget', 'inleg', 'spaar', 'vari', 'vast']);
-    expect(r.reeksen.sort()).toEqual(['budget', 'inleg', 'spaar', 'vari', 'vast']);
+    expect(r.meta.sort()).toEqual(['budget', 'inleg', 'vari', 'vast']);       // v161: restsaldo-quote vervallen
+    expect(r.reeksen.sort()).toEqual(['budget', 'inleg', 'vari', 'vast']);
     expect(r.niveau).toBe(true);
     expect(r.ref).toBe(true);
     expect(r.state).toBe('n');                                        // geen aparte niveau-tak meer

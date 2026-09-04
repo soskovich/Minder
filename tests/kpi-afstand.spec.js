@@ -2,6 +2,9 @@
 // verhouding tot je doel moest je zelf maken. kpiAfstand() zet ze in verhouding — in
 // procentpunten en vertaald naar euro's — uit dezelfde totals()/splitFixedVar() waar het
 // percentage uit komt, zodat bedrag en percentage niet uit elkaar kunnen lopen.
+// v161: alleen budgetnaleving heeft nog een doel. De drie andere kerncijfers meten een verhouding
+// zonder norm, dus kpiBand() geeft daar null en er is per definitie geen afstand. Geen band is null,
+// niet nul: een verzonnen doel van 0% zou elk cijfer eeuwig 'boven je doel' laten lezen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR, M1, INKOMEN, POTJES } = require('./budget-fixture');
@@ -17,22 +20,21 @@ const kpi = (page, key, m) => page.evaluate(([k, mm]) => {
 }, [key, m || M1]);
 
 test.describe('a · de afstand rekent uit één bron', () => {
-  test('restsaldo-quote: hoger dan het doel is de goede kant op', async ({ page }) => {
+  test('budgetnaleving is het enige cijfer met een doel', async ({ page }) => {
     await boot(page);
-    const k = await kpi(page, 'spaar');
-    expect(k.afst.goed).toBe(true);
-    expect(k.afst.pt).toBeCloseTo(k.raw - k.band, 1);           // dir 'up': waarde min doel
-    expect(k.afst.basis).toBe(INKOMEN);
-    expect(k.afst.bedrag).toBe(Math.round(Math.abs(k.raw - k.band) / 100 * INKOMEN));
+    const k = await kpi(page, 'budget');
+    expect(k.band).toBe(100);
+    expect(k.afst.pt).toBeCloseTo(k.band - k.raw, 1);            // dir 'down': doel min waarde
+    expect(k.afst.goed).toBe(k.raw <= k.band);
   });
 
-  test('drukmetrieken tellen andersom: lager dan het doel is goed', async ({ page }) => {
+  test('zonder band geen afstand, en geen band van nul', async ({ page }) => {
     await boot(page);
-    for (const key of ['vast', 'vari']) {
+    for (const key of ['inleg', 'vast', 'vari']) {
       const k = await kpi(page, key);
-      expect(k.afst.pt).toBeCloseTo(k.band - k.raw, 1);          // dir 'down': doel min waarde
-      expect(k.afst.goed).toBe(k.raw <= k.band);
-      expect(k.afst.basis).toBe(INKOMEN);
+      expect(k.band, key).toBe(null);                            // null, niet 0
+      expect(k.afst, key).toBe(null);
+      expect(k.txt, key).toBe('');
     }
   });
 
@@ -46,31 +48,26 @@ test.describe('a · de afstand rekent uit één bron', () => {
 
   test('het bedrag komt overeen met de som die het percentage maakt', async ({ page }) => {
     await boot(page);
-    // restsaldo-quote: het verschil in euro's is wat je meer overhield dan het doel vraagt
+    // budgetnaleving: het verschil in euro's is wat je onder of boven je potjes zat
     const r = await page.evaluate((m) => {
-      const t = totals(m), B = kpiBand('spaar');
-      const overgehouden = t.income - t.spend;
-      const doelBedrag = Math.round(B / 100 * t.income);
-      return { overgehouden, doelBedrag, afst: insKpis(m).spaar.afst };
+      const t = totals(m);
+      return { ruimte: Math.round(t.budget) - Math.round(t.spend), afst: insKpis(m).budget.afst };
     }, M1);
-    expect(r.afst.bedrag).toBe(Math.abs(r.overgehouden - r.doelBedrag));
+    expect(Math.abs(r.afst.bedrag - Math.abs(r.ruimte))).toBeLessThanOrEqual(1);
   });
 });
 
 test.describe('b · onbekend blijft onbekend', () => {
-  test('zonder inkomen is er geen afstand', async ({ page }) => {
+  test('zonder budget is er geen afstand', async ({ page }) => {
     await open(page, seed());
     const r = await page.evaluate(() => {
-      // totals() leest het inkomen uit SET (index.html:1441) zolang autoIncome uit staat;
-      // transacties weghalen is dus niet genoeg om "inkomen onbekend" na te bootsen.
-      SET.income = 0; SET.autoIncome = false;
-      TX = TX.filter((t) => CATS[catOf(t)].type !== 'income');
+      SET.budgets = {}; SET.budgetsNext = {}; SET.income = 0; SET.autoIncome = false;
       save();
       const m = months()[months().length - 1];
       const K = insKpis(m);
-      return { inkomen: totals(m).income, raw: K.spaar.raw, afst: K.spaar.afst, val: K.spaar.val };
+      return { budget: totals(m).budget, raw: K.budget.raw, afst: K.budget.afst, val: K.budget.val };
     });
-    expect(r.inkomen).toBe(0);
+    expect(r.budget).toBe(0);
     expect(r.raw).toBe(null);
     expect(r.afst).toBe(null);                                   // geen verzonnen getal (v59/v73)
     expect(r.val).toBe('—');
@@ -87,53 +84,46 @@ test.describe('b · onbekend blijft onbekend', () => {
 });
 
 test.describe('c · de woorden volgen de betekenis, niet het teken', () => {
-  test('elke metriek krijgt zijn eigen formulering', async ({ page }) => {
+  test('budgetnaleving spreekt over je budget, niet over een doel', async ({ page }) => {
     await boot(page);
-    expect((await kpi(page, 'spaar')).txt).toMatch(/(meer|minder) dan je doel/);
     expect((await kpi(page, 'budget')).txt).toMatch(/(onder|over) je budget/);
-    expect((await kpi(page, 'vast')).txt).toMatch(/(onder|boven) je doel/);
-    expect((await kpi(page, 'vari')).txt).toMatch(/(onder|boven) je doel/);
   });
 
-  test('meer sparen leest als winst, meer uitgeven als last', async ({ page }) => {
+  test('onder of over je budget, en op je doel is een eigen geval', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => ({
-      spaarGoed: kpiAfstandTxt('spaar', { pt: 5, bedrag: 100, basis: 2000, goed: true }, false),
-      spaarSlecht: kpiAfstandTxt('spaar', { pt: -5, bedrag: 100, basis: 2000, goed: false }, false),
-      vastGoed: kpiAfstandTxt('vast', { pt: 5, bedrag: 100, basis: 2000, goed: true }, false),
-      vastSlecht: kpiAfstandTxt('vast', { pt: -5, bedrag: 100, basis: 2000, goed: false }, false),
-      budgetSlecht: kpiAfstandTxt('budget', { pt: -5, bedrag: 100, basis: 2000, goed: false }, false),
-      opDoel: kpiAfstandTxt('spaar', { pt: 0, bedrag: 0, basis: 2000, goed: true }, false),
+      goed: kpiAfstandTxt('budget', { pt: 5, bedrag: 100, basis: 2000, goed: true }, false),
+      slecht: kpiAfstandTxt('budget', { pt: -5, bedrag: 100, basis: 2000, goed: false }, false),
+      opDoel: kpiAfstandTxt('budget', { pt: 0, bedrag: 0, basis: 2000, goed: true }, false),
+      zonder: kpiAfstandTxt('vast', null, false),
     }));
-    expect(r.spaarGoed).toContain('meer dan je doel');
-    expect(r.spaarSlecht).toContain('minder dan je doel');
-    expect(r.vastGoed).toContain('onder je doel');
-    expect(r.vastSlecht).toContain('boven je doel');
-    expect(r.budgetSlecht).toContain('over je budget');
+    expect(r.goed).toContain('onder je budget');
+    expect(r.slecht).toContain('over je budget');
     expect(r.opDoel).toContain('op je doel');
+    expect(r.zonder).toBe('');
   });
 });
 
 test.describe('d · een lopende maand velt geen oordeel', () => {
   test('de tegel laat de afstand weg zolang de maand loopt', async ({ page }) => {
     await boot(page, CUR);
-    expect((await kpi(page, 'spaar', CUR)).partial).toBe(true);
+    expect((await kpi(page, 'budget', CUR)).partial).toBe(true);
     const strip = await page.locator('#insKpiStrip').innerText();
     expect(strip).toContain('loopt nog');
-    expect(strip).not.toMatch(/meer dan je doel|minder dan je doel/);   // halve maand = geen prestatie
+    expect(strip).not.toMatch(/onder je budget|over je budget/);        // halve maand = geen prestatie
     expect(await page.locator('#insKpiStrip .kpi-afst').count()).toBe(0);
   });
 
   test('een afgeronde maand toont de afstand wél op de tegel', async ({ page }) => {
     await boot(page, M1);
-    expect((await kpi(page, 'spaar', M1)).partial).toBe(false);
+    expect((await kpi(page, 'budget', M1)).partial).toBe(false);
     expect(await page.locator('#insKpiStrip .kpi-afst').count()).toBeGreaterThan(0);
-    expect(await page.locator('#insKpiStrip').innerText()).toMatch(/dan je doel|je budget/);
+    expect(await page.locator('#insKpiStrip').innerText()).toMatch(/je budget/);
   });
 
   test('de detailsheet toont het wél, met de tussenstand erbij', async ({ page }) => {
     await boot(page, CUR);
-    await page.evaluate(() => openKpiDetail('spaar'));
+    await page.evaluate(() => openKpiDetail('budget'));
     await page.waitForTimeout(60);
     const s = await page.locator('#sheet').innerText();
     expect(s).toContain('Tussenstand');
@@ -143,7 +133,7 @@ test.describe('d · een lopende maand velt geen oordeel', () => {
 
   test('bij een afgeronde maand staat die tussenstand-noot er niet', async ({ page }) => {
     await boot(page, M1);
-    await page.evaluate(() => openKpiDetail('spaar'));
+    await page.evaluate(() => openKpiDetail('budget'));
     await page.waitForTimeout(60);
     const s = await page.locator('#sheet').innerText();
     expect(s).not.toContain('Tussenstand');
@@ -152,12 +142,12 @@ test.describe('d · een lopende maand velt geen oordeel', () => {
 });
 
 test.describe('e · de balk', () => {
-  test('staat er voor elke kerncijfer-sheet met een doel', async ({ page }) => {
+  test('staat bij het cijfer met een doel, en alleen daar', async ({ page }) => {
     await boot(page, M1);
-    for (const key of ['spaar', 'budget', 'vast', 'vari']) {
+    for (const [key, n] of [['budget', 1], ['inleg', 0], ['vast', 0], ['vari', 0]]) {
       await page.evaluate((k) => openKpiDetail(k), key);
       await page.waitForTimeout(40);
-      expect(await page.locator('#sheet .kpi-doel').count(), key).toBe(1);
+      expect(await page.locator('#sheet .kpi-doel').count(), key).toBe(n);
     }
   });
 
@@ -172,7 +162,7 @@ test.describe('e · de balk', () => {
 
   test('zonder afstand geen balk', async ({ page }) => {
     await boot(page, M1);
-    const leeg = await page.evaluate(() => kpiDoelBalk({ key: 'spaar', raw: null, afst: null, state: 'n' }));
+    const leeg = await page.evaluate(() => kpiDoelBalk({ key: 'budget', raw: null, afst: null, state: 'n' }));
     expect(leeg).toBe('');
   });
 });
