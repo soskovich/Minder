@@ -16,7 +16,9 @@ async function boot(page, payload) {
   await page.evaluate(() => go('ins'));
   await page.waitForSelector('#s-ins .card');
 }
-const kaartHtml = (page) => page.evaluate((m) => monthStatusCard(m), CUR);
+// v166: de ring-tak van monthStatusCard() werd berekend en weggegooid - de enige aanroeper is de
+// terugval in renderIns(), en die vuurt alleen zonder budget. De budgetstand woont in de hero.
+const kaartHtml = (page) => page.evaluate((m) => insBudgetBlok(m), CUR);
 
 test.describe('a · de budget-kaart', () => {
   test('binnen budget kleurt nooit amber, ook niet als je sneller gaat dan de maand', async ({ page }) => {
@@ -35,20 +37,16 @@ test.describe('a · de budget-kaart', () => {
     const html = await kaartHtml(page);
 
     expect(html).not.toMatch(AMBER);                                   // geen amber binnen budget
-    expect(html).toContain('var(--accent)');                           // de ring blijft rustig
-    if (info.kanAhead) {
-      expect(html).toContain('sneller dan de maand');                  // het woord draagt de betekenis
-      expect(html).toMatch(/sneller dan de maand[\s\S]{0,80}var\(--mut\)|var\(--mut\)[\s\S]{0,80}sneller dan de maand/);
-    } else {
-      expect(html).toContain('op schema');
-    }
+    expect(html).toContain('var(--accent)');                           // de balk blijft rustig
+    expect(html).not.toContain('var(--red)');
+    // het tempo staat er als feit, zonder oordeel: geen kleur, geen woord als "te snel"
+    expect(html).toMatch(/de maand is \d+% voorbij/);
   });
 
   test('over budget blijft rood — dat is wél aandacht', async ({ page }) => {
     await boot(page, metBudget(200));                                  // 445 uitgegeven van 200
     const html = await kaartHtml(page);
-    expect(html).toContain('over budget');
-    expect(html).toContain('var(--red)');
+    expect(html).toContain('var(--red)');                              // over budget is rood
     expect(html).not.toMatch(AMBER);                                   // rood, niet amber ernaast
   });
 

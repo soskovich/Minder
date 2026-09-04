@@ -410,16 +410,8 @@ test.describe('f · de twee verbandregels', () => {
     expect(await VB(page)).toBe('');
   });
 
-  test('één constante zet ze allebei uit', async ({ page }) => {
-    await boot(page, seedM({ goals: [{ id: 'g1', naam: 'Vakantie', doel: 10000, gespaard: 0, allocMode: 'fixed', perMaand: 100, streefdatum: over(20) }] }, { uitschieter: true }));
-    expect(await VB(page)).not.toBe('');
-    const uit = await page.evaluate(() => ({
-      vlag: typeof MAAND_VERBANDEN,
-      aan: MAAND_VERBANDEN === true,
-      guard: /^[^\n]*\n[^\n]*MAAND_VERBANDEN/.test(String(maandVerband)),
-    }));
-    expect(uit).toEqual({ vlag: 'boolean', aan: true, guard: true });   // één vlag, meteen bovenaan
-  });
+  // v166: MAAND_VERBANDEN stond altijd op true en is verwijderd. De twee verbandzinnen zelf
+  // worden hierboven en hieronder getoetst.
 
   test('de signalen dragen nu cat, bedrag en boven, zonder dat de tekst verandert', async ({ page }) => {
     await boot(page, seedM({}, { uitschieter: true }));

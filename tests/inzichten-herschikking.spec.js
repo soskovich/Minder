@@ -121,13 +121,9 @@ test.describe('b · terugvallen', () => {
     expect(b.streep).toBe(true);
   });
 
-  test('een vorige maand: geen nog-deze-maand', async ({ page }) => {
-    await boot(page);
-    await page.evaluate((m) => { curMonth = m; render(); go('ins'); }, M1);
-    const b = await beeld(page);
-    expect(b.ndmKoppen).toBe(0);
-    expect(b.streep).toBe(false);
-  });
+  // v166: de tak 'een vorige maand' bestond alleen in dode code. months() voegt de huidige
+  // maand altijd toe en render() zet curMonth op het laatste element, dus die stand is
+  // onbereikbaar. De toets is met de tak mee vervallen.
 
   test('een stukkende bron laat de rest staan', async ({ page }) => {
     await boot(page);

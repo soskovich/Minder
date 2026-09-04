@@ -942,12 +942,10 @@ function monthLabel(m){ const [y,mo]=m.split('-'); return MFULL[+mo-1]+' '+y; }
 /* ---------- periode-helpers (Inzichten: maand / 3 mnd / YTD / alles) ---------- */
 function periodMonths(){
   const ms=months(); if(!ms.length) return [];
+  // SET.insMonths en SET.insYear werden nergens geschreven, dus dit viel altijd terug op de
+  // getoonde maand. Dat is wat er overblijft.
   const cm=(curMonth&&ms.includes(curMonth))?curMonth:ms[ms.length-1];
-  const yr=SET.insYear||cm.slice(0,4);
-  const inYr=ms.filter(m=>m.slice(0,4)===yr);
-  let sel=(SET.insMonths||[]).filter(m=>inYr.includes(m));
-  if(!sel.length) sel=[ (inYr.includes(cm)?cm:inYr[inYr.length-1]) || ms[ms.length-1] ];
-  return sel.slice().sort();
+  return [cm];
 }
 function periodTx(){ const set=new Set(periodMonths()); return TX.filter(t=>set.has(t.date.slice(0,7))); }
 function periodLabel(){ const pm=periodMonths(); if(!pm.length) return '';
@@ -1477,7 +1475,6 @@ function render(){
   if(!TX.length){ renderEmpty(); return; }
   const ms=months(); if(!curMonth||!ms.includes(curMonth)) curMonth=ms[ms.length-1];
   renderDash(); renderTx(); renderIns(); renderActions(); renderVooruit(); renderMaand(); renderVermogen(); renderFire(); renderSet();
-  syncMonthPick();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
   if(window._setSheet && $('#sheetBg').classList.contains('show')) renderSetSheet(); // open instellingen-sheet meeverversen
   if(window._nfSheet && $('#sheetBg').classList.contains('show')) renderNfSheet();
@@ -1862,9 +1859,6 @@ function monthlySavingTarget(){
   if(mode==='percent') return inc*(+SET.savingPercent||0)/100;
   return Math.max(inc - monthBudget(inc), 0);
 }
-function savingLabel(){ const m=SET.savingMode||'auto';
-  if(m==='amount') return 'vast bedrag'; if(m==='percent') return (+SET.savingPercent||0)+'% van inkomen';
-  return (100-SET.limit)+'% van inkomen'; }
 // Wat er "gespaard" staat richting je buffer: je spaarrekening(en) + handmatig extra spaargeld.
 // Is er geen spaarrekening gemarkeerd, dan val je terug op je totale saldo — je betaalrekening
 // bevat dan immers ook je buffer. Eén bron voor de hero (savingsModel) én het noodfonds-plan-item,
@@ -1914,16 +1908,6 @@ function savingsModel(){
   const monthsLeft= src==='plan' ? (rate>0? toGo/rate : 0) : (monthlySaving>0? toGo/monthlySaving : 0);
   return {inc,room,monthlySaving,avgSpend,avgFixed,avgVar,basis,mult,baseVal,baseLabel,goal:goal2,goalSrc:src,cur:cur2,missing:missing2,pct,toGo,monthsLeft,
           planItem:plan1,planAlloc:rate,planNaam:plan1?plan1.naam:''};
-}
-function renderSavings(){
-  const S=savingsModel(); if(!S.inc) return '';
-  return `<div class="card">
-    <div class="row"><span class="hlabel" style="margin:0;flex:1">Sparen & buffer</span><span class="small muted" onclick="go('set')" style="cursor:pointer;color:var(--teal)">doel ›</span></div>
-    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:var(--fs-xl);font-weight:800;color:var(--teal)">${euro0(S.monthlySaving)}<span style="font-size:var(--fs-sm);font-weight:600">/mnd</span></div><div class="small muted" onclick="go('set')" style="cursor:pointer">beoogde spaarinleg (${savingLabel()}) ›</div></div>
-    <div class="goal-row" style="margin-top:12px"><span class="muted">Bufferdoel ${S.goalSrc==='nood'?`· volgt je noodfonds (${nfMaanden()} mnd crisislast)`:(S.basis==='amount'?'(vast bedrag)':`${S.mult}× gem. ${S.baseLabel} (${euro0(S.baseVal)})`)}</span><span><b>${euro0(S.cur)}</b><span class="muted"> / ${euro0(S.goal)}</span></span></div>
-    <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${S.pct}%;background:var(--teal)"></div></div>
-    <div class="small muted" style="margin-top:8px">${S.toGo>0?`Nog <b>${euro0(S.toGo)}</b> te gaan, ongeveer <b>${Math.round(S.monthsLeft)} maanden</b> bij ${euro0(S.monthlySaving)}/mnd.`:`${ICON('party')} Je buffer van ${S.months_} maanden is bereikt.`}${S.missing>0?' · vul je saldo\'s in voor een kloppend beeld':''}</div>
-  </div>`;
 }
 // gedetailleerde lijst van komende vaste lasten & inkomsten (Inzichten)
 /* ---- Fresh start (MECHANISM_SPEC.freshStart): één rustig vooruitblik-moment bij een nieuwe maand.
@@ -1981,18 +1965,11 @@ function freshStartSave(){
  * Legt je woord naast het cijfer (als je koppelde en de categorie nog bestaat) en laat JOU wegen.
  * Guard: categorie weg? Dan terug naar alleen de tekst, nooit een verzonnen getal. */
 function capMonth(ym){ const mo=+ym.split('-')[1]-1; const n=MFULL[mo]||''; return n.charAt(0).toUpperCase()+n.slice(1); }
-function prevYM(ym){ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-2,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
-let _demoReflHidden=false;
-function demoReflHide(){ _demoReflHidden=true; renderDash(); }
 function voornemenCarry(){ const v=SET.maandVoornemen; const ym=nowYMstr(); if(v&&!v.__demo){ SET.maandVoornemen={ym,text:v.text,cat:v.cat,bedrag:v.bedrag}; SET.voornemenReflectedFor=ym; } SET.freshStartSeen=ym; save(); renderDash(); toast(`${ICON('check')} Meegenomen naar ${capMonth(ym)}`); }
 function voornemenReflectDone(){ const v=SET.maandVoornemen; if(v&&!v.__demo) SET.voornemenReflectedFor=v.ym; save(); renderDash(); }
 function freshStartReflection(){
-  const ym=nowYMstr(); let v=SET.maandVoornemen; let demo=false;
-  const real = v && v.text && v.ym<ym && SET.voornemenReflectedFor!==v.ym;
-  if(!real){
-    if(SET.demoMechanismen && !_demoReflHidden){ v={ym:prevYM(ym),text:'Minder vaak bestellen bij uit eten',cat:'uiteten',bedrag:150,__demo:true}; demo=true; }
-    else return '';
-  }
+  const ym=nowYMstr(); const v=SET.maandVoornemen;
+  if(!(v && v.text && v.ym<ym && SET.voornemenReflectedFor!==v.ym)) return '';
   let cijfer;
   if(v.cat && v.bedrag && CATS[v.cat]){
     const actual=Math.round(((catSpendMap(v.ym)||{})[v.cat])||0);
@@ -2003,8 +1980,8 @@ function freshStartReflection(){
   } else {
     cijfer=`<div class="small muted" style="line-height:1.5;margin-top:8px">Hoe kijk je erop terug? Alleen jij weet of het gelukt is.</div>`;
   }
-  const carry = demo?'demoReflHide()':'voornemenCarry()';
-  const done  = demo?'demoReflHide()':'voornemenReflectDone()';
+  const carry = 'voornemenCarry()';
+  const done  = 'voornemenReflectDone()';
   return `<div class="card" style="border-left:3px solid var(--blue);border-radius:0 16px 16px 0;padding:15px 15px">
     <div style="font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:var(--blue);font-weight:600">${capMonth(v.ym)} · je voornemen</div>
     <div class="small muted" style="margin-top:8px">Je nam je voor:</div>
@@ -2017,60 +1994,8 @@ function freshStartReflection(){
   </div>`;
 }
 
-/* ----- DASHBOARD (periode-gestuurd) ----- */
-// "Ruimte boven je spaardoel", projectie-hero (staat bovenaan Inzichten)
-function heroProjection(m){
-  const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const isNow=m===nowYM; const t=totals(m);
-  const monthName=MFULL[+m.slice(5,7)-1];
-  if(isNow){
-    // koers-op-spaardoel-kaart: geen tweede groot besteed-bedrag, maar een doel-voortgangssignaal
-    const L=monthLiquidity(); const sv=Math.round(monthlySavingTarget()); const projected=Math.round(L.projected); const free=projected-sv;
-    if(sv>0){
-      const onTrack=free>=0;
-      const barFill=onTrack?100:Math.max(0,Math.min(Math.round(projected/sv*100),100));
-      const goalPos=onTrack?Math.max(4,Math.min(Math.round(sv/Math.max(projected,1)*100),100)):100;
-      const chip=onTrack
-        ? `<span style="display:inline-flex;align-items:center;font-size:12px;font-weight:700;border-radius:20px;padding:4px 11px;background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)">Op koers</span>`
-        : `<span style="display:inline-flex;align-items:center;font-size:12px;font-weight:700;border-radius:20px;padding:4px 11px;background:rgba(251,191,36,.14);color:var(--amber)">Nog niet op koers</span>`;
-      const sentence=onTrack
-        ? `Je eindigt deze maand naar verwachting <b style="color:var(--teal)">${euro0(free)} boven</b> je spaardoel.`
-        : `Je komt deze maand naar verwachting <b style="color:var(--amber)">${euro0(free)} tekort</b> voor je spaardoel.`;
-      return `<div class="card" style="cursor:pointer" onclick="openProjection()">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--mut2)">Koers op je spaardoel</div>${chip}</div>
-        <div style="font-size:13.5px;margin:9px 0 8px">${sentence}</div>
-        <div style="height:7px;border-radius:6px;background:var(--card2);overflow:hidden;margin:7px 0 5px;position:relative">
-          <div style="height:100%;border-radius:6px;background:${onTrack?'var(--teal)':'var(--amber)'};width:${barFill}%"></div>
-          <div style="position:absolute;top:-3px;bottom:-3px;left:${goalPos}%;width:2px;background:var(--txt);opacity:.65"></div></div>
-        <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--mut2)"><span>Verwacht eindsaldo ${euro0(projected)}${t.incomeEst?' · loon geschat':''}</span><span>spaardoel ${euro0(sv)}</span></div>
-        <div style="text-align:right;margin-top:9px"><span style="color:var(--teal);font-weight:700;font-size:var(--fs-sm)">bekijk de opbouw ›</span></div>
-      </div>`;
-    }
-    // geen spaardoel ingesteld: alleen het verwachte eindsaldo, klein gehouden
-    return `<div class="card" style="cursor:pointer" onclick="openProjection()">
-      <div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--mut2)">Verwacht eindsaldo deze maand</div>
-      <div style="font-size:20px;font-weight:800;color:${projected<0?'var(--red)':'var(--teal)'};margin:4px 0 2px">${euro(projected)}</div>
-      <div style="font-size:12px;color:var(--mut)">Stel een spaardoel in om je koers te volgen. ›</div></div>`;
-  }
-  // andere maanden: budget-over hero (budget = je potjes-som; inkomen-limiet als spiegel)
-  const pctRaw=t.budget>0?Math.round(t.spend/t.budget*100):0;
-  const overLimit=t.budget>t.limit && t.limit>0;
-  const lbl=`${monthName} · over`;
-  const col = pctRaw<100?'var(--green)':'var(--red)';
-  const big=euro(Math.max(t.budget-t.spend,0));
-  const sub=`${euro(t.spend)} uitgegeven van ${euro(t.budget)} budget${overLimit?` · ${euro0(t.budget-t.limit)} boven limiet`:''}`;
-  return `<div class="hero2">
-    <div class="hlbl">${lbl}${t.incomeEst?' <span class="tag">geschat</span>':''}</div>
-    <div class="hbig" style="color:${col}">${big}</div>
-    ${t.budget>0?`<div style="height:6px;border-radius:6px;background:var(--card2);max-width:340px;margin:4px 0 6px;overflow:hidden"><div style="height:100%;border-radius:6px;background:${pctRaw<100?'var(--teal)':'var(--red)'};width:${Math.min(pctRaw,100)}%"></div></div>`:''}
-    <div class="hsub">${sub}</div>
-  </div>`;
-}
 // ===== HOME (N26-stijl): één kerngetal, platte stats, één coachregel + CTA, recente transacties =====
 function renderDash(){
-  const ms=months(); if(!ms.length){ $('#s-dash').innerHTML=renderReminder(); return; }
-  const tb=totalBalance(); const ts=totalSaved();
   // ---- HERO: het saldo, groot, zonder kader ----
   const S2=safeToSpend(); const sWarn=S2.missing>0;
   // Geen bekend saldo (bv. vlak na een pure bestand-import): dan is het saldo onbekend, geen stellige \u20ac0,00.
@@ -2163,31 +2088,6 @@ function openSafeToSpend(){
       <div style="font-weight:800;font-size:16px;color:${balUnknown?'var(--mut)':(S.safe<0?'var(--red)':'var(--teal)')}">${balUnknown?'onbekend':euro0(S.safe)}</div></div>
     ${(!balUnknown && S.safe<0)?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:var(--fs-sm);color:var(--mut)">Wat er deze maand nog vanaf moet, is samen groter dan je saldo plus het inkomen dat nog komt. Vrij besteedbaar is er dan even niet, want elke uitgave gaat nu ten koste van een potje of van wat je opzij wilde zetten. Waar je aan schuift, is aan jou. Je kunt een potje verlagen, je spaardoel deze maand versoepelen, of het zo laten en er bewust rekening mee houden.</div>`:(incDue>0?`<div class="small muted" style="margin-top:12px">Inclusief ${euro0(incDue)} verwacht inkomen dat deze maand nog binnenkomt.</div>`:'')}
     <div class="small muted" style="margin-top:12px">Je totale saldo plus het inkomen dat nog binnenkomt, min wat al op je spaarrekening staat, de vaste lasten die nog komen, je variabele potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven. Geld naar je spaarrekening overmaken verandert dit bedrag dus niet.</div>`;
-  showSheetBg();
-}
-function openProjection(){
-  let L,sv; try{ L=monthLiquidity(); sv=Math.round(monthlySavingTarget()); }catch(_){ return; }
-  const projected=L.projected, free=projected-sv;
-  const line=(label,val,col,act,note)=>`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)${act?';cursor:pointer':''}" ${act?`onclick="${act}"`:''}>
-      <div style="flex:1"><div style="font-size:var(--fs-md)">${label}</div>${note?`<div class="small muted">${note}</div>`:''}</div>
-      <div style="font-weight:700;white-space:nowrap;color:${col||'var(--txt)'}">${euro0(val)}</div>${act?'<span style="color:var(--teal);font-weight:700;margin-left:4px">\u203a</span>':'<span style="width:8px"></span>'}</div>`;
-  const result=(label,val,col)=>`<div class="row" style="gap:10px;padding:12px 0;margin-top:2px;border-top:2px solid var(--line)"><div style="flex:1;font-weight:800;font-size:15px">${label}</div><div style="font-weight:800;font-size:15px;color:${col||'var(--txt)'}">${euro0(val)}</div></div>`;
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="center" style="margin-bottom:12px">
-      <div class="muted small">${free>=0?'Boven je spaardoel':'Tekort voor je spaardoel'}</div>
-      <div style="font-size:30px;font-weight:800;color:${free>=0?'var(--teal)':'var(--red)'}">${euro(Math.abs(free))}</div>
-      <div class="muted small">zo is dit opgebouwd</div></div>
-    <div class="hlabel" style="margin:6px 2px 2px">Verwacht eindsaldo deze maand</div>
-    ${line('Huidig saldo', L.sum, 'var(--teal)', 'openBalances()', L.missing>0?'een deel is nog onbekend':'al je gekoppelde rekeningen')}
-    ${L.incDue>0?line('Inkomen dat nog komt', L.incDue, 'var(--green)', '', 'komt er deze maand nog bij'):''}
-    ${L.fixDue>0?line('Vaste lasten die nog komen', L.fixDue, 'var(--mut)', 'openFixedDue()', 'gaat er nog vanaf'):''}
-    ${L.varDue>0?line('Variabele uitgaven die nog komen', L.varDue, 'var(--mut)', '', 'verwacht, op basis van je tempo, gaat er nog vanaf'):''}
-    ${result('Verwacht eindsaldo', projected, projected<0?'var(--red)':'var(--txt)')}
-    <div class="hlabel" style="margin:18px 2px 2px">Hiervan opzij voor je doel</div>
-    ${line('Spaardoel deze maand', sv, 'var(--mut)', "closeSheet();go('set')", 'wat je deze maand opzij wilt zetten')}
-    ${result(free>=0?'Boven je spaardoel':'Tekort voor je spaardoel', Math.abs(free), free>=0?'var(--teal)':'var(--red)')}
-    ${free<0?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:var(--fs-sm);color:var(--mut)">Je verwachte eindsaldo is lager dan je spaardoel. Dat betekent niet per se rood staan, maar dat er deze maand minder overblijft om opzij te zetten dan je doel.</div>`:''}
-    <div class="small muted" style="margin-top:12px">Je saldo plus inkomen dat nog komt, min de vaste lasten en je verwachte variabele uitgaven, geeft je eindsaldo. Daar gaat je spaardoel nog vanaf.</div>`;
   showSheetBg();
 }
 function renderReminder(){
@@ -2915,7 +2815,6 @@ const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:1
 /* v155: de meevallerdrempel stond als kaal 1.15 op drie plekken. Eén naam, dezelfde waarde, zodat
    de verdeelregel niet zijn eigen drempel krijgt. Geen gedragswijziging. */
 const MEEVALLER_FACTOR = 1.15;   // de rest volgt nfMaanden()
-const MAAND_VERBANDEN = true;                                          // beide verbandzinnen in één keer uit
 const MAAND_PATROON = ['budget-','discr-','tempo'];                    // uitgavenpatronen; geen incasso's, geen saldo-nudges
 const MAAND_VOLGORDE = ['dekking','buffer','aansluiting','doel','patroon'];
 const MAAND_ERNST = {tekort:0, 'let op':1, ok:2, onbekend:3};
@@ -2957,7 +2856,7 @@ function maandStructureel(){
       .filter(n=>n && n.h==='structureel')
       .map(n=>({key:n.key, naam:String(n.l1||'').replace(/<[^>]*>/g,'').slice(0,42),
         status:MAAND_DREMPEL.structureelStatus, waarde:'', eenheid:'',
-        gevolg:String(n.l1||'').replace(/<[^>]*>/g,''),
+        gevolg:'',                                   // was dezelfde zin als naam
         act:n.act||"go('ins')", sig:n, structureel:true}));
   }catch(_){ return []; }
 }
@@ -3302,7 +3201,6 @@ function maandOordeel(R){
 }
 /* Precies twee vaste verbandregels. Niets afgeleid met een model of heuristiek. */
 function maandVerband(R){
-  if(!MAAND_VERBANDEN) return '';
   const pat=R.find(r=>r.key==='patroon'&&r.sig&&r.sig.boven>0&&r.sig.cat);
   const gaten=R.filter(r=>r.status==='tekort'&&(r.key==='dekking'||r.key==='doel')&&r.tekortPerMaand>0)
                .sort((a,b)=>a.tekortPerMaand-b.tekortPerMaand);
@@ -3332,7 +3230,7 @@ function maandRij(r,compact){
   return `<div class="row" style="gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${r.act}">
     ${maandDot(r.status)}
     <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.naam)}</div>
-      <div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg)}</div></div>
+      ${r.gevolg?`<div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg)}</div>`:''}</div>
     <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:42%"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>`;
 }
@@ -3343,10 +3241,6 @@ function maandGelezen(){
 }
 function renderMaand(){
   const R=maandRegels();
-  if(!R.length){
-    $('#s-maand').innerHTML=`<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
-    return;
-  }
   /* v162: structurele signalen lopen mee in het oordeel volgens de bestaande beslisboom. Ze gaan
      bewust NIET naar maandCoachIngang() of maandVerband(): die kennen alleen de vijf regels, en een
      gesprek openen op een sleutel die coTopicMaand() niet kent zou een half pad opleveren. */
@@ -4019,9 +3913,7 @@ function renderPlan(bare){
   // dan zeggen we dat rustig i.p.v. het geruisloos te laten verdwijnen
   const vrij=planVrij(P);
   const vrijLine=vrij>0?`<div id="planVrij" class="small muted" style="margin:0 2px 9px;line-height:1.45"><b>${euro0(vrij)}/mnd</b> nog vrij${isMode('rustig')?'':' — al je doelen krijgen wat ze nodig hebben'} · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></div>`:'';
-  const inner=head+warn+vrijLine+spaarVrijLine(P)+spaarOverLine(P)+rows+coHorizonVraag()+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
-  if(bare) return inner;
-  return `<div style="margin-top:18px"><div class="row" style="margin:0 2px 8px"><span class="hlabel" style="margin:0;flex:1">Mijn plan</span></div>${inner}</div>`;
+  return head+warn+vrijLine+spaarVrijLine(P)+spaarOverLine(P)+rows+coHorizonVraag()+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
 }
 
 /* ---- Deel 2: optioneel dure-schuld-advies bij een nieuw doel (nooit verplicht) ---- */
@@ -5295,12 +5187,8 @@ function toggleNfNote(c){ SET.nfNoteOpen=SET.nfNoteOpen||{}; SET.nfNoteOpen[c]=!
 function toggleNfList(){ SET.nfListOpen=!SET.nfListOpen; save(); renderNfSheet(); }
 const VOORUIT_FOOT=`<div class="scr-foot">Vooruitkijken is een schatting, geen belofte.</div>`;
 function renderVooruit(){
-  if(!TX.length){ $('#s-vooruit').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
-  const ms=months(); const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const m=curMonth||ms[ms.length-1]; const isNow=m===nowYM;
-  // v70: ook op een afgeronde maand geen komende-lasten-lijst meer (renderUpcoming), consistent
-  // met de lopende maand waar "Volgende uitgaven" verviel.
-  if(!isNow){ $('#s-vooruit').innerHTML = renderSavings() + renderPlan() + VOORUIT_FOOT; return; }
+  const ms=months();
+  const m=curMonth||ms[ms.length-1];
   // v80: de spaardoel-hero is uit de samenstelling; je plan draagt het doel zelf,
   // inclusief voortgang en einddatum per item. De functie blijft bestaan, hij wordt niet meer getoond
   // — en daarmee ook de hefboom "Sneller bij je doel?" niet, die als coach-melding blijft bestaan.
@@ -5456,9 +5344,7 @@ function coachMirrorCard(){
 }
 function renderActions(){
   if(!TX.length){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
-  const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const m=curMonth||months()[months().length-1]; const isNow=m===nowYM;
-  if(!isNow){ $('#s-act').innerHTML=`<div class="card"><div class="small muted">Je coach werkt op de lopende maand (${esc(monthLabel(nowYM))}). Je bekijkt nu ${esc(monthLabel(m))}. <span style="color:var(--teal);cursor:pointer" onclick="gotoCurrentMonth()">Naar ${esc(monthLabel(nowYM))} ›</span></div></div>`; return; }
+  const m=curMonth||months()[months().length-1];
   const zoneMine=`<div class="cz-mine">
     <div class="czr-head" onclick="toggleCoachDisc()"><span>${ICON('target')} Mijn regel: geen budget, geen aankoop</span><span>${SET.coachDiscOpen?'▲':'▼'}</span></div>
     ${SET.coachDiscOpen?coachDiscipline(m):''}
@@ -6588,7 +6474,6 @@ function openCategory(k){
       <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`).join('')}`;
   showSheetBg();
 }
-function gotoCurrentMonth(){ const ms=months(); const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); curMonth = ms.includes(ym)?ym:ms[ms.length-1]; SET.insPeriod='month'; save(); render(); }
 function toggleExpand(which){ SET[which]=!SET[which]; save(); renderIns(); }
 /* Inklap-vlaggen zijn drietrap: undefined = nog geen keuze (dan beslist de modus), true/false = de
    gebruiker heeft zelf gekozen en dat wint altijd. Zo start Rustig rustiger zonder iets te overrulen.
@@ -6606,18 +6491,6 @@ function collapOpen(flag){
 function toggleCollap(which){ SET[which]=!collapOpen(which); save(); renderIns(); }
 // uitgaven per categorie / winkel voor één maand (voor vergelijking)
 function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
-// variabele uitgaven per weekdag
-// percentage → leesbare breuk voor lekentaal ("bijna de helft")
-function pctWord(p){
-  if(p>=46&&p<=54) return 'ongeveer de helft';
-  if(p>=42&&p<46) return 'bijna de helft';
-  if(p>=30&&p<=37) return 'ongeveer een derde';
-  if(p>=22&&p<=28) return 'ongeveer een kwart';
-  if(p>=63&&p<=70) return 'ongeveer twee derde';
-  if(p>=72&&p<=78) return 'ongeveer driekwart';
-  if(p>=80) return 'het grootste deel';
-  return null;
-}
 
 /* ----- COACH (lichtgewicht AI-regels) ----- */
 
@@ -6836,27 +6709,15 @@ function monthVsPrevInner(m){
   const a=steerSpendUpTo(m,day), b=steerSpendUpTo(prev,day);
   const tThis=sum(a), tPrev=sum(b);
   if(tPrev<=0 && tThis<=0) return {has:false,drivers:new Set(),html:''};
-  const delta=tThis-tPrev, minder=delta<0;
-  const pct=tPrev>0?Math.round(Math.abs(delta)/tPrev*100):0;
   const keys=new Set([...Object.keys(a),...Object.keys(b)]);
   const diffs=[...keys].map(k=>({k,d:Math.round((a[k]||0)-(b[k]||0))})).filter(x=>Math.abs(x.d)>=5 && CATS[x.k]);
   const downs=diffs.filter(x=>x.d<0).sort((x,y)=>x.d-y.d).slice(0,3);
   const ups=diffs.filter(x=>x.d>0).sort((x,y)=>y.d-x.d).slice(0,2);
   const drivers=new Set([...downs,...ups].map(x=>x.k));
-  // streak op volledige maanden (hele maand vs hele maand), exclusief een lopende maand
-  let streak=0; const lastFull=partial?idx-1:idx;
-  for(let i=lastFull;i>=1;i--){ const cur=sum(steerSpendUpTo(ms[i],99)), pr=sum(steerSpendUpTo(ms[i-1],99)); if(cur>0&&pr>0&&cur<pr) streak++; else break; }
-  const col=minder?'var(--green)':'var(--red)';
-  const rustig=isMode('rustig');
-  const dirWord=minder?'minder':'meer';
-  const drv=(minder?downs:ups).slice(0,2).map(x=>CATS[x.k].name.toLowerCase());
-  const drvSentence=drv.length?`Vooral doordat je ${dirWord} aan ${drv.length>1?drv[0]+' en '+drv[1]:drv[0]} uitgaf.`:'';
-  const sub=partial?'dan vorige maand, tot nu toe':'dan vorige maand';
-  const html=`<div style="font-size:25px;font-weight:800;letter-spacing:-.5px;color:${col}">${euro0(Math.abs(delta))} ${dirWord}</div>
-    <div class="small muted" style="margin-top:2px">${sub}</div>
-    ${streak>=2?`<div class="small" style="color:var(--green);margin-top:5px">Al ${streak} maanden op rij minder uitgegeven.</div>`:''}
-    ${(!rustig&&drvSentence)?`<div class="small muted" style="margin-top:9px">${drvSentence}</div>`:''}`;
-  return {has:true,drivers,html};
+  /* Alleen drivers wordt gelezen (door whatStandsOutLine). De .html hierboven - het verschil met
+     vorige maand, de streak-regel en de zin over de grootste veroorzakers - werd elke render
+     gebouwd en weggegooid, en de streak-lus liep steerSpendUpTo() over elke maand opnieuw. */
+  return {has:true,drivers};
 }
 // categorieën die "Hoe doe je het?" al als budget-afwijking toont, voor ontdubbeling in "Wat valt op"
 function budgetFlaggedCats(m){
@@ -6883,9 +6744,8 @@ function insSignals(m,exclude){
       if(exclude.has(k)) continue;
       if(c>b && b>a && a>0 && (c-a)>=15 && (!best||(c-a)>best.d)) best={k,a,c,d:c-a};
     }
-    if(best) out.push({pri:9,tone:'warn',act:`openCategory('${best.k}')`,
-      kpiLabel:CATS[best.k].name, kpiVal:euro0(best.c), kpiSub:`was ${euro0(best.a)}`, chip:{text:'loopt op',type:'up'},
-      hyp:`${CATS[best.k].name} loopt al drie maanden op.`, imp:`Kijk of dit blijvend is; zo ja, zet er een grens op.`});
+    if(best) out.push({pri:9,act:`openCategory('${best.k}')`,
+      kpiLabel:CATS[best.k].name, kpiVal:euro0(best.c), kpiSub:`was ${euro0(best.a)}`});
   }
   // 2) bovengemiddeld aandeel t.o.v. eigen historie
   if(idx>=1 && curTot>0){
@@ -6898,10 +6758,8 @@ function insSignals(m,exclude){
       if(share>=0.12 && (share-avg)>=0.05 && (!best||share>best.share)) best={k,share,avg,amt:cur[k],avgAmt};
     }
     if(best){ const mult=best.avgAmt>0?best.amt/best.avgAmt:0;
-      out.push({pri:7,tone:'warn',act:`openCategory('${best.k}')`,
-        kpiLabel:CATS[best.k].name, kpiVal:euro0(best.amt), kpiSub:best.avgAmt>0?`jouw gemiddelde ${euro0(best.avgAmt)}`:'bovengemiddeld',
-        chip:{text:mult>=1.4?(mult.toFixed(1).replace('.',',')+'\u00d7 normaal'):'bovengemiddeld',type:'up'},
-        hyp:`Aan ${CATS[best.k].name.toLowerCase()} ben je dit keer veel meer kwijt dan je gewend bent.`, imp:`Check of het eenmalig was; anders een grens op ${CATS[best.k].name.toLowerCase()}.`}); }
+      out.push({pri:7,act:`openCategory('${best.k}')`,
+        kpiLabel:CATS[best.k].name, kpiVal:euro0(best.amt), kpiSub:best.avgAmt>0?`jouw gemiddelde ${euro0(best.avgAmt)}`:'bovengemiddeld'}); }
   }
   // 3) piekdag (variabele uitgaven) \u2014 netto per dag: telpoort op afschrijvingen, dag-sommen incl. terugstortingen
   const vis=txOfMonth(m).filter(x=>x.amount<0 && CATS[catOf(x)] && CATS[catOf(x)].type==='expense' && !isFixed(x));
@@ -6910,9 +6768,8 @@ function insSignals(m,exclude){
     const sumd=[0,0,0,0,0,0,0]; for(const x of visAll){ sumd[(new Date(x.date).getDay()+6)%7]+=-x.amount; }
     const tot=sumd.reduce((a,b)=>a+b,0), peak=sumd.indexOf(Math.max(...sumd));
     const share=tot>0?Math.round(sumd[peak]/tot*100):0;
-    if(share>=24) out.push({pri:5,tone:'info',act:'',
-      kpiLabel:'Piekdag', kpiVal:dn[peak], kpiSub:`${share}% van je losse geld`, chip:{text:'patroon',type:'n'},
-      hyp:`${pctWord(share)?pctWord(share).charAt(0).toUpperCase()+pctWord(share).slice(1):('Ongeveer '+share+'%')} van je losse geld gaat op ${dn[peak]}.`, imp:`Zo'n vaste piek is gewoonte; \u00e9\u00e9n bewuste ${dn[peak]} levert de meeste winst.`});
+    if(share>=24) out.push({pri:5,act:'',
+      kpiLabel:'Piekdag', kpiVal:dn[peak], kpiSub:`${share}% van je losse geld`});
   }
   // 4) grootste netto uitgave per winkel (terugstorting verrekend) i.p.v. \u00e9\u00e9n losse transactie
   if(vis.length>=5){
@@ -6920,9 +6777,8 @@ function insSignals(m,exclude){
     const arr=Object.entries(byM).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
     const vals=arr.map(e=>e[1]).sort((a,b)=>a-b); const med=vals[Math.floor(vals.length/2)]||0;
     if(arr.length && med>0 && arr[0][1]>=med*4 && arr[0][1]>=40)
-      out.push({pri:6,tone:'warn',act:'',
-        kpiLabel:'Grootste uitgave', kpiVal:euro0(arr[0][1]), kpiSub:esc(arr[0][0]), chip:{text:'grootste winkel',type:'n'},
-        hyp:`E\u00e9n winkel domineert je losse uitgaven.`, imp:`Reken je deze maand niet rijk of arm aan dit ene bedrag.`});
+      out.push({pri:6,act:'',
+        kpiLabel:'Grootste uitgave', kpiVal:euro0(arr[0][1]), kpiSub:esc(arr[0][0])});
   }
   return out;
 }
@@ -6935,47 +6791,12 @@ function monthStatusCard(m){
   if(bud<=0){
     return `<div class="card"><div class="row" style="cursor:pointer" onclick="openBudgetEditor('${m}')"><span style="flex:1;font-weight:700;font-size:13px">Budget deze maand</span><span class="small muted">stel in ›</span></div></div>`;
   }
-  const usedPct=Math.round(sp/bud*100), over=sp>bud, room=bud-sp;
-  const now=new Date(); const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate(); const dom=Math.min(now.getDate(),dim);
-  const dayPct=Math.round(dom/dim*100); const ahead=!over && usedPct>dayPct+8;
-  // Amber is voor échte aandacht (over budget, tekort). "Sneller dan de maand" is informatief:
-  // je zit nog binnen je budget, dus de ring blijft rustig en het woord draagt de betekenis.
-  const col=over?'var(--red)':'var(--accent)';
-  const tempo=over?'over budget':(ahead?'sneller dan de maand':'op schema');
-  const tempoCol=over?'var(--red)':(ahead?'var(--mut)':'var(--accent)');
-  const centerBig=euro0(over?sp-bud:room);
-  const centerSub=over?('over budget · '+usedPct+'%'):('over · '+usedPct+'% gebruikt');
-  const R=46, C=2*Math.PI*R, dash=Math.max(0,Math.min(usedPct,100))/100*C;
-  const a=(dayPct/100)*2*Math.PI, mx=(56+R*Math.cos(a)).toFixed(1), my=(56+R*Math.sin(a)).toFixed(1);
-  const ring=`<div style="position:relative;width:112px;height:112px;flex-shrink:0">
-    <svg width="112" height="112" viewBox="0 0 112 112" style="transform:rotate(-90deg)">
-      <circle cx="56" cy="56" r="${R}" fill="none" stroke="var(--card2)" stroke-width="10"/>
-      <circle cx="56" cy="56" r="${R}" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} ${(C-dash).toFixed(1)}"/>
-      <circle cx="${mx}" cy="${my}" r="3.4" fill="var(--txt)" stroke="var(--bg)" stroke-width="1.6"/>
-    </svg>
-    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
-      <div style="font-size:20px;font-weight:800;letter-spacing:-.4px;color:${col}">${centerBig}</div>
-      <div style="font-size:10.5px;color:var(--mut2);margin-top:1px">${centerSub}</div>
-    </div></div>`;
-  // act = optionele onclick: rij wordt klikbaar met chevron; zonder act = platte, niet-klikbare rij.
-  const kv=(l,v,vc,act)=>`<div class="row" style="justify-content:space-between;padding:5px 0;font-size:var(--fs-sm);border-top:1px solid var(--line)${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}><span class="muted">${l}</span><span style="font-weight:700${vc?';color:'+vc:''}">${v}${act?' <span style="color:var(--teal)">›</span>':''}</span></div>`;
-  return `<div class="card">
-    <div style="display:flex;align-items:center;gap:16px">
-      <div style="cursor:pointer;flex-shrink:0" onclick="openBudgetCompare('${m}')">${ring}</div>
-      <div style="flex:1;min-width:0">
-        <div class="row" style="justify-content:space-between;margin-bottom:6px;cursor:pointer" onclick="openBudgetCompare('${m}')"><span style="font-weight:700;font-size:13px">Budget deze maand</span><span style="color:var(--teal)">›</span></div>
-        ${kv('Uitgegeven', euro0(sp), '', `openMonthSpend('${m}')`)}
-        ${kv('Maandbudget', euro0(bud), '', `openPotjesVerdeling('${m}')`)}
-        ${(()=>{ const tb=totalBudget(), pb=plannedTotalBudget(); return (tb>0 && pb!==tb) ? `<div class="row" style="justify-content:space-between;padding:2px 0 5px;font-size:var(--fs-xs);color:var(--mut2);cursor:pointer" onclick="openPotjesVerdeling('${m}','next')"><span style="margin-left:2px">↳ vanaf volgende maand</span><span style="font-weight:700;color:var(--teal)">${euro0(pb)}</span></div>` : ''; })()}
-        ${kv('Tempo', tempo, tempoCol)}
-        ${kv('Dag', dom+' van '+dim)}
-        ${t.budget>t.limit&&t.limit>0?`<div class="row" style="justify-content:space-between;padding:5px 0;font-size:var(--fs-xs);border-top:1px solid var(--line);color:var(--mut2)"><span>boven inkomen-limiet</span><span style="font-weight:700">${euro0(t.budget-t.limit)} (${SET.limit}%)</span></div>`:''}
-      </div>
-    </div></div>`;
+  /* Alles hieronder was de ring-tak. De enige aanroeper is de terugval in renderIns(), en die
+     wordt alleen bereikt als insHeroKaart() leeg teruggaf - wat exact gebeurt bij budget 0, en
+     dan is de prompt hierboven al weg. De ring, het tempo, de dag-marker en de kv-rijen werden
+     dus elke render gebouwd en weggegooid; de ingangen die ze droegen zitten in de hero (v135). */
+  return '';
 }
-// mini-sparkline: verloop van één categorie over de laatste maanden (voor de drill-down)
-// Eén sparkline-implementatie voor de hele app: een waarden-array in, staafjes eruit.
-// null = onbekende maand (geen staaf); opts.colorAt geeft per maand een kleur (bv. binnen/buiten je band).
 function miniSpark(values, opts){
   opts=opts||{};
   const vals=(values||[]).map(v=>(v==null||isNaN(v))?null:+v);
@@ -7778,11 +7599,10 @@ function insKpiSamenvatting(m){
 }
 function insSection(t){ return `<div class="inssec">${t}</div>`; }
 function renderIns(){
-  if(!TX.length){ $('#s-ins').innerHTML='<div class="card"><div class="small muted">Nog geen transacties. Importeer of koppel je bank.</div></div>'; return; }
   const m=curMonth||months()[months().length-1];
-  const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); const isNow=(m===nowYM);
-  // gecombineerde status-kaart (koers + budget) voor de lopende maand; vorige maanden houden hun budget-hero
-  const statusBlock = isNow ? monthStatusCard(m) : heroProjection(m);
+  // gecombineerde status-kaart (koers + budget); m is altijd de lopende maand, want months()
+  // voegt die altijd toe en curMonth is altijd het laatste element.
+  const statusBlock = monthStatusCard(m);
   // v66: "Hoe gezond is jouw verdeling?" (gedekt door de Kerncijfers) en de standalone sectie
   // "Waar gaat je geld heen" (verhuisd naar de maand-drill-down) zijn hier weg. Daarmee had de
   // "Bekijk meer"-zone geen inhoud meer, dus die is met de periode-chips mee vervallen;
@@ -7791,9 +7611,8 @@ function renderIns(){
      opviel, en de rest ingeklapt onder Verdieping. Terugval: geen lopende maand -> de bestaande
      hero zonder nog-deze-maand; geen budget -> de budget-prompt van monthStatusCard met de
      nog-deze-maand-kaart er los onder. */
-  let hero;
-  if(!isNow) hero=statusBlock;
-  else { const H=insHeroKaart(m); hero = H || (statusBlock + nogDezeMaandCard()); }
+  const H=insHeroKaart(m);
+  const hero = H || (statusBlock + nogDezeMaandCard());
   let beh=''; try{ beh=renderBehavior(m); }catch(_){}
   const behN=(beh.match(/beh-row/g)||[]).length;
   /* v136: geen Categorieen-kaart meer op de pagina zelf. Diezelfde verdeling staat al achter
@@ -8837,7 +8656,6 @@ function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=f
 
 function esc(s){return (s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 
-function syncMonthPick(){ const a=(document.querySelector('.screen.active')||{}).id; const mp=document.getElementById('monthPick'); if(mp) mp.style.display=(TX.length && a!=='s-dash' && a!=='s-set' && a!=='s-vermogen')?'flex':'none'; }
 function go(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   $('#s-'+name).classList.add('active');
@@ -8846,7 +8664,6 @@ function go(name){
   if(name==='act'){ window._coachStep=0; window._coachAnswer=null; window._coReopen=true; renderActions(); }
   // leesmoment: alleen de datum, geen streak, geen teller, geen herinnering (v130)
   if(name==='maand'){ try{ renderMaand(); SET.maandGelezen=new Date().toISOString().slice(0,10); save(); }catch(_){} }
-  syncMonthPick();
   try{ localStorage.setItem('minder_view', name); }catch(_){}
   window.scrollTo(0,0);
 }
