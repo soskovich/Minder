@@ -228,12 +228,13 @@ test.describe('d · de verdieping', () => {
 });
 
 test.describe('e · modus en layout', () => {
-  test('rustig toont drie kerncijfers, die logica blijft', async ({ page }) => {
+  // v161: Inzichten draagt nog twee kerncijfers; de andere twee staan op het maandscherm.
+  test('rustig toont er een, Begeleid beide', async ({ page }) => {
     await boot(page, seedIns({ mode: 'rustig' }));
     const n = await page.evaluate(() => document.querySelectorAll('#insKpiStrip [data-kpi]').length);
-    expect(n).toBe(3);
+    expect(n).toBe(1);
     await boot(page);
-    expect(await page.evaluate(() => document.querySelectorAll('#insKpiStrip [data-kpi]').length)).toBe(5);
+    expect(await page.evaluate(() => document.querySelectorAll('#insKpiStrip [data-kpi]').length)).toBe(2);
   });
 
   for (const w of [360, 390]) {

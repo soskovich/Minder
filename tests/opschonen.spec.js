@@ -151,12 +151,12 @@ test.describe('d · dubbele widgets zijn weg uit Inzichten', () => {
     expect(ins).not.toMatch(/tik een balkdeel/i);          // het verdeling-blok zelf, niet de norm-naam
     expect(ins).not.toMatch(/wat betekent 50\/30\/20/i);
     expect(ins).not.toMatch(/bekijk meer/i);
-    // v84: "50/30/20" mag hier wél staan als naam van de actieve referentie-verdeling
-    expect(ins).toMatch(/gemeten tegen: 50\/30\/20/i);
+    // v161: de norm stuurt de kerncijfers niet meer, dus de norm-regel staat hier ook niet meer.
+    expect(ins).not.toMatch(/gemeten tegen: 50\/30\/20/i);
     // wat blijft
     expect(ins).toMatch(/kerncijfers/i);
     expect(ins).toMatch(/uitgaven vs budget/i);
-    expect(ins).toMatch(/abonnementen|meer/i);
+    expect(ins).toMatch(/verdieping/i);
   });
 
   test('de renderers zelf blijven bestaan voor de drill-down', async ({ page }) => {
@@ -173,17 +173,19 @@ test.describe('d · dubbele widgets zijn weg uit Inzichten', () => {
 });
 
 test.describe('e · KPI-detail is per KPI verschillend', () => {
+  // v161: de vier kerncijfers staan op twee schermen. De tegels zelf openen nog steeds elk hun
+  // eigen uitleg; de restsaldo-quote is vervallen.
   test('elke tegel opent zijn eigen uitleg en eigen reeks', async ({ page }) => {
-    await boot(page, 'ins');
     const gezien = {};
-    for (const key of ['spaar', 'budget', 'vari', 'vast']) {
-      await page.locator(`#insKpiStrip .wvo-tile[data-kpi="${key}"]`).click();
+    for (const [scr, blok, key] of [['ins', '#insKpiStrip', 'budget'], ['ins', '#insKpiStrip', 'vari'],
+      ['maand', '#maandKpiBlok', 'inleg'], ['maand', '#maandKpiBlok', 'vast']]) {
+      await boot(page, scr);
+      await page.locator(`${blok} .wvo-tile[data-kpi="${key}"]`).click();
       await page.waitForSelector('#kpiDetailHead');
       gezien[key] = await page.locator('#sheet').innerText();
       await page.evaluate(() => closeSheet());
     }
-    expect(gezien.spaar).toContain('Restsaldo-quote');
-    expect(gezien.spaar).toContain('(inkomen − uitgaven) ÷ inkomen');
+    expect(gezien.inleg).toContain('Spaarquote');
     expect(gezien.budget).toContain('Budgetnaleving');
     expect(gezien.budget).toContain('uitgaven ÷ budget');
     expect(gezien.vari).toContain('Variabele-lasten-druk');
@@ -192,20 +194,18 @@ test.describe('e · KPI-detail is per KPI verschillend', () => {
     expect(gezien.vast).toContain('vaste lasten ÷ inkomen');
 
     // vier verschillende teksten, geen gedeelde generieke output
-    const uniek = new Set(Object.values(gezien));
-    expect(uniek.size).toBe(4);
+    expect(new Set(Object.values(gezien)).size).toBe(4);
   });
 
   test('de getoonde reeks hoort bij díe KPI', async ({ page }) => {
     await boot(page, 'ins');
     const r = await page.evaluate((m) => {
       const K = insKpis(m, 0);
-      return { spaar: K.spaar.series, vari: K.vari.series, vast: K.vast.series, budget: K.budget.series };
+      return { inleg: K.inleg.series, vari: K.vari.series, vast: K.vast.series, budget: K.budget.series };
     }, CUR);
-    expect(r.spaar).not.toEqual(r.vari);
+    expect(r.inleg).not.toEqual(r.vari);
     expect(r.vari).not.toEqual(r.vast);
     expect(r.budget).not.toEqual(r.vast);
-    expect(r.spaar.every((v) => v <= 100)).toBe(true);       // percentages
     expect(r.vari.every((v) => v >= 0 && v <= 100)).toBe(true);
   });
 });

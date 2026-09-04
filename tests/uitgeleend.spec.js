@@ -43,12 +43,14 @@ test.describe('a · markeren haalt het uit de uitgaven', () => {
     expect(await page.evaluate(() => CATS.uitgeleend.type)).toBe('internal');
   });
 
-  test('de afgeleide cijfers bewegen mee: restsaldo-quote en budgetnaleving', async ({ page }) => {
+  // v161: de restsaldo-quote is vervallen. Budgetnaleving draagt hier hetzelfde bewijs, en netSpend
+  // toont rechtstreeks dat de post uit je uitgaven is.
+  test('de afgeleide cijfers bewegen mee: budgetnaleving en je uitgaven', async ({ page }) => {
     await boot(page, [LEEN]);
-    const voor = await page.evaluate((m) => ({ q: insKpis(m).spaar.raw, b: insKpis(m).budget.raw }), CUR);
+    const voor = await page.evaluate((m) => ({ b: insKpis(m).budget.raw, sp: Math.round(netSpend(txOfMonth(m))) }), CUR);
     await page.evaluate((i) => markLoan(i, 'uit', 'lening'), await UIT(page));
-    const na = await page.evaluate((m) => ({ q: insKpis(m).spaar.raw, b: insKpis(m).budget.raw }), CUR);
-    expect(na.q).toBeGreaterThan(voor.q);                    // je hield meer over: het was geen uitgave
+    const na = await page.evaluate((m) => ({ b: insKpis(m).budget.raw, sp: Math.round(netSpend(txOfMonth(m))) }), CUR);
+    expect(na.sp).toBeLessThan(voor.sp);                     // het was geen uitgave
     expect(na.b).toBeLessThan(voor.b);
   });
 

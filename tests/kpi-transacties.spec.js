@@ -33,12 +33,7 @@ test.describe('a · de lijst telt op tot het cijfer', () => {
     expect(r.lijst).toBe(r.cijfer);
   });
 
-  test('restsaldo-quote: inkomen min de lijst is wat je overhield', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate((m) => { const t = totals(m); return { over: t.income - netSpend(kpiTx('spaar', m)), cijfer: t.income - t.spend, pct: insKpis(m).spaar.raw, income: t.income }; }, M1);
-    expect(r.over).toBe(r.cijfer);
-    expect(r.pct).toBeCloseTo(r.over / r.income * 100, 6);       // en dat ís het percentage
-  });
+  // v161: de restsaldo-quote is vervallen; de optel-invariant staat hieronder per cijfer.
 
   test('vast en variabel samen zijn precies de budget-lijst: geen overlap, geen gat', async ({ page }) => {
     await boot(page);
@@ -88,7 +83,7 @@ test.describe('b · wat er níet in hoort', () => {
 test.describe('c · het inkomen wordt niet als transactie voorgesteld', () => {
   test('een zelf ingesteld inkomen heet ook zo', async ({ page }) => {
     await boot(page);                                             // fixture: autoIncome false, income 3000
-    await page.evaluate(() => openKpiDetail('spaar'));
+    await page.evaluate(() => openKpiDetail('vast'));
     await page.waitForTimeout(60);
     await page.locator('#sheet details.kpi-tx').evaluate((e) => { e.open = true; });   // de lijst staat dicht; innerText ziet verborgen tekst niet
     const s = await page.locator('#sheet').innerText();
@@ -99,7 +94,7 @@ test.describe('c · het inkomen wordt niet als transactie voorgesteld', () => {
 
   test('een herkend inkomen heet anders', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { SET.autoIncome = true; save(); openKpiDetail('spaar'); });
+    await page.evaluate(() => { SET.autoIncome = true; save(); openKpiDetail('vast'); });
     await page.waitForTimeout(60);
     await page.locator('#sheet details.kpi-tx').evaluate((e) => { e.open = true; });   // de lijst staat dicht; innerText ziet verborgen tekst niet
     const s = await page.locator('#sheet').innerText();
@@ -107,21 +102,13 @@ test.describe('c · het inkomen wordt niet als transactie voorgesteld', () => {
     expect(s).not.toContain('zelf ingesteld');
   });
 
-  test('de kop rekent de som voor met hetzelfde inkomen', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => openKpiDetail('spaar'));
-    await page.waitForTimeout(60);
-    await page.locator('#sheet details.kpi-tx').evaluate((e) => { e.open = true; });   // de lijst staat dicht; innerText ziet verborgen tekst niet
-    const s = await page.locator('#sheet').innerText();
-    expect(s).toMatch(/inkomen − .* uitgaven = .* overgehouden/);
-    expect(s).toContain(`€${INKOMEN.toLocaleString('nl-NL')} inkomen`);
-  });
+  // v161: de kop-som 'inkomen min uitgaven is overgehouden' hoorde bij de restsaldo-quote.
 });
 
 test.describe('d · de weergave', () => {
   test('elke kerncijfer-sheet heeft de lijst, met het juiste aantal', async ({ page }) => {
     await boot(page);
-    for (const key of ['spaar', 'budget', 'vast', 'vari']) {
+    for (const key of ['inleg', 'budget', 'vast', 'vari']) {
       await page.evaluate((k) => openKpiDetail(k), key);
       await page.waitForTimeout(40);
       expect(await page.locator('#sheet details.kpi-tx').count(), key).toBe(1);
@@ -149,7 +136,7 @@ test.describe('e · smalle mobiel', () => {
     test(`de open lijst past op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 880 });
       await boot(page);
-      await page.evaluate(() => openKpiDetail('spaar'));
+      await page.evaluate(() => openKpiDetail('vast'));
       await page.waitForTimeout(60);
       await page.locator('#sheet details.kpi-tx').evaluate((e) => { e.open = true; });
       await page.waitForTimeout(60);

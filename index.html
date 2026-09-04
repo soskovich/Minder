@@ -2882,7 +2882,8 @@ function saveFasterTip(){
   return {label:best.label, action:best.action||'', save:best.save, perYear:best.save*12, earlier,
           datumBase:etaDatum(baseMonths), datumNew:etaDatum(newMonths)};
 }
-function scoreNotifs(){
+function scoreNotifs(opts){
+  opts=opts||{};
   const out=[]; if(!TX.length) return out;
   const ms=months(); if(!ms.length) return out;
   const m=ms[ms.length-1];
@@ -2898,26 +2899,26 @@ function scoreNotifs(){
     overs.sort((a,b)=>b.d-a.d);
     // v130 additief: cat/bedrag/boven erbij zodat het maandscherm het verband kan leggen zonder
     // zelf te rekenen. Geen bestaande waarde of tekst verandert.
-    overs.slice(0,2).forEach((o,i)=>push({key:'budget-'+o.k,score:72+Math.min(o.d/10,24)-i*6,t:o.band==='action'?'bad':'warn',ic:CATS[o.k].icon,
+    overs.slice(0,2).forEach((o,i)=>push({key:'budget-'+o.k, h:'direct',score:72+Math.min(o.d/10,24)-i*6,t:o.band==='action'?'bad':'warn',ic:CATS[o.k].icon,
       cat:o.k, bedrag:Math.round(spend[o.k]||0), boven:Math.round(o.d),
       l1:`Je ${CATS[o.k].name.toLowerCase()} ${o.potje?'is over je potje':'gaat over budget'} deze maand.`,l2:'Bekijk waar het heen ging',act:`openVariance('${o.k}')`})); }catch(_){} }
   /* v157: je zet geld opzij bij een partij die niet bij je bezittingen staat. Alleen vaststellen -
      de app kent de waarde van die belegging niet en verzint er geen. De sleutel hangt aan de naam,
      dus snooze en mute lopen per partij via de groep 'bezit'. */
   try{ const B=(beleggingZonderBezitting()||[])[0];
-    if(B) push({key:'bezit-'+B.naam.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12), score:36, t:'info', ic:ICON('trend'),
+    if(B) push({key:'bezit-'+B.naam.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12), h:'correctie', score:36, t:'info', ic:ICON('trend'),
       l1:`Je zet geld opzij bij ${B.naam}, maar dat staat niet bij je bezittingen.`,
       l2:'Voeg de waarde toe voor je netto vermogen',
       act:`openAsset(null,'${esc(String(B.naam).replace(/'/g,"\'"))}')`}); }catch(_){}
   // v128: één controlemoment op de reserveringenlijst, hooguit één keer per maand (resCheck).
-  try{ if(resCheckDue()) push({key:'res-check',score:34,t:'info',ic:ICON('cal'),
+  try{ if(resCheckDue()) push({key:'res-check', h:'correctie',score:34,t:'info',ic:ICON('cal'),
     l1:'Klopt je lijst met reserveringen nog?',l2:'Premies en aanslagen veranderen',act:'openReserveringen()'}); }catch(_){}
   /* v155: een meevaller die binnenkomt, met het voorstel uit je eigen verdeelregel. De sleutel
      hangt aan de transactie, dus een keer per meevaller en niet per dag; snooze en mute lopen via
      de groep 'meeval'. Geen felicitatie, geen bedrag in de kop: dat staat in de sheet. */
   try{ const mv=meevallerTx();
     if(mv){ const P=meevallerPlan(Math.round(mv.amount));
-      if(P.volledig) push({key:'meeval-'+String(mv.id||mv.date),score:58,t:'info',ic:ICON('coins'),
+      if(P.volledig) push({key:'meeval-'+String(mv.id||mv.date), h:'direct',score:58,t:'info',ic:ICON('coins'),
         l1:'Er kwam meer binnen dan je normale maandinkomen.',
         l2:'Bekijk de verdeling volgens je regel',
         act:`openMeevaller(${Math.round(mv.amount)},'transactie')`}); } }catch(_){}
@@ -2926,12 +2927,12 @@ function scoreNotifs(){
   if(isNow){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget();
     if(tgt>0 && L.projected<tgt){ const tekort=Math.max(Math.round(tgt-L.projected),1); const ack=(SET.chronicAck||{}).saverisk;
       if(!(ack && ack.ym===m && tekort < ack.val*1.10)){
-        push({key:'save-risk',score:82,t:'bad',ic:ICON('coins'),l1:'Je haalt je spaardoel deze maand niet.',l2:'Bekijk je vooruitblik',act:"go('vooruit')",chronic:{key:'saverisk',ym:m,val:tekort}});
+        push({key:'save-risk', h:'direct',score:82,t:'bad',ic:ICON('coins'),l1:'Je haalt je spaardoel deze maand niet.',l2:'Bekijk je vooruitblik',act:"go('vooruit')",chronic:{key:'saverisk',ym:m,val:tekort}});
         saveRiskPushed=true;
       } } }catch(_){} }
   // tempo zegt hetzelfde als save-risk ("je geeft te snel uit"); één boodschap is genoeg
   if(isNow && !saveRiskPushed){ try{ const t=totals(m), de=daysElapsed(m), el=de.elapsed||1;
-    if(t.budget>0 && el>=5 && (t.spend/el*de.dim)>t.budget*1.07){ const proj=Math.round(t.spend/el*de.dim); const ack=(SET.chronicAck||{}).tempo; if(!(ack && ack.ym===m && proj < ack.val*1.10)) push({key:'tempo',score:66,t:'warn',ic:ICON('clock'),l1:'Op dit tempo ga je deze maand over je grens.',l2:'Verlaag je dagdoel',act:"go('act')",chronic:{key:'tempo',ym:m,val:proj}}); } }catch(_){} }
+    if(t.budget>0 && el>=5 && (t.spend/el*de.dim)>t.budget*1.07){ const proj=Math.round(t.spend/el*de.dim); const ack=(SET.chronicAck||{}).tempo; if(!(ack && ack.ym===m && proj < ack.val*1.10)) push({key:'tempo', h:'direct',score:66,t:'warn',ic:ICON('clock'),l1:'Op dit tempo ga je deze maand over je grens.',l2:'Verlaag je dagdoel',act:"go('act')",chronic:{key:'tempo', h:'direct',ym:m,val:proj}}); } }catch(_){} }
   // Categorie-neutraal i.p.v. de oude vices-melding: welke stuurbare categorie ligt het sterkst
   // boven zijn éígen mediaan? Geen categorie wordt apart aangewezen; de maatstaf is je eigen normaal.
   if(isNow){ try{ const cur=catSpendMap(m); const B=SET.budgets||{};
@@ -2948,14 +2949,14 @@ function scoreNotifs(){
       }
       if(best){ const ack=(SET.chronicAck||{}).discr;
         if(!(ack && ack.ym===m && best.v < ack.val*1.25))
-          push({key:'discr-'+best.k, score:58+Math.min(best.d/10,22), t:'warn', ic:CATS[best.k].icon,
+          push({key:'discr-'+best.k, h:'direct', score:58+Math.min(best.d/10,22), t:'warn', ic:CATS[best.k].icon,
             cat:best.k, bedrag:best.v, boven:best.d,
             l1:`${CATS[best.k].name} ligt deze maand boven je normaal: ${euro0(best.v)} tegen meestal ${euro0(best.mref)}.`,
             l2:'Bekijk waar het heen ging', act:`openCategory('${best.k}')`, chronic:{key:'discr',ym:m,val:best.v}});
       } } }catch(_){} }
   // af-en-toe: concrete manier om sneller bij je spaardoel te komen (vervangt de oude 'Sneller bij je doel'-kaart)
   if(isNow){ try{ const sf=saveFasterTip(); if(sf && sf.earlier>=1 && sf.save>=10){
-    push({key:'savefaster-'+m, score:34, t:'good', ic:ICON('coins'),
+    push({key:'savefaster-'+m, h:'geen', score:34, t:'good', ic:ICON('coins'),
       l1:sf.action||`Sneller bij je spaardoel? ${sf.label.charAt(0).toUpperCase()+sf.label.slice(1)} kan.`,
       l2:`+${euro0(sf.save)}/mnd (${euro0(sf.perYear)}/jr) · ~${sf.earlier} ${sf.earlier===1?'maand':'maanden'} eerder, rond ${sf.datumNew}`,
       act:"go('vooruit')"}); } }catch(_){} }
@@ -2970,13 +2971,13 @@ function scoreNotifs(){
       const kop = zacht
         ? `${wie?wie+' moet':'Er moet'} je nog ${bedrag} terugbetalen${dat?` · ${voor}`:''}.`
         : `${wie?wie+' moet':'Er moet'} je nog ${bedrag} terugbetalen — ${voor} (${wanneer}).`;
-      push({key:'loandue-'+l.id, score:laat?70:66, t:(laat&&!zacht)?'warn':'info', ic:ICON('coins'),
+      push({key:'loandue-'+l.id, h:'direct', score:laat?70:66, t:(laat&&!zacht)?'warn':'info', ic:ICON('coins'),
         l1:kop, l2:'Stuur betaalverzoek', act:`loanShare('${l.id}')`});
     } }catch(_){}
   // cooling-off terugkomprompt: parkeerde je iets ('wachten tot morgen'), kom er na ~1 dag op terug
   try{ const log=SET.coachLog||[]; const nowMs=Date.now();
     const park=log.find(l=>l.type==='beslis' && l.uitkomst==='geparkeerd' && !l.resolved && (nowMs-l.ts)>=18*36e5 && (nowMs-l.ts)<=7*864e5);
-    if(park){ const it=String(park.item||'die aankoop').slice(0,24); push({key:'park-'+park.ts, score:84, t:'warn', ic:ICON('clock'), l1:`Je parkeerde ${it} (${euro0(park.bedrag||0)}). Staat 't er nog?`, l2:'Open je coach', act:"go('act')"}); } }catch(_){}
+    if(park){ const it=String(park.item||'die aankoop').slice(0,24); push({key:'park-'+park.ts, h:'direct', score:84, t:'warn', ic:ICON('clock'), l1:`Je parkeerde ${it} (${euro0(park.bedrag||0)}). Staat 't er nog?`, l2:'Open je coach', act:"go('act')"}); } }catch(_){}
   try{ const lim=new Date(now); lim.setDate(lim.getDate()-7);
     const recent=TX.filter(x=>x.amount<0 && new Date(x.date)>=lim && CATS[catOf(x)].type==='expense' && !isFixed(x));
     const byCat={}; for(const mm of months().slice(-4)){ for(const x of txOfMonth(mm)){ if(x.amount<0&&CATS[catOf(x)].type==='expense'){ (byCat[catOf(x)]=byCat[catOf(x)]||[]).push(-x.amount); } } }
@@ -2984,10 +2985,10 @@ function scoreNotifs(){
     let big=null; for(const x of recent){ const a=-x.amount, mref=med(byCat[catOf(x)]||[a]); if(a>=75 && a>=mref*2.5 && (!big||a>-big.amount)) big=x; }
     if(big) push({key:'big-'+big.id,score:56,t:'info',ic:ICON('alert'),l1:`Grote uitgave bij ${cleanMerch(big.name)}, hoger dan je gebruikelijk.`,l2:'Klopt dit? Bekijk',act:`openSheet('${big.id}')`}); }catch(_){}
   if(isNow){ try{ const inc=txOfMonth(m).find(x=>x.amount>0 && CATS[catOf(x)].type==='income' && x.date===today);
-    if(inc){ const tgt=Math.round(monthlySavingTarget()); push({key:'salary-'+today,score:76,t:'good',ic:ICON('wallet'),l1:'Je salaris staat erop.',l2:tgt>0?`Zet nu ${euro0(tgt)} opzij`:'Zet eerst je sparen apart',act:"go('act')"}); } }catch(_){} }
+    if(inc){ const tgt=Math.round(monthlySavingTarget()); push({key:'salary-'+today, h:'direct',score:76,t:'good',ic:ICON('wallet'),l1:'Je salaris staat erop.',l2:tgt>0?`Zet nu ${euro0(tgt)} opzij`:'Zet eerst je sparen apart',act:"go('act')"}); } }catch(_){} }
   try{ const tom=new Date(now); tom.setDate(tom.getDate()+1); tom.setHours(0,0,0,0);
     const L=liquidityDaily(45); for(const e of (L.events||[])){ const d=new Date(e.date); d.setHours(0,0,0,0);
-      if(d.getTime()===tom.getTime() && e.amt<0 && Math.abs(e.amt)>=25){ push({key:'bill-'+today,score:52,t:'info',ic:ICON('cal'),l1:`Morgen: ${String(e.name||'').slice(0,22)} ${euro(e.amt)}.`,l2:'Zorg dat er saldo is',act:"go('vooruit')"}); break; } } }catch(_){}
+      if(d.getTime()===tom.getTime() && e.amt<0 && Math.abs(e.amt)>=25){ push({key:'bill-'+today, h:'direct',score:52,t:'info',ic:ICON('cal'),l1:`Morgen: ${String(e.name||'').slice(0,22)} ${euro(e.amt)}.`,l2:'Zorg dat er saldo is',act:"go('vooruit')"}); break; } } }catch(_){}
   // --- saldo-tekort vóór lasten binnen 1-2 dagen (hoogste prioriteit) ---
   try{ const Lq=liquidityDaily(3); const t0=new Date(); t0.setHours(0,0,0,0); const hz=new Date(t0); hz.setDate(hz.getDate()+2);
     const due=(Lq.events||[]).filter(e=>{const d=new Date(e.date); d.setHours(0,0,0,0); return e.amt<0 && d.getTime()>=t0.getTime() && d.getTime()<=hz.getTime();}).sort((a,b)=>a.date-b.date);
@@ -2997,14 +2998,14 @@ function scoreNotifs(){
     if(dueAmt>0 && tb.known>0 && tb.sum<dueAmt){
       const topUp=Math.max(Math.ceil((dueAmt-tb.sum)/5)*5,5); const first=due[0];
       const dd=Math.round((new Date(first.date).setHours(0,0,0,0)-t0.getTime())/86400000); const when=dd<=0?'vandaag':dd===1?'morgen':'overmorgen';
-      out.push({key:'lowbal-'+today,score:96,t:'bad',ic:ICON('alert'),
+      out.push({key:'lowbal-'+today, h:'direct',score:96,t:'bad',ic:ICON('alert'),
         l1: due.length>1?`Te weinig saldo voor ${due.length} vaste lasten ${when}.`:`Te weinig saldo: ${when} wordt ${esc(String(first.name||'').slice(0,20))} ${euro(-first.amt)} afgeschreven.`,
         l2:`Vul ±${euro0(topUp)} aan${tb.missing>0?` · gerekend met ${tb.known} van je ${tb.known+tb.missing} rekeningen`:''}`, act:"go('vooruit')"});
     }
     // Ontbreekt er saldo, dan kán dit alarm niet betrouwbaar zijn. Eén rustige uitnodiging
     // i.p.v. een waarschuwing die we niet kunnen onderbouwen; per maand hooguit één keer.
     if(dueAmt>=50 && tb.missing>0 && (SET.balNudge||{}).ym!==m){
-      out.push({key:'balnudge-'+m, score:44, t:'info', ic:ICON('wallet'),
+      out.push({key:'balnudge-'+m, h:'correctie', score:44, t:'info', ic:ICON('wallet'),
         l1: tb.known>0?'Van een deel van je rekeningen kennen we het saldo niet.':'We kennen je saldo niet, dus we kunnen niet waarschuwen.',
         l2:'Voeg je saldo toe, dan waarschuwt Minder je als er te weinig staat', act:'balNudgeGo()'});
     } }catch(_){}
@@ -3012,13 +3013,13 @@ function scoreNotifs(){
   try{ const t0=new Date().setHours(0,0,0,0);
     for(const s of accountShortfalls()){
       const dd=Math.round((s.t-t0)/86400000); const when=dd<=0?'vandaag':dd===1?'morgen':`over ${dd} dagen`;
-      out.push({key:'accshort-'+s.acc+'-'+new Date(s.t).toISOString().slice(0,10), score:94, t:'bad', ic:ICON('alert'),
+      out.push({key:'accshort-'+s.acc+'-'+new Date(s.t).toISOString().slice(0,10), h:'direct', score:94, t:'bad', ic:ICON('alert'),
         l1:`${esc(accShort(s.acc))}: ${esc(String(s.name||'').slice(0,18))} ${euro(s.amt)} ${when}, maar er staat ${euro(s.balance)}.`,
         l2:`Tekort ${euro0(s.shortfall)} · vul aan of schuif over`, act:"go('vooruit')"});
     } }catch(_){}
   // mentale-rekening: stilstaand surplus BOVEN de buffer terwijl dure schuld rente kost (observatie, geen alarm)
   try{ const ma=mentalAccountingSignal();
-    if(ma) push({key:'rente-'+(ma.debt.id||'x'), score:60, t:'info', ic:ICON('coins'),
+    if(ma) push({key:'rente-'+(ma.debt.id||'x'), h:'structureel', score:60, t:'info', ic:ICON('coins'),
       l1:`${euro0(ma.inzet)} staat stil terwijl ${esc(ma.debt.naam)} ${ma.debt.rente}% rente kost.`,
       l2:`Boven je buffer · dat deel kan ~${euro0(ma.renteJaar)}/jr dempen`, act:"go('vermogen')"});
   }catch(_){}
@@ -3038,7 +3039,7 @@ function scoreNotifs(){
     // 1) spaar-Rules als uitgave (1-tik fix) - een correctie, geen inzicht
     const savRx=/monthly rule|weekly rule/i; let savMis=0,savN=0;
     for(const mm of doneA.concat([curMonth])){ for(const t of txOfMonth(mm)){ if(t.amount<0&&CATS[catOf(t)].type==='expense'&&savRx.test(t.name||'')){savMis+=-t.amount;savN++;} } }
-    if(savN>=2) push({key:'savrules', score:58, t:'info', ic:ICON('sync'),
+    if(savN>=2) push({key:'savrules', h:'correctie', score:58, t:'info', ic:ICON('sync'),
       l1:'Je spaarstortingen tellen als uitgave',
       l2:`${euro0(savMis)} aan eigen overboekingen telt mee. Tik om dit recht te zetten.`, act:'fixSavingsRules()'});
     if(doneA.length>=2){
@@ -3047,18 +3048,18 @@ function scoreNotifs(){
       const savNormalA=Math.round(avgA(normalA.map(r=>r.savedEur)));
       // 2) meevaller-afhankelijkheid
       if(normalA.length>=1&&windfallA.length>=1&&savNormalA<targetA*0.7&&targetA>0&&!hasAutoSaving())
-        push({key:'meevaller', score:62, t:'bad', ic:ICON('coins'),
+        push({key:'meevaller', h:'structureel', score:62, t:'bad', ic:ICON('coins'),
           l1:'Zonder meevaller spaar je te weinig',
           l2:`Zet ${euro0(targetA)} automatisch opzij zodra je salaris binnen is.`, act:"toggleStep('savings')"});
       // 3) lifestyle inflation
       const spWA=Math.round(avgA(windfallA.map(r=>r.sp))), spNA=Math.round(avgA(normalA.map(r=>r.sp)));
       if(windfallA.length>=1&&normalA.length>=1&&spWA>spNA*1.12)
-        push({key:'inflatie', score:44, t:'warn', ic:ICON('trend'),
+        push({key:'inflatie', h:'structureel', score:44, t:'warn', ic:ICON('trend'),
           l1:'Meer binnen, meer uitgegeven',
           l2:`Zet je extraatje meteen opzij, vóór je het uitgeeft.`, act:"go('ins')"});
       // 4) streak boven grens
       let streakA=0; for(let i=rowsA.length-1;i>=0;i--){ if(rowsA[i].over) streakA++; else break; }
-      if(streakA>=2) push({key:'overstreak', score:68, t:'warn', ic:ICON('warn'),
+      if(streakA>=2) push({key:'overstreak', h:'structureel', score:68, t:'warn', ic:ICON('warn'),
         l1:'Je geeft al maanden te veel uit',
         l2:`Tijd om het te kantelen. Kies vandaag één last die eruit kan.`, act:'toggleActDeep()'});
     }
@@ -3067,12 +3068,15 @@ function scoreNotifs(){
   if(isNow){ try{ let pos=null;
     const wk=Date.now()-7*864e5; const dec=(SET.coachLog||[]).filter(l=>l.type==='beslis'&&l.ts>=wk);
     let saved=0; dec.forEach(d=>{ if((d.uitkomst==='geparkeerd'&&!d.resolved)||d.uitkomst==='geannuleerd') saved+=(+d.bedrag||0); });
-    if(saved>=20) pos={key:'win-saved',score:24,t:'good',ic:ICON('check'),l1:`${euro0(saved)} niet ongepland uitgegeven deze week.`,l2:'Zo hou je grip',act:"go('act')"};
-    if(!pos){ const L=monthLiquidity(), tgt=monthlySavingTarget(); if(L.projected>=tgt && L.daysLeft>0) pos={key:'room',score:20,t:'good',ic:ICON('check'),l1:'Je ligt op koers deze maand.',l2:'Mooi, hou dit vast',act:"go('vooruit')"}; }
+    if(saved>=20) pos={key:'win-saved', h:'geen',score:24,t:'good',ic:ICON('check'),l1:`${euro0(saved)} niet ongepland uitgegeven deze week.`,l2:'Zo hou je grip',act:"go('act')"};
+    if(!pos){ const L=monthLiquidity(), tgt=monthlySavingTarget(); if(L.projected>=tgt && L.daysLeft>0) pos={key:'room', h:'geen',score:20,t:'good',ic:ICON('check'),l1:'Je ligt op koers deze maand.',l2:'Mooi, hou dit vast',act:"go('vooruit')"}; }
     if(pos) push(pos);
   }catch(_){} }
   const muted=SET.notifMuted||{}, snz=SET.notifSnooze||{}, nowMs=Date.now(); const CRIT=new Set(['lowbal','accshort']);
-  const filt=out.filter(o=>{ const g=(o.key||'').split('-')[0]; if(CRIT.has(g)) return true; if(muted[g]) return false; if(snz[g]&&nowMs<snz[g]) return false; return true; });
+  /* v162: 'Niet meer tonen' blijft altijd gelden, ook op het maandscherm. Een lopende snooze mag
+     een structureel signaal daar juist niet onzichtbaar maken, want die snooze was bedoeld voor de
+     meldingenlijst. De snooze-logica zelf verandert niet; alleen waar hij geldt. */
+  const filt=out.filter(o=>{ const g=(o.key||'').split('-')[0]; if(CRIT.has(g)) return true; if(muted[g]) return false; if(!opts.negeerSnooze && snz[g]&&nowMs<snz[g]) return false; return true; });
   filt.sort((a,b)=>b.score-a.score);
   // Loss-aversion dosering: hooguit maxFramesPerDag loss-frames, nooit gestapeld.
   // CRIT en positieve noten passen ongemoeid; alleen discretionaire stakes worden gedoseerd.
@@ -3084,10 +3088,14 @@ function scoreNotifs(){
     seen.add(o.key); uniq.push(o); }
   return uniq;
 }
-function notifList(){ const all=scoreNotifs(); const top=all.slice(0,5);
-  // garandeer minstens één positieve noot in de lijst (balans voor de vermijder)
-  if(!top.some(x=>x.t==='good')){ const pos=all.find(x=>x.t==='good'); if(pos){ if(top.length>=5) top[top.length-1]=pos; else top.push(pos); } }
-  return top; }
+/* v162: de lijst sorteert niet meer op 'vraagt dit actie' maar op 'wat gebeurt er als ik dit een
+   week negeer'. Alleen 'direct' en 'correctie' horen hier: het eerste heeft binnen een week een
+   concreet gevolg, het tweede is een fout in je administratie met een fix. Structurele patronen
+   staan op het maandscherm, en constateringen nergens - die snoozede je toch weg, waarna ze een
+   week later ongewijzigd terugkwamen. De garantie op een positieve noot is daarmee vervallen: die
+   noten zijn per definitie 'geen', dus er valt niets meer te garanderen. */
+const NOTIF_HORIZON=new Set(['direct','correctie']);
+function notifList(){ return scoreNotifs().filter(o=>NOTIF_HORIZON.has(o.h)).slice(0,5); }
 function notifGrp(k){ return String(k||'').split('-')[0]; }
 function notifMuted(){ return SET.notifMuted||{}; }
 function notifSnooze(g){ SET.notifSnooze=SET.notifSnooze||{}; SET.notifSnooze[g]=Date.now()+7*86400000; save(); updateNotifBadge(); openNotifs(); toast(`${ICON('check')} Melding 7 dagen uitgesteld`); }
@@ -3121,7 +3129,9 @@ function openNotifs(){
     return `<div class="coach ${n.t}" style="margin-bottom:${crit?'10px':'2px'}"><div class="ic">${n.ic}</div><div class="tx" style="cursor:pointer" onclick="closeSheet();${n.act}"><b>${n.l1}</b><br><span class="muted">${n.l2} ›</span></div></div>`
       + (crit?'':`<div style="display:flex;gap:16px;margin:0 0 12px 40px;flex-wrap:wrap">${g==='loandue'?`<span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanRepaidFromNotif('${n.key.replace(/^loandue-/,'')}')">Terugbetaald</span>`:''}<span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifSnooze('${g}')">Snooze 7d</span><span class="small" style="color:var(--mut2);cursor:pointer" onclick="notifMute('${g}')">Niet meer tonen</span></div>`);
   }).join('')
-    : `<div class="small muted" style="padding:10px 0">Geen meldingen, alles op koers.</div>`;
+    /* v162: de lijst is vaker leeg, en dat is goed. Eén rustige regel, geen uitleg en geen
+       verwijzing naar het maandscherm - anders wordt de lege staat zelf een melding. */
+    : `<div class="small muted" style="padding:10px 0">Niets wat deze week aandacht vraagt.</div>`;
   const nMute=Object.keys(SET.notifMuted||{}).length, nSnz=Object.keys(SET.notifSnooze||{}).filter(k=>(SET.notifSnooze||{})[k]>Date.now()).length;
   const resetRow=(nMute+nSnz>0)?`<div class="small" style="margin-top:6px;text-align:center"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="notifResetMutes()">Gedempte meldingen herstellen (${nMute+nSnz})</span></div>`:'';
   $('#sheet').innerHTML=`<div class="grab"></div>
@@ -3604,7 +3614,7 @@ function doelTempoLine(p){
    Dit scherm REKENT NIETS ZELF. Het roept bestaande functies aan, stelt hun uitkomsten samen en
    sorteert ze. Valt een bron weg, dan valt die regel weg - zonder foutmelding en zonder
    placeholder; het scherm werkt met drie van de vijf. */
-const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:100 };   // kpiMinBedrag: onder dit grondtal zegt een percentage niets (v161)
+const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelStatus:'tekort' };   // v162: een patroon over maanden vraagt een beslissing, geen aandacht   // kpiMinBedrag: onder dit grondtal zegt een percentage niets (v161)
 /* v155: de meevallerdrempel stond als kaal 1.15 op drie plekken. Eén naam, dezelfde waarde, zodat
    de verdeelregel niet zijn eigen drempel krijgt. Geen gedragswijziging. */
 const MEEVALLER_FACTOR = 1.15;   // de rest volgt nfMaanden()
@@ -3634,6 +3644,25 @@ function maandDoel(){
     const p=P.find(x=>x.type==='goal'&&x.streefdatum&&x.status!=='bereikt'&&x.status!=='gepauzeerd');
     if(!p) return null; const T=doelTempo(p,p.alloc); return T?{p,T}:{p,T:null};
   }catch(_){ return null; }
+}
+/* Structurele signalen op het maandscherm (v162). Een patroon over meerdere maanden hoort bij het
+   maandmoment, niet in een lijst die je dagelijks wegtikt. Ze lopen mee als gewone regel: dezelfde
+   vorm, dezelfde statusdot, dezelfde sortering, zodat er één lijst ontstaat en geen tweede blok.
+   Ritme in plaats van snooze: ze verschijnen bij het maandmoment en verdwijnen zodra je dit scherm
+   hebt gelezen (SET.maandGelezen, hetzelfde gezien-mechanisme als v130) of zodra de situatie is
+   opgelost. Een lopende snooze telt hier bewust niet - die was voor de meldingenlijst bedoeld -
+   maar 'Niet meer tonen' geldt onverkort, want dat is een keuze en geen uitstel. */
+function maandStructureel(){
+  try{
+    const vandaag=new Date().toISOString().slice(0,10);
+    if(SET.maandGelezen===vandaag) return [];        // vandaag al gelezen: het maandmoment is geweest
+    return (scoreNotifs({negeerSnooze:true})||[])
+      .filter(n=>n && n.h==='structureel')
+      .map(n=>({key:n.key, naam:String(n.l1||'').replace(/<[^>]*>/g,'').slice(0,42),
+        status:MAAND_DREMPEL.structureelStatus, waarde:'', eenheid:'',
+        gevolg:String(n.l1||'').replace(/<[^>]*>/g,''),
+        act:n.act||"go('ins')", sig:n, structureel:true}));
+  }catch(_){ return []; }
 }
 /* De vijf regels. Elke bron in zijn eigen try: gooit er een, dan valt alleen die regel weg. */
 function maandRegels(){
@@ -4021,13 +4050,18 @@ function renderMaand(){
     $('#s-maand').innerHTML=`<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
     return;
   }
-  const O=maandOordeel(R);
+  /* v162: structurele signalen lopen mee in het oordeel volgens de bestaande beslisboom. Ze gaan
+     bewust NIET naar maandCoachIngang() of maandVerband(): die kennen alleen de vijf regels, en een
+     gesprek openen op een sleutel die coTopicMaand() niet kent zou een half pad opleveren. */
+  const STR=maandStructureel();
+  const RO=R.concat(STR);
+  const O=maandOordeel(RO);
   /* v134: beslissing en aandacht zijn twee dingen, en de beslisboom gebruikt die woorden al zo -
      tekort vraagt een beslissing, let op vraagt aandacht. Stonden ze samen onder één kop, dan telde
      de zin (alleen de tekorten) iets anders dan wat eronder stond. Nu een kaart per betekenis; een
      lege kaart valt weg, dus in de praktijk zie je zelden drie kaarten. */
-  const opVolgorde=a=>MAAND_VOLGORDE.indexOf(a.key);
-  const beslis=R.filter(r=>r.status==='tekort').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
+  const opVolgorde=a=>{ const i=MAAND_VOLGORDE.indexOf(a.key); return i<0?99:i; };   // v162: structurele signalen achter de vijf regels
+  const beslis=RO.filter(r=>r.status==='tekort').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
   const aandacht=R.filter(r=>r.status==='let op').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
   const goed=R.filter(r=>r.status==='ok');
   const verband=maandVerband(R);
@@ -8667,9 +8701,9 @@ const KPI_META={
   budget:{label:'Budgetnaleving',     bandTxt:'doel 100% of minder', band:100, dir:'down', sign:1, base:0,
     uitleg:'Welk deel van je maandbudget je hebt uitgegeven: uitgaven ÷ budget. Je budget is de som van je potjes; heb je die niet, dan je inkomen-limiet.'},
   vari:  {label:'Variabele-lasten-druk', bandTxt:'doel onder 30%', band:30, dir:'down', sign:1, base:0,
-    uitleg:'Welk deel van je inkomen naar variabele (niet-vaste) uitgaven gaat: variabele uitgaven ÷ inkomen. Het richtpunt komt uit je referentie-verdeling.'},
+    uitleg:'Welk deel van je inkomen naar variabele (niet-vaste) uitgaven gaat: variabele uitgaven ÷ inkomen. Er hoort geen doel bij: dit cijfer laat je verloop zien, niet of je een norm haalt.'},
   vast:  {label:'Vaste-lasten-druk',  bandTxt:'doel onder 50%', band:50, dir:'down', sign:1, base:0,
-    uitleg:'Welk deel van je inkomen naar herkende terugkerende lasten gaat: vaste lasten ÷ inkomen. Het richtpunt komt uit je referentie-verdeling.'}
+    uitleg:'Welk deel van je inkomen naar herkende terugkerende lasten gaat: vaste lasten ÷ inkomen. Er hoort geen doel bij: dit cijfer laat je verloop zien, niet of je een norm haalt.'}
 };
 // Drie van de vier banden volgen je gekozen referentie-verdeling (default 50/30/20 → precies de
 // oude 20%, 30% en 50%), zodat vast/variabel/sparen samen het hele ijkpunt spiegelen.
@@ -8724,6 +8758,9 @@ function kpiAfstandTxt(key,A,kort){
 }
 function kpiState(key,v,ref){
   if(v==null) return 'n';
+  /* v161: zonder band is er geen oordeel. Zonder deze guard rekende elke tak door met null:
+     `v<null` is `v<0`, dus elk vast- en variabel-cijfer kwam stilzwijgend op 'bad' uit. */
+  if(kpiBand(key)==null) return 'n';
   if(key==='spaar'||key==='inleg'){ const B=kpiBand(key); return v>=B?'good':(v>=B*0.5?'mid':'bad'); }
   if(key==='budget') return v<=100?'good':(v<=110?'mid':'bad');
   if(key==='vast'){  const B=kpiBand('vast');  return v<B?'good':(v<=B*1.3?'mid':'bad'); }
@@ -9060,7 +9097,10 @@ function kpiTxLijst(key,m){
     : (key==='budget')
     ? `${euro0(uit)} uitgegeven van ${euro0(t.budget)} budget`
     : `${euro0(uit)} aan ${key==='vast'?'vaste lasten':'variabele uitgaven'}`;
-  const incRegel=(key==='spaar')
+  /* v161: deze regel hing aan de restsaldo-quote. De redenering van v104 geldt voor elk cijfer met
+     je inkomen als noemer: dat inkomen komt uit je instelling, niet uit de som van je
+     inkomsten-transacties, dus het hoort als aparte regel met zijn bron en niet in de lijst. */
+  const incRegel=(kpiBasis(key,t)===(+t.income||0) && t.income>0)
     ? `<div class="row" style="justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
          <span class="small">Inkomen · <span style="color:var(--mut2)">${KPI_INCBRON[t.incomeBasis]||t.incomeBasis}</span></span>
          <span class="small" style="font-weight:700">${euro0(t.income)}</span></div>`
@@ -9215,7 +9255,6 @@ function openKpiDetail(key){
     ${kpiTxLijst(key,m)}
     ${kpiHistChart(k)}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:8px">Je volledige historie van deze metriek.</div>
-    ${(key==='spaar'||key==='vast'||key==='vari')?`<div style="margin-top:8px">${splitNormLine()}</div>`:''}
     <div style="height:8px"></div>`;
   showSheetBg();
 }

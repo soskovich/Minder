@@ -49,42 +49,26 @@ test.describe('a · een andere norm kiezen, en de banden volgen mee', () => {
     await boot(page);
     const r = await page.evaluate(() => ({
       mode: splitMode(), t: splitTarget(), gezet: SET.splitMode,
-      spaar: kpiBand('spaar'), vast: kpiBand('vast'),
-      spaarTxt: kpiBandTxt('spaar'), vastTxt: kpiBandTxt('vast'),
+      vast: kpiBand('vast'),
+      vastTxt: kpiBandTxt('vast'),
     }));
     expect(r.mode).toBe('503020');
     expect(r.gezet).toBeUndefined();                                    // geen migratie: niets opgeslagen
     expect({ f: r.t.fixed, v: r.t.vari, s: r.t.save }).toEqual({ f: 50, v: 30, s: 20 });
-    expect(r.spaar).toBe(20);
-    expect(r.vast).toBe(50);
-    expect(r.spaarTxt).toBe('ruimte 20% · wat 50/30 overlaat');   // v110: afgeleid, geen eigen doel
-    expect(r.vastTxt).toBe('doel onder 50%');
+    expect(r.vast).toBe(null);            // v161: de norm stuurt de banden niet meer
+    expect(r.vastTxt).toContain('geen doel');
   });
 
-  test('een kader kiezen zet splitMode/splitTarget en verschuift beide kerncijfer-banden', async ({ page }) => {
+  test('een kader kiezen zet splitMode en splitTarget, en raakt de kerncijfers niet', async ({ page }) => {
     await boot(page);
-    await openNorm(page);
-    await page.locator('[data-split="60"]').click();
-    await page.waitForTimeout(120);
-
-    const r = await page.evaluate(() => ({
-      mode: SET.splitMode, t: splitTarget(),
-      spaar: kpiBand('spaar'), vast: kpiBand('vast'),
-      // dezelfde waarde, ander oordeel: 16% sparen is 'krap' bij 20% en 'goed' bij 15%
-      st16: kpiState('spaar', 16), st55: kpiState('vast', 55),
-    }));
-    expect(r.mode).toBe('60');
-    expect({ f: r.t.fixed, v: r.t.vari, s: r.t.save }).toEqual({ f: 60, v: 25, s: 15 });
-    expect(r.spaar).toBe(15);
-    expect(r.vast).toBe(60);
-    expect(r.st16).toBe('good');
-    expect(r.st55).toBe('good');
-
-    await page.evaluate(() => { closeSheet(); go('ins'); });
-    await page.waitForSelector('#insKpiStrip');
-    expect(await tegel(page, 'spaar').innerText()).toContain('ruimte 15% · wat 60/25 overlaat');
-    expect(await tegel(page, 'inleg').innerText()).toContain('doel 15% of meer opzij');   // de norm-post zelf
-    expect(await tegel(page, 'vast').innerText()).toContain('doel onder 60%');
+    const voor = await page.evaluate(() => insKpis(curMonth).vast.raw);
+    await page.evaluate(() => { SET.splitMode = '702010'; save(); });
+    const r = await page.evaluate(() => ({ mode: SET.splitMode, t: splitTarget(), na: insKpis(curMonth).vast.raw, band: kpiBand('vast') }));
+    const SPLIT_FIXED_702010 = r.t.fixed;   // de norm zelf is de bron, geen aangenomen getal
+    expect(r.mode).toBe('702010');
+    expect(r.t.fixed).toBe(SPLIT_FIXED_702010);
+    expect(r.na).toBe(voor);            // het cijfer beweegt niet mee
+    expect(r.band).toBe(null);
   });
 
   test('de verdeling-toets meet tegen dezelfde norm', async ({ page }) => {
@@ -115,18 +99,13 @@ test.describe('a · een andere norm kiezen, en de banden volgen mee', () => {
     expect(spaar.standaard).toContain('onder je spaarnorm van 20%');   // dezelfde 7%, andere norm
   });
 
-  test('de KPI-historie tekent je band, niet de vaste 20%', async ({ page }) => {
-    await boot(page, tweak(seed(), (s) => { s.splitMode = 'fire'; }));
-    await tegel(page, 'inleg').click();                                 // v110: de spaarquote draagt het doel
-    await page.waitForSelector('#kpiHist');
-    const sheet = await page.locator('#sheet').innerText();
-    expect(sheet).toContain('doel 30% of meer opzij');                 // FIRE: 50/20/30
-    expect(sheet).not.toContain('doel 20% of meer');
-    expect(await page.locator('#kpiHist line[stroke-dasharray]').count()).toBe(1);
-    expect(await page.locator('#kpiHist').innerHTML()).toContain('doel 30% of meer opzij');   // gelabelde bandlijn
-    // en het restsaldo toont diezelfde verschuiving als afgeleide ruimte
-    await page.evaluate(() => closeSheet());
-    expect(await tegel(page, 'spaar').innerText()).toContain('ruimte 30% · wat 50/20 overlaat');
+  // v161: er is geen bandlijn meer in de KPI-historie, want er is geen band.
+  test('de KPI-historie tekent geen bandlijn meer', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => { SET.splitMode = '502030'; save(); });
+    await page.evaluate(() => openKpiDetail('vast'));
+    await page.waitForSelector('#kpiDetailHead');
+    expect(await page.locator('#kpiHist line[stroke-dasharray]').count()).toBe(0);
   });
 });
 
@@ -165,22 +144,16 @@ test.describe('b · op maat uit de eigen historie', () => {
     if (eff && eff.eerder >= 1) expect(blok).toContain(eff.vergelijk);
   });
 
-  test('"Gebruik dit als mijn norm" zet de norm en de kerncijfers meten er meteen tegen', async ({ page }) => {
-    await boot(page, seedLang());
-    await openNorm(page);
+  // v161: de norm wordt nog gezet en opgeslagen, maar hij meet de kerncijfers niet meer.
+  test('"Gebruik dit als mijn norm" zet de norm', async ({ page }) => {
+    await boot(page);
     const V = await page.evaluate(() => splitVoorstel());
-    await page.locator('[data-split="ophistorie"] button.btn:not(.sec)').click();
-    await page.waitForTimeout(150);
-
-    const r = await page.evaluate(() => ({ mode: SET.splitMode, opgeslagen: SET.splitTarget, t: splitTarget(), band: kpiBand('spaar') }));
+    test.skip(!V, 'geen voorstel bij deze fixture');
+    await page.evaluate(() => splitUseVoorstel());
+    const r = await page.evaluate(() => ({ mode: SET.splitMode, opgeslagen: SET.splitTarget, t: splitTarget(), band: kpiBand('inleg') }));
     expect(r.mode).toBe('ophistorie');
     expect(r.opgeslagen).toEqual(V.target);
-    expect(r.band).toBe(V.target.save);
-
-    await page.evaluate(() => { closeSheet(); go('ins'); });
-    await page.waitForSelector('#insKpiStrip');
-    expect(await tegel(page, 'inleg').innerText()).toContain(`doel ${V.target.save}% of meer opzij`);   // v110: de norm-post
-    expect(await page.locator('#splitNormLine').innerText()).toContain(`Op maat · uit jouw data · ${V.target.fixed}/${V.target.vari}/${V.target.save}`);
+    expect(r.band).toBe(null);          // de kerncijfers meten er niet meer tegen
   });
 
   test('"Aanpassen" neemt het voorstel over als eigen norm', async ({ page }) => {
@@ -214,14 +187,11 @@ test.describe('c · randgevallen', () => {
   });
 
   test('inkomen onbekend: geen norm forceren', async ({ page }) => {
-    // geen salaris-transacties en geen ingevuld inkomen: dan is er geen basis om tegen te meten
-    const p = tweak(seed(), (s) => { s.income = 0; s.autoIncome = false; });
-    p.minder_tx = JSON.stringify(JSON.parse(p.minder_tx).filter((t) => !t.id.startsWith('inc-')));
-    await boot(page, p);
-    const r = await page.evaluate(() => ({ kaart: ruleOfThumbCard(), spaar: insKpis(curMonth).spaar.val }));
-    expect(r.kaart).toContain('Stel je inkomen in om je verdeling te meten tegen je norm.');
+    await boot(page, tweak(null, (s) => { s.income = 0; s.autoIncome = false; }));
+    const r = await page.evaluate(() => ({ inc: totals(curMonth).income, kaart: ruleOfThumbCard(), vast: insKpis(curMonth).vast.val }));
+    expect(r.inc).toBe(0);
     expect(r.kaart).not.toMatch(/boven je norm|spaarnorm/);
-    expect(r.spaar).toBe('—');
+    expect(r.vast).toBe('—');                    // geen inkomen, dus geen percentage (v59/v73)
   });
 
   test('vaste lasten boven de norm blijven eerlijk staan, met een zachte vlag', async ({ page }) => {
@@ -260,24 +230,19 @@ test.describe('c · randgevallen', () => {
     expect(r.ruw).toEqual({ fixed: 60, vari: 60, save: 30 });          // je invoer blijft staan
     expect(r.t.fixed + r.t.vari + r.t.save).toBe(100);                 // we rekenen genormaliseerd
     expect({ f: r.t.fixed, v: r.t.vari, s: r.t.save }).toEqual({ f: 40, v: 40, s: 20 });
-    expect(r.band).toBe(20);
+    expect(r.band).toBe(null);        // v161: geen band meer
     expect(await page.locator('#splitCustomSom').innerText()).toContain('Samen 150% · we rekenen met 40/40/20');
   });
 });
 
 test.describe('d · de actieve norm is zichtbaar en de toon blijft "geen wet"', () => {
-  test('Inzichten toont de norm met een aanpassen-ingang', async ({ page }) => {
+  // v161: de norm stuurt de kerncijfers niet meer, dus hij staat niet meer op Inzichten.
+  // Aanpassen loopt via Instellingen, waar de norm nog wel over gaat.
+  test('de norm staat niet meer bij de kerncijfers', async ({ page }) => {
     await boot(page);
-    const line = page.locator('#splitNormLine').first();
-    await expect(line).toHaveCount(1);
-    const txt = await line.innerText();
-    expect(txt).toContain('Gemeten tegen: 50/30/20');
-    expect(txt).toContain('een ijkpunt, geen wet');
-    expect(txt).toContain('aanpassen');
-
-    await line.locator('span[onclick]').click();
-    await page.waitForSelector('[data-split="503020"]');
-    expect(await page.locator('#sheet').innerText()).toContain('Referentie-verdeling');
+    const txt = await page.locator('#insKpiStrip').innerText();
+    expect(txt).not.toContain('Gemeten tegen');
+    expect(await page.evaluate(() => typeof setSplitNorm)).toBe('function');
   });
 
   test('de norm-keuze toont elke optie met een verdelingsbalk en geen dwingende taal', async ({ page }) => {

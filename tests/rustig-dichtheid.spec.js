@@ -15,29 +15,29 @@ const tegels = (page) => page.locator('#insKpiStrip .wvo-tile');
 const grafiek = (page) => page.locator('#insSpendChart');
 
 test.describe('a · kerncijfers: drie tegelijk in Rustig', () => {
-  test('Rustig toont er 3 met een uitklap; de keuze blijft staan', async ({ page }) => {
+  // v161: Inzichten draagt nog twee kerncijfers, de andere twee staan op het maandscherm.
+  test('Rustig toont er een met een uitklap; de keuze blijft staan', async ({ page }) => {
     await openIns(page, 'rustig');
-    await expect(tegels(page)).toHaveCount(3);
+    await expect(tegels(page)).toHaveCount(1);
     const keys = await tegels(page).evaluateAll((els) => els.map((e) => e.dataset.kpi));
-    expect(keys).toEqual(['spaar', 'inleg', 'budget']);             // v109: Rustig toont de eerste drie van vijf
+    expect(keys).toEqual(['budget']);
     const knop = page.locator('#kpiMeer');
     await expect(knop).toHaveCount(1);
-    expect(await knop.innerText()).toContain('toon alle 5 kerncijfers');
+    expect(await knop.innerText()).toContain('toon beide kerncijfers');
 
     await knop.click();
-    await page.waitForFunction(() => document.querySelectorAll('#insKpiStrip .wvo-tile').length === 5);
+    await page.waitForFunction(() => document.querySelectorAll('#insKpiStrip .wvo-tile').length === 2);
     expect(await page.evaluate(() => SET.kpiAll)).toBe(true);
     expect(await page.locator('#kpiMeer').innerText()).toContain('minder');
 
-    // en na een re-render blijft het uitgeklapt
     await page.evaluate(() => renderIns());
-    await expect(tegels(page)).toHaveCount(5);
+    await expect(tegels(page)).toHaveCount(2);
   });
 
-  test('Begeleid en Expert tonen ze alle vijf, zonder uitklap', async ({ page }) => {
+  test('Begeleid en Expert tonen ze allebei, zonder uitklap', async ({ page }) => {
     for (const mode of ['begeleid', 'expert']) {
       await openIns(page, mode);
-      await expect(tegels(page), mode).toHaveCount(5);
+      await expect(tegels(page), mode).toHaveCount(2);
       expect(await page.locator('#kpiMeer').count(), mode).toBe(0);
     }
   });
@@ -111,10 +111,10 @@ test.describe('c · niets anders verandert', () => {
   test('de cijfers en de norm-regel blijven in Rustig gewoon staan', async ({ page }) => {
     await openIns(page, 'rustig');
     const strip = await page.locator('#insKpiStrip').innerText();
-    expect(strip.toLowerCase()).toContain('restsaldo-quote');
-    expect(strip).toContain('doel 20% of meer');
-    expect(strip).toContain('Gemeten tegen: 50/30/20');
-    expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(5);   // v109: vijf kerncijfers
+    expect(strip.toLowerCase()).toContain('budgetnaleving');
+    expect(strip).toContain('doel 100% of minder');
+    expect(strip).not.toContain('50/30/20');            // v161: de norm stuurt de kerncijfers niet meer
+    expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // v161: vier, over twee schermen
     // v135: de samenstelling is herschikt (hero, dan wat opviel, dan Verdieping), maar de grafiek
     // houdt zijn drietraps default uit v90 en de strip staat er onveranderd in
     expect(await page.evaluate(() => /insSection\('Deze maand'\)\s*\+\s*hero\s*\+\s*whatStandsOutLine\(m\)\s*\+\s*insLekVraag\(m\)/.test(renderIns.toString()))).toBe(true);
