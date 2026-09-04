@@ -3604,7 +3604,7 @@ function doelTempoLine(p){
    Dit scherm REKENT NIETS ZELF. Het roept bestaande functies aan, stelt hun uitkomsten samen en
    sorteert ze. Valt een bron weg, dan valt die regel weg - zonder foutmelding en zonder
    placeholder; het scherm werkt met drie van de vijf. */
-const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0 };
+const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:100 };   // kpiMinBedrag: onder dit grondtal zegt een percentage niets (v161)
 /* v155: de meevallerdrempel stond als kaal 1.15 op drie plekken. Eén naam, dezelfde waarde, zodat
    de verdeelregel niet zijn eigen drempel krijgt. Geen gedragswijziging. */
 const MEEVALLER_FACTOR = 1.15;   // de rest volgt nfMaanden()
@@ -4046,6 +4046,7 @@ function renderMaand(){
       ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}</div>`:''}
     ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
       ${goed.map(r=>maandRij(r,true)).join('')}</div>`:''}
+    ${maandKpiBlok(curMonth||months()[months().length-1])}
     ${maandBeleggenRegel(R)}
     ${maandCoachIngang(R)}
     ${maandGelezen()}
@@ -8673,18 +8674,22 @@ const KPI_META={
 // Drie van de vier banden volgen je gekozen referentie-verdeling (default 50/30/20 → precies de
 // oude 20%, 30% en 50%), zodat vast/variabel/sparen samen het hele ijkpunt spiegelen.
 // Alleen budgetnaleving meet tegen je eigen potjes.
+/* v161: 50/30/20 stuurt de kerncijfers niet meer. Die norm gaat over iemand met een rekening en
+   geen structuur; posten als een reserveringsinleg of een leasetermijn passen in geen van de drie
+   hokjes, en dan komt er een percentage uit dat niets zegt. De norm blijft bestaan waar hij wel
+   over gaat (ruleOfThumbCard en zijn instellingenpaneel), maar niet meer als band hieronder.
+   Budgetnaleving houdt zijn band van 100%: die meet tegen je eigen potjes, niet tegen een extern
+   ijkpunt. De rest heeft geen eigen voorwaarde en krijgt dus geen doel, want een cijfer zonder norm
+   is bruikbaar en een cijfer met de verkeerde norm is misleidend. */
 function kpiBand(key){
-  if(key==='inleg') return splitTarget().save;                    // de norm-post zelf
-  if(key==='spaar'){ const T=splitTarget(); return Math.max(100-T.fixed-T.vari,0); }   // afgeleid: wat vast en variabel overlaten
-  if(key==='vast')  return splitTarget().fixed;
-  if(key==='vari')  return splitTarget().vari;
-  return KPI_META[key].band;
+  if(key==='budget') return KPI_META.budget.band;
+  return null;
 }
 function kpiBandTxt(key){
-  if(key==='spaar'){ const T=splitTarget(); return `ruimte ${Math.max(100-T.fixed-T.vari,0)}% · wat ${T.fixed}/${T.vari} overlaat`; }
-  if(key==='inleg') return `doel ${splitTarget().save}% of meer opzij`;
-  if(key==='vast')  return `doel onder ${splitTarget().fixed}%`;
-  if(key==='vari')  return `doel onder ${splitTarget().vari}%`;
+  if(key==='budget') return KPI_META.budget.bandTxt;
+  if(key==='inleg')  return 'wat je opzij zette en belegde';
+  if(key==='vast')   return 'geen doel, alleen je verloop';
+  if(key==='vari')   return 'geen doel, alleen je verloop';
   return KPI_META[key].bandTxt;
 }
 const KPI_WOORD={good:'goed',mid:'krap',bad:'let op'};
@@ -8738,6 +8743,54 @@ function insKpiSeries(n){
 // Vier KPI's voor maand m, elk met waarde, band, oordeel én historische reeks.
 // Onbekend = '—' i.p.v. een verzonnen getal; een lopende maand krijgt geen oordeel:
 // een halve maand is per definitie "zuinig" en dat is geen verdienste.
+/* ===== Vermogensopbouw per maand (v161) =====
+ * De spaarquote telde alleen wat naar een gemarkeerde spaarrekening ging. In dit systeem is
+ * vermogensopbouw breder: de reserveringenpot en de beleggingsinleg horen er ook bij.
+ *
+ * Drie van de vijf stromen zijn betrouwbaar te onderscheiden en tellen mee. Twee niet, en die
+ * blijven er bewust buiten in plaats van geschat te worden:
+ *  - het aankoopdoel heeft geen rekening en geen transacties; de voortgang is het handmatige veld
+ *    'Al gespaard' (v99). Wordt het doel vanaf je spaarrekening gevoed, dan zit dat geld al in de
+ *    eerste stroom en zou meetellen dubbel zijn.
+ *  - aflossing: de app kan de maandtermijn wel aan een schuld koppelen, maar niet het
+ *    aflossingsdeel. Rente en aflossing splitsen vraagt een amortisatieberekening, en v100 legt
+ *    vast dat de restschuld handmatig is en nergens meebeweegt met betalingen.
+ * De uitleg-sheet noemt beide, zodat zichtbaar is wat er buiten valt.
+ *
+ * resThisMonth() spiegelt savedThisMonth() exact: dezelfde vorm, dezelfde klem op nul, dezelfde
+ * afronding, alleen op SET.resAcc. Dubbeltelling is structureel uitgesloten doordat die rekening
+ * uitdrukkelijk niet als spaarrekening telt (v128), dus savedThisMonth() ziet hem nooit. */
+function resThisMonth(ym){
+  const a=resAccId(); if(!a) return 0;
+  let net=0; for(const t of txOfMonth(ym)){ if(t.acc===a) net+=t.amount; }
+  return Math.max(Math.round(net),0);
+}
+/* Beleggingsinleg: uitgaande boekingen in de categorie sparen waarvan de tegenrekening niet van
+   jou is. Die tegenrekening-toets is nodig, anders telt een overboeking naar je eigen spaarrekening
+   twee keer: als uitgaande boeking hier en als instroom in savedNet(). */
+function beleggingsInleg(ym){
+  const eigen=new Set(OWN); let som=0;
+  for(const t of txOfMonth(ym)){
+    if(!(t.amount<0)) continue;
+    if(catOf(t)!=='sparen') continue;
+    if((t.refNums||[]).some(n=>eigen.has(n))) continue;
+    som+=-t.amount;
+  }
+  return Math.max(Math.round(som),0);
+}
+/* De teller van de spaarquote, met zijn opbouw erbij. null per deel = die stroom is niet bekend;
+   totaal is null zodra geen enkele stroom bekend is. */
+function vermogensInleg(ym){
+  let sp=null; try{ sp=savedNet(ym); }catch(_){}
+  const heeftRes=!!resAccId();
+  const delen=[
+    {key:'spaar', naam:'Naar je spaarrekening', bedrag: sp==null?null:Math.round(sp)},
+    {key:'res',   naam:'Naar je reserveringen', bedrag: heeftRes?resThisMonth(ym):null},
+    {key:'bel',   naam:'Beleggingsinleg',       bedrag: beleggingsInleg(ym)},
+  ];
+  const bekend=delen.some(d=>d.bedrag!=null);
+  return {totaal: bekend?delen.reduce((a,d)=>a+(d.bedrag||0),0):null, delen};
+}
 function insKpis(m,n){
   const t=totals(m), S=insKpiSeries(n);
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -8746,13 +8799,20 @@ function insKpis(m,n){
   const labels=upto(S.ms).map(x=>MNAMES[+x.slice(5,7)-1]);
   const maanden=upto(S.ms);
   const sf=splitFixedVar(m);
+  /* v161: de restsaldo-quote is vervallen. Die mat wat er op je betaalrekening bleef staan, en dat
+     is bij een automatische verdeling per definitie hoog: een artefact van je eigen structuur.
+     De spaarquote telt nu de hele vermogensopbouw, niet alleen de spaarrekening. */
+  const V=vermogensInleg(m);
   const waarde={
-    spaar:  t.income>0?(t.income-t.spend)/t.income*100:null,
-    inleg:  (t.income>0&&savedNet(m)!=null)?savedNet(m)/t.income*100:null,
+    inleg:  (t.income>0&&V.totaal!=null)?V.totaal/t.income*100:null,
     budget: t.budget>0?t.spend/t.budget*100:null,
     vari:   t.income>0?sf.vari/t.income*100:null,
     vast:   t.income>0?sf.fixed/t.income*100:null
   };
+  /* Het grondtal per cijfer: de teller waar het percentage uit komt. Is die te klein, dan zegt het
+     percentage niets - een terugstorting in een categorie met nauwelijks kosten gaf zo een vaste-
+     lastendruk van -1%. Dan tonen we het bedrag zelf. Drempel in MAAND_DREMPEL, niet inline. */
+  const grondtal={inleg:V.totaal, budget:Math.round(t.spend), vari:Math.round(sf.vari), vast:Math.round(sf.fixed)};
   const mk=key=>{
     const M=KPI_META[key], v=waarde[key], ref=null;
     const fmt=_pct0;
@@ -8767,18 +8827,22 @@ function insKpis(m,n){
     if(key==='budget') band=`${kpiBandTxt(key)} · ${t.potTotal>0?'je potjes':'je inkomen-limiet'}`;
     if(v==null) band=(key==='budget')?'nog geen budget':(key==='inleg'&&t.income>0)?'geen spaarrekening bekend':'inkomen onbekend';
     const afst=kpiAfstand(key,v,t,sf);
-    return {key, label:M.label, raw:v, ref, val:v==null?'—':fmt(v), band, uitleg:M.uitleg, fmt, partial, afst,
+    const g=grondtal[key];
+    const klein=(v!=null && g!=null && Math.abs(g)<MAAND_DREMPEL.kpiMinBedrag);
+    if(klein) band=`grondtal ${euro0(g)} · te klein voor een percentage`;
+    return {key, label:M.label, raw:v, ref, val:klein?euro0(g):(v==null?'—':fmt(v)), band, uitleg:M.uitleg, fmt, partial, afst,
+            grondtal:g, klein,
             uitBuffer: uitBuf, dekTxt: uitBuf>0?`${euro0(uitBuf)} kwam uit je buffer`:'',
-            oordeel: v==null?'':(partial?'loopt nog':(uitBuf>0?'deels uit buffer':(KPI_WOORD[st]||''))),
-            state: (v==null||partial)?'n':st,      // kleur van het cijfer
+            oordeel: (v==null||klein)?'':(partial?'loopt nog':(uitBuf>0?'deels uit buffer':(KPI_WOORD[st]||''))),
+            state: (v==null||partial||klein)?'n':st,      // kleur van het cijfer
             trendState: st,                         // oordeel los van de lopende maand
             src: key==='budget'?(t.potTotal>0?'potjes':'limiet'):undefined,
             budgetBedrag: key==='budget'?Math.round(t.budget):undefined,
             series: upto(S[key]), labels, maanden};
   };
-  // spaar en inleg naast elkaar: overhouden tegenover opzij zetten, precies het verschil dat
-  // v108 blootlegde. Daarna vari en vast naast elkaar, samen het hele ijkpunt.
-  const items=['spaar','inleg','budget','vari','vast'].map(mk);
+  // v161: vier cijfers, verdeeld over twee schermen. Structureel (spaarquote, vaste-lastendruk)
+  // hoort bij de maand; operationeel (budgetnaleving, variabele-lastendruk) bij Inzichten.
+  const items=['inleg','budget','vari','vast'].map(mk);
   const by={}; for(const k of items) by[k.key]=k;
   return Object.assign({m,partial,items},by);
 }
@@ -8824,13 +8888,10 @@ function miniSparkLine(values, opts){
     ${lijn}<path d="${pad}" fill="none" stroke="var(--bar)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>${punt}</div>`;
 }
 function dismissInlegNoot(){ SET.inlegSeen=1; save(); try{renderIns();}catch(_){} }
-function insKpiStrip(m){
-  const K=insKpis(m);
-  // Rustig: drie cijfers tegelijk is genoeg om te lezen; de rest staat één tik verderop.
-  const rustig=isMode('rustig'), alles=!rustig||!!SET.kpiAll;
-  const items=alles?K.items:K.items.slice(0,3);
-  const meer=rustig?`<button class="snz" id="kpiMeer" onclick="toggleExpand('kpiAll')">${alles?'minder ▲':`toon alle ${K.items.length} kerncijfers ▾`}</button>`:'';
-  const tiles=items.map(k=>{
+/* v161: de tegels zijn gedeeld, want de kerncijfers staan nu op twee schermen. Eén renderer, zodat
+   Inzichten en het maandscherm niet uiteen kunnen lopen in opmaak of oordeel. */
+function kpiTegels(items){
+  return items.map(k=>{
     const col=kpiCol(k.state);
     const doel=kpiBand(k.key)!=null?kpiBand(k.key):null;
     const sl=miniSparkLine(k.series,{target:doel, running:k.partial});
@@ -8844,17 +8905,38 @@ function insKpiStrip(m){
       ${spark||`<div class="small spk-na" style="color:var(--mut2);font-size:10px">na 2 maanden zie je hier je verloop</div>`}
     </div>`;
   }).join('');
-  const nieuwNoot=(!SET.inlegSeen && K.inleg && K.inleg.raw!=null)
-    ? `<div class="kpi-nieuw small" style="background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin:0 0 9px;line-height:1.5">
-        <b>Nieuw: Spaarquote.</b> <span style="color:var(--mut2)">Je restsaldo-quote laat zien wat je overhield; de spaarquote wat er écht naar je spaarrekening ging. Die twee lopen vaak uiteen — geld dat op je betaalrekening blijft staan telt wel als overgehouden, niet als gespaard.</span>
-        <span style="color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();dismissInlegNoot()">begrepen ›</span></div>`
-    : '';
+}
+/* Operationeel, binnen de maand: hoe sta ik ervoor tegenover mijn eigen plan. */
+function insKpiStrip(m){
+  const K=insKpis(m);
+  const keys=['budget','vari'];
+  const rustig=isMode('rustig'), alles=!rustig||!!SET.kpiAll;
+  const items=K.items.filter(k=>keys.includes(k.key)).slice(0, alles?9:1);
+  const meer=rustig?`<button class="snz" id="kpiMeer" onclick="toggleExpand('kpiAll')">${alles?'minder ▲':'toon beide kerncijfers ▾'}</button>`:'';
+  const tiles=kpiTegels(items);
+  const nieuwNoot='';   // v161: de introductienoot ging over het verschil met de restsaldo-quote, en die bestaat niet meer
   return `<div class="card" id="insKpiStrip">
     <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">${ICON('chart')} Kerncijfers</span></div>
-    <div class="small muted" style="margin:0 0 4px">Hoe gezond je financiën ervoor staan — en of het de goede kant op beweegt.</div>
+    <div class="small muted" style="margin:0 0 4px">Hoe je deze maand tegenover je eigen plan staat. Wat structureel is, staat op je maandscherm.</div>
     ${nieuwNoot}<div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${tiles}</div>${meer}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:10px">${K.partial?'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus nog zonder oordeel. ':''}Tik een cijfer voor de uitleg en je volledige historie.</div>
-    ${splitNormLine()}
+  </div>`;
+}
+/* Structureel, tussen de maanden: bouw ik vermogen op, en hoe zwaar wegen mijn vaste lasten.
+   Dezelfde tegels en dezelfde 'loopt nog'-behandeling als op Inzichten; alleen de plek verschilt. */
+function maandKpiBlok(m){
+  let K=null; try{ K=insKpis(m); }catch(_){ return ''; }
+  if(!K) return '';
+  const keys=['inleg','vast'];
+  const rustig=isMode('rustig'), alles=!rustig||!!SET.kpiAllMaand;
+  const items=K.items.filter(k=>keys.includes(k.key)).slice(0, alles?9:1);
+  if(!items.length) return '';
+  const meer=rustig?`<button class="snz" onclick="toggleExpand('kpiAllMaand')">${alles?'minder ▲':'toon beide kerncijfers ▾'}</button>`:'';
+  return `<div class="card" id="maandKpiBlok">
+    <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">${ICON('chart')} Kerncijfers</span></div>
+    <div class="small muted" style="margin:0 0 4px">Wat er structureel gebeurt, van maand op maand.</div>
+    <div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${kpiTegels(items)}</div>${meer}
+    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:10px">${K.partial?'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus nog zonder oordeel.':''}</div>
   </div>`;
 }
 
@@ -9093,6 +9175,24 @@ function kpiDoelBalk(k){
     </div>
     ${k.partial?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:5px">Tussenstand: de maand loopt nog, dus dit is nog geen eindoordeel.</div>`:''}</div>`;
 }
+/* De opbouw van de spaarquote (v161). Toont per stroom wat er meetelt, en noemt uitdrukkelijk wat
+   er buiten valt en waarom - anders lijkt een ontbrekende stroom een fout in plaats van een keuze. */
+function kpiInlegOpbouw(m){
+  let V=null; try{ V=vermogensInleg(m); }catch(_){ return ''; }
+  if(!V) return '';
+  const rij=(naam,bedrag,noot)=>`<div class="row" style="gap:9px;padding:6px 0;border-bottom:1px solid var(--line)">
+    <span class="small" style="flex:1;min-width:0">${esc(naam)}${noot?` <span style="color:var(--mut2)">· ${esc(noot)}</span>`:''}</span>
+    <span class="small" style="font-weight:700;white-space:nowrap">${bedrag==null?'niet bekend':euro0(bedrag)}</span></div>`;
+  return `<div class="small muted" style="margin:14px 0 4px;font-weight:600">Waaruit dit cijfer is opgebouwd</div>
+    ${V.delen.map(d=>rij(d.naam,d.bedrag,d.key==='spaar'&&d.bedrag==null?'geen spaarrekening gemarkeerd':(d.key==='res'&&d.bedrag==null?'geen reserveringsrekening ingesteld':''))).join('')}
+    ${V.totaal!=null?`<div class="row" style="gap:9px;padding:8px 0"><span class="small" style="flex:1;font-weight:600">Samen</span>
+      <span class="small" style="font-weight:700">${euro0(V.totaal)}</span></div>`:''}
+    <div class="small muted" style="margin-top:8px;line-height:1.5">Hier buiten vallen twee stromen, bewust en niet bij vergissing.
+      <b>Je aankoopdoel</b> heeft geen eigen rekening; de voortgang is een bedrag dat je zelf invult, en wordt het doel vanuit je
+      spaarrekening gevoed dan telt dat geld hierboven al mee. <b>Aflossing op een lening</b> valt er ook buiten: de app kan de
+      maandtermijn wel herkennen, maar niet welk deel daarvan aflossing is en welk deel rente. Schatten zou een cijfer opleveren
+      dat stelliger is dan wat de app weet.</div>`;
+}
 function openKpiDetail(key){
   const m=curMonth||months()[months().length-1];
   const K=insKpis(m,0); const k=K[key]; if(!k) return;                    // n=0: volledige historie
@@ -9106,6 +9206,7 @@ function openKpiDetail(key){
     </div>
     <div class="small" style="color:var(--mut2);margin-top:3px">${k.band}${k.key==='budget'&&k.budgetBedrag>0?` · ${euro0(k.budgetBedrag)}`:''}${k.oordeel&&!k.partial?` · ${k.oordeel}`:''}</div>
     ${kpiDoelBalk(k)}
+    ${key==='inleg'?kpiInlegOpbouw(m):''}
     ${kpiSpaarBrug(key,m)}
     ${kpiDeltaBlok(key,m,k.partial)}
     ${kpiTxLijst(key,m)}
