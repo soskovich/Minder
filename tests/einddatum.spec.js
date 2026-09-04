@@ -37,9 +37,12 @@ test.describe('a · de spaardoel-hero is weg', () => {
     expect(await page.locator('#s-vooruit .plan-item').count()).toBeGreaterThan(0);
   });
 
-  test('de functies blijven bestaan, ze worden alleen niet meer getoond', async ({ page }) => {
+  // v160: vooruitForecast() bouwde de hero nog wel maar werd sinds v80 nergens aangeroepen; hij is
+  // nu verwijderd. De twee functies die de vooruitblik wel gebruikt blijven bestaan.
+  test('de dode hero is weg, de gebruikte functies blijven', async ({ page }) => {
     await openV(page, tweak((s) => { s.goals = []; }));
-    expect(await page.evaluate(() => typeof vooruitForecast)).toBe('function');
+    expect(await page.evaluate(() => typeof vooruitForecast)).toBe('undefined');
+    expect(await page.evaluate(() => typeof goalCoachCard)).toBe('undefined');
     expect(await page.evaluate(() => typeof coachRuleOptions)).toBe('function');
     expect(await page.evaluate(() => typeof toggleVooruitCut)).toBe('function');
   });

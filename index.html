@@ -998,26 +998,6 @@ function dailyRollingSeries(days){
   for(const t of TX){ if(isExpenseTx(t) && !isFixed(t)){ const d=new Date(t.date); const idx=Math.round((d-startD)/86400000); if(idx>=0&&idx<days) arr[idx]+=-t.amount; } }   // netto: terugstorting verlaagt de dag
   return {arr, start:startD.toISOString().slice(0,10), end};
 }
-function renderDailyRolling(){
-  const days=SET.rollDays||30;
-  const {arr,start,end}=dailyRollingSeries(days); if(!arr.length) return '';
-  const sum=arr.reduce((a,b)=>a+b,0), avg=sum/days;
-  const target=avg;   // v158: het instelbare dagbudget is weg; de referentie is je eigen gemiddelde
-  const scaleMax=Math.max(Math.max(...arr), target*1.3, 1);
-  const maxV=Math.max(...arr), maxIdx=arr.indexOf(maxV);
-  const fmtD=s=>{const d=new Date(s);return d.getDate()+' '+MNAMES[d.getMonth()];};
-  return `<div class="card">
-    <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">Variabele uitgaven (laatste ${days} dagen)</span></div>
-    <div class="chips" style="margin:6px 0 2px"><span class="chip ${days===30?'on':''}" onclick="SET.rollDays=30;save();render();">30 dagen</span><span class="chip ${days===90?'on':''}" onclick="SET.rollDays=90;save();render();">90 dagen</span></div>
-    <div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 2px"><div style="font-size:var(--fs-xl);font-weight:800">${euro(avg)}</div><div class="small muted">gem./dag · totaal ${euro0(sum)}</div></div>
-    <div class="daily">
-      <div class="tline" style="bottom:${Math.min(target/scaleMax*100,99)}%"></div>
-      ${arr.map((v,i)=>`<div class="d" style="height:${Math.max(v/scaleMax*100,2)}%"></div>`).join('')}
-    </div>
-    <div class="small muted" style="display:flex;justify-content:space-between"><span>${fmtD(start)}</span><span style="color:var(--amber)">– – gem.</span><span>${fmtD(end)}</span></div>
-    <div class="small muted" style="margin-top:8px">Hoogste dag <b>${euro0(maxV)}</b>. ${days===30?'Tik op 90 dagen voor een breder beeld.':''}</div>
-  </div>`;
-}
 
 /* ----- AI-PROGNOSE volgende maand ----- */
 function renderForecast(){
@@ -2342,19 +2322,6 @@ function renderUpcoming(){
     ${(more>0||exp)?`<button class="snz" onclick="toggleVooruit('expandUpcoming')">${exp?'minder ▲':'toon alle ('+all.length+') ▼'}</button>`:''}
   </div>`;
 }
-function renderWeekVarKPI(){
-  const m=curMonth, sv=splitFixedVar(m), de=daysElapsed(m), eb=effectiveBudgets(m);
-  const perDay=sv.vari/(de.elapsed||1);
-  // dagtempo op je variabele potjes; geen potjes → val terug op de inkomen-limiet minus vaste lasten
-  const varPool = totalBudget()>0 ? eb.varRoom : Math.max(totals(m).limit - sv.fixed, 0);
-  const tgtDay=Math.max(varPool,0)/de.dim;   // v158: geen instelbaar dagbudget meer
-  const wk=perDay*7, tgt=tgtDay*7, col=wk<=tgt?'var(--green)':wk<=tgt*1.2?'var(--amber)':'var(--red)';
-  return `<div class="card">
-    <div class="row"><span class="hlabel" style="margin:0;flex:1">Variabele uitgave per week</span><span class="small muted" onclick="openVarTx()" style="cursor:pointer;color:var(--teal)">transacties ›</span></div>
-    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:var(--fs-xl);font-weight:800;color:${col}">${euro(wk)}</div><div class="small muted">gem./week · richtlijn ${euro(tgt)}</div></div>
-    <div class="bar-track" style="margin:10px 0 2px"><div class="bar-fill" style="width:${Math.min(wk/(tgt||1)*100,100)}%;background:${col}"></div></div>
-  </div>`;
-}
 function renderBudgetKPI(){
   // dynamisch: bestedingsruimte = 70% van het inkomen van de getoonde periode (schaalt mee met inkomen)
   const t=ptot(); const budget=t.budget, actual=t.spend, pct=budget>0?Math.round(actual/budget*100):0;
@@ -2457,73 +2424,6 @@ function renderDash(){
     else if(isMode('expert')){ const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0">deze maand · uit ${euro(_tt.spend)} · in ${euro(_tt.income)} · saldo ${euro(S2.saldo)}</div>`; }
   }catch(_){ }
   $('#s-dash').innerHTML = renderReminder() + (freshStartDue()?(freshStartReflection()+freshStartCard()):'') + modeTop + hero + vermogenCard() + recentBlock + modeBot;
-}
-function renderDash_OLD_UNUSED(){
-  const p=SET.insPeriod||'month'; const isM=p==='month';
-  const t=ptot(); const n=t.months;
-  const pct = t.budget>0 ? Math.min(t.spend/t.budget*100,100) : (t.spend>0?100:0);
-  const pctRaw = t.budget>0 ? Math.round(t.spend/t.budget*100) : 0;
-  const over = t.spend>t.budget && t.budget>0;
-  const left = t.budget - t.spend;
-  const ringColor = pctRaw<70?'var(--green)':pctRaw<100?'var(--amber)':'var(--red)';
-  const C=2*Math.PI*86, off=C*(1-pct/100);
-  const savedPct = t.income>0 ? Math.round((t.income-t.spend)/t.income*100) : 0;
-  const periods=[['month','Maand'],['3m','3 mnd'],['ytd','YTD'],['all','Alles']];
-  const pchips=`<div class="chips" style="margin-bottom:4px">${periods.map(([k,l])=>`<span class="chip ${p===k?'on':''}" onclick="setPeriod('${k}')">${l}</span>`).join('')}</div>`;
-  const pTx=periodTx(), pSet=new Set(periodMonths());
-  // trend laatste 6 maanden (tik om in te zoomen)
-  const recent=months().slice(-6); const spends=recent.map(m=>totals(m).spend); const maxS=Math.max(...spends,1);
-  const trendCard=`<div class="card"><h3 style="font-size:var(--fs-md);margin-bottom:4px">Uitgaven per maand</h3>
-    <div class="small muted">Laatste ${recent.length} maanden · tik op een maand</div>
-    <div class="spark">${recent.map((m,i)=>`<div class="b" title="${m}" style="height:${spends[i]/maxS*100}%;background:${pSet.has(m)?'var(--teal)':'var(--teal-d)'};cursor:pointer" onclick="drillMonth('${m}')"><span class="val">${euro0(spends[i])}</span><span class="lab">${MNAMES[+m.slice(5,7)-1]}</span></div>`).join('')}</div><div style="height:22px"></div></div>`;
-  // versus vorige maand (maandweergave)
-  let compare='';
-  if(isM){ const ms2=months(); const idx=ms2.indexOf(curMonth), prev=idx>0?ms2[idx-1]:null;
-    if(prev){ const tc=totals(curMonth), pt=totals(prev); const diff=tc.spend-pt.spend; const up=diff>0;
-      compare=`<div class="card" style="cursor:pointer" onclick="openCompare('${prev}')"><div class="row"><span class="hlabel" style="margin:0;flex:1">Versus ${MFULL[+prev.slice(5,7)-1]}</span><span style="color:${up?'var(--red)':'var(--green)'};font-weight:700">${up?'▲':'▼'} ${euro(Math.abs(diff))} ›</span></div><div class="small muted" style="margin-top:6px">Je gaf deze maand ${up?'meer':'minder'} uit dan vorige maand (${euro0(pt.spend)} → ${euro0(tc.spend)}). Tik voor details per categorie en winkel.</div></div>`; } }
-
-  // HERO: vrij besteedbaar = verwacht saldo eind maand − beoogde spaarinleg (alleen lopende maand)
-  // de 70%-bestedingsruimte bevat vaste lasten en is dus niet "vrij"; pas na lasten + spaardoel is geld écht vrij
-  const msH=months(), latestH=msH[msH.length-1];
-  const liveMonth = isM && curMonth===latestH;
-  const heroBar = pctRaw<70?'var(--green)':pctRaw<100?'var(--amber)':'var(--red)';
-  let heroLbl, heroBig, heroSub, heroCol;
-  if(liveMonth){
-    const LH=monthLiquidity(); const saveH=monthlySavingTarget(); const free=LH.projected-saveH;
-    heroLbl='Vrij te besteden deze maand';
-    heroCol = free<0?'var(--red)':'var(--green)';
-    heroBig = euro(Math.max(free,0));
-    heroSub = free<0
-      ? `${ICON('warn')} Je haalt je spaardoel van ${euro0(saveH)} niet. Je komt ${euro0(-free)} tekort (verwacht saldo eind maand ${euro0(LH.projected)}).`
-      : `verwacht saldo eind maand ${euro0(LH.projected)} − spaardoel ${euro0(saveH)} = vrij na lasten én sparen`;
-  } else {
-    heroLbl = 'Ruimte over '+(isM?'deze maand':'· '+esc(periodLabel()));
-    heroCol = heroBar;
-    heroBig = euro(Math.max(left,0));
-    heroSub = over?`${ICON('warn')} ${euro0(-left)} boven je ${SET.limit}%-ruimte (${euro0(t.budget)})`:`van ${euro0(t.budget)} bestedingsruimte · ${euro0(t.spend)} uitgegeven (${pctRaw}%)`;
-  }
-  const heroCard=`<div class="card">
-    <div class="row"><span class="small muted">${heroLbl}</span>${t.incomeEst?'<span class="tag">inkomen geschat</span>':''}</div>
-    <div style="font-size:44px;font-weight:800;letter-spacing:-1px;color:${heroCol};margin:2px 0">${heroBig}</div>
-    <div class="small muted">${heroSub}</div>
-    <div class="bar-track" style="height:12px;margin-top:12px"><div class="bar-fill" style="width:${pct}%;background:${heroBar}"></div></div>
-    ${liveMonth?`<div class="small muted" style="margin-top:6px">${euro0(t.spend)} van ${euro0(t.budget)} bestedingsruimte (${SET.limit}%) uitgegeven (${pctRaw}%)</div>`:''}
-    <div class="kpis" style="margin-top:14px">
-      <div class="kpi"><div class="v" style="color:var(--green)">${euro0(t.income)}</div><div class="l">Inkomen${t.incomeEst?'*':''}</div></div>
-      <div class="kpi"><div class="v">${euro0(t.spend)}</div><div class="l">Uitgegeven</div></div>
-      <div class="kpi"><div class="v" style="color:${savedPct>=30?'var(--teal)':'var(--amber)'}">${savedPct}%</div><div class="l">Bespaard</div></div>
-    </div>
-  </div>`;
-  // TOP-ACTIE: het belangrijkste signaal als kaart met knop
-  const top=isM?coachTips(curMonth)[0]:null;
-  const actionCard = top ? `<div class="card"><div class="coach ${top.t}" style="margin:0"><div class="ic">${top.ic}</div><div class="tx">${top.m}</div></div>
-    <button class="btn sec" style="margin-top:10px" onclick="go('${top.t==='bad'||top.t==='warn'?'act':'ins'}')">${top.t==='bad'||top.t==='warn'?`${ICON('flag')} Maak een plan`:'Meer signalen & inzichten'}</button></div>` : '';
-  // MEER (ingeklapt): de analytische widgets
-  const moreWidgets=[ isM?renderWeekVarKPI():'', trendCard, compare, renderFixedVariable(pTx,t.income), renderWeekdayPattern(pTx), renderDonut(t.byCat),
-    `<div class="card"><div class="row" style="margin-bottom:10px"><span class="hlabel" style="margin:0;flex:1">Top uitgaven</span><span class="small muted" onclick="go('ins')" style="cursor:pointer;color:var(--teal)">details ›</span></div>${topCats(t,6)}</div>` ].filter(Boolean).join('');
-  $('#s-dash').innerHTML = pchips + renderReminder() + (freshStartDue()?freshStartCard():'') + heroCard + renderLiquidityCard() + renderSavings() + actionCard
-    + `<button class="snz" onclick="toggleDashMore()">${SET.dashMore?'minder ▲':'meer op dashboard ▼'}</button>`
-    + (SET.dashMore?moreWidgets:'');
 }
 function toggleDashMore(){ SET.dashMore=!SET.dashMore; save(); renderDash(); }
 // liquiditeit standaard ingeklapt; alleen op de lopende/laatste maand
@@ -3452,7 +3352,7 @@ function bufferChart(ingelegd, doel, maandTotal){
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Spaarkoers naar je bufferdoel">${goalLine}<polyline points="${pts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.6"/>${marker}${lab}</svg>`;
 }
 /* v140: de ingang naar het onderwerp 'horizon'. Bedoeld was: bij de besparingschips op de
-   vooruitblik. Die chips staan er niet meer - zowel vooruitForecast() als goalCoachCard() viel in
+   vooruitblik. Die chips staan er niet meer: de blokken die ze bouwden vielen in
    v80 uit de samenstelling en beide zijn dode code. De dichtstbijzijnde plek waar hetzelfde
    onderwerp wél leeft is het plan-blok, tussen de doelen waar de streefdatum en het tempo al
    staan, op planniveau naast vrijLine en spaarVrijLine (v126). Een vraag over de afstand tot je
@@ -3471,62 +3371,6 @@ function coHorizonVraag(m){
     vraag=`Je projectie komt uit op ${H.bereik}. Wil je kijken wat een besparing daaraan verschuift?`;
   }
   return `<div id="vooruitHorizon" class="small muted" style="margin:2px 2px 9px;line-height:1.45;cursor:pointer" onclick="coStart('horizon','${esc(mm)}')">${vraag} <span style="color:var(--teal);font-weight:700">›</span></div>`;
-}
-function vooruitForecast(){
-  // HERO = voortgang naar je bufferdoel; grafiek klimt naar de doellijn
-  let S=null; try{ S=savingsModel(); }catch(_){}
-  const ingelegd = S ? Math.round(S.cur) : totalSaved().sum;   // heel saldo (+ extra spaargeld), consistent met savingsModel
-  const doel=S?Math.round(S.goal):0;
-  const maand=S?Math.round(S.planAlloc>0?S.planAlloc:S.monthlySaving):0;   // tempo van het #1-plan-item
-  const toGo=Math.max(doel-ingelegd,0);
-  const pct=doel>0?Math.min(Math.round(ingelegd/doel*100),100):0;
-  const maanden=maand>0?Math.round(toGo/maand):0;
-  // hefboom + grafiek delen dezelfde actieve besparing (coachRules)
-  const m2=curMonth||months()[months().length-1];
-  const rules=(typeof coachRuleOptions==='function')?coachRuleOptions(m2):[];
-  const optKeys=new Set(rules.map(r=>r.key)); let cut=0;
-  for(const k in (SET.coachRules||{})) if(optKeys.has(k)) cut+=+SET.coachRules[k]||0;
-  let hefboom='';
-  if(doel>0 && maand>0 && toGo>0){
-    const exactBase=toGo/maand, exactCut=cut>0?toGo/(maand+cut):exactBase; const diff=exactBase-exactCut;
-    let eff;
-    if(cut<=0) eff=`Tik een besparing aan, dan zie je hoeveel eerder je je doel haalt.`;
-    else if(diff>=1){ const mm=Math.round(diff); eff=`Met ${euro0(cut)} extra per maand ben je er <b>~${mm} ${mm===1?'maand':'maanden'} eerder</b>, rond ${Math.round(exactCut)} mnd.`; }
-    else { const wk=Math.max(Math.round(diff*4.33),1); eff=`Met ${euro0(cut)} extra per maand ben je er <b>~${wk} ${wk===1?'week':'weken'} eerder</b>. Kleine besparing, klein effect.`; }
-    const chips=rules.map(r=>{const on=!!(SET.coachRules&&SET.coachRules[r.key]); return `<button class="vh-chip${on?' on':''}" onclick="toggleVooruitCut('${r.key}',${r.cut})">${esc(r.label)} ·${euro0(r.cut)}</button>`;}).join('');
-    if(chips && !isMode('rustig')) hefboom=`<div class="vh-hef"><div class="vh-hef-h">Sneller bij je doel?</div>${chips}<div class="vh-eff">${eff}</div></div>`;
-  }
-  let hero;
-  if(doel>0){
-    const eta=(maand>0 && toGo>0)?(function(){const d=new Date(); d.setMonth(d.getMonth()+maanden); return d.toLocaleDateString('nl-NL',{month:'long',year:'numeric'});})():'';
-    const planLbl=(S&&S.goalSrc==='plan')?`${esc(S.planNaam)} <span style="opacity:.6">· #1 in je plan</span>`:'Je spaardoel';
-    hero=`<div class="vooruit">
-      <div class="vh-lbl">${planLbl}</div>
-      <div class="goalring">
-        <div class="gr-ring">
-          <svg viewBox="0 0 36 36" width="108" height="108" aria-hidden="true">
-            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--card2)" stroke-width="3.2"/>
-            ${pct>0?`<circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--teal)" stroke-width="3.2" stroke-linecap="round" stroke-dasharray="${pct} ${100-pct}" stroke-dashoffset="25" transform="rotate(-90 18 18) scale(1,-1) translate(0,-36)"/>`:''}
-          </svg>
-          <div class="gr-ctr"><div class="p">${pct}%</div><div class="l">bereikt</div></div>
-        </div>
-        <div class="gr-info">
-          <div class="gr-a">${euro0(ingelegd)} <span class="u">van ${euro0(doel)}</span></div>
-          ${toGo>0?(eta?`<div class="gr-e">${ingelegd>0?'Op koers':'Op dit tempo'}, klaar rond ${eta}</div><div class="gr-p" style="opacity:.8">op basis van je huidige tempo, geen belofte</div>`:''):`<div class="gr-e">Doel bereikt</div>`}
-          ${toGo>0?`<div class="gr-p">nog ${euro0(toGo)} te gaan${maand>0?` · ~${maanden} mnd`:''}</div>`:''}
-          <div class="gr-f">${(S&&S.goalSrc==='plan')?'Je #1 in Mijn plan · je spaarinleg gaat hier eerst heen.':'Je saldo telt mee naar dit doel.'}</div>
-        </div>
-      </div>
-    </div>`;
-  } else {
-    hero=`<div class="vooruit">
-      <div class="vh-lbl">Je spaardoel</div>
-      <div class="vh-big">€0</div>
-      <div class="vh-status">Stel je inkomen en bufferdoel in, dan toon ik je voortgang.</div>
-      <div class="vh-sub" style="cursor:pointer" onclick="go('set')">Naar instellingen ›</div>
-    </div>`;
-  }
-  return hero;
 }
 function vooruitHero(){
   const L=monthLiquidity(); const sv=monthlySavingTarget(); const free=Math.round(L.projected-sv);
@@ -5955,7 +5799,7 @@ function renderVermogen(){
 }
 // ===== Coach-gedreven 'Sneller bij je doel?' =====
 // concrete, op patronen gebaseerde manieren HOE je mindert (geen generiek 'geef minder uit')
-// Effect van EEN losse tip op je doel: zelfde rekenwijze als saveFasterTip/goalCoachCard,
+// Effect van EEN losse tip op je doel: zelfde rekenwijze als saveFasterTip,
 // alleen nu per tip. Niet kwantificeerbaar (geen doel, geen tempo) -> null, dan zwijgen we erover.
 function tipEffect(save){
   let S=null; try{ S=savingsModel(); }catch(_){}
@@ -6028,45 +5872,6 @@ function goalDualChart(ingelegd,doel,maand,cut,baseMonths,newMonths){
   const accelLine=accel?`<line x1="${X(0)}" y1="${startY}" x2="${nX}" y2="${yT}" stroke="var(--accent)" stroke-width="2.6"/><circle cx="${nX}" cy="${yT}" r="4" fill="var(--accent)"/><text x="${nX}" y="${H-6}" fill="var(--accent)" font-size="9" font-weight="700" text-anchor="middle">${dShort(newMonths)}</text>`:'';
   return `<div class="gc-dual"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none">${goalLine}${baseLine}${accelLine}</svg>
     <div class="gc-leg"><span><i style="background:var(--accent)"></i>jouw koers</span><span><i class="d" style="border-color:var(--ref)"></i>huidig tempo</span></div></div>`;
-}
-function goalCoachCard(bare){
-  let S=null; try{S=savingsModel();}catch(_){}
-  if(!S||!S.goal||S.goal<=0) return '';
-  const ingelegd=Math.round(S.cur),doel=Math.round(S.goal),maand=Math.round(S.monthlySaving),toGo=Math.max(doel-ingelegd,0);
-  if(isMode('rustig')||toGo<=0||maand<=0) return goalChartCard();
-  const m=curMonth||months()[months().length-1];
-  const tips=goalCoachTips(m); if(!tips.length) return goalChartCard();
-  let cut=0; const active=new Set();
-  for(const t of tips){ if(SET.coachRules&&SET.coachRules[t.key]){ cut+=+SET.coachRules[t.key]||0; active.add(t.key);} }
-  const baseMonths=Math.ceil(toGo/maand), newMonths=Math.ceil(toGo/(maand+cut)), earlier=baseMonths-newMonths;
-  const nd=new Date(); nd.setMonth(nd.getMonth()+newMonths); const dlabel=nd.toLocaleDateString('nl-NL',{month:'short',year:'numeric'});
-  const n=active.size;
-  const coach = n===0
-    ? `Twee plekken om makkelijk sneller te sparen, op basis van je eigen uitgaven. Zet aan wat past.`
-    : (earlier>=1 ? `${n===tips.length?'Goed bezig. ':'Mooi. '}Samen zet je <b style="color:var(--teal)">${euro0(cut)} per maand</b> extra opzij.` : `Met <b style="color:var(--teal)">${euro0(cut)} per maand</b> erbij ben je een paar weken eerder klaar.`);
-  const chip = (cut>0) ? `<span class="gc-chipd">${earlier>=1?`${earlier} ${earlier===1?'maand':'maanden'} eerder`:'paar weken eerder'}</span>` : '';
-  const sub = cut>0 ? `met ${euro0(cut)} per maand extra opzij` : 'kies hieronder om eerder klaar te zijn';
-  // context -> concrete actie -> bedrag per maand en per jaar -> scenario, plus de met/zonder-regel
-  const rows=tips.map(t=>{const on=active.has(t.key);
-    const eff=t.effect?`<span class="gc-eff"> · ${t.effect.kort}</span>`:'';
-    const verg=(t.effect&&t.effect.vergelijk)?`<div class="gc-verg">${t.effect.vergelijk}</div>`:'';
-    return `<div class="gc-tip${on?' on':''}" onclick="toggleVooruitCut('${t.key}',${t.save})"><span class="gc-ic">${t.icon}</span><div class="gc-bd">
-      <div class="gc-how">${t.context}</div>
-      <div class="gc-act">${t.action}</div>
-      <div class="gc-save">${euro0(t.save)} per maand · ${euro0(t.perYear)} per jaar${eff}</div>${verg}
-    </div><span class="gc-sw"></span></div>`;}).join('');
-  const committed=SET.goalCommit&&SET.goalCommit.cut===cut&&cut>0;
-  const commitBtn=cut>0?`<button class="gc-commit${committed?' done':''}" onclick="commitGoalCut(${cut})">${committed?`Vastgelegd, ${euro0(cut)} per maand`:`Leg ${euro0(cut)} per maand vast, dan help ik je eraan denken`}</button>`:'';
-  const reinforce=committed?`<div class="small muted" style="margin-top:9px">Mooi dat je dit aangaat. Ik help je eraan denken en we kijken samen hoe het gaat. Een mindere week is niet erg, vooruitgang weegt zwaarder dan perfectie.</div>`:'';
-  return `<div class="card">
-    ${bare?'':`<div class="row" style="margin-bottom:7px"><span class="hlabel" style="margin:0;flex:1">${ICON('bulb')} Sneller bij je doel?</span></div>`}
-    <div class="gc-bighead">Klaar ${dlabel}${chip}</div>
-    <div class="small muted" style="margin-top:2px">${sub}</div>
-    ${goalDualChart(ingelegd,doel,maand,cut,baseMonths,newMonths)}
-    <div class="gc-coach" style="margin-top:12px"><span>${coach}</span></div>
-    ${rows}${commitBtn}
-    ${reinforce}
-  </div>`;
 }
 function commitGoalCut(cut){ SET.goalCommit={cut,ts:Date.now()}; save(); try{renderVooruit();}catch(_){}; toast(`${ICON('check')} Vastgelegd, ${euro0(cut)}/mnd richting je doel`); }
 function nogDezeMaandBody(){
@@ -6271,7 +6076,7 @@ function renderVooruit(){
   // v70: ook op een afgeronde maand geen komende-lasten-lijst meer (renderUpcoming), consistent
   // met de lopende maand waar "Volgende uitgaven" verviel.
   if(!isNow){ $('#s-vooruit').innerHTML = renderSavings() + renderPlan() + VOORUIT_FOOT; return; }
-  // v80: de spaardoel-hero (vooruitForecast) is uit de samenstelling; je plan draagt het doel zelf,
+  // v80: de spaardoel-hero is uit de samenstelling; je plan draagt het doel zelf,
   // inclusief voortgang en einddatum per item. De functie blijft bestaan, hij wordt niet meer getoond
   // — en daarmee ook de hefboom "Sneller bij je doel?" niet, die als coach-melding blijft bestaan.
   const goals=renderPlan(true);

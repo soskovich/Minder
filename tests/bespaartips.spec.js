@@ -115,19 +115,9 @@ test.describe('b · scenario per tip', () => {
 });
 
 test.describe('c · de kanalen dragen context, actie en scenario', () => {
-  test('de tip-kaart toont context → actie → €/mnd (€/jaar) · scenario', async ({ page }) => {
-    await boot(page);
-    const html = await page.evaluate(() => goalCoachCard(true));
-    const T = await tips(page);
-    expect(html).toContain('gc-act');
-    expect(html).toContain(T[0].action);
-    expect(html).toContain(T[0].context);
-    expect(html).toContain(`${await page.evaluate((v) => euro0(v), T[0].perYear)} per jaar`);
-    if (T[0].effect && T[0].effect.eerder >= 1) {
-      expect(html).toContain('gc-verg');
-      expect(html).toMatch(/Zonder: klaar .+ · met deze stap:/);
-    }
-  });
+  // v160: de tip-kaart (goalCoachCard) is verwijderd. Hij bouwde deze weergave nog wel, maar werd
+  // sinds v80 nergens meer gerenderd. De drie kanalen die je wel ziet - de melding, het
+  // coach-onderwerp en de Rustig-variant - staan hieronder en dekken dezelfde tips.
 
   test('de melding noemt de concrete stap en het effect', async ({ page }) => {
     await boot(page);
