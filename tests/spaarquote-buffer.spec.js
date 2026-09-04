@@ -2,8 +2,8 @@
 // gaan en tóch een spaarquote op groen zien staan. Dat klopte: savedNet() meet wát er naar je
 // spaarrekening ging, niet waar dat geld vandaan kwam. Stort je meer dan je die maand overhield,
 // dan kwam het verschil uit je buffer — je zette geld opzij, maar je vermogen groeide er niet mee.
-// spaarDekking() is daarvoor de enige bron: het oordeel, de tegelregel en de brug-zin lezen alle
-// drie hetzelfde getal. De service worker staat globaal uit via playwright.config.js.
+// v161 trok de koppeling met de spaarquote in: dat cijfer meet hoeveel er opzij ging, niet waar
+// het vandaan kwam. spaarDekking() zelf blijft, en dit bestand toetst nog wat die functie zegt. De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 
 const now = new Date();
@@ -82,71 +82,6 @@ test.describe('a · de rekenregel', () => {
   });
 });
 
-test.describe('b · het oordeel op de tegel', () => {
-  test('doel gehaald uit je buffer is geen groen', async ({ page }) => {
-    await boot(page, seedBuffer(OVER));
-    const k = await kpi(page, M1);
-    expect(k.val).toBe('30%');                 // het cijfer zelf verandert niet
-    expect(k.state).not.toBe('good');
-    expect(k.oordeel).toBe('deels uit buffer');
-    expect(k.dekTxt).toBe('€300 kwam uit je buffer');
-  });
-
-  test('de tegel toont de buffer-regel in plaats van "op je doel"', async ({ page }) => {
-    await boot(page, seedBuffer(OVER));
-    // de echte tegel-markup van die maand, los van welke maand het scherm toont
-    const tegel = await page.evaluate((m) => {
-      const box = document.createElement('div');
-      box.innerHTML = insKpiStrip(m);
-      const el = box.querySelector('[data-kpi="inleg"]');
-      return el.textContent.replace(/\s+/g, ' ').trim();
-    }, M1);
-    expect(tegel).toContain('kwam uit je buffer');
-    expect(tegel).toContain('deels uit buffer');
-    expect(tegel).not.toContain('op je doel');   // twee regels die elkaar tegenspreken
-  });
-
-  test('netjes gespaard blijft gewoon groen, zonder melding', async ({ page }) => {
-    await boot(page, seedBuffer(NETJES));
-    const k = await kpi(page, M1);
-    expect(k.state).toBe('good');
-    expect(k.uitBuffer).toBe(0);
-    expect(k.dekTxt).toBe('');
-  });
-});
-
-test.describe('c · één bron voor alle drie de plekken', () => {
-  test('de brug-zin in de sheet noemt hetzelfde bedrag als de tegel', async ({ page }) => {
-    await boot(page, seedBuffer(OVER));
-    const k = await kpi(page, M1);
-    expect(k.brug).toContain('€300 meer dan je overhield');
-    expect(k.brug).toContain('uit je buffer');
-    expect(k.brug).toContain('€600');           // wat je overhield
-    expect(k.brug).toContain('€900');           // wat je stortte
-  });
-
-  test('zonder aanspraak op de buffer zegt de brug-zin waar het verschil bleef', async ({ page }) => {
-    await boot(page, seedBuffer(NETJES));
-    const k = await kpi(page, M1);
-    expect(k.brug).toContain('bleef op je betaalrekening staan');
-    expect(k.brug).not.toContain('buffer');
-  });
-
-  test('ontsparen is geen buffer-melding maar een opname', async ({ page }) => {
-    // netto -200 van de spaarrekening af
-    const p = seedBuffer({ maanden: [[M2, 1500, 900], [M1, 1800, 0]] });
-    const tx = JSON.parse(p.minder_tx);
-    tx.push({ id: 'op-in', date: `${M1}-12`, amount: 200, acc: MAIN, name: 'Spaarpot', desc: 'NAAR SPAREN', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] });
-    tx.push({ id: 'op-uit', date: `${M1}-12`, amount: -200, acc: SAV, name: 'Spaarpot', desc: 'NAAR SPAREN', typ: '', ref: '', src: 'csv', accName: 'Instant Savings', refNums: [] });
-    p.minder_tx = JSON.stringify(tx);
-    await boot(page, p);
-    const k = await kpi(page, M1);
-    expect(k.dek.gestort).toBe(-200);
-    expect(k.dek.uitBuffer).toBe(0);
-    expect(k.brug).toContain('netto op');
-  });
-});
-
 test.describe('d · de historie blijft ongemoeid', () => {
   test('de dekking van deze maand kleurt geen eerdere maanden', async ({ page }) => {
     await boot(page, seedBuffer(OVER));
@@ -160,11 +95,4 @@ test.describe('d · de historie blijft ongemoeid', () => {
     expect(kleur).toBe('var(--bar)');
   });
 
-  test('een lopende maand krijgt geen kleuroordeel, wel de melding', async ({ page }) => {
-    await boot(page, seedBuffer({ maanden: [[M1, 1500, 900], [CUR, 2400, 900]] }));
-    const k = await kpi(page, CUR);
-    expect(k.state).toBe('n');                  // v103: een halve maand is geen eindoordeel
-    expect(k.oordeel).toBe('loopt nog');
-    expect(k.dekTxt).toBe('€300 kwam uit je buffer');   // het feit mag er wel staan
-  });
 });
