@@ -42,6 +42,13 @@ async function boot(page, payload) {
   await page.evaluate(() => go('ins'));
 }
 
+/* De twee terugval-tests leunden op een fixture die alleen op de eerste dagen van de maand een
+   lege liquiditeit oplevert: varDue is tempo maal de resterende dagen, dus die loopt vanaf de derde
+   vanzelf op en dan viel de test om op de kalender in plaats van op het gedrag. De guard leest
+   monthLiquidity(), dus die leggen we vast - net als de 'stukkende bron'-test verderop doet. */
+const legeLiquiditeit = (page) => page.evaluate(() => {
+  window.monthLiquidity = () => ({ fixDue: 0, varDue: 0, incDue: 0, fixDueExclCount: 0, sum: 0, projected: 0, daysLeft: 0 });
+});
 const beeld = (page) => page.evaluate(() => {
   const el = document.querySelector('#s-ins');
   const t = el.innerText;
@@ -94,6 +101,8 @@ test.describe('a · de herokaart', () => {
 test.describe('b · terugvallen', () => {
   test('niets meer open: alleen de budgethelft, geen lege tegels', async ({ page }) => {
     await boot(page, seedIns({ savingAmount: 0 }, { alleenNu: true }));
+    await legeLiquiditeit(page);
+    await page.evaluate(() => renderIns());
     expect(await page.evaluate(() => nogDezeMaandBody())).toBe('');
     const b = await beeld(page);
     expect(b.eerste).toMatch(/van €[\d.]+ maandbudget/);
@@ -150,6 +159,8 @@ test.describe('c · het omhulsel blijft bestaan', () => {
 
   test('een lege body geeft ook een lege kaart', async ({ page }) => {
     await boot(page, seedIns({ savingAmount: 0 }, { alleenNu: true }));
+    await legeLiquiditeit(page);
+    expect(await page.evaluate(() => nogDezeMaandBody())).toBe('');
     expect(await page.evaluate(() => nogDezeMaandCard())).toBe('');
   });
 });
