@@ -151,14 +151,30 @@ test.describe('d · ritme in plaats van snooze', () => {
     expect((await structureel(page)).some((r) => r.key === str[0].key)).toBe(false);
   });
 
-  test('na het lezen van het maandscherm verdwijnen ze tot het volgende moment', async ({ page }) => {
+  /* v168: hier stond dat een structureel signaal verdween zodra je het maandscherm had gelezen.
+     Dat maakte het scherm onbetrouwbaar: go('maand') zette die vlag zelf, dus de tweede keer
+     openen gaf binnen dezelfde dag een ander oordeel. De gelezen-vlag stuurt geen inhoud meer aan;
+     een signaal verdwijnt alleen als de situatie is opgelost of als je het wegzet. */
+  test('het lezen van het maandscherm verandert niets aan wat er staat', async ({ page }) => {
     await boot(page);
     const str = await structureel(page);
     test.skip(!str.length, 'deze fixture levert geen structureel signaal');
     await page.evaluate(() => { SET.maandGelezen = new Date().toISOString().slice(0, 10); save(); });
-    expect(await structureel(page)).toEqual([]);
-    // en er is geen tweede gezien-mechanisme naast het bestaande
-    expect(await page.evaluate(() => maandStructureel.toString())).toContain('SET.maandGelezen');
+    expect(await structureel(page)).toEqual(str);
+    expect(await page.evaluate(() => maandStructureel.toString())).not.toContain('SET.maandGelezen');
+  });
+
+  test('twee keer openen op dezelfde dag geeft hetzelfde oordeel', async ({ page }) => {
+    await boot(page);
+    const lees = async () => {
+      await page.evaluate(() => go('maand'));
+      await page.waitForTimeout(110);
+      return page.evaluate(() => $('#s-maand').innerText.replace(/Gelezen op [^.]*\./, '').replace(/\s+/g, ' ').trim());
+    };
+    const een = await lees();
+    await page.evaluate(() => go('ins'));
+    const twee = await lees();
+    expect(twee).toBe(een);
   });
 });
 

@@ -17,13 +17,18 @@ function seedDoel(goals, extra = {}) {
   const tx = [
     { id: 'i1', date: `${CUR}-01`, amount: 3000, acc: MAIN, name: 'Werkgever', desc: 'SALARIS LOON', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] },
     { id: 'e1', date: `${CUR}-05`, amount: -400, acc: MAIN, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] },
+    /* v168: spaarSaldo() valt niet meer terug op je banksaldo, dus een spaarrekening bestaat pas
+       als er een boeking op staat (OWN komt uit TX, v122). Zonder deze regel was het buffersaldo
+       hier onbekend en pakte het noodfonds zijn euro alsnog uit de capaciteit, waardoor deze
+       doel-toetsen 199 en 6 maanden zagen in plaats van 200 en 5. */
+    { id: 's1', date: `${CUR}-02`, amount: 1, acc: SAV, name: 'Spaarpot', desc: 'NAAR SPAREN', typ: '', ref: '', src: 'csv', accName: 'Spaar', refNums: [] },
   ];
   return {
     minder_tx: JSON.stringify(tx), minder_ovr: '{}',
     minder_set: JSON.stringify(Object.assign({
       limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 3000,
       savingMode: 'amount', savingAmount: 200, savingsEnds: ['4323'],
-      manualBal: { [MAIN]: 2000, [SAV]: 0 },
+      manualBal: { [MAIN]: 2000, [SAV]: 1 },
       nfDoelVast: 1,                       // noodfonds vrijwel nul: de capaciteit gaat naar de doelen
       vooruitDoelOpen: true,               // "Mijn plan" staat standaard ingeklapt op Vooruitblik
       goals, planOrder: (goals || []).map((g) => g.id),

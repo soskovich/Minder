@@ -272,15 +272,26 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
 
   // nfMaanden 12 houdt het noodfonds onvol, zodat het #1 blijft en de hero het écht toont
   // (een bereikt item schuift door naar het volgende doel, zie hierboven).
-  test('zonder gemarkeerde spaarrekening valt beide kanten terug op je saldo', async ({ page }) => {
+  /* v168: hier stond dat beide kanten terugvielen op je totale banksaldo. Dat is je
+     betaalrekening en geen buffer, en het cijfer voedde de bufferregel op Maand en daarmee
+     beleggenKlaar(). Zonder aangewezen spaarrekening is het nu onbekend, en dat blijft het:
+     hero en plan-item zeggen nog steeds hetzelfde, alleen zeggen ze nu dat ze het niet weten. */
+  test('zonder gemarkeerde spaarrekening is het buffersaldo onbekend, geen banksaldo', async ({ page }) => {
     await openV(page, tweak((s) => { s.savingsEnds = []; s.nfMaanden = 12; s.goals = doelen(); }));
     const r = await meet(page);
     expect(r.ts.n).toBe(0);
-    expect(r.spaar.bron).toBe('saldo');
-    expect(r.spaar.cur).toBe(r.bank);                    // terugval op het totale saldo
-    expect(r.item).toBe(Math.min(r.spaar.cur, r.doel));
-    expect(r.item).toBeGreaterThan(0);                   // was 0: dát was de tegenspraak
-    expect(r.hero).toBe(r.item);                         // hero en plan-item zeggen hetzelfde
+    expect(r.spaar.bron).toBe('geen');
+    expect(r.spaar.missing).toBe(true);
+    expect(r.spaar.cur).not.toBe(r.bank);                // geen terugval op je betaalrekening
+    expect(r.bank).toBeGreaterThan(0);                   // die is wel degelijk bekend
+    expect(r.hero).toBe(r.item);                         // hero en plan-item blijven het eens
+    const rij = await page.evaluate(() => {
+      const d = document.createElement('div'); d.innerHTML = renderPlan(true);
+      return d.innerText.replace(/\s+/g, ' ');
+    });
+    expect(rij).toContain('onbekend');                   // geen stellige nul
+    expect(rij).toContain('wijs je spaarrekening aan');   // wel de reden en de volgende stap
+    expect(rij).not.toMatch(/Noodfonds€0 /);
   });
 
   test('extra spaargeld telt aan beide kanten mee', async ({ page }) => {
@@ -309,16 +320,31 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
     expect(r.pct).toBe(Math.min(100, Math.round(r.spaar / r.doel * 100)));
   });
 
-  test('zonder gemarkeerde spaarrekening volgt het model de terugval', async ({ page }) => {
+  /* v168: het model volgde de terugval op je banksaldo. Nu geeft noodfondsModel().spaar null bij
+     onbekend, en daar hangt de hele keten aan: bufferMaanden() geeft null, de bufferregel valt weg
+     van het maandscherm, en beleggenKlaar() komt daardoor op volledig:false uit. */
+  test('zonder gemarkeerde spaarrekening geeft het model null, en de keten zwijgt', async ({ page }) => {
     await openV(page, tweak((s) => { s.savingsEnds = []; s.nfMaanden = 12; s.goals = doelen(); }));
-    const r = await page.evaluate(() => ({
-      model: noodfondsModel().spaar,
-      bank: totalBalance().sum,
-      fire: fireInputs().nfCur,
-      item: planItems().find((x) => x.id === 'noodfonds').gespaard,
-    }));
-    expect(r.model).toBe(r.bank);
-    expect(r.fire).toBe(r.bank);
-    expect(r.item).toBe(r.bank);                         // vier lezers, één getal
+    const r = await page.evaluate(() => {
+      const R = maandRegels(), B = beleggenKlaar(R);
+      return { model: noodfondsModel().spaar, pct: noodfondsModel().pct, bank: totalBalance().sum,
+        fire: fireInputs().nfCur, buffer: bufferMaanden(),
+        bufferRegels: R.filter((x) => x.key === 'buffer').length,
+        volledig: B.volledig, klaar: B.klaar, blok: B.blokkade && B.blokkade.key,
+        item: planItems().find((x) => x.id === 'noodfonds') };
+    });
+    expect(r.model).toBe(null);                          // niet je betaalrekening
+    expect(r.pct).toBe(null);                            // en dus ook geen percentage
+    expect(r.bank).toBeGreaterThan(0);                   // het banksaldo is wel bekend
+    expect(r.buffer).toBe(null);                         // bufferMaanden sluit daarop aan
+    expect(r.bufferRegels).toBe(0);                      // de regel valt weg van het maandscherm
+    expect(r.volledig).toBe(false);                      // beleggenKlaar zwijgt
+    expect(r.klaar).toBe(false);
+    expect(r.blok).toBe('buffer');
+    expect(r.item.spaarOnbekend).toBe(true);             // de plan-rij zegt het met zoveel woorden
+    /* Bekend en niet opgelost: fireInputs() geeft nfCur 0 in plaats van onbekend, want laag B is
+       puur en rekent met getallen (v32). De noodfonds-mijlpaal op het vermogensscherm toont daardoor
+       0% in plaats van onbekend. Dat is een aparte beslissing, geen opruiming. */
+    expect(r.fire).toBe(0);
   });
 });

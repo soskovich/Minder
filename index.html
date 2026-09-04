@@ -1338,6 +1338,8 @@ function spaarDekking(m){
 // Saldo-invoer: Instellingen ▸ Inkomen & rekeningen, waar je per rekening een saldo invult.
 // Eén bestemming voor elke "vul je saldo aan"-CTA, zodat de onbekend-staat nooit doodloopt.
 function openSaldoInvoer(){ closeSheet(); go('set'); openSet('income'); }
+// zelfde vorm, voor het onbekende buffersaldo: daar wijs je een spaarrekening aan (v168)
+function openSpaarrekening(){ closeSheet(); go('set'); openSet('bank'); }
 // saldo-nudge: tik = naar de invoer én deze maand niet meer vragen
 function balNudgeGo(){ try{ const ms=months(); SET.balNudge={ym:ms[ms.length-1]||''}; save(); }catch(_){} openSaldoInvoer(); }
 // drill-down: rekeningen waaruit je saldo bestaat
@@ -1869,12 +1871,17 @@ function monthlySavingTarget(){
 // bevat dan immers ook je buffer. Eén bron voor de hero (savingsModel) én het noodfonds-plan-item,
 // die anders twee bedragen voor hetzelfde doel toonden.
 function spaarSaldo(){
-  const {sum:bankBal,missing:bankMissing}=totalBalance();
   const extra=+SET.extraSavings||0;
   try{ const ts=totalSaved();
     if(ts.n>0) return {cur:ts.sum+extra, missing:ts.missing>0, bron:'spaarrekening'};
   }catch(_){}
-  return {cur:bankBal+extra, missing:bankMissing, bron:'saldo'};
+  /* v168: hier stond een terugval op je totale banksaldo. Dat is je betaalrekening en geen buffer,
+     en het cijfer voedde de bufferregel op Maand en daarmee beleggenKlaar(). Een verzonnen zekerheid
+     op precies dat getal is de duurste die deze app kan hebben, dus zonder aangewezen spaarrekening
+     is het onbekend. Geen tweede schatting: 'Extra spaargeld' is jouw eigen invoer voor potjes die
+     de app niet ziet, dus dat telt wel, net als een handmatig saldo. */
+  if(extra>0) return {cur:extra, missing:false, bron:'extra'};
+  return {cur:0, missing:true, bron:'geen'};
 }
 function savingsModel(){
   const inc = SET.autoIncome ? baseIncome() : (+SET.income||0);
@@ -2741,9 +2748,12 @@ function setPlanAlloc(id,patch){
 function planMap(){
   const by={};
   let nfDoel=0; try{ nfDoel=Math.round(noodfondsModel().doel||0); }catch(_){}
-  let saved=0;  try{ saved=Math.round(spaarSaldo().cur||0); }catch(_){}   // zelfde bron als de hero
+  let saved=0, spaarOnbekend=false;
+  try{ const S=spaarSaldo(); saved=Math.round(S.cur||0); spaarOnbekend=!!S.missing; }catch(_){ spaarOnbekend=true; }
   // buffer blijft heilig: de voortgang van het noodfonds meet je spaargeld, geclamd op het doel
-  by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,gespaard:nfDoel>0?Math.min(saved,nfDoel):saved},
+  /* v168: onbekend is geen nul. De rekenkant houdt 0 aan zodat de verdeling niet verandert, maar
+     de rij zegt dat we het niet weten in plaats van "0 van je doel gespaard". */
+  by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,spaarOnbekend,gespaard:nfDoel>0?Math.min(saved,nfDoel):saved},
     planAllocOf(planAllocCfg(PLAN_NF)));
   for(const g of (SET.goals||[])) if(g&&g.id)
     by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,
@@ -2849,14 +2859,17 @@ function maandDoel(){
 /* Structurele signalen op het maandscherm (v162). Een patroon over meerdere maanden hoort bij het
    maandmoment, niet in een lijst die je dagelijks wegtikt. Ze lopen mee als gewone regel: dezelfde
    vorm, dezelfde statusdot, dezelfde sortering, zodat er één lijst ontstaat en geen tweede blok.
-   Ritme in plaats van snooze: ze verschijnen bij het maandmoment en verdwijnen zodra je dit scherm
-   hebt gelezen (SET.maandGelezen, hetzelfde gezien-mechanisme als v130) of zodra de situatie is
-   opgelost. Een lopende snooze telt hier bewust niet - die was voor de meldingenlijst bedoeld -
-   maar 'Niet meer tonen' geldt onverkort, want dat is een keuze en geen uitstel. */
+   Ze verdwijnen pas als de situatie is opgelost of als je ze expliciet wegzet. Een lopende snooze
+   telt hier bewust niet - die was voor de meldingenlijst bedoeld - maar 'Niet meer tonen' geldt
+   onverkort, want dat is een keuze en geen uitstel.
+   v168: hier stond een onderdrukking op SET.maandGelezen. Die maakte het scherm onbetrouwbaar: het
+   openen zette de vlag, dus de tweede keer binnen dezelfde dag verscheen een ander oordeel zonder
+   dat er iets was veranderd. De gelezen-vlag mag bepalen of je een herinnering krijgt om dit scherm
+   te openen; hij mag nooit bepalen wat erop staat. Een tweede plek was hij ook niet nodig: deze
+   signalen staan per v162 al buiten notifList(), want NOTIF_HORIZON laat alleen direct en correctie
+   door. Er viel dus niets te onderdrukken. */
 function maandStructureel(){
   try{
-    const vandaag=new Date().toISOString().slice(0,10);
-    if(SET.maandGelezen===vandaag) return [];        // vandaag al gelezen: het maandmoment is geweest
     return (scoreNotifs({negeerSnooze:true})||[])
       .filter(n=>n && n.h==='structureel')
       .map(n=>({key:n.key, naam:String(n.l1||'').replace(/<[^>]*>/g,'').slice(0,42),
@@ -3727,6 +3740,7 @@ function etaDatum(maanden){
   return d.toLocaleDateString('nl-NL',{month:'short',year:'numeric'}).replace('.','');
 }
 function planSub(p){
+  if(p.spaarOnbekend) return `${euro0(p.alloc)}/mnd \u00b7 we weten niet wat er op je buffer staat: <span style="color:var(--teal);font-weight:600" onclick="event.stopPropagation();openSpaarrekening()">wijs je spaarrekening aan \u203a</span>`;
   if(p.status==='bereikt') return `${ICON('party')} Bereikt`;
   if(p.status==='gepauzeerd') return 'Gepauzeerd · krijgt nu niets';
   if(p.status==='wacht op capaciteit') return `Wacht op capaciteit · ${planModeLabel(p)}, maar alles gaat eerst naar de doelen erboven`;
@@ -3912,7 +3926,7 @@ function renderPlan(bare){
     return `<div class="card plan-item" data-id="${p.id}" style="padding:12px 13px;margin-bottom:8px">
       <div style="display:flex;gap:10px;align-items:flex-start">
         <div style="flex:1;min-width:0;cursor:pointer" onclick="${planOpen(p)}">
-          <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${euro0(p.gespaard)} / ${euro0(p.doel)}</span></div>
+          <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${p.spaarOnbekend?`<span style="color:var(--mut)">onbekend</span>`:euro0(p.gespaard)} / ${euro0(p.doel)}</span></div>
           <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>
           <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
           ${doelTempoLine(p)}${planWachtHint(p)}
@@ -8703,7 +8717,9 @@ function go(name){
   if(!geenData()){
     if(name==='act'){ window._coachStep=0; window._coachAnswer=null; window._coReopen=true; renderActions(); }
     // leesmoment: alleen de datum, geen streak, geen teller, geen herinnering (v130)
-    if(name==='maand'){ try{ renderMaand(); SET.maandGelezen=new Date().toISOString().slice(0,10); save(); }catch(_){} }
+    /* Eerst de vlag, dan de render: anders toont "Gelezen op" de datum van de vorige keer. Dat kan
+       nu veilig, want de vlag stuurt geen inhoud meer aan (v168). */
+    if(name==='maand'){ try{ SET.maandGelezen=new Date().toISOString().slice(0,10); save(); renderMaand(); }catch(_){} }
   }
   try{ localStorage.setItem('minder_view', name); }catch(_){}
   window.scrollTo(0,0);
