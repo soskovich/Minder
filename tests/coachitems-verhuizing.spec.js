@@ -165,13 +165,18 @@ test.describe('e · de vier verhuizingen samen', () => {
 });
 
 test.describe('f · deel A sloopt nog niets', () => {
-  test('s-act, coachFocus, nextTip en coachItems staan er nog', async ({ page }) => {
+  // v165: coachFocus() en nextTip() zijn weg. Dat kon omdat alle vijf regels een thuis hebben:
+  // vier in de signalen-engine en regel 5 in coachRuleOptions(). coachItems() blijft, want
+  // renderBehavior() leest hem nog; s-act zelf staat er tot deel B.
+  test('s-act en coachItems staan er nog, coachFocus en nextTip niet meer', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => ({
       sact: !!document.querySelector('#s-act'),
       focus: typeof coachFocus, tip: typeof nextTip, items: typeof coachItems,
+      opties: typeof coachRuleOptions,
       nav: !!document.querySelector('.nav a[data-go="act"]'),
-    }))).toEqual({ sact: true, focus: 'function', tip: 'function', items: 'function', nav: true });
+    }))).toEqual({ sact: true, focus: 'undefined', tip: 'undefined', items: 'function',
+      opties: 'function', nav: true });
   });
 
   test('regel 5 en de fallback zijn bewust niet verhuisd', async ({ page }) => {

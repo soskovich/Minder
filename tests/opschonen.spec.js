@@ -167,7 +167,8 @@ test.describe('d · dubbele widgets zijn weg uit Inzichten', () => {
     }));
     expect(r.cat).toBe('function');
     expect(r.merch).toBe('function');
-    expect(r.thumb).toBe('function');       // blijft gedefinieerd, alleen niet meer aangeroepen
+    // v165: ruleOfThumbCard had zelf al geen aanroeper meer en is met de norm-laag opgeruimd
+    expect(r.thumb).toBe('undefined');
     expect(r.catOut).toBe(true);
   });
 });

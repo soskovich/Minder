@@ -195,10 +195,16 @@ test.describe('c · geen verzonnen norm', () => {
     expect(na.budget).toEqual(voor.budget);
   });
 
-  test('de norm blijft bestaan waar hij wel over gaat', async ({ page }) => {
+  // v161 haalde 50/30/20 onder de kerncijfers weg en liet de kaart staan; v165 haalde ook die weg,
+  // want hij had geen aanroeper meer en daarmee stuurde de hele norm-laag niets.
+  test('de norm-laag is helemaal weg, en geen cijfer viel erop terug', async ({ page }) => {
     await boot(page);
-    expect(await page.evaluate(() => typeof splitTarget().save)).toBe('number');
-    expect(await page.evaluate(() => typeof setSplitNorm)).toBe('function');
+    const r = await page.evaluate(() => ({
+      weg: ['splitTarget', 'setSplitNorm', 'splitMode', 'ruleOfThumbCard'].map((n) => typeof window[n]),
+      banden: ['inleg', 'budget', 'vari', 'vast'].map((k) => kpiBand(k)),
+    }));
+    expect(new Set(r.weg)).toEqual(new Set(['undefined']));
+    expect(r.banden).toEqual([null, 100, null, null]);   // alleen budgetnaleving heeft een doel
   });
 
   test('kpiBasis staat los van de band', async ({ page }) => {

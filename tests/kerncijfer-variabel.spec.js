@@ -35,7 +35,7 @@ test.describe('a · de nieuwe tegel', () => {
       cur: insKpis(ms.CUR).vari.raw,
       eigen: splitFixedVar(ms.CUR).vari / totals(ms.CUR).income * 100,
       m1: insKpis(ms.M1).vari.raw,
-      band: kpiBand('vari'), bandTxt: kpiBandTxt('vari'), norm: splitTarget().vari,
+      band: kpiBand('vari'), bandTxt: kpiBandTxt('vari'),
       volgorde: insKpis(ms.CUR).items.map((x) => x.key),
     }), { CUR, M1 });
 
@@ -69,12 +69,14 @@ test.describe('a · de nieuwe tegel', () => {
   });
 });
 
-test.describe('b · de band volgt je referentie-verdeling', () => {
-  test('een andere norm verschuift het cijfer niet', async ({ page }) => {
+// v165: de referentie-verdeling zelf bestaat niet meer. Hij stuurde sinds v161 geen enkel cijfer
+// meer aan en zijn laatste lezer (ruleOfThumbCard) was onbereikbaar, dus de hele laag is weg.
+test.describe('b · er is geen norm-laag meer', () => {
+  test('de norm-functies bestaan niet meer', async ({ page }) => {
     await openIns(page);
-    const voor = await page.evaluate((m) => insKpis(m).vari.raw, CUR);
-    await page.evaluate(() => { SET.splitMode = '702010'; save(); });
-    expect(await page.evaluate((m) => insKpis(m).vari.raw, CUR)).toBe(voor);
+    const r = await page.evaluate(() => ['splitTarget', 'splitMode', 'splitNorm', 'setSplitNorm',
+      'ruleOfThumbCard', 'healthSplit'].map((n) => typeof window[n]));
+    expect(new Set(r)).toEqual(new Set(['undefined']));
   });
 
   test('de sparkline heeft geen doellijn meer', async ({ page }) => {
@@ -84,8 +86,8 @@ test.describe('b · de band volgt je referentie-verdeling', () => {
     expect(await page.evaluate(() => kpiBand('vari'))).toBe(null);
   });
 
-  // v161: een eigen norm verschuift niets meer aan dit cijfer.
-  test('een eigen norm verschuift de band niet meer', async ({ page }) => {
+  // een achtergebleven waarde in SET mag niets meer doen
+  test('een oude norm-instelling in SET verschuift niets', async ({ page }) => {
     await openIns(page);
     const voor = await page.evaluate((m) => insKpis(m).vari.raw, CUR);
     await page.evaluate(() => { SET.splitMode = 'custom'; SET.splitTarget = { fixed: 40, vari: 40, save: 20 }; save(); });
