@@ -1949,10 +1949,20 @@ function freshStartDue(){
 function freshStartCard(){
   const now=new Date(); const mn=MFULL[now.getMonth()]; const cap=mn.charAt(0).toUpperCase()+mn.slice(1);
   let nood=''; try{ const M=noodfondsModel(); if(M&&M.spaar!=null) nood=` Je noodfonds staat op ${euro0(M.spaar)}.`; }catch(_){}
+  /* v174: "Je speelruimte staat weer vol" stond boven een negatieve Veilig te besteden, en bij een
+     leeg noodfonds boven "Je noodfonds staat op €0". De kaart kent de stand nu en constateert in
+     beide richtingen even neutraal: geen aanmoediging bij een tekort, geen alarm bij een goede
+     stand. Geen nieuwe berekening; safeToSpend() is dezelfde bron als de hero eronder. */
+  let S=null; try{ S=safeToSpend(); }catch(_){}
+  const bekend=!!(S && S.known>0);
+  const krap=bekend && S.safe<0;
+  const opening = !bekend ? `${cap} is begonnen.`
+    : krap ? `${cap} begint met een tekort van ${euro0(Math.abs(S.safe))}.`
+    : `${cap} begint schoon. Je speelruimte staat weer vol.`;
   const catOpts=Object.keys(CATS).filter(k=>CATS[k].type==='expense').map(k=>`<option value="${k}">${esc(CATS[k].name)}</option>`).join('');
   return `<div class="card" style="border-left:3px solid var(--teal);border-radius:0 16px 16px 0;padding:16px 15px">
     <div style="font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--teal);font-weight:600">Nieuwe maand</div>
-    <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.35;margin:9px 0 4px">${cap} begint schoon. Je speelruimte staat weer vol.${nood}</div>
+    <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.35;margin:9px 0 4px">${opening}${nood}</div>
     <div class="small muted" style="line-height:1.5">Wat wil je deze maand anders doen? Eén voornemen is genoeg.</div>
     <input id="freshVoornemen" placeholder="Bijv. minder vaak bestellen bij uit eten" style="width:100%;margin-top:12px;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;color:var(--txt);font:inherit;font-size:13px;box-sizing:border-box" />
     <span id="freshCoupleLink" onclick="freshToggleCouple()" style="color:var(--teal);font-size:var(--fs-sm);font-weight:600;cursor:pointer;margin-top:10px;display:inline-block">+ Koppel aan een bedrag &amp; categorie (optioneel)</span>
@@ -2028,8 +2038,12 @@ function renderDash(){
   // Rustig-modus: een tekort blijft zichtbaar, maar niet als groot alarmrood getal. Spiegel, gevolg, keuze.
   const krapRustig=isMode('rustig') && S2.safe<0;
   const safeCol=krapRustig?'var(--amber)':(S2.safe<0?'var(--red)':'var(--teal)');
-  const krapNote=krapRustig
-    ? `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:8px">Je zit deze maand krap. E\u00e9n potje geeft je grip op waar het heen gaat. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="openPotjePick()">Maak potje \u203a</span></div>`
+  /* v174: de volgende stap stond alleen in Rustig, dus Begeleid en Expert kregen het rode getal
+     zonder uitweg - precies omgekeerd aan wat die modusnamen beloven. Zelfde zin, zelfde route,
+     alleen de aanhef verschilt: Rustig dempt het getal en zegt er iets bij, de andere modi tonen
+     het getal en krijgen dezelfde stap. */
+  const krapNote=(S2.safe<0 && balKnown)
+    ? `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:8px">${krapRustig?'Je zit deze maand krap. ':''}E\u00e9n potje geeft je grip op waar het heen gaat. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="openPotjePick()">Maak potje \u203a</span></div>`
     : '';
   // Zonder \u00e9\u00e9n bekend saldo rekent safeToSpend met 0. Dat getal dan groot tonen is even onwaar als "totaal saldo \u20ac0,00":
   // het hoofdgetal gaat mee in de onbekend-staat, met de saldo-invoer als volgende stap. De berekening blijft ongemoeid.
@@ -2668,12 +2682,23 @@ function financeModel(){
    staan, op planniveau naast vrijLine en spaarVrijLine (v126). Een vraag over de afstand tot je
    doel of je jaartal, geen neutrale knop naar de coach. Leeg zodra coHorizonBron() niets geeft, en
    dus nooit een lege staat. Alle getallen komen daarvandaan; hier wordt niets gerekend. */
+/* Hoeveel andere doelen hebben óók een tekort? Puur tellen op wat allocatePlan() en doelTempo()
+   al leveren; er wordt niets bij berekend en niets bij verzonnen. (v174) */
+function coHorizonMeer(behalveId){
+  try{ return allocatePlan().filter(x=>x.type==='goal'&&x.streefdatum&&x.id!==behalveId
+    &&x.status!=='bereikt'&&x.status!=='gepauzeerd'
+    &&(function(){ const T=doelTempo(x,x.alloc); return !!(T&&T.gat>0); })()).length; }catch(_){ return 0; }
+}
 function coHorizonVraag(m){
   const H=coHorizonBron(); if(!H) return '';
   const mm=m||curMonth||months()[months().length-1];
   let vraag;
   if(H.soort==='doel'){
-    vraag=`Je legt ${euro0(H.T.gat)} per maand te weinig in voor ${esc(H.p.naam||'dit doel')}. Wil je kijken waar dat vandaan kan komen?`;
+    /* v174: bij meerdere doelen met een tekort noemde deze zin er één, zonder te zeggen dat er meer
+       waren. maandDoel() pakt het eerste doel in je plan, en die volgorde is je eigen prioriteit;
+       eén ding tegelijk aanbieden is goed, doen alsof er maar één is niet. */
+    const meer=coHorizonMeer(H.p&&H.p.id);
+    vraag=`Je legt ${euro0(H.T.gat)} per maand te weinig in voor ${esc(H.p.naam||'dit doel')}${meer>0?`, en voor ${meer} ${meer===1?'ander doel':'andere doelen'} ook`:''}. Wil je kijken waar dat vandaan kan komen?`;
   } else if(H.verschil>0){
     const n=H.verschil;
     vraag=`Je projectie komt ${n} ${n===1?'jaar':'jaar'} na ${H.doelJaar} uit. Wil je kijken wat dat verschuift?`;
@@ -6814,6 +6839,9 @@ function _catSpendOf(mm){ return catSpendMap(mm); }   // netto per categorie (te
      grootste winkel
        hyp: "Een winkel domineert je losse uitgaven."
        imp: "Reken je deze maand niet rijk of arm aan dit ene bedrag." */
+// v174: pctWord() ging in v165 mee als dode code. De piekdag-zin gebruikte hem; hier staat het
+// percentage zelf, zodat de zin verder woordelijk blijft zoals hij geschreven was.
+const pctWoord=p=>`Ongeveer ${p}%`;
 function insSignals(m,exclude){
   exclude=exclude||new Set();
   const ms=months(); const idx=ms.indexOf(m); if(idx<0) return [];
@@ -6828,7 +6856,9 @@ function insSignals(m,exclude){
       if(c>b && b>a && a>0 && (c-a)>=15 && (!best||(c-a)>best.d)) best={k,a,c,d:c-a};
     }
     if(best) out.push({pri:9,act:`openCategory('${best.k}')`,
-      kpiLabel:CATS[best.k].name, kpiVal:euro0(best.c), kpiSub:`was ${euro0(best.a)}`});
+      kpiLabel:CATS[best.k].name, kpiVal:euro0(best.c), kpiSub:`was ${euro0(best.a)}`,
+      hyp:`${CATS[best.k].name} loopt al drie maanden op.`,
+      imp:`Kijk of dit blijvend is; zo ja, zet er een grens op.`});
   }
   // 2) bovengemiddeld aandeel t.o.v. eigen historie
   if(idx>=1 && curTot>0){
@@ -6842,7 +6872,9 @@ function insSignals(m,exclude){
     }
     if(best){ const mult=best.avgAmt>0?best.amt/best.avgAmt:0;
       out.push({pri:7,act:`openCategory('${best.k}')`,
-        kpiLabel:CATS[best.k].name, kpiVal:euro0(best.amt), kpiSub:best.avgAmt>0?`jouw gemiddelde ${euro0(best.avgAmt)}`:'bovengemiddeld'}); }
+        kpiLabel:CATS[best.k].name, kpiVal:euro0(best.amt), kpiSub:best.avgAmt>0?`jouw gemiddelde ${euro0(best.avgAmt)}`:'bovengemiddeld',
+        hyp:`Aan ${CATS[best.k].name.toLowerCase()} ben je dit keer veel meer kwijt dan je gewend bent.`,
+        imp:`Check of het eenmalig was; anders een grens op ${CATS[best.k].name.toLowerCase()}.`}); }
   }
   // 3) piekdag (variabele uitgaven) \u2014 netto per dag: telpoort op afschrijvingen, dag-sommen incl. terugstortingen
   const vis=txOfMonth(m).filter(x=>x.amount<0 && CATS[catOf(x)] && CATS[catOf(x)].type==='expense' && !isFixed(x));
@@ -6851,8 +6883,12 @@ function insSignals(m,exclude){
     const sumd=[0,0,0,0,0,0,0]; for(const x of visAll){ sumd[(new Date(x.date).getDay()+6)%7]+=-x.amount; }
     const tot=sumd.reduce((a,b)=>a+b,0), peak=sumd.indexOf(Math.max(...sumd));
     const share=tot>0?Math.round(sumd[peak]/tot*100):0;
-    if(share>=24) out.push({pri:5,act:'',
-      kpiLabel:'Piekdag', kpiVal:dn[peak], kpiSub:`${share}% van je losse geld`});
+    /* Geen tik: er is geen weergave per weekdag in de app, en een tik naar iets anders zou een
+       gevolg suggereren dat er niet is. spiegel:true zegt dat met zoveel woorden (v174). */
+    if(share>=24) out.push({pri:5,act:'',spiegel:true,
+      kpiLabel:'Piekdag', kpiVal:dn[peak], kpiSub:`${share}% van je losse geld`,
+      hyp:`${pctWoord(share)} van je losse geld gaat op ${dn[peak]}.`,
+      imp:`Zo'n vaste piek is gewoonte; een bewuste ${dn[peak]} levert de meeste winst.`});
   }
   // 4) grootste netto uitgave per winkel (terugstorting verrekend) i.p.v. \u00e9\u00e9n losse transactie
   if(vis.length>=5){
@@ -6860,8 +6896,10 @@ function insSignals(m,exclude){
     const arr=Object.entries(byM).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
     const vals=arr.map(e=>e[1]).sort((a,b)=>a-b); const med=vals[Math.floor(vals.length/2)]||0;
     if(arr.length && med>0 && arr[0][1]>=med*4 && arr[0][1]>=40)
-      out.push({pri:6,act:'',
-        kpiLabel:'Grootste uitgave', kpiVal:euro0(arr[0][1]), kpiSub:esc(arr[0][0])});
+      out.push({pri:6,act:`openMerchant('${esc(String(arr[0][0]).toUpperCase().replace(/'/g,"\\'"))}')`,
+        kpiLabel:'Grootste uitgave', kpiVal:euro0(arr[0][1]), kpiSub:esc(arr[0][0]),
+        hyp:`Een winkel domineert je losse uitgaven.`,
+        imp:`Reken je deze maand niet rijk of arm aan dit ene bedrag.`});
   }
   return out;
 }
@@ -7602,11 +7640,18 @@ function whatStandsOutLine(m){
   sig.sort((a,b)=>b.pri-a.pri);
   const top=sig[0]; if(!top) return '';
   const act=top.act||'';
+  /* v174: de regel toonde alleen de spiegel. De duiding en het dus-wat lagen al geschreven klaar in
+     insSignals() en werden nooit getoond, terwijl dat precies het gevolg is dat hier ontbrak. Een
+     signaal zonder tik krijgt er geen verzonnen: dan zegt de regel dat het een observatie is. */
+  const gevolg=[top.hyp,top.imp].filter(Boolean).join(' ');
   return `<div class="card" id="wvoLine" style="padding:12px 14px${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}>
     <div class="row" style="gap:8px">
       <span style="flex:1;min-width:0;font-size:13px">${ICON('bulb')} <span class="muted">Valt op:</span> <b>${esc(top.kpiLabel)}</b> · ${top.kpiVal}${top.kpiSub?` <span class="muted">(${esc(top.kpiSub)})</span>`:''}</span>
       ${act?'<span style="color:var(--teal);font-weight:700">›</span>':''}
-    </div></div>`;
+    </div>
+    ${gevolg?`<div class="small muted" style="margin-top:6px;line-height:1.5">${esc(gevolg)}</div>`:''}
+    ${(!act&&top.spiegel)?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px">Alleen een observatie: hier hoort geen stap bij.</div>`:''}
+  </div>`;
 }
 
 /* Herokaart op Inzichten (v135): budgetstand en "Nog deze maand" beantwoorden dezelfde vraag -
