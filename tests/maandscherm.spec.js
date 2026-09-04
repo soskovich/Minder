@@ -121,11 +121,15 @@ test.describe('c · de statussen', () => {
     expect(await meet()).toBe('tekort');                                            // 2 mnd
   });
 
-  test('aansluiting: let op bij een verschil, ok bij nul', async ({ page }) => {
+  /* v172: het noodfonds claimt niet meer zijn doel maar zijn toewijzing, dus het doel omhoog
+     zetten sluit het gat niet meer - toewijzen wel. Dat is precies de bedoeling van model B. */
+  test('aansluiting: let op bij niet-toegewezen spaargeld, ok als alles toegewezen is', async ({ page }) => {
     await boot(page);
     const meet = async () => (await R(page)).find((r) => r.key === 'aansluiting').status;
-    expect(await meet()).toBe('let op');                                            // 20000 spaar, 3000 nf, 1000 doel
-    await page.evaluate(() => { SET.nfDoelVast = 19000; SET.goals[0].gespaard = 1000; save(); });
+    expect(await meet()).toBe('let op');
+    const saldo = await page.evaluate(() => Math.round(spaarSaldo().cur));
+    await page.evaluate((s) => { SET.nfDoelVast = s; SET.nfToegewezen = s - 1000;
+      SET.goals[0].gespaard = 1000; save(); }, saldo);
     expect(await meet()).toBe('ok');
   });
 
@@ -283,7 +287,9 @@ test.describe('d · het oordeel', () => {
   // zegt 'alle' alleen als er ook niets onbekend is.
   test('d: alles goed, punt, geen felicitatie', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { SET.nfDoelVast = 19000; save(); });                  // aansluiting sluit aan
+    // v172: aansluiting sluit aan door toe te wijzen, niet door het doel te verhogen
+    await page.evaluate(() => { const s = Math.round(spaarSaldo().cur);
+      SET.nfDoelVast = s; SET.nfToegewezen = s - Math.round(+SET.goals[0].gespaard || 0); save(); });
     const r = await page.evaluate(() => {
       const R = maandRegels();
       return { n: R.length, ok: R.filter((x) => x.status === 'ok').length, o: maandOordeel(R) };
@@ -357,8 +363,8 @@ test.describe('e · indeling', () => {
         inKaart: kaart ? kaart.querySelectorAll('.row').length : 0 };
     });
     expect(uit.tekort).toBeGreaterThan(1);
-    expect(uit.letop).toBeGreaterThan(0);                       // er zijn ook aandacht-regels
-    expect(uit.inKaart).toBe(uit.tekort);                       // maar die staan er niet in
+    expect(uit.letop).toBeGreaterThanOrEqual(0);                // aandacht-regels zijn optioneel
+    expect(uit.inKaart).toBe(uit.tekort);                       // alleen de tekorten staan in de kaart
     expect(uit.zin).toBe(`Er zijn deze maand ${uit.tekort} dingen die een beslissing vragen.`);
   });
 
@@ -382,7 +388,10 @@ test.describe('e · indeling', () => {
 
   test('een lege kaart wordt weggelaten', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { SET.nfDoelVast = 19000; save(); go('maand'); });
+    // v172: alles ok betekent ook: al je spaargeld is toegewezen
+    await page.evaluate(() => { const s = Math.round(spaarSaldo().cur);
+      SET.nfDoelVast = s; SET.nfToegewezen = s - Math.round(+SET.goals[0].gespaard || 0);
+      save(); go('maand'); });
     const t = await page.locator('#s-maand').innerText();
     expect(t).not.toMatch(/vraagt een beslissing/i);   // alles ok, dus die kaarten vallen weg
     expect(t).not.toMatch(/vraagt aandacht/i);

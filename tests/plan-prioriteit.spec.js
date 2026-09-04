@@ -289,9 +289,10 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
       const d = document.createElement('div'); d.innerHTML = renderPlan(true);
       return d.innerText.replace(/\s+/g, ' ');
     });
-    expect(rij).toContain('onbekend');                   // geen stellige nul
-    expect(rij).toContain('wijs je spaarrekening aan');   // wel de reden en de volgende stap
-    expect(rij).not.toMatch(/Noodfonds€0 /);
+    // v172: de rij toont een toewijzing (jouw getal); het onbekende zit in de vergelijking ertegen
+    expect(rij).toContain('We weten niet wat er op je spaarrekening staat');
+    expect(rij).toContain('wijs je spaarrekening aan');
+    expect(rij).toContain('toegewezen');
   });
 
   test('extra spaargeld telt aan beide kanten mee', async ({ page }) => {
@@ -341,7 +342,10 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
     expect(r.volledig).toBe(false);                      // beleggenKlaar zwijgt
     expect(r.klaar).toBe(false);
     expect(r.blok).toBe('buffer');
-    expect(r.item.spaarOnbekend).toBe(true);             // de plan-rij zegt het met zoveel woorden
+    // v172: de rij draagt geen spaarOnbekend meer; hij toont jouw toewijzing, en het plan zegt
+    // erboven waarom het die niet tegen een saldo kan afzetten
+    expect(r.item.spaarOnbekend).toBe(undefined);
+    expect(typeof r.item.gespaard).toBe('number');
     /* Bekend en niet opgelost: fireInputs() geeft nfCur 0 in plaats van onbekend, want laag B is
        puur en rekent met getallen (v32). De noodfonds-mijlpaal op het vermogensscherm toont daardoor
        0% in plaats van onbekend. Dat is een aparte beslissing, geen opruiming. */

@@ -1282,6 +1282,19 @@ function n26SavingsAccounts(){ return allAccounts().filter(isSavingsAcc); }
 /* Eenmalige migratie van savingsEnds naar keuzes per rekening. Alleen waar jouw lijstje iets
    anders zei dan de standaard wordt een expliciete keuze weggeschreven; de rest blijft aan de
    default hangen. savingsEnds blijft staan, ongebruikt, zodat er niets onherstelbaar verdwijnt. */
+/* v172: het noodfonds ging van gemeten naar toegewezen. Zonder deze eenmalige overzetting staat
+   het na de update op nul terwijl er buffer is. Alleen bij een bekend spaarsaldo: is dat onbekend,
+   dan blijft de vlag uit en migreren we zodra het wel bekend is. Daarna loopt het cijfer stil - dat
+   bijsturen doe je met de regel "staat nog niet toegewezen" op je plan. */
+function migrateNfToegewezen(){
+  if(SET.nfToegewezenMigrated) return;
+  let S=null; try{ S=spaarSaldo(); }catch(_){ return; }
+  if(!S || S.missing) return;
+  let doel=0; try{ doel=Math.round(noodfondsModel().doel||0); }catch(_){}
+  const saved=Math.max(Math.round(S.cur||0),0);
+  SET.nfToegewezen = doel>0 ? Math.min(saved,doel) : saved;
+  SET.nfToegewezenMigrated=1; save();
+}
 function migrateSavingsAcc(){
   if(SET.savingsAccMigrated) return;
   const ends=Array.isArray(SET.savingsEnds)?SET.savingsEnds:null;
@@ -2748,13 +2761,14 @@ function setPlanAlloc(id,patch){
 function planMap(){
   const by={};
   let nfDoel=0; try{ nfDoel=Math.round(noodfondsModel().doel||0); }catch(_){}
-  let saved=0, spaarOnbekend=false;
-  try{ const S=spaarSaldo(); saved=Math.round(S.cur||0); spaarOnbekend=!!S.missing; }catch(_){ spaarOnbekend=true; }
-  // buffer blijft heilig: de voortgang van het noodfonds meet je spaargeld, geclamd op het doel
-  /* v168: onbekend is geen nul. De rekenkant houdt 0 aan zodat de verdeling niet verandert, maar
-     de rij zegt dat we het niet weten in plaats van "0 van je doel gespaard". */
-  by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,spaarOnbekend,gespaard:nfDoel>0?Math.min(saved,nfDoel):saved},
-    planAllocOf(planAllocCfg(PLAN_NF)));
+  /* v172: het noodfonds las hier zijn voortgang uit spaarSaldo(), terwijl een spaardoel zijn
+     voortgang uit een handmatig veld haalt. Twee herkomsten in dezelfde kolom, en spaarOver()
+     bestond alleen om het verschil te melden dat daaruit ontstond. Nu is elke voortgang in het
+     plan een TOEGEWEZEN bedrag, ook die van het noodfonds. De gemeten buffer blijft bestaan waar
+     hij thuishoort: bufferMaanden() en de bufferregel op Maand lezen onverkort spaarSaldo(). */
+  const nfToe=Math.max(Math.round(+SET.nfToegewezen||0),0);
+  by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,
+    gespaard:nfDoel>0?Math.min(nfToe,nfDoel):nfToe}, planAllocOf(planAllocCfg(PLAN_NF)));
   for(const g of (SET.goals||[])) if(g&&g.id)
     by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,
              streefdatum:g.streefdatum||''}, planAllocOf(g));   // v123: leeg = gedraagt zich als voorheen
@@ -2920,22 +2934,23 @@ function maandRegels(){
       const st = bm<MAAND_DREMPEL.bufferKritiek ? 'tekort' : (bm<richt ? 'let op' : 'ok');
       const n=Math.round(bm*10)/10;
       uit.push({key:'buffer', naam:'Buffer in maanden', status:st,
-        waarde:String(n).replace('.',',') , eenheid:`maanden · je richt staat op ${richt}`,
+        waarde:String(n).replace('.',',') , eenheid:`maanden op je rekening · je richt staat op ${richt}`,
         gevolg: st==='ok' ? `Je buffer dekt ${String(n).replace('.',',')} maanden essentiële lasten, op of boven je eigen richtbedrag.`
               : st==='let op' ? `Je buffer dekt ${String(n).replace('.',',')} maanden. Je richt staat op ${richt}.`
               : `Je buffer dekt ${String(n).replace('.',',')} maanden essentiële lasten. Onder de drie maanden vangt hij weinig op.`,
         act:'openNoodfondsPanel()'});
     } }catch(_){}
   // 3. aansluiting
-  try{ const V=spaarVrij(), O=spaarOver();
-    const bekend=!(V.vrij===0&&O.over===0&&V.saved===0);
-    if(bekend||V.saved>0){
-      const st=(V.vrij>0||O.over>0)?'let op':'ok';
+  /* v172: de over-helft is vervallen met spaarOver(). Wat overblijft is de vraag die er altijd al
+     toe deed: staat er spaargeld dat aan geen enkel item is toegewezen? Sinds het noodfonds ook een
+     toewijzing draagt is dit bovendien het enige mechanisme dat je handmatige cijfers bijstuurt. */
+  try{ const V=spaarVrij();
+    if(V.saved>0){
+      const st=V.vrij>0?'let op':'ok';
       uit.push({key:'aansluiting', naam:'Aansluiting spaargeld', status:st,
-        waarde: st==='ok'?'sluit aan':euro0(V.vrij>0?V.vrij:O.over), eenheid: st==='ok'?'toewijzingen en saldo gelijk':(V.vrij>0?'niet toegewezen':'te veel geclaimd'),
-        gevolg: st==='ok' ? 'Je toewijzingen en je spaarsaldo lopen gelijk.'
-              : (V.vrij>0 ? `Er staat ${euro0(V.vrij)} spaargeld dat nog bij geen enkel doel hoort.`
-                          : `Je doelen claimen samen ${euro0(O.over)} meer dan er op je spaarrekening staat.`),
+        waarde: st==='ok'?'sluit aan':euro0(V.vrij), eenheid: st==='ok'?'alles toegewezen':'staat nog niet toegewezen',
+        gevolg: st==='ok' ? 'Al je spaargeld is aan een item in je plan toegewezen.'
+                          : `Er staat ${euro0(V.vrij)} op je spaarrekening dat aan geen enkel item is toegewezen.`,
         vrij:V.vrij, act:"go('vooruit')"});
     } }catch(_){}
   // 4. aankoopdoel
@@ -3740,7 +3755,6 @@ function etaDatum(maanden){
   return d.toLocaleDateString('nl-NL',{month:'short',year:'numeric'}).replace('.','');
 }
 function planSub(p){
-  if(p.spaarOnbekend) return `${euro0(p.alloc)}/mnd \u00b7 we weten niet wat er op je buffer staat: <span style="color:var(--teal);font-weight:600" onclick="event.stopPropagation();openSpaarrekening()">wijs je spaarrekening aan \u203a</span>`;
   if(p.status==='bereikt') return `${ICON('party')} Bereikt`;
   if(p.status==='gepauzeerd') return 'Gepauzeerd · krijgt nu niets';
   if(p.status==='wacht op capaciteit') return `Wacht op capaciteit · ${planModeLabel(p)}, maar alles gaat eerst naar de doelen erboven`;
@@ -3768,108 +3782,79 @@ function planWachtHint(p){
    spaarrekening staat viel daardoor tussen wal en schip: het telde nergens mee. Dit maakt het
    zichtbaar en toewijsbaar; het rekent niets automatisch mee. Wat je al bij je doelen hebt
    ingevuld gaat eraf, zodat hetzelfde geld nooit twee keer als "vrij" wordt aangeboden. */
+/* Wat staat er op je spaarrekening dat aan geen enkel plan-item is toegewezen? (v126, v172)
+   Sinds elk item een toegewezen bedrag draagt is dit één aftrekking over alle items, zonder
+   uitzondering voor het noodfonds. Dit is vanaf nu ook het enige mechanisme dat je handmatige
+   toewijzingen bijstuurt, dus de regel mag niet wegvallen in de ruis. */
 function spaarVrij(){
   let doel=0; try{ doel=Math.round(noodfondsModel().doel||0); }catch(_){}
   let S={cur:0,missing:true}; try{ S=spaarSaldo(); }catch(_){}
-  if(S.missing) return {vrij:0,saved:0,doel,toegewezen:0};   // v126: geen noodfonds-doel is doel 0, geen reden om te zwijgen
+  if(S.missing) return {vrij:0,saved:0,doel,toegewezen:0};
   const saved=Math.round(S.cur||0);
-  const toegewezen=(SET.goals||[]).reduce((a,g)=>a+Math.max(Math.round(+g.gespaard||0),0),0);
-  return {vrij:Math.max(saved-doel-toegewezen,0), saved, doel, toegewezen};
+  const nf=Math.max(Math.round(+SET.nfToegewezen||0),0);
+  const toegewezen=(SET.goals||[]).reduce((a,g)=>a+Math.max(Math.round(+g.gespaard||0),0),0)
+    + (doel>0?Math.min(nf,doel):nf);
+  return {vrij:Math.max(saved-toegewezen,0), saved, doel, toegewezen};
 }
-// bestemming: het bovenste lopende spaardoel — alleen een 'goal' draagt handmatig spaargeld
-// (een aflos-item leidt zijn voortgang af uit de restschuld en mag je niet zomaar ophogen)
+/* Bestemming: het bovenste lopende item dat een toegewezen bedrag draagt. Sinds v172 is dat ook
+   het noodfonds. Een aflos-item niet: dat leidt zijn voortgang af uit de restschuld en mag je niet
+   zomaar ophogen (v100). */
 function spaarVrijDoel(P){
-  return (P||allocatePlan()).find(x=>x.type==='goal'&&x.status!=='bereikt'&&x.status!=='gepauzeerd')||null;
+  return (P||allocatePlan()).find(x=>(x.type==='goal'||x.type==='noodfonds')
+    &&x.status!=='bereikt'&&x.status!=='gepauzeerd')||null;
 }
-/* vrij en over zijn twee kanten van hetzelfde verschil en kunnen per definitie niet allebei
-   positief zijn. Gebeurt dat toch, dan klopt de rekensom niet en zwijgen we liever dan iets
-   tegenstrijdigs te tonen; de console zegt waar het misging. */
-function spaarStil(V,O){
-  if(V.vrij>0 && O.over>0){ try{ console.warn('[Minder] spaarVrij en spaarOver allebei positief', V, O); }catch(_){} return true; }
-  return false;
-}
+/* v172: hier stonden spaarStil(), spaarOver(), spaarOverDoelen(), spaarOverLine() en
+   spaarOverAf(). Ze bestonden alleen om het verschil te melden dat ontstond doordat het noodfonds
+   zijn voortgang uit je saldo herrekende terwijl een spaardoel dat niet deed: samen konden ze meer
+   claimen dan er stond, zonder dat jij iets fout deed. Sinds elke voortgang in het plan een
+   toewijzing is kan die som het saldo alleen nog overschrijden als je zelf te veel toewijst, en dat
+   houdt spaarVrijToe() al tegen. De oorzaak is weg, dus de melding ook. */
 /* v126: deze twee regels hingen aan het noodfonds-plan-item, want ze werden binnen de plan-rij
    gerenderd en begonnen met een type-guard. Zonder noodfondsitem, of zodra het gepauzeerd, bereikt
    of uit het plan was, verdween de controle geruisloos - precies wanneer je buffer op peil is en
    alles naar je doelen gaat. Ze staan nu op planniveau, naast de andere plan-brede regels. */
+/* v172: sinds elke voortgang in het plan een toewijzing is, is dit het enige mechanisme dat die
+   handmatige cijfers bijstuurt. Een gemuteerde regel tussen de andere regels verdwijnt in de ruis,
+   dus hij staat als eigen blok met dezelfde linkerrand die de verse-start-kaart al gebruikt. Geen
+   amber: er is niets mis, er valt alleen iets toe te wijzen (v78/v93). */
 function spaarVrijLine(P){
+  /* v172: zonder bekend spaarsaldo valt er niets te vergelijken, maar dan hoort de reden er wel te
+     staan - die stond eerder in de plan-rij van het noodfonds (v168) en die rij toont nu een
+     toewijzing. Zelfde vorm, zelfde volgende stap. */
+  let S=null; try{ S=spaarSaldo(); }catch(_){}
+  if(S && S.missing) return `<div class="card spaar-vrij" style="border-left:3px solid var(--teal);border-radius:0 16px 16px 0;padding:12px 14px;margin:0 0 9px">
+    <div class="small" style="line-height:1.5">We weten niet wat er op je spaarrekening staat, dus we kunnen je toewijzingen er niet tegen afzetten.</div>
+    <div class="small" style="margin-top:6px"><span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="event.stopPropagation();openSpaarrekening()">wijs je spaarrekening aan ›</span></div></div>`;
   const V=spaarVrij(); if(!(V.vrij>0)) return '';
-  if(spaarStil(V,spaarOver())) return '';
-  const t=spaarVrijDoel(P); const kort=isMode('rustig'); const nf=V.doel>0;
-  const txt=nf
-    ? (kort ? `${euro0(V.vrij)} staat boven je noodfonds-doel.`
-            : `${euro0(V.vrij)} van je spaargeld staat boven je noodfonds-doel en hoort nog bij geen enkel doel.`)
-    : (kort ? `${euro0(V.vrij)} hoort nog bij geen enkel doel.`
-            : `${euro0(V.vrij)} van je spaargeld hoort nog bij geen enkel doel.`);
+  const t=spaarVrijDoel(P); const kort=isMode('rustig');
+  const txt=kort
+    ? `${euro0(V.vrij)} is nog niet toegewezen.`
+    : `Er staat ${euro0(V.vrij)} op je spaarrekening dat aan geen enkel item in je plan is toegewezen.`;
   const cta=t
-    ? `<span style="color:var(--teal);cursor:pointer" onclick="event.stopPropagation();spaarVrijToe('${t.id}')">toewijzen aan ${esc(t.naam)} ›</span>`
-    : `<span style="color:var(--teal);cursor:pointer" onclick="event.stopPropagation();openGoal()">voeg een doel toe ›</span>`;
-  return `<div class="spaar-vrij small" style="margin:0 2px 9px;color:var(--mut2);line-height:1.45">${txt} ${cta}</div>`;
+    ? `<span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="event.stopPropagation();spaarVrijToe('${t.id}')">toewijzen aan ${esc(t.naam)} ›</span>`
+    : `<span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="event.stopPropagation();openGoal()">voeg een doel toe ›</span>`;
+  return `<div class="card spaar-vrij" style="border-left:3px solid var(--teal);border-radius:0 16px 16px 0;padding:12px 14px;margin:0 0 9px">
+    <div class="small" style="line-height:1.5">${txt}</div>
+    <div class="small" style="margin-top:6px">${cta}</div></div>`;
 }
 // telt het vrije spaargeld op bij "Al gespaard" van dat doel — nooit meer dan het doel nog nodig
 // heeft; de rest blijft staan voor een volgend doel. Omkeerbaar: het veld blijft bewerkbaar.
 function spaarVrijToe(id){
-  const g=(SET.goals||[]).find(x=>x.id===id); if(!g) return;
   const V=spaarVrij(); if(!(V.vrij>0)) return;
+  if(id===PLAN_NF){
+    const nu=Math.max(Math.round(+SET.nfToegewezen||0),0);
+    const rest=Math.max(V.doel-nu,0); if(rest<=0) return;
+    const bij=Math.min(V.vrij,rest);
+    SET.nfToegewezen=nu+bij; save(); render();
+    toast(`${ICON('check')} ${euro0(bij)} toegewezen aan je noodfonds`);
+    return;
+  }
+  const g=(SET.goals||[]).find(x=>x.id===id); if(!g) return;
   const rest=Math.max(Math.round((+g.doel||0)-(+g.gespaard||0)),0); if(rest<=0) return;
   const bij=Math.min(V.vrij,rest);
   g.gespaard=Math.round((+g.gespaard||0)+bij);
   save(); render();
   toast(`${ICON('check')} ${euro0(bij)} toegewezen aan ${g.naam||'je doel'}`);
-}
-/* De keerzijde van spaarVrij (v102). Het noodfonds rekent zijn voortgang elke keer opnieuw uit je
-   saldo (planMap: min(saved, doel)), terwijl "Al gespaard" van een spaardoel jouw eigen getal is.
-   Verhoog je het noodfonds-doel nadat je vrij spaargeld aan een doel gaf, dan pakt het noodfonds
-   dat geld terug zonder dat het bij het doel verdwijnt: dezelfde euro telt dan twee keer.
-   spaarVrij() klemt op nul en zweeg daarover. Hier maken we het zichtbaar; verplaatsen doet de
-   gebruiker zelf met één tik (MECHANISM_SPEC.defaultEffect: nooit stilletjes geld bewegen). */
-function spaarOver(){
-  let doel=0; try{ doel=Math.round(noodfondsModel().doel||0); }catch(_){}
-  let S={cur:0,missing:true}; try{ S=spaarSaldo(); }catch(_){}
-  if(S.missing) return {over:0,saved:0,doel,toegewezen:0,nf:0};
-  const saved=Math.round(S.cur||0);
-  // v126: zonder noodfonds-doel claimt het noodfonds NIETS. Stond hier eerst `saved`, waardoor
-  // over = nf + toegewezen - saved neerkwam op `toegewezen` en dus altijd positief was. Dat bleef
-  // verborgen omdat de melding alleen op het noodfonds-item rendeerde; zonder die guard zou de app
-  // bij iedereen zonder noodfonds een tekort melden dat er niet is.
-  const nf=doel>0?Math.min(saved,doel):0;                     // wat het noodfonds nu claimt
-  const toegewezen=(SET.goals||[]).reduce((a,g)=>a+Math.max(Math.round(+g.gespaard||0),0),0);
-  return {over:Math.max(nf+toegewezen-saved,0), saved, doel, toegewezen, nf};
-}
-// wie levert in? De laagste prioriteit eerst — spiegelbeeld van spaarVrijToe, dat juist aan het
-// bovenste lopende doel geeft. Alleen 'goal'-items dragen handmatig spaargeld.
-function spaarOverDoelen(P){
-  return (P||allocatePlan()).filter(x=>x.type==='goal'&&(+x.gespaard||0)>0).reverse();
-}
-function spaarOverLine(P){
-  const V=spaarOver(); if(!(V.over>0)) return '';
-  if(spaarStil(spaarVrij(),V)) return '';
-  const rij=spaarOverDoelen(P); if(!rij.length) return '';
-  const kort=isMode('rustig'); const nf=V.doel>0;
-  const txt=nf
-    ? (kort ? `Je doelen claimen ${euro0(V.over)} meer dan er staat.`
-            : `Je doelen claimen samen ${euro0(V.nf+V.toegewezen)}, terwijl er ${euro0(V.saved)} op je spaarrekening staat. Je noodfonds-doel ging omhoog, dus ${euro0(V.over)} zit nu bij twee doelen tegelijk.`)
-    : (kort ? `Je doelen claimen ${euro0(V.over)} meer dan er staat.`
-            : `Je doelen claimen samen ${euro0(V.toegewezen)}, terwijl er ${euro0(V.saved)} op je spaarrekening staat.`);
-  const naam=rij.length===1?esc(rij[0].naam):'je doelen';
-  return `<div class="spaar-over small" style="margin:0 2px 9px;color:var(--mut2);line-height:1.45">${txt}
-    <span style="color:var(--teal);cursor:pointer" onclick="event.stopPropagation();spaarOverAf()">haal ${euro0(V.over)} weg bij ${naam} ›</span></div>`;
-}
-// Haalt het teveel van onderaf weg uit "Al gespaard". Nooit onder nul, nooit meer dan het teveel;
-// de velden blijven gewoon bewerkbaar, dus je kunt het met de hand anders verdelen.
-function spaarOverAf(){
-  const V=spaarOver(); if(!(V.over>0)) return;
-  let rest=V.over; const namen=[];
-  for(const it of spaarOverDoelen()){
-    if(rest<=0) break;
-    const g=(SET.goals||[]).find(x=>x.id===it.id); if(!g) continue;
-    const nu=Math.max(Math.round(+g.gespaard||0),0); const af=Math.min(nu,rest);
-    if(af<=0) continue;
-    g.gespaard=nu-af; rest-=af; namen.push(g.naam||'doel');
-  }
-  if(rest===V.over) return;                                   // niets kunnen weghalen
-  save(); render();
-  toast(`${ICON('check')} ${euro0(V.over-rest)} weggehaald bij ${namen.join(' en ')}`);
 }
 // waar stel je het maandbedrag/percentage van dít item in?
 function planAllocOpen(it){
@@ -3926,7 +3911,7 @@ function renderPlan(bare){
     return `<div class="card plan-item" data-id="${p.id}" style="padding:12px 13px;margin-bottom:8px">
       <div style="display:flex;gap:10px;align-items:flex-start">
         <div style="flex:1;min-width:0;cursor:pointer" onclick="${planOpen(p)}">
-          <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${p.spaarOnbekend?`<span style="color:var(--mut)">onbekend</span>`:euro0(p.gespaard)} / ${euro0(p.doel)}</span></div>
+          <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${euro0(p.gespaard)} toegewezen / ${euro0(p.doel)}</span></div>
           <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>
           <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
           ${doelTempoLine(p)}${planWachtHint(p)}
@@ -3947,7 +3932,7 @@ function renderPlan(bare){
   // dan zeggen we dat rustig i.p.v. het geruisloos te laten verdwijnen
   const vrij=planVrij(P);
   const vrijLine=vrij>0?`<div id="planVrij" class="small muted" style="margin:0 2px 9px;line-height:1.45"><b>${euro0(vrij)}/mnd</b> nog vrij${isMode('rustig')?'':' — al je doelen krijgen wat ze nodig hebben'} · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></div>`:'';
-  return head+warn+vrijLine+spaarVrijLine(P)+spaarOverLine(P)+rows+coHorizonVraag()+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  return head+warn+vrijLine+spaarVrijLine(P)+rows+coHorizonVraag()+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
 }
 
 /* ---- Deel 2: optioneel dure-schuld-advies bij een nieuw doel (nooit verplicht) ---- */
@@ -9481,7 +9466,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}

@@ -38,17 +38,22 @@ const meet = (page) => page.evaluate(() => ({
 const regel = (page) => page.locator('#s-vooruit .spaar-vrij');
 
 test.describe('a · het bedrag klopt en is zichtbaar', () => {
-  test('spaargeld boven het bereikte doel staat als regel boven je plan', async ({ page }) => {
+  /* v172: het noodfonds draagt sinds model B een toewijzing in plaats van je saldo. De fixture
+     wijst het doel volledig toe, zodat "wat staat er boven mijn toewijzingen" dezelfde vraag blijft
+     die deze test stelde. De bestemming is nu het bovenste lopende item, en dat kan het noodfonds
+     zelf zijn; hier is dat bereikt, dus valt de tik op het spaardoel. */
+  test('spaargeld boven je toewijzingen staat als regel boven je plan', async ({ page }) => {
+    // de migratie zet nfToegewezen eenmalig op min(saldo, doel), dus het noodfonds staat vol
     await openV(page, metDoelen([{ id: 'gA', naam: 'Kosten koper', doel: 20000, gespaard: 0, allocMode: 'auto' }]));
     const r = await meet(page);
     expect(r.nf.status).toBe('bereikt');                       // doel gehaald
-    expect(r.nf.gespaard).toBe(r.doel);                        // en geklemd op het doel: hier zit het gat
-    expect(r.vrij.vrij).toBe(r.saved - r.doel);                // niets toegewezen, dus alles erboven is vrij
+    expect(r.nf.gespaard).toBe(r.doel);                        // volledig toegewezen
+    expect(r.vrij.vrij).toBe(r.saved - r.doel);
     expect(r.vrij.vrij).toBeGreaterThan(0);
 
     const t = await regel(page).innerText();
     expect(t).toContain(await page.evaluate((v) => euro0(v), r.vrij.vrij));
-    expect(t).toMatch(/boven je noodfonds-doel/i);
+    expect(t).toMatch(/aan geen enkel item in je plan is toegewezen/i);
     expect(t).toContain('toewijzen aan Kosten koper');
     // v126: buiten de plan-rijen, dus hij overleeft een gepauzeerd of ontbrekend noodfonds
     expect(await page.locator('#s-vooruit .plan-item .spaar-vrij').count()).toBe(0);
@@ -57,8 +62,9 @@ test.describe('a · het bedrag klopt en is zichtbaar', () => {
   test('wat al bij een doel staat telt niet nog een keer als vrij', async ({ page }) => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Kosten koper', doel: 20000, gespaard: 400, allocMode: 'auto' }]));
     const r = await meet(page);
-    expect(r.vrij.toegewezen).toBe(400);
-    expect(r.vrij.vrij).toBe(r.saved - r.doel - 400);
+    // v172: toegewezen telt alle items, dus ook de toewijzing van het noodfonds
+    expect(r.vrij.toegewezen).toBe(r.nf.gespaard + 400);
+    expect(r.vrij.vrij).toBe(r.saved - r.nf.gespaard - 400);
     expect(await regel(page).innerText()).toContain(await page.evaluate((v) => euro0(v), r.saved - r.doel - 400));
   });
 
@@ -71,11 +77,17 @@ test.describe('a · het bedrag klopt en is zichtbaar', () => {
     expect(await regel(page).count()).toBe(0);
   });
 
-  test('zonder bekend spaarsaldo zwijgt hij', async ({ page }) => {
+  /* v172: zonder bekend spaarsaldo valt er niets te vergelijken, maar de reden hoort er wel te
+     staan - die stond eerder in de plan-rij van het noodfonds (v168) en die rij toont nu een
+     toewijzing. Zelfde blok, andere tekst, zelfde volgende stap. */
+  test('zonder bekend spaarsaldo noemt hij de reden in plaats van een bedrag', async ({ page }) => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Kosten koper', doel: 20000, gespaard: 0 }], (s) => { s.manualBal = {}; }));
     expect(await page.evaluate(() => spaarSaldo().missing)).toBeTruthy();
     expect((await meet(page)).vrij.vrij).toBe(0);
-    expect(await regel(page).count()).toBe(0);
+    const t = await regel(page).innerText();
+    expect(t).toContain('We weten niet wat er op je spaarrekening staat');
+    expect(t).toContain('wijs je spaarrekening aan');
+    expect(t).not.toMatch(/€/);
   });
 });
 

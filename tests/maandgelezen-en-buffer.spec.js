@@ -150,16 +150,18 @@ test.describe('c · zonder aangewezen spaarrekening is de buffer onbekend', () =
     expect(t).not.toMatch(/noodfonds staat op/i);
   });
 
-  test('de plan-rij zegt onbekend, met de reden en een volgende stap', async ({ page }) => {
+  /* v172: de plan-rij toont sinds model B een TOEGEWEZEN bedrag, en dat is jouw eigen getal - ook
+     zonder bekend spaarsaldo. Het onbekende zit niet in de rij maar in de vergelijking ertegen, dus
+     daar staat nu de reden en de volgende stap. */
+  test('het plan zegt waarom het je toewijzingen niet kan afzetten', async ({ page }) => {
     await boot(page);
     const h = await page.evaluate(() => renderPlan(true));
     const d = await page.evaluate((html) => { const e = document.createElement('div');
       e.innerHTML = html; return e.innerText.replace(/\s+/g, ' '); }, h);
-    expect(d).toContain('onbekend');
+    expect(d).toContain('We weten niet wat er op je spaarrekening staat');
     expect(d).toContain('wijs je spaarrekening aan');
-    expect(d).not.toMatch(/op dit tempo/);            // geen looptijd op een onbekende stand
     expect(h).toContain('openSpaarrekening()');
-    expect(h).toContain('var(--mut)');                 // zelfde vorm als de hero op Home
+    expect(d).toContain('toegewezen');                 // de rij zelf blijft een toewijzing tonen
   });
 
   test('extra spaargeld is invoer, geen schatting, en telt dus wel', async ({ page }) => {
