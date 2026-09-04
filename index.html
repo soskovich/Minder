@@ -128,11 +128,6 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .insfocus{padding:16px 2px 4px}
 .insfocus .if-ctx{font-size:14.5px;color:var(--txt);line-height:1.5;margin-bottom:16px;max-width:320px}
 .if-cta{display:inline-flex;align-items:center;gap:6px;background:var(--teal);color:var(--on-accent);border:0;border-radius:13px;padding:11px 18px;font-size:var(--fs-md);font-weight:600;cursor:pointer}
-.daystat{padding:16px 2px 2px;border-top:1px solid var(--line);margin-top:20px}
-.daystat .ds-l{font-size:13px;color:var(--mut)}
-.daystat .ds-v{font-size:26px;font-weight:600;letter-spacing:-.5px;font-variant-numeric:tabular-nums;margin:3px 0 1px}
-.daystat .ds-s{font-size:var(--fs-sm);color:var(--mut)}
-.daymini{font-size:13px;color:var(--mut);margin-top:20px;padding-top:14px;border-top:1px solid var(--line)}
 .vooruit{padding:24px 2px 4px}
 .vooruit .vh-lbl{font-size:13px;color:var(--mut)}
 .vooruit .vh-big{font-size:44px;font-weight:600;letter-spacing:-1.4px;line-height:1.04;font-variant-numeric:tabular-nums;margin:7px 0 12px}
@@ -1007,7 +1002,7 @@ function renderDailyRolling(){
   const days=SET.rollDays||30;
   const {arr,start,end}=dailyRollingSeries(days); if(!arr.length) return '';
   const sum=arr.reduce((a,b)=>a+b,0), avg=sum/days;
-  const userDay=+SET.dailyVarBudget||0; const target=userDay>0?userDay:avg; // bij geen doel: eigen gemiddelde als referentie
+  const target=avg;   // v158: het instelbare dagbudget is weg; de referentie is je eigen gemiddelde
   const scaleMax=Math.max(Math.max(...arr), target*1.3, 1);
   const maxV=Math.max(...arr), maxIdx=arr.indexOf(maxV);
   const fmtD=s=>{const d=new Date(s);return d.getDate()+' '+MNAMES[d.getMonth()];};
@@ -1017,9 +1012,9 @@ function renderDailyRolling(){
     <div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 2px"><div style="font-size:var(--fs-xl);font-weight:800">${euro(avg)}</div><div class="small muted">gem./dag · totaal ${euro0(sum)}</div></div>
     <div class="daily">
       <div class="tline" style="bottom:${Math.min(target/scaleMax*100,99)}%"></div>
-      ${arr.map((v,i)=>`<div class="d ${userDay>0&&v>target?'over':''}" style="height:${Math.max(v/scaleMax*100,2)}%"></div>`).join('')}
+      ${arr.map((v,i)=>`<div class="d" style="height:${Math.max(v/scaleMax*100,2)}%"></div>`).join('')}
     </div>
-    <div class="small muted" style="display:flex;justify-content:space-between"><span>${fmtD(start)}</span>${userDay>0?`<span style="color:var(--amber)">– – doel ${euro(target)}</span>`:`<span style="color:var(--amber)">– – gem.</span>`}<span>${fmtD(end)}</span></div>
+    <div class="small muted" style="display:flex;justify-content:space-between"><span>${fmtD(start)}</span><span style="color:var(--amber)">– – gem.</span><span>${fmtD(end)}</span></div>
     <div class="small muted" style="margin-top:8px">Hoogste dag <b>${euro0(maxV)}</b>. ${days===30?'Tik op 90 dagen voor een breder beeld.':''}</div>
   </div>`;
 }
@@ -2352,11 +2347,11 @@ function renderWeekVarKPI(){
   const perDay=sv.vari/(de.elapsed||1);
   // dagtempo op je variabele potjes; geen potjes → val terug op de inkomen-limiet minus vaste lasten
   const varPool = totalBudget()>0 ? eb.varRoom : Math.max(totals(m).limit - sv.fixed, 0);
-  const autoDay=Math.max(varPool,0)/de.dim, userDay=+SET.dailyVarBudget||0, tgtDay=userDay>0?userDay:autoDay;
+  const tgtDay=Math.max(varPool,0)/de.dim;   // v158: geen instelbaar dagbudget meer
   const wk=perDay*7, tgt=tgtDay*7, col=wk<=tgt?'var(--green)':wk<=tgt*1.2?'var(--amber)':'var(--red)';
   return `<div class="card">
     <div class="row"><span class="hlabel" style="margin:0;flex:1">Variabele uitgave per week</span><span class="small muted" onclick="openVarTx()" style="cursor:pointer;color:var(--teal)">transacties ›</span></div>
-    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:var(--fs-xl);font-weight:800;color:${col}">${euro(wk)}</div><div class="small muted">gem./week · ${userDay>0?'doel':'richtlijn'} ${euro(tgt)}</div></div>
+    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><div style="font-size:var(--fs-xl);font-weight:800;color:${col}">${euro(wk)}</div><div class="small muted">gem./week · richtlijn ${euro(tgt)}</div></div>
     <div class="bar-track" style="margin:10px 0 2px"><div class="bar-fill" style="width:${Math.min(wk/(tgt||1)*100,100)}%;background:${col}"></div></div>
   </div>`;
 }
@@ -3173,7 +3168,6 @@ function scoreNotifs(){
     const wk=Date.now()-7*864e5; const dec=(SET.coachLog||[]).filter(l=>l.type==='beslis'&&l.ts>=wk);
     let saved=0; dec.forEach(d=>{ if((d.uitkomst==='geparkeerd'&&!d.resolved)||d.uitkomst==='geannuleerd') saved+=(+d.bedrag||0); });
     if(saved>=20) pos={key:'win-saved',score:24,t:'good',ic:ICON('check'),l1:`${euro0(saved)} niet ongepland uitgegeven deze week.`,l2:'Zo hou je grip',act:"go('act')"};
-    if(!pos){ try{ const D=dayBudgetNow(); if(D.dagdoel>0){ const st=computeStreak(D.dagdoel); if(st>=3) pos={key:'win-streak',score:23,t:'good',ic:ICON('fire'),l1:`${st} dagen op rij onder je dagdoel.`,l2:'Hou dit vast',act:"go('act')"}; } }catch(_){} }
     if(!pos){ const L=monthLiquidity(), tgt=monthlySavingTarget(); if(L.projected>=tgt && L.daysLeft>0) pos={key:'room',score:20,t:'good',ic:ICON('check'),l1:'Je ligt op koers deze maand.',l2:'Mooi, hou dit vast',act:"go('vooruit')"}; }
     if(pos) push(pos);
   }catch(_){} }
@@ -6406,27 +6400,6 @@ function actSignal(){
   for(const c of cands){ c.key=actKey(c); if(!actDone(c.key)) return c; }
   return {done:true};
 }
-// dagbudget van vandaag (status), leeft nu in Inzichten, niet meer in Actieplan
-function dayBudgetNow(){
-  const now=new Date(); now.setHours(0,0,0,0);
-  const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); const de=daysElapsed(nowYM);
-  const userDay=+SET.dailyVarBudget||0;
-  const expInc=SET.autoIncome?baseIncome():(+SET.income||0);
-  const fixHist=months().filter(x=>x<nowYM).slice(-3).map(mm=>splitFixedVar(mm).fixed).filter(v=>v>0).sort((a,b)=>a-b);
-  const typFixed=fixHist.length?fixHist[Math.floor(fixHist.length/2)]:splitFixedVar(nowYM).fixed;
-  // dagtempo op je variabele potjes; geen potjes → inkomen-limiet minus typische vaste lasten (als vanouds)
-  const varPool = totalBudget()>0 ? effectiveBudgets(nowYM).varRoom : Math.max(Math.round(monthBudget(expInc))-typFixed,0);
-  const dagdoel=Math.round(userDay>0?userDay:varPool/(de.dim||30));
-  let spent=0; const today=nowYM+'-'+String(now.getDate()).padStart(2,'0');
-  for(const x of txOfMonth(nowYM)){ if(x.date===today && isExpenseTx(x) && !isFixed(x)) spent+=-x.amount; }   // netto: een terugstorting van vandaag verlaagt de dagteller
-  return {dagdoel, spent:Math.round(spent), rest:Math.max(dagdoel-spent,0), over:spent>dagdoel};
-}
-function dayMiniLine(){ const D=dayBudgetNow(); if(!(D.dagdoel>0)) return ''; const dd=euro0(D.dagdoel); const streak=(typeof computeStreak==='function')?computeStreak(D.dagdoel):0; const txt=D.over?`Vandaag ging je over je dagdoel van ${dd}`:(streak>=2?`Al ${streak} dagen op rij onder je dagdoel van ${dd}`:`Vandaag onder je dagdoel van ${dd}`); return `<div class="daymini">${txt}</div>`; }
-function dayStatusLine(){
-  const D=dayBudgetNow(); if(!(D.dagdoel>0)) return '';
-  const col=D.over?'var(--amber)':'var(--teal)';
-  return `<div class="daystat"><div class="ds-l">Vandaag te besteden</div><div class="ds-v" style="color:${col}">${euro(D.rest)}</div><div class="ds-s">al ${euro0(D.spent)} van ${euro0(D.dagdoel)} vandaag</div></div>`;
-}
 // projectiekaart: lijngrafiek (huidige koers vs met-regel) over de komende maanden, met groot eindbedrag
 function coachProjCard(cut){
   if(typeof forecastMonths!=='function') return '';
@@ -6643,7 +6616,6 @@ function coachMirrorCard(){
   const log=SET.coachLog||[]; const wk=Date.now()-7*864e5;
   const dec=log.filter(l=>l.type==='beslis' && l.ts>=wk);
   const wins=[];
-  try{ const D=dayBudgetNow(); if(D.dagdoel>0){ const st=computeStreak(D.dagdoel); if(st>=2) wins.push(`${ICON('fire')} ${st} dagen op rij onder je dagdoel`); } }catch(_){}
   try{ const pc=potCount(); if(pc>=1) wins.push(`${ICON('check')} Je hebt ${pc} ${pc===1?'potje':'potjes'} lopen`); }catch(_){}
   try{ const S=savingsModel(); if(S.goal>0 && S.pct>=10){ const mls=S.pct>=50?50:(S.pct>=25?25:10); wins.push(`${ICON('target')} ${mls}%+ van je buffer bereikt (${euro0(S.cur)})`); } }catch(_){}
   const pat=coachPattern();
@@ -7755,18 +7727,6 @@ function coachReset(){ window._coachStep=0; window._coachAnswer=null; window._co
 function coachCommit(key,scale){ SET.coachLast={rule:window._coachAnswer||'',gain:Math.round(window._coachGain||0),scale,ts:Date.now()}; window._coachStep=0; window._coachAnswer=null; window._coachCut=0; window._coachGain=0; markActionDone(key,scale); }
 function toggleStep(id){ SET.steps=SET.steps||{}; SET.steps[id]=!SET.steps[id]; save(); renderActions(); if(SET.steps[id]) toast(`${ICON('check')} Stap afgevinkt`); }
 function toggleActDeep(){ SET.actDeep=!SET.actDeep; save(); renderActions(); }
-// streak = aaneengesloten recente dagen (t/m gisteren) met variabele uitgave ≤ dagdoel
-function computeStreak(dagdoel){
-  if(!(dagdoel>0)||!TX.length) return 0;
-  const byDay={}; let first='9999-99-99';
-  for(const x of TX){ if(x.date<first) first=x.date; if(isExpenseTx(x) && !isFixed(x)){ byDay[x.date]=(byDay[x.date]||0)+(-x.amount); } }   // netto per dag (terugstorting helpt de streak)
-  const today=new Date(); today.setHours(0,0,0,0); let streak=0;
-  for(let i=1;i<=120;i++){ const d=new Date(today); d.setDate(d.getDate()-i); const ds=d.toISOString().slice(0,10);
-    if(ds<first) break;
-    if((byDay[ds]||0)<=dagdoel) streak++; else break;
-  }
-  return streak;
-}
 function renderPlanDetail(){
   if(!TX.length) return '';
   const m=curMonth; const plan=savingsPlan(m);
@@ -10033,9 +9993,6 @@ function setBudget(){
       : (SET.limitMode||'pct')==='baseline'
       ? `<div class="small muted" style="margin-top:6px">Je limiet ankert op je typische uitgaven (≈ ${euro0(baselineSpend())}/mnd) en groeit niet mee met je inkomen. Meer verdienen → meer sparen.</div>`
       : `<div class="small muted" style="margin-top:6px">Klassiek: limiet = ${SET.limit}% van je inkomen. Meer inkomen = meer ruimte.</div>`}
-    <label class="fld">Dagbudget variabele uitgaven (optioneel)</label>
-    <input type="number" value="${SET.dailyVarBudget||''}" placeholder="bv. 45" oninput="SET.dailyVarBudget=+this.value||0;save();render();">
-    <div class="small muted" style="margin-top:6px">Je richtbedrag per dag voor vrij besteedbaar geld. Leeg = automatisch uit je budget.</div>
     <label class="fld">Bufferdoel</label>
     <div class="small muted" style="margin-bottom:6px">Je buffer volgt je noodfonds: essentiële crisis-last × het aantal maanden. Verfijnen doe je op Vooruitblik ▸ Noodfonds.</div>
     <div class="chips">${[3,4,6].map(x=>`<span class="chip ${nfMaanden()===x?'on':''}" onclick="SET.nfMaanden=${x};save();render();">${x} mnd</span>`).join('')}</div>

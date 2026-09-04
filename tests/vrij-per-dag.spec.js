@@ -159,3 +159,44 @@ test.describe('c · er is geen instelling voor', () => {
     expect(await page.locator('#s-ins').innerText()).not.toMatch(/variabele uitgave per dag/i);
   });
 });
+
+// v158, vervolg: het instelbare dagbudget is weg. Dat kon pas nadat het veld op 0 stond, want dan
+// nam elke leesplek al zijn terugval en verschoof er per definitie geen uitkomst.
+test.describe('d · het instelbare dagbudget is weg', () => {
+  test('de instelling bestaat niet meer', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => { go('set'); openBudgetEditor(); });
+    const t = await page.locator('#sheet').innerText();
+    expect(t).not.toMatch(/dagbudget variabele uitgaven/i);
+    expect(await page.evaluate(() => setBudget())).not.toContain('dailyVarBudget');
+  });
+
+  test('geen enkele leesplek kijkt er nog naar', async ({ page }) => {
+    await boot(page);
+    for (const fn of ['dayBudgetNow', 'renderWeekVarKPI', 'renderDailyRolling']) {
+      const src = await page.evaluate((f) => (window[f] ? window[f].toString() : ''), fn);
+      expect(src).not.toContain('dailyVarBudget');
+      expect(src).not.toContain('userDay');
+    }
+  });
+
+  test('de streak op een dagdoel is weg', async ({ page }) => {
+    // v159: het dagdoel was na v158 een afgeleide van je potjes, geen norm meer. Een streak telt
+    // dagen onder een grens, en die grens bestaat niet meer als keuze.
+    await boot(page);
+    for (const fn of ['dayBudgetNow', 'computeStreak', 'dayMiniLine', 'dayStatusLine']) {
+      expect(await page.evaluate((f) => typeof window[f], fn)).toBe('undefined');
+    }
+    const keys = await page.evaluate(() => scoreNotifs().map((n) => n.key));
+    expect(keys).not.toContain('win-streak');
+    const src = await page.evaluate(() => coachMirrorCard.toString());
+    expect(src).not.toMatch(/dagen op rij|dagdoel/);
+  });
+
+  test('de rest van de coachkaart blijft werken', async ({ page }) => {
+    await boot(page);
+    expect(await page.evaluate(() => typeof coachMirrorCard())).toBe('string');
+    await page.evaluate(() => go('act'));
+    expect(await page.locator('#s-act').innerText()).not.toMatch(/dagen op rij onder je dagdoel/i);
+  });
+});
