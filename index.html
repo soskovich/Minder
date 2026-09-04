@@ -2928,12 +2928,21 @@ function maandDoel(){
    te openen; hij mag nooit bepalen wat erop staat. Een tweede plek was hij ook niet nodig: deze
    signalen staan per v162 al buiten notifList(), want NOTIF_HORIZON laat alleen direct en correctie
    door. Er viel dus niets te onderdrukken. */
+/* v175: MAAND_DREMPEL.structureelStatus duwde elk structureel signaal naar 'tekort', ook de
+   info-variant. Daardoor trok een neutrale observatie de oordeelzin naar 'er is iets dat vastloopt';
+   dat is het scherm luider maken dan de werkelijkheid. De engine draagt de zwaarte al in n.t, dus
+   die wordt nu gelezen in plaats van weggegooid.
+   Twee bestemmingen, geen derde: een blokkade landt in 'vraagt een beslissing' (tekort), een
+   observatie in 'vraagt aandacht' (let op). Past een signaal in geen van beide, maak er dan geen
+   lichtere status voor maar stel de vraag of het signaal nog nodig is - een derde categorie zou
+   nergens meer opvallen. structureelStatus blijft de terugval voor een onbekende t. */
+const STRUCT_STATUS={bad:'tekort', warn:'tekort', info:'let op'};
 function maandStructureel(){
   try{
     return (scoreNotifs({negeerSnooze:true})||[])
       .filter(n=>n && n.h==='structureel')
       .map(n=>({key:n.key, naam:String(n.l1||'').replace(/<[^>]*>/g,'').slice(0,42),
-        status:MAAND_DREMPEL.structureelStatus, waarde:'', eenheid:'',
+        status:STRUCT_STATUS[n.t]||MAAND_DREMPEL.structureelStatus, waarde:'', eenheid:'',
         gevolg:'',                                   // was dezelfde zin als naam
         act:n.act||"go('ins')", sig:n, structureel:true}));
   }catch(_){ return []; }
@@ -3353,9 +3362,14 @@ function renderMaand(){
      lege kaart valt weg, dus in de praktijk zie je zelden drie kaarten. */
   const opVolgorde=a=>{ const i=MAAND_VOLGORDE.indexOf(a.key); return i<0?99:i; };   // v162: structurele signalen achter de vijf regels
   const beslis=RO.filter(r=>r.status==='tekort').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
-  const aandacht=R.filter(r=>r.status==='let op').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
+  /* v175: beslis filterde op RO en aandacht op R, dus een structureel signaal met status 'let op'
+     landde in geen van beide kaarten en telde alleen mee in de oordeelzin. Dat is verlies, geen
+     weergavefout: het scherm noemt het dan wel in de kop maar toont het nergens. Beide kaarten
+     putten nu uit dezelfde lijst. 'goed' blijft op R: een structureel signaal is per definitie
+     geen 'ok', en zou daar alleen ruis toevoegen. */
+  const aandacht=RO.filter(r=>r.status==='let op').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
   const goed=R.filter(r=>r.status==='ok');
-  const verband=maandVerband(R);
+  const verband=maandVerband(RO);
   $('#s-maand').innerHTML=`
     ${maandAfspraakLus()}
     <div class="card">
@@ -3373,7 +3387,7 @@ function renderMaand(){
       ${goed.map(r=>maandRij(r,true)).join('')}</div>`:''}
     ${maandKpiBlok(curMonth||months()[months().length-1])}
     ${maandBeleggenRegel(R)}
-    ${maandCoachIngang(R)}
+    ${maandCoachIngang(RO)}
     ${maandGelezen()}
     <div style="height:12px"></div>`;
 }
@@ -5969,8 +5983,12 @@ async function coTopicHorizon(m){
    mag vastleggen. Dat is het punt ervan. Het opent bij één regel van het maandscherm, in de zin
    die daar al staat (r.gevolg), en eindigt in een expliciete bevestigingsstap. Een keuze die een
    coachRule aanzet is nadrukkelijk geen afspraak: die schrijft {type:'tip'}, net als elders. */
+/* v175: de coach-ingang wijst sinds nu naar dezelfde zwaarste regel als de oordeelzin, en dat kan
+   ook een structureel signaal zijn. Zonder deze tweede bron gaf coMaandRegel() daar null terug en
+   sloot het gesprek meteen: een half pad, precies wat v162 wilde vermijden. */
 function coMaandRegel(key){
-  try{ const R=maandRegels(); return R.find(r=>r.key===key) || null; }catch(_){ return null; }
+  try{ const r=maandRegels().find(x=>x.key===key); if(r) return r; }catch(_){}
+  try{ return maandStructureel().find(x=>x.key===key) || null; }catch(_){ return null; }
 }
 /* De zwaarste regel: tekort boven let op, en daarbinnen de vaste volgorde van het maandscherm. */
 function coMaandZwaarste(R){
@@ -6002,9 +6020,12 @@ const CO_MAAND_REGELS=['dekking','buffer','aansluiting','doel','patroon'];
 async function coTopicMaand(m, key){
   const _g=_coGen; if(!_coT) return;
   // zonder regel: staat er al een afspraak, dan is dit het aanpas-pad; anders de zwaarste regel
-  if(!CO_MAAND_REGELS.includes(key)){
+  /* v175: naast de vijf regels kan de ingang nu ook een structureel signaal aanwijzen. Alleen een
+     sleutel die nergens op slaat valt terug op de zwaarste regel, en die lijst is dezelfde als die
+     van de ingang zelf - anders wijst het gesprek naar iets anders dan waarop je tikte. */
+  if(!CO_MAAND_REGELS.includes(key) && !coMaandRegel(key)){
     if(coachThisMonthAfspraak()) return coAfspraakOpen(m);
-    let alle=[]; try{ alle=maandRegels(); }catch(_){}
+    let alle=[]; try{ alle=maandRegels().concat(maandStructureel()); }catch(_){}
     const z=coMaandZwaarste(alle); if(!z){ coEnd(); return; }
     key=z.key;
   }
@@ -6016,6 +6037,11 @@ async function coTopicMaand(m, key){
     const lbl = key==='buffer' ? 'Mijn buffer verfijnen' : 'Naar mijn plan';
     const doe = key==='buffer' ? ()=>openNoodfondsPanel() : ()=>go('vooruit');
     opts.push({l:lbl, act:()=>{ coEnd(); try{ doe(); }catch(_){} }});
+  } else if(R.structureel){
+    /* Zelfde principe: een structureel signaal draagt zijn eigen actie al, en dat is precies de tik
+       die de rij op het maandscherm ook heeft. Geen coachRuleOptions hier - die gaan over een
+       uitgavecategorie en dit signaal gaat over een patroon over maanden. */
+    if(R.act) opts.push({l:'Hier iets aan doen', act:()=>{ coEnd(); try{ eval(R.act); }catch(_){} }});
   } else {
     let rules=[]; try{ rules=(coachRuleOptions(m)||[]).filter(x=>!(SET.coachRules&&SET.coachRules[x.key])); }catch(_){}
     for(const r of rules) opts.push({l:`${r.label} (+${euro0(r.cut)}/mnd)`, act:async()=>{

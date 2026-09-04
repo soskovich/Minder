@@ -121,11 +121,15 @@ test.describe('c · structureel op het maandscherm', () => {
     expect(kaarten.some((k) => /signaal|patroon|melding/i.test(k))).toBe(false);
   });
 
-  test('de coach-ingang blijft bij de vijf regels', async ({ page }) => {
+  /* v175: dit legde vast dat de coach-ingang R kreeg en dus de structurele signalen miste. Daardoor
+     wees de ingang onderaan naar een andere regel dan de oordeelzin bovenaan noemde. Beide lezen nu
+     RO, en coMaandRegel() kent de structurele sleutels, zodat het gesprek niet meteen sluit. */
+  test('de coach-ingang en het oordeel lezen dezelfde lijst', async ({ page }) => {
     await boot(page);
     const src = await page.evaluate(() => renderMaand.toString());
-    expect(src).toContain('maandCoachIngang(R)');   // R, niet RO
-    expect(src).toContain('maandVerband(R)');
+    expect(src).toContain('maandCoachIngang(RO)');
+    expect(src).toContain('maandVerband(RO)');
+    expect(src).toContain('maandOordeel(RO)');
   });
 });
 
