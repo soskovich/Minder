@@ -1471,8 +1471,11 @@ function daysElapsed(m){ const [y,mo]=m.split('-').map(Number); const dim=new Da
 /* ============================================================
    RENDER
    ============================================================ */
+/* Is er iets te tonen? Eén bron, gelezen door render() en go(). Zonder die tweede lezer rendert
+   go() alsnog een scherm over de lege staat heen en is het gat terug. */
+function geenData(){ return !TX.length; }
 function render(){
-  if(!TX.length){ renderEmpty(); return; }
+  if(geenData()){ renderEmpty(); return; }
   const ms=months(); if(!curMonth||!ms.includes(curMonth)) curMonth=ms[ms.length-1];
   renderDash(); renderTx(); renderIns(); renderActions(); renderVooruit(); renderMaand(); renderVermogen(); renderFire(); renderSet();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
@@ -1516,8 +1519,10 @@ function renderEmpty(){
     </div>
     <p class="small muted" style="margin-top:24px">${ICON('lock')} Alleen inzicht, nooit toegang tot je geld. Alles blijft privé op dit toestel.</p>
   </div>`;
-  $('#s-dash').innerHTML=html;
-  ['#s-tx','#s-ins','#s-act','#s-vooruit','#s-vermogen'].forEach(s=>{const el=$(s); if(el) el.innerHTML=html;});
+  /* Elk scherm behalve Instellingen, afgeleid uit de DOM. Een handmatige lijst mist er altijd
+     een: s-maand en s-fire stonden er niet in, dus die twee toonden bij nul transacties gewoon
+     hun normale inhoud, gebouwd op niets. */
+  document.querySelectorAll('.screen').forEach(el=>{ if(el.id!=='s-set') el.innerHTML=html; });
   renderSet();
 }
 
@@ -2932,12 +2937,14 @@ function maandRegels(){
               : `Je legt nu ${euro0(d.p.alloc)} per maand in en je hebt ${euro0(T.benodigd)} nodig. Je komt ${euro0(T.gat)} per maand tekort.`,
         tekortPerMaand: st==='tekort'?T.gat:0, act:`openGoal('${d.p.id}')`});
     } }catch(_){}
-  // 5. patroon
-  try{ const n=maandPatroon();
+  // 5. patroon - alleen als er boekingen zijn om te beschrijven. Zonder data is "er springt deze
+  //    maand geen uitgavenpatroon uit" geen vaststelling maar een lege claim, en hield deze regel
+  //    in zijn eentje de hele maandsamenvatting overeind.
+  try{ if(TX.length){ const n=maandPatroon();
     uit.push({key:'patroon', naam:'Patroon van de maand', status:n?'let op':'ok',
       waarde: n&&n.bedrag!=null?euro0(n.bedrag):(n?'let op':'rustig'), eenheid: n&&n.boven!=null?`${euro0(n.boven)} boven je normaal`:(n?'gesignaleerd':'geen signaal'),
       gevolg: n?String(n.l1||'').replace(/<[^>]*>/g,''):'Er springt deze maand geen uitgavenpatroon uit.',
-      sig:n, act:n&&n.act?n.act:"go('ins')"});
+      sig:n, act:n&&n.act?n.act:"go('ins')"}); }
   }catch(_){}
   return uit.sort((a,b)=>MAAND_VOLGORDE.indexOf(a.key)-MAAND_VOLGORDE.indexOf(b.key));
 }
@@ -3181,6 +3188,7 @@ function meevallerVastleggen(key, bedrag, totaal){
 /* Het oordeel: deterministisch, in deze volgorde. Geen vrije formulering, geen voorspelling die
    verder gaat dan de cijfers, geen aanmoediging en geen compliment. */
 function maandOordeel(R){
+  if(!R.length) return {zin:'Er is nog niets te beoordelen.', sub:''};
   const tekort=R.filter(r=>r.status==='tekort');
   const letop=R.filter(r=>r.status==='let op');
   const ok=R.filter(r=>r.status==='ok');
@@ -3193,7 +3201,12 @@ function maandOordeel(R){
   else if(tekort.length===1) zin=`Er is deze maand één ding dat een beslissing vraagt: ${tekort[0].naam.toLowerCase()}.`;
   else if(tekort.length>1) zin=`Er zijn deze maand ${tekort.length} dingen die een beslissing vragen.`;
   else if(letop.length) zin=`Er is niets dat vastloopt. ${letop.length} ${letop.length===1?'regel vraagt':'regels vragen'} aandacht.`;
-  else zin='Alle vijf de regels staan goed.';
+  /* Het werkelijke aantal, niet vijf: welke regels er staan hangt af van wat je hebt ingesteld.
+     'Alle' mag alleen als er ook niets onbekend is, anders leest de zin als een volledig oordeel
+     over een onvolledige lijst. */
+  else if(ok.length===1) zin='De enige regel die te toetsen is staat goed.';
+  else zin = (ok.length===R.length) ? `Alle ${ok.length} regels staan goed.`
+                                    : `De ${ok.length} regels die te toetsen zijn staan goed.`;
   const sub = ok.length
     ? `${ok.map(r=>r.naam.toLowerCase()).join(' en ')} ${ok.length===1?'is':'zijn'} in orde.`
     : '';
@@ -3241,6 +3254,13 @@ function maandGelezen(){
 }
 function renderMaand(){
   const R=maandRegels();
+  /* Geen enkele regel te toetsen: dan vat dit scherm niets samen. Bij nul transacties komt hier
+     niemand meer langs - render() en go() vallen dan terug op renderEmpty() - maar een scherm dat
+     zijn eigen leegte niet kent, vult hem met een claim. */
+  if(!R.length){
+    $('#s-maand').innerHTML=`<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
+    return;
+  }
   /* v162: structurele signalen lopen mee in het oordeel volgens de bestaande beslisboom. Ze gaan
      bewust NIET naar maandCoachIngang() of maandVerband(): die kennen alleen de vijf regels, en een
      gesprek openen op een sleutel die coTopicMaand() niet kent zou een half pad opleveren. */
@@ -6699,7 +6719,7 @@ function steerSpendUpTo(m, day){ // stuurbare (variabele) uitgaven per categorie
   return by;
 }
 function monthVsPrevInner(m){
-  const ms=months(); const idx=ms.indexOf(m); if(idx<1) return {has:false,drivers:new Set(),html:''};
+  const ms=months(); const idx=ms.indexOf(m); if(idx<1) return {has:false,drivers:new Set()};
   const prev=ms[idx-1];
   const now=new Date(); const todayYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const partial=(m===todayYM);
@@ -6708,16 +6728,20 @@ function monthVsPrevInner(m){
   const sum=o=>Math.round(Object.values(o).reduce((s,v)=>s+v,0));
   const a=steerSpendUpTo(m,day), b=steerSpendUpTo(prev,day);
   const tThis=sum(a), tPrev=sum(b);
-  if(tPrev<=0 && tThis<=0) return {has:false,drivers:new Set(),html:''};
+  if(tPrev<=0 && tThis<=0) return {has:false,drivers:new Set()};
+  const delta=tThis-tPrev;
   const keys=new Set([...Object.keys(a),...Object.keys(b)]);
   const diffs=[...keys].map(k=>({k,d:Math.round((a[k]||0)-(b[k]||0))})).filter(x=>Math.abs(x.d)>=5 && CATS[x.k]);
   const downs=diffs.filter(x=>x.d<0).sort((x,y)=>x.d-y.d).slice(0,3);
   const ups=diffs.filter(x=>x.d>0).sort((x,y)=>y.d-x.d).slice(0,2);
   const drivers=new Set([...downs,...ups].map(x=>x.k));
-  /* Alleen drivers wordt gelezen (door whatStandsOutLine). De .html hierboven - het verschil met
-     vorige maand, de streak-regel en de zin over de grootste veroorzakers - werd elke render
-     gebouwd en weggegooid, en de streak-lus liep steerSpendUpTo() over elke maand opnieuw. */
-  return {has:true,drivers};
+  /* whatStandsOutLine() leest alleen drivers. De opgemaakte .html die hier stond werd elke render
+     gebouwd en weggegooid; de streak-lus erin liep steerSpendUpTo() over elke maand opnieuw en komt
+     niet terug. delta en partial blijven wel staan: dat is een aftrekking van twee waarden die er
+     toch al zijn, en daarmee is het kopgetal een eenregelaar:
+       `${euro0(Math.abs(delta))} ${delta<0?'minder':'meer'} dan vorige maand${partial?', tot nu toe':''}`
+     met var(--green) bij minder en var(--red) bij meer. */
+  return {has:true,drivers,delta,partial};
 }
 // categorieën die "Hoe doe je het?" al als budget-afwijking toont, voor ontdubbeling in "Wat valt op"
 function budgetFlaggedCats(m){
@@ -6731,6 +6755,21 @@ function isMode(x){ return (SET.mode||'begeleid')===x; }
 
 /* ===== OPVALLEND DEZE MAAND, data-gedreven hypotheses (van 'wat' naar 'dus-wat') ===== */
 function _catSpendOf(mm){ return catSpendMap(mm); }   // netto per categorie (terugstorting verrekend); gelijk aan catSpendMap, geen duplicaat-logica meer
+/* Bewaard uit v166: elk signaal droeg een duiding (hyp) en een dus-wat (imp) mee die nooit
+   gerenderd werden. De getallen staan nog in kpiLabel/kpiVal/kpiSub; deze zinnen niet, en ze
+   horen bij het gevolg dat op Inzichten ontbreekt.
+     categorie loopt 3 maanden op
+       hyp: "<Categorie> loopt al drie maanden op."
+       imp: "Kijk of dit blijvend is; zo ja, zet er een grens op."
+     ver boven je normaal
+       hyp: "Aan <categorie> ben je dit keer veel meer kwijt dan je gewend bent."
+       imp: "Check of het eenmalig was; anders een grens op <categorie>."
+     piekdag
+       hyp: "<Bijna de helft> van je losse geld gaat op <dag>."
+       imp: "Zo'n vaste piek is gewoonte; een bewuste <dag> levert de meeste winst."
+     grootste winkel
+       hyp: "Een winkel domineert je losse uitgaven."
+       imp: "Reken je deze maand niet rijk of arm aan dit ene bedrag." */
 function insSignals(m,exclude){
   exclude=exclude||new Set();
   const ms=months(); const idx=ms.indexOf(m); if(idx<0) return [];
@@ -8661,9 +8700,11 @@ function go(name){
   $('#s-'+name).classList.add('active');
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.go===name));
   const _g=document.getElementById('headGear'); if(_g) _g.classList.toggle('on',name==='set');
-  if(name==='act'){ window._coachStep=0; window._coachAnswer=null; window._coReopen=true; renderActions(); }
-  // leesmoment: alleen de datum, geen streak, geen teller, geen herinnering (v130)
-  if(name==='maand'){ try{ renderMaand(); SET.maandGelezen=new Date().toISOString().slice(0,10); save(); }catch(_){} }
+  if(!geenData()){
+    if(name==='act'){ window._coachStep=0; window._coachAnswer=null; window._coReopen=true; renderActions(); }
+    // leesmoment: alleen de datum, geen streak, geen teller, geen herinnering (v130)
+    if(name==='maand'){ try{ renderMaand(); SET.maandGelezen=new Date().toISOString().slice(0,10); save(); }catch(_){} }
+  }
   try{ localStorage.setItem('minder_view', name); }catch(_){}
   window.scrollTo(0,0);
 }

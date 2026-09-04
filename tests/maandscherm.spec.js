@@ -279,13 +279,37 @@ test.describe('d · het oordeel', () => {
     expect(o.zin).toBe('Er is niets dat vastloopt. 1 regel vraagt aandacht.');
   });
 
+  // v167: de zin noemde altijd vijf, ook als er drie regels stonden. Hij telt nu wat er is, en
+  // zegt 'alle' alleen als er ook niets onbekend is.
   test('d: alles goed, punt, geen felicitatie', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { SET.nfDoelVast = 19000; save(); });                  // aansluiting sluit aan
-    const o = await O(page);
-    expect(o.zin).toBe('Alle vijf de regels staan goed.');
-    expect(o.zin).not.toMatch(/[!—]/);
-    expect(o.zin).not.toMatch(/mooi|knap|goed bezig|gefeliciteerd/i);
+    const r = await page.evaluate(() => {
+      const R = maandRegels();
+      return { n: R.length, ok: R.filter((x) => x.status === 'ok').length, o: maandOordeel(R) };
+    });
+    expect(r.ok).toBe(r.n);                                                          // alles ok in deze opzet
+    expect(r.o.zin).toBe(`Alle ${r.n} regels staan goed.`);
+    expect(r.o.zin).not.toContain('vijf');
+    expect(r.o.zin).not.toMatch(/[!—]/);
+    expect(r.o.zin).not.toMatch(/mooi|knap|goed bezig|gefeliciteerd/i);
+  });
+
+  test('d2: het aantal is het werkelijke aantal, en alle telt alleen bij volledig', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const mk = (n, st) => Array.from({ length: n }, (_, i) => ({ key: 'r' + i, naam: 'Regel ' + (i + 1), status: st }));
+      return {
+        drie: maandOordeel(mk(3, 'ok')).zin,
+        een: maandOordeel(mk(1, 'ok')).zin,
+        gemengd: maandOordeel(mk(2, 'ok').concat(mk(1, 'onbekend'))).zin,
+        nul: maandOordeel([]).zin,
+      };
+    });
+    expect(r.drie).toBe('Alle 3 regels staan goed.');
+    expect(r.een).toBe('De enige regel die te toetsen is staat goed.');
+    expect(r.gemengd).toBe('De 2 regels die te toetsen zijn staan goed.');           // niet 'alle'
+    expect(r.nul).toBe('Er is nog niets te beoordelen.');
   });
 
   test('e: te veel onbekend', async ({ page }) => {
