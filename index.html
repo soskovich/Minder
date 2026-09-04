@@ -1605,8 +1605,9 @@ function monthLiquidity(){
   const varDue=Math.round(dailyVar*daysLeft);
   const {sum,missing}=totalBalance(); const buffer=+SET.buffer||0;
   const projected=Math.round(sum+incDue-fixDue-varDue);   // forecast blijft de eerlijke voorspelling (Optie B)
-  const varPlan=varPlanRemaining(ym);                      // je variabele plan (potjes), voor de spiegel op de kaart
-  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,varPlan,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems,fixDueExclCount};
+  // v170: varPlan is hier weg. Hij voedde de spiegel op de liquiditeitskaart en die verviel; sindsdien
+  // las niemand hem. Wie het variabele plan nodig heeft roept varPlanRemaining() aan, de enige bron.
+  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems,fixDueExclCount};
 }
 // Veilig te besteden = saldo - nog-niet-betaalde vaste lasten deze maand - nog gereserveerde potjes (budget minus al uitgegeven)
 function safeToSpend(){
@@ -2117,7 +2118,7 @@ function toast(msg){ let el=document.getElementById('toast'); if(!el){ el=docume
    De uitleg is één zin en verschijnt in een mini-popover; bewust geen alert/confirm, die blokkeren de app en de extensie. */
 const JARGON={
   veiligtebesteden:'Wat er van je saldo vrij is voor de rest van de maand: je saldo min je vaste lasten die nog komen, min wat er in je potjes gereserveerd staat, min je spaarinleg.',
-  onderaandestreep:'Wat er deze maand nog binnenkomt min wat er nog af moet; het gaat alleen over de dagen die nog komen, niet over je hele saldo.',
+  eigenkracht:'Wat er deze maand nog binnenkomt min wat er nog uit moet, zonder je banksaldo. Negatief betekent dat er deze maand meer uitgaat dan er binnenkomt en je dus je saldo aanspreekt. Wil je het bedrag inclusief saldo, kijk dan naar Veilig te besteden op Home.',
   nogtesparen:'Het deel van je spaarinleg voor deze maand dat je nog opzij moet zetten: je maandbedrag min wat er deze maand al naar je spaarrekening ging.',
   spaarinleg:'Wat je per maand opzij wilt zetten. Dit is het bedrag dat je doelen verdeelt, niet alles wat er aan het eind van de maand overblijft.',
   restsaldo:'Je inkomen min je uitgaven in een maand. Je spaarinleg komt hieruit; wat er daarnaast overblijft kan ergens anders heen.',
@@ -5054,7 +5055,7 @@ function nogDezeMaandBody(){
       <div class="wvo-tile"><div class="wvo-tl">Nog te ontvangen</div><div class="wvo-tv" style="color:${teOntvangen>0?'var(--green)':'var(--mut)'}">${euro0(teOntvangen)}</div><div class="wvo-ts">inkomen</div></div>${spaarTegel}
     </div>
     ${varPlan>0?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:6px;text-align:right;cursor:pointer" onclick="openReservedPotjes()">plus ${euro0(varPlan)} variabel uit je potjes ›</div>`:''}
-    <div class="ndm-net"><span>${jrg('onderaandestreep','Onderaan de streep')}</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>${naSparen}`;
+    <div class="ndm-net"><span>${jrg('eigenkracht','Deze maand op eigen kracht')}</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>${naSparen}`;
 }
 /* v135: de kaart is gesplitst in body en omhulsel, zodat Inzichten de tegels in zijn eigen
    herokaart kan zetten zonder een kaart in een kaart. Alle guards en de koppeling met

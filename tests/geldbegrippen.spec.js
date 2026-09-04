@@ -27,12 +27,12 @@ test.describe('a · tik-voor-uitleg op de kernbegrippen', () => {
   });
 
   // v144: "Nog deze maand" stond op Vooruitblik en op Inzichten; alleen de Inzichten-hero bleef.
-  test('"Onderaan de streep" en "Nog te sparen" in de Inzichten-hero ook', async ({ page }) => {
+  test('"Deze maand op eigen kracht" en "Nog te sparen" in de Inzichten-hero ook', async ({ page }) => {
     await boot(page, 'ins');
     const kaart = page.locator('#s-ins .card').first();
     const termen = await kaart.locator('.jrg').evaluateAll((els) => els.map((e) => e.textContent));
     expect(termen).toContain('Nog te sparen');
-    expect(termen).toContain('Onderaan de streep');
+    expect(termen).toContain('Deze maand op eigen kracht');
 
     // de tegel is klikbaar; een tik op de term toont alleen de uitleg, niet de drill-down
     await kaart.locator('.jrg', { hasText: 'Nog te sparen' }).click();

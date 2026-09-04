@@ -75,7 +75,7 @@ test.describe('a · de herokaart', () => {
     expect(b.eerste).toMatch(/dag \d+ van \d+/);
     expect(b.eerste).toMatch(/van €[\d.]+ maandbudget/);
     expect(b.eerste).toMatch(/NOG DEZE MAAND/);
-    expect(b.eerste).toMatch(/Onderaan de streep/);
+    expect(b.eerste).toMatch(/Deze maand op eigen kracht/);
     expect(b.ndmKoppen).toBe(1);                       // niet twee keer op het scherm
   });
 

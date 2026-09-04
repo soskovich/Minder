@@ -49,7 +49,7 @@ const SITUATIES = [
 
 test.describe('a · elke plek leest dezelfde bron', () => {
   for (const [naam, opt] of SITUATIES) {
-    test(`${naam}: vier plekken, één getal`, async ({ page }) => {
+    test(`${naam}: drie plekken en het scherm, één getal`, async ({ page }) => {
       await boot(page, seed(opt));
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
@@ -58,7 +58,10 @@ test.describe('a · elke plek leest dezelfde bron', () => {
         return {
           bron: varRest,
           safe: Math.round(safeToSpend().reserved),
-          liq: Math.round(monthLiquidity().varPlan),
+          // wat Inzichten er letterlijk van maakt: het bedrag uit de regel onder de tegel
+          scherm: (function(){ const d=document.createElement('div'); d.innerHTML=nogDezeMaandBody();
+            const m2=d.innerText.replace(/\s+/g,' ').match(/plus €([\d.]+) variabel/);
+            return m2 ? +m2[1].replace(/\./g,'') : 0; })(),
           // dezelfde som, met de hand: potjeRest per niet-recurring potje
           hand: (function () {
             const sp = catSpendMap(m), B = SET.budgets || {}, rc = recurringCats();
@@ -70,8 +73,8 @@ test.describe('a · elke plek leest dezelfde bron', () => {
         };
       });
       expect(r.safe).toBe(r.bron);
-      expect(r.liq).toBe(r.bron);
       expect(r.hand).toBe(r.bron);
+      expect(r.scherm).toBe(r.bron);       // en dat is ook het bedrag dat Inzichten toont
     });
   }
 });

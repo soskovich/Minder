@@ -42,7 +42,7 @@ test.describe('a · de tegel toont wat er nog opzij moet', () => {
     const kt = (await kaart(page).innerText()).toLowerCase();
     expect(kt).toContain('nog te betalen');
     expect(kt).toContain('nog te ontvangen');
-    expect(kt).toContain('onderaan de streep');
+    expect(kt).toContain('deze maand op eigen kracht');
   });
 
   test('het is exact het bedrag dat "veilig te besteden" al reserveert', async ({ page }) => {
@@ -78,7 +78,7 @@ test.describe('b · randgevallen', () => {
     expect(kt).not.toContain('vrij ná sparen');
     expect(kt).toContain('nog te betalen');
     expect(kt).toContain('nog te ontvangen');
-    expect(kt).toContain('onderaan de streep');
+    expect(kt).toContain('deze maand op eigen kracht');
     expect(await kaart(page).locator('.wvo-tiles').evaluate((e) => e.style.gridTemplateColumns)).toBe('1fr 1fr');
   });
 
@@ -102,7 +102,7 @@ test.describe('b · randgevallen', () => {
 });
 
 test.describe('c · "vrij ná sparen" spiegelt zonder te rekenen', () => {
-  test('verschijnt alleen als er onderaan de streep iets overblijft', async ({ page }) => {
+  test('verschijnt alleen als er deze maand op eigen kracht iets overblijft', async ({ page }) => {
     // salaris van deze maand weg -> incDue = je basisinkomen, dus een positief netto
     await boot(page, tweak((set, tx) => {
       for (let i = tx.length - 1; i >= 0; i--) if (tx[i].id === 'inc-' + CUR) tx.splice(i, 1);

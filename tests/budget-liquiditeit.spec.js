@@ -76,15 +76,20 @@ test.describe('v53 potjes leidend, inkomen-limiet als spiegel', () => {
 
 /* ===================== v54: potjes-plan naast forecast ===================== */
 test.describe('v54 liquiditeit: plan naast forecast', () => {
-  test('varPlan is het onbestede variabele plan; de forecast blijft apart', async ({ page }) => {
+  /* v170: L.varPlan is weg. Hij voedde de spiegel op de liquiditeitskaart en die verviel, dus
+     sindsdien las niemand hem. Het plan komt uit varPlanRemaining(), de enige bron; de forecast
+     blijft een apart model. */
+  test('het plan komt uit varPlanRemaining; de forecast blijft apart', async ({ page }) => {
     await open(page);
-    const L = await page.evaluate(() => monthLiquidity());
-    expect(L.varPlan).toBe(VARPLAN);                       // potjes-kant
+    const r = await page.evaluate(() => ({ L: monthLiquidity(), plan: varPlanRemaining(curMonth) }));
+    const L = r.L;
+    expect(L.varPlan).toBe(undefined);                     // geen tweede plek meer waar het staat
+    expect(r.plan).toBe(VARPLAN);                          // potjes-kant
     expect(L.fixDue).toBe(FIXDUE);
     expect(L.sum).toBe(SALDO);
     // forecast-formule ongewijzigd: saldo + inkomen - vast - variabel-op-tempo
     expect(L.projected).toBe(Math.round(L.sum + L.incDue - L.fixDue - L.varDue));
-    expect(L.varDue).not.toBe(L.varPlan);                  // twee modellen, bewust niet gelijkgetrokken
+    expect(L.varDue).not.toBe(r.plan);                     // twee modellen, bewust niet gelijkgetrokken
   });
 
   test('de labels benoemen welk model je ziet', async ({ page }) => {
