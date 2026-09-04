@@ -462,7 +462,10 @@ test.describe('g · leesmoment en robuustheid', () => {
     expect(await page.evaluate(() => SET.maandGelezen || null)).toBeNull();
     await page.evaluate(() => go('maand'));
     const d = await page.evaluate(() => SET.maandGelezen);
-    expect(d).toBe(new Date().toISOString().slice(0, 10));
+    // v177: de app legt de LOKALE dag vast, niet de UTC-dag; die verschillen tussen middernacht
+    // en 02:00 zomertijd
+    const nu = new Date();
+    expect(d).toBe(nu.getFullYear() + '-' + String(nu.getMonth() + 1).padStart(2, '0') + '-' + String(nu.getDate()).padStart(2, '0'));
     await page.evaluate(() => go('maand'));
     const t = await page.locator('#s-maand').innerText();
     expect(t).toMatch(/Gelezen op \d{1,2} \w+ \d{4}\./);

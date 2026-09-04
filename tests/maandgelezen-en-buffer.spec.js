@@ -6,6 +6,11 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 
+// v177: de app legt de LOKALE dag vast (vandaagYMD), niet de UTC-dag. Tussen middernacht
+// en 02:00 zomertijd verschillen die, en dan toonde "Gelezen op" de dag ervoor.
+const vandaag = () => { const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
 const MAIN = 'NL01MAIN0000001111';
 const SAV = 'NL01SAVE0000004323';
 const now = new Date();
@@ -66,7 +71,7 @@ test.describe('a · het scherm spreekt zichzelf niet meer tegen', () => {
     const src = await page.evaluate(() => maandStructureel.toString());
     expect(src).not.toContain('maandGelezen');
     const voor = await page.evaluate(() => maandStructureel().map((r) => r.key));
-    await page.evaluate(() => { SET.maandGelezen = new Date().toISOString().slice(0, 10); save(); });
+    await page.evaluate((d) => { SET.maandGelezen = d; save(); }, vandaag());
     expect(await page.evaluate(() => maandStructureel().map((r) => r.key))).toEqual(voor);
     await page.evaluate(() => { delete SET.maandGelezen; save(); });
     expect(await page.evaluate(() => maandStructureel().map((r) => r.key))).toEqual(voor);
@@ -76,7 +81,8 @@ test.describe('a · het scherm spreekt zichzelf niet meer tegen', () => {
     await boot(page);
     const dag1 = await openMaand(page);
     await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 1);
-      SET.maandGelezen = d.toISOString().slice(0, 10); save(); });
+      SET.maandGelezen = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      save(); });
     const dag2 = await openMaand(page);
     expect(dag2).toBe(dag1);
   });
@@ -99,7 +105,7 @@ test.describe('b · Gelezen op klopt bij de render waarin hij staat', () => {
     await page.waitForTimeout(120);
     const r = await page.evaluate(() => ({ txt: $('#s-maand').innerText, vlag: SET.maandGelezen }));
     const d = new Date();
-    expect(r.vlag).toBe(d.toISOString().slice(0, 10));
+    expect(r.vlag).toBe(vandaag());
     expect(r.txt).toContain(`Gelezen op ${d.getDate()} `);
   });
 

@@ -757,6 +757,12 @@ function load(){try{
  * SET.budgetMonth  = de 'YYYY-MM' waar SET.budgets op geankerd staat.
  * Bij maandwissel promoveert rolloverBudgets() de 'next'-laag naar actief. Niets gewijzigd = carry-forward. */
 function thisYM(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+/* v177: welke dag is het hier? new Date().toISOString() geeft de UTC-dag, en tussen middernacht en
+   02:00 zomertijd is dat gisteren. "Gelezen op" toonde daardoor de dag ervoor, en een boeking van
+   vandaag matchte niet. Datums in TX zijn lokale kalenderdagen, dus dit hoort dat ook te zijn.
+   De PSD2-aanroepen houden bewust hun ISO-datum: dat is een API-parameter, geen dag van jou. */
+function vandaagYMD(){ const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function nextYM(ym){ let [y,mo]=String(ym).split('-').map(Number); mo++; if(mo>12){mo=1;y++;} return y+'-'+String(mo).padStart(2,'0'); }
 function ymFull(ym){ const mo=+String(ym).split('-')[1]; return MFULL[mo-1]||''; }
 function rolloverBudgets(){
@@ -1130,7 +1136,13 @@ function openBudgetCompare(m){
   const now=new Date(); const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate(); const dom=Math.min(now.getDate(),dim);
   const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); const isNowM=m===nowYM;
   const dayPct=isNowM?Math.round(dom/dim*100):100;
-  const ahead=isNowM && usedPct>dayPct+8, behind=isNowM && usedPct<dayPct-8;
+  /* v177: ahead/behind vergeleek je hele uitgave met de verstreken dagen, dus een incasso op dag 2
+     maakte je "iets te snel" zonder dat je iets deed. Het tempo-oordeel gaat over het variabele
+     deel; usedPct blijft ongemoeid, want dat is een stand en geen tempo. */
+  const _P=tempoProjectie(m);
+  const _vb=varBudget();
+  const variPct=_vb>0?Math.round(_P.variTot/_vb*100):0;
+  const ahead=isNowM && _vb>0 && variPct>dayPct+8, behind=isNowM && _vb>0 && variPct<dayPct-8;
   const tempo=!isNowM?'afgerond':(over?'over budget':(ahead?'iets te snel':(behind?'ruim op schema':'op schema')));
   const tempoCol=over?'var(--red)':(ahead?'var(--amber)':'var(--teal)');
   const EB=effectiveBudgets(m).out, actual=catSpendMap(m);
@@ -1232,6 +1244,46 @@ function baseIncome(){
 function splitFixedVar(m){ let fixed=0,vari=0;
   for(const x of txOfMonth(m)){ if(CATS[catOf(x)].type==='expense'){ if(isFixed(x)) fixed+=-x.amount; else vari+=-x.amount; } }   // netto: terugstorting verlaagt vast/variabel
   return {fixed,vari};
+}
+/* ===== Tempo-projectie (v177) =====
+ * Een tempo veronderstelt dat een uitgave gelijkmatig over de maand valt, en een incasso doet dat
+ * per definitie niet. Huur op dag 2 laat je tempo op dag 5 exploderen, en dat gebeurt elke maand
+ * bij iedereen in de eerste week: dan levert de kalender het oordeel in plaats van je gedrag.
+ * Daarom wordt alleen het VARIABELE deel geextrapoleerd. Vaste lasten tellen als waarneming mee:
+ * wat er al is afgeschreven, plus wat er deze maand nog komt (monthLiquidity().fixDue). De
+ * scheiding komt uit splitFixedVar(), die dat onderscheid al maakt (v55).
+ * Eén bron: vier plekken rekenden hier hun eigen tempo, drie daarvan met vaste lasten erin. */
+function tempoProjectie(m){
+  m=m||(typeof kijkMaand==='function'?kijkMaand():m);
+  let de={dim:30,elapsed:0}; try{ de=daysElapsed(m); }catch(_){}
+  const el=Math.max(de.elapsed,1);
+  const lopend=(m===thisYM());
+  /* Eén pass met dezelfde partitie als splitFixedVar (isFixed, v55), maar ook gesplitst op datum:
+     een boeking die verderop in deze maand valt is al ingepland en hoort niet in een tempo dat over
+     de verstreken dagen rekent. Anders telt een geplande afschrijving als gedrag van vandaag. */
+  let vastTot=0, variTot=0, variLater=0;
+  try{ for(const x of txOfMonth(m)){
+    const c=CATS[catOf(x)]; if(!c||c.type!=='expense') continue;
+    const bedrag=-x.amount;
+    if(isFixed(x)){ vastTot+=bedrag; continue; }
+    if(lopend && (+x.date.slice(8,10))>de.elapsed) variLater+=bedrag;
+    else variTot+=bedrag;
+  } }catch(_){}
+  let fixDue=0; try{ if(lopend) fixDue=Math.round(monthLiquidity().fixDue||0); }catch(_){}
+  const vast=Math.round(vastTot)+fixDue;
+  const variTempo=lopend?Math.round(variTot/el*de.dim):Math.round(variTot);
+  return {dim:de.dim, elapsed:de.elapsed, lopend, vast,
+    variTot:Math.round(variTot), variLater:Math.round(variLater),
+    vari:Math.round(variTot+variLater), variTempo,
+    proj: vast+Math.round(variLater)+variTempo};
+}
+/* De variabele helft van je potjes: dezelfde partitie die varPlanRemaining() gebruikt, dus geen
+   tweede definitie van "welke categorieen zijn variabel". Nodig om een variabel tempo tegen een
+   variabel budget te kunnen zetten in plaats van tegen je hele budget. */
+function varBudget(){
+  const B=SET.budgets||{}; let rc=new Set(); try{ rc=recurringCats(); }catch(_){}
+  let v=0; for(const k in B){ const b=+B[k]||0; if(b>0 && !rc.has(k)) v+=b; }
+  return Math.round(v);
 }
 // ===== PROGNOSE (lichtgewicht AI: gemiddelden + trend) =====
 function monthAgg(m){ let income=0; for(const t of txOfMonth(m)) if(CATS[catOf(t)].type==='income') income+=Math.max(t.amount,0);
@@ -2268,8 +2320,8 @@ function headerSearch(){ go('tx'); if(!window._txSearchOpen) toggleTxSearch(); s
  * uitgaven-angst traint. lossFrames = {ymd, n, keys} houdt de dagteller bij. */
 const LOSS_GROUPS=new Set(['budget','tempo','discr','big','save']);   // 'discr' verving de oude vices-melding
 function isLossFrame(key){ return LOSS_GROUPS.has(String(key||'').split('-')[0]); }
-function lossFramesToday(){ const d=new Date().toISOString().slice(0,10); const lf=SET.lossFrames; return (lf&&lf.ymd===d)?(+lf.n||0):0; }
-function noteLossSeen(key){ if(!isLossFrame(key)) return; const d=new Date().toISOString().slice(0,10); let lf=SET.lossFrames;
+function lossFramesToday(){ const d=vandaagYMD(); const lf=SET.lossFrames; return (lf&&lf.ymd===d)?(+lf.n||0):0; }
+function noteLossSeen(key){ if(!isLossFrame(key)) return; const d=vandaagYMD(); let lf=SET.lossFrames;
   if(!lf||lf.ymd!==d){ lf=SET.lossFrames={ymd:d,n:0,keys:{}}; } lf.keys=lf.keys||{};
   if(!lf.keys[key]){ lf.keys[key]=1; lf.n=(+lf.n||0)+1; } }
 /* ---- Mental accounting: stilstaand surplus boven de heilige buffer vs. dure schuld (MECHANISM_SPEC.mentalAccounting) ----
@@ -2319,7 +2371,7 @@ function scoreNotifs(opts){
   const out=[]; if(!TX.length) return out;
   const ms=months(); if(!ms.length) return out;
   const m=ms[ms.length-1];
-  const now=new Date(); const today=now.toISOString().slice(0,10);
+  const now=new Date(); const today=vandaagYMD();
   const isNow=m===(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
   const push=o=>{ if(o&&o.l1) out.push(o); };
   if(SET.demoMechanismen){ demoNotifs().forEach(push); }
@@ -2363,8 +2415,12 @@ function scoreNotifs(opts){
         saveRiskPushed=true;
       } } }catch(_){} }
   // tempo zegt hetzelfde als save-risk ("je geeft te snel uit"); één boodschap is genoeg
+  /* v177: hier stond t.spend/el*de.dim - je hele maanduitgave op tempo, dus met de huur erin.
+     tempoProjectie() extrapoleert alleen het variabele deel en telt de vaste lasten als
+     waarneming mee. */
   if(isNow && !saveRiskPushed){ try{ const t=totals(m), de=daysElapsed(m), el=de.elapsed||1;
-    if(t.budget>0 && el>=5 && (t.spend/el*de.dim)>t.budget*1.07){ const proj=Math.round(t.spend/el*de.dim); const ack=(SET.chronicAck||{}).tempo; if(!(ack && ack.ym===m && proj < ack.val*1.10)) push({key:'tempo', h:'direct',score:66,t:'warn',ic:ICON('clock'),l1:'Op dit tempo ga je deze maand over je grens.',l2:'Verlaag je dagdoel',act:"go('act')",chronic:{key:'tempo', h:'direct',ym:m,val:proj}}); } }catch(_){} }
+    const P=tempoProjectie(m);
+    if(t.budget>0 && el>=5 && P.proj>t.budget*1.07){ const proj=P.proj; const ack=(SET.chronicAck||{}).tempo; if(!(ack && ack.ym===m && proj < ack.val*1.10)) push({key:'tempo', h:'direct',score:66,t:'warn',ic:ICON('clock'),l1:'Op dit tempo ga je deze maand over je grens.',l2:'Verlaag je dagdoel',act:"go('act')",chronic:{key:'tempo', h:'direct',ym:m,val:proj}}); } }catch(_){} }
   // Categorie-neutraal i.p.v. de oude vices-melding: welke stuurbare categorie ligt het sterkst
   // boven zijn éígen mediaan? Geen categorie wordt apart aangewezen; de maatstaf is je eigen normaal.
   if(isNow){ try{ const cur=catSpendMap(m); const B=SET.budgets||{};
@@ -5398,7 +5454,14 @@ function coachStatus(m){
   const t=totals(m), L=monthLiquidity(), de=daysElapsed(m);
   const bud=Math.round(t.budget), spent=Math.round(t.spend);
   const dim=de.dim, elapsed=de.elapsed, left=Math.max(dim-elapsed,0);
-  const expected=bud>0?Math.round(bud*elapsed/dim):0;            // lineair verwacht tempo tot nu
+  /* v177: expected was bud*elapsed/dim en werd tegen je hele uitgave gezet, dus de huur van dag 2
+     maakte je in de eerste week per definitie "over budget". Het tempo-oordeel gaat nu over het
+     variabele deel; de vaste lasten die al zijn afgeschreven tellen als waarneming mee, zodat
+     expected nog steeds leest als "wat je nu ongeveer kwijt zou zijn". */
+  const P=tempoProjectie(m);
+  const vb=varBudget();
+  const variVerwacht=vb>0?Math.round(vb*elapsed/dim):0;
+  const expected=P.vast+variVerwacht;
   // v169: hier stond een derde formule voor hetzelfde bedrag (historisch gemiddelde, met terugval
   // op het tempo). Zelfde bron als Home en Inzichten: je plan.
   const varRest=(function(){ try{ return varPlanRemaining(m); }catch(_){ return 0; } })();
@@ -5406,7 +5469,7 @@ function coachStatus(m){
   let verdict,vcol,vkey;
   if(bud<=0){ verdict='stel inkomen in'; vcol='var(--mut)'; vkey='none'; }
   else if(spent>bud||projEnd>bud){ verdict='over budget'; vcol='var(--amber)'; vkey='over'; }
-  else if(spent<=expected*0.9){ verdict='ruim binnen'; vcol='var(--teal)'; vkey='room'; }
+  else if(P.variTot<=variVerwacht*0.9){ verdict='ruim binnen'; vcol='var(--teal)'; vkey='room'; }
   else { verdict='op koers'; vcol='var(--teal)'; vkey='track'; }
   return {bud,spent,left,dim,elapsed,expected,projEnd,verdict,vcol,vkey,
     pct:bud>0?Math.min(spent/bud*100,100):0, pacePct:bud>0?Math.min(expected/bud*100,100):0};
@@ -8739,7 +8802,8 @@ function minderBriefingState(){
   return {
     safeToSpend: num(()=>safeToSpend().safe),
     safeToSpendBuffer: +SET.stsBuffer||0,
-    netSpendPeriode: num(()=>{ const de=daysElapsed(ym); if(!de.elapsed||de.elapsed<7) return NaN; return netSpend(txOfMonth(ym))*de.dim/de.elapsed; }),  // tempo-gecorrigeerd: lopende uitgave -> verwachte volledige maand (pas vanaf dag 7)
+    // v177: dit extrapoleerde je hele maanduitgave, dus met de vaste lasten erin
+    netSpendPeriode: num(()=>{ const de=daysElapsed(ym); if(!de.elapsed||de.elapsed<7) return NaN; return tempoProjectie(ym).proj; }),   // lopende uitgave -> verwachte volledige maand (pas vanaf dag 7)
     netSpendPatroon: num(()=>baselineSpend()),
     verplichtingen: verpl,
     fireOpKoers: fireOpKoers()
@@ -8911,7 +8975,7 @@ function go(name){
        nu veilig, want de vlag stuurt geen inhoud meer aan (v168). */
     /* v176: het leesmoment gaat over de lopende maand. Een afgesloten maand bekijken zet die vlag
        dus niet, en onderdrukt daarmee ook niets van het heden. */
-    if(name==='maand'){ try{ if(isLopendeMaand()){ SET.maandGelezen=new Date().toISOString().slice(0,10); save(); } renderMaand(); }catch(_){} }
+    if(name==='maand'){ try{ if(isLopendeMaand()){ SET.maandGelezen=vandaagYMD(); save(); } renderMaand(); }catch(_){} }
   }
   try{ localStorage.setItem('minder_view', name); }catch(_){}
   window.scrollTo(0,0);

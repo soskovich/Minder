@@ -186,9 +186,17 @@ test.describe('e · de lege lijst', () => {
   test('een rustige regel, zonder uitleg of verwijzing', async ({ page }) => {
     // ruim saldo, want lowbal en accshort zijn kritiek en negeren demping met opzet
     await boot(page, seed({ set: { manualBal: { [MAIN]: 50000, [SPAAR]: 20000 } } }));
+    /* De loss-frame-dosering (MECHANISM_SPEC.lossAversion) capt het aantal frames per dag, dus
+       zodra je er een dempt schuift het volgende signaal aan. Eén ronde dempen is niet genoeg;
+       we dempen tot de lijst stabiel leeg is. */
     await page.evaluate(() => {
-      const m = {}; for (const n of scoreNotifs()) m[String(n.key).split('-')[0]] = true;
-      SET.notifMuted = m; save();
+      SET.notifMuted = SET.notifMuted || {};
+      for (let i = 0; i < 20; i++) {
+        const n = scoreNotifs();
+        if (!n.length) break;
+        for (const x of n) SET.notifMuted[String(x.key).split('-')[0]] = true;
+      }
+      save();
     });
     expect(await page.evaluate(() => notifList().map((n) => n.key))).toEqual([]);
     await page.evaluate(() => openNotifs());

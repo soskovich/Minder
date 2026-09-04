@@ -7,6 +7,11 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 
+// v177: de app legt de LOKALE dag vast (vandaagYMD), niet de UTC-dag. Tussen middernacht
+// en 02:00 zomertijd verschillen die, en dan toonde "Gelezen op" de dag ervoor.
+const vandaag = () => { const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
 const MAIN = 'NL01MAIN0000001111';
 const SAV = 'NL01SAVE0000004323';
 const now = new Date();
@@ -201,7 +206,7 @@ test.describe('e · maandGelezen blijft van de lopende maand', () => {
     await boot(page);
     await page.evaluate(() => go('maand'));
     await page.waitForTimeout(130);
-    expect(await page.evaluate(() => SET.maandGelezen)).toBe(new Date().toISOString().slice(0, 10));
+    expect(await page.evaluate(() => SET.maandGelezen)).toBe(vandaag());
   });
 });
 
