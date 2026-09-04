@@ -117,7 +117,10 @@ test.describe('c · niets anders verandert', () => {
     expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // v161: vier, over twee schermen
     // v135: de samenstelling is herschikt (hero, dan wat opviel, dan Verdieping), maar de grafiek
     // houdt zijn drietraps default uit v90 en de strip staat er onveranderd in
-    expect(await page.evaluate(() => /insSection\('Deze maand'\)\s*\+\s*hero\s*\+\s*whatStandsOutLine\(m\)\s*\+\s*insLekVraag\(m\)/.test(renderIns.toString()))).toBe(true);
+    // v176: de samenstelling draagt nu ook de maandkiezer en de banner; de volgorde blijft
+    const src = await page.evaluate(() => renderIns.toString().replace(/\s+/g, ' '));
+    expect(src).toMatch(/hero \+ whatStandsOutLine\(m\)/);
+    expect(await page.evaluate(() => renderIns.toString())).toContain('afgeslotenMaandBanner(m)');
     expect(await page.evaluate(() => COLLAP_DEF.openSpendChart)).toEqual({ rustig: false, rest: true });
   });
 

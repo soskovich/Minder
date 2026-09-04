@@ -3342,6 +3342,26 @@ function maandGelezen(){
   return `<div class="small" style="color:var(--mut2);text-align:center;margin-top:14px">Gelezen op ${dt.getDate()} ${MFULL[dt.getMonth()]} ${dt.getFullYear()}.</div>`;
 }
 function renderMaand(){
+  const m=kijkMaand();
+  /* v176: bij een afgesloten maand valt het hele regelblok weg. Alle vijf de regels lezen een stand
+     van NU - dekking() en spaarVrij() een rekeningsaldo, bufferMaanden() je spaarsaldo, maandDoel()
+     je huidige plan, en maandPatroon() leest scoreNotifs(), dat intern op ms[ms.length-1] rekent en
+     dus altijd de lopende maand beschrijft. Ze met terugwerkende kracht tonen zou suggereren dat je
+     buffer in juli op dat niveau stond terwijl je het saldo van vandaag ziet. Weglaten dus, niet
+     labelen: onder een historische kop leest een getal als historisch, hoe je het ook bijschrijft.
+     Wat wel per maand rekent is maandKpiBlok(m); dat blijft staan. Het oordeel verdwijnt mee, want
+     het telt de regels die er staan en er staan er geen. */
+  if(!isLopendeMaand(m)){
+    $('#s-maand').innerHTML=`${afgeslotenMaandBanner(m)}
+      <div class="card">
+        <div class="row" style="gap:8px"><span class="hlabel" style="margin:0;flex:1">Je maand</span>${maandKiezerChip(m)}</div>
+        <div class="small muted" style="margin-top:8px;line-height:1.5">Je maand-regels gaan over hoe je er nu voor staat: je buffer, je dekking, je aansluiting spaargeld en je aankoopdoel lezen allemaal een saldo van vandaag. Die zijn niet met terugwerkende kracht te bepalen, dus voor een afgesloten maand staan ze er niet.</div>
+        <div class="small" style="margin-top:8px"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="naarLopendeMaand()">Naar ${esc(monthLabel(thisYM()))} ›</span></div>
+      </div>
+      ${maandKpiBlok(m)}
+      <div style="height:12px"></div>`;
+    return;
+  }
   const R=maandRegels();
   /* Geen enkele regel te toetsen: dan vat dit scherm niets samen. Bij nul transacties komt hier
      niemand meer langs - render() en go() vallen dan terug op renderEmpty() - maar een scherm dat
@@ -3373,7 +3393,7 @@ function renderMaand(){
   $('#s-maand').innerHTML=`
     ${maandAfspraakLus()}
     <div class="card">
-      <div class="hlabel" style="margin:0 0 6px">Je maand</div>
+      <div class="row" style="gap:8px;margin:0 0 6px"><span class="hlabel" style="margin:0;flex:1">Je maand</span>${maandKiezerChip(m)}</div>
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
       ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
     </div>
@@ -3385,7 +3405,7 @@ function renderMaand(){
       ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}</div>`:''}
     ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
       ${goed.map(r=>maandRij(r,true)).join('')}</div>`:''}
-    ${maandKpiBlok(curMonth||months()[months().length-1])}
+    ${maandKpiBlok(m)}
     ${maandBeleggenRegel(R)}
     ${maandCoachIngang(RO)}
     ${maandGelezen()}
@@ -7699,7 +7719,7 @@ function insBudgetBlok(m){
   if(L && L.datum < m+'-01'){
     const {act,lab}=importCta();
     return `<div>
-      <div class="row" style="gap:8px"><span class="hlabel" style="margin:0;flex:1">${esc(monthLabel(m))}</span></div>
+      <div class="row" style="gap:8px">${maandKiezerKop(m)}</div>
       <div class="row" style="align-items:baseline;gap:8px;margin-top:8px">
         <span style="font-size:var(--fs-xl);font-weight:800;color:var(--mut)">onbekend</span>
         <span class="small muted" style="flex:1;min-width:0">uitgegeven</span></div>
@@ -7714,7 +7734,7 @@ function insBudgetBlok(m){
     ? `<div class="row" style="justify-content:space-between;margin-top:6px;font-size:var(--fs-xs);color:var(--mut2)"><span>boven inkomen-limiet</span><span style="font-weight:700">${euro0(t.budget-t.limit)} (${SET.limit}%)</span></div>`
     : '';
   return `<div>
-    <div class="row" style="gap:8px;cursor:pointer" onclick="openBudgetCompare('${m}')"><span class="hlabel" style="margin:0;flex:1">${esc(monthLabel(m))}</span><span class="small muted">dag ${d.elapsed} van ${d.dim} ›</span></div>
+    <div class="row" style="gap:8px">${maandKiezerKop(m)}<span class="small muted" style="cursor:pointer" onclick="openBudgetCompare('${m}')">${isLopendeMaand(m)?`dag ${d.elapsed} van ${d.dim}`:'hele maand'} ›</span></div>
     <div class="row" style="align-items:baseline;gap:8px;margin-top:8px">
       <span style="cursor:pointer" onclick="openMonthSpend('${m}')"><span style="font-size:var(--fs-xl);font-weight:800">${euro0(sp)}</span> <span class="small muted">uitgegeven</span></span>
       <span class="small muted" style="flex:1;min-width:0;cursor:pointer" onclick="openPotjesVerdeling('${m}')">van ${euro0(bud)} ${t.potTotal>0?'maandbudget':'je inkomen-limiet'} ›</span>
@@ -7768,8 +7788,52 @@ function insKpiSamenvatting(m){
   }catch(_){ return ''; }
 }
 function insSection(t){ return `<div class="inssec">${t}</div>`; }
+
+/* ===== Maandkiezer (v176) =====
+ * Eén bron voor "welke maand kijk ik": curMonth. Die bestaat al, elk drill-down leest hem, en het
+ * is module-state - dus hij verdwijnt bij een herstart en bij een import (die zet curMonth=null).
+ * Bewust GEEN tweede keuze in SET ernaast: dan zou de keuze een instelling worden die over sessies
+ * blijft hangen, en dan zit je over drie weken nog in juli zonder het te merken.
+ * Bereik: uitsluitend months(), dus geen toekomst en niets vóór je eerste boeking. */
+function kijkMaand(){
+  const ms=months(); if(!ms.length) return thisYM();
+  return (curMonth && ms.includes(curMonth)) ? curMonth : ms[ms.length-1];
+}
+function isLopendeMaand(m){ return (m||kijkMaand())===thisYM(); }
+function zetKijkMaand(m){
+  const ms=months(); if(!ms.includes(m)) return;    // nooit navigeren naar een maand zonder data
+  curMonth=m; closeSheet(); render();
+}
+function naarLopendeMaand(){ curMonth=null; closeSheet(); render(); }
+// de kop is de kiezer: dezelfde hlabel als eerst, met een pijl erbij
+// zelfde kiezer, als chip naast een kop die zijn eigen titel houdt (het maandscherm)
+function maandKiezerChip(m){
+  return `<span class="small" style="color:var(--teal);font-weight:600;cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();openMaandKiezer()">${esc(monthLabel(m))} ▾</span>`;
+}
+function maandKiezerKop(m){
+  return `<span class="hlabel" style="margin:0;flex:1;cursor:pointer" onclick="event.stopPropagation();openMaandKiezer()">${esc(monthLabel(m))} \u25be</span>`;
+}
+/* Onmiskenbaar dat je niet naar de lopende maand kijkt. Bewust dezelfde signal-warn-vorm als de
+   herinnering over verouderde data: dat is de bestaande manier om te zeggen "wat je ziet is niet
+   het heden", en dit is precies dezelfde soort waarschuwing. Geen nieuwe kleur. */
+function afgeslotenMaandBanner(m){
+  if(isLopendeMaand(m)) return '';
+  return `<div class="signal warn" style="margin-bottom:2px"><div class="si">${ICON('clock')}</div>
+    <div class="st"><b>Je kijkt naar ${esc(monthLabel(m))}, een afgesloten maand.</b> De cijfers hieronder gaan over die maand, niet over nu.
+    <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="naarLopendeMaand()">Terug naar ${esc(monthLabel(thisYM()))} ›</span></div></div>`;
+}
+function openMaandKiezer(){
+  const ms=months().slice().reverse(); const nu=kijkMaand();
+  window._setSheet=null;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg)">Welke maand?</div>
+      <div class="muted small">Alleen maanden waarvan je boekingen hebt.</div></div>
+    <div class="chips wrap" style="margin-top:6px">${ms.map(x=>`<span class="chip ${x===nu?'on':''}" onclick="zetKijkMaand('${x}')">${esc(monthLabel(x))}${x===thisYM()?' \u00b7 nu':''}</span>`).join('')}</div>
+    <button class="btn sec" style="margin-top:14px" onclick="closeSheet()">Klaar</button>`;
+  showSheetBg();
+}
 function renderIns(){
-  const m=curMonth||months()[months().length-1];
+  const m=kijkMaand(); const nu=isLopendeMaand(m);
   // gecombineerde status-kaart (koers + budget); m is altijd de lopende maand, want months()
   // voegt die altijd toe en curMonth is altijd het laatste element.
   const statusBlock = monthStatusCard(m);
@@ -7781,9 +7845,15 @@ function renderIns(){
      opviel, en de rest ingeklapt onder Verdieping. Terugval: geen lopende maand -> de bestaande
      hero zonder nog-deze-maand; geen budget -> de budget-prompt van monthStatusCard met de
      nog-deze-maand-kaart er los onder. */
-  const H=insHeroKaart(m);
-  const hero = H || (statusBlock + nogDezeMaandCard());
-  let beh=''; try{ beh=renderBehavior(m); }catch(_){}
+  /* v176: bij een afgesloten maand valt alles weg wat over het nu gaat. "Nog deze maand" leest
+     monthLiquidity() en safeToSpend(), en die kennen alleen vandaag; onder een historische kop zou
+     dat lezen als de stand van die maand. insBudgetBlok(m) rekent wel gewoon door. */
+  const H=nu?insHeroKaart(m):insBudgetBlok(m);
+  const hero = H ? (nu?H:`<div class="card">${H}</div>`) : (statusBlock + (nu?nogDezeMaandCard():''));
+  /* renderBehavior mengt twee bronnen: de over-budget-rij is per maand, maar de rijen uit
+     coachItems() rekenen op nowYM. Onder een historische kop zou dat de indruk wekken dat die
+     observaties over die maand gaan. */
+  let beh=''; try{ beh=nu?renderBehavior(m):''; }catch(_){}
   const behN=(beh.match(/beh-row/g)||[]).length;
   /* v136: geen Categorieen-kaart meer op de pagina zelf. Diezelfde verdeling staat al achter
      "Uitgegeven" (openMonthSpend, eerste chip), en dat is de plek waar de vraag "waar ging mijn
@@ -7791,8 +7861,11 @@ function renderIns(){
   const verdieping = insVouw('openKpiCard','Kerncijfers',ICON('chart'),insKpiSamenvatting(m),insKpiStrip(m))
     + spendVsBudgetChart()
     + insVouw('openBehavior','Gedrag',ICON('bulb'),behN?`${behN} ${behN===1?'observatie':'observaties'}`:'',beh)
-    + subsCard();
-  $('#s-ins').innerHTML = insSection('Deze maand') + hero + whatStandsOutLine(m) + insLekVraag(m)
+    + (nu?subsCard():'');   // abonnementen gaan over wat er nu loopt
+  /* De lek-vraag opent een coachgesprek over een stap die je nu kunt zetten; op een afgesloten
+     maand nodigt dat uit tot een keuze over iets wat voorbij is (v139: alleen kijken). */
+  $('#s-ins').innerHTML = afgeslotenMaandBanner(m) + insSection(nu?'Deze maand':'Terugblik')
+    + hero + whatStandsOutLine(m) + (nu?insLekVraag(m):'')
     + (verdieping?insSection('Verdieping')+verdieping:'');
 }
 
@@ -8836,7 +8909,9 @@ function go(name){
     // leesmoment: alleen de datum, geen streak, geen teller, geen herinnering (v130)
     /* Eerst de vlag, dan de render: anders toont "Gelezen op" de datum van de vorige keer. Dat kan
        nu veilig, want de vlag stuurt geen inhoud meer aan (v168). */
-    if(name==='maand'){ try{ SET.maandGelezen=new Date().toISOString().slice(0,10); save(); renderMaand(); }catch(_){} }
+    /* v176: het leesmoment gaat over de lopende maand. Een afgesloten maand bekijken zet die vlag
+       dus niet, en onderdrukt daarmee ook niets van het heden. */
+    if(name==='maand'){ try{ if(isLopendeMaand()){ SET.maandGelezen=new Date().toISOString().slice(0,10); save(); } renderMaand(); }catch(_){} }
   }
   try{ localStorage.setItem('minder_view', name); }catch(_){}
   window.scrollTo(0,0);

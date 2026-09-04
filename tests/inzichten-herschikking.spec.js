@@ -96,8 +96,11 @@ test.describe('a · de herokaart', () => {
 
   test('de budgethelft blijft de budget-vergelijking openen', async ({ page }) => {
     await boot(page);
-    const a = await page.evaluate(() => document.querySelector('#s-ins .card div[onclick]').getAttribute('onclick'));
-    expect(a).toMatch(/openBudgetCompare/);
+    /* v176: de maandnaam in de kop is de maandkiezer geworden, dus openBudgetCompare hangt nu aan
+       de dagteller ernaast. De ingang blijft bestaan, alleen op een ander element (v114/v115). */
+    const h = await page.evaluate(() => $('#s-ins').innerHTML);
+    expect(h).toContain('openBudgetCompare');
+    expect(h).toContain('openMaandKiezer()');
   });
 });
 
