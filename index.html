@@ -1615,10 +1615,9 @@ function safeToSpend(){
   const sp=catSpendMap(ym); const B=SET.budgets||{};
   // Potjes van niet-recurring categorieën = variabel plan; recurring categorieën lopen via fixDue (geen dubbeltelling).
   // Vast = uitsluitend de herkende terugkerende incasso/periodieke overboeking (L.fixDue). Het budget-vangnet + v54-cap vervallen.
-  let reservedVar=0, potOver=0; const _rc=recurringCats();
-  const _d=daysElapsed(ym), _left=Math.max(_d.dim-_d.elapsed,0);
+  const reservedVar=varPlanRemaining(ym);   // v169: één bron voor "wat blijft er over deze maand"
+  let potOver=0; const _rc=recurringCats();
   for(const k in B){ const bud=+B[k]||0; if(bud<=0||_rc.has(k)) continue;
-    reservedVar+=potjeRest(bud, sp[k]||0, _d.dim, _left);
     potOver+=Math.max((sp[k]||0)-bud,0);                       // hoeveel je al over je potjes ging
   }
   const fixedStillToGo=Math.round(L.fixDue||0);
@@ -5027,9 +5026,17 @@ function goalCoachTips(m){
 }
 function nogDezeMaandBody(){
   let L=null; try{ L=monthLiquidity(); }catch(_){ return ''; }
-  if(!L||!(L.fixDue>0||L.varDue>0||L.incDue>0)) return '';
-  const teBetalen=Math.round(L.fixDue+L.varDue), teOntvangen=Math.round(L.incDue), netto=teOntvangen-teBetalen;
-  const sub=`${L.fixDue>0?`vast ${euro0(L.fixDue)}`:''}${(L.fixDue>0&&L.varDue>0)?' \u00b7 ':''}${L.varDue>0?`variabel ${euro0(L.varDue)} (tempo)`:''}${(L.fixDueExclCount>0)?` \u00b7 ${L.fixDueExclCount} uitgesloten`:''}`;
+  /* v169: het variabele deel kwam uit L.varDue, een extrapolatie van je tempo deze maand. Home
+     rekende datzelfde deel met potjeRest, en dat liep ver uiteen: bij een normaal tempo €150 plan
+     tegen €931 prognose, dus Home zei "+€1.450 veilig te besteden" terwijl hier "-€931" stond.
+     Potjes zijn je sturingsmechanisme, dus het plan stuurt. varPlanRemaining() is de enige bron. */
+  const varPlan=(function(){ try{ return varPlanRemaining(curMonth||months()[months().length-1]); }catch(_){ return 0; } })();
+  if(!L||!(L.fixDue>0||varPlan>0||L.incDue>0)) return '';
+  /* Waarneming en plan blijven zichtbaar gescheiden: het grote getal is wat er herkend is aan
+     vaste lasten, het variabele deel staat er als eigen regel onder. Eén bedrag dat die twee
+     optelt suggereert één soort zekerheid. */
+  const teBetalen=Math.round(L.fixDue), teOntvangen=Math.round(L.incDue), netto=teOntvangen-teBetalen-varPlan;
+  const sub=`${L.fixDue>0?`herkende incasso's`:'niets herkend'}${(L.fixDueExclCount>0)?` \u00b7 ${L.fixDueExclCount} uitgesloten`:''}`;
   // Nog te sparen: exact het bedrag dat 'veilig te besteden' al reserveert (saveReserved), zodat de twee
   // schermen nooit uiteen kunnen lopen. Niets herberekend; geen spaartarget = geen tegel.
   let S=null; try{ S=safeToSpend(); }catch(_){}
@@ -5043,9 +5050,10 @@ function nogDezeMaandBody(){
   // Alleen bij een positief netto \u2014 "vrij n\u00e1 sparen" bij een tekort zou een belofte suggereren die er niet is.
   const naSparen=(spaarOn&&nogSparen>0&&netto>0)?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:5px;text-align:right">${euro0(netto-nogSparen)} vrij n\u00e1 sparen</div>`:'';
   return `<div class="wvo-tiles" style="grid-template-columns:${spaarOn?'1fr 1fr 1fr':'1fr 1fr'}">
-      <div class="wvo-tile"${teBetalen>0?' style="cursor:pointer" onclick="openFixedDue()"':''}><div class="wvo-tl">Nog te betalen</div><div class="wvo-tv" style="color:var(--red)">${euro0(teBetalen)}</div>${sub?`<div class="wvo-ts">${sub}</div>`:''}</div>
+      <div class="wvo-tile"${teBetalen>0?' style="cursor:pointer" onclick="openFixedDue()"':''}><div class="wvo-tl">Nog te betalen · vast</div><div class="wvo-tv" style="color:${teBetalen>0?'var(--red)':'var(--mut)'}">${euro0(teBetalen)}</div>${sub?`<div class="wvo-ts">${sub}</div>`:''}</div>
       <div class="wvo-tile"><div class="wvo-tl">Nog te ontvangen</div><div class="wvo-tv" style="color:${teOntvangen>0?'var(--green)':'var(--mut)'}">${euro0(teOntvangen)}</div><div class="wvo-ts">inkomen</div></div>${spaarTegel}
     </div>
+    ${varPlan>0?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:6px;text-align:right;cursor:pointer" onclick="openReservedPotjes()">plus ${euro0(varPlan)} variabel uit je potjes ›</div>`:''}
     <div class="ndm-net"><span>${jrg('onderaandestreep','Onderaan de streep')}</span><span class="wvo-chip ${netto>=0?'dn':'up'}">${netto>=0?'+':''}${euro0(netto)}</span></div>${naSparen}`;
 }
 /* v135: de kaart is gesplitst in body en omhulsel, zodat Inzichten de tegels in zijn eigen
@@ -5310,9 +5318,9 @@ function coachStatus(m){
   const bud=Math.round(t.budget), spent=Math.round(t.spend);
   const dim=de.dim, elapsed=de.elapsed, left=Math.max(dim-elapsed,0);
   const expected=bud>0?Math.round(bud*elapsed/dim):0;            // lineair verwacht tempo tot nu
-  const fm=(typeof forecastModel==='function')?forecastModel():null; const fVar=fm?fm.fVar:0;
-  const variSpent=splitFixedVar(m).vari;
-  const varRest=fVar>0?Math.max(0,Math.min(Math.round((fVar/dim)*left),Math.round(fVar-variSpent))):L.varDue;
+  // v169: hier stond een derde formule voor hetzelfde bedrag (historisch gemiddelde, met terugval
+  // op het tempo). Zelfde bron als Home en Inzichten: je plan.
+  const varRest=(function(){ try{ return varPlanRemaining(m); }catch(_){ return 0; } })();
   const projEnd=spent+L.fixDue+varRest;
   let verdict,vcol,vkey;
   if(bud<=0){ verdict='stel inkomen in'; vcol='var(--mut)'; vkey='none'; }

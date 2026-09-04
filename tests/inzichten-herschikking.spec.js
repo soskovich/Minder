@@ -48,6 +48,9 @@ async function boot(page, payload) {
    monthLiquidity(), dus die leggen we vast - net als de 'stukkende bron'-test verderop doet. */
 const legeLiquiditeit = (page) => page.evaluate(() => {
   window.monthLiquidity = () => ({ fixDue: 0, varDue: 0, incDue: 0, fixDueExclCount: 0, sum: 0, projected: 0, daysLeft: 0 });
+  // v169: het variabele deel komt uit varPlanRemaining(), niet meer uit L.varDue. "Niets meer open"
+  // betekent dus ook: niets meer in je potjes.
+  window.varPlanRemaining = () => 0;
 });
 const beeld = (page) => page.evaluate(() => {
   const el = document.querySelector('#s-ins');

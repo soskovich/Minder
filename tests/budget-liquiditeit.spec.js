@@ -93,13 +93,16 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     // opgeruimd. Het label leeft nog in nogDezeMaandBody(), dus daar bewaken we het.
     expect(await page.evaluate(() => nogDezeMaandCard())).not.toContain('Verwacht over einde maand');
     await page.evaluate(() => go('ins'));   // v144: de tegels wonen alleen nog in de Inzichten-hero
-    // varDue = tempo x resterende dagen, dus op de laatste dag van de maand is hij nul en toont
-    // de kaart die post terecht niet. De assertie volgt dat, anders faalt deze test een dag
-    // per maand op iets wat juist klopt.
+    /* v169: het variabele deel kwam uit L.varDue, een extrapolatie van je tempo. Dat is nu het
+       plan (varPlanRemaining), en het staat als eigen regel onder de tegel in plaats van opgeteld
+       bij de waargenomen vaste lasten. Op de laatste dag van de maand is het plan nul en toont de
+       kaart die regel terecht niet; de assertie volgt dat. */
     const rest = await page.evaluate(() => { const d = daysElapsed(curMonth); return d.dim - d.elapsed; });
     const t = await text(page, '#s-ins');
-    if (rest > 0) expect(t).toMatch(/variabel €[\d.]+ \(tempo\)/);
-    else expect(t).not.toMatch(/\(tempo\)/);
+    expect(t).not.toMatch(/\(tempo\)/);                  // het tempo is geen grondslag meer
+    const plan = await page.evaluate((m) => varPlanRemaining(m), await page.evaluate(() => curMonth));
+    if (rest > 0 && plan > 0) expect(t).toMatch(/plus €[\d.]+ variabel uit je potjes/);
+    else expect(t).not.toMatch(/variabel uit je potjes/);
   });
 
   test('spiegel vuurt op drempel max(€50, 20%) en spreekt plan vs tempo aan', async ({ page }) => {

@@ -109,7 +109,8 @@ test.describe('c · "vrij ná sparen" spiegelt zonder te rekenen', () => {
     }));
     const r = await page.evaluate(() => {
       const L = monthLiquidity();
-      const netto = Math.round(L.incDue) - Math.round(L.fixDue + L.varDue);
+      // v169: het variabele deel komt uit je potjes, niet uit je tempo
+      const netto = Math.round(L.incDue) - Math.round(L.fixDue) - varPlanRemaining(curMonth);
       return { netto, rest: safeToSpend().saveReserved };
     });
     expect(r.netto).toBeGreaterThan(0);
@@ -120,7 +121,8 @@ test.describe('c · "vrij ná sparen" spiegelt zonder te rekenen', () => {
 
   test('blijft weg bij een negatief netto (geen belofte die er niet is)', async ({ page }) => {
     await boot(page);                                                    // salaris al binnen -> netto negatief
-    const netto = await page.evaluate(() => { const L = monthLiquidity(); return Math.round(L.incDue) - Math.round(L.fixDue + L.varDue); });
+    const netto = await page.evaluate(() => { const L = monthLiquidity();
+      return Math.round(L.incDue) - Math.round(L.fixDue) - varPlanRemaining(curMonth); });
     expect(netto).toBeLessThan(0);
     const kt = (await kaart(page).innerText()).toLowerCase();
     expect(kt).not.toContain('vrij ná sparen');
