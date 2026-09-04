@@ -161,7 +161,11 @@ test.describe('c · zonder aangewezen spaarrekening is de buffer onbekend', () =
     expect(d).toContain('We weten niet wat er op je spaarrekening staat');
     expect(d).toContain('wijs je spaarrekening aan');
     expect(h).toContain('openSpaarrekening()');
-    expect(d).toContain('toegewezen');                 // de rij zelf blijft een toewijzing tonen
+    /* v173: is er nooit gemigreerd omdat het saldo onbekend was, dan is die 0 geen toewijzing van
+       jou maar een gat. De rij zegt dan onbekend en toont geen voortgang, tempo of datum. */
+    expect(d).toContain('onbekend');
+    expect(d).not.toMatch(/op dit tempo/);
+    expect(d).not.toMatch(/rond \w+ \d{4}/);
   });
 
   test('extra spaargeld is invoer, geen schatting, en telt dus wel', async ({ page }) => {

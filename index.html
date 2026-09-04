@@ -2115,13 +2115,24 @@ function openSafeToSpend(){
     <div class="small muted" style="margin-top:12px">Je totale saldo plus het inkomen dat nog binnenkomt, min wat al op je spaarrekening staat, de vaste lasten die nog komen, je variabele potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven. Geld naar je spaarrekening overmaken verandert dit bedrag dus niet.</div>`;
   showSheetBg();
 }
+/* Wanneer kwam er voor het laatst een boeking binnen? (v173) Eén detectie, gedeeld door de
+   herinnering op Home en door de budgetstand op Inzichten - anders staan er twee meningen over
+   dezelfde vraag. null = er valt niets over te zeggen. */
+function laatsteImport(){
+  if(!TX.length) return null;
+  const datum=TX.reduce((a,b)=>a.date>b.date?a:b).date;
+  return {datum, dagen:Math.floor((Date.now()-new Date(datum))/86400000)};
+}
+// dezelfde tik als de herinnering: één ingang om je data bij te werken, geen tweede CTA-patroon
+function importCta(){
+  return {act:(FSA&&SET.folderName)?'syncFolder(true)':"document.getElementById('file').click()",
+          lab:(FSA&&SET.folderName)?'Synchroniseer map':'Bestand toevoegen'};
+}
 function renderReminder(){
-  if(!TX.length) return '';
-  const last=TX.reduce((a,b)=>a.date>b.date?a:b).date;
-  const days=Math.floor((Date.now()-new Date(last))/86400000);
+  const L=laatsteImport(); if(!L) return '';
+  const days=L.dagen;
   if(days<8) return '';
-  const act=(FSA&&SET.folderName)?'syncFolder(true)':"document.getElementById('file').click()";
-  const lab=(FSA&&SET.folderName)?'Synchroniseer map':'Bestand toevoegen';
+  const {act,lab}=importCta();
   return `<div class="signal warn" style="margin-bottom:2px"><div class="si">${ICON('clock')}</div><div class="st"><b>Je data is ${days} dagen oud.</b> Importeer je nieuwste bankbestand voor een actueel beeld. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="${act}">${lab} ›</span></div></div>`;
 }
 function toast(msg){ let el=document.getElementById('toast'); if(!el){ el=document.createElement('div'); el.id='toast'; document.body.appendChild(el); } el.innerHTML=msg; el.className='show'; clearTimeout(window._tt); window._tt=setTimeout(()=>{el.className='';},3500); }
@@ -2767,7 +2778,12 @@ function planMap(){
      plan een TOEGEWEZEN bedrag, ook die van het noodfonds. De gemeten buffer blijft bestaan waar
      hij thuishoort: bufferMaanden() en de bufferregel op Maand lezen onverkort spaarSaldo(). */
   const nfToe=Math.max(Math.round(+SET.nfToegewezen||0),0);
-  by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,
+  /* v173: zonder bekend spaarsaldo heeft migrateNfToegewezen() nooit kunnen draaien, dus die 0 is
+     geen toewijzing van jou maar een gat. Een voortgang, een tempo en een einddatum die daarop
+     gerekend zijn liegen; de rij zwijgt dan over alle drie. */
+  const nfOnbekend=(function(){ if(SET.nfToegewezenMigrated) return false;
+    try{ return !!spaarSaldo().missing; }catch(_){ return true; } })();
+  by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,nfOnbekend,
     gespaard:nfDoel>0?Math.min(nfToe,nfDoel):nfToe}, planAllocOf(planAllocCfg(PLAN_NF)));
   for(const g of (SET.goals||[])) if(g&&g.id)
     by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,
@@ -2840,7 +2856,12 @@ function doelTempoLine(p){
    Dit scherm REKENT NIETS ZELF. Het roept bestaande functies aan, stelt hun uitkomsten samen en
    sorteert ze. Valt een bron weg, dan valt die regel weg - zonder foutmelding en zonder
    placeholder; het scherm werkt met drie van de vijf. */
-const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelStatus:'tekort' };   // v162: een patroon over maanden vraagt een beslissing, geen aandacht   // kpiMinBedrag: onder dit grondtal zegt een percentage niets (v161)
+/* v173: "Er ontbreekt te veel om een oordeel te geven" vuurde bij één onbekende regel van één.
+   Een zuiver aandeel kan dat niet oplossen (100% ligt boven elke drempel), dus er hoort een
+   ondergrens bij: onder onbekendMin regels zegt een verhouding niets over volledigheid, en dan
+   meldt het scherm gewoon de regels die het wél heeft. */
+const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelStatus:'tekort',
+  onbekendDeel:0.5, onbekendMin:3 };   // v162: een patroon over maanden vraagt een beslissing, geen aandacht   // kpiMinBedrag: onder dit grondtal zegt een percentage niets (v161)
 /* v155: de meevallerdrempel stond als kaal 1.15 op drie plekken. Eén naam, dezelfde waarde, zodat
    de verdeelregel niet zijn eigen drempel krijgt. Geen gedragswijziging. */
 const MEEVALLER_FACTOR = 1.15;   // de rest volgt nfMaanden()
@@ -3221,8 +3242,14 @@ function maandOordeel(R){
   const letop=R.filter(r=>r.status==='let op');
   const ok=R.filter(r=>r.status==='ok');
   const onb=R.filter(r=>r.status==='onbekend');
-  if(R.length && onb.length>R.length/2)
+  if(R.length>=MAAND_DREMPEL.onbekendMin && onb.length/R.length>MAAND_DREMPEL.onbekendDeel)
     return {zin:'Er ontbreekt te veel om een oordeel te geven.', sub:`Onbekend: ${onb.map(r=>r.naam.toLowerCase()).join(', ')}.`};
+  /* v173: onder de drempel viel een lijst met alleen onbekende regels door naar de telzin, en die
+     telde er dan nul. Geen nieuwe formulering: dezelfde zin als bij een lege lijst (v167), met de
+     bestaande opsomming van wat onbekend is. */
+  if(!ok.length && !tekort.length && !letop.length)
+    return {zin:'Er is nog niets te beoordelen.',
+      sub: onb.length?`Onbekend: ${onb.map(r=>r.naam.toLowerCase()).join(', ')}.`:''};
   const metMaand=tekort.find(r=>r.maand);
   let zin;
   if(metMaand) zin=`Je systeem houdt stand tot ${resMaandLabel(metMaand.maand)}. Daarna loopt het vast op je ${metMaand.naam.toLowerCase()}.`;
@@ -3755,6 +3782,8 @@ function etaDatum(maanden){
   return d.toLocaleDateString('nl-NL',{month:'short',year:'numeric'}).replace('.','');
 }
 function planSub(p){
+  // v173: geen looptijd en geen datum op een voortgang die niet is vastgesteld
+  if(p.nfOnbekend) return `${euro0(p.alloc)}/mnd`;
   if(p.status==='bereikt') return `${ICON('party')} Bereikt`;
   if(p.status==='gepauzeerd') return 'Gepauzeerd · krijgt nu niets';
   if(p.status==='wacht op capaciteit') return `Wacht op capaciteit · ${planModeLabel(p)}, maar alles gaat eerst naar de doelen erboven`;
@@ -3911,10 +3940,10 @@ function renderPlan(bare){
     return `<div class="card plan-item" data-id="${p.id}" style="padding:12px 13px;margin-bottom:8px">
       <div style="display:flex;gap:10px;align-items:flex-start">
         <div style="flex:1;min-width:0;cursor:pointer" onclick="${planOpen(p)}">
-          <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${euro0(p.gespaard)} toegewezen / ${euro0(p.doel)}</span></div>
-          <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>
+          <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${p.nfOnbekend?`<span style="color:var(--mut)">onbekend</span>`:euro0(p.gespaard)+' toegewezen'} / ${euro0(p.doel)}</span></div>
+          ${p.nfOnbekend?'':`<div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>`}
           <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
-          ${doelTempoLine(p)}${planWachtHint(p)}
+          ${p.nfOnbekend?'':doelTempoLine(p)}${planWachtHint(p)}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${up}${dn}</div>
       </div>
@@ -7177,7 +7206,8 @@ function kpiTegels(items){
       <div class="wvo-ts">${k.band}${k.oordeel?` · <b style="color:${col}">${k.oordeel}</b>`:''}</div>
       ${(()=>{ const e=(!k.partial?kpiAfstandTxt(k.key,k.afst,true):'');
         return e?`<div class="wvo-ts kpi-afst" style="color:var(--mut2)">${e}</div>`:''; })()}
-      ${spark||`<div class="small spk-na" style="color:var(--mut2);font-size:10px">na 2 maanden zie je hier je verloop</div>`}
+      ${spark||''}${''/* v173: de mededeling dat je nog moet wachten stond per tegel en nog eens
+        onder de maandgrafiek: drie keer hetzelfde op één scherm. De grafiek zegt het nu als enige. */}
     </div>`;
   }).join('');
 }
@@ -7590,6 +7620,21 @@ function insBudgetBlok(m){
   const bud=Math.round(t.budget), sp=Math.round(t.spend);
   if(!(bud>0)) return '';
   const d=daysElapsed(m);
+  /* v173: nul uitgaven en geen data zijn niet hetzelfde. Ligt de laatste boeking vóór de maand
+     waarover dit cijfer gaat, dan is er niets gemeten en is "€0 uitgegeven, 0%" een bewering.
+     Zelfde vorm als de onbekend-hero op Home: het woord onbekend, de reden, en de tik die de
+     herinnering op Home ook gebruikt (importCta) - geen tweede detectie en geen tweede CTA. */
+  const L=laatsteImport();
+  if(L && L.datum < m+'-01'){
+    const {act,lab}=importCta();
+    return `<div>
+      <div class="row" style="gap:8px"><span class="hlabel" style="margin:0;flex:1">${esc(monthLabel(m))}</span></div>
+      <div class="row" style="align-items:baseline;gap:8px;margin-top:8px">
+        <span style="font-size:var(--fs-xl);font-weight:800;color:var(--mut)">onbekend</span>
+        <span class="small muted" style="flex:1;min-width:0">uitgegeven</span></div>
+      <div class="small" style="color:var(--mut);margin-top:6px;line-height:1.5">Je laatste boeking is van ${new Date(L.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}, dus over deze maand is nog niets binnengekomen. Nul uitgaven en geen data zijn niet hetzelfde.</div>
+      <div class="small" style="margin-top:6px"><span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="${act}">${esc(lab)} ›</span></div></div>`;
+  }
   const usedPct=Math.round(sp/bud*100), dayPct=Math.round(d.elapsed/d.dim*100);
   const over=sp>bud;
   /* Drie ingangen, elk op zijn eigen woorden - de ring en de titel van monthStatusCard vielen weg
@@ -7601,7 +7646,7 @@ function insBudgetBlok(m){
     <div class="row" style="gap:8px;cursor:pointer" onclick="openBudgetCompare('${m}')"><span class="hlabel" style="margin:0;flex:1">${esc(monthLabel(m))}</span><span class="small muted">dag ${d.elapsed} van ${d.dim} ›</span></div>
     <div class="row" style="align-items:baseline;gap:8px;margin-top:8px">
       <span style="cursor:pointer" onclick="openMonthSpend('${m}')"><span style="font-size:var(--fs-xl);font-weight:800">${euro0(sp)}</span> <span class="small muted">uitgegeven</span></span>
-      <span class="small muted" style="flex:1;min-width:0;cursor:pointer" onclick="openPotjesVerdeling('${m}')">van ${euro0(bud)} maandbudget ›</span>
+      <span class="small muted" style="flex:1;min-width:0;cursor:pointer" onclick="openPotjesVerdeling('${m}')">van ${euro0(bud)} ${t.potTotal>0?'maandbudget':'je inkomen-limiet'} ›</span>
       <span style="font-weight:700;white-space:nowrap;color:${over?'var(--red)':'var(--txt)'}">${usedPct}%</span></div>
     ${(()=>{ const tb=totalBudget(), pb=plannedTotalBudget();   // v115-ingang naar de volgende-maand-lijst
       return (tb>0 && pb!==tb) ? `<div class="row" style="justify-content:space-between;padding:4px 0 0;font-size:var(--fs-xs);color:var(--mut2);cursor:pointer" onclick="openPotjesVerdeling('${m}','next')"><span style="margin-left:2px">↳ vanaf volgende maand</span><span style="font-weight:700;color:var(--teal)">${euro0(pb)}</span></div>` : ''; })()}

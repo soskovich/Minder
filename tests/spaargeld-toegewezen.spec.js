@@ -52,9 +52,11 @@ test.describe('a · één betekenis in de kolom', () => {
     await boot(page, seed({ nfToegewezen: 900, spaarSaldo: 2000 }));
     expect((await nfItem(page)).gespaard).toBe(900);   // niet 1500: het saldo geclamd op het doel
     expect(await page.evaluate(() => Math.round(spaarSaldo().cur))).toBe(2000);
-    // commentaar telt niet als gebruik: planMap legt uit waar spaarSaldo() stond
+    /* v173: planMap raadpleegt spaarSaldo() nog wel, maar alleen om vast te stellen of de
+       toewijzing ooit is gemigreerd - nooit om de voortgang te berekenen. */
     const kaal = (await page.evaluate(() => planMap.toString())).replace(/\/\*[\s\S]*?\*\//g, ' ');
-    expect(kaal).not.toContain('spaarSaldo(');
+    expect(kaal).not.toMatch(/gespaard:[^,]*spaarSaldo/);
+    expect(kaal).toContain('nfToegewezen');
   });
 
   test('een toewijzing kan het doel niet overschrijden', async ({ page }) => {

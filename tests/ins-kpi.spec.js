@@ -213,7 +213,11 @@ test.describe('b · historische reeksen', () => {
     }));
     expect(await page.evaluate(() => months().length)).toBe(1);
     const s = await strip(page);
-    expect(s).toContain('na 2 maanden zie je hier je verloop');
+    // v173: die mededeling stond per tegel en nog eens onder de maandgrafiek, drie keer op één
+    // scherm. De grafiek zegt het nu als enige, dus de tegel toont alleen geen sparkline.
+    const pagina = await page.evaluate(() => $('#s-ins').innerText);
+    expect((pagina.match(/maanden zie je hier je verloop/gi) || []).length).toBe(1);
+    expect(s).not.toMatch(/zie je hier je verloop/i);   // niet meer per tegel
     expect(await page.locator('#insKpiStrip .spark').count()).toBe(0);
     expect(s).toMatch(/\d+%/);                                            // de waarde staat er wél
   });
