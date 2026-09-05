@@ -60,7 +60,9 @@ const beeld = (page) => page.evaluate(() => {
     secties: [...el.querySelectorAll('.inssec')].map((x) => x.textContent),
     eerste: (el.querySelector('.card') || { innerText: '' }).innerText,
     ndmKoppen: (t.match(/NOG DEZE MAAND/g) || []).length,
-    streep: !!el.querySelector('.ndm-net'),
+    // v192: de scheidingslijn (.ndm-net) hing aan de chip die verviel. De tegelrij is de nieuwe
+    // markering, maar .wvo-tiles staat ook elders op het scherm; de vaste-lastentegel is uniek.
+    tegels: [...el.querySelectorAll('.wvo-tl')].some((x) => /Nog te betalen/i.test(x.textContent)),
     prompt: /stel in/.test(t),
     kpiOpen: !!el.querySelector('#insKpiStrip'),
     over: el.scrollWidth - el.clientWidth,
@@ -75,7 +77,7 @@ test.describe('a · de herokaart', () => {
     expect(b.eerste).toMatch(/dag \d+ van \d+/);
     expect(b.eerste).toMatch(/van €[\d.]+ maandbudget/);
     expect(b.eerste).toMatch(/NOG DEZE MAAND/);
-    expect(b.eerste).toMatch(/Deze maand op eigen kracht/);
+    expect(b.eerste).toMatch(/Nog te betalen/i);
     expect(b.ndmKoppen).toBe(1);                       // niet twee keer op het scherm
   });
 
@@ -113,7 +115,7 @@ test.describe('b · terugvallen', () => {
     const b = await beeld(page);
     expect(b.eerste).toMatch(/van €[\d.]+ maandbudget/);
     expect(b.ndmKoppen).toBe(0);
-    expect(b.streep).toBe(false);
+    expect(b.tegels).toBe(false);
     expect(b.tekst).not.toMatch(/Nog te betalen/i);
   });
 
@@ -124,7 +126,7 @@ test.describe('b · terugvallen', () => {
     expect(await page.evaluate((m) => insHeroKaart(m), CUR)).toBe('');
     expect(b.prompt).toBe(true);                       // de bestaande budget-prompt
     expect(b.ndmKoppen).toBe(1);                       // en de kaart er los onder
-    expect(b.streep).toBe(true);
+    expect(b.tegels).toBe(true);
   });
 
   // v166: de tak 'een vorige maand' bestond alleen in dode code. months() voegt de huidige

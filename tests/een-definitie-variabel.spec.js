@@ -79,22 +79,37 @@ test.describe('a · elke plek leest dezelfde bron', () => {
   }
 });
 
-test.describe('b · Home en Inzichten spreken elkaar niet tegen', () => {
+/* v192: hier stond de identiteit safe === eigenKracht + spendSaldo - saveReserved, die Home aan
+   het chipgetal op Inzichten bond. Dat getal is vervallen: het telde een waarneming op bij een
+   planrest en werd daardoor beter naarmate je meer uitgaf. De brug via dat getal was het middel;
+   wat bewaakt moest worden is dat het variabele deel op beide schermen uit varPlanRemaining()
+   komt. Dat is wat hieronder staat.
+
+   Deze vorm is bewust zwakker, en het is goed dat dat opvalt. De oude test bond het hele bedrag
+   van Home aan een bedrag dat op Inzichten te lezen was, dus een tweede definitie ergens in
+   safeToSpend() liet hem vallen. Deze bindt alleen nog de gedeelde term. Een afwijking in het
+   saldo-deel of in de spaarreservering valt hier dus niet meer uit; die worden elders gedekt
+   (blok a hierboven en de opbouw-sheet). Er is geen sterkere vorm meer beschikbaar zonder een
+   getal terug te zetten dat de twee optelt, en juist dat getal was de fout. */
+test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron', () => {
   for (const [naam, opt] of SITUATIES) {
-    test(`${naam}: de twee schermen sluiten op elkaar aan`, async ({ page }) => {
+    test(`${naam}: Home en Inzichten lezen één varPlanRemaining`, async ({ page }) => {
       await boot(page, seed(opt));
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
-        const S = safeToSpend(), L = monthLiquidity();
-        const varPlan = varPlanRemaining(m);
-        return { home: Math.round(S.safe),
-          inzichten: Math.round(L.incDue) - Math.round(L.fixDue) - varPlan,
-          spendSaldo: Math.round(S.spendSaldo), saveReserved: Math.round(S.saveReserved) };
+        const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
+        const t = d.innerText.replace(/\s+/g, ' ');
+        const mm = t.match(/plus €([\d.]+) variabel/);
+        return { bron: varPlanRemaining(m), home: Math.round(safeToSpend().reserved),
+          inzichten: mm ? +mm[1].replace(/\./g, '') : 0, tekst: t,
+          srcSafe: safeToSpend.toString(), srcBody: nogDezeMaandBody.toString() };
       });
-      /* De twee getallen beantwoorden een andere vraag - Home telt je saldo mee en reserveert je
-         spaardoel, Inzichten kijkt alleen naar de stromen van deze maand - maar ze zijn per
-         constructie herleidbaar tot elkaar. Loopt dit uiteen, dan is er een tweede definitie. */
-      expect(r.home).toBe(r.inzichten + r.spendSaldo - r.saveReserved);
+      expect(r.home).toBe(r.bron);
+      expect(r.inzichten).toBe(r.bron);
+      expect(r.srcSafe).toContain('varPlanRemaining(');
+      expect(r.srcBody).toContain('varPlanRemaining(');
+      // en er staat geen getal meer dat die planrest bij een waarneming optelt
+      expect(r.tekst).not.toMatch(/eigen kracht/i);
     });
   }
 });

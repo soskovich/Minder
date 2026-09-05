@@ -27,22 +27,19 @@ test.describe('a · tik-voor-uitleg op de kernbegrippen', () => {
   });
 
   // v144: "Nog deze maand" stond op Vooruitblik en op Inzichten; alleen de Inzichten-hero bleef.
-  test('"Deze maand op eigen kracht" en "Nog te sparen" in de Inzichten-hero ook', async ({ page }) => {
+  // v192: "Deze maand op eigen kracht" is vervallen; "Nog te sparen" is de term die er staat.
+  test('"Nog te sparen" in de Inzichten-hero ook', async ({ page }) => {
     await boot(page, 'ins');
     const kaart = page.locator('#s-ins .card').first();
     const termen = await kaart.locator('.jrg').evaluateAll((els) => els.map((e) => e.textContent));
     expect(termen).toContain('Nog te sparen');
-    expect(termen).toContain('Deze maand op eigen kracht');
+    expect(termen).not.toContain('Deze maand op eigen kracht');
 
     // de tegel is klikbaar; een tik op de term toont alleen de uitleg, niet de drill-down
     await kaart.locator('.jrg', { hasText: 'Nog te sparen' }).click();
     await page.waitForSelector('#tipPop.show');
     expect(await page.locator('#tipPop').innerText()).toContain('opzij moet zetten');
     expect(await page.locator('#sheetBg.show').count()).toBe(0);
-
-    await page.locator('#s-ins .ndm-net .jrg').click();
-    await page.waitForSelector('#tipPop.show');
-    expect(await page.locator('#tipPop').innerText()).toContain('nog binnenkomt');
   });
 
   test('de uitleg is toetsenbord-bereikbaar en sluit weer', async ({ page }) => {

@@ -44,14 +44,13 @@ async function boot(page, scherm, payload) {
 }
 
 test.describe('a · Vooruitblik toont de kaart niet meer', () => {
-  test('geen kop, geen tegels, geen "Deze maand op eigen kracht"', async ({ page }) => {
+  test('geen kop en geen tegels', async ({ page }) => {
     await boot(page, 'vooruit');
     // de tegels hebben wel degelijk inhoud: dit is een keuze, geen lege staat
     expect(await page.evaluate(() => nogDezeMaandBody())).not.toBe('');
     const v = await page.locator('#s-vooruit').innerText();
     expect(v).not.toMatch(/nog deze maand/i);
-    expect(v).not.toMatch(/deze maand op eigen kracht/i);
-    expect(await page.locator('#s-vooruit .wvo-tiles, #s-vooruit .ndm-net').count()).toBe(0);
+    expect(await page.locator('#s-vooruit .wvo-tiles').count()).toBe(0);
   });
 
   test('de plan-zone en de dekkingskaart blijven, in die volgorde', async ({ page }) => {
@@ -72,9 +71,9 @@ test.describe('b · Inzichten is de enige lezer', () => {
     const el = page.locator('#s-ins');
     const t = await el.innerText();
     expect((t.match(/NOG DEZE MAAND/g) || []).length).toBe(1);
-    expect(t).toMatch(/Deze maand op eigen kracht/);
+    expect(t).toMatch(/Nog te betalen/i);
     // de tegels zitten in de herokaart zelf, niet in een losse kaart eronder
-    expect(await el.locator('.card').first().locator('.ndm-net').count()).toBe(1);
+    expect(await el.locator('.card').first().locator('.wvo-tiles').count()).toBe(1);
   });
 
   test('openFixedDue blijft bereikbaar vanuit die kaart', async ({ page }) => {

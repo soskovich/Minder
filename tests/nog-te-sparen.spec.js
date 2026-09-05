@@ -42,7 +42,6 @@ test.describe('a · de tegel toont wat er nog opzij moet', () => {
     const kt = (await kaart(page).innerText()).toLowerCase();
     expect(kt).toContain('nog te betalen');
     expect(kt).toContain('nog te ontvangen');
-    expect(kt).toContain('deze maand op eigen kracht');
   });
 
   test('het is exact het bedrag dat "veilig te besteden" al reserveert', async ({ page }) => {
@@ -75,10 +74,8 @@ test.describe('b · randgevallen', () => {
     await expect(tegels(page)).toHaveCount(2);
     const kt = (await kaart(page).innerText()).toLowerCase();
     expect(kt).not.toContain('nog te sparen');
-    expect(kt).not.toContain('vrij ná sparen');
     expect(kt).toContain('nog te betalen');
     expect(kt).toContain('nog te ontvangen');
-    expect(kt).toContain('deze maand op eigen kracht');
     expect(await kaart(page).locator('.wvo-tiles').evaluate((e) => e.style.gridTemplateColumns)).toBe('1fr 1fr');
   });
 
@@ -91,7 +88,6 @@ test.describe('b · randgevallen', () => {
     expect(sub).toContain('gehaald');
     expect(sub).toContain(`€${GESPAARD} opzij`);
     expect(await t.locator('.wvo-tv').getAttribute('style')).toContain('var(--green)');
-    expect(await kaart(page).innerText()).not.toContain('vrij ná sparen');   // niets meer te reserveren
   });
 
   test('meer gespaard dan het doel blijft €0, nooit negatief', async ({ page }) => {
@@ -101,35 +97,10 @@ test.describe('b · randgevallen', () => {
   });
 });
 
-test.describe('c · "vrij ná sparen" spiegelt zonder te rekenen', () => {
-  test('verschijnt alleen als er deze maand op eigen kracht iets overblijft', async ({ page }) => {
-    // salaris van deze maand weg -> incDue = je basisinkomen, dus een positief netto
-    await boot(page, tweak((set, tx) => {
-      for (let i = tx.length - 1; i >= 0; i--) if (tx[i].id === 'inc-' + CUR) tx.splice(i, 1);
-    }));
-    const r = await page.evaluate(() => {
-      const L = monthLiquidity();
-      // v169: het variabele deel komt uit je potjes, niet uit je tempo
-      const netto = Math.round(L.incDue) - Math.round(L.fixDue) - varPlanRemaining(curMonth);
-      return { netto, rest: safeToSpend().saveReserved };
-    });
-    expect(r.netto).toBeGreaterThan(0);
-    const kt = (await kaart(page).innerText()).toLowerCase();
-    expect(kt).toContain('vrij ná sparen');
-    expect(kt).toContain(`€${(r.netto - r.rest).toLocaleString('nl-NL')} vrij ná sparen`);
-  });
-
-  test('blijft weg bij een negatief netto (geen belofte die er niet is)', async ({ page }) => {
-    await boot(page);                                                    // salaris al binnen -> netto negatief
-    const netto = await page.evaluate(() => { const L = monthLiquidity();
-      return Math.round(L.incDue) - Math.round(L.fixDue) - varPlanRemaining(curMonth); });
-    expect(netto).toBeLessThan(0);
-    const kt = (await kaart(page).innerText()).toLowerCase();
-    expect(kt).not.toContain('vrij ná sparen');
-    expect(kt).toContain('nog te sparen');                                // de tegel zelf blijft wel
-  });
-});
-
+/* v192: hier stond blok c, over de spiegel "€X vrij ná sparen". Die hing aan het chipgetal
+   "Deze maand op eigen kracht" (netto - nogSparen), en dat getal is vervallen omdat het een
+   waarneming bij een planrest optelde en daardoor steeg naarmate je meer uitgaf. Een spiegel op een
+   getal dat weg is heeft geen onderwerp meer. Zie tests/geen-verbetering-door-uitgeven.spec.js. */
 test('d · drie tegels passen op 360 en 390px', async ({ page }) => {
   await boot(page);
   for (const w of [360, 390]) {
