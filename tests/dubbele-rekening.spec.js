@@ -87,10 +87,10 @@ test.describe('a · de vondst', () => {
 test.describe('b · de melding', () => {
   test('de regel staat onder je rekeningen en opent de sheet', async ({ page }) => {
     await boot(page);
-    const h = await page.evaluate(() => accountsCard());
+    const h = await page.evaluate(() => rekOverlapRegel());   // v183: de regel staat los van de lijst
     expect(h).toContain('dezelfde boekingen');
     expect(h).toContain('openRekOverlap()');
-    await page.evaluate(() => { go('set'); toggleSet('bank'); });
+    await page.evaluate(() => { go('set'); toggleSet('bank'); });   // v183: de overlapregel blijft hier
     await page.locator('#s-set >> text=dezelfde boekingen').first().click();
     await page.waitForSelector('#sheetBg.show');
     const sheet = await page.locator('#sheet').innerText();

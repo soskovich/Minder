@@ -1404,7 +1404,12 @@ function spaarDekking(m){
 // Eén bestemming voor elke "vul je saldo aan"-CTA, zodat de onbekend-staat nooit doodloopt.
 function openSaldoInvoer(){ closeSheet(); go('set'); openSet('income'); }
 // zelfde vorm, voor het onbekende buffersaldo: daar wijs je een spaarrekening aan (v168)
-function openSpaarrekening(){ closeSheet(); go('set'); openSet('bank'); }
+/* v183: de spaarrekening-vlag staat sinds de samenvoeging in de rekeningenlijst onder Inkomen &
+   rekeningen, dus deze tik wijst daarheen. Daarmee heeft SET_SHEETS.bank geen aanroeper meer;
+   die blijft bewust staan tot oorzaak 4 (SET_SHEETS als tweede oppervlak) aan de beurt is. Haal
+   hem niet weg als dode mapping: dan is de bank-sheet niet meer te openen zodra oorzaak 4 hem
+   een eigen ingang geeft. */
+function openSpaarrekening(){ closeSheet(); go('set'); openSet('income'); }
 // saldo-nudge: tik = naar de invoer én deze maand niet meer vragen
 function balNudgeGo(){ try{ const ms=months(); SET.balNudge={ym:ms[ms.length-1]||''}; save(); }catch(_){} openSaldoInvoer(); }
 // drill-down: rekeningen waaruit je saldo bestaat
@@ -8302,7 +8307,8 @@ function renderSet(){
      onderaan). 'Coach-avatar & toon' is opgegaan in Coach: één onderwerp, één regel. */
   const cats=[
     ['income',ICON('euro'),'Inkomen & rekeningen',inkomenBekend()?`Je ontvangt ${euro0(inc)} per maand`:'Je inkomen is nog onbekend',setIncome,''],
-    ['bank',ICON('bank'),'Bankkoppeling',_bank.sub,setBank,_bank.col],
+    ['bank',ICON('bank'),'Bank & koppelingen',_bank.sub,setBank,_bank.col],
+    ['trans',ICON('swap'),'Transacties & categorieën',SET.hideInternal?'Interne overboekingen verborgen':'Interne overboekingen tellen mee',setTransacties,''],
     ['budget',ICON('target'),'Budget & doelen',spaardoelBekend()?`Je spaart ${euro0(monthlySavingTarget())} per maand`:'Je spaarinleg is nog onbekend',null,'','openBudgetEditor()'],
     ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
     ['coach',ICON('robot'),'Coach',`Je coach staat ${SET.coachOff?'uit':'aan'} · ${coachSamenvatting()}`,setCoach,''],
@@ -8480,19 +8486,14 @@ function setBudget(){
 function setIncome(){
   const dq=totals(curMonth||(months()[months().length-1]||''));
   let h=`
-    <label class="fld">Je naam <span class="small muted">· je coach spreekt je hiermee aan</span></label>
-    <input type="text" value="${esc(SET.name||'')}" placeholder="bv. Vincent" oninput="SET.name=this.value;save();" onchange="render();">
-    <div class="toggle" style="margin-top:14px"><div><div style="font-weight:600">Inkomen automatisch detecteren</div><div class="small muted">Uit je bijschrijvingen (categorie Inkomen)</div></div>
+    <div class="toggle"><div><div style="font-weight:600">Inkomen automatisch detecteren</div><div class="small muted">Uit je bijschrijvingen (categorie Inkomen)</div></div>
       <label class="sw"><input type="checkbox" ${SET.autoIncome?'checked':''} onchange="SET.autoIncome=this.checked;save();render();"><span class="sl"></span></label></div>
     ${SET.autoIncome?`<div class="small muted" style="margin-top:8px">Gedetecteerd deze maand: <b>${euro(dq.detectedIncome)}</b></div>`
       :`<label class="fld">Inkomen per maand (€)</label><input type="number" value="${SET.income||''}" placeholder="bv. 2500" oninput="SET.income=+this.value||0;save();render();">`}`;
   if(OWN.length){ h+=`
     <label class="fld" style="margin-top:14px">Je rekeningen & saldo <span class="small muted">· ${totalBalance().known>0?euro(totalBalance().sum)+' totaal':'saldo onbekend'}</span></label>
-    <div class="small muted" style="margin-bottom:8px">Saldo's uit MT940/PSD2 zijn vooraf ingevuld; vul ontbrekende saldo's bij voor een kloppende prognose.</div>
-    ${zichtbareRek().map(a=>{const m=ACCMETA[a]||{};const cnt=TX.filter(t=>t.acc===a).length;const bv=accBalance(a);const det=m.balance!=null;return `
-      <div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)"><div style="min-width:0;flex:1"><div style="font-weight:600">${esc(accShort(a))} <span class="tag">${m.bank||''}</span></div><div class="small muted">${m.role||'Rekening'} · ${cnt} tx${det?' · saldo '+m.date:''}</div></div>
-        <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" step="0.01" value="${bv!=null?bv:''}" placeholder="0,00" style="width:92px;text-align:right;padding:7px 9px" oninput="setBal('${a}',this.value)"></div></div>`;}).join('')}
-    ${legeRekRegel()}
+    <div class="small muted" style="margin-bottom:8px">Saldo's uit MT940/PSD2 zijn vooraf ingevuld.</div>
+    ${accountsCard()}
     <label class="fld">Minimale buffer (waarschuwing)</label>
     <input type="number" value="${SET.buffer||''}" placeholder="bv. 1000" oninput="SET.buffer=+this.value||0;save();render();">
     <div class="small muted" style="margin-top:6px">De prognose waarschuwt als je saldo hieronder dreigt te komen.</div>
@@ -8680,21 +8681,37 @@ function openRekOverlap(){
     <div class="small muted" style="margin-top:6px">Kopieren zet het op je klembord. Het verlaat je toestel pas als je het zelf ergens plakt.</div>`;
   showSheetBg();
 }
+/* v183: hier stonden twee lijsten over dezelfde rekeningen: deze (naam en spaarvlag, onder
+   Bankkoppeling) en een tweede in setIncome() met de saldo-invoer. Ze liepen allebei over
+   zichtbareRek() en toonden allebei naam en saldo; alleen de bewerking verschilde. Nu één lijst,
+   met per rekening zowel het saldo als de vlag. Hij woont onder Inkomen & rekeningen, want die
+   sectie gaat over wat er op je rekeningen staat; Bank & koppelingen gaat over hoe de data
+   binnenkomt en houdt daarom rekOverlapRegel(), een koppelingsprobleem.
+   legeRekRegel() stond eerder in allebei de lijsten en staat nu dus ook maar één keer. */
 function accountsCard(){
   if(!OWN.length) return '<div class="small muted">Nog geen rekeningen. Koppel je bank of voeg een bestand toe.</div>';
   const sav=new Set(n26SavingsAccounts());
-  const rows=zichtbareRek().map(a=>{ const b=accBalance(a); const l4=acctLast4(a);
-    const cnt=(ACCMETA[a]&&ACCMETA[a].count)||TX.filter(t=>t.acc===a).length;
-    return {a,b,l4,cnt,isSav:sav.has(a),name:acctNiceName(a),bank:(ACCMETA[a]&&ACCMETA[a].bank)||''}; })
+  const rows=zichtbareRek().map(a=>{ const b=accBalance(a); const m=ACCMETA[a]||{};
+    const cnt=m.count||TX.filter(t=>t.acc===a).length;
+    return {a,b,m,cnt,l4:acctLast4(a),isSav:sav.has(a),name:acctNiceName(a),bank:m.bank||''}; })
     .sort((x,y)=>(y.b||0)-(x.b||0));
-  return rows.map(r=>`<div class="row" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
-      <div style="flex:1;min-width:0;cursor:pointer" onclick="acctRenameOpen('${esc(String(r.a).replace(/'/g,"\\'"))}')"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.name)} <span style="color:var(--teal);font-weight:700">\u203a</span></div>
-        <div class="small muted">${esc(r.bank||'')}${r.bank?' · ':''}${r.b!=null?euro(r.b):'saldo onbekend'} · ${r.cnt} transactie${r.cnt===1?'':'s'}${r.l4?' · ··'+esc(r.l4):''}</div></div>
-      <div style="text-align:right"><div class="small muted" style="margin-bottom:2px">spaar&shy;rekening</div>
-        <label class="sw"><input type="checkbox" ${r.isSav?'checked':''} onchange="toggleSavingsAcct('${esc(String(r.a).replace(/'/g,"\\'"))}')"><span class="sl"></span></label></div>
+  const q=v=>String(v).replace(/'/g,"\\'");
+  return rows.map(r=>`<div data-acc="${esc(r.a)}" style="padding:10px 0;border-bottom:1px solid var(--line)">
+      <div style="cursor:pointer" onclick="acctRenameOpen('${esc(q(r.a))}')">
+        <div style="font-weight:600;font-size:var(--fs-md)">${esc(r.name)} <span style="color:var(--teal);font-weight:600;font-size:var(--fs-xs)">bewerk</span></div>
+        <div class="small muted">${esc(r.bank||'')}${r.bank?' · ':''}${r.cnt} transactie${r.cnt===1?'':'s'}${r.l4?' · ··'+esc(r.l4):''}</div></div>
+      <div class="row" style="justify-content:space-between;gap:10px;margin-top:8px">
+        <div style="display:flex;align-items:center;gap:5px">
+          <span class="small muted">${r.b==null?'saldo onbekend':'Saldo'}</span><span class="muted">€</span>
+          <input type="number" step="0.01" value="${r.b!=null?r.b:''}" placeholder="0,00" style="width:88px;text-align:right;padding:7px 9px" oninput="setBal('${esc(q(r.a))}',this.value)">
+          </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="small muted">spaar&shy;rekening</span>
+          <label class="sw"><input type="checkbox" ${r.isSav?'checked':''} onchange="toggleSavingsAcct('${esc(q(r.a))}')"><span class="sl"></span></label></div>
+      </div>
     </div>`).join('') +
-    `<div class="small muted" style="margin-top:9px">Zet de schakelaar aan bij je <b>spaarrekening(en)</b>. Daaraan ziet Minder hoeveel je deze maand al spaarde. Tik op een naam om die zelf aan te passen.</div>`
-    + legeRekRegel() + rekOverlapRegel();
+    `<div class="small muted" style="margin-top:9px">Vul ontbrekende saldo's bij voor een kloppende prognose. Zet de schakelaar aan bij je <b>spaarrekening(en)</b>: daaraan ziet Minder hoeveel je deze maand al spaarde. Tik op een naam om die zelf aan te passen.</div>`
+    + legeRekRegel();
 }
 /* v181: de subregel in Instellingen keek alleen naar het AANTAL rekeningen en meldde daarom "Je
    bank is gekoppeld" terwijl het paneel eronder "Verbinding verlopen" toonde. Eén bron voor
@@ -8791,16 +8808,30 @@ function setBank(){
      op dezelfde backend-URL als de bankkoppeling. Hij hoort bij wat hij nodig heeft. Zichtbaar,
      niet in het geavanceerde blok: dat is een gebruikersknop, en die verstoppen is precies wat
      v181 ophief. Alleen het modelveld en de bouwinstructie blijven onder Geavanceerd. */
+  /* v183: de briefingexport stond onder Privacy, maar dat gaat over waar je data staat en dit is
+     een uitgaande koppeling met een andere app. Hij verlaat je toestel niet (het is een map op
+     ditzelfde apparaat), dus hij staat bewust NIET in privacyUitzonderingen(): die functie
+     beantwoordt wat er van je toestel af gaat. Privacy noemt hem nog wel als feit. */
+  const briefHtml = `
+    <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
+    <div class="small muted" style="margin-bottom:4px;font-weight:600">Briefing naar je CommandCenter-map</div>
+    <div class="small muted" style="margin-bottom:10px">Schrijf je financiële signalen (safe-to-spend, afwijkende uitgave, aankomende verplichting, Vermogensreis) naar een map op dit toestel. Je dagelijkse briefing leest ze daar in. Kies de map één keer; daarna exporteert Minder ook automatisch bij openen.</div>
+    <button class="btn sec" onclick="kiesMinderExportMap()">${ICON('folder')} Kies exportmap (eenmalig)${SET.briefingFolder?` · ${esc(SET.briefingFolder)}`:''}</button>
+    <button class="btn sec" style="margin-top:8px" onclick="exporteerMinderSignalen(false)">${ICON('check')} Exporteer signalen naar briefing</button>`;
   const aiHtml = `
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
     <div class="toggle"><div><div style="font-weight:600">AI-coach</div><div class="small muted">Een taalmodel verwoordt de coach-zinnen. Je cijfers blijven uit de lokale motor, maar de coach-tekst gaat naar je eigen backend. Standaard uit.</div></div>
       <label class="sw"><input type="checkbox" ${SET.aiCoach?'checked':''} onchange="SET.aiCoach=this.checked;save();render();"><span class="sl"></span></label></div>
     ${SET.aiCoach?`<div class="small muted" style="margin-top:6px">Hij loopt via dezelfde backend als je bankkoppeling. ${psd2Ready()?'Die staat ingesteld.':'Die staat nog niet ingesteld, dus voorlopig blijft de lokale coach aan het woord.'} Het model kies je onder Geavanceerd.</div>`:''}`;
+  /* v183: de rekeningenlijst staat nu onder Inkomen & rekeningen (één lijst, v183). Wat hier
+     blijft is het koppelingsprobleem: twee ids met dezelfde boekingen, of een gekoppelde rekening
+     zonder boekingen. Dat gaat over de koppeling, niet over wat er op je rekening staat. */
   const accHtml = OWN.length ? `
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
     <div class="small muted" style="margin-bottom:8px;font-weight:600">Je rekeningen</div>
-    ${accountsCard()}` : '';
-  return head + bestandHtml + aiHtml + accHtml + advHtml;
+    <div class="small muted">${zichtbareRek().length} rekening${zichtbareRek().length===1?'':'en'} in beeld. Saldo's en je spaarrekening stel je in bij <b>Inkomen &amp; rekeningen</b>.</div>
+    ${rekOverlapRegel()}` : '';
+  return head + bestandHtml + aiHtml + briefHtml + accHtml + advHtml;
 }
 function bankAdvTap(){
   window._advTaps=(window._advTaps||0)+1; clearTimeout(window._advTapT);
@@ -8816,17 +8847,29 @@ function setModus(){
 }
 function setCoach(){
   return `
-    <div class="toggle"><div><div style="font-weight:600">Coaching</div><div class="small muted">Coach-tips op je Home & Actieplan</div></div>
+    <label class="fld">Je naam <span class="small muted">· je coach spreekt je hiermee aan</span></label>
+    <input type="text" value="${esc(SET.name||'')}" placeholder="bv. Vincent" oninput="SET.name=this.value;save();" onchange="render();">
+    <div class="toggle" style="margin-top:14px"><div><div style="font-weight:600">Coaching</div><div class="small muted">Coach-tips op je Home & Actieplan</div></div>
       <label class="sw"><input type="checkbox" ${!SET.coachOff?'checked':''} onchange="SET.coachOff=!this.checked;save();render();"><span class="sl"></span></label></div>
     <div class="row" style="justify-content:space-between;margin-top:8px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openCoachAvatar()">
       <div><div style="font-weight:600">Avatar & toon</div><div class="small muted">${coachSamenvatting()}</div></div>
       <span class="muted" style="font-size:var(--fs-lg)">›</span></div>
-    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Interne overboekingen verbergen</div><div class="small muted">Eigen rekeningen & sparen tellen niet als uitgave</div></div>
-      <label class="sw"><input type="checkbox" ${SET.hideInternal?'checked':''} onchange="SET.hideInternal=this.checked;save();render();"><span class="sl"></span></label></div>
     <div style="height:10px"></div>
     <div class="small muted" style="margin-top:10px">${ICON('info')} ${SET.aiCoach?`<b>AI-coach staat aan.</b> Een taalmodel verwoordt de zinnen via je eigen Worker. De bedragen komen nog steeds uit de lokale motor. Zet uit voor 100% lokaal.`:`<b>Hoe werkt de coach?</b> Geen AI in de cloud. Alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.`}</div>`;
 }
 
+/* v183: 'Interne overboekingen verbergen' stond onder Coach, terwijl het een categorisatieregel
+   is: het bepaalt of een boeking als uitgave telt. Er was geen sectie over hoe transacties geboekt
+   worden, en dat is zelf de bevinding - de automatiseringsregels (SET.rules) zijn alleen vanuit
+   het transactiedetail te maken en staan nergens in Instellingen. Deze sectie is daarvoor de
+   plek. Nog open: de regel-editor zelf; die is een eigen ronde en wordt hier niet gebouwd. */
+function setTransacties(){
+  return `
+    <div class="small muted" style="margin-bottom:10px">Hoe Minder je boekingen indeelt.</div>
+    <div class="toggle"><div><div style="font-weight:600">Interne overboekingen verbergen</div><div class="small muted">Eigen rekeningen & sparen tellen niet als uitgave</div></div>
+      <label class="sw"><input type="checkbox" ${SET.hideInternal?'checked':''} onchange="SET.hideInternal=this.checked;save();render();"><span class="sl"></span></label></div>
+    <div class="small muted" style="margin-top:10px">${ICON('info')} Een losse boeking indelen doe je in de transactie zelf: tik hem aan en kies een categorie. Wil je dat voortaan automatisch, dan maak je daar ook de regel aan.</div>`;
+}
 function setPrivacy(){
   const standalone = (window.matchMedia&&matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
   return `
@@ -8837,9 +8880,7 @@ function setPrivacy(){
     <div class="small muted" style="margin:8px 0 6px"><b>Exporteren (lokaal):</b> een CSV-bestand, gemaakt op dit toestel.</div>
     <button class="btn sec" style="margin-bottom:8px" onclick="exportTxCSV()">${ICON('folder')} Exporteer transacties (CSV)</button>
     <button class="btn sec" style="margin-bottom:8px" onclick="exportPotjesCSV()">${ICON('target')} Exporteer potjes/budgetten (CSV)</button>
-    <div class="small muted" style="margin:14px 0 6px"><b>Briefing:</b> schrijf je financiële signalen (safe-to-spend, afwijkende uitgave, aankomende verplichting, Vermogensreis) naar je CommandCenter-map. Je dagelijkse briefing leest ze daar in. Kies de map één keer; daarna exporteert Minder ook automatisch bij openen.</div>
-    <button class="btn sec" style="margin-bottom:8px" onclick="kiesMinderExportMap()">${ICON('folder')} Kies exportmap (eenmalig)${SET.briefingFolder?` · ${esc(SET.briefingFolder)}`:''}</button>
-    <button class="btn sec" style="margin-bottom:8px" onclick="exporteerMinderSignalen(false)">${ICON('check')} Exporteer signalen naar briefing</button>
+    <div class="small muted" style="margin:14px 0 6px"><b>Briefing:</b> Minder kan je signalen naar een map op dit toestel schrijven, waar je dagelijkse briefing ze inleest. Instellen doe je bij <b>Bank &amp; koppelingen</b>.${SET.briefingFolder?` Nu ingesteld op <b>${esc(SET.briefingFolder)}</b>, en Minder schrijft er automatisch naartoe zodra je de app opent.`:''}</div>
     <div class="small muted" style="margin:14px 0 6px"><b>Back-up &amp; herstel:</b> één bestand met al je gegevens (transacties, potjes, doelen, schulden, instellingen). Handig vóór je browsergegevens wist of een nieuw toestel.</div>
     <button class="btn sec" style="margin-bottom:8px" onclick="exportBackup()">${ICON('doc')} Volledige back-up maken</button>
     <button class="btn sec" style="margin-bottom:8px" onclick="restoreBackupPick()">${ICON('sync')} Herstel uit back-up</button>

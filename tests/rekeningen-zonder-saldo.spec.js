@@ -42,7 +42,7 @@ async function boot(page, payload) {
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof zichtbareRek === 'function');
 }
 const bankPaneel = async (page) => {
-  await page.evaluate(() => { go('set'); toggleSet('bank'); });
+  await page.evaluate(() => { go('set'); toggleSet('income'); });   // v183: één lijst, onder Inkomen
   return page.locator('#s-set').innerText();
 };
 
@@ -86,7 +86,7 @@ test.describe('b · in één tik terug', () => {
 
   test('een tik in het paneel schakelt om', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { go('set'); toggleSet('bank'); });
+    await page.evaluate(() => { go('set'); toggleSet('income'); });   // v183: één lijst, onder Inkomen
     await page.locator('#s-set', { hasText: 'zonder saldo' }).locator('text=2 rekeningen zonder saldo tonen').first().click();
     expect(await page.evaluate(() => SET.toonLegeRek)).toBe(true);
     expect(await page.locator('#s-set').innerText()).toMatch(/zonder saldo verbergen/);

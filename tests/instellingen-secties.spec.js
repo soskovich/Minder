@@ -7,8 +7,9 @@ const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
 
 // De volgorde loopt van binnenkomende data naar wat je ermee doet naar hoe het verteld wordt.
-const VOLGORDE = ['Inkomen & rekeningen', 'Bankkoppeling', 'Budget & doelen',
-  'Vermogensreis · aannames', 'Coach', 'Weergave & modus', 'Uiterlijk', 'Privacy & gegevens'];
+const VOLGORDE = ['Inkomen & rekeningen', 'Bank & koppelingen', 'Transacties & categorieën',
+  'Budget & doelen', 'Vermogensreis · aannames', 'Coach', 'Weergave & modus', 'Uiterlijk',
+  'Privacy & gegevens'];
 
 function metSet(v) {
   const p = seed();
@@ -114,7 +115,7 @@ test.describe('b · de coach is één regel met één gedrag', () => {
 });
 
 test.describe('c · data en koppelingen boven vormgeving', () => {
-  test('de acht regels staan in de nieuwe volgorde', async ({ page }) => {
+  test('de negen regels staan in de nieuwe volgorde', async ({ page }) => {
     await boot(page);
     const namen = await page.evaluate(() => [...document.querySelectorAll('#s-set div[style*="min-width:0"] > div')]
       .filter((e) => (e.getAttribute('style') || '').includes('font-weight:600'))
@@ -127,8 +128,8 @@ test.describe('c · data en koppelingen boven vormgeving', () => {
     const t = await page.evaluate(() => $('#s-set').innerText);
     const p = (w) => t.indexOf(w);
     expect(p('Inkomen & rekeningen')).toBeLessThan(p('Uiterlijk'));
-    expect(p('Bankkoppeling')).toBeLessThan(p('Uiterlijk'));
-    expect(p('Bankkoppeling')).toBeLessThan(p('Weergave & modus'));
+    expect(p('Bank & koppelingen')).toBeLessThan(p('Uiterlijk'));
+    expect(p('Bank & koppelingen')).toBeLessThan(p('Weergave & modus'));
     expect(p('Privacy & gegevens')).toBeGreaterThan(p('Uiterlijk'));   // beheer onderaan
   });
 
@@ -137,7 +138,7 @@ test.describe('c · data en koppelingen boven vormgeving', () => {
     page.on('pageerror', (e) => fouten.push(String(e)));
     page.on('console', (m) => { if (m.type() === 'error') fouten.push(m.text()); });
     await boot(page);
-    for (const id of ['income', 'bank', 'budget', 'fire', 'coach', 'modus', 'look', 'privacy']) {
+    for (const id of ['income', 'bank', 'trans', 'budget', 'fire', 'coach', 'modus', 'look', 'privacy']) {
       await page.evaluate((x) => toggleSet(x), id);
       await page.waitForTimeout(30);
       await page.evaluate((x) => toggleSet(x), id);
@@ -146,4 +147,125 @@ test.describe('c · data en koppelingen boven vormgeving', () => {
     expect(fouten).toEqual([]);
     expect(await page.evaluate(() => $('#s-set').innerText)).toContain('Privacy & gegevens');
   });
+});
+
+test.describe('d · Je naam staat bij de coach die hem gebruikt', () => {
+  test('het veld staat onder Coach en niet meer onder Inkomen', async ({ page }) => {
+    await boot(page);
+    expect(await paneel(page, 'setCoach')).toContain('Je naam');
+    expect(await paneel(page, 'setIncome')).not.toContain('Je naam');
+    // de enige lezers van SET.name zijn de coach zelf
+    expect(await page.evaluate(() => /SET\.name/.test(coVoornaam.toString()))).toBe(true);
+  });
+
+  test('invullen werkt nog en komt terug in het gesprek', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => { SET.name = 'Vincent'; save(); renderSet(); });
+    expect(await page.evaluate(() => coVoornaam())).toBe('Vincent');
+    // innerText leest de waarde van een invoerveld niet, dus we kijken naar de opmaak zelf
+    expect(await page.evaluate(() => setCoach())).toContain('value="Vincent"');
+  });
+});
+
+test.describe('e · Transacties & categorieën is een eigen sectie', () => {
+  test('de schakelaar staat er en niet meer onder Coach', async ({ page }) => {
+    await boot(page);
+    expect(await paneel(page, 'setTransacties')).toContain('Interne overboekingen verbergen');
+    expect(await paneel(page, 'setCoach')).not.toContain('Interne overboekingen');
+    expect(await paneel(page, 'setIncome')).not.toContain('Interne overboekingen');
+  });
+
+  test('de subregel volgt de stand en de schakelaar werkt', async ({ page }) => {
+    await boot(page);
+    const t = () => page.evaluate(() => $('#s-set').innerText);
+    expect(await t()).toContain('Interne overboekingen verborgen');
+    await page.evaluate(() => { SET.hideInternal = false; save(); renderSet(); });
+    expect(await t()).toContain('Interne overboekingen tellen mee');
+  });
+
+  test('er wordt geen regel-editor gebouwd, alleen benoemd waar hij zit', async ({ page }) => {
+    await boot(page);
+    const t = await paneel(page, 'setTransacties');
+    expect(t).toMatch(/in de transactie zelf/);
+    expect(t).not.toContain('SET.rules');
+  });
+});
+
+test.describe('f · de briefingexport woont bij de koppelingen', () => {
+  test('de knoppen staan onder Bank & koppelingen', async ({ page }) => {
+    await boot(page);
+    const bank = await paneel(page, 'setBank');
+    expect(bank).toContain('Kies exportmap');
+    expect(bank).toContain('Exporteer signalen naar briefing');
+    const priv = await paneel(page, 'setPrivacy');
+    expect(priv).not.toContain('Kies exportmap');
+    expect(priv).not.toContain('Exporteer signalen naar briefing');
+  });
+
+  test('Privacy noemt hem nog wel als feit, met de plek erbij', async ({ page }) => {
+    await boot(page, metSet({ briefingFolder: 'CommandCenter' }));
+    const priv = await paneel(page, 'setPrivacy');
+    expect(priv).toContain('Briefing');
+    expect(priv).toContain('Bank & koppelingen');
+    expect(priv).toContain('CommandCenter');
+    expect(priv).toMatch(/automatisch naartoe zodra je de app opent/);
+  });
+
+  test('hij telt niet mee als uitzondering: hij verlaat je toestel niet', async ({ page }) => {
+    await boot(page, metSet({ briefingFolder: 'CommandCenter' }));
+    expect(await page.evaluate(() => privacyUitzonderingen())).toEqual([]);
+    expect(await page.evaluate(() => privacySub())).toBe('Alles blijft op dit toestel');
+    expect(await page.evaluate(() => /briefing/i.test(privacyUitzonderingen.toString()))).toBe(false);
+  });
+});
+
+test.describe('g · één rekeningenlijst', () => {
+  test('saldo en spaarvlag staan in dezelfde rij', async ({ page }) => {
+    await boot(page);
+    const acc = await page.evaluate(() => OWN[0]);
+    const html = await page.evaluate(() => accountsCard());
+    expect(html).toContain(`data-acc="${acc}"`);
+    expect(html).toContain('setBal(');
+    expect(html).toContain('toggleSavingsAcct(');
+    expect(html).toContain('acctRenameOpen(');
+  });
+
+  test('de lijst staat onder Inkomen en niet meer onder Bank & koppelingen', async ({ page }) => {
+    await boot(page);
+    expect(await paneel(page, 'setIncome')).toContain('spaar');
+    const bank = await paneel(page, 'setBank');
+    expect(bank).not.toContain('setBal');
+    expect(bank).toMatch(/stel je in bij Inkomen & rekeningen/);
+  });
+
+  test('legeRekRegel staat er nog maar één keer', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => { go('set'); toggleSet('income'); toggleSet('bank');
+      return ($('#s-set').innerText.match(/zonder saldo (tonen|verbergen)/g) || []).length; });
+    expect(r).toBeLessThanOrEqual(1);
+  });
+
+  test('de tik naar je spaarrekening opent de sectie waar die vlag staat', async ({ page }) => {
+    await boot(page);
+    await page.evaluate(() => openSpaarrekening());
+    await page.waitForSelector('#sheetBg.show');
+    const t = await page.locator('#sheet').innerText();
+    expect(t).toContain('Inkomen & rekeningen');
+    expect(t).toContain('spaar');
+  });
+
+  for (const w of [360, 390]) {
+    test(`de rij past op ${w}px zonder horizontale overflow`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: 780 });
+      await boot(page);
+      await page.evaluate(() => toggleSet('income'));
+      await page.waitForTimeout(60);
+      const over = await page.evaluate(() => ({
+        set: $('#s-set').scrollWidth - $('#s-set').clientWidth,
+        body: document.body.scrollWidth - document.body.clientWidth,
+      }));
+      expect(over.set).toBeLessThanOrEqual(1);
+      expect(over.body).toBeLessThanOrEqual(1);
+    });
+  }
 });

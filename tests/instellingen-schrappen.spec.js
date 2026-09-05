@@ -6,7 +6,8 @@
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
 
-const REGELS = ['budget', 'fire', 'look', 'modus', 'income', 'bank', 'coach', 'coachlook', 'privacy'];
+// v182/v183: 'coachlook' ging op in 'coach', en 'trans' kwam erbij als eigen sectie.
+const REGELS = ['income', 'bank', 'trans', 'budget', 'fire', 'coach', 'modus', 'look', 'privacy'];
 
 async function boot(page, payload) {
   await open(page, payload || seed());
@@ -51,16 +52,19 @@ test.describe('b · een mapping bestaat alleen met een aanroeper', () => {
   test('SET_SHEETS kent nog precies de twee die openSet krijgt', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => Object.keys(SET_SHEETS).sort())).toEqual(['bank', 'income']);
-    // en dat zijn exact de twee argumenten waarmee de app openSet() aanroept
+    /* v183: beide aanroepers wijzen nu naar 'income', want de rekeningenlijst is samengevoegd en
+       woont daar. SET_SHEETS.bank houdt daarmee geen aanroeper meer en blijft bewust staan tot
+       oorzaak 4 (SET_SHEETS als tweede oppervlak) aan de beurt is. Haal hem niet weg als dode
+       mapping: die uitzondering is vastgelegd, met reden. */
     const src = await page.evaluate(() => openSaldoInvoer.toString() + openSpaarrekening.toString());
     expect(src).toContain("openSet('income')");
-    expect(src).toContain("openSet('bank')");
+    expect(src).not.toContain("openSet('bank')");
   });
 
   test('de zes onbereikbare panelen werken nog, inline in Instellingen', async ({ page }) => {
     await boot(page);
     for (const [id, woord] of [['look', 'Uiterlijk'], ['fire', 'rendement'], ['modus', 'Rustig'],
-      ['coach', 'Coaching'], ['privacy', 'Waar staat mijn data']]) {
+      ['coach', 'Coaching'], ['trans', 'Interne overboekingen'], ['privacy', 'Waar staat mijn data']]) {
       await page.evaluate((x) => toggleSet(x), id);
       expect(await setTekst(page), id).toContain(woord);
       await page.evaluate((x) => toggleSet(x), id);
@@ -127,7 +131,8 @@ test.describe('d · de negen regels openen en sluiten zonder fout', () => {
     // en alle negen staan er nog als regel
     const t = await setTekst(page);
     for (const w of ['Budget & doelen', 'Vermogensreis', 'Uiterlijk', 'Weergave & modus',
-      'Inkomen & rekeningen', 'Bankkoppeling', 'Coach', 'Privacy & gegevens']) {
+      'Inkomen & rekeningen', 'Bank & koppelingen', 'Transacties & categorieën', 'Coach',
+      'Privacy & gegevens']) {
       expect(t, w).toContain(w);
     }
   });
