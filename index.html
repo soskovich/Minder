@@ -8291,20 +8291,20 @@ function setFireAannames(){
 function goFireAannames(){ SET.setOpen='fire'; save(); renderSet(); go('set'); }   // rustige link vanaf het FIRE-scherm naar de aannames
 function renderSet(){
   const open=SET.setOpen||'';
-  const psd2=Object.keys(SET.psd2Accounts||{}).length;
+  const _bank=bankStand();
   const inc=SET.autoIncome?baseIncome():(+SET.income||0);
   let _fr=null; try{ _fr=reisState(); }catch(_){}
   const _frSub=_fr?`${(''+_fr.rend).replace('.',',')}% rendement · factor ${_fr.fireMult} · pensioen ${_fr.override||(_fr.birth?(+_fr.birth+67):'—')}`:'aannames voor je vermogensreis';
   const cats=[
-    ['budget',ICON('target'),'Budget & doelen',`Je spaart ${euro0(monthlySavingTarget())} per maand`,null,'','openBudgetEditor()'],
+    ['budget',ICON('target'),'Budget & doelen',spaardoelBekend()?`Je spaart ${euro0(monthlySavingTarget())} per maand`:'Je spaarinleg is nog onbekend',null,'','openBudgetEditor()'],
     ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
     ['look',ICON('palet'),'Uiterlijk',THEMES[themeKey()].naam,setLook,''],
     ['modus',ICON('filter'),'Weergave & modus',({rustig:'Rustig',begeleid:'Begeleid',expert:'Expert'})[SET.mode||'begeleid'],setModus,''],
-    ['income',ICON('euro'),'Inkomen & rekeningen',`Je ontvangt ${euro0(inc)} per maand`,setIncome,''],
-    ['bank',ICON('bank'),'Bankkoppeling',psd2?'Je bank is gekoppeld':'Nog geen bank gekoppeld',setBank,psd2?'':'var(--amber)'],
+    ['income',ICON('euro'),'Inkomen & rekeningen',inkomenBekend()?`Je ontvangt ${euro0(inc)} per maand`:'Je inkomen is nog onbekend',setIncome,''],
+    ['bank',ICON('bank'),'Bankkoppeling',_bank.sub,setBank,_bank.col],
     ['coach',ICON('robot'),'Coach',`Je coach staat ${SET.coachOff?'uit':'aan'}`,setCoach,''],
     ['coachlook',ICON('user'),'Coach-avatar & toon',coachSamenvatting(),null,'','openCoachAvatar()'],
-    ['privacy',ICON('lock'),'Privacy & gegevens','Alles blijft op dit toestel',setPrivacy,''],
+    ['privacy',ICON('lock'),'Privacy & gegevens',privacySub(),setPrivacy,''],
   ];
   const list=cats.map(([id,ic,label,sub,fn,col,sheet])=>{
     /* Twee soorten regels. De meeste klappen inline uit met fn(). Een regel met een eigen sheet
@@ -8483,7 +8483,7 @@ function setIncome(){
     ${SET.autoIncome?`<div class="small muted" style="margin-top:8px">Gedetecteerd deze maand: <b>${euro(dq.detectedIncome)}</b></div>`
       :`<label class="fld">Inkomen per maand (€)</label><input type="number" value="${SET.income||''}" placeholder="bv. 2500" oninput="SET.income=+this.value||0;save();render();">`}`;
   if(OWN.length){ h+=`
-    <label class="fld" style="margin-top:14px">Je rekeningen & saldo <span class="small muted">· ${euro(totalBalance().sum)} totaal</span></label>
+    <label class="fld" style="margin-top:14px">Je rekeningen & saldo <span class="small muted">· ${totalBalance().known>0?euro(totalBalance().sum)+' totaal':'saldo onbekend'}</span></label>
     <div class="small muted" style="margin-bottom:8px">Saldo's uit MT940/PSD2 zijn vooraf ingevuld; vul ontbrekende saldo's bij voor een kloppende prognose.</div>
     ${zichtbareRek().map(a=>{const m=ACCMETA[a]||{};const cnt=TX.filter(t=>t.acc===a).length;const bv=accBalance(a);const det=m.balance!=null;return `
       <div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)"><div style="min-width:0;flex:1"><div style="font-weight:600">${esc(accShort(a))} <span class="tag">${m.bank||''}</span></div><div class="small muted">${m.role||'Rekening'} · ${cnt} tx${det?' · saldo '+m.date:''}</div></div>
@@ -8692,13 +8692,49 @@ function accountsCard(){
     `<div class="small muted" style="margin-top:9px">Zet de schakelaar aan bij je <b>spaarrekening(en)</b>. Daaraan ziet Minder hoeveel je deze maand al spaarde. Tik op een naam om die zelf aan te passen.</div>`
     + legeRekRegel() + rekOverlapRegel();
 }
+/* v181: de subregel in Instellingen keek alleen naar het AANTAL rekeningen en meldde daarom "Je
+   bank is gekoppeld" terwijl het paneel eronder "Verbinding verlopen" toonde. Eén bron voor
+   allebei, zodat ze niet uiteen kunnen lopen.
+   De kleur is omgedraaid: amber stond op "nog geen bank gekoppeld" (er is niets aan de hand, je
+   hebt alleen nog niets gedaan) en bleef grijs bij een verlopen verbinding (daar moet je iets
+   doen). Amber is voor echte aandacht (v78/v93), dus die hoort bij verlopen. */
+function bankStand(){
+  const ps=SET.psd2Accounts||{}; const n=Object.keys(ps).length;
+  const verlopen=n>0 && Object.values(ps).some(v=>v.exp && new Date(v.exp) < new Date());
+  return {n, verlopen,
+    banks:Object.values(ps).map(v=>v.bank).filter((v,i,a)=>a.indexOf(v)===i).join(' + '),
+    sub: n ? (verlopen?'Verbinding verlopen':'Je bank is gekoppeld') : 'Nog geen bank gekoppeld',
+    col: verlopen ? 'var(--amber)' : ''};
+}
+/* v181: de privacy-subregel beweerde onvoorwaardelijk "Alles blijft op dit toestel", en dat wordt
+   onwaar zodra de bankkoppeling of de AI-coach aanstaat. Hij volgt nu de werkelijke stand, net als
+   de andere zeven subregels. Gemeten aan wat er daadwerkelijk gebeurt: een gekoppelde bank haalt
+   bij elke verversing data op, en een aangezette AI-coach stuurt coach-data naar je backend. */
+function privacyUitzonderingen(){
+  const uit=[];
+  if(Object.keys(SET.psd2Accounts||{}).length) uit.push('je bankkoppeling');
+  if(SET.aiCoach) uit.push('de AI-coach');
+  return uit;
+}
+function privacySub(){
+  const u=privacyUitzonderingen();
+  if(!u.length) return 'Alles blijft op dit toestel';
+  return 'Lokaal, behalve '+(u.length===2?u[0]+' en '+u[1]:u[0]);
+}
+/* v181: zonder ingesteld inkomen is de uitkomst van deze twee niet nul maar onbekend. Home zegt
+   daar het woord "onbekend" met een tik naar de invoer; de instellingsregel doet hetzelfde, en de
+   tik zit al in de regel zelf. Geen tweede vorm, geen stellige nul (v59/v73). */
+function inkomenBekend(){ return (SET.autoIncome?baseIncome():(+SET.income||0))>0; }
+function spaardoelBekend(){
+  return (SET.savingMode||'auto')==='amount' ? (+SET.savingAmount||0)>0 : inkomenBekend();
+}
 function setBank(){
-  const ps=SET.psd2Accounts||{}; const psd2=Object.keys(ps).length; const adv=!!SET.advBank;
+  const B=bankStand(); const ps=SET.psd2Accounts||{}; const psd2=B.n; const adv=!!SET.advBank;
   const dot=c=>`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:9px;vertical-align:middle"></span>`;
   let head;
   if(psd2){
-    const banks=Object.values(ps).map(v=>v.bank).filter((v,i,a)=>a.indexOf(v)===i).join(' + ');
-    const expired=Object.values(ps).some(v=>v.exp && new Date(v.exp) < new Date());
+    const banks=B.banks;
+    const expired=B.verlopen;
     const last=SET.psd2LastSync?new Date(SET.psd2LastSync).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'';
     if(expired){
       head=`<div style="display:flex;align-items:center;font-weight:600">${dot('var(--amber)')}Verbinding verlopen</div>
@@ -8727,7 +8763,18 @@ function setBank(){
       ${Object.entries(ps).map(([k,v])=>`<div class="row" style="padding:4px 0"><span class="small">${ICON('bank')} ${esc(v.bank)} · ${esc(v.label)}</span><span class="small muted">${v.exp?'tot '+new Date(v.exp).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):''}</span></div>`).join('')}
       <button class="btn sec" style="margin-top:8px" onclick="psd2Disconnect()">Bank ontkoppelen</button>`:''}
     <div style="border-top:1px solid var(--line);margin:14px 0 10px"></div>
-    <div class="small muted" style="margin-bottom:8px;font-weight:600">Andere manier om transacties toe te voegen</div>
+    <div class="small muted" style="margin-bottom:8px;font-weight:600">AI-coach</div>
+    <label class="fld">Model (optioneel)</label>
+    <input type="text" value="${esc(SET.aiModel||'')}" placeholder="bv. claude-3-5-haiku-latest" oninput="SET.aiModel=this.value;save();">
+    <div class="small muted" style="margin-top:6px">De AI-coach gebruikt dezelfde backend als proxy. Voeg daar het <b>/coach</b>-endpoint toe en zet je LLM-key als secret. Aanzetten doe je bij Coach.</div>` : '';
+  /* v181: dit blok zat achter bankAdvTap, vijf tikken op de voetregel van Instellingen. Voor wie
+     geen backend heeft is het de enige manier om data in de app te krijgen, dus het staat nu
+     gewoon in beeld. Bewust als tweede optie: de koppeling houdt de plek bovenaan en houdt als
+     enige het accent (btn), alles hieronder is btn sec. */
+  const bestandHtml = `
+    <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
+    <div class="small muted" style="margin-bottom:4px;font-weight:600">Of voeg een bestand toe</div>
+    <div class="small muted" style="margin-bottom:10px">Een MT940-bestand van ABN AMRO of een CSV van N26. Het bestand wordt op dit toestel gelezen.</div>
     ${SET.folderName
       ? `<div class="small muted" style="margin-bottom:10px">Map <b>${esc(SET.folderName)}</b> gekoppeld.</div>
          <button class="btn sec" onclick="syncFolder(true)">${ICON('sync')} Synchroniseer map</button>
@@ -8735,12 +8782,12 @@ function setBank(){
            <label class="sw"><input type="checkbox" ${SET.autoSync?'checked':''} onchange="SET.autoSync=this.checked;save();"><span class="sl"></span></label></div>
          <button class="btn sec" style="margin-top:8px" onclick="forgetFolder()">Map ontkoppelen</button>`
       : (FSA?`<button class="btn sec" onclick="connectFolder()">${ICON('folder')} Map koppelen</button>`:'')}
-    <button class="btn sec" style="margin-top:8px" onclick="document.getElementById('file').click()">${ICON('folder')} Bestand toevoegen</button>` : '';
+    <button class="btn sec" style="margin-top:8px" onclick="document.getElementById('file').click()">${ICON('folder')} Bestand toevoegen</button>`;
   const accHtml = OWN.length ? `
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
     <div class="small muted" style="margin-bottom:8px;font-weight:600">Je rekeningen</div>
     ${accountsCard()}` : '';
-  return head + accHtml + advHtml;
+  return head + bestandHtml + accHtml + advHtml;
 }
 function bankAdvTap(){
   window._advTaps=(window._advTaps||0)+1; clearTimeout(window._advTapT);
@@ -8760,11 +8807,9 @@ function setCoach(){
       <label class="sw"><input type="checkbox" ${!SET.coachOff?'checked':''} onchange="SET.coachOff=!this.checked;save();render();"><span class="sl"></span></label></div>
     <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Interne overboekingen verbergen</div><div class="small muted">Eigen rekeningen & sparen tellen niet als uitgave</div></div>
       <label class="sw"><input type="checkbox" ${SET.hideInternal?'checked':''} onchange="SET.hideInternal=this.checked;save();render();"><span class="sl"></span></label></div>
-    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">AI-coach (via je Worker)</div><div class="small muted">Taalmodel verwoordt het coach-gesprek. Stuurt coach-data naar je eigen backend. Standaard uit.</div></div>
+    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">AI-coach</div><div class="small muted">Een taalmodel verwoordt de coach-zinnen. Je cijfers blijven uit de lokale motor, maar de coach-tekst gaat naar je eigen backend. Standaard uit.</div></div>
       <label class="sw"><input type="checkbox" ${SET.aiCoach?'checked':''} onchange="SET.aiCoach=this.checked;save();render();"><span class="sl"></span></label></div>
-    ${SET.aiCoach?`<label class="fld" style="margin-top:8px">Model (optioneel)</label>
-      <input type="text" value="${esc(SET.aiModel||'')}" placeholder="bv. claude-3-5-haiku-latest" oninput="SET.aiModel=this.value;save();">
-      <div class="small muted" style="margin-top:6px">Gebruikt je PSD2-Worker (Bankkoppeling → Geavanceerd) als proxy. Voeg daar het <b>/coach</b>-endpoint toe en zet je LLM-key als secret. Cijfers en flow blijven uit de lokale motor; bij geen net valt 'ie terug op de lokale coach.</div>`:''}
+    ${SET.aiCoach?`<div class="small muted" style="margin-top:6px">Hij loopt via dezelfde backend als je bankkoppeling. ${psd2Ready()?'Die staat ingesteld.':'Die staat nog niet ingesteld, dus voorlopig blijft de lokale coach aan het woord.'} Instellen en het model kiezen doe je bij Bankkoppeling ▸ Geavanceerd.</div>`:''}
     <div style="height:10px"></div>
     <div class="small muted" style="margin-top:10px">${ICON('info')} ${SET.aiCoach?`<b>AI-coach staat aan.</b> Een taalmodel verwoordt de zinnen via je eigen Worker. De bedragen komen nog steeds uit de lokale motor. Zet uit voor 100% lokaal.`:`<b>Hoe werkt de coach?</b> Geen AI in de cloud. Alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.`}</div>`;
 }
@@ -8772,7 +8817,7 @@ function setCoach(){
 function setPrivacy(){
   const standalone = (window.matchMedia&&matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
   return `
-    <div class="small muted" style="margin-bottom:10px"><b>Waar staat mijn data?</b> Alles staat lokaal in je browser op dit toestel. ${TX.length} transacties, ${months().length} maanden. Niets gaat naar een server (behalve de optionele live bankkoppeling via je eigen backend).</div>
+    <div class="small muted" style="margin-bottom:10px"><b>Waar staat mijn data?</b> Alles staat lokaal in je browser op dit toestel. ${TX.length} transacties, ${months().length} maanden. Twee dingen kunnen data van dit toestel af sturen, allebei alleen als je ze zelf aanzet en allebei naar je eigen backend: de live bankkoppeling en de AI-coach. ${(function(){const u=privacyUitzonderingen(); return u.length?`Nu staat aan: <b>${u.join(' en ')}</b>.`:'Op dit moment staat geen van beide aan.';})()}</div>
     ${standalone?`<div class="small muted" style="margin-bottom:10px">${ICON('check')} Geïnstalleerd als app, werkt offline.</div>`
       :(deferredPrompt?`<button class="btn sec" style="margin-bottom:8px" onclick="installApp()">${ICON('install')} Installeer als app</button>`
         :`<div class="small muted" style="margin-bottom:10px">Installeren via browsermenu: ⋮ → "App installeren" (Chrome/Edge) of Deel → "Zet op beginscherm" (iPhone).</div>`)}
@@ -9153,8 +9198,25 @@ async function psd2Refresh(silent){
   if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){}
   if(!silent) toast(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt, geen nieuwe (van vandaag soms nog niet geboekt)');
 }
+/* v181: hier stond een toast plus SET.advBank=true. De toast ("Stel eerst je bank-verbinding in")
+   zei niet wat een bank-verbinding is of waar hij vandaan komt, en het omzetten van advBank
+   veranderde ongevraagd een instelling. Nu zegt de app wat er nodig is, en wat je zonder die
+   koppeling wel kunt: een bestand toevoegen. Zelf zetten blijft jouw tik. */
+function psd2GeenBackend(){
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:12px"><div style="font-size:var(--fs-xl)">${ICON('bank')}</div>
+      <div style="font-weight:800;font-size:var(--fs-lg)">Er is nog geen koppeling</div>
+      <div class="muted small">een live bankkoppeling loopt via je eigen backend</div></div>
+    <div class="small muted" style="line-height:1.6;margin-bottom:12px">Minder praat nooit rechtstreeks met je bank. Daar zit een backend tussen die je zelf draait, en die twee dingen nodig heeft: een adres en een token. Zolang die er niet zijn, kan deze knop niets ophalen.</div>
+    <div class="small muted" style="line-height:1.6;margin-bottom:14px">Heb je geen backend, dan werkt de app gewoon: voeg een bestand toe uit je bank en alles wordt op dit toestel ingelezen.</div>
+    <button class="btn" onclick="closeSheet();document.getElementById('file').click()">${ICON('folder')} Bestand toevoegen</button>
+    <button class="btn sec" style="margin-top:8px" onclick="psd2ToonGeavanceerd()">Ik heb een backend, toon de velden</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeSheet()">Sluiten</button>`;
+  showSheetBg();
+}
+function psd2ToonGeavanceerd(){ SET.advBank=true; SET.setOpen='bank'; save(); closeSheet(); go('set'); renderSet(); }
 async function psd2Connect(){
-  if(!psd2Ready()){ toast('Stel eerst je bank-verbinding in'); SET.advBank=true; SET.setOpen='bank'; save(); go('set'); return; }
+  if(!psd2Ready()){ psd2GeenBackend(); return; }
   const country=SET.psd2Country||'NL';
   toast('Banken ophalen…');
   let banks=[];
