@@ -8329,7 +8329,7 @@ function renderSet(){
       <div class="muted" style="font-size:var(--fs-lg)">${op?'▲':'›'}</div>
     </div>
     ${op?`<div style="padding:10px 4px 16px;border-bottom:1px solid var(--line)">${fn()}</div>`:''}`;}).join('');
-  $('#s-set').innerHTML = `<div class="row" style="margin:2px 2px 18px"><span class="hlabel" style="margin:0;flex:1">Instellingen</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="go('dash')">Klaar</span></div><div class="card" style="padding:6px 12px">${list}</div>
+  $('#s-set').innerHTML = `<div class="row" style="margin:2px 2px 18px"><span class="hlabel" style="margin:0;flex:1">Instellingen</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="setKlaar()">Klaar</span></div><div class="card" style="padding:6px 12px">${list}</div>
     <div class="center small muted" style="padding:8px 0 20px;cursor:default" onclick="bankAdvTap()">Minder · veilig &amp; lokaal</div>`;
 }
 
@@ -9113,7 +9113,23 @@ function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=f
 
 function esc(s){return (s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 
+/* v184: 'Klaar' in Instellingen deed hardgecodeerd go('dash'). Kwam je binnen via de budgetlink
+   op Inzichten of via een tik op Maand, dan zette Klaar je op Home en was er geen terug.
+   De herkomst komt uit de BESTAANDE view-state: minder_view wordt pas aan het eind van go()
+   geschreven, dus aan het begin staat er nog het scherm waar je vandaan komt. Dat is één waarde,
+   geen tweede navigatiegeschiedenis, en hij staat bewust in module-state: na een herstart is er
+   geen herkomst en valt Klaar terug op Home, precies zoals het randgeval vraagt (zelfde redenering
+   als curMonth in v176). */
+let setHerkomst=null;
+function setKlaar(){
+  const h=setHerkomst; setHerkomst=null;
+  go(h && document.getElementById('s-'+h) ? h : 'dash');
+}
 function go(name){
+  if(name==='set'){
+    let v=null; try{ v=localStorage.getItem('minder_view'); }catch(_){}
+    if(v && v!=='set' && document.getElementById('s-'+v)) setHerkomst=v;
+  } else setHerkomst=null;
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   $('#s-'+name).classList.add('active');
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.go===name));
