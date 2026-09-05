@@ -2948,6 +2948,13 @@ function doelTempoLine(p){
    Een zuiver aandeel kan dat niet oplossen (100% ligt boven elke drempel), dus er hoort een
    ondergrens bij: onder onbekendMin regels zegt een verhouding niets over volledigheid, en dan
    meldt het scherm gewoon de regels die het wél heeft. */
+/* v191: dekkingOk draagt twee betekenissen die dezelfde grens zijn, dus bewust één getal en geen
+   tweede constante ernaast (v154): het is de graad waarboven de status ok is, en tegelijk het
+   plafond waarboven een dekkingsgraad geen percentage meer toont. Boven de 100% is de vraag
+   beantwoord en verandert het exacte getal geen enkele beslissing; '403%' of '1111%' is dan een
+   cijfer dat om aandacht vraagt zonder er recht op te hebben. Dit is dezelfde bevinding als het
+   kopcijfer op Plan, dat toen per geval is opgelost door de graad van die kaart te halen; de regel
+   staat nu vast, zodat hij niet ergens anders terugkomt. */
 const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelStatus:'tekort',
   onbekendDeel:0.5, onbekendMin:3 };   // v162: een patroon over maanden vraagt een beslissing, geen aandacht   // kpiMinBedrag: onder dit grondtal zegt een percentage niets (v161)
 /* v155: de meevallerdrempel stond als kaal 1.15 op drie plekken. Eén naam, dezelfde waarde, zodat
@@ -3053,8 +3060,8 @@ function maandRegels(){
       /* v133: de eenheid staat in een smalle kolom, dus kort houden. v189: hij draagt nu het
          oordeel dat uit de waardekolom is gehaald - het percentage, of waarom er geen is. */
       eenheid: !D.volledig ? 'niet te beoordelen'
-        : D.graad!=null ? `in je pot · ${D.graad}% van wat nu nodig is`
-        : (D.gat && D.gat.gedektPct!=null) ? `in je pot · ${D.gat.gedektPct}% van de eerstvolgende post`
+        : D.graad!=null ? `in je pot · ${graadTekst(D.graad,'wat nu nodig is')}`
+        : (D.gat && D.gat.gedektPct!=null) ? `in je pot · ${graadTekst(D.gat.gedektPct,'de eerstvolgende post')}`
         : D.gat ? `in je pot · ${euro0(D.gat.tekort)} tekort`
         : komt ? 'in je pot · er hoeft nu nog niets opzij' : 'in je pot · niets aankomend dit jaar',
         maand: (st==='tekort'&&D.gedektTot)?D.gedektTot:null,
@@ -3420,6 +3427,14 @@ function maandVerband(R){
     if(n>0) return `Er staat ${euro0(aan.vrij)} niet toegewezen. Dat dekt ${n} ${n===1?'maand':'maanden'} van je tekort.`;
   }
   return '';
+}
+/* De enige plek waar een dekkingsgraad in woorden wordt gezet: een percentage tot en met de
+   drempel, daarboven een vaststelling. Het bedrag blijft in de waardekolom staan (v190), deze zin
+   draagt het oordeel. Geen nieuwe formulering: 'op peil' is het woord dat die kolom er zelf voor
+   gebruikte voordat hij één soort waarde ging tonen. */
+function graadTekst(graad, noemer){
+  const g=Math.round(+graad||0);
+  return g>MAAND_DREMPEL.dekkingOk ? `op peil voor ${noemer}` : `${g}% van ${noemer}`;
 }
 function maandDot(st){
   const c = st==='tekort'?'var(--red)':st==='let op'?'var(--amber)':st==='ok'?'var(--green)':'var(--bar)';

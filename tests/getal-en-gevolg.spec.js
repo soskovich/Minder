@@ -23,6 +23,8 @@ function seed(o = {}) {
     add(m, '08', -300, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
     // comfort-uitgaven: daaruit komt noodfondsModel().comfortTot, de terugval van planCapacity()
     add(m, '12', -150, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT');
+    // OWN komt uit TX (v122), dus de reserveringspot bestaat pas met een boeking erop
+    add(m, '13', 25, 'Reserveringen', 'NAAR RESERVERINGEN', RES);
   }
   const set = Object.assign({
     mode: 'begeleid', autoIncome: false, income: 3000, limit: 70, vooruitDoelOpen: true,
@@ -313,5 +315,59 @@ test.describe('i · een regelnaam is nooit een afgekapte zin', () => {
     await boot(page);
     const namen = await page.evaluate(() => maandStructureel().map((r) => r.naam));
     for (const n of namen) expect(n.length).toBeLessThanOrEqual(43);
+  });
+});
+
+test.describe('j · een dekkingsgraad toont geen percentage boven de drempel', () => {
+  /* v191: dezelfde bevinding als het kopcijfer op Plan, dat toen per geval is opgelost door de
+     graad van die kaart te halen. De regel staat nu vast in MAAND_DREMPEL, zodat hij niet ergens
+     anders terugkomt: tot en met de drempel een percentage, daarboven een vaststelling. */
+  test('graadTekst kapt af op de drempel uit de constante', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => ({
+      drempel: MAAND_DREMPEL.dekkingOk,
+      nul: graadTekst(0, 'wat nu nodig is'),
+      halve: graadTekst(44, 'wat nu nodig is'),
+      precies: graadTekst(100, 'wat nu nodig is'),
+      erboven: graadTekst(101, 'wat nu nodig is'),
+      ver: graadTekst(1111, 'wat nu nodig is'),
+      post: graadTekst(403, 'de eerstvolgende post'),
+    }));
+    expect(r.drempel).toBe(100);
+    expect(r.nul).toBe('0% van wat nu nodig is');
+    expect(r.halve).toBe('44% van wat nu nodig is');
+    expect(r.precies).toBe('100% van wat nu nodig is');   // de drempel zelf telt nog als percentage
+    expect(r.erboven).toBe('op peil voor wat nu nodig is');
+    expect(r.ver).toBe('op peil voor wat nu nodig is');
+    expect(r.post).toBe('op peil voor de eerstvolgende post');
+    for (const k of ['erboven', 'ver', 'post']) expect(r[k]).not.toMatch(/%/);
+  });
+
+  test('de dekkingregel toont geen graad boven de honderd', async ({ page }) => {
+    const p = seed(); const set = JSON.parse(p.minder_set);
+    set.manualBal[RES] = 50000;                            // pot ver boven wat er nu hoort te staan
+    p.minder_set = JSON.stringify(set);
+    await boot(page, p);
+    const r = await page.evaluate(() => ({ graad: dekking(12).graad,
+      d: (maandRegels() || []).find((x) => x.key === 'dekking') }));
+    test.skip(!r.d || !(r.graad > 100), 'deze opzet geeft geen graad boven de honderd');
+    expect(r.d.eenheid).toContain('op peil');
+    expect(r.d.eenheid).not.toMatch(/\d+%/);
+    expect(r.d.waarde).toMatch(/^€/);                      // het bedrag blijft in de kolom staan
+  });
+
+  test('graad wordt nergens anders als percentage getoond', async ({ page }) => {
+    await boot(page);
+    /* dekkingTekst() rekent met bedragen en maanden, resDekkingCard() draagt de graad sinds v187
+       niet meer, en de kolom toont sinds v190 een bedrag. graadTekst() is dus de enige plek. */
+    const r = await page.evaluate(() => ({
+      tekst: dekkingTekst(dekking(12)),
+      kaart: resDekkingCard(),
+      bronnen: [dekkingTekst.toString(), resDekkingCard.toString()]
+        .map((t) => t.replace(/\/\*[\s\S]*?\*\//g, ' ')),
+    }));
+    expect(r.tekst).not.toMatch(/\d+%/);
+    expect(r.kaart).not.toMatch(/\d+%/);
+    for (const b of r.bronnen) expect(b).not.toContain('graad');
   });
 });

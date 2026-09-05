@@ -88,7 +88,10 @@ test.describe('b · de regels', () => {
         bm: Math.round(bm * 10) / 10, regelBuf: rr.find((r) => r.key === 'buffer').waarde, vrij: V.vrij };
     });
     expect(uit.regelDek).toBe(uit.potStand);          // v189: de kolom toont je potsaldo
-    expect(uit.regelDekEenheid).toContain(uit.dekGraad + '%');   // het percentage staat ernaast
+    /* v191: een dekkingsgraad toont een percentage tot en met de drempel en daarboven een
+       vaststelling; boven de 100% verandert het exacte getal geen enkele beslissing. */
+    if (uit.dekGraad <= 100) expect(uit.regelDekEenheid).toContain(uit.dekGraad + '%');
+    else { expect(uit.regelDekEenheid).toContain('op peil'); expect(uit.regelDekEenheid).not.toMatch(/%/); }
     expect(uit.regelBuf).toBe(String(uit.bm).replace('.', ','));
   });
 
