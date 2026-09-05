@@ -95,11 +95,11 @@ test.describe('b · coStart is de enige ingang', () => {
 
   test('de sheet is van het gesprek: een eerder geopende instellingen-sheet telt niet meer mee', async ({ page }) => {
     await open(page, metDoel());
-    await page.evaluate(() => openSet('privacy'));
+    await page.evaluate(() => openSet('income'));   // v180: openSet kent nog income en bank
     await page.evaluate(() => coStart('algemeen'));
     await wachtKeuze(page, 'Kosten koper huis');
     expect(await page.evaluate(() => window._setSheet)).toBeNull();
-    expect(await page.locator('#sheet').innerText()).not.toContain('Waar staat mijn data');
+    expect(await page.locator('#sheet').innerText()).not.toContain('Inkomen & rekeningen');
   });
 });
 

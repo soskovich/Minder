@@ -75,7 +75,7 @@ test.describe('b · een nieuw potje mag wel meteen', () => {
 test.describe('c · de knop belooft wat hij doet', () => {
   test('de bevestiging noemt de volgende maand, niet "wordt overschreven"', async ({ page }) => {
     await open(page);
-    const html = await page.evaluate(() => { openSet('budget'); return document.getElementById('sheet').innerHTML; });
+    const html = await page.evaluate(() => { openBudgetEditor(); return document.getElementById('sheet').innerHTML; });
     expect(html).toContain('Voorstel uit mijn historie');
     const conf = (html.match(/confirm\(&quot;?'?([^'&]*voorstellen[^'&]*)/) || [])[1] || html;
     expect(conf).toMatch(/volgende maand/);

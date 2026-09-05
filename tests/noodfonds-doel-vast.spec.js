@@ -135,7 +135,7 @@ test.describe('d · het staat er eerlijk bij', () => {
   test('Instellingen spreekt de maandkeuze niet tegen', async ({ page }) => {
     await boot(page);
     // "Bufferdoel" zit in de sub-sheet Budget & doelen, niet op #s-set zelf
-    await page.evaluate(() => { setNfDoelVast(12000); openSet('budget'); });
+    await page.evaluate(() => { setNfDoelVast(12000); openBudgetEditor(); });
     await page.waitForTimeout(80);
     const s = await page.locator('#sheet').innerText();
     expect(s).toContain('Bufferdoel');
@@ -145,7 +145,7 @@ test.describe('d · het staat er eerlijk bij', () => {
 
   test('zonder vast doel houdt Instellingen de oude formulering', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => openSet('budget'));
+    await page.evaluate(() => openBudgetEditor());
     await page.waitForTimeout(80);
     const s = await page.locator('#sheet').innerText();
     expect(s).toMatch(/mnd essentiële crisis-last/);

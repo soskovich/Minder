@@ -71,7 +71,8 @@ test.describe('v53 potjes leidend, inkomen-limiet als spiegel', () => {
 
   test('Instellingen spiegelt dezelfde overschrijding, met de geplande som als noot', async ({ page }) => {
     await open(page);
-    await page.evaluate(() => { go('set'); openSet('budget'); });
+    // v180: de budget-sheet opent met openBudgetEditor(); openSet('budget') was onbereikbaar
+    await page.evaluate(() => { go('set'); openBudgetEditor(); });
     const t = await text(page, '#potGridTotal');
     expect(t).toContain('boven je inkomen-limiet');
     expect(t).toContain('€2.400');                       // nu-actief = hoofdgetal (v56)

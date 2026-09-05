@@ -1993,7 +1993,6 @@ function nowYMstr(){ const n=new Date(); return n.getFullYear()+'-'+String(n.get
 function freshStartDue(){
   const ym=nowYMstr();
   if(SET.freshStartSeen===ym) return false;            // deze maand al begroet of weggetikt
-  if(SET.demoMechanismen) return true;                 // demo: tonen tot je 'm wegtikt
   if(!TX.length) return false;                         // niet voor een lege app
   if(new Date().getDate()>7) return false;             // alleen het frisse-start-venster (eerste week)
   return months().filter(m=>m<ym).length>0;            // alleen als er een vorige maand met data was
@@ -2052,8 +2051,8 @@ function freshStartSave(){
  * Legt je woord naast het cijfer (als je koppelde en de categorie nog bestaat) en laat JOU wegen.
  * Guard: categorie weg? Dan terug naar alleen de tekst, nooit een verzonnen getal. */
 function capMonth(ym){ const mo=+ym.split('-')[1]-1; const n=MFULL[mo]||''; return n.charAt(0).toUpperCase()+n.slice(1); }
-function voornemenCarry(){ const v=SET.maandVoornemen; const ym=nowYMstr(); if(v&&!v.__demo){ SET.maandVoornemen={ym,text:v.text,cat:v.cat,bedrag:v.bedrag}; SET.voornemenReflectedFor=ym; } SET.freshStartSeen=ym; save(); renderDash(); toast(`${ICON('check')} Meegenomen naar ${capMonth(ym)}`); }
-function voornemenReflectDone(){ const v=SET.maandVoornemen; if(v&&!v.__demo) SET.voornemenReflectedFor=v.ym; save(); renderDash(); }
+function voornemenCarry(){ const v=SET.maandVoornemen; const ym=nowYMstr(); if(v){ SET.maandVoornemen={ym,text:v.text,cat:v.cat,bedrag:v.bedrag}; SET.voornemenReflectedFor=ym; } SET.freshStartSeen=ym; save(); renderDash(); toast(`${ICON('check')} Meegenomen naar ${capMonth(ym)}`); }
+function voornemenReflectDone(){ const v=SET.maandVoornemen; if(v) SET.voornemenReflectedFor=v.ym; save(); renderDash(); }
 function freshStartReflection(){
   const ym=nowYMstr(); const v=SET.maandVoornemen;
   if(!(v && v.text && v.ym<ym && SET.voornemenReflectedFor!==v.ym)) return '';
@@ -2343,11 +2342,6 @@ function mentalAccountingSignal(){
   return {surplus, debt:d, inzet, renteJaar};
 }
 /* ---- Demo-modus: toont de drie mechanismen geforceerd, schrijft NIETS weg. Zet uit na bekijken. ---- */
-function demoNotifs(){ return [
-  {key:'budget-demo', score:71, t:'warn', ic:ICON('warn'), l1:'(demo) Je vices gaan €40 over je potje deze maand.', l2:'Zo kantelt je marge', act:"openCategory('vices')"},
-  {key:'rente-demo', score:60, t:'info', ic:ICON('coins'), l1:'(demo) €450 staat stil terwijl Creditcard 14% rente kost.', l2:'Boven je buffer · dat deel kan ~€63/jr dempen', act:"go('vermogen')"}
-]; }
-// beste concrete manier om méér te sparen richting je doel (gedrag-tips + comfort-categorieën), met het maanden-eerder-effect
 function saveFasterTip(){
   let S=null; try{ S=savingsModel(); }catch(_){}
   if(!S||!(S.goal>0)||!(S.monthlySaving>0)) return null;
@@ -2374,7 +2368,6 @@ function scoreNotifs(opts){
   const now=new Date(); const today=vandaagYMD();
   const isNow=m===(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
   const push=o=>{ if(o&&o.l1) out.push(o); };
-  if(SET.demoMechanismen){ demoNotifs().forEach(push); }
   if(isNow){ try{ const {out:eb}=effectiveBudgets(m); const spend=catSpendMap(m); const B=SET.budgets||{}; const overs=[];
     const keys=new Set([...Object.keys(eb||{}), ...Object.keys(B).filter(k=>+B[k]>0)]);
     for(const k of keys){ if(!CATS[k]||CATS[k].type!=='expense') continue; const act=spend[k]||0; const potje=+B[k]||0;
@@ -2572,7 +2565,7 @@ function scoreNotifs(opts){
   let lossLeft=Math.max(MAXLOSS-lossFramesToday(),0);
   const seen=new Set(), uniq=[];
   for(const o of filt){ if(seen.has(o.key)) continue;
-    if(isLossFrame(o.key) && !/-demo$/.test(o.key)){ if(lossLeft<=0) continue; lossLeft--; }
+    if(isLossFrame(o.key)){ if(lossLeft<=0) continue; lossLeft--; }
     seen.add(o.key); uniq.push(o); }
   return uniq;
 }
@@ -6416,7 +6409,6 @@ function coParkResolve(entry,uitkomst,intentie){ entry.resolved=true;
 // koude her-keuze; geeft true terug als er iets te beslissen viel (anders draait het normale coachgesprek)
 async function coParkReturn(m,keep){
   let p=coParkDue();
-  if(!p && SET.demoMechanismen){ const dc=Object.keys(CATS).find(k=>CATS[k]&&CATS[k].type==='expense')||'vices'; p={__demo:true,type:'beslis',item:'koptelefoon',bedrag:120,potjeId:dc,uitkomst:'geparkeerd',intentie:'nu',parkN:1,ts:Date.now()-19*36e5}; }
   if(!p) return false;
   if(!keep) coReset();
   if(!_coT) return false;
@@ -6430,11 +6422,11 @@ async function coParkReturn(m,keep){
   if(n>=PARK_SIGNAL_N){ await coSay(`Je parkeert dit nu ${n} keer. Dat telkens uitstellen is ook een antwoord.`); }
   await coSay(`Doen, of laten?`);
   coChoices([
-    {l:`Nu doen`, act:async()=>{ coBub('me','Nu doen'); if(!p.__demo) coParkResolve(p,'doorgezet','nu'); coFx('vastgelegd, doorgezet'); await coSay(`Doorgezet. Jij houdt de regie, ik leg 't vast. Geen oordeel.`); coEnd(); }},
-    {l:`Nog even parkeren`, act:async()=>{ coBub('me','Nog even parkeren'); if(!p.__demo){ p.resolved=true;
+    {l:`Nu doen`, act:async()=>{ coBub('me','Nu doen'); coParkResolve(p,'doorgezet','nu'); coFx('vastgelegd, doorgezet'); await coSay(`Doorgezet. Jij houdt de regie, ik leg 't vast. Geen oordeel.`); coEnd(); }},
+    {l:`Nog even parkeren`, act:async()=>{ coBub('me','Nog even parkeren'); { p.resolved=true;
         coachLogAdd({type:'beslis',item:p.item,bedrag:amt,potjeId:p.potjeId,uitkomst:'geparkeerd',intentie:'nu',parkN:n+1,text:`${euro0(amt)} ${cn} · geparkeerd`}); save(); }
         coFx('opnieuw geparkeerd'); await coSay(`Goed. Ik kom er nog een keer op terug.`); coEnd(); }},
-    {l:`Laten gaan`, act:async()=>{ coBub('me','Laten gaan'); if(!p.__demo) coParkResolve(p,'geannuleerd','nu'); coFx('vastgelegd, losgelaten'); await coSay(`Helder. Dan was het de impuls, niet de aankoop.`); coEnd(); }}
+    {l:`Laten gaan`, act:async()=>{ coBub('me','Laten gaan'); coParkResolve(p,'geannuleerd','nu'); coFx('vastgelegd, losgelaten'); await coSay(`Helder. Dan was het de impuls, niet de aankoop.`); coEnd(); }}
   ]);
   return true; }
 // sub-flow verschuiven: budget verplaatsen tussen potjes, totaal blijft kloppen
@@ -8304,13 +8296,13 @@ function renderSet(){
   let _fr=null; try{ _fr=reisState(); }catch(_){}
   const _frSub=_fr?`${(''+_fr.rend).replace('.',',')}% rendement · factor ${_fr.fireMult} · pensioen ${_fr.override||(_fr.birth?(+_fr.birth+67):'—')}`:'aannames voor je vermogensreis';
   const cats=[
-    ['budget',ICON('target'),'Budget & doelen',`Je spaart ${euro0(monthlySavingTarget())} per maand`,setBudget,'','openBudgetEditor()'],
+    ['budget',ICON('target'),'Budget & doelen',`Je spaart ${euro0(monthlySavingTarget())} per maand`,null,'','openBudgetEditor()'],
     ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
     ['look',ICON('palet'),'Uiterlijk',THEMES[themeKey()].naam,setLook,''],
     ['modus',ICON('filter'),'Weergave & modus',({rustig:'Rustig',begeleid:'Begeleid',expert:'Expert'})[SET.mode||'begeleid'],setModus,''],
     ['income',ICON('euro'),'Inkomen & rekeningen',`Je ontvangt ${euro0(inc)} per maand`,setIncome,''],
     ['bank',ICON('bank'),'Bankkoppeling',psd2?'Je bank is gekoppeld':'Nog geen bank gekoppeld',setBank,psd2?'':'var(--amber)'],
-    ['coach',ICON('robot'),'Coach & categorieën',`Je coach staat ${SET.coachOff?'uit':'aan'}`,setCoach,''],
+    ['coach',ICON('robot'),'Coach',`Je coach staat ${SET.coachOff?'uit':'aan'}`,setCoach,''],
     ['coachlook',ICON('user'),'Coach-avatar & toon',coachSamenvatting(),null,'','openCoachAvatar()'],
     ['privacy',ICON('lock'),'Privacy & gegevens','Alles blijft op dit toestel',setPrivacy,''],
   ];
@@ -8348,8 +8340,14 @@ function applyTheme(){
 function setTheme(k){
   if(!THEMES[k]) return;
   SET.theme=k; save(); applyTheme(); render();
-  if(window._setSheet==='look') renderSetSheet();
   toast(`${ICON('check')} Thema: ${THEMES[k].naam}`);
+}
+/* Het hero-bedrag in het voorbeeld komt uit je eigen cijfers, precies zoals Home het toont: het
+   getal bij een bekend saldo, en anders het woord dat Home daar ook gebruikt. Een verzonnen bedrag
+   hoort hier niet, ook niet in een voorbeeld dat over kleur gaat. */
+function themeHeroTekst(){
+  try{ if(!(totalBalance().known>0)) return 'onbekend'; return euro0(safeToSpend().safe); }
+  catch(_){ return 'onbekend'; }
 }
 // mini-voorbeeld per thema: dezelfde bouwstenen als de app (kaart, hero-bedrag, staafje, pill)
 function themePreview(k){
@@ -8358,7 +8356,7 @@ function themePreview(k){
   return `<div style="background:${t.bg};border-radius:10px;padding:10px 11px;border:1px solid rgba(128,128,128,.18);overflow:hidden">
     ${t.glow?`<div style="height:0;position:relative"><div style="position:absolute;left:-20%;top:-24px;width:90%;height:56px;background:radial-gradient(60% 100% at 30% 0%,rgba(52,224,196,.30),transparent 70%);filter:blur(2px)"></div></div>`:''}
     <div style="font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:${t.accent};font-weight:700;position:relative">Minder</div>
-    <div style="font-size:19px;font-weight:800;letter-spacing:-.6px;margin:3px 0 5px;position:relative;${heroKleur};${t.serif?"font-family:Georgia,'Times New Roman',serif":''}">€1.240</div>
+    <div style="font-size:19px;font-weight:800;letter-spacing:-.6px;margin:3px 0 5px;position:relative;${heroKleur};${t.serif?"font-family:Georgia,'Times New Roman',serif":''}">${themeHeroTekst()}</div>
     <div style="background:${t.card};border:1px solid rgba(128,128,128,.16);border-radius:7px;padding:6px 7px;display:flex;align-items:flex-end;gap:3px;height:30px">
       ${[10,16,12,20,14].map((h,i)=>`<div style="flex:1;height:${h}px;border-radius:2px;background:${i===4?t.accent:(t.serif?'#cdd6cf':'#37455f')}"></div>`).join('')}
     </div>
@@ -8418,7 +8416,11 @@ function renderBudgetSheet(){
   el.scrollTop = sc;
 }
 
-const SET_SHEETS={look:[ICON('palet'),'Uiterlijk',setLook],budget:[ICON('target'),'Budget & doelen',setBudget],fire:[ICON('trend'),'Vermogensreis · aannames',setFireAannames],modus:[ICON('filter'),'Weergave & modus',setModus],income:[ICON('euro'),'Inkomen & rekeningen',setIncome],bank:[ICON('bank'),'Bankkoppeling & import',setBank],coach:[ICON('robot'),'Coach & categorieën',setCoach],privacy:[ICON('lock'),'Privacy & gegevens',setPrivacy]};
+/* Alleen wat openSet() daadwerkelijk opent. Die functie kent twee aanroepers: openSaldoInvoer()
+   met 'income' en openSpaarrekening() met 'bank'. De zes andere mappings (look, budget, fire,
+   modus, coach, privacy) waren onbereikbaar: hun regels in Instellingen klappen inline uit met
+   toggleSet(), of hebben een eigen sheet (budget via openBudgetEditor). */
+const SET_SHEETS={income:[ICON('euro'),'Inkomen & rekeningen',setIncome],bank:[ICON('bank'),'Bankkoppeling & import',setBank]};
 
 function setBudget(){
   const adv=!!SET.budgetAdv;
@@ -8756,8 +8758,6 @@ function setCoach(){
   return `
     <div class="toggle"><div><div style="font-weight:600">Coaching</div><div class="small muted">Coach-tips op je Home & Actieplan</div></div>
       <label class="sw"><input type="checkbox" ${!SET.coachOff?'checked':''} onchange="SET.coachOff=!this.checked;save();render();"><span class="sl"></span></label></div>
-    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Streak tonen</div><div class="small muted">${ICON('fire')} dagen op rij binnen je dagdoel</div></div>
-      <label class="sw"><input type="checkbox" ${!SET.hideStreak?'checked':''} onchange="SET.hideStreak=!this.checked;save();render();"><span class="sl"></span></label></div>
     <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Interne overboekingen verbergen</div><div class="small muted">Eigen rekeningen & sparen tellen niet als uitgave</div></div>
       <label class="sw"><input type="checkbox" ${SET.hideInternal?'checked':''} onchange="SET.hideInternal=this.checked;save();render();"><span class="sl"></span></label></div>
     <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">AI-coach (via je Worker)</div><div class="small muted">Taalmodel verwoordt het coach-gesprek. Stuurt coach-data naar je eigen backend. Standaard uit.</div></div>
@@ -8765,9 +8765,6 @@ function setCoach(){
     ${SET.aiCoach?`<label class="fld" style="margin-top:8px">Model (optioneel)</label>
       <input type="text" value="${esc(SET.aiModel||'')}" placeholder="bv. claude-3-5-haiku-latest" oninput="SET.aiModel=this.value;save();">
       <div class="small muted" style="margin-top:6px">Gebruikt je PSD2-Worker (Bankkoppeling → Geavanceerd) als proxy. Voeg daar het <b>/coach</b>-endpoint toe en zet je LLM-key als secret. Cijfers en flow blijven uit de lokale motor; bij geen net valt 'ie terug op de lokale coach.</div>`:''}
-    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Demo: mechanismen tonen</div><div class="small muted">Toont de parkeer-terugkeer, een loss-frame en het rente-signaal geforceerd. Schrijft niets weg. Zet daarna weer uit.</div></div>
-      <label class="sw"><input type="checkbox" ${SET.demoMechanismen?'checked':''} onchange="SET.demoMechanismen=this.checked;save();render();"><span class="sl"></span></label></div>
-    ${SET.demoMechanismen?`<div class="small muted" style="margin-top:6px">${ICON('info')} Open je <b>meldingen</b> (belletje) voor het loss-frame en het rente-signaal, en de <b>Coach</b>-tab voor de parkeer-terugkeer.</div>`:''}
     <div style="height:10px"></div>
     <div class="small muted" style="margin-top:10px">${ICON('info')} ${SET.aiCoach?`<b>AI-coach staat aan.</b> Een taalmodel verwoordt de zinnen via je eigen Worker. De bedragen komen nog steeds uit de lokale motor. Zet uit voor 100% lokaal.`:`<b>Hoe werkt de coach?</b> Geen AI in de cloud. Alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.`}</div>`;
 }

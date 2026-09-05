@@ -146,16 +146,18 @@ test.describe('c · de signatuur per thema', () => {
 });
 
 test.describe('d · het Uiterlijk-scherm', () => {
+  /* v180: Uiterlijk klapt inline uit in Instellingen. De sheet-variant (openSet('look')) was
+     onbereikbaar: openSet() kent alleen 'income' en 'bank'. Zelfde paneel, ander omhulsel. */
   test('toont de thema-kaarten met preview en markeert de actieve', async ({ page }) => {
     await boot(page, 'set');
-    await page.evaluate(() => openSet('look'));
+    await page.evaluate(() => toggleSet('look'));
     await page.waitForSelector('[data-theme-card]');
     const kaarten = page.locator('[data-theme-card]');
     expect(await kaarten.count()).toBe(3);
     for (const k of ['prive', 'aurora', 'standaard']) {
       await expect(page.locator(`[data-theme-card="${k}"]`)).toHaveCount(1);
     }
-    const sheet = await page.locator('#sheet').innerText();
+    const sheet = await page.locator('#s-set').innerText();
     expect(sheet).toContain('Privé');
     expect(sheet).toContain('Neo-Dark Aurora');
     expect((sheet.match(/actief/g) || []).length).toBe(1);             // precies één actief
@@ -163,8 +165,8 @@ test.describe('d · het Uiterlijk-scherm', () => {
     // tik = live wisselen, en de sheet toont de nieuwe keuze
     await page.locator('[data-theme-card="prive"]').click();
     expect(await attr(page)).toBe('prive');
-    await page.waitForFunction(() => /Privé[\s\S]*actief/.test(document.getElementById('sheet').innerText));
-    expect((await page.locator('#sheet').innerText()).match(/actief/g).length).toBe(1);
+    await page.waitForFunction(() => /Privé[\s\S]*actief/.test(document.getElementById('s-set').innerText));
+    expect((await page.locator('#s-set').innerText()).match(/actief/g).length).toBe(1);
   });
 
   test('Uiterlijk staat als eigen rij in Instellingen', async ({ page }) => {
