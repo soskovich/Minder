@@ -29,7 +29,8 @@ function seed(o = {}) {
   if (o.uitschieter !== false) add(CUR, dd(5), -420, 'Mediamarkt', 'BEA, BETAALPAS MEDIAMARKT');
   const set = Object.assign({ mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
     manualBal: { [MAIN]: 4000 }, budgets: { huur: 900, boodschappen: 400 },
-    reserveringen: [{ id: 'r1', naam: 'Tandarts', bedrag: 300, interval: 12, maand: 6 }],
+    // de dekking-test vraagt om een dekkingsregel op Maand; die komt uit een reservering
+    reserveringen: [{ id: 'r1', naam: 'Tandarts', bedrag: 300, vervalmaand: '2027-06', intervalM: 12 }],
   }, o.set || {});
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set),
     minder_own: JSON.stringify([MAIN]), minder_accmeta: '{}', minder_plan: '{}' };
@@ -253,5 +254,67 @@ test.describe('h · de beleggen-regel herhaalt geen zichtbare rij', () => {
     expect(src).toContain("B.blokkade.key!=='buffer'");
     // en beleggenKlaar zelf is niet aangeraakt
     expect(await page.evaluate(() => /r\.status!=='tekort'/.test(beleggenKlaar.toString()))).toBe(true);
+  });
+});
+
+test.describe('i · de terugval claimt geen leegte die er niet is', () => {
+  /* v188: de terugval keek alleen naar maandRegels() en negeerde maandStructureel(). Sinds er nog
+     drie regels over zijn werd hij bereikbaar, en dan las je 'er is nog te weinig ingesteld'
+     terwijl er wel degelijk een signaal stond. Hij vuurt nu alleen als er noch regels noch
+     structurele signalen zijn. */
+  const kaal = () => {
+    const p = seed();
+    const set = JSON.parse(p.minder_set);
+    delete set.reserveringen; delete set.goals; delete set.savingsEnds;
+    p.minder_set = JSON.stringify(set);
+    return p;
+  };
+
+  test('noch regels noch signalen: dan zegt het scherm dat, en niets anders', async ({ page }) => {
+    await boot(page, kaal());
+    const r = await page.evaluate(() => ({ regels: maandRegels().length, str: maandStructureel().length }));
+    test.skip(r.regels > 0 || r.str > 0, 'deze fixture levert wel iets op');
+    expect(await scherm(page, 'maand')).toContain('Er is nog te weinig ingesteld');
+  });
+
+  test('alleen structurele signalen: die worden getoond, met een oordeel erover', async ({ page }) => {
+    await boot(page, kaal());
+    const r = await page.evaluate(() => {
+      // dwing één structureel signaal af zonder de signalen-engine aan te raken
+      const orig = window.maandStructureel;
+      window.maandStructureel = () => [{ key: 'overstreak', naam: 'Je geeft al maanden te veel uit',
+        status: 'tekort', waarde: '', eenheid: '', gevolg: '', act: '', structureel: true }];
+      renderMaand();
+      const t = $('#s-maand').innerText.replace(/\s+/g, ' ');
+      window.maandStructureel = orig;
+      return { t, regels: maandRegels().length };
+    });
+    expect(r.regels).toBe(0);                                   // geen enkele gewone regel
+    expect(r.t).not.toContain('Er is nog te weinig ingesteld');  // dus geen claim van leegte
+    expect(r.t).toContain('Je geeft al maanden te veel uit');    // het signaal staat er
+    expect(r.t).toMatch(/beslissing vraagt/);                    // met een oordeel dat het telt
+  });
+
+  test('de guard leest allebei de bronnen', async ({ page }) => {
+    await boot(page);
+    const src = await page.evaluate(() => renderMaand.toString());
+    expect(src).toContain('!R.length && !STR.length');
+  });
+});
+
+test.describe('j · het bedrag staat bij het oordeel, niet op twee schermen', () => {
+  test('de Plan-kaart noemt het bedrag per maand niet meer', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => ({
+      per: dekking(12).benodigdPerMaand,
+      kaart: (function () { const d = document.createElement('div');
+        d.innerHTML = resDekkingCard(); return d.innerText.replace(/\s+/g, ' '); })(),
+      regel: ((maandRegels() || []).find((x) => x.key === 'dekking') || {}).gevolg || '',
+    }));
+    test.skip(!(r.per > 0), 'deze fixture vraagt niets per maand');
+    const bedrag = String(r.per).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    expect(r.regel).toContain(bedrag);          // het oordeel op Maand noemt het
+    expect(r.kaart).not.toContain(bedrag);      // de kaart op Plan niet
+    expect(r.kaart).toMatch(/\d+ post/);        // die houdt de feiten over je lijst
   });
 });

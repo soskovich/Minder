@@ -31,8 +31,8 @@ function seed(o = {}) {
   const set = Object.assign({ mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
     manualBal: bal, budgets: o.geenBudget ? {} : { boodschappen: 500, huur: 900 },
     goals: [{ id: 'g1', naam: 'Reis', doel: 5000, gespaard: 0, allocMode: 'auto' }],
-    // v186: Maand draagt de meermaands-grafiek en heeft daarvoor minstens een maandregel nodig
-    reserveringen: [{ id: 'r1', naam: 'Tandarts', bedrag: 300, interval: 12, maand: 6 }],
+    // Maand draagt de meermaands-grafiek; één reservering geeft dat scherm zijn body
+    reserveringen: [{ id: 'r1', naam: 'Tandarts', bedrag: 300, vervalmaand: '2027-06', intervalM: 12 }],
   }, o.set || {});
   if (o.spaar && !o.geenSaldo) set.savingsEnds = ['4323'];
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set),

@@ -3449,17 +3449,21 @@ function renderMaand(){
     return;
   }
   const R=maandRegels();
-  /* Geen enkele regel te toetsen: dan vat dit scherm niets samen. Bij nul transacties komt hier
-     niemand meer langs - render() en go() vallen dan terug op renderEmpty() - maar een scherm dat
-     zijn eigen leegte niet kent, vult hem met een claim. */
-  if(!R.length){
-    $('#s-maand').innerHTML=`<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
-    return;
-  }
   /* v162: structurele signalen lopen mee in het oordeel volgens de bestaande beslisboom. Ze gaan
      bewust NIET naar maandCoachIngang() of maandVerband(): die kennen alleen de vaste regels, en een
      gesprek openen op een sleutel die coTopicMaand() niet kent zou een half pad opleveren. */
   const STR=maandStructureel();
+  /* Niets te toetsen EN geen enkel structureel signaal: dan vat dit scherm niets samen. Bij nul
+     transacties komt hier niemand meer langs - render() en go() vallen dan terug op renderEmpty() -
+     maar een scherm dat zijn eigen leegte niet kent, vult hem met een claim.
+     v188: deze terugval keek alleen naar R en negeerde de structurele signalen. Toen er na v186 en
+     v187 nog drie regels overbleven werd hij bereikbaar, en dan las je 'er is nog te weinig
+     ingesteld' terwijl er wel degelijk iets stond. Stellig zijn over de afwezigheid van iets dat er
+     wel is, is precies wat deze reeks weghaalt. */
+  if(!R.length && !STR.length){
+    $('#s-maand').innerHTML=`<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
+    return;
+  }
   const RO=R.concat(STR);
   const O=maandOordeel(RO);
   /* v134: beslissing en aandacht zijn twee dingen, en de beslisboom gebruikt die woorden al zo -
@@ -3730,10 +3734,13 @@ function resDekkingCard(){
      plek waar je de lijst beheert, dus de feiten over die lijst en de ingang ernaartoe. Geen kale
      verwijzing, want dan verlies je de beheercontext; geen tweede oordeel, want dat is de doublure.
      resCheckLine() blijft: die gaat over je lijst, niet over je dekking. */
-  const perMnd=Math.round(D.benodigdPerMaand||0);
+  /* v188: hier stond ook nog wat je lijst per maand vraagt. Dat is hetzelfde getal als de noemer
+     van het oordeel op Maand, en hetzelfde getal op twee schermen kost de lezer een verificatie die
+     niets oplevert - dezelfde reden als bij totaal saldo tegenover netto vermogen (v171). Het bedrag
+     hoort bij het oordeel, en dat woont op Maand. */
   return `<div class="card" style="cursor:pointer" onclick="openReserveringen()">
     <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span><span class="small muted">${D.aantal} ${D.aantal===1?'post':'posten'} \u00b7 <span style="color:var(--teal)">bekijk \u203a</span></span></div>
-    <div class="small muted" style="margin-top:5px;line-height:1.5">Kosten die niet elke maand vallen.${perMnd>0?` Samen vragen ze ${euro0(perMnd)} per maand.`:''} Of je genoeg opzij hebt staan, lees je op Maand.</div>
+    <div class="small muted" style="margin-top:5px;line-height:1.5">Kosten die niet elke maand vallen. Of je genoeg opzij hebt staan, lees je op Maand.</div>
     ${resCheckLine()}</div>`;
 }
 /* Eén controlemoment op de lijst zelf: handmatige invoer drijft weg zodra een premie verandert.
