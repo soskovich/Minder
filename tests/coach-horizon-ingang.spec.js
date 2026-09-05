@@ -165,7 +165,7 @@ test.describe('d · een besparing aanzetten', () => {
     const na = await page.evaluate(() => Math.round(financeModel().projection.endBalanceDecember));
     expect(na).toBeGreaterThan(voor);
     expect(await page.evaluate(() => financeModel().projection.totalCut)).toBe(opt.cut);
-    expect(await page.locator('#coThr').innerText()).toMatch(/terug op je vooruitblik/i);
+    expect(await page.locator('#coThr').innerText()).toMatch(/terug in je plan/i)      // v179: het scherm heet Plan;
   });
 
   test('het voor-en-na komt uit financeModel en staat als effect in de draad', async ({ page }) => {

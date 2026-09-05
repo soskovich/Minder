@@ -102,7 +102,7 @@ test.describe('b · het gesprek begint bij het cijfer', () => {
     await page.locator('#coCh .cch').first().click();
     await page.waitForFunction(() => window._coLive === false, null, { timeout: 15000 });
     expect(await page.evaluate((k) => (SET.coachRules || {})[k], opt.key)).toBe(opt.cut);
-    expect(await page.locator('#coThr').innerText()).toMatch(/terug op je vooruitblik/i);
+    expect(await page.locator('#coThr').innerText()).toMatch(/terug in je plan/i)      // v179: het scherm heet Plan;
   });
 });
 

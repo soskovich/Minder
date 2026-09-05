@@ -583,7 +583,7 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
   <a data-go="ins"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4"/><path d="M12 2a6 6 0 0 0-3.5 10.9c.9.7 1.5 1.6 1.5 2.6V16h4v-.5c0-1 .6-1.9 1.5-2.6A6 6 0 0 0 12 2Z"/></svg></span>Inzichten</a>
   <a data-go="act"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3"/></svg></span>Coach</a>
   <a data-go="maand"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>Maand</a>
-  <a data-go="vooruit"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>Vooruitblik</a>
+  <a data-go="vooruit"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>Plan</a>
 </nav>
 
 <div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
@@ -2411,7 +2411,7 @@ function scoreNotifs(opts){
   if(isNow){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget();
     if(tgt>0 && L.projected<tgt){ const tekort=Math.max(Math.round(tgt-L.projected),1); const ack=(SET.chronicAck||{}).saverisk;
       if(!(ack && ack.ym===m && tekort < ack.val*1.10)){
-        push({key:'save-risk', h:'direct',score:82,t:'bad',ic:ICON('coins'),l1:'Je haalt je spaardoel deze maand niet.',l2:'Bekijk je vooruitblik',act:"go('vooruit')",chronic:{key:'saverisk',ym:m,val:tekort}});
+        push({key:'save-risk', h:'direct',score:82,t:'bad',ic:ICON('coins'),l1:'Je haalt je spaardoel deze maand niet.',l2:'Bekijk je plan',act:"go('vooruit')",chronic:{key:'saverisk',ym:m,val:tekort}});
         saveRiskPushed=true;
       } } }catch(_){} }
   // tempo zegt hetzelfde als save-risk ("je geeft te snel uit"); één boodschap is genoeg
@@ -2717,7 +2717,7 @@ function financeModel(){
   const current={spent:st.spent,budget:st.bud,dim:st.dim,elapsed:st.elapsed,left:st.left,expectedOnPace:st.expected,
     paceDelta:Math.round(st.expected-st.spent),
     fixedDueRemaining:fixDueR,varRemaining:Math.max(st.projEnd-st.spent-fixDueR,0),forecastEndOfMonth:st.projEnd,status:st.vkey};
-  // ---- projectie (Vooruitblik én Coach lezen dit) ----
+  // ---- projectie (Plan én Coach lezen dit) ----
   const setAside=Math.round(+SET.coachSetAside||0);                       // eenmalig opzijgezet (coach-actie)
   const optKeys=new Set((coachRuleOptions(cm)||[]).map(r=>r.key)); let totalCut=0;
   for(const k in (SET.coachRules||{})) if(optKeys.has(k)) totalCut+=+SET.coachRules[k]||0;
@@ -2732,7 +2732,7 @@ function financeModel(){
     coach:{projection:endDec, leak:(typeof coachLeak==='function'?coachLeak(cm):null), lastAction:(typeof coachLastText==='function'?coachLastText():'')}};
 }
 /* v140: de ingang naar het onderwerp 'horizon'. Bedoeld was: bij de besparingschips op de
-   vooruitblik. Die chips staan er niet meer: de blokken die ze bouwden vielen in
+   planscherm. Die chips staan er niet meer: de blokken die ze bouwden vielen in
    v80 uit de samenstelling en beide zijn dode code. De dichtstbijzijnde plek waar hetzelfde
    onderwerp wél leeft is het plan-blok, tussen de doelen waar de streefdatum en het tempo al
    staan, op planniveau naast vrijLine en spaarVrijLine (v126). Een vraag over de afstand tot je
@@ -4577,7 +4577,7 @@ function fireInputs(){
   if(!nfDoel){ try{ nfDoel=Math.round(savingsModel().goal||0); }catch(_){} }
   if(!nfCur){ try{ nfCur=Math.round(savingsModel().cur||0); }catch(_){} }
   const emergencyGoal=nfDoel;   // FIRE-mijlpaal = restsaldo-waterval = Noodfonds-kaart
-  let monthlySaving=0; try{ monthlySaving=Math.round(monthlySavingTarget()||0); }catch(_){}   // beoogde maandelijkse spaarinleg — het tempo waarop het noodfonds vult (zelfde bron als Vooruitblik)
+  let monthlySaving=0; try{ monthlySaving=Math.round(monthlySavingTarget()||0); }catch(_){}   // beoogde maandelijkse spaarinleg — het tempo waarop het noodfonds vult (zelfde bron als Plan)
   let missBal=false; try{ missBal=((totalBalance().missing||0)>0); }catch(_){}   // eerlijk over onbekende input (C2-noot)
   const debtsEnriched=(SET.debts||[]).map(d=>Object.assign({},d,{inExp:debtInExpenses(d)}));   // detectie: zit de aflossing in je uitgaven?
   // Bezittingen splitsen: groeiende → belegd (groeit op FIRE-rendement), niet-groeiende → flat (vlak), lease-auto('s) → leaseItems (schrijven af)
@@ -4702,7 +4702,7 @@ function fireModel(R, inputs){
     mid.push(Ay-dy); low.push(C+flat0+ls+Il-dy); high.push(C+flat0+ls+Ih-dy); midGross.push(C+flat0+ls+Ig-dy); assets.push(Ay); bser.push(Ib); cser.push(C);
     koop.push((Ay-dy)/Math.pow(1+R.infl/100,y+1)); }
   const reach=t=>{ for(let y=0;y<=HZ;y++){ if(mid[y]>=t) return y; } return null; };
-  // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Vooruitblik (via fireInputs.emergencyGoal)
+  // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Plan (via fireInputs.emergencyGoal)
   const noodDoel=inputs.emergencyGoal;
   const FIRE=(R.annualExp||0)*R.fireMult;
   // per-schuld aflossing: elk type een eigen aflosjaar (getoond in de afbouw-strook + mijlpaal-lijst)
@@ -5244,7 +5244,7 @@ function nogDezeMaandBody(){
 /* v135: de kaart is gesplitst in body en omhulsel, zodat Inzichten de tegels in zijn eigen
    herokaart kan zetten zonder een kaart in een kaart. Alle guards en de koppeling met
    safeToSpend().saveReserved zitten onveranderd in de body.
-   v144: Vooruitblik toont deze kaart niet meer; het omhulsel blijft de terugval van renderIns()
+   v144: Plan toont deze kaart niet meer; het omhulsel blijft de terugval van renderIns()
    wanneer er geen budget is en de herokaart dus leeg zou blijven. */
 function nogDezeMaandCard(){
   const body=nogDezeMaandBody(); if(!body) return '';
@@ -5312,7 +5312,7 @@ function noodfondsModel(){
   return _nfCache;
 }
 // noodfondsCard() is hier weg (v103): sinds het noodfonds een plan-item werd, rendert het
-// Vooruitblik-scherm die kaart niet meer. "Verfijnen" bij het plan-item opent openNoodfondsPanel().
+// Plan-scherm die kaart niet meer. "Verfijnen" bij het plan-item opent openNoodfondsPanel().
 // tests/opschonen.spec.js bewaakt dat #nfCard niet terugkomt.
 function openNoodfondsPanel(){ window._setSheet=null; window._nfSheet=true; renderNfSheet(); showSheetBg(); }
 function renderNfSheet(){
@@ -5413,6 +5413,9 @@ function setNfNote(c,v){ SET.nfNote=SET.nfNote||{}; const s=(''+v).trim(); if(s=
 function toggleNfNote(c){ SET.nfNoteOpen=SET.nfNoteOpen||{}; SET.nfNoteOpen[c]=!SET.nfNoteOpen[c]; save(); renderNfSheet(); }
 function toggleNfList(){ SET.nfListOpen=!SET.nfListOpen; save(); renderNfSheet(); }
 const VOORUIT_FOOT=`<div class="scr-foot">Vooruitkijken is een schatting, geen belofte.</div>`;
+/* v179: dit scherm heet Plan. De interne sleutel blijft 'vooruit' (id s-vooruit, go('vooruit'),
+   SET.vooruitDoelOpen, minder_view): dat is opslag en navigatie-state, geen tekst die je leest,
+   en hernoemen zou een migratie vragen zonder dat er iets aan verandert. */
 function renderVooruit(){
   const ms=months();
   const m=curMonth||ms[ms.length-1];
@@ -5889,7 +5892,7 @@ function coEnd(){ if(_coC)_coC.innerHTML=''; window._coLive=false; }
 function coSuggestPot(cat){ const vals=months().map(ym=>catSpendMap(ym)[cat]||0).filter(v=>v>0).sort((a,b)=>a-b); const med=vals.length?vals[Math.floor(vals.length/2)]:0; return Math.max(Math.round(med/5)*5,10); }
 // aantal 'keer' in een categorie deze maand (= aantal uitgave-transacties), voor frequentie-coaching
 function potjeKeer(m,cat){ let n=0; for(const x of txOfMonth(m)){ const c=CATS[catOf(x)]; if(x.amount<0 && c && c.type==='expense' && catOf(x)===cat) n++; } return n; }
-// effect van €extra/maand op je bufferdoel (zelfde rekenwijze als de hefboom op Vooruitblik); null als niet kwantificeerbaar
+// effect van €extra/maand op je bufferdoel (zelfde rekenwijze als de hefboom op Plan); null als niet kwantificeerbaar
 function coGoalEffect(extra){
   if(!(extra>0)) return null;
   let S=null; try{ S=savingsModel(); }catch(_){}
@@ -6048,9 +6051,9 @@ async function coTopicLek(m){
   await coSay(R.txt,{html:true,accent:true}); if(_g!==_coGen)return;
   let rules=[]; try{ rules=coachRuleOptions(m)||[]; }catch(_){}
   const opts=rules.map(r=>({l:`${r.label} (+${euro0(r.cut)}/mnd)`, act:async()=>{
-    toggleVooruitCut(r.key,r.cut);                            // dezelfde omzetting als op de vooruitblik
+    toggleVooruitCut(r.key,r.cut);                            // dezelfde omzetting als op het planscherm
     coachLogAdd({type:'tip',text:r.label});                   // nooit type 'afspraak' vanaf deze ingang
-    await coSay(`Mooi. Dat zie je terug op je vooruitblik.`);
+    await coSay(`Mooi. Dat zie je terug in je plan.`);
     const _slot=coTone('slot'); if(_slot) await coSay(_slot);
     coEnd();
   }}));
@@ -6078,7 +6081,7 @@ function coHorizonBron(){
 }
 /* Het onderwerp 'horizon': gaat over gevolg, niet over een uitgave die net is gedaan. Opent met de
    bestaande formulering (doelTempoLine bij een doel, de twee jaartallen bij de vermogensreis) en
-   biedt daarna dezelfde besparingen als de chips op de vooruitblik. Alleen regels die nu uit
+   biedt daarna dezelfde besparingen als de chips op het planscherm. Alleen regels die nu uit
    staan: toggleVooruitCut() schakelt om, dus een regel die al aan staat zou juist uitgaan.
    Onttrekkingen horen hier niet; die hebben hun eigen ingang op het vermogensscherm. */
 async function coTopicHorizon(m){
@@ -6099,11 +6102,11 @@ async function coTopicHorizon(m){
   const opts=rules.map(r=>({l:`${r.label} (+${euro0(r.cut)}/mnd)`, act:async()=>{
     let before=null, after=null;
     try{ before=financeModel().projection.endBalanceDecember; }catch(_){}
-    toggleVooruitCut(r.key,r.cut);                       // dezelfde route als de chips op de vooruitblik
+    toggleVooruitCut(r.key,r.cut);                       // dezelfde route als de chips op het planscherm
     try{ after=financeModel().projection.endBalanceDecember; }catch(_){}
     if(before!=null && after!=null) coFx(`spaardoel ${euro0(before)} → ${euro0(after)}`);
     coachLogAdd({type:'tip',text:r.label});              // nooit type 'afspraak' vanaf deze ingang
-    await coSay(`Mooi. Dat zie je terug op je vooruitblik.`);
+    await coSay(`Mooi. Dat zie je terug in je plan.`);
     const _slot=coTone('slot'); if(_slot) await coSay(_slot);
     coEnd();
   }}));
@@ -7065,7 +7068,7 @@ function insSignals(m,exclude){
 // "Wat valt op", gecombineerd: maand-over-maand (vs vorige maand) + ontdubbelde patroonsignalen (vs je normaal).
 // Differentiatie: "Hoe doe je het?" gaat over je PLAN; deze kaart over je NORMAAL. Geen categorie verschijnt twee keer.
 // ===== Week-vergelijking (kalenderweek ma-zo), drill-down vanuit 'Wat valt op' =====
-// budget-tempo van deze maand als moderne ring + details (de koers-op-doel staat al op Vooruitblik)
+// budget-tempo van deze maand als moderne ring + details (de koers-op-doel staat al op Plan)
 function monthStatusCard(m){
   const t=totals(m); const bud=Math.round(t.budget), sp=Math.round(t.spend);
   if(bud<=0){
@@ -8431,7 +8434,7 @@ function setBudget(){
       ? `<div class="small muted" style="margin-top:6px">Je limiet ankert op je typische uitgaven (≈ ${euro0(baselineSpend())}/mnd) en groeit niet mee met je inkomen. Meer verdienen → meer sparen.</div>`
       : `<div class="small muted" style="margin-top:6px">Klassiek: limiet = ${SET.limit}% van je inkomen. Meer inkomen = meer ruimte.</div>`}
     <label class="fld">Bufferdoel</label>
-    <div class="small muted" style="margin-bottom:6px">Je buffer volgt je noodfonds: essentiële crisis-last × het aantal maanden. Verfijnen doe je op Vooruitblik ▸ Noodfonds.</div>
+    <div class="small muted" style="margin-bottom:6px">Je buffer volgt je noodfonds: essentiële crisis-last × het aantal maanden. Verfijnen doe je op Plan ▸ Noodfonds.</div>
     <div class="chips">${[3,4,6].map(x=>`<span class="chip ${nfMaanden()===x?'on':''}" onclick="SET.nfMaanden=${x};save();render();">${x} mnd</span>`).join('')}</div>
     <div class="small muted" style="margin-top:6px">${(function(){try{const M=noodfondsModel();
       return M.doelVast!=null
@@ -8745,7 +8748,7 @@ function bankAdvTap(){
 
 function setModus(){
   return `
-    <div class="small muted" style="margin-bottom:10px">Bepaalt hoe Minder zich toont op Home, Inzichten, Coach en de Vooruitblik.</div>
+    <div class="small muted" style="margin-bottom:10px">Bepaalt hoe Minder zich toont op Home, Inzichten, Coach en Plan.</div>
     <div class="chips">${[['rustig','Rustig'],['begeleid','Begeleid'],['expert','Expert']].map(([k,l])=>`<span class="chip ${(SET.mode||'begeleid')===k?'on':''}" onclick="SET.mode='${k}';save();render();">${l}</span>`).join('')}</div>
     <div class="small muted" style="margin-top:10px;line-height:1.7"><b>Rustig:</b> minder cijfers, zachtere toon, fijn als geld stress geeft.<br><b>Begeleid:</b> uitleg, tips &amp; benchmarks (standaard).<br><b>Expert:</b> compact, cijfers eerst, extra detail.</div>`;
 }
