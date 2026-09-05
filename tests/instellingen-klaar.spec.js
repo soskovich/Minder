@@ -14,7 +14,7 @@ async function boot(page) {
   await open(page, seed());
   await page.evaluate(() => go('dash'));
 }
-const klaar = async (page) => { await page.evaluate(() => setKlaar()); await page.waitForTimeout(50); };
+const klaar = async (page) => { await page.evaluate(() => terug()); await page.waitForTimeout(50); };
 
 test.describe('a · Klaar keert terug naar waar je vandaan kwam', () => {
   for (const van of ['dash', 'ins', 'maand', 'vooruit', 'act']) {
@@ -52,10 +52,10 @@ test.describe('b · het randgeval valt terug op het oude gedrag', () => {
     await boot(page);
     await page.evaluate(() => go('set'));
     await page.reload();
-    await page.waitForFunction(() => typeof setKlaar === 'function' && TX.length > 0);
+    await page.waitForFunction(() => typeof terug === 'function' && TX.length > 0);
     await page.waitForTimeout(120);
     expect(await actief(page)).toBe('s-set');            // de view-state herstelt Instellingen
-    expect(await page.evaluate(() => setHerkomst)).toBeNull();
+    expect(await page.evaluate(() => vorigeView)).toBeNull();
     await klaar(page);
     expect(await actief(page)).toBe('s-dash');           // terugval, zoals voorheen
   });
@@ -67,7 +67,7 @@ test.describe('b · het randgeval valt terug op het oude gedrag', () => {
     await klaar(page);
     expect(await actief(page)).toBe('s-maand');
     // de herkomst is verbruikt en wordt niet hergebruikt
-    expect(await page.evaluate(() => setHerkomst)).toBeNull();
+    expect(await page.evaluate(() => vorigeView)).toBeNull();
   });
 
   test('Instellingen opnieuw openen vanaf Instellingen overschrijft de herkomst niet', async ({ page }) => {
@@ -85,18 +85,42 @@ test.describe('c · er is geen tweede navigatiegeschiedenis', () => {
     await boot(page);
     await page.evaluate(() => go('ins'));
     await page.evaluate(() => go('set'));
-    expect(await page.evaluate(() => setHerkomst)).toBe('ins');
-    expect(await page.evaluate(() => typeof setHerkomst)).toBe('string');
+    expect(await page.evaluate(() => vorigeView)).toBe('ins');
+    expect(await page.evaluate(() => typeof vorigeView)).toBe('string');
     // niets van dit alles wordt opgeslagen
-    expect(await page.evaluate(() => JSON.stringify(SET))).not.toContain('setHerkomst');
+    expect(await page.evaluate(() => JSON.stringify(SET))).not.toContain('vorigeView');
     expect(await page.evaluate(() => Object.keys(localStorage).some((k) => /herkomst/i.test(k)))).toBe(false);
   });
 
-  test('naar een ander scherm gaan wist de herkomst', async ({ page }) => {
+  /* v185: het mechanisme is algemeen geworden, want Vermogen en Transacties hadden dezelfde
+     hardgecodeerde go('dash'). Elk scherm onthoudt dus waar je vandaan kwam, altijd precies één
+     stap terug. Een sprong via terug() zet zelf geen nieuwe herkomst, anders stuurt een tweede tik
+     je heen en weer in plaats van naar Home. */
+  test('elke sprong onthoudt precies één stap, en terug() zet er geen nieuwe', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('ins'));
     await page.evaluate(() => go('set'));
     await page.evaluate(() => go('maand'));
-    expect(await page.evaluate(() => setHerkomst)).toBeNull();
+    expect(await page.evaluate(() => vorigeView)).toBe('set');   // één stap, geen stapel
+    await klaar(page);
+    expect(await actief(page)).toBe('s-set');
+    expect(await page.evaluate(() => vorigeView)).toBeNull();
+    await klaar(page);
+    expect(await actief(page)).toBe('s-dash');                   // en dan de terugval
+  });
+
+  test('de twee andere terugknoppen gebruiken hetzelfde mechanisme', async ({ page }) => {
+    await boot(page);
+    for (const [van, naar] of [['ins', 'vermogen'], ['maand', 'tx']]) {
+      await page.evaluate((x) => go(x), van);
+      await page.evaluate((x) => go(x), naar);
+      expect(await actief(page)).toBe('s-' + naar);
+      await klaar(page);
+      expect(await actief(page), naar).toBe('s-' + van);
+    }
+    // en beide knoppen roepen terug() aan, niet go('dash')
+    const src = await page.evaluate(() => renderVermogen.toString() + renderTx.toString());
+    expect(src).toContain('onclick="terug()"');
+    expect(src).not.toContain(`onclick="go('dash')"`);
   });
 });

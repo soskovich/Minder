@@ -38,7 +38,7 @@ test.describe('b · geen zichtbare tekst noemt de oude naam meer', () => {
     await open(page, seed());
     const r = await page.evaluate(() => ({
       lek: coTopicLek.toString(), hor: coTopicHorizon.toString(),
-      nf: openNoodfondsPanel.toString(), set: renderSetSheet.toString(),
+      nf: openNoodfondsPanel.toString(), set: renderInkomenSheet.toString(),
     }));
     for (const [k, v] of Object.entries(r)) expect(v, k).not.toMatch(/je vooruitblik/i);
     expect(r.lek + r.hor).toContain('terug in je plan');

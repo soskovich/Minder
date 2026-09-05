@@ -49,16 +49,17 @@ test.describe('a · schakelaars beloven alleen wat bestaat', () => {
 });
 
 test.describe('b · een mapping bestaat alleen met een aanroeper', () => {
-  test('SET_SHEETS kent nog precies de twee die openSet krijgt', async ({ page }) => {
+  /* v185: SET_SHEETS is opgeheven. De tabel had nog twee ingangen en één aanroeper, en droeg een
+     tweede set labels naast de regelnamen. De uitzondering die v183 vastlegde (bank zonder
+     aanroeper, bewaard tot oorzaak 4) is daarmee opgelost in plaats van verlengd. Wat deze test
+     bewaakt blijft hetzelfde: er is één oppervlak per editor, en geen tabel zonder aanroeper. */
+  test('er is geen tabel meer, alleen de twee ingangen die echt bestaan', async ({ page }) => {
     await boot(page);
-    expect(await page.evaluate(() => Object.keys(SET_SHEETS).sort())).toEqual(['bank', 'income']);
-    /* v183: beide aanroepers wijzen nu naar 'income', want de rekeningenlijst is samengevoegd en
-       woont daar. SET_SHEETS.bank houdt daarmee geen aanroeper meer en blijft bewust staan tot
-       oorzaak 4 (SET_SHEETS als tweede oppervlak) aan de beurt is. Haal hem niet weg als dode
-       mapping: die uitzondering is vastgelegd, met reden. */
+    expect(await page.evaluate(() => typeof window.SET_SHEETS)).toBe('undefined');
+    expect(await page.evaluate(() => typeof window.openSet)).toBe('undefined');
     const src = await page.evaluate(() => openSaldoInvoer.toString() + openSpaarrekening.toString());
-    expect(src).toContain("openSet('income')");
-    expect(src).not.toContain("openSet('bank')");
+    expect(src).toContain('openInkomenSheet()');
+    expect(await page.evaluate(() => typeof openInkomenSheet)).toBe('function');
   });
 
   test('de zes onbereikbare panelen werken nog, inline in Instellingen', async ({ page }) => {

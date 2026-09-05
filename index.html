@@ -1402,14 +1402,12 @@ function spaarDekking(m){
 
 // Saldo-invoer: Instellingen ▸ Inkomen & rekeningen, waar je per rekening een saldo invult.
 // Eén bestemming voor elke "vul je saldo aan"-CTA, zodat de onbekend-staat nooit doodloopt.
-function openSaldoInvoer(){ closeSheet(); go('set'); openSet('income'); }
+function openSaldoInvoer(){ closeSheet(); go('set'); openInkomenSheet(); }
 // zelfde vorm, voor het onbekende buffersaldo: daar wijs je een spaarrekening aan (v168)
 /* v183: de spaarrekening-vlag staat sinds de samenvoeging in de rekeningenlijst onder Inkomen &
-   rekeningen, dus deze tik wijst daarheen. Daarmee heeft SET_SHEETS.bank geen aanroeper meer;
-   die blijft bewust staan tot oorzaak 4 (SET_SHEETS als tweede oppervlak) aan de beurt is. Haal
-   hem niet weg als dode mapping: dan is de bank-sheet niet meer te openen zodra oorzaak 4 hem
-   een eigen ingang geeft. */
-function openSpaarrekening(){ closeSheet(); go('set'); openSet('income'); }
+   rekeningen, dus deze tik wijst daarheen. v185: SET_SHEETS is opgeheven en dit is nog de enige
+   sheet-ingang in Instellingen; hij opent die sectie rechtstreeks. */
+function openSpaarrekening(){ closeSheet(); go('set'); openInkomenSheet(); }
 // saldo-nudge: tik = naar de invoer én deze maand niet meer vragen
 function balNudgeGo(){ try{ const ms=months(); SET.balNudge={ym:ms[ms.length-1]||''}; save(); }catch(_){} openSaldoInvoer(); }
 // drill-down: rekeningen waaruit je saldo bestaat
@@ -1551,7 +1549,7 @@ function render(){
   const ms=months(); if(!curMonth||!ms.includes(curMonth)) curMonth=ms[ms.length-1];
   renderDash(); renderTx(); renderIns(); renderActions(); renderVooruit(); renderMaand(); renderVermogen(); renderFire(); renderSet();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
-  if(window._setSheet && $('#sheetBg').classList.contains('show')) renderSetSheet(); // open instellingen-sheet meeverversen
+  if(window._setSheet && $('#sheetBg').classList.contains('show')) renderInkomenSheet(); // open instellingen-sheet meeverversen
   if(window._nfSheet && $('#sheetBg').classList.contains('show')) renderNfSheet();
   if(window._budgetSheet && $('#sheetBg').classList.contains('show')) renderBudgetSheet();
 }
@@ -4996,6 +4994,17 @@ function fireFreedBlock(M){
     ${rows.length?`<div style="margin-top:6px">${rows.join('')}</div><div class="small mut2" style="font-size:10.5px;margin-top:6px">Twee mogelijkheden ter vergelijking, bij benadering. Jij kiest; dit is geen advies.</div>`:''}
   </div>`;
 }
+/* v185: deze regel stond in het instellingenpaneel Vermogensreis, als doorgerekende uitkomst
+   onder het invoerveld 'Gewenst per maand'. Anders dan het FIRE-getal (dat als mijlpaal met bedrag
+   en jaar al op dit scherm staat) stond dit bedrag nergens in woorden: reqCap wordt alleen als
+   lijn in de grafiek getekend, en dan nog alleen met 'Inkomensdoel' aan. Daarom verhuisd en niet
+   weggehaald. Er wordt niets herrekend: dezelfde formule, dezelfde M. */
+function reisInkomensdoelRegel(M){
+  const R=M.R, rq=(+R.incGoal||0)*12*R.fireMult;
+  if(!(rq>0)) return '';
+  const it=M.reach(rq), gap=M.mid[M.HZ]-rq;
+  return `<div class="small mut2" style="font-size:11.5px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line)">Voor ${euro0(R.incGoal)}/mnd is <b style="color:var(--txt)">${euro0(rq)}</b> aan kapitaal nodig (× 12 × ${R.fireMult}). ${it!=null?('Op koers rond '+(M.nowY+it)):('Niet gehaald in '+M.targetYear)} · in ${M.targetYear} ${gap>=0?`<span style="color:var(--teal)">overschot ${euro0(gap)}</span>`:`<span style="color:var(--amber)">tekort ${euro0(-gap)}</span>`}.</div>`;
+}
 function renderFire(){
   const ib='background:none;border:none;color:var(--teal);font-size:24px;cursor:pointer;padding:0 8px 0 0;line-height:1';
   const head=`<div class="row" style="align-items:center;margin:2px 2px 14px;gap:6px"><button onclick="go('vermogen')" title="Terug" style="${ib}">‹</button><b style="font-size:var(--fs-lg);flex:1">Vermogensreis</b><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="go('vermogen')">Klaar</span></div>`;
@@ -5047,13 +5056,14 @@ function renderFire(){
     ${missNote}
     <div style="display:flex;gap:7px;margin-top:8px;flex-wrap:wrap">${tg('compose','Samenstelling')}${tg('band','Bandbreedte')}${tg('koop','Koopkracht')}${tg('showInk','Inkomensdoel')}${tg('scrub','Waarden')}</div>
     <div class="small mut2" style="font-size:12px;margin-top:8px">Op de lange termijn ${ft!=null?('kom je rond '+(nowY+ft)+' bij je FIRE-getal. Een band, geen belofte.'):('haal je je FIRE-getal niet vóór '+M.targetYear+'.')}</div>
-    ${R.taxPct>0?`<div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">In ${M.targetYear} staat er in dit voorbeeld ${euro0(M.mid[M.HZ])}. Zonder belasting zou dat rond ${euro0(M.midGross[M.HZ])} liggen.</div>`:''}
+    ${R.taxPct>0?`<div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">In ${M.targetYear} staat er in dit voorbeeld ${euro0(M.mid[M.HZ])}. Zonder belasting zou dat rond ${euro0(M.midGross[M.HZ])} liggen. Het tarief van ${(''+R.taxPct).replace('.',',')}% is een ruwe plaatshouder, geen berekend feit: deze hele lijn rust daarop.</div>`:''}
     ${reisHaalbaarheid(M)}
     ${M.FIRE>0?`<div class="row" style="justify-content:space-between;align-items:center;margin:14px 2px 0;cursor:pointer" onclick="openOnttrekking()"><span class="hlabel" style="margin:0">Wat kost een onttrekking?</span><span style="color:var(--teal);font-size:16px">›</span></div>
     <div class="small mut2" style="font-size:var(--fs-xs);margin:2px 2px 0">Geld uit je belegde laag, uitgedrukt in maanden op je horizon.</div>`:''}
     ${fireFreedBlock(M)}
     <div class="row" style="justify-content:space-between;align-items:center;margin:14px 2px 0;cursor:pointer" onclick="reisMsToggle()"><span class="hlabel" style="margin:0">Mijlpalen</span><span style="color:var(--mut2);font-size:16px">${msOpen?'▲':'›'}</span></div>
     ${msOpen?`${list}
+    ${reisInkomensdoelRegel(M)}
     <button class="cp-add" style="margin-top:9px" onclick="reisAddCustom()">+ Eigen mijlpaal</button>`:''}
     ${aannames}
     <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:13px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Rekenvoorbeeld met jouw aannames. Geen advies of belofte. De lijn rekent maand-voor-maand met je inleg (incl. wijzigingen). Je bruto salaris telt niet mee, alleen wat je opzij zet. AOW is een indicatie; koopkracht = geld van nu.</div>
@@ -5103,7 +5113,7 @@ function renderVermogen(){
   if(!TX.length){ $('#s-vermogen').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
   const w=netWorth(); const series=netWorthSeries();
   const ib='background:none;border:none;color:var(--teal);font-size:24px;cursor:pointer;padding:0 8px 0 0;line-height:1';
-  const head=`<div class="row" style="align-items:center;margin:2px 2px 14px;gap:6px"><button onclick="go('dash')" title="Terug" style="${ib}">‹</button><b style="font-size:var(--fs-lg);flex:1">Vermogen</b><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="go('dash')">Klaar</span></div>`;
+  const head=`<div class="row" style="align-items:center;margin:2px 2px 14px;gap:6px"><button onclick="terug()" title="Terug" style="${ib}">‹</button><b style="font-size:var(--fs-lg);flex:1">Vermogen</b><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="terug()">Klaar</span></div>`;
   // moderne netto-vermogen-kaart: compositiebalk (eigen deel vs schuld) i.p.v. saldo-verloop
   const _nwUnder=w.netto<0, _nwBez=w.bez, _nwSch=Math.max(w.sch,0);
   const _nwEig=_nwBez>0?Math.max(0,Math.min(Math.round(w.netto/_nwBez*100),100)):(w.netto>0?100:0);
@@ -6805,7 +6815,7 @@ function txFiltered(){
 }
 function renderTx(){
   const ib='background:var(--card2);border:1px solid var(--line);border-radius:10px;width:38px;height:38px;font-size:var(--fs-md);cursor:pointer;color:inherit';
-  const header=`<div class="row" style="align-items:center;margin:2px 2px 12px;gap:8px"><button onclick="go('dash')" title="Terug naar dashboard" style="${ib}">‹</button><b style="font-size:var(--fs-lg);flex:1">Transacties</b>
+  const header=`<div class="row" style="align-items:center;margin:2px 2px 12px;gap:8px"><button onclick="terug()" title="Terug" style="${ib}">‹</button><b style="font-size:var(--fs-lg);flex:1">Transacties</b>
     <div style="display:flex;gap:8px">
       <button onclick="quickAdd()" title="Bijwerken / importeren" style="${ib}">${ICON('sync')}</button>
       <button onclick="toggleTxSearch()" style="${ib}">${ICON('search')}</button>
@@ -8256,13 +8266,13 @@ function setCat(id,k){
 // FIRE-aannames, verhuisd van het Vermogensreis-scherm naar Instellingen (puur verplaatsing; zelfde controls/handlers).
 function setFireAannames(){
   const R=reisState(); let M; try{ M=reisModel(); }catch(_){ return '<div class="small muted">Nog geen gegevens voor je vermogensreis.</div>'; }
-  const nowY=M.nowY;
   const fl=(lab,attrs,suffix)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lab}</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;flex:0 0 128px;max-width:128px"><span class="small muted" style="flex-shrink:0;font-size:12px">€</span><input ${attrs} style="flex:1;min-width:0;width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;outline:none">${suffix?`<span class="small muted" style="flex-shrink:0;font-size:var(--fs-xs)">${suffix}</span>`:''}</div></div>`;
   const nl=(lab,attrs,suffix)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lab}</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;flex:0 0 128px;max-width:128px"><input ${attrs} style="flex:1;min-width:0;width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;outline:none">${suffix?`<span class="small muted" style="flex-shrink:0;font-size:var(--fs-xs)">${suffix}</span>`:''}</div></div>`;
   const roRow=(lab,val,note)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1;min-width:0">${lab}</label><div style="background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:6px 11px;font-weight:700;font-size:var(--fs-md);white-space:nowrap">${val}</div></div>${note?`<div class="small mut2" style="font-size:var(--fs-xs);margin-top:4px">${note}</div>`:''}`;
   const rs=reisRestsaldo(M);
   const fireChips=[{m:25,w:'4%'},{m:30,w:'3,3%'},{m:'eigen'}].map(o=>{ if(o.m==='eigen') return `<span onclick="reisFire('eigen')" class="chip ${R.fireCustom?'on':''}" style="flex:1">Eigen</span>`; return `<span onclick="reisFire(${o.m})" class="chip ${(!R.fireCustom&&R.fireMult===o.m)?'on':''}" style="flex:1">${o.m}×</span>`; }).join('');
-  const reqCap=(+R.incGoal||0)*12*R.fireMult; const it=M.reach(reqCap); const gap=M.mid[M.HZ]-reqCap; const ft=M.reach(M.FIRE);
+  /* v185: hier stonden reqCap, it, gap en ft: doorgerekende uitkomsten in een instellingenpaneel.
+     Ze horen bij de projectie zelf en staan nu op het Vermogensreis-scherm, bij de mijlpalen. */
   const rendContent = `${R.inlegMode==='auto'?`<div class="small muted" style="margin-bottom:2px">Hoe je restsaldo groeit</div>${rs.groei}`:''}
       ${R.inlegMode==='auto'
         ? roRow('Rendement (vóór belasting)', (''+R.rend).replace('.',',')+'%/jr', 'Volgt je groeikeuze hierboven.')
@@ -8282,9 +8292,9 @@ function setFireAannames(){
       <div class="small muted" style="margin-top:7px;font-size:11.5px">${R.expMode==='eigen'?(R.expMonthly>0?('= <b style="color:var(--txt)">'+euro0(R.annualExp)+'</b>/jaar'):'Vul je verwachte maanduitgaven in.'):'Geschat uit je recente uitgaven.'}</div>`;
   const factorContent = `<div class="chips" style="margin-top:2px">${fireChips}</div>
       ${R.fireCustom?nl('Eigen factor','type="number" min="10" value="'+R.fireMult+'" onchange="reisSet(\'fireMult\',+this.value||25)"','×'):''}
-      <div class="small muted" style="margin-top:7px;font-size:11.5px">Nodig: <b style="color:var(--txt)">${euro0(M.FIRE)}</b> · verwacht ${ft!=null?('rond '+(nowY+ft)):('na '+M.targetYear)}.</div>`;
+      <div class="small muted" style="margin-top:7px;font-size:11.5px">De factor bepaalt hoe groot je FIRE-getal is. Het bedrag en het jaar staan bij je mijlpalen.</div>`;
   const inkomenContent = `${fl('Gewenst per maand','type="number" min="0" step="100" value="'+R.incGoal+'" onchange="reisSet(\'incGoal\',Math.max(0,Math.round(+this.value||0)))"','/mnd')}
-      <div class="small muted" style="margin-top:7px;font-size:11.5px">Benodigd kapitaal <b style="color:var(--txt)">${euro0(reqCap)}</b> (× 12 × ${R.fireMult}). ${it!=null?('Op koers rond '+(nowY+it)):('Niet gehaald in '+M.targetYear)} · in ${M.targetYear} ${gap>=0?('<span style="color:var(--teal)">overschot '+euro0(gap)+'</span>'):('<span style="color:var(--amber)">tekort '+euro0(-gap)+'</span>')}.</div>`;
+      <div class="small muted" style="margin-top:7px;font-size:11.5px">Wat dit bedrag aan kapitaal vraagt, en of je daar uitkomt, staat bij je mijlpalen.</div>`;
   const sub=t=>`<div class="hlabel" style="margin:15px 0 0;font-size:11.5px">${t}</div>`;
   return `<div class="small muted" style="margin-bottom:2px">Aannames voor je Vermogensreis. Ze sturen de projectie; de grafiek en de mijlpalen zie je op het Vermogensreis-scherm.</div>
     ${sub('Rendement &amp; inflatie')}${rendContent}
@@ -8293,7 +8303,7 @@ function setFireAannames(){
     ${sub('Jaaruitgaven')}${uitgavenContent}
     ${sub('Inkomen bij pensioen')}${inkomenContent}`;
 }
-function goFireAannames(){ SET.setOpen='fire'; save(); renderSet(); go('set'); }   // rustige link vanaf het FIRE-scherm naar de aannames
+function goFireAannames(){ SET.setOpen='fire'; save(); renderSet(); go('set'); }   // rustige link vanaf het Vermogensreis-scherm naar de aannames
 function renderSet(){
   const open=SET.setOpen||'';
   const _bank=bankStand();
@@ -8319,17 +8329,21 @@ function renderSet(){
   const list=cats.map(([id,ic,label,sub,fn,col,sheet])=>{
     /* Twee soorten regels. De meeste klappen inline uit met fn(). Een regel met een eigen sheet
        klapt nooit uit: die sheet is namelijk ook ergens anders de ingang, en dan hoort er één
-       oppervlak te zijn. Budget komt ook vanuit Inzichten, de coach-avatar ook vanuit de coachkop. */
+       oppervlak te zijn. Budget komt ook vanuit Inzichten, de coach-avatar ook vanuit de coachkop.
+       v185: aan de regel zag je dat verschil niet, want allebei droegen ze dezelfde chevron. Beide
+       patronen zijn met opzet gekozen, dus het gedrag blijft; alleen het teken zegt nu welk van de
+       twee je krijgt. De driehoek vouwt hier open, de chevron gaat ergens heen - precies wat de
+       chevron overal elders in de app al betekent. */
     const act = sheet || `toggleSet('${id}')`;
     const op  = !sheet && open===id;
     return `
     <div onclick="${act}" style="display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line);cursor:pointer">
       <div style="font-size:var(--fs-xl)">${ic}</div>
       <div style="flex:1;min-width:0"><div style="font-weight:600">${label}</div><div class="small ${col?'':'muted'}"${col?` style="color:${col}"`:''}>${sub}</div></div>
-      <div class="muted" style="font-size:var(--fs-lg)">${op?'▲':'›'}</div>
+      <div class="muted" style="font-size:var(--fs-lg)">${sheet?'›':(op?'▲':'▼')}</div>
     </div>
     ${op?`<div style="padding:10px 4px 16px;border-bottom:1px solid var(--line)">${fn()}</div>`:''}`;}).join('');
-  $('#s-set').innerHTML = `<div class="row" style="margin:2px 2px 18px"><span class="hlabel" style="margin:0;flex:1">Instellingen</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="setKlaar()">Klaar</span></div><div class="card" style="padding:6px 12px">${list}</div>
+  $('#s-set').innerHTML = `<div class="row" style="margin:2px 2px 18px"><span class="hlabel" style="margin:0;flex:1">Instellingen</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="terug()">Klaar</span></div><div class="card" style="padding:6px 12px">${list}</div>
     <div class="center small muted" style="padding:8px 0 20px;cursor:default" onclick="bankAdvTap()">Minder · veilig &amp; lokaal</div>`;
 }
 
@@ -8392,14 +8406,24 @@ function setLook(){
   return `<div class="small muted" style="margin-bottom:10px">Kies hoe Minder eruitziet. De hele app verandert meteen mee · je cijfers blijven precies hetzelfde.</div>
     ${kaart('prive')}${kaart('aurora')}${kaart('standaard')}`;
 }
-function openSet(id){ window._setSheet=id; renderSetSheet(); showSheetBg(); }
 
-function renderSetSheet(){
-  const id=window._setSheet; const def=SET_SHEETS[id]; if(!def) return;
-  const [ic,title,fn]=def;
+/* v185: hier stond SET_SHEETS, een tabel met acht ingangen waarvan er in v180 zes onbereikbaar
+   bleken en er in v183 nog één aanroeper overbleef. Een tabel van twee met één aanroeper is geen
+   tabel meer, en hij droeg een tweede set labels: de sheet heette 'Bankkoppeling & import' terwijl
+   de regel 'Bank & koppelingen' heet. Twee namen voor hetzelfde is precies wat deze reeks
+   weghaalt. De bank-ingang is niet bewaard voor het geval dat: een mapping zonder aanroeper is
+   geen voorraad maar ballast (v165), en komt er ooit een ingang bij, dan is dit vijf regels werk.
+   window._setSheet blijft bestaan als markering van het oppervlak: openCoachAvatar(),
+   openBudgetEditor() en het coachgesprek zetten hem op null om de sheet over te nemen. */
+function openInkomenSheet(){
+  window._setSheet='income'; window._nfSheet=null; window._budgetSheet=null;
+  renderInkomenSheet(); showSheetBg();
+}
+function renderInkomenSheet(){
+  if(window._setSheet!=='income') return;
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="row" style="margin-bottom:12px"><div style="font-weight:800;font-size:var(--fs-lg)">${ic} ${title}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    ${fn()}<div style="height:8px"></div>`;
+    <div class="row" style="margin-bottom:12px"><div style="font-weight:800;font-size:var(--fs-lg)">${ICON('euro')} Inkomen &amp; rekeningen</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    ${setIncome()}<div style="height:8px"></div>`;
 }
 
 /* Budget in-context invullen: dezelfde editor (setBudget) als bottomsheet, direct vanuit Inzichten.
@@ -8426,11 +8450,6 @@ function renderBudgetSheet(){
   el.scrollTop = sc;
 }
 
-/* Alleen wat openSet() daadwerkelijk opent. Die functie kent twee aanroepers: openSaldoInvoer()
-   met 'income' en openSpaarrekening() met 'bank'. De zes andere mappings (look, budget, fire,
-   modus, coach, privacy) waren onbereikbaar: hun regels in Instellingen klappen inline uit met
-   toggleSet(), of hebben een eigen sheet (budget via openBudgetEditor). */
-const SET_SHEETS={income:[ICON('euro'),'Inkomen & rekeningen',setIncome],bank:[ICON('bank'),'Bankkoppeling & import',setBank]};
 
 function setBudget(){
   const adv=!!SET.budgetAdv;
@@ -8506,7 +8525,7 @@ function setIncome(){
 function toggleSavingsAcct(a){
   SET.savingsAcc=SET.savingsAcc||{};
   SET.savingsAcc[a]=!isSavingsAcc(a);
-  save(); SET.setOpen='bank'; renderSet(); try{renderSetSheet();}catch(_){} try{renderDash();}catch(_){}
+  save(); SET.setOpen='bank'; renderSet(); try{renderInkomenSheet();}catch(_){} try{renderDash();}catch(_){}
 }
 /* v146: rekeningen zonder bekend saldo staan standaard niet in Instellingen. Het zijn in de praktijk
    rekeningen die je niet meer gebruikt, en ze vulden allebei de lijsten met regels waar niets aan te
@@ -8520,7 +8539,7 @@ function rekMetSaldo(){ return OWN.filter(a=>accBalance(a)!=null); }
 function rekZonderSaldo(){ return OWN.filter(a=>accBalance(a)==null); }
 function toonAlleRek(){ return !!SET.toonLegeRek || !rekMetSaldo().length; }
 function zichtbareRek(){ return toonAlleRek()?OWN.slice():rekMetSaldo(); }
-function toggleLegeRek(){ SET.toonLegeRek=!SET.toonLegeRek; save(); renderSet(); try{renderSetSheet();}catch(_){} }
+function toggleLegeRek(){ SET.toonLegeRek=!SET.toonLegeRek; save(); renderSet(); try{renderInkomenSheet();}catch(_){} }
 function legeRekRegel(){
   const n=rekZonderSaldo().length; if(!n || !rekMetSaldo().length) return '';
   return `<div class="small muted" style="margin-top:9px;cursor:pointer" onclick="toggleLegeRek()">${SET.toonLegeRek
@@ -9118,18 +9137,24 @@ function esc(s){return (s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>'
    De herkomst komt uit de BESTAANDE view-state: minder_view wordt pas aan het eind van go()
    geschreven, dus aan het begin staat er nog het scherm waar je vandaan komt. Dat is één waarde,
    geen tweede navigatiegeschiedenis, en hij staat bewust in module-state: na een herstart is er
-   geen herkomst en valt Klaar terug op Home, precies zoals het randgeval vraagt (zelfde redenering
-   als curMonth in v176). */
-let setHerkomst=null;
-function setKlaar(){
-  const h=setHerkomst; setHerkomst=null;
-  go(h && document.getElementById('s-'+h) ? h : 'dash');
+   geen herkomst en valt de knop terug op Home, precies zoals het randgeval vraagt (zelfde
+   redenering als curMonth in v176).
+   v185: Vermogen en Transacties hadden dezelfde hardgecodeerde go('dash'), dus het mechanisme is
+   algemeen gemaakt in plaats van drie keer nagebouwd. terug() verbruikt de waarde en zet tijdens
+   die sprong geen nieuwe: anders stuurt een tweede tik je heen en weer in plaats van naar Home. */
+let vorigeView=null, _terugSprong=false;
+function terug(){
+  const h=vorigeView; vorigeView=null; _terugSprong=true;
+  try{ go(h && document.getElementById('s-'+h) ? h : 'dash'); } finally { _terugSprong=false; }
 }
 function go(name){
-  if(name==='set'){
+  if(_terugSprong) vorigeView=null;
+  else {
     let v=null; try{ v=localStorage.getItem('minder_view'); }catch(_){}
-    if(v && v!=='set' && document.getElementById('s-'+v)) setHerkomst=v;
-  } else setHerkomst=null;
+    /* Sta je er al, dan is dit geen sprong en houdt de herkomst zijn waarde: anders sluit
+       openSpaarrekening() je op in Instellingen als je hem daar vandaan aanroept. */
+    if(v!==name) vorigeView = (v && document.getElementById('s-'+v)) ? v : null;
+  }
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   $('#s-'+name).classList.add('active');
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.go===name));

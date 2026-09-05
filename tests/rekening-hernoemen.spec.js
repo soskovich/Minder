@@ -102,7 +102,7 @@ test.describe('a · hernoemen', () => {
 test.describe('b · de ingangen', () => {
   test('via de rekeningenlijst in Instellingen', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { go('set'); openSet('income'); });   // v183: de lijst woont onder Inkomen
+    await page.evaluate(() => { go('set'); openInkomenSheet(); });   // v183: de lijst woont onder Inkomen
     // v183: de rij draagt zijn rekening-id, dus er hoeft niet op opmaak gemikt te worden
     const rij = page.locator(`#sheet [data-acc="${POT1}"]`);
     await rij.locator('div[onclick^="acctRenameOpen"]').click();

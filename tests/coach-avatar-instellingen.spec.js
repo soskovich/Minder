@@ -127,7 +127,7 @@ test.describe('c · plaatsonafhankelijk', () => {
 
   test('de sheet neemt het oppervlak over van een eerder geopende instellingen-sheet', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => openSet('income'));   // v180: openSet kent nog income en bank
+    await page.evaluate(() => openInkomenSheet());   // v185: de enige sheet-ingang in Instellingen
     await page.waitForSelector('#sheetBg.show');
     await page.evaluate(() => openCoachAvatar());
     expect(await page.evaluate(() => window._setSheet)).toBeNull();

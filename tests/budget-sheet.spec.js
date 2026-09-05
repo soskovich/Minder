@@ -163,7 +163,7 @@ test('g · de hook overschrijft geen andere sheet', async ({ page }) => {
   await page.locator('#s-ins >> text=Maandbudget').first().click();
   await page.waitForSelector(SHEET);
 
-  await page.evaluate(() => { openSet('income'); });               // andere sheet, zonder tussentijds sluiten
+  await page.evaluate(() => { openInkomenSheet(); });               // andere sheet, zonder tussentijds sluiten
   await page.evaluate(() => render());
   const s = await sheetTxt(page);
   expect(s).toContain('Inkomen');

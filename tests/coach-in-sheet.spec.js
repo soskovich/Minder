@@ -95,7 +95,7 @@ test.describe('b · coStart is de enige ingang', () => {
 
   test('de sheet is van het gesprek: een eerder geopende instellingen-sheet telt niet meer mee', async ({ page }) => {
     await open(page, metDoel());
-    await page.evaluate(() => openSet('income'));   // v180: openSet kent nog income en bank
+    await page.evaluate(() => openInkomenSheet());   // v185: de enige sheet-ingang in Instellingen
     await page.evaluate(() => coStart('algemeen'));
     await wachtKeuze(page, 'Kosten koper huis');
     expect(await page.evaluate(() => window._setSheet)).toBeNull();

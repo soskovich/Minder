@@ -88,7 +88,7 @@ test.describe('a · de schakelaar werkt nu voor elk potje', () => {
 
   test('de schakelaar in de rekeningenlijst blijft staan waar je hem zet', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { go('set'); openSet('income'); });   // v183: de spaarvlag staat in de samengevoegde lijst
+    await page.evaluate(() => { go('set'); openInkomenSheet(); });   // v183: de spaarvlag staat in de samengevoegde lijst
     // exact op de rekening selecteren: 'Buffer Rust' (CSV) en 'Buffer rust' (PSD2 ··1123) staan
     // allebei in de lijst, en hasText is hoofdletterongevoelig
     // v183: de rij draagt zijn rekening-id, dus er hoeft niet op opmaak gemikt te worden
