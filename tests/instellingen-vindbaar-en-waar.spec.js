@@ -165,9 +165,11 @@ test.describe('d · de privacyregel volgt beide koppelingen', () => {
 });
 
 test.describe('e · de AI-coach zegt wat er verandert, niet hoe je het bouwt', () => {
-  test('de schakelaar staat nog onder Coach, zonder bouwinstructie', async ({ page }) => {
+  /* v182: de schakelaar is naar Bankkoppeling verhuisd, bij de backend-URL waarop hij draait.
+     Wat deze test bewaakt is onveranderd: hij zegt wat er verandert, niet hoe je het bouwt. */
+  test('de schakelaar staat bij zijn configuratie, zonder bouwinstructie', async ({ page }) => {
     await open(page, zonder({ aiCoach: true }));
-    const t = await page.evaluate(() => setCoach());
+    const t = await page.evaluate(() => setBank());
     expect(t).toContain('AI-coach');
     expect(t).toMatch(/coach-tekst gaat naar je eigen backend/);
     expect(t).not.toContain('/coach');
@@ -186,9 +188,9 @@ test.describe('e · de AI-coach zegt wat er verandert, niet hoe je het bouwt', (
 
   test('aan zonder backend zegt de app dat de lokale coach aan het woord blijft', async ({ page }) => {
     await open(page, zonder({ aiCoach: true, psd2Url: '', psd2Token: '' }));
-    expect(await page.evaluate(() => setCoach())).toContain('nog niet ingesteld');
+    expect(await page.evaluate(() => setBank())).toContain('nog niet ingesteld');
     await open(page, zonder({ aiCoach: true, psd2Url: 'https://x.workers.dev', psd2Token: 't' }));
-    expect(await page.evaluate(() => setCoach())).toContain('Die staat ingesteld');
+    expect(await page.evaluate(() => setBank())).toContain('Die staat ingesteld');
   });
 });
 

@@ -6,7 +6,9 @@
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
 
-const RIJ = '#s-set >> text=Coach-avatar & toon';
+// v182: 'Coach-avatar & toon' is opgegaan in de regel Coach. De sheet en al zijn ingangen
+// blijven bestaan; de ingang vanuit Instellingen zit nu in het uitgeklapte coach-paneel.
+const RIJ = '#s-set >> text=Avatar & toon';
 
 async function boot(page, scherm) {
   await open(page, seed());
@@ -15,18 +17,21 @@ async function boot(page, scherm) {
 }
 
 test.describe('a · de regel bij Instellingen', () => {
-  test('staat er, in de vorm van de andere regels', async ({ page }) => {
+  test('staat er, als rij binnen het coach-paneel', async ({ page }) => {
     await boot(page);
-    const rij = page.locator('#s-set .card > div', { hasText: 'Coach-avatar & toon' }).first();
-    await expect(rij).toHaveCount(1);
+    await page.evaluate(() => toggleSet('coach'));
+    const rij = page.locator('#s-set div[onclick="openCoachAvatar()"]').first();
     const t = await rij.innerText();
-    expect(t).toContain('Coach-avatar & toon');
+    expect(t).toContain('Avatar & toon');
     expect(t).toMatch(/Sara · directe toon/);   // label boven, samenvatting eronder
     expect(t).toContain('›');
+    // en de regel in de lijst zelf noemt de gekozen coach in zijn subregel
+    expect(await page.evaluate(() => $('#s-set').innerText)).toMatch(/Je coach staat aan · Sara/);
   });
 
   test('de samenvatting volgt de gekozen avatar en toon', async ({ page }) => {
     await boot(page);
+    await page.evaluate(() => toggleSet('coach'));
     expect(await page.evaluate(() => coachSamenvatting())).toBe('Sara · directe toon');
     await page.evaluate(() => { SET.coachAvatar = 'm'; SET.coachTone = 'zacht'; save(); renderSet(); });
     expect(await page.evaluate(() => coachSamenvatting())).toBe('Daan · zachte toon');
@@ -42,6 +47,7 @@ test.describe('a · de regel bij Instellingen', () => {
 
   test('tikken opent de sheet, niet een uitklap', async ({ page }) => {
     await boot(page);
+    await page.evaluate(() => toggleSet('coach'));
     await page.locator(RIJ).first().click();
     await page.waitForSelector('#sheetBg.show');
     const s = await page.locator('#sheet').innerText();
@@ -54,6 +60,7 @@ test.describe('a · de regel bij Instellingen', () => {
 test.describe('b · wisselen werkt vanaf beide plekken', () => {
   test('toon wisselen vanuit Instellingen wordt opgeslagen en teruggelezen', async ({ page }) => {
     await boot(page);
+    await page.evaluate(() => toggleSet('coach'));
     await page.locator(RIJ).first().click();
     await page.waitForSelector('#sheetBg.show');
     await page.locator('#coachToneChips .chip', { hasText: 'Zacht' }).click();
@@ -72,6 +79,7 @@ test.describe('b · wisselen werkt vanaf beide plekken', () => {
 
   test('avatar wisselen vanuit Instellingen sluit de sheet en werkt de regel bij', async ({ page }) => {
     await boot(page);
+    await page.evaluate(() => toggleSet('coach'));
     await page.locator(RIJ).first().click();
     await page.waitForSelector('#sheetBg.show');
     await page.evaluate(() => setCoachAvatar('m'));
@@ -133,6 +141,7 @@ test.describe('d · layout', () => {
     test(`geen horizontale overflow op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 780 });
       await boot(page);
+      await page.evaluate(() => toggleSet('coach'));
       await page.locator(RIJ).first().click();
       await page.waitForSelector('#sheetBg.show');
       const over = await page.evaluate(() => ({

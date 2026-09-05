@@ -8295,15 +8295,19 @@ function renderSet(){
   const inc=SET.autoIncome?baseIncome():(+SET.income||0);
   let _fr=null; try{ _fr=reisState(); }catch(_){}
   const _frSub=_fr?`${(''+_fr.rend).replace('.',',')}% rendement · factor ${_fr.fireMult} · pensioen ${_fr.override||(_fr.birth?(+_fr.birth+67):'—')}`:'aannames voor je vermogensreis';
+  /* v182: de volgorde volgde de code, niet het onderwerp: Uiterlijk en Weergave stonden boven
+     Inkomen en Bankkoppeling, dus cosmetica boven data. De lijn loopt nu van binnenkomende data
+     (inkomen, koppeling) naar wat je ermee van plan bent (budget, vermogensreis) naar hoe het
+     verteld wordt (coach, weergave, uiterlijk) naar je gegevens zelf (privacy, met het wissen
+     onderaan). 'Coach-avatar & toon' is opgegaan in Coach: één onderwerp, één regel. */
   const cats=[
-    ['budget',ICON('target'),'Budget & doelen',spaardoelBekend()?`Je spaart ${euro0(monthlySavingTarget())} per maand`:'Je spaarinleg is nog onbekend',null,'','openBudgetEditor()'],
-    ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
-    ['look',ICON('palet'),'Uiterlijk',THEMES[themeKey()].naam,setLook,''],
-    ['modus',ICON('filter'),'Weergave & modus',({rustig:'Rustig',begeleid:'Begeleid',expert:'Expert'})[SET.mode||'begeleid'],setModus,''],
     ['income',ICON('euro'),'Inkomen & rekeningen',inkomenBekend()?`Je ontvangt ${euro0(inc)} per maand`:'Je inkomen is nog onbekend',setIncome,''],
     ['bank',ICON('bank'),'Bankkoppeling',_bank.sub,setBank,_bank.col],
-    ['coach',ICON('robot'),'Coach',`Je coach staat ${SET.coachOff?'uit':'aan'}`,setCoach,''],
-    ['coachlook',ICON('user'),'Coach-avatar & toon',coachSamenvatting(),null,'','openCoachAvatar()'],
+    ['budget',ICON('target'),'Budget & doelen',spaardoelBekend()?`Je spaart ${euro0(monthlySavingTarget())} per maand`:'Je spaarinleg is nog onbekend',null,'','openBudgetEditor()'],
+    ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
+    ['coach',ICON('robot'),'Coach',`Je coach staat ${SET.coachOff?'uit':'aan'} · ${coachSamenvatting()}`,setCoach,''],
+    ['modus',ICON('filter'),'Weergave & modus',({rustig:'Rustig',begeleid:'Begeleid',expert:'Expert'})[SET.mode||'begeleid'],setModus,''],
+    ['look',ICON('palet'),'Uiterlijk',THEMES[themeKey()].naam,setLook,''],
     ['privacy',ICON('lock'),'Privacy & gegevens',privacySub(),setPrivacy,''],
   ];
   const list=cats.map(([id,ic,label,sub,fn,col,sheet])=>{
@@ -8766,7 +8770,7 @@ function setBank(){
     <div class="small muted" style="margin-bottom:8px;font-weight:600">AI-coach</div>
     <label class="fld">Model (optioneel)</label>
     <input type="text" value="${esc(SET.aiModel||'')}" placeholder="bv. claude-3-5-haiku-latest" oninput="SET.aiModel=this.value;save();">
-    <div class="small muted" style="margin-top:6px">De AI-coach gebruikt dezelfde backend als proxy. Voeg daar het <b>/coach</b>-endpoint toe en zet je LLM-key als secret. Aanzetten doe je bij Coach.</div>` : '';
+    <div class="small muted" style="margin-top:6px">De AI-coach gebruikt dezelfde backend als proxy. Voeg daar het <b>/coach</b>-endpoint toe en zet je LLM-key als secret. Aanzetten doe je hierboven.</div>` : '';
   /* v181: dit blok zat achter bankAdvTap, vijf tikken op de voetregel van Instellingen. Voor wie
      geen backend heeft is het de enige manier om data in de app te krijgen, dus het staat nu
      gewoon in beeld. Bewust als tweede optie: de koppeling houdt de plek bovenaan en houdt als
@@ -8783,11 +8787,20 @@ function setBank(){
          <button class="btn sec" style="margin-top:8px" onclick="forgetFolder()">Map ontkoppelen</button>`
       : (FSA?`<button class="btn sec" onclick="connectFolder()">${ICON('folder')} Map koppelen</button>`:'')}
     <button class="btn sec" style="margin-top:8px" onclick="document.getElementById('file').click()">${ICON('folder')} Bestand toevoegen</button>`;
+  /* v182: de AI-coachschakelaar stond onder Coach terwijl zijn configuratie hier staat: hij draait
+     op dezelfde backend-URL als de bankkoppeling. Hij hoort bij wat hij nodig heeft. Zichtbaar,
+     niet in het geavanceerde blok: dat is een gebruikersknop, en die verstoppen is precies wat
+     v181 ophief. Alleen het modelveld en de bouwinstructie blijven onder Geavanceerd. */
+  const aiHtml = `
+    <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
+    <div class="toggle"><div><div style="font-weight:600">AI-coach</div><div class="small muted">Een taalmodel verwoordt de coach-zinnen. Je cijfers blijven uit de lokale motor, maar de coach-tekst gaat naar je eigen backend. Standaard uit.</div></div>
+      <label class="sw"><input type="checkbox" ${SET.aiCoach?'checked':''} onchange="SET.aiCoach=this.checked;save();render();"><span class="sl"></span></label></div>
+    ${SET.aiCoach?`<div class="small muted" style="margin-top:6px">Hij loopt via dezelfde backend als je bankkoppeling. ${psd2Ready()?'Die staat ingesteld.':'Die staat nog niet ingesteld, dus voorlopig blijft de lokale coach aan het woord.'} Het model kies je onder Geavanceerd.</div>`:''}`;
   const accHtml = OWN.length ? `
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
     <div class="small muted" style="margin-bottom:8px;font-weight:600">Je rekeningen</div>
     ${accountsCard()}` : '';
-  return head + bestandHtml + accHtml + advHtml;
+  return head + bestandHtml + aiHtml + accHtml + advHtml;
 }
 function bankAdvTap(){
   window._advTaps=(window._advTaps||0)+1; clearTimeout(window._advTapT);
@@ -8805,11 +8818,11 @@ function setCoach(){
   return `
     <div class="toggle"><div><div style="font-weight:600">Coaching</div><div class="small muted">Coach-tips op je Home & Actieplan</div></div>
       <label class="sw"><input type="checkbox" ${!SET.coachOff?'checked':''} onchange="SET.coachOff=!this.checked;save();render();"><span class="sl"></span></label></div>
+    <div class="row" style="justify-content:space-between;margin-top:8px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openCoachAvatar()">
+      <div><div style="font-weight:600">Avatar & toon</div><div class="small muted">${coachSamenvatting()}</div></div>
+      <span class="muted" style="font-size:var(--fs-lg)">›</span></div>
     <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Interne overboekingen verbergen</div><div class="small muted">Eigen rekeningen & sparen tellen niet als uitgave</div></div>
       <label class="sw"><input type="checkbox" ${SET.hideInternal?'checked':''} onchange="SET.hideInternal=this.checked;save();render();"><span class="sl"></span></label></div>
-    <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">AI-coach</div><div class="small muted">Een taalmodel verwoordt de coach-zinnen. Je cijfers blijven uit de lokale motor, maar de coach-tekst gaat naar je eigen backend. Standaard uit.</div></div>
-      <label class="sw"><input type="checkbox" ${SET.aiCoach?'checked':''} onchange="SET.aiCoach=this.checked;save();render();"><span class="sl"></span></label></div>
-    ${SET.aiCoach?`<div class="small muted" style="margin-top:6px">Hij loopt via dezelfde backend als je bankkoppeling. ${psd2Ready()?'Die staat ingesteld.':'Die staat nog niet ingesteld, dus voorlopig blijft de lokale coach aan het woord.'} Instellen en het model kiezen doe je bij Bankkoppeling ▸ Geavanceerd.</div>`:''}
     <div style="height:10px"></div>
     <div class="small muted" style="margin-top:10px">${ICON('info')} ${SET.aiCoach?`<b>AI-coach staat aan.</b> Een taalmodel verwoordt de zinnen via je eigen Worker. De bedragen komen nog steeds uit de lokale motor. Zet uit voor 100% lokaal.`:`<b>Hoe werkt de coach?</b> Geen AI in de cloud. Alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.`}</div>`;
 }
