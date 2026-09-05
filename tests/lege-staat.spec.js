@@ -83,18 +83,22 @@ test.describe('a · zonder data claimt geen enkel scherm iets', () => {
   });
 });
 
-test.describe('b · regel patroon heeft data nodig', () => {
+// v186: de regel 'Patroon van de maand' is vervallen. Hij las maandPatroon(), en die filtert
+// scoreNotifs() op budget-, discr- en tempo: alle drie h:'direct', dus letterlijk dezelfde
+// melding als in de meldingenlijst. De horizon-indeling zegt dat die daar hoort en nergens
+// anders. Maand houdt vier regels; maandPatroon() voedt nog wel maandVerband().
+test.describe('b · regel patroon bestaat niet meer', () => {
   test('zonder boekingen staat er geen enkele regel', async ({ page }) => {
     await boot(page, leeg());
     expect(await page.evaluate(() => maandRegels())).toEqual([]);
     expect(await page.evaluate(() => maandOordeel(maandRegels()))).toEqual({ zin: 'Er is nog niets te beoordelen.', sub: '' });
   });
 
-  test('met boekingen staat hij er onveranderd', async ({ page }) => {
+  test('met boekingen staat hij er ook niet, want hij is geen regel meer', async ({ page }) => {
     await boot(page, metData());
-    const r = await page.evaluate(() => maandRegels().filter((x) => x.key === 'patroon'));
-    expect(r.length).toBe(1);
-    expect(r[0].naam).toBe('Patroon van de maand');
+    expect(await page.evaluate(() => maandRegels().filter((x) => x.key === 'patroon'))).toEqual([]);
+    // en de melding zelf staat er nog wel, op zijn ene plek: de meldingenlijst
+    expect(await page.evaluate(() => typeof maandPatroon)).toBe('function');
   });
 
   test('de lege staat van Maand bestaat weer, voor als er niets te toetsen valt', async ({ page }) => {

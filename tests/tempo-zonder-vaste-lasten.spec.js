@@ -29,6 +29,9 @@ function seed(o = {}) {
   if (o.gepland) add(CUR, dd(VANDAAG + 3), -400, 'Mediamarkt', 'BEA, BETAALPAS MEDIAMARKT');
   const set = Object.assign({ mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
     manualBal: { [MAIN]: 4000 }, budgets: { huur: 900, boodschappen: 400 },
+    // v186: zonder een maandregel valt Maand terug op de lege staat; 'Gelezen op' hoort bij het
+    // volle scherm, dus geeft deze fixture er een reserveringspost bij.
+    reserveringen: [{ id: 'r1', naam: 'Tandarts', bedrag: 300, interval: 12, maand: 6 }],
   }, o.set || {});
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set),
     minder_own: JSON.stringify([MAIN]), minder_accmeta: '{}', minder_plan: '{}' };

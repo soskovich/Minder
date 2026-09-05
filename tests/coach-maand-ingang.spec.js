@@ -76,11 +76,11 @@ test.describe('a · de ingang kiest de zwaarste regel', () => {
   test('tekort weegt zwaarder dan let op', async ({ page }) => {
     await maand(page);
     const uit = await page.evaluate(() => coMaandZwaarste([
-      { key: 'patroon', status: 'let op' }, { key: 'doel', status: 'tekort' }]));
+      { key: 'aansluiting', status: 'let op' }, { key: 'doel', status: 'tekort' }]));
     expect(uit.key).toBe('doel');
     // en binnen dezelfde status telt de schermvolgorde
     const uit2 = await page.evaluate(() => coMaandZwaarste([
-      { key: 'patroon', status: 'let op' }, { key: 'buffer', status: 'let op' }]));
+      { key: 'aansluiting', status: 'let op' }, { key: 'buffer', status: 'let op' }]));
     expect(uit2.key).toBe('buffer');
   });
 });
@@ -124,12 +124,13 @@ test.describe('c · het gesprek', () => {
     }
   });
 
-  test('dekking, doel en patroon krijgen de besparingsregels', async ({ page }) => {
+  // v186: patroon is geen maandregel meer; dekking en doel houden de besparingsregels
+  test('dekking en doel krijgen de besparingsregels', async ({ page }) => {
     await maand(page, tweeTekorten());
     // alleen de regels die deze maand bestaan: zonder reserveringen is er geen dekking-regel
     const aanwezig = await page.evaluate(() => maandRegels().map((r) => r.key));
-    const keys = ['dekking', 'doel', 'patroon'].filter((k) => aanwezig.includes(k));
-    expect(keys.length).toBeGreaterThan(1);
+    const keys = ['dekking', 'doel'].filter((k) => aanwezig.includes(k));
+    expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) {
       await page.evaluate(([m, k]) => coStart('maand', m, k), [CUR, key]);
       await wachtKeuze(page);
@@ -162,7 +163,9 @@ test.describe('d · de afspraak', () => {
 
   test('een coachRule aanzetten is geen afspraak', async ({ page }) => {
     await maand(page, tweeTekorten());
-    await page.evaluate((m) => coStart('maand', m, 'patroon'), CUR);
+    /* v186: patroon is geen maandregel meer; 'doel' is de regel die deze fixture levert en die
+       net als patroon de besparingsregels aangeboden krijgt. */
+    await page.evaluate((m) => coStart('maand', m, 'doel'), CUR);
     await wachtKeuze(page);
     const opt = (await page.evaluate((m) => coachRuleOptions(m), CUR))[0];
 
@@ -180,17 +183,19 @@ test.describe('d · de afspraak', () => {
 
   test('de tekst draagt de regelKey en waar van toepassing de categorie', async ({ page }) => {
     await maand(page, tweeTekorten());
-    await page.evaluate((m) => coStart('maand', m, 'patroon'), CUR);
+    /* v186: patroon is geen maandregel meer; 'doel' is de regel die deze fixture levert en die
+       net als patroon de besparingsregels aangeboden krijgt. */
+    await page.evaluate((m) => coStart('maand', m, 'doel'), CUR);
     await wachtKeuze(page);
     await page.locator('#coCh .cch').first().click();
     await kies(page, 'Zo spreken we af');
     await page.waitForFunction(() => window._coLive === false, null, { timeout: 15000 });
 
     const af = (await afspraken(page))[0];
-    expect(af.regel).toBe('patroon');
+    expect(af.regel).toBe('doel');
     expect(af.cat).toBeTruthy();
     expect(await page.evaluate((c) => !!CATS[c], af.cat)).toBe(true);
-    expect(af.text).toMatch(/per maand\), voor patroon van de maand/i);   // leesbaar zonder context
+    expect(af.text).toMatch(/per maand\), voor kosten koper huis/i);   // leesbaar zonder context
   });
 
   test('twee keer vastleggen geeft één afspraak deze maand', async ({ page }) => {

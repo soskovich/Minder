@@ -32,12 +32,17 @@ function seed(o = {}) {
   const bal = { [MAIN]: 4000 };
   if (o.spaar) bal[SAV] = 9000;
   const set = Object.assign({ mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
-    manualBal: bal, budgets: { huur: 1000, boodschappen: 500 } }, o.set || {});
+    manualBal: bal, budgets: { huur: 1000, boodschappen: 500 },
+    reserveringen: [{ id: 'r1', naam: 'Tandarts', bedrag: 300, interval: 12, maand: 6 }] }, o.set || {});
   if (o.spaar) set.savingsEnds = ['4323'];
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set),
     minder_own: JSON.stringify(o.spaar ? [MAIN, SAV] : [MAIN]), minder_accmeta: '{}', minder_plan: '{}' };
 }
 
+/* v186: de patroonregel is vervallen, en die was voor een fixture zonder reserveringen,
+   spaarrekening of doel de enige maandregel. Zonder een van die drie valt Maand nu terug op
+   'Er is nog te weinig ingesteld'. Deze fixtures krijgen daarom een reserveringspost, zodat
+   het scherm toont wat de test wil meten. */
 async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());

@@ -31,34 +31,35 @@ const wachtKeuze = (page) => page.waitForFunction(
 const log = (page) => page.evaluate(() => JSON.stringify(SET.coachLog || []));
 
 test.describe('a · de ingang op Inzichten', () => {
+  /* v186: de lek-vraag was een eigen kaart, direct onder 'Valt op' en identiek vormgegeven. Twee
+     kaarten over hetzelfde onder elkaar. Hij is nu de voetregel binnen die ene kaart. Wat deze
+     tests bewaken blijft hetzelfde: de bevinding met bedrag en naam, en een ingang naar het
+     gesprek die geen neutrale knop naar de coach is. */
   test('staat er als een vraag over de bevinding, met bedrag en naam', async ({ page }) => {
     await ins(page);
-    const r = page.locator('#insLekVraag');
+    const r = page.locator('#wvoLine');
     await expect(r).toHaveCount(1);
     const t = await r.innerText();
-    expect(t).toMatch(/viel op/);
-    expect(t).toMatch(/wil je kijken wat je daaraan kunt doen\?/i);
+    expect(t).toMatch(/wil je kijken wat je (daar|hier)aan kunt doen\?/i);
     expect(t).toMatch(/€\d/);                                    // het bedrag uit coachLeak
     expect(t).not.toMatch(/coach/i);                             // geen neutrale knop naar de coach
   });
 
-  test('staat direct onder de bevinding', async ({ page }) => {
+  test('het is één kaart, geen tweede eronder', async ({ page }) => {
     await ins(page);
-    const volgorde = await page.evaluate(() => {
-      const ids = [...document.querySelectorAll('#s-ins > *')].map((e) => e.id || '');
-      return { wvo: ids.indexOf('wvoLine'), lek: ids.indexOf('insLekVraag') };
-    });
-    if (volgorde.wvo >= 0) expect(volgorde.lek).toBe(volgorde.wvo + 1);
-    else expect(volgorde.lek).toBeGreaterThan(0);
+    const ids = await page.evaluate(() => [...document.querySelectorAll('#s-ins > *')].map((e) => e.id || ''));
+    expect(ids.filter((x) => x === 'wvoLine').length).toBe(1);
+    expect(ids).not.toContain('insLekVraag');
+    // de ingang zit binnen die kaart, niet ernaast
+    expect(await page.locator('#wvoLine [onclick*="coStart"]').count()).toBe(1);
   });
 
-  test('geen lek betekent geen regel, en geen lege staat', async ({ page }) => {
+  test('geen lek betekent geen ingang, en geen lege staat', async ({ page }) => {
     await ins(page, seed());                                     // fixture zonder lek-transactie
     const R = await page.evaluate((m) => coachWeekRisk(m), CUR);
     expect(R.tone).toBe('ok');
-    expect(await page.locator('#insLekVraag').count()).toBe(0);
-    expect(await page.locator('#s-ins').innerText()).not.toMatch(/viel op/);
-    expect(await page.evaluate((m) => insLekVraag(m), CUR)).toBe('');
+    expect(await page.locator('#s-ins [onclick*="coStart(\'lek\'"]').count()).toBe(0);
+    expect(await page.locator('#s-ins').innerText()).not.toMatch(/kunt doen\?/);
   });
 
   test('het is de enige nieuwe ingang', async ({ page }) => {
@@ -73,7 +74,7 @@ test.describe('a · de ingang op Inzichten', () => {
 test.describe('b · het gesprek begint bij het cijfer', () => {
   test('opent met de bevinding, niet met een groet', async ({ page }) => {
     await ins(page);
-    await page.locator('#insLekVraag').click();
+    await page.locator('#wvoLine [onclick*="coStart"]').click();
     await wachtKeuze(page);
     const draad = await page.locator('#coThr').innerText();
     expect(draad).toMatch(/mediamarkt/i);
@@ -205,7 +206,7 @@ test.describe('e · layout', () => {
     test(`geen horizontale overflow op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 780 });
       await ins(page);
-      await page.locator('#insLekVraag').click();
+      await page.locator('#wvoLine [onclick*="coStart"]').click();
       await wachtKeuze(page);
       const over = await page.evaluate(() => ({
         ins: document.querySelector('#s-ins').scrollWidth - document.querySelector('#s-ins').clientWidth,

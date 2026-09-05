@@ -125,7 +125,7 @@ test.describe('c · niet te toetsen is een volwaardige uitkomst', () => {
   });
 
   test('een regelKey zonder categorie is niet toetsbaar', async ({ page }) => {
-    for (const regel of ['dekking', 'buffer', 'aansluiting', 'doel', 'patroon']) {
+    for (const regel of ['dekking', 'buffer', 'aansluiting', 'doel']) {
       await maand(page, metAfspraak({ text: 'iets', regel }));
       expect((await page.evaluate(() => afspraakUitkomst(vorigeAfspraak()))).status).toBe('niet te toetsen');
     }

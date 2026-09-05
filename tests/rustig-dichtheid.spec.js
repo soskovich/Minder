@@ -129,7 +129,7 @@ test.describe('c · niets anders verandert', () => {
     // houdt zijn drietraps default uit v90 en de strip staat er onveranderd in
     // v176: de samenstelling draagt nu ook de maandkiezer en de banner; de volgorde blijft
     const src = await page.evaluate(() => renderIns.toString().replace(/\s+/g, ' '));
-    expect(src).toMatch(/hero \+ whatStandsOutLine\(m\)/);
+    expect(src).toMatch(/hero \+ whatStandsOutLine\(m, nu\)/);   // v186: de lek-ingang zit in die kaart
     expect(await page.evaluate(() => renderIns.toString())).toContain('afgeslotenMaandBanner(m)');
     expect(await page.evaluate(() => COLLAP_DEF.openSpendChart)).toEqual({ rustig: false, rest: true });
   });

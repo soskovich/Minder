@@ -2943,7 +2943,7 @@ const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:1
    de verdeelregel niet zijn eigen drempel krijgt. Geen gedragswijziging. */
 const MEEVALLER_FACTOR = 1.15;   // de rest volgt nfMaanden()
 const MAAND_PATROON = ['budget-','discr-','tempo'];                    // uitgavenpatronen; geen incasso's, geen saldo-nudges
-const MAAND_VOLGORDE = ['dekking','buffer','aansluiting','doel','patroon'];
+const MAAND_VOLGORDE = ['dekking','buffer','aansluiting','doel'];   // v186: patroon vervallen
 const MAAND_ERNST = {tekort:0, 'let op':1, ok:2, onbekend:3};
 
 /* De enige nieuwe som op dit scherm, en met opzet niet meer dan een deling van twee bestaande
@@ -3073,18 +3073,13 @@ function maandRegels(){
               : `Je legt nu ${euro0(d.p.alloc)} per maand in en je hebt ${euro0(T.benodigd)} nodig. Je komt ${euro0(T.gat)} per maand tekort.`,
         tekortPerMaand: st==='tekort'?T.gat:0, act:`openGoal('${d.p.id}')`});
     } }catch(_){}
-  // 5. patroon - alleen als er boekingen zijn om te beschrijven. Zonder data is "er springt deze
-  //    maand geen uitgavenpatroon uit" geen vaststelling maar een lege claim, en hield deze regel
-  //    in zijn eentje de hele maandsamenvatting overeind.
-  try{ if(TX.length){ const n=maandPatroon();
-    uit.push({key:'patroon', naam:'Patroon van de maand', status:n?'let op':'ok',
-      waarde: n&&n.bedrag!=null?euro0(n.bedrag):(n?'let op':'rustig'), eenheid: n&&n.boven!=null?`${euro0(n.boven)} boven je normaal`:(n?'gesignaleerd':'geen signaal'),
-      gevolg: n?String(n.l1||'').replace(/<[^>]*>/g,''):'Er springt deze maand geen uitgavenpatroon uit.',
-      /* v178: de terugval was go('ins'), midden in je maandmoment naar een ander scherm. Het
-         signaal draagt meestal zijn eigen tik (een drill-down in een sheet); zonder die tik opent
-         de uitgaven van deze maand, ook een sheet. Je blijft op Maand. */
-      sig:n, act:n&&n.act?n.act:`openMonthSpend('${kijkMaand()}')`}); }
-  }catch(_){}
+  /* v186: hier stond de regel 'Patroon van de maand'. Hij las maandPatroon(), en dat filtert
+     scoreNotifs() op de sleutels budget-, discr- en tempo. Die dragen alle drie h:'direct', dus dit
+     was letterlijk dezelfde melding die je ook in de meldingenlijst ziet (NOTIF_HORIZON laat direct
+     en correctie door). De horizon-indeling uit v162 zegt waar een signaal hoort: structureel op
+     Maand, direct en correctie in de lijst. Deze hoorde dus in de lijst en nergens anders.
+     maandPatroon() blijft bestaan, maar alleen als invoer voor maandVerband(): dat verband zegt
+     iets wat de melding zelf niet zegt (hoeveel van je gat het dekt) en is dus geen doublure. */
   return uit.sort((a,b)=>MAAND_VOLGORDE.indexOf(a.key)-MAAND_VOLGORDE.indexOf(b.key));
 }
 /* ===== De voorwaarden voor beleggen (v154) =====
@@ -3359,7 +3354,11 @@ function maandOordeel(R){
 }
 /* Precies twee vaste verbandregels. Niets afgeleid met een model of heuristiek. */
 function maandVerband(R){
-  const pat=R.find(r=>r.key==='patroon'&&r.sig&&r.sig.boven>0&&r.sig.cat);
+  /* v186: het patroon is geen eigen regel meer (die dubbelde met de meldingenlijst), maar dit
+     verband zegt iets wat de melding zelf niet zegt: hoeveel van je gat die uitgave dekt. Dus
+     lezen we de bron rechtstreeks in plaats van hem in R te zoeken. Geen nieuwe berekening. */
+  let _p=null; try{ _p=maandPatroon(); }catch(_){}
+  const pat=(_p && _p.boven>0 && _p.cat) ? {sig:_p} : null;
   const gaten=R.filter(r=>r.status==='tekort'&&(r.key==='dekking'||r.key==='doel')&&r.tekortPerMaand>0)
                .sort((a,b)=>a.tekortPerMaand-b.tekortPerMaand);
   // 1) een uitgave boven normaal dekt het gat
@@ -6158,7 +6157,7 @@ async function coMaandBevestig(R, r){
     {l:'Nu even niet', act:()=>coEnd()}
   ]);
 }
-const CO_MAAND_REGELS=['dekking','buffer','aansluiting','doel','patroon'];
+const CO_MAAND_REGELS=['dekking','buffer','aansluiting','doel'];   // v186: patroon vervallen
 async function coTopicMaand(m, key){
   const _g=_coGen; if(!_coT) return;
   // zonder regel: staat er al een afspraak, dan is dit het aanpas-pad; anders de zwaarste regel
@@ -7802,24 +7801,43 @@ function spendVsBudgetChart(){
 }
 
 // Compacte één-regel-versie van "Wat valt op": alleen het topsignaal, met dezelfde tik-actie.
-function whatStandsOutLine(m){
-  const mv=monthVsPrevInner(m);
-  const exclude=new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
-  let sig; try{ sig=insSignals(m,exclude); }catch(_){ sig=[]; }
-  sig.sort((a,b)=>b.pri-a.pri);
-  const top=sig[0]; if(!top) return '';
-  const act=top.act||'';
+/* v186: hier stonden twee identiek vormgegeven eenregelige kaarten die tegelijk konden renderen:
+   'Valt op' met de bevinding, en daar direct onder de lek-vraag met een ingang naar een gesprek
+   over dezelfde soort bevinding. Twee kaarten over hetzelfde onder elkaar. Nu één kaart: de
+   bevinding bovenaan, het gesprek als voetregel. Gaat de lek over dezelfde categorie als de
+   bevinding, dan herhaalt de voetregel de naam niet. Is er alleen een lek, dan draagt die kaart
+   de bevinding; is er geen van beide, dan rendert er niets. */
+function whatStandsOutLine(m, nu){
+  if(nu===undefined) nu=true;
+  let top=null;
+  try{
+    const mv=monthVsPrevInner(m);
+    const exclude=new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
+    const sig=insSignals(m,exclude); sig.sort((a,b)=>b.pri-a.pri); top=sig[0]||null;
+  }catch(_){}
+  let L=null;
+  try{ if(nu){ const W=coachWeekRisk(m); if(W && W.tone==='warn') L=coachLeak(m)||null; } }catch(_){}
+  const lekNaam = L ? (L.name || ((CATS[L.cat]||{}).name||'')) : '';
+  if(!top && !lekNaam) return '';
+  const act = top ? (top.act||'') : '';
   /* v174: de regel toonde alleen de spiegel. De duiding en het dus-wat lagen al geschreven klaar in
      insSignals() en werden nooit getoond, terwijl dat precies het gevolg is dat hier ontbrak. Een
      signaal zonder tik krijgt er geen verzonnen: dan zegt de regel dat het een observatie is. */
-  const gevolg=[top.hyp,top.imp].filter(Boolean).join(' ');
+  const gevolg = top ? [top.hyp,top.imp].filter(Boolean).join(' ') : '';
+  const kop = top
+    ? `<span style="flex:1;min-width:0;font-size:13px">${ICON('bulb')} <span class="muted">Valt op:</span> <b>${esc(top.kpiLabel)}</b> \u00b7 ${top.kpiVal}${top.kpiSub?` <span class="muted">(${esc(top.kpiSub)})</span>`:''}</span>
+      ${act?'<span style="color:var(--teal);font-weight:700">\u203a</span>':''}`
+    : `<span style="flex:1;min-width:0;font-size:13px">${ICON('bulb')} <span class="muted">Valt op:</span> <b>${esc(lekNaam)}</b> \u00b7 ${euro0(L.amount)}</span>`;
+  const zelfde = !!(top && L && L.cat && top.act && String(top.act).indexOf(`'${L.cat}'`)>=0);
+  const voet = L
+    ? `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line);color:var(--teal);font-weight:600;cursor:pointer" onclick="event.stopPropagation();coStart('lek','${esc(m)}')">${
+        zelfde||!top ? 'Wil je kijken wat je hieraan kunt doen?' : `${esc(lekNaam)} (${euro0(L.amount)}) viel ook op. Wil je kijken wat je daaraan kunt doen?`} \u203a</div>`
+    : '';
   return `<div class="card" id="wvoLine" style="padding:12px 14px${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}>
-    <div class="row" style="gap:8px">
-      <span style="flex:1;min-width:0;font-size:13px">${ICON('bulb')} <span class="muted">Valt op:</span> <b>${esc(top.kpiLabel)}</b> · ${top.kpiVal}${top.kpiSub?` <span class="muted">(${esc(top.kpiSub)})</span>`:''}</span>
-      ${act?'<span style="color:var(--teal);font-weight:700">›</span>':''}
-    </div>
+    <div class="row" style="gap:8px">${kop}</div>
     ${gevolg?`<div class="small muted" style="margin-top:6px;line-height:1.5">${esc(gevolg)}</div>`:''}
-    ${(!act&&top.spiegel)?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px">Alleen een observatie: hier hoort geen stap bij.</div>`:''}
+    ${(!act&&top&&top.spiegel)?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px">Alleen een observatie: hier hoort geen stap bij.</div>`:''}
+    ${voet}
   </div>`;
 }
 
@@ -7869,19 +7887,8 @@ function insBudgetBlok(m){
    bevinding erboven en stelt er een vraag over in plaats van neutraal naar de coach te wijzen.
    Alleen zichtbaar als er echt een lek is: geen lek, geen regel, en geen uitleg waarom er niets
    staat. De woorden en de getallen komen uit coachLeak(); hier wordt niets gerekend. */
-function insLekVraag(m){
-  let R=null; try{ R=coachWeekRisk(m); }catch(_){ return ''; }
-  if(!R || R.tone!=='warn') return '';
-  let L=null; try{ L=coachLeak(m); }catch(_){}
-  if(!L) return '';
-  const wat=L.name?esc(L.name):(CATS[L.cat]?esc(CATS[L.cat].name):'');
-  if(!wat) return '';
-  return `<div class="card" id="insLekVraag" style="padding:12px 14px;cursor:pointer" onclick="coStart('lek','${m}')">
-    <div class="row" style="gap:8px">
-      <span style="flex:1;min-width:0;font-size:13px"><b>${wat}</b> (${euro0(L.amount)}) viel op. Wil je kijken wat je daaraan kunt doen?</span>
-      <span style="color:var(--teal);font-weight:700">›</span>
-    </div></div>`;
-}
+/* v186: insLekVraag() stond hier als eigen kaart, direct onder 'Valt op' en identiek vormgegeven.
+   Hij is opgegaan in whatStandsOutLine(), als voetregel binnen dezelfde kaart. */
 function insHeroKaart(m){
   const A=insBudgetBlok(m);
   if(!A) return '';   // geen budget: de beller toont de budget-prompt met de losse kaart eronder
@@ -7986,10 +7993,11 @@ function renderIns(){
      niet over deze maand gaat. Beide stonden hier op een operationeel scherm. */
   const verdieping = insVouw('openKpiCard','Kerncijfers',ICON('chart'),insKpiSamenvatting(m),insKpiStrip(m))
     + insVouw('openBehavior','Gedrag',ICON('bulb'),behN?`${behN} ${behN===1?'observatie':'observaties'}`:'',beh);
-  /* De lek-vraag opent een coachgesprek over een stap die je nu kunt zetten; op een afgesloten
-     maand nodigt dat uit tot een keuze over iets wat voorbij is (v139: alleen kijken). */
+  /* De lek-ingang opent een coachgesprek over een stap die je nu kunt zetten; op een afgesloten
+     maand nodigt dat uit tot een keuze over iets wat voorbij is (v139: alleen kijken). Sinds v186
+     zit die ingang in de Valt-op-kaart, dus krijgt die kaart de maand-vlag mee. */
   $('#s-ins').innerHTML = afgeslotenMaandBanner(m) + insSection(nu?'Deze maand':'Terugblik')
-    + hero + whatStandsOutLine(m) + (nu?insLekVraag(m):'')
+    + hero + whatStandsOutLine(m, nu)
     + (verdieping?insSection('Verdieping')+verdieping:'');
 }
 

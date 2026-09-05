@@ -105,15 +105,18 @@ test.describe('c · een maandregel laat je niet van scherm wisselen', () => {
     expect(r.act).not.toContain('go(');
   });
 
-  test('de patroonregel valt terug op een sheet, niet op een ander scherm', async ({ page }) => {
+  /* v186: de patroonregel is vervallen, want hij toonde een melding die al in de meldingenlijst
+     staat. Wat deze test bewaakt geldt onverkort voor de regels die overblijven: geen enkele
+     maandregel stuurt je naar een ander scherm. */
+  test('geen enkele maandregel stuurt je naar een ander scherm', async ({ page }) => {
     await boot(page, 'maand');
     const src = await page.evaluate(() => maandRegels.toString());
-    // de terugval was go('ins'); hij opent nu de uitgaven van de maand waar je naar kijkt
-    expect(src).toContain("openMonthSpend('${kijkMaand()}')");
     const kaal = src.replace(/\/\*[\s\S]*?\*\//g, ' ').split('\n')
       .map((r) => r.replace(/(^|[^:\w])\/\/.*$/, '$1')).join(' ');
     expect(kaal).not.toContain("go('ins')");
     expect(kaal).not.toContain("go('vooruit')");
+    const acts = await page.evaluate(() => (maandRegels() || []).map((r) => r.act || ''));
+    for (const a of acts) expect(a).not.toContain('go(');
   });
 
   test('openAansluiting leest spaarVrij en rekent zelf niets', async ({ page }) => {

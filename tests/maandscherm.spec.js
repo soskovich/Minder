@@ -70,7 +70,7 @@ test.describe('a · het scherm bestaat naast de andere', () => {
 test.describe('b · de vijf regels', () => {
   test('alle vijf staan er, in de vaste volgorde', async ({ page }) => {
     await boot(page);
-    expect((await R(page)).map((r) => r.key)).toEqual(['dekking', 'buffer', 'aansluiting', 'doel', 'patroon']);
+    expect((await R(page)).map((r) => r.key)).toEqual(['dekking', 'buffer', 'aansluiting', 'doel']);
   });
 
   test('de bronnen komen uit de bestaande functies', async ({ page }) => {
@@ -142,13 +142,17 @@ test.describe('c · de statussen', () => {
     expect((await R(page)).some((r) => r.key === 'doel')).toBe(false);               // geen streefdatum: geen regel
   });
 
-  test('patroon: let op bij een signaal, ok zonder', async ({ page }) => {
-    await boot(page);
-    expect((await R(page)).find((r) => r.key === 'patroon').status).toBe('ok');
+  /* v186: patroon is geen regel meer. De melding waar hij op leunde draagt h:'direct' en hoort
+     dus in de meldingenlijst; maandPatroon() blijft bestaan als invoer voor maandVerband(), dat
+     iets zegt wat de melding zelf niet zegt. */
+  test('patroon is geen regel meer, maar voedt nog wel het verband', async ({ page }) => {
     await boot(page, seedM({}, { uitschieter: true }));
-    const p = (await R(page)).find((r) => r.key === 'patroon');
-    expect(p.status).toBe('let op');
-    expect(p.eenheid).toMatch(/boven je normaal/);
+    expect((await R(page)).find((r) => r.key === 'patroon')).toBeUndefined();
+    const p = await page.evaluate(() => maandPatroon());
+    expect(p).not.toBeNull();
+    expect(p.boven).toBeGreaterThan(0);
+    // en hij zit nog in de meldingenlijst, want dat is zijn horizon
+    expect(await page.evaluate(() => notifList().some((n) => n.key === maandPatroon().key))).toBe(true);
   });
 
   test('alleen uitgavenpatronen tellen, geen incasso of saldo-nudge', async ({ page }) => {
@@ -318,24 +322,34 @@ test.describe('d · het oordeel', () => {
     expect(r.nul).toBe('Er is nog niets te beoordelen.');
   });
 
+  /* v186: Maand houdt vier regels sinds de patroonregel verviel, en drie daarvan vallen bij een
+     ontbrekend spaarsaldo helemaal weg in plaats van onbekend te worden (v168). Er is dus geen
+     fixture meer die de drempel uit v173 haalt met echte data. Het oordeel zelf is puur, dus we
+     toetsen hem met een regellijst, zoals d2 hierboven al doet. */
   test('e: te veel onbekend', async ({ page }) => {
-    // geen spaarsaldo -> buffer en aansluiting vallen weg; geen potsaldo -> dekking onbekend;
-    // een streefdatum in de lopende maand -> doelTempo geeft null, dus doel onbekend
-    await boot(page, seedM({ manualBal: { [MAIN]: 1500 },
-      goals: [{ id: 'g1', naam: 'Vakantie', doel: 2000, gespaard: 0, allocMode: 'fixed', perMaand: 100, streefdatum: CUR }] }));
-    const r = await R(page);
-    const onb = r.filter((x) => x.status === 'onbekend').length;
-    expect(onb).toBeGreaterThan(r.length / 2);
-    const o = await O(page);
-    expect(o.zin).toBe('Er ontbreekt te veel om een oordeel te geven.');
-    expect(o.sub).toMatch(/^Onbekend: /);
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const mk = (n, st, p) => Array.from({ length: n }, (_, i) => ({ key: (p || 'r') + i, naam: 'Regel ' + i, status: st }));
+      return {
+        drieVanVier: maandOordeel(mk(3, 'onbekend').concat(mk(1, 'ok', 'x'))),
+        tweeVanDrie: maandOordeel(mk(2, 'onbekend').concat(mk(1, 'ok', 'x'))),
+        // onder de ondergrens uit v173 zegt een aandeel niets over volledigheid
+        eenVanTwee: maandOordeel(mk(1, 'onbekend').concat(mk(1, 'ok', 'x'))).zin,
+        eenVanEen: maandOordeel(mk(1, 'onbekend')).zin,
+      };
+    });
+    expect(r.drieVanVier.zin).toBe('Er ontbreekt te veel om een oordeel te geven.');
+    expect(r.drieVanVier.sub).toMatch(/^Onbekend: /);
+    expect(r.tweeVanDrie.zin).toBe('Er ontbreekt te veel om een oordeel te geven.');
+    expect(r.eenVanTwee).toBe('De enige regel die te toetsen is staat goed.');
+    expect(r.eenVanEen).toBe('Er is nog niets te beoordelen.');
   });
 
   test('de subregel zegt wat er wel goed staat', async ({ page }) => {
     await boot(page);
     const o = await O(page);
     expect(o.sub).toMatch(/in orde\.$/);
-    expect(o.sub).toMatch(/dekking reserveringen|buffer in maanden|vakantie|patroon/i);
+    expect(o.sub).toMatch(/dekking reserveringen|buffer in maanden|vakantie/i);
   });
 });
 
@@ -472,10 +486,10 @@ test.describe('g · leesmoment en robuustheid', () => {
     expect(t).not.toMatch(/streak|op rij|dagen achter|\d+x gelezen/i);
   });
 
-  test('het scherm werkt met drie van de vijf bronnen', async ({ page }) => {
+  test('het scherm werkt met twee van de vier bronnen', async ({ page }) => {
     await boot(page, seedM({ reserveringen: [], goals: [] }));
     const r = await R(page);
-    expect(r.map((x) => x.key)).toEqual(['buffer', 'aansluiting', 'patroon']);
+    expect(r.map((x) => x.key)).toEqual(['buffer', 'aansluiting']);
     await page.evaluate(() => go('maand'));
     expect(await page.locator('#s-maand').innerText()).not.toContain('onbekend');
   });
@@ -491,7 +505,7 @@ test.describe('g · leesmoment en robuustheid', () => {
     });
     expect(r).not.toContain('dekking');
     expect(r).toContain('buffer');
-    expect(r.length).toBe(4);
+    expect(r.length).toBe(3);
   });
 
   test('de waardekolom blijft een kolom, geen verticale strook', async ({ page }) => {
