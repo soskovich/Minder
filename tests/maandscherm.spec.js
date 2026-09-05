@@ -1,4 +1,5 @@
-// v130: één scherm dat je één keer per maand opent, met de vijf getallen die samen zeggen of je
+// v130: één scherm dat je één keer per maand opent, met de getallen die samen zeggen of je
+// systeem standhoudt. v186/v187: van vijf regels naar drie (dekking, buffer, doel).
 // geldsysteem gezond is. Het scherm REKENT NIETS ZELF: het roept bestaande functies aan, stelt hun
 // uitkomsten samen en sorteert ze. Enige uitzondering, na akkoord: bufferMaanden(), een deling van
 // twee bestaande uitkomsten. Valt een bron weg, dan valt die regel weg zonder foutmelding.
@@ -67,10 +68,13 @@ test.describe('a · het scherm bestaat naast de andere', () => {
   });
 });
 
-test.describe('b · de vijf regels', () => {
-  test('alle vijf staan er, in de vaste volgorde', async ({ page }) => {
+test.describe('b · de regels', () => {
+  /* v186: patroon vervallen (dubbelde met de meldingenlijst). v187: aansluiting vervallen, want
+     dat is een administratief verschil tussen toegewezen en aanwezig, geen oordeel over je
+     positie. Drie regels over: dekking, buffer, doel. */
+  test('alle drie staan er, in de vaste volgorde', async ({ page }) => {
     await boot(page);
-    expect((await R(page)).map((r) => r.key)).toEqual(['dekking', 'buffer', 'aansluiting', 'doel']);
+    expect((await R(page)).map((r) => r.key)).toEqual(['dekking', 'buffer', 'doel']);
   });
 
   test('de bronnen komen uit de bestaande functies', async ({ page }) => {
@@ -123,14 +127,18 @@ test.describe('c · de statussen', () => {
 
   /* v172: het noodfonds claimt niet meer zijn doel maar zijn toewijzing, dus het doel omhoog
      zetten sluit het gat niet meer - toewijzen wel. Dat is precies de bedoeling van model B. */
-  test('aansluiting: let op bij niet-toegewezen spaargeld, ok als alles toegewezen is', async ({ page }) => {
+  /* v187: aansluiting is geen maandregel meer. Het feit zelf leeft onveranderd door in
+     spaarVrij() en in spaarVrijLine() op Plan, dus dat is wat deze test nu meet. */
+  test('aansluiting staat niet meer op Maand, maar spaarVrij meet nog hetzelfde', async ({ page }) => {
     await boot(page);
-    const meet = async () => (await R(page)).find((r) => r.key === 'aansluiting').status;
-    expect(await meet()).toBe('let op');
+    expect((await R(page)).some((r) => r.key === 'aansluiting')).toBe(false);
+    expect(await page.evaluate(() => spaarVrij().vrij)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => spaarVrijLine(allocatePlan()))).toContain('toewijzen');
     const saldo = await page.evaluate(() => Math.round(spaarSaldo().cur));
     await page.evaluate((s) => { SET.nfDoelVast = s; SET.nfToegewezen = s - 1000;
       SET.goals[0].gespaard = 1000; save(); }, saldo);
-    expect(await meet()).toBe('ok');
+    expect(await page.evaluate(() => spaarVrij().vrij)).toBe(0);
+    expect(await page.evaluate(() => spaarVrijLine(allocatePlan()))).toBe('');
   });
 
   test('aankoopdoel: tekort bij een gat, ok zonder, onbekend zonder streefdatum', async ({ page }) => {
@@ -281,10 +289,15 @@ test.describe('d · het oordeel', () => {
     expect((await O(page)).zin).toMatch(/^Er zijn deze maand \d+ dingen die een beslissing vragen\.$/);
   });
 
+  /* v187: de standaardfixture had zijn enige 'let op' in de aansluitingsregel, en die staat niet
+     meer op Maand. Een richtbedrag boven de stand zet de buffer op 'let op' zonder dat er iets
+     misgaat, en dat is precies de stand die deze zin beschrijft. */
   test('c: alleen let op', async ({ page }) => {
-    await boot(page);
-    const o = await O(page);
-    expect(o.zin).toBe('Er is niets dat vastloopt. 1 regel vraagt aandacht.');
+    await boot(page, seedM({ nfMaanden: 40 }));
+    const r = await R(page);
+    expect(r.filter((x) => x.status === 'tekort').length).toBe(0);
+    expect(r.filter((x) => x.status === 'let op').length).toBe(1);
+    expect((await O(page)).zin).toBe('Er is niets dat vastloopt. 1 regel vraagt aandacht.');
   });
 
   // v167: de zin noemde altijd vijf, ook als er drie regels stonden. Hij telt nu wat er is, en
@@ -486,10 +499,10 @@ test.describe('g · leesmoment en robuustheid', () => {
     expect(t).not.toMatch(/streak|op rij|dagen achter|\d+x gelezen/i);
   });
 
-  test('het scherm werkt met twee van de vier bronnen', async ({ page }) => {
+  test('het scherm werkt met één van de drie bronnen', async ({ page }) => {
     await boot(page, seedM({ reserveringen: [], goals: [] }));
     const r = await R(page);
-    expect(r.map((x) => x.key)).toEqual(['buffer', 'aansluiting']);
+    expect(r.map((x) => x.key)).toEqual(['buffer']);
     await page.evaluate(() => go('maand'));
     expect(await page.locator('#s-maand').innerText()).not.toContain('onbekend');
   });
@@ -505,7 +518,7 @@ test.describe('g · leesmoment en robuustheid', () => {
     });
     expect(r).not.toContain('dekking');
     expect(r).toContain('buffer');
-    expect(r.length).toBe(3);
+    expect(r.length).toBe(2);
   });
 
   test('de waardekolom blijft een kolom, geen verticale strook', async ({ page }) => {

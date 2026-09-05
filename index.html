@@ -2927,12 +2927,14 @@ function doelTempoLine(p){
   return wrap(`Je legt nu ${euro0(p.alloc)} per maand in. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig. Je komt ${euro0(T.gat)} per maand tekort.`);
 }
 /* ---------- MAANDSCHERM (v130) ----------
-   Eén scherm dat je één keer per maand opent, met de vijf getallen die samen zeggen of je
+   Eén scherm dat je één keer per maand opent, met de getallen die samen zeggen of je
    geldsysteem gezond is. De samenhang is het punt: 60% dekking betekent iets anders naast een
    buffer van zes maanden dan naast een buffer van één.
    Dit scherm REKENT NIETS ZELF. Het roept bestaande functies aan, stelt hun uitkomsten samen en
    sorteert ze. Valt een bron weg, dan valt die regel weg - zonder foutmelding en zonder
-   placeholder; het scherm werkt met drie van de vijf. */
+   placeholder; het scherm werkt ook met een deel ervan. (v186/v187: van vijf regels naar drie -
+   patroon dubbelde met de meldingenlijst, aansluiting is een administratief verschil en geen
+   oordeel over je positie. De bronnen zelf zijn ongemoeid.) */
 /* v173: "Er ontbreekt te veel om een oordeel te geven" vuurde bij één onbekende regel van één.
    Een zuiver aandeel kan dat niet oplossen (100% ligt boven elke drempel), dus er hoort een
    ondergrens bij: onder onbekendMin regels zegt een verhouding niets over volledigheid, en dan
@@ -2943,7 +2945,7 @@ const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:1
    de verdeelregel niet zijn eigen drempel krijgt. Geen gedragswijziging. */
 const MEEVALLER_FACTOR = 1.15;   // de rest volgt nfMaanden()
 const MAAND_PATROON = ['budget-','discr-','tempo'];                    // uitgavenpatronen; geen incasso's, geen saldo-nudges
-const MAAND_VOLGORDE = ['dekking','buffer','aansluiting','doel'];   // v186: patroon vervallen
+const MAAND_VOLGORDE = ['dekking','buffer','doel'];   // v186: patroon, v187: aansluiting vervallen
 const MAAND_ERNST = {tekort:0, 'let op':1, ok:2, onbekend:3};
 
 /* De enige nieuwe som op dit scherm, en met opzet niet meer dan een deling van twee bestaande
@@ -2999,7 +3001,7 @@ function maandStructureel(){
         act:n.act||"go('ins')", sig:n, structureel:true}));
   }catch(_){ return []; }
 }
-/* De vijf regels. Elke bron in zijn eigen try: gooit er een, dan valt alleen die regel weg. */
+/* De regels. Elke bron in zijn eigen try: gooit er een, dan valt alleen die regel weg. */
 function maandRegels(){
   const uit=[];
   // 1. dekking
@@ -3047,20 +3049,13 @@ function maandRegels(){
               : `Je buffer dekt ${String(n).replace('.',',')} maanden essentiële lasten. Onder de drie maanden vangt hij weinig op.`,
         act:'openNoodfondsPanel()'});
     } }catch(_){}
-  // 3. aansluiting
-  /* v172: de over-helft is vervallen met spaarOver(). Wat overblijft is de vraag die er altijd al
-     toe deed: staat er spaargeld dat aan geen enkel item is toegewezen? Sinds het noodfonds ook een
-     toewijzing draagt is dit bovendien het enige mechanisme dat je handmatige cijfers bijstuurt. */
-  try{ const V=spaarVrij();
-    if(V.saved>0){
-      const st=V.vrij>0?'let op':'ok';
-      uit.push({key:'aansluiting', naam:'Aansluiting spaargeld', status:st,
-        waarde: st==='ok'?'sluit aan':euro0(V.vrij), eenheid: st==='ok'?'alles toegewezen':'staat nog niet toegewezen',
-        gevolg: st==='ok' ? 'Al je spaargeld is aan een item in je plan toegewezen.'
-                          : `Er staat ${euro0(V.vrij)} op je spaarrekening dat aan geen enkel item is toegewezen.`,
-        // v178: was go('vooruit'); het gevolg staat nu in een sheet, dus je blijft op Maand
-        vrij:V.vrij, act:"openAansluiting()"});
-    } }catch(_){}
+  /* v187: hier stond de regel 'Aansluiting spaargeld'. Hij is van dit scherm af, want hij
+     beantwoordt een andere vraag dan de andere regels: buffer, dekking en aankoopdoel gaan over je
+     financiële positie, en dat er nog geld zonder label staat is een administratief verschil tussen
+     toegewezen en aanwezig. Het maandoordeel telt de regels die er staan, dus dat wordt er zuiverder
+     van. Het feit zelf verdwijnt niet: spaarVrijLine() op Plan is sinds v172 het enige mechanisme
+     dat je handmatige toewijzing bijstuurt, en staat daar bewust als eigen blok. Daarmee verviel ook
+     openAansluiting(), die geen andere aanroeper had dan deze regel. */
   // 4. aankoopdoel
   try{ const d=maandDoel();
     if(d){
@@ -3091,7 +3086,7 @@ function maandRegels(){
  * Alle drie staan al als losse regel op dit scherm. Deze laag stelt alleen de SAMENSTELLING vast en
  * rekent zelf niets: hij leest de rijen die maandRegels() al opleverde en roept dekking(),
  * bufferMaanden() en doelTempo() dus geen tweede keer aan. De drempels komen uit MAAND_DREMPEL,
- * dezelfde constante die de vijf statussen bepaalt.
+ * dezelfde constante die de statussen bepaalt.
  *
  * Buffer haalt de voorwaarde ook bij status 'let op': die stand betekent boven de drie maanden maar
  * onder je eigen richtbedrag, en de voorwaarde is de drie maanden. Bij dekking en doel is 'ok' de
@@ -3150,6 +3145,18 @@ function maandBeleggenRegel(R){
         ${maandDot('onbekend')}
         <div class="small muted" style="flex:1;min-width:0;line-height:1.45">Niet te beoordelen zolang ${esc(mist.join(' en '))} ontbreekt.</div>
       </div></div>`;
+  }
+  /* v187: op een scherm waar buffer en dekking al als eigen regel staan, herhaalde deze
+     samenstelling ze. Hij toont zich daarom alleen nog wanneer hij iets zegt wat die regels niet
+     zeggen: bij groen (de conclusie volgt uit geen van de drie afzonderlijk), en bij een blokkade
+     die je niet uit een zichtbare rij kunt aflezen. Zegt de rij van de blokkade zelf al 'tekort',
+     dan zwijgt hij.
+     De buffer is de uitzondering: die haalt de voorwaarde ook bij status 'let op' (v154, boven de
+     drie maanden maar onder je eigen richtbedrag). 'Let op' en 'haalt de voorwaarde' zijn dan twee
+     verschillende oordelen, dus daar herhaalt hij niets. */
+  if(!B.klaar && B.blokkade && B.blokkade.key!=='buffer'){
+    const rij=(Array.isArray(R)?R:[]).find(x=>x.key===B.blokkade.key);
+    if(rij && rij.status==='tekort') return '';
   }
   const zin = B.klaar
     ? 'Je drie voorwaarden voor beleggen zijn alle drie gehaald.'
@@ -3367,8 +3374,10 @@ function maandVerband(R){
     if(g.tekortPerMaand<=pat.sig.boven)
       return `${euro0(g.tekortPerMaand)} per maand extra naar ${esc(g.naam.toLowerCase())} sluit het gat. Dat is ongeveer wat je ${esc((CATS[pat.sig.cat]||{}).name||pat.sig.cat).toLowerCase()} boven je normaal ligt.`;
   }
-  // 2) niet-toegewezen geld dekt het gat
-  const aan=R.find(r=>r.key==='aansluiting');
+  /* 2) niet-toegewezen geld dekt het gat. v187: aansluiting is geen eigen regel meer, dus lezen we
+     spaarVrij() rechtstreeks - dezelfde bron als de regel had. Het verband blijft, want hoeveel
+     maanden van je tekort dat dekt zegt geen van beide schermen los. */
+  let aan=null; try{ const V=spaarVrij(); if(V && V.saved>0) aan={vrij:V.vrij}; }catch(_){}
   const doel=R.find(r=>r.key==='doel'&&r.status==='tekort'&&r.tekortPerMaand>0);
   if(aan&&aan.vrij>0&&doel){
     const n=Math.floor(aan.vrij/doel.tekortPerMaand);
@@ -3396,29 +3405,10 @@ function maandRij(r,compact){
    inkomen-limiet (v53: een spiegel, geen plafond). Allebei structureel, dus horen ze hier.
    Categorie c: ze lezen je instellingen van NU, dus bij een afgesloten maand staan ze er niet -
    renderMaand komt daar niet eens langs. */
-/* v178: de aansluiting-regel sprong met go('vooruit') naar een ander scherm. Het gevolg staat nu
-   hier: hetzelfde bedrag uit spaarVrij() en dezelfde tik als spaarVrijLine op je plan. Er wordt
-   niets herrekend en er is geen tweede route naar een toewijzing (v172). */
-function openAansluiting(){
-  let V=null; try{ V=spaarVrij(); }catch(_){}
-  if(!V){ return; }
-  let t=null; try{ t=spaarVrijDoel(); }catch(_){}
-  const cta=(V.vrij>0 && t)
-    ? `<button class="btn" style="margin-top:14px" onclick="closeSheet();spaarVrijToe('${esc(t.id)}')">Toewijzen aan ${esc(t.naam)}</button>`
-    : (V.vrij>0 ? `<button class="btn" style="margin-top:14px" onclick="closeSheet();openGoal()">Voeg een doel toe</button>` : '');
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="center" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg)">Aansluiting spaargeld</div>
-      <div class="muted small">je saldo naast je toewijzingen</div></div>
-    <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
-      <span class="small">Op je spaarrekening</span><span class="small" style="font-weight:700">${euro0(V.saved)}</span></div>
-    <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
-      <span class="small">Toegewezen aan je plan</span><span class="small" style="font-weight:700">${euro0(V.toegewezen)}</span></div>
-    <div class="row" style="justify-content:space-between;padding:8px 0">
-      <span class="small">Nog niet toegewezen</span><span class="small" style="font-weight:700;color:${V.vrij>0?'var(--teal)':'var(--mut)'}">${euro0(V.vrij)}</span></div>
-    ${cta}
-    <button class="btn sec" style="margin-top:8px" onclick="closeSheet()">Klaar</button>`;
-  showSheetBg();
-}
+/* v187: hier stond openAansluiting(), de sheet achter de maandregel 'Aansluiting spaargeld'. Die
+   regel is van Maand af en de sheet had geen andere aanroeper. Het bijsturen zelf zit onveranderd
+   in spaarVrijLine() op Plan, met spaarVrijDoel()/spaarVrijToe() - nog steeds één route naar een
+   toewijzing (v172). */
 function maandPlanRegels(){
   let tb=0, pb=0, t=null;
   try{ tb=totalBudget(); pb=plannedTotalBudget(); t=totals(kijkMaand()); }catch(_){ return ''; }
@@ -3467,7 +3457,7 @@ function renderMaand(){
     return;
   }
   /* v162: structurele signalen lopen mee in het oordeel volgens de bestaande beslisboom. Ze gaan
-     bewust NIET naar maandCoachIngang() of maandVerband(): die kennen alleen de vijf regels, en een
+     bewust NIET naar maandCoachIngang() of maandVerband(): die kennen alleen de vaste regels, en een
      gesprek openen op een sleutel die coTopicMaand() niet kent zou een half pad opleveren. */
   const STR=maandStructureel();
   const RO=R.concat(STR);
@@ -3476,7 +3466,7 @@ function renderMaand(){
      tekort vraagt een beslissing, let op vraagt aandacht. Stonden ze samen onder één kop, dan telde
      de zin (alleen de tekorten) iets anders dan wat eronder stond. Nu een kaart per betekenis; een
      lege kaart valt weg, dus in de praktijk zie je zelden drie kaarten. */
-  const opVolgorde=a=>{ const i=MAAND_VOLGORDE.indexOf(a.key); return i<0?99:i; };   // v162: structurele signalen achter de vijf regels
+  const opVolgorde=a=>{ const i=MAAND_VOLGORDE.indexOf(a.key); return i<0?99:i; };   // v162: structurele signalen achter de vaste regels
   const beslis=RO.filter(r=>r.status==='tekort').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
   /* v175: beslis filterde op RO en aandacht op R, dus een structureel signaal met status 'let op'
      landde in geen van beide kaarten en telde alleen mee in de oordeelzin. Dat is verlies, geen
@@ -3510,7 +3500,7 @@ function renderMaand(){
     ${maandGelezen()}
     <div style="height:12px"></div>`;
 }
-/* v141: de ingang naar het maandgesprek, onder de vijf regels. Geen neutrale knop: de zin zegt
+/* v141: de ingang naar het maandgesprek, onder de regels. Geen neutrale knop: de zin zegt
    waar het over gaat, afgeleid van de zwaarste regel, in de woorden die het scherm zelf gebruikt
    (tekort vraagt een beslissing, let op vraagt aandacht). Staat er al een afspraak voor deze maand,
    dan staat die hier in plaats van de ingang: één afspraak per maand, dus niet twee wegen naar een
@@ -3537,7 +3527,7 @@ function maandCoachIngang(R){
 
    Wat toetsbaar is: alleen een afspraak met een categorie. Die ontstaat als je in het gesprek een
    besparingsregel koos (`cut_<categorie>`) of via coShowAction een potje zette of verschoof.
-   Wat niet toetsbaar is: alles wat alleen een regelKey draagt. Geen van de vijf functies achter de
+   Wat niet toetsbaar is: alles wat alleen een regelKey draagt. Geen van de functies achter de
    maandregels is maand-gebonden - bufferMaanden(), dekking(12), spaarVrij(), maandDoel() en
    maandPatroon() beschrijven de stand van nu, niet die van een afgelopen maand. Er is dus geen
    manier om ze op de afspraakmaand te meten zonder een tweede meetmethode te bouwen, en dat zou
@@ -3734,10 +3724,16 @@ function resDekkingCard(){
   const D=dekking(12);
   if(!D.aantal) return `<div class="card" style="cursor:pointer" onclick="openReserveringen()"><div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span><span class="small" style="color:var(--teal)">instellen \u203a</span></div>
     <div class="small muted" style="margin-top:4px">Kosten die niet elke maand vallen, zoals aanslagen, premies en onderhoud.</div></div>`;
-  const kop=D.volledig&&D.graad!=null?`${D.graad}%`:(D.werkelijkeStand!=null?euro0(D.werkelijkeStand):'onbekend');
+  /* v187: hier stonden de dekkingsgraad en dekkingTekst(D), en dat is hetzelfde oordeel als de
+     regel 'Dekking reserveringen' op Maand - twee schermen, één bron (dekking(12)). Dekking is een
+     structurele vraag, dus dat oordeel staat op Maand. Deze kaart houdt wat hier hoort: het is de
+     plek waar je de lijst beheert, dus de feiten over die lijst en de ingang ernaartoe. Geen kale
+     verwijzing, want dan verlies je de beheercontext; geen tweede oordeel, want dat is de doublure.
+     resCheckLine() blijft: die gaat over je lijst, niet over je dekking. */
+  const perMnd=Math.round(D.benodigdPerMaand||0);
   return `<div class="card" style="cursor:pointer" onclick="openReserveringen()">
-    <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span><span class="small muted">${esc(kop)} \u00b7 <span style="color:var(--teal)">bekijk \u203a</span></span></div>
-    <div class="small muted" style="margin-top:5px;line-height:1.5">${esc(dekkingTekst(D))}</div>
+    <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span><span class="small muted">${D.aantal} ${D.aantal===1?'post':'posten'} \u00b7 <span style="color:var(--teal)">bekijk \u203a</span></span></div>
+    <div class="small muted" style="margin-top:5px;line-height:1.5">Kosten die niet elke maand vallen.${perMnd>0?` Samen vragen ze ${euro0(perMnd)} per maand.`:''} Of je genoeg opzij hebt staan, lees je op Maand.</div>
     ${resCheckLine()}</div>`;
 }
 /* Eén controlemoment op de lijst zelf: handmatige invoer drijft weg zodra een premie verandert.
@@ -6157,11 +6153,11 @@ async function coMaandBevestig(R, r){
     {l:'Nu even niet', act:()=>coEnd()}
   ]);
 }
-const CO_MAAND_REGELS=['dekking','buffer','aansluiting','doel'];   // v186: patroon vervallen
+const CO_MAAND_REGELS=['dekking','buffer','doel'];   // v186: patroon, v187: aansluiting vervallen
 async function coTopicMaand(m, key){
   const _g=_coGen; if(!_coT) return;
   // zonder regel: staat er al een afspraak, dan is dit het aanpas-pad; anders de zwaarste regel
-  /* v175: naast de vijf regels kan de ingang nu ook een structureel signaal aanwijzen. Alleen een
+  /* v175: naast de vaste regels kan de ingang nu ook een structureel signaal aanwijzen. Alleen een
      sleutel die nergens op slaat valt terug op de zwaarste regel, en die lijst is dezelfde als die
      van de ingang zelf - anders wijst het gesprek naar iets anders dan waarop je tikte. */
   if(!CO_MAAND_REGELS.includes(key) && !coMaandRegel(key)){
@@ -6735,8 +6731,7 @@ function toggleExpand(which){ SET[which]=!SET[which]; save(); renderIns(); }
    Vlaggen zonder ingang in COLLAP_DEF houden hun bestaande default (dicht). */
 const COLLAP_DEF={
   openSpendChart:{rustig:false, rest:true},    // v90 blijft: dicht in Rustig, open in Begeleid
-  openKpiCard:{rustig:true, rest:true},        // kerncijfers blijven standaard open
-  openBehavior:{rustig:false, rest:false}
+  openKpiCard:{rustig:true, rest:true}         // kerncijfers blijven standaard open
 };
 function collapOpen(flag){
   const v=SET[flag]; if(v===true||v===false) return v;
@@ -7810,10 +7805,25 @@ function spendVsBudgetChart(){
 function whatStandsOutLine(m, nu){
   if(nu===undefined) nu=true;
   let top=null;
+  /* v187: de Gedrag-kaart had na het schrappen van de coachItems-rijen nog één rij over, en dat was
+     dezelfde soort observatie als deze kaart: iets wat deze maand opvalt. Een eigen kaart onder
+     Verdieping is dan zwaarder vormgegeven dan zijn inhoud. Die rij is hier de EERSTE bron, want
+     over je potje heen is concreter dan een afwijking van je historie. Geen nieuwe berekening:
+     budgetOverCat(m) is precies wat renderBehavior() inline deed, en de categorie zat al in de
+     exclude-set hieronder, dus hij kan niet twee keer verschijnen. */
   try{
-    const mv=monthVsPrevInner(m);
-    const exclude=new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
-    const sig=insSignals(m,exclude); sig.sort((a,b)=>b.pri-a.pri); top=sig[0]||null;
+    const ov=budgetOverCat(m);
+    if(ov) top={pri:99, act:`openCategory('${ov.k}')`,
+      kpiLabel:ov.name, kpiVal:euro0(ov.spent), kpiSub:`potje ${euro0(ov.bud)}`,
+      hyp:`${ov.name} loopt uit de pas.`,
+      imp:`Je zit ${euro0(ov.over)} boven je potje.`};
+  }catch(_){}
+  try{
+    if(!top){
+      const mv=monthVsPrevInner(m);
+      const exclude=new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
+      const sig=insSignals(m,exclude); sig.sort((a,b)=>b.pri-a.pri); top=sig[0]||null;
+    }
   }catch(_){}
   let L=null;
   try{ if(nu){ const W=coachWeekRisk(m); if(W && W.tone==='warn') L=coachLeak(m)||null; } }catch(_){}
@@ -7980,19 +7990,17 @@ function renderIns(){
      dat lezen als de stand van die maand. insBudgetBlok(m) rekent wel gewoon door. */
   const H=nu?insHeroKaart(m):insBudgetBlok(m);
   const hero = H ? (nu?H:`<div class="card">${H}</div>`) : (statusBlock + (nu?nogDezeMaandCard():''));
-  /* renderBehavior mengt twee bronnen: de over-budget-rij is per maand, maar de rijen uit
-     coachItems() rekenen op nowYM. Onder een historische kop zou dat de indruk wekken dat die
-     observaties over die maand gaan. */
-  let beh=''; try{ beh=nu?renderBehavior(m):''; }catch(_){}
-  const behN=(beh.match(/beh-row/g)||[]).length;
   /* v136: geen Categorieen-kaart meer op de pagina zelf. Diezelfde verdeling staat al achter
      "Uitgegeven" (openMonthSpend, eerste chip), en dat is de plek waar de vraag "waar ging mijn
      geld heen" hoort (v114/v115). Twee weergaven van hetzelfde is geen keuze maar ruis. */
   /* v178: de meermaands-grafiek en de abonnementenkaart staan nu op Maand. De eerste zet deze
      maand naast eerdere maanden en dat is een structurele vraag; de tweede is een lastenlijst die
      niet over deze maand gaat. Beide stonden hier op een operationeel scherm. */
-  const verdieping = insVouw('openKpiCard','Kerncijfers',ICON('chart'),insKpiSamenvatting(m),insKpiStrip(m))
-    + insVouw('openBehavior','Gedrag',ICON('bulb'),behN?`${behN} ${behN===1?'observatie':'observaties'}`:'',beh);
+  /* v187: de Gedrag-kaart is vervallen. Drie van zijn vier bronnen waren de regels uit
+     coachItems() die sinds v143 woordelijk ook in scoreNotifs() staan (dus op Maand of in de
+     meldingenlijst), en de vierde was de over-budget-rij, die nu de eerste bron van de
+     Valt-op-kaart is. Eén observatie, één plek. */
+  const verdieping = insVouw('openKpiCard','Kerncijfers',ICON('chart'),insKpiSamenvatting(m),insKpiStrip(m));
   /* De lek-ingang opent een coachgesprek over een stap die je nu kunt zetten; op een afgesloten
      maand nodigt dat uit tot een keuze over iets wat voorbij is (v139: alleen kijken). Sinds v186
      zit die ingang in de Valt-op-kaart, dus krijgt die kaart de maand-vlag mee. */
@@ -8004,18 +8012,12 @@ function renderIns(){
 
 /* ----- per categorie (over een transactielijst) ----- */
 
-function renderBehavior(m){
-  const rows=[]; const actual=catSpendMap(m), EB=effectiveBudgets(m).out; let worst=null;
-  for(const k in EB){ if(+EB[k]>0){ const act=actual[k]||0; if(act>+EB[k]){ const band=budgetBand(+EB[k],act); if(band==='action'||band==='monitor'){ const over=act-(+EB[k]); if(!worst||over>worst.over) worst={k,over}; } } } }
-  if(worst) rows.push({tone:'warn',txt:`${CATS[worst.k].name} loopt uit de pas`,k:worst.k});
-  for(const i of (coachItems()||[])){ if(i.t==='good'||rows.length>=4) continue;
-    if(worst && i.insight && i.insight.toLowerCase().includes(CATS[worst.k].name.toLowerCase())) continue;
-    rows.push({tone:i.t,txt:i.insight}); }
-  if(!rows.length) return '';
-  const dotc=t=>t==='bad'?'var(--red)':t==='warn'?'var(--amber)':'var(--teal)';
-  const body=rows.slice(0,4).map(r=>`<div class="beh-row"><span class="beh-dot" style="background:${dotc(r.tone)}"></span><span class="beh-t">${esc(r.txt)}</span></div>`).join('');
-  return `<div class="card"><div class="hlabel" style="margin:0 0 4px">Gedrag</div>${body}</div>`;
-}
+/* v187: hier stond renderBehavior(). Hij mengde twee bronnen: de over-budget-rij van deze maand
+   en de inzichten uit coachItems(). Die laatste vier staan sinds v143 woordelijk ook in
+   scoreNotifs(), dus stonden ze op drie oppervlakken tegelijk; scoreNotifs() is de bron die de
+   coach-verhuizing overleeft. De over-budget-rij is opgegaan in whatStandsOutLine().
+   coachItems() zelf blijft staan en heeft daarmee geen aanroeper meer: hem verwijderen hoort bij
+   fase 6 van de coach-verhuizing, die zijn eigen voorwaarde heeft. */
 function renderCatBreak(list){
   const by={}; for(const t of list){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); }   // netto: terugstorting verlaagt de categorie
   const ex=Object.entries(by).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]); if(!ex.length) return '';

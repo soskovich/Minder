@@ -1,5 +1,5 @@
 // v141: vierde coach-ingang, vanaf het maandscherm. Dit is het maandgesprek: het opent bij één
-// regel van de vijf, in de zin die daar al staat, en eindigt in een afspraak die je volgende maand
+// regel, in de zin die daar al staat, en eindigt in een afspraak die je volgende maand
 // terugziet. Anders dan 'lek' en 'horizon' mag dit onderwerp wél een afspraak wegschrijven.
 // Kritiek: de oude afspraak verdwijnt pas op het moment dat de nieuwe er staat.
 // De service worker staat globaal uit via playwright.config.js.
@@ -76,11 +76,11 @@ test.describe('a · de ingang kiest de zwaarste regel', () => {
   test('tekort weegt zwaarder dan let op', async ({ page }) => {
     await maand(page);
     const uit = await page.evaluate(() => coMaandZwaarste([
-      { key: 'aansluiting', status: 'let op' }, { key: 'doel', status: 'tekort' }]));
+      { key: 'dekking', status: 'let op' }, { key: 'doel', status: 'tekort' }]));
     expect(uit.key).toBe('doel');
     // en binnen dezelfde status telt de schermvolgorde
     const uit2 = await page.evaluate(() => coMaandZwaarste([
-      { key: 'aansluiting', status: 'let op' }, { key: 'buffer', status: 'let op' }]));
+      { key: 'doel', status: 'let op' }, { key: 'buffer', status: 'let op' }]));
     expect(uit2.key).toBe('buffer');
   });
 });
@@ -113,9 +113,10 @@ test.describe('c · het gesprek', () => {
     expect(await page.evaluate(() => window._coOnderwerp)).toBe('maand');
   });
 
-  test('buffer en aansluiting krijgen de actie die al achter die regel hangt', async ({ page }) => {
+  // v187: aansluiting is geen maandregel meer; buffer houdt zijn eigen actie
+  test('buffer krijgt de actie die al achter die regel hangt', async ({ page }) => {
     await maand(page);
-    for (const [key, lbl] of [['buffer', 'Mijn buffer verfijnen'], ['aansluiting', 'Naar mijn plan']]) {
+    for (const [key, lbl] of [['buffer', 'Mijn buffer verfijnen']]) {
       await page.evaluate(([m, k]) => coStart('maand', m, k), [CUR, key]);
       await wachtKeuze(page);
       const ks = await page.evaluate(() => [...document.querySelectorAll('#coCh .cch')].map((b) => b.innerText.trim()));

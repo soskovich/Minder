@@ -138,13 +138,17 @@ test.describe('d · de vrij-regel stuurt het handmatige cijfer bij', () => {
     expect(r.V.vrij).toBe(500);                       // de rest blijft staan voor een volgend item
   });
 
-  test('de maandregel meldt hetzelfde, in zijn eigen woorden', async ({ page }) => {
+  /* v187: de maandregel 'Aansluiting spaargeld' is vervallen. Hij zei hetzelfde als deze regel op
+     Plan, en dat er geld zonder label staat is een administratief verschil, geen oordeel over je
+     positie. Het feit en het bijsturen leven onveranderd door in spaarVrij() en spaarVrijLine(). */
+  test('het feit staat nog op Plan, en niet meer op Maand', async ({ page }) => {
     await boot(page, seed({ spaarSaldo: 2000, nfToegewezen: 500 }));
-    const r = await page.evaluate(() => maandRegels().find((x) => x.key === 'aansluiting'));
-    expect(r.status).toBe('let op');
-    expect(r.eenheid).toBe('staat nog niet toegewezen');
-    expect(r.gevolg).toMatch(/aan geen enkel item is toegewezen/);
-    expect(r.gevolg).not.toMatch(/claimen/);          // de over-kant bestaat niet meer
+    expect(await page.evaluate(() => maandRegels().some((x) => x.key === 'aansluiting'))).toBe(false);
+    const t = await page.evaluate(() => { const d = document.createElement('div');
+      d.innerHTML = spaarVrijLine(allocatePlan()); return d.innerText.replace(/\s+/g, ' '); });
+    expect(t).toMatch(/aan geen enkel item in je plan is toegewezen/);
+    expect(t).not.toMatch(/claimen/);                 // de over-kant bestaat niet meer
+    expect(t).toMatch(/toewijzen aan/i);              // en het bijsturen zit er nog aan vast
   });
 });
 

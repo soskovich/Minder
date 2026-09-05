@@ -220,7 +220,7 @@ test.describe('e · één keer per maand', () => {
 });
 
 test.describe('f · plaats en layout', () => {
-  test('de regel staat vóór het oordeel en vóór de vijf regels', async ({ page }) => {
+  test('de regel staat vóór het oordeel en vóór de regels', async ({ page }) => {
     await maand(page, metAfspraak({ text: 'x', cat: 'boodschappen' }, 200));
     const eerste = await page.locator('#s-maand > .card').first().innerText();
     expect(eerste).toMatch(/je afspraak van vorige maand/i);

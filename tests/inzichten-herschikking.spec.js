@@ -204,16 +204,14 @@ test.describe('d · de verdieping', () => {
     if (uit.budget) expect(uit.sam).toContain(uit.budget);
   });
 
-  test('Gedrag staat er ingeklapt bij, met het aantal observaties', async ({ page }) => {
+  /* v187: de Gedrag-kaart is vervallen. Drie van zijn vier bronnen stonden woordelijk ook in
+     scoreNotifs() (v143), en de vierde, de over-budget-rij, is de eerste bron van de Valt-op-kaart
+     geworden. Eén observatie, één plek. */
+  test('Gedrag bestaat niet meer; de observatie staat in de Valt-op-kaart', async ({ page }) => {
     await boot(page);
-    const beh = await page.evaluate((m) => renderBehavior(m), CUR);
+    expect(await page.evaluate(() => typeof window.renderBehavior)).toBe('undefined');
     const b = await beeld(page);
-    if (beh) {
-      expect(b.tekst).toMatch(/gedrag/i);
-      expect(b.tekst).toMatch(/\d+ observatie/);
-    } else {
-      expect(b.tekst).not.toMatch(/gedrag/i);                            // leeg: geen kaart
-    }
+    expect(b.tekst).not.toMatch(/gedrag/i);
   });
 
   test('wat opviel blijft uitgeklapt en staat boven Verdieping', async ({ page }) => {

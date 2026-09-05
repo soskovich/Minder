@@ -124,22 +124,24 @@ test.describe('b · elk van de drie als blokkade', () => {
     expect(h).toContain('tegen 3 maanden');
   });
 
-  test('dekking blokkeert', async ({ page }) => {
+  /* v187: de regel toont zich alleen nog wanneer hij iets zegt wat de losse regels niet zeggen.
+     Blokkeert dekking of doel en staat die rij zichtbaar op 'tekort', dan herhaalt hij de rij die
+     er drie regels boven staat, en zwijgt hij. Het oordeel zelf verandert niet: beleggenKlaar()
+     blijft dezelfde blokkade aanwijzen. */
+  test('dekking blokkeert: het oordeel staat, de regel zwijgt want de rij zegt het al', async ({ page }) => {
     await boot(page, seed({ resSaldo: 10 }));
     expect(await statusVan(page, 'dekking')).toBe('tekort');
     const b = await B(page);
     expect(b.blokkade.key).toBe('dekking');
-    expect(await regel(page)).toContain('tegen 100%');
+    expect(await regel(page)).toBe('');
   });
 
-  test('het aankoopdoel blokkeert', async ({ page }) => {
+  test('het aankoopdoel blokkeert: idem, de rij zegt het al', async ({ page }) => {
     await boot(page, seed({ perMaand: 10, set: { savingAmount: 10 } }));
     expect(await statusVan(page, 'doel')).toBe('tekort');
     const b = await B(page);
     expect(b.blokkade.key).toBe('doel');
-    const h = await regel(page);
-    expect(h).toContain('Vakantie');
-    expect(h).toContain('tekort');
+    expect(await regel(page)).toBe('');
   });
 
   test('precies twee niet gehaald: alleen de eerste in de volgorde wordt genoemd', async ({ page }) => {
@@ -149,10 +151,7 @@ test.describe('b · elk van de drie als blokkade', () => {
     const nietGehaald = b.voorwaarden.filter((v) => !v.gehaald).map((v) => v.key);
     expect(nietGehaald).toEqual(['dekking', 'doel']);             // precies twee
     expect(b.blokkade.key).toBe('dekking');                       // maar alleen de eerste telt
-    const t = await tekst(page);
-    expect(t).toContain('dekking reserveringen');
-    expect(t).not.toContain('Vakantie');
-    expect((t.match(/tegen/g) || []).length).toBe(1);             // één ding tegelijk
+    expect(await regel(page)).toBe('');                           // en de rij zegt het al
   });
 
   test('alle drie niet gehaald: nog steeds één blokkade', async ({ page }) => {
@@ -222,7 +221,7 @@ test.describe('d · zichtbaarheid en plek', () => {
     expect(await regel(page)).not.toBe('');
   });
 
-  test('de regel staat onder de vijf regels en boven de coach-ingang', async ({ page }) => {
+  test('de regel staat onder de regels en boven de coach-ingang', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
     const t = await page.locator('#s-maand').innerText();
@@ -234,7 +233,7 @@ test.describe('d · zichtbaarheid en plek', () => {
     if (iCoach > -1) expect(iBeleg).toBeLessThan(iCoach);
   });
 
-  test('de regel herhaalt de cijfers van de vijf regels niet', async ({ page }) => {
+  test('de regel herhaalt de cijfers van de regels niet', async ({ page }) => {
     await boot(page);
     const t = await tekst(page);                       // de gerenderde tekst, niet de HTML
     expect(t).not.toMatch(/%/);                        // geen dekkingsgraad

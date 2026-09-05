@@ -379,15 +379,38 @@ test.describe('g · het controlemoment', () => {
 });
 
 test.describe('h · weergave', () => {
-  test('de kaart staat op Vooruitblik en opent het beheer', async ({ page }) => {
+  /* v187: dekking is een structurele vraag, dus het oordeel staat op Maand. Deze kaart is de plek
+     waar je de lijst beheert en houdt daarom de feiten over die lijst en de ingang ernaartoe, zonder
+     de graad en zonder dekkingTekst. Twee schermen, één bron: het oordeel staat er nog maar één keer. */
+  test('de kaart staat op Plan met de feiten en de ingang, zonder het oordeel', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('vooruit'));
     await page.waitForSelector('#s-vooruit');
     const t = await page.locator('#s-vooruit').innerText();
     expect(t).toContain('Reserveringen');
-    expect(t).toMatch(/gedekt tot en met/);
+    expect(t).toMatch(/\d+ post/);
+    expect(t).not.toMatch(/gedekt tot en met/);
+    expect(t).not.toMatch(/\d+% van wat er/);
     await page.locator('#s-vooruit >> text=Reserveringen').first().click();
     await page.waitForSelector('#resHead');
+  });
+
+  test('het oordeel staat op Maand, en daar maar één keer', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      go('maand');
+      return { regel: (maandRegels() || []).find((x) => x.key === 'dekking'),
+        zin: dekkingTekst(dekking(12)), scherm: $('#s-maand').innerText };
+    });
+    expect(r.regel).toBeTruthy();
+    expect(r.regel.gevolg).toBe(r.zin);                 // het oordeel komt uit dekkingTekst
+    expect(r.scherm).toContain('Dekking reserveringen');
+    /* En resDekkingCard roept die zin niet meer aan. Commentaar telt niet als aanroep: de functie
+       legt in een comment uit wat er stond en waarom (dezelfde meetfout als v164). */
+    const kaal = (await page.evaluate(() => resDekkingCard.toString()))
+      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+    expect(kaal).not.toContain('dekkingTekst');
+    expect(kaal).not.toContain('D.graad');
   });
 
   for (const w of [360, 390]) {

@@ -48,8 +48,8 @@ test.describe('a · het patroon staat op precies één plek', () => {
     await boot(page);
     const keys = await page.evaluate(() => maandRegels().map((r) => r.key));
     expect(keys).not.toContain('patroon');
-    expect(keys.every((k) => ['dekking', 'buffer', 'aansluiting', 'doel'].includes(k))).toBe(true);
-    expect(await page.evaluate(() => MAAND_VOLGORDE)).toEqual(['dekking', 'buffer', 'aansluiting', 'doel']);
+    expect(keys.every((k) => ['dekking', 'buffer', 'doel'].includes(k))).toBe(true);
+    expect(await page.evaluate(() => MAAND_VOLGORDE)).toEqual(['dekking', 'buffer', 'doel']);
     expect(await scherm(page, 'maand')).not.toContain('Patroon van de maand');
   });
 
@@ -154,5 +154,104 @@ test.describe('c · de keuze staat vast, zodat de tweede niet terugkomt', () => 
     expect(maand).not.toMatch(/kunt doen\?/);
     expect(await page.evaluate(() => ($('#s-maand').innerHTML || '')))
       .not.toContain("coStart('lek'");
+  });
+});
+
+test.describe('d · de coach-inzichten hebben één bron', () => {
+  test('renderBehavior bestaat niet meer, en coachItems heeft geen lezer', async ({ page }) => {
+    await boot(page);
+    expect(await page.evaluate(() => typeof window.renderBehavior)).toBe('undefined');
+    expect(await page.evaluate(() => typeof coachItems)).toBe('function');
+    const kaal = (await page.evaluate(() => renderIns.toString()))
+      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+    expect(kaal).not.toContain('coachItems');
+    expect(kaal).not.toContain('renderBehavior');
+    expect(kaal).not.toContain('openBehavior');
+  });
+
+  test('de vier regels staan in de signalen-engine, niet op een derde oppervlak', async ({ page }) => {
+    await boot(page);
+    const src = await page.evaluate(() => scoreNotifs.toString());
+    for (const k of ['savrules', 'meevaller', 'inflatie', 'overstreak']) expect(src).toContain(`key:'${k}'`);
+    await page.evaluate(() => go('ins'));
+    const ins = await page.evaluate(() => $('#s-ins').innerText);
+    expect(ins).not.toMatch(/gedrag/i);
+  });
+});
+
+test.describe('e · de over-budget-observatie staat op één plek', () => {
+  test('hij is de eerste bron van de Valt-op-kaart', async ({ page }) => {
+    const p = seed({ set: { budgets: { huur: 900, boodschappen: 100 } } });   // boodschappen loopt over
+    await boot(page, p);
+    const ov = await page.evaluate((m) => budgetOverCat(m), CUR);
+    test.skip(!ov, 'deze fixture levert geen overschrijding');
+    const html = await page.evaluate((m) => whatStandsOutLine(m, true), CUR);
+    expect(html).toContain(ov.name);
+    expect(html).toContain('loopt uit de pas');
+    expect(html).toContain(`openCategory('${ov.k}')`);
+    // geen nieuwe berekening: budgetOverCat is de bron
+    expect(await page.evaluate(() => /budgetOverCat\(/.test(whatStandsOutLine.toString()))).toBe(true);
+  });
+
+  test('en verschijnt niet twee keer in dezelfde kaart', async ({ page }) => {
+    const p = seed({ set: { budgets: { huur: 900, boodschappen: 100 } } });
+    await boot(page, p);
+    const html = await page.evaluate((m) => whatStandsOutLine(m, true), CUR);
+    const ov = await page.evaluate((m) => budgetOverCat(m), CUR);
+    if (ov) expect((html.match(new RegExp(ov.name, 'g')) || []).length).toBeLessThanOrEqual(2);
+  });
+});
+
+test.describe('f · dekking wordt op één scherm beoordeeld', () => {
+  test('Maand oordeelt, Plan beheert', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => ({
+      regel: (maandRegels() || []).find((x) => x.key === 'dekking'),
+      zin: dekkingTekst(dekking(12)),
+      kaart: (function () { const d = document.createElement('div');
+        d.innerHTML = resDekkingCard(); return d.innerText.replace(/\s+/g, ' '); })(),
+    }));
+    expect(r.regel.gevolg).toBe(r.zin);                  // het oordeel staat op Maand
+    expect(r.kaart).not.toContain(r.zin);                // en niet op Plan
+    expect(r.kaart).toMatch(/\d+ post/);                 // Plan houdt de feiten
+    expect(r.kaart).toMatch(/lees je op Maand/);         // en wijst waar het oordeel staat
+  });
+});
+
+test.describe('g · de aansluiting staat op Plan, niet op Maand', () => {
+  test('geen maandregel, wel de vrij-regel op je plan', async ({ page }) => {
+    await boot(page);
+    expect(await page.evaluate(() => MAAND_VOLGORDE)).not.toContain('aansluiting');
+    expect(await page.evaluate(() => (maandRegels() || []).some((x) => x.key === 'aansluiting'))).toBe(false);
+    expect(await page.evaluate(() => typeof window.openAansluiting)).toBe('undefined');
+    expect(await page.evaluate(() => typeof spaarVrijLine)).toBe('function');
+  });
+
+  test('het verband dat erop leunde blijft, en leest de bron rechtstreeks', async ({ page }) => {
+    await boot(page);
+    const src = await page.evaluate(() => maandVerband.toString());
+    expect(src).toContain('spaarVrij()');
+    expect(src).not.toMatch(/r\.key==='aansluiting'/);
+  });
+});
+
+test.describe('h · de beleggen-regel herhaalt geen zichtbare rij', () => {
+  test('bij een zichtbaar tekort op dekking of doel zwijgt hij', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const R = maandRegels(); const B = beleggenKlaar(R);
+      return { blok: B.blokkade ? B.blokkade.key : null, klaar: B.klaar,
+        rij: B.blokkade ? (R.find((x) => x.key === B.blokkade.key) || {}).status : null,
+        regel: maandBeleggenRegel(R) };
+    });
+    if (r.blok && r.blok !== 'buffer' && r.rij === 'tekort') expect(r.regel).toBe('');
+  });
+
+  test('de bufferblokkade blijft altijd staan: let op is een ander oordeel', async ({ page }) => {
+    await boot(page);
+    const src = await page.evaluate(() => maandBeleggenRegel.toString());
+    expect(src).toContain("B.blokkade.key!=='buffer'");
+    // en beleggenKlaar zelf is niet aangeraakt
+    expect(await page.evaluate(() => /r\.status!=='tekort'/.test(beleggenKlaar.toString()))).toBe(true);
   });
 });

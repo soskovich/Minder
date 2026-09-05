@@ -97,12 +97,14 @@ test.describe('b · de ingeklapte kop noemt wat eronder staat', () => {
 });
 
 test.describe('c · een maandregel laat je niet van scherm wisselen', () => {
-  test('de aansluitingsregel opent een sheet op Maand', async ({ page }) => {
+  /* v187: de aansluitingsregel is van Maand af, en openAansluiting() had geen andere aanroeper.
+     Het bijsturen zit onveranderd in spaarVrijLine() op Plan. */
+  test('de aansluitingsregel en zijn sheet bestaan niet meer op Maand', async ({ page }) => {
     await boot(page, 'maand');
-    const r = await page.evaluate(() => (maandRegels() || []).find((x) => x.key === 'aansluiting'));
-    test.skip(!r, 'deze fixture levert geen aansluitingsregel');
-    expect(r.act).toBe('openAansluiting()');
-    expect(r.act).not.toContain('go(');
+    expect(await page.evaluate(() => (maandRegels() || []).some((x) => x.key === 'aansluiting'))).toBe(false);
+    expect(await page.evaluate(() => typeof window.openAansluiting)).toBe('undefined');
+    // en het feit zelf staat er nog, op zijn ene plek
+    expect(await page.evaluate(() => typeof spaarVrijLine)).toBe('function');
   });
 
   /* v186: de patroonregel is vervallen, want hij toonde een melding die al in de meldingenlijst
@@ -119,23 +121,24 @@ test.describe('c · een maandregel laat je niet van scherm wisselen', () => {
     for (const a of acts) expect(a).not.toContain('go(');
   });
 
-  test('openAansluiting leest spaarVrij en rekent zelf niets', async ({ page }) => {
-    await boot(page, 'maand');
+  /* v187: openAansluiting() is met de aansluitingsregel meegegaan; hij had geen andere aanroeper.
+     Het bijsturen zit onveranderd in spaarVrijLine() op Plan, met dezelfde bron en dezelfde route
+     naar een toewijzing (v172). */
+  test('spaarVrijLine leest spaarVrij en rekent zelf niets', async ({ page }) => {
+    await boot(page, 'vooruit');
     const V = await page.evaluate(() => spaarVrij());
-    await page.evaluate(() => openAansluiting());
-    await page.waitForSelector('#sheetBg.show');
-    const t = (await page.locator('#sheet').innerText()).replace(/\s+/g, ' ');
-    for (const n of [V.saved, V.toegewezen, V.vrij]) expect(t).toContain(String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
-    // dezelfde toewijzing als op je plan, geen tweede route (v172)
-    const html = await page.locator('#sheet').innerHTML();
-    if (V.vrij > 0) expect(html).toMatch(/spaarVrijToe\(|openGoal\(/);
-    expect(await page.evaluate(() => /spaarVrij\(\)/.test(openAansluiting.toString()))).toBe(true);
+    const html = await page.evaluate(() => spaarVrijLine(allocatePlan()));
+    if (V.vrij > 0) {
+      expect(html).toContain(String(V.vrij).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
+      expect(html).toMatch(/spaarVrijToe\(|openGoal\(/);
+    }
+    expect(await page.evaluate(() => /spaarVrij\(\)/.test(spaarVrijLine.toString()))).toBe(true);
   });
 
   test('kijken verandert niets aan je gegevens', async ({ page }) => {
     await boot(page, 'maand');
     const voor = await page.evaluate(() => JSON.stringify([TX.length, SET, OWN]));
-    await page.evaluate(() => { openAansluiting(); closeSheet(); });
+    await page.evaluate(() => { maandRegels(); maandVerband(maandRegels()); });
     await page.waitForTimeout(80);
     expect(await page.evaluate(() => JSON.stringify([TX.length, SET, OWN]))).toBe(voor);
   });
@@ -155,14 +158,15 @@ test.describe('d · de horizon van het scherm blijft kloppen', () => {
     expect(t).not.toMatch(/inkomen-limiet/i);
   });
 
-  test('de verdieping op Inzichten houdt precies twee kaarten over', async ({ page }) => {
+  // v187: de Gedrag-kaart is opgegaan in de Valt-op-kaart, dus Verdieping houdt er één over
+  test('de verdieping op Inzichten houdt precies één kaart over', async ({ page }) => {
     await boot(page, 'ins');
     const src = await page.evaluate(() => renderIns.toString());
     const n = (src.match(/insVouw\(/g) || []).length;
-    expect(n).toBe(2);                                   // Kerncijfers en Gedrag
+    expect(n).toBe(1);                                   // alleen Kerncijfers
     const t = await tekst(page, 'ins');
     expect(t).toMatch(/kerncijfers/i);
-    expect(t).toMatch(/gedrag/i);
+    expect(t).not.toMatch(/gedrag/i);
     expect(t).toMatch(/verdieping/i);
   });
 });
