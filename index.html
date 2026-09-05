@@ -2503,7 +2503,10 @@ function scoreNotifs(opts){
     } }catch(_){}
   // mentale-rekening: stilstaand surplus BOVEN de buffer terwijl dure schuld rente kost (observatie, geen alarm)
   try{ const ma=mentalAccountingSignal();
-    if(ma) push({key:'rente-'+(ma.debt.id||'x'), h:'structureel', score:60, t:'info', ic:ICON('coins'),
+    /* v189: dit signaal is het enige structurele met een samengestelde l1, en die werd als
+       regelnaam op 42 tekens afgekapt - halverwege een woord bij een langere schuldnaam. De korte
+       naam is data, geen tweede formulering: de zin zelf blijft ongewijzigd in l1. */
+    if(ma) push({key:'rente-'+(ma.debt.id||'x'), h:'structureel', kort:'Stilstaand geld naast rente', score:60, t:'info', ic:ICON('coins'),
       l1:`${euro0(ma.inzet)} staat stil terwijl ${esc(ma.debt.naam)} ${ma.debt.rente}% rente kost.`,
       l2:`Boven je buffer · dat deel kan ~${euro0(ma.renteJaar)}/jr dempen`, act:"go('vermogen')"});
   }catch(_){}
@@ -2781,7 +2784,7 @@ function renderGoalSheet(id, g, modeOverride){
     ? `<label class="fld" style="margin-top:10px">Per maand opzij (€)</label><input id="gMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 150" style="width:100%">`
     : mode==='pct'
     ? `<label class="fld" style="margin-top:10px">Deel van je spaarinleg (%)</label><input id="gPct" type="number" inputmode="numeric" min="0" max="100" value="${d.pct||''}" placeholder="bv. 30" style="width:100%">
-       <div class="small muted" style="margin-top:6px">${planCapacity()>0?`${euro0(planCapacity())}/mnd te verdelen · dit doel krijgt ${euro0(Math.round(planCapacity()*(+d.pct||0)/100))}`:'Nog geen spaarinleg bekend.'}</div>`
+       <div class="small muted" style="margin-top:6px">${planCapacity()>0?`${euro0(planCapacity())}/mnd ${planCapLabel()} te verdelen · dit doel krijgt ${euro0(Math.round(planCapacity()*(+d.pct||0)/100))}`:'Nog geen spaarinleg bekend.'}</div>`
     : `<div class="small muted" style="margin-top:8px">Dit doel krijgt wat er op zijn plek in de rij nog over is.</div>`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px">${isNew?'Nieuw spaardoel':'Spaardoel bewerken'}</div>
@@ -2997,11 +3000,24 @@ function maandDoel(){
    lichtere status voor maar stel de vraag of het signaal nog nodig is - een derde categorie zou
    nergens meer opvallen. structureelStatus blijft de terugval voor een onbekende t. */
 const STRUCT_STATUS={bad:'tekort', warn:'tekort', info:'let op'};
+/* v189: de regelnaam kwam uit l1, afgekapt op 42 tekens, dus een samengestelde zin eindigde
+   halverwege een woord. Een afgekapte zin als naam is erger dan een lange naam. Draagt het signaal
+   een korte naam, dan is dat de naam; anders kappen we op woordgrens met een zichtbare afkapping,
+   zodat een signaal dat er later bijkomt zonder korte naam nog steeds leesbaar is. */
+function kortNaam(n){
+  const kort=String((n&&n.kort)||'').trim();
+  if(kort) return kort;
+  const vol=String((n&&n.l1)||'').replace(/<[^>]*>/g,'').trim();
+  if(vol.length<=42) return vol;
+  const snee=vol.slice(0,42);
+  const sp=snee.lastIndexOf(' ');
+  return (sp>=20?snee.slice(0,sp):snee).replace(/[\s,.;:]+$/,'')+'\u2026';
+}
 function maandStructureel(){
   try{
     return (scoreNotifs({negeerSnooze:true})||[])
       .filter(n=>n && n.h==='structureel')
-      .map(n=>({key:n.key, naam:String(n.l1||'').replace(/<[^>]*>/g,'').slice(0,42),
+      .map(n=>({key:n.key, naam:kortNaam(n),
         status:STRUCT_STATUS[n.t]||MAAND_DREMPEL.structureelStatus, waarde:'', eenheid:'',
         gevolg:'',                                   // was dezelfde zin als naam
         act:n.act||"go('ins')", sig:n, structureel:true}));
@@ -3024,17 +3040,23 @@ function maandRegels(){
       uit.push({key:'dekking', naam:'Dekking reserveringen', status:st,
         // v132: bij een tekort horen het percentage en het bedrag allebei zichtbaar te zijn, met de
         // noemer erbij - anders staat hetzelfde woord voor twee verschillende verhoudingen.
-        waarde: !D.volledig ? 'onbekend'
-              : D.graad!=null ? (D.graad+'%')
-              : (D.gat && D.gat.gedektPct!=null) ? (D.gat.gedektPct+'%')
-              : D.gat ? euro0(D.gat.tekort)
-              : komt ? 'op peil' : 'geen',
+      /* v189: deze kolom mengde vijf soorten waarde - een percentage, een bedrag, 'op peil',
+         'geen' en 'onbekend'. Nu toont hij er één: wat er in je reserveringenpot staat, of het
+         woord onbekend als dat saldo er niet is. Een percentage kan hier niet altijd staan, want
+         D.graad is null zodra er nog niets opgebouwd hoeft te zijn; er dan een percentage bij
+         verzinnen is precies wat deze reeks weghaalt. Daarmee is de kolom consistent met buffer
+         (maanden) en doel (een bedrag): elke rij toont zijn gemeten waarde, het oordeel staat in
+         de zin ernaast, die alle takken al kent via dekkingTekst(). */
+      waarde: !D.volledig ? 'onbekend' : euro0(Math.round(D.werkelijkeStand||0)),
         // v133: de eenheid staat in een smalle kolom, dus kort houden. Het tekortbedrag staat al in
         // de zin ernaast zodra er een gat is; alleen zonder gat noemen we het hier.
-        eenheid: !D.volledig ? 'niet te beoordelen'
-               : D.graad!=null ? `van wat nu nodig is${D.gat?'':` · ${euro0(D.tekort)} tekort`}`
-               : D.gat ? 'van de eerstvolgende post'
-               : komt ? 'er hoeft nu nog niets opzij' : 'niets aankomend dit jaar',
+      /* v133: de eenheid staat in een smalle kolom, dus kort houden. v189: hij draagt nu het
+         oordeel dat uit de waardekolom is gehaald - het percentage, of waarom er geen is. */
+      eenheid: !D.volledig ? 'niet te beoordelen'
+        : D.graad!=null ? `in je pot · ${D.graad}% van wat nu nodig is`
+        : (D.gat && D.gat.gedektPct!=null) ? `in je pot · ${D.gat.gedektPct}% van de eerstvolgende post`
+        : D.gat ? `in je pot · ${euro0(D.gat.tekort)} tekort`
+        : komt ? 'in je pot · er hoeft nu nog niets opzij' : 'in je pot · niets aankomend dit jaar',
         maand: (st==='tekort'&&D.gedektTot)?D.gedektTot:null,
         // de zin komt uit dekkingTekst(): die kent alle takken al, inclusief een pot die de
         // eerstvolgende post nu al niet dekt en een lijst waar dit jaar niets uit valt. Hier een
@@ -3873,6 +3895,14 @@ function planItems(){
   return out;
 }
 // maandelijkse spaarruimte; zonder spaardoel val terug op je bezuinigingsruimte
+/* v189: planCapacity() valt terug op comfortTot zodra er geen spaarinleg is ingesteld, maar de
+   kop zei onverkort "je spaarinleg". Hernoemen zou het normale geval vager maken om een randgeval
+   te dekken, dus zegt de kop het alleen wanneer de terugval optreedt. Dezelfde toets als in
+   planCapacity() zelf; die functie is ongemoeid. */
+function planCapTerugval(){
+  try{ return !(Math.round(monthlySavingTarget()||0)>0) && planCapacity()>0; }catch(_){ return false; }
+}
+function planCapLabel(){ return planCapTerugval()?'comfortabele ruimte':'spaarinleg'; }
 function planCapacity(){
   let cap=Math.round(monthlySavingTarget()||0);
   if(!(cap>0)){ try{ cap=Math.round(noodfondsModel().comfortTot||0); }catch(_){} }
@@ -3946,7 +3976,7 @@ function planOpen(it){
 const PLAN_MODES=[['auto','Auto'],['fixed','Vast bedrag'],['pct','Percentage']];
 function planModeLabel(p){
   if(p.mode==='fixed') return `vast ${euro0(p.perMaand)}`;
-  if(p.mode==='pct')   return `${(''+p.pct).replace('.',',')}% van je spaarinleg`;
+  if(p.mode==='pct')   return `${(''+p.pct).replace('.',',')}% van je ${planCapLabel()}`;
   return 'auto · pakt wat er nog is';
 }
 // "over ~8 maanden" wordt pas concreet met een datum erbij. Zelfde patroon als de oude hero:
@@ -3967,6 +3997,15 @@ function planSub(p){
   const mod=p.mode==='pct'?`${(''+p.pct).replace('.',',')}% · `:(p.mode==='fixed'?'vast · ':'');
   // maak zichtbaar dat een deel is doorgezakt uit wat er boven overbleef
   const dz=(+p.extra>0&&p.mode!=='auto')?` · waarvan ${euro0(p.extra)} doorgezakt`:'';
+  /* v189: hier stond alleen p.alloc, terwijl allocatePlan() de eta rekent met debtPer + alloc. Het
+     getoonde bedrag en de looptijd kwamen dus niet uit dezelfde som. Van die twee klopt de eta: die
+     schuld krijgt werkelijk je bestaande termijn EN wat je plan er extra in stopt. Corrigeren naar
+     het getoonde bedrag zou de termijn negeren die je maandelijks al betaalt, en de looptijd te
+     pessimistisch maken. Dus tonen we het bedrag waarmee gerekend is, met de herkomst erbij zodat
+     p.alloc leesbaar blijft - dat is wat de waterval toewijst. Zonder termijn valt er niets bij op
+     te tellen en blijft de regel zoals hij was. */
+  const per=(p.type==='aflossen')?Math.max(Math.round(+p.debtPer||0),0):0;
+  if(per>0) return `${mod}${euro0(p.alloc+per)}/mnd · waarvan ${euro0(per)} je termijn${dz}${eta}`;
   return `${mod}${euro0(p.alloc)}/mnd${dz}${eta}`;
 }
 // Waaróm krijgt dit doel niets? Een auto-doel erboven pakt wat er overblijft; met een maandbedrag
@@ -4076,7 +4115,7 @@ function renderPlanAllocSheet(){
     ? `<label class="fld" style="margin-top:10px">Per maand extra (€)</label><input id="paPer" type="number" inputmode="numeric" min="0" value="${A.perMaand||''}" placeholder="bv. 100" onchange="setPlanAllocVeld('perMaand',this.value)" style="width:100%">`
     : A.mode==='pct'
     ? `<label class="fld" style="margin-top:10px">Deel van je spaarinleg (%)</label><input id="paPct" type="number" inputmode="numeric" min="0" max="100" value="${A.pct||''}" placeholder="bv. 30" onchange="setPlanAllocVeld('pct',this.value)" style="width:100%">
-       <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd te verdelen · dit item krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarinleg bekend.'}</div>`
+       <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd ${planCapLabel()} te verdelen · dit item krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarinleg bekend.'}</div>`
     : `<div class="small muted" style="margin-top:9px">Dit item krijgt wat er op zijn plek in de rij nog over is.</div>`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg);flex:1">${esc(it.naam)}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
@@ -4129,7 +4168,9 @@ function renderPlan(bare){
       </div>
     </div>`;
   }).join('');
-  const head=`<div class="small muted" style="margin:0 2px 8px">Je ${jrg('spaarinleg','spaarinleg')} gaat van boven naar beneden: ${cap>0?`<b>${euro0(cap)}/mnd</b> te verdelen`:'nog geen spaarinleg bekend'}. Zet met ▲▼ wat eerst moet.</div>`;
+  const head=planCapTerugval()
+    ? `<div class="small muted" style="margin:0 2px 8px">Je hebt nog geen ${jrg('spaarinleg','spaarinleg')} ingesteld, dus dit plan verdeelt je comfortabele ruimte: <b>${euro0(cap)}/mnd</b>. Zet met ▲▼ wat eerst moet.</div>`
+    : `<div class="small muted" style="margin:0 2px 8px">Je ${jrg('spaarinleg','spaarinleg')} gaat van boven naar beneden: ${cap>0?`<b>${euro0(cap)}/mnd</b> te verdelen`:'nog geen spaarinleg bekend'}. Zet met ▲▼ wat eerst moet.</div>`;
   const W=planAllocWarning();
   const warn=W?`<div id="planWarn" class="small" style="color:${isMode('rustig')?'var(--mut)':'var(--amber)'};background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 11px;margin:0 2px 9px;line-height:1.45">${W.txt}</div>`:'';
   // niets blijft liggen: is er ná het bijvullen van álle lopende doelen nog capaciteit over,
@@ -5407,7 +5448,7 @@ function nfAllocCard(){
     ? `<div class="row" style="gap:8px;margin-top:9px"><label class="small muted" style="flex:1">Vast bedrag per maand</label><div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:110px"><span class="small muted">€</span><input id="nfPer" type="number" inputmode="numeric" min="0" value="${A.perMaand||''}" placeholder="0" onchange="setNfAlloc('perMaand',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;outline:none"></div></div>`
     : A.mode==='pct'
     ? `<div class="row" style="gap:8px;margin-top:9px"><label class="small muted" style="flex:1">Deel van je spaarinleg</label><div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;width:110px"><input id="nfPct" type="number" inputmode="numeric" min="0" max="100" value="${A.pct||''}" placeholder="0" onchange="setNfAlloc('pct',this.value)" style="width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;outline:none"><span class="small muted">%</span></div></div>
-       <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd te verdelen · dit doel krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarinleg bekend.'}</div>`
+       <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd ${planCapLabel()} te verdelen · dit doel krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarinleg bekend.'}</div>`
     : `<div class="small muted" style="margin-top:9px">Het noodfonds krijgt wat er op zijn plek in de rij nog over is.</div>`;
   return `<div class="card"><div class="small" style="font-weight:600">Hoeveel gaat hier maandelijks heen?</div>
     ${planModeChips(A.mode,'setNfAllocMode')}${veld}</div>`;

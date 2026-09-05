@@ -83,9 +83,12 @@ test.describe('b · de regels', () => {
       const rr = maandRegels();
       const D = dekking(12), bm = bufferMaanden(), V = spaarVrij();
       return { dekGraad: D.graad, regelDek: rr.find((r) => r.key === 'dekking').waarde,
+        regelDekEenheid: rr.find((r) => r.key === 'dekking').eenheid,
+        potStand: euro0(Math.round(D.werkelijkeStand || 0)),
         bm: Math.round(bm * 10) / 10, regelBuf: rr.find((r) => r.key === 'buffer').waarde, vrij: V.vrij };
     });
-    expect(uit.regelDek).toBe(uit.dekGraad + '%');
+    expect(uit.regelDek).toBe(uit.potStand);          // v189: de kolom toont je potsaldo
+    expect(uit.regelDekEenheid).toContain(uit.dekGraad + '%');   // het percentage staat ernaast
     expect(uit.regelBuf).toBe(String(uit.bm).replace('.', ','));
   });
 
@@ -175,6 +178,9 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
   // twaalf maanden of verder weg ligt is benodigdeStand nul, dus geeft dekking() terecht graad null.
   // Dat las het maandscherm als onbekend, met status tekort. Er is niets onbekends: er hoeft alleen
   // nog niets opgebouwd te zijn.
+  /* v189: de waardekolom mengde vijf soorten waarde. Hij toont er nu een: wat er in je
+     reserveringenpot staat, of het woord onbekend. Het oordeel dat eruit gehaald is - het
+     percentage, of waarom er geen is - staat in de eenheid ernaast, met dezelfde noemers. */
   const eenmalig = (bedrag, o) => ({ id: 'a', naam: 'Post', bedrag, vervalmaand: over(o), intervalM: 0 });
   const dek = async (page) => (await R(page)).find((r) => r.key === 'dekking');
 
@@ -183,17 +189,17 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     const d = await dek(page);
     expect(await page.evaluate(() => dekking(12).graad)).toBeNull();     // geen percentage te delen
     expect(d.status).toBe('ok');
-    expect(d.waarde).toBe('op peil');
+    expect(d.waarde).toBe('€50');                                       // v189: je potsaldo
     expect(d.waarde).not.toBe('onbekend');
-    expect(d.eenheid).toBe('er hoeft nu nog niets opzij');
+    expect(d.eenheid).toBe('in je pot · er hoeft nu nog niets opzij');
   });
 
   test('kun je hem niet betalen, dan is het tekort, met de maand erbij', async ({ page }) => {
     await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
     const d = await dek(page);
     expect(d.status).toBe('tekort');
-    expect(d.waarde).toBe('40%');                                       // v132: percentage van die post
-    expect(d.eenheid).toBe('van de eerstvolgende post');                // v133: kort, de kolom is smal
+    expect(d.waarde).toBe('€10');                                       // v189: je potsaldo
+    expect(d.eenheid).toBe('in je pot · 40% van de eerstvolgende post'); // v132 percentage, nu in de eenheid
     expect(d.gevolg).toMatch(/€15 tekort/);                             // het bedrag staat in de zin
     expect(d.gevolg).not.toMatch(/gedekt tot en met \./);               // geen lege maand meer
   });
@@ -202,8 +208,8 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     await boot(page, seedM({ reserveringen: [{ id: 'a', naam: 'Post', bedrag: 25, vervalmaand: over(12), intervalM: 12 }] }));
     const d = await dek(page);
     expect(d.status).toBe('ok');
-    expect(d.waarde).toBe('geen');
-    expect(d.eenheid).toBe('niets aankomend dit jaar');
+    expect(d.waarde).toMatch(/^€/);                                     // v189: je potsaldo, geen woord
+    expect(d.eenheid).toBe('in je pot · niets aankomend dit jaar');
     expect(d.gevolg).toBe('Er komt de komende twaalf maanden niets aan uit je lijst.');
   });
 
@@ -220,15 +226,15 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     // zonder opbouw-eis: percentage van de post die niet past
     await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
     let d = await dek(page);
-    expect(d.waarde).toBe('40%');                                        // 10 van 25
-    expect(d.eenheid).toBe('van de eerstvolgende post');
+    expect(d.waarde).toBe('€10');                                        // v189: je potsaldo
+    expect(d.eenheid).toBe('in je pot · 40% van de eerstvolgende post');  // 10 van 25
     expect(d.gevolg).toMatch(/€15 tekort/);                              // bedrag in de zin, niet dubbel
 
     // met opbouw-eis: percentage van wat nu nodig is
     await boot(page, seedM({ reserveringen: [{ id: 'a', naam: 'Aanslag', bedrag: 600, vervalmaand: over(3), intervalM: 12 }], manualBal: { [MAIN]: 1500, [RES]: 200, [SAV]: 20000 } }));
     d = await dek(page);
-    expect(d.waarde).toBe('44%');                                        // 200 van 450
-    expect(d.eenheid).toBe('van wat nu nodig is');
+    expect(d.waarde).toBe('€200');                                       // v189: je potsaldo
+    expect(d.eenheid).toBe('in je pot · 44% van wat nu nodig is');        // 200 van 450
     expect(d.gevolg).toMatch(/€400 tekort/);
   });
 
@@ -241,15 +247,15 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
   test('een lege pot is 0 procent, geen verzonnen getal', async ({ page }) => {
     await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 0, [SAV]: 20000 } }));
     const d = await dek(page);
-    expect(d.waarde).toBe('0%');
-    expect(d.eenheid).toBe('van de eerstvolgende post');
+    expect(d.waarde).toBe('€0');                                         // v189: een lege pot is nul
+    expect(d.eenheid).toBe('in je pot · 0% van de eerstvolgende post');   // geen verzonnen getal
     expect(d.gevolg).toMatch(/€25 tekort/);
   });
 
   test('zonder tekort blijft de eenheid schoon', async ({ page }) => {
     await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 50, [SAV]: 20000 } }));
     const d = await dek(page);
-    expect(d.eenheid).toBe('er hoeft nu nog niets opzij');
+    expect(d.eenheid).toBe('in je pot · er hoeft nu nog niets opzij');
     expect(d.eenheid).not.toMatch(/tekort/);
   });
 

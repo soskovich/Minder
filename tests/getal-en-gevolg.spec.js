@@ -21,6 +21,8 @@ function seed(o = {}) {
     add(m, '02', 3000, 'Werkgever', 'SALARIS LOON');
     add(m, '03', -900, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
     add(m, '08', -300, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
+    // comfort-uitgaven: daaruit komt noodfondsModel().comfortTot, de terugval van planCapacity()
+    add(m, '12', -150, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT');
   }
   const set = Object.assign({
     mode: 'begeleid', autoIncome: false, income: 3000, limit: 70, vooruitDoelOpen: true,
@@ -40,6 +42,7 @@ async function boot(page, payload) {
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof planCapacity === 'function' && TX.length > 0);
 }
+const euroNL = (n) => '€' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const tekst = (page, n) => page.evaluate((x) => { go(x); return $('#s-' + x).innerText.replace(/\s+/g, ' '); }, n);
 
 test.describe('a · het benodigde bedrag staat naast wat er te verdelen is', () => {
@@ -173,5 +176,142 @@ test.describe('e · al opgelost in de eenheden-ronde', () => {
     const src = await page.evaluate(() => renderDash.toString());
     expect(src).toContain('euro0(S2.safe)');
     expect(src).toContain('euro0(S2.saldo)');
+  });
+});
+
+test.describe('f · het aflosbedrag en de looptijd komen uit dezelfde som', () => {
+  test('met een termijn erbij: het getoonde bedrag is het bedrag waarmee gerekend is', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const p = { type: 'aflossen', rest: 3200, rente: 0, debtPer: 100, alloc: 300, mode: 'fixed',
+        perMaand: 300, extra: 0, status: 'loopt' };
+      p.eta = payoffMonths(p.rest, (p.debtPer || 0) + p.alloc, p.rente);
+      return { sub: planSub(p), eta: p.eta, som: p.debtPer + p.alloc,
+        etaUitGetoond: payoffMonths(p.rest, p.debtPer + p.alloc, p.rente) };
+    });
+    // het bedrag in de regel is precies het bedrag dat in payoffMonths ging
+    expect(r.sub).toContain('/mnd');
+    expect(r.sub).toContain(euroNL(r.som) + '/mnd');
+    expect(r.sub).toContain('waarvan ' + euroNL(100) + ' je termijn');
+    expect(r.sub).toContain('~' + r.eta + ' maanden');
+    expect(r.eta).toBe(r.etaUitGetoond);
+    expect(r.sub).not.toContain(euroNL(300) + '/mnd');   // niet het losse plan-aandeel
+  });
+
+  test('zonder termijn blijft de regel zoals hij was', async ({ page }) => {
+    await boot(page);
+    const sub = await page.evaluate(() => {
+      const p = { type: 'aflossen', rest: 3200, rente: 0, debtPer: 0, alloc: 400, mode: 'fixed',
+        perMaand: 400, extra: 0, status: 'loopt' };
+      p.eta = payoffMonths(p.rest, p.alloc, p.rente);
+      return planSub(p);
+    });
+    expect(sub).toContain(euroNL(400) + '/mnd');
+    expect(sub).not.toContain('je termijn');
+  });
+
+  test('een spaardoel krijgt geen termijn-uitsplitsing', async ({ page }) => {
+    await boot(page);
+    const sub = await page.evaluate(() => planSub({ type: 'goal', alloc: 200, mode: 'fixed',
+      perMaand: 200, extra: 0, eta: 5, status: 'loopt' }));
+    expect(sub).toContain(euroNL(200) + '/mnd');
+    expect(sub).not.toContain('termijn');
+  });
+});
+
+test.describe('g · de kop zegt wat er werkelijk wordt verdeeld', () => {
+  test('met een spaarinleg heet het je spaarinleg', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => ({ terugval: planCapTerugval(), label: planCapLabel(),
+      kop: (function () { const d = document.createElement('div');
+        d.innerHTML = renderPlan(true); return d.innerText.replace(/\s+/g, ' '); })() }));
+    expect(r.terugval).toBe(false);
+    expect(r.label).toBe('spaarinleg');
+    expect(r.kop).toMatch(/spaarinleg gaat van boven naar beneden/);
+    expect(r.kop).not.toMatch(/comfortabele ruimte/);
+  });
+
+  test('op de terugval zegt de kop dat, met de reden erbij', async ({ page }) => {
+    const p = seed(); const set = JSON.parse(p.minder_set);
+    set.savingMode = 'amount'; set.savingAmount = 0; p.minder_set = JSON.stringify(set);
+    await boot(page, p);
+    const r = await page.evaluate(() => ({ doel: Math.round(monthlySavingTarget()), cap: planCapacity(),
+      terugval: planCapTerugval(), label: planCapLabel(),
+      kop: (function () { const d = document.createElement('div');
+        d.innerHTML = renderPlan(true); return d.innerText.replace(/\s+/g, ' '); })() }));
+    test.skip(!(r.doel === 0 && r.cap > 0), 'deze opzet valt niet terug');
+    expect(r.terugval).toBe(true);
+    expect(r.label).toBe('comfortabele ruimte');
+    expect(r.kop).toMatch(/nog geen spaarinleg ingesteld/);
+    expect(r.kop).toMatch(/comfortabele ruimte/);
+  });
+
+  test('planCapacity zelf is niet aangeraakt', async ({ page }) => {
+    await boot(page);
+    const src = await page.evaluate(() => planCapacity.toString());
+    expect(src).toContain('monthlySavingTarget()');
+    expect(src).toContain('comfortTot');
+    expect(src).not.toContain('planCapLabel');
+  });
+});
+
+test.describe('h · de waardekolom van dekking toont één soort waarde', () => {
+  test('een bedrag, of het woord onbekend, en niets anders', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const uit = [];
+      const meet = () => { const d = (maandRegels() || []).find((x) => x.key === 'dekking');
+        return d ? { w: d.waarde, e: d.eenheid } : null; };
+      uit.push(meet());                                          // gewone stand
+      const bal = JSON.parse(JSON.stringify(SET.manualBal));
+      SET.resAcc = ''; save(); uit.push(meet());                 // geen pot aangewezen
+      SET.resAcc = 'NL01RESE0000009999'; SET.manualBal = bal; save();
+      return uit;
+    });
+    for (const x of r) {
+      if (!x) continue;
+      expect(x.w === 'onbekend' || /^-?€/.test(x.w), x.w).toBe(true);
+      expect(x.w).not.toMatch(/%/);
+      expect(x.w).not.toBe('op peil');
+      expect(x.w).not.toBe('geen');
+    }
+  });
+
+  test('het oordeel staat in de eenheid, met de noemer erbij', async ({ page }) => {
+    await boot(page);
+    const d = await page.evaluate(() => (maandRegels() || []).find((x) => x.key === 'dekking'));
+    test.skip(!d, 'geen dekkingsregel');
+    expect(d.eenheid).toMatch(/^in je pot |^niet te beoordelen$/);
+    if (/%/.test(d.eenheid)) expect(d.eenheid).toMatch(/% van (wat nu nodig is|de eerstvolgende post)/);
+  });
+});
+
+test.describe('i · een regelnaam is nooit een afgekapte zin', () => {
+  test('de bron levert een korte naam waar de zin lang is', async ({ page }) => {
+    await boot(page);
+    const src = await page.evaluate(() => scoreNotifs.toString());
+    expect(src).toContain('Stilstaand geld naast rente');
+  });
+
+  test('kortNaam gebruikt die naam en kapt anders op woordgrens', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => ({
+      metKort: kortNaam({ kort: 'Korte naam', l1: 'Een hele lange zin die veel te ver doorloopt om als naam te dienen.' }),
+      kortGenoeg: kortNaam({ l1: 'Je geeft al maanden te veel uit' }),
+      lang: kortNaam({ l1: 'Een hele lange zin die veel te ver doorloopt om als naam te dienen.' }),
+      html: kortNaam({ l1: '<b>Vet</b> en gewoon' }),
+    }));
+    expect(r.metKort).toBe('Korte naam');
+    expect(r.kortGenoeg).toBe('Je geeft al maanden te veel uit');
+    expect(r.lang.length).toBeLessThanOrEqual(43);
+    expect(r.lang.slice(-1)).toBe('…');
+    expect(r.lang.slice(-2, -1)).not.toBe(' ');             // geen spatie voor de afkapping
+    expect(r.html).toBe('Vet en gewoon');                   // tags eruit, zoals voorheen
+  });
+
+  test('geen structurele regel draagt een halve zin', async ({ page }) => {
+    await boot(page);
+    const namen = await page.evaluate(() => maandStructureel().map((r) => r.naam));
+    for (const n of namen) expect(n.length).toBeLessThanOrEqual(43);
   });
 });
