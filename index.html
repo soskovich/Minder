@@ -2918,13 +2918,19 @@ function doelTempoLine(p){
   if(n<=0) return wrap(`Je streefdatum ${lbl} is verstreken. Er wordt hier niets meer teruggerekend.`);
   const T=doelTempo(p, p.alloc); if(!T) return '';
   const bedrag=(rest===Math.round(+p.doel||0))?euro0(p.doel):`de resterende ${euro0(rest)}`;
-  if(!(p.alloc>0)) return wrap(`Er gaat op dit moment niets naar dit doel. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig.`);
+  /* v189: het benodigde bedrag stond er zonder dat het ooit tegen de capaciteit werd gelegd. Op een
+     scherm waar 300 euro per maand te verdelen is, is "1.167 per maand nodig" een eis zonder
+     context. Deze spiegel geeft het getal betekenis; er wordt niets herrekend, planCapacity() is
+     dezelfde bron die de kop van het plan al gebruikt. */
+  const _cap=planCapacity();
+  const capZin=_cap>0?` Je hele plan heeft ${euro0(_cap)} per maand te verdelen.`:'';
+  if(!(p.alloc>0)) return wrap(`Er gaat op dit moment niets naar dit doel. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig.${capZin}`);
   if(T.haalbaar){
     const sp=(p.eta!=null)?(T.maandenTot-p.eta):null;
     const staart=(sp!=null&&sp>0)?`, met ${sp} ${sp===1?'maand':'maanden'} speling`:(sp===0?', precies op de datum':'');
     return wrap(`Je huidige inleg haalt de datum${staart}.`);
   }
-  return wrap(`Je legt nu ${euro0(p.alloc)} per maand in. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig. Je komt ${euro0(T.gat)} per maand tekort.`);
+  return wrap(`Je legt nu ${euro0(p.alloc)} per maand in. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig. Je komt ${euro0(T.gat)} per maand tekort.${capZin}`);
 }
 /* ---------- MAANDSCHERM (v130) ----------
    Eén scherm dat je één keer per maand opent, met de getallen die samen zeggen of je
@@ -3328,6 +3334,14 @@ function meevallerVastleggen(key, bedrag, totaal){
 }
 /* Het oordeel: deterministisch, in deze volgorde. Geen vrije formulering, geen voorspelling die
    verder gaat dan de cijfers, geen aanmoediging en geen compliment. */
+/* v189: de ok-opsomming plakte met ' en ', dus bij drie regels werd het 'a en b en c'. Sinds er
+   nog drie regels zijn kan dat nog steeds voorkomen. Nederlandse opsomming: komma's, en alleen
+   voor het laatste lid 'en'. */
+function opsomming(lijst){
+  const a=(lijst||[]).filter(Boolean);
+  if(a.length<=1) return a[0]||'';
+  return a.slice(0,-1).join(', ')+' en '+a[a.length-1];
+}
 function maandOordeel(R){
   if(!R.length) return {zin:'Er is nog niets te beoordelen.', sub:''};
   const tekort=R.filter(r=>r.status==='tekort');
@@ -3355,7 +3369,7 @@ function maandOordeel(R){
   else zin = (ok.length===R.length) ? `Alle ${ok.length} regels staan goed.`
                                     : `De ${ok.length} regels die te toetsen zijn staan goed.`;
   const sub = ok.length
-    ? `${ok.map(r=>r.naam.toLowerCase()).join(' en ')} ${ok.length===1?'is':'zijn'} in orde.`
+    ? `${opsomming(ok.map(r=>r.naam.toLowerCase()))} ${ok.length===1?'is':'zijn'} in orde.`
     : '';
   return {zin, sub:sub.charAt(0).toUpperCase()+sub.slice(1)};
 }
@@ -3740,7 +3754,7 @@ function resDekkingCard(){
      hoort bij het oordeel, en dat woont op Maand. */
   return `<div class="card" style="cursor:pointer" onclick="openReserveringen()">
     <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span><span class="small muted">${D.aantal} ${D.aantal===1?'post':'posten'} \u00b7 <span style="color:var(--teal)">bekijk \u203a</span></span></div>
-    <div class="small muted" style="margin-top:5px;line-height:1.5">Kosten die niet elke maand vallen. Of je genoeg opzij hebt staan, lees je op Maand.</div>
+    <div class="small muted" style="margin-top:5px;line-height:1.5">Kosten die niet elke maand vallen. Deze inleg staat los van je plan hierboven: hij concurreert niet met je spaardoelen. Of je genoeg opzij hebt staan, lees je op Maand.</div>
     ${resCheckLine()}</div>`;
 }
 /* Eén controlemoment op de lijst zelf: handmatige invoer drijft weg zodra een premie verandert.
@@ -7897,8 +7911,12 @@ function insBudgetBlok(m){
       <span style="cursor:pointer" onclick="openMonthSpend('${m}')"><span style="font-size:var(--fs-xl);font-weight:800">${euro0(sp)}</span> <span class="small muted">uitgegeven</span></span>
       <span class="small muted" style="flex:1;min-width:0;cursor:pointer" onclick="openPotjesVerdeling('${m}')">van ${euro0(bud)} ${t.potTotal>0?'maandbudget':'je inkomen-limiet'} ›</span>
       <span style="font-weight:700;white-space:nowrap;color:${over?'var(--red)':'var(--txt)'}">${usedPct}%</span></div>
-    <div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${over?'var(--red)':'var(--accent)'}"></div></div>
-    <div class="small" style="color:var(--mut2);margin-top:5px">de maand is ${dayPct}% voorbij</div>${spiegel}</div>`;
+    <!-- v189: het dagpercentage stond als losse zin naast de balk, dus je moest zelf vergelijken
+         hoe ver je uitgaven staan tegenover hoe ver de maand is. De streep in de balk doet dat werk;
+         de zin eronder is nu zijn legenda in plaats van een tweede weergave. -->
+    <div class="bar-track" style="margin:8px 0 0;position:relative"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${over?'var(--red)':'var(--accent)'}"></div>
+      ${isLopendeMaand(m)?`<div title="de maand is ${dayPct}% voorbij" style="position:absolute;top:-2px;bottom:-2px;left:${Math.min(Math.max(dayPct,0),100)}%;width:2px;background:var(--mut2);border-radius:1px"></div>`:''}</div>
+    ${isLopendeMaand(m)?`<div class="small" style="color:var(--mut2);margin-top:5px">de streep staat waar de maand nu is: ${dayPct}% voorbij</div>`:''}${spiegel}</div>`;
 }
 /* v139: de eerste ingang naar het coachgesprek buiten het coachscherm. Hij haakt aan op de
    bevinding erboven en stelt er een vraag over in plaats van neutraal naar de coach te wijzen.

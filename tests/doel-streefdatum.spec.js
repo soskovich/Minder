@@ -104,7 +104,10 @@ test.describe('b · de zin', () => {
     const p = await item(page);
     expect(p.alloc).toBe(200);
     const t = await regel(page);
-    expect(t).toBe(`Je legt nu €200 per maand in. Voor €8.000 in ${await page.evaluate((d) => doelDatumLabel(d), overMnd(28))} heb je €286 per maand nodig. Je komt €86 per maand tekort.`);
+    /* v189: het benodigde bedrag stond er zonder dat het ooit tegen de capaciteit werd gelegd,
+       dus de zin sluit nu af met wat er te verdelen is. Dezelfde bron als de kop van het plan. */
+    const cap = await page.evaluate(() => euro0(planCapacity()));
+    expect(t).toBe(`Je legt nu €200 per maand in. Voor €8.000 in ${await page.evaluate((d) => doelDatumLabel(d), overMnd(28))} heb je €286 per maand nodig. Je komt €86 per maand tekort. Je hele plan heeft ${cap} per maand te verdelen.`);
     expect(t).not.toMatch(/[!—]/);                     // geen uitroeptekens, geen em-dashes
   });
 
