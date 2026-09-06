@@ -3738,6 +3738,12 @@ function maandAfspraakLus(){
     return `<div class="card">${kop}${spiegel}
       <div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${esc(nm)} ging van ${euro0(U.toen.bedrag)} naar ${euro0(U.nu.bedrag)}.</div>${sluit}</div>`;
   }
+  /* v200: de zelfrapportage-tak hieronder blijft bewust bestaan. Hij werd altijd geraakt door een
+     als-dan-afspraak, en die vorm is met v200 vervallen, dus hij komt zeldzamer voor. Dood is hij
+     niet: ook een afspraak uit coShowAction() ontstaat zonder categorie zodra opt.potCat en
+     opt.shiftCat leeg blijven (bijvoorbeeld 'ik zeg Netflix op'), en dan is er niets objectiefs te
+     meten. Ruim hem niet op omdat hij weinig gebruikt lijkt: zonder deze tak zou zo'n afspraak
+     alleen zijn tekst tonen en nooit een uitkomst krijgen. */
   const zelf=afspraakZelf(af);
   if(zelf) return `<div class="card">${kop}${spiegel}
     <div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">Je gaf zelf aan: ${esc(zelf)}.</div>${sluit}</div>`;
@@ -6054,29 +6060,12 @@ function coMagAfspraak(){ const o=CO_ONDERWERPEN[window._coOnderwerp]; return !(
    meer in een weggehaalde draad schrijft. Er wordt hier nooit iets vastgelegd en nooit iets uit
    SET.coachLog gehaald: een afgebroken gesprek laat je afspraken ongemoeid. */
 function coAfbreken(){
-  if(!window._coLive && !window._coPark) return;
+  if(!window._coLive) return;
   _coGen++; coEnd();
   window._coOnderwerp=null;   // v140: hier wel loslaten, in coEnd() niet (dat ontwapent de guard)
-  window._coPark=null; window._coTextCb=null;
+  // v200: hier stonden _coPark en _coTextCb. Die hoorden bij coTextSheet(), het invoerscherm dat de
+  // gespreksdraad even uit de sheet haalde; met die functie hebben ze geen schrijver meer.
   _coT=null; _coC=null;
-}
-/* coTextSheet() gebruikt dezelfde sheet als het gesprek. In plaats van de draad te overschrijven
-   halen we de twee nodes er even uit en hangen we ze daarna terug. Het blijven dezelfde elementen,
-   dus _coT en _coC blijven geldig en de draad overleeft het invoerscherm. */
-function coParkeerDraad(){
-  if(!window._coLive || !_coT || !_coC) return false;
-  window._coPark=[_coT,_coC];
-  try{ _coT.remove(); _coC.remove(); }catch(_){}
-  return true;
-}
-function coHerstelDraad(){
-  const p=window._coPark; window._coPark=null;
-  if(!p) return false;
-  const sh=$('#sheet'); sh.innerHTML='<div class="grab"></div>';
-  sh.appendChild(p[0]); sh.appendChild(p[1]);
-  _coT=p[0]; _coC=p[1];
-  showSheetBg();
-  return true;
 }
 function coBub(cls,txt,o){ if(!_coT)return; o=o||{};
   const set=(el)=>{ if(o.html) el.innerHTML=txt; else el.textContent=txt; };
@@ -6548,22 +6537,18 @@ function potOptions(exclude){ const B=SET.budgets||{}; const m=curMonth||months(
   if(!ks.length) ks=Object.keys(CATS).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k)&&k!==exclude);
   return ks.map(k=>{ const rest=(+B[k]>0)?Math.max(Math.round((+B[k])-(catSpendMap(m)[k]||0)),0):null; return {v:k,t:CATS[k].name+(rest!=null?` · nog ${euro0(rest)}`:'')}; }); }
 function potName(k){ return CATS[k]?CATS[k].name.toLowerCase():'een ander potje'; }
-/* v196: hier stond coOfferAction(m,leak). Nul verwijzingen, al voor v180 genoteerd; hij bood een
-   potje aan bij een lek en viel anders door naar coAfspraak().
-   LET OP: hij was de ENIGE aanroeper van coAfspraak(), dus die staat nu zonder ingang, en met hem
-   coTextSheet(), coTextSave(), coParkeerDraad() en coHerstelDraad(). Dat is geen opruimwerk maar
-   het opheffen van een gespreksvorm: de drie standaard als-dan-afspraken en het vrijetekstveld uit
-   v138. Ze blijven daarom bewust staan tot daar apart over is besloten; een bereikbaarheidsronde
-   vindt ze en dat is de bedoeling. coShowAction() heeft wel een eigen invoerveld, dus vrije tekst
-   bij een afspraak kan nog. */
-async function coAfspraak(m){
-  await coSay(`Maak er een als-dan van voor de komende tijd.`);
-  coChoices([
-    {l:'Als ik iets buiten budget wil, dan slaap ik er een nacht over',act:()=>coCommit(`als ik iets buiten budget wil, dan slaap ik er een nacht over`)},
-    {l:'Als een potje leeg is, dan stopt het daar',act:()=>coCommit(`als een potje leeg is, dan stopt het`)},
-    {l:'Zelf bedenken',act:()=>coTextSheet('Jouw als-dan','als ... dan ...',v=>coCommit(v||'eigen afspraak'))}
-  ]);
-}
+/* v196: hier stond coOfferAction(m,leak), die bij een lek een potje aanbood en anders doorviel
+   naar coAfspraak(). v200 heeft die keten afgemaakt: coAfspraak(), coTextSheet(), coTextSave(),
+   coParkeerDraad() en coHerstelDraad() zijn weg.
+   Wat er verdween is de als-dan-vorm: 'Maak er een als-dan van voor de komende tijd', met twee
+   kant-en-klare zinnen en een vrij tekstveld. De reden om hem niet terug te bouwen staat in de
+   afspraaklus: zo'n afspraak kreeg per definitie GEEN categorie, viel dus altijd in
+   afspraakUitkomst()'s tak 'niet te toetsen', en eindigde bij de twee zelfrapportage-knoppen. Dan
+   is de terugblik een enquete in plaats van een spiegel, en de lus bestaat juist om tegen je eigen
+   cijfers te toetsen. De tak waarin de vorm zat (coReasonChips: waarom gaf je dit uit?) was al
+   eerder afgeknipt, dus hij was verweesd en niet vervangen.
+   Wat blijft: coShowAction() heeft een eigen invoerveld, dus vrije tekst bij een afspraak kan nog,
+   en die afspraken dragen wel een categorie of een bedrag. */
 /* v138: coCommit() en coAfspraakOpen() mogen uitsluitend vanuit een lopend gesprek worden
    aangeroepen. Ze zijn de enige plek waar een afspraak ontstaat, en een afspraak hoort altijd bij
    een keuze die je zelf in het gesprek maakt. Roep ze nergens anders aan: afbreken (coAfbreken)
@@ -6691,19 +6676,6 @@ async function buyFlow(cat,amt,item){
   if(!has) opts.unshift({l:`Maak eerst een ${cn}-potje`,act:()=>{ window._potAfter=()=>buyFlow(cat,amt,item); openPotje(cat); }});
   coChoices(opts);
 }
-// gedeeld tekst-sheet voor de 'zeg ik zelf'-momenten (enige plek waar typen mag)
-function coTextSheet(title,ph,cb){
-  coParkeerDraad();                       // v138: de draad blijft bestaan, hij hangt er even uit
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px">${esc(title)}</div>
-    <input id="coTxt" type="text" placeholder="${esc(ph)}" style="width:100%">
-    <button class="btn" style="margin-top:14px;width:100%" onclick="coTextSave()">${ICON('check')} Vastleggen</button>`;
-  window._coTextCb=cb; showSheetBg();
-}
-function coTextSave(){ const v=((document.getElementById('coTxt')||{}).value||'').trim();
-  const cb=window._coTextCb; window._coTextCb=null;
-  if(!coHerstelDraad()) closeSheet();     // buiten een gesprek gedraagt hij zich als vanouds
-  if(cb) cb(v); }
 // budget als coach-actie: potje zetten/bewerken via een sheet (geen live-render, focus blijft)
 // een potje draagt een AANNAME (basis): frequentie × bedrag, per week, of vast. Het maandbedrag volgt eruit.
 function potDraftTotal(){ const d=window._potDraft||{}; if(d.type==='freq') return Math.round((+d.n||0)*(+d.per||0)); if(d.type==='week') return Math.round((+d.per||0)*4.345); return Math.round(+d.vast||0); }

@@ -111,14 +111,16 @@ test.describe('c · een volledig gesprek tot een afspraak', () => {
     await wachtKeuze(page, 'Budget & potjes');            // het onderwerpenmenu
     const voor = JSON.parse(await log(page)).filter((l) => l.type === 'afspraak').length;
 
-    // de als-dan-keuze is het einde van de potjes-tak; hier ontstaat de afspraak
-    await page.evaluate(() => coAfspraak(curMonth));
-    await kies(page, 'slaap ik er een nacht over');
+    /* v200: hier stond coAfspraak(), de als-dan-stap. Die vorm is vervallen omdat zo'n afspraak per
+       definitie geen categorie kreeg en dus altijd in de zelfrapportage-tak van de afspraaklus
+       viel. coCommit() is nog steeds de enige plek waar een afspraak ontstaat; de test toetst
+       onveranderd dat er precies een bijkomt en dat het gesprek daarna sluit. */
+    await page.evaluate(() => coCommit('ik houd uit eten onder 150 euro'));
     await page.waitForFunction(() => window._coLive === false, null, { timeout: 15000 });
 
     const na = JSON.parse(await log(page)).filter((l) => l.type === 'afspraak');
     expect(na.length).toBe(voor + 1);
-    expect(na[0].text).toMatch(/slaap ik er een nacht over/);
+    expect(na[0].text).toMatch(/uit eten onder 150/);
     expect(await page.evaluate(() => document.querySelectorAll('#coCh .cch').length)).toBe(0);
   });
 });
@@ -143,7 +145,8 @@ test.describe('d · halverwege afbreken', () => {
     expect(await log(page)).toBe(voor);
     // de draad zelf blijft staan, precies zoals coEnd() hem laat staan; de volgende coStart
     // bouwt de sheet-schil opnieuw op, dus hij is nooit zichtbaar naast een nieuw gesprek
-    expect(await page.evaluate(() => !!window._coPark)).toBe(false);
+    // v200: _coPark hoorde bij coTextSheet() en bestaat niet meer
+    expect(await page.evaluate(() => '_coPark' in window)).toBe(false);
   });
 
   test('op de achtergrondtik werkt het net zo', async ({ page }) => {
@@ -166,55 +169,35 @@ test.describe('d · halverwege afbreken', () => {
   });
 });
 
-test.describe('e · zelf tekst invoeren', () => {
-  test('het invoerscherm overschrijft de draad niet, hij hangt er even uit', async ({ page }) => {
+/* v200: hier stond blok e, over het vrijetekst-invoerscherm in het gesprek. coTextSheet(),
+   coTextSave(), coParkeerDraad() en coHerstelDraad() zijn vervallen met de als-dan-vorm die ze als
+   enige aanriep. Wat die tests bewaakten was de v138-truc: coTextSheet gebruikte DEZELFDE sheet als
+   de gespreksdraad, dus de twee nodes moesten er even uit en daarna terug, als dezelfde elementen,
+   anders raakten _coT en _coC hun doel kwijt. Die les staat vastgelegd in CLAUDE.md, want hij geldt
+   opnieuw zodra er ergens een tekstinvoer in een gesprek komt.
+   Vrije tekst bij een afspraak kan nog wel: coShowAction() heeft een eigen invoerveld binnen de
+   draad, dus daar hoeft niets geparkeerd te worden. */
+test.describe('e · vrije tekst loopt nu via coShowAction', () => {
+  test('het invoerveld staat in de draad zelf, dus er valt niets te parkeren', async ({ page }) => {
     await coach(page);
     await wachtKeuze(page, 'Kosten koper huis');
-    const bubbels = await page.evaluate(() => document.querySelectorAll('#coThr .cbub').length);
-
-    await page.evaluate(() => coTextSheet('Jouw als-dan', 'als ... dan ...', (v) => { window._testV = v; }));
-    // draad staat geparkeerd, het invoerveld heeft de sheet
-    expect(await page.evaluate(() => ({
-      park: Array.isArray(window._coPark),
-      inSheet: !!document.querySelector('#sheet #coThr'),
-      veld: !!document.getElementById('coTxt'),
-      live: !!window._coLive,
-    }))).toEqual({ park: true, inSheet: false, veld: true, live: true });
-
-    await page.fill('#coTxt', 'als ik twijfel, dan wacht ik een dag');
-    await page.locator('#sheet button.btn').click();
-
-    // dezelfde draad terug, met dezelfde bubbels erin, en de sheet blijft open
-    expect(await page.evaluate(() => ({
-      v: window._testV,
-      park: window._coPark,
-      inSheet: !!document.querySelector('#sheet #coThr'),
-      bubbels: document.querySelectorAll('#coThr .cbub').length,
-      open: document.querySelector('#sheetBg').classList.contains('show'),
-      live: !!window._coLive,
-    }))).toEqual({
-      v: 'als ik twijfel, dan wacht ik een dag', park: null, inSheet: true, bubbels, open: true, live: true,
-    });
-  });
-
-  test('_coT wijst nog naar de draad in de sheet, dus het gesprek kan verder', async ({ page }) => {
-    await coach(page);
-    await wachtKeuze(page, 'Kosten koper huis');
-    await page.evaluate(() => coTextSheet('Test', 'ph', () => {}));
-    await page.locator('#sheet button.btn').click();
-    await page.evaluate(() => coBub('me', 'nog een bubbel'));
-    expect(await page.locator('#sheet #coThr').innerText()).toContain('nog een bubbel');
-  });
-
-  test('het invoerscherm wegtikken breekt het gesprek af zonder iets vast te leggen', async ({ page }) => {
-    await coach(page);
-    await wachtKeuze(page, 'Kosten koper huis');
-    const voor = await log(page);
-    await page.evaluate(() => coTextSheet('Jouw als-dan', 'als ... dan ...', (v) => coCommit(v || 'eigen afspraak')));
-    await page.evaluate(() => closeSheet());
-    await page.waitForTimeout(600);
-    expect(await page.evaluate(() => ({ live: !!window._coLive, park: window._coPark, cb: window._coTextCb }))).toEqual({ live: false, park: null, cb: null });
-    expect(await log(page)).toBe(voor);
+    const r = await page.evaluate(() => ({
+      textSheet: typeof window.coTextSheet,
+      textSave: typeof window.coTextSave,
+      parkeer: typeof window.coParkeerDraad,
+      herstel: typeof window.coHerstelDraad,
+      alsDan: typeof window.coAfspraak,
+      showAction: typeof window.coShowAction,
+      // coShowAction hangt zijn invoer in #coCh, binnen de draad
+      inDraad: /_coC\.appendChild\(inp\)/.test(String(window.coShowAction)),
+    }));
+    expect(r.textSheet).toBe('undefined');
+    expect(r.textSave).toBe('undefined');
+    expect(r.parkeer).toBe('undefined');
+    expect(r.herstel).toBe('undefined');
+    expect(r.alsDan).toBe('undefined');
+    expect(r.showAction).toBe('function');
+    expect(r.inDraad).toBe(true);
   });
 });
 
