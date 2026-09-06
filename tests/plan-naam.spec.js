@@ -26,7 +26,7 @@ test.describe('a · de naam in de nav', () => {
 test.describe('b · geen zichtbare tekst noemt de oude naam meer', () => {
   test('geen enkel scherm zegt Vooruitblik', async ({ page }) => {
     await open(page, seed());
-    for (const s of ['dash', 'ins', 'act', 'maand', 'vooruit', 'vermogen', 'set']) {
+    for (const s of ['dash', 'ins', 'maand', 'vooruit', 'vermogen', 'set']) {   // v196: geen 'act' meer
       await page.evaluate((x) => go(x), s);
       await page.waitForTimeout(60);
       const t = await page.evaluate((x) => $('#s-' + x).innerText, s);

@@ -17,7 +17,7 @@ async function boot(page) {
 const klaar = async (page) => { await page.evaluate(() => terug()); await page.waitForTimeout(50); };
 
 test.describe('a · Klaar keert terug naar waar je vandaan kwam', () => {
-  for (const van of ['dash', 'ins', 'maand', 'vooruit', 'act']) {
+  for (const van of ['dash', 'ins', 'maand', 'vooruit', 'vermogen']) {   // v196: 'act' is opgeheven
     test(`vanaf ${van}`, async ({ page }) => {
       await boot(page);
       await page.evaluate((x) => go(x), van);

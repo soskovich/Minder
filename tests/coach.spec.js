@@ -1,3 +1,5 @@
+// v196: de coachpagina (s-act) is opgeheven. Het gesprek is geen bestemming meer maar wordt
+// vanaf vier plekken opgeroepen, dus openen gaat via coStart() in plaats van go('act').
 // v74: persoonlijker coach — doel-first opening op je plan-#1, onderwerpenmenu,
 // en een coach-wissel die ook de toon verandert (ook zonder AI-laag).
 // De service worker staat globaal uit via playwright.config.js.
@@ -21,8 +23,8 @@ const metDoel = (extra) => tweak((s) => {
 
 async function coach(page, payload) {
   await open(page, payload || metDoel());
-  await page.evaluate(() => go('act'));
-  await page.waitForSelector('#s-act .coachhead');
+  await page.evaluate(() => coStart('algemeen'));
+  await page.waitForSelector('#coThr');
 }
 const draad = (page) => page.locator('#coThr').innerText();
 const wachtKeuze = (page, txt) => page.waitForFunction(
@@ -63,7 +65,7 @@ test.describe('a · doel-first opening', () => {
     await wachtKeuze(page, 'Bespaartips');
     expect(await page.evaluate(() => SET.coachGoalConfirmed)).toBe('gA');
 
-    await page.evaluate(() => { go('ins'); go('act'); startCoachTalk(months()[months().length - 1]); });
+    await page.evaluate(() => { go('ins'); startCoachTalk(months()[months().length - 1]); });
     await wachtKeuze(page, 'Bespaartips');                       // direct het menu
     const d = await draad(page);
     expect(d).not.toMatch(/waar werk je/i);

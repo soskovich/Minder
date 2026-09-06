@@ -1,3 +1,5 @@
+// v196: de coachpagina (s-act) is opgeheven. Het gesprek is geen bestemming meer maar wordt
+// vanaf vier plekken opgeroepen, dus openen gaat via coStart() in plaats van go('act').
 // v138: het coachgesprek draaide in een container binnen s-act en was daarmee aan dat scherm
 // vastgeklonken. Het draait nu in de sheet, met coStart(onderwerp, m) als enige ingang, zodat het
 // later ook vanaf Inzichten, de vooruitblik en het maandscherm op te roepen is. Refactor: het
@@ -21,8 +23,8 @@ const metDoel = (extra) => tweak((s) => {
 
 async function coach(page, payload) {
   await open(page, payload || metDoel());
-  await page.evaluate(() => go('act'));
-  await page.waitForSelector('#s-act .coachhead');
+  await page.evaluate(() => coStart('algemeen'));
+  await page.waitForSelector('#coThr');
 }
 const wachtKeuze = (page, txt) => page.waitForFunction(
   (t) => [...document.querySelectorAll('#coCh .cch')].some((b) => b.innerText.indexOf(t) >= 0), txt, { timeout: 15000 });
@@ -33,24 +35,22 @@ async function kies(page, txt) {
 const log = (page) => page.evaluate(() => JSON.stringify(SET.coachLog || []));
 
 test.describe('a · de draad staat in de sheet', () => {
-  test('coThr en coCh hangen in de sheet, niet meer in s-act', async ({ page }) => {
+  test('coThr en coCh hangen in de sheet', async ({ page }) => {
     await coach(page);
     await wachtKeuze(page, 'Kosten koper huis');
     const waar = await page.evaluate(() => ({
       inSheet: !!document.querySelector('#sheet #coThr') && !!document.querySelector('#sheet #coCh'),
-      inAct: !!document.querySelector('#s-act #coThr') || !!document.querySelector('#s-act #coCh'),
+      inAct: false,   // v196: s-act bestaat niet meer, dus er valt niets meer in te hangen
       aantal: document.querySelectorAll('#coThr').length,
       open: document.querySelector('#sheetBg').classList.contains('show'),
     }));
     expect(waar).toEqual({ inSheet: true, inAct: false, aantal: 1, open: true });
   });
 
-  test('s-act houdt zijn kop, koopknop en spiegelkaart', async ({ page }) => {
-    await coach(page);
-    expect(await page.locator('#s-act .coachhead').count()).toBe(1);
-    expect(await page.locator('#s-act #buyBtn').count()).toBe(1);
-    expect(await page.locator('#s-act').innerText()).toMatch(/alleen als er iets te zeggen valt/i);
-  });
+  /* v196: hier stond dat s-act zijn kop, koopknop en spiegelkaart hield. Dat scherm is opgeheven:
+     de coach is geen bestemming meer maar een gesprek dat je vanaf vier plekken oproept. Wat deze
+     test bewaakte - dat het gesprek in de sheet leeft en het scherm eronder niet aantast - heeft
+     geen scherm meer om niet aan te tasten; de eerste test hierboven dekt de sheet zelf. */
 
   test('een render() opent de sheet niet vanzelf', async ({ page }) => {
     await open(page, metDoel());

@@ -10,37 +10,12 @@ async function boot(page, scherm, payload) {
   await page.waitForSelector(`#s-${scherm}`);
 }
 
-test.describe('a · Coach zonder potjes-widget', () => {
-  test('de "Je potjes"-zone is weg', async ({ page }) => {
-    await boot(page, 'act');
-    await page.waitForSelector('#s-act .coachhead');
-    const act = await page.locator('#s-act').innerText();
-    expect(act).not.toContain('Je potjes');
-    expect(act).not.toContain('Potje voor een categorie');
-    expect(act).not.toContain('Geen potje = geen aankoop');
-    expect(await page.locator('#s-act .cz-pot').count()).toBe(0);
-    expect(await page.locator('#s-act .cp-add').count()).toBe(0);
-    // en geen dode toggle achtergelaten
-    expect(await page.evaluate(() => typeof togglePotjes)).toBe('undefined');
-    expect(await page.evaluate(() => renderActions.toString().includes('zonePotjes'))).toBe(false);
-  });
-
-  test('de rest van Coach blijft staan en werkt', async ({ page }) => {
-    await boot(page, 'act');
-    await page.waitForSelector('#s-act .coachhead');
-    const act = await page.locator('#s-act').innerText();
-    expect(act).toMatch(/je coach/i);                            // .nm staat op uppercase
-    expect(act).toMatch(/ik wil iets kopen/i);
-    expect(act).toMatch(/mijn regel: geen budget, geen aankoop/i);
-
-    // v138: Coach openen start het gesprek in de sheet, die het scherm afdekt. Eerst dicht,
-    // dan is s-act weer bereikbaar; de kop, de koopknop en de spiegelkaart staan er onveranderd.
-    await page.evaluate(() => closeSheet());
-    await page.locator('#buyBtn').click();                       // koopcheck opent nog
-    await page.waitForSelector('#sheetBg.show');
-    expect(await page.locator('#sheet').innerText()).toMatch(/kopen|aankoop/i);
-  });
-
+/* v196: hier stond blok a, over wat er op het coachscherm wel en niet stond. Dat scherm is met
+   fase 6 opgeheven: de coach is geen bestemming meer maar een gesprek dat je vanaf vier plekken
+   oproept. Wat deze tests bewaakten heeft geen scherm meer om op te staan; dat potjes elders
+   bewerkbaar blijven staat hieronder, en dat de koopcheck bereikbaar blijft staat in
+   coach-zonder-scherm.spec.js. */
+test.describe('a · wat de potjes-widget achterliet', () => {
   test('potjes blijven bewerkbaar via de budget-bottomsheet', async ({ page }) => {
     await boot(page, 'ins');
     await page.waitForSelector('#insKpiStrip');

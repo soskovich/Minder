@@ -87,19 +87,21 @@ test.describe('b · wisselen werkt vanaf beide plekken', () => {
     expect(await page.locator('#s-set').innerText()).toContain('Daan · directe toon');
   });
 
-  test('wisselen vanaf de coachkop werkt nog steeds', async ({ page }) => {
-    await boot(page, 'act');
-    // v138: het gesprek start nu in de sheet en dekt s-act af; die eerst dicht om bij de kop te komen
-    await page.evaluate(() => closeSheet());
-    await page.locator('#s-act .coachhead').click();
-    await page.waitForSelector('#sheetBg.show');
-    expect(await page.locator('#sheet').innerText()).toContain('Kies je coach');
-    await page.locator('#coachToneChips .chip', { hasText: 'Zakelijk' }).click();
-    await page.waitForFunction(() => coachTone() === 'zakelijk');
-    expect(await page.evaluate(() => JSON.parse(localStorage.minder_set).coachTone)).toBe('zakelijk');
-    // de kop staat er nog: hij verdwijnt pas als s-act zelf wordt opgeheven
-    expect(await page.locator('#s-act .coachhead').count()).toBe(1);
-  });
+  /* v196: de coachkop op s-act was de tweede ingang naar de avatar-sheet. Dat scherm is opgeheven,
+     dus Instellingen is de enige ingang. Die moet het dan ook echt zijn: toon en avatar blijven
+     instelbaar, en de kop bestaat nergens meer. */
+  test('de avatar-sheet is bereikbaar vanuit Instellingen, en de coachkop bestaat niet meer',
+    async ({ page }) => {
+      await boot(page, 'dash');
+      await page.evaluate(() => closeSheet());
+      expect(await page.locator('.coachhead').count()).toBe(0);
+      await page.evaluate(() => openCoachAvatar());
+      await page.waitForSelector('#sheetBg.show');
+      expect(await page.locator('#sheet').innerText()).toContain('Kies je coach');
+      await page.locator('#coachToneChips .chip', { hasText: 'Zakelijk' }).click();
+      await page.waitForFunction(() => coachTone() === 'zakelijk');
+      expect(await page.evaluate(() => JSON.parse(localStorage.minder_set).coachTone)).toBe('zakelijk');
+    });
 });
 
 test.describe('c · plaatsonafhankelijk', () => {

@@ -37,7 +37,7 @@ test.describe('a · Nederlandse getalnotatie', () => {
   });
 
   test('geen punt-als-decimaal of losse k-varianten op het scherm', async ({ page }) => {
-    for (const scherm of ['dash', 'ins', 'vooruit', 'act']) {
+    for (const scherm of ['dash', 'ins', 'vooruit', 'maand']) {   // v196: 'act' is opgeheven
       await boot(page, scherm);
       const t = await page.locator(`#s-${scherm}`).innerText();
       expect(t, scherm).not.toMatch(/€\s?\d{1,3}\.\d{3}\.\d{2}\b/);     // €8.079.88
@@ -133,12 +133,10 @@ test.describe('c · kaarten, knoppen en navbar', () => {
 });
 
 test.describe('d · scherm-afronding en avatar', () => {
-  test('Coach en Vooruitblik eindigen met een rustige regel i.p.v. leegte', async ({ page }) => {
+  // v196: Coach is opgeheven; Plan houdt zijn rustige slotregel.
+  test('Plan eindigt met een rustige regel i.p.v. leegte', async ({ page }) => {
     await boot(page, 'vooruit');
     expect(await page.locator('#s-vooruit .scr-foot').count()).toBe(1);
-    await page.evaluate(() => go('act'));
-    await page.waitForSelector('#s-act .coachhead');
-    expect(await page.locator('#s-act .scr-foot').count()).toBe(1);
   });
 
   test('de coach-avatar is een geometrische mark, geen silhouet', async ({ page }) => {

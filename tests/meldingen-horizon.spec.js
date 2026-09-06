@@ -102,8 +102,14 @@ test.describe('c · structureel op het maandscherm', () => {
     await boot(page);
     const str = await structureel(page);
     test.skip(!str.length, 'deze fixture levert geen structureel signaal');
+    /* v196: elk structureel signaal krijgt zijn status uit STRUCT_STATUS (v175), niet uit de
+       terugval. bad en warn zijn een blokkade en gaan naar 'tekort', info is een observatie en gaat
+       naar 'let op'. MAAND_DREMPEL.structureelStatus is alleen de terugval bij een onbekende t. */
     expect(await page.evaluate(() => MAAND_DREMPEL.structureelStatus)).toBe('tekort');
-    for (const r of str) expect(r.status).toBe('tekort');
+    expect(await page.evaluate(() => STRUCT_STATUS)).toEqual({ bad: 'tekort', warn: 'tekort', info: 'let op' });
+    const verwacht = await page.evaluate(() => maandStructureel().map((r) =>
+      (STRUCT_STATUS[(r.sig || {}).t] || MAAND_DREMPEL.structureelStatus)));
+    for (let i = 0; i < str.length; i++) expect(str[i].status).toBe(verwacht[i]);
     const r = await page.evaluate(() => {
       const R = maandRegels(), S = maandStructureel();
       return { zonder: maandOordeel(R).zin, met: maandOordeel(R.concat(S)).zin };

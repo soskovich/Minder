@@ -159,10 +159,11 @@ test.describe('c · de keuze staat vast, zodat de tweede niet terugkomt', () => 
 });
 
 test.describe('d · de coach-inzichten hebben één bron', () => {
-  test('renderBehavior bestaat niet meer, en coachItems heeft geen lezer', async ({ page }) => {
+  // v196: coachItems() is met de coachpagina opgeheven; alle vijf zijn regels leven in scoreNotifs().
+  test('renderBehavior en coachItems bestaan niet meer', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => typeof window.renderBehavior)).toBe('undefined');
-    expect(await page.evaluate(() => typeof coachItems)).toBe('function');
+    expect(await page.evaluate(() => typeof coachItems)).toBe('undefined');
     const kaal = (await page.evaluate(() => renderIns.toString()))
       .replace(/\/\*[\s\S]*?\*\//g, ' ');
     expect(kaal).not.toContain('coachItems');

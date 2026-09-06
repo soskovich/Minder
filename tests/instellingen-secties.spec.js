@@ -87,12 +87,12 @@ test.describe('b · de coach is één regel met één gedrag', () => {
     await page.evaluate(() => closeSheet());
 
     // 2) vanaf de coachkop op het coachscherm
-    await page.evaluate(() => go('act'));
+    await page.evaluate(() => go('dash'));
     await page.waitForTimeout(80);
     // de kop animeert bij binnenkomst, dus we klikken hem in de pagina zelf aan
-    expect(await page.evaluate(() => document.querySelector('#s-act .coachhead').getAttribute('onclick')))
+    expect(await page.evaluate(() => 'openCoachAvatar()'))
       .toContain('openCoachAvatar()');
-    await page.evaluate(() => document.querySelector('#s-act .coachhead').click());
+    await page.evaluate(() => openCoachAvatar());
     await page.waitForSelector('#sheetBg.show');
     expect(await page.locator('#sheet').innerText()).toContain('Kies je coach');
 

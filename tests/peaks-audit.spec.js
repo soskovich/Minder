@@ -345,8 +345,8 @@ test.describe('g · punt 8: het bestaande spaarstortingen-signaal', () => {
     expect(SV.raakt).toBe(0);
     expect(SV.patroon).toMatch(/monthly rule/);
     expect(SV.namen).toContain('Peaks');
-    // coachItems zelf is onaangeroerd
-    const src = await page.evaluate(() => coachItems.toString());
+    // v196: coachItems() is opgeheven; de regel leeft als signaal 'savrules' in scoreNotifs()
+    const src = await page.evaluate(() => scoreNotifs.toString());
     expect(src).toContain('monthly rule|weekly rule');
     expect(src).not.toContain('peaks');
   });

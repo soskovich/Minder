@@ -189,14 +189,17 @@ test.describe('d · het instelbare dagbudget is weg', () => {
     }
     const keys = await page.evaluate(() => scoreNotifs().map((n) => n.key));
     expect(keys).not.toContain('win-streak');
-    const src = await page.evaluate(() => coachMirrorCard.toString());
-    expect(src).not.toMatch(/dagen op rij|dagdoel/);
+    // v196: coachMirrorCard() droeg de wins-regel en is met de coachpagina opgeheven; de zin mag
+    // in de hele app niet meer bestaan.
+    const bron = await page.evaluate(() => document.documentElement.outerHTML);
+    expect(bron).not.toMatch(/dagen op rij onder je dagdoel/);
   });
 
-  test('de rest van de coachkaart blijft werken', async ({ page }) => {
+  test('de streakzin bestaat nergens meer', async ({ page }) => {
     await boot(page);
-    expect(await page.evaluate(() => typeof coachMirrorCard())).toBe('string');
-    await page.evaluate(() => go('act'));
-    expect(await page.locator('#s-act').innerText()).not.toMatch(/dagen op rij onder je dagdoel/i);
+    // v196: het coachscherm is opgeheven; de streakzin mag nergens meer opduiken
+    await page.evaluate(() => coStart('algemeen'));
+    await page.waitForSelector('#coThr');
+    expect(await page.locator('#sheet').innerText()).not.toMatch(/dagen op rij onder je dagdoel/i);
   });
 });

@@ -273,8 +273,6 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .cz-rule.on{border-color:var(--teal);color:var(--teal);background:color-mix(in srgb,var(--accent) 8%,transparent)}
 .cz-rule .cr-cut{float:right;color:var(--mut);font-weight:600}
 .cz-rule.on .cr-cut{color:var(--teal)}
-.cz-mine{margin-top:26px;opacity:.9}
-.cz-mine .czr-head{font-size:13px;color:var(--mut);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .cz-pot{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
 .cz-pot:last-child{border-bottom:0}
 .cz-pot .cp-info{flex:1;min-width:0}
@@ -306,10 +304,6 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .corow{display:flex;gap:8px;align-items:flex-end;align-self:flex-start;max-width:92%;margin:5px 0}
 .corow .coav{width:28px;height:28px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--card2)}
 .corow .cbub.co{margin:0}
-.coachhead{display:flex;align-items:center;gap:9px;margin:26px 2px 11px;cursor:pointer}
-.coachhead .av{width:30px;height:30px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--card2)}
-.coachhead .nm{font-size:var(--fs-xs);font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)}
-.coachhead .sw{font-size:var(--fs-xs);color:var(--teal);margin-left:auto}
 .cobuy{display:block;width:100%;text-align:left;background:var(--card2);border:1px solid var(--teal);color:var(--teal);border-radius:12px;padding:12px 13px;margin-top:18px;font-size:13.5px;font-weight:600;cursor:pointer}
 .coinput{width:100%;margin-top:8px;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:var(--fs-md);box-sizing:border-box}
 .coconf{display:flex;gap:8px;margin-top:10px}
@@ -569,7 +563,6 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
 <!-- INZICHTEN -->
 <section class="screen" id="s-ins"></section>
 <!-- ACTIEPLAN -->
-<section class="screen" id="s-act"></section>
 <section class="screen" id="s-vooruit"></section>
 <!-- INSTELLINGEN -->
 <section class="screen" id="s-set"></section>
@@ -583,7 +576,6 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
 <nav class="nav">
   <a data-go="dash" class="on"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></span>Home</a>
   <a data-go="ins"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4"/><path d="M12 2a6 6 0 0 0-3.5 10.9c.9.7 1.5 1.6 1.5 2.6V16h4v-.5c0-1 .6-1.9 1.5-2.6A6 6 0 0 0 12 2Z"/></svg></span>Inzichten</a>
-  <a data-go="act"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3"/></svg></span>Coach</a>
   <a data-go="maand"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>Maand</a>
   <a data-go="vooruit"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>Plan</a>
 </nav>
@@ -1178,7 +1170,7 @@ function openBudgetCompare(m){
     </div>`:''}
     ${rows.length?`<div class="hlabel" style="margin:18px 2px 6px">Grootste afwijkingen van je potjes</div>${moverRows}`:`<div class="small muted" style="margin-top:16px">Stel een maandbudget per categorie in om afwijkingen te zien.</div>`}
     <div class="wvo-insight"><span class="h">Wat dit betekent</span>${insight}</div>
-    ${overRows.length?`<button class="if-cta" style="margin-top:16px" onclick="closeSheet();go('act')">${ICON('target')} Vraag je coach om een bespaartip \u203a</button>`:''}`;
+    ${overRows.length?`<button class="if-cta" style="margin-top:16px" onclick="coStart('algemeen')">${ICON('target')} Vraag je coach om een bespaartip \u203a</button>`:''}`;
   showSheetBg();
 }
 function catDriver(m,k){
@@ -1549,7 +1541,7 @@ function geenData(){ return !TX.length; }
 function render(){
   if(geenData()){ renderEmpty(); return; }
   const ms=months(); if(!curMonth||!ms.includes(curMonth)) curMonth=ms[ms.length-1];
-  renderDash(); renderTx(); renderIns(); renderActions(); renderVooruit(); renderMaand(); renderVermogen(); renderFire(); renderSet();
+  renderDash(); renderTx(); renderIns(); renderVooruit(); renderMaand(); renderVermogen(); renderFire(); renderSet();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
   if(window._setSheet && $('#sheetBg').classList.contains('show')) renderInkomenSheet(); // open instellingen-sheet meeverversen
   if(window._nfSheet && $('#sheetBg').classList.contains('show')) renderNfSheet();
@@ -2089,7 +2081,7 @@ function renderDash(){
   }catch(_){ }
   // v195: hier stonden freshStartReflection() en freshStartCard(). De kaart is opgeheven en de
   // terugblik staat nu op Maand, bij de afspraaklus die dezelfde vraag stelt.
-  $('#s-dash').innerHTML = renderReminder() + modeTop + hero + vermogenCard() + recentBlock + modeBot;
+  $('#s-dash').innerHTML = renderReminder() + modeTop + hero + koopcheckRegel() + vermogenCard() + recentBlock + modeBot;
 }
 function adjustSaveTarget(d){
   const cur=Math.round(monthlySavingTarget());
@@ -2379,7 +2371,7 @@ function scoreNotifs(opts){
      waarneming mee. */
   if(isNow && !saveRiskPushed){ try{ const t=totals(m), de=daysElapsed(m), el=de.elapsed||1;
     const P=tempoProjectie(m);
-    if(t.budget>0 && el>=5 && P.proj>t.budget*1.07){ const proj=P.proj; const ack=(SET.chronicAck||{}).tempo; if(!(ack && ack.ym===m && proj < ack.val*1.10)) push({key:'tempo', h:'direct',score:66,t:'warn',ic:ICON('clock'),l1:'Op dit tempo ga je deze maand over je grens.',l2:'Verlaag je dagdoel',act:"go('act')",chronic:{key:'tempo', h:'direct',ym:m,val:proj}}); } }catch(_){} }
+    if(t.budget>0 && el>=5 && P.proj>t.budget*1.07){ const proj=P.proj; const ack=(SET.chronicAck||{}).tempo; if(!(ack && ack.ym===m && proj < ack.val*1.10)) push({key:'tempo', h:'direct',score:66,t:'warn',ic:ICON('clock'),l1:'Op dit tempo ga je deze maand over je grens.',l2:'Bekijk je budgetstand',act:"go('ins')",chronic:{key:'tempo', h:'direct',ym:m,val:proj}}); } }catch(_){} }
   // Categorie-neutraal i.p.v. de oude vices-melding: welke stuurbare categorie ligt het sterkst
   // boven zijn éígen mediaan? Geen categorie wordt apart aangewezen; de maatstaf is je eigen normaal.
   if(isNow){ try{ const cur=catSpendMap(m); const B=SET.budgets||{};
@@ -2424,7 +2416,7 @@ function scoreNotifs(opts){
   // cooling-off terugkomprompt: parkeerde je iets ('wachten tot morgen'), kom er na ~1 dag op terug
   try{ const log=SET.coachLog||[]; const nowMs=Date.now();
     const park=log.find(l=>l.type==='beslis' && l.uitkomst==='geparkeerd' && !l.resolved && (nowMs-l.ts)>=18*36e5 && (nowMs-l.ts)<=7*864e5);
-    if(park){ const it=String(park.item||'die aankoop').slice(0,24); push({key:'park-'+park.ts, h:'direct', score:84, t:'warn', ic:ICON('clock'), l1:`Je parkeerde ${it} (${euro0(park.bedrag||0)}). Staat 't er nog?`, l2:'Open je coach', act:"go('act')"}); } }catch(_){}
+    if(park){ const it=String(park.item||'die aankoop').slice(0,24); push({key:'park-'+park.ts, h:'direct', score:84, t:'warn', ic:ICON('clock'), l1:`Je parkeerde ${it} (${euro0(park.bedrag||0)}). Staat 't er nog?`, l2:'Open je coach', act:"coStart('algemeen')"}); } }catch(_){}
   try{ const lim=new Date(now); lim.setDate(lim.getDate()-7);
     const recent=TX.filter(x=>x.amount<0 && new Date(x.date)>=lim && CATS[catOf(x)].type==='expense' && !isFixed(x));
     const byCat={}; for(const mm of months().slice(-4)){ for(const x of txOfMonth(mm)){ if(x.amount<0&&CATS[catOf(x)].type==='expense'){ (byCat[catOf(x)]=byCat[catOf(x)]||[]).push(-x.amount); } } }
@@ -2432,7 +2424,7 @@ function scoreNotifs(opts){
     let big=null; for(const x of recent){ const a=-x.amount, mref=med(byCat[catOf(x)]||[a]); if(a>=75 && a>=mref*2.5 && (!big||a>-big.amount)) big=x; }
     if(big) push({key:'big-'+big.id,score:56,t:'info',ic:ICON('alert'),l1:`Grote uitgave bij ${cleanMerch(big.name)}, hoger dan je gebruikelijk.`,l2:'Klopt dit? Bekijk',act:`openSheet('${big.id}')`}); }catch(_){}
   if(isNow){ try{ const inc=txOfMonth(m).find(x=>x.amount>0 && CATS[catOf(x)].type==='income' && x.date===today);
-    if(inc){ const tgt=Math.round(monthlySavingTarget()); push({key:'salary-'+today, h:'direct',score:76,t:'good',ic:ICON('wallet'),l1:'Je salaris staat erop.',l2:tgt>0?`Zet nu ${euro0(tgt)} opzij`:'Zet eerst je sparen apart',act:"go('act')"}); } }catch(_){} }
+    if(inc){ const tgt=Math.round(monthlySavingTarget()); push({key:'salary-'+today, h:'direct',score:76,t:'good',ic:ICON('wallet'),l1:'Je salaris staat erop.',l2:tgt>0?`Zet nu ${euro0(tgt)} opzij`:'Zet eerst je sparen apart',act:"go('vooruit')"}); } }catch(_){} }
   try{ const tom=new Date(now); tom.setDate(tom.getDate()+1); tom.setHours(0,0,0,0);
     const L=liquidityDaily(45); for(const e of (L.events||[])){ const d=new Date(e.date); d.setHours(0,0,0,0);
       if(d.getTime()===tom.getTime() && e.amt<0 && Math.abs(e.amt)>=25){ push({key:'bill-'+today, h:'direct',score:52,t:'info',ic:ICON('cal'),l1:`Morgen: ${String(e.name||'').slice(0,22)} ${euro(e.amt)}.`,l2:'Zorg dat er saldo is',act:"go('vooruit')"}); break; } } }catch(_){}
@@ -2479,9 +2471,23 @@ function scoreNotifs(opts){
      acute meldingen (saldo 94, parkeren 84, budget 72+). De knoplabels vervallen: een meldingrij
      heeft geen knop, en elk label herhaalde de zin uit `context` al. coachItems() blijft in deel A
      onaangeroerd, dus beide bronnen draaien nu naast elkaar om te vergelijken.
-     Regel 5 (grootste variabele hefboom) en de fallback ('Je zit op koers') zijn NIET verhuisd:
-     zie de inventarisatie, die vervallen wegens overlap met coachRuleOptions() en met de
-     positieve noot 'room' hieronder. */
+     De fallback ('Je zit op koers') is niet als eigen regel verhuisd: de positieve noot 'room'
+     hieronder zegt hetzelfde.
+     v196 CORRIGEERT de notitie die hier stond: regel 5 zou vervallen 'wegens overlap met
+     coachRuleOptions()'. Die overlap bestaat niet. coachRuleOptions() beantwoordt waar je DEZE
+     MAAND op kunt snijden - een keuzemenu over één maand, snede 25%, uitkomst een coachRule die je
+     aan of uit zet. Regel 5 zegt welke categorie STRUCTUREEL je grootste stuurbare post is - een
+     observatie over zes afgeronde maanden. Twee verschillende knoppen.
+     Regel 5 staat daarom NIET in deze lijst. De vier hierboven beschrijven allemaal een
+     VERANDERING: een afhankelijkheid die ontstond, uitgaven die meestegen, een streak die begon,
+     een boeking die verkeerd staat. Regel 5 beschrijft een EIGENSCHAP, en die verandert vrijwel
+     nooit - je grootste stuurbare post is bijna altijd dezelfde. Als signaal zou hij dus altijd
+     waar zijn: hij zou permanent onder 'Vraagt aandacht' op het maandscherm staan en het
+     maandoordeel laten zeggen dat er een regel aandacht vraagt terwijl er niets aan de hand is.
+     Een materialiteitsdrempel repareert dat symptoom alleen tot hij weer opschuift.
+     Hij leeft nu als grootsteHefboom() en wordt getoond als CONTEXT bij coachRuleOptions() in het
+     gesprek: geen bevinding, maar achtergrond bij een keuze. Daarmee leven alle vijf de regels van
+     coachItems() elders en kon die functie vervallen. */
   try{ if(TX.length && !SET.coachOff){
     const doneA=months().filter(x=>x<(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'))).slice(-6);
     const baseA=baseIncome(), targetA=Math.round(monthlySavingTarget());
@@ -2500,7 +2506,7 @@ function scoreNotifs(opts){
       if(normalA.length>=1&&windfallA.length>=1&&savNormalA<targetA*0.7&&targetA>0&&!hasAutoSaving())
         push({key:'meevaller', h:'structureel', score:62, t:'bad', ic:ICON('coins'),
           l1:'Zonder meevaller spaar je te weinig',
-          l2:`Zet ${euro0(targetA)} automatisch opzij zodra je salaris binnen is.`, act:"toggleStep('savings')"});
+          l2:`Zet ${euro0(targetA)} automatisch opzij zodra je salaris binnen is.`, act:"go('vooruit')"});
       // 3) lifestyle inflation
       const spWA=Math.round(avgA(windfallA.map(r=>r.sp))), spNA=Math.round(avgA(normalA.map(r=>r.sp)));
       if(windfallA.length>=1&&normalA.length>=1&&spWA>spNA*1.12)
@@ -2511,14 +2517,14 @@ function scoreNotifs(opts){
       let streakA=0; for(let i=rowsA.length-1;i>=0;i--){ if(rowsA[i].over) streakA++; else break; }
       if(streakA>=2) push({key:'overstreak', h:'structureel', score:68, t:'warn', ic:ICON('warn'),
         l1:'Je geeft al maanden te veel uit',
-        l2:`Tijd om het te kantelen. Kies vandaag één last die eruit kan.`, act:'toggleActDeep()'});
+        l2:`Tijd om het te kantelen. Kies vandaag één last die eruit kan.`, act:`openMonthSpend('${curMonth||''}')`});
     }
   } }catch(_){}
   // positieve noot: altijd minstens iets goeds tonen als het er is (balans, niet alleen als fallback)
   if(isNow){ try{ let pos=null;
     const wk=Date.now()-7*864e5; const dec=(SET.coachLog||[]).filter(l=>l.type==='beslis'&&l.ts>=wk);
     let saved=0; dec.forEach(d=>{ if((d.uitkomst==='geparkeerd'&&!d.resolved)||d.uitkomst==='geannuleerd') saved+=(+d.bedrag||0); });
-    if(saved>=20) pos={key:'win-saved', h:'geen',score:24,t:'good',ic:ICON('check'),l1:`${euro0(saved)} niet ongepland uitgegeven deze week.`,l2:'Zo hou je grip',act:"go('act')"};
+    if(saved>=20) pos={key:'win-saved', h:'geen',score:24,t:'good',ic:ICON('check'),l1:`${euro0(saved)} niet ongepland uitgegeven deze week.`,l2:'Zo hou je grip',act:"go('vooruit')"};
     if(!pos){ const L=monthLiquidity(), tgt=monthlySavingTarget(); if(L.projected>=tgt && L.daysLeft>0) pos={key:'room', h:'geen',score:20,t:'good',ic:ICON('check'),l1:'Je ligt op koers deze maand.',l2:'Mooi, hou dit vast',act:"go('vooruit')"}; }
     if(pos) push(pos);
   }catch(_){} }
@@ -4672,6 +4678,13 @@ function netWorthSeries(){
    ik nu doen", en dat leunt op je rekeningen; het vermogen staat een keer, op zijn eigen scherm.
    Deze kaart blijft de ingang: hij zegt of je bezittingen en schulden al hebt ingevuld, en verder
    niets. Geen bedrag, dus ook geen kop die iets belooft wat het getal niet is. */
+/* v196: de koopcheck had drie ingangen: de knop op het coachscherm, een keuze binnen een gesprek,
+   en de PWA-shortcut ?action=buy. Met het opheffen van dat scherm viel de enige knop in de app weg.
+   Hij staat nu op Home, onder de hero: de koopcheck vraagt "kan ik dit uitgeven" en dat is letterlijk
+   de beslissing die Home beantwoordt. Eén regel, geen kaart: hij is een ingang, geen mededeling. */
+function koopcheckRegel(){
+  return `<div class="card" style="cursor:pointer;margin-top:4px" onclick="openBuy()"><div class="row"><span style="font-weight:600">${ICON('cart')} Ik wil iets kopen</span><span class="small" style="color:var(--teal);font-weight:700">check ›</span></div></div>`;
+}
 function vermogenCard(){
   const nA=(SET.assets||[]).length, nS=(SET.debts||[]).length;
   const sub=(nA||nS)
@@ -5602,40 +5615,11 @@ function vooruitZone(key,label,teaser,open,content){
   return open?bar+content:bar;
 }
 function hasAutoSaving(){ try{ const ms=months().slice(-3); let n=0; for(const mm of ms){ for(const t of txOfMonth(mm)){ if(catOf(t)==='sparen' || /(monthly|weekly) rule|round[\s-]?up|income sorter/i.test(t.name||'')) n++; } } return n>=2; }catch(_){ return false; } }
-function coachItems(){
-  const items=[]; if(!TX.length||SET.coachOff) return items;
-  const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const done=months().filter(m=>m<nowYM).slice(-6);
-  const base=baseIncome(), target=Math.round(monthlySavingTarget());
-  const avg=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:0;
-  // 1) spaar-Rules als uitgave (1-tik fix)
-  const savRx=/monthly rule|weekly rule/i; let savMis=0,savN=0;
-  for(const m of done.concat([curMonth])){ for(const t of txOfMonth(m)){ if(t.amount<0&&CATS[catOf(t)].type==='expense'&&savRx.test(t.name||'')){savMis+=-t.amount;savN++;} } }
-  if(savN>=2) items.push({t:'info',insight:'Je spaarstortingen tellen als uitgave',context:`${euro0(savMis)} aan eigen overboekingen telt mee. Tik om dit recht te zetten.`,label:'Zet recht met 1 tik',fn:'fixSavingsRules()'});
-  if(done.length>=2){
-    const rows=done.map(m=>{const t=totals(m);return{inc:t.income,sp:t.spend,savedEur:t.income-t.spend,over:t.spend>t.budget};});
-    const normal=rows.filter(r=>r.inc<=base*MEEVALLER_FACTOR), windfall=rows.filter(r=>r.inc>base*MEEVALLER_FACTOR);
-    const savNormal=Math.round(avg(normal.map(r=>r.savedEur)));
-    // 2) meevaller-afhankelijkheid
-    if(normal.length>=1&&windfall.length>=1&&savNormal<target*0.7&&target>0&&!hasAutoSaving())
-      items.push({t:'bad',insight:'Zonder meevaller spaar je te weinig',context:`Zet ${euro0(target)} automatisch opzij zodra je salaris binnen is.`,label:`Zet ${euro0(target)}/mnd vast sparen`,fn:"toggleStep('savings')"});
-    // 3) lifestyle inflation
-    const spW=Math.round(avg(windfall.map(r=>r.sp))), spN=Math.round(avg(normal.map(r=>r.sp)));
-    if(windfall.length>=1&&normal.length>=1&&spW>spN*1.12)
-      items.push({t:'warn',insight:'Meer binnen, meer uitgegeven',context:`Zet je extraatje meteen opzij, vóór je het uitgeeft.`,label:'Zet je extraatje opzij',fn:"go('ins')"});
-    // 4) streak boven grens
-    let streak=0; for(let i=rows.length-1;i>=0;i--){ if(rows[i].over) streak++; else break; }
-    if(streak>=2) items.push({t:'warn',insight:'Je geeft al maanden te veel uit',context:`Tijd om het te kantelen. Kies vandaag één last die eruit kan.`,label:'Verlaag één vaste last',fn:'toggleActDeep()'});
-  }
-  // 5) grootste variabele hefboom
-  const vc={}; for(const m of done){ for(const t of txOfMonth(m)){ if(isExpenseTx(t)&&!isFixed(t)){const k=catOf(t);vc[k]=(vc[k]||0)+(-t.amount);} } }   // netto per categorie
-  const topVar=Object.entries(vc).map(([k,v])=>({k,avg:v/(done.length||1)})).sort((a,b)=>b.avg-a.avg)[0];
-  if(topVar) items.push({t:'info',insight:`${CATS[topVar.k].name} is je grootste knop`,context:`Iets minder hier scheelt ${euro0(Math.round(topVar.avg*0.15))}/mnd. Kies een goedkoper alternatief.`,label:`Bekijk ${CATS[topVar.k].name}`,fn:`openCategory('${topVar.k}')`});
-  // fallback: op koers
-  if(!items.length){ const t=totals(curMonth); const saved=t.income-t.spend; const pct=t.income?Math.round(saved/t.income*100):0;
-    items.push({t:'good',insight:'Je zit op koers',context:`Je spaarde ${euro0(Math.max(saved,0))} deze maand. Mooi, hou dit vast.`,label:'Zet je volgende stap',fn:'toggleActDeep()'}); }
-  return items;
-}
+/* v196: hier stond coachItems(), de vijf regels van het opgeheven coachscherm. Alle vijf leven
+   elders: savrules, meevaller, inflatie en overstreak verhuisden in v143 naar scoreNotifs(), en
+   regel 5 (grootste variabele hefboom, key 'hefboom') in v196 - die was blijven staan op een
+   notitie die zei dat coachRuleOptions() hetzelfde deed, en dat klopte niet. De fallback 'Je zit op
+   koers' is de positieve noot 'room'. */
 // grootste budget-overschrijding deze maand (categorie waar uitgave het meest boven budget ligt)
 function budgetOverCat(m){
   const EB=effectiveBudgets(m).out, actual=catSpendMap(m); let best=null;
@@ -5651,14 +5635,6 @@ function isRecurringMerchant(name){
   return hits>=2;
 }
 // discipline, kernprincipe: geen impuls, elke euro een bestemming, geen budget = geen aankoop
-function coachDiscipline(m){
-  const rules=[
-    `<b>Geen budget = geen aankoop.</b> De harde regel. Heeft iets geen vooraf bepaalde plek? Dan koop je het niet.`,
-    `Elke euro krijgt éérst een bestemming, leven, vaste lasten of sparen, en gaat dán pas weg.`,
-    `Wen jezelf één vraag aan vóór elke aankoop: "is hier een budget voor?" Geen ja, geen aankoop.`
-  ];
-  return `<div class="cg-disc"><div class="cd-h">${ICON('target')} Discipline boven impuls</div>${rules.map(r=>`<div class="cd-rule">${r}</div>`).join('')}</div>`;
-}
 // ===== COACH-SCHERM (4 zones), status (time-pacing) · deze week · vooruit (forecast-held) · mijn regels =====
 // 1) STATUS op time-pacing: verwacht tempo = budget × verstreken/dim; incl. nog-te-komen vaste lasten in projEind
 function coachStatus(m){
@@ -5697,6 +5673,41 @@ function coachWeekRisk(m){
   return {tone:'ok',txt:`Er liep deze week niets uit de hand. Hou het zo: geef elke euro vooraf een bestemming.`};
 }
 // regel-opties: tikbare gedragsregels die maandelijks geld vrijspelen → buigen de koerslijn omhoog
+/* Blijft: coachMirrorCard() en het coachscherm zijn weg, maar het gesprek leest dit patroon nog
+   op twee plekken (v196). */
+function coachPattern(){
+  // 1) weekdag-concentratie van discretionaire uitgaven (laatste ~8 weken)
+  try{ const lim=Date.now()-56*864e5; const days=[0,0,0,0,0,0,0]; const nm=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag']; let tot=0;
+    for(const t of TX){ const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixedCat(c)) continue; const dt=new Date(t.date); if(isNaN(dt)||dt.getTime()<lim) continue; const a=-t.amount; days[dt.getDay()]+=a; tot+=a; }   // netto per dag
+    if(tot>0){ let mi=0; for(let i=1;i<7;i++) if(days[i]>days[mi]) mi=i; const share=days[mi]/tot; if(share>=0.28 && days[mi]>=40) return `je ${jrg('stuurbaar','stuurbare uitgaven')} pieken op <b>${nm[mi]}</b> (${Math.round(share*100)}%).`; }
+  }catch(_){}
+  // 2) 'in het moment'-patroon uit de koopcheck-historie
+  try{ const dec=(SET.coachLog||[]).filter(l=>l.type==='beslis'); const nu=dec.filter(l=>l.intentie==='nu').length; if(dec.length>=3 && nu/dec.length>=0.5) return `je koopchecks zijn vaker '<b>ik wil het nÃº</b>' dan gepland.`; }catch(_){}
+  return '';
+}
+/* v196: regel 5 uit het opgeheven coachItems(). Venster, filter en snede zijn onveranderd: de
+   laatste zes afgeronde maanden, alleen variabele uitgaven, netto per categorie. Hij is geen
+   signaal - een eigenschap die vrijwel nooit verandert is altijd waar en dus geen bevinding - maar
+   context bij de keuze die coachRuleOptions() aanbiedt: waarom staan juist deze drie er.
+   Null zodra er geen historie of geen variabele post is; dan zegt het gesprek er niets over. */
+function grootsteHefboom(){
+  try{
+    const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+    const done=months().filter(x=>x<nowYM).slice(-6);
+    if(!done.length) return null;
+    const vc={};
+    for(const mm of done){ for(const t of txOfMonth(mm)){ if(isExpenseTx(t)&&!isFixed(t)){const k=catOf(t);vc[k]=(vc[k]||0)+(-t.amount);} } }
+    const top=Object.entries(vc).map(([k,v])=>({k,avg:v/done.length})).sort((a,b)=>b.avg-a.avg)[0];
+    if(!top || !CATS[top.k] || !(top.avg>0)) return null;
+    return {cat:top.k, naam:CATS[top.k].name, perMaand:Math.round(top.avg), maanden:done.length};
+  }catch(_){ return null; }
+}
+/* Eén zin, en alleen waar er ook echt iets te kiezen valt: zonder opties is het een losse
+   observatie en precies daarom hoort hij niet als signaal maar hier. */
+function hefboomZin(){
+  const H=grootsteHefboom(); if(!H) return '';
+  return `Over de laatste ${H.maanden} ${H.maanden===1?'maand':'maanden'} is <span class="hl">${esc(H.naam.toLowerCase())}</span> je grootste ${jrg('stuurbaar','stuurbare post')}: ongeveer ${euro0(H.perMaand)} per maand.`;
+}
 function coachRuleOptions(m){
   const sp=catSpendMap(m); const opts=[];
   const lab={uit_eten:'Max 1× per week uit eten',boodschappen:'Strakker boodschappen',vrije_tijd:'Eén uitje minder',shoppen:'Geen losse aankopen',vervoer:'Minder losse ritten',overig:'Minder losse uitgaven'};
@@ -5706,60 +5717,6 @@ function coachRuleOptions(m){
     else { const cut=Math.max(Math.round(sp[k]*0.25/5)*5,10); opts.push({key:'cut_'+k,label:lab[k]||('Minder '+CATS[k].name.toLowerCase()),cut}); }
   }
   return opts;
-}
-function toggleCoachDisc(){ SET.coachDiscOpen=!SET.coachDiscOpen; save(); renderActions(); }
-function coachPattern(){
-  // 1) weekdag-concentratie van discretionaire uitgaven (laatste ~8 weken)
-  try{ const lim=Date.now()-56*864e5; const days=[0,0,0,0,0,0,0]; const nm=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag']; let tot=0;
-    for(const t of TX){ const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixedCat(c)) continue; const dt=new Date(t.date); if(isNaN(dt)||dt.getTime()<lim) continue; const a=-t.amount; days[dt.getDay()]+=a; tot+=a; }   // netto per dag
-    if(tot>0){ let mi=0; for(let i=1;i<7;i++) if(days[i]>days[mi]) mi=i; const share=days[mi]/tot; if(share>=0.28 && days[mi]>=40) return `je ${jrg('stuurbaar','stuurbare uitgaven')} pieken op <b>${nm[mi]}</b> (${Math.round(share*100)}%).`; }
-  }catch(_){}
-  // 2) 'in het moment'-patroon uit de koopcheck-historie
-  try{ const dec=(SET.coachLog||[]).filter(l=>l.type==='beslis'); const nu=dec.filter(l=>l.intentie==='nu').length; if(dec.length>=3 && nu/dec.length>=0.5) return `je koopchecks zijn vaker '<b>ik wil het nú</b>' dan gepland.`; }catch(_){}
-  return '';
-}
-function coachMirrorCard(){
-  const log=SET.coachLog||[]; const wk=Date.now()-7*864e5;
-  const dec=log.filter(l=>l.type==='beslis' && l.ts>=wk);
-  const wins=[];
-  try{ const pc=potCount(); if(pc>=1) wins.push(`${ICON('check')} Je hebt ${pc} ${pc===1?'potje':'potjes'} lopen`); }catch(_){}
-  try{ const S=savingsModel(); if(S.goal>0 && S.pct>=10){ const mls=S.pct>=50?50:(S.pct>=25?25:10); wins.push(`${ICON('target')} ${mls}%+ van je buffer bereikt (${euro0(S.cur)})`); } }catch(_){}
-  const pat=coachPattern();
-  if(!dec.length && !wins.length && !pat) return '';
-  let body='';
-  if(dec.length){
-    const cnt={}; let saved=0;
-    dec.forEach(d=>{ cnt[d.uitkomst]=(cnt[d.uitkomst]||0)+1; if(d.uitkomst==='geparkeerd'||d.uitkomst==='geannuleerd') saved+=(+d.bedrag||0); });
-    const held=(cnt['geparkeerd']||0)+(cnt['geannuleerd']||0)+(cnt['ingepland']||0);
-    body+=`<div class="small" style="margin-bottom:4px"><b>${dec.length}</b> ${dec.length===1?'koopcheck':'koopchecks'} deze week · <span style="color:var(--teal)">${held}× geremd</span>${cnt['doorgezet']?` · ${cnt['doorgezet']}× doorgezet`:''}</div>`;
-    if(saved>0) body+=`<div class="small muted">Daarmee ${euro0(saved)} niet ongepland uitgegeven.</div>`;
-  }
-  let winHtml='';
-  if(wins.length) winHtml=`<div style="margin-top:${dec.length?'10px':'0'};display:flex;flex-direction:column;gap:5px">${wins.map(w=>`<div class="small" style="color:var(--green)">${w}</div>`).join('')}</div>`;
-  const patHtml=pat?`<div class="small muted" style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">${ICON('search')} Patroon: ${pat}</div>`:'';
-  return `<div class="card"><div class="small muted" style="margin-bottom:8px;font-weight:600">${ICON('target')} Zo deed je het deze week</div>${body}${winHtml}${patHtml}</div>`;
-}
-function renderActions(){
-  if(!TX.length){ $('#s-act').innerHTML='<div class="card"><div class="small muted">Nog geen data. Importeer of koppel je bank.</div></div>'; return; }
-  const m=curMonth||months()[months().length-1];
-  const zoneMine=`<div class="cz-mine">
-    <div class="czr-head" onclick="toggleCoachDisc()"><span>${ICON('target')} Mijn regel: geen budget, geen aankoop</span><span>${SET.coachDiscOpen?'▲':'▼'}</span></div>
-    ${SET.coachDiscOpen?coachDiscipline(m):''}
-  </div>`;
-  // v70: de "Je potjes"-widget is hier weg. Potjes blijven bewerkbaar via de budget-bottomsheet
-  // (Inzichten ▸ Deze maand ▸ Maandbudget) en via openPotje/openPotjePick elders; alleen deze
-  // coach-weergave verviel, het potjes-systeem zelf niet.
-  /* v138: de draad staat niet meer in dit scherm maar in de sheet, dus een render() kan hem niet
-     meer wegvegen en de guard uit v82 heeft hier niets meer te beschermen. Wat wel blijft: het
-     gesprek start alleen als je Coach echt opent (go('act') zet _coReopen), niet bij elke render.
-     Anders zou de sheet vanzelf openklappen terwijl je op een ander scherm staat. */
-  const _open=!!window._coReopen; window._coReopen=false;
-  $('#s-act').innerHTML = `<div class="coachhead" onclick="openCoachAvatar()"><div class="av">${coachAvatar()}</div><span class="nm">Je coach</span><span class="sw">wissel ›</span></div>`
-    + `<button class="cobuy" id="buyBtn">${ICON('cart')} Ik wil iets kopen</button>`
-    + coachMirrorCard() + zoneMine
-    + `<div class="scr-foot">Je coach spreekt alleen als er iets te zeggen valt.</div>`;
-  const bb=document.getElementById('buyBtn'); if(bb) bb.onclick=openBuy;
-  if(_open) coStart('algemeen', m);
 }
 /* ---------- COACH-DIALOOG (tik-door gesprek, leest/voert uit via de motor) ---------- */
 let _coT=null,_coC=null,_coGen=0;
@@ -6090,8 +6047,8 @@ async function coFirstPotFlow(m){
   await coSay(`Dan weet je voortaan precies waar 't vandaan komt, en de koopcheck rekent met jouw plan.`,{ai:true});
   if(_gen!==_coGen)return true;
   coChoices([
-    {l:`Ja, stel ${cl} in op ${euro0(sug)}`, act:async()=>{ SET.budgets=SET.budgets||{}; SET.budgets[v.cat]=sug; SET.firstPotDone=true; save(); try{TX.forEach(categorize);}catch(_){ } coFx(`eerste potje '${cl}' · ${euro0(sug)}/mnd`); coachLogAdd({type:'potje',text:`eerste potje voor ${cl}`}); await coSay(`Mooi. Je eerste potje staat, <span class="hl">${cl}</span> heeft nu een plan.`,{html:true,accent:true}); await coSay(`Test 'm meteen: tik <span class="hl">'Ik wil iets kopen'</span> en zie wat er gebeurt.`,{html:true}); coEnd(); setTimeout(()=>renderActions(),2200); }},
-    {l:`Ik kies zelf het bedrag`, act:()=>{ SET.firstPotDone=true; save(); window._potAfter=()=>renderActions(); openPotje(v.cat); }},
+    {l:`Ja, stel ${cl} in op ${euro0(sug)}`, act:async()=>{ SET.budgets=SET.budgets||{}; SET.budgets[v.cat]=sug; SET.firstPotDone=true; save(); try{TX.forEach(categorize);}catch(_){ } coFx(`eerste potje '${cl}' · ${euro0(sug)}/mnd`); coachLogAdd({type:'potje',text:`eerste potje voor ${cl}`}); await coSay(`Mooi. Je eerste potje staat, <span class="hl">${cl}</span> heeft nu een plan.`,{html:true,accent:true}); await coSay(`Test 'm meteen: tik <span class="hl">'Ik wil iets kopen'</span> en zie wat er gebeurt.`,{html:true}); coEnd(); }},
+    {l:`Ik kies zelf het bedrag`, act:()=>{ SET.firstPotDone=true; save(); openPotje(v.cat); }},
     {l:`Nu even niet`, act:async()=>{ SET.firstPotSkipMonth=m; save(); await coSay(`Geen probleem. Ik wijs 't je later nog wel eens aan.`); startCoachTalk(m); }}
   ]);
   return true;
@@ -6214,6 +6171,7 @@ async function coTopicLek(m){
   if(!R || R.tone!=='warn'){ coEnd(); return; }              // geen lek: hier valt niets te bespreken
   await coSay(R.txt,{html:true,accent:true}); if(_g!==_coGen)return;
   let rules=[]; try{ rules=coachRuleOptions(m)||[]; }catch(_){}
+  if(rules.length){ const _h=hefboomZin(); if(_h){ await coSay(_h,{html:true}); if(_g!==_coGen)return; } }
   const opts=rules.map(r=>({l:`${r.label} (+${euro0(r.cut)}/mnd)`, act:async()=>{
     toggleVooruitCut(r.key,r.cut);                            // dezelfde omzetting als op het planscherm
     coachLogAdd({type:'tip',text:r.label});                   // nooit type 'afspraak' vanaf deze ingang
@@ -6263,6 +6221,7 @@ async function coTopicHorizon(m){
     await coSay(zin,{html:true,accent:true}); if(_g!==_coGen)return;
   }
   let rules=[]; try{ rules=(coachRuleOptions(m)||[]).filter(r=>!(SET.coachRules&&SET.coachRules[r.key])); }catch(_){}
+  if(rules.length){ const _h=hefboomZin(); if(_h){ await coSay(_h,{html:true}); if(_g!==_coGen)return; } }
   const opts=rules.map(r=>({l:`${r.label} (+${euro0(r.cut)}/mnd)`, act:async()=>{
     let before=null, after=null;
     try{ before=financeModel().projection.endBalanceDecember; }catch(_){}
@@ -6342,6 +6301,7 @@ async function coTopicMaand(m, key){
     if(R.act) opts.push({l:'Hier iets aan doen', act:()=>{ coEnd(); try{ eval(R.act); }catch(_){} }});
   } else {
     let rules=[]; try{ rules=(coachRuleOptions(m)||[]).filter(x=>!(SET.coachRules&&SET.coachRules[x.key])); }catch(_){}
+    if(rules.length){ const _h=hefboomZin(); if(_h){ await coSay(_h,{html:true}); if(_g!==_coGen)return; } }
     for(const r of rules) opts.push({l:`${r.label} (+${euro0(r.cut)}/mnd)`, act:async()=>{
       toggleVooruitCut(r.key,r.cut);                     // een regel, nog geen afspraak
       coachLogAdd({type:'tip',text:r.label});
@@ -6503,16 +6463,14 @@ function potOptions(exclude){ const B=SET.budgets||{}; const m=curMonth||months(
   if(!ks.length) ks=Object.keys(CATS).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k)&&k!==exclude);
   return ks.map(k=>{ const rest=(+B[k]>0)?Math.max(Math.round((+B[k])-(catSpendMap(m)[k]||0)),0):null; return {v:k,t:CATS[k].name+(rest!=null?` · nog ${euro0(rest)}`:'')}; }); }
 function potName(k){ return CATS[k]?CATS[k].name.toLowerCase():'een ander potje'; }
-async function coOfferAction(m,leak){
-  if(leak && (leak.kind==='missing-pot'||leak.kind==='impulse')){
-    const cn=CATS[leak.cat]?CATS[leak.cat].name.toLowerCase():'die categorie';
-    await coSay(`Zal ik een potje voor ${cn} maken? Geen potje, geen aankoop.`);
-    coChoices([
-      {l:'Ja, maak een potje',act:async()=>{ const amt=coSuggestPot(leak.cat); SET.budgets=SET.budgets||{}; SET.budgets[leak.cat]=amt; save(); TX.forEach(categorize); coFx(`potje '${cn}' · ${euro0(amt)}/mnd`); coachLogAdd({type:'potje',text:`een potje voor ${cn}`}); await coSay(`Staat. ${euro0(amt)} per maand. Volgende keer dat 't langskomt, weet je waar 't vandaan komt.`); await coAfspraak(m); }},
-      {l:'Was eenmalig',act:async()=>{ await coSay(`Kan. Al zag ik 't vaker langskomen. Maar goed, jij kent 't 't best.`); await coAfspraak(m); }}
-    ]);
-  } else { await coAfspraak(m); }
-}
+/* v196: hier stond coOfferAction(m,leak). Nul verwijzingen, al voor v180 genoteerd; hij bood een
+   potje aan bij een lek en viel anders door naar coAfspraak().
+   LET OP: hij was de ENIGE aanroeper van coAfspraak(), dus die staat nu zonder ingang, en met hem
+   coTextSheet(), coTextSave(), coParkeerDraad() en coHerstelDraad(). Dat is geen opruimwerk maar
+   het opheffen van een gespreksvorm: de drie standaard als-dan-afspraken en het vrijetekstveld uit
+   v138. Ze blijven daarom bewust staan tot daar apart over is besloten; een bereikbaarheidsronde
+   vindt ze en dat is de bedoeling. coShowAction() heeft wel een eigen invoerveld, dus vrije tekst
+   bij een afspraak kan nog. */
 async function coAfspraak(m){
   await coSay(`Maak er een als-dan van voor de komende tijd.`);
   coChoices([
@@ -6747,7 +6705,7 @@ function savePotje(k,del){
   }
   closeSheet();
   const after=window._potAfter; window._potAfter=null;
-  if(after){ try{ after(); }catch(_){ renderActions(); } } else { renderActions(); }
+  if(after){ try{ after(); }catch(_){ render(); } } else { render(); }
   toast(`${ICON('check')} ${msg}`);
 }
 // concrete, gekwantificeerde gedragsregels per signaal, elke regel draagt z'n eigen maand-besparing (cut) voor de forecast
@@ -6778,8 +6736,10 @@ function coachRules(m,sig){
   if(sig.scale==='maand' && sig.tone!=='good') return [ r('Een abonnement opzeggen (€15 p/m)',15), r('Automatisch €100 per maand sparen',0), r('Een vaste last verlagen (€50 p/m)',50) ];
   return [ r('Naar mijn buffer',0), r('Extra aflossen',0), r('Laten staan',0) ];
 }
-function toggleStep(id){ SET.steps=SET.steps||{}; SET.steps[id]=!SET.steps[id]; save(); renderActions(); if(SET.steps[id]) toast(`${ICON('check')} Stap afgevinkt`); }
-function toggleActDeep(){ SET.actDeep=!SET.actDeep; save(); renderActions(); }
+/* v196: hier stonden toggleStep() en toggleActDeep(). Ze schreven SET.steps en SET.actDeep en
+   tekenden s-act opnieuw; niets las die twee sleutels, dus ze deden buiten dat scherm al niets.
+   De twee signalen die ze als actie droegen (meevaller, overstreak) wijzen nu naar een plek die
+   wel bestaat. */
 
 /* ----- VASTE vs VARIABELE LASTEN ----- */
 const FIXED_CATS=new Set(['huur','verzekering','studie','sport','abonnement','bankkosten','persoonlijk']);
@@ -9446,7 +9406,6 @@ function go(name){
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.go===name));
   const _g=document.getElementById('headGear'); if(_g) _g.classList.toggle('on',name==='set');
   if(!geenData()){
-    if(name==='act'){ window._coachStep=0; window._coachAnswer=null; window._coReopen=true; renderActions(); }
     // leesmoment: alleen de datum, geen streak, geen teller, geen herinnering (v130)
     /* Eerst de vlag, dan de render: anders toont "Gelezen op" de datum van de vorige keer. Dat kan
        nu veilig, want de vlag stuurt geen inhoud meer aan (v168). */

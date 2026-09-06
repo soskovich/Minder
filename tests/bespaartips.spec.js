@@ -137,8 +137,8 @@ test.describe('c · de kanalen dragen context, actie en scenario', () => {
 
   test('het coach-onderwerp Bespaartips vertelt context, actie, bedrag en scenario', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { go('act'); startCoachTalk(); });
-    await page.waitForSelector('#s-act .coachhead');
+    await page.evaluate(() => { coStart('algemeen'); startCoachTalk(); });
+    await page.waitForSelector('#coThr');
     await page.evaluate(() => coTopic('tips', curMonth || months()[months().length - 1]));
     await page.waitForFunction(() => /per jaar/.test(document.getElementById('coThr').innerText), null, { timeout: 15000 });
     const T = await tips(page);
@@ -155,8 +155,8 @@ test.describe('c · de kanalen dragen context, actie en scenario', () => {
   test('in Rustig is dezelfde tip korter, met dezelfde bedragen', async ({ page }) => {
     await boot(page);
     const T = await tips(page);
-    await page.evaluate(() => { SET.mode = 'rustig'; save(); go('act'); startCoachTalk(); });
-    await page.waitForSelector('#s-act .coachhead');
+    await page.evaluate(() => { SET.mode = 'rustig'; save(); coStart('algemeen'); startCoachTalk(); });
+    await page.waitForSelector('#coThr');
     await page.evaluate(() => coTopic('tips', curMonth || months()[months().length - 1]));
     await page.waitForFunction(() => /\/mnd/.test(document.getElementById('coThr').innerText), null, { timeout: 15000 });
     const r = await page.locator('#coThr').innerText();

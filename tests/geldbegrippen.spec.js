@@ -60,7 +60,7 @@ test.describe('b · één term per begrip', () => {
     await boot(page, 'vooruit');
     const gezien = await page.evaluate(() => {
       const uit = [];
-      for (const s of ['dash', 'ins', 'act', 'vooruit', 'vermogen', 'set']) {
+      for (const s of ['dash', 'ins', 'vooruit', 'vermogen', 'set']) {   // v196: geen 'act' meer
         go(s); const el = document.getElementById('s-' + s); if (el) uit.push(el.innerText);
       }
       // plus de sheets waar de term stond

@@ -1,3 +1,5 @@
+// v196: de coachpagina (s-act) is opgeheven. Het gesprek is geen bestemming meer maar wordt
+// vanaf vier plekken opgeroepen, dus openen gaat via coStart() in plaats van go('act').
 // v92: bij de allereerste coach-opening staat er één warme bubbel die laat zien wát de coach kan.
 // Daarna is de opening precies zoals hij was (groet -> menu).
 // De service worker staat globaal uit via playwright.config.js.
@@ -9,8 +11,8 @@ function tweak(fn) {
 }
 async function coach(page, payload) {
   await open(page, payload || seed());
-  await page.evaluate(() => go('act'));
-  await page.waitForSelector('#s-act .coachhead');
+  await page.evaluate(() => coStart('algemeen'));
+  await page.waitForSelector('#coThr');
   await page.waitForFunction(() => [...document.querySelectorAll('#coThr .co')].filter((b) => b.innerText.trim()).length >= 2, null, { timeout: 15000 });
   // wachten tot het gesprek is uitgesproken: er staan keuzes klaar, dan komt er niets meer bij
   await page.waitForFunction(() => document.querySelectorAll('#coCh .cch').length > 0, null, { timeout: 15000 });
@@ -43,7 +45,7 @@ test.describe('a · de eerste opening', () => {
 test.describe('b · daarna nooit meer', () => {
   test('een tweede opening is de bestaande groet zonder intro', async ({ page }) => {
     await coach(page);
-    await page.evaluate(() => { go('dash'); go('act'); });
+    await page.evaluate(() => { go('dash'); coStart('algemeen'); });
     await page.waitForTimeout(800);
     const b = await bubbels(page);
     expect(b[0]).toMatch(/waarmee kan ik je helpen/i);

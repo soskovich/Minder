@@ -4,7 +4,8 @@ const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
 
 const TOKENS = { '--fs-xs': '11px', '--fs-sm': '12.5px', '--fs-md': '14px', '--fs-lg': '17px', '--fs-xl': '22px' };
-const SCHERMEN = ['dash', 'ins', 'act', 'vooruit', 'tx', 'vermogen', 'set'];
+// v196: 'act' is opgeheven
+const SCHERMEN = ['dash', 'ins', 'vooruit', 'tx', 'vermogen', 'set'];
 
 async function boot(page) {
   await open(page, seed());

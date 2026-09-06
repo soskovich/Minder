@@ -36,7 +36,8 @@ async function boot(page, payload) {
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof geenData === 'function');
 }
-const SCHERMEN = ['dash', 'tx', 'ins', 'act', 'vooruit', 'maand', 'vermogen', 'fire'];
+// v196: 'act' is opgeheven
+const SCHERMEN = ['dash', 'tx', 'ins', 'vooruit', 'maand', 'vermogen', 'fire'];
 
 test.describe('a · zonder data claimt geen enkel scherm iets', () => {
   test('elk scherm behalve Instellingen toont dezelfde lege staat', async ({ page }) => {

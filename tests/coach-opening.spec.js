@@ -1,3 +1,5 @@
+// v196: de coachpagina (s-act) is opgeheven. Het gesprek is geen bestemming meer maar wordt
+// vanaf vier plekken opgeroepen, dus openen gaat via coStart() in plaats van go('act').
 // Coach-opening (v82): persoonlijke groet bij het openen, en vastgelegde gesprekken alleen
 // terughalen als ze nú ergens op slaan. Geen rekenlogica geraakt.
 const { test, expect } = require('@playwright/test');
@@ -23,8 +25,8 @@ const basis = (extra) => tweak((s) => {
 
 async function coach(page, payload) {
   await open(page, payload || basis());
-  await page.evaluate(() => go('act'));
-  await page.waitForSelector('#s-act .coachhead');
+  await page.evaluate(() => coStart('algemeen'));
+  await page.waitForSelector('#coThr');
 }
 const draad = (page) => page.locator('#coThr').innerText();
 // de typ-indicator is ook een .co-bubbel maar zonder tekst; die telt niet mee
@@ -75,7 +77,7 @@ test.describe('a · de groet', () => {
   test('opnieuw openen geeft een verse opening met één groet', async ({ page }) => {
     await coach(page);
     await wachtKeuze(page, 'Bespaartips');
-    await page.evaluate(() => { go('dash'); go('act'); });
+    await page.evaluate(() => { go('dash'); coStart('algemeen'); });
     await wachtBubbel(page);
     await wachtKeuze(page, 'Bespaartips');
     expect((await draad(page)).match(/waarmee kan ik je helpen/g).length).toBe(1);
@@ -120,7 +122,7 @@ test.describe('b · vastgelegde gesprekken', () => {
     // zet de afspraak op de categorie die nu het grootste lek is
     await page.evaluate((c) => {
       SET.coachLog = [{ ts: Date.now(), type: 'afspraak', text: 'ik hou het bij €150', cat: c }];
-      SET.coachRecall = null; save(); go('dash'); go('act');
+      SET.coachRecall = null; save(); go('dash'); coStart('algemeen');
     }, cat);
     await wachtKeuze(page, 'Bespaartips');
     const t = await draad(page);
@@ -137,7 +139,7 @@ test.describe('b · vastgelegde gesprekken', () => {
     expect(await draad(page)).toContain('ik neem één keer per week iets mee');
 
     // tweede opening in dezelfde maand: niet opnieuw
-    await page.evaluate(() => { go('dash'); go('act'); });
+    await page.evaluate(() => { go('dash'); coStart('algemeen'); });
     await wachtKeuze(page, 'Bespaartips');
     expect(await draad(page)).not.toContain('ik neem één keer per week iets mee');
   });
