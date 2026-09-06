@@ -57,7 +57,8 @@ const meet = (page) => page.evaluate(() => {
     if (l && v) tegels[l.innerText.trim()] = eur(v.innerText);
   }
   const tekst = d.innerText.replace(/\s+/g, ' ');
-  const vp = tekst.match(/plus €([\d.]+) variabel/);
+  // v204: het variabele deel stond als voetregel onder de tegels ('plus EUR X variabel uit je potjes') en is een vierde tegel geworden, 'Nog uit je potjes'. Het bedrag en de bron zijn ongewijzigd; alleen de vindplaats verschuift.
+  const vp = tekst.match(/nog uit je potjes\s*€([\d.]+)/i);
   return { tegels, varPlan: vp ? +vp[1].replace(/\./g, '') : 0, tekst,
     uitgegeven: Math.round(catSpendMap(curMonth || months()[months().length - 1]).boodschappen || 0) };
 });
@@ -101,7 +102,7 @@ test.describe('a \u00b7 de vier stappen', () => {
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
         const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
-        const v = d.innerText.replace(/\s+/g, ' ').match(/plus \u20ac([\d.]+) variabel/);
+        const v = d.innerText.replace(/\s+/g, ' ').match(/nog uit je potjes\s*\u20ac([\d.]+)/i);
         return { getoond: v ? +v[1].replace(/\./g, '') : 0, bron: varPlanRemaining(m) };
       });
       expect(r.getoond, `bij +${extra}`).toBe(r.bron);
@@ -161,7 +162,7 @@ test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
       const eur = (s) => { const x = String(s).match(/€\s?([\d.]+)/); return x ? +x[1].replace(/\./g, '') : null; };
       const tg = {};
       for (const t of d.querySelectorAll('.wvo-tile')) tg[t.querySelector('.wvo-tl').innerText.trim()] = eur(t.querySelector('.wvo-tv').innerText);
-      const vp = d.innerText.replace(/\s+/g, ' ').match(/plus €([\d.]+) variabel/);
+      const vp = d.innerText.replace(/\s+/g, ' ').match(/nog uit je potjes\s*€([\d.]+)/i);
       return { tg, varPlan: vp ? +vp[1].replace(/\./g, '') : 0,
         fixDue: Math.round(L.fixDue), incDue: Math.round(L.incDue),
         saveReserved: Math.max(Math.round(S.saveReserved), 0), bron: varPlanRemaining(m) };

@@ -115,8 +115,9 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     const t = await text(page, '#s-ins');
     expect(t).not.toMatch(/\(tempo\)/);                  // het tempo is geen grondslag meer
     const plan = await page.evaluate((m) => varPlanRemaining(m), await page.evaluate(() => curMonth));
-    if (rest > 0 && plan > 0) expect(t).toMatch(/plus €[\d.]+ variabel uit je potjes/);
-    else expect(t).not.toMatch(/variabel uit je potjes/);
+    // v204: die regel is de tegel 'Nog uit je potjes' geworden; zelfde bedrag, zelfde bron.
+    if (rest > 0 && plan > 0) expect(t).toMatch(/nog uit je potjes\s*€[\d.]+/i);
+    else expect(t).not.toMatch(/nog uit je potjes/i);
   });
 
   test('spiegel vuurt op drempel max(€50, 20%) en spreekt plan vs tempo aan', async ({ page }) => {

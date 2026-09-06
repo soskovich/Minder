@@ -60,7 +60,8 @@ test.describe('a · elke plek leest dezelfde bron', () => {
           safe: Math.round(safeToSpend().reserved),
           // wat Inzichten er letterlijk van maakt: het bedrag uit de regel onder de tegel
           scherm: (function(){ const d=document.createElement('div'); d.innerHTML=nogDezeMaandBody();
-            const m2=d.innerText.replace(/\s+/g,' ').match(/plus €([\d.]+) variabel/);
+            // v204: het variabele deel stond als voetregel onder de tegels ('plus EUR X variabel uit je potjes') en is een vierde tegel geworden, 'Nog uit je potjes'. Het bedrag en de bron zijn ongewijzigd; alleen de vindplaats verschuift.
+            const m2=d.innerText.replace(/\s+/g,' ').match(/nog uit je potjes\s*€([\d.]+)/i);
             return m2 ? +m2[1].replace(/\./g,'') : 0; })(),
           // dezelfde som, met de hand: potjeRest per niet-recurring potje
           hand: (function () {
@@ -99,7 +100,7 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
         const m = curMonth || months()[months().length - 1];
         const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
         const t = d.innerText.replace(/\s+/g, ' ');
-        const mm = t.match(/plus €([\d.]+) variabel/);
+        const mm = t.match(/nog uit je potjes\s*€([\d.]+)/i);   // v204: was een voetregel
         return { bron: varPlanRemaining(m), home: Math.round(safeToSpend().reserved),
           inzichten: mm ? +mm[1].replace(/\./g, '') : 0, tekst: t,
           srcSafe: safeToSpend.toString(), srcBody: nogDezeMaandBody.toString() };
@@ -167,7 +168,10 @@ test.describe('d · Nog te betalen mengt geen twee soorten zekerheid', () => {
     expect(r.txt).toContain('Nog te betalen · vast');
     expect(r.txt).not.toMatch(/\(tempo\)/);
     if (r.plan > 0) {
-      expect(r.txt).toContain(`plus €${r.plan.toLocaleString('nl-NL')} variabel uit je potjes`);
+      // v204: het plan staat nu als eigen tegel naast 'Nog te sparen' in plaats van als
+      // voetregel eronder. Waarneming boven, plan onder; het bedrag is hetzelfde.
+      expect(r.txt.replace(/\s+/g, ' ').toLowerCase())
+        .toContain(`nog uit je potjes €${r.plan.toLocaleString('nl-NL')}`);
       // en dat bedrag is nergens opgeteld bij de waargenomen vaste lasten
       if (r.fix > 0) expect(r.txt).not.toContain(`€${(r.fix + r.plan).toLocaleString('nl-NL')}`);
     }

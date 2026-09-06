@@ -4092,7 +4092,9 @@ const PLAN_MODES=[['auto','Auto'],['fixed','Vast bedrag'],['pct','Percentage']];
 function planModeLabel(p){
   if(p.mode==='fixed') return `vast ${euro0(p.perMaand)}`;
   if(p.mode==='pct')   return `${(''+p.pct).replace('.',',')}% van je ${planCapLabel()}`;
-  return 'auto · pakt wat er nog is';
+  // v204: dit was 'auto, pakt wat er nog is'. Die staart legt uit wat auto doet, en dat staat
+  // onder de lijst. planModeLabel() heeft precies een aanroeper, dus dit raakt alleen die rij.
+  return 'auto';
 }
 // "over ~8 maanden" wordt pas concreet met een datum erbij. Zelfde patroon als de oude hero:
 // vandaag + het aantal maanden, als maand + jaar (bv. "rond mrt 2027").
@@ -4123,7 +4125,10 @@ function planSub(p){
   if(p.nfOnbekend) return `${euro0(p.alloc)}/mnd`;
   if(p.status==='bereikt') return `${ICON('party')} Bereikt`;
   if(p.status==='gepauzeerd') return 'Gepauzeerd · krijgt nu niets';
-  if(p.status==='wacht op capaciteit') return `Wacht op capaciteit · ${planModeLabel(p)}, maar alles gaat eerst naar de doelen erboven`;
+  /* v204: hier stond ", maar alles gaat eerst naar de doelen erboven". Dat is de uitleg die v193
+     uit de rij haalde en onder de lijst zette, en hij stond dus op twee plekken. Wat overblijft is
+     status plus modus: een feit over deze rij. Het waarom staat een keer, in planWachtRegel(). */
+  if(p.status==='wacht op capaciteit') return `Wacht op capaciteit · ${planModeLabel(p)}`;
   const et=p.eta?etaTekst(p.eta):'';
   const eta=et?` · op dit tempo ${et}`:'';
   const mod=p.mode==='pct'?`${(''+p.pct).replace('.',',')}% · `:(p.mode==='fixed'?'vast · ':'');
@@ -5495,15 +5500,44 @@ function nogDezeMaandBody(){
   let S=null; try{ S=safeToSpend(); }catch(_){}
   const spaarOn=!!(S && S.saveTarget>0);
   const nogSparen=spaarOn?Math.max(S.saveReserved,0):0, gehaald=spaarOn&&nogSparen<=0;
-  const spaarTegel=spaarOn?`
-      <div class="wvo-tile" style="cursor:pointer" onclick="openSafeToSpend()"><div class="wvo-tl">${jrg('nogtesparen','Nog te sparen')}</div>
-        <div class="wvo-tv" style="color:${gehaald?'var(--green)':'var(--txt)'}">${euro0(nogSparen)}</div>
-        <div class="wvo-ts">${gehaald?`${ICON('check')} gehaald \u00b7 ${euro0(S.savedThisMonth)} opzij`:`van ${euro0(S.saveTarget)}${S.savedThisMonth>0?` \u00b7 ${euro0(S.savedThisMonth)} opzij`:''}`}</div></div>`:'';
-  return `<div class="wvo-tiles" style="grid-template-columns:${spaarOn?'1fr 1fr 1fr':'1fr 1fr'}">
-      <div class="wvo-tile"${teBetalen>0?' style="cursor:pointer" onclick="openFixedDue()"':''}><div class="wvo-tl">Nog te betalen · vast</div><div class="wvo-tv" style="color:${teBetalen>0?'var(--red)':'var(--mut)'}">${euro0(teBetalen)}</div>${sub?`<div class="wvo-ts">${sub}</div>`:''}</div>
-      <div class="wvo-tile"><div class="wvo-tl">Nog te ontvangen</div><div class="wvo-tv" style="color:${teOntvangen>0?'var(--green)':'var(--mut)'}">${euro0(teOntvangen)}</div><div class="wvo-ts">inkomen</div></div>${spaarTegel}
-    </div>
-    ${varPlan>0?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:6px;text-align:right;cursor:pointer" onclick="openReservedPotjes()">plus ${euro0(varPlan)} variabel uit je potjes ›</div>`:''}`;
+  /* v204: hier stonden drie gelijkvormige tegels met een vierde post eronder als voetregel in de
+     kleinste tekstgraad, rechts uitgelijnd. Twee problemen die er een waren.
+     De drie tegels waren gelijkvormig maar niet gelijksoortig: "nog te betalen" en "nog te
+     ontvangen" zijn waarnemingen uit je boekingen met een herkomst eronder, terwijl "nog te sparen"
+     een plan is met een noemer en een gehaald-stand die de andere twee niet kennen. En de vierde
+     post, wat er nog uit je potjes moet, was aan het begin van de maand de grootste uitgaande post
+     van het blok en had de kleinste vorm.
+     De scheiding die er werkelijk is, is WAARNEMING tegenover PLAN. In twee kolommen levert dat
+     vanzelf twee rijen op: waarneming boven, plan onder, en die rijen zijn de scheiding. Geen
+     groepskoppen erbij: de sub van elke tegel noemt zijn bron al, en twee koppen voor vier tegels
+     is meer meubilair dan winst.
+     Er telt hier niets op (v192 haalde de chip weg en er is geen tweede optelling voor
+     teruggekomen), dus vier tegels suggereren geen waterval. */
+  const posten=[
+    // waarneming: wat je boekingen zeggen over de rest van de maand
+    {lab:`Nog te betalen · vast`, val:euro0(teBetalen),
+     col:teBetalen>0?'var(--red)':'var(--mut)', sub, tik:teBetalen>0?'openFixedDue()':''},
+    {lab:'Nog te ontvangen', val:euro0(teOntvangen),
+     col:teOntvangen>0?'var(--green)':'var(--mut)', sub:'inkomen', tik:''},
+  ];
+  // plan: wat je jezelf hebt opgelegd. Zonder alarmkleur, want dit is geen tekort (v78/v93).
+  if(spaarOn) posten.push({lab:jrg('nogtesparen','Nog te sparen'), val:euro0(nogSparen),
+    col:gehaald?'var(--green)':'var(--txt)',
+    sub:gehaald?`${ICON('check')} gehaald · ${euro0(S.savedThisMonth)} opzij`
+               :`van ${euro0(S.saveTarget)}${S.savedThisMonth>0?` · ${euro0(S.savedThisMonth)} opzij`:''}`,
+    tik:'openSafeToSpend()'});
+  if(varPlan>0) posten.push({lab:'Nog uit je potjes', val:euro0(varPlan), col:'var(--txt)',
+    sub:'variabel', tik:'openReservedPotjes()'});
+  /* Een oneven laatste tegel neemt de volle breedte. Zonder dat blijft hij als halve rij hangen, en
+     dat leest als een tegel waar een tweede bij hoort te staan. De eerste twee renderen altijd
+     zodra dit blok er staat, dus in de praktijk gaat het om een enkele plan-tegel op de tweede rij;
+     de regel is algemeen gehouden zodat ook een lijst van een of drie klopt. */
+  const vol=i=>posten.length%2===1 && i===posten.length-1;
+  const tegel=(p,i)=>`<div class="wvo-tile" style="${vol(i)?'grid-column:1/-1;':''}${p.tik?'cursor:pointer':''}"${p.tik?` onclick="${p.tik}"`:''}>
+      <div class="wvo-tl">${p.lab}</div>
+      <div class="wvo-tv" style="color:${p.col}">${p.val}</div>
+      ${p.sub?`<div class="wvo-ts">${p.sub}</div>`:''}</div>`;
+  return `<div class="wvo-tiles" style="grid-template-columns:1fr 1fr">${posten.map(tegel).join('')}</div>`;
 }
 /* v135: de kaart is gesplitst in body en omhulsel, zodat Inzichten de tegels in zijn eigen
    herokaart kan zetten zonder een kaart in een kaart. Alle guards en de koppeling met

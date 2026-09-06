@@ -30,14 +30,17 @@ const spaarTegel = (page) => tegels(page).nth(2);
 test.describe('a · de tegel toont wat er nog opzij moet', () => {
   test('bedrag, subregel en plek naast de andere twee', async ({ page }) => {
     await boot(page);
-    await expect(tegels(page)).toHaveCount(3);
+    /* v204: de rij telt sinds v204 ook 'Nog uit je potjes', dus het aantal ligt niet meer vast.
+       Wat deze test bewaakt is de spaartegel zelf, en die staat onveranderd op de derde plek:
+       de twee waarnemingen eerst, daarna het plan. */
+    await expect(tegels(page).nth(2)).toBeVisible();
     const t = (await spaarTegel(page).innerText()).toLowerCase();
     expect(t).toContain('nog te sparen');
     expect(t).toContain('€100');
     expect(t).toContain(`van €${TARGET}`);
     expect(t).toContain(`€${GESPAARD} opzij`);
-    // drie kolommen zolang er een spaardoel is
-    expect(await kaart(page).locator('.wvo-tiles').evaluate((e) => e.style.gridTemplateColumns)).toBe('1fr 1fr 1fr');
+    // v204: twee kolommen, zodat de rijen zelf de scheiding zijn tussen waarneming en plan
+    expect(await kaart(page).locator('.wvo-tiles').evaluate((e) => e.style.gridTemplateColumns)).toBe('1fr 1fr');
     // en de bestaande tegels staan er onveranderd bij
     const kt = (await kaart(page).innerText()).toLowerCase();
     expect(kt).toContain('nog te betalen');
@@ -71,7 +74,8 @@ test.describe('b · randgevallen', () => {
   test('geen spaardoel: geen tegel, en de widget blijft verder gelijk', async ({ page }) => {
     await boot(page, tweak((set) => { set.savingMode = 'amount'; set.savingAmount = 0; }));
     expect(await page.evaluate(() => monthlySavingTarget())).toBe(0);
-    await expect(tegels(page)).toHaveCount(2);
+    // v204: zonder spaardoel valt de spaartegel weg; of er dan twee of drie tegels staan hangt
+    // af van je potjes, dus toetsen we de afwezigheid en niet het aantal
     const kt = (await kaart(page).innerText()).toLowerCase();
     expect(kt).not.toContain('nog te sparen');
     expect(kt).toContain('nog te betalen');
@@ -101,7 +105,7 @@ test.describe('b · randgevallen', () => {
    "Deze maand op eigen kracht" (netto - nogSparen), en dat getal is vervallen omdat het een
    waarneming bij een planrest optelde en daardoor steeg naarmate je meer uitgaf. Een spiegel op een
    getal dat weg is heeft geen onderwerp meer. Zie tests/geen-verbetering-door-uitgeven.spec.js. */
-test('d · drie tegels passen op 360 en 390px', async ({ page }) => {
+test('d · de tegels passen op 360 en 390px', async ({ page }) => {
   await boot(page);
   for (const w of [360, 390]) {
     await page.setViewportSize({ width: w, height: 900 });
@@ -120,7 +124,8 @@ test('d · drie tegels passen op 360 en 390px', async ({ page }) => {
     expect(r.pagina, `${w}px`).toBe(0);
     expect(r.buiten, `${w}px`).toBe(0);
     expect(r.afgekapt, `${w}px`).toBe(0);                                // geen afgekapt bedrag
-    expect(r.breedtes.length, `${w}px`).toBe(3);
+    // v204: het aantal ligt niet meer vast; wat telt is dat geen tegel te smal wordt
+    expect(r.breedtes.length, `${w}px`).toBeGreaterThanOrEqual(3);
     expect(Math.min(...r.breedtes), `${w}px`).toBeGreaterThan(70);
   }
 });
