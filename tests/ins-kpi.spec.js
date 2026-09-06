@@ -12,21 +12,25 @@ const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
 //   M1 en M2 (afgerond) : 25 + 20 + 900 + 400 + 150 = 1495 uitgaven
 const SPEND_CUR = 445, SPEND_M1 = 1495, INK = 3000, POTJES = 2400;
 
+/* v194: de sparklines en de maandgrafiek renderen pas vanaf GRAFIEK_MIN afgeronde maanden.
+   HIST geeft de fixture die historie; de extra maanden zijn identiek aan M1, dus geen enkel
+   afgeleid getal in deze spec verschuift. */
+const HIST = { maanden: 8 };
 async function openIns(page, payload) {
-  await open(page, payload || seed());
+  await open(page, payload || seed(HIST));
   await page.evaluate(() => go('ins'));
   await page.waitForSelector('#insKpiStrip');
 }
 /* v178: de meermaands-grafiek zet deze maand naast eerdere maanden en staat sindsdien op Maand.
    De grafiek zelf is onveranderd, alleen het scherm waar hij op staat verschilt. */
 async function openGrafiek(page, payload) {
-  await open(page, payload || seed());
+  await open(page, payload || seed(HIST));
   await page.evaluate(() => go('maand'));
   await page.waitForSelector('#s-maand .card');
 }
 
 function tweak(fn) {
-  const p = seed();
+  const p = seed(HIST);
   const set = JSON.parse(p.minder_set);
   const tx = JSON.parse(p.minder_tx);
   fn(set, tx);
@@ -208,10 +212,13 @@ test.describe('b · historische reeksen', () => {
       };
     }, { CUR, M1 });
 
-    expect(r.reeks).toEqual([M2, M1, CUR]);
+    // v194: de fixture draagt extra historie voor de grafiek en de sparklines; de reeks volgt
+    // months() en is dus even lang, met M2/M1/CUR nog steeds achteraan.
+    expect(r.reeks.slice(-3)).toEqual([M2, M1, CUR]);
+    expect(r.reeks.length).toBe(r.maanden);
     expect(r.alle).toBe(r.maanden);                                       // n=0 = volledige historie
     expect(r.variCur).toEqual(r.handmatig);                               // exact months().map(...)
-    expect(r.variM1.length).toBe(2);                                      // t/m de getoonde maand
+    expect(r.variM1.length).toBe(r.maanden - 1);                          // t/m de getoonde maand
   });
 
   test('bij één maand historie: waarde zonder trend, met nette regel', async ({ page }) => {
@@ -251,20 +258,21 @@ test.describe('b · historische reeksen', () => {
 });
 
 test.describe('b2 · maandgrafiek', () => {
-  test('één datakleur, alleen de uitschieter gelabeld, tooltip op elke maand', async ({ page }) => {
+  /* v194: de lopende maand had hier een eigen accentkleur en een sterretje. Die staaf staat er niet
+     meer in, dus er is nog precies een datakleur. En alle staven dragen nu een waardelabel, niet
+     alleen de uitschieter: anders kun je twee maanden niet vergelijken zonder te tikken. */
+  test('één datakleur, elke staaf gelabeld, tooltip op elke maand', async ({ page }) => {
     await openGrafiek(page);
     const c = page.locator('#insSpendChart');
     const kleuren = await c.locator('rect.cbar').evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('fill')))]);
-    expect(kleuren.sort()).toEqual(['var(--bar)', 'var(--teal)']);          // neutraal + accent lopende maand
+    expect(kleuren).toEqual(['var(--bar)']);                               // een datakleur, geen accent
     expect(await c.locator('rect.cbar[rx="3"]').count()).toBe(await c.locator('rect.cbar').count());
+    expect(await c.locator('rect.cbar[fill="var(--teal)"]').count()).toBe(0);
+    expect(await page.locator('#insSpendChart').innerHTML()).not.toContain('*</text>');
 
-    const nu = c.locator('rect.cbar[fill="var(--teal)"]');
-    expect(await nu.getAttribute('stroke-dasharray')).toBeTruthy();         // voorlopig gemarkeerd
-    expect(await page.locator('#insSpendChart').innerHTML()).toContain('*</text>');
-
-    // labels: alleen de uitschieter (plus het budget-tag), tooltip op elke maand
+    const staven = await c.locator('rect.cbar').count();
     const vals = await c.locator('text[font-weight="700"]').evaluateAll((els) => els.map((e) => e.textContent));
-    expect(vals.filter((t) => !/budget/.test(t)).length).toBeLessThanOrEqual(1);   // alleen de uitschieter
+    expect(vals.filter((t) => !/budget/.test(t)).length).toBe(staven);      // elke staaf een waarde
     expect(await c.locator('rect[fill="transparent"] title').count()).toBe(await c.locator('rect.cbar').count());
     expect(await page.locator('#insSpendChart line[stroke-dasharray]').count()).toBeGreaterThan(0);   // referentielijn
     expect(await page.locator('#insSpendChart line:not([stroke-dasharray])').count()).toBe(1);        // alleen de basislijn
@@ -284,7 +292,8 @@ test.describe('c · tik op een tegel', () => {
     expect(sheet).not.toContain('50/30/20');
     expect(sheet).toContain('volledige historie van deze metriek');
     expect(await page.locator('#kpiHist').count()).toBe(1);
-    expect(await page.locator('#kpiHist rect.cbar').count()).toBe(3);     // één staaf per maand
+    const nMaanden = await page.evaluate(() => months().length);
+    expect(await page.locator('#kpiHist rect.cbar').count()).toBe(nMaanden);   // één staaf per maand
     expect(await page.locator('#kpiHist line[stroke-dasharray]').count()).toBe(0);   // geen band, geen lijn
   });
 
@@ -347,22 +356,38 @@ test.describe('c · tik op een tegel', () => {
 });
 
 test.describe('d · uitgaven-vs-budget-grafiek', () => {
-  test('rendert elke maand met budgetlijn en markeert de lopende maand', async ({ page }) => {
+  /* v194: de lopende maand stond hier als volwaardige staaf naast volle maanden en las op dag 5
+     als een instorting; de correctie hing aan een sterretje met een voetnoot. Die staaf is weg, dus
+     de grafiek plot alleen afgeronde maanden. Alle staven dragen nu een waardelabel. */
+  test('rendert elke afgeronde maand met budgetlijn, en de lopende maand niet', async ({ page }) => {
     await openIns(page);
-    const n = await page.evaluate(() => months().length);
+    const n = await page.evaluate(() => months().filter((m) => m < thisYM()).length);
     const html = await page.evaluate(() => spendVsBudgetChart());
+    expect(n).toBeGreaterThanOrEqual(6);
     expect((html.match(/<rect class="cbar"/g) || []).length).toBe(n);
     expect((html.match(/stroke-dasharray="4 3"/g) || []).length).toBe(n);      // budgetlijn per maand
-    expect((html.match(/fill-opacity=".42"/g) || []).length).toBe(1);          // alleen de lopende maand
-    expect(html).toContain('De maand met * loopt nog.');
-    // het label komt uit MNAMES, dus lezen we het daar ook uit: hardcoderen laat deze test
-    // elf maanden per jaar slagen om de verkeerde reden en in de twaalfde falen op de kalender.
+    expect(html).not.toContain('fill-opacity=".42"');                          // geen accentstaaf meer
+    expect(html).not.toContain('loopt nog');                                   // en dus geen voetnoot
     const nu = await page.evaluate((m) => MNAMES[+m.slice(5, 7) - 1], CUR);
-    expect(html).toContain(`>${nu}*<`);                                        // lopende maand gemarkeerd op de x-as
-    expect((html.match(/\*</g) || []).length).toBe(1);                         // en alleen die
-    expect(html).toContain('budget €');                                        // gelabelde budgetlijn
+    expect(html).not.toContain(`>${nu}*<`);
+    expect(html).not.toContain('*<');                                          // het sterretje is weg
     expect(html).toContain('>0<');                                             // y-as met nullijn
-    expect((html.match(/font-weight="700"/g) || []).length).toBeGreaterThan(0); // waardelabels
+    expect((html.match(/font-weight="700"/g) || []).length).toBe(n);           // elke staaf een label
+  });
+
+  test('de budgettag staat er alleen als de budgetten per maand verschillen', async ({ page }) => {
+    await openIns(page);
+    const gelijk = await page.evaluate(() => spendVsBudgetChart());
+    expect(gelijk).not.toContain('budget €');       // een vlakke lijn zegt het al
+    // een afwijkend budget in de laatste afgeronde maand: dan voegt de tag wel iets toe
+    const anders = await page.evaluate(() => {
+      const echt = totals;
+      const laatste = months().filter((m) => m < thisYM()).slice(-1)[0];
+      window.totals = (mm, o) => { const t = echt(mm, o);
+        return mm === laatste ? Object.assign({}, t, { budget: t.budget * 0.6 }) : t; };
+      const h = spendVsBudgetChart(); window.totals = echt; return h;
+    });
+    expect(anders).toContain('budget €');
   });
 
   test('een tik op een kolom leest hem uit; de uitlezing opent die maand', async ({ page }) => {
@@ -380,12 +405,15 @@ test.describe('d · uitgaven-vs-budget-grafiek', () => {
     expect((await page.locator('#sheet').innerText()).toLowerCase()).toContain(label.toLowerCase());
   });
 
-  test('onder 2 maanden: lege staat i.p.v. een misleidende grafiek', async ({ page }) => {
+  /* v194: de drempel ging van twee naar GRAFIEK_MIN afgeronde maanden. Bij drie punten, waarvan
+     een lopend, verandert er geen beslissing door de vorm. */
+  test(`onder de drempel: lege staat i.p.v. een misleidende grafiek`, async ({ page }) => {
     await openIns(page, tweak((set, tx) => {
       for (let i = tx.length - 1; i >= 0; i--) if (!tx[i].date.startsWith(CUR)) tx.splice(i, 1);
     }));
+    const min = await page.evaluate(() => GRAFIEK_MIN);
     const html = await page.evaluate(() => spendVsBudgetChart());
-    expect(html).toContain('Na twee maanden zie je hier je verloop.');
+    expect(html).toContain(`Vanaf ${min} afgeronde maanden zie je hier je verloop`);
     expect(html).not.toContain('openBudgetCompare');
     expect(await page.locator('#insSpendChart').count()).toBe(0);
   });
@@ -431,9 +459,11 @@ test('f · catSparkline blijft werken via de gedeelde miniSpark', async ({ page 
     spark: catSparkline('boodschappen'),
     leeg: miniSpark([5]),
     drie: miniSpark([1, 2, 3]),
+    n: Math.min(months().length, 6),
   }));
-  expect(r.spark).toContain('Verloop laatste 3 maanden');
-  expect((r.spark.match(/class="b"/g) || []).length).toBe(3);
+  // v194: de fixture draagt meer historie; catSparkline volgt die en noemt zijn eigen aantal.
+  expect(r.spark).toContain(`Verloop laatste ${r.n} maanden`);
+  expect((r.spark.match(/class="b"/g) || []).length).toBe(r.n);
   expect(r.spark).toContain('class="lab"');
   expect(r.leeg).toBe('');                                                // < 2 waarden: geen sparkline
   expect((r.drie.match(/class="b"/g) || []).length).toBe(3);

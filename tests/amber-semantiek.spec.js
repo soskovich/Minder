@@ -7,12 +7,12 @@ const { seed, open, CUR } = require('./budget-fixture');
 const AMBER = /var\(--amber\)|#fbbf24|#f5b544/;
 
 function metBudget(bedrag) {
-  const p = seed(); const set = JSON.parse(p.minder_set);
+  const p = seed({ maanden: 8 }); const set = JSON.parse(p.minder_set);
   set.budgets = { boodschappen: bedrag }; set.budgetsNext = {};
   p.minder_set = JSON.stringify(set); return p;
 }
 async function boot(page, payload) {
-  await open(page, payload || seed());
+  await open(page, payload || seed({ maanden: 8 }));
   await page.evaluate(() => go('ins'));
   await page.waitForSelector('#s-ins .card');
 }

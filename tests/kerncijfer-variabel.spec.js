@@ -9,12 +9,12 @@ const INK = 3000;
 const VARI_M1 = 575;
 
 async function openIns(page, payload) {
-  await open(page, payload || seed());
+  await open(page, payload || seed({ maanden: 8 }));
   await page.evaluate(() => go('ins'));
   await page.waitForSelector('#insKpiStrip');
 }
 function tweak(fn) {
-  const p = seed(); const set = JSON.parse(p.minder_set); fn(set);
+  const p = seed({ maanden: 8 }); const set = JSON.parse(p.minder_set); fn(set);
   p.minder_set = JSON.stringify(set); return p;
 }
 const tegel = (page, key) => page.locator(`#insKpiStrip .wvo-tile[data-kpi="${key}"]`);

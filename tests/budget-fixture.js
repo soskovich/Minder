@@ -25,7 +25,11 @@ const SAFE = (SALDO - SPAAR_SALDO) - FIXDUE - VARPLAN - SAVE_REMAINING;   // 194
 
 // giftCharged=false laat de periodieke overboeking deze maand openstaan,
 // zodat hij in fixDue moet landen (v55: incasso EN standing order).
-function seed({ giftCharged = true } = {}) {
+/* v194: de maandgrafiek en de sparklines renderen pas vanaf GRAFIEK_MIN afgeronde maanden. Specs
+   die die vormen toetsen geven `maanden` mee; de extra maanden zijn identiek aan M1, dus elk
+   afgeleid gemiddelde (noodfondsModel, baseIncome, suggestBudgets) blijft precies gelijk en geen
+   enkele bestaande verwachting verschuift. Default blijft 3, zoals het altijd was. */
+function seed({ giftCharged = true, maanden = 3 } = {}) {
   const tx = [];
   const add = (id, m, day, amount, name, desc, acc, accName) =>
     tx.push({ id, date: `${m}-${day}`, amount, acc, name, desc, typ: '', ref: '', src: 'csv', accName, refNums: [] });
@@ -39,6 +43,16 @@ function seed({ giftCharged = true } = {}) {
   for (const m of [M2, M1]) add('huur-' + m, m, '20', -900, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING', MAIN, 'Main');
   // Variabele historie (kaart), voor de prognose-basis.
   for (const m of [M2, M1]) {
+    add('ah-' + m, m, '08', -400, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN', MAIN, 'Main');
+    add('eet-' + m, m, '12', -150, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT', MAIN, 'Main');
+  }
+  // v194: extra historie op verzoek, met exact het patroon van M1.
+  for (let k = 3; k < maanden; k++) {
+    const m = ym(new Date(now.getFullYear(), now.getMonth() - k, 1));
+    add('inc-' + m, m, '05', 3000, 'Werkgever', 'SALARIS LOON', MAIN, 'Main');
+    add('fit-' + m, m, '04', -25, 'Basic-Fit', 'ECOM BASIC FIT BETAALPAS', MAIN, 'Main');
+    add('gift-' + m, m, '03', -20, 'Greenpeace', 'PERIODIEKE OVERBOEKING MAANDELIJKSE GIFT', MAIN, 'Main');
+    add('huur-' + m, m, '20', -900, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING', MAIN, 'Main');
     add('ah-' + m, m, '08', -400, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN', MAIN, 'Main');
     add('eet-' + m, m, '12', -150, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT', MAIN, 'Main');
   }

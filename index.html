@@ -2957,7 +2957,13 @@ function doelTempoLine(p){
    kopcijfer op Plan, dat toen per geval is opgelost door de graad van die kaart te halen; de regel
    staat nu vast, zodat hij niet ergens anders terugkomt. */
 const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelStatus:'tekort',
-  onbekendDeel:0.5, onbekendMin:3 };   // v162: een patroon over maanden vraagt een beslissing, geen aandacht   // kpiMinBedrag: onder dit grondtal zegt een percentage niets (v161)
+  onbekendDeel:0.5, onbekendMin:3, budgetVol:100 };   // v194: de grens waarop je potjes precies op zijn
+/* v194: een verloop is pas een verloop bij genoeg punten. Onder deze drempel verandert er geen
+   beslissing door de vórm van een lijn of een reeks staven - je leest een richting en verder niets -
+   en is een getal met zijn vorige waarde sterker. Eén constante voor de maandgrafiek en de
+   sparklines samen, zodat die twee niet uiteen kunnen lopen. Geteld worden afgeronde maanden: de
+   lopende is per definitie niet vergelijkbaar. */
+const GRAFIEK_MIN = 6;   // v162: een patroon over maanden vraagt een beslissing, geen aandacht   // kpiMinBedrag: onder dit grondtal zegt een percentage niets (v161)
 /* v155: de meevallerdrempel stond als kaal 1.15 op drie plekken. Eén naam, dezelfde waarde, zodat
    de verdeelregel niet zijn eigen drempel krijgt. Geen gedragswijziging. */
 const MEEVALLER_FACTOR = 1.15;   // de rest volgt nfMaanden()
@@ -4239,14 +4245,28 @@ function renderPlan(bare){
   const P=allocatePlan(); const cap=planCapacity(); const n=P.length;
   const rows=P.map((p,i)=>{
     const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
-    const col=p.status==='gepauzeerd'?'var(--mut)':(p.status==='bereikt'?'var(--green)':'var(--teal)');
+    /* v194: de balk toonde alleen voortgang, terwijl dit scherm over verdeling gaat - het enige
+       beeld op de pagina toonde dus het verkeerde. Een tweede, lichter segment achter de vulling
+       zegt wat er deze maand bij komt, zodat de balk zowel je stand als de beweging draagt. Bij een
+       aflos-item is dat alloc plus je bestaande termijn: hetzelfde bedrag dat de regel eronder
+       noemt (v190), want dat is wat er werkelijk in gaat. Staat het item stil, dan is alloc nul en
+       is er geen segment - dat sluit aan op de grijze vulling hierboven in plaats van ermee te
+       botsen. Niets gerekend: alloc, debtPer, gespaard en doel bestaan alle vier al. */
+    const perMnd=Math.max(Math.round(+p.alloc||0),0)+(p.type==='aflossen'?Math.max(Math.round(+p.debtPer||0),0):0);
+    const groei=(p.doel>0&&perMnd>0)?Math.max(Math.min(perMnd/p.doel*100,100-pct),0):0;
+    /* v194: 'wacht op capaciteit' was teal, precies de kleur van een doel dat wél geld krijgt.
+       Drie doelen zagen er dan identiek uit terwijl er één €300 per maand krijgt en twee niets. In
+       beide gevallen komt er niets bij, dus krijgt wachten dezelfde grijstint als gepauzeerd - dat
+       patroon bestond al, inclusief het woord erbij in planSub(). */
+    const stil=p.status==='gepauzeerd'||p.status==='wacht op capaciteit';
+    const col=stil?'var(--mut)':(p.status==='bereikt'?'var(--green)':'var(--teal)');
     const up=i>0?`<button class="plan-mv" onclick="planMove('${p.id}',-1)" aria-label="Hoger">▲</button>`:'<span class="plan-mv off">▲</span>';
     const dn=i<n-1?`<button class="plan-mv" onclick="planMove('${p.id}',1)" aria-label="Lager">▼</button>`:'<span class="plan-mv off">▼</span>';
     return `<div class="card plan-item" data-id="${p.id}" style="padding:12px 13px;margin-bottom:8px">
       <div style="display:flex;gap:10px;align-items:flex-start">
         <div style="flex:1;min-width:0;cursor:pointer" onclick="${planOpen(p)}">
           <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${p.nfOnbekend?`<span style="color:var(--mut)">onbekend</span>`:euro0(p.gespaard)+' toegewezen'} / ${euro0(p.doel)}</span></div>
-          ${p.nfOnbekend?'':`<div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>`}
+          ${p.nfOnbekend?'':`<div class="bar-track" style="margin:8px 0 0;display:flex"><div class="bar-fill" style="width:${pct}%;background:${col}${groei>0?';border-radius:6px 0 0 6px':''}"></div>${groei>0?`<div class="bar-fill bar-groei" style="width:${groei.toFixed(1)}%;background:color-mix(in srgb,${col} 38%,transparent);border-radius:0 6px 6px 0"></div>`:''}</div>`}
           <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
           ${p.nfOnbekend?'':doelTempoLine(p)}
         </div>
@@ -7591,12 +7611,34 @@ function miniSparkLine(values, opts){
 }
 /* v161: de tegels zijn gedeeld, want de kerncijfers staan nu op twee schermen. Eén renderer, zodat
    Inzichten en het maandscherm niet uiteen kunnen lopen in opmaak of oordeel. */
+/* v194: een sparkline bij drie punten is twee segmenten - je leest een richting en verder niets -
+   en twee lijnen naast elkaar met elk hun eigen schaal en zonder as nodigen uit tot een
+   vergelijking die niet klopt. Onder GRAFIEK_MIN volle maanden vervalt de lijn dus, en komt er een
+   getal met zijn vorige waarde voor terug: dat is wat je aan een verloop wilde aflezen. De lopende
+   maand telt niet mee als volle maand.
+   Tweede geval: is het grondtal te klein voor een percentage, dan staat er een bedrag in de tegel
+   (v161/v193) terwijl de reeks procenten plot. Getal en lijn in twee eenheden onder elkaar, zonder
+   dat iets dat zegt. Dan geen lijn en ook geen delta-zin, want die zou procenten noemen onder een
+   bedrag; de band zegt al dat het grondtal te klein is. */
+function kpiVolleMaanden(k){
+  const v=(k&&k.series)||[];
+  const n=v.filter(x=>x!=null).length;
+  return k&&k.partial&&v.length&&v[v.length-1]!=null?n-1:n;
+}
+function kpiDeltaZin(k){
+  const v=((k&&k.series)||[]).filter(x=>x!=null);
+  if(v.length<2) return `<div class="wvo-ts" style="color:var(--mut2)">Een verloop zie je vanaf ${GRAFIEK_MIN} afgeronde maanden.</div>`;
+  const vorige=v[v.length-2];
+  return `<div class="wvo-ts" style="color:var(--mut2)">vorige maand ${_pct0(vorige)} \u00b7 verloop vanaf ${GRAFIEK_MIN} mnd</div>`;
+}
 function kpiTegels(items){
   return items.map(k=>{
     const col=kpiCol(k.state);
     const doel=kpiBand(k.key)!=null?kpiBand(k.key):null;
-    const sl=miniSparkLine(k.series,{target:doel, running:k.partial});
-    const spark=sl?`<div class="spk-wrap">${sl}</div>`:'';
+    const genoeg=kpiVolleMaanden(k)>=GRAFIEK_MIN;
+    const sl=(genoeg&&!k.klein)?miniSparkLine(k.series,{target:doel, running:k.partial}):'';
+    const spark=sl?`<div class="spk-wrap">${sl}</div>`
+      :((!genoeg&&!k.klein&&k.raw!=null)?kpiDeltaZin(k):'');
     return `<div class="wvo-tile" style="cursor:pointer" onclick="openKpiDetail('${k.key}')" data-kpi="${k.key}">
       <div class="wvo-tl">${k.label}</div>
       <div class="wvo-tv" style="color:${col}">${k.val}</div>
@@ -7958,45 +8000,70 @@ function spendVsBudgetChart(){
   // overvalt je niet. Een eigen keuze (open of dicht) wint altijd van die default.
   const open=collapOpen('openSpendChart');
   const head=`<div class="row" style="margin-bottom:${open?'8px':'0'};cursor:pointer" onclick="toggleCollap('openSpendChart')"><span class="hlabel" style="margin:0;flex:1">${ICON('trend')} Uitgaven vs budget</span><span class="muted" style="font-size:var(--fs-lg);width:14px;text-align:center">${open?'▲':'›'}</span></div>`;
-  if(ms.length<2) return `<div class="card">${head}${open?'<div class="small muted">Na twee maanden zie je hier je verloop.</div>':''}</div>`;
-  if(!open) return `<div class="card" id="insSpendCard">${head}<div class="small" style="color:var(--mut2);margin-top:6px">Je uitgaven per maand naast je budget · tik om te bekijken</div></div>`;
-  const last=ms.slice(-12);
+  /* v194: de lopende maand stond hier als volwaardige staaf naast volle maanden. Op dag 5 leest
+     €445 naast €1.495 als een instorting, en de correctie hing aan een sterretje met een voetnoot
+     in 8pt. Die staaf is weg: deze grafiek beantwoordt hoe je maanden zich tot elkaar verhouden, en
+     een halve maand hoort daar niet in. Wat je deze maand uitgaf staat op Inzichten in de hero, met
+     de dagteller ernaast. Daarmee vervallen ook het sterretje, de voetnoot en de accentstaaf.
+     v194: en de drempel gaat van twee naar GRAFIEK_MIN afgeronde maanden. Bij drie punten verandert
+     er geen beslissing door de vorm; de lege staat zegt vanaf wanneer het wel zin heeft. */
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const rows=last.map(mm=>{ const t=totals(mm); return {m:mm, spend:Math.max(t.spend,0), budget:Math.max(t.budget,0), now:mm===nowYM}; });
+  const afgerond=ms.filter(mm=>mm<nowYM);
+  if(afgerond.length<GRAFIEK_MIN) return `<div class="card">${head}${open?`<div class="small muted">Vanaf ${GRAFIEK_MIN} afgeronde maanden zie je hier je verloop. Je hebt er nu ${afgerond.length}.</div>`:''}</div>`;
+  if(!open) return `<div class="card" id="insSpendCard">${head}<div class="small" style="color:var(--mut2);margin-top:6px">Je uitgaven per maand naast je budget · tik om te bekijken</div></div>`;
+  const last=afgerond.slice(-12);
+  const rows=last.map(mm=>{ const t=totals(mm); return {m:mm, spend:Math.max(t.spend,0), budget:Math.max(t.budget,0)}; });
   const G=CHART_GEO, {W,H,L,R,TOP,BASE,XLAB}=G;
   const niceTop=reisNiceCeil(Math.max(...rows.map(r=>Math.max(r.spend,r.budget)),1)*1.08);
   const slot=(W-L-R)/rows.length, bw=Math.min(slot*0.62,34);
   const y=v=>BASE-Math.max(v,0)/niceTop*(BASE-TOP);
-  // alleen de uitschieter draagt een label; de rest lees je via de tooltip of de uitlezing
-  const piek=rows.reduce((b,r,i)=>(r.spend>rows[b].spend?i:b),0);
-  const toon=new Set([piek]);
-  const yBudLab=rows[rows.length-1].budget>0?y(rows[rows.length-1].budget)-4:-99;
-  if(piek===rows.length-1 && Math.abs(Math.max(y(rows[piek].spend)-4,TOP-4)-yBudLab)<11) toon.delete(piek);
+  /* v194: alleen de piekstaaf droeg een waardelabel, dus je kon geen twee maanden vergelijken
+     zonder er een aan te tikken. Bij twaalf of minder staven passen ze allemaal; boven negen gaat
+     de tekengrootte een stap omlaag zodat ze niet in elkaar lopen. */
+  const fs=rows.length>9?7.5:8.5;
+  const toon=new Set(rows.map((_,i)=>i));
+  /* v194: de budgetlijn werd twee keer gecodeerd - als gestreepte segmenten per maand én als tag
+     rechts, die over het rechteruiteinde van diezelfde lijn viel. De segmenten blijven, want die
+     zijn de waarheid per maand; de tag verschijnt alleen nog als de budgetten per maand verschillen
+     en hij dus iets zegt wat de vlakke lijn niet al zegt. */
+  const budgetten=rows.map(r=>r.budget).filter(b=>b>0);
+  const heeftBudget=budgetten.length>0;
+  const budgetVerschilt=heeftBudget && budgetten.some(b=>b!==budgetten[0]);
+  const budNu=rows[rows.length-1].budget;
+  const toonTag=budgetVerschilt && budNu>0;
+  const yBudLab=toonTag?y(budNu)-4:-99;
+  const laatste=rows.length-1;
+  if(toonTag && Math.abs(Math.max(y(rows[laatste].spend)-4,TOP-4)-yBudLab)<11) toon.delete(laatste);
   const bars=rows.map((r,i)=>{
     const cx=L+slot*i+slot/2, x=cx-bw/2, yy=y(r.spend), h=Math.max(BASE-yy,1.5);
-    // één datakleur: neutraal, met de lopende maand als accent. Boven of onder budget lees je
-    // aan de gestreepte budgetlijn — geen tweede kleur nodig.
-    const col=r.now?'var(--teal)':'var(--bar)';
-    const bar=`<rect class="cbar" x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${col}"${r.now?' fill-opacity=".42" stroke="'+col+'" stroke-width="1" stroke-dasharray="3 2"':''}/>`;
+    // v194: één datakleur voor alle staven. De lopende maand had een eigen accent en staat er niet
+    // meer in; boven of onder budget lees je aan de gestreepte budgetlijn, geen tweede kleur nodig.
+    const col='var(--bar)';
+    const bar=`<rect class="cbar" x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${col}"/>`;
     const bud=r.budget>0?`<line x1="${(L+slot*i+1).toFixed(1)}" x2="${(L+slot*(i+1)-1).toFixed(1)}" y1="${y(r.budget).toFixed(1)}" y2="${y(r.budget).toFixed(1)}" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
-    const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="8.5" font-weight="700" fill="var(--txt)" text-anchor="middle">${chartK(r.spend)}</text>`:'';
-    const lab=`<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="var(--lab)" text-anchor="middle">${MNAMES[+r.m.slice(5,7)-1]}${r.now?'*':''}</text>`;
-    // let op: geen aanhalingstekens in deze string — hij zit in een onclick-attribuut
-    const uit=`&lt;b&gt;${esc(monthLabel(r.m))}&lt;/b&gt; · ${euro0(r.spend)}${r.budget>0?` van ${euro0(r.budget)}`:''}${r.now?' · tot nu toe':''} · bekijk maand ›`;
+    const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="${fs}" font-weight="700" fill="var(--txt)" text-anchor="middle">${chartK(r.spend)}</text>`:'';
+    const lab=`<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="var(--lab)" text-anchor="middle">${MNAMES[+r.m.slice(5,7)-1]}</text>`;
+    // let op: geen aanhalingstekens in deze string, hij zit in een onclick-attribuut
+    const uit=`&lt;b&gt;${esc(monthLabel(r.m))}&lt;/b&gt; · ${euro0(r.spend)}${r.budget>0?` van ${euro0(r.budget)}`:''} · bekijk maand ›`;
     const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+18).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="chartRead('spendRead','${uit}');window._spendPick='${r.m}'"><title>${MFULL[+r.m.slice(5,7)-1]} ${r.m.slice(0,4)} · ${euro0(r.spend)}</title></rect>`;
     return bud+bar+val+lab+hit;
   }).join('');
-  const hasNow=rows.some(r=>r.now);
-  const budNu=rows[rows.length-1].budget;
+  /* v194: de legenda had drie items voor twee coderingen, en noemde 'maandbudget' ook als er
+     nergens een lijn stond. Hij wordt daarom afgeleid uit wat er werkelijk getekend is in plaats van
+     een vaste lijst te zijn: elk item hangt aan een codering die op dat moment op het doek staat.
+     Komt er ooit een codering bij, dan hoort hij hier als voorwaarde bij te komen en niet als regel
+     tekst; een legenda-item zonder codering is een belofte over een vorm die er niet is. */
+  const leg=[{aan:true, i:'<i style="background:var(--bar)"></i>', l:'per maand'},
+             {aan:heeftBudget, i:'<i class="d"></i>', l:'maandbudget'}].filter(x=>x.aan);
   return `<div class="card">${head}
     <svg id="insSpendChart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block">
       ${chartYAxis(niceTop, chartK)}
       <line x1="${L}" x2="${W-R}" y1="${BASE}" y2="${BASE}" stroke="rgba(255,255,255,.14)" stroke-width="1"/>
       ${bars}
-      ${budNu>0?chartTagRight(W-R, y(budNu)-4, 'budget '+chartK(budNu), 'var(--ref)'):''}
+      ${toonTag?chartTagRight(W-R, y(budNu)-4, 'budget '+chartK(budNu), 'var(--ref)'):''}
     </svg>
-    <div id="spendRead" class="small" style="color:var(--teal);font-size:var(--fs-xs);margin-top:2px;min-height:15px;cursor:pointer" onclick="if(window._spendPick)openBudgetCompare(window._spendPick)"><span style="color:var(--mut2)">Tik een maand voor het bedrag.${hasNow?' De maand met * loopt nog.':''}</span></div>
-    <div class="gc-leg"><span><i style="background:var(--bar)"></i>per maand</span><span><i style="background:var(--teal)"></i>deze maand</span><span><i class="d"></i>maandbudget</span></div>
+    <div id="spendRead" class="small" style="color:var(--teal);font-size:var(--fs-xs);margin-top:2px;min-height:15px;cursor:pointer" onclick="if(window._spendPick)openBudgetCompare(window._spendPick)"><span style="color:var(--mut2)">Tik een maand voor het bedrag.</span></div>
+    <div class="gc-leg">${leg.map(x=>`<span>${x.i}${x.l}</span>`).join('')}</div>
   </div>`;
 }
 
@@ -8062,6 +8129,22 @@ function whatStandsOutLine(m, nu){
    misleidend renderen. Er wordt hier niets uitgerekend; alle getallen komen uit totals(),
    daysElapsed() en de body van nogDezeMaandCard. De status-chip uit monthStatusCard staat er
    bewust NIET bij: die logica woont daar en zou hier een tweede bron worden. */
+/* v194: boven je budget klemt de balk op 100% en is hij vol rood: de vorm draagt dan niets meer,
+   precies op het moment dat er iets moet gebeuren. Een balk die de overschrijding uittekent zou
+   zijn eigen schaal laten verschuiven met hoe ver je eroverheen bent, en dan is hij tussen twee
+   bezoeken niet meer te vergelijken - hetzelfde bezwaar dat deze ronde bij de sparklines maakt.
+   Wat je op dat moment nodig hebt zijn twee getallen: hoeveel je eroverheen bent en hoeveel tijd er
+   nog is. Allebei bestonden ze al; hier wordt niets gerekend wat er niet stond. Op de grens
+   dezelfde vorm met de nul erin. */
+function budgetOverZin(sp,bud,d,over,opDeGrens){
+  if(!over&&!opDeGrens) return '';
+  const dagen=Math.max(d.dim-d.elapsed,0);
+  const rest=dagen===1?'met nog 1 dag te gaan':(dagen>0?`met nog ${dagen} dagen te gaan`:'op de laatste dag van de maand');
+  const kop=over?`${euro0(sp-bud)} over je potjes`:'Je potjes zijn precies op';
+  // dezelfde kleur als de balk erboven: een stand krijgt er niet twee (v78/v93)
+  const kleur=over?'var(--red)':'var(--amber)';
+  return `<div class="small" style="color:${kleur};margin-top:5px;line-height:1.45">${kop}, ${rest}.</div>`;
+}
 function insBudgetBlok(m){
   let t=null; try{ t=totals(m); }catch(_){ return ''; }
   const bud=Math.round(t.budget), sp=Math.round(t.spend);
@@ -8083,7 +8166,15 @@ function insBudgetBlok(m){
       <div class="small" style="margin-top:6px"><span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="${act}">${esc(lab)} ›</span></div></div>`;
   }
   const usedPct=Math.round(sp/bud*100), dayPct=Math.round(d.elapsed/d.dim*100);
-  const over=sp>bud;
+  /* v194: 'op de grens' zag er identiek uit als 'ruim eronder', want de balk kleurde pas bij méér
+     dan je budget. Precies op je budget is een eigen stand: je bent er niet overheen, maar elke
+     euro hierna wel. Amber is daar de kleur voor (v78/v93), rood blijft voor eroverheen. Het
+     oordeel komt uit de échte verhouding en niet uit usedPct: die is afgerond, dus 99,6% zou als
+     100% lezen terwijl er nog ruimte is. De grens staat in MAAND_DREMPEL. */
+  const pctEcht=bud>0?sp/bud*100:0;
+  const over=pctEcht>MAAND_DREMPEL.budgetVol;
+  const opDeGrens=!over && pctEcht>=MAAND_DREMPEL.budgetVol;
+  const balkKleur=over?'var(--red)':(opDeGrens?'var(--amber)':'var(--accent)');
   /* Drie ingangen, elk op zijn eigen woorden - de ring en de titel van monthStatusCard vielen weg
      op de lopende maand, dus de kop en de twee bedragen nemen die rol over (v135). */
   /* v178: 'boven inkomen-limiet' is een oordeel over je plan, niet over hoe deze maand loopt.
@@ -8094,13 +8185,19 @@ function insBudgetBlok(m){
     <div class="row" style="align-items:baseline;gap:8px;margin-top:8px">
       <span style="cursor:pointer" onclick="openMonthSpend('${m}')"><span style="font-size:var(--fs-xl);font-weight:800">${euro0(sp)}</span> <span class="small muted">uitgegeven</span></span>
       <span class="small muted" style="flex:1;min-width:0;cursor:pointer" onclick="openPotjesVerdeling('${m}')">van ${euro0(bud)} ${t.potTotal>0?'maandbudget':'je inkomen-limiet'} ›</span>
-      <span style="font-weight:700;white-space:nowrap;color:${over?'var(--red)':'var(--txt)'}">${usedPct}%</span></div>
+      <span style="font-weight:700;white-space:nowrap;color:${over?'var(--red)':(opDeGrens?'var(--amber)':'var(--txt)')}">${usedPct}%</span></div>
     <!-- v189: het dagpercentage stond als losse zin naast de balk, dus je moest zelf vergelijken
          hoe ver je uitgaven staan tegenover hoe ver de maand is. De streep in de balk doet dat werk;
          de zin eronder is nu zijn legenda in plaats van een tweede weergave. -->
-    <div class="bar-track" style="margin:8px 0 0;position:relative"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${over?'var(--red)':'var(--accent)'}"></div>
-      ${isLopendeMaand(m)?`<div title="de maand is ${dayPct}% voorbij" style="position:absolute;top:-2px;bottom:-2px;left:${Math.min(Math.max(dayPct,0),100)}%;width:2px;background:var(--mut2);border-radius:1px"></div>`:''}</div>
-    ${isLopendeMaand(m)?`<div class="small" style="color:var(--mut2);margin-top:5px">de streep staat waar de maand nu is: ${dayPct}% voorbij</div>`:''}${spiegel}</div>`;
+    <!-- v194: de dagstreep stond binnenin de balk en verdween in de rode vulling zodra je over je
+         budget ging - precies wanneer je hem nodig hebt. .bar-track heeft overflow:hidden, dus hij
+         staat nu in een wrapper eróm en steekt boven en onder de balk uit. Daarmee is hij leesbaar
+         op elke vulling, zonder een tweede kleur. De streep zelf blijft: hij vervangt de losse zin
+         over hoe ver de maand is, en die zin eronder is zijn legenda (v189). -->
+    <div style="position:relative;margin:8px 0 0">
+      <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${balkKleur}"></div></div>
+      ${isLopendeMaand(m)?`<i title="de maand is ${dayPct}% voorbij" style="position:absolute;top:-3px;height:15px;left:${Math.min(Math.max(dayPct,0),100)}%;width:2px;background:var(--mut2);border-radius:1px"></i>`:''}</div>
+    ${isLopendeMaand(m)?`<div class="small" style="color:var(--mut2);margin-top:5px">de streep staat waar de maand nu is: ${dayPct}% voorbij</div>`:''}${budgetOverZin(sp,bud,d,over,opDeGrens)}${spiegel}</div>`;
 }
 /* v139: de eerste ingang naar het coachgesprek buiten het coachscherm. Hij haakt aan op de
    bevinding erboven en stelt er een vraag over in plaats van neutraal naar de coach te wijzen.

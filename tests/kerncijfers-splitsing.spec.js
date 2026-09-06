@@ -164,12 +164,19 @@ test.describe('b · de splitsing over twee schermen', () => {
     expect(n).toBe(4);
   });
 
-  test('sparklines staan op beide schermen', async ({ page }) => {
+  /* v194: een sparkline rendert pas vanaf GRAFIEK_MIN volle maanden; deze fixture zit daaronder.
+     Wat de test bewaakt is dat beide schermen dezelfde renderer gebruiken en dus dezelfde vorm
+     tonen, dus toetsen we dat ze dezelfde keuze maken - lijn of delta-zin - en niet dat er per se
+     een lijn staat. */
+  test('beide schermen tonen dezelfde vorm onder de tegel', async ({ page }) => {
     await boot(page);
+    const uit = [];
     for (const fn of ['insKpiStrip', 'maandKpiBlok']) {
       const h = await page.evaluate((a) => window[a.f](a.m), { f: fn, m: AF });
-      expect(h).toContain('spk-wrap');
+      uit.push({ lijn: h.includes('spk-wrap'), delta: /verloop vanaf \d+ mnd|Een verloop zie je vanaf/.test(h) });
     }
+    expect(uit[0]).toEqual(uit[1]);
+    expect(uit[0].lijn || uit[0].delta).toBe(true);
   });
 });
 

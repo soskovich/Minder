@@ -5,7 +5,7 @@ const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
 
 async function openIns(page, mode) {
-  const p = seed();
+  const p = seed({ maanden: 8 });
   const set = JSON.parse(p.minder_set); set.mode = mode; p.minder_set = JSON.stringify(set);
   await open(page, p);
   await page.evaluate(() => go('ins'));
@@ -16,7 +16,7 @@ const grafiek = (page) => page.locator('#insSpendChart');
 /* v178: de maandgrafiek zet deze maand naast eerdere maanden, en dat is een structurele vraag.
    Hij staat sindsdien op Maand; de drietraps default uit v90 verhuist ongewijzigd mee. */
 async function openMaand(page, mode) {
-  const p = seed();
+  const p = seed({ maanden: 8 });
   const set = JSON.parse(p.minder_set); set.mode = mode; p.minder_set = JSON.stringify(set);
   await open(page, p);
   await page.evaluate(() => go('maand'));

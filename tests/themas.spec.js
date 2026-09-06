@@ -4,7 +4,7 @@ const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
 
 async function boot(page, scherm) {
-  await open(page, seed());
+  await open(page, seed({ maanden: 8 }));
   if (scherm) await page.evaluate((s) => go(s), scherm);
 }
 const tok = (page, n) => page.evaluate((k) => getComputedStyle(document.documentElement).getPropertyValue(k).trim(), n);
@@ -119,7 +119,7 @@ test.describe('c · de signatuur per thema', () => {
   });
 
   test('een negatief hero-bedrag houdt zijn eigen kleur, ook in Aurora', async ({ page }) => {
-    const p = seed();
+    const p = seed({ maanden: 8 });
     const set = JSON.parse(p.minder_set);
     set.manualBal = { [JSON.parse(p.minder_own)[0]]: 10 };             // te weinig saldo -> tekort
     p.minder_set = JSON.stringify(set);

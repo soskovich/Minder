@@ -5,7 +5,7 @@ const { test, expect } = require('@playwright/test');
 const { seed, open, CUR, M1 } = require('./budget-fixture');
 
 async function boot(page, scherm) {
-  await open(page, seed());
+  await open(page, seed({ maanden: 8 }));
   if (scherm) { await page.evaluate((s) => go(s), scherm); await page.waitForSelector(`#s-${scherm}`); }
 }
 const token = (page, naam) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), naam);

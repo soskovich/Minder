@@ -105,16 +105,22 @@ test.describe('b · de reserveringsinleg zegt dat hij losstaat van je plan', () 
   });
 });
 
-test.describe('c · de dagmarkering staat in de balk', () => {
-  test('de balk draagt een streep op het dagpercentage', async ({ page }) => {
+/* v194: de streep stond binnen .bar-track en verdween daardoor in de rode vulling zodra je over
+   je budget ging. .bar-track heeft overflow:hidden, dus hij staat nu in een wrapper eromheen en
+   steekt boven en onder de balk uit. Hij blijft bestaan en blijft op dayPct staan; alleen zijn
+   leesbaarheid verandert. */
+test.describe('c · de dagmarkering hoort bij de balk', () => {
+  test('de wrapper draagt een streep op het dagpercentage', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('ins'));
     await page.waitForTimeout(90);
     const r = await page.evaluate(() => {
       const track = document.querySelector('#s-ins .bar-track');
       if (!track) return null;
-      const mark = [...track.children].find((e) => (e.getAttribute('style') || '').includes('position:absolute'));
-      return { heeft: !!mark, left: mark ? mark.style.left : '', title: mark ? mark.getAttribute('title') : '' };
+      const wrap = track.parentElement;
+      const mark = [...wrap.children].find((e) => (e.getAttribute('style') || '').includes('position:absolute'));
+      return { heeft: !!mark, left: mark ? mark.style.left : '', title: mark ? mark.getAttribute('title') : '',
+        buiten: !!mark && !track.contains(mark) };
     });
     test.skip(!r, 'geen budgetbalk in deze fixture');
     expect(r.heeft).toBe(true);
@@ -122,6 +128,7 @@ test.describe('c · de dagmarkering staat in de balk', () => {
     const pct = Math.round(d.elapsed / d.dim * 100);
     expect(r.left).toBe(pct + '%');
     expect(r.title).toContain(pct + '%');
+    expect(r.buiten).toBe(true);          // buiten de vulling, dus leesbaar op elke kleur
   });
 
   test('de zin eronder is de legenda van die streep, niet een tweede weergave', async ({ page }) => {
