@@ -102,7 +102,11 @@ test.describe('b · samenvoegen', () => {
     const P = await page.evaluate((x) => rekSamenvoegPlan(x[0], x[1]), [OUD, NIEUW]);
     expect(P.weg).toBe(4);                             // de vier dubbele
     expect(P.mee).toBe(1);                             // 'Alleen op de oude'
-    expect(P.saldoVan).toBe(50);
+    // v201: saldoVan/saldoNaar zijn uit het plan gehaald; het saldo staat in de bevestiging,
+    // via rekSaldoRegel(), dat rekFeiten() leest - dezelfde accBalance()
+    expect('saldoVan' in P).toBe(false);
+    const zin = await page.evaluate((x) => rekSaldoRegel(x[0], x[1]), [OUD, NIEUW]);
+    expect(zin).toMatch(/€\s?50,00 minder in je totaal/);
   });
 
   test('na samenvoegen is er één rekening en telt het saldo één keer', async ({ page }) => {

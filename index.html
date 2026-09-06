@@ -8930,31 +8930,117 @@ async function rekOverlapCopy(){
    Onomkeerbaar, dus uitsluitend na een bevestiging die per stuk noemt wat er gebeurt, en nooit
    automatisch - welke van de twee de echte is weet alleen de gebruiker. De doelrekening is die met
    de nieuwste machtiging; staat die er niet, dan die met de meeste boekingen. */
+/* v201: wat gebeurt er met de rollen van de opgeheven rekening? Eén bron, zodat de bevestiging
+   precies zegt wat rekSamenvoeg() daarna doet.
+   De regel: je voegt samen omdat het dezelfde rekening is, dus was de opgeheven id je
+   reserveringspot of je spaarrekening, dan is de blijvende dat ook. Dat is geen aanname over je
+   bedoeling maar de consequentie van wat je bevestigt.
+   De uitzondering is v128: de reserveringenpot hangt uitdrukkelijk NIET aan isSavingsAcc(), want
+   geld dat al vergeven is aan de tandarts is geen vermogen. Twee rollen op één rekening laten we
+   dus niet ontstaan door een samenvoeging. Draagt de blijvende rekening de andere rol al, dan
+   vervalt de rol in plaats van te verhuizen - en de bevestiging zegt dat.
+   Was de opgeheven id zelf al allebei, dan verhuizen beide: die botsing bestond al en wordt door de
+   reserveringen-sheet gemeld, dus de samenvoeging maakt hem niet nieuw. */
+function rekRolPlan(van, naar){
+  const wasRes = SET.resAcc===van;
+  const wasSav = (typeof isSavingsAcc==='function') && isSavingsAcc(van);
+  const naarRes = SET.resAcc===naar;
+  const naarSav = (typeof isSavingsAcc==='function') && isSavingsAcc(naar);
+  // botst de rol met een rol die de blijvende rekening al draagt? dan niet verhuizen
+  const resBotst = wasRes && !wasSav && naarSav;
+  const savBotst = wasSav && !wasRes && naarRes;
+  return { wasRes, wasSav,
+    resVerhuist: wasRes && !resBotst, resVervalt: resBotst,
+    savVerhuist: wasSav && !savBotst, savVervalt: savBotst };
+}
 function rekSamenvoegPlan(van, naar){
   const houd=new Set(TX.filter(t=>t.acc===naar).map(_softKey));
   const mee=TX.filter(t=>t.acc===van && !houd.has(_softKey(t)));
   const weg=TX.filter(t=>t.acc===van && houd.has(_softKey(t)));
-  return {van, naar, mee:mee.length, weg:weg.length, saldoVan:accBalance(van), saldoNaar:accBalance(naar)};
+  // v201: saldoVan/saldoNaar zijn hier weg. Het saldo staat in de bevestiging via rekSaldoRegel(),
+  // dat rekFeiten() leest - dezelfde accBalance(), maar dan op de plek waar hij gebruikt wordt.
+  return {van, naar, mee:mee.length, weg:weg.length};
 }
 function rekSamenvoeg(van, naar){
   if(!van||!naar||van===naar) return;
+  const R=rekRolPlan(van, naar);   // vooraf: na de verhuizing is de oude id niet meer te lezen
   const houd=new Set(TX.filter(t=>t.acc===naar).map(_softKey));
   TX=TX.filter(t=>!(t.acc===van && houd.has(_softKey(t))));      // dubbel: weg
   for(const t of TX) if(t.acc===van) t.acc=naar;                 // de rest verhuist
+  /* v201: de rollen van de opgeheven id verhuizen mee. Voorheen werd de spaarvlag alleen gewist en
+     bleef SET.resAcc naar een id wijzen die niet meer bestond. Allebei stil, en allebei met een
+     echt gevolg: de spaarvlag haalde het saldo uit totalSaved(), waardoor je buffer op onbekend
+     viel en veilig-te-besteden met datzelfde bedrag omhoog sprong; de dode resAcc liet resAccId()
+     leeg teruggeven, waardoor de dekkingsregel op Maand van ok naar onbekend ging en resBal op nul.
+     Precies de stille sprongen die deze reeks weghaalt. */
   const ps=SET.psd2Accounts||{}; delete ps[van]; SET.psd2Accounts=ps;
   if(SET.manualBal) delete SET.manualBal[van];
   if(SET.acctName) delete SET.acctName[van];
   if(SET.savingsAcc) delete SET.savingsAcc[van];
+  if(R.savVerhuist){ SET.savingsAcc=SET.savingsAcc||{}; SET.savingsAcc[naar]=true; }
+  if(R.resVerhuist) SET.resAcc=naar;
+  else if(R.resVervalt) delete SET.resAcc;
   delete ACCMETA[van];
   TX.sort((a,b)=>a.date.localeCompare(b.date));
   applyOwnAccounts(); buildAccMeta(); save();
   curMonth=null; closeSheet(); render();
   toast(`${ICON('check')} Samengevoegd tot één rekening`);
 }
-function rekSamenvoegVraag(a, b){
+/* Het derde argument zet de richting vast: `a` wordt dan de opgeheven rekening, wat er ook uit de
+   heuristiek zou komen. Dat is nodig voor een rekening zonder boekingen (v201): die heuristiek is
+   gemaakt voor twee rekeningen die allebei boekingen hebben, en `exp` wint daar van `tx`. Een lege
+   rekening met een nieuwere machtiging zou dus de rekening MET historie leegruimen - de boekingen
+   verhuizen wel mee, maar naam, saldo en vlaggen van die rekening zouden verdwijnen. Zonder dit
+   argument gedraagt hij zich exact zoals voorheen. */
+/* De rolregels in de bevestiging komen uit dezelfde rekRolPlan() die rekSamenvoeg() uitvoert, dus
+   wat je leest is wat er gebeurt. Alleen wat van toepassing is krijgt een regel. */
+function rekRolRegels(van, naar){
+  const R=rekRolPlan(van, naar), vn=esc(acctNiceName(van)), nn=esc(acctNiceName(naar));
+  const uit=[];
+  if(R.savVerhuist) uit.push(`${vn} staat aangemerkt als spaarrekening; die vlag gaat mee naar ${nn}`);
+  if(R.savVervalt)  uit.push(`${vn} staat aangemerkt als spaarrekening, maar ${nn} is al je reserveringenpot; die vlag vervalt`);
+  if(R.resVerhuist) uit.push(`${vn} is je reserveringenpot; die rol gaat mee naar ${nn}`);
+  if(R.resVervalt)  uit.push(`${vn} is je reserveringenpot, maar ${nn} staat al aangemerkt als spaarrekening; die rol vervalt en je wijst zelf een nieuwe pot aan`);
+  return uit;
+}
+/* Het saldo van de opgeheven rekening is het enige getal dat definitief weg is, en waar het telde
+   verschilt per pad. Bij een overlap staat de rekening in OWN en telt hij dus dubbel in je totaal:
+   dat totaal daalt. Een gekoppelde rekening zonder boekingen staat niet in OWN (v122) en telt daar
+   dus niet mee - wel in je spaargeld of je reserveringenpot, want die twee lopen over allAccounts().
+   Zeg dus niet 'minder in je totaal' waar dat niet waar is. */
+function rekSaldoRegel(van, naar){
+  const V=rekFeiten(van);
+  if(V.saldo==null) return `het saldo van ${esc(V.naam)} is niet bekend, dus er verdwijnt geen bedrag`;
+  if(OWN.includes(van)) return `het saldo telt daarna nog één keer mee (${euro(V.saldo)} minder in je totaal)`;
+  return `het saldo van ${euro(V.saldo)} verdwijnt met ${esc(V.naam)}; dat is het enige getal dat definitief weg is`;
+}
+/* v201: een gekoppelde rekening zonder boekingen valt buiten OWN (v122) en is daardoor met geen
+   enkele boeking te vergelijken - rekeningOverlap() kan hem structureel niet vinden, want die toets
+   draait op _softKey van de boekingen zelf. Dat is precies het CSV-naar-koppeling-geval uit v122 en
+   v150. De enige die weet of dit dezelfde rekening is, ben jij.
+   Daarom: geen voorstel, geen voorselectie en uitdrukkelijk GEEN naamgelijkenis. Twee Spaces die
+   'Buffer' heten kunnen twee echte rekeningen zijn, en een suggestie op een naam leest als een
+   vaststelling. De lijst noemt per kandidaat de feiten waarmee je het zelf kunt beslissen: naam,
+   aantal boekingen, saldo als dat bekend is, en de laatste vier cijfers van de IBAN - of de id
+   zelf, want zonder eigen IBAN is dat wat de twee onderscheidt (acctLast4() geeft voor elk
+   N26-potje uit een CSV '26', uit de naam 'N26', dus die zegt hier niets, v118). */
+function rekKandidaten(leeg){
+  const rest=allAccounts().filter(a=>a!==leeg);
+  if(!rest.length) return `<div class="small muted" style="margin:6px 0 2px">Er is geen andere rekening om mee samen te voegen.</div>`;
+  const rij=a=>{ const f=rekFeiten(a);
+    return `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="rekSamenvoegVraag('${esc(String(leeg).replace(/'/g,"\'"))}','${esc(String(a).replace(/'/g,"\'"))}','vast')">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:var(--fs-md)">${esc(f.naam)}</div>
+        <div class="small muted">${f.tx} boeking${f.tx===1?'':'en'} · ${f.saldo!=null?euro(f.saldo):'saldo onbekend'} · ${f.l4?'IBAN '+esc(f.l4):'id '+esc(f.a)}</div>
+      </div><span class="muted">›</span></div>`; };
+  return `<div class="small" style="margin:8px 0 2px;font-weight:600">Hoort ${esc(acctNiceName(leeg))} bij een van deze?</div>
+    <div class="small muted" style="margin-bottom:4px">Kies zelf. Minder stelt hier niets voor: zonder boekingen is er niets om op te vergelijken.</div>
+    ${rest.map(rij).join('')}`;
+}
+function rekSamenvoegVraag(a, b, vasteRichting){
   const fa=rekFeiten(a), fb=rekFeiten(b);
   // doel = de nieuwste machtiging, anders de meeste boekingen
-  const naarA=(fa.exp&&fb.exp&&fa.exp!==fb.exp) ? (fa.exp>fb.exp) : (fa.tx>=fb.tx);
+  const naarA=vasteRichting ? false : ((fa.exp&&fb.exp&&fa.exp!==fb.exp) ? (fa.exp>fb.exp) : (fa.tx>=fb.tx));
   const naar=naarA?a:b, van=naarA?b:a;
   const P=rekSamenvoegPlan(van, naar), F=rekFeiten(naar), V=rekFeiten(van);
   $('#sheet').innerHTML=`<div class="grab"></div>
@@ -8973,8 +9059,8 @@ function rekSamenvoegVraag(a, b){
     <div class="small muted" style="margin:10px 2px">
       · ${P.weg} dubbele boeking${P.weg===1?'':'en'} ${P.weg===1?'valt':'vallen'} weg<br>
       · ${P.mee} boeking${P.mee===1?'':'en'} ${P.mee===1?'verhuist':'verhuizen'} mee, je geschiedenis blijft compleet<br>
-      · het saldo telt daarna nog één keer mee${P.saldoVan!=null?' ('+euro(P.saldoVan)+' minder in je totaal)':''}<br>
-      · de naam en instellingen van de vervallen rekening verdwijnen
+      · ${rekSaldoRegel(van, naar)}<br>
+      ${rekRolRegels(van, naar).map(r=>'· '+r+'<br>').join('')}· de naam en de overige instellingen van de vervallen rekening verdwijnen
     </div>
     <button class="btn" onclick="rekSamenvoeg('${esc(String(van).replace(/'/g,"\'"))}','${esc(String(naar).replace(/'/g,"\'"))}')">${ICON('check')} Samenvoegen</button>
     <button class="btn sec" style="margin-top:8px" onclick="openRekOverlap()">Annuleren</button>`;
@@ -8991,7 +9077,7 @@ function openRekOverlap(){
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:10px"><div style="font-size:var(--fs-xl)">${ICON('bank')}</div>
       <div style="font-weight:800;font-size:var(--fs-lg)">Dezelfde boekingen, twee rekeningen</div>
-      <div class="muted small">Read-only. Er wordt niets gewijzigd.</div></div>
+      <div class="muted small">Samenvoegen is het enige wat je hier kunt wijzigen, en dat gaat nooit vanzelf.</div></div>
     ${ov.length?ov.map(o=>`<div class="card" style="margin-bottom:10px">
       <div class="small" style="color:var(--amber);margin-bottom:6px">${o.gedeeld} gedeelde boekingen · van ${o.aN} en ${o.bN}</div>
       ${kaart(rekFeiten(o.a))}${kaart(rekFeiten(o.b))}
@@ -9000,7 +9086,7 @@ function openRekOverlap(){
     </div>`).join(''):'<div class="small muted">Geen overlap meer gevonden.</div>'}
     ${(()=>{ const leeg=rekZonderBoekingen(); return leeg.length?`<div class="card" style="margin-bottom:10px">
       <div class="small" style="margin-bottom:6px;font-weight:600">Gekoppeld, maar nog zonder boekingen</div>
-      ${leeg.map(a=>kaart(rekFeiten(a))).join('')}
+      ${leeg.map(a=>kaart(rekFeiten(a))+rekKandidaten(a)).join('')}
       <div class="small muted" style="margin-top:8px">Je bank deelt deze rekening wel, maar er kwam nog geen enkele boeking mee. Daardoor staat hij nergens anders in de app.</div>
     </div>`:''; })()}
     <div class="small muted" style="margin:12px 0 6px;font-weight:600">Al je rekeningen</div>
