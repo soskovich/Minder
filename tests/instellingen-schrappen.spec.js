@@ -67,7 +67,7 @@ test.describe('b · een mapping bestaat alleen met een aanroeper', () => {
   test('de zes onbereikbare panelen werken nog, inline in Instellingen', async ({ page }) => {
     await boot(page);
     for (const [id, woord] of [['look', 'Uiterlijk'], ['fire', 'rendement'], ['modus', 'Rustig'],
-      ['coach', 'Coaching'], ['trans', 'Interne overboekingen'], ['privacy', 'Waar staat mijn data']]) {
+      ['coach', 'Coachsignalen'], ['trans', 'Interne overboekingen'], ['privacy', 'Waar staat mijn data']]) {
       await page.evaluate((x) => toggleSet(x), id);
       expect(await setTekst(page), id).toContain(woord);
       await page.evaluate((x) => toggleSet(x), id);

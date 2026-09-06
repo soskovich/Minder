@@ -3434,14 +3434,17 @@ function maandOordeel(R){
   const letop=R.filter(r=>r.status==='let op');
   const ok=R.filter(r=>r.status==='ok');
   const onb=R.filter(r=>r.status==='onbekend');
+  /* v202: deze twee opsommingen plakten met join(', '), dus bij twee onbekende regels stond er
+     'Onbekend: buffer, doel.' waar de rest van de app 'buffer en doel' zegt. opsomming() (v189) is
+     de enige plek waar een reeks tot een zin wordt gemaakt; hij werd hier nog niet gelezen. */
   if(R.length>=MAAND_DREMPEL.onbekendMin && onb.length/R.length>MAAND_DREMPEL.onbekendDeel)
-    return {zin:'Er ontbreekt te veel om een oordeel te geven.', sub:`Onbekend: ${onb.map(r=>r.naam.toLowerCase()).join(', ')}.`};
+    return {zin:'Er ontbreekt te veel om een oordeel te geven.', sub:`Onbekend: ${opsomming(onb.map(r=>r.naam.toLowerCase()))}.`};
   /* v173: onder de drempel viel een lijst met alleen onbekende regels door naar de telzin, en die
      telde er dan nul. Geen nieuwe formulering: dezelfde zin als bij een lege lijst (v167), met de
      bestaande opsomming van wat onbekend is. */
   if(!ok.length && !tekort.length && !letop.length)
     return {zin:'Er is nog niets te beoordelen.',
-      sub: onb.length?`Onbekend: ${onb.map(r=>r.naam.toLowerCase()).join(', ')}.`:''};
+      sub: onb.length?`Onbekend: ${opsomming(onb.map(r=>r.naam.toLowerCase()))}.`:''};
   const metMaand=tekort.find(r=>r.maand);
   let zin;
   if(metMaand) zin=`Je systeem houdt stand tot ${resMaandLabel(metMaand.maand)}. Daarna loopt het vast op je ${metMaand.naam.toLowerCase()}.`;
@@ -8630,7 +8633,18 @@ function renderSet(){
     ['trans',ICON('swap'),'Transacties & categorieën',SET.hideInternal?'Interne overboekingen verborgen':'Interne overboekingen tellen mee',setTransacties,''],
     ['budget',ICON('target'),'Budget & doelen',spaardoelBekend()?`Je spaart ${euro0(monthlySavingTarget())} per maand`:'Je spaarinleg is nog onbekend',null,'','openBudgetEditor()'],
     ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
-    ['coach',ICON('robot'),'Coach',`Je coach staat ${SET.coachOff?'uit':'aan'} · ${coachSamenvatting()}`,setCoach,''],
+    /* v202: hier stond 'Je coach staat uit/aan' en de schakelaar heette 'Coaching', met als
+       subregel 'Coach-tips op je Home & Actieplan'. Alle drie onwaar. SET.coachOff wordt op precies
+       een functionele plek gelezen: de guard in scoreNotifs(), die vijf signalen uitzet (savrules,
+       meevaller, inflatie, overstreak en het geparkeerde-aankoopsignaal). coStart() leest hem niet,
+       dus met de coach 'uit' kon je vanaf Maand, Inzichten en Plan nog gewoon een gesprek beginnen;
+       gemeten start het gesprek in beide standen identiek. En 'Actieplan' is het scherm dat in v196
+       is opgeheven, terwijl de signalen niet op Home staan maar in je meldingen en op Maand.
+       Gekozen voor de tekst aanpassen, niet het gedrag (v181, zoals bij 'Read-only' en de
+       privacyclaim): het gedrag aanpassen zou vier gespreksingangen op drie schermen tot een dode
+       knop maken, en dat is de vraag of het gesprek optioneel is - een eigen ronde waard. De sectie
+       blijft Coach heten, want het gesprek is de coach en dat woont daar. */
+    ['coach',ICON('robot'),'Coach',`Je coachsignalen staan ${SET.coachOff?'uit':'aan'} · ${coachSamenvatting()}`,setCoach,''],
     ['modus',ICON('filter'),'Weergave & modus',({rustig:'Rustig',begeleid:'Begeleid',expert:'Expert'})[SET.mode||'begeleid'],setModus,''],
     ['look',ICON('palet'),'Uiterlijk',THEMES[themeKey()].naam,setLook,''],
     ['privacy',ICON('lock'),'Privacy & gegevens',privacySub(),setPrivacy,''],
@@ -8781,6 +8795,9 @@ function setBudget(){
         ? `Doel nu: <b>${euro0(M.doel)}</b> · door jou vastgezet, dus de maandkeuze hierboven stuurt het niet. De schatting zou ${euro0(M.doelAuto)} zeggen.`
         : `Doel nu: <b>${euro0(M.doel)}</b> · ${M.maanden} mnd essentiële crisis-last.`;
     }catch(_){return '';}})()}</div>
+    <label class="fld" style="margin-top:14px">Rente op je spaargeld</label>
+    <div class="row" style="gap:8px"><input type="number" min="0" max="20" step="0.1" value="${SET.spaarRente!=null&&SET.spaarRente!==''?SET.spaarRente:''}" placeholder="0" style="flex:1" oninput="SET.spaarRente=this.value===''?'':Math.max(0,+this.value||0);save();render();"><span class="muted" style="align-self:center">%/jr</span></div>
+    <div class="small muted" style="margin-top:6px">Minder gebruikt dit om te bepalen of een schuld duur genoeg is om voor te gaan op sparen. Laat je hem leeg, dan rekent hij met 0% en gaat een schuld dus eerder voor.</div>
     <label class="fld" style="margin-top:14px">${ICON('chart')} Maandbudget per categorie</label>
     <div class="small muted" style="margin:0 0 6px">Dit zijn dezelfde <b>potjes</b> als bij je Coach, wijzig ze hier of daar, het is één systeem.</div>
     <div class="small" id="potGridTotal" style="margin:2px 0 4px">${potRoomLineHTML(totalBudget(), plannedTotalBudget())}</div>
@@ -8811,13 +8828,72 @@ function setBudget(){
     ${adv?advBlock:''}`;
 }
 
+/* v202: SET.irregularIncome wordt door financeModel() gelezen (vakantiegeld, dertiende maand,
+   bonus op hun maand: income = baseInc + de posten van die maand) maar had geen invoerkanaal, dus
+   hij was altijd leeg. Dat was de enige echte lacune van de vijf schrijverloze velden uit v197.
+   Bewust handmatig: geen detectie uit transacties en geen schatting. Een vakantiegeld is een
+   concreet bedrag op een bekende maand, en een geraden bedrag zou de hele projectie verschuiven.
+   De vorm volgt de reserveringen: een lijst in het paneel, een sheet als editor (v61, een oppervlak
+   per editor). Drie velden naast elkaar passen niet op 360px. */
+function irrLijst(){ return Array.isArray(SET.irregularIncome)?SET.irregularIncome:[]; }
+function irrGeldig(){ return irrLijst().filter(x=>x&&x.ym&&+x.amount); }   // dezelfde filter als financeModel()
+function irrSorted(){ return irrGeldig().slice().sort((a,b)=>String(a.ym).localeCompare(String(b.ym))); }
+function irrRijen(){
+  const L=irrSorted();
+  if(!L.length) return `<div class="small muted" style="padding:8px 0">Nog geen posten. Denk aan vakantiegeld, een dertiende maand of een bonus.</div>`;
+  return L.map(v=>`<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openIrregular('${esc(String(v.id).replace(/'/g,"\\'"))}')">
+    <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(v.naam||'Onregelmatig inkomen')}</div>
+      <div class="small muted">${esc(resMaandLabel(v.ym))}</div></div>
+    <span class="small" style="font-weight:700;white-space:nowrap">${euro0(Math.round(+v.amount))}</span>
+    <span class="muted" style="margin-left:6px">›</span></div>`).join('');
+}
+function openIrregular(id){
+  const v=id?irrLijst().find(x=>x.id===id):null;
+  const d=v||{naam:'',amount:'',ym:''};
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">${v?'Post bewerken':'Onregelmatig inkomen'}</div>
+    <div class="small muted" style="margin-bottom:12px">Een bedrag dat je op een bekende maand verwacht. Het telt in die maand bij je inkomen op.</div>
+    <label class="fld">Omschrijving</label>
+    <input id="irNaam" type="text" value="${esc(d.naam||'')}" placeholder="bv. Vakantiegeld" style="width:100%">
+    <label class="fld" style="margin-top:10px">Maand</label>
+    <input id="irMaand" type="month" value="${esc(d.ym||'')}" style="width:100%">
+    <label class="fld" style="margin-top:10px">Netto bedrag (€)</label>
+    <input id="irBedrag" type="number" inputmode="numeric" value="${d.amount||''}" placeholder="bv. 2400" style="width:100%">
+    <div class="small muted" style="margin-top:6px">Netto, dus wat er werkelijk op je rekening komt. Minder rekent nergens netto uit bruto.</div>
+    <button class="btn" style="margin-top:14px;width:100%" onclick="saveIrregular('${esc(String(id||'').replace(/'/g,"\\'"))}')">${ICON('check')} Opslaan</button>
+    ${v?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteIrregular('${esc(String(id).replace(/'/g,"\\'"))}')">Verwijderen</div>`:''}
+    <div class="small muted" style="margin-top:12px;text-align:center;cursor:pointer" onclick="openInkomenSheet()">‹ Terug</div>`;
+  showSheetBg();
+}
+function saveIrregular(id){
+  const v=x=>(document.getElementById(x)||{}).value;
+  const naam=String(v('irNaam')||'').trim();
+  if(!naam){ toast('Vul een omschrijving in'); return; }
+  const maand=String(v('irMaand')||'').trim();
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(maand)){ toast('Kies een maand'); return; }
+  const bedrag=Math.round(+v('irBedrag')||0);
+  if(!bedrag){ toast('Vul een bedrag in'); return; }
+  const g={ id:id||('ir'+Date.now().toString(36)), naam, ym:maand, amount:bedrag };
+  SET.irregularIncome=irrLijst().slice();
+  const i=SET.irregularIncome.findIndex(x=>x.id===id);
+  if(i>=0) SET.irregularIncome[i]=g; else SET.irregularIncome.push(g);
+  save(); render(); openInkomenSheet(); toast(`${ICON('check')} Post opgeslagen`);
+}
+function deleteIrregular(id){
+  SET.irregularIncome=irrLijst().filter(x=>x.id!==id);
+  save(); render(); openInkomenSheet(); toast('Post verwijderd');
+}
 function setIncome(){
   const dq=totals(curMonth||(months()[months().length-1]||''));
   let h=`
     <div class="toggle"><div><div style="font-weight:600">Inkomen automatisch detecteren</div><div class="small muted">Uit je bijschrijvingen (categorie Inkomen)</div></div>
       <label class="sw"><input type="checkbox" ${SET.autoIncome?'checked':''} onchange="SET.autoIncome=this.checked;save();render();"><span class="sl"></span></label></div>
     ${SET.autoIncome?`<div class="small muted" style="margin-top:8px">Gedetecteerd deze maand: <b>${euro(dq.detectedIncome)}</b></div>`
-      :`<label class="fld">Inkomen per maand (€)</label><input type="number" value="${SET.income||''}" placeholder="bv. 2500" oninput="SET.income=+this.value||0;save();render();">`}`;
+      :`<label class="fld">Inkomen per maand (€)</label><input type="number" value="${SET.income||''}" placeholder="bv. 2500" oninput="SET.income=+this.value||0;save();render();">`}
+    <label class="fld" style="margin-top:14px">Onregelmatig inkomen <span class="small muted">· vakantiegeld, dertiende maand, bonus</span></label>
+    <div class="small muted" style="margin-bottom:2px">Deze bedragen tellen in hun eigen maand mee in je prognose, boven op je maandinkomen.</div>
+    ${irrRijen()}
+    <button class="btn sec" style="margin-top:10px" onclick="openIrregular('')">${ICON('plus')} Post toevoegen</button>`;
   if(OWN.length){ h+=`
     <label class="fld" style="margin-top:14px">Je rekeningen & saldo <span class="small muted">· ${totalBalance().known>0?euro(totalBalance().sum)+' totaal':'saldo onbekend'}</span></label>
     <div class="small muted" style="margin-bottom:8px">Saldo's uit MT940/PSD2 zijn vooraf ingevuld.</div>
@@ -9263,7 +9339,7 @@ function setCoach(){
   return `
     <label class="fld">Je naam <span class="small muted">· je coach spreekt je hiermee aan</span></label>
     <input type="text" value="${esc(SET.name||'')}" placeholder="bv. Vincent" oninput="SET.name=this.value;save();" onchange="render();">
-    <div class="toggle" style="margin-top:14px"><div><div style="font-weight:600">Coaching</div><div class="small muted">Coach-tips op je Home & Actieplan</div></div>
+    <div class="toggle" style="margin-top:14px"><div><div style="font-weight:600">Coachsignalen</div><div class="small muted">Signalen uit je patronen, in je meldingen en op Maand. Je gesprek blijft bereikbaar vanaf Maand, Inzichten en Plan.</div></div>
       <label class="sw"><input type="checkbox" ${!SET.coachOff?'checked':''} onchange="SET.coachOff=!this.checked;save();render();"><span class="sl"></span></label></div>
     <div class="row" style="justify-content:space-between;margin-top:8px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openCoachAvatar()">
       <div><div style="font-weight:600">Avatar & toon</div><div class="small muted">${coachSamenvatting()}</div></div>

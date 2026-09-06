@@ -64,14 +64,14 @@ test.describe('b · de coach is één regel met één gedrag', () => {
     expect(t).not.toContain('Coach-avatar & toon');
     expect((t.match(/Coach/g) || []).length).toBeGreaterThan(0);
     // de subregel van de ene regel noemt allebei: de stand en de gekozen coach
-    expect(t).toMatch(/Je coach staat aan · .+ toon/);
+    expect(t).toMatch(/Je coachsignalen staan aan · .+ toon/);   // v202
   });
 
   test('de regel klapt inline uit, zoals elke regel zonder eigen sheet', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => toggleSet('coach'));
     const t = await page.evaluate(() => $('#s-set').innerText.replace(/\s+/g, ' '));
-    expect(t).toContain('Coaching');
+    expect(t).toContain('Coachsignalen');   // v202
     expect(t).toContain('Avatar & toon');
     expect(await page.evaluate(() => !$('#sheetBg').classList.contains('show'))).toBe(true);
   });

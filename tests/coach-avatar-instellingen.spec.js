@@ -26,7 +26,9 @@ test.describe('a · de regel bij Instellingen', () => {
     expect(t).toMatch(/Sara · directe toon/);   // label boven, samenvatting eronder
     expect(t).toContain('›');
     // en de regel in de lijst zelf noemt de gekozen coach in zijn subregel
-    expect(await page.evaluate(() => $('#s-set').innerText)).toMatch(/Je coach staat aan · Sara/);
+    // v202: 'Je coach staat aan' is 'Je coachsignalen staan aan' geworden; de schakelaar zet
+    // vijf signalen uit en niet het gesprek
+    expect(await page.evaluate(() => $('#s-set').innerText)).toMatch(/Je coachsignalen staan aan · Sara/);
   });
 
   test('de samenvatting volgt de gekozen avatar en toon', async ({ page }) => {
