@@ -1298,7 +1298,64 @@ function forecastModel(){
 function accBalance(acc){ const mb=(SET.manualBal||{})[acc]; if(mb!=null && mb!=='') return +mb; const a=ACCMETA[acc]; return a&&a.balance!=null?a.balance:null; }
 // known = rekeningen mét een bekend saldo. Nul bekende saldi (bv. direct na een CSV-import) betekent onbekend, niet €0.
 function totalBalance(){ let sum=0, missing=0, known=0; for(const acc of OWN){ const b=accBalance(acc); if(b==null) missing++; else { sum+=b; known++; } } return {sum,missing,known}; }
-function setBal(acc,val){ SET.manualBal=SET.manualBal||{}; if(val===''||val==null) delete SET.manualBal[acc]; else SET.manualBal[acc]=+val; save(); renderDash(); } // settings niet herrenderen (focus behouden)
+/* v198: een saldo en een transactiereeks komen niet altijd uit hetzelfde moment. Bij een
+   PSD2-koppeling wel (saldo en boekingen komen uit dezelfde ophaling), bij een handmatig saldo of
+   een CSV-import niet: dan staat er een momentopname naast boekingen die daarna zijn gedaan.
+   De app WIST dat al per rekening en gooide het weg: ACCMETA[acc].date wordt gezet door de
+   PSD2-ingest en door parseMT940() (het :62F:-eindsaldo draagt zijn eigen datum), maar accBalance()
+   las alleen .balance en geen enkele functie las die datum. SET.manualBal had helemaal geen datum.
+   Dit legt hem vast en maakt hem leesbaar. Er verandert GEEN ENKELE berekening: safeToSpend(),
+   totalBalance(), netWorth() en de liquiditeitslaag lezen onverkort accBalance(). Wat er bijkomt is
+   dat de opbouw-sheet kan zeggen dat het saldo ouder is dan je nieuwste boeking. */
+function setBal(acc,val){ SET.manualBal=SET.manualBal||{}; SET.manualBalDatum=SET.manualBalDatum||{};
+  if(val===''||val==null){ delete SET.manualBal[acc]; delete SET.manualBalDatum[acc]; }
+  else { SET.manualBal[acc]=+val; SET.manualBalDatum[acc]=vandaagYMD(); }   // v177: een lokale dag, net als de datums in TX
+  save(); renderDash(); } // settings niet herrenderen (focus behouden)
+/* De datum die bij het getoonde saldo hoort, of null als we hem niet weten. Null is een eigen
+   uitkomst en geen aanleiding voor een aanname: een saldo dat je vóór v198 handmatig invoerde heeft
+   geen datum, en dan zegt de app er niets over (v59/v73). De volgorde spiegelt accBalance() exact -
+   een handmatig saldo wint van ACCMETA - anders zou de datum bij een ander bedrag horen dan het
+   bedrag dat je ziet. */
+function accBalanceDatum(acc){
+  const mb=(SET.manualBal||{})[acc];
+  if(mb!=null && mb!=='') return ((SET.manualBalDatum||{})[acc])||null;
+  const a=ACCMETA[acc];
+  return (a && a.balance!=null && a.date) ? a.date : null;
+}
+// de nieuwste boeking op één rekening, of null
+function nieuwsteTxDatum(acc){
+  let d=null; for(const t of TX){ if(t.acc===acc && (d==null || t.date>d)) d=t.date; }
+  return d;
+}
+/* Welke rekeningen hebben een saldo dat ouder is dan hun nieuwste boeking? Strikt ouder: valt de
+   boeking op de saldodatum zelf, dan zit hij er per definitie in - een MT940-eindsaldo is inclusief
+   die dag, en een PSD2-saldo is van het moment van ophalen. Zonder saldodatum of zonder boekingen
+   staat er niets: we weten het dan niet, en dat is geen achterstand. */
+function saldoAchter(){
+  const uit=[];
+  for(const a of (OWN||[])){
+    if(accBalance(a)==null) continue;
+    const bd=accBalanceDatum(a); if(!bd) continue;
+    const td=nieuwsteTxDatum(a); if(!td) continue;
+    if(td>bd) uit.push({acc:a, saldoDatum:bd, txDatum:td});
+  }
+  return uit;
+}
+/* Eén regel in de opbouw-sheet, bij het saldo waar hij over gaat.
+   Bewust GEEN bedrag en GEEN richting: er staat niet dat je saldo hoger of lager is dan je denkt,
+   want zodra daar een richting in staat gaat iemand rekenen, en dat is precies wat we hier niet
+   kunnen. Er staat alleen dat er tijd tussen zit. De regel verdwijnt vanzelf zodra de saldodatum
+   weer gelijk of nieuwer is: bij een PSD2-sync gebeurt dat bij de volgende ophaling, bij een
+   handmatig saldo zodra je het opnieuw invoert. */
+function saldoAchterRegel(){
+  let r=[]; try{ r=saldoAchter(); }catch(_){ return ''; }
+  if(!r.length) return '';
+  const dag=d=>{ try{ return new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'long'}); }catch(_){ return d; } };
+  const zin = r.length===1
+    ? `Het saldo van ${esc(acctNiceName(r[0].acc))} is van ${dag(r[0].saldoDatum)}, de nieuwste boeking erop van ${dag(r[0].txDatum)}. Wat daar tussenin gebeurde zit hier nog niet in.`
+    : `Bij ${r.length} rekeningen is het saldo ouder dan de nieuwste boeking erop. Wat daar tussenin gebeurde zit hier nog niet in.`;
+  return `<div class="small" style="color:var(--mut2);line-height:1.5;margin:8px 0 2px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:10px">${zin}</div>`;
+}
 
 // N26-spaarpotjes: alle N26-Spaces behalve de betaalrekening (Main) en het potje eindigend op 4840
 // rekening matchen op laatste cijfers (PSD2-acc = IBAN-cijfers, of via opgeslagen IBAN)
@@ -2106,6 +2163,7 @@ function openSafeToSpend(){
     ${balUnknown
       ? `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openSaldoInvoer()"><div style="flex:1"><div style="font-size:var(--fs-md)">Totaal saldo</div><div class="small muted">nog geen enkel saldo bekend</div></div><div style="font-weight:700;white-space:nowrap;color:var(--mut)">onbekend</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`
       : line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':'al je gekoppelde rekeningen')}
+    ${balUnknown?'':saldoAchterRegel()}
     ${S.incDue>0?`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:var(--fs-md)">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
     ${S.savedBal>0?line('Al op je spaarrekening', S.savedBal, 'var(--mut)', "closeSheet();openSavingsPots()", 'staat apart om te sparen, niet vrij besteedbaar'):''}
@@ -9532,6 +9590,9 @@ async function psd2Refresh(silent){
   if(!psd2Ready()){ if(!silent){ toast('Stel eerst de backend-URL en token in'); go('set'); } return; }
   if(!silent) toast('Verversen…');
   const from=new Date(); from.setMonth(from.getMonth()-2); const fromStr=from.toISOString().slice(0,10);
+  /* v198: de datumstempel bij het saldo was toISOString().slice(0,10), en dat is de UTC-dag: tussen
+     middernacht en 02:00 zomertijd stempelt die gisteren, waardoor een vers opgehaald saldo als
+     achterlopend zou lezen. De datums in TX zijn lokale kalenderdagen (v177), dus deze ook. */
   const allTx=[]; const balances={}; let authFail=false, anyOk=false;
   for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue;
     let cont=null, guard=0;
@@ -9542,7 +9603,7 @@ async function psd2Refresh(silent){
       for(const raw of (d.transactions||[])){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
       cont=d.continuation_key||null; guard++;
     } while(cont && guard<40);
-    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:new Date().toISOString().slice(0,10)}; }catch(e){}
+    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:vandaagYMD()}; }catch(e){}
   }
   if(authFail && !anyOk){ if(!silent){ toast('Koppeling verlopen, log opnieuw in'); psd2Connect(); } return; }
   SET.psd2LastSync=Date.now(); save();
@@ -9659,7 +9720,7 @@ async function psd2IngestSession(s){
       for(const raw of (d.transactions||[])){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
       cont=d.continuation_key||null; guard++;
     } while(cont && guard<40);
-    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:new Date().toISOString().slice(0,10)}; }catch(e){}
+    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:vandaagYMD()}; }catch(e){}
     { try{ const fp=new Date(); fp.setMonth(fp.getMonth()-1);   // v197: pending telt altijd mee const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fp.toISOString().slice(0,10)+'&transaction_status=PDNG');
       for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); } }catch(e){} }
   }
