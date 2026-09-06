@@ -157,45 +157,12 @@ test.describe('2 · een tekort krijgt in elke modus dezelfde volgende stap', () 
   });
 });
 
-test.describe('3 · de verse-start-kaart volgt de stand eronder', () => {
-  const kaart = (page) => page.evaluate(() => { const d = document.createElement('div');
-    d.innerHTML = freshStartCard(); return d.innerText.replace(/\s+/g, ' '); });
-
-  test('bij een positieve stand: schoon, zonder alarm', async ({ page }) => {
-    await boot(page, seed({ saldo: 9000 }));
-    const t = await kaart(page);
-    expect(t).toContain('begint schoon. Je speelruimte staat weer vol.');
-    expect(t).not.toMatch(/tekort/);
-  });
-
-  test('bij een tekort: geen aanmoediging, wel het bedrag', async ({ page }) => {
-    await boot(page, seed({ saldo: 100 }));
-    const t = await kaart(page);
-    expect(t).toMatch(/begint met een tekort van €[\d.]+/);
-    expect(t).not.toContain('speelruimte staat weer vol');
-    expect(t).not.toMatch(/[!—]/);
-    expect(t).not.toMatch(/goed bezig|let op|pas op/i);   // constateren, niet waarschuwen
-  });
-
-  test('bij een leeg noodfonds spreekt de kaart zichzelf niet meer tegen', async ({ page }) => {
-    await boot(page, seed({ saldo: 100, spaar: true, spaarSaldo: 0 }));
-    const t = await kaart(page);
-    expect(await page.evaluate(() => noodfondsModel().spaar)).toBe(0);
-    expect(t).toContain('Je noodfonds staat op €0.');
-    expect(t).not.toContain('speelruimte staat weer vol');
-  });
-
-  test('bij een onbekend saldo beweert de kaart niets', async ({ page }) => {
-    const p = seed({});
-    const set = JSON.parse(p.minder_set); set.manualBal = {}; p.minder_set = JSON.stringify(set);
-    await boot(page, p);
-    const t = await kaart(page);
-    expect(t).toMatch(/is begonnen\./);
-    expect(t).not.toContain('speelruimte staat weer vol');
-    expect(t).not.toMatch(/tekort van/);
-  });
-});
-
+/* v195: hier stond blok 3, vier tests over de verse-startkaart op Home. Die kaart is opgeheven:
+   hij was een complete tweede voornemenlus naast de coachlus, met een leeg tekstveld op een scherm
+   dat over iets anders gaat. De bevinding die deze tests bewaakten (v174: de kaart opende met 'je
+   speelruimte staat weer vol' boven een negatieve Veilig te besteden) heeft daarmee geen onderwerp
+   meer; het getal zelf staat onveranderd in de hero eronder, en blok 1 en 2 hierboven toetsen dat.
+   Het moment dat de kaart belichaamde leeft voort als timing op Maand; zie voornemen-en-moment. */
 test.describe('4 · coHorizonVraag noemt er een en zegt hoeveel er zijn', () => {
   const doelen = (n) => Array.from({ length: n }, (_, i) => ({ id: 'g' + i, naam: 'Doel ' + (i + 1),
     doel: 9000, gespaard: 0, allocMode: 'fixed', perMaand: 50, streefdatum: overMnd(4) }));

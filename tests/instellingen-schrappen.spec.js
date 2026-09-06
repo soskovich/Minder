@@ -36,7 +36,9 @@ test.describe('a · schakelaars beloven alleen wat bestaat', () => {
     expect(await setTekst(page)).not.toMatch(/demo/i);
     const r = await page.evaluate(() => ({
       fn: typeof window.demoNotifs,
-      sig: scoreNotifs.toString(), park: coParkReturn.toString(), fresh: freshStartDue.toString(),
+      // v195: freshStartDue() is met de verse-startkaart opgeheven; de demo-tak zat erin en is
+      // dus per definitie mee verdwenen. verseStart() is wat ervoor in de plaats kwam.
+      sig: scoreNotifs.toString(), park: coParkReturn.toString(), fresh: verseStart.toString(),
     }));
     expect(r.fn).toBe('undefined');
     for (const [k, v] of Object.entries(r)) if (k !== 'fn') expect(v, k).not.toMatch(/demoMechanismen|__demo/);

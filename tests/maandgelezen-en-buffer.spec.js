@@ -147,9 +147,10 @@ test.describe('c · zonder aangewezen spaarrekening is de buffer onbekend', () =
     expect(r.blok).toBe('buffer');
   });
 
+  // v195: de verse-startkaart noemde dat bedrag; die kaart bestaat niet meer. Wat de test
+  // bewaakt blijft: Home zegt nergens een noodfondsbedrag op een onbekend spaarsaldo.
   test('Home noemt geen noodfondsbedrag meer', async ({ page }) => {
     await boot(page);
-    expect(await page.evaluate(() => freshStartCard())).not.toMatch(/noodfonds staat op/);
     await page.evaluate(() => go('dash'));
     await page.waitForTimeout(100);
     const t = await page.evaluate(() => $('#s-dash').innerText);
@@ -191,7 +192,6 @@ test.describe('d · regressie: met aangewezen spaarrekening verandert er niets',
       const R = maandRegels();
       return { s: spaarSaldo(), buf: bufferMaanden(),
         regel: (R.find((x) => x.key === 'buffer') || {}).status,
-        home: /noodfonds staat op/.test(freshStartCard()),
         plan: (planItems().find((x) => x.id === 'noodfonds') || {}).spaarOnbekend };
     });
     expect(r.s.missing).toBe(false);
@@ -199,7 +199,10 @@ test.describe('d · regressie: met aangewezen spaarrekening verandert er niets',
     expect(r.s.cur).toBe(9000);
     expect(r.buf).toBeGreaterThan(0);
     expect(['ok', 'let op', 'tekort']).toContain(r.regel);
-    expect(r.home).toBe(true);
+    /* v195: hier stond dat Home het noodfondsbedrag noemde bij een bekend spaarsaldo. Dat deed de
+       verse-startkaart, en die is opgeheven; Home noemt dat bedrag nu in geen enkele stand. Wat de
+       test belooft blijft staan: het bedrag, de buffer, de maandregel en de plan-rij veranderen
+       niet zodra je een spaarrekening aanwijst. */
     expect(r.plan).toBeFalsy();
   });
 });
