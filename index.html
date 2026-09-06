@@ -285,6 +285,8 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .cz-pot .cp-btn.make{border-color:var(--teal);color:var(--teal)}
 .plan-mv{width:34px;height:30px;border-radius:8px;background:var(--card2);border:1px solid var(--line);color:var(--mut);font-size:var(--fs-xs);line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .plan-mv.off{opacity:.22}
+.plan-tab{display:grid;grid-template-columns:1fr auto;gap:3px 12px;line-height:1.4;margin-top:1px}
+.plan-tab .v{color:var(--txt);font-weight:700;text-align:right;white-space:nowrap}
 .plan-1{display:inline-block;background:var(--teal);color:var(--on-accent);font-weight:800;font-size:10px;border-radius:5px;padding:1px 6px;vertical-align:1px}
 .cp-add{display:block;width:100%;text-align:left;background:transparent;border:1px solid var(--ln2);color:var(--txt);border-radius:var(--r-inner);padding:11px 13px;margin:var(--s1) 0 4px;font-size:13px;font-weight:600;cursor:pointer}
 .cz-note{font-size:12px;color:var(--mut);line-height:1.5;margin:9px 4px 0}
@@ -3174,10 +3176,12 @@ function maandBeleggenRegel(R){
   if(!B.volledig){
     const mist=B.voorwaarden.filter(v=>v.ontbreekt).map(v=>v.naam).filter(Boolean);
     if(!mist.length) return '';
+    // v193: join(' en ') gaf bij drie bronnen 'a en b en c', en 'ontbreekt' bleef enkelvoud bij een
+    // opsomming. opsomming() bestaat sinds v189 en werd hier nog niet gelezen.
     return `<div class="card">${kop}
       <div class="row" style="gap:9px;align-items:flex-start;padding:7px 0">
         ${maandDot('onbekend')}
-        <div class="small muted" style="flex:1;min-width:0;line-height:1.45">Niet te beoordelen zolang ${esc(mist.join(' en '))} ontbreekt.</div>
+        <div class="small muted" style="flex:1;min-width:0;line-height:1.45">Niet te beoordelen zolang ${esc(opsomming(mist))} ${mist.length===1?'ontbreekt':'ontbreken'}.</div>
       </div></div>`;
   }
   /* v187: op een scherm waar buffer en dekking al als eigen regel staan, herhaalde deze
@@ -3440,9 +3444,17 @@ function maandDot(st){
   return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};flex-shrink:0;margin-top:6px"></span>`;
 }
 function maandRij(r,compact){
-  if(compact) return `<div class="row" style="gap:9px;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${r.act}">
+  /* v193: de compacte rij liet de eenheid weg om kort te blijven, dus er stond 'Buffer in maanden
+     · 10,4' zonder waarin, en 'Dekking reserveringen · €2.500' zonder waartegen. Dat zijn precies de
+     twee dingen die een getal leesbaar maken: de eenheid en het referentiepunt. Hij draagt nu
+     dezelfde rechterkolom als de uitgeklapte rij - waarde met de eenheid eronder - en laat alleen
+     het gevolg weg. Dat is wat 'compact' hier hoort te betekenen: minder zin, niet minder getal.
+     Geen tweede formulering: r.eenheid is het veld dat maandRegels() al levert. */
+  if(compact) return `<div class="row" style="gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${r.act}">
     ${maandDot(r.status)}<span class="small" style="flex:1;min-width:0">${esc(r.naam)}</span>
-    <span class="small" style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</span></div>`;
+    <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:52%">
+      <div class="small" style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
+      ${r.eenheid?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div>`:''}</div></div>`;
   return `<div class="row" style="gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${r.act}">
     ${maandDot(r.status)}
     <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.naam)}</div>
@@ -3466,9 +3478,16 @@ function maandPlanRegels(){
   if(tb>0 && pb!==tb) rijen.push(`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openPotjesVerdeling('${esc(kijkMaand())}','next')">
     <span class="small">Je potjes vanaf volgende maand</span>
     <span class="small" style="font-weight:700;color:var(--teal)">${euro0(pb)} ›</span></div>`);
-  if(t && t.budget>t.limit && t.limit>0) rijen.push(`<div class="row" style="justify-content:space-between;padding:6px 0">
-    <span class="small">Boven je inkomen-limiet</span>
-    <span class="small" style="font-weight:700;color:var(--mut2)">${euro0(t.budget-t.limit)} (${SET.limit}%)</span></div>`);
+  /* v193: deze rij was grijs, niet tikbaar en droeg alleen een bedrag, terwijl de rij erboven een
+     stand toont die je kunt openen. Twee soorten regel onder één kop, waarvan er een doodloopt. Hij
+     krijgt nu een zin met richting en dezelfde soort ingang als de rij erboven, zodat beide lezen
+     als een feit over je plan plus waar je heen kunt. Niets herrekend: t.budget, t.limit en
+     SET.limit staan er al, en de limiet blijft een spiegel en geen plafond (v53). */
+  if(t && t.budget>t.limit && t.limit>0) rijen.push(`<div style="padding:6px 0;cursor:pointer" onclick="openPotjesVerdeling('${esc(kijkMaand())}')">
+    <div class="row" style="justify-content:space-between">
+      <span class="small">Boven je inkomen-limiet</span>
+      <span class="small" style="font-weight:700;color:var(--teal)">${euro0(t.budget-t.limit)} ›</span></div>
+    <div class="small" style="color:var(--mut2);line-height:1.45;margin-top:3px">Je potjes vragen samen ${euro0(Math.round(t.budget))}. Dat is ${euro0(t.budget-t.limit)} boven de ${SET.limit}% van je inkomen die je als grens nam: een spiegel, geen plafond.</div></div>`);
   if(!rijen.length) return '';
   return `<div class="card"><div class="hlabel" style="margin:0 0 2px">Je plan</div>${rijen.join('')}</div>`;
 }
@@ -3567,8 +3586,14 @@ function maandCoachIngang(R){
     <div style="line-height:1.45">${esc(af.text||'')}</div>
     <div class="small" style="margin-top:8px;color:var(--teal);cursor:pointer;font-weight:600" onclick="coStart('maand','${esc(m)}')">Aanpassen ›</div></div>`;
   const z=coMaandZwaarste(R);
+  /* v193: deze ingang noemde de zwaarste regel voor de derde keer op één scherm - maandOordeel()
+     noemt hem bij precies één tekort, de rij zelf noemt hem, en hier stond hij nog eens mét zijn
+     oordeel. De rij zelf de ingang maken lost dat niet op: die heeft al een eigen tik naar zijn
+     sheet (r.act), en twee handelingen op één element is geen verbetering. Dus laat de ingang het
+     oordeel weg: 'vraagt een beslissing' staat al in de kaartkop erboven en in de oordeelzin. De
+     naam blijft, want de vraag heeft een onderwerp nodig. */
   if(z) return `<div class="card" style="cursor:pointer" onclick="coStart('maand','${esc(m)}','${esc(z.key)}')">
-    <div class="row" style="gap:8px"><span style="flex:1;min-width:0;line-height:1.45">${esc(z.naam)} ${z.status==='tekort'?'vraagt een beslissing':'vraagt aandacht'}. Zullen we dat doorlopen?</span>
+    <div class="row" style="gap:8px"><span style="flex:1;min-width:0;line-height:1.45">Zullen we ${esc(z.naam.toLowerCase())} doorlopen?</span>
       <span style="color:var(--teal);font-weight:700">›</span></div></div>`;
   if(R.some(r=>r.status==='ok')) return `<div class="card" style="cursor:pointer" onclick="coStart('algemeen','${esc(m)}')">
     <div class="row" style="gap:8px"><span style="flex:1;min-width:0;line-height:1.45" class="muted">Er valt deze maand niets te beslissen. Wil je toch iets doornemen?</span>
@@ -4000,14 +4025,31 @@ function etaDatum(maanden){
   const d=new Date(); d.setMonth(d.getMonth()+n);
   return d.toLocaleDateString('nl-NL',{month:'short',year:'numeric'}).replace('.','');
 }
+/* v193: "~7 maanden" en "rond apr 2027" stonden allebei op de regel, en dat is hetzelfde feit
+   twee keer: de datum is vandaag plus dat aantal maanden, er zit geen extra informatie in. Welke
+   van de twee leesbaarder is hangt af van de looptijd. Onder een jaar denk je in maanden ("nog een
+   half jaar"); daarboven moet je "~34 maanden" zelf omrekenen en zegt de datum meer. De grens
+   staat in een constante en niet inline, zodat er één plek is waar hij verschuift. */
+const ETA_DATUM_VANAF = 12;
+function etaTekst(eta){
+  const n=Math.round(+eta||0); if(n<=0) return '';
+  if(n<ETA_DATUM_VANAF) return `~${n} ${n===1?'maand':'maanden'}`;
+  const d=etaDatum(n); return d?`rond ${d}`:`~${n} maanden`;
+}
+/* v193: hier stonden tot vijf waarden in één grijze regel, in de kleinste tekstgraad van de kaart,
+   met doelTempoLine() er direct onder. Een zin met ingebedde getallen is te volgen tot ongeveer
+   drie; daarboven tel je in plaats van dat je leest. Vanaf vier waarden wordt het daarom een
+   uitgelijnde minitabel: label links, waarde rechts, zodat de bedragen onder elkaar staan en te
+   vergelijken zijn. Alleen de weergave verandert; elke waarde komt uit dezelfde bron als voorheen
+   en er wordt niets bij berekend. */
 function planSub(p){
   // v173: geen looptijd en geen datum op een voortgang die niet is vastgesteld
   if(p.nfOnbekend) return `${euro0(p.alloc)}/mnd`;
   if(p.status==='bereikt') return `${ICON('party')} Bereikt`;
   if(p.status==='gepauzeerd') return 'Gepauzeerd · krijgt nu niets';
   if(p.status==='wacht op capaciteit') return `Wacht op capaciteit · ${planModeLabel(p)}, maar alles gaat eerst naar de doelen erboven`;
-  const dat=p.eta?etaDatum(p.eta):'';
-  const eta=p.eta?` · op dit tempo ~${p.eta} ${p.eta===1?'maand':'maanden'}${dat?` · rond ${dat}`:''}`:'';
+  const et=p.eta?etaTekst(p.eta):'';
+  const eta=et?` · op dit tempo ${et}`:'';
   const mod=p.mode==='pct'?`${(''+p.pct).replace('.',',')}% · `:(p.mode==='fixed'?'vast · ':'');
   // maak zichtbaar dat een deel is doorgezakt uit wat er boven overbleef
   const dz=(+p.extra>0&&p.mode!=='auto')?` · waarvan ${euro0(p.extra)} doorgezakt`:'';
@@ -4019,19 +4061,54 @@ function planSub(p){
      p.alloc leesbaar blijft - dat is wat de waterval toewijst. Zonder termijn valt er niets bij op
      te tellen en blijft de regel zoals hij was. */
   const per=(p.type==='aflossen')?Math.max(Math.round(+p.debtPer||0),0):0;
+  /* Tel de wáárden, niet de rijen: 'vast' is een woord en maakt een regel niet zwaarder om te
+     lezen, een percentage wel. Vier of meer waarden gaat naar de tabel. */
+  const dzB=(+p.extra>0&&p.mode!=='auto')?Math.round(+p.extra):0;
+  const n=1+(per>0?1:0)+(dzB>0?1:0)+(et?1:0)+(p.mode==='pct'?1:0);
+  if(n>=4){
+    const rij=(l,v)=>`<span>${l}</span><span class="v">${v}</span>`;
+    const r=[rij('Per maand', euro0(p.alloc+per))];
+    if(per>0) r.push(rij('waarvan je termijn', euro0(per)));
+    if(dzB>0) r.push(rij('waarvan doorgezakt', euro0(dzB)));
+    if(p.mode==='pct') r.push(rij('Aandeel', `${(''+p.pct).replace('.',',')}% van je ${planCapLabel()}`));
+    else if(p.mode==='fixed') r.push(rij('Verdeling','vast bedrag'));
+    if(et) r.push(rij('Klaar', `op dit tempo ${et}`));
+    return `<div class="plan-tab">${r.join('')}</div>`;
+  }
   if(per>0) return `${mod}${euro0(p.alloc+per)}/mnd · waarvan ${euro0(per)} je termijn${dz}${eta}`;
   return `${mod}${euro0(p.alloc)}/mnd${dz}${eta}`;
 }
-// Waaróm krijgt dit doel niets? Een auto-doel erboven pakt wat er overblijft; met een maandbedrag
-// of percentage daarop zakt de rest hierheen door. Uitleg + tik naar díe invoer, geen dwang.
-function planWachtHint(p){
-  const b=p&&p.status==='wacht op capaciteit'&&p.blokkeerder; if(!b) return '';
+/* Waaróm krijgen deze doelen niets? Een auto-doel erboven pakt wat er overblijft; met een
+   maandbedrag of percentage daarop zakt de rest door.
+   v193: deze uitleg stond woordelijk identiek onder élk wachtend doel, inclusief dezelfde
+   blokkeerdernaam - bij drie wachtende doelen dus drie keer dezelfde alinea op één scherm. De
+   blokkeerder is per constructie voor alle wachtenden dezelfde (allocatePlan zet auto1), dus één
+   regel op planniveau zegt precies hetzelfde en telt erbij hoeveel doelen wachten.
+   Diezelfde ronde voegt hem samen met planAllocWarning(): die twee zeiden hetzelfde in twee
+   registers, de een op planniveau en de ander per doel. Ze vuren niet altijd samen - een auto-doel
+   dat alles opslokt claimt niets, dus de waarschuwing zwijgt daar - en daarom is dit één regel met
+   twee standen in plaats van een van de twee geschrapt: de waarschuwing houdt zijn amber (er wordt
+   meer verdeeld dan er is), de auto-stand blijft neutraal, want daar is niets mis - zo werkt auto
+   nu eenmaal (v78/v93). */
+function planWachtBron(P){
+  const wacht=(P||[]).filter(p=>p.status==='wacht op capaciteit'&&p.blokkeerder);
+  return wacht.length?{b:wacht[0].blokkeerder, n:wacht.length}:null;
+}
+function planWachtRegel(P){
+  const W=planAllocWarning(), B=planWachtBron(P);
+  if(!W&&!B) return '';
   const kort=isMode('rustig');
-  const txt=kort
-    ? `‘${esc(b.naam)}’ pakt nu wat er overblijft.`
-    : `‘${esc(b.naam)}’ pakt nu alles wat er overblijft. Geef dat doel een maandbedrag of %, dan zakt de rest hierheen door.`;
-  return `<div class="plan-hint small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${txt}
-    <span style="color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();${planAllocOpen(b)}">maandbedrag instellen ›</span></div>`;
+  const doelen=B?(B.n===1?'1 doel':`${B.n} doelen`):'';
+  const wacht=B?(B.n===1?'wacht':'wachten'):'';
+  const uitleg=B?(kort
+    ? `‘${esc(B.b.naam)}’ pakt nu wat er overblijft, dus ${doelen} eronder ${wacht}.`
+    : `‘${esc(B.b.naam)}’ pakt nu alles wat er overblijft, dus ${doelen} eronder ${wacht}. Geef dat doel een maandbedrag of %, dan zakt de rest door.`):'';
+  const tik=B?` <span style="color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();${planAllocOpen(B.b)}">maandbedrag instellen ›</span>`:'';
+  const txt=[W?W.txt:'', uitleg].filter(Boolean).join(' ')+tik;
+  const stijl=W
+    ? `color:${isMode('rustig')?'var(--mut)':'var(--amber)'};background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 11px;margin:0 2px 9px`
+    : 'color:var(--mut2);margin:0 2px 9px';
+  return `<div id="planWacht" class="small" style="${stijl};line-height:1.45">${txt}</div>`;
 }
 /* Spaargeld boven je noodfonds-doel (v99).
    Het noodfonds-plan-item klemt zijn voortgang op het doel (planMap), en de voortgang van een
@@ -4171,7 +4248,7 @@ function renderPlan(bare){
           <div class="row"><span style="font-weight:700;font-size:var(--fs-md)">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small muted">${p.nfOnbekend?`<span style="color:var(--mut)">onbekend</span>`:euro0(p.gespaard)+' toegewezen'} / ${euro0(p.doel)}</span></div>
           ${p.nfOnbekend?'':`<div class="bar-track" style="margin:8px 0 0"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>`}
           <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
-          ${p.nfOnbekend?'':doelTempoLine(p)}${planWachtHint(p)}
+          ${p.nfOnbekend?'':doelTempoLine(p)}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${up}${dn}</div>
       </div>
@@ -4185,8 +4262,7 @@ function renderPlan(bare){
   const head=planCapTerugval()
     ? `<div class="small muted" style="margin:0 2px 8px">Je hebt nog geen ${jrg('spaarinleg','spaarinleg')} ingesteld, dus dit plan verdeelt je comfortabele ruimte: <b>${euro0(cap)}/mnd</b>. Zet met ▲▼ wat eerst moet.</div>`
     : `<div class="small muted" style="margin:0 2px 8px">Je ${jrg('spaarinleg','spaarinleg')} gaat van boven naar beneden: ${cap>0?`<b>${euro0(cap)}/mnd</b> te verdelen`:'nog geen spaarinleg bekend'}. Zet met ▲▼ wat eerst moet.</div>`;
-  const W=planAllocWarning();
-  const warn=W?`<div id="planWarn" class="small" style="color:${isMode('rustig')?'var(--mut)':'var(--amber)'};background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 11px;margin:0 2px 9px;line-height:1.45">${W.txt}</div>`:'';
+  const warn=planWachtRegel(P);
   // niets blijft liggen: is er ná het bijvullen van álle lopende doelen nog capaciteit over,
   // dan zeggen we dat rustig i.p.v. het geruisloos te laten verdwijnen
   const vrij=planVrij(P);
@@ -5497,7 +5573,13 @@ function resetNfAmount(c){ if(SET.nfAmount) delete SET.nfAmount[c]; if(SET.nfNot
 function setNfNote(c,v){ SET.nfNote=SET.nfNote||{}; const s=(''+v).trim(); if(s==='') delete SET.nfNote[c]; else SET.nfNote[c]=s.slice(0,80); save(); renderNfSheet(); }
 function toggleNfNote(c){ SET.nfNoteOpen=SET.nfNoteOpen||{}; SET.nfNoteOpen[c]=!SET.nfNoteOpen[c]; save(); renderNfSheet(); }
 function toggleNfList(){ SET.nfListOpen=!SET.nfListOpen; save(); renderNfSheet(); }
-const VOORUIT_FOOT=`<div class="scr-foot">Vooruitkijken is een schatting, geen belofte.</div>`;
+/* v193: hier stond 'Vooruitkijken is een schatting, geen belofte'. Inhoudelijk klopt dat nog - dit
+   scherm projecteert wel degelijk, elke rij draagt een looptijd en doelTempoLine() noemt een datum -
+   maar het wóórd 'vooruitkijken' was sinds v179 het laatste restant van de oude schermnaam, en
+   daardoor las de regel als een onderschrift bij het scherm in plaats van bij de getallen. Dat is
+   precies waar v179 hem voor wilde behouden. Zelfde strekking, ander aangrijpingspunt: hij zegt nu
+   welke getallen onzeker zijn. */
+const VOORUIT_FOOT=`<div class="scr-foot">De looptijden en datums hier zijn een schatting, geen belofte.</div>`;
 /* v179: dit scherm heet Plan. De interne sleutel blijft 'vooruit' (id s-vooruit, go('vooruit'),
    SET.vooruitDoelOpen, minder_view): dat is opslag en navigatie-state, geen tekst die je leest,
    en hernoemen zou een migratie vragen zonder dat er iets aan verandert. */
@@ -5510,8 +5592,15 @@ function renderVooruit(){
   const goals=renderPlan(true);
   const doelOpen=(SET.vooruitDoelOpen!==undefined)?SET.vooruitDoelOpen:isMode('expert');
   const P=(()=>{ try{ return planItems(); }catch(_){ return []; } })();
-  const top=P[0]; const doelTeaser=top?`#1 ${top.naam}${P.length>1?` · +${P.length-1}`:''}`:'nog geen';
-  const doelZone=vooruitZone('vooruitDoelOpen','Mijn plan',doelTeaser,doelOpen,goals);
+  /* v193: de zonekop heette 'Mijn plan' en dupliceerde daarmee de tabnaam, sinds dit scherm in
+     v179 Plan ging heten. De kop helemaal weghalen kan niet zonder de inklap-knop mee te nemen (die
+     stuurt SET.vooruitDoelOpen), dus neemt de samenvatting die plek in: op een scherm dat Plan heet
+     is 'de lijst, samengevat' precies wat die balk hoort te zeggen. vooruitZone() escapet zijn
+     label niet en hier zit een doelnaam in, dus dat gebeurt hier. */
+  const top=P[0];
+  const doelKop=top?`#1 ${esc(top.naam)}`:'Nog geen doelen';
+  const doelTeaser=(top&&P.length>1)?`+${P.length-1} meer`:'';
+  const doelZone=vooruitZone('vooruitDoelOpen',doelKop,doelTeaser,doelOpen,goals);
   // noodfondsCard() is hier weg: het noodfonds is een plan-item geworden en "verfijnen" opent
   // vanaf dát item (planOpen -> openNoodfondsPanel), dus de kaart stond dubbel.
   // "Volgende uitgaven" (vooruitDeep) is weg, dus ook de knop "Deze maand in detail" — anders
@@ -7381,6 +7470,29 @@ function vermogensInleg(ym){
   const bekend=delen.some(d=>d.bedrag!=null);
   return {totaal: bekend?delen.reduce((a,d)=>a+(d.bedrag||0),0):null, delen};
 }
+/* v193: kpiMinBedrag bestaat omdat een klein grondtal een percentage onbetrouwbaar maakt - een
+   terugstorting in een categorie met nauwelijks kosten gaf zo een vaste-lastendruk van -1% (v161).
+   Bij een grondtal van precies nul speelt dat niet: er is niets om te vertekenen, het percentage is
+   exact 0 en dat is een meting. De hero op Inzichten toonde daar al '€0 uitgegeven · 0%' terwijl de
+   tegel 'te klein voor een percentage' zei, dus dezelfde maand las op twee plekken anders. Nul is
+   voortaan een uitkomst en geen ondergrens; onbekend blijft een andere zaak en wordt eerder
+   afgevangen (v==null, v163). */
+function pctZinvol(grondtal){
+  if(grondtal==null) return false;
+  const g=Math.abs(Math.round(grondtal));
+  return g===0 || g>=MAAND_DREMPEL.kpiMinBedrag;
+}
+/* En de andere helft van diezelfde regel: nul is alleen een meting als er ook iets te meten viel.
+   Ligt je laatste boeking vóór de maand waarover het cijfer gaat, dan is er niets binnengekomen en
+   zegt de hero 'onbekend' (v173). Dan mag de tegel geen 0% tonen, want dan spreken ze elkaar tegen
+   in de andere richting. Dezelfde bron als de hero - laatsteImport() - zodat er geen tweede
+   detectie ontstaat. */
+function maandGemeten(m){
+  // zonder een geldige maand valt er niets te toetsen; dan niets onderdrukken. Een losse
+  // stringvergelijking op 'null-01' zou juist alles op onbekend zetten.
+  if(!/^\d{4}-\d{2}$/.test(String(m||''))) return true;
+  try{ const L=laatsteImport(); return !(L && L.datum < m+'-01'); }catch(_){ return true; }
+}
 function insKpis(m,n){
   const t=totals(m), S=insKpiSeries(n);
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -7403,8 +7515,9 @@ function insKpis(m,n){
      percentage niets - een terugstorting in een categorie met nauwelijks kosten gaf zo een vaste-
      lastendruk van -1%. Dan tonen we het bedrag zelf. Drempel in MAAND_DREMPEL, niet inline. */
   const grondtal={inleg:V.totaal, budget:Math.round(t.spend), vari:Math.round(sf.vari), vast:Math.round(sf.fixed)};
+  const gemeten=maandGemeten(m);
   const mk=key=>{
-    const M=KPI_META[key], v=waarde[key], ref=null;
+    const M=KPI_META[key], v=gemeten?waarde[key]:null, ref=null;
     const fmt=_pct0;
     let st=kpiState(key,v,ref);
     /* v161 trekt de bijstelling uit v117 in. De spaarquote meet hoeveel er opzij ging; of dat uit
@@ -7415,9 +7528,10 @@ function insKpis(m,n){
     let band=kpiBandTxt(key);
     if(key==='budget') band=`${kpiBandTxt(key)} · ${t.potTotal>0?'je potjes':'je inkomen-limiet'}`;
     if(v==null) band=(key==='budget')?'nog geen budget':(key==='inleg'&&t.income>0)?'geen spaarrekening bekend':'inkomen onbekend';
+    if(!gemeten) band='geen boekingen in deze maand';
     const afst=kpiAfstand(key,v,t,sf);
     const g=grondtal[key];
-    const klein=(v!=null && g!=null && Math.abs(g)<MAAND_DREMPEL.kpiMinBedrag);
+    const klein=(v!=null && !pctZinvol(g));
     if(klein) band=`grondtal ${euro0(g)} · te klein voor een percentage`;
     return {key, label:M.label, raw:v, ref, val:klein?euro0(g):(v==null?'—':fmt(v)), band, uitleg:M.uitleg, fmt, partial, afst,
             grondtal:g, klein,
@@ -7519,9 +7633,18 @@ function maandKpiBlok(m){
   const items=K.items.filter(k=>keys.includes(k.key)).slice(0, alles?9:1);
   if(!items.length) return '';
   const meer=rustig?`<button class="snz" onclick="toggleExpand('kpiAllMaand')">${alles?'minder ▲':'toon beide kerncijfers ▾'}</button>`:'';
+  /* v193: de ondertitel beloofde onvoorwaardelijk 'van maand op maand'. Dat klopt zodra de reeks
+     meer dan een punt heeft - ook op een afgesloten maand, want series loopt tot en met de gekozen
+     maand - maar niet in je eerste maand: dan staat er een cijfer onder een kop over verloop. De
+     kop telt daarom wat er staat, dezelfde regel als maandOordeel() die de regels telt die er staan
+     (v167). Het blok zelf blijft: dat cijfer klopt voor die maand, weglaten zou een feit weghalen. */
+  const punten=Math.max(0,...items.map(k=>(k.series||[]).filter(x=>x!=null).length));
+  const onder=punten>1
+    ? 'Wat er structureel gebeurt, van maand op maand.'
+    : 'Wat er structureel gebeurt. Er is één maand gemeten, dus er valt nog geen verloop te zien.';
   return `<div class="card" id="maandKpiBlok">
     <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">${ICON('chart')} Kerncijfers</span></div>
-    <div class="small muted" style="margin:0 0 4px">Wat er structureel gebeurt, van maand op maand.</div>
+    <div class="small muted" style="margin:0 0 4px">${onder}</div>
     <div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${kpiTegels(items)}</div>${meer}
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:10px">${K.partial?'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus nog zonder oordeel.':''}</div>
   </div>`;

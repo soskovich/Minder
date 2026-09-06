@@ -64,7 +64,10 @@ test.describe('v53 potjes leidend, inkomen-limiet als spiegel', () => {
     const plan = await page.evaluate(() => { const d = document.createElement('div');
       d.innerHTML = maandPlanRegels(); return d.innerText.replace(/\s+/g, ' '); });
     expect(plan).toContain('Boven je inkomen-limiet');
-    expect(plan).toContain('€300 (70%)');
+    // v193: het bedrag staat in de waardekolom, het percentage in de gevolgzin met richting
+    expect(plan).toContain('€300');
+    expect(plan).toMatch(/boven de 70% van je inkomen/);
+    expect(plan).toMatch(/spiegel, geen plafond/);
     const kaart = await page.evaluate((m) => monthStatusCard(m), CUR);
     expect(kaart).not.toContain('€2.100');   // de limiet staat nergens als maandbudget
   });

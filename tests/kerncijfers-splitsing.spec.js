@@ -231,7 +231,9 @@ test.describe('d · klein grondtal', () => {
   test('de drempel staat in MAAND_DREMPEL, niet inline', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => MAAND_DREMPEL.kpiMinBedrag)).toBe(100);
-    expect(await page.evaluate(() => insKpis.toString())).toContain('MAAND_DREMPEL.kpiMinBedrag');
+    // v193: de drempel verhuisde naar pctZinvol(), dat ook het nulgeval draagt
+    expect(await page.evaluate(() => insKpis.toString())).toContain('pctZinvol');
+    expect(await page.evaluate(() => pctZinvol.toString())).toContain('MAAND_DREMPEL.kpiMinBedrag');
   });
 
   test('een normaal grondtal geeft gewoon een percentage', async ({ page }) => {

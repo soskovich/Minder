@@ -49,20 +49,46 @@ test.describe('a · de spaardoel-hero is weg', () => {
 });
 
 test.describe('b · einddatum per doel', () => {
-  test('een plan-item met looptijd toont maanden én de datum', async ({ page }) => {
-    // gA staat op #1 met een vast maandbedrag, dus hij heeft een eigen ETA
+  /* v193: hier stonden maanden EN de datum, en dat is hetzelfde feit twee keer - de datum is
+     vandaag plus dat aantal maanden. Nu is het er een, afhankelijk van de looptijd: onder een jaar
+     de maanden, daarboven de datum. De grens staat in ETA_DATUM_VANAF. */
+  test('een korte looptijd toont maanden, geen datum', async ({ page }) => {
     await openV(page, tweak((s) => {
       s.goals = [{ id: 'gA', naam: 'Nieuwe laptop', doel: 1000, perMaand: 100, gespaard: 0, allocMode: 'fixed' }];
       s.planOrder = ['gA', 'noodfonds'];
     }));
-    const P = await page.evaluate(() => allocatePlan());
-    const gA = P.find((x) => x.id === 'gA');
+    const gA = (await page.evaluate(() => allocatePlan())).find((x) => x.id === 'gA');
     expect(gA.eta).toBeGreaterThan(0);
+    expect(gA.eta).toBeLessThan(await page.evaluate(() => ETA_DATUM_VANAF));
 
     const rij = await page.locator('#s-vooruit .plan-item[data-id="gA"]').innerText();
-    expect(rij).toContain(`~${gA.eta}`);                                  // het aantal maanden blijft
-    expect(rij).toContain(`rond ${await datumOver(page, gA.eta)}`);       // en de datum staat erbij
-    expect(rij).toMatch(/rond [a-z]{3,4} \d{4}/i);                        // bv. "rond mrt 2027"
+    expect(rij).toContain(`~${gA.eta}`);
+    expect(rij).not.toMatch(/rond [a-z]{3,4} \d{4}/i);
+  });
+
+  test('een lange looptijd toont de datum, geen maanden', async ({ page }) => {
+    await openV(page, tweak((s) => {
+      s.goals = [{ id: 'gA', naam: 'Nieuwe keuken', doel: 12000, perMaand: 100, gespaard: 0, allocMode: 'fixed' }];
+      s.planOrder = ['gA', 'noodfonds'];
+    }));
+    const gA = (await page.evaluate(() => allocatePlan())).find((x) => x.id === 'gA');
+    expect(gA.eta).toBeGreaterThanOrEqual(await page.evaluate(() => ETA_DATUM_VANAF));
+
+    const rij = await page.locator('#s-vooruit .plan-item[data-id="gA"]').innerText();
+    expect(rij).toContain(`rond ${await datumOver(page, gA.eta)}`);
+    expect(rij).toMatch(/rond [a-z]{3,4} \d{4}/i);
+    expect(rij).not.toContain(`~${gA.eta} maanden`);
+  });
+
+  test('de grens ligt op een jaar en staat in een constante', async ({ page }) => {
+    await openV(page, tweak(() => {}));
+    const r = await page.evaluate(() => ({ grens: ETA_DATUM_VANAF,
+      elf: etaTekst(11), twaalf: etaTekst(12), een: etaTekst(1), nul: etaTekst(0) }));
+    expect(r.grens).toBe(12);
+    expect(r.elf).toBe('~11 maanden');
+    expect(r.een).toBe('~1 maand');
+    expect(r.twaalf).toMatch(/^rond [a-z]{3,4} \d{4}$/i);
+    expect(r.nul).toBe('');
   });
 
   test('een gepauzeerd of bereikt doel toont geen datum', async ({ page }) => {

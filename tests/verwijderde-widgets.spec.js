@@ -78,14 +78,15 @@ test.describe('b · Vooruitblik zonder komende-uitgaven-lijsten', () => {
     const v = await page.locator('#s-vooruit').innerText();
     expect(v).not.toContain('Komende lasten');
     expect(v).not.toContain('Volgende uitgaven');
-    expect(v).toMatch(/mijn plan/i);                             // wat er hoort te blijven (hlabel = uppercase)
+    // v193: de zonekop heet niet meer 'Mijn plan' maar draagt de samenvatting van de lijst
+    expect(v).toMatch(/#1 /);                                    // wat er hoort te blijven
   });
 
   test('de rest van Vooruitblik blijft staan', async ({ page }) => {
     await boot(page, 'vooruit');
     const v = await page.locator('#s-vooruit').innerText();
     expect(v).not.toMatch(/nog deze maand/i);                    // v144: alleen nog op Inzichten
-    expect(v).toMatch(/mijn plan/i);                             // prioriteitenlijst
+    expect(v).toMatch(/#1 /);                                    // de prioriteitenlijst, samengevat
   });
 
   // v164: vooruitFocus() had geen aanroeper meer en is opgeruimd. Wat overeind blijft is de vraag

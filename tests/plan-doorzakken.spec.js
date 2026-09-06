@@ -185,7 +185,10 @@ test.describe('c · ETA volgt de definitieve toewijzing', () => {
     expect(P[0].eta).toBe(Math.ceil(5000 / 350));       // niet ceil(5000/100)
     expect(P[1].eta).toBe(Math.ceil(5000 / 150));
     await openPlanZone(page);
-    expect(await page.locator('.plan-item[data-id="gA"]').innerText()).toContain(`~${P[0].eta} maanden`);
+    // v193: boven een jaar toont de regel de datum in plaats van het aantal maanden; de eta zelf
+    // (hierboven getoetst) is onveranderd de bron van allebei.
+    const eDat = await page.evaluate((n) => etaDatum(n), P[0].eta);
+    expect(await page.locator('.plan-item[data-id="gA"]').innerText()).toContain(`rond ${eDat}`);
   });
 
   test('een aflos-item rekent zijn looptijd via payoffMonths op de bijgevulde inleg', async ({ page }) => {
@@ -216,14 +219,15 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
     expect(P[1].blok).toBe('gA');
 
     await openPlanZone(page);
-    const hint = page.locator('.plan-item[data-id="gB"] .plan-hint');
+    /* v193: deze uitleg stond onder elk wachtend doel, woordelijk identiek en met dezelfde
+       blokkeerdernaam. Hij staat nu een keer, op planniveau, met dezelfde tik. */
+    const hint = page.locator('#planWacht');
     await expect(hint).toHaveCount(1);
     const t = await hint.innerText();
     expect(t).toContain('Vakantie');
     expect(t).toMatch(/maandbedrag of %/);
     expect(t).toMatch(/maandbedrag instellen/i);
-    // het doel dat wél krijgt heeft geen hint
-    expect(await page.locator('.plan-item[data-id="gA"] .plan-hint').count()).toBe(0);
+    expect(await page.locator('.plan-hint').count()).toBe(0);
 
     // de tik opent de invoer van het bovenliggende doel, niet die van gB
     await hint.locator('text=maandbedrag instellen').click();
@@ -253,7 +257,7 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
     expect(P[1].blok).toBe('af:d1');
 
     await openPlanZone(page);
-    await page.locator('.plan-item[data-id="gB"] .plan-hint >> text=maandbedrag instellen').click();
+    await page.locator('#planWacht >> text=maandbedrag instellen').click();
     await page.waitForSelector('#paModes');
     expect(await page.locator('#paModes .chip').count()).toBe(3);
     await page.locator('#paModes .chip', { hasText: 'Vast bedrag' }).click();
@@ -280,7 +284,7 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
     await openPlanZone(page);
     const rij = page.locator('.plan-item[data-id="gB"]');
     expect(await rij.innerText()).toMatch(/wacht op capaciteit/i);
-    expect(await rij.locator('.plan-hint').count()).toBe(0);
+    expect(await page.locator('#planWacht').count()).toBe(0);   // geen blokkeerder, dus geen regel
   });
 });
 

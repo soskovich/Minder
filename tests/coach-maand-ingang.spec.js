@@ -54,7 +54,10 @@ test.describe('a · de ingang kiest de zwaarste regel', () => {
   test('één tekort: de zin noemt die regel en de woorden van het scherm', async ({ page }) => {
     await maand(page);
     const t = await page.locator('#s-maand').innerText();
-    expect(t).toMatch(/Kosten koper huis vraagt een beslissing\. Zullen we dat doorlopen\?/);
+    // v193: de ingang noemt de naam en laat het oordeel weg; dat staat al in de kaartkop en in
+    // de oordeelzin erboven, dus stond het er drie keer.
+    expect(t).toMatch(/Zullen we kosten koper huis doorlopen\?/);
+    expect(t).not.toMatch(/Kosten koper huis vraagt een beslissing/);
     const z = await page.evaluate(() => coMaandZwaarste(maandRegels()));
     expect(z.key).toBe('doel');
     expect(z.status).toBe('tekort');
@@ -70,7 +73,7 @@ test.describe('a · de ingang kiest de zwaarste regel', () => {
     const eerste = await page.evaluate((ks) => ks.slice().sort((a, b) => MAAND_VOLGORDE.indexOf(a) - MAAND_VOLGORDE.indexOf(b))[0], tekorten);
     expect(z.key).toBe(eerste);
     expect(z.key).toBe('buffer');                            // buffer staat vóór doel
-    expect(await page.locator('#s-maand').innerText()).toMatch(/Buffer in maanden vraagt een beslissing/);
+    expect(await page.locator('#s-maand').innerText()).toMatch(/Zullen we buffer in maanden doorlopen\?/);
   });
 
   test('tekort weegt zwaarder dan let op', async ({ page }) => {
@@ -103,7 +106,7 @@ test.describe('b · alles ok, en alleen onbekend', () => {
 test.describe('c · het gesprek', () => {
   test('opent bij die ene regel, in de zin van het scherm, zonder groet', async ({ page }) => {
     await maand(page);
-    await page.locator('#s-maand .card', { hasText: 'Zullen we dat doorlopen' }).click();
+    await page.locator('#s-maand .card', { hasText: 'Zullen we ' }).click();
     await wachtKeuze(page);
     const draad = await page.locator('#coThr').innerText();
     const R = await page.evaluate(() => coMaandRegel('doel'));
@@ -298,7 +301,7 @@ test.describe('g · de andere ingangen blijven zoals ze waren', () => {
     test(`geen horizontale overflow op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 780 });
       await maand(page);
-      await page.locator('#s-maand .card', { hasText: 'Zullen we dat doorlopen' }).click();
+      await page.locator('#s-maand .card', { hasText: 'Zullen we ' }).click();
       await wachtKeuze(page);
       const over = await page.evaluate(() => ({
         maand: document.querySelector('#s-maand').scrollWidth - document.querySelector('#s-maand').clientWidth,

@@ -143,8 +143,11 @@ test.describe('b · zachte hint bij over-verdeling', () => {
     expect(P[1].status).toBe('');
 
     await openPlanZone(page);
-    expect(await page.locator('#planWarn').count()).toBe(1);
-    expect(await page.locator('#planWarn').innerText()).toContain('€370');
+    // v193: de waarschuwing en de wachthint zijn een regel geworden (#planWacht). De waarschuwing
+    // is de overlevende plek; de hint had als enige unieke inhoud welk doel het opslokt.
+    expect(await page.locator('#planWacht').count()).toBe(1);
+    expect(await page.locator('#planWacht').innerText()).toContain('€370');
+    expect(await page.locator('#planWarn').count()).toBe(0);
   });
 
   test('percentages boven 100% worden benoemd', async ({ page }) => {
@@ -164,7 +167,7 @@ test.describe('b · zachte hint bij over-verdeling', () => {
     ]));
     expect(await page.evaluate(() => planAllocWarning())).toBeNull();
     await openPlanZone(page);
-    expect(await page.locator('#planWarn').count()).toBe(0);
+    expect(await page.locator('#planWarn, #planWacht').count()).toBe(0);
   });
 });
 
