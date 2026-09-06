@@ -751,12 +751,24 @@ function load(){try{
  * SET.budgetMonth  = de 'YYYY-MM' waar SET.budgets op geankerd staat.
  * Bij maandwissel promoveert rolloverBudgets() de 'next'-laag naar actief. Niets gewijzigd = carry-forward. */
 function thisYM(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
-/* v177: welke dag is het hier? new Date().toISOString() geeft de UTC-dag, en tussen middernacht en
-   02:00 zomertijd is dat gisteren. "Gelezen op" toonde daardoor de dag ervoor, en een boeking van
-   vandaag matchte niet. Datums in TX zijn lokale kalenderdagen, dus dit hoort dat ook te zijn.
-   De PSD2-aanroepen houden bewust hun ISO-datum: dat is een API-parameter, geen dag van jou. */
-function vandaagYMD(){ const d=new Date();
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+/* ---- LOKALE KALENDERDAG (v177, verruimd in v199) ----------------------------------------------
+   Een datum die een kalenderdag bedoelt komt hier vandaan. toISOString() geeft de UTC-dag, en die
+   loopt in Nederland tot twee uur achter op de dag die je op je klok ziet. Op een moment dat met
+   setHours(0,0,0,0) op lokale middernacht is gezet loopt hij er zelfs ALTIJD een dag achter, want
+   00:00 CEST is 22:00 UTC van de dag ervoor.
+   Dat is drie keer misgegaan: v177 in 'Gelezen op' en de signaalmatching, v198 in het
+   PSD2-saldostempel, en v199 in de accshort-sleutel. De correctie van v177 bleef onvolledig omdat
+   er alleen naar `new Date().toISOString()` is gekeken en niet naar `new Date(<ts>).toISOString()`.
+   De regel: alles wat vergeleken wordt met een datum uit TX, met een SET-datumveld of met
+   ACCMETA[acc].date is een lokale dag - die drie zijn lokale kalenderdagen. Ook een datum die
+   nergens heen gaat maar wél wordt opgeslagen volgt die regel: een opslagveld wordt later
+   vergeleken. Alleen wat een API of een uitwisselingsformaat in gaat houdt ISO.
+   ymdVan() is de enige plek waar die formule staat; vandaagYMD() is hem voor nu. Schrijf hem
+   nergens opnieuw uit: een tweede exemplaar dat toevallig goed is, is precies hoe deze fout zich
+   verspreidt, want de volgende kopieert de vorm die hij ziet. */
+function ymdVan(d){ const x=(d instanceof Date)?d:new Date(d);
+  return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
+function vandaagYMD(){ return ymdVan(new Date()); }
 function nextYM(ym){ let [y,mo]=String(ym).split('-').map(Number); mo++; if(mo>12){mo=1;y++;} return y+'-'+String(mo).padStart(2,'0'); }
 function ymFull(ym){ const mo=+String(ym).split('-')[1]; return MFULL[mo-1]||''; }
 function rolloverBudgets(){
@@ -2510,7 +2522,13 @@ function scoreNotifs(opts){
   try{ const t0=new Date().setHours(0,0,0,0);
     for(const s of accountShortfalls()){
       const dd=Math.round((s.t-t0)/86400000); const when=dd<=0?'vandaag':dd===1?'morgen':`over ${dd} dagen`;
-      out.push({key:'accshort-'+s.acc+'-'+new Date(s.t).toISOString().slice(0,10), h:'direct', score:94, t:'bad', ic:ICON('alert'),
+      /* v199: hier stond toISOString() op s.t, en dat is lokale middernacht uit accountShortfalls()
+         (setHours(0,0,0,0)). Die stempelt in Nederland het hele jaar door de dag ervoor. Vandaag
+         heeft dat geen zichtbaar gevolg - 'accshort' staat in CRIT en is dus niet te snoozen, en de
+         verschuiving is voor elke datum gelijk, dus twee shortfalls blijven uit elkaar te houden -
+         maar een sleutel die een andere dag noemt dan de gebruiker ziet is een val voor de volgende
+         die hem uitleest. Een sleutel is intern, dus hij volgt de lokale regel. */
+      out.push({key:'accshort-'+s.acc+'-'+ymdVan(s.t), h:'direct', score:94, t:'bad', ic:ICON('alert'),
         l1:`${esc(accShort(s.acc))}: ${esc(String(s.name||'').slice(0,18))} ${euro(s.amt)} ${when}, maar er staat ${euro(s.balance)}.`,
         l2:`Tekort ${euro0(s.shortfall)} · vul aan of schuif over`, act:"go('vooruit')"});
     } }catch(_){}
@@ -9234,8 +9252,9 @@ async function requestPersistUI(){ const ok=await requestPersist(); toast(ok?`${
 function exportBackup(){
   const data={app:'minder',v:1,ts:Date.now(),tx:TX,ovr:OVR,own:OWN,accmeta:ACCMETA,plan:PLAN,set:SET};
   const blob=new Blob([JSON.stringify(data)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
-  const d=new Date(); const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  a.href=url; a.download='minder-backup-'+ds+'.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+  // v199: hier stond de formule van vandaagYMD() woordelijk opnieuw. Hij was goed, maar een tweede
+  // exemplaar is hoe de vorm zich verspreidt; er is er nu één.
+  a.href=url; a.download='minder-backup-'+vandaagYMD()+'.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
   toast(`${ICON('check')} Back-up gemaakt (${TX.length} transacties)`);
 }
 function restoreBackupPick(){ const el=document.getElementById('backupFile'); if(el){ el.value=''; el.click(); } }
