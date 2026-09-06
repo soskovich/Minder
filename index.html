@@ -1953,17 +1953,17 @@ function savingsModel(){
   const avgSpend=med(ms.map(m=>totals(m).spend));
   const avgFixed=med(ms.map(m=>splitFixedVar(m).fixed));
   const avgVar=med(ms.map(m=>splitFixedVar(m).vari));
-  // flexibel bufferdoel
-  const basis=SET.bufferBasis||'spend';
-  const mult=+SET.bufferMonths||6;
-  let baseVal, baseLabel;
-  if(basis==='income'){ baseVal=inc; baseLabel='inkomen'; }
-  else if(basis==='fixed'){ baseVal=avgFixed; baseLabel='vaste lasten'; }
-  else if(basis==='variable'){ baseVal=avgVar; baseLabel='variabele lasten'; }
-  else { baseVal=avgSpend; baseLabel='maanduitgave'; }
-  // Richting A: het buffer-doel volgt de crisis-noodfonds (één bron). Oude formule alleen nog als terugval bij lege data.
+  /* v197: hier stond een keuzemenu voor het bufferdoel op SET.bufferBasis (spend/income/fixed/
+     variable/amount) en SET.bufferMonths. Geen van drieën werd ooit geschreven - er is geen invoer
+     en geen migratie - dus vier van de vijf takken waren onbereikbaar en mult was altijd 6. Het
+     mechanisme is vervangen: het bufferdoel volgt sinds richting A de crisis-noodfonds, en dit is
+     alleen nog de terugval bij lege data (nfDoel is dan 0). Die terugval blijft, met de waarden die
+     hij in de praktijk altijd al had. basis, mult, baseVal en baseLabel blijven in het
+     return-object staan - niemand leest ze van buiten, maar ze weghalen verandert de vorm van een
+     model en dat is een andere ingreep. */
+  const basis='spend', mult=6, baseVal=avgSpend, baseLabel='maanduitgave';
   let nfDoel=0; try{ nfDoel=Math.round(noodfondsModel().doel||0); }catch(_){}
-  const goal = nfDoel>0 ? nfDoel : (basis==='amount' ? (+SET.bufferAmount||0) : baseVal*mult);
+  const goal = nfDoel>0 ? nfDoel : baseVal*mult;
   // Het spaardoel meet wat er op je spaarrekening(en) staat (+ handmatig spaargeld), niet je hele saldo:
   // je betaalrekening bevat immers geld voor nog te betalen lasten en is geen buffer.
   const {cur,missing}=spaarSaldo();
@@ -2488,7 +2488,9 @@ function scoreNotifs(opts){
      Hij leeft nu als grootsteHefboom() en wordt getoond als CONTEXT bij coachRuleOptions() in het
      gesprek: geen bevinding, maar achtergrond bij een keuze. Daarmee leven alle vijf de regels van
      coachItems() elders en kon die functie vervallen. */
-  try{ if(TX.length && !SET.coachOff){
+  // v197: hier stond ook TX.length, 168 regels na de guard bovenin die er al op terugkeert. Die
+  // helft kon nooit onwaar zijn; hij kwam in v143 mee uit coachItems(), waar hij de enige guard was.
+  try{ if(!SET.coachOff){
     const doneA=months().filter(x=>x<(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'))).slice(-6);
     const baseA=baseIncome(), targetA=Math.round(monthlySavingTarget());
     const avgA=a=>a.length?a.reduce((s2,x)=>s2+x,0)/a.length:0;
@@ -2686,7 +2688,9 @@ function financeModel(){
     paceDelta:Math.round(st.expected-st.spent),
     fixedDueRemaining:fixDueR,varRemaining:Math.max(st.projEnd-st.spent-fixDueR,0),forecastEndOfMonth:st.projEnd,status:st.vkey};
   // ---- projectie (Plan én Coach lezen dit) ----
-  const setAside=Math.round(+SET.coachSetAside||0);                       // eenmalig opzijgezet (coach-actie)
+  // v197: hier stond `Math.round(+SET.coachSetAside||0)`, altijd 0 - de coach-actie die dat veld
+  // zou schrijven bestaat niet (meer), dus de post viel overal uit de projectie weg.
+  const setAside=0;
   const optKeys=new Set((coachRuleOptions(cm)||[]).map(r=>r.key)); let totalCut=0;
   for(const k in (SET.coachRules||{})) if(optKeys.has(k)) totalCut+=+SET.coachRules[k]||0;
   // ÉÉN gecommitteerde koers: werkelijk t/m nu, daarna + eenmalig opzijgezet + actieve maandregels
@@ -5773,9 +5777,14 @@ const MECHANISM_SPEC = {
   // zodra het duurdere schuld verbergt.
   mentalAccounting: {
     regel: 'Potje gezond = helpt plannen. Potje schadelijk = verbergt duurdere schuld.',
-    vuurt: 'Stilstaand geld in laag-/nulrente-potje terwijl er schuld/rood staat tegen hogere rente.',
+    vuurt: 'Stilstaand geld in een potje terwijl er schuld of rood staat tegen een rente boven minRenteVerschil. Het potje telt daarbij als nulrente zolang SET.spaarRente geen invoer heeft (v197).',
     condities: {
-      minRenteVerschil: 0.05,   // schuldrente minus potjesopbrengst moet hier boven liggen
+      /* v197: dit heette een verschil, en de code rekent het ook zo: schuldrente min SET.spaarRente.
+         Maar SET.spaarRente wordt nergens geschreven - geen invoerveld, geen default - dus die is
+         altijd 0 en de toets is in de praktijk de schuldrente zelf. De spec zegt nu wat de code
+         doet. Het invoerveld bouwen is een eigen ronde; komt dat er, dan wordt dit weer een echt
+         verschil zonder dat de aftrekking hoeft te veranderen. */
+      minRenteVerschil: 0.05,   // schuldrente min spaarrente; die tweede is nu altijd 0, dus feitelijk de schuldrente
       minBedrag: 50             // materialiteitsdrempel: niet vuren onder dit bedrag
     },
     zwijgt: [
@@ -6753,9 +6762,15 @@ function isFixed(t){
 function openFixedVarDrill(kind, m){
   // m gezet = de maand-drill vanuit "Uitgegeven"; leeg = het Inzichten-widget over de hele periode.
   // _fvMonth wordt alleen hier gezet, dus een tussentijdse renderIns() (bv. na een omzetting) kan de
-  // scope niet omgooien - met _fvTx zou dat wel gebeuren, want dat schrijft renderFixedVariable.
+  // scope niet omgooien. (v197: het alternatief _fvTx is met renderFixedVariable in v165 vervallen.)
   window._fvDrillKind=kind; window._fvMonth=m||null;
-  const list=m?txOfMonth(m):(window._fvTx||txOfMonth(curMonth)); const fixed=(kind==='fixed');
+  /* v197: hier stond `m?txOfMonth(m):(window._fvTx||txOfMonth(curMonth))`. Die terugval was
+     onbereikbaar: alle aanroepers geven een maand mee - de twee rijen in de uitgegeven-drill een
+     letterlijke, en de drie heropeningen na een omzetting window._fvMonth, dat deze functie zelf
+     zet en dus altijd gevuld is zodra je hier bent. window._fvTx had daarnaast geen schrijver meer
+     sinds renderFixedVariable() in v165 verviel; de comment hierboven noemt hem nog als de reden
+     waarom _fvMonth de betere keuze was. */
+  const list=txOfMonth(m); const fixed=(kind==='fixed');
   const items=list.filter(x=>isExpenseTx(x) && (fixed?isFixed(x):!isFixed(x))).sort((a,b)=>b.date.localeCompare(a.date));   // incl. terugstortingen: netto totaal
   const tot=items.reduce((s,t)=>s-t.amount,0);
   $('#sheet').innerHTML=`<div class="grab"></div>
@@ -9216,7 +9231,6 @@ function minderBriefingState(){
   }catch(_){}
   return {
     safeToSpend: num(()=>safeToSpend().safe),
-    safeToSpendBuffer: +SET.stsBuffer||0,
     // v177: dit extrapoleerde je hele maanduitgave, dus met de vaste lasten erin
     netSpendPeriode: num(()=>{ const de=daysElapsed(ym); if(!de.elapsed||de.elapsed<7) return NaN; return tempoProjectie(ym).proj; }),   // lopende uitgave -> verwachte volledige maand (pas vanaf dag 7)
     netSpendPatroon: num(()=>baselineSpend()),
@@ -9225,10 +9239,13 @@ function minderBriefingState(){
   };
 }
 
+/* v197: hier stond `const buffer=state.safeToSpendBuffer??0`. Dat veld kwam uit SET.stsBuffer, dat
+   nergens werd geschreven, dus de marge was altijd 0 en de vergelijking altijd `rest>0`. Het veld is
+   met de dode conditie uit de export gehaald en deze lezer rekent nu rechtstreeks met nul. */
 function _signaalSafeToSpend(state){
-  const rest=state.safeToSpend, buffer=state.safeToSpendBuffer??0;
+  const rest=state.safeToSpend;
   if(!isFinite(rest)) return null;
-  if(rest>buffer) return null;
+  if(rest>0) return null;
   return { sectie:'financien', prioriteit:rest<0?'hoog':'midden',
     samenvatting:rest<0?`Je zit deze periode ${Math.abs(Math.round(rest))} euro over je safe-to-spend.`:`Je safe-to-spend is nog ${Math.round(rest)} euro, dat begint te knellen.`,
     actie:'Houd de rest van de periode kort.', detail:null };
@@ -9370,7 +9387,11 @@ function migrateAcctNames(){
 }
 // Eén ingang voor "sheet openen": zet de sheet zichtbaar en ruimt de toast op, die anders over de invoervelden bleef liggen.
 function showSheetBg(){ $('#sheetBg').classList.add('show'); try{ const _t=document.getElementById('toast'); if(_t){ _t.className=''; clearTimeout(window._tt); } }catch(_){} hideTip(); }
-function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; hideTip();
+/* v197: _txFilterSheet stond hier niet bij, en werd nergens anders op false gezet. Zijn drie lezers
+   doen `if(window._txFilterSheet) openTxFilter()` - dat leest als "staat de sheet open, ververs hem
+   dan" - maar de vlag betekende "is ooit geopend". Een filterwijziging liet de sheet daardoor de
+   rest van de sessie weer openspringen nadat je hem had gesloten. */
+function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; window._txFilterSheet=false; hideTip();
   try{ coAfbreken(); }catch(_){}   // v138: de sheet dicht midden in een gesprek = coEnd(), zonder iets vast te leggen
 }
 
@@ -9526,7 +9547,10 @@ async function psd2Refresh(silent){
   if(authFail && !anyOk){ if(!silent){ toast('Koppeling verlopen, log opnieuw in'); psd2Connect(); } return; }
   SET.psd2LastSync=Date.now(); save();
   const added=commitTx(allTx, balances);
-  if(SET.psd2Pending!==false){ const pend=[];
+  /* v197: hier stond `if(SET.psd2Pending!==false)`. Dat las als een instelling, maar niets schreef
+     dat veld ooit, dus de andere tak was onbereikbaar. Er komt ook geen instelling: een pending
+     afschrijving is geld dat weg is, dus die hoort altijd mee te tellen. */
+  { const pend=[];
     for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue;
       try{ const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fromStr+'&transaction_status=PDNG');
         for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); }
@@ -9636,7 +9660,7 @@ async function psd2IngestSession(s){
       cont=d.continuation_key||null; guard++;
     } while(cont && guard<40);
     try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:new Date().toISOString().slice(0,10)}; }catch(e){}
-    if(SET.psd2Pending!==false){ try{ const fp=new Date(); fp.setMonth(fp.getMonth()-1); const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fp.toISOString().slice(0,10)+'&transaction_status=PDNG');
+    { try{ const fp=new Date(); fp.setMonth(fp.getMonth()-1);   // v197: pending telt altijd mee const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fp.toISOString().slice(0,10)+'&transaction_status=PDNG');
       for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); } }catch(e){} }
   }
   SET.psd2Accounts=meta; SET.psd2LastSync=Date.now();

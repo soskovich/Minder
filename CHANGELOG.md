@@ -333,3 +333,11 @@
 - **`coAfspraak()` en zijn keten blijven staan** (`minder-v196`): `coOfferAction()` was de enige aanroeper. Dat opheffen is het opheffen van een gespreksvorm, geen opruimwerk; eigen ronde.
 - **Gemeld, niet gewijzigd** (`minder-v196`): `SET.coachOff` zet de structurele signalen uit maar niet het gesprek, terwijl de schakelaar zegt dat je coach uitstaat.
 - **`tests/coach-zonder-scherm.spec.js` (16 tests)** (`minder-v196`): het scherm bestaat niet meer (DOM, nav, functies, en geen enkele functiebron noemt het nog met comments gestript), de vier gespreksingangen werken, toon en avatar blijven instelbaar vanuit Instellingen, de koopcheck houdt zijn ingang, en regel 5 is context. Elf bestaande specs volgen de nieuwe opening `coStart('algemeen')`. Suite groen: 1386.
+- **Een pass op dode condities** (`minder-v197`): guards waarvan één tak onbereikbaar is, in functies die gewoon leven. Die categorie vonden de opruimrondes van `v164`/`v165` niet.
+- **Twee guards achter een eerdere guard** (`minder-v197`): `TX.length` in `scoreNotifs()` en de `_fvTx`-terugval in `openFixedVarDrill()`. Beide weg.
+- **`SET.psd2Pending` is geen conditie meer** (`minder-v197`): een pending afschrijving is geld dat weg is en telt altijd mee.
+- **Het bufferdoel-keuzemenu is weg, de terugval blijft** (`minder-v197`): `bufferBasis`, `bufferMonths` en `bufferAmount` hadden geen schrijver. Bij lege data rekent `savingsModel()` onveranderd zes maanduitgaven.
+- **`coachSetAside` en `stsBuffer` zijn weg** (`minder-v197`), `irregularIncome` blijft: dat is de enige echte lacune, met een eigen ronde voor het invoerkanaal.
+- **`MECHANISM_SPEC.mentalAccounting` gecorrigeerd** (`minder-v197`): de drempel is feitelijk de schuldrente, want `SET.spaarRente` heeft geen invoer. De aftrekking blijft.
+- **Bug: de transactiefilter-sheet sprong weer open** (`minder-v197`): `_txFilterSheet` ging nooit op false. `closeSheet()` wist hem nu, net als de andere sheetvlaggen.
+- **`tests/dode-condities.spec.js` (16 tests)** (`minder-v197`): de weggehaalde condities komen niet terug, het lege-data-pad van `savingsModel()` blijft werken, `irregularIncome` blijft gelezen, de rentetoets blijft een aftrekking, en de filtersheet blijft dicht nadat je hem sloot maar ververst nog wel terwijl hij openstaat. Suite groen: 1402.
