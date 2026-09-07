@@ -1803,17 +1803,35 @@ function vrijPerDag(){
   const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   let de={dim:30,elapsed:0}; try{ de=daysElapsed(ym); }catch(_){}
   const dagenResterend=Math.max(de.dim-de.elapsed,1);
-  if(!S) return {perDag:0, ruimte:0, dagenResterend, volledig:false};
+  if(!S) return {perDag:0, ruimte:0, dagenResterend, volledig:false, known:0, missing:0};
   const ruimte=Math.round(S.safe);
+  // known en missing komen mee zodat de regel eronder de twee onvolledig-gevallen uit elkaar kan
+  // houden zonder ze zelf af te leiden. volledig blijft exact dezelfde formule (v158).
   return {perDag: ruimte>0?Math.round(ruimte/dagenResterend):0, ruimte, dagenResterend,
-    volledig: S.known>0 && !S.missing};
+    volledig: S.known>0 && !S.missing, known:S.known, missing:S.missing};
 }
 /* Een regel bij het bestaande veilig-te-besteden-getal, geen eigen kaart. Het bedrag zelf staat er
    groot boven, dus dat herhalen we niet. Geen bedrag bij een negatieve ruimte: een negatief
    dagbedrag zegt niets. */
+/* v206: zwijgen met een reden. De drempel blijft streng - een dagbedrag is een deling, en delen
+   door een onvolledige som geeft een getal dat preciezer oogt dan het is; de hero toont een totaal
+   met een zichtbare kanttekening, een dagbedrag heeft die ruimte niet. Wat ontbrak was de tweede
+   helft van 'niet rekenen waar je het niet weet, wel zeggen wat je niet weet' (v173): van de zeven
+   plekken die op hetzelfde onvolledige saldo leunen benoemde alleen de opbouw-sheet het, en deze
+   ene verdween geruisloos.
+   Geen tweede vorm: de zin gebruikt woordelijk 'een deel is nog onbekend' en dezelfde ingang
+   (openBalances) als de rij Totaal saldo in die sheet, en die sheet noemt zelf welke rekeningen
+   niet meetellen. Geen bedrag en geen benadering - dat is precies wat de drempel tegenhoudt.
+   Bij known===0 zwijgt hij volledig: dan staat de onbekend-hero er met zijn eigen reden en zijn
+   eigen ingang (openSaldoInvoer), en een tweede regel eronder zou die doublen. Home roept deze
+   functie in die tak ook niet aan; de guard staat er zodat dat waar blijft als dat verandert. */
 function vrijPerDagLine(){
   let V=null; try{ V=vrijPerDag(); }catch(_){ return ''; }
-  if(!V || !V.volledig) return '';
+  if(!V) return '';
+  if(!V.volledig){
+    if(!V.known) return '';
+    return `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px"><span style="cursor:pointer" onclick="openBalances()">Geen bedrag per dag: een deel van je saldo is nog onbekend <span style="color:var(--teal)">›</span></span></div>`;
+  }
   const dag=V.dagenResterend===1?'dag':'dagen';
   if(V.ruimte<=0) return `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px">Je ruimte voor deze maand is op, met nog ${V.dagenResterend} ${dag} te gaan.</div>`;
   return `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px">Nog ${V.dagenResterend} ${dag} deze maand, dus ${euro0(V.perDag)} per dag.</div>`;

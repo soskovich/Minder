@@ -118,12 +118,19 @@ test.describe('b · de regel', () => {
     expect(await regel(page)).toBe('');
   });
 
+  /* v206: onvolledig blijft onvolledig en er komt geen bedrag, maar de regel verdwijnt niet meer
+     geruisloos: hij zegt waarom er geen dagbedrag staat, met de ingang uit de opbouw-sheet.
+     Wat deze test bewaakt is ongewijzigd - geen schatting, geen benadering. Zie
+     tests/zwijgen-met-reden.spec.js voor de zin en de ingang zelf. */
   test('een van twee saldi onbekend telt ook als onvolledig', async ({ page }) => {
     await boot(page, seed({ tweedeRekening: true }));   // tweede rekening zonder saldo
     const r = await page.evaluate(() => ({ missing: safeToSpend().missing, known: safeToSpend().known, v: vrijPerDag() }));
     expect(r.missing).toBeGreaterThan(0);
+    expect(r.known).toBeGreaterThan(0);
     expect(r.v.volledig).toBe(false);
-    expect(await regel(page)).toBe('');
+    const h = await regel(page);
+    expect(h).not.toMatch(/per dag\./);                 // geen bedrag
+    expect(h).toContain('een deel van je saldo is nog onbekend');
   });
 
   test('geen norm: geen kleur, geen doel, geen streak', async ({ page }) => {
