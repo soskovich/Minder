@@ -124,7 +124,7 @@ test.describe('c · de coachschakelaar zegt wat hij doet', () => {
   test('de schakelaar heet naar de signalen en noemt waar ze staan', async ({ page }) => {
     await boot(page);
     const t = await paneel(page);
-    expect(t).toContain('Coachsignalen');
+    expect(t).toContain('Signalen uit je patronen');
     expect(t).toMatch(/in je meldingen en op Maand/);
     expect(t).toMatch(/gesprek blijft bereikbaar vanaf Maand, Inzichten en Plan/);
     // de twee onware beweringen zijn weg
@@ -136,7 +136,7 @@ test.describe('c · de coachschakelaar zegt wat hij doet', () => {
     for (const off of [false, true]) {
       await boot(page, seed({ coachOff: off }));
       const r = await page.evaluate(() => { renderSet(); return $('#s-set').innerText.replace(/\s+/g, ' '); });
-      expect(r).toContain('Je coachsignalen staan ' + (off ? 'uit' : 'aan'));
+      expect(r).toContain('Signalen uit je patronen staan ' + (off ? 'uit' : 'aan'));
       expect(r).not.toMatch(/Je coach staat (aan|uit)/);
     }
   });

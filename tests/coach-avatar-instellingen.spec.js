@@ -28,7 +28,7 @@ test.describe('a · de regel bij Instellingen', () => {
     // en de regel in de lijst zelf noemt de gekozen coach in zijn subregel
     // v202: 'Je coach staat aan' is 'Je coachsignalen staan aan' geworden; de schakelaar zet
     // vijf signalen uit en niet het gesprek
-    expect(await page.evaluate(() => $('#s-set').innerText)).toMatch(/Je coachsignalen staan aan · Sara/);
+    expect(await page.evaluate(() => $('#s-set').innerText)).toMatch(/Signalen uit je patronen staan aan · Sara/);
   });
 
   test('de samenvatting volgt de gekozen avatar en toon', async ({ page }) => {

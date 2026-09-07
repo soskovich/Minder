@@ -2397,6 +2397,13 @@ function saveFasterTip(){
   return {label:best.label, action:best.action||'', save:best.save, perYear:best.save*12, earlier,
           datumBase:etaDatum(baseMonths), datumNew:etaDatum(newMonths)};
 }
+const PATROONSIGNALEN = {   // v205: de vier die SET.coachOff uitzet, met wat ze in gewone woorden zijn
+  savrules:   'spaarstortingen die als uitgave staan',
+  meevaller:  'een meevaller in je inkomen',
+  inflatie:   'uitgaven die met je inkomen meestijgen',
+  overstreak: 'maanden op rij boven je budget',
+};
+const PATROONSIGNALEN_NAAM = 'Signalen uit je patronen';   // een term per begrip (v91): de schakelaar en de sectieregel gebruiken deze
 function scoreNotifs(opts){
   opts=opts||{};
   const out=[]; if(!TX.length) return out;
@@ -2575,6 +2582,16 @@ function scoreNotifs(opts){
      coachItems() elders en kon die functie vervallen. */
   // v197: hier stond ook TX.length, 168 regels na de guard bovenin die er al op terugkeert. Die
   // helft kon nooit onwaar zijn; hij kwam in v143 mee uit coachItems(), waar hij de enige guard was.
+  /* v205: SET.coachOff zet PRECIES deze vier uit, en de tekst bij de schakelaar noemt ze uit deze
+     tabel. v202 bracht de tekst van 'je coach staat uit' naar 'je coachsignalen staan uit' op de
+     aanname dat het om alle signalen ging; het zijn er vier van de ruim veertig in deze functie, en
+     de rest blijft gewoon staan. Wat de vier delen is dat Minder ze over meerdere maanden uit je
+     cijfers AFLEIDT. Wat er nu speelt is een waarneming en hoort er dus buiten: een aankomende
+     afschrijving, een lage stand, en ook de aankoop die je zelf hebt geparkeerd - daar heb je zelf
+     om gevraagd, dus die zet je niet uit met een schakelaar over patronen.
+     Komt er een signaal bij of gaat er een weg, pas dan deze tabel mee aan:
+     tests/coachsignalen-guard.spec.js bindt hem aan de keys binnen de guard, zodat de tekst niet
+     stilletjes onwaar kan worden. */
   try{ if(!SET.coachOff){
     const doneA=months().filter(x=>x<(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'))).slice(-6);
     const baseA=baseIncome(), targetA=Math.round(monthlySavingTarget());
@@ -8732,16 +8749,23 @@ function renderSet(){
     ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
     /* v202: hier stond 'Je coach staat uit/aan' en de schakelaar heette 'Coaching', met als
        subregel 'Coach-tips op je Home & Actieplan'. Alle drie onwaar. SET.coachOff wordt op precies
-       een functionele plek gelezen: de guard in scoreNotifs(), die vijf signalen uitzet (savrules,
-       meevaller, inflatie, overstreak en het geparkeerde-aankoopsignaal). coStart() leest hem niet,
+       een functionele plek gelezen: de guard in scoreNotifs(), die VIER signalen uitzet - savrules
+       (correctie) plus meevaller, inflatie en overstreak (structureel), samen precies wat
+       maandStructureel() teruggeeft. Het geparkeerde-aankoopsignaal stond hier eerder ten onrechte
+       bij: park- wordt boven de guard gepusht en blijft staan. coStart() leest hem niet,
        dus met de coach 'uit' kon je vanaf Maand, Inzichten en Plan nog gewoon een gesprek beginnen;
        gemeten start het gesprek in beide standen identiek. En 'Actieplan' is het scherm dat in v196
        is opgeheven, terwijl de signalen niet op Home staan maar in je meldingen en op Maand.
        Gekozen voor de tekst aanpassen, niet het gedrag (v181, zoals bij 'Read-only' en de
        privacyclaim): het gedrag aanpassen zou vier gespreksingangen op drie schermen tot een dode
        knop maken, en dat is de vraag of het gesprek optioneel is - een eigen ronde waard. De sectie
-       blijft Coach heten, want het gesprek is de coach en dat woont daar. */
-    ['coach',ICON('robot'),'Coach',`Je coachsignalen staan ${SET.coachOff?'uit':'aan'} · ${coachSamenvatting()}`,setCoach,''],
+       blijft Coach heten, want het gesprek is de coach en dat woont daar.
+       v205: 'je coachsignalen' was nog steeds te ruim - het klonk als alle signalen, en het zijn er
+       vier van de ruim veertig. De naam komt nu uit PATROONSIGNALEN_NAAM en zegt wat de schakelaar
+       werkelijk uitzet: wat Minder uit je patronen AFLEIDT, niet de meldingen over wat er nu speelt.
+       Daarmee is park- buiten de guard geen inconsistentie meer maar de regel zelf: een geparkeerde
+       aankoop is geen afgeleid patroon maar iets waar je zelf om hebt gevraagd. */
+    ['coach',ICON('robot'),'Coach',`${PATROONSIGNALEN_NAAM} staan ${SET.coachOff?'uit':'aan'} · ${coachSamenvatting()}`,setCoach,''],
     ['modus',ICON('filter'),'Weergave & modus',({rustig:'Rustig',begeleid:'Begeleid',expert:'Expert'})[SET.mode||'begeleid'],setModus,''],
     ['look',ICON('palet'),'Uiterlijk',THEMES[themeKey()].naam,setLook,''],
     ['privacy',ICON('lock'),'Privacy & gegevens',privacySub(),setPrivacy,''],
@@ -9439,7 +9463,7 @@ function setCoach(){
   return `
     <label class="fld">Je naam <span class="small muted">· je coach spreekt je hiermee aan</span></label>
     <input type="text" value="${esc(SET.name||'')}" placeholder="bv. Vincent" oninput="SET.name=this.value;save();" onchange="render();">
-    <div class="toggle" style="margin-top:14px"><div><div style="font-weight:600">Coachsignalen</div><div class="small muted">Signalen uit je patronen, in je meldingen en op Maand. Je gesprek blijft bereikbaar vanaf Maand, Inzichten en Plan.</div></div>
+    <div class="toggle" style="margin-top:14px"><div><div style="font-weight:600">${PATROONSIGNALEN_NAAM}</div><div class="small muted">Wat Minder over meerdere maanden uit je cijfers afleidt: ${opsomming(Object.values(PATROONSIGNALEN))}. Die staan in je meldingen en op Maand. Meldingen over wat er nu speelt blijven staan, en je gesprek blijft bereikbaar vanaf Maand, Inzichten en Plan.</div></div>
       <label class="sw"><input type="checkbox" ${!SET.coachOff?'checked':''} onchange="SET.coachOff=!this.checked;save();render();"><span class="sl"></span></label></div>
     <div class="row" style="justify-content:space-between;margin-top:8px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openCoachAvatar()">
       <div><div style="font-weight:600">Avatar & toon</div><div class="small muted">${coachSamenvatting()}</div></div>
