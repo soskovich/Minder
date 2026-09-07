@@ -6092,7 +6092,7 @@ function coReset(){ _coGen++; window._coLive=true; _coT=document.getElementById(
    bij een cijfer begint hoort dat niet te doen, en een onderwerp dat er later bijkomt moet die
    keuze maken in plaats van hem te erven. Een onbekend onderwerp staat hier niet in en gedraagt
    zich daarom als voorheen. */
-const CO_ONDERWERPEN={algemeen:{afspraak:true}, lek:{afspraak:false}, horizon:{afspraak:false}, maand:{afspraak:true}};
+const CO_ONDERWERPEN={algemeen:{afspraak:true}, lek:{afspraak:false}, horizon:{afspraak:false}, maand:{afspraak:true}, koop:{afspraak:false}};
 function coSheetShell(){ $('#sheet').innerHTML=`<div class="grab"></div><div class="cothr" id="coThr"></div><div id="coCh"></div>`; }
 function coStart(onderwerp,m,arg){
   coAfbreken();                                                            // een lopend gesprek eerst netjes af
@@ -6104,6 +6104,7 @@ function coStart(onderwerp,m,arg){
   if(onderwerp==='lek'){ coReset(); return coTopicLek(m); }
   if(onderwerp==='horizon'){ coReset(); return coTopicHorizon(m); }
   if(onderwerp==='maand'){ coReset(); return coTopicMaand(m,arg); }
+  if(onderwerp==='koop' && arg && arg.cat) return buyFlow(arg.cat,arg.amt,arg.item);   // buyFlow() doet zelf coReset()
   return coOpen(m);                                                        // coOpen() doet zelf coReset()
 }
 /* v139: 'lek' is een terloops gesprek dat vanaf Inzichten begint, niet het maandgesprek. Het mag
@@ -6643,7 +6644,12 @@ function openBuy(){
     <button class="btn" style="margin-top:14px;width:100%" onclick="startBuy()">${ICON('cart')} Check</button>`;
   showSheetBg();
 }
-function startBuy(){ const item=((document.getElementById('buyItem')||{}).value||'').trim(); const amt=Math.round(+((document.getElementById('buyAmt')||{}).value)||0); const cat=(document.getElementById('buyCat')||{}).value; closeSheet(); if(amt>0&&cat) buyFlow(cat,amt,item); else toast('Vul een bedrag in'); }
+/* De check zelf draait als gesprek: buyFlow() schrijft in #coThr/#coCh, en die twee bestaan sinds
+   v138 alleen in de sheet die coStart() bouwt. openBuy() heeft die sheet net met zijn eigen
+   formulier gevuld, dus closeSheet() gevolgd door buyFlow() liet de check op zijn eerste regel
+   terugkeren: geen bubbel, geen keuze, geen log-entry. Het overnemen van de sheet loopt daarom
+   via coStart(), de enige ingang naar het gesprek; het formulier maakt er geen tweede naast. */
+function startBuy(){ const item=((document.getElementById('buyItem')||{}).value||'').trim(); const amt=Math.round(+((document.getElementById('buyAmt')||{}).value)||0); const cat=(document.getElementById('buyCat')||{}).value; if(amt>0&&cat) coStart('koop',null,{cat,amt,item}); else { closeSheet(); toast('Vul een bedrag in'); } }
 function coBuyLog(item,amt,cat,uitkomst,intentie){ coachLogAdd({type:'beslis',item:item||'',bedrag:amt,potjeId:cat,uitkomst,intentie,text:`${euro0(amt)} ${potName(cat)} · ${uitkomst}`}); }
 
 /* ---- Temporal discounting: de parkeer-lus sluiten. Volgt MECHANISM_SPEC.temporalDiscounting ----
@@ -6730,7 +6736,7 @@ async function buyFlow(cat,amt,item){
     ]); }}
   ];
   // 4-koppeling: geen potje? bied meteen aan er één te maken, en check daarna opnieuw
-  if(!has) opts.unshift({l:`Maak eerst een ${cn}-potje`,act:()=>{ window._potAfter=()=>buyFlow(cat,amt,item); openPotje(cat); }});
+  if(!has) opts.unshift({l:`Maak eerst een ${cn}-potje`,act:()=>{ window._potAfter=()=>coStart('koop',null,{cat,amt,item}); openPotje(cat); }});
   coChoices(opts);
 }
 // budget als coach-actie: potje zetten/bewerken via een sheet (geen live-render, focus blijft)

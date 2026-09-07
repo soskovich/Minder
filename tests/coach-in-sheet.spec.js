@@ -66,7 +66,8 @@ test.describe('b · coStart is de enige ingang', () => {
     // v140: elk onderwerp verklaart of het een maandafspraak mag vastleggen
     expect(await page.evaluate(() => CO_ONDERWERPEN)).toEqual({
       algemeen: { afspraak: true }, lek: { afspraak: false },
-      horizon: { afspraak: false }, maand: { afspraak: true } });   // v141: 'maand' erbij
+      horizon: { afspraak: false }, maand: { afspraak: true },
+      koop: { afspraak: false } });   // v141: 'maand' erbij, v205: 'koop' (de koopcheck schrijft alleen beslis)
     await page.evaluate(() => coStart('bestaatniet'));
     await wachtKeuze(page, 'Kosten koper huis');
     expect(await page.locator('#coThr').innerText()).toMatch(/waar werk je/i);

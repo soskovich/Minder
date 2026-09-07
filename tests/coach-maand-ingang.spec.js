@@ -286,15 +286,16 @@ test.describe('g · de andere ingangen blijven zoals ze waren', () => {
   test('lek en horizon mogen nog steeds geen afspraak schrijven', async ({ page }) => {
     await maand(page);
     expect(await page.evaluate(() => CO_ONDERWERPEN)).toEqual({
-      algemeen: { afspraak: true }, lek: { afspraak: false }, horizon: { afspraak: false }, maand: { afspraak: true } });
+      algemeen: { afspraak: true }, lek: { afspraak: false }, horizon: { afspraak: false }, maand: { afspraak: true },
+      koop: { afspraak: false } });   // v205: de koopcheck is ook een gesprek, en schrijft alleen beslis
     // de toets hangt aan een lopend gesprek; hier zetten we die staat zelf, want zonder lek in
     // deze fixture sluit coTopicLek meteen en is er niets meer om tegen te toetsen
     const uit = await page.evaluate(() => {
       const b = [window._coLive, window._coOnderwerp]; const r = {};
-      for (const k of ['lek', 'horizon', 'maand', 'algemeen']) { window._coLive = true; window._coOnderwerp = k; r[k] = coMagAfspraak(); }
+      for (const k of ['lek', 'horizon', 'maand', 'algemeen', 'koop']) { window._coLive = true; window._coOnderwerp = k; r[k] = coMagAfspraak(); }
       window._coLive = b[0]; window._coOnderwerp = b[1]; return r;
     });
-    expect(uit).toEqual({ lek: false, horizon: false, maand: true, algemeen: true });
+    expect(uit).toEqual({ lek: false, horizon: false, maand: true, algemeen: true, koop: false });
   });
 
   for (const w of [360, 390]) {
