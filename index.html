@@ -6104,7 +6104,7 @@ function coStart(onderwerp,m,arg){
   if(onderwerp==='lek'){ coReset(); return coTopicLek(m); }
   if(onderwerp==='horizon'){ coReset(); return coTopicHorizon(m); }
   if(onderwerp==='maand'){ coReset(); return coTopicMaand(m,arg); }
-  if(onderwerp==='koop' && arg && arg.cat) return buyFlow(arg.cat,arg.amt,arg.item);   // buyFlow() doet zelf coReset()
+  if(onderwerp==='koop' && arg && arg.cat) return buyFlow(arg.cat,arg.amt,arg.item,arg.verder);   // buyFlow() doet zelf coReset()
   return coOpen(m);                                                        // coOpen() doet zelf coReset()
 }
 /* v139: 'lek' is een terloops gesprek dat vanaf Inzichten begint, niet het maandgesprek. Het mag
@@ -6627,6 +6627,32 @@ function coAfspraakSchrijf(txt, extra){
   return true;
 }
 async function coCommit(txt, extra){ if(!coAfspraakSchrijf(txt, extra)) return; coFx(`afspraak vastgelegd`); await coSay(`Genoteerd. Daar kom ik volgende keer op terug.`); coEnd(); }
+/* v205: boven dit bedrag stelt de koopcheck voor om er een nacht over te slapen. Er stond geen
+   bruikbare drempel in SET: SET.limit is een percentage van je inkomen op maandniveau (v53),
+   MECHANISM_SPEC.mentalAccounting.condities.minBedrag hoort bij het rentesignaal, en
+   MAAND_DREMPEL.kpiMinBedrag is een grondtal voor een percentage. Dit is de enige plek waar het
+   getal staat. Nul (of leeg, of onzin) zet de stap uit; de drempel houdt niets tegen en velt geen
+   oordeel, want wat de aankoop kost rekent de check zelf uit en dat is zijn uitkomst. */
+const SLAAP_DREMPEL_DEFAULT = 100;
+function slaapDrempel(){ const v=+(SET.slaapDrempel!=null&&SET.slaapDrempel!==''?SET.slaapDrempel:SLAAP_DREMPEL_DEFAULT); return (isFinite(v)&&v>0)?Math.round(v):0; }
+function slaapVoorstel(amt){ const d=slaapDrempel(); return d>0 && (+amt||0)>d; }   // strikt boven: net op de drempel is er nog niets voor te stellen
+/* De vraag geeft een Promise terug in plaats van buyFlow opnieuw te starten: zo blijft de draad
+   staan en hoeft er niets opnieuw gerenderd te worden. 'Parkeer tot morgen' schrijft exact
+   dezelfde entry als de knop 'Even wachten tot morgen' verderop, dus coParkDue()/coParkReturn()
+   pikken hem op via het bestaande signaal park-<ts>. 'Toch nu zien' schrijft NIETS: die aankoop is
+   niet geparkeerd, dus coParkReturn() mag hem morgen niet terugbrengen terwijl je hem afrondde.
+   Breekt het gesprek af terwijl de vraag openstaat, dan resolvet de Promise nooit en loopt buyFlow
+   niet verder - geen timer, geen schrijfactie, dezelfde stilte als coAfbreken() elders geeft. */
+function coSlaapVraag(cat,amt,item){
+  return new Promise(async (res)=>{
+    const _g=_coGen;
+    await coSay(`Wil je er een nacht over slapen?`); if(_g!==_coGen){ res(false); return; }
+    coChoices([
+      {l:`Parkeer tot morgen`, act:async()=>{ coBuyLog(item,amt,cat,'geparkeerd','nu'); coFx('vastgelegd, geparkeerd'); await coSay(`Goed. Ik kom er morgen op terug.`); coEnd(); res(false); }},
+      {l:`Toch nu zien`, act:()=>res(true)}
+    ]);
+  });
+}
 // BESLISMOMENT (prototype, 4 stappen): invoer → binaire check → vertakking (regie bij gebruiker) → altijd vastleggen
 function openBuy(){
   const cats=Object.keys(CATS).filter(k=>CATS[k]&&CATS[k].type==='expense'&&!isFixedCat(k));
@@ -6701,11 +6727,14 @@ function coBuyShift(item,amt,cat){
       .concat([{l:'Toch niet',act:async()=>{ coBuyLog(item,amt,cat,'geannuleerd','n.v.t.'); coFx('vastgelegd · geannuleerd'); await coSay('Ook goed. Dan blijft alles staan.'); coEnd(); }}]));
   });
 }
-async function buyFlow(cat,amt,item){
+async function buyFlow(cat,amt,item,verder){
   coReset(); if(!_coT)return;
   const cn=potName(cat);
   coBub('me',`Ik wil ${item?esc(item)+' ':''}voor ${euro0(amt)} (${cn}).`);
   await coWait(180);
+  // v205: het voorstel om er een nacht over te slapen staat VOOR de uitkomst en voor elke som.
+  // Staat de uitkomst er al, dan is de beslissing gevallen en is slapen een formaliteit.
+  if(!verder && slaapVoorstel(amt) && !(await coSlaapVraag(cat,amt,item))) return;
   const m=curMonth||months()[months().length-1]; const B=SET.budgets||{}; const has=+B[cat]>0;
   const rest=has?Math.round(+B[cat]-(catSpendMap(m)[cat]||0)):0;
   const planned=has && amt<=rest;   // geplande aankoop uit een gevuld potje = succes, geen loss-frame (MECHANISM_SPEC.lossAversion)
@@ -6736,7 +6765,8 @@ async function buyFlow(cat,amt,item){
     ]); }}
   ];
   // 4-koppeling: geen potje? bied meteen aan er één te maken, en check daarna opnieuw
-  if(!has) opts.unshift({l:`Maak eerst een ${cn}-potje`,act:()=>{ window._potAfter=()=>coStart('koop',null,{cat,amt,item}); openPotje(cat); }});
+  // verder:true - de slaapvraag is hierboven al beantwoord en hoort na een nieuw potje niet opnieuw te komen
+  if(!has) opts.unshift({l:`Maak eerst een ${cn}-potje`,act:()=>{ window._potAfter=()=>coStart('koop',null,{cat,amt,item,verder:true}); openPotje(cat); }});
   coChoices(opts);
 }
 // budget als coach-actie: potje zetten/bewerken via een sheet (geen live-render, focus blijft)
@@ -8891,6 +8921,9 @@ function setBudget(){
     <label class="fld">Meevallers: deel dat vrij blijft (%)</label>
     <input type="number" min="0" max="100" value="${SET.meevallerVrijPct!=null&&SET.meevallerVrijPct!==''?SET.meevallerVrijPct:''}" placeholder="${MEEVALLER_VRIJ_DEFAULT}" oninput="SET.meevallerVrijPct=this.value===''?'':+this.value;save();">
     <div class="small muted" style="margin-top:6px">Bij bonus, vakantiegeld of een nabetaling blijft <b>${meevallerVrijPct()}%</b> vrij besteedbaar. De rest gaat naar de eerste voorwaarde die nog niet gehaald is: eerst je reserveringen tot ze gedekt zijn, dan je buffer tot ${MAAND_DREMPEL.bufferKritiek} maanden, dan je aankoopdoel. Je legt de regel nu vast; bij binnenkomst zie je het voorstel en bevestig je zelf per post. <span style="color:var(--teal);cursor:pointer" onclick="openMeevaller(0,'handmatig')">Nu doorrekenen ›</span></div>
+    <label class="fld">Nachtje over slapen vanaf (€)</label>
+    <input type="number" min="0" step="5" value="${SET.slaapDrempel!=null&&SET.slaapDrempel!==''?SET.slaapDrempel:''}" placeholder="${SLAAP_DREMPEL_DEFAULT}" oninput="SET.slaapDrempel=this.value===''?'':Math.max(0,+this.value||0);save();">
+    <div class="small muted" style="margin-top:6px">Boven dit bedrag stelt de koopcheck voor om er een nacht over te slapen. Je kiest zelf: parkeren tot morgen, of meteen de uitkomst zien. Op ${euro0(0)} staat de stap uit.</div>
     <button class="snz" style="margin-top:14px" onclick="SET.budgetAdv=${!adv};save();render();">${adv?'Minder opties ▲':'Geavanceerd: limiet-model, bufferdoel & categorie-budgetten ▼'}</button>
     ${adv?advBlock:''}`;
 }

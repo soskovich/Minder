@@ -9,8 +9,11 @@ const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
 
 // boodschappen: potje 800, deze maand 300 uitgegeven, dus 500 ruimte
-const BINNEN = 120;
+// v205: onder SLAAP_DREMPEL_DEFAULT (100) blijft, zodat deze spec de check zelf toetst en niet de
+// slaapstap. Waar het bedrag er wel boven ligt wordt die stap expliciet gepasseerd.
+const BINNEN = 60;
 const BUITEN = 900;
+const slaapStap = (page) => kies(page, 'Toch nu zien');   // v205: BUITEN ligt boven de drempel
 
 const draad = (page) => page.evaluate(() => (document.getElementById('coThr') || {}).innerText || '');
 const log = (page) => page.evaluate(() => (SET.coachLog || []).filter((l) => l.type === 'beslis'));
@@ -86,6 +89,7 @@ test.describe('b - binnen en buiten je ruimte, en wat er wordt opgeslagen', () =
     await open(page, seed());
     await page.evaluate(() => openBuy());
     await vulCheck(page, BUITEN);
+    await slaapStap(page);
     await wachtZin(page, 'Wil je dit echt');
     await wachtKeuze(page, 'Ik wil het');
     const keuzes = await page.evaluate(() => [...document.querySelectorAll('#coCh .cch')].map((b) => b.innerText.trim().split('\n')[0]));
@@ -98,6 +102,7 @@ test.describe('b - binnen en buiten je ruimte, en wat er wordt opgeslagen', () =
     await open(page, seed());
     await page.evaluate(() => openBuy());
     await vulCheck(page, BUITEN);
+    await slaapStap(page);
     await kies(page, 'Ik wil het nú');
     await kies(page, 'Toch doen');
     await wachtZin(page, 'Doorgezet');
@@ -145,6 +150,7 @@ test.describe('c - parkeren en de terugkeer', () => {
     await open(page, seed());
     await page.evaluate(() => openBuy());
     await vulCheck(page, BUITEN);
+    await slaapStap(page);
     await kies(page, 'Ik wil het nú');
     await kies(page, 'Even wachten tot morgen');
     await wachtZin(page, 'morgen nog');
@@ -189,6 +195,7 @@ test.describe('d - de check leunt op de sheet van coStart, niet op een eigen opp
     await open(page, seed());
     await page.evaluate(() => openBuy());
     await vulCheck(page, BUITEN);
+    await slaapStap(page);
     await kies(page, 'Ik wil het nú');
     await kies(page, 'Toch doen');
     await wachtZin(page, 'Doorgezet');
