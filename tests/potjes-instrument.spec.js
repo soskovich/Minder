@@ -80,14 +80,15 @@ test.describe('a - Inzichten voor en na', () => {
 });
 
 test.describe('b - de kerncijfers op Maand zijn ongemoeid', () => {
-  test('spaarquote en vaste-lastendruk staan er, met hun eigen blok', async ({ page }) => {
+  // v209: de vaste-lastendruk is van Maand af; de spaarquote blijft, met zijn eigen blok
+  test('de spaarquote staat er, met zijn eigen blok', async ({ page }) => {
     await open(page, seed({ maanden: 8 }));
     const t = await maand(page);
-    expect(t.toLowerCase()).toContain('kerncijfers');
+    expect(t.toLowerCase()).toContain('vermogensopbouw');
     expect(t.toLowerCase()).toContain('spaarquote');
-    expect(t.toLowerCase()).toContain('vaste-lasten-druk');
+    expect(t.toLowerCase()).not.toContain('vaste-lasten-druk');
     expect(await page.evaluate(() => [...document.querySelectorAll('#maandKpiBlok [data-kpi]')].map((e) => e.dataset.kpi)))
-      .toEqual(['inleg', 'vast']);
+      .toEqual(['inleg']);
   });
 
   test('insKpis rekent nog altijd alle vier', async ({ page }) => {

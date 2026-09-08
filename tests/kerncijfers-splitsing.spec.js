@@ -150,20 +150,24 @@ test.describe('b · de splitsing over twee schermen', () => {
     expect(await page.evaluate(() => typeof insKpiStrip)).toBe('undefined');
   });
 
-  test('het maandscherm toont het structurele paar', async ({ page }) => {
+  /* v209: de vaste-lastendruk is van het maandscherm af. Hij had geen doel, stond vaak op een te
+     klein grondtal, en je stuurt er niet op: vaste lasten verander je door op te zeggen of te
+     verhuizen, niet door naar een percentage te kijken. De spaarquote blijft: die telt sinds v161
+     je hele vermogensopbouw en verandert wel met wat je doet. */
+  test('het maandscherm toont alleen nog de spaarquote', async ({ page }) => {
     await boot(page);
     const h = await page.evaluate((m) => maandKpiBlok(m), AF);
     expect(h).toContain('data-kpi="inleg"');
-    expect(h).toContain('data-kpi="vast"');
+    expect(h).not.toContain('data-kpi="vast"');
     expect(h).not.toContain('data-kpi="budget"');
     expect(h).not.toContain('data-kpi="vari"');
   });
 
-  test('van de vier is er nog één plek, met twee tegels', async ({ page }) => {
+  test('van de vier is er nog één plek, met één tegel', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { go('ins'); go('maand'); });
     const n = await page.evaluate(() => document.querySelectorAll('[data-kpi]').length);
-    expect(n).toBe(2);
+    expect(n).toBe(1);
     expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // wel alle vier berekend
   });
 
@@ -271,16 +275,21 @@ test.describe('e · loopt nog, en de rustige modus', () => {
     expect(k.inleg.oordeel).not.toBe('loopt nog');
   });
 
-  test('rustig toont er een, met een tik naar de rest', async ({ page }) => {
-    await boot(page, seed({ mode: 'rustig' }));
-    const h = await page.evaluate((m) => maandKpiBlok(m), AF);
-    expect((h.match(/data-kpi=/g) || []).length).toBe(1);
-    expect(h).toMatch(/toon beide kerncijfers/);
+  /* v209: bij één cijfer valt er niets uit te klappen, dus de 'toon beide kerncijfers'-knop is
+     vervallen. Hij zou een dode knop zijn. SET.kpiAllMaand blijft ongelezen achter, net als
+     SET.kpiAll na v208; een achtergebleven waarde mag niets meer doen. */
+  test('elke modus toont hetzelfde ene cijfer, zonder uitklap', async ({ page }) => {
+    for (const mode of ['rustig', 'begeleid', 'expert']) {
+      await boot(page, seed({ mode }));
+      const h = await page.evaluate((m) => maandKpiBlok(m), AF);
+      expect((h.match(/data-kpi=/g) || []).length, mode).toBe(1);
+      expect(h, mode).not.toMatch(/toon beide kerncijfers/);
+    }
   });
 
-  test('en uitgeklapt weer allebei', async ({ page }) => {
+  test('een achtergebleven kpiAllMaand doet niets', async ({ page }) => {
     await boot(page, seed({ mode: 'rustig', set: { kpiAllMaand: true } }));
     const h = await page.evaluate((m) => maandKpiBlok(m), AF);
-    expect((h.match(/data-kpi=/g) || []).length).toBe(2);
+    expect((h.match(/data-kpi=/g) || []).length).toBe(1);
   });
 });

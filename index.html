@@ -8026,27 +8026,38 @@ function kpiTegels(items){
    insKpis(), en die voedt de kerncijfers op Maand. */
 /* Structureel, tussen de maanden: bouw ik vermogen op, en hoe zwaar wegen mijn vaste lasten.
    Dezelfde tegels en dezelfde 'loopt nog'-behandeling als op Inzichten; alleen de plek verschilt. */
+/* v209: de vaste-lastendruk is van dit blok af, dezelfde redenering waarmee de variabele-lastendruk
+   in v208 van Inzichten verdween. Hij had geen doel (kpiBand('vast') is null sinds v161), stond
+   vaak op een te klein grondtal, en je stuurt er niet op: je vaste lasten verander je door een
+   abonnement op te zeggen of te verhuizen, niet door naar een percentage te kijken.
+   De spaarquote blijft. Die telt sinds v161 je hele vermogensopbouw - spaarrekening, reserveringen
+   en beleggingsinleg - en dat cijfer verandert wel met wat je doet.
+   Wat er nog is maar geen ingang meer heeft: KPI_META.vast, waarde/grondtal in insKpis(), S.vast in
+   insKpiSeries() en de vast-takken in kpiState(), kpiTx() en kpiAfstandTxt(). Dezelfde stand als
+   budget en vari na v208. splitFixedVar() is ONGEMOEID en springlevend: monthAgg(), safeToSpend(),
+   noodfondsModel(), projVarEstimate(), financeModel(), reisModel() en kpiAfstand() lezen hem
+   onverkort. Alleen de weergave van sf.fixed als percentage verdwijnt.
+   Eén cijfer, dus één kolom: een tegel in een tweekolomsgrid zou als halve rij blijven hangen en
+   lezen als een tegel waar een tweede bij hoort (v204). En de 'toon beide kerncijfers'-uitklap
+   vervalt: bij één cijfer valt er niets uit te klappen, en dat was een dode knop geworden.
+   SET.kpiAllMaand blijft ongelezen achter, net als SET.kpiAll na v208.
+   De kop noemt het onderwerp in plaats van de categorie: 'Kerncijfers' is meervoud bij één cijfer,
+   en 'Wat er structureel gebeurt' claimt de hele structuur terwijl er één stroom in staat. Wat de
+   ondertitel wél moest houden is de telling uit v193: bij één gemeten maand valt er geen verloop
+   te zien, en dan hoort daar niet 'van maand op maand' te staan. */
 function maandKpiBlok(m){
   let K=null; try{ K=insKpis(m); }catch(_){ return ''; }
   if(!K) return '';
-  const keys=['inleg','vast'];
-  const rustig=isMode('rustig'), alles=!rustig||!!SET.kpiAllMaand;
-  const items=K.items.filter(k=>keys.includes(k.key)).slice(0, alles?9:1);
+  const items=K.items.filter(k=>k.key==='inleg');
   if(!items.length) return '';
-  const meer=rustig?`<button class="snz" onclick="toggleExpand('kpiAllMaand')">${alles?'minder ▲':'toon beide kerncijfers ▾'}</button>`:'';
-  /* v193: de ondertitel beloofde onvoorwaardelijk 'van maand op maand'. Dat klopt zodra de reeks
-     meer dan een punt heeft - ook op een afgesloten maand, want series loopt tot en met de gekozen
-     maand - maar niet in je eerste maand: dan staat er een cijfer onder een kop over verloop. De
-     kop telt daarom wat er staat, dezelfde regel als maandOordeel() die de regels telt die er staan
-     (v167). Het blok zelf blijft: dat cijfer klopt voor die maand, weglaten zou een feit weghalen. */
   const punten=Math.max(0,...items.map(k=>(k.series||[]).filter(x=>x!=null).length));
   const onder=punten>1
-    ? 'Wat er structureel gebeurt, van maand op maand.'
-    : 'Wat er structureel gebeurt. Er is één maand gemeten, dus er valt nog geen verloop te zien.';
+    ? 'Welk deel van je inkomen er opzij ging, van maand op maand.'
+    : 'Welk deel van je inkomen er opzij ging. Er is één maand gemeten, dus er valt nog geen verloop te zien.';
   return `<div class="card" id="maandKpiBlok">
-    <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">${ICON('chart')} Kerncijfers</span></div>
+    <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">${ICON('chart')} Vermogensopbouw</span></div>
     <div class="small muted" style="margin:0 0 4px">${onder}</div>
-    <div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${kpiTegels(items)}</div>${meer}
+    <div class="wvo-tiles" style="grid-template-columns:1fr">${kpiTegels(items)}</div>
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:10px">${K.partial?'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus nog zonder oordeel.':''}</div>
   </div>`;
 }

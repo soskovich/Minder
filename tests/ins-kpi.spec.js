@@ -53,8 +53,8 @@ function tweak(fn) {
 
 const strip = (page) => page.locator('#maandKpiBlok').innerText();
 const tegel = (page, key) => page.locator(`#maandKpiBlok .wvo-tile[data-kpi="${key}"]`);
-const INS_KEYS = ['inleg', 'vast'];          // v208: het maandscherm draagt de tegels
-const MAAND_KEYS = ['budget', 'vari'];       // v208: deze twee hebben geen tegel meer
+const INS_KEYS = ['inleg'];                        // v209: de spaarquote is de enige tegel
+const MAAND_KEYS = ['budget', 'vari', 'vast'];     // v208/v209: deze drie hebben geen tegel meer
 // het maandblok is dezelfde renderer; we tekenen hem los zodat we niet op go('maand') hoeven leunen
 async function maandBlok(page, m) {
   return page.evaluate((mm) => {
@@ -68,9 +68,9 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
   test('de widget benoemt waar hij voor is', async ({ page }) => {
     await openIns(page);
     const s = await strip(page);
-    expect(s).toMatch(/kerncijfers/i);
-    expect(s).toMatch(/Wat er structureel gebeurt/);
-    expect(await page.locator('#maandKpiBlok .wvo-tile').count()).toBe(2);
+    expect(s).toMatch(/vermogensopbouw/i);
+    expect(s).toMatch(/Welk deel van je inkomen er opzij ging/);
+    expect(await page.locator('#maandKpiBlok .wvo-tile').count()).toBe(1);
     // v208: budgetnaleving en de variabele-lastendruk hebben geen tegel meer, op geen enkel scherm
     for (const key of MAAND_KEYS) await expect(tegel(page, key)).toHaveCount(0);
     expect(await page.locator('#s-ins .wvo-tile[data-kpi]').count()).toBe(0);
@@ -79,13 +79,13 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
   /* v208: insKpis() rekent nog altijd vier cijfers, maar er worden er nog twee getoond. De
      structurele twee staan op Maand; budgetnaleving stond al in de hero en de variabele-lastendruk
      stuurde niets, dus die twee hebben nergens meer een tegel. */
-  test('van de vier cijfers worden er nog twee getoond, en op één plek', async ({ page }) => {
+  test('van de vier cijfers wordt er nog één getoond, en op één plek', async ({ page }) => {
     await openIns(page);
     const K = await page.evaluate((m) => insKpis(m).items.map((x) => x.key), CUR);
     expect(K.sort()).toEqual(['budget', 'inleg', 'vari', 'vast']);
     const blok = await strip(page);
     expect(blok).toMatch(/spaarquote/i);
-    expect(blok).toMatch(/vaste-lasten-druk/i);
+    expect(blok).not.toMatch(/vaste-lasten-druk/i);
     expect(blok).not.toMatch(/budgetnaleving/i);
     expect(blok).not.toMatch(/variabele-lasten-druk/i);
     const ins = await page.evaluate(() => { go('ins'); return $('#s-ins').innerText; });
@@ -106,10 +106,9 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
       expect(await t.locator('svg.spk path').count(), key).toBe(1);
     }
     const s = await strip(page);
-    // v208: budgetnaleving was het enige cijfer met een doel en heeft geen tegel meer, dus de twee
-    // die overblijven dragen allebei de bandregel zonder norm
-    expect(s).toContain('geen doel, alleen je verloop');
-    expect(s).not.toMatch(/doel onder \d+%/);                             // geen norm meer als band
+    // v209: de spaarquote is de enige tegel; hij heeft geen band met een norm
+    expect(s).not.toMatch(/doel onder \d+%/);
+    expect(s).not.toMatch(/doel \d+% of/);
     expect(s).not.toContain('je potjes');                                 // v208: budget heeft hier geen tegel
   });
 
@@ -206,12 +205,21 @@ test.describe('a2 · richting A: één datataal in de tegels', () => {
     expect(r.kort).toBe('');                                               // <2 maanden = geen sparkline
   });
 
-  test('sparklines staan per rij op dezelfde hoogte, ook als de bandregel wrapt', async ({ page }) => {
+  /* v209: hier stond dat sparklines per rij op dezelfde hoogte staan, ook als de bandregel wrapt.
+     Met de vaste-lastendruk verdween de tweede tegel, dus er is geen rij meer om uit te lijnen.
+     Wat blijft toetsbaar is dat de enige tegel zijn sparkline draagt en de volle breedte neemt. */
+  test('de enige tegel neemt de volle breedte en draagt zijn sparkline', async ({ page }) => {
     await openIsMaand(page);
-    const bodems = await page.evaluate(() => [...document.querySelectorAll('#maandKpiBlok svg.spk')]
-      .map((e) => Math.round(e.getBoundingClientRect().bottom)));
-    expect(bodems.length).toBe(2);
-    expect(bodems[0]).toBe(bodems[1]);
+    const r = await page.evaluate(() => {
+      const rij = document.querySelector('#maandKpiBlok .wvo-tiles');
+      const t = rij.querySelector('.wvo-tile');
+      return { kolommen: getComputedStyle(rij).gridTemplateColumns.split(' ').length,
+        vol: Math.abs(t.getBoundingClientRect().width - rij.getBoundingClientRect().width) < 2,
+        spark: rij.querySelectorAll('svg.spk').length };
+    });
+    expect(r.kolommen).toBe(1);
+    expect(r.vol).toBe(true);
+    expect(r.spark).toBe(1);
   });
 });
 
@@ -301,13 +309,13 @@ test.describe('b2 · maandgrafiek', () => {
 test.describe('c · tik op een tegel', () => {
   test('opent uitleg plus de volledige historie', async ({ page }) => {
     await openIns(page);
-    await tegel(page, 'vast').click();
+    await tegel(page, 'inleg').click();
     await page.waitForSelector('#kpiDetailHead');
     const sheet = await page.locator('#sheet').innerText();
 
-    expect(sheet).toContain('Vaste-lasten-druk');
-    expect(sheet).toContain('vaste lasten ÷ inkomen');                    // hoe hij berekend is
-    expect(sheet).toContain('Er hoort geen doel bij');                    // v161: geen norm meer
+    expect(sheet).toContain('Spaarquote');
+    expect(sheet).toContain('gedeeld door je inkomen');                   // hoe hij berekend is
+    expect(await page.evaluate(() => kpiBand('inleg'))).toBe(null);       // v161: geen norm meer
     expect(sheet).not.toContain('50/30/20');
     expect(sheet).toContain('volledige historie van deze metriek');
     expect(await page.locator('#kpiHist').count()).toBe(1);
@@ -373,8 +381,7 @@ test.describe('c · tik op een tegel', () => {
       titels.push(sheet.split('\n')[0]);
       await page.evaluate(() => closeSheet());
     }
-    expect(new Set(titels).size).toBe(2);                                      // twee verschillende koppen
-    expect(titels).toEqual(['Spaarquote', 'Vaste-lasten-druk']);
+    expect(titels).toEqual(['Spaarquote']);                                    // v209: nog één tegel
   });
 });
 
@@ -450,7 +457,7 @@ test.describe('e · rustige modus en "Wat valt op"', () => {
     const begeleid = await page.evaluate((m) => ({ bad: kpiCol('bad'), strip: maandKpiBlok(m), chart: spendVsBudgetChart() }), M1);
     expect(begeleid.bad).toBe('var(--red)');
     expect(begeleid.chart).not.toContain('var(--red)');                   // grafiek: één datakleur
-    expect((begeleid.strip.match(/var\(--bar\)/g) || []).length).toBeGreaterThanOrEqual(2);   // neutrale lijnen
+    expect((begeleid.strip.match(/var\(--bar\)/g) || []).length).toBeGreaterThanOrEqual(1);   // neutrale lijnen
 
     const rustig = await page.evaluate((m) => { SET.mode = 'rustig'; save(); return { bad: kpiCol('bad'), strip: maandKpiBlok(m), chart: spendVsBudgetChart() }; }, M1);
     expect(rustig.bad).toBe('var(--amber)');

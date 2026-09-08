@@ -184,7 +184,7 @@ test.describe('e · KPI-detail is per KPI verschillend', () => {
     const gezien = {};
     /* v208: budgetnaleving en de variabele-lastendruk hebben geen tegel meer. De twee die
        overblijven openen elk nog hun eigen uitleg en eigen reeks. */
-    for (const [scr, blok, key] of [['maand', '#maandKpiBlok', 'inleg'], ['maand', '#maandKpiBlok', 'vast']]) {
+    for (const [scr, blok, key] of [['maand', '#maandKpiBlok', 'inleg']]) {
       await boot(page, scr);
       await page.locator(`${blok} .wvo-tile[data-kpi="${key}"]`).click();
       await page.waitForSelector('#kpiDetailHead');
@@ -192,11 +192,8 @@ test.describe('e · KPI-detail is per KPI verschillend', () => {
       await page.evaluate(() => closeSheet());
     }
     expect(gezien.inleg).toContain('Spaarquote');
-    expect(gezien.vast).toContain('Vaste-lasten-druk');
-    expect(gezien.vast).toContain('vaste lasten ÷ inkomen');
-
-    // twee verschillende teksten, geen gedeelde generieke output
-    expect(new Set(Object.values(gezien)).size).toBe(2);
+    // v209: de vaste-lastendruk heeft geen tegel meer, dus er is nog één sheet te openen
+    expect(new Set(Object.values(gezien)).size).toBe(1);
   });
 
   test('de getoonde reeks hoort bij díe KPI', async ({ page }) => {

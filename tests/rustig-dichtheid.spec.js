@@ -26,32 +26,25 @@ async function openMaand(page, mode) {
   await page.waitForSelector('#s-maand .card');
 }
 
-test.describe('a · kerncijfers: drie tegelijk in Rustig', () => {
-  // v161: Inzichten draagt nog twee kerncijfers, de andere twee staan op het maandscherm.
-  test('Rustig toont er een met een uitklap; de keuze blijft staan', async ({ page }) => {
-    await openIns(page, 'rustig');
-    await expect(tegels(page)).toHaveCount(1);
-    const keys = await tegels(page).evaluateAll((els) => els.map((e) => e.dataset.kpi));
-    expect(keys).toEqual(['inleg']);
-    const knop = page.locator('#maandKpiBlok .snz');
-    await expect(knop).toHaveCount(1);
-    expect(await knop.innerText()).toContain('toon beide kerncijfers');
-
-    await knop.click();
-    await page.waitForFunction(() => document.querySelectorAll('#maandKpiBlok .wvo-tile').length === 2);
-    expect(await page.evaluate(() => SET.kpiAllMaand)).toBe(true);
-    expect(await page.locator('#maandKpiBlok .snz').innerText()).toContain('minder');
-
-    await page.evaluate(() => renderMaand());
-    await expect(tegels(page)).toHaveCount(2);
-  });
-
-  test('Begeleid en Expert tonen ze allebei, zonder uitklap', async ({ page }) => {
-    for (const mode of ['begeleid', 'expert']) {
+/* v209: de drietraps uitklap uit v90 gold voor de kerncijfers. Sinds de vaste-lastendruk van het
+   maandscherm af is, staat daar nog één cijfer en valt er niets uit te klappen; de knop is
+   vervallen omdat hij een dode knop zou zijn. De drietraps zelf leeft onveranderd voor de
+   maandgrafiek, en die staat hieronder in blok b. */
+test.describe('a · kerncijfers: één cijfer, in elke modus hetzelfde', () => {
+  test('elke modus toont de spaarquote, zonder uitklap', async ({ page }) => {
+    for (const mode of ['rustig', 'begeleid', 'expert']) {
       await openIns(page, mode);
-      await expect(tegels(page), mode).toHaveCount(2);
+      await expect(tegels(page), mode).toHaveCount(1);
+      const keys = await tegels(page).evaluateAll((els) => els.map((e) => e.dataset.kpi));
+      expect(keys, mode).toEqual(['inleg']);
       expect(await page.locator('#maandKpiBlok .snz').count(), mode).toBe(0);
     }
+  });
+
+  test('een achtergebleven kpiAllMaand verandert niets', async ({ page }) => {
+    await openIns(page, 'rustig');
+    await page.evaluate(() => { SET.kpiAllMaand = true; save(); renderMaand(); });
+    await expect(tegels(page)).toHaveCount(1);
   });
 });
 

@@ -162,7 +162,8 @@ test.describe('d · standen van nu staan niet onder een historische kop', () => 
     await boot(page);
     await kies(page, VORIGE);
     const maand = await tekst(page, 'maand');
-    expect(maand).toMatch(/kerncijfers/i);             // spaarquote en vaste-lastendruk per maand
+    expect(maand).toMatch(/vermogensopbouw/i);         // v209: de spaarquote, per maand
+    expect(maand).toMatch(/spaarquote/i);
     const ins = await tekst(page, 'ins');
     expect(ins).toMatch(/uitgegeven/);                 // de budgetstand rekent door
     expect(ins).toMatch(/hele maand/);                 // en niet meer "dag x van y"

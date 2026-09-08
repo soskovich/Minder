@@ -92,7 +92,7 @@ test.describe('b · de ingeklapte kop noemt wat eronder staat', () => {
       maand: [...document.querySelectorAll('#maandKpiBlok .wvo-tile')].map((e) => e.dataset.kpi),
       vouw: typeof insKpiSamenvatting,
     }));
-    expect(r.maand).toEqual(['inleg', 'vast']);
+    expect(r.maand).toEqual(['inleg']);        // v209: de vaste-lastendruk is van Maand af
     expect(r.vouw).toBe('undefined');
     const ins = await page.evaluate(() => { go('ins'); return $('#s-ins').innerText; });
     expect(ins.toLowerCase()).not.toContain('spaarquote');

@@ -149,8 +149,6 @@ test('e · de tegels passen nog steeds op 360px', async ({ page }) => {
   });
   expect(r.pagina).toBe(0);
   expect(r.buiten).toBe(0);
-  expect(r.n).toBe(2);        // v208: het maandscherm draagt er twee
-  // in de lopende maand heeft de vaste-lastendruk grondtal EUR 20, dus geen percentage en geen
-  // sparkline (v161/v193); de tegel zelf staat er wel
+  expect(r.n).toBe(1);        // v209: het maandscherm draagt er nog één, de spaarquote
   expect(r.sparks).toBe(1);
 });
