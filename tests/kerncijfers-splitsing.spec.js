@@ -139,13 +139,15 @@ test.describe('b · de splitsing over twee schermen', () => {
     expect(await page.evaluate((m) => insKpis(m).spaar, AF)).toBeUndefined();
   });
 
-  test('Inzichten toont het operationele paar', async ({ page }) => {
+  /* v208: Inzichten draagt geen kerncijfers meer. Budgetnaleving stond al in de hero, in dezelfde
+     eenheid en uit dezelfde bron, en de variabele-lastendruk stuurde niets: je potjes zijn de norm
+     voor variabele lasten, en een percentage met je totale uitgaven als noemer daalt zodra je vaste
+     lasten stijgen. Beide cijfers worden nog berekend; ze hebben alleen geen tegel meer. */
+  test('Inzichten draagt geen kerncijfers meer', async ({ page }) => {
     await boot(page);
-    const h = await page.evaluate((m) => insKpiStrip(m), AF);
-    expect(h).toContain('data-kpi="budget"');
-    expect(h).toContain('data-kpi="vari"');
-    expect(h).not.toContain('data-kpi="inleg"');
-    expect(h).not.toContain('data-kpi="vast"');
+    const ins = await page.evaluate(() => { go('ins'); return $('#s-ins').innerHTML; });
+    expect(ins).not.toContain('data-kpi=');
+    expect(await page.evaluate(() => typeof insKpiStrip)).toBe('undefined');
   });
 
   test('het maandscherm toont het structurele paar', async ({ page }) => {
@@ -157,26 +159,27 @@ test.describe('b · de splitsing over twee schermen', () => {
     expect(h).not.toContain('data-kpi="vari"');
   });
 
-  test('samen precies vier, geen derde plek', async ({ page }) => {
+  test('van de vier is er nog één plek, met twee tegels', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { go('ins'); go('maand'); });
     const n = await page.evaluate(() => document.querySelectorAll('[data-kpi]').length);
-    expect(n).toBe(4);
+    expect(n).toBe(2);
+    expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // wel alle vier berekend
   });
 
   /* v194: een sparkline rendert pas vanaf GRAFIEK_MIN volle maanden; deze fixture zit daaronder.
      Wat de test bewaakt is dat beide schermen dezelfde renderer gebruiken en dus dezelfde vorm
      tonen, dus toetsen we dat ze dezelfde keuze maken - lijn of delta-zin - en niet dat er per se
      een lijn staat. */
-  test('beide schermen tonen dezelfde vorm onder de tegel', async ({ page }) => {
+  /* v208: er is nog één scherm met tegels, dus 'beide schermen dezelfde vorm' valt weg. Wat blijft
+     is dat de vorm onder de tegel er staat: een lijn zodra er genoeg maanden zijn, anders de
+     delta-zin. */
+  test('onder de tegel staat een lijn of de delta-zin', async ({ page }) => {
     await boot(page);
-    const uit = [];
-    for (const fn of ['insKpiStrip', 'maandKpiBlok']) {
-      const h = await page.evaluate((a) => window[a.f](a.m), { f: fn, m: AF });
-      uit.push({ lijn: h.includes('spk-wrap'), delta: /verloop vanaf \d+ mnd|Een verloop zie je vanaf/.test(h) });
-    }
-    expect(uit[0]).toEqual(uit[1]);
-    expect(uit[0].lijn || uit[0].delta).toBe(true);
+    const h = await page.evaluate((m) => maandKpiBlok(m), AF);
+    const lijn = h.includes('spk-wrap');
+    const delta = /verloop vanaf \d+ mnd|Een verloop zie je vanaf/.test(h);
+    expect(lijn || delta).toBe(true);
   });
 });
 
@@ -257,10 +260,8 @@ test.describe('e · loopt nog, en de rustige modus', () => {
     const k = await K(page, CUR);
     expect(k.partial).toBe(true);
     expect(k.inleg.oordeel).toBe('loopt nog');
-    for (const fn of ['insKpiStrip', 'maandKpiBlok']) {
-      const h = await page.evaluate((a) => window[a.f](a.m), { f: fn, m: CUR });
-      expect(h).toMatch(/loopt nog/);
-    }
+    const h = await page.evaluate((m) => maandKpiBlok(m), CUR);
+    expect(h).toMatch(/loopt nog/);
   });
 
   test('een afgeronde maand krijgt wel een oordeel', async ({ page }) => {
@@ -270,16 +271,16 @@ test.describe('e · loopt nog, en de rustige modus', () => {
     expect(k.inleg.oordeel).not.toBe('loopt nog');
   });
 
-  test('rustig toont er een per scherm, met een tik naar de rest', async ({ page }) => {
+  test('rustig toont er een, met een tik naar de rest', async ({ page }) => {
     await boot(page, seed({ mode: 'rustig' }));
-    const h = await page.evaluate((m) => insKpiStrip(m) + maandKpiBlok(m), AF);
-    expect((h.match(/data-kpi=/g) || []).length).toBe(2);
+    const h = await page.evaluate((m) => maandKpiBlok(m), AF);
+    expect((h.match(/data-kpi=/g) || []).length).toBe(1);
     expect(h).toMatch(/toon beide kerncijfers/);
   });
 
   test('en uitgeklapt weer allebei', async ({ page }) => {
-    await boot(page, seed({ mode: 'rustig', set: { kpiAll: true, kpiAllMaand: true } }));
-    const h = await page.evaluate((m) => insKpiStrip(m) + maandKpiBlok(m), AF);
-    expect((h.match(/data-kpi=/g) || []).length).toBe(4);
+    await boot(page, seed({ mode: 'rustig', set: { kpiAllMaand: true } }));
+    const h = await page.evaluate((m) => maandKpiBlok(m), AF);
+    expect((h.match(/data-kpi=/g) || []).length).toBe(2);
   });
 });

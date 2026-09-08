@@ -81,18 +81,21 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
 });
 
 test.describe('b · de ingeklapte kop noemt wat eronder staat', () => {
-  test('de samenvatting leest de twee kerncijfers die op Inzichten staan', async ({ page }) => {
-    await boot(page, 'ins');
-    const r = await page.evaluate((m) => ({
-      sam: insKpiSamenvatting(m),
-      tegels: [...document.querySelectorAll('#insKpiStrip .wvo-tile')].map((e) => e.dataset.kpi),
-      labels: Object.fromEntries(Object.entries(insKpis(m)).map(([k, v]) => [k, v && v.label])),
-    }), null);
-    // v161: budgetnaleving en variabele-lastendruk staan hier, spaarquote en vaste-lastendruk op Maand
-    expect(r.tegels).toEqual(['budget', 'vari']);
-    for (const k of r.tegels) expect(r.sam.toLowerCase()).toContain(String(r.labels[k]).toLowerCase());
-    // en dus niet de spaarquote, die staat op het maandscherm
-    expect(r.sam.toLowerCase()).not.toContain(String(r.labels.inleg || 'spaarquote').toLowerCase());
+  /* v208: het Kerncijfers-blok is van Inzichten af, en met dat blok verviel de ingeklapte kop met
+     zijn samenvatting (insVouw en insKpiSamenvatting hadden geen andere aanroeper). Wat deze test
+     bewaakte - de kop noemt wat eronder staat - heeft geen kop meer om te noemen. Wat er voor in de
+     plaats komt is de andere helft van dezelfde regel: op Maand staan precies de twee structurele
+     cijfers, en op Inzichten staat er geen enkele. */
+  test('de tegels staan op Maand, en Inzichten draagt er geen', async ({ page }) => {
+    await boot(page, 'maand');
+    const r = await page.evaluate(() => ({
+      maand: [...document.querySelectorAll('#maandKpiBlok .wvo-tile')].map((e) => e.dataset.kpi),
+      vouw: typeof insKpiSamenvatting,
+    }));
+    expect(r.maand).toEqual(['inleg', 'vast']);
+    expect(r.vouw).toBe('undefined');
+    const ins = await page.evaluate(() => { go('ins'); return $('#s-ins').innerText; });
+    expect(ins.toLowerCase()).not.toContain('spaarquote');
   });
 });
 
@@ -158,15 +161,15 @@ test.describe('d · de horizon van het scherm blijft kloppen', () => {
     expect(t).not.toMatch(/inkomen-limiet/i);
   });
 
-  // v187: de Gedrag-kaart is opgegaan in de Valt-op-kaart, dus Verdieping houdt er één over
-  test('de verdieping op Inzichten houdt precies één kaart over', async ({ page }) => {
+  /* v187: de Gedrag-kaart ging op in de Valt-op-kaart, dus Verdieping hield er één over. v208: die
+     ene is het Kerncijfers-blok en dat is van Inzichten af, dus de sectie bestaat niet meer. */
+  test('de verdieping op Inzichten bestaat niet meer', async ({ page }) => {
     await boot(page, 'ins');
     const src = await page.evaluate(() => renderIns.toString());
-    const n = (src.match(/insVouw\(/g) || []).length;
-    expect(n).toBe(1);                                   // alleen Kerncijfers
+    expect((src.match(/insVouw\(/g) || []).length).toBe(0);
     const t = await tekst(page, 'ins');
-    expect(t).toMatch(/kerncijfers/i);
+    expect(t).not.toMatch(/kerncijfers/i);
     expect(t).not.toMatch(/gedrag/i);
-    expect(t).toMatch(/verdieping/i);
+    expect(t).not.toMatch(/verdieping/i);
   });
 });

@@ -1,5 +1,10 @@
 // v89: het kerncijfer "Uitgaven-niveau" is vervangen door "Variabele-lasten-druk", zodat de derde
 // band van je referentie-verdeling (vast/variabel/sparen) ook in de Kerncijfers zit.
+// v208: die tegel is vervallen. Hij stuurde niets: je wilt minder euro's variabel uitgeven, en het
+// instrument daarvoor zijn je potjes, die al je norm voor variabele lasten zijn. Het percentage
+// daalde bovendien zodra je vaste lasten stegen, zonder dat je gedrag veranderde.
+// Wat deze spec nog bewaakt: het cijfer wordt nog berekend (insKpis rekent alle vier), er is nog
+// steeds geen norm-laag, en de maandgrafiek houdt het absolute uitgaven-niveau.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR, M1 } = require('./budget-fixture');
@@ -10,62 +15,36 @@ const VARI_M1 = 575;
 
 async function openIns(page, payload) {
   await open(page, payload || seed({ maanden: 8 }));
-  await page.evaluate(() => go('ins'));
-  await page.waitForSelector('#insKpiStrip');
+  await page.evaluate(() => go('maand'));
+  await page.waitForSelector('#maandKpiBlok');
 }
 function tweak(fn) {
   const p = seed({ maanden: 8 }); const set = JSON.parse(p.minder_set); fn(set);
   p.minder_set = JSON.stringify(set); return p;
 }
-const tegel = (page, key) => page.locator(`#insKpiStrip .wvo-tile[data-kpi="${key}"]`);
+const tegel = (page, key) => page.locator(`.wvo-tile[data-kpi="${key}"]`);   // waar dan ook op het scherm
 
-test.describe('a · de nieuwe tegel', () => {
-  test('staat er, met waarde uit splitFixedVar zonder band', async ({ page }) => {
+test.describe('a · de tegel is vervallen, het cijfer niet', () => {
+  test('geen enkele tegel toont de variabele-lastendruk', async ({ page }) => {
     await openIns(page);
-    await expect(tegel(page, 'vari')).toHaveCount(1);
+    await expect(tegel(page, 'vari')).toHaveCount(0);
     await expect(tegel(page, 'niveau')).toHaveCount(0);
-
-    const t = await tegel(page, 'vari').innerText();
-    expect(t.toLowerCase()).toContain('variabele-lasten-druk');
-    expect(t).toContain('geen doel');   // v161: de norm stuurt dit cijfer niet meer
-    expect(t).toMatch(/\d+%/);                                       // een percentage, geen euro's
-    expect(t).not.toMatch(/€/);
-
-    const r = await page.evaluate((ms) => ({
-      cur: insKpis(ms.CUR).vari.raw,
-      eigen: splitFixedVar(ms.CUR).vari / totals(ms.CUR).income * 100,
-      m1: insKpis(ms.M1).vari.raw,
-      band: kpiBand('vari'), bandTxt: kpiBandTxt('vari'),
-      volgorde: insKpis(ms.CUR).items.map((x) => x.key),
-    }), { CUR, M1 });
-
-    expect(r.cur).toBeCloseTo(r.eigen, 6);                            // exact de bestaande bron
-    expect(r.m1).toBeCloseTo(VARI_M1 / INK * 100, 6);                 // 19,2% in de fixture
-    expect(r.band).toBe(null);
-    expect(r.bandTxt).toContain('geen doel');
-    expect(r.volgorde).toEqual(['inleg', 'budget', 'vari', 'vast']);   // v161: restsaldo vervallen
+    const ins = await page.evaluate(() => { go('ins'); return $('#s-ins').innerText; });
+    expect(ins.toLowerCase()).not.toContain('variabele-lasten-druk');
+    const maand = await page.evaluate(() => { go('maand'); return $('#s-maand').innerText; });
+    expect(maand.toLowerCase()).not.toContain('variabele-lasten-druk');
   });
 
-  // v161: zonder norm is er geen oordeel. Het cijfer blijft, de kleur is neutraal.
-  test('zonder norm geen oordeel, wel een cijfer', async ({ page }) => {
+  test('het cijfer wordt nog berekend, uit splitFixedVar en zonder band', async ({ page }) => {
     await openIns(page);
-    const k = await page.evaluate((m) => { const K = insKpis(m); return { raw: K.vari.raw, state: K.vari.state, band: K.vari.band }; }, CUR);
-    expect(k.raw).toBeGreaterThan(0);
-    expect(k.state).toBe('n');
-    expect(k.band).toContain('geen doel');
-  });
-
-  test('lopende maand: geen oordeel; inkomen onbekend: —', async ({ page }) => {
-    await openIns(page);
-    const nu = await page.evaluate((m) => insKpis(m).vari, CUR);
-    expect(nu.oordeel).toBe('loopt nog');
-    expect(nu.state).toBe('n');
-
-    await openIns(page, tweak((s) => { s.income = 0; }));
-    const geen = await page.evaluate((m) => insKpis(m).vari, CUR);
-    expect(geen.val).toBe('—');
-    expect(geen.band).toBe('inkomen onbekend');
-    expect(await page.locator('#insKpiStrip').innerText()).not.toMatch(/NaN|Infinity/);
+    const r = await page.evaluate((m) => ({
+      raw: insKpis(m).vari.raw,
+      eigen: splitFixedVar(m).vari / totals(m).income * 100,
+      band: kpiBand('vari'),
+    }), M1);
+    expect(r.raw).toBeCloseTo(r.eigen, 6);
+    expect(r.raw).toBeCloseTo(VARI_M1 / INK * 100, 6);
+    expect(r.band).toBe(null);                       // v161: de norm stuurt dit cijfer niet
   });
 });
 
@@ -79,11 +58,11 @@ test.describe('b · er is geen norm-laag meer', () => {
     expect(new Set(r)).toEqual(new Set(['undefined']));
   });
 
-  test('de sparkline heeft geen doellijn meer', async ({ page }) => {
+  test('er is geen doellijn, want er is geen band', async ({ page }) => {
     await openIns(page);
-    const h = await page.evaluate((m) => insKpiStrip(m), CUR);
-    expect(h).toContain('data-kpi="vari"');
     expect(await page.evaluate(() => kpiBand('vari'))).toBe(null);
+    // v208: en er is ook geen sparkline meer, want er is geen tegel
+    expect(await page.evaluate((m) => maandKpiBlok(m), CUR)).not.toContain('data-kpi="vari"');
   });
 
   // een achtergebleven waarde in SET mag niets meer doen
@@ -99,14 +78,17 @@ test.describe('b · er is geen norm-laag meer', () => {
 test.describe('c · het detail', () => {
   // v161: de norm stuurt dit cijfer niet meer, dus er is geen norm-lijn en geen actieve norm
   // in de sheet. De historie zelf blijft.
-  test('toont de percentage-historie, zonder norm-lijn', async ({ page }) => {
+  /* v208: de sheet zelf is ongemoeid, maar hij heeft geen ingang meer: er is geen vari-tegel om op
+     te tikken. Dat is het verlies dat met deze ronde is aanvaard; de uitleg en de historie bestaan
+     nog als functie. */
+  test('de sheet bestaat nog, maar heeft geen ingang meer', async ({ page }) => {
     await openIns(page);
+    expect(await page.locator('.wvo-tile[data-kpi="vari"]').count()).toBe(0);
     await page.evaluate(() => openKpiDetail('vari'));
     await page.waitForSelector('#kpiDetailHead');
     const t = await page.locator('#sheet').innerText();
     expect(t).toContain('Variabele-lasten-druk');
     expect(t).not.toMatch(/50\/30\/20|gemeten tegen/i);
-    expect(await page.evaluate(() => kpiBand('vari'))).toBe(null);
   });
 });
 
@@ -119,7 +101,7 @@ test.describe('d · opgeruimd en de rest ongewijzigd', () => {
         meta: Object.keys(KPI_META), reeksen: Object.keys(S).filter((k) => k !== 'ms'),
         niveau: K.niveau === undefined, ref: K.niveauRef === undefined,
         state: kpiState('niveau', 500, 400),
-        strip: insKpiStrip(m),
+        strip: maandKpiBlok(m),
       };
     }, CUR);
     expect(r.meta.sort()).toEqual(['budget', 'inleg', 'vari', 'vast']);       // v161: restsaldo-quote vervallen
@@ -132,7 +114,7 @@ test.describe('d · opgeruimd en de rest ongewijzigd', () => {
     expect(await page.locator('#s-ins').innerText()).not.toContain('Uitgaven-niveau');
   });
 
-  test('budget en vast zijn onveranderd', async ({ page }) => {
+  test('budget en vast worden onveranderd berekend', async ({ page }) => {
     await openIns(page);
     const k = await page.evaluate((m) => {
       const K = insKpis(m);
@@ -154,10 +136,10 @@ test.describe('d · opgeruimd en de rest ongewijzigd', () => {
 test('e · de tegels passen nog steeds op 360px', async ({ page }) => {
   await openIns(page);
   await page.setViewportSize({ width: 360, height: 900 });
-  await page.evaluate(() => renderIns());
+  await page.evaluate(() => renderMaand());
   await page.waitForTimeout(100);
   const r = await page.evaluate(() => {
-    const strip = document.getElementById('insKpiStrip'), sb = strip.getBoundingClientRect();
+    const strip = document.getElementById('maandKpiBlok'), sb = strip.getBoundingClientRect();
     const tiles = [...strip.querySelectorAll('.wvo-tile')];
     return {
       pagina: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -167,6 +149,8 @@ test('e · de tegels passen nog steeds op 360px', async ({ page }) => {
   });
   expect(r.pagina).toBe(0);
   expect(r.buiten).toBe(0);
-  expect(r.n).toBe(2);        // v161: Inzichten draagt er nog twee
-  expect(r.sparks).toBe(2);
+  expect(r.n).toBe(2);        // v208: het maandscherm draagt er twee
+  // in de lopende maand heeft de vaste-lastendruk grondtal EUR 20, dus geen percentage en geen
+  // sparkline (v161/v193); de tegel zelf staat er wel
+  expect(r.sparks).toBe(1);
 });

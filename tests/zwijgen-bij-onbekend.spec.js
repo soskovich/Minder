@@ -199,11 +199,11 @@ test.describe('6 · één ingang per gat op Home', () => {
 test.describe('7 · één keer melden dat er te weinig historie is', () => {
   test('bij één maand staat de mededeling precies één keer', async ({ page }) => {
     await boot(page, seed({ eenMaand: true }));
-    await page.evaluate(() => { SET.kpiAll = 1; save(); });
+    await page.evaluate(() => { SET.kpiAllMaand = 1; save(); });
     // v178: de maandgrafiek die de zin draagt staat op Maand; de tegels staan op Inzichten
     const t = (await scherm(page, 'ins')) + ' ' + (await scherm(page, 'maand'));
     expect((t.match(/maanden zie je hier je verloop/gi) || []).length).toBe(1);
-    expect(await page.evaluate(() => $('#insKpiStrip').innerText)).not.toMatch(/zie je hier je verloop/i);
+    expect(await page.evaluate(() => $('#maandKpiBlok').innerText)).not.toMatch(/zie je hier je verloop/i);
   });
 });
 

@@ -1676,6 +1676,24 @@ function potjeRest(bud, uitgegeven, dim, daysLeft){
   return Math.round(bud/Math.max(dim,1)*Math.max(daysLeft,0));
 }
 // Onbestede variabele potjes deze maand (potjes = je plan; gedeeld door de liquiditeitskaart en safeToSpend).
+/* v208: de stand van je variabele potjes, uit de bestaande partitie. Geen nieuwe berekening: het
+   restant komt uit varPlanRemaining() en het budget uit varBudget(), en het gebruikte deel loopt
+   over dezelfde recurringCats()-scheiding die die twee al gebruiken.
+   Let op dat rest + gebruikt NIET altijd budget is: bij een overschreden potje slaat potjeRest om
+   naar het geplande dagtempo maal de resterende dagen (v111), en dat is met opzet geen rekenkundig
+   restant. De tegel toont ze daarom als losse feiten en telt ze nergens op. */
+function varPotjeStand(ym){
+  const B=SET.budgets||{}; const sp=catSpendMap(ym);
+  let rc=new Set(); try{ rc=recurringCats(); }catch(_){}
+  let gebruikt=0, potjes=0;
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; gebruikt+=(sp[k]||0); potjes++; }
+  const budget=varBudget();
+  let rest=0; try{ rest=varPlanRemaining(ym); }catch(_){}
+  gebruikt=Math.round(gebruikt);
+  return {budget, gebruikt, rest, potjes,
+    deel: budget>0?Math.round(gebruikt/budget*100):null,
+    over: budget>0 && gebruikt>budget};
+}
 function varPlanRemaining(ym){
   const sp=catSpendMap(ym), B=SET.budgets||{}; let v=0;
   const rc=recurringCats(); const d=daysElapsed(ym), daysLeft=Math.max(d.dim-d.elapsed,0);
@@ -1931,11 +1949,11 @@ function openReservedPotjes(){
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('target')}</div><div style="font-weight:800;font-size:var(--fs-lg)">Gereserveerd in je potjes</div>
       <div class="muted small">budget dat je per categorie apart zette · nog niet uitgegeven</div>
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0;color:var(--teal)">${euro(tot)}</div></div>
-    ${rows.length?rows.map(r=>{const c=CATS[r.k]||CATS.overig;return `<div class="tx" style="cursor:default">
+    ${rows.length?rows.map(r=>{const c=CATS[r.k]||CATS.overig;return `<div class="tx" style="cursor:pointer" onclick="openPotje('${esc(r.k)}')">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${c.name}</div><div class="cat">${euro0(r.spent)} van ${euro0(r.bud)} gebruikt${r.over?` · potje op, gerekend op je eigen dagtempo voor de resterende dagen`:''}</div></div>
-      <div class="amt" style="font-weight:700;color:${r.over?'var(--amber)':(r.rest>0?'var(--teal)':'var(--mut)')}">${euro(r.rest)}</div></div>`;}).join(''):'<div class="muted small center" style="padding:16px">Nog geen variabele potjes met budget. Geef je categorieën een maandbedrag bij de Coach.</div>'}
-    <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Dit is het deel van je variabele potjes dat je deze maand nog niet hebt uitgegeven. Het staat apart, zodat 'veilig te besteden' je potjes respecteert.</div>`;
+      <div class="info"><div class="nm">${c.name}</div><div class="cat">${euro0(r.spent)} van ${euro0(r.bud)} gebruikt${r.over?` · potje op, gerekend op je eigen dagtempo voor de resterende dagen`:''} · aanpassen ›</div></div>
+      <div class="amt" style="font-weight:700;color:${r.over?'var(--amber)':(r.rest>0?'var(--teal)':'var(--mut)')}">${euro(r.rest)}</div></div>`;}).join(''):`<div class="muted small center" style="padding:16px">Nog geen variabele potjes met budget. <span style="color:var(--teal);cursor:pointer" onclick="openPotjePick()">Maak een potje ›</span></div>`}
+    <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Dit is het deel van je variabele potjes dat je deze maand nog niet hebt uitgegeven. Het staat apart, zodat 'veilig te besteden' je potjes respecteert. Wil je minder variabel uitgeven, dan verlaag je hier een potje.</div>`;
   showSheetBg();
 }
 /* Read-only drill-downs achter de budgetkaart op Inzichten (v114, gesplitst in v115): het getal
@@ -5693,8 +5711,20 @@ function nogDezeMaandBody(){
     sub:gehaald?`${ICON('check')} gehaald · ${euro0(S.savedThisMonth)} opzij`
                :`van ${euro0(S.saveTarget)}${S.savedThisMonth>0?` · ${euro0(S.savedThisMonth)} opzij`:''}`,
     tik:'openSafeToSpend()'});
-  if(varPlan>0) posten.push({lab:'Nog uit je potjes', val:euro0(varPlan), col:'var(--txt)',
-    sub:'variabel', tik:'openReservedPotjes()'});
+  /* v208: de potjes-tegel is het instrument voor variabele lasten geworden, dus hoort te zien te
+     zijn waar je staat en niet alleen wat er over is. De sub volgt de vorm van 'Nog te sparen' in
+     dezelfde rij ('van <noemer> · <wat er al is>'), zodat de twee plan-tegels gelijksoortig blijven.
+     Het deel staat er alleen zolang je binnen je potjes zit: boven de 100% zegt de hero al
+     '<bedrag> over je potjes, met nog N dagen te gaan', en dat percentage zou datzelfde in een
+     tweede vorm herhalen (v191: tot de drempel een percentage, daarboven een vaststelling). Geen
+     alarmkleur, want wat je jezelf hebt opgelegd is geen tekort (v78/v93). */
+  if(varPlan>0){ const VP=(function(){ try{ return varPotjeStand(curMonth||months()[months().length-1]); }catch(_){ return null; } })();
+    const vsub = !VP||!(VP.budget>0) ? 'variabel'
+      : VP.gebruikt<=0 ? `van ${euro0(VP.budget)} · nog niets gebruikt`
+      : VP.over ? `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt`
+      : `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt · ${VP.deel}%`;
+    posten.push({lab:'Nog uit je potjes', val:euro0(varPlan), col:'var(--txt)',
+      sub:vsub, tik:'openReservedPotjes()'}); }
   /* Een oneven laatste tegel neemt de volle breedte. Zonder dat blijft hij als halve rij hangen, en
      dat leest als een tegel waar een tweede bij hoort te staan. De eerste twee renderen altijd
      zodra dit blok er staat, dus in de praktijk gaat het om een enkele plan-tegel op de tweede rij;
@@ -7241,13 +7271,18 @@ function openCategory(k){
       <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`).join('')}`;
   showSheetBg();
 }
-function toggleExpand(which){ SET[which]=!SET[which]; save(); renderIns(); }
+/* v208: dit deed renderIns() en ging er dus van uit dat elke uitklap op Inzichten staat, precies
+   de fout die v178 voor toggleCollap ophief. De 'toon beide kerncijfers'-knop staat sinds v161 op
+   Maand, en tekende dus het verkeerde scherm opnieuw: je tikte en er veranderde niets. Nu
+   render(), zodat de toggle het scherm tekent waar je op staat (v137). Bestaande bug, blootgelegd
+   doordat het Kerncijfers-blok van Inzichten af ging. */
+function toggleExpand(which){ SET[which]=!SET[which]; save(); render(); }
 /* Inklap-vlaggen zijn drietrap: undefined = nog geen keuze (dan beslist de modus), true/false = de
    gebruiker heeft zelf gekozen en dat wint altijd. Zo start Rustig rustiger zonder iets te overrulen.
    Vlaggen zonder ingang in COLLAP_DEF houden hun bestaande default (dicht). */
 const COLLAP_DEF={
-  openSpendChart:{rustig:false, rest:true},    // v90 blijft: dicht in Rustig, open in Begeleid
-  openKpiCard:{rustig:true, rest:true}         // kerncijfers blijven standaard open
+  openSpendChart:{rustig:false, rest:true}     // v90 blijft: dicht in Rustig, open in Begeleid
+  // v208: openKpiCard is vervallen met het Kerncijfers-blok op Inzichten
 };
 function collapOpen(flag){
   const v=SET[flag]; if(v===true||v===false) return v;
@@ -7975,21 +8010,20 @@ function kpiTegels(items){
     </div>`;
   }).join('');
 }
-/* Operationeel, binnen de maand: hoe sta ik ervoor tegenover mijn eigen plan. */
-function insKpiStrip(m){
-  const K=insKpis(m);
-  const keys=['budget','vari'];
-  const rustig=isMode('rustig'), alles=!rustig||!!SET.kpiAll;
-  const items=K.items.filter(k=>keys.includes(k.key)).slice(0, alles?9:1);
-  const meer=rustig?`<button class="snz" id="kpiMeer" onclick="toggleExpand('kpiAll')">${alles?'minder ▲':'toon beide kerncijfers ▾'}</button>`:'';
-  const tiles=kpiTegels(items);
-  return `<div class="card" id="insKpiStrip">
-    <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">${ICON('chart')} Kerncijfers</span></div>
-    <div class="small muted" style="margin:0 0 4px">Hoe je deze maand tegenover je eigen plan staat. Wat structureel is, staat op je maandscherm.</div>
-    <div class="wvo-tiles" style="grid-template-columns:repeat(2,1fr)">${tiles}</div>${meer}
-    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:10px">${K.partial?'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus nog zonder oordeel. ':''}Tik een cijfer voor de uitleg en je volledige historie.</div>
-  </div>`;
-}
+/* v208: hier stond insKpiStrip(), het Kerncijfers-blok van Inzichten met budgetnaleving en de
+   variabele-lastendruk. Budgetnaleving stond al in de hero, in dezelfde eenheid en uit dezelfde
+   bron (totals()), met de balk en de dagteller erbij. En de variabele-lastendruk stuurde niets: je
+   wilt minder euro's variabel uitgeven, en het instrument daarvoor zijn je potjes. Dat percentage
+   daalde bovendien zodra je vaste lasten stegen, zonder dat je gedrag veranderde, want je totale
+   uitgaven staan in de noemer. Je potjes zijn al je norm voor variabele lasten; een doel op dat
+   percentage zou een tweede norm zijn voor dezelfde vraag.
+   Wat definitief weg is: de variabele-lastendruk zelf, de sparklines en de kpiDeltaZin-terugval van
+   deze twee, de afstand tot de band bij budget, en de tik naar openKpiDetail voor budget en vari.
+   Die functie blijft leven voor inleg en vast op het maandscherm; kpiTegels(), insKpis() en
+   KPI_META zijn ongemoeid, want maandKpiBlok() leest ze onverkort.
+   Bekend en niet opgeruimd: insKpis() rekent alle vier de cijfers en maandKpiBlok() filtert er twee
+   uit, dus budget en vari worden nog berekend en weggegooid (het v166-geval). Dat opruimen raakt
+   insKpis(), en die voedt de kerncijfers op Maand. */
 /* Structureel, tussen de maanden: bouw ik vermogen op, en hoe zwaar wegen mijn vaste lasten.
    Dezelfde tegels en dezelfde 'loopt nog'-behandeling als op Inzichten; alleen de plek verschilt. */
 function maandKpiBlok(m){
@@ -8547,24 +8581,10 @@ function insHeroKaart(m){
    houden. Nu overal dezelfde kop met dezelfde driehoek, dus de knop springt niet van boven naar
    onder zodra je hem opent. Het idioom zelf is niet nieuw: insKpiStrip gebruikt binnenin al
    dezelfde driehoeken. */
-function insVouw(flag, titel, icoon, samenvatting, inhoud){
-  if(!inhoud) return '';
-  if(collapOpen(flag)) return `<div class="row" style="gap:10px;cursor:pointer;margin:0 2px 8px" onclick="toggleCollap('${flag}')">
-    <span class="hlabel" style="margin:0;flex:1">${icoon} ${esc(titel)}</span>
-    <span class="muted" style="font-size:var(--fs-lg);width:14px;text-align:center">▲</span></div>` + inhoud;
-  return `<div class="card" style="cursor:pointer" onclick="toggleCollap('${flag}')">
-    <div class="row" style="gap:10px"><span class="hlabel" style="margin:0;flex:0 0 auto;white-space:nowrap">${icoon} ${esc(titel)}</span>
-      ${samenvatting?`<span class="small muted" style="flex:1;min-width:0;text-align:right">${esc(samenvatting)}</span>`:'<span style="flex:1"></span>'}
-      <span class="muted" style="font-size:var(--fs-lg);width:14px;text-align:center">▼</span></div></div>`;
-}
-// samenvatting van de kerncijfers, uit dezelfde bron die de strip vult
-function insKpiSamenvatting(m){
-  try{ const K=insKpis(m);
-    /* v178: dit las 'inleg', de spaarquote, terwijl diezelfde kaart uitgeklapt zegt dat de
-       spaarquote op het maandscherm staat (v161). De kop noemt nu wat er onder staat. */
-    return ['budget','vari'].map(k=>K[k]&&K[k].raw!=null?`${K[k].label.toLowerCase()} ${K[k].val}`:'').filter(Boolean).join(' \u00b7 ');
-  }catch(_){ return ''; }
-}
+/* v208: hier stonden insVouw() en insKpiSamenvatting(). Verdieping bevatte precies één element,
+   het Kerncijfers-blok, en met dat blok verviel de enige aanroeper van allebei. De sectiekop viel
+   vanzelf weg: renderIns() had die guard al. Vouwen gebeurt elders onveranderd met hetzelfde
+   idioom (v203): de kop van renderMerchants(), die van spendVsBudgetChart() en vooruitZone(). */
 function insSection(t){ return `<div class="inssec">${t}</div>`; }
 
 /* ===== Maandkiezer (v176) =====
@@ -8638,13 +8658,11 @@ function renderIns(){
      coachItems() die sinds v143 woordelijk ook in scoreNotifs() staan (dus op Maand of in de
      meldingenlijst), en de vierde was de over-budget-rij, die nu de eerste bron van de
      Valt-op-kaart is. Eén observatie, één plek. */
-  const verdieping = insVouw('openKpiCard','Kerncijfers',ICON('chart'),insKpiSamenvatting(m),insKpiStrip(m));
   /* De lek-ingang opent een coachgesprek over een stap die je nu kunt zetten; op een afgesloten
      maand nodigt dat uit tot een keuze over iets wat voorbij is (v139: alleen kijken). Sinds v186
      zit die ingang in de Valt-op-kaart, dus krijgt die kaart de maand-vlag mee. */
   $('#s-ins').innerHTML = afgeslotenMaandBanner(m) + insSection(nu?'Deze maand':'Terugblik')
-    + hero + whatStandsOutLine(m, nu)
-    + (verdieping?insSection('Verdieping')+verdieping:'');
+    + hero + whatStandsOutLine(m, nu);
 }
 
 

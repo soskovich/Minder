@@ -59,7 +59,7 @@ test.describe('b · de hele app volgt', () => {
     await boot(page, 'ins');
     const uit = await page.evaluate(() => ({
       chart: spendVsBudgetChart(),
-      kpi: insKpiStrip(curMonth || months()[months().length - 1]),
+      kpi: maandKpiBlok(curMonth || months()[months().length - 1]),   // v208: de tegels staan alleen nog op Maand
       avatar: coachAvatar(),
     }));
     for (const [naam, html] of Object.entries(uit)) {

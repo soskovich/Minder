@@ -4,14 +4,17 @@
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
 
+/* v208: het Kerncijfers-blok is van Inzichten af, dus de drietraps uitklap uit v90 leeft alleen
+   nog op Maand, met SET.kpiAllMaand. Wat deze tests bewaken is ongewijzigd: Rustig start met een
+   tegel en een uitklap, en je eigen keuze blijft staan. */
 async function openIns(page, mode) {
   const p = seed({ maanden: 8 });
   const set = JSON.parse(p.minder_set); set.mode = mode; p.minder_set = JSON.stringify(set);
   await open(page, p);
-  await page.evaluate(() => go('ins'));
-  await page.waitForSelector('#insKpiStrip');
+  await page.evaluate(() => go('maand'));
+  await page.waitForSelector('#maandKpiBlok');
 }
-const tegels = (page) => page.locator('#insKpiStrip .wvo-tile');
+const tegels = (page) => page.locator('#maandKpiBlok .wvo-tile');
 const grafiek = (page) => page.locator('#insSpendChart');
 /* v178: de maandgrafiek zet deze maand naast eerdere maanden, en dat is een structurele vraag.
    Hij staat sindsdien op Maand; de drietraps default uit v90 verhuist ongewijzigd mee. */
@@ -29,17 +32,17 @@ test.describe('a · kerncijfers: drie tegelijk in Rustig', () => {
     await openIns(page, 'rustig');
     await expect(tegels(page)).toHaveCount(1);
     const keys = await tegels(page).evaluateAll((els) => els.map((e) => e.dataset.kpi));
-    expect(keys).toEqual(['budget']);
-    const knop = page.locator('#kpiMeer');
+    expect(keys).toEqual(['inleg']);
+    const knop = page.locator('#maandKpiBlok .snz');
     await expect(knop).toHaveCount(1);
     expect(await knop.innerText()).toContain('toon beide kerncijfers');
 
     await knop.click();
-    await page.waitForFunction(() => document.querySelectorAll('#insKpiStrip .wvo-tile').length === 2);
-    expect(await page.evaluate(() => SET.kpiAll)).toBe(true);
-    expect(await page.locator('#kpiMeer').innerText()).toContain('minder');
+    await page.waitForFunction(() => document.querySelectorAll('#maandKpiBlok .wvo-tile').length === 2);
+    expect(await page.evaluate(() => SET.kpiAllMaand)).toBe(true);
+    expect(await page.locator('#maandKpiBlok .snz').innerText()).toContain('minder');
 
-    await page.evaluate(() => renderIns());
+    await page.evaluate(() => renderMaand());
     await expect(tegels(page)).toHaveCount(2);
   });
 
@@ -47,7 +50,7 @@ test.describe('a · kerncijfers: drie tegelijk in Rustig', () => {
     for (const mode of ['begeleid', 'expert']) {
       await openIns(page, mode);
       await expect(tegels(page), mode).toHaveCount(2);
-      expect(await page.locator('#kpiMeer').count(), mode).toBe(0);
+      expect(await page.locator('#maandKpiBlok .snz').count(), mode).toBe(0);
     }
   });
 });
@@ -120,11 +123,12 @@ test.describe('c · niets anders verandert', () => {
 
   test('de cijfers en de norm-regel blijven in Rustig gewoon staan', async ({ page }) => {
     await openIns(page, 'rustig');
-    const strip = await page.locator('#insKpiStrip').innerText();
-    expect(strip.toLowerCase()).toContain('budgetnaleving');
-    expect(strip).toContain('doel 100% of minder');
+    // v208: budgetnaleving en de variabele-lastendruk zijn van Inzichten af; de spaarquote en de
+    // vaste-lastendruk staan onveranderd op Maand. insKpis() rekent nog altijd alle vier.
+    const strip = await page.locator('#maandKpiBlok').innerText();
+    expect(strip.toLowerCase()).toContain('spaarquote');
     expect(strip).not.toContain('50/30/20');            // v161: de norm stuurt de kerncijfers niet meer
-    expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // v161: vier, over twee schermen
+    expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // v161: vier, waarvan twee getoond
     // v135: de samenstelling is herschikt (hero, dan wat opviel, dan Verdieping), maar de grafiek
     // houdt zijn drietraps default uit v90 en de strip staat er onveranderd in
     // v176: de samenstelling draagt nu ook de maandkiezer en de banner; de volgorde blijft

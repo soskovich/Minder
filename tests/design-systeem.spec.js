@@ -76,7 +76,7 @@ test.describe('b · tokens en kleurgebruik', () => {
 
   test('de KPI-sparklines gebruiken één rustige kleur binnen de band', async ({ page }) => {
     await boot(page, 'ins');
-    const strip = await page.evaluate((m) => insKpiStrip(m), CUR);
+    const strip = await page.evaluate((m) => maandKpiBlok(m), CUR);   // v208: de tegels staan alleen nog op Maand
     expect(strip).toContain('var(--bar)');
     expect(strip).not.toContain('var(--teal-d)');                       // geen oude donkerteal-staafjes
   });

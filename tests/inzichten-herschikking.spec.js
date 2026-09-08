@@ -170,11 +170,14 @@ test.describe('c · het omhulsel blijft bestaan', () => {
 });
 
 test.describe('d · de verdieping', () => {
-  test('de kaarten onder Verdieping, met de juiste standen', async ({ page }) => {
+  /* v208: Verdieping bevatte precies één element, het Kerncijfers-blok, en dat is van Inzichten af.
+     De sectiekop viel vanzelf weg: renderIns() had die guard al. Er blijft één sectie over, en die
+     zegt ook welke maand je leest. */
+  test('Verdieping bestaat niet meer; Deze maand blijft de enige sectie', async ({ page }) => {
     await boot(page);
     const b = await beeld(page);
-    expect(b.secties).toEqual(['Deze maand', 'Verdieping']);
-    expect(b.kpiOpen).toBe(true);                                        // kerncijfers standaard open
+    expect(b.secties).toEqual(['Deze maand']);
+    expect(b.tekst).not.toMatch(/kerncijfers/i);
     // v178: de meermaands-grafiek en de abonnementenkaart staan op Maand
     expect(b.tekst).not.toMatch(/uitgaven vs budget/i);
     expect(b.tekst).not.toMatch(/tik om te bekijken/);
@@ -183,27 +186,20 @@ test.describe('d · de verdieping', () => {
     expect(b.tekst).not.toMatch(/grootste:/)
   });
 
-  test('de kerncijfers zijn in te klappen en tonen dan een samenvatting', async ({ page }) => {
+  /* v208: hier stonden twee tests over de ingeklapte kop en zijn samenvatting. Met het
+     Kerncijfers-blok verviel de enige aanroeper van insVouw() en insKpiSamenvatting(), dus die twee
+     bestaan niet meer. Wat er voor in de plaats komt is de vaststelling dat ze weg zijn en dat er
+     op Inzichten niets meer te vouwen valt. */
+  test('de vouwlaag op Inzichten is vervallen', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => toggleCollap('openKpiCard'));
-    const b = await beeld(page);
-    expect(b.kpiOpen).toBe(false);
-    expect(b.tekst).toMatch(/kerncijfers/i);
-    const sam = await page.evaluate((m) => insKpiSamenvatting(m), CUR);
-    expect(sam).toMatch(/spaarquote|budgetnaleving/i);
-    expect(b.tekst).toContain(sam);
-  });
-
-  test('de samenvatting komt uit dezelfde bron als de strip', async ({ page }) => {
-    await boot(page);
-    const uit = await page.evaluate((m) => {
-      const K = insKpis(m);
-      const w = (k) => (K[k] && K[k].raw != null) ? K[k].val : null;   // onbekend telt niet mee
-      return { sam: insKpiSamenvatting(m), inleg: w('inleg'), budget: w('budget') };
-    }, CUR);
-    expect(uit.inleg || uit.budget).toBeTruthy();                       // minstens één bruikbaar cijfer
-    if (uit.inleg) expect(uit.sam).toContain(uit.inleg);
-    if (uit.budget) expect(uit.sam).toContain(uit.budget);
+    const r = await page.evaluate(() => ({
+      vouw: typeof insVouw, sam: typeof insKpiSamenvatting, strip: typeof insKpiStrip,
+      def: Object.keys(COLLAP_DEF),
+      src: renderIns.toString(),
+    }));
+    expect([r.vouw, r.sam, r.strip]).toEqual(['undefined', 'undefined', 'undefined']);
+    expect(r.def).not.toContain('openKpiCard');
+    expect(r.src).not.toContain('insVouw');
   });
 
   /* v187: de Gedrag-kaart is vervallen. Drie van zijn vier bronnen stonden woordelijk ook in
@@ -216,27 +212,30 @@ test.describe('d · de verdieping', () => {
     expect(b.tekst).not.toMatch(/gedrag/i);
   });
 
-  test('wat opviel blijft uitgeklapt en staat boven Verdieping', async ({ page }) => {
+  /* v208: Verdieping bestaat niet meer, dus 'boven Verdieping' heeft geen anker. Wat blijft is dat
+     de Valt-op-regel uitgeklapt onder de hero staat, als laatste blok van het scherm. */
+  test('wat opviel staat uitgeklapt onder de hero', async ({ page }) => {
     await boot(page);
     const uit = await page.evaluate(() => {
       const el = document.querySelector('#s-ins');
       const wvo = el.querySelector('#wvoLine');
-      const sec = [...el.querySelectorAll('.inssec')].find((x) => x.textContent === 'Verdieping');
-      if (!wvo || !sec) return { aanwezig: !!wvo, voor: null };
-      return { aanwezig: true, voor: !!(wvo.compareDocumentPosition(sec) & Node.DOCUMENT_POSITION_FOLLOWING) };
+      if (!wvo) return { aanwezig: false };
+      const kaarten = [...el.querySelectorAll('.card')];
+      return { aanwezig: true, laatste: kaarten.length === 0 || kaarten[kaarten.length - 1].contains(wvo) || wvo.contains(kaarten[kaarten.length - 1]) };
     });
-    if (uit.aanwezig) expect(uit.voor).toBe(true);
+    if (uit.aanwezig) expect(uit.laatste).toBe(true);
   });
 });
 
 test.describe('e · modus en layout', () => {
   // v161: Inzichten draagt nog twee kerncijfers; de andere twee staan op het maandscherm.
-  test('rustig toont er een, Begeleid beide', async ({ page }) => {
-    await boot(page, seedIns({ mode: 'rustig' }));
-    const n = await page.evaluate(() => document.querySelectorAll('#insKpiStrip [data-kpi]').length);
-    expect(n).toBe(1);
-    await boot(page);
-    expect(await page.evaluate(() => document.querySelectorAll('#insKpiStrip [data-kpi]').length)).toBe(2);
+  /* v208: de kerncijfers staan alleen nog op Maand, dus de drietraps uitklap uit v90 leeft daar.
+     Op Inzichten staat geen enkele tegel meer, in geen enkele modus. */
+  test('Inzichten draagt in geen enkele modus nog een kerncijfer', async ({ page }) => {
+    for (const mode of ['rustig', 'begeleid', 'expert']) {
+      await boot(page, seedIns({ mode }));
+      expect(await page.evaluate(() => document.querySelectorAll('#s-ins [data-kpi]').length), mode).toBe(0);
+    }
   });
 
   for (const w of [360, 390]) {

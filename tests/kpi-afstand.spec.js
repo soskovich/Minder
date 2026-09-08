@@ -11,7 +11,7 @@ const { seed, open, CUR, M1, INKOMEN, POTJES } = require('./budget-fixture');
 
 async function boot(page, maand) {
   await open(page, seed());
-  await page.evaluate((m) => { SET.kpiAll = 1; curMonth = m; save(); go('ins'); renderIns(); }, maand || M1);
+  await page.evaluate((m) => { SET.kpiAllMaand = 1; curMonth = m; save(); go('maand'); renderMaand(); }, maand || M1);   // v208: de tegels staan alleen nog op Maand
   await page.waitForTimeout(80);
 }
 const kpi = (page, key, m) => page.evaluate(([k, mm]) => {
@@ -105,20 +105,19 @@ test.describe('c · de woorden volgen de betekenis, niet het teken', () => {
 });
 
 test.describe('d · een lopende maand velt geen oordeel', () => {
-  test('de tegel laat de afstand weg zolang de maand loopt', async ({ page }) => {
-    await boot(page, CUR);
-    expect((await kpi(page, 'budget', CUR)).partial).toBe(true);
-    const strip = await page.locator('#insKpiStrip').innerText();
-    expect(strip).toContain('loopt nog');
-    expect(strip).not.toMatch(/onder je budget|over je budget/);        // halve maand = geen prestatie
-    expect(await page.locator('#insKpiStrip .kpi-afst').count()).toBe(0);
-  });
-
-  test('een afgeronde maand toont de afstand wél op de tegel', async ({ page }) => {
+  /* v208: hier stonden twee tests over de afstand OP DE TEGEL: weg zolang de maand loopt, zichtbaar
+     bij een afgeronde maand. Budgetnaleving is sinds v161 het enige cijfer met een band, en zijn
+     tegel is met het Kerncijfers-blok van Inzichten af. Daarmee heeft geen enkele tegel op een
+     scherm nog een afstand, en die twee toetsten een oppervlak dat niet meer bestaat.
+     De laag zelf is ongemoeid en wordt hieronder onverkort getoetst: kpiAfstand(), kpiAfstandTxt()
+     en de balk leven in de detailsheet, die de tussenstand bij een lopende maand nog steeds wél
+     toont. Wat er wegvalt is de weergave op de tegel, niet de berekening. */
+  test('de tegel-afstand heeft geen oppervlak meer, de sheet wel', async ({ page }) => {
     await boot(page, M1);
-    expect((await kpi(page, 'budget', M1)).partial).toBe(false);
-    expect(await page.locator('#insKpiStrip .kpi-afst').count()).toBeGreaterThan(0);
-    expect(await page.locator('#insKpiStrip').innerText()).toMatch(/je budget/);
+    expect(await page.locator('#s-maand .kpi-afst').count()).toBe(0);
+    expect(await page.locator('#s-ins .kpi-afst').count()).toBe(0);
+    // de afstand zelf is er onveranderd, alleen niet op een tegel
+    expect((await kpi(page, 'budget', M1)).afst).not.toBe(null);
   });
 
   test('de detailsheet toont het wél, met de tussenstand erbij', async ({ page }) => {
@@ -198,7 +197,7 @@ test.describe('g · smalle mobiel', () => {
     test(`de strip en de sheet passen op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 880 });
       await boot(page, M1);
-      const strip = await page.evaluate(() => { const e = document.getElementById('insKpiStrip'); return e.scrollWidth - e.clientWidth; });
+      const strip = await page.evaluate(() => { const e = document.getElementById('maandKpiBlok'); return e.scrollWidth - e.clientWidth; });
       expect(strip).toBeLessThanOrEqual(0);
       await page.evaluate(() => openKpiDetail('budget'));
       await page.waitForTimeout(60);

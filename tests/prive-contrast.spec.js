@@ -63,7 +63,7 @@ test('c · standaard en Aurora zijn niet aangeraakt', async ({ page }) => {
 test('d · Privé blijft er licht uitzien en de app rendert normaal', async ({ page }) => {
   await boot(page);
   await page.evaluate(() => { setTheme('prive'); go('ins'); });
-  await page.waitForSelector('#insKpiStrip');
+  await page.waitForSelector('#s-ins .card');   // v208: het Kerncijfers-blok staat niet meer op Inzichten
   const r = await page.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
     const html = document.getElementById('s-ins').innerText;

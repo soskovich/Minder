@@ -29,7 +29,7 @@ function seedSpaar({ stort = { [M2]: 250, [M1]: 300 }, gemarkeerd = true, spaarR
 }
 async function boot(page, opts) {
   await open(page, seedSpaar(opts));
-  await page.evaluate((m) => { SET.kpiAll = 1; curMonth = m; save(); go('ins'); renderIns(); }, M1);
+  await page.evaluate((m) => { SET.kpiAllMaand = 1; curMonth = m; save(); go('maand'); renderMaand(); }, M1);   // v208: de tegels staan alleen nog op Maand
   await page.waitForTimeout(60);
 }
 const kpi = (page, key, m) => page.evaluate(([k, mm]) => { const x = insKpis(mm)[k]; return { raw: x.raw, val: x.val, band: x.band, state: x.state, afst: x.afst }; }, [key, m || M1]);
@@ -43,7 +43,7 @@ test.describe('a · het gemelde geval', () => {
       const d = document.createElement('div'); d.innerHTML = maandKpiBlok(m); return d.textContent;
     }, M1);
     expect(blok).toMatch(/spaarquote/i);
-    expect(await page.locator('#insKpiStrip').innerText()).not.toMatch(/spaarquote/i);
+    expect(await page.locator('#s-ins').innerText()).not.toMatch(/spaarquote/i);   // en op Inzichten staat hij niet
   });
 
   test('beide kanten van een eigen overboeking tellen één keer', async ({ page }) => {
@@ -165,7 +165,7 @@ test.describe('e · smalle mobiel', () => {
     test(`de tegels en de spaarquote-sheet passen op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 900 });
       await boot(page);
-      const strip = await page.evaluate(() => { const e = document.getElementById('insKpiStrip'); return e.scrollWidth - e.clientWidth; });
+      const strip = await page.evaluate(() => { const e = document.getElementById('maandKpiBlok'); return e.scrollWidth - e.clientWidth; });
       expect(strip).toBeLessThanOrEqual(0);
       await page.evaluate(() => openKpiDetail('inleg'));
       await page.waitForTimeout(60);

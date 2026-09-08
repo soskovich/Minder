@@ -51,7 +51,7 @@ async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof insVouw === 'function');
+  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof vooruitZone === 'function');
 }
 
 /* De inventaris leest elke CSS-regel die --teal of --accent noemt plus elke inline stijl, en niet
@@ -152,10 +152,11 @@ test.describe('a · teal betekent op Home en Inzichten nog één ding', () => {
 });
 
 test.describe('b · één idioom voor vouwen', () => {
-  /* Vier plekken, drie idiomen: insVouw met een voetregel, twee eigen koppen, en vooruitZone.
-     Alle vier droegen dicht een chevron, en dat teken betekent sinds v185 "gaat ergens heen".
-     Nu overal: driehoek omlaag dicht, driehoek omhoog open. */
-  const BRONNEN = ['insVouw', 'renderMerchants', 'spendVsBudgetChart', 'vooruitZone'];
+  /* v203: vier plekken, drie idiomen, alle vier met een chevron die sinds v185 "gaat ergens heen"
+     betekent. Nu overal: driehoek omlaag dicht, driehoek omhoog open.
+     v208: insVouw() is vervallen met het Kerncijfers-blok op Inzichten - dat was zijn enige
+     aanroeper. Er blijven drie plekken over, met hetzelfde idioom. */
+  const BRONNEN = ['renderMerchants', 'spendVsBudgetChart', 'vooruitZone'];
 
   test('geen enkele vouwknop draagt nog een chevron', async ({ page }) => {
     await boot(page);
@@ -186,26 +187,33 @@ test.describe('b · één idioom voor vouwen', () => {
     }
   });
 
-  test('insVouw zet zijn knop boven de inhoud, net als de andere drie', async ({ page }) => {
+  /* v208: hier stonden twee tests op insVouw(). Die functie is vervallen met zijn enige aanroeper,
+     dus de knop-boven-de-inhoud en het wisselen worden nu getoetst op de vouwplek die er wel is:
+     de maandgrafiek op Maand, met dezelfde drietraps vlag (v90) en hetzelfde idioom. */
+  test('de vouwknop staat boven de inhoud, niet als voetregel eronder', async ({ page }) => {
     await boot(page);
-    const dicht = await page.evaluate(() => { SET.openKpiCard = false; save(); return insVouw('openKpiCard', 'Kerncijfers', '', 'samenvatting', '<p id="X">inhoud</p>'); });
-    const open = await page.evaluate(() => { SET.openKpiCard = true; save(); return insVouw('openKpiCard', 'Kerncijfers', '', 'samenvatting', '<p id="X">inhoud</p>'); });
-    expect(dicht).toContain('▼');
+    const open = await page.evaluate(() => { SET.openSpendChart = true; save(); return spendVsBudgetChart(); });
     expect(open).toContain('▲');
-    // de knop staat vóór de inhoud, niet als voetregel eronder
-    expect(open.indexOf('▲')).toBeLessThan(open.indexOf('id="X"'));
+    // 'cbar' is de eerste staaf van de grafiek; het icoon in de kop is zelf ook een svg
+    expect(open.indexOf('▲')).toBeLessThan(open.indexOf('cbar'));
     expect(open).not.toMatch(/inklappen/);
   });
 
   test('open en dicht wisselen elkaar echt af op het scherm', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { SET.openKpiCard = true; save(); render(); go('ins'); });
-    const a = await page.evaluate(() => $('#s-ins').innerText);
+    await page.evaluate(() => { SET.openSpendChart = true; save(); render(); go('maand'); });
+    const a = await page.evaluate(() => $('#s-maand').innerText);
     expect(a).toContain('▲');
-    await page.evaluate(() => toggleCollap('openKpiCard'));
-    const b = await page.evaluate(() => $('#s-ins').innerText);
+    await page.evaluate(() => toggleCollap('openSpendChart'));
+    const b = await page.evaluate(() => $('#s-maand').innerText);
     expect(b).toContain('▼');
-    expect(b).not.toContain('▲');
+  });
+
+  test('insVouw en zijn vlag bestaan niet meer', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => ({ vouw: typeof insVouw, def: Object.keys(COLLAP_DEF) }));
+    expect(r.vouw).toBe('undefined');
+    expect(r.def).not.toContain('openKpiCard');
   });
 });
 

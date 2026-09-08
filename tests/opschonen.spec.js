@@ -153,9 +153,12 @@ test.describe('d · dubbele widgets zijn weg uit Inzichten', () => {
     expect(ins).not.toMatch(/bekijk meer/i);
     // v161: de norm stuurt de kerncijfers niet meer, dus de norm-regel staat hier ook niet meer.
     expect(ins).not.toMatch(/gemeten tegen: 50\/30\/20/i);
-    // wat blijft
-    expect(ins).toMatch(/kerncijfers/i);
-    expect(ins).toMatch(/verdieping/i);
+    /* v208: het Kerncijfers-blok is van Inzichten af (budgetnaleving stond al in de hero, de
+       variabele-lastendruk stuurde niets), en daarmee verviel de sectie Verdieping die alleen dat
+       blok bevatte. Wat blijft is de hero met de budgetstand. */
+    expect(ins).not.toMatch(/kerncijfers/i);
+    expect(ins).not.toMatch(/verdieping/i);
+    expect(ins).toMatch(/maandbudget/i);
     // v178: de meermaands-grafiek staat op Maand
     expect(ins).not.toMatch(/uitgaven vs budget/i);
   });
@@ -179,8 +182,9 @@ test.describe('e · KPI-detail is per KPI verschillend', () => {
   // eigen uitleg; de restsaldo-quote is vervallen.
   test('elke tegel opent zijn eigen uitleg en eigen reeks', async ({ page }) => {
     const gezien = {};
-    for (const [scr, blok, key] of [['ins', '#insKpiStrip', 'budget'], ['ins', '#insKpiStrip', 'vari'],
-      ['maand', '#maandKpiBlok', 'inleg'], ['maand', '#maandKpiBlok', 'vast']]) {
+    /* v208: budgetnaleving en de variabele-lastendruk hebben geen tegel meer. De twee die
+       overblijven openen elk nog hun eigen uitleg en eigen reeks. */
+    for (const [scr, blok, key] of [['maand', '#maandKpiBlok', 'inleg'], ['maand', '#maandKpiBlok', 'vast']]) {
       await boot(page, scr);
       await page.locator(`${blok} .wvo-tile[data-kpi="${key}"]`).click();
       await page.waitForSelector('#kpiDetailHead');
@@ -188,15 +192,11 @@ test.describe('e · KPI-detail is per KPI verschillend', () => {
       await page.evaluate(() => closeSheet());
     }
     expect(gezien.inleg).toContain('Spaarquote');
-    expect(gezien.budget).toContain('Budgetnaleving');
-    expect(gezien.budget).toContain('uitgaven ÷ budget');
-    expect(gezien.vari).toContain('Variabele-lasten-druk');
-    expect(gezien.vari).toContain('variabele uitgaven ÷ inkomen');
     expect(gezien.vast).toContain('Vaste-lasten-druk');
     expect(gezien.vast).toContain('vaste lasten ÷ inkomen');
 
-    // vier verschillende teksten, geen gedeelde generieke output
-    expect(new Set(Object.values(gezien)).size).toBe(4);
+    // twee verschillende teksten, geen gedeelde generieke output
+    expect(new Set(Object.values(gezien)).size).toBe(2);
   });
 
   test('de getoonde reeks hoort bij díe KPI', async ({ page }) => {

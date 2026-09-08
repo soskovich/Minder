@@ -93,7 +93,8 @@ test.describe('a · de rij scheidt waarneming van plan', () => {
     expect(b.tegels[0].sub).toMatch(/incasso|niets herkend/i);
     expect(b.tegels[1].sub).toBe('inkomen');
     expect(b.tegels[2].sub).toMatch(/van €|gehaald/);
-    expect(b.tegels[3].sub).toBe('variabel');
+    // v208: de potjes-tegel is een voortgang geworden, met dezelfde noemer-vorm als de tegel ernaast
+    expect(b.tegels[3].sub).toMatch(/van €.*gebruikt|variabel/);
     // geen groepskoppen: de rij bestaat uit tegels en verder niets
     const koppen = await page.evaluate(() =>
       document.querySelectorAll('#s-ins .wvo-tiles > :not(.wvo-tile)').length);
