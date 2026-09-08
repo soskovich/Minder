@@ -3085,6 +3085,90 @@ function maandDoel(){
     if(!p) return null; const T=doelTempo(p,p.alloc); return T?{p,T}:{p,T:null};
   }catch(_){ return null; }
 }
+/* ===== Bewust accepteren (v207) =====
+ * Bij elke maandregel kun je drie dingen: de inleg aanpassen, de norm aanpassen, of bewust niets
+ * doen. Die derde is anders dan de andere twee en wordt daarom niet gelijkgeschakeld.
+ *
+ * Bij inleg is de toets: ging de inleg werkelijk omhoog. Bij de norm is de wijziging meteen
+ * zichtbaar en valt er niets te monitoren. Bij accepteren is er WEL iets te toetsen, maar in een
+ * andere maand: is het voorspelde gat er gekomen. Dat past niet in de afspraaklus - vorigeAfspraak()
+ * is per constructie 'de vorige kalendermaand', en een gat kan maanden verderop vallen. Vandaar een
+ * eigen opslag, die bovendien elke render van Maand gelezen moet worden en niet alleen bij de
+ * terugblik.
+ *
+ * SET.maandAccept[key] = {ts, ym, tot, maat}. `tot` is de maand waarin het gat valt (leeg als die
+ * niet bestaat), `maat` de grootheid waarop je accepteerde.
+ *
+ * KRITIEK - acceptatie is geen permanente stilte. Drie vervalroutes, en de eerste is de enige die
+ * iets terugbrengt om te toetsen:
+ *   maand      de maand waarin het gat valt is bereikt -> de regel komt terug MET de terugblik
+ *   veranderd  de situatie is materieel anders dan wat je accepteerde -> je accepteerde iets anders
+ *   oud        er is geen gat-maand (buffer), dus alleen een bovengrens in maanden
+ * Die derde is een echte asymmetrie: de bufferregel heeft geen maand waarin iets valt, en er een
+ * verzinnen zou een datum claimen die er niet is. */
+const ACCEPT_MAX_MND = 6;      // bovengrens waar geen gat-maand bestaat
+const ACCEPT_VERSCHIL = 0.25;  // relatieve afwijking waarboven de situatie materieel anders is
+/* De grootheid waarop de acceptatie sloeg. Bewust per regel een andere eenheid: bij dekking en doel
+   is dat het tekort per maand, bij buffer het aantal maanden dat je buffer dekt. Ze worden nooit
+   met elkaar vergeleken, alleen met zichzelf op een later moment. */
+function acceptMaat(r){
+  if(!r) return null;
+  if(r.key==='buffer'){ let b=null; try{ b=bufferMaanden(); }catch(_){} return b==null?null:Math.round(b*100)/100; }
+  const t=Math.round(+r.tekortPerMaand||0); return t>0?t:null;
+}
+/* De maand waarin het gat valt. Bij dekking draagt de rij gedektTot - de laatste maand die nog
+   past - dus het gat valt de maand daarna. Bij het doel is dat de streefdatum. Buffer heeft er
+   geen, en die krijgt er ook geen. */
+function acceptTot(r){
+  if(!r) return '';
+  if(r.key==='dekking') return r.maand?nextYM(r.maand):'';
+  if(r.key==='doel'){ try{ const d=maandDoel(); return (d&&d.p&&d.p.streefdatum)||''; }catch(_){ return ''; } }
+  return '';
+}
+function maandAcceptZet(key){
+  let r=null; try{ r=maandRegels().find(x=>x.key===key); }catch(_){}
+  if(!r) return null;
+  const A=SET.maandAccept=SET.maandAccept||{};
+  A[key]={ts:Date.now(), ym:thisYM(), tot:acceptTot(r), maat:acceptMaat(r)};
+  save(); return A[key];
+}
+function maandAcceptWis(key){ if(SET.maandAccept&&SET.maandAccept[key]!=null){ delete SET.maandAccept[key]; save(); } }
+/* Geldig, of de reden waarom hij vervalt. Geeft null als er niets is geaccepteerd. */
+function maandAcceptStatus(key, r){
+  const a=(SET.maandAccept||{})[key]; if(!a) return null;
+  const nu=thisYM();
+  if(a.tot && String(a.tot)<=nu) return {a, geldig:false, reden:'maand'};
+  const verstreken=-(doelMaandenTot(a.ym)||0);
+  if(verstreken>=ACCEPT_MAX_MND) return {a, geldig:false, reden:'oud'};
+  const m=acceptMaat(r);
+  if(a.maat!=null && m!=null && Math.abs(m-a.maat)/Math.max(Math.abs(a.maat),1)>ACCEPT_VERSCHIL)
+    return {a, geldig:false, reden:'veranderd'};
+  return {a, geldig:true, reden:null};
+}
+/* De rijen zoals het scherm ze toont: een geldig geaccepteerde regel telt niet meer als tekort.
+   Bewust HIER en niet in maandRegels(): die berekent, dit weegt wat jij hebt besloten. Wat er
+   gemeten wordt verandert niet - waarde, eenheid en gevolg blijven exact staan.
+   KRITIEK: beleggenKlaar() mag deze lijst NOOIT krijgen. Die stelt vast of je geld hebt dat je op
+   korte termijn niet nodig hebt, en een tekort dat jij accepteert is nog steeds een tekort (v154:
+   een verkeerd groen licht kost geld dat binnen een jaar nodig is). renderMaand() geeft die dus de
+   onbewerkte R, en een test bewaakt dat. */
+function maandMetAccept(R){
+  return (R||[]).map(r=>{
+    const st=maandAcceptStatus(r.key, r);
+    if(!st || !st.geldig) return r;
+    return Object.assign({}, r, {status:'let op', geaccepteerd:st.a});
+  });
+}
+// wat er te toetsen valt zodra de gat-maand bereikt is: alleen de vervallen-door-maand-acceptaties
+function maandAcceptVerlopen(){
+  const A=SET.maandAccept||{}; const uit=[];
+  for(const key in A){
+    let r=null; try{ r=maandRegels().find(x=>x.key===key)||null; }catch(_){}
+    const st=maandAcceptStatus(key, r);
+    if(st && !st.geldig && st.reden==='maand') uit.push({key, a:st.a, r});
+  }
+  return uit;
+}
 /* Structurele signalen op het maandscherm (v162). Een patroon over meerdere maanden hoort bij het
    maandmoment, niet in een lijst die je dagelijks wegtikt. Ze lopen mee als gewone regel: dezelfde
    vorm, dezelfde statusdot, dezelfde sortering, zodat er één lijst ontstaat en geen tweede blok.
@@ -3559,7 +3643,8 @@ function maandRij(r,compact){
   return `<div class="row" style="gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${r.act}">
     ${maandDot(r.status)}
     <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.naam)}</div>
-      ${r.gevolg?`<div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg)}</div>`:''}</div>
+      ${r.gevolg?`<div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg)}</div>`:''}
+      ${r.geaccepteerd?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:4px">Je hebt dit bewust geaccepteerd${r.geaccepteerd.tot?`, tot ${esc(resMaandLabel(r.geaccepteerd.tot))}`:''}.</div>`:''}</div>
     <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:42%"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>`;
 }
@@ -3634,7 +3719,11 @@ function renderMaand(){
     $('#s-maand').innerHTML=`<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
     return;
   }
-  const RO=R.concat(STR);
+  /* v207: een regel die je bewust hebt geaccepteerd telt niet meer als tekort, dus het oordeel,
+     de twee kaarten, het verband en de coach-ingang lezen de gewogen lijst. maandBeleggenRegel(R)
+     hieronder houdt bewust de ONBEWERKTE R: een tekort dat jij accepteert is nog steeds een tekort,
+     en beleggenKlaar() gaat over geld dat je binnen een jaar nodig hebt (v154). */
+  const RO=maandMetAccept(R).concat(STR);
   const O=maandOordeel(RO);
   /* v134: beslissing en aandacht zijn twee dingen, en de beslisboom gebruikt die woorden al zo -
      tekort vraagt een beslissing, let op vraagt aandacht. Stonden ze samen onder één kop, dan telde
@@ -3651,7 +3740,7 @@ function renderMaand(){
   const goed=R.filter(r=>r.status==='ok');
   const verband=maandVerband(RO);
   $('#s-maand').innerHTML=`
-    ${maandAfspraakLus()}${freshStartReflection()}
+    ${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
     <div class="card">
       <div class="row" style="gap:8px;margin:0 0 6px"><span class="hlabel" style="margin:0;flex:1">Je maand</span>${maandKiezerChip(m)}</div>
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
@@ -3674,6 +3763,26 @@ function renderMaand(){
     ${maandGelezen()}
     <div style="height:12px"></div>`;
 }
+/* De terugblik op een acceptatie, en de enige plek waar er een komt. Hij verschijnt zodra de maand
+   waarin het gat zou vallen is bereikt - dat kan maanden na de keuze zijn, en daarom past hij niet
+   in de afspraaklus, die per constructie naar de vorige kalendermaand kijkt.
+   Wat er getoetst wordt is wat de app kan zien: dat de maand er is, en wat de stand nu is. Of het
+   gat werkelijk uit je buffer is opgevangen valt niet uit je boekingen af te leiden, dus dat
+   beweert deze regel ook niet. Geen oordeel, geen aanmoediging: de regel staat daarna weer gewoon
+   als beslissing, en dat is het gevolg. */
+function maandAcceptLus(){
+  let lijst=[]; try{ lijst=maandAcceptVerlopen(); }catch(_){ return ''; }
+  if(!lijst.length) return '';
+  const x=lijst[0]; const nm=(x.r&&x.r.naam)||x.key;
+  const kop=`<div class="hlabel" style="margin:0 0 6px">Wat je hebt geaccepteerd</div>`;
+  const spiegel=`<div style="line-height:1.45">Je accepteerde <span class="hl">${esc(nm.toLowerCase())}</span> tot ${esc(resMaandLabel(x.a.tot))}. Die maand is er.</div>`;
+  const stand=x.r
+    ? `<div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">De stand nu: ${esc(x.r.waarde)} ${esc(x.r.eenheid||'')}.</div>`
+    : `<div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">Die regel staat er nu niet meer.</div>`;
+  const sluit=`<div class="small" style="margin-top:10px;color:var(--mut2);cursor:pointer" onclick="maandAcceptSluit('${esc(x.key)}')">Gezien</div>`;
+  return `<div class="card">${kop}${spiegel}${stand}${sluit}</div>`;
+}
+function maandAcceptSluit(key){ maandAcceptWis(key); renderMaand(); }
 /* v141: de ingang naar het maandgesprek, onder de regels. Geen neutrale knop: de zin zegt
    waar het over gaat, afgeleid van de zwaarste regel, in de woorden die het scherm zelf gebruikt
    (tekort vraagt een beslissing, let op vraagt aandacht). Staat er al een afspraak voor deze maand,
@@ -3740,6 +3849,24 @@ function afspraakZelf(af){
 function afspraakUitkomst(af){
   const leeg={status:'niet te toetsen', tekst:(af&&af.text)||'', toen:null, nu:null};
   if(!af||!af.ts) return leeg;
+  /* v207: een afspraak om de INLEG te verhogen is meetbaar zonder categorie, want er is een
+     grootheid die precies dat meet: resThisMonth() voor je reserveringenpot, savedThisMonth() voor
+     je spaarrekening. Beide bestonden al. De afspraak draagt `basis`, het bedrag zoals het in de
+     afspraakmaand stond, dus er wordt niets teruggerekend wat toen niet gemeten is.
+     Richting is hier omhoog in plaats van omlaag, met dezelfde AFSPRAAK_MARGE als de categorie-tak.
+     Bij het aankoopdoel bestaat deze meting NIET: de inleg daar is een instelling en een doel heeft
+     geen rekening en geen transacties (v99). Die keuze draagt dus geen `meet` en valt hieronder
+     terug op 'niet te toetsen', net als een normwijziging. */
+  if(af.vorm==='inleg' && af.meet && af.basis!=null){
+    const afM=coYm(af.ts); const nu=thisYM();
+    if(nu<=afM) return leeg;                                // de maand na de afspraak is nog niet begonnen
+    let b=null; try{ b=(af.meet==='res')?resThisMonth(nu):savedThisMonth(nu); }catch(_){ return leeg; }
+    if(b==null) return leeg;
+    const v=Math.round(+af.basis||0); b=Math.round(b);
+    return {status: (b > v*(1+AFSPRAAK_MARGE)) ? 'gelukt' : 'niet gelukt', tekst:af.text||'',
+      wat: af.meet==='res'?'Je inleg in je reserveringen':'Wat je opzij zette',
+      toen:{maand:afM, bedrag:v}, nu:{maand:nu, bedrag:b}};
+  }
   if(!af.cat || !CATS[af.cat]) return leeg;                 // geen categorie: niets objectiefs te meten
   const nuM=coYm(af.ts);
   const d=new Date(af.ts); const p=new Date(d.getFullYear(), d.getMonth()-1, 1);
@@ -3774,6 +3901,10 @@ function afspraakZelfZet(uitkomst){
    te kiezen valt). Geen oordeel over de persoon, geen verwijt, geen aanmoediging, geen streak. */
 function maandAfspraakLus(){
   const af=vorigeAfspraak(); if(!af) return '';
+  /* v207: een acceptatie heeft zijn eigen terugblik (maandAcceptLus), en die komt pas in de maand
+     waarin het gat valt. Hem hier ook tonen zou dezelfde keuze twee keer terugleggen, met twee
+     verschillende vragen. */
+  if(af.vorm==='accepteer') return '';
   if(afspraakGezien(af)) return '';
   try{ if(coachThisMonthAfspraak()) return ''; }catch(_){}
   const U=afspraakUitkomst(af);
@@ -3781,7 +3912,8 @@ function maandAfspraakLus(){
   const spiegel=`<div style="line-height:1.45">Vorige maand sprak je af: <span class="hl">${esc(U.tekst)}</span>.</div>`;
   const sluit=`<div class="small" style="margin-top:10px;color:var(--mut2);cursor:pointer" onclick="afspraakSluit()">Gezien</div>`;
   if(U.status!=='niet te toetsen'){
-    const nm=CATS[af.cat]?CATS[af.cat].name:'die categorie';
+    // v207: U.wat draagt de naam bij een inleg-afspraak; bij een categorie-afspraak is dat de categorie
+    const nm=U.wat || (CATS[af.cat]?CATS[af.cat].name:'die categorie');
     return `<div class="card">${kop}${spiegel}
       <div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${esc(nm)} ging van ${euro0(U.toen.bedrag)} naar ${euro0(U.nu.bedrag)}.</div>${sluit}</div>`;
   }
@@ -6430,15 +6562,86 @@ function coMaandAfspraakTekst(R, r){
 }
 function coMaandCat(r){ const k=r?String(r.key||'').replace(/^cut_/,''):''; return CATS[k]?k:null; }
 /* Stap drie: de enige plek waar de afspraak ontstaat. Zonder deze tik is er geen afspraak. */
-async function coMaandBevestig(R, r){
+/* v207: het derde argument is een optie uit maandRegelOpties(). De volgorde in de act telt:
+   coCommit() doet coEnd(), dus de acceptatie en de sheet komen daarna. Een sheet openen VOOR de
+   afspraak zou het gesprek afbreken (closeSheet -> coAfbreken) en er zou niets vastgelegd zijn. */
+async function coMaandBevestig(R, r, opt){
   const _g=_coGen;
-  const tekst=coMaandAfspraakTekst(R,r);
+  const tekst=opt?opt.tekst:coMaandAfspraakTekst(R,r);
+  const extra=opt?Object.assign({regel:R.key}, opt.extra||{}):{regel:R.key, cat:coMaandCat(r)};
   await coSay(`Zullen we dit vastleggen als je afspraak voor deze maand?`); if(_g!==_coGen)return;
   await coSay(`<span class="hl">${esc(tekst)}</span>`,{html:true,accent:true}); if(_g!==_coGen)return;
   coChoices([
-    {l:'Zo spreken we af', act:async()=>{ await coCommit(tekst,{regel:R.key, cat:coMaandCat(r)}); }},
+    {l:'Zo spreken we af', act:async()=>{
+      await coCommit(tekst, extra);
+      if(opt && opt.accept){ try{ maandAcceptZet(opt.accept); }catch(_){} }
+      if(opt && opt.na) opt.na();
+      try{ if(typeof renderMaand==='function' && !opt?.na) renderMaand(); }catch(_){}
+    }},
     {l:'Nu even niet', act:()=>coEnd()}
   ]);
+}
+/* ===== De drie vormen per maandregel (v207) =====
+ * De kaart 'Vraagt een beslissing' toonde een stand met een gevolgzin, zonder keuze. De keuzes
+ * horen in het gesprek, niet op de kaart, en per regel zijn het er telkens drie: de inleg
+ * aanpassen, de norm aanpassen, of bewust niets doen.
+ *
+ * Elke optie leidt naar een BESTAANDE ingang; er is hier geen editor bijgebouwd. Twee dingen om te
+ * weten:
+ *  - bij dekking bestaat 'inleg verhogen' niet als instelling. Wat je naar je reserveringenpot
+ *    overmaakt is gedrag, geen veld: benodigdPerMaand volgt uit SET.reserveringen (v128). Die optie
+ *    opent dus geen sheet en is puur de afspraak.
+ *  - bij het aankoopdoel leiden meer inleggen, de streefdatum en het doelbedrag alle drie naar
+ *    dezelfde sheet (openGoal). Drie labels, drie velden, één bestemming. De zin in het gesprek
+ *    maakt het onderscheid, niet de sheet.
+ *
+ * Een optie die niet van toepassing is verschijnt niet, en geen enkele is voorgesorteerd of
+ * aanbevolen: er staat geen 'aanbevolen', de volgorde is inleg, norm, accepteren, en er is geen
+ * default. */
+function maandRegelOpties(R, m){
+  if(!R || R.structureel) return [];
+  const uit=[]; const tekort=Math.round(+R.tekortPerMaand||0);
+  const na=fn=>()=>{ try{ fn(); }catch(_){} };
+  if(R.key==='dekking'){
+    if(tekort>0) uit.push({vorm:'inleg', l:`${euro0(tekort)} per maand extra opzij zetten`,
+      tekst:`Ik zet ${euro0(tekort)} per maand extra opzij voor mijn reserveringen`,
+      extra:{vorm:'inleg', meet:'res', basis:(function(){ try{ return Math.round(resThisMonth(m)); }catch(_){ return 0; } })()}});
+    let n=0; try{ n=resLijst().length; }catch(_){}
+    if(n) uit.push({vorm:'norm', l:'Een verplichting bijstellen of schrappen',
+      tekst:'Ik stel mijn reserveringen bij', extra:{vorm:'norm'}, na:na(()=>openReserveringen())});
+  } else if(R.key==='buffer'){
+    uit.push({vorm:'inleg', l:'Mijn maandbedrag verhogen',
+      tekst:'Ik verhoog het bedrag dat ik per maand opzij zet',
+      extra:{vorm:'inleg', meet:'spaar', basis:(function(){ try{ return Math.round(savedThisMonth(m)); }catch(_){ return 0; } })()},
+      na:na(()=>openBudgetEditor())});
+    uit.push({vorm:'norm', l:`Mijn richtbedrag verlagen (nu ${nfMaanden()} maanden)`,
+      tekst:'Ik verlaag mijn richtbedrag voor mijn buffer', extra:{vorm:'norm'}, na:na(()=>openNoodfondsPanel())});
+  } else if(R.key==='doel'){
+    let d=null; try{ d=maandDoel(); }catch(_){}
+    const id=d&&d.p?d.p.id:''; const nm=(d&&d.p&&d.p.naam)||'je doel';
+    if(id){
+      /* Dit is naar de letter 'de inleg aanpassen', maar het is een instelling en geen gedraging,
+         dus er valt niets te meten (v99). Hij draagt daarom geen meet-veld. */
+      if(tekort>0) uit.push({vorm:'norm', l:`${euro0(tekort)} per maand meer inleggen`,
+        tekst:`Ik leg ${euro0(tekort)} per maand meer in voor ${nm}`, extra:{vorm:'norm'}, na:na(()=>openGoal(id))});
+      uit.push({vorm:'norm', l:'Mijn streefdatum verschuiven',
+        tekst:`Ik verschuif de streefdatum van ${nm}`, extra:{vorm:'norm'}, na:na(()=>openGoal(id))});
+      uit.push({vorm:'norm', l:'Mijn doelbedrag bijstellen',
+        tekst:`Ik stel het doelbedrag van ${nm} bij`, extra:{vorm:'norm'}, na:na(()=>openGoal(id))});
+    }
+  }
+  // bewust niets doen: alleen waar er ook werkelijk iets te accepteren valt
+  if((R.status==='tekort'||R.status==='let op') && !R.geaccepteerd){
+    const tot=acceptTot(R);
+    const lbl={dekking:'Accepteren dat dit gat uit mijn buffer komt',
+               buffer:'Accepteren dat mijn buffer hier staat',
+               doel:'Accepteren dat ik deze datum niet haal'}[R.key];
+    if(lbl) uit.push({vorm:'accepteer', l:lbl,
+      tekst: tot ? `Ik accepteer dit tot ${resMaandLabel(tot)}, voor ${(R.naam||'').toLowerCase()}`
+                 : `Ik accepteer dit voorlopig, voor ${(R.naam||'').toLowerCase()}`,
+      extra:{vorm:'accepteer'}, accept:R.key});
+  }
+  return uit;
 }
 const CO_MAAND_REGELS=['dekking','buffer','doel'];   // v186: patroon, v187: aansluiting vervallen
 async function coTopicMaand(m, key){
@@ -6456,11 +6659,12 @@ async function coTopicMaand(m, key){
   const R=coMaandRegel(key); if(!R){ coEnd(); return; }
   await coSay(`<b>${esc(R.naam)}</b> · ${esc(R.gevolg)}`,{html:true,accent:true}); if(_g!==_coGen)return;
   const opts=[];
-  if(key==='buffer' || key==='aansluiting'){
-    // de actie die op het maandscherm al achter deze regel hangt
-    const lbl = key==='buffer' ? 'Mijn buffer verfijnen' : 'Naar mijn plan';
-    const doe = key==='buffer' ? ()=>openNoodfondsPanel() : ()=>go('vooruit');
-    opts.push({l:lbl, act:()=>{ coEnd(); try{ doe(); }catch(_){} }});
+  /* v207: hier stond voor buffer één enkele knop naar het noodfondspaneel. Elke vaste regel krijgt
+     nu zijn drie vormen (maandRegelOpties), zodat de kaart 'Vraagt een beslissing' een beslissing
+     achter zich heeft in plaats van alleen een stand. */
+  const drie=maandRegelOpties(R, m);
+  if(drie.length){
+    for(const o of drie) opts.push({l:o.l, act:()=>coMaandBevestig(R, null, o)});
   } else if(R.structureel){
     /* Zelfde principe: een structureel signaal draagt zijn eigen actie al, en dat is precies de tik
        die de rij op het maandscherm ook heeft. Geen coachRuleOptions hier - die gaan over een

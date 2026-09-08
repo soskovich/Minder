@@ -116,22 +116,26 @@ test.describe('c · het gesprek', () => {
     expect(await page.evaluate(() => window._coOnderwerp)).toBe('maand');
   });
 
-  // v187: aansluiting is geen maandregel meer; buffer houdt zijn eigen actie
-  test('buffer krijgt de actie die al achter die regel hangt', async ({ page }) => {
-    await maand(page);
-    for (const [key, lbl] of [['buffer', 'Mijn buffer verfijnen']]) {
-      await page.evaluate(([m, k]) => coStart('maand', m, k), [CUR, key]);
-      await wachtKeuze(page);
-      const ks = await page.evaluate(() => [...document.querySelectorAll('#coCh .cch')].map((b) => b.innerText.trim()));
-      expect(ks.some((x) => x.indexOf(lbl) === 0)).toBe(true);
-      expect(ks.some((x) => /\/mnd\)/.test(x))).toBe(false);   // geen besparingsregels bij deze twee
-    }
+  /* v207: hier stond dat buffer één knop kreeg ('Mijn buffer verfijnen') en dat dekking en doel de
+     generieke besparingsregels kregen (+EUR X/mnd). Elke vaste regel krijgt nu zijn eigen drie
+     vormen: de inleg aanpassen, de norm aanpassen, of bewust niets doen. Dat is wat de kaart
+     'Vraagt een beslissing' waarmaakt - een stand met een gevolgzin had geen keuze achter zich.
+     De besparingsregels zijn niet verdwenen: coachRuleOptions() en hefboomZin() worden onverkort
+     gelezen door coTopicLek en coTopicHorizon, waar ze over uitgavecategorieën gaan en dus op hun
+     plaats zijn. Op het maandpad zijn ze vervangen door opties die over déze regel gaan. */
+  test('buffer krijgt zijn drie vormen, met de norm-optie naar het bestaande paneel', async ({ page }) => {
+    await maand(page, tweeTekorten());   // eenTekort() zet de buffer op peil, en dan is er niets te accepteren
+    await page.evaluate(([m, k]) => coStart('maand', m, k), [CUR, 'buffer']);
+    await wachtKeuze(page);
+    const ks = await page.evaluate(() => [...document.querySelectorAll('#coCh .cch')].map((b) => b.innerText.trim()));
+    expect(ks.some((x) => /maandbedrag verhogen/i.test(x))).toBe(true);      // inleg
+    expect(ks.some((x) => /richtbedrag verlagen/i.test(x))).toBe(true);      // norm
+    expect(ks.some((x) => /Accepteren/i.test(x))).toBe(true);                // bewust niets doen
+    expect(ks.some((x) => /\/mnd\)/.test(x))).toBe(false);                   // geen generieke besparingsregels
   });
 
-  // v186: patroon is geen maandregel meer; dekking en doel houden de besparingsregels
-  test('dekking en doel krijgen de besparingsregels', async ({ page }) => {
+  test('dekking en doel krijgen hun eigen drie vormen', async ({ page }) => {
     await maand(page, tweeTekorten());
-    // alleen de regels die deze maand bestaan: zonder reserveringen is er geen dekking-regel
     const aanwezig = await page.evaluate(() => maandRegels().map((r) => r.key));
     const keys = ['dekking', 'doel'].filter((k) => aanwezig.includes(k));
     expect(keys.length).toBeGreaterThan(0);
@@ -139,7 +143,8 @@ test.describe('c · het gesprek', () => {
       await page.evaluate(([m, k]) => coStart('maand', m, k), [CUR, key]);
       await wachtKeuze(page);
       const ks = await page.evaluate(() => [...document.querySelectorAll('#coCh .cch')].map((b) => b.innerText.trim()));
-      expect(ks.some((x) => /\+€\d.*\/mnd\)/.test(x))).toBe(true);
+      expect(ks.length).toBeGreaterThanOrEqual(4);                 // minstens twee vormen plus vastleggen en afbreken
+      expect(ks.some((x) => /Accepteren/i.test(x))).toBe(true);
     }
   });
 });
@@ -165,30 +170,44 @@ test.describe('d · de afspraak', () => {
     expect(t).not.toMatch(/zullen we dat doorlopen/i);        // niet twee wegen naar een nieuwe
   });
 
-  test('een coachRule aanzetten is geen afspraak', async ({ page }) => {
+  /* v207: hier stond dat een coachRule aanzetten nog geen afspraak is, en dat afbreken de regel
+     liet staan zonder er een afspraak bij te schrijven. Die route bestaat op het maandpad niet meer
+     (de generieke besparingsregels zijn vervangen door de drie vormen per regel), en op lek en
+     horizon dekt de test in blok g hem al af.
+     Wat er voor in de plaats komt is dezelfde invariant op het nieuwe pad, en die weegt zwaarder:
+     een optie kiezen legt nog NIETS vast. Pas 'Zo spreken we af' schrijft de afspraak, en bij
+     accepteren pas dan de acceptatie in SET.maandAccept. Breek je af, dan staat er niets. */
+  test('een optie kiezen legt nog niets vast, ook geen acceptatie', async ({ page }) => {
     await maand(page, tweeTekorten());
-    /* v186: patroon is geen maandregel meer; 'doel' is de regel die deze fixture levert en die
-       net als patroon de besparingsregels aangeboden krijgt. */
-    await page.evaluate((m) => coStart('maand', m, 'doel'), CUR);
-    await wachtKeuze(page);
-    const opt = (await page.evaluate((m) => coachRuleOptions(m), CUR))[0];
-
-    await page.locator('#coCh .cch').first().click();          // zet de regel aan
+    await page.evaluate((m) => coStart('maand', m, 'buffer'), CUR);
+    await kies(page, 'Accepteren');
     await page.waitForFunction(() => [...document.querySelectorAll('#coCh .cch')].some((b) => /zo spreken we af/i.test(b.innerText)), null, { timeout: 15000 });
-    expect(await page.evaluate((k) => (SET.coachRules || {})[k], opt.key)).toBe(opt.cut);
-    expect(await afspraken(page)).toEqual([]);                 // regel staat, afspraak nog niet
-
-    // nu afbreken: de regel blijft, de afspraak komt er niet
-    await page.evaluate(() => closeSheet());
-    await page.waitForTimeout(800);
     expect(await afspraken(page)).toEqual([]);
-    expect(await page.evaluate((k) => (SET.coachRules || {})[k], opt.key)).toBe(opt.cut);
+    expect(await page.evaluate(() => JSON.stringify(SET.maandAccept || {}))).toBe('{}');
+
+    await page.evaluate(() => closeSheet());
+    await page.waitForTimeout(600);
+    expect(await afspraken(page)).toEqual([]);
+    expect(await page.evaluate(() => JSON.stringify(SET.maandAccept || {}))).toBe('{}');
   });
 
-  test('de tekst draagt de regelKey en waar van toepassing de categorie', async ({ page }) => {
+  test('de bevestiging legt de afspraak en de acceptatie samen vast', async ({ page }) => {
     await maand(page, tweeTekorten());
-    /* v186: patroon is geen maandregel meer; 'doel' is de regel die deze fixture levert en die
-       net als patroon de besparingsregels aangeboden krijgt. */
+    await page.evaluate((m) => coStart('maand', m, 'buffer'), CUR);
+    await kies(page, 'Accepteren');
+    await kies(page, 'Zo spreken we af');
+    await page.waitForFunction(() => window._coLive === false, null, { timeout: 15000 });
+    const af = (await afspraken(page))[0];
+    expect(af.regel).toBe('buffer');
+    expect(af.vorm).toBe('accepteer');
+    expect(await page.evaluate(() => !!(SET.maandAccept || {}).buffer)).toBe(true);
+  });
+
+  /* v207: op het maandpad draagt de afspraak nu de regelKey en de VORM (inleg, norm of accepteer)
+     in plaats van een uitgavecategorie: de opties gaan over deze regel en niet over een categorie.
+     De categorie-tak bestaat onverkort voor coachRuleOptions in lek en horizon. */
+  test('de tekst draagt de regelKey en de vorm', async ({ page }) => {
+    await maand(page, tweeTekorten());
     await page.evaluate((m) => coStart('maand', m, 'doel'), CUR);
     await wachtKeuze(page);
     await page.locator('#coCh .cch').first().click();
@@ -197,9 +216,8 @@ test.describe('d · de afspraak', () => {
 
     const af = (await afspraken(page))[0];
     expect(af.regel).toBe('doel');
-    expect(af.cat).toBeTruthy();
-    expect(await page.evaluate((c) => !!CATS[c], af.cat)).toBe(true);
-    expect(af.text).toMatch(/per maand\), voor kosten koper huis/i);   // leesbaar zonder context
+    expect(['inleg', 'norm', 'accepteer']).toContain(af.vorm);
+    expect(af.text).toMatch(/kosten koper huis/i);   // leesbaar zonder de context van het gesprek
   });
 
   test('twee keer vastleggen geeft één afspraak deze maand', async ({ page }) => {
