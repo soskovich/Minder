@@ -129,7 +129,7 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
 
 ## Testconventie
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v211` → `minder-v212`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v212` → `minder-v213`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de
