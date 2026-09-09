@@ -5387,8 +5387,20 @@ function reisRestsaldo(M){
     const intern=nIntern>0?` (${nIntern===1?'1 loopt':nIntern+' lopen'} als interne overboeking)`:'';
     debtNote=`we vinden ${wat} niet terug in je uitgaven${intern}; je restsaldo kan te hoog staan`;
   }
+  /* v210: het bedrag is de som van je maandtermijnen en zei niet waaruit. Geen nieuwe berekening -
+     M.debtPay draagt naam en termijn per schuld al, en dat is exact wat debtPer optelt. De vorm
+     volgt planSub() (v190/v193): tel de waarden, tot drie een zin, vanaf vier de uitgelijnde
+     minitabel. Een schuld met termijn 0 draagt niets bij aan het totaal en staat er dus niet in;
+     die krijgt zijn eigen 'aflossing te laag' al als mijlpaal. Bij een enkele schuld is het totaal
+     die schuld, dus dan zou de opbouw het bedrag alleen herhalen. */
+  const dParts=debts.filter(d=>(+d.per||0)>0);
+  const debtOpbouw = (dParts.length>=2)
+    ? (dParts.length>=3
+      ? `<div class="plan-tab small mut2" style="font-size:11.5px;margin-top:3px">${dParts.map(d=>`<span>${esc(d.nm)}</span><span class="v">${euro0(d.per)}</span>`).join('')}</div>`
+      : `<div class="small mut2" style="font-size:11.5px;margin-top:2px">waarvan ${opsomming(dParts.map(d=>`${euro0(d.per)} ${esc(d.nm)}`))}</div>`)
+    : '';
   const step2= debts.length? stepWrap(rail('2','var(--amber)','#2a1e00',true),
-    `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Schuld loopt mee</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(debtPer)}/mnd</span></div><div class="small mut2" style="font-size:11.5px${debtWarn?';color:var(--amber)':''}">${debtNote}</div>`) : '';
+    `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Schuld loopt mee</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(debtPer)}/mnd</span></div>${debtOpbouw}<div class="small mut2" style="font-size:11.5px${debtWarn?';color:var(--amber)':''}">${debtNote}</div>`) : '';
   // groeikeuze — los blokje (rs.groei) voor de groep "Rendement & inflatie"
   const g=(id,lab,r)=>`<span onclick="reisGrow('${id}')" class="chip ${R.growMode===id?'on':''}" style="text-align:center">${lab} <span style="opacity:.75">${r}</span></span>`;
   const vRend=(''+R.rendFromGrow).replace('.',',');
