@@ -5024,7 +5024,25 @@ function fireInputs(){
   const belegdItems=_grow.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0)}));
   const flatItems=_flatA.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0)}));
   const leaseItems=(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).map(d=>({naam:d.naam||'Auto', dagwaarde:+d.dagwaarde||0, afschr:(+d.afschr||0)>0?+d.afschr:18}));   // afschrijving %/jr (declining balance, default 18)
-  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, leaseItems, emergencyGoal, nfDoel, nfCur, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
+  /* v211: bestemmingen uit je restsaldo die geen vermogen zijn. surplus = fNet telt alleen
+     type==='expense' (forecastModel), en een reserveringsinleg loopt als interne overboeking en een
+     spaardoel heeft helemaal geen transacties (v99). Beide bleven dus in het restsaldo staan en
+     compoundeerden mee tot je pensioen, terwijl ze zijn toegewezen aan de tandarts of aan een
+     aankoop binnen een paar jaar. v128 legde al vast dat een reserveringenpot uitgestelde
+     consumptie is en geen vermogen; dit maakt dat waar in de projectie.
+     Laag A leest hier, laag B krijgt platte getallen (v32). Er wordt niets herrekend: de bedragen
+     komen uit dekking() en allocatePlan() zoals ze zijn, en die twee blijven ongemoeid. */
+  let resPerMaand=0; try{ resPerMaand=Math.max(Math.round(dekking(12).benodigdPerMaand||0),0); }catch(_){}
+  /* Alle doelen met een toewijzing, niet alleen die met een streefdatum: allocatePlan() verdeelt
+     dezelfde capaciteit over alle doelen, dus een deelverzameling laat de rest gewoon compounderen
+     en dat is een halve correctie. Een streefdatum is bovendien optioneel en stuurt de waterfall
+     niet (v123); hem hier beslissend maken zou dat veld een rekenkundig gevolg geven dat het nooit
+     had. Een gepauzeerd of bereikt doel heeft per definitie alloc 0 en valt er dus vanzelf uit.
+     Aflos-items blijven erbuiten: schuld is stap 2 van de waterval en die is niet aangeraakt. */
+  let doelPerMaand=0, doelItems=[];
+  try{ doelItems=allocatePlan().filter(p=>p&&p.type==='goal'&&(+p.alloc||0)>0).map(p=>({naam:p.naam||'Doel', per:Math.round(+p.alloc||0)}));
+       doelPerMaand=doelItems.reduce((a,x)=>a+x.per,0); }catch(_){}
+  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, leaseItems, emergencyGoal, nfDoel, nfCur, resPerMaand, doelPerMaand, doelItems, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
 function fireState(inputs, cfg){
   const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
@@ -5119,9 +5137,24 @@ function fireModel(R, inputs){
   const vrij = (R.inlegMode==='auto') ? Math.max(0, Math.min(_msav, +R.pmt||0)) : 0;
   let volYear=nowY;   // jaar waarin het noodfonds vol is (nowY = nu al vol → geen vul-fase)
   if(vrij>0 && _nfDoel>0 && _nfCur<_nfDoel && _msav>0){ const needM=Math.ceil((_nfDoel-_nfCur)/_msav); volYear=nowY+Math.floor((nowMo+needM)/12); }
-  const pmtFor=year=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY);
-    if(vrij>0 && year<volYear) a=Math.max(a-vrij,0);   // vul-fase: 'vrij' gaat nog naar het noodfonds
-    return a; };
+  /* v211: bestemmingen uit je restsaldo die geen vermogen zijn. Reserveringen komen elk jaar
+     eraf: benodigdPerMaand zit per v128 bewust NIET in planCapacity, dus 'vrij' dekt hem niet en
+     er kan hier niets dubbel af. Doelen komen er pas af VANAF volYear: tot dat jaar diverteert
+     'vrij' al min(monthlySaving, pmt), en monthlySaving IS planCapacity, precies het bedrag dat
+     allocatePlan() over noodfonds en doelen verdeelt. Zonder die voorwaarde zou dezelfde euro in
+     de vul-fase twee keer van je inleg af gaan. Beide landen in de vlakke laag (C), net als de
+     noodfonds-vulling: geld dat je binnen een paar jaar uitgeeft hoort niet te compounderen.
+     De noodfonds-stap zelf is niet aangeraakt - 'fill' is nog exact 'vrij'. */
+  const _res=(R.inlegMode==='auto')?Math.max(+inputs.resPerMaand||0,0):0;
+  const _doel=(R.inlegMode==='auto')?Math.max(+inputs.doelPerMaand||0,0):0;
+  const pmtParts=year=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY);
+    const fill=(vrij>0 && year<volYear)?vrij:0;
+    a=Math.max(a-fill,0);   // vul-fase: 'vrij' gaat nog naar het noodfonds
+    const wens=_res+((year<volYear)?0:_doel);
+    const best=Math.max(Math.min(wens,a),0);   // nooit meer diverteren dan er dat jaar is
+    a=Math.max(a-best,0);
+    return {p:a, fill, best}; };
+  const pmtFor=year=>pmtParts(year).p;
   // Fase 1: bezittingen (cash vlak + belegd groeit op rendement) en schuld (afloscurve) apart; vermogen = bezittingen − schuld.
   const liq0=inputs.liq||0, belegd0=(inputs.belegd||0)+(+R.een||0), flat0=inputs.flat||0;   // eenmalige inleg telt als belegd; flat0 = niet-groeiende bezittingen (vlak)
   const _ds=(inputs.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0).map(d=>({naam:d.naam||'Schuld',rest:Math.max(+d.rest||0,0),per:+d.perMaand||0,rente:+d.rente||0}));
@@ -5131,8 +5164,8 @@ function fireModel(R, inputs){
   let Im=belegd0,Il=belegd0,Ih=belegd0,Ig=belegd0, C=liq0, Ib=belegd0;   // belegde potjes (mid/low/high/bruto) + cash + Ib = startkapitaal zonder maandinleg (voor de opbouw)
   const A0=liq0+belegd0+flat0+leaseSeries[0];
   const mid=[A0-debt[0]],low=[A0-debt[0]],high=[A0-debt[0]],koop=[A0-debt[0]],midGross=[A0-debt[0]],assets=[A0], bser=[belegd0], cser=[liq0];   // bser/cser: additief voor de bezittingen-opbouw
-  for(let y=0;y<HZ;y++){ const p=pmtFor(nowY+y), fill=(nowY+y<volYear)?vrij:0;
-    for(let m=0;m<12;m++){ Im=Im*(1+rM)+p; Il=Il*(1+rL)+p; Ih=Ih*(1+rH)+p; Ig=Ig*(1+rM)+p; Ib=Ib*(1+rM); C+=fill; }   // cash blijft vlak; alleen de noodfonds-vulling komt erbij; Ib groeit zonder inleg
+  for(let y=0;y<HZ;y++){ const _q=pmtParts(nowY+y), p=_q.p, fill=_q.fill, best=_q.best;
+    for(let m=0;m<12;m++){ Im=Im*(1+rM)+p; Il=Il*(1+rL)+p; Ih=Ih*(1+rH)+p; Ig=Ig*(1+rM)+p; Ib=Ib*(1+rM); C+=fill+best; }   // cash blijft vlak; de noodfonds-vulling en de bestemmingen komen erbij; Ib groeit zonder inleg
     Im=Math.max(Im-fireBelasting(R,Im),0); Il=Math.max(Il-fireBelasting(R,Il),0); Ih=Math.max(Ih-fireBelasting(R,Ih),0); Ib=Math.max(Ib-fireBelasting(R,Ib),0);   // belasting op het belegde potje (proportioneel, dus ook op Ib)
     const dy=debt[y+1], ls=leaseSeries[y+1], Ay=C+flat0+ls+Im;
     mid.push(Ay-dy); low.push(C+flat0+ls+Il-dy); high.push(C+flat0+ls+Ih-dy); midGross.push(C+flat0+ls+Ig-dy); assets.push(Ay); bser.push(Ib); cser.push(C);
@@ -5180,7 +5213,7 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},missing:inputs.missing};
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),doel:Math.round(_doel),doelItems:(inputs.doelItems||[]),nu:Math.round(pmtParts(nowY).best),groeit:Math.round(pmtParts(nowY).p)},missing:inputs.missing};
 }
 /* v124: reisModel neemt een optionele override, bv. reisModel({vermogenDelta:-4000}).
    De override grijpt bewust TUSSEN laag A en laag B aan, op een kopie van het inputs-object:
@@ -5399,7 +5432,31 @@ function reisRestsaldo(M){
       ? `<div class="plan-tab small mut2" style="font-size:11.5px;margin-top:3px">${dParts.map(d=>`<span>${esc(d.nm)}</span><span class="v">${euro0(d.per)}</span>`).join('')}</div>`
       : `<div class="small mut2" style="font-size:11.5px;margin-top:2px">waarvan ${opsomming(dParts.map(d=>`${euro0(d.per)} ${esc(d.nm)}`))}</div>`)
     : '';
-  const step2= debts.length? stepWrap(rail('2','var(--amber)','#2a1e00',true),
+  /* v211: de twee bestemmingen die er wel af gaan maar nergens stonden. Er wordt niets herrekend:
+     M.bestemming komt uit fireInputs (dekking() en allocatePlan()) en de bedragen zijn dezelfde.
+     Ze staan tussen het noodfonds en de schuld, want ze gaan er net als het noodfonds echt af;
+     de schuldstap is informatief en sluit de rij. Neutrale tint: dit is geen aandacht (v78/v93). */
+  const B=M.bestemming||{res:0,doel:0,doelItems:[]};
+  const stapNr=(function(){ let n=1; return ()=>String(++n); })();   // stap 1 is het noodfonds
+  const doelNamen=(B.doelItems||[]).map(x=>x.naam);
+  const stepRes= (B.res>0)? stepWrap(rail(stapNr(),'var(--mut)','var(--bg)',false),
+    `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Reserveringen</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--mut)">${euro0(B.res)}/mnd</span></div><div class="small mut2" style="font-size:11.5px">wat je lijst per maand vraagt; dit is uitgestelde consumptie, dus het groeit niet mee</div>`) : '';
+  /* Valt dit jaar nog in de vul-fase, dan zit de doelinleg al in de noodfonds-vulling erboven
+     (die diverteert de hele planCapacity) en gaat hij er hier niet nog eens af. De stap blijft
+     staan, want het is een echte bestemming, maar zegt dat erbij: anders tellen de getoonde
+     stappen niet op tot wat er werkelijk van je inleg af gaat. */
+  const doelInVul=(M.freed.volYear>M.nowY);
+  const doelSub=doelInVul
+    ? 'zit nu nog in de noodfonds-vulling hierboven, dus hij gaat er niet nog een keer af'
+    : `${doelNamen.length?'naar '+opsomming(doelNamen.map(esc))+'; ':''}toegewezen op Plan, dus dit geld groeit niet mee`;
+  const stepDoel= (B.doel>0)? stepWrap(rail(stapNr(),'var(--mut)','var(--bg)',false),
+    `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Spaardoelen</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--mut)">${euro0(B.doel)}/mnd</span></div><div class="small mut2" style="font-size:11.5px">${doelSub}</div>${(!doelInVul&&(B.doelItems||[]).length>=3)?`<div class="plan-tab small mut2" style="font-size:11.5px;margin-top:3px">${B.doelItems.map(x=>`<span>${esc(x.naam)}</span><span class="v">${euro0(x.per)}</span>`).join('')}</div>`:''}`) : '';
+  /* Wat er dan pas mag groeien. Geen stap maar de uitkomst van de rij, en geen nieuwe berekening:
+     M.bestemming.groeit is pmtParts(nowY).p, precies het bedrag waarmee het model dit jaar rekent. */
+  const groeitRegel=(B.res>0||B.doel>0)?`<div style="margin-top:8px;padding:10px 12px;background:var(--card2);border-radius:11px">
+    <div class="row"><span class="small muted">Groeit mee vanaf nu</span><span style="font-weight:800;font-size:var(--fs-md);color:var(--teal)">${euro0(B.groeit)}/mnd</span></div>
+    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">${euro0(surplus)} restsaldo min wat er hierboven af gaat. Dit is het bedrag waarmee de projectie rekent.</div></div>`:'';
+  const step2= debts.length? stepWrap(rail(stapNr(),'var(--amber)','#2a1e00',true),
     `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Schuld loopt mee</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(debtPer)}/mnd</span></div>${debtOpbouw}<div class="small mut2" style="font-size:11.5px${debtWarn?';color:var(--amber)':''}">${debtNote}</div>`) : '';
   // groeikeuze — los blokje (rs.groei) voor de groep "Rendement & inflatie"
   const g=(id,lab,r)=>`<span onclick="reisGrow('${id}')" class="chip ${R.growMode===id?'on':''}" style="text-align:center">${lab} <span style="opacity:.75">${r}</span></span>`;
@@ -5411,7 +5468,7 @@ function reisRestsaldo(M){
        <input type="range" min="0" max="100" step="10" value="${R.splitBeleg}" oninput="reisSplit(this.value)" style="width:100%;margin-top:6px;accent-color:var(--purple)"></div>`
     : '';
   const note=`<div class="small mut2" style="font-size:10.5px;margin-top:8px">Zodra je noodfonds vol is${debts.length?' en je schuld is afgelost':''}, groeit je hele restsaldo mee. De groeikeuze stel je in bij "Rendement &amp; inflatie".</div>`;
-  return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}<div style="margin-top:6px">${step1}${step2}</div>${note}`, groei:`${growChips}${splitUI}` };
+  return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}<div style="margin-top:6px">${step1}${stepRes}${stepDoel}${step2}</div>${groeitRegel}${note}`, groei:`${growChips}${splitUI}` };
 }
 // Spiegel (geen advies): toont dat er ruimte vrijkomt zodra het noodfonds vol is, en wat 'vrij'/mnd doet
 // bij twee bestemmingen (aflossen vs beleggen) — puur ter vergelijking, de keuze blijft bij de gebruiker.
