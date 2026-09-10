@@ -54,7 +54,12 @@ test.describe('a · de terugval op Maand vuurt alleen bij werkelijke leegte', ()
     const t = await maand(page);
     expect(t).not.toContain('Er is nog te weinig ingesteld');
     expect(t).toMatch(/beslissing vraagt|aandacht/);          // het oordeel telt wat er staat
-    expect(t).toMatch(/Je geeft al maanden te veel uit/);     // en het signaal staat er zelf ook
+    /* En het signaal staat er zelf ook. Sinds v219 draagt het een korte naam ('Maanden boven je
+       grens') in plaats van zijn hele l1: de rij toont die naam en het gesprek gebruikt hem in
+       zijn vraag. Bindt daarom aan de sleutel en niet aan de zin, want de zin kan hernoemd worden
+       zonder dat er iets stuk is. */
+    expect(r.str).toContain('overstreak');
+    expect(t).toMatch(/Maanden boven je grens/);
   });
 
   test('noch regels noch signalen: dan zegt het scherm dat wel', async ({ page }) => {

@@ -2661,18 +2661,23 @@ function scoreNotifs(opts){
       const savNormalA=Math.round(avgA(normalA.map(r=>r.savedEur)));
       // 2) meevaller-afhankelijkheid
       if(normalA.length>=1&&windfallA.length>=1&&savNormalA<targetA*0.7&&targetA>0&&!hasAutoSaving())
-        push({key:'meevaller', h:'structureel', score:62, t:'bad', ic:ICON('coins'),
+        push({key:'meevaller', h:'structureel', score:62, t:'bad', ic:ICON('coins'), kort:'Sparen leunt op meevallers',
           l1:'Zonder meevaller spaar je te weinig',
           l2:`Zet ${euro0(targetA)} automatisch opzij zodra je salaris binnen is.`, act:"go('vooruit')"});
       // 3) lifestyle inflation
       const spWA=Math.round(avgA(windfallA.map(r=>r.sp))), spNA=Math.round(avgA(normalA.map(r=>r.sp)));
       if(windfallA.length>=1&&normalA.length>=1&&spWA>spNA*1.12)
-        push({key:'inflatie', h:'structureel', score:44, t:'warn', ic:ICON('trend'),
+        /* v219: dit was t:'warn' en landde daarmee in 'vraagt een beslissing'. Er is hier geen
+           norm die je mist: meer inkomen met meer uitgaven kan volstrekt gezond zijn, en na een
+           baanwissel is het de verwachte gevolgtrekking. De conditie zelf zegt het al - hij vuurt
+           op een verhouding (spWA > spNA * 1.12) en niet op een grens. Dus een observatie, en die
+           hoort in 'vraagt aandacht'. */
+        push({key:'inflatie', h:'structureel', score:44, t:'info', ic:ICON('trend'), kort:'Meer binnen, meer uitgegeven',
           l1:'Meer binnen, meer uitgegeven',
           l2:`Zet je extraatje meteen opzij, vóór je het uitgeeft.`, act:"go('ins')"});
       // 4) streak boven grens
       let streakA=0; for(let i=rowsA.length-1;i>=0;i--){ if(rowsA[i].over) streakA++; else break; }
-      if(streakA>=2) push({key:'overstreak', h:'structureel', score:68, t:'warn', ic:ICON('warn'),
+      if(streakA>=2) push({key:'overstreak', h:'structureel', score:68, t:'warn', ic:ICON('warn'), kort:'Maanden boven je grens',
         l1:'Je geeft al maanden te veel uit',
         l2:`Tijd om het te kantelen. Kies vandaag één last die eruit kan.`, act:`openMonthSpend('${curMonth||''}')`});
     }
@@ -3787,6 +3792,13 @@ function renderMaand(){
     ${aandacht.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt aandacht</div>
       ${aandacht.map(r=>maandRij(r,false)).join('')}
       ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}</div>`:''}
+    ${/* v219: de ingang naar het gesprek stond vier blokken lager, achter de spaarquote, de
+          uitgavengrafiek en de beleggen-regel. De kaart erboven belooft een beslissing en de
+          plek waar die te maken valt lag buiten beeld. Hij staat nu onder de regels die iets
+          vragen en boven 'Staat goed', want daar hoort hij niet bij. De rij zelf blijft een
+          eigen tik naar zijn sheet houden (v193): twee handelingen op één element is geen
+          verbetering, dus de ingang blijft een eigen element. */''}
+    ${(beslis.length||aandacht.length)?maandCoachIngang(RO):''}
     ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
       ${goed.map(r=>maandRij(r,true)).join('')}</div>`:''}
     ${maandKpiBlok(m)}
@@ -3794,7 +3806,7 @@ function renderMaand(){
     ${spendVsBudgetChart()}
     ${subsCard()}
     ${maandBeleggenRegel(R)}
-    ${maandCoachIngang(RO)}
+    ${(!beslis.length&&!aandacht.length)?maandCoachIngang(RO):''}
     ${maandGelezen()}
     <div style="height:12px"></div>`;
 }

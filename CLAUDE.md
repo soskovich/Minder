@@ -83,6 +83,14 @@ genoemde versietag.)*
 - **Defaults** (`MECHANISM_SPEC.defaultEffect`): nietsdoen is de gezonde keuze, altijd zichtbaar en
   in één tik omkeerbaar. Nooit een default die stilletjes geld beweegt of een doel zet.
 - **`fireInputs()` is de enige naad** (`v32`): laag A leest Minder, laag B is puur, laag C rendert.
+- **Blokkade of observatie: is er een norm die niet wordt gehaald?** (`v175`, `v187`, `v219`) Dat
+  is het criterium dat bepaalt of een signaal in "vraagt een beslissing" (`tekort`) of in "vraagt
+  aandacht" (`let op`) landt. Een spaardoel dat structureel niet gehaald wordt en een
+  bestedingslimiet die maanden op rij wordt overschreden lopen vast: blokkade. Een patroon zonder
+  grens eronder, zoals uitgaven die meestijgen met je inkomen, stelt iets vast: observatie. Toets
+  een nieuw signaal hieraan in plaats van zijn `t` per geval te kiezen, anders is de indeling een
+  reeks losse oordelen. Twee bestemmingen, geen derde: past een signaal in geen van beide, stel dan
+  de vraag of het signaal nog nodig is.
 - **Status zit in het label, niet in de kleur** (`v78`, `v93`): amber uitsluitend voor echte
   aandacht; informatieve signalen dragen `--mut`/`--mut2`.
 - **Alles via tokens in `:root`** (`v75`, `v83`, `v96`): geen hardgecodeerde hex, ook niet in
@@ -106,7 +114,7 @@ cat > a.txt <<'AEOF'
 (`minder-v214` → `minder-v215`, en zo verder). Dit is de enige plek waar die regel staat.
 AEOF
 cat > b.txt <<'BEOF'
-(`minder-v218` → `minder-v219`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v219` → `minder-v220`, en zo verder). Dit is de enige plek waar die regel staat.
 - **Datumnotatie** (`v199`): een kalenderdag komt uit `vandaagYMD()` of `ymdVan()`. `toISOString()`
   is **alleen** voor wat een API of een uitwisselingsformaat in gaat. Een sleutel, een label en een
   opslagveld zijn intern en volgen dus de lokale regel; `toISOString()` geeft de UTC-dag, en op een
