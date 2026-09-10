@@ -114,7 +114,7 @@ cat > a.txt <<'AEOF'
 (`minder-v214` → `minder-v215`, en zo verder). Dit is de enige plek waar die regel staat.
 AEOF
 cat > b.txt <<'BEOF'
-(`minder-v219` → `minder-v220`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v220` → `minder-v221`, en zo verder). Dit is de enige plek waar die regel staat.
 - **Datumnotatie** (`v199`): een kalenderdag komt uit `vandaagYMD()` of `ymdVan()`. `toISOString()`
   is **alleen** voor wat een API of een uitwisselingsformaat in gaat. Een sleutel, een label en een
   opslagveld zijn intern en volgen dus de lokale regel; `toISOString()` geeft de UTC-dag, en op een

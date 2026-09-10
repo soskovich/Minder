@@ -4103,8 +4103,26 @@ function resDekkingCard(){
      van het oordeel op Maand, en hetzelfde getal op twee schermen kost de lezer een verificatie die
      niets oplevert - dezelfde reden als bij totaal saldo tegenover netto vermogen (v171). Het bedrag
      hoort bij het oordeel, en dat woont op Maand. */
+  /* v220: het saldo van je reserveringenpot stond hier niet, terwijl de twee blokken erboven wél
+     allebei een bedrag dragen. Uit resSaldo(), dus accBalance() via SET.resAcc; niets herrekend.
+     Alleen het bedrag: de dekkingsgraad en dekkingTekst() zijn in v187/v188 bewust van deze kaart
+     gehaald omdat dat oordeel op Maand woont, en die keuze staat. Dus geen percentage, geen balk
+     en geen 'op peil'. Een balk zou hier bovendien een eindpunt suggereren dat er niet is: een
+     reservering loopt door zolang je verplichtingen hebt.
+     resSaldo() geeft null in twee gevallen die hier verschillend horen te lopen - rekening
+     aangewezen maar saldo onbekend, en helemaal geen rekening - dus resAccId() scheidt ze. Het
+     onbekend-model is letterlijk dat van de plan-rij hierboven (nfOnbekend): het woord, gedempt,
+     nooit een nul die een bedrag claimt dat we niet kennen.
+     De teller en de ingang verhuizen naar een eigen regel eronder. Rechts in de kop staat bij de
+     blokken erboven precies één ding, de stand, en v203 gaf dat bedrag daar het gewicht; een
+     kolom met bedrag, teller én actie zou deze kaart anders opbouwen dan de kaart ernaast. */
+  const resAcc=resAccId();
+  const resSt=resAcc?resSaldo():null;
+  const standKop = !resAcc ? '' :
+    `<span class="small" style="white-space:nowrap;flex-shrink:0">${resSt==null?'<span class="muted">onbekend</span>':`<b style="font-weight:700">${euro0(resSt)}</b>`}</span>`;
   return `<div class="card" style="cursor:pointer" onclick="openReserveringen()">
-    <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span><span class="small muted">${D.aantal} ${D.aantal===1?'post':'posten'} \u00b7 <span style="color:var(--teal)">bekijk \u203a</span></span></div>
+    <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span>${standKop}</div>
+    <div class="small muted" style="margin-top:4px">${D.aantal} ${D.aantal===1?'post':'posten'} \u00b7 <span style="color:var(--teal)">bekijk \u203a</span></div>
     <div class="small muted" style="margin-top:5px;line-height:1.5">Kosten die niet elke maand vallen. Deze inleg staat los van je plan hierboven: hij concurreert niet met je spaardoelen. Of je genoeg opzij hebt staan, lees je op Maand.</div>
     ${resCheckLine()}</div>`;
 }
