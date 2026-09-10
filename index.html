@@ -4929,7 +4929,7 @@ function openAsset(id, naamVoorstel){
       <span style="flex:1"><span style="font-weight:600;font-size:13px">Groeit dit? (belegging/spaargeld)</span><span class="small muted" style="display:block">Toon een verwachte-waarde-projectie</span></span></label>
     <div id="agrowf" style="display:${g?'block':'none'}">
       <div class="row" style="gap:8px">
-        <div style="flex:1"><label class="fld">Netto rendement (%/jr)</label><input id="aRend" type="number" inputmode="decimal" value="${a.rend||''}" placeholder="5" style="width:100%"></div>
+        <div style="flex:1"><label class="fld">Netto rendement (%/jr)</label><input id="aRend" type="number" inputmode="decimal" value="${a.rend||''}" placeholder="0" style="width:100%"></div>
         <div style="flex:1"><label class="fld">Inflatie (%/jr)</label><input id="aInfl" type="number" inputmode="decimal" value="${a.infl||''}" placeholder="2" style="width:100%"></div>
       </div>
       <label class="fld" style="margin-top:10px">Horizon (jaren)</label><input id="aHor" type="number" inputmode="numeric" value="${a.horizon||''}" placeholder="20" style="width:100%">
@@ -4938,6 +4938,7 @@ function openAsset(id, naamVoorstel){
         <div style="flex:1"><label class="fld">Periodieke inleg (€/mnd)</label><input id="aPer" type="number" inputmode="numeric" value="${a.per||''}" placeholder="0" style="width:100%"></div>
       </div>
       <div class="small muted" style="font-size:var(--fs-xs);margin-top:8px">"Netto" = na kosten en belasting. Met inflatie tonen we ook de koopkracht van nu. Rendement is niet gegarandeerd — geen advies.</div>
+      <div class="small mut2" style="font-size:var(--fs-xs);margin-top:6px">Laat je het rendement leeg, dan groeit deze bezitting niet in de Vermogensreis: de stand blijft staan op wat jij invult. Dat is de bedoeling bij een saldo dat je zelf bijwerkt.</div>
     </div>
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveAsset('${id||''}')">${ICON('check')} Opslaan</button>
     ${a0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteAsset('${id}')">Bezitting verwijderen</div>`:''}
@@ -5024,7 +5025,13 @@ function fireInputs(){
   /* v212: a.per (Periodieke inleg per bezitting) werd geschreven door saveAsset() maar nergens
      gelezen, dus de inleg naar bv. een pensioenpot landde als anonieme 'Nieuwe inleg'. Laag A geeft
      hem nu mee; laag B verschuift alleen de toewijzing en verandert het totaal niet. */
-  const belegdItems=_grow.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0), per:Math.max(Math.round(+a.per||0),0)}));
+  /* v213: a.rend (Netto rendement per bezitting) had één lezer (expectedReturnPct, een zin in de
+     schuld-editor) en raakte de projectie niet: elke groeiende bezitting groeide op het globale
+     tarief uit de groeikeuze-chips. Een stand die je maandelijks zelf bijwerkt (een holding, een
+     spaarpot, een restwaarde) groeide daardoor mee alsof het een belegging was. Laag A geeft het
+     tarief nu mee; leeg is 0 en betekent: die stand blijft staan. Geen terugval op het globale
+     tarief, want dat is een aanname over jouw geld die jij niet hebt gedaan. */
+  const belegdItems=_grow.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0), per:Math.max(Math.round(+a.per||0),0), rend:Math.max(+a.rend||0,0)}));
   const flatItems=_flatA.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0)}));
   const leaseItems=(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).map(d=>({naam:d.naam||'Auto', dagwaarde:+d.dagwaarde||0, afschr:(+d.afschr||0)>0?+d.afschr:18}));   // afschrijving %/jr (declining balance, default 18)
   /* v211: bestemmingen uit je restsaldo die geen vermogen zijn. surplus = fNet telt alleen
@@ -5154,8 +5161,11 @@ function fireModel(R, inputs){
      Dat is de prijs van inleg per bezitting, en tegelijk de voorwaarde voor een eigen rendement
      per bezitting later. Bij zelf-invullen blijft alles zoals het was: R.pmt is dan jouw eigen
      bedrag en daar hoort de app niets vanaf te halen. */
-  const _potItems=(inputs.belegdItems||[]).map(it=>({naam:it.naam||'Bezitting', waarde:Math.max(+it.waarde||0,0), per:Math.max(Math.round(+it.per||0),0)}));
-  if((+R.een||0)>0) _potItems.push({naam:'Eenmalige inleg', waarde:+R.een||0, per:0});
+  const _potItems=(inputs.belegdItems||[]).map(it=>({naam:it.naam||'Bezitting', waarde:Math.max(+it.waarde||0,0), per:Math.max(Math.round(+it.per||0),0), rend:Math.max(+it.rend||0,0)}));
+  /* De eenmalige inleg uit de reis is geen bezitting maar toekomstig geld zonder bestemming, net
+     als de nieuwe inleg. Hij houdt dus het globale tarief; alleen zo blijft de regel 'geen eigen
+     rendement, geen groei' een uitspraak over jouw bezittingen en niet over je reis-instelling. */
+  if((+R.een||0)>0) _potItems.push({naam:'Eenmalige inleg', waarde:+R.een||0, per:0, rend:+R.rend||0});
   const _aperWens=(R.inlegMode==='auto')?_potItems.reduce((a,x)=>a+x.per,0):0;
   const pmtParts=year=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY);
     const fill=(vrij>0 && year<volYear)?vrij:0;
@@ -5179,19 +5189,41 @@ function fireModel(R, inputs){
   const _debtS=fireDebtSeries(_ds, HZ); const debt=_debtS.total;   // debt = totaal per jaar (ongewijzigd); _debtS.parts = per-schuld opbouw
   // lease-auto('s): schrijven af met declining balance (waarde × (1−afschr/100)^jaar); totale afschrijf-reeks per jaar
   const _lease=inputs.leaseItems||[]; const leaseSeries=[]; for(let y=0;y<=HZ;y++) leaseSeries.push(_lease.reduce((s,l)=>s+(+l.dagwaarde||0)*Math.pow(1-(+l.afschr||0)/100,y),0));
-  let Im=belegd0,Il=belegd0,Ih=belegd0,Ig=belegd0, C=liq0;   // belegde potjes (mid/low/high/bruto) + cash
-  let Ab=_potItems.map(x=>x.waarde);   // per bezitting: startwaarde, groeit op rM en krijgt zijn eigen a.per
+  /* v213: de belegde laag is niet langer één pot op één tarief. Elke bezitting groeit op zijn
+     eigen a.rend, en wat er aan nieuwe inleg bij komt houdt het globale tarief uit de
+     groeikeuze-chips, want daarvan is de bestemming nog niet bepaald. v212 gaf elke bezitting al
+     een eigen reeks voor de weergave; die reeks IS nu de vermogenslijn, dus er staat geen tweede
+     berekening meer naast de eerste (v104). Im is per constructie Nm + som(Ab).
+     Een pot zonder rendement ligt vlak: geen groei, geen bandbreedte en geen heffing. De band ±2%
+     is marktonzekerheid, en een stand die jij maandelijks zelf bijwerkt heeft die niet; er een
+     spreiding omheen tekenen zou een beweging verzinnen die je nergens hebt opgegeven. Dezelfde
+     reden houdt de heffing eraf: hij zou een vlakke stand laten dalen zonder dat de app weet dat
+     dat gebeurt, en de niet-groeiende bezittingen (flat0) worden om die reden ook niet belast. */
+  const rMi=_potItems.map(x=>Math.max(+x.rend||0,0)/100/12);
+  const rLi=_potItems.map(x=>((+x.rend||0)>0)?((+x.rend||0)-2)/100/12:0);
+  const rHi=_potItems.map(x=>((+x.rend||0)>0)?((+x.rend||0)+2)/100/12:0);
+  const groeit_i=_potItems.map(x=>(+x.rend||0)>0);
+  const som=a=>a.reduce((s,v)=>s+v,0);
+  let Nm=0,Nl=0,Nh=0,Ng=0, C=liq0;   // nieuwe inleg: één pot op het globale tarief (mid/low/high/bruto) + cash
+  let Im=belegd0,Il=belegd0,Ih=belegd0,Ig=belegd0;   // de belegde laag als geheel; belegd0 is de som van de potten
+  let Ab=_potItems.map(x=>x.waarde), AbL=_potItems.map(x=>x.waarde), AbH=_potItems.map(x=>x.waarde), AbG=_potItems.map(x=>x.waarde);
   const bserParts=_potItems.map(x=>[x.waarde]);
   const A0=liq0+belegd0+flat0+leaseSeries[0];
   const mid=[A0-debt[0]],low=[A0-debt[0]],high=[A0-debt[0]],koop=[A0-debt[0]],midGross=[A0-debt[0]],assets=[A0], cser=[liq0];   // cser: additief voor de bezittingen-opbouw
   for(let y=0;y<HZ;y++){ const _q=pmtParts(nowY+y), p=_q.p, fill=_q.fill, best=_q.best, aper=_q.aper;
     const _f=(_q.aperWens>0)?(aper/_q.aperWens):0;   // proportioneel klemmen: elke pot levert evenveel in
-    const pInv=p+aper;   // wat er werkelijk in de belegde pot gaat; identiek aan p van vóór v212
-    for(let m=0;m<12;m++){ Im=Im*(1+rM)+pInv; Il=Il*(1+rL)+pInv; Ih=Ih*(1+rH)+pInv; Ig=Ig*(1+rM)+pInv;
-      for(let i=0;i<Ab.length;i++) Ab[i]=Ab[i]*(1+rM)+_potItems[i].per*_f;
+    /* p gaat naar de nieuwe-inleg-pot op het globale tarief; aper gaat per bezitting naar de pot
+       waar hij hoort, op het tarief van die bezitting. Samen is dat nog steeds p+aper per maand,
+       dus er komt geen euro bij en er valt er geen weg: alleen het tarief waarop hij groeit
+       verschilt nu per bestemming. */
+    for(let m=0;m<12;m++){ Nm=Nm*(1+rM)+p; Nl=Nl*(1+rL)+p; Nh=Nh*(1+rH)+p; Ng=Ng*(1+rM)+p;
+      for(let i=0;i<Ab.length;i++){ const inl=_potItems[i].per*_f;
+        Ab[i]=Ab[i]*(1+rMi[i])+inl; AbL[i]=AbL[i]*(1+rLi[i])+inl; AbH[i]=AbH[i]*(1+rHi[i])+inl; AbG[i]=AbG[i]*(1+rMi[i])+inl; }
       C+=fill+best; }   // cash blijft vlak; de noodfonds-vulling en de bestemmingen komen erbij
-    Im=Math.max(Im-fireBelasting(R,Im),0); Il=Math.max(Il-fireBelasting(R,Il),0); Ih=Math.max(Ih-fireBelasting(R,Ih),0);   // belasting op het belegde potje
-    for(let i=0;i<Ab.length;i++) Ab[i]=Math.max(Ab[i]-fireBelasting(R,Ab[i]),0);   // proportioneel, dus dezelfde heffing per pot
+    Nm=Math.max(Nm-fireBelasting(R,Nm),0); Nl=Math.max(Nl-fireBelasting(R,Nl),0); Nh=Math.max(Nh-fireBelasting(R,Nh),0);   // belasting op de nieuwe inleg
+    for(let i=0;i<Ab.length;i++){ if(!groeit_i[i]) continue;   // een vlakke stand wordt niet belast: zie de noot hierboven
+      Ab[i]=Math.max(Ab[i]-fireBelasting(R,Ab[i]),0); AbL[i]=Math.max(AbL[i]-fireBelasting(R,AbL[i]),0); AbH[i]=Math.max(AbH[i]-fireBelasting(R,AbH[i]),0); }
+    Im=Nm+som(Ab); Il=Nl+som(AbL); Ih=Nh+som(AbH); Ig=Ng+som(AbG);
     const dy=debt[y+1], ls=leaseSeries[y+1], Ay=C+flat0+ls+Im;
     mid.push(Ay-dy); low.push(C+flat0+ls+Il-dy); high.push(C+flat0+ls+Ih-dy); midGross.push(C+flat0+ls+Ig-dy); assets.push(Ay); cser.push(C);
     bserParts.forEach((arr,i)=>arr.push(Ab[i]));
@@ -5218,7 +5250,12 @@ function fireModel(R, inputs){
      een eigen rendement per bezitting later mogelijk zonder deze laag opnieuw te bouwen.
      'Nieuwe inleg' blijft het restant, dus de som blijft per constructie gelijk aan assets. */
   const assetParts=(function(){ const parts=[];
-    _potItems.forEach((it,i)=>{ if((+it.waarde||0)>0||(+it.per||0)>0) parts.push({naam:it.naam, kind:'belegging', col:ASSETCOL[i%ASSETCOL.length], series:bserParts[i].slice()}); });
+    /* v213: een pot zonder rendement en zonder inleg beweegt niet meer en hoort dus bij de vlakke
+       bezittingen, met dezelfde kleur. Hem groen laten zou hem in de opbouw als belegging tonen
+       terwijl zijn lijn recht is. Krijgt hij wel inleg, dan beweegt hij en blijft hij groen. */
+    _potItems.forEach((it,i)=>{ if(!((+it.waarde||0)>0||(+it.per||0)>0)) return;
+      const beweegt=((+it.rend||0)>0||(+it.per||0)>0);
+      parts.push({naam:it.naam, kind:beweegt?'belegging':'flat', col:beweegt?ASSETCOL[i%ASSETCOL.length]:'#a8a29e', series:bserParts[i].slice()}); });
     (inputs.flatItems||[]).forEach(it=>{ const w=+it.waarde||0; if(w>0) parts.push({naam:it.naam, kind:'flat', col:'#a8a29e', series:assets.map(_=>w)}); });   // niet-groeiende bezittingen: constant = waarde
     (_lease||[]).forEach(l=>{ if((+l.dagwaarde||0)>0) parts.push({naam:l.naam, kind:'lease', col:'#c98a6b', series:leaseSeries.map((_,y)=>(+l.dagwaarde||0)*Math.pow(1-(+l.afschr||0)/100,y))}); });   // lease-auto: schrijft af (declining balance)
     if(cser.some(v=>v>0.5)) parts.push({naam:'Spaargeld / cash', kind:'cash', col:'#94a3b8', series:cser.slice()});
@@ -5243,7 +5280,12 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),doel:Math.round(_doel),doelItems:(inputs.doelItems||[]),nu:Math.round(pmtParts(nowY).best),groeit:Math.round(pmtParts(nowY).p+pmtParts(nowY).aper)},bezit:{wens:Math.round(_aperWens),eff:Math.round(pmtParts(nowY).aper),geklemd:(pmtParts(nowY).aper<_aperWens-0.5),items:_potItems.filter(x=>x.per>0).map(x=>({naam:x.naam,per:x.per}))},missing:inputs.missing};
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),doel:Math.round(_doel),doelItems:(inputs.doelItems||[]),nu:Math.round(pmtParts(nowY).best),groeit:Math.round(pmtParts(nowY).p+pmtParts(nowY).aper)},bezit:{wens:Math.round(_aperWens),eff:Math.round(pmtParts(nowY).aper),geklemd:(pmtParts(nowY).aper<_aperWens-0.5),items:_potItems.filter(x=>x.per>0).map(x=>({naam:x.naam,per:x.per})),
+    /* v213: welke bezittingen vlak liggen omdat er geen rendement bij staat. Uit belegdItems en
+       niet uit _potItems, want de eenmalige inleg is geen bezitting. Het scherm zegt dit, anders
+       lijkt het of de app ze is vergeten. */
+    vlak:(inputs.belegdItems||[]).filter(x=>(+x.rend||0)<=0&&(+x.waarde||0)>0).map(x=>({naam:x.naam,waarde:Math.round(+x.waarde||0)})),
+    rendItems:(inputs.belegdItems||[]).filter(x=>(+x.rend||0)>0).map(x=>({naam:x.naam,rend:+x.rend||0}))},missing:inputs.missing};
 }
 /* v124: reisModel neemt een optionele override, bv. reisModel({vermogenDelta:-4000}).
    De override grijpt bewust TUSSEN laag A en laag B aan, op een kopie van het inputs-object:
@@ -5495,6 +5537,17 @@ function reisRestsaldo(M){
   const bezitKlem = Z.geklemd? `<div style="margin-top:8px;padding:10px 12px;background:var(--card2);border:1px solid var(--line);border-radius:11px">
     <div class="row"><span class="small" style="font-weight:700;color:var(--amber)">Inleg per bezitting past niet</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(Z.eff)} van ${euro0(Z.wens)}</span></div>
     <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">Je hebt bij je bezittingen samen ${euro0(Z.wens)}/mnd ingesteld, en daar is na de stappen hierboven ${euro0(Z.eff)} voor over. De projectie verdeelt dat naar rato over ${Z.items.length===1?'die bezitting':'je '+Z.items.length+' bezittingen'}, want een volgorde heb je nergens opgegeven.</div></div>` : '';
+  /* v213: welke bezittingen vlak liggen, en waarom. Zonder deze regel zie je in de opbouw een
+     rechte lijn zonder te weten dat je die zelf hebt ingesteld door het rendementsveld leeg te
+     laten. Spiegel (deze standen), gevolg (ze groeien niet mee), keuze (vul een rendement in bij
+     de bezitting) - en die keuze leidt naar openAsset(), een ingang die al bestaat. Mut en niet
+     amber (v78/v93): dit is een instelling van jou, geen aandacht die de app opeist. De vorm
+     volgt planSub()/debtOpbouw (v190/v193): tot drie een zin, vanaf vier de bestaande minitabel. */
+  const V=(M.bezit&&M.bezit.vlak)||[];
+  const vlakRegel = V.length? `<div style="margin-top:8px;padding:10px 12px;background:var(--card2);border-radius:11px">
+    <div class="row"><span class="small" style="font-weight:700">Deze standen groeien niet mee</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--mut)">${euro0(V.reduce((s,x)=>s+x.waarde,0))}</span></div>
+    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">${V.length<=3?`${opsomming(V.map(x=>esc(x.naam)))} ${V.length===1?'staat':'staan'} zonder netto rendement, dus de projectie houdt ${V.length===1?'die stand':'die standen'} op ${V.length===1?'zijn':'hun'} huidige waarde.`:'Deze bezittingen staan zonder netto rendement, dus de projectie houdt ze op hun huidige waarde.'} Werk je ze zelf bij, dan klopt dat. Zo niet, vul dan een rendement in bij de bezitting.</div>
+    ${V.length>=4?`<div class="plan-tab small mut2" style="font-size:11.5px;margin-top:3px">${V.map(x=>`<span>${esc(x.naam)}</span><span class="v">${euro0(x.waarde)}</span>`).join('')}</div>`:''}</div>` : '';
   const step2= debts.length? stepWrap(rail(stapNr(),'var(--amber)','#2a1e00',true),
     `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Schuld loopt mee</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(debtPer)}/mnd</span></div>${debtOpbouw}<div class="small mut2" style="font-size:11.5px${debtWarn?';color:var(--amber)':''}">${debtNote}</div>`) : '';
   // groeikeuze — los blokje (rs.groei) voor de groep "Rendement & inflatie"
@@ -5507,7 +5560,7 @@ function reisRestsaldo(M){
        <input type="range" min="0" max="100" step="10" value="${R.splitBeleg}" oninput="reisSplit(this.value)" style="width:100%;margin-top:6px;accent-color:var(--purple)"></div>`
     : '';
   const note=`<div class="small mut2" style="font-size:10.5px;margin-top:8px">Zodra je noodfonds vol is${debts.length?' en je schuld is afgelost':''}, groeit je hele restsaldo mee. De groeikeuze stel je in bij "Rendement &amp; inflatie".</div>`;
-  return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}<div style="margin-top:6px">${step1}${stepRes}${stepDoel}${step2}</div>${groeitRegel}${bezitKlem}${note}`, groei:`${growChips}${splitUI}` };
+  return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}<div style="margin-top:6px">${step1}${stepRes}${stepDoel}${step2}</div>${groeitRegel}${bezitKlem}${vlakRegel}${note}`, groei:`${growChips}${splitUI}` };
 }
 // Spiegel (geen advies): toont dat er ruimte vrijkomt zodra het noodfonds vol is, en wat 'vrij'/mnd doet
 // bij twee bestemmingen (aflossen vs beleggen) — puur ter vergelijking, de keuze blijft bij de gebruiker.

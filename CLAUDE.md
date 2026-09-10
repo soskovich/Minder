@@ -96,6 +96,10 @@ genoemde versietag.)*
   is **alleen** voor wat een API of een uitwisselingsformaat in gaat. Een sleutel, een label en een
   opslagveld zijn intern en volgen dus de lokale regel; `toISOString()` geeft de UTC-dag, en op een
   moment dat op lokale middernacht staat is dat altijd de dag ervóór.
+- **Geen rendement is geen groei** (`v213`): een bezitting groeit alleen op het netto rendement dat
+  jij bij die bezitting hebt ingevuld. Leeg betekent dat de stand blijft staan, en er is geen
+  terugval op het globale tarief; dat geldt alleen voor geld waarvan de bestemming nog niet bepaald
+  is. Vlak is vlak: zo'n stand krijgt ook geen bandbreedte en geen heffing.
 - **Rustig toont minder, rekent nooit anders** (`v20`, `v90`): default is `begeleid`, de keuze is
   altijd omkeerbaar, en een expliciete keuze van de gebruiker wint van de modus.
 
@@ -129,7 +133,7 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
 
 ## Testconventie
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v212` → `minder-v213`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v213` → `minder-v214`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

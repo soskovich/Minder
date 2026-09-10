@@ -17,11 +17,18 @@ const RES = 'NL01RESV0000009999';
 const BINNENKORT = ym(new Date(now.getFullYear(), now.getMonth() + 3, 1));
 
 // Twee groeiende potten met een eigen inleg, plus een niet-groeiende bezitting als controle.
+// Het reële patroon: Peaks doet 6% en dat wijkt af van het globale tarief.
 const POTTEN = [
   { id: 'a1', naam: 'Peaks pensioen', waarde: 3219, grow: true, rend: 6, per: 250 },
   { id: 'a2', naam: 'Peaks Kayani', waarde: 420, grow: true, rend: 6, per: 50 },
   { id: 'a3', naam: 'Auto', waarde: 9000, grow: false },
 ];
+// Sinds v213 wordt a.rend gelezen, en dan doet a.per twee dingen tegelijk: het geld verhuist naar
+// een andere pot ÉN het gaat op een ander tarief groeien. De v212-invariant gaat over het eerste,
+// dus die meet op deze variant, waarin elke pot precies het tarief van de nieuwe inleg heeft. Het
+// tweede effect staat hieronder apart en heeft zijn eigen spec (rendement-per-bezitting).
+const opGlobaal = (as) => as.map((a) => (a.grow ? Object.assign({}, a, { rend: 5 }) : a));
+const OPGLOBAAL = opGlobaal(POTTEN);
 const zonderPer = (as) => as.map((a) => Object.assign({}, a, { per: 0 }));
 
 function seed(assets, extra) {
@@ -84,9 +91,9 @@ const waterval = (page) => page.evaluate(() => {
 
 test.describe('a - KRITIEK: een verschuiving, geen toevoeging', () => {
   test('het projectietotaal is exact gelijk met en zonder inleg per bezitting', async ({ page }) => {
-    await boot(page, POTTEN);
+    await boot(page, OPGLOBAAL);
     const met = await totaal(page);
-    await zet(page, zonderPer(POTTEN));
+    await zet(page, zonderPer(OPGLOBAAL));
     const zonder = await totaal(page);
     expect(met.eind).toBe(zonder.eind);
     expect(met.assets).toBe(zonder.assets);
@@ -96,17 +103,34 @@ test.describe('a - KRITIEK: een verschuiving, geen toevoeging', () => {
   });
 
   test('de hele vermogensreeks is gelijk, niet alleen het eindpunt', async ({ page }) => {
-    await boot(page, POTTEN);
+    await boot(page, OPGLOBAAL);
     const met = await totaal(page);
-    await zet(page, zonderPer(POTTEN));
+    await zet(page, zonderPer(OPGLOBAAL));
     const zonder = await totaal(page);
     expect(met.reeks).toEqual(zonder.reeks);
   });
 
-  test('wat de potten erbij krijgen, verliest Nieuwe inleg precies', async ({ page }) => {
+  /* Op het reële tarief (Peaks 6% naast een globale 5%) is het géén nuloperatie meer, en dat is
+     sinds v213 de bedoeling: dezelfde euro groeit harder omdat hij naar een pot gaat die harder
+     groeit. De invariant hierboven zegt dat er niets ontstaat of verdwijnt; deze zegt dat het
+     verschil dat overblijft uitsluitend van het tarief komt. */
+  test('op een afwijkend tarief verschuift de inleg ook het rendement, en alleen dat', async ({ page }) => {
     await boot(page, POTTEN);
-    const met = await potten(page);
+    const met = await totaal(page);
     await zet(page, zonderPer(POTTEN));
+    const zonder = await totaal(page);
+    expect(met.eind).toBeGreaterThan(zonder.eind);
+    // zet de potten op het globale tarief en het verschil is weg
+    await zet(page, OPGLOBAAL);
+    const gelijk = await totaal(page);
+    await zet(page, zonderPer(OPGLOBAAL));
+    expect(gelijk.eind).toBe((await totaal(page)).eind);
+  });
+
+  test('wat de potten erbij krijgen, verliest Nieuwe inleg precies', async ({ page }) => {
+    await boot(page, OPGLOBAAL);
+    const met = await potten(page);
+    await zet(page, zonderPer(OPGLOBAAL));
     const zonder = await potten(page);
     const erbij = (met['Peaks pensioen'] - zonder['Peaks pensioen']) + (met['Peaks Kayani'] - zonder['Peaks Kayani']);
     const eraf = zonder['Nieuwe inleg'] - met['Nieuwe inleg'];
@@ -154,9 +178,11 @@ test.describe('b - de inleg landt bij de bezitting', () => {
 });
 
 test.describe('c - de klem is proportioneel en wordt gemeld', () => {
+  // Deze fixture bestaat om de klem te forceren, niet om een tarief vast te leggen; hij staat op
+  // het globale tarief zodat de totaal-invariant hieronder hetzelfde meet als die bij POTTEN.
   const GROOT = [
-    { id: 'a1', naam: 'Pot een', waarde: 1000, grow: true, per: 1000 },
-    { id: 'a2', naam: 'Pot drie', waarde: 1000, grow: true, per: 3000 },
+    { id: 'a1', naam: 'Pot een', waarde: 1000, grow: true, rend: 5, per: 1000 },
+    { id: 'a2', naam: 'Pot drie', waarde: 1000, grow: true, rend: 5, per: 3000 },
   ];
 
   test('meer ingesteld dan er overblijft, dus geklemd op wat er is', async ({ page }) => {
@@ -180,6 +206,7 @@ test.describe('c - de klem is proportioneel en wordt gemeld', () => {
     expect(Math.abs(d3 / d1 - 3)).toBeLessThan(0.01);
   });
 
+  // op het globale tarief, want anders meet deze het tariefverschil mee (zie POTTEN hierboven)
   test('ook geklemd blijft het totaal gelijk', async ({ page }) => {
     await boot(page, GROOT);
     const met = await totaal(page);
@@ -209,12 +236,8 @@ test.describe('d - buiten bereik van deze ronde', () => {
     expect((await totaal(page)).groeit).toBe(700);
   });
 
-  test('a.rend raakt de projectie niet: die volgt de groeikeuze', async ({ page }) => {
-    await boot(page, POTTEN);
-    const voor = await totaal(page);
-    await zet(page, POTTEN.map((a) => (a.grow ? Object.assign({}, a, { rend: 25 }) : a)));
-    expect((await totaal(page)).reeks).toEqual(voor.reeks);
-  });
+  // a.rend stond hier als 'raakt de projectie niet'. Sinds v213 is dat onwaar: het tarief per
+  // bezitting stuurt de projectie wel. De invariant staat nu in rendement-per-bezitting.spec.js.
 
   test('a.eenmalig, a.horizon en a.infl worden nog steeds niet gelezen', async ({ page }) => {
     await boot(page, POTTEN);
