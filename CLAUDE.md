@@ -56,7 +56,9 @@ Elk scherm beantwoordt precies één vraag, en een element staat op precies éé
 - **Home** (`dash`) — waar sta ik nu.
 - **Inzichten** (`ins`) — hoe loopt deze maand (operationeel).
 - **Maand** (`maand`) — houdt mijn systeem stand (structureel).
-- **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen.
+- **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Plan rekent in **maandtempo**
+  (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
+  restant van déze maand. Beide kloppen; wat ze verbindt hoort op Plan te staan en nergens anders.
 
 Daarnaast bestaan `tx` (Transacties), `vermogen` en `set` (Instellingen). Die dragen geen
 horizon en zijn alleen via knoppen bereikbaar, dus zet er niets op wat een van de vier hoort
@@ -104,7 +106,7 @@ cat > a.txt <<'AEOF'
 (`minder-v214` → `minder-v215`, en zo verder). Dit is de enige plek waar die regel staat.
 AEOF
 cat > b.txt <<'BEOF'
-(`minder-v217` → `minder-v218`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v218` → `minder-v219`, en zo verder). Dit is de enige plek waar die regel staat.
 - **Datumnotatie** (`v199`): een kalenderdag komt uit `vandaagYMD()` of `ymdVan()`. `toISOString()`
   is **alleen** voor wat een API of een uitwisselingsformaat in gaat. Een sleutel, een label en een
   opslagveld zijn intern en volgen dus de lokale regel; `toISOString()` geeft de UTC-dag, en op een

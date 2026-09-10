@@ -4590,13 +4590,43 @@ function planAllocWarning(){
   return null;
 }
 // "Mijn plan": de geordende lijst met op/neer-knoppen (betrouwbaar op mobiel; drag kan later)
+/* v218: Plan verdeelt planCapacity(), en dat is je ingestelde maandbedrag. Er zit geen fout in
+   die verdeling, maar het scherm zei nergens dat het over een hele maand gaat terwijl Home over het
+   restant van deze maand gaat. Twee getallen die verschillende vragen beantwoorden lezen dan als
+   hetzelfde: "€166/mnd nog vrij" naast "nog €1.044 te sparen deze maand".
+   Geen nieuw getal en geen tweede som: het maandbedrag staat al in de kop, en wat er deze maand al
+   binnen is komt uit safeToSpend(), dezelfde bron die het op Home toont.
+   Geen regel wanneer er deze maand nog niets is gespaard: dan is de hele maand nog te gaan en zegt
+   de kop het al. De terugval van planCapacity() (v190) heeft hier GEEN eigen guard nodig: die
+   treedt per definitie op wanneer monthlySavingTarget() nul is, en dan is saveTarget ook nul, dus
+   de toets op tgt vangt hem al. Een tweede guard voor hetzelfde geval zou een conditie zijn die
+   nooit als enige beslist.
+   Mut en niet amber (v78/v93): dit is een observatie, geen aandacht. Er is ook geen keuze, en die
+   wordt niet verzonnen om de vorm compleet te maken. */
+function planMaandRegel(){
+  let S=null; try{ S=safeToSpend(); }catch(_){ return ''; }
+  if(!S) return '';
+  const tgt=Math.round(+S.saveTarget||0), al=Math.round(+S.savedThisMonth||0);
+  if(!(tgt>0)||!(al>0)) return '';
+  const nog=Math.max(Math.round(+S.saveReserved||0),0);
+  const kort=isMode('rustig');
+  const txt=(nog>0)
+    ? (kort ? `Per maand. Deze maand komt er nog ${euro0(nog)} bij.`
+            : `Dit is een verdeling <b>per maand</b>. Deze maand staat er al ${euro0(al)} van op je spaarrekening, dus er komt nog ${euro0(nog)} bij.`)
+    : (kort ? `Per maand. Deze maand is je maandbedrag al binnen.`
+            : `Dit is een verdeling <b>per maand</b>. Je maandbedrag van ${euro0(tgt)} is deze maand al binnengekomen, dus deze verdeling gaat over wat er hierna bij komt.`);
+  return `<div class="small mut2" style="margin:0 2px 9px;line-height:1.45">${txt}</div>`;
+}
 function renderPlan(bare){
   const P=allocatePlan(); const cap=planCapacity(); const n=P.length;
   const rows=P.map((p,i)=>{
     const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
     /* v194: de balk toonde alleen voortgang, terwijl dit scherm over verdeling gaat - het enige
        beeld op de pagina toonde dus het verkeerde. Een tweede, lichter segment achter de vulling
-       zegt wat er deze maand bij komt, zodat de balk zowel je stand als de beweging draagt. Bij een
+       zegt wat er PER MAAND bij komt, zodat de balk zowel je stand als de beweging draagt. Dat is
+       het maandtempo en niet het restant van deze maand: het hele scherm rekent in maandtempo
+       (v218), en een balk die halverwege de maand ineens iets anders toont zou het beeld breken.
+       Bij een
        aflos-item is dat alloc plus je bestaande termijn: hetzelfde bedrag dat de regel eronder
        noemt (v190), want dat is wat er werkelijk in gaat. Staat het item stil, dan is alloc nul en
        is er geen segment - dat sluit aan op de grijze vulling hierboven in plaats van ermee te
@@ -4642,7 +4672,7 @@ function renderPlan(bare){
   // dan zeggen we dat rustig i.p.v. het geruisloos te laten verdwijnen
   const vrij=planVrij(P);
   const vrijLine=vrij>0?`<div id="planVrij" class="small muted" style="margin:0 2px 9px;line-height:1.45"><b>${euro0(vrij)}/mnd</b> nog vrij${isMode('rustig')?'':' — al je doelen krijgen wat ze nodig hebben'} · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></div>`:'';
-  return head+warn+vrijLine+spaarVrijLine(P)+spaarOverLine(P)+rows+coHorizonVraag()+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  return head+planMaandRegel()+warn+vrijLine+spaarVrijLine(P)+spaarOverLine(P)+rows+coHorizonVraag()+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
 }
 
 /* ---- Deel 2: optioneel dure-schuld-advies bij een nieuw doel (nooit verplicht) ---- */
