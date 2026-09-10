@@ -5190,20 +5190,33 @@ function fireModel(R, inputs){
   if((+R.een||0)>0) _potItems.push({naam:'Eenmalige inleg', waarde:+R.een||0, per:0, rend:+R.rend||0});
   const _aperWens=(R.inlegMode==='auto')?_potItems.reduce((a,x)=>a+x.per,0):0;
   const pmtParts=year=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY);
-    const fill=(vrij>0 && year<volYear)?vrij:0;
-    a=Math.max(a-fill,0);   // vul-fase: 'vrij' gaat nog naar het noodfonds
+    /* v216: a.per gaat er als EERSTE af, vóór het noodfonds en vóór de bestemmingen. Een
+       spaardoel is een voornemen; een periodieke inleg naar een bezitting is een feit, want dat
+       geld gaat maandelijks werkelijk die kant op. Een voornemen hoort een feit niet te
+       verdringen, en dat gebeurde: stond je plan meer toe te wijzen dan je restsaldo groot is,
+       dan bleef er nul over voor de inleg en groeide je pensioenpot alleen nog op rendement.
+       Tweede reden, en die is categorisch: fase A haalt reserveringen en doelen eraf omdat dat
+       geld NIET mag compounderen, het is vergeven aan consumptie. a.per gaat naar een belegging
+       en hoort juist wél te compounderen, alleen bij de pot waar hij landt. Hem achter de
+       bestemmingen zetten behandelde hem als consumptieve bestemming, en dat is een
+       categoriefout. */
+    const aper=Math.max(Math.min(_aperWens,a),0);
+    a=Math.max(a-aper,0);
+    /* De noodfonds-stap zelf is niet aangeraakt, maar hij vult nu uit wat er ná je inleg over is:
+       'vrij' is nog steeds het tempo, alleen kan er minder zijn dan dat. */
+    const fill=(vrij>0 && year<volYear)?Math.min(vrij,a):0;
+    a=Math.max(a-fill,0);   // vul-fase: wat er van 'vrij' past gaat naar het noodfonds
     const wens=_res+((year<volYear)?0:_doel);
     const best=Math.max(Math.min(wens,a),0);   // nooit meer diverteren dan er dat jaar is
     a=Math.max(a-best,0);
-    /* v212: de periodieke inleg per bezitting (a.per). Dit is GEEN bestemming zoals hierboven:
-       het geld blijft compounderen, het krijgt alleen de pot waar het hoort in plaats van de
-       verzamelbak 'Nieuwe inleg'. Daarom gaat het er hier af en via pInv weer in, zodat het totaal
-       per constructie gelijk blijft. Klemmen gebeurt PROPORTIONEEL en nooit op volgorde: een
-       rangorde tussen je bezittingen bestaat nergens, en die hier verzinnen zou een voorrang
-       claimen die je niet hebt ingesteld. Wanneer er geklemd wordt zegt het scherm dat. */
-    const aper=Math.max(Math.min(_aperWens,a),0);
-    a=Math.max(a-aper,0);
-    return {p:a, fill, best, aper, aperWens:_aperWens}; };
+    /* v212: a.per blijft compounderen, hij krijgt alleen de pot waar hij hoort in plaats van de
+       verzamelbak 'Nieuwe inleg'. Daarom gaat hij er hierboven af en komt hij via pInv weer in,
+       zodat het totaal per constructie gelijk blijft. Klemmen gebeurt PROPORTIONEEL en nooit op
+       volgorde: een rangorde tussen je bezittingen bestaat nergens, en die hier verzinnen zou een
+       voorrang claimen die je niet hebt ingesteld. Wanneer er geklemd wordt zegt het scherm dat.
+       v216: 'wens' gaat mee terug, want nu kunnen de BESTEMMINGEN geklemd worden in plaats van de
+       inleg, en dan hoort het scherm te zeggen dat je op Plan meer toewijst dan er overblijft. */
+    return {p:a, fill, best, aper, aperWens:_aperWens, bestWens:wens}; };
   const pmtFor=year=>pmtParts(year).p;
   // Fase 1: bezittingen (cash vlak + belegd groeit op rendement) en schuld (afloscurve) apart; vermogen = bezittingen − schuld.
   const liq0=inputs.liq||0, belegd0=(inputs.belegd||0)+(+R.een||0), flat0=inputs.flat||0;   // eenmalige inleg telt als belegd; flat0 = niet-groeiende bezittingen (vlak)
@@ -5302,7 +5315,12 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),doel:Math.round(_doel),doelItems:(inputs.doelItems||[]),nu:Math.round(pmtParts(nowY).best),groeit:Math.round(pmtParts(nowY).p+pmtParts(nowY).aper)},bezit:{wens:Math.round(_aperWens),eff:Math.round(pmtParts(nowY).aper),geklemd:(pmtParts(nowY).aper<_aperWens-0.5),items:_potItems.filter(x=>x.per>0).map(x=>({naam:x.naam,per:x.per})),
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),doel:Math.round(_doel),doelItems:(inputs.doelItems||[]),nu:Math.round(pmtParts(nowY).best),groeit:Math.round(pmtParts(nowY).p+pmtParts(nowY).aper),
+    /* v216: wat je bestemmingen dit jaar vragen en wat ervan past. Sinds a.per vóór de
+       bestemmingen staat kan hier geklemd worden, en dan wijs je op Plan meer toe dan je
+       restsaldo groot is. Dat is een echte bevinding over jouw plan en hoort dus op het scherm,
+       niet stil in de rekenkern. */
+    wens:Math.round(pmtParts(nowY).bestWens),geklemd:(pmtParts(nowY).best<pmtParts(nowY).bestWens-0.5)},bezit:{wens:Math.round(_aperWens),eff:Math.round(pmtParts(nowY).aper),geklemd:(pmtParts(nowY).aper<_aperWens-0.5),items:_potItems.filter(x=>x.per>0).map(x=>({naam:x.naam,per:x.per})),
     /* v213: welke bezittingen vlak liggen omdat er geen rendement bij staat. Uit belegdItems en
        niet uit _potItems, want de eenmalige inleg is geen bezitting. Het scherm zegt dit, anders
        lijkt het of de app ze is vergeten. */
@@ -5494,10 +5512,19 @@ function reisRestsaldo(M){
   const nfToGo=Math.max(nfDoel-nfCur,0), nfFull=(nfDoel<=0)||nfToGo<=0, nfPct=nfDoel>0?Math.min(100,Math.round(nfCur/nfDoel*100)):0;
   const nfFill=M.restsaldo.monthlySaving||0;   // tempo = je maandelijkse spaarinleg (niet je hele restsaldo), gelijk aan de noodfonds-mijlpaal en de "Sparen & buffer"-kaart
   const nfMonths=(nfToGo>0 && nfFill>0)?Math.ceil(nfToGo/nfFill):0;
+  const stapNr=(function(){ let n=0; return ()=>String(++n); })();   // de eerste stap die er is krijgt 1
   const num=(n,c1,c2)=>`<div class="num" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;background:${c1};color:${c2}">${n}</div>`;
   const stepWrap=(rail,inner,last)=>`<div style="display:flex;gap:11px;padding:10px 0">${rail}<div style="flex:1;min-width:0">${inner}</div></div>`;
   const rail=(n,c1,c2,last)=>`<div style="width:26px;flex-shrink:0;display:flex;flex-direction:column;align-items:center">${num(n,c1,c2)}${last?'':`<div style="width:2px;flex:1;background:var(--line);margin-top:4px"></div>`}</div>`;
-  const step1=stepWrap(rail('1','var(--green)','var(--on-accent)',false),
+  /* v216: de volgorde is nu zichtbaar, want hij is inhoudelijk. Wat je maandelijks werkelijk naar
+     een bezitting overmaakt gaat er als eerste af; daarna pas verdeelt de waterval wat er nog is.
+     Zonder deze stap zou het scherm een reeks bestemmingen tonen die niet optelt tot wat er van je
+     restsaldo af gaat. Teal en niet amber: dit is geen aandacht, het is waar je geld heen gaat. */
+  const Zb=M.bezit||{wens:0,eff:0,geklemd:false,items:[]};
+  const bezNamen=(Zb.items||[]).map(x=>x.naam);
+  const stepBez = (Zb.eff>0)? stepWrap(rail(stapNr(),'var(--teal)','var(--on-accent)',false),
+    `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Inleg per bezitting</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--teal)">${euro0(Zb.eff)}/mnd</span></div><div class="small mut2" style="font-size:11.5px">${bezNamen.length?'naar '+opsomming(bezNamen.map(esc))+'; ':''}dit gaat er maandelijks al heen, dus het gaat er als eerste af en het groeit mee</div>${((Zb.items||[]).length>=3)?`<div class="plan-tab small mut2" style="font-size:11.5px;margin-top:3px">${Zb.items.map(x=>`<span>${esc(x.naam)}</span><span class="v">${euro0(x.per)}</span>`).join('')}</div>`:''}`) : '';
+  const step1=stepWrap(rail(stapNr(),'var(--green)','var(--on-accent)',false),
     nfFull
     ? `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Noodfonds</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--green)">vol ✓</span></div><div class="small mut2" style="font-size:11.5px">je buffer is compleet, dit deel gaat door naar groei</div>`
     : `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Noodfonds eerst</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--green)">tot ${euro0(nfDoel)}</span></div><div class="small mut2" style="font-size:11.5px">vullen tot je doel, stopt vanzelf als het vol is</div><div class="bar-track" style="margin:7px 0 2px"><div class="bar-fill" style="width:${nfPct}%;background:var(--green)"></div></div><div class="small mut2" style="font-size:var(--fs-xs)">${euro0(nfCur)} / ${euro0(nfDoel)}${nfMonths>0?' · nog ± '+nfMonths+' mnd':''}</div><div class="small mut2" style="font-size:10.5px;margin-top:2px">${nfFill>0?`Vult met je spaarinleg (${euro0(nfFill)}/mnd); je overige restsaldo kan elders heen.`:'Stel je maandelijkse spaarinleg in voor een tijdsschatting.'}</div>`);
@@ -5531,7 +5558,6 @@ function reisRestsaldo(M){
      Ze staan tussen het noodfonds en de schuld, want ze gaan er net als het noodfonds echt af;
      de schuldstap is informatief en sluit de rij. Neutrale tint: dit is geen aandacht (v78/v93). */
   const B=M.bestemming||{res:0,doel:0,doelItems:[]};
-  const stapNr=(function(){ let n=1; return ()=>String(++n); })();   // stap 1 is het noodfonds
   const doelNamen=(B.doelItems||[]).map(x=>x.naam);
   const stepRes= (B.res>0)? stepWrap(rail(stapNr(),'var(--mut)','var(--bg)',false),
     `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Reserveringen</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--mut)">${euro0(B.res)}/mnd</span></div><div class="small mut2" style="font-size:11.5px">wat je lijst per maand vraagt; dit is uitgestelde consumptie, dus het groeit niet mee</div>`) : '';
@@ -5555,10 +5581,9 @@ function reisRestsaldo(M){
      rangorde tussen je bezittingen nergens is ingesteld. Dat stil doen zou een voorrang claimen
      die je niet hebt gekozen. Amber, want dit is echte aandacht (v78/v93): er wordt minder
      ingelegd dan je hebt opgegeven. Geen regel wanneer er niets geklemd wordt. */
-  const Z=M.bezit||{wens:0,eff:0,geklemd:false,items:[]};
-  const bezitKlem = Z.geklemd? `<div style="margin-top:8px;padding:10px 12px;background:var(--card2);border:1px solid var(--line);border-radius:11px">
-    <div class="row"><span class="small" style="font-weight:700;color:var(--amber)">Inleg per bezitting past niet</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(Z.eff)} van ${euro0(Z.wens)}</span></div>
-    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">Je hebt bij je bezittingen samen ${euro0(Z.wens)}/mnd ingesteld, en daar is na de stappen hierboven ${euro0(Z.eff)} voor over. De projectie verdeelt dat naar rato over ${Z.items.length===1?'die bezitting':'je '+Z.items.length+' bezittingen'}, want een volgorde heb je nergens opgegeven.</div></div>` : '';
+  const bezitKlem = Zb.geklemd? `<div style="margin-top:8px;padding:10px 12px;background:var(--card2);border:1px solid var(--line);border-radius:11px">
+    <div class="row"><span class="small" style="font-weight:700;color:var(--amber)">Inleg per bezitting past niet</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(Zb.eff)} van ${euro0(Zb.wens)}</span></div>
+    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">Je hebt bij je bezittingen samen ${euro0(Zb.wens)}/mnd ingesteld, en daar is na de stappen hierboven ${euro0(Zb.eff)} voor over. De projectie verdeelt dat naar rato over ${Zb.items.length===1?'die bezitting':'je '+Zb.items.length+' bezittingen'}, want een volgorde heb je nergens opgegeven.</div></div>` : '';
   /* v213: welke bezittingen vlak liggen, en waarom. Zonder deze regel zie je in de opbouw een
      rechte lijn zonder te weten dat je die zelf hebt ingesteld door het rendementsveld leeg te
      laten. Spiegel (deze standen), gevolg (ze groeien niet mee), keuze (vul een rendement in bij
@@ -5570,6 +5595,15 @@ function reisRestsaldo(M){
     <div class="row"><span class="small" style="font-weight:700">Deze standen groeien niet mee</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--mut)">${euro0(V.reduce((s,x)=>s+x.waarde,0))}</span></div>
     <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">${V.length<=3?`${opsomming(V.map(x=>esc(x.naam)))} ${V.length===1?'staat':'staan'} zonder netto rendement, dus de projectie houdt ${V.length===1?'die stand':'die standen'} op ${V.length===1?'zijn':'hun'} huidige waarde.`:'Deze bezittingen staan zonder netto rendement, dus de projectie houdt ze op hun huidige waarde.'} Werk je ze zelf bij, dan klopt dat. Zo niet, vul dan een rendement in bij de bezitting.</div>
     ${V.length>=4?`<div class="plan-tab small mut2" style="font-size:11.5px;margin-top:3px">${V.map(x=>`<span>${esc(x.naam)}</span><span class="v">${euro0(x.waarde)}</span>`).join('')}</div>`:''}</div>` : '';
+  /* v216: de klem is omgedraaid. a.per gaat er nu als eerste af, dus wat tekortkomt zijn de
+     BESTEMMINGEN: je wijst op Plan meer toe dan er van je restsaldo overblijft. Dat is een
+     bevinding over je plan en geen rekenkundig detail, dus hij staat er met beide bedragen.
+     Amber, want dit is echte aandacht (v78/v93): een deel van wat je hebt toegewezen kan dit
+     jaar niet weg. Geen regel wanneer alles past. */
+  const B2=M.bestemming||{};
+  const bestKlem = (B2.geklemd && B2.wens>0)? `<div style="margin-top:8px;padding:10px 12px;background:var(--card2);border:1px solid var(--line);border-radius:11px">
+    <div class="row"><span class="small" style="font-weight:700;color:var(--amber)">Je bestemmingen passen niet in je restsaldo</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(B2.nu)} van ${euro0(B2.wens)}</span></div>
+    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">Je reserveringen en spaardoelen vragen samen ${euro0(B2.wens)}/mnd, en na ${Zb.eff>0?'je inleg per bezitting en ':''}je noodfonds is er ${euro0(B2.nu)} voor over. Op Plan is dus meer toegewezen dan er binnenkomt; daar pas je de verdeling aan.</div></div>` : '';
   const step2= debts.length? stepWrap(rail(stapNr(),'var(--amber)','#2a1e00',true),
     `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Schuld loopt mee</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(debtPer)}/mnd</span></div>${debtOpbouw}<div class="small mut2" style="font-size:11.5px${debtWarn?';color:var(--amber)':''}">${debtNote}</div>`) : '';
   // groeikeuze — los blokje (rs.groei) voor de groep "Rendement & inflatie"
@@ -5582,7 +5616,7 @@ function reisRestsaldo(M){
        <input type="range" min="0" max="100" step="10" value="${R.splitBeleg}" oninput="reisSplit(this.value)" style="width:100%;margin-top:6px;accent-color:var(--purple)"></div>`
     : '';
   const note=`<div class="small mut2" style="font-size:10.5px;margin-top:8px">Zodra je noodfonds vol is${debts.length?' en je schuld is afgelost':''}, groeit je hele restsaldo mee. De groeikeuze stel je in bij "Rendement &amp; inflatie".</div>`;
-  return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}<div style="margin-top:6px">${step1}${stepRes}${stepDoel}${step2}</div>${groeitRegel}${bezitKlem}${vlakRegel}${note}`, groei:`${growChips}${splitUI}` };
+  return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}<div style="margin-top:6px">${stepBez}${step1}${stepRes}${stepDoel}${step2}</div>${groeitRegel}${bezitKlem}${bestKlem}${vlakRegel}${note}`, groei:`${growChips}${splitUI}` };
 }
 // Spiegel (geen advies): toont dat er ruimte vrijkomt zodra het noodfonds vol is, en wat 'vrij'/mnd doet
 // bij twee bestemmingen (aflossen vs beleggen) — puur ter vergelijking, de keuze blijft bij de gebruiker.

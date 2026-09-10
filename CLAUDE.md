@@ -104,11 +104,15 @@ cat > a.txt <<'AEOF'
 (`minder-v214` → `minder-v215`, en zo verder). Dit is de enige plek waar die regel staat.
 AEOF
 cat > b.txt <<'BEOF'
-(`minder-v215` → `minder-v216`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v216` → `minder-v217`, en zo verder). Dit is de enige plek waar die regel staat.
 - **Datumnotatie** (`v199`): een kalenderdag komt uit `vandaagYMD()` of `ymdVan()`. `toISOString()`
   is **alleen** voor wat een API of een uitwisselingsformaat in gaat. Een sleutel, een label en een
   opslagveld zijn intern en volgen dus de lokale regel; `toISOString()` geeft de UTC-dag, en op een
   moment dat op lokale middernacht staat is dat altijd de dag ervóór.
+- **Een voornemen verdringt geen feit** (`v216`): in de restsaldo-waterval gaat wat er maandelijks
+  werkelijk naar een bezitting gaat (`a.per`) er als eerste af, vóór het noodfonds en vóór de
+  bestemmingen. Een spaardoel is een voornemen; een inleg die al loopt is een feit. Komt er dan te
+  weinig over voor de bestemmingen, dan is dát wat het scherm meldt.
 - **Geen rendement is geen groei** (`v213`): een bezitting groeit alleen op het netto rendement dat
   jij bij die bezitting hebt ingevuld. Leeg betekent dat de stand blijft staan, en er is geen
   terugval op het globale tarief; dat geldt alleen voor geld waarvan de bestemming nog niet bepaald

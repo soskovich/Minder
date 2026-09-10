@@ -206,12 +206,21 @@ test.describe('c - de klem is proportioneel en wordt gemeld', () => {
     expect(Math.abs(d3 / d1 - 3)).toBeLessThan(0.01);
   });
 
-  // op het globale tarief, want anders meet deze het tariefverschil mee (zie POTTEN hierboven)
-  test('ook geklemd blijft het totaal gelijk', async ({ page }) => {
+  /* Deze stond hier als 'ook geklemd blijft het totaal gelijk'. Dat gold zolang a.per ACHTER de
+     bestemmingen stond: hij pakte dan alleen wat toch al zou compounderen, dus het was zuiver een
+     verschuiving. Sinds v216 gaat a.per vóór het noodfonds en de bestemmingen, en die landen in de
+     vlakke laag. Een euro die van een bestemming naar een pot verhuist gaat dus van niet-groeien
+     naar groeien, en dan hoort het totaal juist te stijgen. Gelijk blijven zou nu betekenen dat de
+     herordening niets deed. Wat onveranderd waar blijft is dat er niets ontstaat of verdwijnt:
+     dat bewaakt somParts === assets. */
+  test('geklemd verdringt de bestemmingen, en dat verhoogt het totaal', async ({ page }) => {
     await boot(page, GROOT);
     const met = await totaal(page);
     await zet(page, zonderPer(GROOT));
-    expect(met.reeks).toEqual((await totaal(page)).reeks);
+    const zonder = await totaal(page);
+    expect(met.eind).toBeGreaterThan(zonder.eind);
+    expect(met.somParts).toBe(met.assets);
+    expect(zonder.somParts).toBe(zonder.assets);
   });
 
   test('het scherm zegt het, met beide bedragen', async ({ page }) => {
