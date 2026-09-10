@@ -4420,12 +4420,84 @@ function spaarVrijDoel(P){
   return (P||allocatePlan()).find(x=>(x.type==='goal'||x.type==='noodfonds')
     &&x.status!=='bereikt'&&x.status!=='gepauzeerd')||null;
 }
-/* v172: hier stonden spaarStil(), spaarOver(), spaarOverDoelen(), spaarOverLine() en
-   spaarOverAf(). Ze bestonden alleen om het verschil te melden dat ontstond doordat het noodfonds
-   zijn voortgang uit je saldo herrekende terwijl een spaardoel dat niet deed: samen konden ze meer
-   claimen dan er stond, zonder dat jij iets fout deed. Sinds elke voortgang in het plan een
-   toewijzing is kan die som het saldo alleen nog overschrijden als je zelf te veel toewijst, en dat
-   houdt spaarVrijToe() al tegen. De oorzaak is weg, dus de melding ook. */
+/* v217: de over-helft is terug. v172 haalde spaarStil(), spaarOver(), spaarOverDoelen(),
+   spaarOverLine() en spaarOverAf() weg met de redenering dat de som het saldo alleen nog kan
+   overschrijden als je zelf te veel toewijst, en dat spaarVrijToe() dat tegenhoudt. Die redenering
+   keek alleen naar de invoerkant. Een toewijzing ligt in model B per ontwerp stil, en je SALDO
+   beweegt: neem je geld op, of legt migrateNfToegewezen() de toewijzing vast op een moment dat er
+   meer stond, dan ontstaat het verschil zonder dat jij iets doet. Gemeten geval: noodfonds op
+   3.050 toegewezen bij 2.500 op de rekening, en niets dat er iets over zei.
+   Verschil met de oude vorm: spaarOver() rekent nu met de TOEGEWEZEN bedragen (nfToegewezen +
+   g.gespaard), niet met een herrekend noodfonds. Daarmee is spaarStil() overbodig geworden - vrij
+   en over zijn hetzelfde verschil met een ander teken en kunnen niet allebei positief zijn - en
+   kan het noodfonds zelf te hoog staan, wat in de oude vorm onmogelijk was. */
+/* Wat is er méér toegewezen dan er op je spaarrekening staat? Exact de tegenhanger van
+   spaarVrij(): dezelfde twee bedragen, andere kant van nul. Eén bron, geen tweede som (v104). */
+function spaarOver(){
+  const V=spaarVrij();
+  return {over:Math.max(V.toegewezen-V.saved,0), saved:V.saved, doel:V.doel, toegewezen:V.toegewezen};
+}
+/* Wie kan er inleveren, en in welke volgorde. Van onder naar boven door het plan: die rangorde heb
+   jij zelf gezet en het is de enige die er ligt. Het noodfonds staat bovenaan omdat het het
+   belangrijkst is, dus het levert als laatste in. Een aflos-item doet niet mee: dat leidt zijn
+   voortgang af uit de restschuld en is geen toewijzing die je mag verlagen (v100). */
+function spaarOverItems(P){
+  return (P||allocatePlan()).filter(x=>(x.type==='goal'||x.type==='noodfonds')&&(+x.gespaard||0)>0).reverse();
+}
+/* De melding. Mut en niet amber (v78/v93): er is niets mis met je geld, er staat een cijfer dat
+   achterloopt op je saldo. Zegt met zoveel woorden waar het vanaf gaat, want als dat het noodfonds
+   is wil je dat weten voordat je tikt: dat is de post die je het minst wilt verlagen. */
+function spaarOverLine(P){
+  const V=spaarOver(); if(!(V.over>0)) return '';
+  const rij=spaarOverItems(P); if(!rij.length) return '';
+  const kort=isMode('rustig');
+  /* Wie er werkelijk inlevert, in dezelfde volgorde als spaarOverAf() aanhoudt. Niet de hele rij:
+     wie niets hoeft in te leveren hoort niet in de zin, anders noemt de melding een post die
+     ongemoeid blijft. */
+  const raakt=[]; let rest=V.over;
+  for(const it of rij){ if(rest<=0) break; const af=Math.min(Math.max(+it.gespaard||0,0),rest); if(af<=0) continue; raakt.push(it); rest-=af; }
+  const noem=x=>x.type==='noodfonds'?'je noodfonds':esc(x.naam);
+  const naam=opsomming(raakt.map(noem));
+  const nfRaakt=raakt.some(x=>x.type==='noodfonds');
+  const anderen=raakt.filter(x=>x.type!=='noodfonds').length;
+  const txt=kort
+    ? `Er is ${euro0(V.over)} meer toegewezen dan er staat.`
+    : `Je plan heeft samen ${euro0(V.toegewezen)} toegewezen, terwijl er ${euro0(V.saved)} op je spaarrekening staat. Dat verschil van ${euro0(V.over)} is niet iets dat je verkeerd hebt ingevuld: een toewijzing blijft staan waar hij stond, en je saldo beweegt.`;
+  /* Raakt het je noodfonds, dan zeg je dat vóór de tik, want dat is de post die je het minst wilt
+     verlagen. Zijn er doelen die eerst inleveren, dan is dat de uitleg; is er niets anders dat kan
+     inleveren, dan is dat de uitleg. Nooit 'je doelen leveren eerst in' als er geen doel met een
+     toewijzing staat: dat zou een volgorde beschrijven die hier niets doet. */
+  const waar=(!nfRaakt||kort) ? ''
+    : `<div class="small mut2" style="font-size:var(--fs-xs);margin-top:4px">${anderen>0
+        ? 'Je doelen leveren eerst in en je noodfonds als laatste, want je eigen volgorde in het plan is de enige rangorde die er ligt.'
+        : 'Dit gaat van je noodfonds af: er staat bij je doelen niets toegewezen, dus daar valt niets weg te halen.'}</div>`;
+  return `<div class="card spaar-over" style="border-left:3px solid var(--mut);border-radius:0 16px 16px 0;padding:12px 14px;margin:0 0 9px">
+    <div class="small" style="line-height:1.5">${txt}</div>${waar}
+    <div class="small" style="margin-top:6px"><span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="event.stopPropagation();spaarOverAf()">haal ${euro0(V.over)} weg bij ${naam} ›</span></div></div>`;
+}
+/* De correctie. Van onder naar boven, en het noodfonds kan meedoen: in het gemeten geval staan de
+   doelen op nul en zit het hele verschil daar, en dan zou een correctie die alleen doelen kent een
+   knop zijn die niets doet. Omkeerbaar: elk bedrag blijft bewerkbaar waar het stond. */
+function spaarOverAf(){
+  const V=spaarOver(); if(!(V.over>0)) return;
+  let rest=V.over; const namen=[];
+  for(const it of spaarOverItems()){
+    if(rest<=0) break;
+    if(it.type==='noodfonds'){
+      const nu=Math.max(Math.round(+SET.nfToegewezen||0),0); const af=Math.min(nu,rest);
+      if(af<=0) continue;
+      SET.nfToegewezen=nu-af; rest-=af; namen.push('je noodfonds');
+      continue;
+    }
+    const g=(SET.goals||[]).find(x=>x.id===it.id); if(!g) continue;
+    const nu=Math.max(Math.round(+g.gespaard||0),0); const af=Math.min(nu,rest);
+    if(af<=0) continue;
+    g.gespaard=nu-af; rest-=af; namen.push(g.naam||'doel');
+  }
+  if(rest===V.over) return;                                   // niets kunnen weghalen
+  save(); render();
+  toast(`${ICON('check')} ${euro0(V.over-rest)} weggehaald bij ${opsomming(namen)}`);
+}
 /* v126: deze twee regels hingen aan het noodfonds-plan-item, want ze werden binnen de plan-rij
    gerenderd en begonnen met een type-guard. Zonder noodfondsitem, of zodra het gepauzeerd, bereikt
    of uit het plan was, verdween de controle geruisloos - precies wanneer je buffer op peil is en
@@ -4570,7 +4642,7 @@ function renderPlan(bare){
   // dan zeggen we dat rustig i.p.v. het geruisloos te laten verdwijnen
   const vrij=planVrij(P);
   const vrijLine=vrij>0?`<div id="planVrij" class="small muted" style="margin:0 2px 9px;line-height:1.45"><b>${euro0(vrij)}/mnd</b> nog vrij${isMode('rustig')?'':' — al je doelen krijgen wat ze nodig hebben'} · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></div>`:'';
-  return head+warn+vrijLine+spaarVrijLine(P)+rows+coHorizonVraag()+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  return head+warn+vrijLine+spaarVrijLine(P)+spaarOverLine(P)+rows+coHorizonVraag()+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
 }
 
 /* ---- Deel 2: optioneel dure-schuld-advies bij een nieuw doel (nooit verplicht) ---- */

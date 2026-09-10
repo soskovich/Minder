@@ -104,7 +104,7 @@ cat > a.txt <<'AEOF'
 (`minder-v214` → `minder-v215`, en zo verder). Dit is de enige plek waar die regel staat.
 AEOF
 cat > b.txt <<'BEOF'
-(`minder-v216` → `minder-v217`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v217` → `minder-v218`, en zo verder). Dit is de enige plek waar die regel staat.
 - **Datumnotatie** (`v199`): een kalenderdag komt uit `vandaagYMD()` of `ymdVan()`. `toISOString()`
   is **alleen** voor wat een API of een uitwisselingsformaat in gaat. Een sleutel, een label en een
   opslagveld zijn intern en volgen dus de lokale regel; `toISOString()` geeft de UTC-dag, en op een
@@ -147,6 +147,13 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
 - **Een dode conditie vind je niet met bereikbaarheid.** De functie eromheen leeft. Ontbreekt de
   schrijver van een vlag, beslis dan niet zelf of de guard weg kan of dat er een invoerkanaal is
   vergeten: het eerste is opruimwerk, het tweede een lacune.
+- **Een signaal weghalen omdat de invoerkant is afgevangen, veronderstelt dat de andere kant
+  stilstaat.** Bij `v172` verviel de over-melding met de redenering dat de som het saldo alleen kan
+  overschrijden als je zelf te veel toewijst, en dat het toewijzen dat tegenhoudt. Maar de
+  toewijzing stond stil en het *saldo* bewoog, en dat was precies het geval dat de melding ving:
+  het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
+  niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
+  Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
 - **Een placeholder of een label dat een waarde belooft, tel je tegen wat de code doet.** Een veld
   met `placeholder="5"` zegt dat leeg laten 5% betekent; staat er in de code `+v('aRend')||0`, dan
   is het 0 en liegt het scherm. Hetzelfde geldt voor een eenheid, een default in een labeltekst en

@@ -96,12 +96,28 @@ test.describe('b · spaarVrij telt alle items, zonder uitzondering', () => {
   });
 });
 
-test.describe('c · de oorzaak is weg, dus de melding ook', () => {
-  test('spaarOver en zijn satellieten bestaan niet meer', async ({ page }) => {
+test.describe('c · één oorzaak is weg, de andere niet', () => {
+  /* Deze stond hier als 'spaarOver en zijn satellieten bestaan niet meer'. v172 haalde ze weg met
+     de redenering dat de som het saldo alleen nog kan overschrijden als je zelf te veel toewijst.
+     Die redenering keek alleen naar de invoerkant: een toewijzing ligt in model B stil en het
+     SALDO beweegt, dus het verschil ontstaat ook zonder dat iemand iets doet. spaarOver() c.s. zijn
+     in v217 teruggekomen, nu rekenend met de toegewezen bedragen. Wat wél definitief weg is, is
+     spaarStil(): die bestond omdat vrij en over uit twee verschillende sommen kwamen en dus
+     allebei positief konden zijn. Nu zijn ze hetzelfde verschil met een ander teken. */
+  test('spaarStil is niet teruggekomen, want vrij en over zijn één verschil', async ({ page }) => {
     await boot(page);
-    for (const fn of ['spaarOver', 'spaarOverAf', 'spaarOverDoelen', 'spaarOverLine', 'spaarStil']) {
-      expect(await page.evaluate((f) => typeof window[f], fn), fn).toBe('undefined');
+    expect(await page.evaluate(() => typeof window.spaarStil)).toBe('undefined');
+    for (const fn of ['spaarOver', 'spaarOverAf', 'spaarOverItems', 'spaarOverLine']) {
+      expect(await page.evaluate((f) => typeof window[f], fn), fn).toBe('function');
     }
+  });
+
+  test('de herkomst van beide helften is dezelfde som', async ({ page }) => {
+    await boot(page, seed({ spaarSaldo: 2000, nfToegewezen: 1500 }));
+    const r = await page.evaluate(() => ({ V: spaarVrij(), O: spaarOver() }));
+    expect(r.O.saved).toBe(r.V.saved);
+    expect(r.O.toegewezen).toBe(r.V.toegewezen);
+    expect(Math.min(r.V.vrij, r.O.over)).toBe(0);
   });
 
   test('een hoger noodfonds-doel laat de toewijzing staan', async ({ page }) => {
