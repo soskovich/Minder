@@ -277,18 +277,35 @@ test.describe('e · de spaarrente heeft een invoerveld', () => {
     expect(await page.evaluate(() => SET.spaarRente == null || SET.spaarRente === '')).toBe(true);
   });
 
+  /* Bindt aan gedrag en niet aan de letterlijke handler-string: die is sinds v215 numIn(this.value)
+     in plaats van +this.value, terwijl het gedrag hetzelfde hoort te zijn. Een assertie op de
+     broncode zou daar omvallen zonder dat er iets stuk is. */
   test('het invoerveld schrijft SET.spaarRente en klemt op nul', async ({ page }) => {
     await boot(page, seed({ budgetAdv: true }));
-    const h = await page.evaluate(() => setBudget());
-    expect(h).toMatch(/SET\.spaarRente=this\.value===''\?'':Math\.max\(0,\+this\.value\|\|0\)/);
-    // en het veld wordt teruggelezen, dus wat je invulde staat er weer
+    const uit = await page.evaluate(() => {
+      const veld = () => {
+        const d = document.createElement('div'); d.innerHTML = setBudget();
+        return [...d.querySelectorAll('input')].find((x) => /spaarRente/.test(x.getAttribute('oninput') || ''));
+      };
+      const tik = (v) => { const i = veld(); const f = new Function('event', i.getAttribute('oninput')); f.call({ value: v }); return SET.spaarRente; };
+      return { gewoon: tik('3,5'), punt: tik('2.25'), negatief: tik('-5'), leeg: tik(''), boven: tik('99') };
+    });
+    expect(uit.gewoon).toBe(3.5);      // de komma is het decimaalteken
+    expect(uit.punt).toBe(2.25);       // en de punt blijft werken
+    expect(uit.negatief).toBe(0);      // klemt op nul
+    expect(uit.leeg).toBe('');         // leeg blijft leeg, niet nul
+    expect(uit.boven).toBe(20);        // en op het maximum
+  });
+
+  test('en het veld toont die waarde terug in NL-notatie', async ({ page }) => {
+    await boot(page, seed({ budgetAdv: true }));
     const val = await page.evaluate(() => {
       SET.spaarRente = 3.5; save();
       const d = document.createElement('div'); d.innerHTML = setBudget();
       const i = [...d.querySelectorAll('input')].find((x) => /spaarRente/.test(x.getAttribute('oninput') || ''));
-      return i ? i.value : null;
+      return i ? i.getAttribute('value') : null;
     });
-    expect(val).toBe('3.5');
+    expect(val).toBe('3,5');
   });
 
   test('een schuld net boven en net onder de drempel', async ({ page }) => {

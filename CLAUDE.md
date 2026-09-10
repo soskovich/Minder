@@ -92,6 +92,19 @@ genoemde versietag.)*
 - **Een term per begrip** (`v91`): uitleg loopt uitsluitend via `jrg()` + `JARGON` + `#tipPop`.
 - **Getalnotatie** (`v75`, `v76`): NL-notatie, minteken vóór het euroteken (`-€128,00`), nul-guard
   tegen `-€0,00`, `euroK()` als enige compacte vorm.
+- **Getalinvoer** (`v215`): een getal dat de gebruiker intikt komt binnen via `numIn()` en gaat
+  terug het veld in via `numUit()`. Een veld waar een decimaal betekenis heeft is
+  `type="text" inputmode="decimal"`, nooit `type="number"`: dat laatste **wist een komma al in de
+  DOM**, dus dan valt er voor `numIn()` niets meer af te vangen. Een bedragveld in hele euro's mag
+  `type="number" inputmode="numeric"` blijven. De import-parsers voor MT940 en CSV houden hun eigen
+  lezer: daar is de punt per formaat duizendtal, en `numIn()` leest `3.5` juist als drieënhalf.
+AEOF
+node rep.js $C a.txt b.txt
+cat > a.txt <<'AEOF'
+(`minder-v214` → `minder-v215`, en zo verder). Dit is de enige plek waar die regel staat.
+AEOF
+cat > b.txt <<'BEOF'
+(`minder-v215` → `minder-v216`, en zo verder). Dit is de enige plek waar die regel staat.
 - **Datumnotatie** (`v199`): een kalenderdag komt uit `vandaagYMD()` of `ymdVan()`. `toISOString()`
   is **alleen** voor wat een API of een uitwisselingsformaat in gaat. Een sleutel, een label en een
   opslagveld zijn intern en volgen dus de lokale regel; `toISOString()` geeft de UTC-dag, en op een

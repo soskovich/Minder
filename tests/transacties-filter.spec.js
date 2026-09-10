@@ -197,7 +197,9 @@ test.describe('d · de filter-sheet zelf', () => {
     const s = await page.locator('#sheet').innerText();
     for (const kop of ['Periode', 'Type', 'Categorie', 'Rekening', 'Bedrag', 'Zoek']) expect(s, kop).toContain(kop);
     expect(s).toContain('in je selectie');
-    expect(await page.locator('#sheet input[type="number"]').count()).toBe(2);
+    // v215: de twee bedragvelden zijn tekstvelden met inputmode=decimal, want een number-veld wist
+    // een komma voordat de app hem kan lezen. Bind aan het paar velden, niet aan hun type.
+    expect(await page.locator('#sheet input[inputmode="decimal"]').count()).toBe(2);
 
     // een keuze in de sheet werkt meteen door in de lijst eronder
     await page.locator('#sheet .chip', { hasText: /^Alles$/ }).first().click();
