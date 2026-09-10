@@ -130,10 +130,17 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
 - **Een dode conditie vind je niet met bereikbaarheid.** De functie eromheen leeft. Ontbreekt de
   schrijver van een vlag, beslis dan niet zelf of de guard weg kan of dat er een invoerkanaal is
   vergeten: het eerste is opruimwerk, het tweede een lacune.
+- **Een placeholder of een label dat een waarde belooft, tel je tegen wat de code doet.** Een veld
+  met `placeholder="5"` zegt dat leeg laten 5% betekent; staat er in de code `+v('aRend')||0`, dan
+  is het 0 en liegt het scherm. Hetzelfde geldt voor een eenheid, een default in een labeltekst en
+  een voorbeeldbedrag. Dit is de vijfde claim in dit traject die niet klopte, en het is telkens
+  dezelfde vorm: de tekst is ooit geschreven bij een gedrag dat later is veranderd. Loop bij elke
+  ronde die een veld raakt zijn tekst na, en laat een veld dat niets doet niet staan: weghalen of
+  alsnog lezen is een keuze, maar hem laten staan is er geen.
 
 ## Testconventie
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v213` → `minder-v214`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v214` → `minder-v215`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

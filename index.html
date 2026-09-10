@@ -4928,16 +4928,17 @@ function openAsset(id, naamVoorstel){
       <input type="checkbox" id="aGrow" ${g?'checked':''} onchange="document.getElementById('agrowf').style.display=this.checked?'block':'none'">
       <span style="flex:1"><span style="font-weight:600;font-size:13px">Groeit dit? (belegging/spaargeld)</span><span class="small muted" style="display:block">Toon een verwachte-waarde-projectie</span></span></label>
     <div id="agrowf" style="display:${g?'block':'none'}">
+      <!-- v214: Inflatie, Horizon en Eenmalige inleg stonden hier als velden zonder lezer. Ze zijn
+           weg omdat de reis hun vraag al beantwoordt: de horizon loopt tot je pensioenjaar en de
+           eenmalige inleg staat als R.een in de reis zelf, en voor inflatie is er één globale
+           aanname bij "Rendement & inflatie". Ze alsnog laten meerekenen zou drie modelkeuzes
+           vragen voor iets waar niemand om heeft gevraagd; een veld dat niets doet is erger dan
+           geen veld. -->
       <div class="row" style="gap:8px">
         <div style="flex:1"><label class="fld">Netto rendement (%/jr)</label><input id="aRend" type="number" inputmode="decimal" value="${a.rend||''}" placeholder="0" style="width:100%"></div>
-        <div style="flex:1"><label class="fld">Inflatie (%/jr)</label><input id="aInfl" type="number" inputmode="decimal" value="${a.infl||''}" placeholder="2" style="width:100%"></div>
-      </div>
-      <label class="fld" style="margin-top:10px">Horizon (jaren)</label><input id="aHor" type="number" inputmode="numeric" value="${a.horizon||''}" placeholder="20" style="width:100%">
-      <div class="row" style="gap:8px;margin-top:10px">
-        <div style="flex:1"><label class="fld">Eenmalige inleg (€)</label><input id="aEen" type="number" inputmode="numeric" value="${a.eenmalig||''}" placeholder="0" style="width:100%"></div>
         <div style="flex:1"><label class="fld">Periodieke inleg (€/mnd)</label><input id="aPer" type="number" inputmode="numeric" value="${a.per||''}" placeholder="0" style="width:100%"></div>
       </div>
-      <div class="small muted" style="font-size:var(--fs-xs);margin-top:8px">"Netto" = na kosten en belasting. Met inflatie tonen we ook de koopkracht van nu. Rendement is niet gegarandeerd — geen advies.</div>
+      <div class="small muted" style="font-size:var(--fs-xs);margin-top:8px">"Netto" = na kosten en belasting. Rendement is niet gegarandeerd, en dit is geen advies. Inflatie en de horizon gelden voor je hele reis en stel je in bij "Rendement &amp; inflatie".</div>
       <div class="small mut2" style="font-size:var(--fs-xs);margin-top:6px">Laat je het rendement leeg, dan groeit deze bezitting niet in de Vermogensreis: de stand blijft staan op wat jij invult. Dat is de bedoeling bij een saldo dat je zelf bijwerkt.</div>
     </div>
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveAsset('${id||''}')">${ICON('check')} Opslaan</button>
@@ -4951,7 +4952,11 @@ function saveAsset(id){
   if(!naam || waarde===0){ toast('Vul een naam en waarde in'); return; }
   const grow=!!((document.getElementById('aGrow')||{}).checked);
   const a={id:id||('a'+Date.now().toString(36)), naam, waarde, grow};
-  if(grow){ a.rend=+v('aRend')||0; a.infl=+v('aInfl')||0; a.horizon=+v('aHor')||0; a.eenmalig=Math.round(+v('aEen')||0); a.per=Math.round(+v('aPer')||0); }
+  /* v214: a.infl, a.horizon en a.eenmalig worden niet meer geschreven. Er is bewust geen migratie:
+     saveAsset() bouwt het object opnieuw op, dus een bestaande bezitting verliest die velden zodra
+     je hem bewerkt, en tot die tijd staan ze er zonder iets te doen (dat deden ze al). Ze actief
+     uit SET halen zou een stille schrijfactie op jouw data zijn zonder dat er iets mee verandert. */
+  if(grow){ a.rend=+v('aRend')||0; a.per=Math.round(+v('aPer')||0); }
   SET.assets=SET.assets||[]; const i=SET.assets.findIndex(x=>x.id===id);
   if(i>=0) SET.assets[i]=a; else SET.assets.push(a);
   save(); closeSheet(); render(); toast(`${ICON('check')} Bezitting opgeslagen`);

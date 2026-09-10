@@ -223,14 +223,8 @@ test.describe('d - het scherm zegt welke standen vlak liggen', () => {
   });
 });
 
-test.describe('e - buiten bereik van deze ronde', () => {
-  test('a.eenmalig, a.horizon en a.infl worden nog steeds niet gelezen', async ({ page }) => {
-    await boot(page, GEMENGD);
-    const voor = await model(page);
-    await zet(page, wijzig(GEMENGD, () => ({ eenmalig: 50000, horizon: 5, infl: 9 })));
-    expect((await model(page)).mid).toEqual(voor.mid);
-  });
-});
+// a.eenmalig, a.horizon en a.infl stonden hier als 'buiten bereik van deze ronde'. Sinds v214 zijn
+// ze weg uit de editor; wat daarvan te bewaken valt staat in velden-zonder-lezer.spec.js.
 
 test.describe('f - layout', () => {
   for (const w of [360, 390]) {

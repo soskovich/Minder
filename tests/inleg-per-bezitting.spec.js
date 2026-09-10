@@ -239,12 +239,6 @@ test.describe('d - buiten bereik van deze ronde', () => {
   // a.rend stond hier als 'raakt de projectie niet'. Sinds v213 is dat onwaar: het tarief per
   // bezitting stuurt de projectie wel. De invariant staat nu in rendement-per-bezitting.spec.js.
 
-  test('a.eenmalig, a.horizon en a.infl worden nog steeds niet gelezen', async ({ page }) => {
-    await boot(page, POTTEN);
-    const voor = await totaal(page);
-    const voorPotten = await potten(page);
-    await zet(page, POTTEN.map((a) => (a.grow ? Object.assign({}, a, { eenmalig: 50000, horizon: 5, infl: 9 }) : a)));
-    expect((await totaal(page)).reeks).toEqual(voor.reeks);
-    expect(await potten(page)).toEqual(voorPotten);
-  });
+  // a.eenmalig, a.horizon en a.infl stonden hier als 'worden niet gelezen'. Sinds v214 zijn ze
+  // helemaal weg uit de editor; wat daarvan te bewaken valt staat in velden-zonder-lezer.spec.js.
 });
