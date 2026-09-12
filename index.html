@@ -3668,6 +3668,59 @@ function maandDot(st){
   const c = st==='tekort'?'var(--red)':st==='let op'?'var(--amber)':st==='ok'?'var(--green)':'var(--bar)';
   return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};flex-shrink:0;margin-top:6px"></span>`;
 }
+/* v222: de kaart 'Vraagt een beslissing' stelde alleen vast. Elke regel zei wat er aan de hand
+   was en wat het gevolg is, maar niet wat de handeling is. De cijfers stonden er al; wat ontbrak
+   was dat ze als handeling werden aangeboden in plaats van als vaststelling.
+   BRON: maandRegelOpties() bepaalt of er een vorm is en welke - daar wordt geen tweede optieset
+   naast gezet. Alleen de FORMULERING is van hier. Die functie schrijft handelingen ('€850 per maand
+   extra opzij zetten'), en dat klopt in het gesprek, want daar kies je. Op de kaart is een
+   handeling een opdracht, en dit is een constatering: dit is wat er nodig is om de norm te halen.
+   EEN suggestie, niet drie: de drie vormen horen in het gesprek onder de kaart, waar je kiest.
+   Hier staat steeds de vorm die de NORM HAALT, nooit de vorm die de norm verlaagt (een verplichting
+   schrappen, je richtbedrag verlagen, je streefdatum verschuiven). Die verplaatsen de norm en
+   beantwoorden dus niet 'wat is er nodig om hem te halen'.
+   DE EENHEID VERSCHILT PER REGEL en de zin draagt dat, anders lees je een stand als een maandbedrag.
+   Bij dekking is r.tekortPerMaand ondanks zijn naam D.tekort, en dat is benodigdeStand min
+   werkelijkeStand: een ACHTERSTAND IN JE POT, geen maandbedrag. maandRegelOpties() noemt hem wel
+   'per maand'; dat is een fout in die labels en die wordt hier niet overgenomen. Bij buffer is het
+   bedrag het gat naar je richtbedrag (noodfondsModel: doel min spaar), ook een totaal. Bij doel is
+   het wel een maandbedrag (benodigd min alloc uit doelTempo).
+   GEEN suggestie zonder norm die niet gehaald wordt (ok en onbekend), en niet bij een regel die je
+   bewust hebt geaccepteerd: dan heb je de norm zelf losgelaten. Een structureel signaal krijgt er
+   geen zolang maandRegelOpties() er geen levert; dat is een eigen lacune. */
+function maandSuggestie(r, m){
+  if(!r || r.structureel || r.geaccepteerd) return '';
+  if(r.status!=='tekort' && r.status!=='let op') return '';
+  let opts=[]; try{ opts=maandRegelOpties(r, m)||[]; }catch(_){}
+  if(!opts.some(o=>o&&o.vorm!=='accepteer')) return '';   // niets dat de norm haalt
+  const t=Math.max(Math.round(+r.tekortPerMaand||0),0);
+  if(r.key==='dekking'){
+    if(!(t>0)) return '';
+    let perM=0; try{ perM=Math.round(dekking(12).benodigdPerMaand||0); }catch(_){}
+    /* Twee grootheden in één regel, dus ze worden uit elkaar gehouden: t is de achterstand in je
+       pot, perM het tempo dat daarnaast doorloopt. */
+    return perM>0
+      ? `${euro0(t)} erbij brengt je pot op de stand die er nu bij hoort; de ${euro0(perM)} hierboven is het maandtempo dat daarnaast doorloopt.`
+      : `${euro0(t)} erbij brengt je pot op de stand die er nu bij hoort.`;
+  }
+  if(r.key==='buffer'){
+    let doel=0, spaar=null;
+    try{ const nf=noodfondsModel(); doel=Math.round(+nf.doel||0); spaar=(nf.spaar!=null)?Math.round(+nf.spaar):null; }catch(_){}
+    if(!(doel>0) || spaar==null) return '';
+    const gat=Math.max(doel-spaar,0); if(!(gat>0)) return '';
+    let richt=0; try{ richt=nfMaanden(); }catch(_){}
+    /* Een totaal en geen maandbedrag, dus 'in totaal' staat erbij: de twee andere regels noemen
+       wel bedragen per maand en zonder dat woord lees je ze als dezelfde soort. */
+    return richt>0
+      ? `${euro0(gat)} erbij brengt je buffer in totaal op je richtbedrag van ${richt} ${richt===1?'maand':'maanden'}.`
+      : `${euro0(gat)} erbij brengt je buffer in totaal op je richtbedrag.`;
+  }
+  if(r.key==='doel'){
+    if(!(t>0)) return '';
+    return `${euro0(t)} per maand erbij houdt die streefdatum haalbaar.`;
+  }
+  return '';
+}
 function maandRij(r,compact){
   /* v193: de compacte rij liet de eenheid weg om kort te blijven, dus er stond 'Buffer in maanden
      · 10,4' zonder waarin, en 'Dekking reserveringen · €2.500' zonder waartegen. Dat zijn precies de
@@ -3683,7 +3736,12 @@ function maandRij(r,compact){
   return `<div class="row" style="gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${r.act}">
     ${maandDot(r.status)}
     <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.naam)}</div>
-      ${r.gevolg?`<div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg)}</div>`:''}
+      ${(function(){ const sug=maandSuggestie(r, curMonth||thisYM());
+        if(!r.gevolg && !sug) return '';
+        /* De suggestie sluit aan op de gevolgzin in dezelfde regel: hij hoort bij dat gevolg en is
+           geen eigen blok dat om aandacht vraagt. Mut, zonder ingang: de tik op de rij blijft de
+           enige handeling (v193), en vastleggen doe je in het gesprek onder de kaart. */
+        return `<div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg||'')}${(r.gevolg&&sug)?' ':''}${sug?`<span class="mut2">${esc(sug)}</span>`:''}</div>`; })()}
       ${r.geaccepteerd?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:4px">Je hebt dit bewust geaccepteerd${r.geaccepteerd.tot?`, tot ${esc(resMaandLabel(r.geaccepteerd.tot))}`:''}.</div>`:''}</div>
     <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:42%"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>`;
