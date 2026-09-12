@@ -6297,7 +6297,80 @@ function renderVooruit(){
   // schermen laten je niet zien welke je leest, en de vraag die ze beantwoorden ("hoe sta ik er
   // halverwege de maand voor") hoort bij de budgetstand, niet bij een vooruitblik over maanden.
   // De vaste lasten blijven bereikbaar via openFixedDue() vanuit die hero.
-  $('#s-vooruit').innerHTML = doelZone + resDekkingCard() + VOORUIT_FOOT;
+  /* v221: zonder argument, want planTotaal() heeft alloc, status en rest nodig en die komen uit
+     allocatePlan(). P hierboven is planItems(): dezelfde items, maar vóór de waterfall, dus zonder
+     status - en dan zou een gepauzeerd doel stil als lopend meetellen. */
+  $('#s-vooruit').innerHTML = doelZone + planTotaalRegel() + resDekkingCard() + VOORUIT_FOOT;
+}
+/* v221: de optelling over je plan. Per doel zag je toegewezen tegen doelbedrag en wat het per
+   maand krijgt, maar nergens het totaal: wat vraagt je plan bij elkaar, wat staat daar tegenover,
+   en wat is het verschil. Dat was alleen te zien door de regels zelf op te tellen.
+   Bronnen: doel, gespaard en rest zoals allocatePlan() ze al levert, planCapacity() voor het tempo
+   en doelMaandenTot() voor de datum. Er wordt niets herrekend.
+   AFBAKENING. Alles behalve type 'aflossen' - schuld is een andere vraag. Het noodfonds telt dus
+   MEE: sinds v172 is het een plan-item met hetzelfde doel/toegewezen-patroon als een doel, het
+   staat in dezelfde lijst, en een regel die zich 'totaal' noemt terwijl het eerste item erboven
+   ontbreekt is een claim die niet klopt.
+   NIET de v211-filter (type 'goal' én alloc > 0). Die hoort bij maandelijkse bestemmingen en werkt
+   hier averechts: een doel dat 'wacht op capaciteit' heeft alloc 0, en dat is juist het doel waar
+   deze vraag over gaat. Een afbakening is niet overdraagbaar tussen twee vragen.
+   Een GEPAUZEERD doel telt wel in het totaal en niet in de maanden: het bedrag is niet verdwenen,
+   je hebt alleen de inleg stilgezet, maar het krijgt geen inleg en dan zou het getal een tempo
+   claimen voor geld dat geen tempo heeft (zelfde redenering als een vlakke bezitting buiten de
+   groei, v213). Een BEREIKT doel telt in beide sommen mee en laat het verschil dus ongemoeid.
+   Geen oordeel: geen kleur die dit als probleem markeert, geen advies om meer in te leggen, geen
+   aanmoediging. Dit heb je nodig, dit staat er, zoveel maanden scheelt dat, en je eerste
+   streefdatum is dan. Wat je ermee doet is aan jou. */
+function planTotaal(P){
+  const items=(P||(function(){ try{ return allocatePlan(); }catch(_){ return []; } })())
+    .filter(p=>p&&p.type!=='aflossen');
+  if(!items.some(p=>p.type==='goal')) return null;   // zonder doelen valt er niets op te tellen
+  const rest=p=>Math.max(Math.round((p.rest!=null)?+p.rest:((+p.doel||0)-(+p.gespaard||0)))||0,0);
+  const nodig=items.reduce((a,p)=>a+Math.max(Math.round(+p.doel||0),0),0);
+  const toe=items.reduce((a,p)=>a+Math.max(Math.round(+p.gespaard||0),0),0);
+  const gat=items.reduce((a,p)=>a+rest(p),0);
+  const pauze=items.filter(p=>p.status==='gepauzeerd');
+  const gatPauze=pauze.reduce((a,p)=>a+rest(p),0);
+  const gatLopend=Math.max(gat-gatPauze,0);
+  let cap=0; try{ cap=planCapacity(); }catch(_){}
+  const mnd=(cap>0&&gatLopend>0)?Math.ceil(gatLopend/cap):null;
+  /* De eerstvolgende streefdatum: die knelt als eerste, de latere zijn pas aan de beurt als die
+     is opgelost. Een gepauzeerd of bereikt doel levert er geen, want daar wordt niets naartoe
+     gerekend. */
+  const metDatum=items.filter(p=>p.type==='goal'&&p.streefdatum&&p.status!=='gepauzeerd'&&rest(p)>0)
+    .slice().sort((a,b)=>String(a.streefdatum).localeCompare(String(b.streefdatum)));
+  const eerste=metDatum[0]||null;
+  let tot=null; if(eerste){ try{ tot=doelMaandenTot(eerste.streefdatum); }catch(_){} }
+  return {nodig, toe, gat, gatLopend, gatPauze, pauze:pauze.length, cap, mnd, eerste, tot,
+    nf:items.some(p=>p.type==='noodfonds')};
+}
+function planTotaalRegel(P){
+  const T=planTotaal(P); if(!T) return '';
+  const kort=isMode('rustig');
+  const som=`Je plan vraagt in totaal <b>${euro0(T.nodig)}</b> en daar staat <b>${euro0(T.toe)}</b> tegenover. Het verschil is <b>${euro0(T.gat)}</b>.`;
+  if(kort) return `<div class="small mut2" style="margin:0 2px 9px;line-height:1.45">${euro0(T.gat)} van je plan staat er nog niet.</div>`;
+  const delen=[som];
+  /* Gepauzeerd geld eerst, en niet als naschrift. Het zit wel in het verschil en niet in de
+     maanden, dus zonder die zin ervoor leest 'het verschil is X, op Y per maand is dat Z maanden'
+     als één deling die niet klopt. Nu noemt de tempo-zin het bedrag waar hij werkelijk over gaat. */
+  if(T.gatPauze>0) delen.push(`${euro0(T.gatPauze)} daarvan hoort bij ${T.pauze===1?'een gepauzeerd doel':'gepauzeerde doelen'} en krijgt geen inleg.`);
+  /* Het tempo. Zonder capaciteit of zonder gat valt er niets te vergelijken, en dan staat er niets
+     in plaats van een nul die een tempo suggereert. */
+  if(T.mnd!=null){
+    delen.push(T.gatPauze>0
+      ? `Op ${euro0(T.cap)} per maand zijn de overige ${euro0(T.gatLopend)} nog ${T.mnd} ${T.mnd===1?'maand':'maanden'}.`
+      : `Op ${euro0(T.cap)} per maand is dat ${T.mnd} ${T.mnd===1?'maand':'maanden'}.`);
+    /* Waarom die twee getallen niet uit dezelfde verzameling komen: de maanden gaan over je hele
+       plan, je noodfonds meegeteld, en de datum hoort bij één doel. Dat staat er met zoveel
+       woorden, want anders lijkt het één som. */
+    if(T.eerste && T.tot!=null && T.tot>0){
+      const lbl=(typeof doelDatumLabel==='function')?doelDatumLabel(T.eerste.streefdatum):'';
+      if(lbl) delen.push(`Je eerste streefdatum is ${lbl}, over ${T.tot} ${T.tot===1?'maand':'maanden'}: die hoort bij ${esc(T.eerste.naam)}, terwijl die ${T.mnd} over je hele plan gaan${T.nf?', je noodfonds meegeteld':''}.`);
+    } else if(T.nf){
+      delen.push(`Die ${T.mnd} gaan over je hele plan, je noodfonds meegeteld.`);
+    }
+  }
+  return `<div class="small mut2" style="margin:0 2px 9px;line-height:1.5">${delen.join(' ')}</div>`;
 }
 function vooruitZone(key,label,teaser,open,content){
   const bar=`<div class="card" data-zone="${key}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px${open?';margin-bottom:8px':''}" onclick="toggleVooruit('${key}')"><span style="font-weight:600;font-size:var(--fs-md)">${label}${teaser?` <span class="small muted" style="font-weight:400">· ${teaser}</span>`:''}</span><span style="color:var(--mut2);font-size:16px">${open?'▲':'▼'}</span></div>`;

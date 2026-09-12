@@ -26,9 +26,16 @@ test.describe('a · noodfonds-widget weg, verfijnen blijft bereikbaar', () => {
     // v103: de functie bleef eerst staan omdat ze alleen niet meer werd samengesteld. Ze is nu
     // opgeruimd; de sheet (openNoodfondsPanel) is de enige plek waar het noodfonds nog rendert.
     expect(await page.evaluate(() => typeof noodfondsCard)).toBe('undefined');
-    // de samenstelling zelf: sinds v80 zonder hero, sinds v144 zonder "Nog deze maand"
-    expect(await page.evaluate(() => /innerHTML\s*=\s*doelZone\s*\+\s*resDekkingCard\(\)/.test(renderVooruit.toString()))).toBe(true);
+    /* De samenstelling zelf: sinds v80 zonder hero, sinds v144 zonder "Nog deze maand". Hier stond
+       een regex op de letterlijke regel `innerHTML = doelZone + resDekkingCard()`. Dat legde de
+       implementatie vast en niet de eigenschap: v221 zette er een blok tussen en de test viel om
+       terwijl er niets stuk was. Bind aan wat er moet staan en wat er weg moet zijn. */
     expect(await page.evaluate(() => /nogDezeMaand/.test(renderVooruit.toString()))).toBe(false);
+    expect(await page.evaluate(() => /doelZone/.test(renderVooruit.toString()))).toBe(true);
+    expect(await page.evaluate(() => /resDekkingCard\(\)/.test(renderVooruit.toString()))).toBe(true);
+    // en de twee blokken staan in deze volgorde op het scherm
+    const iDoel = v.indexOf('Reserveringen');
+    expect(iDoel).toBeGreaterThanOrEqual(0);
   });
 
   test('het noodfonds-plan-item is de ingang naar verfijnen', async ({ page }) => {

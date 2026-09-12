@@ -114,7 +114,7 @@ cat > a.txt <<'AEOF'
 (`minder-v214` → `minder-v215`, en zo verder). Dit is de enige plek waar die regel staat.
 AEOF
 cat > b.txt <<'BEOF'
-(`minder-v220` → `minder-v221`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v221` → `minder-v222`, en zo verder). Dit is de enige plek waar die regel staat.
 - **Datumnotatie** (`v199`): een kalenderdag komt uit `vandaagYMD()` of `ymdVan()`. `toISOString()`
   is **alleen** voor wat een API of een uitwisselingsformaat in gaat. Een sleutel, een label en een
   opslagveld zijn intern en volgen dus de lokale regel; `toISOString()` geeft de UTC-dag, en op een
@@ -150,6 +150,12 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
 - **Een kleurinventaris loopt via de stylesheet, niet via computed colours.** Match elke CSS-regel
   die `--teal`/`--accent` noemt tegen het gerenderde scherm en neem elke inline stijl mee: een
   vergelijking op de berekende kleur mist `color-mix` en gradients.
+- **Een afbakening is niet overdraagbaar tussen twee vragen.** `alloc > 0` klopt voor maandelijkse
+  bestemmingen (`v211`: wat gaat er deze maand heen) en werkt averechts voor totalen (`v221`: wat
+  vraagt mijn plan bij elkaar), want een doel dat op 'wacht op capaciteit' staat heeft `alloc` nul
+  en is juist het doel waar die tweede vraag over gaat. Kopieer een filter dus niet omdat hij naast
+  de nieuwe code staat; leid hem af uit de vraag die je stelt. Dit is dezelfde vorm als een test
+  die de implementatie vastlegt in plaats van de eigenschap.
 - **Een test die een zin of een teller als anker gebruikt bewijst de invariant niet.** Bind aan de
   bron of aan de identiteit die je wilt vasthouden. Meet met echte data in plaats van een
   gemonkeypatchte functie, en maak nooit groen met een verzonnen waarde of een fallback die alleen
