@@ -115,37 +115,44 @@ test.describe('b - elk structureel signaal draagt een korte naam', () => {
     expect(n).not.toContain('…');
   });
 
-  test('de gespreksvraag leest als een zin, niet als een zin in een zin', async ({ page }) => {
+  /* v224: de korte naam werd hier getoetst via de uitnodiging 'Zullen we <naam> doorlopen?' onder
+     de kaart. Die tak is vervallen, maar de naam draagt nog steeds de regel op het scherm en de
+     kop van het gesprek. Daar staat hij nu, en de eis is dezelfde: een naam en geen volzin. */
+  test('de naam leest als een naam, niet als een zin', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
     const t = await page.locator('#s-maand').innerText();
-    expect(t).toContain('Zullen we maanden boven je grens doorlopen?');
-    expect(t).not.toContain('Zullen we je geeft al maanden');
+    expect(t).toContain('Maanden boven je grens');
+    expect(t).not.toContain('Je geeft al maanden te veel uit');
   });
 });
 
 test.describe('c - de ingang staat bij de belofte', () => {
-  /* v223: de spaarquote stond als eigen kaart ná de ingang; sinds die als voet onder de streep in
-     de kaart met je maandregels staat, komt hij ervóór. De eigenschap die deze test bewaakt is
-     onveranderd: de ingang staat direct onder de kaart die een beslissing belooft, en niet vier
-     blokken lager. Die meet hij nu tegen de uitgavengrafiek, het eerstvolgende blok erna. */
-  test('onder de regels die iets vragen, en boven de blokken erna', async ({ page }) => {
+  /* v224: de ingang stond onder de hele kaart en koos via coMaandZwaarste() welke regel hij opende.
+     Nu draagt elke regel met een tekort er zelf een. De eigenschap die deze groep bewaakt blijft:
+     de ingang staat bij wat hij belooft, en niet elders op het scherm. Alleen is 'bij' nu de regel
+     in plaats van de kaart. */
+  test('elke ingang staat binnen de kaart die een beslissing belooft', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
-    const t = await page.locator('#s-maand').innerText();
-    const kaart = t.indexOf('VRAAGT EEN BESLISSING');
-    const ingang = t.indexOf('Zullen we');
-    const erna = t.indexOf('UITGAVEN VS BUDGET');
-    expect(kaart).toBeGreaterThanOrEqual(0);
-    expect(ingang).toBeGreaterThan(kaart);
-    expect(erna).toBeGreaterThan(ingang);
+    const uit = await page.evaluate(() => {
+      const kaart = [...document.querySelectorAll('#s-maand .card')].find((c) => /Vraagt een beslissing/.test(c.textContent));
+      const inKaart = (kaart.innerHTML.match(/coStart\('maand'/g) || []).length;
+      const opScherm = (document.querySelector('#s-maand').innerHTML.match(/coStart\('maand'/g) || []).length;
+      return { inKaart, opScherm };
+    });
+    expect(uit.inKaart).toBeGreaterThan(0);
+    expect(uit.inKaart).toBe(uit.opScherm);   // geen enkele ingang buiten de kaart
   });
 
-  test('hij staat er één keer, niet twee', async ({ page }) => {
+  test('één per regel met een tekort, niet meer en niet minder', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
     const html = await page.locator('#s-maand').innerHTML();
-    expect([...html.matchAll(/coStart\('maand'/g)].length).toBe(1);
+    const keys = [...html.matchAll(/coStart\('maand','[^']*','([^']*)'\)/g)].map((x) => x[1]);
+    const tekorten = await page.evaluate(() => maandMetAccept(maandRegels()).concat(maandStructureel())
+      .filter((r) => r.status === 'tekort').map((r) => r.key));
+    expect(keys).toEqual(tekorten);
   });
 
   test('de rij houdt zijn eigen tik naar zijn sheet (v193)', async ({ page }) => {

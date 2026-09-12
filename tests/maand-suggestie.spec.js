@@ -165,12 +165,15 @@ test.describe('c - een suggestie is geen advies', () => {
     expect(h).not.toContain('--amber');
   });
 
+  /* v224: de rij draagt nu een gespreksingang eronder, met een eigen onclick. v193 blijft gelden
+     voor de RIJ zelf: die houdt één tik, naar zijn editor. De ingang is een eigen element. */
   test('geen tweede tik op de rij', async ({ page }) => {
     await boot(page);
     const h = await page.evaluate(() => maandRij(maandMetAccept(maandRegels()).find((x) => x.key === 'buffer'), false));
-    // precies één onclick: die van de rij zelf (v193)
-    expect([...h.matchAll(/onclick=/g)].length).toBe(1);
-    expect(h).not.toContain('coStart');
+    const rijDeel = h.slice(0, h.indexOf('padding:0 0 10px 17px'));
+    expect([...rijDeel.matchAll(/onclick=/g)].length).toBe(1);
+    expect(rijDeel).toContain('openNoodfondsPanel');
+    expect(rijDeel).not.toContain('coStart');
   });
 });
 
@@ -210,15 +213,18 @@ test.describe('d - zwijgen waar er geen norm is die niet gehaald wordt', () => {
   });
 });
 
-test.describe('e - de ingang onder de kaart draagt de drie vormen', () => {
-  test('hij staat er, precies één keer, en opent de zwaarste regel', async ({ page }) => {
+/* v224: de ene ingang onder de kaart is vervallen; elke regel met een tekort draagt er zelf een.
+   Wat deze groep bewaakt blijft gelden: er is een ingang naar het gesprek, en die opent op een
+   regel die de drie vormen heeft. */
+test.describe('e - elke regel opent het gesprek op zijn eigen onderwerp', () => {
+  test('elke tekort-regel heeft een ingang op zijn eigen sleutel', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
     const html = await page.locator('#s-maand').innerHTML();
     const m = [...html.matchAll(/coStart\('maand','[^']*','([^']*)'\)/g)].map((x) => x[1]);
-    expect(m.length).toBe(1);
-    const z = await page.evaluate(() => coMaandZwaarste(maandMetAccept(maandRegels().concat(maandStructureel()))).key);
-    expect(m[0]).toBe(z);
+    const tekorten = await page.evaluate(() => maandMetAccept(maandRegels()).concat(maandStructureel())
+      .filter((r) => r.status === 'tekort').map((r) => r.key));
+    expect(m).toEqual(tekorten);
   });
 
   test('en die regel heeft hier alle drie de vormen', async ({ page }) => {

@@ -196,7 +196,11 @@ test.describe('d - de rest van het scherm blijft staan', () => {
     const t = await tekst(page);
     expect(t).toContain('JE MAAND');
     expect(t).toMatch(/beslissing vrag/);
-    expect(await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/coStart\('maand'/g) || []).length)).toBe(1);
+    // v224: één ingang per regel met een tekort, niet meer één per scherm
+    const ingangen = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/coStart\('maand'/g) || []).length);
+    const tekorten = await page.evaluate(() => maandMetAccept(maandRegels()).concat(maandStructureel()).filter((r) => r.status === 'tekort').length);
+    expect(ingangen).toBe(tekorten);
+    expect(ingangen).toBeGreaterThan(0);
   });
 
   test('geen sectiekop binnen de kaart', async ({ page }) => {

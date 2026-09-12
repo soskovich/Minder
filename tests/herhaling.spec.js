@@ -307,27 +307,28 @@ test.describe('g · "Boven je inkomen-limiet" heeft een gevolg en een ingang', (
   });
 });
 
-test.describe('h · de coach-ingang noemt de naam, niet het oordeel', () => {
-  test('de ingang herhaalt het oordeel van de kaartkop niet', async ({ page }) => {
+/* v224: deze groep toetste de uitnodiging onder de kaart ('Zullen we <naam> doorlopen?'). Die tak
+   is vervallen: elke regel draagt nu zijn eigen ingang. De eis eronder blijft en verscherpt zelfs:
+   de ingang herhaalt het oordeel niet, en hij noemt de naam ook niet meer - zijn plaats onder de
+   regel zegt al waar hij over gaat, en v193 waarschuwde er juist voor dat die naam anders drie keer
+   op één scherm staat. */
+test.describe('h · de ingang herhaalt niet wat er al staat', () => {
+  test('de ingang herhaalt het oordeel en de naam van de regel niet', async ({ page }) => {
     await boot(page, {});
-    /* De regels komen hier met de hand: wat getoetst wordt is de formulering van de ingang, niet
+    /* De regel komt hier met de hand: wat getoetst wordt is de formulering van de ingang, niet
        hoe maandRegels() tot een tekort komt. Dat laatste heeft zijn eigen spec. */
     const r = await page.evaluate(() => {
-      const R = [{ key: 'dekking', naam: 'Dekking reserveringen', status: 'tekort', waarde: '€5',
-                   eenheid: 'in je pot', gevolg: 'Je pot dekt de eerstvolgende post niet.',
-                   act: 'openReserveringen()' },
-                 { key: 'buffer', naam: 'Buffer in maanden', status: 'let op', waarde: '3,2',
-                   eenheid: 'maanden op je rekening', gevolg: '', act: 'openNoodfondsPanel()' }];
-      const z = coMaandZwaarste(R);
-      const d = document.createElement('div'); d.innerHTML = maandCoachIngang(R);
+      const R = { key: 'dekking', naam: 'Dekking reserveringen', status: 'tekort', waarde: '€5',
+                  eenheid: 'in je pot', gevolg: 'Je pot dekt de eerstvolgende post niet.',
+                  tekortPerMaand: 850, act: 'openReserveringen()' };
+      const d = document.createElement('div'); d.innerHTML = maandIngang(R, thisYM());
       const el = d.querySelector('[onclick]');
-      return { naam: z && z.naam, tekst: d.innerText.replace(/\s+/g, ' '),
+      return { tekst: d.innerText.replace(/\s+/g, ' '),
         act: el ? el.getAttribute('onclick') : null };
     });
-    expect(r.naam).toBe('Dekking reserveringen');          // de zwaarste van de twee
-    expect(r.tekst).toContain('dekking reserveringen');     // de naam blijft: de vraag heeft een onderwerp
+    expect(r.tekst).not.toMatch(/dekking reserveringen/i);  // de rij erboven draagt de naam al
     expect(r.tekst).not.toMatch(/vraagt een beslissing|vraagt aandacht/);  // dat staat al in de kaartkop
-    expect(r.act).toMatch(/^coStart\('maand'/);            // de fasering blijft ongemoeid
+    expect(r.act).toMatch(/coStart\('maand','[^']*','dekking'\)/);   // op zijn eigen onderwerp
     expect(r.act).toContain("'dekking'");                  // en opent op die regel
   });
 

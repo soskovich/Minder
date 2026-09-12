@@ -3688,12 +3688,31 @@ function maandDot(st){
    GEEN suggestie zonder norm die niet gehaald wordt (ok en onbekend), en niet bij een regel die je
    bewust hebt geaccepteerd: dan heb je de norm zelf losgelaten. Een structureel signaal krijgt er
    geen zolang maandRegelOpties() er geen levert; dat is een eigen lacune. */
+/* v224: het bedrag waar een regel om draagt, als één bron. De suggestie in de gevolgzin en de
+   gespreksingang eronder noemen hetzelfde getal, en dat kan alleen als ze het op dezelfde plek
+   halen. De eenheid verschilt per regel en dat staat erbij: bij dekking is r.tekortPerMaand
+   ondanks zijn naam een ACHTERSTAND (D.tekort = benodigdeStand min werkelijkeStand), bij buffer
+   het totale gat naar je richtbedrag uit noodfondsModel(), en alleen bij doel een maandbedrag. */
+function maandTekort(r){
+  if(!r || r.structureel) return null;
+  const t=Math.max(Math.round(+r.tekortPerMaand||0),0);
+  if(r.key==='dekking') return t>0?{bedrag:t, soort:'stand'}:null;
+  if(r.key==='doel')    return t>0?{bedrag:t, soort:'maand'}:null;
+  if(r.key==='buffer'){
+    let doel=0, spaar=null;
+    try{ const nf=noodfondsModel(); doel=Math.round(+nf.doel||0); spaar=(nf.spaar!=null)?Math.round(+nf.spaar):null; }catch(_){}
+    if(!(doel>0)||spaar==null) return null;
+    const gat=Math.max(doel-spaar,0);
+    return gat>0?{bedrag:gat, soort:'totaal'}:null;
+  }
+  return null;
+}
 function maandSuggestie(r, m){
   if(!r || r.structureel || r.geaccepteerd) return '';
   if(r.status!=='tekort' && r.status!=='let op') return '';
   let opts=[]; try{ opts=maandRegelOpties(r, m)||[]; }catch(_){}
   if(!opts.some(o=>o&&o.vorm!=='accepteer')) return '';   // niets dat de norm haalt
-  const t=Math.max(Math.round(+r.tekortPerMaand||0),0);
+  const T=maandTekort(r); const t=T?T.bedrag:0;
   if(r.key==='dekking'){
     if(!(t>0)) return '';
     let perM=0; try{ perM=Math.round(dekking(12).benodigdPerMaand||0); }catch(_){}
@@ -3704,10 +3723,8 @@ function maandSuggestie(r, m){
       : `${euro0(t)} erbij brengt je pot op de stand die er nu bij hoort.`;
   }
   if(r.key==='buffer'){
-    let doel=0, spaar=null;
-    try{ const nf=noodfondsModel(); doel=Math.round(+nf.doel||0); spaar=(nf.spaar!=null)?Math.round(+nf.spaar):null; }catch(_){}
-    if(!(doel>0) || spaar==null) return '';
-    const gat=Math.max(doel-spaar,0); if(!(gat>0)) return '';
+    if(!(t>0)) return '';
+    const gat=t;
     let richt=0; try{ richt=nfMaanden(); }catch(_){}
     /* Een totaal en geen maandbedrag, dus 'in totaal' staat erbij: de twee andere regels noemen
        wel bedragen per maand en zonder dat woord lees je ze als dezelfde soort. */
@@ -3721,6 +3738,26 @@ function maandSuggestie(r, m){
   }
   return '';
 }
+/* v224: een gespreksingang per regel, in de vorm die Plan al gebruikt (coHorizonVraag): een vraag
+   met het bedrag en een chevron, die het gesprek op precies dit onderwerp opent. Die functie zelf
+   is niet herbruikbaar - hij opent 'horizon' en niet 'maand', leest doelTempo() in plaats van de
+   maandregel, en is één zin voor het hele plan - dus alleen de vorm is overgenomen.
+   Hij noemt de NAAM NIET. Op Plan staat die zin los en is de naam nodig; hier staat hij onder de
+   rij die de naam al draagt, en v193 wees er al op dat de zwaarste regel zo drie keer op één
+   scherm kwam te staan. Zijn plaats zegt waar hij over gaat.
+   Een STRUCTUREEL SIGNAAL krijgt wel een ingang, maar een andere vraag. maandRegelOpties() levert
+   er geen drie vormen voor, dus het gesprek biedt daar zijn eigen actie plus 'alleen vastleggen'.
+   Die afspraak is het waardevolle deel: een patroon over maanden is precies iets om iets over af
+   te spreken. De vraag noemt dus de afspraak en niet een bedrag dat het signaal niet draagt.
+   Geen tweede tik op de rij (v193): dit is een eigen element eronder, zoals op Plan. */
+function maandIngang(r, m){
+  if(!r || r.status!=='tekort' || r.geaccepteerd) return '';
+  const mm=m||curMonth||thisYM();
+  const tik=(v)=>`<div class="small" style="margin:2px 0 0;line-height:1.45;color:var(--mut2);cursor:pointer" onclick="event.stopPropagation();coStart('maand','${esc(mm)}','${esc(r.key)}')">${v} <span style="color:var(--teal);font-weight:700">›</span></div>`;
+  if(r.structureel) return tik('Wil je hier een afspraak over maken?');
+  const T=maandTekort(r); if(!T) return '';
+  return tik(`Wil je kijken waar die ${euro0(T.bedrag)}${T.soort==='maand'?' per maand':''} vandaan kan komen?`);
+}
 function maandRij(r,compact){
   /* v193: de compacte rij liet de eenheid weg om kort te blijven, dus er stond 'Buffer in maanden
      · 10,4' zonder waarin, en 'Dekking reserveringen · €2.500' zonder waartegen. Dat zijn precies de
@@ -3733,7 +3770,10 @@ function maandRij(r,compact){
     <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:52%">
       <div class="small" style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
       ${r.eenheid?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div>`:''}</div></div>`;
-  return `<div class="row" style="gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${r.act}">
+  /* v224: de streep stond op de rij zelf. Nu er een gespreksingang onder kan staan hoort hij om
+     die twee heen, anders scheidt hij een regel van zijn eigen ingang. */
+  return `<div style="border-bottom:1px solid var(--line)">
+    <div class="row" style="gap:9px;align-items:flex-start;padding:10px 0 6px;cursor:pointer" onclick="${r.act}">
     ${maandDot(r.status)}
     <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.naam)}</div>
       ${(function(){ const sug=maandSuggestie(r, curMonth||thisYM());
@@ -3744,7 +3784,9 @@ function maandRij(r,compact){
         return `<div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg||'')}${(r.gevolg&&sug)?' ':''}${sug?`<span class="mut2">${esc(sug)}</span>`:''}</div>`; })()}
       ${r.geaccepteerd?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:4px">Je hebt dit bewust geaccepteerd${r.geaccepteerd.tot?`, tot ${esc(resMaandLabel(r.geaccepteerd.tot))}`:''}.</div>`:''}</div>
     <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:42%"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
-      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>`;
+      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>
+    ${(function(){ const ing=maandIngang(r, curMonth||thisYM()); return ing?`<div style="padding:0 0 10px 17px">${ing}</div>`:''; })()}
+  </div>`;
 }
 /* v178: twee oordelen over je plan die op Inzichten in het blok over deze maand stonden. Het
    eerste gaat over een periode die nog niet begon, het tweede weegt je potjes tegen je
@@ -3937,16 +3979,16 @@ function maandCoachIngang(R){
      aanhef, want dat is het ijkpunt waarop een voornemen het meest waard is. Bewust een aanhef op
      de bestaande ingang en geen tweede kaart: de vraag staat er al, alleen de aanleiding ontbrak. */
   const nieuw=verseStart()?'Nieuwe maand. ':'';
-  const z=coMaandZwaarste(R);
-  /* v193: deze ingang noemde de zwaarste regel voor de derde keer op één scherm - maandOordeel()
-     noemt hem bij precies één tekort, de rij zelf noemt hem, en hier stond hij nog eens mét zijn
-     oordeel. De rij zelf de ingang maken lost dat niet op: die heeft al een eigen tik naar zijn
-     sheet (r.act), en twee handelingen op één element is geen verbetering. Dus laat de ingang het
-     oordeel weg: 'vraagt een beslissing' staat al in de kaartkop erboven en in de oordeelzin. De
-     naam blijft, want de vraag heeft een onderwerp nodig. */
-  if(z) return `<div class="card" style="cursor:pointer" onclick="coStart('maand','${esc(m)}','${esc(z.key)}')">
-    <div class="row" style="gap:8px"><span style="flex:1;min-width:0;line-height:1.45">${nieuw}Zullen we ${esc(z.naam.toLowerCase())} doorlopen?</span>
-      <span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+  /* v224: hier stond de uitnodiging 'Zullen we <regel> doorlopen?', jarenlang de enige ingang naar
+     het gesprek. Hij koos via coMaandZwaarste() welke regel hij opende, en dat was het probleem:
+     een structureel signaal valt buiten MAAND_VOLGORDE, krijgt daardoor index -1 en kwam dus altijd
+     vóór dekking, buffer en doel - terwijl maandRegelOpties() daar geen drie vormen voor levert.
+     De regels met opties waren zo onbereikbaar. Elke regel met een tekort draagt nu zijn eigen
+     ingang (maandIngang), dus er valt niets meer te kiezen en die verdringing is weg.
+     De twee andere takken van deze functie blijven: de afspraak-kaart hierboven is een andere taak,
+     en de regel hieronder biedt een gesprek juist wanneer er niets te beslissen valt.
+     coMaandZwaarste() blijft ook bestaan: coTopicMaand() valt erop terug wanneer het gesprek zonder
+     sleutel wordt geopend, en dat is precies wat 'Aanpassen' hierboven doet. */
   if(R.some(r=>r.status==='ok')) return `<div class="card" style="cursor:pointer" onclick="coStart('algemeen','${esc(m)}')">
     <div class="row" style="gap:8px"><span style="flex:1;min-width:0;line-height:1.45" class="muted">${nieuw}Er valt deze maand niets te beslissen. Wil je toch iets doornemen?</span>
       <span style="color:var(--teal);font-weight:700">›</span></div></div>`;

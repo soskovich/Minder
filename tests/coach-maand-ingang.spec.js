@@ -50,30 +50,39 @@ async function kies(page, txt) {
 const log = (page) => page.evaluate(() => JSON.stringify(SET.coachLog || []));
 const afspraken = async (page) => JSON.parse(await log(page)).filter((l) => l.type === 'afspraak');
 
-test.describe('a · de ingang kiest de zwaarste regel', () => {
-  test('één tekort: de zin noemt die regel en de woorden van het scherm', async ({ page }) => {
+/* v224: deze groep heette 'de ingang kiest de zwaarste regel'. Die ene ingang onder de kaart is
+   vervallen: elke regel met een tekort draagt nu zijn eigen ingang, dus er valt niets meer te
+   kiezen. coMaandZwaarste() bestaat wél nog, want coTopicMaand() valt erop terug wanneer het
+   gesprek zonder sleutel wordt geopend; zijn rangorde wordt hieronder onverkort getoetst. */
+test.describe('a · elke regel met een tekort draagt zijn eigen ingang', () => {
+  test('één tekort: één ingang, op die regel', async ({ page }) => {
     await maand(page);
-    const t = await page.locator('#s-maand').innerText();
-    // v193: de ingang noemt de naam en laat het oordeel weg; dat staat al in de kaartkop en in
-    // de oordeelzin erboven, dus stond het er drie keer.
-    expect(t).toMatch(/Zullen we kosten koper huis doorlopen\?/);
-    expect(t).not.toMatch(/Kosten koper huis vraagt een beslissing/);
+    const h = await page.locator('#s-maand').innerHTML();
+    const keys = [...h.matchAll(/coStart\('maand','[^']*','([^']*)'\)/g)].map((x) => x[1]);
+    expect(keys).toEqual(['doel']);
+    // de rangorde zelf blijft bestaan voor het gesprek zonder sleutel
     const z = await page.evaluate(() => coMaandZwaarste(maandRegels()));
     expect(z.key).toBe('doel');
     expect(z.status).toBe('tekort');
   });
 
-  test('meerdere tekorten: de vaste volgorde beslist', async ({ page }) => {
+  test('meerdere tekorten: elk zijn eigen ingang, in schermvolgorde', async ({ page }) => {
     await maand(page, tweeTekorten());
     const st = await page.evaluate(() => maandRegels().map((r) => [r.key, r.status]));
     const tekorten = st.filter((x) => x[1] === 'tekort').map((x) => x[0]);
     expect(tekorten.length).toBeGreaterThan(1);
 
+    const h = await page.locator('#s-maand').innerHTML();
+    const keys = [...h.matchAll(/coStart\('maand','[^']*','([^']*)'\)/g)].map((x) => x[1]);
+    expect(keys).toEqual(tekorten);           // geen keuze meer, ze staan er allemaal
+    expect(keys).toContain('buffer');
+    expect(keys).toContain('doel');
+
+    // en de rangorde die het gesprek zonder sleutel gebruikt is ongewijzigd
     const z = await page.evaluate(() => coMaandZwaarste(maandRegels()));
     const eerste = await page.evaluate((ks) => ks.slice().sort((a, b) => MAAND_VOLGORDE.indexOf(a) - MAAND_VOLGORDE.indexOf(b))[0], tekorten);
     expect(z.key).toBe(eerste);
     expect(z.key).toBe('buffer');                            // buffer staat vóór doel
-    expect(await page.locator('#s-maand').innerText()).toMatch(/Zullen we buffer in maanden doorlopen\?/);
   });
 
   test('tekort weegt zwaarder dan let op', async ({ page }) => {
@@ -106,7 +115,7 @@ test.describe('b · alles ok, en alleen onbekend', () => {
 test.describe('c · het gesprek', () => {
   test('opent bij die ene regel, in de zin van het scherm, zonder groet', async ({ page }) => {
     await maand(page);
-    await page.locator('#s-maand .card', { hasText: 'Zullen we ' }).click();
+    await page.locator('#s-maand').getByText(/Wil je kijken|Wil je hier een afspraak/).first().click();   // v224: de ingang staat op de regel zelf
     await wachtKeuze(page);
     const draad = await page.locator('#coThr').innerText();
     const R = await page.evaluate(() => coMaandRegel('doel'));
@@ -320,7 +329,7 @@ test.describe('g · de andere ingangen blijven zoals ze waren', () => {
     test(`geen horizontale overflow op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 780 });
       await maand(page);
-      await page.locator('#s-maand .card', { hasText: 'Zullen we ' }).click();
+      await page.locator('#s-maand').getByText(/Wil je kijken|Wil je hier een afspraak/).first().click();   // v224: de ingang staat op de regel zelf
       await wachtKeuze(page);
       const over = await page.evaluate(() => ({
         maand: document.querySelector('#s-maand').scrollWidth - document.querySelector('#s-maand').clientWidth,
