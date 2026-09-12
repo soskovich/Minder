@@ -128,6 +128,16 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
 - **Meet voordat je bouwt.** Een audit die een probleem beschrijft is geen meting. Reproduceer de
   bevinding eerst; is hij al opgelost of anders van omvang, dan meld je dat in plaats van het te
   bouwen.
+- **Een geslaagd commando betekent niet dat het juiste is weggeschreven.** De andere lessen hier
+  gaan over hoe je meet; deze gaat over de stap ervoor. Een heredoc die op zijn terminator
+  struikelt schrijft de rest van je eigen commando weg als inhoud, en dat ziet er in de terminal
+  succesvol uit: geen foutmelding, exitcode nul. Bij `v215` belandden zo zeven regels shell midden
+  in de staande regels van dit bestand, en ze stonden er acht commits lang. Erger dan de verloren
+  regels was het gevolg: er ontstond een **tweede** cacheversie-regel, de leidende was de
+  verkeerde, en de regel die zegt waar de cacheversie staat wees daarmee zelf naar de verkeerde
+  plek. Elke ronde daarna leunde op een instructie die niet klopte. Lees dus terug wat er staat,
+  niet of het commando lukte, en let daarbij op wat er **bij** is gekomen en niet alleen op wat je
+  bedoelde te veranderen.
 - **Dode code meet je met bereikbaarheid, niet met verwijzingen.** Loop vanaf de echte startpunten
   (de HTML buiten het script, plus de boot-code buiten elke functie) de aanroepgraaf af. Een groep
   dode functies die naar elkaar verwijst houdt zichzelf levend en heeft altijd twee of meer
