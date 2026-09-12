@@ -240,17 +240,22 @@ test.describe('e · de compacte maandrij houdt zijn eenheid', () => {
   });
 });
 
-test.describe('f · de kerncijferkop telt wat er staat', () => {
-  test('meerdere maanden: van maand op maand', async ({ page }) => {
+/* v223: deze drie bewaakten de ondertitel boven het kerncijfer ('van maand op maand' tegenover
+   'nog geen verloop te zien'). Die ondertitel is vervallen met de kaartschil, maar de eigenschap
+   die hij droeg niet: het blok mag geen verloop beloven dat er niet is. Die uitspraak staat nu in
+   de tegel zelf, in de deltazin. De tests wijzen daarheen; de eis is dezelfde. */
+test.describe('f · het kerncijfer belooft geen verloop dat er niet is', () => {
+  test('meerdere maanden: het noemt de vorige maand', async ({ page }) => {
     await boot(page, { maanden: 4 });
     const t = await page.evaluate(() => {
       const d = document.createElement('div'); d.innerHTML = maandKpiBlok(kijkMaand());
       return d.innerText.replace(/\s+/g, ' ');
     });
-    expect(t).toContain('van maand op maand');
+    expect(t).toMatch(/vorige maand/);
+    expect(t).not.toMatch(/nog geen verloop|vanaf \d+ afgeronde maanden/);
   });
 
-  test('een afgesloten maand houdt de kop, want de reeks loopt tot daar', async ({ page }) => {
+  test('een afgesloten maand ook, want de reeks loopt tot daar', async ({ page }) => {
     await boot(page, { maanden: 4 });
     const r = await page.evaluate(() => {
       const ms = months(); const eerder = ms[ms.length - 2];
@@ -261,7 +266,7 @@ test.describe('f · de kerncijferkop telt wat er staat', () => {
           .map((k) => (k.series || []).filter((x) => x != null).length)) };
     });
     expect(r.punten).toBeGreaterThan(1);
-    expect(r.tekst).toContain('van maand op maand');
+    expect(r.tekst).toMatch(/vorige maand/);
   });
 
   test('één gemeten maand: geen belofte over verloop', async ({ page }) => {
@@ -271,8 +276,8 @@ test.describe('f · de kerncijferkop telt wat er staat', () => {
       return d.innerText.replace(/\s+/g, ' ');
     });
     test.skip(!r, 'geen kerncijferblok in deze opzet');
-    expect(r).not.toContain('van maand op maand');
-    expect(r).toMatch(/nog geen verloop te zien/);
+    expect(r).not.toMatch(/vorige maand/);
+    expect(r).toMatch(/verloop zie je vanaf \d+ afgeronde maanden/);
   });
 });
 

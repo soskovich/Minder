@@ -125,16 +125,20 @@ test.describe('b - elk structureel signaal draagt een korte naam', () => {
 });
 
 test.describe('c - de ingang staat bij de belofte', () => {
-  test('onder de regels die iets vragen, en boven Staat goed', async ({ page }) => {
+  /* v223: de spaarquote stond als eigen kaart ná de ingang; sinds die als voet onder de streep in
+     de kaart met je maandregels staat, komt hij ervóór. De eigenschap die deze test bewaakt is
+     onveranderd: de ingang staat direct onder de kaart die een beslissing belooft, en niet vier
+     blokken lager. Die meet hij nu tegen de uitgavengrafiek, het eerstvolgende blok erna. */
+  test('onder de regels die iets vragen, en boven de blokken erna', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
     const t = await page.locator('#s-maand').innerText();
     const kaart = t.indexOf('VRAAGT EEN BESLISSING');
     const ingang = t.indexOf('Zullen we');
-    const quote = t.indexOf('SPAARQUOTE');
+    const erna = t.indexOf('UITGAVEN VS BUDGET');
     expect(kaart).toBeGreaterThanOrEqual(0);
     expect(ingang).toBeGreaterThan(kaart);
-    expect(ingang).toBeLessThan(quote);
+    expect(erna).toBeGreaterThan(ingang);
   });
 
   test('hij staat er één keer, niet twee', async ({ page }) => {

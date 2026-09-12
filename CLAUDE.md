@@ -114,7 +114,7 @@ cat > a.txt <<'AEOF'
 (`minder-v214` → `minder-v215`, en zo verder). Dit is de enige plek waar die regel staat.
 AEOF
 cat > b.txt <<'BEOF'
-(`minder-v222` → `minder-v223`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v223` → `minder-v224`, en zo verder). Dit is de enige plek waar die regel staat.
 - **Datumnotatie** (`v199`): een kalenderdag komt uit `vandaagYMD()` of `ymdVan()`. `toISOString()`
   is **alleen** voor wat een API of een uitwisselingsformaat in gaat. Een sleutel, een label en een
   opslagveld zijn intern en volgen dus de lokale regel; `toISOString()` geeft de UTC-dag, en op een
@@ -150,6 +150,19 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
 - **Een kleurinventaris loopt via de stylesheet, niet via computed colours.** Match elke CSS-regel
   die `--teal`/`--accent` noemt tegen het gerenderde scherm en neem elke inline stijl mee: een
   vergelijking op de berekende kleur mist `color-mix` en gradients.
+- **Pipe de testrun nooit door `tail` of `head`.** De exit code van een pipeline is die van het
+  laatste commando, dus `npx playwright test | tail` geeft **altijd 0**, ook bij 88 failures. En
+  `tail` knipt de samenvatting weg: Playwright drukt eerst de failure-lijst af, dus een klein
+  venster landt midden in die lijst en toont testnamen die op voortgangsregels lijken. Schrijf de
+  volledige uitvoer naar een bestand, lees de exit code apart uit, en grep dan op de regel met
+  `passed`/`failed`. Toets ook het **aantal**: `npx playwright test --list` geeft het totaal, en
+  wijkt dat af van `passed + skipped`, dan is er iets niet gedraaid. Een sprong in de looptijd
+  (hier van 2,8 naar 13,4 minuten) is hetzelfde signaal: dat zijn timeouts.
+- **Hernoem nooit iets waar tests aan hangen zonder eerst in `tests/` te greppen.** Een naam, een
+  id of een CSS-klasse die in de app een detail lijkt, is voor een spec het anker waaraan hij zijn
+  eigenschap ophangt. Bij `v223` kostte het hernoemen van één functie en het laten vallen van
+  `#maandKpiBlok`/`.wvo-tile` 88 tests in veertien bestanden, terwijl de opdracht alleen vroeg de
+  kaartschil eromheen te verwijderen. Grep vóór het bouwen in `index.html` **en** in `tests/`.
 - **Een formulering is niet overdraagbaar tussen twee plekken.** `maandRegelOpties()` schrijft
   handelingen ("€850 per maand extra opzij zetten"), en dat klopt in het coachgesprek, want daar
   kies je. Op een kaart die vaststelt is dezelfde zin een opdracht (`v222`). Neem van zo'n bron de

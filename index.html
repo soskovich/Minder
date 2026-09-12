@@ -3772,8 +3772,30 @@ function maandPlanRegels(){
       <span class="small">Boven je inkomen-limiet</span>
       <span class="small" style="font-weight:700;color:var(--teal)">${euro0(t.budget-t.limit)} ›</span></div>
     <div class="small" style="color:var(--mut2);line-height:1.45;margin-top:3px">Je potjes vragen samen ${euro0(Math.round(t.budget))}. Dat is ${euro0(t.budget-t.limit)} boven de ${SET.limit}% van je inkomen die je als grens nam: een spiegel, geen plafond.</div></div>`);
-  if(!rijen.length) return '';
-  return `<div class="card"><div class="hlabel" style="margin:0 0 2px">Je plan</div>${rijen.join('')}</div>`;
+  /* v223: de kop 'Je plan' en de kaart eromheen zijn vervallen; deze rijen staan nu onder de
+     streep in de kaart met je maandregels. Beide rijen gaan mee: de tweede was in de opdracht
+     over het hoofd gezien, maar het is dezelfde soort constatering met een bedrag en een ingang.
+     Geen statusdot, want geen van beide vraagt een beslissing. */
+  return rijen.join('');
+}
+/* v223: wat wel telt maar geen beslissing vraagt, onder een streep in dezelfde kaart als je
+   maandregels. De streep draagt het onderscheid: erboven staat wat een beslissing of aandacht
+   vraagt, met een statusdot; eronder staan constateringen zonder dot.
+   Daarom hangt de voet aan de LAATSTE kaart die regels draagt en niet vast aan de eerste: staat er
+   na de streep nog een kaart met dots, dan scheidt hij niets meer. */
+function maandVoet(m){
+  const delen=[];
+  try{ const sq=maandKpiBlok(m); if(sq) delen.push(sq); }catch(_){}
+  try{ const pr=maandPlanRegels(); if(pr) delen.push(pr); }catch(_){}
+  return delen.join('');
+}
+/* De streep komt er alleen bij als er iets onder staat EN iets erboven: zonder inhoud eronder
+   scheidt hij niets, en zonder regels erboven staat hij aan de bovenkant van een kaart. */
+function maandVoetBlok(m, metRegelsErboven){
+  const v=maandVoet(m); if(!v) return '';
+  return metRegelsErboven
+    ? `<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:2px">${v}</div>`
+    : v;
 }
 function maandGelezen(){
   const d=SET.maandGelezen; if(!d) return '';
@@ -3797,7 +3819,10 @@ function renderMaand(){
         <div class="small muted" style="margin-top:8px;line-height:1.5">Je maand-regels gaan over hoe je er nu voor staat: je buffer, je dekking, je aansluiting spaargeld en je aankoopdoel lezen allemaal een saldo van vandaag. Die zijn niet met terugwerkende kracht te bepalen, dus voor een afgesloten maand staan ze er niet.</div>
         <div class="small" style="margin-top:8px"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="naarLopendeMaand()">Naar ${esc(monthLabel(thisYM()))} ›</span></div>
       </div>
-      ${maandKpiBlok(m)}
+      ${/* v223: hier stond maandKpiBlok(), de kaart met de kop 'Vermogensopbouw'. Die kop en de
+            twee uitlegzinnen zijn overal vervallen; de regel zelf blijft, en in deze tak is er geen
+            kaart met maandregels om in op te gaan, dus krijgt hij er een van zichzelf. */''}
+      ${(function(){ const sq=maandKpiBlok(m); return sq?`<div class="card">${sq}</div>`:''; })()}
       <div style="height:12px"></div>`;
     return;
   }
@@ -3844,12 +3869,18 @@ function renderMaand(){
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
       ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
     </div>
+    ${/* v223: 'Vermogensopbouw' en 'Je plan' waren eigen kaarten met een kop en een uitlegzin voor
+          één cijfer. Ze staan nu als voet onder de streep, in de laatste kaart die regels draagt:
+          aandacht als die er is, anders beslissing, anders 'Staat goed'. Is er geen enkele
+          regelkaart, dan blijft de voet een eigen kaart zonder streep (zie onder). */''}
     ${beslis.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt een beslissing</div>
       ${beslis.map(r=>maandRij(r,false)).join('')}
-      ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}</div>`:''}
+      ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
+      ${aandacht.length?'':maandVoetBlok(m,true)}</div>`:''}
     ${aandacht.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt aandacht</div>
       ${aandacht.map(r=>maandRij(r,false)).join('')}
-      ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}</div>`:''}
+      ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
+      ${maandVoetBlok(m,true)}</div>`:''}
     ${/* v219: de ingang naar het gesprek stond vier blokken lager, achter de spaarquote, de
           uitgavengrafiek en de beleggen-regel. De kaart erboven belooft een beslissing en de
           plek waar die te maken valt lag buiten beeld. Hij staat nu onder de regels die iets
@@ -3858,9 +3889,11 @@ function renderMaand(){
           verbetering, dus de ingang blijft een eigen element. */''}
     ${(beslis.length||aandacht.length)?maandCoachIngang(RO):''}
     ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
-      ${goed.map(r=>maandRij(r,true)).join('')}</div>`:''}
-    ${maandKpiBlok(m)}
-    ${maandPlanRegels()}
+      ${goed.map(r=>maandRij(r,true)).join('')}
+      ${(beslis.length||aandacht.length)?'':maandVoetBlok(m,true)}</div>`:''}
+    ${/* geen enkele regelkaart: dan heeft de voet geen kaart om in op te gaan en geen streep om
+          iets van te scheiden, dus staat hij er als eigen kaart. */''}
+    ${(beslis.length||aandacht.length||goed.length)?'':(maandVoet(m)?`<div class="card">${maandVoet(m)}</div>`:'')}
     ${spendVsBudgetChart()}
     ${subsCard()}
     ${maandBeleggenRegel(R)}
@@ -8526,20 +8559,26 @@ function kpiTegels(items){
    en 'Wat er structureel gebeurt' claimt de hele structuur terwijl er één stroom in staat. Wat de
    ondertitel wél moest houden is de telling uit v193: bij één gemeten maand valt er geen verloop
    te zien, en dan hoort daar niet 'van maand op maand' te staan. */
+/* v223: dit was een eigen kaart met de kop 'Vermogensopbouw', een uitlegzin erboven en een
+   tweede eronder, voor één cijfer. Die schil is weg: de kaart, de kop en beide zinnen. 'Welk deel
+   van je inkomen er opzij ging' herhaalt wat de band al zegt, en 'Deze maand loopt nog' zit als
+   'loopt nog' al in k.oordeel. Wat overblijft is de tegel zelf, die onder de streep in de kaart
+   met je maandregels komt te staan.
+   DE TEGEL-STRUCTUUR BLIJFT ONGEMOEID, en dat is met opzet. Het id, .wvo-tiles, .wvo-tile en
+   data-kpi zijn geen opmaakdetail: veertien specs hangen eraan en bewaken daarmee welke KPI er
+   staat, de sparkline en zijn eindpunt, de themakleuren, de rustige modus en het uitblijven van
+   horizontale overflow. Die eigenschappen gelden onverkort, dus de haken waaraan ze hangen horen
+   te blijven. Een eerdere opzet verving de tegel door een eigen regel-vorm en haalde daarmee 88
+   tests onderuit; de schil weghalen was de opdracht, de structuur eronder niet.
+   Het id staat op een wrapper en niet op .wvo-tiles zelf, want selectors als
+   '#maandKpiBlok .wvo-tiles' verwachten die nesting. */
 function maandKpiBlok(m){
   let K=null; try{ K=insKpis(m); }catch(_){ return ''; }
   if(!K) return '';
   const items=K.items.filter(k=>k.key==='inleg');
   if(!items.length) return '';
-  const punten=Math.max(0,...items.map(k=>(k.series||[]).filter(x=>x!=null).length));
-  const onder=punten>1
-    ? 'Welk deel van je inkomen er opzij ging, van maand op maand.'
-    : 'Welk deel van je inkomen er opzij ging. Er is één maand gemeten, dus er valt nog geen verloop te zien.';
-  return `<div class="card" id="maandKpiBlok">
-    <div class="row" style="margin-bottom:2px"><span class="hlabel" style="margin:0;flex:1">${ICON('chart')} Vermogensopbouw</span></div>
-    <div class="small muted" style="margin:0 0 4px">${onder}</div>
+  return `<div id="maandKpiBlok">
     <div class="wvo-tiles" style="grid-template-columns:1fr">${kpiTegels(items)}</div>
-    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:10px">${K.partial?'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus nog zonder oordeel.':''}</div>
   </div>`;
 }
 

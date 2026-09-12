@@ -65,11 +65,14 @@ async function maandBlok(page, m) {
 }
 
 test.describe('a · doel en zelf-verklarende KPI\'s', () => {
+  /* v223: de kop 'Vermogensopbouw' en de zin 'Welk deel van je inkomen er opzij ging' zijn met de
+     kaartschil vervallen. Het benoemen zelf niet: dat doet de tegel, met zijn label en zijn band.
+     Die dragen de rol die de kop en de ondertitel hadden, en de eis is dus dezelfde. */
   test('de widget benoemt waar hij voor is', async ({ page }) => {
     await openIns(page);
     const s = await strip(page);
-    expect(s).toMatch(/vermogensopbouw/i);
-    expect(s).toMatch(/Welk deel van je inkomen er opzij ging/);
+    expect(s).toMatch(/spaarquote/i);
+    expect(s).toMatch(/wat je opzij zette en belegde/);
     expect(await page.locator('#maandKpiBlok .wvo-tile').count()).toBe(1);
     // v208: budgetnaleving en de variabele-lastendruk hebben geen tegel meer, op geen enkel scherm
     for (const key of MAAND_KEYS) await expect(tegel(page, key)).toHaveCount(0);
@@ -130,7 +133,10 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
       expect(['', 'loopt nog'], k.key).toContain(k.oordeel);
       expect(k.oordeel, k.key).not.toMatch(/goed|krap|let op/);
     }
-    expect(await strip(page)).toContain('nog zonder oordeel');
+    /* v223: hier stond de zin 'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus
+       nog zonder oordeel'. Die is vervallen omdat 'loopt nog' in de tegel het al zegt, en dat is
+       precies wat deze test wil vaststellen: de lezer ziet dat de maand nog loopt. */
+    expect(await strip(page)).toMatch(/loopt nog/);
   });
 
   test('een afgeronde maand krijgt wél een oordeel', async ({ page }) => {

@@ -133,11 +133,12 @@ test.describe('c - de spaarquote is ongewijzigd', () => {
     expect(typeof r.klein).toBe('boolean');
   });
 
+  /* v223: de zin 'nog zonder oordeel' is met de kaartschil vervallen. 'loopt nog' in de tegel zegt
+     het al, en dat is wat deze test wil vaststellen. */
   test('de lopende maand krijgt geen oordeel', async ({ page }) => {
     await open(page, seed({ maanden: 8 }));
     const b = await blok(page, null);
     expect(b.tekst).toContain('loopt nog');
-    expect(b.tekst).toContain('nog zonder oordeel');
   });
 });
 
@@ -161,17 +162,23 @@ test.describe('d - één cijfer, één kolom, en de kop zegt wat er staat', () =
     expect(b.tekst).not.toMatch(/toon beide/);
   });
 
-  test('de kop noemt het onderwerp, niet de categorie', async ({ page }) => {
+  /* v223: de kop 'Vermogensopbouw' is met de kaartschil vervallen, en daarmee ook de vraag of hij
+     het onderwerp of de categorie noemt. Wat de test bewaakte blijft gelden op de plek die het nu
+     draagt: het label van de tegel noemt één stroom en geen verzamelnaam. */
+  test('het label noemt het onderwerp, niet de categorie', async ({ page }) => {
     await open(page, seed({ maanden: 8 }));
     const b = await blok(page, M1);
-    expect(b.tekst.toLowerCase()).toContain('vermogensopbouw');
+    expect(b.tekst.toLowerCase()).toContain('spaarquote');
     expect(b.tekst.toLowerCase()).not.toContain('kerncijfers');   // meervoud bij één cijfer
     expect(b.tekst).not.toMatch(/Wat er structureel gebeurt/);    // te ruim voor één stroom
   });
 
-  test('de ondertitel telt wat er staat', async ({ page }) => {
+  /* v223: de ondertitel is vervallen; de deltazin in de tegel draagt nu wat er over het verloop te
+     zeggen valt, en die telt nog steeds wat er staat. */
+  test('het blok belooft geen verloop dat er niet is', async ({ page }) => {
     await open(page, seed({ maanden: 8 }));
-    expect((await blok(page, M1)).tekst).toMatch(/van maand op maand/);
+    // bij genoeg historie is het verloop een sparkline en geen zin; de helper telt die al
+    expect((await blok(page, M1)).sparks).toBeGreaterThan(0);
     // v193: bij één gemeten maand valt er geen verloop te zien, en dan staat dat er ook niet
     const een = await page.evaluate(() => {
       const ms = months();
@@ -180,8 +187,8 @@ test.describe('d - één cijfer, één kolom, en de kop zegt wat er staat', () =
       return maandKpiBlok(months()[months().length - 1]);
     });
     if (een) {
-      expect(een).toMatch(/één maand gemeten/);
-      expect(een).not.toMatch(/van maand op maand/);
+      expect(een).toMatch(/verloop zie je vanaf/);
+      expect(een).not.toMatch(/vorige maand/);
     }
   });
 });
