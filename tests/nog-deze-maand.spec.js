@@ -227,22 +227,23 @@ test.describe('d · de vier situaties uit de controlelijst', () => {
 });
 
 test.describe('e · de plan-rij houdt drie rollen en herhaalt de uitleg niet', () => {
-  test('een wachtend doel noemt status en modus, en verder niets', async ({ page }) => {
+  /* v225: de uitleg onder de lijst is vervallen. De rij noemt nu zelf op welke bestemming hij
+     wacht; dat is een feit over die rij, geen alinea over hoe auto werkt. De eis van v193 blijft:
+     geen uitleg in de rij. */
+  test('een wachtend doel noemt waarop hij wacht, en verder niets', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => {
       go('vooruit');
       const rij = [...document.querySelectorAll('#s-vooruit .plan-item')]
-        .find((x) => /Wacht op capaciteit/.test(x.innerText));
-      const onder = document.getElementById('planWacht');
+        .find((x) => /Wacht op/.test(x.innerText));
       return { rij: rij ? rij.innerText.replace(/\s+/g, ' ') : '',
-               onder: onder ? onder.innerText.replace(/\s+/g, ' ') : '' };
+               onder: document.querySelectorAll('#planWacht').length };
     });
-    expect(r.rij).toMatch(/Wacht op capaciteit . auto/);
-    // de uitleg staat niet meer in de rij
+    expect(r.rij).toMatch(/Wacht op .\S/);           // met een naam erbij
+    expect(r.rij).toMatch(/. auto|. vast|%/);        // en de modus
     expect(r.rij).not.toMatch(/gaat eerst naar de doelen erboven/);
-    expect(r.rij).not.toMatch(/pakt wat er nog is/);
-    // maar wel een keer, onder de lijst
-    expect(r.onder).toMatch(/pakt nu alles wat er overblijft/);
+    expect(r.rij).not.toMatch(/pakt wat er nog is|pakt nu alles wat er overblijft/);
+    expect(r.onder).toBe(0);
   });
 
   test('een lopend, een wachtend en een gepauzeerd doel dragen elk drie rollen', async ({ page }) => {
@@ -256,7 +257,7 @@ test.describe('e · de plan-rij houdt drie rollen en herhaalt de uitleg niet', (
       }));
     });
     const lopend = r.find((x) => /op dit tempo/.test(x.tekst));
-    const wacht = r.find((x) => /Wacht op capaciteit/.test(x.tekst));
+    const wacht = r.find((x) => /Wacht op/.test(x.tekst));
     const pauze = r.find((x) => /Gepauzeerd/.test(x.tekst));
     for (const x of [lopend, wacht, pauze]) {
       expect(x, JSON.stringify(r.map((y) => y.tekst))).toBeTruthy();

@@ -49,37 +49,46 @@ const metWachtenden = (aantal) => {
 };
 const planHtml = (page) => page.evaluate(() => renderPlan(true));
 
-test.describe('a · de wachtuitleg staat er precies één keer', () => {
+/* v225: de wachtuitleg was een alinea op planniveau, met een tik naar de invoer van het doel dat
+   alles opslokt. Plan toont de waterval nu als vorm, en dan hoeft niemand meer uit te leggen dat
+   het van boven naar beneden gaat: elke wachtende rij noemt zelf op welke bestemming hij wacht, en
+   die bestemming staat als rij direct erboven. De eis die v193 stelde blijft onverkort gelden en
+   wordt hier scherper: geen alinea, en geen herhaalde tik. Wat mag herhalen is de status van een
+   rij, want die gaat over die rij - net als 'Gepauzeerd' dat altijd al deed. */
+test.describe('a · de wachtuitleg is vervallen; de rij noemt zijn blokkeerder', () => {
   for (const n of [0, 1, 2, 3]) {
-    test(`${n} wachtende ${n === 1 ? 'doel' : 'doelen'}: hoogstens één regel`, async ({ page }) => {
+    test(`${n} wachtende ${n === 1 ? 'doel' : 'doelen'}: geen alinea, wel een naam per rij`, async ({ page }) => {
       await boot(page, metWachtenden(n));
       const r = await page.evaluate(() => {
         const P = allocatePlan();
         const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-        const regels = [...d.querySelectorAll('#planWacht')];
+        const rijen = [...d.querySelectorAll('.plan-item')].map((x) => x.innerText.replace(/\s+/g, ' '));
         return { wachtend: P.filter((p) => p.status === 'wacht op capaciteit').length,
-          regels: regels.length, tekst: regels.map((x) => x.innerText.replace(/\s+/g, ' ')),
-          tikken: d.querySelectorAll('#planWacht [onclick]').length,
-          hints: d.querySelectorAll('.plan-hint').length };
+          regels: d.querySelectorAll('#planWacht').length,
+          hints: d.querySelectorAll('.plan-hint').length,
+          noemt: rijen.filter((t) => /Wacht op .Vakantie./.test(t)).length };
       });
       expect(r.wachtend).toBe(n);
       expect(r.hints).toBe(0);                       // de oude per-doel-hint bestaat niet meer
-      expect(r.regels).toBe(n > 0 ? 1 : 0);          // nooit twee keer dezelfde alinea
-      if (n > 0) {
-        expect(r.tekst[0]).toContain('Vakantie');    // welk doel het opslokt
-        expect(r.tekst[0]).toContain(n === 1 ? '1 doel' : `${n} doelen`);
-        expect(r.tikken).toBe(1);                    // en één tik naar die invoer
-      }
+      expect(r.regels).toBe(0);                      // en de alinea op planniveau evenmin
+      expect(r.noemt).toBe(n);                       // elke wachtende rij noemt de blokkeerder
     });
   }
 
-  test('de regel telt in enkelvoud en meervoud mee', async ({ page }) => {
-    await boot(page, metWachtenden(1));
-    const een = (await planHtml(page)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
-    expect(een).toMatch(/1 doel eronder wacht\b/);
+  test('de rij noemt waarop hij wacht, en nooit wanneer hij aan de beurt is', async ({ page }) => {
     await boot(page, metWachtenden(2));
-    const twee = (await planHtml(page)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
-    expect(twee).toMatch(/2 doelen eronder wachten\b/);
+    const t = (await planHtml(page)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    expect(t).not.toMatch(/doelen eronder wachten/);
+    expect(t).not.toMatch(/maandbedrag instellen/);
+    /* geen datum bij een wachtend doel: wanneer het aan de beurt komt hangt af van keuzes die nog
+       niet gemaakt zijn, en een maand-en-jaar zou daar een precisie aan geven die er niet is */
+    const wacht = await page.evaluate(() => {
+      const d = document.createElement('div'); d.innerHTML = renderPlan(true);
+      return [...d.querySelectorAll('.plan-item')].map((x) => x.innerText)
+        .filter((x) => /Wacht op/.test(x));
+    });
+    expect(wacht.length).toBe(2);
+    for (const w of wacht) expect(w).not.toMatch(/rond \w+ \d{4}|20\d\d/);
   });
 });
 
@@ -103,15 +112,19 @@ test.describe('b · waarschuwing en wachtuitleg zijn één regel', () => {
     expect(r.tekst).toMatch(/wachten dan op capaciteit|tellen op tot/);
   });
 
-  test('alleen de auto-werking: neutraal, geen amber', async ({ page }) => {
+  /* v225: bij alleen de auto-werking stond hier een neutrale regel die uitlegde hoe auto werkt.
+     Die is vervallen; er is niets mis, dus is er ook niets te melden. De eigenschap die deze test
+     bewaakt blijft: de amber-stand is voorbehouden aan een echte overtoewijzing (v78/v93). */
+  test('alleen de auto-werking: geen melding, en zeker geen amber', async ({ page }) => {
     await boot(page, metWachtenden(2));
     const r = await page.evaluate(() => {
       const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-      const el = d.querySelector('#planWacht');
-      return { warn: !!planAllocWarning(), amber: /amber|251,191,36/.test(el.outerHTML) };
+      return { warn: !!planAllocWarning(), n: d.querySelectorAll('#planWacht').length,
+        amber: /amber|251,191,36/.test(d.innerHTML) };
     });
     expect(r.warn).toBe(false);                      // een auto-doel claimt niets
-    expect(r.amber).toBe(false);                     // dus er is niets mis, alleen iets uit te leggen
+    expect(r.n).toBe(0);
+    expect(r.amber).toBe(false);
   });
 
   test('niets aan de hand: geen regel, geen lege staat', async ({ page }) => {
@@ -171,14 +184,20 @@ test.describe('c · vanaf vier waarden een uitgelijnde tabel', () => {
 });
 
 test.describe('d · de plan-zone en het voorbehoud', () => {
-  test('de samenvatting is de kop, "Mijn plan" bestaat niet meer', async ({ page }) => {
+  /* v225: de zonebalk droeg een samenvatting van de lijst ('#1 Vakantie · +3 meer'). De kaart
+     eronder toont die volgorde nu zelf, genummerd, dus de balk zou hem herhalen. Wat blijft: de
+     balk draagt niet de naam van de tab, en de nummering staat ergens op het scherm. */
+  test('de zone heet Bestemmingen en herhaalt de lijst niet', async ({ page }) => {
     await boot(page, metWachtenden(2));
     await page.evaluate(() => go('vooruit'));
     const t = await page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]').innerText();
-    const rest = (await page.evaluate(() => planItems().length)) - 1;   // het noodfonds telt mee
     expect(t).not.toMatch(/mijn plan/i);
-    expect(t).toContain('#1 Vakantie');
-    expect(t).toContain(`+${rest} meer`);
+    expect(t).toContain('Bestemmingen');
+    expect(t).not.toContain('Vakantie');
+    expect(t).not.toMatch(/\+\d+ meer/);
+    const rij = await page.locator('#s-vooruit .plan-item').first().innerText();
+    expect(rij).toMatch(/^1\s/);
+    expect(rij).toContain('Vakantie');
   });
 
   test('zonder doelen zegt de kop dat', async ({ page }) => {
@@ -193,9 +212,10 @@ test.describe('d · de plan-zone en het voorbehoud', () => {
     await boot(page, { set: { goals: [{ id: 'x', naam: '<b>Stout</b>', doel: 900, gespaard: 0,
       allocMode: 'fixed', perMaand: 100 }], planOrder: ['x', 'noodfonds'], planPaused: { noodfonds: true } } });
     await page.evaluate(() => go('vooruit'));
-    const bar = page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]');
-    expect(await bar.innerText()).toContain('<b>Stout</b>');
-    expect(await bar.locator('b').count()).toBe(0);
+    // v225: de doelnaam stond in de zonebalk; hij staat nu in de rij, en daar geldt dezelfde eis
+    const rij = page.locator('#s-vooruit .plan-item[data-id="x"]');
+    expect(await rij.innerText()).toContain('<b>Stout</b>');
+    expect(await rij.locator('b:has-text("Stout")').count()).toBe(0);
   });
 
   test('het voorbehoud gaat over de getallen, niet over het scherm', async ({ page }) => {

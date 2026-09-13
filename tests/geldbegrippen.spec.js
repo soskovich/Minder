@@ -93,7 +93,9 @@ test.describe('b · één term per begrip', () => {
     await boot(page, 'vooruit');
     const html = await page.evaluate(() => renderPlan());
     expect(html).toContain(">spaarinleg<");                            // als uitlegbare term
-    expect(html).toContain('gaat van boven naar beneden');
+    // v225: de zin over de volgorde staat achter het uitlegteken in de kop, en dus in NOTES.
+    // De eis blijft: de term staat zichtbaar op het scherm en er hangt een uitleg aan.
+    expect(await page.evaluate(() => NOTES.planUitleg)).toContain('gaat van boven naar beneden');
     expect(await page.evaluate(() => JARGON.spaarinleg)).toContain('per maand opzij');
   });
 });

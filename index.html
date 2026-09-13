@@ -286,6 +286,8 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .plan-tab{display:grid;grid-template-columns:1fr auto;gap:3px 12px;line-height:1.4;margin-top:1px}
 .plan-tab .v{color:var(--txt);font-weight:700;text-align:right;white-space:nowrap}
 .plan-1{display:inline-block;background:var(--teal);color:var(--on-accent);font-weight:800;font-size:10px;border-radius:5px;padding:1px 6px;vertical-align:1px}
+.plan-1.n{background:var(--card2);color:var(--mut);font-weight:700}
+.plan-rij{padding:10px 0;border-top:1px solid var(--ln2)}
 .cp-add{display:block;width:100%;text-align:left;background:transparent;border:1px solid var(--ln2);color:var(--txt);border-radius:var(--r-inner);padding:11px 13px;margin:var(--s1) 0 4px;font-size:13px;font-weight:600;cursor:pointer}
 .cz-note{font-size:12px;color:var(--mut);line-height:1.5;margin:9px 4px 0}
 .cz-effect{font-size:var(--fs-md);color:var(--txt);line-height:1.5;margin-bottom:4px}
@@ -2308,14 +2310,19 @@ const JARGON={
   firefactor:'Hoeveel keer je jaaruitgaven je als vermogen aanhoudt; factor 25 hoort bij een onttrekking van 4% per jaar.',
   procentpunt:'Het verschil tussen twee percentages. Gaat je restsaldo-quote van 20% naar 22%, dan is dat 2 procentpunt. Zo zie je wat één transactie aan een kerncijfer heeft gedaan.'
 };
+const NOTES={};
+function noteIcon(key,label){
+  return `<span class="jrg" tabindex="0" role="button" aria-label="Uitleg: ${esc(label||'')}" onclick="showTip(event,'${key}')" onkeydown="if(event.key==='Enter'||event.key===' '){showTip(event,'${key}')}" style="border:0;font-size:12px;color:var(--mut2)">&#9432;</span>`;
+}
 function jrg(key,label){ const u=JARGON[key]; if(!u) return label;
   return `<span class="jrg" tabindex="0" role="button" aria-label="Uitleg: ${esc(u)}" onclick="showTip(event,'${key}')" onkeydown="if(event.key==='Enter'||event.key===' '){showTip(event,'${key}')}">${label}</span>`; }
 function showTip(e,key){
-  const u=JARGON[key]; if(!u) return;
+  const u=JARGON[key], note=NOTES[key]; if(!u&&!note) return;
   try{ e.preventDefault(); e.stopPropagation(); }catch(_){}                 // niet de <details> eronder open-/dichtklappen
   let p=document.getElementById('tipPop');
   if(!p){ p=document.createElement('div'); p.id='tipPop'; p.setAttribute('role','tooltip'); document.body.appendChild(p); }
-  p.textContent=u; p.className='show'; window._tipTs=Date.now();
+  if(note) p.innerHTML=note; else p.textContent=u;
+  p.className='show'; window._tipTs=Date.now();
   // Een tik zet ook focus, en de browser kan de term dan net in beeld scrollen. Daarom plaatsen we
   // de popover nog een keer in de volgende frame (anders staat hij scheef) en negeert de
   // scroll-sluiter die ene eigen scroll (anders klapt de uitleg meteen weer dicht).
@@ -4485,18 +4492,37 @@ function etaTekst(eta){
    uitgelijnde minitabel: label links, waarde rechts, zodat de bedragen onder elkaar staan en te
    vergelijken zijn. Alleen de weergave verandert; elke waarde komt uit dezelfde bron als voorheen
    en er wordt niets bij berekend. */
-function planSub(p){
+function planBedragDeel(p){
+  const per=(p.type==='aflossen')?Math.max(Math.round(+p.debtPer||0),0):0;
+  return {mod:p.mode==='pct'?`${(''+p.pct).replace('.',',')}% · `:(p.mode==='fixed'?'vast · ':''),
+          bedrag:euro0(Math.max(Math.round(+p.alloc||0),0)+per)};
+}
+function planBedrag(p){ const D=planBedragDeel(p); return `${D.mod}${D.bedrag}/mnd`; }
+/* De regel onder een bestemming: waar hij staat, en daarna hoe hard hij loopt. planSub() levert
+   dat tweede deel; met kaal=true laat hij het bedrag weg, want dat staat sinds v225 in de rij
+   erboven. Zonder die vlag is planSub() woordelijk wat hij was. */
+function planRegel(p){
+  if(p.nfOnbekend) return '<span class="muted">onbekend</span>';
+  const stand=`<b style="font-weight:700">${euro0(p.gespaard)}</b><span class="muted"> toegewezen / ${euro0(p.doel)}</span>`;
+  const rest=planSub(p,true);
+  if(/plan-tab/.test(rest)) return `<div>${stand}</div>${rest}`;
+  return rest?`${stand} · ${rest}`:stand;
+}
+function planSub(p,kaal){
   // v173: geen looptijd en geen datum op een voortgang die niet is vastgesteld
   if(p.nfOnbekend) return `${euro0(p.alloc)}/mnd`;
   if(p.status==='bereikt') return `${ICON('party')} Bereikt`;
   if(p.status==='gepauzeerd') return 'Gepauzeerd · krijgt nu niets';
   /* v204: hier stond ", maar alles gaat eerst naar de doelen erboven". Dat is de uitleg die v193
-     uit de rij haalde en onder de lijst zette, en hij stond dus op twee plekken. Wat overblijft is
-     status plus modus: een feit over deze rij. Het waarom staat een keer, in planWachtRegel(). */
-  if(p.status==='wacht op capaciteit') return `Wacht op capaciteit · ${planModeLabel(p)}`;
+     uit de rij haalde en onder de lijst zette, en hij stond dus op twee plekken.
+     v225: die regel onder de lijst is vervallen en de uitleg keert hier terug, maar dan als feit
+     in plaats van als alinea: niet hoe auto werkt, maar op welke bestemming deze rij wacht. Die
+     bestemming staat als rij direct hierboven, dus het is ook meteen de ingang. */
+  if(p.status==='wacht op capaciteit') return p.blokkeerder
+    ? `Wacht op ‘${esc(p.blokkeerder.naam)}’ · ${planModeLabel(p)}`
+    : `Wacht op capaciteit · ${planModeLabel(p)}`;
   const et=p.eta?etaTekst(p.eta):'';
   const eta=et?` · op dit tempo ${et}`:'';
-  const mod=p.mode==='pct'?`${(''+p.pct).replace('.',',')}% · `:(p.mode==='fixed'?'vast · ':'');
   // maak zichtbaar dat een deel is doorgezakt uit wat er boven overbleef
   const dz=(+p.extra>0&&p.mode!=='auto')?` · waarvan ${euro0(p.extra)} doorgezakt`:'';
   /* v189: hier stond alleen p.alloc, terwijl allocatePlan() de eta rekent met debtPer + alloc. Het
@@ -4513,7 +4539,7 @@ function planSub(p){
   const n=1+(per>0?1:0)+(dzB>0?1:0)+(et?1:0)+(p.mode==='pct'?1:0);
   if(n>=4){
     const rij=(l,v)=>`<span>${l}</span><span class="v">${v}</span>`;
-    const r=[rij('Per maand', euro0(p.alloc+per))];
+    const r=kaal?[]:[rij('Per maand', euro0(p.alloc+per))];
     if(per>0) r.push(rij('waarvan je termijn', euro0(per)));
     if(dzB>0) r.push(rij('waarvan doorgezakt', euro0(dzB)));
     if(p.mode==='pct') r.push(rij('Aandeel', `${(''+p.pct).replace('.',',')}% van je ${planCapLabel()}`));
@@ -4521,40 +4547,20 @@ function planSub(p){
     if(et) r.push(rij('Klaar', `op dit tempo ${et}`));
     return `<div class="plan-tab">${r.join('')}</div>`;
   }
-  if(per>0) return `${mod}${euro0(p.alloc+per)}/mnd · waarvan ${euro0(per)} je termijn${dz}${eta}`;
-  return `${mod}${euro0(p.alloc)}/mnd${dz}${eta}`;
+  if(per>0) return `${kaal?'':planBedrag(p)+' · '}waarvan ${euro0(per)} je termijn${dz}${eta}`;
+  if(kaal) return `${dz}${eta}`.replace(/^ · /,'');
+  return `${planBedrag(p)}${dz}${eta}`;
 }
-/* Waaróm krijgen deze doelen niets? Een auto-doel erboven pakt wat er overblijft; met een
-   maandbedrag of percentage daarop zakt de rest door.
-   v193: deze uitleg stond woordelijk identiek onder élk wachtend doel, inclusief dezelfde
-   blokkeerdernaam - bij drie wachtende doelen dus drie keer dezelfde alinea op één scherm. De
-   blokkeerder is per constructie voor alle wachtenden dezelfde (allocatePlan zet auto1), dus één
-   regel op planniveau zegt precies hetzelfde en telt erbij hoeveel doelen wachten.
-   Diezelfde ronde voegt hem samen met planAllocWarning(): die twee zeiden hetzelfde in twee
-   registers, de een op planniveau en de ander per doel. Ze vuren niet altijd samen - een auto-doel
-   dat alles opslokt claimt niets, dus de waarschuwing zwijgt daar - en daarom is dit één regel met
-   twee standen in plaats van een van de twee geschrapt: de waarschuwing houdt zijn amber (er wordt
-   meer verdeeld dan er is), de auto-stand blijft neutraal, want daar is niets mis - zo werkt auto
-   nu eenmaal (v78/v93). */
-function planWachtBron(P){
-  const wacht=(P||[]).filter(p=>p.status==='wacht op capaciteit'&&p.blokkeerder);
-  return wacht.length?{b:wacht[0].blokkeerder, n:wacht.length}:null;
-}
-function planWachtRegel(P){
-  const W=planAllocWarning(), B=planWachtBron(P);
-  if(!W&&!B) return '';
-  const kort=isMode('rustig');
-  const doelen=B?(B.n===1?'1 doel':`${B.n} doelen`):'';
-  const wacht=B?(B.n===1?'wacht':'wachten'):'';
-  const uitleg=B?(kort
-    ? `‘${esc(B.b.naam)}’ pakt nu wat er overblijft, dus ${doelen} eronder ${wacht}.`
-    : `‘${esc(B.b.naam)}’ pakt nu alles wat er overblijft, dus ${doelen} eronder ${wacht}. Geef dat doel een maandbedrag of %, dan zakt de rest door.`):'';
-  const tik=B?` <span style="color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();${planAllocOpen(B.b)}">maandbedrag instellen ›</span>`:'';
-  const txt=[W?W.txt:'', uitleg].filter(Boolean).join(' ')+tik;
-  const stijl=W
-    ? `color:${isMode('rustig')?'var(--mut)':'var(--amber)'};background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 11px;margin:0 2px 9px`
-    : 'color:var(--mut2);margin:0 2px 9px';
-  return `<div id="planWacht" class="small" style="${stijl};line-height:1.45">${txt}</div>`;
+/* De zachte spiegel op planniveau: verdeel je meer dan er is, dan zeggen we dat. Nooit blokkeren. */
+/* v225: hier stond ook de uitleg waarom de doelen onderaan wachten, met een tik naar de invoer
+   van het doel dat alles opslokt. Plan toont de waterval nu als vorm: elke wachtende rij noemt
+   zelf op welke bestemming hij wacht, en die bestemming staat als rij direct erboven. Dat is de
+   ingang, en daarmee zijn de alinea en zijn tik overbodig geworden.
+   Wat blijft is planAllocWarning(), en die blijft zichtbaar: een amber-melding achter een
+   uitlegteken is geen melding meer (v78/v93). planWachtBron() had hier zijn enige aanroeper. */
+function planWachtRegel(){
+  const W=planAllocWarning(); if(!W) return '';
+  return `<div id="planWacht" class="small" style="color:${isMode('rustig')?'var(--mut)':'var(--amber)'};background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 11px;margin:0 2px 9px;line-height:1.45">${W.txt}</div>`;
 }
 /* Spaargeld boven je noodfonds-doel (v99).
    Het noodfonds-plan-item klemt zijn voortgang op het doel (planMap), en de voortgang van een
@@ -4766,7 +4772,8 @@ function planAllocWarning(){
    nooit als enige beslist.
    Mut en niet amber (v78/v93): dit is een observatie, geen aandacht. Er is ook geen keuze, en die
    wordt niet verzonnen om de vorm compleet te maken. */
-function planMaandRegel(){
+function planMaandRegel(){ const t=planMaandTekst(); return t?`<div class="small mut2" style="margin:0 2px 9px;line-height:1.45">${t}</div>`:''; }
+function planMaandTekst(){
   let S=null; try{ S=safeToSpend(); }catch(_){ return ''; }
   if(!S) return '';
   const tgt=Math.round(+S.saveTarget||0), al=Math.round(+S.savedThisMonth||0);
@@ -4778,64 +4785,81 @@ function planMaandRegel(){
             : `Dit is een verdeling <b>per maand</b>. Deze maand staat er al ${euro0(al)} van op je spaarrekening, dus er komt nog ${euro0(nog)} bij.`)
     : (kort ? `Per maand. Deze maand is je maandbedrag al binnen.`
             : `Dit is een verdeling <b>per maand</b>. Je maandbedrag van ${euro0(tgt)} is deze maand al binnengekomen, dus deze verdeling gaat over wat er hierna bij komt.`);
-  return `<div class="small mut2" style="margin:0 2px 9px;line-height:1.45">${txt}</div>`;
+  return txt;
 }
+/* v225: Plan legde de waterval uit in drie zinnen boven een lijst losse kaarten, en toonde hem
+   nergens. Nu is de lijst de uitleg: een kaart met bovenaan wat er te verdelen is, daaronder de
+   bestemmingen in de volgorde waarin ze bediend worden, genummerd, en onderaan wat er overblijft.
+   Er wordt niets anders gerekend - allocatePlan() en planCapacity() zijn ongemoeid; dit is de
+   vorm waarin hun uitkomst te zien is.
+   Achter het uitlegteken staat wat het scherm eerst in zinnen zei: waar het te verdelen bedrag
+   vandaan komt, en dat het om een maandtempo gaat (v218). De amber-melding blijft er wel staan,
+   want een melding achter een uitlegteken is geen melding meer (v78/v93).
+   Per bestemming een regel eronder: waar hij staat, en hoe hard hij loopt. Een wachtende
+   bestemming noemt op welke bestemming hij wacht en nooit wanneer hij aan de beurt is - dat hangt
+   af van keuzes die nog niet gemaakt zijn, en een datum zou daar een precisie aan geven die er
+   niet is (v59/v73/v173).
+   De volgorde is de hoofdhandeling van dit scherm, dus de pijlen blijven zichtbaar. Pauzeren,
+   verfijnen en uit plan halen verschijnen pas na een tik op de rij: dat zijn keuzes bij een
+   bestemming, en ze concurreerden met de knoppen die het mechanisme zelf bedienen. */
+function planRij(id){ window._planRij=(window._planRij===id)?null:id; render(); }
 function renderPlan(bare){
   const P=allocatePlan(); const cap=planCapacity(); const n=P.length;
   const rows=P.map((p,i)=>{
     const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
-    /* v194: de balk toonde alleen voortgang, terwijl dit scherm over verdeling gaat - het enige
-       beeld op de pagina toonde dus het verkeerde. Een tweede, lichter segment achter de vulling
-       zegt wat er PER MAAND bij komt, zodat de balk zowel je stand als de beweging draagt. Dat is
-       het maandtempo en niet het restant van deze maand: het hele scherm rekent in maandtempo
-       (v218), en een balk die halverwege de maand ineens iets anders toont zou het beeld breken.
-       Bij een
-       aflos-item is dat alloc plus je bestaande termijn: hetzelfde bedrag dat de regel eronder
-       noemt (v190), want dat is wat er werkelijk in gaat. Staat het item stil, dan is alloc nul en
-       is er geen segment - dat sluit aan op de grijze vulling hierboven in plaats van ermee te
-       botsen. Niets gerekend: alloc, debtPer, gespaard en doel bestaan alle vier al. */
+    /* v194: de balk toonde alleen voortgang, terwijl dit scherm over verdeling gaat. Een tweede,
+       lichter segment achter de vulling zegt wat er PER MAAND bij komt, zodat de balk zowel je
+       stand als de beweging draagt. Dat is het maandtempo en niet het restant van deze maand: het
+       hele scherm rekent in maandtempo (v218). Bij een aflos-item is dat alloc plus je bestaande
+       termijn: hetzelfde bedrag dat de rij noemt (v190), want dat is wat er werkelijk in gaat.
+       Staat het item stil, dan is alloc nul en is er geen segment. Niets gerekend: alloc, debtPer,
+       gespaard en doel bestaan alle vier al. */
     const perMnd=Math.max(Math.round(+p.alloc||0),0)+(p.type==='aflossen'?Math.max(Math.round(+p.debtPer||0),0):0);
     const groei=(p.doel>0&&perMnd>0)?Math.max(Math.min(perMnd/p.doel*100,100-pct),0):0;
-    /* v194: 'wacht op capaciteit' was teal, precies de kleur van een doel dat wél geld krijgt.
-       Drie doelen zagen er dan identiek uit terwijl er één €300 per maand krijgt en twee niets. In
-       beide gevallen komt er niets bij, dus krijgt wachten dezelfde grijstint als gepauzeerd - dat
-       patroon bestond al, inclusief het woord erbij in planSub(). */
+    /* v194: 'wacht op capaciteit' was teal, precies de kleur van een doel dat wel geld krijgt. In
+       beide gevallen komt er niets bij, dus krijgt wachten dezelfde grijstint als gepauzeerd. */
     const stil=p.status==='gepauzeerd'||p.status==='wacht op capaciteit';
     const col=stil?'var(--mut)':(p.status==='bereikt'?'var(--green)':'var(--teal)');
-    const up=i>0?`<button class="plan-mv" onclick="planMove('${p.id}',-1)" aria-label="Hoger">▲</button>`:'<span class="plan-mv off">▲</span>';
-    const dn=i<n-1?`<button class="plan-mv" onclick="planMove('${p.id}',1)" aria-label="Lager">▼</button>`:'<span class="plan-mv off">▼</span>';
-    return `<div class="card plan-item" data-id="${p.id}" style="padding:12px 13px;margin-bottom:8px">
+    const up=i>0?`<button class="plan-mv" onclick="event.stopPropagation();planMove('${p.id}',-1)" aria-label="Hoger">&#9650;</button>`:'<span class="plan-mv off">&#9650;</span>';
+    const dn=i<n-1?`<button class="plan-mv" onclick="event.stopPropagation();planMove('${p.id}',1)" aria-label="Lager">&#9660;</button>`:'<span class="plan-mv off">&#9660;</span>';
+    const D=planBedragDeel(p);
+    const uit=window._planRij===p.id;
+    const act=(kl,tk,fn)=>`<span class="small" style="color:var(--${kl});cursor:pointer" onclick="event.stopPropagation();${fn}">${tk}</span>`;
+    const acties=uit?`<div class="row" style="margin-top:9px;gap:14px;flex-wrap:wrap">
+        ${act('teal', p.type==='noodfonds'?'verfijnen ›':'openen ›', planOpen(p))}
+        ${p.type==='aflossen'?act('teal','maandbedrag ›',planAllocOpen(p)):''}
+        ${act('mut2', planPaused(p.id)?'hervatten':'pauzeren', `planTogglePause('${p.id}')`)}
+        ${p.type==='aflossen'?act('mut2','uit plan halen',`planRemove('${p.id}')`):''}
+      </div>`:'';
+    return `<div class="plan-item plan-rij" data-id="${p.id}">
       <div style="display:flex;gap:10px;align-items:flex-start">
-        <div style="flex:1;min-width:0;cursor:pointer" onclick="${planOpen(p)}">
-          <!-- v203: de naam stond vet op fs-md en het bedrag klein en gedempt ernaast, terwijl juist
-               dat bedrag de stand draagt: waar je staat op weg naar je doel. De verhouding is omgedraaid.
-               Het bereikte bedrag krijgt het gewicht en de gewone tekstkleur; " toegewezen / doel" blijft
-               gedempt, want dat is de eenheid en de noemer en niet de waarde (v193 blok 26). De naam
-               blijft leesbaar op 600 in plaats van 700. Geen kleur erbij: hoe de stand ervoor staat zegt
-               de balk eronder al. -->
-          <div class="row"><span style="font-weight:600;font-size:var(--fs-md);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i===0?'<span class="plan-1">1</span> ':''}${esc(p.naam)}</span><span class="small" style="white-space:nowrap;flex-shrink:0">${p.nfOnbekend?`<span class="muted">onbekend</span>`:`<b style="font-weight:700">${euro0(p.gespaard)}</b><span class="muted"> toegewezen</span>`}<span class="muted"> / ${euro0(p.doel)}</span></span></div>
+        <div style="flex:1;min-width:0;cursor:pointer" onclick="planRij('${p.id}')">
+          <div class="row"><span style="font-weight:600;font-size:var(--fs-md);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="plan-1${i===0?'':' n'}">${i+1}</span> ${esc(p.naam)}</span><span class="small" style="white-space:nowrap;flex-shrink:0">${D.mod?`<span class="muted">${D.mod}</span>`:''}<b style="font-weight:700">${D.bedrag}</b><span class="muted">/mnd</span></span></div>
           ${p.nfOnbekend?'':`<div class="bar-track" style="margin:8px 0 0;display:flex"><div class="bar-fill" style="width:${pct}%;background:${col}${groei>0?';border-radius:6px 0 0 6px':''}"></div>${groei>0?`<div class="bar-fill bar-groei" style="width:${groei.toFixed(1)}%;background:color-mix(in srgb,${col} 38%,transparent);border-radius:0 6px 6px 0"></div>`:''}</div>`}
-          <div class="small muted" style="margin-top:6px">${planSub(p)}</div>
+          <div class="small muted" style="margin-top:6px">${planRegel(p)}</div>
           ${p.nfOnbekend?'':doelTempoLine(p)}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${up}${dn}</div>
-      </div>
-      <div class="row" style="margin-top:8px;gap:12px">
-        <span class="small" style="color:var(--mut2);cursor:pointer" onclick="planTogglePause('${p.id}')">${planPaused(p.id)?'hervatten':'pauzeren'}</span>
-        ${p.type==='noodfonds'?`<span class="small" style="color:var(--teal);cursor:pointer" onclick="openNoodfondsPanel()">verfijnen ›</span>`:''}
-        ${p.type==='aflossen'?`<span class="small" style="color:var(--mut2);cursor:pointer" onclick="planRemove('${p.id}')">uit plan halen</span>`:''}
-      </div>
+      </div>${acties}
     </div>`;
   }).join('');
-  const head=planCapTerugval()
-    ? `<div class="small muted" style="margin:0 2px 8px">Je hebt nog geen ${jrg('spaarinleg','spaarinleg')} ingesteld, dus dit plan verdeelt je comfortabele ruimte: <b>${euro0(cap)}/mnd</b>. Zet met ▲▼ wat eerst moet.</div>`
-    : `<div class="small muted" style="margin:0 2px 8px">Je ${jrg('spaarinleg','spaarinleg')} gaat van boven naar beneden: ${cap>0?`<b>${euro0(cap)}/mnd</b> te verdelen`:'nog geen spaarinleg bekend'}. Zet met ▲▼ wat eerst moet.</div>`;
-  const warn=planWachtRegel(P);
-  // niets blijft liggen: is er ná het bijvullen van álle lopende doelen nog capaciteit over,
-  // dan zeggen we dat rustig i.p.v. het geruisloos te laten verdwijnen
+  // Wat het scherm eerst in zinnen zei staat nu achter het uitlegteken bovenin de kaart.
+  NOTES.planUitleg=[
+    planCapTerugval()
+      ? 'Je hebt nog geen spaarinleg ingesteld, dus dit plan verdeelt je comfortabele ruimte: wat er na je vaste lasten en je gewone uitgaven overblijft.'
+      : 'Je spaarinleg gaat van boven naar beneden: elke bestemming krijgt wat hij nodig heeft, en wat overblijft zakt door naar de volgende. Met de pijlen zet je wat eerst moet.',
+    planMaandTekst()
+  ].filter(Boolean).map(t=>`<div style="margin-bottom:7px">${t}</div>`).join('');
+  const kop=`<div class="row"><span style="font-weight:600;font-size:var(--fs-md)">Te verdelen uit je ${planCapTerugval()?'comfortabele ruimte':jrg('spaarinleg','spaarinleg')} ${noteIcon('planUitleg','hoe dit plan verdeelt')}</span><span style="font-weight:800;font-size:var(--fs-md);color:${cap>0?'var(--teal)':'var(--mut)'}">${cap>0?`${euro0(cap)}/mnd`:'nog niet bekend'}</span></div>${cap>0?`<div class="bar-track" style="margin:9px 0 1px"><div class="bar-fill" style="width:100%;background:var(--teal)"></div></div>`:''}`;
+  /* Niets blijft liggen, en het staat er ook wanneer er niets overblijft: dat is de sluitpost van
+     de waterval, en een sluitpost die alleen bij een positief bedrag verschijnt laat je raden of
+     hij er niet was of dat hij nul was. Een keuze staat er alleen als er iets te kiezen valt. */
   const vrij=planVrij(P);
-  const vrijLine=vrij>0?`<div id="planVrij" class="small muted" style="margin:0 2px 9px;line-height:1.45"><b>${euro0(vrij)}/mnd</b> nog vrij${isMode('rustig')?'':' — al je doelen krijgen wat ze nodig hebben'} · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span></div>`:'';
-  return head+planMaandRegel()+warn+vrijLine+spaarVrijLine(P)+spaarOverLine(P)+rows+coHorizonVraag()+`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
+  const rest=`<div id="planVrij" class="small" style="border-top:1px solid var(--ln2);margin-top:2px;padding-top:9px;display:flex;justify-content:space-between;gap:12px;color:var(--mut2)"><span>Blijft over${(vrij>0&&!isMode('rustig'))?' - al je bestemmingen krijgen wat ze nodig hebben':''}</span><span style="white-space:nowrap"><b style="font-weight:700;color:${vrij>0?'var(--txt)':'var(--mut)'}">${euro0(vrij)}</b>/mnd${vrij>0?` · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span>`:''}</span></div>`;
+  const leeg=`<div class="small muted" style="border-top:1px solid var(--ln2);margin-top:2px;padding:11px 0 3px">Nog geen bestemmingen. Alles wat je opzij zet blijft op je spaarrekening staan.</div>`;
+  return planWachtRegel()+spaarVrijLine(P)+spaarOverLine(P)
+    +`<div class="card" style="padding:12px 13px">${kop}${rows||leeg}${rest}</div>`
+    +`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
 }
 
 /* ---- Deel 2: optioneel dure-schuld-advies bij een nieuw doel (nooit verplicht) ---- */
@@ -6412,16 +6436,10 @@ function renderVooruit(){
      minder' (v20/v90) gaat over nevenzaken, en hier is de lijst de hoofdzaak. Je eigen keuze wint
      onverkort, want SET.vooruitDoelOpen wordt als eerste gelezen. */
   const doelOpen=(SET.vooruitDoelOpen!==undefined)?SET.vooruitDoelOpen:true;
-  const P=(()=>{ try{ return planItems(); }catch(_){ return []; } })();
-  /* v193: de zonekop heette 'Mijn plan' en dupliceerde daarmee de tabnaam, sinds dit scherm in
-     v179 Plan ging heten. De kop helemaal weghalen kan niet zonder de inklap-knop mee te nemen (die
-     stuurt SET.vooruitDoelOpen), dus neemt de samenvatting die plek in: op een scherm dat Plan heet
-     is 'de lijst, samengevat' precies wat die balk hoort te zeggen. vooruitZone() escapet zijn
-     label niet en hier zit een doelnaam in, dus dat gebeurt hier. */
-  const top=P[0];
-  const doelKop=top?`#1 ${esc(top.naam)}`:'Nog geen doelen';
-  const doelTeaser=(top&&P.length>1)?`+${P.length-1} meer`:'';
-  const doelZone=vooruitZone('vooruitDoelOpen',doelKop,doelTeaser,doelOpen,goals);
+  /* v225: hier stond de samenvatting van de lijst in de zonebalk ("#1 Vakantie · +3 meer"), met
+     P, top, doelKop en doelTeaser eromheen. De kaart eronder toont die volgorde nu zelf, met
+     nummers, dus de balk draagt alleen nog de naam van de zone en de inklap-knop. */
+  const doelZone=vooruitZone('vooruitDoelOpen','Bestemmingen','',doelOpen,goals);
   // noodfondsCard() is hier weg: het noodfonds is een plan-item geworden en "verfijnen" opent
   // vanaf dát item (planOpen -> openNoodfondsPanel), dus de kaart stond dubbel.
   // "Volgende uitgaven" (vooruitDeep) is weg, dus ook de knop "Deze maand in detail" — anders

@@ -38,27 +38,38 @@ test.describe('a · noodfonds-widget weg, verfijnen blijft bereikbaar', () => {
     expect(iDoel).toBeGreaterThanOrEqual(0);
   });
 
+  /* v225: 'verfijnen ›' stond los in de rij en deed exact hetzelfde als een tik op de rij zelf -
+     planOpen(noodfonds) is woordelijk openNoodfondsPanel(). De knoppen staan nu achter die tik,
+     zodat de rij zelf rustig blijft en de volgorde-knoppen de enige zichtbare handeling zijn. De
+     eis blijft dezelfde: vanaf het noodfonds-item kom je bij het verfijnen-paneel. */
   test('het noodfonds-plan-item is de ingang naar verfijnen', async ({ page }) => {
     await boot(page, 'vooruit');
     await openPlanZone(page);
     const nf = page.locator('#s-vooruit .plan-item[data-id="noodfonds"]');
     await expect(nf).toHaveCount(1);
-    expect(await nf.innerText()).toContain('verfijnen');
+    expect(await nf.innerText()).not.toContain('verfijnen');   // pas na de tik
 
-    await nf.locator('text=verfijnen').click();
+    await nf.locator('text=Noodfonds').click();
+    await page.waitForSelector('#s-vooruit .plan-item[data-id="noodfonds"] >> text=verfijnen');
+    await page.locator('#s-vooruit .plan-item[data-id="noodfonds"] >> text=verfijnen').click();
     await page.waitForSelector('#sheetBg.show');
     const sheet = await page.locator('#sheet').innerText();
     expect(sheet).toContain('Noodfonds verfijnen');
     expect(sheet).toContain('Minimaal nodig in crisis');
   });
 
-  test('ook de kaart-body van het plan-item opent de sheet', async ({ page }) => {
+  test('de tik op de rij is wat de knoppen tevoorschijn haalt', async ({ page }) => {
     await boot(page, 'vooruit');
     await openPlanZone(page);
     expect(await page.evaluate(() => planItems().find((x) => x.id === 'noodfonds') && planOpen(planItems()[0]) !== null)).toBeTruthy();
+    const nf = page.locator('#s-vooruit .plan-item[data-id="noodfonds"]');
+    expect(await nf.innerText()).not.toMatch(/pauzeren|hervatten/);
+    await nf.locator('text=Noodfonds').click();
+    await page.waitForSelector('#s-vooruit .plan-item[data-id="noodfonds"] >> text=pauzeren');
+    // en nog een tik legt hem weer dicht
     await page.locator('#s-vooruit .plan-item[data-id="noodfonds"] >> text=Noodfonds').click();
-    await page.waitForSelector('#sheetBg.show');
-    expect(await page.locator('#sheet').innerText()).toContain('Noodfonds verfijnen');
+    await page.waitForFunction(() => !/pauzeren/.test(
+      (document.querySelector('#s-vooruit .plan-item[data-id="noodfonds"]') || {}).innerText || ''));
   });
 });
 

@@ -84,7 +84,8 @@ test.describe('a - de verdeling is een maandtempo, en dat blijft zo', () => {
       const d = document.createElement('div'); d.innerHTML = renderPlan(true);
       return d.textContent.replace(/\s+/g, ' ');
     });
-    expect(t).toContain('€3.000/mnd te verdelen');
+    expect(t).toContain('Te verdelen uit je spaarinleg');
+    expect(t).toContain('€3.000/mnd');
   });
 
   test('de eta is een tempo in volle maanden, niet het restant van deze maand', async ({ page }) => {
@@ -112,11 +113,17 @@ test.describe('b - de regel legt het verband, zonder nieuw getal', () => {
     expect(c.al + c.nog).toBe(c.tgt);
   });
 
-  test('en hij staat op het scherm zelf', async ({ page }) => {
+  /* v225: de zin stond als losse regel boven de lijst. Hij staat nu achter het uitlegteken in de
+     kop van de kaart, samen met de uitleg over de volgorde. Hij is dus nog steeds op het scherm
+     bereikbaar, maar pas als je erom vraagt - en dat is precies waarom deze test nu de tik doet in
+     plaats van alleen de tekst te lezen. */
+  test('en hij staat op het scherm, achter het uitlegteken', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('vooruit'));
-    const t = await page.locator('#s-vooruit').innerText();
-    expect(t).toContain('verdeling per maand');
+    expect(await page.locator('#s-vooruit').innerText()).not.toContain('verdeling per maand');
+    await page.locator('#s-vooruit [onclick*="planUitleg"]').first().click();
+    await page.waitForSelector('#tipPop.show');
+    expect(await page.locator('#tipPop').innerText()).toContain('verdeling per maand');
   });
 });
 

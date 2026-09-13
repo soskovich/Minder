@@ -55,7 +55,16 @@ test.describe('1 · Vooruitblik zwijgt bij een onbekende bron', () => {
   test('geen voortgang, geen tempo, geen datum', async ({ page }) => {
     await boot(page, seed({ geenSaldo: true }));
     const t = await plan(page);
-    expect(t).toMatch(/Noodfonds\s*onbekend/);
+    /* v225: rechts in de rij staat sinds deze ronde het maandbedrag, dus 'onbekend' staat op de
+       regel eronder in plaats van direct achter de naam. De eis is onveranderd: de rij zegt dat
+       de stand onbekend is, en zegt verder niets. */
+    const nfRij = await page.evaluate(() => {
+      const r = [...document.querySelectorAll('#s-vooruit .plan-item')]
+        .find((x) => /Noodfonds/.test(x.innerText));
+      return r ? r.innerText.replace(/\s+/g, ' ') : '';
+    });
+    expect(nfRij).toMatch(/Noodfonds/);
+    expect(nfRij).toMatch(/onbekend/);
     // een spaardoel op €0 is wel een echte toewijzing (je wees er niets aan toe); het gaat om de
     // noodfonds-rij, waar die 0 nooit is vastgesteld
     const rij = t.slice(t.indexOf('Noodfonds'), t.indexOf('Reis'));

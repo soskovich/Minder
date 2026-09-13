@@ -64,18 +64,21 @@ test.describe('a · een doel met streefdatum en een gat', () => {
     expect(H.naam).toBe('Kosten koper huis');
   });
 
-  test('de ingang staat bij de besparingschips en stelt een vraag', async ({ page }) => {
+  /* v225: Plan toont de waterval en draagt geen losse gespreksuitnodiging meer; coHorizonVraag()
+     is uit renderPlan() gehaald. De zin en het onderwerp bestaan nog, dus dit is een gespreksonderwerp
+     zonder ingang - hetzelfde open punt als 'algemeen' na fase 6. Deze test legt dat vast, zodat de
+     lacune zichtbaar blijft in plaats van stilletjes te verdwijnen. */
+  test('de ingang is vervallen; de vraag bestaat nog wel', async ({ page }) => {
     await vooruit(page);
-    const r = page.locator('#vooruitHorizon');
-    await expect(r).toHaveCount(1);
-    expect(await r.innerText()).toMatch(/per maand te weinig in voor Kosten koper huis.*wil je kijken/is);
-    // in het plan-blok, tussen de doelen waar de streefdatum en het tempo al staan
-    expect(await page.evaluate(() => !!document.querySelector('#s-vooruit #vooruitHorizon'))).toBe(true);
+    expect(await page.locator('#vooruitHorizon').count()).toBe(0);
+    expect(await page.evaluate(() => /coHorizonVraag/.test(renderPlan.toString()))).toBe(false);
+    const zin = await page.evaluate((m) => coHorizonVraag(m), CUR);
+    expect(zin).toMatch(/per maand te weinig in voor Kosten koper huis.*wil je kijken/is);
   });
 
   test('het gesprek opent met de bestaande tempo-regel, niet met een groet', async ({ page }) => {
     await vooruit(page);
-    await page.locator('#vooruitHorizon').click();
+    await page.evaluate((m) => coStart('horizon', m), CUR);   // v225: de knop op Plan is vervallen
     await wachtKeuze(page);
     const draad = await page.locator('#coThr').innerText();
     const zin = await page.evaluate(() => { const t = document.createElement('div'); t.innerHTML = doelTempoLine(coHorizonBron().p); return t.innerText.trim(); });
@@ -263,7 +266,7 @@ test.describe('g · geen onttrekkingen en geen layout-schade', () => {
     test(`geen horizontale overflow op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 780 });
       await vooruit(page);
-      await page.locator('#vooruitHorizon').click();
+      await page.evaluate((m) => coStart('horizon', m), CUR);   // v225: de knop op Plan is vervallen
       await wachtKeuze(page);
       const over = await page.evaluate(() => ({
         v: document.querySelector('#s-vooruit').scrollWidth - document.querySelector('#s-vooruit').clientWidth,

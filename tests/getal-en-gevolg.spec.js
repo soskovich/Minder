@@ -236,8 +236,12 @@ test.describe('g · de kop zegt wat er werkelijk wordt verdeeld', () => {
         d.innerHTML = renderPlan(true); return d.innerText.replace(/\s+/g, ' '); })() }));
     expect(r.terugval).toBe(false);
     expect(r.label).toBe('spaarinleg');
-    expect(r.kop).toMatch(/spaarinleg gaat van boven naar beneden/);
+    /* v225: de kop was een zin boven de lijst; hij is een label bij het te verdelen bedrag
+       geworden en de uitleg staat achter het uitlegteken. De eigenschap die deze test bewaakt is
+       onveranderd: het scherm noemt de bron van het bedrag dat het verdeelt, en noemt hem juist. */
+    expect(r.kop).toMatch(/Te verdelen uit je spaarinleg/);
     expect(r.kop).not.toMatch(/comfortabele ruimte/);
+    expect(await page.evaluate(() => NOTES.planUitleg)).toMatch(/spaarinleg gaat van boven naar beneden/);
   });
 
   test('op de terugval zegt de kop dat, met de reden erbij', async ({ page }) => {
@@ -251,8 +255,9 @@ test.describe('g · de kop zegt wat er werkelijk wordt verdeeld', () => {
     test.skip(!(r.doel === 0 && r.cap > 0), 'deze opzet valt niet terug');
     expect(r.terugval).toBe(true);
     expect(r.label).toBe('comfortabele ruimte');
-    expect(r.kop).toMatch(/nog geen spaarinleg ingesteld/);
-    expect(r.kop).toMatch(/comfortabele ruimte/);
+    expect(r.kop).toMatch(/Te verdelen uit je comfortabele ruimte/);
+    // de reden staat er nog steeds bij, sinds v225 achter het uitlegteken
+    expect(await page.evaluate(() => NOTES.planUitleg)).toMatch(/nog geen spaarinleg ingesteld/);
   });
 
   test('planCapacity zelf is niet aangeraakt', async ({ page }) => {

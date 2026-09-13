@@ -59,7 +59,9 @@ test.describe('a · het restant zakt door', () => {
 
     await openPlanZone(page);
     expect(await page.locator('.plan-item[data-id="gA"]').innerText()).toContain('waarvan €250 doorgezakt');
-    expect(await page.locator('#planVrij').count()).toBe(0);
+    // v225: de sluitpost staat er ook als er niets overblijft, en zegt dan €0
+    expect(await page.locator('#planVrij').innerText()).toMatch(/Blijft over\s*€0/);
+    expect(await page.locator('#planVrij').innerText()).not.toMatch(/voeg een doel toe/i);
   });
 
   test('top-doel vast €100 + een lopend auto-doel: het auto-doel krijgt €400', async ({ page }) => {
@@ -170,7 +172,9 @@ test.describe('b · vrije ruimte i.p.v. verdwijnen', () => {
     expect(P.every((x) => x.status === 'wacht op capaciteit' || x.status === 'bereikt')).toBe(true);
     expect(await vrij(page)).toBe(0);
     await openPlanZone(page);
-    expect(await page.locator('#planVrij').count()).toBe(0);
+    // v225: wel de sluitpost, maar zonder bedrag om te verdelen en dus zonder keuze
+    expect(await page.locator('#planVrij').innerText()).toMatch(/Blijft over\s*€0/);
+    expect(await page.locator('#planVrij').innerText()).not.toMatch(/voeg een doel toe/i);
   });
 });
 
@@ -219,18 +223,18 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
     expect(P[1].blok).toBe('gA');
 
     await openPlanZone(page);
-    /* v193: deze uitleg stond onder elk wachtend doel, woordelijk identiek en met dezelfde
-       blokkeerdernaam. Hij staat nu een keer, op planniveau, met dezelfde tik. */
-    const hint = page.locator('#planWacht');
-    await expect(hint).toHaveCount(1);
-    const t = await hint.innerText();
-    expect(t).toContain('Vakantie');
-    expect(t).toMatch(/maandbedrag of %/);
-    expect(t).toMatch(/maandbedrag instellen/i);
+    /* v225: deze uitleg stond als alinea op planniveau, met een tik naar de invoer van het doel dat
+       alles opslokt. De wachtende rij noemt die blokkeerder nu zelf, en de blokkeerder staat als
+       rij direct erboven: dat is de ingang geworden. */
+    expect(await page.locator('#planWacht').count()).toBe(0);
     expect(await page.locator('.plan-hint').count()).toBe(0);
+    const rij = page.locator('#s-vooruit .plan-item[data-id="gB"]');
+    expect(await rij.innerText()).toMatch(/Wacht op .Vakantie./);
+    expect(await rij.innerText()).not.toMatch(/maandbedrag instellen/i);
 
-    // de tik opent de invoer van het bovenliggende doel, niet die van gB
-    await hint.locator('text=maandbedrag instellen').click();
+    // en die blokkeerder is vanaf zijn eigen rij te openen
+    await page.locator('#s-vooruit .plan-item[data-id="gA"] >> text=Vakantie').click();
+    await page.locator('#s-vooruit .plan-item[data-id="gA"] >> text=openen').click();
     await page.waitForSelector('#gModes');
     expect(await page.locator('#gNaam').inputValue()).toBe('Vakantie');
 
@@ -257,7 +261,11 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
     expect(P[1].blok).toBe('af:d1');
 
     await openPlanZone(page);
-    await page.locator('#planWacht >> text=maandbedrag instellen').click();
+    /* v225: een aflos-item heeft geen eigen record en dus geen editor voor zijn maandbedrag; die
+       kleine sheet was alleen via de wachthint bereikbaar. Nu staat hij achter de tik op de rij,
+       waar hij hoort. */
+    await page.locator('#s-vooruit .plan-item[data-id="af:d1"] >> text=Creditcard').click();
+    await page.locator('#s-vooruit .plan-item[data-id="af:d1"] >> text=maandbedrag').click();
     await page.waitForSelector('#paModes');
     expect(await page.locator('#paModes .chip').count()).toBe(3);
     await page.locator('#paModes .chip', { hasText: 'Vast bedrag' }).click();

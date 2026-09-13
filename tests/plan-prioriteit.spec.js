@@ -149,6 +149,9 @@ test.describe('c · het noodfonds', () => {
     await openPlanZone(page);
     const nf = page.locator('#s-vooruit .plan-item[data-id="noodfonds"]');
     await expect(nf).toHaveCount(1);
+    // v225: de knoppen staan achter een tik op de rij; wat er dan staat is onveranderd
+    await nf.locator('text=Noodfonds').click();
+    await page.waitForSelector('#s-vooruit .plan-item[data-id="noodfonds"] >> text=pauzeren');
     expect(await nf.innerText()).not.toContain('uit plan halen');   // geen verwijder-affordance
     expect(await nf.innerText()).toContain('pauzeren');             // pauzeren mag wel
 

@@ -218,22 +218,32 @@ test.describe('b · één idioom voor vouwen', () => {
 });
 
 test.describe('c · op Plan draagt het bedrag de stand', () => {
-  test('het toegewezen bedrag heeft het gewicht, de naam stapt terug', async ({ page }) => {
+  /* v203 gaf het gewicht aan het bedrag in plaats van aan de naam, en dat blijft zo. v225 wisselt
+     wélk bedrag daar staat: dit scherm gaat over verdelen, dus rechts in de rij staat wat deze
+     bestemming per maand krijgt. De stand verhuist naar de regel eronder, en houdt daar zijn eigen
+     verhouding: het bereikte bedrag vet, de eenheid en de noemer gedempt. */
+  test('het maandbedrag heeft het gewicht, de naam stapt terug', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
     const r = await page.evaluate(() => {
-      const rij = document.querySelector('#s-vooruit .plan-item .row');
+      const item = document.querySelector('#s-vooruit .plan-item');
+      const rij = item.querySelector('.row');
       const naam = rij.children[0], bedrag = rij.children[1];
       const b = bedrag.querySelector('b');
+      const sub = item.querySelector('.row + .bar-track + .small, .row + .small');
       return { naamGewicht: +getComputedStyle(naam).fontWeight,
                bedragGewicht: b ? +getComputedStyle(b).fontWeight : null,
                bedragTekst: b ? b.innerText : '',
-               noemer: bedrag.innerText.replace(/\s+/g, ' ') };
+               eenheid: bedrag.innerText.replace(/\s+/g, ' '),
+               stand: sub ? sub.innerText.replace(/\s+/g, ' ') : '',
+               standGewicht: sub && sub.querySelector('b') ? +getComputedStyle(sub.querySelector('b')).fontWeight : null };
     });
     expect(r.bedragGewicht).toBeGreaterThan(r.naamGewicht);
     expect(r.bedragTekst).toMatch(/€/);
-    // de eenheid en de noemer blijven gedempt: die dragen de waarde niet
-    expect(r.noemer).toMatch(/toegewezen \/ €/);
+    expect(r.eenheid).toMatch(/\/mnd/);
+    // de stand staat een regel lager, met dezelfde verhouding: waarde vet, noemer gedempt
+    expect(r.stand).toMatch(/toegewezen \/ €/);
+    expect(r.standGewicht).toBeGreaterThan(400);
   });
 
   test('een noodfonds zonder bekend spaarsaldo blijft onbekend zeggen', async ({ page }) => {
