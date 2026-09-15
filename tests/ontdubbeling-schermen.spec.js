@@ -249,12 +249,18 @@ test.describe('h · de beleggen-regel herhaalt geen zichtbare rij', () => {
     if (r.blok && r.blok !== 'buffer' && r.rij === 'tekort') expect(r.regel).toBe('');
   });
 
+  /* v226: hier stond een assertie op de brontekst van beleggenKlaar() - /r.status!=='tekort'/ -
+     en die legde de implementatie vast in plaats van de eigenschap. Sinds de buffer daar aan
+     r.kritiek wordt gemeten en niet aan zijn status klopte de tekst niet meer, terwijl de
+     eigenschap onveranderd geldt: de bufferblokkade wordt nooit weggelaten omdat de rij iets
+     anders zegt. Die uitzondering zit in maandBeleggenRegel() en dat is wat dit blok over gaat, dus
+     daar hangt de test nu alleen nog aan. Dat de voorwaarde zelf de STAND volgt en niet de status
+     staat met echte data in op-tempo.spec.js, blok e; deze fixture heeft geen spaarrekening en dus
+     geen bufferregel om dat op te meten. */
   test('de bufferblokkade blijft altijd staan: let op is een ander oordeel', async ({ page }) => {
     await boot(page);
     const src = await page.evaluate(() => maandBeleggenRegel.toString());
     expect(src).toContain("B.blokkade.key!=='buffer'");
-    // en beleggenKlaar zelf is niet aangeraakt
-    expect(await page.evaluate(() => /r\.status!=='tekort'/.test(beleggenKlaar.toString()))).toBe(true);
   });
 });
 

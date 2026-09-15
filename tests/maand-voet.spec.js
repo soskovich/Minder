@@ -6,6 +6,10 @@
 // Geen informatieverlies buiten twee uitlegzinnen: het label, het percentage, de sparkline, de
 // deltazin onder GRAFIEK_MIN maanden, de tik naar het detail, beide plan-rijen en de zin over de
 // 70%-grens staan er alle nog.
+// v226: de spaarquote is uit de voet en staat weer als eigen kaart - hij is een uitkomst en geen
+// constatering over een maandregel. Wat onder de streep overblijft zijn de plan-rijen, en dat is
+// waar deze spec de voet sindsdien aan afleest. De streep houdt zijn werk: hij scheidt op soort
+// (dot of geen dot) en niet op aantal. Wat de tegel zelf draagt staat in op-tempo.spec.js.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 
@@ -15,6 +19,9 @@ const MAIN = 'NL01MAIN0000001111';
 const SPAAR = 'NL01SAVE0000004323';
 const RES = 'NL01RESV0000009999';
 const APRIL = ym(new Date(now.getFullYear() + 1, 3, 1));
+// v226: een gat binnen MAAND_DREMPEL.dekkingMarge maanden vraagt een beslissing, verder weg
+// aandacht. Met o.knel zet een test het knelmoment waar hij het nodig heeft.
+const knelYm = (n) => ym(new Date(now.getFullYear(), now.getMonth() + n, 1));
 const DOELDATUM = ym(new Date(now.getFullYear() + 1, now.getMonth(), 1));
 const OVER = { boodschappen: 1800, huur: 1500, vervoer: 400 };   // potjes boven de 70%-limiet
 
@@ -40,7 +47,7 @@ function seed(o) {
     savingsAcc: { [SPAAR]: true }, resAcc: RES,
     nfDoelVast: 7200, nfToegewezen: 3100, nfToegewezenMigrated: true, nfMaanden: 3,
     goals: [{ id: 'g1', naam: 'Kosten Koper', doel: 20000, gespaard: 500, streefdatum: DOELDATUM, allocMode: 'fixed', perMaand: 0 }],
-    reserveringen: [{ id: 'r1', naam: 'Aanslag', bedrag: 3000, vervalmaand: APRIL, intervalM: 12 }],
+    reserveringen: [{ id: 'r1', naam: 'Aanslag', bedrag: 3000, vervalmaand: o.knel != null ? knelYm(o.knel) : APRIL, intervalM: 12 }],
   }, o.set || {});
   return {
     minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set),
@@ -136,12 +143,16 @@ test.describe('b - geen informatieverlies', () => {
 });
 
 test.describe('c - de streep en waar de voet hangt', () => {
+  /* v226: alle drie de regels moeten dan werkelijk een beslissing vragen. Geen inleg op de
+     spaarrekening (de buffer ligt dus niet op tempo) en een gat binnen de marge. */
   test('bij alleen een beslissingskaart hangt de voet daar, met streep', async ({ page }) => {
-    await boot(page, { budgets: OVER });
-    const c = (await kaarten(page)).find((x) => x.kop === 'Vraagt een beslissing');
-    expect(c.spaarquote).toBe(true);
+    await boot(page, { budgets: OVER, geenSpaar: true, knel: 2 });
+    const k = await kaarten(page);
+    expect(k.map((x) => x.kop)).not.toContain('Vraagt aandacht');
+    const c = k.find((x) => x.kop === 'Vraagt een beslissing');
     expect(c.limiet).toBe(true);
     expect(c.streep).toBe(true);
+    expect(c.spaarquote).toBe(false);   // die staat sinds v226 in zijn eigen kaart
   });
 
   test('is er ook een aandachtskaart, dan hangt de voet daar en niet erboven', async ({ page }) => {
@@ -150,10 +161,11 @@ test.describe('c - de streep en waar de voet hangt', () => {
     const b = k.find((x) => x.kop === 'Vraagt een beslissing');
     const a = k.find((x) => x.kop === 'Vraagt aandacht');
     expect(b).toBeTruthy(); expect(a).toBeTruthy();
-    expect(b.spaarquote).toBe(false);
-    expect(a.spaarquote).toBe(true);
+    expect(b.limiet).toBe(false);
+    expect(a.limiet).toBe(true);
     // en er staan geen statusdots meer ná de streep
     expect(a.streep).toBe(true);
+    expect(b.spaarquote).toBe(false); expect(a.spaarquote).toBe(false);
   });
 
   test('de streep staat er precies één keer', async ({ page }) => {
@@ -166,8 +178,12 @@ test.describe('c - de streep en waar de voet hangt', () => {
     await boot(page);
     const t = await tekst(page);
     expect(t).not.toContain('Boven je inkomen-limiet');
-    // de spaarquote staat er wel, dus de streep blijft
+    /* v226: hier stond dat de streep blijft omdat de spaarquote er nog onder staat. Die staat nu
+       in een eigen kaart, dus zonder overschrijding en zonder volgende-maand-rij is de voet leeg
+       en valt de streep weg. De spaarquote zelf staat er onverkort, alleen elders. */
     expect(t).toMatch(/spaarquote/i);
+    const streep = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length);
+    expect(streep).toBe(0);
   });
 
   test('zonder spaarquote en zonder overschrijding valt de voet en de streep weg', async ({ page }) => {
@@ -177,16 +193,16 @@ test.describe('c - de streep en waar de voet hangt', () => {
       const n = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length);
       expect(n).toBe(0);
     } else {
-      // de spaarquote is hier alsnog te bepalen; dan hoort de streep er juist wel te staan
-      expect(await tekst(page)).toMatch(/spaarquote/i);
+      // er staat toch een plan-rij onder; dan hoort de streep er juist wel te staan
+      expect(leeg).toMatch(/potjes vanaf volgende maand|inkomen-limiet/);
     }
   });
 
   test('maandVoetBlok zonder regels erboven draagt geen streep', async ({ page }) => {
-    await boot(page);
+    await boot(page, { budgets: OVER });
     const h = await page.evaluate(() => maandVoetBlok(curMonth || thisYM(), false));
     expect(h).not.toContain('border-top');
-    expect(h).toMatch(/spaarquote/i);
+    expect(h).toContain('Boven je inkomen-limiet');
   });
 });
 
@@ -195,7 +211,7 @@ test.describe('d - de rest van het scherm blijft staan', () => {
     await boot(page, { budgets: OVER });
     const t = await tekst(page);
     expect(t).toContain('JE MAAND');
-    expect(t).toMatch(/beslissing vrag/);
+    expect(t).toMatch(/beslissing vra/);   // 'vraagt' bij één, 'vragen' bij meer
     // v224: één ingang per regel met een tekort, niet meer één per scherm
     const ingangen = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/coStart\('maand'/g) || []).length);
     const tekorten = await page.evaluate(() => maandMetAccept(maandRegels()).concat(maandStructureel()).filter((r) => r.status === 'tekort').length);
@@ -203,13 +219,15 @@ test.describe('d - de rest van het scherm blijft staan', () => {
     expect(ingangen).toBeGreaterThan(0);
   });
 
+  // v226: de voet hangt aan de laatste kaart die regels draagt, en dat is hier de aandachtskaart
   test('geen sectiekop binnen de kaart', async ({ page }) => {
     await boot(page, { budgets: OVER });
-    const k = (await kaarten(page)).find((x) => x.kop === 'Vraagt een beslissing');
+    const k = (await kaarten(page)).find((x) => x.limiet);
     const koppen = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /Vraagt een beslissing/.test(x.textContent));
+      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /inkomen-limiet/.test(x.textContent));
       return [...c.querySelectorAll('.hlabel')].length;
     });
+    expect(k.kop).toMatch(/^Vraagt /);
     expect(k.streep).toBe(true);
     expect(koppen).toBe(1);   // alleen de kaartkop zelf
   });

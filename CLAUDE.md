@@ -83,9 +83,18 @@ genoemde versietag.)*
 - **Defaults** (`MECHANISM_SPEC.defaultEffect`): nietsdoen is de gezonde keuze, altijd zichtbaar en
   in één tik omkeerbaar. Nooit een default die stilletjes geld beweegt of een doel zet.
 - **`fireInputs()` is de enige naad** (`v32`): laag A leest Minder, laag B is puur, laag C rendert.
-- **Blokkade of observatie: is er een norm die niet wordt gehaald?** (`v175`, `v187`, `v219`) Dat
-  is het criterium dat bepaalt of een signaal in "vraagt een beslissing" (`tekort`) of in "vraagt
-  aandacht" (`let op`) landt. Een spaardoel dat structureel niet gehaald wordt en een
+- **Blokkade of observatie: is er een norm die niet wordt gehaald, en wordt hij op tijd gehaald?**
+  (`v175`, `v187`, `v219`, `v226`) Dat is het criterium dat bepaalt of een signaal in "vraagt een
+  beslissing" (`tekort`) of in "vraagt aandacht" (`let op`) landt. De tweede helft is van `v226`:
+  een norm die niet **nu** gehaald wordt is nog geen blokkade als hij **op tijd** gehaald wordt.
+  Een buffer onder de drie maanden waar elke maand netto geld naartoe gaat (`bufferTempo()` leest
+  `savedNet()`, niet de `alloc` van het plan: `v216`) en een dekking waarvan het gat verder dan
+  `MAAND_DREMPEL.dekkingMarge` maanden weg ligt vragen aandacht, geen beslissing. Dat knelmoment is
+  `D.gat.maand` en niet `gedektTot`: die twee kunnen maanden uit elkaar liggen. Een regel die zo
+  naar `let op` schuift verliest zijn gespreksingang, want er valt niets te kiezen; en `status` is
+  daarmee géén meting meer, dus wie de meting nodig heeft leest het eigen veld (`kritiek` bij de
+  buffer) en niet de status - `beleggenKlaar()` doet dat, anders geeft een buffer van 1,1 maanden
+  groen licht om te beleggen (`v154`). Een spaardoel dat structureel niet gehaald wordt en een
   bestedingslimiet die maanden op rij wordt overschreden lopen vast: blokkade. Een patroon zonder
   grens eronder, zoals uitgaven die meestijgen met je inkomen, stelt iets vast: observatie. Toets
   een nieuw signaal hieraan in plaats van zijn `t` per geval te kiezen, anders is de indeling een
@@ -212,7 +221,7 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v225` → `minder-v226`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v226` → `minder-v227`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

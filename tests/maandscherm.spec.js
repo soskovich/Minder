@@ -112,8 +112,12 @@ test.describe('b · de regels', () => {
 });
 
 test.describe('c · de statussen', () => {
-  test('dekking: tekort onder 100 procent, ok erboven, onbekend zonder saldo', async ({ page }) => {
-    await boot(page);
+  /* v226: de post ligt hier één maand vooruit en niet zes. De status hangt sindsdien niet alleen
+     aan de stand maar ook aan het moment waarop het knelt: een gat dat drie maanden of verder weg
+     ligt vraagt aandacht en geen beslissing. Wat deze test meet is de stand, dus het knelmoment
+     wordt vastgezet in plaats van meegemeten. */
+  test('dekking: tekort als de eerstvolgende post niet past, ok als hij past, onbekend zonder saldo', async ({ page }) => {
+    await boot(page, seedM({ reserveringen: [{ id: 'a', naam: 'Gemeente', bedrag: 480, vervalmaand: over(1), intervalM: 12 }] }));
     expect((await R(page)).find((r) => r.key === 'dekking').status).toBe('ok');     // 2000 in de pot
     await page.evaluate((a) => { SET.manualBal[a] = 10; save(); }, RES);
     expect((await R(page)).find((r) => r.key === 'dekking').status).toBe('tekort');
@@ -184,11 +188,15 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
   /* v189: de waardekolom mengde vijf soorten waarde. Hij toont er nu een: wat er in je
      reserveringenpot staat, of het woord onbekend. Het oordeel dat eruit gehaald is - het
      percentage, of waarom er geen is - staat in de eenheid ernaast, met dezelfde noemers. */
+  /* v226: de posten in dit blok liggen twee maanden vooruit en niet drie. De status van dekking
+     hangt sindsdien ook aan het moment waarop het knelt: vanaf MAAND_DREMPEL.dekkingMarge maanden
+     vraagt een gat aandacht en geen beslissing. Dit blok meet de waardekolom en de eenheid, dus het
+     knelmoment wordt hier binnen de marge vastgezet in plaats van meegemeten. */
   const eenmalig = (bedrag, o) => ({ id: 'a', naam: 'Post', bedrag, vervalmaand: over(o), intervalM: 0 });
   const dek = async (page) => (await R(page)).find((r) => r.key === 'dekking');
 
   test('een eenmalige post die je kunt betalen is ok, niet onbekend', async ({ page }) => {
-    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 50, [SAV]: 20000 } }));
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 2)], manualBal: { [MAIN]: 1500, [RES]: 50, [SAV]: 20000 } }));
     const d = await dek(page);
     expect(await page.evaluate(() => dekking(12).graad)).toBeNull();     // geen percentage te delen
     expect(d.status).toBe('ok');
@@ -198,7 +206,7 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
   });
 
   test('kun je hem niet betalen, dan is het tekort, met de maand erbij', async ({ page }) => {
-    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 2)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
     const d = await dek(page);
     expect(d.status).toBe('tekort');
     expect(d.waarde).toBe('€10');                                       // v189: je potsaldo
@@ -227,7 +235,7 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
 
   test('bij een tekort staan het percentage en het bedrag er allebei, met de noemer', async ({ page }) => {
     // zonder opbouw-eis: percentage van de post die niet past
-    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 2)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
     let d = await dek(page);
     expect(d.waarde).toBe('€10');                                        // v189: je potsaldo
     expect(d.eenheid).toBe('in je pot · 40% van de eerstvolgende post');  // 10 van 25
@@ -242,13 +250,13 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
   });
 
   test('gedektPct komt uit dekking(), niet uit een som op het scherm', async ({ page }) => {
-    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 2)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
     const g = await page.evaluate(() => dekking(12).gat);
     expect(g).toMatchObject({ bedrag: 25, tekort: 15, gedektPct: 40 });
   });
 
   test('een lege pot is 0 procent, geen verzonnen getal', async ({ page }) => {
-    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 0, [SAV]: 20000 } }));
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 2)], manualBal: { [MAIN]: 1500, [RES]: 0, [SAV]: 20000 } }));
     const d = await dek(page);
     expect(d.waarde).toBe('€0');                                         // v189: een lege pot is nul
     expect(d.eenheid).toBe('in je pot · 0% van de eerstvolgende post');   // geen verzonnen getal
@@ -256,7 +264,7 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
   });
 
   test('zonder tekort blijft de eenheid schoon', async ({ page }) => {
-    await boot(page, seedM({ reserveringen: [eenmalig(25, 3)], manualBal: { [MAIN]: 1500, [RES]: 50, [SAV]: 20000 } }));
+    await boot(page, seedM({ reserveringen: [eenmalig(25, 2)], manualBal: { [MAIN]: 1500, [RES]: 50, [SAV]: 20000 } }));
     const d = await dek(page);
     expect(d.eenheid).toBe('in je pot · er hoeft nu nog niets opzij');
     expect(d.eenheid).not.toMatch(/tekort/);
@@ -275,9 +283,11 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
 test.describe('d · het oordeel', () => {
   test('a: tekort met een maand noemt die maand', async ({ page }) => {
     // een kleine post die nog wél past, zodat er een 'gedekt tot'-maand is
+    // v226: het gat valt twee maanden vooruit en blijft daarmee binnen de marge, zodat deze zin
+    // over een regel gaat die werkelijk een beslissing vraagt.
     await boot(page, seedM({ reserveringen: [
       { id: 'k', naam: 'Auto', bedrag: 60, vervalmaand: over(1), intervalM: 12 },
-      { id: 'a', naam: 'Gemeente', bedrag: 480, vervalmaand: over(6), intervalM: 12 },
+      { id: 'a', naam: 'Gemeente', bedrag: 480, vervalmaand: over(2), intervalM: 12 },
     ] }));
     await page.evaluate((a) => { SET.manualBal[a] = 100; save(); }, RES);            // dekking tekort met gedektTot
     const o = await O(page);
@@ -292,7 +302,7 @@ test.describe('d · het oordeel', () => {
   });
 
   test('b: meerdere tekorten tellen', async ({ page }) => {
-    await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 }, reserveringen: [{ id: 'a', naam: 'Gemeente', bedrag: 480, vervalmaand: over(6), intervalM: 0 }] }));
+    await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 }, reserveringen: [{ id: 'a', naam: 'Gemeente', bedrag: 480, vervalmaand: over(2), intervalM: 0 }] }));
     const r = await R(page);
     expect(r.filter((x) => x.status === 'tekort').length).toBeGreaterThan(1);
     expect((await O(page)).zin).toMatch(/^Er zijn deze maand \d+ dingen die een beslissing vragen\.$/);
@@ -388,7 +398,10 @@ test.describe('e · indeling', () => {
 
   test('de zin telt precies wat er in de beslissingskaart staat', async ({ page }) => {
     // v134: de zin telde alleen de tekorten terwijl de kaart ook de let-op-regels toonde
-    await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 } }));
+    // v226: de post twee maanden vooruit, zodat dekking een beslissing blijft en er dus meer dan
+    // een tekort te tellen valt.
+    await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 },
+      reserveringen: [{ id: 'a', naam: 'Gemeente', bedrag: 480, vervalmaand: over(2), intervalM: 12 }] }));
     await page.evaluate(() => go('maand'));
     const uit = await page.evaluate(() => {
       const R3 = maandRegels();

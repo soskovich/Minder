@@ -3095,8 +3095,18 @@ function doelTempoLine(p){
    cijfer dat om aandacht vraagt zonder er recht op te hebben. Dit is dezelfde bevinding als het
    kopcijfer op Plan, dat toen per geval is opgelost door de graad van die kaart te halen; de regel
    staat nu vast, zodat hij niet ergens anders terugkomt. */
+/* v226: twee drempels erbij, en ze staan hier omdat ze de STATUS bepalen en niets anders. Beide
+   staan op drie maanden, en dat is dezelfde grens als bufferKritiek en om dezelfde reden: drie
+   maanden is de horizon waarop een maandbedrag nog iets kan doen.
+     bufferTempoVenster  over hoeveel afgeronde maanden de richting van je buffer wordt gemeten.
+                         Korter is geen richting, langer laat een inleg die vorig jaar stopte te
+                         lang meetellen.
+     dekkingMarge        hoeveel maanden het knelmoment minstens weg moet liggen voordat de regel
+                         geen beslissing meer vraagt. Dekking heeft één instrument, het maandtempo
+                         benodigdPerMaand; een gat binnen drie maanden haal je daar niet meer mee op. */
 const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelStatus:'tekort',
-  onbekendDeel:0.5, onbekendMin:3, budgetVol:100 };   // v194: de grens waarop je potjes precies op zijn
+  onbekendDeel:0.5, onbekendMin:3, budgetVol:100,   // v194: de grens waarop je potjes precies op zijn
+  bufferTempoVenster:3, dekkingMarge:3 };
 /* v194: een verloop is pas een verloop bij genoeg punten. Onder deze drempel verandert er geen
    beslissing door de vórm van een lijn of een reeks staven - je leest een richting en verder niets -
    en is een getal met zijn vorige waarde sterker. Eén constante voor de maandgrafiek en de
@@ -3118,6 +3128,44 @@ function bufferMaanden(){
   try{ const M=noodfondsModel(); ess=Math.round(M.essCrisis||0); sp=(M.spaar!=null)?Math.round(M.spaar):null; }catch(_){ return null; }
   if(sp==null||!(ess>0)) return null;
   return sp/ess;
+}
+/* ===== Ligt de buffer op tempo? (v226) =====
+ * De statusdrempel toetste of de norm NU gehaald wordt, niet of hij op tijd gehaald wordt. Een
+ * buffer van 1,1 maanden met elke maand geld erheen vroeg daardoor een beslissing terwijl er niets
+ * te beslissen valt: hij loopt vol.
+ *
+ * BRON: savedNet() per afgeronde maand. Dat is precies de stroom waarvan spaarSaldo() de stand
+ * meet, een bijschrijving op je aangewezen spaarrekening, dus stand en richting komen uit dezelfde
+ * meting. Uitdrukkelijk NIET allocatePlan(): de alloc van het noodfonds-item is een voornemen, en
+ * v216 legt vast dat een voornemen geen feit verdringt. Een plan van 300 per maand mag een tekort
+ * niet wegnemen zolang er niets beweegt. Datzelfde item draagt zijn voortgang bovendien als
+ * TOEWIJZING (SET.nfToegewezen, v172), terwijl de bufferregel aan de meet-kant staat.
+ *
+ * IN EURO'S, niet in maanden dekking. Van bufferMaanden() bestaat geen reeks over de tijd: het
+ * noodfondsmodel meet essCrisis alleen voor nu. Een historische maanden-dekking zou een schatting
+ * zijn, en die haalt v59/v73 juist weg. Stijgt je buffer in euro's terwijl je essentiële lasten
+ * harder stijgen, dan zegt deze toets dus dat er geld naartoe gaat en niet dat de dekking groeit.
+ *
+ * EEN REEKS, TWEE RICHTINGEN. "Er gaat maandelijks geld naartoe" en "er vloeit geen geld weg" zijn
+ * samen één toets: savedNet > 0 in ELKE maand van het venster. Een maand op nul betekent dat er
+ * niets heen ging, een maand negatief dat er geld uit kwam; beide vallen zo af, zonder tweede bron
+ * die van de eerste kan gaan afwijken. savedNet() klemt niet op nul - savedThisMonth() doet dat wel,
+ * en die is hier dus niet de bron.
+ *
+ * null = onbekend, en onbekend geeft nooit 'op tempo' (v59/v73). Twee gevallen: er is geen
+ * spaarrekening aangewezen, zodat savedNet() terugvalt op de categorie 'sparen' en iets anders meet
+ * dan waar spaarSaldo() op staat; of er zijn te weinig afgeronde maanden. De lopende maand telt niet
+ * mee, zoals noodfondsModel() hem ook uitsluit: een halve maand is niet vergelijkbaar. */
+function bufferTempo(){
+  let bron=''; try{ bron=spaarSaldo().bron; }catch(_){ return null; }
+  if(bron!=='spaarrekening') return null;
+  const nu=thisYM(), venster=MAAND_DREMPEL.bufferTempoVenster;
+  const win=months().filter(m=>m<nu).slice(-venster);
+  if(win.length<venster) return null;
+  const reeks=[];
+  for(const mm of win){ let v=null; try{ v=savedNet(mm); }catch(_){}
+    if(v==null) return null; reeks.push(v); }
+  return {maanden:win, reeks, stijgt:reeks.every(v=>v>0)};
 }
 // het patroon-signaal met de hoogste score, of null
 function maandPatroon(){
@@ -3271,8 +3319,28 @@ function maandRegels(){
          percentage te delen - maar er hoeft dan ook niets opgebouwd te zijn. Eerder las dit als
          'onbekend' met status tekort. De vraag van deze regel is "ben ik gedekt", dus het gat weegt
          mee: is er een voorkomen dat niet meer past, dan is het tekort, ook als de opbouw op peil is. */
-      const st = !D.volledig ? 'onbekend'
-               : (D.gat || (D.graad!=null && D.graad<MAAND_DREMPEL.dekkingOk)) ? 'tekort' : 'ok';
+      /* v226: de norm is onveranderd - een gat of een graad onder de 100% betekent dat hij niet
+         wordt gehaald - maar een norm die niet NU wordt gehaald is nog geen blokkade. Het moment
+         waarop het knelt bestaat al als gegeven, dus dat wordt gelezen.
+         DAT MOMENT IS D.gat.maand EN NIET gedektTot. Die twee zijn niet hetzelfde: gedektTot is de
+         maand van de laatste post die je nog kunt betalen, en tussen die maand en het gat kan een
+         gat in de kalender zitten. Gedekt t/m november met een post in april daarna is zeven
+         maanden lucht, geen twee; op gedektTot meten zou het knelmoment structureel te dichtbij
+         leggen en de regel onnodig in 'vraagt een beslissing' houden.
+         Is er geen gat, dan past het hele jaar en knelt er niets. Is gedektTot null, dan past de
+         eerstvolgende post nu al niet en ligt het knelmoment op nul of een maand: dat blijft een
+         beslissing.
+         De graad-clausule in `norm` staat er onveranderd sinds v131, maar hij is bij nader inzien
+         niet bereikbaar, en dat is een eigenschap van de som en niet van deze ronde: geen gat
+         betekent dat je stand ELK voorkomen in de horizon dekt, en benodigdeStand is hoogstens het
+         opgebouwde deel van de EERSTE voorkomens. Dus geen gat impliceert een graad op of boven de
+         100. Hij blijft staan omdat hij de norm uitschrijft in plaats van hem te laten volgen uit
+         een impliciete afleiding; een test legt de implicatie vast, zodat niemand hem later als een
+         levende tak gaat lezen. */
+      const knel = D.gat ? doelMaandenTot(D.gat.maand) : null;
+      const opTempo = !D.gat || (knel!=null && knel>=MAAND_DREMPEL.dekkingMarge);
+      const norm = !D.gat && !(D.graad!=null && D.graad<MAAND_DREMPEL.dekkingOk);
+      const st = !D.volledig ? 'onbekend' : norm ? 'ok' : opTempo ? 'let op' : 'tekort';
       const komt = D.regels.some(r=>r.soort==='post');   // valt er dit jaar iets binnen de horizon?
       uit.push({key:'dekking', naam:'Dekking reserveringen', status:st,
         // v132: bij een tekort horen het percentage en het bedrag allebei zichtbaar te zijn, met de
@@ -3299,19 +3367,49 @@ function maandRegels(){
         // eerstvolgende post nu al niet dekt en een lijst waar dit jaar niets uit valt. Hier een
         // eigen variant schrijven zou een tweede formulering van hetzelfde zijn.
         gevolg: dekkingTekst(D),
-        tekortPerMaand: st==='tekort'?Math.max(D.tekort,0):0, act:'openReserveringen()'});
+        /* v226: opTempo staat alleen op de rij als de norm óók niet gehaald wordt. Bij 'ok' zou het
+           veld de suggestie en de gespreksingang onderdrukken die er toch al niet zijn, en dan
+           draagt het een betekenis die het niet heeft. De gevolgzin blijft dekkingTekst(): die
+           noemt de maand van het gat en het bedrag al voluit, dus een eigen zin hier zou een tweede
+           formulering van hetzelfde zijn. */
+        opTempo: st==='let op',
+        /* v226: dit veld hing aan de status (`st==='tekort' ? ... : 0`) en dat is een afbakening die
+           niet overdraagbaar is. Het is een MEETWAARDE - D.tekort, benodigdeStand min je potstand -
+           en meevallerNodig() leest hem om te zeggen waar een meevaller als eerste heen hoort. Zou
+           hij op nul staan zodra de regel op tempo ligt, dan verdwijnt de reserveringenpost stil uit
+           de verdeelregel terwijl de achterstand er nog is. Op tempo zegt dat het gat ver weg ligt,
+           niet dat het gedicht is.
+           Voor ok en onbekend verandert er niets: zonder gat is de graad op of boven de 100 en is
+           D.tekort dus nul, en zonder bekend saldo blijft hij op nul staan. */
+        tekortPerMaand: Math.max(D.tekort,0), act:'openReserveringen()'});
     } }catch(_){}
   // 2. buffer
   try{ const bm=bufferMaanden();
     if(bm!=null){
       const richt=nfMaanden();
-      const st = bm<MAAND_DREMPEL.bufferKritiek ? 'tekort' : (bm<richt ? 'let op' : 'ok');
+      /* v226: kritiek is de meting (onder de drie maanden), status het oordeel. Die twee liepen
+         samen zolang kritiek altijd 'tekort' betekende; nu een buffer die op tempo ligt naar
+         'let op' schuift, moeten ze los. beleggenKlaar() leest daarom kritiek en niet de status:
+         die vraag is "mag ik beleggen", en het antwoord daarop is de harde drie maanden. Een
+         verkeerd groen licht daar kost geld dat binnen een jaar nodig is (v154).
+         Het richtbedrag blijft de tweede grens, en die staat boven kritiek: een richt van één maand
+         maakt een buffer van twee maanden niet in orde. */
+      const kritiek = bm<MAAND_DREMPEL.bufferKritiek;
+      let T=null; try{ T=bufferTempo(); }catch(_){}
+      const opTempo = kritiek && !!(T&&T.stijgt);
+      const st = kritiek ? (opTempo?'let op':'tekort') : (bm<richt ? 'let op' : 'ok');
       const n=Math.round(bm*10)/10;
-      uit.push({key:'buffer', naam:'Buffer in maanden', status:st,
-        waarde:String(n).replace('.',',') , eenheid:`maanden op je rekening · je richt staat op ${richt}`,
-        gevolg: st==='ok' ? `Je buffer dekt ${String(n).replace('.',',')} maanden essentiële lasten, op of boven je eigen richtbedrag.`
-              : st==='let op' ? `Je buffer dekt ${String(n).replace('.',',')} maanden. Je richt staat op ${richt}.`
-              : `Je buffer dekt ${String(n).replace('.',',')} maanden essentiële lasten. Onder de drie maanden vangt hij weinig op.`,
+      const nTxt=String(n).replace('.',',');
+      uit.push({key:'buffer', naam:'Buffer in maanden', status:st, kritiek, opTempo,
+        waarde:nTxt, eenheid:`maanden op je rekening · je richt staat op ${richt}`,
+        /* De op-tempo-zin noemt de meting, wat die betekent, en de richting - in die volgorde en
+           zonder 'maar', want dat woord maakt van een vaststelling een bemoediging. Het venster
+           staat erin omdat het de afbakening van de meting is: drie maanden gemeten is niet
+           hetzelfde als 'altijd'. */
+        gevolg: st==='ok' ? `Je buffer dekt ${nTxt} maanden essentiële lasten, op of boven je eigen richtbedrag.`
+              : opTempo ? `Je buffer dekt ${nTxt} maanden essentiële lasten. Onder de drie maanden vangt hij weinig op. Er ging de afgelopen ${MAAND_DREMPEL.bufferTempoVenster} maanden elke maand geld naartoe, dus hij loopt op.`
+              : st==='let op' ? `Je buffer dekt ${nTxt} maanden. Je richt staat op ${richt}.`
+              : `Je buffer dekt ${nTxt} maanden essentiële lasten. Onder de drie maanden vangt hij weinig op.`,
         act:'openNoodfondsPanel()'});
     } }catch(_){}
   /* v187: hier stond de regel 'Aansluiting spaargeld'. Hij is van dit scherm af, want hij
@@ -3357,6 +3455,17 @@ function maandRegels(){
  * onder je eigen richtbedrag, en de voorwaarde is de drie maanden. Bij dekking en doel is 'ok' de
  * enige stand die haalt.
  *
+ * v226: de buffer wordt daarvoor niet meer aan zijn STATUS gemeten maar aan r.kritiek, het veld dat
+ * zegt of hij onder de drie maanden staat. Sinds een buffer die op tempo ligt naar 'let op' schuift
+ * zijn dat twee verschillende dingen, en 'status is niet tekort' zou hier een buffer van 1,1 maanden
+ * groen licht geven. Dat is precies het verkeerde groene licht van v154. Dekking is al veilig: die
+ * eist 'ok', en op tempo is 'let op'.
+ * Daaruit volgt ook de statuskleur in deze laag: een voorwaarde die niet gehaald wordt is hier een
+ * blokkade en draagt dus 'tekort', ook als de regel op het maandscherm 'let op' zegt. Dat zijn twee
+ * antwoorden op twee vragen over hetzelfde cijfer - "houdt mijn systeem stand" en "mag ik beleggen" -
+ * en de tweede kent geen tempo. Voor elke stand die vóór v226 bestond verandert dit niets: alleen de
+ * nieuwe op-tempo-rijen zijn niet-gehaald zonder status 'tekort'.
+ *
  * KRITIEK - zwijgen bij onvolledigheid. Ontbreekt een van de drie rijen, of staat er 'onbekend',
  * dan is er GEEN uitspraak: geen 'bijna', geen 'waarschijnlijk nog niet', geen gedeeltelijke
  * uitkomst. Een verkeerd groen licht hier kost geld dat binnen een jaar nodig is. */
@@ -3381,9 +3490,9 @@ function beleggenKlaar(R){
         waarde:'onbekend', drempel:v.drempel(), status:'onbekend', eenheid:r?r.eenheid:''});
       continue;
     }
-    const gehaald = v.key==='buffer' ? r.status!=='tekort' : r.status==='ok';
+    const gehaald = v.key==='buffer' ? !r.kritiek : r.status==='ok';
     voorwaarden.push({key:v.key, naam:v.label||r.naam, gehaald, ontbreekt:false,
-      waarde:beleggenWaarde(v.key,r), drempel:v.drempel(), status:r.status, eenheid:r.eenheid});
+      waarde:beleggenWaarde(v.key,r), drempel:v.drempel(), status:gehaald?r.status:'tekort', eenheid:r.eenheid});
   }
   const blokkade=voorwaarden.find(v=>!v.gehaald)||null;   // vaste volgorde: buffer, dekking, doel
   return {klaar: volledig && voorwaarden.every(v=>v.gehaald), voorwaarden, blokkade, volledig};
@@ -3425,9 +3534,20 @@ function maandBeleggenRegel(R){
     const rij=(Array.isArray(R)?R:[]).find(x=>x.key===B.blokkade.key);
     if(rij && rij.status==='tekort') return '';
   }
+  /* v226: staat de buffer op 'let op' omdat hij op tempo ligt, dan zegt de rij hierboven in amber
+     dat hij groeit en deze kaart in rood dat de voorwaarde niet gehaald is - over hetzelfde cijfer,
+     direct onder elkaar. Dat verschil is verdedigbaar (de rij vraagt of je moet bijsturen, deze
+     kaart of de voorwaarde gehaald is) maar het viel alleen uit twee kleuren af te leiden. De zin
+     zegt het nu zelf.
+     GEEN LOGICAWIJZIGING en geen tweede bron: de vlag is r.opTempo, hetzelfde veld dat de rij en de
+     suggestie lezen, en de dot blijft de status van de blokkade volgen. Alleen de FORMULERING is van
+     hier (v222): die uit de gevolgzin van de bufferregel overnemen zou een zin over drie maanden
+     meting in een kaart over een drempel zetten. */
+  const groeit = !B.klaar && B.blokkade && B.blokkade.key==='buffer'
+    && !!((Array.isArray(R)?R:[]).find(x=>x.key==='buffer')||{}).opTempo;
   const zin = B.klaar
     ? 'Je drie voorwaarden voor beleggen zijn alle drie gehaald.'
-    : `Nog niet aan je voorwaarden voor beleggen: ${B.blokkade.naam} ${B.blokkade.waarde} tegen ${B.blokkade.drempel}.`;
+    : `Nog niet aan je voorwaarden voor beleggen: ${B.blokkade.naam} ${B.blokkade.waarde} tegen ${B.blokkade.drempel}.${groeit?' Hij groeit, maar de drempel is nog niet gehaald.':''}`;
   return `<div class="card" style="cursor:pointer" onclick="openBeleggenVoorwaarden()">${kop}
     <div class="row" style="gap:9px;align-items:flex-start;padding:7px 0">
       ${maandDot(B.klaar?'ok':B.blokkade.status)}
@@ -3714,8 +3834,12 @@ function maandTekort(r){
   }
   return null;
 }
+/* v226: een regel die op tempo ligt krijgt er geen. De suggestie zegt wat er nodig is om de norm te
+   halen, en dat is op zo'n regel een duwtje zonder keuze erachter: er valt niets te beslissen zolang
+   de norm op tijd gehaald wordt. Dezelfde reden waarom de gespreksingang eronder vervalt, alleen
+   heeft die geen eigen poort nodig - maandIngang() eist status 'tekort' en 'op tempo' is 'let op'. */
 function maandSuggestie(r, m){
-  if(!r || r.structureel || r.geaccepteerd) return '';
+  if(!r || r.structureel || r.geaccepteerd || r.opTempo) return '';
   if(r.status!=='tekort' && r.status!=='let op') return '';
   let opts=[]; try{ opts=maandRegelOpties(r, m)||[]; }catch(_){}
   if(!opts.some(o=>o&&o.vorm!=='accepteer')) return '';   // niets dat de norm haalt
@@ -3756,7 +3880,12 @@ function maandSuggestie(r, m){
    er geen drie vormen voor, dus het gesprek biedt daar zijn eigen actie plus 'alleen vastleggen'.
    Die afspraak is het waardevolle deel: een patroon over maanden is precies iets om iets over af
    te spreken. De vraag noemt dus de afspraak en niet een bedrag dat het signaal niet draagt.
-   Geen tweede tik op de rij (v193): dit is een eigen element eronder, zoals op Plan. */
+   Geen tweede tik op de rij (v193): dit is een eigen element eronder, zoals op Plan.
+   v226: de poort hieronder is ook de poort voor een regel die op tempo ligt. Die schuift naar
+   'let op' en verliest zijn ingang daarmee zonder dat er een tweede toets bij komt: een vraag
+   "waar kan dat vandaan komen" vraagt om een keuze, en er valt niets te kiezen zolang de norm op
+   tijd gehaald wordt. Een expliciete opTempo-toets ernaast zou een tweede waarheid zijn over
+   dezelfde poort; een test legt vast dat deze ene het doet. */
 function maandIngang(r, m){
   if(!r || r.status!=='tekort' || r.geaccepteerd) return '';
   const mm=m||curMonth||thisYM();
@@ -3831,10 +3960,19 @@ function maandPlanRegels(){
    maandregels. De streep draagt het onderscheid: erboven staat wat een beslissing of aandacht
    vraagt, met een statusdot; eronder staan constateringen zonder dot.
    Daarom hangt de voet aan de LAATSTE kaart die regels draagt en niet vast aan de eerste: staat er
-   na de streep nog een kaart met dots, dan scheidt hij niets meer. */
+   na de streep nog een kaart met dots, dan scheidt hij niets meer.
+   v226: de spaarquote is hier weg en staat weer als eigen kaart. Hij is een UITKOMST en geen stand
+   tegen een norm, dus hij hoorde niet in de kaart met de regels die een beslissing of aandacht
+   vragen - ook niet onder de streep, want daar staan constateringen over die regels.
+   Wat overblijft zijn de plan-rijen. De streep houdt daarmee zijn werk: hij scheidt op soort en
+   niet op aantal, en één rij zonder dot onder rijen met een dot is precies dat onderscheid. Staat
+   er niets onder, dan valt hij al weg (maandVoetBlok). Eén rij is het bovendien niet altijd: de
+   rij 'Je potjes vanaf volgende maand' staat er ook, als er iets verandert. */
+/* m wordt sinds v226 niet meer gelezen - maandPlanRegels() leest kijkMaand() zelf. De parameter
+   blijft staan omdat hij bij maandVoetBlok(m, metRegelsErboven) de tweede positie draagt; hem
+   daar weghalen zou elke bestaande aanroep met twee argumenten stil verkeerd laten landen. */
 function maandVoet(m){
   const delen=[];
-  try{ const sq=maandKpiBlok(m); if(sq) delen.push(sq); }catch(_){}
   try{ const pr=maandPlanRegels(); if(pr) delen.push(pr); }catch(_){}
   return delen.join('');
 }
@@ -3921,7 +4059,9 @@ function renderMaand(){
     ${/* v223: 'Vermogensopbouw' en 'Je plan' waren eigen kaarten met een kop en een uitlegzin voor
           één cijfer. Ze staan nu als voet onder de streep, in de laatste kaart die regels draagt:
           aandacht als die er is, anders beslissing, anders 'Staat goed'. Is er geen enkele
-          regelkaart, dan blijft de voet een eigen kaart zonder streep (zie onder). */''}
+          regelkaart, dan blijft de voet een eigen kaart zonder streep (zie onder).
+          v226: van die twee is alleen 'Je plan' daar nog. De spaarquote is geen constatering over
+          een maandregel maar een uitkomst, en staat weer als eigen kaart verderop. */''}
     ${beslis.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt een beslissing</div>
       ${beslis.map(r=>maandRij(r,false)).join('')}
       ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
@@ -3943,6 +4083,14 @@ function renderMaand(){
     ${/* geen enkele regelkaart: dan heeft de voet geen kaart om in op te gaan en geen streep om
           iets van te scheiden, dus staat hij er als eigen kaart. */''}
     ${(beslis.length||aandacht.length||goed.length)?'':(maandVoet(m)?`<div class="card">${maandVoet(m)}</div>`:'')}
+    ${/* v226: de spaarquote weer als eigen kaart, op de plek die hij vóór v223 had: achter de
+          regels, vóór de uitgavengrafiek. Hij is een uitkomst en geen stand tegen een norm, dus
+          hij hoort niet tussen de regels die een beslissing of aandacht vragen - ook niet onder de
+          streep daar, want die constateringen gaan over diezelfde regels.
+          De kaartkop 'Vermogensopbouw' en de twee uitlegzinnen uit v223 komen niet terug: die waren
+          langer dan het cijfer dat ze toelichtten. De tegel draagt zijn label, percentage, band en
+          sparkline zelf (kpiTegels), dus dit is alleen de schil eromheen. */''}
+    ${(function(){ const sq=maandKpiBlok(m); return sq?`<div class="card">${sq}</div>`:''; })()}
     ${spendVsBudgetChart()}
     ${subsCard()}
     ${maandBeleggenRegel(R)}

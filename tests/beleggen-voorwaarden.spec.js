@@ -15,8 +15,12 @@ const SPAAR = 'NL01SAVE0000004323';
 const RES = 'NL01RESV0000009999';
 const OVER = ym(new Date(now.getFullYear() + 1, now.getMonth(), 1));
 // een jaarpost die pas over 12 maanden valt heeft nog geen opbouw nodig (v131), dus die kan de
-// dekking niet laten zakken. Voor deze test moet hij dichterbij staan: over 3 maanden.
-const BINNENKORT = ym(new Date(now.getFullYear(), now.getMonth() + 3, 1));
+// dekking niet laten zakken. Voor deze test moet hij dichterbij staan.
+// v226: over 2 maanden en niet over 3. Vanaf MAAND_DREMPEL.dekkingMarge maanden vraagt een gat
+// aandacht in plaats van een beslissing, en dan staat de dekkingsrij niet meer op 'tekort'. Deze
+// tests gaan over de samenstelling van de drie voorwaarden, niet over dat moment, dus het
+// knelmoment ligt hier binnen de marge.
+const BINNENKORT = ym(new Date(now.getFullYear(), now.getMonth() + 2, 1));
 
 // Eén basis, en per test schuiven we precies één knop: het spaarsaldo (buffer), de stand van de
 // reserveringenpot (dekking) of de inleg op het doel (aankoopdoel).

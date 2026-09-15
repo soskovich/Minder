@@ -16,7 +16,11 @@ const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '
 const MAIN = 'NL01MAIN0000001111';
 const SPAAR = 'NL01SAVE0000004323';
 const RES = 'NL01RESV0000009999';
-const APRIL = ym(new Date(now.getFullYear() + 1, 3, 1));
+/* v226: het knelmoment van de reservering ligt twee maanden vooruit en niet volgend jaar april.
+   Sinds v226 vraagt een gat dat MAAND_DREMPEL.dekkingMarge maanden of verder weg ligt aandacht in
+   plaats van een beslissing, en deze tests gaan over de ingang bij een tekort. Het bedrag schuift
+   mee: benodigdeStand is 3000 x (12 - 2) / 12 = 2500 tegen 400 in de pot. */
+const KNEL = ym(new Date(now.getFullYear(), now.getMonth() + 2, 1));
 const DOELDATUM = ym(new Date(now.getFullYear() + 1, now.getMonth(), 1));
 
 function seed(o) {
@@ -29,7 +33,10 @@ function seed(o) {
     add('i' + m, MAIN, m, '05', 4000, 'Werkgever', 'SALARIS LOON');
     add('h' + m, MAIN, m, '02', -1500, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
     add('a' + m, MAIN, m, '06', -900, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
-    add('s' + m, SPAAR, m, '26', 300, 'Spaarpot', 'NAAR SPAREN');
+    /* v226: één storting, in de oudste maand, zodat de spaarrekening bestaat maar er in het
+       venster van bufferTempo() geen geld naartoe gaat. Met een maandelijkse storting ligt de
+       buffer op tempo en vraagt hij juist geen beslissing; dat geval staat in op-tempo.spec.js. */
+    if (i === 11) add('s' + m, SPAAR, m, '26', 300, 'Spaarpot', 'NAAR SPAREN');
     add('r' + m, RES, m, '10', 100, 'Reserveringen', 'NAAR RESERVERINGEN');
   }
   const set = Object.assign({
@@ -40,7 +47,7 @@ function seed(o) {
     savingsAcc: { [SPAAR]: true }, resAcc: RES,
     nfDoelVast: 7200, nfToegewezen: 3100, nfToegewezenMigrated: true, nfMaanden: 3,
     goals: [{ id: 'g1', naam: 'Kosten Koper', doel: 20000, gespaard: 500, streefdatum: DOELDATUM, allocMode: 'fixed', perMaand: 0 }],
-    reserveringen: [{ id: 'r1', naam: 'Aanslag', bedrag: 3000, vervalmaand: APRIL, intervalM: 12 }],
+    reserveringen: [{ id: 'r1', naam: 'Aanslag', bedrag: 3000, vervalmaand: KNEL, intervalM: 12 }],
   }, o.set || {});
   return {
     minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set),
@@ -67,7 +74,7 @@ const ing = (page, key) => page.evaluate((k) => {
 }, key);
 
 test.describe('a - elke regel met een tekort draagt zijn eigen ingang', () => {
-  for (const [key, bedrag] of [['dekking', '€850'], ['buffer', '€4.100'], ['doel', '€1.625']]) {
+  for (const [key, bedrag] of [['dekking', '€2.100'], ['buffer', '€4.100'], ['doel', '€1.625']]) {
     test(`${key} opent op zijn eigen sleutel, met zijn eigen bedrag`, async ({ page }) => {
       await boot(page);
       const r = await ing(page, key);

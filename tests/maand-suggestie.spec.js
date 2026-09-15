@@ -15,7 +15,12 @@ const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '
 const MAIN = 'NL01MAIN0000001111';
 const SPAAR = 'NL01SAVE0000004323';
 const RES = 'NL01RESV0000009999';
-const APRIL = ym(new Date(now.getFullYear() + 1, 3, 1));
+/* v226: de reservering valt twee maanden vooruit in plaats van volgend jaar april. Een gat dat
+   MAAND_DREMPEL.dekkingMarge maanden of verder weg ligt vraagt sindsdien aandacht en geen
+   beslissing, en een regel op tempo krijgt geen suggestie - dat is precies wat deze tests niet
+   meten. De bedragen schuiven mee: benodigdeStand is 3000 x (12 - 2) / 12 = 2500 tegen 400 in de
+   pot, dus een achterstand van 2100, en het maandtempo is 3000 / 2 = 1500. */
+const KNEL = ym(new Date(now.getFullYear(), now.getMonth() + 2, 1));
 const DOELDATUM = ym(new Date(now.getFullYear() + 1, now.getMonth(), 1));
 
 function seed(o) {
@@ -28,7 +33,10 @@ function seed(o) {
     add('i' + m, MAIN, m, '05', 4000, 'Werkgever', 'SALARIS LOON');
     add('h' + m, MAIN, m, '02', -1500, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
     add('a' + m, MAIN, m, '06', -900, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
-    add('s' + m, SPAAR, m, '26', 300, 'Spaarpot', 'NAAR SPAREN');
+    /* v226: één storting, in de oudste maand. De spaarrekening bestaat dan wel, maar er gaat in
+       het venster van bufferTempo() geen geld naartoe, dus de bufferregel blijft een tekort en
+       draagt dus een suggestie. Het op-tempo-geval staat in op-tempo.spec.js. */
+    if (i === 5) add('s' + m, SPAAR, m, '26', 300, 'Spaarpot', 'NAAR SPAREN');
     if (!o.geenRes) add('r' + m, RES, m, '10', 100, 'Reserveringen', 'NAAR RESERVERINGEN');
   }
   const bal = { [MAIN]: 2000, [SPAAR]: o.spaar != null ? o.spaar : 3100 };
@@ -41,7 +49,7 @@ function seed(o) {
     savingsAcc: { [SPAAR]: true },
     nfDoelVast: 7200, nfToegewezen: 3100, nfToegewezenMigrated: true, nfMaanden: 3,
     goals: [{ id: 'g1', naam: 'Kosten Koper', doel: 20000, gespaard: 500, streefdatum: DOELDATUM, allocMode: 'fixed', perMaand: 0 }],
-    reserveringen: [{ id: 'r1', naam: 'Aanslag', bedrag: 3000, vervalmaand: APRIL, intervalM: 12 }],
+    reserveringen: [{ id: 'r1', naam: 'Aanslag', bedrag: 3000, vervalmaand: KNEL, intervalM: 12 }],
   }, o.set || {});
   if (!o.geenResAcc) set.resAcc = RES;
   return {
@@ -64,7 +72,7 @@ test.describe('a - elke regel met een tekort draagt een suggestie', () => {
     await boot(page);
     const r = await sug(page, 'dekking');
     expect(r.status).toBe('tekort');
-    expect(r.sug).toContain('€850');
+    expect(r.sug).toContain('€2.100');
   });
 
   test('buffer', async ({ page }) => {
@@ -126,7 +134,7 @@ test.describe('b - het bedrag komt uit de regel en wordt nergens opnieuw bereken
     const b = (await sug(page, 'buffer')).sug;
     const g = (await sug(page, 'doel')).sug;
     // D.tekort is benodigdeStand min werkelijkeStand, dus geen maandbedrag
-    expect(d).not.toMatch(/€850 per maand/);
+    expect(d).not.toMatch(/€2\.100 per maand/);
     expect(b).toContain('in totaal');
     expect(b).not.toMatch(/€4\.100 per maand/);
     expect(g).toContain('per maand');
@@ -135,9 +143,9 @@ test.describe('b - het bedrag komt uit de regel en wordt nergens opnieuw bereken
   test('dekking houdt de twee grootheden uit elkaar', async ({ page }) => {
     await boot(page);
     const d = (await sug(page, 'dekking')).sug;
-    expect(d).toContain('€429');            // het lopende tempo uit de gevolgzin
+    expect(d).toContain('€1.500');          // het lopende tempo uit de gevolgzin
     expect(d).toContain('maandtempo');
-    expect(d.indexOf('€850')).toBeLessThan(d.indexOf('€429'));
+    expect(d.indexOf('€2.100')).toBeLessThan(d.indexOf('€1.500'));
   });
 });
 
