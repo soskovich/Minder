@@ -189,7 +189,9 @@ test.describe('b · één idioom voor vouwen', () => {
 
   /* v208: hier stonden twee tests op insVouw(). Die functie is vervallen met zijn enige aanroeper,
      dus de knop-boven-de-inhoud en het wisselen worden nu getoetst op de vouwplek die er wel is:
-     de maandgrafiek op Maand, met dezelfde drietraps vlag (v90) en hetzelfde idioom. */
+     de maandgrafiek, met dezelfde drietraps vlag (v90) en hetzelfde idioom.
+     v227: die grafiek staat sinds deze ronde op Inzichten en niet meer op Maand. Het idioom is wat
+     hier getoetst wordt, niet de plek, dus alleen het scherm dat gelezen wordt verschuift. */
   test('de vouwknop staat boven de inhoud, niet als voetregel eronder', async ({ page }) => {
     await boot(page);
     const open = await page.evaluate(() => { SET.openSpendChart = true; save(); return spendVsBudgetChart(); });
@@ -201,11 +203,11 @@ test.describe('b · één idioom voor vouwen', () => {
 
   test('open en dicht wisselen elkaar echt af op het scherm', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { SET.openSpendChart = true; save(); render(); go('maand'); });
-    const a = await page.evaluate(() => $('#s-maand').innerText);
+    await page.evaluate(() => { SET.openSpendChart = true; save(); render(); go('ins'); });
+    const a = await page.evaluate(() => $('#s-ins').innerText);
     expect(a).toContain('▲');
     await page.evaluate(() => toggleCollap('openSpendChart'));
-    const b = await page.evaluate(() => $('#s-maand').innerText);
+    const b = await page.evaluate(() => $('#s-ins').innerText);
     expect(b).toContain('▼');
   });
 

@@ -16,14 +16,15 @@ async function openIns(page, mode) {
 }
 const tegels = (page) => page.locator('#maandKpiBlok .wvo-tile');
 const grafiek = (page) => page.locator('#insSpendChart');
-/* v178: de maandgrafiek zet deze maand naast eerdere maanden, en dat is een structurele vraag.
-   Hij staat sindsdien op Maand; de drietraps default uit v90 verhuist ongewijzigd mee. */
-async function openMaand(page, mode) {
+/* v178 zette de maandgrafiek op Maand omdat hij maanden naast elkaar zet; v227 bracht hem terug
+   naar Inzichten, onder het blok over deze maand. De drietraps default uit v90 verhuist beide keren
+   ongewijzigd mee, en dat is wat blok b hieronder bewaakt: de plek verandert, het gedrag niet. */
+async function openGrafiek(page, mode) {
   const p = seed({ maanden: 8 });
   const set = JSON.parse(p.minder_set); set.mode = mode; p.minder_set = JSON.stringify(set);
   await open(page, p);
-  await page.evaluate(() => go('maand'));
-  await page.waitForSelector('#s-maand .card');
+  await page.evaluate(() => go('ins'));
+  await page.waitForSelector('#s-ins .card');
 }
 
 /* v209: de drietraps uitklap uit v90 gold voor de kerncijfers. Sinds de vaste-lastendruk van het
@@ -50,7 +51,7 @@ test.describe('a · kerncijfers: één cijfer, in elke modus hetzelfde', () => {
 
 test.describe('b · maandgrafiek ingeklapt in Rustig', () => {
   test('Rustig start dicht, met een tikbare kop', async ({ page }) => {
-    await openMaand(page, 'rustig');
+    await openGrafiek(page, 'rustig');
     expect(await grafiek(page).count()).toBe(0);                    // geen 12-maands grafiek in beeld
     const kaart = page.locator('#insSpendCard');
     await expect(kaart).toHaveCount(1);
@@ -64,7 +65,7 @@ test.describe('b · maandgrafiek ingeklapt in Rustig', () => {
   });
 
   test('Begeleid staat gewoon open, en een eigen keuze wint in beide modi', async ({ page }) => {
-    await openMaand(page, 'begeleid');
+    await openGrafiek(page, 'begeleid');
     await expect(grafiek(page)).toHaveCount(1);
 
     // de gebruiker klapt hem zelf dicht: dan blijft hij dicht, ook in Begeleid
@@ -76,13 +77,13 @@ test.describe('b · maandgrafiek ingeklapt in Rustig', () => {
     expect(await grafiek(page).count()).toBe(0);
 
     // en in Rustig wint een expliciet "open" van de ingeklapte default
-    await page.evaluate(() => { SET.mode = 'rustig'; SET.openSpendChart = true; save(); renderMaand(); });
+    await page.evaluate(() => { SET.mode = 'rustig'; SET.openSpendChart = true; save(); renderIns(); });
     await page.waitForTimeout(120);
     await expect(grafiek(page)).toHaveCount(1);
   });
 
   test('collapOpen is drietraps en raakt bestaande vlaggen niet', async ({ page }) => {
-    await openMaand(page, 'begeleid');
+    await openGrafiek(page, 'begeleid');
     const r = await page.evaluate(() => {
       const uit = {};
       delete SET.openSpendChart;

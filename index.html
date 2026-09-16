@@ -4091,7 +4091,10 @@ function renderMaand(){
           langer dan het cijfer dat ze toelichtten. De tegel draagt zijn label, percentage, band en
           sparkline zelf (kpiTegels), dus dit is alleen de schil eromheen. */''}
     ${(function(){ const sq=maandKpiBlok(m); return sq?`<div class="card">${sq}</div>`:''; })()}
-    ${spendVsBudgetChart()}
+    ${/* v227: hier stond spendVsBudgetChart(). Die staat nu op Inzichten, onder het blok over deze
+          maand. Dat is een omkering van v178, dat hem juist hierheen haalde omdat hij maanden naast
+          elkaar zet en dat een structurele vraag is; de afweging staat in BESLISSINGEN.md met beide
+          kanten erbij. Verplaatsen is nooit kopiëren: hij staat hier niet meer. */''}
     ${subsCard()}
     ${maandBeleggenRegel(R)}
     ${(!beslis.length&&!aandacht.length)?maandCoachIngang(RO):''}
@@ -9392,7 +9395,17 @@ function renderIns(){
      geld heen" hoort (v114/v115). Twee weergaven van hetzelfde is geen keuze maar ruis. */
   /* v178: de meermaands-grafiek en de abonnementenkaart staan nu op Maand. De eerste zet deze
      maand naast eerdere maanden en dat is een structurele vraag; de tweede is een lastenlijst die
-     niet over deze maand gaat. Beide stonden hier op een operationeel scherm. */
+     niet over deze maand gaat. Beide stonden hier op een operationeel scherm.
+     v227: de grafiek is terug, onder het blok over deze maand. Dat is een omkering van v178 en geen
+     nieuwe afweging die die oude overtreft; BESLISSINGEN.md draagt beide kanten. De abonnementenkaart
+     blijft op Maand.
+     ALLEEN OP DE LOPENDE MAAND. Op Maand viel hij bij een afgesloten maand vanzelf weg, want
+     renderMaand() keert daar eerder terug (v176); renderIns() rendert wel door. Onder de kop
+     'Terugblik juli' zou deze grafiek maanden ná juli tonen, en dat is dezelfde fout die v176
+     beschrijft. Hij hangt daarom aan `nu`, de vlag die de hero hier al gebruikt.
+     WAT HIJ MEET IS ONGEMOEID: de lopende maand blijft er bewust uit (v194, een halve maand hoort
+     niet tussen volle maanden). Hij staat dus onder een kop die 'Deze maand' zegt zonder deze maand
+     te tonen; dat is de prijs van deze plek en is bij de keuze gemeld. */
   /* v187: de Gedrag-kaart is vervallen. Drie van zijn vier bronnen waren de regels uit
      coachItems() die sinds v143 woordelijk ook in scoreNotifs() staan (dus op Maand of in de
      meldingenlijst), en de vierde was de over-budget-rij, die nu de eerste bron van de
@@ -9401,7 +9414,7 @@ function renderIns(){
      maand nodigt dat uit tot een keuze over iets wat voorbij is (v139: alleen kijken). Sinds v186
      zit die ingang in de Valt-op-kaart, dus krijgt die kaart de maand-vlag mee. */
   $('#s-ins').innerHTML = afgeslotenMaandBanner(m) + insSection(nu?'Deze maand':'Terugblik')
-    + hero + whatStandsOutLine(m, nu);
+    + hero + whatStandsOutLine(m, nu) + (nu?spendVsBudgetChart():'');
 }
 
 

@@ -35,10 +35,13 @@ async function openIsMaand(page, payload) {
 }
 /* v178: de meermaands-grafiek zet deze maand naast eerdere maanden en staat sindsdien op Maand.
    De grafiek zelf is onveranderd, alleen het scherm waar hij op staat verschilt. */
+/* v227: de uitgaven-vs-budget-grafiek staat op Inzichten, onder het blok over deze maand.
+   go() rendert alleen 'maand' opnieuw, dus de andere schermen komen uit de render bij het
+   opstarten; dat is hier genoeg, want er wordt niets in SET gewijzigd. */
 async function openGrafiek(page, payload) {
   await open(page, payload || seed(HIST));
-  await page.evaluate(() => go('maand'));
-  await page.waitForSelector('#s-maand .card');
+  await page.evaluate(() => go('ins'));
+  await page.waitForSelector('#s-ins .card');
 }
 
 function tweak(fn) {
@@ -260,11 +263,12 @@ test.describe('b · historische reeksen', () => {
     expect(await page.evaluate(() => months().length)).toBe(1);
     const s = await strip(page);
     /* v173: die mededeling stond per tegel en nog eens onder de maandgrafiek, drie keer op één
-       scherm. De grafiek zegt het nu als enige. v178: die grafiek staat op Maand, dus de zin komt
-       in de hele app precies één keer voor, en niet op het scherm met de tegels. */
+       scherm. De grafiek zegt het nu als enige, en dat is wat deze test bewaakt: precies één keer in
+       de hele app. v178 zette die grafiek op Maand, v227 bracht hem terug naar Inzichten, dus de zin
+       staat nu op Inzichten en niet op Maand. Hij hangt nog steeds niet aan een tegel. */
     const pagina = await page.evaluate(() => $('#s-ins').innerText + ' ' + $('#s-maand').innerText);
     expect((pagina.match(/maanden zie je hier je verloop/gi) || []).length).toBe(1);
-    expect(await page.evaluate(() => $('#s-ins').innerText)).not.toMatch(/zie je hier je verloop/i);
+    expect(await page.evaluate(() => $('#s-maand').innerText)).not.toMatch(/zie je hier je verloop/i);
     expect(s).not.toMatch(/zie je hier je verloop/i);   // niet meer per tegel
     expect(await page.locator('#maandKpiBlok .spark').count()).toBe(0);
     expect(s).toMatch(/\d+%/);                                            // de waarde staat er wél

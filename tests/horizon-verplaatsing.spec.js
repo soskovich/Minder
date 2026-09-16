@@ -53,13 +53,19 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
     expect(await page.evaluate(() => maandPlanRegels())).not.toContain('--amber');
   });
 
-  test('de meermaands-grafiek staat op Maand en niet meer op Inzichten', async ({ page }) => {
+  /* v227: deze verhuizing is omgekeerd. De grafiek staat weer op Inzichten, onder het blok over
+     deze maand. De REGEL die deze spec bewaakt verandert niet - een verplaatst element staat op
+     precies één scherm - alleen de richting. De afweging staat in BESLISSINGEN.md met beide kanten:
+     v178 haalde hem naar Maand omdat hij maanden naast elkaar zet, en dat argument staat nog. */
+  test('de meermaands-grafiek staat op Inzichten en niet meer op Maand', async ({ page }) => {
     await boot(page, 'maand');
     const t = await beide(page);
-    expect(t.maand).toMatch(/uitgaven vs budget/i);
-    expect(t.ins).not.toMatch(/uitgaven vs budget/i);
-    expect(await page.evaluate(() => /spendVsBudgetChart/.test(renderIns.toString()))).toBe(false);
-    expect(await page.evaluate(() => /spendVsBudgetChart/.test(renderMaand.toString()))).toBe(true);
+    expect(t.ins).toMatch(/uitgaven vs budget/i);
+    expect(t.maand).not.toMatch(/uitgaven vs budget/i);
+    /* Zonder comments gemeten: renderMaand() noemt de functie nog in een comment dat vertelt dát
+       hij verhuisd is, en een naam in een comment is geen aanroep. */
+    expect(await page.evaluate(() => /spendVsBudgetChart/.test(renderIns.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(true);
+    expect(await page.evaluate(() => /spendVsBudgetChart/.test(renderMaand.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);
   });
 
   test('de abonnementenkaart staat op Maand en niet meer op Inzichten', async ({ page }) => {

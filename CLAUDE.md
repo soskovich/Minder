@@ -54,7 +54,12 @@ geen editor bij om een optie te kunnen tonen. Niets in deze laag mag aanmoedigen
 ## De vier horizonnen
 Elk scherm beantwoordt precies één vraag, en een element staat op precies één scherm:
 - **Home** (`dash`) — waar sta ik nu.
-- **Inzichten** (`ins`) — hoe loopt deze maand (operationeel).
+- **Inzichten** (`ins`) — hoe loopt deze maand (operationeel). Draagt sinds `v227` ook de
+  meermaands-grafiek "Uitgaven vs budget", onder het blok over deze maand. Dat is een omkering van
+  `v178`, dat hem juist naar Maand haalde omdat hij maanden naast elkaar zet; het argument van `v178`
+  staat nog en `BESLISSINGEN.md` draagt beide kanten. Hij toont uitsluitend afgeronde maanden
+  (`v194`), dus hij staat onder een kop die "Deze maand" zegt zonder deze maand te tonen, en hij
+  rendert alleen op de lopende maand.
 - **Maand** (`maand`) — houdt mijn systeem stand (structureel).
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Plan rekent in **maandtempo**
   (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
@@ -221,7 +226,7 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v226` → `minder-v227`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v227` → `minder-v228`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

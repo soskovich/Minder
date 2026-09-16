@@ -333,20 +333,22 @@ test.describe('g · layout', () => {
       await boot(page, { maanden: 14, nu: 876, set: { budgets: { huur: 900, boodschappen: 300 } } });
       await page.evaluate(() => { SET.openSpendChart = true; save(); go('ins'); });
       await page.waitForSelector('#s-ins .card');
+      /* v227: de grafiek staat op Inzichten, onder het blok over deze maand. Beide schermen worden
+         nog op overflow gemeten, alleen staat de grafiek nu in het eerste. */
       const ins = await page.evaluate(() => {
         const el = document.getElementById('s-ins');
-        return el.scrollWidth - el.clientWidth;
+        return { over: el.scrollWidth - el.clientWidth, grafiek: !!el.querySelector('#insSpendChart') };
       });
-      expect(ins, `${w}px inzichten`).toBe(0);
+      expect(ins.over, `${w}px inzichten`).toBe(0);
+      expect(ins.grafiek).toBe(true);
       await page.evaluate(() => go('maand'));
       await page.waitForSelector('#s-maand .card');
       const maand = await page.evaluate(() => {
         const el = document.getElementById('s-maand');
-        const svg = el.querySelector('#insSpendChart');
-        return { over: el.scrollWidth - el.clientWidth, grafiek: !!svg };
+        return { over: el.scrollWidth - el.clientWidth, grafiek: !!el.querySelector('#insSpendChart') };
       });
       expect(maand.over, `${w}px maand`).toBe(0);
-      expect(maand.grafiek).toBe(true);
+      expect(maand.grafiek).toBe(false);
     });
   }
 });

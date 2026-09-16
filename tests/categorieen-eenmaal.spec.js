@@ -23,15 +23,15 @@ test.describe('a · de pagina', () => {
 
   /* v208: Verdieping bevatte precies één element, het Kerncijfers-blok, en dat is van Inzichten af.
      De sectiekop viel daarmee vanzelf weg: renderIns() had die guard al. */
-  test('Verdieping bestaat niet meer, de maandgrafiek staat nog op Maand', async ({ page }) => {
+  test('Verdieping bestaat niet meer, de maandgrafiek staat onder Deze maand', async ({ page }) => {
     await boot(page);
     const t = await page.locator('#s-ins').innerText();
     expect(t).not.toMatch(/verdieping/i);
     expect(t).not.toMatch(/kerncijfers/i);
-    // v178: de meermaands-grafiek is naar Maand verhuisd, want die vergelijkt maanden
-    expect(t).not.toMatch(/uitgaven vs budget/i);
+    // v178 haalde de meermaands-grafiek naar Maand, v227 zette hem terug onder Deze maand
+    expect(t).toMatch(/uitgaven vs budget/i);
     await page.evaluate(() => go('maand'));
-    expect(await page.locator('#s-maand').innerText()).toMatch(/uitgaven vs budget/i);
+    expect(await page.locator('#s-maand').innerText()).not.toMatch(/uitgaven vs budget/i);
   });
 });
 

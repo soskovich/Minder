@@ -178,9 +178,11 @@ test.describe('d · de verdieping', () => {
     const b = await beeld(page);
     expect(b.secties).toEqual(['Deze maand']);
     expect(b.tekst).not.toMatch(/kerncijfers/i);
-    // v178: de meermaands-grafiek en de abonnementenkaart staan op Maand
-    expect(b.tekst).not.toMatch(/uitgaven vs budget/i);
-    expect(b.tekst).not.toMatch(/tik om te bekijken/);
+    /* v178: de meermaands-grafiek en de abonnementenkaart staan op Maand. v227: de grafiek is terug
+       onder Deze maand, dus die twee asserties zijn omgedraaid; de abonnementenkaart blijft op
+       Maand. Wat deze test bewaakt is dat er één sectie is, niet wat er in staat. */
+    expect(b.tekst).toMatch(/uitgaven vs budget/i);
+    expect(b.tekst).not.toMatch(/abonnementen/i);
     // v136: de Categorieen-kaart is weg van de pagina; die verdeling staat achter "Uitgegeven"
     expect(b.tekst).not.toMatch(/^categorieën/im);
     expect(b.tekst).not.toMatch(/grootste:/)
@@ -213,17 +215,24 @@ test.describe('d · de verdieping', () => {
   });
 
   /* v208: Verdieping bestaat niet meer, dus 'boven Verdieping' heeft geen anker. Wat blijft is dat
-     de Valt-op-regel uitgeklapt onder de hero staat, als laatste blok van het scherm. */
-  test('wat opviel staat uitgeklapt onder de hero', async ({ page }) => {
+     de Valt-op-regel uitgeklapt onder de hero staat.
+     v227: 'als laatste blok van het scherm' is geen anker meer, want de meermaands-grafiek staat
+     eronder. Het anker is waar hij hoort: direct onder de hero, dus met niets tussen die twee.
+     v135 zette die twee bij elkaar en dat is wat deze test bewaakt. */
+  test('wat opviel staat uitgeklapt direct onder de hero', async ({ page }) => {
     await boot(page);
     const uit = await page.evaluate(() => {
       const el = document.querySelector('#s-ins');
       const wvo = el.querySelector('#wvoLine');
       if (!wvo) return { aanwezig: false };
       const kaarten = [...el.querySelectorAll('.card')];
-      return { aanwezig: true, laatste: kaarten.length === 0 || kaarten[kaarten.length - 1].contains(wvo) || wvo.contains(kaarten[kaarten.length - 1]) };
+      const eigen = kaarten.findIndex((c) => c.contains(wvo));
+      return { aanwezig: true, eigen, aantal: kaarten.length };
     });
-    if (uit.aanwezig) expect(uit.laatste).toBe(true);
+    if (uit.aanwezig) {
+      // de hero is de eerste kaart, de valt-op-regel de tweede (of hij zit in de hero zelf)
+      expect(uit.eigen, 'direct onder de hero').toBeLessThanOrEqual(1);
+    }
   });
 });
 

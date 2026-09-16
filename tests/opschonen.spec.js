@@ -177,8 +177,8 @@ test.describe('d · dubbele widgets zijn weg uit Inzichten', () => {
     expect(ins).not.toMatch(/kerncijfers/i);
     expect(ins).not.toMatch(/verdieping/i);
     expect(ins).toMatch(/maandbudget/i);
-    // v178: de meermaands-grafiek staat op Maand
-    expect(ins).not.toMatch(/uitgaven vs budget/i);
+    // v178 zette de meermaands-grafiek op Maand, v227 bracht hem terug onder Deze maand
+    expect(ins).toMatch(/uitgaven vs budget/i);
   });
 
   test('de renderers zelf blijven bestaan voor de drill-down', async ({ page }) => {
