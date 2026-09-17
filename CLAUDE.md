@@ -136,6 +136,10 @@ genoemde versietag.)*
   is. Vlak is vlak: zo'n stand krijgt ook geen bandbreedte en geen heffing.
 - **Rustig toont minder, rekent nooit anders** (`v20`, `v90`): default is `begeleid`, de keuze is
   altijd omkeerbaar, en een expliciete keuze van de gebruiker wint van de modus.
+- **Vaststellen zonder gevolg is geen signaal** (`v228`): een element dat alleen constateert, en
+  waar geen stap uit volgt die niet al elders ligt, gaat weg. Zo vervielen 'Boven je
+  inkomen-limiet' (de grens blijft een meting) en 'Meer binnen, meer uitgegeven' (`inflatie`).
+  `STRUCT_STATUS.info` houdt `rente` als gebruiker; een lege tak is iets anders dan een verkeerde.
 
 ## Meetlessen
 Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als je ze herhaalt.
@@ -226,7 +230,7 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v227` → `minder-v228`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v228` → `minder-v229`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

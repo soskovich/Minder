@@ -53,14 +53,13 @@ test.describe('a · de budget-kaart', () => {
     expect(html).not.toMatch(AMBER);                                   // rood, niet amber ernaast
   });
 
-  test('"boven inkomen-limiet" is een spiegel, geen waarschuwing', async ({ page }) => {
-    await boot(page);                                                  // fixture: potjes 2400 vs limiet 2100
+  /* v228: de rij 'Boven je inkomen-limiet' is vervallen (tests/vaststellen-zonder-gevolg.spec.js).
+     Wat er in maandPlanRegels() overblijft draagt geen status en dus ook geen amber. */
+  test('wat er onder de streep op Maand staat draagt geen amber', async ({ page }) => {
+    await boot(page);
     const html = await planHtml(page);
-    expect(html).toContain('Boven je inkomen-limiet');
-    expect(html).toContain('var(--mut2)');
+    expect(html).not.toContain('inkomen-limiet');
     expect(html).not.toMatch(AMBER);
-    // het bedrag blijft gewoon staan
-    expect(html).toContain('€300');
   });
 });
 

@@ -440,10 +440,12 @@ test.describe('g - de spaarquote is een eigen kaart', () => {
     if (uit.chart > -1) expect(uit.quote).toBeLessThan(uit.chart);
   });
 
-  test('de streep houdt zijn werk met alleen de plan-rijen eronder', async ({ page }) => {
-    await boot(page, { set: { budgets: { boodschappen: 1800, huur: 1500, vervoer: 400 } } });
+  /* v228: de rij 'Boven je inkomen-limiet' is vervallen, dus potjes boven de limiet vullen de voet
+     niet meer. Een volgende-maand-laag doet dat nog wel; de eigenschap blijft dezelfde. */
+  test('de streep houdt zijn werk met alleen de plan-rij eronder', async ({ page }) => {
+    await boot(page, { set: { budgetsNext: { boodschappen: 1100 } } });
     const uit = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /inkomen-limiet/.test(x.textContent));
+      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /potjes vanaf volgende maand/.test(x.textContent));
       return { kop: ((c.querySelector('.hlabel') || {}).textContent || '').trim(),
         streep: /border-top:1px solid var\(--line\)/.test(c.innerHTML),
         spaarquote: /Spaarquote/.test(c.textContent) };

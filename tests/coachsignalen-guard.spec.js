@@ -3,10 +3,11 @@
 // werden er vijf genoemd, met het geparkeerde-aankoopsignaal erbij. Het zijn er vier, en park-
 // wordt ruim honderd regels boven de guard gepusht. Deze spec meet dat aan de accolades van het
 // blok, zodat de tekst en de code niet opnieuw uiteen kunnen lopen.
+// v228: 'inflatie' is vervallen, dus het zijn er nu drie. De meting blijft dezelfde.
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
 
-const BINNEN_GUARD = ['savrules', 'meevaller', 'inflatie', 'overstreak'];
+const BINNEN_GUARD = ['savrules', 'meevaller', 'overstreak'];
 
 // leest de bron en geeft de push-keys terug, gesplitst op binnen/buiten het coachOff-blok
 function guardKeys(page) {
@@ -29,8 +30,8 @@ function guardKeys(page) {
   });
 }
 
-test.describe('a - de guard dekt precies vier signalen', () => {
-  test('savrules, meevaller, inflatie en overstreak, en niets anders', async ({ page }) => {
+test.describe('a - de guard dekt precies drie signalen', () => {
+  test('savrules, meevaller en overstreak, en niets anders', async ({ page }) => {
     await open(page, seed());
     const g = await guardKeys(page);
     expect(g).not.toBeNull();
@@ -64,7 +65,7 @@ test.describe('a - de guard dekt precies vier signalen', () => {
   });
 });
 
-test.describe('a2 - de tekst komt uit dezelfde vier', () => {
+test.describe('a2 - de tekst komt uit dezelfde drie', () => {
   // v202 zette 'je coach staat uit' om naar 'je coachsignalen staan uit', op de aanname dat het om
   // alle signalen ging. Het zijn er vier van de ruim veertig, dus die tekst was nog steeds te ruim.
   // PATROONSIGNALEN is nu de enige bron voor wat de schakelaar noemt, en hier hangt hij aan de guard.
@@ -75,7 +76,7 @@ test.describe('a2 - de tekst komt uit dezelfde vier', () => {
     expect(tab.sort()).toEqual(g.binnen.sort());
   });
 
-  test('de schakelaar noemt de vier en zegt wat er blijft staan', async ({ page }) => {
+  test('de schakelaar noemt de drie en zegt wat er blijft staan', async ({ page }) => {
     await open(page, seed());
     const t = await page.evaluate(() => { go('set'); toggleSet('coach'); return $('#s-set').innerText; });
     expect(t).toContain('Signalen uit je patronen');

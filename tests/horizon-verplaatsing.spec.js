@@ -44,13 +44,13 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
     expect(await page.evaluate(() => maandPlanRegels())).toContain("'next'");
   });
 
-  test("'boven je inkomen-limiet' staat op Maand en niet meer op Inzichten", async ({ page }) => {
+  /* v228: 'boven je inkomen-limiet' verhuisde in v178 naar Maand en is daar vervallen. De regel
+     van deze spec blijft: hij staat nu op geen enkel scherm, en zeker niet terug op Inzichten. */
+  test("'boven je inkomen-limiet' staat op geen van beide schermen", async ({ page }) => {
     await boot(page, 'maand');
     const t = await beide(page);
-    expect(t.maand).toMatch(/Boven je inkomen-limiet/i);
+    expect(t.maand).not.toMatch(/inkomen-limiet/i);
     expect(t.ins).not.toMatch(/inkomen-limiet/i);
-    // v53 blijft: het is een spiegel, geen plafond, dus geen aandachtskleur
-    expect(await page.evaluate(() => maandPlanRegels())).not.toContain('--amber');
   });
 
   /* v227: deze verhuizing is omgekeerd. De grafiek staat weer op Inzichten, onder het blok over

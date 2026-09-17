@@ -52,22 +52,15 @@ test.describe('v53 potjes leidend, inkomen-limiet als spiegel', () => {
     expect(e.varRoom).toBe(1480);       // de rest = basis voor het dag-/weektempo
   });
 
-  test('budgetkaart toont het potjes-totaal met de limiet-spiegel', async ({ page }) => {
+  test('budgetkaart toont het potjes-totaal, niet de limiet', async ({ page }) => {
     await open(page);
     await page.evaluate(() => go('ins'));
     const t = await text(page, '#s-ins');
     expect(t).toMatch(/maandbudget/i);   // v135: staat nu in de zin "van €2.400 maandbudget"
     expect(t).toContain('€2.400');
-    /* v178: de limiet-spiegel is een oordeel over je plan en staat op Maand. Inzichten toont
-       alleen nog hoe deze maand loopt. */
+    /* v178: de limiet-spiegel was een oordeel over je plan en verhuisde naar Maand; v228 liet hem
+       daar vervallen (tests/vaststellen-zonder-gevolg.spec.js). De limiet zelf blijft een meting. */
     expect(t).not.toContain('inkomen-limiet');
-    const plan = await page.evaluate(() => { const d = document.createElement('div');
-      d.innerHTML = maandPlanRegels(); return d.innerText.replace(/\s+/g, ' '); });
-    expect(plan).toContain('Boven je inkomen-limiet');
-    // v193: het bedrag staat in de waardekolom, het percentage in de gevolgzin met richting
-    expect(plan).toContain('€300');
-    expect(plan).toMatch(/boven de 70% van je inkomen/);
-    expect(plan).toMatch(/spiegel, geen plafond/);
     const kaart = await page.evaluate((m) => monthStatusCard(m), CUR);
     expect(kaart).not.toContain('€2.100');   // de limiet staat nergens als maandbudget
   });

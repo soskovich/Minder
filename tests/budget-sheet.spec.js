@@ -9,8 +9,9 @@ const { seed, open, CUR } = require('./budget-fixture');
 const SHEET = '#sheetBg.show';
 const sheetTxt = (page) => page.locator('#sheet').innerText();
 
-// Fixture: potjes 2400 boven de inkomen-limiet 2100 (70% van 3000). Het verschil staat als
-// "boven inkomen-limiet" in de widget en beweegt dus mee met de limiet-slider in de sheet.
+// Fixture: potjes 2400 boven de inkomen-limiet 2100 (70% van 3000). De limiet-slider in de sheet
+// werkt de sheet zelf live bij; de rij 'boven inkomen-limiet' die er vroeger aan hing is in v228
+// vervallen.
 async function openIns(page, payload) {
   await open(page, payload || seed());
   await page.evaluate(() => go('ins'));
@@ -61,15 +62,10 @@ test('a2 · ring en titel blijven de read-only vergelijking openen', async ({ pa
   expect(await sheetTxt(page)).not.toContain('Bestedingslimiet');
 });
 
-test('b · de limiet-slider werkt de sheet én de widget live bij', async ({ page }) => {
+test('b · de limiet-slider werkt de sheet live bij', async ({ page }) => {
   await openEditor(page);
 
   expect(await sheetTxt(page)).toContain('Bestedingslimiet: 70%');
-  // v178: de limiet-spiegel staat op Maand; de sheet en die regel moeten samen bijwerken
-  const spiegel = () => page.evaluate(() => { const d = document.createElement('div');
-    d.innerHTML = maandPlanRegels(); return d.innerText.replace(/\s+/g, ' '); });
-  expect(await spiegel()).toMatch(/boven de 70% van je inkomen/);              // v193: in de gevolgzin
-  expect(await spiegel()).toContain('€300');                                   // 2400 - 2100 = 300 boven de limiet
 
   // de echte oninput-handler van de slider afvuren (SET.limit=..;save();render();)
   await page.evaluate(() => {
@@ -84,10 +80,8 @@ test('b · de limiet-slider werkt de sheet én de widget live bij', async ({ pag
   expect(s).toContain('€1.500');                                               // Nu: 50% van 3000 besteden
   expect(await page.evaluate(() => SET.limit)).toBe(50);
   expect(await page.evaluate(() => document.querySelector('#sheetBg').classList.contains('show'))).toBe(true);
-
-  const na = await spiegel();
-  expect(na).toMatch(/boven de 50% van je inkomen/);                           // v193: in de gevolgzin
-  expect(na).toContain('€900');                                                // 2400 - 1500 = 900
+  // de limiet blijft een meting: totals() leest hem nog
+  expect(await page.evaluate(() => totals(kijkMaand()).limit)).toBe(1500);
 });
 
 test('c · een categorie-potje behoudt focus tijdens typen', async ({ page }) => {

@@ -11,7 +11,7 @@ const MS = [5, 4, 3, 2, 1].map((k) => ym(new Date(now.getFullYear(), now.getMont
 const MAIN = 'NL01MAIN0000001111';
 const SPAAR = 'NL01SAVE0000004323';
 
-// maanden waarin structureel meer werd uitgegeven dan er binnenkwam: voedt overstreak en inflatie
+// maanden waarin structureel meer werd uitgegeven dan er binnenkwam: voedt overstreak
 function seed(o = {}) {
   const tx = [];
   const add = (id, acc, m, day, amount, naam, desc) =>
@@ -62,7 +62,7 @@ test.describe('a · de classificatie zit aan de bron', () => {
     expect(nl).toContain('.h');
     expect(ms).toContain("n.h==='structureel'");
     for (const src of [nl, ms]) {
-      expect(src).not.toMatch(/overstreak|inflatie|meevaller|lowbal/);   // geen tweede indeling
+      expect(src).not.toMatch(/overstreak|meevaller|lowbal/);   // geen tweede indeling
     }
   });
 });

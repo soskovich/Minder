@@ -5,6 +5,8 @@
 // Het criterium dat blokkade van observatie scheidt: IS ER EEN NORM DIE NIET WORDT GEHAALD?
 // Bij 'meevaller' je spaardoel en bij 'overstreak' je bestedingslimiet - die lopen vast, dus tekort.
 // Bij 'rente' en 'inflatie' niet - die stellen een patroon vast, dus let op.
+// v228: 'inflatie' is daarna vervallen, want een observatie waar niets uit volgt is geen signaal.
+// 'rente' is nu de enige gebruiker van STRUCT_STATUS.info; de mapping zelf blijft ongewijzigd.
 // Verder: de coach-ingang stond vier blokken onder de kaart die een beslissing belooft, en drie van
 // de vier structurele signalen hadden geen korte naam, zodat hun hele l1 als regelnaam diende.
 // De service worker staat globaal uit via playwright.config.js.
@@ -57,7 +59,7 @@ async function boot(page, o) {
 const bron = (page) => page.evaluate(() => {
   const src = document.documentElement.outerHTML;
   const uit = {};
-  for (const k of ['meevaller', 'inflatie', 'overstreak']) {
+  for (const k of ['meevaller', 'overstreak']) {
     const m = src.match(new RegExp("key:'" + k + "'[^}]*?t:'(\\w+)'"));
     const n = src.match(new RegExp("key:'" + k + "'[^}]*?kort:'([^']+)'"));
     uit[k] = { t: m ? m[1] : null, kort: n ? n[1] : null };
@@ -68,9 +70,13 @@ const bron = (page) => page.evaluate(() => {
 test.describe('a - de indeling volgt één criterium', () => {
   test('een signaal zonder norm die vastloopt is een observatie', async ({ page }) => {
     await boot(page);
-    const b = await bron(page);
-    // inflatie: een verhouding, geen grens -> observatie
-    expect(b.inflatie.t).toBe('info');
+    // rente: stilstaand geld naast een dure schuld stelt een patroon vast -> observatie (v228: het
+    // enige structurele signaal met t:'info' sinds inflatie is vervallen)
+    const t = await page.evaluate(() => {
+      const m = document.documentElement.outerHTML.match(/key:'rente-'[^}]*?h:'structureel'[^}]*?t:'(\w+)'/);
+      return m ? m[1] : null;
+    });
+    expect(t).toBe('info');
     expect(await page.evaluate(() => STRUCT_STATUS.info)).toBe('let op');
   });
 
@@ -99,10 +105,10 @@ test.describe('a - de indeling volgt één criterium', () => {
 });
 
 test.describe('b - elk structureel signaal draagt een korte naam', () => {
-  test('geen van de vier valt nog terug op zijn hele zin', async ({ page }) => {
+  test('geen van de structurele signalen valt nog terug op zijn hele zin', async ({ page }) => {
     await boot(page);
     const b = await bron(page);
-    for (const k of ['meevaller', 'inflatie', 'overstreak']) {
+    for (const k of ['meevaller', 'overstreak']) {
       expect(b[k].kort, k).toBeTruthy();
       expect(b[k].kort.length, k).toBeLessThanOrEqual(42);
     }

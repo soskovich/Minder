@@ -171,10 +171,11 @@ test.describe('d · de coach-inzichten hebben één bron', () => {
     expect(kaal).not.toContain('openBehavior');
   });
 
-  test('de vier regels staan in de signalen-engine, niet op een derde oppervlak', async ({ page }) => {
+  test('de regels staan in de signalen-engine, niet op een derde oppervlak', async ({ page }) => {
     await boot(page);
     const src = await page.evaluate(() => scoreNotifs.toString());
-    for (const k of ['savrules', 'meevaller', 'inflatie', 'overstreak']) expect(src).toContain(`key:'${k}'`);
+    // v228: 'inflatie' is vervallen; de drie die over zijn wonen nog steeds hier
+    for (const k of ['savrules', 'meevaller', 'overstreak']) expect(src).toContain(`key:'${k}'`);
     await page.evaluate(() => go('ins'));
     const ins = await page.evaluate(() => $('#s-ins').innerText);
     expect(ins).not.toMatch(/gedrag/i);

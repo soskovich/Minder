@@ -10,6 +10,9 @@
 // constatering over een maandregel. Wat onder de streep overblijft zijn de plan-rijen, en dat is
 // waar deze spec de voet sindsdien aan afleest. De streep houdt zijn werk: hij scheidt op soort
 // (dot of geen dot) en niet op aantal. Wat de tegel zelf draagt staat in op-tempo.spec.js.
+// v228: de rij 'Boven je inkomen-limiet' is vervallen. De voet draagt nog één rij, 'Je potjes vanaf
+// volgende maand', en die staat er alleen als je potjes veranderen. Deze spec vult de voet daarom
+// met een volgende-maand-laag (NEXT) in plaats van met potjes boven de limiet (OVER).
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 
@@ -23,7 +26,7 @@ const APRIL = ym(new Date(now.getFullYear() + 1, 3, 1));
 // aandacht. Met o.knel zet een test het knelmoment waar hij het nodig heeft.
 const knelYm = (n) => ym(new Date(now.getFullYear(), now.getMonth() + n, 1));
 const DOELDATUM = ym(new Date(now.getFullYear() + 1, now.getMonth(), 1));
-const OVER = { boodschappen: 1800, huur: 1500, vervoer: 400 };   // potjes boven de 70%-limiet
+const NEXT = { budgetsNext: { boodschappen: 1000 } };   // wijkt af van budgets.boodschappen (900): de voet draagt een rij
 
 function seed(o) {
   o = o || {};
@@ -63,14 +66,14 @@ async function boot(page, o) {
 const kaarten = (page) => page.evaluate(() => [...document.querySelectorAll('#s-maand .card')].map((c) => ({
   kop: ((c.querySelector('.hlabel') || {}).textContent || '').trim(),
   spaarquote: /Spaarquote/.test(c.textContent),
-  limiet: /inkomen-limiet/.test(c.textContent),
+  voet: /potjes vanaf volgende maand/.test(c.textContent),
   streep: /border-top:1px solid var\(--line\)/.test(c.innerHTML),
 })));
 const tekst = (page) => page.evaluate(() => document.querySelector('#s-maand').innerText.replace(/\s+/g, ' '));
 
 test.describe('a - de twee kaarten bestaan niet meer', () => {
   test('geen kop Vermogensopbouw en geen kop Je plan', async ({ page }) => {
-    await boot(page, { budgets: OVER });
+    await boot(page, { set: NEXT });
     const koppen = (await kaarten(page)).map((c) => c.kop);
     expect(koppen).not.toContain('Vermogensopbouw');
     expect(koppen).not.toContain('Je plan');
@@ -130,15 +133,14 @@ test.describe('b - geen informatieverlies', () => {
     expect(h).toContain("openKpiDetail('inleg')");
   });
 
-  test('beide plan-rijen gaan mee, met bedrag, ingang en de 70%-zin', async ({ page }) => {
-    await boot(page, { budgets: OVER, set: { budgetsNext: { boodschappen: 1500, huur: 1500, vervoer: 400 } } });
+  test('de plan-rij gaat mee, met bedrag en ingang', async ({ page }) => {
+    await boot(page, { set: NEXT });
     const h = await page.evaluate(() => maandPlanRegels());
     expect(h).toContain('Je potjes vanaf volgende maand');
-    expect(h).toContain('Boven je inkomen-limiet');
     expect(h).toContain('openPotjesVerdeling');
-    const d = await page.evaluate(() => { const x = document.createElement('div'); x.innerHTML = maandPlanRegels(); return x.textContent; });
-    expect(d).toContain('70% van je inkomen');
-    expect(d).toContain('een spiegel, geen plafond');
+    expect(h).toContain('€2.500');   // 1500 huur + 1000 boodschappen vanaf volgende maand
+    // v228: de tweede rij ('Boven je inkomen-limiet') is vervallen
+    expect(h).not.toContain('inkomen-limiet');
   });
 });
 
@@ -146,47 +148,48 @@ test.describe('c - de streep en waar de voet hangt', () => {
   /* v226: alle drie de regels moeten dan werkelijk een beslissing vragen. Geen inleg op de
      spaarrekening (de buffer ligt dus niet op tempo) en een gat binnen de marge. */
   test('bij alleen een beslissingskaart hangt de voet daar, met streep', async ({ page }) => {
-    await boot(page, { budgets: OVER, geenSpaar: true, knel: 2 });
+    await boot(page, { set: NEXT, geenSpaar: true, knel: 2 });
     const k = await kaarten(page);
     expect(k.map((x) => x.kop)).not.toContain('Vraagt aandacht');
     const c = k.find((x) => x.kop === 'Vraagt een beslissing');
-    expect(c.limiet).toBe(true);
+    expect(c.voet).toBe(true);
     expect(c.streep).toBe(true);
     expect(c.spaarquote).toBe(false);   // die staat sinds v226 in zijn eigen kaart
   });
 
   test('is er ook een aandachtskaart, dan hangt de voet daar en niet erboven', async ({ page }) => {
-    await boot(page, { budgets: OVER, spaar: 9000, set: { nfMaanden: 6, nfDoelVast: 0, nfToegewezen: 9000 } });
+    await boot(page, { spaar: 9000, set: Object.assign({ nfMaanden: 6, nfDoelVast: 0, nfToegewezen: 9000 }, NEXT) });
     const k = await kaarten(page);
     const b = k.find((x) => x.kop === 'Vraagt een beslissing');
     const a = k.find((x) => x.kop === 'Vraagt aandacht');
     expect(b).toBeTruthy(); expect(a).toBeTruthy();
-    expect(b.limiet).toBe(false);
-    expect(a.limiet).toBe(true);
+    expect(b.voet).toBe(false);
+    expect(a.voet).toBe(true);
     // en er staan geen statusdots meer ná de streep
     expect(a.streep).toBe(true);
     expect(b.spaarquote).toBe(false); expect(a.spaarquote).toBe(false);
   });
 
   test('de streep staat er precies één keer', async ({ page }) => {
-    await boot(page, { budgets: OVER });
+    await boot(page, { set: NEXT });
     const n = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length);
     expect(n).toBe(1);
   });
 
-  test('zonder overschrijding staat de limietregel er niet', async ({ page }) => {
+  test('zonder volgende-maand-laag is de voet leeg en valt de streep weg', async ({ page }) => {
     await boot(page);
     const t = await tekst(page);
-    expect(t).not.toContain('Boven je inkomen-limiet');
+    expect(t).not.toContain('vanaf volgende maand');
     /* v226: hier stond dat de streep blijft omdat de spaarquote er nog onder staat. Die staat nu
-       in een eigen kaart, dus zonder overschrijding en zonder volgende-maand-rij is de voet leeg
-       en valt de streep weg. De spaarquote zelf staat er onverkort, alleen elders. */
+       in een eigen kaart, dus zonder volgende-maand-rij is de voet leeg en valt de streep weg.
+       De spaarquote zelf staat er onverkort, alleen elders. v228: potjes boven de limiet vullen de
+       voet niet meer, dus dit is sindsdien de gewone toestand. */
     expect(t).toMatch(/spaarquote/i);
     const streep = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length);
     expect(streep).toBe(0);
   });
 
-  test('zonder spaarquote en zonder overschrijding valt de voet en de streep weg', async ({ page }) => {
+  test('zonder spaarquote en zonder volgende-maand-laag valt de voet en de streep weg', async ({ page }) => {
     await boot(page, { geenSpaar: true, set: { savingsAcc: {}, savingMode: 'amount', savingAmount: 0 } });
     const leeg = await page.evaluate(() => maandVoet(curMonth || thisYM()));
     if (leeg === '') {
@@ -194,21 +197,21 @@ test.describe('c - de streep en waar de voet hangt', () => {
       expect(n).toBe(0);
     } else {
       // er staat toch een plan-rij onder; dan hoort de streep er juist wel te staan
-      expect(leeg).toMatch(/potjes vanaf volgende maand|inkomen-limiet/);
+      expect(leeg).toMatch(/potjes vanaf volgende maand/);
     }
   });
 
   test('maandVoetBlok zonder regels erboven draagt geen streep', async ({ page }) => {
-    await boot(page, { budgets: OVER });
+    await boot(page, { set: NEXT });
     const h = await page.evaluate(() => maandVoetBlok(curMonth || thisYM(), false));
     expect(h).not.toContain('border-top');
-    expect(h).toContain('Boven je inkomen-limiet');
+    expect(h).toContain('Je potjes vanaf volgende maand');
   });
 });
 
 test.describe('d - de rest van het scherm blijft staan', () => {
   test('maandkiezer, oordeel en coach-ingang', async ({ page }) => {
-    await boot(page, { budgets: OVER });
+    await boot(page, { set: NEXT });
     const t = await tekst(page);
     expect(t).toContain('JE MAAND');
     expect(t).toMatch(/beslissing vra/);   // 'vraagt' bij één, 'vragen' bij meer
@@ -221,10 +224,10 @@ test.describe('d - de rest van het scherm blijft staan', () => {
 
   // v226: de voet hangt aan de laatste kaart die regels draagt, en dat is hier de aandachtskaart
   test('geen sectiekop binnen de kaart', async ({ page }) => {
-    await boot(page, { budgets: OVER });
-    const k = (await kaarten(page)).find((x) => x.limiet);
+    await boot(page, { set: NEXT });
+    const k = (await kaarten(page)).find((x) => x.voet);
     const koppen = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /inkomen-limiet/.test(x.textContent));
+      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /potjes vanaf volgende maand/.test(x.textContent));
       return [...c.querySelectorAll('.hlabel')].length;
     });
     expect(k.kop).toMatch(/^Vraagt /);
@@ -233,7 +236,7 @@ test.describe('d - de rest van het scherm blijft staan', () => {
   });
 
   test('de regels onder de streep dragen geen statusdot', async ({ page }) => {
-    await boot(page, { budgets: OVER });
+    await boot(page, { set: NEXT });
     const uit = await page.evaluate(() => {
       const v = document.createElement('div'); v.innerHTML = maandVoet(curMonth || thisYM());
       return /border-radius:50%/.test(v.innerHTML);
@@ -246,7 +249,7 @@ test.describe('e - layout', () => {
   for (const w of [360, 390]) {
     test(`Maand past op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 900 });
-      await boot(page, { budgets: OVER });
+      await boot(page, { set: NEXT });
       const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(over).toBeLessThanOrEqual(1);
     });

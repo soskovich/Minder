@@ -72,22 +72,9 @@ test.describe('b · regel 2: meevaller-afhankelijkheid', () => {
   });
 });
 
-test.describe('c · regel 3: lifestyle inflation', () => {
-  const fixture = () => bouw((s, tx) => {
-    boek(tx, M1, '06', 4000, 'Bonus', 'EXTRA UITKERING');
-    boek(tx, M1, '15', -1500, 'Diverse', 'BEA, BETAALPAS DIVERSE');   // in de meevallermaand meer uitgegeven
-  });
-
-  test('vuurt op zijn voorwaarde, met zijn eigen tekst', async ({ page }) => {
-    await boot(page, fixture());
-    const n = await sig(page, 'inflatie');
-    test.skip(!n, 'deze opzet haalt de voorwaarde niet');
-    expect(n.l1).toBe('Meer binnen, meer uitgegeven');
-    expect(n.l2).toMatch(/^Zet je extraatje meteen opzij/);
-    expect(n.t).toBe('warn');
-    expect(n.h).toBe('structureel');
-  });
-});
+/* v228: regel 3 (lifestyle inflation, key 'inflatie') is vervallen. Hij stelde een verhouding vast
+   waar niets uit volgde; tests/vaststellen-zonder-gevolg.spec.js legt vast dat hij nergens meer
+   vuurt. */
 
 test.describe('d · regel 4: twee maanden op rij boven budget', () => {
   const fixture = () => bouw((s, tx) => {
@@ -120,7 +107,7 @@ test.describe('e · de vier verhuizingen samen', () => {
         boek(tx, M1, '06', 4000, 'Bonus', 'EXTRA UITKERING');
       }));
       const paren = [['savrules', 'Je spaarstortingen tellen als uitgave'], ['meevaller', 'Zonder meevaller spaar je te weinig'],
-        ['inflatie', 'Meer binnen, meer uitgegeven'], ['overstreak', 'Je geeft al maanden te veel uit'],
+        ['overstreak', 'Je geeft al maanden te veel uit'],
         ['hefboom', 'is je grootste knop']];
       let gevuurd = 0;
       for (const [key, zin] of paren) {
@@ -152,7 +139,7 @@ test.describe('e · de vier verhuizingen samen', () => {
       for (const n of scoreNotifs() || []) uit[n.key] = n.score;
       return uit;
     });
-    for (const k of ['savrules', 'meevaller', 'inflatie', 'overstreak']) {
+    for (const k of ['savrules', 'meevaller', 'overstreak']) {
       if (scores[k] != null) expect(scores[k]).toBeLessThan(72);   // onder de budget-signalen en alles daarboven
     }
   });
@@ -162,7 +149,7 @@ test.describe('e · de vier verhuizingen samen', () => {
       for (const m of [M2, M1]) boek(tx, m, '10', -150, 'Monthly Rule', 'BEA, BETAALPAS');
       s.coachOff = true;
     }));
-    for (const k of ['savrules', 'meevaller', 'inflatie', 'overstreak', 'hefboom']) {
+    for (const k of ['savrules', 'meevaller', 'overstreak', 'hefboom']) {
       expect(await sig(page, k), k).toBeNull();
     }
   });

@@ -55,7 +55,7 @@ test.describe('a · guards die door een eerdere guard al waren afgevangen', () =
     expect(await page.evaluate(() => scoreNotifs())).toEqual([]);
     await boot(page, { set: { coachOff: true } });
     const keys = await page.evaluate(() => scoreNotifs({ negeerSnooze: true }).map((n) => n.key));
-    for (const k of ['savrules', 'meevaller', 'inflatie', 'overstreak']) expect(keys).not.toContain(k);
+    for (const k of ['savrules', 'meevaller', 'overstreak']) expect(keys).not.toContain(k);
   });
 });
 

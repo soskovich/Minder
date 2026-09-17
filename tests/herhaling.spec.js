@@ -301,31 +301,9 @@ test.describe('f · het kerncijfer belooft geen verloop dat er niet is', () => {
   });
 });
 
-test.describe('g · "Boven je inkomen-limiet" heeft een gevolg en een ingang', () => {
-  const boven = { set: { budgets: { huur: 900, boodschappen: 700, uiteten: 400, shopping: 400 } } };
-
-  test('de rij draagt een zin met richting en opent de potjes', async ({ page }) => {
-    await boot(page, boven);
-    const r = await page.evaluate(() => {
-      const t = totals(kijkMaand());
-      const d = document.createElement('div'); d.innerHTML = maandPlanRegels();
-      const rij = [...d.querySelectorAll('[onclick]')].find((x) => /inkomen-limiet/.test(x.innerText));
-      return { over: t.budget > t.limit, budget: Math.round(t.budget), limiet: Math.round(t.limit),
-        tekst: rij ? rij.innerText.replace(/\s+/g, ' ') : null,
-        act: rij ? rij.getAttribute('onclick') : null };
-    });
-    expect(r.over).toBe(true);
-    expect(r.tekst).toContain(String(r.budget).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
-    expect(r.tekst).toMatch(/spiegel, geen plafond/);
-    expect(r.act).toMatch(/^openPotjesVerdeling\(/);      // een ingang, geen doodlopende regel
-  });
-
-  test('binnen de limiet staat de rij er niet', async ({ page }) => {
-    await boot(page, { set: { budgets: { huur: 900, boodschappen: 300 } } });
-    const t = await page.evaluate(() => maandPlanRegels());
-    expect(t).not.toMatch(/inkomen-limiet/);
-  });
-});
+/* v228: groep g toetste de rij 'Boven je inkomen-limiet' (v193: een zin met richting en een
+   ingang). Die rij is vervallen: hij stelde iets vast waar niets uit volgde. Wat er nu voor in de
+   plaats staat, en wat er niet meer staat, bewaakt tests/vaststellen-zonder-gevolg.spec.js. */
 
 /* v224: deze groep toetste de uitnodiging onder de kaart ('Zullen we <naam> doorlopen?'). Die tak
    is vervallen: elke regel draagt nu zijn eigen ingang. De eis eronder blijft en verscherpt zelfs:

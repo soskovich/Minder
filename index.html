@@ -2457,10 +2457,9 @@ function saveFasterTip(){
   return {label:best.label, action:best.action||'', save:best.save, perYear:best.save*12, earlier,
           datumBase:etaDatum(baseMonths), datumNew:etaDatum(newMonths)};
 }
-const PATROONSIGNALEN = {   // v205: de vier die SET.coachOff uitzet, met wat ze in gewone woorden zijn
+const PATROONSIGNALEN = {   // v205: de drie die SET.coachOff uitzet, met wat ze in gewone woorden zijn (v228: 'inflatie' is vervallen)
   savrules:   'spaarstortingen die als uitgave staan',
   meevaller:  'een meevaller in je inkomen',
-  inflatie:   'uitgaven die met je inkomen meestijgen',
   overstreak: 'maanden op rij boven je budget',
 };
 const PATROONSIGNALEN_NAAM = 'Signalen uit je patronen';   // een term per begrip (v91): de schakelaar en de sectieregel gebruiken deze
@@ -2642,8 +2641,8 @@ function scoreNotifs(opts){
      coachItems() elders en kon die functie vervallen. */
   // v197: hier stond ook TX.length, 168 regels na de guard bovenin die er al op terugkeert. Die
   // helft kon nooit onwaar zijn; hij kwam in v143 mee uit coachItems(), waar hij de enige guard was.
-  /* v205: SET.coachOff zet PRECIES deze vier uit, en de tekst bij de schakelaar noemt ze uit deze
-     tabel. v202 bracht de tekst van 'je coach staat uit' naar 'je coachsignalen staan uit' op de
+  /* v205: SET.coachOff zet PRECIES deze vier uit (sinds v228 drie: inflatie is vervallen), en de
+     tekst bij de schakelaar noemt ze uit deze tabel. v202 bracht de tekst van 'je coach staat uit' naar 'je coachsignalen staan uit' op de
      aanname dat het om alle signalen ging; het zijn er vier van de ruim veertig in deze functie, en
      de rest blijft gewoon staan. Wat de vier delen is dat Minder ze over meerdere maanden uit je
      cijfers AFLEIDT. Wat er nu speelt is een waarneming en hoort er dus buiten: een aankomende
@@ -2671,18 +2670,14 @@ function scoreNotifs(opts){
         push({key:'meevaller', h:'structureel', score:62, t:'bad', ic:ICON('coins'), kort:'Sparen leunt op meevallers',
           l1:'Zonder meevaller spaar je te weinig',
           l2:`Zet ${euro0(targetA)} automatisch opzij zodra je salaris binnen is.`, act:"go('vooruit')"});
-      // 3) lifestyle inflation
-      const spWA=Math.round(avgA(windfallA.map(r=>r.sp))), spNA=Math.round(avgA(normalA.map(r=>r.sp)));
-      if(windfallA.length>=1&&normalA.length>=1&&spWA>spNA*1.12)
-        /* v219: dit was t:'warn' en landde daarmee in 'vraagt een beslissing'. Er is hier geen
-           norm die je mist: meer inkomen met meer uitgaven kan volstrekt gezond zijn, en na een
-           baanwissel is het de verwachte gevolgtrekking. De conditie zelf zegt het al - hij vuurt
-           op een verhouding (spWA > spNA * 1.12) en niet op een grens. Dus een observatie, en die
-           hoort in 'vraagt aandacht'. */
-        push({key:'inflatie', h:'structureel', score:44, t:'info', ic:ICON('trend'), kort:'Meer binnen, meer uitgegeven',
-          l1:'Meer binnen, meer uitgegeven',
-          l2:`Zet je extraatje meteen opzij, vóór je het uitgeeft.`, act:"go('ins')"});
-      // 4) streak boven grens
+      /* v228: hier stond 'inflatie' ('Meer binnen, meer uitgegeven'), dat vuurde zodra de
+         uitgaven in meevaller-maanden twaalf procent boven die in gewone maanden lagen. v219 had
+         het al tot observatie teruggebracht omdat er geen norm in zit, alleen een verhouding.
+         Maar een observatie waar niets uit volgt is geen signaal: meer inkomen met meer uitgaven
+         kan volstrekt gezond zijn, en na een baanwissel is het de verwachte gevolgtrekking. Het is
+         vervallen, met zijn tekst, zijn korte naam en zijn regel in PATROONSIGNALEN. De andere
+         drie hier blijven, en STRUCT_STATUS.info houdt zijn lezer: 'rente' hierboven. */
+      // 3) streak boven grens
       let streakA=0; for(let i=rowsA.length-1;i>=0;i--){ if(rowsA[i].over) streakA++; else break; }
       if(streakA>=2) push({key:'overstreak', h:'structureel', score:68, t:'warn', ic:ICON('warn'), kort:'Maanden boven je grens',
         l1:'Je geeft al maanden te veel uit',
@@ -3925,35 +3920,29 @@ function maandRij(r,compact){
   </div>`;
 }
 /* v178: twee oordelen over je plan die op Inzichten in het blok over deze maand stonden. Het
-   eerste gaat over een periode die nog niet begon, het tweede weegt je potjes tegen je
-   inkomen-limiet (v53: een spiegel, geen plafond). Allebei structureel, dus horen ze hier.
+   eerste gaat over een periode die nog niet begon, het tweede woog je potjes tegen je
+   inkomen-limiet (v53: een spiegel, geen plafond). Allebei structureel, dus hoorden ze hier.
    Categorie c: ze lezen je instellingen van NU, dus bij een afgesloten maand staan ze er niet -
-   renderMaand komt daar niet eens langs. */
+   renderMaand komt daar niet eens langs.
+   v228: de tweede rij ('Boven je inkomen-limiet') is vervallen. Hij stelde vast dat je potjes
+   boven de grens lagen en zei er zelf bij dat dat mocht; er volgde niets uit, want wie zijn
+   potjes te hoog zet merkt dat aan zijn budget en niet aan dit percentage. De grens zelf blijft:
+   totals() valt erop terug zonder potjes, monthlySavingTarget() en suggestBudgets() rekenen ermee
+   en de slider in Instellingen zet hem. Alleen deze lezer is weg. Wat overblijft is één
+   voorwaardelijke rij, en zonder wijziging aan je potjes is deze functie leeg. */
 /* v187: hier stond openAansluiting(), de sheet achter de maandregel 'Aansluiting spaargeld'. Die
    regel is van Maand af en de sheet had geen andere aanroeper. Het bijsturen zelf zit onveranderd
    in spaarVrijLine() op Plan, met spaarVrijDoel()/spaarVrijToe() - nog steeds één route naar een
    toewijzing (v172). */
 function maandPlanRegels(){
-  let tb=0, pb=0, t=null;
-  try{ tb=totalBudget(); pb=plannedTotalBudget(); t=totals(kijkMaand()); }catch(_){ return ''; }
+  let tb=0, pb=0;
+  try{ tb=totalBudget(); pb=plannedTotalBudget(); }catch(_){ return ''; }
   const rijen=[];
   if(tb>0 && pb!==tb) rijen.push(`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openPotjesVerdeling('${esc(kijkMaand())}','next')">
     <span class="small">Je potjes vanaf volgende maand</span>
     <span class="small" style="font-weight:700;color:var(--teal)">${euro0(pb)} ›</span></div>`);
-  /* v193: deze rij was grijs, niet tikbaar en droeg alleen een bedrag, terwijl de rij erboven een
-     stand toont die je kunt openen. Twee soorten regel onder één kop, waarvan er een doodloopt. Hij
-     krijgt nu een zin met richting en dezelfde soort ingang als de rij erboven, zodat beide lezen
-     als een feit over je plan plus waar je heen kunt. Niets herrekend: t.budget, t.limit en
-     SET.limit staan er al, en de limiet blijft een spiegel en geen plafond (v53). */
-  if(t && t.budget>t.limit && t.limit>0) rijen.push(`<div style="padding:6px 0;cursor:pointer" onclick="openPotjesVerdeling('${esc(kijkMaand())}')">
-    <div class="row" style="justify-content:space-between">
-      <span class="small">Boven je inkomen-limiet</span>
-      <span class="small" style="font-weight:700;color:var(--teal)">${euro0(t.budget-t.limit)} ›</span></div>
-    <div class="small" style="color:var(--mut2);line-height:1.45;margin-top:3px">Je potjes vragen samen ${euro0(Math.round(t.budget))}. Dat is ${euro0(t.budget-t.limit)} boven de ${SET.limit}% van je inkomen die je als grens nam: een spiegel, geen plafond.</div></div>`);
-  /* v223: de kop 'Je plan' en de kaart eromheen zijn vervallen; deze rijen staan nu onder de
-     streep in de kaart met je maandregels. Beide rijen gaan mee: de tweede was in de opdracht
-     over het hoofd gezien, maar het is dezelfde soort constatering met een bedrag en een ingang.
-     Geen statusdot, want geen van beide vraagt een beslissing. */
+  /* v223: de kop 'Je plan' en de kaart eromheen zijn vervallen; deze rij staat onder de streep in
+     de kaart met je maandregels. Geen statusdot, want hij vraagt geen beslissing. */
   return rijen.join('');
 }
 /* v223: wat wel telt maar geen beslissing vraagt, onder een streep in dezelfde kaart als je
@@ -3964,10 +3953,10 @@ function maandPlanRegels(){
    v226: de spaarquote is hier weg en staat weer als eigen kaart. Hij is een UITKOMST en geen stand
    tegen een norm, dus hij hoorde niet in de kaart met de regels die een beslissing of aandacht
    vragen - ook niet onder de streep, want daar staan constateringen over die regels.
-   Wat overblijft zijn de plan-rijen. De streep houdt daarmee zijn werk: hij scheidt op soort en
+   Wat overblijft is de plan-rij. De streep houdt daarmee zijn werk: hij scheidt op soort en
    niet op aantal, en één rij zonder dot onder rijen met een dot is precies dat onderscheid. Staat
-   er niets onder, dan valt hij al weg (maandVoetBlok). Eén rij is het bovendien niet altijd: de
-   rij 'Je potjes vanaf volgende maand' staat er ook, als er iets verandert. */
+   er niets onder, dan valt hij al weg (maandVoetBlok). Sinds v228 is dat de gewone toestand: de
+   enige rij, 'Je potjes vanaf volgende maand', staat er alleen als er iets verandert. */
 /* m wordt sinds v226 niet meer gelezen - maandPlanRegels() leest kijkMaand() zelf. De parameter
    blijft staan omdat hij bij maandVoetBlok(m, metRegelsErboven) de tweede positie draagt; hem
    daar weghalen zou elke bestaande aanroep met twee argumenten stil verkeerd laten landen. */
@@ -9278,9 +9267,9 @@ function insBudgetBlok(m){
   const balkKleur=over?'var(--red)':(opDeGrens?'var(--amber)':'var(--accent)');
   /* Drie ingangen, elk op zijn eigen woorden - de ring en de titel van monthStatusCard vielen weg
      op de lopende maand, dus de kop en de twee bedragen nemen die rol over (v135). */
-  /* v178: 'boven inkomen-limiet' is een oordeel over je plan, niet over hoe deze maand loopt.
-     Het staat nu op Maand (maandPlanRegels), samen met 'vanaf volgende maand'. */
-  const spiegel='';
+  /* v178: 'boven inkomen-limiet' was een oordeel over je plan, niet over hoe deze maand loopt,
+     en verhuisde naar Maand (maandPlanRegels). Daar is hij in v228 vervallen. De lege
+     placeholder die hier sindsdien stond is toen meegegaan. */
   return `<div>
     <div class="row" style="gap:8px">${maandKiezerKop(m)}<span class="small muted" style="cursor:pointer" onclick="openBudgetCompare('${m}')">${isLopendeMaand(m)?`dag ${d.elapsed} van ${d.dim}`:'hele maand'} ›</span></div>
     <div class="row" style="align-items:baseline;gap:8px;margin-top:8px">
@@ -9298,7 +9287,7 @@ function insBudgetBlok(m){
     <div style="position:relative;margin:8px 0 0">
       <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${balkKleur}"></div></div>
       ${isLopendeMaand(m)?`<i title="de maand is ${dayPct}% voorbij" style="position:absolute;top:-3px;height:15px;left:${Math.min(Math.max(dayPct,0),100)}%;width:2px;background:var(--mut2);border-radius:1px"></i>`:''}</div>
-    ${isLopendeMaand(m)?`<div class="small" style="color:var(--mut2);margin-top:5px">de streep staat waar de maand nu is: ${dayPct}% voorbij</div>`:''}${budgetOverZin(sp,bud,d,over,opDeGrens)}${spiegel}</div>`;
+    ${isLopendeMaand(m)?`<div class="small" style="color:var(--mut2);margin-top:5px">de streep staat waar de maand nu is: ${dayPct}% voorbij</div>`:''}${budgetOverZin(sp,bud,d,over,opDeGrens)}</div>`;
 }
 /* v139: de eerste ingang naar het coachgesprek buiten het coachscherm. Hij haakt aan op de
    bevinding erboven en stelt er een vraag over in plaats van neutraal naar de coach te wijzen.
