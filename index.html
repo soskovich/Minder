@@ -3249,6 +3249,25 @@ function maandMetAccept(R){
     return Object.assign({}, r, {status:'let op', geaccepteerd:st.a});
   });
 }
+/* v229: de tweede poort naast geaccepteerd. Een regel waarover je deze maand een afspraak hebt
+   gemaakt vraagt geen beslissing meer: die is genomen. Hij schuift naar 'let op', draagt de
+   afspraak (r.afspraak) en verliest daarmee zijn suggestie (maandSuggestie) en zijn gespreksingang
+   (maandIngang eist 'tekort'). De regel zelf blijft staan met zijn waarde: je buffer staat nog op
+   1,1 van 3, dat feit is niet veranderd, alleen je voornemen.
+   Niet via r.opTempo: dat is een meting (bufferTempo) die zegt dat de norm op tijd gehaald wordt,
+   stuurt de gevolgzin van de bufferregel en heeft eigen tests. Een afspraak zegt niets over het
+   tempo. Dezelfde vorm als geaccepteerd (v207): een keuze over een meting heen.
+   Een acceptatie-afspraak loopt al via maandAcceptZet() en SET.maandAccept; die tak blijft leidend.
+   De poort leest coachThisMonthAfspraak(): alleen de lopende kalendermaand. Volgende maand staat
+   de regel dus vanzelf weer op 'tekort' als het tekort er nog is, en dan komt ook de terugblik. */
+function maandMetAfspraak(R){
+  let af=null; try{ af=coachThisMonthAfspraak(); }catch(_){}
+  if(!af || !af.regel || af.vorm==='accepteer') return R||[];
+  return (R||[]).map(r=>{
+    if(!r || r.key!==af.regel || r.geaccepteerd) return r;
+    return Object.assign({}, r, {status: r.status==='tekort'?'let op':r.status, afspraak:af});
+  });
+}
 // wat er te toetsen valt zodra de gat-maand bereikt is: alleen de vervallen-door-maand-acceptaties
 function maandAcceptVerlopen(){
   const A=SET.maandAccept||{}; const uit=[];
@@ -3834,7 +3853,7 @@ function maandTekort(r){
    de norm op tijd gehaald wordt. Dezelfde reden waarom de gespreksingang eronder vervalt, alleen
    heeft die geen eigen poort nodig - maandIngang() eist status 'tekort' en 'op tempo' is 'let op'. */
 function maandSuggestie(r, m){
-  if(!r || r.structureel || r.geaccepteerd || r.opTempo) return '';
+  if(!r || r.structureel || r.geaccepteerd || r.opTempo || r.afspraak) return '';   // v229: r.afspraak, zie maandMetAfspraak
   if(r.status!=='tekort' && r.status!=='let op') return '';
   let opts=[]; try{ opts=maandRegelOpties(r, m)||[]; }catch(_){}
   if(!opts.some(o=>o&&o.vorm!=='accepteer')) return '';   // niets dat de norm haalt
@@ -3913,7 +3932,8 @@ function maandRij(r,compact){
            geen eigen blok dat om aandacht vraagt. Mut, zonder ingang: de tik op de rij blijft de
            enige handeling (v193), en vastleggen doe je in het gesprek onder de kaart. */
         return `<div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg||'')}${(r.gevolg&&sug)?' ':''}${sug?`<span class="mut2">${esc(sug)}</span>`:''}</div>`; })()}
-      ${r.geaccepteerd?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:4px">Je hebt dit bewust geaccepteerd${r.geaccepteerd.tot?`, tot ${esc(resMaandLabel(r.geaccepteerd.tot))}`:''}.</div>`:''}</div>
+      ${r.geaccepteerd?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:4px">Je hebt dit bewust geaccepteerd${r.geaccepteerd.tot?`, tot ${esc(resMaandLabel(r.geaccepteerd.tot))}`:''}.</div>`:''}
+      ${(r.afspraak&&!r.geaccepteerd)?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:4px">Hier loopt een afspraak over: ${esc(r.afspraak.text||'')}.</div>`:''}</div>
     <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:42%"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>
     ${(function(){ const ing=maandIngang(r, curMonth||thisYM()); return ing?`<div style="padding:0 0 10px 17px">${ing}</div>`:''; })()}
@@ -4022,7 +4042,9 @@ function renderMaand(){
      de twee kaarten, het verband en de coach-ingang lezen de gewogen lijst. maandBeleggenRegel(R)
      hieronder houdt bewust de ONBEWERKTE R: een tekort dat jij accepteert is nog steeds een tekort,
      en beleggenKlaar() gaat over geld dat je binnen een jaar nodig hebt (v154). */
-  const RO=maandMetAccept(R).concat(STR);
+  // v229: de afspraak-poort ligt over beide lijsten, want een afspraak kan ook over een structureel
+  // signaal gaan ('Alleen vastleggen' draagt ook daar de regelKey).
+  const RO=maandMetAfspraak(maandMetAccept(R).concat(STR));
   const O=maandOordeel(RO);
   /* v134: beslissing en aandacht zijn twee dingen, en de beslisboom gebruikt die woorden al zo -
      tekort vraagt een beslissing, let op vraagt aandacht. Stonden ze samen onder één kop, dan telde
@@ -4194,11 +4216,21 @@ function afspraakUitkomst(af){
     let b=null; try{ b=(af.meet==='res')?resThisMonth(nu):savedThisMonth(nu); }catch(_){ return leeg; }
     if(b==null) return leeg;
     const v=Math.round(+af.basis||0); b=Math.round(b);
-    const afg=Math.round(+af.bedrag||0);
+    let afg=Math.round(+af.bedrag||0);
+    /* v229, route b: zonder bedrag maar met instelling is de lat wat je zelf hebt ingesteld: je
+       maandbedrag nu min je maandbedrag toen. Heb je het niet verhoogd, dan is er geen lat en geldt
+       de toets van v207; de terugblik zegt dan dat je maandbedrag nog op hetzelfde staat. */
+    let inst=null;
+    if(!(afg>0) && af.instelling!=null){
+      let nuI=null; try{ nuI=Math.round(monthlySavingTarget()); }catch(_){}
+      if(nuI!=null){ inst={toen:Math.round(+af.instelling||0), nu:nuI}; afg=Math.max(nuI-inst.toen,0); }
+    }
     const gelukt = afg>0 ? (b >= v + afg*(1-AFSPRAAK_MARGE)) : (b > v*(1+AFSPRAAK_MARGE));
-    return {status: gelukt ? 'gelukt' : 'niet gelukt', tekst:af.text||'',
+    const uit={status: gelukt ? 'gelukt' : 'niet gelukt', tekst:af.text||'',
       wat: af.meet==='res'?'Je inleg in je reserveringen':'Wat je opzij zette',
       toen:{maand:afM, bedrag:v}, nu:{maand:nu, bedrag:b}, afgesproken: afg>0?afg:null};
+    if(inst) uit.instelling=inst;
+    return uit;
   }
   /* v229: de inleg voor een aankoopdoel is een instelling (v99), dus de bron is het plan en niet
      een reeks transacties: p.alloc is wat het doel nu krijgt. Toets: ging dat met het afgesproken
@@ -4260,8 +4292,13 @@ function maandAfspraakLus(){
   if(U.status!=='niet te toetsen'){
     // v207: U.wat draagt de naam bij een inleg-afspraak; bij een categorie-afspraak is dat de categorie
     const nm=U.wat || (CATS[af.cat]?CATS[af.cat].name:'die categorie');
-    // v229: draagt de afspraak een bedrag, dan staat de lat erbij; anders alleen de beweging
-    const lat=U.afgesproken>0?` Afgesproken was ${euro0(U.afgesproken)} erbij.`:'';
+    // v229: draagt de afspraak een bedrag, dan staat de lat erbij; anders alleen de beweging.
+    // Route b: kwam de lat uit je maandbedrag, dan staat dat erbij; is dat niet verhoogd, dan zegt
+    // de regel dat, want dan was er geen lat en telde elke verhoging.
+    const lat=U.afgesproken>0
+      ? (U.instelling ? ` Je maandbedrag ging van ${euro0(U.instelling.toen)} naar ${euro0(U.instelling.nu)}, dus afgesproken was ${euro0(U.afgesproken)} erbij.`
+                      : ` Afgesproken was ${euro0(U.afgesproken)} erbij.`)
+      : (U.instelling ? ` Je maandbedrag staat nog op ${euro0(U.instelling.nu)}.` : '');
     return `<div class="card">${kop}${spiegel}
       <div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${esc(nm)} ging van ${euro0(U.toen.bedrag)} naar ${euro0(U.nu.bedrag)}.${lat}</div>${sluit}</div>`;
   }
@@ -7379,9 +7416,15 @@ function maandRegelOpties(R, m){
     if(n) uit.push({vorm:'norm', l:'Een verplichting bijstellen of schrappen',
       tekst:'Ik stel mijn reserveringen bij', extra:{vorm:'norm'}, na:na(()=>openReserveringen())});
   } else if(R.key==='buffer'){
+    /* v229: deze optie noemt geen bedrag, en het bedrag op de kaart (maandTekort: het gat naar je
+       richtbedrag) is een totaal en geen maandbedrag. De lat komt daarom uit wat je zelf instelt:
+       de afspraak draagt je maandbedrag van nu (instelling), en afspraakUitkomst() leest het
+       maandbedrag op het toetsmoment. Het verschil is het afgesproken bedrag, en dat is letterlijk
+       'ik verhoog het bedrag dat ik per maand opzij zet'. Geen nieuw getal. */
     uit.push({vorm:'inleg', l:'Mijn maandbedrag verhogen',
       tekst:'Ik verhoog het bedrag dat ik per maand opzij zet',
-      extra:{vorm:'inleg', meet:'spaar', basis:(function(){ try{ return Math.round(savedThisMonth(m)); }catch(_){ return 0; } })()},
+      extra:{vorm:'inleg', meet:'spaar', basis:(function(){ try{ return Math.round(savedThisMonth(m)); }catch(_){ return 0; } })(),
+             instelling:(function(){ try{ return Math.round(monthlySavingTarget()); }catch(_){ return 0; } })()},
       na:na(()=>openBudgetEditor())});
     uit.push({vorm:'norm', l:`Mijn richtbedrag verlagen (nu ${nfMaanden()} maanden)`,
       tekst:'Ik verlaag mijn richtbedrag voor mijn buffer', extra:{vorm:'norm'}, na:na(()=>openNoodfondsPanel())});

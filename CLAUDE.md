@@ -144,7 +144,12 @@ genoemde versietag.)*
   (`bedrag`), en `afspraakUitkomst()` toetst tegen `basis + bedrag`. De bron verschilt per
   regelKey (dekking en buffer een reeks per maand, doel een stand uit het plan). Zonder bedrag of
   zonder bron blijft de zelfrapportage-tak (`v200`). Zet nooit een totaal (`maandTekort()` bij
-  buffer) als maandbedrag in een afspraak: eenheid eerst.
+  buffer) als maandbedrag in een afspraak: eenheid eerst. Bij buffer is de lat je eigen
+  maandbedrag (`instelling`, route b).
+- **Een regel met een lopende afspraak vraagt geen beslissing** (`v229`): `maandMetAfspraak()`
+  schuift hem naar 'let op' met `r.afspraak`, naast `geaccepteerd` (`v207`); de waarde blijft
+  staan. Niet via `r.opTempo`: dat is een meting, dit is een keuze. Alleen de lopende
+  kalendermaand; daarna staat de regel vanzelf terug en komt de terugblik.
 
 ## Meetlessen
 Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als je ze herhaalt.
