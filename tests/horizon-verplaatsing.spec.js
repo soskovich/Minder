@@ -158,17 +158,19 @@ test.describe('c · een maandregel laat je niet van scherm wisselen', () => {
 });
 
 test.describe('d · de horizon van het scherm blijft kloppen', () => {
-  test('bij een afgesloten maand staat er niets over nu', async ({ page }) => {
+  /* v233: Grip leest altijd de lopende maand; de kiezer op Inzichten raakt hem niet. Wat deze test
+     bewaakte (bij een afgesloten maand staat er op Maand niets over nu) is vervallen omdat er op
+     Grip geen afgesloten maand meer bestaat. Wat ervoor in de plaats staat: de kiezer van
+     Inzichten verandert niets aan Grip. */
+  test('de kiezer van Inzichten verandert niets aan Grip', async ({ page }) => {
     await boot(page, 'maand', metAbo());
     const ms = await page.evaluate(() => months());
     test.skip(ms.length < 2, 'deze fixture heeft geen afgesloten maand');
+    const nu = await page.evaluate(() => document.querySelector('#s-maand').innerHTML);
     await page.evaluate((m) => zetKijkMaand(m), ms[ms.length - 2]);
     await page.waitForTimeout(120);
-    const t = await tekst(page, 'maand');
-    // abonnementen gaan over wat er nu loopt, en je plan is een instelling van vandaag
-    expect(t).not.toMatch(/abonnementen/i);
-    expect(t).not.toMatch(/vanaf volgende maand/i);
-    expect(t).not.toMatch(/inkomen-limiet/i);
+    expect(await page.evaluate(() => document.querySelector('#s-maand').innerHTML)).toBe(nu);
+    expect(await tekst(page, 'ins')).toMatch(/afgesloten maand/i);   // Inzichten zegt het wel
   });
 
   /* v187: de Gedrag-kaart ging op in de Valt-op-kaart, dus Verdieping hield er één over. v208: die

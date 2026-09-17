@@ -171,7 +171,7 @@ test.describe('f · deel A sloopt nog niets', () => {
       tabs: [...document.querySelectorAll('.nav a')].map((a) => a.dataset.go),
     }))).toEqual({ sact: false, focus: 'undefined', tip: 'undefined', items: 'undefined',
       acties: 'undefined', opties: 'function', nav: false,
-      tabs: ['dash', 'ins', 'maand', 'vooruit'] });
+      tabs: ['dash', 'ins', 'vooruit', 'maand'] });   // v233: Plan vóór Grip
   });
 
   /* v196: regel 5 is geen signaal geworden. De vier hierboven beschrijven een VERANDERING - een

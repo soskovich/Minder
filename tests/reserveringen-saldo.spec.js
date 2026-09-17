@@ -108,7 +108,7 @@ test.describe('b - KRITIEK: alleen het saldo, geen oordeel', () => {
 
   test('de verwijzende regel naar Maand staat er onveranderd', async ({ page }) => {
     await boot(page);
-    expect(await tekst(page)).toContain('Of je genoeg opzij hebt staan, lees je op Maand.');
+    expect(await tekst(page)).toContain('Of je genoeg opzij hebt staan, lees je op Grip.');   // v233
   });
 
   test('dekking() wordt alleen voor de telling gebruikt, niet voor een oordeel', async ({ page }) => {
@@ -143,7 +143,7 @@ test.describe('c - een onbekend saldo verschijnt niet als nul', () => {
     expect(t).not.toContain('€');
     // de kaart blijft verder zoals hij was
     expect(t).toContain('3 posten');
-    expect(t).toContain('Of je genoeg opzij hebt staan, lees je op Maand.');
+    expect(t).toContain('Of je genoeg opzij hebt staan, lees je op Grip.');
   });
 
   test('een saldo van werkelijk nul is wel een bedrag', async ({ page }) => {

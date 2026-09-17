@@ -225,7 +225,7 @@ test.describe('f · plaats en layout', () => {
     const eerste = await page.locator('#s-maand > .card').first().innerText();
     expect(eerste).toMatch(/je afspraak van vorige maand/i);
     const tweede = await page.locator('#s-maand > .card').nth(1).innerText();
-    expect(tweede).toMatch(/je maand/i);
+    expect(tweede).toMatch(/beslissing|aandacht|staan goed|niets te beoordelen/i);   // v233: de oordeelkaart, zonder kop 'Je maand'
   });
 
   for (const w of [360, 390]) {

@@ -215,10 +215,10 @@ test.describe('c - de streep en waar de voet hangt', () => {
 });
 
 test.describe('d - de rest van het scherm blijft staan', () => {
-  test('maandkiezer, oordeel en coach-ingang', async ({ page }) => {
+  test('oordeel en coach-ingang, zonder kiezer en zonder kop', async ({ page }) => {
     await boot(page, { set: NEXT });
     const t = await tekst(page);
-    expect(t).toContain('JE MAAND');
+    expect(t).not.toContain('JE MAAND');   // v233: Grip heeft geen maandkiezer en geen kop meer
     expect(t).toMatch(/beslissing vra/);   // 'vraagt' bij één, 'vragen' bij meer
     // v224: één ingang per regel met een tekort, niet meer één per scherm
     const ingangen = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/coStart\('maand'/g) || []).length);

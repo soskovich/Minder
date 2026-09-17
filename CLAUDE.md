@@ -26,7 +26,7 @@ iconen) laat `ls` je zien. Twee dingen die je daar niet aan afleest:
 - `lossAversion` — dosering: hooguit `condities.maxFramesPerDag` loss-frames per dag, nooit gestapeld, en alleen met een verplichte positieve spiegel; verlies als stakes (weken vertraging), nooit als schuld. Een geplande aankoop uit een gevuld potje telt niet als loss.
 - `temporalDiscounting` — de parkeer-lus sluiten: een geparkeerde aankoop keert in koude staat terug met dezelfde keuze (doen / nog eens parkeren / laten gaan). Na `condities.herhaalParkeerSignaal` (4) keer parkeren wordt het patroon zacht gespiegeld, zonder een beslissing af te dwingen.
 - `defaultEffect` — ontwerpprincipe (geen signaal): elke default staat zo dat nietsdoen de gezonde keuze is, altijd zichtbaar en in één tik omkeerbaar. Nooit een default die stilletjes geld beweegt of een doel zet; geen dark patterns.
-- `freshStart` — het maandmoment: in de eerste `VERSE_START_DAGEN` van een nieuwe maand geeft Maand aanleiding het gesprek te openen. Timing, geen tweede mechanisme en geen eigen state (`v195`).
+- `freshStart` — het maandmoment: in de eerste `VERSE_START_DAGEN` van een nieuwe maand geeft Grip aanleiding het gesprek te openen. Timing, geen tweede mechanisme en geen eigen state (`v195`).
 
 ## Service worker
 - Bij `controllerchange` volgt een eenmalige `location.reload()`, met een `_reloading`-guard. Haal die guard nooit weg: zonder hem herlaadt de app zichzelf in een lus.
@@ -52,7 +52,8 @@ element dat het alleen een observatie is. Een keuze leidt altijd naar een bestaa
 geen editor bij om een optie te kunnen tonen. Niets in deze laag mag aanmoedigen, belonen of scoren.
 
 ## De vier horizonnen
-Elk scherm beantwoordt precies één vraag, en een element staat op precies één scherm:
+Elk scherm beantwoordt precies één vraag, en een element staat op precies één scherm. De nav loopt
+op in horizon (`v233`): Home, Inzichten, Plan, Grip.
 - **Home** (`dash`) — waar sta ik nu.
 - **Inzichten** (`ins`) — hoe loopt deze maand (operationeel). Draagt sinds `v227` ook de
   meermaands-grafiek "Uitgaven vs budget", onder het blok over deze maand. Dat is een omkering van
@@ -60,7 +61,9 @@ Elk scherm beantwoordt precies één vraag, en een element staat op precies éé
   staat nog en `BESLISSINGEN.md` draagt beide kanten. Hij toont uitsluitend afgeronde maanden
   (`v194`), dus hij staat onder een kop die "Deze maand" zegt zonder deze maand te tonen, en hij
   rendert alleen op de lopende maand.
-- **Maand** (`maand`) — houdt mijn systeem stand (structureel).
+- **Grip** (`maand`, sinds `v233`; heette Maand) — houdt mijn systeem stand (structureel). Leest
+  altijd de lopende maand en heeft geen maandkiezer; de kiezer (`curMonth`, `kijkMaand()`) is van
+  Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`.
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Plan rekent in **maandtempo**
   (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
   restant van déze maand. Beide kloppen; wat ze verbindt hoort op Plan te staan en nergens anders.
@@ -252,7 +255,7 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v232` → `minder-v233`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v233` → `minder-v234`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

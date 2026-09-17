@@ -217,7 +217,7 @@ test.describe('f · dekking wordt op één scherm beoordeeld', () => {
     expect(r.regel.gevolg).toBe(r.zin);                  // het oordeel staat op Maand
     expect(r.kaart).not.toContain(r.zin);                // en niet op Plan
     expect(r.kaart).toMatch(/\d+ post/);                 // Plan houdt de feiten
-    expect(r.kaart).toMatch(/lees je op Maand/);         // en wijst waar het oordeel staat
+    expect(r.kaart).toMatch(/lees je op Grip/);          // en wijst waar het oordeel staat (v233: het scherm heet Grip)
   });
 });
 

@@ -254,7 +254,7 @@ test.describe('f · de spec beschrijft wat er staat', () => {
     const F = await page.evaluate(() => MECHANISM_SPEC.freshStart);
     expect(JSON.stringify(F)).not.toMatch(/freshStartGezien|maandVoornemen/);
     expect(F.vuurt).toMatch(/VERSE_START_DAGEN/);
-    expect(F.vuurt).toMatch(/Maand/);
+    expect(F.vuurt).toMatch(/Grip/);   // v233: het scherm heet Grip
     expect(F.state.join(' ')).toMatch(/geen eigen state/);
     expect(F.zwijgt.join(' ')).toMatch(/Geen historie-eis/);
   });

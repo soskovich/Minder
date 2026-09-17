@@ -130,8 +130,8 @@ test.describe('c · de coachschakelaar zegt wat hij doet', () => {
     await boot(page);
     const t = await paneel(page);
     expect(t).toContain('Signalen uit je patronen');
-    expect(t).toMatch(/in je meldingen en op Maand/);
-    expect(t).toMatch(/gesprek blijft bereikbaar vanaf Maand, Inzichten en Plan/);
+    expect(t).toMatch(/in je meldingen en op Grip/);
+    expect(t).toMatch(/gesprek blijft bereikbaar vanaf Inzichten, Plan en Grip/);   // v233: in de volgorde van de nav
     // de twee onware beweringen zijn weg
     expect(t).not.toMatch(/Actieplan/);
     expect(t).not.toMatch(/Coach-tips op je Home/);

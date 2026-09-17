@@ -50,7 +50,7 @@ test.describe('a · het scherm bestaat niet meer', () => {
       reopen: '_coReopen' in window ? window._coReopen : 'weg',
     }));
     expect(r.sectie).toBe(false);
-    expect(r.nav).toEqual(['dash', 'ins', 'maand', 'vooruit']);   // vijf tabs zijn er vier
+    expect(r.nav).toEqual(['dash', 'ins', 'vooruit', 'maand']);   // vijf tabs zijn er vier (v233: oplopend in horizon, Grip laatst)
     for (const t of r.fn) expect(t).toBe('undefined');
     expect(r.kop).toBe(0);
   });

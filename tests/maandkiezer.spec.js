@@ -106,8 +106,12 @@ test.describe('b · het bereik is months(), niet meer', () => {
   });
 });
 
+/* v233: de kiezer is van Maand af; het scherm heet Grip en leest altijd de lopende maand. Wat hier
+   over Maand stond (banner, kop-als-kiezer, geen regels, geen oordeel, vlag niet gezet, geen
+   gesprek) is vervallen, omdat er op Grip geen afgesloten maand meer bestaat. Wat ervoor in de
+   plaats staat: de kiezer van Inzichten raakt Grip niet, en Grip noemt nergens een maand. */
 test.describe('c · zichtbaar dat je niet naar nu kijkt', () => {
-  for (const scherm of ['ins', 'maand']) {
+  for (const scherm of ['ins']) {
     test(`${scherm}: de banner staat er bij een afgesloten maand, en niet bij nu`, async ({ page }) => {
       await boot(page);
       expect(await tekst(page, scherm)).not.toContain('een afgesloten maand');
@@ -125,6 +129,16 @@ test.describe('c · zichtbaar dat je niet naar nu kijkt', () => {
     });
   }
 
+  test('Grip heeft geen kiezer en geen banner, ook niet als Inzichten op een eerdere maand staat', async ({ page }) => {
+    await boot(page);
+    await kies(page, VORIGE);
+    const h = await page.evaluate(() => { go('maand'); return $('#s-maand').innerHTML; });
+    expect(h).not.toContain('openMaandKiezer()');
+    expect(h).not.toContain('een afgesloten maand');
+    expect(h).not.toContain('naarLopendeMaand()');
+    expect(await page.evaluate(() => typeof maandKiezerChip)).toBe('undefined');
+  });
+
   test('terug naar nu werkt vanaf de banner', async ({ page }) => {
     await boot(page);
     await kies(page, VORIGE);
@@ -134,28 +148,26 @@ test.describe('c · zichtbaar dat je niet naar nu kijkt', () => {
   });
 });
 
-test.describe('d · standen van nu staan niet onder een historische kop', () => {
-  test('geen enkele maandregel wordt historisch getoond', async ({ page }) => {
+test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet', () => {
+  test('met de kiezer op een eerdere maand rendert Grip byte-identiek', async ({ page }) => {
     await boot(page);
-    const nu = await tekst(page, 'maand');
-    expect(nu).toMatch(/buffer in maanden/i);          // op de lopende maand staan ze er wel
+    const nu = await page.evaluate(() => { go('maand'); return $('#s-maand').innerHTML; });
+    expect(nu).toMatch(/buffer in maanden/i);
     await kies(page, VORIGE);
-    const oud = await tekst(page, 'maand');
-    for (const woord of ['Buffer in maanden', 'Dekking reserveringen', 'Aansluiting spaargeld',
-      'Patroon van de maand']) {
-      expect(oud, woord).not.toContain(woord);
-    }
-    expect(oud).toMatch(/niet met terugwerkende kracht/);
+    const daarna = await page.evaluate(() => { go('maand'); return $('#s-maand').innerHTML; });
+    expect(daarna).toBe(nu);
+    expect(await page.evaluate(() => kijkMaand())).toBe(VORIGE);   // en Inzichten houdt zijn keuze
   });
 
-  test('geen oordeelzin die iets beoordeelt wat er niet staat', async ({ page }) => {
+  test('alles wat vanaf Grip een maand meegeeft, geeft de lopende maand mee', async ({ page }) => {
     await boot(page);
     await kies(page, VORIGE);
-    const t = await tekst(page, 'maand');
-    for (const zin of ['regels staan goed', 'ontbreekt te veel', 'vraagt een beslissing',
-      'vraagt aandacht', 'niets te beoordelen']) {
-      expect(t, zin).not.toContain(zin);
-    }
+    const r = await page.evaluate(() => { go('maand'); const h = $('#s-maand').innerHTML;
+      return { maanden: [...h.matchAll(/coStart\('maand','(\d{4}-\d{2})'/g)].map((x) => x[1]),
+        potjes: [...h.matchAll(/openPotjesVerdeling\('(\d{4}-\d{2})'/g)].map((x) => x[1]), nu: thisYM() }; });
+    for (const m of r.maanden.concat(r.potjes)) expect(m).toBe(r.nu);
+    const src = await page.evaluate(() => renderMaand.toString() + maandIngang.toString() + maandCoachIngang.toString() + maandPlanRegels.toString());
+    expect(src.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/kijkMaand\(\)|curMonth/);
   });
 
   test('wat wel per maand rekent blijft staan', async ({ page }) => {
@@ -186,13 +198,14 @@ test.describe('d · standen van nu staan niet onder een historische kop', () => 
   });
 });
 
-test.describe('e · maandGelezen blijft van de lopende maand', () => {
-  test('een afgesloten maand bekijken zet de vlag niet', async ({ page }) => {
+test.describe('e · maandGelezen is van de lopende maand', () => {
+  test('Grip openen zet de vlag, ook als Inzichten op een eerdere maand staat', async ({ page }) => {
     await boot(page);
     await kies(page, VORIGE);
     await page.evaluate(() => go('maand'));
     await page.waitForTimeout(130);
-    expect(await page.evaluate(() => SET.maandGelezen)).toBe(undefined);
+    expect(await page.evaluate(() => SET.maandGelezen)).toBe(vandaag());   // v233: Grip is altijd de lopende maand
+    expect(await page.evaluate(() => /isLopendeMaand\(\)/.test(go.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);   // de guard is weg
   });
 
   test('en onderdrukt de structurele signalen van nu niet', async ({ page }) => {
@@ -213,12 +226,12 @@ test.describe('e · maandGelezen blijft van de lopende maand', () => {
 });
 
 test.describe('f · alleen kijken', () => {
-  test('geen afspraak-ingang en geen coachgesprek in een afgesloten maand', async ({ page }) => {
+  test('geen coachgesprek op Inzichten in een afgesloten maand; Grip houdt zijn ingang', async ({ page }) => {
     await boot(page);
+    const voor = await page.evaluate(() => { go('maand'); return ($('#s-maand').innerHTML.match(/coStart\('maand'/g) || []).length; });
     await kies(page, VORIGE);
-    const h = await page.evaluate(() => $('#s-maand').innerHTML);
-    expect(h).not.toContain("coStart('maand'");
-    expect(h).not.toContain('coAfspraakOpen');
+    const na = await page.evaluate(() => { go('maand'); return ($('#s-maand').innerHTML.match(/coStart\('maand'/g) || []).length; });
+    expect(na).toBe(voor);   // v233: Grip leest nu, dus de kiezer verandert niets aan zijn ingang
     const ins = await page.evaluate(() => { go('ins'); return $('#s-ins').innerHTML; });
     expect(ins).not.toContain("coStart('lek'");
   });

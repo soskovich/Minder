@@ -60,7 +60,7 @@ test.describe('a · het scherm bestaat naast de andere', () => {
   test('sectie en tabblad, en go() werkt zoals bij de rest', async ({ page }) => {
     await boot(page);
     expect(await page.locator('#s-maand').count()).toBe(1);
-    expect(await page.locator('.nav a[data-go="maand"]').innerText()).toContain('Maand');
+    expect(await page.locator('.nav a[data-go="maand"]').innerText()).toContain('Grip');   // v233: de sleutel blijft 'maand', het label is Grip
     await page.locator('.nav a[data-go="maand"]').click();
     expect(await page.evaluate(() => document.querySelector('#s-maand').classList.contains('active'))).toBe(true);
     expect(await page.evaluate(() => localStorage.getItem('minder_view'))).toBe('maand');

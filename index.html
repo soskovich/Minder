@@ -578,8 +578,8 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
 <nav class="nav">
   <a data-go="dash" class="on"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></span>Home</a>
   <a data-go="ins"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4"/><path d="M12 2a6 6 0 0 0-3.5 10.9c.9.7 1.5 1.6 1.5 2.6V16h4v-.5c0-1 .6-1.9 1.5-2.6A6 6 0 0 0 12 2Z"/></svg></span>Inzichten</a>
-  <a data-go="maand"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>Maand</a>
   <a data-go="vooruit"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>Plan</a>
+  <a data-go="maand"><span class="i"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>Grip</a>
 </nav>
 
 <div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
@@ -3927,7 +3927,7 @@ function maandSuggestie(r, m){
    dezelfde poort; een test legt vast dat deze ene het doet. */
 function maandIngang(r, m){
   if(!r || r.status!=='tekort' || r.geaccepteerd) return '';
-  const mm=m||curMonth||thisYM();
+  const mm=m||thisYM();   // v233: Grip leest nu
   const tik=(v)=>`<div class="small" style="margin:2px 0 0;line-height:1.45;color:var(--mut2);cursor:pointer" onclick="event.stopPropagation();coStart('maand','${esc(mm)}','${esc(r.key)}')">${v} <span style="color:var(--teal);font-weight:700">›</span></div>`;
   if(r.structureel) return tik('Wil je hier een afspraak over maken?');
   const T=maandTekort(r); if(!T) return '';
@@ -3951,7 +3951,7 @@ function maandRij(r,compact){
     <div class="row" style="gap:9px;align-items:flex-start;padding:10px 0 6px;cursor:pointer" onclick="${r.act}">
     ${maandDot(r.status)}
     <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(r.naam)}</div>
-      ${(function(){ const sug=maandSuggestie(r, curMonth||thisYM());
+      ${(function(){ const sug=maandSuggestie(r, thisYM());   // v233: Grip leest nu, niet de kiezer van Inzichten
         if(!r.gevolg && !sug) return '';
         /* De suggestie sluit aan op de gevolgzin in dezelfde regel: hij hoort bij dat gevolg en is
            geen eigen blok dat om aandacht vraagt. Mut, zonder ingang: de tik op de rij blijft de
@@ -3961,7 +3961,7 @@ function maandRij(r,compact){
       ${(r.afspraak&&!r.geaccepteerd)?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:4px">Hier loopt een afspraak over: ${esc(r.afspraak.text||'')}.</div>`:''}</div>
     <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:42%"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>
-    ${(function(){ const ing=maandIngang(r, curMonth||thisYM()); return ing?`<div style="padding:0 0 10px 17px">${ing}</div>`:''; })()}
+    ${(function(){ const ing=maandIngang(r, thisYM()); return ing?`<div style="padding:0 0 10px 17px">${ing}</div>`:''; })()}
   </div>`;
 }
 /* v178: twee oordelen over je plan die op Inzichten in het blok over deze maand stonden. Het
@@ -3983,7 +3983,7 @@ function maandPlanRegels(){
   let tb=0, pb=0;
   try{ tb=totalBudget(); pb=plannedTotalBudget(); }catch(_){ return ''; }
   const rijen=[];
-  if(tb>0 && pb!==tb) rijen.push(`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openPotjesVerdeling('${esc(kijkMaand())}','next')">
+  if(tb>0 && pb!==tb) rijen.push(`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openPotjesVerdeling('${esc(thisYM())}','next')">
     <span class="small">Je potjes vanaf volgende maand</span>
     <span class="small" style="font-weight:700;color:var(--teal)">${euro0(pb)} ›</span></div>`);
   /* v223: de kop 'Je plan' en de kaart eromheen zijn vervallen; deze rij staat onder de streep in
@@ -4024,26 +4024,18 @@ function maandGelezen(){
   return `<div class="small" style="color:var(--mut2);text-align:center;margin-top:14px">Gelezen op ${dt.getDate()} ${MFULL[dt.getMonth()]} ${dt.getFullYear()}.</div>`;
 }
 function renderMaand(){
-  const m=kijkMaand();
-  /* v176: bij een afgesloten maand valt het hele regelblok weg. Alle vijf de regels lezen een stand
-     van NU - dekking() en spaarVrij() een rekeningsaldo, bufferMaanden() je spaarsaldo, maandDoel()
-     je huidige plan, en maandPatroon() leest scoreNotifs(), dat intern op ms[ms.length-1] rekent en
-     dus altijd de lopende maand beschrijft. Ze met terugwerkende kracht tonen zou suggereren dat je
-     buffer in juli op dat niveau stond terwijl je het saldo van vandaag ziet. Weglaten dus, niet
-     labelen: onder een historische kop leest een getal als historisch, hoe je het ook bijschrijft.
-     Het oordeel verdwijnt mee, want het telt de regels die er staan en er staan er geen.
-     v232: hier stond ook de spaarquote (maandKpiBlok), want die rekent wel per maand. Hij staat nu
-     op Vermogen, op de laatste afgeronde maand; verplaatsen is nooit kopiëren. */
-  if(!isLopendeMaand(m)){
-    $('#s-maand').innerHTML=`${afgeslotenMaandBanner(m)}
-      <div class="card">
-        <div class="row" style="gap:8px"><span class="hlabel" style="margin:0;flex:1">Je maand</span>${maandKiezerChip(m)}</div>
-        <div class="small muted" style="margin-top:8px;line-height:1.5">Je maand-regels gaan over hoe je er nu voor staat: je buffer, je dekking, je aansluiting spaargeld en je aankoopdoel lezen allemaal een saldo van vandaag. Die zijn niet met terugwerkende kracht te bepalen, dus voor een afgesloten maand staan ze er niet.</div>
-        <div class="small" style="margin-top:8px"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="naarLopendeMaand()">Naar ${esc(monthLabel(thisYM()))} ›</span></div>
-      </div>
-      <div style="height:12px"></div>`;
-    return;
-  }
+  /* v233: Grip leest altijd de lopende maand. Hier stond sinds v176 een maandkiezer met een
+     afgesloten-maand-tak: banner, kop 'Je maand' met chip, een uitlegzin en 'Naar <nu>'. Alle
+     regels lezen een saldo van vandaag (categorie c uit v176), dus bij een andere maand viel het
+     hele regelblok en het oordeel al weg en bleef er een leeg scherm over dat uitlegde waarom. Dat
+     scherm bestaat niet meer: er valt op Grip geen maand te kiezen. De kiezer, de banner en curMonth
+     blijven voor Inzichten, waar categorie a wel doorrekent op de gekozen maand. Grip noemt nergens
+     een maand en elke lezer vanaf Grip (maandIngang, maandSuggestie, maandCoachIngang,
+     maandPlanRegels) geeft thisYM() mee, zodat Grip en Inzichten niet stil uiteen kunnen lopen:
+     Grip heeft geen maand, en Inzichten zegt met zijn banner welke hij toont.
+     De kop 'Je maand' is meegegaan: zonder kiezer valt er geen maand te kiezen, en de kop sprak de
+     schermnaam tegen. De oordeelzin draagt het scherm. */
+  const m=thisYM();
   const R=maandRegels();
   /* v162: structurele signalen lopen mee in het oordeel volgens de bestaande beslisboom. Ze gaan
      bewust NIET naar maandCoachIngang() of maandVerband(): die kennen alleen de vaste regels, en een
@@ -4085,7 +4077,6 @@ function renderMaand(){
   $('#s-maand').innerHTML=`
     ${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
     <div class="card">
-      <div class="row" style="gap:8px;margin:0 0 6px"><span class="hlabel" style="margin:0;flex:1">Je maand</span>${maandKiezerChip(m)}</div>
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
       ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
     </div>
@@ -4159,7 +4150,7 @@ function maandAcceptSluit(key){ maandAcceptWis(key); renderMaand(); }
    dan staat die hier in plaats van de ingang: één afspraak per maand, dus niet twee wegen naar een
    nieuwe. Alleen onbekende regels betekent geen ingang. */
 function maandCoachIngang(R){
-  const m=curMonth||months()[months().length-1];
+  const m=thisYM();   // v233: Grip leest nu, niet de kiezer van Inzichten
   const af=(typeof coachThisMonthAfspraak==='function')?coachThisMonthAfspraak():null;
   if(af) return `<div class="card">
     <div class="hlabel" style="margin:0 0 6px">Je afspraak deze maand</div>
@@ -4482,7 +4473,7 @@ function resDekkingCard(){
   return `<div class="card" style="cursor:pointer" onclick="openReserveringen()">
     <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span>${standKop}</div>
     <div class="small muted" style="margin-top:4px">${D.aantal} ${D.aantal===1?'post':'posten'} \u00b7 <span style="color:var(--teal)">bekijk \u203a</span></div>
-    <div class="small muted" style="margin-top:5px;line-height:1.5">Kosten die niet elke maand vallen. Deze inleg staat los van je plan hierboven: hij concurreert niet met je spaardoelen. Of je genoeg opzij hebt staan, lees je op Maand.</div>
+    <div class="small muted" style="margin-top:5px;line-height:1.5">Kosten die niet elke maand vallen. Deze inleg staat los van je plan hierboven: hij concurreert niet met je spaardoelen. Of je genoeg opzij hebt staan, lees je op Grip.</div>
     ${resCheckLine()}</div>`;
 }
 /* Eén controlemoment op de lijst zelf: handmatige invoer drijft weg zodra een premie verandert.
@@ -6994,8 +6985,8 @@ const MECHANISM_SPEC = {
   // Die kaart is opgeheven; het effect blijft, maar als TIMING van het maandmoment en niet als
   // tweede mechanisme. De uitnodiging bestond al op Maand, alleen de aanleiding ontbrak.
   freshStart: {
-    regel: 'In de eerste dagen van een nieuwe maand mag het maandscherm aanleiding geven het gesprek te openen. Nooit terugwijzen op wat misging.',
-    vuurt: 'Op Maand, binnen VERSE_START_DAGEN na de maandwisseling, als aanhef op de bestaande coach-ingang.',
+    regel: 'In de eerste dagen van een nieuwe maand mag Grip aanleiding geven het gesprek te openen. Nooit terugwijzen op wat misging.',
+    vuurt: 'Op Grip, binnen VERSE_START_DAGEN na de maandwisseling, als aanhef op de bestaande coach-ingang.',
     condities: {
       eenPerPeriode: true,            // begrensd door de afspraak zelf: staat die er, dan is er geen uitnodiging meer
       kijktVooruitNietTerug: true,    // geen loss-frame over de vorige maand
@@ -9188,7 +9179,7 @@ function kpiInlegOpbouw(m){
     ${V.delen.map(d=>rij(d.naam,d.bedrag,d.key==='spaar'&&d.bedrag==null?'geen spaarrekening gemarkeerd':(d.key==='res'&&d.bedrag==null?'geen reserveringsrekening ingesteld':''))).join('')}
     ${V.totaal!=null?`<div class="row" style="gap:9px;padding:8px 0"><span class="small" style="flex:1;font-weight:600">Samen</span>
       <span class="small" style="font-weight:700">${euro0(V.totaal)}</span></div>`:''}
-    <div class="small muted" style="margin-top:8px;line-height:1.5">Dit cijfer zegt <b>hoeveel</b> er opzij ging, niet waar het vandaan kwam. Zette je iets opzij uit een pot in plaats van uit het inkomen van deze maand, dan telt dat hier gewoon mee; of je opbouw gedekt was door je overschot lees je op je maandscherm bij je drie voorwaarden.</div>
+    <div class="small muted" style="margin-top:8px;line-height:1.5">Dit cijfer zegt <b>hoeveel</b> er opzij ging, niet waar het vandaan kwam. Zette je iets opzij uit een pot in plaats van uit het inkomen van deze maand, dan telt dat hier gewoon mee; of je opbouw gedekt was door je overschot lees je op Grip bij je drie voorwaarden.</div>
     <div class="small muted" style="margin-top:8px;line-height:1.5">Hier buiten vallen twee stromen, bewust en niet bij vergissing.
       <b>Je aankoopdoel</b> heeft geen eigen rekening; de voortgang is een bedrag dat je zelf invult, en wordt het doel vanuit je
       spaarrekening gevoed dan telt dat geld hierboven al mee. <b>Aflossing op een lening</b> valt er ook buiten: de app kan de
@@ -9474,10 +9465,8 @@ function zetKijkMaand(m){
 }
 function naarLopendeMaand(){ curMonth=null; closeSheet(); render(); }
 // de kop is de kiezer: dezelfde hlabel als eerst, met een pijl erbij
-// zelfde kiezer, als chip naast een kop die zijn eigen titel houdt (het maandscherm)
-function maandKiezerChip(m){
-  return `<span class="small" style="color:var(--teal);font-weight:600;cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();openMaandKiezer()">${esc(monthLabel(m))} ▾</span>`;
-}
+/* v233: hier stond maandKiezerChip(), de kiezer als chip naast de kop op Maand. Grip heeft geen
+   kiezer meer; de kop-als-kiezer hieronder is van Inzichten. */
 function maandKiezerKop(m){
   return `<span class="hlabel" style="margin:0;flex:1;cursor:pointer" onclick="event.stopPropagation();openMaandKiezer()">${esc(monthLabel(m))} \u25be</span>`;
 }
@@ -10583,7 +10572,7 @@ function setCoach(){
   return `
     <label class="fld">Je naam <span class="small muted">· je coach spreekt je hiermee aan</span></label>
     <input type="text" value="${esc(SET.name||'')}" placeholder="bv. Vincent" oninput="SET.name=this.value;save();" onchange="render();">
-    <div class="toggle" style="margin-top:14px"><div><div style="font-weight:600">${PATROONSIGNALEN_NAAM}</div><div class="small muted">Wat Minder over meerdere maanden uit je cijfers afleidt: ${opsomming(Object.values(PATROONSIGNALEN))}. Die staan in je meldingen en op Maand. Meldingen over wat er nu speelt blijven staan, en je gesprek blijft bereikbaar vanaf Maand, Inzichten en Plan.</div></div>
+    <div class="toggle" style="margin-top:14px"><div><div style="font-weight:600">${PATROONSIGNALEN_NAAM}</div><div class="small muted">Wat Minder over meerdere maanden uit je cijfers afleidt: ${opsomming(Object.values(PATROONSIGNALEN))}. Die staan in je meldingen en op Grip. Meldingen over wat er nu speelt blijven staan, en je gesprek blijft bereikbaar vanaf Inzichten, Plan en Grip.</div></div>
       <label class="sw"><input type="checkbox" ${!SET.coachOff?'checked':''} onchange="SET.coachOff=!this.checked;save();render();"><span class="sl"></span></label></div>
     <div class="row" style="justify-content:space-between;margin-top:8px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openCoachAvatar()">
       <div><div style="font-weight:600">Avatar & toon</div><div class="small muted">${coachSamenvatting()}</div></div>
@@ -10888,9 +10877,9 @@ function go(name){
     // leesmoment: alleen de datum, geen streak, geen teller, geen herinnering (v130)
     /* Eerst de vlag, dan de render: anders toont "Gelezen op" de datum van de vorige keer. Dat kan
        nu veilig, want de vlag stuurt geen inhoud meer aan (v168). */
-    /* v176: het leesmoment gaat over de lopende maand. Een afgesloten maand bekijken zet die vlag
-       dus niet, en onderdrukt daarmee ook niets van het heden. */
-    if(name==='maand'){ try{ if(isLopendeMaand()){ SET.maandGelezen=vandaagYMD(); save(); } renderMaand(); }catch(_){} }
+    /* v176: het leesmoment gaat over de lopende maand. v233: Grip is altijd de lopende maand, dus
+       de guard op isLopendeMaand() is weg; de vlag stuurt nog steeds geen inhoud (v168). */
+    if(name==='maand'){ try{ SET.maandGelezen=vandaagYMD(); save(); renderMaand(); }catch(_){} }
   }
   try{ localStorage.setItem('minder_view', name); }catch(_){}
   window.scrollTo(0,0);
