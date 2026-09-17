@@ -76,6 +76,10 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **Een halve maand is geen maand** (`v194`, `v230`): een vergelijking tussen de lopende maand en
+  afgeronde maanden rendert alleen op afgeronde maanden (de meermaands-grafiek, signaal 2 van
+  `insSignals()`). Geen tempo-vergelijking als vervanging: vaste lasten passen niet in een tempo
+  (`v177`). Een lege kaart is dan de juiste uitkomst.
 - **Onbekend blijft onbekend** (`v59`, `v73`, `v173`): geen bedrag, geen oordeel en geen alarm op
   data die er niet is. Zwijgen is een geldige uitkomst. Noem de reden en één volgende stap, nooit
   een gemiddelde, een nul of een terugval die een cijfer redt.

@@ -8315,6 +8315,11 @@ function monthVsPrevInner(m){
   return {has:true,drivers,delta,partial};
 }
 // categorieën die "Hoe doe je het?" al als budget-afwijking toont, voor ontdubbeling in "Wat valt op"
+/* v230: de naam leest als 'alle categorieën met een potje', en dat is hij niet. Hier vallen alleen
+   categorieën weg die hun potje OVERSCHRIJDEN met band monitor of action, precies wat de comment
+   hierboven zegt. Een categorie met een potje waar je onder blijft gaat gewoon door naar
+   insSignals(). Dat is correct gedrag: de budgetkaart meldt een overschrijding al, en alleen die
+   zou hier dubbel staan. Niet hernoemd: de naam is het anker van specs in tests/. */
 function budgetFlaggedCats(m){
   const set=new Set();
   try{ const EB=effectiveBudgets(m).out, actual=catSpendMap(m);
@@ -8368,7 +8373,15 @@ function insSignals(m,exclude){
       imp:`Kijk of dit blijvend is; zo ja, zet er een grens op.`});
   }
   // 2) bovengemiddeld aandeel t.o.v. eigen historie
-  if(idx>=1 && curTot>0){
+  /* v230: alleen op een afgeronde maand. Het aandeel van een halve maand tegen drie hele is geen
+     vergelijking: vaste lasten zijn dan al afgeschreven en de variabele rest nog niet, dus elk
+     aandeel is opgeblazen, en het meest bij een vaste last als vervoer. Wat de kaart dan toont is
+     een bevinding die verdwijnt zodra de maand vol loopt, en dat is geen bevinding maar een fout.
+     Geen tempo-vergelijking (aandeel tot dezelfde dag): dat is de constructie die bij het
+     uitgaventempo al gerepareerd moest worden, omdat vaste lasten niet in een tempo passen (v177).
+     Dezelfde afweging als v194 bij de grafiek. De kaart mag daardoor in de lopende maand leeg zijn;
+     de andere signalen en de lek-voetregel dragen haar als er werkelijk iets opvalt. */
+  if(idx>=1 && curTot>0 && !isLopendeMaand(m)){
     const hist=ms.slice(Math.max(0,idx-3),idx); let best=null;
     for(const k of Object.keys(cur)){
       const share=cur[k]/curTot; let hs=0,hc=0;

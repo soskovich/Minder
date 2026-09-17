@@ -24,7 +24,8 @@ function seed(o = {}) {
     add(`${m}-02`, 3000, 'Werkgever', 'SALARIS LOON');
     add(`${m}-03`, -900, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
     if (o.oploop) add(`${m}-08`, -(120 + k * 90), 'Apotheek', 'BEA, BETAALPAS APOTHEEK CENTRUM');
-    if (o.uitschieter) add(`${m}-16`, m === CUR ? -700 : -60, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT');
+    // v230: signaal 2 vuurt alleen op een afgeronde maand, dus de uitschieter valt in de VORIGE maand
+    if (o.uitschieter) add(`${m}-16`, m === MS[2] ? -700 : -60, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT');
     if (o.winkel && m === CUR) add(`${m}-14`, -900, 'Mediamarkt', 'BEA, BETAALPAS MEDIAMARKT');
     if (o.piek) for (const [d, a] of [['05', -200], ['12', -200], ['19', -200], ['26', -200],
       ['07', -20], ['09', -20], ['14', -20], ['21', -20]]) add(`${m}-${d}`, a, 'Cafe De Hoek', 'BEA, BETAALPAS CAFE DE HOEK');
@@ -46,35 +47,35 @@ async function boot(page, payload) {
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof insSignals === 'function');
 }
-const signalen = (page) => page.evaluate((m) => insSignals(m, new Set()), CUR);
+const signalen = (page, m) => page.evaluate((m) => insSignals(m, new Set()), m || CUR);
 // de regel zoals hij op Inzichten staat, voor precies dit ene signaal
-const regelVoor = (page, label) => page.evaluate(([m, l]) => {
+const regelVoor = (page, label, m) => page.evaluate(([m, l]) => {
   const s = insSignals(m, new Set()).find((x) => x.kpiLabel === l);
   if (!s) return null;
   const orig = window.insSignals; window.insSignals = () => [s];
-  const d = document.createElement('div'); d.innerHTML = whatStandsOutLine(m);
+  const d = document.createElement('div'); d.innerHTML = whatStandsOutLine(m, m === thisYM());
   window.insSignals = orig;
   return { txt: d.innerText.replace(/\s+/g, ' '), html: d.innerHTML };
-}, [CUR, label]);
+}, [m || CUR, label]);
 
 test.describe('1 · elk signaal draagt een duiding en een dus-wat', () => {
   const GEVALLEN = [
     ['categorie loopt op', { oploop: true }, 'Zorg & apotheek', 'loopt al drie maanden op'],
-    ['ver boven je normaal', { uitschieter: true }, 'Uit eten & café', 'een groter deel van je uitgaven dan je gewend bent'],   // v230: de maat van de conditie
+    ['ver boven je normaal', { uitschieter: true }, 'Uit eten & café', 'een groter deel van je uitgaven dan je gewend bent', MS[2]],   // v230: de maat van de conditie, op een afgeronde maand
     ['piekdag', { piek: true }, 'Piekdag', 'van je losse geld gaat op'],
     ['grootste winkel', { winkel: true, set: { budgets: { huur: 900 } } }, 'Grootste uitgave', 'domineert je losse uitgaven'],
   ];
-  for (const [naam, opt, label, zin] of GEVALLEN) {
+  for (const [naam, opt, label, zin, maand] of GEVALLEN) {
     test(`${naam}: duiding, dus-wat en een tik of de melding dat die er niet is`, async ({ page }) => {
       await boot(page, seed(opt));
-      const alle = await signalen(page);
+      const alle = await signalen(page, maand);
       const s = alle.find((x) => x.kpiLabel === label);
       test.skip(!s, `deze fixture levert het signaal ${label} niet`);
       expect(s.hyp, 'duiding').toBeTruthy();
       expect(s.imp, 'dus-wat').toBeTruthy();
       // een tik, of expliciet gemarkeerd als alleen-spiegel: nooit stilzwijgend geen van beide
       expect(!!s.act || !!s.spiegel, 'tik of spiegel-markering').toBe(true);
-      const r = await regelVoor(page, label);
+      const r = await regelVoor(page, label, maand);
       expect(r.txt).toContain(zin);
       if (s.act) {
         expect(r.html).toContain(s.act);
