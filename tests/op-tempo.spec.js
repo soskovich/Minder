@@ -404,40 +404,17 @@ test.describe('f - een kaart zonder enig tekort', () => {
   });
 });
 
-test.describe('g - de spaarquote is een eigen kaart', () => {
-  test('hij staat niet meer in de voet onder de streep', async ({ page }) => {
+/* v232: de spaarquote is van Maand naar Vermogen verhuisd (tests/spaarquote-op-vermogen.spec.js).
+   Wat groep g hier bewaakte, dat hij niet in de voet zat en een eigen kaart zonder kop was, geldt
+   daar onverkort; op Maand staat hij nergens meer. */
+test.describe('g - de spaarquote staat niet meer op Maand', () => {
+  test('niet in de voet, niet als kaart', async ({ page }) => {
     await boot(page);
     const voet = await page.evaluate(() => maandVoet(curMonth || thisYM()));
     expect(voet).not.toMatch(/maandKpiBlok|wvo-tile/);
     const k = await kaarten(page);
-    expect(k.filter((x) => x.spaarquote).map((x) => x.kop)).toEqual(['']);   // een kaart zonder kop
-  });
-
-  test('de kaart draagt label, percentage, band en sparkline, en geen kop of uitlegzin', async ({ page }) => {
-    await boot(page);
-    const uit = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /Spaarquote/.test(x.textContent));
-      return { html: c.innerHTML, tekst: c.innerText.replace(/\s+/g, ' '), hlabels: c.querySelectorAll('.hlabel').length,
-        tegels: [...c.querySelectorAll('[data-kpi]')].map((e) => e.dataset.kpi) };
-    });
-    expect(uit.tegels).toEqual(['inleg']);
-    expect(uit.hlabels).toBe(0);
-    expect(uit.tekst).not.toMatch(/Vermogensopbouw/i);
-    expect(uit.tekst).not.toContain('Welk deel van je inkomen er opzij ging');
-    expect(uit.tekst).toMatch(/\d+%/);
-    expect(uit.tekst).toContain('wat je opzij zette en belegde');   // de band
-    expect(uit.html).toContain('spk-wrap');                          // de sparkline
-  });
-
-  test('hij staat achter de regels en voor de uitgavengrafiek', async ({ page }) => {
-    await boot(page);
-    const uit = await page.evaluate(() => {
-      const h = document.querySelector('#s-maand').innerHTML;
-      return { quote: h.indexOf('id="maandKpiBlok"'), aandacht: h.indexOf('Vraagt aandacht'), chart: h.indexOf('id="svbChart"') };
-    });
-    expect(uit.aandacht).toBeGreaterThan(-1);
-    expect(uit.quote).toBeGreaterThan(uit.aandacht);
-    if (uit.chart > -1) expect(uit.quote).toBeLessThan(uit.chart);
+    expect(k.filter((x) => x.spaarquote)).toEqual([]);
+    expect(await page.evaluate(() => document.querySelector('#s-maand').innerHTML.indexOf('id="maandKpiBlok"'))).toBe(-1);
   });
 
   /* v228: de rij 'Boven je inkomen-limiet' is vervallen, dus potjes boven de limiet vullen de voet

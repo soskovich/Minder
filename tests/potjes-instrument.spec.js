@@ -83,12 +83,15 @@ test.describe('b - de kerncijfers op Maand zijn ongemoeid', () => {
   // v209: de vaste-lastendruk is van Maand af; de spaarquote blijft, met zijn eigen blok
   // v223: de kaartschil met de kop is vervallen; de tegel staat nu onder de streep in de kaart met
   // je maandregels. Het cijfer en zijn eigen data-kpi blijven, en dat is wat deze test bewaakt.
-  test('de spaarquote staat er, met zijn eigen tegel', async ({ page }) => {
+  // v232: de spaarquote staat op Vermogen; Maand draagt hem niet meer, en de tegel is dezelfde
+  test('de spaarquote staat op Vermogen, met zijn eigen tegel, en niet op Maand', async ({ page }) => {
     await open(page, seed({ maanden: 8 }));
     const t = await maand(page);
-    expect(t.toLowerCase()).toContain('spaarquote');
+    expect(t.toLowerCase()).not.toContain('spaarquote');
     expect(t.toLowerCase()).not.toContain('vaste-lasten-druk');
-    expect(await page.evaluate(() => [...document.querySelectorAll('#maandKpiBlok [data-kpi]')].map((e) => e.dataset.kpi)))
+    const v = await page.evaluate(() => { go('vermogen'); return $('#s-vermogen').innerText.toLowerCase(); });
+    expect(v).toContain('spaarquote');
+    expect(await page.evaluate(() => [...document.querySelectorAll('#s-vermogen #maandKpiBlok [data-kpi]')].map((e) => e.dataset.kpi)))
       .toEqual(['inleg']);
   });
 

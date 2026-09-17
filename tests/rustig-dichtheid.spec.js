@@ -7,14 +7,15 @@ const { seed, open } = require('./budget-fixture');
 /* v208: het Kerncijfers-blok is van Inzichten af, dus de drietraps uitklap uit v90 leeft alleen
    nog op Maand, met SET.kpiAllMaand. Wat deze tests bewaken is ongewijzigd: Rustig start met een
    tegel en een uitklap, en je eigen keuze blijft staan. */
+// v232: de spaarquote-tegel staat op Vermogen (laatste afgeronde maand)
 async function openIns(page, mode) {
   const p = seed({ maanden: 8 });
   const set = JSON.parse(p.minder_set); set.mode = mode; p.minder_set = JSON.stringify(set);
   await open(page, p);
-  await page.evaluate(() => go('maand'));
-  await page.waitForSelector('#maandKpiBlok');
+  await page.evaluate(() => go('vermogen'));
+  await page.waitForSelector('#s-vermogen #maandKpiBlok');
 }
-const tegels = (page) => page.locator('#maandKpiBlok .wvo-tile');
+const tegels = (page) => page.locator('#s-vermogen #maandKpiBlok .wvo-tile');
 const grafiek = (page) => page.locator('#insSpendChart');
 /* v178 zette de maandgrafiek op Maand omdat hij maanden naast elkaar zet; v227 bracht hem terug
    naar Inzichten, onder het blok over deze maand. De drietraps default uit v90 verhuist beide keren
@@ -44,7 +45,7 @@ test.describe('a · kerncijfers: één cijfer, in elke modus hetzelfde', () => {
 
   test('een achtergebleven kpiAllMaand verandert niets', async ({ page }) => {
     await openIns(page, 'rustig');
-    await page.evaluate(() => { SET.kpiAllMaand = true; save(); renderMaand(); });
+    await page.evaluate(() => { SET.kpiAllMaand = true; save(); renderVermogen(); });
     await expect(tegels(page)).toHaveCount(1);
   });
 });
@@ -119,7 +120,7 @@ test.describe('c · niets anders verandert', () => {
     await openIns(page, 'rustig');
     // v208: budgetnaleving en de variabele-lastendruk zijn van Inzichten af; de spaarquote en de
     // vaste-lastendruk staan onveranderd op Maand. insKpis() rekent nog altijd alle vier.
-    const strip = await page.locator('#maandKpiBlok').innerText();
+    const strip = await page.locator('#s-vermogen #maandKpiBlok').innerText();
     expect(strip.toLowerCase()).toContain('spaarquote');
     expect(strip).not.toContain('50/30/20');            // v161: de norm stuurt de kerncijfers niet meer
     expect(await page.evaluate((m) => insKpis(m).items.length, null)).toBe(4);   // v161: vier, waarvan twee getoond

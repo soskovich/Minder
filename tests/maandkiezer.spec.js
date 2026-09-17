@@ -162,9 +162,9 @@ test.describe('d · standen van nu staan niet onder een historische kop', () => 
     await boot(page);
     await kies(page, VORIGE);
     const maand = await tekst(page, 'maand');
-    // v223: de kop 'Vermogensopbouw' is met de kaartschil vervallen; het cijfer zelf blijft en
-    // dat is wat deze test bewaakt: wat per maand rekent, staat er ook bij een andere maand.
-    expect(maand).toMatch(/spaarquote/i);
+    // v223: de kop 'Vermogensopbouw' is met de kaartschil vervallen; het cijfer zelf bleef.
+    // v232: de spaarquote staat op Vermogen en niet meer op Maand, ook niet bij een andere maand.
+    expect(maand).not.toMatch(/spaarquote/i);
     const ins = await tekst(page, 'ins');
     expect(ins).toMatch(/uitgegeven/);                 // de budgetstand rekent door
     expect(ins).toMatch(/hele maand/);                 // en niet meer "dag x van y"

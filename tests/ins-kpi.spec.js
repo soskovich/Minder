@@ -18,20 +18,23 @@ const SPEND_CUR = 445, SPEND_M1 = 1495, INK = 3000, POTJES = 2400;
 const HIST = { maanden: 8 };
 /* v208: het Kerncijfers-blok is van Inzichten af. De tegels, de sparklines en de detailsheet leven
    onveranderd op het maandscherm, met dezelfde renderer (kpiTegels); alleen de twee getoonde
-   cijfers verschillen. Deze spec toetst die laag dus daar. */
+   cijfers verschillen. Deze spec toetst die laag dus daar.
+   v232: de tegel staat op Vermogen en toont daar de laatste AFGERONDE maand (M1 in deze fixture),
+   met de maand in het label. De renderer is dezelfde; wat een test over de lopende maand wil
+   vaststellen (loopt nog, het open eindpunt) tekent hij los via maandBlok(page, CUR). */
 async function openIns(page, payload) {
   await open(page, payload || seed(HIST));
-  await page.evaluate(() => go('maand'));
-  await page.waitForSelector('#maandKpiBlok');
+  await page.evaluate(() => go('vermogen'));
+  await page.waitForSelector('#s-vermogen #maandKpiBlok');
 }
 /* In de lopende maand is het grondtal van de vaste-lastendruk EUR 20 (de huur is nog niet
    afgeschreven), dus die tegel toont geen percentage en geen sparkline - bestaand gedrag sinds
    v161/v193. Waar een test twee volwaardige tegels nodig heeft, kijken we naar een afgeronde
-   maand. */
+   maand. v232: dat is nu de maand die Vermogen zelf toont. */
 async function openIsMaand(page, payload) {
   await open(page, payload || seed(HIST));
-  await page.evaluate((m) => { curMonth = m; go('maand'); }, M1);
-  await page.waitForSelector('#maandKpiBlok');
+  await page.evaluate((m) => { curMonth = m; go('vermogen'); }, M1);
+  await page.waitForSelector('#s-vermogen #maandKpiBlok');
 }
 /* v178: de meermaands-grafiek zet deze maand naast eerdere maanden en staat sindsdien op Maand.
    De grafiek zelf is onveranderd, alleen het scherm waar hij op staat verschilt. */
@@ -54,8 +57,8 @@ function tweak(fn) {
   return p;
 }
 
-const strip = (page) => page.locator('#maandKpiBlok').innerText();
-const tegel = (page, key) => page.locator(`#maandKpiBlok .wvo-tile[data-kpi="${key}"]`);
+const strip = (page) => page.locator('#s-vermogen #maandKpiBlok').innerText();   // v232: op het scherm; een probe (maandBlok) draagt hetzelfde id
+const tegel = (page, key) => page.locator(`#s-vermogen #maandKpiBlok .wvo-tile[data-kpi="${key}"]`);
 const INS_KEYS = ['inleg'];                        // v209: de spaarquote is de enige tegel
 const MAAND_KEYS = ['budget', 'vari', 'vast'];     // v208/v209: deze drie hebben geen tegel meer
 // het maandblok is dezelfde renderer; we tekenen hem los zodat we niet op go('maand') hoeven leunen
@@ -77,9 +80,11 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
     expect(s).toMatch(/spaarquote/i);
     expect(s).toMatch(/wat je opzij zette en belegde/);
     expect(await page.locator('#maandKpiBlok .wvo-tile').count()).toBe(1);
+    expect(s).toMatch(/spaarquote · (januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)/i);   // v232: het label noemt de maand
     // v208: budgetnaleving en de variabele-lastendruk hebben geen tegel meer, op geen enkel scherm
     for (const key of MAAND_KEYS) await expect(tegel(page, key)).toHaveCount(0);
     expect(await page.locator('#s-ins .wvo-tile[data-kpi]').count()).toBe(0);
+    expect(await page.locator('#s-maand .wvo-tile[data-kpi]').count()).toBe(0);   // v232: en niet meer op Maand
   });
 
   /* v208: insKpis() rekent nog altijd vier cijfers, maar er worden er nog twee getoond. De
@@ -138,8 +143,11 @@ test.describe('a · doel en zelf-verklarende KPI\'s', () => {
     }
     /* v223: hier stond de zin 'Deze maand loopt nog: het cijfer gaat over de dagen tot nu toe, dus
        nog zonder oordeel'. Die is vervallen omdat 'loopt nog' in de tegel het al zegt, en dat is
-       precies wat deze test wil vaststellen: de lezer ziet dat de maand nog loopt. */
-    expect(await strip(page)).toMatch(/loopt nog/);
+       precies wat deze test wil vaststellen: de lezer ziet dat de maand nog loopt.
+       v232: op Vermogen staat de laatste afgeronde maand, dus daar staat 'loopt nog' niet; de
+       renderer zegt het nog wel zodra hij de lopende maand tekent. */
+    expect(await maandBlok(page, CUR)).toMatch(/loopt nog/);
+    expect(await strip(page)).not.toMatch(/loopt nog/);
   });
 
   test('een afgeronde maand krijgt wél een oordeel', async ({ page }) => {
@@ -168,8 +176,9 @@ test.describe('a2 · richting A: één datataal in de tegels', () => {
      vorm draagt; de lijn zelf is dezelfde renderer voor allebei. */
   test('elke tegel: één-kleurige lijn, open teal punt op de lopende maand, geen ring', async ({ page }) => {
     await openIns(page);
+    await maandBlok(page, CUR);   // v232: de lopende maand staat op geen scherm meer; de renderer tekent haar hier los
     for (const key of ['inleg']) {
-      const t = tegel(page, key);
+      const t = page.locator(`#maandKpiProbe .wvo-tile[data-kpi="${key}"]`);
       const lijn = t.locator('svg.spk path');
       await expect(lijn).toHaveCount(1);
       expect(await lijn.getAttribute('stroke'), key).toBe('var(--bar)');   // één rustige datakleur
@@ -190,11 +199,14 @@ test.describe('a2 · richting A: één datataal in de tegels', () => {
       expect(Math.abs(box.width - box.height), key).toBeLessThan(1.2);     // rond, niet uitgerekt
     }
     // geen teal in de lijnen zelf (de norm-regel eronder heeft wél een teal "aanpassen ›"-link)
-    const sparks = await page.locator('#maandKpiBlok .spk-wrap').evaluateAll((els) => els.map((e) => e.innerHTML).join(''));
+    const sparks = await page.locator('#maandKpiProbe .spk-wrap').evaluateAll((els) => els.map((e) => e.innerHTML).join(''));
     expect((sparks.match(/var\(--teal\)/g) || []).length).toBe(0);
-    const strip = await page.locator('#maandKpiBlok').innerHTML();
-    expect(await page.locator('#maandKpiBlok .spk-nu').count()).toBe(1);    // alleen het eindpunt van de tegel met een sparkline
+    const strip = await page.locator('#maandKpiProbe').innerHTML();
+    expect(await page.locator('#maandKpiProbe .spk-nu').count()).toBe(1);    // alleen het eindpunt van de tegel met een sparkline
     expect(strip).not.toContain('class="spark"');                          // geen bonte staafjes meer
+    // v232: de tegel op Vermogen toont een afgeronde maand en eindigt dus op een gesloten punt
+    expect(await page.locator('#s-vermogen #maandKpiBlok .spk-nu').count()).toBe(0);
+    expect(await page.locator('#s-vermogen #maandKpiBlok .spk-eind').count()).toBe(1);
   });
 
   // v103: dit legde eerst vast dat de doellijn wég moest zodra hij de lijn zou platdrukken.
@@ -257,11 +269,15 @@ test.describe('b · historische reeksen', () => {
   });
 
   test('bij één maand historie: waarde zonder trend, met nette regel', async ({ page }) => {
-    await openIns(page, tweak((set, tx) => {
+    await open(page, tweak((set, tx) => {
       for (let i = tx.length - 1; i >= 0; i--) if (!tx[i].date.startsWith(CUR)) tx.splice(i, 1);
     }));
     expect(await page.evaluate(() => months().length)).toBe(1);
-    const s = await strip(page);
+    /* v232: zonder afgeronde maand toont Vermogen geen tegel: er is geen maand om over te spreken.
+       De renderer zelf geeft op de lopende maand nog de waarde zonder trend. */
+    await page.evaluate(() => go('vermogen'));
+    expect(await page.locator('#s-vermogen #maandKpiBlok').count()).toBe(0);
+    const s = await maandBlok(page, CUR);
     /* v173: die mededeling stond per tegel en nog eens onder de maandgrafiek, drie keer op één
        scherm. De grafiek zegt het nu als enige, en dat is wat deze test bewaakt: precies één keer in
        de hele app. v178 zette die grafiek op Maand, v227 bracht hem terug naar Inzichten, dus de zin
@@ -270,7 +286,7 @@ test.describe('b · historische reeksen', () => {
     expect((pagina.match(/maanden zie je hier je verloop/gi) || []).length).toBe(1);
     expect(await page.evaluate(() => $('#s-maand').innerText)).not.toMatch(/zie je hier je verloop/i);
     expect(s).not.toMatch(/zie je hier je verloop/i);   // niet meer per tegel
-    expect(await page.locator('#maandKpiBlok .spark').count()).toBe(0);
+    expect(await page.locator('#maandKpiProbe .spark, #maandKpiProbe svg.spk').count()).toBe(0);
     expect(s).toMatch(/\d+%/);                                            // de waarde staat er wél
   });
 
@@ -329,8 +345,10 @@ test.describe('c · tik op een tegel', () => {
     expect(sheet).not.toContain('50/30/20');
     expect(sheet).toContain('volledige historie van deze metriek');
     expect(await page.locator('#kpiHist').count()).toBe(1);
-    const nMaanden = await page.evaluate(() => months().length);
+    // v232: de tik opent het detail op de maand van de tegel (M1), dus de historie loopt tot en met M1
+    const nMaanden = await page.evaluate((m) => months().filter((x) => x <= m).length, M1);
     expect(await page.locator('#kpiHist rect.cbar').count()).toBe(nMaanden);   // één staaf per maand
+    expect(await page.locator('#sheet').innerText()).toContain(await page.evaluate((m) => monthLabel(m), M1));
     expect(await page.locator('#kpiHist line[stroke-dasharray]').count()).toBe(0);   // geen band, geen lijn
   });
 
@@ -448,7 +466,7 @@ test.describe('d · uitgaven-vs-budget-grafiek', () => {
   /* v194: de drempel ging van twee naar GRAFIEK_MIN afgeronde maanden. Bij drie punten, waarvan
      een lopend, verandert er geen beslissing door de vorm. */
   test(`onder de drempel: lege staat i.p.v. een misleidende grafiek`, async ({ page }) => {
-    await openIns(page, tweak((set, tx) => {
+    await openGrafiek(page, tweak((set, tx) => {
       for (let i = tx.length - 1; i >= 0; i--) if (!tx[i].date.startsWith(CUR)) tx.splice(i, 1);
     }));
     const min = await page.evaluate(() => GRAFIEK_MIN);

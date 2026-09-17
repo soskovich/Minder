@@ -101,13 +101,18 @@ test.describe('a - de twee kaarten bestaan niet meer', () => {
 });
 
 test.describe('b - geen informatieverlies', () => {
-  test('label, percentage en band staan er', async ({ page }) => {
+  /* v232: de spaarquote staat op Vermogen, op de laatste afgeronde maand. Label, percentage en
+     band gingen mee (tests/spaarquote-op-vermogen.spec.js); hier blijft staan dat Maand hem niet
+     meer draagt en dat de renderer zelf niets verloor. */
+  test('label, percentage en band staan er, in de renderer, en niet meer op Maand', async ({ page }) => {
     await boot(page);
     const t = await tekst(page);
-    expect(t).toMatch(/spaarquote/i);
-    expect(t).toMatch(/\d+%/);
-    expect(t).toContain('wat je opzij zette en belegde');
-    expect(t).toContain('loopt nog');   // dit draagt de nuance van de vervallen zin
+    expect(t).not.toMatch(/spaarquote/i);
+    const r = await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = maandKpiBlok(curMonth || thisYM()); return d.textContent.replace(/\s+/g, ' '); });
+    expect(r).toMatch(/spaarquote/i);
+    expect(r).toMatch(/\d+%/);
+    expect(r).toContain('wat je opzij zette en belegde');
+    expect(r).toContain('loopt nog');   // dit draagt de nuance van de vervallen zin, op de lopende maand
   });
 
   test('de sparkline staat er bij genoeg historie', async ({ page }) => {
@@ -127,10 +132,10 @@ test.describe('b - geen informatieverlies', () => {
     expect(uit.tekst).toMatch(/verloop vanaf \d+/);
   });
 
-  test('de tik naar het detail blijft', async ({ page }) => {
+  test('de tik naar het detail blijft, en draagt de maand van de tegel', async ({ page }) => {
     await boot(page);
     const h = await page.evaluate(() => maandKpiBlok(curMonth || thisYM()));
-    expect(h).toContain("openKpiDetail('inleg')");
+    expect(h).toMatch(/openKpiDetail\('inleg','\d{4}-\d{2}'\)/);   // v232: het detail opent op dezelfde maand
   });
 
   test('de plan-rij gaat mee, met bedrag en ingang', async ({ page }) => {
@@ -184,7 +189,7 @@ test.describe('c - de streep en waar de voet hangt', () => {
        in een eigen kaart, dus zonder volgende-maand-rij is de voet leeg en valt de streep weg.
        De spaarquote zelf staat er onverkort, alleen elders. v228: potjes boven de limiet vullen de
        voet niet meer, dus dit is sindsdien de gewone toestand. */
-    expect(t).toMatch(/spaarquote/i);
+    expect(t).not.toMatch(/spaarquote/i);   // v232: de spaarquote staat op Vermogen
     const streep = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length);
     expect(streep).toBe(0);
   });

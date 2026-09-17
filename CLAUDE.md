@@ -67,7 +67,8 @@ Elk scherm beantwoordt precies één vraag, en een element staat op precies éé
 
 Daarnaast bestaan `tx` (Transacties), `vermogen` en `set` (Instellingen). Die dragen geen
 horizon en zijn alleen via knoppen bereikbaar, dus zet er niets op wat een van de vier hoort
-te beantwoorden.
+te beantwoorden. Vermogen draagt sinds `v232` wel de spaarquote (`maandKpiBlok()`, op de laatste
+afgeronde maand): dat is de instroom van de vermogenslaag, geen oordeel over de maand.
 
 Verplaatsen is nooit kopiëren: staat hetzelfde getal op twee schermen, dan kost dat een verificatie
 die niets oplevert. Een test leest bij een verhuizing beide schermen en eist dat het element op het
@@ -251,7 +252,7 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v231` → `minder-v232`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v232` → `minder-v233`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

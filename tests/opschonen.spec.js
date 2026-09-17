@@ -202,7 +202,8 @@ test.describe('e · KPI-detail is per KPI verschillend', () => {
     const gezien = {};
     /* v208: budgetnaleving en de variabele-lastendruk hebben geen tegel meer. De twee die
        overblijven openen elk nog hun eigen uitleg en eigen reeks. */
-    for (const [scr, blok, key] of [['maand', '#maandKpiBlok', 'inleg']]) {
+    // v232: de spaarquote-tegel staat op Vermogen
+    for (const [scr, blok, key] of [['vermogen', '#s-vermogen #maandKpiBlok', 'inleg']]) {
       await boot(page, scr);
       await page.locator(`${blok} .wvo-tile[data-kpi="${key}"]`).click();
       await page.waitForSelector('#kpiDetailHead');

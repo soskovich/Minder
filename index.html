@@ -4031,8 +4031,9 @@ function renderMaand(){
      dus altijd de lopende maand beschrijft. Ze met terugwerkende kracht tonen zou suggereren dat je
      buffer in juli op dat niveau stond terwijl je het saldo van vandaag ziet. Weglaten dus, niet
      labelen: onder een historische kop leest een getal als historisch, hoe je het ook bijschrijft.
-     Wat wel per maand rekent is maandKpiBlok(m); dat blijft staan. Het oordeel verdwijnt mee, want
-     het telt de regels die er staan en er staan er geen. */
+     Het oordeel verdwijnt mee, want het telt de regels die er staan en er staan er geen.
+     v232: hier stond ook de spaarquote (maandKpiBlok), want die rekent wel per maand. Hij staat nu
+     op Vermogen, op de laatste afgeronde maand; verplaatsen is nooit kopiëren. */
   if(!isLopendeMaand(m)){
     $('#s-maand').innerHTML=`${afgeslotenMaandBanner(m)}
       <div class="card">
@@ -4040,10 +4041,6 @@ function renderMaand(){
         <div class="small muted" style="margin-top:8px;line-height:1.5">Je maand-regels gaan over hoe je er nu voor staat: je buffer, je dekking, je aansluiting spaargeld en je aankoopdoel lezen allemaal een saldo van vandaag. Die zijn niet met terugwerkende kracht te bepalen, dus voor een afgesloten maand staan ze er niet.</div>
         <div class="small" style="margin-top:8px"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="naarLopendeMaand()">Naar ${esc(monthLabel(thisYM()))} ›</span></div>
       </div>
-      ${/* v223: hier stond maandKpiBlok(), de kaart met de kop 'Vermogensopbouw'. Die kop en de
-            twee uitlegzinnen zijn overal vervallen; de regel zelf blijft, en in deze tak is er geen
-            kaart met maandregels om in op te gaan, dus krijgt hij er een van zichzelf. */''}
-      ${(function(){ const sq=maandKpiBlok(m); return sq?`<div class="card">${sq}</div>`:''; })()}
       <div style="height:12px"></div>`;
     return;
   }
@@ -4119,14 +4116,10 @@ function renderMaand(){
     ${/* geen enkele regelkaart: dan heeft de voet geen kaart om in op te gaan en geen streep om
           iets van te scheiden, dus staat hij er als eigen kaart. */''}
     ${(beslis.length||aandacht.length||goed.length)?'':(maandVoet(m)?`<div class="card">${maandVoet(m)}</div>`:'')}
-    ${/* v226: de spaarquote weer als eigen kaart, op de plek die hij vóór v223 had: achter de
-          regels, vóór de uitgavengrafiek. Hij is een uitkomst en geen stand tegen een norm, dus
-          hij hoort niet tussen de regels die een beslissing of aandacht vragen - ook niet onder de
-          streep daar, want die constateringen gaan over diezelfde regels.
-          De kaartkop 'Vermogensopbouw' en de twee uitlegzinnen uit v223 komen niet terug: die waren
-          langer dan het cijfer dat ze toelichtten. De tegel draagt zijn label, percentage, band en
-          sparkline zelf (kpiTegels), dus dit is alleen de schil eromheen. */''}
-    ${(function(){ const sq=maandKpiBlok(m); return sq?`<div class="card">${sq}</div>`:''; })()}
+    ${/* v226: de spaarquote stond hier als eigen kaart, achter de regels. v232: hij staat op
+          Vermogen. Hij meet welk deel van je inkomen naar vermogensopbouw ging, en dat is de
+          instroom van de vermogenslaag, niet een oordeel over of je systeem standhoudt. Alles ging
+          mee: label, percentage, sparkline, band en de tik naar het detail. */''}
     ${/* v227: hier stond spendVsBudgetChart(). Die staat nu op Inzichten, onder het blok over deze
           maand. Dat is een omkering van v178, dat hem juist hierheen haalde omdat hij maanden naast
           elkaar zet en dat een structurele vraag is; de afweging staat in BESLISSINGEN.md met beide
@@ -6334,7 +6327,12 @@ function renderVermogen(){
     ${_nwBar}
     ${_nwTrend}
   </div>`;
-  $('#s-vermogen').innerHTML = head + samenvatting + nwCard + `<div class="card" style="cursor:pointer" onclick="go('fire')"><div class="row"><span style="flex:1;font-weight:700;font-size:var(--fs-md)">${ICON('trend')} Vermogensreis</span><span class="small" style="color:var(--teal);font-weight:600">bekijk ›</span></div></div>` + renderAssets() + renderDebts();   // FIRE-sectie is nu een eigen scherm (#s-fire); entree-knop altijd zichtbaar
+  /* v232: de spaarquote, van Maand hierheen. Eigen kaart, niet in de netto-vermogen-kaart: Opbouw
+     daarboven leest inkomen min uitgaven, de spaarquote leest vermogensInleg(), en twee verwante
+     metingen in één kaart lezen als één getal in twee vormen. Stand, dan tempo, dan waar je heen
+     gaat (Vermogensreis). Laatste afgeronde maand; is die er niet, dan staat er niets. */
+  const spaarquote=(function(){ try{ const mA=vermogenSpaarquoteMaand(); if(!mA) return ''; const sq=maandKpiBlok(mA,{maandInLabel:true}); return sq?`<div class="card">${sq}</div>`:''; }catch(_){ return ''; } })();
+  $('#s-vermogen').innerHTML = head + samenvatting + nwCard + spaarquote + `<div class="card" style="cursor:pointer" onclick="go('fire')"><div class="row"><span style="flex:1;font-weight:700;font-size:var(--fs-md)">${ICON('trend')} Vermogensreis</span><span class="small" style="color:var(--teal);font-weight:600">bekijk ›</span></div></div>` + renderAssets() + renderDebts();   // FIRE-sectie is nu een eigen scherm (#s-fire); entree-knop altijd zichtbaar
 }
 // ===== Coach-gedreven 'Sneller bij je doel?' =====
 // concrete, op patronen gebaseerde manieren HOE je mindert (geen generiek 'geef minder uit')
@@ -8756,7 +8754,7 @@ function insKpis(m,n){
     const g=grondtal[key];
     const klein=(v!=null && !pctZinvol(g));
     if(klein) band=`grondtal ${euro0(g)} · te klein voor een percentage`;
-    return {key, label:M.label, raw:v, ref, val:klein?euro0(g):(v==null?'—':fmt(v)), band, uitleg:M.uitleg, fmt, partial, afst,
+    return {key, m, label:M.label, raw:v, ref, val:klein?euro0(g):(v==null?'—':fmt(v)), band, uitleg:M.uitleg, fmt, partial, afst,   // v232: m mee, zodat de tik het detail op dezelfde maand opent
             grondtal:g, klein,
             oordeel: (v==null||klein)?'':(partial?'loopt nog':(KPI_WOORD[st]||'')),
             state: (v==null||partial||klein)?'n':st,      // kleur van het cijfer
@@ -8842,7 +8840,7 @@ function kpiTegels(items){
     const sl=(genoeg&&!k.klein)?miniSparkLine(k.series,{target:doel, running:k.partial}):'';
     const spark=sl?`<div class="spk-wrap">${sl}</div>`
       :((!genoeg&&!k.klein&&k.raw!=null)?kpiDeltaZin(k):'');
-    return `<div class="wvo-tile" style="cursor:pointer" onclick="openKpiDetail('${k.key}')" data-kpi="${k.key}">
+    return `<div class="wvo-tile" style="cursor:pointer" onclick="openKpiDetail('${k.key}','${esc(k.m||'')}')" data-kpi="${k.key}">
       <div class="wvo-tl">${k.label}</div>
       <div class="wvo-tv" style="color:${col}">${k.val}</div>
       <div class="wvo-ts">${k.band}${k.oordeel?` · <b style="color:${col}">${k.oordeel}</b>`:''}</div>
@@ -8901,11 +8899,20 @@ function kpiTegels(items){
    tests onderuit; de schil weghalen was de opdracht, de structuur eronder niet.
    Het id staat op een wrapper en niet op .wvo-tiles zelf, want selectors als
    '#maandKpiBlok .wvo-tiles' verwachten die nesting. */
-function maandKpiBlok(m){
+/* v232: de tegel staat op Vermogen en toont daar de laatste AFGERONDE maand. Een halve maand is
+   geen tempo (v230), en op een scherm dat over dertig jaar gaat is die halve maand ruis. Op een
+   afgeronde maand draagt de tegel een oordeel, een kleur, een afstand en een gesloten eindpunt in
+   de sparkline; 'loopt nog' komt daar dus niet voor. Het label noemt de maand, anders lees je een
+   percentage zonder te weten waarover het gaat. De naam maandKpiBlok en het id blijven: daar
+   hangen de specs aan die de tegel bewaken, en de tegel zelf is niet veranderd. */
+function vermogenSpaarquoteMaand(){ const ms=months().filter(x=>x<thisYM()); return ms.length?ms[ms.length-1]:null; }
+function maandKpiBlok(m, opts){
+  opts=opts||{};
   let K=null; try{ K=insKpis(m); }catch(_){ return ''; }
   if(!K) return '';
   const items=K.items.filter(k=>k.key==='inleg');
   if(!items.length) return '';
+  if(opts.maandInLabel) items.forEach(k=>{ k.label=`${k.label} · ${MFULL[+m.slice(5,7)-1]}`; });
   return `<div id="maandKpiBlok">
     <div class="wvo-tiles" style="grid-template-columns:1fr">${kpiTegels(items)}</div>
   </div>`;
@@ -9188,8 +9195,11 @@ function kpiInlegOpbouw(m){
       maandtermijn wel herkennen, maar niet welk deel daarvan aflossing is en welk deel rente. Schatten zou een cijfer opleveren
       dat stelliger is dan wat de app weet.</div>`;
 }
-function openKpiDetail(key){
-  const m=curMonth||months()[months().length-1];
+/* v232: het tweede argument is de maand van de tegel die je aantikte. Zonder dat opende het detail
+   curMonth, de maand van de kiezer op Inzichten en Maand, en op Vermogen toont de tegel een andere
+   maand dan die kiezer. Zonder argument gedraagt hij zich als voorheen. */
+function openKpiDetail(key, mm){
+  const m=(mm&&months().includes(mm))?mm:(curMonth||months()[months().length-1]);
   const K=insKpis(m,0); const k=K[key]; if(!k) return;                    // n=0: volledige historie
   window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;
   $('#sheet').innerHTML=`<div class="grab"></div>

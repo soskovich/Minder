@@ -13,10 +13,11 @@ const INK = 3000;
 // M1 (afgerond): vast = huur 900 + gift 20 (herkende herhaling), variabel = sport 25 + AH 400 + eten 150
 const VARI_M1 = 575;
 
+// v232: de spaarquote-tegel staat op Vermogen (laatste afgeronde maand); daar staat het tegelblok
 async function openIns(page, payload) {
   await open(page, payload || seed({ maanden: 8 }));
-  await page.evaluate(() => go('maand'));
-  await page.waitForSelector('#maandKpiBlok');
+  await page.evaluate(() => go('vermogen'));
+  await page.waitForSelector('#s-vermogen #maandKpiBlok');
 }
 function tweak(fn) {
   const p = seed({ maanden: 8 }); const set = JSON.parse(p.minder_set); fn(set);
@@ -136,7 +137,7 @@ test.describe('d · opgeruimd en de rest ongewijzigd', () => {
 test('e · de tegels passen nog steeds op 360px', async ({ page }) => {
   await openIns(page);
   await page.setViewportSize({ width: 360, height: 900 });
-  await page.evaluate(() => renderMaand());
+  await page.evaluate(() => renderVermogen());
   await page.waitForTimeout(100);
   const r = await page.evaluate(() => {
     const strip = document.getElementById('maandKpiBlok'), sb = strip.getBoundingClientRect();

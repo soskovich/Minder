@@ -8,10 +8,12 @@
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR, M1 } = require('./budget-fixture');
 
+/* v232: de tegel staat op Vermogen en toont daar de laatste afgeronde maand (M1 in deze fixture);
+   mm=null tekent de renderer los voor de lopende maand, want die staat op geen scherm meer. */
 const blok = (page, m) => page.evaluate((mm) => {
-  if (mm) curMonth = mm;
-  go('maand');
-  const b = document.getElementById('maandKpiBlok');
+  let b;
+  if (mm) { curMonth = mm; go('vermogen'); b = document.querySelector('#s-vermogen #maandKpiBlok'); }
+  else { b = document.createElement('div'); b.innerHTML = maandKpiBlok(thisYM()); document.body.appendChild(b); }
   return b ? {
     tekst: b.innerText,
     tegels: [...b.querySelectorAll('[data-kpi]')].map((e) => e.dataset.kpi),
@@ -94,7 +96,7 @@ test.describe('c - de spaarquote is ongewijzigd', () => {
     expect(b.tegels).toEqual(['inleg']);
     expect(b.sparks).toBe(1);
     expect(b.tekst.toLowerCase()).toContain('spaarquote');
-    await page.locator('#maandKpiBlok .wvo-tile[data-kpi="inleg"]').click();
+    await page.locator('#s-vermogen #maandKpiBlok .wvo-tile[data-kpi="inleg"]').click();
     await page.waitForSelector('#kpiDetailHead');
     const sheet = await page.locator('#sheet').innerText();
     expect(sheet).toContain('Spaarquote');
@@ -135,10 +137,11 @@ test.describe('c - de spaarquote is ongewijzigd', () => {
 
   /* v223: de zin 'nog zonder oordeel' is met de kaartschil vervallen. 'loopt nog' in de tegel zegt
      het al, en dat is wat deze test wil vaststellen. */
-  test('de lopende maand krijgt geen oordeel', async ({ page }) => {
+  test('de lopende maand krijgt geen oordeel, en Vermogen toont haar niet', async ({ page }) => {
     await open(page, seed({ maanden: 8 }));
     const b = await blok(page, null);
     expect(b.tekst).toContain('loopt nog');
+    expect((await blok(page, M1)).tekst).not.toContain('loopt nog');   // v232: een afgeronde maand draagt een oordeel of niets
   });
 });
 

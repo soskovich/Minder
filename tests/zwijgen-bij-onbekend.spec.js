@@ -210,9 +210,10 @@ test.describe('7 · één keer melden dat er te weinig historie is', () => {
     await boot(page, seed({ eenMaand: true }));
     await page.evaluate(() => { SET.kpiAllMaand = 1; save(); });
     // v178: de maandgrafiek die de zin draagt staat op Maand; de tegels staan op Inzichten
-    const t = (await scherm(page, 'ins')) + ' ' + (await scherm(page, 'maand'));
+    // v232: de tegel staat op Vermogen, en bij één maand (geen afgeronde) staat hij daar niet eens
+    const t = (await scherm(page, 'ins')) + ' ' + (await scherm(page, 'maand')) + ' ' + (await scherm(page, 'vermogen'));
     expect((t.match(/maanden zie je hier je verloop/gi) || []).length).toBe(1);
-    expect(await page.evaluate(() => $('#maandKpiBlok').innerText)).not.toMatch(/zie je hier je verloop/i);
+    expect(await page.evaluate(() => document.querySelectorAll('#maandKpiBlok').length)).toBe(0);
   });
 });
 
