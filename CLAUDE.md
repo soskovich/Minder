@@ -140,6 +140,11 @@ genoemde versietag.)*
   waar geen stap uit volgt die niet al elders ligt, gaat weg. Zo vervielen 'Boven je
   inkomen-limiet' (de grens blijft een meting) en 'Meer binnen, meer uitgegeven' (`inflatie`).
   `STRUCT_STATUS.info` houdt `rente` als gebruiker; een lege tak is iets anders dan een verkeerde.
+- **Een afspraak draagt zijn bedrag** (`v229`): een optie die een bedrag noemt geeft het mee
+  (`bedrag`), en `afspraakUitkomst()` toetst tegen `basis + bedrag`. De bron verschilt per
+  regelKey (dekking en buffer een reeks per maand, doel een stand uit het plan). Zonder bedrag of
+  zonder bron blijft de zelfrapportage-tak (`v200`). Zet nooit een totaal (`maandTekort()` bij
+  buffer) als maandbedrag in een afspraak: eenheid eerst.
 
 ## Meetlessen
 Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als je ze herhaalt.
@@ -230,7 +235,7 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v228` → `minder-v229`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v229` → `minder-v230`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

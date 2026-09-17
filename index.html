@@ -4184,15 +4184,34 @@ function afspraakUitkomst(af){
      Bij het aankoopdoel bestaat deze meting NIET: de inleg daar is een instelling en een doel heeft
      geen rekening en geen transacties (v99). Die keuze draagt dus geen `meet` en valt hieronder
      terug op 'niet te toetsen', net als een normwijziging. */
+  /* v229: draagt de afspraak een bedrag, dan is dat de lat: de maand na de afspraak moet er dat
+     bedrag meer heen zijn gegaan dan in de afspraakmaand, met dezelfde marge (2% van het bedrag).
+     Zonder bedrag blijft de toets van v207 staan: elke verhoging boven de marge telt. Dat is dan
+     ook wat de tekst van zo'n afspraak zegt ('ik verhoog'), niet meer en niet minder. */
   if(af.vorm==='inleg' && af.meet && af.basis!=null){
     const afM=coYm(af.ts); const nu=thisYM();
     if(nu<=afM) return leeg;                                // de maand na de afspraak is nog niet begonnen
     let b=null; try{ b=(af.meet==='res')?resThisMonth(nu):savedThisMonth(nu); }catch(_){ return leeg; }
     if(b==null) return leeg;
     const v=Math.round(+af.basis||0); b=Math.round(b);
-    return {status: (b > v*(1+AFSPRAAK_MARGE)) ? 'gelukt' : 'niet gelukt', tekst:af.text||'',
+    const afg=Math.round(+af.bedrag||0);
+    const gelukt = afg>0 ? (b >= v + afg*(1-AFSPRAAK_MARGE)) : (b > v*(1+AFSPRAAK_MARGE));
+    return {status: gelukt ? 'gelukt' : 'niet gelukt', tekst:af.text||'',
       wat: af.meet==='res'?'Je inleg in je reserveringen':'Wat je opzij zette',
-      toen:{maand:afM, bedrag:v}, nu:{maand:nu, bedrag:b}};
+      toen:{maand:afM, bedrag:v}, nu:{maand:nu, bedrag:b}, afgesproken: afg>0?afg:null};
+  }
+  /* v229: de inleg voor een aankoopdoel is een instelling (v99), dus de bron is het plan en niet
+     een reeks transacties: p.alloc is wat het doel nu krijgt. Toets: ging dat met het afgesproken
+     bedrag omhoog ten opzichte van de stand in de afspraakmaand. Is het doel weg of bereikt, dan
+     valt er niets te toetsen. */
+  if(af.vorm==='norm' && af.meet==='doel' && af.doelId && af.basis!=null && Math.round(+af.bedrag||0)>0){
+    const afM=coYm(af.ts); const nu=thisYM();
+    if(nu<=afM) return leeg;
+    let p=null; try{ p=(allocatePlan()||[]).find(x=>x && x.type==='goal' && x.id===af.doelId); }catch(_){ return leeg; }
+    if(!p) return leeg;
+    const v=Math.round(+af.basis||0), b=Math.max(Math.round(+p.alloc||0),0), afg=Math.round(+af.bedrag||0);
+    return {status: (b >= v + afg*(1-AFSPRAAK_MARGE)) ? 'gelukt' : 'niet gelukt', tekst:af.text||'',
+      wat:`Je inleg voor ${p.naam||'je doel'}`, toen:{maand:afM, bedrag:v}, nu:{maand:nu, bedrag:b}, afgesproken:afg};
   }
   if(!af.cat || !CATS[af.cat]) return leeg;                 // geen categorie: niets objectiefs te meten
   const nuM=coYm(af.ts);
@@ -4241,8 +4260,10 @@ function maandAfspraakLus(){
   if(U.status!=='niet te toetsen'){
     // v207: U.wat draagt de naam bij een inleg-afspraak; bij een categorie-afspraak is dat de categorie
     const nm=U.wat || (CATS[af.cat]?CATS[af.cat].name:'die categorie');
+    // v229: draagt de afspraak een bedrag, dan staat de lat erbij; anders alleen de beweging
+    const lat=U.afgesproken>0?` Afgesproken was ${euro0(U.afgesproken)} erbij.`:'';
     return `<div class="card">${kop}${spiegel}
-      <div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${esc(nm)} ging van ${euro0(U.toen.bedrag)} naar ${euro0(U.nu.bedrag)}.</div>${sluit}</div>`;
+      <div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${esc(nm)} ging van ${euro0(U.toen.bedrag)} naar ${euro0(U.nu.bedrag)}.${lat}</div>${sluit}</div>`;
   }
   /* v200: de zelfrapportage-tak hieronder blijft bewust bestaan. Hij werd altijd geraakt door een
      als-dan-afspraak, en die vorm is met v200 vervallen, dus hij komt zeldzamer voor. Dood is hij
@@ -7346,9 +7367,14 @@ function maandRegelOpties(R, m){
   const uit=[]; const tekort=Math.round(+R.tekortPerMaand||0);
   const na=fn=>()=>{ try{ fn(); }catch(_){} };
   if(R.key==='dekking'){
+    /* v229: de optie noemt een bedrag, dus de afspraak draagt het ook (bedrag). Zonder dat veld
+       telde over een maand elke verhoging als gelukt. Let op de eenheid: tekort is hier D.tekort,
+       een achterstand in je pot en geen maandbedrag (v222); het label zegt 'per maand' en dat is
+       een fout in dit label die hier niet is aangeraakt. De toets volgt de tekst van de afspraak:
+       ging er die maand dat bedrag meer naar je reserveringen dan in de afspraakmaand. */
     if(tekort>0) uit.push({vorm:'inleg', l:`${euro0(tekort)} per maand extra opzij zetten`,
       tekst:`Ik zet ${euro0(tekort)} per maand extra opzij voor mijn reserveringen`,
-      extra:{vorm:'inleg', meet:'res', basis:(function(){ try{ return Math.round(resThisMonth(m)); }catch(_){ return 0; } })()}});
+      extra:{vorm:'inleg', meet:'res', bedrag:tekort, basis:(function(){ try{ return Math.round(resThisMonth(m)); }catch(_){ return 0; } })()}});
     let n=0; try{ n=resLijst().length; }catch(_){}
     if(n) uit.push({vorm:'norm', l:'Een verplichting bijstellen of schrappen',
       tekst:'Ik stel mijn reserveringen bij', extra:{vorm:'norm'}, na:na(()=>openReserveringen())});
@@ -7363,10 +7389,15 @@ function maandRegelOpties(R, m){
     let d=null; try{ d=maandDoel(); }catch(_){}
     const id=d&&d.p?d.p.id:''; const nm=(d&&d.p&&d.p.naam)||'je doel';
     if(id){
-      /* Dit is naar de letter 'de inleg aanpassen', maar het is een instelling en geen gedraging,
-         dus er valt niets te meten (v99). Hij draagt daarom geen meet-veld. */
+      /* Dit is naar de letter 'de inleg aanpassen', maar het is een instelling en geen gedraging:
+         een doel heeft geen rekening en geen transacties (v99). v207 gaf hem daarom geen meet-veld.
+         v229: de optie noemt een bedrag, en wat er werkelijk gebeurt is wel te lezen, alleen niet
+         uit transacties maar uit het plan: p.alloc is de inleg die het doel nu krijgt. De afspraak
+         draagt die stand als basis en het bedrag; de toets is of de inleg met dat bedrag omhoog
+         ging. Dat is een stand van nu, geen reeks per maand. De vorm blijft 'norm'. */
       if(tekort>0) uit.push({vorm:'norm', l:`${euro0(tekort)} per maand meer inleggen`,
-        tekst:`Ik leg ${euro0(tekort)} per maand meer in voor ${nm}`, extra:{vorm:'norm'}, na:na(()=>openGoal(id))});
+        tekst:`Ik leg ${euro0(tekort)} per maand meer in voor ${nm}`,
+        extra:{vorm:'norm', meet:'doel', doelId:id, bedrag:tekort, basis:Math.max(Math.round(+(d.p.alloc)||0),0)}, na:na(()=>openGoal(id))});
       uit.push({vorm:'norm', l:'Mijn streefdatum verschuiven',
         tekst:`Ik verschuif de streefdatum van ${nm}`, extra:{vorm:'norm'}, na:na(()=>openGoal(id))});
       uit.push({vorm:'norm', l:'Mijn doelbedrag bijstellen',
