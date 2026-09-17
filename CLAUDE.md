@@ -226,6 +226,10 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   ronde die een veld raakt zijn tekst na, en laat een veld dat niets doet niet staan: weghalen of
   alsnog lezen is een keuze, maar hem laten staan is er geen.
 
+- **Een signaal toont de maat waarop het vuurt.** Signaal 2 van `insSignals()` vuurde op een
+  aandeel en toonde bedragen (`v230`): "€2.000 (jouw gemiddelde €2.000) · veel meer kwijt". Lees
+  bij elk signaal de conditie en de `kpiVal`/`kpiSub`/`hyp` naast elkaar; verschilt de maat, dan
+  kan de kaart het signaal tegenspreken zonder dat een test het ziet.
 - **Een melding kan de enige drager van een ingang zijn.** Voordat je er een laat vervallen, meet
   welke tikken eraan hangen en waar die als enige heen leiden. Een hint die "maandbedrag instellen"
   zegt kan de enige weg naar een editor zijn die verder nergens vandaan te openen is; dan is hem
@@ -240,7 +244,7 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v229` → `minder-v230`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v230` → `minder-v231`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

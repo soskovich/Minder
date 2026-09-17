@@ -8335,6 +8335,11 @@ function _catSpendOf(mm){ return catSpendMap(mm); }   // netto per categorie (te
      ver boven je normaal
        hyp: "Aan <categorie> ben je dit keer veel meer kwijt dan je gewend bent."
        imp: "Check of het eenmalig was; anders een grens op <categorie>."
+       v230: die hyp is herschreven. De conditie meet een AANDEEL (share tegen het gemiddelde
+       aandeel), de zin beweerde een bedrag, en kpiVal/kpiSub toonden bedragen. Zo kon 'Huur ·
+       €2.000 (jouw gemiddelde €2.000) · veel meer kwijt' ontstaan: hetzelfde bedrag, groter
+       aandeel omdat het maandtotaal lager lag. Tekst en getal dragen nu de maat van de conditie:
+       hyp: "Aan <categorie> gaat dit keer een groter deel van je uitgaven dan je gewend bent."
      piekdag
        hyp: "<Bijna de helft> van je losse geld gaat op <dag>."
        imp: "Zo'n vaste piek is gewoonte; een bewuste <dag> levert de meeste winst."
@@ -8366,16 +8371,21 @@ function insSignals(m,exclude){
   if(idx>=1 && curTot>0){
     const hist=ms.slice(Math.max(0,idx-3),idx); let best=null;
     for(const k of Object.keys(cur)){
-      const share=cur[k]/curTot; let hs=0,hc=0,as=0,ac=0;
-      for(const mm of hist){ const sp=_catSpendOf(mm); const tot=Object.values(sp).reduce((a,b)=>a+b,0); if(tot>0){ hs+=(sp[k]||0)/tot; hc++; } if((sp[k]||0)>0){ as+=sp[k]; ac++; } }
-      const avg=hc?hs/hc:0, avgAmt=ac?as/ac:0;
+      const share=cur[k]/curTot; let hs=0,hc=0;
+      for(const mm of hist){ const sp=_catSpendOf(mm); const tot=Object.values(sp).reduce((a,b)=>a+b,0); if(tot>0){ hs+=(sp[k]||0)/tot; hc++; } }
+      const avg=hc?hs/hc:0;   // v230: het gemiddelde BEDRAG (avgAmt) is hier weg; het werd alleen getoond en las een andere maat dan de conditie
       if(exclude.has(k)) continue;
-      if(share>=0.12 && (share-avg)>=0.05 && (!best||share>best.share)) best={k,share,avg,amt:cur[k],avgAmt};
+      if(share>=0.12 && (share-avg)>=0.05 && (!best||share>best.share)) best={k,share,avg};
     }
-    if(best){ const mult=best.avgAmt>0?best.amt/best.avgAmt:0;
+    /* v230: de conditie leest een aandeel, dus het getal en de zin ook. Hier stonden best.amt en
+       best.avgAmt (het gemiddelde bedrag over de maanden met uitgaven in deze categorie) met de zin
+       'veel meer kwijt dan je gewend bent'. Dat is een andere maat dan waarop het signaal vuurt,
+       en die twee lopen uiteen zodra het maandtotaal beweegt: een lager totaal maakt elk aandeel
+       groter terwijl het bedrag gelijk blijft of daalt. Het bedrag zelf staat in de drill-down. */
+    if(best){ const pct=Math.round(best.share*100), was=Math.round(best.avg*100);
       out.push({pri:7,act:`openCategory('${best.k}')`,
-        kpiLabel:CATS[best.k].name, kpiVal:euro0(best.amt), kpiSub:best.avgAmt>0?`jouw gemiddelde ${euro0(best.avgAmt)}`:'bovengemiddeld',
-        hyp:`Aan ${CATS[best.k].name.toLowerCase()} ben je dit keer veel meer kwijt dan je gewend bent.`,
+        kpiLabel:CATS[best.k].name, kpiVal:`${pct}% van je uitgaven`, kpiSub:`was gemiddeld ${was}%`,
+        hyp:`Aan ${CATS[best.k].name.toLowerCase()} gaat dit keer een groter deel van je uitgaven dan je gewend bent.`,
         imp:`Check of het eenmalig was; anders een grens op ${CATS[best.k].name.toLowerCase()}.`}); }
   }
   // 3) piekdag (variabele uitgaven) \u2014 netto per dag: telpoort op afschrijvingen, dag-sommen incl. terugstortingen

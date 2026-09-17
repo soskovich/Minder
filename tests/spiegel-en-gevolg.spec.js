@@ -60,7 +60,7 @@ const regelVoor = (page, label) => page.evaluate(([m, l]) => {
 test.describe('1 · elk signaal draagt een duiding en een dus-wat', () => {
   const GEVALLEN = [
     ['categorie loopt op', { oploop: true }, 'Zorg & apotheek', 'loopt al drie maanden op'],
-    ['ver boven je normaal', { uitschieter: true }, 'Uit eten & café', 'veel meer kwijt dan je gewend bent'],
+    ['ver boven je normaal', { uitschieter: true }, 'Uit eten & café', 'een groter deel van je uitgaven dan je gewend bent'],   // v230: de maat van de conditie
     ['piekdag', { piek: true }, 'Piekdag', 'van je losse geld gaat op'],
     ['grootste winkel', { winkel: true, set: { budgets: { huur: 900 } } }, 'Grootste uitgave', 'domineert je losse uitgaven'],
   ];
