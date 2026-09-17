@@ -1554,7 +1554,8 @@ function recurringSchedule(){
       nx=new Date(lastD); let g=0; do{ nx.setMonth(nx.getMonth()+intervalM); g++; }while(nx.getTime()<=today && g<60);
     }
     nx=shiftWeekendToMonday(nx);                                // incasso in het weekend -> maandag erna
-    out.push({key:k,name:r.name,cat:r.cat,type:r.type,amount:last.amt,day:lastD.getDate(),intervalM,nextDate:new Date(nx),lastDate:last.date,count:r.occ.length,monthlyEq:Math.round(last.amt/intervalM),acc:last.acc,incasso:(r.tot>0 && r.inc/r.tot>=0.5),periodic:(r.tot>0 && r.per/r.tot>=0.5)});
+    out.push({key:k,name:r.name,cat:r.cat,type:r.type,amount:last.amt,day:lastD.getDate(),intervalM,nextDate:new Date(nx),lastDate:last.date,count:r.occ.length,monthlyEq:Math.round(last.amt/intervalM),acc:last.acc,incasso:(r.tot>0 && r.inc/r.tot>=0.5),periodic:(r.tot>0 && r.per/r.tot>=0.5),
+      amts:occ.map(o=>o.amt)});   // v231: één bedrag per maand, zodat een lezer de spreiding kan meten zonder zelf te detecteren
   }
   return out.sort((a,b)=>a.nextDate-b.nextDate);
 }
@@ -1883,7 +1884,7 @@ function openFixedDue(){
   const row=(s,isExcl)=>{const c=CATS[s.cat]||CATS.overig; const kk=(s.key||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     return `<div class="tx" style="cursor:default${isExcl?';opacity:.55':''}">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">${isExcl?'niet meer terugkerend':fmt(s.day)+' · '+c.name}</div></div>
+      <div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">${isExcl?opgezegdLabel(s.key):fmt(s.day)+' · '+c.name}</div></div>
       <div class="amt neg" style="margin-right:10px${isExcl?';text-decoration:line-through;color:var(--mut2)':''}">−${euro(s.amount)}</div>
       <div onclick="toggleFixDueExcl('${kk}')" title="${isExcl?'Weer meetellen':'Uitsluiten'}">${sw(isExcl)}</div></div>`;};
   $('#sheet').innerHTML=`<div class="grab"></div>
@@ -1892,10 +1893,20 @@ function openFixedDue(){
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0;color:var(--teal)">${euro(L.fixDue)}</div></div>
     ${active.length?active.map(s=>row(s,false)).join(''):'<div class="muted small center" style="padding:16px">Geen vaste lasten die deze maand nog meetellen.</div>'}
     ${excl.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Uitgesloten · telt niet mee</div>${excl.map(s=>row(s,true)).join('')}`:''}
-    <div style="font-size:11.5px;color:var(--mut2);margin-top:14px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:9px">Ken je een post die niet meer terugkeert (opgezegd of eenmalig)? Zet 'm uit met de schakelaar. Uitgesloten posten tellen niet mee in 'nog te betalen' en 'veilig te besteden', en worden volgende maand niet opnieuw voorspeld. Terugzetten kan altijd.</div>`;
+    <div style="font-size:11.5px;color:var(--mut2);margin-top:14px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:9px">Heb je een post opgezegd, of was hij eenmalig? Zet 'm uit met de schakelaar: dan telt hij niet mee in 'nog te betalen' en 'veilig te besteden', wordt hij niet opnieuw voorspeld, en meldt Minder het als hij toch wordt afgeschreven. Dezelfde lijst staat onder Instellingen, Vaste lasten. Terugzetten kan altijd.</div>`;
   showSheetBg();
 }
-function toggleFixDueExcl(key){ if(!key) return; SET.fixDueExcl=SET.fixDueExcl||{}; if(SET.fixDueExcl[key]) delete SET.fixDueExcl[key]; else SET.fixDueExcl[key]=1; save(); try{render();}catch(_){}; openFixedDue(); toast(SET.fixDueExcl[key]?`${ICON('check')} Post uitgesloten · onthouden`:'Post telt weer mee'); }
+/* v231: één vlag voor 'deze post keert niet meer terug', met de dag waarop je dat vastlegde. Hij
+   sluit de post uit de prognose (de lezers toetsen alleen op waarheid, dus een object werkt daar
+   net als de oude 1) en maakt een afschrijving ná die dag toetsbaar (scoreNotifs, 'opgezegd-').
+   Oude vlaggen zijn 1 zonder datum: die blijven uitsluiten en krijgen geen toets, want sinds
+   wanneer is onbekend. SET.cancelFlags ('opzeggen?' op de oude abonnementenkaart) had geen lezer
+   buiten zijn eigen sheet en betekende een voornemen, geen feit; hij wordt niet meer geschreven
+   en niet gemigreerd (v214: geen stille schrijfactie op je data). */
+function opgezegdSinds(key){ const f=(SET.fixDueExcl||{})[key]; if(!f) return null; return (typeof f==='object'&&f.sinds)?String(f.sinds):''; }
+function opgezegdLabel(key){ const s=opgezegdSinds(key); return s===null?'':(s?`Opgezegd op ${dagKort(s)}`:'Opgezegd'); }
+function dagKort(ymd){ const d=String(ymd||''); return d.length>=10?`${+d.slice(8,10)} ${MNAMES[+d.slice(5,7)-1]||''}`:d; }
+function toggleFixDueExcl(key, terug){ if(!key) return; SET.fixDueExcl=SET.fixDueExcl||{}; if(SET.fixDueExcl[key]) delete SET.fixDueExcl[key]; else SET.fixDueExcl[key]={sinds:vandaagYMD()}; save(); try{render();}catch(_){}; if(terug==='vaste') openVasteLasten(); else openFixedDue(); toast(SET.fixDueExcl[key]?`${ICON('check')} Opgezegd · onthouden`:'Post telt weer mee'); }
 // drill-down: verwachte variabele uitgaven onderverdeeld per categoriebudget
 // drill vanuit 'Uitgegeven' op de budgetkaart: waar ging je geld deze maand heen (per categorie → openCategory).
 // Maand-drill-down: hier wonen sinds v66 de categorieën én de top uitgaven, met een segment-toggle
@@ -2568,6 +2579,20 @@ function scoreNotifs(opts){
     const med=a=>{const z=a.slice().sort((x,y)=>x-y);return z.length?z[Math.floor(z.length/2)]:0;};
     let big=null; for(const x of recent){ const a=-x.amount, mref=med(byCat[catOf(x)]||[a]); if(a>=75 && a>=mref*2.5 && (!big||a>-big.amount)) big=x; }
     if(big) push({key:'big-'+big.id,score:56,t:'info',ic:ICON('alert'),l1:`Grote uitgave bij ${cleanMerch(big.name)}, hoger dan je gebruikelijk.`,l2:'Klopt dit? Bekijk',act:`openSheet('${big.id}')`}); }catch(_){}
+  /* v231: een afschrijving van een post die je als opgezegd hebt vastgelegd. Dit is de ene afwijking
+     waarvoor jij een feit inbrengt (de datum in SET.fixDueExcl); prijsverhoging en dubbele
+     afschrijving zijn open en vragen bedragen per voorkomen. Horizon direct: het gaat over één
+     boeking van nu, niet over een patroon. Buiten de coachOff-guard, om dezelfde reden als park-:
+     je hebt hier zelf om gevraagd. Een oude vlag zonder datum krijgt geen melding. */
+  try{ const F=SET.fixDueExcl||{}; const met=Object.keys(F).filter(k=>F[k]&&typeof F[k]==='object'&&F[k].sinds);
+    if(met.length){ const ks=new Set(met); const laatst={};
+      for(const t of TX){ if(!(t.amount<0)||t.pending) continue; if(!(isIncasso(t)||isPeriodicTransfer(t))) continue;
+        const k=recurKey(t); if(!ks.has(k) || !(t.date>String(F[k].sinds))) continue;
+        if(!laatst[k]||t.date>laatst[k].date) laatst[k]=t; }
+      for(const k in laatst){ const t=laatst[k];
+        push({key:'opgezegd-'+k.replace(/[^A-Z0-9]/g,'').slice(0,16), h:'direct', score:64, t:'warn', ic:ICON('repeat'),
+          l1:`${cleanMerch(t.name)||t.name} is op ${dagKort(t.date)} toch afgeschreven.`,
+          l2:`Je gaf aan dat je dit had opgezegd. Bekijk de boeking`, act:`openSheet('${t.id}')`}); } } }catch(_){}
   if(isNow){ try{ const inc=txOfMonth(m).find(x=>x.amount>0 && CATS[catOf(x)].type==='income' && x.date===today);
     if(inc){ const tgt=Math.round(monthlySavingTarget()); push({key:'salary-'+today, h:'direct',score:76,t:'good',ic:ICON('wallet'),l1:'Je salaris staat erop.',l2:tgt>0?`Zet nu ${euro0(tgt)} opzij`:'Zet eerst je sparen apart',act:"go('vooruit')"}); } }catch(_){} }
   try{ const tom=new Date(now); tom.setDate(tom.getDate()+1); tom.setHours(0,0,0,0);
@@ -4106,7 +4131,10 @@ function renderMaand(){
           maand. Dat is een omkering van v178, dat hem juist hierheen haalde omdat hij maanden naast
           elkaar zet en dat een structurele vraag is; de afweging staat in BESLISSINGEN.md met beide
           kanten erbij. Verplaatsen is nooit kopiëren: hij staat hier niet meer. */''}
-    ${subsCard()}
+    ${/* v231: hier stond subsCard(), de abonnementenkaart. Een lijst is structureel, maar op het
+          maandmoment gaat het over of je systeem standhoudt, niet over welke abonnementen je hebt.
+          De lijst staat nu onder Instellingen (Vaste lasten), samengevoegd met de lijst van de
+          liquiditeitsprognose, en alleen een afwijking komt terug: als melding. */''}
     ${maandBeleggenRegel(R)}
     ${(!beslis.length&&!aandacht.length)?maandCoachIngang(RO):''}
     ${maandGelezen()}
@@ -6338,10 +6366,14 @@ function goalCoachTips(m){
       tips.push(tipMaak({key:'tip_small', icon:ICON('cart'), label:'Kleine aankopen bundelen',
         context:`Je deed deze maand <b>${small.length} kleine aankopen</b> onder de 15 euro, samen ${euro0(som)}.`,
         action:`Doe je kleine aankopen op één vast moment per week in plaats van tussendoor.`, save})); } }catch(_){}
-  try{ let subs=[]; if(typeof subscriptionsList==='function') subs=subscriptionsList()||[]; const tot=subs.reduce((a,x)=>a+(x.amount||x.bedrag||0),0);
+  /* v231: deze tip las x.amount||x.bedrag op objecten die alleen x.monthly droegen, dus het totaal
+     was altijd 0 en tot>=15 nooit waar: hij heeft sinds die veldnaam niet gevuurd. Hij leest nu de
+     opzegbare posten uit de gedeelde lijst (vasteLasten), zonder wat je al hebt opgezegd, met
+     monthlyEq. Niet de hele lijst: 'zeg er één op die je niet meer gebruikt' klopt niet bij huur. */
+  try{ let subs=[]; if(typeof opzegbarePosten==='function') subs=(opzegbarePosten()||[]).filter(x=>!x.opgezegd); const tot=subs.reduce((a,x)=>a+(+x.monthlyEq||0),0);
     if(subs.length>=2 && tot>=15){ const save=Math.max(Math.round(tot*0.3/5)*5,10);
       tips.push(tipMaak({key:'tip_subs', icon:ICON('repeat'), label:'Abonnementen nalopen',
-        context:`Je hebt <b>${subs.length} abonnementen</b>, samen ${euro0(tot)} per maand — ${euro0(tot*12)} per jaar.`,
+        context:`Je hebt <b>${subs.length} opzegbare vaste posten</b>, samen ${euro0(tot)} per maand, ${euro0(tot*12)} per jaar.`,
         action:`Loop ze deze week één keer door en zeg er één op die je niet meer gebruikt.`, save})); } }catch(_){}
   try{ const days=[0,0,0,0,0,0,0]; const nm=['zondag','maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag']; let tot=0;
     for(const t of txOfMonth(m)){ const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense'||isFixed(t))continue; days[new Date(t.date).getDay()]+=-t.amount; tot+=-t.amount; }   // netto per dag
@@ -7563,14 +7595,14 @@ async function coTopicPotjes(m){
 }
 async function coTopicVast(m){
   const _g=_coGen; let subs=[];
-  try{ subs=(subscriptionsList()||[]).slice(0,3); }catch(_){}
+  try{ subs=(opzegbarePosten()||[]).filter(x=>!x.opgezegd).slice(0,3); }catch(_){}   // v231: dezelfde lijst als Instellingen, Vaste lasten
   if(!subs.length){ await coSay(`Ik herken nog geen abonnementen in je afschrijvingen.`,{ai:true}); coChoices([coTerug(m)]); return; }
-  const tot=Math.round(subs.reduce((s,x)=>s+(x.monthly||0),0));
-  await coSay(`Je grootste vaste posten: ${subs.map(s=>`<span class="hl">${esc(s.name)}</span> ${euro0(s.monthly)}`).join(', ')}.`,{html:true}); if(_g!==_coGen)return;
+  const tot=Math.round(subs.reduce((s,x)=>s+(x.monthlyEq||0),0));
+  await coSay(`Je grootste opzegbare posten: ${subs.map(s=>`<span class="hl">${esc(s.name)}</span> ${euro0(s.monthlyEq)}`).join(', ')}.`,{html:true}); if(_g!==_coGen)return;
   await coSay(`Samen ${euro0(tot)} per maand, ${euro0(tot*12)} per jaar. Hier snijd je in kosten, niet in je gedrag.`,{ai:true}); if(_g!==_coGen)return;
   coChoices([
     {l:'Ik zeg er één op', act:()=>coShowAction({eyebrow:'Eén post minder',context:`Opzeggen kost even tijd en levert elke maand op.`,title:`Welke zeg je op?`,input:{type:'text',ph:'bv. '+subs[0].name},afspraak:v=>`ik zeg ${(v||'één abonnement')} op`})},
-    {l:'Bekijk al mijn abonnementen', act:()=>{ coEnd(); go('maand'); }},   // v178: de lijst staat op Maand
+    {l:'Bekijk al mijn vaste lasten', act:()=>{ coEnd(); openVasteLasten(); }},   // v231: de lijst staat onder Instellingen; de sheet opent vanaf elk scherm
     coTerug(m), {l:'Nu even niet',act:()=>coEnd()}
   ]);
 }
@@ -10556,8 +10588,11 @@ function setCoach(){
    het transactiedetail te maken en staan nergens in Instellingen. Deze sectie is daarvoor de
    plek. Nog open: de regel-editor zelf; die is een eigen ronde en wordt hier niet gebouwd. */
 function setTransacties(){
+  let vl=[]; try{ vl=vasteLasten(); }catch(_){}
+  const vlWeg=vl.filter(s=>s.opgezegd).length;
   return `
     <div class="small muted" style="margin-bottom:10px">Hoe Minder je boekingen indeelt.</div>
+    <div class="toggle" style="cursor:pointer" onclick="openVasteLasten()"><div><div style="font-weight:600">${ICON('repeat')} Vaste lasten</div><div class="small muted">${vl.length?`${vl.length} herkend${vlWeg?`, ${vlWeg} opgezegd`:''} · incasso's en periodieke overboekingen`:'nog niets herkend'}</div></div><span style="color:var(--teal);font-weight:700">›</span></div>
     <div class="toggle"><div><div style="font-weight:600">Interne overboekingen verbergen</div><div class="small muted">Eigen rekeningen & sparen tellen niet als uitgave</div></div>
       <label class="sw"><input type="checkbox" ${SET.hideInternal?'checked':''} onchange="SET.hideInternal=this.checked;save();render();"><span class="sl"></span></label></div>
     <div class="small muted" style="margin-top:10px">${ICON('info')} Een losse boeking indelen doe je in de transactie zelf: tik hem aan en kies een categorie. Wil je dat voortaan automatisch, dan maak je daar ook de regel aan.</div>`;
@@ -11556,39 +11591,49 @@ function isPeriodicTransfer(t){ const U=((t.desc||'')+' '+(t.name||'')).toUpperC
   if(t.src==='csv' && /(standing ?order|periodic)/i.test(t.typ||'')) return true;                                          // N26 CSV: Type-veld
   return /PERIODIEKE OVERB|PERIODIEKE OVERSCHR|DOORLOPENDE OPDRACHT|STANDING ORDER|PERIODIEKE SEPA/.test(U);
 }
-function subscriptionsList(){
-  // alleen ECHTE, opzegbare abonnementen via AUTOMATISCHE INCASSO (geen losse betalingen, geen vaste lasten als verzekering/huur)
-  const recent3=months().slice(-3); const r3=new Set(recent3);
-  const map={};
-  for(const t of TX){ if(t.amount>=0) continue; const c=catOf(t); if(!CATS[c]||CATS[c].type!=='expense') continue;
-    if(!isIncasso(t)) continue;                                                 // alleen automatische incasso's
-    const ym=t.date.slice(0,7); if(!r3.has(ym)) continue;                       // alleen laatste 3 maanden
-    const key=(t.name||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').slice(0,20).trim(); if(!key) continue;
-    const m=(map[key]=map[key]||{name:t.name,cat:c,byM:{},last:''}); m.byM[ym]=(m.byM[ym]||0)+(-t.amount); if(t.date>m.last)m.last=t.date; m.cat=c; }
-  const subCats=new Set(['abonnement','sport','goededoel']);                    // opzegbaar
-  const med=a=>{const z=a.slice().sort((x,y)=>x-y);return z.length?(z.length%2?z[(z.length-1)/2]:(z[z.length/2-1]+z[z.length/2])/2):0;};
-  const out=[];
-  for(const k in map){ const r=map[k];
-    const vals=recent3.map(m=>r.byM[m]||0).filter(v=>v>0);
-    if(vals.length<2) continue;                                                 // terugkerend: in >=2 van de laatste 3 maanden
-    const mean=vals.reduce((a,b)=>a+b,0)/vals.length; const sd=Math.sqrt(vals.reduce((s,a)=>s+(a-mean)**2,0)/vals.length); const cv=mean>0?sd/mean:1;
-    if(!(subCats.has(r.cat) || (r.cat==='overig' && cv<0.12))) continue;        // opzegbare categorie, of uncategorized maar stabiel
-    out.push({key:k,name:r.name,cat:r.cat,monthly:Math.round(med(vals)),months:vals.length,last:r.last}); }   // bedrag = mediaan laatste 3 mnd
-  return out.sort((a,b)=>b.monthly-a.monthly);
+/* ===== Vaste lasten (v231) =====
+   Hier stonden subscriptionsList(), subsCard(), toggleCancel() en openSubs(): een eigen detectie
+   (alleen incasso, laatste drie maanden, in twee ervan, drie categorieën), een kaart op Maand, en
+   een knop 'opzeggen?' die een vlag zette (SET.cancelFlags) die niets las, met een groen blok dat
+   een besparing claimde over iets wat niet was gebeurd. Dezelfde posten stonden in de lijst van de
+   liquiditeitsprognose met een tweede vlag (SET.fixDueExcl) die de eerste niet kende.
+   Nu één lijst uit één bron: recurringSchedule(), dat de prognose al voedde. Incasso of periodieke
+   overboeking, elke uitgavencategorie, elk interval, minstens twee afschrijvingen, niet te lang stil.
+   Elke post uit de oude lijst zit hierin (twee incasso's in drie maanden zijn twee afschrijvingen
+   binnen 45 dagen); erbij komen huur, verzekering, energie, overboekingen en kwartaal- en jaarposten.
+   De oude afbakening 'opzegbaar' bestaat nog als weergavefilter (opzegbarePosten) voor het gesprek
+   en de coachtip, niet als tweede detectie. Eén vlag, met datum: zie toggleFixDueExcl(). */
+const INTERVAL_TXT={1:'per maand',3:'per kwartaal',6:'per halfjaar',12:'per jaar'};
+function vasteLasten(){
+  let sched=[]; try{ sched=recurringSchedule(); }catch(_){ return []; }
+  return sched.filter(s=>s.type==='fixed' && (s.incasso||s.periodic))
+    .map(s=>{ const sinds=opgezegdSinds(s.key); return Object.assign({}, s, {opgezegd:sinds!==null, sinds:sinds||null}); })
+    .sort((a,b)=>b.monthlyEq-a.monthlyEq);
 }
-function subsCard(){ const list=subscriptionsList(); if(!list.length) return ''; const total=list.reduce((s,x)=>s+x.monthly,0);
-  return `<div class="card" style="cursor:pointer" onclick="openSubs()"><div class="row"><span style="font-weight:600">${ICON('repeat')} Abonnementen</span><span class="small" style="color:var(--teal);font-weight:600">${euro0(total)}/mnd ›</span></div><div class="small muted" style="margin-top:4px">${list.length} ${list.length===1?'abonnement':'abonnementen'} · check wat je nog gebruikt</div></div>`; }
-function toggleCancel(k){ SET.cancelFlags=SET.cancelFlags||{}; if(SET.cancelFlags[k]) delete SET.cancelFlags[k]; else SET.cancelFlags[k]=true; save(); openSubs(); }
-function openSubs(){
-  const list=subscriptionsList(); const flags=SET.cancelFlags||{};
-  const total=list.reduce((s,x)=>s+x.monthly,0); const saving=list.filter(x=>flags[x.key]).reduce((s,x)=>s+x.monthly,0);
+const OPZEGBAAR_CATS=new Set(['abonnement','sport','goededoel']);
+function opzegbarePosten(){
+  return vasteLasten().filter(s=>{
+    if(OPZEGBAAR_CATS.has(s.cat)) return true;
+    if(s.cat!=='overig') return false;
+    const a=s.amts||[]; if(a.length<2) return false;                            // ongecategoriseerd telt alleen bij een stabiel bedrag
+    const mean=a.reduce((x,y)=>x+y,0)/a.length; const sd=Math.sqrt(a.reduce((x,y)=>x+(y-mean)**2,0)/a.length);
+    return mean>0 && sd/mean<0.12;
+  });
+}
+function openVasteLasten(){
+  const L=vasteLasten(); const actief=L.filter(s=>!s.opgezegd), weg=L.filter(s=>s.opgezegd);
+  const tot=actief.reduce((a,s)=>a+(+s.monthlyEq||0),0);
+  const row=s=>{ const c=CATS[s.cat]||CATS.overig; const kk=(s.key||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);gap:10px;align-items:flex-start${s.opgezegd?';opacity:.55':''}">
+      <div style="min-width:0;flex:1"><div style="font-weight:600;font-size:var(--fs-md)">${c.icon||''} ${esc(s.name)}</div>
+        <div class="small muted">${euro0(s.amount)} ${INTERVAL_TXT[s.intervalM]||''}${s.intervalM!==1?` · ${euro0(s.monthlyEq)} per maand`:''} · ${esc(c.name)}</div>
+        ${s.opgezegd?`<div class="small" style="color:var(--mut2)">${opgezegdLabel(s.key)}</div>`:''}</div>
+      <button class="chip ${s.opgezegd?'on':''}" style="flex-shrink:0" onclick="toggleFixDueExcl('${kk}','vaste')">${s.opgezegd?'Toch niet':'Opgezegd'}</button></div>`; };
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="row" style="margin-bottom:4px"><div style="font-weight:800;font-size:var(--fs-lg)">${ICON('repeat')} Abonnementen</div><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="small muted" style="margin-bottom:10px">${list.length} ${list.length===1?'abonnement':'abonnementen'} · samen ${euro0(total)}/mnd. Markeer wat je niet meer gebruikt. <span style="display:block;margin-top:4px">Alleen automatische incasso&#39;s &middot; bedrag = mediaan van de laatste 3 maanden.</span></div>
-    ${list.map(x=>{const on=!!flags[x.key]; return `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);${on?'opacity:.55':''}">
-      <div style="min-width:0;flex:1"><div style="font-weight:600;font-size:var(--fs-md)">${CATS[x.cat].icon||''} ${esc(x.name)}</div><div class="small muted">${euro0(x.monthly)}/mnd · ${x.months} mnd gezien</div></div>
-      <button class="chip ${on?'on':''}" style="flex-shrink:0" onclick="toggleCancel('${x.key}')">${on?'opzeggen':'opzeggen?'}</button></div>`;}).join('')||'<div class="small muted">Nog geen abonnementen herkend.</div>'}
-    ${saving>0?`<div style="margin-top:12px;background:color-mix(in srgb,var(--green) 10%,transparent);border:1px solid color-mix(in srgb,var(--green) 35%,transparent);border-radius:10px;padding:12px 14px;font-size:var(--fs-md)">Door deze op te zeggen bespaar je <b style="color:var(--green)">${euro0(saving)}/mnd</b> (${euro0(saving*12)}/jaar).</div>`:''}
+    <div class="row" style="margin-bottom:4px"><div style="font-weight:800;font-size:var(--fs-lg)">${ICON('repeat')} Vaste lasten</div><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="small muted" style="margin-bottom:10px;line-height:1.5">${actief.length} ${actief.length===1?'post':'posten'} · samen ${euro0(tot)} per maand. Incasso's en periodieke overboekingen die Minder in je afschrijvingen herkent. Heb je iets opgezegd, leg dat hier vast: dan telt het niet meer mee in je prognose, en meldt Minder het als het toch wordt afgeschreven.</div>
+    ${actief.map(row).join('')||'<div class="small muted">Nog geen vaste lasten herkend.</div>'}
+    ${weg.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Opgezegd · telt niet mee</div>${weg.map(row).join('')}`:''}
     <div style="height:8px"></div>`;
   showSheetBg();
 }

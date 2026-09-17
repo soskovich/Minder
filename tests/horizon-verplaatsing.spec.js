@@ -68,21 +68,25 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
     expect(await page.evaluate(() => /spendVsBudgetChart/.test(renderMaand.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);
   });
 
-  test('de abonnementenkaart staat op Maand en niet meer op Inzichten', async ({ page }) => {
+  /* v231: de abonnementenkaart is van Maand af en de lijst staat onder Instellingen (Vaste
+     lasten), samengevoegd met de lijst van de liquiditeitsprognose. De regel van deze spec blijft:
+     op geen van beide horizonschermen, en het gesprek wijst naar de plek waar de lijst wel staat. */
+  test('de abonnementenkaart staat op geen van beide schermen', async ({ page }) => {
     await boot(page, 'maand', metAbo());
     const t = await beide(page);
-    expect(t.maand).toMatch(/abonnementen/i);
+    expect(t.maand).not.toMatch(/abonnementen/i);
     expect(t.ins).not.toMatch(/abonnementen/i);
-    expect(await page.evaluate(() => /subsCard/.test(renderIns.toString()))).toBe(false);
+    // comments tellen niet als verwijzing: renderMaand noemt subsCard nog in de notitie over de verhuizing
+    expect(await page.evaluate(() => /subsCard/.test((renderIns.toString() + renderMaand.toString()).replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);
   });
 
   test('de ingang uit het coachgesprek wijst naar de nieuwe plek', async ({ page }) => {
     await boot(page);
     const src = await page.evaluate(() => coTopicVast.toString());
-    expect(src).toContain('Bekijk al mijn abonnementen');
-    // de regel eromheen: dezelfde tik, ander scherm
-    expect(/Bekijk al mijn abonnementen[\s\S]{0,120}go\('maand'\)/.test(src)).toBe(true);
-    expect(/Bekijk al mijn abonnementen[\s\S]{0,120}go\('ins'\)/.test(src)).toBe(false);
+    expect(src).toContain('Bekijk al mijn vaste lasten');
+    expect(/Bekijk al mijn vaste lasten[\s\S]{0,120}openVasteLasten\(\)/.test(src)).toBe(true);
+    expect(src).not.toContain("go('maand')");
+    expect(src).not.toContain("go('ins')");
   });
 });
 

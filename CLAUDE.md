@@ -87,6 +87,9 @@ genoemde versietag.)*
   waarheid, en die lopen uiteen. Een lijst achter een cijfer telt per constructie op tot dat cijfer.
 - **Eén oppervlak per editor, meerdere ingangen** (`v61`): een drill-down is een extra ingang,
   nooit een tweede editor.
+- **Eén post, één lijst, één vlag** (`v231`): terugkerende posten komen uit `recurringSchedule()`
+  en dragen één vlag, `SET.fixDueExcl[key]={sinds}` ("Opgezegd op"). Geen tweede detectie en geen
+  tweede vlag naast die ene; een afbakening (opzegbaar) is een weergavefilter op dezelfde lijst.
 - **Potjes zijn leidend, de inkomen-limiet is een spiegel** (`v53`): nooit stilletjes naar beneden
   schalen.
 - **Defaults** (`MECHANISM_SPEC.defaultEffect`): nietsdoen is de gezonde keuze, altijd zichtbaar en
@@ -248,7 +251,7 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v230` → `minder-v231`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v231` → `minder-v232`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

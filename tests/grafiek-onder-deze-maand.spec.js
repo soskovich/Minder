@@ -112,11 +112,12 @@ test.describe('d - wat niet met hem mee verhuisde', () => {
     expect(await page.evaluate(() => SET.openSpendChart)).toBe(true);
   });
 
-  test('de abonnementenkaart blijft op Maand', async ({ page }) => {
+  /* v231: de abonnementenkaart is van Maand af (Instellingen, Vaste lasten). Wat deze test
+     bewaakte, dat hij niet met de grafiek mee naar Inzichten ging, blijft staan. */
+  test('de abonnementenkaart is niet mee naar Inzichten gegaan', async ({ page }) => {
     await boot(page);
     expect(await tekst(page, 'ins')).not.toMatch(/abonnementen/i);
     expect(await page.evaluate(() => /subsCard/.test(renderIns.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);
-    expect(await page.evaluate(() => /subsCard/.test(renderMaand.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(true);
   });
 
   /* Wat de grafiek meet is niet aangeraakt: de lopende maand blijft eruit (v194). Dit staat hier
