@@ -91,6 +91,10 @@ genoemde versietag.)*
   waarheid, en die lopen uiteen. Een lijst achter een cijfer telt per constructie op tot dat cijfer.
 - **Eén oppervlak per editor, meerdere ingangen** (`v61`): een drill-down is een extra ingang,
   nooit een tweede editor.
+- **`geenNorm` is een uitgave zonder norm, `internal` is geen uitgave** (`v234`): `CATS.onvoorzien`
+  telt in `netSpend()` en het maandtotaal, maar niet tegen een budget of een historie
+  (budgetnaleving leest `totals().spendNorm`, met `buitenNorm` zichtbaar in de hero). Geen
+  koppeling met het noodfonds: het spaarsaldo daalt en de bufferregel ziet dat al. Geen teller.
 - **Eén post, één lijst, één vlag** (`v231`): terugkerende posten komen uit `recurringSchedule()`
   en dragen één vlag, `SET.fixDueExcl[key]={sinds}` ("Opgezegd op"). Geen tweede detectie en geen
   tweede vlag naast die ene; een afbakening (opzegbaar) is een weergavefilter op dezelfde lijst.
@@ -255,7 +259,7 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v233` → `minder-v234`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v234` → `minder-v235`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de
