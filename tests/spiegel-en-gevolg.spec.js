@@ -15,6 +15,15 @@ const MS = [3, 2, 1, 0].map((k) => ym(new Date(now.getFullYear(), now.getMonth()
 const CUR = MS[3];
 const overMnd = (k) => { const d = new Date(now); d.setMonth(d.getMonth() + k);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+/* v239: de piekdag meet een WEEKDAG tegen je eigen gemiddelde voor die weekdag. De oude fixture
+   boekte op dag 5, 12, 19 en 26 van de maand; dat is binnen een maand dezelfde weekdag maar over
+   maanden heen een andere, dus de referentie voor de piekdag van deze maand stond op nul en het
+   signaal zweeg. Gemeten: zaterdag 91% met referentie 0%. Deze helper zet de boekingen op een
+   echte weekdag, zodat de fixture een gewoonte bouwt in plaats van een kalenderartefact. */
+const dagenMet = (m, wd, aantal) => { const [y, mo] = m.split('-').map(Number); const uit = [];
+  for (let d = 1; d <= 31 && uit.length < aantal; d++) { const dt = new Date(y, mo - 1, d);
+    if (dt.getMonth() !== mo - 1) break; if (dt.getDay() === wd) uit.push(String(d).padStart(2, '0')); }
+  return uit; };
 
 function seed(o = {}) {
   const tx = []; let i = 0;
@@ -27,8 +36,11 @@ function seed(o = {}) {
     // v230: signaal 2 vuurt alleen op een afgeronde maand, dus de uitschieter valt in de VORIGE maand
     if (o.uitschieter) add(`${m}-16`, m === MS[2] ? -700 : -60, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT');
     if (o.winkel && m === CUR) add(`${m}-14`, -900, 'Mediamarkt', 'BEA, BETAALPAS MEDIAMARKT');
-    if (o.piek) for (const [d, a] of [['05', -200], ['12', -200], ['19', -200], ['26', -200],
-      ['07', -20], ['09', -20], ['14', -20], ['21', -20]]) add(`${m}-${d}`, a, 'Cafe De Hoek', 'BEA, BETAALPAS CAFE DE HOEK');
+    /* v239: vrijdag is de gewoonte (historie ~45% van het losse geld), en in de lopende maand
+       springt hij eruit (~80%). Dat is een afwijking van ongeveer 1,8x, dus boven PIEK_FACTOR. */
+    if (o.piek) { const isCur = m === CUR;
+      dagenMet(m, 5, 4).forEach((d) => add(`${m}-${d}`, isCur ? -120 : -50, 'Cafe De Hoek', 'BEA, BETAALPAS CAFE DE HOEK'));
+      [1, 2, 3, 4].forEach((wd) => dagenMet(m, wd, 1).forEach((d) => add(`${m}-${d}`, isCur ? -30 : -60, 'Cafe De Hoek', 'BEA, BETAALPAS CAFE DE HOEK'))); }
     if (o.spaar) add(`${m}-26`, 0.01, 'Spaarpot', 'NAAR SPAREN', SAV);
   });
   const bal = { [MAIN]: o.saldo != null ? o.saldo : 4000 };
@@ -63,7 +75,7 @@ test.describe('1 · elk signaal draagt een duiding en een dus-wat', () => {
   const GEVALLEN = [
     ['categorie loopt op', { oploop: true }, 'Zorg & apotheek', 'loopt al drie maanden op'],
     ['ver boven je normaal', { uitschieter: true }, 'Uit eten & café', 'een groter deel van je uitgaven dan je gewend bent', MS[2]],   // v230: de maat van de conditie, op een afgeronde maand
-    ['piekdag', { piek: true }, 'Piekdag', 'van je losse geld gaat op'],
+    ['piekdag', { piek: true }, 'Piekdag', 'van je losse geld ging op'],   // v239: en de referentie erachter
     ['grootste winkel', { winkel: true, set: { budgets: { huur: 900 } } }, 'Grootste uitgave', 'domineert je losse uitgaven'],
   ];
   for (const [naam, opt, label, zin, maand] of GEVALLEN) {

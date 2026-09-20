@@ -8847,12 +8847,67 @@ function _catSpendOf(mm){ return catSpendMap(mm); }   // netto per categorie (te
      piekdag
        hyp: "<Bijna de helft> van je losse geld gaat op <dag>."
        imp: "Zo'n vaste piek is gewoonte; een bewuste <dag> levert de meeste winst."
+       v239: allebei herschreven, om twee redenen. De hyp noemde een aandeel zonder referentie,
+       en 24% was een vaste grens: vijf actieve dagen en twee actieve dagen lagen aan dezelfde
+       lat. De zin draagt nu de noemer, net zoals v230 dat bij het aandeel-signaal deed:
+       hyp: "Ongeveer <p>% van je losse geld ging op <dag>, tegen <n>% in de drie maanden ervoor."
+       De imp was bovendien een handeling ("een bewuste <dag> levert de meeste winst"), en op een
+       regel die vaststelt is dat een opdracht (v222). Hij stelt nu vast:
+       imp: "Je losse geld lag deze maand sterker op een dag dan je gewend bent."
      grootste winkel
        hyp: "Een winkel domineert je losse uitgaven."
        imp: "Reken je deze maand niet rijk of arm aan dit ene bedrag." */
 // v174: pctWord() ging in v165 mee als dode code. De piekdag-zin gebruikte hem; hier staat het
 // percentage zelf, zodat de zin verder woordelijk blijft zoals hij geschreven was.
 const pctWoord=p=>`Ongeveer ${p}%`;
+/* De twee knoppen van de piekdag, met opzet hier en niet verstopt in de conditie.
+   PIEK_MIN_TX verving de bestaande poort van 6: er stond dus al een minimum, dit is een
+   aanscherping en geen nieuw hek.
+   PIEK_FACTOR is hoeveel keer je eigen gemiddelde voor die weekdag de maand moet halen voor het
+   een bevinding is. Beide zijn met een regel te wijzigen; piekdag-meten.js in de repo-root laat
+   zien wat andere waarden op je eigen maanden doen. */
+const PIEK_MIN_TX = 8;     // minimum aantal losse transacties in de maand (was 6)
+const PIEK_FACTOR = 1.5;   // keer je eigen gemiddelde aandeel voor die weekdag
+/* ===== PIEKDAG: de snede en de noemer (v239) =====
+ * LOSSE GELD IS ZONDER ONVOORZIEN. Signaal 3 en 4 waren de enige twee plekken in de normlaag waar
+ * `geenNorm` niet werd uitgesloten, terwijl signaal 1 en 2 in dezelfde functie dat al deden (v234).
+ * Gemeten gevolg: een uitgave van 484 euro bij de gemeente, door de gebruiker op onvoorzien gezet,
+ * tilde een vrijdag naar 52% en vuurde tegelijk als 'grootste uitgave'. Twee regels op hetzelfde
+ * scherm uit een bedrag dat nergens een keuze was.
+ * DE NOEMER. 24% was een vaste grens zonder referentie, dus vijf actieve dagen en twee actieve
+ * dagen werden aan dezelfde lat gehouden. De referentie is nu je eigen verdeling: drie AFGERONDE
+ * maanden, hetzelfde losse geld, per weekdag als aandeel van dat maandtotaal, en dan het gemiddelde
+ * van die drie aandelen. Aandeel tegen aandeel (v230), nooit aandeel tegen bedrag. */
+function piekVerdeling(m, negeerWinkel){
+  const lijst=txOfMonth(m).filter(x=>CATS[catOf(x)] && CATS[catOf(x)].type==='expense' && !isFixed(x) && !geenNorm(catOf(x)));   // v234
+  const uit = negeerWinkel ? lijst.filter(x=>(cleanMerch(x.name)||x.name||'onbekend')!==negeerWinkel) : lijst;
+  const sumd=[0,0,0,0,0,0,0];
+  for(const x of uit) sumd[(new Date(x.date).getDay()+6)%7]+=-x.amount;   // dag-sommen netto, telpoort op afschrijvingen
+  const tot=sumd.reduce((a,b)=>a+b,0);
+  if(!(tot>0)) return null;
+  return {sumd, tot, aandeel:sumd.map(v=>v/tot), n:uit.filter(x=>x.amount<0).length};
+}
+/* Minder dan drie bruikbare maanden geeft null, en dan zwijgt het signaal. GEEN TERUGVAL op een
+   gelijke verdeling: een zevende per dag is geen meting van jouw patroon maar een aanname, en dan
+   zegt het percentage weer niets. Liever stil. */
+function piekReferentie(m){
+  const ms=months().filter(x=>x<m).slice(-3);
+  if(ms.length<3) return null;
+  const rij=[]; for(const mm of ms){ const V=piekVerdeling(mm); if(V) rij.push(V.aandeel); }
+  if(rij.length<3) return null;
+  return [0,1,2,3,4,5,6].map(i=>rij.reduce((s,a)=>s+a[i],0)/rij.length);
+}
+/* Vuurt de piekdag, en zo ja op welke dag. Null is de normale uitkomst.
+   ref[peak] moet groter dan nul zijn: "1,5 keer je eigen gemiddelde" is zonder gemiddelde geen
+   vergelijking, en elk veelvoud van nul is waar. Een weekdag waarop je in drie maanden niets
+   uitgaf blijft daardoor stil, ook als hij deze maand de grootste is. Dat is een bewuste keuze en
+   geen omissie: zonder referentie is er niets om tegen af te zetten. */
+function piekVuurt(V, ref){
+  if(!V || !ref || V.n<PIEK_MIN_TX) return null;
+  const peak=V.aandeel.indexOf(Math.max(...V.aandeel));
+  if(!(ref[peak]>0) || V.aandeel[peak] < ref[peak]*PIEK_FACTOR) return null;
+  return {peak, share:Math.round(V.aandeel[peak]*100), norm:Math.round(ref[peak]*100)};
+}
 function insSignals(m,exclude){
   exclude=exclude||new Set();
   const ms=months(); const idx=ms.indexOf(m); if(idx<0) return [];
@@ -8900,31 +8955,41 @@ function insSignals(m,exclude){
         hyp:`Aan ${CATS[best.k].name.toLowerCase()} gaat dit keer een groter deel van je uitgaven dan je gewend bent.`,
         imp:`Check of het eenmalig was; anders een grens op ${CATS[best.k].name.toLowerCase()}.`}); }
   }
-  // 3) piekdag (variabele uitgaven) \u2014 netto per dag: telpoort op afschrijvingen, dag-sommen incl. terugstortingen
-  const vis=txOfMonth(m).filter(x=>x.amount<0 && CATS[catOf(x)] && CATS[catOf(x)].type==='expense' && !isFixed(x));
-  const visAll=txOfMonth(m).filter(x=>CATS[catOf(x)] && CATS[catOf(x)].type==='expense' && !isFixed(x));
-  if(vis.length>=6){
-    const sumd=[0,0,0,0,0,0,0]; for(const x of visAll){ sumd[(new Date(x.date).getDay()+6)%7]+=-x.amount; }
-    const tot=sumd.reduce((a,b)=>a+b,0), peak=sumd.indexOf(Math.max(...sumd));
-    const share=tot>0?Math.round(sumd[peak]/tot*100):0;
-    /* Geen tik: er is geen weergave per weekdag in de app, en een tik naar iets anders zou een
-       gevolg suggereren dat er niet is. spiegel:true zegt dat met zoveel woorden (v174). */
-    if(share>=24) out.push({pri:5,act:'',spiegel:true,
-      kpiLabel:'Piekdag', kpiVal:dn[peak], kpiSub:`${share}% van je losse geld`,
-      hyp:`${pctWoord(share)} van je losse geld gaat op ${dn[peak]}.`,
-      imp:`Zo'n vaste piek is gewoonte; een bewuste ${dn[peak]} levert de meeste winst.`});
-  }
-  // 4) grootste netto uitgave per winkel (terugstorting verrekend) i.p.v. \u00e9\u00e9n losse transactie
+  /* v239: losse geld is zonder onvoorzien, in de telpoort EN in de sommen. Zie de comment boven
+     piekVerdeling(): dit waren de enige twee signalen in deze functie die geenNorm nog meetelden. */
+  const losAll=txOfMonth(m).filter(x=>CATS[catOf(x)] && CATS[catOf(x)].type==='expense' && !isFixed(x) && !geenNorm(catOf(x)));   // v234
+  const vis=losAll.filter(x=>x.amount<0);          // telpoort: alleen afschrijvingen
+  const visAll=losAll;                             // sommen: netto, dus incl. terugstortingen
+  /* 4) grootste netto uitgave per winkel. Hij wordt hier al BEPAALD maar pas onderaan gepusht: de
+     piekdag heeft hem nodig voor de tegentest, want een winkel mag geen twee regels dragen. */
+  let dom=null;
   if(vis.length>=5){
     const byM={}; for(const x of visAll){ const nm=cleanMerch(x.name)||x.name||'onbekend'; byM[nm]=(byM[nm]||0)+(-x.amount); }
     const arr=Object.entries(byM).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
     const vals=arr.map(e=>e[1]).sort((a,b)=>a-b); const med=vals[Math.floor(vals.length/2)]||0;
-    if(arr.length && med>0 && arr[0][1]>=med*4 && arr[0][1]>=40)
-      out.push({pri:6,act:`openMerchant('${esc(String(arr[0][0]).toUpperCase().replace(/'/g,"\\'"))}')`,
-        kpiLabel:'Grootste uitgave', kpiVal:euro0(arr[0][1]), kpiSub:esc(arr[0][0]),
-        hyp:`Een winkel domineert je losse uitgaven.`,
-        imp:`Reken je deze maand niet rijk of arm aan dit ene bedrag.`});
+    if(arr.length && med>0 && arr[0][1]>=med*4 && arr[0][1]>=40) dom={naam:arr[0][0], bedrag:arr[0][1]};
   }
+  // 3) piekdag: je eigen weekdagverdeling tegen je eigen gemiddelde voor die dag
+  const _ref=piekReferentie(m);
+  const P=piekVuurt(piekVerdeling(m), _ref);
+  /* EEN BRON DRAAGT NOOIT TWEE REGELS. Vuurt de grootste uitgave, dan telt de piekdag alleen als
+     hij ook zonder de boekingen van die winkel blijft staan. Gemeten op WINKEL en niet op een
+     losse transactie, want dat is de eenheid waarop signaal 4 vuurt: een netto som per winkel kan
+     uit meerdere boekingen bestaan. Wat de regel toont is de echte maand (P), inclusief die winkel;
+     de tegentest bepaalt alleen of hij er mag staan. */
+  const _magPiek = P && (!dom || !!piekVuurt(piekVerdeling(m, dom.naam), _ref));
+  if(_magPiek){
+    /* Geen tik: er is geen weergave per weekdag in de app, en een tik naar iets anders zou een
+       gevolg suggereren dat er niet is. spiegel:true zegt dat met zoveel woorden (v174). */
+    out.push({pri:5,act:'',spiegel:true,
+      kpiLabel:'Piekdag', kpiVal:dn[P.peak], kpiSub:`${P.share}% van je losse geld, normaal ${P.norm}%`,
+      hyp:`${pctWoord(P.share)} van je losse geld ging op ${dn[P.peak]}, tegen ${P.norm}% in de drie maanden ervoor.`,
+      imp:`Je losse geld lag deze maand sterker op een dag dan je gewend bent.`});
+  }
+  if(dom) out.push({pri:6,act:`openMerchant('${esc(String(dom.naam).toUpperCase().replace(/'/g,"\\'"))}')`,
+    kpiLabel:'Grootste uitgave', kpiVal:euro0(dom.bedrag), kpiSub:esc(dom.naam),
+    hyp:`Een winkel domineert je losse uitgaven.`,
+    imp:`Reken je deze maand niet rijk of arm aan dit ene bedrag.`});
   return out;
 }
 // "Wat valt op", gecombineerd: maand-over-maand (vs vorige maand) + ontdubbelde patroonsignalen (vs je normaal).

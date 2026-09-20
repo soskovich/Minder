@@ -144,8 +144,12 @@ test.describe('Inzichten: constateren, niet oplossen', () => {
     expect(rijen[1]).toContain('Uit eten');
   });
 
+  /* v239: ZES leverde hiervoor een piekdag, maar die vraagt nu acht losse boekingen en drie
+     afgeronde maanden historie, en boot() seedt er twee. De patroonregel komt daarom van de
+     grootste uitgave: een dominante winkel in een categorie zonder potje, dus geen budgetsignaal. */
   test('één potje over: die regel plus één patroonregel', async ({ page }) => {
-    await boot(page, { tx: ZES, set: { budgets: { boodschappen: 100 } } });
+    await boot(page, { tx: ZES.concat([{ cat: 'shopping', bedrag: 400, naam: 'Zalando', dag: '09' }]),
+      set: { budgets: { boodschappen: 100 } } });
     await page.evaluate(() => go('ins'));
     await expect(page.locator('.valtop-rij')).toHaveCount(1);
     await expect(page.locator('.valtop-patroon')).toHaveCount(1);

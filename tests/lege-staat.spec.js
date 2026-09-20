@@ -149,7 +149,11 @@ test.describe('d · bewaard voor later', () => {
     await boot(page, metData());
     // een comment boven een functie zit niet in toString(), dus we lezen het bestand zelf
     const bron = await page.evaluate(() => fetch('/index.html').then((r) => r.text()));
-    const src = bron.slice(Math.max(0, bron.indexOf('function insSignals') - 1400), bron.indexOf('function insSignals'));
+    /* v239: dit las 1400 tekens vóór insSignals, en dat is een byte-afstand en geen eigenschap.
+       Zodra er een helper tussen kwam te staan (piekVerdeling/piekReferentie/piekVuurt) viel het
+       comment buiten het venster en werd de test rood zonder dat er een zin verloren was. Hij
+       leest nu het hele bestand: wat hij vasthoudt is dat de zinnen bewaard zijn, niet waar. */
+    const src = bron;
     for (const zin of ['zet er een grens op', 'Check of het eenmalig was',
       'levert de meeste winst', 'niet rijk of arm']) {
       expect(src, zin).toContain(zin);

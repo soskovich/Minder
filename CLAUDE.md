@@ -14,6 +14,9 @@ Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dra
 Alles zit in `index.html`: HTML, inline `<style>` en inline `<script>`. Dat ene bestand is het
 product; hou die inline structuur intact. Wat er verder ligt (`sw.js`, `manifest.webmanifest`, de
 iconen) laat `ls` je zien. Twee dingen die je daar niet aan afleest:
+- `piekdag-meten.js` is **geen app-code**: een leesscript dat je in de console van je eigen browser
+  plakt om de twee piekdag-constanten op je eigen maanden te beoordelen (`v239`). Het schrijft niets
+  en hoort niet in `index.html`; de app kan zonder.
 - `Open-banking-koppeling-plan.md` is een **referentieplan**, geen gebouwde koppeling. De
   MT940/CSV-import blijft de basis; lees het niet als beschrijving van werkende code.
 - `ACCMETA[acc]` draagt naast `balance` ook `date`: de dag waarop dat saldo gold (`v198`). Dat veld
@@ -109,6 +112,25 @@ genoemde versietag.)*
   alleen voor `coachWeekRisk()` en `coachLeak()`: die meten een percentage en stellen een andere
   vraag. De patronen uit `insSignals()` vullen op Inzichten aan tot het totaal van twee, en komen
   niet op Grip: een patroon is operationeel, geen normoverschrijding.
+- **De piekdag meet tegen je eigen verdeling** (`v239`): 24% was een vaste grens zonder referentie,
+  dus vijf actieve dagen en twee actieve dagen lagen aan dezelfde lat. De noemer is nu `piekReferentie()`:
+  drie **afgeronde** maanden, hetzelfde losse geld, per weekdag als aandeel van dat maandtotaal, en
+  dan het gemiddelde van die drie aandelen. Aandeel tegen aandeel (`v230`), nooit aandeel tegen
+  bedrag. Twee knoppen, allebei als losse constante: `PIEK_MIN_TX` (8, een aanscherping van de
+  bestaande poort van 6) en `PIEK_FACTOR` (1,5). GEEN TERUGVAL op een gelijke verdeling: minder dan
+  drie bruikbare maanden geeft `null` en dan zwijgt het signaal, want een zevende per dag is een
+  aanname en geen meting. Een weekdag waarvoor het gemiddelde nul is blijft ook stil: elk veelvoud
+  van nul is waar, dus er valt niets tegen af te zetten. Dat is een bewuste keuze, geen omissie.
+- **Losse geld is zonder onvoorzien** (`v239`): signaal 3 en 4 van `insSignals()` waren de enige twee
+  plekken in de normlaag waar `geenNorm` niet werd uitgesloten, terwijl signaal 1 en 2 in dezelfde
+  functie dat al deden (`v234`). Nu ook daar, in de telpoort **en** in de sommen. Gemeten aanleiding:
+  een uitgave van €484 op onvoorzien tilde een vrijdag naar 52% en vuurde tegelijk als grootste
+  uitgave, dus twee regels uit een bedrag dat nergens een keuze was.
+- **Een bron draagt nooit twee regels** (`v239`): vuurt de grootste uitgave, dan staat de piekdag er
+  alleen als hij ook zonder de boekingen van die winkel blijft. Gemeten op **winkel** en niet op een
+  losse transactie, want een netto som per winkel kan uit meerdere boekingen bestaan en dat is de
+  eenheid waarop signaal 4 vuurt. Wat de regel toont is de echte maand; de tegentest bepaalt alleen
+  of hij er mag staan.
 - **Het lek is de vijfde patroonbron** (`v237`): `lekSignaal()` zet `coachLeak()` om in dezelfde
   objectvorm als `insSignals()`, met `pri` 12 zodat hij via de bestaande sortering bovenaan komt
   (een lek is een doorlopende kost die je kunt opzeggen, de andere vier zijn observaties). Hij telt
@@ -344,7 +366,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v238` → `minder-v239`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v239` → `minder-v240`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de
