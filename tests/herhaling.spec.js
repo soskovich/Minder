@@ -24,7 +24,10 @@ function seed(o = {}) {
     }
     if (!(nu && o.geenUitgaven)) add(m, '16', -10, RES, 'Reserve', 'RESERVERING');
   });
-  const set = Object.assign({ mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
+  /* v242: de grendel. Zolang het noodfonds niet vol is gaat de hele spaarinleg daarheen en valt er
+     niets te verdelen. Deze spec gaat over wat er dáárna gebeurt, dus staat de buffer hier vol. */
+  const set = Object.assign({ nfToegewezen: 9e7, nfToegewezenMigrated: true,
+    mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
     manualBal: { [MAIN]: 6000, [RES]: 250 }, savingMode: 'amount', savingAmount: 300,
     budgets: { huur: 900, boodschappen: 500, uiteten: 200 },
     resAcc: RES, reserveringen: [{ id: 'r1', naam: 'Tandarts', bedrag: 300, interval: 12, offset: 6 }],

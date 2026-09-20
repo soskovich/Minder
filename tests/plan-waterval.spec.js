@@ -15,6 +15,10 @@ function tweak(fn) {
   const set = JSON.parse(p.minder_set);
   set.savingAmount = CAP;
   set.vooruitDoelOpen = true;
+  /* v242: de grendel. Zolang het noodfonds niet vol is gaat de hele spaarinleg daarheen en valt er
+     niets te verdelen. Deze spec gaat over de verdeling zelf, dus de buffer staat hier vol en de
+     grendel open. Dat is de voorwaarde die er altijd al impliciet was; nu staat hij er. */
+  set.nfToegewezen = 9e7; set.nfToegewezenMigrated = true;   // planMap klemt op het doel
   fn(set);
   p.minder_set = JSON.stringify(set);
   return p;

@@ -10,6 +10,11 @@ const CAP = 300;
 function tweak(fn) {
   const p = seed();
   const set = JSON.parse(p.minder_set);
+  /* v242: de grendel. Zolang het noodfonds niet vol is gaat de hele spaarinleg daarheen en valt er
+     niets te verdelen. De meeste tests hier gaan over de verdeling zelf, dus staat de buffer vol en
+     de grendel open; dat was de voorwaarde die er altijd al impliciet was. De tests die juist over
+     de gesloten grendel gaan zetten nfToegewezen zelf terug. */
+  set.nfToegewezen = 9e7; set.nfToegewezenMigrated = true;   // planMap klemt op het doel
   fn(set);
   p.minder_set = JSON.stringify(set);
   return p;
@@ -35,16 +40,21 @@ async function openPlanZone(page) {
 }
 
 test.describe('a · planItems en de waterfall', () => {
-  test('noodfonds staat standaard bovenaan en slurpt de spaarruimte op', async ({ page }) => {
-    await openV(page);
+  /* v242 GEEFT DIT ZIJN EIGEN NAAM. Tot v241 slurpte het noodfonds de spaarruimte op omdat het
+     bovenaan stond en modus 'auto' had: hetzelfde gedrag, maar als gevolg van een volgorde die je
+     zelf kon omgooien. Sinds v242 is het de grendel: zolang de buffer niet vol is gaat de hele
+     inleg daarheen, en de doelen eronder wachten daar zichtbaar op in plaats van op capaciteit. */
+  test('de buffer is niet vol: de grendel zit dicht en de hele inleg gaat daarheen', async ({ page }) => {
+    await openV(page, tweak((s) => { s.nfToegewezen = 0; s.goals = doelen(); }));
+    expect(await page.evaluate(() => !!planGrendel())).toBe(true);
     const P = await page.evaluate(() => allocatePlan());
     expect(P.map((x) => x.id)).toEqual(['noodfonds', 'gA', 'gB']);
     expect(await page.evaluate(() => planCapacity())).toBe(CAP);
 
     expect(P[0].type).toBe('noodfonds');
-    expect(P[0].alloc).toBe(CAP);                     // geen perMaand -> pakt wat er is
+    expect(P[0].alloc).toBe(CAP);
     expect(P[1].alloc).toBe(0);
-    expect(P[1].status).toBe('wacht op capaciteit');
+    expect(P[1].status).toBe('wacht op de buffer');
     expect(P[2].alloc).toBe(0);
   });
 
@@ -58,7 +68,8 @@ test.describe('a · planItems en de waterfall', () => {
     expect(P[1].alloc).toBe(200);                     // zonder perMaand: wat er overblijft
     expect(P[1].eta).toBe(3);                         // ceil(500 / 200)
     expect(P[2].alloc).toBe(0);                       // niets meer over
-    expect(P[2].status).toBe('wacht op capaciteit');
+    // v242: met een open grendel is de buffer per definitie vol, dus dit item is 'bereikt'
+    expect(P[2].status).toBe('bereikt');
     expect(P[0].alloc + P[1].alloc + P[2].alloc).toBe(CAP);
   });
 
@@ -89,13 +100,17 @@ test.describe('a · planItems en de waterfall', () => {
     expect(await page.evaluate(() => planCapacity())).toBe(0);
     const P = await page.evaluate(() => allocatePlan());
     expect(P.every((x) => x.alloc === 0)).toBe(true);
-    expect(P.every((x) => x.status === 'wacht op capaciteit' || x.status === 'bereikt')).toBe(true);
+    // v242: zonder capaciteit beweegt er niets, of de grendel nu dicht zit of niet
+    expect(P.every((x) => ['wacht op capaciteit', 'wacht op de buffer', 'bereikt'].includes(x.status))).toBe(true);
   });
 });
 
 test.describe('b · herordenen en het plan', () => {
+  // v242: 'standaard' is een buffer die nog niet vol is; dan is het noodfonds het bovenste lopende
+  // item en volgt savingsModel() dat. Met een volle buffer schuift het model door naar het volgende
+  // doel, en dat is bestaand gedrag (zie 'een bereikt #1 schuift door' hieronder).
   test('standaard volgt het model het noodfonds, precies als voorheen', async ({ page }) => {
-    await openV(page);
+    await openV(page, tweak((s) => { s.nfToegewezen = 0; }));
     const S = await page.evaluate(() => ({ src: savingsModel().goalSrc, goal: savingsModel().goal, nf: Math.round(noodfondsModel().doel) }));
     expect(S.src).toBe('nood');
     expect(S.goal).toBe(S.nf);
@@ -159,9 +174,23 @@ test.describe('c · het noodfonds', () => {
     await page.evaluate(() => planRemove('noodfonds'));
     expect(await page.evaluate(() => planItems().some((x) => x.id === 'noodfonds'))).toBe(true);
 
-    // maar zakken kan wel
+    // v242: zakken kan zolang de grendel open is, dus met een volle buffer
     await page.evaluate(() => planMove('noodfonds', 1));
     expect(await page.evaluate(() => planItems()[0].id)).toBe('gA');
+  });
+
+  /* v242 KEERT EEN DEEL VAN DEZE REGEL OM. Herordenen mocht altijd; nu mag het niet langs een lege
+     buffer heen. Dat is de hele grendel: zonder die regel lekt er geld langs je noodfonds zodra je
+     hem naar beneden schuift, en dat is precies wat de vorige vorm toeliet. Verwijderen kon al niet
+     en kan nog steeds niet. */
+  test('met een lege buffer is hij niet te verslepen', async ({ page }) => {
+    await openV(page, tweak((s) => { s.nfToegewezen = 0; s.goals = doelen(); }));
+    expect(await page.evaluate(() => !!planGrendel())).toBe(true);
+    const voor = await page.evaluate(() => planItems().map((x) => x.id));
+    await page.evaluate(() => planMove('noodfonds', 1));
+    expect(await page.evaluate(() => planItems().map((x) => x.id))).toEqual(voor);
+    await page.evaluate(() => planMove('gA', -1));
+    expect(await page.evaluate(() => planItems().map((x) => x.id))).toEqual(voor);
   });
 });
 
@@ -263,8 +292,12 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
     bank: totalBalance().sum,
   }));
 
+  // v242: deze drie vergelijken de voortgang van het plan-item met je spaarsaldo, dus daar hoort
+  // de echte toewijzing te staan en niet de volle buffer die tweak() standaard zet.
+  const echt = (fn) => tweak((s) => { delete s.nfToegewezen; delete s.nfToegewezenMigrated; if (fn) fn(s); });
+
   test('met een gemarkeerde spaarrekening', async ({ page }) => {
-    await openV(page);
+    await openV(page, echt());
     const r = await meet(page);
     expect(r.ts.n).toBeGreaterThan(0);
     expect(r.spaar.bron).toBe('spaarrekening');
@@ -280,7 +313,7 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
      beleggenKlaar(). Zonder aangewezen spaarrekening is het nu onbekend, en dat blijft het:
      hero en plan-item zeggen nog steeds hetzelfde, alleen zeggen ze nu dat ze het niet weten. */
   test('zonder gemarkeerde spaarrekening is het buffersaldo onbekend, geen banksaldo', async ({ page }) => {
-    await openV(page, tweak((s) => { s.savingsEnds = []; s.nfMaanden = 12; s.goals = doelen(); }));
+    await openV(page, echt((s) => { s.savingsEnds = []; s.nfMaanden = 12; s.goals = doelen(); }));
     const r = await meet(page);
     expect(r.ts.n).toBe(0);
     expect(r.spaar.bron).toBe('geen');
@@ -299,7 +332,7 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
   });
 
   test('extra spaargeld telt aan beide kanten mee', async ({ page }) => {
-    await openV(page, tweak((s) => { s.extraSavings = 500; s.goals = doelen(); }));
+    await openV(page, echt((s) => { s.extraSavings = 500; s.goals = doelen(); }));
     const r = await meet(page);
     expect(r.spaar.cur).toBe(r.ts.sum + 500);
     expect(r.item).toBe(Math.min(r.spaar.cur, r.doel));

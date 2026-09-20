@@ -40,6 +40,10 @@ function seedM(set = {}, opt = {}) {
       goals: [{ id: 'g1', naam: 'Vakantie', doel: 2000, gespaard: 1000, allocMode: 'fixed', perMaand: 300, streefdatum: over(20) }],
       planOrder: ['g1', 'noodfonds'],
       nfDoelVast: 3000,
+      /* v242: de grendel. Zonder een volle buffer gaat de hele spaarinleg daarheen en krijgt het
+         doel niets, en dan wordt elke regel over dat doel een tekort. Deze spec gaat over het
+         oordeel op Grip en niet over de grendel, dus staat de buffer hier vol. */
+      nfToegewezen: 3000, nfToegewezenMigrated: true,
     }, set)),
     minder_own: JSON.stringify([MAIN, RES, SAV]), minder_accmeta: '{}', minder_plan: '{}',
   };
@@ -325,7 +329,11 @@ test.describe('d · het oordeel', () => {
     await boot(page);
     // v172: aansluiting sluit aan door toe te wijzen, niet door het doel te verhogen
     await page.evaluate(() => { const s = Math.round(spaarSaldo().cur);
-      SET.nfDoelVast = s; SET.nfToegewezen = s - Math.round(+SET.goals[0].gespaard || 0); save(); });
+      /* v242: 'alles ok' vraagt sinds de grendel ook een VOLLE buffer. Blijft er een gat, dan gaat
+         de hele spaarinleg daarheen en krijgt het doel niets, en dat is geen ok-regel. Het doel
+         van de buffer is dus precies wat er na de toewijzing aan het doel overblijft. */
+      const b = s - Math.round(+SET.goals[0].gespaard || 0);
+      SET.nfDoelVast = b; SET.nfToegewezen = b; save(); });
     const r = await page.evaluate(() => {
       const R = maandRegels();
       return { n: R.length, ok: R.filter((x) => x.status === 'ok').length, o: maandOordeel(R) };
@@ -439,7 +447,8 @@ test.describe('e · indeling', () => {
     await boot(page);
     // v172: alles ok betekent ook: al je spaargeld is toegewezen
     await page.evaluate(() => { const s = Math.round(spaarSaldo().cur);
-      SET.nfDoelVast = s; SET.nfToegewezen = s - Math.round(+SET.goals[0].gespaard || 0);
+      const b = s - Math.round(+SET.goals[0].gespaard || 0);   // v242: de buffer moet vol zijn
+      SET.nfDoelVast = b; SET.nfToegewezen = b;
       save(); go('maand'); });
     const t = await page.locator('#s-maand').innerText();
     expect(t).not.toMatch(/vraagt een beslissing/i);   // alles ok, dus die kaarten vallen weg

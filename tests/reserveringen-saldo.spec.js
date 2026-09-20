@@ -98,12 +98,19 @@ test.describe('b - KRITIEK: alleen het saldo, geen oordeel', () => {
     expect(h).not.toContain('bar-fill');
   });
 
-  test('geen oordeelwoorden over dekking', async ({ page }) => {
+  /* v242 KEERT EEN DEEL VAN v220 OM, en dat is de bedoeling. v220 hield op deze kaart alleen het
+     saldo, omdat het dekkingsoordeel op Grip woont (v187). Wat er nu bij komt is geen oordeel maar
+     een aftrekking: de gemeten stand min wat er nu opgebouwd hoort te zijn. Staat er meer, dan
+     blijft er over; staat er minder, dan is dat een tekort. Het oordeel zelf (de graad, gedektTot,
+     en of het op tijd komt) blijft op Grip, en de verwijzende regel daarheen blijft staan. */
+  test('geen oordeelwoorden, maar wel de aftrekking', async ({ page }) => {
     await boot(page);
     const t = (await tekst(page)).toLowerCase();
-    for (const w of ['op peil', 'tekort', 'gedekt', 'dekkingsgraad', 'volledig gedekt']) {
+    for (const w of ['op peil', 'gedekt tot', 'dekkingsgraad', 'volledig gedekt']) {
       expect(t, w).not.toContain(w);
     }
+    expect(t).not.toMatch(/\d+%/);                       // geen percentage, in geen enkele vorm
+    expect(t).toMatch(/blijft over|tekort/);
   });
 
   test('de verwijzende regel naar Maand staat er onveranderd', async ({ page }) => {
@@ -111,13 +118,19 @@ test.describe('b - KRITIEK: alleen het saldo, geen oordeel', () => {
     expect(await tekst(page)).toContain('Of je genoeg opzij hebt staan, lees je op Grip.');   // v233
   });
 
-  test('dekking() wordt alleen voor de telling gebruikt, niet voor een oordeel', async ({ page }) => {
-    // een pot die ruim tekortschiet en een die ruim voldoet geven dezelfde kaart op het bedrag na
+  test('het verschil is het enige dat met het saldo meebeweegt', async ({ page }) => {
+    /* v220 eiste hier dat een arme en een rijke pot dezelfde kaart gaven op het bedrag na, want de
+       kaart droeg geen oordeel. v242 zet het verschil erbij, dus die twee mogen nu juist van elkaar
+       verschillen. Wat de test vasthoudt is dat het daarbij blijft: dezelfde posten, dezelfde
+       zinnen, alleen de stand en het verschil bewegen mee. */
     await boot(page, { saldo: 50 });
-    const arm = (await tekst(page)).replace('€50', 'X');
+    const arm = await tekst(page);
     await boot(page, { saldo: 999999 });
-    const rijk = (await tekst(page)).replace('€999.999', 'X');
-    expect(arm).toBe(rijk);
+    const rijk = await tekst(page);
+    const schoon = (t) => t.replace(/€[\d.]+/g, 'X').replace(/Blijft over|Tekort/g, 'VERSCHIL');
+    expect(schoon(arm)).toBe(schoon(rijk));
+    expect(arm).toMatch(/Tekort/);
+    expect(rijk).toMatch(/Blijft over/);
   });
 });
 
@@ -140,7 +153,10 @@ test.describe('c - een onbekend saldo verschijnt niet als nul', () => {
     expect(await page.evaluate(() => resAccId())).toBe('');
     const t = await tekst(page);
     expect(t).not.toContain('onbekend');
-    expect(t).not.toContain('€');
+    // v242: de verwachte kosten staan wel op de kaart, ook zonder rekening; wat ontbreekt is de
+    // stand en daarmee het verschil, want zonder saldo valt er niets af te trekken (v59/v73)
+    expect(t).not.toMatch(/Blijft over|Tekort/);
+    expect(t).toContain('nog geen rekening aangewezen');
     // de kaart blijft verder zoals hij was
     expect(t).toContain('3 posten');
     expect(t).toContain('Of je genoeg opzij hebt staan, lees je op Grip.');

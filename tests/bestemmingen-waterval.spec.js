@@ -157,13 +157,27 @@ test.describe('b - de euro landt vlak, niet in de compoundende laag', () => {
 });
 
 test.describe('c - in de vul-fase gaat er niets dubbel af', () => {
-  test('een doel gaat er pas af vanaf het vol-jaar, want vrij diverteert de hele capaciteit', async ({ page }) => {
+  /* v242 MAAKT DIT HARDER. Tot v241 kregen de doelen in de vul-fase wél een toewijzing, en de
+     waterval moest uitleggen dat die niet nog een keer van je inleg af ging omdat 'vrij' de hele
+     capaciteit al naar de buffer diverteerde. Sinds de grendel krijgen ze werkelijk niets: zolang
+     de buffer niet vol is gaat de hele spaarinleg daarheen, dus doelPerMaand is nul en staat de
+     stap er niet. Wat er wél van je inleg af gaat is onveranderd; dat is de laatste assertie. */
+  test('in de vul-fase krijgen de doelen niets, dus er gaat niets dubbel af', async ({ page }) => {
     await boot(page, { nfVol: false });
     const m = await model(page);
     expect(m.volYear).toBeGreaterThan(m.nowY);
-    expect(m.doel).toBeGreaterThan(0);
+    expect(await page.evaluate(() => !!planGrendel())).toBe(true);
+    expect(m.doel).toBe(0);
+    expect(m.doelItems).toEqual([]);
     expect(m.best.nu).toBe(m.res);
     expect(m.best.groeit).toBe(m.pmt - m.vrij - m.res);
+  });
+
+  test('en zodra de buffer vol is krijgen ze wel een toewijzing', async ({ page }) => {
+    await boot(page, { nfVol: true });
+    const m = await model(page);
+    expect(await page.evaluate(() => planGrendel())).toBe(null);
+    expect(m.doel).toBeGreaterThan(0);
   });
 
   test('reserveringen gaan er ook in de vul-fase af: ze zitten niet in planCapacity', async ({ page }) => {
@@ -173,9 +187,13 @@ test.describe('c - in de vul-fase gaat er niets dubbel af', () => {
     expect(m.best.nu).toBeGreaterThan(0);
   });
 
-  test('de stap zegt het ook, in plaats van een bedrag te tonen dat er niet af gaat', async ({ page }) => {
+  test('de stap staat er niet, want er gaat niets heen', async ({ page }) => {
     await boot(page, { nfVol: false });
-    expect(await waterval(page)).toContain('zit nu nog in de noodfonds-vulling');
+    const t = await waterval(page);
+    // v242: geen bedrag tonen dat er niet af gaat, en ook geen stap die uitlegt waarom niet: de
+    // noodfonds-vulling erboven draagt dat verhaal al, en die staat er onveranderd
+    expect(t).not.toContain('Spaardoelen');
+    expect(t).toMatch(/noodfonds/i);
   });
 });
 

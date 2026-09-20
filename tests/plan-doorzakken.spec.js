@@ -10,6 +10,10 @@ function tweak(fn) {
   const p = seed();
   const set = JSON.parse(p.minder_set);
   set.savingAmount = CAP;
+  /* v242: de grendel. Zolang het noodfonds niet vol is gaat de hele spaarinleg daarheen en valt er
+     niets te verdelen. Deze spec gaat over de verdeling zelf, dus de buffer staat hier vol en de
+     grendel open. Dat is de voorwaarde die er altijd al impliciet was; nu staat hij er. */
+  set.nfToegewezen = 9e7; set.nfToegewezenMigrated = true;   // planMap klemt op het doel
   fn(set);
   p.minder_set = JSON.stringify(set);
   return p;
@@ -169,7 +173,8 @@ test.describe('b · vrije ruimte i.p.v. verdwijnen', () => {
     expect(await page.evaluate(() => planCapacity())).toBe(0);
     const P = await alloc(page);
     expect(P.every((x) => x.alloc === 0 && x.extra === 0)).toBe(true);
-    expect(P.every((x) => x.status === 'wacht op capaciteit' || x.status === 'bereikt')).toBe(true);
+    // v242: zonder capaciteit beweegt er niets, of de grendel nu dicht zit of niet
+    expect(P.every((x) => ['wacht op capaciteit', 'wacht op de buffer', 'bereikt'].includes(x.status))).toBe(true);
     expect(await vrij(page)).toBe(0);
     await openPlanZone(page);
     // v225: wel de sluitpost, maar zonder bedrag om te verdelen en dus zonder keuze
@@ -241,6 +246,7 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
     // en een maandbedrag daarop zet de doorzak-werking aan
     await page.locator('#gModes .chip', { hasText: 'Vast bedrag' }).click();
     await page.locator('#gMnd').fill('200');
+    await page.locator('#gDatum').fill('2030-01');       // v242: de streefdatum is verplicht
     await page.locator('#sheet >> text=Opslaan').click();
     await page.waitForSelector('#sheetBg.show', { state: 'detached' });
     const Q = await alloc(page);
@@ -297,21 +303,27 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
 });
 
 test.describe('e · buffer blijft heilig', () => {
-  test('het noodfonds is een gewoon lopend item: het wordt bijgevuld, nooit leeggehaald', async ({ page }) => {
+  /* v242 SCHERPT DEZE REGEL AAN. Tot v241 was het noodfonds een gewoon lopend item met een eigen
+     vast bedrag; een lege buffer kon daardoor 80 euro per maand krijgen terwijl de rest naar je
+     doelen ging. Sinds v242 gaat bij een lege buffer de hele inleg daarheen en is dat vaste bedrag
+     niet meer te zetten. Wat onveranderd blijft is de heiligheid zelf: hij wordt bijgevuld en
+     nooit leeggehaald, en nooit verder dan wat hij nog nodig heeft. */
+  test('een lege buffer krijgt de hele inleg, en nooit meer dan hij nodig heeft', async ({ page }) => {
     await openV(page, tweak((s) => {
-      s.goals = [{ id: 'gA', naam: 'Vakantie', doel: 5000, gespaard: 0, allocMode: 'fixed', perMaand: 100 }];
+      s.goals = [{ id: 'gA', naam: 'Vakantie', doel: 5000, gespaard: 0, allocMode: 'fixed', perMaand: 100, streefdatum: '2030-01' }];
       s.planOrder = ['noodfonds', 'gA'];
       s.planAlloc = { noodfonds: { allocMode: 'fixed', perMaand: 80 } };
       s.nfMaanden = 12;                                   // houdt het noodfonds ruim onvol
+      s.nfToegewezen = 0;                                 // en dus de grendel dicht
     }));
+    expect(await page.evaluate(() => !!planGrendel())).toBe(true);
     const P = await alloc(page);
     const nf = P[0];
     expect(nf.id).toBe('noodfonds');
-    expect(nf.base).toBe(80);                             // zijn eigen vaste bedrag
-    expect(nf.extra).toBeGreaterThan(0);                  // en het restant zakt hierheen door
-    expect(nf.alloc).toBe(CAP - 100);
+    expect(nf.alloc).toBe(CAP);                           // het vaste bedrag van 80 telt niet mee
     expect(nf.alloc).toBeLessThanOrEqual(nf.rest);        // nooit meer dan het doel nog nodig heeft
-    expect(P[1].alloc).toBe(100);
+    expect(P[1].alloc).toBe(0);
+    expect(P[1].status).toBe('wacht op de buffer');
     expect(await vrij(page)).toBe(0);
   });
 });

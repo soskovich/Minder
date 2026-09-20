@@ -94,7 +94,8 @@ test.describe('a - de optelling telt op', () => {
     // Kosten Koper krijgt niets omdat het noodfonds de capaciteit pakt
     const kk = await page.evaluate(() => allocatePlan().find((p) => p.id === 'g1'));
     expect(kk.alloc).toBe(0);
-    expect(kk.status).toBe('wacht op capaciteit');
+    // v242: de buffer van deze fixture is niet vol, dus de grendel houdt dit doel tegen
+    expect(kk.status).toBe('wacht op de buffer');
     // en toch zit zijn bedrag in het totaal
     expect((await T(page)).nodig).toBe(21334);
   });

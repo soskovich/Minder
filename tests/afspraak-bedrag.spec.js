@@ -22,6 +22,9 @@ function drieTekorten(extra) {
   s.resAcc = SAV;
   s.goals = [{ id: 'g1', naam: 'Vakantie', doel: 4000, gespaard: 200, allocMode: 'fixed', perMaand: 50, streefdatum: plusM(3) }];
   s.planOrder = ['g1', 'noodfonds'];
+  // v242: de grendel. Deze spec toetst het bedrag in een afspraak op een doel, dus de buffer staat
+  // vol en de grendel open; anders krijgt het doel niets en is er geen bedrag om tegen te toetsen.
+  s.nfToegewezen = 9e7; s.nfToegewezenMigrated = true;
   if (extra) extra(s);
   p.minder_set = JSON.stringify(s);
   return p;
@@ -149,6 +152,12 @@ test.describe('b - afspraakUitkomst toetst tegen het bedrag', () => {
   test('doel: de bron is de inleg in het plan, een stand van nu', async ({ page }) => {
     const metDoelAfspraak = (perMaand) => drieTekorten((s) => {
       s.goals[0].perMaand = perMaand;
+      /* v242: met een open grendel blijft er ruimte over, en die zakt in ronde 2 door naar het
+         eerste lopende doel. Dan is p.alloc niet meer gelijk aan het maandbedrag en meet deze test
+         de doorzak in plaats van de inleg. Een tweede doel op 'auto' vangt het restant op, zodat
+         g1 precies zijn eigen maandbedrag krijgt; dat is wat deze test wil toetsen. */
+      s.goals.push({ id: 'g2', naam: 'Sluitpost', doel: 99999, gespaard: 0, allocMode: 'auto', streefdatum: plusM(60) });
+      s.planOrder = ['g1', 'g2', 'noodfonds'];
       s.coachLog = [{ ts: VORIGE_TS, type: 'afspraak', text: 'Ik leg €100 per maand meer in voor Vakantie',
         regel: 'doel', vorm: 'norm', meet: 'doel', doelId: 'g1', basis: 50, bedrag: 100 }];
     });

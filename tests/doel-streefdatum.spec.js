@@ -173,7 +173,7 @@ test.describe('c · eta en streefdatum spreken elkaar niet tegen', () => {
 });
 
 test.describe('d · opslaan en tonen', () => {
-  test('de editor heeft een lege maand-invoer en bewaart YYYY-MM', async ({ page }) => {
+  test('de editor bewaart YYYY-MM, en een bestaand doel zonder datum opent leeg', async ({ page }) => {
     await boot(page, seedDoel([G()]));
     await page.evaluate(() => openGoal('g1'));
     await page.waitForSelector('#gDatum');
@@ -184,13 +184,25 @@ test.describe('d · opslaan en tonen', () => {
     expect(await page.evaluate(() => SET.goals[0].streefdatum)).toBe(overMnd(28));
   });
 
-  test('leeg opslaan laat de sleutel weg, en het doel gedraagt zich als voorheen', async ({ page }) => {
+  /* v242 DRAAIT DEZE BEDOELING OM. v123 maakte de streefdatum optioneel: leeg opslaan liet de
+     sleutel weg en het doel gedroeg zich als voorheen. Sinds v242 heeft elk doel er een, en is het
+     noodfonds het enige item zonder. Leeg opslaan bewaart dus niets en de sheet blijft open; de
+     datum die er stond blijft staan. Wat onveranderd blijft is de vorm: YYYY-MM, en niets anders. */
+  test('leeg opslaan kan niet meer: de datum blijft staan en de sheet blijft open', async ({ page }) => {
     await boot(page, seedDoel([G({ streefdatum: overMnd(28) })]));
     await page.evaluate(() => openGoal('g1'));
     await page.waitForSelector('#gDatum');
     await page.locator('#gDatum').fill('');
     await page.locator('#sheet >> text=Opslaan').click();
-    await page.waitForSelector('#sheetBg.show', { state: 'detached' });
+    await expect(page.locator('#gDatum')).toBeVisible();              // niet opgeslagen, niets gesloten
+    const g = await page.evaluate(() => JSON.parse(JSON.stringify(SET.goals[0])));
+    expect(g.streefdatum).toBe(overMnd(28));
+  });
+
+  test('een bestaand doel zonder datum telt mee en leest als onvolledig', async ({ page }) => {
+    /* Zo'n doel kan sinds v242 niet meer ontstaan, maar het kan er nog staan. Het blijft bestaan en
+       blijft meetellen; wat het niet meer heeft is een terugrekening, en dat staat er ook. */
+    await boot(page, seedDoel([G()]));
     const g = await page.evaluate(() => JSON.parse(JSON.stringify(SET.goals[0])));
     expect('streefdatum' in g).toBe(false);
     expect(await regel(page)).toBe('');
@@ -208,12 +220,15 @@ test.describe('d · opslaan en tonen', () => {
     expect(await page.locator('#sheet').innerText()).toContain('per maand nodig');
   });
 
-  test('een doel zonder streefdatum toont niets extra in de planlijst', async ({ page }) => {
+  test('een doel zonder streefdatum toont geen terugrekening, wel een ingang om hem te zetten', async ({ page }) => {
     await boot(page, seedDoel([G()]));
     await page.evaluate(() => { go('vooruit'); });
     await page.waitForSelector('.plan-item');
     const t = await page.locator('.plan-item[data-id="g1"]').innerText();
     expect(t).not.toContain('per maand nodig');
     expect(t).toContain('op dit tempo');                              // de bestaande eta-regel blijft
+    // v242: en de rij zegt dat de datum ontbreekt, met de ingang ernaar toe
+    expect(t).toContain('Streefdatum ontbreekt');
+    expect(t).toContain('datum zetten');
   });
 });

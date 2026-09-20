@@ -102,6 +102,34 @@ genoemde versietag.)*
   dan het raster van twee bij twee dat ze vervangt (gemeten 630 tegen 558px). De tegelvorm blijft
   bestaan voor `nogDezeMaandCard()`, de terugval zonder budget, en het tegel-CSS is van
   `maandKpiBlok()` op Vermogen (`v232`): verbouw dat niet vanaf Inzichten.
+- **De buffer gaat eerst, en dat is een grendel** (`v242`): zolang `planMap()[PLAN_NF]` niet vol is
+  gaat de hele spaarinleg daarheen (`planGrendel()`), krijgt elk ander item status
+  `wacht op de buffer`, en is het noodfonds niet te verslepen en niet op een vast bedrag te zetten.
+  Zodra hij vol is gaat de grendel vanzelf open; er is geen knop en geen vlag. HIJ HANGT AAN
+  `type==='noodfonds'` EN NIET AAN "het item zonder streefdatum": die tweede regel klopt pas in de
+  eindtoestand en wijst tijdens de overgang elk bestaand doel zonder datum ook aan. Onbekend blijft
+  onbekend: is de voortgang niet vastgesteld, dan blijft de grendel dicht en wordt er geen maand
+  genoemd waarin hij opengaat. Geen buffer-doel is geen grendel. Ronde 2 van `allocatePlan()` (het
+  restant zakt door naar het volgende lopende item op volgorde) is ongemoeid en blijft de terugval.
+- **Elk doel heeft een streefdatum, behalve de buffer** (`v242`): afgedwongen in `saveGoal()`, bij
+  aanmaken en bij wijzigen, zodat er nooit een tweede item zonder datum kan ontstaan. Dat draait
+  `v123` terug, dat de datum juist optioneel maakte. Een doel van vóór `v242` zonder datum blijft
+  bestaan en blijft meetellen, maar leest als onvolledig met één ingang om hem alsnog te zetten
+  (`planDatumRegel()`): geen stille default en niets weggooien, want Minder weet niet wanneer jij
+  dat doel af wilt hebben.
+- **Meer verdelen dan er is kun je niet opslaan** (`v242`): de som van de vaste maandbedragen blijft
+  onder `planCapacity()`, getoetst in `saveGoal()` en in `setPlanAllocVeld()` via `planVastRuimte()`.
+  Dezelfde stap van spiegel naar grens als bij het bijstellen van een potje (`v238`): een tekort dat
+  je kunt wegklikken is geen regel. `planAllocWarning()` blijft bestaan voor wat onder die grens
+  valt, zoals percentages die samen boven de honderd komen. Zonder bekende spaarinleg is er niets om
+  tegen af te zetten en geldt de grens niet (`v59`, `v73`).
+- **Reserveringen zijn een gemeten stand tegenover een ingevoerde verwachting** (`v242`): het blok op
+  Plan toont drie dingen en verder niets - de stand van de rekening (`accBalance(SET.resAcc)`), de
+  verwachte kosten met hun maand, en het verschil. Staat er meer dan er nu opgebouwd hoort te zijn,
+  dan blijft er over; staat er minder, dan is dat een tekort. Dat is een aftrekking en geen oordeel:
+  de dekkingsgraad, `gedektTot` en of het op tijd komt blijven op Grip (`v187`), en de verwijzende
+  regel daarheen blijft staan. Geen alarmkleur. Het blok raakt de spaarinleg niet: `benodigdPerMaand`
+  komt niet in `planItems()`, `allocatePlan()` of `planCapacity()` (`v128`).
 - **Een halve maand is geen maand** (`v194`, `v230`): een vergelijking tussen de lopende maand en
   afgeronde maanden rendert alleen op afgeronde maanden (de meermaands-grafiek, signaal 2 van
   `insSignals()`). Geen tempo-vergelijking als vervanging: vaste lasten passen niet in een tempo
@@ -400,7 +428,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v241` → `minder-v242`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v242` → `minder-v243`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

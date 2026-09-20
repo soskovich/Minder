@@ -9,6 +9,10 @@ const CAP = 300;   // savingMode 'amount', savingAmount 300 -> monthlySavingTarg
 function tweak(fn) {
   const p = seed();
   const set = JSON.parse(p.minder_set);
+  /* v242: de grendel. Zolang het noodfonds niet vol is gaat de hele spaarinleg daarheen en valt er
+     niets te verdelen. Deze spec gaat over de verdeling zelf, dus de buffer staat hier vol en de
+     grendel open. Dat is de voorwaarde die er altijd al impliciet was; nu staat hij er. */
+  set.nfToegewezen = 9e7; set.nfToegewezenMigrated = true;   // planMap klemt op het doel
   fn(set);
   p.minder_set = JSON.stringify(set);
   return p;
@@ -34,7 +38,7 @@ async function openPlanZone(page) {
   }
   await page.waitForSelector('#s-vooruit .plan-item');
 }
-const alloc = (page) => page.evaluate(() => allocatePlan().map((x) => ({ id: x.id, mode: x.mode, alloc: x.alloc, eta: x.eta, status: x.status })));
+const alloc = (page) => page.evaluate(() => allocatePlan().map((x) => ({ id: x.id, mode: x.mode, alloc: x.alloc, base: x.base, extra: x.extra, eta: x.eta, status: x.status })));
 
 test.describe('a · de drie modi', () => {
   test('vast bedrag krijgt exact dat bedrag, auto de rest', async ({ page }) => {
@@ -47,7 +51,8 @@ test.describe('a · de drie modi', () => {
     expect(P[0].alloc).toBe(120);                       // exact het vaste bedrag
     expect(P[1].alloc).toBe(CAP - 120);                 // auto pakt wat er nog is
     expect(P[2].alloc).toBe(0);
-    expect(P[2].status).toBe('wacht op capaciteit');
+    // v242: met een open grendel is de buffer per definitie vol, dus dit item is 'bereikt'
+    expect(P[2].status).toBe('bereikt');
     expect(P[0].eta).toBe(Math.ceil(2000 / 120));       // ETA volgt de toewijzing
     expect(P[1].eta).toBe(Math.ceil(2000 / 180));
   });
@@ -184,6 +189,7 @@ test.describe('c · de editors', () => {
     await page.waitForSelector('#gPct');
     expect(await page.locator('#gMnd').count()).toBe(0);         // €-veld maakt plaats voor %
     await page.locator('#gPct').fill('25');
+    await page.locator('#gDatum').fill('2030-01');               // v242: de streefdatum is verplicht
     await page.locator('#sheet >> text=Opslaan').click();
     await page.waitForSelector('#sheetBg.show', { state: 'detached' });
 
@@ -192,31 +198,39 @@ test.describe('c · de editors', () => {
     expect(g.pct).toBe(25);
     expect(g.perMaand).toBe(120);                                // niet gewist bij de moduswissel
     const P = await alloc(page);
-    expect(P[0].alloc).toBe(Math.round(CAP * 0.25));
+    /* v242: met een open grendel is dit het enige lopende doel, dus het restant van ronde 1 zakt er
+       in ronde 2 alsnog heen. Wat de modus bepaalt is ronde 1, en dat is base; alloc is de som. */
+    expect(P[0].base).toBe(Math.round(CAP * 0.25));
+    expect(P[0].alloc).toBe(P[0].base + P[0].extra);
   });
 
-  test('het noodfonds krijgt dezelfde keuze in zijn eigen sheet', async ({ page }) => {
+  /* v242 DRAAIT DEZE BEDOELING OM. Tot v241 kreeg het noodfonds dezelfde drie verdeelmodi als een
+     spaardoel, want het was 'gewoon plan-item #1'. Dat was precies het lek: een vast bedrag op een
+     lege buffer laat de rest van je inleg langs die buffer lopen. Zolang de grendel dicht zit
+     staan de chips er niet, en zegt de sheet waarom en wanneer hij opengaat. */
+  test('het noodfonds krijgt geen keuze zolang de buffer niet vol is', async ({ page }) => {
     await openV(page, seed());
+    expect(await page.evaluate(() => !!planGrendel())).toBe(true);
     await page.evaluate(() => openNoodfondsPanel());
     await page.waitForSelector('#nfMaandChips');
     const sheet = await page.locator('#sheet').innerText();
     expect(sheet).toContain('Hoeveel gaat hier maandelijks heen?');
-
-    await page.locator('#sheet .chip', { hasText: 'Vast bedrag' }).click();
-    await page.waitForSelector('#nfPer');
-    await page.locator('#nfPer').fill('80');
-    await page.locator('#nfPer').press('Tab');
-    await page.waitForFunction(() => (SET.planAlloc || {}).noodfonds && SET.planAlloc.noodfonds.perMaand === 80);
-
-    const P = await page.evaluate(() => allocatePlan().map((x) => ({ id: x.id, mode: x.mode, base: x.base, extra: x.extra, alloc: x.alloc })));
-    const nf = P.find((x) => x.id === 'noodfonds');
-    expect(nf.mode).toBe('fixed');
-    expect(nf.base).toBe(80);                                    // ronde 1: niet meer de hele spaarruimte
-    // v98: er is hier geen ander lopend doel, dus het restant zakt door naar het noodfonds zelf
-    // i.p.v. ongebruikt te blijven liggen. Zodra er een tweede doel staat, gaat het daarheen.
-    expect(P.length).toBe(1);
-    expect(nf.extra).toBe(nf.alloc - 80);
+    expect(sheet).toContain('Je hele spaarinleg');
+    expect(await page.locator('#sheet .chip', { hasText: 'Vast bedrag' }).count()).toBe(0);
+    // ook programmatisch blijft de modus staan
+    await page.evaluate(() => setNfAllocMode('fixed'));
+    expect(await page.evaluate(() => planAllocOf(planAllocCfg('noodfonds')).mode)).not.toBe('fixed');
+    const nf = await page.evaluate(() => allocatePlan().find((x) => x.id === 'noodfonds'));
+    expect(nf.alloc).toBe(CAP);                                  // de hele spaarruimte, zoals de grendel eist
     expect(await page.evaluate(() => planVrij())).toBe(0);
+  });
+
+  test('met een volle buffer staan de drie modi er wel', async ({ page }) => {
+    await openV(page, tweak((s) => { s.goals = []; }));
+    expect(await page.evaluate(() => planGrendel())).toBe(null);
+    await page.evaluate(() => openNoodfondsPanel());
+    await page.waitForSelector('#nfMaandChips');
+    expect(await page.locator('#sheet .chip', { hasText: 'Vast bedrag' }).count()).toBe(1);
   });
 
   test('de plan-lijst benoemt de modus en het bedrag', async ({ page }) => {
@@ -225,7 +239,11 @@ test.describe('c · de editors', () => {
       { id: 'gB', naam: 'Laptop', doel: 5000, gespaard: 0, allocMode: 'fixed', perMaand: 50 },
     ]));
     await openPlanZone(page);
-    expect(await page.locator('.plan-item[data-id="gA"]').innerText()).toContain('30% · €90/mnd');
+    /* v242: met een open grendel blijft er ruimte over die doorzakt, dus het bedrag op de rij is
+       alloc en niet alleen het aandeel. Wat deze test vasthoudt is dat de rij zijn modus benoemt
+       naast zijn bedrag; het bedrag toetsen we tegen de bron in plaats van tegen een vast getal. */
+    const A = await page.evaluate(() => allocatePlan().find((x) => x.id === 'gA'));
+    expect(await page.locator('.plan-item[data-id="gA"]').innerText()).toContain(`30% · €${A.alloc}/mnd`);
     expect(await page.locator('.plan-item[data-id="gB"]').innerText()).toContain('vast · €50/mnd');
   });
 });
