@@ -8854,6 +8854,10 @@ function _catSpendOf(mm){ return catSpendMap(mm); }   // netto per categorie (te
        De imp was bovendien een handeling ("een bewuste <dag> levert de meeste winst"), en op een
        regel die vaststelt is dat een opdracht (v222). Hij stelt nu vast:
        imp: "Je losse geld lag deze maand sterker op een dag dan je gewend bent."
+       v240: de kop draagt nu het bedrag en het percentage zakte naar de toelichting, dus de hyp
+       kreeg er een zin bij die zegt waar het normaal-bedrag vandaan komt. Zonder die zin leest een
+       afgeleide als een meting:
+       hyp: "... Bij dat gebruikelijke aandeel hoort deze maand ongeveer <normaal>."
      grootste winkel
        hyp: "Een winkel domineert je losse uitgaven."
        imp: "Reken je deze maand niet rijk of arm aan dit ene bedrag." */
@@ -8902,11 +8906,28 @@ function piekReferentie(m){
    vergelijking, en elk veelvoud van nul is waar. Een weekdag waarop je in drie maanden niets
    uitgaf blijft daardoor stil, ook als hij deze maand de grootste is. Dat is een bewuste keuze en
    geen omissie: zonder referentie is er niets om tegen af te zetten. */
+/* v240: de regel leest voorop een bedrag, dus piekVuurt() levert er twee. De meting verandert
+   niet: hij vuurt nog steeds op het aandeel, en de bedragen hangen er alleen aan.
+   normBedrag IS EEN AFGELEIDE, geen gemeten bedrag: het gemiddelde AANDEEL maal het losse geld van
+   deze maand. Niet het gemiddelde van de drie werkelijke dagbedragen. Die tweede rekenwijze legt
+   een bedrag van deze maand naast bedragen uit maanden waarin je totaal anders lag, en dan
+   verschuift het verschil zodra je maand duurder of goedkoper is zonder dat de verdeling scheef
+   staat. Gemeten geval waarin de twee elkaar tegenspreken: maandag 80 euro van 250 (32%) tegen een
+   referentie van 20% (historisch 100 euro van 500). Het aandeel is hoger, dus de regel vuurt; met
+   de tweede rekenwijze zou de kop 'maandag 80 euro, normaal 100 euro' lezen, en dat spreekt de
+   toelichting eronder tegen.
+   BEIDE BEDRAGEN KOMEN UIT HET ONGEAFGERONDE AANDEEL, net als de twee percentages. Niet uit het al
+   afgeronde percentage: dan bepaalt de weergave het getal in plaats van de meting. Afronden gebeurt
+   pas in euro0(). Gevolg, bewust aanvaard: wie het getoonde percentage maal zijn maandtotaal
+   naneemt kan een paar euro lager uitkomen (gemeten: 90 tegen 94 bij een referentie van 9,4% op een
+   maand van 1000 euro). De verhouding tussen de twee bedragen blijft wel gelijk aan die tussen de
+   twee percentages, en dat is de rekensom die je zonder het maandtotaal kunt maken. */
 function piekVuurt(V, ref){
   if(!V || !ref || V.n<PIEK_MIN_TX) return null;
   const peak=V.aandeel.indexOf(Math.max(...V.aandeel));
   if(!(ref[peak]>0) || V.aandeel[peak] < ref[peak]*PIEK_FACTOR) return null;
-  return {peak, share:Math.round(V.aandeel[peak]*100), norm:Math.round(ref[peak]*100)};
+  return {peak, share:Math.round(V.aandeel[peak]*100), norm:Math.round(ref[peak]*100),
+    bedrag:V.sumd[peak], normBedrag:ref[peak]*V.tot};
 }
 function insSignals(m,exclude){
   exclude=exclude||new Set();
@@ -8981,9 +9002,20 @@ function insSignals(m,exclude){
   if(_magPiek){
     /* Geen tik: er is geen weergave per weekdag in de app, en een tik naar iets anders zou een
        gevolg suggereren dat er niet is. spiegel:true zegt dat met zoveel woorden (v174). */
+    /* v240: het bedrag voorop, het percentage in de toelichting. Een verhouding moet je omrekenen
+       voordat hij iets betekent, een bedrag herken je meteen. Het percentage blijft staan, want
+       daar zit de vergelijkbaarheid: een maand van 900 euro los geld en een maand van 400 geven
+       bij hetzelfde patroon andere bedragen.
+       DE HERKOMST VAN HET NORMAAL-BEDRAG STAAT IN DE TOELICHTING en niet in de kop. Gemeten op 360
+       en 390px: deze kop blijft op een regel, ook in het langste geval dat hij kan krijgen
+       ('donderdag 12.340 euro (normaal 11.083 euro)'). Met de herkomst erbij ('normaal 83 euro bij
+       je gebruikelijke aandeel') loopt hij op allebei de breedtes naar twee regels, en dan duwt de
+       kop zijn eigen label naar de tweede regel. Een korte variant in de kop ('normaal 83 euro bij
+       9%') past wel, maar die haalt het percentage terug naar boven, en dat is precies wat deze
+       ronde wegneemt. */
     out.push({pri:5,act:'',spiegel:true,
-      kpiLabel:'Piekdag', kpiVal:dn[P.peak], kpiSub:`${P.share}% van je losse geld, normaal ${P.norm}%`,
-      hyp:`${pctWoord(P.share)} van je losse geld ging op ${dn[P.peak]}, tegen ${P.norm}% in de drie maanden ervoor.`,
+      kpiLabel:'Piekdag', kpiVal:`${dn[P.peak]} ${euro0(P.bedrag)}`, kpiSub:`normaal ${euro0(P.normBedrag)}`,
+      hyp:`${pctWoord(P.share)} van je losse geld ging op ${dn[P.peak]}, tegen ${P.norm}% in de drie maanden ervoor. Bij dat gebruikelijke aandeel hoort deze maand ongeveer ${euro0(P.normBedrag)}.`,
       imp:`Je losse geld lag deze maand sterker op een dag dan je gewend bent.`});
   }
   if(dom) out.push({pri:6,act:`openMerchant('${esc(String(dom.naam).toUpperCase().replace(/'/g,"\\'"))}')`,

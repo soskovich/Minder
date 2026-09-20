@@ -72,7 +72,8 @@ const meet = (page) => page.evaluate(() => {
     aandeel: V ? Math.round(Math.max(...V.aandeel) * 100) : 0,
     refPeak: (V && ref) ? Math.round(ref[V.aandeel.indexOf(Math.max(...V.aandeel))] * 100) : null,
     vuurt: !!P, labels: insSignals(m, ex).map((s) => s.kpiLabel),
-    subs: insSignals(m, ex).map((s) => s.kpiSub) };
+    subs: insSignals(m, ex).map((s) => s.kpiSub),
+    hyps: insSignals(m, ex).map((s) => s.hyp) };
 });
 
 // drie rustige historiemaanden; frVr stelt het vrijdag-bedrag in
@@ -162,10 +163,13 @@ test.describe('de noemer', () => {
     expect(r.piek).toBe('vrijdag');
     expect(r.vuurt).toBe(true);
     expect(r.labels).toContain('Piekdag');
+    // v240: de kop draagt de twee bedragen, de twee percentages staan in de toelichting. Wat deze
+    // test vasthoudt is dat de referentie in de regel staat, en dat is nog steeds zo.
     const sub = r.subs[r.labels.indexOf('Piekdag')];
-    expect(sub).toMatch(/^\d+% van je losse geld, normaal \d+%$/);
-    expect(sub).toContain(`${r.aandeel}%`);
-    expect(sub).toContain(`normaal ${r.refPeak}%`);
+    const hyp = r.hyps[r.labels.indexOf('Piekdag')];
+    expect(sub).toMatch(/^normaal \u20ac[\d.]+$/);
+    expect(hyp).toContain(`${r.aandeel}%`);
+    expect(hyp).toContain(`tegen ${r.refPeak}% in de drie maanden ervoor`);
     // vaststellen, geen opdracht
     const s = await page.evaluate(() => { const m = thisYM(); const mv = monthVsPrevInner(m);
       const ex = new Set([...mv.drivers, ...budgetFlaggedCats(m)]);

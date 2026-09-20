@@ -121,6 +121,21 @@ genoemde versietag.)*
   drie bruikbare maanden geeft `null` en dan zwijgt het signaal, want een zevende per dag is een
   aanname en geen meting. Een weekdag waarvoor het gemiddelde nul is blijft ook stil: elk veelvoud
   van nul is waar, dus er valt niets tegen af te zetten. Dat is een bewuste keuze, geen omissie.
+- **De piekdag meet op aandeel en leest voorop een bedrag** (`v240`): de kop draagt de weekdag met
+  het bedrag van die dag en het normaal-bedrag, de twee percentages staan in de toelichting. Het
+  percentage mag er nooit uit: daar zit de vergelijkbaarheid, want een maand met €900 los geld en
+  een maand met €400 geven bij hetzelfde patroon andere bedragen. Het normaal-bedrag is het
+  gemiddelde **aandeel** maal het losse geld van deze maand, nooit het gemiddelde van de drie
+  werkelijke dagbedragen: dat tweede legt een bedrag van deze maand naast bedragen uit maanden
+  waarin je totaal anders lag. Gemeten geval waarin ze elkaar tegenspreken: maandag €80 van €250
+  (32%) tegen een referentie van 20% (historisch €100 van €500) geeft als normaal €50 tegen €100,
+  en die tweede kop spreekt zijn eigen toelichting tegen. BEIDE BEDRAGEN KOMEN UIT HET
+  ONGEAFGERONDE AANDEEL, net als de twee percentages; niet uit het al afgeronde percentage, want
+  dan bepaalt de weergave het getal. Gevolg, bewust aanvaard: wie het getoonde percentage maal zijn
+  maandtotaal naneemt kan een paar euro lager uitkomen (gemeten €90 tegen €94 bij 9,4% op een maand
+  van €1.000). De verhouding tussen de twee bedragen blijft gelijk aan die tussen de twee
+  percentages, en dat is de enige rekensom die zonder het maandtotaal te maken is. De herkomst van
+  het normaal-bedrag hoort in de toelichting: in de kop loopt hij op 360 en 390px naar twee regels.
 - **Losse geld is zonder onvoorzien** (`v239`): signaal 3 en 4 van `insSignals()` waren de enige twee
   plekken in de normlaag waar `geenNorm` niet werd uitgesloten, terwijl signaal 1 en 2 in dezelfde
   functie dat al deden (`v234`). Nu ook daar, in de telpoort **en** in de sommen. Gemeten aanleiding:
@@ -366,7 +381,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v239` → `minder-v240`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v240` → `minder-v241`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de
