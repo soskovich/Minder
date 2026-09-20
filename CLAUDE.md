@@ -146,6 +146,24 @@ genoemde versietag.)*
   pas volgende maand" (`setCatBudget`, `savePotje`). Het voorstel ligt **nooit** onder je huidige
   stand: `ceil5(max(stand, prognose))` met `daysElapsed()` als enige kalenderbron. Een lager bedrag
   mag handmatig, en dan laat `over_eind_maand` zien dat de maand alsnog boven het potje eindigde.
+- **Bijstellen is een verdeling, geen verhoging** (`v238`): een verhoging wijst een even grote
+  verlaging aan, zodat het maandtotaal gelijk blijft. Dat draait het `v235`-besluit terug dat een
+  verhoging gewoon een verhoging was omdat `potje_voor`/`potje_na` hem achteraf zichtbaar maakten:
+  zichtbaarheid houdt een totaal niet vast. Drie harde regels: **opslaan kan pas als het verschil
+  nul is** (een tekort dat je kunt wegklikken is geen regel, dus er blijft er ook geen achter),
+  **een dekkend potje per keer** (je benoemt wat het kost in plaats van het uit te smeren), en de
+  **ondergrens van een dekkend potje is wat er deze maand al uit is** (`valtOpRuimte()`; een potje
+  zonder ruimte staat niet in de keuzelijst, dus de regel zit aan de bron en niet in een
+  foutmelding). De dekking loopt door dezelfde twee lagen als de verhoging, dus `rolloverBudgets()`
+  draait beide kanten terug. Het record draagt `dekking: [{categorie, potjeId, potje_voor,
+  potje_na}]`, en de telling blijft één keer `potje_bijgesteld`: twee potjes, één handeling.
+  WAT HIER BEWUST NIET LIGT: de ondergrens geldt voor de **dekkende** potjes. Je eigen potje lager
+  zetten dan je stand mag nog steeds (`v235`), en een verlaging vraagt geen dekking, want de regel
+  houdt tegen dat het totaal **groeit**. En de eis hoort bij deze ene route:
+  `valtOpPotjeOpslaan()` is de enige plek die een **bestaand** potje in de lopende maand wijzigt.
+  Elke andere schrijver van `SET.budgets` maakt een **nieuw** potje (`setCatBudget`, `savePotje`,
+  `suggestBudgets`, het eerste-potje-gesprek), en dat is een andere handeling. Je maandtotaal kan
+  dus nog steeds groeien via een nieuw potje, en dat van volgende maand via de budgeteditor.
 - **Eén post, één lijst, één vlag** (`v231`): terugkerende posten komen uit `recurringSchedule()`
   en dragen één vlag, `SET.fixDueExcl[key]={sinds}` ("Opgezegd op"). Geen tweede detectie en geen
   tweede vlag naast die ene; een afbakening (opzegbaar) is een weergavefilter op dezelfde lijst.
@@ -326,7 +344,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v237` → `minder-v238`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v238` → `minder-v239`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

@@ -69,8 +69,18 @@ const DRIE = {
     { cat: 'vervoer', bedrag: 80, naam: 'Shell' },
     { cat: 'sport', bedrag: 38, naam: 'Basic-Fit' },
   ],
-  set: { budgets: { boodschappen: 200, uiteten: 100, vervoer: 50, sport: 30 } },
+  // v238: shopping heeft geen boekingen en dus 300 ruimte. Zonder een potje met ruimte valt er
+  // niets te verschuiven en staat de opslaanknop altijd uit. Het levert geen signaal op, dus de
+  // rangorde, de drempel en de log blijven precies zoals ze waren.
+  set: { budgets: { boodschappen: 200, uiteten: 100, vervoer: 50, sport: 30, shopping: 300 } },
 };
+/* v238: bijstellen is een verdeling. De knop blijft uit tot het verschil nul is, dus elke test die
+   opslaat wijst eerst een dekkend potje aan. */
+async function dek(page, cat, bedrag) {
+  await page.locator('#sheet [onclick*="valtOpDekLijst"]').click();
+  await page.locator('#valtOpDekBlok .tx', { hasText: cat }).click();
+  await page.locator('#valtOpDekBlok input').last().fill(String(bedrag));
+}
 // zes losse boodschappen-boekingen op één dag: piekdag vuurt, geen dominante winkel
 const ZES = [28, 29, 30, 31, 32, 33].map((b, i) => ({ cat: 'boodschappen', bedrag: b, naam: 'Winkel ' + 'ABCDEF'[i], dag: '08' }));
 
@@ -269,10 +279,13 @@ test.describe('de drie handelingen', () => {
     // KRITIEK: nooit onder de huidige stand, anders verdwijnt het signaal terwijl je er nog boven staat
     expect(voorstel).toBeGreaterThanOrEqual(300);
     expect(voorstel % 5).toBe(0);
-    await page.locator('#sheet button.btn').click();
-    const na = await page.evaluate(() => ({ b: SET.budgets.boodschappen, n: SET.budgetsNext.boodschappen }));
+    const totVoor = await page.evaluate(() => Math.round(totalBudget()));
+    await dek(page, 'Online shopping', voorstel - 200);
+    await page.locator('#valtOpSave').click();
+    const na = await page.evaluate(() => ({ b: SET.budgets.boodschappen, n: SET.budgetsNext.boodschappen, tot: Math.round(totalBudget()) }));
     expect(na.b).toBe(voorstel);          // de lopende maand
     expect(na.n).toBe(200);               // rolloverBudgets() draait hem bij de maandwissel terug
+    expect(na.tot).toBe(totVoor);         // v238: het maandtotaal blijft gelijk
     const r = (await logVan(page))[`${CUR}|boodschappen`];
     expect(r.actie).toBe('potje_bijgesteld');
     expect(r.potje_voor).toBe(200);
@@ -285,7 +298,8 @@ test.describe('de drie handelingen', () => {
     await page.evaluate(() => go('maand'));
     await page.locator('.valtop-open .valtop-hand button').first().click();
     await page.locator('#valtOpBedrag').fill('220');
-    await page.locator('#sheet button.btn').click();
+    await dek(page, 'Online shopping', 20);
+    await page.locator('#valtOpSave').click();
     const r = (await logVan(page))[`${CUR}|boodschappen`];
     expect(r.potje_voor).toBe(200);
     expect(r.potje_na).toBe(220);
@@ -297,7 +311,8 @@ test.describe('de drie handelingen', () => {
     await boot(page, DRIE);
     await page.evaluate(() => go('maand'));
     await page.locator('.valtop-open .valtop-hand button').first().click();
-    await page.locator('#sheet button.btn').click();
+    await dek(page, 'Online shopping', +(await page.locator('#valtOpBedrag').inputValue()) - 200);
+    await page.locator('#valtOpSave').click();
     expect(await sigKeys(page)).toEqual(['uiteten', 'vervoer']);   // nummer drie schuift door
     await page.evaluate(() => go('ins'));
     await expect(page.locator('.valtop-rij')).toHaveCount(2);
@@ -407,8 +422,10 @@ test.describe('de vastlegging', () => {
     const blok = page.locator('.card', { hasText: 'Wat je met deze overschrijdingen deed' });
     await expect(blok).toContainText('0× potje bijgesteld');
     await page.locator('.valtop-open .valtop-hand button').first().click();
-    await page.locator('#sheet button.btn').click();
+    await dek(page, 'Online shopping', +(await page.locator('#valtOpBedrag').inputValue()) - 200);
+    await page.locator('#valtOpSave').click();
     await page.evaluate(() => go('maand'));
+    // v238: een verdeling raakt twee potjes maar blijft een handeling
     await expect(blok).toContainText('1× potje bijgesteld');
     await expect(blok).toContainText('€200');
     await expect(blok).not.toContainText('streak');
@@ -529,6 +546,7 @@ test.describe('layout', () => {
     // v215: hele euro's mogen type=number/inputmode=numeric houden
     expect(await veld.getAttribute('type')).toBe('number');
     expect(await veld.getAttribute('inputmode')).toBe('numeric');
+    await dek(page, 'Online shopping', 100);   // v238: met de dekkingshelft erbij
     const over = await page.evaluate(() => {
       const el = document.querySelector('#sheet');
       return el.scrollWidth - el.clientWidth;
@@ -676,7 +694,8 @@ test.describe('terugtypen na de knop op Grip', () => {
     await page.evaluate(() => go('maand'));
     await page.locator('.valtop-open .valtop-hand button').first().click();
     await page.locator('#valtOpBedrag').fill('450');
-    await page.locator('#sheet button.btn').click();
+    await dek(page, 'Online shopping', 250);
+    await page.locator('#valtOpSave').click();
     expect((await logVan(page))[`${CUR}|boodschappen`].potje_na).toBe(450);
     // in de budgeteditor terugtypen naar de oude stand, per toetsaanslag
     await page.evaluate(() => { setCatBudget('boodschappen', '2'); setCatBudget('boodschappen', '20'); setCatBudget('boodschappen', '200'); });
@@ -699,5 +718,140 @@ test.describe('terugtypen na de knop op Grip', () => {
     await page.evaluate(() => setCatBudget('boodschappen', '200'));
     r = (await logVan(page))[`${CUR}|boodschappen`];
     expect(r.actie).toBe(null);                      // terug op de oude stand telt niet als actie
+  });
+});
+
+/* v238: bijstellen is een verdeling, geen verhoging. Tot v237 ging het potje omhoog en het
+   maandtotaal mee, en de log zweeg over waar dat geld vandaan kwam. Drie harde regels: opslaan kan
+   pas als het verschil nul is, je wijst een dekkend potje per keer aan, en een dekkend potje mag
+   niet onder wat er deze maand al uit is. */
+test.describe('bijstellen is een verdeling', () => {
+  // sport 50 met 90 uitgegeven (het signaal), en twee potjes met elk 60 ruimte
+  const VERDEEL = {
+    tx: [{ cat: 'sport', bedrag: 90, naam: 'Basic-Fit' },
+         { cat: 'boodschappen', bedrag: 340, naam: 'Albert Heijn' },
+         { cat: 'uiteten', bedrag: 40, naam: 'Restaurant De Kade' }],
+    set: { budgets: { sport: 50, boodschappen: 400, uiteten: 100 } },   // totaal 550
+  };
+  const open = async (page) => {
+    await page.evaluate(() => go('maand'));
+    await page.locator('.valtop-open .valtop-hand button').first().click();
+  };
+  const totaal = (page) => page.evaluate(() => Math.round(totalBudget()));
+
+  test('volledige dekking uit een potje: het maandtotaal blijft gelijk', async ({ page }) => {
+    await boot(page, VERDEEL);
+    expect(await totaal(page)).toBe(550);
+    await open(page);
+    await page.locator('#valtOpBedrag').fill('96');
+    await dek(page, 'Boodschappen', 46);
+    await expect(page.locator('#valtOpTekort')).toContainText('Gedekt');
+    await page.locator('#valtOpSave').click();
+    expect(await totaal(page)).toBe(550);
+    const b = await page.evaluate(() => SET.budgets);
+    expect(b.sport).toBe(96);
+    expect(b.boodschappen).toBe(354);          // beide kanten in de lopende maand
+    const r = (await logVan(page))[`${CUR}|sport`];
+    expect(r.potje_voor).toBe(50);
+    expect(r.potje_na).toBe(96);
+    expect(r.dekking).toEqual([{ categorie: 'Boodschappen', potjeId: 'boodschappen', potje_voor: 400, potje_na: 354 }]);
+    // een verdeling raakt twee potjes maar is een handeling, en de dekkende kant krijgt geen eigen record
+    expect(Object.keys(await logVan(page))).toEqual([`${CUR}|sport`]);
+  });
+
+  test('zonder dekking kun je niet opslaan, en het verschil staat in de sheet', async ({ page }) => {
+    await boot(page, VERDEEL);
+    await open(page);
+    await page.locator('#valtOpBedrag').fill('96');
+    await expect(page.locator('#valtOpSave')).toBeDisabled();
+    await expect(page.locator('#valtOpTekort')).toContainText('Nog te dekken');
+    await expect(page.locator('#valtOpTekort')).toContainText('€46');
+    // de tweede sluiting zit in valtOpPotjeOpslaan zelf: ook rechtstreeks aanroepen doet niets
+    await page.evaluate(() => valtOpPotjeOpslaan(thisYM() + '|sport'));
+    expect(await page.evaluate(() => SET.budgets.sport)).toBe(50);
+    expect((await logVan(page))[`${CUR}|sport`].actie).toBe(null);
+  });
+
+  test('een potje met te weinig ruimte wordt geklemd, en er kan een tweede bij', async ({ page }) => {
+    await boot(page, VERDEEL);
+    await open(page);
+    await page.locator('#valtOpBedrag').fill('150');          // 100 te dekken
+    await dek(page, 'Boodschappen', 999);
+    expect(await page.locator('#valtOpDek_boodschappen').inputValue()).toBe('60');   // ruimte 400 min 340
+    await expect(page.locator('#valtOpTekort')).toContainText('€40');
+    await expect(page.locator('#valtOpSave')).toBeDisabled();
+    await dek(page, 'Uit eten', 40);
+    await expect(page.locator('#valtOpSave')).toBeEnabled();
+    await page.locator('#valtOpSave').click();
+    expect(await totaal(page)).toBe(550);
+    const r = (await logVan(page))[`${CUR}|sport`];
+    expect(r.dekking.map((x) => [x.potjeId, x.potje_na])).toEqual([['boodschappen', 340], ['uiteten', 60]]);
+  });
+
+  test('een potje kan niet onder zijn huidige stand', async ({ page }) => {
+    await boot(page, VERDEEL);
+    await open(page);
+    await page.locator('#valtOpBedrag').fill('150');
+    await dek(page, 'Boodschappen', 100);                     // zou het potje op 300 zetten, met 340 erin
+    expect(await page.locator('#valtOpDek_boodschappen').inputValue()).toBe('60');
+    expect(await page.locator('#valtOpDek_boodschappen').getAttribute('max')).toBe('60');
+    // de rij noemt de ruimte en waar die vandaan komt
+    await expect(page.locator('#valtOpDekBlok .tx').first()).toContainText('ruimte €60');
+    await expect(page.locator('#valtOpDekBlok .tx').first()).toContainText('€340 uitgegeven');
+  });
+
+  test('zonder enkel potje met ruimte valt er niets te verschuiven', async ({ page }) => {
+    // boodschappen 300 met 340 erin, uit eten 30 met 40 erin: allebei al over hun potje
+    await boot(page, { tx: VERDEEL.tx, set: { budgets: { sport: 50, boodschappen: 300, uiteten: 30 } } });
+    await open(page);
+    expect(await page.evaluate(() => valtOpDekKandidaten('sport'))).toEqual([]);
+    await expect(page.locator('#valtOpDekBlok')).toContainText('Geen enkel ander potje heeft deze maand nog ruimte');
+    await expect(page.locator('#valtOpSave')).toBeDisabled();
+    // de kaart houdt zijn twee andere handelingen, dus je zit niet vast
+    await page.evaluate(() => closeSheet());
+    await expect(page.locator('.valtop-open .valtop-hand button')).toHaveCount(3);
+  });
+
+  test('de maandwissel draait allebei de kanten terug', async ({ page }) => {
+    await boot(page, VERDEEL);
+    await open(page);
+    await page.locator('#valtOpBedrag').fill('96');
+    await dek(page, 'Boodschappen', 46);
+    await page.locator('#valtOpSave').click();
+    expect(await page.evaluate(() => SET.budgetsNext)).toMatchObject({ sport: 50, boodschappen: 400 });
+    const na = await page.evaluate((m) => { SET.budgetMonth = m; save(); rolloverBudgets(); return SET.budgets; }, M1);
+    expect(na.sport).toBe(50);
+    expect(na.boodschappen).toBe(400);
+    expect(await totaal(page)).toBe(550);
+  });
+
+  test('de log leest beide kanten en de telling telt een keer', async ({ page }) => {
+    await boot(page, VERDEEL);
+    await open(page);
+    await page.locator('#valtOpBedrag').fill('96');
+    await dek(page, 'Boodschappen', 46);
+    await page.locator('#valtOpSave').click();
+    await page.evaluate(() => go('maand'));
+    const blok = page.locator('.card', { hasText: 'Wat je met deze overschrijdingen deed' });
+    await expect(blok).toContainText('€50 → €96');
+    await expect(blok).toContainText('uit Boodschappen €400 → €354');
+    await expect(blok).toContainText('1× potje bijgesteld');
+    await expect(blok).not.toContainText('2× potje bijgesteld');
+    // een record van voor v238 heeft geen dekking en mag daar niet over liegen
+    expect(await page.evaluate(() => { const d = document.createElement('div');
+      const bak = SET.valtOpLog[thisYM() + '|sport'].dekking; delete SET.valtOpLog[thisYM() + '|sport'].dekking;
+      d.innerHTML = valtOpLogBlok(); SET.valtOpLog[thisYM() + '|sport'].dekking = bak;
+      return d.innerText; })).not.toContain('uit ');
+  });
+
+  test('een verlaging van je eigen potje vraagt geen dekking', async ({ page }) => {
+    await boot(page, VERDEEL);
+    await open(page);
+    // v235 blijft: een lager bedrag mag, en dat laat het totaal juist dalen
+    await page.locator('#valtOpBedrag').fill('40');
+    await expect(page.locator('#valtOpSave')).toBeEnabled();
+    await page.locator('#valtOpSave').click();
+    expect(await totaal(page)).toBe(540);
+    expect((await logVan(page))[`${CUR}|sport`].potje_na).toBe(40);
   });
 });

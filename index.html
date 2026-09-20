@@ -496,6 +496,7 @@ input[type=search],input[type=number]{width:100%;background:var(--card2);border:
 .btn{display:block;width:100%;background:var(--teal);color:var(--on-accent);border:none;border-radius:var(--r-inner);padding:13px;font-size:var(--fs-md);font-weight:700;cursor:pointer;text-align:center}
 .btn:active{filter:brightness(1.1)}
 .btn.sec{background:transparent;border:1px solid var(--ln2);color:var(--txt);font-weight:600}
+.btn[disabled]{background:var(--card2);color:var(--mut2);cursor:not-allowed}   /* v238: uit tot de dekking rond is */
 .btn.danger{background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.4);color:var(--red)}
 .slider{width:100%;accent-color:var(--teal)}
 label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6px;font-weight:600}
@@ -4120,35 +4121,164 @@ function valtOpKaartOpen(s){
    was een aparte keuze en wordt hier niet overschreven.
    potje_voor en potje_na gaan altijd de vastlegging in, ook bij een handmatig lager bedrag. Dan
    laat de afsluiting zien dat de maand alsnog boven het potje eindigde. */
+/* v238: bijstellen is een verdeling, geen verhoging.
+   Tot v237 ging het potje omhoog en het maandtotaal mee: Sport van 50 naar 96 maakte het
+   maandbudget 46 euro groter, en de log zweeg over waar die 46 vandaan kwam. potje_voor en
+   potje_na maakten het achteraf zichtbaar, maar zichtbaarheid houdt een totaal niet vast. Nu wijst
+   elke verhoging een even grote verlaging aan, en blijft het maandtotaal gelijk.
+   DRIE REGELS, alle drie hard:
+   1. Opslaan kan pas als het verschil nul is. Een tekort dat je kunt wegklikken is geen regel, dus
+      er blijft ook geen openstaand tekort achter dat de app daarna zou moeten tonen.
+   2. Een dekkend potje per keer, een tweede pas als het moet. Je benoemt wat het kost in plaats van
+      46 euro uit te smeren over acht potjes van zes.
+   3. De ondergrens van een dekkend potje is wat er deze maand al uit is. Een potje naar 300 terwijl
+      er 340 in zit verplaatst het probleem alleen naar volgende maand.
+   TWEE GRENZEN die hier bewust NIET liggen:
+   - De ondergrens geldt voor de DEKKENDE potjes. Het potje dat omhoog gaat mag je nog steeds lager
+     zetten dan je stand: dat besluit is van v235 en staat hier niet ter discussie; over_eind_maand
+     laat dan zien dat de maand alsnog boven het potje eindigde.
+   - Een verlaging van je eigen potje vraagt geen dekking. De regel houdt tegen dat het totaal
+     GROEIT; kleiner worden is precies waar de app voor is.
+   Het voorstel blijft ceil5(max(stand, prognose)) uit v235. De dekking wordt niet voorgevuld: de
+   sheet zegt wat er te dekken valt en jij kiest of je een potje aanwijst of je bedrag verlaagt. */
+function valtOpRuimte(k, sp){
+  const potje=Math.round(+(SET.budgets||{})[k]||0);
+  const uit=Math.round((sp||{})[k]||0);
+  return {potje, uit, ruimte:Math.max(potje-uit,0)};
+}
+/* Alleen potjes met ruimte, en nooit het potje dat omhoog gaat. Een potje zonder ruimte staat er
+   dus niet tussen: dat is regel 3, aan de bron in plaats van als foutmelding achteraf. */
+function valtOpDekKandidaten(kUit){
+  const B=SET.budgets||{}; let sp={}; try{ sp=catSpendMap(thisYM())||{}; }catch(_){}
+  return Object.keys(B)
+    .filter(k=>k!==kUit && +B[k]>0 && CATS[k] && CATS[k].type==='expense' && !geenNorm(k))
+    .map(k=>Object.assign({k, naam:CATS[k].name}, valtOpRuimte(k, sp)))
+    .filter(x=>x.ruimte>0)
+    .sort((a,b)=> (b.ruimte-a.ruimte) || a.naam.localeCompare(b.naam,'nl'));
+}
+function valtOpDek(){ return window._valtOpDek||null; }
+function valtOpDekSom(){ const d=valtOpDek(); if(!d) return 0;
+  let s=0; for(const k in d.dek) s+=Math.round(+d.dek[k]||0); return s; }
+function valtOpVerhoging(){ const d=valtOpDek(); if(!d) return 0;
+  return Math.max(Math.round(d.na)-Math.round(d.voor),0); }
+/* Positief: nog te dekken. Negatief: je dekt meer dan je erbij doet. Allebei houden de knop uit,
+   want het maandtotaal moet gelijk blijven en niet ongeveer gelijk. */
+function valtOpVerschil(){ return valtOpVerhoging()-valtOpDekSom(); }
+function valtOpNieuwTotaal(){ const d=valtOpDek(); if(!d) return totalBudget();
+  return Math.round(totalBudget()) - Math.round(d.voor) + Math.round(d.na) - valtOpDekSom(); }
+function valtOpMag(){ const d=valtOpDek(); return !!d && d.na>0 && valtOpVerschil()===0; }
+
+/* Alleen de afgeleide getallen bijwerken, niet het blok hertekenen: anders verliest het veld waar
+   je in typt zijn focus na elke toetsaanslag (dezelfde reden als bij setCatBudget). */
+function valtOpDekHerreken(){
+  const d=valtOpDek(); if(!d) return;
+  const v=valtOpVerschil();
+  const t=document.getElementById('valtOpTekort');
+  if(t) t.innerHTML = v>0
+    ? `Nog te dekken: <b>${euro0(v)}</b>`
+    : (v<0 ? `Je dekt <b>${euro0(-v)}</b> meer dan je erbij doet.`
+           : (valtOpVerhoging()>0 ? `<span style="color:var(--teal)">Gedekt.</span> Je maandtotaal blijft gelijk.`
+                                  : `Je potje gaat niet omhoog, dus er valt niets te dekken.`));
+  const tot=document.getElementById('valtOpTotaal');
+  if(tot) tot.innerHTML = `Maandtotaal: <b>${euro0(valtOpNieuwTotaal())}</b> · nu ${euro0(Math.round(totalBudget()))}`;
+  const b=document.getElementById('valtOpSave');
+  if(b){ if(valtOpMag()) b.removeAttribute('disabled'); else b.setAttribute('disabled',''); }
+}
+function valtOpBedragIn(v){ const d=valtOpDek(); if(!d) return;
+  const n=numIn(v); d.na = n>0?Math.round(n):0; valtOpDekHerreken(); }
+function valtOpDekZet(k, v){ const d=valtOpDek(); if(!d) return;
+  let sp={}; try{ sp=catSpendMap(thisYM())||{}; }catch(_){}
+  const R=valtOpRuimte(k, sp);
+  let n=numIn(v); n = n>0?Math.round(n):0;
+  if(n>R.ruimte){ n=R.ruimte; const el=document.getElementById('valtOpDek_'+k); if(el) el.value=n; }   // regel 3
+  d.dek[k]=n; valtOpDekHerreken(); }
+function valtOpDekVoegToe(k){ const d=valtOpDek(); if(!d) return;
+  d.dek[k]=0; d.lijst=false; valtOpDekTeken(); }
+function valtOpDekWeg(k){ const d=valtOpDek(); if(!d) return;
+  delete d.dek[k]; valtOpDekTeken(); }
+function valtOpDekLijst(){ const d=valtOpDek(); if(!d) return; d.lijst=!d.lijst; valtOpDekTeken(); }
+function valtOpDekTeken(){ const el=document.getElementById('valtOpDekBlok');
+  if(el){ el.innerHTML=valtOpDekBlok(); valtOpDekHerreken(); } }
+
+function valtOpDekBlok(){
+  const d=valtOpDek(); if(!d) return '';
+  let sp={}; try{ sp=catSpendMap(thisYM())||{}; }catch(_){}
+  const gekozen=Object.keys(d.dek);
+  const kand=valtOpDekKandidaten(d.k).filter(x=>gekozen.indexOf(x.k)<0);
+  const rij=k=>{ const R=valtOpRuimte(k, sp); const c=CATS[k]||CATS.overig;
+    return `<div class="tx" data-dek="${esc(k)}" style="cursor:default">
+      <div class="ava" style="background:var(--card2)">${c.icon||''}</div>
+      <div class="info"><div class="nm">${esc(c.name)}</div><div class="cat">ruimte ${euro0(R.ruimte)} · ${euro0(R.potje)} min ${euro0(R.uit)} uitgegeven</div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="muted">€</span>
+        <input id="valtOpDek_${esc(k)}" type="number" min="0" max="${R.ruimte}" step="5" inputmode="numeric" value="${d.dek[k]>0?d.dek[k]:''}" oninput="valtOpDekZet('${esc(k)}',this.value)" style="width:74px;text-align:right;padding:6px 8px">
+        <span class="small" style="color:var(--mut2);cursor:pointer" onclick="valtOpDekWeg('${esc(k)}')">weg</span>
+      </div></div>`; };
+  const kies=x=>`<div class="tx" style="cursor:pointer" onclick="valtOpDekVoegToe('${esc(x.k)}')">
+      <div class="ava" style="background:var(--card2)">${(CATS[x.k]||{}).icon||''}</div>
+      <div class="info"><div class="nm">${esc(x.naam)}</div><div class="cat">ruimte ${euro0(x.ruimte)}</div></div>
+      <div class="amt" style="color:var(--teal)">kies</div></div>`;
+  /* Geen enkele kandidaat: dan kun je deze maand niet bijstellen. Dat is de uitkomst van de regel
+     en geen storing, dus de sheet zegt het en laat de twee andere handelingen op de kaart staan. */
+  const leeg = !kand.length && !gekozen.length
+    ? `<div class="small" style="color:var(--mut2);margin-top:6px;line-height:1.45">Geen enkel ander potje heeft deze maand nog ruimte, dus er valt niets te verschuiven. Een grens zetten of de boekingen bekijken kan wel.</div>`
+    : '';
+  const knop = kand.length
+    ? `<div class="small" style="margin-top:8px;color:var(--teal);font-weight:600;cursor:pointer" onclick="valtOpDekLijst()">${d.lijst?'Verbergen':(gekozen.length?'Nog een potje aanwijzen':'Potje aanwijzen')} ›</div>`
+    : '';
+  return `<div id="valtOpTekort" class="small" style="line-height:1.5"></div>
+    ${gekozen.map(rij).join('')}
+    ${knop}
+    ${d.lijst?kand.map(kies).join(''):''}
+    ${leeg}
+    <div id="valtOpTotaal" class="small muted" style="margin-top:10px;line-height:1.5"></div>`;
+}
+
 function valtOpPotjeSheet(id){
   const r=(SET.valtOpLog||{})[id]; if(!r) return;
   let s=null; try{ s=(valtOpSignals(thisYM())||[]).find(x=>x.id===id); }catch(_){}
   if(!s) return;
   const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
-  const gepland=(SET.budgetsNext||{})[s.potjeId];
+  window._valtOpDek={id, k:s.potjeId, voor:Math.round(s.potje), na:valtOpVoorstel(s), dek:{}, lijst:false};
   window._setSheet=null;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">${esc(s.naam)}-potje bijstellen</div>
     <div class="small muted" style="margin-bottom:12px">Je gaf deze maand ${euro0(s.uitgegeven)} uit en je potje staat op ${euro0(s.potje)}. Het voorstel ligt nooit onder je huidige stand en telt de dagen mee die de maand nog heeft.</div>
     <label class="fld">Maandbudget (€)</label>
-    <input id="valtOpBedrag" type="number" min="0" step="5" inputmode="numeric" value="${valtOpVoorstel(s)}" style="width:100%">
-    <div class="small muted" style="margin-top:12px;line-height:1.5">Dit geldt voor deze maand. ${gepland!=null?`Vanaf ${esc(vanaf)} geldt de wijziging die je al had klaarstaan: ${euro0(+gepland||0)}.`:`Vanaf ${esc(vanaf)} staat je potje weer op ${euro0(s.potje)}.`}</div>
-    <div class="small" style="color:var(--mut2);margin-top:8px;line-height:1.45">Een hoger potje verandert je meetlat, niet je uitgave. Wat je kiest wordt vastgelegd.</div>
-    <button class="btn" style="margin-top:14px;width:100%" onclick="valtOpPotjeOpslaan('${esc(id)}')">${ICON('check')} Vastzetten voor deze maand</button>`;
+    <input id="valtOpBedrag" type="number" min="0" step="5" inputmode="numeric" value="${valtOpVoorstel(s)}" oninput="valtOpBedragIn(this.value)" style="width:100%">
+    <div style="border-top:1px solid var(--line);margin:14px 0 12px"></div>
+    <div class="hlabel" style="margin:0 0 8px">Waar komt het vandaan</div>
+    <div id="valtOpDekBlok">${valtOpDekBlok()}</div>
+    <div class="small" style="color:var(--mut2);margin-top:10px;line-height:1.45">Allebei de wijzigingen gelden voor deze maand. Vanaf ${esc(vanaf)} staan je potjes weer zoals ze stonden, of op de wijziging die je al had klaarstaan.</div>
+    <button class="btn" id="valtOpSave" disabled style="margin-top:14px;width:100%" onclick="valtOpPotjeOpslaan('${esc(id)}')">${ICON('check')} Vastzetten voor deze maand</button>`;
   showSheetBg();
+  valtOpDekHerreken();
 }
 function valtOpPotjeOpslaan(id){
+  const d=valtOpDek(); if(!d || d.id!==id) return;
   const r=(SET.valtOpLog||{})[id]; if(!r) return;
   const k=r.potjeId; if(!CATS[k]) return;
-  const el=document.getElementById('valtOpBedrag');
-  const ingevuld=numIn(el?el.value:'');
-  const voor=Math.round(+(SET.budgets||{})[k]||0);
-  const na=ingevuld>0?Math.round(ingevuld):voor;
-  SET.budgets=SET.budgets||{}; SET.budgets[k]=na;
-  SET.budgetsNext=SET.budgetsNext||{};
+  if(!valtOpMag()) return;                       // de knop hoort dan uit te staan; dit is de tweede sluiting
+  const voor=Math.round(+(SET.budgets||{})[k]||0), na=Math.round(d.na);
+  SET.budgets=SET.budgets||{}; SET.budgetsNext=SET.budgetsNext||{};
+  SET.budgets[k]=na;
   if(SET.budgetsNext[k]==null) SET.budgetsNext[k]=voor;
+  /* De dekking loopt door dezelfde twee lagen als de verhoging, dus rolloverBudgets() draait bij de
+     maandwissel allebei de kanten terug. De ==null-guard is dezelfde: stond er al een wijziging
+     klaar voor volgende maand, dan blijft die staan en wint hij van de terugzetting.
+     De haak valtOpPotjeGewijzigd() ziet hier niets van: die hangt aan setCatBudget() en savePotje(),
+     en deze route schrijft SET.budgets rechtstreeks. De dekkingskant krijgt dus geen eigen record. */
+  const dekking=[];
+  for(const dk in d.dek){
+    const bedrag=Math.round(+d.dek[dk]||0); if(!(bedrag>0) || !CATS[dk]) continue;
+    const dv=Math.round(+(SET.budgets||{})[dk]||0), dn=Math.max(dv-bedrag,0);
+    SET.budgets[dk]=dn;
+    if(SET.budgetsNext[dk]==null) SET.budgetsNext[dk]=dv;
+    dekking.push({categorie:CATS[dk].name, potjeId:dk, potje_voor:dv, potje_na:dn});
+  }
   save();
-  valtOpActieZet(id,'potje_bijgesteld',{potje_voor:voor, potje_na:na});
+  valtOpActieZet(id,'potje_bijgesteld',{potje_voor:voor, potje_na:na, dekking});
+  window._valtOpDek=null;
   closeSheet(); render();
   toast(`${ICON('check')} ${CATS[k].name}-potje deze maand ${euro0(na)}`);
 }
@@ -4168,9 +4298,13 @@ function valtOpLogBlok(){
      overschrijding die buiten de twee plekken viel. Juist die wil je terugzien - anders weet je niet
      wat je niet gezien hebt. */
   const woord={potje_bijgesteld:'potje bijgesteld', grens_gezet:'grens gezet', geen:'niets gedaan'};
+  /* v238: de dekking hoort in dezelfde regel, anders leest de log "50 naar 96" en zwijgt hij over
+     waar die 46 vandaan kwam. Een lege lijst hoort bij een record van voor v238 en zegt niets. */
+  const dekTekst=r=>{ const D=(r&&r.dekking)||[]; if(!D.length) return '';
+    return ' · uit ' + D.map(x=>`${esc(x.categorie)} ${euro0(x.potje_voor)} → ${euro0(x.potje_na)}`).join(', '); };
   const regel=r=>`<div class="row" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)">
       <span style="flex:1;min-width:0;font-size:13px">${esc(r.categorie||r.potjeId||'')} <span class="muted">· ${esc(monthLabel(r.maand))}</span></span>
-      <span class="small muted" style="white-space:nowrap">${esc(r.actie?woord[r.actie]||r.actie:(r.getoond?'nog open':'niet getoond'))}${r.actie==='potje_bijgesteld'&&r.potje_voor!=null?` · ${euro0(r.potje_voor)} → ${euro0(r.potje_na||0)}`:''}</span>
+      <span class="small muted" style="white-space:nowrap">${esc(r.actie?woord[r.actie]||r.actie:(r.getoond?'nog open':'niet getoond'))}${r.actie==='potje_bijgesteld'&&r.potje_voor!=null?` · ${euro0(r.potje_voor)} → ${euro0(r.potje_na||0)}`:''}${dekTekst(r)}</span>
     </div>`;
   const tel=[`${T.n.potje_bijgesteld}× potje bijgesteld`, `${T.n.grens_gezet}× grens gezet`, `${T.n.geen}× niets gedaan`].join(' · ');
   const sinds=T.eerste?` sinds ${esc(monthLabel(T.eerste))}`:'';
