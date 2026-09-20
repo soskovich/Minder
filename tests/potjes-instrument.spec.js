@@ -13,10 +13,13 @@ const ins = (page) => page.evaluate(() => { go('ins'); return $('#s-ins').innerT
 const maand = (page) => page.evaluate(() => { go('maand'); return $('#s-maand').innerText; });
 const potjesTegel = (page) => page.evaluate(() => {
   go('ins');
-  const t = [...document.querySelectorAll('#s-ins .wvo-tile')].find((x) => /uit je potjes/i.test(x.innerText));
+  const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((x) => /uit je potjes/i.test(x.innerText));
   if (!t) return null;
-  const r = t.innerText.split('\n');
-  return { lab: r[0], val: r[1], sub: r[2] || '', tik: t.getAttribute('onclick') };
+  /* v241: lijstregel in plaats van tegel, dus het bedrag staat rechts naast het label en niet
+     eronder. Lezen per element en niet per tekstregel, anders hangt de test aan de volgorde
+     waarin innerText de kolommen afloopt. */
+  const q = (c) => { const e = t.querySelector(c); return e ? e.innerText : ''; };
+  return { lab: q('.ins-nog-lab'), val: q('.ins-nog-val'), sub: q('.ins-nog-sub'), tik: t.getAttribute('onclick') };
 });
 
 // potjes zonder uitgaven: alles staat nog open
@@ -53,9 +56,11 @@ test.describe('a - Inzichten voor en na', () => {
     expect(t.toLowerCase()).not.toContain('budgetnaleving');
     expect(t.toLowerCase()).not.toContain('variabele-lasten-druk');
     expect(await page.evaluate(() => document.querySelectorAll('#s-ins [data-kpi]').length)).toBe(0);
-    // één sectiekop over, en die zegt ook welke maand je leest
+    /* v241: de sectiekoppen zeggen nu per blok welke vraag hij beantwoordt, en welke maand je
+       leest staat in de eyebrow erboven (de maandkiezer). Geen kop zonder inhoud. */
     expect(await page.evaluate(() => [...document.querySelectorAll('#s-ins .inssec')].map((x) => x.innerText)))
-      .toEqual(['DEZE MAAND']);
+      .toEqual(['WAT ER NOG KOMT', 'OVER DE MAANDEN HEEN']);   // deze fixture levert geen signaal, dus geen lege kop
+    expect(await page.evaluate(() => document.querySelector('#s-ins .ins-eyebrow').innerText)).toMatch(/\u25be/);
   });
 
   test('de hero draagt de budgetstand onveranderd', async ({ page }) => {
@@ -110,10 +115,11 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
     expect(t.lab).toMatch(/NOG UIT JE POTJES/i);
     expect(t.val).toMatch(/^€/);
     expect(t.sub).toMatch(/^van €[\d.]+ · €[\d.]+ gebruikt · \d+%$/);
-    // de vorm volgt de tegel ernaast in dezelfde rij (v204)
+    // de vorm volgt de post erboven: dezelfde noemer-vorm voor de twee plan-posten (v204)
     const spaar = await page.evaluate(() => {
-      const x = [...document.querySelectorAll('#s-ins .wvo-tile')].find((e) => /nog te sparen/i.test(e.innerText));
-      return x ? x.innerText.split('\n')[2] : '';
+      const x = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((e) => /nog te sparen/i.test(e.innerText));
+      const s = x && x.querySelector('.ins-nog-sub');
+      return s ? s.innerText : '';
     });
     expect(spaar).toMatch(/^van €/);
   });
@@ -139,8 +145,9 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
       TX = TX.filter((t) => !(t.date.slice(0, 7) === m && ['boodschappen', 'uiteten'].includes(catOf(t))));
       render(); go('ins');
       const VP = varPotjeStand(m);
-      const t = [...document.querySelectorAll('#s-ins .wvo-tile')].find((x) => /uit je potjes/i.test(x.innerText));
-      return { VP, sub: t ? t.innerText.split('\n')[2] : null };
+      const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((x) => /uit je potjes/i.test(x.innerText));
+      const s = t && t.querySelector('.ins-nog-sub');
+      return { VP, sub: s ? s.innerText : null };
     });
     expect(r.VP.gebruikt).toBe(0);
     expect(r.sub).toMatch(/^van €[\d.]+ · nog niets gebruikt$/);
@@ -175,8 +182,8 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
     await open(page, overschreden());
     const kleur = await page.evaluate(() => {
       go('ins');
-      const t = [...document.querySelectorAll('#s-ins .wvo-tile')].find((x) => /uit je potjes/i.test(x.innerText));
-      return t ? t.querySelector('.wvo-tv').getAttribute('style') : '';
+      const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((x) => /uit je potjes/i.test(x.innerText));
+      return t ? t.querySelector('.ins-nog-val').getAttribute('style') : '';
     });
     expect(kleur).toContain('var(--txt)');
     expect(kleur).not.toMatch(/--red|--amber/);
@@ -215,10 +222,10 @@ test.describe('e - layout', () => {
       await ins(page);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       const buiten = await page.evaluate(() => {
-        const rij = document.querySelector('#s-ins .wvo-tiles');
+        const rij = document.querySelector('#insNogLijst');
         if (!rij) return 0;
         const rb = rij.getBoundingClientRect();
-        return [...rij.querySelectorAll('.wvo-tile')].filter((t) => t.getBoundingClientRect().right > rb.right + 1).length;
+        return [...rij.querySelectorAll('.ins-nog-rij')].filter((t) => t.getBoundingClientRect().right > rb.right + 1).length;
       });
       expect(buiten).toBe(0);
     });

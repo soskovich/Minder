@@ -111,9 +111,11 @@ test.describe('het bedrag voorop', () => {
     // het percentage is niet verdwenen, het staat in de toelichting
     expect(r.S.hyp).toContain('37%');
     expect(r.S.hyp).toContain('9%');
-    // en de herkomst van het normaal-bedrag staat erbij, zodat het niet als meting leest
-    expect(r.S.hyp).toContain('€83');
-    expect(r.S.hyp).toMatch(/gebruikelijke aandeel/);
+    /* v241: de zin die de herkomst van het normaal-bedrag uitlegde is vervallen. Dat bedrag staat
+       sinds v240 zelf in de kop, dus de uitleg herhaalde wat je al ziet. De regel telt op het scherm
+       nu drie dingen: de kop, de zin met de twee percentages, en de observatie. */
+    expect(r.S.hyp).not.toMatch(/gebruikelijke aandeel/);
+    expect(r.S.hyp.split('.').filter((x) => x.trim()).length).toBe(1);
     // vaststellen, geen opdracht, en nog altijd zonder tik
     expect(r.S.hyp + ' ' + r.S.imp).not.toMatch(/\bZet\b|\bGeef\b|\bKijk\b|\bCheck\b|\bStop\b|\bPak\b/);
     expect(r.S.imp).toBe('Je losse geld lag deze maand sterker op een dag dan je gewend bent.');

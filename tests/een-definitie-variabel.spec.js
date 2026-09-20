@@ -103,7 +103,7 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
         const mm = t.match(/nog uit je potjes\s*€([\d.]+)/i);   // v204: was een voetregel
         return { bron: varPlanRemaining(m), home: Math.round(safeToSpend().reserved),
           inzichten: mm ? +mm[1].replace(/\./g, '') : 0, tekst: t,
-          srcSafe: safeToSpend.toString(), srcBody: nogDezeMaandBody.toString() };
+          srcSafe: safeToSpend.toString(), srcBody: nogDezeMaandPosten.toString() };
       });
       expect(r.home).toBe(r.bron);
       expect(r.inzichten).toBe(r.bron);
@@ -123,7 +123,7 @@ test.describe('c · het tempo is prognose, geen grondslag', () => {
       plan: varPlanRemaining(curMonth || months()[months().length - 1]),
       forecast: Math.round(safeToSpend().varForecast),
       sts: safeToSpend.toString(),
-      ndm: nogDezeMaandBody.toString(),
+      ndm: nogDezeMaandPosten.toString(),
       coach: coachStatus.toString(),
     }));
     expect(r.forecast).toBe(r.varDue);              // varForecast is de prognose, ongewijzigd

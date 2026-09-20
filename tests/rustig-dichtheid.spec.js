@@ -130,7 +130,11 @@ test.describe('c · niets anders verandert', () => {
     const src = await page.evaluate(() => renderIns.toString().replace(/\s+/g, ' '));
     // v235: de Valt op-kaart is vervallen; op dezelfde plek staan de valt-op-regels (insSignalRows).
     // De lek-ingang zat in die kaart en hangt nu aan de chevron op de Grip-kaart.
-    expect(src).toMatch(/hero \+ insSignalRows\(m, nu\)/);
+    /* v241: renderIns() zet de blokken als losse secties neer, dus de oude regel bestaat niet meer.
+       De volgorde blijft dezelfde en staat als eigenschap in valt-op-signalen.spec.js; hier toetsen
+       we alleen dat de signaalregels nog door renderIns() worden geschreven. */
+    expect(src).toContain('insSignalRows(m, nu)');
+    expect(src).toContain('insBudgetBlok(m)');
     expect(await page.evaluate(() => renderIns.toString())).toContain('afgeslotenMaandBanner(m)');
     expect(await page.evaluate(() => COLLAP_DEF.openSpendChart)).toEqual({ rustig: false, rest: true });
   });

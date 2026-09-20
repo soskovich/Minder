@@ -57,15 +57,18 @@ async function boot(page, payload) {
 
 const blok = (page) => page.evaluate(() => {
   go('ins');
-  const rij = document.querySelector('#s-ins .wvo-tiles');
+  const rij = document.querySelector('#insNogLijst');
   if (!rij) return null;
   return {
-    kolommen: getComputedStyle(rij).gridTemplateColumns.split(' ').length,
-    tegels: [...rij.querySelectorAll('.wvo-tile')].map((t) => ({
-      label: (t.querySelector('.wvo-tl') || {}).innerText || '',
-      waarde: (t.querySelector('.wvo-tv') || {}).innerText || '',
-      sub: (t.querySelector('.wvo-ts') || {}).innerText || '',
-      vol: /grid-column/.test(t.getAttribute('style') || ''),
+    // v241: op Inzichten is dit een lijst en geen raster. Wat de test vasthoudt is dezelfde
+    // eigenschap als in v204 (waarneming boven, plan onder), alleen zijn de rijen nu de posten
+    // zelf. 'rechts' is de rechterkant van het bedrag: die moet voor alle posten gelijk zijn,
+    // anders zijn ze niet met elkaar te vergelijken.
+    tegels: [...rij.querySelectorAll('.ins-nog-rij')].map((t) => ({
+      label: (t.querySelector('.ins-nog-lab') || {}).innerText || '',
+      waarde: (t.querySelector('.ins-nog-val') || {}).innerText || '',
+      sub: (t.querySelector('.ins-nog-sub') || {}).innerText || '',
+      rechts: Math.round(t.querySelector('.ins-nog-val').getBoundingClientRect().right),
       top: Math.round(t.getBoundingClientRect().top),
       tik: !!t.getAttribute('onclick'),
     })),
@@ -74,17 +77,17 @@ const blok = (page) => page.evaluate(() => {
 });
 
 test.describe('a · de rij scheidt waarneming van plan', () => {
-  test('vier posten, twee kolommen, waarneming boven en plan onder', async ({ page }) => {
+  test('vier posten, vier regels, waarneming boven en plan onder', async ({ page }) => {
     await boot(page);
     const b = await blok(page);
     expect(b).not.toBeNull();
-    expect(b.kolommen).toBe(2);
     expect(b.tegels.map((t) => t.label)).toEqual([
-      'NOG TE BETALEN · VAST', 'NOG TE ONTVANGEN', 'NOG TE SPAREN', 'NOG UIT JE POTJES']);
-    // de twee waarnemingen staan op dezelfde regel, de twee plan-posten op de volgende
-    expect(b.tegels[0].top).toBe(b.tegels[1].top);
-    expect(b.tegels[2].top).toBe(b.tegels[3].top);
-    expect(b.tegels[2].top).toBeGreaterThan(b.tegels[0].top);
+      'Nog te betalen · vast', 'Nog te ontvangen', 'Nog te sparen', 'Nog uit je potjes']);
+    // v241: elke post staat op zijn eigen regel, en de volgorde draagt de scheiding uit v204:
+    // eerst de twee waarnemingen, dan de twee plan-posten
+    for (let i = 1; i < b.tegels.length; i++) expect(b.tegels[i].top).toBeGreaterThan(b.tegels[i - 1].top);
+    // en de bedragen staan tegen dezelfde rechterkant, dus je kunt ze met elkaar vergelijken
+    expect(new Set(b.tegels.map((t) => t.rechts)).size).toBe(1);
   });
 
   test('elke sub noemt zijn bron, dus de groepen dragen zichzelf', async ({ page }) => {
@@ -97,7 +100,7 @@ test.describe('a · de rij scheidt waarneming van plan', () => {
     expect(b.tegels[3].sub).toMatch(/van €.*gebruikt|variabel/);
     // geen groepskoppen: de rij bestaat uit tegels en verder niets
     const koppen = await page.evaluate(() =>
-      document.querySelectorAll('#s-ins .wvo-tiles > :not(.wvo-tile)').length);
+      document.querySelectorAll('#insNogLijst > :not(.ins-nog-rij)').length);
     expect(koppen).toBe(0);
   });
 
@@ -107,11 +110,14 @@ test.describe('a · de rij scheidt waarneming van plan', () => {
     const pot = b.tegels[3];
     expect(pot.waarde).toMatch(/€/);
     expect(pot.tik).toBe(true);
-    // de oude regel bestaat niet meer, in geen enkele vorm
-    const src = await page.evaluate(() => nogDezeMaandBody.toString());
+    // de oude regel bestaat niet meer, in geen enkele vorm, in geen van de twee weergaven
+    const src = await page.evaluate(() => nogDezeMaandPosten.toString() + nogDezeMaandBody.toString() + insNogLijst.toString());
     expect(src).not.toMatch(/plus \$\{euro0\(varPlan\)\} variabel/);
-    expect(src).not.toMatch(/text-align:right/);
-    expect(b.naDeRij).toBe('');
+    /* v241: de lijst lijnt zijn bedragen rechts uit, dus text-align:right is daar juist gewenst.
+       Wat deze test bewaakt is de oude voetregel, en die herken je eraan dat hij ná de posten stond
+       en het variabele bedrag herhaalde. Dat toetsen we op het scherm in plaats van in de bron. */
+    expect(b.naDeRij).not.toMatch(/variabel/i);
+    expect(b.naDeRij).not.toContain(pot.waarde);
   });
 });
 
@@ -125,8 +131,8 @@ test.describe('b · er telt niets op in dit blok', () => {
       let S = null; try { S = safeToSpend(); } catch (_) {}
       const eur = (t) => Math.abs(Math.round(parseFloat(String(t).replace(/[^\d,-]/g, '').replace(/\./g, '').replace(',', '.')) || 0));
       // let op: Inzichten draagt verderop nog een .wvo-tiles, dus alleen de eerste
-      const rij = document.querySelector('#s-ins .wvo-tiles');
-      return { getoond: [...rij.querySelectorAll('.wvo-tv')].map((x) => eur(x.innerText)),
+      const rij = document.querySelector('#insNogLijst');
+      return { getoond: [...rij.querySelectorAll('.ins-nog-val')].map((x) => eur(x.innerText)),
                fix: Math.round(L.fixDue), inc: Math.round(L.incDue), vp: Math.round(vp),
                spaar: S ? Math.round(Math.max(S.saveReserved, 0)) : 0 };
     });
@@ -153,35 +159,36 @@ test.describe('b · er telt niets op in dit blok', () => {
   });
 });
 
-test.describe('c · een oneven laatste tegel neemt de volle breedte', () => {
-  test('zonder potjes: drie tegels, de laatste vult de rij', async ({ page }) => {
-    await boot(page, seed({}, { geenPotjes: true }));
-    const b = await blok(page);
-    expect(b.tegels.length).toBe(3);
-    expect(b.tegels[2].vol).toBe(true);
-    expect(b.tegels[0].vol).toBe(false);
-    const breed = await page.evaluate(() => {
-      const t = [...document.querySelectorAll('#s-ins .wvo-tiles .wvo-tile')];
-      return { laatste: Math.round(t[2].getBoundingClientRect().width),
-               eerste: Math.round(t[0].getBoundingClientRect().width) };
+/* v204 gaf een oneven laatste tegel de volle breedte, want een halve rij leest als een tegel waar
+   een tweede bij hoort te staan. In een lijst kan die halve rij niet bestaan: elke post is een
+   regel over de volle breedte, hoeveel posten er ook zijn. De regel zelf is niet weg, hij geldt nog
+   voor de tegelvorm in nogDezeMaandBody() die de terugval-kaart gebruikt; dat legt de laatste test
+   hieronder vast. */
+test.describe('c · elk aantal posten leest hetzelfde', () => {
+  for (const [naam, opt, aantal, laatste] of [
+    ['zonder potjes: drie regels', { geenPotjes: true }, 3, 'Nog te sparen'],
+    ['zonder spaardoel: drie regels', { geenSpaardoel: true }, 3, 'Nog uit je potjes'],
+    ['zonder spaardoel en zonder potjes: twee regels', { geenSpaardoel: true, geenPotjes: true }, 2, 'Nog te ontvangen'],
+  ]) {
+    test(naam, async ({ page }) => {
+      await boot(page, seed({}, opt));
+      const b = await blok(page);
+      expect(b.tegels.length).toBe(aantal);
+      expect(b.tegels[aantal - 1].label).toBe(laatste);
+      // elke regel even breed, dus geen halve rij en geen uitzondering voor de laatste
+      const breed = await page.evaluate(() => [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
+        .map((t) => Math.round(t.getBoundingClientRect().width)));
+      expect(new Set(breed).size).toBe(1);
+      // de bedragen blijven onderling vergelijkbaar
+      expect(new Set(b.tegels.map((t) => t.rechts)).size).toBe(1);
     });
-    expect(breed.laatste).toBeGreaterThan(breed.eerste * 1.8);
-  });
+  }
 
-  test('zonder spaardoel: drie tegels, ook dan vult de laatste de rij', async ({ page }) => {
-    await boot(page, seed({}, { geenSpaardoel: true }));
-    const b = await blok(page);
-    expect(b.tegels.length).toBe(3);
-    expect(b.tegels[2].label).toBe('NOG UIT JE POTJES');
-    expect(b.tegels[2].vol).toBe(true);
-  });
-
-  test('zonder spaardoel en zonder potjes: twee tegels, geen halve rij', async ({ page }) => {
-    await boot(page, seed({}, { geenSpaardoel: true, geenPotjes: true }));
-    const b = await blok(page);
-    expect(b.tegels.length).toBe(2);
-    expect(b.tegels.some((t) => t.vol)).toBe(false);
-    expect(b.tegels[0].top).toBe(b.tegels[1].top);
+  test('de tegelvorm houdt zijn volle-breedte-regel voor de terugval-kaart', async ({ page }) => {
+    await boot(page);
+    const src = await page.evaluate(() => nogDezeMaandBody.toString());
+    expect(src).toContain('grid-column:1/-1');
+    expect(src).toMatch(/posten\.length\s*%\s*2\s*===\s*1/);
   });
 });
 
@@ -201,7 +208,7 @@ test.describe('d · de vier situaties uit de controlelijst', () => {
     expect(pot).toBeGreaterThan(spaar);
     // en hij staat in dezelfde vorm als zijn buurman, niet meer in de kleinste graad
     const zelfde = await page.evaluate(() => {
-      const t = [...document.querySelectorAll('#s-ins .wvo-tiles .wvo-tv')];
+      const t = [...document.querySelectorAll('#insNogLijst .ins-nog-val')];
       return getComputedStyle(t[2]).fontSize === getComputedStyle(t[3]).fontSize;
     });
     expect(zelfde).toBe(true);
@@ -210,9 +217,9 @@ test.describe('d · de vier situaties uit de controlelijst', () => {
   test('met alles betaald blijft de tegel staan en kleurt hij niet rood', async ({ page }) => {
     await boot(page, seed({}, { allesBetaald: true }));
     const b = await blok(page);
-    expect(b.tegels[0].label).toBe('NOG TE BETALEN · VAST');
+    expect(b.tegels[0].label).toBe('Nog te betalen · vast');
     const kleur = await page.evaluate(() => {
-      const t = document.querySelector('#s-ins .wvo-tiles .wvo-tile .wvo-tv');
+      const t = document.querySelector('#insNogLijst .ins-nog-rij .ins-nog-val');
       return t.getAttribute('style') || '';
     });
     expect(kleur).toMatch(/--mut/);
@@ -221,8 +228,8 @@ test.describe('d · de vier situaties uit de controlelijst', () => {
   test('zonder potjes verdwijnt de potjes-tegel en niet de rest', async ({ page }) => {
     await boot(page, seed({}, { geenPotjes: true }));
     const b = await blok(page);
-    expect(b.tegels.map((t) => t.label)).not.toContain('NOG UIT JE POTJES');
-    expect(b.tegels.map((t) => t.label)).toContain('NOG TE ONTVANGEN');
+    expect(b.tegels.map((t) => t.label)).not.toContain('Nog uit je potjes');
+    expect(b.tegels.map((t) => t.label)).toContain('Nog te ontvangen');
   });
 });
 
@@ -279,20 +286,21 @@ test.describe('e · de plan-rij houdt drie rollen en herhaalt de uitleg niet', (
 
 test.describe('f · layout', () => {
   for (const w of [360, 390]) {
-    test(`de tegelrij past op ${w}px`, async ({ page }) => {
+    test(`de lijst past op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 820 });
       await boot(page);
       await page.evaluate(() => go('ins'));
       const r = await page.evaluate(() => {
-        const rij = document.querySelector('#s-ins .wvo-tiles');
+        const rij = document.querySelector('#insNogLijst');
         return { over: document.body.scrollWidth - document.body.clientWidth,
                  rijOver: rij.scrollWidth - rij.clientWidth,
-                 rijen: new Set([...rij.querySelectorAll('.wvo-tile')]
-                   .map((t) => Math.round(t.getBoundingClientRect().top))).size };
+                 rijen: new Set([...rij.querySelectorAll('.ins-nog-rij')]
+                   .map((t) => Math.round(t.getBoundingClientRect().top))).size,
+                 posten: rij.querySelectorAll('.ins-nog-rij').length };
       });
       expect(r.over).toBeLessThanOrEqual(1);
       expect(r.rijOver).toBeLessThanOrEqual(1);
-      expect(r.rijen).toBe(2);
+      expect(r.rijen).toBe(r.posten);   // v241: elke post een eigen regel, dus geen twee naast elkaar
     });
   }
 });

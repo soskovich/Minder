@@ -66,19 +66,22 @@ test.describe('a · Vooruitblik toont de kaart niet meer', () => {
 });
 
 test.describe('b · Inzichten is de enige lezer', () => {
-  test('de herokaart draagt de tegels, precies één keer', async ({ page }) => {
+  /* v241: de herokaart is gesplitst. De posten staan in de sectie 'Wat er nog komt' en niet meer
+     in een kaart; wat deze test vasthoudt is dat ze er precies één keer staan, en dat de
+     tegelvorm er niet daarnaast ook nog staat. */
+  test('Inzichten draagt de posten precies één keer, als lijst', async ({ page }) => {
     await boot(page, 'ins');
     const el = page.locator('#s-ins');
     const t = await el.innerText();
-    expect((t.match(/NOG DEZE MAAND/g) || []).length).toBe(1);
-    expect(t).toMatch(/Nog te betalen/i);
-    // de tegels zitten in de herokaart zelf, niet in een losse kaart eronder
-    expect(await el.locator('.card').first().locator('.wvo-tiles').count()).toBe(1);
+    expect((t.match(/WAT ER NOG KOMT/g) || []).length).toBe(1);
+    expect((t.match(/Nog te betalen/gi) || []).length).toBe(1);
+    expect(await el.locator('#insNogLijst').count()).toBe(1);
+    expect(await el.locator('.wvo-tiles').count()).toBe(0);   // niet ook nog als tegels
   });
 
   test('openFixedDue blijft bereikbaar vanuit die kaart', async ({ page }) => {
     await boot(page, 'ins');
-    const tegel = page.locator('#s-ins .wvo-tile[onclick*="openFixedDue"]');
+    const tegel = page.locator('#insNogLijst .ins-nog-rij[onclick*="openFixedDue"]');
     await expect(tegel).toHaveCount(1);
   });
 });
@@ -99,6 +102,11 @@ test.describe('d · zonder budget valt Inzichten terug op de losse kaart', () =>
     await boot(page, 'ins', seed({ income: 0, budgets: {} }));
     const t = await page.locator('#s-ins').innerText();
     expect((t.match(/NOG DEZE MAAND/g) || []).length).toBe(1);
-    expect(await page.evaluate(() => insHeroKaart(curMonth || months()[months().length - 1]))).toBe('');
+    /* v241: insHeroKaart() bestaat niet meer. De terugval hangt nu aan insBudgetBlok(): die valt
+       leeg terug zonder budget, en dan toont renderIns() de budget-prompt met nogDezeMaandCard()
+       eronder. Dat is precies wat deze test bewaakt, alleen op de nieuwe naad. */
+    expect(await page.evaluate(() => insBudgetBlok(curMonth || months()[months().length - 1]))).toBe('');
+    expect(await page.locator('#s-ins .wvo-tiles').count()).toBe(1);
+    expect(await page.locator('#insNogLijst').count()).toBe(0);
   });
 });

@@ -46,28 +46,37 @@ test.describe('a - hij staat op Inzichten en niet meer op Maand', () => {
 });
 
 test.describe('b - onder het blok over deze maand', () => {
-  test('hij is de laatste kaart, en de valt-op-regel staat boven hem', async ({ page }) => {
+  /* v241: 'de laatste kaart' is geen anker meer, want op Inzichten is alleen de stand nog een
+     kaart. De eigenschap die v227 vastlegde is de VOLGORDE: de grafiek staat onderaan, onder de
+     valt-op-regel. Die toetsen we nu op de plek in het document zelf. */
+  test('hij staat onderaan, en de valt-op-regel staat boven hem', async ({ page }) => {
     await boot(page);
     const uit = await page.evaluate(() => {
       const el = document.querySelector('#s-ins');
-      const kaarten = [...el.querySelectorAll('.card')];
-      const chart = el.querySelector('#insSpendChart');
-      const wvo = el.querySelector('.valtop-rij, .valtop-patroon');   // v235: was #wvoLine
-      const idx = (n) => n ? kaarten.findIndex((c) => c.contains(n)) : -1;
-      return { aantal: kaarten.length, chart: idx(chart), wvo: idx(wvo) };
+      const blokken = [...el.children];
+      const idx = (n) => n ? blokken.findIndex((c) => c.contains(n)) : -1;
+      return { aantal: blokken.length,
+        chart: idx(el.querySelector('#insSpendChart') || el.querySelector('#insSpendCard')),
+        wvo: idx(el.querySelector('.valtop-rij, .valtop-patroon')),
+        kaartenNaDeChart: [...el.querySelectorAll('.card')].filter((c) =>
+          c.compareDocumentPosition(el.querySelector('#insSpendCard')) & Node.DOCUMENT_POSITION_PRECEDING).length };
     });
-    expect(uit.chart).toBe(uit.aantal - 1);          // laatste kaart van het scherm
+    expect(uit.chart).toBe(uit.aantal - 1);          // het laatste blok van het scherm
     if (uit.wvo >= 0) expect(uit.wvo).toBeLessThan(uit.chart);
+    expect(uit.kaartenNaDeChart).toBe(0);
   });
 
-  test('de sectiekop Deze maand staat erboven, en er is er maar een', async ({ page }) => {
+  /* v241: de kop boven de grafiek zegt nu waarom hij daar staat. Tot v240 stond hij onder 'Deze
+     maand' terwijl hij uitsluitend afgeronde maanden toont (v194); die kop sprak zichzelf tegen. */
+  test('de sectiekop Over de maanden heen staat erboven', async ({ page }) => {
     await boot(page);
     const uit = await page.evaluate(() => {
       const h = document.querySelector('#s-ins').innerHTML;
-      return { secties: [...document.querySelectorAll('#s-ins .inssec')].map((e) => e.textContent.trim()),
-        kop: h.indexOf('inssec'), chart: h.indexOf('insSpendChart') };
+      const koppen = [...document.querySelectorAll('#s-ins .inssec')].map((e) => e.textContent.trim());
+      return { secties: koppen, kop: h.lastIndexOf('inssec'), chart: h.indexOf('insSpendCard') };
     });
-    expect(uit.secties).toEqual(['Deze maand']);
+    expect(uit.secties[uit.secties.length - 1]).toBe('Over de maanden heen');
+    expect(uit.secties).not.toContain('Deze maand');
     expect(uit.kop).toBeGreaterThan(-1);
     expect(uit.kop).toBeLessThan(uit.chart);
   });
@@ -86,7 +95,11 @@ test.describe('c - alleen op de lopende maand', () => {
     expect(uit.lopend).toBe(false);
     expect(uit.chart).toBe(false);
     expect(uit.tekst).not.toMatch(/uitgaven vs budget/i);
-    expect(uit.tekst).toMatch(/terugblik/i);          // en de kop zegt dat je terugkijkt
+    /* v241: de sectiekop 'Terugblik' is vervallen; de maandkiezer in de eyebrow noemt de maand, en
+       de banner erboven zegt met zoveel woorden dat het een afgesloten maand is. Dat is dezelfde
+       mededeling op één plek in plaats van twee. */
+    expect(uit.tekst).toMatch(/een afgesloten maand/i);
+    expect(uit.tekst).not.toMatch(/over de maanden heen/i);
   });
 
   test('terug naar de lopende maand en hij staat er weer', async ({ page }) => {

@@ -182,16 +182,31 @@ test.describe('Inzichten: constateren, niet oplossen', () => {
     expect(ins).not.toContain('uit de pas');
     expect(ins).not.toContain('Wil je kijken wat je hieraan kunt doen');
     expect(ins).not.toMatch(/coStart\(&quot;?'?lek/);
-    // de rand is var(--mut2), geen nieuw token en geen accent op het bedrag
+    /* de rand is var(--mut2), geen nieuw token en geen accent op het bedrag.
+       v241: de kaart eromheen is weg, en daarmee de afgeronde hoeken die bij dat kader hoorden.
+       Wat het signaal draagt is de linkerrand, en die staat er nog. */
     const rij = await page.locator('.valtop-rij').first().getAttribute('style');
     expect(rij).toContain('border-left:3px solid var(--mut2)');
-    expect(rij).toContain('border-radius:0 16px 16px 0');
+    expect(rij).not.toContain('border-radius');
+    expect(await page.locator('.card .valtop-rij').count()).toBe(0);
   });
 
-  test('de rij staat tussen de hero en de grafiek', async ({ page }) => {
+  /* v241: de samenstelling van renderIns() is herschreven, dus een grep op de oude regel bewijst
+     niets meer. De eigenschap is de volgorde op het scherm: de stand, wat er nog komt, de signalen,
+     en dan de grafiek. Die meten we op de gerenderde pagina en niet in de broncode. */
+  test('de rij staat tussen de stand en de grafiek', async ({ page }) => {
     await boot(page, DRIE);
-    const src = await page.evaluate(() => renderIns.toString());
-    expect(src).toMatch(/hero \+ insSignalRows\(m, nu\) \+ \(nu\?spendVsBudgetChart\(\)/);
+    await page.evaluate(() => go('ins'));
+    const uit = await page.evaluate(() => {
+      const el = document.querySelector('#s-ins');
+      const blok = [...el.children];
+      const idx = (sel) => { const n = el.querySelector(sel); return n ? blok.findIndex((c) => c.contains(n)) : -1; };
+      return { stand: idx('.card'), nog: idx('#insNogLijst'), sig: idx('.valtop-rij'), graf: idx('#insSpendCard') };
+    });
+    expect(uit.stand).toBeGreaterThanOrEqual(0);
+    expect(uit.sig).toBeGreaterThan(uit.stand);
+    if (uit.nog >= 0) expect(uit.sig).toBeGreaterThan(uit.nog);
+    if (uit.graf >= 0) expect(uit.sig).toBeLessThan(uit.graf);
   });
 });
 

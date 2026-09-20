@@ -117,7 +117,7 @@ test.describe('a · teal betekent op Home en Inzichten nog één ding', () => {
 
   test('de tegel Nog te sparen kleurt alleen nog als hij gehaald is', async ({ page }) => {
     await boot(page);
-    const src = await page.evaluate(() => nogDezeMaandBody.toString());
+    const src = await page.evaluate(() => nogDezeMaandPosten.toString());
     // teal verdwijnt uit deze tegel; groen bij gehaald blijft, zoals de twee tegels ernaast
     expect(src).toMatch(/gehaald\?'var\(--green\)':'var\(--txt\)'/);
     expect(src).not.toMatch(/gehaald\?'var\(--green\)':'var\(--teal\)'/);

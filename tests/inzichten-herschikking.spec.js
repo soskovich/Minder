@@ -38,7 +38,7 @@ async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seedIns());
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof insHeroKaart === 'function');
+  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof insEyebrow === 'function');
   await page.evaluate(() => go('ins'));
 }
 
@@ -62,7 +62,11 @@ const beeld = (page) => page.evaluate(() => {
     ndmKoppen: (t.match(/NOG DEZE MAAND/g) || []).length,
     // v192: de scheidingslijn (.ndm-net) hing aan de chip die verviel. De tegelrij is de nieuwe
     // markering, maar .wvo-tiles staat ook elders op het scherm; de vaste-lastentegel is uniek.
-    tegels: [...el.querySelectorAll('.wvo-tl')].some((x) => /Nog te betalen/i.test(x.textContent)),
+    // v241: op Inzichten zijn de tegels een lijst geworden; de terugval-kaart houdt de tegelvorm
+    tegels: [...el.querySelectorAll('.ins-nog-lab, .wvo-tl')].some((x) => /Nog te betalen/i.test(x.textContent)),
+    lijst: !!el.querySelector('#insNogLijst'),
+    lijstBuitenKaart: !!el.querySelector('#insNogLijst') && !el.querySelector('.card #insNogLijst'),
+    eyebrow: (el.querySelector('.ins-eyebrow') || { innerText: '' }).innerText,
     prompt: /stel in/.test(t),
     kpiOpen: !!el.querySelector('#insKpiStrip'),
     over: el.scrollWidth - el.clientWidth,
@@ -70,28 +74,39 @@ const beeld = (page) => page.evaluate(() => {
   };
 });
 
-test.describe('a · de herokaart', () => {
-  test('budgetstand en nog-deze-maand staan in één kaart', async ({ page }) => {
+/* v241 draait de las van v135 terug. De twee helften beantwoordden twee vragen en vulden samen op
+   360px het hele scherm tot de vouw, dus ze staan nu als twee blokken onder elkaar: de stand in de
+   enige kaart van de pagina, 'wat er nog komt' als lijst zonder kaart eronder. De eigenschappen die
+   v135 bewaakte blijven: precies één plek voor de posten, dezelfde ingangen, dezelfde terugvallen. */
+test.describe('a · de stand en wat er nog komt', () => {
+  test('de stand is een kaart, wat er nog komt staat eronder zonder kaart', async ({ page }) => {
     await boot(page);
     const b = await beeld(page);
-    expect(b.eerste).toMatch(/dag \d+ van \d+/);
     expect(b.eerste).toMatch(/van €[\d.]+ maandbudget/);
-    expect(b.eerste).toMatch(/NOG DEZE MAAND/);
-    expect(b.eerste).toMatch(/Nog te betalen/i);
-    expect(b.ndmKoppen).toBe(1);                       // niet twee keer op het scherm
+    expect(b.eerste).not.toMatch(/Nog te betalen/i);   // de posten zitten niet meer in de kaart
+    expect(b.kaarten).toBe(1);                         // en de kaart is de enige op het scherm
+    expect(b.lijst).toBe(true);
+    expect(b.lijstBuitenKaart).toBe(true);
+    expect(b.secties).toContain('Wat er nog komt');
+    expect(b.tekst).toMatch(/Nog te betalen/i);
+    expect(b.ndmKoppen).toBe(0);                       // de oude kop 'Nog deze maand' is de sectiekop geworden
   });
 
-  test('de kop noemt de maand en de dag, zonder status-chip', async ({ page }) => {
+  test('de eyebrow noemt de maand en de dag, zonder status-chip', async ({ page }) => {
     await boot(page);
-    const kop = await page.evaluate(() => document.querySelector('#s-ins .card').innerText.split('\n').slice(0, 3).join(' | '));
-    expect(kop).toMatch(/dag \d+ van \d+/);
+    const b = await beeld(page);
+    expect(b.eyebrow).toMatch(/dag \d+ van \d+/);
+    expect(b.eyebrow).toMatch(/\u25be/);                 // de maandkiezer
+    // ze staan er precies één keer, dus niet ook nog in de kaart
+    expect(b.eerste).not.toMatch(/dag \d+ van \d+/);
+    expect((b.tekst.match(/dag \d+ van \d+/g) || []).length).toBe(1);
     // de chip-woorden wonen in monthStatusCard en zijn daar bewust gebleven
-    expect(kop).not.toMatch(/op schema|sneller dan de maand|over budget/i);
+    expect(b.eyebrow).not.toMatch(/op schema|sneller dan de maand|over budget/i);
   });
 
-  test('de tegels houden hun eigen ingangen', async ({ page }) => {
+  test('de posten houden hun eigen ingangen', async ({ page }) => {
     await boot(page);
-    const acties = await page.evaluate(() => [...document.querySelectorAll('#s-ins .wvo-tile[onclick]')].map((n) => n.getAttribute('onclick')));
+    const acties = await page.evaluate(() => [...document.querySelectorAll('#insNogLijst .ins-nog-rij[onclick]')].map((n) => n.getAttribute('onclick')));
     expect(acties.some((a) => /openFixedDue/.test(a))).toBe(true);
     expect(acties.some((a) => /openSafeToSpend/.test(a))).toBe(true);
   });
@@ -111,11 +126,14 @@ test.describe('b · terugvallen', () => {
     await boot(page, seedIns({ savingAmount: 0 }, { alleenNu: true }));
     await legeLiquiditeit(page);
     await page.evaluate(() => renderIns());
-    expect(await page.evaluate(() => nogDezeMaandBody())).toBe('');
+    expect(await page.evaluate(() => nogDezeMaandPosten().length)).toBe(0);
+    expect(await page.evaluate(() => insNogLijst())).toBe('');
     const b = await beeld(page);
     expect(b.eerste).toMatch(/van €[\d.]+ maandbudget/);
     expect(b.ndmKoppen).toBe(0);
     expect(b.tegels).toBe(false);
+    expect(b.lijst).toBe(false);
+    expect(b.secties).not.toContain('Wat er nog komt');   // geen kop zonder inhoud
     expect(b.tekst).not.toMatch(/Nog te betalen/i);
   });
 
@@ -123,10 +141,12 @@ test.describe('b · terugvallen', () => {
     await boot(page, seedIns({ income: 0, budgets: {} }));
     const b = await beeld(page);
     expect(await page.evaluate((m) => Math.round(totals(m).budget), CUR)).toBe(0);
-    expect(await page.evaluate((m) => insHeroKaart(m), CUR)).toBe('');
+    // v241: insHeroKaart() bestaat niet meer; de terugval hangt aan insBudgetBlok()
+    expect(await page.evaluate((m) => insBudgetBlok(m), CUR)).toBe('');
     expect(b.prompt).toBe(true);                       // de bestaande budget-prompt
-    expect(b.ndmKoppen).toBe(1);                       // en de kaart er los onder
+    expect(b.ndmKoppen).toBe(1);                       // en de kaart er los onder, nog als tegels
     expect(b.tegels).toBe(true);
+    expect(b.lijst).toBe(false);
   });
 
   // v166: de tak 'een vorige maand' bestond alleen in dode code. months() voegt de huidige
@@ -138,12 +158,16 @@ test.describe('b · terugvallen', () => {
     const uit = await page.evaluate((m) => {
       const orig = window.monthLiquidity;
       window.monthLiquidity = () => { throw new Error('stuk'); };
-      const hero = insHeroKaart(m);
+      const stand = insBudgetBlok(m); let lijst = 'NIET AFGEVANGEN';
+      try { lijst = insNogLijst(); } catch (_) {}
+      renderIns();
+      const paginaTekst = document.querySelector('#s-ins').innerText;
       window.monthLiquidity = orig;
-      return { hero, heeftBudget: /budget/.test(hero), heeftTegels: /wvo-tiles/.test(hero) };
+      return { heeftBudget: /budget/.test(stand), lijst, paginaTekst };
     }, CUR);
-    expect(uit.heeftBudget).toBe(true);                // de budgethelft blijft
-    expect(uit.heeftTegels).toBe(false);               // de tegels vallen weg
+    expect(uit.heeftBudget).toBe(true);                // de standkaart blijft
+    expect(uit.lijst).toBe('');                        // en de posten vallen weg, afgevangen
+    expect(uit.paginaTekst).not.toMatch(/Wat er nog komt/i);
   });
 });
 
@@ -173,10 +197,13 @@ test.describe('d · de verdieping', () => {
   /* v208: Verdieping bevatte precies één element, het Kerncijfers-blok, en dat is van Inzichten af.
      De sectiekop viel vanzelf weg: renderIns() had die guard al. Er blijft één sectie over, en die
      zegt ook welke maand je leest. */
-  test('Verdieping bestaat niet meer; Deze maand blijft de enige sectie', async ({ page }) => {
+  test('Verdieping bestaat niet meer; elke sectie zegt welke vraag hij beantwoordt', async ({ page }) => {
     await boot(page);
     const b = await beeld(page);
-    expect(b.secties).toEqual(['Deze maand']);
+    /* v241: er is niet één sectie meer maar één per blok, en elke kop zegt zijn vraag. Welke maand
+       je leest staat in de eyebrow. Een kop zonder inhoud staat er niet, dus deze lijst is precies
+       wat deze fixture oplevert. */
+    expect(b.secties).toEqual(['Wat er nog komt', 'Over de maanden heen']);
     expect(b.tekst).not.toMatch(/kerncijfers/i);
     /* v178: de meermaands-grafiek en de abonnementenkaart staan op Maand. v227: de grafiek is terug
        onder Deze maand, dus die twee asserties zijn omgedraaid; de abonnementenkaart blijft op
@@ -226,13 +253,18 @@ test.describe('d · de verdieping', () => {
       // v235: #wvoLine is vervallen; de valt-op-regels staan als losse kaarten op dezelfde plek
       const wvo = el.querySelector('.valtop-rij, .valtop-patroon');
       if (!wvo) return { aanwezig: false };
-      const kaarten = [...el.querySelectorAll('.card')];
-      const eigen = kaarten.findIndex((c) => c.contains(wvo));
-      return { aanwezig: true, eigen, aantal: kaarten.length };
+      /* v241: de signalen staan niet meer in een kaart, dus het anker is de sectiekop erboven.
+         Wat v135 bij elkaar zette blijft bij elkaar: de kop 'Wat opvalt' staat direct vóór de
+         eerste signaalregel, met niets ertussen. */
+      const kop = [...el.querySelectorAll('.inssec')].find((k) => /wat opvalt/i.test(k.textContent));
+      const houder = wvo.parentElement;
+      return { aanwezig: true, kop: !!kop, direct: kop ? kop.nextElementSibling === houder : false,
+        inKaart: !!el.querySelector('.card .valtop-rij, .card .valtop-patroon') };
     });
     if (uit.aanwezig) {
-      // de hero is de eerste kaart, de valt-op-regel de tweede (of hij zit in de hero zelf)
-      expect(uit.eigen, 'direct onder de hero').toBeLessThanOrEqual(1);
+      expect(uit.kop, 'de sectiekop staat er').toBe(true);
+      expect(uit.direct, 'direct onder de kop').toBe(true);
+      expect(uit.inKaart, 'geen kaart om het signaal').toBe(false);
     }
   });
 });

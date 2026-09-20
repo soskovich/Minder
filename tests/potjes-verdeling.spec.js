@@ -50,7 +50,9 @@ test.describe('a · de ingang', () => {
     /* v135: de ring en de titel zijn op de lopende maand vervangen door de maandnaam als ingang.
        v176: die maandnaam is de maandkiezer geworden, dus de vergelijking hangt nu aan de
        dagteller ernaast. Eén ingang per vraag blijft staan, alleen op een ander element. */
-    await page.locator('#s-ins .card .row span.small[onclick*="openBudgetCompare"]').first().click();
+    /* v241: de dagteller staat in de eyebrow boven de kaart in plaats van erin. De ingang blijft
+       dezelfde, alleen het anker verhuist mee. */
+    await page.locator('#s-ins .ins-eyebrow span[onclick*="openBudgetCompare"]').first().click();
     await page.waitForSelector(SHEET);
     const s = await sheetTxt(page);
     expect(s).toMatch(/hoe doe je het deze maand\?/i);      // de kop rendert uppercase

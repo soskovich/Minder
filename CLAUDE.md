@@ -58,12 +58,14 @@ geen editor bij om een optie te kunnen tonen. Niets in deze laag mag aanmoedigen
 Elk scherm beantwoordt precies één vraag, en een element staat op precies één scherm. De nav loopt
 op in horizon (`v233`): Home, Inzichten, Plan, Grip.
 - **Home** (`dash`) — waar sta ik nu.
-- **Inzichten** (`ins`) — hoe loopt deze maand (operationeel). Draagt sinds `v227` ook de
-  meermaands-grafiek "Uitgaven vs budget", onder het blok over deze maand. Dat is een omkering van
-  `v178`, dat hem juist naar Maand haalde omdat hij maanden naast elkaar zet; het argument van `v178`
-  staat nog en `BESLISSINGEN.md` draagt beide kanten. Hij toont uitsluitend afgeronde maanden
-  (`v194`), dus hij staat onder een kop die "Deze maand" zegt zonder deze maand te tonen, en hij
-  rendert alleen op de lopende maand.
+- **Inzichten** (`ins`) — hoe loopt deze maand (operationeel). Sinds `v241` vier blokken onder
+  elkaar, elk met een kop die zijn vraag noemt: een eyebrow met de maandkiezer en de dagteller, de
+  stand-kaart, "Wat er nog komt", "Wat opvalt" en "Over de maanden heen". Draagt sinds `v227` ook de
+  meermaands-grafiek "Uitgaven vs budget". Dat is een omkering van `v178`, dat hem juist naar Maand
+  haalde omdat hij maanden naast elkaar zet; het argument van `v178` staat nog en `BESLISSINGEN.md`
+  draagt beide kanten. Hij toont uitsluitend afgeronde maanden (`v194`); tot `v240` stond hij
+  daardoor onder een kop die "Deze maand" zei zonder deze maand te tonen, en sinds `v241` onder
+  "Over de maanden heen". Hij rendert alleen op de lopende maand.
 - **Grip** (`maand`, sinds `v233`; heette Maand) — houdt mijn systeem stand (structureel). Leest
   altijd de lopende maand en heeft geen maandkiezer; de kiezer (`curMonth`, `kijkMaand()`) is van
   Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. Draagt sinds `v235` bovenaan
@@ -88,6 +90,18 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **Op Inzichten is de stand het enige kader** (`v241`): `insHeroKaart()` laste de stand van de
+  maand en "Nog deze maand" in een kaart. Twee vragen in een kader is een kader te veel: gemeten op
+  360px was die kaart 351px en stond de onderkant van het tweede signaal op 602px bij 567px
+  zichtbaar, dus je moest scrollen voordat je wist dat er nog iets onder zat. `renderIns()` roept
+  `insBudgetBlok()` en `insNogLijst()` nu apart aan; alleen de eerste is een kaart. Elk ander blok
+  staat onder een `insSection()`-kop die zijn vraag noemt, en **een kop zonder inhoud staat er
+  niet**: een maand zonder signalen laat geen lege "Wat opvalt" achter. De maandkiezer en de
+  dagteller staan in de eyebrow erboven en nergens anders; `insBudgetBlok()` schrijft ze niet meer,
+  ook niet in zijn "onbekend"-tak. WAT DE LIJST KOST: vier posten van twee regels nemen 72px meer
+  dan het raster van twee bij twee dat ze vervangt (gemeten 630 tegen 558px). De tegelvorm blijft
+  bestaan voor `nogDezeMaandCard()`, de terugval zonder budget, en het tegel-CSS is van
+  `maandKpiBlok()` op Vermogen (`v232`): verbouw dat niet vanaf Inzichten.
 - **Een halve maand is geen maand** (`v194`, `v230`): een vergelijking tussen de lopende maand en
   afgeronde maanden rendert alleen op afgeronde maanden (de meermaands-grafiek, signaal 2 van
   `insSignals()`). Geen tempo-vergelijking als vervanging: vaste lasten passen niet in een tempo
@@ -135,7 +149,12 @@ genoemde versietag.)*
   maandtotaal naneemt kan een paar euro lager uitkomen (gemeten €90 tegen €94 bij 9,4% op een maand
   van €1.000). De verhouding tussen de twee bedragen blijft gelijk aan die tussen de twee
   percentages, en dat is de enige rekensom die zonder het maandtotaal te maken is. De herkomst van
-  het normaal-bedrag hoort in de toelichting: in de kop loopt hij op 360 en 390px naar twee regels.
+  het normaal-bedrag hoort in de toelichting **zolang dat bedrag niet zelf in de kop staat**. Sinds
+  `v241` staat het er wel ("zaterdag €522, normaal €128"), en dan is "bij dat gebruikelijke aandeel
+  hoort ongeveer €128" een herhaling van wat je al ziet; die zin is daarom vervallen. Komt het
+  bedrag ooit uit de kop, dan hoort de herkomst terug in de toelichting, want zonder een van beide
+  leest een afgeleide als een meting. In de kop past hij niet: daar loopt hij op 360 en 390px naar
+  twee regels.
 - **Losse geld is zonder onvoorzien** (`v239`): signaal 3 en 4 van `insSignals()` waren de enige twee
   plekken in de normlaag waar `geenNorm` niet werd uitgesloten, terwijl signaal 1 en 2 in dezelfde
   functie dat al deden (`v234`). Nu ook daar, in de telpoort **en** in de sommen. Gemeten aanleiding:
@@ -381,7 +400,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v240` → `minder-v241`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v241` → `minder-v242`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de
