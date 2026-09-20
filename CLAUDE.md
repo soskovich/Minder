@@ -66,7 +66,9 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. Draagt sinds `v235` bovenaan
   de valt-op-kaarten: dezelfde signalen die Inzichten constateert, met de historie en de drie
   handelingen eraan. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
-  de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten.
+  de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten. Sinds `v237` is dat niet
+  meer de enige ingang: `coachLeak()` levert ook een patroonregel op Inzichten. Twee ingangen naar
+  hetzelfde gesprek, maar nooit voor hetzelfde geval.
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Plan rekent in **maandtempo**
   (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
   restant van déze maand. Beide kloppen; wat ze verbindt hoort op Plan te staan en nergens anders.
@@ -107,6 +109,22 @@ genoemde versietag.)*
   alleen voor `coachWeekRisk()` en `coachLeak()`: die meten een percentage en stellen een andere
   vraag. De patronen uit `insSignals()` vullen op Inzichten aan tot het totaal van twee, en komen
   niet op Grip: een patroon is operationeel, geen normoverschrijding.
+- **Het lek is de vijfde patroonbron** (`v237`): `lekSignaal()` zet `coachLeak()` om in dezelfde
+  objectvorm als `insSignals()`, met `pri` 12 zodat hij via de bestaande sortering bovenaan komt
+  (een lek is een doorlopende kost die je kunt opzeggen, de andere vier zijn observaties). Hij telt
+  mee in het maximum van twee en verdringt nooit een budgetsignaal. Zijn tekst is **hier**
+  geschreven en niet overgenomen van `coachWeekRisk()`: die schrijft een handeling, en op een regel
+  die vaststelt is dat een opdracht (`v222`). Alleen op de lopende maand (`v139`, `v186`).
+  DE ONTDUBBELING LEEST `budgetFlaggedCats` EN NIET DE HELE EXCLUDE-SET. `mv.drivers` hield ooit de
+  categorieën tegen die de maand-vs-vorige-kaart al noemde, maar die kaart bestaat niet meer:
+  `monthVsPrevInner()` heeft alleen `insSignalRows()` nog als aanroeper. Voor `insSignals()` blijft
+  die set zoals hij was; voor het lek sloot hij precies de gevallen uit waarvoor hij bestaat, want
+  een losse aankoop zonder potje ís een grote maand-op-maand-beweging. Dat een afbakening niet
+  overdraagbaar is tussen twee vragen staat als meetles hieronder.
+  BEKENDE CONSEQUENTIE, bewust niet gerepareerd: een categorie boven zijn potje maar onder
+  `DREMPEL_EUR` (potje €100, uitgegeven €110) zit wel in `budgetFlaggedCats` en is geen
+  valt-op-signaal, dus die staat nergens. Dat hoort bij de drempel; hem via de lek-route alsnog
+  binnenlaten zou die keuze ondergraven.
 - **Wat een signaal je kostte, staat vast** (`v235`): `SET.valtOpLog[maand+'|'+categorie]` krijgt een
   record bij de eerste detectie, ook als het signaal buiten de twee plekken viel (`getoond:false`) -
   anders weet je niet wat je niet gezien hebt. Een actie (`potje_bijgesteld`, `grens_gezet`) laat het
@@ -116,6 +134,12 @@ genoemde versietag.)*
   Het potje verhogen laat een signaal verdwijnen zonder dat je minder uitgeeft, dus elke route
   daarheen telt mee - ook `setCatBudget()` en `savePotje()`. Geen teller die iets goedkeurt: de
   telling is een spiegel.
+- **De laag bepaalt wat je vastlegt** (`v237`): de knop op Grip verzet het potje van de **lopende**
+  maand, `setCatBudget()` en `savePotje()` dat van de **volgende**. Beide voeden hetzelfde record,
+  dus `valtOpPotjeGewijzigd()` laat `potje_na` staan zodra dat gelijk is aan `SET.budgets[k]`:
+  anders overschrijft een latere editor-wijziging de Grip-waarde en leest de log "€200 → €200"
+  terwijl het potje op €450 staat. Een log die zegt dat er niets gebeurde bij precies de handeling
+  die hij moest vangen, is erger dan geen log.
 - **Bijstellen geldt deze maand, en draait vanzelf terug** (`v235`): de knop op Grip schrijft
   `SET.budgets[k]` en zet `SET.budgetsNext[k]` terug op de oude waarde, zodat `rolloverBudgets()` hem
   bij de maandwissel ongedaan maakt. Dat is een bewuste uitzondering op "een bestaand potje verschuift
@@ -272,6 +296,14 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   aandeel en toonde bedragen (`v230`): "€2.000 (jouw gemiddelde €2.000) · veel meer kwijt". Lees
   bij elk signaal de conditie en de `kpiVal`/`kpiSub`/`hyp` naast elkaar; verschilt de maat, dan
   kan de kaart het signaal tegenspreken zonder dat een test het ziet.
+- **Een afbakening die zijn scherm overleeft, filtert blind.** `mv.drivers` uit
+  `monthVsPrevInner()` bestond om de categorieën van de maand-vs-vorige-kaart niet te herhalen. Die
+  kaart is weg; de set bleef, en `insSignalRows()` is de enige aanroeper. Bij `v237` sloot hij
+  precies het geval uit dat de nieuwe bron moest vangen (Mediamarkt €220 in shopping is per
+  definitie een grote maand-op-maand-beweging), en de regel rendeerde in geen enkel testgeval.
+  Meet bij een nieuwe lezer van een bestaande set dus eerst wát die set beschermt en of dat er nog
+  staat. Dit is dezelfde vorm als "een afbakening is niet overdraagbaar tussen twee vragen", maar de
+  oorzaak is anders: niet een andere vraag, maar een verdwenen antwoord.
 - **Een melding kan de enige drager van een ingang zijn.** Voordat je er een laat vervallen, meet
   welke tikken eraan hangen en waar die als enige heen leiden. Een hint die "maandbedrag instellen"
   zegt kan de enige weg naar een editor zijn die verder nergens vandaan te openen is; dan is hem
@@ -285,8 +317,16 @@ de samenvatting weg. Wil je de uitvoer beperken, gebruik dan een reporter of sch
 bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
+**Draai onder `TZ=Europe/Amsterdam`.** Op UTC lopen `ymdVan()` en `toISOString()` nooit uiteen, dus
+`lokale-kalenderdag.spec.js` bewijst daar niets en staat er rood; onder CEST is hij groen.
+
+**Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
+binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
+`v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
+locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
+
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v236` → `minder-v237`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v237` → `minder-v238`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

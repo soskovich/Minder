@@ -90,7 +90,11 @@ test.describe('a · het patroon staat op precies één plek', () => {
 });
 
 test.describe('b · constateren en kiezen staan elk op één scherm', () => {
-  test('de kaart met de ingang is weg, en Inzichten draagt er geen meer', async ({ page }) => {
+  /* v237: Inzichten draagt weer een lek-ingang, maar niet de oude. De CTA-voetregel is weg; wat er
+     staat is een stille patroonregel die de bevinding zelf draagt. Wat deze test bewaakt is dat de
+     kaart met zijn twee elementen niet terug is: geen #wvoLine, geen insLekVraag, en hooguit een
+     ingang op dit scherm in plaats van een bevinding met een vraag eronder. */
+  test('de kaart met de ingang is weg, en Inzichten draagt er hooguit een', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('ins'));
     await page.waitForTimeout(90);
@@ -98,7 +102,10 @@ test.describe('b · constateren en kiezen staan elk op één scherm', () => {
     expect(ids).not.toContain('insLekVraag');
     expect(ids).not.toContain('wvoLine');
     expect(await page.evaluate(() => typeof whatStandsOutLine)).toBe('undefined');
-    expect(await page.evaluate(() => document.querySelectorAll('#s-ins [onclick*="coStart"]').length)).toBe(0);
+    expect(await page.evaluate(() => document.querySelectorAll("#s-ins [onclick*=\"coStart('lek'\"]").length))
+      .toBeLessThanOrEqual(1);
+    // de ingang zit in de regel zelf, niet als losse vraag eronder
+    expect(await page.evaluate(() => ($('#s-ins').innerText || ''))).not.toMatch(/kunt doen\?/);
   });
 
   test('de ingang staat op Grip, en daar maar één keer', async ({ page }) => {
@@ -152,19 +159,20 @@ test.describe('c · de keuze staat vast, zodat de tweede niet terugkomt', () => 
     for (const x of r) expect(x.sig, x.key).toBe(false);
   });
 
-  /* v235: de lek-ingang is van Inzichten naar Grip verhuisd, dus de richting van deze test draait
-     om. Wat hij bewaakt is onveranderd: de ingang staat op precies één scherm, en de CTA-vraag
-     staat nergens meer als losse regel. */
-  test('Inzichten toont geen enkele maandregel, en draagt de lek-ingang niet meer', async ({ page }) => {
+  /* v235 haalde de lek-ingang van Inzichten af, v237 zet er weer een neer in een andere vorm en
+     voor een ander geval. De ontdubbeling die deze test bewaakt is daarmee niet vervallen maar
+     verschoven: geen scherm draagt er twee, en de CTA-vraag staat nergens meer als losse regel.
+     Dat er er twee tegelijk kunnen zijn, een per scherm, is de dekking die v237 wil. */
+  test('Inzichten toont geen enkele maandregel, en geen scherm draagt twee lek-ingangen', async ({ page }) => {
     await boot(page);
     const ins = await scherm(page, 'ins');
     expect(ins).not.toContain('Patroon van de maand');
     expect(ins).not.toMatch(/kunt doen\?/);
-    expect(await page.evaluate(() => ($('#s-ins').innerHTML || '')))
-      .not.toContain("coStart('lek'");
+    const per = async (x) => page.evaluate((n) => document.querySelectorAll('#s-' + n + " [onclick*=\"coStart('lek'\"]").length, x);
     await scherm(page, 'maand');
-    expect(await page.evaluate(() => document.querySelectorAll("[onclick*=\"coStart('lek'\"]").length))
-      .toBeLessThanOrEqual(1);
+    expect(await per('ins')).toBeLessThanOrEqual(1);
+    expect(await per('maand')).toBeLessThanOrEqual(1);
+    for (const x of ['vooruit', 'dash', 'tx']) expect(await per(x), x).toBe(0);
   });
 });
 

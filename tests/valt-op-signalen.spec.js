@@ -26,6 +26,7 @@ const D = {
   vervoer: 'BEA, BETAALPAS SHELL TANKSTATION',
   shopping: 'ECOM ZALANDO PAYMENTS',
   sport: 'ECOM BASIC FIT BETAALPAS',
+  zorg: 'BEA, BETAALPAS APOTHEEK CENTRUM',
 };
 
 function seed(o) {
@@ -533,5 +534,170 @@ test.describe('layout', () => {
       return el.scrollWidth - el.clientWidth;
     });
     expect(over).toBeLessThanOrEqual(1);
+  });
+});
+
+/* v237: coachLeak() is de vijfde bron voor de patroonregels. De lek-ingang hing sinds v235 alleen
+   aan de chevron van de open Grip-kaart, en die kaart bestaat pas bij een overschrijding van
+   minstens DREMPEL_EUR. coachLeak() meet iets anders, dus die twee dekten elkaar niet.
+   Wat deze groep vasthoudt: het lek staat bovenaan de patroonregels, telt mee in het maximum van
+   twee, verdringt nooit een budgetsignaal, en een categorie staat nooit twee keer op het scherm. */
+test.describe('de lek-regel op Inzichten', () => {
+  const lekRij = (page) => page.locator(".valtop-patroon[onclick*=\"coStart('lek'\"]");
+  const ingang = (page, scherm) =>
+    page.evaluate((x) => document.querySelectorAll('#s-' + x + " [onclick*=\"coStart('lek'\"]").length, scherm);
+
+  test('een lek zonder overschrijding: ingang op Inzichten, niet op Grip', async ({ page }) => {
+    await boot(page, {
+      tx: [{ cat: 'shopping', bedrag: 220, naam: 'Zalando' }],
+      set: { budgets: { boodschappen: 400 } },          // shopping heeft geen potje
+    });
+    expect(await page.evaluate(() => coachLeak(thisYM()).kind)).toBe('impulse');
+    expect(await sigKeys(page)).toEqual([]);            // geen enkele overschrijding
+    await page.evaluate(() => go('ins'));
+    await expect(lekRij(page)).toHaveCount(1);
+    expect(await ingang(page, 'ins')).toBe(1);
+    await page.evaluate(() => go('maand'));
+    await expect(page.locator('.valtop-kaart')).toHaveCount(0);
+    expect(await ingang(page, 'maand')).toBe(0);
+  });
+
+  test('een lek met een overschrijding in dezelfde categorie: ingang op Grip, geen lek-regel', async ({ page }) => {
+    await boot(page, {
+      tx: [{ cat: 'boodschappen', bedrag: 300, naam: 'Albert Heijn' }],
+      set: { budgets: { boodschappen: 200 } },
+    });
+    // dezelfde categorie draagt allebei: de overschrijding is het lek
+    expect(await page.evaluate(() => coachLeak(thisYM()))).toMatchObject({ kind: 'over-budget', cat: 'boodschappen' });
+    expect(await sigKeys(page)).toEqual(['boodschappen']);
+    await page.evaluate(() => go('ins'));
+    await expect(lekRij(page)).toHaveCount(0);          // de budgetregel draagt hem al
+    await expect(page.locator('.valtop-rij')).toHaveCount(1);
+    expect(await ingang(page, 'ins')).toBe(0);
+    await page.evaluate(() => go('maand'));
+    expect(await ingang(page, 'maand')).toBe(1);
+  });
+
+  test('een lek in een categorie die al als patroonregel staat: geen lek-regel', async ({ page }) => {
+    await boot(page, {
+      tx: [{ cat: 'zorg', bedrag: 60, naam: 'Apotheek Centrum', m: M2, dag: '18' },
+           { cat: 'zorg', bedrag: 120, naam: 'Apotheek Centrum', m: M1, dag: '18' },
+           { cat: 'zorg', bedrag: 200, naam: 'Apotheek Centrum', dag: '18' }],
+      set: { budgets: { boodschappen: 400 } },
+    });
+    expect(await page.evaluate(() => coachLeak(thisYM()).cat)).toBe('zorg');
+    await page.evaluate(() => go('ins'));
+    // zorg loopt drie maanden op: dat patroon heeft de plek, het lek valt weg
+    await expect(page.locator('.valtop-patroon')).toHaveCount(1);
+    await expect(lekRij(page)).toHaveCount(0);
+    await expect(page.locator('.valtop-patroon')).toContainText('Zorg');
+  });
+
+  test('twee budgetsignalen plus een lek: geen lek-regel, het maximum van twee wint', async ({ page }) => {
+    await boot(page, {
+      tx: [{ cat: 'boodschappen', bedrag: 300, naam: 'Albert Heijn' },
+           { cat: 'uiteten', bedrag: 150, naam: 'Restaurant De Kade' },
+           { cat: 'shopping', bedrag: 220, naam: 'Zalando' }],
+      set: { budgets: { boodschappen: 200, uiteten: 100 } },
+    });
+    expect(await page.evaluate(() => coachLeak(thisYM()).cat)).toBe('shopping');
+    await page.evaluate(() => go('ins'));
+    await expect(page.locator('.valtop-rij')).toHaveCount(2);
+    await expect(page.locator('.valtop-patroon')).toHaveCount(0);
+    expect(await ingang(page, 'ins')).toBe(0);
+  });
+
+  /* Het opgegeven geval was "een aandeel-signaal", maar dat is signaal 2 en dat vuurt niet op de
+     lopende maand (v230: een halve maand is geen maand), terwijl een budgetsignaal juist alleen
+     daar bestaat. De twee kunnen dus nooit samen voorkomen. Gemeten wordt daarom tegen de sterkste
+     patroonregel die er wel kan staan: signaal 1, drie maanden op rij, met pri 9. Wint het lek van
+     die, dan wint hij van alle vier. */
+  test('een budgetsignaal plus een lek plus een patroon: het lek staat er, het patroon niet', async ({ page }) => {
+    await boot(page, {
+      tx: [{ cat: 'boodschappen', bedrag: 300, naam: 'Albert Heijn' },
+           { cat: 'shopping', bedrag: 220, naam: 'Zalando' },
+           { cat: 'zorg', bedrag: 60, naam: 'Apotheek Centrum', m: M2, dag: '18' },
+           { cat: 'zorg', bedrag: 120, naam: 'Apotheek Centrum', m: M1, dag: '18' },
+           { cat: 'zorg', bedrag: 200, naam: 'Apotheek Centrum', dag: '18' }],
+      set: { budgets: { boodschappen: 200 } },
+    });
+    const pri = await page.evaluate(() => {
+      const m = thisYM(); const mv = monthVsPrevInner(m);
+      const ex = new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
+      return { lek: lekSignaal(m, budgetFlaggedCats(m)).pri, pat: insSignals(m, ex).map((x) => x.pri) };
+    });
+    expect(pri.lek).toBeGreaterThan(9);
+    expect(pri.pat).toContain(9);
+    await page.evaluate(() => go('ins'));
+    await expect(page.locator('.valtop-rij')).toHaveCount(1);     // het budgetsignaal blijft staan
+    await expect(page.locator('.valtop-patroon')).toHaveCount(1); // en er is nog een plek
+    await expect(lekRij(page)).toHaveCount(1);                    // die gaat naar het lek
+    await expect(page.locator('.valtop-patroon')).not.toContainText('Zorg');
+  });
+
+  test('de lek-regel draagt de vaststelling en het gevolg, zonder gebiedende wijs', async ({ page }) => {
+    await boot(page, {
+      tx: [{ cat: 'shopping', bedrag: 220, naam: 'Zalando' }],
+      set: { budgets: { boodschappen: 400 } },
+    });
+    await page.evaluate(() => go('ins'));
+    const r = lekRij(page);
+    const t = await r.innerText();
+    expect(t).toContain('Zalando');
+    expect(t).toMatch(/€\s?220/);
+    expect(t).toContain('Online shopping');
+    expect(t).toContain('zat deze maand in geen enkel potje');
+    // v222: geen handeling op een regel die vaststelt. De zin van coachWeekRisk blijft in het gesprek.
+    expect(t).not.toMatch(/\bGeef\b|\bZet\b|\bStop\b|\bKijk\b/);
+    expect(t).not.toMatch(/[!—]/);
+    // zelfde stille vorm als de andere patroonregels
+    const st = await r.getAttribute('style');
+    expect(st).toContain('border-left:3px solid var(--mut2)');
+    expect(await r.locator('button').count()).toBe(0);
+  });
+
+  test('op een afgesloten maand komt de lek-regel niet mee', async ({ page }) => {
+    await boot(page, {
+      tx: [{ cat: 'shopping', bedrag: 220, naam: 'Zalando' }],
+      set: { budgets: { boodschappen: 400 } },
+    });
+    const html = await page.evaluate((m) => insSignalRows(m, false), M1);
+    expect(html).not.toContain("coStart('lek'");
+  });
+});
+
+/* v237: de log ging liegen. De knop op Grip verzet de LOPENDE maand, setCatBudget() de volgende.
+   Zonder guard overschreef een latere editor-wijziging potje_na, en dan las de log "€200 → €200"
+   terwijl het potje van deze maand op €450 stond: precies bij de handeling die de vastlegging
+   moest vangen. */
+test.describe('terugtypen na de knop op Grip', () => {
+  test('de log houdt het bedrag van de Grip-route vast', async ({ page }) => {
+    await boot(page, DRIE);
+    await page.evaluate(() => go('maand'));
+    await page.locator('.valtop-open .valtop-hand button').first().click();
+    await page.locator('#valtOpBedrag').fill('450');
+    await page.locator('#sheet button.btn').click();
+    expect((await logVan(page))[`${CUR}|boodschappen`].potje_na).toBe(450);
+    // in de budgeteditor terugtypen naar de oude stand, per toetsaanslag
+    await page.evaluate(() => { setCatBudget('boodschappen', '2'); setCatBudget('boodschappen', '20'); setCatBudget('boodschappen', '200'); });
+    const r = (await logVan(page))[`${CUR}|boodschappen`];
+    expect(r.potje_voor).toBe(200);
+    expect(r.potje_na).toBe(450);                    // niet 200: de lopende maand staat op 450
+    expect(await page.evaluate(() => SET.budgets.boodschappen)).toBe(450);
+    // en het signaal komt niet terug, want er is deze maand geen overschrijding meer
+    expect(await sigKeys(page)).not.toContain('boodschappen');
+    await page.evaluate(() => go('ins'));
+    await expect(page.locator('#insSignalRows')).not.toContainText('Boodschappen');
+  });
+
+  test('zonder de Grip-route blijft het typen per toetsaanslag werken', async ({ page }) => {
+    await boot(page, DRIE);
+    await page.evaluate(() => { valtOpSignals(thisYM()); setCatBudget('boodschappen', '3'); setCatBudget('boodschappen', '35'); setCatBudget('boodschappen', '350'); });
+    let r = (await logVan(page))[`${CUR}|boodschappen`];
+    expect(r.potje_voor).toBe(200);
+    expect(r.potje_na).toBe(350);
+    await page.evaluate(() => setCatBudget('boodschappen', '200'));
+    r = (await logVan(page))[`${CUR}|boodschappen`];
+    expect(r.actie).toBe(null);                      // terug op de oude stand telt niet als actie
   });
 });

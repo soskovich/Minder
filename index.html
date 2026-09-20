@@ -8597,6 +8597,15 @@ function valtOpPotjeGewijzigd(k, voor, na){
        guard die bij de eerste actie stopt bevriest potje_na op 3. Een eerdere bijstelling mag dus
        worden bijgewerkt; een grens is een andere keuze en blijft staan. */
     if(r.actie && r.actie!=='potje_bijgesteld') return;
+    /* v237: de knop op Grip verzet de LOPENDE maand, setCatBudget() en savePotje() de volgende.
+       Staat potje_na al gelijk aan het potje dat nu voor deze maand geldt, dan is die waarde langs
+       de Grip-route gezet en mag een volgende-maand-wijziging hem niet overschrijven. Zonder deze
+       regel las de log "200 -> 200" terwijl het potje van deze maand op 450 stond, en dan zegt de
+       vastlegging dat er niets gebeurde bij precies de handeling die ze moest vangen.
+       Het bijwerken per toetsaanslag raakt dit niet: daar blijft SET.budgets[k] ongemoeid, dus
+       potje_na kan er nooit gelijk aan staan (wordt het dat wel, dan is het de tak hieronder die
+       de actie juist terugdraait). */
+    if(r.potje_na!=null && r.potje_na===Math.round(+(SET.budgets||{})[k]||0)) return;
     const v=Math.round(+voor||0), n=Math.round(+na||0);
     if(v===n){
       /* Terug op de oude stand: dan heb je niets bijgesteld. Alleen een bijstelling die uit dit
@@ -8723,7 +8732,7 @@ function insSignals(m,exclude){
       if(exclude.has(k)||geenNorm(k)) continue;   // v234
       if(c>b && b>a && a>0 && (c-a)>=15 && (!best||(c-a)>best.d)) best={k,a,c,d:c-a};
     }
-    if(best) out.push({pri:9,act:`openCategory('${best.k}')`,
+    if(best) out.push({pri:9,cat:best.k,act:`openCategory('${best.k}')`,   // v237: cat, zodat insSignalRows het lek ertegen kan houden
       kpiLabel:CATS[best.k].name, kpiVal:euro0(best.c), kpiSub:`was ${euro0(best.a)}`,
       hyp:`${CATS[best.k].name} loopt al drie maanden op.`,
       imp:`Kijk of dit blijvend is; zo ja, zet er een grens op.`});
@@ -8752,7 +8761,7 @@ function insSignals(m,exclude){
        en die twee lopen uiteen zodra het maandtotaal beweegt: een lager totaal maakt elk aandeel
        groter terwijl het bedrag gelijk blijft of daalt. Het bedrag zelf staat in de drill-down. */
     if(best){ const pct=Math.round(best.share*100), was=Math.round(best.avg*100);
-      out.push({pri:7,act:`openCategory('${best.k}')`,
+      out.push({pri:7,cat:best.k,act:`openCategory('${best.k}')`,   // v237: cat, zie signaal 1
         kpiLabel:CATS[best.k].name, kpiVal:`${pct}% van je uitgaven`, kpiSub:`was gemiddeld ${was}%`,
         hyp:`Aan ${CATS[best.k].name.toLowerCase()} gaat dit keer een groter deel van je uitgaven dan je gewend bent.`,
         imp:`Check of het eenmalig was; anders een grens op ${CATS[best.k].name.toLowerCase()}.`}); }
@@ -9664,6 +9673,45 @@ function insPatroonRij(p){
 /* De budgetregels lezen de LOPENDE maand: het zijn de signalen waar op Grip een handeling aan
    hangt, en die handelingen gelden deze maand. Op een afgesloten maand blijven alleen de patronen
    over, precies zoals de oude kaart daar deed. */
+/* v237: coachLeak() als vijfde bron voor de patroonregels. De lek-ingang hing sinds v235 alleen
+   aan de chevron van de open Grip-kaart, en die kaart bestaat pas bij een overschrijding van
+   minstens DREMPEL_EUR. coachLeak() meet iets anders (een percentage via budgetBand, of een uitgave
+   zonder potje), dus die twee dekken elkaar niet: een lek zonder overschrijding had geen ingang
+   meer. Twee ingangen naar hetzelfde gesprek is hier geen dubbeling maar dekking.
+   GEEN EXTRA FILTER. De bestaande exclude-set (drivers plus budgetFlaggedCats) haalt per
+   constructie precies de 'over-budget'-smaak eruit, want dat is dezelfde conditie. En noPotLeak()
+   slaat elke categorie met een potje over, dus een 'impulse'- of 'missing-pot'-lek kan nooit
+   dezelfde categorie hebben als een valt-op-signaal. De scheidslijn lag er al: deze regel draagt
+   geld dat buiten je potjes om weglekt, de budgetregel geld dat over een potje heen gaat.
+   BEKENDE CONSEQUENTIE: een categorie boven haar potje maar onder DREMPEL_EUR zit wel in
+   budgetFlaggedCats en is geen valt-op-signaal, dus die staat nergens. Dat hoort bij de drempel;
+   hem via deze route alsnog binnenlaten zou die keuze ondergraven.
+   DE TEKST IS HIER GESCHREVEN en niet overgenomen van coachWeekRisk(): die schrijft een handeling
+   ("Geef X een potje"), en op een regel die vaststelt is dat een opdracht (v222). De regel doet de
+   vaststelling en toont het gevolg; de handeling komt pas in het gesprek achter de tik. */
+function lekSignaal(m, exclude){
+  let L=null; try{ L=coachLeak(m); }catch(_){ return null; }
+  if(!L || !L.cat || !CATS[L.cat]) return null;
+  if(exclude && exclude.has(L.cat)) return null;
+  const bedrag=Math.round(+L.amount||0); if(!(bedrag>0)) return null;
+  const cat=CATS[L.cat].name;
+  /* Per smaak een eigen vaststelling. 'over-budget' bereikt deze regel niet zolang de exclude-set
+     meekomt, maar de zin hoort ook los van de beller te kloppen. */
+  const T = L.kind==='missing-pot'
+    ? {hyp:`${L.name} komt vaker terug en heeft nog geen potje.`,
+       imp:`Een vaste behoefte zonder potje valt buiten elke grens die je hebt gezet.`}
+    : L.kind==='over-budget'
+    ? {hyp:`${L.name} ging deze maand over het potje heen.`,
+       imp:`Dat deel viel buiten de grens die je zelf had gezet.`}
+    : {hyp:`${L.name} zat deze maand in geen enkel potje.`,
+       imp:`Wat geen potje heeft, valt buiten elke grens die je hebt gezet.`};
+  /* pri boven de 9 van het hoogste patroon: een lek is een doorlopende kost die je kunt opzeggen,
+     de andere vier zijn observaties. Is er maar een plek, dan hoort de opzegbare daar te staan.
+     Dat loopt via dezelfde sortering, dus nergens een uitzondering. */
+  return {pri:12, cat:L.cat, act:`coStart('lek','${esc(m)}')`,
+    kpiLabel:L.name, kpiVal:euro0(bedrag), kpiSub:(cat===L.name?'':cat),
+    hyp:T.hyp, imp:T.imp};
+}
 function insSignalRows(m, nu){
   if(nu===undefined) nu=isLopendeMaand(m);
   let B=[]; if(nu){ try{ B=valtOpSignals(m)||[]; }catch(_){ B=[]; } }
@@ -9671,8 +9719,26 @@ function insSignalRows(m, nu){
   let P=[];
   if(ruimte>0){ try{
     const mv=monthVsPrevInner(m);
-    const exclude=new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
-    P=insSignals(m,exclude).sort((a,b)=>b.pri-a.pri).slice(0,ruimte);
+    const vlag=budgetFlaggedCats(m);
+    const exclude=new Set([...mv.drivers, ...vlag]);
+    let kand=insSignals(m,exclude).sort((a,b)=>b.pri-a.pri);
+    /* v237: het lek erbij, maar alleen op de lopende maand. Het gesprek erachter gaat over een stap
+       die je nu kunt zetten; op een afgesloten maand nodigt dat uit tot een keuze over iets wat
+       voorbij is (v139, v186). Hij valt ook weg als zijn categorie al een plek heeft als
+       patroonregel: die toets leest de plekken zoals ze zonder het lek zouden zijn, want daarna
+       verdringt het lek de onderste. Signaal 3 en 4 dragen geen cat en kunnen dus nooit matchen.
+       HIJ LEEST vlag EN NIET exclude, en dat is met opzet. mv.drivers houdt de categorieen tegen
+       die de maand-vs-vorige-kaart al noemde, maar die kaart bestaat niet meer: monthVsPrevInner()
+       heeft alleen deze aanroeper nog en levert alleen zijn drivers-set. Voor insSignals blijft dat
+       zoals het was, maar voor het lek sluit het precies de gevallen uit waarvoor hij bestaat: een
+       losse aankoop zonder potje is per definitie een grote maand-op-maand-beweging, dus de
+       impuls-smaak viel er altijd uit (gemeten: Mediamarkt 220 in shopping). Dat is de meetles dat
+       een afbakening niet overdraagbaar is tussen twee vragen. Wat er wel toe doet staat er nog:
+       budgetFlaggedCats haalt de over-budget-smaak eruit, en de toets hieronder de patroonregels.
+       Een categorie kan daardoor nooit twee keer op het scherm staan. */
+    const L=nu?lekSignaal(m, vlag):null;
+    if(L && kand.slice(0,ruimte).every(s=>s.cat!==L.cat)) kand=[L].concat(kand);
+    P=kand.sort((a,b)=>b.pri-a.pri).slice(0,ruimte);
   }catch(_){ P=[]; } }
   if(!B.length && !P.length) return '';
   return `<div id="insSignalRows">${B.map(valtOpRij).join('')}${P.map(insPatroonRij).join('')}</div>`;

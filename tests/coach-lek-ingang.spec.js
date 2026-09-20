@@ -3,9 +3,12 @@
 // v235: die regel was de CTA-voetregel in de Valt op-kaart op Inzichten, en die kaart is vervallen.
 // Inzichten constateert nu alleen; de keuze staat op Grip. De ingang hangt daarom aan de chevron in
 // de kop van de open valt-op-kaart op Grip, en niet aan een vierde knop naast de drie handelingen.
-// LET OP, dit is een versmalling en ze staat hier expres vastgelegd: de chevron bestaat alleen op
-// een kaart, en een kaart bestaat alleen bij een categorie die minstens DREMPEL_EUR boven zijn
-// potje zit. Een lek zonder zo'n overschrijding heeft sindsdien geen ingang meer (zie test a5).
+// v237: die verhuizing kostte dekking, want de chevron bestaat alleen op een kaart en een kaart
+// bestaat alleen bij een overschrijding van minstens DREMPEL_EUR, terwijl coachLeak() iets anders
+// meet. Een lek zonder overschrijding had daardoor geen ingang meer. Sinds v237 is coachLeak() ook
+// een bron voor de patroonregels op Inzichten, dus er zijn nu twee ingangen naar hetzelfde gesprek:
+// de kaart vangt het lek dat samenvalt met een overschrijding, de regel vangt het lek dat dat niet
+// doet. Dat is geen dubbeling maar dekking, en a4 en a5 meten het allebei van hun eigen kant.
 // Kritiek en onveranderd: dit gesprek mag de maandafspraak nooit raken, want
 // coachThisMonthAfspraak() laat er één per maand toe en coAfspraakOpen() wist de bestaande eerst.
 // De service worker staat globaal uit via playwright.config.js.
@@ -93,26 +96,55 @@ test.describe('a · de ingang op Grip', () => {
     expect(await page.locator('#s-maand').innerText()).not.toMatch(/kunt doen\?/);
   });
 
-  test('a4 · het is de enige ingang, en Inzichten draagt hem niet meer', async ({ page }) => {
-    await ins(page);
-    for (const scherm of ['vooruit', 'dash', 'tx', 'ins']) {
+  /* v237: "de enige ingang" klopt niet meer, en dat is de bedoeling. Inzichten en Grip kunnen er
+     allebei een dragen zolang ze over een ander geval gaan. Wat blijft staan is dat geen scherm er
+     twee draagt, en dat Home, Plan en Transacties er geen krijgen: daar valt over een lek niets te
+     beslissen. */
+  test('a4 · hooguit een ingang per scherm, en alleen op Inzichten en Grip', async ({ page }) => {
+    await ins(page, metLekEnSignaal());
+    for (const scherm of ['vooruit', 'dash', 'tx']) {
       expect(await page.evaluate((s) => (document.querySelector('#s-' + s) || {}).innerHTML || '', scherm))
         .not.toContain("coStart('lek'");
     }
-    expect(await page.evaluate(() => document.querySelectorAll("[onclick*=\"coStart('lek'\"]").length)).toBe(1);
+    const per = async (s) => page.evaluate((x) => document.querySelectorAll('#s-' + x + " [onclick*=\"coStart('lek'\"]").length, s);
+    expect(await per('ins')).toBeLessThanOrEqual(1);
+    expect(await per('maand')).toBeLessThanOrEqual(1);
+    // deze fixture draagt allebei de gevallen: een lek zonder overschrijding (shopping, geen potje)
+    // en een overschrijding met een kaart (boodschappen). Dat is precies de dekking die v237 wil.
+    expect(await per('ins') + await per('maand')).toBe(2);
   });
 
-  /* a5 legt de versmalling vast die deze verhuizing kost. Hij is geen wens maar een meting: met
-     hetzelfde lek, maar zonder categorie boven haar potje, is er geen kaart en dus geen chevron.
-     Vóór v235 hing de ingang alleen aan coachWeekRisk() en coachLeak() en stond hij er wel.
-     Verandert dat oordeel, dan hoort deze test te veranderen en niet stilletjes groen te blijven. */
-  test('a5 · zonder valt-op-signaal is er geen ingang, ook al is er een lek', async ({ page }) => {
+  /* a5 was in v235 een vastgelegde versmalling: zonder kaart geen ingang. v237 heft die op, dus
+     dit is nu een meting van de andere kant. Hetzelfde geval, hetzelfde lek, geen overschrijding:
+     de ingang hoort er te zijn, op Inzichten, en niet op Grip. Valt hij weg, dan is de dekking
+     stilletjes terug naar v235 en hoort die test rood te staan. */
+  test('a5 · een lek zonder overschrijding krijgt zijn ingang op Inzichten, niet op Grip', async ({ page }) => {
     await ins(page, metLek());                                   // lek, maar geen potje-overschrijding
     expect(await page.evaluate((m) => coachWeekRisk(m).tone, CUR)).toBe('warn');
     expect(await page.evaluate((m) => !!coachLeak(m), CUR)).toBe(true);
     expect(await page.evaluate(() => valtOpSignals(thisYM()).length)).toBe(0);
-    await expect(chevron(page)).toHaveCount(0);
-    expect(await page.evaluate(() => document.querySelectorAll("[onclick*=\"coStart('lek'\"]").length)).toBe(0);
+    await expect(chevron(page)).toHaveCount(0);                  // geen kaart, dus geen chevron
+    await page.evaluate(() => go('ins'));
+    await expect(page.locator('.valtop-patroon')).toHaveCount(1);
+    const onclick = await page.locator('.valtop-patroon').getAttribute('onclick');
+    expect(onclick).toContain("coStart('lek'");
+    expect(onclick).toContain(CUR);
+    // de regel draagt de bevinding zelf, met bedrag en categorie
+    const t = await page.locator('.valtop-patroon').innerText();
+    expect(t).toMatch(/mediamarkt/i);
+    expect(t).toMatch(/€\s?220/);
+  });
+
+  /* Het gesprek achter de regel is hetzelfde gesprek als achter de chevron: coTopicLek(), met
+     dezelfde maand. Zonder deze toets kan de regel een dode tik worden. */
+  test('a6 · de regel op Inzichten opent hetzelfde gesprek', async ({ page }) => {
+    await ins(page, metLek());
+    await page.evaluate(() => go('ins'));
+    await page.locator('.valtop-patroon').click();
+    await wachtKeuze(page);
+    expect(await page.evaluate(() => window._coOnderwerp)).toBe('lek');
+    const draad = await page.locator('#coThr').innerText();
+    expect(draad).toMatch(/mediamarkt/i);
   });
 });
 
