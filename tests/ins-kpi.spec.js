@@ -493,21 +493,29 @@ test.describe('e · rustige modus en "Wat valt op"', () => {
     expect(rustig.chart).not.toContain('var(--red)');
   });
 
-  test('"Wat valt op" staat als compacte regel onder de kerncijfers', async ({ page }) => {
+  // v235: de Valt op-kaart is vervallen. Een patroon uit insSignals() staat nu als stille regel
+  // (.valtop-patroon) op dezelfde plek: geen lamp, geen 'Valt op:'-label, geen CTA. Wat de test
+  // vasthoudt is onveranderd - het signaal komt op Inzichten terecht en noemt zijn categorie.
+  test('een patroon uit insSignals staat als stille regel onder de kerncijfers', async ({ page }) => {
     // zorg stijgt drie maanden op rij -> signaal 1 (isFixedCat sluit zorg uit van de drivers,
     // en zonder potje wordt het niet budget-flagged, dus insSignals slaat het niet over)
     await openIns(page, tweak((set, tx) => {
       const add = (m, day, amount) => tx.push({ id: 'zorg-' + m, date: `${m}-${day}`, amount, acc: MAIN, name: 'Apotheek Centrum', desc: 'BEA, BETAALPAS APOTHEEK CENTRUM', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] });
       add(M2, '18', -60); add(M1, '18', -120); add(CUR, '18', -200);
     }));
-    const line = page.locator('#wvoLine');
+    const line = page.locator('.valtop-patroon');
     await expect(line).toHaveCount(1);
-    expect(await line.innerText()).toContain('Valt op:');
     expect(await line.innerText()).toContain('Zorg & apotheek');
+    // stil: geen label, geen knop, geen accentkleur op het bedrag
+    const html = await line.innerHTML();
+    expect(html).not.toContain('Valt op:');
+    expect(html).not.toContain('<button');
+    expect(await line.getAttribute('style')).toContain('border-left:3px solid var(--mut2)');
 
     // en het oude tegelblok is weg
     expect(await page.locator('#s-ins').innerText()).not.toContain('Wat dit betekent');
     expect(await page.evaluate(() => typeof whatStandsOutCard)).toBe('undefined');   // v164: opgeruimd
+    expect(await page.evaluate(() => typeof whatStandsOutLine)).toBe('undefined');   // v235: opgeruimd
   });
 });
 

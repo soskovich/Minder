@@ -48,13 +48,14 @@ async function boot(page, payload) {
   await page.waitForFunction(() => typeof insSignals === 'function');
 }
 const signalen = (page, m) => page.evaluate((m) => insSignals(m, new Set()), m || CUR);
-// de regel zoals hij op Inzichten staat, voor precies dit ene signaal
+/* De regel zoals hij op Inzichten staat, voor precies dit ene signaal.
+   v235: dit ging via whatStandsOutLine() met window.insSignals tijdelijk overschreven, omdat die
+   functie zelf koos welk signaal bovenaan kwam. insPatroonRij() rendert één signaal, dus de
+   monkeypatch is weg en dit meet de echte functie met echte data. */
 const regelVoor = (page, label, m) => page.evaluate(([m, l]) => {
   const s = insSignals(m, new Set()).find((x) => x.kpiLabel === l);
   if (!s) return null;
-  const orig = window.insSignals; window.insSignals = () => [s];
-  const d = document.createElement('div'); d.innerHTML = whatStandsOutLine(m, m === thisYM());
-  window.insSignals = orig;
+  const d = document.createElement('div'); d.innerHTML = insPatroonRij(s);
   return { txt: d.innerText.replace(/\s+/g, ' '), html: d.innerHTML };
 }, [m || CUR, label]);
 
@@ -108,7 +109,7 @@ test.describe('1 · elk signaal draagt een duiding en een dus-wat', () => {
     for (const opt of [{ oploop: true }, { piek: true }, { winkel: true }]) {
       await boot(page, seed(opt));
       const t = await page.evaluate((m) => { const d = document.createElement('div');
-        d.innerHTML = whatStandsOutLine(m); return d.innerText; }, CUR);
+        d.innerHTML = insSignalRows(m, true); return d.innerText; }, CUR);
       expect(t).not.toMatch(/goed bezig|knap|mooi|gefeliciteerd|op rij|streak|punten/i);
       expect(t).not.toMatch(/[!—]/);
     }

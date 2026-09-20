@@ -63,7 +63,10 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   rendert alleen op de lopende maand.
 - **Grip** (`maand`, sinds `v233`; heette Maand) — houdt mijn systeem stand (structureel). Leest
   altijd de lopende maand en heeft geen maandkiezer; de kiezer (`curMonth`, `kijkMaand()`) is van
-  Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`.
+  Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. Draagt sinds `v235` bovenaan
+  de valt-op-kaarten: dezelfde signalen die Inzichten constateert, met de historie en de drie
+  handelingen eraan. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
+  de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten.
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Plan rekent in **maandtempo**
   (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
   restant van déze maand. Beide kloppen; wat ze verbindt hoort op Plan te staan en nergens anders.
@@ -95,6 +98,30 @@ genoemde versietag.)*
   telt in `netSpend()` en het maandtotaal, maar niet tegen een budget of een historie
   (budgetnaleving leest `totals().spendNorm`, met `buitenNorm` zichtbaar in de hero). Geen
   koppeling met het noodfonds: het spaarsaldo daalt en de bufferregel ziet dat al. Geen teller.
+- **Eén detectie, twee weergaven** (`v235`): `valtOpSignals()` is de enige plek waar een
+  potje-overschrijding wordt vastgesteld. De lat is een bedrag (`DREMPEL_EUR`, 25) en niet een
+  percentage, de rangorde is euro's boven het potje met de categorienaam als tiebreak, en er komen
+  er hooguit twee. Inzichten rendert ze als stille regels (`insSignalRows()`, constateren), Grip als
+  kaarten met de handelingen (`gripSignalCards()`, kiezen). Grip rekent niets zelf; een tweede
+  drempel of een eigen meting daar is een tweede waarheid. `budgetOverCat()` blijft bestaan, maar
+  alleen voor `coachWeekRisk()` en `coachLeak()`: die meten een percentage en stellen een andere
+  vraag. De patronen uit `insSignals()` vullen op Inzichten aan tot het totaal van twee, en komen
+  niet op Grip: een patroon is operationeel, geen normoverschrijding.
+- **Wat een signaal je kostte, staat vast** (`v235`): `SET.valtOpLog[maand+'|'+categorie]` krijgt een
+  record bij de eerste detectie, ook als het signaal buiten de twee plekken viel (`getoond:false`) -
+  anders weet je niet wat je niet gezien hebt. Een actie (`potje_bijgesteld`, `grens_gezet`) laat het
+  signaal tot einde maand vallen; `valtOpAfsluiten()` sluit bij de eerste opening in een nieuwe maand
+  af met `over_eind_maand` en `actie:'geen'`. De meetlat bij die afsluiting komt uit het record zelf
+  (`potje_na`, anders `potje_bij_detectie`) en niet uit `SET.budgets`: die is dan al doorgeschoven.
+  Het potje verhogen laat een signaal verdwijnen zonder dat je minder uitgeeft, dus elke route
+  daarheen telt mee - ook `setCatBudget()` en `savePotje()`. Geen teller die iets goedkeurt: de
+  telling is een spiegel.
+- **Bijstellen geldt deze maand, en draait vanzelf terug** (`v235`): de knop op Grip schrijft
+  `SET.budgets[k]` en zet `SET.budgetsNext[k]` terug op de oude waarde, zodat `rolloverBudgets()` hem
+  bij de maandwissel ongedaan maakt. Dat is een bewuste uitzondering op "een bestaand potje verschuift
+  pas volgende maand" (`setCatBudget`, `savePotje`). Het voorstel ligt **nooit** onder je huidige
+  stand: `ceil5(max(stand, prognose))` met `daysElapsed()` als enige kalenderbron. Een lager bedrag
+  mag handmatig, en dan laat `over_eind_maand` zien dat de maand alsnog boven het potje eindigde.
 - **Eén post, één lijst, één vlag** (`v231`): terugkerende posten komen uit `recurringSchedule()`
   en dragen één vlag, `SET.fixDueExcl[key]={sinds}` ("Opgezegd op"). Geen tweede detectie en geen
   tweede vlag naast die ene; een afbakening (opzegbaar) is een weergavefilter op dezelfde lijst.
@@ -259,7 +286,7 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 `npx playwright test --list`: wijkt dat af, dan is er iets niet gedraaid.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v234` → `minder-v235`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v235` → `minder-v236`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

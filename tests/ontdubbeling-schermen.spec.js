@@ -4,7 +4,11 @@
 //     meldingenlijst staat. De horizon-indeling uit v162 zegt waar een signaal hoort: structureel
 //     op Maand, direct en correctie in de lijst.
 // (5) 'Valt op' en de lek-vraag waren twee identiek vormgegeven kaarten die tegelijk renderden,
-//     over dezelfde soort bevinding. Nu een kaart: de bevinding, met het gesprek als voetregel.
+//     over dezelfde soort bevinding. v186 maakte er één kaart van, met het gesprek als voetregel.
+//     v235 heeft die kaart gesplitst langs de horizonnen: Inzichten constateert (insSignalRows),
+//     Grip draagt de keuze (gripSignalCards). Eén detectie, valtOpSignals(), en twee weergaven.
+//     De ontdubbeling die deze groep bewaakt verschuift daarmee mee: de lek-ingang stond op
+//     Inzichten en staat nu op Grip, en op precies één van de twee.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 
@@ -85,57 +89,58 @@ test.describe('a · het patroon staat op precies één plek', () => {
   });
 });
 
-test.describe('b · één kaart voor wat opvalt', () => {
-  test('de bevinding en de ingang staan in dezelfde kaart', async ({ page }) => {
+test.describe('b · constateren en kiezen staan elk op één scherm', () => {
+  test('de kaart met de ingang is weg, en Inzichten draagt er geen meer', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('ins'));
     await page.waitForTimeout(90);
     const ids = await page.evaluate(() => [...document.querySelectorAll('#s-ins > *')].map((e) => e.id || ''));
     expect(ids).not.toContain('insLekVraag');
-    expect(ids.filter((x) => x === 'wvoLine').length).toBeLessThanOrEqual(1);
-    if (ids.includes('wvoLine')) {
-      const html = await page.locator('#wvoLine').innerHTML();
-      expect((html.match(/coStart\('lek'/g) || []).length).toBeLessThanOrEqual(1);
-    }
+    expect(ids).not.toContain('wvoLine');
+    expect(await page.evaluate(() => typeof whatStandsOutLine)).toBe('undefined');
+    expect(await page.evaluate(() => document.querySelectorAll('#s-ins [onclick*="coStart"]').length)).toBe(0);
   });
 
-  test('twee identieke kaarten onder elkaar bestaan niet meer', async ({ page }) => {
+  test('de ingang staat op Grip, en daar maar één keer', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => go('ins'));
-    const n = await page.evaluate(() => document.querySelectorAll('#s-ins [onclick*="coStart(\'lek\'"]').length);
+    await page.evaluate(() => go('maand'));
+    await page.waitForTimeout(90);
+    const n = await page.evaluate(() => document.querySelectorAll('#s-maand [onclick*="coStart(\'lek\'"]').length);
     expect(n).toBeLessThanOrEqual(1);
     expect(await page.evaluate(() => typeof window.insLekVraag)).toBe('undefined');
   });
 
-  test('zonder bevinding en zonder lek rendert er niets', async ({ page }) => {
+  test('zonder signaal en zonder patroon rendert Inzichten niets', async ({ page }) => {
     await boot(page, seed({ uitschieter: false }));
-    const html = await page.evaluate((m) => whatStandsOutLine(m, true), CUR);
+    const html = await page.evaluate((m) => insSignalRows(m, true), CUR);
     const r = await page.evaluate((m) => {
-      let top = null;
+      let pat = 0;
       try { const mv = monthVsPrevInner(m);
         const ex = new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
-        top = insSignals(m, ex).sort((a, b) => b.pri - a.pri)[0] || null; } catch (_) {}
-      let L = null; try { const W = coachWeekRisk(m); if (W && W.tone === 'warn') L = coachLeak(m); } catch (_) {}
-      return { top: !!top, lek: !!L };
+        pat = insSignals(m, ex).length; } catch (_) {}
+      return { sig: valtOpSignals(m).length, pat };
     }, CUR);
-    if (!r.top && !r.lek) expect(html).toBe('');
+    if (!r.sig && !r.pat) expect(html).toBe('');
     else expect(html).not.toBe('');
   });
 
-  test('op een afgesloten maand komt de gespreksingang niet mee', async ({ page }) => {
+  test('op een afgesloten maand komen de budgetregels niet mee', async ({ page }) => {
     await boot(page);
     const ms = await page.evaluate(() => months());
     test.skip(ms.length < 2, 'geen afgesloten maand');
     const vorige = ms[ms.length - 2];
-    const html = await page.evaluate((m) => whatStandsOutLine(m, false), vorige);
+    const html = await page.evaluate((m) => insSignalRows(m, false), vorige);
+    // de handelingen gelden deze maand, dus een budgetregel hoort niet onder een afgesloten maand
+    expect(html).not.toContain('valtop-rij');
+    expect(html).not.toContain('in Grip');
     expect(html).not.toContain("coStart('lek'");
   });
 
-  test('de kaart houdt de duiding en het dus-wat uit v174', async ({ page }) => {
+  test('de patroonregel houdt de duiding en het dus-wat uit v174', async ({ page }) => {
     await boot(page);
-    const src = await page.evaluate(() => whatStandsOutLine.toString());
-    expect(src).toContain('top.hyp');
-    expect(src).toContain('top.imp');
+    const src = await page.evaluate(() => insPatroonRij.toString());
+    expect(src).toContain('p.hyp');
+    expect(src).toContain('p.imp');
     expect(src).toContain('Alleen een observatie');
   });
 });
@@ -147,14 +152,19 @@ test.describe('c · de keuze staat vast, zodat de tweede niet terugkomt', () => 
     for (const x of r) expect(x.sig, x.key).toBe(false);
   });
 
-  test('Inzichten toont geen enkele maandregel, en Maand geen lek-ingang', async ({ page }) => {
+  /* v235: de lek-ingang is van Inzichten naar Grip verhuisd, dus de richting van deze test draait
+     om. Wat hij bewaakt is onveranderd: de ingang staat op precies één scherm, en de CTA-vraag
+     staat nergens meer als losse regel. */
+  test('Inzichten toont geen enkele maandregel, en draagt de lek-ingang niet meer', async ({ page }) => {
     await boot(page);
     const ins = await scherm(page, 'ins');
-    const maand = await scherm(page, 'maand');
     expect(ins).not.toContain('Patroon van de maand');
-    expect(maand).not.toMatch(/kunt doen\?/);
-    expect(await page.evaluate(() => ($('#s-maand').innerHTML || '')))
+    expect(ins).not.toMatch(/kunt doen\?/);
+    expect(await page.evaluate(() => ($('#s-ins').innerHTML || '')))
       .not.toContain("coStart('lek'");
+    await scherm(page, 'maand');
+    expect(await page.evaluate(() => document.querySelectorAll("[onclick*=\"coStart('lek'\"]").length))
+      .toBeLessThanOrEqual(1);
   });
 });
 
@@ -182,26 +192,38 @@ test.describe('d · de coach-inzichten hebben één bron', () => {
   });
 });
 
-test.describe('e · de over-budget-observatie staat op één plek', () => {
-  test('hij is de eerste bron van de Valt-op-kaart', async ({ page }) => {
+test.describe('e · de over-budget-observatie heeft één detectie', () => {
+  /* v235: budgetOverCat() was de eerste bron van de Valt-op-kaart en gaf de GROOTSTE
+     overschrijding. valtOpSignals() heeft die rol overgenomen met een andere lat (een bedrag in
+     plaats van een percentage) en levert er twee. budgetOverCat() blijft bestaan voor
+     coachWeekRisk() en coachLeak(), die een andere vraag stellen; hij voedt het scherm niet meer. */
+  test('valtOpSignals is de enige detectie, en Grip rekent niet zelf', async ({ page }) => {
     const p = seed({ set: { budgets: { huur: 900, boodschappen: 100 } } });   // boodschappen loopt over
     await boot(page, p);
-    const ov = await page.evaluate((m) => budgetOverCat(m), CUR);
-    test.skip(!ov, 'deze fixture levert geen overschrijding');
-    const html = await page.evaluate((m) => whatStandsOutLine(m, true), CUR);
-    expect(html).toContain(ov.name);
-    expect(html).toContain('loopt uit de pas');
-    expect(html).toContain(`openCategory('${ov.k}')`);
-    // geen nieuwe berekening: budgetOverCat is de bron
-    expect(await page.evaluate(() => /budgetOverCat\(/.test(whatStandsOutLine.toString()))).toBe(true);
+    const sig = await page.evaluate((m) => valtOpSignals(m), CUR);
+    test.skip(!sig.length, 'deze fixture levert geen overschrijding');
+    await page.evaluate(() => go('ins'));
+    const ins = await page.locator('.valtop-rij').first().innerText();
+    expect(ins).toContain(sig[0].naam);
+    // Grip leest dezelfde functie en doet geen eigen meting
+    const src = await page.evaluate(() => gripSignalCards.toString() + valtOpKaartOpen.toString() + valtOpKaartDicht.toString());
+    expect(src).toMatch(/valtOpSignals\(/);
+    expect(src).not.toMatch(/budgetOverCat|budgetBand|effectiveBudgets/);
+    await page.evaluate(() => go('maand'));
+    expect(await page.locator('.valtop-open').innerText()).toContain(sig[0].naam);
   });
 
-  test('en verschijnt niet twee keer in dezelfde kaart', async ({ page }) => {
+  test('en verschijnt maar één keer per scherm', async ({ page }) => {
     const p = seed({ set: { budgets: { huur: 900, boodschappen: 100 } } });
     await boot(page, p);
-    const html = await page.evaluate((m) => whatStandsOutLine(m, true), CUR);
-    const ov = await page.evaluate((m) => budgetOverCat(m), CUR);
-    if (ov) expect((html.match(new RegExp(ov.name, 'g')) || []).length).toBeLessThanOrEqual(2);
+    const sig = await page.evaluate((m) => valtOpSignals(m), CUR);
+    test.skip(!sig.length, 'deze fixture levert geen overschrijding');
+    await page.evaluate(() => go('ins'));
+    const rijen = await page.locator('.valtop-rij').allInnerTexts();
+    expect(rijen.filter((t) => t.includes(sig[0].naam)).length).toBe(1);
+    await page.evaluate(() => go('maand'));
+    const kaarten = await page.locator('.valtop-kaart').allInnerTexts();
+    expect(kaarten.filter((t) => t.includes(sig[0].naam)).length).toBe(1);
   });
 });
 

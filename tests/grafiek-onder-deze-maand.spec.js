@@ -52,7 +52,7 @@ test.describe('b - onder het blok over deze maand', () => {
       const el = document.querySelector('#s-ins');
       const kaarten = [...el.querySelectorAll('.card')];
       const chart = el.querySelector('#insSpendChart');
-      const wvo = el.querySelector('#wvoLine');
+      const wvo = el.querySelector('.valtop-rij, .valtop-patroon');   // v235: was #wvoLine
       const idx = (n) => n ? kaarten.findIndex((c) => c.contains(n)) : -1;
       return { aantal: kaarten.length, chart: idx(chart), wvo: idx(wvo) };
     });

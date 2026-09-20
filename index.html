@@ -1036,10 +1036,16 @@ function effectiveBudgets(m){
 }
 function setCatBudget(k,val){ // bestaand potje wijzigen = vanaf volgende maand; nieuw potje = meteen actief
   const exists = +(SET.budgets||{})[k] > 0;
+  const voor = +(SET.budgets||{})[k]||0;   // v235: de stand vóór deze wijziging, voor de vastlegging
   const v = (String(val).trim()===''||numIn(val)<=0) ? 0 : numIn(val);
   if(exists){ SET.budgetsNext=SET.budgetsNext||{}; if(v===(+(SET.budgets||{})[k]||0)) delete SET.budgetsNext[k]; else SET.budgetsNext[k]=v; }
   else { SET.budgets=SET.budgets||{}; if(v>0) SET.budgets[k]=v; else delete SET.budgets[k]; }
-  save(); const g=document.getElementById('potGridTotal'); if(g) g.innerHTML=potRoomLineHTML(totalBudget(), plannedTotalBudget()); renderIns(); } // settings niet herrenderen (focus)
+  save();
+  /* v235: staat er voor deze categorie deze maand een open valt-op-signaal, dan is dit dezelfde
+     handeling als de knop op Grip en hoort hij in hetzelfde record. Zonder deze haak zou juist de
+     makkelijkste route om een signaal te laten verdwijnen de enige zijn die niet geteld wordt. */
+  try{ valtOpPotjeGewijzigd(k, voor, v); }catch(_){}
+  const g=document.getElementById('potGridTotal'); if(g) g.innerHTML=potRoomLineHTML(totalBudget(), plannedTotalBudget()); renderIns(); } // settings niet herrenderen (focus)
 // budgetvoorstel met VASTE LASTEN als vertrekpunt:
 // - vaste lasten op historisch niveau (committed, niet schalen)
 // - resterende bestedingsruimte verdeeld over variabele lasten (die je zelf beïnvloedt)
@@ -2507,6 +2513,20 @@ function scoreNotifs(opts){
     overs.slice(0,2).forEach((o,i)=>push({key:'budget-'+o.k, h:'direct',score:72+Math.min(o.d/10,24)-i*6,t:o.band==='action'?'bad':'warn',ic:CATS[o.k].icon,
       cat:o.k, bedrag:Math.round(spend[o.k]||0), boven:Math.round(o.d),
       l1:`Je ${CATS[o.k].name.toLowerCase()} ${o.potje?'is over je potje':'gaat over budget'} deze maand.`,l2:'Bekijk waar het heen ging',act:`openVariance('${o.k}')`})); }catch(_){} }
+  /* v235: de grens uit Valt op. Geen tweede budgetmelding: de lat is jouw stand van het moment dat
+     je de grens zette, niet je potje, en hij meldt per boeking die daarna nog binnenkomt. 'Volgende'
+     is precies 'stond er nog niet in toen je de grens zette', dus de bekende ids uit het record
+     beslissen dat en niet de datum: een boeking van dezelfde dag telt dan gewoon mee.
+     De groep is 'grens' (de sleutel tot het eerste streepje), dus snooze en mute lopen per groep. */
+  if(isNow){ try{ const G=SET.valtOpGrens||{};
+    for(const k in G){ const g=G[k]; if(!g || g.ym!==m || !CATS[k]) continue;
+      const bek=new Set(g.bekend||[]);
+      const nieuw=txOfMonth(m).filter(x=>catOf(x)===k && x.amount<0 && !bek.has(x.id)).sort((a,b)=>b.date.localeCompare(a.date));
+      nieuw.forEach((t,i)=>push({key:'grens-'+k+'-'+String(t.id), h:'direct', score:74-i, t:'warn', ic:CATS[k].icon,
+        cat:k, bedrag:Math.round(-t.amount),
+        l1:`${esc(String(t.name||'').slice(0,22))} ${euro0(-t.amount)} kwam na je grens op ${CATS[k].name.toLowerCase()}.`,
+        l2:'Bekijk de boekingen', act:`openCategory('${k}','${m}')`}));
+    } }catch(_){} }
   /* v157: je zet geld opzij bij een partij die niet bij je bezittingen staat. Alleen vaststellen -
      de app kent de waarde van die belegging niet en verzint er geen. De sleutel hangt aan de naam,
      dus snooze en mute lopen per partij via de groep 'bezit'. */
@@ -4038,6 +4058,128 @@ function maandGelezen(){
   const dt=new Date(d); if(isNaN(dt)) return '';
   return `<div class="small" style="color:var(--mut2);text-align:center;margin-top:14px">Gelezen op ${dt.getDate()} ${MFULL[dt.getMonth()]} ${dt.getFullYear()}.</div>`;
 }
+/* ===== VALT OP OP GRIP (v235) =====
+ * Dezelfde lijst als op Inzichten, in dezelfde volgorde, uit dezelfde valtOpSignals(). Geen eigen
+ * detectie en geen eigen drempel: Grip leest wat Inzichten bepaalt en rendert alleen anders.
+ * Inzichten constateert, Grip draagt de historie en de handelingen.
+ * De patroonregels uit insSignals() komen hier NIET: die zijn operationeel en horen bij de vraag
+ * hoe deze maand loopt, niet bij de vraag of je systeem standhoudt.
+ * Valt de lijst leeg, dan rendert dit niets en toont Grip alleen zijn bestaande onderdelen. */
+function valtOpDagenRest(){ const d=daysElapsed(thisYM()); return Math.max(d.dim-d.elapsed,0); }
+function valtOpToon(id){ window._valtOpOpen=id; renderMaand(); }
+function gripSignalCards(){
+  let L=[]; try{ L=valtOpSignals(thisYM())||[]; }catch(_){ return ''; }
+  if(!L.length) return '';
+  // eerste kaart open, tenzij je vanaf Inzichten op de tweede regel tikte
+  const open = L.some(s=>s.id===window._valtOpOpen) ? window._valtOpOpen : L[0].id;
+  return L.map(s=>s.id===open?valtOpKaartOpen(s):valtOpKaartDicht(s)).join('');
+}
+function valtOpKaartDicht(s){
+  return `<div class="card valtop-kaart" data-sig="${esc(s.id)}" style="cursor:pointer;padding:13px 15px;margin:0 0 9px" onclick="valtOpToon('${esc(s.id)}')">
+    <div class="row" style="gap:8px">
+      <span style="flex:1;min-width:0;font-weight:600;font-size:var(--fs-md)">${esc(s.naam)}</span>
+      <span class="small muted" style="white-space:nowrap">${euro0(s.over)} boven je potje</span>
+      <span style="color:var(--mut2);font-size:16px">▼</span>
+    </div></div>`;
+}
+function valtOpKaartOpen(s){
+  const dagen=valtOpDagenRest();
+  const rest=dagen===1?'nog 1 dag':(dagen>0?`nog ${dagen} dagen`:'de laatste dag');
+  const n=valtOpHistorie(s.potjeId, s.maand);
+  const hist = n>0
+    ? `In de drie maanden hiervoor leverde ${esc(s.naam.toLowerCase())} ${n===1?'één keer':n+' keer'} zo'n signaal op.`
+    : `In de drie maanden hiervoor leverde ${esc(s.naam.toLowerCase())} geen signaal op.`;
+  /* v235: de chevron draagt de lek-ingang. Die zat als CTA-voetregel in de Valt op-kaart op
+     Inzichten en was de ENIGE aanroeper van coStart('lek') in het bestand; zonder deze plek zou
+     coTopicLek() onbereikbaar worden. Hij hangt aan de kop en niet aan een vierde knop, zodat de
+     drie handelingen ongemoeid blijven. Alleen als er ook echt een lek is: coTopicLek() eindigt
+     anders meteen, en dan is de chevron een belofte zonder gesprek. */
+  let lek=null; try{ lek=coachLeak(thisYM()); }catch(_){}
+  const chev = lek
+    ? `<span style="color:var(--teal);font-weight:700;cursor:pointer;padding:0 2px" onclick="event.stopPropagation();coStart('lek','${esc(thisYM())}')">›</span>`
+    : '';
+  const hand=(lab,sub,knop,act)=>`<div class="row valtop-hand" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
+      <span style="flex:1;min-width:0"><span style="font-size:13px">${lab}</span>${sub?`<div class="small muted" style="margin-top:2px;line-height:1.45">${sub}</div>`:''}</span>
+      <button class="btn sec" style="width:auto;padding:8px 13px;white-space:nowrap;font-size:13px" onclick="${act}">${knop}</button></div>`;
+  return `<div class="card valtop-kaart valtop-open" data-sig="${esc(s.id)}" style="margin:0 0 9px">
+    <div class="row" style="gap:8px">
+      <span style="flex:1;min-width:0;font-weight:600;font-size:var(--fs-md)">${ICON('bulb')} ${esc(s.naam)} <span class="muted" style="font-weight:400">${euro0(s.uitgegeven)} van ${euro0(s.potje)}</span></span>
+      ${chev}</div>
+    <div class="small" style="margin-top:6px;line-height:1.5">${euro0(s.over)} boven je potje, met ${rest} te gaan.</div>
+    <div class="small" style="color:var(--mut2);margin-top:4px;line-height:1.45">${hist}</div>
+    <div style="margin-top:10px">
+      ${hand('Potje bijstellen','Je potje gaat deze maand omhoog. Je uitgave verandert er niet van.','Bijstellen',`valtOpPotjeSheet('${esc(s.id)}')`)}
+      ${hand('Grens voor de rest van de maand','Je krijgt een melding bij elke volgende boeking in deze categorie.','Grens zetten',`valtOpGrensZet('${esc(s.id)}')`)}
+      ${hand('Bekijk de transacties','','Bekijken',`openCategory('${esc(s.potjeId)}','${esc(s.maand)}')`)}
+    </div></div>`;
+}
+/* Bijstellen geldt voor de LOPENDE maand, en dat is een uitzondering op de regel dat een bestaand
+   potje pas volgende maand verschuift (setCatBudget, savePotje). Daarom schrijft hij SET.budgets
+   en zet hij SET.budgetsNext terug op de oude waarde, zodat rolloverBudgets() de verhoging bij de
+   maandwissel vanzelf terugdraait. Staat er al een geplande wijziging, dan blijft die staan: die
+   was een aparte keuze en wordt hier niet overschreven.
+   potje_voor en potje_na gaan altijd de vastlegging in, ook bij een handmatig lager bedrag. Dan
+   laat de afsluiting zien dat de maand alsnog boven het potje eindigde. */
+function valtOpPotjeSheet(id){
+  const r=(SET.valtOpLog||{})[id]; if(!r) return;
+  let s=null; try{ s=(valtOpSignals(thisYM())||[]).find(x=>x.id===id); }catch(_){}
+  if(!s) return;
+  const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
+  const gepland=(SET.budgetsNext||{})[s.potjeId];
+  window._setSheet=null;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">${esc(s.naam)}-potje bijstellen</div>
+    <div class="small muted" style="margin-bottom:12px">Je gaf deze maand ${euro0(s.uitgegeven)} uit en je potje staat op ${euro0(s.potje)}. Het voorstel ligt nooit onder je huidige stand en telt de dagen mee die de maand nog heeft.</div>
+    <label class="fld">Maandbudget (€)</label>
+    <input id="valtOpBedrag" type="number" min="0" step="5" inputmode="numeric" value="${valtOpVoorstel(s)}" style="width:100%">
+    <div class="small muted" style="margin-top:12px;line-height:1.5">Dit geldt voor deze maand. ${gepland!=null?`Vanaf ${esc(vanaf)} geldt de wijziging die je al had klaarstaan: ${euro0(+gepland||0)}.`:`Vanaf ${esc(vanaf)} staat je potje weer op ${euro0(s.potje)}.`}</div>
+    <div class="small" style="color:var(--mut2);margin-top:8px;line-height:1.45">Een hoger potje verandert je meetlat, niet je uitgave. Wat je kiest wordt vastgelegd.</div>
+    <button class="btn" style="margin-top:14px;width:100%" onclick="valtOpPotjeOpslaan('${esc(id)}')">${ICON('check')} Vastzetten voor deze maand</button>`;
+  showSheetBg();
+}
+function valtOpPotjeOpslaan(id){
+  const r=(SET.valtOpLog||{})[id]; if(!r) return;
+  const k=r.potjeId; if(!CATS[k]) return;
+  const el=document.getElementById('valtOpBedrag');
+  const ingevuld=numIn(el?el.value:'');
+  const voor=Math.round(+(SET.budgets||{})[k]||0);
+  const na=ingevuld>0?Math.round(ingevuld):voor;
+  SET.budgets=SET.budgets||{}; SET.budgets[k]=na;
+  SET.budgetsNext=SET.budgetsNext||{};
+  if(SET.budgetsNext[k]==null) SET.budgetsNext[k]=voor;
+  save();
+  valtOpActieZet(id,'potje_bijgesteld',{potje_voor:voor, potje_na:na});
+  closeSheet(); render();
+  toast(`${ICON('check')} ${CATS[k].name}-potje deze maand ${euro0(na)}`);
+}
+/* De log en de telling, onderaan Grip. De telling is de reden dat de vastlegging bestaat: het potje
+   verhogen laat een signaal verdwijnen zonder dat je minder uitgeeft, en zonder telling is dat de
+   makkelijkste knop. Geen streak, geen score, geen oordeel - alleen hoe vaak wat voorkwam. */
+/* De kop draagt bewust niet het woord 'signaal': meldingen-horizon bewaakt sinds v162 dat een
+   structureel signaal op Grip geen eigen blok krijgt, en toetst dat op de koppen van alle kaarten.
+   'Overschrijdingen' zegt hier bovendien preciezer wat er in de log staat. */
+function valtOpLogBlok(){
+  const T=valtOpTelling(); if(!T.totaal) return '';
+  const L=SET.valtOpLog||{};
+  const rijen=Object.keys(L).map(id=>L[id]).filter(Boolean)
+    .sort((a,b)=> String(b.maand).localeCompare(String(a.maand)) || String(a.categorie).localeCompare(String(b.categorie),'nl'))
+    .slice(0,6);
+  /* 'niet getoond' is een eigen stand, geen variant van 'nog open': dat record hoort bij een
+     overschrijding die buiten de twee plekken viel. Juist die wil je terugzien - anders weet je niet
+     wat je niet gezien hebt. */
+  const woord={potje_bijgesteld:'potje bijgesteld', grens_gezet:'grens gezet', geen:'niets gedaan'};
+  const regel=r=>`<div class="row" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)">
+      <span style="flex:1;min-width:0;font-size:13px">${esc(r.categorie||r.potjeId||'')} <span class="muted">· ${esc(monthLabel(r.maand))}</span></span>
+      <span class="small muted" style="white-space:nowrap">${esc(r.actie?woord[r.actie]||r.actie:(r.getoond?'nog open':'niet getoond'))}${r.actie==='potje_bijgesteld'&&r.potje_voor!=null?` · ${euro0(r.potje_voor)} → ${euro0(r.potje_na||0)}`:''}</span>
+    </div>`;
+  const tel=[`${T.n.potje_bijgesteld}× potje bijgesteld`, `${T.n.grens_gezet}× grens gezet`, `${T.n.geen}× niets gedaan`].join(' · ');
+  const sinds=T.eerste?` sinds ${esc(monthLabel(T.eerste))}`:'';
+  return `<div class="card">
+    <div class="hlabel" style="margin:0 0 2px">Wat je met deze overschrijdingen deed</div>
+    ${rijen.map(regel).join('')}
+    <div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${tel}${sinds}.${T.top&&T.top.n>1?` ${esc(T.top.naam)} kwam het vaakst terug: ${T.top.n} keer.`:''}</div>
+  </div>`;
+}
 function renderMaand(){
   /* v233: Grip leest altijd de lopende maand. Hier stond sinds v176 een maandkiezer met een
      afgesloten-maand-tak: banner, kop 'Je maand' met chip, een uitlegzin en 'Naar <nu>'. Alle
@@ -4063,8 +4205,14 @@ function renderMaand(){
      v187 nog drie regels overbleven werd hij bereikbaar, en dan las je 'er is nog te weinig
      ingesteld' terwijl er wel degelijk iets stond. Stellig zijn over de afwezigheid van iets dat er
      wel is, is precies wat deze reeks weghaalt. */
+  /* v235: de valt-op-kaarten staan bovenaan Grip en lezen valtOpSignals(). Ze worden hier als
+     eerste gebouwd, want de leegte-terugval hieronder moet ze kennen: met potjes en een
+     overschrijding, maar zonder buffer, dekking of doel, is R leeg en STR leeg terwijl er wel
+     degelijk iets staat. Dat is exact de fout die v188 bij de structurele signalen repareerde,
+     en hij komt terug zodra er een derde bron bij komt die deze tak niet kent. */
+  const VS=(function(){ try{ return gripSignalCards(); }catch(_){ return ''; } })();
   if(!R.length && !STR.length){
-    $('#s-maand').innerHTML=`<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
+    $('#s-maand').innerHTML= VS + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpLogBlok();
     return;
   }
   /* v207: een regel die je bewust hebt geaccepteerd telt niet meer als tekort, dus het oordeel,
@@ -4090,7 +4238,7 @@ function renderMaand(){
   const goed=R.filter(r=>r.status==='ok');
   const verband=maandVerband(RO);
   $('#s-maand').innerHTML=`
-    ${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
+    ${VS}${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
     <div class="card">
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
       ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
@@ -4136,6 +4284,7 @@ function renderMaand(){
           liquiditeitsprognose, en alleen een afwijking komt terug: als melding. */''}
     ${maandBeleggenRegel(R)}
     ${(!beslis.length&&!aandacht.length)?maandCoachIngang(RO):''}
+    ${valtOpLogBlok()}
     ${maandGelezen()}
     <div style="height:12px"></div>`;
 }
@@ -7923,6 +8072,7 @@ function savePotje(k,del){
     if(exists){ // bestaand potje weghalen = grens loslaten → pas volgende maand
       SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[k]=0;
       SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[k]=null; save();
+      try{ valtOpPotjeGewijzigd(k, +(SET.budgets||{})[k]||0, 0); }catch(_){}   // v235
       msg=`${CATS[k].name}-potje stopt vanaf ${vanaf}`;
     } else { // alleen een geplande wijziging of nieuw concept → meteen weg
       if(SET.budgetsNext) delete SET.budgetsNext[k];
@@ -7938,6 +8088,7 @@ function savePotje(k,del){
     if(exists){ // wijziging aan bestaand potje → de meetlat blijft deze maand staan, geldt vanaf volgende maand
       SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[k]= total>0?total:0;
       SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[k]= meta; save();
+      try{ valtOpPotjeGewijzigd(k, +(SET.budgets||{})[k]||0, total>0?total:0); }catch(_){}   // v235
       msg=`${CATS[k].name}-potje: ${euro0(total)}/mnd vanaf ${vanaf}`;
     } else { // nieuw potje → meteen actief (er is nog geen grens om te verschuiven)
       SET.budgets=SET.budgets||{}; if(total>0) SET.budgets[k]=total; else delete SET.budgets[k];
@@ -8078,14 +8229,18 @@ function openMerchant(key){
       <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`;}).join('')}`;
   showSheetBg();
 }
-function openCategory(k){
-  const items=periodTx().filter(x=>catOf(x)===k).sort((a,b)=>b.date.localeCompare(a.date));   // beide tekens: ook terugstortingen tonen
+/* v235: m is optioneel. Grip heeft geen maandkiezer en geeft altijd thisYM() mee (v233); zonder
+   die maand leest deze lijst curMonth, en dat is de maand die je op Inzichten koos. Laat je m weg,
+   dan blijft alles zoals het was: de getoonde periode. */
+function openCategory(k, m){
+  const bron = m ? TX.filter(x=>x.date.slice(0,7)===m) : periodTx();
+  const items=bron.filter(x=>catOf(x)===k).sort((a,b)=>b.date.localeCompare(a.date));   // beide tekens: ook terugstortingen tonen
   if(!items.length) return; const c=CATS[k];
   const tot=items.reduce((s,t)=>s-t.amount,0);   // netto: een terugstorting verlaagt het categorietotaal
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${c.icon}</div>
       <div style="font-weight:800;font-size:var(--fs-lg)">${c.name}</div>
-      <div class="muted small">${items.length} transacties · ${esc(periodLabel())}</div>
+      <div class="muted small">${items.length} transacties · ${esc(m?monthLabel(m):periodLabel())}</div>
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${euro(tot)}</div></div>
     ${c.geenNorm?`<div class="small muted" style="margin:0 2px 10px;line-height:1.5">Kosten die je niet kon voorzien. Meer dan een paar per jaar betekent dat ze een potje horen te hebben.</div>`:''}
     ${catSparkline(k)}
@@ -8343,7 +8498,7 @@ function monthVsPrevInner(m){
   const downs=diffs.filter(x=>x.d<0).sort((x,y)=>x.d-y.d).slice(0,3);
   const ups=diffs.filter(x=>x.d>0).sort((x,y)=>y.d-x.d).slice(0,2);
   const drivers=new Set([...downs,...ups].map(x=>x.k));
-  /* whatStandsOutLine() leest alleen drivers. De opgemaakte .html die hier stond werd elke render
+  /* insSignalRows() leest alleen drivers (v235: als exclude-set voor insSignals). De opgemaakte .html die hier stond werd elke render
      gebouwd en weggegooid; de streak-lus erin liep steerSpendUpTo() over elke maand opnieuw en komt
      niet terug. delta en partial blijven wel staan: dat is een aftrekking van twee waarden die er
      toch al zijn, en daarmee is het kopgetal een eenregelaar:
@@ -8366,6 +8521,170 @@ function budgetFlaggedCats(m){
 }
 function isMode(x){ return (SET.mode||'begeleid')===x; }
 
+/* ===== VALT OP: een detectie, twee weergaven (v235) =====
+ * Hier stond het werk verdeeld over twee routes: budgetOverCat() gaf de GROOTSTE overschrijding
+ * aan de Valt op-kaart, en budgetFlaggedCats() gaf dezelfde meting iets ruimer als exclude-set aan
+ * insSignals(). De kaart constateerde en bood in hetzelfde element de uitweg aan; dat tweede is
+ * Grip-werk. valtOpSignals() is nu de enige detectie: Inzichten bepaalt de lijst, Grip leest hem.
+ *
+ * WAT ER GEMETEN WORDT verschilt van budgetOverCat(): die las budgetBand() (meer dan 3% over het
+ * potje) en nam er een. Hier is de lat een bedrag - DREMPEL_EUR - en komen er twee, op euro's
+ * gesorteerd. Bewust geen relatieve eis erbij: die legt de lat hoger naarmate het potje groter is,
+ * en daar zitten juist de euro's. budgetOverCat() zelf blijft staan voor coachWeekRisk() en
+ * coachLeak(); die stellen een andere vraag (wat is deze week het grootste verschil met je plan).
+ *
+ * DOORSCHUIVEN IS GEEN EIGEN MECHANIEK. De lijst wordt bij elke render opnieuw berekend, dus een
+ * plek die vrijvalt doordat je een actie vastlegt, vult zich vanzelf met de volgende boven de
+ * drempel. Er is geen bewaarde volgorde die daarmee uit de pas kan lopen.
+ *
+ * SET.valtOpLog[maand+'|'+categorie] = het record. Dezelfde vorm als SET.maandAccept (v207) en
+ * SET.fixDueExcl (v231): een object per sleutel, onder save(). Bewust NIET coachLog: die kapt af
+ * op 50 en de telling loopt sinds de eerste maand, dus die zou stil gaan liegen.
+ * Een record wordt aangemaakt bij de EERSTE detectie, ook als het signaal buiten de twee plekken
+ * viel - anders weet je niet wat je niet gezien hebt. */
+function valtOpId(m,k){ return m+'|'+k; }
+function valtOpLogAll(){ return (SET.valtOpLog=SET.valtOpLog||{}); }
+/* Open = nog geen actie vastgelegd. 'geen' zet de maandafsluiting; binnen de maand is een record
+   dus open of het draagt een van de twee handelingen. */
+function valtOpIsOpen(r){ return !!r && !r.actie; }
+function valtOpSignals(m){
+  const DREMPEL_EUR = 25;   // euro's boven het potje waaronder een overschrijding geen plek inneemt
+  m = m || thisYM();
+  let EB={}, sp={};
+  try{ EB=effectiveBudgets(m).out||{}; sp=catSpendMap(m)||{}; }catch(_){ return []; }
+  const L=valtOpLogAll(); let dirty=false; const kand=[];
+  for(const k in EB){
+    const potje=Math.round(+EB[k]||0);
+    if(!(potje>0) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k)) continue;   // v234: onvoorzien heeft geen norm
+    const uitgegeven=Math.round(sp[k]||0);
+    const over=uitgegeven-potje;
+    if(over<DREMPEL_EUR) continue;
+    const id=valtOpId(m,k);
+    if(!L[id]){ L[id]={ id, maand:m, categorie:CATS[k].name, potjeId:k,
+      potje_bij_detectie:potje, over_bij_detectie:over, gedetecteerd_op:vandaagYMD(),
+      getoond:false, actie:null, actie_op:null, potje_voor:null, potje_na:null,
+      over_eind_maand:null }; dirty=true; }
+    kand.push({ id, maand:m, potjeId:k, naam:CATS[k].name, uitgegeven, potje, over });
+  }
+  // rangorde op euro's boven het potje, bij gelijk bedrag op categorienaam
+  kand.sort((a,b)=> (b.over-a.over) || a.naam.localeCompare(b.naam,'nl'));
+  const lijst=kand.filter(s=>valtOpIsOpen(L[s.id])).slice(0,2);
+  /* getoond wordt waar zodra het signaal een van de twee plekken haalt, en blijft daarna waar: een
+     categorie die binnen een maand rond de drempel schommelt houdt daarmee een record dat zegt dat
+     je het gezien hebt, ook als hij later terugzakt. */
+  for(const s of lijst){ if(!L[s.id].getoond){ L[s.id].getoond=true; dirty=true; } }
+  if(dirty) save();
+  return lijst;
+}
+/* De actie op een signaal. Een record met een actie valt uit de lijst, op beide schermen, tot het
+   einde van de maand - daarna sluit valtOpAfsluiten() hem af en begint de nieuwe maand schoon. */
+function valtOpActieZet(id, actie, extra){
+  const r=(SET.valtOpLog||{})[id]; if(!r) return null;
+  r.actie=actie; r.actie_op=vandaagYMD();
+  if(extra) for(const f in extra) r[f]=extra[f];
+  save(); return r;
+}
+/* Een potjewijziging via openPotje() of de budgeteditor is dezelfde handeling als de knop op Grip,
+   dus hij hoort in hetzelfde record. Zonder dit zou juist de makkelijkste route om een signaal te
+   laten verdwijnen de enige zijn die niet geteld wordt.
+   potje_voor houdt zijn eerste waarde vast: setCatBudget() vuurt per toetsaanslag, en de stand van
+   vóór het typen is wat je wilt terugzien. */
+function valtOpPotjeGewijzigd(k, voor, na){
+  try{
+    const r=(SET.valtOpLog||{})[valtOpId(thisYM(), k)];
+    if(!r) return;
+    /* setCatBudget() vuurt per TOETSAANSLAG. Bij het typen van 350 komt eerst 3 langs, dan 35: een
+       guard die bij de eerste actie stopt bevriest potje_na op 3. Een eerdere bijstelling mag dus
+       worden bijgewerkt; een grens is een andere keuze en blijft staan. */
+    if(r.actie && r.actie!=='potje_bijgesteld') return;
+    const v=Math.round(+voor||0), n=Math.round(+na||0);
+    if(v===n){
+      /* Terug op de oude stand: dan heb je niets bijgesteld. Alleen een bijstelling die uit dit
+         tikken zelf kwam wordt teruggedraaid, zodat de telling niet meetelt wat je ongedaan maakte. */
+      if(r.actie==='potje_bijgesteld' && r.potje_voor===v){
+        r.actie=null; r.actie_op=null; r.potje_voor=null; r.potje_na=null; save();
+      }
+      return;
+    }
+    r.actie='potje_bijgesteld'; r.actie_op=vandaagYMD();
+    if(r.potje_voor==null) r.potje_voor=v;
+    r.potje_na=n;
+    save();
+  }catch(_){}
+}
+/* Hoe vaak deze categorie in de drie maanden vóór deze maand een signaal opleverde. UIT DE LOG,
+   niet herberekend: wat er toen gemeten is staat vast, ook als de cijfers sindsdien zijn verschoven
+   door een hercategorisering of een terugboeking. */
+function valtOpHistorie(k, m){
+  const L=SET.valtOpLog||{}; const [y,mo]=String(m||thisYM()).split('-').map(Number);
+  const heen=[];
+  for(let i=1;i<=3;i++){ const d=new Date(y,mo-1-i,1); heen.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); }
+  let n=0; for(const id in L){ const r=L[id]; if(r && r.potjeId===k && heen.indexOf(r.maand)>=0) n++; }
+  return n;
+}
+/* De telling sinds de eerste maand: hoe vaak elke actie voorkwam en welke categorie het vaakst
+   terugkomt. Geen streak en geen score - dit is een spiegel op wat jij met een signaal deed, en de
+   reden dat hij bestaat is dat het potje verhogen een signaal laat verdwijnen zonder dat je minder
+   uitgeeft. */
+function valtOpTelling(){
+  const L=SET.valtOpLog||{};
+  const n={potje_bijgesteld:0, grens_gezet:0, geen:0}; const perCat={}; let totaal=0, eerste='';
+  for(const id in L){ const r=L[id]; if(!r) continue; totaal++;
+    if(r.actie && n[r.actie]!=null) n[r.actie]++;
+    perCat[r.potjeId]=(perCat[r.potjeId]||0)+1;
+    if(r.maand && (!eerste || r.maand<eerste)) eerste=r.maand; }
+  let top=null;
+  for(const k in perCat){ const nm=(CATS[k]||{}).name||k;
+    if(!top || perCat[k]>top.n || (perCat[k]===top.n && nm.localeCompare(top.naam,'nl')<0)) top={k, naam:nm, n:perCat[k]}; }
+  return {n, top, totaal, eerste};
+}
+/* Maandafsluiting bij de eerste opening in een nieuwe maand. Elk openstaand record van een
+   afgeronde maand krijgt over_eind_maand, en actie 'geen' waar er niets is gebeurd.
+   DE MEETLAT IS HET RECORD ZELF, niet SET.budgets: die is bij een maandwissel al door
+   rolloverBudgets() doorgeschoven, en een record moet af te sluiten zijn zonder van de volgorde
+   in de bootregel af te hangen. Heb je het potje bijgesteld, dan is potje_na de lat - zo laat de
+   afsluiting zien dat een te lage bijstelling de maand alsnog boven het potje liet eindigen.
+   Lost de overschrijding vanzelf op door een correctie of een terugboeking, dan blijft het record
+   staan met actie 'geen' en over_eind_maand 0: het signaal was er, en dat is wat je terugziet. */
+function valtOpAfsluiten(){
+  const L=SET.valtOpLog; if(!L) return; const nu=thisYM(); let dirty=false;
+  for(const id in L){ const r=L[id];
+    if(!r || !r.maand || r.maand>=nu || r.over_eind_maand!=null) continue;
+    const lat=(r.actie==='potje_bijgesteld' && r.potje_na!=null) ? Math.round(+r.potje_na||0) : Math.round(+r.potje_bij_detectie||0);
+    let sp=0; try{ sp=Math.round((catSpendMap(r.maand)||{})[r.potjeId]||0); }catch(_){}
+    r.over_eind_maand=Math.max(sp-lat,0);
+    if(!r.actie) r.actie='geen';
+    dirty=true; }
+  if(dirty) save();
+}
+/* De grens: een zelfgekozen stop op je stand van dit moment, voor de rest van de maand. Hij raakt
+   geen potje en telt nergens in mee; hij levert een melding zodra er nog een boeking in die
+   categorie bij komt. De boekingen die er al waren gaan mee in het record, want 'volgende' is
+   precies 'stond er nog niet in toen je de grens zette'. t.id is een hash van rekening, datum,
+   bedrag en omschrijving (categorize), dus die overleeft een herstart.
+   Geen tweede budgetmelding: de lat is jouw stand van dat moment, niet je potje. */
+function valtOpGrensZet(id){
+  const r=(SET.valtOpLog||{})[id]; if(!r) return;
+  const k=r.potjeId, m=thisYM(); if(!CATS[k]) return;
+  const stand=Math.round((catSpendMap(m)||{})[k]||0);
+  const bekend=txOfMonth(m).filter(x=>catOf(x)===k).map(x=>x.id);
+  SET.valtOpGrens=SET.valtOpGrens||{};
+  SET.valtOpGrens[k]={ym:m, stand, op:vandaagYMD(), bekend};
+  save();
+  valtOpActieZet(id,'grens_gezet');
+  closeSheet(); render();
+  toast(`${ICON('check')} Grens op ${euro0(stand)} · ${CATS[k].name.toLowerCase()}`);
+}
+/* Het voorgestelde bedrag bij bijstellen. KRITIEK: het ligt nooit onder je huidige stand. Een
+   voorstel van 120 terwijl er 194 uit is, laat je 74 boven je potje staan terwijl het signaal
+   verdwijnt, en dat is een schijnoplossing. Daarom het maximum van de stand en de prognose voor de
+   hele maand, naar boven op 5. daysElapsed() is de enige kalenderbron. */
+function ceil5(x){ return Math.ceil((+x||0)/5)*5; }
+function valtOpVoorstel(s){
+  const d=daysElapsed(s.maand||thisYM());
+  const prognose=s.uitgegeven/Math.max(d.elapsed,1)*d.dim;
+  return ceil5(Math.max(s.uitgegeven, prognose));
+}
 /* ===== OPVALLEND DEZE MAAND, data-gedreven hypotheses (van 'wat' naar 'dus-wat') ===== */
 function _catSpendOf(mm){ return catSpendMap(mm); }   // netto per categorie (terugstorting verrekend); gelijk aan catSpendMap, geen duplicaat-logica meer
 /* Bewaard uit v166: elk signaal droeg een duiding (hyp) en een dus-wat (imp) mee die nooit
@@ -9303,61 +9622,64 @@ function spendVsBudgetChart(){
   </div>`;
 }
 
-// Compacte één-regel-versie van "Wat valt op": alleen het topsignaal, met dezelfde tik-actie.
-/* v186: hier stonden twee identiek vormgegeven eenregelige kaarten die tegelijk konden renderen:
-   'Valt op' met de bevinding, en daar direct onder de lek-vraag met een ingang naar een gesprek
-   over dezelfde soort bevinding. Twee kaarten over hetzelfde onder elkaar. Nu één kaart: de
-   bevinding bovenaan, het gesprek als voetregel. Gaat de lek over dezelfde categorie als de
-   bevinding, dan herhaalt de voetregel de naam niet. Is er alleen een lek, dan draagt die kaart
-   de bevinding; is er geen van beide, dan rendert er niets. */
-function whatStandsOutLine(m, nu){
-  if(nu===undefined) nu=true;
-  let top=null;
-  /* v187: de Gedrag-kaart had na het schrappen van de coachItems-rijen nog één rij over, en dat was
-     dezelfde soort observatie als deze kaart: iets wat deze maand opvalt. Een eigen kaart onder
-     Verdieping is dan zwaarder vormgegeven dan zijn inhoud. Die rij is hier de EERSTE bron, want
-     over je potje heen is concreter dan een afwijking van je historie. Geen nieuwe berekening:
-     budgetOverCat(m) is precies wat renderBehavior() inline deed, en de categorie zat al in de
-     exclude-set hieronder, dus hij kan niet twee keer verschijnen. */
-  try{
-    const ov=budgetOverCat(m);
-    if(ov) top={pri:99, act:`openCategory('${ov.k}')`,
-      kpiLabel:ov.name, kpiVal:euro0(ov.spent), kpiSub:`potje ${euro0(ov.bud)}`,
-      hyp:`${ov.name} loopt uit de pas.`,
-      imp:`Je zit ${euro0(ov.over)} boven je potje.`};
-  }catch(_){}
-  try{
-    if(!top){
-      const mv=monthVsPrevInner(m);
-      const exclude=new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
-      const sig=insSignals(m,exclude); sig.sort((a,b)=>b.pri-a.pri); top=sig[0]||null;
-    }
-  }catch(_){}
-  let L=null;
-  try{ if(nu){ const W=coachWeekRisk(m); if(W && W.tone==='warn') L=coachLeak(m)||null; } }catch(_){}
-  const lekNaam = L ? (L.name || ((CATS[L.cat]||{}).name||'')) : '';
-  if(!top && !lekNaam) return '';
-  const act = top ? (top.act||'') : '';
-  /* v174: de regel toonde alleen de spiegel. De duiding en het dus-wat lagen al geschreven klaar in
-     insSignals() en werden nooit getoond, terwijl dat precies het gevolg is dat hier ontbrak. Een
-     signaal zonder tik krijgt er geen verzonnen: dan zegt de regel dat het een observatie is. */
-  const gevolg = top ? [top.hyp,top.imp].filter(Boolean).join(' ') : '';
-  const kop = top
-    ? `<span style="flex:1;min-width:0;font-size:13px">${ICON('bulb')} <span class="muted">Valt op:</span> <b>${esc(top.kpiLabel)}</b> \u00b7 ${top.kpiVal}${top.kpiSub?` <span class="muted">(${esc(top.kpiSub)})</span>`:''}</span>
-      ${act?'<span style="color:var(--teal);font-weight:700">\u203a</span>':''}`
-    : `<span style="flex:1;min-width:0;font-size:13px">${ICON('bulb')} <span class="muted">Valt op:</span> <b>${esc(lekNaam)}</b> \u00b7 ${euro0(L.amount)}</span>`;
-  const zelfde = !!(top && L && L.cat && top.act && String(top.act).indexOf(`'${L.cat}'`)>=0);
-  const voet = L
-    ? `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line);color:var(--teal);font-weight:600;cursor:pointer" onclick="event.stopPropagation();coStart('lek','${esc(m)}')">${
-        zelfde||!top ? 'Wil je kijken wat je hieraan kunt doen?' : `${esc(lekNaam)} (${euro0(L.amount)}) viel ook op. Wil je kijken wat je daaraan kunt doen?`} \u203a</div>`
-    : '';
-  return `<div class="card" id="wvoLine" style="padding:12px 14px${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}>
-    <div class="row" style="gap:8px">${kop}</div>
+/* v235: hier stond whatStandsOutLine(), de Valt op-kaart. Die deed twee dingen tegelijk: hij
+   constateerde dat een categorie boven zijn potje zat, en bood in hetzelfde element de uitweg aan
+   ("Wil je kijken wat je hieraan kunt doen?"). Alleen dat tweede is Grip-werk, en de belofte was er
+   een die Inzichten niet kon waarmaken: er stond geen enkele handeling op dat scherm.
+   Wat er weg is: het lamp-icoon, de zin over uit de pas lopen (top.hyp/top.imp op de budgetregel)
+   en de CTA-voetregel. Wat ervoor in de plaats komt zijn stille regels die alleen de spiegel en het
+   gevolg dragen, met de keuze op Grip. De lek-ingang (coStart('lek')) is niet vervallen maar
+   verhuisd: hij hangt aan de chevron in de kop van de open kaart op Grip (gripSignalCards).
+   insSignals() is evenmin vervallen. Die vier signalen zijn patronen en geen normoverschrijdingen,
+   en er is geen ander scherm dat ze draagt. Ze staan onder de budgetregels, in dezelfde vorm, tot
+   het totaal van twee: twee budgetsignalen betekent geen patroonregel, een betekent er een, geen
+   betekent maximaal twee. De exclude-set blijft drivers plus budgetFlaggedCats(m), zodat een
+   categorie nooit twee keer op het scherm staat.
+   Geen lege staat: een pagina die zwijgt als er niets aan de hand is, is zelf ook informatie. */
+const VALTOP_RAND='border-left:3px solid var(--mut2);border-radius:0 16px 16px 0;padding:12px 14px;margin:0 0 9px';
+/* Spiegel (uitgegeven van potje), gevolg (het bedrag boven het potje), keuze (de kaart op Grip).
+   Geen accentkleur op het bedrag: status zit in het label, niet in de kleur (v78/v93). */
+function valtOpRij(s){
+  return `<div class="card valtop-rij" data-sig="${esc(s.id)}" style="${VALTOP_RAND};cursor:pointer" onclick="naarGripSignaal('${esc(s.id)}')">
+    <div class="row" style="gap:8px">
+      <span style="flex:1;min-width:0;font-size:13px"><b>${esc(s.naam)}</b> <span class="muted">${euro0(s.uitgegeven)} van ${euro0(s.potje)}</span> · ${euro0(s.over)} boven je potje</span>
+      <span class="small" style="color:var(--teal);font-weight:600;white-space:nowrap">in Grip ›</span>
+    </div></div>`;
+}
+/* Dezelfde schil voor een patroon uit insSignals(). De duiding en het dus-wat blijven staan: die
+   waren de reden dat v174 ze ging tonen, en zonder gevolg is een constatering geen signaal (v228).
+   Een patroon zonder tik zegt met zoveel woorden dat het een observatie is. */
+function insPatroonRij(p){
+  const act=p.act||'';
+  const gevolg=[p.hyp,p.imp].filter(Boolean).join(' ');
+  return `<div class="card valtop-patroon" style="${VALTOP_RAND}${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}>
+    <div class="row" style="gap:8px">
+      <span style="flex:1;min-width:0;font-size:13px"><b>${esc(p.kpiLabel)}</b> · ${p.kpiVal}${p.kpiSub?` <span class="muted">(${esc(p.kpiSub)})</span>`:''}</span>
+      ${act?'<span style="color:var(--mut2);font-weight:700">›</span>':''}
+    </div>
     ${gevolg?`<div class="small muted" style="margin-top:6px;line-height:1.5">${esc(gevolg)}</div>`:''}
-    ${(!act&&top&&top.spiegel)?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px">Alleen een observatie: hier hoort geen stap bij.</div>`:''}
-    ${voet}
+    ${(!act&&p.spiegel)?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px">Alleen een observatie: hier hoort geen stap bij.</div>`:''}
   </div>`;
 }
+/* De budgetregels lezen de LOPENDE maand: het zijn de signalen waar op Grip een handeling aan
+   hangt, en die handelingen gelden deze maand. Op een afgesloten maand blijven alleen de patronen
+   over, precies zoals de oude kaart daar deed. */
+function insSignalRows(m, nu){
+  if(nu===undefined) nu=isLopendeMaand(m);
+  let B=[]; if(nu){ try{ B=valtOpSignals(m)||[]; }catch(_){ B=[]; } }
+  const ruimte=Math.max(2-B.length,0);
+  let P=[];
+  if(ruimte>0){ try{
+    const mv=monthVsPrevInner(m);
+    const exclude=new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
+    P=insSignals(m,exclude).sort((a,b)=>b.pri-a.pri).slice(0,ruimte);
+  }catch(_){ P=[]; } }
+  if(!B.length && !P.length) return '';
+  return `<div id="insSignalRows">${B.map(valtOpRij).join('')}${P.map(insPatroonRij).join('')}</div>`;
+}
+/* De rij is de ingang naar de kaart op Grip. Geen tweede detectie: de id is de sleutel van hetzelfde
+   signaal, en Grip opent die kaart in plaats van de bovenste. */
+function naarGripSignaal(id){ window._valtOpOpen=id||null; go('maand'); }
 
 /* Herokaart op Inzichten (v135): budgetstand en "Nog deze maand" beantwoorden dezelfde vraag -
    hoe sta ik er halverwege de maand voor - dus staan ze in één kaart. Bewust twee blokken die elk
@@ -9441,7 +9763,8 @@ function insBudgetBlok(m){
    Alleen zichtbaar als er echt een lek is: geen lek, geen regel, en geen uitleg waarom er niets
    staat. De woorden en de getallen komen uit coachLeak(); hier wordt niets gerekend. */
 /* v186: insLekVraag() stond hier als eigen kaart, direct onder 'Valt op' en identiek vormgegeven.
-   Hij is opgegaan in whatStandsOutLine(), als voetregel binnen dezelfde kaart. */
+   Hij is toen opgegaan in whatStandsOutLine(), als voetregel binnen dezelfde kaart. v235: die
+   kaart is vervallen en de lek-ingang hangt aan de chevron op de Grip-kaart (valtOpKaartOpen). */
 function insHeroKaart(m){
   const A=insBudgetBlok(m);
   if(!A) return '';   // geen budget: de beller toont de budget-prompt met de losse kaart eronder
@@ -9548,7 +9871,7 @@ function renderIns(){
      maand nodigt dat uit tot een keuze over iets wat voorbij is (v139: alleen kijken). Sinds v186
      zit die ingang in de Valt-op-kaart, dus krijgt die kaart de maand-vlag mee. */
   $('#s-ins').innerHTML = afgeslotenMaandBanner(m) + insSection(nu?'Deze maand':'Terugblik')
-    + hero + whatStandsOutLine(m, nu) + (nu?spendVsBudgetChart():'');
+    + hero + insSignalRows(m, nu) + (nu?spendVsBudgetChart():'');
 }
 
 
@@ -9557,7 +9880,8 @@ function renderIns(){
 /* v187: hier stond renderBehavior(). Hij mengde twee bronnen: de over-budget-rij van deze maand
    en de inzichten uit coachItems(). Die laatste vier staan sinds v143 woordelijk ook in
    scoreNotifs(), dus stonden ze op drie oppervlakken tegelijk; scoreNotifs() is de bron die de
-   coach-verhuizing overleeft. De over-budget-rij is opgegaan in whatStandsOutLine().
+   coach-verhuizing overleeft. De over-budget-rij ging toen naar whatStandsOutLine() en is in v235
+   opgegaan in valtOpSignals(), de enige detectie achter Inzichten en Grip.
    coachItems() zelf blijft staan en heeft daarmee geen aanroeper meer: hem verwijderen hoort bij
    fase 6 van de coach-verhuizing, die zijn eigen voorwaarde heeft. */
 function renderCatBreak(list){
@@ -11676,7 +12000,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}

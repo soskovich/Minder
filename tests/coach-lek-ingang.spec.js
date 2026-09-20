@@ -1,6 +1,12 @@
-// v139: de eerste ingang naar het coachgesprek buiten het coachscherm. Op Inzichten staat onder de
-// bevinding een regel die coStart('lek', m) opent: een gesprek dat begint bij het cijfer zelf in
-// plaats van bij een groet. Kritiek: dit gesprek mag de maandafspraak nooit raken, want
+// v139: de eerste ingang naar het coachgesprek buiten het coachscherm: een regel die
+// coStart('lek', m) opent, een gesprek dat begint bij het cijfer zelf in plaats van bij een groet.
+// v235: die regel was de CTA-voetregel in de Valt op-kaart op Inzichten, en die kaart is vervallen.
+// Inzichten constateert nu alleen; de keuze staat op Grip. De ingang hangt daarom aan de chevron in
+// de kop van de open valt-op-kaart op Grip, en niet aan een vierde knop naast de drie handelingen.
+// LET OP, dit is een versmalling en ze staat hier expres vastgelegd: de chevron bestaat alleen op
+// een kaart, en een kaart bestaat alleen bij een categorie die minstens DREMPEL_EUR boven zijn
+// potje zit. Een lek zonder zo'n overschrijding heeft sindsdien geen ingang meer (zie test a5).
+// Kritiek en onveranderd: dit gesprek mag de maandafspraak nooit raken, want
 // coachThisMonthAfspraak() laat er één per maand toe en coAfspraakOpen() wist de bestaande eerst.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
@@ -21,60 +27,99 @@ function metLek(extra) {
   return p;
 }
 
-async function ins(page, payload) {
-  await open(page, payload || metLek());
-  await page.evaluate(() => go('ins'));
-  await page.waitForSelector('#s-ins .card');
+// v235: de chevron hangt aan een valt-op-kaart, dus de fixture heeft naast het lek ook een
+// categorie boven haar potje nodig. Boodschappen staat deze maand op 300; met een potje van 250 is
+// dat 50 boven de drempel van 25.
+function metLekEnSignaal() {
+  return metLek((set) => { set.budgets.boodschappen = 250; });
 }
+/* Een valt-op-signaal zonder lek. Die twee vallen meestal samen - coachWeekRisk() noemt een
+   over-budget categorie zelf een lek - maar ze meten niet hetzelfde: valtOpSignals() vuurt op een
+   BEDRAG (25 euro boven het potje) en budgetOverCat() op een PERCENTAGE (budgetBand, meer dan 3%).
+   Boodschappen op 900 met een potje van 875 is 25 euro over en 2,9%: wel een signaal, geen lek.
+   Precies dat gat maakt zichtbaar dat de chevron aan coachLeak() hangt en niet aan de kaart. */
+function alleenSignaal() {
+  const p = seed();
+  const tx = JSON.parse(p.minder_tx);
+  tx.push({ id: 'ah-extra', date: `${CUR}-09`, amount: -600, acc: MAIN, name: 'Albert Heijn',
+    desc: 'BEA, BETAALPAS ALBERT HEIJN', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] });
+  p.minder_tx = JSON.stringify(tx);
+  const set = JSON.parse(p.minder_set);
+  set.budgets.boodschappen = 875;
+  p.minder_set = JSON.stringify(set);
+  return p;
+}
+async function ins(page, payload) {
+  await open(page, payload || metLekEnSignaal());
+  await page.evaluate(() => go('maand'));
+  await page.waitForSelector('#s-maand .card');
+}
+const chevron = (page) => page.locator('.valtop-open [onclick*="coStart"]');
 const wachtKeuze = (page) => page.waitForFunction(
   () => document.querySelectorAll('#coCh .cch').length > 0, null, { timeout: 15000 });
 const log = (page) => page.evaluate(() => JSON.stringify(SET.coachLog || []));
 
-test.describe('a · de ingang op Inzichten', () => {
-  /* v186: de lek-vraag was een eigen kaart, direct onder 'Valt op' en identiek vormgegeven. Twee
-     kaarten over hetzelfde onder elkaar. Hij is nu de voetregel binnen die ene kaart. Wat deze
-     tests bewaken blijft hetzelfde: de bevinding met bedrag en naam, en een ingang naar het
-     gesprek die geen neutrale knop naar de coach is. */
-  test('staat er als een vraag over de bevinding, met bedrag en naam', async ({ page }) => {
+test.describe('a · de ingang op Grip', () => {
+  /* v186 maakte van de lek-vraag de voetregel binnen de Valt op-kaart. v235 heeft die kaart
+     opgeheven: Inzichten constateert, Grip draagt de keuze. De ingang is nu een chevron in de kop
+     van de open kaart. Wat deze tests bewaken verschuift mee: de bevinding met bedrag en naam
+     staat in die kaart, en de ingang is geen neutrale knop naar de coach. */
+  test('a1 · de chevron staat in de kop van de open kaart, en nergens anders', async ({ page }) => {
     await ins(page);
-    const r = page.locator('#wvoLine');
-    await expect(r).toHaveCount(1);
-    const t = await r.innerText();
-    expect(t).toMatch(/wil je kijken wat je (daar|hier)aan kunt doen\?/i);
-    expect(t).toMatch(/€\d/);                                    // het bedrag uit coachLeak
+    await expect(chevron(page)).toHaveCount(1);
+    const onclick = await chevron(page).getAttribute('onclick');
+    expect(onclick).toContain("coStart('lek'");
+    expect(onclick).toContain(CUR);                              // Grip leest altijd de lopende maand (v233)
+    // niet als vierde knop tussen de handelingen
+    expect(await page.locator('.valtop-hand [onclick*="coStart"]').count()).toBe(0);
+    await expect(page.locator('.valtop-open .valtop-hand button')).toHaveCount(3);
+  });
+
+  test('a2 · de kaart eromheen draagt de bevinding met bedrag en naam', async ({ page }) => {
+    await ins(page);
+    const t = await page.locator('.valtop-open').innerText();
+    expect(t).toMatch(/boodschappen/i);
+    expect(t).toMatch(/€\d/);
     expect(t).not.toMatch(/coach/i);                             // geen neutrale knop naar de coach
   });
 
-  test('het is één kaart, geen tweede eronder', async ({ page }) => {
-    await ins(page);
-    const ids = await page.evaluate(() => [...document.querySelectorAll('#s-ins > *')].map((e) => e.id || ''));
-    expect(ids.filter((x) => x === 'wvoLine').length).toBe(1);
-    expect(ids).not.toContain('insLekVraag');
-    // de ingang zit binnen die kaart, niet ernaast
-    expect(await page.locator('#wvoLine [onclick*="coStart"]').count()).toBe(1);
+  test('a3 · geen lek betekent geen chevron, en geen lege staat', async ({ page }) => {
+    await ins(page, alleenSignaal());                            // wel een signaal, geen lek
+    expect(await page.evaluate(() => valtOpSignals(thisYM()).map((x) => x.potjeId))).toEqual(['boodschappen']);
+    expect(await page.evaluate((m) => coachWeekRisk(m).tone, CUR)).toBe('ok');
+    expect(await page.evaluate((m) => coachLeak(m), CUR)).toBe(null);
+    await expect(page.locator('.valtop-open')).toHaveCount(1);    // de kaart staat er wel
+    await expect(chevron(page)).toHaveCount(0);                   // de ingang niet
+    expect(await page.locator('#s-maand').innerText()).not.toMatch(/kunt doen\?/);
   });
 
-  test('geen lek betekent geen ingang, en geen lege staat', async ({ page }) => {
-    await ins(page, seed());                                     // fixture zonder lek-transactie
-    const R = await page.evaluate((m) => coachWeekRisk(m), CUR);
-    expect(R.tone).toBe('ok');
-    expect(await page.locator('#s-ins [onclick*="coStart(\'lek\'"]').count()).toBe(0);
-    expect(await page.locator('#s-ins').innerText()).not.toMatch(/kunt doen\?/);
-  });
-
-  test('het is de enige nieuwe ingang', async ({ page }) => {
+  test('a4 · het is de enige ingang, en Inzichten draagt hem niet meer', async ({ page }) => {
     await ins(page);
-    for (const scherm of ['vooruit', 'dash', 'tx', 'maand']) {
+    for (const scherm of ['vooruit', 'dash', 'tx', 'ins']) {
       expect(await page.evaluate((s) => (document.querySelector('#s-' + s) || {}).innerHTML || '', scherm))
         .not.toContain("coStart('lek'");
     }
+    expect(await page.evaluate(() => document.querySelectorAll("[onclick*=\"coStart('lek'\"]").length)).toBe(1);
+  });
+
+  /* a5 legt de versmalling vast die deze verhuizing kost. Hij is geen wens maar een meting: met
+     hetzelfde lek, maar zonder categorie boven haar potje, is er geen kaart en dus geen chevron.
+     Vóór v235 hing de ingang alleen aan coachWeekRisk() en coachLeak() en stond hij er wel.
+     Verandert dat oordeel, dan hoort deze test te veranderen en niet stilletjes groen te blijven. */
+  test('a5 · zonder valt-op-signaal is er geen ingang, ook al is er een lek', async ({ page }) => {
+    await ins(page, metLek());                                   // lek, maar geen potje-overschrijding
+    expect(await page.evaluate((m) => coachWeekRisk(m).tone, CUR)).toBe('warn');
+    expect(await page.evaluate((m) => !!coachLeak(m), CUR)).toBe(true);
+    expect(await page.evaluate(() => valtOpSignals(thisYM()).length)).toBe(0);
+    await expect(chevron(page)).toHaveCount(0);
+    expect(await page.evaluate(() => document.querySelectorAll("[onclick*=\"coStart('lek'\"]").length)).toBe(0);
   });
 });
 
 test.describe('b · het gesprek begint bij het cijfer', () => {
   test('opent met de bevinding, niet met een groet', async ({ page }) => {
     await ins(page);
-    await page.locator('#wvoLine [onclick*="coStart"]').click();
+    await chevron(page).click();
     await wachtKeuze(page);
     const draad = await page.locator('#coThr').innerText();
     expect(draad).toMatch(/mediamarkt/i);
@@ -206,10 +251,10 @@ test.describe('e · layout', () => {
     test(`geen horizontale overflow op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 780 });
       await ins(page);
-      await page.locator('#wvoLine [onclick*="coStart"]').click();
+      await chevron(page).click();
       await wachtKeuze(page);
       const over = await page.evaluate(() => ({
-        ins: document.querySelector('#s-ins').scrollWidth - document.querySelector('#s-ins').clientWidth,
+        ins: document.querySelector('#s-maand').scrollWidth - document.querySelector('#s-maand').clientWidth,
         sheet: document.querySelector('#sheet').scrollWidth - document.querySelector('#sheet').clientWidth,
         body: document.body.scrollWidth - document.body.clientWidth,
       }));

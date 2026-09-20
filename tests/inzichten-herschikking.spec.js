@@ -223,7 +223,8 @@ test.describe('d · de verdieping', () => {
     await boot(page);
     const uit = await page.evaluate(() => {
       const el = document.querySelector('#s-ins');
-      const wvo = el.querySelector('#wvoLine');
+      // v235: #wvoLine is vervallen; de valt-op-regels staan als losse kaarten op dezelfde plek
+      const wvo = el.querySelector('.valtop-rij, .valtop-patroon');
       if (!wvo) return { aanwezig: false };
       const kaarten = [...el.querySelectorAll('.card')];
       const eigen = kaarten.findIndex((c) => c.contains(wvo));

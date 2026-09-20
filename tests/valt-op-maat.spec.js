@@ -50,7 +50,9 @@ async function boot(page) {
 const meet = (page, m) => page.evaluate(([m, nu]) => {
   const mv = monthVsPrevInner(m); const ex = new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
   const alle = insSignals(m, ex).sort((a, b) => b.pri - a.pri);
-  const d = document.createElement('div'); d.innerHTML = whatStandsOutLine(m, nu);
+  // v235: was whatStandsOutLine(m, nu). Die kaart is vervallen; insSignalRows() rendert de regels
+  // op dezelfde plek op Inzichten, met dezelfde signalen uit insSignals().
+  const d = document.createElement('div'); d.innerHTML = insSignalRows(m, nu);
   const cur = catSpendMap(m); const tot = Object.values(cur).reduce((a, b) => a + b, 0);
   return { s: alle[0] || null, pris: alle.map((s) => s.pri), kaart: d.innerText.replace(/\s+/g, ' ').trim(),
     huur: cur.huur, aandeel: Math.round(cur.huur / tot * 100), flagged: [...budgetFlaggedCats(m)] };

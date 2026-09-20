@@ -101,7 +101,7 @@ test.describe('b · de vier gespreksingangen blijven werken', () => {
 
   for (const [naam, aanroep, verwacht] of [
     ['algemeen', "coStart('algemeen')", 'algemeen'],
-    ['lek (Inzichten)', "coStart('lek')", 'lek'],
+    ['lek (Grip)', "coStart('lek')", 'lek'],   // v235: verhuisd van de Valt op-kaart op Inzichten
     ['horizon (Plan)', "coStart('horizon')", 'horizon'],
     ['maand (Maand)', "coStart('maand')", 'maand'],
   ]) {
@@ -117,7 +117,11 @@ test.describe('b · de vier gespreksingangen blijven werken', () => {
     await boot(page);
     const r = await page.evaluate(() => {
       const kaal = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-      return { ins: /coStart\('lek'/.test(kaal(whatStandsOutLine.toString())),
+      /* v235: de Valt op-kaart op Inzichten is vervallen en met haar de CTA-voetregel. De
+         lek-ingang hangt nu aan de chevron in de kop van de open valt-op-kaart op Grip. Grip draagt
+         daarmee twee ingangen; Inzichten draagt er geen meer. Wat deze test vasthoudt is dat elk
+         onderwerp een bestaande ingang heeft, niet op welk scherm die staat. */
+      return { ins: /coStart\('lek'/.test(kaal(valtOpKaartOpen.toString())),
         plan: /coStart\('horizon'/.test(kaal(coHorizonVraag.toString())),
         maand: /coStart\('maand'/.test(kaal(maandCoachIngang.toString())),
         algemeen: /coStart\('algemeen'/.test(kaal(maandCoachIngang.toString())) };

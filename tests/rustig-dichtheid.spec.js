@@ -128,7 +128,9 @@ test.describe('c · niets anders verandert', () => {
     // houdt zijn drietraps default uit v90 en de strip staat er onveranderd in
     // v176: de samenstelling draagt nu ook de maandkiezer en de banner; de volgorde blijft
     const src = await page.evaluate(() => renderIns.toString().replace(/\s+/g, ' '));
-    expect(src).toMatch(/hero \+ whatStandsOutLine\(m, nu\)/);   // v186: de lek-ingang zit in die kaart
+    // v235: de Valt op-kaart is vervallen; op dezelfde plek staan de valt-op-regels (insSignalRows).
+    // De lek-ingang zat in die kaart en hangt nu aan de chevron op de Grip-kaart.
+    expect(src).toMatch(/hero \+ insSignalRows\(m, nu\)/);
     expect(await page.evaluate(() => renderIns.toString())).toContain('afgeslotenMaandBanner(m)');
     expect(await page.evaluate(() => COLLAP_DEF.openSpendChart)).toEqual({ rustig: false, rest: true });
   });
