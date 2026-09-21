@@ -86,7 +86,10 @@ async function pijlen(page, index) {
     for (let k = 0; k < rijen.length; k += 2) per.push([rijen[k], rijen[k + 1]]);
     const r = per[i];
     if (!r) return null;
-    const lees = (el) => (!el ? null : { tag: el.tagName.toLowerCase(), off: el.classList.contains('off') });
+    /* v246: een pijltje dat niet mag is een <button disabled> en geen <span>. Een schermlezer
+       ziet daarmee een uitgeschakelde bediening in plaats van een element zonder knopbetekenis. */
+    const lees = (el) => (!el ? null : { tag: el.tagName.toLowerCase(),
+      off: el.classList.contains('off'), disabled: !!el.disabled });
     return { op: lees(r[0]), neer: lees(r[1]) };
   }, index);
 }
@@ -98,35 +101,35 @@ test.describe('a · de pijltjes zeggen wat ze doen', () => {
       // eerst vaststellen dat dit werkelijk de gemelde toestand is
       expect(await page.evaluate(() => planGrendel())).toMatchObject({ dicht: true, rest: 4201, maanden: 2 });
       const nf = await pijlen(page, 0);
-      expect(nf.op).toEqual({ tag: 'span', off: true });     // geen buur boven
-      expect(nf.neer).toEqual({ tag: 'span', off: true });   // langs de buffer heen mag niet
+      expect(nf.op).toEqual({ tag: 'button', off: true, disabled: true });     // geen buur boven
+      expect(nf.neer).toEqual({ tag: 'button', off: true, disabled: true });   // langs de buffer heen mag niet
     });
 
   test('en het doel er direct onder heeft zijn pijltje omhoog uit, dat omlaag aan', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, TOESTEL));
     const g1 = await pijlen(page, 1);
-    expect(g1.op).toEqual({ tag: 'span', off: true });
-    expect(g1.neer).toEqual({ tag: 'button', off: false });
+    expect(g1.op).toEqual({ tag: 'button', off: true, disabled: true });
+    expect(g1.neer).toEqual({ tag: 'button', off: false, disabled: false });
   });
 
   test('een buffer die bijna vol is gedraagt zich net zo: bijna vol is niet vol', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, BIJNA));
     expect(await page.evaluate(() => planGrendel())).toMatchObject({ dicht: true, rest: 101, maanden: 1 });
-    expect((await pijlen(page, 0)).neer).toEqual({ tag: 'span', off: true });
-    expect((await pijlen(page, 1)).op).toEqual({ tag: 'span', off: true });
+    expect((await pijlen(page, 0)).neer).toEqual({ tag: 'button', off: true, disabled: true });
+    expect((await pijlen(page, 1)).op).toEqual({ tag: 'button', off: true, disabled: true });
   });
 
   test('zodra de buffer vol is gaan ze vanzelf aan, zonder knop en zonder vlag', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, VOL));
     expect(await page.evaluate(() => planGrendel())).toBe(null);
-    expect((await pijlen(page, 0)).neer).toEqual({ tag: 'button', off: false });
-    expect((await pijlen(page, 1)).op).toEqual({ tag: 'button', off: false });
+    expect((await pijlen(page, 0)).neer).toEqual({ tag: 'button', off: false, disabled: false });
+    expect((await pijlen(page, 1)).op).toEqual({ tag: 'button', off: false, disabled: false });
   });
 
   test('de rand van de lijst blijft uit staan, ook met een open grendel', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, VOL));
-    expect((await pijlen(page, 0)).op).toEqual({ tag: 'span', off: true });
-    expect((await pijlen(page, 2)).neer).toEqual({ tag: 'span', off: true });
+    expect((await pijlen(page, 0)).op).toEqual({ tag: 'button', off: true, disabled: true });
+    expect((await pijlen(page, 2)).neer).toEqual({ tag: 'button', off: true, disabled: true });
   });
 
   test('onderling schuiven onder de buffer mag en werkt, ook bij een dichte grendel', async ({ page }) => {
@@ -140,9 +143,13 @@ test.describe('a · de pijltjes zeggen wat ze doen', () => {
     async ({ page }) => {
       // het bewijs dat de uitgegrijsde vorm geen knop is: er hangt geen onclick aan
       await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, TOESTEL));
-      const heeftHandler = await page.evaluate(() =>
-        [...document.querySelectorAll('#s-vooruit .plan-mv')].slice(0, 2).some((el) => el.hasAttribute('onclick')));
-      expect(heeftHandler).toBe(false);
+      // v246: geen onclick, en bovendien echt uitgeschakeld
+      const r = await page.evaluate(() => {
+        const els = [...document.querySelectorAll('#s-vooruit .plan-mv')].slice(0, 2);
+        return { handler: els.some((el) => el.hasAttribute('onclick')), uit: els.every((el) => el.disabled) };
+      });
+      expect(r.handler).toBe(false);
+      expect(r.uit).toBe(true);
     });
 
   test('planMoveMag is de enige poort: de rij en planMove() beslissen niet apart', async ({ page }) => {
@@ -150,10 +157,12 @@ test.describe('a · de pijltjes zeggen wat ze doen', () => {
     // elke rij: wat de DOM toont moet gelijk zijn aan wat planMoveMag zegt
     const paren = await page.evaluate(() => planItems().map((it, i) => ({
       i, id: it.id, op: planMoveMag(it.id, -1), neer: planMoveMag(it.id, 1) })));
+    /* v246: beide vormen zijn nu een <button>, dus de poort is af te lezen aan disabled en niet
+       meer aan het soort element. Dat is precies de winst: een uitgeschakelde bediening. */
     for (const p of paren) {
       const d = await pijlen(page, p.i);
-      expect(d.op.tag === 'button', `rij ${p.i} omhoog`).toBe(p.op);
-      expect(d.neer.tag === 'button', `rij ${p.i} omlaag`).toBe(p.neer);
+      expect(!d.op.disabled, `rij ${p.i} omhoog`).toBe(p.op);
+      expect(!d.neer.disabled, `rij ${p.i} omlaag`).toBe(p.neer);
     }
   });
 });

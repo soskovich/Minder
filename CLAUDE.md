@@ -117,6 +117,39 @@ genoemde versietag.)*
   dan het raster van twee bij twee dat ze vervangt (gemeten 630 tegen 558px). De tegelvorm blijft
   bestaan voor `nogDezeMaandCard()`, de terugval zonder budget, en het tegel-CSS is van
   `maandKpiBlok()` op Vermogen (`v232`): verbouw dat niet vanaf Inzichten.
+- **Plan is een vertakte waterval, en hoogte is het doelbedrag** (`v246`): bovenaan de inlegbalk,
+  verdeeld in een segment per bestemming naar `p.alloc`, met wat onverdeeld blijft als eigen leeg
+  segment. Per bestemming een tak boven zijn eigen vat, met dezelfde dikte en dezelfde horizontale
+  plek als dat segment; een bestemming die niets krijgt heeft geen tak. Per bestemming een vat
+  waarvan de HOOGTE het doelbedrag is, met de vulling in de bestaande `.bar-track`/`.bar-fill`
+  maar verticaal, en "nog te gaan" als de lege rest van de track (dus de telling blijft 1 bij
+  stilstand en 2 bij beweging, zoals `v194` hem legde).
+  GEEN TIJDAS. Met meerdere ontvangers is hoogte niet meer gelijk aan duur, dus een maandschaal
+  langs de kolom zou liegen. Dat is een keuze en geen omissie, en `plan-vaten.spec.js` bewaakt hem.
+  DE SCHAAL: aandeel van de som van de doelbedragen over `VAT_BUDGET` (480px), met `VAT_MIN` (98px,
+  gemeten: de inhoud van het hoogste datumpaar op 360px) als bodem, water-fillend herverdeeld tot
+  er niemand meer bij klemt. Boven het breekpunt (`aantal × VAT_MIN > VAT_BUDGET`, dus vanaf vijf
+  vaten) groeit de kolom mee in plaats van dat een vat inklapt of verdwijnt: inklappen zou precies
+  het mechanisme verbergen dat dit scherm moet tonen.
+  EEN GEKLEMD VAT IS NIET OP SCHAAL EN ZEGT DAT. Gemeten stond een doel van €3.000 op de bodem
+  naast een noodfonds van €5.301, een verhouding van 1,3 terwijl het bedrag 1,8 keer zo groot is.
+  Daarom een gestippelde bovenrand in `--mut2` plus een `.sr-only`-regel met dezelfde inhoud.
+  KLEUR DRAAGT DE VERBINDING die de afstand niet meer draagt: segment en tak delen hun tint uit
+  `planTint()`, mengsels van de bestaande `--teal` met `--card2`, en geen nieuwe tokens.
+  HET NOODFONDS DRAAGT GEEN TWEEDE DATUM en geen markering. Dat is het zichtbare verschil tussen de
+  buffer en een doel, en het vervangt elke uitleg daarover. Is hij vol en de grendel open, dan
+  krimpt hij tot één regel, want dan draagt hij geen tak meer.
+  HET DATUMPAAR komt uit `doelTempo()` en `p.eta`, in vier uitkomsten: normaal (vol in X, moet in Y,
+  met "net op tijd" zodra de speling onder een maand zakt), te laat (achterstand in maanden plus het
+  bedrag per maand dat het wel haalt), onbekend (de reden, geen bedrag) en te laat door de grendel
+  (de openingsmaand, geen bedrag, want dat bestaat daar niet: `v243`). Wachten op de buffer is GEEN
+  achterstand en krijgt dus geen markering: `T.knelt` is daar altijd waar omdat `alloc` nul is.
+  GEEN ALARMROOD, want er is niets fout gedaan; de verdeling is later dan bedoeld.
+  `planRegel()` is opgegaan in `planStand()` plus het datumpaar; `planStand()` is de enige bron van
+  de getoonde stand en wordt ook door blok 3 van het diagnosescherm gelezen. Bij `nfOnbekend` staat
+  hij er niet: die nul is een gat en geen toewijzing (`v173`).
+  `planTotaalRegel()` staat sindsdien binnen de kaart van de waterval, onder de sluitpost, en niet
+  meer tussen de bestemmingen en de reserveringen, waar hij las alsof de reserveringen erin zaten.
 - **De buffer gaat eerst, en dat is een grendel** (`v242`): zolang `planMap()[PLAN_NF]` niet vol is
   gaat de hele spaarinleg daarheen (`planGrendel()`), krijgt elk ander item status
   `wacht op de buffer`, en is het noodfonds niet te verslepen en niet op een vast bedrag te zetten.
@@ -479,7 +512,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v245` → `minder-v246`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v246` → `minder-v247`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

@@ -217,7 +217,11 @@ test.describe('d · opslaan en tonen', () => {
     await boot(page, seedDoel([G({ streefdatum: overMnd(28) })]));
     await page.evaluate(() => { go('vooruit'); });
     await page.waitForSelector('.plan-item');
-    expect(await page.locator('.plan-item[data-id="g1"]').innerText()).toContain('per maand nodig');
+    /* v246: de planlijst zei "heb je €X per maand nodig" in doelTempoLine(). Die zin is met de
+       vertakte waterval vervallen; het vat noemt hetzelfde bedrag uit dezelfde bron (doelTempo().
+       benodigd) in zijn datumpaar, als het bedrag dat de datum wel zou halen. De editor houdt zijn
+       eigen zin onveranderd. */
+    expect(await page.locator('.plan-item[data-id="g1"]').innerText()).toMatch(/per maand haalt het/);
 
     await page.evaluate(() => openGoal('g1'));
     await page.waitForSelector('#gDatum');

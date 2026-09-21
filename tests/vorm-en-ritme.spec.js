@@ -228,11 +228,16 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
     await boot(page);
     await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
     const r = await page.evaluate(() => {
-      const item = document.querySelector('#s-vooruit .plan-item');
+      /* v246: de eerste rij kan een ingeklapt vol noodfonds zijn, en dat is een regel en geen vat.
+         Deze test gaat over een bestemming die nog loopt, dus die zoeken we op. */
+      const item = [...document.querySelectorAll('#s-vooruit .plan-item')]
+        .find((x) => !x.querySelector('.vat-vol') && x.querySelector('.vat')) 
+        || document.querySelector('#s-vooruit .plan-item');
       const rij = item.querySelector('.row');
       const naam = rij.children[0], bedrag = rij.children[1];
       const b = bedrag.querySelector('b');
-      const sub = item.querySelector('.row + .bar-track + .small, .row + .small');
+      // v246: de stand staat in het vat, als eigen regel onder de kop
+      const sub = item.querySelector('.vat-stand') || item.querySelector('.row + .small');
       return { naamGewicht: +getComputedStyle(naam).fontWeight,
                bedragGewicht: b ? +getComputedStyle(b).fontWeight : null,
                bedragTekst: b ? b.innerText : '',
@@ -259,12 +264,33 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
     if (t) expect(t).toMatch(/onbekend|€/);
   });
 
-  test('de rij wordt er niet hoger van', async ({ page }) => {
+  /* v246: DEZE TEST IS OMGEDRAAID. Hij legde vast dat elke rij even hoog blijft (onder 150px), en
+     dat was juist zolang de rij een balk met een regel eronder was. Sinds de vertakte waterval IS
+     de hoogte het doelbedrag, dus een groot doel hoort hoger te zijn dan een klein. Wat nu geldt
+     en hier staat: geen vat onder de minimumhoogte, de kolom binnen zijn budget of op
+     aantal x minimum daarboven, en de niet-geklemde vaten onderling in verhouding tot hun
+     doelbedrag. */
+  test('de vaten staan op schaal, met een bodem en een budget', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
-    const h = await page.evaluate(() => [...document.querySelectorAll('#s-vooruit .plan-item')]
-      .map((x) => x.offsetHeight));
-    for (const x of h) expect(x).toBeLessThan(150);
+    const r = await page.evaluate(() => {
+      const P = allocatePlan();
+      const vaten = [...document.querySelectorAll('#s-vooruit .vat')].map((v) => ({
+        id: v.closest('.plan-item').dataset.id,
+        h: Math.round(v.getBoundingClientRect().height),
+        geklemd: v.dataset.geklemd === '1',
+        doel: (P.find((x) => x.id === v.closest('.plan-item').dataset.id) || {}).doel }));
+      return { vaten, MIN: VAT_MIN, BUDGET: VAT_BUDGET };
+    });
+    expect(r.vaten.length).toBeGreaterThan(0);
+    for (const v of r.vaten) expect(v.h, v.id).toBeGreaterThanOrEqual(r.MIN);
+    const som = r.vaten.reduce((a, v) => a + v.h, 0);
+    expect(som).toBeLessThanOrEqual(Math.max(r.BUDGET, r.vaten.length * r.MIN) + 2);
+    // de vaten die niet op de bodem staan houden onderling de verhouding van hun doelbedrag
+    const vrij = r.vaten.filter((v) => !v.geklemd && v.doel > 0);
+    for (let i = 1; i < vrij.length; i++) {
+      expect(vrij[i].h / vrij[0].h).toBeCloseTo(vrij[i].doel / vrij[0].doel, 1);
+    }
   });
 });
 

@@ -101,7 +101,10 @@ test.describe('a · het gemelde geval', () => {
     });
     expect(r.label).toBe(r.uitEta);                  // planGrendelDatum is etaDatum(G.maanden)
     expect(r.rij).toContain(`verdelen gaat open rond ${r.label}`);
-    expect(r.rij).toContain(`vanaf ${r.label}`);
+    /* v246: hier stond ook `vanaf ${label}`, uit de tempo-zin van doelTempoLine(). Die zin is met
+       de vertakte waterval vervallen: het vat draagt het datumpaar en de openingsmaand staat daar
+       één keer. De eigenschap die deze test bewaakt is onveranderd: de openingsmaand op het scherm
+       komt uit planGrendelDatum() en nergens anders vandaan. */
   });
 });
 

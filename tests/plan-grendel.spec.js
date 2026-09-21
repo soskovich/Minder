@@ -84,9 +84,11 @@ test.describe('a · de grendel', () => {
       expect(p.alloc, p.naam).toBe(0);
       expect(p.status, p.naam).toBe('wacht op de buffer');
     }
-    // en de rij zegt wanneer verdelen opengaat
+    /* En de rij zegt wanneer verdelen opengaat. v246: dat stond in planSub() als "Wacht op je
+       buffer · verdelen gaat open rond X"; sinds de vertakte waterval staat het in het datumpaar
+       van het vat, onder de streefdatum. Dezelfde bron (planGrendelDatum), andere plek. */
     const t = await page.evaluate(() => document.querySelector('#s-vooruit').innerText);
-    expect(t).toMatch(/Wacht op je buffer · verdelen gaat open rond \w+ \d{4}/);
+    expect(t).toMatch(/verdelen gaat open rond \w+ \d{4}/);
   });
 
   test('het noodfonds is niet te verslepen en niet op een vast bedrag te zetten', async ({ page }) => {

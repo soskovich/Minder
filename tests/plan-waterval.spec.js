@@ -38,8 +38,11 @@ async function openV(page, payload) {
   await page.evaluate(() => go('vooruit'));
   await page.waitForSelector('#s-vooruit .card');
 }
+/* v246: het nummer staat in .vat-naam, de kop van het vat. Bindt aan de naamregel en niet aan de
+   hele rijtekst: die draagt sinds de vertakte waterval ook de stand en het datumpaar. */
 const rijen = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .plan-item')]
-  .map((x) => ({ id: x.dataset.id, tekst: x.innerText.replace(/\s+/g, ' ') })));
+  .map((x) => ({ id: x.dataset.id, tekst: x.innerText.replace(/\s+/g, ' '),
+    naam: ((x.querySelector('.vat-naam') || {}).innerText || '').replace(/\s+/g, ' ').trim() })));
 const scherm = (page) => page.locator('#s-vooruit').innerText();
 
 /* ---------------------------------------------------------------------------------------- */
@@ -54,7 +57,7 @@ test.describe('a · de kaart toont het mechanisme', () => {
     const R = await rijen(page);
     expect(R.map((x) => x.id)).toEqual(['gA', 'gB', 'noodfonds']);
     // de nummers volgen de volgorde van de waterval, niet de naam of het bedrag
-    for (let i = 0; i < R.length; i++) expect(R[i].tekst).toMatch(new RegExp('^' + (i + 1) + '\\s'));
+    for (let i = 0; i < R.length; i++) expect(R[i].naam).toMatch(new RegExp('^' + (i + 1) + '\\s'));
     // en de drie horen bij elkaar in één kaart, in deze volgorde
     expect(t.indexOf('Te verdelen')).toBeGreaterThanOrEqual(0);
     expect(t.indexOf('Te verdelen')).toBeLessThan(t.indexOf('Kosten koper'));
@@ -63,14 +66,19 @@ test.describe('a · de kaart toont het mechanisme', () => {
 
   test('het te verdelen bedrag is planCapacity, met een volle balk erbij', async ({ page }) => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Kosten koper', doel: 9000, gespaard: 0, allocMode: 'fixed', perMaand: 200 }]));
+    /* v246: de balk was één volle vulling; hij is verdeeld in een segment per bestemming plus een
+       eigen leeg segment voor wat onverdeeld blijft. De eigenschap blijft dezelfde en wordt
+       scherper: de balk telt op tot het hele te verdelen bedrag, niets valt eruit. */
     const r = await page.evaluate(() => {
       const kaart = [...document.querySelectorAll('#s-vooruit .card')].find((c) => /Te verdelen/.test(c.textContent));
-      const balk = kaart.querySelector(':scope > .bar-track > .bar-fill');
-      return { cap: planCapacity(), tekst: kaart.innerText.replace(/\s+/g, ' '),
-        breedte: balk ? balk.style.width : null };
+      const balk = kaart.querySelector(':scope > .inleg-balk');
+      const segs = balk ? [...balk.children].map((x) => ({ id: x.dataset.seg, w: parseFloat(x.style.width) })) : [];
+      return { cap: planCapacity(), tekst: kaart.innerText.replace(/\s+/g, ' '), segs };
     });
     expect(r.tekst).toContain(await page.evaluate((c) => euro0(c) + '/mnd', r.cap));
-    expect(r.breedte).toBe('100%');     // het hele bedrag, want dat is wat er te verdelen valt
+    expect(r.segs.length).toBeGreaterThan(0);
+    expect(r.segs.reduce((a, x) => a + x.w, 0)).toBeCloseTo(100, 1);
+    expect(r.segs.some((x) => x.id === 'gA')).toBe(true);
   });
 
   test('elke rij noemt zijn maandbedrag rechts en zijn stand eronder', async ({ page }) => {
@@ -85,6 +93,9 @@ test.describe('a · de kaart toont het mechanisme', () => {
     const alloc = await page.evaluate(() => euro0(allocatePlan().find((x) => x.id === 'gA').alloc));
     expect(r.rij).toContain(alloc + '/mnd');
     expect(r.heel).toMatch(/€1\.500 toegewezen \/ €9\.000/);   // en waar hij staat
+    // v246: en de tak boven het vat draagt hetzelfde bedrag, want beide lezen p.alloc
+    const tak = await page.locator('.plan-tak[data-tak="gA"]').innerText();
+    expect(tak).toContain(alloc + '/mnd');
   });
 });
 
@@ -206,8 +217,8 @@ test.describe('e · de volgorde blijft de hoofdhandeling', () => {
     await page.waitForFunction(() => (document.querySelector('#s-vooruit .plan-item') || {}).dataset.id === 'gB');
     const R = await rijen(page);
     expect(R[0].id).toBe('gB');
-    expect(R[0].tekst).toMatch(/^1\s/);
-    expect(R[1].tekst).toMatch(/^2\s/);
+    expect(R[0].naam).toMatch(/^1\s/);
+    expect(R[1].naam).toMatch(/^2\s/);
   });
 });
 

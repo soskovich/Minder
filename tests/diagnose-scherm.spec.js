@@ -238,8 +238,9 @@ test.describe('c · wat er in staat', () => {
     await boot(page, { goals: DRIE });
     await open(page);
     const t = await uit(page);
-    // de getoonde regel wordt door planRegel() zelf geschreven, niet nagebouwd: één bron per getal
-    expect(t).toContain('komt uit planRegel(), veld p.gespaard / veld p.doel');
+    // de getoonde regel wordt door planStand() zelf geschreven, niet nagebouwd: één bron per getal
+    // v246: planRegel() is opgegaan in planStand() plus het datumpaar in het vat
+    expect(t).toContain('komt uit planStand(), veld p.gespaard / veld p.doel');
     expect(t).toMatch(/€\s?9\.000 toegewezen \/ €\s?40\.000/);
     expect(t).toContain('p.gespaard = 9000');
     expect(t).toContain('p.doel     = 40000');

@@ -162,9 +162,10 @@ test.describe('b · de plan-balk: stilstand is grijs, beweging krijgt een segmen
     const r = await page.evaluate(() => {
       const p = allocatePlan().find((x) => x.type === 'aflossen');
       const d = document.createElement('div'); d.innerHTML = renderPlan(true);
+      // v246: het vat vult van onderaf, dus het segment zit in de hoogte en niet meer in de breedte
       const f = d.querySelector('.plan-item[data-id="af:d1"] .bar-fill:nth-child(2)');
       return { alloc: p.alloc, debtPer: p.debtPer, doel: p.doel, gespaard: p.gespaard,
-        breedte: f ? parseFloat(f.style.width) : null };
+        breedte: f ? parseFloat(f.style.height) : null };
     });
     const verwacht = Math.min((r.alloc + r.debtPer) / r.doel * 100,
       100 - Math.min(Math.round(r.gespaard / r.doel * 100), 100));
