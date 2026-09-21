@@ -126,6 +126,20 @@ genoemde versietag.)*
   onbekend: is de voortgang niet vastgesteld, dan blijft de grendel dicht en wordt er geen maand
   genoemd waarin hij opengaat. Geen buffer-doel is geen grendel. Ronde 2 van `allocatePlan()` (het
   restant zakt door naar het volgende lopende item op volgorde) is ongemoeid en blijft de terugval.
+  ELKE SCHRIJVER GAAT ERDOOR, EN DE PIJLTJES ZEGGEN WAT ZE DOEN (`v245`): `planMoveMag(id,dir)` is de
+  enige poort, gelezen door `planMove()` én door de rij die de pijltjes tekent. Die twee besloten
+  apart, en gemeten op echte gegevens (buffer 1.100 van 5.301) rendeerde een GEBLOKKEERD pijltje als
+  een gewone actieve knop; een knop die er bruikbaar uitziet en het niet hoort te zijn, is erger dan
+  geen knop. `planPromoteDebt()` zette een aflos-item ongehinderd op plek 1 en heeft nu dezelfde
+  check, met dezelfde zin: `GRENDEL_TOAST`, want het is dezelfde regel. `setNfAlloc()` kreeg de check
+  die `setNfAllocMode()` al had. GEEN CORRECTIE BIJ HET LEZEN: `planItems()` zet een verkeerde
+  volgorde niet stil recht. Met elke schrijver bewaakt kan hij niet meer ontstaan, en een vangnet
+  zou het volgende lek verbergen: het scherm klopt, de opslag niet, en niemand ziet dat er een
+  schrijver langs de regel gaat. Het slot is `grendel-schrijvers.spec.js`, die de bron leest en op
+  elke schrijver van `SET.planOrder` valt; `planForget()` is de enige uitzondering en leunt op de
+  `unshift`-tak in `planItems()`, die daarom een eigen test heeft. Fixtures en echte gegevens nemen
+  andere paden, dus de DOM-tests draaien op de gemeten toestand (4.201 te gaan, twee maanden) naast
+  een buffer die binnen één maand vol is.
 - **Een doel achter de grendel begint pas als de grendel opengaat** (`v243`): `doelTempo()` rekent
   het venster vanaf de openingsmaand en niet vanaf vandaag zodra `goal.grendel` is gezet, het veld
   dat `allocatePlan()` aan elk wachtend item hangt. Eén bron: `G.maanden` voor de som,
@@ -146,8 +160,13 @@ genoemde versietag.)*
   bestaan en blijft meetellen, maar leest als onvolledig met één ingang om hem alsnog te zetten
   (`planDatumRegel()`): geen stille default en niets weggooien, want Minder weet niet wanneer jij
   dat doel af wilt hebben.
-- **Meer verdelen dan er is kun je niet opslaan** (`v242`): de som van de vaste maandbedragen blijft
-  onder `planCapacity()`, getoetst in `saveGoal()` en in `setPlanAllocVeld()` via `planVastRuimte()`.
+- **Meer verdelen dan er is kun je niet opslaan** (`v242`, `v245`): de som van de vaste maandbedragen
+  blijft onder `planCapacity()`, getoetst in `saveGoal()`, `setPlanAllocVeld()` en sinds `v245` ook
+  `setNfAlloc()` via `planVastRuimte()`. Die derde ontbrak: gemeten schreef hij 99.000 per maand bij
+  een capaciteit van 3.000, en `planVastSom()` telt het noodfonds gewoon mee, dus daarna was er voor
+  elk ander doel nul over. Een vast maandbedrag belandt op precies twee plekken, `setPlanAlloc()` en
+  `saveGoal()`, en `grendel-schrijvers.spec.js` leest de bron en eist dat elke aanroeper die een
+  bedrag meegeeft de grens noemt; een aanroeper die alleen een modus zet heeft hem niet nodig.
   Dezelfde stap van spiegel naar grens als bij het bijstellen van een potje (`v238`): een tekort dat
   je kunt wegklikken is geen regel. `planAllocWarning()` blijft bestaan voor wat onder die grens
   valt, zoals percentages die samen boven de honderd komen. Zonder bekende spaarinleg is er niets om
@@ -460,7 +479,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v244` → `minder-v245`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v245` → `minder-v246`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

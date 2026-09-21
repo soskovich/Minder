@@ -3057,6 +3057,9 @@ function deleteGoal(id){ SET.goals=(SET.goals||[]).filter(x=>x.id!==id); planFor
    het noodfonds is hier één herordenbaar item i.p.v. het hardgecodeerde hoofddoel.
    ============================================================ */
 const PLAN_NF='noodfonds';
+/* v245: één regel, één zin. Elke route die op de grendel stuit zegt hetzelfde, want het is
+   dezelfde grendel; twee formuleringen zouden lezen als twee verschillende regels. */
+const GRENDEL_TOAST='Je buffer gaat eerst; schuiven kan zodra hij vol is';
 const planDebtKey=id=>'af:'+id;
 function planOrderList(){ return Array.isArray(SET.planOrder)?SET.planOrder.filter(x=>typeof x==='string'):[]; }
 function planPaused(id){ return !!(SET.planPaused||{})[id]; }
@@ -5200,14 +5203,27 @@ function planVrij(P){
   const used=P.reduce((a,x)=>a+(+x.alloc||0),0);
   return Math.max(planCapacity()-used,0);
 }
+/* v242: zolang de grendel dicht zit staat het noodfonds vooraan. Onderling schuiven mag, langs
+   de buffer heen niet: die volgorde geldt pas als de grendel open is, en tot die tijd zou hij
+   tonen dat er geld langs een lege buffer gaat terwijl dat niet gebeurt.
+   v245: dit stond inline in planMove(), en de rij tekende zijn pijltjes daar los van. Gemeten op
+   echte gegevens (buffer 1.100 van 5.301): het pijltje omlaag bij het noodfonds was GEBLOKKEERD
+   en rendeerde als een gewone actieve knop. Een knop die er bruikbaar uitziet en het niet hoort te
+   zijn, is erger dan geen knop, dus leest de rij nu dezelfde functie. Een tweede toets ernaast zou
+   een tweede waarheid zijn. FALSE BIJ EEN ONTBREKENDE BUUR: dat is ook 'deze verschuiving kan
+   niet', en de rij hoeft die twee gevallen niet uit elkaar te houden. planMove() wel, want alleen
+   de grendel verdient een uitleg; aan de rand van de lijst valt er niets te melden. */
+function planMoveMag(id,dir){
+  const ids=planItems().map(x=>x.id); const i=ids.indexOf(id); const j=i+dir;
+  if(i<0||j<0||j>=ids.length) return false;
+  ids.splice(j,0,ids.splice(i,1)[0]);
+  return !(planGrendel() && ids[0]!==PLAN_NF);
+}
 function planMove(id,dir){
   const ids=planItems().map(x=>x.id); const i=ids.indexOf(id); const j=i+dir;
   if(i<0||j<0||j>=ids.length) return;
+  if(!planMoveMag(id,dir)){ toast(GRENDEL_TOAST); return; }
   ids.splice(j,0,ids.splice(i,1)[0]);
-  /* v242: zolang de grendel dicht zit staat het noodfonds vooraan. Onderling schuiven mag, langs
-     de buffer heen niet: die volgorde geldt pas als de grendel open is, en tot die tijd zou hij
-     tonen dat er geld langs een lege buffer gaat terwijl dat niet gebeurt. */
-  if(planGrendel() && ids[0]!==PLAN_NF){ toast('Je buffer gaat eerst; schuiven kan zodra hij vol is'); return; }
   SET.planOrder=ids; save(); render();
 }
 function planTogglePause(id){ SET.planPaused=SET.planPaused||{}; if(SET.planPaused[id]) delete SET.planPaused[id]; else SET.planPaused[id]=true; save(); render(); }
@@ -5606,8 +5622,10 @@ function renderPlan(bare){
        beide gevallen komt er niets bij, dus krijgt wachten dezelfde grijstint als gepauzeerd. */
     const stil=p.status==='gepauzeerd'||p.status==='wacht op capaciteit'||p.status==='wacht op de buffer';   // v242
     const col=stil?'var(--mut)':(p.status==='bereikt'?'var(--green)':'var(--teal)');
-    const up=i>0?`<button class="plan-mv" onclick="event.stopPropagation();planMove('${p.id}',-1)" aria-label="Hoger">&#9650;</button>`:'<span class="plan-mv off">&#9650;</span>';
-    const dn=i<n-1?`<button class="plan-mv" onclick="event.stopPropagation();planMove('${p.id}',1)" aria-label="Lager">&#9660;</button>`:'<span class="plan-mv off">&#9660;</span>';
+    /* v245: de poort is planMoveMag() en niet meer de positie in de lijst. Die twee vielen samen
+       zolang alleen de rand tegenhield; sinds de grendel (v242) niet meer. */
+    const up=planMoveMag(p.id,-1)?`<button class="plan-mv" onclick="event.stopPropagation();planMove('${p.id}',-1)" aria-label="Hoger">&#9650;</button>`:'<span class="plan-mv off">&#9650;</span>';
+    const dn=planMoveMag(p.id,1)?`<button class="plan-mv" onclick="event.stopPropagation();planMove('${p.id}',1)" aria-label="Lager">&#9660;</button>`:'<span class="plan-mv off">&#9660;</span>';
     const D=planBedragDeel(p);
     const uit=window._planRij===p.id;
     const act=(kl,tk,fn)=>`<span class="small" style="color:var(--${kl});cursor:pointer" onclick="event.stopPropagation();${fn}">${tk}</span>`;
@@ -5678,6 +5696,11 @@ function debtNudgeCard(){
 }
 function planPromoteDebt(debtId){
   const key=planDebtKey(debtId);
+  /* v245: dit zet een item op plek 1 en is daarmee precies de verschuiving die planMove() tegenhoudt.
+     Hij deed dat ongehinderd: gemeten ging noodfonds,g1,g2,g3 naar af:d1,noodfonds,g1,g2,g3 bij een
+     dichte grendel. allocatePlan() hangt aan type en niet aan positie, dus er lekte geen geld weg;
+     het scherm toonde alleen een volgorde die de verdeling niet volgt. Dezelfde regel, dezelfde zin. */
+  if(planGrendel()){ toast(GRENDEL_TOAST); return; }
   const ids=planItems().map(x=>x.id).filter(x=>x!==key);
   SET.planOrder=[key].concat(ids); save(); closeSheet(); render();
   toast(`${ICON('check')} Aflossen staat nu bovenaan je plan`);
@@ -7223,7 +7246,19 @@ function nfAllocCard(){
 }
 function setNfAllocMode(v){ if(planGrendel()) return; setPlanAlloc(PLAN_NF,{allocMode:v}); renderNfSheet(); }   // v242
 function setNfAlloc(veld,v){
+  /* v245: twee grenzen die hier ontbraken terwijl ze een regel hoger en elders wel staan.
+     De grendel, zoals in setNfAllocMode(): staat hij dicht, dan pakt de buffer alles en valt er
+     niets te verdelen, dus er is ook geen bedrag te zetten.
+     En de harde grens van v242, zoals in saveGoal() en setPlanAllocVeld(). Gemeten: met een open
+     grendel schreef deze functie 99.000 per maand bij een capaciteit van 3.000, en planVastSom()
+     telt het noodfonds gewoon mee, dus daarna was er voor elk ander doel nul over. Een derde
+     schrijver van een vast maandbedrag zonder de grens is een derde waarheid. */
+  if(planGrendel()) return;
   const n=Math.max(0,Math.round(numIn(v)));
+  if(veld!=='pct'){
+    const R=planVastRuimte(PLAN_NF);
+    if(R.cap>0 && n>R.over){ toast(`${euro0(n-R.over)} te veel verdeeld; er is ${euro0(R.over)} per maand over`); renderNfSheet(); return; }
+  }
   setPlanAlloc(PLAN_NF, veld==='pct'?{pct:Math.min(n,100)}:{perMaand:n});
   renderNfSheet();
 }
@@ -11616,7 +11651,21 @@ function diagVersie(){
       L.push('sw wachtend: '+(r?((r.waiting?'ja (oude worker nog actief)':'nee')+' | installing: '+(r.installing?'ja':'nee')):'<geen registratie>')); }
     catch(e){ L.push('sw wachtend: FOUT: '+e.message); }
     L.push('planGrendel bestaat: '+(typeof planGrendel));
-    L.push('planMove draagt de grendelcheck: '+_dS(()=>/planGrendel\(\)/.test(planMove.toString())?'JA':'NEE (oude code)'));
+    /* v245: dit zocht planGrendel() letterlijk in planMove(). Sindsdien loopt de check via
+       planMoveMag(), dus die vorm zou 'oude code' melden op code die precies goed is. De probe
+       toetst nu de route en houdt de oude inline-vorm erbij, want een oude worker moet hier nog
+       steeds JA kunnen zeggen over zijn eigen versie. */
+    L.push('planMove draagt de grendelcheck: '+_dS(()=>{
+      const inline=/planGrendel\(\)/.test(planMove.toString());
+      const viaMag=typeof planMoveMag==='function' && /planMoveMag\(/.test(planMove.toString())
+        && /planGrendel\(\)/.test(planMoveMag.toString());
+      return (inline||viaMag)?'JA':'NEE (oude code)'; }));
+    L.push('de twee andere routes dragen hem: '+_dS(()=>{
+      const a=/planGrendel\(\)/.test(planPromoteDebt.toString());
+      const b=/planGrendel\(\)/.test(setNfAlloc.toString());
+      return `planPromoteDebt ${a?'JA':'NEE'} | setNfAlloc ${b?'JA':'NEE'}`; }));
+    L.push('de pijltjes lezen dezelfde poort: '+_dS(()=>
+      /planMoveMag\(/.test(renderPlan.toString())?'JA':'NEE (oude code)'));
     L.push('doelTempo: '+(typeof doelTempo)+' | insEyebrow: '+(typeof insEyebrow)+' | diagOpen: '+(typeof diagOpen));
     return L;
   });

@@ -214,10 +214,24 @@ test.describe('c · wat er in staat', () => {
     expect(t).toContain('=== EINDE ===');
   });
 
-  test('blok 1 laat zien of planMove() de grendelcheck draagt', async ({ page }) => {
+  /* v245: deze probe zocht planGrendel() letterlijk in planMove(). Sinds de check via
+     planMoveMag() loopt stond daar 'NEE (oude code)' terwijl de code precies goed was, en de
+     suite ving dat. Een probe die de vorm van vandaag vastlegt in plaats van de eigenschap
+     veroudert met de eerste refactor; deze toetst de route, en de oude inline-vorm telt nog
+     steeds mee zodat een oude worker over zijn eigen versie de waarheid vertelt. */
+  test('blok 1 laat zien of planMove() de grendelcheck draagt, via welke route dan ook',
+    async ({ page }) => {
+      await boot(page, { goals: DRIE });
+      await open(page);
+      expect(await uit(page)).toContain('planMove draagt de grendelcheck: JA');
+    });
+
+  test('blok 1 toetst ook de twee andere routes en de pijltjes', async ({ page }) => {
     await boot(page, { goals: DRIE });
     await open(page);
-    expect(await uit(page)).toContain('planMove draagt de grendelcheck: JA');
+    const t = await uit(page);
+    expect(t).toContain('de twee andere routes dragen hem: planPromoteDebt JA | setNfAlloc JA');
+    expect(t).toContain('de pijltjes lezen dezelfde poort: JA');
   });
 
   test('blok 3 noemt het veld waar de getoonde toegewezen-regel zijn bedrag haalt', async ({ page }) => {
