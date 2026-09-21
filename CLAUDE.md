@@ -117,40 +117,43 @@ genoemde versietag.)*
   dan het raster van twee bij twee dat ze vervangt (gemeten 630 tegen 558px). De tegelvorm blijft
   bestaan voor `nogDezeMaandCard()`, de terugval zonder budget, en het tegel-CSS is van
   `maandKpiBlok()` op Vermogen (`v232`): verbouw dat niet vanaf Inzichten.
-- **Plan is een vertakte waterval, en hoogte is het doelbedrag** (`v246`): bovenaan de inlegbalk,
+- **Plan is een vertakte waterval met gelijke balken** (`v246`, `v248`): bovenaan de inlegbalk,
   verdeeld in een segment per bestemming naar `p.alloc`, met wat onverdeeld blijft als eigen leeg
-  segment. Per bestemming een tak boven zijn eigen vat, met dezelfde dikte en dezelfde horizontale
-  plek als dat segment; een bestemming die niets krijgt heeft geen tak. Per bestemming een vat
-  waarvan de HOOGTE het doelbedrag is, met de vulling in de bestaande `.bar-track`/`.bar-fill`
-  maar verticaal, en "nog te gaan" als de lege rest van de track (dus de telling blijft 1 bij
-  stilstand en 2 bij beweging, zoals `v194` hem legde).
-  GEEN TIJDAS. Met meerdere ontvangers is hoogte niet meer gelijk aan duur, dus een maandschaal
-  langs de kolom zou liegen. Dat is een keuze en geen omissie, en `plan-vaten.spec.js` bewaakt hem.
-  DE TEKST STAAT BOVEN HET VAT EN NIET ERIN (`v246b`), en dat is de reden dat de bodem laag kan
-  blijven. Met de tekst erin was `VAT_MIN` 98px, en bij die bodem klemden op de gemeten gegevens
-  twee van de drie vaten: de inrichting kreeg naar verhouding 59px en het noodfonds 95px, allebei
-  eronder, dus ze stonden even hoog terwijl hun bedragen 77% schelen. Dat is exact het bezwaar
-  waarmee de linkergoot is afgewezen, alleen van binnenuit. `.vat-kop` draagt nu naam, maandbedrag,
-  `planStand()` en het datumpaar; `.vat` is alleen nog de vorm met zijn vulling.
-  DE SCHAAL: aandeel van de som van de doelbedragen over `VAT_BUDGET`, met `VAT_MIN` (20px, de
-  kleinste hoogte waarop een vat nog als vorm leest) als bodem, water-fillend herverdeeld tot er
-  niemand meer bij klemt. Boven het breekpunt (`aantal × VAT_MIN > VAT_BUDGET`, dus vanaf 17 vaten)
-  groeit de kolom mee in plaats van dat een vat inklapt of verdwijnt: inklappen zou precies het
-  mechanisme verbergen dat dit scherm moet tonen.
-  `VAT_BUDGET` IS DE ENIGE KNOP AAN DE SCHAAL en staat daarom als losse constante boven
-  `planVatHoogten()`. Hij is 320px: groter is fijnmaziger en kost pagina, kleiner is compacter en
-  duwt eerder vaten op de bodem. Hij stond op 480, gekozen toen de bodem nog 78 of 98px was en een
-  klein vat zijn eigen tekst moest kunnen dragen; sinds de tekst boven het vat staat heeft die
-  reden geen grond meer en kostte die 480 ruim 150px pagina die grotendeels leeg vat van het
-  grootste doel was. Op de gemeten gegevens (5.301, 16.000, 3.000) klemt geen enkel vat en staan ze
-  op 70, 211 en 40px, oftewel 13,21 tegen 13,19 tegen 13,33px per duizend euro.
-  EEN GEKLEMD VAT IS NIET OP SCHAAL EN ZEGT DAT: een gestippelde bovenrand in `--mut2` plus een
-  `.sr-only`-regel met dezelfde inhoud. Dat blijft nodig, want onder de bodem kan het nog steeds
-  gebeuren; het is alleen geen dagelijks geval meer.
-  DE TAK DRAAGT GEEN TEKST. Hij had een label met het maandbedrag, en sinds de kop dat bedrag één
-  regel hoger noemt is dat een tweede bron. Kleur en dikte komen uit hetzelfde segment als de balk.
+  segment. Per bestemming een tak boven zijn eigen balk, met dezelfde dikte en dezelfde horizontale
+  plek als dat segment; een bestemming die niets krijgt heeft geen tak. De tak draagt geen tekst:
+  het maandbedrag staat in de kop één regel hoger, en twee keer hetzelfde getal is een tweede bron.
   KLEUR DRAAGT DE VERBINDING die de afstand niet meer draagt: segment en tak delen hun tint uit
   `planTint()`, mengsels van de bestaande `--teal` met `--card2`, en geen nieuwe tokens.
+  ELKE BESTEMMING KRIJGT DEZELFDE LIGGENDE BALK (`v248`). `v246` gaf elk doel een vat op hoogte van
+  zijn doelbedrag; de verhouding klopte, maar leverde niets op, want een leeg vat van ruim 300px
+  zegt alleen dat een doel ver weg is. De vulling is nu de voortgang in procenten, zodat de doelen
+  onderling vergelijkbaar worden op wat telt. Het is letterlijk de vorm van vóór ronde B (`v194`):
+  `.bar-track` met `display:flex`, "nog te gaan" als de lege rest en geen eigen element, dus de
+  telling van de vullagen blijft 1 bij stilstand en 2 bij beweging. Daarmee vervielen
+  `planVatHoogten()`, `VAT_MIN`, `VAT_BUDGET` en de markering "niet op schaal": er valt niets meer
+  te schalen en dus niets te klemmen. GEEN TIJDAS, ook niet langs een liggende balk.
+  EEN BALK VAN GELIJKE GROOTTE IS ALLEEN ZIJN PLEK WAARD ALS HIJ IETS DRAAGT WAT DE TEKST NIET
+  ZEGT, en dat is het streepje (`doelStreepje()`): waar je nu zou moeten staan om je streefdatum te
+  halen. Verwachte stand is `startStand + (doel - startStand) × verstreken/venster`, in HELE DAGEN
+  met alle drie de momenten op lokale middernacht - met de klok erbij leest een doel dat je
+  vanochtend aanmaakte vanmiddag al "€1 achter", en een lijn van maanden heeft geen uren nodig.
+  Het noodfonds krijgt er geen, want het heeft geen streefdatum. Een wachtend doel heeft hem op
+  nul: er wordt nog niets van verwacht zolang de buffer voorgaat. Geen kleur en geen oordeel, wel
+  een `.sr-only`-tekst die voor, achter of op koers zegt met het bedrag erbij.
+  HET BEGINMOMENT WORDT BEWAARD EN NIET AFGELEID: `g.startDatum` en `g.startStand`. Afleiden uit
+  `goal.grendel` kan niet, want dat veld hangt `allocatePlan()` aan een item zolang het WACHT, dus
+  op de dag dat de grendel opengaat valt het weg. GEMETEN op een doel van €10.000 met streefdatum
+  juni 2028, aangemaakt 19 juli 2026 en een grendel die rond november 2026 opengaat: het venster
+  springt dan van 18,3 naar 22,4 maanden waarvan er al 4,1 verstreken zijn, en het streepje schiet
+  van €0 naar €1.832 op de dag dat je net mag beginnen. Drie schrijvers: `saveGoal()` bij AANMAKEN
+  (bij wijzigen blijft de oorsprong staan, hij is historie en geen invoer), `resNaarDoel()` met de
+  stand die de knop meegeeft (anders leest zo'n doel op dag één "je loopt voor"), en
+  `grendelStartVastleggen()` eenmalig op de overgang van dicht naar open, voor ELK doel, met
+  `SET.grendelDicht` als enige vlag. Die laatste draait bij de boot, want de overgang is een moment
+  en geen toestand. TERUGVAL voor doelen van vóór `v248`: het aanmaakmoment uit de base36-tijdstempel
+  in de id, met stand 0 en een plausibiliteitstoets (niet vóór 2020, niet in de toekomst). Dat is
+  een implementatiedetail dat als data wordt gelezen, dus `plan-balken.spec.js` leest de bron en
+  eist dat beide aanmaakroutes dat formaat nog gebruiken en dat de boot de vastlegging aanroept.
   HET NOODFONDS DRAAGT GEEN TWEEDE DATUM en geen markering. Dat is het zichtbare verschil tussen de
   buffer en een doel, en het vervangt elke uitleg daarover. Is hij vol en de grendel open, dan
   krimpt hij tot één regel, want dan draagt hij geen tak meer.
@@ -527,7 +530,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v247` → `minder-v248`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v248` → `minder-v249`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

@@ -264,33 +264,25 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
     if (t) expect(t).toMatch(/onbekend|€/);
   });
 
-  /* v246: DEZE TEST IS OMGEDRAAID. Hij legde vast dat elke rij even hoog blijft (onder 150px), en
-     dat was juist zolang de rij een balk met een regel eronder was. Sinds de vertakte waterval IS
-     de hoogte het doelbedrag, dus een groot doel hoort hoger te zijn dan een klein. Wat nu geldt
-     en hier staat: geen vat onder de minimumhoogte, de kolom binnen zijn budget of op
-     aantal x minimum daarboven, en de niet-geklemde vaten onderling in verhouding tot hun
-     doelbedrag. */
-  test('de vaten staan op schaal, met een bodem en een budget', async ({ page }) => {
+  /* DEZE TEST IS VOOR DE TWEEDE KEER OMGEDRAAID, en dat is precies waarom hij hier staat.
+     Oorspronkelijk: "de rij wordt er niet hoger van", elke rij onder 150px. Bij v246 werd dat "de
+     vaten staan op schaal, met een bodem en een budget", want de hoogte droeg toen het doelbedrag.
+     Bij v248 is de hoogte geen drager meer: elke bestemming krijgt dezelfde liggende balk en de
+     vulling draagt de voortgang. Daarmee geldt het oorspronkelijke weer, en scherper: niet "onder
+     150px" maar "alle balken precies even hoog", want gelijkheid is nu de eigenschap zelf. */
+  test('elke bestemming krijgt dezelfde balk, en de rij blijft laag', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
-    const r = await page.evaluate(() => {
-      const P = allocatePlan();
-      const vaten = [...document.querySelectorAll('#s-vooruit .vat')].map((v) => ({
+    const r = await page.evaluate(() => ({
+      balken: [...document.querySelectorAll('#s-vooruit .vat')].map((v) => ({
         id: v.closest('.plan-item').dataset.id,
         h: Math.round(v.getBoundingClientRect().height),
-        geklemd: v.dataset.geklemd === '1',
-        doel: (P.find((x) => x.id === v.closest('.plan-item').dataset.id) || {}).doel }));
-      return { vaten, MIN: VAT_MIN, BUDGET: VAT_BUDGET };
-    });
-    expect(r.vaten.length).toBeGreaterThan(0);
-    for (const v of r.vaten) expect(v.h, v.id).toBeGreaterThanOrEqual(r.MIN);
-    const som = r.vaten.reduce((a, v) => a + v.h, 0);
-    expect(som).toBeLessThanOrEqual(Math.max(r.BUDGET, r.vaten.length * r.MIN) + 2);
-    // de vaten die niet op de bodem staan houden onderling de verhouding van hun doelbedrag
-    const vrij = r.vaten.filter((v) => !v.geklemd && v.doel > 0);
-    for (let i = 1; i < vrij.length; i++) {
-      expect(vrij[i].h / vrij[0].h).toBeCloseTo(vrij[i].doel / vrij[0].doel, 1);
-    }
+        w: Math.round(v.getBoundingClientRect().width) })),
+      rijen: [...document.querySelectorAll('#s-vooruit .plan-item')].map((x) => x.offsetHeight) }));
+    expect(r.balken.length).toBeGreaterThan(1);
+    expect(new Set(r.balken.map((x) => x.h)).size, 'hoogtes: ' + r.balken.map((x) => x.h).join(',')).toBe(1);
+    expect(new Set(r.balken.map((x) => x.w)).size, 'breedtes: ' + r.balken.map((x) => x.w).join(',')).toBe(1);
+    for (const x of r.rijen) expect(x).toBeLessThan(150);
   });
 });
 

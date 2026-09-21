@@ -285,13 +285,16 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .plan-mv.off,.plan-mv:disabled{opacity:.22;cursor:default}
 /* v246: het vat. Hoogte is het doelbedrag, de vullagen staan van onderaf gestapeld en de tekst
    ligt erbovenop. Alles HTML en CSS: de knoppen in het vat blijven echte knoppen. */
-.vat{position:relative;overflow:hidden;border-radius:8px;background:var(--card2);margin:0 0 11px}
+.vat{position:relative;margin:0 0 11px}
 /* v246b: de tekst van een bestemming staat boven zijn vat en niet erin. Elke regel in het vat tilde
    de minimumhoogte op, en daarmee vielen er meer vaten onder de bodem en stonden ze even hoog
    terwijl hun bedragen sterk verschilden. */
 .vat-kop{padding:0}
-.vat .bar-track{position:absolute;left:0;right:0;top:0;bottom:0;height:auto;margin:0;border-radius:10px;display:flex;flex-direction:column-reverse;justify-content:flex-start}
-.vat .bar-fill{border-radius:0;transition:height .5s;width:100%}
+.vat .bar-track{height:11px;margin:0}
+/* Het streepje staat buiten de track: die heeft overflow:hidden, en een markering op 0% of 100%
+   zou daarbinnen half wegvallen. Geen nieuwe kleur, geen oordeel: --mut2 zoals elke andere
+   informatieve markering (v78/v93). */
+.doel-streep{position:absolute;top:-2px;bottom:-2px;width:2px;margin-left:-1px;background:var(--mut2);border-radius:1px}
 .vat-in{position:relative;display:flex;gap:10px;align-items:flex-start;padding:2px 2px 6px}
 .vat-naam{font-weight:600;font-size:var(--fs-md);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vat-stand{display:block;margin-top:2px}
@@ -301,7 +304,6 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 /* Een geklemd vat staat op de minimumhoogte en is dus NIET op schaal; de gestippelde bovenrand
    zegt dat, en de sr-only-regel erin zegt het in woorden. Een te laat vat draagt een gedempte
    markering en geen alarmkleur: er is niets fout gedaan, de verdeling is later dan bedoeld. */
-.vat-geklemd{border-top:1px dashed var(--mut2)}
 .vat-laat{border-left:3px solid var(--mut2)}
 .vat-vol{padding:2px 0}
 /* De twee pijltjes onder elkaar zijn 64px hoog en dat is wat een ingeklapte rij hoog maakt, niet
@@ -3074,6 +3076,11 @@ function saveGoal(id){
     perMaand: per,      // bewaren, niet wissen bij een moduswissel
     pct:      mode==='pct'   ? Math.max(0,Math.min(100,Math.round(numIn(v('gPct'))||0))) : (+oud.pct||0) };
   g.streefdatum=sd;
+  /* v248: het beginmoment van de lijn waar het streepje op rust. ALLEEN BIJ AANMAKEN. Wijzig je
+     later je stand of je bedrag, dan blijft de oorsprong staan waar hij stond: hij is historie en
+     geen invoer. Een doel van vóór v248 houdt dus geen velden en valt terug op zijn id. */
+  if(id){ if(oud.startDatum) g.startDatum=oud.startDatum; if(oud.startStand!=null) g.startStand=+oud.startStand||0; }
+  else  { g.startDatum=vandaagYMD(); g.startStand=Math.max(Math.round(+g.gespaard||0),0); }
   SET.goals=SET.goals||[]; const i=SET.goals.findIndex(x=>x.id===id);
   if(i>=0) SET.goals[i]=g; else SET.goals.push(g);
   save(); closeSheet(); render(); toast(`${ICON('check')} Doel opgeslagen`);
@@ -3183,7 +3190,9 @@ function planMap(){
     gespaard:nfDoel>0?Math.min(nfToe,nfDoel):nfToe}, planAllocOf(planAllocCfg(PLAN_NF)));
   for(const g of (SET.goals||[])) if(g&&g.id)
     by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,
-             streefdatum:g.streefdatum||''}, planAllocOf(g));   // v123: leeg = gedraagt zich als voorheen
+             streefdatum:g.streefdatum||'',
+             // v248: doorgeven, niet herrekenen. doelStreepje() leest ze hier en nergens anders.
+             startDatum:g.startDatum||'', startStand:+g.startStand||0}, planAllocOf(g));   // v123: leeg = gedraagt zich als voorheen
   // aflos-items bestaan alleen als ze in de volgorde staan; de schuld zelf blijft onaangeroerd
   for(const key of planOrderList()){
     if(key.slice(0,3)!=='af:') continue;
@@ -5142,7 +5151,10 @@ function resNaarDoel(id){
   /* allocMode 'auto': het doel krijgt wat er op zijn plek nog over is. Een vast bedrag zou hier een
      verdeling voor je kiezen, en dat doet deze ronde nergens. Je zet het zelf in de doel-editor. */
   const g={id:'g'+Date.now().toString(36), naam:(v.naam||'Doel'), doel:bedrag, gespaard:Math.min(gespaard,bedrag),
-           allocMode:'auto', perMaand:0, pct:0, streefdatum:ym};
+           allocMode:'auto', perMaand:0, pct:0, streefdatum:ym,
+           /* v248: de stand die je meeneemt uit de reservering is waar dit doel begint, niet nul.
+              Zonder dat zou het streepje op nul starten en las je "je loopt voor" op dag één. */
+           startDatum:vandaagYMD(), startStand:Math.max(Math.round(Math.min(gespaard,bedrag)),0)};
   SET.goals=(SET.goals||[]).concat([g]);
   SET.reserveringen=resLijst().filter(x=>x.id!==id);
   save(); render(); renderResSheet();
@@ -5641,54 +5653,105 @@ function planRij(id){ window._planRij=(window._planRij===id)?null:id; render(); 
  *
  * ER WORDT NIETS HERREKEND. allocatePlan(), doelTempo(), planGrendel(), planMoveMag() en de harde
  * grens zijn ongemoeid; dit is de vorm waarin hun uitkomst te zien is. */
-/* v246b: de tekst stond IN het vat en tilde daarmee de bodem naar 98px, en bij die bodem klemden op
-   de gemeten gegevens twee van de drie vaten: de inrichting kreeg naar verhouding 59px en het
-   noodfonds 95px, allebei eronder, dus ze stonden even hoog terwijl hun bedragen 77% schelen. Dat is
-   exact het bezwaar waarmee de linkergoot is afgewezen, alleen van binnenuit. De tekst staat nu
-   BOVEN het vat en het vat is alleen nog de vorm met zijn vulling, dus de bodem is die van een
-   leesbare vorm en niet die van een alinea. Op de gemeten gegevens klemt daarmee geen enkel vat. */
-const VAT_MIN=20;        // de kleinste hoogte waarop een vat nog als vorm leest, met zijn drie lagen zichtbaar
-/* DE ENIGE KNOP AAN DE SCHAAL. Hoeveel hoogte de vatenkolom samen mag innemen; elk vat krijgt
-   daarvan zijn aandeel naar doelbedrag. Groter is fijnmaziger en kost pagina, kleiner is compacter
-   en duwt eerder vaten op de bodem. Voelt het na een week te krap of te ruim, dan is dit de regel
-   die je bijstelt en verder niets.
-   v247b: stond op 480, gekozen toen de bodem nog 78 of 98px was en een klein vat zijn eigen tekst
-   moest kunnen dragen. Sinds de tekst boven het vat staat heeft die reden geen grond meer, en de
-   480 kostte ruim 150px pagina die grotendeels leeg vat van het grootste doel was. Gemeten op
-   320: de drie vaten van de gemeten gegevens staan op 70, 211 en 40px, geen van drieën geklemd. */
-const VAT_BUDGET=320;
+/* ===== Het beginmoment van een doel, en het streepje (v248) =====
+ * Een balk van gelijke grootte is alleen zijn plek waard als hij iets draagt wat de tekst niet
+ * zegt. Dat is het streepje: waar je nu zou moeten staan om je streefdatum te halen. Staat de
+ * vulling ervoor, dan loop je voor; staat hij erachter, dan loop je achter. In één blik per doel.
+ *
+ * HET BEGINMOMENT WORDT BEWAARD EN NIET AFGELEID, en dat is de hele reden dat deze twee velden
+ * bestaan. Afleiden uit goal.grendel kan niet: dat veld hangt allocatePlan() aan een item zolang
+ * het WACHT, dus op de dag dat de grendel opengaat valt het weg. GEMETEN op een doel van €10.000
+ * met streefdatum juni 2028, aangemaakt 19 juli 2026, grendel open rond november 2026: het venster
+ * springt dan van 18,3 maanden (vanaf de opening) naar 22,4 maanden (vanaf het id), waarvan er op
+ * die dag al 4,1 verstreken zijn. Het streepje schiet van €0 naar €1.832, op de dag dat je net mag
+ * beginnen. Dat geldt voor elk doel dat wachtte.
+ *
+ * DRIE SCHRIJVERS, EN DE VIERDE IS EEN TERUGVAL:
+ *   saveGoal()      - bij aanmaken: het moment van aanmaken en de stand die je invult
+ *   resNaarDoel()   - hetzelfde, met de stand die de knop meegeeft
+ *   grendelStartVastleggen() - eenmalig op het moment dat de grendel opengaat
+ *   het id          - terugval voor doelen van vóór v248, met stand 0
+ * Die laatste leest het aanmaakmoment uit de base36-tijdstempel in de id, en dat is een
+ * implementatiedetail dat als data wordt gelezen. plan-streepje.spec.js leest daarom de bron en
+ * eist dat beide aanmaakroutes dat formaat nog gebruiken, zodat een wijziging daar bij het bouwen
+ * omvalt in plaats van in beeld. */
+const DOEL_START_VLOER=Date.parse('2020-01-01T00:00:00Z');
+function doelIdMoment(id){
+  const m=/^g([0-9a-z]+)$/.exec(String(id||'')); if(!m) return null;
+  const ms=parseInt(m[1],36);
+  /* Plausibel of niets. Een handgemaakte id als 'g1' decodeert naar 1970 en een toekomstig moment
+     bestaat niet; in beide gevallen kent de app geen beginmoment en komt er dus geen streepje. */
+  if(!isFinite(ms) || ms<DOEL_START_VLOER || ms>Date.now()) return null;
+  return ymdVan(new Date(ms));
+}
+function doelStart(g){
+  if(!g) return null;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(String(g.startDatum||'')))
+    return {datum:g.startDatum, stand:Math.max(Math.round(+g.startStand||0),0), bron:'vastgelegd'};
+  const idm=doelIdMoment(g.id);
+  return idm?{datum:idm, stand:0, bron:'id'}:null;
+}
 
-/* De schaal. Hoogte naar doelbedrag kan niet zonder budget: het kleinste doel op de minimumhoogte
-   zetten maakt een doel van 16.000 ruim 400px en loopt bij een grotere spreiding hard weg. Dus:
-   elk vat krijgt zijn aandeel van de som van de doelbedragen over een budget, en wie daarmee onder
-   de minimumhoogte valt krijgt de minimumhoogte, waarna de rest het overgebleven budget opnieuw
-   naar verhouding verdeelt. Dat herhaalt tot er niemand meer bij klemt.
-   BOVEN HET BREEKPUNT GROEIT DE KOLOM MEE. Budget en minimum kunnen elkaar niet meer houden zodra
-   aantal x minimum groter is dan het budget; vanaf dat punt is het budget aantal x minimum. De
-   verhouding blijft dan exact kloppen voor elk vat boven het minimum, en er verdwijnt geen vat.
-   De onderste vaten inklappen zou precies het mechanisme verbergen dat dit scherm moet tonen.
-   EEN GEKLEMD VAT IS NIET OP SCHAAL, en dat hoort het te zeggen: wie twee vaten vergelijkt leest
-   anders een verhouding die er niet is (gemeten: 78 naast 100px terwijl het bedrag 1,8 keer zo
-   groot is). Daarom draagt het veld geklemd door naar de weergave. */
-function planVatHoogten(items){
-  const uit={}; const ids=(items||[]).map(p=>p.id);
-  const doel={}; for(const p of (items||[])) doel[p.id]=Math.max(Math.round(+p.doel||0),0);
-  for(const id of ids) uit[id]={h:VAT_MIN, geklemd:true};
-  if(!ids.length) return uit;
-  const budget=Math.max(VAT_BUDGET, ids.length*VAT_MIN);
-  if(!(ids.reduce((a,id)=>a+doel[id],0)>0)) return uit;   // geen enkel doelbedrag: alles op het minimum
-  const vrij=new Set(ids); let rest=budget, nog=true;
-  while(nog){
-    nog=false;
-    const som=[...vrij].reduce((a,id)=>a+doel[id],0);
-    if(!(som>0)) break;
-    for(const id of [...vrij]){
-      if(rest*doel[id]/som < VAT_MIN){ vrij.delete(id); rest-=VAT_MIN; nog=true; }
-    }
+/* Waar het streepje staat. Verwachte stand = startStand + (doel - startStand) x verstreken/venster,
+   met het venster van startDatum tot de eerste van de streefdatum-maand, en verstreken geklemd op
+   dat venster. Daarmee ligt de verwachte stand per constructie tussen startStand en doel.
+   EEN WACHTEND DOEL STAAT OP NUL: er wordt nog niets van verwacht zolang de buffer voorgaat, dus
+   de verwachte stand is nul en niet "wat er zou moeten staan als je al begonnen was".
+   HET NOODFONDS KRIJGT ER GEEN: dat heeft geen streefdatum, dus er is niets om tegen af te zetten.
+   Geen kleur en geen oordeel: het streepje en de vulling zeggen het, de tekst stelt vast. */
+function doelStreepje(p){
+  if(!p || p.type!=='goal' || !p.streefdatum) return null;
+  const doel=Math.max(Math.round(+p.doel||0),0); if(!(doel>0)) return null;
+  const stand=Math.max(Math.round(+p.gespaard||0),0);
+  const maak=(verwacht,wacht)=>{
+    const v=Math.max(Math.min(Math.round(verwacht),doel),0);
+    return {verwacht:v, verschil:stand-v, pct:Math.max(Math.min(v/doel*100,100),0), wacht:!!wacht};
+  };
+  if(p.grendel) return maak(0,true);
+  const S=doelStart(p); if(!S) return null;
+  const m=/^(\d{4})-(\d{2})$/.exec(String(p.streefdatum)); if(!m) return null;
+  const eind=new Date(+m[1],+m[2]-1,1).getTime();
+  const start=new Date(S.datum+'T00:00:00').getTime();
+  if(!isFinite(start)||!isFinite(eind)||!(eind>start)) return null;   // geen venster, geen streepje
+  /* IN HELE DAGEN, alle drie de momenten op lokale middernacht. Met de klok erbij telt een doel dat
+     je vanochtend hebt aangemaakt vanmiddag al een halve dag mee, en dan leest het streepje "je
+     loopt €1 achter" op dag één. Een lijn van maanden heeft geen uren nodig, en zo staat het
+     streepje ook de hele dag stil in plaats van onder je handen te kruipen. */
+  const nu=new Date(vandaagYMD()+'T00:00:00').getTime();
+  const deel=Math.max(Math.min((nu-start)/(eind-start),1),0);
+  return maak(S.stand+(doel-S.stand)*deel,false);
+}
+/* De schermlezertekst. Hij zegt hetzelfde als het beeld: voor, achter of op koers, met het bedrag.
+   Op koers is het afgeronde verschil nul, en niet een zelfbedachte marge eromheen. */
+function doelStreepjeTekst(p,S){
+  S=S||doelStreepje(p); if(!S) return '';
+  const d=S.verschil;
+  if(d>0) return `Je loopt ${euro0(d)} voor op wat je streefdatum vraagt.`;
+  if(d<0) return `Je loopt ${euro0(-d)} achter op wat je streefdatum vraagt.`;
+  return 'Je ligt op koers voor je streefdatum.';
+}
+
+/* De grendel gaat open. Dan is dat het beginmoment van elk doel dat erachter stond, want er is
+   tot dat moment niets heen gegaan. Eenmalig, op de overgang van dicht naar open, en niet bij
+   elke lezing: SET.grendelDicht is de enige vlag en hij wordt bij die overgang weer gewist.
+   ELK DOEL, ook een doel dat al een startDatum had: zolang de grendel dicht zat kon geen enkel
+   doel vooruit, dus hun lijn begint hier opnieuw, met de stand die ze op dat moment hebben.
+   WAT HIJ NIET MEET: de dag waarop de grendel werkelijk openging als je de app daarna pas opent.
+   Dan is het de dag waarop het is vastgesteld, en dat staat zo in het veld. */
+function grendelStartVastleggen(){
+  let dicht=false; try{ dicht=!!planGrendel(); }catch(_){ return 0; }
+  const was=!!SET.grendelDicht;
+  if(dicht){ if(!was){ SET.grendelDicht=true; save(); } return 0; }
+  if(!was) return 0;
+  const vandaag=vandaagYMD(); let n=0;
+  for(const g of (SET.goals||[])){
+    if(!g||!g.id) continue;
+    g.startDatum=vandaag;
+    g.startStand=Math.max(Math.round(+g.gespaard||0),0);
+    n++;
   }
-  const som=[...vrij].reduce((a,id)=>a+doel[id],0);
-  for(const id of vrij) uit[id]={h:Math.max(Math.round(rest*doel[id]/(som||1)),VAT_MIN), geklemd:false};
-  return uit;
+  delete SET.grendelDicht; save();
+  return n;
 }
 
 /* De tint. Segment en tak dragen dezelfde kleur, want met de vaten onder elkaar staat het derde vat
@@ -5779,8 +5842,6 @@ function renderPlan(bare){
      ter hoogte van zijn doelbedrag een blok dat niets meer zegt. Het krimpt tot één regel. Zolang
      de grendel dicht zit blijft het een vat, want dan gaat juist alles daarheen. */
   const klein=new Set(P.filter(p=>p.type==='noodfonds'&&!G&&p.rest<=0).map(p=>p.id));
-  const vaten=P.filter(p=>!klein.has(p.id));
-  const H=planVatHoogten(vaten);
   const SEG=planSegmenten(P,cap);
   const tints={}; P.forEach((p,i)=>{ tints[p.id]=planTint(p,i); });
   const rows=P.map((p,i)=>{
@@ -5812,7 +5873,7 @@ function renderPlan(bare){
             <span class="vat-naam">${nr} ${esc(p.naam)}<span class="muted" style="font-weight:400"> · ${planSub(p,true)}</span></span>
             <span class="small vat-stand" style="margin:0;white-space:nowrap;flex-shrink:0">${planStand(p)}</span></div>
           ${pijlen}</div>${acties}</div>`;
-    const hh=H[p.id]||{h:VAT_MIN,geklemd:true};
+
     const tint=tints[p.id];
     const seg=SEG.segs.find(s=>s.id===p.id)||{alloc:0,van:0,breed:0};
     /* De tak. Dikte en horizontale plek komen uit hetzelfde segment als in de balk erboven, dus
@@ -5831,12 +5892,19 @@ function renderPlan(bare){
     const groei=(p.doel>0&&perMnd>0)?Math.max(Math.min(perMnd/p.doel*100,100-pct),0):0;
     const R=vatRegels(p);
     const dof=(p.status==='wacht op de buffer')?' vat-dof':'';
-    const kl=hh.geklemd?' vat-geklemd':'';
     const laat=R.laat?' vat-laat':'';
-    /* "Nog te gaan" is de lege rest van de track en geen eigen element: dan blijft de telling van
-       de vullagen 1 bij een stilstaand item en 2 bij een lopend, precies zoals v194 hem legde. */
+    /* v248: de balk ligt weer, en elke bestemming krijgt dezelfde. De hoogte naar doelbedrag was
+       meetkundig juist maar leverde niets op: een leeg vat van ruim 300px zegt alleen dat het ver
+       weg is. De vulling is nu de voortgang in procenten, zodat de doelen onderling vergelijkbaar
+       worden op wat telt. Dit is letterlijk de vorm van vóór ronde B (v194): "nog te gaan" is de
+       lege rest van de track en geen eigen element, dus de telling van de vullagen blijft 1 bij
+       stilstand en 2 bij beweging. */
     const vulling=p.nfOnbekend?''
-      :`<div class="bar-track"><div class="bar-fill" style="height:${pct}%;background:${tint}"></div>${groei>0?`<div class="bar-fill bar-groei" style="height:${groei.toFixed(1)}%;background:color-mix(in srgb,${tint} 38%,transparent)"></div>`:''}</div>`;
+      :`<div class="bar-track" style="display:flex"><div class="bar-fill" style="width:${pct}%;background:${tint}${groei>0?';border-radius:6px 0 0 6px':''}"></div>${groei>0?`<div class="bar-fill bar-groei" style="width:${groei.toFixed(1)}%;background:color-mix(in srgb,${tint} 38%,transparent);border-radius:0 6px 6px 0"></div>`:''}</div>`;
+    /* Het streepje: waar je nu zou moeten staan om je streefdatum te halen. Het staat buiten de
+       track, want die heeft overflow:hidden en dan zou een markering op de rand wegvallen. */
+    const ST=p.nfOnbekend?null:doelStreepje(p);
+    const streep=ST?`<span class="doel-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="left:${ST.pct.toFixed(2)}%"><span class="sr-only">${doelStreepjeTekst(p,ST)}</span></span>`:'';
     /* Wat er is doorgezakt hoort bij de stand: het is binnengekomen zonder dat jij het hebt
        verdeeld. De tak draagt het niet meer, want die draagt sinds v246b helemaal geen tekst. */
     const dzR=dzB>0?`<span class="muted"> · ${euro0(dzB)} doorgezakt</span>`:'';
@@ -5850,10 +5918,7 @@ function renderPlan(bare){
           ${pijlen}
         </div>
       </div>${tak}
-      <div class="vat${kl}${laat}${dof}" data-geklemd="${hh.geklemd?1:0}" data-laat="${R.laat?1:0}" style="height:${hh.h}px">
-        ${vulling}
-        ${hh.geklemd?'<span class="sr-only">Dit vat staat op de minimumhoogte, dus zijn hoogte is niet op schaal.</span>':''}
-      </div>${acties}</div>`;
+      <div class="vat${laat}${dof}" data-laat="${R.laat?1:0}">${vulling}${streep}</div>${acties}</div>`;
   }).join('');
   // Wat het scherm eerst in zinnen zei staat nu achter het uitlegteken bovenin de kaart.
   NOTES.planUitleg=[
@@ -13128,7 +13193,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
