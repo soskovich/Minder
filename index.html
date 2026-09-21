@@ -10905,7 +10905,7 @@ function renderSet(){
     </div>
     ${op?`<div style="padding:10px 4px 16px;border-bottom:1px solid var(--line)">${fn()}</div>`:''}`;}).join('');
   $('#s-set').innerHTML = `<div class="row" style="margin:2px 2px 18px"><span class="hlabel" style="margin:0;flex:1">Instellingen</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="terug()">Klaar</span></div><div class="card" style="padding:6px 12px">${list}</div>
-    <div class="center small muted" style="padding:8px 0 20px;cursor:default" onclick="bankAdvTap()">Minder · veilig &amp; lokaal</div>`;
+    <div class="center small muted" id="setVoet" style="padding:8px 0 20px;cursor:default;-webkit-user-select:none;user-select:none" onclick="bankAdvTap()" onpointerdown="diagDruk(1)" onpointerup="diagDruk(0)" onpointercancel="diagDruk(0)" onpointerleave="diagDruk(0)" oncontextmenu="return false">Minder · veilig &amp; lokaal</div>`;
 }
 
 /* ---------- Uiterlijk: thema's ----------
@@ -11565,9 +11565,197 @@ function setBank(){
   return head + bestandHtml + aiHtml + briefHtml + accHtml + advHtml;
 }
 function bankAdvTap(){
+  /* v244: de voetregel draagt nu ook de lange druk naar het diagnosescherm. Een lange druk eindigt
+     op een gewone tik, en die mag de vijf-tik-teller niet optellen.
+     HET IS EEN TIJDSTEMPEL EN GEEN VLAG, want de tik komt niet altijd. Gemeten: zodra het
+     diagnosescherm openstaat dekt de sheet de voetregel af, dus de pointerup en de klik landen op
+     de overlay en bankAdvTap() draait helemaal niet. Een vlag die alleen hier wordt gewist blijft
+     dan staan, en de eerstvolgende echte tik wordt opgegeten. Een tijdstempel heft zichzelf op. */
+  if(window._diagLang && Date.now()-window._diagLang < 1200){ window._diagLang=0; return; }
   window._advTaps=(window._advTaps||0)+1; clearTimeout(window._advTapT);
   window._advTapT=setTimeout(()=>{window._advTaps=0;},1500);
   if(window._advTaps>=5){ window._advTaps=0; SET.advBank=!SET.advBank; SET.setOpen='bank'; save(); toast(SET.advBank?'Geavanceerd zichtbaar':'Geavanceerd verborgen'); renderSet(); }
+}
+
+/* ===== Diagnose (v244) =====
+ * Waarom dit in de app zit en niet in een losse console: je gegevens staan alleen op je eigen
+ * toestel en verlaten het nooit. Loopt er iets anders dan in de testdata, dan is dat alleen daar
+ * te zien, en op een telefoon is er geen console. Dit scherm leest die staat uit.
+ *
+ * VOORWAARDEN, en ze zijn hard. Alles hieronder LEEST alleen: geen save(), niets naar SET, niets
+ * naar localStorage, geen netwerk. De grendelcheck van planMove() wordt NAGEREKEND op een kopie
+ * van de lijst; planMove() zelf wordt niet aangeroepen, dus je volgorde verandert niet door te
+ * kijken. diagnose-scherm.spec.js legt dat vast, en meet het op localStorage.setItem in plaats
+ * van alleen op de inhoud achteraf: een schrijver die dezelfde waarde terugzet is ook een
+ * schrijver.
+ *
+ * DIT IS GEEN ELEMENT DAT IETS OVER JE GELD ZEGT. Spiegel, gevolg, keuze gelden hier dus niet: er
+ * volgt geen stap uit en er valt niets te kiezen. Het is een uitlezing, hij staat verborgen, en
+ * daarom concurreert hij met geen enkele horizon.
+ *
+ * ER KOMEN BLOKKEN BIJ. Elk blok is een entry in DIAG_BLOKKEN met een titel en een lees-functie
+ * die regels teruggeeft; de lezer mag een promise teruggeven, want blok 1 moet caches.keys()
+ * afwachten. Een blok erbij is een entry erbij, en verder niets: diagTekst() en het scherm blijven
+ * zoals ze zijn. Dat is de reden dat dit een lijst is en geen functie die de tekst uitschrijft. */
+const _dJ=(v)=>{ try{ return JSON.stringify(v); }catch(_){ return '<niet leesbaar>'; } };
+const _dV=(fn)=>{ try{ return _dJ(fn()); }catch(e){ return 'FOUT: '+e.message; } };
+const _dS=(fn)=>{ try{ return String(fn()); }catch(e){ return 'FOUT: '+e.message; } };
+
+/* 1. Draait er oude code? De cachenaam zegt welke versie de service worker heeft opgeslagen. Dat
+      is niet hetzelfde als welke code er nu in het geheugen staat, dus daar staat een bronprobe
+      naast: leest planMove() de grendel wel. Staat daar NEE, dan is de rest van dit scherm niet
+      het antwoord en is de oude worker het. */
+function diagVersie(){
+  const L=[];
+  return Promise.resolve().then(async()=>{
+    try{ L.push('caches: '+((await caches.keys()).join(', ')||'<geen>')); }
+    catch(e){ L.push('caches: FOUT: '+e.message); }
+    L.push('sw controller: '+_dS(()=>{ const c=navigator.serviceWorker&&navigator.serviceWorker.controller;
+      return c?c.scriptURL:'<geen controller>'; }));
+    try{ const r=await navigator.serviceWorker.getRegistration();
+      L.push('sw wachtend: '+(r?((r.waiting?'ja (oude worker nog actief)':'nee')+' | installing: '+(r.installing?'ja':'nee')):'<geen registratie>')); }
+    catch(e){ L.push('sw wachtend: FOUT: '+e.message); }
+    L.push('planGrendel bestaat: '+(typeof planGrendel));
+    L.push('planMove draagt de grendelcheck: '+_dS(()=>/planGrendel\(\)/.test(planMove.toString())?'JA':'NEE (oude code)'));
+    L.push('doelTempo: '+(typeof doelTempo)+' | insEyebrow: '+(typeof insEyebrow)+' | diagOpen: '+(typeof diagOpen));
+    return L;
+  });
+}
+
+/* 2. De volgorde in het geheugen naast die op schijf naast die op het scherm. Lopen ze uiteen, dan
+      is er iets gezet dat niet is weggeschreven, of andersom. */
+function diagVolgorde(){
+  return [
+    'SET.planOrder (geheugen): '+_dV(()=>SET.planOrder),
+    'planOrder (localStorage): '+_dV(()=>JSON.parse(localStorage.getItem('minder_set')||'{}').planOrder),
+    'planItems() getoond:      '+_dV(()=>planItems().map(x=>x.id)),
+    'planItems() namen:        '+_dV(()=>planItems().map(x=>x.naam)),
+    'SET.planPaused: '+_dV(()=>SET.planPaused),
+  ];
+}
+
+/* 3. De grendel, plus alles waar hij op rekent. De regel op het scherm en de regel die planGrendel()
+      leest komen allebei uit planMap()[noodfonds], maar dat is een bewering tot je het naast elkaar
+      ziet: de getoonde regel wordt hier door planRegel() zelf geschreven, met de tags eraf, en niet
+      nagebouwd. Eén bron per getal, ook in een uitlezing. Daaronder de twee "te gaan"-bedragen: het
+      plan rekent met SET.nfToegewezen, de bufferregel met het gemeten spaarsaldo. Lopen die uiteen,
+      dan staat de grendel open terwijl het scherm elders zegt dat de buffer niet vol is. */
+function diagGrendel(){
+  const L=[];
+  const NF=(()=>{ try{ return planMap()[PLAN_NF]; }catch(_){ return null; } })();
+  const NFa=(()=>{ try{ return allocatePlan().find(x=>x.id===PLAN_NF)||null; }catch(_){ return null; } })();
+  L.push('planGrendel(): '+_dV(()=>planGrendel()));
+  L.push('planGrendelDatum(): '+_dV(()=>planGrendelDatum()));
+  L.push('planCapacity(): '+_dV(()=>planCapacity()));
+  L.push('monthlySavingTarget(): '+_dV(()=>monthlySavingTarget()));
+  L.push('');
+  L.push('de getoonde regel bij het noodfonds komt uit planRegel(), veld p.gespaard / veld p.doel:');
+  L.push('  '+_dS(()=>NFa?String(planRegel(NFa)).replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim():'<geen noodfonds-item>'));
+  L.push('  p.gespaard = '+_dV(()=>NF&&NF.gespaard)+'  <- min(SET.nfToegewezen, doel), of nfToegewezen als doel 0 is');
+  L.push('  p.doel     = '+_dV(()=>NF&&NF.doel)+'  <- noodfondsModel().doel');
+  L.push('planGrendel() leest exact diezelfde twee velden, en rest = doel - gespaard:');
+  L.push('  '+_dS(()=>{ const G=planGrendel();
+    if(!NF) return 'geen noodfonds-item, dus planGrendel() geeft null';
+    if(!G) return 'planGrendel() geeft null bij doel '+NF.doel+' en gespaard '+NF.gespaard+' (rest '+(NF.doel-NF.gespaard)+')';
+    return 'doel '+G.doel+' - gespaard '+NF.gespaard+' = rest '+G.rest+(G.onbekend?' (onbekend)':''); }));
+  L.push('scherm en grendel lezen hetzelfde: '+_dS(()=>{ const G=planGrendel();
+    if(!NF) return 'n.v.t.';
+    const rest=Math.max(Math.round(NF.doel)-Math.max(Math.round(NF.gespaard),0),0);
+    if(!G) return rest>0?'NEE (scherm zegt '+rest+' te gaan, grendel staat open)':'JA (buffer vol, grendel open)';
+    return G.rest===rest?'JA':'NEE (scherm '+rest+', grendel '+G.rest+')'; }));
+  L.push('');
+  L.push('SET.nfToegewezen: '+_dV(()=>SET.nfToegewezen)+' | migrated: '+_dV(()=>SET.nfToegewezenMigrated));
+  L.push('SET.nfDoelVast: '+_dV(()=>SET.nfDoelVast));
+  L.push('noodfondsModel().doel: '+_dV(()=>Math.round(noodfondsModel().doel||0)));
+  L.push('noodfondsModel().spaar: '+_dV(()=>noodfondsModel().spaar));
+  L.push('spaarSaldo(): '+_dV(()=>spaarSaldo()));
+  L.push('te gaan volgens het PLAN   (doel - nfToegewezen): '+_dV(()=>{
+    const d=Math.round(noodfondsModel().doel||0), t=Math.max(Math.round(+SET.nfToegewezen||0),0);
+    return Math.max(d-t,0); }));
+  L.push('te gaan volgens de BUFFER  (doel - spaarsaldo):   '+_dV(()=>{
+    const d=Math.round(noodfondsModel().doel||0), s=spaarSaldo();
+    return s.missing?'onbekend':Math.max(d-Math.round(s.cur),0); }));
+  return L;
+}
+
+/* 4. Wat de grendelcheck in planMove() zou beslissen, voor elk item en beide richtingen. Dit is de
+      regel zelf, nagerekend op een kopie van de lijst. planMove() wordt niet aangeroepen. */
+function diagPlanMove(){
+  const L=[];
+  let G=null, items=[];
+  try{ G=planGrendel(); items=planItems(); }catch(e){ return ['FOUT: '+e.message]; }
+  const ids0=items.map(x=>x.id);
+  L.push('grendel dicht: '+(G?'JA':'NEE'));
+  items.forEach((it,i)=>{
+    [[-1,'omhoog'],[1,'omlaag']].forEach(([dir,lbl])=>{
+      const ids=ids0.slice(), j=i+dir;
+      if(j<0||j>=ids.length){ L.push(`  ${i}. ${it.naam} ${lbl}: geen buur, valt uit op de grens`); return; }
+      ids.splice(j,0,ids.splice(i,1)[0]);
+      L.push(`  ${i}. ${it.naam} (${it.id}) ${lbl}: ${(G&&ids[0]!==PLAN_NF)?'GEBLOKKEERD':'DOORGELATEN'} -> ${_dJ(ids)}`);
+    });
+  });
+  return L;
+}
+
+/* 5. Wat allocatePlan() aan dezelfde items hangt. Loopt dit uiteen met blok 4, dan beslissen twee
+      functies verschillend over dezelfde grendel. */
+function diagAlloc(){
+  try{
+    return allocatePlan().map((x,i)=>`  ${i}. ${x.naam} (${x.id}) type=${x.type} mode=${x.mode}`
+      +` status=${_dJ(x.status)} alloc=${x.alloc} rest=${x.rest} grendel=${x.grendel?'ja':'nee'}`);
+  }catch(e){ return ['FOUT: '+e.message]; }
+}
+
+const DIAG_BLOKKEN=[
+  {titel:'welke versie draait', lees:diagVersie},
+  {titel:'de volgorde', lees:diagVolgorde},
+  {titel:'de grendel', lees:diagGrendel},
+  {titel:'wat planMove() zou beslissen (nagerekend, niet uitgevoerd)', lees:diagPlanMove},
+  {titel:'wat allocatePlan() zegt', lees:diagAlloc},
+];
+
+async function diagTekst(){
+  const L=['=== MINDER DIAGNOSE ===','tijd: '+new Date().toString()];
+  for(let i=0;i<DIAG_BLOKKEN.length;i++){
+    const b=DIAG_BLOKKEN[i];
+    L.push('', `-- ${i+1}. ${b.titel} --`);
+    let r; try{ r=await Promise.resolve(b.lees()); }catch(e){ r=['FOUT: '+e.message]; }
+    for(const regel of (Array.isArray(r)?r:[String(r)])) L.push(String(regel));
+  }
+  L.push('', '=== EINDE ===');
+  return L.join('\n');
+}
+
+/* De uitvoer draagt bedragen uit je eigen gegevens. Hij blijft op dit toestel; hij gaat er alleen
+   af als je hem zelf ergens plakt. Dat staat er ook boven, want het scherm hoort te zeggen wat het
+   in handen geeft. */
+async function diagOpen(){
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="margin-bottom:6px"><span class="hlabel" style="margin:0;flex:1">Diagnose</span>
+      <span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="small muted" style="margin-bottom:8px;line-height:1.5">Een uitlezing van wat de app op dit toestel meet. Dit scherm leest alleen: er verandert niets aan je gegevens door te kijken. De uitvoer bevat je eigen bedragen en blijft op dit toestel, tenzij je hem zelf ergens plakt.</div>
+    <textarea id="diagUit" readonly onclick="this.select()" style="width:100%;height:46vh;box-sizing:border-box;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--fs-xs);line-height:1.45;white-space:pre;overflow:auto;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px">Bezig met lezen...</textarea>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <button class="btn" id="diagCopy" onclick="diagCopy()" style="flex:1">Kopieer</button>
+    </div>`;
+  showSheetBg();
+  let t; try{ t=await diagTekst(); }catch(e){ t='FOUT bij het lezen: '+e.message; }
+  const el=$('#diagUit'); if(el) el.value=t;
+}
+async function diagCopy(){
+  const el=$('#diagUit'); if(!el) return;
+  try{ await navigator.clipboard.writeText(el.value); toast(`${ICON('check')} Diagnose gekopieerd`); }
+  catch(_){ try{ el.select(); }catch(__){} toast('Kopieren lukte niet; de tekst staat geselecteerd'); }
+}
+
+/* De lange tik. Er staat nergens in de app een versienummer, en er een bij zetten zou een tweede
+   versiestring naast CACHE in sw.js maken - precies de val die v215 ons kostte. Dus hangt hij aan
+   de voetregel die de verborgen vijf-tik al draagt. De vlag zorgt dat de tik die na een lange druk
+   alsnog afgaat niet ook nog bankAdvTap() optelt. */
+function diagDruk(aan){
+  clearTimeout(window._diagT);
+  if(!aan) return;
+  window._diagT=setTimeout(()=>{ window._diagLang=Date.now(); diagOpen(); }, 700);
 }
 
 function setModus(){

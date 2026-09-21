@@ -16,7 +16,9 @@ product; hou die inline structuur intact. Wat er verder ligt (`sw.js`, `manifest
 iconen) laat `ls` je zien. Twee dingen die je daar niet aan afleest:
 - `piekdag-meten.js` is **geen app-code**: een leesscript dat je in de console van je eigen browser
   plakt om de twee piekdag-constanten op je eigen maanden te beoordelen (`v239`). Het schrijft niets
-  en hoort niet in `index.html`; de app kan zonder.
+  en hoort niet in `index.html`; de app kan zonder. Een losse variant hiervan voor de grendel heeft
+  kort bestaan en is bij `v244` weer verdwenen: op een telefoon is er geen console, dus die meting
+  zit nu in de app zelf (`DIAG_BLOKKEN`). Twee kopieën van dezelfde uitlezing zouden uiteenlopen.
 - `Open-banking-koppeling-plan.md` is een **referentieplan**, geen gebouwde koppeling. De
   MT940/CSV-import blijft de basis; lees het niet als beschrijving van werkende code.
 - `ACCMETA[acc]` draagt naast `balance` ook `date`: de dag waarop dat saldo gold (`v198`). Dat veld
@@ -90,6 +92,19 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **Diagnose leest alleen, en groeit per blok** (`v244`): het verborgen scherm achter een lange
+  druk op de voetregel in Instellingen (`diagOpen()`) is een uitlezing van wat de app op dít
+  toestel meet, want de gegevens van de gebruiker staan alleen daar en op een telefoon is er geen
+  console. KIJKEN VERANDERT NIETS: geen `save()`, niets naar `SET`, niets naar `localStorage`, geen
+  netwerk, en `planMove()` wordt nagerekend op een kopie en niet uitgevoerd. `diagnose-scherm.spec.js`
+  meet dat op `localStorage.setItem` en niet alleen op de inhoud achteraf: een schrijver die
+  dezelfde waarde terugzet is ook een schrijver. De blokken staan in `DIAG_BLOKKEN` en nergens
+  anders; `diagTekst()` en het scherm kennen geen enkel blok bij naam, dus een blok erbij is een
+  entry erbij. Een lezer mag een promise teruggeven (blok 1 wacht op `caches.keys()`), en een blok
+  dat stukgaat neemt de rest niet mee. DIT IS GEEN ELEMENT DAT IETS OVER JE GELD ZEGT: spiegel,
+  gevolg en keuze gelden hier niet, want er volgt geen stap uit. Er komt geen versienummer in beeld
+  om de ingang aan te hangen: dat zou een tweede versiestring naast `CACHE` in `sw.js` maken, en
+  wat dat kost staat onder de meetlessen.
 - **Op Inzichten is de stand het enige kader** (`v241`): `insHeroKaart()` laste de stand van de
   maand en "Nog deze maand" in een kaart. Twee vragen in een kader is een kader te veel: gemeten op
   360px was die kaart 351px en stond de onderkant van het tweede signaal op 602px bij 567px
@@ -445,7 +460,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v243` → `minder-v244`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v244` → `minder-v245`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de
