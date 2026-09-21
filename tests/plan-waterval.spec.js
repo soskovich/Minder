@@ -93,9 +93,16 @@ test.describe('a · de kaart toont het mechanisme', () => {
     const alloc = await page.evaluate(() => euro0(allocatePlan().find((x) => x.id === 'gA').alloc));
     expect(r.rij).toContain(alloc + '/mnd');
     expect(r.heel).toMatch(/€1\.500 toegewezen \/ €9\.000/);   // en waar hij staat
-    // v246: en de tak boven het vat draagt hetzelfde bedrag, want beide lezen p.alloc
-    const tak = await page.locator('.plan-tak[data-tak="gA"]').innerText();
-    expect(tak).toContain(alloc + '/mnd');
+    /* v246b: de tak droeg dit bedrag ook, en sinds de tekst boven het vat staat noemt de kop het
+       één regel hoger. Twee keer hetzelfde getal is een tweede bron, dus de tak draagt alleen nog
+       kleur en dikte; die dikte komt uit hetzelfde segment als de balk erboven. */
+    const tak = await page.evaluate(() => {
+      const t = document.querySelector('.plan-tak[data-tak="gA"]');
+      return { tekst: t.innerText.trim(), w: parseFloat(t.querySelector('i').style.width) };
+    });
+    expect(tak.tekst).toBe('');
+    expect(tak.w).toBeCloseTo(await page.evaluate(() =>
+      allocatePlan().find((x) => x.id === 'gA').alloc / planCapacity() * 100), 1);
   });
 });
 

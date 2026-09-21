@@ -126,14 +126,24 @@ genoemde versietag.)*
   stilstand en 2 bij beweging, zoals `v194` hem legde).
   GEEN TIJDAS. Met meerdere ontvangers is hoogte niet meer gelijk aan duur, dus een maandschaal
   langs de kolom zou liegen. Dat is een keuze en geen omissie, en `plan-vaten.spec.js` bewaakt hem.
-  DE SCHAAL: aandeel van de som van de doelbedragen over `VAT_BUDGET` (480px), met `VAT_MIN` (98px,
-  gemeten: de inhoud van het hoogste datumpaar op 360px) als bodem, water-fillend herverdeeld tot
-  er niemand meer bij klemt. Boven het breekpunt (`aantal × VAT_MIN > VAT_BUDGET`, dus vanaf vijf
-  vaten) groeit de kolom mee in plaats van dat een vat inklapt of verdwijnt: inklappen zou precies
-  het mechanisme verbergen dat dit scherm moet tonen.
-  EEN GEKLEMD VAT IS NIET OP SCHAAL EN ZEGT DAT. Gemeten stond een doel van €3.000 op de bodem
-  naast een noodfonds van €5.301, een verhouding van 1,3 terwijl het bedrag 1,8 keer zo groot is.
-  Daarom een gestippelde bovenrand in `--mut2` plus een `.sr-only`-regel met dezelfde inhoud.
+  DE TEKST STAAT BOVEN HET VAT EN NIET ERIN (`v246b`), en dat is de reden dat de bodem laag kan
+  blijven. Met de tekst erin was `VAT_MIN` 98px, en bij die bodem klemden op de gemeten gegevens
+  twee van de drie vaten: de inrichting kreeg naar verhouding 59px en het noodfonds 95px, allebei
+  eronder, dus ze stonden even hoog terwijl hun bedragen 77% schelen. Dat is exact het bezwaar
+  waarmee de linkergoot is afgewezen, alleen van binnenuit. `.vat-kop` draagt nu naam, maandbedrag,
+  `planStand()` en het datumpaar; `.vat` is alleen nog de vorm met zijn vulling.
+  DE SCHAAL: aandeel van de som van de doelbedragen over `VAT_BUDGET` (480px), met `VAT_MIN` (20px,
+  de kleinste hoogte waarop een vat nog als vorm leest) als bodem, water-fillend herverdeeld tot er
+  niemand meer bij klemt. Boven het breekpunt (`aantal × VAT_MIN > VAT_BUDGET`, dus vanaf 25 vaten)
+  groeit de kolom mee in plaats van dat een vat inklapt of verdwijnt: inklappen zou precies het
+  mechanisme verbergen dat dit scherm moet tonen. Op de gemeten gegevens (5.301, 16.000, 3.000)
+  klemt geen enkel vat en staan ze op 105, 316 en 59px, oftewel 19,8 tegen 19,8 tegen 19,7px per
+  duizend euro.
+  EEN GEKLEMD VAT IS NIET OP SCHAAL EN ZEGT DAT: een gestippelde bovenrand in `--mut2` plus een
+  `.sr-only`-regel met dezelfde inhoud. Dat blijft nodig, want onder de bodem kan het nog steeds
+  gebeuren; het is alleen geen dagelijks geval meer.
+  DE TAK DRAAGT GEEN TEKST. Hij had een label met het maandbedrag, en sinds de kop dat bedrag één
+  regel hoger noemt is dat een tweede bron. Kleur en dikte komen uit hetzelfde segment als de balk.
   KLEUR DRAAGT DE VERBINDING die de afstand niet meer draagt: segment en tak delen hun tint uit
   `planTint()`, mengsels van de bestaande `--teal` met `--card2`, en geen nieuwe tokens.
   HET NOODFONDS DRAAGT GEEN TWEEDE DATUM en geen markering. Dat is het zichtbare verschil tussen de
@@ -512,7 +522,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v246` → `minder-v247`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v247` → `minder-v248`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

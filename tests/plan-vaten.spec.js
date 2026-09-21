@@ -66,15 +66,21 @@ async function boot(page, o, breed) {
   await page.waitForFunction(() => typeof planVatHoogten === 'function');
   await page.evaluate(() => go('vooruit'));
 }
-const vaten = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .vat')].map((v) => ({
-  id: v.closest('.plan-item').dataset.id,
-  h: Math.round(v.getBoundingClientRect().height),
-  nodig: Math.ceil(v.querySelector('.vat-in').getBoundingClientRect().height),
-  geklemd: v.dataset.geklemd === '1', laat: v.dataset.laat === '1',
-  dat: (v.querySelector('.vat-dat') || { innerText: '' }).innerText.replace(/\s+/g, ' ').trim(),
-})));
+/* v246b: de tekst van een bestemming staat BOVEN zijn vat, in .vat-kop. Het vat is alleen nog de
+   vorm met zijn vulling. Elke regel die in het vat stond tilde de bodem op, en bij een bodem van
+   98px klemden op de gemeten gegevens twee van de drie vaten: ze stonden even hoog terwijl hun
+   bedragen 77% scheelden. */
+const vaten = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .vat')].map((v) => {
+  const it = v.closest('.plan-item');
+  return { id: it.dataset.id,
+    h: Math.round(v.getBoundingClientRect().height),
+    kop: Math.round(it.querySelector('.vat-kop').getBoundingClientRect().height),
+    geklemd: v.dataset.geklemd === '1', laat: v.dataset.laat === '1',
+    dat: (it.querySelector('.vat-dat') || { innerText: '' }).innerText.replace(/\s+/g, ' ').trim() };
+}));
+// de tak draagt sinds v246b geen tekst meer: het bedrag staat in de kop één regel erboven
 const takken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .plan-tak')]
-  .map((t) => ({ id: t.dataset.tak, label: t.querySelector('span').innerText.replace(/\s+/g, ' ') })));
+  .map((t) => ({ id: t.dataset.tak, w: parseFloat(t.querySelector('i').style.width) })));
 const KK = (o) => Object.assign({ id: 'g1', naam: 'Kosten Koper', doel: 16000, gespaard: 0, allocMode: 'auto' }, o);
 const IW = (o) => Object.assign({ id: 'g2', naam: 'Inrichting woning', doel: 3000, gespaard: 0, allocMode: 'auto' }, o);
 
@@ -87,7 +93,10 @@ test.describe('a · de grendel in beeld', () => {
     expect(await page.evaluate(() => planGrendel())).toMatchObject({ dicht: true, rest: 4201 });
     const T = await takken(page);
     expect(T.map((x) => x.id)).toEqual(['noodfonds']);      // de andere twee krijgen niets, dus geen tak
-    expect(T[0].label).toContain('€3.000/mnd');             // de hele inleg
+    expect(T[0].w).toBeCloseTo(100, 1);                     // de hele inleg, dus de volle breedte
+    // en het bedrag staat in de kop erboven, één keer
+    expect(await page.locator('#s-vooruit .plan-item[data-id="noodfonds"] .vat-kop').innerText())
+      .toContain('€3.000/mnd');
   });
 
   test('het noodfonds noemt de maand waarin hij vol is, en de twee doelen wachten', async ({ page }) => {
@@ -220,14 +229,23 @@ test.describe('c · de schaal', () => {
   const drie = { goals: [KK({ streefdatum: overMnd(21) }), IW({ streefdatum: overMnd(28) })],
     planOrder: ['noodfonds', 'g1', 'g2'] };
 
-  test('geen vat onder de minimumhoogte, en geen vat knipt zijn eigen tekst af', async ({ page }) => {
-    await boot(page, drie);
-    const MIN = await page.evaluate(() => VAT_MIN);
-    for (const v of await vaten(page)) {
-      expect(v.h, v.id).toBeGreaterThanOrEqual(MIN);
-      expect(v.nodig, v.id + ' inhoud past').toBeLessThanOrEqual(v.h);
-    }
-  });
+  test('op de gemeten gegevens is geen enkel vat geklemd, en staan ze onderling op schaal',
+    async ({ page }) => {
+      await boot(page, drie);
+      const MIN = await page.evaluate(() => VAT_MIN);
+      const V = await vaten(page);
+      const doelen = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, p.doel])));
+      expect(V.length).toBe(3);
+      for (const v of V) {
+        expect(v.h, v.id).toBeGreaterThanOrEqual(MIN);
+        expect(v.geklemd, v.id + ' niet geklemd').toBe(false);
+      }
+      /* px per euro is voor alle drie hetzelfde: dat is wat "op schaal" betekent. De marge is de
+         afronding naar hele pixels, en die weegt op het kleinste vat het zwaarst: één pixel op 59
+         is 1,7%. Drie procent dekt dat en laat een echte scheefstand vallen. */
+      const perEuro = V.map((v) => v.h / doelen[v.id]);
+      for (const x of perEuro) expect(Math.abs(x - perEuro[0]) / perEuro[0]).toBeLessThan(0.03);
+    });
 
   test('de kolom blijft binnen zijn budget, en de vrije vaten staan op schaal', async ({ page }) => {
     await boot(page, drie);
@@ -236,21 +254,28 @@ test.describe('c · de schaal', () => {
     expect(V.reduce((a, v) => a + v.h, 0)).toBeLessThanOrEqual(Math.max(c.BUD, V.length * c.MIN) + 2);
     const doelen = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, p.doel])));
     const vrij = V.filter((v) => !v.geklemd);
+    expect(vrij.length).toBeGreaterThan(1);
     for (let i = 1; i < vrij.length; i++)
       expect(vrij[i].h / vrij[0].h).toBeCloseTo(doelen[vrij[i].id] / doelen[vrij[0].id], 1);
   });
 
-  test('het kleinste vat houdt zijn minimumhoogte naast een doel van €16.000', async ({ page }) => {
-    await boot(page, drie);
-    const V = await vaten(page);
-    const klein = V.find((x) => x.id === 'g2'), groot = V.find((x) => x.id === 'g1');
-    expect(klein.geklemd).toBe(true);
-    expect(klein.h).toBe(await page.evaluate(() => VAT_MIN));
-    expect(groot.h).toBeGreaterThan(klein.h * 2);
-  });
+  test('een doel dat te klein is voor de bodem houdt de bodem, naast een doel van €16.000',
+    async ({ page }) => {
+      // €200 naast €16.000 valt onder de bodem; €3.000 op de gemeten gegevens niet meer
+      await boot(page, { goals: [KK({ streefdatum: overMnd(21) }), IW({ doel: 200, streefdatum: overMnd(28) })],
+        planOrder: ['noodfonds', 'g1', 'g2'] });
+      const V = await vaten(page);
+      const klein = V.find((x) => x.id === 'g2'), groot = V.find((x) => x.id === 'g1');
+      expect(klein.geklemd).toBe(true);
+      expect(klein.h).toBe(await page.evaluate(() => VAT_MIN));
+      expect(groot.geklemd).toBe(false);
+      expect(groot.h).toBeGreaterThan(klein.h * 2);
+    });
 
   test('precies de geklemde vaten dragen de markering, de andere niet', async ({ page }) => {
-    await boot(page, drie);
+    // een mengsel is nodig: op de gemeten gegevens klemt sinds v246b geen enkel vat meer
+    await boot(page, { goals: [KK({ streefdatum: overMnd(21) }), IW({ doel: 200, streefdatum: overMnd(28) })],
+      planOrder: ['noodfonds', 'g1', 'g2'] });
     const r = await page.evaluate(() => {
       const H = planVatHoogten(allocatePlan());
       return [...document.querySelectorAll('#s-vooruit .vat')].map((v) => {
@@ -271,17 +296,30 @@ test.describe('c · de schaal', () => {
     }
   });
 
+  /* Het breekpunt ligt bij aantal x VAT_MIN > VAT_BUDGET. Met een bodem van 20px is dat pas vanaf
+     25 vaten, en zoveel bestemmingen in een fixture zetten maakt de regel niet scherper. De regel
+     zelf is puur, dus die toetsen we op planVatHoogten(); dat de weergave die hoogten gebruikt
+     staat in de tests hierboven. */
   test('boven het breekpunt groeit de kolom mee in plaats van dat een vat verdwijnt', async ({ page }) => {
-    const veel = []; for (let i = 1; i <= 8; i++) veel.push({ id: 'v' + i, naam: 'Doel ' + i,
-      doel: 1000 * i, gespaard: 0, allocMode: 'auto', streefdatum: overMnd(24 + i) });
-    await boot(page, Object.assign({ goals: veel, planOrder: ['noodfonds'].concat(veel.map((g) => g.id)) }, VOL));
-    const c = await page.evaluate(() => ({ MIN: VAT_MIN, BUD: VAT_BUDGET }));
-    const V = await vaten(page);
-    expect(V.length).toBe(8);                       // het noodfonds is vol en ingeklapt
-    const som = V.reduce((a, v) => a + v.h, 0);
-    expect(som).toBeGreaterThan(c.BUD);             // het budget alleen kan dit niet meer dragen
-    expect(som).toBeLessThanOrEqual(Math.max(c.BUD, V.length * c.MIN) + 2);
-    for (const v of V) expect(v.h, v.id).toBeGreaterThanOrEqual(c.MIN);
+    await boot(page, drie);
+    const r = await page.evaluate(() => {
+      const maak = (n) => Array.from({ length: n }, (_, i) => ({ id: 'x' + i, doel: 1000 * (i + 1) }));
+      const meet = (n) => {
+        const H = planVatHoogten(maak(n));
+        const hs = Object.values(H).map((x) => x.h);
+        return { n, som: hs.reduce((a, b) => a + b, 0), min: Math.min(...hs), aantal: hs.length };
+      };
+      return { onder: meet(10), breek: meet(Math.ceil(VAT_BUDGET / VAT_MIN) + 5),
+        MIN: VAT_MIN, BUD: VAT_BUDGET };
+    });
+    expect(r.onder.aantal).toBe(10);
+    expect(r.onder.som).toBeLessThanOrEqual(r.BUD + 2);
+    expect(r.onder.min).toBeGreaterThanOrEqual(r.MIN);
+    // erboven: geen vat verdwijnt, geen vat zakt onder de bodem, en de kolom groeit mee
+    expect(r.breek.aantal).toBe(Math.ceil(r.BUD / r.MIN) + 5);
+    expect(r.breek.min).toBeGreaterThanOrEqual(r.MIN);
+    expect(r.breek.som).toBeGreaterThan(r.BUD);
+    expect(r.breek.som).toBeLessThanOrEqual(r.breek.aantal * r.MIN + r.BUD);
   });
 });
 
@@ -352,11 +390,18 @@ test.describe('d · de balk en de takken', () => {
       expect(r.takken[0].w).toBeCloseTo(r.alloc.g1 / r.cap * 100, 1);
     });
 
-  test('de tak noemt hetzelfde bedrag als de balk erboven verdeelt', async ({ page }) => {
+  /* v246b: de tak droeg een label met het maandbedrag, en sinds de tekst boven het vat staat noemt
+     de kop dat bedrag één regel hoger. Twee keer hetzelfde getal is een tweede bron, dus de tak
+     draagt alleen nog kleur en dikte. */
+  test('het maandbedrag staat één keer, in de kop boven de tak', async ({ page }) => {
     await boot(page, twee);
-    const T = await takken(page);
     const alloc = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, euro0(p.alloc)])));
-    for (const t of T) expect(t.label, t.id).toContain(alloc[t.id] + '/mnd');
+    for (const t of await takken(page)) {
+      const kop = await page.locator(`#s-vooruit .plan-item[data-id="${t.id}"] .vat-kop`).innerText();
+      expect(kop, t.id).toContain(alloc[t.id] + '/mnd');
+    }
+    expect(await page.evaluate(() =>
+      [...document.querySelectorAll('#s-vooruit .plan-tak')].every((t) => !t.innerText.trim()))).toBe(true);
   });
 });
 
