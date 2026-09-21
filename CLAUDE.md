@@ -132,13 +132,18 @@ genoemde versietag.)*
   eronder, dus ze stonden even hoog terwijl hun bedragen 77% schelen. Dat is exact het bezwaar
   waarmee de linkergoot is afgewezen, alleen van binnenuit. `.vat-kop` draagt nu naam, maandbedrag,
   `planStand()` en het datumpaar; `.vat` is alleen nog de vorm met zijn vulling.
-  DE SCHAAL: aandeel van de som van de doelbedragen over `VAT_BUDGET` (480px), met `VAT_MIN` (20px,
-  de kleinste hoogte waarop een vat nog als vorm leest) als bodem, water-fillend herverdeeld tot er
-  niemand meer bij klemt. Boven het breekpunt (`aantal × VAT_MIN > VAT_BUDGET`, dus vanaf 25 vaten)
+  DE SCHAAL: aandeel van de som van de doelbedragen over `VAT_BUDGET`, met `VAT_MIN` (20px, de
+  kleinste hoogte waarop een vat nog als vorm leest) als bodem, water-fillend herverdeeld tot er
+  niemand meer bij klemt. Boven het breekpunt (`aantal × VAT_MIN > VAT_BUDGET`, dus vanaf 17 vaten)
   groeit de kolom mee in plaats van dat een vat inklapt of verdwijnt: inklappen zou precies het
-  mechanisme verbergen dat dit scherm moet tonen. Op de gemeten gegevens (5.301, 16.000, 3.000)
-  klemt geen enkel vat en staan ze op 105, 316 en 59px, oftewel 19,8 tegen 19,8 tegen 19,7px per
-  duizend euro.
+  mechanisme verbergen dat dit scherm moet tonen.
+  `VAT_BUDGET` IS DE ENIGE KNOP AAN DE SCHAAL en staat daarom als losse constante boven
+  `planVatHoogten()`. Hij is 320px: groter is fijnmaziger en kost pagina, kleiner is compacter en
+  duwt eerder vaten op de bodem. Hij stond op 480, gekozen toen de bodem nog 78 of 98px was en een
+  klein vat zijn eigen tekst moest kunnen dragen; sinds de tekst boven het vat staat heeft die
+  reden geen grond meer en kostte die 480 ruim 150px pagina die grotendeels leeg vat van het
+  grootste doel was. Op de gemeten gegevens (5.301, 16.000, 3.000) klemt geen enkel vat en staan ze
+  op 70, 211 en 40px, oftewel 13,21 tegen 13,19 tegen 13,33px per duizend euro.
   EEN GEKLEMD VAT IS NIET OP SCHAAL EN ZEGT DAT: een gestippelde bovenrand in `--mut2` plus een
   `.sr-only`-regel met dezelfde inhoud. Dat blijft nodig, want onder de bodem kan het nog steeds
   gebeuren; het is alleen geen dagelijks geval meer.

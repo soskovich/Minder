@@ -5648,7 +5648,15 @@ function planRij(id){ window._planRij=(window._planRij===id)?null:id; render(); 
    BOVEN het vat en het vat is alleen nog de vorm met zijn vulling, dus de bodem is die van een
    leesbare vorm en niet die van een alinea. Op de gemeten gegevens klemt daarmee geen enkel vat. */
 const VAT_MIN=20;        // de kleinste hoogte waarop een vat nog als vorm leest, met zijn drie lagen zichtbaar
-const VAT_BUDGET=480;    // de hoogte die de vatenkolom mag innemen zolang de minimumhoogte past
+/* DE ENIGE KNOP AAN DE SCHAAL. Hoeveel hoogte de vatenkolom samen mag innemen; elk vat krijgt
+   daarvan zijn aandeel naar doelbedrag. Groter is fijnmaziger en kost pagina, kleiner is compacter
+   en duwt eerder vaten op de bodem. Voelt het na een week te krap of te ruim, dan is dit de regel
+   die je bijstelt en verder niets.
+   v247b: stond op 480, gekozen toen de bodem nog 78 of 98px was en een klein vat zijn eigen tekst
+   moest kunnen dragen. Sinds de tekst boven het vat staat heeft die reden geen grond meer, en de
+   480 kostte ruim 150px pagina die grotendeels leeg vat van het grootste doel was. Gemeten op
+   320: de drie vaten van de gemeten gegevens staan op 70, 211 en 40px, geen van drieën geklemd. */
+const VAT_BUDGET=320;
 
 /* De schaal. Hoogte naar doelbedrag kan niet zonder budget: het kleinste doel op de minimumhoogte
    zetten maakt een doel van 16.000 ruim 400px en loopt bij een grotere spreiding hard weg. Dus:
