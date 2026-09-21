@@ -2938,7 +2938,10 @@ function financeModel(){
 function coHorizonMeer(behalveId){
   try{ return allocatePlan().filter(x=>x.type==='goal'&&x.streefdatum&&x.id!==behalveId
     &&x.status!=='bereikt'&&x.status!=='gepauzeerd'
-    &&(function(){ const T=doelTempo(x,x.alloc); return !!(T&&T.gat>0); })()).length; }catch(_){ return 0; }
+    /* v243: knelt in plaats van gat>0. Een doel dat achter de grendel niet meer op tijd kan komen
+       heeft geen tekort per maand, want dat bedrag bestaat niet, maar het is wel het geval dat het
+       hardst telt. Zwijgen zou het stilletjes uit deze telling houden. */
+    &&(function(){ const T=doelTempo(x,x.alloc); return !!(T&&T.knelt); })()).length; }catch(_){ return 0; }
 }
 function coHorizonVraag(m){
   const H=coHorizonBron(); if(!H) return '';
@@ -2949,7 +2952,12 @@ function coHorizonVraag(m){
        waren. maandDoel() pakt het eerste doel in je plan, en die volgorde is je eigen prioriteit;
        eén ding tegelijk aanbieden is goed, doen alsof er maar één is niet. */
     const meer=coHorizonMeer(H.p&&H.p.id);
-    vraag=`Je legt ${euro0(H.T.gat)} per maand te weinig in voor ${esc(H.p.naam||'dit doel')}${meer>0?`, en voor ${meer} ${meer===1?'ander doel':'andere doelen'} ook`:''}. Wil je kijken waar dat vandaan kan komen?`;
+    const ook=meer>0?`, en voor ${meer} ${meer===1?'ander doel':'andere doelen'} ook`:'';
+    /* v243: bij 'te laat' bestaat er geen bedrag per maand, en euro0(null) zou er stil 0 van maken.
+       De vraag noemt dan het feit in plaats van een getal; de telling erachter blijft dezelfde. */
+    vraag = (H.T.soort==='telaat')
+      ? `${esc(H.p.naam||'Dit doel')} haalt zijn streefdatum niet zolang je buffer voorgaat${ook}. Wil je kijken wat je daarmee wilt?`
+      : `Je legt ${euro0(H.T.gat)} per maand te weinig in voor ${esc(H.p.naam||'dit doel')}${ook}. Wil je kijken waar dat vandaan kan komen?`;
   } else if(H.verschil>0){
     const n=H.verschil;
     vraag=`Je projectie komt ${n} ${n===1?'jaar':'jaar'} na ${H.doelJaar} uit. Wil je kijken wat dat verschuift?`;
@@ -3171,6 +3179,25 @@ function doelDatumLabel(ym){
   const mo=+m[2]; if(mo<1||mo>12) return '';
   return MFULL[mo-1]+' '+m[1];
 }
+/* v243: de grendel zat hier nog niet in. Een doel dat op de buffer wacht krijgt tot die vol is per
+   definitie niets, dus het venster begint niet vandaag maar op de maand dat de grendel opengaat.
+   Gemeten geval: een buffer met nog 31.000 te gaan op 3.000 per maand gaat over 11 maanden open;
+   voor 3.000 in juni 2028 is het venster dan 10 maanden en niet 21, en het bedrag 300 per maand en
+   niet 143. Dat is geen tekstkwestie maar een rekenfout die v242 introduceerde.
+   DE SLEUTEL IS goal.grendel, het veld dat allocatePlan() sinds v242 aan elk wachtend item hangt.
+   Eén bron: G.maanden voor de som, planGrendelDatum(G) voor het label, allebei dezelfde G die de
+   wacht-regel al draagt. Een object zonder dat veld (een handgemaakt doel, of een item met een open
+   grendel) valt vanzelf terug op vandaag, en dan is deze functie woordelijk wat hij was.
+   DRIE UITKOMSTEN, want twee randgevallen hebben geen bedrag:
+     normaal  - het venster is er, benodigd en gat zijn getallen
+     onbekend - de openingsmaand is niet te bepalen (geen spaarinleg, of een niet vastgestelde
+                spaarstand). Geen bedrag, gat null: er valt niets te berekenen, dus ook niets te
+                melden (v59/v73).
+     telaat   - de openingsmaand valt OP of NA de streefdatum, dus het venster is nul of negatief.
+                Geen bedrag per maand, want dat bestaat niet, en nooit een deling door nul. Maar het
+                gat is hier NIET null: dit is het ergste dat deze functie kan opleveren, en zwijgen
+                zou betekenen dat Grip niets zegt over precies het doel waar het het meest over te
+                zeggen heeft. Daarvoor draagt hij `knelt`, en dat is wat de tellers lezen. */
 function doelTempo(goal, alloc){
   const g=goal||{};
   const maandenTot=doelMaandenTot(g.streefdatum);
@@ -3178,9 +3205,23 @@ function doelTempo(goal, alloc){
   const rest=(g.rest!=null)?Math.max(Math.round(+g.rest||0),0)
                            :Math.max(Math.round((+g.doel||0)-(+g.gespaard||0)),0);
   if(rest<=0) return null;                                        // al bereikt: niets terug te rekenen
+  const G=g.grendel||null;
+  if(G){
+    if(G.onbekend || !(G.maanden>0))
+      return {soort:'onbekend', maandenTot, start:null, startLabel:'', venster:null,
+              benodigd:null, gat:null, haalbaar:false, knelt:false};
+    const start=G.maanden, venster=maandenTot-start;
+    if(venster<=0)                                               // op of na de streefdatum
+      return {soort:'telaat', maandenTot, start, startLabel:planGrendelDatum(G), venster,
+              benodigd:null, gat:null, haalbaar:false, knelt:true};
+    const ben=Math.ceil(rest/venster), gt=ben-Math.max(Math.round(+alloc||0),0);
+    return {soort:'normaal', maandenTot, start, startLabel:planGrendelDatum(G), venster,
+            benodigd:ben, gat:gt, haalbaar:gt<=0, knelt:gt>0};
+  }
   const benodigd=Math.ceil(rest/maandenTot);
   const gat=benodigd-Math.max(Math.round(+alloc||0),0);
-  return {maandenTot, benodigd, gat, haalbaar:gat<=0};
+  return {soort:'normaal', maandenTot, start:0, startLabel:'', venster:maandenTot,
+          benodigd, gat, haalbaar:gat<=0, knelt:gat>0};
 }
 /* De zin eromheen: spiegel (wat je nu doet), gevolg (wat de datum vraagt), keuze (het verschil).
    Geen oordeel, geen aanmoediging. Spreekt eta niet tegen: beide lezen dezelfde rest en alloc,
@@ -3202,13 +3243,22 @@ function doelTempoLine(p){
      dezelfde bron die de kop van het plan al gebruikt. */
   const _cap=planCapacity();
   const capZin=_cap>0?` Je hele plan heeft ${euro0(_cap)} per maand te verdelen.`:'';
-  if(!(p.alloc>0)) return wrap(`Er gaat op dit moment niets naar dit doel. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig.${capZin}`);
+  /* v243: de twee uitkomsten zonder bedrag komen eerst, want daaronder staat overal euro0(benodigd)
+     en dat is hier null. GEEN 'te verdelen'-staart bij onbekend: die zin zet een bedrag naast een
+     bedrag, en het eerste van die twee bestaat niet. */
+  if(T.soort==='onbekend')
+    return wrap(`Wat je per maand nodig hebt is nog niet te rekenen: het is niet bekend wanneer je buffer vol is, en tot die tijd gaat je hele spaarinleg daarheen.`);
+  if(T.soort==='telaat')
+    return wrap(`${lbl} is niet te halen zolang je buffer eerst vol moet. Die is op dit tempo pas rond ${T.startLabel} vol, en dan is die datum er al${_cap>0?`. Je hele plan heeft ${euro0(_cap)} per maand te verdelen`:''}.`);
+  // v243: een doel dat op de buffer wacht begint pas als de grendel opengaat, en de zin zegt wanneer
+  const vanaf=T.startLabel?`vanaf ${T.startLabel} `:'';
+  if(!(p.alloc>0)) return wrap(`Er gaat op dit moment niets naar dit doel. Voor ${bedrag} in ${lbl} heb je ${vanaf}${euro0(T.benodigd)} per maand nodig.${capZin}`);
   if(T.haalbaar){
     const sp=(p.eta!=null)?(T.maandenTot-p.eta):null;
     const staart=(sp!=null&&sp>0)?`, met ${sp} ${sp===1?'maand':'maanden'} speling`:(sp===0?', precies op de datum':'');
     return wrap(`Je huidige inleg haalt de datum${staart}.`);
   }
-  return wrap(`Je legt nu ${euro0(p.alloc)} per maand in. Voor ${bedrag} in ${lbl} heb je ${euro0(T.benodigd)} per maand nodig. Je komt ${euro0(T.gat)} per maand tekort.${capZin}`);
+  return wrap(`Je legt nu ${euro0(p.alloc)} per maand in. Voor ${bedrag} in ${lbl} heb je ${vanaf}${euro0(T.benodigd)} per maand nodig. Je komt ${euro0(T.gat)} per maand tekort.${capZin}`);
 }
 /* ---------- MAANDSCHERM (v130) ----------
    Eén scherm dat je één keer per maand opent, met de getallen die samen zeggen of je
@@ -3577,13 +3627,27 @@ function maandRegels(){
   try{ const d=maandDoel();
     if(d){
       const T=d.T;
-      const st = !T ? 'onbekend' : (T.gat>MAAND_DREMPEL.doelOk ? 'tekort' : 'ok');
-      uit.push({key:'doel', naam:d.p.naam||'Aankoopdoel', status:st,
-        waarde: T?euro0(T.benodigd):'onbekend', eenheid: T?`per maand nodig · nu ${euro0(d.p.alloc)}`:'geen streefdatum',
+      /* v243: drie uitkomsten uit doelTempo(). 'telaat' is een blokkade zonder bedrag: de datum is
+         zo niet te halen, en dat vraagt een beslissing (v175/v226). Hij draagt geen tekortPerMaand,
+         want dat bedrag bestaat niet; maandVerband() en acceptMaat() toetsen op > 0 en slaan hem dus
+         vanzelf over in plaats van een gat te dichten dat niet te dichten is.
+         'onbekend' is de andere kant: niets te rekenen, dus geen oordeel (v59/v73). */
+      const telaat = !!(T && T.soort==='telaat');
+      const onbek  = !!(T && T.soort==='onbekend');
+      const st = !T ? 'onbekend' : telaat ? 'tekort' : onbek ? 'onbekend'
+               : (T.gat>MAAND_DREMPEL.doelOk ? 'tekort' : 'ok');
+      const vanaf = (T && T.startLabel) ? `vanaf ${T.startLabel} ` : '';
+      uit.push({key:'doel', naam:d.p.naam||'Aankoopdoel', status:st, telaat,
+        waarde: telaat ? 'niet te halen' : (T&&!onbek) ? euro0(T.benodigd) : 'onbekend',
+        eenheid: telaat ? `zolang je buffer voorgaat · ${esc(doelDatumLabel(d.p.streefdatum))}`
+               : onbek ? 'nog niet te rekenen'
+               : T ? `per maand nodig · nu ${euro0(d.p.alloc)}` : 'geen streefdatum',
         gevolg: !T ? 'Zonder streefdatum valt er niets terug te rekenen.'
+              : telaat ? `Je buffer is op dit tempo pas rond ${T.startLabel} vol, terwijl je streefdatum ${doelDatumLabel(d.p.streefdatum)} is. Tot die tijd gaat je hele spaarinleg naar die buffer, dus dit doel staat stil.`
+              : onbek ? 'Er is nog niet bekend wanneer je buffer vol is, dus er valt voor dit doel niets terug te rekenen.'
               : st==='ok' ? `Je huidige inleg haalt de datum.`
-              : `Je legt nu ${euro0(d.p.alloc)} per maand in en je hebt ${euro0(T.benodigd)} nodig. Je komt ${euro0(T.gat)} per maand tekort.`,
-        tekortPerMaand: st==='tekort'?T.gat:0, act:`openGoal('${d.p.id}')`});
+              : `Je legt nu ${euro0(d.p.alloc)} per maand in en je hebt ${vanaf}${euro0(T.benodigd)} nodig. Je komt ${euro0(T.gat)} per maand tekort.`,
+        tekortPerMaand: (st==='tekort'&&!telaat)?T.gat:0, act:`openGoal('${d.p.id}')`});
     } }catch(_){}
   /* v186: hier stond de regel 'Patroon van de maand'. Hij las maandPatroon(), en dat filtert
      scoreNotifs() op de sleutels budget-, discr- en tempo. Die dragen alle drie h:'direct', dus dit
@@ -3630,7 +3694,9 @@ const BELEGGEN_VOORWAARDEN=[
 ];
 function beleggenWaarde(key, r){
   if(key==='buffer') return `${r.waarde} maanden`;
-  if(key==='doel')   return (r.tekortPerMaand>0)?`${euro0(r.tekortPerMaand)} tekort`:'geen tekort';
+  // v243: een doel dat achter de grendel niet meer op tijd komt heeft geen tekort per maand, maar
+  // 'geen tekort' zou daar het tegenovergestelde beweren van wat er aan de hand is.
+  if(key==='doel')   return r.telaat?'datum niet te halen':((r.tekortPerMaand>0)?`${euro0(r.tekortPerMaand)} tekort`:'geen tekort');
   return String(r.waarde);
 }
 function beleggenKlaar(R){
@@ -4018,6 +4084,10 @@ function maandSuggestie(r, m){
       : `${euro0(gat)} erbij brengt je buffer in totaal op je richtbedrag.`;
   }
   if(r.key==='doel'){
+    /* v243: bij 'te laat' is er geen bedrag per maand dat de datum haalbaar maakt, dus die zin kan
+       hier niet staan. Wat er wél is zijn de twee hefbomen die maandRegelOpties() nog levert; de
+       derde, meer inleggen, bestaat niet zolang de buffer voorgaat. Vaststellen, niet opdragen. */
+    if(r.telaat) return 'Zolang je buffer voorgaat komt er niets bij; wat hier beweegt is je streefdatum of je doelbedrag.';
     if(!(t>0)) return '';
     return `${euro0(t)} per maand erbij houdt die streefdatum haalbaar.`;
   }
@@ -4045,6 +4115,11 @@ function maandIngang(r, m){
   const mm=m||thisYM();   // v233: Grip leest nu
   const tik=(v)=>`<div class="small" style="margin:2px 0 0;line-height:1.45;color:var(--mut2);cursor:pointer" onclick="event.stopPropagation();coStart('maand','${esc(mm)}','${esc(r.key)}')">${v} <span style="color:var(--teal);font-weight:700">›</span></div>`;
   if(r.structureel) return tik('Wil je hier een afspraak over maken?');
+  /* v243: een doel dat achter de grendel niet meer op tijd komt heeft geen bedrag per maand, want
+     dat bestaat niet. Zonder eigen tak viel de ingang daarmee weg bij precies de regel die de
+     zwaarste is, en een melding die de enige drager van een ingang is mag niet stil verdwijnen.
+     Dus dezelfde vorm als bij een structureel signaal: een vraag zonder bedrag. */
+  if(r.telaat) return tik('Wil je kijken wat je met deze datum wilt?');
   const T=maandTekort(r); if(!T) return '';
   return tik(`Wil je kijken waar die ${euro0(T.bedrag)}${T.soort==='maand'?' per maand':''} vandaan kan komen?`);
 }
@@ -4873,7 +4948,13 @@ function resDekkingCard(){
     <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span>${standKop}</div>
     <div class="small muted" style="margin-top:4px">${D.aantal} ${D.aantal===1?'post':'posten'} · ${resAcc?`gemeten op ${esc(acctNiceName(resAcc))}`:'nog geen rekening aangewezen'} · <span style="color:var(--teal)">bekijk ›</span></div>
     ${kosten}${verschil}
-    <div class="small muted" style="margin-top:8px;line-height:1.5">Kosten die niet elke maand vallen. Deze inleg staat los van je plan hierboven: hij concurreert niet met je spaardoelen. Of je genoeg opzij hebt staan, lees je op Grip.</div>
+    <!-- v243: hier stonden drie zinnen die elkaar tegenspraken. 'Of je genoeg opzij hebt staan, lees
+         je op Grip' kwam uit v187, toen dit blok alleen het saldo droeg; sinds v242 staat het
+         verschil er een regel hoger, dus de kaart verwees naar elders voor iets wat ze zelf al zegt.
+         'Deze inleg' klopte ook niet meer: dit is een gemeten stand, geen inleg. Wat blijft is de
+         ene zin die voor iemand die dit blok voor het eerst ziet echte informatie draagt. De regel
+         'gemeten op <rekening>' erboven draagt de herkomst al. -->
+    <div class="small muted" style="margin-top:8px;line-height:1.5">Kosten die niet elke maand vallen. Dit staat los van je spaarinleg.</div>
     ${resCheckLine()}</div>`;
 }
 /* Eén controlemoment op de lijst zelf: handmatige invoer drijft weg zodra een premie verandert.
@@ -7842,7 +7923,7 @@ async function coTopicLek(m){
    hebt bepaald (eigen streefjaar of geboortejaar); anders valt targetYear terug op nu + 30 jaar en
    zou het gesprek een jaartal noemen dat niemand heeft gekozen. */
 function coHorizonBron(){
-  try{ const D=maandDoel(); if(D && D.T && D.T.gat>0) return {soort:'doel', p:D.p, T:D.T}; }catch(_){}
+  try{ const D=maandDoel(); if(D && D.T && D.T.knelt) return {soort:'doel', p:D.p, T:D.T}; }catch(_){}   // v243
   try{ const M=reisModel();
     /* M.missing is een object {balances, assets} en dus altijd truthy (v124): toets het veld.
        Een onbekend saldo diskwalificeert de projectie (v59/v73); geen bezittingen is geen onbekende

@@ -70,8 +70,12 @@ test.describe('c - geen zichtbare tekst noemt het scherm nog Maand', () => {
     set.reserveringen = [{ id: 'r1', naam: 'Waterschap', bedrag: 900, intervalM: 12, vervalmaand: M1.slice(0, 4) + '-12' }];
     set.resAcc = 'NL01SAVE0000004323'; p.minder_set = JSON.stringify(set);
     await open(page, p);
+    /* v243: de kaart droeg de zin 'Of je genoeg opzij hebt staan, lees je op Grip'. Die is vervallen
+       omdat de kaart het verschil sinds v242 zelf toont. De assertie is gesplitst: de kaart noemt
+       het scherm niet meer, en waar de zin nog wél staat (de inleg-detailsheet) heet het scherm nog
+       steeds Grip. Dat laatste is wat deze spec bewaakt. */
     const kaart = await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = resDekkingCard(); return d.innerText.replace(/\s+/g, ' '); });
-    expect(kaart).toContain('lees je op Grip');
+    expect(kaart).not.toContain('Maand');
     const detail = await page.evaluate((m) => { openKpiDetail('inleg', m); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' '); }, M1);
     expect(detail).toContain('lees je op Grip');
     expect(detail).not.toContain('maandscherm');

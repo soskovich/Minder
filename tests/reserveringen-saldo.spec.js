@@ -113,9 +113,16 @@ test.describe('b - KRITIEK: alleen het saldo, geen oordeel', () => {
     expect(t).toMatch(/blijft over|tekort/);
   });
 
-  test('de verwijzende regel naar Maand staat er onveranderd', async ({ page }) => {
+  /* v243: die verwijzende regel is vervallen. Hij kwam uit v187, toen deze kaart alleen het saldo
+     droeg en het oordeel elders stond; sinds v242 staat het verschil er een regel hoger, en dan
+     verwijst de kaart naar elders voor iets wat ze zelf al zegt. Wat blijft is de ene zin die voor
+     iemand die dit blok voor het eerst ziet echte informatie draagt. */
+  test('de kaart verwijst niet meer naar elders voor wat ze zelf zegt', async ({ page }) => {
     await boot(page);
-    expect(await tekst(page)).toContain('Of je genoeg opzij hebt staan, lees je op Grip.');   // v233
+    const t = await tekst(page);
+    expect(t).not.toContain('lees je op Grip');
+    expect(t).toContain('Kosten die niet elke maand vallen. Dit staat los van je spaarinleg.');
+    expect(t).toMatch(/Blijft over|Tekort/);
   });
 
   test('het verschil is het enige dat met het saldo meebeweegt', async ({ page }) => {
@@ -159,7 +166,7 @@ test.describe('c - een onbekend saldo verschijnt niet als nul', () => {
     expect(t).toContain('nog geen rekening aangewezen');
     // de kaart blijft verder zoals hij was
     expect(t).toContain('3 posten');
-    expect(t).toContain('Of je genoeg opzij hebt staan, lees je op Grip.');
+    expect(t).toContain('Dit staat los van je spaarinleg.');   // v243
   });
 
   test('een saldo van werkelijk nul is wel een bedrag', async ({ page }) => {

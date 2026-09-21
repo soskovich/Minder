@@ -82,11 +82,29 @@ test.describe('a - elke regel met een tekort draagt een suggestie', () => {
     expect(r.sug).toContain('€4.100');
   });
 
-  test('doel', async ({ page }) => {
+  /* v243: in deze fixture is de buffer nog niet vol (7.200 met 3.100 toegewezen) en gaat de
+     grendel pas open ná de streefdatum. Het doel is dan 'te laat': er bestaat geen bedrag per maand
+     dat die datum haalbaar maakt, dus die zin kan er niet staan. De eigenschap die deze spec
+     bewaakt blijft wel staan: elke regel met een tekort draagt een suggestie, en die noemt wat er
+     werkelijk beweegt. Het bedrag-geval staat hieronder, met een volle buffer. */
+  test('doel: te laat, dus de hefbomen in plaats van een bedrag', async ({ page }) => {
     await boot(page);
     const r = await sug(page, 'doel');
     expect(r.status).toBe('tekort');
-    expect(r.sug).toContain('€1.625');
+    expect(r.sug).toContain('je streefdatum of je doelbedrag');
+    expect(r.sug).not.toMatch(/€/);
+  });
+
+  test('doel: met een volle buffer noemt de suggestie het bedrag per maand', async ({ page }) => {
+    await boot(page, { set: { nfToegewezen: 9e7 } });
+    const r = await sug(page, 'doel');
+    expect(r.status).toBe('tekort');
+    /* v243: met een open grendel krijgt het doel de €300 die naar de buffer ging, dus het tekort is
+       €1.325 en niet €1.625. Het anker is de regel zelf, niet het getal. */
+    const t = await page.evaluate(() => euro0(maandRegels().find((x) => x.key === 'doel').tekortPerMaand));
+    expect(t).toBe('€1.325');
+    expect(r.sug).toContain(t);
+    expect(r.sug).toContain('houdt die streefdatum haalbaar');
   });
 
   test('en ze staan alle drie op het scherm', async ({ page }) => {
@@ -95,7 +113,7 @@ test.describe('a - elke regel met een tekort draagt een suggestie', () => {
     const t = await page.locator('#s-maand').innerText();
     expect(t).toContain('brengt je pot op de stand');
     expect(t).toContain('brengt je buffer in totaal');
-    expect(t).toContain('houdt die streefdatum haalbaar');
+    expect(t).toContain('je streefdatum of je doelbedrag');   // v243: te laat, zie hierboven
   });
 });
 
@@ -110,7 +128,7 @@ test.describe('b - het bedrag komt uit de regel en wordt nergens opnieuw bereken
   });
 
   test('doel noemt exact r.tekortPerMaand', async ({ page }) => {
-    await boot(page);
+    await boot(page, { set: { nfToegewezen: 9e7 } });   // v243: met een volle buffer is er een bedrag
     const uit = await page.evaluate(() => {
       const r = maandRegels().find((x) => x.key === 'doel');
       return { sug: maandSuggestie(r, curMonth || thisYM()), euro: euro0(r.tekortPerMaand) };
@@ -132,6 +150,7 @@ test.describe('b - het bedrag komt uit de regel en wordt nergens opnieuw bereken
     await boot(page);
     const d = (await sug(page, 'dekking')).sug;
     const b = (await sug(page, 'buffer')).sug;
+    await boot(page, { set: { nfToegewezen: 9e7 } });   // v243: een bedrag per maand vraagt een volle buffer
     const g = (await sug(page, 'doel')).sug;
     // D.tekort is benodigdeStand min werkelijkeStand, dus geen maandbedrag
     expect(d).not.toMatch(/€2\.100 per maand/);

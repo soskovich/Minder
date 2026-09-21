@@ -27,6 +27,9 @@ function seed(o = {}) {
     add(m, '13', 25, 'Reserveringen', 'NAAR RESERVERINGEN', RES);
   }
   const set = Object.assign({
+    // v243: de grendel staat hier open; deze spec gaat over wat er daarna gebeurt
+    nfToegewezen: 9e7, nfToegewezenMigrated: true,
+
     mode: 'begeleid', autoIncome: false, income: 3000, limit: 70, vooruitDoelOpen: true,
     savingMode: 'amount', savingAmount: 300,
     manualBal: { [MAIN]: 4000, [SAV]: 8000, [RES]: 1000 },
@@ -89,8 +92,11 @@ test.describe('b · de reserveringsinleg zegt dat hij losstaat van je plan', () 
     await boot(page);
     const t = await page.evaluate(() => { const d = document.createElement('div');
       d.innerHTML = resDekkingCard(); return d.innerText.replace(/\s+/g, ' '); });
-    expect(t).toContain('staat los van je plan');
-    expect(t).toMatch(/concurreert niet met je spaardoelen/);
+    /* v243: 'staat los van je plan hierboven' en 'concurreert niet met je spaardoelen' zeiden
+       hetzelfde twee keer, en de tweede stond naast een verwijzing naar Grip die de kaart sinds
+       v242 niet meer nodig heeft. Eén zin over het losstaan is genoeg; welke woorden dat zijn is
+       niet de eigenschap, dat het er staat wel. */
+    expect(t).toMatch(/los van je spaarinleg/);
     // en het bedrag per maand staat er nog steeds niet (v188)
     const per = await page.evaluate(() => dekking(12).benodigdPerMaand);
     if (per > 0) expect(t).not.toContain(String(per).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));

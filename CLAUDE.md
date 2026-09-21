@@ -111,6 +111,20 @@ genoemde versietag.)*
   onbekend: is de voortgang niet vastgesteld, dan blijft de grendel dicht en wordt er geen maand
   genoemd waarin hij opengaat. Geen buffer-doel is geen grendel. Ronde 2 van `allocatePlan()` (het
   restant zakt door naar het volgende lopende item op volgorde) is ongemoeid en blijft de terugval.
+- **Een doel achter de grendel begint pas als de grendel opengaat** (`v243`): `doelTempo()` rekent
+  het venster vanaf de openingsmaand en niet vanaf vandaag zodra `goal.grendel` is gezet, het veld
+  dat `allocatePlan()` aan elk wachtend item hangt. Eén bron: `G.maanden` voor de som,
+  `planGrendelDatum(G)` voor het label. Een object zonder dat veld rekent onveranderd vanaf vandaag.
+  DRIE UITKOMSTEN, want twee randgevallen hebben geen bedrag: `normaal` (venster, `benodigd`, `gat`),
+  `onbekend` (de openingsmaand is niet te bepalen: geen bedrag, `gat` null, `knelt` false, want er
+  valt niets te berekenen en dus niets te melden) en `telaat` (de openingsmaand valt op of na de
+  streefdatum: geen bedrag per maand, want dat bestaat niet, maar `knelt` true). Bij `telaat` is
+  zwijgen geen neutrale uitkomst maar een stil verlies: het is het ergste dat deze functie kan
+  opleveren. Daarom leest alles wat telt `T.knelt` en niet `T.gat>0`, houdt de Grip-regel status
+  `tekort` met `telaat:true` en `tekortPerMaand:0`, en houden `maandIngang()`, `maandSuggestie()` en
+  `coHorizonVraag()` elk een eigen tak zonder bedrag. NOOIT EEN BEDRAG VERZINNEN voor een doel dat
+  te laat is; wat er wel beweegt zijn de streefdatum en het doelbedrag, en die twee opties levert
+  `maandRegelOpties()` nog steeds.
 - **Elk doel heeft een streefdatum, behalve de buffer** (`v242`): afgedwongen in `saveGoal()`, bij
   aanmaken en bij wijzigen, zodat er nooit een tweede item zonder datum kan ontstaan. Dat draait
   `v123` terug, dat de datum juist optioneel maakte. Een doel van vóór `v242` zonder datum blijft
@@ -129,7 +143,10 @@ genoemde versietag.)*
   dan blijft er over; staat er minder, dan is dat een tekort. Dat is een aftrekking en geen oordeel:
   de dekkingsgraad, `gedektTot` en of het op tijd komt blijven op Grip (`v187`), en de verwijzende
   regel daarheen blijft staan. Geen alarmkleur. Het blok raakt de spaarinleg niet: `benodigdPerMaand`
-  komt niet in `planItems()`, `allocatePlan()` of `planCapacity()` (`v128`).
+  komt niet in `planItems()`, `allocatePlan()` of `planCapacity()` (`v128`). De proza eronder is
+  sinds `v243` één zin: "Kosten die niet elke maand vallen. Dit staat los van je spaarinleg." De
+  verwijzing naar Grip is vervallen, want het blok toont het verschil zelf; "deze inleg" ook, want
+  dit is een gemeten stand.
 - **Een halve maand is geen maand** (`v194`, `v230`): een vergelijking tussen de lopende maand en
   afgeronde maanden rendert alleen op afgeronde maanden (de meermaands-grafiek, signaal 2 van
   `insSignals()`). Geen tempo-vergelijking als vervanging: vaste lasten passen niet in een tempo
@@ -428,7 +445,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v242` → `minder-v243`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v243` → `minder-v244`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

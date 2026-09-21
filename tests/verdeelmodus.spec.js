@@ -209,7 +209,8 @@ test.describe('c · de editors', () => {
      lege buffer laat de rest van je inleg langs die buffer lopen. Zolang de grendel dicht zit
      staan de chips er niet, en zegt de sheet waarom en wanneer hij opengaat. */
   test('het noodfonds krijgt geen keuze zolang de buffer niet vol is', async ({ page }) => {
-    await openV(page, seed());
+    // v243: budget-fixture zet de grendel standaard open; deze test gaat juist over de dichte
+    await openV(page, tweak((s) => { s.nfToegewezen = 0; }));
     expect(await page.evaluate(() => !!planGrendel())).toBe(true);
     await page.evaluate(() => openNoodfondsPanel());
     await page.waitForSelector('#nfMaandChips');

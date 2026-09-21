@@ -74,7 +74,7 @@ const ing = (page, key) => page.evaluate((k) => {
 }, key);
 
 test.describe('a - elke regel met een tekort draagt zijn eigen ingang', () => {
-  for (const [key, bedrag] of [['dekking', '€2.100'], ['buffer', '€4.100'], ['doel', '€1.625']]) {
+  for (const [key, bedrag] of [['dekking', '€2.100'], ['buffer', '€4.100']]) {
     test(`${key} opent op zijn eigen sleutel, met zijn eigen bedrag`, async ({ page }) => {
       await boot(page);
       const r = await ing(page, key);
@@ -84,9 +84,33 @@ test.describe('a - elke regel met een tekort draagt zijn eigen ingang', () => {
     });
   }
 
+  test('doel opent op zijn eigen sleutel, met zijn eigen bedrag', async ({ page }) => {
+    await boot(page, { set: { nfToegewezen: 9e7 } });   // v243: een bedrag per maand vraagt een volle buffer
+    const r = await ing(page, 'doel');
+    expect(r.status).toBe('tekort');
+    expect(r.opent).toBe('doel');
+    // het anker is de regel, niet het getal: met een open grendel krijgt het doel de 300 die anders
+    // naar de buffer ging, dus het tekort is 1.325
+    const t = await page.evaluate(() => euro0(maandRegels().find((x) => x.key === 'doel').tekortPerMaand));
+    expect(r.tekst).toContain(t);
+  });
+
+  /* v243: is de buffer niet vol en gaat de grendel pas na de streefdatum open, dan bestaat dat
+     bedrag niet. De ingang mag daar niet mee wegvallen: dat zou hem laten verdwijnen bij precies de
+     zwaarste regel. Hij krijgt dan dezelfde vorm als bij een structureel signaal, een vraag zonder
+     bedrag. */
+  test('doel: te laat houdt zijn ingang, zonder bedrag', async ({ page }) => {
+    await boot(page);
+    const r = await ing(page, 'doel');
+    expect(r.status).toBe('tekort');
+    expect(r.opent).toBe('doel');
+    expect(r.tekst).toContain('Wil je kijken wat je met deze datum wilt?');
+    expect(r.tekst).not.toMatch(/€/);
+  });
+
   test('het bedrag komt uit dezelfde bron als de suggestie erboven', async ({ page }) => {
     await boot(page);
-    for (const k of ['dekking', 'buffer', 'doel']) {
+    for (const k of ['dekking', 'buffer']) {   // v243: doel heeft hier geen bedrag, zie de test erboven
       const uit = await page.evaluate((key) => {
         const m = curMonth || thisYM();
         const r = maandMetAccept(maandRegels()).find((x) => x.key === key);

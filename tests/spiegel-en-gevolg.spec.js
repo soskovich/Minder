@@ -46,6 +46,9 @@ function seed(o = {}) {
   const bal = { [MAIN]: o.saldo != null ? o.saldo : 4000 };
   if (o.spaar) bal[SAV] = o.spaarSaldo != null ? o.spaarSaldo : 0;
   const set = Object.assign({ mode: o.mode || 'begeleid', autoIncome: false, income: 3000, limit: 70,
+    // v243: de grendel staat hier open; deze spec gaat over wat er daarna gebeurt
+    nfToegewezen: 9e7, nfToegewezenMigrated: true,
+
     manualBal: bal, budgets: { huur: 900, boodschappen: 300 }, goals: o.goals || [],
   }, o.set || {});
   if (o.spaar) set.savingsEnds = ['4323'];

@@ -33,6 +33,9 @@ function seed(o = {}) {
   // de omschrijving moet als inkomen categoriseren, anders is het geen inkomensboeking
   if (o.meevaller) add('mv', MAIN, CUR, '20', o.meevaller, 'Werkgever', 'SALARIS LOON VAKANTIEGELD');
   const set = {
+    // v243: de grendel staat hier open; deze spec gaat over wat er daarna gebeurt
+    nfToegewezen: 9e7, nfToegewezenMigrated: true,
+
     limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 3000,
     manualBal: { [MAIN]: 2000, [SPAAR]: spaar, [RES]: resSaldo },
     budgets: { boodschappen: 500, huur: 900 },

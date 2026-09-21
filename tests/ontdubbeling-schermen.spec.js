@@ -247,7 +247,12 @@ test.describe('f · dekking wordt op één scherm beoordeeld', () => {
     expect(r.regel.gevolg).toBe(r.zin);                  // het oordeel staat op Maand
     expect(r.kaart).not.toContain(r.zin);                // en niet op Plan
     expect(r.kaart).toMatch(/\d+ post/);                 // Plan houdt de feiten
-    expect(r.kaart).toMatch(/lees je op Grip/);          // en wijst waar het oordeel staat (v233: het scherm heet Grip)
+    /* v243: de verwijzende zin was één weergave van de ontdubbeling, niet de ontdubbeling zelf. Die
+       is dat het OORDEEL (dekkingTekst: gedekt tot, het gat, wat je per maand nodig hebt) op Grip
+       staat en niet op Plan, terwijl Plan de posten en het verschil draagt. Dat toetsen we nu
+       rechtstreeks in plaats van via een zin die de kaart sinds v242 niet meer nodig heeft. */
+    expect(r.kaart).not.toMatch(/gedekt tot|per maand nodig/);
+    expect(r.zin).toMatch(/gedekt tot|per maand nodig|nog geen verplichtingen|niets aan/i);
   });
 });
 

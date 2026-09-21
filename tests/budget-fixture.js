@@ -68,6 +68,9 @@ function seed({ giftCharged = true, maanden = 3 } = {}) {
   const set = {
     limit: 70, limitMode: 'pct', hideInternal: true, mode: 'begeleid', insPeriod: 'month',
     autoIncome: false, income: INKOMEN,
+    /* v243: de grendel van v242 staat hier open. Elke spec die deze fixture gebruikt gaat over wat
+       er na de buffer gebeurt; een dichte grendel zou daar overal de verdeling stilzetten. */
+    nfToegewezen: 9e7, nfToegewezenMigrated: true,
     savingMode: 'amount', savingAmount: 300,
     savingsEnds: ['4323'],
     manualBal: { [MAIN]: 4000, [SAV]: 2500 },

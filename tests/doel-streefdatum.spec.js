@@ -76,7 +76,11 @@ test.describe('a · de rekenregel', () => {
     const T = await page.evaluate(() => doelTempo({ doel: 1001, gespaard: 0, streefdatum: document.title && null }, 0) || null);
     const T2 = await page.evaluate((d) => doelTempo({ doel: 1001, gespaard: 0, streefdatum: d }, 100), overMnd(10));
     expect(T).toBeNull();                              // zonder geldige datum: niets beweren
-    expect(T2).toEqual({ maandenTot: 10, benodigd: 101, gat: 1, haalbaar: false });
+    /* v243: doelTempo() draagt er velden bij (soort, start, startLabel, venster, knelt) voor de
+       grendel. Dit object is handgemaakt en heeft geen grendel, dus het rekent onveranderd vanaf
+       vandaag: soort 'normaal', start 0, venster gelijk aan maandenTot. */
+    expect(T2).toEqual({ soort: 'normaal', maandenTot: 10, start: 0, startLabel: '', venster: 10,
+      benodigd: 101, gat: 1, haalbaar: false, knelt: true });
   });
 
   test('null zonder datum, bij een bereikt doel en bij een verstreken datum', async ({ page }) => {
