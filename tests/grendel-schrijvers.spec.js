@@ -318,6 +318,41 @@ test.describe('d · de bron: elke schrijver gaat door de grens', () => {
     expect(f.body).toMatch(/planVastRuimte\(/);
   });
 
+  /* v255: DEZELFDE VORM, DE ANDERE GRENS. planVastRuimte() hierboven is de harde grens op de SOM
+     (v242). Dit is de grendel op de handeling zelf: een eigen maandbedrag of een eigen modus voor
+     iets anders dan de buffer is splitsen, en dat blijft dicht tot de buffer vol is.
+     Tot v254 hing dat aan geen enkele schrijver maar aan ronde 1 van allocatePlan(), die de modus
+     van een niet-buffer-item overslaat zolang de grendel dicht is. Gemeten met een dichte grendel:
+     setPlanAllocVeld('perMaand','500') schreef 500 weg op een aflos-item, en saveGoal() schreef
+     allocMode 'fixed' met perMaand 500 op een wachtend doel. Beide werden daarna stil genegeerd,
+     dus het scherm zei 'vast 500' bij een doel dat nul kreeg. Een waarde die je kunt opslaan en
+     die niets doet is geen grens (v238).
+     HIER GELDT GEEN 'ALLEEN ALS HIJ EEN BEDRAG ZET'-UITZONDERING zoals bij planVastRuimte(): een
+     modus kiezen is de helft van een maandbedrag instellen, dus elke aanroeper leest hem. */
+  test('elke schrijver van een verdeling gaat door planVastMag()', () => {
+    const w = schrijvers(/setPlanAlloc\(/);
+    expect(w.length, 'geen enkele schrijver gevonden: de zoekvorm klopt niet meer').toBeGreaterThan(0);
+    const ongedekt = w.filter((x) => {
+      if (x.fn === 'setPlanAlloc') return false;               // de opslagfunctie zelf, geen route
+      return !/planVastMag\(/.test(x.body || '');
+    });
+    expect(ongedekt.map((x) => `${x.fn} (regel ${x.regel}): ${x.tekst}`)).toEqual([]);
+  });
+
+  test('en saveGoal(), de andere opslagroute, leest hem ook', () => {
+    const f = functieRond(CODE.indexOf('\nfunction saveGoal('));
+    expect(f.naam).toBe('saveGoal');
+    expect(f.body).toMatch(/planVastMag\(/);
+  });
+
+  /* planVastMag() is de enige toets. Een tweede planGrendel() naast hem in dezelfde functie zou
+     een tweede waarheid zijn, precies de fout die planMoveMag() bij v245 wegnam. */
+  test('geen schrijver toetst de grendel daarnaast nog een keer zelf', () => {
+    const w = schrijvers(/setPlanAlloc\(/).filter((x) => x.fn !== 'setPlanAlloc');
+    const dubbel = w.filter((x) => /planGrendel\(/.test(x.body || ''));
+    expect(dubbel.map((x) => x.fn)).toEqual([]);
+  });
+
   test('de drie routes die we kennen staan er alle drie bij', () => {
     const w = schrijvers(/setPlanAlloc\(/).map((x) => x.fn);
     expect(w).toContain('setPlanAllocVeld');

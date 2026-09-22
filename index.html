@@ -3076,7 +3076,13 @@ function renderGoalSheet(id, g, modeOverride){
   /* v242: een vast maandbedrag is de gewone manier van verdelen geworden, dus een nieuw doel opent
      daarop. 'auto' bestaat nog voor wie het kiest en voor bestaande doelen; planAllocOf() houdt
      zijn terugval, zodat een oud doel zich blijft gedragen zoals het deed. */
-  const A=planAllocOf(d); const mode=modeOverride||window._goalMode||(isNew?'fixed':A.mode);
+  /* v255: met een dichte grendel valt er niets te kiezen, dus staan de chips er niet en blijft de
+     modus staan zoals hij is (bij een nieuw doel: 'auto'). Dezelfde vorm als renderNfSheet(), dat
+     dit voor de buffer al deed: de regel zegt waarom en wanneer hij opengaat. Een knop die er
+     bruikbaar uitziet en het niet hoort te zijn is erger dan geen knop (v245). */
+  const vastMag=planVastMag();
+  const A=planAllocOf(d);
+  const mode=vastMag ? (modeOverride||window._goalMode||(isNew?'fixed':A.mode)) : (isNew?'auto':A.mode);
   window._goalMode=mode;
   /* v242: wat er nog te verdelen is, naast het veld waarin je het verdeelt. planVastRuimte() laat
      dit doel zelf buiten de som, anders zou je je eigen bedrag niet opnieuw kunnen opslaan. Boven
@@ -3105,8 +3111,9 @@ function renderGoalSheet(id, g, modeOverride){
     <div class="small muted" style="margin-top:6px">${(!isNew&&!d.streefdatum)?'Dit doel komt van vóór deze versie en heeft er nog geen. Zonder datum valt er niets terug te rekenen. ':''}Elk doel heeft er een; alleen je noodfonds niet, want dat is geen doel met een einddatum maar de bodem eronder.</div>
     ${(function(){ try{ const pi=id?allocatePlan().find(x=>x.id===id):null; return pi?doelTempoLine(pi):''; }catch(_){ return ''; } })()}
     <label class="fld" style="margin-top:12px">Hoeveel gaat hier maandelijks heen?</label>
-    <div id="gModes">${planModeChips(mode,'goalMode')}</div>
-    ${bedrag}
+    ${vastMag
+      ? `<div id="gModes">${planModeChips(mode,'goalMode')}</div>${bedrag}`
+      : `<div class="small muted" style="margin-top:8px;line-height:1.5">Wat je buffer overhoudt, zolang hij niet vol is. Een eigen maandbedrag kan zodra dat zo is${(function(){ const dt=planGrendelDatum(); return dt?`, op dit tempo rond ${dt}`:''; })()}.</div>`}
     <label class="fld" style="margin-top:10px">Al gespaard (€)</label><input id="gNu" type="number" inputmode="numeric" value="${d.gespaard||''}" placeholder="0" style="width:100%">
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveGoal('${id||''}')">${ICON('check')} Opslaan</button>
     ${g?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteGoal('${id}')">Doel verwijderen</div>`:''}
@@ -3116,24 +3123,33 @@ function saveGoal(id){
   const v=x=>(document.getElementById(x)||{}).value;
   const naam=(v('gNaam')||'').trim(); const doel=Math.round(numIn(v('gDoel'))||0);
   if(!naam || doel<=0){ toast('Vul een naam en doelbedrag in'); return; }
-  const mode=window._goalMode||'fixed';   // v242
   const oud=(SET.goals||[]).find(x=>x.id===id)||{};
+  /* v255: met een dichte grendel kun je geen eigen maandbedrag zetten (planVastMag()), maar
+     WEIGEREN MAG DEZE OPSLAG NIET: dan kun je de naam of de streefdatum van een bestaand doel niet
+     meer wijzigen, en juist die datum dwingt v242 hier af. Dus houdt hij de verdeling vast zoals
+     hij was en slaat hij de rest gewoon op. Een NIEUW doel heeft geen oude verdeling en komt dan
+     op 'auto' met nul: dat is wat resNaarDoel() al doet, om dezelfde reden (een vast bedrag zou
+     een verdeling voor je kiezen terwijl daar niets te verdelen valt).
+     De modus komt hier dus uit de opslag en niet uit het blad, want het blad toont de chips bij
+     een dichte grendel helemaal niet. */
+  const vastMag=planVastMag();
+  const mode=vastMag ? (window._goalMode||'fixed') : (oud.allocMode||'auto');   // v242, v255
   const sd=String(v('gDatum')||'').trim();
   /* v242: de streefdatum is verplicht voor elk doel. Alleen het noodfonds heeft er geen, en dat is
      geen item uit SET.goals. Afgedwongen bij aanmaken EN bij wijzigen, zodat er nooit een tweede
      doel zonder datum kan ontstaan; een bestaand doel zonder datum krijgt er dus een zodra je hem
      voor iets anders opent, en dat is de enige weg naar binnen. */
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(sd)){ toast('Kies een streefdatum'); return; }
-  const per = mode==='fixed' ? Math.round(numIn(v('gMnd'))||0) : (+oud.perMaand||0);
+  const per = (vastMag&&mode==='fixed') ? Math.round(numIn(v('gMnd'))||0) : (+oud.perMaand||0);
   /* v242: de harde grens. Meer verdelen dan je spaarinleg kun je niet opslaan; zie planVastRuimte.
      Zonder bekende inleg is er niets om tegen af te zetten en blijft de grens weg (v59/v73). */
-  if(mode==='fixed'){
+  if(vastMag&&mode==='fixed'){
     const R=planVastRuimte(id||null);
     if(R.cap>0 && per>R.over){ toast(`${euro0(per-R.over)} te veel verdeeld; er is ${euro0(R.over)} per maand over`); return; }
   }
   const g={id:id||('g'+Date.now().toString(36)), naam, doel, gespaard:Math.round(numIn(v('gNu'))||0), allocMode:mode,
     perMaand: per,      // bewaren, niet wissen bij een moduswissel
-    pct:      mode==='pct'   ? Math.max(0,Math.min(100,Math.round(numIn(v('gPct'))||0))) : (+oud.pct||0) };
+    pct:      (vastMag&&mode==='pct') ? Math.max(0,Math.min(100,Math.round(numIn(v('gPct'))||0))) : (+oud.pct||0) };
   g.streefdatum=sd;
   /* v248: het beginmoment van de lijn waar het streepje op rust. ALLEEN BIJ AANMAKEN. Wijzig je
      later je stand of je bedrag, dan blijft de oorsprong staan waar hij stond: hij is historie en
@@ -3156,6 +3172,21 @@ const PLAN_NF='noodfonds';
 /* v245: één regel, één zin. Elke route die op de grendel stuit zegt hetzelfde, want het is
    dezelfde grendel; twee formuleringen zouden lezen als twee verschillende regels. */
 const GRENDEL_TOAST='Je buffer gaat eerst; schuiven kan zodra hij vol is';
+/* v255: dezelfde grendel, de andere handeling. Schuiven is de volgorde, dit is de verdeling: een
+   eigen maandbedrag voor iets anders dan de buffer. Twee zinnen omdat het twee feiten zijn, niet
+   twee formuleringen van hetzelfde (v91). */
+const GRENDEL_VAST_TOAST='Je buffer gaat eerst; een eigen maandbedrag kan zodra hij vol is';
+/* v255: DE POORT OP HET SPLITSEN. Een eigen maandbedrag instellen voor iets anders dan de buffer
+   is echt splitsen, en dat blijft dicht tot de buffer vol is. Tot v254 hing dat nergens aan een
+   schrijver maar aan ronde 1 van allocatePlan(), die de modus van een niet-buffer-item overslaat
+   zolang de grendel dicht is. Gemeten ging setPlanAllocVeld('perMaand','500') op een aflos-item er
+   gewoon in, en saveGoal() schreef allocMode 'fixed' met perMaand 500 op een wachtend doel; beide
+   werden daarna stil genegeerd. Een waarde die je kunt opslaan en die niets doet is geen grens
+   (v238), en hij liegt bovendien: het scherm zegt dan 'vast 500' bij een doel dat nul krijgt.
+   EÉN POORT, gelezen door elke schrijver en door elk scherm dat de chips tekent. Ook het noodfonds
+   zelf leest hem: daar was de reden een andere (de buffer pakt alles), maar de voorwaarde is
+   letterlijk dezelfde, en twee toetsen naast elkaar zijn twee waarheden. */
+function planVastMag(){ return !planGrendel(); }
 const planDebtKey=id=>'af:'+id;
 function planOrderList(){ return Array.isArray(SET.planOrder)?SET.planOrder.filter(x=>typeof x==='string'):[]; }
 function planPaused(id){ return !!(SET.planPaused||{})[id]; }
@@ -5249,6 +5280,28 @@ function planCapacity(){
 // Ronde 2 (v98): wat na ronde 1 nog over is blijft niet liggen maar zakt top-down door naar het
 // eerstvolgende lopende doel, ook voorbij zijn vaste maandbedrag. Per item: base = ronde 1,
 // extra = wat er is doorgezakt, alloc = de som (waarop status en eta gerekend worden).
+/* v255: MAG RONDE 2 LANGS EEN DICHTE GRENDEL? De grendel moest voorkomen dat je gaat SPLITSEN
+   terwijl je buffer leeg is, niet dat er geld een maand blijft liggen dat de buffer niet eens kan
+   opnemen. De voorwaarde is dus niet "de grendel is open" maar "de buffer is klaar": hij heeft
+   deze maand zijn hele rest gekregen, hij staat niet stil, en zijn stand is bekend.
+   DRIE EISEN, ALLE DRIE NODIG. Gemeten met een GEPAUZEERDE buffer bij een dichte grendel: de
+   buffer krijgt nul en er blijft 3.000 over, dus zonder die eis zou je hele inleg langs een lege
+   buffer naar het eerste doel gaan, precies wat de grendel tegenhoudt. Bij een ONBEKENDE stand
+   volgt het vandaag al uit de rekensom (rest is dan het hele doel, dus de buffer neemt alles),
+   maar "onbekend blijft onbekend" (v173) mag niet van een toevallige uitkomst afhangen. En de
+   derde eis is in het normale geval vanzelf waar of vanzelf onwaar, want krijgt de buffer minder
+   dan zijn rest, dan was left al nul.
+   HIJ STAAT ALS EIGEN FUNCTIE en niet als drie condities in een if, om dezelfde reden als
+   planMoveMag() (v245): de regel hangt aan de invariant en niet aan de toestand waarin hij bedacht
+   is, en een tweede toets ernaast zou een tweede waarheid zijn. */
+function planBufferKlaar(P,G){
+  if(!G) return true;                                    // open: ronde 2 was altijd al vrij
+  const nf=(P||[]).find(x=>x&&x.type==='noodfonds');
+  if(!nf) return false;                                  // geen buffer-item: niets vast te stellen
+  if(nf.nfOnbekend) return false;                        // v173
+  if(nf.status==='gepauzeerd') return false;
+  return Math.round(+nf.alloc||0)>=Math.round(+nf.rest||0);
+}
 function allocatePlan(){
   const cap=planCapacity(); let left=cap;
   /* v242: de grendel. Dicht betekent dat de buffer de hele inleg pakt en de rest wacht. Het is
@@ -5270,10 +5323,23 @@ function allocatePlan(){
     }
     return Object.assign({},it,{rest,alloc,base:alloc,extra:0,status});
   });
-  // ronde 2: het restant vult de lopende doelen bij, in dezelfde prioriteitsvolgorde
+  /* ronde 2: het restant vult de lopende doelen bij, in dezelfde prioriteitsvolgorde.
+     v255 DRAAIT DE v242-REGEL HIER TERUG. Tot v254 stond hier "dicht is dicht, ook in ronde 2", en
+     daarmee bleef liggen wat de buffer niet meer kon gebruiken. Gemeten op het gemelde geval:
+     buffer nog 2.534 nodig van 3.000 inleg, noodfonds krijgt 2.534, en 466 bleef staan bij
+     "Blijft over" terwijl Kosten Koper op plek 2 wachtte. In de maand dat de buffer vol raakt was
+     het erger: nog 800 nodig, 2.200 bleef liggen. Dat is een maand verloren aan geld waar de
+     buffer geen bestemming meer voor heeft. De poort is nu planBufferKlaar().
+     RONDE 2 LEEST DE MODUS NIET, en dus splitst een vast maandbedrag hier nog steeds niets: het
+     restant zakt op volgorde door en het eerste lopende doel neemt wat het nodig heeft, nooit
+     meer. Wat de grendel tegen het splitsen doet zit volledig in RONDE 1, die de modus van een
+     niet-buffer-item overslaat zolang G waar is, en sinds v255 ook in planVastMag() bij de
+     schrijvers. Dicht hier dus niets af dat al dicht is, en draai hier niets open in de
+     veronderstelling dat een vast bedrag al meetelde. */
+  const bufferKlaar=planBufferKlaar(P,G);
   for(const p of P){
     if(left<=0) break;
-    if(G && p.type!=='noodfonds') continue;                     // v242: dicht is dicht, ook in ronde 2
+    if(G && !bufferKlaar && p.type!=='noodfonds') continue;      // v242/v255: zie planBufferKlaar()
     if(p.status==='gepauzeerd'||p.rest<=0) continue;            // gepauzeerd en bereikt slaan we over
     const ruimte=p.rest-p.alloc; if(ruimte<=0) continue;        // dit doel heeft al wat het nodig heeft
     const bij=Math.min(ruimte,left); p.alloc+=bij; p.extra+=bij; left-=bij;
@@ -5285,7 +5351,15 @@ function allocatePlan(){
     /* v242: wachten op de buffer is geen 'wacht op capaciteit'. Daar is iemand boven je die het
        opmaakt en kun je zelf schuiven; hier is het een grendel die vanzelf opengaat. De rij draagt
        G mee zodat hij de maand kan noemen zonder hem een tweede keer uit te rekenen. */
-    if(p.status==='wacht op de buffer'){ p.eta=null; p.grendel=G; continue; }
+    /* v255: krijgt dit doel tóch geld, dan wacht het niet meer. Wat de buffer niet meer kon
+       gebruiken is doorgezakt, dus het valt door naar de gewone tak hieronder en krijgt een
+       status, een tint en een tak. grendelDoorzak draagt de grendel mee naar het scherm ZONDER
+       het veld grendel te zetten: dat laatste zou doelTempo() het venster vanaf de openingsmaand
+       laten rekenen (v243), en dat klopt alleen voor een doel dat nog niets krijgt. */
+    if(p.status==='wacht op de buffer'){
+      if(!(p.alloc>0)){ p.eta=null; p.grendel=G; continue; }
+      p.grendelDoorzak=G;
+    }
     p.status=p.alloc>0?'':'wacht op capaciteit';
     p.eta=null;
     if(p.alloc>0){
@@ -5413,7 +5487,10 @@ function planSub(p,kaal){
   const et=p.eta?etaTekst(p.eta):'';
   const eta=et?` · op dit tempo ${et}`:'';
   // maak zichtbaar dat een deel is doorgezakt uit wat er boven overbleef
-  const dz=(+p.extra>0&&p.mode!=='auto')?` · waarvan ${euro0(p.extra)} doorgezakt`:'';
+  /* v255: bij een dichte grendel is base altijd nul voor een doel, dus extra is dan gelijk aan
+     alloc en herhaalt "waarvan X doorgezakt" letterlijk het bedrag dat de kop al noemt. Dat is een
+     tweede bron voor hetzelfde getal (v104); waar het vandaan komt zegt vatRegels() in woorden. */
+  const dz=(+p.extra>0&&p.mode!=='auto'&&!p.grendelDoorzak)?` · waarvan ${euro0(p.extra)} doorgezakt`:'';
   /* v189: hier stond alleen p.alloc, terwijl allocatePlan() de eta rekent met debtPer + alloc. Het
      getoonde bedrag en de looptijd kwamen dus niet uit dezelfde som. Van die twee klopt de eta: die
      schuld krijgt werkelijk je bestaande termijn EN wat je plan er extra in stopt. Corrigeren naar
@@ -5424,7 +5501,7 @@ function planSub(p,kaal){
   const per=(p.type==='aflossen')?Math.max(Math.round(+p.debtPer||0),0):0;
   /* Tel de wáárden, niet de rijen: 'vast' is een woord en maakt een regel niet zwaarder om te
      lezen, een percentage wel. Vier of meer waarden gaat naar de tabel. */
-  const dzB=(+p.extra>0&&p.mode!=='auto')?Math.round(+p.extra):0;
+  const dzB=(+p.extra>0&&p.mode!=='auto'&&!p.grendelDoorzak)?Math.round(+p.extra):0;
   const n=1+(per>0?1:0)+(dzB>0?1:0)+(et?1:0)+(p.mode==='pct'?1:0);
   if(n>=4){
     const rij=(l,v)=>`<span>${l}</span><span class="v">${v}</span>`;
@@ -5621,14 +5698,24 @@ function renderPlanAllocSheet(){
     ? `<label class="fld" style="margin-top:10px">Deel van je spaarinleg (%)</label><input id="paPct" type="number" inputmode="numeric" min="0" max="100" value="${A.pct||''}" placeholder="bv. 30" onchange="setPlanAllocVeld('pct',this.value)" style="width:100%">
        <div class="small muted" style="margin-top:6px">${cap>0?`${euro0(cap)}/mnd ${planCapLabel()} te verdelen · dit item krijgt ${euro0(Math.round(cap*A.pct/100))}`:'Nog geen spaarinleg bekend.'}</div>`
     : `<div class="small muted" style="margin-top:9px">Dit item krijgt wat er op zijn plek in de rij nog over is.</div>`;
+  /* v255: zelfde poort, zelfde vorm als in de doel-editor en in renderNfSheet(). */
+  const vastMag=planVastMag();
+  const dt=vastMag?'':planGrendelDatum();
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg);flex:1">${esc(it.naam)}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
     <div class="card"><div class="small" style="font-weight:600">Hoeveel gaat hier maandelijks heen?</div>
-      <div id="paModes">${planModeChips(A.mode,'setPlanAllocMode')}</div>${veld}</div>
+      ${vastMag
+        ? `<div id="paModes">${planModeChips(A.mode,'setPlanAllocMode')}</div>${veld}`
+        : `<div class="small muted" style="margin-top:9px;line-height:1.5">Wat je buffer overhoudt, zolang hij niet vol is. Een eigen maandbedrag kan zodra dat zo is${dt?`, op dit tempo rond ${dt}`:''}.</div>`}</div>
     <div style="height:8px"></div>`;
 }
-function setPlanAllocMode(v){ setPlanAlloc(window._planAllocId,{allocMode:v}); renderPlanAllocSheet(); }
+/* v255: de grendel, via planVastMag(). Een modus kiezen is de helft van een eigen maandbedrag
+   instellen, dus hij staat hier net zo hard als op het veld eronder; setNfAllocMode() had hem al. */
+function setPlanAllocMode(v){ if(!planVastMag()){ toast(GRENDEL_VAST_TOAST); return; } setPlanAlloc(window._planAllocId,{allocMode:v}); renderPlanAllocSheet(); }
 function setPlanAllocVeld(veld,v){
+  /* v255: gemeten schreef deze functie met een dichte grendel 500 per maand op een aflos-item, en
+     allocatePlan() negeerde dat daarna stil. Zie planVastMag(). */
+  if(!planVastMag()){ toast(GRENDEL_VAST_TOAST); return; }
   const n=Math.max(0,Math.round(numIn(v)));
   /* v242: dezelfde harde grens als in de doel-editor. Dit is de andere plek waar een vast
      maandbedrag wordt gezet, dus de grens hoort hier net zo hard te staan. */
@@ -5881,6 +5968,22 @@ function vatRegels(p){
      zolang de grendel dicht zit, en dat is geen achterstand. */
   if(p.status==='wacht op de buffer')
     return {regels:[moet, `verdelen gaat open rond ${T.startLabel}`].filter(Boolean), laat:false};
+  /* v255: de grendel is dicht en dit doel krijgt tóch geld, want wat de buffer niet meer kon
+     gebruiken is doorgezakt. "Wacht op je buffer" is dan niet waar, maar een achterstand rekenen
+     ook niet: p.eta is hier ceil(rest / het doorgezakte bedrag), en dat bedrag is DE REST VAN DE
+     MAAND VAN JE BUFFER en niet het tempo van dit doel. Gemeten zou Kosten Koper met 466
+     doorgezakt uitkomen op "25 maanden te laat · 1.600 per maand haalt het wel", terwijl de buffer
+     volgende maand vol is en er dan 3.000 per maand heen kan. Dezelfde grond als v242: wachten op
+     de buffer is geen achterstand, dus geen markering en geen bedrag per maand.
+     DRIE REGELS, en de derde is de bestaande zin uit dezelfde bron. Die zegt het tweede feit al:
+     je eigen maandbedrag komt zodra de buffer vol is. Een tweede formulering ernaast zou een term
+     erbij zijn (v91). Gemeten op 360px: 252px beschikbaar in .vat-dat, en "krijgt wat je buffer
+     overhoudt" is 171px. De twee feiten in één zin haalt dat niet: "krijgt wat je buffer overhoudt
+     · eigen maandbedrag kan zodra hij vol is" is 422px en breekt op 360 én 390px. */
+  if(p.grendelDoorzak){
+    const dt=planGrendelDatum(p.grendelDoorzak);
+    return {regels:[moet,'krijgt wat je buffer overhoudt',dt?`verdelen gaat open rond ${dt}`:''].filter(Boolean), laat:false};
+  }
   if(T.knelt){
     const ach=(p.eta!=null)?(p.eta-T.maandenTot):null;
     const kop=(ach!=null&&ach>0)?`${moet} · ${ach} ${ach===1?'maand':'maanden'} te laat`:`${moet} · nog niet te halen`;
@@ -5937,7 +6040,7 @@ function renderPlan(bare){
     const seg=SEG.segs.find(s=>s.id===p.id)||{alloc:0,van:0,breed:0};
     /* De tak. Dikte en horizontale plek komen uit hetzelfde segment als in de balk erboven, dus
        ze kunnen niet uiteenlopen. Een doel dat nu niets krijgt heeft geen tak (punt 6). */
-    const dzB=(+p.extra>0&&p.mode!=='auto')?Math.round(+p.extra):0;
+    const dzB=(+p.extra>0&&p.mode!=='auto'&&!p.grendelDoorzak)?Math.round(+p.extra):0;   // v255: zie planSub()
     /* v246b: de tak had een label met het maandbedrag. Sinds de tekst boven het vat staat noemt de
        kop dat bedrag één regel hoger, en twee keer hetzelfde getal is een tweede bron. De tak
        draagt nu alleen kleur en dikte; die twee komen uit hetzelfde segment als de balk erboven. */
@@ -7624,7 +7727,7 @@ function nfAllocCard(){
   return `<div class="card"><div class="small" style="font-weight:600">Hoeveel gaat hier maandelijks heen?</div>
     ${planModeChips(A.mode,'setNfAllocMode')}${veld}</div>`;
 }
-function setNfAllocMode(v){ if(planGrendel()) return; setPlanAlloc(PLAN_NF,{allocMode:v}); renderNfSheet(); }   // v242
+function setNfAllocMode(v){ if(!planVastMag()) return; setPlanAlloc(PLAN_NF,{allocMode:v}); renderNfSheet(); }   // v242, poort sinds v255
 function setNfAlloc(veld,v){
   /* v245: twee grenzen die hier ontbraken terwijl ze een regel hoger en elders wel staan.
      De grendel, zoals in setNfAllocMode(): staat hij dicht, dan pakt de buffer alles en valt er
@@ -7632,8 +7735,11 @@ function setNfAlloc(veld,v){
      En de harde grens van v242, zoals in saveGoal() en setPlanAllocVeld(). Gemeten: met een open
      grendel schreef deze functie 99.000 per maand bij een capaciteit van 3.000, en planVastSom()
      telt het noodfonds gewoon mee, dus daarna was er voor elk ander doel nul over. Een derde
-     schrijver van een vast maandbedrag zonder de grens is een derde waarheid. */
-  if(planGrendel()) return;
+     schrijver van een vast maandbedrag zonder de grens is een derde waarheid.
+     v255: die grendel-toets heet nu planVastMag() en is dezelfde poort die de doel-editor en het
+     aflos-blad lezen. De reden verschilt (hier pakt de buffer alles, daar is het splitsen), de
+     voorwaarde niet, en twee toetsen naast elkaar zijn twee waarheden. */
+  if(!planVastMag()) return;
   const n=Math.max(0,Math.round(numIn(v)));
   if(veld!=='pct'){
     const R=planVastRuimte(PLAN_NF);
@@ -12054,9 +12160,15 @@ function diagVersie(){
       const viaMag=typeof planMoveMag==='function' && /planMoveMag\(/.test(planMove.toString())
         && /planGrendel\(\)/.test(planMoveMag.toString());
       return (inline||viaMag)?'JA':'NEE (oude code)'; }));
+    /* v255: DEZELFDE VAL ALS HIERBOVEN, een versie later. setNfAlloc() leest de grendel nu via
+       planVastMag(), zoals planMove() hem via planMoveMag() leest, en de literale vorm zou dus
+       'NEE' melden op code die precies goed is. De oude vorm blijft erbij staan, want een oude
+       worker moet hier nog steeds JA kunnen zeggen over zijn eigen versie. */
     L.push('de twee andere routes dragen hem: '+_dS(()=>{
       const a=/planGrendel\(\)/.test(planPromoteDebt.toString());
-      const b=/planGrendel\(\)/.test(setNfAlloc.toString());
+      const b=/planGrendel\(\)/.test(setNfAlloc.toString())
+        || (typeof planVastMag==='function' && /planVastMag\(/.test(setNfAlloc.toString())
+            && /planGrendel\(\)/.test(planVastMag.toString()));
       return `planPromoteDebt ${a?'JA':'NEE'} | setNfAlloc ${b?'JA':'NEE'}`; }));
     L.push('de pijltjes lezen dezelfde poort: '+_dS(()=>
       /planMoveMag\(/.test(renderPlan.toString())?'JA':'NEE (oude code)'));
@@ -12144,11 +12256,20 @@ function diagPlanMove(){
 }
 
 /* 5. Wat allocatePlan() aan dezelfde items hangt. Loopt dit uiteen met blok 4, dan beslissen twee
-      functies verschillend over dezelfde grendel. */
+      functies verschillend over dezelfde grendel.
+      v255: met de regel erbij die bepaalt of ronde 2 langs een dichte grendel mag. Zonder dat zou
+      dit blok "grendel=nee" zeggen bij een doel dat doorgezakt geld krijgt, terwijl blok 4 op
+      dezelfde toestand "grendel dicht: JA" zegt - precies de tegenspraak die dit blok moet vangen.
+      Het veld grendel staat alleen op een doel dat NIETS krijgt (dan schuift doelTempo() het
+      venster, v243); doorzak staat op een doel dat wel geld krijgt. KIJKEN VERANDERT NIETS:
+      allocatePlan() en planBufferKlaar() lezen alleen. */
 function diagAlloc(){
   try{
-    return allocatePlan().map((x,i)=>`  ${i}. ${x.naam} (${x.id}) type=${x.type} mode=${x.mode}`
-      +` status=${_dJ(x.status)} alloc=${x.alloc} rest=${x.rest} grendel=${x.grendel?'ja':'nee'}`);
+    const P=allocatePlan(), G=planGrendel();
+    const L=[`  buffer klaar (planBufferKlaar): ${planBufferKlaar(P,G)?'JA, ronde 2 mag doorzakken':'NEE, ronde 2 blijft dicht'}`];
+    return L.concat(P.map((x,i)=>`  ${i}. ${x.naam} (${x.id}) type=${x.type} mode=${x.mode}`
+      +` status=${_dJ(x.status)} alloc=${x.alloc} base=${x.base} extra=${x.extra} rest=${x.rest}`
+      +` grendel=${x.grendel?'ja':'nee'} doorzak=${x.grendelDoorzak?'ja':'nee'}`));
   }catch(e){ return ['FOUT: '+e.message]; }
 }
 

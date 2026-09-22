@@ -308,6 +308,46 @@ genoemde versietag.)*
   hij er niet: die nul is een gat en geen toewijzing (`v173`).
   `planTotaalRegel()` staat sindsdien binnen de kaart van de waterval, onder de sluitpost, en niet
   meer tussen de bestemmingen en de reserveringen, waar hij las alsof de reserveringen erin zaten.
+- **De grendel houdt het splitsen tegen, niet het doorzakken** (`v255`): wat de buffer deze maand
+  niet meer kan gebruiken zakt door naar het eerstvolgende lopende doel op volgorde, ook bij een
+  dichte grendel. Gemeten aanleiding: buffer nog €2.534 nodig van €3.000 inleg, het noodfonds kreeg
+  zijn €2.534 en de resterende €466 bleef staan bij "Blijft over" terwijl Kosten Koper op plek 2
+  wachtte. In de maand dat de buffer vol raakt was het erger: nog €800 nodig, €2.200 bleef liggen.
+  DE REGEL ZAT IN RONDE 2 VAN `allocatePlan()`, niet in ronde 1: die eerste zet alleen de status
+  `wacht op de buffer`, laat `left` onaangeroerd en houdt het doel in `P`, dus het bleef een
+  geldige ontvanger. De `continue` in ronde 2 sloeg hem expliciet over.
+  DE POORT IS `planBufferKlaar(P,G)` EN NIET "DE GRENDEL IS OPEN": de buffer moet deze maand zijn
+  hele `rest` hebben gekregen, niet gepauzeerd staan en geen onbekende stand hebben. Gemeten met
+  een GEPAUZEERDE buffer bij een dichte grendel: de buffer krijgt nul en er blijft €3.000 over, dus
+  zonder die eis gaat je hele inleg langs een lege buffer naar het eerste doel. Bij een onbekende
+  stand volgt het al uit de rekensom, maar `v173` mag niet van een toevallige uitkomst afhangen.
+  Hij staat als eigen functie om dezelfde reden als `planMoveMag()` (`v245`).
+  **RONDE 2 LEEST DE VERDEELMODUS NIET**, en dus splitst een vast maandbedrag daar nog steeds
+  niets: het restant zakt op volgorde door en het eerste doel neemt wat het nodig heeft, nooit
+  meer. Wat de grendel tegen het splitsen doet zit in RONDE 1, die de modus van een
+  niet-buffer-item overslaat zolang `G` waar is. Dicht daar dus niets af dat al dicht is, en draai
+  het niet open in de veronderstelling dat een vast bedrag al meetelde; `grendel-doorzakken.spec.js`
+  houdt beide kanten vast.
+  EEN DOEL DAT DOORGEZAKT GELD KRIJGT WACHT NIET MEER: het krijgt status `''`, een tint en een tak,
+  en het datumpaar zegt `moet in X` / `krijgt wat je buffer overhoudt` / `verdelen gaat open rond Y`.
+  GEEN ACHTERSTAND EN GEEN BEDRAG PER MAAND daar: `p.eta` is `ceil(rest / het doorgezakte bedrag)`,
+  en dat bedrag is de rest van de maand van je buffer en niet het tempo van dit doel - gemeten zou
+  Kosten Koper met €466 doorgezakt op "25 maanden te laat · €1.600 per maand haalt het wel"
+  uitkomen terwijl de buffer volgende maand vol is. Zelfde grond als `v242`: wachten op de buffer is
+  geen achterstand. `p.grendelDoorzak` draagt de grendel naar het scherm zonder `p.grendel` te
+  zetten, want dat laatste zou `doelTempo()` het venster vanaf de openingsmaand laten rekenen
+  (`v243`), en dat klopt alleen voor een doel dat nog niets krijgt. Gemeten op 360px: 252px
+  beschikbaar in `.vat-dat`, de tweede regel is 171px; beide feiten in één zin is 422px en breekt.
+  HET SPLITSEN IS NU WEL EEN GRENS: `planVastMag()` is de poort op een eigen maandbedrag of een
+  eigen modus voor iets anders dan de buffer, gelezen door `setPlanAllocMode()`,
+  `setPlanAllocVeld()`, `setNfAlloc()`, `setNfAllocMode()`, `saveGoal()` en door elk blad dat de
+  chips tekent. Tot `v254` hing dat aan geen enkele schrijver: gemeten schreef
+  `setPlanAllocVeld('perMaand','500')` er gewoon in en zette `saveGoal()` modus `vast` met €500 op
+  een wachtend doel, waarna ronde 1 het stil negeerde en het scherm "vast €500" zei bij een doel dat
+  nul kreeg (`v238`). `saveGoal()` WEIGERT DE OPSLAG NIET: dan zou je de naam of de streefdatum van
+  een bestaand doel niet meer kunnen wijzigen, en juist die datum dwingt `v242` daar af. Hij houdt
+  de bestaande `allocMode`/`perMaand`/`pct` vast en slaat de rest op; een nieuw doel komt op `auto`
+  met nul, zoals `resNaarDoel()` al deed.
 - **De buffer gaat eerst, en dat is een grendel** (`v242`): zolang `planMap()[PLAN_NF]` niet vol is
   gaat de hele spaarinleg daarheen (`planGrendel()`), krijgt elk ander item status
   `wacht op de buffer`, en is het noodfonds niet te verslepen en niet op een vast bedrag te zetten.
@@ -670,7 +710,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v254` → `minder-v255`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v255` → `minder-v256`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de
