@@ -83,7 +83,15 @@ test.describe('b · de hoogte tot de vouw', () => {
      (360px breed) en 588px (390px breed), met een herokaart van 351 respectievelijk 337px.
      Na de splitsing is de kaart 120 respectievelijk 106px, maar de lijst kost meer hoogte dan het
      raster dat hij vervangt: vier posten van twee regels in plaats van twee rijen van twee kolommen.
-     Wat deze test vastlegt is de gemeten uitkomst, zodat een volgende ronde ziet wat hij verschuift. */
+     Wat deze test vastlegt is de gemeten uitkomst, zodat een volgende ronde ziet wat hij verschuift.
+     v250 IS ZO'N RONDE, en deze test ving hem: de potjesregel kreeg er een tweede toelichtingsregel
+     bij ("Bij je geplande tempo heb je nog EUR X nodig, EUR Y meer dan er in zit"), die op 360 en
+     390px over twee regels loopt. Kosten, gemeten: de onderkant van het tweede signaal gaat van 630
+     naar 668px op 360 en van 616 naar 654px op 390, precies de 38px van die regel plus zijn marge.
+     De vouw zelf verschuift niet van gedrag: op 360x640 pasten de signalen al niet (567px
+     zichtbaar) en op 360x800 en 390x844 passen ze nog steeds ruim (727 en 771px zichtbaar).
+     De drempel gaat daarom van 660 naar 680 mee, en bewust niet verder: de marge die 660 boven de
+     630 van v241 liet is hiermee opgebruikt, dus de volgende regel erbij valt hier weer om. */
   for (const [breedte, hoogte, past] of [[360, 640, false], [360, 800, true], [390, 844, true]]) {
     test(`${breedte}x${hoogte}: de signalen ${past ? 'passen' : 'passen niet'} in het eerste scherm`, async ({ page }) => {
       await boot(page, null, breedte, hoogte);
@@ -99,7 +107,7 @@ test.describe('b · de hoogte tot de vouw', () => {
       });
       expect(r.aantal).toBe(2);
       expect(r.kaart).toBeLessThan(200);                       // de kaart was 351/337px
-      expect(r.bodem).toBeLessThanOrEqual(660);                // gemeten 630 / 616
+      expect(r.bodem).toBeLessThanOrEqual(680);                // v241 gemeten 630 / 616, v250 668 / 654
       expect(r.bodem <= r.zichtbaar).toBe(past);
     });
   }

@@ -89,22 +89,29 @@ test.describe('a · het blok hangt in het scherm', () => {
 });
 
 test.describe('b · wat het blok vaststelt', () => {
+  /* v250: het blok leest de regel zoals hij sinds deze ronde op het scherm staat - de aftrekking
+     als groot getal, de reservering als eigen regel eronder. Bleef het blok "grote getal
+     (varPlanRemaining)" zeggen, dan zou de uitlezing zelf weer een ander getal beweren dan het
+     scherm, en dat is precies wat hij moest ontrafelen. */
   test('de vier getallen in het blok zijn die van het scherm', async ({ page }) => {
     await boot(page, { boekingen: OVER });
     const c = await cijfers(page);
     const t = await page.evaluate(() => diagPotjes().join('\n'));
-    expect(t).toContain(`grote getal (varPlanRemaining): ${c.rest}`);
+    expect(t).toContain(`Nog uit je potjes (varBudget - gebruikt): ${c.budget - c.gebruikt}`);
     expect(t).toContain(`van          (varBudget):       ${c.budget}`);
     expect(t).toContain(`gebruikt     (varPotjeStand):   ${c.gebruikt}`);
     expect(t).toContain(`procent      (varPotjeStand):   ${c.deel}`);
+    expect(t).toContain(`nog nodig    (varPlanRemaining): ${c.rest}`);
   });
 
-  test('het gat is het verschil tussen wat er staat en wat de aftrekking geeft', async ({ page }) => {
+  test('het gat is het verschil tussen de twee regels, en het blok zegt dat de tweede er staat', async ({ page }) => {
     await boot(page, { boekingen: OVER });
     const c = await cijfers(page);
     const gat = c.rest - (c.budget - c.gebruikt);
     expect(gat).toBeGreaterThan(0);
-    expect(await page.evaluate(() => diagPotjes().join('\n'))).toContain(`HET GAT                             : ${gat}`);
+    const t = await page.evaluate(() => diagPotjes().join('\n'));
+    expect(t).toContain(`HET GAT                        : ${gat}`);
+    expect(t).toContain('de regel staat er dus.');
   });
 
   /* De kern: het gat is per overschreden potje de reservering uit potjeRest() PLUS de
@@ -133,12 +140,13 @@ test.describe('b · wat het blok vaststelt', () => {
     expect(r.gat).toBeGreaterThan(r.overs);
   });
 
-  test('de vier optellingen in het blok sluiten alle vier aan', async ({ page }) => {
+  test('de vijf optellingen in het blok sluiten alle vijf aan', async ({ page }) => {
     await boot(page, { boekingen: OVER });
     const t = await page.evaluate(() => diagPotjes().join('\n'));
     expect(t).toContain('som van de potjes = varBudget(): JA');
     expect(t).toContain('som besteed = gebruikt:          JA');
-    expect(t).toContain('som restant = grote getal:       JA');
+    expect(t).toContain('potjes - besteed = grote getal:  JA');
+    expect(t).toContain('som restant = nog nodig:         JA');
     expect(t).toContain('som bijdragen = het gat:         JA');
   });
 
@@ -155,13 +163,16 @@ test.describe('b · wat het blok vaststelt', () => {
     const c = await cijfers(page);
     expect(c.rest).toBe(c.budget - c.gebruikt);
     const t = await page.evaluate(() => diagPotjes().join('\n'));
-    expect(t).toContain('HET GAT                             : 0');
+    expect(t).toContain('HET GAT                        : 0');
+    expect(t).toContain('geen gat, dus die regel staat er niet.');
     expect(t).toContain('0 overschreden');
   });
 
   /* safeToSpend() rekent de overschrijding al uit als potOver en geeft hem terug, maar gebruikt
-     hem niet in `safe` en de app leest hem nergens. Dat staat in het blok omdat het precies de
-     term is die een correctie nodig heeft, en hij bestaat al. */
+     hem niet in `safe` en de app leest hem nergens. Hij staat in het blok omdat hij eruitziet als
+     het getal dat je zoekt en dat niet is: hij telt per potje alleen de overschrijding en verrekent
+     geen potje dat eronder bleef, dus hij is noch het gat noch de aftrekking. De correctie van v250
+     leest hem dan ook niet. */
   test('het blok noemt potOver, die bestaat en door de app niet wordt gelezen', async ({ page }) => {
     await boot(page, { boekingen: OVER });
     const r = await page.evaluate(() => {
@@ -171,7 +182,13 @@ test.describe('b · wat het blok vaststelt', () => {
     expect(r.potOver).toBeGreaterThan(0);
     expect(r.reserved).toBe(r.rest);
     const t = await page.evaluate(() => diagPotjes().join('\n'));
-    expect(t).toContain(`potOver (bestaat al, wordt door de app nergens gelezen): ${r.potOver}`);
+    expect(t).toContain(`potOver (alleen de overschrijding, geen lezer in de app): ${r.potOver}`);
+    // en hij is niet het gat en niet de aftrekking: drie verschillende getallen
+    const c = await cijfers(page);
+    expect(r.potOver).not.toBe(c.rest - (c.budget - c.gebruikt));
+    expect(r.potOver).not.toBe(c.budget - c.gebruikt);
+    const src = await page.evaluate(() => nogDezeMaandPosten.toString());
+    expect(src).not.toContain('potOver');
   });
 });
 

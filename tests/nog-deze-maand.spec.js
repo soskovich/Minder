@@ -109,7 +109,11 @@ test.describe('a · de rij scheidt waarneming van plan', () => {
     const b = await blok(page);
     const pot = b.tegels[3];
     expect(pot.waarde).toMatch(/€/);
-    expect(pot.tik).toBe(true);
+    /* v250: hier stond expect(pot.tik).toBe(true). De tik is verhuisd naar de regel onder het
+       bedrag, want die noemt het bedrag dat openReservedPotjes() in zijn kop zet; het grote getal
+       toont sindsdien de aftrekking en heeft geen tik meer. Waar de ingang hangt en waar hij op
+       uitkomt staat in potjesregel-aansluiting.spec.js. Wat deze test vasthoudt is dat de post een
+       post in de rij is en geen voetregel eronder, en dat blijft hieronder staan. */
     // de oude regel bestaat niet meer, in geen enkele vorm, in geen van de twee weergaven
     const src = await page.evaluate(() => nogDezeMaandPosten.toString() + nogDezeMaandBody.toString() + insNogLijst.toString());
     expect(src).not.toMatch(/plus \$\{euro0\(varPlan\)\} variabel/);
@@ -134,10 +138,16 @@ test.describe('b · er telt niets op in dit blok', () => {
       const rij = document.querySelector('#insNogLijst');
       return { getoond: [...rij.querySelectorAll('.ins-nog-val')].map((x) => eur(x.innerText)),
                fix: Math.round(L.fixDue), inc: Math.round(L.incDue), vp: Math.round(vp),
+               inPotjes: (function(){ try{ const V=varPotjeStand(curMonth); return Math.abs(V.budget-V.gebruikt); }catch(_){ return 0; } })(),
                spaar: S ? Math.round(Math.max(S.saveReserved, 0)) : 0 };
     });
-    // elk getoond getal komt uit precies een bron, geen enkele is een combinatie
-    const bronnen = [r.fix, r.inc, r.spaar, r.vp];
+    /* BEDOELING BIJGESTELD (v250): "geen enkel getal is een combinatie" gold voor de vier posten
+       zoals ze toen waren. Het grote getal op de potjesregel is sindsdien met opzet een verschil,
+       varBudget() min varPotjeStand().gebruikt, want het staat op één regel met "van X · Y
+       gebruikt" en moest daarop aansluiten. Dat verschil is dus een geldige bron; wat de test
+       tegenhoudt blijft wat v192 wegnam: getallen die posten uit verschillende bronnen bij elkaar
+       optellen. */
+    const bronnen = [r.fix, r.inc, r.spaar, r.vp, r.inPotjes];
     for (const g of r.getoond) expect(bronnen, JSON.stringify(r)).toContain(g);
     // en de combinaties die de weggehaalde chip toonde staan er niet
     for (const combi of [r.inc - r.fix - r.vp, r.fix + r.vp, r.inc - r.fix, r.fix + r.vp + r.spaar]) {

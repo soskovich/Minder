@@ -1753,7 +1753,14 @@ function potjeRest(bud, uitgegeven, dim, daysLeft){
    over dezelfde recurringCats()-scheiding die die twee al gebruiken.
    Let op dat rest + gebruikt NIET altijd budget is: bij een overschreden potje slaat potjeRest om
    naar het geplande dagtempo maal de resterende dagen (v111), en dat is met opzet geen rekenkundig
-   restant. De tegel toont ze daarom als losse feiten en telt ze nergens op. */
+   restant maar een reservering voor de rest van de maand.
+   v250: "de tegel toont ze als losse feiten en telt ze nergens op" stond hier, en dat klopte niet
+   meer met het scherm. Sinds v208 staat de sub direct onder het grote getal in de vorm
+   "van X · Y gebruikt", en die vorm leest als een aftrekking; gemeten stond er €1.089 waar €1.730
+   min €1.132 gelijk is aan €598. Het grote getal op die regel is nu budget min gebruikt, die
+   aftrekking dus, en `rest` staat eronder als eigen regel met het verschil erbij. Wie `rest`
+   leest, leest een reservering en geen restant: zet hem nooit onder een noemer zonder dat erbij
+   te zeggen. */
 function varPotjeStand(ym){
   const B=SET.budgets||{}; const sp=catSpendMap(ym);
   let rc=new Set(); try{ rc=recurringCats(); }catch(_){}
@@ -7275,7 +7282,11 @@ function nogDezeMaandPosten(){
      tegen €931 prognose, dus Home zei "+€1.450 veilig te besteden" terwijl hier "-€931" stond.
      Potjes zijn je sturingsmechanisme, dus het plan stuurt. varPlanRemaining() is de enige bron. */
   const varPlan=(function(){ try{ return varPlanRemaining(curMonth||months()[months().length-1]); }catch(_){ return 0; } })();
-  if(!L||!(L.fixDue>0||varPlan>0||L.incDue>0)) return [];
+  /* v250: VP staat hier en niet meer bij de post, want de blokpoort leest hem mee. Bleef die op
+     varPlan staan, dan viel het hele blok weg op de dag dat al je potjes over zijn en daysLeft nul
+     is, en dat is dezelfde fout als de postpoort hieronder. */
+  const VP=(function(){ try{ return varPotjeStand(curMonth||months()[months().length-1]); }catch(_){ return null; } })();
+  if(!L||!(L.fixDue>0||varPlan>0||L.incDue>0||(VP&&VP.budget>0))) return [];
   /* Waarneming en plan blijven zichtbaar gescheiden: het grote getal is wat er herkend is aan
      vaste lasten, het variabele deel staat er als eigen regel onder. Eén bedrag dat die twee
      optelt suggereert één soort zekerheid. */
@@ -7329,13 +7340,31 @@ function nogDezeMaandPosten(){
      '<bedrag> over je potjes, met nog N dagen te gaan', en dat percentage zou datzelfde in een
      tweede vorm herhalen (v191: tot de drempel een percentage, daarboven een vaststelling). Geen
      alarmkleur, want wat je jezelf hebt opgelegd is geen tekort (v78/v93). */
-  if(varPlan>0){ const VP=(function(){ try{ return varPotjeStand(curMonth||months()[months().length-1]); }catch(_){ return null; } })();
-    const vsub = !VP||!(VP.budget>0) ? 'variabel'
-      : VP.gebruikt<=0 ? `van ${euro0(VP.budget)} · nog niets gebruikt`
+  /* v250: het grote getal was varPlanRemaining(), en dat is geen restant maar een reservering:
+     bij een overschreden potje geeft potjeRest() het geplande dagtempo maal de resterende dagen
+     terug (v111). Onder "van X · Y gebruikt" leest dat als een aftrekking en dat is het niet.
+     Gemeten stond er €1.089 waar €1.730 min €1.132 gelijk is aan €598, en dat gat groeide binnen
+     twee dagen van €385 naar €491. Het grote getal is nu wél die aftrekking, uit dezelfde twee
+     bronnen als de sub eronder. De reservering is niet weg: hij staat als eigen regel eronder, met
+     het verschil erbij, want dat verschil is wat deze regel te zeggen heeft.
+     DE POORT IS varBudget() EN NIET varPlan. Op de laatste dag van de maand is daysLeft nul, dus
+     geeft elk overschreden potje nul terug; met de oude poort verdween de regel dan precies
+     wanneer "te veel uitgegeven" het meest te zeggen heeft.
+     DE TIK HANGT AAN DE NOOT. openReservedPotjes() telt per potje potjeRest() op, dus zijn koptotaal
+     is varPlan en niet het grote getal; hij hoort bij de regel die dat bedrag noemt. Het grote getal
+     krijgt geen tik: er is geen bestaand overzicht waarvan de kop op deze aftrekking uitkomt, en een
+     tik naar een ander getal is precies de fout die deze ronde opruimt. Vanaf Home blijft de sheet
+     bereikbaar via 'Gereserveerd in je potjes' in de opbouw. */
+  if(VP && VP.budget>0){
+    const inPotjes=VP.budget-VP.gebruikt;        // wat er werkelijk nog in je potjes zit
+    const gat=varPlan-inPotjes;                  // wat de reservering daar bovenop vraagt
+    const vsub = VP.gebruikt<=0 ? `van ${euro0(VP.budget)} · nog niets gebruikt`
       : VP.over ? `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt`
       : `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt · ${VP.deel}%`;
-    posten.push({lab:'Nog uit je potjes', val:euro0(varPlan), col:'var(--txt)',
-      sub:vsub, tik:'openReservedPotjes()'}); }
+    posten.push({lab: inPotjes<0?'Te veel uitgegeven':'Nog uit je potjes',
+      val:euro0(Math.abs(inPotjes)), col:'var(--txt)', sub:vsub, tik:'',
+      noot: gat>0?`Bij je geplande tempo heb je nog ${euro0(varPlan)} nodig, ${euro0(gat)} meer dan er in zit.`:'',
+      nootTik:'openReservedPotjes()'}); }
   return posten;
 }
 /* De tegelvorm. Hij staat nog maar op één plek: de terugval-kaart wanneer er geen budget is, en
@@ -7351,7 +7380,8 @@ function nogDezeMaandBody(){
   const tegel=(p,i)=>`<div class="wvo-tile" style="${vol(i)?'grid-column:1/-1;':''}${p.tik?'cursor:pointer':''}"${p.tik?` onclick="${p.tik}"`:''}>
       <div class="wvo-tl">${p.lab}</div>
       <div class="wvo-tv" style="color:${p.col}">${p.val}</div>
-      ${p.sub?`<div class="wvo-ts">${p.sub}</div>`:''}</div>`;
+      ${p.sub?`<div class="wvo-ts">${p.sub}</div>`:''}
+      ${p.noot?`<div class="wvo-ts nog-noot" style="color:var(--mut2);margin-top:3px${p.nootTik?';cursor:pointer':''}"${p.nootTik?` onclick="event.stopPropagation();${p.nootTik}"`:''}>${p.noot}${p.nootTik?' \u203a':''}</div>`:''}</div>`;
   return `<div class="wvo-tiles" style="grid-template-columns:1fr 1fr">${posten.map(tegel).join('')}</div>`;
 }
 /* v241: dezelfde posten als lijst, voor Inzichten. Een raster scan je, een lijst lees je, en van
@@ -7368,7 +7398,8 @@ function insNogLijst(){
   const rij=(p,i)=>`<div class="ins-nog-rij" style="display:flex;gap:10px;align-items:baseline;padding:8px 2px${i?';border-top:1px solid var(--line)':''}${p.tik?';cursor:pointer':''}"${p.tik?` onclick="${p.tik}"`:''}>
       <span style="flex:1;min-width:0">
         <span class="ins-nog-lab" style="font-size:13px">${p.lab}</span>
-        ${p.sub?`<span class="small ins-nog-sub" style="display:block;color:var(--mut);margin-top:1px;line-height:1.4">${p.sub}</span>`:''}</span>
+        ${p.sub?`<span class="small ins-nog-sub" style="display:block;color:var(--mut);margin-top:1px;line-height:1.4">${p.sub}</span>`:''}
+        ${p.noot?`<span class="small ins-nog-noot" style="display:block;color:var(--mut2);margin-top:3px;line-height:1.4${p.nootTik?';cursor:pointer':''}"${p.nootTik?` onclick="event.stopPropagation();${p.nootTik}"`:''}>${p.noot}${p.nootTik?' \u203a':''}</span>`:''}</span>
       <span class="ins-nog-val" style="font-weight:800;white-space:nowrap;text-align:right;color:${p.col}">${p.val}</span></div>`;
   return `<div id="insNogLijst">${posten.map(rij).join('')}</div>`;
 }
@@ -12047,15 +12078,16 @@ function diagAlloc(){
   }catch(e){ return ['FOUT: '+e.message]; }
 }
 
-/* 6. De potjesregel op Inzichten: waarom het grote getal niet het verschil is (v249).
+/* 6. De potjesregel op Inzichten: waar het gat vandaan komt (v249).
       Gemeld: "Nog uit je potjes €1.089, van €1.730 · €1.132 gebruikt · 65%", terwijl 1.730 min
       1.132 gelijk is aan 598. Alle vier de getallen rekenen over DEZELFDE potjes (elke k in
       SET.budgets met bud>0 die niet in recurringCats() zit) en dezelfde transacties
       (catSpendMap). Het verschil zit in potjeRest(): bij een potje waar je overheen bent gegaan
       geeft die niet het negatieve restant terug maar bud/dim maal de resterende dagen, als
-      reservering voor de rest van de maand (v111). Dat is met opzet, maar het maakt het grote
-      getal geen restant, en op één regel met "van X gebruikt" leest het wel zo.
-      Dit blok rekent het gat per potje uit, zodat te zien is waar het vandaan komt. */
+      reservering voor de rest van de maand (v111).
+      Sinds v250 toont de regel de aftrekking als groot getal en de reservering als eigen regel
+      eronder, met het gat erbij. Dit blok leest precies die twee getallen terug en rekent het gat
+      per potje uit, zodat op de eigen gegevens te zien is waar het vandaan komt. */
 function diagPotjes(){
   const L=[];
   const ym=(function(){ try{ return curMonth||months()[months().length-1]; }catch(_){ return ''; } })();
@@ -12069,17 +12101,18 @@ function diagPotjes(){
   const daysLeft=Math.max(d.dim-d.elapsed,0);
   L.push(`dag ${d.elapsed} van ${d.dim}, nog ${daysLeft} dagen`);
   L.push('');
-  L.push('de vier getallen op de regel:');
-  L.push('  grote getal (varPlanRemaining): '+_dV(()=>varPlanRemaining(ym)));
-  L.push('  van          (varBudget):       '+_dV(()=>varBudget()));
   const VP=_dT(()=>varPotjeStand(ym),null);
+  const budget=_dT(()=>varBudget(),0), rest=_dT(()=>varPlanRemaining(ym),0), gebruikt=VP?VP.gebruikt:0;
+  const inPotjes=budget-gebruikt, gat=rest-inPotjes;
+  L.push('wat de regel toont:');
+  L.push(`  ${inPotjes<0?'Te veel uitgegeven':'Nog uit je potjes'} (varBudget - gebruikt): ${Math.abs(inPotjes)}`);
+  L.push('  van          (varBudget):       '+_dV(()=>varBudget()));
   L.push('  gebruikt     (varPotjeStand):   '+_dV(()=>VP&&VP.gebruikt));
   L.push('  procent      (varPotjeStand):   '+_dV(()=>VP&&VP.deel));
-  const budget=_dT(()=>varBudget(),0), rest=_dT(()=>varPlanRemaining(ym),0), gebruikt=VP?VP.gebruikt:0;
-  L.push('');
-  L.push(`rekenkundig restant (van - gebruikt): ${budget-gebruikt}`);
-  L.push(`wat er staat        (grote getal)   : ${rest}`);
-  L.push(`HET GAT                             : ${rest-(budget-gebruikt)}`);
+  L.push('de regel eronder, alleen bij een gat boven nul:');
+  L.push('  nog nodig    (varPlanRemaining): '+_dV(()=>varPlanRemaining(ym)));
+  L.push(`  HET GAT                        : ${gat}`);
+  L.push(gat>0?'  de regel staat er dus.':'  geen gat, dus die regel staat er niet.');
   L.push('');
   L.push('per potje. meetelt: alle drie de sommen lopen over dezelfde poort (bud>0 en niet');
   L.push('terugkerend), dus een potje telt overal mee of nergens. reserve is wat potjeRest()');
@@ -12112,13 +12145,15 @@ function diagPotjes(){
   L.push('sluit de optelling aan:');
   L.push(`  som van de potjes = varBudget(): ${sBud===budget?'JA':'NEE ('+sBud+' tegen '+budget+')'}`);
   L.push(`  som besteed = gebruikt:          ${sSp===gebruikt?'JA':'NEE ('+sSp+' tegen '+gebruikt+')'}`);
-  L.push(`  som restant = grote getal:       ${sRest===rest?'JA':'NEE ('+sRest+' tegen '+rest+')'}`);
-  L.push(`  som bijdragen = het gat:         ${sGat===(rest-(budget-gebruikt))?'JA':'NEE ('+sGat+' tegen '+(rest-(budget-gebruikt))+')'}`);
+  L.push(`  potjes - besteed = grote getal:  ${(sBud-sSp)===inPotjes?'JA':'NEE ('+(sBud-sSp)+' tegen '+inPotjes+')'}`);
+  L.push(`  som restant = nog nodig:         ${sRest===rest?'JA':'NEE ('+sRest+' tegen '+rest+')'}`);
+  L.push(`  som bijdragen = het gat:         ${sGat===gat?'JA':'NEE ('+sGat+' tegen '+gat+')'}`);
   L.push('');
-  /* safeToSpend() rekent de overschrijding al uit, als potOver, en niemand leest hem: hij wordt
-     alleen teruggegeven. Dat is hier het vermelden waard, want het is precies de term die een
-     correctie nodig heeft, en hij bestaat al. */
-  L.push('safeToSpend().potOver (bestaat al, wordt door de app nergens gelezen): '
+  /* potOver telt per potje alleen de overschrijding en verrekent geen potje dat eronder bleef, dus
+     hij is niet het gat en ook niet het grote getal. Hij staat hier omdat hij er zo uitziet en dat
+     niet is: gemeten 500 waar de aftrekking op -100 uitkwam en het gat op 713. Nog steeds geen
+     lezer in de app. */
+  L.push('safeToSpend().potOver (alleen de overschrijding, geen lezer in de app): '
     +_dV(()=>{ try{ return safeToSpend().potOver; }catch(_){ return null; } }));
   L.push('safeToSpend().reserved (is varPlanRemaining, en gaat wel in safe): '
     +_dV(()=>{ try{ return safeToSpend().reserved; }catch(_){ return null; } }));

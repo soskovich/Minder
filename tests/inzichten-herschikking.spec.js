@@ -51,6 +51,12 @@ const legeLiquiditeit = (page) => page.evaluate(() => {
   // v169: het variabele deel komt uit varPlanRemaining(), niet meer uit L.varDue. "Niets meer open"
   // betekent dus ook: niets meer in je potjes.
   window.varPlanRemaining = () => 0;
+  /* v250: de poort van de potjesregel leest sinds deze ronde varPotjeStand().budget en niet meer
+     varPlanRemaining(). Dat is met opzet: op de laatste dag van de maand geeft potjeRest() voor een
+     overschreden potje nul terug, en dan verdween de regel precies wanneer hij het meest te zeggen
+     had. "Niets meer open" moet dus ook zeggen dat er geen potjes zijn, anders legt deze fixture
+     alleen nog de oude poort vast. */
+  window.varPotjeStand = () => ({ budget: 0, gebruikt: 0, rest: 0, potjes: 0, deel: null, over: false });
 });
 const beeld = (page) => page.evaluate(() => {
   const el = document.querySelector('#s-ins');

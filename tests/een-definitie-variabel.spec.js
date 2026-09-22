@@ -47,6 +47,20 @@ const SITUATIES = [
   ['tempo ver boven het plan', { boodschappen: 480, uiteten: 195 }],
 ];
 
+/* v250: het grote getal op de potjesregel is de aftrekking (varBudget min gebruikt) geworden; de
+   reservering uit varPlanRemaining() staat als eigen regel eronder, en alleen wanneer die twee
+   uiteenlopen. Wat deze spec vasthoudt is de BRON en niet de plek, dus lees de reservering waar hij
+   staat: uit de regel eronder zodra die er is, en anders uit het grote getal - want zonder gat zijn
+   het per definitie dezelfde twee getallen. Het lezen gebeurt hier en niet in page.evaluate(),
+   zodat er niets in de pagina hoeft te worden gezet om de meting te kunnen doen. */
+const schermPlan = (tekst) => {
+  const t = String(tekst).replace(/\s+/g, ' ');
+  const n = t.match(/heb je nog \u20ac([\d.]+) nodig/i);
+  if (n) return +n[1].replace(/\./g, '');
+  const g = t.match(/(?:nog uit je potjes|te veel uitgegeven)\s*\u20ac([\d.]+)/i);
+  return g ? +g[1].replace(/\./g, '') : 0;
+};
+
 test.describe('a · elke plek leest dezelfde bron', () => {
   for (const [naam, opt] of SITUATIES) {
     test(`${naam}: drie plekken en het scherm, één getal`, async ({ page }) => {
@@ -60,9 +74,9 @@ test.describe('a · elke plek leest dezelfde bron', () => {
           safe: Math.round(safeToSpend().reserved),
           // wat Inzichten er letterlijk van maakt: het bedrag uit de regel onder de tegel
           scherm: (function(){ const d=document.createElement('div'); d.innerHTML=nogDezeMaandBody();
-            // v204: het variabele deel stond als voetregel onder de tegels ('plus EUR X variabel uit je potjes') en is een vierde tegel geworden, 'Nog uit je potjes'. Het bedrag en de bron zijn ongewijzigd; alleen de vindplaats verschuift.
-            const m2=d.innerText.replace(/\s+/g,' ').match(/nog uit je potjes\s*€([\d.]+)/i);
-            return m2 ? +m2[1].replace(/\./g,'') : 0; })(),
+            // v204: het variabele deel stond als voetregel onder de tegels en is een tegel geworden.
+            // v250: en staat sindsdien in de regel eronder zodra hij van de aftrekking afwijkt.
+            return d.innerText; })(),
           // dezelfde som, met de hand: potjeRest per niet-recurring potje
           hand: (function () {
             const sp = catSpendMap(m), B = SET.budgets || {}, rc = recurringCats();
@@ -75,7 +89,7 @@ test.describe('a · elke plek leest dezelfde bron', () => {
       });
       expect(r.safe).toBe(r.bron);
       expect(r.hand).toBe(r.bron);
-      expect(r.scherm).toBe(r.bron);       // en dat is ook het bedrag dat Inzichten toont
+      expect(schermPlan(r.scherm)).toBe(r.bron);   // en dat is ook het bedrag dat Inzichten toont
     });
   }
 });
@@ -100,13 +114,12 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
         const m = curMonth || months()[months().length - 1];
         const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
         const t = d.innerText.replace(/\s+/g, ' ');
-        const mm = t.match(/nog uit je potjes\s*€([\d.]+)/i);   // v204: was een voetregel
         return { bron: varPlanRemaining(m), home: Math.round(safeToSpend().reserved),
-          inzichten: mm ? +mm[1].replace(/\./g, '') : 0, tekst: t,
+          inzichten: d.innerText, tekst: t,   // v204 tegel, v250 de regel eronder
           srcSafe: safeToSpend.toString(), srcBody: nogDezeMaandPosten.toString() };
       });
       expect(r.home).toBe(r.bron);
-      expect(r.inzichten).toBe(r.bron);
+      expect(schermPlan(r.inzichten)).toBe(r.bron);
       expect(r.srcSafe).toContain('varPlanRemaining(');
       expect(r.srcBody).toContain('varPlanRemaining(');
       // en er staat geen getal meer dat die planrest bij een waarneming optelt

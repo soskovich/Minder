@@ -13,13 +13,19 @@ const ins = (page) => page.evaluate(() => { go('ins'); return $('#s-ins').innerT
 const maand = (page) => page.evaluate(() => { go('maand'); return $('#s-maand').innerText; });
 const potjesTegel = (page) => page.evaluate(() => {
   go('ins');
-  const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((x) => /uit je potjes/i.test(x.innerText));
+  /* v250: het label is niet meer vast. Zit je boven de som van je variabele potjes, dan heet de
+     regel 'Te veel uitgegeven'; daaronder 'Nog uit je potjes'. De regel is dus op allebei te
+     vinden, niet op de ene zin. */
+  const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText));
   if (!t) return null;
   /* v241: lijstregel in plaats van tegel, dus het bedrag staat rechts naast het label en niet
      eronder. Lezen per element en niet per tekstregel, anders hangt de test aan de volgorde
      waarin innerText de kolommen afloopt. */
   const q = (c) => { const e = t.querySelector(c); return e ? e.innerText : ''; };
-  return { lab: q('.ins-nog-lab'), val: q('.ins-nog-val'), sub: q('.ins-nog-sub'), tik: t.getAttribute('onclick') };
+  const n = t.querySelector('.ins-nog-noot');
+  return { lab: q('.ins-nog-lab'), val: q('.ins-nog-val'), sub: q('.ins-nog-sub'),
+    noot: n ? n.innerText : null, nootTik: n ? n.getAttribute('onclick') : null,
+    tik: t.getAttribute('onclick') };
 });
 
 // potjes zonder uitgaven: alles staat nog open
@@ -163,6 +169,11 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
     expect(t.sub).not.toMatch(/%/);              // de hero zegt al hoeveel je erover bent
   });
 
+  /* OPEN PUNT, gemeten bij v250 en bewust niet aangeraakt: budgetOverZin() in de hero zegt
+     "EUR X over je potjes" maar rekent met totals().budget tegen totals().spendNorm, dus met ALLE
+     potjes en met uitgaven uit categorieen zonder potje. Deze regel rekent alleen variabel.
+     Gemeten met EUR 200 bij een categorie zonder potje: de hero zegt 300 over je potjes waar de
+     regel op 100 uitkomt. Hetzelfde soort verkeerde etiket als deze regel had. */
   test('de hero noemt de overschrijding, de tegel herhaalt hem niet', async ({ page }) => {
     await open(page, overschreden());
     const t = await ins(page);
@@ -182,7 +193,7 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
     await open(page, overschreden());
     const kleur = await page.evaluate(() => {
       go('ins');
-      const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((x) => /uit je potjes/i.test(x.innerText));
+      const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText));
       return t ? t.querySelector('.ins-nog-val').getAttribute('style') : '';
     });
     expect(kleur).toContain('var(--txt)');
@@ -191,10 +202,19 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
 });
 
 test.describe('d - de tegel leidt naar het instrument', () => {
-  test('de tik opent de potjes, en elke rij opent zijn eigen potje', async ({ page }) => {
-    await open(page, seed());
+  /* BEDOELING OMGEDRAAID (v250): de tik zat op de hele regel en dus op het grote getal, terwijl
+     openReservedPotjes() potjeRest() per potje optelt en zijn koptotaal daarmee varPlanRemaining
+     is. Sinds het grote getal de aftrekking toont, kwam je dan op een ander getal uit dan waarop
+     je tikte. De sheet hangt nu aan de regel die dat bedrag noemt. Het grote getal heeft geen tik:
+     geen bestaand overzicht komt op die aftrekking uit, en liever geen tik dan een verkeerde. */
+  test('de tik zit op de regel die het bedrag van de sheet noemt', async ({ page }) => {
+    /* overschreden() en niet seed(): die tweede heeft geen potje boven zijn grens en dus geen gat,
+       en dan staat de regel met de sheet-ingang er terecht niet. Dat geval staat in
+       potjesregel-aansluiting.spec.js, samen met de route die Home dan nog houdt. */
+    await open(page, overschreden());
     const t = await potjesTegel(page);
-    expect(t.tik).toBe('openReservedPotjes()');
+    expect(t.tik).toBeNull();
+    expect(t.nootTik).toContain('openReservedPotjes()');
     const r = await page.evaluate(() => {
       openReservedPotjes();
       const rijen = [...document.querySelectorAll('#sheet .tx')];

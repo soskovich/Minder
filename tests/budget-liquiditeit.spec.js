@@ -102,16 +102,20 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     await page.evaluate(() => go('ins'));   // v144: de tegels wonen alleen nog in de Inzichten-hero
     /* v169: het variabele deel kwam uit L.varDue, een extrapolatie van je tempo. Dat is nu het
        plan (varPlanRemaining), en het staat als eigen regel onder de tegel in plaats van opgeteld
-       bij de waargenomen vaste lasten. Op de laatste dag van de maand is het plan nul en toont de
-       kaart die regel terecht niet; de assertie volgt dat. */
-    const rest = await page.evaluate(() => { const d = daysElapsed(curMonth); return d.dim - d.elapsed; });
+       bij de waargenomen vaste lasten.
+       v250: de regel hangt niet meer aan dat plan maar aan varBudget(). Op de laatste dag van de
+       maand geeft potjeRest() voor een overschreden potje nul terug, en dan verdween de regel
+       precies wanneer hij het meest te zeggen had. Heb je potjes, dan staat hij er; heb je ze
+       niet, dan niet. De assertie volgt die poort en niet meer de kalender. */
+    const potjes = await page.evaluate(() => { try { return varBudget(); } catch (_) { return 0; } });
     const t = await text(page, '#s-ins');
     expect(t).not.toMatch(/\(tempo\)/);                  // het tempo is geen grondslag meer
     const plan = await page.evaluate((m) => varPlanRemaining(m), await page.evaluate(() => curMonth));
     // v204: die regel is de tegel 'Nog uit je potjes' geworden; zelfde bedrag, zelfde bron.
     // v241: lijstregel in plaats van tegel, dus label en bedrag staan naast elkaar op één regel
-    if (rest > 0 && plan > 0) expect(t).toMatch(/nog uit je potjes[\s\S]{0,40}€[\d.]+/i);
-    else expect(t).not.toMatch(/nog uit je potjes/i);
+    if (potjes > 0) expect(t).toMatch(/(nog uit je potjes|te veel uitgegeven)[\s\S]{0,40}€[\d.]+/i);
+    else expect(t).not.toMatch(/nog uit je potjes|te veel uitgegeven/i);
+    expect(plan).toBeGreaterThanOrEqual(0);
   });
 
   test('spiegel vuurt op drempel max(€50, 20%) en spreekt plan vs tempo aan', async ({ page }) => {

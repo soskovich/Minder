@@ -105,22 +105,44 @@ genoemde versietag.)*
   gevolg en keuze gelden hier niet, want er volgt geen stap uit. Er komt geen versienummer in beeld
   om de ingang aan te hangen: dat zou een tweede versiestring naast `CACHE` in `sw.js` maken, en
   wat dat kost staat onder de meetlessen.
-- **Het grote getal op de potjesregel is een reservering, geen restant** (`v249`, gemeten): op
-  Inzichten staat "Nog uit je potjes X, van Y gebruikt Z", en X is niet Y min Z. Gemeten gat van
-  €385 op dag 20 en €491 op dag 22, dus het groeit met de maand mee. ALLE VIER DE GETALLEN LOPEN
-  OVER DEZELFDE POTJES EN DEZELFDE TRANSACTIES: `varPlanRemaining()`, `varBudget()` en de lus in
-  `varPotjeStand()` delen één poort (`bud>0` en niet in `recurringCats()`) en één bron
-  (`catSpendMap()`), dus een potje telt overal mee of nergens. Het verschil zit volledig in
-  `potjeRest()`: boven het potje geeft die niet het negatieve restant maar `bud/dim × daysLeft`,
-  het geplande dagtempo voor de resterende dagen (`v111`). PER OVERSCHREDEN POTJE IS DE BIJDRAGE
-  AAN HET GAT `reserve + overschrijding`, en daarom is het gat veel groter dan de zichtbare
-  overschrijding. De code legt dat zelf al vast bij `varPotjeStand()` ("de tegel toont ze als
-  losse feiten en telt ze nergens op"). Maar de sub staat sinds `v208` direct onder het grote
-  getal in de vorm "van X · Y gebruikt", en die vorm leest als een aftrekking, ongeacht wat de
-  code bedoelt. `safeToSpend().potOver` rekent de
-  overschrijding al uit en heeft geen enkele lezer in de app: dat is de term die een correctie
-  nodig heeft, en hij bestaat dus al. Blok 6 van `DIAG_BLOKKEN` (`diagPotjes()`) leest dit per
-  potje uit en toetst de vier optellingen; er is nog GEEN correctie gebouwd.
+- **Een getal dat geen rekenkundig restant is, staat niet onder een regel die als aftrekking
+  leest** (`v249`, `v250`): op Inzichten stond "Nog uit je potjes €1.089, van €1.730 · €1.132
+  gebruikt", en €1.730 min €1.132 is €598. Alle vier de getallen lopen over DEZELFDE potjes en
+  dezelfde transacties: `varPlanRemaining()`, `varBudget()` en de lus in `varPotjeStand()` delen
+  één poort (`bud>0` en niet in `recurringCats()`) en één bron (`catSpendMap()`). Het verschil zat
+  volledig in `potjeRest()`: boven het potje geeft die `bud/dim × daysLeft`, het geplande dagtempo
+  voor de resterende dagen (`v111`), en dus een RESERVERING en geen restant. Per overschreden
+  potje is de bijdrage aan het gat `reserve + overschrijding`, en daarom was het gat veel groter
+  dan de zichtbare overschrijding: gemeten €385 op dag 20 en €491 op dag 22.
+  HET GROTE GETAL IS NU DE AFTREKKING, `varBudget()` min `varPotjeStand().gebruikt`, dus dezelfde
+  twee getallen als de sub eronder. De reservering is niet weg: die staat als eigen regel eronder,
+  met het verschil erbij, en alleen als dat verschil boven nul ligt. Loopt de aftrekking onder
+  nul, dan heet de regel `Te veel uitgegeven` met het bedrag zonder minteken. GEEN ENKELE LEZER
+  VAN `varPlanRemaining()` IS AANGERAAKT: `safeToSpend().reserved`, `coachStatus().projEnd` en de
+  sheet blijven de reservering lezen, want daar is het het juiste getal.
+  DE POORT LEEST `varPotjeStand().budget` EN NIET `varPlanRemaining()`. Op de laatste dag van de
+  maand is `daysLeft` nul, dus geeft elk overschreden potje nul terug, en de oude poort liet de
+  regel dan vallen precies wanneer "te veel uitgegeven" het meest te zeggen heeft.
+  EEN TIK KOMT UIT OP HET BEDRAG WAAROP JE TIKTE. `openReservedPotjes()` telt `potjeRest()` op,
+  dus zijn koptotaal is de reservering; die tik hangt daarom aan de regel die dat bedrag noemt en
+  niet meer aan de rij. Het grote getal krijgt géén tik: er is geen bestaand overzicht waarvan de
+  kop op deze aftrekking uitkomt (`openPotjesVerdeling` toont alle potjes zonder besteding,
+  `openBudgetCompare` rekent over het hele budget), en liever geen tik dan een tik naar een ander
+  getal. Zonder gat staat die regel er niet en heeft Inzichten dus geen route naar de sheet; via
+  Home blijft hij bereikbaar in de opbouw van 'veilig te besteden'.
+  `safeToSpend().potOver` is NIET de term die dit oplost: die telt per potje alleen de
+  overschrijding en verrekent geen potje dat eronder bleef, dus hij is noch het gat noch de
+  aftrekking (gemeten 500 tegen -100 en 713). Hij heeft nog steeds geen lezer in de app.
+  Blok 6 van `DIAG_BLOKKEN` (`diagPotjes()`) leest beide regels terug en toetst vijf optellingen.
+  WAT DE TWEEDE REGEL KOST: 38px, want hij loopt op 360 én 390px over twee regels. De onderkant
+  van het tweede valt-op-signaal gaat van 630 naar 668px op 360 en van 616 naar 654px op 390, en
+  de tripdraad in `inzichten-indeling.spec.js` schuift daarmee van 660 naar 680. Dat is de laatste
+  ruimte die de nulmeting van `v241` liet: een volgende regel in dit blok valt daar weer om, en
+  dat is de bedoeling.
+  OPEN PUNT, gemeten en bewust niet aangeraakt: `budgetOverZin()` in de hero zegt "€X over je
+  potjes" maar rekent met `totals().budget` tegen `totals().spendNorm`, dus met alle potjes én met
+  uitgaven uit categorieën zonder potje. Gemeten met €200 bij zo'n categorie: de hero zegt €300
+  over je potjes waar deze regel op €100 uitkomt. Hetzelfde soort verkeerde etiket.
 - **Op Inzichten is de stand het enige kader** (`v241`): `insHeroKaart()` laste de stand van de
   maand en "Nog deze maand" in een kaart. Twee vragen in een kader is een kader te veel: gemeten op
   360px was die kaart 351px en stond de onderkant van het tweede signaal op 602px bij 567px
@@ -546,7 +568,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v249` → `minder-v250`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v250` → `minder-v251`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

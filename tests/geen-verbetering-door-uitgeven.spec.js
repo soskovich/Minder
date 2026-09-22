@@ -96,16 +96,29 @@ test.describe('a \u00b7 de vier stappen', () => {
     }
   });
 
+/* v250: het grote getal op de potjesregel is de aftrekking (varBudget min gebruikt) geworden; de
+   reservering uit varPlanRemaining() staat als eigen regel eronder, en alleen wanneer die twee
+   uiteenlopen. Wat deze spec vasthoudt is de BRON en niet de plek, dus lees de reservering waar hij
+   staat: uit de regel eronder zodra die er is, en anders uit het grote getal - want zonder gat zijn
+   het per definitie dezelfde twee getallen. Het lezen gebeurt hier en niet in page.evaluate(),
+   zodat er niets in de pagina hoeft te worden gezet om de meting te kunnen doen. */
+const schermPlan = (tekst) => {
+  const t = String(tekst).replace(/\s+/g, ' ');
+  const n = t.match(/heb je nog \u20ac([\d.]+) nodig/i);
+  if (n) return +n[1].replace(/\./g, '');
+  const g = t.match(/(?:nog uit je potjes|te veel uitgegeven)\s*\u20ac([\d.]+)/i);
+  return g ? +g[1].replace(/\./g, '') : 0;
+};
+
   test('de planrest blijft de planrest, ook boven het potje', async ({ page }) => {
     for (const extra of STAPPEN) {
       await boot(page, extra);
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
         const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
-        const v = d.innerText.replace(/\s+/g, ' ').match(/nog uit je potjes\s*\u20ac([\d.]+)/i);
-        return { getoond: v ? +v[1].replace(/\./g, '') : 0, bron: varPlanRemaining(m) };
+        return { getoond: d.innerText, bron: varPlanRemaining(m) };
       });
-      expect(r.getoond, `bij +${extra}`).toBe(r.bron);
+      expect(schermPlan(r.getoond), `bij +${extra}`).toBe(r.bron);
     }
   });
 
