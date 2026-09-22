@@ -51,13 +51,14 @@ const SITUATIES = [
    reservering uit varPlanRemaining() staat als eigen regel eronder, en alleen wanneer die twee
    uiteenlopen. Wat deze spec vasthoudt is de BRON en niet de plek, dus lees de reservering waar hij
    staat: uit de regel eronder zodra die er is, en anders uit het grote getal - want zonder gat zijn
-   het per definitie dezelfde twee getallen. Het lezen gebeurt hier en niet in page.evaluate(),
-   zodat er niets in de pagina hoeft te worden gezet om de meting te kunnen doen. */
-const schermPlan = (tekst) => {
-  const t = String(tekst).replace(/\s+/g, ' ');
-  const n = t.match(/heb je nog \u20ac([\d.]+) nodig/i);
-  if (n) return +n[1].replace(/\./g, '');
-  const g = t.match(/(?:nog uit je potjes|te veel uitgegeven)\s*\u20ac([\d.]+)/i);
+   het per definitie dezelfde twee getallen.
+   v251: die regel wordt hier op zijn ELEMENT gezocht (.nog-noot) en niet op zijn zin. De eerste
+   versie matchte "heb je nog EUR X nodig", en toen de zin korter moest om op 360px op één regel te
+   passen viel deze spec om op de formulering terwijl de eigenschap ongemoeid was. */
+const schermPlan = ({ noot, alles }) => {
+  const bedrag = (t) => { const m = String(t).replace(/\s+/g, ' ').match(/\u20ac([\d.]+)/); return m ? +m[1].replace(/\./g, '') : null; };
+  if (noot) return bedrag(noot);
+  const g = String(alles).replace(/\s+/g, ' ').match(/(?:nog uit je potjes|te veel uitgegeven)\s*\u20ac([\d.]+)/i);
   return g ? +g[1].replace(/\./g, '') : 0;
 };
 
@@ -76,7 +77,7 @@ test.describe('a · elke plek leest dezelfde bron', () => {
           scherm: (function(){ const d=document.createElement('div'); d.innerHTML=nogDezeMaandBody();
             // v204: het variabele deel stond als voetregel onder de tegels en is een tegel geworden.
             // v250: en staat sindsdien in de regel eronder zodra hij van de aftrekking afwijkt.
-            return d.innerText; })(),
+            return { noot: (d.querySelector('.nog-noot') || {}).innerText || '', alles: d.innerText }; })(),
           // dezelfde som, met de hand: potjeRest per niet-recurring potje
           hand: (function () {
             const sp = catSpendMap(m), B = SET.budgets || {}, rc = recurringCats();
@@ -115,7 +116,8 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
         const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
         const t = d.innerText.replace(/\s+/g, ' ');
         return { bron: varPlanRemaining(m), home: Math.round(safeToSpend().reserved),
-          inzichten: d.innerText, tekst: t,   // v204 tegel, v250 de regel eronder
+          inzichten: { noot: (d.querySelector('.nog-noot') || {}).innerText || '', alles: d.innerText },
+          tekst: t,
           srcSafe: safeToSpend.toString(), srcBody: nogDezeMaandPosten.toString() };
       });
       expect(r.home).toBe(r.bron);

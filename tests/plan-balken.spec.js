@@ -10,7 +10,8 @@
 // vulling ervoor, dan loop je voor; erachter, dan loop je achter.
 //
 // HET BEGINMOMENT WORDT BEWAARD EN NIET AFGELEID. Afleiden uit goal.grendel kan niet: dat veld
-// bestaat alleen zolang een doel WACHT. Gemeten op een doel van €10.000 met streefdatum juni 2028,
+// bestaat alleen zolang een doel WACHT. Gemeten op het doel van het toestel: €10.000 met
+// streefdatum juni 2028 (in de fixtures KK_STREEF, zie de toelichting daar),
 // aangemaakt 19 juli 2026 en een grendel die rond november 2026 opengaat: met het id als terugval
 // springt het streepje op de openingsdag van €0 naar €1.832, precies op de dag dat je mag
 // beginnen. Daarom leggen saveGoal(), resNaarDoel() en grendelStartVastleggen() startDatum en
@@ -89,12 +90,22 @@ const takken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-v
 /* De echte ids van het toestel. Ze dragen hun aanmaakmoment in base36 ('gmrsd1piu' is 19 juli
    2026), en dat is wat de terugval leest; ID_KK zou naar 1970 decoderen en dus geen streepje geven.
    Een spec die het beginmoment toetst moet daarom met plausibele ids werken. */
+/* DE STREEFDATA VAN HET TOESTEL, en waarom ze hier als afstand staan. Kosten Koper loopt tot
+   juni 2028 en Inrichting woning tot januari 2029; op de meetdag (september 2026) is dat 21 en 28
+   maanden vooruit. Ze staan hieronder als die AFSTAND en niet als die DATUM, want een vaste datum
+   kruipt met de kalender naar het heden toe: in juni 2028 zou dit doel op zijn streefdatum staan
+   en in juli erna erachter, en dan toetst de spec een ander geval dan hij beschrijft. Wat hij
+   vasthoudt is een doel dat bijna twee jaar weg ligt met een tweede er een half jaar achter, en
+   dat is precies de verhouding van het toestel. Bedrag, id en naam zijn wel letterlijk het
+   toestel: €10.000 en €3.000, met de ids die hun aanmaakmoment dragen. */
+const KK_STREEF = overMnd(21);        // juni 2028 op de meetdag
+const IW_STREEF = overMnd(28);        // januari 2029 op de meetdag
 const KK = (o) => Object.assign({ id: 'gmrsd1piu', naam: 'Kosten Koper', doel: 10000, gespaard: 0, allocMode: 'auto' }, o);
 const IW = (o) => Object.assign({ id: 'gmub1fh4u', naam: 'Inrichting woning', doel: 3000, gespaard: 0, allocMode: 'auto' }, o);
 const ID_KK = 'gmrsd1piu', ID_IW = 'gmub1fh4u';
 
 test.describe('a · de grendel in beeld', () => {
-  const dicht = { goals: [KK({ streefdatum: overMnd(21) }), IW({ streefdatum: overMnd(28) })],
+  const dicht = { goals: [KK({ streefdatum: KK_STREEF }), IW({ streefdatum: IW_STREEF })],
     planOrder: ['noodfonds', ID_KK, ID_IW] };
 
   test('dichte grendel op de gemeten toestand: één tak, en die gaat naar de buffer', async ({ page }) => {
@@ -199,7 +210,7 @@ test.describe('b · het datumpaar', () => {
 
   test('onbekend: geen datum, wel de reden, en geen bedrag', async ({ page }) => {
     await boot(page, { set: { nfToegewezenMigrated: false, savingsAcc: {}, savingsEnds: [], extraSavings: 0 },
-      goals: [KK({ streefdatum: overMnd(21) })], planOrder: ['noodfonds', ID_KK] });
+      goals: [KK({ streefdatum: KK_STREEF })], planOrder: ['noodfonds', ID_KK] });
     const soort = await page.evaluate((id) => {
       const p = allocatePlan().find((x) => x.id === id);
       return doelTempo(p, p.alloc).soort;
@@ -212,7 +223,7 @@ test.describe('b · het datumpaar', () => {
   });
 
   test('het noodfonds draagt nooit een tweede datum', async ({ page }) => {
-    for (const o of [{ goals: [KK({ streefdatum: overMnd(21) })], planOrder: ['noodfonds', ID_KK] },
+    for (const o of [{ goals: [KK({ streefdatum: KK_STREEF })], planOrder: ['noodfonds', ID_KK] },
                      { goals: [], planOrder: ['noodfonds'] }]) {
       await boot(page, o);
       const nf = (await balken(page)).find((x) => x.id === 'noodfonds');
@@ -239,7 +250,7 @@ test.describe('b · het datumpaar', () => {
    elke bestemming heeft dezelfde balk, dus er valt niets te schalen en niets te klemmen. Wat
    ervoor in de plaats komt is wat de balk nu wel moet zeggen. */
 test.describe('c · de balken zijn gelijk, de vulling is de voortgang', () => {
-  const drie = { goals: [KK({ streefdatum: overMnd(21) }), IW({ streefdatum: overMnd(28) })],
+  const drie = { goals: [KK({ streefdatum: KK_STREEF }), IW({ streefdatum: IW_STREEF })],
     planOrder: ['noodfonds', ID_KK, ID_IW] };
 
   test('drie balken van gelijke hoogte en gelijke breedte', async ({ page }) => {
@@ -252,7 +263,7 @@ test.describe('c · de balken zijn gelijk, de vulling is de voortgang', () => {
 
   test('de vulling is gespaard gedeeld door doel, in procenten', async ({ page }) => {
     await boot(page, Object.assign({
-      goals: [KK({ gespaard: 2500, streefdatum: overMnd(21) }), IW({ gespaard: 300, streefdatum: overMnd(28) })],
+      goals: [KK({ gespaard: 2500, streefdatum: KK_STREEF }), IW({ gespaard: 300, streefdatum: IW_STREEF })],
       planOrder: ['noodfonds', ID_KK, ID_IW] }, VOL));
     const B = await balken(page);
     const P = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, { g: p.gespaard, d: p.doel }])));
@@ -264,7 +275,7 @@ test.describe('c · de balken zijn gelijk, de vulling is de voortgang', () => {
 
   test('nog te gaan is de lege rest van de track en geen eigen laag', async ({ page }) => {
     await boot(page, Object.assign({ goals: [KK({ gespaard: 2500, allocMode: 'fixed', perMaand: 500,
-      streefdatum: overMnd(21) })], planOrder: ['noodfonds', ID_KK] }, VOL));
+      streefdatum: KK_STREEF })], planOrder: ['noodfonds', ID_KK] }, VOL));
     const b = (await balken(page)).find((x) => x.id === ID_KK);
     expect(b.vulling.length).toBe(2);                    // stand plus wat er deze maand bij komt
     expect(b.vulling[0] + b.vulling[1]).toBeLessThanOrEqual(100.01);
@@ -276,12 +287,12 @@ test.describe('d · het streepje', () => {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 
   test('het noodfonds draagt nooit een streepje, want het heeft geen streefdatum', async ({ page }) => {
-    await boot(page, { goals: [KK({ streefdatum: overMnd(21) })], planOrder: ['noodfonds', ID_KK] });
+    await boot(page, { goals: [KK({ streefdatum: KK_STREEF })], planOrder: ['noodfonds', ID_KK] });
     expect((await balken(page)).find((x) => x.id === 'noodfonds').streep).toBe(null);
   });
 
   test('een doel achter de grendel heeft zijn streepje op nul', async ({ page }) => {
-    await boot(page, { goals: [KK({ streefdatum: overMnd(21) })], planOrder: ['noodfonds', ID_KK] });
+    await boot(page, { goals: [KK({ streefdatum: KK_STREEF })], planOrder: ['noodfonds', ID_KK] });
     expect(await page.evaluate(() => !!planGrendel())).toBe(true);
     const b = (await balken(page)).find((x) => x.id === ID_KK);
     expect(b.streep).toBe(0);
@@ -293,7 +304,7 @@ test.describe('d · het streepje', () => {
      grendelStartVastleggen() het beginmoment eenmalig vast op het moment van opengaan. */
   test('de grendel gaat open en het streepje blijft op nul in plaats van te springen',
     async ({ page }) => {
-      await boot(page, { goals: [KK({ streefdatum: overMnd(21) })], planOrder: ['noodfonds', ID_KK] });
+      await boot(page, { goals: [KK({ streefdatum: KK_STREEF })], planOrder: ['noodfonds', ID_KK] });
       expect((await balken(page)).find((x) => x.id === ID_KK).streep).toBe(0);
       expect(await page.evaluate(() => !!SET.grendelDicht), 'de vlag staat bij een dichte grendel').toBe(true);
       /* De buffer wordt vol. Niet via een reload: addInitScript zet de fixture er dan opnieuw
@@ -388,7 +399,7 @@ test.describe('d · het streepje', () => {
   });
 
   test('een bestaand doel zonder de twee velden valt terug op zijn id', async ({ page }) => {
-    await boot(page, Object.assign({ goals: [KK({ gespaard: 0, streefdatum: overMnd(21) })],
+    await boot(page, Object.assign({ goals: [KK({ gespaard: 0, streefdatum: KK_STREEF })],
       planOrder: ['noodfonds', ID_KK] }, VOL));
     const r = await page.evaluate((id) => {
       const g = (SET.goals || []).find((x) => x.id === id);
@@ -512,7 +523,7 @@ test.describe('d · de balk en de takken', () => {
 });
 
 test.describe('e · de bediening en de omgeving', () => {
-  const drie = { goals: [KK({ streefdatum: overMnd(21) }), IW({ streefdatum: overMnd(28) })],
+  const drie = { goals: [KK({ streefdatum: KK_STREEF }), IW({ streefdatum: IW_STREEF })],
     planOrder: ['noodfonds', ID_KK, ID_IW] };
 
   test('een pijltje dat niet mag is een uitgeschakelde knop, en tikken doet niets', async ({ page }) => {

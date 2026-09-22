@@ -41,10 +41,20 @@ function seed(o) {
   };
 }
 
-// twee potjes eroverheen, het derde ruim erbinnen: de verhouding uit de melding
-const GEMELD = [['b1', '03', -620, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN'],
-  ['v1', '04', -330, 'Shell', 'BEA, BETAALPAS SHELL TANKSTATION'],
-  ['u1', '06', -120, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT']];
+/* DE GEMETEN TOESTAND VAN HET TOESTEL, en niet een verhouding die erop lijkt. Gemeld werd
+   "Nog uit je potjes €1.089, van €1.730 · €1.132 gebruikt · 65%", dus €1.730 aan variabele potjes,
+   €1.132 gebruikt en een aftrekking van €598. Die drie staan hieronder als potjes en boekingen.
+   WAT NIET VAST TE ZETTEN IS: de €1.089 en het gat van €491. potjeRest() geeft voor een
+   overschreden potje bud/dim maal de RESTERENDE DAGEN terug, dus die twee hangen aan de dag van
+   de maand: op dag 20 was het gat €385, op dag 22 €491. Een fixture die ze als getal vastlegt zou
+   morgen rood staan zonder dat er iets mis is. De potjes zijn daarom zo gekozen dat het gat op
+   dag 22 van een maand van 30 dagen precies op €491 uitkomt, en elke test leest hem verder live
+   uit varPlanRemaining() in plaats van hem te herhalen. */
+const GEMELD_BUDGETS = { boodschappen: 600, uiteten: 400, vervoer: 330, shopping: 400, huur: 1200 };
+const GEMELD = [['b1', '03', -931, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN'],
+  ['u1', '06', -120, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT'],
+  ['v1', '04', -81, 'Shell', 'BEA, BETAALPAS SHELL TANKSTATION']];
+const gemeld = () => ({ boekingen: GEMELD, budgets: GEMELD_BUDGETS });
 // alles ruim binnen de potjes: geen gat
 const BINNEN = [['b1', '03', -120, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN']];
 // meer uitgegeven dan de som van alle variabele potjes
@@ -85,7 +95,7 @@ const meet = (page) => page.evaluate(() => {
 
 test.describe('a · het grote getal is de aftrekking die eronder staat', () => {
   test('de gemelde verhouding: het getal is budget min gebruikt, niet de reservering', async ({ page }) => {
-    await boot(page, { boekingen: GEMELD });
+    await boot(page, gemeld());
     const r = await meet(page);
     expect(r.er).toBe(true);
     expect(r.valEur).toBe(r.inPotjes);          // de aftrekking
@@ -95,7 +105,7 @@ test.describe('a · het grote getal is de aftrekking die eronder staat', () => {
   });
 
   test('de sub noemt dezelfde twee getallen waaruit het grote getal volgt', async ({ page }) => {
-    await boot(page, { boekingen: GEMELD });
+    await boot(page, gemeld());
     const r = await meet(page);
     // "van €1.200 · €1.070 gebruikt · 89%" - en 1200 min 1070 is wat er groot staat
     const g = [...r.sub.matchAll(/€([\d.]+)/g)].map((x) => +x[1].replace(/\./g, ''));
@@ -115,7 +125,7 @@ test.describe('a · het grote getal is de aftrekking die eronder staat', () => {
 
 test.describe('b · de reservering staat eronder, met het verschil erbij', () => {
   test('de extra regel noemt varPlanRemaining en het gat', async ({ page }) => {
-    await boot(page, { boekingen: GEMELD });
+    await boot(page, gemeld());
     const r = await meet(page);
     const g = [...r.noot.matchAll(/€([\d.]+)/g)].map((x) => +x[1].replace(/\./g, ''));
     expect(g[0]).toBe(r.rest);                  // "heb je nog €493 nodig"
@@ -135,7 +145,7 @@ test.describe('b · de reservering staat eronder, met het verschil erbij', () =>
   });
 
   test('de extra regel draagt geen alarmkleur', async ({ page }) => {
-    await boot(page, { boekingen: GEMELD });
+    await boot(page, gemeld());
     const kleur = await page.evaluate(() => {
       const n = document.querySelector('#insNogLijst .ins-nog-noot');
       const c = getComputedStyle(n).color;
@@ -188,7 +198,7 @@ test.describe('e · een tik komt uit op het bedrag waarop je tikte', () => {
   });
 
   test('de tik op de extra regel opent de sheet met datzelfde bedrag in de kop', async ({ page }) => {
-    await boot(page, { boekingen: GEMELD });
+    await boot(page, gemeld());
     const r = await meet(page);
     await page.click('#insNogLijst .ins-nog-noot');
     await page.waitForSelector('#sheetBg.show');
@@ -196,7 +206,7 @@ test.describe('e · een tik komt uit op het bedrag waarop je tikte', () => {
   });
 
   test('het grote getal heeft geen tik, want geen bestaand overzicht komt erop uit', async ({ page }) => {
-    await boot(page, { boekingen: GEMELD });
+    await boot(page, gemeld());
     expect((await meet(page)).rijTik).toBe(false);
     await page.click('#insNogLijst .ins-nog-val');
     expect(await page.locator('#sheetBg.show').count()).toBe(0);
@@ -219,9 +229,10 @@ test.describe('e · een tik komt uit op het bedrag waarop je tikte', () => {
 });
 
 test.describe('f · safeToSpend is niet aangeraakt', () => {
-  for (const [naam, bk] of [['gemeld', GEMELD], ['binnen', BINNEN], ['overal over', OVERAL]]) {
+  for (const [naam, o] of [['gemeld', gemeld()], ['binnen', { boekingen: BINNEN }],
+    ['overal over', { boekingen: OVERAL }]]) {
     test(`${naam}: reserved blijft varPlanRemaining, en de regel wijkt er bewust van af`, async ({ page }) => {
-      await boot(page, { boekingen: bk });
+      await boot(page, o);
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
         const S = safeToSpend();

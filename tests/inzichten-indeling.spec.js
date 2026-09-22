@@ -79,21 +79,21 @@ test.describe('a · de pagina in volgorde', () => {
 });
 
 test.describe('b · de hoogte tot de vouw', () => {
-  /* De nulmeting van v240, met dezelfde fixture: de onderkant van het tweede signaal stond op 602px
-     (360px breed) en 588px (390px breed), met een herokaart van 351 respectievelijk 337px.
-     Na de splitsing is de kaart 120 respectievelijk 106px, maar de lijst kost meer hoogte dan het
-     raster dat hij vervangt: vier posten van twee regels in plaats van twee rijen van twee kolommen.
-     Wat deze test vastlegt is de gemeten uitkomst, zodat een volgende ronde ziet wat hij verschuift.
-     v250 IS ZO'N RONDE, en deze test ving hem: de potjesregel kreeg er een tweede toelichtingsregel
-     bij ("Bij je geplande tempo heb je nog EUR X nodig, EUR Y meer dan er in zit"), die op 360 en
-     390px over twee regels loopt. Kosten, gemeten: de onderkant van het tweede signaal gaat van 630
-     naar 668px op 360 en van 616 naar 654px op 390, precies de 38px van die regel plus zijn marge.
-     De vouw zelf verschuift niet van gedrag: op 360x640 pasten de signalen al niet (567px
-     zichtbaar) en op 360x800 en 390x844 passen ze nog steeds ruim (727 en 771px zichtbaar).
-     De drempel gaat daarom van 660 naar 680 mee, en bewust niet verder: de marge die 660 boven de
-     630 van v241 liet is hiermee opgebruikt, dus de volgende regel erbij valt hier weer om. */
-  for (const [breedte, hoogte, past] of [[360, 640, false], [360, 800, true], [390, 844, true]]) {
-    test(`${breedte}x${hoogte}: de signalen ${past ? 'passen' : 'passen niet'} in het eerste scherm`, async ({ page }) => {
+  /* DE EIS, en niet de gemeten uitkomst. Bij de herindeling van v241 was het doel dat je de
+     signalen ziet zonder te scrollen; de nulmeting van v240 (onderkant tweede signaal op 602px bij
+     360px breed, 588px bij 390px) stond erbij om te laten zien wat er verschoof.
+     Die nulmeting is daarna de assertie geworden: een vast getal (660, bij v250 verschoven naar
+     680) naast een vlag `past` die voor 360x640 op false stond. Daarmee legde deze test vast dat de
+     signalen daar NIET in het eerste scherm passen, en dat is precies de eis die hij moest bewaken.
+     Een drempel die meeschuift met wat er gebouwd is meet niets.
+     Vanaf v251 is de lat de zichtbare hoogte zelf: de onderkant van het laatste signaal blijft
+     boven de vouw, op elk van de drie formaten. Gemeten valt dat op 567px (360x640), 727px
+     (360x800) en 771px (390x844): de vensterhoogte min de nav. Die grenzen staan er ook als getal
+     naast, zodat een nav die krimpt de eis niet stilletjes ruimer maakt.
+     DEZE TEST MAG ROOD STAAN. Rood betekent dan dat je moet scrollen voordat je weet dat er iets
+     onder staat, en dat is een bevinding over het scherm en niet over de test. */
+  for (const [breedte, hoogte, vouw] of [[360, 640, 567], [360, 800, 727], [390, 844, 771]]) {
+    test(`${breedte}x${hoogte}: de signalen passen in het eerste scherm`, async ({ page }) => {
       await boot(page, null, breedte, hoogte);
       const r = await page.evaluate(() => {
         const el = document.querySelector('#s-ins');
@@ -107,8 +107,8 @@ test.describe('b · de hoogte tot de vouw', () => {
       });
       expect(r.aantal).toBe(2);
       expect(r.kaart).toBeLessThan(200);                       // de kaart was 351/337px
-      expect(r.bodem).toBeLessThanOrEqual(680);                // v241 gemeten 630 / 616, v250 668 / 654
-      expect(r.bodem <= r.zichtbaar).toBe(past);
+      expect(r.zichtbaar).toBe(vouw);          // de vouw zelf verschuift niet zonder dat je het ziet
+      expect(r.bodem, JSON.stringify(r)).toBeLessThanOrEqual(r.zichtbaar);
     });
   }
 });

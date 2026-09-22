@@ -134,11 +134,39 @@ genoemde versietag.)*
   overschrijding en verrekent geen potje dat eronder bleef, dus hij is noch het gat noch de
   aftrekking (gemeten 500 tegen -100 en 713). Hij heeft nog steeds geen lezer in de app.
   Blok 6 van `DIAG_BLOKKEN` (`diagPotjes()`) leest beide regels terug en toetst vijf optellingen.
-  WAT DE TWEEDE REGEL KOST: 38px, want hij loopt op 360 én 390px over twee regels. De onderkant
-  van het tweede valt-op-signaal gaat van 630 naar 668px op 360 en van 616 naar 654px op 390, en
-  de tripdraad in `inzichten-indeling.spec.js` schuift daarmee van 660 naar 680. Dat is de laatste
-  ruimte die de nulmeting van `v241` liet: een volgende regel in dit blok valt daar weer om, en
-  dat is de bedoeling.
+  DE TWEEDE REGEL PAST OP ÉÉN REGEL, OP 360 én 390px: "Je tempo vraagt €1.089 · €491 erboven".
+  Gemeten op 360px is er 283px beschikbaar; deze vorm is 221px en blijft bij €12.345 nog op 245px.
+  De langere vormen halen dat niet ("Bij je geplande tempo heb je nog X nodig, Y meer dan er in
+  zit" is 301px en brak in twee regels, 38px). "Meer dan erin zit" past bij kleine bedragen (277px)
+  maar breekt boven de €9.999, en een zin die bij een groter bedrag omvalt is geen éénregelige zin.
+  Kosten van de regel, gemeten: de noot is 18px hoog op beide breedtes, en de onderkant van het
+  tweede valt-op-signaal staat op 651px (360) en 636px (390), tegen 630 en 616 zonder deze regel.
+- **De vouw op Inzichten is een eis en geen nulmeting** (`v251`): `inzichten-indeling.spec.js`
+  toetst sinds deze ronde dat de onderkant van het laatste valt-op-signaal boven de vouw blijft:
+  567px op 360x640, 727px op 360x800 en 771px op 390x844, de vensterhoogte min de nav. Daarvóór
+  stond er een vast getal (660, bij `v250` verschoven naar 680) naast een vlag die voor 360x640 op
+  `false` stond, en daarmee legde de test vast dat de signalen daar juist NIET in het eerste scherm
+  passen. Dat is precies de eis van `v241` die hij moest bewaken. Een drempel die meeschuift met
+  wat er gebouwd is meet niets; verzwakken met een uitleg erbij is nog steeds verzwakken.
+  HIJ STAAT NU ROOD op 360x640: gemeten 651 tegen 567 zichtbaar, een gat van 84px. Dat is een
+  bevinding over het scherm en niet over de test, en hij hoort rood te blijven tot dat gat dicht is.
+  DE BEGROTING, gemeten op de fixture van die spec: header 74, eyebrow 18, stand-kaart 120, kop
+  "Wat er nog komt" 16, de lijst 245 (vier rijen van 55, 56, 56 en 77), kop "Wat opvalt" 16, de
+  twee signalen 112, plus 62px marges. De lijst is met 245px het grootste blok en staat tussen de
+  kaart en de signalen in; de twee koppen kosten samen 74px met hun marges. De goedkoopste ingreep
+  raakt geen enkele regel tekst: "Wat opvalt" vóór "Wat er nog komt" zetten brengt de signalen op
+  ongeveer 257 tot 369px. Dat is een volgordebesluit en geen meting, dus het ligt bij de gebruiker.
+- **Fixtures dragen de toestand van het toestel, of ze heten anders** (`v251`): een fixture die
+  "de gemelde cijfers" heet en andere getallen draagt, laat een ronde denken dat hij het geval
+  reproduceert terwijl hij een gelijkende verhouding toetst. `potjesregel-aansluiting.spec.js`
+  draagt nu €1.730 aan potjes, €1.132 gebruikt en dus €598, precies de gemelde regel. WAT NIET VAST
+  TE ZETTEN IS legt de fixture zelf uit: de €1.089 en het gat van €491 hangen aan de dag van de
+  maand, want `potjeRest()` rekent met de resterende dagen (op dag 20 was het gat €385, op dag 22
+  €491). De potjes zijn zo gekozen dat het op dag 22 van een maand van 30 dagen uitkomt, en elke
+  test leest die twee verder live uit `varPlanRemaining()`. In `plan-balken.spec.js` zijn bedrag,
+  id en naam van Kosten Koper wel het toestel; de streefdatum staat als AFSTAND (`KK_STREEF`,
+  21 maanden) en niet als juni 2028, want een vaste datum kruipt naar het heden en laat de spec
+  na juni 2028 een ander geval toetsen dan hij beschrijft. Dat staat er nu bij.
   OPEN PUNT, gemeten en bewust niet aangeraakt: `budgetOverZin()` in de hero zegt "€X over je
   potjes" maar rekent met `totals().budget` tegen `totals().spendNorm`, dus met alle potjes én met
   uitgaven uit categorieën zonder potje. Gemeten met €200 bij zo'n categorie: de hero zegt €300
@@ -562,13 +590,19 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 **Draai onder `TZ=Europe/Amsterdam`.** Op UTC lopen `ymdVan()` en `toISOString()` nooit uiteen, dus
 `lokale-kalenderdag.spec.js` bewijst daar niets en staat er rood; onder CEST is hij groen.
 
+**Bekend rood, en het hoort rood te blijven:** `inzichten-indeling.spec.js` "360x640: de signalen
+passen in het eerste scherm". Gemeten 651px tegen 567px zichtbaar. Dat is de eis van `v241` en geen
+nulmeting; hij staat rood omdat je op een 640px-scherm moet scrollen voordat je weet dat er signalen
+zijn. Maak hem niet groen door de grens te verhogen. De begroting van die 651px en de goedkoopste
+ingreep staan bij de staande regel "De vouw op Inzichten is een eis en geen nulmeting".
+
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
 `v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v250` → `minder-v251`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v251` → `minder-v252`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

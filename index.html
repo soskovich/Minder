@@ -7363,7 +7363,7 @@ function nogDezeMaandPosten(){
       : `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt · ${VP.deel}%`;
     posten.push({lab: inPotjes<0?'Te veel uitgegeven':'Nog uit je potjes',
       val:euro0(Math.abs(inPotjes)), col:'var(--txt)', sub:vsub, tik:'',
-      noot: gat>0?`Bij je geplande tempo heb je nog ${euro0(varPlan)} nodig, ${euro0(gat)} meer dan er in zit.`:'',
+      noot: gat>0?`Je tempo vraagt ${euro0(varPlan)} · ${euro0(gat)} erboven`:'',
       nootTik:'openReservedPotjes()'}); }
   return posten;
 }
