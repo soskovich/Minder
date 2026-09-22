@@ -105,6 +105,22 @@ genoemde versietag.)*
   gevolg en keuze gelden hier niet, want er volgt geen stap uit. Er komt geen versienummer in beeld
   om de ingang aan te hangen: dat zou een tweede versiestring naast `CACHE` in `sw.js` maken, en
   wat dat kost staat onder de meetlessen.
+- **Het grote getal op de potjesregel is een reservering, geen restant** (`v249`, gemeten): op
+  Inzichten staat "Nog uit je potjes X, van Y gebruikt Z", en X is niet Y min Z. Gemeten gat van
+  €385 op dag 20 en €491 op dag 22, dus het groeit met de maand mee. ALLE VIER DE GETALLEN LOPEN
+  OVER DEZELFDE POTJES EN DEZELFDE TRANSACTIES: `varPlanRemaining()`, `varBudget()` en de lus in
+  `varPotjeStand()` delen één poort (`bud>0` en niet in `recurringCats()`) en één bron
+  (`catSpendMap()`), dus een potje telt overal mee of nergens. Het verschil zit volledig in
+  `potjeRest()`: boven het potje geeft die niet het negatieve restant maar `bud/dim × daysLeft`,
+  het geplande dagtempo voor de resterende dagen (`v111`). PER OVERSCHREDEN POTJE IS DE BIJDRAGE
+  AAN HET GAT `reserve + overschrijding`, en daarom is het gat veel groter dan de zichtbare
+  overschrijding. De code legt dat zelf al vast bij `varPotjeStand()` ("de tegel toont ze als
+  losse feiten en telt ze nergens op"). Maar de sub staat sinds `v208` direct onder het grote
+  getal in de vorm "van X · Y gebruikt", en die vorm leest als een aftrekking, ongeacht wat de
+  code bedoelt. `safeToSpend().potOver` rekent de
+  overschrijding al uit en heeft geen enkele lezer in de app: dat is de term die een correctie
+  nodig heeft, en hij bestaat dus al. Blok 6 van `DIAG_BLOKKEN` (`diagPotjes()`) leest dit per
+  potje uit en toetst de vier optellingen; er is nog GEEN correctie gebouwd.
 - **Op Inzichten is de stand het enige kader** (`v241`): `insHeroKaart()` laste de stand van de
   maand en "Nog deze maand" in een kaart. Twee vragen in een kader is een kader te veel: gemeten op
   360px was die kaart 351px en stond de onderkant van het tweede signaal op 602px bij 567px
@@ -530,7 +546,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v248` → `minder-v249`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v249` → `minder-v250`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

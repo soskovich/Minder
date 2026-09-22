@@ -11922,6 +11922,8 @@ function bankAdvTap(){
 const _dJ=(v)=>{ try{ return JSON.stringify(v); }catch(_){ return '<niet leesbaar>'; } };
 const _dV=(fn)=>{ try{ return _dJ(fn()); }catch(e){ return 'FOUT: '+e.message; } };
 const _dS=(fn)=>{ try{ return String(fn()); }catch(e){ return 'FOUT: '+e.message; } };
+// een waarde die je verder wilt rekenen, met een terugval als de bron stukgaat
+const _dT=(fn,terugval)=>{ try{ const v=fn(); return (v===undefined||v===null)?terugval:v; }catch(_){ return terugval; } };
 
 /* 1. Draait er oude code? De cachenaam zegt welke versie de service worker heeft opgeslagen. Dat
       is niet hetzelfde als welke code er nu in het geheugen staat, dus daar staat een bronprobe
@@ -12045,12 +12047,91 @@ function diagAlloc(){
   }catch(e){ return ['FOUT: '+e.message]; }
 }
 
+/* 6. De potjesregel op Inzichten: waarom het grote getal niet het verschil is (v249).
+      Gemeld: "Nog uit je potjes €1.089, van €1.730 · €1.132 gebruikt · 65%", terwijl 1.730 min
+      1.132 gelijk is aan 598. Alle vier de getallen rekenen over DEZELFDE potjes (elke k in
+      SET.budgets met bud>0 die niet in recurringCats() zit) en dezelfde transacties
+      (catSpendMap). Het verschil zit in potjeRest(): bij een potje waar je overheen bent gegaan
+      geeft die niet het negatieve restant terug maar bud/dim maal de resterende dagen, als
+      reservering voor de rest van de maand (v111). Dat is met opzet, maar het maakt het grote
+      getal geen restant, en op één regel met "van X gebruikt" leest het wel zo.
+      Dit blok rekent het gat per potje uit, zodat te zien is waar het vandaan komt. */
+function diagPotjes(){
+  const L=[];
+  const ym=(function(){ try{ return curMonth||months()[months().length-1]; }catch(_){ return ''; } })();
+  if(!ym) return ['geen maand bekend'];
+  L.push('maand: '+ym);
+  const B=(SET.budgets||{});
+  const sp=_dT(()=>catSpendMap(ym),{});
+  const rc=_dT(()=>recurringCats(),new Set());
+  const d=_dT(()=>daysElapsed(ym),null);
+  if(!d) return L.concat(['daysElapsed() gaf niets, dus er valt niets te rekenen']);
+  const daysLeft=Math.max(d.dim-d.elapsed,0);
+  L.push(`dag ${d.elapsed} van ${d.dim}, nog ${daysLeft} dagen`);
+  L.push('');
+  L.push('de vier getallen op de regel:');
+  L.push('  grote getal (varPlanRemaining): '+_dV(()=>varPlanRemaining(ym)));
+  L.push('  van          (varBudget):       '+_dV(()=>varBudget()));
+  const VP=_dT(()=>varPotjeStand(ym),null);
+  L.push('  gebruikt     (varPotjeStand):   '+_dV(()=>VP&&VP.gebruikt));
+  L.push('  procent      (varPotjeStand):   '+_dV(()=>VP&&VP.deel));
+  const budget=_dT(()=>varBudget(),0), rest=_dT(()=>varPlanRemaining(ym),0), gebruikt=VP?VP.gebruikt:0;
+  L.push('');
+  L.push(`rekenkundig restant (van - gebruikt): ${budget-gebruikt}`);
+  L.push(`wat er staat        (grote getal)   : ${rest}`);
+  L.push(`HET GAT                             : ${rest-(budget-gebruikt)}`);
+  L.push('');
+  L.push('per potje. meetelt: alle drie de sommen lopen over dezelfde poort (bud>0 en niet');
+  L.push('terugkerend), dus een potje telt overal mee of nergens. reserve is wat potjeRest()');
+  L.push('teruggeeft bij een overschrijding, en bijdrage is reserve plus de overschrijding zelf.');
+  L.push('  '+['potje'.padEnd(20),'potje'.padStart(8),'besteed'.padStart(8),'restant'.padStart(8),
+    'over'.padStart(8),'bijdr.'.padStart(8),'telt mee'].join(' '));
+  let sBud=0,sSp=0,sRest=0,sGat=0,nOver=0;
+  const namen=Object.keys(B).sort();
+  for(const k of namen){
+    const bud=Math.round(+B[k]||0);
+    const besteed=Math.round(sp[k]||0);
+    const terug=rc.has(k);
+    const mee=(bud>0 && !terug);
+    const naam=((CATS[k]||{}).name||k);
+    if(!mee){
+      L.push('  '+[naam.slice(0,20).padEnd(20),String(bud).padStart(8),String(besteed).padStart(8),
+        '-'.padStart(8),'-'.padStart(8),'-'.padStart(8), terug?'nee (terugkerend)':'nee (geen potje)'].join(' '));
+      continue;
+    }
+    const r=Math.round(_dT(()=>potjeRest(bud,besteed,d.dim,daysLeft),0));
+    const over=Math.max(besteed-bud,0);
+    const bij=r-(bud-besteed);              // wat dit potje aan het gat toevoegt
+    sBud+=bud; sSp+=besteed; sRest+=r; sGat+=bij; if(over>0) nOver++;
+    L.push('  '+[naam.slice(0,20).padEnd(20),String(bud).padStart(8),String(besteed).padStart(8),
+      String(r).padStart(8),String(over).padStart(8),String(bij).padStart(8),'ja'].join(' '));
+  }
+  L.push('  '+['TOTAAL'.padEnd(20),String(sBud).padStart(8),String(sSp).padStart(8),
+    String(sRest).padStart(8),''.padStart(8),String(sGat).padStart(8),`${nOver} overschreden`].join(' '));
+  L.push('');
+  L.push('sluit de optelling aan:');
+  L.push(`  som van de potjes = varBudget(): ${sBud===budget?'JA':'NEE ('+sBud+' tegen '+budget+')'}`);
+  L.push(`  som besteed = gebruikt:          ${sSp===gebruikt?'JA':'NEE ('+sSp+' tegen '+gebruikt+')'}`);
+  L.push(`  som restant = grote getal:       ${sRest===rest?'JA':'NEE ('+sRest+' tegen '+rest+')'}`);
+  L.push(`  som bijdragen = het gat:         ${sGat===(rest-(budget-gebruikt))?'JA':'NEE ('+sGat+' tegen '+(rest-(budget-gebruikt))+')'}`);
+  L.push('');
+  /* safeToSpend() rekent de overschrijding al uit, als potOver, en niemand leest hem: hij wordt
+     alleen teruggegeven. Dat is hier het vermelden waard, want het is precies de term die een
+     correctie nodig heeft, en hij bestaat al. */
+  L.push('safeToSpend().potOver (bestaat al, wordt door de app nergens gelezen): '
+    +_dV(()=>{ try{ return safeToSpend().potOver; }catch(_){ return null; } }));
+  L.push('safeToSpend().reserved (is varPlanRemaining, en gaat wel in safe): '
+    +_dV(()=>{ try{ return safeToSpend().reserved; }catch(_){ return null; } }));
+  return L;
+}
+
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
   {titel:'de grendel', lees:diagGrendel},
   {titel:'wat planMove() zou beslissen (nagerekend, niet uitgevoerd)', lees:diagPlanMove},
   {titel:'wat allocatePlan() zegt', lees:diagAlloc},
+  {titel:'de potjesregel op Inzichten', lees:diagPotjes},
 ];
 
 async function diagTekst(){
