@@ -56,7 +56,14 @@ async function boot(page, payload, breedte, hoogte) {
 }
 
 test.describe('a · de pagina in volgorde', () => {
-  test('eyebrow, stand-kaart, wat er nog komt, wat opvalt, over de maanden heen', async ({ page }) => {
+  /* BEDOELING OMGEDRAAID (v252): tot v251 stond 'Wat er nog komt' vóór 'Wat opvalt', en deze test
+     legde die volgorde vast. De eis van v241 was dat je de signalen ziet zonder te scrollen, en
+     met de lijst ertussen werd die niet gehaald: gemeten 651px tegen 567px zichtbaar op 360x640.
+     De lijst is met 245px het grootste blok van de pagina en duwde precies weg waar de pagina voor
+     bestaat. De volgorde volgt nu wat een blok vraagt: na de stand komt wat er verandert en waar
+     een stap uit volgt, en de vaste context mag onder de vouw. Alleen de volgorde is veranderd;
+     geen blok is van vorm veranderd en er is niets bij of af. */
+  test('eyebrow, stand-kaart, wat opvalt, wat er nog komt, over de maanden heen', async ({ page }) => {
     await boot(page);
     const uit = await page.evaluate(() => {
       const el = document.querySelector('#s-ins');
@@ -69,10 +76,10 @@ test.describe('a · de pagina in volgorde', () => {
     });
     expect(uit.eyebrow).toBe(0);
     expect(uit.stand).toBe(1);
-    expect(uit.nog).toBeGreaterThan(uit.stand);
-    expect(uit.sig).toBeGreaterThan(uit.nog);
-    expect(uit.graf).toBeGreaterThan(uit.sig);
-    expect(uit.secties).toEqual(['Wat er nog komt', 'Wat opvalt', 'Over de maanden heen']);
+    expect(uit.sig).toBeGreaterThan(uit.stand);
+    expect(uit.nog).toBeGreaterThan(uit.sig);
+    expect(uit.graf).toBeGreaterThan(uit.nog);
+    expect(uit.secties).toEqual(['Wat opvalt', 'Wat er nog komt', 'Over de maanden heen']);
     // de stand is het enige blok met een kader
     expect(uit.kaarten).toBe(1);
   });

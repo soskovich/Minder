@@ -10,8 +10,8 @@
 // vulling ervoor, dan loop je voor; erachter, dan loop je achter.
 //
 // HET BEGINMOMENT WORDT BEWAARD EN NIET AFGELEID. Afleiden uit goal.grendel kan niet: dat veld
-// bestaat alleen zolang een doel WACHT. Gemeten op het doel van het toestel: €10.000 met
-// streefdatum juni 2028 (in de fixtures KK_STREEF, zie de toelichting daar),
+// bestaat alleen zolang een doel WACHT. Gerekend op een doel van €10.000 met streefdatum juni 2028
+// (een rekenvoorbeeld, geen toestand: zie de toelichting bij KK_STREEF),
 // aangemaakt 19 juli 2026 en een grendel die rond november 2026 opengaat: met het id als terugval
 // springt het streepje op de openingsdag van €0 naar €1.832, precies op de dag dat je mag
 // beginnen. Daarom leggen saveGoal(), resNaarDoel() en grendelStartVastleggen() startDatum en
@@ -90,17 +90,21 @@ const takken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-v
 /* De echte ids van het toestel. Ze dragen hun aanmaakmoment in base36 ('gmrsd1piu' is 19 juli
    2026), en dat is wat de terugval leest; ID_KK zou naar 1970 decoderen en dus geen streepje geven.
    Een spec die het beginmoment toetst moet daarom met plausibele ids werken. */
-/* DE STREEFDATA VAN HET TOESTEL, en waarom ze hier als afstand staan. Kosten Koper loopt tot
-   juni 2028 en Inrichting woning tot januari 2029; op de meetdag (september 2026) is dat 21 en 28
-   maanden vooruit. Ze staan hieronder als die AFSTAND en niet als die DATUM, want een vaste datum
-   kruipt met de kalender naar het heden toe: in juni 2028 zou dit doel op zijn streefdatum staan
-   en in juli erna erachter, en dan toetst de spec een ander geval dan hij beschrijft. Wat hij
-   vasthoudt is een doel dat bijna twee jaar weg ligt met een tweede er een half jaar achter, en
-   dat is precies de verhouding van het toestel. Bedrag, id en naam zijn wel letterlijk het
-   toestel: €10.000 en €3.000, met de ids die hun aanmaakmoment dragen. */
-const KK_STREEF = overMnd(21);        // juni 2028 op de meetdag
-const IW_STREEF = overMnd(28);        // januari 2029 op de meetdag
-const KK = (o) => Object.assign({ id: 'gmrsd1piu', naam: 'Kosten Koper', doel: 10000, gespaard: 0, allocMode: 'auto' }, o);
+/* DE STREEFDATA VAN HET TOESTEL, en waarom ze hier als afstand staan.
+   GECORRIGEERD bij v252. Tot v251 stond hier "juni 2028" met een doelbedrag van €10.000, en dat
+   was geen van beide gemeten. Juni 2028 kwam uit een rekenvoorbeeld in de v243-opdracht ("Voor
+   €3.000 in juni 2028 heb je vanaf aug 2027 €300 per maand nodig"), dus uit een voorbeeld bij een
+   ander bedrag, en is daarna aan Kosten Koper geplakt en als meting opgeschreven. Het scherm van
+   het toestel zegt "moet in juli 2027" bij Kosten Koper en "moet in maart 2027" bij Inrichting
+   woning, en blok 5 van het diagnosescherm zegt rest=16000 en rest=3000 bij gespaard 0, dus
+   doelbedragen van €16.000 en €3.000. Dat staat hieronder.
+   DE DATA STAAN ALS AFSTAND en niet als datum, want een vaste datum kruipt met de kalender naar
+   het heden toe: in juli 2027 zou dit doel op zijn streefdatum staan en de maand erna erachter, en
+   dan toetst de spec een ander geval dan hij beschrijft. Wat hij vasthoudt is de verhouding van
+   het toestel: twee wachtende doelen, het kleinste het eerst aan de beurt. */
+const KK_STREEF = overMnd(10);        // juli 2027 op de meetdag
+const IW_STREEF = overMnd(6);         // maart 2027 op de meetdag
+const KK = (o) => Object.assign({ id: 'gmrsd1piu', naam: 'Kosten Koper', doel: 16000, gespaard: 0, allocMode: 'auto' }, o);
 const IW = (o) => Object.assign({ id: 'gmub1fh4u', naam: 'Inrichting woning', doel: 3000, gespaard: 0, allocMode: 'auto' }, o);
 const ID_KK = 'gmrsd1piu', ID_IW = 'gmub1fh4u';
 

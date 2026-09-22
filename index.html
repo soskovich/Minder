@@ -7363,7 +7363,7 @@ function nogDezeMaandPosten(){
       : `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt · ${VP.deel}%`;
     posten.push({lab: inPotjes<0?'Te veel uitgegeven':'Nog uit je potjes',
       val:euro0(Math.abs(inPotjes)), col:'var(--txt)', sub:vsub, tik:'',
-      noot: gat>0?`Je tempo vraagt ${euro0(varPlan)} · ${euro0(gat)} erboven`:'',
+      noot: gat>0?`Bij je tempo nog ${euro0(varPlan)} nodig · ${euro0(gat)} tekort`:'',
       nootTik:'openReservedPotjes()'}); }
   return posten;
 }
@@ -10886,10 +10886,19 @@ function renderIns(){
      iets oplevert, zodat een maand zonder signalen geen lege 'Wat opvalt' achterlaat. */
   const sig = insSignalRows(m, nu);
   const graf = nu ? spendVsBudgetChart() : '';
+  /* v252: 'Wat opvalt' staat vóór 'Wat er nog komt'. De eis van v241 was dat je de signalen ziet
+     zonder te scrollen, en die werd niet gehaald: gemeten stond de onderkant van het tweede
+     signaal op 651px bij 567px zichtbaar op 360x640. De lijst ertussen is met 245px het grootste
+     blok van de pagina, en hij duwde precies datgene weg waar de pagina voor bestaat.
+     DE VOLGORDE VOLGT WAT HET BLOK VRAAGT en niet wat het meet: na de stand komt wat er verandert
+     en waar een stap uit volgt; de vier posten van 'Wat er nog komt' zijn vaste context die je
+     opzoekt als je hem nodig hebt, en die mag onder de vouw. Dat draait de volgorde van v241 om,
+     en alleen de volgorde: geen blok is van vorm veranderd en er is niets bij of af.
+     'Over de maanden heen' blijft onderaan, want die kijkt het verst terug. */
   $('#s-ins').innerHTML = afgeslotenMaandBanner(m) + insEyebrow(m)
     + stand
-    + (nog ? insSection('Wat er nog komt') + nog : '')
     + (sig ? insSection('Wat opvalt') + sig : '')
+    + (nog ? insSection('Wat er nog komt') + nog : '')
     + (graf ? insSection('Over de maanden heen') + graf : '');
 }
 
