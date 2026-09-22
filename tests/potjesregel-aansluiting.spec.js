@@ -197,12 +197,24 @@ test.describe('e · een tik komt uit op het bedrag waarop je tikte', () => {
     return m ? +m[1].replace(/\./g, '') : null;
   });
 
-  test('de tik op de extra regel opent de sheet met datzelfde bedrag in de kop', async ({ page }) => {
+  /* BEDOELING OMGEDRAAID (v254): de tik op de extra regel opende openReservedPotjes(), en dat kon
+     toen, want die sheet telde ook potjeRest() op en had dus hetzelfde koptotaal. Sinds v254 toont
+     die sheet de reservering (varPotjesReserve) en niet meer de tempo-som, dus dezelfde tik zou
+     weer op een ander getal uitkomen dan waarop je tikte. Er is geen bestaand scherm dat de
+     tempo-som toont, dus er is geen tik. De sheet blijft bereikbaar vanaf Home. */
+  test('de extra regel heeft geen tik meer, want geen scherm toont de tempo-som', async ({ page }) => {
     await boot(page, gemeld());
     const r = await meet(page);
+    expect(r.noot).not.toBeNull();
+    expect(r.nootTik).toBe(false);
     await page.click('#insNogLijst .ins-nog-noot');
-    await page.waitForSelector('#sheetBg.show');
-    expect(await kopBedrag(page)).toBe(r.rest);      // openReservedPotjes telt potjeRest op
+    expect(await page.locator('#sheetBg.show').count()).toBe(0);
+    // en de sheet die er wel is toont een ander getal, dus die tik hoorde er niet meer te zijn
+    const kop = await page.evaluate(() => { openReservedPotjes();
+      const t = document.querySelector('#sheet').innerText.replace(/\s+/g, ' ');
+      const m = t.match(/\u20ac([\d.]+)(?:,\d\d)?/);
+      return m ? +m[1].replace(/\./g, '') : null; });
+    expect(kop).not.toBe(r.rest);
   });
 
   test('het grote getal heeft geen tik, want geen bestaand overzicht komt erop uit', async ({ page }) => {
@@ -212,7 +224,7 @@ test.describe('e · een tik komt uit op het bedrag waarop je tikte', () => {
     expect(await page.locator('#sheetBg.show').count()).toBe(0);
   });
 
-  test('zonder gat is er geen tik op de regel, en Home houdt de route naar de sheet', async ({ page }) => {
+  test('Home houdt de route naar de sheet, ook zonder gat', async ({ page }) => {
     await boot(page, { boekingen: BINNEN });
     const r = await meet(page);
     expect(r.rijTik).toBe(false);
@@ -236,13 +248,17 @@ test.describe('f · safeToSpend is niet aangeraakt', () => {
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
         const S = safeToSpend();
-        return { reserved: Math.round(S.reserved), plan: varPlanRemaining(m),
+        return { reserved: Math.round(S.reserved), plan: varPlanRemaining(m), reserve: varPotjesReserve(m),
           src: safeToSpend.toString(),
           safe: S.safe, opnieuw: safeToSpend().safe };
       });
-      expect(r.reserved).toBe(r.plan);             // de lezer op Home leest nog de reservering
-      expect(r.src).toContain('varPlanRemaining(');
-      expect(r.src).not.toContain('varPotjeStand');  // en niet het nieuwe getal van de regel
+      /* v254: safeToSpend() leest varPotjesReserve() in plaats van varPlanRemaining(), want
+         veilig te besteden vraagt wat er nog IN je potjes zit. Wat deze test vasthoudt blijft: de
+         regel op Inzichten en veilig te besteden lopen niet stiekem uiteen, ze stellen bewust een
+         andere vraag, en de aftrekking van de regel is geen van beide. */
+      expect(r.reserved).toBe(r.reserve);
+      expect(r.src).toContain('varPotjesReserve(');
+      expect(r.src).not.toContain('varPotjeStand');  // en niet het getal van de regel zelf
       expect(r.safe).toBe(r.opnieuw);
     });
   }

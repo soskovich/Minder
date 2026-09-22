@@ -508,6 +508,9 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .tx .info{flex:1;min-width:0}
 .tx .nm{font-weight:600;font-size:var(--fs-md);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tx .cat{font-size:var(--fs-xs);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* v254: de rijen in 'Gereserveerd in je potjes' dragen een uitleg die niet op een regel past, en
+   de ellipsis at juist daar het 'aanpassen ›' op. Alleen deze rijen breken af. */
+.tx.res-rij .cat{white-space:normal;overflow:visible;text-overflow:clip}
 .tx .amt{font-weight:700;font-size:var(--fs-md);white-space:nowrap}
 .amt.pos{color:var(--green)} .amt.neg{color:var(--txt)}
 .cat-row{display:flex;align-items:center;gap:11px;margin-bottom:13px}
@@ -1773,6 +1776,25 @@ function varPotjeStand(ym){
     deel: budget>0?Math.round(gebruikt/budget*100):null,
     over: budget>0 && gebruikt>budget};
 }
+/* v254: wat er nog IN je potjes zit. Naast varPlanRemaining(), dat een andere vraag beantwoordt:
+   wat geef je bij je geplande tempo deze maand nog uit. Twee vragen, twee functies.
+   HET VERSCHIL ZIT IN HET LEGE POTJE. varPlanRemaining() leunt op potjeRest(), en die geeft boven
+   het potje het geplande dagtempo maal de resterende dagen terug (v111). Dat is een prognose, en
+   als reservering klopt hij niet: gemeten stonden er drie lege potjes voor samen EUR 153 in de
+   sheet "Gereserveerd in je potjes" terwijl er niets meer in zat, en dat bedrag ging af van je
+   veilig te besteden. Wat je daarna in zo'n categorie uitgeeft is niet meer door een potje gedekt
+   en hoort gewoon van je vrije geld af te gaan, op het moment dat je het uitgeeft.
+   DEZELFDE POORT als varPlanRemaining(): bud>0 en niet terugkerend, en dezelfde catSpendMap(). Een
+   potje telt in allebei mee of in geen van beide.
+   POTJEREST() BLIJFT ZOALS HIJ IS. Hij heeft nog twee lezers die de prognose juist nodig hebben:
+   varPlanRemaining() voor de tweede regel op Inzichten, en de prognoseregel onder deze sheet.
+   IDENTITEIT: deze som is varBudget() min varPotjeStand().gebruikt, plus safeToSpend().potOver. */
+function varPotjesReserve(ym){
+  const sp=catSpendMap(ym), B=SET.budgets||{}; let v=0;
+  const rc=recurringCats();
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; v+=Math.max(bud-(sp[k]||0),0); }
+  return Math.round(v);
+}
 function varPlanRemaining(ym){
   const sp=catSpendMap(ym), B=SET.budgets||{}; let v=0;
   const rc=recurringCats(); const d=daysElapsed(ym), daysLeft=Math.max(d.dim-d.elapsed,0);
@@ -1844,7 +1866,12 @@ function safeToSpend(){
   const sp=catSpendMap(ym); const B=SET.budgets||{};
   // Potjes van niet-recurring categorieën = variabel plan; recurring categorieën lopen via fixDue (geen dubbeltelling).
   // Vast = uitsluitend de herkende terugkerende incasso/periodieke overboeking (L.fixDue). Het budget-vangnet + v54-cap vervallen.
-  const reservedVar=varPlanRemaining(ym);   // v169: één bron voor "wat blijft er over deze maand"
+  /* v169 las hier varPlanRemaining(), één bron voor "wat blijft er over deze maand". v254 splitst
+     die vraag: veilig te besteden vraagt wat er nog IN je potjes zit, en dat is varPotjesReserve().
+     Een leeg potje reserveert nul in plaats van zijn resterende dagtempo; gemeten steeg safe
+     daarmee van 2.937 naar 3.090 op drie lege potjes van samen 153. varPlanRemaining() blijft
+     bestaan voor de tweede regel op Inzichten, die de tempo-som stelt. */
+  const reservedVar=varPotjesReserve(ym);
   let potOver=0; const _rc=recurringCats();
   for(const k in B){ const bud=+B[k]||0; if(bud<=0||_rc.has(k)) continue;
     potOver+=Math.max((sp[k]||0)-bud,0);                       // hoeveel je al over je potjes ging
@@ -2024,6 +2051,21 @@ function openMonthSpend(m){
     <div id="msBody">${body||`<div class="muted small center" style="padding:16px">${leeg}</div>`}</div>`;
   showSheetBg();
 }
+/* v254: de kop zei "budget dat je per categorie apart zette · nog niet uitgegeven" terwijl drie
+   van de zes posten potjes waren die op zijn. Die telden mee voor hun resterende dagtempo
+   (potjeRest, v111): gemeten EUR 133, 15 en 5, samen 153 die als opzijgezet budget in het totaal
+   stond en van je veilig te besteden afging. Dat is een prognose en geen reservering.
+   EEN POTJE DAT OP IS RESERVEERT NUL, en het totaal is de som van wat je ziet. Wat je daarna in
+   zo'n categorie uitgeeft is niet door een potje gedekt en gaat van je vrije geld af op het moment
+   dat je het uitgeeft.
+   DE PROGNOSE VERDWIJNT NIET, maar is geen aftrekking meer: hij staat als eigen regel onder de
+   lijst, en alleen als er een leeg potje is. Vaststelling, geen advies.
+   EEN LEEG POTJE BLIJFT IN DE LIJST, met nul en met wat eruit ging. Hem weglaten verbergt precies
+   wat je wilt zien; hij zakt wel naar onderen, want de lijst sorteert op wat er nog in zit.
+   DE SUBREGEL BREEKT AF OVER TWEE REGELS (.res-rij). Hij stond op nowrap met een ellipsis, en de
+   drie rijen die uitleg nodig hadden verloren daardoor als enige hun "aanpassen ›": gemeten 212px
+   beschikbaar terwijl "EUR 598 van EUR 500 gebruikt · aanpassen ›" die 212px al vol maakt, dus
+   inkorten alleen redt het niet. */
 function openReservedPotjes(){
   const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const sp=catSpendMap(ym); const B=SET.budgets||{};
@@ -2031,17 +2073,21 @@ function openReservedPotjes(){
   const rc=recurringCats();
   const d=daysElapsed(ym), daysLeft=Math.max(d.dim-d.elapsed,0);
   for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; const spent=sp[k]||0;
-    rows.push({k,bud,spent,rest:potjeRest(bud,spent,d.dim,daysLeft),over:spent>bud}); }   // potjes van niet-recurring categorieën = variabel plan
-  rows.sort((a,b)=>b.rest-a.rest);
+    // tempo: wat potjeRest() voor dit potje zou reserveren. Alleen voor de regel onder de lijst.
+    rows.push({k,bud,spent,rest:Math.max(bud-spent,0),over:spent>bud,
+      tempo:spent>bud?potjeRest(bud,spent,d.dim,daysLeft):0}); }   // potjes van niet-recurring categorieën = variabel plan
+  rows.sort((a,b)=>(b.rest-a.rest)||((b.spent-b.bud)-(a.spent-a.bud)));
   const tot=rows.reduce((a,r)=>a+r.rest,0);
+  const tempoOp=Math.round(rows.reduce((a,r)=>a+r.tempo,0));
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('target')}</div><div style="font-weight:800;font-size:var(--fs-lg)">Gereserveerd in je potjes</div>
       <div class="muted small">budget dat je per categorie apart zette · nog niet uitgegeven</div>
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0;color:var(--teal)">${euro(tot)}</div></div>
-    ${rows.length?rows.map(r=>{const c=CATS[r.k]||CATS.overig;return `<div class="tx" style="cursor:pointer" onclick="openPotje('${esc(r.k)}')">
+    ${rows.length?rows.map(r=>{const c=CATS[r.k]||CATS.overig;return `<div class="tx res-rij" style="cursor:pointer" onclick="openPotje('${esc(r.k)}')">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${c.name}</div><div class="cat">${euro0(r.spent)} van ${euro0(r.bud)} gebruikt${r.over?` · potje op, gerekend op je eigen dagtempo voor de resterende dagen`:''} · aanpassen ›</div></div>
+      <div class="info"><div class="nm">${c.name}</div><div class="cat">${euro0(r.spent)} van ${euro0(r.bud)} gebruikt${r.over?` · potje op, dit reserveert niets meer`:''} · aanpassen ›</div></div>
       <div class="amt" style="font-weight:700;color:${r.over?'var(--amber)':(r.rest>0?'var(--teal)':'var(--mut)')}">${euro(r.rest)}</div></div>`;}).join(''):`<div class="muted small center" style="padding:16px">Nog geen variabele potjes met budget. <span style="color:var(--teal);cursor:pointer" onclick="openPotjePick()">Maak een potje ›</span></div>`}
+    ${tempoOp>0?`<div class="small" style="color:var(--mut2);margin-top:12px;line-height:1.45">Bij je tempo verwacht je deze maand nog ${euro0(tempoOp)} uit te geven in potjes die al op zijn.</div>`:''}
     <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Dit is het deel van je variabele potjes dat je deze maand nog niet hebt uitgegeven. Het staat apart, zodat 'veilig te besteden' je potjes respecteert. Wil je minder variabel uitgeven, dan verlaag je hier een potje.</div>`;
   showSheetBg();
 }
@@ -2316,7 +2362,13 @@ function openSafeToSpend(){
     ${S.resBal>0?line('In je reserveringspot', S.resBal, 'var(--mut)', "openReserveringen()", 'al vergeven aan posten die nog moeten komen'):''}
     ${S.fixDueRecurring>0?line('Vaste lasten die nog komen', S.fixDueRecurring, 'var(--mut)', 'openFixedDue()', 'wat deze maand nog wordt afgeschreven'):''}
     ${S.fixDueBudgetExtra>0?line('Vaste lasten uit je budget', S.fixDueBudgetExtra, 'var(--mut)', '', 'budget voor vaste categorieën waar nog geen incasso voor is herkend'):''}
-    ${S.reserved>0?line('Gereserveerd in je potjes', S.reserved, 'var(--mut)', "openReservedPotjes()", 'budget dat je per categorie apart zette'):''}
+    <!-- v254: de poort was S.reserved>0. Sinds een leeg potje nul reserveert kan die som nul zijn
+         terwijl je wel potjes hebt, en dan viel deze regel weg. Dat is precies de toestand die je
+         wilt zien, en het is sinds v254 ook de enige route naar de sheet: de tik op de tweede regel
+         van Inzichten is weg omdat die over de tempo-som gaat. Gemeten op vier potjes die alle vier
+         op waren: reserved 0, regel weg, sheet nergens meer te openen. De poort leest nu of je
+         variabele potjes hebt. -->
+    ${varBudget()>0?line('Gereserveerd in je potjes', S.reserved, 'var(--mut)', "openReservedPotjes()", S.reserved>0?'budget dat je per categorie apart zette':'je potjes zijn op, er staat niets meer apart'):''}
     ${varTempoMirror(S.reserved, S.varForecast, 'safe')}
     ${(function(){
       const tgt=S.saveTarget||0, onSav=Math.min(S.savedThisMonth||0,tgt);
@@ -7362,11 +7414,13 @@ function nogDezeMaandPosten(){
      DE POORT IS varBudget() EN NIET varPlan. Op de laatste dag van de maand is daysLeft nul, dus
      geeft elk overschreden potje nul terug; met de oude poort verdween de regel dan precies
      wanneer "te veel uitgegeven" het meest te zeggen heeft.
-     DE TIK HANGT AAN DE NOOT. openReservedPotjes() telt per potje potjeRest() op, dus zijn koptotaal
-     is varPlan en niet het grote getal; hij hoort bij de regel die dat bedrag noemt. Het grote getal
-     krijgt geen tik: er is geen bestaand overzicht waarvan de kop op deze aftrekking uitkomt, en een
-     tik naar een ander getal is precies de fout die deze ronde opruimt. Vanaf Home blijft de sheet
-     bereikbaar via 'Gereserveerd in je potjes' in de opbouw. */
+     GEEN TIK, OP GEEN VAN BEIDE REGELS (v254). Tot v253 opende de noot openReservedPotjes(), want
+     die sheet telde toen ook potjeRest() op en had dus hetzelfde koptotaal. Sinds v254 toont die
+     sheet de reservering (varPotjesReserve) en niet meer de tempo-som, dus die tik zou weer op een
+     ander getal uitkomen dan waarop je tikte. Er is geen bestaand scherm dat de tempo-som toont, en
+     het grote getal heeft om dezelfde reden nooit een tik gehad. Liever geen tik dan een verkeerde.
+     De sheet blijft bereikbaar vanaf Home, via 'Gereserveerd in je potjes' in de opbouw van veilig
+     te besteden. */
   if(VP && VP.budget>0){
     const inPotjes=VP.budget-VP.gebruikt;        // wat er werkelijk nog in je potjes zit
     const gat=varPlan-inPotjes;                  // wat de reservering daar bovenop vraagt
@@ -7375,8 +7429,7 @@ function nogDezeMaandPosten(){
       : `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt · ${VP.deel}%`;
     posten.push({lab: inPotjes<0?'Te veel uitgegeven':'Nog uit je potjes',
       val:euro0(Math.abs(inPotjes)), col:'var(--txt)', sub:vsub, tik:'',
-      noot: gat>0?`Bij je tempo nog ${euro0(varPlan)} nodig · ${euro0(gat)} tekort`:'',
-      nootTik:'openReservedPotjes()'}); }
+      noot: gat>0?`Bij je tempo nog ${euro0(varPlan)} nodig · ${euro0(gat)} tekort`:'', nootTik:''}); }
   return posten;
 }
 /* De tegelvorm. Hij staat nog maar op één plek: de terugval-kaart wanneer er geen budget is, en

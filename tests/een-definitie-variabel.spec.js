@@ -73,6 +73,7 @@ test.describe('a · elke plek leest dezelfde bron', () => {
         return {
           bron: varRest,
           safe: Math.round(safeToSpend().reserved),
+          reserve: varPotjesReserve(m),
           // wat Inzichten er letterlijk van maakt: het bedrag uit de regel onder de tegel
           scherm: (function(){ const d=document.createElement('div'); d.innerHTML=nogDezeMaandBody();
             // v204: het variabele deel stond als voetregel onder de tegels en is een tegel geworden.
@@ -88,7 +89,12 @@ test.describe('a · elke plek leest dezelfde bron', () => {
           })(),
         };
       });
-      expect(r.safe).toBe(r.bron);
+      /* BEDOELING BIJGESTELD (v254): safeToSpend().reserved las varPlanRemaining() en leest sinds
+         die ronde varPotjesReserve(), want veilig te besteden vraagt wat er nog IN je potjes zit en
+         niet wat je bij je tempo nog uitgeeft. Die twee lopen alleen uiteen bij een leeg potje, en
+         dan precies het bedrag dat zo'n potje aan dagtempo reserveerde. Wat deze test vasthoudt
+         blijft: elke plek rekent met dezelfde potjes en dezelfde boekingen, zonder tweede som. */
+      expect(r.safe).toBe(r.reserve);
       expect(r.hand).toBe(r.bron);
       expect(schermPlan(r.scherm)).toBe(r.bron);   // en dat is ook het bedrag dat Inzichten toont
     });
@@ -116,11 +122,12 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
         const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
         const t = d.innerText.replace(/\s+/g, ' ');
         return { bron: varPlanRemaining(m), home: Math.round(safeToSpend().reserved),
+          reserve: varPotjesReserve(m),
           inzichten: { noot: (d.querySelector('.nog-noot') || {}).innerText || '', alles: d.innerText },
           tekst: t,
           srcSafe: safeToSpend.toString(), srcBody: nogDezeMaandPosten.toString() };
       });
-      expect(r.home).toBe(r.bron);
+      expect(r.home).toBe(r.reserve);   // v254: Home leest de reservering, Inzichten de tempo-som
       expect(schermPlan(r.inzichten)).toBe(r.bron);
       expect(r.srcSafe).toContain('varPlanRemaining(');
       expect(r.srcBody).toContain('varPlanRemaining(');

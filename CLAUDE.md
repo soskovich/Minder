@@ -124,13 +124,15 @@ genoemde versietag.)*
   DE POORT LEEST `varPotjeStand().budget` EN NIET `varPlanRemaining()`. Op de laatste dag van de
   maand is `daysLeft` nul, dus geeft elk overschreden potje nul terug, en de oude poort liet de
   regel dan vallen precies wanneer "te veel uitgegeven" het meest te zeggen heeft.
-  EEN TIK KOMT UIT OP HET BEDRAG WAAROP JE TIKTE. `openReservedPotjes()` telt `potjeRest()` op,
-  dus zijn koptotaal is de reservering; die tik hangt daarom aan de regel die dat bedrag noemt en
-  niet meer aan de rij. Het grote getal krijgt géén tik: er is geen bestaand overzicht waarvan de
-  kop op deze aftrekking uitkomt (`openPotjesVerdeling` toont alle potjes zonder besteding,
-  `openBudgetCompare` rekent over het hele budget), en liever geen tik dan een tik naar een ander
-  getal. Zonder gat staat die regel er niet en heeft Inzichten dus geen route naar de sheet; via
-  Home blijft hij bereikbaar in de opbouw van 'veilig te besteden'.
+  EEN TIK KOMT UIT OP HET BEDRAG WAAROP JE TIKTE, en daarom heeft deze regel er sinds `v254` geen
+  meer. Tot `v253` opende de tweede regel `openReservedPotjes()`, want die sheet telde toen ook
+  `potjeRest()` op en had dus hetzelfde koptotaal. Sinds `v254` toont die sheet de reservering en
+  niet de tempo-som, dus dezelfde tik zou weer op een ander getal uitkomen. Er is geen bestaand
+  scherm dat de tempo-som toont, en het grote getal had om dezelfde reden al nooit een tik
+  (`openPotjesVerdeling` toont alle potjes zonder besteding, `openBudgetCompare` rekent over het
+  hele budget). Liever geen tik dan een verkeerde. INZICHTEN HEEFT DAARMEE GEEN ROUTE NAAR DE SHEET;
+  via Home blijft hij bereikbaar in de opbouw van 'veilig te besteden', en die regel staat er sinds
+  `v254` ook als de reservering nul is.
   `safeToSpend().potOver` is NIET de term die dit oplost: die telt per potje alleen de
   overschrijding en verrekent geen potje dat eronder bleef, dus hij is noch het gat noch de
   aftrekking (gemeten 500 tegen -100 en 713). Hij heeft nog steeds geen lezer in de app.
@@ -144,6 +146,42 @@ genoemde versietag.)*
   één-regel-eis niet: "Bij je geplande tempo heb je nog X nodig, Y meer dan er in zit" is 301px
   en brak in twee regels (38px), en "meer dan erin zit" past bij €1.089 (277px) maar breekt boven
   de €9.999. Een zin die bij een groter bedrag omvalt is geen éénregelige zin.
+- **Een potje dat op is reserveert nul, en de prognose is geen aftrekking** (`v254`): de sheet
+  "Gereserveerd in je potjes" zei "budget dat je per categorie apart zette · nog niet uitgegeven"
+  terwijl gemeten drie van de zes posten potjes waren die op zijn: €598 van €500 telde voor €133,
+  €249 van €55 voor €15, €56 van €20 voor €5. Samen €153 die als opzijgezet budget in het totaal
+  stond en van je veilig te besteden afging. Dat is `potjeRest()`, het dagtempo maal de resterende
+  dagen (`v111`): een prognose, geen reservering.
+  TWEE VRAGEN, TWEE FUNCTIES. `varPlanRemaining()` vraagt wat je bij je geplande tempo nog uitgeeft
+  en voedt de tweede regel op Inzichten; `varPotjesReserve()` vraagt wat er nog IN je potjes zit,
+  `Σ max(potje - besteed, 0)`, en voedt `safeToSpend().reserved` en de sheet. DEZELFDE POORT
+  (`bud>0` en niet in `recurringCats()`) en dezelfde `catSpendMap()`, dus een potje telt in allebei
+  mee of in geen van beide. IDENTITEIT: `varPotjesReserve()` is de aftrekking van de Inzichten-regel
+  plus `safeToSpend().potOver`; die laatste heeft daarmee eindelijk een lezer in de vorm van een
+  toets, niet van een berekening. Gemeten: de sheet 1.063 naar 910, veilig te besteden 2.937 naar
+  3.090, precies de 153.
+  `potjeRest()` ZELF BLIJFT ZOALS HIJ IS: hij houdt twee lezers die de prognose juist nodig hebben,
+  `varPlanRemaining()` en de prognoseregel onder de sheet. DIE REGEL IS DE PROGNOSE, geen
+  aftrekking: "Bij je tempo verwacht je deze maand nog €X uit te geven in potjes die al op zijn",
+  onder de lijst en alleen als er een leeg potje is. Vaststelling, geen advies.
+  EEN LEEG POTJE BLIJFT IN DE LIJST, met nul en met wat eruit ging; hem weglaten verbergt precies
+  wat je wilt zien. Het totaal in de kop is de som van de posten eronder.
+  DE ROUTE NAAR DE SHEET WAS BIJNA WEG. De tik op de Inzichten-regel verviel (zie de `v250`-regel),
+  en de regel op Home hing aan `S.reserved>0` - die som kan nu nul zijn terwijl je wel potjes hebt.
+  Gemeten op vier potjes die alle vier op waren: reserved 0, regel weg, sheet nergens meer te
+  openen. Die poort leest nu `varBudget()>0`, en bij nul zegt de sub "je potjes zijn op, er staat
+  niets meer apart". Dat is de meetles over een melding die de enige drager van een ingang is, en
+  deze ronde maakte hem zelf bijna waar.
+  DE SUBREGEL BREEKT AF OVER TWEE REGELS (`.tx.res-rij .cat`). Hij stond op `nowrap` met een
+  ellipsis, en juist de rijen die uitleg nodig hadden verloren als enige hun "aanpassen ›":
+  gemeten 212px beschikbaar terwijl "€598 van €500 gebruikt · aanpassen ›" die 212px al vol maakt,
+  dus inkorten alleen redde het niet. Alleen deze rijen breken af; `.tx .cat` blijft elders op
+  één regel. Kosten, gemeten: zo'n rij wordt 75px in plaats van 63px op 360 en 390px.
+  OPEN PUNT, gemeten en niet gebouwd: de gebruiker ziet Huur en Abonnementen in deze sheet staan,
+  terwijl `recurringCats()` die op een fixture met dezelfde vorm wél als terugkerend ziet. Beide
+  functies delen één poort, dus als die twee er staan zit het in `recurringSchedule()` en niet in
+  een tweede poort; ze tellen dan ook mee op Inzichten. Blok 6 van `DIAG_BLOKKEN` leest per potje
+  uit of het terugkerend is.
 - **De vier posten onder "Wat er nog komt" staan in de weg van je geld, en tellen nergens op**
   (`v253`): wat binnenkomt, wat je opzij zet, wat vastligt, en wat er voor je potjes overblijft.
   Dat draait de scheiding van `v204` om (waarneming boven, plan onder, de twee bronsoorten om en
@@ -632,7 +670,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v253` → `minder-v254`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v254` → `minder-v255`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

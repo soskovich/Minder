@@ -207,14 +207,21 @@ test.describe('d - de tegel leidt naar het instrument', () => {
      is. Sinds het grote getal de aftrekking toont, kwam je dan op een ander getal uit dan waarop
      je tikte. De sheet hangt nu aan de regel die dat bedrag noemt. Het grote getal heeft geen tik:
      geen bestaand overzicht komt op die aftrekking uit, en liever geen tik dan een verkeerde. */
-  test('de tik zit op de regel die het bedrag van de sheet noemt', async ({ page }) => {
+  /* BEDOELING OMGEDRAAID (v254): de tik hing aan de regel die de tempo-som noemt, want de sheet
+     toonde toen datzelfde getal. Sinds v254 toont die sheet de reservering, dus de tik is weg:
+     liever geen tik dan een naar een ander getal. De route naar de sheet loopt via Home. */
+  test('de regel heeft geen tik meer, en de sheet blijft via Home bereikbaar', async ({ page }) => {
     /* overschreden() en niet seed(): die tweede heeft geen potje boven zijn grens en dus geen gat,
        en dan staat de regel met de sheet-ingang er terecht niet. Dat geval staat in
        potjesregel-aansluiting.spec.js, samen met de route die Home dan nog houdt. */
     await open(page, overschreden());
     const t = await potjesTegel(page);
     expect(t.tik).toBeNull();
-    expect(t.nootTik).toContain('openReservedPotjes()');
+    expect(t.nootTik).toBeNull();
+    const viaHome = await page.evaluate(() => { go('dash'); openSafeToSpend();
+      return [...document.querySelectorAll('#sheet [onclick]')]
+        .some((x) => /gereserveerd in je potjes/i.test(x.innerText)); });
+    expect(viaHome).toBe(true);
     const r = await page.evaluate(() => {
       openReservedPotjes();
       const rijen = [...document.querySelectorAll('#sheet .tx')];

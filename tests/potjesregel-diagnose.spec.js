@@ -177,10 +177,13 @@ test.describe('b · wat het blok vaststelt', () => {
     await boot(page, { boekingen: OVER });
     const r = await page.evaluate(() => {
       const S = safeToSpend();
-      return { potOver: S.potOver, reserved: S.reserved, rest: varPlanRemaining(curMonth || months()[months().length - 1]) };
+      const m = curMonth || months()[months().length - 1];
+      return { potOver: S.potOver, reserved: S.reserved, rest: varPlanRemaining(m), reserve: varPotjesReserve(m) };
     });
     expect(r.potOver).toBeGreaterThan(0);
-    expect(r.reserved).toBe(r.rest);
+    // v254: reserved leest varPotjesReserve() en niet meer varPlanRemaining(); blok 6 blijft
+    // de tempo-som tonen, want dat is wat de regel op Inzichten stelt
+    expect(r.reserved).toBe(r.reserve);
     const t = await page.evaluate(() => diagPotjes().join('\n'));
     expect(t).toContain(`potOver (alleen de overschrijding, geen lezer in de app): ${r.potOver}`);
     // en hij is niet het gat en niet de aftrekking: drie verschillende getallen

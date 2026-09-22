@@ -4,6 +4,17 @@
 // natuurlijk doorloopt. potjeRest() reserveert dan het geplande dagtempo van dat potje maal de
 // resterende dagen. Dezelfde bron voor varPlanRemaining, safeToSpend én openReservedPotjes, zodat
 // de drill-down het hoofdgetal niet tegenspreekt.
+//
+// BEDOELING OMGEDRAAID (v254), voor veilig te besteden en voor de sheet. Gemeld: de sheet zegt
+// "budget dat je per categorie apart zette · nog niet uitgegeven" terwijl drie van de zes posten
+// potjes waren die op zijn; die stonden er voor samen EUR 153 in en gingen af van veilig te
+// besteden. Dat is een prognose en geen reservering. Sinds v254 leest safeToSpend().reserved
+// varPotjesReserve() - de som van max(potje - besteed, 0) - en reserveert een leeg potje dus weer
+// nul. Wat je daarna in zo'n categorie uitgeeft gaat van je vrije geld af op het moment dat je het
+// uitgeeft, en dat is precies wat v111 toen niet wilde.
+// WAT VAN v111 BLIJFT STAAN, en hieronder ook getoetst: potjeRest() zelf is onaangeroerd, meer
+// uitgeven maakt veilig te besteden niet ruimer, en de drill-down spreekt het hoofdgetal niet
+// tegen. De prognose is niet weg maar staat onder de lijst in plaats van in het totaal.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { open } = require('./budget-fixture');
@@ -85,7 +96,10 @@ test.describe('a · de rekenregel', () => {
 });
 
 test.describe('b · het gemelde geval', () => {
-  test('een overschreden potje telt weer mee in veilig te besteden', async ({ page }) => {
+  /* v254: dit was "telt weer mee in veilig te besteden" met de dagtempo-reservering erin. Nu is de
+     eigenschap omgekeerd: een leeg potje reserveert nul, en de overschrijding is wel nog apart
+     zichtbaar via potOver en via de prognoseregel onder de sheet. */
+  test('een overschreden potje reserveert nul, en de overschrijding blijft zichtbaar', async ({ page }) => {
     await open(page, seedPot());
     const r = await page.evaluate((m) => {
       const S = safeToSpend(), t = totals(m), d = daysElapsed(m), left = Math.max(d.dim - d.elapsed, 0);
@@ -93,13 +107,17 @@ test.describe('b · het gemelde geval', () => {
       return { safe: S.safe, reserved: S.reserved, potOver: S.potOver, left,
         boodschappen: potjeRest(500, sp.boodschappen || 0, d.dim, left),
         uiteten: potjeRest(200, sp.uiteten || 0, d.dim, left),
+        uitetenRest: Math.max(200 - (sp.uiteten || 0), 0),
+        reserveBron: varPotjesReserve(m),
         over: t.spend - t.budget };
     }, CUR);
     expect(r.over).toBeGreaterThan(0);                       // je bent over je maandbudget
     expect(r.potOver).toBe(200);                             // en 200 daarvan zit in één potje
     if (r.left > 0) {
-      expect(r.boodschappen).toBeGreaterThan(0);             // vroeger was dit 0
-      expect(r.reserved).toBe(r.boodschappen + r.uiteten);
+      expect(r.boodschappen).toBeGreaterThan(0);             // potjeRest() zelf is onaangeroerd
+      // maar de reservering leest hem niet meer: het lege potje draagt nul, het andere zijn restant
+      expect(r.reserved).toBe(r.uitetenRest);
+      expect(r.reserved).toBe(r.reserveBron);
     }
   });
 
@@ -114,10 +132,19 @@ test.describe('b · het gemelde geval', () => {
 });
 
 test.describe('c · één bron', () => {
-  test('varPlanRemaining en safeToSpend rekenen hetzelfde', async ({ page }) => {
+  /* BEDOELING OMGEDRAAID (v254): tot v253 was varPlanRemaining() de enige bron, ook voor
+     safeToSpend(). Dat zijn twee vragen gebleken: wat geef je bij je tempo nog uit (Inzichten), en
+     wat zit er nog in je potjes (veilig te besteden en de sheet). Twee vragen, twee functies. Wat
+     één bron moet blijven is de sheet tegenover veilig te besteden, en dat staat hieronder. */
+  test('veilig te besteden leest de reservering, Inzichten de tempo-som', async ({ page }) => {
     await open(page, seedPot());
-    const r = await page.evaluate((m) => ({ plan: varPlanRemaining(m), safe: safeToSpend().reserved }), CUR);
-    expect(r.plan).toBe(r.safe);
+    const r = await page.evaluate((m) => ({ plan: varPlanRemaining(m), reserve: varPotjesReserve(m),
+      safe: safeToSpend().reserved, potOver: safeToSpend().potOver,
+      budget: varBudget(), gebruikt: varPotjeStand(m).gebruikt }), CUR);
+    expect(r.safe).toBe(r.reserve);
+    expect(r.reserve).toBeLessThan(r.plan);          // in deze fixture is een potje op
+    // en de reservering is de aftrekking plus wat je erover ging: één identiteit, geen derde som
+    expect(r.reserve).toBe((r.budget - r.gebruikt) + r.potOver);
   });
 
   test('de drill-down spreekt het hoofdgetal niet tegen', async ({ page }) => {
@@ -134,16 +161,18 @@ test.describe('c · één bron', () => {
     expect(som).toBe(r.reserved);
   });
 
-  test('een leeg potje legt uit waarom het toch reserveert', async ({ page }) => {
+  /* BEDOELING OMGEDRAAID (v254): de regel legde uit waarom een leeg potje toch reserveerde. Hij
+     reserveert niets meer, dus de rij zegt dat, en de prognose staat als eigen regel onder de
+     lijst in plaats van in het totaal. */
+  test('een leeg potje staat er met nul, en de prognose staat onder de lijst', async ({ page }) => {
     await open(page, seedPot());
     const left = await page.evaluate((m) => { const d = daysElapsed(m); return d.dim - d.elapsed; }, CUR);
     await page.evaluate(() => openReservedPotjes());
     await page.waitForTimeout(80);
     const s = await page.locator('#sheet').innerText();
-    if (left > 0) {
-      expect(s).toContain('potje op');
-      expect(s).toContain('eigen dagtempo');
-    }
+    expect(s).toContain('potje op');
+    expect(s).not.toContain('eigen dagtempo');
+    if (left > 0) expect(s).toMatch(/Bij je tempo verwacht je deze maand nog \u20ac[\d.]+ uit te geven/);
   });
 });
 
