@@ -77,14 +77,23 @@ const blok = (page) => page.evaluate(() => {
 });
 
 test.describe('a · de rij scheidt waarneming van plan', () => {
-  test('vier posten, vier regels, waarneming boven en plan onder', async ({ page }) => {
+  /* BEDOELING OMGEDRAAID (v253): de volgorde stond op de scheiding van v204 (waarneming boven,
+     plan onder) en is nu de weg van je geld door de maand: wat binnenkomt, wat je opzij zet, wat
+     vastligt, en wat er voor je potjes overblijft. De scheiding van v204 draagt nog wel dat elke
+     post zijn eigen vorm houdt en dat elke sub zijn bron noemt; dat staat in de test hieronder.
+     WAT DEZE VOLGORDE NIET IS: een waterval. De vier van elkaar aftrekken geeft een getal dat er
+     uitziet als "wat ik overhoud" en dat niet is, want het begint bij wat er NOG binnenkomt en
+     niet bij wat er al staat. Gemeten op dezelfde maand met het salaris al binnen in plaats van
+     nog komend springt die aftrekking van +2.025 naar -975 terwijl safeToSpend() op 3.720 blijft.
+     Er staat daarom geen totaal en geen restregel, en die afwezigheid is wat de test in blok b
+     vasthoudt. */
+  test('vier posten, vier regels, in de weg van je geld door de maand', async ({ page }) => {
     await boot(page);
     const b = await blok(page);
     expect(b).not.toBeNull();
     expect(b.tegels.map((t) => t.label)).toEqual([
-      'Nog te betalen · vast', 'Nog te ontvangen', 'Nog te sparen', 'Nog uit je potjes']);
-    // v241: elke post staat op zijn eigen regel, en de volgorde draagt de scheiding uit v204:
-    // eerst de twee waarnemingen, dan de twee plan-posten
+      'Nog te ontvangen', 'Nog te sparen', 'Nog te betalen · vast', 'Nog uit je potjes']);
+    // v241: elke post staat op zijn eigen regel, in de volgorde waarin hij hierboven staat
     for (let i = 1; i < b.tegels.length; i++) expect(b.tegels[i].top).toBeGreaterThan(b.tegels[i - 1].top);
     // en de bedragen staan tegen dezelfde rechterkant, dus je kunt ze met elkaar vergelijken
     expect(new Set(b.tegels.map((t) => t.rechts)).size).toBe(1);
@@ -93,11 +102,14 @@ test.describe('a · de rij scheidt waarneming van plan', () => {
   test('elke sub noemt zijn bron, dus de groepen dragen zichzelf', async ({ page }) => {
     await boot(page);
     const b = await blok(page);
-    expect(b.tegels[0].sub).toMatch(/incasso|niets herkend/i);
-    expect(b.tegels[1].sub).toBe('inkomen');
-    expect(b.tegels[2].sub).toMatch(/van €|gehaald/);
+    /* v253: op label en niet op plek. De volgorde is deze ronde veranderd en daarmee viel deze
+       test om terwijl zijn eigenschap ongemoeid was: elke post noemt zijn eigen bron. */
+    const sub = (l) => (b.tegels.find((t) => t.label === l) || {}).sub;
+    expect(sub('Nog te betalen · vast')).toMatch(/incasso|niets herkend/i);
+    expect(sub('Nog te ontvangen')).toBe('inkomen');
+    expect(sub('Nog te sparen')).toMatch(/van €|gehaald/);
     // v208: de potjes-tegel is een voortgang geworden, met dezelfde noemer-vorm als de tegel ernaast
-    expect(b.tegels[3].sub).toMatch(/van €.*gebruikt|variabel/);
+    expect(sub('Nog uit je potjes')).toMatch(/van €.*gebruikt|variabel/);
     // geen groepskoppen: de rij bestaat uit tegels en verder niets
     const koppen = await page.evaluate(() =>
       document.querySelectorAll('#insNogLijst > :not(.ins-nog-rij)').length);
@@ -176,9 +188,10 @@ test.describe('b · er telt niets op in dit blok', () => {
    hieronder vast. */
 test.describe('c · elk aantal posten leest hetzelfde', () => {
   for (const [naam, opt, aantal, laatste] of [
-    ['zonder potjes: drie regels', { geenPotjes: true }, 3, 'Nog te sparen'],
+    // v253: de volgorde is ontvangen, sparen, betalen, potjes; valt er een weg, dan schuift de rest op
+    ['zonder potjes: drie regels', { geenPotjes: true }, 3, 'Nog te betalen · vast'],
     ['zonder spaardoel: drie regels', { geenSpaardoel: true }, 3, 'Nog uit je potjes'],
-    ['zonder spaardoel en zonder potjes: twee regels', { geenSpaardoel: true, geenPotjes: true }, 2, 'Nog te ontvangen'],
+    ['zonder spaardoel en zonder potjes: twee regels', { geenSpaardoel: true, geenPotjes: true }, 2, 'Nog te betalen · vast'],
   ]) {
     test(naam, async ({ page }) => {
       await boot(page, seed({}, opt));
@@ -207,19 +220,22 @@ test.describe('d · de vier situaties uit de controlelijst', () => {
     await boot(page);
     const b = await blok(page);
     expect(b.tegels.length).toBe(4);
-    expect(b.tegels[0].waarde).toMatch(/€/);      // er staat nog een vaste last open
+    // v253: op label, want de vaste post staat niet meer vooraan
+    expect(b.tegels.find((t) => t.label === 'Nog te betalen · vast').waarde).toMatch(/€/);
   });
 
   test('aan het begin van de maand is de potjes-post de grootste', async ({ page }) => {
     await boot(page, seed({}, { beginMaand: true }));
     const b = await blok(page);
     const eur = (s) => Math.abs(parseFloat(String(s).replace(/[^\d,-]/g, '').replace(/\./g, '').replace(',', '.')) || 0);
-    const pot = eur(b.tegels[3].waarde), spaar = eur(b.tegels[2].waarde);
+    // v253: op label, want de volgorde is veranderd; de eigenschap is dezelfde
+    const pot = eur(b.tegels.find((t) => t.label === 'Nog uit je potjes').waarde);
+    const spaar = eur(b.tegels.find((t) => t.label === 'Nog te sparen').waarde);
     expect(pot).toBeGreaterThan(spaar);
     // en hij staat in dezelfde vorm als zijn buurman, niet meer in de kleinste graad
     const zelfde = await page.evaluate(() => {
       const t = [...document.querySelectorAll('#insNogLijst .ins-nog-val')];
-      return getComputedStyle(t[2]).fontSize === getComputedStyle(t[3]).fontSize;
+      return getComputedStyle(t[t.length - 2]).fontSize === getComputedStyle(t[t.length - 1]).fontSize;
     });
     expect(zelfde).toBe(true);
   });
@@ -227,10 +243,12 @@ test.describe('d · de vier situaties uit de controlelijst', () => {
   test('met alles betaald blijft de tegel staan en kleurt hij niet rood', async ({ page }) => {
     await boot(page, seed({}, { allesBetaald: true }));
     const b = await blok(page);
-    expect(b.tegels[0].label).toBe('Nog te betalen · vast');
+    expect(b.tegels.map((t) => t.label)).toContain('Nog te betalen · vast');
+    // v253: de vaste post staat niet meer vooraan, dus zoek hem op zijn label en niet op zijn plek
     const kleur = await page.evaluate(() => {
-      const t = document.querySelector('#insNogLijst .ins-nog-rij .ins-nog-val');
-      return t.getAttribute('style') || '';
+      const r = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
+        .find((x) => /nog te betalen/i.test(x.innerText));
+      return r.querySelector('.ins-nog-val').getAttribute('style') || '';
     });
     expect(kleur).toMatch(/--mut/);
   });

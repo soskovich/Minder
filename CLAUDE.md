@@ -144,6 +144,26 @@ genoemde versietag.)*
   één-regel-eis niet: "Bij je geplande tempo heb je nog X nodig, Y meer dan er in zit" is 301px
   en brak in twee regels (38px), en "meer dan erin zit" past bij €1.089 (277px) maar breekt boven
   de €9.999. Een zin die bij een groter bedrag omvalt is geen éénregelige zin.
+- **De vier posten onder "Wat er nog komt" staan in de weg van je geld, en tellen nergens op**
+  (`v253`): wat binnenkomt, wat je opzij zet, wat vastligt, en wat er voor je potjes overblijft.
+  Dat draait de scheiding van `v204` om (waarneming boven, plan onder, de twee bronsoorten om en
+  om); wat van `v204` staat is dat elke post zijn eigen vorm houdt en dat elke sub zijn bron noemt.
+  DEZE VOLGORDE NODIGT UIT TOT AFTREKKEN EN DAT KLOPT NIET, dus er komt geen totaal en geen
+  restregel bij. De aftrekking is exact `safeToSpend().safe` min je vrij besteedbare saldo, dus hij
+  laat weg wat er al op je rekening staat. GEMETEN op dezelfde maand, alleen het salaris al binnen
+  in plaats van nog komend: de aftrekking springt van +2.025 naar -975 terwijl `safe` op 3.720
+  blijft en `monthLiquidity().projected` op 3.929. Een getal dat met het volle salaris omslaat
+  terwijl je positie niet verandert, is geen stand. Dat is dezelfde fout die `v192` wegnam toen
+  "Deze maand op eigen kracht" (`incDue - fixDue - varPlan`) verdween.
+  DE VIERDE POST MAAKT HET ERGER, niet beter: hij toont sinds `v250` de aftrekking
+  `varBudget - gebruikt`, terwijl `safeToSpend()` met de reservering `varPlanRemaining()` rekent.
+  De aftrekking met de getoonde post wijkt daarom nog eens het gat af (gemeten 2.025 tegen 1.720),
+  dus hij mengt twee maten van hetzelfde. `nog-deze-maand-volgorde.spec.js` legt beide identiteiten
+  vast, zodat een volgende ronde ziet wat zo'n restregel zou beweren.
+  EEN POST ZOEK JE OP ZIJN LABEL EN NIET OP ZIJN PLEK: deze wissel liet vijf tests in
+  `nog-deze-maand` en vijf in `nog-te-sparen` omvallen die op `tegels[n]` stonden terwijl hun
+  eigenschap niets met de volgorde te maken had. Alleen de test die de volgorde zelf vasthoudt
+  indexeert nog.
 - **De vouw op Inzichten is een eis en geen nulmeting** (`v251`, `v252`):
   `inzichten-indeling.spec.js` toetst dat de onderkant van het laatste valt-op-signaal boven de
   vouw blijft: 567px op 360x640, 727px op 360x800 en 771px op 390x844, de vensterhoogte min de nav.
@@ -612,7 +632,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v252` → `minder-v253`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v253` → `minder-v254`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de

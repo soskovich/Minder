@@ -7318,21 +7318,33 @@ function nogDezeMaandPosten(){
      vanzelf twee rijen op: waarneming boven, plan onder, en die rijen zijn de scheiding. Geen
      groepskoppen erbij: de sub van elke tegel noemt zijn bron al, en twee koppen voor vier tegels
      is meer meubilair dan winst.
-     Er telt hier niets op (v192 haalde de chip weg en er is geen tweede optelling voor
-     teruggekomen), dus vier tegels suggereren geen waterval. */
-  const posten=[
-    // waarneming: wat je boekingen zeggen over de rest van de maand
-    {lab:`Nog te betalen · vast`, val:euro0(teBetalen),
-     col:teBetalen>0?'var(--red)':'var(--mut)', sub, tik:teBetalen>0?'openFixedDue()':''},
-    {lab:'Nog te ontvangen', val:euro0(teOntvangen),
-     col:teOntvangen>0?'var(--green)':'var(--mut)', sub:'inkomen', tik:''},
-  ];
-  // plan: wat je jezelf hebt opgelegd. Zonder alarmkleur, want dit is geen tekort (v78/v93).
+     DIE SCHEIDING DRAAGT DE VOLGORDE NIET MEER sinds v253, zie hieronder; wat er wel van staat is
+     dat elke post zijn eigen vorm houdt en dat de sub van elke post zijn bron noemt.
+     Er telt hier nog steeds niets op (v192 haalde de chip weg en er is geen tweede optelling voor
+     teruggekomen); de volgorde van v253 nodigt daar wel toe uit, en waarom dat niet klopt staat
+     daar met de meting erbij. */
+  /* v253: de volgorde is de weg van je geld door de maand - wat binnenkomt, wat je opzij zet, wat
+     vastligt, en wat er voor je potjes overblijft. Tot v252 stond hij op de scheiding van v204,
+     waarneming boven en plan onder, met de twee bronsoorten om en om.
+     WAT ER NIET BIJ KOMT: een totaal of een restregel. De vier aftrekken van elkaar geeft een getal
+     dat er uitziet als "wat ik overhoud" en dat niet is, want het begint bij wat er NOG binnenkomt
+     en niet bij wat er al staat. Gemeten op dezelfde maand, alleen het salaris al binnen in plaats
+     van nog komend: de aftrekking springt van +2.025 naar -975 terwijl safeToSpend() en de prognose
+     allebei op 3.720 en 3.929 blijven staan. Dat is precies de fout die v192 wegnam toen het getal
+     "Deze maand op eigen kracht" verdween; er telt hier niets op. */
+  const posten=[];
+  // wat er binnenkomt
+  posten.push({lab:'Nog te ontvangen', val:euro0(teOntvangen),
+    col:teOntvangen>0?'var(--green)':'var(--mut)', sub:'inkomen', tik:''});
+  // wat je opzij zet. Zonder alarmkleur, want dit is geen tekort (v78/v93).
   if(spaarOn) posten.push({lab:jrg('nogtesparen','Nog te sparen'), val:euro0(nogSparen),
     col:gehaald?'var(--green)':'var(--txt)',
     sub:gehaald?`${ICON('check')} gehaald · ${euro0(S.savedThisMonth)} opzij`
                :`van ${euro0(S.saveTarget)}${S.savedThisMonth>0?` · ${euro0(S.savedThisMonth)} opzij`:''}`,
     tik:'openSafeToSpend()'});
+  // wat vastligt: wat je boekingen zeggen over de rest van de maand
+  posten.push({lab:`Nog te betalen · vast`, val:euro0(teBetalen),
+    col:teBetalen>0?'var(--red)':'var(--mut)', sub, tik:teBetalen>0?'openFixedDue()':''});
   /* v208: de potjes-tegel is het instrument voor variabele lasten geworden, dus hoort te zien te
      zijn waar je staat en niet alleen wat er over is. De sub volgt de vorm van 'Nog te sparen' in
      dezelfde rij ('van <noemer> · <wat er al is>'), zodat de twee plan-tegels gelijksoortig blijven.

@@ -27,22 +27,25 @@ async function boot(page, payload) {
    Het anker verhuist mee; wat de tests vasthouden (bedrag, subregel, plek, tik) blijft hetzelfde. */
 const kaart = (page) => page.locator('#insNogLijst');
 const tegels = (page) => kaart(page).locator('.ins-nog-rij');
-const spaarTegel = (page) => tegels(page).nth(2);
+/* v253: op zijn label en niet op zijn plek. De volgorde van de vier posten is die ronde gewijzigd
+   naar de weg van je geld door de maand (ontvangen, sparen, betalen, potjes), en daarmee viel deze
+   spec om op een plek terwijl wat hij vasthoudt - bedrag, subregel en tik van de spaarpost - er
+   niets mee te maken heeft. */
+const spaarTegel = (page) => tegels(page).filter({ hasText: /nog te sparen/i }).first();
 
 test.describe('a · de tegel toont wat er nog opzij moet', () => {
   test('bedrag, subregel en plek naast de andere twee', async ({ page }) => {
     await boot(page);
     /* v204: de rij telt sinds v204 ook 'Nog uit je potjes', dus het aantal ligt niet meer vast.
-       Wat deze test bewaakt is de spaartegel zelf, en die staat onveranderd op de derde plek:
-       de twee waarnemingen eerst, daarna het plan. */
-    await expect(tegels(page).nth(2)).toBeVisible();
+       v253: en de plek ook niet meer, dus deze test zoekt de spaarpost op zijn label. */
+    await expect(spaarTegel(page)).toBeVisible();
     const t = (await spaarTegel(page).innerText()).toLowerCase();
     expect(t).toContain('nog te sparen');
     expect(t).toContain('€100');
     expect(t).toContain(`van €${TARGET}`);
     expect(t).toContain(`€${GESPAARD} opzij`);
-    // v241: geen twee kolommen meer maar een lijst; de scheiding tussen waarneming en plan is de
-    // volgorde, en de spaarpost staat nog steeds op de derde plek
+    // v241: geen twee kolommen meer maar een lijst. De volgorde zelf staat in
+    // nog-deze-maand-volgorde.spec.js; hier telt alleen dat de spaarpost naast de andere staat.
     expect(await tegels(page).count()).toBeGreaterThanOrEqual(3);
     // en de bestaande posten staan er onveranderd bij
     const kt = (await kaart(page).innerText()).toLowerCase();
