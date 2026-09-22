@@ -192,8 +192,13 @@ test.describe('Inzichten: constateren, niet oplossen', () => {
   });
 
   /* v241: de samenstelling van renderIns() is herschreven, dus een grep op de oude regel bewijst
-     niets meer. De eigenschap is de volgorde op het scherm: de stand, wat er nog komt, de signalen,
-     en dan de grafiek. Die meten we op de gerenderde pagina en niet in de broncode. */
+     niets meer. De eigenschap is de volgorde op het scherm, en die meten we op de gerenderde pagina
+     en niet in de broncode.
+     v252: de volgorde is de stand, de signalen, wat er nog komt, en dan de grafiek. De regel die
+     deze test vasthoudt is onveranderd - de rij staat tussen de stand en de grafiek - maar de
+     assertie `sig > nog` legde de oude plek van de lijst vast en is daarom omgedraaid. De eis van
+     v241 was dat je de signalen ziet zonder te scrollen, en met de lijst ertussen werd die niet
+     gehaald (gemeten 651px tegen 567px zichtbaar op 360x640, nu 369px). */
   test('de rij staat tussen de stand en de grafiek', async ({ page }) => {
     await boot(page, DRIE);
     await page.evaluate(() => go('ins'));
@@ -205,7 +210,7 @@ test.describe('Inzichten: constateren, niet oplossen', () => {
     });
     expect(uit.stand).toBeGreaterThanOrEqual(0);
     expect(uit.sig).toBeGreaterThan(uit.stand);
-    if (uit.nog >= 0) expect(uit.sig).toBeGreaterThan(uit.nog);
+    if (uit.nog >= 0) expect(uit.nog).toBeGreaterThan(uit.sig);
     if (uit.graf >= 0) expect(uit.sig).toBeLessThan(uit.graf);
   });
 });
