@@ -352,6 +352,27 @@ genoemde versietag.)*
   DE VOUW KAN HIER NIET DOOR BEWEGEN: "Wat opvalt" staat sinds `v252` vóór "Wat er nog komt", dus
   een regel die in die tweede sectie bijkomt valt onder de signalen. Gemeten na deze ronde: 369px
   tegen 567px zichtbaar op 360x640 en 354px tegen 771px op 390x844, exact de getallen van `v252`.
+- **OPEN PUNT: het dagbedrag staat onder de vouw op 360x640** (`v257`): gemeten begint de dagregel
+  op 592px terwijl er 567px zichtbaar is, dus op de kleinste telefoon kost hij een scroll. De
+  signalen blijven er ruim boven (335px tegen 567px, 321px tegen 771px op 390x844), dus de eis van
+  `v241` wordt gehaald en de tripdraad in `inzichten-indeling.spec.js` is niet verschoven. Toch is
+  dit een echt punt: dit is het enige getal op Inzichten dat de gebruiker BUITEN DE DEUR gebruikt,
+  en onder de vouw haalt dat de reden weg waarom het gevraagd werd.
+  DE RICHTING, VASTGELEGD ZODAT EEN VOLGENDE RONDE NIET DE VERKEERDE KANT OP BEGINT.
+  HET BLOK VERPLAATSEN IS GEEN OPLOSSING: de volgorde van `v252` klopt, eerst wat er verandert en
+  dan vaste context, en "Wat er nog komt" is die vaste context. Wie dit oplost door de secties om te
+  draaien draait `v252` terug en zet de signalen weer onder de vouw; die meting staat hierboven.
+  DE PLEK WAAR DIT GETAL HOORT IS DE HERO, bij de balk die al zegt hoeveel van je maandbudget op is.
+  Dat is dezelfde vraag op dezelfde plek: de balk zegt hoe ver je bent, het dagbedrag wat dat
+  betekent voor de dagen die nog komen.
+  HARDE VOORWAARDE: de regel blijft daar HETZELFDE GETAL lezen, `varPotjeStand().rest` en niet de
+  hero-meting (`totals().budget` min `totals().spendNorm`). Die twee lopen uiteen zodra je buiten
+  een potje uitgeeft of een terugkerend potje niet gelijk is aan zijn incasso, en dat is precies de
+  tweede waarheid die `v257` heeft weggehaald. Een dagregel die in de hero opeens met de hero-som
+  gaat rekenen omdat hij daar staat, brengt hem terug.
+  DAT UITZOEKEN IS EEN EIGEN RONDE: het raakt de hoogte van de stand-kaart (`v241` houdt die onder
+  de 200px) en dus opnieuw de vouw, plus het open punt van `budgetOverZin()` dat in diezelfde hero
+  staat.
 - **OPEN PUNT: de dagen-conventie sluit vandaag uit** (`v257`): `maandDagenOver()`, `potjeRest()`
   (`v111`) en `budgetOverZin()` rekenen alle drie met `dim - elapsed`, dus op dag 23 van 30 zijn dat
   7 dagen en niet 8, terwijl je vandaag nog kunt uitgeven. Op de laatste dag redt alleen de klem op
