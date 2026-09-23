@@ -1921,12 +1921,24 @@ function safeToSpend(){
  * volledig is false zodra safeToSpend() onvolledig is; bij een ontbrekend saldo tonen we niets in
  * plaats van een benadering (v59/v73). Bewust strenger dan de hero, die al een getal toont zodra
  * er een enkel saldo bekend is. */
+/* v257: DE RESTERENDE DAGEN VAN DE MAAND, ALS ÉÉN BRON. vrijPerDag() leidde hem inline af, en de
+   dagregel onder "Nog uit je potjes" zou dat een tweede keer doen; twee inline-afleidingen van
+   hetzelfde getal zijn twee waarheden zodra er één verandert (v104).
+   DE CONVENTIE SLUIT VANDAAG UIT: dim min elapsed, dus op dag 23 van 30 zijn dat 7 dagen en niet
+   8. Dat is wat potjeRest() (v111) en budgetOverZin() ook doen, en het is een bewuste keuze boven
+   het alternatief: met vandaag erbij zou Inzichten "8 dagen" zeggen waar Home op dezelfde dag "7
+   dagen" zegt, en dat is een tweede waarheid op de noemer. De klem op 1 houdt de deling heel op de
+   laatste dag. Dat die dag dan bijna om is staat als open punt in CLAUDE.md; het omzetten raakt
+   deze functie, potjeRest() en budgetOverZin() tegelijk en is dus een eigen ronde. */
+function maandDagenOver(ym){
+  let d={dim:30,elapsed:0}; try{ d=daysElapsed(ym); }catch(_){}
+  return Math.max(d.dim-d.elapsed,1);
+}
 function vrijPerDag(){
   let S=null; try{ S=safeToSpend(); }catch(_){}
   const now=new Date();
   const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  let de={dim:30,elapsed:0}; try{ de=daysElapsed(ym); }catch(_){}
-  const dagenResterend=Math.max(de.dim-de.elapsed,1);
+  const dagenResterend=maandDagenOver(ym);
   if(!S) return {perDag:0, ruimte:0, dagenResterend, volledig:false, known:0, missing:0};
   const ruimte=Math.round(S.safe);
   // known en missing komen mee zodat de regel eronder de twee onvolledig-gevallen uit elkaar kan
@@ -7530,8 +7542,28 @@ function nogDezeMaandPosten(){
     const vsub = VP.gebruikt<=0 ? `van ${euro0(VP.budget)} · nog niets gebruikt`
       : VP.over ? `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt`
       : `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt · ${VP.deel}%`;
+    /* v257: DRIE REGELS, ÉÉN BRON. De stand (het grote getal met zijn sub), die stand per dag, en
+       wat je geplande tempo daar bovenop vraagt. Alle drie lezen varPotjeStand() en varPlanRemaining(),
+       dus ze kunnen elkaar niet tegenspreken: de eerste is het restant, de tweede datzelfde restant
+       vlak verdeeld over de dagen die nog komen, de derde het verschil met je eigen potjesverdeling.
+       WAAROM inPotjes EN NIET budget MIN uitgegeven MIN vaste lasten. Die handberekening uit de
+       hero lijkt hetzelfde en is het niet: het maandbudget telt alle potjes, uitgegeven telt ook
+       categorieën ZONDER potje, en fixDue komt uit recurringSchedule() en niet uit een categorie.
+       Gemeten op dezelfde fixture: in het gemelde geval komen beide op 520 uit, maar met 200 uitgegeven
+       buiten een potje zegt de aftrekking 320 tegen 520, en met een incasso van 420 bij een potje van
+       389 zegt hij 489 tegen 520. Dat verschil hoort bij het open punt van budgetOverZin() en niet
+       bij deze regel; hier telt dat de dagregel hetzelfde getal deelt als dat erboven staat.
+       DE NOEMER KOMT UIT maandDagenOver(), dezelfde bron als vrijPerDag() op Home, dus vandaag telt
+       niet mee en de laatste dag klemt op 1.
+       GEEN DAGREGEL ZODRA HET RESTANT OP IS. Bij precies nul zegt het grote getal het al en zou
+       "€0 per dag" datzelfde herhalen; bij een negatief restant staat er "Te veel uitgegeven" en
+       zegt een dagbedrag niets (dezelfde grond als v158, dat bij een negatieve ruimte ook geen
+       bedrag toont). De constatering zit dan in het label en niet in een eigen berekening. */
+    const dagen=maandDagenOver(curMonth||months()[months().length-1]);
+    const dagW=dagen===1?'dag':'dagen';
     posten.push({lab: inPotjes<0?'Te veel uitgegeven':'Nog uit je potjes',
       val:euro0(Math.abs(inPotjes)), col:'var(--txt)', sub:vsub, tik:'',
+      dagRegel: inPotjes>0?`Nog ${dagen} ${dagW} deze maand, dus ${euro0(Math.round(inPotjes/dagen))} per dag`:'',
       noot: gat>0?`Bij je tempo nog ${euro0(varPlan)} nodig · ${euro0(gat)} tekort`:'', nootTik:''}); }
   return posten;
 }
@@ -7549,6 +7581,7 @@ function nogDezeMaandBody(){
       <div class="wvo-tl">${p.lab}</div>
       <div class="wvo-tv" style="color:${p.col}">${p.val}</div>
       ${p.sub?`<div class="wvo-ts">${p.sub}</div>`:''}
+      ${p.dagRegel?`<div class="wvo-ts nog-dag" style="color:var(--mut2);margin-top:3px">${p.dagRegel}.</div>`:''}
       ${p.noot?`<div class="wvo-ts nog-noot" style="color:var(--mut2);margin-top:3px${p.nootTik?';cursor:pointer':''}"${p.nootTik?` onclick="event.stopPropagation();${p.nootTik}"`:''}>${p.noot}${p.nootTik?' \u203a':''}</div>`:''}</div>`;
   return `<div class="wvo-tiles" style="grid-template-columns:1fr 1fr">${posten.map(tegel).join('')}</div>`;
 }
@@ -7567,6 +7600,7 @@ function insNogLijst(){
       <span style="flex:1;min-width:0">
         <span class="ins-nog-lab" style="font-size:13px">${p.lab}</span>
         ${p.sub?`<span class="small ins-nog-sub" style="display:block;color:var(--mut);margin-top:1px;line-height:1.4">${p.sub}</span>`:''}
+        ${p.dagRegel?`<span class="small ins-nog-dag" style="display:block;color:var(--mut2);margin-top:3px;line-height:1.4">${p.dagRegel}.</span>`:''}
         ${p.noot?`<span class="small ins-nog-noot" style="display:block;color:var(--mut2);margin-top:3px;line-height:1.4${p.nootTik?';cursor:pointer':''}"${p.nootTik?` onclick="event.stopPropagation();${p.nootTik}"`:''}>${p.noot}${p.nootTik?' \u203a':''}</span>`:''}</span>
       <span class="ins-nog-val" style="font-weight:800;white-space:nowrap;text-align:right;color:${p.col}">${p.val}</span></div>`;
   return `<div id="insNogLijst">${posten.map(rij).join('')}</div>`;

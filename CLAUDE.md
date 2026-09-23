@@ -327,6 +327,39 @@ genoemde versietag.)*
   hij er niet: die nul is een gat en geen toewijzing (`v173`).
   `planTotaalRegel()` staat sindsdien binnen de kaart van de waterval, onder de sluitpost, en niet
   meer tussen de bestemmingen en de reserveringen, waar hij las alsof de reserveringen erin zaten.
+- **De stand, die stand per dag, en wat je tempo daar bovenop vraagt** (`v257`): onder "Nog uit je
+  potjes" staan sinds `v257` drie regels, en alle drie lezen `varPotjeStand()` en
+  `varPlanRemaining()`. De eerste is het restant, de tweede datzelfde restant vlak verdeeld over de
+  dagen die nog komen, de derde het verschil met je eigen potjesverdeling. Ze kunnen elkaar niet
+  tegenspreken, want er is één bron.
+  DE DAGREGEL DEELT HET GETAL DAT ER AL STAAT, `VP.budget - VP.gebruikt`, en niet de handberekening
+  uit de hero (`budget - spendNorm - fixDue`). Die twee lijken hetzelfde en zijn het niet: de drie
+  termen komen uit drie metingen. `totals().budget` telt ALLE potjes, `totals().spendNorm` telt ook
+  uitgaven in categorieën ZONDER potje, en `monthLiquidity().fixDue` komt uit `recurringSchedule()`
+  en dus niet uit een categorie. Gemeten op één fixture: in het gemelde geval komen beide op €520
+  uit, maar met €200 uitgegeven buiten een potje zegt de aftrekking €320 tegen €520, en met een
+  incasso van €420 bij een potje van €389 €489 tegen €520. Op het toestel liepen ze al uiteen: uit
+  de getoonde regel "Bij je tempo nog €1.045 nodig · €463 tekort" volgt dat daar €582 stond. Dat
+  verschil hoort bij het open punt van `budgetOverZin()` hieronder en niet bij deze regel.
+  DE NOEMER KOMT UIT `maandDagenOver(ym)`, ÉÉN BRON, ook gelezen door `vrijPerDag()` op Home. Er is
+  dus geen tweede dagbedrag naast het bestaande: Home deelt je saldo-ruimte, Inzichten je potjes,
+  en allebei door hetzelfde aantal dagen. `dagbedrag-potjes.spec.js` leest de bron en eist dat
+  `Math.max(dim-elapsed,1)` op precies één plek staat.
+  GEEN DAGREGEL ZODRA HET RESTANT OP IS. Bij precies nul zegt het grote getal het al en zou "€0 per
+  dag" datzelfde herhalen; bij een negatief restant staat er "Te veel uitgegeven" en zegt een
+  dagbedrag niets (dezelfde grond als `v158`, dat bij een negatieve ruimte ook geen bedrag toont).
+  De constatering zit in het label en niet in een eigen berekening.
+  DE VOUW KAN HIER NIET DOOR BEWEGEN: "Wat opvalt" staat sinds `v252` vóór "Wat er nog komt", dus
+  een regel die in die tweede sectie bijkomt valt onder de signalen. Gemeten na deze ronde: 369px
+  tegen 567px zichtbaar op 360x640 en 354px tegen 771px op 390x844, exact de getallen van `v252`.
+- **OPEN PUNT: de dagen-conventie sluit vandaag uit** (`v257`): `maandDagenOver()`, `potjeRest()`
+  (`v111`) en `budgetOverZin()` rekenen alle drie met `dim - elapsed`, dus op dag 23 van 30 zijn dat
+  7 dagen en niet 8, terwijl je vandaag nog kunt uitgeven. Op de laatste dag redt alleen de klem op
+  1 de deling, en dan staat er "nog 1 dag" op een dag die bijna om is. Gemeten: dagbedrag €74 bij 7
+  dagen tegen €65 bij 8. BEWUST NIET OPGELOST bij `v257`: met vandaag erbij zou Inzichten "8 dagen"
+  zeggen waar Home op dezelfde dag "7 dagen" zegt, en dat is een tweede waarheid op de noemer. Eén
+  waarheid wint, ook als hij op de laatste dag scheef staat. Wordt dit opgepakt, dan veranderen
+  `maandDagenOver()`, `potjeRest()` en `budgetOverZin()` TEGELIJK, en dat is een eigen ronde.
 - **De grendel houdt het splitsen tegen, niet het doorzakken** (`v255`): wat de buffer deze maand
   niet meer kan gebruiken zakt door naar het eerstvolgende lopende doel op volgorde, ook bij een
   dichte grendel. Gemeten aanleiding: buffer nog €2.534 nodig van €3.000 inleg, het noodfonds kreeg
@@ -729,7 +762,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v255` → `minder-v256`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v257` → `minder-v258`, en zo verder). Dit is de enige plek waar die regel staat.
 
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de
