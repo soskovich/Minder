@@ -764,6 +764,15 @@ locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het vel
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
 (`minder-v257` → `minder-v258`, en zo verder). Dit is de enige plek waar die regel staat.
 
+**DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
+app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
+`tests/` en documentatie, dus de cache ging van `minder-v255` rechtstreeks naar `minder-v257`. Dat
+gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
+bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
+om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
+`minder-vN` in één greep terug te vinden in `CHANGELOG.md` en in de comments in `index.html`.
+Versienummers hoeven alleen te VERSCHILLEN om een cache te breken, niet opeenvolgend te zijn.
+
 ## Geschiedenis (niet automatisch geladen)
 - **`BESLISSINGEN.md`** — elke vastgelegde keuze met de redenering, de gemeten aanleiding en de
   valkuil erachter, geordend per onderwerp met de versietag erbij. Lees dit bestand zodra een ronde
