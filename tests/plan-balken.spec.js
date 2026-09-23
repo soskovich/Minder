@@ -96,15 +96,18 @@ const takken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-v
    €3.000 in juni 2028 heb je vanaf aug 2027 €300 per maand nodig"), dus uit een voorbeeld bij een
    ander bedrag, en is daarna aan Kosten Koper geplakt en als meting opgeschreven. Het scherm van
    het toestel zegt "moet in juli 2027" bij Kosten Koper en "moet in maart 2027" bij Inrichting
-   woning, en blok 5 van het diagnosescherm zegt rest=16000 en rest=3000 bij gespaard 0, dus
-   doelbedragen van €16.000 en €3.000. Dat staat hieronder.
+   woning, en blok 5 van het diagnosescherm zei toen rest=16000 en rest=3000 bij gespaard 0.
+   BIJGEWERKT bij v256: Kosten Koper staat op €10.000. Dat doel is na v252 verlaagd, en het
+   plantotaal ging in dezelfde stap van €21.301 naar €16.534, dus de meting van v252 klopte op
+   haar moment en is daarna verouderd. Een fixture die een bedrag van het toestel draagt veroudert
+   met dat bedrag mee; zie de fixture-regel in CLAUDE.md.
    DE DATA STAAN ALS AFSTAND en niet als datum, want een vaste datum kruipt met de kalender naar
    het heden toe: in juli 2027 zou dit doel op zijn streefdatum staan en de maand erna erachter, en
    dan toetst de spec een ander geval dan hij beschrijft. Wat hij vasthoudt is de verhouding van
    het toestel: twee wachtende doelen, het kleinste het eerst aan de beurt. */
 const KK_STREEF = overMnd(10);        // juli 2027 op de meetdag
 const IW_STREEF = overMnd(6);         // maart 2027 op de meetdag
-const KK = (o) => Object.assign({ id: 'gmrsd1piu', naam: 'Kosten Koper', doel: 16000, gespaard: 0, allocMode: 'auto' }, o);
+const KK = (o) => Object.assign({ id: 'gmrsd1piu', naam: 'Kosten Koper', doel: 10000, gespaard: 0, allocMode: 'auto' }, o);
 const IW = (o) => Object.assign({ id: 'gmub1fh4u', naam: 'Inrichting woning', doel: 3000, gespaard: 0, allocMode: 'auto' }, o);
 const ID_KK = 'gmrsd1piu', ID_IW = 'gmub1fh4u';
 
@@ -446,7 +449,7 @@ test.describe('d · het streepje', () => {
 
 test.describe('d · de balk en de takken', () => {
   /* Twee doelen die precies krijgen wat ze nog nodig hebben, zodat er werkelijk iets onverdeeld
-     blijft: met een doel van €16.000 erin zou ronde 2 het restant alsnog doorschuiven en is er
+     blijft: met een doel van €10.000 erin zou ronde 2 het restant alsnog doorschuiven en is er
      geen vrij segment om te toetsen. */
   const twee = Object.assign({
     goals: [KK({ doel: 1500, streefdatum: overMnd(40), allocMode: 'fixed', perMaand: 1500 }),

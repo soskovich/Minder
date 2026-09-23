@@ -223,23 +223,42 @@ genoemde versietag.)*
   waar een stap uit volgt, en de vier posten van "Wat er nog komt" zijn vaste context die je
   opzoekt als je hem nodig hebt. "Over de maanden heen" blijft onderaan, want die kijkt het verst
   terug.
-- **Fixtures dragen de toestand van het toestel, of ze heten anders** (`v251`): een fixture die
-  "de gemelde cijfers" heet en andere getallen draagt, laat een ronde denken dat hij het geval
-  reproduceert terwijl hij een gelijkende verhouding toetst. `potjesregel-aansluiting.spec.js`
-  draagt nu €1.730 aan potjes, €1.132 gebruikt en dus €598, precies de gemelde regel. WAT NIET VAST
-  TE ZETTEN IS legt de fixture zelf uit: de €1.089 en het gat van €491 hangen aan de dag van de
-  maand, want `potjeRest()` rekent met de resterende dagen (op dag 20 was het gat €385, op dag 22
-  €491). De potjes zijn zo gekozen dat het op dag 22 van een maand van 30 dagen uitkomt, en elke
-  test leest die twee verder live uit `varPlanRemaining()`. In `plan-balken.spec.js` stond het er
+- **Fixtures dragen de toestand van het toestel, of ze heten anders** (`v251`, `v256`): een fixture
+  die "de gemelde cijfers" heet en andere getallen draagt, laat een ronde denken dat hij het geval
+  reproduceert terwijl hij een gelijkende verhouding toetst.
+  DEZELFDE UITKOMST IS NIET HETZELFDE GEVAL (`v256`). Drie keer ging dit mis, en de derde keer was
+  de verleidelijkste: `grendel-doorzakken.spec.js` droeg bij `v255` een noodfonds van €40.000 met
+  €37.466 toegewezen, want dat geeft dezelfde rest van €2.534 als het toestel, en alle 32 tests
+  stonden groen. Maar die buffer staat op 94 procent en die van het toestel (€3.534 met €1.000) op
+  28, dus het is een ander geval met toevallig hetzelfde antwoord voor deze ene som. Gemeten naast
+  elkaar: toewijzing identiek (2.534 / 466 / 0, Blijft over €0), voortgang 94 tegen 28 procent.
+  EEN FIXTURE DIE NAAR DE TOESTAND VAN DE GEBRUIKER VERWIJST DRAAGT DIE GETALLEN, niet een paar dat
+  op dezelfde uitkomst uitkomt. Groen op zo'n variant zegt alleen dat de afgeleide klopt, niet dat
+  het gemelde geval is gereproduceerd, en de volgende ronde leest hem als toestand. Kies je toch
+  een variant omdat je een randgeval nodig hebt, geef hem dan een naam die zegt wat hij is. De
+  eerste twee keer ging het om de streefdatum en het doelbedrag van Kosten Koper (hieronder), de
+  derde om het bufferdoel.
+  VEROUDEREN IS IETS ANDERS DAN FOUT (`v256`): Kosten Koper is €10.000 en niet de €16.000 die
+  `v252` uit blok 5 las. Dat doel is daarna verlaagd, en het plantotaal ging in dezelfde stap van
+  €21.301 naar €16.534. De meting van `v252` klopte dus op haar moment. Een fixture die een bedrag
+  van het toestel draagt veroudert zodra de gebruiker dat bedrag wijzigt; dan is de meting bijwerken
+  de correctie, niet de oude meting wantrouwen of er een tegenspraak van maken.
+  `potjesregel-aansluiting.spec.js` draagt nu €1.730 aan potjes, €1.132 gebruikt en dus €598,
+  precies de gemelde regel. WAT NIET VAST TE ZETTEN IS legt de fixture zelf uit: de €1.089 en het
+  gat van €491 hangen aan de dag van de maand, want `potjeRest()` rekent met de resterende dagen
+  (op dag 20 was het gat €385, op dag 22 €491). De potjes zijn zo gekozen dat het op dag 22 van
+  een maand van 30 dagen uitkomt, en elke test leest die twee verder live uit
+  `varPlanRemaining()`. In `plan-balken.spec.js` stond het er
   twee keer naast: "juni 2028" kwam uit een REKENVOORBEELD in de `v243`-opdracht ("Voor €3.000 in
   juni 2028 heb je vanaf aug 2027 €300 per maand nodig") en is daarna aan Kosten Koper geplakt en
   als meting opgeschreven, en het doelbedrag stond op €10.000. Het scherm van het toestel zegt
-  "moet in juli 2027" en "moet in maart 2027", en blok 5 van het diagnosescherm zegt rest=16000 en
-  rest=3000 bij gespaard 0. Sinds `v252` staat dat er: `KK_STREEF` 10 maanden, `IW_STREEF` 6
-  maanden, doelbedragen €16.000 en €3.000. Ze staan als AFSTAND en niet als datum, want een vaste
-  datum kruipt naar het heden en laat de spec na juli 2027 een ander geval toetsen dan hij
-  beschrijft. EEN VOORBEELD UIT EEN OPDRACHT IS GEEN METING: schrijf er dan "gerekend" bij en niet
-  "gemeten", anders wordt het na één ronde als toestand gelezen.
+  "moet in juli 2027" en "moet in maart 2027", en blok 5 van het diagnosescherm zei toen rest=16000
+  en rest=3000 bij gespaard 0. Sinds `v252` staat dat er: `KK_STREEF` 10 maanden, `IW_STREEF` 6
+  maanden. Het doelbedrag van Kosten Koper is sinds `v256` €10.000 en niet €16.000, want dat doel
+  is daarna verlaagd; zie de regel hierboven over verouderen. De data staan als AFSTAND en niet als
+  datum, want een vaste datum kruipt naar het heden en laat de spec na juli 2027 een ander geval
+  toetsen dan hij beschrijft. EEN VOORBEELD UIT EEN OPDRACHT IS GEEN METING: schrijf er dan
+  "gerekend" bij en niet "gemeten", anders wordt het na één ronde als toestand gelezen.
   OPEN PUNT, gemeten en bewust niet aangeraakt: `budgetOverZin()` in de hero zegt "€X over je
   potjes" maar rekent met `totals().budget` tegen `totals().spendNorm`, dus met alle potjes én met
   uitgaven uit categorieën zonder potje. Gemeten met €200 bij zo'n categorie: de hero zegt €300

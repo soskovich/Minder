@@ -89,14 +89,25 @@ const meet = (page) => page.evaluate(() => {
 });
 
 test.describe('a · de gemelde toestand: drie lege potjes', () => {
-  test('de drie dragen nul, het totaal zakt met 153 en veilig te besteden stijgt met hetzelfde', async ({ page }) => {
+  /* HET VERSCHIL HANGT AAN DE DAG VAN DE MAAND en staat daarom niet als getal in deze tests.
+     potjeRest() is bud/dim maal de RESTERENDE dagen (v111), dus de tempo-som krimpt elke dag: op
+     dag 22 van een maand van 30 was het gemelde verschil €153, op dag 23 is het €135. Tot v255
+     stond die 153 hier drie keer hardgecodeerd terwijl alles eromheen live werd gelezen, en de
+     suite viel om zodra de kalender een dag verder stond. Dezelfde vorm als de fixture-regel in
+     CLAUDE.md, alleen niet op een bedrag van het toestel maar op een afgeleide van vandaag.
+     WAT WEL VASTSTAAT is de identiteit: het verschil tussen de twee sommen is precies het bedrag
+     waarmee veilig te besteden ruimer werd, en precies wat de prognoseregel noemt. Die wordt hier
+     getoetst, met de eis dat hij boven nul ligt zodat de test niet leegloopt op een dag waarop er
+     niets te verschillen valt. */
+  test('de drie dragen nul, en veilig te besteden wordt met het hele verschil ruimer', async ({ page }) => {
     await boot(page, DRIE_OP);
     const r = await meet(page);
     const op = r.rijen.filter((x) => /potje op/.test(x.sub));
     expect(op.length).toBe(3);
     for (const x of op) expect(x.bedrag).toBe(0);
-    // de tempo-som is wat de sheet vroeger in zijn kop zette
-    expect(r.plan - r.reserve).toBe(153);
+    // de tempo-som is wat de sheet vroeger in zijn kop zette; het verschil is wat dat kostte
+    const verschil = r.plan - r.reserve;
+    expect(verschil, 'de drie lege potjes leveren geen verschil op').toBeGreaterThan(0);
     expect(r.kop).toBe(r.reserve);
     /* en veilig te besteden is met precies datzelfde bedrag ruimer geworden. safe trekt de
        reservering af, dus safe met de oude bron is safe min het verschil tussen de twee sommen. */
@@ -104,7 +115,7 @@ test.describe('a · de gemelde toestand: drie lege potjes', () => {
       const m = curMonth || months()[months().length - 1];
       return safeToSpend().safe - (varPlanRemaining(m) - varPotjesReserve(m));
     });
-    expect(r.safe - oud).toBe(153);
+    expect(r.safe - oud).toBe(verschil);
   });
 
   test('het totaal in de kop is de som van de posten eronder', async ({ page }) => {
@@ -127,9 +138,19 @@ test.describe('a · de gemelde toestand: drie lege potjes', () => {
   test('de prognoseregel staat onder de lijst en telt nergens in mee', async ({ page }) => {
     await boot(page, DRIE_OP);
     const r = await meet(page);
-    expect(r.prognose).toMatch(/Bij je tempo verwacht je deze maand nog €153 uit te geven in potjes die al op zijn\./);
-    expect(r.kop).not.toBe(r.kop + 153);
-    expect(r.rijen.some((x) => x.bedrag === 153)).toBe(false);
+    const verschil = r.plan - r.reserve;
+    expect(verschil).toBeGreaterThan(0);
+    /* euro0() is app-code en bestaat hier niet, dus de zin wordt op zijn vorm getoetst en het
+       bedrag erin op zijn waarde. Dat is ook het juiste anker: wat vaststaat is dat het getal in
+       de zin de tempo-som min de reservering is, niet hoe het is opgemaakt. */
+    expect(r.prognose).toMatch(/^Bij je tempo verwacht je deze maand nog €[\d.]+ uit te geven in potjes die al op zijn\.$/);
+    expect(eur(/nog (€[\d.]+) uit te geven/.exec(r.prognose)[1])).toBe(verschil);
+    /* en hij telt nergens in mee: niet in de kop (die is de reservering, niet de reservering plus
+       de prognose) en niet als eigen post in de lijst. Tot v255 stond hier r.kop !== r.kop + 153,
+       en dat is waar voor elk getal behalve nul, dus die assert kon niet vallen. */
+    expect(r.kop).toBe(r.reserve);
+    expect(r.kop).not.toBe(r.reserve + verschil);
+    expect(r.rijen.some((x) => x.bedrag === verschil)).toBe(false);
   });
 });
 

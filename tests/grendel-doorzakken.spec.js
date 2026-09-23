@@ -20,13 +20,19 @@
 // overslaat; gemeten gingen setPlanAllocVeld() en saveGoal() er gewoon in en werden daarna stil
 // genegeerd. Sinds v255 is planVastMag() de poort.
 //
-// DE FIXTURE IS DIE VAN HET TOESTEL: bufferrest 2.534 bij 3.000 inleg, Kosten Koper 10.000 en
-// Inrichting woning 3.000. De zes bestaande grendel-fixtures hebben allemaal een buffer die meer
-// nodig heeft dan één maand inleg, dus er blijft daar nooit iets over en ze meten dit geval niet.
-// LET OP, een openstaand verschil: CLAUDE.md legt bij v252 vast dat blok 5 van het diagnosescherm
-// op het toestel rest=16000 voor Kosten Koper las. De opdracht van deze ronde noemt 10.000. Die
-// twee kunnen niet allebei waar zijn; dit bestand volgt de opdracht en de rest van de getallen
-// hangt er niet aan.
+// DE FIXTURE IS DIE VAN HET TOESTEL, en dat betekent de getallen zelf en niet een paar dat op
+// dezelfde uitkomst uitkomt. Noodfonds-doel 3.534 met 1.000 toegewezen, dus 2.534 te gaan bij
+// 3.000 inleg; Kosten Koper 10.000 en Inrichting woning 3.000.
+// BIJ v255 STOND HIER 40.000 MET 37.466 TOEGEWEZEN. Die rest komt op dezelfde 2.534 uit en alle
+// tests hieronder bleven groen, en precies dat is het probleem: een buffer die nog 2.534 nodig
+// heeft van 40.000 staat op 94 procent, en een die er 2.534 nodig heeft van 3.534 op 28. Dat is
+// een ander geval dan het gemelde, met dezelfde uitkomst voor deze ene som. Zie de fixture-regel
+// in CLAUDE.md.
+// Kosten Koper stond bij v252 op 16.000, uit blok 5 van het diagnosescherm. Dat doel is daarna
+// verlaagd naar 10.000 (het plantotaal ging in dezelfde stap van 21.301 naar 16.534), dus die
+// 16.000 is verouderd en geen tegenspraak.
+// De zes bestaande grendel-fixtures hebben allemaal een buffer die meer nodig heeft dan één maand
+// inleg, dus er blijft daar nooit iets over en ze meten dit geval niet.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
@@ -41,9 +47,9 @@ const M2 = ym(new Date(now.getFullYear(), now.getMonth() - 2, 1));
 const MAIN = 'NL01MAIN0000001111';
 const SPAAR = 'NL01SAVE0000004323';
 
-// de toestand van het toestel: doel 40.000, toegewezen 37.466, dus 2.534 te gaan bij 3.000 inleg
-const NF_DOEL = 40000;
-const NF_TOE = 37466;
+// de toestand van het toestel: doel 3.534, toegewezen 1.000, dus 2.534 te gaan bij 3.000 inleg
+const NF_DOEL = 3534;
+const NF_TOE = 1000;
 const INLEG = 3000;
 const REST = NF_DOEL - NF_TOE;          // 2.534
 const OVER = INLEG - REST;              // 466: wat de buffer niet meer kan gebruiken
@@ -125,7 +131,7 @@ test.describe('a · het gemelde geval', () => {
 
 test.describe('b · planBufferKlaar: de drie eisen', () => {
   test('de buffer vraagt meer dan de hele inleg: alles daarheen, niets zakt door', async ({ page }) => {
-    await boot(page, { nfToe: 9000 });                  // 31.000 te gaan
+    await boot(page, { nfToe: 0 });                     // 3.534 te gaan, meer dan de 3.000 inleg
     const P = await plan(page);
     expect(P.klaar).toBe(false);
     expect(P.by.noodfonds.alloc).toBe(INLEG);
@@ -291,7 +297,7 @@ test.describe('e · doelTempo rekent met wat het doel nu werkelijk krijgt', () =
   });
 
   test('een doel dat nog niets krijgt rekent onveranderd vanaf de openingsmaand', async ({ page }) => {
-    await boot(page, { nfToe: 9000 });                  // niemand krijgt iets: grendel dicht, buffer niet klaar
+    await boot(page, { nfToe: 0 });                     // niemand krijgt iets: grendel dicht, buffer niet klaar
     const r = await page.evaluate(() => {
       const p = allocatePlan().find((x) => x.id === 'kk');
       return { alloc: p.alloc, heeftGrendel: !!p.grendel, T: doelTempo(p, p.alloc) };
