@@ -352,6 +352,17 @@ genoemde versietag.)*
   DE VOUW KAN HIER NIET DOOR BEWEGEN: "Wat opvalt" staat sinds `v252` vóór "Wat er nog komt", dus
   een regel die in die tweede sectie bijkomt valt onder de signalen. Gemeten na deze ronde: 369px
   tegen 567px zichtbaar op 360x640 en 354px tegen 771px op 390x844, exact de getallen van `v252`.
+- **OPEN PUNT: `SET.hideInternal` doet niets** (`v257`): de schakelaar in Instellingen heet
+  "Interne overboekingen verborgen" en belooft daarmee een filter. Gemeten met de schakelaar aan en
+  uit, op dezelfde gegevens: de transactielijst, Inzichten en Home zijn karakter voor karakter
+  identiek, `totals().spend` en `safeToSpend().safe` onveranderd, en een pinopname staat in beide
+  standen gewoon in de lijst. Vier treffers in de bron, alle vier in de instelling zelf (de default,
+  het label in de instellingenrij, de checkbox en de import-merge): er is geen lezer.
+  DIT IS DE MEETLES over een label dat een waarde belooft die de code niet heeft, nu als schakelaar
+  in plaats van als placeholder. WEGHALEN OF ALSNOG LEZEN IS EEN KEUZE, hem laten staan is er geen.
+  Meet vóór het weghalen wat eraan hangt: interne boekingen vallen al buiten `spendNorm` en
+  `spend` via `CATS[k].type`, dus wat de schakelaar zou moeten doen is de LIJST filteren, en dat is
+  iets wat de app nergens anders doet.
 - **OPEN PUNT: het dagbedrag staat onder de vouw op 360x640** (`v257`): gemeten begint de dagregel
   op 592px terwijl er 567px zichtbaar is, dus op de kleinste telefoon kost hij een scroll. De
   signalen blijven er ruim boven (335px tegen 567px, 321px tegen 771px op 390x844), dus de eis van
