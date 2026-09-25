@@ -95,6 +95,20 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **Een poort die een lijst toont en een filter dat de rijen kiest, gaan nooit over dezelfde
+  vraag** (`v260`): `nogDezeMaandPosten()` had allebei. Een voorpoort liet het hele blok vallen
+  tenzij `fixDue`, `varPlan`, `incDue` of een potje boven nul stond, en daaronder besliste het
+  filter per post of hij er hoorde te staan. Twee plekken met hetzelfde oordeel, en ze waren het
+  oneens: GEMETEN viel met alleen een gehaald spaardoel het hele blok weg, dus de poort gooide
+  precies de regel weg die het filter wilde houden.
+  DE POORT VRAAGT OF DE LIJST LEEG IS, NIET WAT ERIN HOORT. Alles wat over de inhoud gaat staat bij
+  de inhoud; de poort leest het resultaat en verder niets. Hier bleef daarvan alleen de `L`-guard
+  over, en die vraagt of er iets te lezen valt.
+  DIT IS `v104` OP EEN LIJST in plaats van op een getal: wie "hoort dit erbij" op twee plekken
+  beantwoordt heeft twee waarheden, en de poort wint altijd, want hij staat eerst - ook als hij het
+  minst weet. DE VORM IS BREDER DAN DIT BLOK: elk scherm dat een lijst achter een `if` rendert loopt
+  dit risico zodra het filter eronder groeit. Toets bij zo'n poort of hij iets anders vraagt dan het
+  filter; vraagt hij hetzelfde, dan is hij de tweede waarheid en gaat hij weg.
 - **Een nul die "er is niets meer" betekent verdwijnt, een nul die "het is klaar" betekent blijft**
   (`v260`): onder de kop stonden vier posten waarvan er twee op nul. "Nog te ontvangen €0 · inkomen"
   en "Nog te sparen €0 · gehaald · €3.000 opzij" zijn niet hetzelfde: de eerste voegt niets toe, de
@@ -108,11 +122,8 @@ genoemde versietag.)*
   HET DERDE GEVAL BIJ INKOMEN IS DE SCHERPSTE: zonder enige inkomensboeking is `baseIncome()` nul
   en `incomeBasis` 'onbekend', en de regel zei toch "€0 · inkomen". Een nul die als meting leest
   terwijl er niets gemeten is, precies wat `v59`/`v73`/`v173` verbieden.
-  DE VOORPOORT IS VERVALLEN. `nogDezeMaandPosten()` begon met een poort die het hele blok liet
-  vallen tenzij `fixDue`, `varPlan`, `incDue` of een potje boven nul stond. Die kende de twee
-  uitkomsten niet: GEMETEN viel met alleen een gehaald spaardoel het blok weg, en daarmee juist de
-  regel die zegt dat het gelukt is. Alleen de `L`-guard blijft; het filter doet de rest. Twee
-  poorten voor dezelfde vraag is een tweede waarheid.
+  DE VOORPOORT IS VERVALLEN, om de reden die als eigen regel hierboven staat: die poort kende deze
+  twee uitkomsten niet en gooide een gehaald spaardoel weg. Alleen de `L`-guard blijft.
   GEEN POST, GEEN KOP: dat was al zo (`renderIns()` doet `nog ? insSection(...) + nog : ''` en
   `insNogLijst()` geeft een lege string bij een lege lijst), maar het was nergens vastgelegd.
   `nog-deze-maand-leeg.spec.js` doet dat nu.
@@ -464,6 +475,20 @@ genoemde versietag.)*
   datum, want een vaste datum kruipt naar het heden en laat de spec na juli 2027 een ander geval
   toetsen dan hij beschrijft. EEN VOORBEELD UIT EEN OPDRACHT IS GEEN METING: schrijf er dan
   "gerekend" bij en niet "gemeten", anders wordt het na één ronde als toestand gelezen.
+  EEN COMMENT IN EEN FIXTURE IS EEN BEWERING, EN DIE HOORT ZELF GETOETST (`v260`).
+  `nog-deze-maand.spec.js` en `nog-deze-maand-volgorde.spec.js` droegen allebei "een vaste last laat
+  in de maand, zodat er ook echt nog iets te betalen is", terwijl `recurringSchedule()` op die
+  fixture NUL vaste posten gaf: de boekingen hadden alleen een `name` en `isIncasso()` leest de
+  `desc`. Tien versies groen op een geval dat ze niet raakten, en de comment zette de volgende ronde
+  op het verkeerde been. DEZELFDE VORM ALS DE ZES GRENDEL-FIXTURES die allemaal een buffer droegen
+  die meer nodig had dan een maand inleg: niet verkeerde getallen, maar een fixture die een ander
+  geval draagt dan zijn eigen tekst zegt. Een groene suite bewijst dan niets over dat geval.
+  DE WERKAFSPRAAK: waar het goedkoop kan een assertie erbij dat de fixture werkelijk draagt wat de
+  comment belooft. In beide specs is dat nu een test die leest dat `recurringSchedule()` maandelijkse
+  incasso's herkent en dat `fixDue` of `fixDueBetaald` boven nul staat; met de omschrijvingen weer
+  weggehaald vielen allebei om, naast negen andere tests. DE ASSERTIE HANGT NIET AAN DE DAG VAN DE
+  MAAND: "laat in de maand" is na de 28e niet meer waar, dus wat vastligt is dat de posten HERKEND
+  worden en niet aan welke kant van vandaag ze vallen.
   OPEN PUNT, gemeten en bewust niet aangeraakt: `budgetOverZin()` in de hero zegt "€X over je
   potjes" maar rekent met `totals().budget` tegen `totals().spendNorm`, dus met alle potjes én met
   uitgaven uit categorieën zonder potje. Gemeten met €200 bij zo'n categorie: de hero zegt €300

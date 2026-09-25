@@ -341,3 +341,23 @@ test.describe('f · layout', () => {
     });
   }
 });
+
+/* v260: de comment bij deze fixture ("een vaste last laat in de maand, zodat er ook echt nog iets
+   te betalen is") is zelf een bewering, en die stond tien versies lang groen terwijl hij onwaar
+   was: de boekingen droegen alleen een naam en isIncasso() leest de omschrijving, dus
+   recurringSchedule() gaf nul vaste posten. Deze test toetst de FIXTURE en niet de app.
+   HIJ HANGT NIET AAN DE DAG VAN DE MAAND: "laat in de maand" is na de 28e niet meer waar, dus wat
+   vastligt is dat de posten HERKEND worden, aan welke kant van vandaag ze ook vallen. */
+test.describe('g · de fixture draagt wat zijn comment belooft', () => {
+  test('recurringSchedule() herkent de maandlasten van deze fixture', async ({ page }) => {
+    await boot(page);
+    const f = await page.evaluate(() => {
+      const herkend = recurringSchedule()
+        .filter((s) => s.type === 'fixed' && s.intervalM === 1 && (s.incasso || s.periodic));
+      const L = monthLiquidity();
+      return { herkend: herkend.length, fixDue: Math.round(L.fixDue), betaald: L.fixDueBetaald };
+    });
+    expect(f.herkend).toBeGreaterThan(0);
+    expect(f.fixDue > 0 || f.betaald > 0).toBe(true);
+  });
+});
