@@ -65,7 +65,7 @@ test.describe('a - Inzichten voor en na', () => {
     /* v241: de sectiekoppen zeggen nu per blok welke vraag hij beantwoordt, en welke maand je
        leest staat in de eyebrow erboven (de maandkiezer). Geen kop zonder inhoud. */
     expect(await page.evaluate(() => [...document.querySelectorAll('#s-ins .inssec')].map((x) => x.innerText)))
-      .toEqual(['WAT ER NOG KOMT', 'OVER DE MAANDEN HEEN']);   // deze fixture levert geen signaal, dus geen lege kop
+      .toEqual(['NOG DEZE MAAND', 'OVER DE MAANDEN HEEN']);   // v260: de kop heet zoals de tegelvorm; deze fixture levert geen signaal, dus geen lege kop
     expect(await page.evaluate(() => document.querySelector('#s-ins .ins-eyebrow').innerText)).toMatch(/\u25be/);
   });
 

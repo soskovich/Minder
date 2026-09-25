@@ -40,6 +40,9 @@ function seed(set, opt) {
   } else {
     add(CUR, '03', -40, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
   }
+  /* v260: de huur van DEZE maand is al afgeschreven, dus fixDue is nul terwijl er wel degelijk
+     iets herkend is. Dat is het geval waarin "Nog te betalen" op nul blijft staan als uitkomst. */
+  if (opt.allesBetaald) add(CUR, '02', -900, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_own: JSON.stringify([MAIN]),
     minder_accmeta: '{}', minder_plan: '{}',
     minder_set: JSON.stringify(Object.assign({ limit: 70, hideInternal: true, mode: 'begeleid',
@@ -79,7 +82,7 @@ test.describe('a · de pagina in volgorde', () => {
     expect(uit.sig).toBeGreaterThan(uit.stand);
     expect(uit.nog).toBeGreaterThan(uit.sig);
     expect(uit.graf).toBeGreaterThan(uit.nog);
-    expect(uit.secties).toEqual(['Wat opvalt', 'Wat er nog komt', 'Over de maanden heen']);
+    expect(uit.secties).toEqual(['Wat opvalt', 'Nog deze maand', 'Over de maanden heen']);   // v260: de kop heet zoals de tegelvorm
     // de stand is het enige blok met een kader
     expect(uit.kaarten).toBe(1);
   });
@@ -145,27 +148,29 @@ test.describe('c · wat er nog komt', () => {
     for (const x of r) { expect(x.sub, x.lab).not.toBe(''); expect(x.subZichtbaar, x.lab).toBe(true); }
   });
 
-  test('een post van nul blijft staan en leest niet als fout', async ({ page }) => {
-    // alles betaald: er staat geen vaste last meer open deze maand
-    await boot(page);
+  test('een post van nul blijft staan als alles al is afgeschreven', async ({ page }) => {
+    /* v260: deze test monkeypatchte monthLiquidity naar fixDue 0 en eiste dat de post bleef staan.
+       Twee dingen zijn daarmee veranderd. De eis is scherper: een nul blijft alleen staan als hij
+       een UITKOMST is, en "alles is al afgeschreven" is dat; "niets herkend" is dat niet en
+       verdwijnt. En de meting loopt niet meer via een gemonkeypatchte functie maar via echte data,
+       zoals de meetlessen voorschrijven: de fixture heeft een herkende incasso die deze maand al
+       is afgeschreven, dus fixDue is nul en fixDueBetaald is het niet. */
+    await boot(page, seed({}, { allesBetaald: true }));
     const r = await page.evaluate(() => {
-      const m = curMonth || months()[months().length - 1];
-      const orig = window.monthLiquidity;
-      window.monthLiquidity = () => Object.assign({}, orig(), { fixDue: 0, fixDueExclCount: 0 });
-      renderIns();
+      const L = monthLiquidity();
       const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
         .find((x) => /nog te betalen/i.test(x.innerText));
-      const uit = t ? { val: t.querySelector('.ins-nog-val').innerText,
-        kleur: t.querySelector('.ins-nog-val').getAttribute('style'),
-        sub: t.querySelector('.ins-nog-sub').innerText } : null;
-      window.monthLiquidity = orig; renderIns();
-      return uit;
+      return { fixDue: Math.round(L.fixDue), betaald: L.fixDueBetaald,
+        val: t ? t.querySelector('.ins-nog-val').innerText : null,
+        kleur: t ? t.querySelector('.ins-nog-val').getAttribute('style') : null,
+        sub: t ? t.querySelector('.ins-nog-sub').innerText : null };
     });
-    expect(r).not.toBeNull();
+    expect(r.fixDue).toBe(0);
+    expect(r.betaald).toBeGreaterThan(0);
     expect(r.val).toBe('€0');
     expect(r.kleur).toContain('var(--mut)');          // gedempt, geen alarmkleur (v78/v93)
     expect(r.kleur).not.toContain('var(--red)');
-    expect(r.sub).toMatch(/niets herkend|incasso/i);  // de reden staat erbij
+    expect(r.sub).toBe('alles is al afgeschreven');   // en niet meer de onware "niets herkend"
   });
 });
 
@@ -217,7 +222,7 @@ test.describe('e · lege en afwijkende staten', () => {
     });
     expect(r.sig).toBe(0);
     expect(r.secties).not.toContain('Wat opvalt');
-    expect(r.secties).toContain('Wat er nog komt');
+    expect(r.secties).toContain('Nog deze maand');   // v260
   });
 
   test('zonder budget blijft de terugval via nogDezeMaandCard staan', async ({ page }) => {

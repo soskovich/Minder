@@ -15,16 +15,22 @@ const SPA = 'psd2_spaar01';
 
 function seed(set = {}, opt = {}) {
   const tx = [];
-  const add = (id, acc, m, day, amount, naam) =>
-    tx.push({ id, date: `${m}-${day}`, amount, acc, name: naam, desc: naam, typ: '', ref: '',
+  const add = (id, acc, m, day, amount, naam, omschrijving) =>
+    tx.push({ id, date: `${m}-${day}`, amount, acc, name: naam, desc: omschrijving || naam, typ: '', ref: '',
               src: 'psd2', accName: '', refNums: [] });
   for (let i = 9; i >= 0; i--) {
     const m = M(i);
     add('i' + i, ACC, m, '25', 3200, 'Werkgever');
-    add('h' + i, ACC, m, '02', -1200, 'Huur Woningstichting');
-    add('n' + i, ACC, m, '03', -12, 'Netflix');
+    /* v260: deze drie droegen alleen een naam, en isIncasso() leest de OMSCHRIJVING. Gemeten:
+       recurringSchedule() gaf nul vaste posten terug en fixDue stond op nul, dus de post
+       "Nog te betalen - vast" toonde hier altijd 0 met de sub "niets herkend" - precies de
+       onwaarheid die v260 repareert. De comment hieronder beweerde al tien versies lang dat er
+       "ook echt nog iets te betalen is" en dat was nooit waar. Met SEPA INCASSO in de omschrijving
+       doet de fixture wat hij zegt. */
+    add('h' + i, ACC, m, '02', -1200, 'Huur Woningstichting', 'SEPA INCASSO HUUR WONINGSTICHTING');
+    add('n' + i, ACC, m, '03', -12, 'Netflix', 'SEPA INCASSO NETFLIX');
     // een vaste last laat in de maand, zodat er ook echt nog iets te betalen is
-    if (!opt.allesBetaald) add('z' + i, ACC, m, '28', -95, 'Zilveren Kruis');
+    if (!opt.allesBetaald) add('z' + i, ACC, m, '28', -95, 'Zilveren Kruis', 'SEPA INCASSO ZILVEREN KRUIS');
     if (!(i === 0 && opt.beginMaand)) {
       add('a' + i, ACC, m, '06', -420, 'Albert Heijn');
       add('r' + i, ACC, m, '11', -240, 'Restaurant De Kroeg');
@@ -105,7 +111,10 @@ test.describe('a · de rij scheidt waarneming van plan', () => {
     /* v253: op label en niet op plek. De volgorde is deze ronde veranderd en daarmee viel deze
        test om terwijl zijn eigenschap ongemoeid was: elke post noemt zijn eigen bron. */
     const sub = (l) => (b.tegels.find((t) => t.label === l) || {}).sub;
-    expect(sub('Nog te betalen · vast')).toMatch(/incasso|niets herkend/i);
+    /* v260: er is een derde vorm bij, en hij noemt zijn bron net zo goed. fixDue nul betekende
+       twee onderscheidbare dingen en de sub zei in allebei de gevallen "niets herkend"; sinds
+       v260 zegt hij bij alles-al-betaald wat er werkelijk aan de hand is. */
+    expect(sub('Nog te betalen · vast')).toMatch(/incasso|niets herkend|al afgeschreven/i);
     expect(sub('Nog te ontvangen')).toBe('inkomen');
     expect(sub('Nog te sparen')).toMatch(/van €|gehaald/);
     // v208: de potjes-tegel is een voortgang geworden, met dezelfde noemer-vorm als de tegel ernaast

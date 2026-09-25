@@ -184,11 +184,11 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
 
   test('wat over het nu gaat verdwijnt', async ({ page }) => {
     await boot(page);
-    // v241: de kop 'Nog deze maand' is de sectiekop 'Wat er nog komt' geworden
-    expect(await tekst(page, 'ins')).toMatch(/wat er nog komt/i);
+    // v241: de kop 'Nog deze maand' werd de sectiekop. v260: en heet weer 'Nog deze maand' (v91)
+    expect(await tekst(page, 'ins')).toMatch(/nog deze maand/i);
     await kies(page, VORIGE);
     const t = await tekst(page, 'ins');
-    expect(t).not.toMatch(/wat er nog komt/i);
+    expect(t).not.toMatch(/nog deze maand/i);
     expect(t).not.toMatch(/nog te betalen/i);
     expect(t).not.toMatch(/abonnementen/i);
     /* "loopt nog" mag nog wel in de meermaands-grafiek staan: dat is de legenda bij de ster van de

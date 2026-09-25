@@ -65,7 +65,11 @@ const beeld = (page) => page.evaluate(() => {
     kaarten: [...el.querySelectorAll('.card')].length,
     secties: [...el.querySelectorAll('.inssec')].map((x) => x.textContent),
     eerste: (el.querySelector('.card') || { innerText: '' }).innerText,
-    ndmKoppen: (t.match(/NOG DEZE MAAND/g) || []).length,
+    /* v260: dit telde op de PAGINATEKST, en sinds de sectiekop 'Nog deze maand' heet telt die
+       mee. Wat deze teller moet onderscheiden is de KAARTVORM (nogDezeMaandCard, de terugval
+       zonder budget) van de sectievorm, en dat is een structuurverschil en geen tekstverschil:
+       de kaart draagt de kop als .hlabel binnen een .card. Bind aan de structuur. */
+    ndmKoppen: [...el.querySelectorAll('.card .hlabel')].filter((x) => /nog deze maand/i.test(x.textContent)).length,
     // v192: de scheidingslijn (.ndm-net) hing aan de chip die verviel. De tegelrij is de nieuwe
     // markering, maar .wvo-tiles staat ook elders op het scherm; de vaste-lastentegel is uniek.
     // v241: op Inzichten zijn de tegels een lijst geworden; de terugval-kaart houdt de tegelvorm
@@ -93,7 +97,7 @@ test.describe('a · de stand en wat er nog komt', () => {
     expect(b.kaarten).toBe(1);                         // en de kaart is de enige op het scherm
     expect(b.lijst).toBe(true);
     expect(b.lijstBuitenKaart).toBe(true);
-    expect(b.secties).toContain('Wat er nog komt');
+    expect(b.secties).toContain('Nog deze maand');   // v260: de kop heet weer zoals de tegelvorm
     expect(b.tekst).toMatch(/Nog te betalen/i);
     expect(b.ndmKoppen).toBe(0);                       // de oude kop 'Nog deze maand' is de sectiekop geworden
   });
@@ -139,7 +143,7 @@ test.describe('b · terugvallen', () => {
     expect(b.ndmKoppen).toBe(0);
     expect(b.tegels).toBe(false);
     expect(b.lijst).toBe(false);
-    expect(b.secties).not.toContain('Wat er nog komt');   // geen kop zonder inhoud
+    expect(b.secties).not.toContain('Nog deze maand');   // geen kop zonder inhoud (v260)
     expect(b.tekst).not.toMatch(/Nog te betalen/i);
   });
 
@@ -173,7 +177,7 @@ test.describe('b · terugvallen', () => {
     }, CUR);
     expect(uit.heeftBudget).toBe(true);                // de standkaart blijft
     expect(uit.lijst).toBe('');                        // en de posten vallen weg, afgevangen
-    expect(uit.paginaTekst).not.toMatch(/Wat er nog komt/i);
+    expect(uit.paginaTekst).not.toMatch(/Nog deze maand/i);
   });
 });
 
@@ -209,7 +213,7 @@ test.describe('d · de verdieping', () => {
     /* v241: er is niet één sectie meer maar één per blok, en elke kop zegt zijn vraag. Welke maand
        je leest staat in de eyebrow. Een kop zonder inhoud staat er niet, dus deze lijst is precies
        wat deze fixture oplevert. */
-    expect(b.secties).toEqual(['Wat er nog komt', 'Over de maanden heen']);
+    expect(b.secties).toEqual(['Nog deze maand', 'Over de maanden heen']);   // v260
     expect(b.tekst).not.toMatch(/kerncijfers/i);
     /* v178: de meermaands-grafiek en de abonnementenkaart staan op Maand. v227: de grafiek is terug
        onder Deze maand, dus die twee asserties zijn omgedraaid; de abonnementenkaart blijft op

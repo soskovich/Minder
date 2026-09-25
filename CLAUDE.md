@@ -62,7 +62,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
 - **Home** (`dash`) — waar sta ik nu.
 - **Inzichten** (`ins`) — hoe loopt deze maand (operationeel). Sinds `v241` vier blokken onder
   elkaar, elk met een kop die zijn vraag noemt: een eyebrow met de maandkiezer en de dagteller, de
-  stand-kaart, "Wat opvalt", "Wat er nog komt" en "Over de maanden heen". Die middelste twee staan
+  stand-kaart, "Wat opvalt", "Nog deze maand" (tot `v260` "Wat er nog komt") en "Over de maanden
+  heen". Die middelste twee staan
   sinds `v252` in die volgorde en niet meer andersom (zie de vouw-regel). Draagt sinds `v227` ook de
   meermaands-grafiek "Uitgaven vs budget". Dat is een omkering van `v178`, dat hem juist naar Maand
   haalde omdat hij maanden naast elkaar zet; het argument van `v178` staat nog en `BESLISSINGEN.md`
@@ -94,6 +95,57 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **Een nul die "er is niets meer" betekent verdwijnt, een nul die "het is klaar" betekent blijft**
+  (`v260`): onder de kop stonden vier posten waarvan er twee op nul. "Nog te ontvangen €0 · inkomen"
+  en "Nog te sparen €0 · gehaald · €3.000 opzij" zijn niet hetzelfde: de eerste voegt niets toe, de
+  tweede is het enige moment waarop de app zegt dat je je maandbedrag hebt gehaald.
+  ELKE POST DRAAGT ZELF OF ZIJN NUL LEEG IS (`leeg`), en `nogDezeMaandPosten()` filtert aan het eind.
+  De regel staat bij de post en niet in het filter, want per post is de vraag een andere. GEMETEN:
+  `Nog te ontvangen` nul is drie keer "er komt niets meer" (salaris al binnen, meer dan je norm en
+  dus geklemd, of inkomen volledig onbekend) en verdwijnt; `Nog te sparen` nul is `gehaald` en
+  blijft; `Nog uit je potjes` nul is een STAND ("van €950 · €950 gebruikt · 100%") en blijft; een
+  NEGATIEF bedrag is nooit leeg, want 'Te veel uitgegeven' is informatie.
+  HET DERDE GEVAL BIJ INKOMEN IS DE SCHERPSTE: zonder enige inkomensboeking is `baseIncome()` nul
+  en `incomeBasis` 'onbekend', en de regel zei toch "€0 · inkomen". Een nul die als meting leest
+  terwijl er niets gemeten is, precies wat `v59`/`v73`/`v173` verbieden.
+  DE VOORPOORT IS VERVALLEN. `nogDezeMaandPosten()` begon met een poort die het hele blok liet
+  vallen tenzij `fixDue`, `varPlan`, `incDue` of een potje boven nul stond. Die kende de twee
+  uitkomsten niet: GEMETEN viel met alleen een gehaald spaardoel het blok weg, en daarmee juist de
+  regel die zegt dat het gelukt is. Alleen de `L`-guard blijft; het filter doet de rest. Twee
+  poorten voor dezelfde vraag is een tweede waarheid.
+  GEEN POST, GEEN KOP: dat was al zo (`renderIns()` doet `nog ? insSection(...) + nog : ''` en
+  `insNogLijst()` geeft een lege string bij een lege lijst), maar het was nergens vastgelegd.
+  `nog-deze-maand-leeg.spec.js` doet dat nu.
+- **De sub "niets herkend" was onwaar, en dat is gerepareerd en niet weggefilterd** (`v260`): de
+  tekst was `L.fixDue>0 ? "herkende incasso's" : 'niets herkend'`, dus bij nul altijd de tweede.
+  GEMETEN op een fixture met huur €1.450 en zorgverzekering €140 als herkende incasso's, allebei
+  deze maand al afgeschreven: `fixDue` nul en de sub zei "niets herkend", terwijl er twee posten
+  herkend waren en gewoon betaald. Dat is het geval dat het vaakst voorkomt, eind van de maand.
+  `monthLiquidity().fixDueBetaald` telt de herkende maandlasten die deze maand al langskwamen, uit
+  DEZELFDE `seen` en hetzelfde `sched` als de filter erboven: het is letterlijk de andere helft van
+  die ene filter, geen tweede detectie. Nul én niets betaald is leeg en valt weg; nul én alles
+  betaald is een UITKOMST met de sub "alles is al afgeschreven", dezelfde vorm als 'gehaald'.
+  WEGFILTEREN ALLEEN ZOU DE FOUT VERBERGEN en niet oplossen, en daarom is dit geen bijvangst van
+  de filterronde maar een eigen reparatie.
+- **De kop heet "Nog deze maand"** (`v260`): hij heette "Wat er nog komt" en dat klopte voor twee
+  van de vier posten. Wat er werkelijk KOMT is je inkomen; je vaste lasten GAAN, je spaardoel is een
+  plan en je potjes zijn een stand. De gemene deler is niet richting maar tijd, en die naam bestaat
+  al: `nogDezeMaandCard()`, de terugval zonder budget, draagt exact deze posten onder "Nog deze
+  maand", en de bron heet `nogDezeMaandPosten()`. Twee namen voor één blok is wat `v91` verbiedt.
+  EEN TEST DIE OP DE PAGINATEKST TELT KAN DE TWEE VORMEN NIET MEER SCHEIDEN: `ndmKoppen` in
+  `inzichten-herschikking.spec.js` telde `/NOG DEZE MAAND/` over `innerText` om de kaartvorm van de
+  sectievorm te onderscheiden, en die tellen nu allebei mee. Het verschil is structureel (de kaart
+  draagt de kop als `.hlabel` binnen een `.card`), dus de teller bindt daaraan.
+- **OPEN PUNT: "opzij gezet" telt alleen bij en trekt nooit af** (`v260`): de post "Nog te sparen"
+  toont `safeToSpend().savedThisMonth`, en die telt `if(sav.has(t.acc) && t.amount>0)` - alleen
+  BIJSCHRIJVINGEN op je spaarrekeningen, bruto. Haal je in dezelfde maand geld terug, dan verandert
+  dat getal niet. GEMETEN met €3.000 erop en €2.000 er in dezelfde maand weer af: de regel zegt
+  €3.000, terwijl `savedThisMonth(ym)` en `savedNet(ym)` allebei €1.000 geven. Drie berekeningen,
+  twee antwoorden, en het getal op het scherm is het enige dat nooit aftrekt.
+  DAT MAAKT HET EEN REPARATIE EN GEEN NIEUW WERK: de netto-vorm staat er al twee keer, dus het is
+  kiezen welke bron de regel leest en niet er een bedenken.
+  DERDE TAK, ook noteren: zonder aangemerkte spaarrekening telt `safeToSpend()` uitgaande boekingen
+  in de categorie `sparen` (`t.amount<0 && catOf(t)==='sparen'`). Weer een andere meting.
 - **Onregelmatig inkomen telt in je saldo en niet in je maandbeeld** (`v259`): eenmalig €5.000 bruto,
   netto €2.550. GEMETEN op één maand met en zonder: `baseIncome()` blijft 5.216 (onderste-helft-
   mediaan, gemeten robuust), maar `totals().income` gaat naar 7.766 en daarmee de inkomen-limiet van
@@ -947,7 +999,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v259` → `minder-v260`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v260` → `minder-v261`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

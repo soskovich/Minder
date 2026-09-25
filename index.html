@@ -2110,6 +2110,14 @@ function monthLiquidity(){
   fixDueItems.forEach(s=>{ s.excl=!!_fdExcl[s.key]; });
   const fixDue=fixDueItems.filter(s=>!s.excl).reduce((a,s)=>a+s.amount,0);
   const fixDueExclCount=fixDueItems.reduce((a,s)=>a+(s.excl?1:0),0);
+  /* v260: hoeveel herkende maandlasten deze maand AL langskwamen. Zonder dit getal is fixDue nul
+     om twee onderscheidbare redenen die de app niet kon onderscheiden, en de sub onder "Nog te
+     betalen" zei in allebei de gevallen "niets herkend". GEMETEN op een fixture met huur €1.450 en
+     zorgverzekering €140 als herkende incasso's, allebei op dag 2 en 4 afgeschreven: fixDue nul en
+     de sub zei "niets herkend", terwijl er twee posten herkend waren en gewoon betaald.
+     De telling leest dezelfde `seen` en hetzelfde `sched` als de filter erboven, dus geen tweede
+     detectie: het is letterlijk de andere helft van die ene filter. */
+  const fixDueBetaald=sched.filter(s=>s.type==='fixed' && s.intervalM===1 && (s.incasso||s.periodic) && seen.has(s.key)).length;
   // verwacht inkomen dat nog moet komen = basisinkomen minus wat al deze maand binnen is
   const incDue=Math.max(baseIncome()-incomeThisMonth,0);
   // variabel resterend = tempo-bewust: blend historisch gemiddelde (per dag) met je werkelijke tempo deze maand
@@ -2124,7 +2132,7 @@ function monthLiquidity(){
   const projected=Math.round(sum+incDue-fixDue-varDue);   // forecast blijft de eerlijke voorspelling (Optie B)
   // v170: varPlan is hier weg. Hij voedde de spiegel op de liquiditeitskaart en die verviel; sindsdien
   // las niemand hem. Wie het variabele plan nodig heeft roept varPlanRemaining() aan, de enige bron.
-  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems,fixDueExclCount};
+  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems,fixDueExclCount,fixDueBetaald};
 }
 // Veilig te besteden = saldo - nog-niet-betaalde vaste lasten deze maand - nog gereserveerde potjes (budget minus al uitgegeven)
 function safeToSpend(){
@@ -7820,7 +7828,16 @@ function nogDezeMaandPosten(){
      varPlan staan, dan viel het hele blok weg op de dag dat al je potjes over zijn en daysLeft nul
      is, en dat is dezelfde fout als de postpoort hieronder. */
   const VP=(function(){ try{ return varPotjeStand(curMonth||months()[months().length-1]); }catch(_){ return null; } })();
-  if(!L||!(L.fixDue>0||varPlan>0||L.incDue>0||(VP&&VP.budget>0))) return [];
+  /* v260: hier stond een voorpoort die het hele blok liet vallen tenzij fixDue, varPlan, incDue of
+     een potje boven nul stond. Die poort kende de twee UITKOMSTEN niet, en dat is precies wat deze
+     ronde toevoegt. GEMETEN: met alleen een gehaald spaardoel (geen vaste lasten, geen potjes)
+     viel het blok weg en verdween "gehaald - 3.000 opzij", terwijl dat het enige moment is waarop
+     de app zegt dat het gelukt is. Datzelfde gold voor "alles is al afgeschreven".
+     DE POORT IS OVERBODIG GEWORDEN: elke post draagt nu zelf of hij leeg is, en het filter aan het
+     eind laat er geen over voor wie niets heeft ingesteld. Twee poorten voor dezelfde vraag is een
+     tweede waarheid, en deze was de oudste en de minst wetende. Alleen de L-guard blijft, want
+     zonder monthLiquidity() valt er niets te lezen. */
+  if(!L) return [];
   /* Waarneming en plan blijven zichtbaar gescheiden: het grote getal is wat er herkend is aan
      vaste lasten, het variabele deel staat er als eigen regel onder. Eén bedrag dat die twee
      optelt suggereert één soort zekerheid. */
@@ -7835,7 +7852,15 @@ function nogDezeMaandPosten(){
      potjes-regel die er direct boven staat. Dus weg, met de "vrij na sparen"-spiegel die eraan
      hing. Wat overblijft zijn losse feiten uit losse bronnen. */
   const teBetalen=Math.round(L.fixDue), teOntvangen=Math.round(L.incDue);
-  const sub=`${L.fixDue>0?`herkende incasso's`:'niets herkend'}${(L.fixDueExclCount>0)?` \u00b7 ${L.fixDueExclCount} uitgesloten`:''}`;
+  /* v260: de sub zei "niets herkend" zodra fixDue nul was, en dat is bij nul om TWEE redenen nul.
+     GEMETEN op een fixture met huur 1.450 en zorgverzekering 140 als herkende incasso's, allebei
+     deze maand al afgeschreven: fixDue nul en de sub zei "niets herkend", terwijl er twee posten
+     herkend waren en gewoon betaald. Die tekst was onwaar in precies het geval dat het vaakst
+     voorkomt: eind van de maand, alles geincasseerd.
+     L.fixDueBetaald onderscheidt de twee. Nul EN niets betaald is leeg en valt weg; nul EN alles
+     betaald is een UITKOMST en blijft staan, dezelfde vorm als 'gehaald' bij Nog te sparen. */
+  const allesBetaald = !(L.fixDue>0) && (L.fixDueBetaald||0)>0;
+  const sub=`${L.fixDue>0?`herkende incasso's`:(allesBetaald?`alles is al afgeschreven`:'niets herkend')}${(L.fixDueExclCount>0)?` \u00b7 ${L.fixDueExclCount} uitgesloten`:''}`;
   // Nog te sparen: exact het bedrag dat 'veilig te besteden' al reserveert (saveReserved), zodat de twee
   // schermen nooit uiteen kunnen lopen. Niets herberekend; geen spaartarget = geen tegel.
   let S=null; try{ S=safeToSpend(); }catch(_){}
@@ -7866,19 +7891,30 @@ function nogDezeMaandPosten(){
      van nog komend: de aftrekking springt van +2.025 naar -975 terwijl safeToSpend() en de prognose
      allebei op 3.720 en 3.929 blijven staan. Dat is precies de fout die v192 wegnam toen het getal
      "Deze maand op eigen kracht" verdween; er telt hier niets op. */
+  /* v260: ELKE POST DRAAGT ZELF OF ZIJN NUL LEEG IS, en aan het eind valt alles met leeg:true weg.
+     De regel staat niet in het filter maar bij de post, want per post is de vraag een andere:
+     betekent nul hier "er komt niets meer" of "het is klaar"? Alleen het eerste verdwijnt.
+     EEN NEGATIEF BEDRAG IS NOOIT LEEG. 'Te veel uitgegeven' is informatie en geen afwezigheid. */
   const posten=[];
-  // wat er binnenkomt
+  /* Wat er binnenkomt. NUL BETEKENT HIER DRIE DINGEN en alle drie zijn "er komt niets meer":
+     je salaris is al binnen, er kwam meer binnen dan je norm (de klem op nul), of je inkomen is
+     helemaal onbekend. Dat derde geval is gemeten (baseIncome 0, incomeBasis 'onbekend') en zei
+     toch gewoon "0 euro, inkomen": een nul die als meting leest terwijl er niets gemeten is,
+     precies wat v59/v73/v173 verbieden. Weghalen lost alle drie op. */
   posten.push({lab:'Nog te ontvangen', val:euro0(teOntvangen),
-    col:teOntvangen>0?'var(--green)':'var(--mut)', sub:'inkomen', tik:''});
+    col:teOntvangen>0?'var(--green)':'var(--mut)', sub:'inkomen', tik:'', leeg:teOntvangen<=0});
   // wat je opzij zet. Zonder alarmkleur, want dit is geen tekort (v78/v93).
-  if(spaarOn) posten.push({lab:jrg('nogtesparen','Nog te sparen'), val:euro0(nogSparen),
+  /* Nul is hier NOOIT leeg: hij betekent dat je je maandbedrag hebt gehaald, en dat is het enige
+     moment waarop de app dat zegt. Zonder spaardoel staat de post er sowieso niet (spaarOn). */
+  if(spaarOn) posten.push({leeg:false, lab:jrg('nogtesparen','Nog te sparen'), val:euro0(nogSparen),
     col:gehaald?'var(--green)':'var(--txt)',
     sub:gehaald?`${ICON('check')} gehaald · ${euro0(S.savedThisMonth)} opzij`
                :`van ${euro0(S.saveTarget)}${S.savedThisMonth>0?` · ${euro0(S.savedThisMonth)} opzij`:''}`,
     tik:'openSafeToSpend()'});
   // wat vastligt: wat je boekingen zeggen over de rest van de maand
   posten.push({lab:`Nog te betalen · vast`, val:euro0(teBetalen),
-    col:teBetalen>0?'var(--red)':'var(--mut)', sub, tik:teBetalen>0?'openFixedDue()':''});
+    col:teBetalen>0?'var(--red)':'var(--mut)', sub, tik:teBetalen>0?'openFixedDue()':'',
+    leeg: teBetalen<=0 && !allesBetaald});
   /* v208: de potjes-tegel is het instrument voor variabele lasten geworden, dus hoort te zien te
      zijn waar je staat en niet alleen wat er over is. De sub volgt de vorm van 'Nog te sparen' in
      dezelfde rij ('van <noemer> · <wat er al is>'), zodat de twee plan-tegels gelijksoortig blijven.
@@ -7931,8 +7967,13 @@ function nogDezeMaandPosten(){
     posten.push({lab: inPotjes<0?'Te veel uitgegeven':'Nog uit je potjes',
       val:euro0(Math.abs(inPotjes)), col:'var(--txt)', sub:vsub, tik:'',
       dagRegel: inPotjes>0?`Nog ${dagen} ${dagW} deze maand, dus ${euro0(Math.round(inPotjes/dagen))} per dag`:'',
+      /* Nul is hier een STAND en geen afwezigheid: je potjes zijn precies op, en de sub zegt
+         "van X, X gebruikt, 100%". Een negatief restant heet 'Te veel uitgegeven' en is helemaal
+         informatie. Dus nooit leeg; de post staat er alleen al niet als je geen potjes hebt
+         (VP.budget>0 hierboven). */
+      leeg:false,
       noot: gat>0?`Bij je tempo nog ${euro0(varPlan)} nodig · ${euro0(gat)} tekort`:'', nootTik:''}); }
-  return posten;
+  return posten.filter(p=>!p.leeg);
 }
 /* De tegelvorm. Hij staat nog maar op één plek: de terugval-kaart wanneer er geen budget is, en
    daar is de kaart het enige wat de posten bij elkaar houdt. Het tegel-CSS (.wvo-tiles en verder)
@@ -11496,7 +11537,14 @@ function renderIns(){
   $('#s-ins').innerHTML = afgeslotenMaandBanner(m) + insEyebrow(m)
     + stand
     + (sig ? insSection('Wat opvalt') + sig : '')
-    + (nog ? insSection('Wat er nog komt') + nog : '')
+    /* v260: de kop heette 'Wat er nog komt' en dat klopte voor twee van de vier posten. Wat er
+       werkelijk KOMT is je inkomen; je vaste lasten GAAN, je spaardoel is een plan en je potjes
+       zijn een stand. De gemene deler is niet richting maar tijd, en die naam bestaat al:
+       nogDezeMaandCard(), de terugval zonder budget, draagt exact deze posten onder 'Nog deze
+       maand', en de bron heet nogDezeMaandPosten(). Twee namen voor een blok is wat v91 verbiedt.
+       DE KOP VERDWIJNT MEE als er geen post overblijft; dat hoeft geen eigen poort, want
+       insNogLijst() geeft een lege string bij een lege lijst en die ternary leest hem al. */
+    + (nog ? insSection('Nog deze maand') + nog : '')
     + (graf ? insSection('Over de maanden heen') + graf : '');
 }
 

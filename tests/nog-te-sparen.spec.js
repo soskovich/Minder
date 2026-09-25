@@ -47,10 +47,13 @@ test.describe('a · de tegel toont wat er nog opzij moet', () => {
     // v241: geen twee kolommen meer maar een lijst. De volgorde zelf staat in
     // nog-deze-maand-volgorde.spec.js; hier telt alleen dat de spaarpost naast de andere staat.
     expect(await tegels(page).count()).toBeGreaterThanOrEqual(3);
-    // en de bestaande posten staan er onveranderd bij
+    /* En de bestaande posten staan er onveranderd bij. v260: 'nog te ontvangen' hoort daar niet
+       meer bij in deze fixture, want het salaris is al binnen en een post van nul zonder uitkomst
+       verdwijnt. Dat is geen eigenschap van de spaarpost, dus de test bindt aan de buren die er
+       wel horen te staan. */
     const kt = (await kaart(page).innerText()).toLowerCase();
     expect(kt).toContain('nog te betalen');
-    expect(kt).toContain('nog te ontvangen');
+    expect(kt).toContain('nog uit je potjes');
   });
 
   test('het is exact het bedrag dat "veilig te besteden" al reserveert', async ({ page }) => {
@@ -85,7 +88,7 @@ test.describe('b · randgevallen', () => {
     const kt = (await kaart(page).innerText()).toLowerCase();
     expect(kt).not.toContain('nog te sparen');
     expect(kt).toContain('nog te betalen');
-    expect(kt).toContain('nog te ontvangen');
+    expect(kt).toContain('nog uit je potjes');   // v260: zie de toelichting hierboven
     expect(await tegels(page).count()).toBeGreaterThanOrEqual(2);
   });
 

@@ -73,7 +73,12 @@ test.describe('b · Inzichten is de enige lezer', () => {
     await boot(page, 'ins');
     const el = page.locator('#s-ins');
     const t = await el.innerText();
-    expect((t.match(/WAT ER NOG KOMT/g) || []).length).toBe(1);
+    /* v260: de sectiekop heet 'Nog deze maand', net als de kaartvorm, want twee namen voor een
+       blok is wat v91 verbiedt. Een telling op de PAGINATEKST kan die twee daardoor niet meer
+       scheiden; het verschil is structureel, dus de test bindt aan de sectiekop en aan de
+       afwezigheid van de kaartvorm. */
+    expect(await el.locator('.inssec', { hasText: /nog deze maand/i }).count()).toBe(1);
+    expect(await el.locator('.card .hlabel', { hasText: /nog deze maand/i }).count()).toBe(0);
     expect((t.match(/Nog te betalen/gi) || []).length).toBe(1);
     expect(await el.locator('#insNogLijst').count()).toBe(1);
     expect(await el.locator('.wvo-tiles').count()).toBe(0);   // niet ook nog als tegels
