@@ -1753,12 +1753,15 @@ function migrateSavingsAcc(){
   SET.savingsAccMigrated=1; save();
 }
 function totalSaved(){ let sum=0,n=0,missing=0; for(const a of n26SavingsAccounts()){ const b=accBalance(a); if(b==null) missing++; else {sum+=b;n++;} } return {sum:Math.round(sum),n,missing}; }
-// hoeveel ging deze maand netto naar je spaarrekening(en) — afgeleid uit de bijschrijvingen op die rekening, niet uit een categorie
-function savedThisMonth(ym){
-  const sav=new Set(n26SavingsAccounts()); if(!sav.size) return 0;
-  let net=0; for(const t of txOfMonth(ym)){ if(sav.has(t.acc)) net+=t.amount; }
-  return Math.max(Math.round(net),0);
-}
+/* Hoeveel ging deze maand netto naar je spaarrekening(en)? v262: dit was een EIGEN lus naast
+   savedNet(), met één verschil en één gat. Het verschil is de klem; het gat was de terugval, die
+   hier ontbrak - gemeten gaf hij 0 waar savedNet() 3.000 geeft, bij iemand die wel spaart maar
+   geen rekening als spaarrekening heeft aangemerkt. Een afspraakbasis van nul terwijl je spaart is
+   onwaar, dus de terugval hoort er ook hier bij.
+   DE KLEM BLIJFT, en alleen hier: afspraakUitkomst() vergelijkt je inleg van nu met de basis uit
+   de afspraakmaand, en een negatieve basis maakt die vergelijking onleesbaar. safeToSpend() klemt
+   juist NIET (zie daar). */
+function savedThisMonth(ym){ const n=savedNet(ym); return Math.max(Math.round(n==null?0:n),0); }
 /* Wat ging er deze maand netto naar je spaarrekening? (v109) savedThisMonth() clampt op >= 0:
    goed voor de referentie-verdeling, maar een kerncijfer moet ook kunnen zeggen dat je hebt
    ontspaard. Zelfde bron, zonder die clamp.
@@ -2166,13 +2169,20 @@ function safeToSpend(){
   const spendSaldo = tb.sum - savedBal - resBal;
   // verwacht inkomen dat deze maand nog binnenkomt telt MEE (consistent met de maandlasten die we aftrekken)
   const incDue=Math.round(L.incDue||0);
-  // nog te sparen deze maand = maandbedrag min wat je DEZE MAAND al hebt weggezet (niet je totale spaarsaldo)
+  /* Nog te sparen deze maand = maandbedrag min wat je DEZE MAAND al hebt weggezet (niet je totale
+     spaarsaldo). v262: hier stond een derde lus die alleen de BIJSCHRIJVINGEN telde, dus wat er in
+     dezelfde maand weer af ging telde niet mee. Dat is niet alleen een verkeerd etiket bij
+     'gehaald': het getal gaat via saveRemaining rechtstreeks in `safe`, en dan verhoogt geld
+     verplaatsen tussen je eigen rekeningen je veilig te besteden. GEMETEN op kloppende saldi,
+     €3.000 erop en €1.500 terug: safe 7.636 tegen 6.136 zonder die beweging, terwijl je positie
+     niet veranderde. Met savedNet() is safe invariant onder heen en weer schuiven.
+     GEEN KLEM, en dat volgt uit dezelfde meting: klem je op nul, dan verschuift de sprong alleen
+     naar een negatief netto (€1.500 eruit gehaald gaf 7.636 tegen 6.136). Te hoog is de
+     gevaarlijke kant (v168). De max() op saveRemaining hieronder blijft wel staan: meer dan je
+     maandbedrag opzij zetten geeft geen negatieve reservering. */
   let saveTarget=0, savedThisMonth=0;
   try{ saveTarget=Math.round(monthlySavingTarget());
-    const sav=(typeof n26SavingsAccounts==='function')?new Set(n26SavingsAccounts()):new Set();
-    if(sav.size){ for(const t of txOfMonth(ym)){ if(sav.has(t.acc) && t.amount>0) savedThisMonth+=t.amount; } }
-    else { for(const t of txOfMonth(ym)){ if(t.amount<0 && catOf(t)==='sparen') savedThisMonth+=-t.amount; } }
-    savedThisMonth=Math.round(savedThisMonth);
+    const n=savedNet(ym); savedThisMonth=Math.round(n==null?0:n);
   }catch(_){}
   const saveRemaining=Math.max(saveTarget-savedThisMonth,0);
   const safe=Math.round(spendSaldo + incDue - fixedStillToGo - reservedVar - saveRemaining);
@@ -2698,18 +2708,20 @@ function openSafeToSpend(){
     ${(function(){
       const tgt=S.saveTarget||0, onSav=Math.min(S.savedThisMonth||0,tgt);
       if(window._stsEdit){
-        const pct=tgt>0?Math.min(Math.round((S.savedThisMonth||0)/tgt*100),100):0;
+        const pct=tgt>0?Math.max(Math.min(Math.round((S.savedThisMonth||0)/tgt*100),100),0):0;
         const bn=(d,s)=>`<div onclick="adjustSaveTarget(${d})" style="width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;cursor:pointer">${s}</div>`;
         return `<div style="background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin:8px 0 2px">
           <div style="font-size:13px;font-weight:700;margin-bottom:2px">Nog te sparen deze maand</div>
           <div style="display:flex;align-items:center;gap:13px;margin:9px 0 4px">${bn(-25,'−')}<div style="font-size:var(--fs-xl);font-weight:800;min-width:84px;text-align:center;color:var(--teal)">${euro0(tgt)}</div>${bn(25,'+')}<div class="small muted" style="margin-left:2px">maandbedrag</div></div>
           <div style="height:7px;border-radius:5px;background:var(--card);overflow:hidden;margin:9px 0 3px"><div style="height:100%;width:${pct}%;background:var(--teal);border-radius:5px"></div></div>
-          <div class="small muted">${euro0(onSav)} van ${euro0(tgt)} maandbedrag heb je deze maand al gespaard</div>
+          <div class="small muted">${onSav<0?`je haalde deze maand ${euro0(-onSav)} uit je spaarrekening`:`${euro0(onSav)} van ${euro0(tgt)} maandbedrag heb je deze maand al gespaard`}</div>
           <div class="row" style="padding:8px 0 0;border-bottom:none"><div style="flex:1" class="small">Nog te sparen deze maand</div><div style="font-weight:800;color:${S.saveReserved>0?'var(--txt)':'var(--green)'}">${euro0(S.saveReserved)}</div></div>
           <div style="text-align:right;margin-top:6px"><span onclick="toggleSaveEdit()" style="color:var(--teal);font-weight:700;font-size:13px;cursor:pointer">Klaar</span></div>
         </div>`;
       }
-      if(S.saveReserved>0) return line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', 'toggleSaveEdit()', `je maandbedrag ${euro0(tgt)}${onSav>0?` min ${euro0(onSav)} deze maand al gespaard`:``}`);
+      // v262: onSav kan nu onder nul staan, en dan is 'al gespaard' onwaar. Zelfde woorden als op
+      // Inzichten, want het is hetzelfde feit op een tweede oppervlak (v91).
+      if(S.saveReserved>0) return line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', 'toggleSaveEdit()', `je maandbedrag ${euro0(tgt)}${onSav>0?` min ${euro0(onSav)} deze maand al gespaard`:(onSav<0?` plus ${euro0(-onSav)} die je eruit haalde`:``)}`);
       if(tgt>0) return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="toggleSaveEdit()"><div style="flex:1"><div style="font-size:var(--fs-md)">Nog te sparen deze maand</div><div class="small" style="color:var(--green)">je maandbedrag van ${euro0(tgt)} heb je deze maand al gespaard</div></div><div style="font-weight:700;color:var(--green)">${euro0(0)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`;
       return '';
     })()}
@@ -2749,7 +2761,7 @@ const JARGON={
   onvoorzien:'Een kost die je niet kon voorzien, zoals een wegsleep of een kapotte wasmachine. Geen potje, telt niet mee tegen je budget. Weet je niet waar een boeking hoort, dan is dat Overig.',
   contant:'Wat je contant hebt uitgegeven sinds je voor het laatst telde. Dit is een verschil en geen boeking per aankoop, dus de app weet het bedrag wel en de bestemming niet. Geen potje, telt niet mee tegen je budget.',
   veiligtebesteden:'Wat er van je saldo vrij is voor de rest van de maand: je saldo min je vaste lasten die nog komen, min wat er in je potjes gereserveerd staat, min je spaarinleg.',
-  nogtesparen:'Het deel van je spaarinleg voor deze maand dat je nog opzij moet zetten: je maandbedrag min wat er deze maand al naar je spaarrekening ging.',
+  nogtesparen:'Het deel van je spaarinleg voor deze maand dat je nog opzij moet zetten: je maandbedrag min wat er deze maand netto naar je spaarrekening ging. Netto, dus wat je er in dezelfde maand weer af haalde gaat eraf.',
   spaarinleg:'Wat je per maand opzij wilt zetten. Dit is het bedrag dat je doelen verdeelt, niet alles wat er aan het eind van de maand overblijft.',
   restsaldo:'Je inkomen min je uitgaven in een maand. Je spaarinleg komt hieruit; wat er daarnaast overblijft kan ergens anders heen.',
   afwijkendbedrag:'Hoger dan je gebruikelijke bedrag bij deze winkel — of, als we die historie nog niet hebben, hoger dan het gemiddelde in deze categorie. Een signaal om even te kijken, geen oordeel.',
@@ -7908,8 +7920,13 @@ function nogDezeMaandPosten(){
      moment waarop de app dat zegt. Zonder spaardoel staat de post er sowieso niet (spaarOn). */
   if(spaarOn) posten.push({leeg:false, lab:jrg('nogtesparen','Nog te sparen'), val:euro0(nogSparen),
     col:gehaald?'var(--green)':'var(--txt)',
+    /* v262: drie vormen, want netto kan onder nul. Boven nul staat er wat je opzij zette, onder
+       nul wat je eruit haalde, en precies nul zegt alleen het maandbedrag - dan sta je op hetzelfde
+       punt als een maand waarin je niets deed, en dat is wat er dan hoort te staan. Geen rood en
+       geen amber bij een negatief netto (v78/v93): dit stelt vast, het vraagt geen aandacht. */
     sub:gehaald?`${ICON('check')} gehaald · ${euro0(S.savedThisMonth)} opzij`
-               :`van ${euro0(S.saveTarget)}${S.savedThisMonth>0?` · ${euro0(S.savedThisMonth)} opzij`:''}`,
+               :`van ${euro0(S.saveTarget)}${S.savedThisMonth>0?` · ${euro0(S.savedThisMonth)} opzij`
+                 :(S.savedThisMonth<0?` · ${euro0(-S.savedThisMonth)} eruit gehaald`:'')}`,
     tik:'openSafeToSpend()'});
   // wat vastligt: wat je boekingen zeggen over de rest van de maand
   posten.push({lab:`Nog te betalen · vast`, val:euro0(teBetalen),

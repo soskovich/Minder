@@ -147,16 +147,57 @@ genoemde versietag.)*
   `inzichten-herschikking.spec.js` telde `/NOG DEZE MAAND/` over `innerText` om de kaartvorm van de
   sectievorm te onderscheiden, en die tellen nu allebei mee. Het verschil is structureel (de kaart
   draagt de kop als `.hlabel` binnen een `.card`), dus de teller bindt daaraan.
-- **OPEN PUNT: "opzij gezet" telt alleen bij en trekt nooit af** (`v260`): de post "Nog te sparen"
-  toont `safeToSpend().savedThisMonth`, en die telt `if(sav.has(t.acc) && t.amount>0)` - alleen
-  BIJSCHRIJVINGEN op je spaarrekeningen, bruto. Haal je in dezelfde maand geld terug, dan verandert
-  dat getal niet. GEMETEN met €3.000 erop en €2.000 er in dezelfde maand weer af: de regel zegt
-  €3.000, terwijl `savedThisMonth(ym)` en `savedNet(ym)` allebei €1.000 geven. Drie berekeningen,
-  twee antwoorden, en het getal op het scherm is het enige dat nooit aftrekt.
-  DAT MAAKT HET EEN REPARATIE EN GEEN NIEUW WERK: de netto-vorm staat er al twee keer, dus het is
-  kiezen welke bron de regel leest en niet er een bedenken.
-  DERDE TAK, ook noteren: zonder aangemerkte spaarrekening telt `safeToSpend()` uitgaande boekingen
-  in de categorie `sparen` (`t.amount<0 && catOf(t)==='sparen'`). Weer een andere meting.
+- **Wat je opzij zet is netto, en de kern daarvan is `safe` en niet het etiket** (`v262`): de post
+  "Nog te sparen" las `safeToSpend().savedThisMonth`, en die telde `if(sav.has(t.acc) && t.amount>0)`:
+  alleen BIJSCHRIJVINGEN, bruto. Je kon €3.000 storten en €3.000 opnemen en dan stond je doel op
+  gehaald. HET ETIKET IS NIET HET PROBLEEM. Dat getal gaat via `saveRemaining` rechtstreeks in
+  `safe`, dus geld verplaatsen tussen je eigen rekeningen verhoogde je veilig te besteden. GEMETEN
+  op vier standen van dezelfde euro's, met saldi die met de boekingen meelopen: €3.000 erop geeft
+  6.136, €3.000 erop en €1.500 terug geeft 7.636, niets bewegen geeft 6.136, €1.500 eruit geeft
+  7.636. Met de netto-bron zijn die vier alle vier 6.136. DE EIGENSCHAP IS DIE INVARIANTIE en niet
+  het getal: wat er van je spaarsaldo af gaat komt bij je vrije saldo en gaat er via "nog te sparen"
+  weer af. `spaarinleg-netto.spec.js` legt dat vast op de vier standen tegelijk, met een tegentoets
+  dat ze onderling wel verschillen.
+  ÉÉN BRON, `savedNet(ym)`. Er waren er drie over dezelfde boekingen: `savedThisMonth()` met een
+  klem en ZONDER terugval, `savedNet()` met allebei, en een eigen lus in `safeToSpend()` die alleen
+  bijschrijvingen telde. `savedThisMonth()` is nu de klem op `savedNet()`.
+  DE KLEM BLIJFT, MAAR ALLEEN DAAR. `safeToSpend()` klemt NIET, en dat volgt uit dezelfde meting:
+  klem je daar op nul, dan verschuift de sprong van €1.500 alleen naar een negatief netto. Te hoog
+  is de gevaarlijke kant (`v168`). `savedThisMonth()` houdt hem wel, want `afspraakUitkomst()`
+  vergelijkt je inleg van nu met de basis uit de afspraakmaand en een negatieve basis maakt die
+  vergelijking onleesbaar.
+  WAT DE SAMENVOEGING VERANDERT: `savedThisMonth()` had geen terugval en gaf nul voor wie spaart
+  zonder aangemerkte spaarrekening. GEMETEN 0 tegen 3.000. Twee lezers merken dat, `afspraakUitkomst()`
+  en de `basis` in `maandRegelOpties()`, en allebei zijn ze beter af: een afspraakbasis van nul
+  terwijl je spaart is onwaar. Beide hebben een eigen test.
+  EEN INTERNE OVERBOEKING TELT GEWOON MEE als opname. De rekening-tak leest elk bedrag op die
+  rekening en kijkt niet naar de categorie; `txOfMonth()` filtert niets weg. GEMETEN met €800 naar
+  je eigen privérekening: €2.200 in plaats van €3.000. Zonder dat zou de invariantie hierboven niet
+  gelden, want juist zo'n overboeking is het geval.
+- **Een nul die "het is klaar" zegt heeft een tegenhanger, en die zegt niet niks** (`v262`): met een
+  netto-bron kan er ook GELD UIT je spaarrekening komen, en dan is `nogSparen` groter dan je
+  maandbedrag. Drie vormen in dezelfde regel: boven nul `van €3.000 · €1.000 opzij`, onder nul
+  `van €3.000 · €1.500 eruit gehaald`, en precies nul alleen `van €3.000`. Dat laatste is bewust
+  hetzelfde als een maand waarin je niets deed, want daar sta je dan ook: heen en terug is geen
+  beweging. GEEN ROOD EN GEEN AMBER bij een negatief netto (`v78`/`v93`): dit stelt vast en vraagt
+  geen aandacht. GEMETEN 56px op 360 én 390px, gelijk aan elke andere post van twee regels.
+  HET WOORD IS "ERUIT GEHAALD" EN NIET "ONTSPAARD": dat tweede staat alleen in een comment en
+  nergens op het scherm, en een nieuw woord voor één regel is een term erbij (`v91`). Home draagt
+  dezelfde woorden in de opbouw van veilig te besteden, want het is hetzelfde feit op een tweede
+  oppervlak.
+- **OPEN PUNT: de terugval telt beide kanten als inleg** (`v262`): zonder aangemerkte spaarrekening
+  telt `savedNet()` de AFSCHRIJVINGEN in de categorie `sparen`, en die keuze heeft een reden: staan
+  beide kanten van dezelfde overboeking in `TX`, dan heffen ze elkaar op bij netto tellen. Maar
+  daarmee telt hij ze ook allebei als inleg. GEMETEN met €3.000 heen en €2.000 terug, beide
+  rekeningen in `TX` en geen rekening aangemerkt: de tak geeft €5.000 (de afschrijving op je
+  betaalrekening én die op je spaarrekening), netto tellen zou €0 geven, en waar is €1.000.
+  Beide fout, dus dit is niet op te lossen door de netto-regel daarheen door te trekken.
+  DE ECHTE VRAAG IS WELKE REKENING JE SPAARREKENING IS, en dat is invoer en geen meting. Niet
+  aangeraakt in `v262`: die ronde repareert de tak die het WEL kan weten.
+- **OPEN PUNT: geen spiegel over opnemen van wat je opzij zette** (`v262`): dat je in dezelfde maand
+  geld terughaalt is nu zichtbaar in één regel, maar er is geen plek die het als PATROON ziet -
+  drie maanden op rij storten en terughalen leest als drie losse maanden. Dat hoort op Grip en is
+  een eigen ronde; hier alleen genoteerd zodat de volgende ronde weet dat de meting er al ligt.
 - **Onregelmatig inkomen telt in je saldo en niet in je maandbeeld** (`v259`): eenmalig €5.000 bruto,
   netto €2.550. GEMETEN op één maand met en zonder: `baseIncome()` blijft 5.216 (onderste-helft-
   mediaan, gemeten robuust), maar `totals().income` gaat naar 7.766 en daarmee de inkomen-limiet van
@@ -1024,7 +1065,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v260` → `minder-v261`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v262` → `minder-v263`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
