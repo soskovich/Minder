@@ -2215,6 +2215,16 @@ function safeToSpend(){
    dagen" zegt, en dat is een tweede waarheid op de noemer. De klem op 1 houdt de deling heel op de
    laatste dag. Dat die dag dan bijna om is staat als open punt in CLAUDE.md; het omzetten raakt
    deze functie, potjeRest() en budgetOverZin() tegelijk en is dus een eigen ronde. */
+/* v263: het venster van de potjesregel. Een dagbedrag is een getal waar je niets mee doet - elke
+   dag eronder voelt als winst en elke dag erboven als incident - en een week is de eenheid waarin
+   je boodschappen doet en uitgaat, groot genoeg om één dure dag te dragen.
+   ROLLEND EN BINNEN DE MAAND: wat heb je de komende zeven dagen, en in de laatste week loopt dat
+   vanzelf terug naar wat er nog is. Geen kalenderweken en geen restweek van twee dagen. Over de
+   maandgrens kijken zou nauwkeuriger zijn en botst met de rest van dat scherm: dan telt de eerste
+   week van de volgende maand mee, waarin je potjes weer vol staan.
+   EEN CONSTANTE EN GEEN EIGEN FUNCTIE: er is precies één lezer, dus een tweede lezer is straks een
+   regel erbij en geen tweede afleiding van hetzelfde venster. */
+const POTJE_VENSTER_DAGEN=7;
 function maandDagenOver(ym){
   let d={dim:30,elapsed:0}; try{ d=daysElapsed(ym); }catch(_){}
   return Math.max(d.dim-d.elapsed,1);
@@ -7979,11 +7989,23 @@ function nogDezeMaandPosten(){
        "€0 per dag" datzelfde herhalen; bij een negatief restant staat er "Te veel uitgegeven" en
        zegt een dagbedrag niets (dezelfde grond als v158, dat bij een negatieve ruimte ook geen
        bedrag toont). De constatering zit dan in het label en niet in een eigen berekening. */
+    /* v263: DEZELFDE BRON, EEN ANDERE DELER. maandDagenOver() blijft de enige plek die zegt hoeveel
+       dagen er nog in de maand zitten; het venster is een klem daarop en geen tweede tijdas.
+       HET BEDRAG IS HET RESTANT OP HETZELFDE DAGTEMPO, rest/dagen maal het venster, en niet
+       rest/venster. Gemeten aan de twee voorbeelden uit de opdracht: met een restant van €270 en
+       nog vijf dagen hoort er €270 te staan, en rest/venster geeft daar €54 - precies het dagbedrag
+       dat deze regel juist vervangt. In de laatste week valt venster samen met dagen en is het
+       bedrag dus letterlijk het restant.
+       DE REGEL NOEMT ALTIJD ZIJN AANTAL DAGEN, anders weet je niet of €380 een week is of een
+       restje. 'komende' zolang de maand langer is dan het venster, 'resterende' zodra hij korter
+       wordt; dat verschil is de enige manier waarop de regel zegt dat de maand bijna om is. */
     const dagen=maandDagenOver(curMonth||months()[months().length-1]);
-    const dagW=dagen===1?'dag':'dagen';
+    const venster=Math.min(dagen,POTJE_VENSTER_DAGEN);
+    const vensterW=venster===1?'dag':'dagen';
+    const vensterBedrag=Math.round(inPotjes/dagen*venster);
     posten.push({lab: inPotjes<0?'Te veel uitgegeven':'Nog uit je potjes',
       val:euro0(Math.abs(inPotjes)), col:'var(--txt)', sub:vsub, tik:'',
-      dagRegel: inPotjes>0?`Nog ${dagen} ${dagW} deze maand, dus ${euro0(Math.round(inPotjes/dagen))} per dag`:'',
+      dagRegel: inPotjes>0?`${venster<dagen?'De komende':'De resterende'} ${venster} ${vensterW} heb je ${euro0(vensterBedrag)}`:'',
       /* Nul is hier een STAND en geen afwezigheid: je potjes zijn precies op, en de sub zegt
          "van X, X gebruikt, 100%". Een negatief restant heet 'Te veel uitgegeven' en is helemaal
          informatie. Dus nooit leeg; de post staat er alleen al niet als je geen potjes hebt

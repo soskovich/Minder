@@ -1,4 +1,6 @@
-// v257: de stand per dag onder "Nog uit je potjes".
+// v257: de stand per dag onder "Nog uit je potjes". v263 maakte er een rollend venster van zeven
+// dagen van; deze spec bewaakt onveranderd de noemer, de randgevallen en de plek op het scherm,
+// met de ankers verschoven naar de nieuwe vorm. Het venster zelf staat in potjes-weekvenster.spec.js.
 //
 // GEMELD: op Inzichten staat alleen een maandstand, terwijl de vraag in de winkel is wat er nog
 // per dag kan. De opdracht rekende dat met de hand uit de hero: maandbudget 3.421 min 2.512
@@ -104,22 +106,30 @@ test.describe('a · de gemelde toestand', () => {
     expect(r.VP.gebruikt).toBe(1312);
     expect(r.post.val).toBe('€520');
     expect(r.post.lab).toBe('Nog uit je potjes');
-    // en de dagregel is dat restant gedeeld door de resterende dagen, live gelezen
-    const verwacht = Math.round(520 / r.dagen);
-    expect(r.post.dagRegel).toBe(`Nog ${r.dagen} ${r.dagen === 1 ? 'dag' : 'dagen'} deze maand, dus €${verwacht} per dag`);
+    /* v263: het anker is verschoven van een dagbedrag naar een venster; de eigenschap is dezelfde
+       gebleven, namelijk dat de regel dit restant over de resterende dagen verdeelt. Het venster is
+       min(dagen, 7) en het bedrag is het restant op datzelfde dagtempo. */
+    const venster = Math.min(r.dagen, 7);
+    const verwacht = Math.round(520 / r.dagen * venster);
+    const woord = venster === 1 ? 'dag' : 'dagen';
+    const soort = venster < r.dagen ? 'De komende' : 'De resterende';
+    expect(r.post.dagRegel).toBe(`${soort} ${venster} ${woord} heb je €${verwacht.toLocaleString('nl-NL')}`);
   });
 
-  /* Op de meetdag van deze ronde (dag 23 van een maand van 30) zijn dat 7 dagen en €74. Het getal
-     zelf hangt aan de kalender, dus de test hierboven leest de dagen live; deze legt de meting
-     vast voor precies die dag, met de klok erop gezet. */
-  test('gemeten op dag 23 van 30: 7 dagen en €74 per dag', async ({ page }) => {
+  /* Op de meetdag van deze ronde (dag 23 van een maand van 30) zijn dat 7 dagen. Het getal zelf
+     hangt aan de kalender, dus de test hierboven leest de dagen live; deze legt de meting vast voor
+     precies die dag, met de klok erop gezet.
+     v263: anker verschoven. Tot v262 stond hier "7 dagen en €74 per dag"; het venster valt op die
+     dag samen met de rest van de maand, dus het bedrag is nu het hele restant van €520 - €74 maal
+     zeven, hetzelfde tempo in de eenheid waarin je het gebruikt. */
+  test('gemeten op dag 23 van 30: een venster van 7 dagen met het hele restant', async ({ page }) => {
     await boot(page, { klok: new Date(now.getFullYear(), now.getMonth(), 23, 12, 0, 0) });
     const r = await potjesPost(page);
     expect(r.dagen).toBe(Math.max(DIM - 23, 1));
     if (DIM === 30) {
       expect(r.dagen).toBe(7);
       expect(r.post.val).toBe('€520');
-      expect(r.post.dagRegel).toBe('Nog 7 dagen deze maand, dus €74 per dag');
+      expect(r.post.dagRegel).toBe('De resterende 7 dagen heb je €520');
     }
   });
 
@@ -128,8 +138,9 @@ test.describe('a · de gemelde toestand', () => {
     const r = await potjesPost(page);
     expect(r.regels[0]).toBe('Nog uit je potjes');
     expect(r.regels[1]).toMatch(/^van €1\.832 · €1\.312 gebruikt/);
-    expect(r.regels[2]).toMatch(/^Nog \d+ dagen? deze maand, dus €\d+ per dag\.$/);
-    expect(r.dagInDom).toMatch(/per dag\.$/);
+    // v263: anker verschoven naar de venstervorm; de volgorde van de drie regels is de eigenschap
+    expect(r.regels[2]).toMatch(/^De (komende|resterende) \d+ dagen? heb je €[\d.]+\.$/);
+    expect(r.dagInDom).toMatch(/heb je €[\d.]+\.$/);
   });
 });
 
@@ -146,8 +157,9 @@ test.describe('b · de noemer is die van de app', () => {
     await boot(page, { klok: new Date(now.getFullYear(), now.getMonth(), DIM, 12, 0, 0) });
     const r = await potjesPost(page);
     expect(r.dagen).toBe(1);
-    expect(r.post.dagRegel).toMatch(/^Nog 1 dag deze maand, dus €\d/);
-    const bedrag = Number((r.post.dagRegel.match(/dus €([\d.]+) per dag/)[1]).replace(/\./g, ''));
+    // v263: anker verschoven; de klem op 1 en het hele restant zijn dezelfde eigenschap als in v257
+    expect(r.post.dagRegel).toMatch(/^De resterende 1 dag heb je €\d/);
+    const bedrag = Number((r.post.dagRegel.match(/heb je €([\d.]+)$/)[1]).replace(/\./g, ''));
     expect(Number.isFinite(bedrag)).toBe(true);
     expect(bedrag).toBe(Math.abs(r.VP.budget - r.VP.gebruikt));   // één dag, dus het hele restant
   });
@@ -239,7 +251,8 @@ test.describe('e · de regel staat onder de signalen', () => {
     const r = await potjesPost(page);
     expect(r.VP.over).toBe(false);          // in totaal nog binnen, één potje eroverheen
     expect(r.post.val).toBe('€20');
-    expect(r.post.dagRegel).toMatch(/^Nog \d+ dagen? deze maand, dus €\d+ per dag$/);
+    // v263: anker verschoven; dat de regel er staat zolang er iets in zit is de eigenschap
+    expect(r.post.dagRegel).toMatch(/^De (komende|resterende) \d+ dagen? heb je €[\d.]+$/);
   });
 });
 

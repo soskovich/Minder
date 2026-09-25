@@ -598,6 +598,40 @@ genoemde versietag.)*
   hij er niet: die nul is een gat en geen toewijzing (`v173`).
   `planTotaalRegel()` staat sindsdien binnen de kaart van de waterval, onder de sluitpost, en niet
   meer tussen de bestemmingen en de reserveringen, waar hij las alsof de reserveringen erin zaten.
+- **Een week is de eenheid, en het venster rolt mee** (`v263`): de tweede regel onder "Nog uit je
+  potjes" was een dagbedrag, en dat is een getal waar je niets mee doet: elke dag eronder voelt als
+  winst en elke dag erboven als incident. Een week is de eenheid waarin je boodschappen doet en
+  uitgaat, en groot genoeg om één dure dag te dragen.
+  DEZELFDE BRON, EEN ANDERE DELER. `maandDagenOver()` blijft de enige plek die zegt hoeveel dagen er
+  nog in de maand zitten; het venster is `Math.min(dagen, POTJE_VENSTER_DAGEN)` en het getal blijft
+  `varPotjeStand().rest`. Geen tweede tijdas, geen kalenderweken, geen weekaggregatie.
+  HET VENSTER BLIJFT BINNEN DE MAAND. Over de maandgrens kijken zou nauwkeuriger zijn en botst met
+  de rest van dat scherm: dan telt de eerste week van de volgende maand mee, waarin je potjes weer
+  vol staan. In de laatste week loopt het venster vanzelf terug en zegt de regel dat ook.
+  HET BEDRAG IS HET RESTANT OP HETZELFDE DAGTEMPO, `rest/dagen * venster`, en NIET `rest/venster`.
+  GEMETEN aan de twee voorbeelden uit de opdracht: met een restant van €270 en nog vijf dagen hoort
+  er €270 te staan, en `rest/venster` geeft daar €54 - precies het dagbedrag dat deze regel
+  vervangt. In de laatste week vallen venster en maand samen en is het bedrag dus letterlijk het
+  restant. Twee formuleringen in de opdracht ("restant gedeeld door 7", "bedrag maal dagen is het
+  restant") wijzen de andere kant op; de voorbeelden wonnen, want die dragen getallen.
+  DE REGEL NOEMT ALTIJD ZIJN AANTAL DAGEN, anders weet je niet of €380 een week is of een restje.
+  Op precies zeven dagen zijn "komende" en "resterende" allebei waar en wint de tweede: die zegt er
+  iets bij wat de eerste niet zegt, namelijk dat de maand daarna om is. GEMETEN 18px op 360 én
+  390px, dus één regel, ook bij vijf cijfers.
+  DE CONVENTIE BLIJFT DIE VAN `v257`: vandaag valt buiten de teller, dus het zijn de zeven dagen ná
+  vandaag. Dat staat op de rand scheef (op de laatste dag zegt hij "De resterende 1 dag" op een dag
+  die bijna om is) en het omzetten raakt `maandDagenOver()`, `potjeRest()` en `budgetOverZin()`
+  tegelijk; dat blijft een eigen ronde.
+  DE RANDGEVALLEN VAN `v257` STAAN ONGEWIJZIGD: restant nul of negatief geeft geen regel.
+- **OPEN PUNT: Home draagt nog een dagbedrag** (`v263`): `vrijPerDagLine()` zegt "Nog 5 dagen deze
+  maand, dus €54 per dag", en het argument voor een week geldt daar net zo hard - dat is daar
+  hetzelfde onbruikbare getal. Het is GEEN tweede waarheid zoals bij `savedThisMonth` (`v262`), want
+  de twee regels beantwoorden verschillende vragen en delen alleen hun noemer: Home deelt
+  `safeToSpend().safe`, Inzichten `varPotjeStand().rest`, en `v257` heeft met een meting vastgelegd
+  dat die twee uiteenlopen zodra je buiten een potje uitgeeft. Maar het staat nu wel als week op het
+  ene scherm en als dag op het andere. DIT MOET ALS ÉÉN VRAAG BEHANDELD WORDEN en niet als een
+  tweede keer hetzelfde: de vraag is welke eenheid bij een bestedingsruimte hoort, en het antwoord
+  geldt dan voor allebei.
 - **De stand, die stand per dag, en wat je tempo daar bovenop vraagt** (`v257`): onder "Nog uit je
   potjes" staan sinds `v257` drie regels, en alle drie lezen `varPotjeStand()` en
   `varPlanRemaining()`. De eerste is het restant, de tweede datzelfde restant vlak verdeeld over de
@@ -1065,7 +1099,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v262` → `minder-v263`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v263` → `minder-v264`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
