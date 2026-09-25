@@ -76,7 +76,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   handelingen eraan. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
   de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten. Sinds `v237` is dat niet
   meer de enige ingang: `coachLeak()` levert ook een patroonregel op Inzichten. Twee ingangen naar
-  hetzelfde gesprek, maar nooit voor hetzelfde geval.
+  hetzelfde gesprek, maar nooit voor hetzelfde geval. Draagt sinds `v258` ook `contantKaart()`, maar
+  alleen als er iets te tellen is (`contantVraagt()`); geen opname en geen telling is zwijgen.
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Plan rekent in **maandtempo**
   (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
   restant van déze maand. Beide kloppen; wat ze verbindt hoort op Plan te staan en nergens anders.
@@ -93,6 +94,82 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **Contant geld is een stand die je telt, en het verschil is de uitgave** (`v258`): je pint €400,
+  de opname is `intern` en dus geen uitgave, maar je saldo daalt wel. GEMETEN voor en na:
+  `totalBalance` 4000 → 3600, veilig te besteden 2912 → 2512, vermogen 4000 → 3600, terwijl je
+  positie niet veranderde. `contantVerwacht()` is nu een term in `totalBalance()` en zet die drie
+  terug op 4000 / 2912 / 4000. GEEN REKENING: contant staat niet in `OWN` (dat komt uit `TX`) en
+  telt niet in `missing`/`known`, want die gaan over rekeningen zonder saldo en een ongetelde zak
+  is iets anders. DE OPNAME IS NIET DE UITGAVE: op het moment van pinnen weet je niet waar dat geld
+  heen gaat, en een schatting in de winkel is geen meting. Wat de app meet is het BEDRAG, en dat is
+  precies waarom het verschil op een `geenNorm`-categorie landt en niet op een potje.
+  DE POORT IS `GEA, BETAALPAS`/`GELDMAAT`, NIET DE INTERN-LIJST: daar staan ook `PRIVEREKENING`,
+  `REVOLUT`, `WISE`, `N26` en `WESTERN UNION` op, en dat zijn overboekingen. Het losse woord
+  `OPNAME` staat er bewust niet bij. `isOpnameTx()` eist daarnaast `catOf(t)==='intern'`, zodat een
+  opname die je zelf op een uitgave zet niet meer meetelt: de override is de ontsnapping, geen
+  tweede vlag (`v231`). ELK WOORD IN `OPNAME_KW` MOET IN DE INTERN-RIJ VAN `RULES` STAAN, anders is
+  het dood: `'GEA BETAALPAS'` zonder komma stond er eerst bij en kon nooit vuren, want
+  `categorize()` zet zo'n boeking op `overig`. `contant-stand.spec.js` leest de bron en houdt de
+  twee lijsten tegen elkaar.
+  NULL ZOLANG JE NOG NOOIT TELDE, en dat is geen nul (`v59`/`v73`/`v173`): zonder beginpunt zou dit
+  "alle opnames ooit" zijn. Dan telt er niets mee en staat alles zoals het vóór `v258` stond, dus
+  het verschil dat de telling maakt is ook wat de telling waard is.
+  DE GRENS IS `t.date > de teldag` EN NIET `>=`. Je telt op het moment dat je pint, dus die opname
+  zit al in je telling; met `>=` komt hij er nog eens bovenop en staat je vermogen te hoog, en te
+  hoog is de gevaarlijke kant (`v168`). Wat overblijft is een opname later op dezelfde dag, ná het
+  tellen: die telt tot de volgende telling niet mee, en dat is de voorzichtige kant.
+  TWEE KEER TELLEN OP ÉÉN DAG TELT OP, het vervangt niet. GEMETEN met 400 → 300 → 250: vervangen gaf
+  één boeking van 50, want de tweede telling rekende tegen de stand van 300 die de eerste al had
+  weggeschreven. Je gaf wel degelijk 150 uit. Optellen houdt één boeking per dag (één `bankRef`, dus
+  de opschoontool ziet nooit een dubbel) én de identiteit: WAT JE NU HEBT PLUS WAT JE CONTANT UITGAF
+  IS JE EERSTE TELLING PLUS ALLES WAT JE DAARNA PINDE. De eerste telling schrijft geen boeking; meer
+  dan verwacht krijgt het andere teken en verrekent netto, net als een terugstorting.
+  DE BOEKING DRAAGT `ruleCat` ÉN `autoCat` en bewust geen `OVR`: `catOf()` leest `OVR[id]||autoCat`,
+  dus met alleen een override wordt de rij categorieloos zodra iemand die wist, en dan valt
+  `CATS[undefined].type` om in `recurringSchedule()`. De override blijft over voor de gebruiker.
+  HET TELMOMENT IS NIET DAGELIJKS EN NIET STIL: bij een opname sinds je laatste telling (het moment
+  waarop het bedrag verandert én waarop je het geld in je hand hebt) via een melding en een kaart op
+  Grip, en in de eerste `VERSE_START_DAGEN` van een nieuwe maand via `verseStart()` (`v195`, timing
+  en geen tweede mechanisme). Nooit gepind én nooit geteld betekent zwijgen: dan heeft de app geen
+  aanwijzing dat je contant geld gebruikt, en een vraag daarover is een aanname over jouw leven.
+  DE OUDERDOMSMELDING IS EEN VOORWAARDE EN GEEN EXTRA. Tel je niet meer, dan telt de stand voor de
+  volle mep mee en is dat de verzonnen zekerheid die `v168` weghaalde. De opbouw van veilig te
+  besteden draagt daarom "Waarvan contant" met een tik naar het telscherm, en daaronder hoe oud de
+  telling is zodra ze niet van vandaag is. GEEN RICHTING en geen correctie, om dezelfde reden als
+  `saldoAchterRegel()` (`v198`): de app weet niet of je meer of minder hebt, alleen dat er tijd
+  tussen zit. `contantStoppen()` is niet hetzelfde als op nul tellen en laat de gemeten boekingen
+  staan.
+- **Een `geenNorm`-categorie wordt nergens bij naam aangewezen** (`v258`): twee plekken deden dat en
+  allebei gingen ze stuk bij een tweede categorie. `insBudgetBlok()` telde ze op tot `t.buitenNorm`
+  en tikte naar `openCategory('onvoorzien')`: GEMETEN "+ €897 onvoorzien, buiten je potjes" met een
+  tik naar een categorie met €497 erin, dezelfde fout die `v250` en `v254` al twee keer opruimden.
+  ÉÉN REGEL PER CATEGORIE (`geenNormRegels()`), niet het totaal met een tik naar een overzicht: zo'n
+  overzicht bestaat niet, en het bouwen om een tik te kunnen tonen is precies wat de premisse
+  verbiedt. De bedragen komen uit `t.byCat` van dezelfde `totals(m)` die `buitenNorm` oplevert, dus
+  ze tellen per constructie op tot dat getal, en DE MAAND GAAT MEE in de tik (de oude tik las
+  `periodTx()`, dus het bedrag kwam uit m en de lijst eronder niet). GEMETEN op 360 en 390px: elke
+  regel 18px, de stand-kaart van 167 naar 190px bij twee categorieën, de pagina van 700 naar 723px;
+  een categorie zonder uitgaven krijgt geen regel, dus wie nooit pint ziet geen verschil. `v241`
+  houdt die kaart onder de 200px, dus EEN DERDE `geenNorm`-CATEGORIE ZET HEM OP 213px en breekt die
+  eis: dan is de vorm van dit blok de vraag, niet het blok eronder.
+  De tweede plek was de vaste uitlegzin achter `c.geenNorm` in `openCategory()`, GEMETEN op Contant:
+  "Kosten die je niet kon voorzien", bij geld dat je juist wél zag aankomen. De uitleg komt nu per
+  categorie uit `JARGON`, waarmee die zin ook niet meer op twee plekken staat (`v91`).
+  DE TELLER IS EEN TEST EN GEEN MOMENTOPNAME: `geennorm-hardcode.spec.js` leest de bron, haalt de
+  sleutels úít die bron (zodat een derde categorie er vanzelf onder valt) en eist dat geen enkele
+  als string in de code staat. Één uitzondering met dezelfde redenering als `planForget()` in
+  `grendel-schrijvers.spec.js`: `contantOpslaan()` schrijft de boeking die in die categorie landt,
+  en dat is de bron van de post zelf. Een uitzondering op een functie die niet meer bestaat is ook
+  een lek dat groen staat, dus dat wordt apart getoetst. MET DRIE SABOTAGES ROOD GEZET voordat hij
+  werd opgenomen (een hardgecodeerde tik terug, de uitleg weer per vlag, `contant` zonder de vlag);
+  alle drie rood, de herstelde bron weer groen.
+  WAT DE VLAG KOOPT, GEMETEN IN DE COACHLAAG met en zonder: zonder de vlag zegt `coachWeekRisk()`
+  "Geef 'contant' een potje: geen budget, geen aankoop", een opdracht die per constructie niet uit
+  te voeren is. Ook `coachLeak()` (contant €400 in plaats van vervoer €85), `coFirstPotCat()`,
+  `coachRuleOptions()`, `openPotjePick()`, `setBudget()` en `openReservering()` wijzen hem dan aan,
+  en `spendNorm` gaat van 1.995 naar 2.395. Zes oppervlakken. `scoreNotifs()` verschilde niet, maar
+  zijn twee `geenNorm`-poorten vuurden op die fixture niet: dat is een gat in de meting en geen
+  bewijs dat ze ongevoelig zijn.
 - **Diagnose leest alleen, en groeit per blok** (`v244`): het verborgen scherm achter een lange
   druk op de voetregel in Instellingen (`diagOpen()`) is een uitlezing van wat de app op dít
   toestel meet, want de gegevens van de gebruiker staan alleen daar en op een telefoon is er geen
@@ -794,7 +871,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v257` → `minder-v258`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v258` → `minder-v259`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

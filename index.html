@@ -735,6 +735,15 @@ const CATS={
      netSpend(), het maandtotaal, de maandvergelijking en de drill-down tellen hem gewoon. Geen
      keywords in categorize(): je kiest hem zelf in de transactie. */
   onvoorzien:{name:'Onvoorzien',icon:ICON('alert'),color:'#b7a99a',type:'expense',geenNorm:true},
+  /* v258: de tweede geenNorm-categorie. Contant is geen onvoorzien: een wegsleep kon je niet zien
+     aankomen, contant geld geef je gewoon uit, alleen ziet de app niet waaraan. Dezelfde vlag om
+     dezelfde reden - er valt geen potje voor te maken, want op het moment van pinnen weet je nog
+     niet waar het heen gaat, en een potje is een norm vooraf. GEMETEN wat die vlag hier koopt:
+     zonder hem zegt coachWeekRisk() "Geef 'contant' een potje: geen budget, geen aankoop", en dat
+     is een opdracht die per constructie niet uit te voeren is. Ook coachLeak(), coFirstPotCat(),
+     coachRuleOptions(), openPotjePick() en setBudget() wijzen hem dan aan. Boekingen komen hier
+     alleen via contantOpslaan(); net als bij onvoorzien geen keywords in categorize(). */
+  contant:{name:'Contant',icon:ICON('coins'),color:'#a3b18a',type:'expense',geenNorm:true},
   overig:{name:'Overig',icon:ICON('card'),color:'#cbd5e1',type:'expense'},
   inkomen:{name:'Inkomen',icon:ICON('wallet'),color:'#10b981',type:'income'},
   sparen:{name:'Sparen & beleggen',icon:ICON('trend'),color:'var(--accent)',type:'internal'},
@@ -1381,9 +1390,174 @@ function forecastModel(){
   return {agg, fInc, fFixed, fVar, fNet:fInc-fFixed-fVar, vSlope, sSlope, next:nextMonths(ms[ms.length-1],13)};
 }
 // ===== SALDO & LIQUIDITEIT =====
+/* HET TELSCHERM. Je telt wat er in je zak zit; de app rekent het verschil uit. Dat is de kant op
+   die de gebruiker koos: een schatting die je in de winkel maakt over waar het geld heen ging is
+   geen meting, en de app hoort te meten. Wat hij meet is het BEDRAG; de bestemming weet hij niet,
+   en dat is precies waarom de boeking op een geenNorm-categorie landt.
+   Het bedrag is type="text" inputmode="decimal" (v215): in contant geld hebben centen betekenis,
+   en type="number" wist een komma al in de DOM voordat numIn() er iets aan kan doen. */
+function contantTellen(){
+  const V=contantVerwacht(), T=contantTelling(), ops=contantOpnamesSinds();
+  const opSom=ops.reduce((a,t)=>a-t.amount,0);
+  const uitleg = T
+    ? `Je telde voor het laatst op ${new Date(T.datum+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}: ${euro0(T.stand)}.${ops.length?` Daarna pinde je ${euro0(opSom)}${ops.length>1?` in ${ops.length} opnames`:''}.`:''}`
+    : `Dit is je eerste telling, dus er valt nog niets te vergelijken. Vanaf nu rekent de app het verschil uit.`;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:4px">Hoeveel contant heb je nu?</div>
+    <div class="small muted" style="line-height:1.5;margin-bottom:12px">${uitleg}</div>
+    ${V!=null?`<div class="small" style="color:var(--mut2);margin-bottom:10px;line-height:1.5">De app verwacht ${euro0(V)}. Tel je minder, dan is het verschil wat je contant hebt uitgegeven.</div>`:''}
+    <label class="fld" style="margin-top:0">In je zak (€)</label>
+    <input id="contInput" type="text" inputmode="decimal" value="${V!=null?numUit(V):''}" placeholder="bv. 35,50" style="width:100%">
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button class="btn" style="flex:1" onclick="contantOpslaan()">Vastleggen</button>
+      <button class="btn sec" onclick="closeSheet()">Later</button></div>
+    ${T?`<div class="small muted" style="margin-top:12px;cursor:pointer" onclick="contantStoppen()">Ik gebruik geen contant geld ›</div>`:''}`;
+  showSheetBg();
+  try{ setTimeout(()=>{ const el=$('#contInput'); if(el){ el.focus(); el.select(); } },60); }catch(_){}
+}
+/* WAT DE TELLING VASTLEGT. De stand met zijn dag, en het verschil als boeking. Dat verschil is het
+   enige moment waarop contant geld een uitgave wordt: de opname zelf blijft intern, want toen was
+   er nog niets besteed (v216 in spiegelbeeld - een opname is geen feit over bestemming, een
+   telling wel).
+   DE IDENTITEIT die dit vasthoudt: wat je nu hebt plus alles wat je contant uitgaf, is wat je bij
+   je eerste telling had plus alles wat je daarna pinde. Elke boeking die deze functie schrijft is
+   één term in die som, dus de lijst telt per constructie op tot het getal (v104/v169).
+   MEER DAN VERWACHT KAN OOK: dan was een eerdere telling te laag of vond je nog een briefje, en
+   staat er een boeking met het andere teken. totals() verrekent die netto binnen de categorie,
+   net als een terugstorting. Niets verzwijgen wat je gemeten hebt.
+   DE EERSTE TELLING SCHRIJFT GEEN BOEKING: er is niets om tegen af te zetten, en een verschil met
+   nul zou je hele zak als uitgave van vandaag boeken.
+   bankRef maakt de boeking uniek per teldag, zodat de opschoontool (_dupSig) twee tellingen van
+   hetzelfde bedrag in verschillende maanden niet als dubbel ziet. Opnieuw tellen op dezelfde dag
+   werkt die ene boeking bij; hoe, staat bij de som hieronder. */
+function contantOpslaan(){
+  const el=$('#contInput'); if(!el) return;
+  const ruw=String(el.value||'').trim();
+  if(ruw===''){ toast('Vul in hoeveel je geteld hebt'); return; }
+  const geteld=Math.max(numIn(ruw),0);
+  const V=contantVerwacht(), dag=vandaagYMD();
+  const ref='contant|'+dag;
+  /* TWEE KEER TELLEN OP ÉÉN DAG TELT OP, het vervangt niet. Gemeten met 400 → 300 → 250: vervangen
+     gaf één boeking van 50, want de tweede telling rekende tegen de stand van 300 die de eerste al
+     had weggeschreven, en de 100 ervoor was daarmee verdwenen. Je gaf wel degelijk 150 uit. Door
+     op te tellen blijft het één boeking per dag (één bankRef, dus de opschoontool ziet nooit een
+     dubbel) én blijft de identiteit staan. Loopt het totaal terug naar nul, dan valt de boeking
+     weg: nul uitgegeven is geen boeking. */
+  const bestaand=TX.find(t=>t.bankRef===ref);
+  if(V!=null){
+    const verschil=Math.round((V-geteld)*100)/100;
+    const totaal=Math.round(((bestaand?-bestaand.amount:0)+verschil)*100)/100;
+    if(bestaand){ TX=TX.filter(t=>t!==bestaand); }
+    if(Math.abs(totaal)>=0.01){
+      /* ruleCat én autoCat, en bewust GEEN OVR. catOf() leest OVR[id]||autoCat, dus met alleen een
+         override zou de boeking categorieloos worden zodra iemand die override wist, en dan valt
+         CATS[undefined].type om in recurringSchedule() - gemeten in een test die de boeking
+         zonder categorie neerzette. Met autoCat gezet is de rij op zichzelf compleet, laat
+         applyOwnAccounts() hem staan (geen refNums, geen eigen rekening) en houdt de gebruiker de
+         override over om hem alsnog ergens anders heen te zetten. */
+      TX.push({id:'cash_'+dag, date:dag, amount:-totaal, acc:'', name:'Contant besteed',
+        desc:'CONTANT TELLING '+dag, typ:'', ref:'', src:'contant', accName:'', refNums:[],
+        bankRef:ref, ruleCat:'contant', autoCat:'contant'});
+      TX.sort((a,b)=>a.date.localeCompare(b.date));
+    }
+  }
+  SET.contant={stand:geteld, datum:dag};
+  save(); closeSheet(); render();
+  toast(V!=null && Math.abs(V-geteld)>=0.01 ? `Vastgelegd. ${euro0(Math.abs(V-geteld))} ${V>geteld?'contant uitgegeven':'erbij'}.` : 'Vastgelegd.');
+}
+/* Stoppen is niet hetzelfde als op nul tellen: nul zegt 'mijn zak is leeg en dat is gemeten', en
+   dit zegt 'reken hier niet meer mee'. Zonder telling valt de term uit totalBalance() en staat
+   alles zoals het vóór de eerste telling stond, dus één tik terug. Dat is de defaults-regel
+   (MECHANISM_SPEC.defaultEffect): omkeerbaar, zichtbaar, en niets beweegt stil. De boekingen die
+   er al staan blijven staan - dat is gemeten historie en die gooi je niet weg. */
+function contantStoppen(){ delete SET.contant; save(); closeSheet(); render(); toast('Contant telt niet meer mee'); }
+/* ===== CONTANT (v258) =====
+ * Je pint €400. De bank boekt het af, dus je saldo daalt met 400, maar je hebt niets uitgegeven:
+ * het geld zit in je zak. De opname is intern (RULES) en dus geen uitgave, en daarmee viel dat
+ * bedrag uit elke som: veilig te besteden en je vermogen zakten 400 terwijl je positie gelijk
+ * bleef. Dat is de spiegel die niet klopte.
+ * DE POORT IS GEA/GELDMAAT EN NIET DE INTERN-LIJST. Gemeten: op die lijst staan ook
+ * PRIVEREKENING, REVOLUT, WISE, N26 en WESTERN UNION, en dat zijn overboekingen naar een andere
+ * rekening en geen geld in je hand. Het losse woord OPNAME staat er bewust niet bij: dat komt ook
+ * voor in omschrijvingen die niets met een automaat te maken hebben, en een te ruime poort telt
+ * geld als contant dat allang ergens anders staat.
+ * DE OVERRIDE IS DE ONTSNAPPING. Heb je een opname zelf op een uitgavencategorie gezet, dan heb
+ * je verklaard dat hij besteed is, en telt hij hier niet meer mee. Geen tweede vlag naast de
+ * categorie die je al kunt zetten (v231: één post, één lijst, één vlag). */
+/* GEMETEN: elk woord hier moet ook in de intern-rij van RULES staan, anders is het dood. De
+   komma-loze variant 'GEA BETAALPAS' stond er eerst bij en kon nooit vuren: categorize() zet zo'n
+   boeking op 'overig', en dan valt hij al op catOf(t)!=='intern' af. Dat is de dode conditie uit de
+   meetlessen, dus hij is weg in plaats van dat RULES werd opgerekt - dat laatste verandert waar
+   boekingen landen, en dat is een andere vraag dan deze. contant-stand.spec.js leest de bron en
+   eist dat deze lijst een deelverzameling van die rij blijft. */
+const OPNAME_KW=['GEA, BETAALPAS','GELDMAAT'];
+function isOpnameTx(t){
+  if(!t || !(t.amount<0)) return false;
+  if(catOf(t)!=='intern') return false;                       // zelf op een uitgave gezet: dan is het besteed
+  const U=String(t.desc||'').toUpperCase();
+  return OPNAME_KW.some(w=>U.includes(w));
+}
+/* De laatste telling. Twee velden, want een stand zonder datum is geen meting: hij zegt niet
+   waarover hij gaat en je kunt er dus ook niet van zeggen dat hij oud is (dezelfde les als v198,
+   waar het saldo zijn datum kwijtraakte). */
+function contantTelling(){ const C=SET.contant||{}; return (C.stand==null||C.stand==='')?null:{stand:+C.stand, datum:C.datum||''}; }
+/* HET ENIGE CONTANTE BEDRAG IN DE APP: je laatste telling plus de opnames daarna. Elke lezer leest
+   deze functie, dus totalBalance() en het telscherm kunnen niet uiteenlopen (v104/v169).
+   NULL ZOLANG JE NOG NOOIT TELDE, en dat is geen nul. Zonder beginpunt zou dit 'alle opnames ooit'
+   zijn, en dat is een bewering: wie drie jaar geleden pinde heeft dat geld niet meer in zijn zak.
+   Onbekend blijft onbekend (v59/v73/v173), en de telling is wat het bekend maakt.
+   DE GRENS IS t.date > de teldag en niet >=. Je telt op het moment dat je pint, want dan vraagt de
+   app erom, en dan heb je dat briefje net in je hand: die opname zit al IN je telling. Met >= zou
+   hij er nog eens bovenop komen en staat je vermogen te hoog, en te hoog is de gevaarlijke kant
+   (v168). Wat er dan overblijft is de opname later op dezelfde dag, ná het tellen: die telt tot je
+   volgende telling niet mee. Dat is de voorzichtige kant, en hij corrigeert zichzelf. */
+function contantVerwacht(){
+  const T=contantTelling(); if(!T) return null;
+  let op=0; for(const t of TX){ if(t.date>T.datum && isOpnameTx(t)) op+=-t.amount; }
+  return Math.round((T.stand+op)*100)/100;
+}
+/* Hoe oud de telling is, in hele dagen, of null als er niet geteld is. Hele dagen en lokale
+   middernacht, net als doelStreepje() (v248): met de klok erbij leest een telling van vanochtend
+   vanmiddag al als een dag oud. */
+function contantOuderdom(){
+  const T=contantTelling(); if(!T||!T.datum) return null;
+  const a=new Date(T.datum+'T00:00:00'), b=new Date(vandaagYMD()+'T00:00:00');
+  if(isNaN(a)) return null;
+  return Math.max(Math.round((b-a)/864e5),0);
+}
+/* Opnames sinds de laatste telling, als losse boekingen. De kaart en het telscherm lezen hier
+   dezelfde lijst, en het aantal is wat de vraag 'je pinde sinds toen' hard maakt. */
+function contantOpnamesSinds(){
+  const T=contantTelling();
+  return TX.filter(t=>isOpnameTx(t) && (!T || t.date>T.datum)).sort((a,b)=>b.date.localeCompare(a.date));
+}
+/* WANNEER DE APP VRAAGT TE TELLEN. Niet dagelijks en niet stil: twee momenten, allebei bestaand.
+   a) er is gepind sinds je laatste telling - dat is het moment waarop het bedrag verandert en waarop
+      je het geld in je hand hebt, dus tellen kost je daar niets extra;
+   b) de eerste VERSE_START_DAGEN van een nieuwe maand (verseStart(), v195), zodat een telling niet
+      maanden oud kan worden als je een tijd niet pint. Dat is timing en geen tweede mechanisme:
+      freshStart geeft Grip aanleiding het gesprek te openen, en dit is zo'n aanleiding.
+   NOOIT VRAGEN ALS ER GEEN OPNAME IS GEWEEST én er nooit geteld is: dan heeft de app geen enkele
+   aanwijzing dat je contant geld hebt, en een vraag daarover is een aanname over jouw leven. */
+function contantVraagt(){
+  const T=contantTelling();
+  if(contantOpnamesSinds().length) return T?'gepind':'eerste';
+  /* De maand-tak eist een telling van VÓÓR deze maand, niet een telling die ouder is dan vandaag.
+     Dat tweede vroeg elke dag van de eerste week opnieuw zodra je op dag 1 geteld had, en dat is
+     precies het zeuren dat 'niet dagelijks' moest uitsluiten. Nu één keer per maand, en zodra je
+     telt is hij weg. */
+  return (T && verseStart() && T.datum < thisYM()+'-01') ? 'maand' : '';
+}
 function accBalance(acc){ const mb=(SET.manualBal||{})[acc]; if(mb!=null && mb!=='') return +mb; const a=ACCMETA[acc]; return a&&a.balance!=null?a.balance:null; }
 // known = rekeningen mét een bekend saldo. Nul bekende saldi (bv. direct na een CSV-import) betekent onbekend, niet €0.
-function totalBalance(){ let sum=0, missing=0, known=0; for(const acc of OWN){ const b=accBalance(acc); if(b==null) missing++; else { sum+=b; known++; } } return {sum,missing,known}; }
+/* v258: contant geld is een term in dit saldo en geen rekening. Het staat dus NIET in OWN (dat komt
+   uit TX en een zak geld boekt niets) en het telt NIET mee in missing/known: die twee gaan over
+   rekeningen waarvan de app het saldo niet weet, en een ongetelde zak is iets anders dan een
+   rekening zonder saldo. Niet geteld betekent hier: geen term, en dan staat alles precies zoals
+   het vóór v258 stond. Zo is het verschil dat de telling maakt ook meteen wat de telling waard is. */
+function totalBalance(){ let sum=0, missing=0, known=0; for(const acc of OWN){ const b=accBalance(acc); if(b==null) missing++; else { sum+=b; known++; } } 
+  const c=contantVerwacht(); if(c!=null) sum+=c;
+  return {sum,missing,known,contant:(c==null?null:c)}; }
 /* v198: een saldo en een transactiereeks komen niet altijd uit hetzelfde moment. Bij een
    PSD2-koppeling wel (saldo en boekingen komen uit dezelfde ophaling), bij een handmatig saldo of
    een CSV-import niet: dan staat er een momentopname naast boekingen die daarna zijn gedaan.
@@ -2350,6 +2524,27 @@ function adjustSaveTarget(d){
   openSafeToSpend(); try{ renderDash(); }catch(_){}
 }
 function toggleSaveEdit(){ window._stsEdit=!window._stsEdit; openSafeToSpend(); }
+/* v258: contant geld zit sinds deze ronde in totalBalance(), dus ook in 'Totaal saldo' hierboven.
+   Een term die meetelt en nergens staat is een stil getal, dus hij krijgt zijn eigen regel met
+   zijn eigen tik naar het telscherm: de tik komt uit op het bedrag waarop je tikte (v254).
+   DE OUDERDOM IS DE VOORWAARDE EN GEEN EXTRA. Een telling van vorige maand telt nog steeds voor
+   de volle mep mee in je veilig te besteden, en dat is precies de verzonnen zekerheid die v168
+   weghaalde toen hij het banksaldo als buffer liet gelden. De melding zegt daarom hoe oud de
+   meting is zodra ze niet van vandaag is. GEEN RICHTING en geen correctie, om dezelfde reden als
+   bij saldoAchterRegel(): de app weet niet of je meer of minder hebt dan er staat, alleen dat er
+   tijd tussen zit. Zodra je telt is de regel weg. */
+function contantOpbouwRegel(){
+  let V=null, oud=null; try{ V=contantVerwacht(); oud=contantOuderdom(); }catch(_){ return ''; }
+  if(V==null) return '';
+  const ops=contantOpnamesSinds().length;
+  const sub = ops ? `geteld en wat je daarna pinde` : `wat je bij je laatste telling had`;
+  const melding = (oud>0)
+    ? `<div class="small" style="color:var(--mut2);line-height:1.5;margin:8px 0 2px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:10px">Je telde ${oud===1?'gisteren':`${oud} dagen geleden`}. Wat je sindsdien contant uitgaf zit hier nog niet in.</div>`
+    : '';
+  return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="closeSheet();contantTellen()">
+      <div style="flex:1"><div style="font-size:var(--fs-md)">Waarvan contant</div><div class="small muted">${sub}</div></div>
+      <div style="font-weight:700;white-space:nowrap;color:var(--mut)">${euro0(V)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>${melding}`;
+}
 function openSafeToSpend(){
   const S=safeToSpend();
   let incDue=0; try{ incDue=Math.round(monthLiquidity().incDue||0); }catch(_){}
@@ -2366,8 +2561,9 @@ function openSafeToSpend(){
     ${balUnknown?`<div style="background:rgba(159,176,199,.07);border-radius:10px;padding:11px 13px;margin-bottom:12px;font-size:var(--fs-sm);color:var(--mut)">Een bankbestand bevat geen saldo, dus we weten niet wat er op je rekening staat. De posten hieronder kloppen wel; alleen het startpunt ontbreekt. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="openSaldoInvoer()">Vul je saldo aan ›</span></div>`:''}
     ${balUnknown
       ? `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openSaldoInvoer()"><div style="flex:1"><div style="font-size:var(--fs-md)">Totaal saldo</div><div class="small muted">nog geen enkel saldo bekend</div></div><div style="font-weight:700;white-space:nowrap;color:var(--mut)">onbekend</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`
-      : line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':'al je gekoppelde rekeningen')}
+      : line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':(contantVerwacht()!=null?'je rekeningen en je contante geld':'al je gekoppelde rekeningen'))}
     ${balUnknown?'':saldoAchterRegel()}
+    ${balUnknown?'':contantOpbouwRegel()}
     ${S.incDue>0?`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:var(--fs-md)">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
     ${S.savedBal>0?line('Al op je spaarrekening', S.savedBal, 'var(--mut)', "closeSheet();openSavingsPots()", 'staat apart om te sparen, niet vrij besteedbaar'):''}
@@ -2434,6 +2630,7 @@ function toast(msg){ let el=document.getElementById('toast'); if(!el){ el=docume
    De uitleg is één zin en verschijnt in een mini-popover; bewust geen alert/confirm, die blokkeren de app en de extensie. */
 const JARGON={
   onvoorzien:'Een kost die je niet kon voorzien, zoals een wegsleep of een kapotte wasmachine. Geen potje, telt niet mee tegen je budget. Weet je niet waar een boeking hoort, dan is dat Overig.',
+  contant:'Wat je contant hebt uitgegeven sinds je voor het laatst telde. Dit is een verschil en geen boeking per aankoop, dus de app weet het bedrag wel en de bestemming niet. Geen potje, telt niet mee tegen je budget.',
   veiligtebesteden:'Wat er van je saldo vrij is voor de rest van de maand: je saldo min je vaste lasten die nog komen, min wat er in je potjes gereserveerd staat, min je spaarinleg.',
   nogtesparen:'Het deel van je spaarinleg voor deze maand dat je nog opzij moet zetten: je maandbedrag min wat er deze maand al naar je spaarrekening ging.',
   spaarinleg:'Wat je per maand opzij wilt zetten. Dit is het bedrag dat je doelen verdeelt, niet alles wat er aan het eind van de maand overblijft.',
@@ -2711,6 +2908,15 @@ function scoreNotifs(opts){
   try{ const log=SET.coachLog||[]; const nowMs=Date.now();
     const park=log.find(l=>l.type==='beslis' && l.uitkomst==='geparkeerd' && !l.resolved && (nowMs-l.ts)>=18*36e5 && (nowMs-l.ts)<=7*864e5);
     if(park){ const it=String(park.item||'die aankoop').slice(0,24); push({key:'park-'+park.ts, h:'direct', score:84, t:'warn', ic:ICON('clock'), l1:`Je parkeerde ${it} (${euro0(park.bedrag||0)}). Staat 't er nog?`, l2:'Open je coach', act:"coStart('algemeen')"}); } }catch(_){}
+  /* v258: het telmoment. Alleen de gepind-tak, want dat is het moment waarop het bedrag verandert
+     en waarop je het geld in je hand hebt; de maand-tak van contantVraagt() hangt aan verseStart()
+     en hoort op Grip, niet in een melding van vandaag (v195: timing, geen tweede mechanisme).
+     Geen eigen meting: de reden en de bedragen komen uit contantVraagt() en contantOpnamesSinds(). */
+  try{ const cv=contantVraagt();
+    if(cv==='gepind'||cv==='eerste'){ const ops=contantOpnamesSinds(); const som=ops.reduce((a,t)=>a-t.amount,0);
+      if(ops.length) push({key:'contant-'+ops[0].date, h:'direct', score:62, t:'info', ic:CATS.contant.icon,
+        l1:`Je pinde ${euro0(som)}${ops.length>1?` in ${ops.length} opnames`:''}. Hoeveel heb je nu in je zak?`,
+        l2:'Tellen', act:'contantTellen()'}); } }catch(_){}
   try{ const lim=new Date(now); lim.setDate(lim.getDate()-7);
     const recent=TX.filter(x=>x.amount<0 && new Date(x.date)>=lim && CATS[catOf(x)].type==='expense' && !isFixed(x) && !geenNorm(catOf(x)));   // v234: 'hoger dan gebruikelijk' is bij onvoorzien een tautologie
     const byCat={}; for(const mm of months().slice(-4)){ for(const x of txOfMonth(mm)){ if(x.amount<0&&CATS[catOf(x)].type==='expense'){ (byCat[catOf(x)]=byCat[catOf(x)]||[]).push(-x.amount); } } }
@@ -4366,6 +4572,42 @@ function maandGelezen(){
  * Valt de lijst leeg, dan rendert dit niets en toont Grip alleen zijn bestaande onderdelen. */
 function valtOpDagenRest(){ const d=daysElapsed(thisYM()); return Math.max(d.dim-d.elapsed,0); }
 function valtOpToon(id){ window._valtOpOpen=id; renderMaand(); }
+/* DE KAART OP GRIP. Grip vraagt of mijn systeem standhoudt, en een contante stand die je nooit
+   telt is precies zo'n systeem dat stilletjes uit de pas loopt. Drie aanleidingen, alle drie uit
+   contantVraagt() en geen enkele uit een eigen meting hier (v235: één detectie, twee weergaven).
+   HIJ STAAT ER ALLEEN ALS ER IETS TE TELLEN IS. Geen opname en geen telling betekent dat de app
+   geen enkele aanwijzing heeft dat jij contant geld gebruikt, en dan is een kaart erover een
+   aanname over jouw leven. Heb je geteld en is er sindsdien niets gepind, dan zwijgt hij ook: het
+   getal staat dan in de opbouw van veilig te besteden en daar hoort het.
+   SPIEGEL, GEVOLG, KEUZE. De spiegel is gemeten (de opnames, de stand, de ouderdom), het gevolg
+   zegt wat dat voor je cijfers betekent, en de keuze is de enige handeling die er is. Geen
+   aanmoediging en geen teller: hoe vaak je telt is nergens vastgelegd. */
+function contantKaart(){
+  let V='', T=null, ops=[], oud=null;
+  try{ V=contantVraagt(); T=contantTelling(); ops=contantOpnamesSinds(); oud=contantOuderdom(); }catch(_){ return ''; }
+  if(!V) return '';
+  const som=ops.reduce((a,t)=>a-t.amount,0);
+  const dag=d=>{ try{ return new Date(d+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'long'}); }catch(_){ return d; } };
+  let spiegel, gevolg;
+  if(V==='eerste'){
+    spiegel = ops.length===1
+      ? `Je pinde ${euro0(som)} op ${dag(ops[0].date)}.`
+      : `Je pinde ${euro0(som)} in ${ops.length} opnames, de laatste op ${dag(ops[0].date)}.`;
+    gevolg = `Dat ging van je saldo af, maar je hebt het niet uitgegeven: het zit in je zak. Zolang je niet telt, weet de app niet dat het er is, en staat je veilig te besteden dus te laag.`;
+  } else if(V==='gepind'){
+    spiegel = `Je pinde ${euro0(som)} sinds je telling van ${dag(T.datum)}. De app rekent nu met ${euro0(contantVerwacht())} contant.`;
+    gevolg = `Dat is je telling plus die opnames, dus wat je er intussen van uitgaf zit er nog niet af.`;
+  } else {
+    spiegel = `Je telde ${oud} dagen geleden: ${euro0(T.stand)} contant.`;
+    gevolg = `Dat bedrag telt nog steeds voor de volle mep mee in je saldo. Wat je sindsdien contant uitgaf, zit er niet in.`;
+  }
+  return `<div class="card" style="padding:13px 15px;margin:0 0 9px">
+    <div class="hlabel" style="margin:0 0 6px">Contant</div>
+    <div style="line-height:1.45;font-size:var(--fs-md)">${spiegel}</div>
+    <div class="small" style="color:var(--mut2);line-height:1.5;margin-top:6px">${gevolg}</div>
+    <div class="small" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="contantTellen()">Tel wat je in je zak hebt ›</div>
+  </div>`;
+}
 function gripSignalCards(){
   let L=[]; try{ L=valtOpSignals(thisYM())||[]; }catch(_){ return ''; }
   if(!L.length) return '';
@@ -4643,8 +4885,12 @@ function renderMaand(){
      degelijk iets staat. Dat is exact de fout die v188 bij de structurele signalen repareerde,
      en hij komt terug zodra er een derde bron bij komt die deze tak niet kent. */
   const VS=(function(){ try{ return gripSignalCards(); }catch(_){ return ''; } })();
-  if(!R.length && !STR.length){
-    $('#s-maand').innerHTML= VS + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpLogBlok();
+  /* v258: de contant-kaart staat naast de valt-op-kaarten bovenaan Grip, en om dezelfde reden ook
+     in de leegte-terugval hieronder: een scherm dat zijn eigen leegte niet kent vult hem met een
+     claim (v188), en dit is de derde bron die die tak moet kennen. */
+  const CK=(function(){ try{ return contantKaart(); }catch(_){ return ''; } })();
+  if(!R.length && !STR.length && !CK){
+    $('#s-maand').innerHTML= VS + CK + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpLogBlok();
     return;
   }
   /* v207: een regel die je bewust hebt geaccepteerd telt niet meer als tekort, dus het oordeel,
@@ -4670,7 +4916,7 @@ function renderMaand(){
   const goed=R.filter(r=>r.status==='ok');
   const verband=maandVerband(RO);
   $('#s-maand').innerHTML=`
-    ${VS}${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
+    ${VS}${CK}${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
     <div class="card">
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
       ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
@@ -9249,7 +9495,7 @@ function openCategory(k, m){
       <div style="font-weight:800;font-size:var(--fs-lg)">${c.name}</div>
       <div class="muted small">${items.length} transacties · ${esc(m?monthLabel(m):periodLabel())}</div>
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${euro(tot)}</div></div>
-    ${c.geenNorm?`<div class="small muted" style="margin:0 2px 10px;line-height:1.5">Kosten die je niet kon voorzien. Meer dan een paar per jaar betekent dat ze een potje horen te hebben.</div>`:''}
+    ${c.geenNorm&&JARGON[k]?`<div class="small muted" style="margin:0 2px 10px;line-height:1.5">${JARGON[k]}</div>`:''}
     ${catSparkline(k)}
     ${items.map(t=>`<div class="tx" style="cursor:default">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
@@ -10900,7 +11146,7 @@ function budgetOverZin(sp,bud,d,over,opDeGrens){
 }
 function insBudgetBlok(m){
   let t=null; try{ t=totals(m); }catch(_){ return ''; }
-  const bud=Math.round(t.budget), sp=Math.round(t.spendNorm), buiten=Math.round(t.buitenNorm||0);   // v234
+  const bud=Math.round(t.budget), sp=Math.round(t.spendNorm);   // v234; v258: buitenNorm wordt per categorie gelezen in geenNormRegels()
   if(!(bud>0)) return '';
   const d=daysElapsed(m);
   /* v173: nul uitgaven en geen data zijn niet hetzelfde. Ligt de laatste boeking vóór de maand
@@ -10955,7 +11201,33 @@ function insBudgetBlok(m){
       <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${balkKleur}"></div></div>
       ${isLopendeMaand(m)?`<i title="de maand is ${dayPct}% voorbij" style="position:absolute;top:-3px;height:15px;left:${Math.min(Math.max(dayPct,0),100)}%;width:2px;background:var(--mut2);border-radius:1px"></i>`:''}</div>
     ${isLopendeMaand(m)?`<div class="small" style="color:var(--mut2);margin-top:5px">de streep staat waar de maand nu is: ${dayPct}% voorbij</div>`:''}${budgetOverZin(sp,bud,d,over,opDeGrens)}
-    ${buiten>0?`<div class="small" style="color:var(--mut2);margin-top:5px;cursor:pointer" onclick="openCategory('onvoorzien')">+ ${euro0(buiten)} onvoorzien, buiten je potjes ›</div>`:''}</div>`;
+    ${geenNormRegels(t,m)}</div>`;
+}
+/* v258: hier stond één regel die ALLE geenNorm-categorieën optelde tot t.buitenNorm en naar
+   onvoorzien tikte. Met een tweede geenNorm-categorie klopt die tik niet meer: gemeten zei hij
+   "+ €897 onvoorzien, buiten je potjes" en kwam je uit op een categorie met €497 erin. Dat is
+   dezelfde fout die v250 en v254 al twee keer opruimden: tikken op het ene bedrag en het andere
+   krijgen.
+   DE KEUZE IS EEN REGEL PER CATEGORIE, niet het totaal met een tik naar een overzicht. Zo'n
+   overzicht van alle geenNorm-categorieën bestaat niet, en het bouwen om een tik te kunnen tonen
+   is precies wat de premisse verbiedt: een keuze leidt naar een BESTAANDE ingang. Elke regel
+   noemt nu zijn eigen bedrag en tikt naar zijn eigen categorie, dus de tik komt uit op het bedrag
+   waarop je tikte.
+   ÉÉN BRON: de bedragen komen uit t.byCat van dezelfde totals(m) die buitenNorm oplevert, dus de
+   regels tellen per constructie op tot buitenNorm. Geen tweede meting via catSpendMap().
+   DE MAAND GAAT MEE. De oude tik riep openCategory('onvoorzien') zonder maand aan, en dan leest
+   die sheet periodTx() - de gekozen periode en niet de maand van dit blok. Dat was dezelfde fout
+   nog een keer, op dezelfde regel: het bedrag kwam uit m en de lijst eronder niet. openCategory()
+   neemt sinds v235 een maand aan, dus dit is geen nieuwe ingang.
+   WAT HET KOST, gemeten op 360px: niets zolang één geenNorm-categorie uitgaven heeft, want dan is
+   het dezelfde ene regel als eerst. Een tweede categorie met uitgaven kost 18px. Een categorie
+   zonder uitgaven staat er niet, dus wie nooit pint ziet geen enkel verschil. */
+function geenNormRegels(t,m){
+  const B=t.byCat||{};
+  const bedrag=k=>Math.round(-(B[k]||0));
+  const ks=Object.keys(CATS).filter(k=>CATS[k].geenNorm && bedrag(k)>0)
+    .sort((a,b)=>bedrag(b)-bedrag(a) || (CATS[a].name<CATS[b].name?-1:1));   // euro's eerst, naam als tiebreak (v235)
+  return ks.map(k=>`<div class="small" style="color:var(--mut2);margin-top:5px;cursor:pointer" onclick="openCategory('${k}','${m}')">+ ${euro0(bedrag(k))} ${CATS[k].name.toLowerCase()}, buiten je potjes ›</div>`).join('');
 }
 /* v139: de eerste ingang naar het coachgesprek buiten het coachscherm. Hij haakt aan op de
    bevinding erboven en stelt er een vraag over in plaats van neutraal naar de coach te wijzen.

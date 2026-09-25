@@ -120,7 +120,11 @@ test.describe('b - dezelfde maand met en zonder de wegsleep', () => {
     expect(met.blok).toContain('+ €500 onvoorzien, buiten je potjes');
     expect(zonder.blok).not.toContain('onvoorzien');
     expect(met.blok).toContain(`€${met.spendNorm.toLocaleString('nl-NL')} uitgegeven`);
-    expect(await page.evaluate(() => insBudgetBlok(thisYM()))).toContain("openCategory('onvoorzien')");
+    /* v258: de tik draagt sinds deze ronde ook de maand mee, want het bedrag ernaast komt uit die
+       maand en de sheet las anders periodTx(). Deze test bond aan de letterlijke aanroep zonder
+       maand en legde daarmee de implementatie vast in plaats van de eigenschap. Wat hij bedoelt te
+       toetsen is dat de regel doortikt naar déze categorie, en dat staat er nu zo. */
+    expect(await page.evaluate(() => insBudgetBlok(thisYM()))).toMatch(/openCategory\('onvoorzien'(,'\d{4}-\d{2}')?\)/);
   });
 
   test('in het vervoerpotje was het wél overbesteding', async ({ page }) => {
@@ -199,11 +203,20 @@ test.describe('e - geen tweede restbak: het onderscheid met Overig staat er', ()
   test('de drill-down zegt wat de categorie is, zonder teller en zonder oordeel', async ({ page }) => {
     await boot(page, metWegsleep());
     await zetCat(page, 'onvoorzien');
-    const t = await page.evaluate(() => { openCategory('onvoorzien'); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' '); });
-    expect(t).toContain('Kosten die je niet kon voorzien. Meer dan een paar per jaar betekent dat ze een potje horen te hebben.');
-    expect(t).not.toMatch(/te veel|te vaak|streak|score/i);
-    const overig = await page.evaluate(() => { openCategory('boodschappen'); return document.querySelector('#sheet').innerText; });
-    expect(overig).not.toContain('Kosten die je niet kon voorzien');
+    /* v258: de sheet droeg hier zijn eigen vaste zin, naast de uitleg die al in JARGON stond. Met
+       een tweede geenNorm-categorie erbij zei die ene zin "Kosten die je niet kon voorzien" ook bij
+       Contant, geld dat je juist wél zag aankomen. De uitleg komt nu per categorie uit JARGON, dus
+       deze test bindt aan die bron in plaats van aan een kopie ervan (v91). Wat hij toetst is
+       onveranderd: de drill-down zegt wat de categorie is, zonder teller en zonder oordeel, en een
+       categorie zonder de vlag krijgt geen uitleg. */
+    const r = await page.evaluate(() => {
+      openCategory('onvoorzien'); const t = document.querySelector('#sheet').innerText.replace(/\s+/g, ' ');
+      openCategory('boodschappen'); const o = document.querySelector('#sheet').innerText;
+      return { t, o, jargon: JARGON.onvoorzien };
+    });
+    expect(r.t).toContain(r.jargon);
+    expect(r.t).not.toMatch(/te veel|te vaak|streak|score/i);
+    expect(r.o).not.toContain(r.jargon);
   });
 });
 
