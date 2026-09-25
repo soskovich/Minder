@@ -603,12 +603,18 @@ genoemde versietag.)*
   Er is voorlopig geen scherm dat hem leest, alleen blok 7 van `DIAG_BLOKKEN`. Die volgorde is met
   opzet: de drempel hieronder is pas te beoordelen als je hem op je eigen toestel kunt meten, en de
   gegevens van de gebruiker staan alleen daar.
-  BLOKKEN EN GEEN KALENDERWEKEN, en het argument is de aansluiting. GEREKEND op 2026: bij
-  kalenderweken valt 10,1 procent van de dagen in een week van een andere maand en springt het
-  aantal weken per maand tussen 4 en 5. GEMETEN op drie maanden: de som van de blokken is per
-  constructie het maandcijfer, de som van de kalenderweken zat er +11, -97 en -95 naast op maanden
-  van 669 en 764. De reeks komt naast de meermaandsgrafiek, en dan weegt aansluiten zwaarder dan
-  doorlopen.
+  BLOKKEN EN GEEN KALENDERWEKEN, EN HET ARGUMENT IS DE POSITIE (gecorrigeerd bij `v265`). `v264`
+  schreef hier dat de som van de blokken per constructie het maandcijfer is, gemeten +0. DAT WAS
+  FOUT: die meting berekende het blok als `Math.floor((dag-1)/7)+1`, en dag 29 geeft dan blok 5, dus
+  de restdagen telden als vijfde emmer mee. Zonder die emmer sluiten blokken NIET aan, en dat was
+  het doorslaggevende argument.
+  WAT WEL STAAT, en sterker, komt uit de gegevens van de gebruiker: een blok heeft een POSITIE in de
+  maand en een kalenderweek niet. GEMETEN over 84 blokken: #1 draagt gemiddeld €218, #2 €251, #3
+  €482 en #4 €811, de 95-procentbanden van #1 en #4 raken elkaar niet, #4 is hoger dan #1 in 19 van
+  de 21 maanden en is de duurste week van zijn maand in 13 van de 20 volledige maanden. Dat patroon
+  bestaat alleen omdat een blok een vaste plek in de maand heeft.
+  DE KALENDER-REKENSOM BLIJFT STAAN: bij kalenderweken valt 10,1 procent van de dagen in een week
+  van een andere maand en springt het aantal weken per maand tussen 4 en 5.
   WEEKDAG-BALANS WAS GEEN ARGUMENT: zeven opeenvolgende dagen dragen elke weekdag precies één keer,
   bij allebei de indelingen. Dat is het tegenovergestelde van wat je zou verwachten bij een piekdag
   die op zaterdag ligt (`v239`/`v240`), en het is gerekend en niet aangenomen. Wat blokken wel
@@ -622,11 +628,49 @@ genoemde versietag.)*
   `geenNorm` ERUIT OM DEZELFDE REDEN ALS `v239`: gemeten tilt één boeking van €497 een blok van
   €176 naar €673, en dat is 6,5 keer de hele bandbreedte tussen gewone blokken (115 tot 192). Een
   reeks met `geenNorm` erin meet de plek van je incidenten en niet je patroon.
+- **De scope is `varBudget()` zonder `geenNorm` en zonder huur** (`v265`): `weekScope()` is de
+  enige plek waar dat staat, en `weekBedragen()` en `weekRestdagen()` lezen hem. HUUR GAAT ER BIJ
+  NAAM UIT en dat is de afbakening zelf ("variabele kosten zonder huur"), geen reparatie eromheen
+  zoals bij `geenNorm` (`v258`). GEMETEN OP HET TOESTEL waarom het nodig is: `recurringCats()` ziet
+  daar Bankkosten, Belasting & boetes, Online shopping, Sport & gezondheid, Vervoer & auto en
+  Verzekeringen als terugkerend, maar huur en abonnementen NIET, dus zonder deze regel stond huur
+  gewoon in de scope met een potje van €750.
+  DE UITSLUITING DRAAGT EEN TRIPDRAAD. Zodra `recurringCats()` huur wel ziet is `WEEK_SCOPE_UIT`
+  dood gewicht, en dan sluit je hem twee keer uit zonder dat iemand het opmerkt.
+  `weekreeks-scope.spec.js` rekent de scope ZONDER de uitsluiting na op dezelfde invoer en eist dat
+  huur daar wel in staat. MIJN EERSTE VORM KON NIET VALLEN: die vergeleek `weekScope()` met een
+  nagebootste `recurringCats()`, maar de uitsluiting haalt huur er in beide gevallen uit, dus de
+  twee waren altijd gelijk.
+- **De blokken tellen netto, en wat buiten valt draagt zijn bedrag** (`v265`): GEMETEN op het
+  toestel telde het diagnoseblok van `v264` bruto en kwam september uit op 1.511 waar de maand
+  1.459 zei; die 52 waren de terugstortingen. Twee waarheden over dezelfde maand, in code van één
+  ronde oud. `weekBedragen()` telt nu netto zoals `catSpendMap()`, en KLEMT NIET op nul: een blok
+  waarin je netto meer terugkreeg dan uitgaf is informatie, en een klem zou de optelling breken.
+  `weekRestdagen()` geeft per maand wat er op dag 29 tot 31 in scope valt. DE REGEL ONDER DE REEKS
+  MOET DAT BEDRAG NOEMEN en niet alleen dat er iets buiten valt: anders mis je geld zonder het te
+  zien, en dat is precies waarom de aansluiting eerst het argument was. Het diagnoseblok TOONT de
+  aansluiting (blokken plus restdagen tegen `catSpendMap` over dezelfde scope) in plaats van hem
+  aan te nemen, want dat aannemen ging bij `v264` mis.
+- **OPEN PUNT: de huur landt niet in de huur-categorie** (`v265`): GEMETEN op het toestel staat het
+  huurpotje op €750 met €66 besteed. Een potje van €750 waar €66 op staat zegt iets over een
+  bedoeling en niet over een meting. Blok 7 van `DIAG_BLOKKEN` leest uit waar de grootste
+  terugkerende posten wel landen en welke boekingen wel op huur staan. Niet gerepareerd: waar een
+  boeking hoort is een categorievraag en geen weekvraag.
+- **OPEN PUNT (bevestigd): `recurringCats()` ziet huur en abonnementen niet** (`v254`, bevestigd bij
+  `v265`): dit stond als open punt op een fixture en is nu op de eigen gegevens van de gebruiker
+  gezien. `recurringCats()` bevat daar wel Bankkosten, Belasting & boetes, Online shopping, Sport &
+  gezondheid, Vervoer & auto en Verzekeringen. Zolang dat zo is telt huur mee in `varBudget()` en
+  dus in de potjesregel op Inzichten.
 - **Onder `WEEK_MIN_BLOKKEN` toont de reeks niets** (`v264`): twaalf volle blokken, en daaronder
   zwijgen zoals `piekReferentie()` onder drie maanden zwijgt. GEEN HALVE REEKS MET EEN WAARSCHUWING
-  ERBIJ. GEREKEND op de gemeten spreiding: gewone blokken lopen van 115 tot 192 op een gemiddelde
+  ERBIJ. GEREKEND op de spreiding van een FIXTURE: gewone blokken van 115 tot 192 op een gemiddelde
   van 176, een bandbreedte van 44 procent; met vier volle blokken per maand geeft zes maanden zes
   waarnemingen per positie en dat is te weinig om daar doorheen te kijken.
+  DIE AANNAME WAS TE LAAG (`v265`). GEMETEN op het toestel over 84 blokken: laagste €10, hoogste
+  €3.163, gemiddeld €438, mediaan €296, variatiecoëfficiënt 103 procent, en 73 procent zonder de
+  blokken boven €1.000. Twee tot ruim twee keer de aanname. De drempel bleef staan omdat hij ruim
+  gehaald wordt (84 bruikbare blokken van de 96 volle), niet omdat de rekensom klopte; was het
+  patroon zwak geweest, dan was twaalf veel te soepel.
   HET DIAGNOSEBLOK TELT TWEE DINGEN APART: VOL is een blok dat helemaal binnen je import valt,
   BRUIKBAAR is een vol blok waarin ook werkelijk iets in scope geboekt staat. Een week zonder
   boeking kan betekenen dat je niets uitgaf, maar ook dat je gegevens daar een gat hebben, en het
@@ -1146,7 +1190,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v264` → `minder-v265`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v265` → `minder-v266`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

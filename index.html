@@ -1049,6 +1049,54 @@ function weekBlokken(){
   }
   return uit;
 }
+/* v265: DE SCOPE VAN DE WEEKREEKS, als bron en niet als filter op de plek van gebruik.
+   `varBudget()` zonder `geenNorm` (v239: één boeking van 497 tilt een blok van 176 naar 673) en
+   ZONDER HUUR. Dat laatste is de afbakening zelf - de vraag luidt "variabele kosten zonder huur" -
+   en geen reparatie eromheen, anders dan bij `geenNorm` (v258).
+   GEMETEN OP HET TOESTEL waarom die uitsluiting nodig is: `recurringCats()` ziet daar Bankkosten,
+   Belasting & boetes, Online shopping, Sport & gezondheid, Vervoer & auto en Verzekeringen als
+   terugkerend, maar huur en abonnementen NIET. Dat is het open punt van `v254`, nu bevestigd op
+   echte gegevens in plaats van op een fixture. Zonder deze regel staat huur gewoon in de scope.
+   ZODRA `recurringCats()` HUUR WEL ZIET is deze uitsluiting dood gewicht: dan sluit je hem twee
+   keer uit en merkt niemand het meer. `weekreeks-scope.spec.js` valt daarop, zodat het opgeruimd
+   wordt in plaats van te blijven staan. */
+const WEEK_SCOPE_UIT=['huur'];
+function weekScope(){
+  const B=SET.budgets||{}; let rc=new Set(); try{ rc=recurringCats(); }catch(_){}
+  return Object.keys(B).filter(k=>(+B[k]||0)>0 && !rc.has(k) && !geenNorm(k) && WEEK_SCOPE_UIT.indexOf(k)<0);
+}
+/* NETTO PER BLOK, zoals catSpendMap() netto per categorie telt. GEMETEN waarom dat moet: op het
+   toestel telden de blokken van september op tot 1.511 terwijl de maand 1.459 zei, en dat verschil
+   van 52 was precies de terugstortingen die bruto tellen niet ziet. Twee waarheden over dezelfde
+   maand, in code van één ronde oud (v264).
+   Niet geklemd op nul, anders dan catSpendMap() per categorie doet: een blok waarin je netto meer
+   terugkreeg dan uitgaf is informatie, en een klem zou dat verbergen én de optelling breken. */
+function weekBedragen(){
+  const scope=new Set(weekScope()); const uit={};
+  for(const t of TX){
+    const c=catOf(t); if(!scope.has(c)) continue;
+    if(!(CATS[c]&&CATS[c].type==='expense')) continue;
+    const dag=+String(t.date).slice(8,10); if(!(dag>=1&&dag<=28)) continue;
+    const k=String(t.date).slice(0,7)+'#'+(Math.floor((dag-1)/7)+1);
+    uit[k]=Math.round(((uit[k]||0)+(-t.amount))*100)/100;
+  }
+  return uit;
+}
+/* WAT ER BUITEN DE BLOKKEN VALT, per maand. Dag 29 tot en met 31 zit in geen enkel blok, en dat is
+   7,9 procent van het jaar. De reeks laat die dagen weg, maar de regel eronder moet zeggen HOEVEEL
+   er dan buiten valt: anders mis je geld zonder het te weten, en dat is precies waarom de
+   aansluiting op de maandgrafiek het eerste argument voor deze indeling was. */
+function weekRestdagen(){
+  const scope=new Set(weekScope()); const uit={};
+  for(const t of TX){
+    const c=catOf(t); if(!scope.has(c)) continue;
+    if(!(CATS[c]&&CATS[c].type==='expense')) continue;
+    const dag=+String(t.date).slice(8,10); if(dag<=28) continue;
+    const m=String(t.date).slice(0,7);
+    uit[m]=Math.round(((uit[m]||0)+(-t.amount))*100)/100;
+  }
+  return uit;
+}
 /* Onder deze drempel toont de weekreeks NIETS, en dat is dezelfde keuze als piekReferentie() onder
    drie maanden: geen halve reeks met een waarschuwing erbij. GEREKEND op de gemeten spreiding van
    de vorm-fixture (gewone blokken 115 tot 192 op een gemiddelde van 176, een bandbreedte van 44
@@ -12941,42 +12989,109 @@ function diagWeekblokken(){
   L.push('');
   const alle=_dT(()=>weekBlokken(),[]);
   const vol=alle.filter(b=>b.vol);
+  const bedrag=_dT(()=>weekBedragen(),{});
+  const rest=_dT(()=>weekRestdagen(),{});
+  const scope=_dT(()=>weekScope(),[]);
   L.push('blokken van zeven dagen (1-7, 8-14, 15-21, 22-28; de rest van de maand is geen blok):');
   L.push('  in beeld: '+alle.length);
   L.push('  vol:      '+vol.length+'   (helemaal binnen je import)');
-  // de scope van de reeks: potjes die niet terugkerend zijn, geenNorm eruit
-  const B=(SET.budgets||{}); const rc=_dT(()=>recurringCats(),new Set());
-  const scope=Object.keys(B).filter(k=>(+B[k]||0)>0 && !rc.has(k) && !geenNorm(k));
-  L.push('');
-  L.push('scope van de reeks (varBudget zonder geenNorm): '+(scope.length?scope.join(', '):'(leeg)'));
-  const inScope=new Set(scope);
-  const perBlok={};
-  for(const t of TX){
-    if(!(t.amount<0)) continue;
-    const c=_dT(()=>catOf(t),'');
-    if(!inScope.has(c)) continue;
-    const dag=+String(t.date).slice(8,10);
-    if(!(dag>=1&&dag<=28)) continue;                       // buiten elk blok
-    const k=String(t.date).slice(0,7)+'#'+(Math.floor((dag-1)/7)+1);
-    perBlok[k]=(perBlok[k]||0)+(-t.amount);
-  }
-  const bruikbaar=vol.filter(b=>perBlok[b.maand+'#'+b.nr]>0);
+  const bruikbaar=vol.filter(b=>bedrag[b.maand+'#'+b.nr]);
   L.push('  bruikbaar: '+bruikbaar.length+'   (vol EN met een boeking in scope)');
+  L.push('');
+  L.push('scope (varBudget zonder geenNorm zonder '+WEEK_SCOPE_UIT.join('/')+'): '+(scope.length?scope.join(', '):'(leeg)'));
+  L.push('  uitgesloten omdat terugkerend: '+([..._dT(()=>recurringCats(),new Set())].join(', ')||'(niets)'));
   L.push('');
   L.push('drempel WEEK_MIN_BLOKKEN: '+WEEK_MIN_BLOKKEN);
   L.push('gehaald op volle blokken:      '+(vol.length>=WEEK_MIN_BLOKKEN?'ja':'nee')+'  ('+vol.length+' van '+WEEK_MIN_BLOKKEN+')');
   L.push('gehaald op bruikbare blokken:  '+(bruikbaar.length>=WEEK_MIN_BLOKKEN?'ja':'nee')+'  ('+bruikbaar.length+' van '+WEEK_MIN_BLOKKEN+')');
-  if(bruikbaar.length){
-    const bedragen=bruikbaar.map(b=>Math.round(perBlok[b.maand+'#'+b.nr]));
-    const som=bedragen.reduce((a,x)=>a+x,0);
+  /* WAT ER BUITEN VALT, en niet alleen dat er iets buiten valt. De reeks laat dag 29 tot 31 weg,
+     dus dit is het bedrag dat de gebruiker mist zonder het te zien. */
+  const restM=Object.keys(rest).sort();
+  const restSom=restM.reduce((a,m)=>a+rest[m],0);
+  L.push('');
+  L.push('wat buiten de blokken valt (dag 29 tot 31, in scope):');
+  L.push('  maanden met restdagen: '+restM.length+'   totaal: '+Math.round(restSom));
+  if(restM.length) L.push('  gemiddeld per zo\'n maand: '+Math.round(restSom/restM.length));
+  if(restM.length) L.push('  per maand: '+restM.map(m=>m+'='+Math.round(rest[m])).join(', '));
+  /* DE AANSLUITING, ZICHTBAAR EN NIET AANGENOMEN. v264 beweerde dat de blokken per constructie op
+     het maandcijfer uitkomen; die meting telde de restdagen als vijfde emmer mee en dat was fout.
+     Hier staan beide sommen naast elkaar voor de lopende maand, zodat het verschil te zien is in
+     plaats van te geloven. */
+  const nu=_dT(()=>thisYM(),'');
+  if(nu){
+    const blokSom=Object.keys(bedrag).filter(k=>k.slice(0,7)===nu).reduce((a,k)=>a+bedrag[k],0);
+    const sp=_dT(()=>catSpendMap(nu),{});
+    const maandSom=scope.reduce((a,k)=>a+(sp[k]||0),0);
     L.push('');
-    L.push('wat die blokken dragen, zodat de spreiding te zien is:');
-    L.push('  laagste: '+Math.min(...bedragen)+'   hoogste: '+Math.max(...bedragen)+'   gemiddeld: '+Math.round(som/bedragen.length));
-    L.push('  per blok: '+bruikbaar.map(b=>b.maand+'#'+b.nr+'='+Math.round(perBlok[b.maand+'#'+b.nr])).join(', '));
+    L.push('aansluiting op de lopende maand '+nu+':');
+    L.push('  som van de blokken (dag 1-28): '+Math.round(blokSom));
+    L.push('  restdagen (dag 29-31):         '+Math.round(rest[nu]||0));
+    L.push('  samen:                         '+Math.round(blokSom+(rest[nu]||0)));
+    L.push('  catSpendMap over dezelfde scope: '+Math.round(maandSom));
+    L.push('  sluit aan: '+(Math.abs(blokSom+(rest[nu]||0)-maandSom)<1?'JA':'NEE, verschil '+Math.round(blokSom+(rest[nu]||0)-maandSom)));
   }
+  if(bruikbaar.length){
+    const b=bruikbaar.map(x=>Math.round(bedrag[x.maand+'#'+x.nr]));
+    L.push('');
+    L.push('wat die blokken dragen:');
+    L.push('  laagste: '+Math.min(...b)+'   hoogste: '+Math.max(...b)+'   gemiddeld: '+Math.round(b.reduce((a,x)=>a+x,0)/b.length));
+    L.push('  per blok: '+bruikbaar.map(x=>x.maand+'#'+x.nr+'='+Math.round(bedrag[x.maand+'#'+x.nr])).join(', '));
+  }
+  /* WAT DE POSITIES DRAGEN, PER CATEGORIE. Gemeten is dat blok 4 bijna vier keer blok 1 is; de
+     vraag die daarop volgt is of dat gedrag is of een boekhoudkundig artefact. Zit er in blok 4
+     elke maand dezelfde post, dan is het geen patroon in wat je doet maar in wanneer iets wordt
+     afgeschreven, en dan toont een reeks iets anders dan hij belooft. */
+  const perPos={}, perPosMaand={};
+  const scopeSet=new Set(scope);
+  for(const t of TX){
+    const c=catOf(t); if(!scopeSet.has(c)) continue;
+    if(!(CATS[c]&&CATS[c].type==='expense')) continue;
+    const dag=+String(t.date).slice(8,10); if(!(dag>=1&&dag<=28)) continue;
+    const m=String(t.date).slice(0,7), nr=Math.floor((dag-1)/7)+1;
+    if(!vol.some(v=>v.maand===m&&v.nr===nr)) continue;
+    (perPos[nr]=perPos[nr]||{})[c]=Math.round((((perPos[nr]||{})[c]||0)+(-t.amount))*100)/100;
+    const km=nr+'|'+m; (perPosMaand[km]=perPosMaand[km]||{})[c]=((perPosMaand[km]||{})[c]||0)+(-t.amount);
+  }
+  L.push('');
+  L.push('wat elke positie draagt, over alle volle blokken:');
+  for(const nr of [1,2,3,4]){
+    const d=perPos[nr]||{}; const som=Object.values(d).reduce((a,x)=>a+x,0);
+    const rij=Object.entries(d).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${Math.round(v)} (${som>0?Math.round(v/som*100):0}%)`);
+    L.push(`  #${nr} (dag ${(nr-1)*7+1}-${nr*7}) totaal ${Math.round(som)}: ${rij.join(', ')||'(niets)'}`);
+  }
+  /* IS HET ELKE MAAND DEZELFDE POST? Per maand de grootste categorie van blok 4, en hoe vaak die
+     wint. Elke maand dezelfde winnaar wijst op een vaste afschrijving; wisselende winnaars op
+     gedrag. */
+  L.push('');
+  L.push('de grootste categorie van blok 4, per maand:');
+  const winnaars={};
+  const maandenMet4=[...new Set(Object.keys(perPosMaand).filter(k=>k.slice(0,2)==='4|').map(k=>k.slice(2)))].sort();
+  for(const m of maandenMet4){
+    const d=perPosMaand['4|'+m]||{};
+    const top=Object.entries(d).sort((a,b)=>b[1]-a[1])[0];
+    if(!top) continue;
+    const som=Object.values(d).reduce((a,x)=>a+x,0);
+    winnaars[top[0]]=(winnaars[top[0]]||0)+1;
+    L.push(`  ${m}: ${top[0]} ${Math.round(top[1])} van ${Math.round(som)} (${som>0?Math.round(top[1]/som*100):0}%)`);
+  }
+  L.push('  telling: '+Object.entries(winnaars).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}x`).join(', '));
+  /* WAAR LANDT DE HUUR? Het huurpotje staat op het toestel op 750 met 66 besteed, dus de huur
+     landt ergens anders. Alleen lezen en niets repareren: dit zegt waar hij wel staat. */
+  L.push('');
+  L.push('waar landt je huur (alleen lezen):');
+  L.push('  potje huur: '+_dV(()=>(SET.budgets||{}).huur)+'   besteed deze maand: '+_dV(()=>{ const sp=catSpendMap(thisYM()); return Math.round(sp.huur||0); }));
+  const sched=_dT(()=>recurringSchedule().filter(r=>r.type==='fixed'),[]);
+  const top=sched.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).slice(0,8);
+  L.push('  de grootste terugkerende posten, met hun categorie:');
+  for(const r of top) L.push(`    ${String(r.name||'').slice(0,28).padEnd(28)} ${String(Math.round(r.amount||0)).padStart(6)}  cat=${r.cat}  elke ${r.intervalM||'?'} mnd`);
+  /* En andersom: wat staat er WEL in de huur-categorie. Landt de huur ergens anders, dan is dit
+     leeg of klein, en dan zegt het potje van 750 iets over een bedoeling en niet over een meting. */
+  const huurTx=TX.filter(t=>catOf(t)==='huur' && t.amount<0).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  L.push('  de laatste boekingen die wel op huur staan:');
+  if(!huurTx.length) L.push('    (geen)');
+  for(const t of huurTx) L.push(`    ${t.date}  ${String(Math.round(-t.amount)).padStart(6)}  ${String(t.name||'').slice(0,30)}`);
   return L;
 }
-
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
