@@ -1021,6 +1021,41 @@ function netSpend(txns){ let s=0; for(const t of txns){ if(isExpenseTx(t)) s+=-t
 /* ---------- maand-helpers ---------- */
 function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!base.length) return []; const s=new Set(base); const n=new Date(); s.add(n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')); return [...s].sort(); }
 function txOfMonth(m){ return TX.filter(t=>t.date.slice(0,7)===m); }
+/* v264: DE WEEKAS, ALS BRON EN NOG ZONDER SCHERM. Blokken van zeven dagen vanaf de 1e van elke
+   maand, dus 1-7, 8-14, 15-21 en 22-28; wat er daarna van de maand overblijft is GEEN blok en komt
+   hier niet in voor. GEREKEND op de kalender van 2026: kalenderweken laten 10,1 procent van de
+   dagen in een week van een andere maand vallen en het aantal weken per maand springt tussen 4 en
+   5. GEMETEN op een fixture met drie maanden: de som van de blokken is per constructie het
+   maandcijfer, de som van de kalenderweken zat er 11, -97 en -95 naast op maanden van 669 en 764.
+   Deze reeks komt naast de maandgrafiek te staan, en dan telt aansluiten zwaarder dan doorlopen.
+   ELK VOL BLOK IS WEEKDAG-GEBALANCEERD, want zeven opeenvolgende dagen dragen elke weekdag precies
+   één keer. Dat gold ook voor kalenderweken; het was dus geen argument tussen de twee. Wat wel
+   verschilt is de restgroep van 1 tot 3 dagen, en die staat daarom niet in deze lijst.
+   `vol` zegt of het hele blok binnen je import valt. Een blok dat half buiten je gegevens ligt is
+   geen week waarover je iets kunt zeggen (v59/v73/v173). */
+function weekBlokken(){
+  if(!TX.length) return [];
+  const datums=TX.map(t=>t.date).filter(Boolean).sort();
+  const eerste=datums[0], laatste=datums[datums.length-1];
+  const uit=[]; let m=eerste.slice(0,7); const eind=laatste.slice(0,7);
+  while(m<=eind){
+    const j=+m.slice(0,4), mm=+m.slice(5,7);
+    const dim=new Date(j,mm,0).getDate();
+    for(let start=1;start+6<=dim;start+=7){
+      const van=m+'-'+String(start).padStart(2,'0'), tot=m+'-'+String(start+6).padStart(2,'0');
+      uit.push({maand:m, nr:(start-1)/7+1, van, tot, vol: van>=eerste && tot<=laatste});
+    }
+    const d=new Date(j,mm,1); m=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  }
+  return uit;
+}
+/* Onder deze drempel toont de weekreeks NIETS, en dat is dezelfde keuze als piekReferentie() onder
+   drie maanden: geen halve reeks met een waarschuwing erbij. GEREKEND op de gemeten spreiding van
+   de vorm-fixture (gewone blokken 115 tot 192 op een gemiddelde van 176, een bandbreedte van 44
+   procent): met vier volle blokken per maand geeft zes maanden zes waarnemingen per positie, en
+   dat is te weinig om daar doorheen te kijken; twaalf maanden geeft er twaalf. Voorlopig leest
+   alleen het diagnosescherm hem, zodat de drempel te meten is voordat de reeks bestaat. */
+const WEEK_MIN_BLOKKEN=12;
 function monthLabel(m){ const [y,mo]=m.split('-'); return MFULL[+mo-1]+' '+y; }
 
 /* ---------- periode-helpers (Inzichten: maand / 3 mnd / YTD / alles) ---------- */
@@ -12888,6 +12923,60 @@ function diagPotjes(){
   return L;
 }
 
+/* 7. Haalt de weekreeks zijn drempel? Dit blok telt en rekent niets uit dat het scherm niet ook
+      zou tonen: de blokken komen uit weekBlokken() en de scope is die van varBudget() met de
+      geenNorm-categorieën eruit, precies de afbakening die de reeks krijgt. Alleen lezen.
+      HET TELT TWEE DINGEN APART. Een VOL blok is een blok dat helemaal binnen je import valt; een
+      BRUIKBAAR blok is een vol blok waarin ook werkelijk iets in scope geboekt staat. Een week
+      zonder enige boeking kan betekenen dat je niets uitgaf, maar ook dat je gegevens daar een gat
+      hebben, en het verschil tussen die twee getallen is precies wat dat zichtbaar maakt. */
+function diagWeekblokken(){
+  const L=[];
+  if(!TX.length) return ['geen transacties'];
+  const datums=TX.map(t=>t.date).filter(Boolean).sort();
+  const eerste=datums[0], laatste=datums[datums.length-1];
+  L.push('eerste boeking:  '+eerste);
+  L.push('laatste boeking: '+laatste);
+  L.push('maanden in TX:   '+_dV(()=>months().length));
+  L.push('');
+  const alle=_dT(()=>weekBlokken(),[]);
+  const vol=alle.filter(b=>b.vol);
+  L.push('blokken van zeven dagen (1-7, 8-14, 15-21, 22-28; de rest van de maand is geen blok):');
+  L.push('  in beeld: '+alle.length);
+  L.push('  vol:      '+vol.length+'   (helemaal binnen je import)');
+  // de scope van de reeks: potjes die niet terugkerend zijn, geenNorm eruit
+  const B=(SET.budgets||{}); const rc=_dT(()=>recurringCats(),new Set());
+  const scope=Object.keys(B).filter(k=>(+B[k]||0)>0 && !rc.has(k) && !geenNorm(k));
+  L.push('');
+  L.push('scope van de reeks (varBudget zonder geenNorm): '+(scope.length?scope.join(', '):'(leeg)'));
+  const inScope=new Set(scope);
+  const perBlok={};
+  for(const t of TX){
+    if(!(t.amount<0)) continue;
+    const c=_dT(()=>catOf(t),'');
+    if(!inScope.has(c)) continue;
+    const dag=+String(t.date).slice(8,10);
+    if(!(dag>=1&&dag<=28)) continue;                       // buiten elk blok
+    const k=String(t.date).slice(0,7)+'#'+(Math.floor((dag-1)/7)+1);
+    perBlok[k]=(perBlok[k]||0)+(-t.amount);
+  }
+  const bruikbaar=vol.filter(b=>perBlok[b.maand+'#'+b.nr]>0);
+  L.push('  bruikbaar: '+bruikbaar.length+'   (vol EN met een boeking in scope)');
+  L.push('');
+  L.push('drempel WEEK_MIN_BLOKKEN: '+WEEK_MIN_BLOKKEN);
+  L.push('gehaald op volle blokken:      '+(vol.length>=WEEK_MIN_BLOKKEN?'ja':'nee')+'  ('+vol.length+' van '+WEEK_MIN_BLOKKEN+')');
+  L.push('gehaald op bruikbare blokken:  '+(bruikbaar.length>=WEEK_MIN_BLOKKEN?'ja':'nee')+'  ('+bruikbaar.length+' van '+WEEK_MIN_BLOKKEN+')');
+  if(bruikbaar.length){
+    const bedragen=bruikbaar.map(b=>Math.round(perBlok[b.maand+'#'+b.nr]));
+    const som=bedragen.reduce((a,x)=>a+x,0);
+    L.push('');
+    L.push('wat die blokken dragen, zodat de spreiding te zien is:');
+    L.push('  laagste: '+Math.min(...bedragen)+'   hoogste: '+Math.max(...bedragen)+'   gemiddeld: '+Math.round(som/bedragen.length));
+    L.push('  per blok: '+bruikbaar.map(b=>b.maand+'#'+b.nr+'='+Math.round(perBlok[b.maand+'#'+b.nr])).join(', '));
+  }
+  return L;
+}
+
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -12895,6 +12984,7 @@ const DIAG_BLOKKEN=[
   {titel:'wat planMove() zou beslissen (nagerekend, niet uitgevoerd)', lees:diagPlanMove},
   {titel:'wat allocatePlan() zegt', lees:diagAlloc},
   {titel:'de potjesregel op Inzichten', lees:diagPotjes},
+  {titel:'haalt de weekreeks zijn drempel', lees:diagWeekblokken},
 ];
 
 async function diagTekst(){

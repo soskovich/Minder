@@ -598,6 +598,53 @@ genoemde versietag.)*
   hij er niet: die nul is een gat en geen toewijzing (`v173`).
   `planTotaalRegel()` staat sindsdien binnen de kaart van de waterval, onder de sluitpost, en niet
   meer tussen de bestemmingen en de reserveringen, waar hij las alsof de reserveringen erin zaten.
+- **De weekas is een blok van zeven dagen vanaf de 1e, en de reeks bestaat nog niet** (`v264`):
+  `weekBlokken()` geeft 1-7, 8-14, 15-21 en 22-28 per maand; wat er daarna overblijft is GEEN blok.
+  Er is voorlopig geen scherm dat hem leest, alleen blok 7 van `DIAG_BLOKKEN`. Die volgorde is met
+  opzet: de drempel hieronder is pas te beoordelen als je hem op je eigen toestel kunt meten, en de
+  gegevens van de gebruiker staan alleen daar.
+  BLOKKEN EN GEEN KALENDERWEKEN, en het argument is de aansluiting. GEREKEND op 2026: bij
+  kalenderweken valt 10,1 procent van de dagen in een week van een andere maand en springt het
+  aantal weken per maand tussen 4 en 5. GEMETEN op drie maanden: de som van de blokken is per
+  constructie het maandcijfer, de som van de kalenderweken zat er +11, -97 en -95 naast op maanden
+  van 669 en 764. De reeks komt naast de meermaandsgrafiek, en dan weegt aansluiten zwaarder dan
+  doorlopen.
+  WEEKDAG-BALANS WAS GEEN ARGUMENT: zeven opeenvolgende dagen dragen elke weekdag precies één keer,
+  bij allebei de indelingen. Dat is het tegenovergestelde van wat je zou verwachten bij een piekdag
+  die op zaterdag ligt (`v239`/`v240`), en het is gerekend en niet aangenomen. Wat blokken wel
+  kosten is de restgroep van 1 tot 3 dagen: 29 dagen in 2026, 7,9 procent van het jaar.
+  DE SCOPE IS DIE VAN `varBudget()` MET `geenNorm` ERUIT, en de reden is `v263` en niet eenvoud:
+  de weekregel daar kijkt vooruit over de potjes, en een reeks met een ruimere scope zou ernaast
+  staan in een andere eenheid terwijl je ze wel naast elkaar leest. GEMETEN dat die scope en
+  "netSpend min huur min recurring" gelijk zijn zolang je binnen je potjes blijft (669/764/764 op
+  drie maanden), en dat de derde afbakening (alles van één rekening) er €72 per maand naast zat,
+  precies de boekingen die van een andere pas gingen. Die derde meet pasgebruik en geen uitgaven.
+  `geenNorm` ERUIT OM DEZELFDE REDEN ALS `v239`: gemeten tilt één boeking van €497 een blok van
+  €176 naar €673, en dat is 6,5 keer de hele bandbreedte tussen gewone blokken (115 tot 192). Een
+  reeks met `geenNorm` erin meet de plek van je incidenten en niet je patroon.
+- **Onder `WEEK_MIN_BLOKKEN` toont de reeks niets** (`v264`): twaalf volle blokken, en daaronder
+  zwijgen zoals `piekReferentie()` onder drie maanden zwijgt. GEEN HALVE REEKS MET EEN WAARSCHUWING
+  ERBIJ. GEREKEND op de gemeten spreiding: gewone blokken lopen van 115 tot 192 op een gemiddelde
+  van 176, een bandbreedte van 44 procent; met vier volle blokken per maand geeft zes maanden zes
+  waarnemingen per positie en dat is te weinig om daar doorheen te kijken.
+  HET DIAGNOSEBLOK TELT TWEE DINGEN APART: VOL is een blok dat helemaal binnen je import valt,
+  BRUIKBAAR is een vol blok waarin ook werkelijk iets in scope geboekt staat. Een week zonder
+  boeking kan betekenen dat je niets uitgaf, maar ook dat je gegevens daar een gat hebben, en het
+  verschil tussen die twee getallen maakt dat zichtbaar.
+- **OPEN PUNT: `coachRuleOptions()` rekent weken om in plaats van ze te meten** (`v264`): hij geeft
+  "Max €X per week" met `Math.max(Math.floor((b/4)/5)*5,5)` over `effectiveBudgets(m).out[k]`.
+  MIJN EERSTE FORMULERING WAS TE STERK en de meting corrigeert hem: ik noemde dit twee weekbedragen
+  op verschillende grondslagen, en dat is het niet. Onder deze indeling heeft elke maand precies
+  VIER volle blokken, dus `b/4` verdeelt het potje over exact de vensters die de reeks meet. De
+  grondslag is dezelfde. Ook staan ze op een ander niveau: de coach geeft een grens PER CATEGORIE,
+  de reeks een totaal over de hele scope, dus ze komen nooit als twee lezingen van één getal naast
+  elkaar te staan.
+  WAT ER WEL BLIJFT STAAN, kleiner en scherper: de restdagen krijgen niets (7,9 procent van het
+  jaar), en `Math.floor(.../5)*5` met een bodem van €5 rondt op een klein potje relatief hard af.
+  DAT IS GEEN REDEN OM DE COACH EERST TE VERBOUWEN. Komt de reeks er en haalt hij zijn drempel, dan
+  heeft de coach voor het eerst een GEMETEN basis in plaats van een deling, en dat is het moment.
+  Nu omzetten zou de suggestie afhankelijk maken van twaalf weken historie en hem daaronder laten
+  zwijgen, en dat is een verlies in een laag die nu gewoon werkt.
 - **Een week is de eenheid, en het venster rolt mee** (`v263`): de tweede regel onder "Nog uit je
   potjes" was een dagbedrag, en dat is een getal waar je niets mee doet: elke dag eronder voelt als
   winst en elke dag erboven als incident. Een week is de eenheid waarin je boodschappen doet en
@@ -1099,7 +1146,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v263` → `minder-v264`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v264` → `minder-v265`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
