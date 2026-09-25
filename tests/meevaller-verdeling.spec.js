@@ -1,3 +1,12 @@
+// v259: DE BRON VAN DE SHEET IS DE VLAG EN NIET MEER EEN DREMPEL. meevallerTx() zocht een
+// inkomensboeking boven baseIncome() x MEEVALLER_FACTOR en is vervallen: gemeten vuurde hij op
+// dezelfde EUR 2.550 wel als de werkgever hem in de salarisregel boekte (7.766 in een boeking) en
+// niet als hij los kwam. En hij gaf mv.amount door, het HELE bedrag van de boeking, dus bij 7.766
+// werd er 777 "vrij besteedbaar" verdeeld waarvan 522 gewoon salaris was.
+// Zes tests hieronder stonden op meevallerTx(). Ze toetsten stuk voor stuk een eigenschap die nog
+// staat, alleen via een andere bron: ze zijn herbonden aan meevallerBedrag() en aan de vlag, en
+// niet groen gemaakt door de eis te verzwakken.
+//
 // v155: de verdeelregel voor onregelmatig inkomen. Vooraf vast te leggen, en bij binnenkomst een
 // voorstel dat die regel volgt: een vast deel vrij, de rest naar de eerste voorwaarde die nog niet
 // gehaald is (reserveringen, buffer, aankoopdoel). Netto, nooit bruto. Nooit automatisch verdelen.
@@ -61,6 +70,12 @@ async function boot(page, payload) {
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof meevallerPlan === 'function');
 }
 const plan = (page, bedrag) => page.evaluate((b) => meevallerPlan(b), bedrag);
+// de vlag zetten op de uitkeringsboeking; categorize() herberekent de id, dus zoeken op omschrijving
+const vlag = (page, bedrag) => page.evaluate((b) => {
+  const t = TX.find((x) => /VAKANTIEGELD/.test(x.desc));
+  zetOnregelmatig(t.id, b == null ? t.amount : b);
+  return Math.round(onregelmatigBedrag(TX.find((x) => x.id === t.id)));
+}, bedrag);
 const nodig = (page) => page.evaluate(() => {
   const R = maandRegels();
   return { dekking: meevallerNodig('dekking', R), buffer: meevallerNodig('buffer', R), doel: meevallerNodig('doel', R) };
@@ -70,7 +85,7 @@ test.describe('a · de regel staat vooraf vast', () => {
   test('standaard 10 procent, en zonder meevaller in beeld in te stellen', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => meevallerVrijPct())).toBe(10);
-    expect(await page.evaluate(() => meevallerTx())).toBe(null);   // geen meevaller aanwezig
+    expect(await page.evaluate(() => meevallerBedrag())).toBe(0);   // niets gemarkeerd, dus niets te verdelen
     // de regel woont in Budget & doelen, dezelfde sheet als het dagbudget
     await page.evaluate(() => { go('set'); openBudgetEditor(); });
     const t = await page.locator('#sheet').innerText();
@@ -85,12 +100,17 @@ test.describe('a · de regel staat vooraf vast', () => {
     expect(await page.evaluate(() => { SET.meevallerVrijPct = ''; return meevallerVrijPct(); })).toBe(10);
   });
 
-  test('de meevallerdrempel is er maar een, gedeeld met de coachlaag', async ({ page }) => {
+  test('de sheet leest geen drempel meer, en de drempel houdt een lezer', async ({ page }) => {
     await boot(page);
+    // MEEVALLER_FACTOR blijft bestaan voor zijn andere vraag: welke AFGERONDE maanden een
+    // meevallermaand waren. Dat is een vraag over maanden en niet over een losse boeking.
     expect(await page.evaluate(() => MEEVALLER_FACTOR)).toBe(1.15);
-    const src = await page.evaluate(() => meevallerTx.toString() + scoreNotifs.toString());
-    expect(src).toContain('MEEVALLER_FACTOR');
-    expect(src).not.toContain('1.15');                              // geen tweede drempel ernaast
+    expect(await page.evaluate(() => scoreNotifs.toString())).toContain('MEEVALLER_FACTOR');
+    expect(await page.evaluate(() => typeof meevallerTx)).toBe('undefined');   // de detector is weg
+    // en de bron van de sheet noemt hem niet
+    const src = await page.evaluate(() => meevallerBedrag.toString() + meevallerPlan.toString());
+    expect(src).not.toContain('MEEVALLER_FACTOR');
+    expect(src).not.toContain('1.15');
   });
 });
 
@@ -205,13 +225,21 @@ test.describe('d · netto, nooit bruto', () => {
     expect(src).not.toMatch(/0\.[0-9]{2}|belasting|loonheffing|heffing|tarief|schijf/i);
   });
 
-  test('uit een transactie geldt het bedrag als netto', async ({ page }) => {
+  test('wat je markeert geldt als netto', async ({ page }) => {
     await boot(page, seed({ meevaller: 4000 }));
-    const mv = await page.evaluate(() => meevallerTx());
-    expect(mv).toBeTruthy();
-    expect(mv.amount).toBe(4000);
-    const h = await page.evaluate(() => { openMeevaller(4000, 'transactie'); return document.getElementById('sheet').innerText; });
+    expect(await vlag(page)).toBe(4000);
+    expect(await page.evaluate(() => meevallerBedrag())).toBe(4000);
+    const h = await page.evaluate(() => { openMeevaller(meevallerBedrag(), 'vlag'); return document.getElementById('sheet').innerText; });
     expect(h).toMatch(/dus netto/i);
+  });
+
+  test('bij een gecombineerde boeking verdeelt hij alleen het gemarkeerde deel', async ({ page }) => {
+    // dit is de gemeten fout die v259 wegnam: de sheet kreeg het hele bedrag van de boeking mee
+    await boot(page, seed({ meevaller: 4000 }));
+    expect(await vlag(page, 1500)).toBe(1500);
+    expect(await page.evaluate(() => meevallerBedrag())).toBe(1500);
+    const P = await plan(page, 1500);
+    expect(P.vrij).toBe(150);        // 10% van 1.500, en niet van 4.000
   });
 });
 
@@ -259,25 +287,29 @@ test.describe('e · nooit automatisch verdelen', () => {
 });
 
 test.describe('f · signalering via de bestaande engine', () => {
-  test('een meevaller geeft een signaal met een sleutel per transactie', async ({ page }) => {
+  test('gemarkeerd inkomen geeft een signaal, met het gemarkeerde bedrag erin', async ({ page }) => {
     await boot(page, seed({ meevaller: 4000 }));
+    await vlag(page);
     const n = await page.evaluate(() => scoreNotifs().filter((x) => String(x.key).startsWith('meeval-')));
     expect(n.length).toBe(1);
-    expect(n[0].act).toMatch(/^openMeevaller\(4000,'transactie'\)$/);
+    expect(n[0].act).toMatch(/^openMeevaller\(4000,'vlag'\)$/);
     expect(n[0].l1).not.toMatch(/gefeliciteerd|mooi|goed nieuws|!/i);
     expect(await page.evaluate(() => notifGrp('meeval-x'))).toBe('meeval');   // snooze en mute per groep
   });
 
-  test('gewoon salaris is geen meevaller', async ({ page }) => {
+  test('gewoon salaris is geen meevaller, en een hoge boeking zonder vlag ook niet', async ({ page }) => {
     await boot(page);
-    expect(await page.evaluate(() => meevallerTx())).toBe(null);
-    const n = await page.evaluate(() => scoreNotifs().filter((x) => String(x.key).startsWith('meeval-')));
-    expect(n.length).toBe(0);
+    expect(await page.evaluate(() => meevallerBedrag())).toBe(0);
+    expect(await page.evaluate(() => scoreNotifs().filter((x) => String(x.key).startsWith('meeval-')).length)).toBe(0);
+    // en met een boeking die de oude drempel ruim haalde, maar niet gemarkeerd is
+    await boot(page, seed({ meevaller: 4000 }));
+    expect(await page.evaluate(() => meevallerBedrag())).toBe(0);
+    expect(await page.evaluate(() => scoreNotifs().filter((x) => String(x.key).startsWith('meeval-')).length)).toBe(0);
   });
 
   test('geen signaal zolang de verdeling niet te maken is', async ({ page }) => {
     await boot(page, seed({ meevaller: 4000, resAcc: '' }));
-    expect(await page.evaluate(() => meevallerTx())).toBeTruthy();          // de meevaller is er wel
+    expect(await vlag(page)).toBe(4000);                                    // gemarkeerd is het wel
     const n = await page.evaluate(() => scoreNotifs().filter((x) => String(x.key).startsWith('meeval-')));
     expect(n.length).toBe(0);                                               // maar er is niets te melden
   });

@@ -1291,17 +1291,90 @@ function monthBudget(inc){
   if(mode==='damper'){ const base=baseIncome()||inc; const a=Math.min(Math.max(+SET.damperPct||30,0),100)/100; return Math.round(base*SET.limit/100 + Math.max(inc-base,0)*a); }
   return pctBud;
 }
+/* ===== ONREGELMATIG INKOMEN (v259) =====
+ * Je krijgt eenmalig €2.550 netto. Dat geld is er, dus het telt in je saldo en in veilig te
+ * besteden. Maar het is geen maandinkomen, en zodra het in de NOEMER van een verhouding staat
+ * zegt die verhouding iets over je gedrag dat niet waar is. GEMETEN op één maand met en zonder:
+ * je vaste-lastendruk zakt van 30,5 naar 20,5 procent en je variabele van 20,1 naar 13,5, terwijl
+ * er aan je lasten niets veranderde. Je spaarquote zakt van 17,3 naar 11,6, want de uitkering
+ * landt wel in de noemer en niet in de teller. Die knik blijft twaalf maanden in de KPI-lijn en
+ * zes in de meermaandsgrafiek staan, want hij is een eigenschap van die maand geworden.
+ * DEZELFDE REDENERING ALS geenNorm (v234) aan de uitgavenkant: het is echt geld, het telt in de
+ * maand, en het hoort in geen enkele verhouding die over gedrag gaat.
+ * JIJ ZET HEM, DE APP RAADT NIET. Er komt geen drempel. De bestaande drempel (MEEVALLER_FACTOR)
+ * is gemeten onbetrouwbaar voor deze vraag: dezelfde €2.550 vuurt hem wél als je werkgever hem in
+ * de salarisregel boekt (€7.766 in één boeking, boven de grens van €5.998) en niet als hij los
+ * komt. Een meting die van de boekhouding van je werkgever afhangt is geen meting.
+ * DE NAAM IS ONREGELMATIG EN NIET EENMALIG: SET.irregularIncome bestaat al voor precies dit
+ * begrip (vakantiegeld, dertiende maand, bonus), alleen vooruitkijkend - je zet daar een bedrag op
+ * een toekomstige maand en financeModel() telt het daar bij je projectie op. Dit is dezelfde
+ * gedachte op het moment dat het geld er is. Twee woorden voor één begrip is wat v91 verbiedt. */
+/* DE VLAG DRAAGT EEN BEDRAG EN GEEN JA/NEE, en dat is geen uitbreiding maar een eis die uit de
+   meting volgt. Betaalt je werkgever de uitkering in DÉZELFDE boeking als je salaris, dan is dat
+   één rij van €7.766. Een ja/nee-vlag haalt die hele rij uit de noemer, dus ook je €5.216
+   maandsalaris, en dan is de verhouding nog schever dan het probleem dat we oplossen. Met een
+   bedrag werkt de vlag in beide gevallen: €2.550 los, of €2.550 van €7.766.
+   De standaard is het hele bedrag van de boeking, want dat is het gewone geval, en de waarde wordt
+   geklemd op dat bedrag: meer onregelmatig dan er binnenkwam bestaat niet. Nul betekent geen vlag.
+   Een boeking in een uitgavencategorie kan hier nooit onder vallen; de poort leest type income. */
+function onregelmatigBedrag(t){
+  if(!t || !(t.amount>0)) return 0;
+  const c=catOf(t); if(!(CATS[c] && CATS[c].type==='income')) return 0;
+  const v=+((SET.onregelmatig||{})[t.id]); if(!(v>0)) return 0;
+  return Math.min(v, t.amount);
+}
+function isOnregelmatig(t){ return onregelmatigBedrag(t)>0; }
+/* De vlag hangt aan t.id, net als een categorie-override, en om dezelfde reden: die id is
+   deterministisch (hash over rekening, datum, bedrag en omschrijving), dus een herimport van
+   hetzelfde bestand levert dezelfde id op en commitTx() slaat de boeking over. GEMETEN: dezelfde
+   id voor en na, nul toegevoegd, TX van 19 naar 19, en de vlag stond er daarna nog.
+   EEN EIGEN MAP EN NIET IN OVR: die is {id: categoriesleutel} en catOf() leest OVR[id]||autoCat,
+   dus een tweede betekenis erin maakt de categorie onleesbaar. */
+function zetOnregelmatig(id, bedrag){
+  const t=TX.find(x=>x.id===id); if(!t) return;
+  SET.onregelmatig=SET.onregelmatig||{};
+  const v=Math.min(Math.max(Math.round((+bedrag||0)*100)/100,0), Math.max(t.amount,0));
+  if(v>0) SET.onregelmatig[id]=v; else delete SET.onregelmatig[id];
+  save(); render();
+  try{ if(document.getElementById('sheetBg').classList.contains('show')) openSheet(id); }catch(_){}
+}
+/* De schakelaar zet het hele bedrag of haalt de vlag weg; het veld eronder verfijnt. Twee
+   ingangen naar dezelfde waarde, geen tweede opslag (v61). */
+function toggleOnregelmatig(id){
+  const t=TX.find(x=>x.id===id); if(!t) return;
+  zetOnregelmatig(id, onregelmatigBedrag(t)>0 ? 0 : t.amount);
+}
+/* ÉÉN BRON VOOR HET MAANDINKOMEN, en dat is de echte vondst van deze ronde. Er waren VIER
+ * onafhankelijke sommaties over dezelfde boekingen: totals(), monthAgg(), incomeThisMonth in
+ * monthLiquidity() en recurringSchedule(). Las de vlag alleen in totals(), dan zeggen monthAgg()
+ * en forecastModel() iets anders over dezelfde maand, en dat is precies de tweede waarheid die
+ * v104 verbiedt. Iedereen leest nu deze functie.
+ * TWEE GETALLEN, zoals spend en spendNorm: `norm` is wat tegen je gedrag staat, `alles` is het
+ * geld. Wie een verhouding rekent leest norm; wie geld telt leest alles. */
+function maandInkomen(m){
+  let alles=0, onregelmatig=0;
+  for(const t of txOfMonth(m)){
+    if(!(CATS[catOf(t)] && CATS[catOf(t)].type==='income')) continue;
+    const v=Math.max(t.amount,0); alles+=v;
+    onregelmatig+=onregelmatigBedrag(t);
+  }
+  return {alles, onregelmatig, norm:alles-onregelmatig};
+}
 function totals(m){
   const list=txOfMonth(m);
-  let income=0, spend=0, internal=0, buitenNorm=0;
+  let spend=0, internal=0, buitenNorm=0;
   const byCat={};
   for(const t of list){
     const c=catOf(t), meta=CATS[c];
     byCat[c]=(byCat[c]||0)+t.amount;
-    if(meta.type==='income') income+=Math.max(t.amount,0);
-    else if(meta.type==='expense'){ spend+=-t.amount; if(meta.geenNorm) buitenNorm+=-t.amount; }   // netto: een terugstorting binnen een uitgavencategorie verlaagt de uitgave
+    if(meta.type==='expense'){ spend+=-t.amount; if(meta.geenNorm) buitenNorm+=-t.amount; }   // netto: een terugstorting binnen een uitgavencategorie verlaagt de uitgave
     else if(meta.type==='internal') internal+=t.amount;
   }
+  /* v259: het inkomen komt uit maandInkomen(m), de enige bron. income is de NORM (zonder wat je
+     als onregelmatig hebt gemarkeerd), incomeAlles is het GELD. Dat is dezelfde splitsing als
+     spend en spendNorm hieronder, met dezelfde regel: wie een verhouding rekent leest de norm,
+     wie geld telt leest alles. */
+  const MI=maandInkomen(m); const income=MI.norm;
   /* v234: spend is het maandtotaal, alles wat weg is. spendNorm is wat tegen je budget staat: spend
      zonder de categorieën met geenNorm. Budgetnaleving, overstreak, de budgetgrafiek en de
      tempo-status lezen spendNorm; wie het geld telt (inkomen min uitgaven, netSpend) leest spend.
@@ -1315,7 +1388,13 @@ function totals(m){
   const limit = monthBudget(inc);      // inkomen-limiet: sinds potjes leidend zijn is dit de REFERENTIE voor de spiegel, niet meer het plafond
   const pot = totalBudget();           // som van je potjes = leidend maandtotaal
   const budget = pot>0 ? pot : limit;  // geen potjes? val terug op de inkomen-limiet, zodat de app niet zonder budget valt
-  return {list,income:inc,detectedIncome:income,spend,spendNorm,buitenNorm,internal,byCat,budget,limit,potTotal:pot,incomeBasis:basis};
+  /* incomeAlles volgt dezelfde tak als income: in handmatige modus is je norm je norm, en dan is
+     er geen gemeten maandbedrag om het onregelmatige deel bij op te tellen. Alleen bij een
+     gedetecteerd inkomen bestaat het verschil, en daar is het precies MI.onregelmatig. */
+  const incAlles = (basis==='gedetecteerd') ? MI.alles : inc;
+  /* detectedIncome houdt zijn eigen betekenis, alles wat er aan inkomen binnenkwam, want het label
+     in Instellingen zegt "Gedetecteerd deze maand". Wat de app ERMEE doet staat in income. */
+  return {list,income:inc,incomeAlles:incAlles,onregelmatig:Math.round(MI.onregelmatig),detectedIncome:MI.alles,spend,spendNorm,buitenNorm,internal,byCat,budget,limit,potTotal:pot,incomeBasis:basis};
 }
 // basis-inkomen = conservatieve norm over je RECENTE maanden (laatste 6): mediaan van de ONDERSTE helft.
 // Recent venster → een salarisverhoging telt meteen mee en oudere/lagere maanden wegen niet meer mee.
@@ -1375,7 +1454,10 @@ function varBudget(){
   return Math.round(v);
 }
 // ===== PROGNOSE (lichtgewicht AI: gemiddelden + trend) =====
-function monthAgg(m){ let income=0; for(const t of txOfMonth(m)) if(CATS[catOf(t)].type==='income') income+=Math.max(t.amount,0);
+/* v259: dit was de tweede van vier eigen inkomenssommaties. Hij leest nu maandInkomen(m), zodat
+   forecastModel().agg niet iets anders over een maand kan zeggen dan totals() doet. `income` is
+   hier de norm, want elke lezer van agg rekent er een gemiddelde of een helling mee. */
+function monthAgg(m){ const income=maandInkomen(m).norm;
   const s=splitFixedVar(m); return {m,income,fixed:s.fixed,vari:s.vari,spend:s.fixed+s.vari,net:income-s.fixed-s.vari}; }
 function regSlope(arr){ const n=arr.length; if(n<2) return 0; const xm=(n-1)/2; const ym=arr.reduce((a,b)=>a+b,0)/n; let num=0,den=0;
   for(let i=0;i<n;i++){ num+=(i-xm)*(arr[i]-ym); den+=(i-xm)**2; } return den?num/den:0; }
@@ -1706,8 +1788,11 @@ function savedTx(ym){
    de tegel en de brug-zin, zodat die elkaar niet kunnen tegenspreken. null = onbekend (v59/v73). */
 function spaarDekking(m){
   const g=savedNet(m); if(g==null) return null;
-  const t=totals(m); if(!(t.income>0)) return null;
-  const over=Math.round(t.income-t.spend), gestort=Math.round(g);
+  /* v259: incomeAlles. De vraag is of je inleg uit je eigen maand kwam of uit een pot, en een
+     onregelmatige uitkering die je opzij zette kwam wel degelijk uit je eigen maand. Geld, geen
+     gedrag, dus dezelfde tak als de opbouwlijn op Vermogen. */
+  const t=totals(m); if(!(t.incomeAlles>0)) return null;
+  const over=Math.round(t.incomeAlles-t.spend), gestort=Math.round(g);
   return {over, gestort, uitBuffer:Math.max(gestort-over,0), gedekt:Math.min(gestort,over)};
 }
 
@@ -1990,8 +2075,16 @@ function monthLiquidity(){
   const daysLeft=Math.max(dim-dom,0);
   const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   // wat is deze maand al langsgekomen?
-  const seen=new Set(); let incomeThisMonth=0;
-  for(const t of txOfMonth(ym)){ const k=recurKey(t); if(k) seen.add(k); if(CATS[catOf(t)].type==='income') incomeThisMonth+=Math.max(t.amount,0); }
+  /* v259: dit was de derde van vier eigen inkomenssommaties, en hij veroorzaakte de regel die
+     v258 vond: met €2.550 onregelmatig binnen en het salaris nog onderweg zei Inzichten "Nog te
+     ontvangen €2.666 · inkomen" terwijl er €5.216 salaris komt, want incDue is baseIncome() min
+     wat er al binnen is. De rekensom voor projected klopte wel (die €2.550 staat al in je saldo
+     en viel tegen elkaar weg), maar de regel beweerde iets onwaars over je salaris.
+     Met de vlag weet de app dat die €2.550 geen maandinkomen was, dus incDue is weer €5.216.
+     Geen aparte reparatie: het is een gevolg van de vlag. */
+  const seen=new Set();
+  for(const t of txOfMonth(ym)){ const k=recurKey(t); if(k) seen.add(k); }
+  const incomeThisMonth=maandInkomen(ym).norm;
   // maandelijkse vaste last die deze maand nog niet langskwam = komt deze maand nog (de afschrijfdatum kan een paar dagen variëren,
   // dus niet uitsluiten omdat de voorspelde dag al voorbij is). Kwartaal/jaar blijven op de voorspelde maand.
   const fixDueItems=sched.filter(s=>{
@@ -2512,7 +2605,7 @@ function renderDash(){
   let modeTop='', modeBot='';
   try{
     if(isMode('rustig')){ const _ms=months(); const _cur=totals(_ms[_ms.length-1]).spend; const _prev=_ms.length>1?totals(_ms[_ms.length-2]).spend:null; const _t=(_prev!=null&&_cur<_prev)?'Je geeft het rustiger aan dan vorige maand.':'Stap voor stap. Je houdt het overzicht.'; modeTop=`<div class="small muted" style="margin:2px 2px 12px">${_t}</div>`; }
-    else if(isMode('expert')){ const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0">deze maand · uit ${euro0(_tt.spend)} · in ${euro0(_tt.income)}</div>`; }   // saldo stond hierboven al
+    else if(isMode('expert')){ const _ms=months(); const _tt=totals(_ms[_ms.length-1]); modeBot=`<div class="small muted" style="margin:10px 2px 0">deze maand · uit ${euro0(_tt.spend)} · in ${euro0(_tt.incomeAlles)}</div>`; }   // v259: incomeAlles, deze regel telt wat er langskwam   // saldo stond hierboven al
   }catch(_){ }
   // v195: hier stonden freshStartReflection() en freshStartCard(). De kaart is opgeheven en de
   // terugblik staat nu op Maand, bij de afspraaklus die dezelfde vraag stelt.
@@ -2545,6 +2638,21 @@ function contantOpbouwRegel(){
       <div style="flex:1"><div style="font-size:var(--fs-md)">Waarvan contant</div><div class="small muted">${sub}</div></div>
       <div style="font-weight:700;white-space:nowrap;color:var(--mut)">${euro0(V)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>${melding}`;
 }
+/* v259, punt 8: wat uit de noemer valt telt wél in je saldo, en dan lopen die twee uiteen. Dat is
+   dezelfde vorm als rest en gebruikt bij de potjesregel (v250), en die hebben we niet voor niets
+   uit elkaar gehaald. Deze regel zegt het verschil, op de plek waar je saldo en je maandbeeld
+   naast elkaar staan, en in dezelfde vorm als "Waarvan contant" (v258) er vlak boven.
+   GEEN TIK: er is geen scherm dat het onregelmatige deel van je maand toont, en een tik naar de
+   transactielijst zou op een ander getal uitkomen dan waar je op tikte (v254). Liever geen tik dan
+   een verkeerde. Hij staat er alleen als er gevlagd inkomen is in de LOPENDE maand, want daar gaat
+   veilig te besteden over. */
+function onregelmatigOpbouwRegel(){
+  let b=0; try{ b=Math.round(maandInkomen(thisYM()).onregelmatig); }catch(_){ return ''; }
+  if(!(b>0)) return '';
+  return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1"><div style="font-size:var(--fs-md)">Waarvan onregelmatig</div><div class="small muted">telt in je saldo, niet in je maandbeeld</div></div>
+      <div style="font-weight:700;white-space:nowrap;color:var(--mut)">${euro0(b)}</div><span style="width:8px"></span></div>`;
+}
 function openSafeToSpend(){
   const S=safeToSpend();
   let incDue=0; try{ incDue=Math.round(monthLiquidity().incDue||0); }catch(_){}
@@ -2564,6 +2672,7 @@ function openSafeToSpend(){
       : line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':(contantVerwacht()!=null?'je rekeningen en je contante geld':'al je gekoppelde rekeningen'))}
     ${balUnknown?'':saldoAchterRegel()}
     ${balUnknown?'':contantOpbouwRegel()}
+    ${balUnknown?'':onregelmatigOpbouwRegel()}
     ${S.incDue>0?`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:var(--fs-md)">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
     ${S.savedBal>0?line('Al op je spaarrekening', S.savedBal, 'var(--mut)', "closeSheet();openSavingsPots()", 'staat apart om te sparen, niet vrij besteedbaar'):''}
@@ -2842,12 +2951,12 @@ function scoreNotifs(opts){
   /* v155: een meevaller die binnenkomt, met het voorstel uit je eigen verdeelregel. De sleutel
      hangt aan de transactie, dus een keer per meevaller en niet per dag; snooze en mute lopen via
      de groep 'meeval'. Geen felicitatie, geen bedrag in de kop: dat staat in de sheet. */
-  try{ const mv=meevallerTx();
-    if(mv){ const P=meevallerPlan(Math.round(mv.amount));
-      if(P.volledig) push({key:'meeval-'+String(mv.id||mv.date), h:'direct',score:58,t:'info',ic:ICON('coins'),
-        l1:'Er kwam meer binnen dan je normale maandinkomen.',
+  try{ const mvB=meevallerBedrag();
+    if(mvB>0){ const P=meevallerPlan(mvB);
+      if(P.volledig) push({key:'meeval-'+(curMonth||thisYM())+'-'+mvB, h:'direct',score:58,t:'info',ic:ICON('coins'),
+        l1:'Je markeerde inkomen als onregelmatig.',
         l2:'Bekijk de verdeling volgens je regel',
-        act:`openMeevaller(${Math.round(mv.amount)},'transactie')`}); } }catch(_){}
+        act:`openMeevaller(${mvB},'vlag')`}); } }catch(_){}
   // save-risk krijgt dezelfde chronic-ack als tempo: pas opnieuw als het tekort merkbaar groeit.
   let saveRiskPushed=false;
   if(isNow){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget();
@@ -3203,7 +3312,9 @@ function financeModel(){
   // ---- maandmodel jan..dec ----
   const months_=[];
   for(let i=0;i<12;i++){ const ym=`${year}-${String(i+1).padStart(2,'0')}`; let income,fixed,variable,kind;
-    if(i<=curIdx && has(ym)){ const t=totals(ym), sv=splitFixedVar(ym); income=Math.round(t.income); fixed=Math.round(sv.fixed); variable=Math.round(sv.vari); kind='actual'; }
+    // v259: incomeAlles. Dit model rolt een saldo vooruit, dus het telt geld; met de norm zou de
+    // geprojecteerde stand precies het gevlagde bedrag te laag uitkomen.
+    if(i<=curIdx && has(ym)){ const t=totals(ym), sv=splitFixedVar(ym); income=Math.round(t.incomeAlles); fixed=Math.round(sv.fixed); variable=Math.round(sv.vari); kind='actual'; }
     else { kind='projection';
       income=baseInc + irregularIncome.filter(x=>x.ym===ym).reduce((s,x)=>s+Math.round(+x.amount),0);
       fixed=monthlyFixed + annualFixed.filter(a=>a.monthIdx===i).reduce((s,a)=>s+a.amount,0);
@@ -4221,16 +4332,21 @@ function meevallerPlan(nettoBedrag){
   }
   return { vrij, posten, rest: Math.max(Math.round(restant), 0), volledig: true };
 }
-/* De meevaller zelf: een inkomensboeking van deze maand boven baseIncome() maal dezelfde drempel
-   die de coachlaag gebruikt. Geen tweede drempel en geen eigen soort-detectie. */
-function meevallerTx(){
-  try {
-    const base = baseIncome(); if (!(base > 0)) return null;
-    const m = curMonth || months()[months().length - 1];
-    const grens = base * MEEVALLER_FACTOR;
-    return txOfMonth(m).filter(t => t.amount > grens && CATS[catOf(t)] && CATS[catOf(t)].type === 'income')
-      .sort((a, b) => b.amount - a.amount)[0] || null;
-  } catch(_){ return null; }
+/* v259: hier stond meevallerTx(), die een inkomensboeking zocht boven baseIncome() ×
+   MEEVALLER_FACTOR (gemeten €5.998). Twee gemeten fouten, en ze zijn dezelfde fout.
+   DE DREMPEL HING AAN DE BOEKHOUDING VAN JE WERKGEVER: dezelfde €2.550 vuurde hem wél als hij in
+   de salarisregel zat (€7.766 in één boeking) en niet als hij los kwam. Een meting die daarvan
+   afhangt is geen meting.
+   EN HIJ VERDEELDE JE SALARIS MEE: de melding gaf mv.amount door, het HELE bedrag van de boeking,
+   en meevallerPlan() rekent vrij = bedrag × 10%. Bij €7.766 is dat €777 "vrij besteedbaar", waarvan
+   €522 gewoon je maandsalaris is.
+   DE BRON IS NU DE VLAG. Je zegt zelf wat onregelmatig is en met welk bedrag, dus de sheet
+   verdeelt precies dat en nooit je salaris. MEEVALLER_FACTOR blijft bestaan voor zijn andere lezer,
+   de meevaller/gewone-maand-splitsing in scoreNotifs(); dat is een vraag over afgeronde maanden en
+   niet over één boeking. */
+function meevallerBedrag(){
+  try { return Math.round(maandInkomen(curMonth || months()[months().length - 1]).onregelmatig); }
+  catch(_){ return 0; }
 }
 /* Wat er de vorige keer werd gekozen, uit de coachlog. Type tip, dus nooit de maandafspraak. */
 function meevallerVorige(){
@@ -4261,7 +4377,7 @@ function openMeevaller(bedrag, bron){
   }
   $('#sheet').innerHTML = `<div class="grab"></div>
     <div class="center" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg)">Verdeling van je meevaller</div>
-      <div class="muted small">${bron === 'transactie' ? 'Uit een herkende bijschrijving, dus netto.' : 'Je eigen invoer.'}</div></div>
+      <div class="muted small">${bron === 'vlag' ? 'Wat je als onregelmatig markeerde, dus netto.' : 'Je eigen invoer.'}</div></div>
     ${vorige ? `<div class="small muted" style="margin-bottom:10px">Vorige keer: ${esc(vorige.text || '')}</div>` : ''}
     ${body}
     <div style="border-top:1px solid var(--line);margin:14px 0 10px"></div>
@@ -7586,7 +7702,12 @@ function renderVermogen(){
   let _nwTrend='', _tDelta=null, _tMnd=0;
   try{ const _win=months().slice(-12);
     if(_win.length>=3){
-      let _acc=0; const _ser=_win.map(mm=>{ const t=totals(mm); _acc+=((t.income||0)-(t.spend||0)); return _acc; });
+      /* v259: incomeAlles en niet income. Deze lijn telt GELD en geen gedrag: hij is de cumulatieve
+         optelling van wat er binnenkwam min wat eruit ging, verankerd op je netto vermogen. Een
+         onregelmatige uitkering hoort daar volledig in, want hij zit ook in je vermogen. Las hij
+         income, dan zou de lijn precies het gevlagde bedrag zakken terwijl het geld er staat. Dit
+         is de enige lezer van de vier waar de vlag NIET doorwerkt. */
+      let _acc=0; const _ser=_win.map(mm=>{ const t=totals(mm); _acc+=((t.incomeAlles||0)-(t.spend||0)); return _acc; });
       const _off=w.netto-_ser[_ser.length-1]; for(let i=0;i<_ser.length;i++) _ser[i]+=_off;
       const _delta=Math.round(_ser[_ser.length-1]-_ser[0]); _tDelta=_delta; _tMnd=_win.length;
       const _W=320,_H=64,_x0=2,_x1=_W-2,_yT=8,_yB=_H-4; const _mn=Math.min(..._ser),_mx=Math.max(..._ser),_rng=(_mx-_mn)||1;
@@ -11606,6 +11727,24 @@ function leaseBlokHTML(t){
       <span class="small" id="leaseLinkNo" style="color:var(--mut2);cursor:pointer" onclick="leaseLinkDismiss('${t.id}')">Niet nu</span>
     </div></div>`;
 }
+/* De schakelaar staat alleen bij een BIJSCHRIJVING in een inkomenscategorie: bij een uitgave zegt
+   hij niets en bij een interne overboeking evenmin. Dezelfde rijvorm als de regel-checkbox erboven,
+   dus geen nieuw component. Het bedragveld verschijnt pas als de vlag aan staat, want zonder vlag
+   valt er niets te verfijnen, en het is type="text" inputmode="decimal" (v215) omdat een netto
+   uitkering centen heeft. */
+function onregelmatigBlok(t){
+  const c=catOf(t);
+  if(!(t.amount>0 && CATS[c] && CATS[c].type==='income')) return '';
+  const b=onregelmatigBedrag(t), aan=b>0;
+  const heel=Math.abs(b-t.amount)<0.01;
+  return `<label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line)">
+      <input type="checkbox" id="onreg" ${aan?'checked':''} onchange="toggleOnregelmatig('${t.id}')">
+      <span class="small" style="flex:1">Dit is <b>onregelmatig inkomen</b><span style="display:block;color:var(--mut2)">telt in je saldo, niet in je maandbeeld</span></span></label>
+    ${aan?`<div class="row" style="gap:8px;align-items:center;padding:0 0 10px">
+      <span class="small muted" style="flex:1">Waarvan onregelmatig${heel?'':` · van ${euro0(t.amount)}`}</span>
+      <input type="text" inputmode="decimal" value="${numUit(b)}" style="width:110px;text-align:right"
+             onchange="zetOnregelmatig('${t.id}', numIn(this.value))"></div>`:''}`;
+}
 function openSheet(id){
   const t=TX.find(x=>x.id===id); if(!t)return;
   window._setSheet=null;
@@ -11619,6 +11758,7 @@ function openSheet(id){
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
+    ${onregelmatigBlok(t)}
     ${loanBlokHTML(t)}${leaseBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
     <div class="catgrid">${Object.entries(CATS).map(([k,c])=>`

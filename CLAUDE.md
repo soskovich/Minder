@@ -94,6 +94,82 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **Onregelmatig inkomen telt in je saldo en niet in je maandbeeld** (`v259`): eenmalig €5.000 bruto,
+  netto €2.550. GEMETEN op één maand met en zonder: `baseIncome()` blijft 5.216 (onderste-helft-
+  mediaan, gemeten robuust), maar `totals().income` gaat naar 7.766 en daarmee de inkomen-limiet van
+  3.651 naar 5.436, de vaste-lastendruk van 30,5 naar 20,5 procent, de variabele van 20,1 naar 13,5
+  en de spaarquote van 17,3 naar 11,6. Er veranderde niets aan het gedrag; alleen de noemer groeide.
+  Die knik blijft twaalf maanden in de KPI-lijn staan en zes in de meermaandsgrafiek, want hij is
+  een eigenschap van die maand geworden. DEZELFDE REDENERING ALS `geenNorm` (`v234`): het is echt
+  geld, het telt in de maand, en het hoort in geen enkele verhouding die over gedrag gaat.
+  GEEN DREMPEL. De bestaande detectie (`MEEVALLER_FACTOR`, grens gemeten €5.998) vuurde op dezelfde
+  €2.550 WÉL als de werkgever hem in de salarisregel boekte (€7.766 in één boeking) en niet als hij
+  los kwam. Een meting die van de boekhouding van je werkgever afhangt is geen meting. `meevallerTx()`
+  is daarom vervallen; `MEEVALLER_FACTOR` houdt zijn andere lezer in `scoreNotifs()`, want dat is een
+  vraag over afgeronde maanden en niet over één boeking.
+  DE VLAG DRAAGT EEN BEDRAG EN GEEN JA/NEE, en dat volgt uit diezelfde meting: bij een gecombineerde
+  boeking van €7.766 zou een ja/nee-vlag ook je €5.216 salaris uit de noemer halen, en dan is de
+  verhouding schever dan het probleem. Standaard is het hele bedrag van de boeking, geklemd daarop,
+  en nul haalt de vlag weg zonder lege sleutel. Hij hangt aan `t.id` in een EIGEN map en niet in
+  `OVR`: die is `{id: categoriesleutel}` en `catOf()` leest `OVR[id]||autoCat`, dus een tweede
+  betekenis erin maakt de categorie onleesbaar. GEMETEN dat een herimport hem behoudt: dezelfde id
+  (hash over rekening, datum, bedrag en omschrijving), nul toegevoegd, `TX` van 19 naar 19.
+  DE NAAM IS ONREGELMATIG EN NIET EENMALIG: `SET.irregularIncome` bestaat al voor precies dit begrip
+  (vakantiegeld, dertiende maand, bonus), alleen vooruitkijkend. Twee woorden voor één begrip is wat
+  `v91` verbiedt.
+- **Één bron voor het maandinkomen** (`v259`): er waren VIER onafhankelijke sommaties over dezelfde
+  boekingen: `totals()`, `monthAgg()`, `incomeThisMonth` in `monthLiquidity()` en `recurringSchedule()`.
+  Las de vlag alleen in `totals()`, dan zeggen `monthAgg()` en `forecastModel()` iets anders over
+  dezelfde maand, en dat is precies de tweede waarheid van `v104`. Iedereen leest nu `maandInkomen(m)`,
+  dat `{alles, onregelmatig, norm}` geeft.
+  TWEE GETALLEN, ZOALS `spend` EN `spendNorm`: `totals().income` is de NORM (wat tegen je gedrag
+  staat) en `totals().incomeAlles` is het GELD. Wie een verhouding rekent leest de norm, wie geld
+  telt leest alles. GEMETEN welke lezer waar hoort: noemer zijn `limit`, `monthAgg`, `kpiBasis`,
+  `kpiXB`, `insKpiSeries`, `insKpis` en `forecastModel().agg`; geld zijn de opbouwlijn op Vermogen
+  (`income − spend` cumulatief, verankerd op je netto vermogen), `financeModel()` (rolt een saldo
+  vooruit), `spaarDekking()` (kwam je inleg uit je eigen maand of uit een pot) en de expert-regel op
+  Home. `detectedIncome` houdt zijn eigen betekenis, want het label zegt "Gedetecteerd deze maand".
+  `baseIncome()` HOUDT BEWUST ZIJN EIGEN LUS: die is gemeten robuust en bleef op verzoek ongemoeid.
+  Dat is de enige overgebleven eigen sommatie, en `onregelmatig-inkomen.spec.js` noemt hem als
+  uitzondering bij naam.
+  DE TRIPDRAAD IS EEN BRONZOEKENDE TEST met twee helften: `totals`, `monthAgg` en `monthLiquidity`
+  moeten `maandInkomen(` noemen, en geen enkele regel mag de income-toets én een optelling dragen
+  (dat was de vorm die vier keer bestond). Met twee sabotages rood gezet voordat hij werd opgenomen.
+- **De regel "Nog te ontvangen" is een gevolg van de vlag** (`v259`): met €2.550 onregelmatig binnen
+  en het salaris nog onderweg zei Inzichten "Nog te ontvangen €2.666 · inkomen" terwijl er €5.216
+  salaris komt, want `incDue` is `baseIncome()` min wat er al binnen is. De rekensom voor `projected`
+  klopte wél (die €2.550 staat al in je saldo en viel tegen elkaar weg), maar de regel beweerde iets
+  onwaars over je salaris. Met de vlag weet `monthLiquidity()` dat het geen maandinkomen was en staat
+  er weer €5.216. Geen aparte reparatie.
+- **Wat uit de noemer valt telt wél in je saldo, en dat moet ergens staan** (`v259`): dezelfde vorm
+  als rest en gebruikt bij de potjesregel (`v250`). De opbouw van veilig te besteden draagt "Waarvan
+  onregelmatig €2.550 · telt in je saldo, niet in je maandbeeld", direct onder "Waarvan contant"
+  (`v258`) en in dezelfde vorm. GEMETEN 59px op 360 én 390px, gelijk aan de andere rijen in die
+  sheet. GEEN TIK: er is geen scherm dat het onregelmatige deel van je maand toont, en een tik naar
+  de transactielijst zou op een ander getal uitkomen dan waar je op tikte (`v254`). Hij staat er
+  alleen als er gevlagd inkomen in de LOPENDE maand is, want daar gaat veilig te besteden over.
+- **OPEN PUNT: de verdeelsheet gaat niet open zonder reserveringen** (`v259`): `meevallerPlan()`
+  geeft `leeg` zodra `beleggenKlaar().volledig` false is, en dat is zo zodra één van de drie
+  voorwaarden niet BEOORDEELBAAR is. GEMETEN in vier standen: zonder reserveringen ontbreekt de rij
+  `dekking` in `maandRegels()` volledig, dus `volledig:false`, de melding vuurt niet en de sheet zegt
+  "Er is nog geen verdeling te maken". Met reserveringen erbij: `volledig:true`, verdeling getoond,
+  melding vuurt, óók met `doel:tekort`.
+  DE EIS IS DUS BEOORDEELBAARHEID EN NIET "je haalt alle drie", en de enige harde blokkade is
+  `dekking`, dat alleen bestaat als je reserveringen hebt ingevoerd. Mijn eerdere formulering dat hij
+  "nooit opengaat bij wie hem het hardst nodig heeft" was te sterk; de meting is scherper. Niet
+  opgelost in deze ronde.
+- **OPEN PUNT: er is geen ingang om een bedrag aan een bestemming toe te wijzen** (`v259`): een
+  eenmalige storting past al in het plan zonder nieuw mechanisme, want een doel heeft `gespaard` en
+  de buffer `SET.nfToegewezen`. GEMETEN op de toestand van het toestel (buffer 3.534 met 1.000,
+  inleg 3.000, Kosten Koper 10.000 over 10 maanden, Inrichting woning 3.000 over 6 maanden):
+  €2.550 naar de buffer maakt hem vol, de grendel gaat meteen open in plaats van in okt 2026, en
+  Kosten Koper springt van 22 maanden naar 4; €2.550 naar Inrichting woning laat de grendel dicht en
+  brengt het tempo-gat daar van €500 naar €75 per maand. Wat ontbreekt is de INGANG en niet het
+  rekenwerk: je moet nu zelf naar de doel-editor en het bedrag optellen bij wat er staat.
+- **RICHTING, niet gebouwd: uitgaven die meegroeien met je inkomen** (`v259`): het `inflatie`-signaal
+  uit `v228` komt niet terug in deze vorm. Komt het ooit terug, dan als CONSTATERING en niet als
+  advies, met `baselineSpend()` tegen `netSpend()` als lat. Beide bestaan al en `baselineSpend()` is
+  gemeten stabiel op 2.640 in elk scenario van `v258`.
 - **Contant geld is een stand die je telt, en het verschil is de uitgave** (`v258`): je pint €400,
   de opname is `intern` en dus geen uitgave, maar je saldo daalt wel. GEMETEN voor en na:
   `totalBalance` 4000 → 3600, veilig te besteden 2912 → 2512, vermogen 4000 → 3600, terwijl je
@@ -871,7 +947,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v258` → `minder-v259`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v259` → `minder-v260`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
