@@ -1078,7 +1078,7 @@ function weekBedragen(){
     if(!(CATS[c]&&CATS[c].type==='expense')) continue;
     const dag=+String(t.date).slice(8,10); if(!(dag>=1&&dag<=28)) continue;
     const k=String(t.date).slice(0,7)+'#'+(Math.floor((dag-1)/7)+1);
-    uit[k]=Math.round(((uit[k]||0)+(-t.amount))*100)/100;
+    uit[k]=Math.round(((uit[k]||0)+(-t.amount)-uitReserveringBedrag(t))*100)/100;   // v269: norm, zoals catSpendMap(); anders breekt de aansluiting in blok 7
   }
   return uit;
 }
@@ -1093,7 +1093,7 @@ function weekRestdagen(){
     if(!(CATS[c]&&CATS[c].type==='expense')) continue;
     const dag=+String(t.date).slice(8,10); if(dag<=28) continue;
     const m=String(t.date).slice(0,7);
-    uit[m]=Math.round(((uit[m]||0)+(-t.amount))*100)/100;
+    uit[m]=Math.round(((uit[m]||0)+(-t.amount)-uitReserveringBedrag(t))*100)/100;   // v269: zelfde norm als weekBedragen(), anders sluit de som niet aan
   }
   return uit;
 }
@@ -1360,7 +1360,7 @@ function catDriver(m,k){
 function baselineSpend(){
   const now=new Date(); const nowYM=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const recent=months().filter(m=>m<nowYM).slice(-6);
-  const sp=recent.map(m=>netSpend(txOfMonth(m))).filter(v=>v>0).sort((a,b)=>a-b);   // netto maand-uitgave
+  const sp=recent.map(m=>{ const L=txOfMonth(m); return netSpend(L)-uitReserveringSom(L); }).filter(v=>v>0).sort((a,b)=>a-b);   // netto maand-uitgave; v269: zonder wat je uit een reservering betaalde, want monthBudget() maakt er een norm van
   if(!sp.length) return 0;
   const lower=sp.slice(0,Math.ceil(sp.length/2));
   return Math.round(lower[Math.floor(lower.length/2)]);
@@ -1427,6 +1427,54 @@ function toggleOnregelmatig(id){
   const t=TX.find(x=>x.id===id); if(!t) return;
   zetOnregelmatig(id, onregelmatigBedrag(t)>0 ? 0 : t.amount);
 }
+/* ===== UIT EEN RESERVERING BETAALD (v269) =====
+ * Je boete van €463 stond maanden als verwachte post in je reserveringen en het geld stond apart.
+ * Betaal je hem, dan is dat echt geld dat weg is, dus het hoort in je saldo en in je maandtotaal.
+ * Maar je gaf deze maand niet meer uit, en zolang het bedrag in een verhouding over je GEDRAG
+ * staat zegt die verhouding iets dat niet waar is. GEMETEN op één maand met en zonder de twee
+ * boetes: valtOpSignals() vuurt op belasting met €463 tegen een potje van €100, de post op
+ * Inzichten slaat om van "Nog uit je potjes €355" naar "Te veel uitgegeven €108", de budgetdruk
+ * gaat van 91,5 naar 109,8 procent en de variabele druk van 13,7 naar 22,6. Aan je gedrag
+ * veranderde niets; alleen de teller groeide.
+ * DEZELFDE VORM ALS SET.onregelmatig (v259), aan de uitgavenkant: een vlag per BOEKING op t.id, in
+ * een eigen map en niet in OVR (die is {id: categoriesleutel} en catOf() leest OVR[id]||autoCat),
+ * met een BEDRAG en geen ja/nee. Het bedrag is de eis en geen uitbreiding: stond er €300
+ * gereserveerd voor een post van €463, dan is €163 wel gewoon uitgave, en een ja/nee-vlag haalt
+ * die €163 ook uit je maandbeeld. GEMETEN op €300 van €463: catSpendMap().belasting gaat van 463
+ * naar 163, spendNorm van 2.768 naar 2.468, en het signaal vuurt nog wel maar op €63.
+ * NIET geenNorm, want dat zit op de CATEGORIE en zou elke belastingpost normvrij maken.
+ * JIJ WIJST DE BOEKING AAN, DE APP MATCHT NIET. Een automatische match op categorie, bedrag en
+ * maand kreeg in de meting van v268 geen basis: de categorie is te grof (€313 landt op belasting,
+ * samen met alles wat daar verder in valt) en het bedrag van een verwachte post is een schatting.
+ * EEN geenNorm-CATEGORIE KAN DE VLAG NIET DRAGEN, en dat is geen beperking maar de reden dat elke
+ * sommatie hieronder identiek kan blijven: die bedragen vallen al buiten spendNorm via buitenNorm,
+ * dus nog een keer aftrekken zou spendNorm dubbel verlagen. De twee verzamelingen zijn daarmee per
+ * constructie disjunct en spendNorm = spend - buitenNorm - uitReservering klopt zonder guard. */
+function uitReserveringBedrag(t){
+  if(!t || !(t.amount<0)) return 0;
+  const c=catOf(t); if(!(CATS[c] && CATS[c].type==='expense')) return 0;
+  if(geenNorm(c)) return 0;
+  const v=+((SET.uitReservering||{})[t.id]); if(!(v>0)) return 0;
+  return Math.min(v, -t.amount);
+}
+function isUitReservering(t){ return uitReserveringBedrag(t)>0; }
+function uitReserveringSom(txns){ let s=0; for(const t of (txns||[])) s+=uitReserveringBedrag(t); return s; }
+function zetUitReservering(id, bedrag, heropen){
+  const t=TX.find(x=>x.id===id); if(!t) return;
+  SET.uitReservering=SET.uitReservering||{};
+  const v=Math.min(Math.max(Math.round((+bedrag||0)*100)/100,0), Math.max(-t.amount,0));
+  if(v>0) SET.uitReservering[id]=v; else delete SET.uitReservering[id];
+  save(); render();
+  /* heropen=false voor de picker bij 'betaald': die staat zelf in de sheet, en zonder deze uitweg
+     zou hij zich door de boekingssheet laten vervangen. Eén schrijver, geen tweede opslag. */
+  if(heropen!==false){ try{ if(document.getElementById('sheetBg').classList.contains('show')) openSheet(id); }catch(_){} }
+}
+/* De schakelaar zet het hele bedrag of haalt de vlag weg; het veld eronder verfijnt. Twee ingangen
+   naar dezelfde waarde, geen tweede opslag (v61). */
+function toggleUitReservering(id){
+  const t=TX.find(x=>x.id===id); if(!t) return;
+  zetUitReservering(id, uitReserveringBedrag(t)>0 ? 0 : -t.amount);
+}
 /* ÉÉN BRON VOOR HET MAANDINKOMEN, en dat is de echte vondst van deze ronde. Er waren VIER
  * onafhankelijke sommaties over dezelfde boekingen: totals(), monthAgg(), incomeThisMonth in
  * monthLiquidity() en recurringSchedule(). Las de vlag alleen in totals(), dan zeggen monthAgg()
@@ -1445,13 +1493,17 @@ function maandInkomen(m){
 }
 function totals(m){
   const list=txOfMonth(m);
-  let spend=0, internal=0, buitenNorm=0;
-  const byCat={};
+  let spend=0, internal=0, buitenNorm=0, uitRes=0;
+  const byCat={}, uitResCat={};
   for(const t of list){
     const c=catOf(t), meta=CATS[c];
     byCat[c]=(byCat[c]||0)+t.amount;
     if(meta.type==='expense'){ spend+=-t.amount; if(meta.geenNorm) buitenNorm+=-t.amount; }   // netto: een terugstorting binnen een uitgavencategorie verlaagt de uitgave
     else if(meta.type==='internal') internal+=t.amount;
+    /* v269: de derde term in dezelfde aftrekking, naast buitenNorm. uitResCat draagt hem per
+       categorie zodat de regel op Inzichten per constructie optelt tot uitReservering, precies
+       zoals geenNormRegels() dat via byCat doet (v258). Geen tweede sommatie. */
+    const ur=uitReserveringBedrag(t); if(ur>0){ uitRes+=ur; uitResCat[c]=(uitResCat[c]||0)+ur; }
   }
   /* v259: het inkomen komt uit maandInkomen(m), de enige bron. income is de NORM (zonder wat je
      als onregelmatig hebt gemarkeerd), incomeAlles is het GELD. Dat is dezelfde splitsing als
@@ -1462,7 +1514,9 @@ function totals(m){
      zonder de categorieën met geenNorm. Budgetnaleving, overstreak, de budgetgrafiek en de
      tempo-status lezen spendNorm; wie het geld telt (inkomen min uitgaven, netSpend) leest spend.
      Geen tweede bron: dezelfde lijst, één filter, en buitenNorm maakt het weggefilterde zichtbaar. */
-  const spendNorm=spend-buitenNorm;
+  /* v269: en zonder wat je uit een reservering betaalde. Die twee verzamelingen zijn disjunct,
+     want uitReserveringBedrag() geeft nul op een geenNorm-categorie. */
+  const spendNorm=spend-buitenNorm-uitRes;
   let inc, basis;
   if(SET.autoIncome){
     if(income>0){ inc=income; basis='gedetecteerd'; }
@@ -1477,7 +1531,7 @@ function totals(m){
   const incAlles = (basis==='gedetecteerd') ? MI.alles : inc;
   /* detectedIncome houdt zijn eigen betekenis, alles wat er aan inkomen binnenkwam, want het label
      in Instellingen zegt "Gedetecteerd deze maand". Wat de app ERMEE doet staat in income. */
-  return {list,income:inc,incomeAlles:incAlles,onregelmatig:Math.round(MI.onregelmatig),detectedIncome:MI.alles,spend,spendNorm,buitenNorm,internal,byCat,budget,limit,potTotal:pot,incomeBasis:basis};
+  return {list,income:inc,incomeAlles:incAlles,onregelmatig:Math.round(MI.onregelmatig),detectedIncome:MI.alles,spend,spendNorm,buitenNorm,uitReservering:Math.round(uitRes),uitResCat,internal,byCat,budget,limit,potTotal:pot,incomeBasis:basis};
 }
 // basis-inkomen = conservatieve norm over je RECENTE maanden (laatste 6): mediaan van de ONDERSTE helft.
 // Recent venster → een salarisverhoging telt meteen mee en oudere/lagere maanden wegen niet meer mee.
@@ -1493,7 +1547,7 @@ function baseIncome(){
 }
 // vaste/variabele splitsing over een maand
 function splitFixedVar(m){ let fixed=0,vari=0;
-  for(const x of txOfMonth(m)){ if(CATS[catOf(x)].type==='expense'){ if(isFixed(x)) fixed+=-x.amount; else vari+=-x.amount; } }   // netto: terugstorting verlaagt vast/variabel
+  for(const x of txOfMonth(m)){ if(CATS[catOf(x)].type==='expense'){ const v=-x.amount-uitReserveringBedrag(x); if(isFixed(x)) fixed+=v; else vari+=v; } }   // netto: terugstorting verlaagt vast/variabel; v269: en zonder wat je uit een reservering betaalde, want monthAgg() is een noemer
   return {fixed,vari};
 }
 /* ===== Tempo-projectie (v177) =====
@@ -5719,8 +5773,48 @@ function resBetaaldZet(id){
   if(o==null){ toast('Er staat geen termijn open'); return; }
   SET.resBetaald=SET.resBetaald||{};
   SET.resBetaald[id]={op:vandaagYMD(), maand:resYmPlus(o)};
-  save(); render(); openReservering(id);
+  save(); render();
   toast(`${ICON('check')} Betaald \u00b7 onthouden`);
+  /* v269: de twee vlaggen raken elkaar op precies dit moment en nergens anders. Deze post staat nu
+     op betaald; de BOEKING is daarmee nog een gewone uitgave, en dat is het geval dat op Inzichten
+     als overbesteding leest. Hier mag je hem aanwijzen. GEEN MATCH: de app zet niets uit zichzelf,
+     ook niet als er precies één kandidaat is. Is er niets aan te wijzen, dan gaat het scherm terug
+     naar de editor zoals vóór v269. */
+  if(resBoekingKandidaten(v).length) openResBoekingPick(id); else openReservering(id);
+}
+/* De kandidaten: afschrijvingen van DEZE maand in een uitgavencategorie die nog geen vlag dragen.
+   Een geenNorm-categorie valt eruit, want daar doet de vlag per constructie niets
+   (uitReserveringBedrag geeft er nul). De categorie van de post staat vooraan als je die hebt
+   ingevuld; dat is de enige hulp die de app geeft, en het is een sortering en geen selectie. */
+function resBoekingKandidaten(v){
+  const m=thisYM(); let L=[];
+  try{ L=txOfMonth(m); }catch(_){ return []; }
+  const cat=(v&&v.cat&&CATS[v.cat])?v.cat:'';
+  return L.filter(t=>t.amount<0 && CATS[catOf(t)] && CATS[catOf(t)].type==='expense'
+                     && !geenNorm(catOf(t)) && !isUitReservering(t))
+    .sort((a,b)=>{ const pa=(cat&&catOf(a)===cat)?0:1, pb=(cat&&catOf(b)===cat)?0:1;
+                   return pa-pb || b.date.localeCompare(a.date) || (-b.amount)-(-a.amount); });
+}
+function openResBoekingPick(id){
+  const v=resLijst().find(x=>x.id===id); if(!v){ renderResSheet(); return; }
+  const K=resBoekingKandidaten(v);
+  const terug=esc(String(id).replace(/'/g,"\\'"));
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">Welke boeking was dit?</div>
+    <div class="small muted" style="margin-bottom:12px">${esc(v.naam||'Verplichting')} staat op betaald. Wijs je de boeking aan, dan telt dat bedrag wel in je maandtotaal en niet tegen je potjes. Je kunt dit ook laten.</div>
+    ${K.slice(0,12).map(t=>`<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="resBoekingKies('${terug}','${esc(String(t.id).replace(/'/g,"\\'"))}')">
+      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(cleanMerch(t.name)||t.name)}</div>
+        <div class="small muted">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})} \u00b7 ${esc(CATS[catOf(t)].name)}</div></div>
+      <div class="small" style="font-weight:700;white-space:nowrap">${euro0(-t.amount)} <span style="color:var(--teal)">\u203a</span></div></div>`).join('')}
+    ${K.length>12?`<div class="small muted" style="padding:6px 0">en nog ${K.length-12} andere boekingen deze maand; die vind je in je transacties</div>`:''}
+    <div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="openReservering('${terug}')">Geen boeking aanwijzen</div>`;
+  showSheetBg();
+}
+function resBoekingKies(resId, txId){
+  const t=TX.find(x=>x.id===txId); if(!t){ openReservering(resId); return; }
+  zetUitReservering(txId, -t.amount, false);
+  openReservering(resId);
+  toast(`${ICON('check')} ${euro0(-t.amount)} uit een reservering`);
 }
 function resBetaaldTerug(id){
   if(!(SET.resBetaald||{})[id]) return;
@@ -9842,12 +9936,17 @@ function openCategory(k, m){
   const items=bron.filter(x=>catOf(x)===k).sort((a,b)=>b.date.localeCompare(a.date));   // beide tekens: ook terugstortingen tonen
   if(!items.length) return; const c=CATS[k];
   const tot=items.reduce((s,t)=>s-t.amount,0);   // netto: een terugstorting verlaagt het categorietotaal
+  /* v269: het bedrag boven blijft het GELD, want het is de som van de rijen eronder. Deze sheet
+     moet dan wel zeggen welk deel uit een reservering kwam, anders wijkt hij af van het potje op
+     Inzichten zonder dat er staat waarom. Uit dezelfde items, dus geen tweede meting. */
+  const uitRes=Math.round(items.reduce((sm,x)=>sm+uitReserveringBedrag(x),0));
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${c.icon}</div>
       <div style="font-weight:800;font-size:var(--fs-lg)">${c.name}</div>
       <div class="muted small">${items.length} transacties · ${esc(m?monthLabel(m):periodLabel())}</div>
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${euro(tot)}</div></div>
     ${c.geenNorm&&JARGON[k]?`<div class="small muted" style="margin:0 2px 10px;line-height:1.5">${JARGON[k]}</div>`:''}
+    ${uitRes>0?`<div class="small" style="color:var(--mut2);margin:0 2px 10px;line-height:1.5">Waarvan ${euro0(uitRes)} uit een reservering betaald, dus buiten je potjes.</div>`:''}
     ${catSparkline(k)}
     ${items.map(t=>`<div class="tx" style="cursor:default">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
@@ -9877,7 +9976,16 @@ function collapOpen(flag){
    maandgrafiek staat nu op Maand, dus de toggle tekent het scherm waar je op staat (v137). */
 function toggleCollap(which){ SET[which]=!collapOpen(which); save(); render(); }
 // uitgaven per categorie / winkel voor één maand (voor vergelijking)
-function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
+/* v269: DIT IS DE NORM-MAP, en dat is de kern van die ronde en geen detail van de vlag. Alle
+   potjes (varPotjeStand, varPotjesReserve, varPlanRemaining, safeToSpend, openReservedPotjes), alle
+   signalen (valtOpSignals, budgetOverCat, de valt-op-log), de hele coachlaag en blok 6 en 7 van
+   DIAG_BLOKKEN lezen deze ene functie. Las de vlag alleen totals(), dan zou spendNorm dalen
+   terwijl het signaal blijft vuren, en dat is precies de tweede waarheid van v104.
+   GEMETEN dat geen enkele van de ruim twintig lezers het GELD wil: openCategory(), openMonthSpend(),
+   renderCatBreak() en renderTxList() tellen hun eigen lijst op en komen hier niet langs, dus hun
+   totaal blijft per constructie gelijk aan de rijen eronder. Daarom kon deze functie de norm
+   worden in plaats van dat er een tweede map naast kwam. */
+function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount)-uitReserveringBedrag(t); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
 
 /* ----- COACH (lichtgewicht AI-regels) ----- */
 
@@ -11553,7 +11661,7 @@ function insBudgetBlok(m){
       <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${balkKleur}"></div></div>
       ${isLopendeMaand(m)?`<i title="de maand is ${dayPct}% voorbij" style="position:absolute;top:-3px;height:15px;left:${Math.min(Math.max(dayPct,0),100)}%;width:2px;background:var(--mut2);border-radius:1px"></i>`:''}</div>
     ${isLopendeMaand(m)?`<div class="small" style="color:var(--mut2);margin-top:5px">de streep staat waar de maand nu is: ${dayPct}% voorbij</div>`:''}${budgetOverZin(sp,bud,d,over,opDeGrens)}
-    ${geenNormRegels(t,m)}</div>`;
+    ${geenNormRegels(t,m)}${uitReserveringRegels(t,m)}</div>`;
 }
 /* v258: hier stond één regel die ALLE geenNorm-categorieën optelde tot t.buitenNorm en naar
    onvoorzien tikte. Met een tweede geenNorm-categorie klopt die tik niet meer: gemeten zei hij
@@ -11574,6 +11682,26 @@ function insBudgetBlok(m){
    WAT HET KOST, gemeten op 360px: niets zolang één geenNorm-categorie uitgaven heeft, want dan is
    het dezelfde ene regel als eerst. Een tweede categorie met uitgaven kost 18px. Een categorie
    zonder uitgaven staat er niet, dus wie nooit pint ziet geen enkel verschil. */
+/* v269: wat uit een reservering betaald is, staat wél in je maandtotaal en niet in het getal
+   erboven, en dan moet het ergens staan (dezelfde regel als v259 bij onregelmatig inkomen en v250
+   bij de potjesregel). EEN REGEL PER CATEGORIE, om precies de reden van v258: een totaal met een
+   tik zou op een ander getal uitkomen dan waarop je tikte, en een overzicht van alle gevlagde
+   boekingen bestaat niet. De bedragen komen uit t.uitResCat van dezelfde totals(m) die
+   uitReservering oplevert, dus ze tellen per constructie op tot dat getal.
+   HET WOORD "BETAALD" STAAT ER NIET, en dat is een meting. "uit een reservering betaald" is met de
+   categorienaam erbij 36px op 360px, dus twee regels; zonder dat woord 18px. De volle zin staat in
+   openCategory(), waar er ruimte voor is. GEMETEN dat geen enkele vorm bij ELKE categorienaam op
+   één regel past: met 'persoonlijke overboeking' (de langste) breekt ook de korte vorm op 360px,
+   terwijl hij op 390px nog past.
+   WAT DE REGEL KOST: 18px, gemeten op 360 en 390px in de levende kaart. De stand-kaart staat op
+   144px zonder geenNorm-regels, 167px met één en 190px met twee (exact de getallen van v258). */
+function uitReserveringRegels(t,m){
+  const U=t.uitResCat||{};
+  const bedrag=k=>Math.round(U[k]||0);
+  const ks=Object.keys(U).filter(k=>CATS[k] && bedrag(k)>0)
+    .sort((a,b)=>bedrag(b)-bedrag(a) || (CATS[a].name<CATS[b].name?-1:1));
+  return ks.map(k=>`<div class="small" style="color:var(--mut2);margin-top:5px;cursor:pointer" onclick="openCategory('${k}','${m}')">+ ${euro0(bedrag(k))} ${CATS[k].name.toLowerCase()}, uit een reservering \u203a</div>`).join('');
+}
 function geenNormRegels(t,m){
   const B=t.byCat||{};
   const bedrag=k=>Math.round(-(B[k]||0));
@@ -11983,6 +12111,25 @@ function onregelmatigBlok(t){
       <input type="text" inputmode="decimal" value="${numUit(b)}" style="width:110px;text-align:right"
              onchange="zetOnregelmatig('${t.id}', numIn(this.value))"></div>`:''}`;
 }
+/* v269: de spiegel van onregelmatigBlok(). Alleen bij een AFSCHRIJVING in een uitgavencategorie,
+   dus de twee kunnen nooit samen op één boeking staan: die van v259 eist amount>0 en type income.
+   Een geenNorm-categorie valt er ook buiten (uitReserveringBedrag geeft daar nul), en dan staat de
+   rij er niet in plaats van dat hij niets doet. Dezelfde vorm, dus geen nieuw component: een
+   checkbox voor de hele boeking en een veld eronder zodra de vlag aan staat, type="text"
+   inputmode="decimal" (v215) omdat een gedeeltelijke dekking centen kan hebben. */
+function uitReserveringBlok(t){
+  const c=catOf(t);
+  if(!(t.amount<0 && CATS[c] && CATS[c].type==='expense') || geenNorm(c)) return '';
+  const b=uitReserveringBedrag(t), aan=b>0;
+  const heel=Math.abs(b-(-t.amount))<0.01;
+  return `<label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line)">
+      <input type="checkbox" id="uitres" ${aan?'checked':''} onchange="toggleUitReservering('${t.id}')">
+      <span class="small" style="flex:1">Dit kwam <b>uit een reservering</b><span style="display:block;color:var(--mut2)">telt in je maandtotaal, niet tegen je potjes</span></span></label>
+    ${aan?`<div class="row" style="gap:8px;align-items:center;padding:0 0 10px">
+      <span class="small muted" style="flex:1">Waarvan uit een reservering${heel?'':` \u00b7 van ${euro0(-t.amount)}`}</span>
+      <input type="text" inputmode="decimal" value="${numUit(b)}" style="width:110px;text-align:right"
+             onchange="zetUitReservering('${t.id}', numIn(this.value))"></div>`:''}`;
+}
 function openSheet(id){
   const t=TX.find(x=>x.id===id); if(!t)return;
   window._setSheet=null;
@@ -11996,7 +12143,7 @@ function openSheet(id){
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
-    ${onregelmatigBlok(t)}
+    ${onregelmatigBlok(t)}${uitReserveringBlok(t)}
     ${loanBlokHTML(t)}${leaseBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
     <div class="catgrid">${Object.entries(CATS).map(([k,c])=>`

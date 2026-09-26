@@ -211,7 +211,14 @@ test.describe('c - terugdraaien zonder de post opnieuw aan te maken', () => {
       return document.getElementById('sheet').innerText; });
     expect(heen).toContain('Deze post is betaald');
     expect(heen).not.toContain('ongedaan maken');
-    const terug = await page.evaluate(() => { resBetaaldZet('rA');
+    /* v269: resBetaaldZet() opent nu eerst de boekingspicker, want daar raken de vlag van v268 en
+       die van v269 elkaar. Het anker is dus verschoven naar openReservering(); de eigenschap die
+       deze test vasthoudt is onveranderd, namelijk dat de EDITOR de handeling draagt en daarna de
+       terugdraaier. Dat de picker ertussen komt staat er als eigen assertie bij. */
+    const tussen = await page.evaluate(() => { resBetaaldZet('rA');
+      return document.getElementById('sheet').innerText; });
+    expect(tussen).toContain('Welke boeking was dit?');
+    const terug = await page.evaluate(() => { openReservering('rA');
       return document.getElementById('sheet').innerText; });
     expect(terug).toContain('Betaald op');
     expect(terug).toContain('ongedaan maken');

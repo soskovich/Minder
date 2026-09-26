@@ -95,6 +95,86 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **`catSpendMap()` is de norm-bron** (`v269`): dat is de kern van die ronde en geen detail van de
+  vlag hieronder. Alle potjes (`varPotjeStand`, `varPotjesReserve`, `varPlanRemaining`,
+  `safeToSpend`, `openReservedPotjes`), alle signalen (`valtOpSignals`, `budgetOverCat`, de
+  valt-op-log), de hele coachlaag, de potje-suggesties en blok 6 en 7 van `DIAG_BLOKKEN` lezen die
+  ene functie, en sinds `v269` lezen ze dus een ander getal dan daarvoor.
+  HET ARGUMENT IS EEN METING: van de ruim twintig aanroepen wil er GEEN ENKELE het geld.
+  `openCategory()`, `openMonthSpend()`, `renderCatBreak()` en `renderTxList()` tellen hun eigen
+  lijst op (`items.reduce`) en komen hier niet langs, dus hun totaal blijft per constructie gelijk
+  aan de rijen eronder. Daarom kon deze functie de norm WORDEN in plaats van dat er een tweede map
+  naast kwam, en dat tweede is precies wat `v104` verbiedt.
+  LAS DE VLAG ALLEEN `totals()`, DAN ZOU `spendNorm` DALEN TERWIJL HET SIGNAAL BLIJFT VUREN. GEMETEN
+  op de twee boetes: `spendNorm` 2.768, `catSpendMap().belasting` 463, `varPotjeStand().gebruikt`
+  1.178 op een potje van 1.070 (110 procent, `over:true`), `valtOpSignals()` "belasting +363" en de
+  post op Inzichten "Te veel uitgegeven €108". Dat zijn vier oppervlakken die `totals()` niet kent.
+  ZES SOMMATIES LEZEN DE VLAG, en dat is de lijst: `catSpendMap`, `totals`, `splitFixedVar`
+  (en daarmee `monthAgg`, een noemer volgens `v259`), `baselineSpend` (want `monthBudget()` maakt er
+  in de `baseline`-modus een norm van), `weekBedragen` en `weekRestdagen`. `netSpend()` blijft
+  BEWUST het geld, want anders is er geen bron meer voor het maandtotaal.
+  `weekBedragen()` MOEST MEE, EN DE TRIPDRAAD VAN `v265` ZEI DAT. `belasting` heeft een potje en is
+  niet `geenNorm` en niet huur, dus het zit in `weekScope()`. Bleef die functie het geld tellen, dan
+  klopte de aansluiting in blok 7 niet meer. GEMETEN voor en na: blokken plus restdagen 1.178 tegen
+  maand 1.178, en na het vlaggen 715 tegen 715. Dat is waarvoor die aansluiting daar staat.
+  `uit-reservering.spec.js` LEEST DE BRON en eist dat elk van die zes de vlag noemt en dat
+  `netSpend()` hem juist niet noemt. Met zes sabotages rood gezet.
+- **Uit een reservering betaald is een vlag per boeking, met een bedrag** (`v269`): je boete van
+  €463 stond maanden als verwachte post in je reserveringen en het geld stond apart. Betaal je hem,
+  dan is het echt geld dat weg is, dus het hoort in je saldo en in je maandtotaal. Maar je gaf deze
+  maand niet meer uit, en in een verhouding over je GEDRAG zegt dat bedrag iets dat niet waar is.
+  GEMETEN met en zonder: de budgetdruk gaat van 91,5 naar 109,8 procent en de variabele druk van
+  13,7 naar 22,6, terwijl er aan je gedrag niets veranderde.
+  DE VORM IS `SET.onregelmatig` (`v259`), aan de uitgavenkant: `SET.uitReservering[t.id]`, in een
+  eigen map en niet in `OVR` (die is `{id: categoriesleutel}` en `catOf()` leest `OVR[id]||autoCat`),
+  met een BEDRAG en geen ja/nee. NIET `geenNorm`, want dat zit op de CATEGORIE en zou elke
+  belastingpost normvrij maken.
+  HET BEDRAG IS DE EIS EN GEEN UITBREIDING. GEMETEN op €300 van €463: `catSpendMap().belasting` gaat
+  van 463 naar 163, `spendNorm` van 2.768 naar 2.468, en het signaal vuurt nog wel maar op €63. Het
+  ongedekte deel is gewoon overbesteding en de vlag liegt daar niet over.
+  EEN `geenNorm`-CATEGORIE KAN DE VLAG NIET DRAGEN, en dat is geen beperking maar de reden dat elke
+  sommatie identiek kan blijven: die bedragen vallen al buiten `spendNorm` via `buitenNorm`, dus nog
+  een keer aftrekken zou dubbel verlagen. De twee verzamelingen zijn daarmee per constructie
+  disjunct en `spendNorm = spend - buitenNorm - uitReservering` klopt zonder guard. Bij zo'n
+  categorie staat de rij er niet, in plaats van dat hij niets doet (`v257`).
+  DE RIJ STAAT IN `openSheet()`, naast die van `v259` en in dezelfde vorm, dus geen nieuw component.
+  Alleen bij een AFSCHRIJVING in een uitgavencategorie, dus de twee vlaggen kunnen nooit samen op
+  één boeking staan: die van `v259` eist `amount>0` en type income.
+  JIJ WIJST DE BOEKING AAN, DE APP MATCHT NIET. Bij het afvinken van een verwachte post (`v268`)
+  opent `openResBoekingPick()`, een picker in de vorm van `openResAccPick()` en `openPotjePick()`:
+  hij kiest, hij slaat niets nieuws op, en hij schrijft via `zetUitReservering()`. GEEN DEFAULT, ook
+  niet bij precies één kandidaat; wijs je niets aan, dan blijft de boeking een gewone uitgave en kun
+  je de vlag later vanuit `openSheet()` zetten. `zetUitReservering()` kreeg daarvoor een derde
+  argument `heropen`: zonder dat zou de picker zich door de boekingssheet laten vervangen.
+  DE TWEE VLAGGEN KUNNEN ELKAAR NIET TEGENSPREKEN, want ze lezen andere data: `SET.resBetaald` hangt
+  aan de reservering, `SET.uitReservering` aan de boeking. GEMETEN en als test vastgelegd dat
+  `dekking(12)` karakter voor karakter gelijk is met en zonder de vlag, en dat afvinken `spendNorm`
+  niet raakt.
+  HET WOORD "BETAALD" STAAT NIET IN DE REGEL OP INZICHTEN. GEMETEN: "+ €463 belasting & boetes, uit
+  een reservering betaald" is 36px op 360px en dus twee regels; zonder dat woord 18px. De volle zin
+  staat in `openCategory()`, waar er ruimte voor is. Geen enkele vorm past bij ELKE categorienaam op
+  één regel: met 'persoonlijke overboeking' breekt ook de korte vorm op 360px, terwijl hij op 390px
+  nog past.
+  EEN REGEL PER CATEGORIE, om de reden van `v258`: een totaal met een tik zou op een ander getal
+  uitkomen dan waarop je tikte, en een overzicht van alle gevlagde boekingen bestaat niet. De
+  bedragen komen uit `t.uitResCat` van dezelfde `totals(m)` die `uitReservering` oplevert, dus ze
+  tellen per constructie op tot dat getal.
+  `openCategory()` HOUDT HET GELD in zijn kop, want dat is de som van de rijen eronder, en zegt
+  eronder welk deel uit een reservering kwam. Zonder die regel wijkt die sheet af van het potje op
+  Inzichten zonder dat er staat waarom.
+- **BEVINDING: de stand-kaart gaat in het worst case over de 200px van `v241`** (`v269`): niet
+  opgelost en de eis is niet opgeschoven. GEMETEN in de levende kaart op 360 EN 390px: de kaart is
+  144px zonder `geenNorm`-regels, 167px met één en 190px met twee (exact de getallen van `v258`), en
+  de reserveringsregel kost 23px (18px tekst plus de 5px marge erboven).
+  IN HET GEMELDE GEVAL HAALT HIJ DE EIS: 190px op 360 en 175px op 390, want met beide boetes gevlagd
+  zakt `spendNorm` onder je budget en valt `budgetOverZin()` weg. Dat die twee breedtes uiteenlopen
+  komt van het afbreken van de kop en de budgetzin op 360px; niet verder uitgesplitst, want wat
+  `v241` toetst is de hoogte van de kaart.
+  HET WORST CASE IS EEN GEDEELTELIJKE VLAG: dan blijft `budgetOverZin()` staan en komt de regel er
+  bovenop. GEMETEN 213px op 360 EN 390px, met twee `geenNorm`-regels en `spendNorm` 2.618 tegen een
+  budget van 2.520. Dat is precies wat `v258` voorspelde voor een derde regel in dit blok, en de
+  vorm van het blok is dan een eigen ronde. `uit-reservering.spec.js` legt beide gevallen vast, dus
+  een volgende ronde kan niet denken dat het meevalt.
 - **Betaald is een vlag per post, en het onderscheid eenmalig/interval zit in de maand**
   (`v268`): een verwachte post die je betaalde bleef als verwachte kost in de lijst staan tot de
   maand omsloeg, en verdween dan STIL - een eenmalige post gaf `resVolgende()` null en was weg
@@ -1262,6 +1342,15 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   precies één" hoort eerst de meting dat er in deze invoer werkelijk meer dan één kon zijn. Toets
   dus de invoer voordat je de uitkomst toetst, en meld het als de opzet niet gelukt is in plaats van
   de groene uitslag als bewijs te lezen.
+- **Een sabotage die groen blijft zegt dat je test die code niet raakt.** Bij `v269` stond de klem
+  op het gevlagde bedrag twee keer, in de setter en bij het lezen, net als bij `onregelmatigBedrag()`
+  (`v259`). De leeskant weghalen liet alle 22 tests groen, want de test schreef via de setter en die
+  klemt al. De conclusie is niet dat die klem weg kan: `SET` komt bij een import terug via
+  `Object.assign` over `d.set`, dus een backup met een te hoge waarde landt ongeklemd in `SET`, en
+  de leesklem is precies wat dat opvangt. WAT ER MISTE WAS HET PAD, en de test schrijft nu
+  rechtstreeks naar `SET` zoals een import dat doet. Lees een groene sabotage dus als een vraag over
+  je test en niet als een vrijbrief om de code te versimpelen; welke van de twee het is beslis je
+  door het pad te zoeken, niet door te kiezen wat het minste werk is.
 - **Een placeholder of een label dat een waarde belooft, tel je tegen wat de code doet.** Een veld
   met `placeholder="5"` zegt dat leeg laten 5% betekent; staat er in de code `+v('aRend')||0`, dan
   is het 0 en liegt het scherm. Hetzelfde geldt voor een eenheid, een default in een labeltekst en
@@ -1304,7 +1393,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v267` → `minder-v268`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v268` → `minder-v269`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
