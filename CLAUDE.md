@@ -162,7 +162,7 @@ genoemde versietag.)*
   `openCategory()` HOUDT HET GELD in zijn kop, want dat is de som van de rijen eronder, en zegt
   eronder welk deel uit een reservering kwam. Zonder die regel wijkt die sheet af van het potje op
   Inzichten zonder dat er staat waarom.
-- **BEVINDING: de stand-kaart gaat in het worst case over de 200px van `v241`** (`v269`): niet
+- **OPEN PUNT: de stand-kaart gaat in het worst case over de 200px van `v241`** (`v269`): niet
   opgelost en de eis is niet opgeschoven. GEMETEN in de levende kaart op 360 EN 390px: de kaart is
   144px zonder `geenNorm`-regels, 167px met één en 190px met twee (exact de getallen van `v258`), en
   de reserveringsregel kost 23px (18px tekst plus de 5px marge erboven).
@@ -172,9 +172,19 @@ genoemde versietag.)*
   `v241` toetst is de hoogte van de kaart.
   HET WORST CASE IS EEN GEDEELTELIJKE VLAG: dan blijft `budgetOverZin()` staan en komt de regel er
   bovenop. GEMETEN 213px op 360 EN 390px, met twee `geenNorm`-regels en `spendNorm` 2.618 tegen een
-  budget van 2.520. Dat is precies wat `v258` voorspelde voor een derde regel in dit blok, en de
-  vorm van het blok is dan een eigen ronde. `uit-reservering.spec.js` legt beide gevallen vast, dus
-  een volgende ronde kan niet denken dat het meevalt.
+  budget van 2.520. Dat is precies wat `v258` voorspelde voor een derde regel in dit blok.
+  WAAROM DE GEBRUIKER HEM VANDAAG NIET ZIET, en dat is de reden dat deze ronde hem niet oplost: op
+  zijn toestel blijft de kaart onder de 200px omdat `budgetOverZin()` wegvalt zodra `spendNorm` onder
+  het budget zakt, en met beide boetes gevlagd gebeurt dat. Hij komt tevoorschijn in de eerste maand
+  waarin hij GEDEELTELIJK vlagt en boven zijn budget blijft, en dan met twee `geenNorm`-categorieën
+  erbij. Dat is een bestaande toestand die op een dag optreedt, en geen regressie die deze ronde
+  introduceert.
+  WAT ER DAN AAN DE HAND IS, is de VORM VAN DIT BLOK en niet deze regel. De kaart draagt inmiddels de
+  stand, de balk, de dagstreep, `budgetOverZin()`, een regel per `geenNorm`-categorie en een regel per
+  gevlagde categorie, en dat zijn zes soorten regels in één kader op een scherm waar `v241` juist een
+  kader weghaalde. Wie dit oppakt verkort dus niet deze ene regel, maar stelt de vraag hoeveel regels
+  dit blok hoort te dragen. `uit-reservering.spec.js` legt beide gevallen vast, dus een volgende ronde
+  kan niet denken dat het meevalt.
 - **Betaald is een vlag per post, en het onderscheid eenmalig/interval zit in de maand**
   (`v268`): een verwachte post die je betaalde bleef als verwachte kost in de lijst staan tot de
   maand omsloeg, en verdween dan STIL - een eenmalige post gaf `resVolgende()` null en was weg
@@ -1333,24 +1343,34 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **Een test die eenduidig uitkomt op invoer waarin maar één kandidaat bestaat, toetst geen
-  uniciteit.** Bij `v268` moest een match op categorie, bedrag en maand worden beoordeeld, en de
-  fixture kreeg er een tweede boeking van €313 bij om de ambiguïteit te maken. Die tweede boeking
-  landde niet in dezelfde categorie, dus er kwam één kandidaat uit en de test stond groen op een
-  eigenschap die hij niet raakte. Dat is dezelfde vorm als een fixture-comment die iets belooft wat
-  de fixture niet draagt (`v261`), maar de fout zit hier in de OPZET: bij een test die zegt "er is
-  precies één" hoort eerst de meting dat er in deze invoer werkelijk meer dan één kon zijn. Toets
-  dus de invoer voordat je de uitkomst toetst, en meld het als de opzet niet gelukt is in plaats van
-  de groene uitslag als bewijs te lezen.
-- **Een sabotage die groen blijft zegt dat je test die code niet raakt.** Bij `v269` stond de klem
-  op het gevlagde bedrag twee keer, in de setter en bij het lezen, net als bij `onregelmatigBedrag()`
-  (`v259`). De leeskant weghalen liet alle 22 tests groen, want de test schreef via de setter en die
-  klemt al. De conclusie is niet dat die klem weg kan: `SET` komt bij een import terug via
-  `Object.assign` over `d.set`, dus een backup met een te hoge waarde landt ongeklemd in `SET`, en
-  de leesklem is precies wat dat opvangt. WAT ER MISTE WAS HET PAD, en de test schrijft nu
-  rechtstreeks naar `SET` zoals een import dat doet. Lees een groene sabotage dus als een vraag over
-  je test en niet als een vrijbrief om de code te versimpelen; welke van de twee het is beslis je
-  door het pad te zoeken, niet door te kiezen wat het minste werk is.
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** Drie keer in vier
+  rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze
+  als incidenten; samen zijn het drie manieren waarop dezelfde fout binnenkomt, en de vraag die alle
+  drie had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
+  (a) DE TRIPDRAAD DIE NIET KON VALLEN (`v265`). De uitsluiting van huur uit `weekScope()` moest een
+  test krijgen die valt zodra `recurringCats()` huur wél als terugkerend ziet, want dan is
+  `WEEK_SCOPE_UIT` dood gewicht. Mijn eerste vorm vergeleek `weekScope()` met een nagebootste
+  `recurringCats()`, maar de uitsluiting haalt huur er in BEIDE gevallen uit, dus de twee waren per
+  constructie gelijk. De reparatie: reken de scope na ZONDER de uitsluiting en eis dat huur daar wel
+  in staat. Dat is een vergelijking waarin de code die je toetst niet aan beide kanten staat.
+  (b) DE FIXTURE MET MAAR ÉÉN KANDIDAAT (`v268`). Een match op categorie, bedrag en maand moest
+  worden beoordeeld, en de fixture kreeg er een tweede boeking van €313 bij om de ambiguïteit te
+  maken. Die tweede boeking landde niet in dezelfde categorie, dus er kwam één kandidaat uit en de
+  test bewees niets over uniciteit. Bij een test die zegt "er is precies één" hoort eerst de meting
+  dat er in deze invoer werkelijk meer dan één KON zijn: toets de invoer voordat je de uitkomst
+  toetst.
+  (c) DE SABOTAGE DIE GROEN BLEEF (`v269`). De klem op het gevlagde bedrag stond twee keer, in de
+  setter en bij het lezen, net als bij `onregelmatigBedrag()` (`v259`). De leeskant weghalen liet
+  alle 22 tests groen, want de test schreef via de setter en die klemt al. De conclusie was NIET dat
+  die klem weg kan: `SET` komt bij een import terug via `Object.assign` over `d.set`, dus een backup
+  met een te hoge waarde landt ongeklemd in `SET`, en de leesklem is precies wat dat opvangt. Wat er
+  miste was HET PAD, en de test schrijft nu rechtstreeks naar `SET` zoals een import dat doet.
+  WAT DE DRIE GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
+  de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
+  DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
+  opneemt, en als die sabotage groen blijft, zoek dan eerst het pad naar de code die je saboteerde.
+  Blijft hij ook daarna groen, dan toetst de test iets anders dan hij zegt.
 - **Een placeholder of een label dat een waarde belooft, tel je tegen wat de code doet.** Een veld
   met `placeholder="5"` zegt dat leeg laten 5% betekent; staat er in de code `+v('aRend')||0`, dan
   is het 0 en liegt het scherm. Hetzelfde geldt voor een eenheid, een default in een labeltekst en
