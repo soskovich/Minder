@@ -13075,19 +13075,105 @@ function diagWeekblokken(){
     L.push(`  ${m}: ${top[0]} ${Math.round(top[1])} van ${Math.round(som)} (${som>0?Math.round(top[1]/som*100):0}%)`);
   }
   L.push('  telling: '+Object.entries(winnaars).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}x`).join(', '));
+  /* v266: DRIE METINGEN DIE DEZELFDE VRAAG BESLISSEN - is het #4-patroon gedrag of een
+     afschrijving die laat in de maand valt.
+     a) de drie grootste NAMEN binnen de categorie die #4 domineert, per maand;
+     b) van de grootste daarvan het bedrag EN DE DAG. Valt dezelfde post elke maand rond dezelfde
+        dag, dan is het een afschrijving; verspringt hij, dan is het gedrag;
+     c) het maandtotaal van de UITGESLOTEN categorie naast dat van de dominante, over de hele reeks.
+        Zakt de een op het moment dat de ander begint te lopen, dan is het EEN VERPLAATSING en geen
+        twee ontwikkelingen. Dat is te zien zonder de namen erbij en dus een onafhankelijke
+        bevestiging.
+     DE CATEGORIE WORDT NIET BIJ NAAM GENOEMD maar afgeleid: de grootste van #4 over alle maanden.
+     Zo blijft dit blok leesbaar op een toestel waar iets anders domineert, en staat er geen
+     categoriesleutel als string in de code (v258). */
+  const dom=Object.entries(perPos[4]||{}).sort((a,b)=>b[1]-a[1])[0];
+  if(dom){
+    const dk=dom[0];
+    L.push('');
+    L.push(`de drie grootste namen binnen '${dk}' in blok 4, per maand (bedrag, dag):`);
+    const grootste=[];
+    for(const m of maandenMet4){
+      const namen={};
+      for(const t of TX){
+        if(String(t.date).slice(0,7)!==m) continue;
+        if(_dT(()=>catOf(t),'')!==dk) continue;
+        const dag=+String(t.date).slice(8,10);
+        if(!(dag>=22&&dag<=28)) continue;
+        const nm=String(t.name||'(zonder naam)').slice(0,26);
+        const g=(namen[nm]=namen[nm]||{bed:0,dagen:[]});
+        g.bed+=-t.amount; if(-t.amount>0) g.dagen.push(dag);
+      }
+      const rij=Object.entries(namen).sort((a,b)=>b[1].bed-a[1].bed).slice(0,3);
+      if(!rij.length){ L.push(`  ${m}: (niets)`); continue; }
+      L.push('  '+m+': '+rij.map(([nm,g])=>`${nm} ${Math.round(g.bed)} (dag ${g.dagen.sort((a,b)=>a-b).join('/')||'?'})`).join(' | '));
+      grootste.push({m, nm:rij[0][0], bed:Math.round(rij[0][1].bed), dag:rij[0][1].dagen[0]});
+    }
+    /* De grootste post op een rij, zodat je in een oogopslag ziet of de dag verspringt. Dat is de
+       eigenlijke toets: een vaste dag is een afschrijving, een wisselende dag is gedrag. */
+    L.push('');
+    L.push('de grootste post per maand, op een rij:');
+    for(const g of grootste) L.push(`  ${g.m}: ${g.nm} ${g.bed} dag ${g.dag==null?'?':g.dag}`);
+    const dagen=grootste.map(g=>g.dag).filter(d=>d!=null);
+    if(dagen.length){
+      const uniek=[...new Set(dagen)].sort((a,b)=>a-b);
+      L.push('  dagen: '+dagen.join(', '));
+      L.push('  verschillende dagen: '+uniek.length+' van de '+dagen.length+'   ('+uniek.join('/')+')');
+    }
+    const nmTel={};
+    for(const g of grootste) nmTel[g.nm]=(nmTel[g.nm]||0)+1;
+    L.push('  namen: '+Object.entries(nmTel).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}x`).join(', '));
+    /* c) DE TEGENPROEF ZONDER NAMEN: de uitgesloten categorie tegen de dominante, per maand en
+       over de hele maand (dus niet alleen blok 4). */
+    const uitK=WEEK_SCOPE_UIT[0];
+    L.push('');
+    L.push(`maandtotaal '${uitK}' tegen '${dk}', hele maand, om een verplaatsing te zien:`);
+    const alleM=_dT(()=>months(),[]);
+    const perM={};
+    for(const t of TX){
+      if(!(t.amount<0)) continue;
+      const c=_dT(()=>catOf(t),''); if(c!==uitK && c!==dk) continue;
+      const m=String(t.date).slice(0,7);
+      const r=(perM[m]=perM[m]||{a:0,b:0});
+      if(c===uitK) r.a+=-t.amount; else r.b+=-t.amount;
+    }
+    L.push(`  maand      ${uitK.slice(0,8).padEnd(8)} ${dk.slice(0,8).padEnd(8)}`);
+    for(const m of alleM){ const r=perM[m]||{a:0,b:0};
+      L.push(`  ${m}   ${String(Math.round(r.a)).padStart(8)} ${String(Math.round(r.b)).padStart(8)}`); }
+    /* DE HERSPLITSING. Alleen de maanden waarin de uitgesloten categorie werkelijk iets draagt:
+       staat het patroon daar nog, dan zit er iets onder het artefact. Is het verschil weg, dan is
+       er geen patroon en hoeft er geen reeks te komen - en dat is een prima uitkomst.
+       GEEN DREMPEL: de splitsing is "draagt deze maand een boeking in die categorie, ja of nee".
+       De tabel hierboven staat erbij, zodat een andere splitsing met de hand na te rekenen is
+       zonder dat er een knop in de code komt. */
+    const metUit=new Set(Object.keys(perM).filter(m=>perM[m].a>0));
+    L.push('');
+    L.push(`de positiecijfers, gesplitst op of de maand een '${uitK}'-boeking draagt:`);
+    for(const [lab,test] of [['met   ',m=>metUit.has(m)],['zonder',m=>!metUit.has(m)]]){
+      const r=[];
+      for(const nr of [1,2,3,4]){
+        const w=vol.filter(b=>b.nr===nr && test(b.maand)).map(b=>bedrag[b.maand+'#'+b.nr]||0);
+        r.push(`#${nr}=${w.length?Math.round(w.reduce((a,x)=>a+x,0)/w.length):0} (n=${w.length})`);
+      }
+      L.push(`  ${lab}: `+r.join('  '));
+    }
+  }
   /* WAAR LANDT DE HUUR? Het huurpotje staat op het toestel op 750 met 66 besteed, dus de huur
      landt ergens anders. Alleen lezen en niets repareren: dit zegt waar hij wel staat. */
   L.push('');
-  L.push('waar landt je huur (alleen lezen):');
-  L.push('  potje huur: '+_dV(()=>(SET.budgets||{}).huur)+'   besteed deze maand: '+_dV(()=>{ const sp=catSpendMap(thisYM()); return Math.round(sp.huur||0); }));
+  /* v266: de categoriesleutel komt uit WEEK_SCOPE_UIT en staat hier niet meer als string. Hij
+     stond er bij v265 drie keer hardgecodeerd, en weekreeks-drilldown.spec.js viel daarop. */
+  const uitCat=WEEK_SCOPE_UIT[0];
+  L.push(`waar landt je ${uitCat} (alleen lezen):`);
+  L.push(`  potje ${uitCat}: `+_dV(()=>(SET.budgets||{})[uitCat])+'   besteed deze maand: '+_dV(()=>{ const sp=catSpendMap(thisYM()); return Math.round(sp[uitCat]||0); }));
   const sched=_dT(()=>recurringSchedule().filter(r=>r.type==='fixed'),[]);
   const top=sched.slice().sort((a,b)=>(b.amount||0)-(a.amount||0)).slice(0,8);
   L.push('  de grootste terugkerende posten, met hun categorie:');
   for(const r of top) L.push(`    ${String(r.name||'').slice(0,28).padEnd(28)} ${String(Math.round(r.amount||0)).padStart(6)}  cat=${r.cat}  elke ${r.intervalM||'?'} mnd`);
   /* En andersom: wat staat er WEL in de huur-categorie. Landt de huur ergens anders, dan is dit
      leeg of klein, en dan zegt het potje van 750 iets over een bedoeling en niet over een meting. */
-  const huurTx=TX.filter(t=>catOf(t)==='huur' && t.amount<0).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
-  L.push('  de laatste boekingen die wel op huur staan:');
+  const huurTx=TX.filter(t=>catOf(t)===uitCat && t.amount<0).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  L.push(`  de laatste boekingen die wel op ${uitCat} staan:`);
   if(!huurTx.length) L.push('    (geen)');
   for(const t of huurTx) L.push(`    ${t.date}  ${String(Math.round(-t.amount)).padStart(6)}  ${String(t.name||'').slice(0,30)}`);
   return L;

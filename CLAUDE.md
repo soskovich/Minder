@@ -651,6 +651,27 @@ genoemde versietag.)*
   zien, en dat is precies waarom de aansluiting eerst het argument was. Het diagnoseblok TOONT de
   aansluiting (blokken plus restdagen tegen `catSpendMap` over dezelfde scope) in plaats van hem
   aan te nemen, want dat aannemen ging bij `v264` mis.
+- **Drie metingen beslissen of een positiepatroon gedrag is of een afschrijving** (`v266`): blok 7
+  drilt door op de categorie die blok 4 DOMINEERT, en die categorie wordt AFGELEID (de grootste van
+  #4 over alle maanden) en niet bij naam genoemd.
+  a) DE DRIE GROOTSTE NAMEN per maand binnen die categorie, met bedrag en dag.
+  b) DE GROOTSTE POST OP EEN RIJ, met een telling van hoeveel verschillende dagen er voorkomen.
+  Dat is de eigenlijke toets: dezelfde post op dezelfde dag is een afschrijving, een wisselende
+  dag is gedrag.
+  c) HET MAANDTOTAAL VAN DE UITGESLOTEN CATEGORIE NAAST DAT VAN DE DOMINANTE, over de hele reeks en
+  over de hele maand. Zakt de een op het moment dat de ander gaat lopen, dan is het ÉÉN
+  VERPLAATSING en geen twee ontwikkelingen. Dat is zichtbaar ZONDER de namen, dus het is een
+  onafhankelijke bevestiging van (a) en (b).
+  DAARNA DE POSITIECIJFERS OPNIEUW, gesplitst op of de maand een boeking in de uitgesloten
+  categorie draagt. Staat het verschil tussen #1 en #4 daar nog, dan zit er iets onder het
+  artefact; is het weg, dan is er geen patroon en hoeft er geen reeks te komen. DAT LAATSTE IS EEN
+  GELDIGE UITKOMST en beter dan een reeks die iets toont wat er niet is.
+  GEEN DREMPEL IN DIE SPLITSING: hij vraagt alleen of die maand zo'n boeking draagt. De tabel van
+  (c) staat erbij, zodat een andere splitsing met de hand na te rekenen is zonder dat er een knop
+  in de code komt.
+  DE HARDCODE DIE `v265` LIET STAAN is in dezelfde ronde weggehaald: die sectie noemde `'huur'`
+  drie keer als string, en `weekreeks-drilldown.spec.js` viel daarop voordat hij werd opgenomen.
+  De sleutel komt nu uit `WEEK_SCOPE_UIT[0]`.
 - **OPEN PUNT: de huur landt niet in de huur-categorie** (`v265`): GEMETEN op het toestel staat het
   huurpotje op €750 met €66 besteed. Een potje van €750 waar €66 op staat zegt iets over een
   bedoeling en niet over een meting. Blok 7 van `DIAG_BLOKKEN` leest uit waar de grootste
@@ -1190,7 +1211,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v265` → `minder-v266`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v266` → `minder-v267`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
