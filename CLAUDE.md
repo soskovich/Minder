@@ -651,6 +651,40 @@ genoemde versietag.)*
   zien, en dat is precies waarom de aansluiting eerst het argument was. Het diagnoseblok TOONT de
   aansluiting (blokken plus restdagen tegen `catSpendMap` over dezelfde scope) in plaats van hem
   aan te nemen, want dat aannemen ging bij `v264` mis.
+- **DE WEEKREEKS WORDT NIET GEBOUWD** (`v267`): er is geen weekpatroon in de variabele uitgaven.
+  Wat er als patroon uitzag was een terugkerende OVERBOEKING NAAR EEN EIGEN REKENING die de
+  intern-detectie niet herkende.
+  DE REDEN, en die is belangrijk omdat mijn eerste twee verklaringen fout waren: de tegenpartij van
+  die acht posten is de VORIGE ACHTERNAAM van de gebruiker. Die staat in `RULES` en in
+  `applyOwnAccounts()` op de HUIDIGE naam, dus alles van vóór de naamswijziging valt buiten de
+  detectie en telt als uitgave mee. Het is geen huur, geen uitgave en geen gedrag.
+  DRIE METINGEN DRAGEN HET:
+  (1) ACHT MAANDEN DEZELFDE TEGENPARTIJ, altijd in blok #4 (2025-01 t/m 2025-08: 335, 335, 335,
+  2.500, 700, 700, 700, 700, op dag 23 tot 27). Daarna verdwijnt hij volledig uit de reeks.
+  (2) DE MONOTONE HERSPLITSING op hoeveel van de huur op de huur-categorie staat: geen huur daar
+  geeft #4/#1 = 7,1x, gedeeltelijk 3,7x, volledig 1,9x. Hoe meer eruit valt, hoe kleiner het
+  patroon.
+  (3) IN DE ACHT SCHONE MAANDEN IS #4 NIET EENS DE HOOGSTE POSITIE: #1 175, #2 299, #3 358, #4 334,
+  en #4 is de hoogste in 2 van de 8 maanden. Haal je de acht posten uit 2025 weg, dan zakt #4 daar
+  van gemiddeld 1.045 naar 262, tegen 180 voor #1.
+  HET RESTJE BIJ #3 BLIJFT LIGGEN tot er twaalf schone maanden zijn. #3 is de hoogste in 5 van de 8,
+  maar met acht maanden en een spreiding van €30 tot €557 binnen die positie is dat ruis. Najagen
+  is precies de reeks bouwen die iets toont wat er niet is.
+  WAT WEL BLIJFT: `weekBlokken()`, `weekScope()`, `weekBedragen()`, `weekRestdagen()`,
+  `WEEK_MIN_BLOKKEN` en blok 7. Die hebben hun werk gedaan en zijn de goedkoopste manier om dit
+  over een jaar opnieuw te beoordelen. Geen scherm leest ze.
+- **Bij een positiegebonden reeks toetst de spreiding van de dag niets** (`v267`): een vaste post
+  kan binnen zijn venster bewegen. GEMETEN: de grootste post per maand viel op zes verschillende
+  dagen van de twintig (22 t/m 27), en onder de regel "een vaste dag is een afschrijving, een
+  wisselende dag is gedrag" las dat als GEDRAG. Fout: de dag verspringt, het blok nooit, want 22
+  tot 28 is één blok. DE TEGENPARTIJ DRAAGT HET ANTWOORD EN NIET DE DATUM - dezelfde naam acht
+  maanden op rij was het bewijs, en die stond in dezelfde uitvoer.
+  EEN TWEEDE VERKEERDE BEVESTIGING IN DEZELFDE RONDE: de tabel van de uitgesloten categorie naast
+  de dominante leek een verplaatsing te tonen (`overig` stortte in van 1.967 naar 238 precies toen
+  `huur` ging lopen) en was bedoeld als ONAFHANKELIJKE bevestiging. Het waren twee dingen die
+  toevallig samenvielen: de overboekingen stopten en de huur werd apart geboekt. Een bevestiging
+  die uit dezelfde weken komt is geen onafhankelijke bevestiging; toets een verklaring op de
+  IDENTITEIT van de post en niet op het moment waarop een reeks van vorm verandert.
 - **Drie metingen beslissen of een positiepatroon gedrag is of een afschrijving** (`v266`): blok 7
   drilt door op de categorie die blok 4 DOMINEERT, en die categorie wordt AFGELEID (de grootste van
   #4 over alle maanden) en niet bij naam genoemd.
