@@ -95,6 +95,65 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **Een rekening met boekingen kan uit de LIJST vallen en toch in elke som zitten** (`v270`): een
+  N26-Space stond niet in de saldolijst terwijl er boekingen op staan. GEMETEN: die rekening zit WEL
+  in `OWN` (4 boekingen), telt in `totalBalance()` als `missing` en niet in de som (som 4.500,
+  bekend 2, missing 1), en valt uit de getoonde lijst omdat `zichtbareRek()` alleen rekeningen met
+  een BEKEND SALDO toont tenzij `SET.toonLegeRek` aan staat (`v146`). Eén tik zet hem terug en er
+  verandert geen enkel cijfer: GEMETEN dat de som en `safeToSpend().safe` in beide standen gelijk
+  zijn. De regel die dat aanbiedt bestaat al (`legeRekRegel()`: "1 rekening zonder saldo tonen").
+  DRIE VERZAMELINGEN DIE NIET HETZELFDE ZEGGEN, en dat is waarom een ontbrekende rekening lastig te
+  plaatsen is: `OWN` komt uit `TX` (`v122`), `allAccounts()` is `OWN` plus de gekoppelde rekeningen
+  zonder boekingen, en `zichtbareRek()` is `OWN` min de rekeningen zonder saldo. Blok 8 van
+  `DIAG_BLOKKEN` zet die drie naast elkaar en zegt PER REKENING in welke hij zit.
+- **De `identification_hash` beslist of een herkoppeling je handmatige keuzes kost** (`v270`):
+  `t.id` is `hash(acc + datum + bedrag + desc)`, dus de REKENING-id zit erin. GEMETEN op de vier
+  standen die de accId-resolutie van `psd2IngestSession()` kan aannemen: een Space MET een opgeslagen
+  hash die later een IBAN krijgt houdt zijn id (`psd2h_ab12cd34ef56`), een Space ZONDER hash krijgt
+  een nieuwe id uit de IBAN-cijfers (`370400449876543210`), een Space zonder IBAN met een nieuwe uid
+  houdt zijn id als de hash bekend is (dat is `v151`), en zonder hash én zonder IBAN krijgt hij elke
+  sessie een nieuwe id. Alleen de tweede en de vierde kosten je iets.
+  WAT ER DAN WEGVALT, per soort en niet in het algemeen. GEMETEN met een nieuwe rekening-id:
+  `OVR[t.id]` WEG, `SET.onregelmatig[t.id]` WEG, `SET.uitReservering[t.id]` WEG, `SET.fixOvr[t.id]`
+  WEG. WAT BLIJFT: `SET.fixDueExcl` (op `recurKey`, en die leest alleen de naam) en `SET.resBetaald`
+  (op de reserverings-id, niet op een boeking). GEMETEN dat `recurKey()` niet verandert bij een
+  andere rekening.
+  DE NAAM VAN DE REKENING ZIT NIET IN DE ID. GEMETEN dat alleen `name` wijzigen de id gelijk laat, en
+  `accName` ook (dat is een CSV-veld): `desc` is wat meetelt, en die komt bij PSD2 uit de tegenpartij
+  en de remittance van de BOEKING, niet uit de rekening. Verandert je bank de opmaak van die
+  omschrijving tussen twee consents, dan verandert de id alsnog; dat is niet te meten zonder de
+  backend en blijft dus een risico dat je noemt en niet wegrekent.
+  COMMITTX FILTERT OP ID. GEMETEN: dezelfde boekingen op dezelfde rekening-id geven 0 toegevoegd en
+  geen dubbele; dezelfde boekingen op een NIEUWE rekening-id geven er vier bij, en
+  `rekeningOverlap()` ziet dat (4 gedeeld). De soft-dedup helpt daar bewust niet, want die eist
+  verschillende bronnen (`v51`).
+  BLOK 8 TOONT DE HASH, en dat is de toevoeging boven de overlap-sheet van `v149`/`v152`: die toont
+  saldo, aantal, uid en consent-datum, maar juist niet het veld dat beslist.
+- **Er is geen bankverbinding als object** (`v270`): `SET.psd2Accounts` is plat per REKENING met
+  `{uid, iban, hash, label, bank, exp}` en verder niets. GEMETEN dat er geen `lastSync` en geen
+  `error` per rekening bestaat; er is één globale `SET.psd2LastSync` en nergens een bewaarde
+  foutstatus. `authFail` in `psd2Refresh()` is een lokale variabele die alleen een toast oplevert.
+  DE VERBINDING WORDT AFGELEID uit `bank` plus `exp`, de `valid_until` die `psd2IngestSession()` per
+  sessie per rekening wegschrijft: twee verschillende `exp`-waarden zijn twee consents. Blok 8
+  groepeert daarop en zegt erbij dat die groepering afgeleid is en nergens staat.
+  HET ENIGE PER-REKENING BEWIJS dat de saldo-aanroep lukte is `ACCMETA[a].date`, de dag waarop het
+  saldo werd gestempeld (`v198`). Staat die bij één rekening oud of leeg terwijl de andere van
+  vandaag is, dan faalt de balances-aanroep voor juist die rekening. Blok 8 zet hem per rekening.
+  `psd2Disconnect()` WIST ALLES TEGELIJK: `SET.psd2Accounts={}`. Er is geen route om één verbinding
+  of één rekening los te koppelen; `rekSamenvoeg()` verwijdert wel één sleutel, maar dat is een
+  samenvoeging en geen ontkoppeling. Een afgebroken koppelpoging laat niets achter in `SET`: alleen
+  `sessionStorage.psd2_state`, en die verdwijnt met het tabblad, dus hij kan de eerste verbinding
+  niet in de weg zitten.
+- **BEVINDING, niet gerepareerd: de pending-tak van `psd2IngestSession()` is dood** (`v270`): de
+  regel `const dp=await psd2Api(...&transaction_status=PDNG)` staat ACHTER `// v197: pending telt
+  altijd mee` op dezelfde regel, dus `dp` wordt nooit gedeclareerd, `dp.transactions` gooit, en de
+  `catch(e){}` eromheen slikt het. Bij een EERSTE koppeling komen er dus geen pending-boekingen
+  binnen. In `psd2Refresh()` staat dezelfde aanroep intact, dus de eerstvolgende verversing haalt ze
+  alsnog op; de schade is één sessie lang en geen verloren data.
+  DIT IS DE `v215`-MEETLES IN APP-CODE: een regel die door een comment is opgeslokt, zonder
+  foutmelding en zonder zichtbaar gevolg. `rekeningen-diagnose.spec.js` PINT BEWUST DE KAPOTTE STAND,
+  zodat de vondst niet alleen in de changelog staat; repareer je de regel, dan valt die test met
+  opzet en werk je hem bij.
 - **`catSpendMap()` is de norm-bron** (`v269`): dat is de kern van die ronde en geen detail van de
   vlag hieronder. Alle potjes (`varPotjeStand`, `varPotjesReserve`, `varPlanRemaining`,
   `safeToSpend`, `openReservedPotjes`), alle signalen (`valtOpSignals`, `budgetOverCat`, de
@@ -1413,7 +1472,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v268` → `minder-v269`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v269` → `minder-v270`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

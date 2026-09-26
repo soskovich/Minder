@@ -13393,6 +13393,85 @@ function diagWeekblokken(){
   for(const t of huurTx) L.push(`    ${t.date}  ${String(Math.round(-t.amount)).padStart(6)}  ${String(t.name||'').slice(0,30)}`);
   return L;
 }
+/* v270: de rekeningen en de bankverbindingen, want een ontbrekende rekening is nergens anders in
+   één beeld te zien. Alleen lezen, zoals de rest van dit scherm (v244).
+   WAT DIT BLOK TOEVOEGT boven de bestaande overlap-sheet (v149/v152): die toont saldo, aantal en
+   consent-datum, maar NIET de identification_hash, en die ene is beslissend. GEMETEN op de vier
+   standen die de accId-resolutie van psd2IngestSession() kan aannemen: een Space MET een opgeslagen
+   hash die een IBAN krijgt houdt zijn id ('psd2h_...'), een Space ZONDER hash krijgt een nieuwe id
+   uit de IBAN-cijfers, en dan verandert elke transactie-id op die rekening.
+   DE DRIE SOMMEN STAAN ER APART BIJ omdat ze niet hetzelfde zeggen: een rekening zonder bekend saldo
+   zit WEL in OWN en telt in totalBalance() als `missing` in plaats van in de som, en hij valt uit de
+   getoonde lijst via zichtbareRek() (v146). Dat is het gat waardoor een rekening met boekingen
+   onzichtbaar kan zijn.
+   DE VERBINDING WORDT AFGELEID en is nergens opgeslagen: SET.psd2Accounts is plat per REKENING, met
+   één globale SET.psd2LastSync en geen enkel foutveld. Wat een consent onderscheidt is `exp`, de
+   valid_until die psd2IngestSession() per sessie wegschrijft, dus daarop groeperen we. ACCMETA[a].date
+   is het enige PER-REKENING bewijs dat de saldo-aanroep die dag lukte. */
+function diagRekeningen(){
+  const L=[]; const ps=_dT(()=>SET.psd2Accounts,{})||{};
+  const own=_dT(()=>OWN,[])||[]; const alle=_dT(()=>allAccounts(),[])||[];
+  const zicht=_dT(()=>zichtbareRek(),[])||[];
+  const tb=_dT(()=>totalBalance(),null);
+  const st=_dT(()=>safeToSpend(),null);
+  L.push('rekeningen in OWN (uit TX):        '+own.length);
+  L.push('rekeningen in allAccounts():       '+alle.length+'  (OWN plus de gekoppelde zonder boekingen)');
+  L.push('rekeningen in de getoonde lijst:   '+zicht.length+'  (zichtbareRek, verbergt zonder saldo tenzij SET.toonLegeRek)');
+  L.push('SET.toonLegeRek:                   '+_dV(()=>!!SET.toonLegeRek));
+  if(tb) L.push('totalBalance(): som '+Math.round(tb.sum)+'  bekend '+tb.known+'  missing '+tb.missing);
+  if(st) L.push('safeToSpend():  safe '+Math.round(st.safe||0)+'  bekend '+(st.known==null?'-':st.known)+'  missing '+(st.missing==null?'-':st.missing));
+  L.push('');
+  L.push('PER REKENING');
+  for(const a of alle){
+    const pm=ps[a]||null, meta=_dT(()=>ACCMETA[a],{})||{};
+    const lijst=_dT(()=>TX.filter(t=>t.acc===a),[])||[];
+    const d=lijst.map(t=>t.date).filter(Boolean).sort();
+    const bal=_dT(()=>accBalance(a),null);
+    L.push('  '+a);
+    L.push('    naam van de bank:   '+(pm?(pm.label||'(geen naam meegekomen)'):'(niet via de koppeling)'));
+    L.push('    bank:               '+(meta.bank||(pm&&pm.bank)||'?'));
+    L.push('    boekingen:          '+lijst.length+(d.length?('   '+d[0]+' t/m '+d[d.length-1]):'   (geen)'));
+    L.push('    bronnen:            '+([...new Set(lijst.map(t=>t.src||'mt940'))].join(' + ')||'-'));
+    L.push('    in OWN:             '+(own.indexOf(a)>=0?'ja':'NEE (gekoppeld, geen boekingen)'));
+    L.push('    saldo:              '+(bal==null?'ONBEKEND':Math.round(bal))+(meta.date?('   gestempeld '+meta.date):'   (geen saldodatum)'));
+    L.push('    in totalBalance():  '+(own.indexOf(a)<0?'nee, zit niet in OWN':(bal==null?'telt als missing, NIET in de som':'ja, in de som')));
+    L.push('    in safeToSpend():   '+(own.indexOf(a)<0?'nee, zit niet in OWN':(bal==null?'telt als missing, NIET in de som':'ja, via totalBalance()')));
+    L.push('    in de lijst:        '+(zicht.indexOf(a)>=0?'ja':'NEE, verborgen door zichtbareRek()'));
+    if(pm){
+      L.push('    uid:                '+(pm.uid||'-')+'   (per sessie, niet stabiel)');
+      L.push('    iban:               '+(pm.iban?('\u00b7\u00b7'+String(pm.iban).slice(-4)):'GEEN eigen IBAN'));
+      L.push('    identification_hash:'+(pm.hash?(' '+pm.hash):' GEEN - bij een herkoppeling krijgt deze rekening een NIEUWE id'));
+      L.push('    consent tot:        '+(pm.exp?String(pm.exp).slice(0,10):'-'));
+    }
+  }
+  L.push('');
+  L.push('PER VERBINDING (afgeleid uit bank + consent-vervaldatum; nergens opgeslagen)');
+  const groepen={};
+  for(const a of Object.keys(ps)){ const pm=ps[a]||{}; const k=(pm.bank||'?')+' | consent tot '+(pm.exp?String(pm.exp).slice(0,10):'-');
+    (groepen[k]=groepen[k]||[]).push(a); }
+  const gk=Object.keys(groepen);
+  if(!gk.length) L.push('  geen gekoppelde rekeningen');
+  for(const k of gk){
+    L.push('  '+k);
+    for(const a of groepen[k]){ const meta=_dT(()=>ACCMETA[a],{})||{};
+      L.push('    '+a+'   '+_dT(()=>TX.filter(t=>t.acc===a).length,0)+' boekingen   saldo gestempeld '+(meta.date||'nooit')); }
+  }
+  L.push('');
+  L.push('  aantal afgeleide verbindingen:     '+gk.length);
+  L.push('  laatste import (globaal):          '+_dV(()=>SET.psd2LastSync?new Date(SET.psd2LastSync).toString():'nooit'));
+  L.push('  laatste import per rekening:       bestaat niet, er is geen veld');
+  L.push('  bewaarde foutstatus:               bestaat niet, er is geen veld');
+  L.push('  dichtstbijzijnde per-rekening bewijs dat de saldo-aanroep lukte: ACCMETA[a].date hierboven');
+  L.push('');
+  const leeg=_dT(()=>rekZonderBoekingen(),[])||[];
+  L.push('gekoppeld zonder boekingen: '+(leeg.length?leeg.join(', '):'geen'));
+  const ov=_dT(()=>rekeningOverlap(),[])||[];
+  L.push('rekeningen met dezelfde boekingen: '+(ov.length?ov.map(o=>o.a+' vs '+o.b+' ('+o.gedeeld+' gedeeld)').join(', '):'geen'));
+  const zonderHash=Object.keys(ps).filter(a=>!(ps[a]||{}).hash);
+  L.push('gekoppeld ZONDER identification_hash: '+(zonderHash.length?zonderHash.join(', '):'geen')
+    +(zonderHash.length?'   <-- die krijgen bij een herkoppeling een nieuwe id':''));
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -13401,6 +13480,7 @@ const DIAG_BLOKKEN=[
   {titel:'wat allocatePlan() zegt', lees:diagAlloc},
   {titel:'de potjesregel op Inzichten', lees:diagPotjes},
   {titel:'haalt de weekreeks zijn drempel', lees:diagWeekblokken},
+  {titel:'de rekeningen en de bankverbindingen', lees:diagRekeningen},
 ];
 
 async function diagTekst(){
