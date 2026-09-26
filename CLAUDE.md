@@ -95,6 +95,56 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **Betaald is een vlag per post, en het onderscheid eenmalig/interval zit in de maand**
+  (`v268`): een verwachte post die je betaalde bleef als verwachte kost in de lijst staan tot de
+  maand omsloeg, en verdween dan STIL - een eenmalige post gaf `resVolgende()` null en was weg
+  zonder dat ergens stond dat je hem gehaald had. Een post met een interval rolde juist door, of je
+  betaald had of niet. Er was geen enkel veld dat "betaald" kon betekenen.
+  DE VORM IS `SET.fixDueExcl` (`v231`) EN NIET HET CORRECTIEPATROON BIJ DE BUFFER: `spaarOver()`
+  verlaagt een opgeslagen getal en boekt geen uitgave, en hier is er juist wel een uitgave die moet
+  blijven staan. Wat wel past is een vlag per post met de dag waarop je hem vastlegde, die dezelfde
+  lijst filtert: `SET.resBetaald[id]={op, maand}`.
+  HET ONDERSCHEID ZIT NIET IN EEN TWEEDE TAK, en dat is de kern. De vlag draagt de MAAND van het
+  voorkomen dat je afvinkte, en `resVolgende()` slaat elk voorkomen tot en met die maand over. Bij
+  een eenmalige post is dat het enige voorkomen en valt hij weg; bij een interval rolt hij door naar
+  de volgende termijn, en die bouwt vanzelf vanaf nul op, want `benodigdeStand` rekent
+  `bedrag x (interval - offset) / interval` en `offset` is daar het hele interval. GEMETEN op de
+  kwartaalvariant: `opgebouwd` gaat van 313 naar 0 en `benodigdeStand` van 463 naar 0.
+  DE MAAND EN GEEN OFFSET: een offset schuift elke maand mee, een lokale ym niet (`v199`).
+  ÉÉN BRON. Alleen `resVolgende()` slaat een betaalde termijn over; `verplichtingen()` en
+  `dekking()` lezen de vlag niet, en elk scherm ziet het dus per constructie (`v104`).
+  `reservering-betaald.spec.js` leest de bron en valt op een tweede lezer.
+  ÉÉN ENTRY PER POST EN GEEN BETAALGESCHIEDENIS: een tweede termijn afvinken vervangt de eerste.
+  De vraag is welke termijn nog open staat, niet wat je ooit betaalde, en een log hoort bij een
+  andere vraag.
+  HET GAT VERDWIJNT, en dat was de vraag die deze ronde moest beslissen. GEMETEN op twee
+  kwartaalposten van €313 en €150 die deze maand vallen, tegen een pot van €1.537: vóór het
+  afvinken `gedektTot` +6 met een gat van €165 in de vierde termijn, na het afvinken `gedektTot` +9
+  en geen gat. De pot is €463 lichter EN de verplichting die hij betaalde is weg, dus er komt een
+  termijn ruimte bij in plaats van af. Zonder deze handeling stond daar een tekort dat er niet was.
+  TERUGDRAAIEN IS DE VLAG WEGHALEN, precies als bij `toggleFixDueExcl()`, en daarom BLIJFT DE POST
+  IN DE BEHEERLIJST staan met "Betaald op 26 sep" erbij: een verkeerd afgevinkte post herstel je
+  zonder hem opnieuw aan te maken. GEMETEN dat `dekking(12)` na het terugdraaien karakter voor
+  karakter dezelfde is. `deleteReservering()` en `resNaarDoel()` halen de vlag mee weg; ids worden
+  nooit hergebruikt, dus dat laat niets achter.
+  GEEN TERMIJN OPEN IS GEEN HANDELING: een verstreken eenmalige post geeft `resVolgende()` null en
+  dan biedt de editor het afvinken niet aan, in plaats van een maand te verzinnen (`v59`/`v73`).
+  EEN BETAALDE RIJ DRAAGT DE CATEGORIE NIET, en dat is gemeten en geen voorkeur: met de categorie
+  erbij breekt de sub over twee regels (76px in plaats van 57px, op 360 EN 390px), en de maand korter
+  schrijven helpt niets ("volgende dec 2026" breekt precies zo). De twee feiten die de rij moet
+  dragen zijn dat hij betaald is en wanneer de volgende termijn valt; de categorie is optioneel,
+  staat in de editor, en staat op elke rij die nog open is.
+- **OPEN PUNT: de boekingskant is niet gedekt** (`v268`): de €463 aan boetes blijft in
+  `spendNorm` staan, want de handeling raakt de reserveringenlijst en niet de boeking. GEMETEN
+  1.750 naar 2.213, precies de €463; de eigen overboeking van je reserveringsrekening naar je
+  betaalrekening staat op `intern` en telt nergens als uitgave, dus daar is niets te repareren.
+  HET PRECEDENT IS `SET.onregelmatig` (`v259`) EN NIET `geenNorm`: dat tweede zit op de CATEGORIE en
+  zou elke belastingpost normvrij maken, terwijl de vraag over één boeking gaat. Een vlag per
+  boeking op `t.id`, in een eigen map en niet in `OVR`, met een BEDRAG en geen ja/nee.
+  WAT ERBIJ HOORT IS EEN AANWIJZING EN GEEN MATCH: bij de handeling wijs je zelf de boeking aan.
+  Een automatische match op categorie, bedrag en maand heeft in de meting geen basis gekregen
+  (zie de meetles hieronder), en de categorie is te grof: €313 landt op `belasting`, samen met alles
+  wat daar verder in valt. Dit is bewust een eigen ronde: koppelen betekent matchen.
 - **Een poort die een lijst toont en een filter dat de rijen kiest, gaan nooit over dezelfde
   vraag** (`v260`): `nogDezeMaandPosten()` had allebei. Een voorpoort liet het hele blok vallen
   tenzij `fixDue`, `varPlan`, `incDue` of een potje boven nul stond, en daaronder besliste het
@@ -1203,6 +1253,15 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
+- **Een test die eenduidig uitkomt op invoer waarin maar één kandidaat bestaat, toetst geen
+  uniciteit.** Bij `v268` moest een match op categorie, bedrag en maand worden beoordeeld, en de
+  fixture kreeg er een tweede boeking van €313 bij om de ambiguïteit te maken. Die tweede boeking
+  landde niet in dezelfde categorie, dus er kwam één kandidaat uit en de test stond groen op een
+  eigenschap die hij niet raakte. Dat is dezelfde vorm als een fixture-comment die iets belooft wat
+  de fixture niet draagt (`v261`), maar de fout zit hier in de OPZET: bij een test die zegt "er is
+  precies één" hoort eerst de meting dat er in deze invoer werkelijk meer dan één kon zijn. Toets
+  dus de invoer voordat je de uitkomst toetst, en meld het als de opzet niet gelukt is in plaats van
+  de groene uitslag als bewijs te lezen.
 - **Een placeholder of een label dat een waarde belooft, tel je tegen wat de code doet.** Een veld
   met `placeholder="5"` zegt dat leeg laten 5% betekent; staat er in de code `+v('aRend')||0`, dan
   is het 0 en liegt het scherm. Hetzelfde geldt voor een eenheid, een default in een labeltekst en
@@ -1245,7 +1304,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v266` → `minder-v267`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v267` → `minder-v268`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

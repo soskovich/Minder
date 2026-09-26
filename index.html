@@ -5417,15 +5417,38 @@ const RES_INTERVAL=[[0,'eenmalig'],[1,'maandelijks'],[3,'per kwartaal'],[6,'half
 function resIntervalLabel(iv){ const r=RES_INTERVAL.find(x=>x[0]===Math.max(Math.round(+iv||0),0)); return r?r[1]:'eenmalig'; }
 function resYmPlus(o){ const n=new Date(); const d=new Date(n.getFullYear(), n.getMonth()+Math.round(+o||0), 1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+/* v268: 'deze post is betaald'. Eenzelfde vorm als SET.fixDueExcl (v231): een vlag per post, met
+   de dag waarop je hem vastlegde, die dezelfde lijst filtert. Geen tweede detectie en geen match op
+   je boekingen: wat betaald is breng jij in, want een automatische match op categorie, bedrag en
+   maand had in de meting geen basis.
+   HET ONDERSCHEID EENMALIG TEGEN INTERVAL ZIT NIET IN EEN TWEEDE TAK. De vlag draagt de MAAND van
+   het voorkomen dat je afvinkte, en resVolgende() slaat elk voorkomen tot en met die maand over.
+   Bij een eenmalige post is dat het enige voorkomen en valt hij weg; bij een post met een interval
+   rolt hij door naar de volgende termijn, en die bouwt dan vanzelf vanaf nul op, want
+   benodigdeStand rekent met bedrag x (interval - offset) / interval en offset is daar het hele
+   interval. Eén mechanisme, en het verschil volgt uit de post zelf.
+   ÉÉN ENTRY PER POST EN GEEN BETAALGESCHIEDENIS: een tweede termijn afvinken vervangt de eerste.
+   Dat is bewust, want de vraag is welke termijn nog open staat, en niet wat je ooit betaalde.
+   De maand is een lokale ym uit resYmPlus() en geen offset: een offset schuift elke maand mee. */
+function resBetaald(v){ const f=(SET.resBetaald||{})[(v||{}).id];
+  return (f && typeof f==='object' && f.maand) ? {op:String(f.op||''), maand:String(f.maand)} : null; }
+function resBetaaldLabel(v){ const B=resBetaald(v); if(!B) return ''; return B.op?`Betaald op ${dagKort(B.op)}`:'Betaald'; }
 /* Eerstvolgende voorkomen als offset in maanden vanaf deze maand, of null.
    Verstreken vervalmaand met een interval rolt door naar de volgende cyclus; een verstreken
-   eenmalige post vervalt volledig. */
+   eenmalige post vervalt volledig. Sinds v268 slaat hij ook over wat je als betaald vastlegde; dat
+   is de ENIGE plek waar dat gebeurt, zodat verplichtingen(), dekking() en elk scherm het per
+   constructie zien (v104). */
 function resVolgende(v){
-  const o=doelMaandenTot((v||{}).vervalmaand); if(o==null) return null;
+  const o0=doelMaandenTot((v||{}).vervalmaand); if(o0==null) return null;
   const iv=Math.max(Math.round(+((v||{}).intervalM)||0),0);
-  if(o>=0) return o;
-  if(!iv) return null;
-  return o + Math.ceil(-o/iv)*iv;
+  let o;
+  if(o0>=0) o=o0;
+  else if(!iv) return null;
+  else o=o0 + Math.ceil(-o0/iv)*iv;
+  const B=resBetaald(v); if(!B) return o;
+  let guard=0;
+  while(resYmPlus(o)<=B.maand && guard++<400){ if(!iv) return null; o+=iv; }
+  return o;
 }
 /* Rolt de lijst uit over de horizon. Een kwartaalpost verschijnt dus vier keer in een jaar.
    Posten zonder bedrag rollen niet uit (ze zetten wel `volledig` op false in dekking()).
@@ -5600,10 +5623,24 @@ function renderResSheet(){
     ? `<div class="small" style="margin-top:8px;color:var(--mut2);line-height:1.5">Deze rekening staat ook aangemerkt als spaarrekening. Dan telt elke storting mee als sparen, terwijl dit geld al vergeven is aan je aanslagen en je tandarts. Je spaarquote en je totaal gespaard meten dan iets anders dan ze horen te meten.
        <span style="color:var(--teal);cursor:pointer" onclick="toggleSavingsAcct('${esc(String(acc).replace(/'/g,"\\'"))}');renderResSheet()">spaarvlag uitzetten \u203a</span></div>`
     : '';
-  const rij=v=>{ const o=resVolgende(v); const bed=Math.round(+v.bedrag||0);
+  /* v268: een betaalde post blijft in deze lijst staan, want dit is het oppervlak waar je hem
+     beheert en waar je een verkeerde markering ongedaan maakt. Wat hij niet meer is, is een
+     verwachte kost: uit resVolgende() valt hij vanzelf uit verplichtingen() en dekking().
+     DE RIJ MAAKT HET ONDERSCHEID ZICHTBAAR: is er een volgende termijn, dan staat die maand er;
+     is er geen, dan staat het woord van het interval er en zegt 'eenmalig' waarom er niets volgt.
+     EEN BETAALDE RIJ DRAAGT DE CATEGORIE NIET, en dat is een meting en geen voorkeur: met de
+     categorie erbij breekt de sub over twee regels (76px in plaats van 57px, op 360 EN 390px), en
+     de maand korter schrijven helpt niets - 'volgende dec 2026' breekt precies zo. Wat overblijft
+     is dus de keuze tussen afbreken en de categorie weglaten. De categorie is optioneel, staat in
+     de editor en staat op elke rij die nog open is; de twee feiten die deze rij moet dragen zijn
+     dat hij betaald is en wanneer de volgende termijn valt. */
+  const rij=v=>{ const o=resVolgende(v); const bed=Math.round(+v.bedrag||0); const B=resBetaald(v);
+    const cat=v.cat&&CATS[v.cat]?' \u00b7 '+esc(CATS[v.cat].name):'';
+    const sub=B ? `${resBetaaldLabel(v)} \u00b7 ${o==null?esc(resIntervalLabel(v.intervalM)):'volgende '+resMaandLabel(resYmPlus(o))}`
+               : `${o==null?'verstreken':resMaandLabel(resYmPlus(o))} \u00b7 ${esc(resIntervalLabel(v.intervalM))}${cat}`;
     return `<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openReservering('${esc(String(v.id).replace(/'/g,"\\'"))}')">
       <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(v.naam||'Verplichting')}</div>
-        <div class="small muted">${o==null?'verstreken':resMaandLabel(resYmPlus(o))} \u00b7 ${esc(resIntervalLabel(v.intervalM))}${v.cat&&CATS[v.cat]?' \u00b7 '+esc(CATS[v.cat].name):''}</div></div>
+        <div class="small muted">${sub}</div></div>
       <div class="small" style="font-weight:700;white-space:nowrap">${bed>0?euro0(bed):'geen bedrag'} <span style="color:var(--teal)">\u203a</span></div></div>`; };
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="resHead">Reserveringen</div>
@@ -5652,6 +5689,7 @@ function openReservering(id){
     <label class="fld" style="margin-top:12px">Categorie (optioneel)</label>
     <select id="rCat" style="width:100%"><option value="">geen</option>${cats.map(([k,c])=>`<option value="${k}"${d.cat===k?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveReservering('${esc(String(id||'').replace(/'/g,"\\'"))}')">${ICON('check')} Opslaan</button>
+    ${v?resBetaaldRegel(v):''}
     ${v?`<div class="small" style="margin-top:14px;text-align:center"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openResNaarDoel('${esc(String(id).replace(/'/g,"\\'"))}')">Dit is geen kost maar een spaardoel \u203a</span></div>`:''}
     ${v?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteReservering('${esc(String(id).replace(/'/g,"\\'"))}')">Verwijderen</div>`:''}
     <div class="small muted" style="margin-top:12px;text-align:center;cursor:pointer" onclick="openReserveringen()">\u2039 Terug</div>`;
@@ -5661,6 +5699,34 @@ function openReservering(id){
 function resIntervalPick(w){ window._resIv=Math.max(Math.round(+w||0),0);
   const box=document.getElementById('rModes'); if(!box) return;
   box.innerHTML=RES_INTERVAL.map(([x,l])=>`<span class="chip ${window._resIv===x?'on':''}" onclick="resIntervalPick(${x})">${l}</span>`).join('');
+}
+/* De handeling en haar terugdraaier, in dezelfde vorm als toggleFixDueExcl(): één schrijver, en
+   ongedaan maken is de vlag weghalen. Een verkeerd afgevinkte post is dus te herstellen zonder hem
+   opnieuw aan te maken, en dat is waarom hij in de beheerlijst blijft staan.
+   ER VALT NIETS TE MARKEREN ZONDER OPEN TERMIJN: een verstreken eenmalige post en een post die al
+   tot en met zijn laatste voorkomen is afgevinkt geven resVolgende() null, en dan zegt de app dat
+   in plaats van een maand te verzinnen (v59/v73). */
+function resBetaaldRegel(v){
+  const id=esc(String(v.id).replace(/'/g,"\\'"));
+  if(resBetaald(v)) return `<div class="small" style="margin-top:14px;text-align:center;color:var(--mut2);line-height:1.5">${resBetaaldLabel(v)}, dus deze termijn staat niet meer als verwachte kost in je lijst.
+    <span style="color:var(--teal);cursor:pointer" onclick="resBetaaldTerug('${id}')">ongedaan maken \u203a</span></div>`;
+  if(resVolgende(v)==null) return '';
+  return `<div class="small" style="margin-top:14px;text-align:center"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="resBetaaldZet('${id}')">Deze post is betaald \u203a</span></div>`;
+}
+function resBetaaldZet(id){
+  const v=resLijst().find(x=>x.id===id); if(!v) return;
+  const o=resVolgende(v);
+  if(o==null){ toast('Er staat geen termijn open'); return; }
+  SET.resBetaald=SET.resBetaald||{};
+  SET.resBetaald[id]={op:vandaagYMD(), maand:resYmPlus(o)};
+  save(); render(); openReservering(id);
+  toast(`${ICON('check')} Betaald \u00b7 onthouden`);
+}
+function resBetaaldTerug(id){
+  if(!(SET.resBetaald||{})[id]) return;
+  delete SET.resBetaald[id];
+  save(); render(); openReservering(id);
+  toast('Post telt weer mee');
 }
 function saveReservering(id){
   const v=x=>(document.getElementById(x)||{}).value;
@@ -5681,6 +5747,7 @@ function saveReservering(id){
 }
 function deleteReservering(id){
   SET.reserveringen=resLijst().filter(x=>x.id!==id);
+  if(SET.resBetaald) delete SET.resBetaald[id];   // v268: geen vlag zonder post; ids worden nooit hergebruikt, dus dit laat niets achter
   save(); render(); renderResSheet(); toast('Verplichting verwijderd');
 }
 /* v242: een reservering omzetten naar een spaardoel. Een reservering is een kost die komt; een
@@ -5734,6 +5801,7 @@ function resNaarDoel(id){
            startDatum:vandaagYMD(), startStand:Math.max(Math.round(Math.min(gespaard,bedrag)),0)};
   SET.goals=(SET.goals||[]).concat([g]);
   SET.reserveringen=resLijst().filter(x=>x.id!==id);
+  if(SET.resBetaald) delete SET.resBetaald[id];   // v268: de post verdwijnt hier ook, dus de vlag gaat mee
   save(); render(); renderResSheet();
   toast(`${ICON('check')} ${g.naam} staat nu bij je doelen`);
 }
