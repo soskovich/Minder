@@ -1876,6 +1876,17 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   kent, zegt een sprong meer dan de uitvoer. Van 2,8 naar 13,4 minuten zijn 88 timeouts van dertig
   seconden, en dat is een harder signaal dan een regel tekst die je makkelijk verkeerd leest. Kijk
   bij een afwijkende looptijd eerst naar het aantal gedraaide tests, niet naar de laatste regels.
+  EN DAT AANTAL VANGT DE ANDERE OORZAAK NIET (`v277`): een sprong kan ook betekenen dat er TWEE suites
+  tegelijk lopen. GEMETEN: een achtergrondrun die als afgebroken werd gemeld liep door en schreef naar
+  hetzelfde uitvoerbestand als de run die ik daarna startte. Dat bestand droeg daarna TWEE samenvattingen,
+  `2 failed / 2637 passed (20,0m)` en `141 failed / 2498 passed (21,6m)`, en ik las de eerste en meldde
+  groen. De tellingscheck kon dat niet vangen, want elke run telt zelf 2641, en de 141 rode waren de staart
+  van de lijst: hele bestanden achter elkaar, de vorm van uitputting en niet van een regressie. Alleen
+  opnieuw draaien, ALLEEN, met een eigen uitvoerbestand en een leeggemaakte `test-results/`, gaf het
+  antwoord (2637 passed, dezelfde twee bekende rode). DE WERKAFSPRAAK: één suite per keer, een eigen
+  bestandsnaam per run, en bij een afwijkende looptijd eerst tellen HOEVEEL samenvattingen er in het
+  bestand staan. Meer dan één betekent dat geen van de twee iets bewijst. Dit is dezelfde familie als de
+  heredoc-les hierboven: een geslaagd commando is niet hetzelfde als de juiste uitvoer.
 - **Grep vóór een hernoeming ook in `tests/`.** Alleen in `index.html` zoeken is dezelfde vindfout
   als de twee hierboven, alleen te smal in plaats van te breed. Een naam, een id of een CSS-klasse
   die in de app een detail lijkt, is voor een spec het anker waaraan hij zijn eigenschap ophangt.
