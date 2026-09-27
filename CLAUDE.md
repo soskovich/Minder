@@ -95,6 +95,53 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE BRON IS DE AS, NIET DE BANK, EN DAT WORDT PER REKENING GEMETEN** (`v275`): `v274` groepeerde op
+  rekening en stijl, en op de enige rekening met twee bronnen vielen psd2 en mt940 daardoor samen.
+  Sectie 4 van blok 10 splitst ze, op een rekening die wordt AFGELEID uit "meer dan één bron" en nergens
+  bij naam staat (`v266`).
+  DE EIGENLIJKE TOETS IS DE VERSCHILVERDELING EN NIET DE WEEKDAG (4a): is `t.date` bij mt940 de
+  valutadatum en is die de betaaldag, dan staat GELIJK daar op honderd procent en bij psd2 laag. De twee
+  weekdagkolommen staan eronder omdat ze zeggen wat dat verschil met de kalender doet, niet omdat ze het
+  bewijs zijn. Dat was nodig omdat de aanwijzing van `v274` op 202 euro en 22 regels rustte.
+  DE NIET-KAARTREGELS ZIJN EEN EIGEN VRAAG (4b): ze kunnen het veld per constructie nooit krijgen, want
+  hun desc draagt geen kaart-kenmerk, geen datum en geen tijd, en ze dragen op het toestel het grootste
+  deel van de in-scope euro's van die rekening. Zonder die meting is er over dat deel niets te zeggen.
+  DE INCASSO STAAT APART, en niet omdat hij anders telt: zijn desc noemt de VERVALDAG en niet het moment
+  van betalen (`v272`, gemeten op Basic Fit). Die tak leest `isIncasso()` en geen eigen regex, dus er
+  komt geen tweede incasso-detectie naast de bestaande.
+  HET OVERLAP-VENSTER STAAT ERBIJ, want twee bronnen dekken niet dezelfde periode en een vergelijking
+  tussen twee tabellen uit verschillende jaren meet de periode mee. 4b geeft eerst de hele import en
+  daarna dezelfde tabel binnen het venster waarin beide bronnen boeken, met dat venster erbij.
+  4c OMZEILT DAT PROBLEEM door dezelfde betaling van twee kanten te vergelijken, en noemt zijn eigen
+  zwakte: EEN PAAR IS GEEN BEWIJS. Gemeten bij `v274` kan één mt940-regel met drie psd2-regels een paar
+  vormen, dus het aantal paren telt te hoog als maat voor dubbelen. Daarom staat er apart hoeveel paren
+  aan BEIDE kanten het veld dragen en hoeveel daarvan een gelijke betaaldatum ÉN -tijd hebben; dat is de
+  harde identiteit, en het verschil tussen aanwijzing en bewijs staat zo in de uitvoer.
+  WAT HET BESLIST, en het blok zegt het zelf: draagt de mt940-kant van de niet-kaartregels het weekend
+  dat de psd2-kant mist, dan is de valutadatum het slot voor de HELE rekening en is de volgende stap de
+  `value_date` uit PSD2 als EIGEN veld bewaren met `t.date` onaangeroerd, precies de vorm van `v273`.
+  Zijn de twee kanten daar gelijk, dan zit de vertekening alleen in de kaartregels.
+  OPEN VRAAG, NIET IN DE APP TE METEN: of ABN die `value_date` in de PSD2-respons meelevert.
+  `mapPsd2Tx()` leest `booking_date || value_date || transaction_date` en gooit de rest weg, dus wat er
+  in de respons stond staat niet in `TX`. Dat is alleen aan de backend te zien.
+- **De sabotage op de bronrichting bleef groen, en dat was de fixture** (`v275`): de parenscan loopt in
+  de volgorde van `TX`, en in mijn eerste fixture stond de mt940-kant er per ongeluk als eerste in.
+  Daarmee was `p.a` altijd al de mt940-kant en deed de check die dat vaststelt niets. De fixture draagt
+  nu een TWEEDE paar met de psd2-kant vooraan, en dan leest 4c zonder die check de richting van dat paar
+  omgekeerd. VIJFDE KEER DEZELFDE FAMILIE (`v265`, `v268`, `v269`, `v274`, `v275`): de test was geldig
+  geformuleerd en raakte de code niet. Wat alle vijf had gevangen is dezelfde vraag, en die staat onder
+  de meetlessen: kan deze test rood worden, en waardoor precies.
+- **Reparatie: mijn eigen `bankVan()` sprak blok 8 tegen** (`v275`): de vorm van `v274` las alleen
+  `SET.psd2Accounts` en viel terug op het `label`, en dat is de naam van de rekening en niet de bank.
+  GEMETEN in een run van `v274`: blok 8 zei bij een rekening "bank: ABN AMRO" en meting 1 "bank -", een
+  tegenspraak over hetzelfde veld in dezelfde uitvoer. Hij leest nu dezelfde afleiding als blok 8.
+  OPEN PUNT: die uitdrukking staat nu op VIER plekken (blok 10, blok 8, `acctNaam()` en
+  `acctRenameOpen()`). De vorm die dat oplost is een `acctBank(a)` die alle vier lezen, en dat raakt
+  app-code buiten dit blok en is dus een eigen ronde.
+  EEN GETAL VAN HET TOESTEL HOORT NIET IN DE TEKST VAN HET BLOK: de conclusieregel noemde eerst "de
+  andere 86 procent van de euro's", gemeten bij `v274`. Zo'n getal veroudert zodra de gegevens
+  veranderen en is dan niet bij te werken door opnieuw te meten (`v256`); de regel wijst nu naar de
+  sommen die in 4a en 4b zelf staan.
 - **DE DEKKING VAN HET BETAALDATUM-VELD STAAT PER BRON EN PER REKENING, MET HET BEDRAG ALS MAAT**
   (`v274`): dat was de kleinste volgende stap die `v273` openliet, want hij beslist of de piekdag ooit
   op betaaldatum kan. Blok 10 geeft per bron en per rekening het aantal boekingen, het aantal
@@ -1783,10 +1830,10 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** Drie keer in vier
-  rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze
-  als incidenten; samen zijn het drie manieren waarop dezelfde fout binnenkomt, en de vraag die alle
-  drie had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** VIJF keer in elf rondes
+  is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze als
+  incidenten; samen zijn het vijf manieren waarop dezelfde fout binnenkomt, en de vraag die alle vijf
+  had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
   (a) DE TRIPDRAAD DIE NIET KON VALLEN (`v265`). De uitsluiting van huur uit `weekScope()` moest een
   test krijgen die valt zodra `recurringCats()` huur wél als terugkerend ziet, want dan is
   `WEEK_SCOPE_UIT` dood gewicht. Mijn eerste vorm vergeleek `weekScope()` met een nagebootste
@@ -1805,7 +1852,16 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   die klem weg kan: `SET` komt bij een import terug via `Object.assign` over `d.set`, dus een backup
   met een te hoge waarde landt ongeklemd in `SET`, en de leesklem is precies wat dat opvangt. Wat er
   miste was HET PAD, en de test schrijft nu rechtstreeks naar `SET` zoals een import dat doet.
-  WAT DE DRIE GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (d) DE ASSERTIE DIE TE RUIM STOND (`v274`). De dekking per bron moest op het BEDRAG binden en niet op
+  het aantal boekingen. De sabotage die per boeking telt bleef groen, want op die fixture gaf hij 5 van 7
+  tegen 482 van 524 en dat ligt allebei boven de helft waarop de assertie stond. De reparatie is niet een
+  andere fixture maar een scherpere assertie: de bedragen voluit.
+  (e) DE FIXTURE DIE DE VOLGORDE AL GOED HAD (`v275`). De parenscan in blok 10 loopt in de volgorde van
+  `TX` en moet zelf vaststellen welke kant de mt940-kant is. In mijn fixture stond die kant er per
+  ongeluk als eerste in, dus de check deed niets en het weghalen bleef groen. De reparatie is een TWEEDE
+  paar met de andere bron vooraan: dan leest het blok zonder die check de richting omgekeerd. Toets bij
+  een check die een ORDE vaststelt dus of je invoer die orde niet al gratis geeft.
+  WAT DE VIJF GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -1861,7 +1917,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v273` → `minder-v274`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v274` → `minder-v275`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

@@ -13994,7 +13994,14 @@ function diagDubbel(){
     if(/\bPMNT\b/i.test(d)) return 'PMNT (de N26-vorm)';
     return '';
   };
-  const bankVan=a=>{ const r=(SET.psd2Accounts||{})[a]; return (r&&(r.bank||r.label))||'-'; };
+  /* DEZELFDE AFLEIDING ALS BLOK 8 (v275). Mijn eerste vorm las alleen SET.psd2Accounts en viel terug
+     op het LABEL, en dat is de naam van de rekening en niet de bank. GEMETEN in een run van v274:
+     blok 8 zei bij een rekening "bank: ABN AMRO" en meting 1 "bank -", een tegenspraak over hetzelfde
+     veld in dezelfde uitvoer, en dat is wat v104 verbiedt.
+     OPEN PUNT, NIET IN DEZE RONDE: deze uitdrukking staat nu op VIER plekken (hier, blok 8,
+     `acctNaam()` en `acctRenameOpen()`). De vorm die dat oplost is een `acctBank(a)` die alle vier
+     lezen, en dat raakt app-code buiten dit blok. */
+  const bankVan=a=>(ACCMETA[a]&&ACCMETA[a].bank)||(((SET.psd2Accounts||{})[a])||{}).bank||'-';
   const dekRij=sleutel=>{
     const rij={};
     for(const t of TX){
@@ -14127,6 +14134,188 @@ function diagDubbel(){
   L.push('  hij mag NIET op een GEMENGDE as als (1) bij de ene bron vol is en bij de andere leeg terwijl');
   L.push('    (3) daar wel een maandagpiek laat zien. Dan hangt de kalender van je bank af in plaats van');
   L.push('    van je gedrag, en dat is dezelfde fout als MEEVALLER_FACTOR (v259).');
+  /* ===== 4. DE BRON BINNEN ÉÉN REKENING (v275) =====
+     WAT v274 OPENLIET. Meting 3 groepeerde op rekening en stijl, en op de rekening die TWEE BRONNEN
+     draagt vielen die twee daardoor samen. GEMETEN op het toestel gaf dat twee vondsten die elkaar niet
+     los laten beoordelen: de kaartregels van die rekening staan op `t.date` op maandag 35 procent en op
+     de betaaldatum op zaterdag 29, terwijl een rekening met ALLEEN mt940 twee kolommen gaf die karakter
+     voor karakter gelijk waren. Dat tweede rustte op 202 euro en 22 regels, en dat is te weinig om
+     "mt940 levert de betaaldag al" op te bouwen.
+     WAT HIER GEMETEN WORDT, en de rekening wordt AFGELEID en niet bij naam genoemd: het is de rekening
+     met meer dan één bron, en dat is precies de eigenschap die dit meetbaar maakt (v266).
+     (a) de KAARTREGELS per bron, met de verschilverdeling tussen `t.date` en de betaaldatum. Dat is de
+     harde toets op "mt940 is al de betaaldag": is `t.date` daar de valutadatum en is die de betaaldag,
+     dan staat bij mt940 bijna alles op GELIJK en bij psd2 niet.
+     (b) de NIET-KAARTREGELS per bron en per stijl. Die kunnen het veld per constructie nooit krijgen
+     (geen kaart-kenmerk, geen datum, geen tijd in de desc), en ze dragen op het toestel 86 procent van
+     de in-scope euro's van die rekening. Zonder deze meting is er over dat deel niets te zeggen.
+     DE INCASSO STAAT APART, en niet omdat hij anders telt maar omdat zijn desc de VERVALDAG noemt en
+     niet het moment van betalen (v272, gemeten op Basic Fit). Een incasso heeft geen betaaldag in de
+     zin die deze vraag bedoelt.
+     (c) DE PAREN, want die vergelijken dezelfde betaling van twee kanten en hebben dus geen
+     periode-vertekening. Twee bronnen dekken verschillende jaren, dus een weekdagvergelijking tussen
+     (b)-tabellen is besmet met de periode; het overlap-venster staat er daarom bij, en (c) omzeilt het.
+     ALLEEN LEZEN, zoals elk blok hier. */
+  const NIET_KAART_STIJL=t=>{
+    if(_dT(()=>isIncasso(t),false)) return 'incasso (desc = vervaldag)';
+    const d=String(t.desc||'');
+    if(/\bIDEAL\b|\bWERO\b|TIKKIE/i.test(d)) return 'iDEAL/Wero/Tikkie';
+    if(/SEPA ?OVERBOEKING/i.test(d)) return 'SEPA-overboeking';
+    return 'anders';
+  };
+  const wdNieuw=()=>({n:0,som:0,wd:[0,0,0,0,0,0,0],veld:0,vSom:0,vTx:[0,0,0,0,0,0,0],vBet:[0,0,0,0,0,0,0],dMin:'',dMax:'',versch:{}});
+  const wdVoeg=(g,t)=>{
+    const b=-t.amount; g.n++; g.som+=b; g.wd[_piekDagIdx(t.date)]+=b;
+    const d=String(t.date).slice(0,10);
+    if(!g.dMin||d<g.dMin) g.dMin=d; if(!g.dMax||d>g.dMax) g.dMax=d;
+    if(t.betaalDatum){ g.veld++; g.vSom+=b;
+      g.vTx[_piekDagIdx(t.date)]+=b; g.vBet[_piekDagIdx(t.betaalDatum)]+=b;
+      const dd=_dagenTussen(t.betaalDatum, t.date);
+      const bak=(dd<0?'t.date EERDER':(dd===0?'gelijk':(dd<=3?('t.date '+dd+' later'):'t.date 4 of meer later')));
+      g.versch[bak]=(g.versch[bak]||0)+1; }
+  };
+  const maWknd=g=>(g.som>0
+    ? ('maandag '+Math.round(g.wd[0]/g.som*100)+'%   weekend '+Math.round((g.wd[5]+g.wd[6])/g.som*100)+'%   grootste '+dk[g.wd.indexOf(Math.max(...g.wd))])
+    : 'netto niets of negatief, geen aandeel te rekenen');
+  L.push('');
+  L.push('4. DE BRON BINNEN EEN REKENING (afgeleid: de rekening met meer dan een bron)');
+  if(!meerdere.length) L.push('  geen rekening draagt twee bronnen, dus hier valt niets te splitsen');
+  for(const acc of meerdere){
+    const rij=TX.filter(t=>String(t.acc)===String(acc));
+    const sc=rij.filter(t=>inScope(t)&&t.amount<0);
+    L.push('');
+    L.push('  rekening '+acc+'   bank '+bankVan(acc)+'   '+rij.length+' boekingen, '+sc.length+' in de scope van piekVerdeling()');
+    /* HET OVERLAP-VENSTER, want de twee bronnen dekken niet dezelfde periode en een weekdagvergelijking
+       tussen twee verschillende jaren meet de periode mee. */
+    const perBron={};
+    for(const t of rij){ const s=src(t); const d=String(t.date).slice(0,10);
+      const b=perBron[s]=perBron[s]||{min:'',max:'',n:0}; b.n++;
+      if(!b.min||d<b.min) b.min=d; if(!b.max||d>b.max) b.max=d; }
+    const bronnen=Object.keys(perBron).sort();
+    for(const s of bronnen) L.push('    bron '+s.padEnd(6)+' '+String(perBron[s].n).padStart(5)+' boekingen   '+perBron[s].min+' t/m '+perBron[s].max);
+    const ovMin=bronnen.map(s=>perBron[s].min).sort().pop();
+    const ovMax=bronnen.map(s=>perBron[s].max).sort()[0];
+    const overlap=(ovMin<=ovMax);
+    L.push('    overlap-venster: '+(overlap?(ovMin+' t/m '+ovMax):'GEEN overlap, dus (b) is niet tussen de bronnen te vergelijken'));
+
+    /* (a) DE KAARTREGELS PER BRON. De verschilverdeling is de eigenlijke toets; de twee
+       weekdagkolommen staan eronder omdat ze zeggen wat dat verschil met de kalender doet. */
+    L.push('');
+    L.push('  4a. DE KAARTREGELS, PER BRON   (kaart-kenmerk BEA/eCom/betaalpas, in scope)');
+    const kaartG={};
+    for(const t of sc){ if(!stijl(t)) continue; const k=src(t); (kaartG[k]=kaartG[k]||wdNieuw()); wdVoeg(kaartG[k],t); }
+    if(!Object.keys(kaartG).length) L.push('    (geen kaartregels in scope op deze rekening)');
+    for(const s of Object.keys(kaartG).sort((a,b)=>kaartG[b].som-kaartG[a].som)){
+      const g=kaartG[s];
+      L.push('    bron '+s+'   '+g.n+' regels, som '+Math.round(g.som)+'   '+g.dMin+' t/m '+g.dMax);
+      L.push('      met het veld: '+g.veld+' van '+g.n+' regels, '+Math.round(g.vSom)+' van '+Math.round(g.som)
+        +' euro'+(g.som>0?(' ('+Math.round(g.vSom/g.som*100)+'%)'):''));
+      if(g.veld){
+        const tot=Object.values(g.versch).reduce((a,b)=>a+b,0);
+        const gel=g.versch['gelijk']||0;
+        L.push('      t.date tegen de betaaldatum: '+Object.entries(g.versch).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v).join(', '));
+        L.push('      GELIJK: '+gel+' van '+tot+' = '+Math.round(gel/tot*100)+'%'
+          +'   (is t.date hier de betaaldag, dan staat dit bij 100)');
+        if(g.vSom>0){
+          L.push('      die regels op t.date:       '+pct(g.vTx,g.vSom));
+          L.push('      die regels op betaaldatum:  '+pct(g.vBet,g.vSom));
+          const x=g.vTx.indexOf(Math.max(...g.vTx)), y=g.vBet.indexOf(Math.max(...g.vBet));
+          L.push('      verschuift de piek: '+(x===y?('NEE, '+dk[x]+' blijft de grootste'):('JA, van '+dk[x]+' naar '+dk[y])));
+        }
+      } else L.push('      geen enkele kaartregel van deze bron draagt het veld');
+      L.push('      op t.date: '+(g.som>0?pct(g.wd,g.som):'-'));
+      L.push('      '+maWknd(g));
+    }
+
+    /* (b) DE NIET-KAARTREGELS. Hier is geen veld en dus geen tweede as: de enige vergelijking die
+       bestaat is de ene bron tegen de andere, en die staat hieronder ook nog binnen het overlap-venster. */
+    L.push('');
+    L.push('  4b. DE NIET-KAARTREGELS, PER BRON EN PER STIJL   (geen kaart-kenmerk, dus nooit een veld)');
+    const bouw=(filter)=>{ const g={};
+      for(const t of sc){ if(stijl(t)) continue; if(filter && !filter(t)) continue;
+        const k=NIET_KAART_STIJL(t)+' | '+src(t); (g[k]=g[k]||wdNieuw()); wdVoeg(g[k],t); }
+      return g; };
+    const toon=(g,kop)=>{
+      L.push('    '+kop);
+      const ks=Object.keys(g).sort();
+      if(!ks.length){ L.push('      (geen regels)'); return; }
+      for(const k of ks){ const x=g[k];
+        L.push('      '+k.padEnd(38)+String(x.n).padStart(5)+' regels  som '+String(Math.round(x.som)).padStart(6)
+          +'   '+x.dMin+' t/m '+x.dMax);
+        L.push('        op t.date: '+(x.som>0?pct(x.wd,x.som):'-'));
+        L.push('        '+maWknd(x));
+      }
+    };
+    toon(bouw(null), 'over de hele import:');
+    if(overlap){
+      const g=bouw(t=>{ const d=String(t.date).slice(0,10); return d>=ovMin && d<=ovMax; });
+      toon(g, 'binnen het overlap-venster '+ovMin+' t/m '+ovMax+' (hier meet de periode niet mee):');
+      /* DE VRAAG VAN DEZE RONDE, en het blok zegt hem zelf: toont de mt940-kant het weekend dat de
+         psd2-kant mist. Per stijl naast elkaar, alleen waar BEIDE bronnen regels hebben. */
+      L.push('    DE VERGELIJKING PER STIJL, binnen dat venster en alleen waar beide bronnen regels hebben:');
+      const stijlen=[...new Set(Object.keys(g).map(k=>k.split(' | ')[0]))].sort();
+      let iets=false;
+      for(const st of stijlen){
+        const a=g[st+' | mt940'], b=g[st+' | psd2'];
+        if(!a||!b||a.som<=0||b.som<=0) continue;
+        iets=true;
+        const wk=x=>Math.round((x.wd[5]+x.wd[6])/x.som*100), ma=x=>Math.round(x.wd[0]/x.som*100);
+        L.push('      '+st.padEnd(28)+' mt940: ma '+ma(a)+'% weekend '+wk(a)+'% (n='+a.n+', '+Math.round(a.som)+')'
+          +'   psd2: ma '+ma(b)+'% weekend '+wk(b)+'% (n='+b.n+', '+Math.round(b.som)+')');
+        L.push('        '+(wk(a)>wk(b)
+          ? ('mt940 draagt '+(wk(a)-wk(b))+' procentpunt MEER weekend')
+          : (wk(a)<wk(b) ? ('mt940 draagt '+(wk(b)-wk(a))+' procentpunt MINDER weekend') : 'gelijk weekend-aandeel')));
+      }
+      if(!iets) L.push('      (geen enkele stijl heeft binnen dat venster regels uit beide bronnen)');
+    }
+
+    /* (c) DEZELFDE BETALING VAN TWEE KANTEN. Dit is de enige vergelijking zonder periode-vertekening,
+       en de zwakte staat er zelf bij: een paar is niet per definitie dezelfde boeking. Waar beide kanten
+       het veld dragen is er een HARDE identiteit (gelijke betaaldatum en -tijd), en die telling staat
+       eronder, zodat het verschil tussen "aanwijzing" en "bewijs" zichtbaar is. */
+    const pAcc=paren.filter(p=>String(p.a.acc)===String(acc));
+    L.push('');
+    L.push('  4c. DEZELFDE BETALING VAN TWEE KANTEN: de kruisbron-paren op deze rekening: '+pAcc.length);
+    if(pAcc.length){
+      let mEerder=0, mGelijk=0, mLater=0, wkndMa=0, maWk=0, beideVeld=0, zelfdeMoment=0;
+      const mWd=[0,0,0,0,0,0,0], pWd=[0,0,0,0,0,0,0]; let mSom=0, pSom=0;
+      for(const p of pAcc){
+        const m=(src(p.a)==='mt940')?p.a:p.b, q=(m===p.a)?p.b:p.a;
+        if(src(m)!=='mt940') continue;
+        const d=_dagenTussen(m.date, q.date);
+        if(d>0) mEerder++; else if(d===0) mGelijk++; else mLater++;
+        const im=_piekDagIdx(m.date), iq=_piekDagIdx(q.date);
+        const b=Math.abs(+m.amount||0);
+        mWd[im]+=b; pWd[iq]+=b; mSom+=b; pSom+=b;
+        if(im>=5 && iq===0) wkndMa++;
+        if(im===0 && iq>=5) maWk++;
+        if(m.betaalDatum && q.betaalDatum){ beideVeld++;
+          if(m.betaalDatum===q.betaalDatum && String(m.betaalTijd||'')===String(q.betaalTijd||'')) zelfdeMoment++; }
+      }
+      L.push('    de mt940-kant ligt EERDER dan de psd2-kant: '+mEerder+'   gelijk: '+mGelijk+'   later: '+mLater);
+      L.push('    mt940-kant in het weekend terwijl de psd2-kant op maandag ligt: '+wkndMa);
+      L.push('    andersom (mt940 op maandag, psd2 in het weekend):               '+maWk);
+      if(mSom>0) L.push('    weekdagverdeling van de mt940-kanten: '+pct(mWd,mSom));
+      if(pSom>0) L.push('    weekdagverdeling van de psd2-kanten:  '+pct(pWd,pSom));
+      L.push('    EEN PAAR IS NIET PER DEFINITIE DEZELFDE BOEKING (gemeten bij v274: een mt940-regel kan met');
+      L.push('      drie psd2-regels een paar vormen). De harde identiteit is een gelijke betaaldatum EN tijd:');
+      L.push('      paren waarvan BEIDE kanten het veld dragen: '+beideVeld+'   waarvan gelijk moment: '+zelfdeMoment);
+    }
+  }
+  L.push('');
+  L.push('  WAT 4a TOT 4c SAMEN BESLISSEN:');
+  L.push('    is GELIJK bij mt940 hoog en bij psd2 laag (4a), dan is de VALUTADATUM de betaaldag en de');
+  L.push('      BOEKDATUM niet, en dan is de bron de as en niet de bank;');
+  L.push('    draagt de mt940-kant van de niet-kaartregels het weekend dat de psd2-kant mist (4b, en');
+  L.push('      bevestigd door 4c op dezelfde betalingen), dan geldt dat voor de HELE rekening en niet');
+  L.push('      alleen voor de kaartregels. Dan is de volgende stap de value_date uit PSD2 als EIGEN veld');
+  L.push('      bewaren, met t.date onaangeroerd, precies zoals de betaaldatum nu naast t.date staat;');
+  L.push('    zijn de twee kanten daar gelijk, dan zit de vertekening alleen in de kaartregels en is');
+  L.push('      er voor de niet-kaartregels niets te repareren. Hoeveel dat is staat per rekening bij 4b:');
+  L.push('      het is de som daar tegen de som bij 4a.');
+  L.push('    OPEN VRAAG, NIET HIER TE METEN: of ABN die value_date in de PSD2-respons meelevert.');
+  L.push('      mapPsd2Tx() leest booking_date || value_date || transaction_date en gooit de rest weg, dus');
+  L.push('      wat er in de respons stond staat niet in TX. Dat is in de backend te zien en nergens hier.');
   return L;
 }
 const DIAG_BLOKKEN=[
