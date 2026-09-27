@@ -13472,6 +13472,159 @@ function diagRekeningen(){
     +(zonderHash.length?'   <-- die krijgen bij een herkoppeling een nieuwe id':''));
   return L;
 }
+/* 9. DE PIEKDAG PER WEEK (v271). Dit blok meet iets wat de app vandaag NIET meet, en dat is de
+      reden dat het er staat. Signaal 3 van insSignals() werkt per MAAND: piekVerdeling(m) telt per
+      weekdag over de hele maand, piekReferentie(m) neemt drie AFGERONDE maanden en vergelijkt
+      aandeel tegen aandeel, met PIEK_MIN_TX (8) en PIEK_FACTOR (1,5). Er is nergens een
+      weekaggregatie voor de piekdag. weekBlokken() (v264) is er wel, maar dat zijn blokken van
+      zeven dagen vanaf de 1e met een andere scope (varBudget zonder geenNorm zonder huur), dus die
+      snede is niet dezelfde en zijn getallen zijn hier niet bruikbaar.
+      DE SNEDE IS DIE VAN piekVerdeling(): uitgaven, niet vast, niet geenNorm, netto geteld. Zo zijn
+      de getallen hier naast signaal 3 te leggen; met een eigen snede zou dat niet kunnen.
+      DE WEKEN ZIJN KALENDERWEKEN MA-ZO, en alleen weken die helemaal binnen je import vallen en
+      helemaal voorbij zijn. Een halve week is geen week, om dezelfde reden als v194: een aandeel
+      van een lopende week naast afgeronde weken is geen vergelijking.
+      HET NORMALE DAGBEDRAG STAAT ER TWEE KEER, en dat is met opzet. `vlak` is het weektotaal
+      gedeeld door zeven en heeft geen referentie nodig. `aandeel` is het gemiddelde aandeel van die
+      weekdag over alle volle weken maal DIT weektotaal, de constructie van v240. De drempel
+      "minstens 2x het normale dagbedrag" is op beide te beoordelen, en welke van de twee bedoeld is
+      valt pas te kiezen als je de twee naast elkaar ziet.
+      DE TWEEDE REEKS BESTAAT OMDAT DE DETECTIE EEN EIGEN OVERBOEKING KAN MISSEN. Dat is de les van
+      v267: acht posten naar een vorige achternaam vielen buiten applyOwnAccounts() en RULES, dus ze
+      telden als uitgave en maakten een patroon dat er niet was. De code kan alleen zeggen of een
+      boeking onder de intern-detectie valt; of het een eigen overboeking IS zegt de tegenpartij.
+      Daarom staat hier per kandidaat-tegenpartij wat de telling wordt als je hem wegstreept, in
+      plaats van dat het blok zelf een naam aanwijst.
+      ALLEEN LEZEN, zoals elk blok hier: geen save(), niets naar SET, niets naar localStorage. */
+const DIAG_PIEK_WEKEN = 6;   // hoeveel volle weken het rapport uitschrijft
+const DIAG_PIEK_KAND  = 6;   // hoeveel kandidaat-tegenpartijen de tweede reeks doorrekent
+/* Lokale kalenderdag, zoals v199 eist: new Date(ymd+'T00:00:00') is lokale middernacht en
+   ymdVan() geeft de lokale dag terug. toISOString() zou hier de dag ervoor kunnen geven. */
+function _piekMaandag(ymd){ const d=new Date(String(ymd).slice(0,10)+'T00:00:00');
+  d.setDate(d.getDate()-((d.getDay()+6)%7)); return ymdVan(d); }
+function _piekPlus(ymd,n){ const d=new Date(String(ymd).slice(0,10)+'T00:00:00');
+  d.setDate(d.getDate()+n); return ymdVan(d); }
+function _piekDagIdx(ymd){ return (new Date(String(ymd).slice(0,10)+'T00:00:00').getDay()+6)%7; }
+function diagPiekdag(){
+  const L=[]; const dn=['maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag','zondag'];
+  const dk=['ma','di','wo','do','vr','za','zo'];
+  if(!TX.length) return ['geen transacties'];
+  const inScope=t=>{ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !isFixed(t) && !geenNorm(c)); };
+  const naamVan=t=>(cleanMerch(t.name)||t.name||'onbekend');
+  const datums=TX.map(t=>t.date).filter(Boolean).sort();
+  const eerste=datums[0], laatste=datums[datums.length-1], vandaag=vandaagYMD();
+  let ma0=_piekMaandag(eerste); if(ma0<eerste) ma0=_piekPlus(ma0,7);
+  const weken=[];
+  for(let ma=ma0, g=0; g<800; g++){ const zo=_piekPlus(ma,6);
+    if(zo>laatste || zo>=vandaag) break; weken.push(ma); ma=_piekPlus(ma,7); }
+  const wset=new Set(weken);
+  const rapport=weken.slice(-DIAG_PIEK_WEKEN);
+  L.push('scope, dezelfde als piekVerdeling(): uitgaven, niet vast (isFixed), niet geenNorm, netto geteld');
+  L.push('weken: kalenderweken ma-zo, alleen weken die helemaal in je import vallen en helemaal voorbij zijn');
+  L.push('eerste boeking: '+eerste+'   laatste: '+laatste+'   vandaag: '+vandaag);
+  L.push('volle weken in je import: '+weken.length+(weken.length?('   van '+weken[0]+' tot '+_piekPlus(weken[weken.length-1],6)):''));
+  L.push('dit rapport schrijft de laatste '+rapport.length+' uit (DIAG_PIEK_WEKEN='+DIAG_PIEK_WEKEN+')');
+  if(!rapport.length){ L.push(''); L.push('geen volle week voorbij: er valt niets te meten'); return L; }
+  /* EEN REEKS IS EEN FILTER PLUS ZIJN EIGEN REFERENTIE. Streep je een tegenpartij weg, dan
+     verandert het aandeel per weekdag ook, dus de referentie wordt opnieuw gerekend. Anders legt de
+     tweede reeks nieuwe dagbedragen naast een oude noemer en is het verschil niet toe te wijzen. */
+  function reeks(negeer){
+    const W={}, uit={};
+    for(const t of TX){
+      const d=String(t.date||'').slice(0,10); if(!d) continue;
+      const ma=_piekMaandag(d); if(!wset.has(ma)) continue;
+      if(inScope(t)){
+        if(negeer && naamVan(t)===negeer) continue;
+        const o=W[ma]=W[ma]||{dag:[0,0,0,0,0,0,0], tx:[]};
+        o.dag[_piekDagIdx(d)]+=-t.amount; o.tx.push(t);
+      } else if(catOf(t)==='intern' && t.amount<0){ (uit[ma]=uit[ma]||[]).push(t); }
+    }
+    const som=[0,0,0,0,0,0,0]; let n=0;
+    for(const ma of weken){ const o=W[ma]; if(!o) continue;
+      const tot=o.dag.reduce((a,b)=>a+b,0); if(!(tot>0)) continue;
+      for(let i=0;i<7;i++) som[i]+=o.dag[i]/tot; n++; }
+    return {W, uit, ref:n?som.map(v=>v/n):null, refN:n};
+  }
+  /* De duurste dag is de weekdag met de hoogste netto som. Bij een gelijke stand wint de eerste
+     weekdag; dat is een keuze en geen meting, en hij staat hier zodat de uitvoer te plaatsen is. */
+  function samenvat(R){
+    const rij=[], tel={}; let v2=0, a2=0, bruikbaar=0;
+    for(const ma of rapport){
+      const o=R.W[ma]; const tot=o?o.dag.reduce((a,b)=>a+b,0):0;
+      if(!o || !(tot>0)){ rij.push({ma, leeg:true}); continue; }
+      let pi=0; for(let i=1;i<7;i++) if(o.dag[i]>o.dag[pi]) pi=i;
+      const vlak=tot/7, na=(R.ref&&R.ref[pi]>0)?R.ref[pi]*tot:null;
+      if(o.dag[pi]>=vlak*2) v2++;
+      if(na!=null && o.dag[pi]>=na*2) a2++;
+      tel[pi]=(tel[pi]||0)+1; bruikbaar++;
+      rij.push({ma, tot, pi, bedrag:o.dag[pi], vlak, na, n:o.tx.filter(t=>t.amount<0).length,
+        dagTx:o.tx.filter(t=>_piekDagIdx(t.date)===pi).slice().sort((a,b)=>a.amount-b.amount)});
+    }
+    return {rij, tel, v2, a2, bruikbaar};
+  }
+  const telRegel=tel=>Object.entries(tel).sort((a,b)=>b[1]-a[1]).map(([i,n])=>dn[i]+' '+n+'x').join(', ')||'(niets)';
+  const R1=reeks(null), S1=samenvat(R1);
+  L.push('');
+  L.push('REEKS 1: alles in scope');
+  L.push('referentie-aandeel per weekdag, over '+R1.refN+' volle weken met een boeking in scope:');
+  L.push('  '+(R1.ref?R1.ref.map((v,i)=>dk[i]+' '+Math.round(v*100)+'%').join('  '):'GEEN, geen week met een bedrag'));
+  for(const r of S1.rij){
+    L.push('');
+    if(r.leeg){ L.push('  week '+r.ma+' t/m '+_piekPlus(r.ma,6)+': niets in scope geboekt'); continue; }
+    L.push('  week '+r.ma+' t/m '+_piekPlus(r.ma,6)+'   totaal '+Math.round(r.tot)+'   '+r.n+' afschrijvingen');
+    L.push('    duurste dag: '+dn[r.pi]+' '+_piekPlus(r.ma,r.pi)+'   '+Math.round(r.bedrag));
+    L.push('    normaal vlak (totaal/7):        '+Math.round(r.vlak)+'   dat is '+(r.vlak>0?(Math.round(r.bedrag/r.vlak*10)/10):'-')+'x');
+    L.push('    normaal aandeel (v240-vorm):    '+(r.na==null?'GEEN referentie voor deze weekdag':Math.round(r.na)+'   dat is '+(Math.round(r.bedrag/r.na*10)/10)+'x'));
+    L.push('    boekingen op die dag:');
+    for(const t of r.dagTx) L.push('      '+String(naamVan(t)).slice(0,28).padEnd(28)+' '+String(Math.round(-t.amount)).padStart(7)+'   '+catOf(t));
+    const u=(R1.uit[r.ma]||[]).slice().sort((a,b)=>a.amount-b.amount);
+    L.push('    niet meegeteld deze week (intern, dus ook opnames): '+(u.length?u.map(t=>naamVan(t)+' '+Math.round(-t.amount)+' op '+dk[_piekDagIdx(t.date)]+' '+String(t.date).slice(5)).join(' | '):'niets'));
+  }
+  L.push('');
+  L.push('  telling duurste weekdag over deze '+S1.bruikbaar+' weken: '+telRegel(S1.tel));
+  L.push('  haalt 2x het vlakke dagbedrag:    '+S1.v2+' van '+S1.bruikbaar+' weken');
+  L.push('  haalt 2x het aandeel-dagbedrag:   '+S1.a2+' van '+S1.bruikbaar+' weken');
+  /* KANDIDATEN VOOR EEN EIGEN OVERBOEKING. Gerangschikt op bedrag en niet op aantal: een eigen
+     overboeking is groot en niet per se frequent, en juist het bedrag tilt een dag naar de piek.
+     Het aantal weken staat erbij, want een post die in elke week terugkomt is een andere zaak dan
+     een eenmalige. Dit blok wijst niets aan; jij leest de namen. */
+  const kand={};
+  for(const ma of rapport){ const o=R1.W[ma]; if(!o) continue;
+    for(const t of o.tx){ if(!(t.amount<0)) continue; const nm=naamVan(t);
+      const k=kand[nm]=kand[nm]||{som:0, n:0, wk:new Set(), grootste:0};
+      k.som+=-t.amount; k.n++; k.wk.add(ma); k.grootste=Math.max(k.grootste,-t.amount); } }
+  const klijst=Object.entries(kand).sort((a,b)=>b[1].som-a[1].som).slice(0,DIAG_PIEK_KAND);
+  L.push('');
+  L.push('KANDIDATEN: de grootste tegenpartijen in deze '+rapport.length+' weken (op bedrag, niet op aantal)');
+  for(const [nm,k] of klijst) L.push('  '+String(nm).slice(0,28).padEnd(28)+' totaal '+String(Math.round(k.som)).padStart(7)+'   '+k.n+' boekingen in '+k.wk.size+' van '+rapport.length+' weken   grootste '+Math.round(k.grootste));
+  if(!klijst.length) L.push('  (geen)');
+  /* REEKS 2: dezelfde weken met een kandidaat weggestreept, per kandidaat apart. Verschuift de
+     duurste dag en verdwijnt de herhaling, dan was het patroon die post en niet je gedrag. Dat is
+     de uitkomst die v267 had moeten voorkomen, en het is een GELDIGE uitkomst. */
+  L.push('');
+  L.push('REEKS 2: dezelfde weken, per kandidaat weggestreept');
+  L.push('  (streept op de schoongemaakte tegenpartijnaam, dus alle boekingen van die naam in deze weken)');
+  for(const [nm] of klijst){
+    const R=reeks(nm), S=samenvat(R);
+    let anders=0;
+    for(let i=0;i<S1.rij.length;i++){ const a=S1.rij[i], b=S.rij[i];
+      if(a.leeg||b.leeg){ if(a.leeg!==b.leeg) anders++; continue; }
+      if(a.pi!==b.pi) anders++; }
+    L.push('');
+    L.push('  zonder '+nm+':');
+    L.push('    telling duurste weekdag: '+telRegel(S.tel));
+    L.push('    duurste dag verschuift in '+anders+' van '+rapport.length+' weken');
+    L.push('    haalt 2x vlak: '+S.v2+' van '+S.bruikbaar+'    haalt 2x aandeel: '+S.a2+' van '+S.bruikbaar);
+    L.push('    per week: '+S.rij.map(r=>r.leeg?'(leeg)':(dk[r.pi]+' '+Math.round(r.bedrag))).join(' | '));
+  }
+  L.push('');
+  L.push('WAT DEZE UITVOER BESLIST');
+  L.push('  drempel uit de opdracht: minimaal 3 van 6 weken dezelfde weekdag EN minstens 2x het normale dagbedrag');
+  L.push('  reeks 1: hoogste weekdag-telling '+Math.max(0,...Object.values(S1.tel))+' van '+S1.bruikbaar);
+  L.push('  blijft die telling staan nadat jij je eigen overboekingen hebt weggestreept, dan is er een weekpatroon;');
+  L.push('  valt hij weg, dan blijft signaal 3 per maand staan en komt de weekmeting er niet.');
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -13481,6 +13634,7 @@ const DIAG_BLOKKEN=[
   {titel:'de potjesregel op Inzichten', lees:diagPotjes},
   {titel:'haalt de weekreeks zijn drempel', lees:diagWeekblokken},
   {titel:'de rekeningen en de bankverbindingen', lees:diagRekeningen},
+  {titel:'de piekdag per week', lees:diagPiekdag},
 ];
 
 async function diagTekst(){

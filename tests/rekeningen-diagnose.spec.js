@@ -278,11 +278,16 @@ test.describe('e - het blok leest alleen', () => {
 
   test('het blok staat als entry in DIAG_BLOKKEN en het scherm kent hem niet bij naam', async ({ page }) => {
     await boot(page);
-    const r = await page.evaluate(() => ({ n: DIAG_BLOKKEN.length,
-      laatste: DIAG_BLOKKEN[DIAG_BLOKKEN.length - 1].titel,
+    /* v271: dit bond op DIAG_BLOKKEN.length en op de LAATSTE entry, en viel dus om zodra er een blok
+       bij kwam. Dat is niet de eigenschap: de eigenschap is dat dit blok EEN entry is en dat
+       diagTekst() geen blok bij naam kent (v244). Een blok erbij is een entry erbij, en daar hoort
+       geen test op te vallen. */
+    const r = await page.evaluate(() => ({
+      erin: DIAG_BLOKKEN.some(b => b.lees === diagRekeningen),
+      titel: (DIAG_BLOKKEN.find(b => b.lees === diagRekeningen) || {}).titel,
       inTekst: !/diagRekeningen/.test(String(diagTekst)) }));
-    expect(r.n).toBe(8);
-    expect(r.laatste).toBe('de rekeningen en de bankverbindingen');
+    expect(r.erin).toBe(true);
+    expect(r.titel).toBe('de rekeningen en de bankverbindingen');
     expect(r.inTekst).toBe(true);   // diagTekst() kent geen blok bij naam (v244)
   });
 });

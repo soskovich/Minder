@@ -95,6 +95,47 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **De piekdag is vandaag een MAANDMETING, en blok 9 meet de weekvariant er los naast** (`v271`):
+  signaal 3 van `insSignals()` telt per weekdag over de HELE MAAND (`piekVerdeling()`) en vergelijkt
+  aandeel tegen aandeel over drie AFGERONDE maanden (`piekReferentie()`), met `PIEK_MIN_TX` (8) en
+  `PIEK_FACTOR` (1,5). Een duurste dag PER WEEK bestaat nergens in de app, en `weekBlokken()`
+  (`v264`) is niet hetzelfde: dat zijn blokken van zeven dagen vanaf de 1e met de scope van
+  `varBudget()` zonder `geenNorm` zonder huur. Die getallen zijn hier dus niet bruikbaar.
+  DE SNEDE VAN BLOK 9 IS DIE VAN `piekVerdeling()`: uitgaven, niet vast, niet `geenNorm`, netto.
+  Met een eigen snede zou de uitvoer niet naast signaal 3 te leggen zijn, en dat is precies wat hij
+  moet beslissen.
+  DE POORT IS `zo >= vandaag` EN NIET ALLEEN `zo > de laatste boeking`: een week die vandaag eindigt
+  is niet voorbij, en op een zondag telt hij zonder die eis mee als volle week. Te veel weken is de
+  gevaarlijke kant (`v168`).
+  TWEE NORMAAL-DAGBEDRAGEN, en dat is geen weifeling maar de meting: `vlak` is het weektotaal door
+  zeven, `aandeel` is het gemiddelde aandeel van die weekdag maal dit weektotaal (de vorm van
+  `v240`). GEMETEN dat ze elkaar tegenspreken: een post van 300 die in ELKE week terugkomt haalt 2x
+  vlak in 6 van 6 weken en 2x aandeel in 0 van 6, want een post die er altijd is IS het aandeel.
+  Welke van de twee "minstens 2x het normale dagbedrag" bedoelt, is pas te kiezen als je ze naast
+  elkaar ziet.
+  DE TWEEDE REEKS STREEPT PER KANDIDAAT-TEGENPARTIJ WEG, en wijst zelf niets aan. De code kan alleen
+  zeggen of een boeking onder de intern-detectie valt, en `v267` heeft gemeten dat dat een andere
+  vraag is dan of het een eigen overboeking IS. De rangschikking is op BEDRAG en niet op aantal: een
+  eigen overboeking is groot en niet per se frequent. Elke reeks rekent zijn EIGEN referentie, want
+  een weggestreepte tegenpartij verandert de verdeling; `piekdag-diagnose.spec.js` leest de bron en
+  eist dat het blok `piekReferentie()` en `piekVuurt()` niet leent.
+  DE GROENE SABOTAGE ZAT OP DE POORT, en dat is de familie uit de meetlessen weer: de fixture
+  eindigde vóór de lopende week, dus de lus stopte al op `zo > laatste` en de poort was per
+  constructie onzichtbaar. Een tweede seed met een boeking op de zondag van de lopende week laat hem
+  elke dag van de week vallen, niet alleen op zondag.
+  WAT HET BLOK BESLIST: blijft de weekdag-telling staan nadat de eigen overboekingen zijn
+  weggestreept, dan is er een weekpatroon; valt hij weg, dan blijft signaal 3 per maand staan en komt
+  de weekmeting er niet. Dat tweede is een GELDIGE uitkomst (`v267`).
+  RICHTING, NIET GEBOUWD en onder voorbehoud van die uitkomst: de weekmeting VERVANGT signaal 3 (dus
+  `PIEK_MIN_TX` en `PIEK_FACTOR` gaan weg, twee constanten ervoor terug) en staat er nooit naast,
+  want twee detecties van dezelfde vraag is `v104`. Signalen met een stap staan boven spiegels, dus
+  het lek (`v237`) gaat voor en de piekdag krijgt plek 2 alleen als er geen lek is. De onder-potje
+  observatie komt in dezelfde rijvorm als de piekdag, kleur uit `--mut`, geen bolletje: status zit in
+  het label (`v78`/`v93`). De afspraak wordt toetsbaar via de weekmeting zelf en niet via
+  zelfrapportage. De herinnering op de afgesproken dag komt NIET in de stand-kaart (die staat al op
+  213px in het worst case, `v269`) maar als rij in "Wat opvalt", op de plek van het piekdagsignaal
+  dat na de afspraak weg is. En die rij toont het DAGBEDRAG uit `vrijPerDag()`, dezelfde eenheid als
+  Home: week of dag blijft de ene vraag van `v263`.
 - **Een rekening met boekingen kan uit de LIJST vallen en toch in elke som zitten** (`v270`): een
   N26-Space stond niet in de saldolijst terwijl er boekingen op staan. GEMETEN: die rekening zit WEL
   in `OWN` (4 boekingen), telt in `totalBalance()` als `missing` en niet in de som (som 4.500,
@@ -1466,13 +1507,21 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 **Draai onder `TZ=Europe/Amsterdam`.** Op UTC lopen `ymdVan()` en `toISOString()` nooit uiteen, dus
 `lokale-kalenderdag.spec.js` bewijst daar niets en staat er rood; onder CEST is hij groen.
 
+**Bekend rood, eigen ronde:** `geen-verbetering-door-uitgeven.spec.js` "de oude som steeg met elke
+uitgegeven euro, en staat nergens meer" valt op een BOTSING en niet op de eigenschap. De test eist dat
+het bedrag van de vervallen som (`incDue - fixDue - varPlan`) nergens in de tekst staat; bij stap +200
+komt die som op 300 uit en dan botst hij met "Nog te sparen €300 van €300", een legitiem ander
+getal. GEMETEN dat hij op `HEAD` net zo rood staat (1 failed, 6 passed), dus hij is niet van `v271`;
+`varPlan` hangt aan de resterende dagen van de maand, dus de botsing komt en gaat met de kalender. Dit
+is de meetles dat een test die op een getal in een zin ankert de invariant niet bewijst.
+
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
 `v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v269` → `minder-v270`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v270` → `minder-v271`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
