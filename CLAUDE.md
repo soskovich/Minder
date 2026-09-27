@@ -95,6 +95,40 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN METING DIE OVER EEN BANK GAAT, STAAT PER REKENING** (`v279`): de teller van `v277` was globaal, en
+  daarmee onbruikbaar voor de vraag waarvoor hij bestond. GEMETEN op het toestel bij `v278`: 184 psd2-regels
+  langs `commitTx()` en NUL met een `value_date`, maar of de regels van de bank waar het om gaat erbij zaten
+  was niet te zien, en een ruwe schatting op de tempo's uit blok 8 zei dat een venster van twee maanden over
+  alle rekeningen ruim 350 regels hoort te geven. `SET.valutaTally` staat nu per rekening met `gezien`,
+  `veld`, `anders`, `nieuw` en `verrijkt`; het totaal is de SOM en geen eigen getal ernaast (`v104`).
+  EEN STILLE REKENING IS GEEN NUL. Nul regels teruggegeven terwijl er boekingen op staan is een METING; een
+  rekening die nooit langs `commitTx()` kwam is een ONTBREKENDE meting, en daar mag geen conclusie over de
+  bron op staan. Het blok scheidt die twee en noemt de tweede bij naam: is er een stille rekening, dan geldt
+  "de respons levert geen value_date" alleen voor de banken die een rij hebben.
+  EEN OUDERE VLAKKE ENTRY WORDT AAN ZIJN VORM HERKEND en apart gemeld, niet als rekening gelezen.
+  DE DIAGNOSE MAG GEEN NETWERK AANROEPEN (`v244`), en dat bepaalt waar de meting hoort: wat de transactie- en
+  de balances-aanroep per rekening teruggaven bestaat alleen op het moment van de sync. `pickBalance()` meldt
+  daarom op verzoek wat hij zag, in de vorm van `betaalMoment(t, metReden)`, en `psd2DiagZet()` legt het vast
+  vanuit de twee sync-routes. Eén schrijver, en een entry wordt overschreven en niet opgeteld: de vraag is wat
+  de LAATSTE sync deed. De vroege terugkeer bij een verlopen koppeling doet een `save()`, want juist die
+  mislukking wil je terugzien.
+  WAT OP EEN NIET-BIJGEWERKT SALDO LEUNT HOORT ERBIJ, anders leest het als een schoonheidsfout: `totalBalance()`,
+  `safeToSpend()`, het herogetal op Home, `vrijPerDag()`, de opbouw-sheet, het netto vermogen en
+  `financeModel()`. Een OUD saldo is erger dan geen saldo, want het telt voor de volle mep mee (`v168`), en
+  alleen `saldoAchterRegel()` (`v198`) meldt de ouderdom.
+- **SECTIE 6 MEET DE AS OP DE MAANDEN DIE SIGNAAL 3 WERKELIJK LEEST** (`v279`): de lopende maand plus de drie
+  afgeronde maanden van `piekReferentie()`, en niet de hele historie. Is het aandeel van de boekdatum-bronnen
+  daar klein, dan meet signaal 3 al vrijwel de betaaldag en verandert er niets; dat is een geldige uitkomst
+  (`v267`).
+  DE INDELING IS AFGELEID EN NOEMT GEEN BANK, want een banknaam als string is de hardcode die `v258` en
+  `v266` hebben opgeruimd. Per groep `bron|bank` wordt over de hele import gemeten of het weekend-aandeel op
+  `t.date` boven het maandag-aandeel ligt. DAT IS EEN HEURISTIEK EN GEEN BEWIJS, dus de twee getallen staan
+  erbij en waar het veld bestaat staat de GELIJK-telling uit 4a ernaast als hardere grond. Een groep met geen
+  weekend EN geen maandag heet NIET TE ZEGGEN en telt bij de boekdatum: dat is de kant die niets belooft.
+  WAT HET BLOK ZELF VERBIEDT: de piekdag op `t.betaalDatum || t.date`. Dat veld dekt maar een deel van de
+  euro's van een boekdatum-bron, dus dan valt binnen ÉÉN rekening een deel op de betaaldag en een deel op de
+  bankdag, gewogen naar BETAALWIJZE. Dat is dezelfde derde kalender die `v273` verbood, nu per betaalwijze in
+  plaats van per bank.
 - **HET TEKEN IN METING 2 KOMT UIT `betaalMoment()` ZELF** (`v278`): het stond op `i===0`, en dat was de
   tie-break van vóór `v276`. GEMETEN op het toestel op de Apple-boeking van 2026-09-02: `veld 2026-09-02
   03:04` met `treffers: >"02.02.2026" "02.02.2026" "02.09.26/03:04"`, dus het teken wees de ingangsdatum aan
@@ -1949,7 +1983,7 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** ZES keer in veertien rondes
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** ACHT keer in vijftien rondes
   is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze als
   incidenten; samen zijn het vijf manieren waarop dezelfde fout binnenkomt, en de vraag die alle vijf
   had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
@@ -1987,7 +2021,15 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   vorm is op het toestel 44 van de 52 regels en stond niet in de fixture. Toets bij een sabotage die groen
   blijft dus of je invoer de GEVALLEN draagt waarop de twee vormen uiteenlopen, en niet alleen het geval
   waarvoor je de code schreef.
-  WAT DE ZES GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (g) DE FIXTURE SCHREEF WAT DE CODE MOEST SCHRIJVEN (`v279`). De teller per rekening moest worden getoetst,
+  en de fixture zette `SET.valutaTally` rechtstreeks in localStorage. De sabotage die alles weer op één hoop
+  telt bleef daardoor groen: `commitTx()` kwam in de hele spec niet langs. Dit is (c) in een andere jas, en de
+  reparatie is dezelfde: laat de test door de echte functie lopen.
+  (h) DE SABOTAGE VERANDERDE DE UITVOER EN NIEMAND KEEK ERNAAR (`v279`). De vorm-toets die een oudere vlakke
+  teller van een rekening moet scheiden bleef groen toen elke sleutel als rekening werd gelezen: de sommen
+  bleven kloppen en de aparte regel bleef staan, er kwamen alleen RIJEN bij voor `gezien` en `op`. Toets bij
+  zo'n scheiding dus ook wat er NIET mag staan, en niet alleen wat er wel staat.
+  WAT DE ACHT GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2057,7 +2099,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v277` → `minder-v278`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v278` → `minder-v279`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

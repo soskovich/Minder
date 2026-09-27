@@ -92,6 +92,7 @@ const voorstand = (page, bedrag) => page.evaluate((b) => {
 
 /* Lever dezelfde regel opnieuw aan, nu MET een value_date, en geef terug wat commitTx ermee deed. */
 const herlever = (page, opt) => page.evaluate((o) => {
+  const ABN = o.acc;
   const t = TX.find((x) => x.amount === o.bedrag);
   const inkomend = mapPsd2Tx(Object.assign({}, o.raw, { booking_date: t.date }), o.acc);
   const added = commitTx([inkomend], null);
@@ -99,7 +100,9 @@ const herlever = (page, opt) => page.evaluate((o) => {
   return { added, inkomendeId: inkomend.id, n: TX.length,
     json: na ? JSON.stringify(na) : null, vd: na ? (na.valutaDatum || null) : null,
     ovr: OVR[o.id] || null, res: (SET.uitReservering || {})[o.id] || null, fix: (SET.fixOvr || {})[o.id] || null,
-    tally: SET.valutaTally ? JSON.parse(JSON.stringify(SET.valutaTally)) : null };
+    /* DE TELLER STAAT PER REKENING SINDS v279, dus de helper geeft de entry van DEZE rekening terug en
+       niet het hele object. De eigenschappen die deze spec vasthoudt zijn niet veranderd. */
+    tally: (SET.valutaTally||{})[ABN] ? JSON.parse(JSON.stringify(SET.valutaTally[ABN])) : null };
 }, opt);
 
 const sectie5 = (page) => page.evaluate(() => {
@@ -219,7 +222,7 @@ test.describe('2 - de telling scheidt verrijkt van nieuw', () => {
         remittance_information: 'Drogist', creditor_account: {},
         bank_transaction_code: { description: 'PMNT' } }, o.acc);
       const added = commitTx([inkomend], null);
-      return { added, tally: JSON.parse(JSON.stringify(SET.valutaTally)) };
+      return { added, tally: JSON.parse(JSON.stringify(SET.valutaTally[o.acc])) };
     }, { acc: ABN, dag: ymd(MA), vd: ymd(ZO) });
     expect(r.added).toBe(1);
     expect(r.tally.nieuw).toBe(1);
@@ -234,7 +237,7 @@ test.describe('2 - de telling scheidt verrijkt van nieuw', () => {
     const r = await page.evaluate(() => {
       const t = TX.find((x) => x.amount === -300);
       const added = commitTx([Object.assign({}, t)], null);
-      return { added, tally: SET.valutaTally || null };
+      return { added, tally: (SET.valutaTally||{})['999100200'] || null };
     });
     expect(r.added).toBe(0);
     expect(r.tally).toBe(null);
@@ -262,9 +265,9 @@ test.describe('2 - de telling scheidt verrijkt van nieuw', () => {
       const set = JSON.parse(localStorage.getItem('minder_set') || '{}');
       const tx = JSON.parse(localStorage.getItem('minder_tx') || '[]');
       const b = tx.find((x) => x.id === id);
-      return { tally: set.valutaTally || null, vd: b ? (b.valutaDatum || null) : null, n: tx.length };
+      return { tally: (set.valutaTally||{})['999100200'] || null, vd: b ? (b.valutaDatum || null) : null, n: tx.length };
     }, v.id);
-    expect(r.tally).toEqual({ gezien: 1, nieuw: 0, verrijkt: 1, op: expect.any(String) });
+    expect(r.tally).toEqual({ gezien: 1, veld: 1, anders: 1, nieuw: 0, verrijkt: 1, op: expect.any(String) });
     expect(r.vd).toBe(ymd(ZA));
     expect(r.n).toBe(4);
   });
@@ -276,7 +279,11 @@ test.describe('3 - blok 10 noemt de splitsing', () => {
     const v = await voorstand(page, -12.34);
     await herlever(page, { bedrag: -12.34, id: v.id, acc: ABN, raw: ruw({ value_date: ymd(ZA) }) });
     const t = await sectie5(page);
-    expect(t).toMatch(/langs commitTx\(\) gekomen \(cumulatief\): 1 psd2-regels\s+nieuw binnen MET het veld: 0\s+bestaande boekingen VERRIJKT: 1/);
+    /* DE TEKST DRAAGT SINDS v279 "som over de rekeningen", want de teller staat per rekening. De
+       eigenschap is niet veranderd: één regel langs commitTx, nul nieuw, één verrijkt. */
+    expect(t).toMatch(/som over de rekeningen\): 1 psd2-regels/);
+    expect(t).toMatch(/nieuw binnen MET het veld: 0\s+bestaande boekingen VERRIJKT: 1/);
+    expect(t).toContain('langs commitTx     1');   // de rij van de rekening zelf
   });
 
   /* DE TWEE OORZAKEN VAN EEN NUL ZIJN NU WEL TE SCHEIDEN, en dat is waarvoor `gezien` bestaat. */
@@ -291,10 +298,13 @@ test.describe('3 - blok 10 noemt de splitsing', () => {
     expect(t).not.toContain('Dat is de bron');
   });
 
+  /* DE CONCLUSIE "DAT IS DE BRON" EIST SINDS v279 dat ELKE gekoppelde rekening langs commitTx kwam. Deze
+     fixture heeft er geen enkele gekoppeld (SET.psd2Accounts is leeg), dus er is ook geen stille rekening
+     en de conclusie mag staan. Dat de uitspraak per bank geldt staat in psd2-per-rekening.spec.js. */
   test('met regels langs commitTx en toch geen veld wijst het blok de bron aan', async ({ page }) => {
     await boot(page);
     const t = await page.evaluate(() => {
-      SET.valutaTally = { gezien: 265, nieuw: 0, verrijkt: 0, op: '2026-09-27' };
+      SET.valutaTally = { '999100200': { gezien: 265, veld: 0, anders: 0, nieuw: 0, verrijkt: 0, op: '2026-09-27' } };
       for (const x of TX) delete x.valutaDatum;
       const L = diagDubbel(); const i = L.findIndex((y) => /^5\. DE VALUTADATUM/.test(y));
       return L.slice(i).join(String.fromCharCode(10));

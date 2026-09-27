@@ -13549,6 +13549,45 @@ function diagRekeningen(){
       L.push('    identification_hash:'+(pm.hash?(' '+pm.hash):' GEEN - bij een herkoppeling krijgt deze rekening een NIEUWE id'));
       L.push('    consent tot:        '+(pm.exp?String(pm.exp).slice(0,10):'-'));
     }
+    /* ===== WAT DE LAATSTE SYNC PER REKENING DEED (v279) =====
+       Het blok mag geen netwerk aanroepen (v244), dus dit is wat `psd2Refresh()` en
+       `psd2IngestSession()` bij die aanroep hebben vastgelegd. De saldostempel hierboven zegt alleen DAT
+       de balances-aanroep lukte; deze regels zeggen waarom hij mislukte, en ze maken een STILLE rekening
+       zichtbaar (nul teruggegeven regels bij een rekening die wel boekingen heeft). */
+    const dg=(SET.psd2Diag||{})[a];
+    if(dg){
+      L.push('    laatste sync:       '+(dg.op||'?')
+        +'   transactie-aanroep gaf '+(dg.txN==null?'?':dg.txN)+' regels terug in '+(dg.txPag==null?'?':dg.txPag)+' pagina(s)'
+        +(dg.txFout?('   FOUT: '+dg.txFout):''));
+      if(!dg.txFout && dg.txN===0 && lijst.length) L.push('      STILLE REKENING: nul regels terug terwijl er '+lijst.length+' boekingen op staan');
+      L.push('    balances-aanroep:   '+(dg.balFout?('FOUT: '+dg.balFout)
+        :(dg.balGeland?('gelukt, saldo '+Math.round(dg.balUit)+', landde in ACCMETA'):'GEEN SALDO, niets naar ACCMETA'))
+        +'   lijst '+(dg.balLijst==null?'?':dg.balLijst)+' entries'+(dg.balTypes?(' ['+dg.balTypes+']'):''));
+      if(!dg.balGeland && !dg.balFout) L.push('      reden: '+(dg.balReden||'onbekend')
+        +(dg.balGekozen?('   gekozen entry: '+dg.balGekozen):'')+(dg.balRuw?('   ruw bedrag: "'+dg.balRuw+'"'):''));
+      if(!dg.balGeland) L.push('      GEVOLG: het saldo hierboven is van '+(meta.date||'onbekend')+' en niet van de laatste sync');
+    } else if(pm){
+      L.push('    laatste sync:       niets vastgelegd - er is niet meer gesynchroniseerd sinds deze uitlezing bestaat');
+    }
+  }
+  /* WAT ER OP DIE SALDI LEUNT, en dat is de reden dat een niet-landende balances-aanroep meer is dan een
+     schoonheidsfout: `totalBalance()` telt ze op, `safeToSpend()` leest die som, en daar hangen het
+     herogetal op Home, `vrijPerDag()`, de opbouw-sheet, het netto vermogen op Vermogen en
+     `financeModel()` aan. Een rekening zonder saldo telt als `missing` en valt uit de som (v168/v270),
+     dus een OUD saldo is erger dan geen saldo: dat telt voor de volle mep mee zonder dat ergens staat
+     hoe oud het is. `saldoAchterRegel()` (v198) is de enige plek die dat aan de gebruiker meldt. */
+  const oud=Object.keys(ps).filter(a=>{ const dg=(SET.psd2Diag||{})[a]; return dg && !dg.balGeland; });
+  L.push('');
+  L.push('SALDI DIE NIET ZIJN BIJGEWERKT BIJ DE LAATSTE SYNC: '+(oud.length?oud.join(', '):'geen'));
+  if(oud.length){
+    L.push('  die saldi tellen voor de volle mep mee in totalBalance() en dus in safeToSpend(),');
+    L.push('  en daarmee in het herogetal op Home, vrijPerDag(), de opbouw-sheet van veilig te besteden,');
+    L.push('  het netto vermogen op Vermogen en financeModel(). Alleen saldoAchterRegel() (v198) meldt');
+    L.push('  de ouderdom, en die leest ACCMETA[a].date.');
+    /* HET SALDO KOMT UIT accBalance() EN NIET UIT ACCMETA: een handmatig saldo wint van de koppeling
+       (SET.manualBal), dus rechtstreeks uit ACCMETA lezen zou een ander getal geven dan de som. */
+    L.push('  som van die rekeningen: '+Math.round(oud.reduce((x,a)=>x+(+accBalance(a)||0),0))
+      +' van '+Math.round(totalBalance().sum||0)+' in totalBalance()');
   }
   L.push('');
   L.push('PER VERBINDING (afgeleid uit bank + consent-vervaldatum; nergens opgeslagen)');
@@ -14392,22 +14431,59 @@ function diagDubbel(){
   }
   L.push('  psd2-boekingen in totaal: '+vdTot+'   met een valutadatum: '+vdVeld
     +(vdTot?('   = '+Math.round(vdVeld/vdTot*100)+'%'):''));
-  const VT=SET.valutaTally||null, vtG=VT?(+VT.gezien||0):0, vtN=VT?(+VT.nieuw||0):0, vtV=VT?(+VT.verrijkt||0):0;
-  L.push('  langs commitTx() gekomen (cumulatief): '+vtG+' psd2-regels'
-    +'   nieuw binnen MET het veld: '+vtN+'   bestaande boekingen VERRIJKT: '+vtV
-    +(VT&&VT.op?('   laatst op '+VT.op):''));
+  /* DE TELLER STAAT PER REKENING (v279). Bij v278 was hij globaal: 184 regels langs commitTx() en nul met
+     een veld, maar welke BANK die regels leverde was niet te zien, en dat is precies de vraag. Het totaal
+     is hier de SOM van de rekeningen en geen eigen getal ernaast (v104). Een oudere VLAKKE entry (de vorm
+     van v277) staat apart: die is aan zijn vorm te herkennen en wordt niet als rekening gelezen. */
+  const VT=SET.valutaTally||{};
+  const vtRek=Object.keys(VT).filter(k=>VT[k]&&typeof VT[k]==='object');
+  const vtLos=Object.keys(VT).filter(k=>!(VT[k]&&typeof VT[k]==='object'));
+  const vtSom=k=>vtRek.reduce((x,a)=>x+(+VT[a][k]||0),0);
+  L.push('  langs commitTx() gekomen (cumulatief, som over de rekeningen): '+vtSom('gezien')+' psd2-regels'
+    +'   met een value_date: '+vtSom('veld')+'   daarvan ANDERS dan booking_date: '+vtSom('anders'));
+  L.push('    nieuw binnen MET het veld: '+vtSom('nieuw')+'   bestaande boekingen VERRIJKT: '+vtSom('verrijkt'));
+  if(vtRek.length){
+    L.push('  per rekening, met wat de transactie-aanroep bij de laatste sync teruggaf (blok 8 legt dat vast):');
+    for(const a of vtRek.sort((x,y)=>(+VT[y].gezien||0)-(+VT[x].gezien||0))){
+      const r=VT[a], dg=(SET.psd2Diag||{})[a]||{};
+      L.push('    '+String(a).padEnd(20)+' bank '+bankVan(a)
+        +'  langs commitTx '+String(+r.gezien||0).padStart(5)
+        +'   met value_date '+String(+r.veld||0).padStart(5)
+        +'   anders dan booking_date '+String(+r.anders||0).padStart(5)
+        +'   nieuw '+(+r.nieuw||0)+'   verrijkt '+(+r.verrijkt||0)
+        +'   laatst '+(r.op||'?'));
+      L.push('      de aanroep gaf '+(dg.txN==null?'?':dg.txN)+' regels terug'
+        +(dg.txFout?('   FOUT: '+dg.txFout):'')
+        +(dg.txN!=null&&dg.txN!==(+r.gezien||0)?('   VERSCHIL met commitTx: mapPsd2Tx() liet '+(dg.txN-(+r.gezien||0))+' regel(s) vallen, cumulatief tegen één sync'):''));
+    }
+  }
+  /* EEN REKENING DIE NOOIT LANGS commitTx() KWAM IS DE EIGENLIJKE VONDST, want dan zegt een nul over het
+     veld niets over die bank. Hij staat er apart, want afwezigheid is geen rij. */
+  const stil=Object.keys(SET.psd2Accounts||{}).filter(a=>vtRek.indexOf(a)<0);
+  L.push('  gekoppelde rekeningen die NOOIT langs commitTx() kwamen: '+(stil.length?stil.join(', '):'geen')
+    +(stil.length?'   <-- over die banken zegt een nul hierboven niets':''));
+  if(vtLos.length) L.push('  daarnaast een oudere meting ZONDER rekening-splitsing (de vorm van v277): '
+    +vtLos.map(k=>k+'='+VT[k]).join(' ')+'   die telt hierboven niet mee');
   L.push('    verrijkt plus nieuw hoort ongeveer gelijk te zijn aan het aantal boekingen met het veld hierboven;');
   L.push('    het loopt uiteen door verwijderde boekingen en door de pending-snapshot, die buiten commitTx()');
   L.push('    om in TX wordt gezet (applyPending()). pending MET het veld: '+vdPend+'.');
   if(!vdVeld){
-    if(!vtG){
+    if(!vtSom('gezien')){
       L.push('  GEEN ENKELE psd2-boeking draagt het veld EN er kwam nog geen psd2-regel langs commitTx().');
       L.push('    Er is dus niet gesynchroniseerd sinds het veld bestaat. Synchroniseer eerst.');
+    } else if(stil.length){
+      /* DE UITSPRAAK GELDT ALLEEN VOOR DE BANKEN DIE WERKELIJK LANGSKWAMEN (v279). Bij v278 stond hier
+         "dat is de bron" op een globale teller, en toen was niet te zien of de bank waar het om gaat
+         erbij zat. Met een stille rekening is de conclusie dus per bank en niet in het algemeen. */
+      L.push('  GEEN ENKELE psd2-boeking draagt het veld TERWIJL er '+vtSom('gezien')+' psd2-regels langs kwamen,');
+      L.push('    MAAR '+stil.length+' gekoppelde rekening(en) kwamen nooit langs. De conclusie geldt dus alleen');
+      L.push('    voor de banken die hierboven een rij hebben, en niet voor: '+stil.join(', '));
     } else {
-      L.push('  GEEN ENKELE psd2-boeking draagt het veld TERWIJL er '+vtG+' psd2-regels langs kwamen.');
-      L.push('    Dat is de bron: de respons levert geen value_date. Dat is een antwoord en geen gebrek.');
+      L.push('  GEEN ENKELE psd2-boeking draagt het veld TERWIJL er '+vtSom('gezien')+' psd2-regels langs kwamen,');
+      L.push('    van ELKE gekoppelde rekening. Dat is de bron: de respons levert geen value_date.');
+      L.push('    Dat is een antwoord en geen gebrek.');
     }
-  } else if(vtG && !vtV && vtN){
+  } else if(vtSom('gezien') && !vtSom('verrijkt') && vtSom('nieuw')){
     L.push('  ALLES KOMT UIT NIEUWE BOEKINGEN en niets uit verrijking. Dan dekt het veld alleen wat er sinds');
     L.push('    v276 nieuw binnenkwam, en zegt de dekking hierboven niets over de rest van je historie.');
   }
@@ -14433,6 +14509,77 @@ function diagDubbel(){
   L.push('    levert de bank de betaaldag wel en kan een weekdagmeting daarop staan. Is ANDERS nul terwijl');
   L.push('    het veld er wel is, dan zijn boekdatum en valutadatum bij deze bank dezelfde dag en valt er');
   L.push('    niets te winnen. Welke datum welke meting voedt is daarna een keuze en geen gevolg.');
+
+  /* ===== 6. PER MAAND: WELK DEEL VAN DE IN-SCOPE EURO'S KOMT VAN EEN BRON DIE DE BETAALDAG DRAAGT (v279)
+     DIT IS DE MEETVRAAG DIE DE AS BESLIST, en hij is kleiner dan hij lijkt. Signaal 3 leest de LOPENDE
+     maand plus de drie afgeronde maanden van `piekReferentie()`, en niet de hele historie. Is het deel dat
+     van een boekdatum-bron komt in juist die maanden klein, dan meet signaal 3 vandaag al vrijwel de
+     betaaldag en hoeft er niets te veranderen; dat is dezelfde geldige uitkomst als v267.
+     DE INDELING IS AFGELEID EN NOEMT GEEN BANK, want een banknaam als string in dit blok is de hardcode
+     die v258 en v266 hebben opgeruimd. Per groep `bron|bank` wordt over de HELE import gemeten of het
+     weekend-aandeel op `t.date` boven het maandag-aandeel ligt; zo ja, dan draagt die groep de betaaldag.
+     DAT IS EEN HEURISTIEK EN GEEN BEWIJS, en daarom staan de twee getallen waarop hij besluit erbij, zodat
+     een lezer de indeling kan afwijzen. Waar het veld bestaat is er hardere grond: de GELIJK-telling uit
+     4a staat per groep, en die is een meting tegen de betaaldatum uit de desc.
+     DE SCOPE IS DIE VAN `piekVerdeling()`, want dat is de functie die signaal 3 voedt. Een eigen snede zou
+     de uitvoer onvergelijkbaar maken met het signaal dat hij moet beoordelen. */
+  L.push('');
+  L.push("6. PER MAAND: WELK DEEL VAN DE IN-SCOPE EURO'S KOMT VAN EEN BRON DIE DE BETAALDAG DRAAGT");
+  const lm=thisYM();
+  const refM=months().filter(x=>x<lm).slice(-3);
+  L.push('  de maanden die signaal 3 leest: de lopende maand '+lm
+    +' plus de referentie van piekReferentie() '+(refM.length?refM.join(', '):'(geen, dan zwijgt het signaal)'));
+  if(refM.length<3) L.push('    minder dan drie afgeronde maanden, dus piekReferentie() geeft null en signaal 3 zwijgt (v239)');
+  const grpVan=t=>src(t)+' | '+bankVan(t.acc);
+  /* EERST DE INDELING BEPALEN OVER DE HELE IMPORT, en pas daarna de maanden lezen: met een indeling per
+     maand zou een groep van kolom kunnen wisselen en telt de tabel twee dingen tegelijk. */
+  const gInfo={};
+  for(const m of months()){
+    for(const t of (piekVerdeling(m)?txOfMonth(m):[])){
+      if(!(CATS[catOf(t)] && CATS[catOf(t)].type==='expense' && !isFixed(t) && !geenNorm(catOf(t)))) continue;
+      const g=gInfo[grpVan(t)]=gInfo[grpVan(t)]||{som:0,dag:[0,0,0,0,0,0,0],veld:0,gelijk:0};
+      const b=-t.amount; g.som+=b; g.dag[_piekDagIdx(t.date)]+=b;
+      if(t.betaalDatum){ g.veld++; if(String(t.betaalDatum)===String(t.date).slice(0,10)) g.gelijk++; }
+    }
+  }
+  const draagt={};
+  L.push('  de groepen, over de hele import, met de twee getallen waarop de indeling besluit:');
+  for(const k of Object.keys(gInfo).sort((a,b)=>gInfo[b].som-gInfo[a].som)){
+    const g=gInfo[k], tot=g.som||1;
+    const wk=(g.dag[5]+g.dag[6])/tot*100, ma=g.dag[0]/tot*100;
+    /* GEEN WEEKEND EN GEEN MAANDAG IS NIET TE ZEGGEN, en dan mag de heuristiek niet doen alsof. Zo'n groep
+       gaat naar de BOEKDATUM-kolom, want dat is de voorzichtige kant: hem bij de betaaldag zetten zou een
+       dekking claimen die niet gemeten is (v168 kiest bij twijfel de kant die niets belooft). */
+    const onbeslist = !(wk>0) && !(ma>0);
+    draagt[k]= wk>ma;
+    L.push('    '+k.padEnd(26)+' in scope '+String(Math.round(g.som)).padStart(7)+' euro'
+      +'   weekend '+Math.round(wk)+'%   maandag '+Math.round(ma)+'%'
+      +'   -> '+(onbeslist?'NIET TE ZEGGEN, en telt daarom bij de boekdatum':(draagt[k]?'DRAAGT de betaaldag':'draagt de BOEKDATUM'))
+      +(g.veld?('   (GELIJK aan de desc-betaaldatum in '+Math.round(g.gelijk/g.veld*100)+'% van '+g.veld+' regels met het veld)')
+              :'   (geen enkele regel met het veld, dus geen harde toets)'));
+  }
+  L.push('  per maand, alleen de maanden die signaal 3 leest:');
+  for(const m of refM.concat([lm])){
+    const A={som:0,dag:[0,0,0,0,0,0,0]}, B={som:0,dag:[0,0,0,0,0,0,0]};
+    for(const t of txOfMonth(m)){
+      if(!(CATS[catOf(t)] && CATS[catOf(t)].type==='expense' && !isFixed(t) && !geenNorm(catOf(t)))) continue;
+      const z=draagt[grpVan(t)]?A:B, b=-t.amount; z.som+=b; z.dag[_piekDagIdx(t.date)]+=b;
+    }
+    const tot=A.som+B.som;
+    L.push('    '+m+(m===lm?' (lopend)':'         ')+'   in scope '+Math.round(tot)+' euro'
+      +'   betaaldag-bronnen '+Math.round(A.som)+' ('+(tot?Math.round(A.som/tot*100):0)+'%)'
+      +'   boekdatum-bronnen '+Math.round(B.som)+' ('+(tot?Math.round(B.som/tot*100):0)+'%)');
+    if(A.som>0) L.push('      betaaldag-bronnen op t.date: '+pct(A.dag,A.som));
+    if(B.som>0) L.push('      boekdatum-bronnen op t.date: '+pct(B.dag,B.som));
+    if(!tot) L.push('      geen in-scope euro\'s in deze maand');
+  }
+  L.push('  WAT DIT BESLIST: is het aandeel van de boekdatum-bronnen in deze maanden klein, dan meet signaal 3');
+  L.push('    al vrijwel de betaaldag en verandert er niets; dat is een geldige uitkomst (v267). Is het groot,');
+  L.push('    dan meet hij een mengsel, en dan is de vraag welke datum welke meting voedt pas echt open.');
+  L.push('    NIET DOEN op grond van deze tabel alleen: de piekdag op t.betaalDatum || t.date zetten. Dat veld');
+  L.push('    dekt maar een deel van de euro\'s van een boekdatum-bron (meting 1 zegt hoeveel), dus dan valt');
+  L.push('    binnen EEN rekening een deel op de betaaldag en een deel op de bankdag, gewogen naar betaalwijze.');
+  L.push('    Dat is dezelfde derde kalender die v273 verbood, nu per betaalwijze in plaats van per bank.');
   return L;
 }
 const DIAG_BLOKKEN=[
@@ -14914,17 +15061,25 @@ async function psd2Refresh(silent){
      achterlopend zou lezen. De datums in TX zijn lokale kalenderdagen (v177), dus deze ook. */
   const allTx=[]; const balances={}; let authFail=false, anyOk=false;
   for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue;
-    let cont=null, guard=0;
+    let cont=null, guard=0, txN=0, txFout='';
     do{
       const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
       let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); anyOk=true; }
-      catch(e){ if(/40[13]|verlop|expired|consent|session|unauth/i.test(e.message||'')) authFail=true; break; }
-      for(const raw of (d.transactions||[])){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
+      catch(e){ if(/40[13]|verlop|expired|consent|session|unauth/i.test(e.message||'')) authFail=true; txFout=String((e&&e.message)||e).slice(0,90); break; }
+      const rij=(d.transactions||[]); txN+=rij.length;
+      for(const raw of rij){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
       cont=d.continuation_key||null; guard++;
     } while(cont && guard<40);
-    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:vandaagYMD()}; }catch(e){}
+    const bu={}; let bal=null, balFout='';
+    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); }
+    catch(e){ balFout=String((e&&e.message)||e).slice(0,90); }
+    if(bal!=null) balances[accId]={balance:bal,date:vandaagYMD()};
+    psd2DiagZet(accId, {txN, txPag:guard, txFout, balUit:bal, balGeland:bal!=null, balFout,
+      balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||''});
   }
-  if(authFail && !anyOk){ if(!silent){ toast('Koppeling verlopen, log opnieuw in'); psd2Connect(); } return; }
+  /* DE UITLEZING MOET DE MISLUKKING OVERLEVEN, en dat is precies het geval dat je wil zien: zonder deze
+     save() gaat wat er net is vastgelegd verloren op de enige route die hier vroeg terugkeert. */
+  if(authFail && !anyOk){ save(); if(!silent){ toast('Koppeling verlopen, log opnieuw in'); psd2Connect(); } return; }
   SET.psd2LastSync=Date.now(); save();
   const added=commitTx(allTx, balances);
   /* v197: hier stond `if(SET.psd2Pending!==false)`. Dat las als een instelling, maar niets schreef
@@ -15031,15 +15186,21 @@ async function psd2IngestSession(s){
     const accId = bekend || ibanNum(iban) || (hash?'psd2h_'+String(hash).slice(0,16):'psd2_'+String(uid).slice(0,8));
     const label = (a.name||a.product||'Rekening')+(iban?' ··'+iban.slice(-4):'');
     meta[accId]={ uid, iban, hash, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'' };
-    let cont=null, guard=0;
+    let cont=null, guard=0, txN=0, txFout='';
     do{
       const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
       let d; try{ d=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions'+qs); }
-      catch(e){ toast('Transacties ophalen mislukt: '+e.message); break; }
-      for(const raw of (d.transactions||[])){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
+      catch(e){ txFout=String((e&&e.message)||e).slice(0,90); toast('Transacties ophalen mislukt: '+e.message); break; }
+      const rij=(d.transactions||[]); txN+=rij.length;
+      for(const raw of rij){ const t=mapPsd2Tx(raw, accId); if(t) allTx.push(t); }
       cont=d.continuation_key||null; guard++;
     } while(cont && guard<40);
-    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); const bal=pickBalance(b); if(bal!=null) balances[accId]={balance:bal,date:vandaagYMD()}; }catch(e){}
+    const bu={}; let bal=null, balFout='';
+    try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); }
+    catch(e){ balFout=String((e&&e.message)||e).slice(0,90); }
+    if(bal!=null) balances[accId]={balance:bal,date:vandaagYMD()};
+    psd2DiagZet(accId, {txN, txPag:guard, txFout, balUit:bal, balGeland:bal!=null, balFout,
+      balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||''});
     { try{ const fp=new Date(); fp.setMonth(fp.getMonth()-1);   // v197: pending telt altijd mee const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fp.toISOString().slice(0,10)+'&transaction_status=PDNG');
       for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); } }catch(e){} }
   }
@@ -15087,11 +15248,38 @@ function mapPsd2Tx(raw, accId, pending){
   return t;
 }
 
-function pickBalance(b){
-  const arr = (b&&(b.balances||b))||[]; if(!Array.isArray(arr)||!arr.length) return null;
+/* ===== WAT DE TWEE AANROEPEN PER REKENING DEDEN (v279) =====
+   DIT IS OPGESLAGEN DATA OMDAT HET NERGENS ANDERS TE ZIEN IS. Het diagnosescherm mag geen netwerk
+   aanroepen (v244), dus wat de transactie- en de balances-aanroep per rekening teruggaven bestaat
+   alleen op het moment van de sync. `SET.psd2LastSync` is globaal en `ACCMETA[a].date` zegt alleen DAT
+   de balances-aanroep lukte, niet waarom hij mislukte (v270).
+   WAAROM HET NODIG IS, gemeten op het toestel bij v278: de saldostempel van ABN stond op vandaag en die
+   van de vijf N26-rekeningen op 25 september, terwijl de sync van dezelfde avond draaide. Er is dus een
+   rekening waarvan de balances-aanroep niets oplevert, en zonder deze uitlezing is niet te zien of dat
+   een fout is, een lege lijst of een bedrag dat niet te lezen valt. Diezelfde uitlezing maakt een STILLE
+   rekening zichtbaar: nul teruggegeven regels naast een rekening die wel boekingen heeft.
+   EEN ENTRY WORDT OVERSCHREVEN EN NIET OPGETELD: de vraag is wat de LAATSTE sync deed, niet wat er ooit
+   gebeurde. De teller van v277 telt wel cumulatief, want die vraagt iets anders. */
+function psd2DiagZet(accId, rec){
+  const D=SET.psd2Diag=SET.psd2Diag||{};
+  D[accId]=Object.assign({op:vandaagYMD()}, rec);
+}
+/* ===== HIJ MELDT OP VERZOEK WAT HIJ ZAG (v279) =====
+   DEZELFDE VORM ALS `betaalMoment(t, metReden)`: een tweede uitdrukking van de respons-vorm in het
+   diagnosescherm zou een tweede waarheid zijn (v104), en het diagnosescherm mag geen netwerk aanroepen
+   (v244), dus het moet hier worden vastgelegd op het moment dat de respons er is. `uitleg` blijft leeg
+   zodra niemand erom vraagt, dus de gewone aanroep verandert niet. */
+function pickBalance(b, uitleg){
+  const stop=(r)=>{ if(uitleg) uitleg.reden=r; return null; };
+  const arr = (b&&(b.balances||b))||[];
+  if(uitleg){ uitleg.lijst = Array.isArray(arr) ? arr.length : -1;
+    uitleg.types = Array.isArray(arr) ? arr.map(x=>String((x&&(x.balance_type||x.type))||'-')).slice(0,6).join(',') : String(typeof arr); }
+  if(!Array.isArray(arr)||!arr.length) return stop(Array.isArray(arr)?'de balances-lijst is leeg':'geen balances-lijst in de respons');
   const pref = arr.find(x=>/CLBD|ITAV|XPCD|PRCD/i.test(x.balance_type||x.type||'')) || arr[0];
-  const v = pref&&(pref.balance_amount||pref.amount); if(!v) return null;
-  const n=parseFloat(v.amount); if(isNaN(n)) return null;
+  if(uitleg) uitleg.gekozen=String((pref&&(pref.balance_type||pref.type))||'-');
+  const v = pref&&(pref.balance_amount||pref.amount); if(!v) return stop('de gekozen entry draagt geen bedrag');
+  if(uitleg) uitleg.ruw=String(v.amount).slice(0,20);
+  const n=parseFloat(v.amount); if(isNaN(n)) return stop('het bedrag is niet als getal te lezen');
   return (pref.credit_debit_indicator||'').toUpperCase()==='DBIT' ? -Math.abs(n) : n;
 }
 // gedeelde commit voor kant-en-klare TX-objecten (zelfde dedup als ingest)
@@ -15135,19 +15323,33 @@ function _dupSig(t){
    bestaande boekingen het veld kregen. Zonder `gezien` leest een dekking van nul als "de bank levert hem
    niet", en dat is iets anders dan "er is nog niet gesynchroniseerd" (v59/v73/v173). */
 function commitTx(newTxns, balances){
-  let added=0, vdGezien=0, vdNieuw=0, vdVerrijkt=0;
+  /* DE TELLING STAAT PER REKENING (v279), en dat is niet hetzelfde getal fijner gehakt: de vraag van
+     v277 was of de bank het veld levert, en dat is een vraag PER BANK. GEMETEN op het toestel bij v278:
+     184 regels langs deze functie en nul met een veld, maar de teller was globaal, dus of ABN's regels
+     daarbij zaten was niet te zien. Een ruwe schatting op de tempo's uit blok 8 zei dat een venster van
+     twee maanden over alle rekeningen ruim 350 regels hoort te geven, dus er was een rekening die niets
+     leverde, en juist die kon de teller niet aanwijzen.
+     HET TOTAAL IS DE SOM, en niet een eigen getal ernaast (v104): het blok telt de rekeningen op.
+     EEN OUDERE VLAKKE METING BLIJFT LEESBAAR: het blok ziet aan de vorm van een entry of hij van vóór
+     deze ronde is en zet hem apart in plaats van hem als rekening te lezen. */
+  let added=0;
+  const vdRek={};
+  const vdTel=(t,k)=>{ const a=String(t.acc||'-'); (vdRek[a]=vdRek[a]||{gezien:0,veld:0,anders:0,nieuw:0,verrijkt:0})[k]++; };
   const existing=new Map(); for(const t of TX){ existing.set(t.id, t); }
   const soft=new Map(); for(const t of TX){ soft.set(_softKey(t), {acc:t.acc, src:t.src}); }
   for(const t of newTxns){ if(!t) continue;
-    if(t.src==='psd2') vdGezien++;
+    if(t.src==='psd2'){ vdTel(t,'gezien');
+      if(t.valutaDatum){ vdTel(t,'veld'); if(String(t.valutaDatum)!==String(t.date).slice(0,10)) vdTel(t,'anders'); } }
     const oud=existing.get(t.id);
-    if(oud){ if(t.valutaDatum && !oud.valutaDatum){ oud.valutaDatum=t.valutaDatum; vdVerrijkt++; } continue; }
+    if(oud){ if(t.valutaDatum && !oud.valutaDatum){ oud.valutaDatum=t.valutaDatum; vdTel(t,'verrijkt'); } continue; }
     const sk=_softKey(t), ex=soft.get(sk);
     if(ex && ex.acc!==t.acc && ex.src!==t.src) continue;   // dedup alleen over verschillende bronnen (bv. CSV↔PSD2); twee PSD2-rekeningen (Main/Zakgeld) worden niet meer tegen elkaar weggegooid
     TX.push(t); existing.set(t.id, t); soft.set(sk,{acc:t.acc,src:t.src}); added++;
-    if(t.valutaDatum) vdNieuw++; }
-  if(vdGezien){ const T=SET.valutaTally=SET.valutaTally||{gezien:0,nieuw:0,verrijkt:0};
-    T.gezien=(+T.gezien||0)+vdGezien; T.nieuw=(+T.nieuw||0)+vdNieuw; T.verrijkt=(+T.verrijkt||0)+vdVerrijkt; T.op=vandaagYMD(); }
+    if(t.valutaDatum) vdTel(t,'nieuw'); }
+  if(Object.keys(vdRek).length){ const T=SET.valutaTally=SET.valutaTally||{};
+    for(const a in vdRek){ const r=T[a]=(T[a]&&typeof T[a]==='object')?T[a]:{};
+      for(const k of ['gezien','veld','anders','nieuw','verrijkt']) r[k]=(+r[k]||0)+vdRek[a][k];
+      r.op=vandaagYMD(); } }
   if(balances) for(const a in balances){ ACCMETA[a]=Object.assign(ACCMETA[a]||{}, balances[a]); }
   TX.sort((a,b)=>a.date.localeCompare(b.date));
   applyOwnAccounts(); buildAccMeta(); save();
