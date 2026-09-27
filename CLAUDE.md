@@ -95,6 +95,45 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **De aansluiting in blok 6 rekent onafgerond, en is dus exact** (`v271`): GEMETEN op het toestel
+  stonden drie van de vijf aansluitingen op NEE en alle drie scheelden precies een euro (som besteed
+  1.459 tegen gebruikt 1.460, som restant 791 tegen 790, potjes min besteed 271 tegen 270). Er was
+  niets mis met de app: het blok telde de AFGERONDE bedragen per potje op en legde die som naast een
+  app-getal dat de SOM afrondt. Een blok dat wolf roept is erger dan geen blok, want de volgende ronde
+  zoekt een fout die er niet is.
+  GEEN TOLERANTIE, DEZELFDE AFRONDINGEN. `varBudget()`, `varPotjeStand().gebruikt` en
+  `varPlanRemaining()` ronden elk hun EIGEN som af, en `inPotjes` en `gat` zijn samengesteld uit die
+  al afgeronde sommen. Het blok doet nu precies die afrondingen op precies die plekken; een enkele
+  afronding over het geheel scheelt opnieuw een euro. `potjeRest()` krijgt de ONAFGERONDE bedragen
+  mee, zoals `varPlanRemaining()` hem aanroept: met afgeronde argumenten was dat een tweede
+  berekening (`v104`).
+  DE RIJEN BLIJVEN AFGEROND, en het blok zegt dat erbij. Een tabel met centen is niet te lezen, maar
+  een lezer die de rijen optelt en op een ander totaal uitkomt moet weten waarom.
+  DE FIXTURE DRAAGT CENTEN, anders meet de test niets: zonder centen is "som van de afrondingen"
+  gelijk aan "afronding van de som". De bedragen zijn ook zo gekozen dat drie afrondingen niet
+  hetzelfde zijn als één (601 min 300 is 301, 600,60 min 300,40 in één keer is 300), want de sabotage
+  op dat derde geval bleef eerst groen. Drie sabotages, alle drie rood.
+- **OPEN PUNT: het bedrag en de dagteller lopen op verschillende klokken** (`v271`): een boeking met
+  een datum NA vandaag telt nu al volledig mee, en de dag waarop hij valt telt niet mee. GEMETEN met
+  een boeking van morgen van €300 in een potje van €400, op dag 27 van 30: `catSpendMap()` en
+  `totals().spend`/`spendNorm` gaan van 300 naar 600, `potjeRest()` en `varPlanRemaining()` van 100
+  naar 40, `varPotjeStand()` van 75 procent naar 150 procent met `over:true`, en `budgetOverZin()`
+  gaat van niets naar "€200 over je potjes, met nog 3 dagen te gaan". `daysElapsed()` blijft dag 27
+  van 30 met 3 dagen te gaan, want die kent alleen de kalender. `txOfMonth()` filtert op de MAAND van
+  `t.date` en niet op vandaag, dus het bedrag zit in de teller terwijl zijn dag buiten de noemer valt.
+  DE GEVAARLIJKE KANT VUURT OOK, en de oorzaak is niet de datum: `vrijPerDag()` gaat van €567 naar
+  €600 per dag en `safeToSpend().safe` van 1.700 naar 1.800, omdat `varPotjesReserve()` op nul klemt
+  zodra een potje over is en de reservering van €100 dus vrijvalt (`v254`). Datzelfde zou gebeuren bij
+  een boeking van vandaag. Wat de toekomstige datum doet is het bedrag laten MEETELLEN; de richting
+  komt van de klem. Te hoog blijft de gevaarlijke kant (`v168`).
+  DIT IS NIET GEREPAREERD en het is een eigen ronde, want het is één vraag met twee kanten die niet
+  los te draaien zijn: de datum uit de normsommen halen raakt `catSpendMap()`, en dat is sinds `v269`
+  de norm-bron van elk signaal, elke potjesom en de hele coachlaag; de dagen erbij tellen raakt
+  `maandDagenOver()`, `potjeRest()` en `budgetOverZin()` tegelijk, en dat is precies de ronde die
+  `v257` al openliet. Kies eerst welke klok wint.
+  DIT IS GEEN THEORIE: op het toestel staat `laatste boeking: 2026-09-28` terwijl het de 27e is, op
+  ABN `521200806`. Diezelfde stand laat blok 9 zijn weekpoort halen (`zo >= vandaag`), dus een
+  boeking na vandaag komt in deze gegevens werkelijk voor.
 - **De piekdag is vandaag een MAANDMETING, en blok 9 meet de weekvariant er los naast** (`v271`):
   signaal 3 van `insSignals()` telt per weekdag over de HELE MAAND (`piekVerdeling()`) en vergelijkt
   aandeel tegen aandeel over drie AFGERONDE maanden (`piekReferentie()`), met `PIEK_MIN_TX` (8) en

@@ -13143,37 +13143,53 @@ function diagPotjes(){
   L.push('per potje. meetelt: alle drie de sommen lopen over dezelfde poort (bud>0 en niet');
   L.push('terugkerend), dus een potje telt overal mee of nergens. reserve is wat potjeRest()');
   L.push('teruggeeft bij een overschrijding, en bijdrage is reserve plus de overschrijding zelf.');
+  /* v271: DE RIJEN ZIJN AFGEROND VOOR DE WEERGAVE, DE AANSLUITING REKENT ONAFGEROND. Hiervoor telde
+     dit blok de AFGERONDE bedragen per potje op en legde die som naast een app-getal dat de som
+     afrondt; dat scheelt een euro zodra er centen in het spel zijn, en dan zei de aansluiting NEE
+     op iets wat klopte. GEMETEN op het toestel: som besteed 1.459 tegen gebruikt 1.460, som restant
+     791 tegen 790, potjes min besteed 271 tegen 270. Drie keer wolf roepen, en een volgende ronde
+     zoekt dan een fout die er niet is.
+     ELKE AANSLUITING PAST NU EXACT DEZELFDE AFRONDING TOE ALS DE APP, en geen tolerantie: varBudget()
+     en varPotjeStand().gebruikt en varPlanRemaining() ronden elk hun eigen SOM af, dus dit blok rondt
+     ook pas de som af. potjeRest() krijgt de onafgeronde bedragen mee, precies zoals
+     varPlanRemaining() hem aanroept; met afgeronde argumenten was dat een tweede berekening. */
+  L.push('de rijen zijn afgerond voor de weergave; de totalen en de aansluiting rekenen onafgerond.');
   L.push('  '+['potje'.padEnd(20),'potje'.padStart(8),'besteed'.padStart(8),'restant'.padStart(8),
     'over'.padStart(8),'bijdr.'.padStart(8),'telt mee'].join(' '));
-  let sBud=0,sSp=0,sRest=0,sGat=0,nOver=0;
+  let sBud=0,sSp=0,sRest=0,nOver=0;
   const namen=Object.keys(B).sort();
   for(const k of namen){
-    const bud=Math.round(+B[k]||0);
-    const besteed=Math.round(sp[k]||0);
+    const bud=+B[k]||0;
+    const besteed=+(sp[k]||0);
     const terug=rc.has(k);
     const mee=(bud>0 && !terug);
     const naam=((CATS[k]||{}).name||k);
     if(!mee){
-      L.push('  '+[naam.slice(0,20).padEnd(20),String(bud).padStart(8),String(besteed).padStart(8),
+      L.push('  '+[naam.slice(0,20).padEnd(20),String(Math.round(bud)).padStart(8),String(Math.round(besteed)).padStart(8),
         '-'.padStart(8),'-'.padStart(8),'-'.padStart(8), terug?'nee (terugkerend)':'nee (geen potje)'].join(' '));
       continue;
     }
-    const r=Math.round(_dT(()=>potjeRest(bud,besteed,d.dim,daysLeft),0));
+    const r=_dT(()=>potjeRest(bud,besteed,d.dim,daysLeft),0);
     const over=Math.max(besteed-bud,0);
     const bij=r-(bud-besteed);              // wat dit potje aan het gat toevoegt
-    sBud+=bud; sSp+=besteed; sRest+=r; sGat+=bij; if(over>0) nOver++;
-    L.push('  '+[naam.slice(0,20).padEnd(20),String(bud).padStart(8),String(besteed).padStart(8),
-      String(r).padStart(8),String(over).padStart(8),String(bij).padStart(8),'ja'].join(' '));
+    sBud+=bud; sSp+=besteed; sRest+=r; if(over>0) nOver++;
+    L.push('  '+[naam.slice(0,20).padEnd(20),String(Math.round(bud)).padStart(8),String(Math.round(besteed)).padStart(8),
+      String(Math.round(r)).padStart(8),String(Math.round(over)).padStart(8),String(Math.round(bij)).padStart(8),'ja'].join(' '));
   }
-  L.push('  '+['TOTAAL'.padEnd(20),String(sBud).padStart(8),String(sSp).padStart(8),
-    String(sRest).padStart(8),''.padStart(8),String(sGat).padStart(8),`${nOver} overschreden`].join(' '));
+  /* De vijf aansluitingen, elk met de afronding van de app erop. inPotjes is bij de app
+     varBudget() min gebruikt, dus twee AFGERONDE sommen; gat is varPlanRemaining() min dat verschil.
+     Reken je dat na met een enkele afronding over het geheel, dan loop je opnieuw een euro mis. */
+  const nBud=Math.round(sBud), nSp=Math.round(sSp), nRest=Math.round(sRest);
+  const nIn=nBud-nSp, nGat=nRest-nIn;
+  L.push('  '+['TOTAAL'.padEnd(20),String(nBud).padStart(8),String(nSp).padStart(8),
+    String(nRest).padStart(8),''.padStart(8),String(nGat).padStart(8),`${nOver} overschreden`].join(' '));
   L.push('');
   L.push('sluit de optelling aan:');
-  L.push(`  som van de potjes = varBudget(): ${sBud===budget?'JA':'NEE ('+sBud+' tegen '+budget+')'}`);
-  L.push(`  som besteed = gebruikt:          ${sSp===gebruikt?'JA':'NEE ('+sSp+' tegen '+gebruikt+')'}`);
-  L.push(`  potjes - besteed = grote getal:  ${(sBud-sSp)===inPotjes?'JA':'NEE ('+(sBud-sSp)+' tegen '+inPotjes+')'}`);
-  L.push(`  som restant = nog nodig:         ${sRest===rest?'JA':'NEE ('+sRest+' tegen '+rest+')'}`);
-  L.push(`  som bijdragen = het gat:         ${sGat===gat?'JA':'NEE ('+sGat+' tegen '+gat+')'}`);
+  L.push(`  som van de potjes = varBudget(): ${nBud===budget?'JA':'NEE ('+nBud+' tegen '+budget+')'}`);
+  L.push(`  som besteed = gebruikt:          ${nSp===gebruikt?'JA':'NEE ('+nSp+' tegen '+gebruikt+')'}`);
+  L.push(`  potjes - besteed = grote getal:  ${nIn===inPotjes?'JA':'NEE ('+nIn+' tegen '+inPotjes+')'}`);
+  L.push(`  som restant = nog nodig:         ${nRest===rest?'JA':'NEE ('+nRest+' tegen '+rest+')'}`);
+  L.push(`  som bijdragen = het gat:         ${nGat===gat?'JA':'NEE ('+nGat+' tegen '+gat+')'}`);
   L.push('');
   /* potOver telt per potje alleen de overschrijding en verrekent geen potje dat eronder bleef, dus
      hij is niet het gat en ook niet het grote getal. Hij staat hier omdat hij er zo uitziet en dat
