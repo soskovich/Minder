@@ -14342,9 +14342,12 @@ function diagDubbel(){
      gemeten worden in plaats van alleen de kaartregels.
      HET VELD IS OPGESLAGEN DATA EN GEEN AFLEIDING, en dat verandert wat deze teller betekent. `t.betaalDatum`
      komt uit de desc en `categorize()` zet hem bij elke boot opnieuw, dus die is er voor de hele historie.
-     De valutadatum staat alleen in de respons, en die is na de import weg. BOEKINGEN DIE ER AL STAAN KRIJGEN
-     HEM DUS NOOIT: deze teller staat op nul tot er opnieuw is gesynchroniseerd, en dat is de verwachte
-     uitkomst en geen vondst.
+     De valutadatum staat alleen in de respons, en die is na de import weg. Deze teller staat dus op nul tot
+     er opnieuw is gesynchroniseerd, en dat is de verwachte uitkomst en geen vondst. SINDS v277 KRIJGT EEN
+     BESTAANDE BOEKING HEM ALSNOG zodra de bank dezelfde regel nog een keer teruggeeft (`commitTx()` verrijkt
+     op een gelijke id), dus één synchronisatie dekt het hele venster dat de bank teruggeeft en niet alleen
+     wat er sindsdien nieuw is. De teller zegt daarom apart hoeveel boekingen verrijkt zijn en hoeveel nieuw
+     binnenkwamen: zonder die splitsing leest een lage dekking als "de bank levert hem niet".
      WAAR `booking_date` ONTBRAK IS `t.date` ZELF DE VALUTADATUM, want `mapPsd2Tx()` leest
      `booking_date || value_date || transaction_date`. Die regels tellen hier per constructie als GELIJK, en
      dat staat erbij, zodat "gelijk" niet als bevestiging leest van iets dat geen meting is.
@@ -14354,10 +14357,11 @@ function diagDubbel(){
      GEEN ENKELE APP-FUNCTIE LEEST `t.valutaDatum`, en dat is de hele afbakening van deze ronde. */
   L.push('');
   L.push('5. DE VALUTADATUM UIT DE PSD2-RESPONS (t.valutaDatum, alleen opgevangen, geen lezer)');
-  L.push('  dit veld wordt bij de IMPORT gezet en niet bij de boot afgeleid, dus bestaande boekingen krijgen');
-  L.push('  hem nooit: nul is hier de verwachte stand tot er opnieuw is gesynchroniseerd.');
+  L.push('  dit veld wordt bij de IMPORT gezet en niet bij de boot afgeleid, dus nul is de verwachte stand');
+  L.push('  tot er opnieuw is gesynchroniseerd. Sinds v277 krijgt een bestaande boeking hem alsnog als de');
+  L.push('  bank dezelfde regel nog een keer teruggeeft, dus \u00e9\u00e9n synchronisatie dekt het hele bankvenster.');
   const vdRij={};
-  let vdTot=0, vdVeld=0;
+  let vdTot=0, vdVeld=0, vdPend=0;
   for(const t of TX){
     if(src(t)!=='psd2') continue;
     const k=String(t.acc);
@@ -14366,7 +14370,7 @@ function diagDubbel(){
     r.n++; vdTot++;
     if(inScope(t) && t.amount<0) r.bedrag+=-t.amount;
     if(!t.valutaDatum) continue;
-    r.veld++; vdVeld++;
+    r.veld++; vdVeld++; if(t.pending) vdPend++;
     if(String(t.valutaDatum)!==String(t.date).slice(0,10)) r.anders++;
     if(inScope(t) && t.amount<0){
       const b=-t.amount; r.gedekt+=b; r.som+=b;
@@ -14375,10 +14379,24 @@ function diagDubbel(){
   }
   L.push('  psd2-boekingen in totaal: '+vdTot+'   met een valutadatum: '+vdVeld
     +(vdTot?('   = '+Math.round(vdVeld/vdTot*100)+'%'):''));
+  const VT=SET.valutaTally||null, vtG=VT?(+VT.gezien||0):0, vtN=VT?(+VT.nieuw||0):0, vtV=VT?(+VT.verrijkt||0):0;
+  L.push('  langs commitTx() gekomen (cumulatief): '+vtG+' psd2-regels'
+    +'   nieuw binnen MET het veld: '+vtN+'   bestaande boekingen VERRIJKT: '+vtV
+    +(VT&&VT.op?('   laatst op '+VT.op):''));
+  L.push('    verrijkt plus nieuw hoort ongeveer gelijk te zijn aan het aantal boekingen met het veld hierboven;');
+  L.push('    het loopt uiteen door verwijderde boekingen en door de pending-snapshot, die buiten commitTx()');
+  L.push('    om in TX wordt gezet (applyPending()). pending MET het veld: '+vdPend+'.');
   if(!vdVeld){
-    L.push('  GEEN ENKELE psd2-boeking draagt het veld. Dat betekent een van twee dingen, en dit blok kan');
-    L.push('    die twee niet scheiden: er is nog niet gesynchroniseerd sinds het veld bestaat, OF de');
-    L.push('    respons levert geen value_date. Synchroniseer eerst; blijft het daarna nul, dan is het de bron.');
+    if(!vtG){
+      L.push('  GEEN ENKELE psd2-boeking draagt het veld EN er kwam nog geen psd2-regel langs commitTx().');
+      L.push('    Er is dus niet gesynchroniseerd sinds het veld bestaat. Synchroniseer eerst.');
+    } else {
+      L.push('  GEEN ENKELE psd2-boeking draagt het veld TERWIJL er '+vtG+' psd2-regels langs kwamen.');
+      L.push('    Dat is de bron: de respons levert geen value_date. Dat is een antwoord en geen gebrek.');
+    }
+  } else if(vtG && !vtV && vtN){
+    L.push('  ALLES KOMT UIT NIEUWE BOEKINGEN en niets uit verrijking. Dan dekt het veld alleen wat er sinds');
+    L.push('    v276 nieuw binnenkwam, en zegt de dekking hierboven niets over de rest van je historie.');
   }
   for(const k of Object.keys(vdRij).sort((a,b)=>vdRij[b].n-vdRij[a].n)){
     const r=vdRij[k];
@@ -15044,8 +15062,9 @@ function mapPsd2Tx(raw, accId, pending){
      paren zijn bewijsbaar dezelfde betaling (gelijke betaaldatum EN tijd aan beide kanten).
      DIT VELD IS OPGESLAGEN DATA EN GEEN AFLEIDING, en daarin verschilt het van het betaalmoment-veld. Dat tweede
      zet `categorize()` bij elke boot uit de desc, dus het herstelt zichzelf; de valutadatum staat alleen in
-     de RESPONS en die is na de import weg. Boekingen die er al staan krijgen hem dus NOOIT, en de teller in
-     blok 10 leest nul tot er opnieuw is gesynchroniseerd. Dat is geen gebrek maar de aard van de bron.
+     de RESPONS en die is na de import weg. Een boeking die er al staat krijgt hem daarom niet bij de boot maar
+     alleen als de bank dezelfde regel teruggeeft: `commitTx()` verrijkt dan op een gelijke id, en verder niets
+     aan die boeking (v277).
      HIJ KOMT NIET IN `t.id`: die hasht over rekening, datum, bedrag en omschrijving. Zou hij meetellen, dan
      kreeg elke bestaande boeking bij een herimport een nieuwe id en verloor je je overrides (v270). */
   const vd=String(raw.value_date||'').slice(0,10);
@@ -15088,13 +15107,34 @@ function _dupSig(t){
   const n=((t.name||t.desc||'').toUpperCase().match(/[A-Z]/g)||[]).join('').slice(0,8);
   return 'H|'+t.date+'|'+(+t.amount).toFixed(2)+'|'+n+'|'+_refTokens(t);
 }
+/* ===== DE VERRIJKING VAN EEN BESTAANDE BOEKING (v277) =====
+   Een regel die de bank opnieuw teruggeeft heeft dezelfde id en werd daarom overgeslagen. Draagt die regel
+   een valutadatum en de bestaande boeking niet, dan is dat het ENIGE wat er te halen valt, en dan wordt
+   alleen dat veld gezet. GEEN categorie, GEEN override, GEEN vlag, GEEN ander veld en geen nieuwe boeking.
+   WAAROM DIT NODIG IS: het veld staat alleen in de RESPONS en wordt niet bij de boot afgeleid, dus zonder
+   deze stap dekt het veld alleen de boekingen die na v276 nieuw binnenkwamen. Met deze stap dekt één
+   synchronisatie het hele venster dat de bank teruggeeft.
+   ALLEEN ALS HET VELD LEEG IS: een bestaande waarde wordt nooit overschreven, dus een respons die later iets
+   anders zegt kan de historie niet stil herschrijven.
+   DE TELLING IS OPGESLAGEN DATA, want ze is nergens uit `TX` af te leiden: een verrijkte en een nieuw
+   binnengekomen boeking zijn daarna niet meer van elkaar te onderscheiden. `SET.valutaTally` telt cumulatief
+   hoeveel psd2-regels langs deze functie kwamen, hoeveel daarvan nieuw met het veld binnenkwamen en hoeveel
+   bestaande boekingen het veld kregen. Zonder `gezien` leest een dekking van nul als "de bank levert hem
+   niet", en dat is iets anders dan "er is nog niet gesynchroniseerd" (v59/v73/v173). */
 function commitTx(newTxns, balances){
-  let added=0; const existing=new Set(TX.map(t=>t.id));
+  let added=0, vdGezien=0, vdNieuw=0, vdVerrijkt=0;
+  const existing=new Map(); for(const t of TX){ existing.set(t.id, t); }
   const soft=new Map(); for(const t of TX){ soft.set(_softKey(t), {acc:t.acc, src:t.src}); }
-  for(const t of newTxns){ if(!t) continue; if(existing.has(t.id)) continue;
+  for(const t of newTxns){ if(!t) continue;
+    if(t.src==='psd2') vdGezien++;
+    const oud=existing.get(t.id);
+    if(oud){ if(t.valutaDatum && !oud.valutaDatum){ oud.valutaDatum=t.valutaDatum; vdVerrijkt++; } continue; }
     const sk=_softKey(t), ex=soft.get(sk);
     if(ex && ex.acc!==t.acc && ex.src!==t.src) continue;   // dedup alleen over verschillende bronnen (bv. CSV↔PSD2); twee PSD2-rekeningen (Main/Zakgeld) worden niet meer tegen elkaar weggegooid
-    TX.push(t); existing.add(t.id); soft.set(sk,{acc:t.acc,src:t.src}); added++; }
+    TX.push(t); existing.set(t.id, t); soft.set(sk,{acc:t.acc,src:t.src}); added++;
+    if(t.valutaDatum) vdNieuw++; }
+  if(vdGezien){ const T=SET.valutaTally=SET.valutaTally||{gezien:0,nieuw:0,verrijkt:0};
+    T.gezien=(+T.gezien||0)+vdGezien; T.nieuw=(+T.nieuw||0)+vdNieuw; T.verrijkt=(+T.verrijkt||0)+vdVerrijkt; T.op=vandaagYMD(); }
   if(balances) for(const a in balances){ ACCMETA[a]=Object.assign(ACCMETA[a]||{}, balances[a]); }
   TX.sort((a,b)=>a.date.localeCompare(b.date));
   applyOwnAccounts(); buildAccMeta(); save();

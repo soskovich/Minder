@@ -230,9 +230,13 @@ test.describe('2 - de valutadatum wordt opgevangen en verder niets', () => {
   });
 
   /* GEEN ENKELE APP-FUNCTIE LEEST HET VELD, en dat is de hele afbakening. Dit is dezelfde bronzoekende
-     vorm als betaaldatum-veld.spec.js bij v273: elke treffer in de bron moet in de setter of in het
-     diagnoseblok liggen, anders telt hij nergens mee en valt deze test. */
-  test('elke treffer in de bron zit in mapPsd2Tx of in blok 10', async () => {
+     vorm als betaaldatum-veld.spec.js bij v273: elke treffer in de bron moet in een SETTER of in het
+     diagnoseblok liggen, anders telt hij nergens mee en valt deze test.
+     DE TWEEDE SETTER IS ERBIJ GEKOMEN BIJ v277 (`commitTx()` verrijkt een bestaande boeking), en daarvoor is
+     deze lijst verbreed. Dat is precies het geval waarvoor verbreden mag: een echte schrijver. Bij v276 viel
+     dezelfde vorm op een COMMENT en toen is de lijst juist NIET verbreed, want dan zou een echte lezer erdoor
+     glippen. Hoeveel schrijvers er zijn staat als eigen eis in valutadatum-verrijking.spec.js. */
+  test('elke treffer in de bron zit in mapPsd2Tx, commitTx of blok 10', async () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
     const totaal = (src.match(/valutaDatum/g) || []).length;
     expect(totaal).toBeGreaterThan(3);
@@ -241,6 +245,7 @@ test.describe('2 - de valutadatum wordt opgevangen en verder niets', () => {
       return src.slice(i, j); };
     const delen = [
       stuk('function mapPsd2Tx(raw, accId, pending){', '\nfunction pickBalance('),
+      stuk('/* ===== DE VERRIJKING VAN EEN BESTAANDE BOEKING (v277) =====', '\nfunction findDuplicateIds('),
       stuk('function diagDubbel(){', '\nconst DIAG_BLOKKEN=['),
     ];
     const binnen = delen.reduce((a, d) => a + (d.match(/valutaDatum/g) || []).length, 0);
@@ -279,8 +284,9 @@ test.describe('3 - de teller in blok 10', () => {
   });
 
   /* EEN NUL HIER IS GEEN VONDST, en het blok zegt dat zelf: het veld ontstaat bij de import en niet bij de
-     boot, dus bestaande boekingen krijgen hem nooit. Zonder die regel leest een nul als "de bank levert
-     hem niet", en dat zijn twee verschillende dingen. */
+     boot. Zonder die regel leest een nul als "de bank levert hem niet", en dat zijn twee verschillende
+     dingen. SINDS v277 kan het blok die twee wel scheiden, met de teller van `commitTx()`; dat de twee
+     takken elk hun eigen tekst dragen staat in valutadatum-verrijking.spec.js. */
   test('het blok scheidt "nog niet gesynchroniseerd" van "de bron levert hem niet"', async ({ page }) => {
     await boot(page);
     const t = await sectie5(page);
@@ -291,7 +297,7 @@ test.describe('3 - de teller in blok 10', () => {
       return L.slice(i).join(String.fromCharCode(10));
     });
     expect(leeg).toContain('GEEN ENKELE psd2-boeking draagt het veld');
-    expect(leeg).toContain('Synchroniseer eerst; blijft het daarna nul, dan is het de bron.');
+    expect(leeg).toContain('Synchroniseer eerst.');
   });
 
   test('het blok schrijft niets weg', async ({ page }) => {

@@ -95,6 +95,30 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN BESTAANDE BOEKING KRIJGT DE VALUTADATUM ALSNOG, EN VERDER NIETS** (`v277`): `v276` vong
+  `t.valutaDatum` op bij de import en schreef erbij dat een bestaande boeking hem NOOIT krijgt. Dat gold voor
+  de BOOT en niet voor een synchronisatie: een bank geeft een VENSTER terug en het grootste deel daarvan
+  staat er al, met dezelfde `t.id`, en die regels werden overgeslagen. `commitTx()` zet bij een gelijke id nu
+  alleen dát ene veld, en alleen als het leeg is. Daarmee dekt ÉÉN synchronisatie het hele bankvenster in
+  plaats van alleen wat er sindsdien nieuw is.
+  EEN BESTAANDE WAARDE WORDT NOOIT OVERSCHREVEN, dus een respons die later iets anders zegt kan de historie
+  niet stil herschrijven, en het veld is na de eerste keer stabiel.
+  DE EIS IS DE BYTE-GELIJKHEID EN GEEN LIJST VELDEN: `valutadatum-verrijking.spec.js` vergelijkt de boeking
+  voor en na als JSON met het nieuwe veld eruit, met een tegentoets dat er wél iets veranderde. Zo valt hij
+  ook op een veld dat de test niet kent; de sabotage die `autoCat` ernaast zet is rood. `OVR`,
+  `SET.uitReservering` en `SET.fixOvr` op dezelfde id worden apart nagelezen (`v270`).
+  DAT DE INKOMENDE REGEL DEZELFDE ID HEEFT IS ZELF EEN TEST, op de INVOER: is die niet gelijk, dan wordt de
+  regel gewoon toegevoegd en toetst geen van de andere tests iets. Dat is de familie van vijf groene
+  sabotages, nu vooraf afgevangen.
+  DE TELLING IS OPGESLAGEN DATA, want een verrijkte en een nieuw binnengekomen boeking zijn achteraf niet van
+  elkaar te onderscheiden. `SET.valutaTally` draagt cumulatief `gezien` (psd2-regels langs `commitTx()`),
+  `nieuw` (nieuw binnen MET het veld) en `verrijkt`. `gezien` IS DE DISCRIMINATOR DIE `v276` NOG NIET HAD:
+  zonder hem is "nul omdat er niet gesynchroniseerd is" niet te scheiden van "nul omdat de bank het veld niet
+  levert" (`v59`/`v73`/`v173`), en sectie 5 zegt nu per geval welke van de twee het is. Een mt940-import laat
+  `gezien` op nul, want daar kwam geen bank aan te pas. Het blok LEEST hem alleen (`v244`).
+  DE LIJST TOEGESTANE PLEKKEN IS VERBREED VOOR EEN ECHTE SCHRIJVER, en dat is het verschil met `v276`: daar
+  viel dezelfde bronzoekende test op een COMMENT en toen is de lijst juist NIET verbreed. Een setter erbij
+  mag, een comment niet. De bereik-eis staat op één plek en het aantal schrijvers (twee) in de nieuwe spec.
 - **DE TREFFER MET EEN TIJD WINT, EN DAT IS VOOR HET EERST EEN GEMETEN KEUZE** (`v276`): `v273` legde vast
   dat "de eerste treffer wint" een AFSPRAAK was en geen meting, en `v275` heeft gemeten wat die afspraak
   kost. GEMETEN op het toestel: van de 52 descs met meer dan één datum kreeg er precies ÉÉN een veld, en dat
@@ -120,9 +144,11 @@ genoemde versietag.)*
   boekt niet op zaterdag of zondag.
   HET IS OPGESLAGEN DATA EN GEEN AFLEIDING, en dat verandert wat een nul betekent. `categorize()` zet
   `t.betaalDatum` bij elke boot opnieuw uit de desc, dus die dekt de hele historie; de valutadatum staat
-  alleen in de RESPONS en die is na de import weg. BESTAANDE BOEKINGEN KRIJGEN HEM NOOIT, de teller leest nul
-  tot er opnieuw is gesynchroniseerd, en het blok zegt dat er zelf bij. Zonder die regel leest een nul als
-  "de bank levert hem niet", en dat zijn twee verschillende dingen. `categorize()` wist hem NIET zoals hij
+  alleen in de RESPONS en die is na de import weg. De teller leest dus nul tot er opnieuw is
+  gesynchroniseerd, en het blok zegt dat er zelf bij. Zonder die regel leest een nul als "de bank levert hem
+  niet", en dat zijn twee verschillende dingen. BIJGEWERKT BIJ `v277`: ik schreef hier dat bestaande
+  boekingen hem NOOIT krijgen. Dat gold voor de boot en niet voor een synchronisatie: de bank geeft een
+  VENSTER terug en die regels hebben dezelfde id, dus ze zijn er wel. Zie de regel bovenaan. `categorize()` wist hem NIET zoals hij
   `t.betaalDatum` wist zodra de poort niet meer geldt; een sabotage die dat wel doet zet zeven tests rood.
   HIJ KOMT NIET IN `t.id`, en dat is de zwaarste eis: die hasht over rekening, datum, bedrag en omschrijving,
   en zou het veld meetellen, dan kreeg elke bestaande boeking bij een herimport een nieuwe id en verloor je je
@@ -1992,7 +2018,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v275` → `minder-v276`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v276` → `minder-v277`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
