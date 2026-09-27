@@ -1014,8 +1014,22 @@ function betaalMoment(t, metReden){
      ontdubbeling wil, dus dit is een keuze die bij die ronde opnieuw op tafel hoort en geen omissie. */
   if(/^\s*GEA\b/i.test(desc)) return nee('een opname (GEA), geen betaling');
   if(!KAART_RE.test(desc)) return nee('geen kaart-kenmerk (BEA/eCom/betaalpas)');
-  const m=desc.match(BETAALDATUM_RE);
-  if(!m) return nee('geen datum in de desc');
+  /* DE TREFFER MET EEN TIJD WINT (v276), en dat is voor het eerst een GEMETEN keuze en geen afspraak.
+     GEMETEN op het toestel bij v275: van de 52 descs met meer dan één datum kreeg er precies ÉÉN een veld,
+     en dat veld was FOUT. De desc van een Apple-abonnement draagt `TERUGKEREND PER 02.02.2026` twee keer
+     en daarna het echte moment `02.03.26/03:03`; de eerste treffer won, lag 28 dagen terug en kwam dus
+     binnen het venster van 45 dagen door. In de maanden waarin die ingangsdatum verder terug lag viel de
+     boeking juist af op het venster, dus dezelfde desc gaf een verkeerd veld of geen veld.
+     DE REGEL VOLGT UIT HET FORMAAT EN NIET UIT DE POSITIE: ABN zet achter het kaart-kenmerk een datum MET
+     een tijd, en 326 van de 327 velden dragen er een. Een datum zonder tijd in zo'n desc is dus iets
+     anders: een ingangsdatum, een vervaldag, een termijn. Dat is een sterkere lat dan 'de eerste' of 'de
+     laatste', want die twee zijn een positie en deze is een eigenschap.
+     ZONDER ENIGE TIJD BLIJFT DE EERSTE TREFFER WINNEN. Dan is er niets om op te kiezen, en een andere
+     positie zou weer een willekeurige tie-break zijn. GEMETEN dat dit de Kiosk-vorm niet raakt, waar BEIDE
+     treffers een tijd dragen: daar blijft de eerste winnen en wordt er nog steeds niet doorgezocht. */
+  const alle=[...desc.matchAll(new RegExp(BETAALDATUM_RE.source,'g'))];
+  if(!alle.length) return nee('geen datum in de desc');
+  const m=alle.find(x=>x[4]) || alle[0];
   const dd=+m[1], mm=+m[2]; let jj=m[3];
   if(!(dd>=1&&dd<=31) || !(mm>=1&&mm<=12)) return nee('geen geldige dag of maand');
   if(jj.length===2) jj='20'+jj;
@@ -13983,7 +13997,7 @@ function diagDubbel(){
      van je bank afhangt in plaats van van je gedrag. De maat is het BEDRAG, net als in blok 9, want een
      dekking in aantal zegt niets over een verdeling die op euro's weegt.
      DE CLASSIFICATIE HIERONDER IS WIJDER DAN KAART_RE, en dat is met opzet: KAART_RE is de POORT van het
-     veld en laat een wallet-regel en de N26-vorm er bewust uit. De vraag hier is een andere, namelijk of
+     veld en laat een wallet-regel en de PMNT-vorm er bewust uit. De vraag hier is een andere, namelijk of
      `t.date` bij een bron ZONDER veld al de betaaldag is, en dan moet je juist de regels zien die geen
      veld krijgen. Geen enkele app-functie leest deze classificatie; hij bestaat alleen in dit blok. */
   const stijl=t=>{
@@ -13991,7 +14005,10 @@ function diagDubbel(){
     if(/^\s*GEA\b/i.test(d)) return '';                                    // een opname is geen betaling
     if(KAART_RE.test(d)) return 'kaart (BEA/eCom/betaalpas)';
     if(/APPLE PAY|GOOGLE PAY/i.test(d)) return 'wallet (Apple/Google Pay)';
-    if(/\bPMNT\b/i.test(d)) return 'PMNT (de N26-vorm)';
+    /* PMNT IS GEEN N26-KENMERK, en dat is nagelezen en niet aangenomen: hij komt uit
+       `raw.bank_transaction_code.description`, die `mapPsd2Tx()` IN de desc zet, dus elke psd2-bron kan hem
+       dragen. Bij v275 stond een ABN-rekening daardoor onder het etiket "de N26-vorm". */
+    if(/\bPMNT\b/i.test(d)) return 'PMNT (de psd2-code)';
     return '';
   };
   /* DEZELFDE AFLEIDING ALS BLOK 8 (v275). Mijn eerste vorm las alleen SET.psd2Accounts en viel terug
@@ -14032,7 +14049,7 @@ function diagDubbel(){
   dekPrint(dekRij(src));
   L.push('  per rekening:');
   dekPrint(dekRij(t=>String(t.acc)), k=>'bank '+bankVan(k));
-  L.push('  (de bank komt uit SET.psd2Accounts en staat er dus alleen bij een gekoppelde rekening)');
+  L.push('  (de bank komt uit ACCMETA en anders uit SET.psd2Accounts, dezelfde afleiding als blok 8)');
   /* ===== 2. DE DESCS MET MEER DAN ÉÉN DATUM-ACHTIG PATROON (v274) =====
      Bij v273 stond hier alleen een TELLING, en die kwam op het toestel op 52 uit. Daarmee is de
      tie-break "de eerste treffer wint" niet meer inert, maar er is nog steeds niet te zien of hij ergens
@@ -14316,6 +14333,75 @@ function diagDubbel(){
   L.push('    OPEN VRAAG, NIET HIER TE METEN: of ABN die value_date in de PSD2-respons meelevert.');
   L.push('      mapPsd2Tx() leest booking_date || value_date || transaction_date en gooit de rest weg, dus');
   L.push('      wat er in de respons stond staat niet in TX. Dat is in de backend te zien en nergens hier.');
+  /* ===== 5. DE VALUTADATUM UIT DE PSD2-RESPONS (v276) =====
+     WAT DEZE TELLER BESLIST. v275 heeft gemeten dat de VALUTADATUM de betaaldag is en de BOEKDATUM niet:
+     bij mt940 was `t.date` in 42 van 42 gevallen gelijk aan de betaaldatum uit de desc, bij psd2 in 148 van
+     265, en de psd2-boekdatum draagt over 287 niet-kaartregels NUL procent weekend. Wat er nog niet was, is
+     of ABN die valutadatum in zijn PSD2-RESPONS meelevert; dat staat niet in de app en niet in `TX`, en
+     daarom is dit veld er nu om het op te vangen. Levert hij hem, dan kan de hele rekening op de betaaldag
+     gemeten worden in plaats van alleen de kaartregels.
+     HET VELD IS OPGESLAGEN DATA EN GEEN AFLEIDING, en dat verandert wat deze teller betekent. `t.betaalDatum`
+     komt uit de desc en `categorize()` zet hem bij elke boot opnieuw, dus die is er voor de hele historie.
+     De valutadatum staat alleen in de respons, en die is na de import weg. BOEKINGEN DIE ER AL STAAN KRIJGEN
+     HEM DUS NOOIT: deze teller staat op nul tot er opnieuw is gesynchroniseerd, en dat is de verwachte
+     uitkomst en geen vondst.
+     WAAR `booking_date` ONTBRAK IS `t.date` ZELF DE VALUTADATUM, want `mapPsd2Tx()` leest
+     `booking_date || value_date || transaction_date`. Die regels tellen hier per constructie als GELIJK, en
+     dat staat erbij, zodat "gelijk" niet als bevestiging leest van iets dat geen meting is.
+     DE TWEE WEEKDAGREEKSEN LOPEN OVER DEZELFDE REGELS, namelijk alleen die met het veld en binnen de scope
+     van `piekVerdeling()`. Anders is het verschil tussen de kolommen vooral de dekking en niet de kalender
+     (v273), en de dekking staat er daarom als aandeel van het BEDRAG bij.
+     GEEN ENKELE APP-FUNCTIE LEEST `t.valutaDatum`, en dat is de hele afbakening van deze ronde. */
+  L.push('');
+  L.push('5. DE VALUTADATUM UIT DE PSD2-RESPONS (t.valutaDatum, alleen opgevangen, geen lezer)');
+  L.push('  dit veld wordt bij de IMPORT gezet en niet bij de boot afgeleid, dus bestaande boekingen krijgen');
+  L.push('  hem nooit: nul is hier de verwachte stand tot er opnieuw is gesynchroniseerd.');
+  const vdRij={};
+  let vdTot=0, vdVeld=0;
+  for(const t of TX){
+    if(src(t)!=='psd2') continue;
+    const k=String(t.acc);
+    const r=vdRij[k]=vdRij[k]||{n:0,veld:0,anders:0,bedrag:0,gedekt:0,
+      tx:[0,0,0,0,0,0,0],vd:[0,0,0,0,0,0,0],som:0};
+    r.n++; vdTot++;
+    if(inScope(t) && t.amount<0) r.bedrag+=-t.amount;
+    if(!t.valutaDatum) continue;
+    r.veld++; vdVeld++;
+    if(String(t.valutaDatum)!==String(t.date).slice(0,10)) r.anders++;
+    if(inScope(t) && t.amount<0){
+      const b=-t.amount; r.gedekt+=b; r.som+=b;
+      r.tx[_piekDagIdx(t.date)]+=b; r.vd[_piekDagIdx(t.valutaDatum)]+=b;
+    }
+  }
+  L.push('  psd2-boekingen in totaal: '+vdTot+'   met een valutadatum: '+vdVeld
+    +(vdTot?('   = '+Math.round(vdVeld/vdTot*100)+'%'):''));
+  if(!vdVeld){
+    L.push('  GEEN ENKELE psd2-boeking draagt het veld. Dat betekent een van twee dingen, en dit blok kan');
+    L.push('    die twee niet scheiden: er is nog niet gesynchroniseerd sinds het veld bestaat, OF de');
+    L.push('    respons levert geen value_date. Synchroniseer eerst; blijft het daarna nul, dan is het de bron.');
+  }
+  for(const k of Object.keys(vdRij).sort((a,b)=>vdRij[b].n-vdRij[a].n)){
+    const r=vdRij[k];
+    L.push('    '+k.padEnd(20)+' bank '+bankVan(k)+'  psd2-boekingen '+String(r.n).padStart(5)
+      +'   met valutadatum '+String(r.veld).padStart(5)
+      +'   waarvan ANDERS dan t.date '+r.anders);
+    if(!r.veld) continue;
+    L.push('      in de scope van piekVerdeling(): '+Math.round(r.gedekt)+' van '+Math.round(r.bedrag)
+      +(r.bedrag>0?(' euro gedekt = '+Math.round(r.gedekt/r.bedrag*100)+'%'):' euro'));
+    if(r.som>0){
+      L.push('      die regels op t.date:        '+pct(r.tx,r.som));
+      L.push('      die regels op valutadatum:   '+pct(r.vd,r.som));
+      const wT=Math.round((r.tx[5]+r.tx[6])/r.som*100), wV=Math.round((r.vd[5]+r.vd[6])/r.som*100);
+      L.push('      weekend: '+wT+'% op t.date tegen '+wV+'% op de valutadatum'
+        +'   maandag: '+Math.round(r.tx[0]/r.som*100)+'% tegen '+Math.round(r.vd[0]/r.som*100)+'%');
+      const a=r.tx.indexOf(Math.max(...r.tx)), b=r.vd.indexOf(Math.max(...r.vd));
+      L.push('      verschuift de piek: '+(a===b?('NEE, '+dk[a]+' blijft de grootste'):('JA, van '+dk[a]+' naar '+dk[b])));
+    }
+  }
+  L.push('  WAT DIT BESLIST: staat ANDERS boven nul en schuift het weekend omhoog op de valutadatum, dan');
+  L.push('    levert de bank de betaaldag wel en kan een weekdagmeting daarop staan. Is ANDERS nul terwijl');
+  L.push('    het veld er wel is, dan zijn boekdatum en valutadatum bij deze bank dezelfde dag en valt er');
+  L.push('    niets te winnen. Welke datum welke meting voedt is daarna een keuze en geen gevolg.');
   return L;
 }
 const DIAG_BLOKKEN=[
@@ -14948,6 +15034,22 @@ function mapPsd2Tx(raw, accId, pending){
   const desc = [name, remit, (raw.bank_transaction_code&&raw.bank_transaction_code.description)||''].filter(Boolean).join(' ');
   const t={ date, amount, acc:accId, src:'psd2', desc, name:name.replace(/\s+/g,' ').slice(0,44),
     refNums: cpAcc.iban? [ibanNum(cpAcc.iban)].filter(Boolean) : [] };
+  /* ===== DE VALUTADATUM UIT DE RESPONS (v276) =====
+     ALLEEN OPVANGEN, GEEN ENKELE LEZER. `t.date` blijft de boekdatum en er verandert geen cijfer in de app.
+     WAAROM DIT VELD ER KOMT, gemeten bij v275 op de rekening die mt940 EN psd2 draagt: bij mt940 is `t.date`
+     de valutadatum en die is in 42 van de 42 gevallen gelijk aan de betaaldatum uit de desc; bij psd2 is
+     `t.date` de boekdatum en die klopt in 148 van de 265. De psd2-boekdatum draagt over 287 niet-kaartregels
+     en ruim 30.000 euro NUL procent weekend, want een bank boekt niet op zaterdag of zondag. Van de 96
+     kruisbron-paren liggen er 78 met de mt940-kant in het weekend en de psd2-kant op maandag, en 42 van die
+     paren zijn bewijsbaar dezelfde betaling (gelijke betaaldatum EN tijd aan beide kanten).
+     DIT VELD IS OPGESLAGEN DATA EN GEEN AFLEIDING, en daarin verschilt het van het betaalmoment-veld. Dat tweede
+     zet `categorize()` bij elke boot uit de desc, dus het herstelt zichzelf; de valutadatum staat alleen in
+     de RESPONS en die is na de import weg. Boekingen die er al staan krijgen hem dus NOOIT, en de teller in
+     blok 10 leest nul tot er opnieuw is gesynchroniseerd. Dat is geen gebrek maar de aard van de bron.
+     HIJ KOMT NIET IN `t.id`: die hasht over rekening, datum, bedrag en omschrijving. Zou hij meetellen, dan
+     kreeg elke bestaande boeking bij een herimport een nieuwe id en verloor je je overrides (v270). */
+  const vd=String(raw.value_date||'').slice(0,10);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(vd)) t.valutaDatum=vd;
   categorize(t);
   if(pending){ t.pending=true; t.id+='_p'; }
   return t;

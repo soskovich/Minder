@@ -95,6 +95,58 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE TREFFER MET EEN TIJD WINT, EN DAT IS VOOR HET EERST EEN GEMETEN KEUZE** (`v276`): `v273` legde vast
+  dat "de eerste treffer wint" een AFSPRAAK was en geen meting, en `v275` heeft gemeten wat die afspraak
+  kost. GEMETEN op het toestel: van de 52 descs met meer dan één datum kreeg er precies ÉÉN een veld, en dat
+  veld was FOUT. Een Apple-abonnement draagt `TERUGKEREND PER 02.02.2026` twee keer en daarna het echte
+  moment `02.03.26/03:03`; de eerste treffer won, lag 28 dagen terug en kwam dus door het venster van 45
+  dagen. In de maanden waarin die ingangsdatum verder terug lag viel de boeking juist af op het venster, dus
+  dezelfde desc gaf een verkeerd veld of geen veld.
+  DE REGEL VOLGT UIT HET FORMAAT EN NIET UIT DE POSITIE: ABN zet achter het kaart-kenmerk een datum MET een
+  tijd, en 326 van de 327 velden dragen er een. Een datum zonder tijd in zo'n desc is dus iets anders: een
+  ingangsdatum, een vervaldag, een termijn. Dat is een sterkere lat dan "de eerste" of "de laatste", want die
+  twee zijn een positie en deze is een eigenschap.
+  ZONDER ENIGE TIJD BLIJFT DE EERSTE TREFFER WINNEN, want dan is er niets om op te kiezen. De Kiosk-vorm van
+  `v274`, waar BEIDE treffers een tijd dragen, blijft daarom ongemoeid: daar wint de eerste nog steeds en
+  wordt er niet doorgezocht. Twee sabotages houden dat vast: terug naar "de eerste" laat de Apple-regels
+  vallen, naar "de laatste" laat de Kiosk-regel vallen.
+- **De valutadatum uit de PSD2-respons wordt OPGEVANGEN en verder niets** (`v276`): `mapPsd2Tx()` zet
+  `t.valutaDatum` uit `raw.value_date`. `t.date` blijft de boekdatum, er verandert geen cijfer, en GEEN ENKELE
+  app-functie leest het veld; `valutadatum-en-tijdtreffer.spec.js` toetst dat op de BRON, zodat een lezer
+  erbuiten de test laat vallen. Dat is dezelfde vorm als bij `t.betaalDatum` (`v273`).
+  DE AANLEIDING IS DE METING VAN `v275`: bij mt940 is `t.date` de valutadatum en in 42 van de 42 gevallen
+  gelijk aan de betaaldatum uit de desc; bij psd2 is het de boekdatum en die klopt in 148 van de 265. De
+  psd2-boekdatum draagt over 287 niet-kaartregels en ruim 30.000 euro NUL procent weekend, want een bank
+  boekt niet op zaterdag of zondag.
+  HET IS OPGESLAGEN DATA EN GEEN AFLEIDING, en dat verandert wat een nul betekent. `categorize()` zet
+  `t.betaalDatum` bij elke boot opnieuw uit de desc, dus die dekt de hele historie; de valutadatum staat
+  alleen in de RESPONS en die is na de import weg. BESTAANDE BOEKINGEN KRIJGEN HEM NOOIT, de teller leest nul
+  tot er opnieuw is gesynchroniseerd, en het blok zegt dat er zelf bij. Zonder die regel leest een nul als
+  "de bank levert hem niet", en dat zijn twee verschillende dingen. `categorize()` wist hem NIET zoals hij
+  `t.betaalDatum` wist zodra de poort niet meer geldt; een sabotage die dat wel doet zet zeven tests rood.
+  HIJ KOMT NIET IN `t.id`, en dat is de zwaarste eis: die hasht over rekening, datum, bedrag en omschrijving,
+  en zou het veld meetellen, dan kreeg elke bestaande boeking bij een herimport een nieuwe id en verloor je je
+  overrides en je vlaggen (`v270`). De test vergelijkt de id van dezelfde ruwe regel met en zonder
+  `value_date`. Een onleesbare waarde wordt VERWORPEN en niet gecorrigeerd, en zonder `value_date` komt er
+  geen lege sleutel (`v59`/`v73`).
+  WAAR `booking_date` ONTBRAK IS `t.date` ZELF DE VALUTADATUM, want `mapPsd2Tx()` leest
+  `booking_date || value_date || transaction_date`. Die regels tellen per constructie als GELIJK, en dat staat
+  in het blok, zodat "gelijk" niet als bevestiging leest van iets dat geen meting is.
+  WAT SECTIE 5 BESLIST: staat ANDERS boven nul en schuift het weekend omhoog op de valutadatum, dan levert de
+  bank de betaaldag wel en kan een weekdagmeting daarop staan. Is ANDERS nul terwijl het veld er wel is, dan
+  zijn boekdatum en valutadatum bij deze bank dezelfde dag. Welke datum welke meting voedt is daarna een
+  KEUZE en geen gevolg, en de richting die daarvoor ligt is: weekdagvragen op de valutadatum waar die er is
+  en anders `t.date`, de desc-tijd alleen voor de ontdubbeling, saldo en dagteller op `t.date`.
+- **Twee etiketten die iets beloofden wat de code niet doet** (`v276`): PMNT heette "de N26-vorm" en stond bij
+  `v275` op een ABN-rekening. NAGELEZEN en niet aangenomen: PMNT komt uit
+  `raw.bank_transaction_code.description`, die `mapPsd2Tx()` IN de desc zet, dus elke psd2-bron kan hem
+  dragen; de stijl heet nu "PMNT (de psd2-code)". En de voetregel onder meting 1 zei "de bank komt uit
+  SET.psd2Accounts en staat er dus alleen bij een gekoppelde rekening", terwijl de reparatie van `v275`
+  primair `ACCMETA` leest en een niet-gekoppelde rekening dus wél een bank kreeg.
+  DAT TWEEDE IS DE MEETLES OVER EEN LABEL NAAST EEN GEREPAREERDE AFLEIDING, in tekst van één ronde oud: bij
+  een reparatie hoort de tekst eromheen mee, want die is geschreven bij het gedrag van daarvoor. De fixture
+  zet de bank in `ACCMETA` en juist NIET in `SET.psd2Accounts`, zodat de test op het geval staat waarop het
+  etiket omviel.
 - **DE BRON IS DE AS, NIET DE BANK, EN DAT WORDT PER REKENING GEMETEN** (`v275`): `v274` groepeerde op
   rekening en stijl, en op de enige rekening met twee bronnen vielen psd2 en mt940 daardoor samen.
   Sectie 4 van blok 10 splitst ze, op een rekening die wordt AFGELEID uit "meer dan één bron" en nergens
@@ -151,7 +203,7 @@ genoemde versietag.)*
   omdat 5 van 7 en 482 van 524 op deze fixture allebei boven de helft liggen. De assertie noemt daarom
   de bedragen voluit.
   DE CLASSIFICATIE IS WIJDER DAN `KAART_RE`, EN DAT IS DE MEETVRAAG ZELF: `KAART_RE` is de POORT van het
-  veld en laat een wallet-regel en de N26-vorm er bewust uit, terwijl de vraag hier is of `t.date` bij
+  veld en laat een wallet-regel en de PMNT-vorm er bewust uit, terwijl de vraag hier is of `t.date` bij
   een bron ZONDER veld al de betaaldag is. Dan moet je juist de regels zien die geen veld krijgen. Vier
   uitkomsten, een opname eerst (`BETAALPAS` staat ook in een `GEA`-regel), dan kaart, wallet en `PMNT`.
   GEEN ENKELE APP-FUNCTIE LEEST HEM, en dat blijft de afbakening van `v273`.
@@ -177,9 +229,14 @@ genoemde versietag.)*
   gekozen treffer wordt verworpen, dus de sabotage die de laatste treffer neemt zet beide kanten rood.
   DE KIOSK-REGEL IN DE FIXTURE IS GECONSTRUEERD EN NIET GEMETEN: hij bewijst niets over hoe vaak dit
   voorkomt of welke treffer juist is, alleen dat het label "waarvan zonder veld" in meting 2 waar is. De
-  52 echte descs blijven de meting, en `v273` blijft de afspraak. Wordt die herzien, dan valt deze test
-  MET OPZET en hoort hij herschreven, zoals de kapotte pending-tak in `rekeningen-diagnose.spec.js`
-  (`v270`).
+  52 echte descs blijven de meting.
+  DIE VOORSPELLING IS GEMETEN ONJUIST GEBLEKEN, en dat is de correctie van `v276`: ik schreef hier dat deze
+  test MET OPZET zou vallen zodra de afspraak werd herzien. De herziening kwam, en hij bleef GROEN. De
+  reden is dat de nieuwe regel op een EIGENSCHAP kiest (de treffer met een tijd) en niet op een positie,
+  en bij de Kiosk-vorm dragen beide treffers een tijd, dus daar wint de eerste nog steeds. Een test die
+  een positie meepint valt dus niet bij elke herziening van die positie; hij valt alleen bij een
+  herziening die hetzelfde geval anders leest. Dat is scherper dan wat ik voorspelde en het maakt de
+  test beter dan ik dacht.
 - **Wat psd2 niet bewaart is nagelezen en niet te meten** (`v274`): `mapPsd2Tx()` neemt alleen een datum
   en gooit `value_date` weg zodra `booking_date` bestaat, en leest GEEN enkel tijdveld. Draagt de ruwe
   payload een eigen tijdstempel of een afwijkende `valueDate`, dan staat die dus niet in `TX` en is hij
@@ -218,7 +275,8 @@ genoemde versietag.)*
   DE DEKKING PER BRON EN PER REKENING STAAT ER SINDS `v274`, en daarmee is "N26 levert het moment niet"
   niet langer afgeleid uit de tegenpartijnamen in de uitvoer. Zie de regel daarover bovenaan; wat die
   meting op het toestel zegt hoort hier zodra hij gedraaid is.
-- **De tie-break op de eerste datum-treffer is NIET inert** (`v273`): GEMETEN 52 descs met meer dan
+- **BESLIST BIJ `v276`: de tie-break was niet inert, en hij viel gemeten één keer verkeerd** (`v273`,
+  beslist bij `v276`): GEMETEN 52 descs met meer dan
   één datum-achtig patroon. Bij `v273` schreef ik dat de keuze inert zou zijn als dat getal nul was;
   het is 52, dus er is voor het eerst een geval om hem op te beoordelen. WAT ER OP HET SPEL STAAT:
   valt bij die 52 de eerste treffer verkeerd, dan is een deel van de 327 betaaldatums onjuist, en de
@@ -254,7 +312,10 @@ genoemde versietag.)*
   HIJ WORDT GEWIST ALS DE POORT NIET MEER GELDT. Het veld staat in `TX` en gaat mee in `save()`; zonder
   wissen blijft een oude waarde staan zodra de poort of de grens verandert, en dan leest een afgeleide
   als data.
-- **"De eerste treffer wint" is een afspraak en geen meting** (`v273`): ik schreef dat het moest omdat
+- **BESLIST BIJ `v276`: "de eerste treffer wint" was een afspraak, en de meting heeft hem vervangen**
+  (`v273`, beslist bij `v276`). Wat hieronder staat is waarom hij een afspraak WAS; de regel die er nu
+  staat is dat de treffer met een TIJD wint, en die staat bovenaan met de meting erbij.
+  DE OORSPRONKELIJKE REDENERING: ik schreef dat het moest omdat
   een psd2-desc soms verdubbeld is met een afgekapte kop ervoor. Die kop draagt echter een AFGEKAPTE
   datum (`NR:16721156, 19.0`), dus er is maar één volledig patroon en eerst of laatst maakt niets uit.
   DE SABOTAGE DIE DE LAATSTE TREFFER NEEMT BLEEF GROEN, en dat is de familie uit de meetlessen: er is
@@ -1867,6 +1928,20 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
   opneemt, en als die sabotage groen blijft, zoek dan eerst het pad naar de code die je saboteerde.
   Blijft hij ook daarna groen, dan toetst de test iets anders dan hij zegt.
+- **EEN BRONZOEKENDE TELLER MAAKT COMMENTAAR DEEL VAN ZIJN OPPERVLAK** (`v276`): de test die eist dat elke
+  treffer van `betaalDatum`/`betaalTijd` binnen `betaalMoment`, `categorize` of een diagnoseblok ligt, viel op
+  een COMMENT. Ik noemde `t.betaalDatum` in de uitleg boven de nieuwe valutadatum in `mapPsd2Tx()`, en die
+  functie staat niet in de toegestane plekken. DE TEST HAD GELIJK EN IS NIET VERZWAKT: hij kan een comment
+  niet van een lezer onderscheiden, en die strengheid is precies waarvoor hij bestaat. De tekst is omgeschreven
+  en de toegestane plekken zijn niet uitgebreid, want dat tweede zou een echte lezer in `mapPsd2Tx()` laten
+  passeren. WAT JE ERVAN LEERT: schrijf bij zo'n teller de UITLEG over een veld op de plek die al is
+  toegestaan, en verwijs elders in woorden in plaats van met de veldnaam.
+- **Een assertie kan te dicht op de implementatie staan, ook in een bronzoekende test** (`v276`): dezelfde
+  ronde liet `betaaldatum-dekking.spec.js` vallen, en daar lag het WEL aan de test. Hij eiste letterlijk de
+  regel `const m=desc.match(BETAALDATUM_RE);`, en die veranderde toen `betaalMoment()` op de treffer met een
+  tijd ging kiezen en dus `matchAll` nodig had. De invariant die hij moet vasthouden is dat het patroon op één
+  plek staat en dat elke lezer hem via de constante leest; hoe die aanroep eruitziet is dat niet. Dat is
+  dezelfde vorm als "een test die een zin of een teller als anker gebruikt", nu met een regel code als anker.
 - **Een placeholder of een label dat een waarde belooft, tel je tegen wat de code doet.** Een veld
   met `placeholder="5"` zegt dat leeg laten 5% betekent; staat er in de code `+v('aRend')||0`, dan
   is het 0 en liegt het scherm. Hetzelfde geldt voor een eenheid, een default in een labeltekst en
@@ -1917,7 +1992,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v274` → `minder-v275`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v275` → `minder-v276`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

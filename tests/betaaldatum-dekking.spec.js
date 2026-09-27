@@ -272,7 +272,7 @@ test.describe('3 - de weekdagverdeling op t.date per rekening en per stijl', () 
     const t = await blok(page);
     expect(t).toContain('3. DE WEEKDAGVERDELING OP t.date PER REKENING EN PER STIJL');
     expect(t).toMatch(/999100200 \| kaart \(BEA\/eCom\/betaalpas\)/);
-    expect(t).toMatch(/370400449876543210 \| PMNT \(de N26-vorm\)/);
+    expect(t).toMatch(/370400449876543210 \| PMNT \(de psd2-code\)/);
     expect(t).toMatch(/bank N26\s+bronnen psd2/);
   });
 
@@ -363,8 +363,13 @@ test.describe('4 - een patroon voor de datum, niet drie', () => {
     const n = src.split(kern).length - 1;
     expect(n, 'het patroon staat ' + n + ' keer in de bron').toBe(1);
     expect(src).toContain('const BETAALDATUM_RE =');
-    expect(src).toContain('const m=desc.match(BETAALDATUM_RE);');
-    expect(src).toContain("const DATUM_ALLE=new RegExp(BETAALDATUM_RE.source,'g');");
+    /* DE INVARIANT IS DAT ELKE LEZER DE CONSTANTE LEEST, en niet hoe die aanroep eruitziet. Mijn eerste
+       vorm pinde de regel `const m=desc.match(BETAALDATUM_RE);` letterlijk, en die viel bij `v276` toen
+       `betaalMoment()` op de treffer met een tijd ging kiezen en dus `matchAll` nodig had. De code was
+       daar niet fout; de assertie stond te dicht op de implementatie (de meetles over een test die de
+       implementatie vastlegt in plaats van de eigenschap). */
+    expect(src).toMatch(/BETAALDATUM_RE\.source/);
+    expect(src).toMatch(/desc\.matchAll\(new RegExp\(BETAALDATUM_RE\.source, *'g'\)\)/);
   });
 
   test('het blok telt met hetzelfde patroon waarmee het veld wordt gezet', async ({ page }) => {
