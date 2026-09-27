@@ -95,6 +95,45 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE VERTEKENING IS SCHOON GEMETEN, EN HIJ IS GROTER DAN DE VERVUILDE METING ZEI** (`v273`,
+  gemeten op het toestel): op de 325 regels IN de scope van `piekVerdeling()` die het veld dragen
+  (som 5.261) staat op `t.date` maandag op 34 procent en het weekend op 13 (za 6, zo 6); op de
+  BETAALDATUM staat maandag op 5 en het weekend op 50 (za 29, zo 22). De piek verschuift van maandag
+  naar zaterdag. De vervuilde meting van `v272` gaf 41/8 tegen 11/35; de incasso's zaten in die
+  noemer en VERZWAKTEN het effect.
+  DE POORT IS BEVESTIGD DOOR EEN NUL: van de 327 boekingen met het veld is er GEEN ENKELE waarbij
+  `t.date` eerder valt dan de betaaldatum (210 gelijk, 58 een dag later, 48 twee, 10 drie, 1 vier of
+  meer). Bij `v272` waren dat 68 gevallen, en dat waren precies de incasso's waarvan de desc de
+  vervaldag noemt. De uitsluiting doet dus wat ze moet doen, en dat is aan een nul te zien.
+  DE REDENEN KLOPPEN OP DE EURO: 278 boekingen dragen een datum in hun desc zonder veld, en dat is
+  250 zonder kaart-kenmerk plus 22 opnames (GEA) plus 6 buiten het venster. Van de 360 met een
+  kaart-kenmerk dragen 327 het veld, 326 daarvan met een tijd.
+  DE PIEKDAG MEET VANDAAG DUS BANKDAGEN, en dat is geen diagnosevraag meer maar een app-vraag: het
+  is signaal 3 op het scherm van de gebruiker. Wat je daar niet mag doen staat hieronder.
+- **OPEN PUNT, EN HET IS EEN GRENS EN GEEN GEBREK: de betaaldatum bestaat alleen bij ABN** (`v273`):
+  GEMETEN geeft de betaaldatum-pas van blok 9 een dekking van 35 van 3.161 euro over de laatste zes
+  weken, ÉÉN procent, en dus een telling die karakter voor karakter gelijk is aan die op `t.date`
+  (2 van 6, verschuift in 0 van 6 weken). PUNT 1 IS DAARMEE NIET BESLIST EN OOK NIET HEROPEND: de pas
+  zegt niets, en de dekkingsregel die dat aan het licht brengt is precies waarvoor hij erin staat.
+  DE OORZAAK ZIT IN DE BRON. Een N26-desc is de kale tegenpartij plus `PMNT` (`Absolute PMNT`,
+  `Plus de Gors PMNT`), zonder kaart-kenmerk en zonder tijd; alleen ABN zet `BEA, ... NR:..,
+  dd.mm.yy/hh:mm` in zijn regel. De laatste zes weken lopen vrijwel volledig via N26, en de 327
+  boekingen met het veld liggen in de ABN-historie.
+  WAT JE DAAROM NIET MAG BOUWEN: de piekdag op een GEMENGDE as. Dan schuiven de ABN-boekingen naar
+  hun betaaldag en de N26-boekingen niet, en dat is een DERDE kalender die van de bron van je bank
+  afhangt in plaats van van je gedrag. Dat is dezelfde fout als de `MEEVALLER_FACTOR` van `v259`, die
+  van de boekhouding van de werkgever afhing.
+  DE VOLGENDE METING IS DE DEKKING PER BRON EN PER REKENING, en die staat er nog niet: blok 10 telt
+  nu alleen het totaal. Zolang die uitsplitsing er niet is, is "N26 levert het moment niet" afgeleid
+  uit de tegenpartijnamen in de uitvoer en niet gemeten. Dat is de kleinste volgende stap, want hij
+  beslist of de piekdag ooit op betaaldatum kan.
+- **De tie-break op de eerste datum-treffer is NIET inert** (`v273`): GEMETEN 52 descs met meer dan
+  één datum-achtig patroon. Bij `v273` schreef ik dat de keuze inert zou zijn als dat getal nul was;
+  het is 52, dus er is voor het eerst een geval om hem op te beoordelen. WAT ER OP HET SPEL STAAT:
+  valt bij die 52 de eerste treffer verkeerd, dan is een deel van de 327 betaaldatums onjuist, en de
+  plausibiliteitsgrens vangt dat niet (die liet 6 boekingen afvallen en laat elke fout BINNEN 45 dagen
+  door). Niet opgelost: welke van de twee juist is valt niet uit deze uitvoer af te leiden, dus dit
+  vraagt eerst een uitlezing van die 52 descs zelf.
 - **De betaaldatum is een EIGEN veld naast `t.date`, en verder niets** (`v273`): `categorize()` zet
   `t.betaalDatum` en `t.betaalTijd` uit de desc, dus zelfherstellend bij elke boot en bij elke
   regelwijziging (`TX.forEach(categorize)`). `t.date` blijft onaangeroerd: het saldo, de dagteller en
