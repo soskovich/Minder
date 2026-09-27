@@ -95,6 +95,51 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE DEKKING VAN HET BETAALDATUM-VELD STAAT PER BRON EN PER REKENING, MET HET BEDRAG ALS MAAT**
+  (`v274`): dat was de kleinste volgende stap die `v273` openliet, want hij beslist of de piekdag ooit
+  op betaaldatum kan. Blok 10 geeft per bron en per rekening het aantal boekingen, het aantal
+  kaartachtige regels, het aantal met het veld en met een tijd, en het gedekte bedrag van het totaal in
+  de scope van `piekVerdeling()`. DE MAAT IS HET BEDRAG, net als in blok 9: een dekking in aantal zegt
+  niets over een verdeling die op euro's weegt, en de sabotage die per boeking telt bleef eerst groen
+  omdat 5 van 7 en 482 van 524 op deze fixture allebei boven de helft liggen. De assertie noemt daarom
+  de bedragen voluit.
+  DE CLASSIFICATIE IS WIJDER DAN `KAART_RE`, EN DAT IS DE MEETVRAAG ZELF: `KAART_RE` is de POORT van het
+  veld en laat een wallet-regel en de N26-vorm er bewust uit, terwijl de vraag hier is of `t.date` bij
+  een bron ZONDER veld al de betaaldag is. Dan moet je juist de regels zien die geen veld krijgen. Vier
+  uitkomsten, een opname eerst (`BETAALPAS` staat ook in een `GEA`-regel), dan kaart, wallet en `PMNT`.
+  GEEN ENKELE APP-FUNCTIE LEEST HEM, en dat blijft de afbakening van `v273`.
+- **De weekdagverdeling per rekening sluit een LOSSE incasso apart uit** (`v274`): dat is geen tweede
+  uitsluiting naast de scope van `piekVerdeling()`. `isFixed()` ziet alleen een HERKENDE herhaling, dus
+  een incasso die één keer voorkomt komt door die scope heen, en dat is precies de vervuiling die de
+  meting van `v272` kostte. `betaaldatum-dekking.spec.js` meet EERST dat de fixture-incasso werkelijk
+  binnen `piekVerdeling()` valt en pas daarna dat hij uit de sectie blijft: zonder die eerste meting
+  kan de uitsluiting weg zonder dat een test het ziet.
+  DE TWEE KOLOMMEN LOPEN OVER DEZELFDE REGELS, en dat is toetsbaar zonder de code na te rekenen: beide
+  reeksen zijn aandelen van het GEDEKTE bedrag, dus ze tellen elk tot honderd op. Rekent een van de twee
+  tegen het volle bedrag van de rij, dan is het verschil tussen de kolommen vooral de dekking en niet de
+  kalender, en dat is de val die `v273` benoemde.
+- **Het datum-patroon staat op ÉÉN plek, met drie lezers** (`v274`): `BETAALDATUM_RE`. Het stond in
+  `betaalMoment()` en twee keer in een LOSSERE vorm in blok 10, dus het blok telde iets anders dan het
+  veld leest, en dat is een tweede waarheid over dezelfde desc (`v104`). `betaalMoment()` neemt de
+  eerste treffer; het blok maakt er met `.source` een globale variant van. De spec leest de bron en eist
+  dat het patroon één keer voorkomt, en meet daarnaast dat de telling van het blok gelijk is aan een
+  telling met het patroon van de app.
+- **De tie-break en het doorzoeken zijn NIET los te toetsen, en de fixture zegt dat** (`v274`):
+  `betaalMoment()` valt niet door naar een latere treffer, dus een desc waarvan de eerste treffer buiten
+  het venster valt krijgt geen veld ook als de tweede plausibel was. Dat is alleen te ZIEN als de
+  gekozen treffer wordt verworpen, dus de sabotage die de laatste treffer neemt zet beide kanten rood.
+  DE KIOSK-REGEL IN DE FIXTURE IS GECONSTRUEERD EN NIET GEMETEN: hij bewijst niets over hoe vaak dit
+  voorkomt of welke treffer juist is, alleen dat het label "waarvan zonder veld" in meting 2 waar is. De
+  52 echte descs blijven de meting, en `v273` blijft de afspraak. Wordt die herzien, dan valt deze test
+  MET OPZET en hoort hij herschreven, zoals de kapotte pending-tak in `rekeningen-diagnose.spec.js`
+  (`v270`).
+- **Wat psd2 niet bewaart is nagelezen en niet te meten** (`v274`): `mapPsd2Tx()` neemt alleen een datum
+  en gooit `value_date` weg zodra `booking_date` bestaat, en leest GEEN enkel tijdveld. Draagt de ruwe
+  payload een eigen tijdstempel of een afwijkende `valueDate`, dan staat die dus niet in `TX` en is hij
+  in het diagnosescherm per constructie onzichtbaar. Dat is alleen te zien aan de backend-respons of aan
+  een import die die velden bewaart; het blok zegt dat erbij, zodat een volgende ronde die vraag niet aan
+  deze uitvoer stelt. Voor de ontdubbeling van stap 2 betekent het dat de TIJD als scheider alleen bij
+  ABN bestaat.
 - **DE VERTEKENING IS SCHOON GEMETEN, EN HIJ IS GROTER DAN DE VERVUILDE METING ZEI** (`v273`,
   gemeten op het toestel): op de 325 regels IN de scope van `piekVerdeling()` die het veld dragen
   (som 5.261) staat op `t.date` maandag op 34 procent en het weekend op 13 (za 6, zo 6); op de
@@ -123,17 +168,17 @@ genoemde versietag.)*
   hun betaaldag en de N26-boekingen niet, en dat is een DERDE kalender die van de bron van je bank
   afhangt in plaats van van je gedrag. Dat is dezelfde fout als de `MEEVALLER_FACTOR` van `v259`, die
   van de boekhouding van de werkgever afhing.
-  DE VOLGENDE METING IS DE DEKKING PER BRON EN PER REKENING, en die staat er nog niet: blok 10 telt
-  nu alleen het totaal. Zolang die uitsplitsing er niet is, is "N26 levert het moment niet" afgeleid
-  uit de tegenpartijnamen in de uitvoer en niet gemeten. Dat is de kleinste volgende stap, want hij
-  beslist of de piekdag ooit op betaaldatum kan.
+  DE DEKKING PER BRON EN PER REKENING STAAT ER SINDS `v274`, en daarmee is "N26 levert het moment niet"
+  niet langer afgeleid uit de tegenpartijnamen in de uitvoer. Zie de regel daarover bovenaan; wat die
+  meting op het toestel zegt hoort hier zodra hij gedraaid is.
 - **De tie-break op de eerste datum-treffer is NIET inert** (`v273`): GEMETEN 52 descs met meer dan
   één datum-achtig patroon. Bij `v273` schreef ik dat de keuze inert zou zijn als dat getal nul was;
   het is 52, dus er is voor het eerst een geval om hem op te beoordelen. WAT ER OP HET SPEL STAAT:
   valt bij die 52 de eerste treffer verkeerd, dan is een deel van de 327 betaaldatums onjuist, en de
   plausibiliteitsgrens vangt dat niet (die liet 6 boekingen afvallen en laat elke fout BINNEN 45 dagen
-  door). Niet opgelost: welke van de twee juist is valt niet uit deze uitvoer af te leiden, dus dit
-  vraagt eerst een uitlezing van die 52 descs zelf.
+  door). Niet opgelost: welke van de twee juist is valt niet uit die uitvoer af te leiden.
+  DE UITLEZING VAN DIE 52 DESCS STAAT ER SINDS `v274`, met alle treffers en met de afgeleide telling of ze
+  dezelfde dag noemen; het beoordelen zelf blijft handwerk op die uitvoer.
 - **De betaaldatum is een EIGEN veld naast `t.date`, en verder niets** (`v273`): `categorize()` zet
   `t.betaalDatum` en `t.betaalTijd` uit de desc, dus zelfherstellend bij elke boot en bij elke
   regelwijziging (`TX.forEach(categorize)`). `t.date` blijft onaangeroerd: het saldo, de dagteller en
@@ -1816,7 +1861,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v272` → `minder-v273`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v273` → `minder-v274`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
