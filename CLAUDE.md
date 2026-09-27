@@ -95,6 +95,52 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **`t.date` IS EEN BANKKALENDER EN GEEN BESTEDINGSKALENDER** (`v272`, gemeten op het toestel): dit is
+  de zwaarste vondst van deze ronde, want elke weekdag-meting in de app staat erop. GEMETEN op de 601
+  boekingen die een datum in hun desc dragen, binnen de scope van `piekVerdeling()` (som 14.130):
+  op `t.date` draagt maandag 41 procent en het weekend 8 (za 4, zo 4); op de DESC-DATUM draagt maandag
+  11 procent en het weekend 35 (za 17, zo 18). De piek verschuift van maandag naar woensdag.
+  DE DESC IS DE ENIGE PLEK waar de dag van de betaling staat: 601 boekingen dragen er een, 500 ook een
+  tijd, en 355 van de 360 met een kaart-kenmerk. Van die 601 wijkt `t.date` in 266 gevallen af (82 keer
+  1 dag later, 70 keer 2, 18 keer 3, 28 keer 4 of meer, en 68 keer EERDER).
+  DE 68 GEVALLEN WAARIN `t.date` EERDER IS, ZIJN HET VOORBEHOUD: bij een incasso noemt de desc de
+  VERVALDAG en niet het moment van betalen (gemeten op Basic Fit: `t.date` maandag, desc de dinsdag
+  erna). De desc-datum is dus alleen betekenisvol bij een KAARTBETALING, en 246 van de 601 zijn dat
+  niet. De verschuiving van 8 naar 35 procent is veel te groot om daaruit te volgen, dus de richting
+  staat; het exacte percentage hoort opnieuw gemeten op alleen de kaartregels.
+  WAT DIT RAAKT: signaal 3 en 4 van `insSignals()`, `piekVerdeling()`, `piekReferentie()` en daarmee de
+  hele piekdag, plus elke weekmeting die op `t.date` leunt. Die meten bankdagen. NIET GEREPAREERD, en
+  het is een eigen ronde: de desc-datum lezen betekent een tweede datum per boeking, en dan is de vraag
+  welke datum welke meting voedt. `t.date` blijft de saldokant (een bank boekt op zijn eigen dag), maar
+  een verdeling over weekdagen hoort op de dag dat je betaalde.
+- **De vier gemelde paren zijn twee boekingen uit ÉÉN bron, niet één boeking uit twee** (`v272`):
+  GEMETEN in blok 10 staan alle vier op rekening `100110012848184840` met aan BEIDE kanten `src=psd2`,
+  op dezelfde dag en met hetzelfde bedrag, met een GELIJKE `_softKey` en een GELIJKE `_dupSig`. De
+  kruisbron-hypothese van `v271` is daarmee weerlegd voor precies deze gevallen: N26 levert dezelfde
+  opname twee keer met een gedrifte automaatnaam (`Geldmaat Zwanebloem 9` tegen `Geldmaat GM Zwanebloe`,
+  `Geldmaat Koestraat 13` tegen `Geldmaat GM Koestraat`). Dat is LETTERLIJK het geval dat de comment
+  boven `_dupSig()` beschrijft, dus `findDuplicateIds()` ziet ze al en ze staan er alleen nog omdat de
+  opschoontool niet gedraaid is.
+  WAAROM DE ENE KANT ALS UITGAVE TELT IS NU GEMETEN: `ruleCat=intern autoCat=intern OVR=overig`. Het is
+  een HANDMATIGE OVERRIDE, op twee boekingen (96 overrides in totaal). Niet de detectie, niet de desc,
+  niet de dedup: precies de ontsnapping die `v258` benoemde. Wie dit oppakt vraagt dus eerst of die
+  override bedoeld was, en repareert niet iets wat de gebruiker zelf heeft gezet.
+  HET WARRIE-PAAR IS DEZELFDE DUBBELE MET EEN KARAKTERDRIFT: `BCK*Rest.Warrie& Knarr` tegen
+  `BCK*Rest.Warrie_ Knarr`. De eigen regel `"REST.WARRIE& KNARR"` matcht alleen de variant met de `&`,
+  dus de twee kanten landen in twee categorieën (`uiteten` en `overig`). Een eigen regel die op een
+  leesteken keyt, valt om bij de drift van de bank.
+- **OPEN PUNT: de opschoontool zou nu ook echte boekingen opruimen** (`v272`): `_softKey` en `_dupSig`
+  nemen de eerste ACHT LETTERS van de naam, en daar lopen verschillende boekingen op samen. GEMETEN
+  twee gevallen in de laatste zestig dagen: `From Main to Voorziening` en `From Main to Handgeld`, beide
+  50 euro op 2026-08-30 ("FROMMAIN" voor allebei, `softKey gelijk` en `dupSig gelijk`) zijn twee
+  VERSCHILLENDE overboekingen, en twee keer `eCom, Betaalpas PLAYSTATION` van 9,99 op 2026-08-17 dragen
+  in hun desc twee verschillende TIJDEN (13:06 en 19:38) en zijn dus twee aankopen. De tool zou van
+  beide paren een kant weghalen.
+  WAT HET WEL GOED DOET, en dat is de tegenhanger: drie keer `CJIB Verkeersboetes` van 65 euro op één
+  dag houdt hij apart (`softKey gelijk`, `dupSig ANDERS`), want `_refTokens` vindt daar drie
+  verschillende cijferreeksen. De referentie is dus wat werkt en de naam-prefix is wat faalt.
+  DE TIJD IN DE DESC IS DE GOEDKOOPSTE SCHEIDER die er al ligt: 500 boekingen dragen er een. Niet
+  gerepareerd, en dit hoort in dezelfde ronde als de desc-datum, want het is hetzelfde veld.
 - **`t.date` betekent niet hetzelfde per bron, en dat is nagelezen en niet gemeten** (`v272`):
   `parseMT940()` leest `:61:` als `(\d{6})(\d{4})?` en gebruikt de EERSTE zes cijfers. Dat is de
   VALUTADATUM; de optionele vier cijfers erachter zijn de boekdatum en die worden weggegooid.
@@ -132,6 +178,14 @@ genoemde versietag.)*
   die verschilt per bron; de soft-dedup in `commitTx()` doet
   `if(ex && ex.acc!==t.acc && ex.src!==t.src) continue` en eist dus dat de REKENING verschilt, terwijl
   hier één rekening twee bronnen draagt; en `findDuplicateIds()` keyt op de `bankRef` per rekening.
+  DE REKENING-EIS IS NIET HET BESLISSENDE SLOT, en dat is een correctie op mijn eigen formulering.
+  GEMETEN op de 96 kruisbron-paren: `_softKey` is bij NUL van de 96 gelijk, want `_softKey` begint met
+  `t.date` en de twee bronnen leveren die boeking 1 tot 5 dagen uit elkaar (37 keer 1 dag, 45 keer 2,
+  8 keer 3, 2 keer 4, 4 keer 5, en NUL keer op dezelfde dag). Het DATUMVERSCHIL alleen maakt de
+  soft-dedup al blind; de rekening-eis is een tweede slot dat er niet meer aan toe komt. Om dezelfde
+  reden ziet `findDuplicateIds()` ze niet: zonder `bankRef` (nul van de 96 draagt er een) valt hij
+  terug op `H|datum|bedrag|naam|refs`, en die datum verschilt. Wie dit repareert moet dus de DATUM
+  aanpakken en niet de rekening-eis.
   DE REKENING-EIS IN DE SOFT-DEDUP HEEFT EEN REDEN die overeind moet blijven bij een reparatie: zonder
   die eis gooien twee PSD2-rekeningen (Main en Zakgeld) elkaars boekingen weg. De comment daar zegt dat,
   en een reparatie die hem weghaalt lost het ene op door het andere terug te brengen.
@@ -205,7 +259,16 @@ genoemde versietag.)*
   WAT HET BLOK BESLIST: blijft de weekdag-telling staan nadat de eigen overboekingen zijn
   weggestreept, dan is er een weekpatroon; valt hij weg, dan blijft signaal 3 per maand staan en komt
   de weekmeting er niet. Dat tweede is een GELDIGE uitkomst (`v267`).
-  DE UITKOMST: ER IS GEEN WEEKPATROON, dus signaal 3 blijft en de weekmeting komt er niet. GEMETEN
+  HEROPEND BIJ `v272`, EN DAT IS EEN ECHTE OMKERING VAN HET FUNDAMENT: alles hieronder is gemeten op
+  `t.date`, en blok 10 heeft gemeten dat `t.date` een bankkalender is en geen bestedingskalender. In de
+  scope van `piekVerdeling()`, over de 601 boekingen met een datum in hun desc: op `t.date` draagt het
+  weekend 8 procent (za 4, zo 4) en maandag 41; op de datum in de desc draagt het weekend 35 procent
+  (za 17, zo 18) en maandag 11. Dat is te groot om aan ruis te liggen. DE CONCLUSIE "GEEN WEEKPATROON"
+  IS DAARMEE NIET VEILIG: de duurste dag per week is ook op `t.date` bepaald, en op de desc-datum kan
+  die heel goed wel herhalen. Wat er staat is wat op `t.date` te zien is; de vraag moet opnieuw op de
+  desc-datum gemeten worden voordat punt 1 definitief is. Signaal 3 blijft voorlopig staan omdat er
+  niets is om hem door te vervangen, niet omdat de meting rond is.
+  DE UITKOMST OP `t.date`: ER IS GEEN WEEKPATROON, dus signaal 3 blijft en de weekmeting komt er niet. GEMETEN
   op het toestel over de laatste zes volle weken: de hoogste weekdag-telling is 2 van 6 (vrijdag),
   tegen een drempel van 3 van 6, en de zes duurste dagen liggen op vijf verschillende weekdagen
   (zo, do, wo, vr, vr, za). Dat is dezelfde geldige uitkomst als `v267`, nu op een tweede indeling.
@@ -215,11 +278,13 @@ genoemde versietag.)*
   (1.900, 1.000, 675, 600, 550, 500) vallen er allemaal al uit. De Bonsu-posten stoppen in 2025-08 en
   zitten dus niet in deze zes weken. Reeks 2 bevestigt het van de andere kant: GEEN ENKELE kandidaat
   wegstrepen brengt de telling boven 2, en vier van de zes maken hem juist diffuser.
-  DE PREMISSE VAN DE OPDRACHT STOND NIET IN DE GEGEVENS: "morgen is zaterdag, je duurste dag" had geen
-  basis. GEMETEN referentie-aandeel over 89 volle weken: ma 27, vr 21, wo 14, di 12, do 11, za 9,
-  zo 6 procent. Maandag is de grootste weekdag en zaterdag en zondag de kleinste, en in de zes
-  gerapporteerde weken was maandag nooit de duurste dag. Er is geen dag om een herinnering aan te
-  hangen, dus de afspraak van stap 2 vervalt met de reeks.
+  DE PREMISSE VAN DE OPDRACHT LEEK NIET IN DE GEGEVENS TE STAAN, EN DAT IS BIJ `v272` OMGEDRAAID.
+  GEMETEN referentie-aandeel over 89 volle weken op `t.date`: ma 27, vr 21, wo 14, di 12, do 11, za 9,
+  zo 6 procent, dus maandag de grootste en het weekend de kleinste. Ik schreef daarop dat "morgen is
+  zaterdag, je duurste dag" geen basis had. DIE MAANDAGPIEK IS NU GEMETEN ALS ARTEFACT: een
+  kaartbetaling op zaterdag krijgt een valutadatum of boekdatum op maandag, en dat is precies de 41
+  tegen 11 procent hierboven. De premisse van de opdracht kan dus gewoon waar zijn; `t.date` verbergt
+  hem. Wat blijft staan is dat de app het vandaag niet kan zien, niet dat het er niet is.
   DE DREMPEL "2x HET NORMALE DAGBEDRAG" ONDERSCHEIDT NIETS: 5 van 6 weken op het vlakke dagbedrag en
   5 van 6 op het aandeel. De bindende eis was de herhaling. Dat de twee maten hier hetzelfde aantal
   geven is toeval van deze zes weken: per week lopen ze uiteen (1,7x tegen 4,1x, en 3,9x tegen 2,6x),
