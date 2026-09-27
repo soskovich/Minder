@@ -95,6 +95,27 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **HET TEKEN IN METING 2 KOMT UIT `betaalMoment()` ZELF** (`v278`): het stond op `i===0`, en dat was de
+  tie-break van vóór `v276`. GEMETEN op het toestel op de Apple-boeking van 2026-09-02: `veld 2026-09-02
+  03:04` met `treffers: >"02.02.2026" "02.02.2026" "02.09.26/03:04"`, dus het teken wees de ingangsdatum aan
+  terwijl het veld de boekdag met de tijd droeg. Een teken dat de waarde ernaast tegenspreekt is precies wat
+  dit project verbiedt, en dit is de meetles van `v276` in code van één ronde oud: bij een reparatie hoort de
+  tekst eromheen mee.
+  DE KEUZE WORDT NIET OPNIEUW UITGEDRUKT. `betaalMoment()` geeft op verzoek `treffer` terug, naast de `reden`
+  die er sinds `v273` al stond, en het blok zoekt die string op in zijn eigen lijst. "De eerste met een tijd"
+  nog eens opschrijven in het blok zou een tweede waarheid over dezelfde desc zijn (`v104`) en bij de
+  volgende herziening opnieuw uiteenlopen.
+  DE VERWORPEN TREFFER WORDT OOK GEMARKEERD, en dat repareert een aanname: de regel zei "de eerste treffer is
+  verworpen" zonder te zeggen welke dat was. `nee()` draagt de gekozen treffer bij de drie verwerpingen die
+  ná de keuze vallen. Leeg blijft hij als de poort al eerder viel (een opname, of geen kaart-kenmerk), want
+  dan is er niets gekozen; op het toestel is dat 44 van de 52 regels.
+  DE VIERDE SABOTAGE BLEEF GROEN EN DE FIXTURE MISTE DE VORM DIE DE LIJST DOMINEERT: een `findIndex` op een
+  tijd in het blok gaf op mijn eerste fixture hetzelfde teken. Het pad zit bij twee datums ZONDER tijd, want
+  daar wint de eerste treffer en vindt "de eerste met een tijd" niets. Met die rij erbij zijn alle vier de
+  sabotages rood. ZESDE KEER DEZELFDE FAMILIE (`v265`, `v268`, `v269`, `v274`, `v275`, `v278`).
+  EEN `v274`-TEST PINDE DE OUDE BETEKENIS: hij eiste dat een verworpen regel geen teken draagt. Dat is
+  herschreven naar een STERKERE assertie (welke treffer het teken draagt, en dat het er precies één is), en
+  niet naar een zwakkere: de code was hier niet fout.
 - **EEN BESTAANDE BOEKING KRIJGT DE VALUTADATUM ALSNOG, EN VERDER NIETS** (`v277`): `v276` vong
   `t.valutaDatum` op bij de import en schreef erbij dat een bestaande boeking hem NOOIT krijgt. Dat gold voor
   de BOOT en niet voor een synchronisatie: een bank geeft een VENSTER terug en het grootste deel daarvan
@@ -1928,7 +1949,7 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** VIJF keer in elf rondes
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** ZES keer in veertien rondes
   is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze als
   incidenten; samen zijn het vijf manieren waarop dezelfde fout binnenkomt, en de vraag die alle vijf
   had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
@@ -1959,7 +1980,14 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   ongeluk als eerste in, dus de check deed niets en het weghalen bleef groen. De reparatie is een TWEEDE
   paar met de andere bron vooraan: dan leest het blok zonder die check de richting omgekeerd. Toets bij
   een check die een ORDE vaststelt dus of je invoer die orde niet al gratis geeft.
-  WAT DE VIJF GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (f) DE FIXTURE MISTE DE VORM DIE DE ECHTE LIJST DOMINEERT (`v278`). Het teken in meting 2 moest uit
+  `betaalMoment()` komen en niet uit een tweede uitdrukking van de tie-break. De sabotage die in het blok
+  `findIndex` op een tijd doet bleef groen, want op mijn fixture gaf dat hetzelfde teken. Het pad zit bij een
+  desc met twee datums ZONDER tijd: daar wint de eerste treffer en vindt "de eerste met een tijd" niets. Die
+  vorm is op het toestel 44 van de 52 regels en stond niet in de fixture. Toets bij een sabotage die groen
+  blijft dus of je invoer de GEVALLEN draagt waarop de twee vormen uiteenlopen, en niet alleen het geval
+  waarvoor je de code schreef.
+  WAT DE ZES GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2029,7 +2057,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v276` → `minder-v277`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v277` → `minder-v278`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

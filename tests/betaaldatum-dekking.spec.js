@@ -253,16 +253,25 @@ test.describe('2 - de descs met meer dan een datum staan uitgeschreven', () => {
     expect(t).toMatch(/geen veld: buiten het venster/);
   });
 
-  /* HET TEKEN STAAT ALLEEN BIJ EEN REGEL DIE HET VELD DRAAGT. Bij de Kiosk-regel is de eerste treffer
-     verworpen, dus daar wijst niets aan, en dat is precies het geval dat beoordeeld moet worden. */
-  test('de verworpen regel draagt geen teken bij zijn eerste treffer', async ({ page }) => {
+  /* HERSCHREVEN BIJ v278, en de code was niet fout: deze test eiste dat een VERWORPEN regel geen teken
+     draagt, met de redenering dat het teken bij het veld hoort. Dat is de oude betekenis. Het teken staat
+     bij de treffer die `betaalMoment()` KOOS, en juist bij een verworpen regel is dat de informatie die
+     je wil: welke van de treffers is weggegooid. Zonder dat teken neemt de tekst 'de gekozen treffer is
+     verworpen' aan wat ze beweert. De nieuwe assertie is sterker dan de oude, want ze pint WELKE treffer
+     het teken draagt in plaats van dat er geen is. */
+  test('de verworpen regel markeert de treffer die betaalMoment koos', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => {
       const L = diagDubbel(); const i = L.findIndex((x) => /01\.01\.20/.test(x) && /treffers:/.test(x));
-      return i < 0 ? null : L[i];
+      const t = TX.find((x) => /01\.01\.20/.test(String(x.desc || '')));
+      return { regel: i < 0 ? null : L[i], bm: t ? betaalMoment(t, true) : null };
     });
-    expect(r).not.toBe(null);
-    expect(r).not.toContain('>"');
+    expect(r.regel).not.toBe(null);
+    expect(r.bm, 'de fixture draagt de verworpen desc').not.toBe(null);
+    expect(r.bm.reden).toBe('buiten het venster');
+    expect(r.bm.treffer).toBeTruthy();
+    expect(r.regel).toContain('>"' + r.bm.treffer + '"');
+    expect((r.regel.match(/>/g) || []).length).toBe(1);
   });
 });
 

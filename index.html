@@ -1006,7 +1006,13 @@ const BETAALDATUM_RE = /(\d{2})[.\-\/](\d{2})[.\-\/](\d{2}(?:\d{2})?)(?:\s*[\/ ]
    project verbiedt, en een tweede poort in het diagnoseblok zou een tweede waarheid zijn (v104).
    Zonder `metReden` is de uitkomst null, dus de aanroep in `categorize()` blijft simpel. */
 function betaalMoment(t, metReden){
-  const nee=r=>metReden?{reden:r}:null;
+  /* HIJ MELDT OOK WELKE TREFFER HIJ KOOS (v278), en dat is geen luxe: het diagnoseblok zette zijn teken
+     op de EERSTE treffer terwijl de tie-break van v276 de treffer met een TIJD neemt, dus het teken sprak
+     de waarde ernaast tegen. De keuze opnieuw uitdrukken in het blok zou een tweede waarheid zijn (v104),
+     dus de keuze komt uit deze functie. `treffer` staat er ook bij een VERWERPING, zodat een regel zonder
+     veld kan zeggen welke treffer is afgevallen in plaats van dat de tekst dat aanneemt. Leeg betekent dat
+     er nog niets te kiezen was, want de poort viel er eerder uit. */
+  const nee=(r,tr)=>metReden?{reden:r, treffer:tr||''}:null;
   const desc=String((t&&t.desc)||'');
   /* GEA EERST ERUIT, en dat is geen detail van de regex: een ABN-opname leest `GEA, BETAALPAS ...`
      en zou dus via `BETAALPAS` binnenkomen. De poort volgt de opdracht (BEA, eCom, Betaalpas) en een
@@ -1031,15 +1037,15 @@ function betaalMoment(t, metReden){
   if(!alle.length) return nee('geen datum in de desc');
   const m=alle.find(x=>x[4]) || alle[0];
   const dd=+m[1], mm=+m[2]; let jj=m[3];
-  if(!(dd>=1&&dd<=31) || !(mm>=1&&mm<=12)) return nee('geen geldige dag of maand');
+  if(!(dd>=1&&dd<=31) || !(mm>=1&&mm<=12)) return nee('geen geldige dag of maand', m[0]);
   if(jj.length===2) jj='20'+jj;
   const ymd=jj+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0');
   const bd=String(t.date||'').slice(0,10); if(!bd) return nee('geen boekdatum om tegen te toetsen');
   const x=new Date(ymd+'T00:00:00'), y=new Date(bd+'T00:00:00');
-  if(isNaN(x)||isNaN(y)) return nee('onleesbare datum');
+  if(isNaN(x)||isNaN(y)) return nee('onleesbare datum', m[0]);
   const d=Math.round((y-x)/86400000);
-  if(d>BETAALDATUM_VOOR || d< -BETAALDATUM_NA) return nee('buiten het venster');   // verwerpen, niet corrigeren
-  return {datum:ymd, tijd:m[4]?(m[4]+':'+m[5]):''};
+  if(d>BETAALDATUM_VOOR || d< -BETAALDATUM_NA) return nee('buiten het venster', m[0]);   // verwerpen, niet corrigeren
+  return {datum:ymd, tijd:m[4]?(m[4]+':'+m[5]):'', treffer:m[0]};
 }
 // id + keyword-categorie (gedeeld door MT940 en CSV)
 function categorize(t){
@@ -13965,7 +13971,7 @@ function diagDubbel(){
   L.push('  een datum in de desc maar GEEN veld: '+descGeenVeld+'   (per reden, uit betaalMoment zelf)');
   for(const [r,n] of Object.entries(redenen).sort((a,b)=>b[1]-a[1])) L.push('    '+r+': '+n);
   L.push('    het venster is '+BETAALDATUM_VOOR+' dagen voor tot '+BETAALDATUM_NA+' na de boekdatum');
-  L.push('  descs met MEER dan een datum-achtig patroon: '+meerdereDatums+'   (de eerste treffer wint)');
+  L.push('  descs met MEER dan een datum-achtig patroon: '+meerdereDatums+'   (de treffer met een tijd wint, anders de eerste)');
   if(!metVeld){ L.push('  geen enkele boeking draagt het veld, dus hier valt niets te vergelijken'); }
   else {
     L.push('  t.date tegen de betaaldatum: '+Object.entries(verschil).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v).join(', '));
@@ -14052,7 +14058,7 @@ function diagDubbel(){
   L.push('  (de bank komt uit ACCMETA en anders uit SET.psd2Accounts, dezelfde afleiding als blok 8)');
   /* ===== 2. DE DESCS MET MEER DAN ÉÉN DATUM-ACHTIG PATROON (v274) =====
      Bij v273 stond hier alleen een TELLING, en die kwam op het toestel op 52 uit. Daarmee is de
-     tie-break "de eerste treffer wint" niet meer inert, maar er is nog steeds niet te zien of hij ergens
+     tie-break niet meer inert, maar er is nog steeds niet te zien of hij ergens
      VERKEERD valt: de plausibiliteitsgrens laat elke fout BINNEN 45 dagen gewoon door. Daarom staan de
      descs hier uitgeschreven, met alle treffers en met een teken bij degene die het veld nu draagt.
      DE AFGELEIDE TELLING IS OF DE TREFFERS DEZELFDE DAG NOEMEN. Noemen ze allemaal dezelfde dag, dan is
@@ -14074,18 +14080,25 @@ function diagDubbel(){
   L.push('    alle treffers noemen DEZELFDE dag: '+meerLijst.filter(r=>r.dagen.length===1).length+'   (daar is de tie-break inert)');
   L.push('    ze noemen MEER dan een dag:        '+meerLijst.filter(r=>r.dagen.length>1).length+'   (daar beslist hij)');
   L.push('    waarvan zonder veld:              '+meerLijst.filter(r=>r.dagen.length>1&&!r.t.betaalDatum).length
-    +'   (de eerste treffer is verworpen en er wordt niet doorgezocht)');
+    +'   (de GEKOZEN treffer is verworpen en er wordt niet doorgezocht; welke dat was staat per regel)');
   if(meerLijst.length){
-    L.push('  uitgeschreven, nieuwste eerst (maximaal '+DIAG_DATUM_MAX+'); > staat bij de treffer die het veld draagt:');
+    L.push('  uitgeschreven, nieuwste eerst (maximaal '+DIAG_DATUM_MAX+'); > staat bij de treffer die betaalMoment() koos:');
     const gs=meerLijst.slice().sort((x,y)=>String(y.t.date).localeCompare(String(x.t.date)));
     for(const r of gs.slice(0,DIAG_DATUM_MAX)){
       const t=r.t;
+      /* DE REDEN EN HET TEKEN KOMEN UIT DEZELFDE AANROEP (v278). Het teken stond op i===0, en dat was de
+         tie-break van vóór v276: sindsdien wint de treffer met een TIJD, dus bij de Apple-desc wees het
+         teken de ingangsdatum aan terwijl het veld de boekdag met de tijd droeg. Een teken dat de waarde
+         ernaast tegenspreekt is precies wat dit project verbiedt, en de keuze hier opnieuw uitdrukken zou
+         een tweede waarheid zijn (v104). Bij twee identieke treffers wint de eerste, net als in de functie. */
+      const bm=_dT(()=>betaalMoment(t,true),null)||{};
+      const kies=bm.treffer?r.m.indexOf(bm.treffer):-1;
       L.push('    '+String(t.date)+'  src='+src(t).padEnd(5)+'  rek '+t.acc+'  '+Math.round(-Math.min(t.amount,0)||t.amount)
         +'   dagen: '+r.dagen.join(' / ')
         +'   '+(t.betaalDatum
           ? ('veld '+t.betaalDatum+(t.betaalTijd?(' '+t.betaalTijd):''))
-          : ('geen veld: '+((_dT(()=>betaalMoment(t,true),null)||{}).reden||'onbekend'))));
-      L.push('      treffers: '+r.m.map((x,i)=>((i===0&&t.betaalDatum)?'>':' ')+'"'+x+'"').join('  '));
+          : ('geen veld: '+(bm.reden||'onbekend'))));
+      L.push('      treffers: '+r.m.map((x,i)=>((i===kies)?'>':' ')+'"'+x+'"').join('  '));
       L.push('      desc="'+kort(t.desc,140)+'"');
     }
     if(gs.length>DIAG_DATUM_MAX) L.push('    ... en '+(gs.length-DIAG_DATUM_MAX)+' meer');
