@@ -95,6 +95,46 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **`t.date` betekent niet hetzelfde per bron, en dat is nagelezen en niet gemeten** (`v272`):
+  `parseMT940()` leest `:61:` als `(\d{6})(\d{4})?` en gebruikt de EERSTE zes cijfers. Dat is de
+  VALUTADATUM; de optionele vier cijfers erachter zijn de boekdatum en die worden weggegooid.
+  `mapPsd2Tx()` neemt `booking_date || value_date || transaction_date`, dus de BOEKDATUM voorop, en de
+  N26-CSV leest de kolom `booking date`, ook de boekdatum. TWEE VAN DE DRIE BRONNEN ZETTEN DE
+  BOEKDATUM EN DE DERDE DE VALUTADATUM, en geen van de drie de dag van de betaling zelf.
+  OP ÉÉN REKENING KUNNEN TWEE DATUMBETEKENISSEN NAAST ELKAAR STAAN: rekening `521200806` draagt
+  `mt940 + psd2`. Dat is geen theorie maar de toestand van het toestel, en het is de reden dat de
+  paren-scan in blok 10 een VENSTER van dagen heeft en niet één dag: een scan op dag 0 mist precies
+  het paar waarvoor hij bestaat. `applyPending()` gebruikt om dezelfde reden al zes dagen.
+  DE DAG VAN DE BETALING KAN IN DE DESC STAAN. Bij een pinbetaling zet ABN een eigen datum en tijd in
+  de `:86:`-regel. Nergens in de app wordt die gelezen; blok 10 doet dat wel, legt hem naast `t.date`
+  en zet de weekdagverdeling van beide naast elkaar binnen de scope van `piekVerdeling()`. Verschuift
+  de piek daar, dan meet signaal 3 bankdagen en geen bestedingsdagen, en dat is een eigen ronde.
+- **Blok 10 zegt per boeking waar de categorie vandaan komt** (`v272`): `ruleCat` is de uitkomst van
+  de keyword-regels (en dus ook van `SET.rules`, die daar als EERSTE langskomen), `autoCat` is die
+  uitkomst na `applyOwnAccounts()`, en `OVR[t.id]` wint van allebei. Staan ze gelijk, dan zegt het
+  blok alleen "uit de keyword-regels"; wijken ze af, dan staan alle drie erbij.
+  DAT WAS NODIG OM EEN VERKEERDE VERKLARING TE VERVANGEN, en dat is de meetles van deze ronde: ik
+  schreef bij `v271` dat een opname op `overig` kan landen omdat `categorize()` alleen `t.desc` leest.
+  Het eerste deel is waar, het tweede volgt er niet uit: in ALLE DRIE de parsers zit de naam IN de
+  desc (`finalize()` leidt de naam juist uit de desc af, de CSV zet `desc=[partner,typ,ref,accName]`,
+  `mapPsd2Tx()` zet `desc=[name,remit,code]`), dus een boeking met `Geldmaat` in de naam heeft het
+  woord ook in de desc en `autoCat` is daar per constructie `intern`. Wat overblijft is `OVR` of een
+  eigen regel, en dat is precies de ontsnapping die `v258` al benoemde. EEN VERKLARING DIE UIT DE BRON
+  VOLGT IS GEEN METING: toets welk veld de waarde werkelijk zet voordat je hem opschrijft.
+- **De opschoontool is op dit geval ontworpen, en een `bankRef` zet hem buitenspel** (`v272`): de
+  comment boven `_dupSig()` noemt de gedrifte automaatnaam met zoveel woorden (`Geldmaat "Zwanebloem 9"`
+  tegen `"GM Zwanebloe"`, geen referentie) en die tak werkt alleen ZONDER `bankRef`. Met een `bankRef`
+  is de sleutel `'B|rekening|ref'`, en twee bronnen dragen twee refs, dus dan ziet de tool hem niet.
+  Blok 10 zegt daarom per paar of er een `bankRef` is EN hoeveel paren `findDuplicateIds()` nu al zou
+  opruimen. Dat scheelt het verschil tussen een lek en een tool die nooit gedraaid is, en dat verschil
+  bepaalt of er iets te repareren valt.
+  DE DRIE ONTDUBBELINGEN, en waarom ze elk langs dit geval kunnen kijken: `t.id` hasht over de DESC en
+  die verschilt per bron; de soft-dedup in `commitTx()` doet
+  `if(ex && ex.acc!==t.acc && ex.src!==t.src) continue` en eist dus dat de REKENING verschilt, terwijl
+  hier één rekening twee bronnen draagt; en `findDuplicateIds()` keyt op de `bankRef` per rekening.
+  DE REKENING-EIS IN DE SOFT-DEDUP HEEFT EEN REDEN die overeind moet blijven bij een reparatie: zonder
+  die eis gooien twee PSD2-rekeningen (Main en Zakgeld) elkaars boekingen weg. De comment daar zegt dat,
+  en een reparatie die hem weghaalt lost het ene op door het andere terug te brengen.
 - **De aansluiting in blok 6 rekent onafgerond, en is dus exact** (`v271`): GEMETEN op het toestel
   stonden drie van de vijf aansluitingen op NEE en alle drie scheelden precies een euro (som besteed
   1.459 tegen gebruikt 1.460, som restant 791 tegen 790, potjes min besteed 271 tegen 270). Er was
@@ -191,11 +231,20 @@ genoemde versietag.)*
   in staan** (`v271`): GEMETEN in blok 9 drie paren op dezelfde dag met hetzelfde bedrag, waarvan er
   twee met één kant IN de scope: `Geldmaat GM Koestraat 200` (intern) naast `Geldmaat Koestraat 13
   200` op `overig`, hetzelfde met 100, en op 21-08 twee keer 120 die beide wel intern werden.
-  WAAROM DE ENE KANT ONTSNAPT: `categorize()` leest ALLEEN `t.desc` (`const U=t.desc.toUpperCase()`)
-  en nooit `t.name`. `OPNAME_KW` en de intern-rij van `RULES` zijn dus in orde; de kant die op `overig`
-  landt heeft een desc zonder `GELDMAAT` en zonder `GEA,`. Blok 9 print de NAAM, en daarom zie je
-  "Geldmaat" op een `overig`-rij staan. Dat is de `v267`-les opnieuw: de detectie leest een veld dat
-  het antwoord niet altijd draagt.
+  WAAROM DE ENE KANT ONTSNAPT IS NOG NIET BEKEND, en mijn eerste verklaring was FOUT (gecorrigeerd bij
+  `v272`). Ik schreef dat `categorize()` alleen `t.desc` leest en nooit `t.name`, en dat de kant op
+  `overig` dus een desc zonder `GELDMAAT` heeft. Dat eerste is waar, maar het kan dit niet verklaren:
+  in ALLE DRIE de parsers zit de naam IN de desc. `finalize()` leidt de naam juist uit de desc af, de
+  CSV zet `desc=[partner,typ,ref,accName]` met `name=partner`, en `mapPsd2Tx()` zet
+  `desc=[name,remit,code]`. Een boeking met `Geldmaat` in de naam heeft het woord dus ook in de desc,
+  en dan is `autoCat` per constructie `intern`. WAT ER OVERBLIJFT is `OVR[t.id]` of een eigen regel in
+  `SET.rules`, want die winnen allebei van `RULES` (dat is de eerste tak in `categorize()`), en dat is
+  precies de ontsnapping die `v258` al benoemde: "de override is de ontsnapping, geen tweede vlag".
+  Blok 10 zet daarom `ruleCat`, `autoCat` en `OVR` per boeking naast elkaar en leest `SET.rules` uit,
+  zodat dit gemeten wordt in plaats van geraden.
+  DAT `categorize()` ALLEEN DE DESC LEEST BLIJFT EEN EIGEN PUNT, los van de dedup: het is waar, het is
+  een risico zodra een bron ooit een naam zonder desc levert, en het hoort niet in dezelfde ronde als
+  de ontdubbeling thuis.
   GEEN VAN DE DRIE ONTDUBBELINGEN ZIET HET, alle drie gemeten in de bron: (1) `t.id` hasht over de
   DESC, en die verschilt per bron; (2) de soft-dedup in `commitTx()` doet
   `if(ex && ex.acc!==t.acc && ex.src!==t.src) continue` en eist dus dat de REKENING verschilt, terwijl
@@ -1506,7 +1555,15 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   de nieuwe code staat; leid hem af uit de vraag die je stelt. Dit is dezelfde vorm als een test
   die de implementatie vastlegt in plaats van de eigenschap.
 - **Een test die een zin of een teller als anker gebruikt bewijst de invariant niet.** Bind aan de
-  bron of aan de identiteit die je wilt vasthouden. Meet met echte data in plaats van een
+  bron of aan de identiteit die je wilt vasthouden.
+  TWEE RONDES DEZELFDE FOUT OP DEZELFDE LIJST (`v271`, `v272`): `rekeningen-diagnose.spec.js` bond op
+  `DIAG_BLOKKEN.length === 8` en op de LAATSTE entry en viel om toen blok 9 erbij kwam; ik repareerde
+  dat en schreef in dezelfde ronde `piekdag-diagnose.spec.js` met `length === 9` en dezelfde
+  laatste-entry-greep, die dan ook omviel toen blok 10 erbij kwam. Een REGISTER groeit, en groeien is
+  precies wat `v244` erover zegt ("een blok erbij is een entry erbij"), dus een teller of een positie
+  daarop is per constructie een verkeerd anker. Bind op de lees-functie: `some(b => b.lees === fn)`.
+  Dat een reparatie in de ene spec niet vanzelf de volgende spec bereikt is het punt: repareer bij zo'n
+  vondst ook de vorm, niet alleen het geval. Meet met echte data in plaats van een
   gemonkeypatchte functie, en maak nooit groen met een verzonnen waarde of een fallback die alleen
   bestaat om de test te laten slagen; wordt een test daardoor zinloos, haal hem weg.
 - **Een dode conditie vind je niet met bereikbaarheid.** De functie eromheen leeft. Ontbreekt de
@@ -1597,7 +1654,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v270` → `minder-v271`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v271` → `minder-v272`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

@@ -13641,6 +13641,229 @@ function diagPiekdag(){
   L.push('  valt hij weg, dan blijft signaal 3 per maand staan en komt de weekmeting er niet.');
   return L;
 }
+/* 10. DUBBELE BOEKINGEN EN WAT `t.date` BETEKENT (v272). Twee vragen in één blok, want ze hangen aan
+      elkaar: of een paar een dubbele import is valt niet te zien zonder te weten of de twee bronnen
+      dezelfde dag bedoelen.
+      WAT DE BRON AL ZEGT, en dat is hier niet gemeten maar nagelezen: de drie invoerkanalen leggen
+      NIET hetzelfde in `t.date`. `parseMT940()` leest `:61:` als `(\d{6})(\d{4})?` en gebruikt de
+      EERSTE zes cijfers, en dat is de VALUTADATUM; de optionele vier cijfers erachter zijn de
+      boekdatum en die worden weggegooid. `mapPsd2Tx()` neemt
+      `booking_date || value_date || transaction_date`, dus de BOEKDATUM voorop. De N26-CSV leest de
+      kolom `booking date`, ook de BOEKDATUM. Rekening 521200806 draagt zowel mt940 als psd2, dus op
+      ÉÉN rekening staan twee datumbetekenissen naast elkaar.
+      DAAROM IS DE PAREN-SCAN NIET OP ÉÉN DAG. Zou hij dat zijn, dan mist hij precies het geval
+      waarvoor hij bestaat: een boeking die in de ene bron op zijn valutadatum staat en in de andere
+      op zijn boekdatum. `applyPending()` gebruikt om dezelfde reden al een venster van zes dagen.
+      Het blok telt de afstand in dagen uit in plaats van hem aan te nemen.
+      WELKE ONTDUBBELING HET HAD KUNNEN ZIEN staat per paar erbij, en dat is de vraag die een reparatie
+      moet beantwoorden: `_softKey` gelijk betekent dat de soft-dedup in `commitTx()` hem had kunnen
+      pakken als de rekening-eis er niet stond, `_dupSig` gelijk dat de opschoontool hem al ziet.
+      WAAR EEN CATEGORIE VANDAAN KOMT STAAT ER PER BOEKING BIJ, en dat is een correctie op mijn eerste
+      verklaring. Ik schreef dat een opname op `overig` kan landen omdat `categorize()` alleen `t.desc`
+      leest en nooit `t.name`. Dat eerste is waar, maar het kan de ontsnapping NIET verklaren: in alle
+      drie de parsers zit de naam IN de desc (`finalize()` leidt de naam juist uit de desc af, de CSV
+      zet `desc=[partner,typ,ref,accName]`, en `mapPsd2Tx()` zet `desc=[name,remit,code]`). Een boeking
+      met `Geldmaat` in de naam heeft het woord dus ook in de desc, en dan is `autoCat` per constructie
+      `intern`. Wat er dan overblijft is `OVR[t.id]` of een eigen regel in `SET.rules`, want die winnen
+      allebei van `RULES`. Daarom staan `ruleCat`, `autoCat` en `OVR` hier naast elkaar: samen zeggen
+      ze precies waar de categorie vandaan komt, en dat is niet te raden.
+      DE DESC-DATUM IS DE ENIGE PLEK waar de dag van de BETALING zelf kan staan: bij een pinbetaling
+      zet ABN een eigen datum en tijd in de `:86:`-regel. Het blok leest die uit en legt hem naast
+      `t.date`, en zet de weekdagverdeling van beide naast elkaar binnen de scope van `piekVerdeling()`.
+      Staat daar een verschil, dan meet signaal 3 bankdagen en geen bestedingsdagen.
+      ALLEEN LEZEN, zoals elk blok hier: geen `save()`, niets naar `SET`, niets naar `localStorage`. */
+const DIAG_PAAR_VENSTER = 6;    // hoeveel dagen een paar uit elkaar mag liggen (zoals applyPending)
+const DIAG_PAAR_MAX     = 40;   // hoeveel paren het blok uitschrijft
+const DIAG_RECENT_DAGEN = 60;   // het venster voor de gemelde gevallen
+/* dd.mm.yy, dd-mm-yy, dd/mm/yyyy, met of zonder tijd erachter. Twee cijfers voor het jaar worden
+   20xx; een dag boven 31 of een maand boven 12 wordt verworpen in plaats van gecorrigeerd. */
+function _descDatum(desc){
+  const m=String(desc||'').match(/(\d{2})[.\-\/](\d{2})[.\-\/](\d{2}(?:\d{2})?)(?:\s*[\/ ]\s*(\d{2}):(\d{2}))?/);
+  if(!m) return null;
+  const dd=+m[1], mm=+m[2]; let jj=m[3];
+  if(!(dd>=1&&dd<=31) || !(mm>=1&&mm<=12)) return null;
+  if(jj.length===2) jj='20'+jj;
+  return {ymd:jj+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0'), tijd:m[4]?(m[4]+':'+m[5]):''};
+}
+/* WAAR DE CATEGORIE VANDAAN KOMT, in één regel en zonder te raden: `ruleCat` is de uitkomst van de
+   keyword-regels (en dus ook van SET.rules, die daar als eerste langskomen), `autoCat` is die uitkomst
+   na `applyOwnAccounts()`, en `OVR[t.id]` wint van allebei. Staan ze niet gelijk, dan zegt het
+   verschil welke laag de categorie heeft gezet. */
+function _diagCatBron(t){
+  const ovr=(OVR||{})[t.id];
+  const zelfde=(t.ruleCat===t.autoCat && !ovr);
+  return 'cat='+String(catOf(t)).padEnd(13)
+    +(zelfde?'(uit de keyword-regels)':('ruleCat='+String(t.ruleCat)+' autoCat='+String(t.autoCat)+' OVR='+(ovr?ovr:'-')));
+}
+function _dagenTussen(a,b){
+  const x=new Date(String(a).slice(0,10)+'T00:00:00'), y=new Date(String(b).slice(0,10)+'T00:00:00');
+  return Math.round((y-x)/86400000);
+}
+function diagDubbel(){
+  const L=[]; const dk=['ma','di','wo','do','vr','za','zo'];
+  if(!TX.length) return ['geen transacties'];
+  const src=t=>t.src||'mt940';
+  const kort=(s,n)=>{ const x=String(s||'').replace(/\s+/g,' ').trim(); return x.length>n?x.slice(0,n-1)+'…':x; };
+  L.push('WAT t.date IS PER BRON (nagelezen in de bron, niet gemeten):');
+  L.push('  mt940: de VALUTADATUM uit :61: (de boekdatum erachter wordt weggegooid)');
+  L.push('  psd2:  booking_date || value_date || transaction_date, dus de BOEKDATUM voorop');
+  L.push('  csv:   de kolom "booking date", dus de BOEKDATUM');
+  const perSrc={}; for(const t of TX) perSrc[src(t)]=(perSrc[src(t)]||0)+1;
+  L.push('');
+  L.push('boekingen per bron: '+Object.entries(perSrc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v).join(', ')+'   (totaal '+TX.length+')');
+  /* DE REKENINGEN MET MEER DAN ÉÉN BRON zijn de enige plek waar een dubbele import kan ontstaan die
+     de soft-dedup niet ziet, want die eist dat de rekening verschilt. */
+  const rekSrc={};
+  for(const t of TX){ (rekSrc[t.acc]=rekSrc[t.acc]||new Set()).add(src(t)); }
+  const meerdere=Object.keys(rekSrc).filter(a=>rekSrc[a].size>1);
+  L.push('rekeningen met MEER DAN EEN bron: '+(meerdere.length?meerdere.map(a=>a+' ('+[...rekSrc[a]].join('+')+')').join(', '):'geen'));
+  L.push('  dat zijn de enige rekeningen waar een dubbele import langs de soft-dedup van commitTx() kan komen');
+  /* EIGEN REGELS WINNEN VAN RULES, en dat is de eerste tak in categorize(). Staat hier een regel die
+     op een opname past, dan is dat de verklaring en niet de detectie. */
+  const eigen=(SET.rules||[]);
+  L.push('');
+  L.push('eigen regels (SET.rules, die winnen van de ingebouwde RULES): '+eigen.length);
+  for(const r of eigen) L.push('  "'+kort(r.kw,40)+'" -> '+r.cat);
+  const nOvr=Object.keys(OVR||{}).length;
+  L.push('handmatige categorie-overrides (OVR): '+nOvr+'   (die winnen van alles)');
+  /* DE PAREN. Groeperen op rekening plus bedrag, dan binnen de groep elk ongeordend paar één keer
+     bekijken. Zo blijft het venster op de datum een MEETRESULTAAT en geen aanname. */
+  const grp={};
+  for(const t of TX){ const k=t.acc+'|'+(+t.amount).toFixed(2); (grp[k]=grp[k]||[]).push(t); }
+  const paren=[]; const perAfstand={}; const zelfdeSrc={};
+  for(const k of Object.keys(grp)){
+    const lijst=grp[k]; if(lijst.length<2) continue;
+    for(let i=0;i<lijst.length;i++) for(let j=i+1;j<lijst.length;j++){
+      const a=lijst[i], b=lijst[j]; const d=Math.abs(_dagenTussen(a.date,b.date));
+      if(d>DIAG_PAAR_VENSTER) continue;
+      if(src(a)===src(b)){ zelfdeSrc[d]=(zelfdeSrc[d]||0)+1; continue; }
+      perAfstand[d]=(perAfstand[d]||0)+1;
+      paren.push({a,b,d});
+    }
+  }
+  L.push('');
+  L.push('PAREN: zelfde rekening, zelfde bedrag, binnen '+DIAG_PAAR_VENSTER+' dagen');
+  L.push('  met VERSCHILLENDE bron: '+paren.length);
+  L.push('    per dagafstand: '+(Object.keys(perAfstand).length?Object.keys(perAfstand).sort((x,y)=>x-y).map(d=>d+' dag'+(d==='1'?'':'en')+' '+perAfstand[d]).join(', '):'geen'));
+  L.push('  met DEZELFDE bron: '+Object.values(zelfdeSrc).reduce((a,b)=>a+b,0)
+    +(Object.keys(zelfdeSrc).length?('   per dagafstand: '+Object.keys(zelfdeSrc).sort((x,y)=>x-y).map(d=>d+'='+zelfdeSrc[d]).join(', ')):''));
+  L.push('  (dezelfde bron op dezelfde dag is twee echte boekingen of een dubbel binnen een import;');
+  L.push('   een verschillende bron is de kandidaat voor dezelfde boeking die twee keer binnenkwam)');
+  if(paren.length){
+    /* WELKE ONTDUBBELING HET HAD KUNNEN ZIEN, en wat de twee kanten in de norm doen. */
+    let nSoft=0, nDup=0, nCatGelijk=0, somNietIntern=0;
+    const catPaar={};
+    for(const p of paren){
+      if(_softKey(p.a)===_softKey(p.b)) nSoft++;
+      if(_dupSig(p.a)===_dupSig(p.b)) nDup++;
+      const ca=catOf(p.a), cb=catOf(p.b);
+      if(ca===cb) nCatGelijk++;
+      const sleutel=[ca,cb].sort().join(' + '); catPaar[sleutel]=(catPaar[sleutel]||0)+1;
+      for(const t of [p.a,p.b]){ const c=catOf(t);
+        if(CATS[c] && CATS[c].type==='expense' && t.amount<0) somNietIntern+=-t.amount; }
+    }
+    L.push('');
+    L.push('  zelfde _softKey (de soft-dedup had hem kunnen zien zonder de rekening-eis): '+nSoft+' van '+paren.length);
+    L.push('  zelfde _dupSig (de opschoontool ziet hem al):                              '+nDup+' van '+paren.length);
+    /* DE OPSCHOONTOOL IS ONTWORPEN OP PRECIES DIT GEVAL. De comment boven _dupSig noemt de gedrifte
+       automaatnaam met zoveel woorden, en die tak werkt alleen ZONDER bankRef: met een bankRef is de
+       sleutel 'B|rekening|ref', en twee bronnen dragen twee refs. Daarom staat hier hoeveel paren de
+       tool NU al zou opruimen en hoeveel er een bankRef dragen. Dat scheelt het verschil tussen "een
+       lek" en "de tool is nooit gedraaid". */
+    let dupNu=null; try{ dupNu=findDuplicateIds(); }catch(_){}
+    if(dupNu){
+      const geraakt=paren.filter(p=>dupNu.has(p.a.id)||dupNu.has(p.b.id)).length;
+      L.push('  de opschoontool zou NU opruimen: '+geraakt+' van '+paren.length+' paren   (findDuplicateIds, '+dupNu.size+' boekingen in totaal)');
+    }
+    const metRef=paren.filter(p=>p.a.bankRef||p.b.bankRef).length;
+    L.push('  paren waarvan minstens een kant een bankRef draagt: '+metRef+' van '+paren.length
+      +'   (met een bankRef keyt _dupSig op B|rekening|ref, dus twee bronnen geven twee sleutels)');
+    L.push('  beide kanten dezelfde categorie: '+nCatGelijk+' van '+paren.length);
+    L.push('  categorie-paren: '+Object.entries(catPaar).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v+'x').join(', '));
+    L.push('  som van de kanten die als UITGAVE tellen: '+Math.round(somNietIntern)+'   (dat is wat er in catSpendMap() zit)');
+    L.push('');
+    L.push('  de paren, nieuwste eerst (maximaal '+DIAG_PAAR_MAX+'):');
+    const gesorteerd=paren.slice().sort((x,y)=>String(y.a.date).localeCompare(String(x.a.date)));
+    for(const p of gesorteerd.slice(0,DIAG_PAAR_MAX)){
+      L.push('    '+p.a.acc+'   '+Math.round(-Math.min(p.a.amount,0)||p.a.amount)+'   '+p.d+' dag'+(p.d===1?'':'en')+' ertussen'
+        +'   softKey '+(_softKey(p.a)===_softKey(p.b)?'gelijk':'anders')
+        +'   dupSig '+(_dupSig(p.a)===_dupSig(p.b)?'gelijk':'anders'));
+      for(const t of [p.a,p.b]){
+        L.push('      '+String(t.date)+'  src='+src(t).padEnd(5)+'  bankRef='+(t.bankRef?kort(t.bankRef,18):'-')+'  '+_diagCatBron(t)+'  name="'+kort(t.name,26)+'"');
+        L.push('        desc="'+kort(t.desc,110)+'"');
+      }
+    }
+    if(gesorteerd.length>DIAG_PAAR_MAX) L.push('    ... en '+(gesorteerd.length-DIAG_PAAR_MAX)+' meer');
+  }
+  /* DE GEMELDE GEVALLEN, AFGELEID EN NIET BIJ NAAM: elke groep met meer dan één boeking op dezelfde
+     rekening, dezelfde dag en hetzelfde bedrag in de laatste DIAG_RECENT_DAGEN, ongeacht de bron.
+     Zo vallen de paren waar de vraag over ging eruit zonder dat er een tegenpartij in de code staat. */
+  const grens=(function(){ const d=new Date(); d.setDate(d.getDate()-DIAG_RECENT_DAGEN); return ymdVan(d); })();
+  const dagGrp={};
+  for(const t of TX){ if(String(t.date)<grens) continue;
+    const k=t.acc+'|'+String(t.date).slice(0,10)+'|'+(+t.amount).toFixed(2); (dagGrp[k]=dagGrp[k]||[]).push(t); }
+  const dubbelDag=Object.keys(dagGrp).filter(k=>dagGrp[k].length>1).sort();
+  L.push('');
+  L.push('OP DEZELFDE DAG, laatste '+DIAG_RECENT_DAGEN+' dagen (sinds '+grens+'), ongeacht de bron: '+dubbelDag.length+' groepen');
+  for(const k of dubbelDag){
+    const g=dagGrp[k];
+    L.push('  '+k.split('|')[1]+'   '+k.split('|')[2]+'   rekening '+k.split('|')[0]+'   '+g.length+' boekingen'
+      +'   bronnen '+[...new Set(g.map(src))].join('+')
+      +'   softKey '+(new Set(g.map(_softKey)).size===1?'gelijk':'anders')
+      +'   dupSig '+(new Set(g.map(_dupSig)).size===1?'gelijk':'anders'));
+    for(const t of g){
+      L.push('      src='+src(t).padEnd(5)+'  '+_diagCatBron(t)+'  name="'+kort(t.name,26)+'"');
+      L.push('        desc="'+kort(t.desc,110)+'"');
+    }
+  }
+  if(!dubbelDag.length) L.push('  (geen)');
+  /* BOEKDATUM OF TRANSACTIEDATUM. De desc is de enige plek waar de dag van de betaling zelf kan
+     staan. Geen enkele boeking wordt hier gecorrigeerd; het blok telt alleen hoe vaak de twee
+     verschillen en wat dat met de weekdagverdeling doet. */
+  const inScope=t=>{ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !isFixed(t) && !geenNorm(c)); };
+  let metDatum=0, metTijd=0, kaart=0, kaartMetDatum=0;
+  const verschil={}; const wdTx=[0,0,0,0,0,0,0], wdDesc=[0,0,0,0,0,0,0];
+  let somTx=0; const voorbeelden=[];
+  for(const t of TX){
+    const isKaart=/^(BEA|GEA|ECOM)\b|BETAALPAS|APPLE PAY|GOOGLE PAY/i.test(String(t.desc||''));
+    if(isKaart) kaart++;
+    const D=_descDatum(t.desc); if(!D) continue;
+    metDatum++; if(D.tijd) metTijd++; if(isKaart) kaartMetDatum++;
+    const d=_dagenTussen(D.ymd, t.date);
+    const bak=(d<0?'t.date EERDER':(d===0?'gelijk':(d<=3?('t.date '+d+' dag'+(d===1?'':'en')+' later'):'t.date 4 of meer dagen later')));
+    verschil[bak]=(verschil[bak]||0)+1;
+    if(inScope(t) && t.amount<0){
+      wdTx[_piekDagIdx(t.date)]+=-t.amount; wdDesc[_piekDagIdx(D.ymd)]+=-t.amount; somTx+=-t.amount;
+      if(d!==0 && voorbeelden.length<8) voorbeelden.push({t,D,d});
+    }
+  }
+  L.push('');
+  L.push('BOEKDATUM OF TRANSACTIEDATUM: draagt de desc een eigen datum?');
+  L.push('  boekingen met een kaart-kenmerk (BEA/GEA/ECOM/betaalpas/pay): '+kaart);
+  L.push('  boekingen met een datum IN de desc: '+metDatum+'   waarvan met een tijd erbij: '+metTijd);
+  L.push('  daarvan met een kaart-kenmerk: '+kaartMetDatum);
+  if(!metDatum){ L.push('  geen enkele desc draagt een datum, dus hier valt niets te vergelijken'); }
+  else {
+    L.push('  t.date tegen de datum in de desc: '+Object.entries(verschil).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v).join(', '));
+    L.push('');
+    L.push('  de weekdagverdeling in de scope van piekVerdeling(), alleen de boekingen met een desc-datum:');
+    L.push('    som: '+Math.round(somTx));
+    if(somTx>0){
+      L.push('    op t.date:        '+wdTx.map((v,i)=>dk[i]+' '+Math.round(v/somTx*100)+'%').join('  '));
+      L.push('    op de desc-datum: '+wdDesc.map((v,i)=>dk[i]+' '+Math.round(v/somTx*100)+'%').join('  '));
+      L.push('    verschuift de piek: '+(wdTx.indexOf(Math.max(...wdTx))===wdDesc.indexOf(Math.max(...wdDesc))
+        ? 'NEE, dezelfde weekdag is de grootste ('+dk[wdTx.indexOf(Math.max(...wdTx))]+')'
+        : 'JA, van '+dk[wdTx.indexOf(Math.max(...wdTx))]+' op t.date naar '+dk[wdDesc.indexOf(Math.max(...wdDesc))]+' op de desc-datum'));
+    }
+    if(voorbeelden.length){
+      L.push('');
+      L.push('  voorbeelden waar de twee verschillen:');
+      for(const v of voorbeelden) L.push('    t.date '+v.t.date+' ('+dk[_piekDagIdx(v.t.date)]+')  desc '+v.D.ymd+' ('+dk[_piekDagIdx(v.D.ymd)]+')'
+        +(v.D.tijd?(' '+v.D.tijd):'')+'  '+v.d+' dag'+(v.d===1?'':'en')+'  '+Math.round(-v.t.amount)+'  '+kort(v.t.name,24));
+    }
+  }
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -13651,6 +13874,7 @@ const DIAG_BLOKKEN=[
   {titel:'haalt de weekreeks zijn drempel', lees:diagWeekblokken},
   {titel:'de rekeningen en de bankverbindingen', lees:diagRekeningen},
   {titel:'de piekdag per week', lees:diagPiekdag},
+  {titel:'dubbele boekingen en wat t.date betekent', lees:diagDubbel},
 ];
 
 async function diagTekst(){
