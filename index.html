@@ -962,6 +962,67 @@ function finalize(t){
   t.refNums=[...t.desc.replace(/\s/g,'').matchAll(/[A-Z]{2}\d{2}[A-Z]{4}(\d{9,10})/g)].map(x=>x[1].replace(/^0+/,''));
   categorize(t);
 }
+/* ===== DE BETAALDATUM (v273) =====
+ * `t.date` is een BANKKALENDER: mt940 levert de valutadatum uit `:61:`, psd2 en de CSV de boekdatum.
+ * GEMETEN bij `v272` wat dat kost: in de scope van piekVerdeling() draagt maandag op `t.date` 41
+ * procent en het weekend 8, en op de datum uit de desc maandag 11 en het weekend 35. Een kaartbetaling
+ * op zaterdag krijgt een boekdatum op maandag, dus elke weekdag-meting in de app meet bankdagen.
+ * DIT VELD VERANDERT NIETS AAN DE APP, en dat is de hele afbakening van deze ronde. `t.date` blijft
+ * onaangeroerd: het saldo, de dagteller en elke som blijven op de boekdatum, want een bank boekt op
+ * zijn eigen dag en `totalBalance()` moet daarmee kloppen. Alleen het diagnosescherm leest dit veld.
+ * ALLEEN BIJ EEN KAARTBETALING. Bij een INCASSO noemt de desc de VERVALDAG en niet het moment van
+ * betalen: GEMETEN op Basic Fit staat `t.date` op maandag en de desc-datum op de dinsdag erna, en dat
+ * verklaart de 68 gevallen waarin `t.date` eerder was dan de desc-datum. Een vervaldag is geen
+ * betaalmoment, dus die regels krijgen het veld niet. `GEA` (een opname) draagt ook een datum en valt
+ * hier bewust buiten: dat is geen betaling maar een opname, hij landt op `intern` en dus buiten elke
+ * weekdag-meting. Komt dat ooit terug, dan is het een eigen keuze en geen uitbreiding van deze poort.
+ * DE PLAUSIBILITEITSGRENS IS EEN VOORWAARDE EN GEEN EXTRA: een cijferreeks in een omschrijving kan
+ * per ongeluk als `dd.mm.yy` lezen. Een betaaldatum ligt vóór of rond zijn boekdatum, dus alles buiten
+ * het venster wordt VERWORPEN in plaats van gecorrigeerd (v59/v73: liever geen waarde dan een verzonnen
+ * waarde). Blok 10 telt hoeveel er zo afvallen.
+ * HIJ WORDT GEWIST ALS DE POORT NIET MEER GELDT. Het veld staat in `TX` en gaat dus mee in `save()`;
+ * zonder wissen zou een oude waarde blijven staan zodra de poort of de grens verandert, en dan leest
+ * een afgeleide als data (dezelfde val als de terugval in `v248`). */
+const KAART_RE = /^\s*(BEA|ECOM)\b|BETAALPAS/i;   // BEA, eCom en Betaalpas; GEA (opname) en incasso's vallen erbuiten
+const BETAALDATUM_VOOR = 45;   // hoeveel dagen vóór de boekdatum een betaaldatum nog plausibel is
+const BETAALDATUM_NA   = 7;    // en hoeveel erna (een boeking kan op zijn valutadatum vooruit staan)
+/* dd.mm.yy, dd-mm-yy of dd/mm/yyyy, met of zonder tijd erachter.
+   DE EERSTE TREFFER WINT, EN DAT IS EEN AFSPRAAK EN GEEN METING. Ik schreef hier eerst dat het moest,
+   omdat een psd2-desc soms verdubbeld is met een afgekapte kop ervoor. Die kop draagt echter een
+   AFGEKAPTE datum ("NR:16721156, 19.0"), en dat is geen volledig patroon, dus er is maar één treffer en
+   eerst of laatst maakt niets uit. De sabotage die de LAATSTE treffer neemt bleef dan ook groen: er is
+   geen gemeten geval dat de twee onderscheidt. Zo'n groene sabotage zegt iets over de test en niet over
+   de code (zie de meetlessen), en de eerlijke uitkomst is dat dit een willekeurige tie-break is.
+   BLOK 10 TELT DAAROM HOE VAAK HET UITMAAKT: "descs met MEER dan een datum-achtig patroon". Staat daar
+   op het toestel een nul, dan is de keuze inert; staat er meer, dan is er voor het eerst een geval om
+   hem op te beoordelen, en dan hoort die beoordeling in een eigen ronde en niet in een aanname hier. */
+/* HIJ GEEFT OP VERZOEK DE REDEN TERUG, en dat is geen luxe: blok 10 moet zeggen WAAROM een boeking
+   met een datum in zijn desc geen veld kreeg, en de eerste vorm telde een opname mee onder
+   "afgevallen op de plausibiliteitsgrens". Een verkeerd etiket op een teller is precies wat dit
+   project verbiedt, en een tweede poort in het diagnoseblok zou een tweede waarheid zijn (v104).
+   Zonder `metReden` is de uitkomst null, dus de aanroep in `categorize()` blijft simpel. */
+function betaalMoment(t, metReden){
+  const nee=r=>metReden?{reden:r}:null;
+  const desc=String((t&&t.desc)||'');
+  /* GEA EERST ERUIT, en dat is geen detail van de regex: een ABN-opname leest `GEA, BETAALPAS ...`
+     en zou dus via `BETAALPAS` binnenkomen. De poort volgt de opdracht (BEA, eCom, Betaalpas) en een
+     opname is geen betaling. Hij draagt WEL een echte tijd, en dat is precies de scheider die de
+     ontdubbeling wil, dus dit is een keuze die bij die ronde opnieuw op tafel hoort en geen omissie. */
+  if(/^\s*GEA\b/i.test(desc)) return nee('een opname (GEA), geen betaling');
+  if(!KAART_RE.test(desc)) return nee('geen kaart-kenmerk (BEA/eCom/betaalpas)');
+  const m=desc.match(/(\d{2})[.\-\/](\d{2})[.\-\/](\d{2}(?:\d{2})?)(?:\s*[\/ ]\s*(\d{2}):(\d{2}))?/);
+  if(!m) return nee('geen datum in de desc');
+  const dd=+m[1], mm=+m[2]; let jj=m[3];
+  if(!(dd>=1&&dd<=31) || !(mm>=1&&mm<=12)) return nee('geen geldige dag of maand');
+  if(jj.length===2) jj='20'+jj;
+  const ymd=jj+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0');
+  const bd=String(t.date||'').slice(0,10); if(!bd) return nee('geen boekdatum om tegen te toetsen');
+  const x=new Date(ymd+'T00:00:00'), y=new Date(bd+'T00:00:00');
+  if(isNaN(x)||isNaN(y)) return nee('onleesbare datum');
+  const d=Math.round((y-x)/86400000);
+  if(d>BETAALDATUM_VOOR || d< -BETAALDATUM_NA) return nee('buiten het venster');   // verwerpen, niet corrigeren
+  return {datum:ymd, tijd:m[4]?(m[4]+':'+m[5]):''};
+}
 // id + keyword-categorie (gedeeld door MT940 en CSV)
 function categorize(t){
   const U=t.desc.toUpperCase();
@@ -976,6 +1037,11 @@ function categorize(t){
   if(cat==='overig' && t.amount>0) cat='intern'; // onbekende bijschrijving = meestal eigen overboeking
   t.ruleCat=cat;
   t.autoCat=cat;   // wordt evt. overschreven door applyOwnAccounts()
+  /* v273: de betaaldatum als EIGEN veld naast t.date, en wissen zodra de poort niet meer geldt.
+     Geen enkele app-functie leest dit; alleen het diagnosescherm. */
+  const bm=betaalMoment(t);
+  if(bm && bm.datum){ t.betaalDatum=bm.datum; t.betaalTijd=bm.tijd; }
+  else { delete t.betaalDatum; delete t.betaalTijd; }
 }
 
 /* ---------- CSV parser (N26-export: Booking Date,Partner Name,Type,Account Name,Amount (EUR)…) ---------- */
@@ -13544,10 +13610,10 @@ function diagPiekdag(){
   /* EEN REEKS IS EEN FILTER PLUS ZIJN EIGEN REFERENTIE. Streep je een tegenpartij weg, dan
      verandert het aandeel per weekdag ook, dus de referentie wordt opnieuw gerekend. Anders legt de
      tweede reeks nieuwe dagbedragen naast een oude noemer en is het verschil niet toe te wijzen. */
-  function reeks(negeer){
-    const W={}, uit={};
+  function reeks(negeer, dv){
+    const W={}, uit={}; const dat=dv||(t=>t.date);
     for(const t of TX){
-      const d=String(t.date||'').slice(0,10); if(!d) continue;
+      const d=String(dat(t)||'').slice(0,10); if(!d) continue;
       const ma=_piekMaandag(d); if(!wset.has(ma)) continue;
       if(inScope(t)){
         if(negeer && naamVan(t)===negeer) continue;
@@ -13633,12 +13699,39 @@ function diagPiekdag(){
     L.push('    haalt 2x vlak: '+S.v2+' van '+S.bruikbaar+'    haalt 2x aandeel: '+S.a2+' van '+S.bruikbaar);
     L.push('    per week: '+S.rij.map(r=>r.leeg?'(leeg)':(dk[r.pi]+' '+Math.round(r.bedrag))).join(' | '));
   }
+  /* DEZELFDE WEKEN OP DE BETAALDATUM (v273). Alles hierboven staat op `t.date`, en dat is een
+     bankkalender (v272). Deze pas legt dezelfde weken naast elkaar met `t.betaalDatum` waar die er is,
+     en anders `t.date`. DE DEKKING STAAT EROP EN IS GEEN DETAIL: is maar een deel van het bedrag
+     gedekt, dan is het verschil tussen de twee passen vooral de dekking en niet de kalender, en dan
+     zegt deze pas weinig. De weken zelf blijven dezelfde kalenderweken; alleen in welke week een
+     boeking valt kan schuiven, en dat is precies wat de meting moet laten zien. */
+  const effDat=t=>t.betaalDatum||t.date;
+  const R2=reeks(null, effDat), S2=samenvat(R2);
+  let gedekt=0, ongedekt=0;
+  for(const ma of rapport){ const o=R1.W[ma]; if(!o) continue;
+    for(const t of o.tx){ if(!(t.amount<0)) continue; if(t.betaalDatum) gedekt+=-t.amount; else ongedekt+=-t.amount; } }
+  const somBeide=gedekt+ongedekt;
+  let anders2=0;
+  for(let i=0;i<S1.rij.length;i++){ const a=S1.rij[i], b=S2.rij[i];
+    if(!a||!b) continue;
+    if(a.leeg||b.leeg){ if(a.leeg!==b.leeg) anders2++; continue; }
+    if(a.pi!==b.pi) anders2++; }
+  L.push('');
+  L.push('DEZELFDE WEKEN OP DE BETAALDATUM (t.betaalDatum waar die er is, anders t.date)');
+  L.push('  dekking in deze '+rapport.length+' weken: '+Math.round(gedekt)+' van '+Math.round(somBeide)
+    +(somBeide>0?('   '+Math.round(gedekt/somBeide*100)+' procent van het bedrag draagt een betaaldatum'):''));
+  L.push('  telling duurste weekdag op t.date:      '+telRegel(S1.tel));
+  L.push('  telling duurste weekdag op betaaldatum: '+telRegel(S2.tel));
+  L.push('  de duurste dag verschuift in '+anders2+' van '+rapport.length+' weken');
+  L.push('  per week op betaaldatum: '+S2.rij.map(r=>r.leeg?'(leeg)':(dk[r.pi]+' '+Math.round(r.bedrag))).join(' | '));
+  L.push('  haalt 2x vlak: '+S2.v2+' van '+S2.bruikbaar+'    haalt 2x aandeel: '+S2.a2+' van '+S2.bruikbaar);
   L.push('');
   L.push('WAT DEZE UITVOER BESLIST');
   L.push('  drempel uit de opdracht: minimaal 3 van 6 weken dezelfde weekdag EN minstens 2x het normale dagbedrag');
-  L.push('  reeks 1: hoogste weekdag-telling '+Math.max(0,...Object.values(S1.tel))+' van '+S1.bruikbaar);
-  L.push('  blijft die telling staan nadat jij je eigen overboekingen hebt weggestreept, dan is er een weekpatroon;');
-  L.push('  valt hij weg, dan blijft signaal 3 per maand staan en komt de weekmeting er niet.');
+  L.push('  op t.date:       hoogste weekdag-telling '+Math.max(0,...Object.values(S1.tel))+' van '+S1.bruikbaar);
+  L.push('  op betaaldatum:  hoogste weekdag-telling '+Math.max(0,...Object.values(S2.tel))+' van '+S2.bruikbaar);
+  L.push('  de betaaldatum is de kalender waarop JIJ betaalde, dus die beslist; t.date staat erboven om');
+  L.push('  te kunnen zien wat de bankkalender ervan maakte.');
   return L;
 }
 /* 10. DUBBELE BOEKINGEN EN WAT `t.date` BETEKENT (v272). Twee vragen in één blok, want ze hangen aan
@@ -13675,16 +13768,6 @@ function diagPiekdag(){
 const DIAG_PAAR_VENSTER = 6;    // hoeveel dagen een paar uit elkaar mag liggen (zoals applyPending)
 const DIAG_PAAR_MAX     = 40;   // hoeveel paren het blok uitschrijft
 const DIAG_RECENT_DAGEN = 60;   // het venster voor de gemelde gevallen
-/* dd.mm.yy, dd-mm-yy, dd/mm/yyyy, met of zonder tijd erachter. Twee cijfers voor het jaar worden
-   20xx; een dag boven 31 of een maand boven 12 wordt verworpen in plaats van gecorrigeerd. */
-function _descDatum(desc){
-  const m=String(desc||'').match(/(\d{2})[.\-\/](\d{2})[.\-\/](\d{2}(?:\d{2})?)(?:\s*[\/ ]\s*(\d{2}):(\d{2}))?/);
-  if(!m) return null;
-  const dd=+m[1], mm=+m[2]; let jj=m[3];
-  if(!(dd>=1&&dd<=31) || !(mm>=1&&mm<=12)) return null;
-  if(jj.length===2) jj='20'+jj;
-  return {ymd:jj+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0'), tijd:m[4]?(m[4]+':'+m[5]):''};
-}
 /* WAAR DE CATEGORIE VANDAAN KOMT, in één regel en zonder te raden: `ruleCat` is de uitkomst van de
    keyword-regels (en dus ook van SET.rules, die daar als eerste langskomen), `autoCat` is die uitkomst
    na `applyOwnAccounts()`, en `OVR[t.id]` wint van allebei. Staan ze niet gelijk, dan zegt het
@@ -13817,49 +13900,67 @@ function diagDubbel(){
     }
   }
   if(!dubbelDag.length) L.push('  (geen)');
-  /* BOEKDATUM OF TRANSACTIEDATUM. De desc is de enige plek waar de dag van de betaling zelf kan
-     staan. Geen enkele boeking wordt hier gecorrigeerd; het blok telt alleen hoe vaak de twee
-     verschillen en wat dat met de weekdagverdeling doet. */
+  /* BOEKDATUM TEGEN BETAALDATUM (v273). Dit las tot v272 de desc van ELKE boeking, en dat was een
+     vervuilde meting: bij een incasso noemt de desc de VERVALDAG, en dat waren de 68 gevallen waarin
+     t.date eerder stond dan de desc-datum. Sinds v273 leest dit blok het VELD `t.betaalDatum`, dat
+     alleen bij een kaartbetaling wordt gezet, en dat is dus per constructie de schone snede.
+     DE UITGESLOTEN REGELS WORDEN GETELD EN NIET WEGGELATEN: hoeveel boekingen dragen wel een datum in
+     hun desc maar geen veld, en hoeveel vielen op de plausibiliteitsgrens af. Anders is het verschil
+     met de meting van v272 niet te plaatsen.
+     Geen enkele boeking wordt hier gecorrigeerd; het blok telt alleen. */
   const inScope=t=>{ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !isFixed(t) && !geenNorm(c)); };
-  let metDatum=0, metTijd=0, kaart=0, kaartMetDatum=0;
-  const verschil={}; const wdTx=[0,0,0,0,0,0,0], wdDesc=[0,0,0,0,0,0,0];
-  let somTx=0; const voorbeelden=[];
+  const heeftDescDatum=t=>/(\d{2})[.\-\/](\d{2})[.\-\/](\d{2}(?:\d{2})?)/.test(String(t.desc||''));
+  let kaart=0, metVeld=0, metTijd=0, descGeenVeld=0, meerdereDatums=0; const redenen={};
+  const verschil={}; const wdTx=[0,0,0,0,0,0,0], wdBet=[0,0,0,0,0,0,0];
+  let somTx=0, nScope=0; const voorbeelden=[];
   for(const t of TX){
-    const isKaart=/^(BEA|GEA|ECOM)\b|BETAALPAS|APPLE PAY|GOOGLE PAY/i.test(String(t.desc||''));
+    const isKaart=KAART_RE.test(String(t.desc||''));
     if(isKaart) kaart++;
-    const D=_descDatum(t.desc); if(!D) continue;
-    metDatum++; if(D.tijd) metTijd++; if(isKaart) kaartMetDatum++;
-    const d=_dagenTussen(D.ymd, t.date);
+    if((String(t.desc||'').match(/\d{2}[.\-\/]\d{2}[.\-\/]\d{2}/g)||[]).length>1) meerdereDatums++;
+    if(!t.betaalDatum){
+      if(heeftDescDatum(t)){ descGeenVeld++;
+        const r=(_dT(()=>betaalMoment(t,true),null)||{}).reden||'onbekend';
+        redenen[r]=(redenen[r]||0)+1; }
+      continue;
+    }
+    metVeld++; if(t.betaalTijd) metTijd++;
+    const d=_dagenTussen(t.betaalDatum, t.date);
     const bak=(d<0?'t.date EERDER':(d===0?'gelijk':(d<=3?('t.date '+d+' dag'+(d===1?'':'en')+' later'):'t.date 4 of meer dagen later')));
     verschil[bak]=(verschil[bak]||0)+1;
     if(inScope(t) && t.amount<0){
-      wdTx[_piekDagIdx(t.date)]+=-t.amount; wdDesc[_piekDagIdx(D.ymd)]+=-t.amount; somTx+=-t.amount;
-      if(d!==0 && voorbeelden.length<8) voorbeelden.push({t,D,d});
+      wdTx[_piekDagIdx(t.date)]+=-t.amount; wdBet[_piekDagIdx(t.betaalDatum)]+=-t.amount; somTx+=-t.amount; nScope++;
+      if(d!==0 && voorbeelden.length<8) voorbeelden.push({t,d});
     }
   }
   L.push('');
-  L.push('BOEKDATUM OF TRANSACTIEDATUM: draagt de desc een eigen datum?');
-  L.push('  boekingen met een kaart-kenmerk (BEA/GEA/ECOM/betaalpas/pay): '+kaart);
-  L.push('  boekingen met een datum IN de desc: '+metDatum+'   waarvan met een tijd erbij: '+metTijd);
-  L.push('  daarvan met een kaart-kenmerk: '+kaartMetDatum);
-  if(!metDatum){ L.push('  geen enkele desc draagt een datum, dus hier valt niets te vergelijken'); }
+  L.push('BOEKDATUM TEGEN BETAALDATUM (het veld t.betaalDatum, alleen kaartbetalingen)');
+  L.push('  boekingen met een kaart-kenmerk (BEA/eCom/betaalpas): '+kaart);
+  L.push('  boekingen MET het veld:      '+metVeld+'   waarvan met een tijd erbij: '+metTijd);
+  L.push('  een datum in de desc maar GEEN veld: '+descGeenVeld+'   (per reden, uit betaalMoment zelf)');
+  for(const [r,n] of Object.entries(redenen).sort((a,b)=>b[1]-a[1])) L.push('    '+r+': '+n);
+  L.push('    het venster is '+BETAALDATUM_VOOR+' dagen voor tot '+BETAALDATUM_NA+' na de boekdatum');
+  L.push('  descs met MEER dan een datum-achtig patroon: '+meerdereDatums+'   (de eerste treffer wint)');
+  if(!metVeld){ L.push('  geen enkele boeking draagt het veld, dus hier valt niets te vergelijken'); }
   else {
-    L.push('  t.date tegen de datum in de desc: '+Object.entries(verschil).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v).join(', '));
+    L.push('  t.date tegen de betaaldatum: '+Object.entries(verschil).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v).join(', '));
     L.push('');
-    L.push('  de weekdagverdeling in de scope van piekVerdeling(), alleen de boekingen met een desc-datum:');
+    L.push('  de weekdagverdeling in de scope van piekVerdeling(), alleen de '+nScope+' regels MET het veld:');
     L.push('    som: '+Math.round(somTx));
     if(somTx>0){
-      L.push('    op t.date:        '+wdTx.map((v,i)=>dk[i]+' '+Math.round(v/somTx*100)+'%').join('  '));
-      L.push('    op de desc-datum: '+wdDesc.map((v,i)=>dk[i]+' '+Math.round(v/somTx*100)+'%').join('  '));
-      L.push('    verschuift de piek: '+(wdTx.indexOf(Math.max(...wdTx))===wdDesc.indexOf(Math.max(...wdDesc))
-        ? 'NEE, dezelfde weekdag is de grootste ('+dk[wdTx.indexOf(Math.max(...wdTx))]+')'
-        : 'JA, van '+dk[wdTx.indexOf(Math.max(...wdTx))]+' op t.date naar '+dk[wdDesc.indexOf(Math.max(...wdDesc))]+' op de desc-datum'));
+      L.push('    op t.date:          '+wdTx.map((v,i)=>dk[i]+' '+Math.round(v/somTx*100)+'%').join('  '));
+      L.push('    op de betaaldatum:  '+wdBet.map((v,i)=>dk[i]+' '+Math.round(v/somTx*100)+'%').join('  '));
+      const pT=wdTx.indexOf(Math.max(...wdTx)), pB=wdBet.indexOf(Math.max(...wdBet));
+      L.push('    verschuift de piek: '+(pT===pB
+        ? 'NEE, dezelfde weekdag is de grootste ('+dk[pT]+')'
+        : 'JA, van '+dk[pT]+' op t.date naar '+dk[pB]+' op de betaaldatum'));
+      const wkndT=wdTx[5]+wdTx[6], wkndB=wdBet[5]+wdBet[6];
+      L.push('    weekend (za+zo):    '+Math.round(wkndT/somTx*100)+'% op t.date tegen '+Math.round(wkndB/somTx*100)+'% op de betaaldatum');
     }
     if(voorbeelden.length){
       L.push('');
       L.push('  voorbeelden waar de twee verschillen:');
-      for(const v of voorbeelden) L.push('    t.date '+v.t.date+' ('+dk[_piekDagIdx(v.t.date)]+')  desc '+v.D.ymd+' ('+dk[_piekDagIdx(v.D.ymd)]+')'
-        +(v.D.tijd?(' '+v.D.tijd):'')+'  '+v.d+' dag'+(v.d===1?'':'en')+'  '+Math.round(-v.t.amount)+'  '+kort(v.t.name,24));
+      for(const v of voorbeelden) L.push('    t.date '+v.t.date+' ('+dk[_piekDagIdx(v.t.date)]+')  betaald '+v.t.betaalDatum+' ('+dk[_piekDagIdx(v.t.betaalDatum)]+')'
+        +(v.t.betaalTijd?(' '+v.t.betaalTijd):'')+'  '+v.d+' dag'+(v.d===1?'':'en')+'  '+Math.round(-v.t.amount)+'  '+kort(v.t.name,24));
     }
   }
   return L;

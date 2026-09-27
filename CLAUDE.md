@@ -95,6 +95,56 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **De betaaldatum is een EIGEN veld naast `t.date`, en verder niets** (`v273`): `categorize()` zet
+  `t.betaalDatum` en `t.betaalTijd` uit de desc, dus zelfherstellend bij elke boot en bij elke
+  regelwijziging (`TX.forEach(categorize)`). `t.date` blijft onaangeroerd: het saldo, de dagteller en
+  elke som blijven op de boekdatum, want een bank boekt op zijn eigen dag en `totalBalance()` moet
+  daarmee kloppen.
+  GEEN ENKELE APP-FUNCTIE LEEST HET VELD, en dat is de hele afbakening van deze ronde.
+  `betaaldatum-veld.spec.js` toetst dat op de BRON: het totaal aantal treffers van
+  `betaalDatum`/`betaalTijd` in `index.html` moet gelijk zijn aan de som over `betaalMoment`,
+  `categorize` en de twee diagnoseblokken. Leest een app-functie het veld, dan telt die treffer nergens
+  mee en valt de test.
+  HET VELD REIST WEL MEE IN `totals().list`, want dat zijn de transactie-objecten zelf. GEMETEN dat het
+  verschil daar UITSLUITEND die twee sleutels is; meereizen is niet gelezen worden. Een snapshot die
+  `list` meeneemt meet zijn eigen aanwezigheid, en dat kostte een testronde.
+  ALLEEN BIJ EEN KAARTBETALING (`KAART_RE`: BEA, eCom, Betaalpas). Bij een INCASSO noemt de desc de
+  VERVALDAG en niet het moment van betalen, en dat waren de 68 gevallen van `v272` waarin `t.date`
+  eerder stond. GEA GAAT ER EXPLICIET UIT: een opname leest `GEA, BETAALPAS ...` en zou via `BETAALPAS`
+  binnenkomen. Hij draagt WEL een echte tijd, en dat is precies de scheider die de ontdubbeling wil,
+  dus dat is een keuze die bij stap 2 opnieuw op tafel hoort en geen omissie.
+  DE PLAUSIBILITEITSGRENS IS EEN VOORWAARDE: een cijferreeks kan per ongeluk als `dd.mm.yy` lezen, dus
+  alles buiten `BETAALDATUM_VOOR` (45) tot `BETAALDATUM_NA` (7) dagen rond de boekdatum wordt VERWORPEN
+  en niet gecorrigeerd (`v59`/`v73`).
+  `betaalMoment(t, metReden)` GEEFT OP VERZOEK DE REDEN, en dat is geen luxe: mijn eerste teller in blok
+  10 zette een opname onder "afgevallen op de plausibiliteitsgrens". Een verkeerd etiket op een teller
+  is precies wat dit project verbiedt, en een tweede poort in het blok zou een tweede waarheid zijn
+  (`v104`). De redenen komen nu uit de bron zelf.
+  HIJ WORDT GEWIST ALS DE POORT NIET MEER GELDT. Het veld staat in `TX` en gaat mee in `save()`; zonder
+  wissen blijft een oude waarde staan zodra de poort of de grens verandert, en dan leest een afgeleide
+  als data.
+- **"De eerste treffer wint" is een afspraak en geen meting** (`v273`): ik schreef dat het moest omdat
+  een psd2-desc soms verdubbeld is met een afgekapte kop ervoor. Die kop draagt echter een AFGEKAPTE
+  datum (`NR:16721156, 19.0`), dus er is maar één volledig patroon en eerst of laatst maakt niets uit.
+  DE SABOTAGE DIE DE LAATSTE TREFFER NEEMT BLEEF GROEN, en dat is de familie uit de meetlessen: er is
+  geen gemeten geval dat de twee onderscheidt. Niet de code versimpeld en geen fixture verzonnen die het
+  geval nabouwt; in plaats daarvan staat in de spec dat deze invariant hier NIET getoetst wordt, en
+  telt blok 10 op de echte gegevens hoe vaak een desc meer dan één datum-achtig patroon draagt. Staat
+  daar nul, dan is de keuze inert; staat er meer, dan is er voor het eerst een geval om hem op te
+  beoordelen.
+- **Blok 9 draait dezelfde weken ook op de betaaldatum** (`v273`): `reeks()` kreeg een datum-kiezer, dus
+  er is ÉÉN weekmachinerie en geen tweede. De pas gebruikt `t.betaalDatum || t.date` en noemt zijn
+  DEKKING als aandeel van het BEDRAG: is maar een deel gedekt, dan is het verschil tussen de twee passen
+  vooral de dekking en niet de kalender, en dan zegt de pas weinig. De weken blijven dezelfde
+  kalenderweken; alleen in welke week een boeking valt kan schuiven, en dat is wat de meting moet laten
+  zien. De betaaldatum beslist punt 1; `t.date` staat erboven om te kunnen zien wat de bankkalender
+  ervan maakte.
+- **OPEN PUNT: een eigen regel valt om op een leesteken** (`v273`): de regel `"REST.WARRIE& KNARR"` in
+  `SET.rules` matcht de variant met de `&` en niet die met een `_`, en de bank levert beide. GEMETEN bij
+  `v272`: dezelfde betaling van 26 euro landt daardoor één keer op `uiteten` en één keer op `overig`.
+  `categorize()` matcht al spatieloos (`Z.includes(wz)`) om MT940-regelafbrekingen te vangen, dus het
+  precedent voor normaliseren bestaat; leestekens negeren zou dezelfde vorm zijn. Niet aangeraakt: het
+  raakt elke bestaande eigen regel en elke ingebouwde `RULES`-rij, en dat is een eigen ronde.
 - **`t.date` IS EEN BANKKALENDER EN GEEN BESTEDINGSKALENDER** (`v272`, gemeten op het toestel): dit is
   de zwaarste vondst van deze ronde, want elke weekdag-meting in de app staat erop. GEMETEN op de 601
   boekingen die een datum in hun desc dragen, binnen de scope van `piekVerdeling()` (som 14.130):
@@ -1571,6 +1621,14 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
 - **Meet voordat je bouwt.** Een audit die een probleem beschrijft is geen meting. Reproduceer de
   bevinding eerst; is hij al opgelost of anders van omvang, dan meld je dat in plaats van het te
   bouwen.
+- **Een verwijdering snijdt mee wat ertussen staat, en `node --check` ziet dat niet.** Bij `v273` haalde
+  ik `_descDatum()` weg en sneed van de comment erboven tot de volgende functie. Daartussen stond
+  `_diagCatBron()`, van één ronde eerder, en die verdween mee. `check.js` bleef GROEN, want een
+  ontbrekende functie is pas bij het aanroepen een fout, en de spec die hem raakt zat in een ander
+  bestand. Twaalf tests vielen om, allemaal in dezelfde spec, en de foutmelding wees naar de
+  aanroepplek en niet naar de verwijdering. Snij bij een verwijdering dus op de FUNCTIE en niet op een
+  bereik tussen twee bakens, en lees terug wat er weg is in plaats van of het commando lukte. Dit is
+  dezelfde vorm als de les hieronder over de heredoc, met een ander instrument.
 - **Een geslaagd commando betekent niet dat het juiste is weggeschreven.** De andere lessen hier
   gaan over hoe je meet; deze gaat over de stap ervoor. Een heredoc die op zijn terminator
   struikelt schrijft de rest van je eigen commando weg als inhoud, en dat ziet er in de terminal
@@ -1719,7 +1777,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v271` → `minder-v272`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v272` → `minder-v273`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

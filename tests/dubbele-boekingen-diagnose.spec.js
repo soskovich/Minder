@@ -122,20 +122,23 @@ test.describe('0 - de fixture draagt wat de comment belooft', () => {
     expect(r.datum12).toBe(true);
   });
 
-  test('de twee desc-datums worden gelezen, en één valt op een andere weekdag', async ({ page }) => {
+  test('de twee betaaldatums worden gezet, en één valt op een andere weekdag', async ({ page }) => {
     await boot(page);
+    /* v273: dit las `_descDatum(t.desc)`, een eigen lezer in blok 10. Die is vervallen: de datum uit de
+       desc is sindsdien een VELD (`t.betaalDatum`, gezet in `categorize()` en alleen bij een
+       kaartbetaling), en blok 10 leest dat veld. Eén bron, dus de test leest hem ook. */
     const r = await page.evaluate(() => {
       const a = TX.find(t => t.amount === -300), b = TX.find(t => t.amount === -50);
-      const da = _descDatum(a.desc), db = _descDatum(b.desc);
-      const wd = (d) => (new Date(d + 'T00:00:00').getDay() + 6) % 7;
-      return { da, db, wdA: wd(a.date), wdDescA: wd(da.ymd), gelijkB: db.ymd === b.date,
+      const wd = (d) => (new Date(String(d).slice(0, 10) + 'T00:00:00').getDay() + 6) % 7;
+      return { datumA: a.betaalDatum, tijdA: a.betaalTijd, datumB: b.betaalDatum,
+        wdA: wd(a.date), wdBetaaldA: a.betaalDatum ? wd(a.betaalDatum) : null, gelijkB: b.betaalDatum === b.date,
         inScopeA: !!(CATS[catOf(a)] && CATS[catOf(a)].type === 'expense' && !isFixed(a) && !geenNorm(catOf(a))) };
     });
-    expect(r.da).toBeTruthy();
-    expect(r.da.tijd).toBe('14:32');
-    expect(r.wdA).toBe(0);        // t.date is maandag
-    expect(r.wdDescA).toBe(5);    // de desc-datum is zaterdag
-    expect(r.gelijkB).toBe(true); // de tweede valt wel samen
+    expect(r.datumA).toBeTruthy();
+    expect(r.tijdA).toBe('14:32');
+    expect(r.wdA).toBe(0);           // t.date is maandag
+    expect(r.wdBetaaldA).toBe(5);    // de betaaldatum is zaterdag
+    expect(r.gelijkB).toBe(true);    // de tweede valt wel samen
     expect(r.inScopeA).toBe(true);
   });
 });
@@ -232,12 +235,12 @@ test.describe('4 - waar de categorie vandaan komt staat erbij', () => {
 });
 
 test.describe('5 - boekdatum of transactiedatum', () => {
-  test('de desc-datum wordt geteld en naast t.date gelegd', async ({ page }) => {
+  test('de betaaldatum wordt geteld en naast t.date gelegd', async ({ page }) => {
     await boot(page);
     const t = await page.evaluate(() => window.REGELS_());
-    expect(t).toContain('boekingen met een datum IN de desc: 2   waarvan met een tijd erbij: 2');
-    expect(t).toMatch(/t\.date tegen de datum in de desc:.*t\.date 2 dagen later 1/);
-    expect(t).toMatch(/t\.date tegen de datum in de desc:.*gelijk 1/);
+    expect(t).toMatch(/boekingen MET het veld:\s+2   waarvan met een tijd erbij: 2/);
+    expect(t).toMatch(/t\.date tegen de betaaldatum:.*t\.date 2 dagen later 1/);
+    expect(t).toMatch(/t\.date tegen de betaaldatum:.*gelijk 1/);
   });
 
   test('de weekdagverdeling verschuift, en het blok zegt van welke dag naar welke', async ({ page }) => {
@@ -245,9 +248,9 @@ test.describe('5 - boekdatum of transactiedatum', () => {
     const t = await page.evaluate(() => window.REGELS_());
     /* 300 euro op maandag geboekt en op zaterdag betaald, 50 euro op woensdag voor beide. De piek
        hoort dus van maandag naar zaterdag te schuiven, en dat is het hele punt voor signaal 3. */
-    expect(t).toContain('verschuift de piek: JA, van ma op t.date naar za op de desc-datum');
+    expect(t).toContain('verschuift de piek: JA, van ma op t.date naar za op de betaaldatum');
     expect(t).toMatch(/op t\.date:\s+ma 86%/);
-    expect(t).toMatch(/op de desc-datum:\s+ma 0%/);
+    expect(t).toMatch(/op de betaaldatum:\s+ma 0%/);
   });
 
   test('wat t.date per bron is, staat er als nagelezen en niet als meting', async ({ page }) => {
