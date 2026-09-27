@@ -165,16 +165,53 @@ genoemde versietag.)*
   WAT HET BLOK BESLIST: blijft de weekdag-telling staan nadat de eigen overboekingen zijn
   weggestreept, dan is er een weekpatroon; valt hij weg, dan blijft signaal 3 per maand staan en komt
   de weekmeting er niet. Dat tweede is een GELDIGE uitkomst (`v267`).
-  RICHTING, NIET GEBOUWD en onder voorbehoud van die uitkomst: de weekmeting VERVANGT signaal 3 (dus
-  `PIEK_MIN_TX` en `PIEK_FACTOR` gaan weg, twee constanten ervoor terug) en staat er nooit naast,
-  want twee detecties van dezelfde vraag is `v104`. Signalen met een stap staan boven spiegels, dus
-  het lek (`v237`) gaat voor en de piekdag krijgt plek 2 alleen als er geen lek is. De onder-potje
-  observatie komt in dezelfde rijvorm als de piekdag, kleur uit `--mut`, geen bolletje: status zit in
-  het label (`v78`/`v93`). De afspraak wordt toetsbaar via de weekmeting zelf en niet via
-  zelfrapportage. De herinnering op de afgesproken dag komt NIET in de stand-kaart (die staat al op
-  213px in het worst case, `v269`) maar als rij in "Wat opvalt", op de plek van het piekdagsignaal
-  dat na de afspraak weg is. En die rij toont het DAGBEDRAG uit `vrijPerDag()`, dezelfde eenheid als
-  Home: week of dag blijft de ene vraag van `v263`.
+  DE UITKOMST: ER IS GEEN WEEKPATROON, dus signaal 3 blijft en de weekmeting komt er niet. GEMETEN
+  op het toestel over de laatste zes volle weken: de hoogste weekdag-telling is 2 van 6 (vrijdag),
+  tegen een drempel van 3 van 6, en de zes duurste dagen liggen op vijf verschillende weekdagen
+  (zo, do, wo, vr, vr, za). Dat is dezelfde geldige uitkomst als `v267`, nu op een tweede indeling.
+  EN HET IS NIET DOOR EIGEN OVERBOEKINGEN VERTEKEND, want dat was de aanname waarop het besluit hing.
+  De intern-detectie pakt ze nu wel: de niet-meegeteld-regels dragen `Vincent Ernst Sumter`,
+  `From Main to Zakgeld`, `From Buffer Rust to Leefgeld` en `Weekly Rule`, en de grote bedragen
+  (1.900, 1.000, 675, 600, 550, 500) vallen er allemaal al uit. De Bonsu-posten stoppen in 2025-08 en
+  zitten dus niet in deze zes weken. Reeks 2 bevestigt het van de andere kant: GEEN ENKELE kandidaat
+  wegstrepen brengt de telling boven 2, en vier van de zes maken hem juist diffuser.
+  DE PREMISSE VAN DE OPDRACHT STOND NIET IN DE GEGEVENS: "morgen is zaterdag, je duurste dag" had geen
+  basis. GEMETEN referentie-aandeel over 89 volle weken: ma 27, vr 21, wo 14, di 12, do 11, za 9,
+  zo 6 procent. Maandag is de grootste weekdag en zaterdag en zondag de kleinste, en in de zes
+  gerapporteerde weken was maandag nooit de duurste dag. Er is geen dag om een herinnering aan te
+  hangen, dus de afspraak van stap 2 vervalt met de reeks.
+  DE DREMPEL "2x HET NORMALE DAGBEDRAG" ONDERSCHEIDT NIETS: 5 van 6 weken op het vlakke dagbedrag en
+  5 van 6 op het aandeel. De bindende eis was de herhaling. Dat de twee maten hier hetzelfde aantal
+  geven is toeval van deze zes weken: per week lopen ze uiteen (1,7x tegen 4,1x, en 3,9x tegen 2,6x),
+  dus het argument om beide te printen staat nog.
+  WAT DE DUURSTE DAGEN WEL ZIJN: tanken en pinnen. Vijf van de zes worden gedragen door één
+  tankbeurt of één opname (Tango 150+50, Shell 125+107, Shell 125+103, Geldmaat 200, Geldmaat 100).
+  Dat is de klontering van grote losse posten en geen patroon in de week.
+- **OPEN PUNT: een pinopname kan als variabele uitgave meetellen, en dezelfde opname kan er twee keer
+  in staan** (`v271`): GEMETEN in blok 9 drie paren op dezelfde dag met hetzelfde bedrag, waarvan er
+  twee met één kant IN de scope: `Geldmaat GM Koestraat 200` (intern) naast `Geldmaat Koestraat 13
+  200` op `overig`, hetzelfde met 100, en op 21-08 twee keer 120 die beide wel intern werden.
+  WAAROM DE ENE KANT ONTSNAPT: `categorize()` leest ALLEEN `t.desc` (`const U=t.desc.toUpperCase()`)
+  en nooit `t.name`. `OPNAME_KW` en de intern-rij van `RULES` zijn dus in orde; de kant die op `overig`
+  landt heeft een desc zonder `GELDMAAT` en zonder `GEA,`. Blok 9 print de NAAM, en daarom zie je
+  "Geldmaat" op een `overig`-rij staan. Dat is de `v267`-les opnieuw: de detectie leest een veld dat
+  het antwoord niet altijd draagt.
+  GEEN VAN DE DRIE ONTDUBBELINGEN ZIET HET, alle drie gemeten in de bron: (1) `t.id` hasht over de
+  DESC, en die verschilt per bron; (2) de soft-dedup in `commitTx()` doet
+  `if(ex && ex.acc!==t.acc && ex.src!==t.src) continue` en eist dus dat de REKENING verschilt, terwijl
+  rekening `521200806` zelf `psd2 + mt940` draagt; (3) `findDuplicateIds()` keyt op `'B|'+acc+'|'+bankRef`
+  en twee bronnen dragen verschillende refs. Blok 8 zegt daarom terecht "rekeningen met dezelfde
+  boekingen: geen": `rekeningOverlap()` vergelijkt rekening-PAREN en hier staat alles op één rekening.
+  WAT HET KOST: in deze zes weken 300 euro in scope die een opname is en geen uitgave, en dat zit via
+  `catSpendMap()` in `spendNorm`, in het potje `overig` (714 van 500) en in elk signaal (`v269`).
+  Reeks 2 rekent het voor: zonder die naam gaat vrijdag 04-09 van 221 naar 21 en is die dag niet meer
+  de duurste. DIT IS `v258` IN EEN NIEUWE VORM: een opname is geen uitgave, en hier lekt hij alsnog
+  binnen langs de desc.
+  NIET VAST TE STELLEN VAN BUITEN HET TOESTEL: op welke rekening en met welke `src` elk van de twee
+  staat. De hypothese van een dubbele import uit twee bronnen verklaart alle drie de paren en de
+  naamsvorm (de "GM" ertussen is een bronverschil), maar het blijft een hypothese tot dat gemeten is.
+  KLEINERE OBSERVATIE VAN DEZELFDE SOORT: op 19-09 staan `Rest.Warrie& Knarr 26` op `uiteten` en
+  `Rest.Warrie Knarr 26` op `overig`, zelfde dag en zelfde bedrag, één ampersand verschil.
 - **Een rekening met boekingen kan uit de LIJST vallen en toch in elke som zitten** (`v270`): een
   N26-Space stond niet in de saldolijst terwijl er boekingen op staan. GEMETEN: die rekening zit WEL
   in `OWN` (4 boekingen), telt in `totalBalance()` als `missing` en niet in de som (som 4.500,
