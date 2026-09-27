@@ -95,6 +95,63 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN OPGESLAGEN GELDIGHEID IS EEN VERWACHTING, EEN MISLUKKING IS EEN METING** (`v280`): `bankStand()` las
+  alleen `exp`, de datum die de bank bij de consent meegaf. GEMETEN op het toestel op 28 sep 2026: vijf van de
+  zes gekoppelde rekeningen gaven bij ELKE aanroep `EXPIRED_SESSION` terug bij een `exp` van 2026-12-01, en de
+  rij in Instellingen zei groen "Je bank is gekoppeld". Samen 5.059 van de 6.226 in `totalBalance()`, dus 81
+  procent van het saldo stond stil en niets zei het. `psd2Falend()` is nu de ENE afleiding van welke gekoppelde
+  rekening bij de laatste sync geen saldo ophaalde, met vier lezers: `bankStand()`, de melding, `saldoAchter()`
+  en blok 8. Dat laatste had zijn eigen filter zonder de vorm-toets, dus blok en app konden al iets anders
+  zeggen over dezelfde rekening (`v104`).
+  HIJ LEEST `balGeland` EN NIET DE FOUTTEKST: een aanroep kan lukken en toch geen saldo opleveren (een lege
+  balances-lijst is gemeten), en dan staat het saldo net zo stil. EEN ENTRY ZONDER `balGeland` IS EEN
+  ONTBREKENDE METING EN GEEN MISLUKKING (`v59`/`v73`/`v173`), en een ontkoppelde rekening met een oude entry
+  telt niet mee. VERLOPEN GAAT VOOR `stuk`: is de consent werkelijk over datum, dan is opnieuw inloggen de
+  handeling en zegt "haalt geen saldo op" er niets bij.
+  HET PREDICAAT STAAT OP ÉÉN PLEK (`falendPredikaat()`). De rij in Instellingen telt en de melding noemt
+  namen, dus het onderwerp verschilt en formuleren ter plekke mag; de BEWERING erachter is er één, en drie
+  kopieën lopen bij de eerste herformulering uiteen (`v91`). De spec viel hierop voordat hij werd opgenomen.
+- **DE MELDING VUURT PER FALENDE REKENING, EN NIET ALLEEN ALS ALLES FAALT** (`v280`): de poort was
+  `authFail && !anyOk`. GEMETEN: vijf rekeningen faalden en de zesde lukte, dus `anyOk` was waar en er kwam
+  vier syncs op een rij geen enkele melding. Eén werkende bank verborg vijf kapotte rekeningen, en dat is de
+  gevaarlijke kant (`v168`): je denkt dat je saldo bij is. `psd2SyncToast()` is ÉÉN toast met de mislukking én
+  wat er wel binnenkwam, want `toast()` hergebruikt zijn element en een tweede zou de eerste wissen. Beide
+  sync-routes lezen hem. De derde tak in `setBank()` noemt de rekeningen BIJ NAAM met de fout van de bank
+  erbij, niet vertaald; de eerste knop is opnieuw verbinden en niet vernieuwen, want vernieuwen is precies wat
+  net niets opleverde.
+- **EEN OUD SALDO HEEFT TWEE REDENEN, EN DE OUDE POORT KENDE MAAR ÉÉN** (`v280`): `saldoAchter()` toetste
+  `td>bd`, en dat MIST precies het geval waarvoor de regel bestaat. GEMETEN: bij de vijf falende rekeningen
+  faalde de sync aan BEIDE kanten, dus saldo en nieuwste boeking stonden allebei op 25 september en de poort
+  gaf NUL treffers. De sync-reden WINT op dezelfde rekening, want die mislukking is waaróm het saldo stilstaat
+  en de rekening twee keer noemen zou hetzelfde feit verdubbelen. DE TEKST VERSCHILT PER REDEN en is geen
+  ruimere poort: "wat daar tussenin gebeurde zit hier nog niet in" is bij een mislukte sync ONWAAR, er is geen
+  tussenin dat ontbreekt. DE LUS BLIJFT OVER `OWN`, want `totalBalance()` telt alleen `OWN` en een gekoppelde
+  rekening die daar niet in staat telt nergens mee.
+  DEZELFDE ZIN OP TWEE OPPERVLAKKEN, UIT ÉÉN BRON: `saldoAchterZinnen()` draagt de tekst,
+  `saldoAchterRegel()` de doos in de opbouw-sheet en `saldoAchterHero()` de regel in de hero op Home, onder
+  "totaal saldo" en boven het bedrag per dag. Dat is `v235` (één detectie, twee weergaven) en `v262`
+  (hetzelfde feit op een tweede oppervlak), en het draait het `v198`-besluit terug dat de regel alleen in de
+  sheet hoort: het herogetal, het totale saldo en het bedrag per dag lees je zonder te tikken en daarop beslis
+  je. GEEN BEDRAG (`v198`: met een bedrag erin gaat iemand rekenen en de app weet niet of je meer of minder
+  hebt), GEEN EIGEN TIK (de regel erboven tikt al naar `openBalances()`, `v254`) en GEEN AMBER (hij stelt vast,
+  `v78`/`v93`; de amber zit in Instellingen, bij de handeling).
+  GEMETEN OP 360 ÉN 390px: de hero gaat van 147px naar 188px, de onderkant van de regel ligt op 248px van de
+  568px die op 360x640 zichtbaar is, en er staat GEEN hoogte-eis op `.homehero` (de 200px van `v241` is de
+  stand-kaart op Inzichten). BIJ MEER DAN ÉÉN REKENING WORDT GETELD EN NIET OPGESOMD: vijf namen voluit is
+  93px op 360px tegen 74px op 390px, dus de kleine telefoon krijgt er een regel bij die de grote niet heeft.
+  Bij verschillende saldodata noemt hij de OUDSTE; op het toestel staan alle vijf op dezelfde dag en dan is
+  die ene datum waar.
+- **EEN NEGATIEF AANDEEL IS EEN TERUGSTORTING EN GEEN REKENFOUT** (`v280`): GEMETEN in mijn eigen blok van één
+  ronde oud gaf sectie 6 `2026-09 boekdatum-bronnen op t.date: ma 90% di 11% wo 5% do -7%`. De sommen tellen
+  netto (`v265`), dus een dag waarop je netto meer terugkreeg dan uitgaf levert een negatief dagbedrag. Het
+  teken blijft staan en wordt benoemd, in de `pct()`-helper die alle secties van het blok lezen; klemmen op nul
+  zou de optelling breken, en dat is precies wat `v265` verbood. MIJN EIGEN TEST KEEK OF DE RIJ TOT ONGEVEER
+  HONDERD OPTELT, en dat deed hij (99), dus die kwam er groen langs: de assertie stond te ruim voor het geval
+  dat hij moest vangen.
+  BLOK 8 NOEMT DE CONTANT-TERM in dezelfde ronde, en om dezelfde reden: de per-rekening-saldi telden op tot
+  5.827 terwijl de regel `som 6226` zei, en nergens stond dat het verschil `contantVerwacht()` (`v258`) is, de
+  enige andere term in `totalBalance()`, die aan geen rekening hangt. Een getal dat de lezer niet kan
+  narekenen stuurt een volgende ronde een fout zoeken die er niet is (`v271`).
 - **EEN METING DIE OVER EEN BANK GAAT, STAAT PER REKENING** (`v279`): de teller van `v277` was globaal, en
   daarmee onbruikbaar voor de vraag waarvoor hij bestond. GEMETEN op het toestel bij `v278`: 184 psd2-regels
   langs `commitTx()` en NUL met een `value_date`, maar of de regels van de bank waar het om gaat erbij zaten
@@ -1942,6 +1999,16 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   bestandsnaam per run, en bij een afwijkende looptijd eerst tellen HOEVEEL samenvattingen er in het
   bestand staan. Meer dan één betekent dat geen van de twee iets bewijst. Dit is dezelfde familie als de
   heredoc-les hierboven: een geslaagd commando is niet hetzelfde als de juiste uitvoer.
+- **Twee mechanische fixture-fouten die niets met de invariant te maken hebben** (`v280`): ze kostten samen
+  twee rondes en ze zijn goedkoop te herkennen.
+  (1) `toISOString().slice(0,10)` IN EEN TEST GEEFT DE UTC-DAG. Ik zette een boeking op "morgen" met
+  `new Date(Date.now()+864e5).toISOString()`, en onder CEST rond middernacht is dat dezelfde dag als vandaag,
+  dus de poort `td>bd` vuurde niet en de test zei dat de code fout was. Dat is exact de regel van `v199`, nu
+  in de spec in plaats van in de app: een kalenderdag in een test komt uit `ymdVan()`, net als de datums in
+  `TX`.
+  (2) `go('dash')` HERTEKENT NIET als Home al staat. Drie tests muteerden `SET` en lazen daarna de OUDE DOM,
+  met de oude zin er nog in. Wil een test het gevolg van een mutatie zien, dan roept hij de render-functie
+  zelf aan (`renderDash()`). Een navigatie is geen hertekening.
 - **Grep vóór een hernoeming ook in `tests/`.** Alleen in `index.html` zoeken is dezelfde vindfout
   als de twee hierboven, alleen te smal in plaats van te breed. Een naam, een id of een CSS-klasse
   die in de app een detail lijkt, is voor een spec het anker waaraan hij zijn eigenschap ophangt.
@@ -1983,7 +2050,7 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** ACHT keer in vijftien rondes
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** NEGEN keer in zestien rondes
   is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze als
   incidenten; samen zijn het vijf manieren waarop dezelfde fout binnenkomt, en de vraag die alle vijf
   had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
@@ -2029,7 +2096,14 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   teller van een rekening moet scheiden bleef groen toen elke sleutel als rekening werd gelezen: de sommen
   bleven kloppen en de aparte regel bleef staan, er kwamen alleen RIJEN bij voor `gezien` en `op`. Toets bij
   zo'n scheiding dus ook wat er NIET mag staan, en niet alleen wat er wel staat.
-  WAT DE ACHT GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (i) DE FIXTURE ZETTE HET GEVAL OP EEN WEEKDAG DIE AL BEZET WAS (`v280`). Het negatieve aandeel in blok 10
+  moest worden getoetst, dus de fixture kreeg een terugstorting die groter was dan de uitgave van diezelfde
+  DAG. Het blok rekent echter per WEEKDAG, en die dag viel op dezelfde weekdag als vijf andere boekingen uit
+  de fixture: netto werd hij positief (`vr 0%` in plaats van `vr -20%`) en de test bewees niets. Twee dingen
+  gingen mis in één greep: de eenheid van de fixture (dag) was niet die van de code (weekdag), en het bedrag
+  was net groot genoeg voor de verkeerde eenheid. Toets bij een fixture die een TEKEN moet omzetten dus of de
+  emmer waarin de code telt werkelijk over de drempel gaat, en niet de emmer die je in gedachten had.
+  WAT DE NEGEN GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2093,13 +2167,21 @@ getal. GEMETEN dat hij op `HEAD` net zo rood staat (1 failed, 6 passed), dus hij
 `varPlan` hangt aan de resterende dagen van de maand, dus de botsing komt en gaat met de kalender. Dit
 is de meetles dat een test die op een getal in een zin ankert de invariant niet bewijst.
 
+**Bekend rood, eigen ronde:** `piekdag-diagnose.spec.js` "het rapport schrijft zes volle weken uit" eist
+`volle weken in je import: 8` en de kalender geeft er 7. De fixture zet zijn boekingen op een afstand in
+dagen, dus hoeveel VOLLE kalenderweken daar helemaal in vallen schuift mee met de weekdag van vandaag.
+GEMETEN dat hij op `HEAD` net zo rood staat (1 failed, 13 passed), dus hij is niet van `v280`. Dit is
+`v256` op een fixture: verouderen is iets anders dan fout, en de reparatie is de dagen aan de WEEKGRENS
+hangen in plaats van aan vandaag, zodat het aantal volle weken vast staat. Dat raakt de piekdag-spec en
+niet deze ronde.
+
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
 `v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v278` → `minder-v279`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v279` → `minder-v280`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

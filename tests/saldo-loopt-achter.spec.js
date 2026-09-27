@@ -165,11 +165,16 @@ test.describe('c · de regel noemt geen bedrag en geen richting', () => {
     expect(t).not.toMatch(/€/);
   });
 
-  test('de bron van de source-tekst draagt geen bedrag', async ({ page }) => {
+  /* BIJGEWERKT BIJ v280: deze eis stond op saldoAchterRegel(), en die draagt de tekst niet meer - die
+     staat sinds v280 in saldoAchterZinnen(), met saldoAchterHero() als tweede weergave. Alleen die ene
+     functie toetsen zou de assertie leeg maken zonder dat er iets rood wordt, en dat is precies de
+     familie uit de meetlessen. De eis is "geen bedrag in deze tekst" en niet "geen bedrag in deze
+     functie", dus hij loopt nu over alle drie. */
+  test('geen enkele drager van de tekst rekent met een bedrag', async ({ page }) => {
     await boot(page, {});
-    const src = await page.evaluate(() => saldoAchterRegel.toString()
-      .replace(/\/\*[\s\S]*?\*\//g, ''));
-    expect(src).not.toMatch(/euro0|euro\(|accBalance\(/);   // hij leest alleen datums
+    const src = await page.evaluate(() => [saldoAchterZinnen, saldoAchterRegel, saldoAchterHero]
+      .map((f) => f.toString().replace(/\/\*[\s\S]*?\*\//g, '')).join('\n'));
+    expect(src).not.toMatch(/euro0|euro\(|accBalance\(/);   // ze lezen alleen datums en namen
   });
 });
 
@@ -239,7 +244,16 @@ test.describe('e · de regel verdwijnt weer, en blijft nergens hangen', () => {
 });
 
 test.describe('f · de regel staat in de opbouw-sheet, bij het saldo', () => {
-  test('hij staat onder Totaal saldo en nergens anders', async ({ page }) => {
+  /* HERSCHREVEN BIJ v280, en naar een STERKERE eis en niet naar een zwakkere.
+     Hij eiste dat de regel NIET op Home staat, met als grond dat een tweede mededeling naast de hero
+     een tweede oppervlak is. Dat besluit is herzien: de hero draagt het herogetal, het totale saldo en
+     het bedrag per dag, en dat zijn de getallen die je zonder te tikken leest en waarop je beslist.
+     Wat v198 werkelijk beschermde is dat er niet twee FORMULERINGEN over dezelfde rekeningen bestaan,
+     en dat is nu harder afgedwongen dan met een afwezigheid: beide oppervlakken lezen
+     saldoAchterZinnen(), dus de test eist dat de zin op Home LETTERLIJK gelijk is aan die in de sheet.
+     Een tweede formulering zou daar meteen op vallen. Dezelfde vorm als v262 (hetzelfde feit op een
+     tweede oppervlak) en v235 (één detectie, twee weergaven). */
+  test('dezelfde zin op precies twee plekken, uit één bron', async ({ page }) => {
     await boot(page, { accmeta: { [MAIN]: { balance: 4000, date: dagenGeleden(9) } },
       set: { manualBal: {} }, laatsteTx: 3 });
     await page.evaluate(() => { go('dash'); openSafeToSpend(); });
@@ -247,9 +261,31 @@ test.describe('f · de regel staat in de opbouw-sheet, bij het saldo', () => {
     const t = await page.locator('#sheet').innerText();
     expect(t).toMatch(/Totaal saldo/);
     expect(t).toMatch(/de nieuwste boeking erop van/);
-    // en niet op Home zelf: een tweede mededeling naast de hero is een tweede oppervlak
     await page.evaluate(() => closeSheet());
-    expect(await page.locator('#s-dash').innerText()).not.toMatch(/nieuwste boeking erop/);
+    const r = await page.evaluate(() => {
+      const zin = saldoAchterZinnen().join(' ').replace(/<[^>]*>/g, '');
+      const d = document.createElement('div');
+      d.innerHTML = saldoAchterHero(); const hero = d.innerText.trim();
+      d.innerHTML = saldoAchterRegel(); const sheet = d.innerText.trim();
+      return { zin, hero, sheet, opHome: (document.getElementById('s-dash').innerText.match(/nieuwste boeking erop/g) || []).length };
+    });
+    expect(r.hero).toBe(r.zin);        // de hero verzint niets
+    expect(r.sheet).toBe(r.zin);       // de sheet ook niet
+    expect(r.hero).toBe(r.sheet);      // en dus zijn ze gelijk
+    expect(r.opHome).toBe(1);          // precies één keer op Home, geen tweede mededeling ernaast
+  });
+
+  /* v280: de regel in de hero draagt geen eigen kader, geen eigen tik en geen amber. De tik bestaat al
+     één regel hoger (totaal saldo -> openBalances), dus een tweede zou op hetzelfde uitkomen (v254),
+     en amber is voor echte aandacht (v78/v93) - die zit in Instellingen, bij de handeling. */
+  test('de hero-regel heeft geen kader, geen tik en geen kleur', async ({ page }) => {
+    await boot(page, { accmeta: { [MAIN]: { balance: 4000, date: dagenGeleden(9) } },
+      set: { manualBal: {} }, laatsteTx: 3 });
+    const h = await page.evaluate(() => saldoAchterHero());
+    expect(h).not.toMatch(/onclick|cursor:pointer/);
+    expect(h).not.toMatch(/--amber|--red|--green/);
+    expect(h).not.toMatch(/border|background/);
+    expect(h).toContain('var(--mut)');
   });
 
   test('bij een onbekend saldo staat hij er niet: dan is er al een andere melding', async ({ page }) => {

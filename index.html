@@ -1900,13 +1900,61 @@ function nieuwsteTxDatum(acc){
    boeking op de saldodatum zelf, dan zit hij er per definitie in - een MT940-eindsaldo is inclusief
    die dag, en een PSD2-saldo is van het moment van ophalen. Zonder saldodatum of zonder boekingen
    staat er niets: we weten het dan niet, en dat is geen achterstand. */
+/* ===== TWEE REDENEN, ÉÉN REGEL (v280) =====
+   Tot v279 kon deze functie maar één ding vaststellen: je saldo is ouder dan de nieuwste boeking erop.
+   GEMETEN op het toestel dat dat precies het geval MIST waarvoor de regel bestaat. Bij vijf rekeningen
+   faalde de sync aan BEIDE kanten (EXPIRED_SESSION op de transactie- én de balances-aanroep), dus saldo
+   en nieuwste boeking stonden allebei op 25 september en `td>bd` was onwaar. Nul treffers, terwijl
+   5.059 van de 6.226 in totalBalance() niet was bijgewerkt en dus onverkort in veilig te besteden zat.
+   DE SYNC-REDEN WINT op dezelfde rekening: die mislukking is waaróm het saldo stilstaat, en de rekening
+   twee keer noemen zou hetzelfde feit verdubbelen.
+   DE TEKST VERSCHILT PER REDEN, en dat is geen opsmuk. "Wat daar tussenin gebeurde zit hier nog niet
+   in" is bij een mislukte sync ONWAAR: er is geen tussenin dat ontbreekt, er is een aanroep die niets
+   opleverde.
+   DE LUS BLIJFT OVER `OWN` en niet over de gekoppelde rekeningen: totalBalance() telt alleen OWN, dus
+   een gekoppelde rekening die daar niet in staat telt nergens mee en heeft niets te melden. */
 function saldoAchter(){
   const uit=[];
+  let fal={}; try{ for(const f of psd2Falend()) fal[f.acc]=f; }catch(_){ fal={}; }
   for(const a of (OWN||[])){
     if(accBalance(a)==null) continue;
     const bd=accBalanceDatum(a); if(!bd) continue;
+    if(fal[a]){ uit.push({acc:a, saldoDatum:bd, txDatum:null, reden:'sync'}); continue; }
     const td=nieuwsteTxDatum(a); if(!td) continue;
-    if(td>bd) uit.push({acc:a, saldoDatum:bd, txDatum:td});
+    if(td>bd) uit.push({acc:a, saldoDatum:bd, txDatum:td, reden:'import'});
+  }
+  return uit;
+}
+/* De ZIN, zonder schil. Twee oppervlakken dragen hem: de opbouw-sheet en de hero op Home. Dat is
+   dezelfde vorm als v235 (één detectie, twee weergaven) en hetzelfde feit op een tweede oppervlak
+   (v262), en het is de reden dat de tekst hier staat en niet twee keer: een tweede formulering over
+   dezelfde vijf rekeningen zou uiteenlopen (v104).
+   GEEN BEDRAG, en dat is de regel van v198 en geen detail: zodra er een bedrag in staat gaat iemand
+   rekenen, en de app weet niet of je meer of minder hebt dan er staat. Alleen dat er tijd tussen zit.
+   BIJ MEER DAN ÉÉN REKENING WORDT GETELD EN NIET OPGESOMD, en dat is gemeten: vijf namen voluit is
+   93px op 360px tegen 74px op 390px, dus de kleine telefoon krijgt er een regel bij die de grote niet
+   heeft. Tellen is 74px op beide.
+   DE DATUM IS DE OUDSTE ZODRA ZE VERSCHILLEN. Op het toestel staan alle vijf op dezelfde dag en dan is
+   "van 25 september" waar; met twee data zou één datum een bewering zijn die niet klopt. */
+function saldoAchterZinnen(){
+  let r=[]; try{ r=saldoAchter(); }catch(_){ return []; }
+  if(!r.length) return [];
+  const dag=d=>{ try{ return new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'long'}); }catch(_){ return d; } };
+  const uit=[];
+  const sync=r.filter(x=>x.reden==='sync');
+  const imp=r.filter(x=>x.reden!=='sync');
+  if(sync.length){
+    const data=[...new Set(sync.map(x=>x.saldoDatum))].sort();
+    uit.push(sync.length===1
+      ? `Het saldo van ${esc(acctNiceName(sync[0].acc))} is van ${dag(data[0])} en niet bijgewerkt bij de laatste synchronisatie.`
+      : (data.length===1
+        ? `Bij ${sync.length} rekeningen is het saldo van ${dag(data[0])} en niet bijgewerkt bij de laatste synchronisatie.`
+        : `Bij ${sync.length} rekeningen is het saldo niet bijgewerkt bij de laatste synchronisatie, het oudste van ${dag(data[0])}.`));
+  }
+  if(imp.length){
+    uit.push(imp.length===1
+      ? `Het saldo van ${esc(acctNiceName(imp[0].acc))} is van ${dag(imp[0].saldoDatum)}, de nieuwste boeking erop van ${dag(imp[0].txDatum)}. Wat daar tussenin gebeurde zit hier nog niet in.`
+      : `Bij ${imp.length} rekeningen is het saldo ouder dan de nieuwste boeking erop. Wat daar tussenin gebeurde zit hier nog niet in.`);
   }
   return uit;
 }
@@ -1917,13 +1965,23 @@ function saldoAchter(){
    weer gelijk of nieuwer is: bij een PSD2-sync gebeurt dat bij de volgende ophaling, bij een
    handmatig saldo zodra je het opnieuw invoert. */
 function saldoAchterRegel(){
-  let r=[]; try{ r=saldoAchter(); }catch(_){ return ''; }
-  if(!r.length) return '';
-  const dag=d=>{ try{ return new Date(d).toLocaleDateString('nl-NL',{day:'numeric',month:'long'}); }catch(_){ return d; } };
-  const zin = r.length===1
-    ? `Het saldo van ${esc(acctNiceName(r[0].acc))} is van ${dag(r[0].saldoDatum)}, de nieuwste boeking erop van ${dag(r[0].txDatum)}. Wat daar tussenin gebeurde zit hier nog niet in.`
-    : `Bij ${r.length} rekeningen is het saldo ouder dan de nieuwste boeking erop. Wat daar tussenin gebeurde zit hier nog niet in.`;
-  return `<div class="small" style="color:var(--mut2);line-height:1.5;margin:8px 0 2px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:10px">${zin}</div>`;
+  const z=saldoAchterZinnen(); if(!z.length) return '';
+  return `<div class="small" style="color:var(--mut2);line-height:1.5;margin:8px 0 2px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:10px">${z.join(' ')}</div>`;
+}
+/* v280: DEZELFDE ZIN IN DE HERO, en dat is waar de vraag van deze ronde over ging. De opbouw-sheet is
+   een drill-down die je opent; het herogetal, het totale saldo en het bedrag per dag lees je zonder te
+   tikken, en dat zijn de getallen waarop je beslist. GEMETEN op het toestel stond daar niets: 81 procent
+   van het saldo was niet bijgewerkt en de hero zei alleen "totaal saldo €6.226".
+   GEEN EIGEN KADER EN GEEN EIGEN TIK. Hij krijgt de vorm van vrijPerDagLine() ernaast, en de regel
+   boven hem tikt al naar openBalances(), waar de rekeningen per stuk staan. Een tweede tik ernaast zou
+   op hetzelfde uitkomen (v254).
+   GEEN AMBER. Deze regel stelt vast en vraagt geen aandacht (v78/v93); de handeling zit in Instellingen
+   en dáár staat de amber.
+   GEMETEN: de hero gaat van 147px naar 188px op 360 én 390px, de onderkant van de regel ligt op 248px
+   van de 568px die op 360x640 zichtbaar is, en er staat geen enkele hoogte-eis op .homehero. */
+function saldoAchterHero(){
+  const z=saldoAchterZinnen(); if(!z.length) return '';
+  return `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px">${z.join(' ')}</div>`;
 }
 
 // N26-spaarpotjes: alle N26-Spaces behalve de betaalrekening (Main) en het potje eindigend op 4840
@@ -2834,6 +2892,7 @@ function renderDash(){
     <div class="hh-lbl">${jrg('veiligtebesteden','Veilig te besteden')}</div>
     <div class="hh-big${safeCol==='var(--teal)'?' grad':''}" style="${safeCol==='var(--teal)'?'':`color:${safeCol};`}cursor:pointer" onclick="openSafeToSpend()">${euro0(S2.safe)}</div>
     <div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openBalances()">totaal saldo ${euro0(S2.saldo)} <span style="color:var(--teal)">\u203a</span></div>
+    ${saldoAchterHero()}
     ${vrijPerDagLine()}
     ${krapNote}
   </div>`
@@ -12904,13 +12963,24 @@ function accountsCard(){
    De kleur is omgedraaid: amber stond op "nog geen bank gekoppeld" (er is niets aan de hand, je
    hebt alleen nog niets gedaan) en bleef grijs bij een verlopen verbinding (daar moet je iets
    doen). Amber is voor echte aandacht (v78/v93), dus die hoort bij verlopen. */
+/* v280: deze rij las ALLEEN `exp`, de geldigheidsdatum die de bank bij de consent meegaf, en dat is
+   niet hetzelfde als wat de bank werkelijk doet. GEMETEN op het toestel: vijf rekeningen gaven bij
+   elke aanroep EXPIRED_SESSION terug terwijl hun `exp` op 2026-12-01 stond, en deze rij zei groen
+   "Je bank is gekoppeld". 81 procent van het saldo in totalBalance() stond stil en Instellingen
+   meldde niets. De opgeslagen geldigheid is een verwachting, de mislukking is een meting, en alleen
+   de tweede weet of er iets binnenkomt.
+   VERLOPEN GAAT VOOR: is de consent werkelijk over datum, dan is opnieuw inloggen de handeling en
+   zegt "haalt niets op" er niets bij. */
 function bankStand(){
   const ps=SET.psd2Accounts||{}; const n=Object.keys(ps).length;
   const verlopen=n>0 && Object.values(ps).some(v=>v.exp && new Date(v.exp) < new Date());
-  return {n, verlopen,
+  let falend=[]; try{ falend=psd2Falend(); }catch(_){ falend=[]; }
+  const stuk=!verlopen && falend.length>0;
+  const stukSub=(falend.length===1?'1 rekening':falend.length+' rekeningen')+falendPredikaat(falend.length);
+  return {n, verlopen, falend, stuk,
     banks:Object.values(ps).map(v=>v.bank).filter((v,i,a)=>a.indexOf(v)===i).join(' + '),
-    sub: n ? (verlopen?'Verbinding verlopen':'Je bank is gekoppeld') : 'Nog geen bank gekoppeld',
-    col: verlopen ? 'var(--amber)' : ''};
+    sub: n ? (verlopen?'Verbinding verlopen':(stuk?stukSub:'Je bank is gekoppeld')) : 'Nog geen bank gekoppeld',
+    col: (verlopen||stuk) ? 'var(--amber)' : ''};
 }
 /* v181: de privacy-subregel beweerde onvoorwaardelijk "Alles blijft op dit toestel", en dat wordt
    onwaar zodra de bankkoppeling of de AI-coach aanstaat. Hij volgt nu de werkelijke stand, net als
@@ -12947,6 +13017,22 @@ function setBank(){
         <div class="small muted" style="margin:3px 0 14px 17px">Je bank vroeg om opnieuw in te loggen.</div>
         <button class="btn" onclick="psd2Connect()">${ICON('bank')} Opnieuw verbinden</button>
         <button class="btn sec" style="margin-top:8px" onclick="psd2Connect()">${ICON('bank')} Nog een bank toevoegen</button>`;
+    } else if(B.stuk){
+      /* v280: DE DERDE TAK. Tot v279 waren er twee: over datum, of groen. Een consent die nog geldt
+         terwijl de bank de sessie weigert viel in de groene tak, en dat is precies de toestand die op
+         het toestel is gemeten. Hier staan de rekeningen bij NAAM, want "een rekening haalt niets op"
+         zonder te zeggen welke laat je zoeken in een lijst die dit scherm niet toont.
+         DE FOUT VAN DE BANK STAAT ERBIJ EN WORDT NIET VERTAALD: een eigen woord voor EXPIRED_SESSION
+         zou een tweede term zijn (v91), en wat de bank zegt is wat er te melden valt.
+         DE EERSTE KNOP IS OPNIEUW VERBINDEN EN NIET VERNIEUWEN. Vernieuwen is precies wat net niets
+         opleverde, dus die als eerste aanbieden stuurt je naar de handeling die al faalde. */
+      const fnamen=B.falend.map(f=>esc(acctNiceName(f.acc))).join(', ');
+      const fouten=[...new Set(B.falend.map(f=>f.fout).filter(Boolean))].join(' · ');
+      head=`<div style="display:flex;align-items:center;font-weight:600">${dot('var(--amber)')}${B.sub}</div>
+        <div class="small muted" style="margin:3px 0 2px 17px">${fnamen}</div>
+        <div class="small muted" style="margin:0 0 14px 17px">${fouten?esc(fouten)+' · h':'H'}un saldo staat stil en telt wel mee in je totaal.</div>
+        <button class="btn" onclick="psd2Connect()">${ICON('bank')} Opnieuw verbinden</button>
+        <button class="btn sec" style="margin-top:8px" onclick="psd2Refresh(false)">${ICON('sync')} Toch vernieuwen</button>`;
     } else {
       head=`<div style="display:flex;align-items:center;font-weight:600">${dot('var(--green)')}Bank gekoppeld</div>
         <div class="small muted" style="margin:3px 0 14px 17px">${esc(banks)}${last?' · '+last+' bijgewerkt':' · nog niet bijgewerkt'}</div>
@@ -13524,7 +13610,13 @@ function diagRekeningen(){
   L.push('rekeningen in allAccounts():       '+alle.length+'  (OWN plus de gekoppelde zonder boekingen)');
   L.push('rekeningen in de getoonde lijst:   '+zicht.length+'  (zichtbareRek, verbergt zonder saldo tenzij SET.toonLegeRek)');
   L.push('SET.toonLegeRek:                   '+_dV(()=>!!SET.toonLegeRek));
-  if(tb) L.push('totalBalance(): som '+Math.round(tb.sum)+'  bekend '+tb.known+'  missing '+tb.missing);
+  /* v280: deze regel gaf de som zonder te zeggen waaruit hij bestaat, en op het toestel telden de
+     per-rekening-saldi op tot 5.827 terwijl hier 6.226 stond. Het verschil is contantVerwacht() (v258),
+     de enige andere term in totalBalance(), en die stond bij geen enkele rekening. Een getal dat de lezer
+     niet kan narekenen stuurt een volgende ronde een fout zoeken die er niet is (v271). */
+  if(tb) L.push('totalBalance(): som '+Math.round(tb.sum)+'  bekend '+tb.known+'  missing '+tb.missing
+    +(tb.contant!=null?'   waarvan contant '+Math.round(tb.contant)+' (v258, hangt aan geen rekening)'
+                      :'   contant: nooit geteld, dus geen term in de som'));
   if(st) L.push('safeToSpend():  safe '+Math.round(st.safe||0)+'  bekend '+(st.known==null?'-':st.known)+'  missing '+(st.missing==null?'-':st.missing));
   L.push('');
   L.push('PER REKENING');
@@ -13575,8 +13667,15 @@ function diagRekeningen(){
      herogetal op Home, `vrijPerDag()`, de opbouw-sheet, het netto vermogen op Vermogen en
      `financeModel()` aan. Een rekening zonder saldo telt als `missing` en valt uit de som (v168/v270),
      dus een OUD saldo is erger dan geen saldo: dat telt voor de volle mep mee zonder dat ergens staat
-     hoe oud het is. `saldoAchterRegel()` (v198) is de enige plek die dat aan de gebruiker meldt. */
-  const oud=Object.keys(ps).filter(a=>{ const dg=(SET.psd2Diag||{})[a]; return dg && !dg.balGeland; });
+     hoe oud het is.
+     SINDS v280 MELDT DE APP HET ZELF, en niet meer alleen deze uitlezing: `saldoAchter()` heeft een
+     tweede reden gekregen en de regel staat in de hero op Home én in de opbouw-sheet. Tot v279 kon
+     `saldoAchterRegel()` dit geval per constructie niet zien, want hij toetste `td>bd` en bij een sync
+     die aan beide kanten faalt staan die twee gelijk.
+     DEZE LIJST LEEST `psd2Falend()` en leidt hem niet zelf af (v104). Hij stond hier als een eigen
+     filter zonder de vorm-toets die die functie wel heeft, dus op een half geschreven entry zeiden het
+     blok en de app al iets anders over dezelfde rekening. */
+  const oud=(_dT(()=>psd2Falend(),[])||[]).map(f=>f.acc);
   L.push('');
   L.push('SALDI DIE NIET ZIJN BIJGEWERKT BIJ DE LAATSTE SYNC: '+(oud.length?oud.join(', '):'geen'));
   if(oud.length){
@@ -14172,7 +14271,16 @@ function diagDubbel(){
     if(t.betaalDatum){ g.veld++; g.vSom+=-t.amount;
       g.vTx[_piekDagIdx(t.date)]+=-t.amount; g.vBet[_piekDagIdx(t.betaalDatum)]+=-t.amount; }
   }
-  const pct=(arr,som)=>arr.map((v,i)=>dk[i]+' '+Math.round(v/som*100)+'%').join('  ');
+  /* v280: EEN NEGATIEF AANDEEL IS EEN TERUGSTORTING EN GEEN REKENFOUT. De sommen tellen netto (v265),
+     dus een dag waarop je netto meer terugkreeg dan uitgaf levert een negatief dagbedrag en dus een
+     negatief aandeel. GEMETEN in mijn eigen blok van één ronde oud: `2026-09 boekdatum-bronnen op
+     t.date: ma 90% di 11% wo 5% do -7%`, en dat leest als een onmogelijkheid terwijl het een meting is.
+     Mijn eigen test keek of de rij tot ongeveer honderd optelt, en dat deed hij (99), dus die kwam er
+     groen langs: de assertie stond te ruim voor het geval dat hij moest vangen.
+     HET TEKEN BLIJFT STAAN en wordt benoemd. Klemmen op nul zou de optelling breken, en dat is precies
+     wat v265 verbood toen weekBedragen() netto ging tellen. */
+  const pct=(arr,som)=>arr.map((v,i)=>dk[i]+' '+Math.round(v/som*100)+'%').join('  ')
+    +((arr||[]).some(v=>v<0)?'   (een negatief aandeel is een terugstorting: de som telt netto)':'');
   const wkeys=Object.keys(wg).sort((a,b)=>wg[b].som-wg[a].som);
   if(!wkeys.length) L.push('  (geen regels in deze snede)');
   for(const k of wkeys){
@@ -15095,7 +15203,7 @@ async function psd2Refresh(silent){
   }
   curMonth=null; render();
   if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){}
-  if(!silent) toast(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt, geen nieuwe (van vandaag soms nog niet geboekt)');
+  if(!silent) psd2SyncToast(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt, geen nieuwe (van vandaag soms nog niet geboekt)');
 }
 /* v181: hier stond een toast plus SET.advBank=true. De toast ("Stel eerst je bank-verbinding in")
    zei niet wat een bank-verbinding is of waar hij vandaan komt, en het omzetten van advBank
@@ -15208,7 +15316,7 @@ async function psd2IngestSession(s){
   const added=commitTx(allTx, balances);
   applyPending(pend);
   curMonth=null; render();
-  toast(added? `${ICON('check')} ${added} transacties gekoppeld van ${aspspName}` : `Koppeling met ${aspspName} ververst (geen nieuwe)`);
+  psd2SyncToast(added? `${ICON('check')} ${added} transacties gekoppeld van ${aspspName}` : `Koppeling met ${aspspName} ververst (geen nieuwe)`);
 }
 // Enable Banking transactie → intern TX-object (zelfde schema als MT940/CSV)
 
@@ -15263,6 +15371,59 @@ function mapPsd2Tx(raw, accId, pending){
 function psd2DiagZet(accId, rec){
   const D=SET.psd2Diag=SET.psd2Diag||{};
   D[accId]=Object.assign({op:vandaagYMD()}, rec);
+}
+/* ===== WELKE GEKOPPELDE REKENINGEN HAALDEN BIJ DE LAATSTE SYNC GEEN SALDO OP (v280) =====
+   EEN AFLEIDING, VIER LEZERS: bankStand() (de rij in Instellingen), de melding na een sync,
+   saldoAchter() (de regel bij het saldo) en blok 8 van DIAG_BLOKKEN. Dat laatste had een eigen filter
+   ZONDER de vorm-toets hieronder, dus op een half geschreven entry zeiden het blok en de app al iets
+   anders over dezelfde rekening (v104).
+   HIJ LEEST `balGeland` EN NIET DE FOUTTEKST. Een aanroep kan lukken en toch geen saldo opleveren -
+   een lege balances-lijst is op het toestel gemeten - en dan staat het saldo net zo stil. De fouttekst
+   komt er los bij, want die zegt waarom en niet dat.
+   EEN ENTRY ZONDER `balGeland` IS EEN ONTBREKENDE METING EN GEEN MISLUKKING. Zo'n entry heeft de vorm
+   van vóór v279 of is half geschreven, en daar mag geen conclusie over de koppeling op staan
+   (v59/v73/v173). Een rekening die nooit is gesynchroniseerd heeft helemaal geen entry en valt hier
+   dus buiten.
+   ALLEEN WAT NU GEKOPPELD IS: `SET.psd2Diag` houdt zijn entry als je een rekening ontkoppelt, en die
+   zegt niets over de koppeling die er nu staat. */
+function psd2Falend(){
+  const ps=SET.psd2Accounts||{}, D=SET.psd2Diag||{}, uit=[];
+  for(const a of Object.keys(ps)){
+    const d=D[a];
+    if(!d || typeof d!=='object' || !Object.prototype.hasOwnProperty.call(d,'balGeland')) continue;
+    if(d.balGeland) continue;
+    uit.push({acc:a, op:d.op||'', fout:String(d.balFout||d.txFout||d.balReden||'')});
+  }
+  return uit;
+}
+/* HET PREDICAAT STAAT OP ÉÉN PLEK, en dat is geen muggenzifterij: drie plekken zeggen dit over dezelfde
+   toestand, met een ander onderwerp ervoor. De rij in Instellingen telt ("5 rekeningen"), de melding en
+   het bankscherm noemen de namen ("Main, Zakgeld en ..."), en dat is de structuur overnemen en ter plekke
+   formuleren zoals de meetles voorschrijft. Maar de BEWERING erachter is één bewering, en drie kopieën
+   daarvan lopen bij de eerste herformulering uiteen (v91). Mijn eigen test in
+   oud-saldo-melden.spec.js viel hierop voordat hij werd opgenomen. */
+function falendPredikaat(n){ return (n===1?' haalt':' halen')+' geen saldo op'; }
+/* v280: DE MELDING VUURDE ALLEEN ALS ALLES FAALDE. De poort was `authFail && !anyOk`, en die eist dat
+   ELKE rekening mislukt. GEMETEN op het toestel: vijf N26-rekeningen gaven EXPIRED_SESSION en de
+   ABN-rekening lukte, dus `anyOk` was waar en er kwam geen enkele melding - niet na die sync en niet na
+   de vier ervoor. Eén werkende bank verborg vijf kapotte rekeningen, en dat is de gevaarlijke kant
+   (v168): je denkt dat je saldo bij is.
+   DE NAMEN STAAN ERIN. Een melding die zegt dat er iets faalt zonder te zeggen wat, laat je zoeken in
+   een lijst die geen enkel scherm toont. */
+function psd2FalendZin(fal){
+  const namen=(fal||[]).map(f=>{ let n=''; try{ n=acctNiceName(f.acc); }catch(_){ n=f.acc; } return esc(n); });
+  if(!namen.length) return '';
+  const lijst = namen.length===1 ? namen[0] : namen.slice(0,-1).join(', ')+' en '+namen[namen.length-1];
+  return lijst+falendPredikaat(namen.length);
+}
+/* De toast na een sync, met ÉÉN BRON VOOR BEIDE ROUTES: psd2Refresh() en psd2IngestSession() zeggen
+   hetzelfde over dezelfde toestand, en twee formuleringen zouden uiteenlopen (v104). De mislukking
+   eerst, dan wat er wel binnenkwam, in één toast en niet twee: toast() hergebruikt zijn element en de
+   tweede zou de eerste wissen. */
+function psd2SyncToast(goed){
+  let fal=[]; try{ fal=psd2Falend(); }catch(_){ fal=[]; }
+  if(!fal.length){ toast(goed); return; }
+  toast(psd2FalendZin(fal)+'<br>'+goed);
 }
 /* ===== HIJ MELDT OP VERZOEK WAT HIJ ZAG (v279) =====
    DEZELFDE VORM ALS `betaalMoment(t, metReden)`: een tweede uitdrukking van de respons-vorm in het
