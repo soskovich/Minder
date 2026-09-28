@@ -24,6 +24,12 @@ const CSVZ = 'N26 Zakgeld';               // Space-naam uit de id: "Zakgeld"
 const CSVX = 'N26 Buffer Rust';           // de dwarsligger: bedragen en richting wijzen verschillend aan
 const PZ = '100110012252714323';          // de psd2-rekening van Zakgeld
 const PM = '100110012555096222';          // Main, de tegenpartij
+/* v283: EEN DERDE PAAR, ALLEEN VOOR DE MATCH PER BOEKING. Het staat los van CSVZ zodat de asserties op
+   de maandtabel (c) daar niet meebewegen, en het draagt de vier gevallen waarop (d) en (e) uiteenlopen:
+   een tweeling die NET buiten het csv-venster valt, een csv-boeking zonder enige tegenhanger, twee
+   psd2-kandidaten op verschillende afstand, en twee overgebleven psd2-regels die elkaars tweeling zijn. */
+const CSVB = 'N26 Buffer Comfort';        // Space-naam uit de id: "Buffer Comfort"
+const PB = '100110012351717586';          // de psd2-rekening van Buffer Comfort
 
 const rij = (acc, src, rows) => rows.map((r, i) => ({ id: acc + '_s' + i, date: r.d, amount: r.a, acc, src,
   name: r.n, desc: r.desc || r.n, typ: '', ref: '', accName: '', refNums: [] }));
@@ -67,11 +73,57 @@ function seed(opt) {
   const zExtra = [{ d: '2026-04-06', a: 60, n: 'naar Buffer Rust', desc: 'From Main to Buffer Rust PMNT' },
     { d: '2026-04-07', a: -61, n: 'uit Buffer Rust', desc: 'From Buffer Rust to Main PMNT' }];
 
+  /* het derde paar. De csv-kant draagt vijf boekingen, de psd2-kant acht. */
+  const bCsv = [
+    { d: '2026-05-05', a: 150, n: 'Main', desc: 'Main' },              // d0
+    { d: '2026-05-20', a: -150, n: 'Zakgeld', desc: 'Zakgeld' },       // d0
+    { d: '2026-05-12', a: -66, n: 'Plus de Gors', desc: 'Plus de Gors' },  // twee kandidaten, d0 wint
+    { d: '2026-05-25', a: -40, n: 'Vomar', desc: 'Vomar' },            // tweeling valt NA het csv-venster
+    { d: '2026-05-10', a: -77, n: 'Vomar', desc: 'Vomar' },            // geen enkele tegenhanger
+    /* TWEE MET HETZELFDE BEDRAG OP DEZELFDE DAG EN MAAR EEN TEGENHANGER. Zonder dit paar kan een psd2-regel
+       per constructie niet hergebruikt worden en is de een-op-een-eis inert: elk ander bedrag komt in deze
+       fixture maar een keer voor aan de csv-kant. */
+    { d: '2026-05-18', a: -55, n: 'Vomar', desc: 'Vomar' },
+    { d: '2026-05-18', a: -55, n: 'Vomar', desc: 'Vomar' },
+    /* TWEE DIE OM DEZELFDE KANDIDAAT VECHTEN OP VERSCHILLENDE AFSTAND. Neemt de code eerst een boeking en
+       dan de afstanden (in plaats van andersom), dan pakt die van 05-10 de kandidaat van 05-12 op twee dagen
+       en houdt die van 05-12 er een op een dag over: 0d 4, 1d 1, 2d 2 in plaats van 0d 5, 2d 1, 3d 1. */
+    { d: '2026-05-10', a: -99, n: 'Vomar', desc: 'Vomar' },
+    { d: '2026-05-12', a: -99, n: 'Vomar', desc: 'Vomar' },
+    /* EEN TEGENHANGER DIE GEMATCHT WORDT EN EEN TWEELING HEEFT DIE OVERBLIJFT. Zonder dit paar is elke
+       tweeling in deze fixture zelf ook overgebleven, en dan maakt het geen verschil of de tweeling in de
+       HELE rekening of alleen onder de overgeblevenen wordt gezocht. */
+    { d: '2026-05-11', a: -44, n: 'Vomar', desc: 'Vomar' },
+    /* NIET GEMATCHT EN BUITEN DE SCOPE: een opname is intern en dus geen uitgave. Zonder deze regel valt
+       elke niet-gematchte boeking toevallig in scope en doet de scope-filter op de euroregel niets. */
+    { d: '2026-05-22', a: -200, n: 'Geldmaat', desc: 'GELDMAAT Purmerend' },
+    /* EEN TEGENHANGER DIE BINNEN HET VENSTER LIGT MAAR TE VER WEG IN DAGEN (zeven). Zonder deze regel kan
+       een ruimere dagafstand per constructie niets extra's matchen en is PAAR_DAGEN inert. */
+    { d: '2026-05-06', a: -111, n: 'Vomar', desc: 'Vomar' },
+  ];
+  const bPsd = [
+    { d: '2026-05-05', a: 150, n: 'naar Buffer Comfort', desc: 'From Main to Buffer Comfort PMNT' },
+    { d: '2026-05-20', a: -150, n: 'uit Buffer Comfort', desc: 'From Buffer Comfort to Zakgeld PMNT' },
+    { d: '2026-05-12', a: -66, n: 'Plus de Gors', desc: 'Plus de Gors Purmerend PMNT' },
+    { d: '2026-05-14', a: -66, n: 'Plus de Gors', desc: 'Plus de Gors Purmerend PMNT' },
+    { d: '2026-05-27', a: -40, n: 'Vomar', desc: 'Vomar Purmerend PMNT' },   // 2 dagen NA 05-25
+    { d: '2026-05-15', a: -88, n: 'Splif', desc: 'Splif Purmerend PMNT' },   // tweeling van de volgende
+    { d: '2026-05-16', a: -88, n: 'Splif', desc: 'Splif Purmerend PMNT' },
+    { d: '2026-05-13', a: -123, n: 'Tango', desc: 'Tango Purmerend PMNT' },  // blijft over, geen tweeling
+    { d: '2026-05-18', a: -55, n: 'Vomar', desc: 'Vomar Purmerend PMNT' },   // EEN tegenhanger voor TWEE
+    { d: '2026-05-12', a: -99, n: 'Vomar', desc: 'Vomar Purmerend PMNT' },
+    { d: '2026-05-13', a: -99, n: 'Vomar', desc: 'Vomar Purmerend PMNT' },
+    { d: '2026-05-11', a: -44, n: 'Vomar', desc: 'Vomar Purmerend PMNT' },   // wordt gematcht
+    { d: '2026-05-12', a: -44, n: 'Vomar', desc: 'Vomar Purmerend PMNT' },   // blijft over, tweeling is gematcht
+    { d: '2026-05-13', a: -111, n: 'Vomar', desc: 'Vomar Purmerend PMNT' },  // zeven dagen van zijn csv-kant
+  ];
   const alles = rij(CSVZ, 'csv', zCsv).concat(rij(PZ, 'psd2', zPsdLaat.concat(zExtra)))
-    .concat(rij(CSVX, 'csv', xCsv)).concat(rij(PM, 'psd2', mPsd));
+    .concat(rij(CSVX, 'csv', xCsv)).concat(rij(PM, 'psd2', mPsd))
+    .concat(rij(CSVB, 'csv', bCsv)).concat(rij(PB, 'psd2', bPsd));
   const ps = {
     [PZ]: { uid: 'u-z', iban: 'DE89' + PZ, hash: 'h-z', label: 'Zakgeld', bank: 'N26', exp: '2026-12-27' },
     [PM]: { uid: 'u-m', iban: 'DE89' + PM, hash: 'h-m', label: 'Main', bank: 'N26', exp: '2026-12-27' },
+    [PB]: { uid: 'u-b', iban: 'DE89' + PB, hash: 'h-b', label: 'Buffer Comfort', bank: 'N26', exp: '2026-12-27' },
   };
   return {
     minder_tx: JSON.stringify(alles), minder_ovr: '{}',
@@ -92,6 +144,17 @@ async function boot(page, opt) {
 }
 const blok = (page, opt) => boot(page, opt).then(() => page.evaluate(() => diagCsvPsd2().join('\n')));
 /* de regels van EEN paar, zodat een assertie niet over de hele uitvoer staat (v281, meetles j) */
+/* de regels van EEN paar binnen een sectie: vanaf zijn kopregel tot de volgende kopregel met een pijl.
+   Zonder deze knip staat elke assertie over ALLE paren tegelijk, en dan verschuift hij zodra de fixture
+   een paar krijgt (v281, meetles j). */
+function paarStuk(t, kop, volgende, csv) {
+  const r = stuk(t, kop, volgende).split('\n');
+  const a = r.findIndex((x) => x.indexOf(csv + ' -> ') >= 0);
+  if (a < 0) return '';
+  const rest = r.slice(a + 1);
+  const b = rest.findIndex((x) => / -> /.test(x));
+  return [r[a]].concat(b < 0 ? rest : rest.slice(0, b)).join('\n');
+}
 /* de TABELregel van een maand, en niet de kopregel die diezelfde maand in zijn venster noemt */
 const tabelRij = (s, m) => s.split('\n').find((x) => new RegExp('^\\s+' + m + '\\s+\\d').test(x)) || '';
 function stuk(t, kop, volgende) {
@@ -186,7 +249,7 @@ test.describe('2 · b, dekt psd2 het csv-venster', () => {
 test.describe('3 · c, aantal en som per maand, uit en in apart', () => {
   test('sluiten de maanden aan, dan staat er ja en het totaal ook', async ({ page }) => {
     const t = await blok(page);
-    const s = stuk(t, 'c. PER PAAR');
+    const s = paarStuk(t, 'c. PER PAAR', 'd. DE MATCH', CSVZ);
     const r = s.split('\n').filter((x) => /^\s+2026-/.test(x));
     expect(r.length).toBe(3);
     for (const x of r) expect(x.trim().endsWith('ja'), x).toBe(true);
@@ -195,7 +258,7 @@ test.describe('3 · c, aantal en som per maand, uit en in apart', () => {
 
   test('uit en in staan apart en in de juiste kolom', async ({ page }) => {
     const t = await blok(page);
-    const s = stuk(t, 'c. PER PAAR');
+    const s = paarStuk(t, 'c. PER PAAR', 'd. DE MATCH', CSVZ);
     /* januari: een bijschrijving van 100 en een afschrijving van 22,50 */
     expect(tabelRij(s, '2026-01')).toMatch(/2026-01\s+2\s+23\s+100\s+2\s+23\s+100\s+ja/);
     /* februari: alleen afschrijvingen, dus in is nul */
@@ -204,7 +267,7 @@ test.describe('3 · c, aantal en som per maand, uit en in apart', () => {
 
   test('sluit een maand niet aan, dan staat er NEE bij die maand en bij het totaal', async ({ page }) => {
     const t = await blok(page, { scheef: true });
-    const s = stuk(t, 'c. PER PAAR');
+    const s = paarStuk(t, 'c. PER PAAR', 'd. DE MATCH', CSVZ);
     const feb = tabelRij(s, '2026-02'), jan = tabelRij(s, '2026-01');
     expect(feb.trim().endsWith('NEE'), feb).toBe(true);
     expect(jan.trim().endsWith('ja'), 'alleen de maand met het verschil mag NEE zeggen').toBe(true);
@@ -213,7 +276,7 @@ test.describe('3 · c, aantal en som per maand, uit en in apart', () => {
 
   test('een ander BEDRAG bij een gelijk aantal geeft ook NEE', async ({ page }) => {
     const t = await blok(page, { scheefBedrag: true });
-    const s = stuk(t, 'c. PER PAAR');
+    const s = paarStuk(t, 'c. PER PAAR', 'd. DE MATCH', CSVZ);
     const feb = tabelRij(s, '2026-02');
     expect(feb).toMatch(/2026-02\s+2\s+63\s+0\s+2\s+70\s+0/);   // gelijk aantal, andere som
     expect(feb.trim().endsWith('NEE'), feb).toBe(true);
@@ -222,10 +285,20 @@ test.describe('3 · c, aantal en som per maand, uit en in apart', () => {
 
   test('een ander AANTAL bij een gelijke som geeft ook NEE', async ({ page }) => {
     const t = await blok(page, { scheefAantal: true });
-    const s = stuk(t, 'c. PER PAAR');
+    const s = paarStuk(t, 'c. PER PAAR', 'd. DE MATCH', CSVZ);
     const feb = tabelRij(s, '2026-02');
     expect(feb).toMatch(/2026-02\s+2\s+63\s+0\s+3\s+63\s+0/);   // gelijke som, ander aantal
     expect(feb.trim().endsWith('NEE'), feb).toBe(true);
+  });
+
+  /* v283: (c) KLEMT DE PSD2-KANT OP HET CSV-VENSTER en meet een verschuiving daardoor als een verschil.
+     Die waarschuwing hoort erbij te staan, anders leest de kolom met NEE als een oordeel terwijl (d) het
+     tegendeel kan zeggen. Zonder deze assertie kan hij weg zonder dat een test het ziet. */
+  test('de tabel waarschuwt voor zijn eigen vensterrand en wijst naar d', async ({ page }) => {
+    const t = await blok(page);
+    const s = stuk(t, 'c. PER PAAR', 'd. DE MATCH');
+    expect(s).toContain('de psd2-kant is hier op het csv-venster geklemd');
+    expect(s).toContain('(d) kijkt daarom buiten het venster en is de meting die beslist');
   });
 
   test('de kostenregel telt netto en alleen wat in de scope valt', async ({ page }) => {
@@ -240,6 +313,108 @@ test.describe('3 · c, aantal en som per maand, uit en in apart', () => {
     expect(r.sc, 'zonder een boeking buiten de scope toetst deze test niets').toBeLessThan(r.alle);
     expect(r.regel).toContain(r.sc + ' boekingen');
     expect(r.regel).toContain(r.netto + ' euro netto');
+  });
+});
+
+test.describe('5 \u00b7 d, de match per boeking', () => {
+  const dStuk = (t) => paarStuk(t, 'd. DE MATCH', 'e. DE OVERGEBLEVEN', CSVB);
+
+  test('de fixture draagt de vier gevallen waarop de match uiteenloopt', async ({ page }) => {
+    await boot(page);
+    /* zonder deze meting toetsen de asserties eronder niets: een tweeling BINNEN het venster maakt de
+       verruiming inert, en zonder een tweede kandidaat op een andere afstand maakt "dichtstbijzijnde
+       eerst" geen verschil (v281, meetles over een inerte sabotage). */
+    const r = await page.evaluate((v) => {
+      const c = TX.filter((t) => t.acc === v.CSVB).map((t) => t.date).sort();
+      const p = TX.filter((t) => t.acc === v.PB);
+      return { csvEind: c[c.length - 1], buiten: p.filter((t) => t.date > c[c.length - 1]).map((t) => t.date),
+        zesZes: p.filter((t) => Math.abs(t.amount + 66) < 0.005).map((t) => t.date).sort(),
+        zonderTegen: p.filter((t) => Math.abs(t.amount + 77) < 0.005).length };
+    }, { CSVB, PB });
+    expect(r.csvEind).toBe('2026-05-25');
+    expect(r.buiten, 'zonder een tweeling BUITEN het csv-venster is de verruiming inert').toEqual(['2026-05-27']);
+    expect(r.zesZes, 'twee kandidaten op verschillende afstand, anders beslist de volgorde niets').toEqual(['2026-05-12', '2026-05-14']);
+    expect(r.zonderTegen, 'de csv-boeking van 77 moet nergens een tegenhanger hebben').toBe(0);
+  });
+
+  test('vier van de vijf matchen, en de tweeling buiten het venster telt mee', async ({ page }) => {
+    const s = dStuk(await blok(page));
+    expect(s).toContain('csv 12 boekingen, psd2 14 in het verruimde venster 2026-05-02 t/m 2026-05-28');
+    expect(s).toMatch(/GEMATCHT 8 van 12 \(67%\)/);
+    /* DE VERDELING IS DE ASSERTIE EN NIET HET TOTAAL: een volgorde die eerst een boeking neemt en dan de
+       afstanden matcht er even veel, maar op andere afstanden (0d 4, 1d 1, 2d 2). */
+    expect(s, 'dichtstbijzijnde dag eerst geeft zes op nul dagen').toContain('0d 6, 1d 0, 2d 1, 3d 1');
+  });
+
+  test('de niet-gematchte csv-kant draagt zijn euro\'s in scope', async ({ page }) => {
+    const s = dStuk(await blok(page));
+    /* DRIE BLIJVEN ONGEMATCHT, TWEE DAARVAN IN SCOPE: de opname is intern en telt niet als uitgave. */
+    expect(s).toContain('NIET GEMATCHT (csv): 4   in de scope van piekVerdeling(): 3 boekingen, 243 euro netto');
+    /* de tweede van 55 heeft WEL hetzelfde bedrag op die rekening, alleen is die tegenhanger al vergeven;
+       die van 77 staat er nergens. Zonder dat onderscheid leest "verder weg" als een ruimer venster. */
+    /* twee hebben WEL hetzelfde bedrag op die rekening: de tweede van 55 (zijn tegenhanger is al vergeven)
+       en die van 111 (zeven dagen weg, buiten PAAR_DAGEN). Die van 77 en de opname staan er nergens. */
+    expect(s).toContain('verder weg: 2');
+  });
+
+  test('vier psd2-regels blijven over', async ({ page }) => {
+    const s = dStuk(await blok(page));
+    expect(s).toMatch(/OVER \(psd2\): 6/);
+  });
+
+  test('een psd2-regel wordt maar een keer gebruikt', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate((v) => {
+      const cl = TX.filter((t) => t.acc === v.CSVB).sort((a, b) => a.date.localeCompare(b.date));
+      const pl = TX.filter((t) => t.acc === v.PB).sort((a, b) => a.date.localeCompare(b.date));
+      const M = _eenOpEen(cl, pl, 3);
+      const vijftig = cl.filter((x) => Math.abs(x.amount + 55) < 0.005).length;
+      const doelVijftig = pl.filter((x) => Math.abs(x.amount + 55) < 0.005).length;
+      return { n: M.match.length, doelen: M.match.map((x) => x.p.id), uniek: new Set(M.match.map((x) => x.p.id)).size,
+        vijftig, doelVijftig };
+    }, { CSVB, PB });
+    expect(r.vijftig, 'zonder twee csv-boekingen op een tegenhanger is de een-op-een-eis inert').toBe(2);
+    expect(r.doelVijftig).toBe(1);
+    expect(r.n).toBe(8);
+    expect(r.uniek, 'twee csv-boekingen op dezelfde psd2-regel is dubbel tellen').toBe(r.doelen.length);
+  });
+
+  test('dichtstbijzijnde dag eerst: de kandidaat op afstand nul wint', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate((v) => {
+      const cl = TX.filter((t) => t.acc === v.CSVB && Math.abs(t.amount + 66) < 0.005);
+      const pl = TX.filter((t) => t.acc === v.PB).sort((a, b) => a.date.localeCompare(b.date));
+      const M = _eenOpEen(cl, pl, 3);
+      return { d: M.match[0].d, dag: M.match[0].p.date };
+    }, { CSVB, PB });
+    expect(r.d).toBe(0);
+    expect(r.dag, 'de kandidaat van 05-14 ligt twee dagen verder en mag niet winnen').toBe('2026-05-12');
+  });
+});
+
+test.describe('6 \u00b7 e, wat de overgebleven psd2-regels zijn', () => {
+  const eStuk = (t) => paarStuk(t, 'e. DE OVERGEBLEVEN', 'WAT DEZE UITVOER BESLIST', CSVB);
+
+  test('de tweelingen en het deel zonder tweeling staan apart', async ({ page }) => {
+    const s = eStuk(await blok(page));
+    expect(s).toContain('overgebleven psd2-regels: 6');
+    /* de twee van 88 op opeenvolgende dagen zijn elkaars tweeling; die van 66 ligt twee dagen van zijn
+       gelijke af en die van 123 staat alleen. */
+    /* de twee van 88 zijn elkaars tweeling en blijven allebei over; die van 44 heeft een tweeling die WEL
+       is gematcht, en die telt dus wel bij "met een tweeling" en niet bij "OOK overgebleven". */
+    expect(s).toContain('met een tweeling binnen psd2: 3   netto 220 euro   waarvan de tweeling OOK is overgebleven: 2');
+    expect(s).toContain('zonder tweeling: 3');
+  });
+
+  test('een tweeling op twee dagen afstand telt niet mee', async ({ page }) => {
+    await boot(page);
+    /* de twee van 66 liggen op 05-12 en 05-14. Zou de tweeling-toets op twee dagen staan, dan telde de
+       overgebleven 05-14 mee en zou "zonder tweeling" op 1 uitkomen in plaats van 2. */
+    const r = await page.evaluate((v) => {
+      const p = TX.filter((t) => t.acc === v.PB && Math.abs(t.amount + 66) < 0.005).map((t) => t.date).sort();
+      return _dagAfstand(p[1], p[0]);
+    }, { PB });
+    expect(r).toBe(2);
   });
 });
 

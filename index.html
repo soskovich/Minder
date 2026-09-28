@@ -14840,9 +14840,15 @@ function diagDubbel(){
         +'   anders dan booking_date '+String(+r.anders||0).padStart(5)
         +'   nieuw '+(+r.nieuw||0)+'   verrijkt '+(+r.verrijkt||0)
         +'   laatst '+(r.op||'?'));
-      L.push('      de aanroep gaf '+(dg.txN==null?'?':dg.txN)+' regels terug'
+      /* v283: HIER STOND EEN VERGELIJKING DIE NIET KON BESTAAN. De regel trok `de aanroep gaf` van
+         `langs commitTx` af en noemde het verschil "mapPsd2Tx() liet N regel(s) vallen". Die twee zijn
+         niet vergelijkbaar: `langs commitTx` is CUMULATIEF over alle syncs en `de aanroep gaf` is alleen
+         de LAATSTE. GEMETEN op het toestel na een tweede sync gaf dat op alle zes de rekeningen een
+         negatief getal (-865, -636, -185, -139, -78, -18) en een oorzaak die de code niet kan vaststellen.
+         De twee getallen staan nu naast elkaar met hun eenheid erbij en worden niet meer afgetrokken. */
+      L.push('      de aanroep gaf bij de LAATSTE sync '+(dg.txN==null?'?':dg.txN)+' regels terug'
         +(dg.txFout?('   FOUT: '+dg.txFout):'')
-        +(dg.txN!=null&&dg.txN!==(+r.gezien||0)?('   VERSCHIL met commitTx: mapPsd2Tx() liet '+(dg.txN-(+r.gezien||0))+' regel(s) vallen, cumulatief tegen één sync'):''));
+        +'   (de teller hierboven is cumulatief over alle syncs, dus die twee tellen niet hetzelfde)');
     }
   }
   /* EEN REKENING DIE NOOIT LANGS commitTx() KWAM IS DE EIGENLIJKE VONDST, want dan zegt een nul over het
@@ -14978,6 +14984,49 @@ function diagDubbel(){
   L.push('    Dat is dezelfde derde kalender die v273 verbood, nu per betaalwijze in plaats van per bank.');
   return L;
 }
+/* v283: het venster waarbinnen twee bronnen dezelfde boeking op een andere dag mogen dragen, en hoeveel
+   dagen de psd2-kant buiten het csv-venster mag kijken. Los benoemd, want ze beslissen wat er matcht en
+   een lezer moet ze kunnen verschuiven zonder de code te lezen. */
+const PAAR_DAGEN = 3;
+const PAAR_RAND = 3;
+/* EEN kalenderafstand in hele dagen, en EEN datumverschuiving. Stonden als losse uitdrukking in blok 10;
+   met een tweede ernaast lopen ze bij de eerste wijziging uiteen (v104). `ymdVan()` houdt de lokale
+   kalenderdag aan, want `toISOString()` geeft de UTC-dag (v199). */
+function _dagAfstand(a, b){
+  return Math.abs(Math.round((new Date(String(a).slice(0,10)+'T00:00:00') - new Date(String(b).slice(0,10)+'T00:00:00'))/864e5));
+}
+function _dagPlus(ymd, n){
+  const d=new Date(String(ymd).slice(0,10)+'T00:00:00'); d.setDate(d.getDate()+(+n||0)); return ymdVan(d);
+}
+/* v283: EEN-OP-EEN TOEWIJZING, DICHTSTBIJZIJNDE DAG EERST. De buitenste lus is de dagafstand en niet de
+   boeking: zo krijgt elke boeking op afstand nul voorrang op elke boeking op afstand een, en dat is wat
+   "dichtstbijzijnde dag eerst" betekent. Binnen een afstand loopt hij de nog vrije csv-boekingen op
+   datumvolgorde af, dus de uitkomst is deterministisch.
+   HIJ IS GULZIG EN NIET OPTIMAAL: bij meer dan een kandidaat op dezelfde afstand beslist de volgorde van
+   de csv-boekingen welke tweeling aan welke boeking hangt. Wat die volgorde BINNEN een afstand niet kan
+   veranderen is het AANTAL op afstand nul, want daar is de dag gelijk en valt er per bedrag en dag niets
+   te kiezen. De volgorde van de twee LUSSEN kan dat wel: neem je eerst een boeking en dan de afstanden,
+   dan kan een boeking een kandidaat wegnemen die een andere op afstand nul had kunnen gebruiken.
+   EEN PSD2-BOEKING WORDT HOOGSTENS EEN KEER GEBRUIKT. Zonder die eis zou een enkele psd2-regel meerdere
+   csv-regels kunnen dekken en telt "gematcht" te hoog; dat is precies de zwakte die 4c van blok 10 bij
+   zijn parenscan noemt. */
+function _eenOpEen(cl, pl, dagen, afstand){
+  const D = afstand || _dagAfstand;
+  const vrij = pl.map(t=>({t, op:false}));
+  const perB = new Map();
+  for(const k of vrij){ const b=(+k.t.amount).toFixed(2); if(!perB.has(b)) perB.set(b, []); perB.get(b).push(k); }
+  const open = cl.slice(), match = [];
+  for(let d=0; d<=dagen; d++){
+    for(let i=0;i<open.length;i++){
+      const c=open[i]; if(!c) continue;
+      for(const k of (perB.get((+c.amount).toFixed(2))||[])){
+        if(k.op || D(k.t.date, c.date)!==d) continue;
+        k.op=true; match.push({c, p:k.t, d}); open[i]=null; break;
+      }
+    }
+  }
+  return {match, csvNiet:open.filter(Boolean), psdOver:vrij.filter(k=>!k.op).map(k=>k.t)};
+}
 /* ===== BLOK 11: DE CSV-IMPORT TEGEN DE PSD2-KOPPELING, PER REKENING (v282) =====
    DE AANLEIDING IS EEN TEGENSPRAAK IN SECTIE 6 VAN BLOK 10: `csv | N26` zegt maandag 40 en weekend 20,
    `psd2 | N26` zegt bij DEZELFDE bank maandag 8 en weekend 38, over overlappende periodes. Zolang niet
@@ -15017,7 +15066,7 @@ function diagCsvPsd2(){
     for(const t of lj){ const k=t.date+'|'+(+t.amount).toFixed(2); if(!dag.has(k)) dag.set(k,0); dag.set(k,dag.get(k)+1); }
     idx[p]={lj, ids, dag};
   }
-  const dagenTussen=(a,b)=>Math.abs(Math.round((new Date(a+'T00:00:00')-new Date(b+'T00:00:00'))/864e5));
+  const dagenTussen=_dagAfstand;   // v283: een bron voor de kalenderafstand (v104)
 
   const paren=[];
   L.push('');
@@ -15088,6 +15137,13 @@ function diagCsvPsd2(){
   L.push('');
   L.push('c. PER PAAR PER MAAND IN HET CSV-VENSTER: AANTAL EN SOM, CSV TEGEN PSD2, UIT EN IN APART');
   L.push('   uit en in zijn de sommen van de negatieve en de positieve bedragen, beide als positief getal.');
+  /* v283: DEZE TABEL DRAAGT EEN ARTEFACT AAN DE VENSTERRAND, en dat hoort erbij te staan in plaats van
+     stil te blijven. De psd2-kant is op het csv-venster geklemd, dus een psd2-regel die een paar dagen
+     later staat dan zijn csv-tweeling valt erbuiten terwijl de csv-kant erin blijft, en dan leest dat als
+     een verschil terwijl het een verschuiving is. (d) hieronder heeft dat niet en beslist. */
+  L.push('   LET OP: de psd2-kant is hier op het csv-venster geklemd, dus een regel die een paar dagen later');
+  L.push('     staat valt erbuiten terwijl zijn csv-tweeling erin blijft. Dat leest als een verschil en is een');
+  L.push('     verschuiving. (d) kijkt daarom buiten het venster en is de meting die beslist.');
   if(!paren.length) L.push('   geen enkel paar, dus niets te vergelijken');
   for(const pr of paren){
     const cv=venster(pr.csv); if(!cv) continue;
@@ -15117,16 +15173,107 @@ function diagCsvPsd2(){
       +sc.length+' boekingen, '+Math.round(som(sc,t=>-t.amount))+' euro netto in de scope van piekVerdeling()');
   }
 
+  /* ===== d. DE MATCH PER BOEKING (v283) =====
+     DE MAANDSOMMEN VAN (c) KUNNEN DE VRAAG NIET BEANTWOORDEN die beslist, en ze dragen een artefact.
+     De vraag is of de csv een DEELVERZAMELING van psd2 is: heeft elke csv-boeking een tegenhanger, dan
+     verlies je met uitsluiten niets en is het irrelevant dat psd2 er meer heeft. Het artefact is de
+     vensterrand: (c) klemt de psd2-kant op het csv-venster, dus een psd2-regel die een paar dagen later
+     staat dan zijn csv-tweeling valt erbuiten terwijl de csv-kant erin blijft. Hier mag de psd2-kant
+     daarom PAAR_RAND dagen buiten dat venster kijken.
+     DICHTSTBIJZIJNDE DAG EERST, EN EEN PSD2-REGEL WORDT MAAR EEN KEER GEBRUIKT. De lus loopt van
+     dagafstand 0 naar PAAR_DAGEN en pakt per afstand de nog vrije csv-boekingen op datumvolgorde. Dat is
+     een gulzige toewijzing en geen optimale: bij meer dan een kandidaat op dezelfde afstand beslist de
+     volgorde welke tweeling aan welke boeking hangt. Wat het NIET verandert is het AANTAL op afstand nul,
+     en de verdeling eronder laat zien hoeveel speling er is.
+     DE NIET-GEMATCHTE CSV-KANT IS DE GEVAARLIJKE, want die zou je bij een uitsluiting kwijtraken; de
+     overgebleven psd2-kant is onschuldig. Daarom staan de euro's in scope alleen bij de eerste. */
+  L.push('');
+  L.push('d. DE MATCH PER BOEKING, EEN-OP-EEN, DICHTSTBIJZIJNDE DAG EERST');
+  L.push('   venster '+PAAR_DAGEN+' dagen; de psd2-kant mag '+PAAR_RAND+' dagen buiten het csv-venster kijken.');
+  L.push('   een psd2-boeking wordt hoogstens een keer gebruikt, dus dit is een een-op-een-toewijzing.');
+  if(!paren.length) L.push('   geen enkel paar, dus niets te matchen');
+  const matchVan={};
+  for(const pr of paren){
+    const cv=venster(pr.csv); if(!cv) continue;
+    const van=_dagPlus(cv[0], -PAAR_RAND), tot=_dagPlus(cv[1], PAAR_RAND);
+    const cl=lijstVan(pr.csv).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const pl=idx[pr.psd2].lj.filter(t=>t.date>=van && t.date<=tot).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const M=_eenOpEen(cl, pl, PAAR_DAGEN, dagenTussen);
+    matchVan[pr.csv]=M;
+    const sc=M.csvNiet.filter(inScope);
+    L.push('   '+pr.csv+' -> '+pr.psd2);
+    L.push('     csv '+cl.length+' boekingen, psd2 '+pl.length+' in het verruimde venster '+van+' t/m '+tot);
+    L.push('     GEMATCHT '+M.match.length+' van '+cl.length
+      +(cl.length?(' ('+Math.round(M.match.length/cl.length*100)+'%)'):'')
+      +'   verdeling van de dagafstand: '+(M.match.length?[...Array(PAAR_DAGEN+1).keys()]
+        .map(d=>d+'d '+M.match.filter(x=>x.d===d).length).join(', '):'-'));
+    L.push('     NIET GEMATCHT (csv): '+M.csvNiet.length
+      +'   in de scope van piekVerdeling(): '+sc.length+' boekingen, '+Math.round(som(sc,t=>-t.amount))+' euro netto');
+    if(M.csvNiet.length){
+      /* zou een RUIMER venster ze alsnog pakken? Dat is de toets of PAAR_DAGEN te krap staat, en hij is
+         los van de toewijzing: hij vraagt alleen of ergens op die rekening hetzelfde bedrag staat. */
+      let verder=0, dichtst=null;
+      for(const c of M.csvNiet){
+        let best=null;
+        for(const t of idx[pr.psd2].lj){ if(Math.abs(t.amount-c.amount)>=0.005) continue;
+          const d=dagenTussen(t.date, c.date); if(best===null || d<best) best=d; }
+        if(best!==null){ verder++; if(dichtst===null || best<dichtst) dichtst=best; }
+      }
+      L.push('       daarvan met WEL hetzelfde bedrag ergens op die rekening, maar verder weg: '+verder
+        +(dichtst!==null?('   kleinste afstand daar: '+dichtst+' dagen'):'')
+        +(verder?'   <-- een ruimer venster zou deze alsnog pakken':''));
+      const namen={}; for(const c of M.csvNiet){ const n=String(c.name||'?').slice(0,24); namen[n]=(namen[n]||0)+1; }
+      L.push('       de vaakst voorkomende namen: '+Object.keys(namen).sort((a,b)=>namen[b]-namen[a]).slice(0,5)
+        .map(n=>n+' '+namen[n]+'x').join(' | '));
+    }
+    L.push('     OVER (psd2): '+M.psdOver.length+'   uit '+Math.round(-som(M.psdOver,t=>Math.min(t.amount,0)))
+      +'   in '+Math.round(som(M.psdOver,t=>Math.max(t.amount,0))));
+  }
+
+  /* ===== e. WAT DE OVERGEBLEVEN PSD2-REGELS ZIJN (v283) =====
+     MEER HISTORIE OF DUBBELING BINNEN PSD2 ZELF, en dat zijn twee verschillende antwoorden. Heeft een
+     overgebleven regel een TWEELING op dezelfde rekening (zelfde bedrag, dezelfde of de volgende dag), dan
+     is hij kandidaat voor een dubbel BINNEN psd2; heeft hij die niet, dan draagt psd2 daar gewoon meer dan
+     de csv-export. DE TWEELING WORDT IN DE HELE REKENING GEZOCHT en niet alleen onder de overgeblevenen,
+     want de tegenhanger kan best aan een csv-regel gematcht zijn.
+     ER WORDT GETELD IN BOEKINGEN EN NIET IN PAREN, dus twee regels die elkaars tweeling zijn tellen allebei.
+     De regel eronder zegt hoeveel daarvan een tweeling hebben die OOK is overgebleven; dat is de hardere
+     aanwijzing voor dubbeling, want dan staat het paar volledig buiten de csv. */
+  L.push('');
+  L.push('e. DE OVERGEBLEVEN PSD2-REGELS: MEER HISTORIE OF EEN DUBBELING BINNEN PSD2');
+  L.push('   een tweeling is: dezelfde rekening, hetzelfde bedrag, dezelfde of de volgende dag.');
+  if(!paren.length) L.push('   geen enkel paar, dus niets over');
+  for(const pr of paren){
+    const M=matchVan[pr.csv]; if(!M) continue;
+    const over=M.psdOver, overSet=new Set(over);
+    let tw=0, twSom=0, twBeide=0;
+    for(const t of over){
+      let twin=null;
+      for(const x of idx[pr.psd2].lj){ if(x===t) continue;
+        if(Math.abs(x.amount-t.amount)>=0.005) continue;
+        if(dagenTussen(x.date, t.date)>1) continue;
+        twin=x; if(overSet.has(x)) break; }
+      if(twin){ tw++; twSom+=-t.amount; if(overSet.has(twin)) twBeide++; }
+    }
+    L.push('   '+pr.csv+' -> '+pr.psd2+'   overgebleven psd2-regels: '+over.length
+      +'   netto '+Math.round(som(over,t=>-t.amount))+' euro');
+    L.push('     met een tweeling binnen psd2: '+tw+'   netto '+Math.round(twSom)+' euro'
+      +'   waarvan de tweeling OOK is overgebleven: '+twBeide);
+    L.push('     zonder tweeling: '+(over.length-tw)+'   dat is het deel dat psd2 MEER draagt dan de csv-export');
+  }
   L.push('');
   L.push('WAT DEZE UITVOER BESLIST');
-  L.push('  kloppen aantal, uit en in per maand, dan zijn de csv-regels binnen dat venster dezelfde boekingen');
-  L.push('    als de psd2-regels en is het voorstel: een csv-regel binnen een door psd2 gedekt venster telt');
-  L.push('    niet mee. Dat is een uitsluiting op VENSTER en niet op boeking, dus er hoeft geen scheider per');
-  L.push('    paar te bestaan, en dat is precies waarom het kan: t.id en de desc-tijd kunnen het hier niet.');
-  L.push('  kloppen ze NIET, dan dekken de twee bronnen niet hetzelfde en moet er per paar een scheider komen;');
-  L.push('    dan zegt de kolom met NEE in welke maand het verschil zit en is dat de plek om te zoeken.');
-  L.push('  WAT DIT BLOK NIET KAN ZEGGEN: dat twee boekingen dezelfde BETALING zijn. Gelijke aantallen en');
-  L.push('    gelijke sommen zijn een correspondentie en geen identiteit; de identiteit die de app kent is');
+  L.push('  (d) BESLIST EN (c) NIET. De vraag is of de csv een DEELVERZAMELING van psd2 is, en dat is het');
+  L.push('    aantal NIET GEMATCHT aan de csv-kant. Staat dat op nul, dan raakt een uitsluiting op venster');
+  L.push('    geen enkele boeking kwijt, en dan is het irrelevant dat psd2 er meer draagt. Staat het boven');
+  L.push('    nul, dan zijn dat precies de boekingen die je zou verliezen, en de euro\'s erbij zeggen hoeveel.');
+  L.push('  (e) ZEGT WAT DE REST IS. Hebben de overgebleven psd2-regels geen tweeling, dan draagt psd2 daar');
+  L.push('    meer historie dan de csv-export en is er niets mis. Hebben ze die wel, en is de tweeling OOK');
+  L.push('    overgebleven, dan staat er een dubbel BINNEN psd2 en is dat een eigen vraag, los van de csv.');
+  L.push('  (c) BLIJFT STAAN ALS GROVERE BLIK, met de waarschuwing erboven: hij klemt de psd2-kant op het');
+  L.push('    csv-venster en meet een verschuiving daardoor als een verschil.');
+  L.push('  WAT DIT BLOK NIET KAN ZEGGEN: dat twee boekingen dezelfde BETALING zijn. Een gelijk bedrag binnen');
+  L.push('    een paar dagen is een correspondentie en geen identiteit; de identiteit die de app kent is');
   L.push('    t.id, en die verschilt hier per constructie. Een uitsluiting op venster aanvaardt dat.');
   return L;
 }

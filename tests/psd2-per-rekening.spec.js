@@ -79,7 +79,12 @@ function seed() {
       /* DE TELLER PER REKENING, plus een oudere VLAKKE meting ernaast (de vorm van v277). */
       valutaTally: {
         [ABN]: { gezien: 12, veld: 0, anders: 0, nieuw: 0, verrijkt: 0, op: ymd(now) },
-        [N26]: { gezien: 8, veld: 6, anders: 4, nieuw: 2, verrijkt: 4, op: ymd(now) },
+        /* v283: BIJ N26 LOPEN DE TWEE GETALLEN UITEEN, en dat is het geval waarvoor de regel bestaat.
+           `gezien` is CUMULATIEF over alle syncs en `txN` is alleen de LAATSTE, dus na een tweede sync
+           staat de teller hoger dan wat de aanroep teruggaf. Bij ABN zijn ze gelijk (12 en 12), zodat
+           beide standen in de fixture zitten. Zonder dit verschil kan een sabotage die de twee weer van
+           elkaar aftrekt per constructie niets veranderen. */
+        [N26]: { gezien: 25, veld: 6, anders: 4, nieuw: 2, verrijkt: 4, op: ymd(now) },
         gezien: 184, nieuw: 0, verrijkt: 0, op: '2026-09-27',
       },
     }),
@@ -230,8 +235,18 @@ test.describe('3 - de value_date-teller staat per rekening', () => {
   test('het totaal is de som van de rekeningen en geen eigen getal', async ({ page }) => {
     await boot(page);
     const t = await sectie(page, '5. DE VALUTADATUM');
-    // 12 + 8 = 20, en de oudere vlakke 184 telt daar NIET in mee
-    expect(t).toContain('som over de rekeningen): 20 psd2-regels');
+    /* v283: DE SOM WORDT UIT DE FIXTURE GELEZEN EN NIET OPGESCHREVEN. Met een vast getal valt deze test
+       om zodra de fixture een teller wijzigt, terwijl de eigenschap die hij vasthoudt (het totaal is de
+       SOM van de rijen en geen eigen getal ernaast) daar niets mee te maken heeft (v256). De oudere
+       VLAKKE sleutel telt er per constructie niet in mee, en dat is wat de tweede assertie vastlegt. */
+    const w = await page.evaluate(() => {
+      const V = SET.valutaTally || {};
+      return Object.keys(V).filter((k) => V[k] && typeof V[k] === 'object')
+        .reduce((s, k) => s + (+V[k].gezien || 0), 0);
+    });
+    expect(w).toBeGreaterThan(0);
+    expect(t).toContain('som over de rekeningen): ' + w + ' psd2-regels');
+    expect(t, 'de oudere vlakke meting mag niet in het totaal meetellen').not.toContain('som over de rekeningen): ' + (w + 184));
     expect(t).toContain('met een value_date: 6');
     expect(t).toContain('daarvan ANDERS dan booking_date: 4');
     expect(t).toContain('nieuw binnen MET het veld: 2');
@@ -293,8 +308,26 @@ test.describe('3 - de value_date-teller staat per rekening', () => {
     const t = await sectie(page, '5. DE VALUTADATUM');
     const bank = await page.evaluate((a) => ((ACCMETA[a] || {}).bank || '-'), ABN);
     expect(t).toMatch(new RegExp(ABN + '\\s+bank ' + bank + '\\s+langs commitTx\\s+12'));
-    expect(t).toContain('de aanroep gaf 12 regels terug');
-    expect(t).toContain('de aanroep gaf 8 regels terug');
+    expect(t).toContain('de aanroep gaf bij de LAATSTE sync 12 regels terug');
+    expect(t).toContain('de aanroep gaf bij de LAATSTE sync 8 regels terug');
+  });
+
+  /* v283: DE TWEE GETALLEN WORDEN NIET MEER VAN ELKAAR AFGETROKKEN. Hier stond een regel die het verschil
+     nam en het "mapPsd2Tx() liet N regel(s) vallen" noemde, terwijl `langs commitTx` cumulatief is over
+     alle syncs en `de aanroep gaf` alleen de laatste. GEMETEN op het toestel na een tweede sync gaf dat op
+     alle zes de rekeningen een negatief getal en een oorzaak die de code niet kan vaststellen. */
+  test('de cumulatieve teller en de laatste sync staan apart, zonder vergelijking', async ({ page }) => {
+    await boot(page);
+    const t = await sectie(page, '5. DE VALUTADATUM');
+    const rij = t.split('\n').filter((x) => x.indexOf('de aanroep gaf') >= 0);
+    expect(rij.length).toBeGreaterThan(0);
+    for (const r of rij) expect(r).toContain('de teller hierboven is cumulatief over alle syncs');
+    /* de twee lopen in deze fixture UITEEN (25 tegen 8), dus een aftrekking zou hier iets opleveren */
+    const n26 = t.split('\n').find((x) => x.indexOf(N26) >= 0 && x.indexOf('langs commitTx') >= 0);
+    expect(n26).toMatch(/langs commitTx\s+25/);
+    expect(t).toContain('de aanroep gaf bij de LAATSTE sync 8 regels terug');
+    expect(t, 'een verschil tussen die twee is geen meting en mag nergens als oorzaak staan').not.toContain('liet');
+    expect(t).not.toContain('VERSCHIL met commitTx');
   });
 
   /* DE VLAKKE SLEUTELS MOGEN GEEN RIJ KRIJGEN, en dat is wat de vorm-toets werkelijk vasthoudt. De

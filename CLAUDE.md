@@ -95,6 +95,40 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE MATCH PER BOEKING BESLIST, DE MAANDSOMMEN NIET** (`v283`): de vraag is of de csv een
+  DEELVERZAMELING van psd2 is. Heeft elke csv-boeking een tegenhanger, dan raakt een uitsluiting op venster
+  niets kwijt en is het IRRELEVANT dat psd2 er meer draagt; heeft ze die niet, dan zijn dat precies de
+  boekingen die je verliest. Een maandsom kan dat verschil niet zien.
+  (c) DRAAGT EEN ARTEFACT AAN DE VENSTERRAND, en dat staat er nu bij in plaats van stil te blijven: hij
+  klemt de psd2-kant op het csv-venster, dus een psd2-regel die een paar dagen later staat dan zijn
+  csv-tweeling valt erbuiten terwijl de csv-kant erin blijft. Dat leest als een verschil en is een
+  verschuiving. (d) kijkt `PAAR_RAND` (3) dagen buiten dat venster en heeft het niet.
+  DE BUITENSTE LUS IS DE DAGAFSTAND EN NIET DE BOEKING, want dat IS "dichtstbijzijnde dag eerst": zo krijgt
+  elke boeking op afstand nul voorrang op elke boeking op afstand een. De volgorde van de csv-boekingen
+  BINNEN een afstand kan het aantal op afstand nul niet veranderen (daar is de dag gelijk en valt er per
+  bedrag en dag niets te kiezen); de volgorde van de twee LUSSEN wel, en dat is met een sabotage vastgezet.
+  EEN PSD2-REGEL WORDT HOOGSTENS EEN KEER GEBRUIKT. Zonder die eis kan één psd2-regel meerdere csv-regels
+  dekken en telt "gematcht" te hoog; dat is dezelfde zwakte die 4c van blok 10 bij zijn parenscan noemt.
+  DE NIET-GEMATCHTE CSV-KANT DRAAGT DE EURO'S en de overgebleven psd2-kant niet: de eerste is wat je zou
+  verliezen, de tweede is onschuldig. En de toets of een RUIMER venster ze alsnog zou pakken staat erbij,
+  zodat `PAAR_DAGEN` beoordeeld kan worden zonder de code te lezen.
+- **WAT OVERBLIJFT AAN DE PSD2-KANT IS MEER HISTORIE OF EEN DUBBELING, EN DAT ZIJN TWEE ANTWOORDEN**
+  (`v283`): (e) telt van de overgebleven psd2-regels hoeveel er een TWEELING hebben op dezelfde rekening met
+  hetzelfde bedrag op dezelfde of de volgende dag, met de som, en hoeveel van die tweelingen ZELF ook zijn
+  overgebleven. Dat laatste is de hardere aanwijzing, want dan staat het paar volledig buiten de csv.
+  DE TWEELING WORDT IN DE HELE REKENING GEZOCHT en niet alleen onder de overgeblevenen: de tegenhanger kan
+  best aan een csv-regel gematcht zijn, en dan is de overgebleven kant nog steeds een kandidaat-dubbel.
+  ER WORDT GETELD IN BOEKINGEN EN NIET IN PAREN, dus twee regels die elkaars tweeling zijn tellen allebei;
+  dat staat in de uitvoer, want anders leest het getal als een aantal dubbels.
+  ZONDER TWEELING IS EEN ANTWOORD: dan draagt psd2 daar meer dan de csv-export en is er niets mis.
+- **EEN CUMULATIEVE TELLER EN EEN ENKELE SYNC WORDEN NIET VAN ELKAAR AFGETROKKEN** (`v283`): sectie 5 van
+  blok 10 nam het verschil tussen `langs commitTx` en `de aanroep gaf` en noemde dat "mapPsd2Tx() liet N
+  regel(s) vallen". Die twee tellen niet hetzelfde: de eerste is CUMULATIEF over alle syncs, de tweede is
+  alleen de LAATSTE. GEMETEN op het toestel na een tweede sync gaf dat op alle zes de rekeningen een negatief
+  getal (-865, -636, -185, -139, -78, -18) en een oorzaak die de code niet kan vaststellen.
+  HIJ VIEL NIET OP OMDAT DE TWEE TOEVALLIG GELIJK WAREN na de herkoppeling, en de regel drukte alleen af bij
+  een verschil. Dat is de vorm van een poort die per constructie niet vuurt op de toestand waarop hij is
+  geschreven; de fixture draagt sindsdien een rekening waar ze UITEENLOPEN.
 - **EEN WEES IS EEN LOSGEKOPPELDE REKENING DIE AL EEN ANDERE REKENING IS** (`v282`): twee bronnen, twee
   vragen. `rekLosgekoppeld()` zegt welke rekeningen `src=psd2`-boekingen dragen maar niet meer in
   `SET.psd2Accounts` staan; `rekWezen()` zegt welke daarvan per de identiteit van de app AL een andere
@@ -2194,7 +2228,7 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** VEERTIEN keer in achttien
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** ACHTTIEN keer in negentien
   rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze als
   incidenten; samen zijn het vijf manieren waarop dezelfde fout binnenkomt, en de vraag die alle vijf
   had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
@@ -2274,7 +2308,18 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   sabotage die de bedragvergelijking weghaalt bleef groen. Er zijn nu twee varianten die elk maar één helft
   raken (gelijk aantal met een ander bedrag, en gelijke som met een ander aantal). Bij een oordeel dat uit
   meer dan één toets bestaat hoort per toets een geval dat alleen die toets raakt.
-  WAT DE VEERTIEN GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (o) VIER SABOTAGES OP EEN RONDE, ALLE VIER DEZELFDE OORZAAK (`v283`). De match per boeking kreeg tien
+  sabotages en vier bleven groen, en geen van de vier lag aan de code: de fixture droeg het geval niet
+  waarop de twee vormen uiteenlopen. Er was geen csv-paar met hetzelfde bedrag dat om EEN tegenhanger vocht
+  (dan kan een psd2-regel per constructie niet hergebruikt worden en is de een-op-een-eis inert); geen twee
+  boekingen die om dezelfde kandidaat vochten op VERSCHILLENDE afstand (dan geeft de lusvolgorde hetzelfde
+  antwoord); geen tweeling die zelf gematcht werd (dan maakt het niet uit of je in de hele rekening of
+  alleen onder de overgeblevenen zoekt); geen niet-gematchte boeking BUITEN de scope (dan doet de
+  scope-filter op de euroregel niets); en geen tegenhanger die te ver weg lag in DAGEN (dan is het
+  dagvenster inert). DE WERKAFSPRAAK DIE DIT SCHERPER MAAKT: schrijf bij elke nieuwe regel eerst op WELK
+  GEVAL hem zou onderscheiden van de voor de hand liggende variant, en zet dat geval in de fixture met een
+  eigen assertie die meet dat het er is. Dat is goedkoper dan tien sabotages draaien en er vier terugkrijgen.
+  WAT DE ACHTTIEN GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2352,7 +2397,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v281` → `minder-v282`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v282` → `minder-v283`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
