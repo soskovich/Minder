@@ -95,6 +95,42 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **SECTIE (f) SCHRIJFT DE TWEELINGEN UIT EN BESLIST NIETS** (`v286`): sectie (e) van blok 11 telde
+  9 overgebleven psd2-regels bij Main met een tweeling (470 euro netto) en zei niet WAT ze zijn. (f)
+  geeft per paar de datum, het bedrag, de dagafstand en per kant de naam, de categorie met de
+  HERKOMST (`ruleCat`/`autoCat`/`OVR`), de referenties, de `bankRef`, de desc-tijden en de desc, en
+  daaronder `softKey`, `dupSig`, of `findDuplicateIds()` er een kant van zou opruimen en of beide
+  kanten zijn overgebleven. GEEN ENKELE APP-FUNCTIE LEEST HEM, en het blok schrijft niets (`v244`).
+  DE CATEGORIE EN DE OVERRIDE STAAN ERBIJ omdat dat bij de Geldmaat-paren van `v272` juist het
+  verschil was (`ruleCat=intern autoCat=intern OVR=overig` op een van de twee kanten), en dan telt
+  de ene kant wel als uitgave en de andere niet. Wie dit oppakt moet weten of de gebruiker dat zelf
+  zette en repareert niet iets wat een keuze is.
+  HET OORDEEL IS EEN LIJST REDENEN EN GEEN JA/NEE. De Geldmaat-vorm eist VIJF dingen tegelijk
+  (zelfde dag, geen `bankRef`, geen referentie aan beide kanten, geen twee VERSCHILLENDE desc-tijden,
+  en een naam die WEL drift maar op de eerste acht letters gelijk blijft), dus zegt het blok bij elk
+  paar dat het niet is welke van de vijf niet opgaat: welke van de vijf het is, bepaalt wat een
+  reparatie zou moeten doen. DE SCHEIDER IS ` | ` EN GEEN KOMMA, en de fixture vond dat: een reden
+  draagt er zelf een ("gelijke naam, dus geen drift"), en met een komma ertussen is de lijst niet
+  terug te lezen tot de redenen waaruit hij bestaat.
+  HET OPEN PUNT VAN `v272` IS HIERMEE PER PAAR MEETBAAR: een paar dat de vorm NIET heeft en dat
+  `findDuplicateIds()` toch zou opruimen krijgt een LET OP-regel en telt onderaan apart. Dat is de
+  PLAYSTATION-vorm (twee desc-tijden, dus per `v281` twee betalingen) en de gelijke-naam-vorm, en
+  dat zijn echte boekingen die de opschoontool zou weghalen.
+- **DE PAARVORMING VAN (f): DICHTSTBIJZIJNDE DAG EERST, EN EEN BOEKING IN HOOGUIT EEN PAAR** (`v286`):
+  de tweeling wordt in de HELE rekening gezocht en niet alleen onder de overgeblevenen, om dezelfde
+  reden als in (e): de tegenhanger kan aan een csv-regel gematcht zijn en de overgebleven kant is dan
+  nog steeds een kandidaat-dubbel. BIJ EEN GELIJKE AFSTAND WINT EEN TWEELING DIE ZELF IS OVERGEBLEVEN,
+  want dan staat het paar volledig buiten de csv en dat is de hardere aanwijzing (`v283`).
+  ZONDER DE EEN-OP-EEN-EIS TELT HET AANTAL PAREN TE HOOG, dezelfde zwakte die 4c van blok 10 bij zijn
+  parenscan noemt, en die eis is pas te toetsen bij DRIE regels van hetzelfde bedrag: bij twee is de
+  tweede na het paren toch al op. (e) TELT IN BOEKINGEN EN (f) IN PAREN, en het blok zegt dat erbij,
+  want een regel die zijn eigen tweeling is staat daar twee keer en hier een keer.
+- **`_naamAcht()` IS DE ENE NAAM-PREFIX** (`v286`): de eerste acht letters van de naam stonden twee
+  keer uitgeschreven (`_softKey` en `_dupSig`) en (f) had ze als derde nodig; een derde kopie zou bij
+  de eerste wijziging uiteenlopen (`v104`). DE AANLEIDING IS EEN VERKEERD ETIKET DAT DE FIXTURE VOND:
+  de reden "de eerste acht letters verschillen" werd uit `_softKey` afgeleid, en die begint met de
+  DATUM, dus een paar op afstand 1 kreeg die reden per constructie terwijl de letters gelijk waren
+  (SPLIFPUR aan beide kanten). Een verkeerd etiket op een reden is precies wat dit project verbiedt.
 - **DE SNEDE VAN `piekVerdeling()` STAAT OP EEN PLEK, EN ELKE SCOPE-SOM DRAAGT DE POORT** (`v285`):
   `piekInScope(t)` is het predicaat en `piekScope(m)` de lijst; zonder maand is dat de hele TELBARE
   import, want blok 9 en blok 10 meten over alle maanden en niet over een. `telbareTx()` is de poort
@@ -2316,10 +2352,10 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** NEGENTIEN keer in twintig
-  rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze als
-  incidenten; samen zijn het vijf manieren waarop dezelfde fout binnenkomt, en de vraag die alle vijf
-  had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** DRIEENTWINTIG keer in
+  eenentwintig rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los
+  lazen ze als incidenten; samen zijn het zes manieren waarop dezelfde fout binnenkomt, en de vraag die ze
+  alle had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
   (a) DE TRIPDRAAD DIE NIET KON VALLEN (`v265`). De uitsluiting van huur uit `weekScope()` moest een
   test krijgen die valt zodra `recurringCats()` huur wél als terugkerend ziet, want dan is
   `WEEK_SCOPE_UIT` dood gewicht. Mijn eerste vorm vergeleek `weekScope()` met een nagebootste
@@ -2414,7 +2450,18 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   test. DE KEUZE IS HIER EEN ANDERE DAN BIJ EEN DODE CONDITIE: de guard is niet dood, hij is alleen niet
   bereikbaar vanuit de verse stand, en dan hoort de test dat pad te maken in plaats van de guard weg te
   halen.
-  WAT DE NEGENTIEN GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (q) VIER SABOTAGES GROEN OP EEN PARENSCAN, EN ALLE VIER OMDAT DE FIXTURE BIJ TWEE OPHIELD (`v286`).
+  De een-op-een-eis (een boeking in hooguit EEN paar) kan bij twee regels van hetzelfde bedrag per
+  constructie niet vallen: de tweede is na het paren toch al op, en pas bij DRIE kan de middelste in
+  twee paren belanden. "De dichtstbijzijnde dag eerst" geeft hetzelfde antwoord als "de eerste vrije
+  kandidaat" zolang alle kandidaten op dezelfde afstand staan. De voorkeur voor een tweeling die ZELF
+  is overgebleven doet niets zolang er maar een kandidaat op die afstand is. En de scheider ` | ` is
+  niet te beoordelen zolang geen enkel paar meer dan EEN reden draagt. VIER REGELS DIE EEN KEUZE
+  TUSSEN KANDIDATEN MAKEN, EN EEN FIXTURE MET STEEDS PRECIES EEN KANDIDAAT. DE WERKAFSPRAAK DIE DIT
+  SCHERPER MAAKT, naast die van (o): bij een regel die KIEST hoort de fixture minstens twee
+  kandidaten te dragen die op de as van die keuze uiteenlopen, en bij een regel over een LIJST
+  minstens een geval met meer dan een element.
+  WAT DE DRIEENTWINTIG GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2502,7 +2549,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v284` → `minder-v285`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v285` → `minder-v286`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
