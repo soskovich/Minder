@@ -115,6 +115,22 @@ genoemde versietag.)*
   DEZE TEST BINDT BEWUST OP EEN FORMULERING ("wat het zou kosten" mag er niet meer staan), en dat mag hier
   omdat de formulering ZELF de vondst was. Dat is de uitzondering op de regel dat een test niet op een zin
   hoort te ankeren: het anker is hier de eigenschap.
+  HET AANTAL EN HET BEDRAG KOMEN UIT DEZELFDE VERZAMELING, en dat is apart vastgelegd omdat het de vraag is
+  die een lezer bij zo'n regel stelt: telt "5 boekingen" hetzelfde als het bedrag ernaast. De opbrengst leest
+  `sc` voor allebei, de prijs `prijs` voor allebei. De fixture draagt zes csv-boekingen in het venster
+  waarvan er VIJF in scope zijn, dus een aantal dat alles telt is te onderscheiden van een aantal dat de
+  scope telt; zonder dat verschil blijft de sabotage groen.
+  HET TOTAAL TELT DE AFGERONDE RIJEN OP EN ROND NIET DE RUWE SOM AF (`v271` in code van hetzelfde uur): de
+  lezer telt de rijen op en moet op het totaal uitkomen. De fixture draagt daarom CENTEN, 105,60 plus 23,60,
+  want per rij afronden geeft 130 en een keer aan het eind afronden 129; zonder centen zijn die twee gelijk
+  en is de keuze inert. DE ASSERTIE LEEST DE RIJEN UIT DE UITVOER en niet de constanten van de fixture, in
+  AANTAL en in BEDRAG, want juist een fixture-constante ziet niet dat de twee over verschillende sneden gaan.
+  MIJN EIGEN RAPPORT ZETTE DE 7 VAN DE FIXTURE NAAST DE 3.493 VAN HET TOESTEL, en dat was de aanleiding om
+  hier te kijken. De code klopte, het bericht niet: op het toestel is de opbrengst 206 boekingen en 3.493
+  euro (123 en 2.120 bij Main plus 83 en 1.373 bij Zakgeld) tegen een prijs van 26 boekingen en 49 euro. EEN
+  GETAL UIT EEN FIXTURE EN EEN GETAL VAN HET TOESTEL HOREN NOOIT IN DEZELFDE ZIN; dat is dezelfde vorm als
+  `v275` (een getal van het toestel hoort niet in de tekst van het blok), nu in een verslag in plaats van in
+  code.
 - **BLOK 11 ZEGT IN DE UITVOER ZELF DAT HIJ `TX` LEEST, EN WAAROM** (`v287`): meting 1 van blok 10 meldt
   over csv `0 van 0 euro` "in de scope van `piekVerdeling()`" en (c) meldt onder dezelfde woorden 2120.
   Allebei waar, want blok 11 leest bewust `TX` (`v285`) en meting 1 leest de poort, maar die reden stond

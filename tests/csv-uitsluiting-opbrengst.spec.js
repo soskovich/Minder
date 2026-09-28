@@ -36,10 +36,16 @@ const CZ = 'N26 Zakgeld', PZ = '100110012848184840';
 
 /* de bedragen staan als constante, want de asserties lezen ze terug en een getal in twee vormen loopt
    uiteen (v104). GEMATCHT is wat een tegenhanger heeft, LOS is wat er geen heeft. */
-const M_GEMATCHT = [20, 30, 40];      // in scope, met tegenhanger: 90 euro
+const M_GEMATCHT = [20.6, 30, 40];    // in scope, met tegenhanger: 90,60 euro
 const M_LOS = [7, 8];                 // in scope, zonder tegenhanger: 15 euro
 const M_LOS_INTERN = 200;             // zonder tegenhanger EN buiten de scope
-const Z_GEMATCHT = [11, 12];          // Zakgeld matcht volledig: prijs nul
+const Z_GEMATCHT = [11.6, 12];        // Zakgeld matcht volledig: prijs nul
+/* DE CENTEN ZIJN DE MEETVRAAG EN GEEN VERSIERING (v271, v287): Main komt op 105,60 en Zakgeld op
+   23,60, dus per rij afronden geeft 106 plus 24 is 130 en een keer afronden aan het eind geeft 129.
+   Zonder centen zijn die twee gelijk en is de keuze welke van de twee het totaal doet inert. */
+const som = (a) => a.reduce((x, y) => x + y, 0);
+const MAIN_E = Math.round(som(M_GEMATCHT) + som(M_LOS));   // 106
+const ZAK_E = Math.round(som(Z_GEMATCHT));                 // 24
 
 const rij = (acc, src, rows) => rows.map((r, i) => ({ id: acc + '_' + src + i, date: r.d, amount: r.a, acc, src,
   name: r.n, desc: r.desc || r.n, typ: '', ref: '', accName: '', refNums: [] }));
@@ -140,7 +146,7 @@ test.describe('1 · de regel in (c) noemt de opbrengst en de prijs', () => {
     const e = getal(s, /DE UITSLUITING HAALT HIER WEG: \d+ boekingen, (\d+) euro/);
     /* de opname telt niet als uitgave en hoort dus NIET in dit bedrag (v258) */
     expect(n).toBe(M_GEMATCHT.length + M_LOS.length);
-    expect(e).toBe(M_GEMATCHT.reduce((a, b) => a + b, 0) + M_LOS.reduce((a, b) => a + b, 0));
+    expect(e).toBe(MAIN_E);
     expect(s).toContain('dat bedrag telde ook via de psd2-kant mee');
   });
 
@@ -150,7 +156,7 @@ test.describe('1 · de regel in (c) noemt de opbrengst en de prijs', () => {
     const pn = getal(s, /DE PRIJS: (\d+) van die boekingen/);
     const pe = getal(s, /geen tegenhanger en vallen toch weg, (\d+) euro/);
     expect(pn).toBe(M_LOS.length);
-    expect(pe).toBe(M_LOS.reduce((a, b) => a + b, 0));
+    expect(pe).toBe(som(M_LOS));
     /* STRIKT KLEINER, en dat is het hele punt: zonder dit verschil is de prijsregel een kopie van de
        opbrengstregel en zegt hij niets. */
     expect(pn).toBeLessThan(getal(s, /DE UITSLUITING HAALT HIER WEG: (\d+) boekingen/));
@@ -165,15 +171,13 @@ test.describe('1 · de regel in (c) noemt de opbrengst en de prijs', () => {
        de prijs. Zonder deze twee asserties naast elkaar doet de scope-filter op de prijsregel niets. */
     expect(t).toMatch(/NIET GEMATCHT \(csv\): 3\b/);
     expect(getal(s, /DE PRIJS: (\d+) van die boekingen/)).toBe(M_LOS.length);
-    expect(getal(s, /geen tegenhanger en vallen toch weg, (\d+) euro/))
-      .toBe(M_LOS.reduce((a, b) => a + b, 0));
+    expect(getal(s, /geen tegenhanger en vallen toch weg, (\d+) euro/)).toBe(som(M_LOS));
   });
 
   test('een paar dat volledig matcht heeft prijs nul en toch een opbrengst', async ({ page }) => {
     await boot(page);
     const s = paarStuk(await blok(page), CZ);
-    expect(getal(s, /DE UITSLUITING HAALT HIER WEG: \d+ boekingen, (\d+) euro/))
-      .toBe(Z_GEMATCHT.reduce((a, b) => a + b, 0));
+    expect(getal(s, /DE UITSLUITING HAALT HIER WEG: \d+ boekingen, (\d+) euro/)).toBe(ZAK_E);
     expect(getal(s, /DE PRIJS: (\d+) van die boekingen/)).toBe(0);
     expect(getal(s, /geen tegenhanger en vallen toch weg, (\d+) euro/)).toBe(0);
   });
@@ -196,11 +200,57 @@ test.describe('2 · het totaal is de optelling van de rijen', () => {
     const oe = getal(t, /de uitsluiting haalt \d+ boekingen en (\d+) euro/);
     const pn = getal(t, /de prijs daarvan is (\d+) boekingen/);
     const pe = getal(t, /de prijs daarvan is \d+ boekingen en (\d+) euro/);
-    const som = (a) => a.reduce((x, y) => x + y, 0);
     expect(on).toBe(M_GEMATCHT.length + M_LOS.length + Z_GEMATCHT.length);
-    expect(oe).toBe(som(M_GEMATCHT) + som(M_LOS) + som(Z_GEMATCHT));
+    /* DE SOM VAN DE AFGERONDE RIJEN en niet de afronding van de ruwe som: 106 plus 24 is 130,
+       terwijl een keer afronden aan het eind 129 geeft (v271). */
+    expect(oe).toBe(MAIN_E + ZAK_E);
+    expect(oe).not.toBe(Math.round(som(M_GEMATCHT) + som(M_LOS) + som(Z_GEMATCHT)));
     expect(pn).toBe(M_LOS.length);
     expect(pe).toBe(som(M_LOS));
+  });
+
+  /* v287: DEZE ASSERTIE LEEST DE RIJEN UIT DE UITVOER en niet de constanten van de fixture, en dat is
+     de vraag die het verschil aan het licht bracht: een AANTAL en een BEDRAG kunnen over twee
+     verschillende verzamelingen gaan zonder dat een test op fixture-constanten dat ziet. Hier moet het
+     totaal per constructie de optelling zijn van wat er boven staat, in allebei de maten. */
+  test('aantal EN bedrag in het totaal zijn de optelling van de rijen erboven', async ({ page }) => {
+    await boot(page);
+    const t = await blok(page);
+    const c = t.slice(t.indexOf('c. PER PAAR'), t.indexOf('d. DE MATCH'));
+    const op = [...c.matchAll(/DE UITSLUITING HAALT HIER WEG: (\d+) boekingen, (\d+) euro/g)];
+    const pr = [...c.matchAll(/DE PRIJS: (\d+) van die boekingen[^\n]*weg, (\d+) euro/g)];
+    /* zonder meer dan een rij is het totaal gelijk aan de rij zelf en toetst dit niets */
+    expect(op.length).toBeGreaterThan(1);
+    expect(pr.length).toBe(op.length);
+    const kolom = (m, i) => m.reduce((x, y) => x + +y[i], 0);
+    expect(getal(c, /de uitsluiting haalt (\d+) boekingen/)).toBe(kolom(op, 1));
+    expect(getal(c, /de uitsluiting haalt \d+ boekingen en (\d+) euro/)).toBe(kolom(op, 2));
+    expect(getal(c, /de prijs daarvan is (\d+) boekingen/)).toBe(kolom(pr, 1));
+    expect(getal(c, /de prijs daarvan is \d+ boekingen en (\d+) euro/)).toBe(kolom(pr, 2));
+  });
+
+  test('de rijen dragen hun aantal en hun bedrag over dezelfde boekingen', async ({ page }) => {
+    await boot(page);
+    const t = await blok(page);
+    /* HET AANTAL MAG NIET EEN ANDERE SNEDE TELLEN DAN HET BEDRAG. Main draagt zes csv-boekingen in het
+       venster waarvan er VIJF in scope zijn (de opname valt af), dus een aantal dat alles telt is te
+       onderscheiden van een aantal dat de scope telt. */
+    const alle = await page.evaluate((a) => TX.filter((x) => x.acc === a.CM).length, { CM });
+    const inScope = await page.evaluate((a) => TX.filter((x) => {
+      if (x.acc !== a.CM) return false;
+      const c = catOf(x);
+      return CATS[c] && CATS[c].type === 'expense' && !isFixed(x) && !geenNorm(c);
+    }).length, { CM });
+    expect(inScope).toBeLessThan(alle);
+    const s = paarStuk(t, CM);
+    expect(getal(s, /DE UITSLUITING HAALT HIER WEG: (\d+) boekingen/)).toBe(inScope);
+    /* en het bedrag is de netto som over precies die verzameling */
+    const bedrag = await page.evaluate((a) => Math.round(TX.filter((x) => {
+      if (x.acc !== a.CM) return false;
+      const c = catOf(x);
+      return CATS[c] && CATS[c].type === 'expense' && !isFixed(x) && !geenNorm(c);
+    }).reduce((q, x) => q - x.amount, 0)), { CM });
+    expect(getal(s, /DE UITSLUITING HAALT HIER WEG: \d+ boekingen, (\d+) euro/)).toBe(bedrag);
   });
 
   test('het totaal is geen kopie van het grootste paar', async ({ page }) => {

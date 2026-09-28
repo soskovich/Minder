@@ -15383,7 +15383,12 @@ function diagCsvPsd2(){
     const sc=lijstVan(pr.csv).filter(t=>t.date>=cv[0] && t.date<=cv[1] && inScope(t));
     const prijs=(matchVan[pr.csv]||{csvNiet:[]}).csvNiet.filter(inScope);
     const scE=som(sc,t=>-t.amount), prE=som(prijs,t=>-t.amount);
-    opTot.n+=sc.length; opTot.e+=scE; prTot.n+=prijs.length; prTot.e+=prE;
+    /* v287: HET TOTAAL TELT DE AFGERONDE RIJEN OP EN ROND NIET DE RUWE SOM AF, want de lezer telt de
+       rijen op en moet op het totaal uitkomen (`v271`). Met centen lopen die twee uiteen: 105,60 plus
+       23,60 is 130 als je per rij afrondt en 129 als je een keer aan het eind afrondt. Het AANTAL en het
+       BEDRAG komen bovendien uit DEZELFDE verzameling (`sc` voor de opbrengst, `prijs` voor de prijs),
+       zodat "5 boekingen" en het bedrag ernaast nooit over twee verschillende sneden gaan. */
+    opTot.n+=sc.length; opTot.e+=Math.round(scE); prTot.n+=prijs.length; prTot.e+=Math.round(prE);
     /* BEIDE BEDRAGEN IN DE MAAT VAN DE SCOPE ZELF, dus NETTO (`-t.amount`) en niet alleen de
        afschrijvingen: zo zijn ze naast de sommen in sectie 6 van blok 10 te leggen (v265).
        v287: DEZE REGEL STOND ER ALS "wat het zou kosten", EN DAT WAS DRIE KEER MIS. De TIJD, want v284
@@ -15402,8 +15407,8 @@ function diagCsvPsd2(){
        van de regels hierboven en geen tweede meting (v104). */
     L.push('');
     L.push('   OVER ALLE PAREN, de optelling van de regels hierboven:');
-    L.push('     de uitsluiting haalt '+opTot.n+' boekingen en '+Math.round(opTot.e)+' euro netto weg die ook via psd2 meetelden');
-    L.push('     de prijs daarvan is '+prTot.n+' boekingen en '+Math.round(prTot.e)+' euro netto zonder tegenhanger');
+    L.push('     de uitsluiting haalt '+opTot.n+' boekingen en '+opTot.e+' euro netto weg die ook via psd2 meetelden');
+    L.push('     de prijs daarvan is '+prTot.n+' boekingen en '+prTot.e+' euro netto zonder tegenhanger');
   }
 
   /* ===== d. DE MATCH PER BOEKING (v283) =====
