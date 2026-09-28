@@ -947,7 +947,110 @@ function buildAccMeta(){
     const prev=ACCMETA[a]||{};
     ACCMETA[a]=Object.assign({},prev,{role,count:list.length,income:inc,label,bank:bankVanRek(a,list,pm)});
   }
+  CSVPAAR=null;   // v284: TX is veranderd, dus de paring en haar vensters worden opnieuw afgeleid
 }
+
+/* ===== v284: DE CSV-IMPORT EN DE PSD2-KOPPELING DRAGEN DEZELFDE BOEKING =====
+   DE AANLEIDING IS GEMETEN IN BLOK 11. Vier N26-Spaces kwamen eerst als csv-export binnen en staan
+   sinds de koppeling van 24 maanden ook als psd2-rekening in TX. Van de 371 csv-boekingen in die vier
+   vensters heeft de match per boeking er 345 een tegenhanger gegeven; de csv-kant is dus vrijwel een
+   DEELVERZAMELING van de psd2-kant, en elke euro in dat venster telde twee keer.
+   DE UITSLUITING GAAT OP VENSTER EN NIET PER BOEKING, en dat is een keuze met een prijs. Per boeking
+   zou scherper zijn, maar een match per boeking is geen IDENTITEIT: de desc verschilt per bron, dus
+   `t.id` verschilt, en geen enkele csv-regel draagt een tijd in zijn desc. Wat er dan overblijft is een
+   correspondentie op dag en bedrag, en die zou als OPGESLAGEN data moeten worden vastgelegd om stabiel
+   te zijn. Zulke data veroudert zonder dat iemand het merkt (v276). Een venster rekent zichzelf uit bij
+   elke boot en er wordt niets per boeking bewaard.
+   DE PRIJS STAAT IN CLAUDE.md EN IS GEMETEN: 26 boekingen van Main die "Lender Account" heten, samen 49
+   euro netto in de scope van piekVerdeling(), hebben geen tegenhanger en vallen toch weg. Daar staat
+   tegenover dat 3.493 euro netto niet langer dubbel telt.
+   GEEN PARING OF EEN GELIJKE STAND IS GEEN UITSLUITING. De paring eist dat de twee onafhankelijke
+   gronden van blok 11 het eens zijn (de bedragen en de richting), en elk van de twee geeft NIETS terug
+   bij een gelijke stand of bij nul treffers. Dan weet de app het niet, en dan telt alles gewoon mee
+   (v59/v73/v173). Dat is ook de gevaarlijke kant, en dat hoort zo: te veel tellen is zichtbaar, te
+   weinig tellen niet (v168).
+   HET VENSTER IS DAT VAN DE PSD2-REKENING ZELF, van zijn eerste tot zijn laatste boeking. Buiten dat
+   venster kan de koppeling de csv-regel per definitie niet dragen, dus daar blijft hij meetellen. */
+let CSVPAAR=null;
+/* DE PARING IS EEN AFLEIDING EN GEEN OPSLAG, en hij staat op EEN plek: blok 11 leest dezelfde functie
+   voor zijn tabel als de uitsluiting voor haar vensters. Een tweede uitdrukking ernaast zou bij de
+   eerste wijziging van de gronden uiteenlopen (v104). Wat blok 11 er zelf bij rekent is de telling op
+   `t.id`, en die doet in de paring niet mee: hij is een waarneming over de tabel, geen grond. */
+function csvPsd2Paring(){
+  const own=(typeof OWN!=='undefined'&&OWN)||[];
+  const per={}; for(const a of own) per[a]=[];
+  for(const t of (typeof TX!=='undefined'?TX:[])){ if(per[t.acc]) per[t.acc].push(t); }
+  const bronnen=a=>new Set((per[a]||[]).map(t=>t.src||'mt940'));
+  const csvAcc=own.filter(a=>{ const b=bronnen(a); return b.size===1 && b.has('csv'); });
+  const psdAcc=own.filter(a=>bronnen(a).has('psd2'));
+  const uit=[];
+  if(!csvAcc.length || !psdAcc.length) return uit;
+  const idx={};
+  for(const p of psdAcc){
+    const lj=per[p], dag=new Map();
+    for(const t of lj){ const k=t.date+'|'+(+t.amount).toFixed(2); dag.set(k,(dag.get(k)||0)+1); }
+    const d=lj.map(t=>t.date).filter(Boolean).sort();
+    idx[p]={lj, dag, van:d.length?d[0]:null, tot:d.length?d[d.length-1]:null};
+  }
+  for(const c of csvAcc){
+    const lj=per[c], sl=String(c).replace(/^N26\s+/i,'').trim().toLowerCase();
+    const rij=[];
+    for(const p of psdAcc){
+      let ex=0, w3=0;
+      for(const t of lj){
+        const k=t.date+'|'+(+t.amount).toFixed(2);
+        if(idx[p].dag.has(k)) ex++;
+        else if(idx[p].lj.some(x=>Math.abs(x.amount-t.amount)<0.005 && _dagAfstand(x.date,t.date)<=PAAR_DAGEN)) w3++;
+      }
+      let naarIn=0, vanUit=0, naarUit=0, vanIn=0;
+      for(const x of idx[p].lj){
+        const d=' '+String(x.desc||'').toLowerCase().replace(/\s+/g,' ')+' ';
+        const tNaar=d.indexOf(' to '+sl)>=0, tVan=d.indexOf(' from '+sl)>=0;
+        if(tNaar){ if(x.amount>0) naarIn++; else naarUit++; }
+        if(tVan){ if(x.amount<0) vanUit++; else vanIn++; }
+      }
+      rij.push({p, ex, w3, naarIn, vanUit, naarUit, vanIn, richt:naarIn+vanUit, spiegel:naarUit+vanIn});
+    }
+    /* EEN GELIJKE STAND WIJST NIETS AAN. Twee rekeningen met evenveel treffers zijn niet te scheiden,
+       en een voorselectie op naam of volgorde zou als vaststelling lezen (v122/v150). Nul treffers ook
+       niet: dat is geen meting maar de afwezigheid ervan. */
+    const top=veld=>{ const srt=rij.slice().sort((a,b)=>b[veld]-a[veld]);
+      if(!srt.length || !srt[0][veld]) return null;
+      if(srt.length>1 && srt[1][veld]===srt[0][veld]) return null;
+      return srt[0].p; };
+    const pb=top('ex'), pr=top('richt');
+    const paar=(pb && pr && pb===pr) ? pb : null;
+    uit.push({csv:c, n:lj.length, rij, pb, pr, psd2:paar,
+      van: paar?idx[paar].van:null, tot: paar?idx[paar].tot:null});
+  }
+  return uit;
+}
+function csvPaar(){
+  if(!CSVPAAR){
+    const rijen=csvPsd2Paring(), map={};
+    for(const r of rijen){ if(r.psd2 && r.van && r.tot) map[r.csv]={psd2:r.psd2, van:r.van, tot:r.tot}; }
+    CSVPAAR={rijen, map};
+  }
+  return CSVPAAR;
+}
+/* DE POORT, EN VERDER NIETS. Alleen een csv-boeking, alleen op een gepaarde rekening, alleen binnen het
+   venster van de psd2-kant. De boeking blijft gewoon in TX en in de transactielijst staan: wat hier
+   gebeurt is dat hij niet meer in een som terechtkomt, en een boeking die stil uit je lijst verdwijnt is
+   erger dan een dubbele die je ziet (v281).
+   DE BRON-TOETS IS DE GUARD OP EEN VEROUDERDE CACHE en niet op de gewone stand: een gepaarde rekening
+   draagt per constructie ALLEEN csv (`csvPsd2Paring()` eist `b.size===1 && b.has('csv')`), dus zolang de
+   cache vers is kan deze regel niet vuren. Hij vuurt wel zodra TX verandert zonder dat `buildAccMeta()`
+   eraan te pas kwam, en dan is een psd2-boeking op die rekening precies wat je niet mag wegtellen. Dat
+   pad staat als eigen test in de spec, anders is dit een guard die niet kan vallen (meetles o). */
+function csvDubbel(t){
+  if(!t || (t.src||'')!=='csv') return false;
+  const e=csvPaar().map[t.acc];
+  return !!(e && t.date>=e.van && t.date<=e.tot);
+}
+/* DE MAAT IS WAT HET GETAL OP DE KAART DRAAGT: netto uitgave in een categorie MET norm, dus precies de
+   bijdrage aan spendNorm die wegvalt. Een uitgesloten overboeking of een uitgesloten inkomen telde daar
+   per constructie nooit in mee, en die staan daarom niet in het bedrag maar wel in de sheet erachter. */
+function csvDubbelTelt(t){ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !geenNorm(c)); }
 
 /* ---------- MT940 parser (ABN AMRO, beide :86:-formaten) ---------- */
 function parseMT940(text){
@@ -1163,7 +1266,7 @@ function netSpend(txns){ let s=0; for(const t of txns){ if(isExpenseTx(t)) s+=-t
 
 /* ---------- maand-helpers ---------- */
 function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!base.length) return []; const s=new Set(base); const n=new Date(); s.add(n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')); return [...s].sort(); }
-function txOfMonth(m){ return TX.filter(t=>t.date.slice(0,7)===m); }
+function txOfMonth(m){ return TX.filter(t=>t.date.slice(0,7)===m && !csvDubbel(t)); }   // v284: een csv-regel binnen het venster van zijn gekoppelde psd2-rekening telt hier niet mee
 /* v264: DE WEEKAS, ALS BRON EN NOG ZONDER SCHERM. Blokken van zeven dagen vanaf de 1e van elke
    maand, dus 1-7, 8-14, 15-21 en 22-28; wat er daarna van de maand overblijft is GEEN blok en komt
    hier niet in voor. GEREKEND op de kalender van 2026: kalenderweken laten 10,1 procent van de
@@ -1257,7 +1360,7 @@ function periodMonths(){
   const cm=(curMonth&&ms.includes(curMonth))?curMonth:ms[ms.length-1];
   return [cm];
 }
-function periodTx(){ const set=new Set(periodMonths()); return TX.filter(t=>set.has(t.date.slice(0,7))); }
+function periodTx(){ const set=new Set(periodMonths()); return TX.filter(t=>set.has(t.date.slice(0,7)) && !csvDubbel(t)); }   // v284: zelfde poort als txOfMonth(), zodat een drill-down optelt tot het cijfer erboven
 function periodLabel(){ const pm=periodMonths(); if(!pm.length) return '';
   if(pm.length===1) return monthLabel(pm[0]);
   const ms=months(); const yr=pm[0].slice(0,4); const inYr=ms.filter(m=>m.slice(0,4)===yr);
@@ -10134,7 +10237,7 @@ function openMerchant(key){
    die maand leest deze lijst curMonth, en dat is de maand die je op Inzichten koos. Laat je m weg,
    dan blijft alles zoals het was: de getoonde periode. */
 function openCategory(k, m){
-  const bron = m ? TX.filter(x=>x.date.slice(0,7)===m) : periodTx();
+  const bron = m ? txOfMonth(m) : periodTx();   // v284: was een tweede uitdrukking van txOfMonth() en kende de uitsluiting dus niet (v104)
   const items=bron.filter(x=>catOf(x)===k).sort((a,b)=>b.date.localeCompare(a.date));   // beide tekens: ook terugstortingen tonen
   if(!items.length) return; const c=CATS[k];
   const tot=items.reduce((s,t)=>s-t.amount,0);   // netto: een terugstorting verlaagt het categorietotaal
@@ -10291,9 +10394,14 @@ function renderTxList(){
     if(multi&&mo!==lastMo){ lastMo=mo; body+=`<div class="tx-mhead">${monthLabel(mo)}</div>`; }
     if(t.date!==lastDay){ lastDay=t.date; body+=`<div class="tx-day">${dayHeader(t.date,multi)}</div>`; }
     const c=CATS[catOf(t)]; const ong=txOutlier(t,catAvg); const pnd=t.pending;
+    /* v284: een uitgesloten boeking blijft in de lijst staan, want stil verdwijnen is erger dan een
+       dubbele die je ziet (v281). Maar hem ONgemarkeerd tonen terwijl hij nergens meetelt is zelf een
+       leugen, dus hij zegt het hier, in dezelfde subregel die 'in behandeling' en 'afwijkend bedrag'
+       al dragen. Geen nieuw element en geen tweede detectie: dezelfde csvDubbel() als de sommen. */
+    const dub=csvDubbel(t);
     body+=`<div class="tx" onclick="openSheet('${t.id}')"${pnd?' style="opacity:.62"':''}>
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(t.name)}</div>${pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--mut)">• ${jrg('afwijkendbedrag','afwijkend bedrag')}</div>`:'')}</div>
+      <div class="info"><div class="nm">${esc(t.name)}</div>${dub?`<div class="cat" style="color:var(--mut)">• telt niet mee, ook via je bankkoppeling</div>`:(pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--mut)">• ${jrg('afwijkendbedrag','afwijkend bedrag')}</div>`:''))}</div>
       <div class="amt ${t.amount>0?'pos':''}" style="font-weight:700">${t.amount>0?'+':''}${euro(t.amount)}</div>
     </div>`;
   }
@@ -11863,7 +11971,7 @@ function insBudgetBlok(m){
       <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${balkKleur}"></div></div>
       ${isLopendeMaand(m)?`<i title="de maand is ${dayPct}% voorbij" style="position:absolute;top:-3px;height:15px;left:${Math.min(Math.max(dayPct,0),100)}%;width:2px;background:var(--mut2);border-radius:1px"></i>`:''}</div>
     ${isLopendeMaand(m)?`<div class="small" style="color:var(--mut2);margin-top:5px">de streep staat waar de maand nu is: ${dayPct}% voorbij</div>`:''}${budgetOverZin(sp,bud,d,over,opDeGrens)}
-    ${geenNormRegels(t,m)}${uitReserveringRegels(t,m)}</div>`;
+    ${geenNormRegels(t,m)}${uitReserveringRegels(t,m)}${csvDubbelRegels(m)}</div>`;
 }
 /* v258: hier stond één regel die ALLE geenNorm-categorieën optelde tot t.buitenNorm en naar
    onvoorzien tikte. Met een tweede geenNorm-categorie klopt die tik niet meer: gemeten zei hij
@@ -11903,6 +12011,52 @@ function uitReserveringRegels(t,m){
   const ks=Object.keys(U).filter(k=>CATS[k] && bedrag(k)>0)
     .sort((a,b)=>bedrag(b)-bedrag(a) || (CATS[a].name<CATS[b].name?-1:1));
   return ks.map(k=>`<div class="small" style="color:var(--mut2);margin-top:5px;cursor:pointer" onclick="openCategory('${k}','${m}')">+ ${euro0(bedrag(k))} ${CATS[k].name.toLowerCase()}, uit een reservering \u203a</div>`).join('');
+}
+/* v284: DEZELFDE VORM ALS geenNormRegels() EN OM DEZELFDE REDEN. Wat niet in het getal erboven zit maar
+   wel van je rekening ging, moet ergens staan; anders mis je geld zonder het te zien (v250/v258/v259).
+   EEN REGEL PER REKENING en niet een totaal: een totaal met een tik zou op een ander bedrag uitkomen dan
+   waarop je tikte, en de vensters verschillen per rekening.
+   HET BEDRAG IS DE BIJDRAGE AAN spendNorm DIE WEGVALT, dus netto en alleen uit categorieen met een norm.
+   Een uitgesloten overboeking telde nooit als uitgave; die staat in de sheet en niet in dit bedrag.
+   GEEN PARING, GEEN REGEL. Wie geen csv-import naast een koppeling heeft ziet hier niets. */
+function csvDubbelRegels(m){
+  let P=null; try{ P=csvPaar(); }catch(_){ return ''; }
+  if(!P || !Object.keys(P.map).length) return '';
+  const per={};
+  for(const t of TX){
+    if(String(t.date).slice(0,7)!==m || !csvDubbel(t) || !csvDubbelTelt(t)) continue;
+    const r=(per[t.acc]=per[t.acc]||{n:0,eur:0}); r.n++; r.eur+=-t.amount;
+  }
+  const ks=Object.keys(per).filter(a=>Math.round(per[a].eur)>0)
+    .sort((a,b)=>per[b].eur-per[a].eur || (a<b?-1:1));
+  return ks.map(a=>`<div class="small" style="color:var(--mut2);margin-top:5px;cursor:pointer" onclick="openCsvDubbel('${esc(a)}','${m}')">+ ${euro0(Math.round(per[a].eur))} ${esc(accShort(a))}, ook via je bankkoppeling ›</div>`).join('');
+}
+/* DE LIJST ACHTER HET CIJFER, en die telt per constructie op tot dat cijfer (v104). Dat is waarom deze
+   sheet bestaat in plaats van een regel zonder tik: het bedrag op de kaart is nergens anders te zien en
+   zonder deze lijst is het niet na te rekenen. Boven staan de vier feiten die de regel zelf niet kwijt
+   kan: welke rekening, welk venster, hoeveel boekingen en hoeveel euro. Eronder staat hoeveel andere
+   boekingen in datzelfde venster vielen; die telden nooit als uitgave, maar ze verdwijnen wel uit je
+   maandsommen en dat mag niet stil blijven. */
+function openCsvDubbel(acc, m){
+  const e=csvPaar().map[acc]; if(!e) return;
+  const alle=TX.filter(t=>t.acc===acc && String(t.date).slice(0,7)===m && csvDubbel(t));
+  const items=alle.filter(csvDubbelTelt).sort((a,b)=>b.date.localeCompare(a.date));
+  if(!items.length) return;
+  const tot=items.reduce((sm,t)=>sm-t.amount,0);
+  const rest=alle.length-items.length;
+  const dag=d=>new Date(String(d).slice(0,10)).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:8px">
+      <div style="font-weight:800;font-size:var(--fs-lg)">${esc(accShort(acc))}, ook via je bankkoppeling</div>
+      <div class="muted small">${items.length} boeking${items.length===1?'':'en'} · ${esc(monthLabel(m))}</div>
+      <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${euro(tot)}</div></div>
+    <div class="small muted" style="margin:0 2px 10px;line-height:1.5">Deze rekening kwam eerst als bestand binnen en loopt nu ook via je bankkoppeling (${esc(accShort(e.psd2))}). Boekingen tussen ${dag(e.van)} en ${dag(e.tot)} staan daardoor twee keer in je gegevens. Ze tellen een keer mee, via de koppeling, en het bedrag hierboven is wat er daarom niet in je maandtotaal zit. Er wordt niets weggegooid: in je transacties staan ze er gewoon bij.</div>
+    ${rest>0?`<div class="small" style="color:var(--mut2);margin:0 2px 10px;line-height:1.5">In hetzelfde venster ${rest===1?'valt nog 1 boeking':'vallen nog '+rest+' boekingen'} van deze rekening. Die telde${rest===1?'':'n'} nooit als uitgave, dus ${rest===1?'hij zit':'ze zitten'} niet in het bedrag hierboven.</div>`:''}
+    ${items.map(t=>`<div class="tx" style="cursor:default">
+      <div class="ava" style="background:var(--card2)">${CATS[catOf(t)]?CATS[catOf(t)].icon:''}</div>
+      <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})}</div></div>
+      <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`).join('')}`;
+  showSheetBg();
 }
 function geenNormRegels(t,m){
   const B=t.byCat||{};
@@ -15068,52 +15222,45 @@ function diagCsvPsd2(){
   }
   const dagenTussen=_dagAfstand;   // v283: een bron voor de kalenderafstand (v104)
 
-  const paren=[];
+  /* v284: DE PARING ZELF WORDT HIER NIET MEER GEREKEND. Sinds de uitsluiting op venster bestaat, leest
+     de app dezelfde afleiding, en een tweede uitdrukking ernaast zou bij de eerste wijziging van de
+     gronden uiteenlopen (v104). Wat het blok er zelf bij rekent is de telling op `t.id`: die is een
+     waarneming over de tabel en geen grond, en de app heeft hem niet nodig. */
+  const PAR=csvPsd2Paring();
+  const paren=PAR.filter(r=>r.psd2).map(r=>({csv:r.csv, psd2:r.psd2}));
   L.push('');
   L.push('a. WELKE CSV-REKENING HOORT BIJ WELKE PSD2-REKENING, EN OP GROND WAARVAN');
-  L.push('   twee onafhankelijke gronden. BEDRAGEN: hoeveel csv-boekingen hebben op die psd2-rekening een');
-  L.push('   boeking op dezelfde dag met hetzelfde bedrag (en hoeveel binnen drie dagen). RICHTING: de');
-  L.push('   Space-naam komt uit de csv-rekening-id zelf (zonder het voorvoegsel), en een overboeking');
-  L.push('   "From X to Y" staat op de rekening van Y als BIJschrijving en op die van X als AFschrijving.');
-  L.push('   Is die rekening de Space, dan lopen "naar" en "uit" hoog; is hij de tegenpartij, dan de spiegel.');
-  for(const c of csvAcc){
-    const lj=lijstVan(c), vw=venster(c), spatie=String(c).replace(/^N26\s+/i,'').trim(), sl=spatie.toLowerCase();
+  L.push('   twee onafhankelijke gronden, en de app leest voor haar uitsluiting dezelfde afleiding.');
+  L.push('   BEDRAGEN: hoeveel csv-boekingen hebben op die psd2-rekening een boeking op dezelfde dag met');
+  L.push('   hetzelfde bedrag (en hoeveel binnen '+PAAR_DAGEN+' dagen). RICHTING: de Space-naam komt uit de');
+  L.push('   csv-rekening-id zelf (zonder het voorvoegsel), en een overboeking "From X to Y" staat op de');
+  L.push('   rekening van Y als BIJschrijving en op die van X als AFschrijving. Is die rekening de Space,');
+  L.push('   dan lopen "naar" en "uit" hoog; is hij de tegenpartij, dan de spiegel.');
+  for(const R of PAR){
+    const c=R.csv, lj=lijstVan(c), vw=venster(c), spatie=String(c).replace(/^N26\s+/i,'').trim();
     L.push('');
     L.push('  '+c+'   '+lj.length+' boekingen   '+(vw?vw[0]+' t/m '+vw[1]:'(geen datums)')+'   Space-naam uit de id: "'+spatie+'"');
-    const rij=[];
-    for(const p of psdAcc){
-      let ex=0, w3=0, idh=0;
-      for(const t of lj){
-        const k=t.date+'|'+(+t.amount).toFixed(2);
-        if(idx[p].dag.has(k)) ex++;
-        else if(idx[p].lj.some(x=>Math.abs(x.amount-t.amount)<0.005 && dagenTussen(x.date,t.date)<=3)) w3++;
-        if(_dT(()=>idx[p].ids.has(txId(t,p)),false)) idh++;
-      }
-      let naarIn=0, vanUit=0, naarUit=0, vanIn=0;
-      for(const x of idx[p].lj){
-        const d=' '+String(x.desc||'').toLowerCase().replace(/\s+/g,' ')+' ';
-        const tNaar=d.indexOf(' to '+sl)>=0, tVan=d.indexOf(' from '+sl)>=0;
-        if(tNaar){ if(x.amount>0) naarIn++; else naarUit++; }
-        if(tVan){ if(x.amount<0) vanUit++; else vanIn++; }
-      }
-      rij.push({p, ex, w3, idh, naarIn, vanUit, naarUit, vanIn, richt:naarIn+vanUit, spiegel:naarUit+vanIn});
-    }
-    L.push('    psd2-rekening          dag+bedrag   binnen 3d   zelfde t.id   naar+in  van+uit  |  naar+uit  van+in');
-    for(const r of rij.slice().sort((a,b)=>b.ex-a.ex)){
+    const idhVan={};
+    for(const p of psdAcc){ let idh=0;
+      for(const t of lj){ if(_dT(()=>idx[p].ids.has(txId(t,p)),false)) idh++; }
+      idhVan[p]=idh; }
+    L.push('    psd2-rekening          dag+bedrag   binnen '+PAAR_DAGEN+'d   zelfde t.id   naar+in  van+uit  |  naar+uit  van+in');
+    for(const r of R.rij.slice().sort((a,b)=>b.ex-a.ex)){
       L.push('    '+String(r.p).padEnd(22)+String(r.ex).padStart(8)+'/'+lj.length
-        +String(r.w3).padStart(12)+String(r.idh).padStart(14)
+        +String(r.w3).padStart(11)+String(idhVan[r.p]).padStart(14)
         +String(r.naarIn).padStart(11)+String(r.vanUit).padStart(9)+'  |'+String(r.naarUit).padStart(10)+String(r.vanIn).padStart(8));
     }
-    const top=(veld)=>{ const s=rij.slice().sort((a,b)=>b[veld]-a[veld]);
-      if(!s.length || !s[0][veld]) return null;
-      if(s.length>1 && s[1][veld]===s[0][veld]) return null;
-      return s[0].p; };
-    const pb=top('ex'), pr=top('richt');
-    L.push('    op de bedragen wijst dit aan: '+(pb||'niets, gelijke stand of nul treffers'));
-    L.push('    op de richting wijst dit aan: '+(pr||'niets, gelijke stand of nul treffers'));
-    if(pb && pr && pb===pr){ paren.push({csv:c, psd2:pb}); L.push('    BEIDE GRONDEN WIJZEN '+pb+' AAN, dus gepaard'); }
-    else L.push('    DE TWEE GRONDEN ZIJN HET NIET EENS, dus NIET gepaard en (b) en (c) laten deze rekening leeg');
-    if(rij.every(r=>!r.idh)) L.push('    geen enkele csv-boeking heeft ergens dezelfde t.id, dus de id kan hier niet ontdubbelen');
+    L.push('    op de bedragen wijst dit aan: '+(R.pb||'niets, gelijke stand of nul treffers'));
+    L.push('    op de richting wijst dit aan: '+(R.pr||'niets, gelijke stand of nul treffers'));
+    if(R.psd2){
+      L.push('    BEIDE GRONDEN WIJZEN '+R.psd2+' AAN, dus gepaard');
+      L.push('    DE APP SLUIT DAAROM UIT: csv-boekingen van '+c+' met een datum van '+R.van+' t/m '+R.tot
+        +' tellen niet mee in txOfMonth() en periodTx() (v284); dat is het venster van '+R.psd2+' zelf.');
+    } else {
+      L.push('    DE TWEE GRONDEN ZIJN HET NIET EENS, dus NIET gepaard en (b) en (c) laten deze rekening leeg');
+      L.push('    DE APP SLUIT HIER NIETS UIT: zonder paring telt elke csv-boeking van deze rekening gewoon mee.');
+    }
+    if(psdAcc.every(p=>!idhVan[p])) L.push('    geen enkele csv-boeking heeft ergens dezelfde t.id, dus de id kan hier niet ontdubbelen');
   }
 
   L.push('');

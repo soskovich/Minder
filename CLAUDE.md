@@ -95,6 +95,62 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN CSV-REGEL BINNEN HET VENSTER VAN ZIJN GEPAARDE PSD2-REKENING TELT NIET MEE** (`v284`): `csvDubbel(t)`
+  is de ENE poort en `txOfMonth()` en `periodTx()` lezen hem, dus elke som volgt. DRIE EISEN, EN ELK ERVAN
+  HEEFT ZIJN EIGEN GEVAL IN DE FIXTURE: de rekening moet gepaard zijn, de datum moet binnen het venster van
+  de PSD2-kant vallen, en de bron moet csv zijn.
+  HET VENSTER IS DAT VAN DE PSD2-REKENING ZELF, van zijn eerste tot zijn laatste boeking, en niet dat van de
+  csv-kant. Buiten dat venster kan de koppeling de regel per definitie niet dragen. In de fixture draagt
+  Buffer Rust daarom een SMALLER psd2-venster dan zijn csv-venster, met een boeking ervoor en een erna;
+  zonder dat geval is "het venster van de psd2-kant" niet te onderscheiden van "alles van een gepaarde
+  rekening".
+  DE BRON-TOETS IS DE GUARD OP EEN VEROUDERDE CACHE. Een gepaarde rekening draagt per constructie alleen
+  csv, dus zolang `CSVPAAR` vers is kan die regel niet vuren; hij vuurt zodra `TX` verandert zonder dat
+  `buildAccMeta()` eraan te pas kwam. Dat pad staat als eigen test in de spec, anders is het een guard die
+  niet kan vallen (meetles o).
+  DE BOEKING BLIJFT IN `TX` EN IN DE LIJST, en zegt daar in dezelfde subregel als "in behandeling" dat hij
+  niet meetelt. Stil verdwijnen is erger dan een dubbele die je ziet (`v281`); ongemarkeerd tonen terwijl
+  hij nergens meetelt is zelf een leugen.
+  DE GEMETEN PRIJS: 26 boekingen van Main die `Lender Account` heten, samen 49 euro netto in de scope van
+  `piekVerdeling()`, hebben geen tegenhanger in (d) en vallen toch weg. Daar staat 3.493 euro netto
+  tegenover die niet langer dubbel telt. DE PRIJS IS AANVAARD EN NIET WEGGEREKEND.
+  WAT DE REGEL NIET DEKT, GEMETEN EN NIET GEDICHT: een maand BINNEN het venster waarin de psd2-kant geen
+  enkele boeking heeft. Daar kan de koppeling de csv-regels niet vervangen en sluit de regel ze toch uit.
+  Sectie (b) van blok 11 meet precies dat en zegt op het toestel bij alle vier de paren "geen". Wie dit
+  dicht, doet dat met die meting in de hand; een extra voorwaarde per maand is een ANDERE regel dan de
+  regel op venster.
+  `months()` BLIJFT DE HELE `TX` LEZEN, en dat is bewust: de maandas is een feit over je gegevens en geen
+  som. Een maand die alleen uit uitgesloten boekingen bestaat kan daardoor op nul staan; op het toestel
+  bestaat die maand niet, want psd2 dekt alle vier de vensters.
+- **DE PARING STAAT OP EEN PLEK, EN EEN GELIJKE STAND WIJST NIETS AAN** (`v284`): `csvPsd2Paring()` draagt
+  de twee onafhankelijke gronden van blok 11 (dag+bedrag, en de richting van de Space-naam met het TEKEN
+  erbij) en paart ALLEEN als ze het eens zijn. Elk van de twee geeft `null` bij een gelijke stand en bij nul
+  treffers, en dan telt alles gewoon mee (`v59`/`v73`/`v173`). Dat is ook de gevaarlijke kant, en dat hoort
+  zo: te veel tellen is zichtbaar, te weinig tellen niet (`v168`).
+  DE FIXTURE DRAAGT DE GELIJKE STAND ALS EIGEN REKENING, met even veel dag+bedrag-treffers op twee
+  psd2-rekeningen terwijl de RICHTING er een aanwijst. Zonder dat verschil kan de tie-break niet vallen:
+  haal hem weg en er wordt wel gepaard, dus wel uitgesloten.
+  BLOK 11 REKENT ZIJN TABEL NIET MEER ZELF UIT. Een tweede uitdrukking naast de app zou bij de eerste
+  wijziging van de gronden uiteenlopen (`v104`). Wat het blok er zelf bij telt is de `t.id`-kolom, en die is
+  een waarneming over de tabel en geen grond; de app heeft hem niet nodig. Het blok zegt per rekening wat de
+  app met de uitkomst doet, met het venster erbij.
+  DE UITKOMST IS EEN CACHE EN GEEN OPSLAG: `CSVPAAR` staat in het geheugen, `buildAccMeta()` gooit hem weg
+  en `csvPaar()` bouwt hem lui opnieuw. Er wordt niets per boeking bewaard, want zulke data veroudert zonder
+  dat iemand het merkt. Een match per boeking zou dat wel vragen, en daarom gaat de uitsluiting op VENSTER.
+- **DE REGEL OP DE KAART IS DE GEENNORM-VORM, DE SHEET ERACHTER DRAAGT HET VENSTER** (`v284`):
+  `csvDubbelRegels(m)` geeft EEN REGEL PER REKENING met het bedrag dat uit `spendNorm` wegvalt, om de reden
+  van `v258`: een totaal met een tik zou op een ander bedrag uitkomen dan waarop je tikte, en de vensters
+  verschillen per rekening. HET BEDRAG IS DE NORM-UITGAVE EN NIET ALLES WAT WEGVALT: een uitgesloten opname
+  telde nooit als uitgave, dus die hoort niet in het bedrag, en de sheet zegt hoeveel er zo in hetzelfde
+  venster vielen. `openCsvDubbel()` is de lijst achter het cijfer en telt er per constructie tot op
+  (`v104`); daar staan de vier feiten die de regel niet kwijt kan (rekening, venster, aantal, bedrag).
+  GEMETEN 23px per regel op 360 EN 390px (18px tekst plus 5px marge erboven), vier regels 92px. DAT RAAKT
+  DE 200px-EIS VAN `v241` ZODRA ER MEER DAN EEN REGEL STAAT, en dat is hetzelfde open punt als `v269`: de
+  vorm van dit blok is de vraag, niet deze regel. Op het toestel is het effect klein: de Spaces dragen
+  vrijwel alleen interne overboekingen en krijgen dus geen regel, en de lopende maand draagt geen csv, dus
+  daar staat er niets.
+  `openCategory()` LAS NOG EEN EIGEN MAANDFILTER naast `txOfMonth()` en kende de poort dus niet. Hij leest
+  nu dezelfde bron, anders telt een drill-down niet op tot het cijfer erboven (`v104`).
 - **DE MATCH PER BOEKING BESLIST, DE MAANDSOMMEN NIET** (`v283`): de vraag is of de csv een
   DEELVERZAMELING van psd2 is. Heeft elke csv-boeking een tegenhanger, dan raakt een uitsluiting op venster
   niets kwijt en is het IRRELEVANT dat psd2 er meer draagt; heeft ze die niet, dan zijn dat precies de
@@ -2228,7 +2284,7 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** ACHTTIEN keer in negentien
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** NEGENTIEN keer in twintig
   rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze als
   incidenten; samen zijn het vijf manieren waarop dezelfde fout binnenkomt, en de vraag die alle vijf
   had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
@@ -2319,7 +2375,14 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   dagvenster inert). DE WERKAFSPRAAK DIE DIT SCHERPER MAAKT: schrijf bij elke nieuwe regel eerst op WELK
   GEVAL hem zou onderscheiden van de voor de hand liggende variant, en zet dat geval in de fixture met een
   eigen assertie die meet dat het er is. Dat is goedkoper dan tien sabotages draaien en er vier terugkrijgen.
-  WAT DE ACHTTIEN GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (p) DE GUARD KON NIET VUREN OP DE GEWONE STAND (`v284`). De uitsluiting toetst naast de rekening ook de
+  BRON, en die toets is per constructie waar: een gepaarde rekening draagt alleen csv, want de paring eist
+  dat. De sabotage die de bron-toets weghaalt was dus alleen rood te krijgen langs het pad waarvoor de guard
+  bestaat: `TX` dat verandert zonder dat `buildAccMeta()` de cache weggooide. Dat pad staat nu als eigen
+  test. DE KEUZE IS HIER EEN ANDERE DAN BIJ EEN DODE CONDITIE: de guard is niet dood, hij is alleen niet
+  bereikbaar vanuit de verse stand, en dan hoort de test dat pad te maken in plaats van de guard weg te
+  halen.
+  WAT DE NEGENTIEN GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2397,7 +2460,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v282` → `minder-v283`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v283` → `minder-v284`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
