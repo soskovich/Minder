@@ -95,6 +95,77 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE IBAN BESLIST DE REKENING-ID, NIET DE HASH** (`v281`): de resolutie in `psd2IngestSession()` is
+  `bekend || ibanNum(iban) || psd2h_<hash> || psd2_<uid>`, dus de hash is de DERDE optie. GEMETEN bij de
+  herkoppeling van N26 op 28 sep 2026: vier rekeningen zonder OPGESLAGEN hash hielden hun id, want die id IS
+  de `ibanNum`-uitkomst; alleen de Space zonder eigen IBAN kreeg een nieuwe. Blok 8 beweerde het omgekeerde
+  ("GEEN hash, dus een NIEUWE id bij een herkoppeling") en dat was onwaar voor een IBAN-rekening; dat is de
+  meetles over een label dat een gevolg belooft dat de code niet heeft, nu in mijn eigen blok.
+  DIE SPACE HEEFT NU WEL EEN IBAN, dus zijn nieuwe id is óók een `ibanNum`-uitkomst en de naamswijziging was
+  eenmalig. Wat instabiel blijft is een rekening zonder IBAN: een hash die de bank ANDERS berekent matcht
+  `bekend` niet, en op het toestel staan twee verschillende hash-schema's naast elkaar.
+  EEN HERKOPPELING VOEGDE NIETS DUBBEL TOE, en dat is per rekening narekenbaar in plaats van aangenomen:
+  toegevoegd was precies `nieuw` uit de valutadatum-teller (3, 15, 0 en 0) terwijl de aanroepen 825, 428, 76
+  en 105 regels teruggaven. De rest werd verrijkt op een gelijke `t.id`, precies wat `v277` moest doen.
+- **`txId()` IS DE ENE IDENTITEIT VAN EEN BOEKING** (`v281`): het bereik (rekening, datum, bedrag,
+  omschrijving, plus de centen) stond alleen in `categorize()`, en dat was genoeg tot de samenvoeging moest
+  weten welke id een boeking KRIJGT op een andere rekening. Een tweede uitdrukking ernaast zou bij de eerste
+  wijziging van dat bereik uiteenlopen (`v104`), en dat bereik is de zwaarste eis in dit veld: verandert hij,
+  dan verliest elke bestaande boeking zijn overrides (`v270`).
+- **EEN SAMENVOEGING VERHUIST DE ID EN DE VLAGGEN, EN ONTDUBBELT OP `t.id`** (`v281`): `rekSamenvoeg()` was
+  stil kapot. Hij verhuisde `t.acc` en liet `t.id` staan, dus vlak na de samenvoeging werkte alles nog; dan
+  doet de boot `TX.forEach(categorize)`, herschrijft `categorize` elke id uit de NIEUWE rekening, en waren de
+  overrides wees terwijl hun sleutels als dode entries in `SET` bleven staan. GEMETEN op vier boekingen met
+  elk een vlagsoort: vlak na de samenvoeging resolveerden alle vier, na de boot-sweep NUL, en de vier
+  sleutels stonden er nog. De id wordt nu bij de verhuizing gezet met dezelfde `txId()`, dus de boot-sweep
+  rekent er precies hetzelfde uit.
+  HIJ ONTDUBBELDE OP `_softKey`, EN DAT GOOIDE ECHTE BOEKINGEN WEG: die sleutel is datum + bedrag + de eerste
+  ACHT LETTERS van de naam, en GEMETEN vallen `From Main to Voorziening` en `From Main to Handgeld` daarop
+  samen (beide 50 euro op 2026-08-30, beide "FROMMAIN", gelijke `_softKey` EN gelijke `_dupSig`, verschillende
+  `t.id`). Nu beslist `t.id`, dezelfde identiteit die `commitTx()` gebruikt.
+  DE TIJD UIT DE DESC IS DE TWEEDE KANS EN SPLITST ALTIJD, nooit samen: draagt dezelfde dag en hetzelfde
+  bedrag aan BEIDE kanten dezelfde tijd, dan is het dezelfde betaling met een herschreven omschrijving.
+  Ontbreekt de tijd aan een kant, of verschilt hij, dan blijven de twee apart. De twee PLAYSTATION-betalingen
+  van 9,99 op 17-08 dragen 13:06 en 19:38 en kunnen dus nooit samenvallen. `_descTijden()` leest
+  `BETAALDATUM_RE` en geen tweede patroon, en geen enkel veld op de boeking.
+  DE VLAG VAN DE OVERLEVENDE WINT bij een dubbel: de blijvende boeking kan een eigen override dragen en die
+  is een keuze van de gebruiker. De oude sleutel gaat ALTIJD weg, ook als hij niets verhuist.
+- **DE DESC-WIJZIGING OP EEN STABIELE REKENING IS EEN GAT, GEMETEN EN BEWUST NIET GEDICHT** (`v281`): houdt
+  de bank de rekening-id maar herschrijft hij de omschrijving, dan verandert `t.id` en ziet `commitTx()` een
+  nieuwe boeking. De soft-dedup daar vuurt per constructie niet: die eist dat de REKENING **en** de BRON
+  allebei verschillen, en hier verschilt geen van beide. GEMETEN: hij komt er gewoon bij.
+  WAAROM DE TIJD-SCHEIDER DIT NIET OPLOST OP DE IMPORTROUTE: daar bevestigt niemand dat de twee dezelfde
+  betaling zijn, en een boeking die stil verdwijnt is erger dan een dubbele die je ziet. Bij een
+  samenvoeging wijst de gebruiker de twee rekeningen zelf aan, en daar mag het dus wel. Wie dit alsnog dicht,
+  doet dat met die afweging in de hand en niet als bijvangst.
+- **DE AS-CONCLUSIE: DE BOEKDATUM VAN ABN-PSD2 IS DE BANKKALENDER, DIE VAN N26 NIET** (`v281`, gemeten op het
+  toestel na de herkoppeling): `v272` schreef "`t.date` is een bankkalender", en dat is nu per bron gemeten.
+  N26-psd2 draagt op `t.date` weekend 37 en 39 procent met maandag op 7 en 8, dus daar IS `t.date` de
+  bestedingsdag; ABN-psd2 draagt maandag 35 en weekend 11.
+  DE VALUTADATUM-ROUTE IS DOOD, en dat is voor het eerst gemeten in plaats van afgeleid: N26 LEVERT de
+  `value_date` (1.444 van de 1.536 regels langs `commitTx()`), ABN levert hem NIET (0 van 92), en bij N26 is
+  hij in 1.429 van de 1.444 gevallen dezelfde dag als de boekdatum. De weekdagvergelijking verschuift de piek
+  bij geen van de twee meetbare rekeningen. Daarmee is de open vraag van `v275` beantwoord.
+  WAT OVERBLIJFT is ABN: de kaartregels daar dragen de desc-betaaldatum voor 100 procent van het bedrag
+  (5.079 van 5.086) en de piek schuift van ma naar za, maar dat is 14 procent van de 36.097 in-scope euro's
+  op die rekening. De iDEAL/Tikkie-regels (8.772 euro, maandag 49 procent) en de incasso's (13.480 euro)
+  kunnen per constructie nooit een veld dragen. De gemengde as die `v273` verbood blijft dus verboden, en er
+  is geen veld dat het gat dicht. Dat is een GRENS en geen gebrek.
+- **OPEN KEUZE, NIET GEBOUWD: de piekdag op alleen de regels waarvan de datum de betaaldag IS** (`v281`):
+  een AFGEBAKENDE scope in plaats van een gemengde as. Dat zijn N26-psd2 op `t.date`, mt940 op `t.date` (daar
+  is `t.date` de valutadatum en die is in 42 van 42 gevallen gelijk aan de desc-betaaldatum) en de
+  ABN-kaartregels op `t.betaalDatum`. INCASSO'S VALLEN ER PER DEFINITIE BUITEN, want hun desc noemt de
+  VERVALDAG en niet het moment van betalen (`v272`, gemeten op Basic Fit).
+  DIT IS GEEN DERDE KALENDER: bij een gemengde as valt binnen ÉÉN rekening een deel op de betaaldag en een
+  deel op de bankdag, gewogen naar betaalwijze, en dan hangt de uitkomst van je bank af in plaats van van je
+  gedrag. Hier valt alles wat MEEDOET op de betaaldag, en wat dat niet kan doet niet mee. De prijs is dekking
+  in plaats van vertekening, en die prijs moet je kunnen zien: DE DEKKING IN EURO'S HOORT BIJ HET SIGNAAL, als
+  aandeel van de in-scope euro's, want anders leest een verdeling over een derde van je geld als een
+  verdeling over je maand.
+  BESLISSING NA DE ONTDUBBELING, en dat is geen uitstel maar een voorwaarde: `csv | N26` zegt maandag 40 en
+  weekend 20 terwijl `psd2 | N26` bij dezelfde bank maandag 8 en weekend 38 zegt, over overlappende periodes.
+  Zolang niet vaststaat of die csv-regels dezelfde boekingen zijn als de psd2-regels, is elke euro-dekking
+  over januari tot juni 2026 mogelijk dubbel geteld.
 - **EEN OPGESLAGEN GELDIGHEID IS EEN VERWACHTING, EEN MISLUKKING IS EEN METING** (`v280`): `bankStand()` las
   alleen `exp`, de datum die de bank bij de consent meegaf. GEMETEN op het toestel op 28 sep 2026: vijf van de
   zes gekoppelde rekeningen gaven bij ELKE aanroep `EXPIRED_SESSION` terug bij een `exp` van 2026-12-01, en de
@@ -2009,6 +2080,16 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   (2) `go('dash')` HERTEKENT NIET als Home al staat. Drie tests muteerden `SET` en lazen daarna de OUDE DOM,
   met de oude zin er nog in. Wil een test het gevolg van een mutatie zien, dan roept hij de render-functie
   zelf aan (`renderDash()`). Een navigatie is geen hertekening.
+- **Een sabotage kan zelf inert zijn, en dan zegt groen niets** (`v281`): ik saboteerde de tijd-scheider door
+  aan de DOELKANT een sleutel zonder tijd toe te voegen. Die bleef groen, en terecht: de van-kant loopt over
+  ZIJN eigen tijden, dus bij een boeking zonder tijd draait die lus nul keer en wordt er niets opgezocht. De
+  sabotage kon de uitkomst per constructie niet raken. Dezelfde vraag als bij een test die niet kan falen, nu
+  een stap eerder: KAN DEZE SABOTAGE HET GEDRAG RAKEN, en langs welk pad. De vorm die het wel deed haalde de
+  tijd uit de sleutel zelf, en die zette de test rood.
+  WAT DAARUIT VOLGT OVER DE CODE: dat de scheider aan BEIDE kanten een tijd eist, rust volledig op de
+  doel-index, want die bevat alleen sleutels MET een tijd. Een tweede sabotage die de van-kant op een lege
+  tijd laat terugvallen blijft daarom ook inert, en dat is een eigenschap van de code en niet een gat in de
+  test.
 - **Grep vóór een hernoeming ook in `tests/`.** Alleen in `index.html` zoeken is dezelfde vindfout
   als de twee hierboven, alleen te smal in plaats van te breed. Een naam, een id of een CSS-klasse
   die in de app een detail lijkt, is voor een spec het anker waaraan hij zijn eigenschap ophangt.
@@ -2050,7 +2131,7 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** NEGEN keer in zestien rondes
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** ELF keer in zeventien rondes
   is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze als
   incidenten; samen zijn het vijf manieren waarop dezelfde fout binnenkomt, en de vraag die alle vijf
   had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
@@ -2103,7 +2184,18 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   gingen mis in één greep: de eenheid van de fixture (dag) was niet die van de code (weekdag), en het bedrag
   was net groot genoeg voor de verkeerde eenheid. Toets bij een fixture die een TEKEN moet omzetten dus of de
   emmer waarin de code telt werkelijk over de drempel gaat, en niet de emmer die je in gedachten had.
-  WAT DE NEGEN GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (j) DE ASSERTIE STOND OVER DE HELE TEKST IN PLAATS VAN PER REKENING (`v281`). Blok 8 moet twee gevallen
+  zonder hash SCHEIDEN: een id die uit de IBAN komt houdt hij, een id zonder IBAN-match niet. Mijn test eiste
+  dat beide zinnen ergens in de uitvoer voorkwamen, en toen bleef de sabotage die de twee takken VERWISSELT
+  groen: beide stonden er nog, alleen bij de verkeerde rekening. Dat is (h) in een andere jas, en de reparatie
+  is dezelfde: lees de regels van DIE rekening apart. Dezelfde spec had die vorm al een keer zo gerepareerd,
+  en die reparatie bereikte de nieuwe test niet.
+  (k) DE FIXTURE MISTE DE KLEINE VORM (`v281`). De wees-detectie moet een niet-gekoppelde psd2-rekening zien
+  ONGEACHT het aantal boekingen, want `rekeningOverlap()` eist minstens 3 gedeelde sleutels en ziet een wees
+  met twee boekingen per constructie nooit. Mijn fixture had alleen een wees met zeven boekingen, dus de
+  sabotage die `lj.length>2` eist bleef groen. Op het toestel is die kleine wees er werkelijk
+  (`psd2_874633c7`, 2 boekingen), en nu staat hij in de fixture.
+  WAT DE ELF GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2181,7 +2273,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v279` → `minder-v280`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v280` → `minder-v281`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

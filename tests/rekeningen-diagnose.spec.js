@@ -25,6 +25,12 @@ const ABN = '100110012555096222';
 const N26M = '1234567890';
 const SPACE = 'psd2h_ab12cd34ef56';   // Space met boekingen, MET hash, ZONDER saldo
 const OUDSTIJL = 'psd2_oudstij';      // gekoppeld, geen boekingen, GEEN hash (van vóór v151)
+/* v281: GEEN hash, maar de id IS de ibanNum-uitkomst van zijn eigen IBAN. Dat is het geval waarop de
+   herkoppeling van 28 sep 2026 werkelijk draaide: vier N26-rekeningen zonder opgeslagen hash hielden hun
+   id, want de resolutie leest `bekend || ibanNum(iban) || psd2h_<hash> || psd2_<uid>` en de IBAN komt
+   vóór de hash. Zonder deze rij toetst de spec alleen de tak die zegt dat de id verandert, en juist die
+   tak was onwaar voor een rekening als deze. */
+const IBANID = '370400449876543210';
 
 function seed(opt) {
   opt = opt || {};
@@ -37,16 +43,22 @@ function seed(opt) {
     add(m + '-06', -220, 'Albert Heijn', 'BEA, Albert Heijn', ABN, 'mt940');
     add(m + '-10', -80, 'Etos', 'BEA, Etos', N26M);
     add(m + '-12', -45, 'Boekhandel', 'BEA, Boekhandel', SPACE);
+    add(m + '-14', -30, 'Kruidvat', 'BEA, Kruidvat', IBANID);
   }
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}',
     minder_set: JSON.stringify({ limit: 70, autoIncome: true,
-      manualBal: Object.assign({ [ABN]: 4200, [N26M]: 300 }, opt.bal || {}),
+      /* IBANID krijgt een saldo, zodat de nieuwe rij de som en de missing-telling van de bestaande
+         tests niet verschuift: die gaan over een rekening ZONDER saldo (de Space) en niet over de
+         hash-resolutie. Een fixture-rij die een andere eigenschap meeverschuift maakt de meting van
+         die eigenschap onleesbaar. */
+      manualBal: Object.assign({ [ABN]: 4200, [N26M]: 300, [IBANID]: 0 }, opt.bal || {}),
       budgets: { boodschappen: 700 },
       toonLegeRek: !!opt.toonLege,
       psd2Accounts: {
         [N26M]: { uid: 'uid-main', iban: 'DE89370400441234567890', hash: 'h-main', label: 'Main ··7890', bank: 'N26', exp: '2027-03-01' },
         [SPACE]: { uid: 'uid-space', iban: '', hash: 'ab12cd34ef56', label: 'Zakgeld', bank: 'N26', exp: '2027-03-01' },
         [OUDSTIJL]: { uid: 'uid-oud', iban: '', label: 'Buffer rust', bank: 'N26', exp: '2026-11-01' },
+        [IBANID]: { uid: 'uid-iban', iban: 'DE89370400449876543210', label: 'Spaarpot ··3210', bank: 'N26', exp: '2027-03-01' },
       },
       psd2LastSync: Date.now() - 3 * 86400000, psd2Url: 'https://x.workers.dev', psd2Token: 't' }),
     minder_own: '[]', minder_accmeta: '{}', minder_plan: '{}' };
@@ -89,10 +101,19 @@ test.describe('a - een rekening met boekingen maar zonder saldo valt uit de lijs
       return { tekst: t,
         inOWN: OWN.indexOf('psd2h_ab12cd34ef56') >= 0,
         zichtbaar: zichtbareRek().indexOf('psd2h_ab12cd34ef56') >= 0,
+        ownN: OWN.length,
+        zonderSaldo: OWN.filter((x) => accBalance(x) == null),
         tb: (function () { const b = totalBalance(); return { sum: Math.round(b.sum), known: b.known, missing: b.missing }; })() }; });
     expect(r.inOWN).toBe(true);
     expect(r.zichtbaar).toBe(false);
-    expect(r.tb).toEqual({ sum: 4500, known: 2, missing: 1 });
+    /* v281: de fixture kreeg er een rekening bij voor de hash-resolutie, en die draagt een saldo van 0.
+       De eigenschap die hier telt is dat de Space als `missing` uit de SOM valt terwijl hij in OWN zit,
+       en die staat los van hoeveel rekeningen er verder zijn. Vandaar de identiteit in plaats van drie
+       absolute getallen: de som is die van de rekeningen MET een saldo, en de Space zit er niet in. */
+    expect(r.tb.missing).toBeGreaterThan(0);
+    expect(r.tb.sum).toBe(4500);
+    expect(r.tb.known + r.tb.missing).toBe(r.ownN);
+    expect(r.zonderSaldo).toContain('psd2h_ab12cd34ef56');
     /* PER REGEL EN NIET OP DE HELE TEKST: mijn eerste vorm toetste of de zin ergens voorkwam, en
        die staat twee keer (bij totalBalance en bij safeToSpend). Een sabotage op de eerste bleef
        daardoor groen op de tweede. Nu leest de test de regels van DEZE rekening apart. */
@@ -112,13 +133,19 @@ test.describe('a - een rekening met boekingen maar zonder saldo valt uit de lijs
 
   test('met SET.toonLegeRek aan staat hij wel in de lijst, en geen enkel cijfer beweegt', async ({ page }) => {
     await boot(page);
-    const uit = await page.evaluate(() => ({ zicht: zichtbareRek().length, sum: Math.round(totalBalance().sum),
-      safe: Math.round(safeToSpend().safe || 0) }));
+    const uit = await page.evaluate(() => ({ zicht: zichtbareRek().length, lijst: zichtbareRek().slice(),
+      sum: Math.round(totalBalance().sum), safe: Math.round(safeToSpend().safe || 0) }));
     await boot(page, { toonLege: true });
-    const aan = await page.evaluate(() => ({ zicht: zichtbareRek().length, sum: Math.round(totalBalance().sum),
-      safe: Math.round(safeToSpend().safe || 0), tekst: REGELS_() }));
-    expect(uit.zicht).toBe(2);
-    expect(aan.zicht).toBe(3);
+    const aan = await page.evaluate((v) => ({ zicht: zichtbareRek().length,
+      erbij: zichtbareRek().filter((x) => v.indexOf(x) < 0),
+      zonderSaldo: OWN.filter((x) => accBalance(x) == null),
+      sum: Math.round(totalBalance().sum),
+      safe: Math.round(safeToSpend().safe || 0), tekst: REGELS_() }), uit.lijst);
+    /* v281: bind op het VERSCHIL en op WELKE rekening erbij komt, niet op twee absolute tellingen. Die
+       twee schuiven mee met elke rij die de fixture erbij krijgt, terwijl de eigenschap is dat de
+       schakelaar precies de rekeningen zonder saldo toevoegt en geen enkel cijfer beweegt. */
+    expect(aan.zicht - uit.zicht).toBe(aan.zonderSaldo.length);
+    expect(aan.erbij).toContain('psd2h_ab12cd34ef56');
     expect(aan.sum).toBe(uit.sum);      // de schakelaar is weergave, geen berekening (v146)
     expect(aan.safe).toBe(uit.safe);
     expect(aan.tekst).toContain('in de lijst:        ja');
@@ -134,13 +161,47 @@ test.describe('a - een rekening met boekingen maar zonder saldo valt uit de lijs
 });
 
 test.describe('b - de hash is het beslissende veld en staat erbij', () => {
-  test('het blok noemt de hash per rekening en zet de rekeningen zonder hash apart', async ({ page }) => {
+  /* HERSCHREVEN BIJ v281, naar een STERKERE eis. De oude vorm pinde één string: 'GEEN - bij een
+     herkoppeling krijgt deze rekening een NIEUWE id'. Die bewering is GEMETEN ONJUIST voor een rekening
+     waarvan de id uit de IBAN komt, en de herkoppeling van 28 sep 2026 heeft dat aangetoond: vier
+     rekeningen zonder opgeslagen hash hielden hun id. De eis is nu dat het blok de twee gevallen SCHEIDT,
+     en dat is meer dan de oude assertie deed: die kon niet zien dat er twee gevallen waren. */
+  test('het blok noemt de hash per rekening en scheidt de twee gevallen zonder hash', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => REGELS_());
-    expect(r).toContain('identification_hash: ab12cd34ef56');
-    expect(r).toContain('identification_hash: GEEN - bij een herkoppeling krijgt deze rekening een NIEUWE id');
-    expect(r).toContain('gekoppeld ZONDER identification_hash: psd2_oudstij');
-    expect(r).toContain('<-- die krijgen bij een herkoppeling een nieuwe id');
+    /* PER REKENING EN NIET OVER DE HELE TEKST. Mijn eerste vorm toetste of beide zinnen ergens voorkwamen,
+       en toen bleef de sabotage die de twee takken VERWISSELT groen: beide stonden er nog, alleen bij de
+       verkeerde rekening. Dat is de meetles dat een sabotage de uitvoer kan veranderen zonder dat iemand
+       op de juiste plek kijkt. */
+    const bij = (acc, kop) => { const alle = r.split(String.fromCharCode(10));
+      const i = alle.indexOf('  ' + acc);
+      if (i < 0) return '(kopregel niet gevonden)';
+      for (let k = i + 1; k < alle.length && /^ {4}\S/.test(alle[k]); k++) if (alle[k].includes(kop)) return alle[k].trim();
+      return '(regel niet gevonden)'; };
+    expect(bij('psd2h_ab12cd34ef56', 'identification_hash:')).toBe('identification_hash: ab12cd34ef56');
+    expect(bij('370400449876543210', 'identification_hash:'))
+      .toBe('identification_hash: GEEN - maar de id komt uit de IBAN, dus een herkoppeling houdt hem');
+    expect(bij('psd2_oudstij', 'identification_hash:'))
+      .toBe('identification_hash: GEEN en geen IBAN-match, dus een herkoppeling geeft deze rekening een NIEUWE id');
+    expect(r).toContain('gekoppeld ZONDER identification_hash:');
+    expect(r).toMatch(/de hash is de DERDE optie in de resolutie/);
+    // en de oude, onware bewering staat er nergens meer
+    expect(r).not.toMatch(/die krijgen bij een herkoppeling een nieuwe id/);
+  });
+
+  /* DE TWEE TAKKEN MOETEN OP DE ECHTE RESOLUTIE STAAN en niet op een eigen vergelijking in het blok:
+     `ibanNum()` is wat psd2IngestSession() gebruikt, dus die beslist. */
+  test('welke tak er staat volgt uit ibanNum(), niet uit een eigen regel', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const ps = SET.psd2Accounts || {};
+      const uit = {};
+      for (const k in ps) uit[k] = { hash: !!ps[k].hash, ibanNum: ibanNum(ps[k].iban || ''), match: ibanNum(ps[k].iban || '') === k };
+      return uit;
+    });
+    expect(r['370400449876543210']).toEqual({ hash: false, ibanNum: '370400449876543210', match: true });
+    expect(r['psd2_oudstij'].match).toBe(false);
+    expect(r['psd2_oudstij'].hash).toBe(false);
   });
 
   test('de accId-resolutie: met hash houdt hij zijn id, zonder hash krijgt hij een nieuwe', async ({ page }) => {

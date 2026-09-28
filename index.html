@@ -1048,10 +1048,21 @@ function betaalMoment(t, metReden){
   return {datum:ymd, tijd:m[4]?(m[4]+':'+m[5]):'', treffer:m[0]};
 }
 // id + keyword-categorie (gedeeld door MT940 en CSV)
+/* ===== DE IDENTITEIT VAN EEN BOEKING, OP ÉÉN PLEK (v281) =====
+   Deze uitdrukking stond alleen in `categorize()`, en dat was genoeg zolang niemand hem voor een ANDERE
+   rekening hoefde uit te rekenen. De samenvoeging moet dat wel: die moet weten welke id een boeking
+   KRIJGT op de rekening die blijft, om te kunnen zien of hij daar al staat. Een tweede uitdrukking
+   ernaast zou bij de eerste wijziging van het hash-bereik uiteenlopen (v104), en dat bereik is de
+   zwaarste eis in dit veld: verandert hij, dan verliest elke bestaande boeking zijn overrides (v270).
+   HET BEREIK IS ONGEWIJZIGD: rekening, datum, bedrag en omschrijving, plus de centen achteraan. */
+function txId(t, acc){
+  const a = (acc===undefined || acc===null) ? (t.acc||'') : (acc||'');
+  return hash(a+t.date+t.amount.toFixed(2)+t.desc)+'_'+Math.round(Math.abs(t.amount)*100);
+}
 function categorize(t){
   const U=t.desc.toUpperCase();
   const Z=U.replace(/\s/g,'');   // spatieloos: vangt MT940-regelafbrekingen op (SAXO B ANK → SAXOBANK)
-  t.id=hash((t.acc||'')+t.date+t.amount.toFixed(2)+t.desc)+'_'+Math.round(Math.abs(t.amount)*100);
+  t.id=txId(t);
   const match=w=>{ const wu=(w||'').toUpperCase(); if(!wu) return false; const wz=wu.replace(/\s/g,''); return U.includes(wu) || (wz.length>=4 && Z.includes(wz)); };
   let cat='overig';
   // 1) eigen regels winnen van de ingebouwde categorisatie
@@ -12783,20 +12794,101 @@ function rekRolPlan(van, naar){
     resVerhuist: wasRes && !resBotst, resVervalt: resBotst,
     savVerhuist: wasSav && !savBotst, savVervalt: savBotst };
 }
+/* ===== DE TIJD UIT DE DESC, UITSLUITEND ALS SCHEIDER (v281) =====
+   Geen tweede datumpatroon: hij leest `BETAALDATUM_RE`, net als `betaalMoment()` en de twee
+   diagnoseblokken. Hij leest GEEN ENKEL veld op de boeking: het tijdveld van `v273` mag door geen
+   app-functie gelezen worden en gaat over een andere vraag, en `betaalMoment()` zou hier ook fout zijn,
+   want die is gepoort op een kaart-kenmerk en op een plausibiliteitsvenster. Hier gaat het alleen om de
+   vraag of er een klok in de omschrijving staat.
+   DE NAAM VAN DAT VELD STAAT HIER MET OPZET NIET, en dat is de meetles van `v276`: de bronzoekende
+   teller in `betaaldatum-veld.spec.js` maakt commentaar deel van zijn oppervlak en kan een comment niet
+   van een lezer onderscheiden. Mijn eerste versie noemde hem wel en zette die test rood; de toegestane
+   plekken zijn NIET verbreed, want dat zou een echte lezer hier laten passeren.
+   HIJ SPLITST EN VOEGT NOOIT SAMEN. GEMETEN op het toestel (v272): twee keer `eCom, Betaalpas
+   PLAYSTATION` van 9,99 op 17-08 dragen 13:06 en 19:38 en zijn dus twee aankopen. Een scheider die
+   twee kanten alleen bij een GELIJKE tijd als dezelfde boeking leest kan die twee nooit samenvoegen;
+   ontbreekt de tijd aan een van de kanten, dan blijven ze apart. */
+function _descTijden(t){
+  const d=String((t&&t.desc)||''); const uit=[];
+  for(const m of d.matchAll(new RegExp(BETAALDATUM_RE.source,'g'))){ if(m[4]&&m[5]) uit.push(m[4]+':'+m[5]); }
+  return [...new Set(uit)];
+}
+/* ===== WAT DE SAMENVOEGING ZOU DOEN (v281) =====
+   DE ONTDUBBELING LEEST `t.id` EN NIET `_softKey`, en dat is een reparatie en geen verfijning.
+   `_softKey` is datum + bedrag + de eerste ACHT LETTERS van de naam, en GEMETEN op het toestel (v272)
+   vallen `From Main to Voorziening` en `From Main to Handgeld` daarop samen: beide 50 euro op
+   2026-08-30, beide "FROMMAIN", gelijke `_softKey` EN gelijke `_dupSig`, terwijl hun `t.id` verschilt.
+   De oude vorm zou van dat paar een kant weggooien. `t.id` hasht over rekening, datum, bedrag en
+   omschrijving, dus hij scheidt die twee wel, en hij is dezelfde identiteit die `commitTx()` gebruikt.
+   DE TIJD IS DE TWEEDE KANS, voor het geval dat `t.id` juist te streng is: een bank die de opmaak van
+   zijn omschrijving wijzigt geeft dezelfde betaling een andere desc en dus een andere id. Draagt die
+   desc aan BEIDE kanten dezelfde tijd bij hetzelfde bedrag op dezelfde dag, dan is het dezelfde
+   betaling. Ontbreekt de tijd, of verschilt hij, dan blijven de twee apart: te weinig opruimen kost
+   een dubbele regel die je ziet, te veel opruimen kost een boeking die je niet meer terugvindt. */
+function _samenvoegPlan(van, naar){
+  const doel=TX.filter(t=>t.acc===naar);
+  const doelIds=new Set(doel.map(t=>t.id));
+  const doelTijd=new Map();
+  for(const t of doel){ for(const tj of _descTijden(t)) doelTijd.set(t.date+'|'+t.amount.toFixed(2)+'|'+tj, t.id); }
+  const mee=[], weg=[];
+  for(const t of TX){
+    if(t.acc!==van) continue;
+    const nieuwId=txId(t, naar);
+    if(doelIds.has(nieuwId)){ weg.push({t, naarId:nieuwId, reden:'id'}); continue; }
+    let raak='';
+    for(const tj of _descTijden(t)){ const k=t.date+'|'+t.amount.toFixed(2)+'|'+tj;
+      if(doelTijd.has(k)){ raak=doelTijd.get(k); break; } }
+    if(raak){ weg.push({t, naarId:raak, reden:'tijd'}); continue; }
+    mee.push({t, nieuwId});
+  }
+  return {van, naar, mee, weg};
+}
 function rekSamenvoegPlan(van, naar){
-  const houd=new Set(TX.filter(t=>t.acc===naar).map(_softKey));
-  const mee=TX.filter(t=>t.acc===van && !houd.has(_softKey(t)));
-  const weg=TX.filter(t=>t.acc===van && houd.has(_softKey(t)));
+  const P=_samenvoegPlan(van, naar);
   // v201: saldoVan/saldoNaar zijn hier weg. Het saldo staat in de bevestiging via rekSaldoRegel(),
   // dat rekFeiten() leest - dezelfde accBalance(), maar dan op de plek waar hij gebruikt wordt.
-  return {van, naar, mee:mee.length, weg:weg.length};
+  return {van, naar, mee:P.mee.length, weg:P.weg.length,
+    wegId:P.weg.filter(w=>w.reden==='id').length, wegTijd:P.weg.filter(w=>w.reden==='tijd').length,
+    vlaggen:P.mee.concat(P.weg).filter(x=>_vlagAantal(x.t.id)>0).length};
+}
+/* hoeveel van de vier vlagsoorten hangen aan deze boeking. Vier maps, een lijst: OVR plus de drie in
+   SET. Een vijfde soort erbij is een regel erbij, en dan valt de spec die deze lijst leest. */
+const VLAG_MAPS=['onregelmatig','uitReservering','fixOvr'];
+function _vlagAantal(id){
+  let n=0;
+  if(typeof OVR!=='undefined' && OVR && Object.prototype.hasOwnProperty.call(OVR,id)) n++;
+  for(const m of VLAG_MAPS){ const M=(typeof SET!=='undefined'&&SET[m])||null;
+    if(M && Object.prototype.hasOwnProperty.call(M,id)) n++; }
+  return n;
+}
+/* Verhuis de vlaggen van een boeking naar zijn nieuwe id. DE VLAG VAN DE OVERLEVENDE WINT: bij een
+   dubbel kan de blijvende boeking al een eigen override dragen, en die is een keuze van de gebruiker;
+   overschrijven zou een categorie stil veranderen bij een handeling die daar niet over gaat. De oude
+   sleutel gaat ALTIJD weg, ook als hij niets verhuist, want anders blijft hij als dode entry staan. */
+function _vlagVerhuis(oudId, nieuwId, tel){
+  if(!oudId || oudId===nieuwId) return;
+  const beweeg=(M)=>{ if(!M || !Object.prototype.hasOwnProperty.call(M,oudId)) return;
+    if(!Object.prototype.hasOwnProperty.call(M,nieuwId)){ M[nieuwId]=M[oudId]; tel.mee++; } else tel.behouden++;
+    delete M[oudId]; };
+  if(typeof OVR!=='undefined') beweeg(OVR);
+  for(const m of VLAG_MAPS) beweeg((typeof SET!=='undefined'&&SET[m])||null);
 }
 function rekSamenvoeg(van, naar){
   if(!van||!naar||van===naar) return;
   const R=rekRolPlan(van, naar);   // vooraf: na de verhuizing is de oude id niet meer te lezen
-  const houd=new Set(TX.filter(t=>t.acc===naar).map(_softKey));
-  TX=TX.filter(t=>!(t.acc===van && houd.has(_softKey(t))));      // dubbel: weg
-  for(const t of TX) if(t.acc===van) t.acc=naar;                 // de rest verhuist
+  /* v281: HIER GING HET STIL MIS. Deze functie verhuisde `t.acc` en liet `t.id` staan, dus direct na de
+     samenvoeging werkte alles nog. Dan doet de boot `TX.forEach(categorize)` en herschrijft `categorize`
+     elke id uit de NIEUWE rekening, en waren je overrides wees terwijl hun sleutels als dode entries in
+     SET bleven staan. GEMETEN op vier boekingen met elk een vlagsoort: vlak na de samenvoeging
+     resolveerden alle vier, na de boot-sweep nul, en de vier sleutels stonden er nog.
+     De id wordt nu HIER gezet, met dezelfde `txId()` die `categorize()` gebruikt, dus de boot-sweep
+     rekent er precies hetzelfde uit en de vlaggen blijven staan. */
+  const P=_samenvoegPlan(van, naar);
+  const tel={mee:0, behouden:0};
+  const wegSet=new Set(P.weg.map(w=>w.t));
+  for(const w of P.weg) _vlagVerhuis(w.t.id, w.naarId, tel);     // de dubbele gaat weg, zijn vlag blijft bij de overlever
+  TX=TX.filter(t=>!wegSet.has(t));                               // dubbel: weg
+  for(const m of P.mee){ _vlagVerhuis(m.t.id, m.nieuwId, tel); m.t.acc=naar; m.t.id=m.nieuwId; }
   /* v201: de rollen van de opgeheven id verhuizen mee. Voorheen werd de spaarvlag alleen gewist en
      bleef SET.resAcc naar een id wijzen die niet meer bestond. Allebei stil, en allebei met een
      echt gevolg: de spaarvlag haalde het saldo uit totalSaved(), waardoor je buffer op onbekend
@@ -12814,7 +12906,7 @@ function rekSamenvoeg(van, naar){
   TX.sort((a,b)=>a.date.localeCompare(b.date));
   applyOwnAccounts(); buildAccMeta(); save();
   curMonth=null; closeSheet(); render();
-  toast(`${ICON('check')} Samengevoegd tot één rekening`);
+  toast(`${ICON('check')} Samengevoegd${tel.mee?`, ${tel.mee} ${tel.mee===1?'markering':'markeringen'} mee`:''}`);
 }
 /* Het derde argument zet de richting vast: `a` wordt dan de opgeheven rekening, wat er ook uit de
    heuristiek zou komen. Dat is nodig voor een rekening zonder boekingen (v201): die heuristiek is
@@ -12887,8 +12979,9 @@ function rekSamenvoegVraag(a, b, vasteRichting){
       <div class="small muted">${V.tx} boekingen · ${V.saldo!=null?euro(V.saldo):'saldo onbekend'}${V.exp?' · machtiging tot '+esc(V.exp):''}</div>
     </div>
     <div class="small muted" style="margin:10px 2px">
-      · ${P.weg} dubbele boeking${P.weg===1?'':'en'} ${P.weg===1?'valt':'vallen'} weg<br>
+      · ${P.weg} dubbele boeking${P.weg===1?'':'en'} ${P.weg===1?'valt':'vallen'} weg${P.weg?` (${P.wegId} op dezelfde omschrijving${P.wegTijd?`, ${P.wegTijd} op dezelfde tijd in de omschrijving`:''})`:''}<br>
       · ${P.mee} boeking${P.mee===1?'':'en'} ${P.mee===1?'verhuist':'verhuizen'} mee, je geschiedenis blijft compleet<br>
+      ${P.vlaggen?`· ${P.vlaggen} boeking${P.vlaggen===1?'':'en'} met een eigen categorie of markering ${P.vlaggen===1?'houdt die':'houden die'}<br>`:''}
       · ${rekSaldoRegel(van, naar)}<br>
       ${rekRolRegels(van, naar).map(r=>'· '+r+'<br>').join('')}· de naam en de overige instellingen van de vervallen rekening verdwijnen
     </div>
@@ -13635,10 +13728,33 @@ function diagRekeningen(){
     L.push('    in totalBalance():  '+(own.indexOf(a)<0?'nee, zit niet in OWN':(bal==null?'telt als missing, NIET in de som':'ja, in de som')));
     L.push('    in safeToSpend():   '+(own.indexOf(a)<0?'nee, zit niet in OWN':(bal==null?'telt als missing, NIET in de som':'ja, via totalBalance()')));
     L.push('    in de lijst:        '+(zicht.indexOf(a)>=0?'ja':'NEE, verborgen door zichtbareRek()'));
+    /* v281: WAT ER AAN DE BOEKINGEN VAN DEZE REKENING HANGT. Dat is de vraag vóór een herkoppeling of een
+       samenvoeging: elke vlag hangt aan `t.id`, en die hasht over de REKENING, dus een rekening die een
+       andere id krijgt neemt al zijn vlaggen mee in de val (v270). Vier maps, uit dezelfde lijst die
+       rekSamenvoeg() verhuist, dus er kan er geen wegzakken. */
+    { const vl={OVR:0, onregelmatig:0, uitReservering:0, fixOvr:0};
+      for(const t of lijst){
+        if(_dT(()=>Object.prototype.hasOwnProperty.call(OVR,t.id), false)===true) vl.OVR++;
+        for(const m of VLAG_MAPS){ const M=_dT(()=>SET[m],null);
+          if(M && Object.prototype.hasOwnProperty.call(M,t.id)) vl[m]++; } }
+      const som=vl.OVR+vl.onregelmatig+vl.uitReservering+vl.fixOvr;
+      L.push('    eigen keuzes:       '+(som?('OVR '+vl.OVR+', onregelmatig '+vl.onregelmatig
+        +', uit reservering '+vl.uitReservering+', vaste post '+vl.fixOvr+'   (die hangen aan t.id en dus aan deze rekening-id)')
+        :'geen'));
+    }
     if(pm){
       L.push('    uid:                '+(pm.uid||'-')+'   (per sessie, niet stabiel)');
       L.push('    iban:               '+(pm.iban?('\u00b7\u00b7'+String(pm.iban).slice(-4)):'GEEN eigen IBAN'));
-      L.push('    identification_hash:'+(pm.hash?(' '+pm.hash):' GEEN - bij een herkoppeling krijgt deze rekening een NIEUWE id'));
+    /* v281: hier stond ' GEEN - bij een herkoppeling krijgt deze rekening een NIEUWE id', en dat is ONWAAR.
+       De resolutie in psd2IngestSession() is `bekend || ibanNum(iban) || psd2h_<hash> || psd2_<uid>`, dus
+       de hash is de DERDE optie en de IBAN de tweede. GEMETEN bij de herkoppeling van 28 sep 2026: vier
+       N26-rekeningen zonder OPGESLAGEN hash hielden hun id, want die id IS de ibanNum-uitkomst; alleen de
+       Space zonder eigen IBAN kreeg een nieuwe. Een label dat een gevolg belooft dat de code niet heeft is
+       precies wat dit project verbiedt, en hier stond het in mijn eigen blok. */
+      const ibn=_dT(()=>ibanNum(pm.iban||''),'')||'';
+      L.push('    identification_hash:'+(pm.hash?(' '+pm.hash)
+        :(ibn===a ? ' GEEN - maar de id komt uit de IBAN, dus een herkoppeling houdt hem'
+                  : ' GEEN en geen IBAN-match, dus een herkoppeling geeft deze rekening een NIEUWE id')));
       L.push('    consent tot:        '+(pm.exp?String(pm.exp).slice(0,10):'-'));
     }
     /* ===== WAT DE LAATSTE SYNC PER REKENING DEED (v279) =====
@@ -13711,9 +13827,67 @@ function diagRekeningen(){
   L.push('gekoppeld zonder boekingen: '+(leeg.length?leeg.join(', '):'geen'));
   const ov=_dT(()=>rekeningOverlap(),[])||[];
   L.push('rekeningen met dezelfde boekingen: '+(ov.length?ov.map(o=>o.a+' vs '+o.b+' ('+o.gedeeld+' gedeeld)').join(', '):'geen'));
+  L.push('  LET OP: rekeningOverlap() eist minstens 3 gedeelde sleutels en 60% van de kleinste kant, dus');
+  L.push('  een wees met een of twee boekingen komt daar per constructie nooit in voor. Die staan hieronder.');
+  /* ===== WEZEN: EEN PSD2-REKENING DIE NIET MEER GEKOPPELD IS (v281) =====
+     Dit is een ANDERE vraag dan de overlap hierboven, en daarom staat hij apart. Een rekening waarvan de
+     boekingen `src=psd2` dragen maar die niet in SET.psd2Accounts staat, is het restant van een sessie die
+     er niet meer is: psd2IngestSession() voegt sleutels toe en verwijdert nooit, dus zo'n rekening blijft
+     met zijn boekingen EN zijn saldo in OWN staan en telt door in totalBalance(). Het aantal boekingen doet
+     hier niet mee: een wees met twee boekingen is even weinig gekoppeld als een met negen.
+     WAT DIT NIET DOET: samenvoegen, of zeggen dat het dezelfde rekening is. De tegenhanger-meting eronder
+     legt de drie velden naast elkaar en verder niets; welke rekening het is, is een vraag die de gegevens
+     hier niet beantwoorden. */
+  const wees=own.filter(a=>{
+    if(ps[a]) return false;
+    const lj=_dT(()=>TX.filter(t=>t.acc===a),[])||[];
+    return lj.length>0 && lj.some(t=>t.src==='psd2');
+  });
+  L.push('');
+  L.push('WEZEN (boekingen uit psd2, rekening niet meer gekoppeld): '+(wees.length?wees.join(', '):'geen'));
+  for(const w of wees){
+    const lj=_dT(()=>TX.filter(t=>t.acc===w),[])||[];
+    const bal=_dT(()=>accBalance(w),null);
+    L.push('  '+w+'   '+lj.length+' boeking'+(lj.length===1?'':'en')+'   saldo '+(bal==null?'onbekend':Math.round(bal))
+      +'   telt in totalBalance(): '+(bal==null?'nee, missing':'JA'));
+    L.push('    per boeking de tegenhangers elders, op datum + bedrag; de tijd uit de desc en de id staan erbij:');
+    for(const t of lj){
+      const tj=(_dT(()=>_descTijden(t),[])||[]).join(',');
+      L.push('      '+t.date+'  '+(+t.amount).toFixed(2)+'  tijd '+(tj||'-')+'  '+String(t.name||'').slice(0,28));
+      const kand=(_dT(()=>TX.filter(x=>x.acc!==w && x.date===t.date && Math.abs(x.amount-t.amount)<0.005),[])||[]);
+      if(!kand.length){ L.push('        geen enkele boeking elders op die dag met dat bedrag'); continue; }
+      for(const k of kand){
+        const ktj=(_dT(()=>_descTijden(k),[])||[]).join(',');
+        const zelfdeId=_dT(()=>txId(t, k.acc)===k.id, false);
+        L.push('        '+k.acc+'  src='+(k.src||'-')+'  tijd '+(ktj||'-')
+          +'  tijd gelijk: '+((tj&&ktj&&tj===ktj)?'JA':(tj&&ktj?'nee':'niet te zeggen'))
+          +'  dezelfde t.id op die rekening: '+(zelfdeId===true?'JA':'nee')
+          +'   '+String(k.name||'').slice(0,28));
+      }
+    }
+    L.push('    WAT DIT BESLIST: staat er een tegenhanger met dezelfde t.id, dan is het per de eigen identiteit');
+    L.push('    van de app dezelfde boeking. Staat er een met dezelfde dag, hetzelfde bedrag en dezelfde TIJD,');
+    L.push('    dan is het dezelfde betaling met een andere omschrijving. Staat er niets, dan is dit een eigen');
+    L.push('    rekening en hoort hij niet samengevoegd te worden.');
+  }
+  /* DODE SLEUTELS: een vlag die aan geen enkele boeking meer hangt. Die ontstaan als een rekening-id
+     verandert (v270) of als een oudere samenvoeging de id herschreef zonder de vlag mee te nemen, en dat
+     laatste deed rekSamenvoeg() tot v281. Het blok TELT ze en ruimt niets op (v244). */
+  { const ids=new Set((_dT(()=>TX,[])||[]).map(t=>t.id));
+    const dood={OVR:0, onregelmatig:0, uitReservering:0, fixOvr:0};
+    const O=_dT(()=>OVR,{})||{};
+    for(const k in O) if(!ids.has(k)) dood.OVR++;
+    for(const m of VLAG_MAPS){ const M=_dT(()=>SET[m],null)||{};
+      for(const k in M) if(!ids.has(k)) dood[m]++; }
+    const som=dood.OVR+dood.onregelmatig+dood.uitReservering+dood.fixOvr;
+    L.push('');
+    L.push('DODE MARKERINGEN (een vlag op een t.id die niet meer bestaat): '+som);
+    if(som) L.push('  OVR '+dood.OVR+', onregelmatig '+dood.onregelmatig+', uit reservering '+dood.uitReservering
+      +', vaste post '+dood.fixOvr+'   (een id verandert als de rekening-id verandert; v281 laat rekSamenvoeg() ze meeverhuizen)');
+  }
   const zonderHash=Object.keys(ps).filter(a=>!(ps[a]||{}).hash);
   L.push('gekoppeld ZONDER identification_hash: '+(zonderHash.length?zonderHash.join(', '):'geen')
-    +(zonderHash.length?'   <-- die krijgen bij een herkoppeling een nieuwe id':''));
+    +(zonderHash.length?'   <-- de hash is de DERDE optie in de resolutie; wat beslist staat per rekening hierboven':''));
   return L;
 }
 /* 9. DE PIEKDAG PER WEEK (v271). Dit blok meet iets wat de app vandaag NIET meet, en dat is de
