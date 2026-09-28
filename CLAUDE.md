@@ -144,6 +144,34 @@ genoemde versietag.)*
   DE FIXTURE BOOTST DE STAND NA EEN BOOT NA en zet dus GEEN `_p` op de id, met een assertie dat hij er
   ook niet komt. Zou hij er wel staan, dan is die herschrijving verdwenen en verandert de betekenis van
   de kolom.
+- **OPEN PUNT, GEMETEN EN BEWUST NIET GEDICHT: een kaartbetaling kan een sync lang verdwijnen** (`v292`,
+  gevonden bij `v291`): dit is de tegenhanger van de regel hierboven, en hij staat apart omdat hij niet
+  over de diagnose gaat maar over de gegevens van de gebruiker. `mapPsd2Tx()` zet `t.id+='_p'` op een
+  pending-regel, maar `categorize()` doet `t.id=txId(t)` en de boot loopt met `TX.forEach(categorize)` over
+  ALLE boekingen, dus dat achtervoegsel is bij de eerstvolgende start weg. Daarna heeft die pending-regel
+  EXACT de id die zijn geboekte versie zou krijgen, want `txId()` hasht over rekening, datum, bedrag en
+  omschrijving en die zijn bij een kaartbetaling die onveranderd boekt alle vier gelijk.
+  WAT ER DAN GEBEURT, in de volgorde van `psd2Refresh()`: `commitTx()` loopt EERST en ziet die id al in
+  `existing` staan, dus hij slaat de geboekte regel over; daarna wist `applyPending()` de pending-regel met
+  `TX=TX.filter(t=>!t.pending)`. Netto is die boeking na die sync NERGENS. De sync erna staat de
+  pending-regel er niet meer, dus dan komt de geboekte versie gewoon binnen: het herstelt zichzelf.
+  DE SCHADE IS EEN SYNC LANG EN GEEN VERLOREN DATA, maar het is de gevaarlijke kant (`v168`): een uitgave
+  die tijdelijk uit `TX` valt maakt je maandtotaal te LAAG en je veilig te besteden te HOOG, en er staat
+  nergens dat het gebeurt. Een boeking die stil verdwijnt is precies wat `v281` en `v284` verbieden.
+  BIJ EEN VOORAUTORISATIE SPEELT HET NIET, en dat is waarom het deze ronde niets oplost: daar verschilt het
+  BEDRAG (de reservering en de echte tankbeurt), dus de twee id's verschillen en `commitTx()` slaat niets
+  over. Het raakt de gewone kaartbetaling die ongewijzigd boekt.
+  NIET GEMETEN OP HET TOESTEL, en dat is de eerste stap voor wie dit oppakt: hoe vaak een pending-regel
+  ongewijzigd boekt is uit de opgeslagen data niet te zien, want er is geen import-tijdstip per boeking
+  (`v291`) en `applyPending()` heeft de pending-kant al gewist tegen de tijd dat je kijkt. Meten betekent
+  hier dus iets vastleggen op het moment van de sync, zoals `psd2DiagZet()` doet (`v279`).
+  DRIE KANTEN OM HET TE DICHTEN, en de keuze is niet gemaakt: (a) `categorize()` het achtervoegsel laten
+  staan, wat het goedkoopst lijkt en raakt aan de zwaarste eis in dit veld, want elke bestaande pending-id
+  verandert dan mee (`v270`); (b) `applyPending()` vóór `commitTx()` laten wissen, wat de overslag weghaalt
+  zonder een id aan te raken; (c) de pending-vlag uit de identiteit halen en de twee op `t.pending` laten
+  scheiden. EIGEN RONDE, NA DE RESERVERINGEN: die ronde raakt dezelfde functies (`commitTx()`,
+  `applyPending()`, de poort in `telbareTx()`) en twee rondes door elkaar heen maakt niet meer uit te maken
+  welke wijziging welk cijfer verschoof.
 - **EEN POORT OP PENDING HEEFT EEN PRIJS, EN DIE STAAT IN DE UITVOER** (`v291`): `v197` legde vast dat
   een pending afschrijving geld is dat weg is en dus MOET meetellen. Dat klopt voor een kaartbetaling van
   vandaag die nog niet geboekt is, en niet voor een reservering aan de pomp. Een poort die alles met
