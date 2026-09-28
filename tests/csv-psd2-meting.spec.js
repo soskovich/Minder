@@ -301,18 +301,28 @@ test.describe('3 · c, aantal en som per maand, uit en in apart', () => {
     expect(s).toContain('(d) kijkt daarom buiten het venster en is de meting die beslist');
   });
 
-  test('de kostenregel telt netto en alleen wat in de scope valt', async ({ page }) => {
+  /* v287: DEZE ASSERTIE ANKERDE OP "wat het zou kosten" EN VIEL TOEN DIE REGEL WERD HERSCHREVEN, terwijl
+     de eigenschap die hij vasthoudt ongemoeid bleef: het bedrag telt NETTO en alleen wat in de scope valt.
+     Dat is dezelfde vorm als de v276-meetles over een assertie die te dicht op de formulering staat. Hij
+     bindt nu op de opbrengstregel, en STERKER dan eerst: de prijsregel eronder mag dat bedrag nooit
+     overschrijden, want de prijs is een deelverzameling van wat er wegvalt. */
+  test('de opbrengstregel telt netto en alleen wat in de scope valt', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate((v) => {
       const lj = TX.filter((t) => t.acc === v.CSVZ);
       const sc = lj.filter((t) => { const c = catOf(t);
         return CATS[c] && CATS[c].type === 'expense' && !isFixed(t) && !geenNorm(c); });
-      const regel = diagCsvPsd2().join('\n').split('\n').find((x) => x.indexOf('wat het zou kosten') >= 0) || '';
-      return { alle: lj.length, sc: sc.length, netto: Math.round(sc.reduce((s, t) => s - t.amount, 0)), regel };
+      const rg = diagCsvPsd2().join('\n').split('\n');
+      const i = rg.findIndex((x) => x.indexOf('DE UITSLUITING HAALT HIER WEG') >= 0);
+      return { alle: lj.length, sc: sc.length, netto: Math.round(sc.reduce((s, t) => s - t.amount, 0)),
+        regel: i < 0 ? '' : rg[i], prijs: rg.slice(i + 1, i + 4).find((x) => x.indexOf('DE PRIJS:') >= 0) || '' };
     }, { CSVZ });
     expect(r.sc, 'zonder een boeking buiten de scope toetst deze test niets').toBeLessThan(r.alle);
     expect(r.regel).toContain(r.sc + ' boekingen');
     expect(r.regel).toContain(r.netto + ' euro netto');
+    const pn = +(r.prijs.match(/DE PRIJS: (\d+) van die boekingen/) || [0, -1])[1];
+    expect(pn).toBeGreaterThanOrEqual(0);
+    expect(pn).toBeLessThanOrEqual(r.sc);
   });
 });
 

@@ -95,6 +95,32 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN UITSLUITING HEEFT EEN OPBRENGST EN EEN PRIJS, EN DAT ZIJN TWEE GETALLEN** (`v287`): de regel in
+  sectie (c) van blok 11 zei "wat het ZOU KOSTEN om deze csv-regels binnen het venster niet mee te
+  tellen: 2120 euro" bij Main en 1373 bij Zakgeld. GEMETEN op het toestel is dat samen 3.493, en dat is
+  exact het bedrag dat `v284` optekende als het bedrag dat NIET LANGER DUBBEL telt. DRIE FOUTEN IN EEN
+  LABEL: de TIJD (`v284` heeft de uitsluiting gebouwd, de app doet dit al), de RICHTING (dit bedrag
+  telde ook via de psd2-kant mee, dus het weghalen is de opbrengst) en het GETAL (de prijs is alleen de
+  csv-kant zonder tegenhanger, 26 boekingen en 49 euro, en (d) rekende die al uit).
+  DE PRIJS KOMT UIT (d) EN WORDT NIET OPNIEUW GEREKEND, en daarvoor is de match omhoog gehaald: hij staat
+  nu boven (c) en heeft drie lezers ((c) voor de prijs, (d) voor de uitschrijving, (e) en (f) voor wat
+  overblijft). Een tweede aanroep in (c) zou bij de eerste wijziging van de toewijzing uiteenlopen
+  (`v104`). HET TOTAAL OVER DE PAREN IS DE OPTELLING van de rijen erboven en geen eigen meting, want dat
+  is het getal dat buiten het blok wordt aangehaald.
+  DE FIXTURE DRAAGT HET GEVAL DAT DE TWEE REGELS ONDERSCHEIDT: een paar waarin de prijs LAGER is dan de
+  opbrengst (drie gematchte csv-boekingen naast twee losse) naast een paar dat VOLLEDIG matcht en dus
+  prijs nul heeft. Zonder dat verschil is de prijsregel een kopie van de opbrengstregel en blijft de
+  sabotage die hem uit `sc` haalt groen. Er staat ook een niet-gematchte OPNAME in, anders doet de
+  scope-filter op de prijsregel niets. Acht sabotages, alle acht rood.
+  DEZE TEST BINDT BEWUST OP EEN FORMULERING ("wat het zou kosten" mag er niet meer staan), en dat mag hier
+  omdat de formulering ZELF de vondst was. Dat is de uitzondering op de regel dat een test niet op een zin
+  hoort te ankeren: het anker is hier de eigenschap.
+- **BLOK 11 ZEGT IN DE UITVOER ZELF DAT HIJ `TX` LEEST, EN WAAROM** (`v287`): meting 1 van blok 10 meldt
+  over csv `0 van 0 euro` "in de scope van `piekVerdeling()`" en (c) meldt onder dezelfde woorden 2120.
+  Allebei waar, want blok 11 leest bewust `TX` (`v285`) en meting 1 leest de poort, maar die reden stond
+  in dit bestand en niet in de uitvoer. Een lezer met alleen de uitvoer in de hand ziet twee antwoorden
+  onder een gelijkende kop, en dat is precies waar `v285` op begon. De kop van het blok noemt nu de bron,
+  de reden en meting 1 bij naam, en de regel in (c) zegt er "VOOR de uitsluiting" bij.
 - **SECTIE (f) SCHRIJFT DE TWEELINGEN UIT EN BESLIST NIETS** (`v286`): sectie (e) van blok 11 telde
   9 overgebleven psd2-regels bij Main met een tweeling (470 euro netto) en zei niet WAT ze zijn. (f)
   geeft per paar de datum, het bedrag, de dagafstand en per kant de naam, de categorie met de
@@ -116,6 +142,25 @@ genoemde versietag.)*
   `findDuplicateIds()` toch zou opruimen krijgt een LET OP-regel en telt onderaan apart. Dat is de
   PLAYSTATION-vorm (twee desc-tijden, dus per `v281` twee betalingen) en de gelijke-naam-vorm, en
   dat zijn echte boekingen die de opschoontool zou weghalen.
+  DE UITKOMST OP HET TOESTEL IS NUL VAN ZEVEN, EN DIE NUL GELDT ALLEEN BINNEN DE CSV-VENSTERS (gemeten
+  bij `v286`): geen van de zeven paren is de Geldmaat-vorm en `findDuplicateIds()` zou er geen enkele van
+  opruimen. WAT ZE WEL ZIJN: vijf paren met een GELIJKE naam een dag uit elkaar (geen drift, dus geen
+  aanwijzing dat het dezelfde betaling is, en er is geen enkele scheider, want de PMNT-vorm draagt geen
+  tijd, geen referentie en geen `bankRef`) en twee paren met verschillende namen op dezelfde dag. De 470
+  euro uit (e) is daarmee bijna geheel `intern`: vijf van de zeven tellen nergens als uitgave, en een
+  overboeking van 500 naar Instant Savings draagt het grootste deel. WAT ER AAN UITGAVE OVERBLIJFT ZIJN
+  TWEE SPLIF-PAREN VAN 9,60 EN 4,80, samen 14,40 euro, en bij allebei staat "beide overgebleven: nee",
+  dus hun tweeling is aan een csv-regel gematcht: de csv draagt er EEN waar psd2 er TWEE draagt. Dat is
+  de enige plek waar een onafhankelijke bron zegt dat psd2 te veel telt.
+  DIE NUL MAG NIET GELEZEN WORDEN ALS "er zijn geen Geldmaat-dubbelen in psd2". (f) kijkt naar de
+  psd2-regels die na de match van (d) OVERBLIJVEN, en die verzameling ligt per constructie binnen het
+  verruimde csv-venster; op het toestel is dat dec 2025 tot juni 2026 bij Main en mei tot juni 2026 bij
+  Zakgeld. De Geldmaat-paren staan in blok 10 op 04-08, 21-08, 04-09 en 19-09, dus ruim daarbuiten, en (f)
+  kon ze nooit zien. Dat is meetles (a) en (m) in een nieuwe jas: een meting waarvan de verzameling het
+  geval niet kan bevatten waarop hij is gericht. De dubbelen die echt schade doen staan in de
+  dezelfde-dag-lijst van blok 10, en `findDuplicateIds()` zou daar 23 boekingen weghalen waarvan er
+  minstens vier echt zijn (de twee PLAYSTATION van 9,99 met 13:06 en 19:38, en `From Main to Voorziening`
+  naast `From Main to Handgeld`). DE OPSCHOONTOOL WORDT NIET GEDRAAID zolang dat zo is.
 - **DE PAARVORMING VAN (f): DICHTSTBIJZIJNDE DAG EERST, EN EEN BOEKING IN HOOGUIT EEN PAAR** (`v286`):
   de tweeling wordt in de HELE rekening gezocht en niet alleen onder de overgeblevenen, om dezelfde
   reden als in (e): de tegenhanger kan aan een csv-regel gematcht zijn en de overgebleven kant is dan
@@ -2549,7 +2594,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v285` → `minder-v286`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v286` → `minder-v287`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

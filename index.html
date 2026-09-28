@@ -15241,7 +15241,7 @@ function diagCsvPsd2(){
   const psdAcc=own.filter(a=>bronnen(a).has('psd2'));
   const venster=a=>{ const d=lijstVan(a).map(t=>t.date).filter(Boolean).sort(); return d.length?[d[0],d[d.length-1]]:null; };
   /* v285: DIT BLOK LEEST BEWUST `TX` EN NIET `telbareTx()`, en het is de enige plek waar dat zo is.
-     Blok 11 MEET wat de csv-import draagt en wat een uitsluiting zou kosten; leest hij de poort, dan
+     Blok 11 MEET wat de csv-import draagt en wat de uitsluiting oplevert en kost; leest hij de poort, dan
      meet hij zijn eigen uitkomst en zegt hij per constructie nul. Daarom draagt hij ook zijn eigen
      kopie van het predicaat: `piekInScope()` mag hier niet gelezen worden, want die is bedoeld voor
      de telbare kant. De bronzoekende test noemt deze twee uitzonderingen bij naam. */
@@ -15268,6 +15268,32 @@ function diagCsvPsd2(){
      waarneming over de tabel en geen grond, en de app heeft hem niet nodig. */
   const PAR=csvPsd2Paring();
   const paren=PAR.filter(r=>r.psd2).map(r=>({csv:r.csv, psd2:r.psd2}));
+
+  /* v287: DE MATCH WORDT EEN KEER GEREKEND EN DRIE KEER GELEZEN. (c) heeft hem nodig om de PRIJS van de
+     uitsluiting te kunnen noemen, (d) schrijft hem uit, en (e) en (f) lopen over wat er overblijft. Hij
+     stond in (d) zelf, en toen kon (c) hem niet lezen; een tweede aanroep in (c) ernaast zou bij de eerste
+     wijziging van de toewijzing uiteenlopen (v104). Hij staat daarom hier, boven alle drie de lezers. */
+  const matchVan={}, matchCtx={};
+  for(const pr of paren){
+    const cv=venster(pr.csv); if(!cv) continue;
+    const van=_dagPlus(cv[0], -PAAR_RAND), tot=_dagPlus(cv[1], PAAR_RAND);
+    const cl=lijstVan(pr.csv).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const pl=idx[pr.psd2].lj.filter(t=>t.date>=van && t.date<=tot).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    matchVan[pr.csv]=_eenOpEen(cl, pl, PAAR_DAGEN, dagenTussen);
+    matchCtx[pr.csv]={van, tot, cl, pl};
+  }
+
+  /* v287: DE LEZER MOET WETEN DAT DIT BLOK EEN ANDERE BRON LEEST DAN BLOK 10, anders staan er twee
+     antwoorden onder een gelijkende kop. De reden stond in CLAUDE.md en niet in de uitvoer, en precies
+     dat verschil is waar v285 op begon. */
+  L.push('');
+  L.push('DIT BLOK LEEST TX EN NIET telbareTx(), EN HET IS DE ENIGE PLEK WAAR DAT ZO IS (v285).');
+  L.push('  Het meet wat de csv-import DRAAGT en wat de uitsluiting van v284 oplevert en kost. Las het de');
+  L.push('  poort, dan mat het zijn eigen uitkomst en zei het per constructie nul.');
+  L.push('  DAAROM STAAT HIER EEN ANDER GETAL DAN BIJ METING 1 VAN BLOK 10: die leest de poort wel en meldt');
+  L.push('  over csv 0 euro in de scope van piekVerdeling(), want daar is de uitsluiting al toegepast.');
+  L.push('  Twee getallen onder een gelijkende kop, twee verschillende vragen, en dus geen tegenspraak.');
+
   L.push('');
   L.push('a. WELKE CSV-REKENING HOORT BIJ WELKE PSD2-REKENING, EN OP GROND WAARVAN');
   L.push('   twee onafhankelijke gronden, en de app leest voor haar uitsluiting dezelfde afleiding.');
@@ -15332,6 +15358,7 @@ function diagCsvPsd2(){
   L.push('     staat valt erbuiten terwijl zijn csv-tweeling erin blijft. Dat leest als een verschil en is een');
   L.push('     verschuiving. (d) kijkt daarom buiten het venster en is de meting die beslist.');
   if(!paren.length) L.push('   geen enkel paar, dus niets te vergelijken');
+  const opTot={n:0,e:0}, prTot={n:0,e:0};
   for(const pr of paren){
     const cv=venster(pr.csv); if(!cv) continue;
     const mnd=[...new Set(lijstVan(pr.csv).map(t=>String(t.date).slice(0,7)))].sort();
@@ -15354,10 +15381,29 @@ function diagCsvPsd2(){
       +String(B.n).padStart(9)+String(Math.round(B.u)).padStart(10)+String(Math.round(B.i)).padStart(10)
       +'   '+(eens?'ja':'NEE'));
     const sc=lijstVan(pr.csv).filter(t=>t.date>=cv[0] && t.date<=cv[1] && inScope(t));
-    /* DE KOSTEN IN DE MAAT VAN DE SCOPE ZELF, dus NETTO (`-t.amount`) en niet alleen de afschrijvingen:
-       zo is dit getal naast de sommen in sectie 6 van blok 10 te leggen (v265). */
-    L.push('     wat het zou kosten om deze csv-regels binnen het venster niet mee te tellen: '
-      +sc.length+' boekingen, '+Math.round(som(sc,t=>-t.amount))+' euro netto in de scope van piekVerdeling()');
+    const prijs=(matchVan[pr.csv]||{csvNiet:[]}).csvNiet.filter(inScope);
+    const scE=som(sc,t=>-t.amount), prE=som(prijs,t=>-t.amount);
+    opTot.n+=sc.length; opTot.e+=scE; prTot.n+=prijs.length; prTot.e+=prE;
+    /* BEIDE BEDRAGEN IN DE MAAT VAN DE SCOPE ZELF, dus NETTO (`-t.amount`) en niet alleen de
+       afschrijvingen: zo zijn ze naast de sommen in sectie 6 van blok 10 te leggen (v265).
+       v287: DEZE REGEL STOND ER ALS "wat het zou kosten", EN DAT WAS DRIE KEER MIS. De TIJD, want v284
+       heeft de uitsluiting gebouwd en de app doet dit al. De RICHTING, want dit bedrag telde ook via de
+       psd2-kant mee, dus het weghalen is de OPBRENGST en geen kostenpost; opgeteld over de paren is het
+       precies het bedrag dat v284 als "niet langer dubbel" optekende. En het GETAL, want de prijs is
+       alleen de csv-kant ZONDER tegenhanger, en die rekent (d) uit. Beide staan er nu, uit een bron. */
+    L.push('     DE UITSLUITING HAALT HIER WEG: '+sc.length+' boekingen, '+Math.round(scE)
+      +' euro netto in de scope van piekVerdeling() VOOR de uitsluiting.');
+    L.push('       dat bedrag telde ook via de psd2-kant mee, dus het is wat niet langer dubbel telt (v284)');
+    L.push('     DE PRIJS: '+prijs.length+' van die boekingen hebben in (d) geen tegenhanger en vallen toch weg, '
+      +Math.round(prE)+' euro netto'+(prijs.length?'   <-- zie (d) voor welke':''));
+  }
+  if(paren.length){
+    /* OVER ALLE PAREN, want dat is het getal dat buiten dit blok wordt aangehaald. Het is de OPTELLING
+       van de regels hierboven en geen tweede meting (v104). */
+    L.push('');
+    L.push('   OVER ALLE PAREN, de optelling van de regels hierboven:');
+    L.push('     de uitsluiting haalt '+opTot.n+' boekingen en '+Math.round(opTot.e)+' euro netto weg die ook via psd2 meetelden');
+    L.push('     de prijs daarvan is '+prTot.n+' boekingen en '+Math.round(prTot.e)+' euro netto zonder tegenhanger');
   }
 
   /* ===== d. DE MATCH PER BOEKING (v283) =====
@@ -15379,14 +15425,9 @@ function diagCsvPsd2(){
   L.push('   venster '+PAAR_DAGEN+' dagen; de psd2-kant mag '+PAAR_RAND+' dagen buiten het csv-venster kijken.');
   L.push('   een psd2-boeking wordt hoogstens een keer gebruikt, dus dit is een een-op-een-toewijzing.');
   if(!paren.length) L.push('   geen enkel paar, dus niets te matchen');
-  const matchVan={};
   for(const pr of paren){
-    const cv=venster(pr.csv); if(!cv) continue;
-    const van=_dagPlus(cv[0], -PAAR_RAND), tot=_dagPlus(cv[1], PAAR_RAND);
-    const cl=lijstVan(pr.csv).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    const pl=idx[pr.psd2].lj.filter(t=>t.date>=van && t.date<=tot).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    const M=_eenOpEen(cl, pl, PAAR_DAGEN, dagenTussen);
-    matchVan[pr.csv]=M;
+    const M=matchVan[pr.csv], C=matchCtx[pr.csv]; if(!M || !C) continue;
+    const van=C.van, tot=C.tot, cl=C.cl, pl=C.pl;
     const sc=M.csvNiet.filter(inScope);
     L.push('   '+pr.csv+' -> '+pr.psd2);
     L.push('     csv '+cl.length+' boekingen, psd2 '+pl.length+' in het verruimde venster '+van+' t/m '+tot);

@@ -232,7 +232,9 @@ test.describe('3 · blok 10 zegt over csv hetzelfde als sectie 6', () => {
       const t = diagCsvPsd2().join('\n');
       const m = t.match(new RegExp(a.CSV.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+(\\d+) boekingen'));
       return { blok: m ? +m[1] : -1, tx: TX.filter((x) => x.acc === a.CSV).length,
-        kosten: /wat het zou kosten om deze csv-regels binnen het venster niet mee te tellen: [1-9]/.test(t) };
+        /* v287: bindt op de OPBRENGSTREGEL en niet meer op "wat het zou kosten"; de eigenschap is
+           dezelfde, namelijk dat blok 11 hier een bedrag boven nul meldt terwijl de app er nul telt. */
+        kosten: /DE UITSLUITING HAALT HIER WEG: [1-9]\d* boekingen, [1-9]\d* euro netto/.test(t) };
     }, { CSV });
     expect(r.blok).toBe(r.tx);
     expect(r.kosten).toBe(true);
