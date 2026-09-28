@@ -1273,7 +1273,7 @@ function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!ba
    over dezelfde snede in hetzelfde blok. Wie boekingen telt leest daarom deze lijst en niet `TX`.
    `TX` ZELF BLIJFT WAT HET WAS: er wordt niets weggegooid, en wie de IMPORT telt (hoeveel boekingen
    draagt deze bron, welke rekeningen bestaan er) leest `TX` gewoon, want dat is een andere vraag. */
-function telbareTx(){ return TX.filter(t=>!csvDubbel(t)); }
+function telbareTx(){ return TX.filter(t=>!csvDubbel(t) && !dubbelWeg(t)); }   // v288: een bevestigde dubbele kant valt langs dezelfde poort weg
 function txOfMonth(m){ return telbareTx().filter(t=>t.date.slice(0,7)===m); }
 /* v264: DE WEEKAS, ALS BRON EN NOG ZONDER SCHERM. Blokken van zeven dagen vanaf de 1e van elke
    maand, dus 1-7, 8-14, 15-21 en 22-28; wat er daarna van de maand overblijft is GEEN blok en komt
@@ -1991,7 +1991,13 @@ function contantTelling(){ const C=SET.contant||{}; return (C.stand==null||C.sta
    volgende telling niet mee. Dat is de voorzichtige kant, en hij corrigeert zichzelf. */
 function contantVerwacht(){
   const T=contantTelling(); if(!T) return null;
-  let op=0; for(const t of TX){ if(t.date>T.datum && isOpnameTx(t)) op+=-t.amount; }
+  /* v288: DE POORT EN NIET DE RUWE `TX`. Dit telt GELD en niet de import, dus hij leest `telbareTx()`
+     (v285). GEMETEN waarom dat hier uitmaakt: de twee kanten van een Geldmaat-paar zijn allebei een
+     opname, dus zonder de poort telt een bevestigde dubbele kant nog steeds mee in je contante stand en
+     daarmee in `totalBalance()` en in veilig te besteden. Te hoog is de gevaarlijke kant (v168), en de
+     bevestiging zou zichzelf dan tegenspreken. Hetzelfde geldt voor een csv-opname binnen het venster van
+     v284: die telde hier ook nog mee. */
+  let op=0; for(const t of telbareTx()){ if(t.date>T.datum && isOpnameTx(t)) op+=-t.amount; }
   return Math.round((T.stand+op)*100)/100;
 }
 /* Hoe oud de telling is, in hele dagen, of null als er niet geteld is. Hele dagen en lokale
@@ -2007,7 +2013,7 @@ function contantOuderdom(){
    dezelfde lijst, en het aantal is wat de vraag 'je pinde sinds toen' hard maakt. */
 function contantOpnamesSinds(){
   const T=contantTelling();
-  return TX.filter(t=>isOpnameTx(t) && (!T || t.date>T.datum)).sort((a,b)=>b.date.localeCompare(a.date));
+  return telbareTx().filter(t=>isOpnameTx(t) && (!T || t.date>T.datum)).sort((a,b)=>b.date.localeCompare(a.date));   // v288: dezelfde poort als contantVerwacht(), anders telt de lijst iets anders op dan het bedrag erboven (v104)
 }
 /* WANNEER DE APP VRAAGT TE TELLEN. Niet dagelijks en niet stil: twee momenten, allebei bestaand.
    a) er is gepind sinds je laatste telling - dat is het moment waarop het bedrag verandert en waarop
@@ -10414,10 +10420,10 @@ function renderTxList(){
        dubbele die je ziet (v281). Maar hem ONgemarkeerd tonen terwijl hij nergens meetelt is zelf een
        leugen, dus hij zegt het hier, in dezelfde subregel die 'in behandeling' en 'afwijkend bedrag'
        al dragen. Geen nieuw element en geen tweede detectie: dezelfde csvDubbel() als de sommen. */
-    const dub=csvDubbel(t);
+    const dub=csvDubbel(t), dwg=dubbelWeg(t);   // v288: een bevestigde dubbele kant zegt het hier om dezelfde reden
     body+=`<div class="tx" onclick="openSheet('${t.id}')"${pnd?' style="opacity:.62"':''}>
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(t.name)}</div>${dub?`<div class="cat" style="color:var(--mut)">• telt niet mee, ook via je bankkoppeling</div>`:(pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--mut)">• ${jrg('afwijkendbedrag','afwijkend bedrag')}</div>`:''))}</div>
+      <div class="info"><div class="nm">${esc(t.name)}</div>${dwg?`<div class="cat" style="color:var(--mut)">• telt niet mee, je legde dit vast als dubbel</div>`:(dub?`<div class="cat" style="color:var(--mut)">• telt niet mee, ook via je bankkoppeling</div>`:(pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--mut)">• ${jrg('afwijkendbedrag','afwijkend bedrag')}</div>`:'')))}</div>
       <div class="amt ${t.amount>0?'pos':''}" style="font-weight:700">${t.amount>0?'+':''}${euro(t.amount)}</div>
     </div>`;
   }
@@ -13000,6 +13006,99 @@ function rekOverlapRegel(){
     return `<div class="small muted" style="margin-top:9px;cursor:pointer" onclick="openRekOverlap()">${n===1?'1 gekoppelde rekening zonder boekingen':n+' gekoppelde rekeningen zonder boekingen'} ›</div>`; }
   return '';
 }
+/* ===== DE KANDIDAAT-PAREN OP HET SCHERM (v288) =====
+   DE REGEL IS GEDEMPT EN NIET AMBER, en dat is geen voorkeur maar de regel van v78/v93: amber is voor
+   echte aandacht, en de app KAN hier niets vaststellen. Twee boekingen met deze vorm zijn een kandidaat;
+   dat ze dezelfde betaling zijn is een identiteit die de app niet heeft (v282). Amber zou een vondst
+   claimen die de code niet draagt. `rekOverlapRegel()` gebruikt amber wel, en daar terecht: `txId()` zegt
+   daar dat het letterlijk dezelfde boekingen zijn.
+   GEEN OPEN PAAR, GEEN REGEL. Een afgehandeld paar brengt de regel niet terug; de sheet blijft via deze
+   plek bereikbaar zolang er iets openstaat, en anders niet. Dat is de meetles over een melding die de
+   enige drager van een ingang is, en hij is hier aanvaard: er valt niets meer te beslissen. */
+function dubbelParenRegel(){
+  let pr=[]; try{ pr=dubbelParen(); }catch(_){ return ''; }
+  const open=pr.filter(p=>!p.keuze);
+  if(!open.length) return '';
+  return `<div class="small" style="margin-top:9px;color:var(--mut2);cursor:pointer" onclick="openDubbelParen()">${open.length===1?'1 paar boekingen kan dezelfde betaling zijn':open.length+' paren boekingen kunnen dezelfde betaling zijn'} \u203a</div>`;
+}
+/* DE SHEET. Per paar de twee feiten die je nodig hebt om te kiezen (de volledige naam en waar de
+   categorie vandaan komt) en het gevolg van de keuze, en verder niets. Er is geen tweede bevestiging:
+   de handeling is in een tik terug te draaien, en dan is een tussenscherm een stap zonder opbrengst
+   (MECHANISM_SPEC.defaultEffect). `rekSamenvoegVraag()` heeft die wel, en daar terecht: samenvoegen is
+   onomkeerbaar. */
+function dubbelParenDag(d){ return new Date(String(d).slice(0,10)).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}); }
+function dubbelParenKant(P, t, ander){
+  const o=ovrTegenDeRegel(t);
+  const c=CATS[catOf(t)];
+  const her=o ? `je zette deze zelf op ${esc(CATS[o.naar]?CATS[o.naar].name:o.naar)}, de regel zegt ${esc(CATS[o.van]?CATS[o.van].name:o.van)}` : 'uit de regels';
+  return `<div style="padding:8px 0;border-top:1px solid var(--line)">
+    <div style="font-weight:600">${esc(t.name||'?')}</div>
+    <div class="small muted">${esc(c?c.name:'?')} \u00b7 ${her}</div>
+    <button class="btn sec" style="margin-top:8px" onclick="dubbelParenZet('${esc(String(P.sleutel).replace(/'/g,"\\'"))}','${esc(String(t.id))}')">Deze valt weg</button></div>`;
+}
+function openDubbelParen(){
+  const pr=(()=>{ try{ return dubbelParen(); }catch(_){ return []; } })();
+  const open=pr.filter(p=>!p.keuze), klaar=pr.filter(p=>p.keuze);
+  const kaart=P=>{
+    /* HET BEDRAG IS DE SOM OVER DE KANTEN DIE ZO'N OVERRIDE DRAGEN, en niet het bedrag van het paar:
+       dragen ze hem allebei, dan telt de categorie hem nu twee keer en valt er ook twee keer zoveel uit. */
+    const kanten=[P.a,P.b].filter(t=>!!ovrTegenDeRegel(t));
+    const ovr=kanten.map(ovrTegenDeRegel);
+    const eur=kanten.reduce((sm,t)=>sm+(-t.amount),0);
+    return `<div class="card" style="margin-bottom:10px">
+      <div class="small muted">${esc(dubbelParenDag(P.a.date))} \u00b7 ${euro(P.a.amount)} \u00b7 ${esc(acctNiceName(P.a.acc))}</div>
+      ${dubbelParenKant(P, P.a, P.b)}${dubbelParenKant(P, P.b, P.a)}
+      ${ovr.length?`<div class="small" style="color:var(--mut2);margin-top:8px;line-height:1.5">Bevestig je een kant, dan vervalt ook je eigen categorie op ${ovr.length===1?'deze boeking':'deze twee boekingen'} en ${ovr.length===1?'volgt hij':'volgen ze'} weer de regel. ${euro0(Math.round(eur))} gaat daarmee uit ${esc(CATS[ovr[0].naar]?CATS[ovr[0].naar].name:ovr[0].naar)}.</div>`:''}
+      <button class="btn sec" style="margin-top:8px" onclick="dubbelParenZet('${esc(String(P.sleutel).replace(/'/g,"\\'"))}','')">Twee verschillende betalingen</button>
+    </div>`;
+  };
+  const klaarKaart=P=>{
+    const weg=P.keuze.weg ? [P.a,P.b].find(t=>t.id===P.keuze.weg) : null;
+    const op=P.keuze.op ? new Date(String(P.keuze.op)).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) : '';
+    return `<div class="card" style="margin-bottom:10px">
+      <div class="small muted">${esc(dubbelParenDag(P.a.date))} \u00b7 ${euro(P.a.amount)} \u00b7 ${esc(acctNiceName(P.a.acc))}</div>
+      <div class="small" style="margin-top:6px">${weg?`<b>${esc(weg.name||'?')}</b> telt${op?' sinds '+esc(op):''} niet meer mee.`:`Twee verschillende betalingen${op?', vastgelegd op '+esc(op):''}. Ze tellen allebei mee.`}</div>
+      ${P.keuze.ovr&&Object.keys(P.keuze.ovr).length?`<div class="small muted" style="margin-top:4px">Je eigen categorie op ${Object.keys(P.keuze.ovr).length===1?'een van de twee':'allebei'} is toen vervallen.</div>`:''}
+      <button class="btn sec" style="margin-top:8px" onclick="dubbelParenTerug('${esc(String(P.sleutel).replace(/'/g,"\\'"))}')">Terugdraaien</button>
+    </div>`;
+  };
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:10px"><div style="font-size:var(--fs-xl)">${ICON('swap')}</div>
+      <div style="font-weight:800;font-size:var(--fs-lg)">Kan dit dezelfde betaling zijn</div>
+      <div class="muted small">Jij beslist per paar. Er wordt niets weggegooid.</div></div>
+    <div class="small muted" style="margin:0 2px 12px;line-height:1.5">Deze boekingen staan twee keer op dezelfde rekening, op dezelfde dag en voor hetzelfde bedrag, met een naam die aan het eind verschilt. Zo levert een bank dezelfde pinopname soms twee keer aan. Twee verschillende overboekingen zien er alleen net zo uit, en dan hoort er niets weg. Daarom kiest de app hier niets.</div>
+    ${open.length?open.map(kaart).join(''):'<div class="small muted" style="margin:0 2px 12px">Er staat geen paar meer open.</div>'}
+    ${klaar.length?`<div class="small muted" style="margin:14px 2px 8px;font-weight:600">Al beslist</div>${klaar.map(klaarKaart).join('')}`:''}
+    ${pr.veelVoudig?`<div class="small muted" style="margin:10px 2px;line-height:1.5">${pr.veelVoudig===1?'Er is 1 groep':'Er zijn '+pr.veelVoudig+' groepen'} van drie of meer boekingen met dezelfde dag, hetzelfde bedrag en hetzelfde naam-begin. Die ${pr.veelVoudig===1?'staat':'staan'} hier niet: welke van welke een dubbel zou zijn, valt niet te zeggen.</div>`:''}`;
+  showSheetBg();
+}
+/* DE SCHRIJVER. Twee dingen tegelijk, en dat is een keuze met een meting eronder: haal je alleen de
+   override weg, dan wordt de andere kant OOK een opname (`isOpnameTx()` eist `catOf(t)==='intern'`) en
+   springt je contante stand omhoog met geld dat er niet is. Haal je alleen de dubbele kant weg, dan
+   blijft de overgebleven kant als uitgave in je potje staan. Elk van de twee alleen is dus een slechtere
+   stand dan nu; samen kloppen ze.
+   DE OVERRIDE VERVALT ALLEEN ALS HIJ DE REGEL TEGENSPREEKT (`ovrTegenDeRegel()`). Een override die naar
+   een andere INTERNE categorie wijst blijft staan: dat is geen vergissing die deze vorm aantoont.
+   DE OUDE WAARDE GAAT MEE IN DE VLAG, want anders is de handeling niet in een tik terug te draaien en is
+   de belofte van de knop onwaar. */
+function dubbelParenZet(sleutel, wegId){
+  let P=null; try{ P=dubbelParen().find(x=>x.sleutel===sleutel); }catch(_){ return; }
+  if(!P || P.keuze) return;
+  if(wegId && P.a.id!==wegId && P.b.id!==wegId) return;
+  const ovr={};
+  if(wegId){ for(const t of [P.a,P.b]){ const o=ovrTegenDeRegel(t); if(o){ ovr[t.id]=o.naar; delete OVR[t.id]; } } }
+  SET.dubbelPaar=SET.dubbelPaar||{};
+  SET.dubbelPaar[sleutel]={weg:wegId||'', op:vandaagYMD(), ovr};
+  save(); buildAccMeta(); render(); openDubbelParen();
+  toast(`${ICON('check')} ${wegId?'Vastgelegd als dubbel':'Vastgelegd als twee betalingen'}`);
+}
+function dubbelParenTerug(sleutel){
+  const e=(SET.dubbelPaar||{})[sleutel]; if(!e) return;
+  for(const id in (e.ovr||{})) OVR[id]=e.ovr[id];
+  delete SET.dubbelPaar[sleutel];
+  save(); buildAccMeta(); render(); openDubbelParen();
+  toast('Teruggedraaid');
+}
 /* Wat de app per rekening weet, in woorden. Eén bron voor de sheet en voor de kopieertekst, zodat
    wat je leest en wat je plakt niet uiteen kunnen lopen. */
 function rekFeiten(a){
@@ -13476,7 +13575,8 @@ function setBank(){
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
     <div class="small muted" style="margin-bottom:8px;font-weight:600">Je rekeningen</div>
     <div class="small muted">${zichtbareRek().length} rekening${zichtbareRek().length===1?'':'en'} in beeld. Saldo's en je spaarrekening stel je in bij <b>Inkomen &amp; rekeningen</b>.</div>
-    ${rekOverlapRegel()}` : '';
+    ${rekOverlapRegel()}
+    ${dubbelParenRegel()}` : '';
   return head + bestandHtml + aiHtml + briefHtml + accHtml + advHtml;
 }
 function bankAdvTap(){
@@ -14058,6 +14158,42 @@ function diagRekeningen(){
       if(!dg.balGeland) L.push('      GEVOLG: het saldo hierboven is van '+(meta.date||'onbekend')+' en niet van de laatste sync');
     } else if(pm){
       L.push('    laatste sync:       niets vastgelegd - er is niet meer gesynchroniseerd sinds deze uitlezing bestaat');
+    }
+  }
+  /* ===== DE EIGEN CATEGORIEEN DIE DE REGEL TEGENSPREKEN (v288) =====
+     Dit is de drill-down op de `OVR`-teller die hierboven per rekening staat, en dus geen nieuw onderwerp:
+     hij zegt WELKE van die eigen keuzes op een boeking staan die de regel `intern` geeft. GEMETEN op het
+     toestel bij v272: twee Geldmaat-opnames droegen `ruleCat=intern autoCat=intern OVR=overig`, en daardoor
+     telde de ene kant van een paar wel als uitgave en de andere niet.
+     HIJ LEEST `ovrTegenDeRegel()` en drukt niets zelf uit (v104): `dubbelParenZet()` haalt precies deze weg
+     bij een bevestigd paar, dus wat hier staat is letterlijk wat die handeling raakt.
+     HET BLOK VERANDERT NIETS (v244). Dit is een leeslijst: wat je ermee doet, doe je zelf in de app.
+     ER STAAT GEEN OORDEEL BIJ. Een override is een keuze van de gebruiker en kan bedoeld zijn; wat de lijst
+     vaststelt is dat de regel iets anders zegt. */
+  {
+    const rij=[];
+    for(const t of (_dT(()=>TX,[])||[])){
+      const o=_dT(()=>ovrTegenDeRegel(t), null);
+      if(o) rij.push({t, o});
+    }
+    rij.sort((x,y)=>String(y.t.date).localeCompare(String(x.t.date)));
+    L.push('');
+    L.push('EIGEN CATEGORIEEN OP EEN BOEKING DIE DE REGEL INTERN GEEFT: '+rij.length
+      +(rij.length?'   (van welke naar welke, de app verandert hier niets)':'   (geen)'));
+    if(rij.length){
+      const nm=k=>(CATS[k]&&CATS[k].name)||k||'?';
+      let eur=0;
+      for(const r of rij.slice(0, DIAG_PAAR_MAX)){
+        L.push('  '+r.t.date+'   '+(+r.t.amount).toFixed(2).padStart(10)+'   '
+          +String(r.t.name||'?').slice(0,34).padEnd(34)+'  '+nm(r.o.van)+' -> '+nm(r.o.naar));
+        L.push('        rekening '+String(r.t.acc||'?')+'   bron '+(r.t.src||'mt940')+'   id '+String(r.t.id||'?'));
+      }
+      if(rij.length>DIAG_PAAR_MAX) L.push('  ... en '+(rij.length-DIAG_PAAR_MAX)+' meer');
+      for(const r of rij){ if(r.t.amount<0) eur+=-r.t.amount; }
+      L.push('  samen '+Math.round(eur)+' euro aan afschrijvingen die nu als uitgave tellen en zonder je eigen categorie niet');
+      const perCat={};
+      for(const r of rij){ if(r.t.amount<0) perCat[r.o.naar]=(perCat[r.o.naar]||0)+(-r.t.amount); }
+      for(const k of Object.keys(perCat).sort((a,b)=>perCat[b]-perCat[a])) L.push('    '+nm(k)+': '+Math.round(perCat[k]));
     }
   }
   /* WAT ER OP DIE SALDI LEUNT, en dat is de reden dat een niet-landende balances-aanroep meer is dan een
@@ -15517,9 +15653,14 @@ function diagCsvPsd2(){
      kant wel als uitgave en de andere niet. Wie dit oppakt moet weten of de gebruiker dat zelf zette. */
   L.push('');
   L.push('f. DE TWEELINGEN UITGESCHREVEN, PER PAAR');
+  /* DE KOP BESCHRIJFT DE VORM IN EIGEN WOORDEN EN HERHAALT DE REDENEN NIET LETTERLIJK. Elke reden staat
+     in `geldmaatMist()`; staat er hier dezelfde tekst, dan zijn er twee spellingen van een eis en
+     veroudert deze kop zodra de vorm verandert (v276). De bronzoekende test van v288 valt daarop. */
   L.push('   de Geldmaat-vorm is: zelfde dag, zelfde bedrag, geen bankRef, geen referentie aan beide');
-  L.push('   kanten, geen twee verschillende desc-tijden, en een naam die drift maar op de eerste acht');
+  L.push('   kanten, geen desc-tijden die uiteenlopen, en een naam die drift maar op de eerste acht');
   L.push('   letters gelijk blijft. Dat is het geval dat findDuplicateIds() al opruimt (v272).');
+  L.push('   ELKE REDEN HIERONDER KOMT UIT geldmaatMist(), dezelfde bron die de kandidatenlijst in');
+  L.push('   Instellingen leest (v288), dus wat daar wordt voorgelegd is wat hier de vorm heet.');
   L.push('   HIER WORDT IN PAREN GETELD; (e) telt in boekingen, dus een regel die zijn eigen tweeling is');
   L.push('   staat daar twee keer en hier een keer.');
   if(!paren.length) L.push('   geen enkel paar, dus niets over');
@@ -15555,20 +15696,16 @@ function diagCsvPsd2(){
       const A=kant(P.a), B=kant(P.b);
       const sk = _dT(()=>_softKey(P.a)===_softKey(P.b), false);
       const ds = _dT(()=>_dupSig(P.a)===_dupSig(P.b), false);
-      const naamA=String(P.a.name||''), naamB=String(P.b.name||'');
-      /* DE VIJF EISEN, elk als eigen reden. Een paar dat er meer dan een mist krijgt ze allemaal:
-         welke van de vijf het is, bepaalt wat een reparatie zou moeten doen. */
-      const mist=[];
-      if(P.d!==0) mist.push('niet dezelfde dag ('+P.d+')');
-      if(A.bank||B.bank) mist.push('een bankRef');
-      if(A.refs||B.refs) mist.push('een referentie in de desc');
-      if(A.tij && B.tij && A.tij!==B.tij) mist.push('twee verschillende desc-tijden');
-      /* DE LETTERS WORDEN APART GELEZEN EN NIET UIT `sk` AFGELEID. GEMETEN op de fixture: `_softKey`
-         begint met de DATUM, dus een paar op afstand 1 heeft hem per constructie anders, en dan zei
-         de reden "de eerste acht letters verschillen" terwijl die gelijk waren. Een verkeerd etiket
-         op een reden is precies wat dit project verbiedt. */
-      if(naamA===naamB) mist.push('gelijke naam, dus geen drift');
-      else if(_dT(()=>_naamAcht(P.a)!==_naamAcht(P.b), false)) mist.push('de eerste acht letters verschillen');
+      /* DE VIJF EISEN KOMEN UIT `geldmaatMist()` (v288) en staan hier niet meer uitgeschreven. Sinds de
+         sheet met kandidaat-paren dezelfde vraag stelt, zijn dat twee lezers van een bewering, en een
+         tweede uitdrukking zou bij de eerste wijziging van de vorm uiteenlopen (v104). Een paar dat er
+         meer dan een mist krijgt ze allemaal: welke van de vijf het is, bepaalt wat een reparatie zou
+         moeten doen. DE LETTERS WORDEN DAAR APART GELEZEN EN NIET UIT `sk` AFGELEID: `_softKey` begint
+         met de DATUM, dus een paar op afstand 1 heeft hem per constructie anders, en dan zou de reden
+         over de naam-prefix op een paar staan waar die prefix juist gelijk is. De reden zelf staat in
+         `geldmaatMist()` en wordt hier bewust niet herhaald: een bronzoekende teller maakt commentaar
+         deel van zijn oppervlak, en die viel hier bij het opnemen op precies deze zin (v276). */
+      const mist=_dT(()=>geldmaatMist(P.a, P.b, P.d), ['(de vorm is niet te bepalen)']);
       const ruimt=opruim.has(P.a.id)||opruim.has(P.b.id);
       if(!mist.length) nGeld++; else { for(const r of mist) redenTal[r]=(redenTal[r]||0)+1; if(ruimt) nRisico++; }
       L.push('     '+P.a.date+'   '+(+P.a.amount).toFixed(2)+'   afstand '+P.d+' dag'+(P.d===1?'':'en'));
@@ -15580,9 +15717,10 @@ function diagCsvPsd2(){
       L.push('       softKey '+(sk?'gelijk':'anders')+'   dupSig '+(ds?'gelijk':'anders')
         +'   findDuplicateIds ruimt een kant op: '+(ruimt?'JA':'nee')
         +'   beide overgebleven: '+(overSet.has(P.b)?'JA':'nee'));
-      /* v286: DE SCHEIDER IS ' | ' EN GEEN KOMMA, en de fixture vond dat: een reden kan er zelf een
-         dragen ("gelijke naam, dus geen drift"), en dan is een lijst met komma's niet terug te lezen
-         tot de redenen waaruit hij bestaat. De tellingsregel onderaan gebruikt dezelfde scheider. */
+      /* v286: DE SCHEIDER IS ' | ' EN GEEN KOMMA, en de fixture vond dat: een van de redenen in
+         `geldmaatMist()` draagt er zelf een, en dan is een lijst met komma's niet terug te lezen tot
+         de redenen waaruit hij bestaat. De tellingsregel onderaan gebruikt dezelfde scheider. De reden
+         staat hier bewust niet uitgeschreven: de bronzoekende teller van v288 telt commentaar mee (v276). */
       L.push('       -> '+(mist.length?('NIET de Geldmaat-vorm: '+mist.join(' | ')):'DE GELDMAAT-VORM'));
       /* v272 NOEMDE DIT ALS OPEN PUNT EN HIER IS HET MEETBAAR: de opschoontool keyt op `_dupSig`, en
          die kent de desc-TIJD en de dagafstand niet. Is een paar NIET de Geldmaat-vorm en zou de tool
@@ -16393,6 +16531,87 @@ function applyPending(list){
    die acht letters uiteenlopen (v104), en juist dat getal is de zwakte die v272 mat: `From Main to
    Voorziening` en `From Main to Handgeld` vallen er allebei op "FROMMAIN". */
 function _naamAcht(t){ return ((t&&(t.name||t.desc)||'').toUpperCase().match(/[A-Z]/g)||[]).join('').slice(0,8); }
+/* ===== DE GELDMAAT-VORM STAAT OP EEN PLEK, MET TWEE LEZERS (v288) =====
+   Sectie (f) van blok 11 schreef de vijf eisen uit en zei per paar welke ervan NIET opgaat; de sheet met
+   kandidaat-paren stelt dezelfde vraag en moet hem hetzelfde beantwoorden. Een tweede uitdrukking ernaast
+   zou bij de eerste wijziging van de vorm uiteenlopen (v104), en dan legt de sheet je een paar voor dat
+   het diagnoseblok de vorm juist ontzegt.
+   HIJ GEEFT REDENEN EN GEEN JA/NEE, want dat is wat (f) nodig heeft: welke van de vijf het is bepaalt wat
+   een reparatie zou moeten doen. `dubbelParen()` leest dezelfde lijst en houdt de paren waar hij leeg is.
+   DE DAGAFSTAND KOMT VAN BUITEN. (f) paart binnen een venster van een dag en geeft de gemeten afstand mee;
+   de sheet groepeert op dezelfde dag en geeft dus per constructie nul. Dezelfde eis, twee bronnen voor dat
+   ene getal, en daarom staat hij niet in deze functie zelf. */
+function geldmaatMist(a, b, d){
+  const mist=[];
+  if(d!==0) mist.push('niet dezelfde dag ('+d+')');
+  if(a.bankRef||b.bankRef) mist.push('een bankRef');
+  if(_refTokens(a)||_refTokens(b)) mist.push('een referentie in de desc');
+  const ta=_descTijden(a).join(' '), tb=_descTijden(b).join(' ');
+  if(ta && tb && ta!==tb) mist.push('twee verschillende desc-tijden');
+  const na=String(a.name||''), nb=String(b.name||'');
+  if(na===nb) mist.push('gelijke naam, dus geen drift');
+  else if(_naamAcht(a)!==_naamAcht(b)) mist.push('de eerste acht letters verschillen');
+  return mist;
+}
+/* ===== DE KANDIDAAT-PAREN, EN DE APP BESLIST ER GEEN (v288) =====
+   Zelfde rekening, zelfde dag, zelfde bedrag, een naam die drift maar op de eerste acht letters gelijk
+   blijft. Dat is precies de vorm die v272 op het toestel mat en die `_dupSig()` al in een comment noemt.
+   DE APP WIJST GEEN KANT AAN. Wat de code kan vaststellen is dat twee boekingen deze vorm hebben; dat ze
+   dezelfde BETALING zijn is een identiteit die hier niet bestaat (v282), en `findDuplicateIds()` zou op
+   dezelfde vorm boekingen weghalen die echt zijn (v272: `From Main to Voorziening` naast `From Main to
+   Handgeld`, twee PLAYSTATION-betalingen met verschillende desc-tijden). Daarom is dit een LIJST en geen
+   regel, en beslist de gebruiker per paar.
+   DRIE OF MEER IS GEEN PAAR. Bij drie boekingen met dezelfde sleutel valt niet te zeggen welke van welke
+   een dubbel is, en dan zwijgt de lijst erover in plaats van er twee te kiezen (v59/v73/v173). Het AANTAL
+   van die groepen staat wel in de sheet: stil overslaan is precies wat dit project verbiedt.
+   EEN BOEKING DIE AL BUITEN DE SOMMEN VALT KOMT HIER NIET IN. `csvDubbel()` sluit hem al uit om een andere
+   reden, en hem hier nog eens aanbieden zou een tweede poort op dezelfde boeking zijn. */
+function dubbelSleutel(t){ return String(t.acc||'')+'|'+_softKey(t); }
+function dubbelParen(){
+  const groep=new Map();
+  for(const t of TX){
+    if(csvDubbel(t)) continue;
+    const k=dubbelSleutel(t);
+    let g=groep.get(k); if(!g) groep.set(k, g=[]);
+    g.push(t);
+  }
+  const P=SET.dubbelPaar||{};
+  const uit=[]; let veel=0;
+  for(const [k, g] of groep){
+    if(g.length>2){ veel++; continue; }
+    if(g.length!==2) continue;
+    if(geldmaatMist(g[0], g[1], 0).length) continue;
+    uit.push({sleutel:k, a:g[0], b:g[1], keuze:P[k]||null});
+  }
+  uit.sort((x,y)=> String(y.a.date).localeCompare(String(x.a.date)) || (x.sleutel<y.sleutel?-1:1));
+  uit.veelVoudig=veel;
+  return uit;
+}
+/* DE POORT. Een bevestigde kant blijft in `TX` en in de transactielijst staan en zegt daar dat hij niet
+   meetelt, om dezelfde reden als v284: stil verdwijnen is erger dan een dubbele die je ziet (v281). En
+   omdat hij blijft staan, brengt een volgende synchronisatie hem niet opnieuw binnen: `commitTx()` ziet
+   zijn id gewoon staan. Een verwijdering zou bij elke sync terugkomen. */
+function dubbelWeg(t){
+  const P=SET.dubbelPaar; if(!P||!t||!t.id) return false;
+  for(const k in P){ const e=P[k]; if(e && e.weg===t.id) return true; }
+  return false;
+}
+/* ===== EEN OVERRIDE DIE DE REGEL TEGENSPREEKT (v288) =====
+   De regel zegt `intern` en jij zette er een UITGAVE-categorie op. Dat is de vorm die v272 op twee
+   Geldmaat-opnames mat (`ruleCat=intern autoCat=intern OVR=overig`), en waardoor de ene kant van een paar
+   wel als uitgave telde en de andere niet.
+   TWEE LEZERS, EEN BEWERING: de leeslijst in blok 8 noemt ze allemaal, en `dubbelParenZet()` haalt precies
+   die van de twee boekingen van het bevestigde paar weg. Een tweede formulering zou bij de eerste
+   herziening uiteenlopen (v91/v104).
+   HIJ OORDEELT NIET DAT HET EEN VERGISSING IS. Een override is een keuze van de gebruiker; wat deze functie
+   zegt is dat hij tegen de regel in gaat, en dat is een waarneming. De leeslijst verandert niets vanzelf. */
+function ovrTegenDeRegel(t){
+  if(!t || !t.id || typeof OVR==='undefined' || !OVR) return null;
+  const ov=OVR[t.id];
+  if(!ov || !CATS[ov] || CATS[ov].type!=='expense') return null;
+  if(String(t.ruleCat||'')!=='intern' && String(t.autoCat||'')!=='intern') return null;
+  return {van: String(t.autoCat||t.ruleCat||''), naar: String(ov)};
+}
 function _softKey(t){ return t.date+'|'+(+t.amount).toFixed(2)+'|'+_naamAcht(t); }
 // onderscheidende referentie uit de omschrijving (Tikkie-ID / Kenmerk / mandaat): een cijferreeks ≥6 telt als uniek kenmerk
 function _refTokens(t){ const m=((t.desc||t.name||'').match(/\d{6,}/g)||[]); return [...new Set(m)].sort().join(','); }

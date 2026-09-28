@@ -95,6 +95,60 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE APP WIJST GEEN DUBBELE BOEKING AAN, DE GEBRUIKER BESLIST PER PAAR** (`v288`): `dubbelParen()` geeft
+  de KANDIDATEN (zelfde rekening, zelfde dag, zelfde bedrag, een naam die drift maar op de eerste acht
+  letters gelijk blijft) en verder niets. Dat `findDuplicateIds()` op deze vorm zou opruimen is juist de
+  reden dat hij niet gedraaid wordt: GEMETEN haalt hij `From Main to Voorziening` of `From Main to
+  Handgeld` weg en een van de twee PLAYSTATION-betalingen van 9,99 (13:06 en 19:38). De app kan niet zien
+  welke van de twee het is; de gebruiker wel, en de sheet geeft hem daarvoor beide VOLLEDIGE namen.
+  DRIE UITKOMSTEN PER PAAR en niet twee: deze kant weg, die kant weg, of twee verschillende betalingen.
+  Zonder die derde blijft een paar dat geen dubbel is eeuwig in de lijst staan en gaat de vraag zeuren.
+  DE BEVESTIGDE KANT BLIJFT IN `TX` EN IN DE LIJST, en zegt daar dat hij niet meetelt (`v281`/`v284`).
+  Verwijderen zou bij de eerstvolgende synchronisatie terugkomen, want `commitTx()` filtert op `t.id` en
+  een weggegooide boeking staat daar niet meer. De poort is `dubbelWeg(t)` in `telbareTx()`.
+  DRIE OF MEER MET DEZELFDE SLEUTEL IS GEEN PAAR (`v59`/`v73`/`v173`), en het AANTAL van die groepen staat
+  in de sheet: stil overslaan is precies wat dit project verbiedt. Een boeking die al buiten de sommen valt
+  via `csvDubbel()` komt er niet in; hem hier nog eens aanbieden is een tweede poort op dezelfde boeking.
+  DE REGEL IN INSTELLINGEN IS GEDEMPT EN NIET AMBER (`v78`/`v93`): de app KAN hier niets vaststellen, en
+  amber zou een vondst claimen die de code niet draagt. `rekOverlapRegel()` mag wel amber, want `txId()`
+  zegt daar dat het letterlijk dezelfde boekingen zijn. Geen open paar, geen regel.
+  GEEN TWEEDE BEVESTIGINGSSCHERM, anders dan bij `rekSamenvoegVraag()`: die handeling is onomkeerbaar en
+  deze is in een tik terug te draaien, en dan is een tussenscherm een stap zonder opbrengst.
+- **DE OVERRIDE EN DE DUBBELE KANT ZIJN EEN HANDELING, EN DAT IS GEMETEN** (`v288`): elk van de twee stappen
+  ALLEEN geeft een slechtere stand dan niets doen. GEMETEN op de getallen van het toestel (Overig 729 van
+  een potje van 500, contant 400, saldo 1700): alleen de override weghalen zet Overig goed op 429 maar maakt
+  de ANDERE kant ook een opname, want `isOpnameTx()` eist `catOf(t)==='intern'`, en dan gaat
+  `contantVerwacht()` 300 omhoog en het saldo naar 2000. Alleen de dubbele kant weghalen laat de
+  overgebleven kant als uitgave in het potje staan. Samen: Overig 429 en saldo 1700. Te hoog is de
+  gevaarlijke kant (`v168`), dus de bevestiging doet allebei en zegt dat vooraf.
+  `ovrTegenDeRegel()` IS DE ENE BEWERING, met twee lezers: de bevestiging haalt precies die van de twee
+  boekingen van het paar weg, de leeslijst in blok 8 noemt ze allemaal. TWEE EISEN, TWEE GEVALLEN: de regel
+  moet `intern` zeggen EN de override moet een UITGAVE-categorie zijn. Een opname die je zelf op Sparen &
+  beleggen zet gaat daardoor niet als uitgave tellen en is dus niet de vergissing waar dit over gaat; de
+  fixture draagt dat geval apart, want anders is de type-eis inert (meetles n).
+  DE OUDE WAARDE GAAT MEE IN DE VLAG, anders is de knop niet in een tik terug te draaien en is zijn belofte
+  onwaar. HIJ OORDEELT NIET dat het een vergissing is: een override is een keuze, en wat de functie zegt is
+  dat de regel iets anders zegt. De leeslijst in blok 8 verandert niets (`v244`).
+- **`contantVerwacht()` EN `contantOpnamesSinds()` LEZEN DE POORT** (`v288`): ze liepen over de ruwe `TX`
+  terwijl ze GELD tellen, en dat is precies het onderscheid van `v285`. Zonder die wijziging telt een
+  bevestigde dubbele opname nog mee in je contante stand en daarmee in `totalBalance()` en in veilig te
+  besteden, en spreekt de bevestiging zichzelf tegen. Hetzelfde gold al voor een csv-opname binnen het
+  venster van `v284`. De twee lezen dezelfde poort, anders telt de lijst achter het bedrag iets anders op
+  dan het bedrag zelf (`v104`).
+- **DE GELDMAAT-VORM STAAT OP EEN PLEK, MET TWEE LEZERS** (`v288`): `geldmaatMist(a,b,d)` geeft de eisen die
+  NIET opgaan; sectie (f) van blok 11 drukt ze af en `dubbelParen()` houdt de paren waar hij leeg is. DE
+  DAGAFSTAND KOMT VAN BUITEN, want (f) paart binnen een venster van een dag en de lijst groepeert op
+  dezelfde dag: dezelfde eis, twee bronnen voor dat ene getal.
+  DE KOP VAN (f) HERHAALT GEEN ENKELE REDEN LETTERLIJK. De bronzoekende test viel daarop bij het opnemen,
+  en de tekst is herschreven in plaats van de test verzwakt (`v276`): twee spellingen van een eis zijn twee
+  waarheden, en de kop veroudert zodra de vorm verandert.
+  DE TEST TELT DE CONSTRUCTIE (`mist.push(`) EN NIET DE NAAM: op de naam tellen is een anker op het aantal
+  keer dat een comment hem noemt, en dat is precies het anker dat `v271` en `v272` heeft laten omvallen.
+  DE NAAM-PREFIX WORDT IN `dubbelParen()` TWEE KEER GEEIST, en dat is gemeten en geen slordigheid:
+  `dubbelSleutel()` draagt `_softKey()` en die begint bij de acht letters, dus die eis in `geldmaatMist()`
+  kan daar per constructie niet vuren. Hij blijft staan omdat hij voor (f) wel leeft; een sabotage erop
+  laat deze spec groen en zet `tweelingen-binnen-psd2.spec.js` rood. Dat is de keuze van `v284` over een
+  guard die vanuit de gewone stand niet bereikbaar is.
 - **EEN UITSLUITING HEEFT EEN OPBRENGST EN EEN PRIJS, EN DAT ZIJN TWEE GETALLEN** (`v287`): de regel in
   sectie (c) van blok 11 zei "wat het ZOU KOSTEN om deze csv-regels binnen het venster niet mee te
   tellen: 2120 euro" bij Main en 1373 bij Zakgeld. GEMETEN op het toestel is dat samen 3.493, en dat is
@@ -2413,8 +2467,8 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** DRIEENTWINTIG keer in
-  eenentwintig rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** VIJFENTWINTIG keer in
+  tweeentwintig rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los
   lazen ze als incidenten; samen zijn het zes manieren waarop dezelfde fout binnenkomt, en de vraag die ze
   alle had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
   (a) DE TRIPDRAAD DIE NIET KON VALLEN (`v265`). De uitsluiting van huur uit `weekScope()` moest een
@@ -2522,7 +2576,21 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   SCHERPER MAAKT, naast die van (o): bij een regel die KIEST hoort de fixture minstens twee
   kandidaten te dragen die op de as van die keuze uiteenlopen, en bij een regel over een LIJST
   minstens een geval met meer dan een element.
-  WAT DE DRIEENTWINTIG GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (r) DE EIS VIEL AL OP EEN ANDERE EIS (`v288`). De desc-tijd-eis moest worden getoetst, en de fixture droeg
+  daarvoor het PLAYSTATION-paar zoals blok 10 het op het toestel afdrukt: twee desc-tijden, dezelfde dag,
+  hetzelfde bedrag. De sabotage die de tijd-eis weghaalt bleef groen, want de namen zijn daar GELIJK en dan
+  sluit de naam-eis het paar al uit. Twee eisen die hetzelfde geval afwijzen, en dan toetst het geval alleen
+  de eerste die vuurt. De reparatie is een geconstrueerd paar met gedrifte namen EN twee tijden (de
+  Kiosk-vorm van `v274`), met erbij dat het geconstrueerd is en niet gemeten. TOETS BIJ EEN EIS DUS OF HET
+  GEVAL NIET AL OP EEN ANDERE EIS VALT, en niet alleen of het de eis raakt die je in gedachten had.
+  (s) DE SLEUTEL DROEG DE EIS AL (`v288`). `dubbelSleutel()` begint bij de rekening, en de fixture had geen
+  enkel paar op TWEE rekeningen, dus de sabotage die de rekening uit de sleutel haalt bleef groen. Dat is (a)
+  in een nieuwe jas: de code die je toetst stond aan beide kanten van de vergelijking, hier omdat elke
+  kandidaat per constructie al op een rekening stond. Dezelfde ronde leverde het spiegelbeeld op: de
+  naam-prefix zit OOK al in die sleutel, en daar is de sabotage per constructie niet rood te krijgen. Het
+  verschil tussen de twee is of er nog een lezer bestaat die het pad wel maakt; bij de prefix is dat (f), en
+  dan blijft de eis staan met die reden erbij (`v284`).
+  WAT DE VIJFENTWINTIG GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2610,7 +2678,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v286` → `minder-v287`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v287` → `minder-v288`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
