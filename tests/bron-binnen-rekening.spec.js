@@ -284,8 +284,15 @@ test.describe('4 - de reparatie en de afbakening', () => {
     const r = await page.evaluate(() => ({
       tien: diagDubbel().join(String.fromCharCode(10)),
       acht: diagRekeningen().join(String.fromCharCode(10)) }));
-    expect(r.acht).toMatch(/bank:\s+ABN AMRO/);
-    expect(r.tien).toMatch(/999100200\s+bank ABN AMRO/);
+    /* v282: DE NAAM IS UIT DE ASSERTIE GEHAALD EN DE OVEREENSTEMMING ERIN GEBLEVEN. Deze fixture heeft de
+       bank in ACCMETA en niet in psd2Accounts, en sinds v282 kan `buildAccMeta()` daar geen naam meer
+       verzinnen: zonder koppel-entry en zonder IBAN heet zo'n rekening `onbekend`. Wat deze test moet
+       vasthouden is dat blok 8 en meting 1 hetzelfde zeggen over dezelfde rekening, en niet welke naam dat
+       is - dat literal was alleen het vervoermiddel. */
+    const bank = await page.evaluate(() => (ACCMETA['999100200'] || {}).bank);
+    expect(bank).toBe('onbekend');
+    expect(r.acht).toMatch(new RegExp('bank:\\s+' + bank));
+    expect(r.tien).toMatch(new RegExp('999100200\\s+bank ' + bank));
     expect(r.tien).not.toMatch(/999100200\s+bank -/);
   });
 

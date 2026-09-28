@@ -387,14 +387,20 @@ test.describe('6 · blok 8 wijst de wees aan en meet zijn tegenhangers', () => {
     return (b.lees() || []).join(String.fromCharCode(10));
   });
 
-  test('een psd2-rekening die niet meer gekoppeld is heet een wees, ongeacht het aantal boekingen', async ({ page }) => {
+  /* v282: DE TWEE REGELS ZIJN GESPLITST. `LOSGEKOPPELD` is wat deze test altijd bedoelde (psd2-boekingen,
+     niet meer in SET.psd2Accounts), en `WEZEN` is sindsdien de STRENGERE vraag: losgekoppeld EN elke boeking
+     staat met dezelfde `txId(t, doel)` op een andere rekening. Op deze fixture staat geen van beide
+     rekeningen volledig elders, dus ze zijn losgekoppeld en geen wees, en die scheiding wordt hier gepind. */
+  test('een psd2-rekening die niet meer gekoppeld is heet losgekoppeld, ongeacht het aantal boekingen', async ({ page }) => {
     await boot(page, { weesLos: true, nieuw: [{ d: '2026-09-25', a: -40, n: 'Etos', desc: 'Etos PMNT' }] });
     const t = await blok8(page);
-    const regel = t.split(String.fromCharCode(10)).find((x) => /^WEZEN /.test(x)) || '';
+    const regel = t.split(String.fromCharCode(10)).find((x) => /^LOSGEKOPPELD /.test(x)) || '';
     expect(regel).toContain(OUD);
     /* DE KLEINE WEES IS HET PUNT: twee boekingen, en rekeningOverlap() ziet hem per constructie nooit.
        Zonder deze assertie blijft een drempel op het aantal boekingen onopgemerkt. */
-    expect(regel, 'een wees met twee boekingen hoort er net zo goed bij').toContain(KLEIN);
+    expect(regel, 'een rekening met twee boekingen hoort er net zo goed bij').toContain(KLEIN);
+    const wz = t.split(String.fromCharCode(10)).find((x) => /^WEZEN /.test(x)) || '';
+    expect(wz, 'geen van beide staat volledig elders, dus geen van beide is een wees').toBe('WEZEN (losgekoppeld EN elke boeking staat met dezelfde t.id op een andere rekening): geen   <-- hieraan hangt de samenvoeg-ingang in Instellingen (Bank & koppelingen)');
     const ov = t.split(String.fromCharCode(10)).find((x) => /^rekeningen met dezelfde boekingen:/.test(x)) || '';
     expect(ov, 'de overlap-check kan hem niet zien, dus hij mag daar niet staan').not.toContain(KLEIN);
     expect(t).toMatch(/een wees met een of twee boekingen komt daar per constructie nooit in voor/);
@@ -415,9 +421,9 @@ test.describe('6 · blok 8 wijst de wees aan en meet zijn tegenhangers', () => {
     expect(t).toMatch(/geen enkele boeking elders op die dag met dat bedrag/);
   });
 
-  test('een gekoppelde rekening staat niet in de wezenlijst', async ({ page }) => {
+  test('een gekoppelde rekening staat niet in de losgekoppeld-lijst', async ({ page }) => {
     await boot(page);
-    const regel = (await blok8(page)).split(String.fromCharCode(10)).find((x) => /^WEZEN /.test(x)) || '';
+    const regel = (await blok8(page)).split(String.fromCharCode(10)).find((x) => /^LOSGEKOPPELD /.test(x)) || '';
     expect(regel).not.toContain(OUD);        // die is hier wel gekoppeld
     expect(regel).not.toContain(STABIEL);
     expect(regel).toContain(KLEIN);          // en deze is dat nooit

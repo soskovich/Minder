@@ -260,7 +260,13 @@ test.describe('3 - de teller in blok 10', () => {
     expect(t).toContain('5. DE VALUTADATUM UIT DE PSD2-RESPONS');
     // acht psd2-regels, drie met het veld, twee daarvan anders dan t.date
     expect(t).toMatch(/psd2-boekingen in totaal: 8\s+met een valutadatum: 3/);
-    expect(t).toMatch(/999100200\s+bank ABN AMRO\s+psd2-boekingen\s+8\s+met valutadatum\s+3\s+waarvan ANDERS dan t\.date 2/);
+    /* v282: DE BANKNAAM STAAT NIET MEER IN DE ASSERTIE. Deze fixture heeft geen koppel-entry, dus
+       `buildAccMeta()` kan de bank niet weten en noemt hem `onbekend` in plaats van de oude hardgecodeerde
+       terugval ABN AMRO. Wat de test moet vasthouden is de TELLING en dat de regel dezelfde naam draagt die
+       de app zelf voor die rekening heeft; de naam zelf komt daarom uit ACCMETA. */
+    const bank = await page.evaluate(() => (ACCMETA['999100200'] || {}).bank);
+    expect(bank, 'zonder koppel-entry en zonder IBAN valt er niets te weten').toBe('onbekend');
+    expect(t).toMatch(new RegExp('999100200\\s+bank ' + bank + '\\s+psd2-boekingen\\s+8\\s+met valutadatum\\s+3\\s+waarvan ANDERS dan t\\.date 2'));
   });
 
   /* DE TWEE REEKSEN LOPEN OVER DEZELFDE REGELS, en dat is toetsbaar zonder de code na te rekenen: beide
@@ -320,8 +326,15 @@ test.describe('4 - de twee etiketten', () => {
     const t = await page.evaluate(() => diagDubbel().join(String.fromCharCode(10)));
     expect(t).toContain('PMNT (de psd2-code)');
     expect(t).not.toContain('PMNT (de N26-vorm)');
-    // en hij staat hier op een ABN-rekening, precies het geval waarop het etiket omviel
-    expect(t).toMatch(/999100200\s+bank ABN AMRO/);
+    /* en hij staat hier op een psd2-rekening ZONDER koppel-entry, precies het geval waarop het etiket
+       omviel. Sinds v282 heet zo'n rekening `onbekend` en niet meer ABN AMRO; wat de test vasthoudt is dat
+       meting 1 dezelfde naam draagt als blok 8 over dezelfde rekening, en dat was de reparatie van v275. */
+    const r = await page.evaluate(() => ({ bank: (ACCMETA['999100200'] || {}).bank,
+      acht: diagRekeningen().join(String.fromCharCode(10)) }));
+    expect(t).toMatch(new RegExp('999100200\\s+bank ' + r.bank));
+    expect(t).not.toMatch(/999100200\s+bank -/);
+    const regel8 = r.acht.split(String.fromCharCode(10)).find((x) => /^\s+bank:/.test(x)) || '';
+    expect(regel8.trim(), 'blok 8 en meting 1 mogen niet iets anders zeggen over dezelfde rekening').toBe('bank:               ' + r.bank);
   });
 
   /* DE VOETREGEL BELOOFDE IETS WAT DE CODE NIET DOET, en dat is de meetles over een label naast een

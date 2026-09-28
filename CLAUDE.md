@@ -95,6 +95,69 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN WEES IS EEN LOSGEKOPPELDE REKENING DIE AL EEN ANDERE REKENING IS** (`v282`): twee bronnen, twee
+  vragen. `rekLosgekoppeld()` zegt welke rekeningen `src=psd2`-boekingen dragen maar niet meer in
+  `SET.psd2Accounts` staan; `rekWezen()` zegt welke daarvan per de identiteit van de app AL een andere
+  rekening zijn, en dat is de lijst waaraan de ingang hangt. DE TOETS IS `txId(t, doel)` EN GEEN GELIJKENIS:
+  dezelfde uitdrukking die `categorize()` en `rekSamenvoeg()` lezen, dus wat hier dezelfde boeking heet is
+  letterlijk wat de samenvoeging zou ontdubbelen. HET AANTAL DOET NIET MEE, en dat is de aanleiding:
+  `rekeningOverlap()` eist minstens 3 gedeelde `_softKey`s en 60 procent van de kleinste kant en ziet
+  `psd2_874633c7` met zijn twee boekingen per constructie nooit.
+  ALLE BOEKINGEN EN NIET DE MEESTE: bij een deel zou de samenvoeging boekingen VERHUIZEN in plaats van
+  ontdubbelen, en dan is het geen wees maar een rekening met overlap, en dat is de vraag van
+  `rekeningOverlap()`. HIJ KIEST GEEN DOEL: kwalificeren er twee, dan staan ze er allebei en kiest de
+  gebruiker (`v122`/`v150`), want een voorselectie op een naam of op het aantal leest als een vaststelling.
+  ZONDER MELDING WAS ER GEEN INGANG, en dat is de meetles in zijn zuiverste vorm: `rekOverlapRegel()` gaf
+  alleen een regel bij een overlap-treffer of een lege gekoppelde rekening, dus met alleen een wees was
+  `openRekOverlap()` niet te OPENEN en bestond de samenvoeging niet voor deze gebruiker.
+  DE RICHTING STAAT VAST (`rekSamenvoegVraag(wees, doel, 'vast')`). Zonder die derde parameter kiest hij de
+  nieuwste machtiging en anders de rekening met de meeste boekingen; een wees heeft geen machtiging, dus het
+  valt op het aantal, en bij een GELIJK aantal wint dan de WEES en verdwijnt juist de gekoppelde rekening.
+  Meer boekingen dan zijn doel kan een wees niet hebben (het doel moet ze allemaal dragen), dus gelijk is het
+  enige pad daarheen, en zonder dat geval in de fixture viel de sabotage alleen op de bron.
+- **DE BANK VOLGT UIT DE PARSER OF UIT DE IBAN, EN IS ANDERS ONBEKEND** (`v282`): `buildAccMeta()` viel voor
+  elke psd2-rekening zonder koppel-entry terug op de hardgecodeerde naam ABN AMRO. GEMETEN op het toestel
+  heette de wees `psd2_874633c7` daardoor ABN AMRO terwijl zijn boekingen "From Main to Buffer Comfort"
+  zeggen, dus N26. DAT IS GEEN SCHOONHEIDSFOUT: sectie 6 van blok 10 groepeert op `bron|bank` en die
+  indeling beslist de as, dus zo'n rekening nam de indeling van ABN over (weekend 0, maandag 34) in plaats
+  van die van N26 (weekend 39, maandag 8), en een N26-rekening die zijn koppeling kwijtraakt kan daarmee de
+  conclusie omdraaien.
+  WAT MAG VOLGT UIT HET FORMAAT: een N26-CSV komt van N26 en een MT940 komt van ABN AMRO, want dat zijn de
+  twee parsers die dit bestand heeft. Al het andere heet `onbekend` (`v59`/`v73`/`v173`).
+  DE IBAN NOEMT GEEN NAAM: `bankUitIban()` leest de bankcode (de letters bij NL, acht cijfers Bankleitzahl
+  bij DE) en leent de naam van je EIGEN andere rekening met dezelfde code. Een tabel met bankcodes zou de
+  hardcode terugbrengen die `v258` en `v266` hebben opgeruimd, en hij zou verouderen zonder dat iemand het
+  merkt. Een verkeerde knip kan daarom alleen een MISSER geven en nooit een verkeerde naam.
+  EEN MATCH OP DE REKENING-ID IS VERWORPEN: `ibanNum()` gooit de letters weg, dus een NL-id draagt het
+  rekeningnummer en geen bankcode, en een prefix-match daarop kan een VERKEERDE naam opleveren. Onbekend is
+  de betere fout (`v168`).
+  `onbekend` IS EEN EIGEN GROEP EN GEEN RESTBAK: de indeling van een groep rust op zijn eigen weekend- en
+  maandagaandeel en daarvoor is de naam niet nodig; waar de naam wel voor nodig is, is de vraag welke regels
+  bij elkaar horen, en die is bij zo'n rekening niet te beantwoorden.
+  OPEN PUNT, ONGEWIJZIGD: de bank-afleiding staat nog op vier plekken (`v275`). Deze ronde raakte alleen de
+  SCHRIJVER (`ACCMETA[a].bank`), en daarmee leest de `bankVan()` van blok 10 vanzelf mee.
+- **BLOK 11 MEET DE CSV-IMPORT TEGEN DE PSD2-KOPPELING, EN BESLIST NIETS** (`v282`): de aanleiding is de
+  tegenspraak in sectie 6: `csv | N26` zegt maandag 40 en weekend 20 terwijl `psd2 | N26` bij DEZELFDE bank
+  maandag 8 en weekend 38 zegt, over overlappende periodes, dus elke euro-dekking in dat venster kan dubbel
+  geteld zijn.
+  GEEN VAN DE TWEE SCHEIDERS VAN `v281` KAN HIER IETS, en dat is waarom het een eigen vraag is: `t.id` niet,
+  want de psd2-desc en de csv-desc verschillen (GEMETEN bij de wees: gelijke dag, gelijk bedrag,
+  verschillende id); de desc-TIJD niet, want geen enkele csv-regel draagt er een. Het is bovendien een
+  KRUIS-REKENING-dubbel, dus de parenscan van blok 10 ziet het niet (die loopt binnen één rekening) en
+  `rekeningOverlap()` ook niet, want `_softKey` begint met de NAAM en die verschilt per bron.
+  DE PAARVORMING RUST OP TWEE ONAFHANKELIJKE GRONDEN EN PAART ALLEEN ALS ZE HET EENS ZIJN: de bedragen (dag
+  + bedrag) en de richting (de Space-naam uit de csv-rekening-id met het TEKEN erbij, want "From X to Y"
+  staat op de rekening van Y als bijschrijving en op die van X als afschrijving). Zijn ze het oneens, dan is
+  er niets gepaard en blijven (b) en (c) leeg: dan weet het blok het niet.
+  DE AANSLUITING IS HET OORDEEL, per maand en over het totaal, op AANTAL en op de sommen van uit en in
+  apart. Kloppen ze, dan is het voorstel een uitsluiting op VENSTER en niet op boeking, en dat is precies
+  waarom het kan zonder scheider per paar. Kloppen ze niet, dan zegt de kolom met NEE in welke maand het
+  verschil zit.
+  DE KOSTENREGEL STAAT ERBIJ, netto en in de scope van `piekVerdeling()`, zodat het getal naast sectie 6 te
+  leggen is (`v265`).
+  WAT HET BLOK ZELF ZEGT DAT HET NIET KAN: dat twee boekingen dezelfde BETALING zijn. Gelijke aantallen en
+  gelijke sommen zijn een correspondentie en geen identiteit; de identiteit die de app kent is `t.id`, en die
+  verschilt hier per constructie. Een uitsluiting op venster aanvaardt dat.
 - **DE IBAN BESLIST DE REKENING-ID, NIET DE HASH** (`v281`): de resolutie in `psd2IngestSession()` is
   `bekend || ibanNum(iban) || psd2h_<hash> || psd2_<uid>`, dus de hash is de DERDE optie. GEMETEN bij de
   herkoppeling van N26 op 28 sep 2026: vier rekeningen zonder OPGESLAGEN hash hielden hun id, want die id IS
@@ -2131,8 +2194,8 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** ELF keer in zeventien rondes
-  is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze als
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** VEERTIEN keer in achttien
+  rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los lazen ze als
   incidenten; samen zijn het vijf manieren waarop dezelfde fout binnenkomt, en de vraag die alle vijf
   had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
   (a) DE TRIPDRAAD DIE NIET KON VALLEN (`v265`). De uitsluiting van huur uit `weekScope()` moest een
@@ -2195,7 +2258,23 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   met twee boekingen per constructie nooit. Mijn fixture had alleen een wees met zeven boekingen, dus de
   sabotage die `lj.length>2` eist bleef groen. Op het toestel is die kleine wees er werkelijk
   (`psd2_874633c7`, 2 boekingen), en nu staat hij in de fixture.
-  WAT DE ELF GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (l) DE SABOTAGE VIEL OP DE BRON EN NIET OP HET GEDRAG (`v282`). De vaste richting in
+  `rekSamenvoegVraag(wees, doel, 'vast')` werd getoetst met een assertie op de onclick-string, en die viel
+  rood - maar de gedragstest bleef groen, want op mijn fixture had het doel MEER boekingen dan de wees en dan
+  kiest hij ook zonder `'vast'` de goede kant. Het pad zit bij een GELIJK aantal, en dat is het enige pad dat
+  bestaat (meer boekingen dan zijn doel kan een wees niet hebben). Een assertie op de bron is dus geen bewijs
+  dat het gedrag gedekt is: zoek het geval waarin de twee vormen uiteenlopen en zet dat in de fixture.
+  (m) DE AANSLUITING LAS DEZELFDE BRON AAN BEIDE KANTEN (`v282`). Dat is (a) opnieuw, en nu in een
+  aansluiting in plaats van in een tripdraad: de sectie-6-test vergeleek het blok met een som over
+  `ACCMETA[acc].bank==='onbekend'`, dus de sabotage die de terugval weer ABN AMRO maakt schoof BEIDE kanten
+  mee en bleef groen. De reparatie is een onafhankelijke ondergrens uit `rekLosgekoppeld()`, die de bank niet
+  leest.
+  (n) HET VERSCHIL IN DE FIXTURE RAAKTE TWEE HELFTEN TEGELIJK (`v282`). De maandaansluiting oordeelt op
+  AANTAL en op de SOMMEN, en mijn ongelijke maand had een boeking extra: dat verandert allebei, dus de
+  sabotage die de bedragvergelijking weghaalt bleef groen. Er zijn nu twee varianten die elk maar één helft
+  raken (gelijk aantal met een ander bedrag, en gelijke som met een ander aantal). Bij een oordeel dat uit
+  meer dan één toets bestaat hoort per toets een geval dat alleen die toets raakt.
+  WAT DE VEERTIEN GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2273,7 +2352,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v280` → `minder-v281`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v281` → `minder-v282`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

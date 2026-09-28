@@ -891,6 +891,48 @@ function applyOwnAccounts(){
   }
 }
 // rol + label per rekening afleiden
+/* v282: DE BANKCODE UIT EEN IBAN, en uitdrukkelijk geen lijst met banknamen. Positie 5 tot en met 8 van
+   een IBAN is de bankcode; is die alfabetisch (NL, BE, FR) dan zijn het de letters, is hij numeriek (DE)
+   dan zijn het acht cijfers van de Bankleitzahl. Dat is een uitspraak over het FORMAAT en niet over een
+   bank, en een verkeerde knip kan daarom alleen een MISSER geven en nooit een verkeerde naam. */
+function ibanBankCode(iban){
+  const s=String(iban||'').replace(/\s/g,'').toUpperCase().slice(4);
+  if(!s) return '';
+  const m=s.match(/^[A-Z]+/);
+  return m ? m[0] : s.slice(0,8);
+}
+/* De naam die bij die bankcode hoort komt uit je EIGEN gekoppelde rekeningen: een andere rekening met
+   dezelfde bankcode draagt de naam die de bank zelf meegaf. Een tabel met bankcodes zou de hardcode
+   terugbrengen die v258 en v266 hebben opgeruimd, en hij zou verouderen zonder dat iemand het merkt. */
+function bankUitIban(iban){
+  const c=ibanBankCode(iban); if(!c) return '';
+  const ps=(typeof SET!=='undefined'&&SET.psd2Accounts)||{};
+  for(const k of Object.keys(ps)){ const e=ps[k]||{};
+    if(e.bank && ibanBankCode(e.iban)===c) return e.bank; }
+  return '';
+}
+/* v282: DE TERUGVAL WAS EEN HARDGECODEERDE BANKNAAM, EN DIE LOOG. De oude uitdrukking gaf de naam van de
+   koppeling, anders N26 bij een csv en anders ABN AMRO, dus elke psd2-rekening ZONDER koppel-entry heette
+   ABN AMRO. (Die uitdrukking staat hier niet uitgeschreven: de spec telt hem in de BRON, en een teller kan
+   een comment niet van code onderscheiden - v276.)
+   GEMETEN op het toestel: de wees `psd2_874633c7` stond in blok 8 als ABN AMRO terwijl zijn boekingen
+   "From Main to Buffer Comfort" zeggen, en dat is N26. HET HEEFT GEVOLGEN en is dus geen schoonheidsfout:
+   sectie 6 van blok 10 groepeert op `bron|bank` en die indeling beslist de as, dus een N26-rekening die
+   zijn koppeling kwijtraakt verhuist zijn euro's naar de ABN-groep (weekend 0, maandag 34) en kan de
+   conclusie omdraaien.
+   WAT MAG VOLGT UIT HET FORMAAT: een N26-CSV komt van N26 en een MT940 komt van ABN AMRO, want dat zijn de
+   twee parsers die dit bestand heeft. Wat er niet uit volgt is een psd2-rekening zonder entry, en die heet
+   nu `onbekend` (v59/v73/v173: onbekend blijft onbekend, en niet de meest waarschijnlijke).
+   DE IBAN IS DE ENIGE ANDERE BRON, en die staat alleen in de koppel-entry. Een match op de rekening-id is
+   overwogen en VERWORPEN: `ibanNum()` gooit de letters weg, dus een NL-id draagt het rekeningnummer en geen
+   bankcode, en een prefix-match daarop kan een VERKEERDE naam opleveren. Onbekend is de betere fout (v168). */
+function bankVanRek(a, list, pm){
+  if(pm) return pm.bank || bankUitIban(pm.iban) || 'onbekend';
+  const srcs=new Set((list||[]).map(t=>t.src||'mt940'));
+  if(srcs.size===1 && srcs.has('csv')) return 'N26';
+  if(srcs.size===1 && srcs.has('mt940')) return 'ABN AMRO';
+  return 'onbekend';
+}
 function buildAccMeta(){
   for(const a of OWN){
     const list=TX.filter(t=>t.acc===a);
@@ -903,7 +945,7 @@ function buildAccMeta(){
     // label: PSD2 toont bank + rekeningnaam, N26-potjes hun naam, ABN rol + laatste 4 cijfers
     const label = pm ? (pm.bank+' · '+pm.label) : isCSV ? (a.replace(/^N26 /,'')+' · N26') : (role+' ··'+a.slice(-4));
     const prev=ACCMETA[a]||{};
-    ACCMETA[a]=Object.assign({},prev,{role,count:list.length,income:inc,label,bank: pm?pm.bank : isCSV?'N26':'ABN AMRO'});
+    ACCMETA[a]=Object.assign({},prev,{role,count:list.length,income:inc,label,bank:bankVanRek(a,list,pm)});
   }
 }
 
@@ -12726,11 +12768,53 @@ function rekeningOverlap(){
 function rekZonderBoekingen(){
   try{ return allAccounts().filter(a=>!OWN.includes(a)); }catch(_){ return []; }
 }
+/* v282: LOSGEKOPPELD - een rekening waarvan boekingen `src=psd2` dragen maar die niet in
+   SET.psd2Accounts staat. `psd2IngestSession()` voegt sleutels toe en verwijdert nooit, dus zo'n rekening
+   blijft met zijn boekingen EN zijn saldo in OWN staan en telt door in `totalBalance()`. Dit is een
+   VASTSTELLING en geen oordeel: losgekoppeld betekent niet dat het dezelfde rekening is als een andere.
+   Stond als eigen filter in blok 8; nu een bron, want `rekWezen()` heeft dezelfde voorwaarde nodig (v104). */
+function rekLosgekoppeld(){
+  const ps=SET.psd2Accounts||{};
+  return (OWN||[]).filter(a=>{
+    if(ps[a]) return false;
+    const lijst=TX.filter(t=>t.acc===a);
+    return lijst.length>0 && lijst.some(t=>t.src==='psd2');
+  });
+}
+/* v282: EEN WEES IS EEN LOSGEKOPPELDE REKENING DIE AL EEN ANDERE REKENING IS, en dat is een STERKERE toets
+   dan de overlap hierboven en een ANDERE vraag. `rekeningOverlap()` eist minstens 3 gedeelde `_softKey`s en
+   60 procent van de kleinste kant, dus GEMETEN vindt hij de wees `psd2_874633c7` met zijn twee boekingen per
+   constructie nooit. En omdat `rekOverlapRegel()` alleen bij een treffer een regel gaf, was de sheet met de
+   samenvoeg-ingang daarmee niet eens te OPENEN: geen melding, geen ingang. Dat is de meetles dat een melding
+   de enige drager van een ingang kan zijn, nu op zichzelf.
+   DE TOETS IS DE IDENTITEIT VAN DE APP EN GEEN GELIJKENIS: elke boeking moet op een andere rekening een
+   boeking hebben met exact de id die hij DAAR zou krijgen, `txId(t, doel)`. Dat is dezelfde uitdrukking die
+   `categorize()` en `rekSamenvoeg()` lezen, dus wat hier 'dezelfde boeking' heet is letterlijk wat de
+   samenvoeging zou ontdubbelen. HET AANTAL DOET NIET MEE, en dat is de hele aanleiding.
+   ALLE BOEKINGEN EN NIET DE MEESTE: bij een deel zou de samenvoeging boekingen VERHUIZEN in plaats van
+   ontdubbelen, en dan is het geen wees maar een rekening met overlap - de vraag van `rekeningOverlap()`.
+   HIJ KIEST GEEN DOEL. Kwalificeren er twee, dan staan ze er allebei en kiest de gebruiker, net als in
+   `rekKandidaten()` (v122/v150): een voorselectie op een naam of op het aantal boekingen leest als een
+   vaststelling, en de enige die weet welke rekening het is, is de gebruiker. */
+function rekWezen(){
+  const los=rekLosgekoppeld(); if(!los.length) return [];
+  const ids={}; for(const a of (OWN||[])) ids[a]=new Set();
+  for(const t of TX){ if(ids[t.acc]) ids[t.acc].add(t.id); }
+  const uit=[];
+  for(const a of los){
+    const lijst=TX.filter(t=>t.acc===a);
+    const doelen=(OWN||[]).filter(b=>b!==a && ids[b] && ids[b].size && lijst.every(t=>ids[b].has(txId(t,b))));
+    if(doelen.length) uit.push({acc:a, doelen, tx:lijst.length});
+  }
+  return uit;
+}
 function rekOverlapRegel(){
-  let ov=[], leeg=[];
-  try{ ov=rekeningOverlap(); leeg=rekZonderBoekingen(); }catch(_){ return ''; }
+  let ov=[], wz=[], leeg=[];
+  try{ ov=rekeningOverlap(); wz=rekWezen(); leeg=rekZonderBoekingen(); }catch(_){ return ''; }
   if(ov.length){ const n=ov.length;
     return `<div class="small" style="margin-top:9px;color:var(--amber);cursor:pointer" onclick="openRekOverlap()">${ICON('warn')} ${n===1?'Twee rekeningen bevatten dezelfde boekingen':n+' paren rekeningen bevatten dezelfde boekingen'} ›</div>`; }
+  if(wz.length){ const n=wz.length;
+    return `<div class="small" style="margin-top:9px;color:var(--amber);cursor:pointer" onclick="openRekOverlap()">${ICON('warn')} ${n===1?'1 rekening staat er twee keer':n+' rekeningen staan er twee keer'} ›</div>`; }
   if(leeg.length){ const n=leeg.length;
     return `<div class="small muted" style="margin-top:9px;cursor:pointer" onclick="openRekOverlap()">${n===1?'1 gekoppelde rekening zonder boekingen':n+' gekoppelde rekeningen zonder boekingen'} ›</div>`; }
   return '';
@@ -13012,6 +13096,23 @@ function openRekOverlap(){
       ${leeg.map(a=>kaart(rekFeiten(a))+rekKandidaten(a)).join('')}
       <div class="small muted" style="margin-top:8px">Je bank deelt deze rekening wel, maar er kwam nog geen enkele boeking mee. Daardoor staat hij nergens anders in de app.</div>
     </div>`:''; })()}
+    ${(()=>{ const wz=(()=>{ try{ return rekWezen(); }catch(_){ return []; } })(); if(!wz.length) return '';
+      /* v282: DE INGANG NAAR DE SAMENVOEGING VOOR EEN WEES. Hij hing tot nu toe volledig aan
+         rekeningOverlap(), en die ziet een wees met een of twee boekingen per constructie niet. De richting
+         staat VAST: de wees vervalt en de rekening die je aanwijst blijft, dus `rekSamenvoegVraag(wees, doel,
+         'vast')` - zonder die derde parameter kiest hij zelf op machtiging of aantal, en dan kan de wees juist
+         de blijver worden. Kwalificeren er twee doelen, dan staan ze er allebei en wijs jij aan. */
+      return `<div class="card" style="margin-bottom:10px">
+      <div class="small" style="color:var(--amber);margin-bottom:6px">${wz.length===1?'Deze rekening staat er twee keer':'Deze rekeningen staan er twee keer'}</div>
+      ${wz.map(w=>kaart(rekFeiten(w.acc))+`<div class="small muted" style="margin:6px 0 2px">Deze rekening is niet meer gekoppeld, en ${w.tx===1?'zijn enige boeking staat':'alle '+w.tx+' boekingen staan'} met dezelfde identiteit ook op ${w.doelen.length===1?'deze rekening':'een van deze rekeningen'}:</div>`
+        +w.doelen.map(d=>{ const f=rekFeiten(d);
+          return `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="rekSamenvoegVraag('${esc(String(w.acc).replace(/'/g,"\'"))}','${esc(String(d).replace(/'/g,"\'"))}','vast')">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:var(--fs-md)">${esc(f.naam)}</div>
+              <div class="small muted">${f.tx} boeking${f.tx===1?'':'en'} · ${f.saldo!=null?euro(f.saldo):'saldo onbekend'} · ${f.l4?'IBAN '+esc(f.l4):'id '+esc(f.a)}</div>
+            </div><span class="muted">›</span></div>`; }).join('')).join('')}
+      <div class="small muted" style="margin-top:8px">Zolang hij er staat telt zijn saldo mee in je totaal. Samenvoegen laat de dubbele boekingen wegvallen; de rekening die blijft bestaan houdt alles wat erop staat.</div>
+    </div>`; })()}
     <div class="small muted" style="margin:12px 0 6px;font-weight:600">Al je rekeningen</div>
     ${allAccounts().map(a=>kaart(rekFeiten(a))).join('')}
     <button class="btn sec" style="margin-top:12px" onclick="rekOverlapCopy()">${ICON('doc')} Kopieer deze lijst</button>
@@ -13835,21 +13936,26 @@ function diagRekeningen(){
      er niet meer is: psd2IngestSession() voegt sleutels toe en verwijdert nooit, dus zo'n rekening blijft
      met zijn boekingen EN zijn saldo in OWN staan en telt door in totalBalance(). Het aantal boekingen doet
      hier niet mee: een wees met twee boekingen is even weinig gekoppeld als een met negen.
-     WAT DIT NIET DOET: samenvoegen, of zeggen dat het dezelfde rekening is. De tegenhanger-meting eronder
-     legt de drie velden naast elkaar en verder niets; welke rekening het is, is een vraag die de gegevens
-     hier niet beantwoorden. */
-  const wees=own.filter(a=>{
-    if(ps[a]) return false;
-    const lj=_dT(()=>TX.filter(t=>t.acc===a),[])||[];
-    return lj.length>0 && lj.some(t=>t.src==='psd2');
-  });
+     WAT DIT NIET DOET: samenvoegen. De tegenhanger-meting eronder legt de drie velden naast elkaar en
+     verder niets.
+     v282: HET BLOK HEEFT ZIJN EIGEN FILTER NIET MEER. `rekLosgekoppeld()` zegt welke rekeningen dit zijn en
+     `rekWezen()` welke daarvan per de identiteit van de app al een andere rekening ZIJN, en dat tweede is de
+     lijst waaraan de ingang in Instellingen hangt. Met een eigen filter hier konden blok en app iets anders
+     zeggen over dezelfde rekening (v104/v280). */
+  const wees=_dT(()=>rekLosgekoppeld(),[])||[];
+  const wz=_dT(()=>rekWezen(),[])||[];
+  const wzVan={}; for(const w of wz) wzVan[w.acc]=w;
   L.push('');
-  L.push('WEZEN (boekingen uit psd2, rekening niet meer gekoppeld): '+(wees.length?wees.join(', '):'geen'));
+  L.push('LOSGEKOPPELD (boekingen uit psd2, rekening niet meer gekoppeld): '+(wees.length?wees.join(', '):'geen'));
+  L.push('WEZEN (losgekoppeld EN elke boeking staat met dezelfde t.id op een andere rekening): '
+    +(wz.length?wz.map(w=>w.acc+' -> '+w.doelen.join(' of ')).join(', '):'geen')
+    +'   <-- hieraan hangt de samenvoeg-ingang in Instellingen (Bank & koppelingen)');
   for(const w of wees){
     const lj=_dT(()=>TX.filter(t=>t.acc===w),[])||[];
     const bal=_dT(()=>accBalance(w),null);
     L.push('  '+w+'   '+lj.length+' boeking'+(lj.length===1?'':'en')+'   saldo '+(bal==null?'onbekend':Math.round(bal))
-      +'   telt in totalBalance(): '+(bal==null?'nee, missing':'JA'));
+      +'   telt in totalBalance(): '+(bal==null?'nee, missing':'JA')
+      +'   wees: '+(wzVan[w]?('JA, doel '+wzVan[w].doelen.join(' of ')):'nee, niet elke boeking staat elders'));
     L.push('    per boeking de tegenhangers elders, op datum + bedrag; de tijd uit de desc en de id staan erbij:');
     for(const t of lj){
       const tj=(_dT(()=>_descTijden(t),[])||[]).join(',');
@@ -14336,7 +14442,7 @@ function diagDubbel(){
      OPEN PUNT, NIET IN DEZE RONDE: deze uitdrukking staat nu op VIER plekken (hier, blok 8,
      `acctNaam()` en `acctRenameOpen()`). De vorm die dat oplost is een `acctBank(a)` die alle vier
      lezen, en dat raakt app-code buiten dit blok. */
-  const bankVan=a=>(ACCMETA[a]&&ACCMETA[a].bank)||(((SET.psd2Accounts||{})[a])||{}).bank||'-';
+  const bankVan=a=>(ACCMETA[a]&&ACCMETA[a].bank)||(((SET.psd2Accounts||{})[a])||{}).bank||'onbekend';
   const dekRij=sleutel=>{
     const rij={};
     for(const t of TX){
@@ -14840,6 +14946,14 @@ function diagDubbel(){
       +(g.veld?('   (GELIJK aan de desc-betaaldatum in '+Math.round(g.gelijk/g.veld*100)+'% van '+g.veld+' regels met het veld)')
               :'   (geen enkele regel met het veld, dus geen harde toets)'));
   }
+  /* v282: `onbekend` IS EEN EIGEN GROEP EN GEEN RESTBAK. Tot v281 heette een psd2-rekening zonder
+     koppel-entry `ABN AMRO`, dus zijn euro's werden bij de ABN-groep opgeteld en namen diens indeling over.
+     Nu staat hij apart, en dat is waar: de indeling van een groep rust op zijn eigen weekend- en
+     maandagaandeel en daarvoor is de naam niet nodig; waar de naam wel voor nodig is, is de vraag WELKE
+     regels bij elkaar horen, en die is hier niet te beantwoorden. */
+  if(Object.keys(gInfo).some(k=>/\| onbekend$/.test(k)))
+    L.push('    LET OP: een groep `onbekend` is een rekening waarvan de bank niet vaststaat (geen koppel-entry,'
+      +' geen IBAN). Hij telt apart en neemt de indeling van geen enkele bank over.');
   L.push('  per maand, alleen de maanden die signaal 3 leest:');
   for(const m of refM.concat([lm])){
     const A={som:0,dag:[0,0,0,0,0,0,0]}, B={som:0,dag:[0,0,0,0,0,0,0]};
@@ -14864,6 +14978,158 @@ function diagDubbel(){
   L.push('    Dat is dezelfde derde kalender die v273 verbood, nu per betaalwijze in plaats van per bank.');
   return L;
 }
+/* ===== BLOK 11: DE CSV-IMPORT TEGEN DE PSD2-KOPPELING, PER REKENING (v282) =====
+   DE AANLEIDING IS EEN TEGENSPRAAK IN SECTIE 6 VAN BLOK 10: `csv | N26` zegt maandag 40 en weekend 20,
+   `psd2 | N26` zegt bij DEZELFDE bank maandag 8 en weekend 38, over overlappende periodes. Zolang niet
+   vaststaat of die csv-regels dezelfde boekingen zijn als de psd2-regels, is elke euro-dekking over dat
+   venster mogelijk dubbel geteld.
+   DIT BLOK MEET EN BESLIST NIETS. Er wordt niets ontdubbeld, niets uitgesloten en niets samengevoegd; wat
+   hier staat is wat er te zien is, met de gronden erbij waarop een volgende ronde kan kiezen.
+   WAT DE TWEE BESTAANDE SCHEIDERS HIER NIET KUNNEN, en dat is de reden dat dit een eigen vraag is:
+   `t.id` niet, want de psd2-desc en de csv-desc verschillen (GEMETEN bij de wees `psd2_874633c7`: gelijke
+   dag, gelijk bedrag, verschillende id); de desc-TIJD niet, want geen enkele csv-regel draagt er een.
+   HET IS BOVENDIEN EEN KRUIS-REKENING-DUBBEL: de csv-potjes zijn eigen rekening-id's, dus de parenscan van
+   blok 10 ziet ze per constructie niet (die loopt binnen EEN rekening) en `rekeningOverlap()` ook niet,
+   want die keyt op `_softKey` en die begint met de NAAM, die per bron verschilt.
+   DE PAARVORMING GEBEURT OP TWEE GRONDEN DIE ONAFHANKELIJK ZIJN, en er wordt alleen gepaard als ze het
+   eens zijn: de bedragen (dag + bedrag) en de richting (de Space-naam in de desc met het teken erbij). Zijn
+   ze het oneens, dan is er niets gepaard, want dan weet het blok het niet (v59/v73/v173). */
+function diagCsvPsd2(){
+  const L=[];
+  const lijstVan=a=>_dT(()=>TX.filter(t=>t.acc===a),[])||[];
+  const bronnen=a=>new Set(lijstVan(a).map(t=>t.src||'mt940'));
+  const own=_dT(()=>OWN,[])||[];
+  const csvAcc=own.filter(a=>{ const b=bronnen(a); return b.size===1 && b.has('csv'); });
+  const psdAcc=own.filter(a=>bronnen(a).has('psd2'));
+  const venster=a=>{ const d=lijstVan(a).map(t=>t.date).filter(Boolean).sort(); return d.length?[d[0],d[d.length-1]]:null; };
+  const inScope=t=>{ const c=_dT(()=>catOf(t),''); return !!(CATS[c] && CATS[c].type==='expense'
+    && !_dT(()=>isFixed(t),false) && !_dT(()=>geenNorm(c),false)); };
+  const som=(arr,f)=>arr.reduce((s,t)=>s+(f(t)||0),0);
+
+  L.push('csv-rekeningen: '+(csvAcc.length?csvAcc.join(', '):'geen'));
+  L.push('psd2-rekeningen: '+(psdAcc.length?psdAcc.join(', '):'geen'));
+  if(!csvAcc.length || !psdAcc.length){ L.push('  zonder beide bronnen is er niets te vergelijken'); return L; }
+
+  /* de id-verzameling en een index op dag+bedrag per psd2-rekening, een keer gebouwd */
+  const idx={};
+  for(const p of psdAcc){
+    const lj=lijstVan(p), ids=new Set(lj.map(t=>t.id)), dag=new Map();
+    for(const t of lj){ const k=t.date+'|'+(+t.amount).toFixed(2); if(!dag.has(k)) dag.set(k,0); dag.set(k,dag.get(k)+1); }
+    idx[p]={lj, ids, dag};
+  }
+  const dagenTussen=(a,b)=>Math.abs(Math.round((new Date(a+'T00:00:00')-new Date(b+'T00:00:00'))/864e5));
+
+  const paren=[];
+  L.push('');
+  L.push('a. WELKE CSV-REKENING HOORT BIJ WELKE PSD2-REKENING, EN OP GROND WAARVAN');
+  L.push('   twee onafhankelijke gronden. BEDRAGEN: hoeveel csv-boekingen hebben op die psd2-rekening een');
+  L.push('   boeking op dezelfde dag met hetzelfde bedrag (en hoeveel binnen drie dagen). RICHTING: de');
+  L.push('   Space-naam komt uit de csv-rekening-id zelf (zonder het voorvoegsel), en een overboeking');
+  L.push('   "From X to Y" staat op de rekening van Y als BIJschrijving en op die van X als AFschrijving.');
+  L.push('   Is die rekening de Space, dan lopen "naar" en "uit" hoog; is hij de tegenpartij, dan de spiegel.');
+  for(const c of csvAcc){
+    const lj=lijstVan(c), vw=venster(c), spatie=String(c).replace(/^N26\s+/i,'').trim(), sl=spatie.toLowerCase();
+    L.push('');
+    L.push('  '+c+'   '+lj.length+' boekingen   '+(vw?vw[0]+' t/m '+vw[1]:'(geen datums)')+'   Space-naam uit de id: "'+spatie+'"');
+    const rij=[];
+    for(const p of psdAcc){
+      let ex=0, w3=0, idh=0;
+      for(const t of lj){
+        const k=t.date+'|'+(+t.amount).toFixed(2);
+        if(idx[p].dag.has(k)) ex++;
+        else if(idx[p].lj.some(x=>Math.abs(x.amount-t.amount)<0.005 && dagenTussen(x.date,t.date)<=3)) w3++;
+        if(_dT(()=>idx[p].ids.has(txId(t,p)),false)) idh++;
+      }
+      let naarIn=0, vanUit=0, naarUit=0, vanIn=0;
+      for(const x of idx[p].lj){
+        const d=' '+String(x.desc||'').toLowerCase().replace(/\s+/g,' ')+' ';
+        const tNaar=d.indexOf(' to '+sl)>=0, tVan=d.indexOf(' from '+sl)>=0;
+        if(tNaar){ if(x.amount>0) naarIn++; else naarUit++; }
+        if(tVan){ if(x.amount<0) vanUit++; else vanIn++; }
+      }
+      rij.push({p, ex, w3, idh, naarIn, vanUit, naarUit, vanIn, richt:naarIn+vanUit, spiegel:naarUit+vanIn});
+    }
+    L.push('    psd2-rekening          dag+bedrag   binnen 3d   zelfde t.id   naar+in  van+uit  |  naar+uit  van+in');
+    for(const r of rij.slice().sort((a,b)=>b.ex-a.ex)){
+      L.push('    '+String(r.p).padEnd(22)+String(r.ex).padStart(8)+'/'+lj.length
+        +String(r.w3).padStart(12)+String(r.idh).padStart(14)
+        +String(r.naarIn).padStart(11)+String(r.vanUit).padStart(9)+'  |'+String(r.naarUit).padStart(10)+String(r.vanIn).padStart(8));
+    }
+    const top=(veld)=>{ const s=rij.slice().sort((a,b)=>b[veld]-a[veld]);
+      if(!s.length || !s[0][veld]) return null;
+      if(s.length>1 && s[1][veld]===s[0][veld]) return null;
+      return s[0].p; };
+    const pb=top('ex'), pr=top('richt');
+    L.push('    op de bedragen wijst dit aan: '+(pb||'niets, gelijke stand of nul treffers'));
+    L.push('    op de richting wijst dit aan: '+(pr||'niets, gelijke stand of nul treffers'));
+    if(pb && pr && pb===pr){ paren.push({csv:c, psd2:pb}); L.push('    BEIDE GRONDEN WIJZEN '+pb+' AAN, dus gepaard'); }
+    else L.push('    DE TWEE GRONDEN ZIJN HET NIET EENS, dus NIET gepaard en (b) en (c) laten deze rekening leeg');
+    if(rij.every(r=>!r.idh)) L.push('    geen enkele csv-boeking heeft ergens dezelfde t.id, dus de id kan hier niet ontdubbelen');
+  }
+
+  L.push('');
+  L.push('b. DEKT PSD2 HET CSV-VENSTER, PER PAAR');
+  if(!paren.length) L.push('   geen enkel paar, dus niets te dekken');
+  for(const pr of paren){
+    const cv=venster(pr.csv), pv=venster(pr.psd2);
+    const dekt = cv && pv && pv[0]<=cv[0] && pv[1]>=cv[1];
+    L.push('   '+pr.csv+' -> '+pr.psd2);
+    L.push('     csv  '+(cv?cv[0]+' t/m '+cv[1]:'-')+'      psd2 '+(pv?pv[0]+' t/m '+pv[1]:'-'));
+    L.push('     psd2 dekt het hele csv-venster: '+(dekt?'JA':'NEE')
+      +(cv&&pv?('   (psd2 begint '+(pv[0]<=cv[0]?'op of voor':'NA')+' de eerste csv-boeking en eindigt '+(pv[1]>=cv[1]?'op of na':'VOOR')+' de laatste)'):''));
+    if(cv){
+      const mnd=[...new Set(lijstVan(pr.csv).map(t=>String(t.date).slice(0,7)))].sort();
+      const gat=mnd.filter(m=>!idx[pr.psd2].lj.some(t=>String(t.date).slice(0,7)===m));
+      L.push('     maanden met csv-boekingen: '+mnd.join(', '));
+      L.push('     daarvan ZONDER enkele psd2-boeking: '+(gat.length?gat.join(', ')+'   <-- daar kan psd2 de csv-regels niet vervangen':'geen'));
+    }
+  }
+
+  L.push('');
+  L.push('c. PER PAAR PER MAAND IN HET CSV-VENSTER: AANTAL EN SOM, CSV TEGEN PSD2, UIT EN IN APART');
+  L.push('   uit en in zijn de sommen van de negatieve en de positieve bedragen, beide als positief getal.');
+  if(!paren.length) L.push('   geen enkel paar, dus niets te vergelijken');
+  for(const pr of paren){
+    const cv=venster(pr.csv); if(!cv) continue;
+    const mnd=[...new Set(lijstVan(pr.csv).map(t=>String(t.date).slice(0,7)))].sort();
+    L.push('   '+pr.csv+' -> '+pr.psd2+'   venster '+cv[0]+' t/m '+cv[1]);
+    L.push('     maand      csv n   csv uit    csv in   psd2 n  psd2 uit   psd2 in   sluit aan');
+    let A={n:0,u:0,i:0}, B={n:0,u:0,i:0};
+    for(const m of mnd){
+      const cl=lijstVan(pr.csv).filter(t=>String(t.date).slice(0,7)===m);
+      const pl=idx[pr.psd2].lj.filter(t=>String(t.date).slice(0,7)===m && t.date>=cv[0] && t.date<=cv[1]);
+      const cu=-som(cl,t=>Math.min(t.amount,0)), ci=som(cl,t=>Math.max(t.amount,0));
+      const pu=-som(pl,t=>Math.min(t.amount,0)), pi=som(pl,t=>Math.max(t.amount,0));
+      A.n+=cl.length; A.u+=cu; A.i+=ci; B.n+=pl.length; B.u+=pu; B.i+=pi;
+      const eens = cl.length===pl.length && Math.abs(cu-pu)<0.01 && Math.abs(ci-pi)<0.01;
+      L.push('     '+m+String(cl.length).padStart(9)+String(Math.round(cu)).padStart(10)+String(Math.round(ci)).padStart(10)
+        +String(pl.length).padStart(9)+String(Math.round(pu)).padStart(10)+String(Math.round(pi)).padStart(10)
+        +'   '+(eens?'ja':'NEE'));
+    }
+    const eens = A.n===B.n && Math.abs(A.u-B.u)<0.01 && Math.abs(A.i-B.i)<0.01;
+    L.push('     TOTAAL   '+String(A.n).padStart(7)+String(Math.round(A.u)).padStart(10)+String(Math.round(A.i)).padStart(10)
+      +String(B.n).padStart(9)+String(Math.round(B.u)).padStart(10)+String(Math.round(B.i)).padStart(10)
+      +'   '+(eens?'ja':'NEE'));
+    const sc=lijstVan(pr.csv).filter(t=>t.date>=cv[0] && t.date<=cv[1] && inScope(t));
+    /* DE KOSTEN IN DE MAAT VAN DE SCOPE ZELF, dus NETTO (`-t.amount`) en niet alleen de afschrijvingen:
+       zo is dit getal naast de sommen in sectie 6 van blok 10 te leggen (v265). */
+    L.push('     wat het zou kosten om deze csv-regels binnen het venster niet mee te tellen: '
+      +sc.length+' boekingen, '+Math.round(som(sc,t=>-t.amount))+' euro netto in de scope van piekVerdeling()');
+  }
+
+  L.push('');
+  L.push('WAT DEZE UITVOER BESLIST');
+  L.push('  kloppen aantal, uit en in per maand, dan zijn de csv-regels binnen dat venster dezelfde boekingen');
+  L.push('    als de psd2-regels en is het voorstel: een csv-regel binnen een door psd2 gedekt venster telt');
+  L.push('    niet mee. Dat is een uitsluiting op VENSTER en niet op boeking, dus er hoeft geen scheider per');
+  L.push('    paar te bestaan, en dat is precies waarom het kan: t.id en de desc-tijd kunnen het hier niet.');
+  L.push('  kloppen ze NIET, dan dekken de twee bronnen niet hetzelfde en moet er per paar een scheider komen;');
+  L.push('    dan zegt de kolom met NEE in welke maand het verschil zit en is dat de plek om te zoeken.');
+  L.push('  WAT DIT BLOK NIET KAN ZEGGEN: dat twee boekingen dezelfde BETALING zijn. Gelijke aantallen en');
+  L.push('    gelijke sommen zijn een correspondentie en geen identiteit; de identiteit die de app kent is');
+  L.push('    t.id, en die verschilt hier per constructie. Een uitsluiting op venster aanvaardt dat.');
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -14875,6 +15141,7 @@ const DIAG_BLOKKEN=[
   {titel:'de rekeningen en de bankverbindingen', lees:diagRekeningen},
   {titel:'de piekdag per week', lees:diagPiekdag},
   {titel:'dubbele boekingen en wat t.date betekent', lees:diagDubbel},
+  {titel:'de csv-import tegen de psd2-koppeling, per rekening', lees:diagCsvPsd2},
 ];
 
 async function diagTekst(){
