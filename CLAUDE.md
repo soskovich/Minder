@@ -95,6 +95,37 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **BLOK 12 MEET DE TANKVOORAUTORISATIE EN BESLIST NIETS** (`v290`): geen koppeling, geen app-gedrag,
+  geen lezer buiten het blok, en het schrijft niets (`v244`). DE AANLEIDING STAAT IN BLOK 9: op alle vijf
+  de duurste tankdagen staan DRIE regels van hetzelfde station, en in alle vijf is de voorautorisatie MIN
+  de terugboeking exact gelijk aan de tweede afschrijving (150-100=50, 125-51=74, 125-18=107, 125-22=103,
+  125-25=100). Klopt dat, dan telt elke tankbeurt DUBBEL en is de zaterdagpiek van `v288` mogelijk een
+  artefact van die vorm en niet van gedrag.
+  DIE VIJF ZIJN EEN VERTEKENDE STEEKPROEF, en dat is de reden dat het blok bestaat: blok 9 drukt alleen
+  de DUURSTE dag per week af, en een dag die dubbel telt wordt daardoor vaker de duurste.
+  DE DRIETALLEN KOMEN UIT DE VORM EN NIET UIT EEN BEDRAG: een uitgave in de vervoer-categorie met een
+  BIJSCHRIJVING van dezelfde tegenpartij binnen `VOORAUT_VENSTER` (14) dagen. Mijn eerste vorm filterde op
+  een heel eurobedrag dat minstens drie keer voorkwam, en die liet juist de 150-voorautorisatie vallen
+  omdat die er maar een keer stond: een drempel die het geval verbergt waarvoor de meting bestaat. WELK
+  bedrag het pompbedrag is hoort een UITKOMST te zijn, dus het histogram is een waarneming over de
+  uitkomst en geen filter erop, en er staat geen bedrag en geen winkelnaam in de code (`v266`).
+  EEN TERUGBOEKING HOORT BIJ PRECIES EEN AFSCHRIJVING (`v283`/`v286`). De lus loopt over de
+  TERUGBOEKINGEN en niet over de afschrijvingen: in die eerste vorm claimde de tweede afschrijving van een
+  drietal dezelfde terugboeking nog eens, en kwam elk drietal er twee keer in, een keer terecht als vorm 3
+  en een keer als een spook-vorm-1 met een onzinnig netto.
+  HET GROOTSTE BEDRAG EERST, PAS DAARNA DE DICHTSTBIJZIJNDE DAG, en dat is geen smaak: een terugboeking
+  kan haar voorautorisatie per definitie niet overtreffen, dus die zit onder de grootste kandidaten. Op de
+  dag sorteren pakt bij een terugboeking die een paar dagen later landt de tankbeurt van DIE dag in plaats
+  van de voorautorisatie ervoor. Dat geval staat in de fixture en is de enige plek waar de twee regels
+  uiteenlopen. De eis dat de terugboeking niet groter is dan de afschrijving is om dezelfde reden apart
+  getoetst, met een bijschrijving die elke afschrijving van die tegenpartij overtreft: zonder dat geval is
+  hij inert, want de sortering pakt toch al het grootste bedrag.
+  VIER UITPUTTENDE VORMEN, zodat "geen van beide" een geldig antwoord is: 1 (deels terug, geen tweede
+  afschrijving), 2 (volledig terug, de tankbeurt apart), 3 (deels terug EN de tankbeurt apart, dus
+  dubbel), en geen terugboeking. Vorm 3 kwam in de vraag niet voor en is wat de uitvoer van blok 9
+  suggereert.
+  WAT HET BLOK NIET KAN ZEGGEN: dat een voorautorisatie en een terugboeking dezelfde BETALING zijn. Een
+  bedrag dat optelt binnen een venster is een correspondentie en geen identiteit, net als in blok 11.
 - **EEN OVERSCHRIJDING DIE DOOR EEN CORRECTIE VERDWEEN IS GEEN 'NIETS GEDAAN'** (`v289`):
   `valtOpAfsluiten()` kende twee handelingen (potje bijgesteld, grens gezet) en zette al het andere op
   `geen`, dus een maand waarin je een dubbele boeking bevestigde of een verkeerde eigen categorie liet
@@ -2743,7 +2774,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v288` → `minder-v289`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v289` → `minder-v290`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

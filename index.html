@@ -15888,6 +15888,194 @@ function diagCsvPsd2(){
   L.push('    t.id, en die verschilt hier per constructie. Een uitsluiting op venster aanvaardt dat.');
   return L;
 }
+/* ===== BLOK 12: DE TANKVOORAUTORISATIE (v290) =====
+   ALLEEN METEN. Geen koppeling, geen app-gedrag, geen enkele lezer buiten dit blok, en het schrijft niets
+   (v244). Wat het beslist is of de piekdag en het Vervoer-potje een koppeling tussen een voorautorisatie
+   en haar terugboeking NODIG hebben.
+   DE AANLEIDING STAAT IN BLOK 9 OP HET TOESTEL (gemeten bij v288): op alle vijf de duurste tankdagen
+   staan DRIE regels van hetzelfde station op dezelfde dag, en in alle vijf de gevallen is de
+   voorautorisatie MIN de terugboeking exact gelijk aan de tweede afschrijving (150-100=50, 125-51=74,
+   125-18=107, 125-22=103, 125-25=100). Als dat klopt telt elke tankbeurt DUBBEL, en dan is de
+   zaterdagpiek van 3 van 6 weken mogelijk een artefact van deze vorm en niet van je gedrag.
+   DE VIJF ZIJN EEN VERTEKENDE STEEKPROEF, en dat is precies waarom dit blok bestaat: blok 9 drukt alleen
+   de DUURSTE dag per week af, en een dag die dubbel telt wordt daardoor vaker de duurste. Hier lopen alle
+   kandidaten langs, ook die van een gewone week.
+   DE DRIETALLEN WORDEN UIT DE VORM AFGELEID EN NIET UIT EEN BEDRAG (v266): een kandidaat is een uitgave in
+   de vervoer-categorie met een BIJSCHRIJVING van dezelfde tegenpartij binnen het venster. Mijn eerste vorm
+   filterde op een heel eurobedrag dat minstens drie keer voorkwam, en die liet op de fixture juist de
+   Tango-voorautorisatie van 150 vallen omdat die er maar een keer stond. Een drempel die het geval
+   verbergt waarvoor de meting bestaat is precies wat dit project verbiedt; dat 125 en 150 de pompbedragen
+   zijn hoort een UITKOMST te zijn, en het histogram in sectie 1 is daarom een waarneming over de uitkomst
+   en geen filter erop.
+   DE VIER VORMEN ZIJN UITPUTTEND, zodat "geen van beide" een geldig antwoord is en niet als vorm 1 wordt
+   geboekt. Vorm 3 is de vorm die de uitvoer van blok 9 suggereert en die in de vraag niet voorkwam. */
+const VOORAUT_VENSTER=14;   // dagen rond de afschrijving waarin de terugboeking mag landen
+function diagVoorautorisatie(){
+  const L=[];
+  const cent=a=>Math.round(Math.abs(a)*100);
+  const heel=a=>cent(a)%100===0;
+  const dag=d=>new Date(String(d).slice(0,10)+'T00:00:00');
+  const afst=(a,b)=>Math.round((dag(b)-dag(a))/864e5);
+  const isVervoer=t=>{ try{ return catOf(t)==='vervoer'; }catch(_){ return false; } };
+  const tel=(_dT(()=>telbareTx(),[])||[]).filter(isVervoer);
+  const key=t=>_dT(()=>recurKey(t),'')||'';
+
+  L.push('ALLEEN METEN. Dit blok leest, beslist niets en schrijft niets (v244). Geen enkele app-functie');
+  L.push('leest hem. Wat hij moet beantwoorden: telt een tankbeurt een of twee keer mee.');
+  L.push('');
+  L.push('1. DE DRIETALLEN, AFGELEID UIT DE VORM EN NIET UIT EEN BEDRAG');
+  L.push('   een uitgave in de vervoer-categorie met een BIJSCHRIJVING van dezelfde tegenpartij binnen');
+  L.push('   '+VOORAUT_VENSTER+' dagen. Er staat geen bedrag en geen winkelnaam in de code (v266): WELK bedrag');
+  L.push('   het pompbedrag is hoort een UITKOMST te zijn en geen aanname, anders meet het blok zijn');
+  L.push('   eigen veronderstelling. Het histogram hieronder is daarom een waarneming over de uitkomst');
+  L.push('   en geen filter erop. Een drempel op "hoe vaak komt dit bedrag terug" is er om dezelfde');
+  L.push('   reden niet: die verbergt een pompbedrag dat maar een of twee keer voorkomt.');
+
+  const perNaam={};
+  for(const t of tel){ const k=key(t); if(!k) continue; (perNaam[k]=perNaam[k]||[]).push(t); }
+  const rijen=[];
+  /* EEN TERUGBOEKING HOORT BIJ PRECIES EEN AFSCHRIJVING, en dat is de een-op-een-eis van v283 en v286.
+     Mijn eerste vorm liep over de AFSCHRIJVINGEN, en dan claimde de tweede afschrijving van een drietal
+     dezelfde terugboeking nog een keer: elk drietal kwam er twee keer in, een keer terecht als vorm 3 en
+     een keer als een spook-vorm-1 met een onzinnig netto. Daarom loopt de lus nu over de TERUGBOEKINGEN.
+     DE KEUZE IS HET GROOTSTE BEDRAG EERST EN PAS DAARNA DE DICHTSTBIJZIJNDE DAG. Dat is geen smaak: een
+     terugboeking kan haar voorautorisatie per definitie niet overtreffen, dus de voorautorisatie zit onder
+     de GROOTSTE kandidaten, en een tankbeurt van dezelfde dag is kleiner. Op de dag sorteren zou bij een
+     terugboeking die een paar dagen later landt de tankbeurt van die dag pakken in plaats van de
+     voorautorisatie ervoor; dat geval staat in de fixture. */
+  const geclaimd=new Set();
+  const terugAlle=tel.filter(t=>t.amount>0).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  for(const terug of terugAlle){
+    const buren=(perNaam[key(terug)]||[]).filter(x=>x!==terug && x.amount<0
+      && !geclaimd.has(x) && cent(x.amount)>=cent(terug.amount)
+      && Math.abs(afst(terug.date,x.date))<=VOORAUT_VENSTER);
+    if(!buren.length) continue;
+    buren.sort((a,b)=>cent(b.amount)-cent(a.amount) || Math.abs(afst(terug.date,a.date))-Math.abs(afst(terug.date,b.date)));
+    const t=buren[0]; geclaimd.add(t); geclaimd.add(terug);
+    const P=cent(t.amount), R=cent(terug.amount);
+    const tweede=(perNaam[key(t)]||[]).filter(x=>x!==t && x!==terug && x.amount<0 && !geclaimd.has(x)
+      && Math.abs(afst(t.date,x.date))<=VOORAUT_VENSTER)
+      .sort((a,b)=>Math.abs(afst(t.date,a.date))-Math.abs(afst(t.date,b.date)));
+    const past=tweede.filter(x=>Math.abs(cent(x.amount)-(P-R))<=1)[0]||null;
+    let vorm, netto, echt;
+    if(R>=P && tweede.length){ vorm='2 (volledig terug, echte tankbeurt apart)'; echt=cent(tweede[0].amount); netto=echt; geclaimd.add(tweede[0]); }
+    else if(past){ vorm='3 (deels terug EN de tankbeurt apart: telt DUBBEL)'; echt=P-R; netto=2*echt; geclaimd.add(past); }
+    else { vorm='1 (deels terug, geen tweede afschrijving die past)'; echt=P-R; netto=echt; }
+    rijen.push({t, terug, P, R, tweede, past, vorm, netto, echt,
+      d:afst(t.date,terug.date),
+      maandOver:String(terug.date).slice(0,7)!==String(t.date).slice(0,7)});
+  }
+  rijen.sort((a,b)=>String(b.t.date).localeCompare(String(a.t.date)));
+
+  /* HET HISTOGRAM IS EEN WAARNEMING OVER DE UITKOMST en geen filter erop. Zo is te zien OF de
+     afschrijvingen van een drietal ronde bedragen zijn, en welke. */
+  const perBed={};
+  for(const r of rijen){ const b=perBed[r.P]=perBed[r.P]||{n:0, namen:new Set(), heel:heel(r.t.amount)}; b.n++; b.namen.add(key(r.t)); }
+  const bedr=Object.keys(perBed).sort((a,b)=>perBed[b].n-perBed[a].n || b-a);
+  L.push('   drietallen gevonden: '+rijen.length);
+  if(!rijen.length){ L.push('   (geen enkele vervoer-uitgave heeft een bijschrijving van dezelfde tegenpartij in dit venster)'); return L; }
+  L.push('   het bedrag van de AFSCHRIJVING, geteld:');
+  for(const c of bedr.slice(0,12)) L.push('     '+(c/100).toFixed(2).padStart(9)+'   '+String(perBed[c].n).padStart(3)+'x   bij '+perBed[c].namen.size+' tegenpartij(en)   '+(perBed[c].heel?'heel eurobedrag':'met centen'));
+  if(bedr.length>12) L.push('     ... en '+(bedr.length-12)+' andere bedragen');
+  /* DE TEGENPROEF: hoeveel uitgaven van datzelfde bedrag hebben GEEN bijschrijving. Staat dat hoog,
+     dan is het bedrag geen pompbedrag maar gewoon een veelvoorkomend bedrag. */
+  const zonder={};
+  for(const t of tel){ if(!(t.amount<0)) continue; const c=cent(t.amount); if(!perBed[c]) continue;
+    if(!rijen.some(r=>r.t===t)) zonder[c]=(zonder[c]||0)+1; }
+  L.push('   dezelfde bedragen ZONDER bijschrijving: '+(bedr.slice(0,6).map(c=>(c/100).toFixed(2)+' '+(zonder[c]||0)+'x').join(' | ')||'-'));
+  L.push('');
+  L.push('2. PER KANDIDAAT-BOEKING, MET HET VENSTER VAN '+VOORAUT_VENSTER+' DAGEN RONDOM');
+  L.push('   kandidaten: '+rijen.length);
+  if(!rijen.length){ L.push('   (geen)'); return L; }
+  for(const r of rijen.slice(0, DIAG_PAAR_MAX)){
+    L.push('  '+r.t.date+'   '+(r.P/100).toFixed(2).padStart(9)+'   '+String(r.t.name||'?').slice(0,26));
+    L.push('     terugboeking: '+(r.terug?((r.R/100).toFixed(2)+' op '+r.terug.date+'   '+(r.d===0?'zelfde dag':(Math.abs(r.d)+' dag'+(Math.abs(r.d)===1?'':'en')+(r.d<0?' EERDER':' later')))
+      +(r.maandOver?'   <-- ANDERE MAAND':'')):'geen in dit venster'));
+    L.push('     andere afschrijvingen van dezelfde tegenpartij in het venster: '
+      +(r.tweede.length?r.tweede.map(x=>(cent(x.amount)/100).toFixed(2)+' op '+x.date+(x===r.past?' <-- past op het verschil':'')).join(' | '):'geen'));
+    L.push('     -> VORM '+r.vorm+'   netto nu '+(r.netto/100).toFixed(2)+'   echte tankbeurt '+(r.echt/100).toFixed(2));
+  }
+  if(rijen.length>DIAG_PAAR_MAX) L.push('  ... en '+(rijen.length-DIAG_PAAR_MAX)+' meer');
+
+  /* (a) DE VORMEN GETELD */
+  L.push('');
+  L.push('3a. WELKE VORM, GETELD');
+  const vt={}; for(const r of rijen) vt[r.vorm]=(vt[r.vorm]||0)+1;
+  for(const k of Object.keys(vt).sort((a,b)=>vt[b]-vt[a])) L.push('   '+String(vt[k]).padStart(4)+'x  vorm '+k);
+  L.push('   vorm 1 = afschrijving, later een bijschrijving van het VERSCHIL, geen tweede afschrijving');
+  L.push('   vorm 2 = afschrijving, later het VOLLE bedrag terug, en de tankbeurt als eigen afschrijving');
+  L.push('   vorm 3 = deels terug EN de tankbeurt apart, dus de tankbeurt telt TWEE keer mee');
+
+  /* (b) DE AFSTAND EN DE MAANDGRENS */
+  L.push('');
+  L.push('3b. HOE VER DE TERUGBOEKING LANDT');
+  const met=rijen.filter(r=>r.terug);
+  const dt={}; for(const r of met) dt[r.d]=(dt[r.d]||0)+1;
+  L.push('   met een terugboeking: '+met.length+' van '+rijen.length);
+  L.push('   per dagafstand: '+(Object.keys(dt).sort((a,b)=>a-b).map(d=>d+'d '+dt[d]).join(', ')||'-'));
+  const verst=met.length?Math.max(...met.map(r=>Math.abs(r.d))):0;
+  L.push('   grootste afstand: '+verst+' dagen   (het venster is '+VOORAUT_VENSTER+', dus een grotere afstand kan dit blok niet zien)');
+  const over=met.filter(r=>r.maandOver);
+  L.push('   terugboeking in een ANDERE maand dan de afschrijving: '+over.length
+    +(over.length?('   '+over.slice(0,6).map(r=>r.t.date+' -> '+r.terug.date).join(' | ')):'')); 
+  L.push('   dat laatste is de vraag die telt voor een maandcijfer: valt de terugboeking in een andere maand,');
+  L.push('   dan staat de ene maand te hoog en de andere te laag, en dat corrigeert zichzelf nooit.');
+
+  /* (c) WAT HET PER MAAND SCHEELT, EN WAT HET MET DE WEEKDAG DOET */
+  L.push('');
+  L.push('3c. WAT HET PER MAAND SCHEELT IN VERVOER & AUTO');
+  L.push('   "nu" is wat er vandaag in de maand staat (de afschrijving in haar eigen maand, de terugboeking');
+  L.push('   in de hare); "gekoppeld" is wat er zou staan als elke tankbeurt een keer telde, in de maand van');
+  L.push('   de afschrijving. Het verschil is wat een koppeling zou opleveren.');
+  const perM={};
+  for(const r of rijen){
+    const m=String(r.t.date).slice(0,7); const R=(perM[m]=perM[m]||{nu:0, gek:0, n:0});
+    R.n++; R.nu+=r.P; R.gek+=r.echt;
+    /* alleen de tweede afschrijving die BIJ DIT DRIETAL hoort telt mee, niet elke andere boeking van
+       dezelfde tegenpartij in het venster: die heeft haar eigen rij of hoort nergens bij */
+    const bij=r.past || (r.vorm.startsWith('2')?r.tweede[0]:null);
+    if(bij && String(bij.date).slice(0,7)===m) R.nu+=cent(bij.amount);
+    if(r.terug && String(r.terug.date).slice(0,7)===m) R.nu-=r.R;
+  }
+  const ms=Object.keys(perM).sort();
+  L.push('   maand      n        nu   gekoppeld   verschil');
+  let tn=0, tg=0;
+  for(const m of ms){ const R=perM[m]; tn+=R.nu; tg+=R.gek;
+    L.push('   '+m+'   '+String(R.n).padStart(3)+'   '+(R.nu/100).toFixed(2).padStart(8)+'   '+(R.gek/100).toFixed(2).padStart(9)+'   '+((R.nu-R.gek)/100).toFixed(2).padStart(8)); }
+  L.push('   TOTAAL        '+String(rijen.length).padStart(3)+'   '+(tn/100).toFixed(2).padStart(8)+'   '+(tg/100).toFixed(2).padStart(9)+'   '+((tn-tg)/100).toFixed(2).padStart(8));
+
+  /* DE WEEKDAG: dezelfde snede als signaal 3, met en zonder de terugboeking op de dag van de afschrijving.
+     Alleen de terugboekingen die NIET al op die dag staan kunnen iets verschuiven; staat alles al op een
+     dag, dan is deze tabel per constructie identiek en zegt hij dat. */
+  L.push('');
+  L.push('   DE WEEKDAGVERDELING in de scope van piekVerdeling(), met de terugboeking op de dag van de afschrijving');
+  const dn=['zo','ma','di','wo','do','vr','za'];
+  const scope=new Set((_dT(()=>piekScope(),[])||[]).map(t=>t.id));
+  const verplaats=new Map(); for(const r of rijen) if(r.terug && r.d!==0) verplaats.set(r.terug.id, r.t.date);
+  const rij2=(kies)=>{ const d=[0,0,0,0,0,0,0]; let tot=0;
+    for(const t of (_dT(()=>telbareTx(),[])||[])){ if(!scope.has(t.id)) continue;
+      const dd=kies(t); const w=dag(dd).getDay(); const a=-t.amount; d[w]+=a; tot+=a; }
+    /* ma..zo, dezelfde volgorde als blok 9 en 10, zodat de rijen naast elkaar te leggen zijn */
+    return tot?[1,2,3,4,5,6,0].map(i=>dn[i]+' '+Math.round(d[i]/tot*100)+'%') : null; };
+  const nu=rij2(t=>t.date);
+  const gek=rij2(t=>verplaats.get(t.id)||t.date);
+  L.push('   verschoven terugboekingen: '+verplaats.size+(verplaats.size?'':'   (alles staat al op dezelfde dag, dus de twee rijen zijn per constructie gelijk)'));
+  L.push('   nu:         '+(nu?nu.join('  '):'(niets in scope)'));
+  L.push('   gekoppeld:  '+(gek?gek.join('  '):'(niets in scope)'));
+
+  L.push('');
+  L.push('WAT DEZE UITVOER BESLIST');
+  L.push('  staat vorm 3 hoog, dan telt elke tankbeurt DUBBEL en is Vervoer & auto structureel te hoog;');
+  L.push('    dan is de zaterdagpiek van blok 9 mogelijk een artefact van deze vorm en niet van je gedrag,');
+  L.push('    en heeft de piekdag een koppeling nodig voordat er iets op die piek wordt gebouwd.');
+  L.push('  staat vorm 1 hoog en landt de terugboeking altijd in dezelfde maand op dezelfde dag, dan klopt');
+  L.push('    het maandcijfer al en is er niets te koppelen: de netto-telling doet het werk (v265).');
+  L.push('  landt de terugboeking in een ANDERE maand, dan klopt geen van beide maanden, ongeacht de vorm.');
+  L.push('  WAT DIT BLOK NIET KAN ZEGGEN: dat een voorautorisatie en een terugboeking dezelfde BETALING zijn.');
+  L.push('    Een bedrag dat optelt binnen een venster is een correspondentie en geen identiteit, net als in');
+  L.push('    blok 11. Wie hierop bouwt aanvaardt dat, of zoekt eerst een scheider die de app nu niet heeft.');
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -15900,6 +16088,7 @@ const DIAG_BLOKKEN=[
   {titel:'de piekdag per week', lees:diagPiekdag},
   {titel:'dubbele boekingen en wat t.date betekent', lees:diagDubbel},
   {titel:'de csv-import tegen de psd2-koppeling, per rekening', lees:diagCsvPsd2},
+  {titel:'de tankvoorautorisatie en haar terugboeking', lees:diagVoorautorisatie},
 ];
 
 async function diagTekst(){
