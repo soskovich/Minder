@@ -105,8 +105,18 @@ test.describe('onvoorzien telt niet mee in het losse geld', () => {
     const posten = SEPT.concat([{ wd: 4, bedrag: 484, w: 4 }]);
     await boot(page, RUSTIG.concat([{ m: CUR, posten }]), 'Hema');
     expect((await meet(page)).n).toBe(8);
-    const src = await page.evaluate(() => piekVerdeling.toString());
-    expect(src).toContain('geenNorm(catOf(x))');
+    /* v285: deze assertie stond op de SPELLING van het predicaat binnen piekVerdeling(), en die
+       verhuisde toen de snede een eigen functie werd. De eigenschap is niet veranderd: de
+       uitsluiting moet in de TELPOORT zitten en niet alleen in de sommen. Hij bindt nu op de weg
+       daarheen, en dat is strenger: valt de lezer terug op een eigen kopie van het predicaat, dan
+       noemt hij piekScope() niet meer en valt deze test. */
+    const r2 = await page.evaluate(() => ({
+      lezer: piekVerdeling.toString(), snede: piekInScope.toString(),
+      poort: piekScope.toString(),
+    }));
+    expect(r2.lezer).toContain('piekScope(m)');
+    expect(r2.snede).toContain('geenNorm(c)');
+    expect(r2.poort).toContain('piekInScope');
   });
 });
 

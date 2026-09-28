@@ -158,9 +158,15 @@ test.describe('c - buiten de signalen die tegen een norm of je historie meten', 
     /* Het big-signaal is in een gevulde maand niet los te zien: het is een loss-frame met een lage
        score, en MECHANISM_SPEC.lossAversion laat er één per dag door (budget, discr of tempo winnen).
        De uitsluiting wordt daarom aan de conditie zelf gemeten, en niet met een gepatchte engine. */
-    const src = await page.evaluate(() => scoreNotifs.toString());
-    const recent = src.slice(src.indexOf('const recent=TX.filter('), src.indexOf('let big=null'));
-    expect(recent).toContain('!geenNorm(catOf(x))');
+    /* v285: de kandidatenlijst las TX met een eigen kopie van het predicaat; sinds v285 leest hij
+       piekScope(), dezelfde snede als signaal 3. De eigenschap is dezelfde en de assertie is
+       strenger: hij bindt op de weg naar de snede in plaats van op haar spelling hier. */
+    const src = await page.evaluate(() => ({
+      lezer: scoreNotifs.toString(), snede: piekInScope.toString(),
+    }));
+    const recent = src.lezer.slice(src.lezer.indexOf('const recent='), src.lezer.indexOf('let big=null'));
+    expect(recent).toContain('piekScope()');
+    expect(src.snede).toContain('!geenNorm(c)');
   });
 
   test('geen aandeel- of trendsignaal op de afgeronde maand', async ({ page }) => {

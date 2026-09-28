@@ -37,6 +37,20 @@ function seed(opt) {
     add(m + '-10', -40, 'Albert Heijn');
   }
   (opt.extra || []).forEach((e) => add(e.datum, -e.bedrag, e.naam, e.desc));
+  /* v285: DE AANSLUITING KON NIET VUREN OP HET GEVAL WAARVOOR HIJ BESTAAT. Hij draait op de LOPENDE
+     maand, en op het toestel draagt die geen csv meer, dus de divergentie die v284 introduceerde
+     (weekBedragen() las TX, catSpendMap() de poort) bleef daar per constructie onzichtbaar. Deze
+     variant zet een gepaarde csv-rekening MET boekingen in de lopende maand ernaast. */
+  if (opt.csv) {
+    const m0 = M(0);
+    add(m0 + '-04', 25, 'in', 'From Main to Zakgeld PMNT');
+    add(m0 + '-05', -26, 'uit', 'From Zakgeld to Main PMNT');
+    for (const d of ['-03', '-10']) {
+      const bedrag = d === '-03' ? -60 : -40;
+      tx.push({ id: 'c' + d, date: m0 + d, amount: bedrag, acc: 'N26 Zakgeld', src: 'csv',
+        name: 'Albert Heijn', desc: 'Albert Heijn', typ: '', ref: '', accName: '', refNums: [] });
+    }
+  }
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}',
     minder_set: JSON.stringify({ limit: 70, mode: 'begeleid', autoIncome: false, income: 5216,
       manualBal: { [ACC]: 4200 },
@@ -202,5 +216,50 @@ test.describe('d - de bron', () => {
       expect(m[1], naam + ' bouwt zijn eigen scope').toMatch(/weekScope\(\)/);
       expect(m[1], naam + ' leest SET.budgets zelf').not.toMatch(/SET\.budgets/);
     }
+  });
+});
+
+/* v285: het geval dat de aansluiting moest kunnen vangen. Zonder deze variant draait hij altijd op
+   een maand zonder csv en kan een lezer die TX leest naast een lezer die de poort leest staan
+   zonder dat een test het ziet - precies de vorm van meetles (a). */
+test.describe('e - de aansluiting vuurt op een maand met csv binnen een psd2-venster', () => {
+  test('de fixture draagt het geval: gepaarde csv-boekingen in de lopende maand, in scope', async ({ page }) => {
+    await boot(page, { csv: true });
+    const r = await page.evaluate(() => {
+      const m = thisYM(); const scope = new Set(weekScope());
+      const csv = TX.filter((t) => t.acc === 'N26 Zakgeld' && t.date.slice(0, 7) === m);
+      return {
+        gepaard: (csvPsd2Paring().find((x) => x.csv === 'N26 Zakgeld') || {}).psd2 || null,
+        n: csv.length, uit: csv.filter(csvDubbel).length,
+        eur: Math.round(csv.filter((t) => scope.has(catOf(t))).reduce((s, t) => s - t.amount, 0)),
+      };
+    });
+    expect(r.gepaard).toBe(ACC);
+    expect(r.n).toBe(2);
+    expect(r.uit).toBe(2);
+    expect(r.eur).toBe(100);        // 60 + 40, en dat is wat de aansluiting zou zien scheelen
+  });
+
+  test('blokken plus restdagen blijft gelijk aan catSpendMap over dezelfde scope', async ({ page }) => {
+    await boot(page, { csv: true });
+    const tekst = (await page.evaluate(() => diagWeekblokken())).join('\n');
+    expect(tekst).toContain('aansluiting op de lopende maand');
+    expect(tekst).toMatch(/sluit aan: JA/);
+  });
+
+  test('weekBedragen() leest dezelfde poort als catSpendMap(), en het verschil is meetbaar', async ({ page }) => {
+    await boot(page, { csv: true });
+    const r = await page.evaluate(() => {
+      const m = thisYM(); const scope = new Set(weekScope());
+      const W = weekBedragen();
+      const blokken = Object.keys(W).filter((k) => k.slice(0, 7) === m).reduce((s, k) => s + W[k], 0);
+      const som = (lijst) => Math.round(lijst
+        .filter((t) => t.date.slice(0, 7) === m && +t.date.slice(8, 10) <= 28)
+        .filter((t) => scope.has(catOf(t)) && CATS[catOf(t)] && CATS[catOf(t)].type === 'expense')
+        .reduce((s2, t) => s2 - t.amount, 0));
+      return { blokken: Math.round(blokken), telbaar: som(telbareTx()), ruw: som(TX) };
+    });
+    expect(r.ruw - r.telbaar).toBe(100);   // de csv-boekingen zitten er echt in
+    expect(r.blokken).toBe(r.telbaar);
   });
 });

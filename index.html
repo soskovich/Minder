@@ -1266,7 +1266,15 @@ function netSpend(txns){ let s=0; for(const t of txns){ if(isExpenseTx(t)) s+=-t
 
 /* ---------- maand-helpers ---------- */
 function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!base.length) return []; const s=new Set(base); const n=new Date(); s.add(n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')); return [...s].sort(); }
-function txOfMonth(m){ return TX.filter(t=>t.date.slice(0,7)===m && !csvDubbel(t)); }   // v284: een csv-regel binnen het venster van zijn gekoppelde psd2-rekening telt hier niet mee
+/* v285: DE POORT ALS LIJST. `csvDubbel()` is sinds v284 de ene poort, maar elke lezer drukte zijn
+   eigen lus over `TX` uit en vier van hen hebben die poort nooit gekregen. GEMETEN op het toestel:
+   sectie 6 van blok 10 had geen csv-groep meer terwijl meting 1 vier regels hoger nog
+   `csv 0 van 3742 euro` meldde onder het label "in de scope van piekVerdeling()", twee antwoorden
+   over dezelfde snede in hetzelfde blok. Wie boekingen telt leest daarom deze lijst en niet `TX`.
+   `TX` ZELF BLIJFT WAT HET WAS: er wordt niets weggegooid, en wie de IMPORT telt (hoeveel boekingen
+   draagt deze bron, welke rekeningen bestaan er) leest `TX` gewoon, want dat is een andere vraag. */
+function telbareTx(){ return TX.filter(t=>!csvDubbel(t)); }
+function txOfMonth(m){ return telbareTx().filter(t=>t.date.slice(0,7)===m); }
 /* v264: DE WEEKAS, ALS BRON EN NOG ZONDER SCHERM. Blokken van zeven dagen vanaf de 1e van elke
    maand, dus 1-7, 8-14, 15-21 en 22-28; wat er daarna van de maand overblijft is GEEN blok en komt
    hier niet in voor. GEREKEND op de kalender van 2026: kalenderweken laten 10,1 procent van de
@@ -1317,9 +1325,14 @@ function weekScope(){
    maand, in code van één ronde oud (v264).
    Niet geklemd op nul, anders dan catSpendMap() per categorie doet: een blok waarin je netto meer
    terugkreeg dan uitgaf is informatie, en een klem zou dat verbergen én de optelling breken. */
+/* v285: DE LUS LEEST `telbareTx()` EN NIET `piekScope()`, en dat is gemeten en geen slordigheid: de
+   scope hier is `weekScope()` (varBudget zonder geenNorm zonder huur) en niet die van
+   piekVerdeling(). Die twee stellen een andere vraag, en `WEEK_SCOPE_UIT` sluit huur bij naam uit
+   omdat `recurringCats()` hem op het toestel niet als terugkerend ziet (v265). Wat deze functie van
+   v285 nodig had is de csv-POORT en niet de snede. */
 function weekBedragen(){
   const scope=new Set(weekScope()); const uit={};
-  for(const t of TX){
+  for(const t of telbareTx()){
     const c=catOf(t); if(!scope.has(c)) continue;
     if(!(CATS[c]&&CATS[c].type==='expense')) continue;
     const dag=+String(t.date).slice(8,10); if(!(dag>=1&&dag<=28)) continue;
@@ -1334,7 +1347,7 @@ function weekBedragen(){
    aansluiting op de maandgrafiek het eerste argument voor deze indeling was. */
 function weekRestdagen(){
   const scope=new Set(weekScope()); const uit={};
-  for(const t of TX){
+  for(const t of telbareTx()){   // v285: dezelfde poort als weekBedragen(), anders sluit de som niet aan
     const c=catOf(t); if(!scope.has(c)) continue;
     if(!(CATS[c]&&CATS[c].type==='expense')) continue;
     const dag=+String(t.date).slice(8,10); if(dag<=28) continue;
@@ -1360,7 +1373,7 @@ function periodMonths(){
   const cm=(curMonth&&ms.includes(curMonth))?curMonth:ms[ms.length-1];
   return [cm];
 }
-function periodTx(){ const set=new Set(periodMonths()); return TX.filter(t=>set.has(t.date.slice(0,7)) && !csvDubbel(t)); }   // v284: zelfde poort als txOfMonth(), zodat een drill-down optelt tot het cijfer erboven
+function periodTx(){ const set=new Set(periodMonths()); return telbareTx().filter(t=>set.has(t.date.slice(0,7))); }   // v284: zelfde poort als txOfMonth(), zodat een drill-down optelt tot het cijfer erboven
 function periodLabel(){ const pm=periodMonths(); if(!pm.length) return '';
   if(pm.length===1) return monthLabel(pm[0]);
   const ms=months(); const yr=pm[0].slice(0,4); const inYr=ms.filter(m=>m.slice(0,4)===yr);
@@ -3499,7 +3512,10 @@ function scoreNotifs(opts){
         l1:`Je pinde ${euro0(som)}${ops.length>1?` in ${ops.length} opnames`:''}. Hoeveel heb je nu in je zak?`,
         l2:'Tellen', act:'contantTellen()'}); } }catch(_){}
   try{ const lim=new Date(now); lim.setDate(lim.getDate()-7);
-    const recent=TX.filter(x=>x.amount<0 && new Date(x.date)>=lim && CATS[catOf(x)].type==='expense' && !isFixed(x) && !geenNorm(catOf(x)));   // v234: 'hoger dan gebruikelijk' is bij onvoorzien een tautologie
+    /* v234: 'hoger dan gebruikelijk' is bij onvoorzien een tautologie. v285: de snede komt uit
+       piekScope(), want deze lus las TX en de mediaan eronder las txOfMonth(), dus binnen EEN
+       signaal stonden twee lezingen van dezelfde maand. */
+    const recent=piekScope().filter(x=>x.amount<0 && new Date(x.date)>=lim);
     const byCat={}; for(const mm of months().slice(-4)){ for(const x of txOfMonth(mm)){ if(x.amount<0&&CATS[catOf(x)].type==='expense'){ (byCat[catOf(x)]=byCat[catOf(x)]||[]).push(-x.amount); } } }
     const med=a=>{const z=a.slice().sort((x,y)=>x-y);return z.length?z[Math.floor(z.length/2)]:0;};
     let big=null; for(const x of recent){ const a=-x.amount, mref=med(byCat[catOf(x)]||[a]); if(a>=75 && a>=mref*2.5 && (!big||a>-big.amount)) big=x; }
@@ -10771,8 +10787,19 @@ const PIEK_FACTOR = 1.5;   // keer je eigen gemiddelde aandeel voor die weekdag
  * dagen werden aan dezelfde lat gehouden. De referentie is nu je eigen verdeling: drie AFGERONDE
  * maanden, hetzelfde losse geld, per weekdag als aandeel van dat maandtotaal, en dan het gemiddelde
  * van die drie aandelen. Aandeel tegen aandeel (v230), nooit aandeel tegen bedrag. */
+/* v285: DE SNEDE VAN piekVerdeling() OP EEN PLEK, als predicaat en als lijst. Tot v284 stond deze
+   uitdrukking ZES keer in dit bestand, en toen v284 de csv-poort in `txOfMonth()` zette liepen de
+   vier die zelf over `TX` lopen uiteen met de twee die hem lazen. Dat is v104 op een snede in plaats
+   van op een getal, en de uitvoer van het toestel liet het zien voordat een gebruiker het zag.
+   TWEE VORMEN EN EEN WAARHEID: `piekScope(m)` geeft de lijst en is wat een lezer normaal nodig heeft;
+   `piekInScope(t)` is het predicaat eronder, voor een lezer die in EEN pass de regels binnen en
+   buiten de snede uit elkaar moet houden (blok 9 doet dat, voor zijn "niet meegeteld"-regels).
+   ZONDER MAAND IS HET DE HELE TELBARE IMPORT, en dat is geen terugval maar de vraag van blok 9 en
+   blok 10: die meten over alle maanden en niet over een. */
+function piekInScope(t){ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !isFixed(t) && !geenNorm(c)); }
+function piekScope(m){ return (m==null?telbareTx():txOfMonth(m)).filter(piekInScope); }
 function piekVerdeling(m, negeerWinkel){
-  const lijst=txOfMonth(m).filter(x=>CATS[catOf(x)] && CATS[catOf(x)].type==='expense' && !isFixed(x) && !geenNorm(catOf(x)));   // v234
+  const lijst=piekScope(m);
   const uit = negeerWinkel ? lijst.filter(x=>(cleanMerch(x.name)||x.name||'onbekend')!==negeerWinkel) : lijst;
   const sumd=[0,0,0,0,0,0,0];
   for(const x of uit) sumd[(new Date(x.date).getDay()+6)%7]+=-x.amount;   // dag-sommen netto, telpoort op afschrijvingen
@@ -10867,7 +10894,7 @@ function insSignals(m,exclude){
   }
   /* v239: losse geld is zonder onvoorzien, in de telpoort EN in de sommen. Zie de comment boven
      piekVerdeling(): dit waren de enige twee signalen in deze functie die geenNorm nog meetelden. */
-  const losAll=txOfMonth(m).filter(x=>CATS[catOf(x)] && CATS[catOf(x)].type==='expense' && !isFixed(x) && !geenNorm(catOf(x)));   // v234
+  const losAll=piekScope(m);   // v234; v285: dezelfde snede als piekVerdeling(), uit een bron
   const vis=losAll.filter(x=>x.amount<0);          // telpoort: alleen afschrijvingen
   const visAll=losAll;                             // sommen: netto, dus incl. terugstortingen
   /* 4) grootste netto uitgave per winkel. Hij wordt hier al BEPAALD maar pas onderaan gepusht: de
@@ -14187,7 +14214,7 @@ function diagPiekdag(){
   const L=[]; const dn=['maandag','dinsdag','woensdag','donderdag','vrijdag','zaterdag','zondag'];
   const dk=['ma','di','wo','do','vr','za','zo'];
   if(!TX.length) return ['geen transacties'];
-  const inScope=t=>{ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !isFixed(t) && !geenNorm(c)); };
+  const inScope=piekInScope;   // v285: dezelfde snede als signaal 3, uit een bron (v104)
   const naamVan=t=>(cleanMerch(t.name)||t.name||'onbekend');
   const datums=TX.map(t=>t.date).filter(Boolean).sort();
   const eerste=datums[0], laatste=datums[datums.length-1], vandaag=vandaagYMD();
@@ -14208,7 +14235,11 @@ function diagPiekdag(){
      tweede reeks nieuwe dagbedragen naast een oude noemer en is het verschil niet toe te wijzen. */
   function reeks(negeer, dv){
     const W={}, uit={}; const dat=dv||(t=>t.date);
-    for(const t of TX){
+    /* v285: `telbareTx()` en niet `TX`. Deze lus splitst in EEN pass de regels binnen de snede van
+       de regels erbuiten (die tweede voeden de "niet meegeteld"-regels), dus hij leest het predicaat
+       en niet de lijst. Zonder de poort hier droeg de referentie over 90 weken de csv-euro's nog wel
+       en signaal 3 niet meer, terwijl dit blok juist bestaat om naast signaal 3 te leggen. */
+    for(const t of telbareTx()){
       const d=String(dat(t)||'').slice(0,10); if(!d) continue;
       const ma=_piekMaandag(d); if(!wset.has(ma)) continue;
       if(inScope(t)){
@@ -14511,13 +14542,19 @@ function diagDubbel(){
      hun desc maar geen veld, en hoeveel vielen op de plausibiliteitsgrens af. Anders is het verschil
      met de meting van v272 niet te plaatsen.
      Geen enkele boeking wordt hier gecorrigeerd; het blok telt alleen. */
-  const inScope=t=>{ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !isFixed(t) && !geenNorm(c)); };
+  /* v285: de snede komt uit de bron en de scope-lussen lezen `telbareTx()`. Tot v284 stond hier een
+     eigen kopie van het predicaat EN liepen de lussen over `TX`; GEMETEN gaf dat in deze uitvoer een
+     csv-regel in meting 1 onder het label "in de scope van piekVerdeling()" terwijl sectie 6 geen
+     csv-groep meer had. De twee mixed lussen (meting 1 en 5) tellen de IMPORT en lezen daarom nog
+     `TX` voor hun aantallen; hun euro-kolommen gaan via `inScopeSet`, dat de poort al draagt. */
+  const inScope=piekInScope;
+  const inScopeSet=new Set(_dT(()=>piekScope(),[])||[]);
   const heeftDescDatum=t=>BETAALDATUM_RE.test(String(t.desc||''));
   const DATUM_ALLE=new RegExp(BETAALDATUM_RE.source,'g');   // hetzelfde patroon, nu alle treffers
   let kaart=0, metVeld=0, metTijd=0, descGeenVeld=0, meerdereDatums=0; const redenen={};
   const verschil={}; const wdTx=[0,0,0,0,0,0,0], wdBet=[0,0,0,0,0,0,0];
   let somTx=0, nScope=0; const voorbeelden=[];
-  for(const t of TX){
+  for(const t of telbareTx()){
     const isKaart=KAART_RE.test(String(t.desc||''));
     if(isKaart) kaart++;
     if((String(t.desc||'').match(DATUM_ALLE)||[]).length>1) meerdereDatums++;
@@ -14604,7 +14641,7 @@ function diagDubbel(){
       r.n++;
       const st=stijl(t); if(st){ r.kaart++; r.stijlen[st]=(r.stijlen[st]||0)+1; }
       if(t.betaalDatum){ r.veld++; if(t.betaalTijd) r.tijd++; }
-      if(inScope(t) && t.amount<0){ r.bedrag+=-t.amount; if(t.betaalDatum) r.gedekt+=-t.amount; }
+      if(inScopeSet.has(t) && t.amount<0){ r.bedrag+=-t.amount; if(t.betaalDatum) r.gedekt+=-t.amount; }
     }
     return rij;
   };
@@ -14695,7 +14732,7 @@ function diagDubbel(){
   L.push('  scope: piekVerdeling() (uitgave, niet vast, niet geenNorm, netto) plus kaartachtig,');
   L.push('         min een incasso en min een periodieke overboeking');
   const wg={};
-  for(const t of TX){
+  for(const t of telbareTx()){
     if(!(inScope(t) && t.amount<0)) continue;
     const st=stijl(t); if(!st) continue;
     if(_dT(()=>isIncasso(t),false) || _dT(()=>isPeriodicTransfer(t),false)) continue;
@@ -14792,7 +14829,7 @@ function diagDubbel(){
   L.push('4. DE BRON BINNEN EEN REKENING (afgeleid: de rekening met meer dan een bron)');
   if(!meerdere.length) L.push('  geen rekening draagt twee bronnen, dus hier valt niets te splitsen');
   for(const acc of meerdere){
-    const rij=TX.filter(t=>String(t.acc)===String(acc));
+    const rij=telbareTx().filter(t=>String(t.acc)===String(acc));
     const sc=rij.filter(t=>inScope(t)&&t.amount<0);
     L.push('');
     L.push('  rekening '+acc+'   bank '+bankVan(acc)+'   '+rij.length+' boekingen, '+sc.length+' in de scope van piekVerdeling()');
@@ -14962,11 +14999,11 @@ function diagDubbel(){
     const r=vdRij[k]=vdRij[k]||{n:0,veld:0,anders:0,bedrag:0,gedekt:0,
       tx:[0,0,0,0,0,0,0],vd:[0,0,0,0,0,0,0],som:0};
     r.n++; vdTot++;
-    if(inScope(t) && t.amount<0) r.bedrag+=-t.amount;
+    if(inScopeSet.has(t) && t.amount<0) r.bedrag+=-t.amount;
     if(!t.valutaDatum) continue;
     r.veld++; vdVeld++; if(t.pending) vdPend++;
     if(String(t.valutaDatum)!==String(t.date).slice(0,10)) r.anders++;
-    if(inScope(t) && t.amount<0){
+    if(inScopeSet.has(t) && t.amount<0){
       const b=-t.amount; r.gedekt+=b; r.som+=b;
       r.tx[_piekDagIdx(t.date)]+=b; r.vd[_piekDagIdx(t.valutaDatum)]+=b;
     }
@@ -15083,8 +15120,7 @@ function diagDubbel(){
      maand zou een groep van kolom kunnen wisselen en telt de tabel twee dingen tegelijk. */
   const gInfo={};
   for(const m of months()){
-    for(const t of (piekVerdeling(m)?txOfMonth(m):[])){
-      if(!(CATS[catOf(t)] && CATS[catOf(t)].type==='expense' && !isFixed(t) && !geenNorm(catOf(t)))) continue;
+    for(const t of (piekVerdeling(m)?piekScope(m):[])){   // v285: dezelfde snede als signaal 3, uit een bron
       const g=gInfo[grpVan(t)]=gInfo[grpVan(t)]||{som:0,dag:[0,0,0,0,0,0,0],veld:0,gelijk:0};
       const b=-t.amount; g.som+=b; g.dag[_piekDagIdx(t.date)]+=b;
       if(t.betaalDatum){ g.veld++; if(String(t.betaalDatum)===String(t.date).slice(0,10)) g.gelijk++; }
@@ -15117,8 +15153,7 @@ function diagDubbel(){
   L.push('  per maand, alleen de maanden die signaal 3 leest:');
   for(const m of refM.concat([lm])){
     const A={som:0,dag:[0,0,0,0,0,0,0]}, B={som:0,dag:[0,0,0,0,0,0,0]};
-    for(const t of txOfMonth(m)){
-      if(!(CATS[catOf(t)] && CATS[catOf(t)].type==='expense' && !isFixed(t) && !geenNorm(catOf(t)))) continue;
+    for(const t of piekScope(m)){   // v285: idem
       const z=draagt[grpVan(t)]?A:B, b=-t.amount; z.som+=b; z.dag[_piekDagIdx(t.date)]+=b;
     }
     const tot=A.som+B.som;
@@ -15205,6 +15240,11 @@ function diagCsvPsd2(){
   const csvAcc=own.filter(a=>{ const b=bronnen(a); return b.size===1 && b.has('csv'); });
   const psdAcc=own.filter(a=>bronnen(a).has('psd2'));
   const venster=a=>{ const d=lijstVan(a).map(t=>t.date).filter(Boolean).sort(); return d.length?[d[0],d[d.length-1]]:null; };
+  /* v285: DIT BLOK LEEST BEWUST `TX` EN NIET `telbareTx()`, en het is de enige plek waar dat zo is.
+     Blok 11 MEET wat de csv-import draagt en wat een uitsluiting zou kosten; leest hij de poort, dan
+     meet hij zijn eigen uitkomst en zegt hij per constructie nul. Daarom draagt hij ook zijn eigen
+     kopie van het predicaat: `piekInScope()` mag hier niet gelezen worden, want die is bedoeld voor
+     de telbare kant. De bronzoekende test noemt deze twee uitzonderingen bij naam. */
   const inScope=t=>{ const c=_dT(()=>catOf(t),''); return !!(CATS[c] && CATS[c].type==='expense'
     && !_dT(()=>isFixed(t),false) && !_dT(()=>geenNorm(c),false)); };
   const som=(arr,f)=>arr.reduce((s,t)=>s+(f(t)||0),0);

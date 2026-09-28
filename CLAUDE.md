@@ -95,6 +95,38 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE SNEDE VAN `piekVerdeling()` STAAT OP EEN PLEK, EN ELKE SCOPE-SOM DRAAGT DE POORT** (`v285`):
+  `piekInScope(t)` is het predicaat en `piekScope(m)` de lijst; zonder maand is dat de hele TELBARE
+  import, want blok 9 en blok 10 meten over alle maanden en niet over een. `telbareTx()` is de poort
+  als lijst, en `txOfMonth()` en `periodTx()` lezen hem.
+  DE AANLEIDING STOND IN DE UITVOER VAN `v284` ZELF: sectie 6 van blok 10 had geen `csv | N26`-groep
+  meer terwijl meting 1 vier regels hoger nog `csv 0 van 3742 euro` meldde onder het label "in de
+  scope van `piekVerdeling()`". Twee antwoorden over dezelfde snede in hetzelfde blok. De snede stond
+  ZES keer in de bron, en `v284` zette de poort alleen in `txOfMonth()` en `periodTx()`, dus de vier
+  lezers die zelf over `TX` lopen kregen hem niet. Dat is `v104` op een snede in plaats van op een
+  getal, en het is door de meting op het toestel gevonden en niet door een test.
+  WIE DE IMPORT TELT LEEST `TX`, WIE BOEKINGEN TELT LEEST `telbareTx()`. Dat onderscheid is de hele
+  regel: hoeveel boekingen draagt deze bron is een andere vraag dan hoeveel euro telt er mee. De twee
+  gemengde lussen in blok 10 (meting 1 en 5) tellen de import op `TX` en rekenen hun euro-kolommen
+  via een `Set` uit `piekScope()`, zodat beide helften waar blijven.
+  `weekBedragen()` EN `weekRestdagen()` LEZEN `telbareTx()` EN NIET `piekScope()`, en dat is gemeten
+  en geen slordigheid: hun scope is `weekScope()` (varBudget zonder `geenNorm` zonder huur) en die
+  stelt een andere vraag. Wat ze van `v285` nodig hadden is de POORT en niet de snede; ze op
+  `piekScope()` zetten zou de huur-uitsluiting van `v265` terugdraaien.
+  BLOK 11 LEEST BEWUST `TX`, en het is de enige uitzondering. Dat blok MEET wat de csv-import draagt
+  en wat een uitsluiting kost; leest hij de poort, dan meet hij zijn eigen uitkomst en zegt hij per
+  constructie nul. Daarom draagt hij ook de enige tweede kopie van het predicaat, met die reden erbij.
+  DE TEST BINDT OP GEDRAG EN NIET OP EEN SPELLING: elke scope-lezer moet hetzelfde antwoord geven over
+  dezelfde boekingen, uitgerekend uit `piekScope()` in de test zelf. Een sabotage die EEN lezer
+  terugzet op `TX` zet precies de assertie van die lezer rood en laat de andere groen, dus de rode
+  test wijst de lezer aan. Negen sabotages, alle negen rood.
+- **DE AANSLUITING VAN `v265` KON NIET VUREN OP HET GEVAL WAARVOOR HIJ BESTAAT** (`v285`): hij draait
+  op de LOPENDE maand, en die draagt op het toestel geen csv meer, dus de divergentie die `v284`
+  introduceerde was daar per constructie onzichtbaar. `weekreeks-scope.spec.js` draagt nu een variant
+  met een GEPAARDE csv-rekening met boekingen in de lopende maand, en meet eerst dat die boekingen er
+  echt zijn (2 stuks, 100 euro in `weekScope()`) voordat hij de aansluiting toetst. Dat is meetles (a)
+  in een tripdraad die al bestond: een poort die alleen op de huidige toestand kijkt, kan de toestand
+  die hem moet laten vallen nooit zien.
 - **EEN CSV-REGEL BINNEN HET VENSTER VAN ZIJN GEPAARDE PSD2-REKENING TELT NIET MEE** (`v284`): `csvDubbel(t)`
   is de ENE poort en `txOfMonth()` en `periodTx()` lezen hem, dus elke som volgt. DRIE EISEN, EN ELK ERVAN
   HEEFT ZIJN EIGEN GEVAL IN DE FIXTURE: de rekening moet gepaard zijn, de datum moet binnen het venster van
@@ -2402,6 +2434,16 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   tijd ging kiezen en dus `matchAll` nodig had. De invariant die hij moet vasthouden is dat het patroon op één
   plek staat en dat elke lezer hem via de constante leest; hoe die aanroep eruitziet is dat niet. Dat is
   dezelfde vorm als "een test die een zin of een teller als anker gebruikt", nu met een regel code als anker.
+  TWEE KEER DEZELFDE VORM BIJ `v285`, en die kwamen pas in de VOLLE suite naar boven: `piekdag-noemer`
+  eiste `geenNorm(catOf(x))` binnen `piekVerdeling()` en `onvoorzien` eiste `!geenNorm(catOf(x))` binnen
+  `scoreNotifs()`. Allebei hielden ze een eigenschap vast die niet veranderde (onvoorzien telt niet mee
+  in de telpoort, en niet in de grote-uitgave-melding), maar ze ankerden op de PLEK waar het predicaat
+  stond, en dat is precies wat die ronde opruimde. Ze binden nu op de WEG naar de snede
+  (`piekScope(` in de lezer, `geenNorm(c)` in `piekInScope`), en dat is strenger: een lezer die
+  terugvalt op een eigen kopie noemt de bron niet meer en valt. WAT JE ERVAN LEERT: een bronzoekende
+  test die een predicaat binnen ZIJN LEZER zoekt, valt bij elke ronde die dat predicaat centraliseert,
+  ook als de eigenschap ongemoeid blijft. Bind op de aanroep van de bron, niet op de inhoud van de
+  lezer.
 - **Een placeholder of een label dat een waarde belooft, tel je tegen wat de code doet.** Een veld
   met `placeholder="5"` zegt dat leeg laten 5% betekent; staat er in de code `+v('aRend')||0`, dan
   is het 0 en liegt het scherm. Hetzelfde geldt voor een eenheid, een default in een labeltekst en
@@ -2460,7 +2502,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v283` → `minder-v284`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v284` → `minder-v285`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
