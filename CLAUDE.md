@@ -95,6 +95,58 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN OVERSCHRIJDING DIE DOOR EEN CORRECTIE VERDWEEN IS GEEN 'NIETS GEDAAN'** (`v289`):
+  `valtOpAfsluiten()` kende twee handelingen (potje bijgesteld, grens gezet) en zette al het andere op
+  `geen`, dus een maand waarin je een dubbele boeking bevestigde of een verkeerde eigen categorie liet
+  vervallen las als een maand waarin je niets deed, bij precies de handeling die hem oploste. De uitkomst
+  heet nu `correctie` en de telling onder het logboek telt hem APART, want de telling is de reden dat de
+  log bestaat: het potje verhogen laat een signaal verdwijnen zonder dat je minder uitgeeft, en een
+  overschrijding die bij nader inzien niet bestond hoort daar niet in mee te wegen.
+  DRIE EISEN TEGELIJK, EN ELK HEEFT ZIJN EIGEN GEVAL IN DE FIXTURE: de maand eindigt op of onder het
+  potje, er IS een correctie, en ZONDER die correctie was hij er nog overheen (`sp+corr > lat`). Die
+  derde is de scherpte: zonder hem staat het label ook op een maand die toch al onder het potje eindigde,
+  en dat is een etiket dat iets belooft wat de meting niet zegt.
+  HET IS EEN BEDRAG EN GEEN VLAG (`valtOpCorrectieBedrag()`), en dat bedrag gaat in het record.
+  TWEE TAKKEN DIE ELKAARS GEVAL NIET VINDEN, allebei gemeten op het toestel bij `v288`: de bevestigde
+  kant telde ZELF in die categorie mee (het Warrie-paar, 26 euro), of hij is nu `intern` en wat uit de
+  categorie viel is de OVERRIDE die bij de bevestiging verviel (de twee Geldmaat-opnames, 300 euro).
+  PER BOEKING DE CATEGORIE WAARIN HIJ TOEN MEETELDE, in een Map, en de override WINT van de huidige
+  categorie: staat hij op de kant die wegviel, dan is die kant nu `intern` en zou tak (a) hem als
+  `intern` tellen. De Map zorgt ook dat hij een keer telt en niet twee. Zonder een paar waarbij de
+  override op de WEGVALLENDE kant staat is die volgorde inert, en dat geval staat in de fixture.
+  EEN RECORD DAT AL EEN EIGEN ACTIE DRAAGT HOUDT DIE: jouw handeling wint van een afleiding. En er wordt
+  niets met terugwerkende kracht herschreven, want `valtOpAfsluiten()` slaat een afgesloten record over.
+- **ELK STUK VAN EEN RONDE KRIJGT EEN UITLEZING, OOK ALS HET EEN VLAG IS** (`v289`): `v288` bouwde de
+  kandidatenlijst, de bevestiging en de poort en gaf `SET.dubbelPaar` GEEN lezer. GEMETEN op het toestel:
+  na vier bevestigingen was in de hele diagnose niet te zien welke paren waren afgehandeld; dat moest uit
+  de "niet meegeteld"-regels van blok 9 worden afgeleid, en die dekken zes weken, dus twee van de vier
+  paren waren per constructie onzichtbaar. Blok 8 schrijft nu per paar de datum, het bedrag, de rekening,
+  welke kant wegviel, welke bleef, je keuze en welke eigen categorie daarbij verviel, plus wat er nog
+  openstaat; blok 10 zegt per groep of hij is afgehandeld, openstaat, of waarom hij geen kandidaat is.
+  DE GROEPEN VAN BLOK 10 VALLEN NIET SAMEN MET DE SLEUTEL van `dubbelParen()`: die draagt ook de
+  naam-prefix, dus een groep daar kan over meer dan een sleutel lopen. Daarom kijkt de statusregel per
+  sleutel en niet per groep.
+  DE REDEN KOMT UIT `geldmaatMist()` en wordt daar niet opnieuw uitgedrukt (`v104`), dezelfde bron als
+  sectie (f) van blok 11 en als de lijst zelf.
+  DE LIJST DIE VERZWIJGT WAT DE CODE WEL DEED is dezelfde fout als een label dat iets belooft wat de code
+  niet doet, alleen andersom, en hij is net zo makkelijk te maken: de uitlezing was er niet omdat de
+  ronde over het BOUWEN ging.
+- **OPEN PUNT, ALLEEN GEMETEN: de app doet 3 API-aanroepen per rekening per sync** (`v289`): een
+  transactie-aanroep (meer bij paginering), een balances-aanroep en een pending-aanroep, in twee lussen
+  over dezelfde rekeningen. Met zes gekoppelde rekeningen is dat MINSTENS 18 aanroepen per keer
+  vernieuwen. GEMETEN op het toestel op 28 sep 2026: twee keer op een dag `ASPSP_RATE_LIMIT_EXCEEDED` op
+  alle vijf de N26-rekeningen, terwijl ABN dezelfde sync wel doorkwam.
+  VIER AANLEIDINGEN, ALLEMAAL IN DE VOORGROND, en er is GEEN achtergrond-sync: geen `setInterval`, geen
+  `periodicsync`, geen `visibilitychange`. (1) de boot, stil, en als enige met een rem: alleen als de
+  laatste sync meer dan 4 uur geleden is; (2) `quickAdd()`, de plusknop, ZONDER rem; (3) de twee knoppen
+  in Instellingen, ZONDER rem; (4) de terugkeer van de bank-consent, via `psd2IngestSession()`.
+  `SET.psd2Diag` KAN DE VRAAG NIET BEANTWOORDEN: hij houdt EEN entry per rekening die bij elke sync
+  wordt overschreven, met `op` als dag. Er is dus nergens een teller per dag, en die zou er moeten komen
+  voordat er iets aan de frequentie wordt veranderd; zonder meting is een rem een gok.
+  NIET GEREPAREERD EN BEWUST NIET: wat de bank als limiet hanteert staat niet in deze code, dus of 18
+  aanroepen te veel zijn is hier niet vast te stellen. Wie dit oppakt meet eerst, en kijkt dan naar de
+  goedkoopste kant: de pending-lus is een tweede ronde over dezelfde rekeningen en zou bij de eerste
+  kunnen.
 - **DE APP WIJST GEEN DUBBELE BOEKING AAN, DE GEBRUIKER BESLIST PER PAAR** (`v288`): `dubbelParen()` geeft
   de KANDIDATEN (zelfde rekening, zelfde dag, zelfde bedrag, een naam die drift maar op de eerste acht
   letters gelijk blijft) en verder niets. Dat `findDuplicateIds()` op deze vorm zou opruimen is juist de
@@ -487,6 +539,19 @@ genoemde versietag.)*
   op die rekening. De iDEAL/Tikkie-regels (8.772 euro, maandag 49 procent) en de incasso's (13.480 euro)
   kunnen per constructie nooit een veld dragen. De gemengde as die `v273` verbood blijft dus verboden, en er
   is geen veld dat het gat dicht. Dat is een GRENS en geen gebrek.
+- **VOOR DE PIEKDAG-RONDE, vastgelegd bij `v289`: bij variant C noemt de piekdag de DOMINANTE CATEGORIE**
+  ("vooral door tanken"), en dan is een wegstreep per FAMILIE minder nodig. DE AANLEIDING IS BLOK 9 op
+  het toestel bij `v288`: de duurste weekdag is voor het eerst 3 van 6 weken zaterdag, op `t.date` en op
+  de betaaldatum, tegen 2 van 6 bij `v271`. Maar alle drie die zaterdagen worden gedragen door een
+  tankbeurt bij een Shell, en reeks 2 streept per NAAM weg: `ShellExpress Amste`, `SHELL LAARDERHOOGT` en
+  `SHELL MUNTBERGWEG` zijn drie namen voor een gedrag. Haal ShellExpress weg en de telling zakt naar 2;
+  haal Muntbergweg weg en hij zakt ook naar 2. De drempel is gehaald, de conclusie niet.
+  WAT DE CATEGORIE-VERMELDING OPLOST: de lezer ziet zelf dat het om tanken gaat, dus de vraag of drie
+  stationsnamen een familie zijn hoeft de code niet te beantwoorden. WAT ZE NIET OPLOST: als de dominante
+  categorie diffuus is, zegt de regel niets en staat de familie-vraag er weer.
+  WAT 'VARIANT C' IS STAAT HIER NIET, en dat hoort aan het begin van die ronde te worden vastgelegd: het
+  label komt uit de piekdag-discussie en niet uit dit bestand, en een label zonder definitie is precies
+  wat dit project elders verbiedt.
 - **OPEN KEUZE, NIET GEBOUWD: de piekdag op alleen de regels waarvan de datum de betaaldag IS** (`v281`):
   een AFGEBAKENDE scope in plaats van een gemengde as. Dat zijn N26-psd2 op `t.date`, mt940 op `t.date` (daar
   is `t.date` de valutadatum en die is in 42 van 42 gevallen gelijk aan de desc-betaaldatum) en de
@@ -2678,7 +2743,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v287` → `minder-v288`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v288` → `minder-v289`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

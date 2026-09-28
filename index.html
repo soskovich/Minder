@@ -5447,7 +5447,7 @@ function valtOpLogBlok(){
   /* 'niet getoond' is een eigen stand, geen variant van 'nog open': dat record hoort bij een
      overschrijding die buiten de twee plekken viel. Juist die wil je terugzien - anders weet je niet
      wat je niet gezien hebt. */
-  const woord={potje_bijgesteld:'potje bijgesteld', grens_gezet:'grens gezet', geen:'niets gedaan'};
+  const woord={potje_bijgesteld:'potje bijgesteld', grens_gezet:'grens gezet', correctie:'vervallen na correctie', geen:'niets gedaan'};
   /* v238: de dekking hoort in dezelfde regel, anders leest de log "50 naar 96" en zwijgt hij over
      waar die 46 vandaan kwam. Een lege lijst hoort bij een record van voor v238 en zegt niets. */
   const dekTekst=r=>{ const D=(r&&r.dekking)||[]; if(!D.length) return '';
@@ -5456,7 +5456,13 @@ function valtOpLogBlok(){
       <span style="flex:1;min-width:0;font-size:13px">${esc(r.categorie||r.potjeId||'')} <span class="muted">· ${esc(monthLabel(r.maand))}</span></span>
       <span class="small muted" style="white-space:nowrap">${esc(r.actie?woord[r.actie]||r.actie:(r.getoond?'nog open':'niet getoond'))}${r.actie==='potje_bijgesteld'&&r.potje_voor!=null?` · ${euro0(r.potje_voor)} → ${euro0(r.potje_na||0)}`:''}${dekTekst(r)}</span>
     </div>`;
-  const tel=[`${T.n.potje_bijgesteld}× potje bijgesteld`, `${T.n.grens_gezet}× grens gezet`, `${T.n.geen}× niets gedaan`].join(' · ');
+  /* v289: de correctie telt APART en niet bij 'niets gedaan'. De telling is de reden dat de log bestaat
+     (het potje verhogen laat een signaal verdwijnen zonder dat je minder uitgeeft), en een overschrijding
+     die bij nader inzien niet bestond hoort daar niet in mee te wegen. Hij staat er alleen als hij is
+     voorgekomen, zodat de regel niet groeit voor wie hem nooit haalt. */
+  const tel=[`${T.n.potje_bijgesteld}× potje bijgesteld`, `${T.n.grens_gezet}× grens gezet`]
+    .concat(T.n.correctie?[`${T.n.correctie}× vervallen na correctie`]:[])
+    .concat([`${T.n.geen}× niets gedaan`]).join(' · ');
   const sinds=T.eerste?` sinds ${esc(monthLabel(T.eerste))}`:'';
   return `<div class="card">
     <div class="hlabel" style="margin:0 0 2px">Wat je met deze overschrijdingen deed</div>
@@ -10680,9 +10686,44 @@ function valtOpHistorie(k, m){
    terugkomt. Geen streak en geen score - dit is een spiegel op wat jij met een signaal deed, en de
    reden dat hij bestaat is dat het potje verhogen een signaal laat verdwijnen zonder dat je minder
    uitgeeft. */
+/* ===== WAT EEN CORRECTIE UIT EEN CATEGORIE HAALDE (v289) =====
+   Een overschrijding die verdwijnt omdat je een dubbele boeking bevestigde of een verkeerde eigen
+   categorie liet vervallen, is iets ANDERS dan een maand waarin je niets deed. `valtOpAfsluiten()` zette
+   daar `actie:'geen'` en dan las de log "niets gedaan" bij precies de handeling die het oploste.
+   HET IS EEN BEDRAG EN GEEN VLAG, en dat is de hele scherpte: pas als de correctie het verschil MAAKTE
+   mag het label staan. Stond de maand ook zonder die correctie al onder het potje, dan verdween er niets
+   en blijft het 'geen'. `valtOpAfsluiten()` toetst daarom `sp + correctie > lat`.
+   TWEE TAKKEN, EN ALLEBEI HEBBEN ZE EEN GEVAL OP HET TOESTEL (gemeten bij v288):
+   a) de BEVESTIGDE kant telde zelf in die categorie mee - dat is het Warrie-paar, waar de kant op
+      `overig` wegviel en de kant op `uiteten` bleef staan (26 euro);
+   b) een OVERRIDE die naar die categorie wees is bij de bevestiging vervallen - dat zijn de twee
+      Geldmaat-opnames, die nu `intern` zijn en dus niet meer via (a) te vinden (200 plus 100 euro).
+   DE TWEE KUNNEN ELKAAR NIET DUBBEL TELLEN: een boeking waarvan de override is weggehaald draagt per
+   `ovrTegenDeRegel()` de regel-categorie `intern`, dus (a) ziet hem niet meer. De id-guard staat er als
+   riem naast die bretel. */
+function valtOpCorrectieBedrag(maand, potjeId){
+  const P=(typeof SET!=='undefined'&&SET.dubbelPaar)||{};
+  if(!Object.keys(P).length) return 0;
+  const idx=new Map(); for(const t of TX) idx.set(t.id, t);
+  let som=0;
+  for(const k in P){ const e=P[k]; if(!e || !e.weg) continue;
+    /* PER BOEKING DE CATEGORIE WAARIN HIJ TOEN MEETELDE, en daarna een keer tellen. De bevestigde kant
+       telde mee in de categorie die hij NU draagt; een boeking waarvan de override verviel telde mee in
+       de categorie waar die override naar wees. Draagt de bevestigde kant allebei, dan wint de override,
+       want dat is waar hij stond, en de Map zorgt dat hij een keer telt en niet twee. */
+    const raak=new Map();
+    const w=idx.get(e.weg); if(w) raak.set(e.weg, catOf(w));
+    for(const id in (e.ovr||{})) raak.set(id, e.ovr[id]);
+    for(const [id, cat] of raak){
+      if(cat!==potjeId) continue;
+      const t=idx.get(id); if(!t || String(t.date).slice(0,7)!==maand || !(t.amount<0)) continue;
+      som+=-t.amount; }
+  }
+  return Math.round(som);
+}
 function valtOpTelling(){
   const L=SET.valtOpLog||{};
-  const n={potje_bijgesteld:0, grens_gezet:0, geen:0}; const perCat={}; let totaal=0, eerste='';
+  const n={potje_bijgesteld:0, grens_gezet:0, correctie:0, geen:0}; const perCat={}; let totaal=0, eerste='';   // v289: een correctie is een eigen uitkomst en geen variant van 'niets gedaan'
   for(const id in L){ const r=L[id]; if(!r) continue; totaal++;
     if(r.actie && n[r.actie]!=null) n[r.actie]++;
     perCat[r.potjeId]=(perCat[r.potjeId]||0)+1;
@@ -10707,7 +10748,17 @@ function valtOpAfsluiten(){
     const lat=(r.actie==='potje_bijgesteld' && r.potje_na!=null) ? Math.round(+r.potje_na||0) : Math.round(+r.potje_bij_detectie||0);
     let sp=0; try{ sp=Math.round((catSpendMap(r.maand)||{})[r.potjeId]||0); }catch(_){}
     r.over_eind_maand=Math.max(sp-lat,0);
-    if(!r.actie) r.actie='geen';
+    /* v289: EEN OVERSCHRIJDING DIE DOOR EEN CORRECTIE VERDWEEN IS GEEN 'NIETS GEDAAN'. De eis is dat de
+       correctie het VERSCHIL MAAKTE: de maand eindigt op of onder het potje EN zonder wat de correctie
+       eruit haalde was hij er nog overheen. Zonder die tweede helft zou het label ook staan op een maand
+       die toch al onder het potje eindigde, en dat is een etiket dat iets belooft wat de meting niet
+       zegt. Alleen bij een record dat nog GEEN actie draagt: een bijgesteld potje of een gezette grens
+       is jouw handeling en die wint. */
+    if(!r.actie){
+      let corr=0; try{ corr=valtOpCorrectieBedrag(r.maand, r.potjeId); }catch(_){}
+      r.actie=(r.over_eind_maand===0 && corr>0 && (sp+corr)>lat) ? 'correctie' : 'geen';
+      if(r.actie==='correctie') r.correctie_bedrag=corr;
+    }
     dirty=true; }
   if(dirty) save();
 }
@@ -14160,6 +14211,61 @@ function diagRekeningen(){
       L.push('    laatste sync:       niets vastgelegd - er is niet meer gesynchroniseerd sinds deze uitlezing bestaat');
     }
   }
+  /* ===== DE BEVESTIGDE KANDIDAAT-PAREN (v289) =====
+   `v288` bouwde de lijst, de bevestiging en de poort, en gaf ze GEEN uitlezing. GEMETEN op het toestel:
+   na vier bevestigingen was in de hele diagnose niet te zien welke paren waren afgehandeld; dat moest
+   worden afgeleid uit de "niet meegeteld"-regels van blok 9, en die dekken maar zes weken, dus de paren
+   van 03-08 en 04-08 waren onzichtbaar. Elk ander stuk van v288 had wel een uitlezing (de overrides
+   hieronder stonden netjes op nul), en dat maakte het gat des te schever.
+   HIJ LEEST `SET.dubbelPaar` EN VERDER NIETS, en het blok schrijft niet (v244). De sleutel draagt de
+   rekening, de dag, het bedrag en de naam-prefix, dus een paar waarvan de boekingen niet meer bestaan
+   is nog steeds te benoemen; dat staat er dan bij in plaats van dat de regel wegvalt. */
+  {
+    const P=_dT(()=>SET.dubbelPaar,{})||{};
+    const ks=Object.keys(P);
+    L.push('');
+    L.push('BEVESTIGDE KANDIDAAT-PAREN (v288, de lijst in Instellingen): '+ks.length+(ks.length?'':'   (geen)'));
+    if(ks.length){
+      const idx=new Map(); for(const t of (_dT(()=>TX,[])||[])) idx.set(t.id, t);
+      const perSleutel={};
+      for(const t of (_dT(()=>TX,[])||[])){ const k=_dT(()=>dubbelSleutel(t),''); if(!k) continue; (perSleutel[k]=perSleutel[k]||[]).push(t); }
+      const nm=t=>String((t&&t.name)||'?').slice(0,30);
+      const rij=ks.map(k=>({k, e:P[k]})).sort((a,b)=>String(b.k).localeCompare(String(a.k)));
+      let nWeg=0, nTwee=0, eurWeg=0;
+      for(const {k, e} of rij){
+        const deel=String(k).split('|');
+        const acc=deel[0]||'?', dag=deel[1]||'?', bed=deel[2]||'?';
+        const groep=perSleutel[k]||[];
+        const weg=e.weg?idx.get(e.weg):null;
+        const blijft=groep.filter(t=>t.id!==e.weg);
+        if(e.weg){ nWeg++; if(weg && weg.amount<0) eurWeg+=-weg.amount; } else nTwee++;
+        L.push('  '+dag+'   '+String(bed).padStart(10)+'   rekening '+acc+'   vastgelegd op '+(e.op||'?'));
+        if(e.weg){
+          L.push('    jouw keuze:   deze kant valt weg');
+          L.push('    valt weg:     '+(weg?(nm(weg)+'   cat='+(_dT(()=>catOf(weg),'?'))+'   id '+weg.id)
+                                            :'(de boeking staat niet meer in TX)   id '+e.weg));
+          L.push('    blijft staan: '+(blijft.length?blijft.map(t=>nm(t)+'   cat='+(_dT(()=>catOf(t),'?'))).join(' | ')
+                                                    :'(geen andere boeking met deze sleutel meer)'));
+        } else {
+          L.push('    jouw keuze:   twee verschillende betalingen, allebei tellen mee');
+          L.push('    de twee:      '+(groep.length?groep.map(t=>nm(t)+'   cat='+(_dT(()=>catOf(t),'?'))).join(' | '):'(niet meer in TX)'));
+        }
+        const ov=Object.keys(e.ovr||{});
+        L.push('    eigen categorie vervallen: '+(ov.length
+          ? ov.map(id=>{ const t=idx.get(id); return (t?nm(t):'(weg)')+' -> '+((CATS[e.ovr[id]]||{}).name||e.ovr[id]); }).join(' | ')
+            +'   (terugdraaien zet die terug)'
+          : 'geen'));
+      }
+      L.push('  samen: '+nWeg+' paar als dubbel bevestigd ('+Math.round(eurWeg)+' euro aan afschrijvingen telt niet meer mee), '
+        +nTwee+' paar vastgelegd als twee betalingen');
+      L.push('  die boekingen staan nog in TX en in de transactielijst, en zeggen daar dat ze niet meetellen (v288)');
+    }
+    /* WAT ER NOG OPEN STAAT, want dat is de andere helft van dezelfde vraag: de regel in Instellingen
+       telt alleen de open paren en verdwijnt zodra er niets meer te beslissen valt. */
+    const open=(_dT(()=>dubbelParen(),[])||[]).filter(x=>!x.keuze);
+    L.push('  nog open in de kandidatenlijst: '+open.length
+      +(open.length?('   '+open.slice(0,8).map(x=>x.a.date+' '+(+x.a.amount).toFixed(2)+' '+String(x.a.name||'?').slice(0,22)).join(' | ')):''));
+  }
   /* ===== DE EIGEN CATEGORIEEN DIE DE REGEL TEGENSPREKEN (v288) =====
      Dit is de drill-down op de `OVR`-teller die hierboven per rekening staat, en dus geen nieuw onderwerp:
      hij zegt WELKE van die eigen keuzes op een boeking staan die de regel `intern` geeft. GEMETEN op het
@@ -14665,8 +14771,33 @@ function diagDubbel(){
       +'   softKey '+(new Set(g.map(_softKey)).size===1?'gelijk':'anders')
       +'   dupSig '+(new Set(g.map(_dupSig)).size===1?'gelijk':'anders'));
     for(const t of g){
-      L.push('      src='+src(t).padEnd(5)+'  '+_diagCatBron(t)+'  name="'+kort(t.name,26)+'"');
+      L.push('      src='+src(t).padEnd(5)+'  '+_diagCatBron(t)+'  name="'+kort(t.name,26)+'"'
+        +(_dT(()=>dubbelWeg(t),false)?'   <-- door jou bevestigd als dubbel, telt niet mee':''));
       L.push('        desc="'+kort(t.desc,110)+'"');
+    }
+    /* v289: DE STAND VAN DEZE GROEP IN DE KANDIDATENLIJST. Deze lijst las tot nu toe de ruwe `TX` en
+       drukte na vier bevestigingen precies hetzelfde af als ervoor; een lezer met alleen de uitvoer zag
+       niet dat er iets was beslist. Dat is dezelfde vorm als een label dat iets belooft wat de code niet
+       doet, nu andersom: een lijst die verzwijgt wat de code wel heeft gedaan.
+       DE GROEPEN VALLEN NIET SAMEN met de sleutel van `dubbelParen()`: die draagt ook de naam-prefix, dus
+       een groep hier kan over meer dan een sleutel lopen. Daarom wordt per sleutel gekeken en niet per
+       groep, en staat de REDEN erbij als hij geen kandidaat is: dat is `geldmaatMist()`, dezelfde bron
+       als sectie (f) van blok 11. Bij drie of meer boekingen bestaat die vraag niet (v288). */
+    const P=_dT(()=>SET.dubbelPaar,{})||{};
+    const sl=[...new Set(g.map(t=>_dT(()=>dubbelSleutel(t),'')).filter(Boolean))];
+    const beslist=sl.filter(x=>P[x]);
+    if(beslist.length){
+      L.push('    -> AFGEHANDELD: '+beslist.map(x=>{
+        const e=P[x]; const w=e.weg?g.find(t=>t.id===e.weg):null;
+        return (e.weg?('"'+kort(w?w.name:'?',26)+'" valt weg'):'twee verschillende betalingen')+' (op '+(e.op||'?')+')';
+      }).join(' | '));
+    } else if(g.length>2){
+      L.push('    -> geen kandidaat: drie of meer boekingen met dezelfde sleutel, dan valt niet te zeggen welke van welke (v288)');
+    } else {
+      const mist=_dT(()=>geldmaatMist(g[0], g[1], 0), null);
+      if(mist && !mist.length && sl.length===1) L.push('    -> STAAT OPEN in de kandidatenlijst in Instellingen');
+      else if(mist && mist.length) L.push('    -> geen kandidaat: '+mist.join(' | '));
+      else L.push('    -> geen kandidaat: de twee boekingen delen geen sleutel (ander naam-begin)');
     }
   }
   if(!dubbelDag.length) L.push('  (geen)');
