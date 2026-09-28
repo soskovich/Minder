@@ -1273,7 +1273,12 @@ function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!ba
    over dezelfde snede in hetzelfde blok. Wie boekingen telt leest daarom deze lijst en niet `TX`.
    `TX` ZELF BLIJFT WAT HET WAS: er wordt niets weggegooid, en wie de IMPORT telt (hoeveel boekingen
    draagt deze bron, welke rekeningen bestaan er) leest `TX` gewoon, want dat is een andere vraag. */
-function telbareTx(){ return TX.filter(t=>!csvDubbel(t) && !dubbelWeg(t)); }   // v288: een bevestigde dubbele kant valt langs dezelfde poort weg
+/* DE POORT IN TWEE STUKKEN, EN DAT IS GEEN TWEEDE WAARHEID (v293). Een bevestigd drietal moet in de
+   LIJST blijven staan, anders is de keuze niet meer terug te draaien en verdwijnt het geval uit zicht
+   (v288). `vorautBron()` is daarom de poort ZONDER zijn eigen uitkomst en `telbareTx()` is die poort
+   plus `vorautWeg()`. Er staat geen eis twee keer: de tweede is letterlijk uit de eerste afgeleid. */
+function vorautBron(){ return TX.filter(t=>!csvDubbel(t) && !dubbelWeg(t)); }   // v288: een bevestigde dubbele kant valt langs dezelfde poort weg
+function telbareTx(){ return vorautBron().filter(t=>!vorautWeg(t)); }           // v293: een bevestigde reservering en haar vrijgave ook
 function txOfMonth(m){ return telbareTx().filter(t=>t.date.slice(0,7)===m); }
 /* v264: DE WEEKAS, ALS BRON EN NOG ZONDER SCHERM. Blokken van zeven dagen vanaf de 1e van elke
    maand, dus 1-7, 8-14, 15-21 en 22-28; wat er daarna van de maand overblijft is GEEN blok en komt
@@ -10426,10 +10431,10 @@ function renderTxList(){
        dubbele die je ziet (v281). Maar hem ONgemarkeerd tonen terwijl hij nergens meetelt is zelf een
        leugen, dus hij zegt het hier, in dezelfde subregel die 'in behandeling' en 'afwijkend bedrag'
        al dragen. Geen nieuw element en geen tweede detectie: dezelfde csvDubbel() als de sommen. */
-    const dub=csvDubbel(t), dwg=dubbelWeg(t);   // v288: een bevestigde dubbele kant zegt het hier om dezelfde reden
+    const dub=csvDubbel(t), dwg=dubbelWeg(t), vwg=vorautWeg(t);   // v288/v293: een bevestigde dubbele kant en een bevestigde reservering zeggen het hier om dezelfde reden
     body+=`<div class="tx" onclick="openSheet('${t.id}')"${pnd?' style="opacity:.62"':''}>
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(t.name)}</div>${dwg?`<div class="cat" style="color:var(--mut)">• telt niet mee, je legde dit vast als dubbel</div>`:(dub?`<div class="cat" style="color:var(--mut)">• telt niet mee, ook via je bankkoppeling</div>`:(pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--mut)">• ${jrg('afwijkendbedrag','afwijkend bedrag')}</div>`:'')))}</div>
+      <div class="info"><div class="nm">${esc(t.name)}</div>${vwg?`<div class="cat" style="color:var(--mut)">• telt niet mee, je legde dit vast als reservering</div>`:(dwg?`<div class="cat" style="color:var(--mut)">• telt niet mee, je legde dit vast als dubbel</div>`:(dub?`<div class="cat" style="color:var(--mut)">• telt niet mee, ook via je bankkoppeling</div>`:(pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--mut)">• ${jrg('afwijkendbedrag','afwijkend bedrag')}</div>`:''))))}</div>
       <div class="amt ${t.amount>0?'pos':''}" style="font-weight:700">${t.amount>0?'+':''}${euro(t.amount)}</div>
     </div>`;
   }
@@ -13066,11 +13071,20 @@ function rekOverlapRegel(){
    GEEN OPEN PAAR, GEEN REGEL. Een afgehandeld paar brengt de regel niet terug; de sheet blijft via deze
    plek bereikbaar zolang er iets openstaat, en anders niet. Dat is de meetles over een melding die de
    enige drager van een ingang is, en hij is hier aanvaard: er valt niets meer te beslissen. */
+/* DEZE REGEL IS DE ENIGE INGANG NAAR DE SHEET, en dus ook naar het terugdraaien (v293). Tot dan
+   verdween hij zodra je alles had beslist, en daarmee was je keuze niet meer terug te draaien terwijl de
+   knop in de sheet dat wel belooft. GEMETEN op het toestel: negen bevestigde paren en nul open, dus daar
+   was de sheet niet meer te openen. Hij blijft nu staan zolang er iets te beslissen OF iets te herzien
+   valt, met een andere tekst per geval. Dezelfde vorm als `vorautRegel()` hieronder, en om dezelfde
+   reden: een label dat iets belooft wat de code niet doet is wat dit project verbiedt. */
 function dubbelParenRegel(){
   let pr=[]; try{ pr=dubbelParen(); }catch(_){ return ''; }
-  const open=pr.filter(p=>!p.keuze);
-  if(!open.length) return '';
-  return `<div class="small" style="margin-top:9px;color:var(--mut2);cursor:pointer" onclick="openDubbelParen()">${open.length===1?'1 paar boekingen kan dezelfde betaling zijn':open.length+' paren boekingen kunnen dezelfde betaling zijn'} \u203a</div>`;
+  const open=pr.filter(p=>!p.keuze), klaar=pr.length-open.length;
+  if(!open.length && !klaar) return '';
+  const tekst = open.length
+    ? (open.length===1?'1 paar boekingen kan dezelfde betaling zijn':open.length+' paren boekingen kunnen dezelfde betaling zijn')
+    : (klaar===1?'1 paar boekingen heb je zelf beoordeeld':klaar+' paren boekingen heb je zelf beoordeeld');
+  return `<div class="small" style="margin-top:9px;color:var(--mut2);cursor:pointer" onclick="openDubbelParen()">${tekst} \u203a</div>`;
 }
 /* DE SHEET. Per paar de twee feiten die je nodig hebt om te kiezen (de volledige naam en waar de
    categorie vandaan komt) en het gevolg van de keuze, en verder niets. Er is geen tweede bevestiging:
@@ -13148,6 +13162,135 @@ function dubbelParenTerug(sleutel){
   for(const id in (e.ovr||{})) OVR[id]=e.ovr[id];
   delete SET.dubbelPaar[sleutel];
   save(); buildAccMeta(); render(); openDubbelParen();
+  toast('Teruggedraaid');
+}
+/* ===== DE RESERVERING AAN DE POMP, EN DE APP WIJST ER GEEN AAN (v293) =====
+   DE AANLEIDING IS BUITEN DE APP GEMETEN. In de bank-app van de gebruiker staat bij zo'n drietal alleen
+   de derde regel als boeking; de eerste twee zijn een reservering en haar vrijgave. Blok 12 heeft dat op
+   het toestel per positie nagelezen en vond GEEN enkel opgeslagen veld dat de twee scheidt: geen
+   pending-vlag, geen bankRef, geen referentie, geen desc-tijd, en een desc die alleen de naam plus de
+   psd2-code draagt. De reservering kwam dus als GEBOEKTE regel binnen, en daarmee is een poort op
+   transaction_status=PDNG per constructie blind voor dit geval.
+   WAT OVERBLIJFT IS DE VORM, EN DIE BESLIST NIETS ZELF. `vorautKandidaten()` geeft de drietallen waarin
+   een afschrijving, een bijschrijving, en een tweede afschrijving die PRECIES het verschil is bij elkaar
+   staan. Dat is een correspondentie en geen identiteit (blok 11 en 12 zeggen dat ook), dus de gebruiker
+   bevestigt per geval. De app kan niet zien of het een reservering was; jij kunt dat in je bank-app wel.
+   ALLEEN VORM 3, en dat is een GEMETEN afbakening en geen vereenvoudiging: bij vorm 1 (deels terug, geen
+   tweede afschrijving) en vorm 2 (volledig terug, de tankbeurt apart) telt de netto-som al precies de
+   echte betaling, en sectie 3c van blok 12 meet dat die twee vormen nul opleveren. Een keuze voorleggen
+   die niets verandert is een vraag die gaat zeuren (v288).
+   ALLE UITGAVEN-CATEGORIEEN EN NIET ALLEEN VERVOER. Op het toestel komt vorm 3 uitsluitend bij tanken
+   voor, maar een afbakening op die categorie zou een hardcode zijn (v266) en zou precies het geval
+   missen waarvoor de lijst bestaat zodra een andere winkel dezelfde vorm gebruikt. Een INTERNE
+   overboeking valt er wel uit: die heeft deze vorm om een andere reden (v288).
+   DE SLEUTEL IS DE t.id VAN DE AFSCHRIJVING, dezelfde identiteit die `commitTx()` en `categorize()`
+   gebruiken (v281). Twee reserveringen van hetzelfde bedrag bij dezelfde tegenpartij op dezelfde dag
+   zouden diezelfde id hebben en kunnen dus per constructie niet naast elkaar in `TX` staan. */
+function vorautSleutel(r){ return String((r&&r.t&&r.t.id)||''); }
+function vorautKandidaten(){
+  const isUitgave=t=>{ try{ const c=CATS[catOf(t)]; return !!(c && c.type==='expense'); }catch(_){ return false; } };
+  let rij=[];
+  try{ rij=vorautDrietallen(vorautBron().filter(isUitgave)); }catch(_){ return []; }
+  const P=(typeof SET!=='undefined'&&SET.vorautPaar)||{};
+  const uit=[];
+  for(const r of rij){
+    if(String(r.vorm).charAt(0)!=='3') continue;
+    const D=vorautDelen(r);
+    /* DEZE GUARD KAN VANUIT DE HUIDIGE STAND NIET VALLEN, en dat staat erbij in plaats van dat hij weg
+       gaat (v284): vorm 3 BETEKENT dat er een terugboeking en een tweede afschrijving zijn, dus hij is
+       per constructie waar zolang alleen vorm 3 wordt voorgelegd. Een sabotage erop blijft daarom groen
+       (meetles r: het geval valt al op een andere eis). Hij blijft staan als vangnet voor een ronde die
+       vorm 1 erbij zou halen, want daar is `bij` null en zou de kaart eronder gooien. De EIGENSCHAP dat
+       elke kandidaat drie regels draagt is apart getoetst. */
+    if(!D.terug || !D.bij) continue;
+    const k=vorautSleutel(r); if(!k) continue;
+    uit.push({sleutel:k, voor:r.t, terug:D.terug, bij:D.bij, echt:r.echt, keuze:P[k]||null});
+  }
+  uit.sort((a,b)=>String(b.voor.date).localeCompare(String(a.voor.date)) || (a.sleutel<b.sleutel?-1:1));
+  return uit;
+}
+/* DE POORT-LEZER leest de VLAG en niet de vorm: de vorm is een kandidaat en de vlag is jouw keuze.
+   Zonder vlag telt alles gewoon mee, en dat is de kant die TE VEEL telt in plaats van te weinig (v168):
+   zichtbaar, en niet stil verdwenen. */
+function vorautWeg(t){
+  const P=(typeof SET!=='undefined'&&SET.vorautPaar)||null;
+  if(!P || !t || !t.id) return false;
+  for(const k in P){ const e=P[k]; if(e && Array.isArray(e.weg) && e.weg.indexOf(t.id)>=0) return true; }
+  return false;
+}
+/* DE REGEL DRAAGT DE ENIGE INGANG NAAR DE SHEET, en dus ook naar het terugdraaien. Zou hij alleen bij
+   een OPEN geval staan, dan verdwijnt hij zodra je alles hebt beslist en is je keuze niet meer terug te
+   draaien, terwijl de knop dat wel belooft. Dat is de meetles over een melding die de enige drager van
+   een ingang is, en een label dat iets belooft wat de code niet doet. Daarom blijft hij staan zolang er
+   iets te beslissen OF iets te herzien valt, met een andere tekst per geval.
+   GEDEMPT EN NIET AMBER (`v78`/`v93`): de app kan hier niets vaststellen, en amber zou een vondst
+   claimen die de code niet draagt. */
+function vorautRegel(){
+  let K=[]; try{ K=vorautKandidaten(); }catch(_){ return ''; }
+  const open=K.filter(x=>!x.keuze), klaar=K.length-open.length;
+  if(!open.length && !klaar) return '';
+  const tekst = open.length
+    ? (open.length===1?'1 betaling kan een reservering met een vrijgave zijn':open.length+' betalingen kunnen een reservering met een vrijgave zijn')
+    : (klaar===1?'1 betaling heb je zelf beoordeeld':klaar+' betalingen heb je zelf beoordeeld');
+  return `<div class="small" style="margin-top:9px;color:var(--mut2);cursor:pointer" onclick="openVoraut()">${tekst} \u203a</div>`;
+}
+/* DE SHEET. Per geval de drie regels met hun bedrag en het GEVOLG van de keuze, en verder niets. Geen
+   tweede bevestiging, om dezelfde reden als bij de dubbele boekingen: de handeling is in een tik terug
+   te draaien, en dan is een tussenscherm een stap zonder opbrengst (MECHANISM_SPEC.defaultEffect). */
+function vorautKaart(K){
+  const c=CATS[catOf(K.bij)] || CATS[catOf(K.voor)];
+  const rij=(lab, t)=>`<div class="small" style="display:flex;justify-content:space-between;gap:10px;padding:3px 0">
+    <span class="muted">${esc(lab)}</span><span>${euro(t.amount)}</span></div>`;
+  const nu=Math.round((-K.voor.amount)+(-K.terug.amount)+(-K.bij.amount));
+  return `<div class="card" style="margin-bottom:10px">
+    <div class="small muted">${esc(dubbelParenDag(K.voor.date))} \u00b7 ${esc(acctNiceName(K.voor.acc))}</div>
+    <div style="font-weight:600;margin-top:2px">${esc(K.voor.name||'?')}</div>
+    <div style="margin-top:6px">${rij('afschrijving', K.voor)}${rij('terug', K.terug)}${rij('tweede afschrijving', K.bij)}</div>
+    <div class="small" style="color:var(--mut2);margin-top:8px;line-height:1.5">Is de eerste een reservering, dan zijn de eerste twee geen boekingen en is ${euro(K.bij.amount)} wat je werkelijk betaalde. ${esc(c?c.name:'Deze categorie')} telt hiervan nu ${euro0(nu)} en daarna ${euro0(Math.round(K.echt/100))}.</div>
+    <button class="btn sec" style="margin-top:8px" onclick="vorautZet('${esc(String(K.sleutel).replace(/'/g,"\\'"))}',1)">Reservering, de eerste twee tellen niet mee</button>
+    <button class="btn sec" style="margin-top:6px" onclick="vorautZet('${esc(String(K.sleutel).replace(/'/g,"\\'"))}',0)">Drie echte boekingen</button>
+  </div>`;
+}
+function openVoraut(){
+  const K=(()=>{ try{ return vorautKandidaten(); }catch(_){ return []; } })();
+  const open=K.filter(x=>!x.keuze), klaar=K.filter(x=>x.keuze);
+  const klaarKaart=x=>{
+    const op=x.keuze.op ? new Date(String(x.keuze.op)).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) : '';
+    const weg=Array.isArray(x.keuze.weg) && x.keuze.weg.length;
+    return `<div class="card" style="margin-bottom:10px">
+      <div class="small muted">${esc(dubbelParenDag(x.voor.date))} \u00b7 ${esc(acctNiceName(x.voor.acc))}</div>
+      <div class="small" style="margin-top:6px">${weg?`De reservering van ${euro(x.voor.amount)} en de vrijgave tellen${op?' sinds '+esc(op):''} niet meer mee. ${euro(x.bij.amount)} blijft staan.`:`Drie echte boekingen${op?', vastgelegd op '+esc(op):''}. Ze tellen alle drie mee.`}</div>
+      <button class="btn sec" style="margin-top:8px" onclick="vorautTerug('${esc(String(x.sleutel).replace(/'/g,"\\'"))}')">Terugdraaien</button>
+    </div>`;
+  };
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="center" style="margin-bottom:10px"><div style="font-size:var(--fs-xl)">${ICON('swap')}</div>
+      <div style="font-weight:800;font-size:var(--fs-lg)">Is dit een reservering</div>
+      <div class="muted small">Jij beslist per geval. Er wordt niets weggegooid.</div></div>
+    <div class="small muted" style="margin:0 2px 12px;line-height:1.5">Bij tanken aan de pomp houdt een bank eerst een vast bedrag vast, geeft daarna het verschil vrij, en boekt wat je echt tankte apart. Staan die drie er alle drie als boeking, dan telt die tankbeurt twee keer. Kijk in je bank-app welke van de drie daar staan. Ziet het er alleen zo uit maar zijn het drie echte betalingen, dan hoort er niets weg, en daarom kiest de app hier niets.</div>
+    ${open.length?open.map(vorautKaart).join(''):'<div class="small muted" style="margin:0 2px 12px">Er staat geen geval meer open.</div>'}
+    ${klaar.length?`<div class="small muted" style="margin:14px 2px 8px;font-weight:600">Al beslist</div>${klaar.map(klaarKaart).join('')}`:''}`;
+  showSheetBg();
+}
+/* DE SCHRIJVER. De reservering EN de vrijgave vallen samen weg, en dat is een handeling en geen twee:
+   alleen de afschrijving weghalen laat de vrijgave als losse bijschrijving staan en dan telt de
+   categorie MINDER dan je betaalde; alleen de vrijgave weghalen maakt het juist erger. Samen blijft
+   precies de tweede afschrijving over, en dat is wat de bank-app toont.
+   ER VERVALT GEEN EIGEN CATEGORIE, anders dan bij de dubbele boekingen (v288): daar sprak een override
+   de intern-regel tegen, en hier staan drie regels van dezelfde tegenpartij in dezelfde
+   uitgaven-categorie. Een override die jij zelf zette blijft dus staan; wat wegvalt is de boeking. */
+function vorautZet(sleutel, echt){
+  let K=null; try{ K=vorautKandidaten().find(x=>x.sleutel===sleutel); }catch(_){ return; }
+  if(!K || K.keuze) return;
+  SET.vorautPaar=SET.vorautPaar||{};
+  SET.vorautPaar[sleutel]={weg: (+echt? [String(K.voor.id), String(K.terug.id)] : []), op:vandaagYMD()};
+  save(); buildAccMeta(); render(); openVoraut();
+  toast(`${ICON('check')} ${+echt?'Vastgelegd als reservering':'Vastgelegd als drie boekingen'}`);
+}
+function vorautTerug(sleutel){
+  const e=(SET.vorautPaar||{})[sleutel]; if(!e) return;
+  delete SET.vorautPaar[sleutel];
+  save(); buildAccMeta(); render(); openVoraut();
   toast('Teruggedraaid');
 }
 /* Wat de app per rekening weet, in woorden. Eén bron voor de sheet en voor de kopieertekst, zodat
@@ -13627,7 +13770,8 @@ function setBank(){
     <div class="small muted" style="margin-bottom:8px;font-weight:600">Je rekeningen</div>
     <div class="small muted">${zichtbareRek().length} rekening${zichtbareRek().length===1?'':'en'} in beeld. Saldo's en je spaarrekening stel je in bij <b>Inkomen &amp; rekeningen</b>.</div>
     ${rekOverlapRegel()}
-    ${dubbelParenRegel()}` : '';
+    ${dubbelParenRegel()}
+    ${vorautRegel()}` : '';
   return head + bestandHtml + aiHtml + briefHtml + accHtml + advHtml;
 }
 function bankAdvTap(){
@@ -15982,7 +16126,11 @@ function diagVoorautorisatie(){
   const heel=a=>cent(a)%100===0;
   const dag=d=>new Date(String(d).slice(0,10)+'T00:00:00');
   const isVervoer=t=>{ try{ return catOf(t)==='vervoer'; }catch(_){ return false; } };
-  const tel=(_dT(()=>telbareTx(),[])||[]).filter(isVervoer);
+  /* DE SCOPE IS `vorautBron()` EN NIET `telbareTx()` (v293), en dat is dezelfde reden als bij blok 11:
+     zou dit blok de poort MET zijn eigen uitkomst lezen, dan verdwijnt een bevestigd drietal uit de
+     meting die juist moet laten zien wat die bevestiging deed (v289). Wat hieronder de POORT leest is de
+     nu-kolom van 3c en van sectie 4, want die vraagt wat er vandaag in de maand staat. */
+  const tel=(_dT(()=>vorautBron(),[])||[]).filter(isVervoer);
   const key=t=>_dT(()=>recurKey(t),'')||'';
 
   L.push('ALLEEN METEN. Dit blok leest, beslist niets en schrijft niets (v244). Geen enkele app-functie');
@@ -16026,6 +16174,15 @@ function diagVoorautorisatie(){
     L.push('     andere afschrijvingen van dezelfde tegenpartij in het venster: '
       +(r.tweede.length?r.tweede.map(x=>(cent(x.amount)/100).toFixed(2)+' op '+x.date+(x===r.past?' <-- past op het verschil':'')).join(' | '):'geen'));
     L.push('     -> VORM '+r.vorm+'   netto nu '+(r.netto/100).toFixed(2)+'   echte tankbeurt '+(r.echt/100).toFixed(2));
+    /* WAT DE APP MET DIT DRIETAL DEED (v293), en dat is de v289-eis: een ronde die een lijst bouwt hoort
+       per geval af te drukken wat er met hem is gebeurd, anders is na een paar bevestigingen niet meer
+       te zien welke zijn afgehandeld. De statusregel leest `vorautKandidaten()` en spreekt dus per
+       constructie dezelfde lijst als de sheet in Instellingen. */
+    const kand=(_dT(()=>vorautKandidaten(),[])||[]).find(x=>x.sleutel===_dT(()=>vorautSleutel(r),''));
+    if(!kand) L.push('     geen kandidaat: alleen vorm 3 wordt voorgelegd, want vorm 1 en 2 tellen netto al de echte betaling (3c rekent dat voor)');
+    else if(!kand.keuze) L.push('     STAAT OPEN in de kandidatenlijst in Instellingen');
+    else if(kand.keuze.weg && kand.keuze.weg.length) L.push('     AFGEHANDELD: jij legde dit vast als een reservering'+(kand.keuze.op?' op '+kand.keuze.op:'')+', de eerste twee tellen niet mee');
+    else L.push('     AFGEHANDELD: jij legde dit vast als drie echte boekingen'+(kand.keuze.op?' op '+kand.keuze.op:'')+', alle drie tellen mee');
   }
   if(rijen.length>DIAG_PAAR_MAX) L.push('  ... en '+(rijen.length-DIAG_PAAR_MAX)+' meer');
 
@@ -16163,7 +16320,7 @@ function diagVoorautorisatie(){
        terugboeking in de hare" beloofde. Dan sluit deze tabel niet aan op wat Vervoer & auto in die maand
        zegt, en dat is precies het geval dat 3b als het belangrijkste aanwijst. Een label dat iets belooft
        wat de code niet doet is wat dit project verbiedt, ook in mijn eigen blok (v275). */
-    for(const x of [D.voor, D.terug, D.bij]){ if(x) emmer(String(x.date).slice(0,7)).nu += Math.round(-x.amount*100); }
+    for(const x of [D.voor, D.terug, D.bij]){ if(x && !_dT(()=>vorautWeg(x),false)) emmer(String(x.date).slice(0,7)).nu += Math.round(-x.amount*100); }
     emmer(String(D.drager.date).slice(0,7)).gek += D.echt;
   }
   const ms=Object.keys(perM).sort();
@@ -16210,7 +16367,7 @@ function diagVoorautorisatie(){
   L.push('   over een. Een interne overboeking valt eruit: die heeft deze vorm om een andere reden (v288).');
   L.push('   DE VERVOER-DRIETALLEN ZITTEN HIER OOK IN, dus dit is geen lijst met alleen het nieuwe.');
   const isUitgave=t=>{ try{ const c=CATS[catOf(t)]; return !!(c && c.type==='expense'); }catch(_){ return false; } };
-  const alles=(_dT(()=>telbareTx(),[])||[]).filter(isUitgave);
+  const alles=(_dT(()=>vorautBron(),[])||[]).filter(isUitgave);   // v293: zelfde reden als bij `tel` hierboven
   const rij4=_dT(()=>vorautDrietallen(alles),[])||[];
   L.push('   boekingen in scope: '+alles.length+'   drietallen: '+rij4.length+'   (vervoer alleen: '+rijen.length+')');
   if(!rij4.length) L.push('   (geen enkele uitgave heeft een bijschrijving van dezelfde tegenpartij in dit venster)');
@@ -16222,7 +16379,7 @@ function diagVoorautorisatie(){
     for(const r of rij4){ const D=vorautDelen(r);
       const c=_dT(()=>catOf(r.t),'?')||'?'; const E=eC(c); E.n++;
       E['v'+String(r.vorm).charAt(0)]=(E['v'+String(r.vorm).charAt(0)]||0)+1;
-      for(const x of [D.voor, D.terug, D.bij]){ if(x) eC(_dT(()=>catOf(x),'?')||'?').nu += Math.round(-x.amount*100); }
+      for(const x of [D.voor, D.terug, D.bij]){ if(x && !_dT(()=>vorautWeg(x),false)) eC(_dT(()=>catOf(x),'?')||'?').nu += Math.round(-x.amount*100); }
       eC(_dT(()=>catOf(D.drager),'?')||'?').gek += D.echt; }
     const cs=Object.keys(perC).sort((a,b)=>(perC[b].nu-perC[b].gek)-(perC[a].nu-perC[a].gek));
     L.push('   categorie                  n   v1   v2   v3         nu   gekoppeld   verschil');
@@ -16238,7 +16395,7 @@ function diagVoorautorisatie(){
     const perT={};
     for(const r of rij4){ const k=String(r.t.name||'?').slice(0,26); const E=perT[k]=perT[k]||{n:0, v3:0, ver:0, cat:new Set()};
       E.n++; if(String(r.vorm).charAt(0)==='3') E.v3++;
-      const D=vorautDelen(r); let nu=0; for(const x of [D.voor, D.terug, D.bij]) if(x) nu+=Math.round(-x.amount*100);
+      const D=vorautDelen(r); let nu=0; for(const x of [D.voor, D.terug, D.bij]) if(x && !_dT(()=>vorautWeg(x),false)) nu+=Math.round(-x.amount*100);
       E.ver+=nu-D.echt; E.cat.add(_dT(()=>catOf(r.t),'?')||'?'); }
     const ts=Object.keys(perT).sort((a,b)=>perT[b].ver-perT[a].ver || perT[b].n-perT[a].n);
     L.push('');

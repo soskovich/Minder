@@ -358,14 +358,17 @@ test.describe('v288 de kandidaat-paren', () => {
     expect(await page.evaluate(() => Object.keys(SET.dubbelPaar || {}).length)).toBe(0);
   });
 
-  /* DE REGEL IN INSTELLINGEN IS DE ENIGE INGANG, dus hij telt wat er OPEN staat en verdwijnt als er niets
-     meer te beslissen valt. */
-  test('de regel in Instellingen telt de open paren en verdwijnt als ze beslist zijn', async ({ page }) => {
+  /* DE REGEL IN INSTELLINGEN IS DE ENIGE INGANG, en dus ook de enige weg naar het terugdraaien.
+     BIJGEWERKT BIJ v293: deze test eiste eerst dat hij VERDWIJNT zodra alles beslist is, en legde daarmee
+     een defect vast in plaats van een eigenschap. GEMETEN op het toestel: negen bevestigde paren en nul
+     open, dus de sheet was daar niet meer te openen en de terugdraai-knop bestond alleen nog in theorie.
+     Hij blijft nu staan zolang er iets te beslissen OF iets te herzien valt. */
+  test('de regel in Instellingen telt de open paren en blijft de weg terug', async ({ page }) => {
     await boot(page);
     const regel = () => page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = dubbelParenRegel(); return d.innerText; });
     expect(await regel()).toContain('4 paren boekingen kunnen dezelfde betaling zijn');
     await page.evaluate(() => { for (const p of dubbelParen()) dubbelParenZet(p.sleutel, ''); });
-    expect(await regel()).toBe('');
+    expect(await regel()).toContain('4 paren boekingen heb je zelf beoordeeld');
     /* en de sheet blijft dan wel leesbaar, met de al besliste paren erin */
     const sheet = await page.evaluate(() => { openDubbelParen(); return $('#sheet').innerText; });
     expect(sheet).toContain('Er staat geen paar meer open');

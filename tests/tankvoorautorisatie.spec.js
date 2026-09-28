@@ -9,8 +9,12 @@
  * DIE VIJF ZIJN EEN VERTEKENDE STEEKPROEF, en dat is de reden dat blok 12 bestaat: blok 9 drukt alleen
  * de DUURSTE dag per week af, en een dag die dubbel telt wordt daardoor vaker de duurste.
  *
- * DIT BLOK BOUWT NIETS. Geen koppeling, geen app-gedrag, geen lezer buiten het blok, en het schrijft
- * niets (v244). Wat het beslist is of die koppeling er moet komen.
+ * DIT BLOK SCHRIJFT NIETS (v244). Wat het beslist is of die koppeling er moet komen.
+ * BIJGEWERKT BIJ v293: hier stond ook "geen lezer buiten het blok", en dat is niet meer waar. De
+ * afleiding `vorautDrietallen()` heeft sinds die ronde een APP-lezer, `vorautKandidaten()`, die de
+ * kandidatenlijst in Instellingen voedt. Dat is dezelfde stap die `geldmaatMist()` bij v288 zette: de
+ * vorm is app-code met meer dan een lezer, en het blok is er daar een van. Wat blijft staan is dat het
+ * blok zelf niets beslist en niets schrijft.
  *
  * WAT DE FIXTURE DRAAGT, EN WAAROM ELK GEVAL ERIN STAAT (meetles o en q):
  *   1. DE VIER TOESTEL-DRIETALLEN als vorm 3. Zonder die is de verdubbeling niet te zien;
@@ -384,6 +388,10 @@ test.describe('v290 de tankvoorautorisatie', () => {
     expect(bron.split('function vorautDrietallen(').length - 1).toBe(1);
     expect(bron.split('vorautDrietallen(tel)').length - 1).toBe(1);
     expect(bron.split('vorautDrietallen(alles)').length - 1).toBe(1);
+    /* SINDS v293 IS ER EEN DERDE AANROEPER, en die is APP-code: de kandidatenlijst in Instellingen. De
+       assertie noemt hem, want anders zou een vierde uitdrukking van de vorm hier onopgemerkt binnen
+       kunnen komen terwijl deze test belooft dat hij op een plek staat. */
+    expect(bron.split('vorautDrietallen(vorautBron()').length - 1).toBe(1);
     /* EN DE REGEL "WELKE TWEEDE AFSCHRIJVING HOORT HIERBIJ" STAAT EEN KEER. De test telt de REGEL en niet
        zijn LEZERS: een teller op het aantal aanroepen valt bij elke sectie die erbij komt, en dat is het
        anker dat v271 en v272 heeft laten omvallen. Wat vast moet staan is dat geen lezer hem opnieuw

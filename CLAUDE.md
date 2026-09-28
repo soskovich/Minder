@@ -144,6 +144,75 @@ genoemde versietag.)*
   DE FIXTURE BOOTST DE STAND NA EEN BOOT NA en zet dus GEEN `_p` op de id, met een assertie dat hij er
   ook niet komt. Zou hij er wel staan, dan is die herschrijving verdwenen en verandert de betekenis van
   de kolom.
+- **DE APP WIJST GEEN RESERVERING AAN, DE GEBRUIKER BESLIST PER GEVAL** (`v293`): `vorautKandidaten()`
+  geeft de KANDIDATEN (een afschrijving, een bijschrijving, en een tweede afschrijving die precies het
+  verschil is) en verder niets; jij bevestigt per geval, precies de vorm van `v288`.
+  DAT HET GEEN POORT IS, IS GEMETEN EN GEEN VOORKEUR. Sectie 2b van blok 12 heeft op het toestel per
+  positie nagelezen welk opgeslagen veld een reservering van een boeking scheidt, en het antwoord was
+  GEEN ENKEL: pending 0 van 33, id-op-`_p` 0 van 33, `src` overal `psd2`, geen `bankRef`, geen referentie
+  op de tank-drietallen, geen desc-tijd, en een desc-staart die per positie gelijk is. De reservering
+  kwam dus als GEBOEKTE regel binnen en een poort op `transaction_status=PDNG` is daarvoor per
+  constructie blind. Daarmee vervalt punt 2 van die ronde, met deze meting als reden.
+  DE VALUTADATUM IS DE ENIGE KOLOM DIE WEL VERSCHILT, EN ER IS NIETS OP GEBOUWD: tweede afschrijving 10
+  van 10, afschrijving 2 van 11, bijschrijving 2 van 11, dus bij negen van de tien drietallen draagt
+  alleen de ECHTE boeking een `value_date`. Dat past bij een reservering die nog niet is afgewikkeld,
+  maar het veld wordt bij de IMPORT gezet en door `v277` naderhand verrijkt, dus "geen valutadatum" kan
+  ook betekenen dat die regel er al stond voordat de bank het veld leverde. Het drietal waar alle drie de
+  kanten hem dragen is de tegenproef. Genoteerd als kandidaat-scheider, niet als poort.
+  ALLEEN VORM 3, en dat is een GEMETEN afbakening: sectie 3c rekent voor dat vorm 1 en vorm 2 nul
+  opleveren, want daar telt de netto-som al precies de echte betaling. Een keuze voorleggen die niets
+  verandert is een vraag die gaat zeuren (`v288`).
+  ALLE UITGAVEN-CATEGORIEEN EN NIET ALLEEN VERVOER. Op het toestel komt vorm 3 uitsluitend bij tanken
+  voor (sectie 4: 19 drietallen, vervoer 11 waarvan 10 vorm 3, overig 6 met nul, sport 2 met nul), maar
+  een afbakening op die categorie zou een hardcode zijn (`v266`) en zou het geval missen zodra een andere
+  winkel dezelfde vorm gebruikt. Een INTERNE overboeking valt er wel uit: die heeft deze vorm om een
+  andere reden (`v288`), en zonder zo'n geval in de fixture doet die poort niets (meetles a en p).
+  DE RESERVERING EN DE VRIJGAVE VALLEN SAMEN WEG, en dat is een handeling en geen twee: alleen de
+  afschrijving weghalen laat de vrijgave als losse bijschrijving staan en dan telt de categorie MINDER
+  dan je betaalde; alleen de vrijgave weghalen maakt het erger. Samen blijft precies de tweede
+  afschrijving over, en dat is wat de bank-app toont.
+  DE BOEKINGEN BLIJVEN IN `TX` EN IN DE LIJST en zeggen daar dat ze niet meetellen, in dezelfde subregel
+  als "in behandeling" (`v281`/`v284`/`v288`). ER VERVALT GEEN EIGEN CATEGORIE, anders dan bij `v288`:
+  daar sprak een override de intern-regel tegen, en hier staan drie regels van dezelfde tegenpartij in
+  dezelfde uitgaven-categorie.
+  DE SLEUTEL IS DE `t.id` VAN DE AFSCHRIJVING (`v281`). Twee reserveringen van hetzelfde bedrag bij
+  dezelfde tegenpartij op dezelfde dag zouden diezelfde id hebben en kunnen dus per constructie niet
+  naast elkaar in `TX` staan. DRIE UITKOMSTEN ZIJN ER NIET, twee is genoeg: "reservering" en "drie echte
+  boekingen". Die tweede is wat bij `v288` de derde was, en zonder hem blijft een geval dat geen
+  reservering is eeuwig in de lijst staan.
+- **EEN REGEL DIE DE ENIGE INGANG DRAAGT, DRAAGT OOK DE WEG TERUG** (`v293`): `dubbelParenRegel()` en
+  `vorautRegel()` verdwenen zodra alles beslist was, en daarmee was de sheet niet meer te openen en de
+  terugdraai-knop een belofte zonder route. GEMETEN op het toestel bij `v293`: negen bevestigde paren en
+  NUL open, dus daar bestond het terugdraaien alleen nog in theorie. Beide regels blijven nu staan zolang
+  er iets te beslissen OF iets te herzien valt, met een andere tekst per geval; zonder enig geval staat
+  er niets.
+  DE TEST VAN `v288` PINDE HET DEFECT en niet de eigenschap: hij eiste dat de regel VERDWIJNT zodra alles
+  beslist is. Dat is de meetles over een melding die de enige drager van een ingang is, nu andersom
+  gevonden: niet bij het weghalen van een melding, maar bij een melding die zichzelf weghaalt. Die test
+  is herschreven naar wat hij moest vasthouden, en dat is de reparatie van de VORM naast die van het
+  geval (`v271`/`v272`).
+- **DE POORT IN TWEE STUKKEN, EN `telbareTx()` IS ERUIT AFGELEID** (`v293`): `vorautBron()` is de poort
+  ZONDER zijn eigen uitkomst en `telbareTx()` is `vorautBron().filter(t=>!vorautWeg(t))`. Er staat geen
+  eis twee keer; de tweede is letterlijk uit de eerste afgeleid.
+  DAT IS NODIG OMDAT EEN BEVESTIGD DRIETAL IN DE LIJST MOET BLIJVEN: las `vorautKandidaten()` de volle
+  poort, dan vormt het drietal zich niet meer zodra je het bevestigt, en is je keuze niet terug te
+  draaien en niet meer te zien. Dat is dezelfde vorm als `dubbelParen()` bij `v288`.
+  BLOK 12 LEEST OM DEZELFDE REDEN `vorautBron()` EN NIET `telbareTx()`, en dat is de tweede uitzondering
+  naast blok 11 (`v285`): zou hij de poort met zijn eigen uitkomst lezen, dan verdwijnt precies het geval
+  dat hij moet tonen (`v289`). WAT DAAR WEL DE POORT LEEST is de nu-kolom van 3c en van sectie 4, want die
+  vraagt wat er VANDAAG in de maand staat; na een bevestiging staat daar dus nul te winnen, en dat is de
+  uitlezing die de ronde toetsbaar maakt.
+  BLOK 12 ZEGT PER DRIETAL WAT DE APP ERMEE DEED (`v289`): afgehandeld als reservering, afgehandeld als
+  drie boekingen, staat open, of geen kandidaat met de reden erbij. DE TELLINGEN VALLEN NIET SAMEN: het
+  blok telt DRIETALLEN in de vervoer-categorie (ook vorm 1 en 2), de lijst telt de gevallen waarover jij
+  iets te beslissen hebt, en een assertie die die twee door elkaar haalt meet iets anders dan ze zegt.
+- **EEN GUARD DIE VANUIT DE HUIDIGE STAND NIET KAN VALLEN, MET DE EIGENSCHAP APART GETOETST** (`v293`):
+  `vorautKandidaten()` toetst naast de vorm ook of er een terugboeking en een tweede afschrijving zijn, en
+  die toets is bij vorm 3 per constructie waar. De sabotage erop blijft dus groen, en dat is meetles (r):
+  het geval valt al op een andere eis. Hij blijft staan als vangnet voor een ronde die vorm 1 erbij zou
+  halen, want daar is de tweede afschrijving er niet en zou de kaart eronder gooien. Dat is de keuze van
+  `v284` over een guard die niet bereikbaar is; wat de test vasthoudt is de EIGENSCHAP (elke kandidaat
+  draagt drie regels) en niet de guard.
 - **OPEN PUNT, GEMETEN EN BEWUST NIET GEDICHT: een kaartbetaling kan een sync lang verdwijnen** (`v292`,
   gevonden bij `v291`): dit is de tegenhanger van de regel hierboven, en hij staat apart omdat hij niet
   over de diagnose gaat maar over de gegevens van de gebruiker. `mapPsd2Tx()` zet `t.id+='_p'` op een
@@ -2678,8 +2747,8 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** ZEVENENTWINTIG keer in
-  vierentwintig rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** NEGENENTWINTIG keer in
+  vijfentwintig rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los
   lazen ze als incidenten; samen zijn het zes manieren waarop dezelfde fout binnenkomt, en de vraag die ze
   alle had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
   (a) DE TRIPDRAAD DIE NIET KON VALLEN (`v265`). De uitsluiting van huur uit `weekScope()` moest een
@@ -2814,7 +2883,15 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   andere eiste dat het er niet stond. TOETS BIJ EEN FIXTURE-VELD DUS OF DE BOOT HET NIET OVERSCHRIJFT, en
   als hij dat doet, boots de stand NA de boot na en maak van die overschrijving een eigen assertie. Hier
   was die overschrijving zelf de vondst van de ronde.
-  WAT DE ZEVENENTWINTIG GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (v) TWEE SABOTAGES GROEN OP EEN SCHRIJVER DIE NIEMAND TWEE KEER AANRIEP (`v293`). De guard die een
+  vastgelegde keuze niet laat overschrijven bleef groen, want geen enkele test riep `vorautZet()` twee
+  keer op dezelfde sleutel aan: de sheet toont bij een beslist geval alleen nog 'Terugdraaien', dus dat
+  pad ontstaat alleen uit een sheet die nog openstond. En het terugdraaien bleef groen toen het de vlag
+  op een LEGE keuze zette in plaats van hem te WISSEN, want een lege keuze haalt ook niets weg en de
+  sommen zijn dan identiek. TOETS BIJ EEN SCHRIJVER DUS OOK DE TWEEDE AANROEP, en bij een terugdraaien
+  niet alleen of de cijfers terug zijn maar ook of de TOESTAND terug is. Beide zijn de familie van (c):
+  de test liep niet langs het pad dat de code beschermt.
+  WAT DE NEGENENTWINTIG GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2896,17 +2973,30 @@ GEMETEN dat hij op `HEAD` net zo rood staat (1 failed, 13 passed), dus hij is ni
 hangen in plaats van aan vandaag, zodat het aantal volle weken vast staat. Dat raakt de piekdag-spec en
 niet deze ronde.
 
+**Bekend rood op de OP-EEN-NA-LAATSTE DAG van een maand, eigen ronde** (gemeten bij `v293`): vijf tests
+eisen het meervoud in `/Nog \d+ dagen deze maand, dus /` en krijgen op zo'n dag "Nog 1 dag", want
+`maandDagenOver()` rekent `dim - elapsed` en sluit vandaag uit (`v257`). Het zijn
+`zwijgen-met-reden.spec.js` (2), `grafiekvormen.spec.js` (2) en `tempo-zonder-vaste-lasten.spec.js` (1).
+GEMETEN dat ze op `HEAD` net zo rood staan, dus ze zijn niet van die ronde: ze kwamen op toen de klok
+tijdens een suite-run over middernacht naar 29 september ging in een maand van 30 dagen.
+DIT IS DEZELFDE FAMILIE ALS DE TWEE HIERONDER: een assertie die op een getal in een zin ankert bewijst de
+eigenschap niet, en die eigenschap is hier dat er een dagbedrag staat en niet hoe het dagwoord vervoegt.
+De reparatie is het meervoud uit de regex halen, en dat raakt vijf specs in drie bestanden plus de vraag
+of de app zelf "1 dag" hoort te zeggen op een dag die bijna om is; die staat al als open punt onder de
+dagen-conventie van `v257`.
+
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
 `v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v290` → `minder-v291`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v293` → `minder-v294`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
-`tests/` en documentatie, dus de cache ging van `minder-v255` rechtstreeks naar `minder-v257`. Dat
+`tests/` en documentatie, dus de cache ging van `minder-v255` rechtstreeks naar `minder-v257`, en om
+dezelfde reden van `minder-v291` naar `minder-v293` (`v292` was het open punt in dit bestand). Dat
 gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
