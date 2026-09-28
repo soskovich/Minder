@@ -95,6 +95,93 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **VORM 3 IS EEN RESERVERING DIE DE APP BEWAART, EN DAT IS BUITEN DE APP BEVESTIGD** (`v291`): in de
+  bank-app staat bij een van de vijf drietallen alleen de DERDE regel als boeking; de eerste twee zijn een
+  reservering en haar vrijgave. Het is dus geen dubbele betaling van de bank maar een regel die de app
+  vasthoudt nadat de bank hem heeft ingetrokken, en dat is een andere oorzaak met een ander gevolg.
+  ER IS NOG GEEN POORT EN GEEN LIJST, en dat is een keuze met een reden: welke vorm de reparatie moet
+  hebben hangt af van HOE die twee regels binnenkwamen. Kwamen ze als pending, dan kan een poort op dat
+  veld ze tegenhouden en gaat dat bij elke volgende sync vanzelf goed. Kwamen ze als GEBOEKT binnen, dan
+  raakt geen enkele pending-poort ze en is de enige route een kandidatenlijst die de gebruiker per geval
+  bevestigt (`v288`). Een poort bouwen die per constructie niet kan vuren op het geval waarvoor hij
+  bestaat is precies wat meetles (a) en (p) verbieden.
+  UIT DE BRON IS "GEBOEKT" HET VERWACHTE ANTWOORD, en dat is nagelezen en niet gemeten: `applyPending()`
+  begint met `TX=TX.filter(t=>!t.pending)` en wist bij ELKE sync de hele pending-snapshot, ook als de
+  pending-aanroep zelf faalde (die zit per rekening in een `try/catch` en de wipe staat erbuiten). Een
+  pending-regel die weken blijft staan kan daar niet door zijn gekomen. En `commitTx()` VOEGT alleen toe:
+  een boeking die de bank niet meer levert haalt hij nooit weg. Dat tweede is het pad dat sectie 2b moet
+  bevestigen of uitsluiten.
+  DE 51 WEERLEGT DE PENDING-HYPOTHESE OOK OP DE GEGEVENS: een drietal is een afschrijving, een
+  BIJSCHRIJVING en een tweede afschrijving, terwijl een pending/booked-paar twee afschrijvingen zijn. Een
+  bank die een voorautorisatie intrekt boekt het VOLLE bedrag terug en niet het verschil, dus de
+  bijschrijving blijft dan onverklaard.
+- **SECTIE 2b ZOEKT DE SCHEIDER DIE DE APP AL OPSLAAT EN NIET LEEST** (`v291`): per positie
+  (afschrijving, bijschrijving, tweede afschrijving) de bron, `t.pending`, het `_p`-achtervoegsel, de
+  valutadatum en of die afwijkt, de `bankRef`, de referentie en de desc-tijd, plus de STAART van de desc
+  per positie geteld en per drietal alle velden voluit.
+  `mapPsd2Tx()` LEEST GEEN STATUS-VELD. Er staat nergens `raw.transaction_status`, `raw.status` of
+  `raw.pending`: de pending-stand komt uit de DERDE PARAMETER, en die zet de aanroeper bij de aparte
+  aanroep met `transaction_status=PDNG`. De scheiding zit dus in de QUERY en niet in een veld, en daarom
+  kan de app een reservering niet van een gewone pending kaartbetaling onderscheiden.
+  DE STAART VAN DE DESC IS DE ENIGE KANDIDAAT-SCHEIDER die er al ligt, want `mapPsd2Tx()` zet de
+  `bank_transaction_code`-beschrijving achteraan in de desc. Verschilt die per positie, dan kan een poort
+  PER BOEKING bestaan in plaats van een bevestiging per geval.
+  DE KOLOM WORDT EXACT BESCHREVEN ("de laatste 24 tekens") EN NIET GEINTERPRETEERD: de naam staat vooraan
+  in de desc, dus die staart kan een deel van de naam dragen. Een slimmere extractie verzinnen zonder de
+  desc-vormen van het toestel te hebben gemeten is een aanname, en de volle desc staat per drietal
+  afgedrukt zodat de echte code leesbaar blijft.
+- **HET `_p`-ACHTERVOEGSEL OVERLEEFT GEEN BOOT, EN `t.pending` WEL** (`v291`): `categorize()` doet
+  `t.id=txId(t)` en de boot loopt met `TX.forEach(categorize)` over ALLE boekingen, dus het `_p` dat
+  `mapPsd2Tx()` erachter zet is bij de eerstvolgende start weg. Het blok zegt dat bij die kolom, want een
+  nul zonder reden leest als een meting (`v59`/`v73`/`v173`).
+  GEVOLG, NAGELEZEN EN ALLEEN GEMELD: na die herschrijving heeft een pending-regel exact de id die zijn
+  GEBOEKTE versie zou krijgen (dezelfde rekening, datum, bedrag en desc). `commitTx()` filtert op `t.id`,
+  dus komt die geboekte versie ONGEWIJZIGD binnen, dan ziet hij de pending-regel als bestaand en slaat hem
+  over, waarna `applyPending()` diezelfde sync de pending-regel wist. Dan staat die boeking er een sync
+  lang NIET. Bij een voorautorisatie speelt dat niet (het bedrag verschilt), bij een gewone kaartbetaling
+  die onveranderd boekt wel. Het herstelt zichzelf bij de volgende sync; wie dit dicht doet dat met die
+  afweging in de hand en niet als bijvangst.
+  DE FIXTURE BOOTST DE STAND NA EEN BOOT NA en zet dus GEEN `_p` op de id, met een assertie dat hij er
+  ook niet komt. Zou hij er wel staan, dan is die herschrijving verdwenen en verandert de betekenis van
+  de kolom.
+- **EEN POORT OP PENDING HEEFT EEN PRIJS, EN DIE STAAT IN DE UITVOER** (`v291`): `v197` legde vast dat
+  een pending afschrijving geld is dat weg is en dus MOET meetellen. Dat klopt voor een kaartbetaling van
+  vandaag die nog niet geboekt is, en niet voor een reservering aan de pomp. Een poort die alles met
+  `transaction_status=PDNG` uitsluit haalt dus ook die eerste uit je maand, en dan staat je uitgave te
+  LAAG en je veilig te besteden te HOOG; te hoog is de gevaarlijke kant (`v168`). Uit de respons is dat
+  onderscheid vandaag niet te maken, dus zo'n poort hoort de twee te SCHEIDEN of niet te bestaan. Dat
+  staat in het blok zodat de prijs niet ongemerkt wordt betaald, en het is dezelfde vorm als de aanvaarde
+  prijs van `v284`: een prijs wordt benoemd en niet weggerekend.
+- **DE DRIETAL-AFLEIDING STAAT OP EEN PLEK, MET TWEE SCOPES** (`v291`): `vorautDrietallen(lijst)` beslist
+  de VORM, de aanroeper kiest de SCOPE. Sectie 1 tot 3 lopen over de vervoer-categorie, sectie 4 over de
+  hele telbare import in de uitgaven-categorieen. Dat is `v285` op een afleiding in plaats van op een
+  snede: de scope komt van buiten, de beslissing staat binnen, en het venster hoort daarom niet in een
+  aanroeper.
+  ALLEEN UITGAVEN IN SECTIE 4, en dat is een afbakening met een reden: een interne overboeking heeft deze
+  vorm om een ANDERE reden (dat zijn de Geldmaat-paren van `v288`) en een reservering is per definitie een
+  betaling. `geenNorm` blijft er wel in, want dat zegt iets over een norm en niets over de vorm. Zonder
+  een interne vorm in de fixture doet die poort niets en blijft de sabotage erop groen (meetles a en p).
+  DE VERVOER-DRIETALLEN ZITTEN OOK IN SECTIE 4, en het blok zegt dat erbij: het is dezelfde afleiding over
+  een ruimere scope en geen aanvulling erop, dus de kolom zegt hoeveel er ZIJN en niet hoeveel er BIJ
+  komen. `vorautDelen(r)` draagt daarnaast de ene regel over welke tweede afschrijving bij een drietal
+  hoort, met drie lezers; `echt` is de tankbeurt en `drager` de boeking die hem draagt, en die twee zijn
+  niet hetzelfde (bij vorm 1 is er geen tweede afschrijving).
+- **3c TELDE EEN TERUGBOEKING IN EEN ANDERE MAAND HELEMAAL NIET MEE** (`v291`): de koptekst beloofde "de
+  afschrijving in haar eigen maand, de terugboeking in de hare" en de code telde de terugboeking en de
+  tweede afschrijving alleen als ze in de maand van de AFSCHRIJVING vielen. Op het maandgrens-geval zei de
+  oude vorm mei 125/85/40 en juni niets, dus hij verzweeg de juni-regels en stelde de opbrengst 45 euro TE
+  LAAG voor. Elke boeking telt nu in haar EIGEN maand en netto zoals de app hem telt (`v265`), en het
+  gekoppelde bedrag in de maand van de boeking die het draagt.
+  DAT IS EEN LABEL DAT IETS BELOOFDE WAT DE CODE NIET DEED, in mijn eigen blok van een ronde oud, en het
+  is dezelfde familie als `v287` en `v275`. DE TEST BINDT OP EEN OPTELLING EN NIET OP EEN GETAL: de som
+  van de nu-kolom moet gelijk zijn aan wat de app netto over diezelfde boekingen telt, uitgerekend uit de
+  drietallen zelf en niet uit een fixture-constante.
+- **EEN BRONZOEKENDE TEST DIE EEN BEDRAG VERBIEDT KAN EEN STRING-LENGTE NIET ONDERSCHEIDEN** (`v291`): de
+  test van `v290` eist dat geen bedrag uit de gegevens in blok 12 staat, en viel op een `slice(0,150)` in
+  een nieuwe uitleesregel. De LENGTE is arbitrair en het verbod niet, dus de lengte is gewijzigd en de
+  test niet verzwakt. Daarna viel hij nog een keer, nu op mijn eigen COMMENT waarin ik dat getal uitlegde:
+  dat is `v276` letterlijk, een bronzoekende teller maakt commentaar deel van zijn oppervlak, en de tekst
+  is herschreven zonder het getal.
 - **BLOK 12 MEET DE TANKVOORAUTORISATIE EN BESLIST NIETS** (`v290`): geen koppeling, geen app-gedrag,
   geen lezer buiten het blok, en het schrijft niets (`v244`). DE AANLEIDING STAAT IN BLOK 9: op alle vijf
   de duurste tankdagen staan DRIE regels van hetzelfde station, en in alle vijf is de voorautorisatie MIN
@@ -2563,8 +2650,8 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** VIJFENTWINTIG keer in
-  tweeentwintig rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** ZEVENENTWINTIG keer in
+  vierentwintig rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los
   lazen ze als incidenten; samen zijn het zes manieren waarop dezelfde fout binnenkomt, en de vraag die ze
   alle had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
   (a) DE TRIPDRAAD DIE NIET KON VALLEN (`v265`). De uitsluiting van huur uit `weekScope()` moest een
@@ -2686,7 +2773,20 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   naam-prefix zit OOK al in die sleutel, en daar is de sabotage per constructie niet rood te krijgen. Het
   verschil tussen de twee is of er nog een lezer bestaat die het pad wel maakt; bij de prefix is dat (f), en
   dan blijft de eis staan met die reden erbij (`v284`).
-  WAT DE VIJFENTWINTIG GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (t) DE TEST BOND OP DE INDENTATIE EN EEN NIEUWE SECTIE KREEG DEZELFDE OPMAAK (`v291`). De een-op-een-eis
+  van blok 12 werd getoetst door de regels te tellen die met twee spaties en een datum beginnen, en sectie
+  2b drukt per drietal een kop met exact die vorm af: de teller ging van 8 naar 16 en de test viel, terecht
+  maar om de verkeerde reden. De reparatie is de SECTIE eerst afbakenen en dan tellen. Dat is de familie
+  "een test die een zin of een teller als anker gebruikt", nu met een opmaak als anker, en het is de derde
+  keer in dit blok dat een nieuwe sectie een oudere assertie raakt.
+  (u) DE FIXTURE SCHREEF EEN VELD DAT DE APP BIJ DE BOOT HERSCHRIJFT (`v291`). De pending-vlag moest in de
+  fixture, en ik zette er ook het `_p`-achtervoegsel op de id bij, want zo komt hij binnen. Maar
+  `categorize()` doet `t.id=txId(t)` en de boot loopt over alle `TX`, dus dat achtervoegsel is weg voordat
+  het diagnosescherm leest. Mijn eerste twee asserties spraken elkaar daardoor tegen: de ene eiste `_p`, de
+  andere eiste dat het er niet stond. TOETS BIJ EEN FIXTURE-VELD DUS OF DE BOOT HET NIET OVERSCHRIJFT, en
+  als hij dat doet, boots de stand NA de boot na en maak van die overschrijving een eigen assertie. Hier
+  was die overschrijving zelf de vondst van de ronde.
+  WAT DE ZEVENENTWINTIG GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -2774,7 +2874,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v289` → `minder-v290`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v290` → `minder-v291`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

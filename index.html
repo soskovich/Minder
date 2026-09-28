@@ -15910,29 +15910,25 @@ function diagCsvPsd2(){
    DE VIER VORMEN ZIJN UITPUTTEND, zodat "geen van beide" een geldig antwoord is en niet als vorm 1 wordt
    geboekt. Vorm 3 is de vorm die de uitvoer van blok 9 suggereert en die in de vraag niet voorkwam. */
 const VOORAUT_VENSTER=14;   // dagen rond de afschrijving waarin de terugboeking mag landen
-function diagVoorautorisatie(){
-  const L=[];
+/* ===== DE DRIETAL-AFLEIDING STAAT OP EEN PLEK, MET TWEE SCOPES (v291) =====
+   Blok 12 stelt zijn vraag over de vervoer-categorie, want daar is de vorm gemeten. Sectie 4 stelt
+   dezelfde vraag over de HELE telbare import, want of andere tegenpartijen deze vorm ook dragen is
+   alleen te beantwoorden door buiten die categorie te kijken. Een tweede uitdrukking van de afleiding
+   ernaast zou bij de eerste wijziging van de vorm uiteenlopen (v104), en dan zegt sectie 4 iets anders
+   over dezelfde boekingen dan sectie 2 een scherm hoger.
+   DE SCOPE KOMT VAN BUITEN EN DE VORM VAN BINNEN. Wat de aanroeper kiest is WELKE boekingen langs de
+   vorm lopen; welke drietallen daaruit komen beslist deze functie, en die beslissing staat niet twee
+   keer. Het venster is VOORAUT_VENSTER en hoort daarom ook niet in een aanroeper.
+   EEN BOEKING KOMT IN HOOGUIT EEN DRIETAL, en `geclaimd` is per aanroep: twee scopes die elkaar
+   overlappen leveren dus elk hun eigen volledige lijst en niet een halve. Sectie 4 telt de
+   vervoer-drietallen dus opnieuw mee, en zegt dat erbij. */
+function vorautDrietallen(lijst){
   const cent=a=>Math.round(Math.abs(a)*100);
-  const heel=a=>cent(a)%100===0;
   const dag=d=>new Date(String(d).slice(0,10)+'T00:00:00');
   const afst=(a,b)=>Math.round((dag(b)-dag(a))/864e5);
-  const isVervoer=t=>{ try{ return catOf(t)==='vervoer'; }catch(_){ return false; } };
-  const tel=(_dT(()=>telbareTx(),[])||[]).filter(isVervoer);
   const key=t=>_dT(()=>recurKey(t),'')||'';
-
-  L.push('ALLEEN METEN. Dit blok leest, beslist niets en schrijft niets (v244). Geen enkele app-functie');
-  L.push('leest hem. Wat hij moet beantwoorden: telt een tankbeurt een of twee keer mee.');
-  L.push('');
-  L.push('1. DE DRIETALLEN, AFGELEID UIT DE VORM EN NIET UIT EEN BEDRAG');
-  L.push('   een uitgave in de vervoer-categorie met een BIJSCHRIJVING van dezelfde tegenpartij binnen');
-  L.push('   '+VOORAUT_VENSTER+' dagen. Er staat geen bedrag en geen winkelnaam in de code (v266): WELK bedrag');
-  L.push('   het pompbedrag is hoort een UITKOMST te zijn en geen aanname, anders meet het blok zijn');
-  L.push('   eigen veronderstelling. Het histogram hieronder is daarom een waarneming over de uitkomst');
-  L.push('   en geen filter erop. Een drempel op "hoe vaak komt dit bedrag terug" is er om dezelfde');
-  L.push('   reden niet: die verbergt een pompbedrag dat maar een of twee keer voorkomt.');
-
   const perNaam={};
-  for(const t of tel){ const k=key(t); if(!k) continue; (perNaam[k]=perNaam[k]||[]).push(t); }
+  for(const t of lijst){ const k=key(t); if(!k) continue; (perNaam[k]=perNaam[k]||[]).push(t); }
   const rijen=[];
   /* EEN TERUGBOEKING HOORT BIJ PRECIES EEN AFSCHRIJVING, en dat is de een-op-een-eis van v283 en v286.
      Mijn eerste vorm liep over de AFSCHRIJVINGEN, en dan claimde de tweede afschrijving van een drietal
@@ -15944,7 +15940,7 @@ function diagVoorautorisatie(){
      terugboeking die een paar dagen later landt de tankbeurt van die dag pakken in plaats van de
      voorautorisatie ervoor; dat geval staat in de fixture. */
   const geclaimd=new Set();
-  const terugAlle=tel.filter(t=>t.amount>0).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const terugAlle=lijst.filter(t=>t.amount>0).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   for(const terug of terugAlle){
     const buren=(perNaam[key(terug)]||[]).filter(x=>x!==terug && x.amount<0
       && !geclaimd.has(x) && cent(x.amount)>=cent(terug.amount)
@@ -15966,6 +15962,42 @@ function diagVoorautorisatie(){
       maandOver:String(terug.date).slice(0,7)!==String(t.date).slice(0,7)});
   }
   rijen.sort((a,b)=>String(b.t.date).localeCompare(String(a.t.date)));
+  return rijen;
+}
+/* ===== WELKE DRIE BOEKINGEN EEN DRIETAL ZIJN, OP EEN PLEK (v291) =====
+   Sectie 2b leest ze uit, 3c telt ze per maand en sectie 4 per categorie. Welke tweede afschrijving
+   BIJ DIT DRIETAL hoort is een regel met een geval erin (bij vorm 2 is dat de eerste van `tweede`,
+   bij vorm 3 die welke op het verschil past, bij vorm 1 is er geen), en drie uitdrukkingen daarvan
+   lopen bij de eerste wijziging uiteen (v104).
+   `echt` IS DE TANKBEURT EN `bij` DE BOEKING DIE HEM DRAAGT. Die twee zijn niet hetzelfde: bij vorm 1
+   is er geen tweede afschrijving en draagt de voorautorisatie zelf het bedrag. Daarom geeft deze
+   functie ze los, en beslist de lezer zelf in welke emmer hij `echt` legt. */
+function vorautDelen(r){
+  const bij = r.past || (String(r.vorm).charAt(0)==='2' ? (r.tweede[0]||null) : null);
+  return {voor:r.t, terug:r.terug||null, bij, drager:(bij||r.t), echt:r.echt};
+}
+function diagVoorautorisatie(){
+  const L=[];
+  const cent=a=>Math.round(Math.abs(a)*100);
+  const heel=a=>cent(a)%100===0;
+  const dag=d=>new Date(String(d).slice(0,10)+'T00:00:00');
+  const isVervoer=t=>{ try{ return catOf(t)==='vervoer'; }catch(_){ return false; } };
+  const tel=(_dT(()=>telbareTx(),[])||[]).filter(isVervoer);
+  const key=t=>_dT(()=>recurKey(t),'')||'';
+
+  L.push('ALLEEN METEN. Dit blok leest, beslist niets en schrijft niets (v244). Geen enkele app-functie');
+  L.push('leest hem. Wat hij moet beantwoorden: telt een tankbeurt een of twee keer mee, WAAROM dat zo is,');
+  L.push('en of andere tegenpartijen dezelfde vorm dragen.');
+  L.push('');
+  L.push('1. DE DRIETALLEN, AFGELEID UIT DE VORM EN NIET UIT EEN BEDRAG');
+  L.push('   een uitgave in de vervoer-categorie met een BIJSCHRIJVING van dezelfde tegenpartij binnen');
+  L.push('   '+VOORAUT_VENSTER+' dagen. Er staat geen bedrag en geen winkelnaam in de code (v266): WELK bedrag');
+  L.push('   het pompbedrag is hoort een UITKOMST te zijn en geen aanname, anders meet het blok zijn');
+  L.push('   eigen veronderstelling. Het histogram hieronder is daarom een waarneming over de uitkomst');
+  L.push('   en geen filter erop. Een drempel op "hoe vaak komt dit bedrag terug" is er om dezelfde');
+  L.push('   reden niet: die verbergt een pompbedrag dat maar een of twee keer voorkomt.');
+
+  const rijen=vorautDrietallen(tel);
 
   /* HET HISTOGRAM IS EEN WAARNEMING OVER DE UITKOMST en geen filter erop. Zo is te zien OF de
      afschrijvingen van een drietal ronde bedragen zijn, en welke. */
@@ -15997,6 +16029,99 @@ function diagVoorautorisatie(){
   }
   if(rijen.length>DIAG_PAAR_MAX) L.push('  ... en '+(rijen.length-DIAG_PAAR_MAX)+' meer');
 
+  /* ===== 2b: WELK OPGESLAGEN VELD DE DRIE REGELS ONDERSCHEIDT (v291) =====
+     DE AANLEIDING IS EEN CONTROLE BUITEN DE APP. Bij een van deze drietallen staat in de bank-app alleen
+     de derde regel als boeking; de eerste twee zijn een reservering en haar vrijgave. Vorm 3 is dan geen
+     dubbele betaling van de bank maar een reservering die de app BEWAART, en dat is een andere oorzaak
+     met een ander gevolg.
+     DEZE SECTIE CLAIMT DAT NIET, hij vraagt het: is er een opgeslagen veld dat een reservering van een
+     boeking scheidt. De posities heten daarom naar wat de VORM ervan zegt (afschrijving, bijschrijving,
+     tweede afschrijving) en niet naar wat de bank-app zei, want dat laatste is een meting van buiten en
+     geen eigenschap van de data (v275: een getal van het toestel hoort niet in de tekst van dit blok).
+     WAT ER NIET IN STAAT, en dat is een gebrek van de OPSLAG en niet van deze sectie: er is nergens een
+     import-tijdstip per boeking. Uit welke sync een regel kwam is dus niet te beantwoorden. */
+  L.push('');
+  L.push('2b. WELK OPGESLAGEN VELD DE DRIE REGELS ONDERSCHEIDT');
+  L.push('   mapPsd2Tx() leest GEEN status- of pending-veld uit de respons: de pending-stand komt uit de');
+  L.push('   DERDE PARAMETER, die de aanroeper zet bij de aparte aanroep met transaction_status=PDNG. Een');
+  L.push('   pending-regel krijgt t.pending=true en een id met _p erachter. Wat hier dus te zien is, is of');
+  L.push('   deze regels langs die route binnenkwamen.');
+  L.push('   DE KOLOM "id op _p" STAAT NA EEN BOOT PER CONSTRUCTIE OP NUL, en dat is zelf een vondst en geen');
+  L.push('   meetfout: categorize() doet t.id=txId(t) en de boot loopt met TX.forEach(categorize) over ALLE');
+  L.push('   boekingen, dus dat achtervoegsel is bij de eerstvolgende start weg. t.pending is het enige');
+  L.push('   kenmerk dat een boot overleeft, en die kolom is dus de kolom die telt.');
+  L.push('   WAT DAT VERDER BETEKENT, nagelezen in de bron en hier alleen gemeld: na die herschrijving heeft');
+  L.push('   een pending-regel exact de id die zijn GEBOEKTE versie zou krijgen (dezelfde rekening, datum,');
+  L.push('   bedrag en desc). commitTx() filtert op t.id, dus komt die geboekte versie ONGEWIJZIGD binnen,');
+  L.push('   dan ziet hij de pending-regel als bestaand en slaat hem over, waarna applyPending() diezelfde');
+  L.push('   sync de pending-regel wist. Dan staat die boeking er een sync lang NIET. Bij een voorautorisatie');
+  L.push('   speelt dat niet (het bedrag verschilt), bij een gewone kaartbetaling die onveranderd boekt wel.');
+  L.push('   UIT WELKE SYNC EEN REGEL KWAM IS NIET TE METEN. commitTx() schrijft geen tijdstempel op een');
+  L.push('   boeking, en de drie die wel bestaan (SET.psd2LastSync, SET.psd2Diag[acc].op en');
+  L.push('   SET.valutaTally[acc].op) zijn globaal of per rekening en worden bij elke sync overschreven.');
+  L.push('   Dat is een ontbrekende meting en geen nul (v59/v73/v173).');
+  const posN=['afschrijving','bijschrijving','tweede afschrijving'];
+  const posRijen=r=>{ const D=vorautDelen(r); return [[posN[0],D.voor],[posN[1],D.terug],[posN[2],D.bij]].filter(x=>!!x[1]); };
+  const staart=t=>String(t.desc||'').slice(-24).replace(/\s+/g,' ').trim();
+  const tal={}; for(const nm of posN) tal[nm]={n:0, pend:0, idp:0, vd:0, vdA:0, bank:0, ref:0, tij:0, src:{}, st:{}};
+  for(const r of rijen) for(const [nm, x] of posRijen(r)){
+    const T=tal[nm]; T.n++;
+    if(x.pending) T.pend++;
+    if(String(x.id||'').slice(-2)==='_p') T.idp++;
+    if(x.valutaDatum){ T.vd++; if(String(x.valutaDatum)!==String(x.date).slice(0,10)) T.vdA++; }
+    if(x.bankRef) T.bank++;
+    if(_dT(()=>_refTokens(x),'')) T.ref++;
+    if((_dT(()=>_descTijden(x),[])||[]).length) T.tij++;
+    T.src[String(x.src||'-')]=(T.src[String(x.src||'-')]||0)+1;
+    const st=staart(x)||'(leeg)'; T.st[st]=(T.st[st]||0)+1;
+  }
+  L.push('');
+  L.push('   positie                 n   pending   id op _p   valutadatum   vd anders   bankRef   referentie   desc-tijd');
+  for(const nm of posN){ const T=tal[nm];
+    L.push('   '+nm.padEnd(20)+String(T.n).padStart(4)+String(T.pend).padStart(10)+String(T.idp).padStart(11)
+      +String(T.vd).padStart(14)+String(T.vdA).padStart(12)+String(T.bank).padStart(10)+String(T.ref).padStart(13)+String(T.tij).padStart(12)); }
+  L.push('   de bron per positie:');
+  for(const nm of posN) L.push('     '+nm.padEnd(20)+(Object.keys(tal[nm].src).map(k=>k+' '+tal[nm].src[k]).join(' | ')||'-'));
+  L.push('   de STAART van de desc (de laatste 24 tekens), per positie geteld. mapPsd2Tx() zet de');
+  L.push('   bank_transaction_code-beschrijving achteraan in de desc, dus codeert de bank een reservering');
+  L.push('   anders dan een boeking, dan staat dat verschil hier:');
+  for(const nm of posN){ const ks=Object.keys(tal[nm].st).sort((a,b)=>tal[nm].st[b]-tal[nm].st[a]);
+    L.push('     '+nm+':'); 
+    for(const k of ks.slice(0,8)) L.push('       '+String(tal[nm].st[k]).padStart(4)+'x  "'+k+'"');
+    if(!ks.length) L.push('       (geen)');
+    else if(ks.length>8) L.push('       ... en '+(ks.length-8)+' andere staarten'); }
+  L.push('');
+  L.push('   PER DRIETAL, ALLE OPGESLAGEN VELDEN DIE EEN SCHEIDER KUNNEN ZIJN');
+  for(const r of rijen.slice(0, DIAG_PAAR_MAX)){
+    L.push('  '+r.t.date+'   '+String(r.t.name||'?').slice(0,26)+'   vorm '+String(r.vorm).charAt(0));
+    for(const [nm, x] of posRijen(r)){
+      L.push('     '+nm.padEnd(20)+(cent(x.amount)/100).toFixed(2).padStart(9)+(x.amount<0?' af':' bij')+'  '+x.date
+        +'   src='+String(x.src||'-')
+        +'   pending='+(x.pending?'JA':'nee')
+        +'   id'+(String(x.id||'').slice(-2)==='_p'?' op _p':' gewoon')
+        +'   vd='+(x.valutaDatum||'-')
+        +'   bankRef='+(x.bankRef||'-')
+        +'   ref='+((_dT(()=>_refTokens(x),''))||'-')
+        +'   tijd='+(((_dT(()=>_descTijden(x),[])||[]).join(' '))||'-'));
+      L.push('       desc: '+String(x.desc||'').replace(/\s+/g,' ').slice(0,160));   // een lengte die niet met een pompbedrag samenvalt: de bronzoekende test verbiedt elk bedrag uit de gegevens in dit blok en kan een string-lengte niet van zo'n bedrag onderscheiden (v266/v276)
+    }
+  }
+  if(rijen.length>DIAG_PAAR_MAX) L.push('  ... en '+(rijen.length-DIAG_PAAR_MAX)+' meer');
+  L.push('');
+  L.push('   WAT DEZE SECTIE BESLIST');
+  L.push('     staat pending of "id op _p" ergens BOVEN NUL, dan is de reservering langs de pending-aanroep');
+  L.push('       binnengekomen en kan een poort op dat veld hem tegenhouden.');
+  L.push('     staat het overal op NUL, dan kwam hij langs de BOOKED-aanroep en raakt geen enkele');
+  L.push('       pending-poort hem. Dan moet de app hem aan de VORM herkennen en bevestig jij per geval,');
+  L.push('       net als bij de dubbele boekingen (v288).');
+  L.push('     UIT DE BRON IS NUL HET VERWACHTE ANTWOORD, en dat is geen meting: applyPending() begint met');
+  L.push('       TX=TX.filter(t=>!t.pending) en wist dus bij ELKE sync de hele pending-snapshot, ook als de');
+  L.push('       pending-aanroep zelf faalde. Een pending-regel die weken blijft staan kan daar niet door');
+  L.push('       zijn gekomen. En commitTx() VOEGT alleen toe: een boeking die de bank niet meer levert');
+  L.push('       haalt hij nooit weg. Dat tweede is het pad dat deze uitvoer moet bevestigen of uitsluiten.');
+  L.push('     verschilt de STAART van de desc per positie, dan is dat de scheider die de app nu niet leest,');
+  L.push('       en die zou een poort per boeking kunnen dragen in plaats van een bevestiging per geval.');
+
   /* (a) DE VORMEN GETELD */
   L.push('');
   L.push('3a. WELKE VORM, GETELD');
@@ -16024,18 +16149,22 @@ function diagVoorautorisatie(){
   /* (c) WAT HET PER MAAND SCHEELT, EN WAT HET MET DE WEEKDAG DOET */
   L.push('');
   L.push('3c. WAT HET PER MAAND SCHEELT IN VERVOER & AUTO');
-  L.push('   "nu" is wat er vandaag in de maand staat (de afschrijving in haar eigen maand, de terugboeking');
-  L.push('   in de hare); "gekoppeld" is wat er zou staan als elke tankbeurt een keer telde, in de maand van');
-  L.push('   de afschrijving. Het verschil is wat een koppeling zou opleveren.');
+  L.push('   "nu" is wat er vandaag in de maand staat: elke boeking van het drietal in HAAR EIGEN maand en');
+  L.push('   netto, precies zoals de app hem telt (v265). "gekoppeld" is wat er zou staan als elke tankbeurt');
+  L.push('   een keer telde, in de maand van de boeking die het bedrag draagt. Het verschil is wat een');
+  L.push('   koppeling zou opleveren.');
   const perM={};
+  const emmer=m=>(perM[m]=perM[m]||{nu:0, gek:0, n:0});
   for(const r of rijen){
-    const m=String(r.t.date).slice(0,7); const R=(perM[m]=perM[m]||{nu:0, gek:0, n:0});
-    R.n++; R.nu+=r.P; R.gek+=r.echt;
-    /* alleen de tweede afschrijving die BIJ DIT DRIETAL hoort telt mee, niet elke andere boeking van
-       dezelfde tegenpartij in het venster: die heeft haar eigen rij of hoort nergens bij */
-    const bij=r.past || (r.vorm.startsWith('2')?r.tweede[0]:null);
-    if(bij && String(bij.date).slice(0,7)===m) R.nu+=cent(bij.amount);
-    if(r.terug && String(r.terug.date).slice(0,7)===m) R.nu-=r.R;
+    const D=vorautDelen(r);
+    emmer(String(r.t.date).slice(0,7)).n++;
+    /* ELKE BOEKING IN HAAR EIGEN MAAND. De vorm van v290 telde de terugboeking alleen mee als hij in de
+       maand van de afschrijving viel en liet hem anders HELEMAAL vallen, terwijl de koptekst "de
+       terugboeking in de hare" beloofde. Dan sluit deze tabel niet aan op wat Vervoer & auto in die maand
+       zegt, en dat is precies het geval dat 3b als het belangrijkste aanwijst. Een label dat iets belooft
+       wat de code niet doet is wat dit project verbiedt, ook in mijn eigen blok (v275). */
+    for(const x of [D.voor, D.terug, D.bij]){ if(x) emmer(String(x.date).slice(0,7)).nu += Math.round(-x.amount*100); }
+    emmer(String(D.drager.date).slice(0,7)).gek += D.echt;
   }
   const ms=Object.keys(perM).sort();
   L.push('   maand      n        nu   gekoppeld   verschil');
@@ -16063,6 +16192,64 @@ function diagVoorautorisatie(){
   L.push('   nu:         '+(nu?nu.join('  '):'(niets in scope)'));
   L.push('   gekoppeld:  '+(gek?gek.join('  '):'(niets in scope)'));
 
+  /* ===== 4: DEZELFDE VORM BUITEN DE VERVOER-CATEGORIE (v291) =====
+     DEZELFDE AFLEIDING, EEN RUIMERE SCOPE. `vorautDrietallen()` staat op een plek en beslist de vorm;
+     wat hier anders is, is welke boekingen erlangs lopen (v285: de scope komt van buiten). Een tweede
+     uitdrukking van de vorm zou bij de eerste wijziging uiteenlopen (v104) en dan zegt deze sectie iets
+     anders over dezelfde boekingen dan sectie 2 een scherm hoger.
+     ALLEEN UITGAVEN-CATEGORIEEN. Een interne overboeking tussen je eigen rekeningen heeft deze vorm om
+     een andere reden (dat zijn de Geldmaat-paren van v288) en een reservering is per definitie een
+     betaling. `geenNorm` blijft er WEL in: dat zegt iets over een norm en niets over de vorm.
+     DE VERVOER-DRIETALLEN ZITTEN HIER OOK IN. Dit is dezelfde afleiding over een ruimere scope en geen
+     aanvulling erop, dus de kolom zegt per categorie hoeveel er zijn en niet hoeveel er BIJ komen.
+     GEEN CATEGORIE EN GEEN WINKELNAAM IN DE CODE (v266): welke tegenpartijen deze vorm dragen hoort een
+     UITKOMST te zijn. Ook de vervoer-rij komt uit de uitkomst en staat hier niet apart benoemd. */
+  L.push('');
+  L.push('4. DEZELFDE VORM BUITEN DE VERVOER-CATEGORIE');
+  L.push('   dezelfde afleiding, nu over de HELE telbare import in de uitgaven-categorieen in plaats van');
+  L.push('   over een. Een interne overboeking valt eruit: die heeft deze vorm om een andere reden (v288).');
+  L.push('   DE VERVOER-DRIETALLEN ZITTEN HIER OOK IN, dus dit is geen lijst met alleen het nieuwe.');
+  const isUitgave=t=>{ try{ const c=CATS[catOf(t)]; return !!(c && c.type==='expense'); }catch(_){ return false; } };
+  const alles=(_dT(()=>telbareTx(),[])||[]).filter(isUitgave);
+  const rij4=_dT(()=>vorautDrietallen(alles),[])||[];
+  L.push('   boekingen in scope: '+alles.length+'   drietallen: '+rij4.length+'   (vervoer alleen: '+rijen.length+')');
+  if(!rij4.length) L.push('   (geen enkele uitgave heeft een bijschrijving van dezelfde tegenpartij in dit venster)');
+  else {
+    /* PER CATEGORIE, EN ELKE BOEKING IN HAAR EIGEN CATEGORIE, precies zoals de app hem telt. Bij een
+       override kan een kant van een drietal in een andere categorie staan dan de rest, en dan telt de app
+       hem daar; deze tabel volgt dat, anders sluit hij niet aan op het potje (v104). */
+    const perC={}; const eC=k=>(perC[k]=perC[k]||{n:0, nu:0, gek:0, v1:0, v2:0, v3:0});
+    for(const r of rij4){ const D=vorautDelen(r);
+      const c=_dT(()=>catOf(r.t),'?')||'?'; const E=eC(c); E.n++;
+      E['v'+String(r.vorm).charAt(0)]=(E['v'+String(r.vorm).charAt(0)]||0)+1;
+      for(const x of [D.voor, D.terug, D.bij]){ if(x) eC(_dT(()=>catOf(x),'?')||'?').nu += Math.round(-x.amount*100); }
+      eC(_dT(()=>catOf(D.drager),'?')||'?').gek += D.echt; }
+    const cs=Object.keys(perC).sort((a,b)=>(perC[b].nu-perC[b].gek)-(perC[a].nu-perC[a].gek));
+    L.push('   categorie                  n   v1   v2   v3         nu   gekoppeld   verschil');
+    let t4n=0, t4g=0;
+    for(const c of cs){ const E=perC[c]; t4n+=E.nu; t4g+=E.gek;
+      L.push('   '+String(c).padEnd(22)+String(E.n).padStart(4)+String(E.v1||0).padStart(5)+String(E.v2||0).padStart(5)+String(E.v3||0).padStart(5)
+        +(E.nu/100).toFixed(2).padStart(11)+(E.gek/100).toFixed(2).padStart(12)+((E.nu-E.gek)/100).toFixed(2).padStart(11)); }
+    L.push('   TOTAAL                '+String(rij4.length).padStart(4)+'               '
+      +(t4n/100).toFixed(2).padStart(11)+(t4g/100).toFixed(2).padStart(12)+((t4n-t4g)/100).toFixed(2).padStart(11));
+    L.push('   het totaal telt de AFGERONDE rijen op, zoals de rijen zelf (v287).');
+    /* PER TEGENPARTIJ, want de categorie is te grof om te zien of het om een pomp gaat of om iets anders.
+       De naam komt uit de gegevens en staat niet in de code. */
+    const perT={};
+    for(const r of rij4){ const k=String(r.t.name||'?').slice(0,26); const E=perT[k]=perT[k]||{n:0, v3:0, ver:0, cat:new Set()};
+      E.n++; if(String(r.vorm).charAt(0)==='3') E.v3++;
+      const D=vorautDelen(r); let nu=0; for(const x of [D.voor, D.terug, D.bij]) if(x) nu+=Math.round(-x.amount*100);
+      E.ver+=nu-D.echt; E.cat.add(_dT(()=>catOf(r.t),'?')||'?'); }
+    const ts=Object.keys(perT).sort((a,b)=>perT[b].ver-perT[a].ver || perT[b].n-perT[a].n);
+    L.push('');
+    L.push('   PER TEGENPARTIJ, op wat een koppeling zou opleveren');
+    L.push('   tegenpartij                    n   vorm 3   verschil   categorie(en)');
+    for(const k of ts.slice(0, DIAG_PAAR_MAX)){ const E=perT[k];
+      L.push('   '+k.padEnd(28)+String(E.n).padStart(4)+String(E.v3).padStart(9)+(E.ver/100).toFixed(2).padStart(11)+'   '+[...E.cat].join(',')); }
+    if(ts.length>DIAG_PAAR_MAX) L.push('   ... en '+(ts.length-DIAG_PAAR_MAX)+' meer');
+    L.push('   tegenpartijen met minstens een vorm 3: '+ts.filter(k=>perT[k].v3>0).length+' van '+ts.length);
+  }
+
   L.push('');
   L.push('WAT DEZE UITVOER BESLIST');
   L.push('  staat vorm 3 hoog, dan telt elke tankbeurt DUBBEL en is Vervoer & auto structureel te hoog;');
@@ -16071,9 +16258,28 @@ function diagVoorautorisatie(){
   L.push('  staat vorm 1 hoog en landt de terugboeking altijd in dezelfde maand op dezelfde dag, dan klopt');
   L.push('    het maandcijfer al en is er niets te koppelen: de netto-telling doet het werk (v265).');
   L.push('  landt de terugboeking in een ANDERE maand, dan klopt geen van beide maanden, ongeacht de vorm.');
+  L.push('  2b BESLIST DE VORM VAN DE REPARATIE, en dat is de zwaarste beslissing in dit blok. Staat pending of');
+  L.push('    "id op _p" boven nul, dan kan een POORT op dat veld de reservering tegenhouden en gaat dat');
+  L.push('    vanzelf goed bij elke volgende sync. Staat het op nul, dan kwam hij als geboekte regel binnen,');
+  L.push('    raakt geen pending-poort hem, en is de enige route een kandidatenlijst die JIJ per geval');
+  L.push('    bevestigt, zoals bij de dubbele boekingen (v288). Dat zijn twee verschillende rondes.');
+  L.push('  EEN POORT OP PENDING HEEFT EEN PRIJS, en die staat hier zodat hij niet ongemerkt wordt betaald:');
+  L.push('    v197 legde vast dat een pending afschrijving geld is dat weg is en dus MOET meetellen. Dat');
+  L.push('    klopt voor een gewone kaartbetaling van vandaag die nog niet geboekt is, en niet voor een');
+  L.push('    reservering aan de pomp. Een poort die alles met transaction_status=PDNG uitsluit haalt dus');
+  L.push('    ook die eerste uit je maand, en dan staat je uitgave te LAAG en je veilig te besteden te HOOG.');
+  L.push('    Te hoog is de gevaarlijke kant (v168), dus zo\'n poort hoort de twee te scheiden of niet te');
+  L.push('    bestaan. Uit de respons is dat onderscheid vandaag niet te maken: mapPsd2Tx() leest geen');
+  L.push('    status-veld en de pending-lijst komt uit een aparte aanroep die de twee niet onderscheidt.');
+  L.push('  4 BESLIST OF DIT EEN TANKVRAAG IS OF EEN BREDERE. Staan er tegenpartijen buiten de vervoer-');
+  L.push('    categorie met vorm 3, dan is een koppeling op de vervoer-categorie te smal en zou hij precies');
+  L.push('    de gevallen missen waarvoor hij bestaat. Staat er niets, dan is de afbakening van sectie 1 tot 3');
+  L.push('    de juiste en is dat een geldige uitkomst (v267).');
   L.push('  WAT DIT BLOK NIET KAN ZEGGEN: dat een voorautorisatie en een terugboeking dezelfde BETALING zijn.');
   L.push('    Een bedrag dat optelt binnen een venster is een correspondentie en geen identiteit, net als in');
   L.push('    blok 11. Wie hierop bouwt aanvaardt dat, of zoekt eerst een scheider die de app nu niet heeft.');
+  L.push('    2b is precies de zoektocht naar die scheider, en de STAART VAN DE DESC is de enige kandidaat');
+  L.push('    die de app al opslaat zonder hem te lezen.');
   return L;
 }
 const DIAG_BLOKKEN=[
