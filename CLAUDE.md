@@ -95,6 +95,44 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE DRIE BAKKEN ZEGGEN WAAROP EEN REPARATIE KAN STAAN, EN ZE TELLEN OP TOT HET PLAFOND** (`v301`):
+  het plafond van `v300` zegt hoeveel er ten hoogste dubbel telt, de bakken bij hoeveel daarvan de app een
+  HARDE identiteit heeft. Drie: beide kanten een betaaldatum met hetzelfde moment, beide kanten het veld met
+  een VERSCHILLEND moment, en geen veld aan minstens een kant. DEZELFDE TOETS ALS 4c, en dezelfde kant als
+  het plafond: de bak telt binnen dezelfde `if(kant)`, want een tweede uitdrukking van "welke kant draagt
+  het geld" loopt bij de eerste wijziging uiteen (`v104`).
+  DE DRIE TELLEN OP TOT HET PLAFOND, in aantal en in euro, en dat STAAT ER in plaats van dat het wordt
+  aangenomen. Een INTERN paar staat in het aantal paren en in geen bak; zonder dat geval in de fixture telt
+  het aantal bakken per constructie op tot het aantal paren en toetst de aansluiting niets.
+  EEN SABOTAGE DIE `JA` HARDCODEERT BLIJFT GROEN, en dat is een eigenschap van de regel en geen gat: in een
+  gezonde stand is de uitkomst JA en is de tekst identiek. GEMETEN dat hij wel werkt: een sabotage die de
+  bak-som met een euro verhoogt schrijft `sluit aan: NEE` (9 paren, 517 tegen 508) en zet de test rood. Wat
+  de bron-assertie tegenhoudt is dat een volgende ronde de vergelijking door een letterlijke JA vervangt;
+  dat is de keuze van `v284` over een guard die vanuit de verse stand niet valt.
+  DE DERDE BAK IS EEN GRENS EN GEEN GEBREK: zonder kaart-kenmerk in de desc bestaat het veld per constructie
+  niet (`v273`), dus daar valt met de betaaldatum niets te scheiden. Hoeveel er aan EEN kant wel een veld
+  dragen staat erbij, want dat is het deel waar een tweede bron nog iets zou kunnen.
+- **DE VENSTERREGEL VAN `v284`, GEMETEN VOOR mt940** (`v301`): 4d stelt bij de rekening met twee bronnen
+  dezelfde vraag als blok 11 (d) bij de csv-rekeningen: is de mt940-kant BINNEN het psd2-venster een
+  deelverzameling van psd2. Is dat zo, dan kan dezelfde uitsluiting op VENSTER hem dragen; zo niet, dan zijn
+  de niet-gematchte regels de PRIJS, in euro's in de scope van `piekVerdeling()`.
+  DE TOEWIJZING KOMT UIT `_eenOpEen()` EN WORDT NIET OPNIEUW UITGEDRUKT (`v104`): dezelfde gulzige
+  een-op-een, dichtstbijzijnde dag eerst, elke psd2-regel hoogstens een keer.
+  DE AFSTAND IS GERICHT EN NIET ABSOLUUT, en dat is het enige verschil met (d). 4c meet dat de mt940-kant bij
+  90 van de 96 paren EERDER ligt, dus de vraag is of de psd2-kant LATER ligt; een psd2-regel die ervoor ligt
+  geeft een negatieve afstand en matcht per constructie niet. Het geval dat de twee vormen onderscheidt staat
+  in de fixture: een mt940-regel waarvan de enige kandidaat twee dagen ERVOOR ligt.
+  HETZELFDE VENSTER ALS DE PARENSCAN (`DIAG_PAAR_VENSTER`), en dat wijkt af van de 0 tot 5 uit de opdracht.
+  De reden is `v104`: met een eigen getal zijn deze telling en de 96 paren niet meer naast elkaar te leggen
+  terwijl ze over dezelfde boekingen gaan. Op de gemeten gegevens is de keuze inert, want de grootste
+  dagafstand daar is 5.
+  DE OUDSTE mt940-REGEL VALT PER CONSTRUCTIE BUITEN HET VENSTER als zijn eigen tegenhanger de eerste
+  psd2-boeking is: hij ligt dan een dag vóór `pv.min`. Dat is de vensterrand die (c) van blok 11 aan de
+  csv-kant noemt, nu aan de mt940-kant, en het is in de fixture GEMETEN en niet voorspeld. Wat erbuiten ligt
+  staat daarom apart geteld, want anders leest de prijs als het hele verschil tussen de twee bronnen.
+  `csvNiet` EN `psdOver` HETEN NAAR HUN EERSTE LEZER: het zijn de linkerlijst die niets vond en de
+  rechterlijst die overbleef, en sinds `v301` is die linkerlijst ook eens mt940. Wie `_eenOpEen()` toch
+  aanraakt hernoemt ze; een naam die de verkeerde bron noemt is precies het etiket dat dit project verbiedt.
 - **DEZELFDE PAREN, TWEE KEER GETELD: DE IMPORT EN WAT ER NOG MEETELT** (`v300`): de parenscan van blok 10
   loopt over de ruwe `TX`, dus zijn kruisbron-paren zijn het getal van vóór `v284` en `v288`. Dat is `v285`
   op deze sectie: wie de IMPORT telt leest `TX`, wie GELD telt leest de poort. De scan blijft op `TX` en
@@ -3322,7 +3360,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v300` → `minder-v301`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v301` → `minder-v302`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -3330,7 +3368,8 @@ app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` 
 dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `minder-v295`: `v292`
 en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfde geval, dus de
 bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte alleen `tests/` en dit
-bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`. Dat gat is geen fout maar de regel
+bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`; `v301` raakt wel app-code
+en bumpt dus gewoon door naar `minder-v301`. Dat gat is geen fout maar de regel
 zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

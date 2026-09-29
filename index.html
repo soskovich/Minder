@@ -14918,6 +14918,7 @@ function diagDubbel(){
                    ['csv in het venster van zijn psd2-kant', t=>_dT(()=>csvDubbel(t),false)]];
     let beideTellen=0, plafondImp=0, nImp=0, plafondTelt=0, nTelt=0;
     const perPoort={}; for(const [nm] of POORTEN) perPoort[nm]=0;
+    const bak={hard:{n:0,eur:0}, anders:{n:0,eur:0}, geen:{n:0,eur:0}}; let bakEen=0;
     for(const p of paren){
       const tb=teltSet.has(p.a.id) && teltSet.has(p.b.id);
       if(tb) beideTellen++;
@@ -14925,7 +14926,16 @@ function diagDubbel(){
       /* EEN KANT PER PAAR, en alleen als die kant als UITGAVE telt: een interne overboeking telt nergens
          als uitgave, dus daar valt in de normsommen niets dubbel te tellen. */
       const kant=[p.a,p.b].find(t=>{ const c=catOf(t); return CATS[c] && CATS[c].type==='expense' && t.amount<0; });
-      if(kant){ plafondImp+=-kant.amount; nImp++; if(tb){ plafondTelt+=-kant.amount; nTelt++; } }
+      if(kant){ plafondImp+=-kant.amount; nImp++; if(tb){ plafondTelt+=-kant.amount; nTelt++; }
+        /* v301: DEZELFDE PAREN, NU NAAR WAT EEN REPARATIE ERAAN ZOU HEBBEN. De harde identiteit is een
+           gelijke betaaldatum EN -tijd aan beide kanten; dat is dezelfde toets als 4c en de enige
+           scheider die de app al opslaat, want `t.id` hasht over de desc en die verschilt per bron. */
+        const beide=!!(p.a.betaalDatum && p.b.betaalDatum);
+        const bk = !beide ? 'geen'
+          : (p.a.betaalDatum===p.b.betaalDatum && String(p.a.betaalTijd||'')===String(p.b.betaalTijd||'')) ? 'hard' : 'anders';
+        bak[bk].n++; bak[bk].eur+=-kant.amount;
+        if(!beide && (p.a.betaalDatum || p.b.betaalDatum)) bakEen++;
+      }
     }
     L.push('');
     L.push('  nog MEETELLEND, beide kanten door telbareTx(): '+beideTellen+' van '+paren.length);
@@ -14938,6 +14948,24 @@ function diagDubbel(){
     L.push('    nog meetellend: '+Math.round(plafondTelt)+' euro over '+nTelt+' paren');
     L.push('    (een plafond en geen schade: dat de twee kanten dezelfde BETALING zijn staat niet vast, en');
     L.push('     een boeking kan in meer dan een paar zitten, dus het aantal paren is een bovengrens)');
+    /* v301: WAAROP ZOU EEN REPARATIE KUNNEN STAAN. Het plafond hierboven zegt hoeveel er ten hoogste
+       dubbel telt; deze drie bakken zeggen bij hoeveel daarvan de app een HARDE identiteit heeft.
+       DE DRIE TELLEN OP TOT HET PLAFOND, in aantal en in euro, en dat staat eronder in plaats van dat
+       het wordt aangenomen: een bak die er niet bij optelt telt iets anders dan hij zegt (v104).
+       DE DERDE BAK IS EEN GRENS EN GEEN GEBREK: een boeking zonder kaart-kenmerk in haar desc krijgt per
+       constructie geen betaaldatum (v273), dus daar is met dit veld niets te scheiden. Hoeveel er aan
+       EEN kant wel een veld dragen staat erbij, want dat is het deel waar een tweede bron nog iets
+       zou kunnen; bij nul aan beide kanten is ook dat pad dicht. */
+    L.push('  DE DRIE BAKKEN over de paren die een uitgave dragen (dezelfde kant als het plafond):');
+    L.push('    harde identiteit, beide kanten het veld en GELIJK moment: '+bak.hard.n+' paren, '+Math.round(bak.hard.eur)+' euro');
+    L.push('    beide kanten het veld, VERSCHILLEND moment:               '+bak.anders.n+' paren, '+Math.round(bak.anders.eur)+' euro');
+    L.push('    geen veld aan minstens een kant:                          '+bak.geen.n+' paren, '+Math.round(bak.geen.eur)+' euro'
+      +'   (waarvan aan EEN kant wel: '+bakEen+')');
+    const bakN=bak.hard.n+bak.anders.n+bak.geen.n, bakE=Math.round(bak.hard.eur)+Math.round(bak.anders.eur)+Math.round(bak.geen.eur);
+    L.push('    de drie samen: '+bakN+' paren, '+bakE+' euro   tegen het plafond '+nImp+' paren, '+Math.round(plafondImp)+' euro'
+      +'   sluit aan: '+((bakN===nImp && bakE===Math.round(plafondImp))?'JA':'NEE'));
+    L.push('    (het euro-totaal telt de AFGERONDE bakken op, zoals de rijen zelf (v287); een bak zonder');
+    L.push('     veld is niet met de betaaldatum te scheiden en vraagt dus een andere scheider of een venster)');
     L.push('');
     L.push('  de paren, nieuwste eerst (maximaal '+DIAG_PAAR_MAX+'):');
     const gesorteerd=paren.slice().sort((x,y)=>String(y.a.date).localeCompare(String(x.a.date)));
@@ -15415,6 +15443,69 @@ function diagDubbel(){
       L.push('    EEN PAAR IS NIET PER DEFINITIE DEZELFDE BOEKING (gemeten bij v274: een mt940-regel kan met');
       L.push('      drie psd2-regels een paar vormen). De harde identiteit is een gelijke betaaldatum EN tijd:');
       L.push('      paren waarvan BEIDE kanten het veld dragen: '+beideVeld+'   waarvan gelijk moment: '+zelfdeMoment);
+    }
+
+    /* ===== 4d. DE VENSTERREGEL VAN v284, NU VOOR mt940 (v301) =====
+       DEZELFDE VRAAG ALS BIJ DE CSV-REKENINGEN, en daarom dezelfde meting: is de mt940-kant een
+       DEELVERZAMELING van de psd2-kant. Heeft elke mt940-regel binnen het psd2-venster een tegenhanger,
+       dan raakt een uitsluiting op VENSTER niets kwijt en is de reparatie diezelfde regel als `v284`;
+       heeft ze die niet, dan zijn dat precies de boekingen die je zou verliezen, en de euro's erbij
+       zeggen hoeveel. Dat laatste is de PRIJS, in dezelfde vorm als (d) van blok 11.
+       HET VENSTER IS DAT VAN DE PSD2-KANT OP DEZE REKENING, van zijn eerste tot zijn laatste boeking,
+       precies zoals `csvDubbel()` het leest. Wat erbuiten ligt raakt een vensterregel per definitie niet
+       en staat er apart, want anders leest de prijs als het hele verschil tussen de twee bronnen.
+       DE TOEWIJZING KOMT UIT `_eenOpEen()` EN WORDT NIET OPNIEUW UITGEDRUKT (v104): dezelfde gulzige
+       een-op-een van blok 11 (d), dichtstbijzijnde dag eerst, elke psd2-regel hoogstens een keer.
+       DE AFSTAND IS GERICHT EN NIET ABSOLUUT, en dat is het enige verschil met (d). 4c meet dat de
+       mt940-kant bij 90 van de 96 paren EERDER ligt, dus de vraag is of de psd2-kant 0 tot
+       DIAG_PAAR_VENSTER dagen LATER ligt; een psd2-regel die ERVOOR ligt geeft een negatieve afstand en
+       matcht per constructie niet. Zonder die richting zou een mt940-regel kunnen matchen met een
+       psd2-regel van ervoor, en dan meet dit iets anders dan de paren waar het over gaat.
+       HETZELFDE VENSTER ALS DE PARENSCAN, en dat is een keuze met een reden: staat hier een eigen
+       getal, dan zijn deze telling en de 96 paren hierboven niet meer naast elkaar te leggen terwijl ze
+       over dezelfde boekingen gaan. Eén bron voor dat aantal dagen (v104).
+       `csvNiet` EN `psdOver` HETEN NAAR HUN EERSTE LEZER en niet naar hun betekenis: het zijn de
+       linkerlijst die niets vond en de rechterlijst die overbleef. Hier is de linkerlijst mt940. */
+    const mtL=rij.filter(t=>src(t)==='mt940'), psdL=rij.filter(t=>src(t)==='psd2');
+    if(mtL.length && psdL.length && perBron['psd2']){
+      const pv=perBron['psd2'];
+      const dag=t=>String(t.date).slice(0,10);
+      const binnen=mtL.filter(t=>dag(t)>=pv.min && dag(t)<=pv.max);
+      const laterDan=(ps,mt)=>_dagenTussen(mt,ps);   // psd2 NA mt940; ervoor geeft negatief en matcht nooit
+      const MM=_eenOpEen(binnen, psdL, DIAG_PAAR_VENSTER, laterDan);
+      const mtZonder=MM.csvNiet, psdRest=MM.psdOver;
+      const sc2=mtZonder.filter(inScope);
+      const eur=a=>Math.round(a.reduce((x,t)=>x+(-t.amount),0));
+      L.push('');
+      L.push('  4d. DE VENSTERREGEL VAN v284, NU VOOR mt940: is de mt940-kant een DEELVERZAMELING van psd2');
+      L.push('    het psd2-venster op deze rekening: '+pv.min+' t/m '+pv.max);
+      L.push('    mt940-regels BINNEN dat venster: '+binnen.length+' van '+mtL.length
+        +'   (erbuiten: '+(mtL.length-binnen.length)+', die raakt een vensterregel niet)');
+      L.push('    GEMATCHT '+MM.match.length+' van '+binnen.length
+        +(binnen.length?(' ('+Math.round(MM.match.length/binnen.length*100)+'%)'):'')
+        +'   de psd2-kant 0 tot '+DIAG_PAAR_VENSTER+' dagen LATER, een-op-een');
+      L.push('      verdeling van de dagafstand: '+(MM.match.length?[...Array(DIAG_PAAR_VENSTER+1).keys()]
+        .map(d=>d+'d '+MM.match.filter(x=>x.d===d).length).join(', '):'-'));
+      L.push('    NIET GEMATCHT (mt940): '+mtZonder.length
+        +'   in de scope van piekVerdeling(): '+sc2.length+' boekingen, '+eur(sc2)+' euro netto   <-- DAT IS DE PRIJS');
+      if(mtZonder.length){
+        /* DE WEEKDAGVERDELING VAN WAT OVERBLIJFT, want dat is waar de scheefheid van 4b en 4c op rust:
+           is de mt940-kant vrijwel geheel gematcht, dan is die scheefheid een eigenschap van de PAREN en
+           niet van een eigen verzameling regels. Blijft er een weekend-zware rest, dan is er meer aan de
+           hand dan een dubbele import. */
+        const wz=[0,0,0,0,0,0,0]; let wzS=0;
+        for(const t of mtZonder){ const b=Math.abs(+t.amount||0); wz[_piekDagIdx(t.date)]+=b; wzS+=b; }
+        if(wzS>0) L.push('      de weekdagverdeling van die regels (op bedrag): '+pct(wz,wzS));
+        const nm={}; for(const t of mtZonder){ const n=String(t.name||'?').slice(0,24); nm[n]=(nm[n]||0)+1; }
+        L.push('      de vaakst voorkomende namen: '+Object.keys(nm).sort((a,b)=>nm[b]-nm[a]).slice(0,5)
+          .map(n=>n+' '+nm[n]+'x').join(' | '));
+      }
+      L.push('    OVER (psd2): '+psdRest.length+' van '+psdL.length+'   dat is het deel dat psd2 MEER draagt dan de mt940-import');
+      L.push('    WAT 4d BESLIST: is NIET GEMATCHT (bijna) nul, dan is de mt940-kant een deelverzameling en');
+      L.push('      kan dezelfde vensterregel als v284 hem uitsluiten, met de prijs hierboven als kosten.');
+      L.push('      Blijft er een rest staan, dan raakt een vensterregel die euro\'s kwijt en is de scheider');
+      L.push('      per boeking nodig; de drie bakken bij de paren zeggen op hoeveel daarvan de app een');
+      L.push('      harde identiteit heeft.');
     }
   }
   L.push('');
