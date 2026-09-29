@@ -144,6 +144,25 @@ genoemde versietag.)*
   DE FIXTURE BOOTST DE STAND NA EEN BOOT NA en zet dus GEEN `_p` op de id, met een assertie dat hij er
   ook niet komt. Zou hij er wel staan, dan is die herschrijving verdwenen en verandert de betekenis van
   de kolom.
+- **OPEN PUNT: BLOK 8 LEEST DE BEVESTIGDE RESERVERINGEN NIET** (`v294`, gemeten): dat blok drukt
+  "BEVESTIGDE KANDIDAAT-PAREN (v288)" af met negen paren en nul open, en zwijgt volledig over de tien
+  bevestigde reserveringen van `v293`. Wie blok 8 leest om te zien wat hij zelf heeft vastgelegd krijgt
+  dus een half beeld. De uitlezing BESTAAT wel, maar in blok 12, per drietal ("AFGEHANDELD: jij legde dit
+  vast als een reservering op ..."), en dat is de plek waar de meting staat.
+  NIET GEREPAREERD EN NIET TRIVIAAL: de keuze is of blok 8 de plek is waar ALLE eigen vastleggingen
+  samenkomen (dan hoort `SET.uitReservering`, `SET.onregelmatig` en `SET.fixDueExcl` daar net zo goed bij,
+  en dat is een eigen vraag) of dat elk mechanisme zijn uitlezing bij zijn eigen blok houdt. Vandaag is
+  het het tweede, met één uitzondering die daar niet in past. Wie dit oppakt kiest eerst welke van de twee.
+- **OPEN PUNT: DE WEEKDAGTABEL VAN 3c KAN OP DEZE GEGEVENS NIETS ZEGGEN** (`v294`, gemeten): hij
+  vergelijkt de verdeling met de terugboeking VERPLAATST naar de dag van de afschrijving, en op het
+  toestel staan alle elf terugboekingen al op die dag, dus "verschoven terugboekingen: 0" en de twee rijen
+  zijn per constructie gelijk. Het blok zegt dat er zelf bij, dus het is geen stil gat, maar de tabel
+  beantwoordt niet de vraag die telt.
+  DE VRAAG DIE TELT is wat de verdeling doet als elke tankbeurt EEN keer telt, en die is niet met een
+  verschuiving te meten maar met een uitsluiting. Die meting is er inmiddels op een andere manier: blok 9
+  draait sinds `v293` op de gecorrigeerde gegevens en laat het verschil rechtstreeks zien. Wie 3c opknapt
+  kiest dus tussen de tabel vervangen door die uitsluiting of hem weghalen omdat blok 9 het al zegt; een
+  tabel die per constructie twee gelijke rijen toont is in beide gevallen geen meting (meetles a).
 - **DE APP WIJST GEEN RESERVERING AAN, DE GEBRUIKER BESLIST PER GEVAL** (`v293`): `vorautKandidaten()`
   geeft de KANDIDATEN (een afschrijving, een bijschrijving, en een tweede afschrijving die precies het
   verschil is) en verder niets; jij bevestigt per geval, precies de vorm van `v288`.
@@ -754,19 +773,34 @@ genoemde versietag.)*
   op die rekening. De iDEAL/Tikkie-regels (8.772 euro, maandag 49 procent) en de incasso's (13.480 euro)
   kunnen per constructie nooit een veld dragen. De gemengde as die `v273` verbood blijft dus verboden, en er
   is geen veld dat het gat dicht. Dat is een GRENS en geen gebrek.
-- **VOOR DE PIEKDAG-RONDE, vastgelegd bij `v289`: bij variant C noemt de piekdag de DOMINANTE CATEGORIE**
-  ("vooral door tanken"), en dan is een wegstreep per FAMILIE minder nodig. DE AANLEIDING IS BLOK 9 op
-  het toestel bij `v288`: de duurste weekdag is voor het eerst 3 van 6 weken zaterdag, op `t.date` en op
-  de betaaldatum, tegen 2 van 6 bij `v271`. Maar alle drie die zaterdagen worden gedragen door een
-  tankbeurt bij een Shell, en reeks 2 streept per NAAM weg: `ShellExpress Amste`, `SHELL LAARDERHOOGT` en
-  `SHELL MUNTBERGWEG` zijn drie namen voor een gedrag. Haal ShellExpress weg en de telling zakt naar 2;
-  haal Muntbergweg weg en hij zakt ook naar 2. De drempel is gehaald, de conclusie niet.
-  WAT DE CATEGORIE-VERMELDING OPLOST: de lezer ziet zelf dat het om tanken gaat, dus de vraag of drie
-  stationsnamen een familie zijn hoeft de code niet te beantwoorden. WAT ZE NIET OPLOST: als de dominante
-  categorie diffuus is, zegt de regel niets en staat de familie-vraag er weer.
-  WAT 'VARIANT C' IS STAAT HIER NIET, en dat hoort aan het begin van die ronde te worden vastgelegd: het
-  label komt uit de piekdag-discussie en niet uit dit bestand, en een label zonder definitie is precies
-  wat dit project elders verbiedt.
+- **DE ZATERDAGPIEK WAS DE DUBBELTELLING, EN NA DE CORRECTIE IS ER GEEN WEEKPATROON** (`v294`, gemeten
+  op het toestel nadat alle tien de reserveringen waren bevestigd): de duurste weekdag staat over dezelfde
+  zes weken op ma 2x, wo 2x, za 2x, tegen za 3x, wo 1x, do 1x, vr 1x bij `v288`. De hoogste telling is
+  2 van 6 op `t.date` EN op de betaaldatum, onder de drempel van 3 van 6. DRIE VAN DE ZES DUURSTE DAGEN
+  VERSPRONGEN: 08-20 do 133 -> 08-17 ma 105, 09-11 vr 220 -> 09-07 ma 203, en 09-26 za 236 -> 09-23 wo 153.
+  De twee zaterdagen die duurste bleven zakten van 160 naar 87 en van 277 naar 173.
+  DE BEDRAG-DREMPEL ZAKTE MEE: "2x het aandeel-dagbedrag" ging van 5 van 6 naar 3 van 6 en "2x vlak" van
+  6 van 6 naar 5 van 6. De verdubbeling droeg dus BEIDE eisen van de drempel, niet alleen de weekdag.
+  EEN ONAFHANKELIJKE CONTROLE OP DE EURO: de vijf weken die veranderden zakten samen 435 euro, en de vijf
+  tankbeurten binnen die weken tellen op tot 433,89. Het verschil is de afronding per week.
+  DE KEUZE VOOR VARIANT C BLIJFT STAAN, EN WAT VERVALT IS ZIJN PREMISSE. Die twee stonden bij `v289` in
+  een adem en zijn hier uit elkaar gehaald, want een volgende ronde die alleen de meting leest zou
+  concluderen dat C is verworpen, en dat is hij niet.
+  VARIANT C IS: de piekdag staat als CONTEXT bij het dagbedrag en niet als eigen signaal, omdat hij geen
+  oordeel velt. Dat is een keuze over de VORM en die rust op geen enkele meting. Hij staat hier
+  gedefinieerd omdat het label uit de piekdag-discussie komt en niet uit dit bestand, en een label zonder
+  definitie is precies wat dit project elders verbiedt.
+  WAT DE METING VERVANGT IS DE PREMISSE ERONDER: `v289` legde vast dat de duurste weekdag voor het eerst
+  3 van 6 weken zaterdag was en dat drie Shell-namen een familie zijn. Die premisse was een ARTEFACT van
+  de dubbeltelling en geen gedrag. Op de gecorrigeerde gegevens is de hoogste telling 2 van 6, dus C
+  TOONT VANDAAG NIETS: de vorm ligt vast, er is alleen geen piekdag om in die vorm te zetten. Haalt een
+  maand de drempel wel, dan hoeft de vorm niet opnieuw gekozen te worden.
+  WAT ER NIET MEER OP DEZE METING STAAT is de vraag of een wegstreep per familie nodig is, en of de
+  piekdag daarvoor zijn dominante categorie moet noemen. Die vraag is met C niet beantwoord en wacht op
+  een nieuwe aanleiding.
+  WAT BLIJFT: er is GEEN weekpatroon in de variabele uitgaven, dus signaal 3 blijft per maand staan en de
+  weekreeks komt er niet. Dat is dezelfde geldige uitkomst als `v267` en `v271`, nu voor het eerst op
+  gegevens waar de tankbeurten niet dubbel in tellen.
 - **OPEN KEUZE, NIET GEBOUWD: de piekdag op alleen de regels waarvan de datum de betaaldag IS** (`v281`):
   een AFGEBAKENDE scope in plaats van een gemengde as. Dat zijn N26-psd2 op `t.date`, mt940 op `t.date` (daar
   is `t.date` de valutadatum en die is in 42 van 42 gevallen gelijk aan de desc-betaaldatum) en de
