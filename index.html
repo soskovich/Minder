@@ -16780,7 +16780,173 @@ function diagPendBots(){
   L.push('   EN HET IS GEEN ZELFDE GAT ALS DE BOTSING: die duurt een sync, deze duurt tot de bank boekt.');
   return L;
 }
-const DIAG_BLOKKEN=[
+/* v302: DE TELLER EN DE NOEMER VAN bufferMaanden(), PER ONDERDEEL. Alleen lezen (v244).
+   DE AANLEIDING IS EEN VERSCHIL DAT NIET TE PLAATSEN WAS: de bufferregel op Grip staat op een
+   aantal maanden, en het saldo van de spaarrekening gedeeld door het bedrag uit de noodfonds-sheet
+   gaf een ander aantal. De deling zelf staat op EEN regel (bufferMaanden(), sp/ess), maar geen van
+   beide kanten was per onderdeel te lezen: blok 3 print spaarSaldo() als GEHEEL en de noemer staat
+   alleen in de sheet. Een getal dat de lezer niet kan narekenen stuurt een volgende ronde een fout
+   zoeken die er niet is (v271), en dat is hier ook gebeurd: ik zocht hem in de huur-categorie
+   terwijl die gewoon meetelt.
+   NIETS WORDT OPNIEUW UITGEDRUKT (v104): de selectie komt uit isSavingsAcc(), het saldo uit
+   accBalance(), de datum uit accBalanceDatum(), de som uit spaarSaldo() en de noemer uit
+   noodfondsModel().crisisRows. Wat dit blok er zelf bij rekent is de AANSLUITING en het venster van
+   de afronding, en dat zijn waarnemingen over die uitkomsten en geen tweede bron.
+   DE KANT DIE WEGVALT STAAT ERBIJ, en dat is de reden dat het blok over ALLE rekeningen loopt:
+   zonder de rekeningen die NIET meetellen is een verschil met je eigen getal niet te plaatsen, want
+   dan zie je alleen wat er wel in zit. Dat is meetles (m) in een nieuwe jas. */
+function diagBuffernorm(){
+  const L=[];
+  L.push('DE VRAAG: de bufferregel op Grip is EEN deling (bufferMaanden(): sp/ess). Blok 3 print');
+  L.push('spaarSaldo() als geheel en de noemer staat alleen in de noodfonds-sheet, dus het getal was');
+  L.push('niet na te rekenen. Blok 8 zegt WELKE rekeningen er zijn; hier staat welke daarvan als');
+  L.push('spaargeld TELLEN, en dat is een andere vraag.');
+  L.push('');
+  L.push('1. DE TELLER: spaarSaldo().cur');
+  L.push('   de selectie komt uit isSavingsAcc(): een eigen keuze in SET.savingsAcc wint, en anders');
+  L.push('   beslist de standaard op de laatste cijfers van de rekening-id OF van de iban ('
+    +_dT(()=>SAV_DEFAULT_ENDS.join(' / '),'?')+').');
+  L.push('   het saldo komt uit accBalance(), en die leest SET.manualBal EERST: een handmatig saldo');
+  L.push('   wint van dat van de bank. Dat staat per rij, want het is een kandidaat voor een verschil');
+  L.push('   met wat je in je bank-app ziet.');
+  const alle=_dT(()=>allAccounts(),[]);
+  const vnd=_dT(()=>vandaagYMD(),'');
+  const resAcc=String(_dT(()=>SET.resAcc,'')||'');
+  const fal=new Set(_dT(()=>psd2Falend().map(f=>f.acc),[]));
+  const rijen=alle.map(a=>{
+    const bal=_dT(()=>accBalance(a),null), dat=_dT(()=>accBalanceDatum(a),null);
+    let nm=''; try{ nm=acctNiceName(a); }catch(_){ nm=String(a); }
+    return {a:String(a), nm:String(nm||a),
+      telt:!!_dT(()=>isSavingsAcc(a),false),
+      eigen:!!_dT(()=>Object.prototype.hasOwnProperty.call(SET.savingsAcc||{},a),false),
+      hand:!!_dT(()=>{ const m=(SET.manualBal||{})[a]; return m!=null&&m!==''; },false),
+      bal, dat, oud:(dat&&vnd)?_dT(()=>_dagenTussen(dat,vnd),null):null};
+  });
+  const schrijf=r=>'     '+r.a.slice(0,20).padEnd(21)
+    +(r.eigen?'eigen  ':'default').padEnd(9)
+    +(r.bal==null?'ONBEKEND':r.bal.toFixed(2)).padStart(11)+'  '
+    +String(r.dat||'-').padEnd(12)
+    +(r.oud==null?'-':(r.oud===0?'vandaag':r.oud+'d oud')).padEnd(9)
+    +(r.hand?'handmatig':'bank').padEnd(10)
+    +r.nm.slice(0,22)
+    +(r.a===resAcc?'   <-- SET.resAcc: de reserveringenrekening':'')
+    +(fal.has(r.a)?'   <-- psd2Falend(): haalde bij de laatste sync geen saldo op':'');
+  const kop='     '+'rekening'.padEnd(21)+'keuze    '+'saldo'.padStart(11)+'  '+'op'.padEnd(12)+'leeftijd '+'tak'.padEnd(10)+'naam';
+  const meetel=rijen.filter(r=>r.telt), buiten=rijen.filter(r=>!r.telt);
+  L.push('');
+  L.push('   TELT MEE ALS SPAARGELD: '+meetel.length+' van '+rijen.length+' rekeningen');
+  if(!meetel.length) L.push('     (geen)');
+  else { L.push(kop); for(const r of meetel) L.push(schrijf(r)); }
+  L.push('   TELT NIET MEE, en dat staat erbij omdat een verschil anders niet te plaatsen is:');
+  if(!buiten.length) L.push('     (geen)');
+  else { L.push(kop); for(const r of buiten) L.push(schrijf(r)); }
+  const bekend=meetel.filter(r=>r.bal!=null);
+  const som=bekend.reduce((x,r)=>x+r.bal,0);
+  const extra=_dT(()=>+SET.extraSavings||0,0);
+  const S=_dT(()=>spaarSaldo(),null);
+  const bron=S?String(S.bron||''):'';
+  const verwacht = bron==='spaarrekening' ? (Math.round(som)+extra) : (bron==='extra' ? extra : 0);
+  L.push('');
+  L.push('   som van de meegetelde saldi: '+som.toFixed(2)+'   over '+bekend.length+' rekening(en) met een bekend saldo');
+  L.push('   SET.extraSavings: '+extra+'   (een nul is hier een meting: het veld in Instellingen staat leeg)');
+  L.push('   spaarSaldo(): cur='+(S?S.cur:'FOUT')+'  missing='+(S?!!S.missing:'?')+'  bron='+(bron||'?'));
+  L.push('   zoals de app hem maakt, per de tak die spaarSaldo() zelf noemt ('+(bron||'?')+'):');
+  L.push('     '+(bron==='spaarrekening'?'Math.round(som van de saldi) + extraSavings = '+Math.round(som)+' + '+extra
+        :bron==='extra'?'alleen extraSavings = '+extra
+        :'geen spaarrekening en geen extra = 0')+' = '+verwacht);
+  L.push('   sluit aan op spaarSaldo().cur: '
+    +((S && Math.round(verwacht*100)===Math.round((+S.cur||0)*100))?'JA':'NEE (blok '+verwacht+', app '+(S?S.cur:'?')+')'));
+  L.push('   DE SOM WORDT EEN KEER AFGEROND EN NIET PER RIJ (v271): tel je de afgeronde rijen hierboven');
+  L.push('   op, dan kun je een euro naast dit getal uitkomen. Daarom staan de rijen met centen.');
+  L.push('   ONBEKEND SALDO OP EEN MEEGETELDE REKENING ZET DE HELE TELLER OP NULL: noodfondsModel().spaar');
+  L.push('   leest spaarSaldo().missing en geeft dan null, bufferMaanden() geeft null, en dan staat de');
+  L.push('   bufferregel NIET op Grip. meegeteld zonder bekend saldo: '+(meetel.length-bekend.length));
+  L.push('   noodfondsModel().spaar (de teller van de deling): '+_dV(()=>noodfondsModel().spaar));
+  L.push('');
+  L.push('2. DE NOEMER: noodfondsModel().essCrisis');
+  const M=_dT(()=>noodfondsModel(),null);
+  if(!M) L.push('   FOUT: noodfondsModel() gaf niets');
+  else{
+    const win=M.win||[];
+    L.push('   venster: '+(win.length?win[0]+' t/m '+win[win.length-1]:'(leeg)')+'   '+M.n+' maand(en)'
+      +(M.winLopend?'   TERUGVAL: nog geen afgeronde maand, dus de LOPENDE maand is de enige bron':'   de lopende maand telt niet mee (v107)'));
+    L.push('   de basis per post is de MEDIAAN over dat venster, behalve voor '
+      +_dT(()=>[...NF_PERIODIEK].join(' en '),'?')+': die nemen het GEMIDDELDE, want ze vallen per jaar.');
+    L.push('     '+'klasse'.padEnd(8)+'categorie'.padEnd(22)+'basis'.padEnd(10)+'auto'.padStart(8)+'  '+'meetelt'.padStart(8)+'  bron');
+    let somCr=0;
+    for(const r of (M.crisisRows||[])){
+      const cat=String(r.cat||''); let nm=cat; try{ nm=(CATS[cat]&&CATS[cat].name)||cat; }catch(_){}
+      const basis = r.kl==='vast' ? (_dT(()=>NF_PERIODIEK.has(cat),false)?'gemiddeld':'mediaan')
+                  : ('mediaan x '+_dT(()=>nfCrisis(cat),'?')+'%');
+      somCr+=(+r.crisis||0);
+      L.push('     '+String(r.kl||'').padEnd(8)+nm.slice(0,21).padEnd(22)+basis.padEnd(10)
+        +String(Math.round(+r.auto||0)).padStart(8)+'  '+String(Math.round(+r.crisis||0)).padStart(8)
+        +'  '+(r.man?'HANDMATIG door jou':'de schatting')
+        +(r.note?'   notitie: '+String(r.note).slice(0,40):''));
+    }
+    L.push('     '+''.padEnd(8)+'som van de rijen'.padEnd(22)+''.padEnd(10)+''.padStart(8)+'  '+String(somCr).padStart(8));
+    L.push('   essCrisis: '+Math.round(M.essCrisis||0)+'   sluit aan op de som van de rijen: '
+      +(somCr===Math.round(M.essCrisis||0)?'JA':'NEE'));
+    L.push('   DIE AANSLUITING KAN VANDAAG NIET AFWIJKEN, en dat staat er in plaats van dat het als');
+    L.push('   bevestiging leest: essCrisis telt precies de bedragen op die ook een rij krijgen. Hij staat');
+    L.push('   er om een rij te vangen die uit de LIJST valt terwijl zijn bedrag in de som blijft; dat is');
+    L.push('   dezelfde keuze als bij de bakken van v301.');
+    L.push('   WAT ER BUITEN DE NOEMER VALT, want dat is de andere helft van de vraag:');
+    for(const c of (M.comfort||[])){ let nm=c[0]; try{ nm=(CATS[c[0]]&&CATS[c[0]].name)||c[0]; }catch(_){}
+      L.push('     comfort  '+String(nm).slice(0,21).padEnd(22)+'mediaan '+String(Math.round(+c[1]||0)).padStart(7)
+        +'   hoogste maand '+String(Math.round(+c[2]||0)).padStart(7)); }
+    if(!(M.comfort||[]).length) L.push('     (geen comfort-categorie met uitgaven)');
+    L.push('     samen (comfortTot): '+Math.round(M.comfortTot||0)+' per maand');
+    const excl=_dT(()=>Object.keys(NF_KLASSE_DEFAULT).filter(c=>nfKlasse(c)==='exclude'),[]);
+    const nietIn=_dT(()=>Object.keys(CATS).filter(c=>CATS[c].type==='expense' && !(c in NF_KLASSE_DEFAULT)),[]);
+    L.push('     exclude: '+(excl.join(', ')||'(geen)'));
+    L.push('     niet in de indeling, dus ook exclude: '+(nietIn.join(', ')||'(geen)'));
+    L.push('   essNormaal (zonder de crisis-kortingen): '+Math.round(M.essNormaal||0)
+      +'   doel: '+Math.round(M.doel||0)+' ('+M.maanden+' mnd'+(M.doelVast!=null?', door jou vastgezet':'')+')');
+    L.push('   DE RIJ OP GRIP ZEGT "essentiele lasten" EN HET GETAL IS essCrisis, dus al verlaagd met de');
+    L.push('   percentages hierboven. De sheet noemt datzelfde getal "minimaal nodig in crisis". Alleen');
+    L.push('   gemeld, niet gerepareerd: het is een label dat meer belooft dan het getal draagt.');
+    L.push('');
+    L.push('3. DE DELING, EN HET VENSTER VAN DE AFRONDING');
+    const sp=_dT(()=>noodfondsModel().spaar,null), ess=Math.round(M.essCrisis||0);
+    const bm=_dT(()=>bufferMaanden(),null);
+    L.push('   bufferMaanden(): '+(bm==null?'null, dus de rij staat NIET op Grip':bm.toFixed(4)));
+    if(bm!=null && ess>0){
+      const d=Math.round(bm*10)/10;
+      const lo=Math.ceil((d-0.05)*ess), hi=Math.ceil((d+0.05)*ess)-1;
+      L.push('   Grip toont er '+String(d).replace('.',',')+' van, want de weergave is Math.round(bm*10)/10.');
+      L.push('   OM OP DIT CIJFER UIT TE KOMEN MOET DE TELLER TUSSEN '+lo+' EN '+hi+' LIGGEN, bij noemer '+ess+'.');
+      L.push('   Valt je eigen getal daarbuiten, dan is dat niet de teller die de app gebruikt, en zeggen de');
+      L.push('   rijen van sectie 1 waar het verschil zit: een rekening die niet meetelt, een handmatig saldo');
+      L.push('   dat voorgaat op dat van de bank, een saldo van een oudere dag, of extraSavings erbovenop.');
+      L.push('   teller nu: '+sp+'   noemer nu: '+ess+'   '+sp+' / '+ess+' = '+(sp/ess).toFixed(4));
+      L.push('   de grenzen die de rij leest: kritiek onder '+_dT(()=>MAAND_DREMPEL.bufferKritiek,'?')
+        +' maanden, en je eigen richt staat op '+_dT(()=>nfMaanden(),'?')+'.');
+    }
+  }
+  L.push('');
+  L.push('4. WAT DE VOLGENDE RONDE NODIG HEEFT, alleen gemeten en nergens gelezen');
+  L.push('   De teller is vandaag het SALDO van je spaarrekeningen, en daar staat ook het geld van je');
+  L.push('   doelen op. Dan telt dat geld mee als buffer. Dit zijn de bedragen die op Plan aan een');
+  L.push('   bestemming zijn TOEGEWEZEN, uit planMap(), naast dat saldo:');
+  const PM=_dT(()=>planMap(),{});
+  let somToe=0;
+  for(const k of Object.keys(PM)){
+    const p=PM[k]||{}; if(p.type!=='noodfonds' && p.type!=='goal') continue;
+    const g=Math.max(Math.round(+p.gespaard||0),0); somToe+=g;
+    L.push('     '+String(p.naam||k).slice(0,26).padEnd(27)+'toegewezen '+String(g).padStart(8)
+      +'   van '+String(Math.round(+p.doel||0)).padStart(8)+(p.type==='noodfonds'?'   (SET.nfToegewezen)':''));
+  }
+  const tel=(S&&!S.missing)?Math.round(S.cur):null;
+  L.push('     som van de toewijzingen: '+somToe+'   tegen de teller van sectie 1: '+(tel==null?'onbekend':tel)
+    +'   verschil: '+(tel==null?'onbekend':(tel-somToe)));
+  L.push('   STAAT ER MINDER OP DE REKENING DAN ER IS TOEGEWEZEN, dan is de toewijzing een voornemen dat');
+  L.push('   het saldo niet draagt. Aflos-items staan er niet bij: hun voortgang is afgeloste schuld en');
+  L.push('   geen geld op een rekening. De reserveringenrekening hangt uitdrukkelijk NIET aan');
+  L.push('   isSavingsAcc() (v128), en of dat op dit toestel ook zo uitvalt staat in sectie 1.');
+  L.push('   DIT BLOK BESLIST NIETS EN VERANDERT NIETS (v244).');
+  return L;
+}const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
   {titel:'de grendel', lees:diagGrendel},
@@ -16794,6 +16960,7 @@ const DIAG_BLOKKEN=[
   {titel:'de csv-import tegen de psd2-koppeling, per rekening', lees:diagCsvPsd2},
   {titel:'de tankvoorautorisatie en haar terugboeking', lees:diagVoorautorisatie},
   {titel:'de pending-botsing: kan een boeking een sync lang verdwijnen', lees:diagPendBots},
+  {titel:'de teller en de noemer van bufferMaanden()', lees:diagBuffernorm},
 ];
 
 async function diagTekst(){

@@ -95,6 +95,52 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN DELING MET TWEE SAMENGESTELDE KANTEN IS PAS EEN METING ALS BEIDE KANTEN PER ONDERDEEL TE LEZEN
+  ZIJN** (`v302`): de bufferregel op Grip is `spaarSaldo().cur / noodfondsModel().essCrisis`, en geen van
+  beide kanten was uit te splitsen: blok 3 print `spaarSaldo()` als GEHEEL en de noemer staat alleen in de
+  noodfonds-sheet. GEMETEN gevolg op het toestel: het getoonde aantal maanden week af van het saldo van de
+  spaarrekening gedeeld door het bedrag uit die sheet, en het verschil was nergens te plaatsen. Blok 14
+  schrijft beide kanten per onderdeel uit. Alleen lezen (`v244`).
+  DE KANT DIE WEGVALT STAAT ERBIJ, en dat is de kern: het blok loopt over `allAccounts()` en niet over
+  `n26SavingsAccounts()`, want zonder de rekeningen die NIET meetellen zie je alleen wat er wel in zit en
+  is een verschil met je eigen getal niet te plaatsen. Dat is meetles (m) in een nieuwe jas, en de sabotage
+  die alleen de meegetelde kant afdrukt staat rood.
+  NIETS WORDT OPNIEUW UITGEDRUKT (`v104`): de selectie komt uit `isSavingsAcc()`, het saldo uit
+  `accBalance()`, de datum uit `accBalanceDatum()`, de som uit `spaarSaldo()`, de noemer uit
+  `noodfondsModel().crisisRows` en de toewijzingen uit `planMap()`. Wat het blok er zelf bij rekent is de
+  AANSLUITING en het venster van de afronding, en dat zijn waarnemingen over die uitkomsten.
+  DRIE KANDIDATEN VOOR EEN VERSCHIL, ELK MET ZIJN EIGEN GEVAL IN DE FIXTURE: een rekening die op een EIGEN
+  KEUZE afwijkt van de standaard op de laatste cijfers (beide kanten op, want `SET.savingsAcc` wint van
+  `SAV_DEFAULT_ENDS`), een HANDMATIG saldo dat voorgaat op dat van de bank (`accBalance()` leest
+  `SET.manualBal` eerst), en een saldo van een OUDERE dag. `SET.extraSavings` is de vierde term en staat
+  er ook op nul, want een nul is daar een meting (`v59`/`v73`/`v173`).
+  DE SOM WORDT EEN KEER AFGEROND EN NIET PER RIJ (`v271`), en daarom dragen de rijen CENTEN: zonder centen
+  is die keuze inert, en met de fixture-saldi geeft per rij afronden 4682 tegen 4681 over het geheel.
+  EEN MEEGETELDE REKENING ZONDER BEKEND SALDO ZET DE HELE TELLER OP NULL, en dan staat de bufferregel niet
+  op Grip. Dat staat als eigen geval in de spec, want het is de enige stand waarin de deling niet bestaat.
+  HET VENSTER VAN DE AFRONDING IS WAT DE VRAAG BEANTWOORDT: bij een noemer van N en een getoond cijfer met
+  een decimaal ligt de teller tussen twee grenzen, en het blok noemt ze. Valt je eigen getal daarbuiten, dan
+  is dat niet de teller die de app gebruikt, en zeggen de rijen welke van de vier kandidaten het is.
+  DE RIJ OP GRIP ZEGT "essentiele lasten" EN HET GETAL IS `essCrisis`, dus al verlaagd met de crisis-
+  percentages; de sheet noemt datzelfde getal "minimaal nodig in crisis". Alleen gemeld in het blok en niet
+  gerepareerd: het is een label dat meer belooft dan het getal draagt.
+  DE AANSLUITING OP DE NOEMER KAN VANDAAG NIET AFWIJKEN, en dat staat er in plaats van dat het als
+  bevestiging leest: `essCrisis` telt precies de bedragen op die ook een rij krijgen. Hij staat er om een rij
+  te vangen die uit de LIJST valt terwijl zijn bedrag in de som blijft, en dat is dezelfde keuze als bij de
+  bakken van `v301`.
+- **OPEN PUNT, ALLEEN GEMETEN: DE TELLER IS EEN REKENINGSALDO EN DAAR STAAT OOK HET GELD VAN JE DOELEN OP**
+  (`v302`): staan alle spaardoelen op EEN spaarrekening, dan telt het geld voor die doelen als buffer mee.
+  De vorm van de reparatie is vastgelegd en niet gebouwd: de teller wordt het bedrag dat op Plan aan het
+  noodfonds is TOEGEWEZEN (`SET.nfToegewezen`, via `planMap()`), en het rekeningsaldo wordt de CONTROLE.
+  Staat er minder op de spaarrekening dan de som van wat aan de bestemmingen is toegewezen, dan zegt de app
+  dat, op Plan en op Grip.
+  SECTIE 4 VAN BLOK 14 IS DIE METING AL, en leest niets: de toewijzing per bestemming uit `planMap()`, hun
+  som, en het verschil met de teller van sectie 1. AFLOS-ITEMS HOREN ER NIET BIJ, want hun voortgang is
+  afgeloste schuld en geen geld op een rekening. DE RESERVERINGENREKENING HANGT UITDRUKKELIJK NIET AAN
+  `isSavingsAcc()` (`v128`), maar kan er wel aan voldoen op de laatste cijfers, en dan telt dat geld ook als
+  buffer; blok 14 wijst hem daarom bij naam aan.
+  DE FIXTURE DRAAGT DE KANT DIE KNELT: er is MEER toegewezen dan er op de rekening staat, want dat is het
+  geval waarvoor de controle bestaat.
 - **DE DRIE BAKKEN ZEGGEN WAAROP EEN REPARATIE KAN STAAN, EN ZE TELLEN OP TOT HET PLAFOND** (`v301`):
   het plafond van `v300` zegt hoeveel er ten hoogste dubbel telt, de bakken bij hoeveel daarvan de app een
   HARDE identiteit heeft. Drie: beide kanten een betaaldatum met hetzelfde moment, beide kanten het veld met
@@ -255,9 +301,13 @@ genoemde versietag.)*
   NAAM hoeft uit te sluiten. Die uitsluiting is sinds `v265` een hardcode met een tripdraad eromheen, en de
   tripdraad bestaat juist om te vallen zodra dit is opgelost. GEMETEN op het toestel ziet `recurringCats()`
   daar wel Bankkosten, Belasting & boetes, Online shopping, Sport & gezondheid, Vervoer & auto en
-  Verzekeringen, en huur en abonnementen niet; blok 7 zegt erbij dat de huur voor een groot deel niet eens
-  op de huur-categorie landt (potje 750, besteed 66), en dat is een categorievraag die vooraf beslist moet
-  worden, want een detectie die op de verkeerde categorie meet lost niets op.
+  Verzekeringen, en huur en abonnementen niet.
+  DE CATEGORIEVRAAG DIE HIER STOND IS BIJ `v302` WEERLEGD: ik schreef hier dat de huur voor een groot deel
+  niet eens op de huur-categorie landt, met "potje 750, besteed 66" als grond. Die 66 is de regel van blok 7
+  en die leest `catSpendMap(thisYM())`, dus de LOPENDE en nog niet afgeronde maand; `noodfondsModel()` leest
+  over dezelfde categorie de MEDIAAN van de laatste 12 AFGERONDE maanden en vindt daar 750. Zelfde poort,
+  zelfde scope, andere MAAND. De huur landt dus wel op de huur-categorie, en deze ronde gaat alleen nog over
+  `recurringCats()`.
 - **OPEN PUNT, NIET GEBOUWD: EEN SCHRIJVER MET MINDER VELDEN WIST STIL WAT ZIJN BUUR MAT** (`v297`):
   `psd2DiagZet()` doet `D[accId]=Object.assign({op:vandaagYMD()}, rec)`, dus hij VERVANGT de hele entry.
   De twee sync-routes schrijven niet hetzelfde: `psd2Refresh()` draagt sinds `v296` ook `pendN`, `pendMap`,
@@ -2562,11 +2612,19 @@ genoemde versietag.)*
   DE HARDCODE DIE `v265` LIET STAAN is in dezelfde ronde weggehaald: die sectie noemde `'huur'`
   drie keer als string, en `weekreeks-drilldown.spec.js` viel daarop voordat hij werd opgenomen.
   De sleutel komt nu uit `WEEK_SCOPE_UIT[0]`.
-- **OPEN PUNT: de huur landt niet in de huur-categorie** (`v265`): GEMETEN op het toestel staat het
-  huurpotje op €750 met €66 besteed. Een potje van €750 waar €66 op staat zegt iets over een
-  bedoeling en niet over een meting. Blok 7 van `DIAG_BLOKKEN` leest uit waar de grootste
-  terugkerende posten wel landen en welke boekingen wel op huur staan. Niet gerepareerd: waar een
-  boeking hoort is een categorievraag en geen weekvraag.
+- **VERVALLEN BIJ `v302`: "de huur landt niet in de huur-categorie"** (`v265`, weerlegd bij `v302`): die
+  regel stond hier op EEN getal uit blok 7, "potje 750, besteed 66", en dat getal is de LOPENDE maand.
+  De regel van blok 7 leest `catSpendMap(thisYM())`; `noodfondsModel()` leest over dezelfde categorie de
+  MEDIAAN van de laatste 12 AFGERONDE maanden (`v107`) en vindt daar 750, en dat is wat op het toestel in
+  "minimaal nodig in crisis" staat. ZELFDE FUNCTIE, ZELFDE POORT, ZELFDE SCOPE, ANDERE MAAND: beide
+  lezingen zijn waar en alleen de tweede gaat over een afgeronde maand. Een halve maand is geen maand
+  (`v194`), en een categorie-conclusie uit een halve maand trekken is precies het verkeerde etiket dat dit
+  project elders verbiedt, nu in mijn eigen regel. Wat september op 66 zet is een eigen vraag (de huur van
+  die maand nog niet geboekt, of een netto-correctie in die categorie), en blok 7 print de laatste vijf
+  boekingen op huur, dus dat is uit de uitvoer te lezen.
+  WAT BLIJFT is de regel eronder: `recurringCats()` ziet huur niet als terugkerend, en daarom sluit
+  `WEEK_SCOPE_UIT` hem bij naam uit. Dat is een weekvraag en geen buffervraag, want de buffernorm leest
+  `recurringCats()` niet.
 - **OPEN PUNT (bevestigd): `recurringCats()` ziet huur en abonnementen niet** (`v254`, bevestigd bij
   `v265`): dit stond als open punt op een fixture en is nu op de eigen gegevens van de gebruiker
   gezien. `recurringCats()` bevat daar wel Bankkosten, Belasting & boetes, Online shopping, Sport &
@@ -3248,6 +3306,18 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   DE VORM IS BIJ `v295` GEREPAREERD, niet alleen het geval: drie bronzoekende tests sneden tot
   `const DIAG_BLOKKEN=[` en toetsten daarmee elk blok dat er later tussen kwam. `sectieVan()` in
   `tests/bron-sectie.js` bakent precies een functie af; zie de staande regel daarover.
+  EN DIE REPARATIE BEREIKTE TWEE SPECS NIET, gevonden bij `v302` doordat blok 14 die snede opnieuw
+  verbreedde: `valutadatum-en-tijdtreffer.spec.js` en `betaaldatum-veld.spec.js` sneden nog tot het
+  register. GEMETEN WAT ZE VERBORGEN, en dat is meer dan een te ruime snede: beide beweren dat elke treffer
+  van hun veld binnen een genoemde lijst functies ligt, en bij beide klopte die lijst niet. Van de 16
+  `valutaDatum`-treffers liggen er DRIE in `diagVoorautorisatie()`, dat niet in de lijst stond; van de 56
+  `betaalDatum`/`betaalTijd`-treffers liggen er ZEVEN in `diagPendBots()`, dat er ook niet in stond. De
+  brede snede dekte ze toe, dus de tests stonden groen op een onware bewering. Beide lijsten noemen nu elke
+  lezer bij naam via `sectieVan()`, en een sabotage die een vijfde lezer toevoegt zet ze rood.
+  TWEE SNEDES DROEGEN NIETS, en die zijn eruit: `betaalMoment()` staat op nul (die geeft `{datum,tijd}`
+  terug en leest de velden niet) en de comment-snede boven de afleiding ook. Die comment-snede weghalen
+  maakt de test STRENGER, en dat is de bedoeling: een comment die het veld noemt hoort te vallen in plaats
+  van te worden toegestaan (`v276`/`v277`).
   (u) DE FIXTURE SCHREEF EEN VELD DAT DE APP BIJ DE BOOT HERSCHRIJFT (`v291`). De pending-vlag moest in de
   fixture, en ik zette er ook het `_p`-achtervoegsel op de id bij, want zo komt hij binnen. Maar
   `categorize()` doet `t.id=txId(t)` en de boot loopt over alle `TX`, dus dat achtervoegsel is weg voordat
@@ -3354,13 +3424,35 @@ WAT ER NIET IS GEREPAREERD, en dat is bewust: de app zegt nog steeds "1 dag" op 
 klopt is de dagen-conventie van `v257` en die staat nog als open punt; deze ronde raakt geen enkele
 regel app-code.
 
+**Bekend rood op EEN DAG per maand, gemeten bij `v302`: zes potjes-tests vallen op de LAATSTE dag van de
+maand.** `potjesregel-diagnose.spec.js` (2), `potjes-reservering.spec.js` (2), `potje-overschreden.spec.js`
+en `potjesregel-aansluiting.spec.js`. DE OORZAAK IS PER CONSTRUCTIE EN GEEN FLAKE: `daysElapsed()` geeft op
+de laatste dag `elapsed === dim`, dus `daysLeft` is NUL, en `potjeRest()` geeft voor een overschreden potje
+`Math.round(bud/dim * 0)` en dus nul. Elke reservering is daar nul, en dan is het gat exact gelijk aan de
+zichtbare overschrijding. GEMETEN: `expect(r.gat).toBeGreaterThan(r.overs)` viel op `150` tegen `150`, en
+alle zes staan op `HEAD` net zo rood (7 failed, 57 passed in een eigen run), dus ze zijn niet van `v302`.
+DIT IS DE FAMILIE VAN `v299`, OP EEN TWEEDE AS: die ronde pinde de tests die het dagWOORD eisten en viel op
+de op-een-na-laatste dag; deze eisen dat er nog RESERVERING is en vallen op de laatste. De reparatie is
+dezelfde (`tests/vaste-dag.js`, de dag geteld vanaf het einde van de maand), en de dagen-conventie van
+`v257` blijft er los van: die vraag gaat over de app en deze over de fixture.
+
+**Onstabiel, oorzaak gemeten, eigen ronde:** `diag-entry-merge.spec.js` "blok 8 noemt welke groep uit een
+eerdere sync komt" valt ongeveer een op de vier keer (GEMETEN 3 van 4 groen in vier runs achter elkaar, en
+ook rood op `HEAD`). "Flake" is geen oorzaak, dus hier staat wat de uitvoer zegt: bij een rode run meldt de
+rij `FOUT: Failed to fetch` op de transactie-aanroep van de tweede sync. Die route schrijft dan de
+transactie-velden niet, `_op` gaat dus niet vooruit, en de pending-groep leest daardoor `vers` in plaats van
+`uit een EERDERE sync`. Het is de STUB van de spec die soms niet levert en niet `psd2DiagZet()`: het stempel
+is monotoon geklemd en daarmee deterministisch zodra de tweede schrijver werkelijk schrijft. Wie dit oppakt
+maakt de stub betrouwbaar of meet in de spec eerst dat de tweede aanroep gelukt is, zoals de invoermeting van
+`v299`/`v300`.
+
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
 `v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v301` → `minder-v302`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v302` → `minder-v303`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -3369,7 +3461,7 @@ dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `m
 en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfde geval, dus de
 bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte alleen `tests/` en dit
 bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`; `v301` raakt wel app-code
-en bumpt dus gewoon door naar `minder-v301`. Dat gat is geen fout maar de regel
+en bumpt dus gewoon door naar `minder-v301`, en `v302` net zo naar `minder-v302`. Dat gat is geen fout maar de regel
 zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

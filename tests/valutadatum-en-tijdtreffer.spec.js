@@ -30,6 +30,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { sectieVan } = require('./bron-sectie');
 
 const now = new Date();
 const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -236,20 +237,27 @@ test.describe('2 - de valutadatum wordt opgevangen en verder niets', () => {
      deze lijst verbreed. Dat is precies het geval waarvoor verbreden mag: een echte schrijver. Bij v276 viel
      dezelfde vorm op een COMMENT en toen is de lijst juist NIET verbreed, want dan zou een echte lezer erdoor
      glippen. Hoeveel schrijvers er zijn staat als eigen eis in valutadatum-verrijking.spec.js. */
-  test('elke treffer in de bron zit in mapPsd2Tx, commitTx of blok 10', async () => {
+  /* v302: DE SNEDE LIEP TOT HET REGISTER EN NIET TOT HET EINDE VAN HET BLOK, en daarmee vielen blok 11,
+     12 en 13 er ook in. Dat is meetles (t), en `v295` heeft die vorm in drie andere specs al gerepareerd;
+     deze bleef staan. GEMETEN wat hij verborg: van de zestien treffers liggen er elf BUITEN `diagDubbel`,
+     namelijk zeven in `commitTx()` (die stonden in de tweede snede) en DRIE in `diagVoorautorisatie()`.
+     Die derde lezer stond niet in de titel en niet in de lijst: blok 12 leest de valutadatum als
+     kandidaat-scheider bij een reservering (v293), dus hij hoort er wel te zijn, alleen ongenoemd.
+     Een test die drie plekken noemt terwijl er vier zijn is groen op een onware bewering.
+     ELKE SNEDE IS NU `sectieVan()`, dus de buurfunctie doet niet meer mee: een blok erbij verbreedt geen
+     enkele snede meer, en een lezer in een vijfde functie laat deze test vallen. */
+  test('elke treffer in de bron zit in mapPsd2Tx, commitTx, blok 10 of blok 12', async () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
     const totaal = (src.match(/valutaDatum/g) || []).length;
     expect(totaal).toBeGreaterThan(3);
-    const stuk = (van, tot) => { const i = src.indexOf(van); const j = src.indexOf(tot, i);
-      expect(i, van + ' niet gevonden').toBeGreaterThan(-1); expect(j).toBeGreaterThan(i);
-      return src.slice(i, j); };
     const delen = [
-      stuk('function mapPsd2Tx(raw, accId, pending){', '\nfunction pickBalance('),
-      stuk('/* ===== DE VERRIJKING VAN EEN BESTAANDE BOEKING (v277) =====', '\nfunction findDuplicateIds('),
-      stuk('function diagDubbel(){', '\nconst DIAG_BLOKKEN=['),
-    ];
+      'function mapPsd2Tx(raw, accId, pending){',
+      'function commitTx(',
+      'function diagDubbel(){',
+      'function diagVoorautorisatie(){',
+    ].map((van) => sectieVan(src, van));
     const binnen = delen.reduce((a, d) => a + (d.match(/valutaDatum/g) || []).length, 0);
-    expect(binnen).toBe(totaal);
+    expect(binnen, 'geen enkele andere functie leest het veld').toBe(totaal);
   });
 });
 

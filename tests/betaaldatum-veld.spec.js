@@ -27,6 +27,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { sectieVan } = require('./bron-sectie');
 
 const now = new Date();
 const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -203,24 +204,31 @@ test.describe('2 - het veld is zelfherstellend en blijft niet staan', () => {
 });
 
 test.describe('3 - geen enkele app-functie leest het veld', () => {
-  test('elke treffer in de bron zit in betaalMoment, categorize of een diagnoseblok', async () => {
+  /* v302: DEZELFDE GEBROKEN SNEDE ALS IN valutadatum-en-tijdtreffer.spec.js, en met hetzelfde gevolg.
+     `stuk('function diagDubbel(){', '\nconst DIAG_BLOKKEN=[')` liep tot het REGISTER en niet tot het einde
+     van dat blok, dus blok 11 tot en met 14 vielen er ook in. GEMETEN wat hij verborg: `diagPendBots()`
+     draagt ZEVEN treffers en stond niet in de lijst. Dat is meetles (t), en `v295` heeft die vorm in drie
+     andere specs al gerepareerd; deze bleef staan, en de reparatie is dezelfde: eerst afbakenen, dan tellen.
+     GEMETEN WAT ER NIETS DRAAGT: `betaalMoment()` staat op nul, want die functie geeft `{datum,tijd}` terug
+     en leest de velden niet, en de comment-snede staat ook op nul. Die comment-snede is daarmee vervallen:
+     hij beschermde niets, en een comment die het veld wel noemt hoort te VALLEN in plaats van te worden
+     toegestaan (v276/v277). `betaalMoment()` blijft in de lijst, want dat is de plek waar de afleiding zelf
+     staat. */
+  test('elke treffer in de bron zit in betaalMoment, categorize of blok 9, 10 of 13', async () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
     const totaal = (src.match(/betaal(Datum|Tijd)/g) || []).length;
     expect(totaal).toBeGreaterThan(5);
     /* De som over de toegestane functies moet het totaal zijn. Leest een app-functie het veld, dan
        telt die treffer nergens mee en valt deze test. Dat is de hele afbakening van v273. */
-    const stuk = (naam, eind) => { const i = src.indexOf(naam); const j = src.indexOf(eind, i);
-      expect(i, naam + ' niet gevonden').toBeGreaterThan(-1); expect(j).toBeGreaterThan(i); return src.slice(i, j); };
     const delen = [
-      stuk('function betaalMoment(t, metReden){', '\nfunction categorize(t){'),
-      stuk('function categorize(t){', '\n/* ---------- CSV parser'),
-      stuk('function diagPiekdag(){', '\nfunction diagDubbel(){'),
-      stuk('function diagDubbel(){', '\nconst DIAG_BLOKKEN=['),
-      // de comment boven de afleiding noemt het veld ook
-      stuk('/* ===== DE BETAALDATUM (v273) =====', 'const KAART_RE'),
-    ];
+      'function betaalMoment(t, metReden){',
+      'function categorize(t){',
+      'function diagPiekdag(){',
+      'function diagDubbel(){',
+      'function diagPendBots(){',
+    ].map((van) => sectieVan(src, van));
     const binnen = delen.reduce((a, d) => a + (d.match(/betaal(Datum|Tijd)/g) || []).length, 0);
-    expect(binnen).toBe(totaal);
+    expect(binnen, 'geen enkele andere functie leest het veld').toBe(totaal);
   });
 
   test('de cijfers van de app zijn identiek met en zonder het veld', async ({ page }) => {
