@@ -500,18 +500,37 @@ test.describe('6 · herstel: een geslaagde sync haalt de rekening eruit', () => 
     }
   });
 
-  test('de laatste sync is de waarheid: een entry wordt overschreven en niet aangevuld', async ({ page }) => {
+  /* HERSCHREVEN BIJ v298, EN DE OUDE TITEL WAS HET DEFECT EN NIET DE EIGENSCHAP. Hij heette "een entry
+     wordt overschreven en niet aangevuld", en dat is precies wat v298 heeft omgedraaid: `psd2DiagZet()`
+     mergt nu per veld, want anders wist een route met minder velden stil wat een andere route mat. De
+     assertie bleef groen (deze route schrijft alle saldo-velden, dus de waarden komen hetzelfde uit),
+     maar de titel zou een volgende ronde de verkeerde kant op sturen. WAT HIJ MOET VASTHOUDEN is de
+     eigenschap: wat de route WEL meet wordt bijgewerkt, een gewiste fout blijft gewist, en wat hij NIET
+     meet blijft staan met zijn eigen stempel. Die laatste helft is nieuw en is de reden dat hij sterker
+     is dan de test die hij vervangt. */
+  test('wat een route meet wordt bijgewerkt, en wat hij niet meet blijft staan', async ({ page }) => {
     await boot(page, deviceSeed());
     const r = await page.evaluate((a) => {
       psd2DiagZet(a, { txN: 12, txPag: 1, txFout: '', balUit: 100, balGeland: true, balFout: '',
         balLijst: 1, balTypes: 'ITBD', balGekozen: 'ITBD', balRuw: '100.00', balReden: '' });
       const d = SET.psd2Diag[a];
-      return { balGeland: d.balGeland, balFout: d.balFout, txFout: d.txFout, erin: psd2Falend().some((x) => x.acc === a) };
+      const gemeten = { balGeland: d.balGeland, balFout: d.balFout, txFout: d.txFout,
+        erin: psd2Falend().some((x) => x.acc === a) };
+      /* Een tweede route die alleen de pending-aanroep vastlegt: de saldo-velden moeten blijven staan,
+         en ze moeten zeggen dat ze van een EERDERE schrijver zijn. */
+      psd2DiagZet(a, { pendN: 0, pendMap: 0, pendFout: '', pendGeland: true });
+      const na = SET.psd2Diag[a];
+      return Object.assign(gemeten, { blijft: na.balTypes, txBlijft: na.txN,
+        saldoVers: psd2DiagVers(na, 'balGeland'), pendVers: psd2DiagVers(na, 'pendN') });
     }, FALEND[0]);
     expect(r.balGeland).toBe(true);
     expect(r.balFout).toBe('');          // de oude EXPIRED_SESSION is weg, niet bewaard
     expect(r.txFout).toBe('');
     expect(r.erin).toBe(false);
+    expect(r.blijft, 'de tweede route meet het saldo niet en wist het dus niet').toBe('ITBD');
+    expect(r.txBlijft).toBe(12);
+    expect(r.saldoVers, 'maar het is niet meer van de laatste sync, en dat staat erbij').toBe(false);
+    expect(r.pendVers).toBe(true);
   });
 
   test('en de melding zwijgt weer zodra alles lukt', async ({ page }) => {

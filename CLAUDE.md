@@ -95,6 +95,62 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN ENTRY WORDT GEMERGD PER VELD, EN ELK VELD DRAAGT ZIJN EIGEN STEMPEL** (`v298`): `psd2DiagZet()`
+  deed `D[accId]=Object.assign({op}, rec)` en VERVING dus de hele entry. De twee sync-routes schrijven niet
+  hetzelfde: `psd2Refresh()` draagt sinds `v296` ook de pending-aanroep en `psd2IngestSession()` niet. Een
+  herkoppeling wiste daarmee de pending-meting die een vernieuwing net had vastgelegd, zonder dat er iets
+  faalde. GEMETEN op het toestel op 29 sep 2026: blok 13 zei bij vijf rekeningen "gaf niet vastgelegd"
+  terwijl `syncs` op 3 stond, en een gewone vernieuwing erna zette alle zes de rijen op `gaf 0`. Een route
+  schrijft nu alleen zijn EIGEN velden.
+  MERGEN MAAKT EEN NIEUWE VAL, EN DIE WORDT IN DEZELFDE RONDE GEDICHT: een veld dat blijft staan is niet
+  meer per definitie van de LAATSTE sync. Zonder een stempel per veld brengt de reparatie precies het
+  etiket terug dat hij wegneemt, een stap verderop: niet een ontbrekende meting die als nul leest (`v296`),
+  maar een oude meting die als de laatste leest. `_op` is het moment van de laatste schrijver, `_veldOp` het
+  moment per veld, en `psd2DiagVers()` geeft DRIE uitkomsten: van deze sync, van een eerdere, of NIET VAST
+  TE STELLEN (`v59`/`v73`/`v173`). Dat derde is geen theorie maar de overgangsstand: elke entry die vandaag
+  op een toestel staat draagt geen stempel.
+  HET STEMPEL IS EEN MOMENT EN GEEN DAG, want op het toestel liepen er vier syncs op EEN dag en `op` is een
+  kalenderdag (`v199`). EN HIJ IS MONOTOON GEKLEMD, en dat is een reparatie die de spec afdwong en geen
+  voorzorg: twee schrijvers in dezelfde milliseconde kregen hetzelfde stempel, en dan las een veld van de
+  vorige schrijver als vers. `Math.max(Date.now(), oud._op+1)` maakt de twee altijd scheidbaar, ook als de
+  klok ze niet scheidt.
+  DE GROEPEN STAAN OP EEN PLEK (`PSD2DIAG_GROEPEN`), MET DRIE LEZERS: blok 8, blok 13 en
+  `psd2DiagHerkomst()`. Ze volgen de DRIE AANROEPEN die een sync per rekening doet (`v289`), want dat is de
+  eenheid waarin een route schrijft of juist niet schrijft. ONBEKEND WINT VAN OUDER: draagt een veld van de
+  groep geen stempel, dan is er over die groep niets te zeggen, en een groep half beoordelen belooft meer
+  dan de meting draagt.
+  `psd2Falend()` LEEST DE HERKOMST, en dat is geen bijvangst maar het repareren van wat de merge breekt:
+  zijn bewering is "haalde bij de LAATSTE sync geen saldo op", en een gemergd `balGeland` kan van een
+  eerdere zijn. NIET VAST TE STELLEN TELT DAAR ALS VERS, want dat is wat het veld vóór `v298` betekende en
+  een mislukking wegfilteren op twijfel is de gevaarlijke kant (`v168`). Dat een saldo stilstaat blijft
+  `saldoAchter()` zeggen, op de DATUM en niet op de aanroep (`v280`), dus er valt niets tussen wal en schip.
+  VANUIT DE HUIDIGE STAND KAN DIE REGEL NIET VUREN (beide routes schrijven `balGeland`), en de spec maakt
+  het pad met een route die alleen de pending-velden schrijft. Dat is de keuze van `v284` over een guard die
+  niet bereikbaar is; wat de test vasthoudt is de EIGENSCHAP.
+  DE TEST VAN `v280` PINDE DE OUDE BETEKENIS: hij heette "een entry wordt overschreven en niet aangevuld" en
+  bleef groen, want die route schrijft alle saldo-velden. De titel zou een volgende ronde de verkeerde kant
+  op sturen, dus hij is herschreven naar wat hij moet vasthouden en tegelijk STERKER gemaakt: wat de route
+  meet wordt bijgewerkt, en wat hij niet meet blijft staan met zijn eigen stempel.
+- **DE VOLGENDE TWEE STAPPEN VAN DE DATA-REPARATIE, VASTGELEGD EN NIET GEBOUWD** (`v298`): ze staan hier
+  omdat de volgorde ertoe doet en een ronde die er halverwege in valt anders bij de verkeerde begint.
+  (1) DE KRUISBRON-PAREN OP ABN: rekening `521200806` draagt mt940 naast psd2 en blok 10 telt daar 96 paren
+  met een verschillende bron. DE SCHEIDER IS DE BETAALDATUM EN DE DESC-TIJD, en die bestaan daar allebei:
+  GEMETEN dragen 50 van de 96 paren aan BEIDE kanten het veld, en 42 daarvan hebben een gelijk moment, en
+  dat is de harde identiteit die `t.id` mist (die hasht over de desc, en die verschilt per bron). De
+  Splif-regels (dezelfde pas, drie paren op 1, 3 en 5 dagen afstand) en de Safrana-regel (een paar op 4
+  dagen dat op het bedrag met een ANDERE winkel matcht) zijn de fixtures, want dat eerste geval onderscheidt
+  "dichtstbijzijnde dag" van "eerste treffer" en het tweede laat zien dat een bedrag binnen een venster geen
+  identiteit is (`v283`/`v290`).
+  EERST METEN HOEVEEL ER NA `v284` EN `v288` NOG OVER ZIJN. Die twee rondes hebben de csv-kant en negen
+  bevestigde paren al uit de sommen gehaald, en een reparatie bouwen op een telling van vóór die rondes is
+  precies de meetles bovenaan: reproduceer de bevinding voordat je hem bouwt.
+  (2) DE HUUR DIE `recurringCats()` NIET ALS TERUGKEREND ZIET, zodat `WEEK_SCOPE_UIT` de huur niet meer BIJ
+  NAAM hoeft uit te sluiten. Die uitsluiting is sinds `v265` een hardcode met een tripdraad eromheen, en de
+  tripdraad bestaat juist om te vallen zodra dit is opgelost. GEMETEN op het toestel ziet `recurringCats()`
+  daar wel Bankkosten, Belasting & boetes, Online shopping, Sport & gezondheid, Vervoer & auto en
+  Verzekeringen, en huur en abonnementen niet; blok 7 zegt erbij dat de huur voor een groot deel niet eens
+  op de huur-categorie landt (potje 750, besteed 66), en dat is een categorievraag die vooraf beslist moet
+  worden, want een detectie die op de verkeerde categorie meet lost niets op.
 - **OPEN PUNT, NIET GEBOUWD: EEN SCHRIJVER MET MINDER VELDEN WIST STIL WAT ZIJN BUUR MAT** (`v297`):
   `psd2DiagZet()` doet `D[accId]=Object.assign({op:vandaagYMD()}, rec)`, dus hij VERVANGT de hele entry.
   De twee sync-routes schrijven niet hetzelfde: `psd2Refresh()` draagt sinds `v296` ook `pendN`, `pendMap`,
@@ -148,6 +204,13 @@ genoemde versietag.)*
   nul van de pending-aanroep is de stand van EEN dag met vier syncs, niet het bewijs dat een bank het nooit
   levert; een bank zonder openstaande kaartbetaling en een bank die de PDNG-filter negeert zien er hier
   hetzelfde uit.
+  GEPARKEERD ALS LATENT RISICO (`v298`), met de voorwaarde waaronder het voluit vuurt: een bank die geen
+  pending levert EN een gebruiker wiens kaart via die bank loopt. Beide gelden hier niet meer tegelijk, want
+  de kaart is naar N26 verhuisd; ze gelden wel voor iemand met alleen een ABN-pas. Dichten vraagt eerst het
+  antwoord op de saldotype-vraag hierboven, want dat beslist of alleen het maandtotaal te laag staat of ook
+  het saldo te hoog, en dat is het verschil tussen een uitlezing en een correctie.
+  DE MEETPLEK LIGT ER AL: blok 13 sectie 4 rekent dit uit de opgeslagen gegevens, per weekend gegroepeerd op
+  zijn zaterdag, dus de meting is over een jaar opnieuw te doen zonder code te schrijven.
 - **EEN TELLER DIE ALLEEN BIJ EEN TREFFER SCHRIJFT KAN GEEN NUL MELDEN** (`v296`): `SET.pendBots[rekening]`
   ontstond bij `v295` pas BIJ een botsing, dus een lege map betekende twee dingen tegelijk. GEMETEN op het
   toestel: blok 13 zei "GEEN ENKELE METING, er is niet gesynchroniseerd sinds deze versie draait" terwijl
@@ -395,6 +458,16 @@ genoemde versietag.)*
   rekeningen nul regels terug, dus `applyPending()` zet niets in `TX` en `commitTx()` vindt nooit een
   pending-regel om overheen te slaan. `bots` en `kwijt` staan daarmee niet alleen op nul, die nul is ook
   verklaard. Het gebrek blijft echt voor de dag dat een bank wel pending gaat leveren.
+  GEPARKEERD ALS LATENT RISICO (`v297`/`v298`), en de voorwaarde waaronder hij vuurt staat erbij: er moet een
+  bank zijn die PENDING-REGELS LEVERT. Zolang de pending-aanroep niets teruggeeft zet `applyPending()` niets
+  in `TX`, en dan kan `commitTx()` per constructie geen pending-regel tegenkomen om overheen te slaan. Op dit
+  toestel is dat vandaag de stand bij beide banken, dus er valt niets te dichten en de keuze tussen (a), (b)
+  en (c) hoeft niet met haast gemaakt te worden.
+  BLOK 13 SECTIE 1 TOONT HET DAN PER REGEL, en dat is waarom parkeren mag in plaats van dichten: zodra er
+  een pending-regel in `TX` staat zegt die sectie per regel of hij zijn `_p` nog draagt (dan botst hij niet)
+  of hem kwijt is (dan is hij SCHERP en slaat de eerstvolgende sync zijn geboekte versie over). Sectie 3
+  telt daarnaast bij elke sync `bots` en `kwijt` per rekening. Wie dit oppakt heeft de meting dus al staan en
+  begint niet bij nul.
   DE METING BESTAAT SINDS `v295` en het gebrek staat er nog: blok 13 telt bij elke sync `bots` en `kwijt`
   per rekening. Tot die ronde was dit uit de opgeslagen data niet te zien, want er is geen import-tijdstip
   per boeking (`v291`) en `applyPending()` heeft de pending-kant al gewist tegen de tijd dat je kijkt.
@@ -3182,14 +3255,14 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v296` → `minder-v297`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v298` → `minder-v299`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
 `tests/` en documentatie, dus de cache ging van `minder-v255` rechtstreeks naar `minder-v257`, en om
 dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `minder-v295`: `v292`
 en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfde geval, dus de
-eerstvolgende bump gaat van `minder-v296` naar `minder-v298`. Dat gat is geen fout maar de regel
+bump van `v298` ging daarom van `minder-v296` naar `minder-v298`. Dat gat is geen fout maar de regel
 zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

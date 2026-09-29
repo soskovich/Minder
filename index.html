@@ -14351,6 +14351,20 @@ function diagRekeningen(){
       if(!dg.balGeland && !dg.balFout) L.push('      reden: '+(dg.balReden||'onbekend')
         +(dg.balGekozen?('   gekozen entry: '+dg.balGekozen):'')+(dg.balRuw?('   ruw bedrag: "'+dg.balRuw+'"'):''));
       if(!dg.balGeland) L.push('      GEVOLG: het saldo hierboven is van '+(meta.date||'onbekend')+' en niet van de laatste sync');
+      /* v298: WELKE VAN DEZE CIJFERS KOMEN VAN DE LAATSTE SYNC. Sinds de entry per veld wordt gemergd
+         blijft een veld staan dat de laatste route niet meet, en dan zegt `laatste sync` hierboven iets
+         over de SCHRIJVER en niet over elk getal eronder. Deze regel staat er alleen als er iets te
+         melden is: is alles van dezelfde sync, dan voegt hij niets toe. */
+      const hkOud=[], hkOnb=[];
+      for(const g of ['transactie','saldo','pending']){
+        const h=psd2DiagHerkomst(dg,g);
+        if(h.stand==='ouder') hkOud.push(g+(h.op?(' van '+h.op):''));
+        else if(h.stand==='onbekend') hkOnb.push(g);
+      }
+      if(hkOud.length) L.push('      UIT EEN EERDERE SYNC: '+hkOud.join(', ')
+        +'   <-- de route van de laatste sync schrijft die velden niet');
+      if(hkOnb.length) L.push('      van welke sync: niet vast te stellen voor '+hkOnb.join(', ')
+        +'   (entry van voor v298, die draagt geen stempel per veld)');
     } else if(pm){
       L.push('    laatste sync:       niets vastgelegd - er is niet meer gesynchroniseerd sinds deze uitlezing bestaat');
     }
@@ -16503,12 +16517,23 @@ function diagPendBots(){
     for(const a of gesynct.sort()){
       const r=P[a], d=DG[a]||{};
       const gaf = (d.pendN==null) ? 'niet vastgelegd' : String(d.pendN);
+      /* v298: VAN WELKE SYNC KOMEN DEZE TWEE KOLOMMEN. De entry wordt per veld gemergd, dus een route die
+         de pending-aanroep niet doet laat ze staan in plaats van ze te wissen. Dat is de reparatie, en
+         zonder dit merkteken zou hij een nieuw verkeerd etiket maken: een getal van gisteren onder een kop
+         die "de laatste sync" zegt. `dedup` en `syncs` staan hier niet in, want die komen uit een andere
+         teller en die telt cumulatief (v295). */
+      const hkP=psd2DiagHerkomst(d,'pending');
+      const merk = hkP.stand==='ouder' ? ('   <-- uit een EERDERE sync'+(hkP.op?(' van '+hkP.op):'')
+          +', de laatste route meet de pending-aanroep niet')
+        : hkP.stand==='onbekend' ? '   <-- van welke sync is niet vast te stellen (entry van voor v298)'
+        : '';
       L.push('   '+String(a).padEnd(20)
         +' gaf '+gaf.padStart(5)
         +'   gelezen '+(d.pendMap==null?'-':String(d.pendMap)).padStart(5)
         +'   dedup '+String(+r.dedup||0).padStart(4)+' ('+euro0(+r.dedupBedrag||0)+')'
         +'   syncs '+String(+r.syncs||0)
-        +(d.pendFout?('   FOUT: '+d.pendFout):''));
+        +(d.pendFout?('   FOUT: '+d.pendFout):'')
+        +merk);
     }
     L.push('   "niet vastgelegd" is de koppel-route (psd2IngestSession): daar is de pending-tak stil kapot');
     L.push('   sinds v270 en die staat als gemeten stand vast; repareren is een eigen ronde.');
@@ -17322,11 +17347,70 @@ function mapPsd2Tx(raw, accId, pending){
    rekening waarvan de balances-aanroep niets oplevert, en zonder deze uitlezing is niet te zien of dat
    een fout is, een lege lijst of een bedrag dat niet te lezen valt. Diezelfde uitlezing maakt een STILLE
    rekening zichtbaar: nul teruggegeven regels naast een rekening die wel boekingen heeft.
-   EEN ENTRY WORDT OVERSCHREVEN EN NIET OPGETELD: de vraag is wat de LAATSTE sync deed, niet wat er ooit
-   gebeurde. De teller van v277 telt wel cumulatief, want die vraagt iets anders. */
+   EEN ENTRY WORDT GEMERGD PER VELD EN NIET VERVANGEN (v298), en dat is een omkering van wat hier stond.
+   GEMETEN op het toestel op 29 sep 2026: de twee sync-routes schrijven niet dezelfde velden, want de
+   vernieuw-route draagt sinds v296 ook de pending-aanroep en de koppel-route niet. Een herkoppeling
+   VERVING daarmee de hele entry en wiste de pending-meting die een vernieuwing net had vastgelegd,
+   zonder dat er iets faalde: blok 13 zei bij vijf rekeningen "gaf niet vastgelegd" terwijl ze wel twee
+   keer waren gesynchroniseerd. Een route schrijft nu alleen zijn EIGEN velden en laat de rest staan.
+   WAT MERGEN KOST, en daarom staat het stempel erbij: een veld dat blijft staan is niet meer per
+   definitie van de LAATSTE sync. `op` blijft de dag van de laatste schrijver, `_op` het moment ervan, en
+   `_veldOp` draagt per veld het moment waarop DAT veld is geschreven. Een veld is van deze sync als die
+   twee gelijk zijn, en anders van een eerdere. Zonder dat onderscheid zou de merge precies het verkeerde
+   etiket terugbrengen dat hij wegneemt, een stap verderop: niet een ontbrekende meting die als nul leest,
+   maar een oude meting die als de laatste leest.
+   DE TELLER VAN v277 TELT WEL CUMULATIEF, want die vraagt iets anders. */
 function psd2DiagZet(accId, rec){
   const D=SET.psd2Diag=SET.psd2Diag||{};
-  D[accId]=Object.assign({op:vandaagYMD()}, rec);
+  const oud=(D[accId]&&typeof D[accId]==='object')?D[accId]:{};
+  /* HET STEMPEL LOOPT ALTIJD VOORUIT, en dat is geen voorzorg maar een reparatie die de spec afdwong:
+     twee schrijvers in DEZELFDE milliseconde kregen hetzelfde stempel, en dan leest een veld van de
+     vorige schrijver als vers. De klem maakt het stempel monotoon per rekening, dus twee schrijvers zijn
+     altijd te scheiden, ook als de klok ze niet scheidt. Weghalen brengt die botsing terug en zet
+     `diag-entry-merge.spec.js` rood. */
+  const nu=Math.max(Date.now(), (+oud._op||0)+1);
+  const st=(oud._veldOp&&typeof oud._veldOp==='object')?Object.assign({},oud._veldOp):{};
+  const ent=Object.assign({}, oud, rec||{});
+  for(const k in (rec||{})) if(Object.prototype.hasOwnProperty.call(rec,k)) st[k]=nu;
+  ent.op=vandaagYMD(); ent._op=nu; ent._veldOp=st;
+  D[accId]=ent;
+}
+/* ===== VAN WELKE SYNC KOMT DIT VELD (v298) =====
+   DRIE UITKOMSTEN EN GEEN TWEE: `true` is van de laatste schrijver, `false` van een eerdere, en `null`
+   is NIET VAST TE STELLEN (v59/v73/v173). Dat laatste is geen theorie: elke entry die op een toestel
+   staat van vóór deze versie draagt geen stempel, en die mag niet als "oud" lezen en ook niet als "vers".
+   HIJ LEEST HET STEMPEL EN NIET DE DAG. `op` is een kalenderdag, en op het toestel liepen er vier syncs
+   op één dag, dus een dag kan twee syncs niet scheiden - precies het geval waarvoor deze meting bestaat. */
+function psd2DiagVers(d, veld){
+  if(!d || typeof d!=='object') return null;
+  const st=d._veldOp, nu=+d._op||0;
+  if(!st || typeof st!=='object' || !nu) return null;
+  if(!Object.prototype.hasOwnProperty.call(st, veld)) return null;
+  return (+st[veld]||0)===nu;
+}
+/* DE GROEPEN STAAN OP EEN PLEK, MET DRIE LEZERS: blok 8, blok 13 en de herkomst-afleiding hieronder.
+   Ze volgen de drie AANROEPEN die een sync per rekening doet (v289), want dat is de eenheid waarin een
+   route schrijft of juist niet schrijft. Een vierde aanroep hoort hier een groep te krijgen, anders
+   zwijgt de herkomst over precies het veld dat nieuw is. */
+const PSD2DIAG_GROEPEN={
+  transactie:['txN','txPag','txFout'],
+  saldo:['balUit','balGeland','balFout','balLijst','balTypes','balGekozen','balRuw','balReden'],
+  pending:['pendN','pendMap','pendFout','pendGeland']
+};
+/* ONBEKEND WINT VAN OUDER: draagt één veld van de groep geen stempel, dan is er over die groep niets te
+   zeggen, en een groep half beoordelen is een etiket dat meer belooft dan de meting draagt. */
+function psd2DiagHerkomst(d, groep){
+  const velden=(PSD2DIAG_GROEPEN[groep]||[]).filter(k=>d && typeof d==='object'
+    && Object.prototype.hasOwnProperty.call(d,k));
+  if(!velden.length) return {stand:'leeg', op:''};
+  let oudste=0, vers=true;
+  for(const k of velden){
+    const v=psd2DiagVers(d,k);
+    if(v===null) return {stand:'onbekend', op:''};
+    if(!v){ vers=false; const t=+((d._veldOp||{})[k])||0; if(t && (!oudste || t<oudste)) oudste=t; }
+  }
+  if(vers) return {stand:'vers', op:''};
+  return {stand:'ouder', op: oudste? ymdVan(new Date(oudste)) : ''};
 }
 /* ===== WELKE GEKOPPELDE REKENINGEN HAALDEN BIJ DE LAATSTE SYNC GEEN SALDO OP (v280) =====
    EEN AFLEIDING, VIER LEZERS: bankStand() (de rij in Instellingen), de melding na een sync,
@@ -17348,6 +17432,14 @@ function psd2Falend(){
     const d=D[a];
     if(!d || typeof d!=='object' || !Object.prototype.hasOwnProperty.call(d,'balGeland')) continue;
     if(d.balGeland) continue;
+    /* v298: SINDS DE ENTRY WORDT GEMERGD KAN DIT VELD VAN EEN EERDERE SYNC ZIJN, en dan is de bewering
+       van deze functie ("haalde bij de LAATSTE sync geen saldo op") niet waar over de laatste sync maar
+       over een oudere. Zo'n mislukking verdwijnt hier niet uit beeld: dat het saldo stilstaat blijft
+       `saldoAchter()` zeggen, op de DATUM en niet op de aanroep (v280). NIET VAST TE STELLEN telt als
+       vers, want dat is wat het veld vóór v298 betekende, en een mislukking wegfilteren op twijfel is de
+       gevaarlijke kant (v168). Vanuit de huidige stand kan deze regel niet vuren, want beide sync-routes
+       schrijven `balGeland`; de spec maakt het pad met een route die alleen de pending-velden schrijft. */
+    if(psd2DiagVers(d,'balGeland')===false) continue;
     uit.push({acc:a, op:d.op||'', fout:String(d.balFout||d.txFout||d.balReden||'')});
   }
   return uit;
