@@ -128,19 +128,58 @@ genoemde versietag.)*
   bevestiging leest: `essCrisis` telt precies de bedragen op die ook een rij krijgen. Hij staat er om een rij
   te vangen die uit de LIJST valt terwijl zijn bedrag in de som blijft, en dat is dezelfde keuze als bij de
   bakken van `v301`.
-- **OPEN PUNT, ALLEEN GEMETEN: DE TELLER IS EEN REKENINGSALDO EN DAAR STAAT OOK HET GELD VAN JE DOELEN OP**
-  (`v302`): staan alle spaardoelen op EEN spaarrekening, dan telt het geld voor die doelen als buffer mee.
-  De vorm van de reparatie is vastgelegd en niet gebouwd: de teller wordt het bedrag dat op Plan aan het
-  noodfonds is TOEGEWEZEN (`SET.nfToegewezen`, via `planMap()`), en het rekeningsaldo wordt de CONTROLE.
-  Staat er minder op de spaarrekening dan de som van wat aan de bestemmingen is toegewezen, dan zegt de app
-  dat, op Plan en op Grip.
-  SECTIE 4 VAN BLOK 14 IS DIE METING AL, en leest niets: de toewijzing per bestemming uit `planMap()`, hun
-  som, en het verschil met de teller van sectie 1. AFLOS-ITEMS HOREN ER NIET BIJ, want hun voortgang is
-  afgeloste schuld en geen geld op een rekening. DE RESERVERINGENREKENING HANGT UITDRUKKELIJK NIET AAN
-  `isSavingsAcc()` (`v128`), maar kan er wel aan voldoen op de laatste cijfers, en dan telt dat geld ook als
-  buffer; blok 14 wijst hem daarom bij naam aan.
+- **DE BUFFERNORM-RONDE: ONTWERP VASTGELEGD, NIET GEBOUWD** (`v302`, aangescherpt bij `v303`): staan alle
+  spaardoelen op EEN spaarrekening, dan telt het geld voor die doelen vandaag als buffer mee, want de teller
+  van `bufferMaanden()` is dat rekeningsaldo. Vier besluiten, en ze komen van de gebruiker:
+  (1) DE TELLER WORDT WAT PLAN AAN HET NOODFONDS HEEFT TOEGEWEZEN, dezelfde bron als de noodfonds-regel op
+  Plan, en dus GEEN tweede afleiding uit het saldo. Plan en Grip tonen daarmee hetzelfde getal. Die bron
+  bestaat al: `planMap()[PLAN_NF].gespaard`, dat is `SET.nfToegewezen` geklemd op het doel.
+  (2) DE CONTROLE IS HET SALDO: is de som van wat aan de doelen is toegewezen HOGER dan het saldo van de
+  spaarrekening, dan zeggen Plan EN Grip dat, met de vraag van welk doel het verschil komt. Tot die keuze
+  telt de buffer NIET als vol.
+  (3) DE BUFFERNORM IS DE ONDERGRENS, niet het doel. Een eigen noodfonds dat hoger ligt blijft het doel op
+  Plan zolang het niet onder de norm zakt; dat mechanisme bestaat al als `nfDoelVast()` (`v101`).
+  (4) DE DREMPEL VOOR BELEGGEN IS EEN EIGEN KEUZE, los van de buffernorm.
+  VIER DINGEN DIE UIT DE BRON VOLGEN EN DIE DE RONDE MOET RESPECTEREN, nagelezen en niet gemeten:
+  `M.spaar` HEEFT DRIE LEZERS IN DEZE VRAAG, en ze moeten samen mee of samen blijven (`v104`):
+  `bufferMaanden()` (de deling), `meevallerNodig('buffer')` (`bufferKritiek * essCrisis - spaar`, de euro's
+  die de kritieke buffer nog vraagt) en de buffer-tak van de verdeelregel (`doel - spaar`). Verlegt alleen de
+  eerste zijn teller, dan komen het getal op Grip en "wat is er nodig" uit twee tellers.
+  DE KLEM VAN `planMap()` GAAT DAN MEE: `gespaard` is `Math.min(nfToegewezen, doel)`, dus de buffer in
+  maanden kan straks niet meer boven `doel / essCrisis` komen, ook niet als er meer op de rekening staat.
+  Of die klem hier juist is, is een keuze die vooraf hoort te worden gemaakt en niet een gevolg dat je
+  achteraf ontdekt.
+  `beleggenKlaar()` LEEST VANDAAG `kritiek` en niet een eigen grens (`v.key==='buffer' ? !r.kritiek : ...`),
+  dus besluit (4) vraagt een grens die nog niet bestaat. Zolang die er niet is hangt beleggen aan
+  `MAAND_DREMPEL.bufferKritiek`.
+  EN DE STATUS-TAK KLOPT NIET MEER ZODRA DE NORM DE ONDERGRENS IS: `st = kritiek ? ... : (bm<richt ? 'let
+  op' : 'ok')`, met `kritiek = bm < 3`. Met een eigen richt van 2 is `ok` per constructie onbereikbaar
+  zolang `bm` onder 3 ligt, dus je eigen ondergrens halen leest nog steeds als een tekort.
+  DE METING LIGT ER AL, en leest niets: sectie 4 van blok 14 zet de toewijzing per bestemming uit
+  `planMap()` naast de teller van sectie 1, met het verschil. AFLOS-ITEMS HOREN ER NIET BIJ, want hun
+  voortgang is afgeloste schuld en geen geld op een rekening. DE RESERVERINGENREKENING HANGT UITDRUKKELIJK
+  NIET AAN `isSavingsAcc()` (`v128`), maar kan er wel aan voldoen op de laatste cijfers, en dan telt dat
+  geld ook als buffer; blok 14 wijst hem daarom bij naam aan.
   DE FIXTURE DRAAGT DE KANT DIE KNELT: er is MEER toegewezen dan er op de rekening staat, want dat is het
   geval waarvoor de controle bestaat.
+- **EEN ONTTREKKING IS EEN BEWEGING EN GEEN STAND, EN DUS UIT EEN RIJ NIET TE LEZEN** (`v303`): sectie 1 van
+  blok 14 laat een rekening die niet meetelt en een saldo van een oudere dag zien, maar een ONTTREKKING
+  verlaagt het saldo zonder dat er aan die rij iets te zien is. Dat is de derde kandidaat voor een verschil
+  tussen het getal op Grip en wat je zelf op je spaarrekening ziet staan, en hij stond er niet.
+  DE BRON IS `savedNet()` EN `savedTx()` (`v262`), de twee functies die de app zelf voor deze stroom
+  gebruikt, dus er staat geen tweede telling naast. DE RIJEN TELLEN OP TOT `savedNet()` VAN DIEZELFDE MAAND
+  en dat STAAT ER, in plaats van dat het wordt aangenomen; de tak die `savedNet()` leest (de rekening-tak of
+  de terugval op de categorie sparen) staat erbij, want die beslist wat de rijen betekenen.
+  HET NETTO ALLEEN VERBERGT DE ONTTREKKING, en dat is het geval dat de fixture draagt: +1200 en -900 in
+  dezelfde maand geeft een rij die "erin" zegt terwijl er 900 uit is gegaan. Daarom staan de afschrijvingen
+  APART geteld, met bedrag, dag en rekening. Zonder dat verschil is een uitlezing die alleen het netto toont
+  niet te onderscheiden van een die de onttrekking noemt.
+  WAT HET BLOK NIET WEET: van welk doel die onttrekking komt. Het saldo is gedaald en er is geen keuze
+  vastgelegd, dus het blok zegt dat en verwijst naar sectie 4, waar de toewijzingen van Plan tegen het saldo
+  staan. Dat is precies de controle die de buffernorm-ronde hierboven gaat bouwen.
+  DE MAANDEN KOMEN UIT `months()` EN DAT ZIJN DE LAATSTE DRIE, dus inclusief de LOPENDE maand: een
+  onttrekking van deze week is de reden dat deze sectie bestaat. De spec leest die maandsleutels uit de
+  PAGINA en niet uit Node, want een maandsleutel in Node afleiden is de val van `v299`.
 - **DE DRIE BAKKEN ZEGGEN WAAROP EEN REPARATIE KAN STAAN, EN ZE TELLEN OP TOT HET PLAFOND** (`v301`):
   het plafond van `v300` zegt hoeveel er ten hoogste dubbel telt, de bakken bij hoeveel daarvan de app een
   HARDE identiteit heeft. Drie: beide kanten een betaaldatum met hetzelfde moment, beide kanten het veld met
@@ -3452,7 +3491,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v302` → `minder-v303`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v303` → `minder-v304`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -3461,7 +3500,7 @@ dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `m
 en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfde geval, dus de
 bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte alleen `tests/` en dit
 bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`; `v301` raakt wel app-code
-en bumpt dus gewoon door naar `minder-v301`, en `v302` net zo naar `minder-v302`. Dat gat is geen fout maar de regel
+en bumpt dus gewoon door naar `minder-v301`, en `v302` en `v303` net zo. Dat gat is geen fout maar de regel
 zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

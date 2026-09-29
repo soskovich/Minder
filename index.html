@@ -16862,6 +16862,44 @@ function diagBuffernorm(){
   L.push('   leest spaarSaldo().missing en geeft dan null, bufferMaanden() geeft null, en dan staat de');
   L.push('   bufferregel NIET op Grip. meegeteld zonder bekend saldo: '+(meetel.length-bekend.length));
   L.push('   noodfondsModel().spaar (de teller van de deling): '+_dV(()=>noodfondsModel().spaar));
+  /* v303: DE DERDE OORZAAK VAN EEN VERSCHIL IS EEN BEWEGING EN GEEN STAND. Een rekening die niet
+     meetelt en een saldo van een oudere dag zijn uit sectie 1 te lezen; een ONTTREKKING is dat niet, want
+     die verlaagt het saldo zonder dat er iets aan de rij te zien is. DE BRON IS savedNet() EN savedTx()
+     (v262), de twee functies die de app zelf voor deze stroom gebruikt, dus er staat geen tweede telling
+     naast: de rijen per rekening moeten optellen tot savedNet() van diezelfde maand, en dat staat erbij
+     in plaats van dat het wordt aangenomen. */
+  L.push('');
+  L.push('   DE BEWEGING OP DIE REKENINGEN, want een onttrekking verlaagt het saldo zonder dat de rij');
+  L.push('   hierboven verandert. De bron is savedNet() en savedTx() (v262), niet een eigen telling.');
+  const ms=_dT(()=>months(),[]).slice(-3);
+  L.push('     '+(meetel.length
+    ? 'de rekening-tak: savedNet() telt elk bedrag op de meegetelde rekeningen, ongeacht de categorie'
+    : 'de TERUGVAL: geen rekening telt mee, dus savedNet() leest de afschrijvingen naar de categorie sparen'));
+  if(!ms.length) L.push('     (geen maand in je gegevens)');
+  for(const m of ms){
+    const lijst=_dT(()=>savedTx(m),[]);
+    const perRek={};
+    for(const t of lijst){ const a=String(t.acc||'-'); perRek[a]=(perRek[a]||0)+(+t.amount||0); }
+    const somRij=Object.keys(perRek).reduce((x,a)=>x+perRek[a],0);
+    const netto=_dT(()=>savedNet(m),null);
+    L.push('     '+m+'   savedNet(): '+(netto==null?'onbekend':netto)
+      +'   som van de rijen: '+Math.round(somRij)
+      +'   sluit aan: '+((netto!=null && Math.round(somRij)===netto)?'JA':'NEE'));
+    for(const a of Object.keys(perRek).sort((x,y)=>perRek[x]-perRek[y]))
+      L.push('       '+String(a).slice(0,21).padEnd(22)+String(Math.round(perRek[a])).padStart(10)
+        +'   '+(perRek[a]<0?'ERUIT':'erin'));
+    const eruit=lijst.filter(t=>(+t.amount||0)<0).sort((x,y)=>x.amount-y.amount);
+    if(eruit.length){
+      L.push('       eruit gehaald: '+eruit.length+' boeking(en), samen '
+        +Math.round(eruit.reduce((x,t)=>x+(-t.amount),0)));
+      for(const t of eruit.slice(0,6))
+        L.push('         '+String(t.date).slice(0,10)+'  '+String(Math.round(-t.amount)).padStart(8)
+          +'  '+String(t.acc||'').slice(0,21).padEnd(22)+String(t.name||'').slice(0,26));
+    }
+  }
+  L.push('   EEN ONTTREKKING WAARVAN HET DOEL NOG NIET GEKOZEN IS STAAT HIER ALS BEWEGING EN NERGENS ALS');
+  L.push('   KEUZE: het saldo is gedaald, en welke bestemming dat verschil draagt weet de app niet. Wat');
+  L.push('   daarover te zeggen valt staat in sectie 4, tegen de toewijzingen van Plan.');
   L.push('');
   L.push('2. DE NOEMER: noodfondsModel().essCrisis');
   const M=_dT(()=>noodfondsModel(),null);
@@ -16917,8 +16955,10 @@ function diagBuffernorm(){
       L.push('   Grip toont er '+String(d).replace('.',',')+' van, want de weergave is Math.round(bm*10)/10.');
       L.push('   OM OP DIT CIJFER UIT TE KOMEN MOET DE TELLER TUSSEN '+lo+' EN '+hi+' LIGGEN, bij noemer '+ess+'.');
       L.push('   Valt je eigen getal daarbuiten, dan is dat niet de teller die de app gebruikt, en zeggen de');
-      L.push('   rijen van sectie 1 waar het verschil zit: een rekening die niet meetelt, een handmatig saldo');
-      L.push('   dat voorgaat op dat van de bank, een saldo van een oudere dag, of extraSavings erbovenop.');
+      L.push('   rijen van sectie 1 waar het verschil zit. VIJF KANDIDATEN: een rekening die niet meetelt,');
+      L.push('   een handmatig saldo dat voorgaat op dat van de bank, een saldo van een oudere dag,');
+      L.push('   extraSavings erbovenop, of een ONTTREKKING die het saldo al verlaagde (de beweging in');
+      L.push('   sectie 1).');
       L.push('   teller nu: '+sp+'   noemer nu: '+ess+'   '+sp+' / '+ess+' = '+(sp/ess).toFixed(4));
       L.push('   de grenzen die de rij leest: kritiek onder '+_dT(()=>MAAND_DREMPEL.bufferKritiek,'?')
         +' maanden, en je eigen richt staat op '+_dT(()=>nfMaanden(),'?')+'.');

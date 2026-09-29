@@ -71,6 +71,14 @@ function seed(opt) {
     add(m, '15', 90, 'ZKAT OVERIG');
   }
   add('2026-02', '20', 1200, 'ZKAT BELASTING');   // een van de vier maanden: mediaan 0, gemiddelde 300
+  /* v303: DE BEWEGING OP DE SPAARREKENING. Een storting EN een onttrekking in dezelfde maand, zo gekozen
+     dat de maand NETTO POSITIEF is (+1200 en -900 geeft +300). Zonder dat verschil is een uitlezing die
+     alleen het netto toont niet te onderscheiden van een die de onttrekking apart noemt, en juist die
+     onttrekking is de derde kandidaat voor een verschil met je eigen getal. */
+  tx.push({ id: 'in1', date: '2026-03-08', amount: 1200, acc: SP1, src: 'mt940',
+    name: 'ZKAT MUT STORTING', desc: 'ZKAT MUT STORTING', typ: '', ref: '', accName: '', refNums: [] });
+  tx.push({ id: 'uit1', date: '2026-03-20', amount: -900, acc: SP1, src: 'mt940',
+    name: 'ZKAT MUT OPNAME', desc: 'ZKAT MUT OPNAME', typ: '', ref: '', accName: '', refNums: [] });
   /* applyOwnAccounts() leidt OWN uit TX af en overschrijft minder_own, dus een rekening bestaat pas
      zodra er een boeking op staat. Deze vier zijn 'intern' via een eigen regel, dus ze raken geen
      enkele categoriesom. */
@@ -116,9 +124,16 @@ async function boot(page, opt) {
 const regels = (page) => page.evaluate(() => REGELS_());
 /* de rij van EEN rekening, want vijf rijen met dezelfde kolommen zijn anders niet te scheiden
    (meetles h/j: een assertie over de hele tekst ziet een verwisseling niet). */
+/* DE RIJ UIT DE REKENINGTABEL VAN SECTIE 1, en niet uit de hele uitvoer: sinds `v303` staan dezelfde
+   rekening-ids ook in de bewegingssectie, en een filter over de volle tekst kan die twee niet scheiden
+   (meetles h/j). De tabel loopt tot de kop van die bewegingssectie. */
 const rijVan = (t, acc) => {
-  const r = t.split('\n').filter((x) => x.includes(acc));
-  expect(r.length, 'rekening ' + acc + ' staat precies een keer in de teller').toBe(1);
+  const i = t.indexOf('TELT MEE ALS SPAARGELD');
+  const j = t.indexOf('DE BEWEGING OP DIE REKENINGEN');
+  expect(i, 'de rekeningtabel van sectie 1 staat in de uitvoer').toBeGreaterThan(-1);
+  expect(j, 'en de bewegingssectie erna bakent hem af').toBeGreaterThan(i);
+  const r = t.slice(i, j).split('\n').filter((x) => x.includes(acc));
+  expect(r.length, 'rekening ' + acc + ' staat precies een keer in de rekeningtabel').toBe(1);
   return r[0];
 };
 const sectie = (t, van, tot) => {
@@ -230,6 +245,50 @@ test.describe('1 - de teller per onderdeel', () => {
   });
 });
 
+test.describe('1b - de beweging op die rekeningen, de derde kandidaat', () => {
+  /* DE MAANDEN KOMEN UIT DE PAGINA EN NIET UIT NODE: `months()` telt de LOPENDE maand altijd mee, dus de
+     laatste drie zijn de twee maanden van de fixture plus de maand van vandaag, en die schuift met de klok.
+     Een maandsleutel in Node afleiden is precies de val van `v299`. Wat vastligt is de INVOER, en die wordt
+     eerst gemeten. */
+  test('de beweging staat per rekening en sluit aan op savedNet()', async ({ page }) => {
+    await boot(page);
+    const t = await regels(page);
+    const echt = await page.evaluate(() => ({ ms: months().slice(-3), nu: thisYM(),
+      per: months().slice(-3).map((m) => ({ m, net: savedNet(m), n: savedTx(m).length })) }));
+    expect(echt.ms.slice(0, 2), 'de twee maanden van de fixture waarin er iets stond')
+      .toEqual(['2026-03', '2026-04']);
+    expect(echt.ms[2], 'en de lopende maand, want months() telt die altijd mee').toBe(echt.nu);
+    expect(echt.per[0].net, '+1200 en -900 op de spaarrekening').toBe(300);
+    expect(echt.per[0].n, 'twee boekingen in maart').toBe(2);
+    expect(echt.per[2].net, 'in de lopende maand bewoog er niets').toBe(0);
+    for (const r of echt.per) {
+      expect(t, 'de rijen van ' + r.m + ' tellen op tot savedNet() van diezelfde maand')
+        .toContain(r.m + '   savedNet(): ' + r.net + '   som van de rijen: ' + r.net + '   sluit aan: JA');
+    }
+  });
+
+  test('een onttrekking is zichtbaar ook als de maand netto positief is', async ({ page }) => {
+    await boot(page);
+    const t = await regels(page);
+    /* alleen het blok van maart, want SP1 staat ook in de andere maanden (meetles h/j). */
+    const mrt = sectie(t, '2026-03   savedNet()', '2026-04   savedNet()');
+    const rij = mrt.split('\n').filter((l) => l.includes(SP1) && /erin|ERUIT/.test(l));
+    expect(rij.length, 'een rij voor die maand').toBe(1);
+    expect(rij[0], 'netto staat er geld BIJ, dus het netto alleen verbergt de onttrekking').toContain('erin');
+    expect(t, 'en daarom staat de onttrekking apart').toContain('eruit gehaald: 1 boeking(en), samen 900');
+    expect(t).toMatch(/2026-03-20\s+900\s+NL11BANK0000004323\s+ZKAT MUT OPNAME/);
+  });
+
+  test('de tak die savedNet() leest staat erbij, en de rekeningen die niet meetellen blijven eruit', async ({ page }) => {
+    await boot(page);
+    const t = await regels(page);
+    expect(t).toContain('de rekening-tak: savedNet() telt elk bedrag op de meegetelde rekeningen');
+    const bew = sectie(t, 'DE BEWEGING OP DIE REKENINGEN', '2. DE NOEMER');
+    expect(bew, 'SP2 telt niet mee en hoort dus niet in de beweging').not.toContain(SP2);
+    expect(bew, 'en de betaalrekening ook niet').not.toContain(BET);
+  });
+});
+
 test.describe('2 - een meegetelde rekening zonder saldo zet de hele teller op null', () => {
   test('dan geeft bufferMaanden() null en staat de rij niet op Grip', async ({ page }) => {
     await boot(page, { resZonderSaldo: true });
@@ -323,7 +382,7 @@ test.describe('5 - de bron: geen tweede uitdrukking, en het blok schrijft niets'
   test('de selectie, het saldo en de som komen uit de app en worden niet opnieuw uitgedrukt', async () => {
     const s = bron();
     for (const fn of ['isSavingsAcc(', 'accBalance(', 'accBalanceDatum(', 'spaarSaldo(',
-      'noodfondsModel(', 'bufferMaanden(', 'planMap(']) {
+      'noodfondsModel(', 'bufferMaanden(', 'planMap(', 'savedNet(', 'savedTx(']) {
       expect(s, 'het blok leest ' + fn).toContain(fn);
     }
     expect(s, 'geen eigen cijfertest naast isSavingsAcc(): dan lopen de twee bij de eerste wijziging uiteen')
@@ -332,6 +391,7 @@ test.describe('5 - de bron: geen tweede uitdrukking, en het blok schrijft niets'
       .not.toMatch(/ACCMETA\[[^\]]*\]\s*\.\s*balance/);
     expect(s, 'de noemer komt uit crisisRows en wordt niet per categorie nagerekend').toContain('crisisRows');
     expect(s).not.toContain('nfMedian(');
+    expect(s, 'de tak van savedNet() wordt niet opnieuw uitgedrukt (v262)').not.toContain("catOf(t)==='sparen'");
   });
 
   test('het blok schrijft niets (v244)', async () => {
