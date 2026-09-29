@@ -95,6 +95,38 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN TEST DIE OVER DE KALENDER GAAT PINT ZIJN EIGEN DAG, GETELD VANAF HET EINDE VAN DE MAAND**
+  (`v299`): zeven tests in vier bestanden eisten het meervoud van het dagwoord en stonden rood op de
+  op-een-na-laatste dag van een maand. Tien bekende rode tests maken kapot waarvoor een suite bestaat:
+  een nieuwe rode valt er niet meer tussen op, en dat is precies het gereedschap dat elke ronde hier
+  gebruikt. `tests/vaste-dag.js` zet de klok van de pagina; `index.html` is niet aangeraakt.
+  VANAF HET EINDE EN NIET OP EEN VAST DAGNUMMER, en dat is het hele punt. "Dag 23" haalt de dag eruit
+  maar niet de MAANDLENGTE: dan is het restant 5 dagen in februari en 8 in maart, en elke assertie die
+  met dat restant rekent beweegt nog steeds mee. Wat deze tests vasthouden IS het restant, dus `dim - 7`
+  is wat vastligt. Dat is ook `POTJE_VENSTER_DAGEN`, dus de regel leest "De resterende 7 dagen".
+  `setFixedTime()` EN NIET `install()`: de eerste vervangt alleen `Date`, de tweede neemt ook de timers
+  over en laat een test die op een toast wacht hangen.
+  DE MAAND BLIJFT DE ECHTE MAAND. De fixtures bouwen hun maandsleutels in Node, en `budget-fixture.js`
+  doet dat voor 73 specs; die naar een vaste maand verhuizen is een eigen ronde. Wat hier vastligt is de
+  dag binnen die maand, en dat is de as waarop deze zeven vielen.
+  DE PIN MOET VOOR `page.goto()`, anders leest de boot nog de echte klok, en dat geval staat als eigen
+  test in `vaste-testdag.spec.js`. EEN SPEC DIE EEN ANDER MOMENT NODIG HEEFT GEEFT HET MEE: `boot()`
+  neemt een klok en die wint van de pin. Zonder dat overschreef mijn eigen standaard-pin de
+  middernacht-test, en dat is bij het bouwen van deze ronde ook echt gebeurd.
+  EEN UITZONDERING, MET HAAR REDEN: `potjes-weekvenster.spec.js` LOOPT DE VENSTERRAND AF en heeft dus
+  meer dan een dag nodig; een gedeelde vaste dag zou daar de meting weghalen. Hij viel ook niet om, want
+  hij leidt zijn eigen maand van dertig dagen af. De spec pint die uitzondering bij naam, zodat de lijst
+  niet stilletjes groeit.
+  TWEE TESTS ZIJN ER STERKER VAN GEWORDEN, en dat is geen bijvangst maar het gevolg van een klok die je
+  kunt kiezen. "vandaagYMD volgt je eigen kalender, niet UTC" draaide op het moment van de suite en dus
+  meestal overdag, waar de lokale dag en de UTC-dag gelijk zijn: hij kon per constructie niet vallen.
+  Hij staat nu op 00:30, met een eerste assertie die MEET dat de twee werkelijk uiteenlopen (meetles b).
+  En "Gelezen op toont de dag waarop je las" las de dag van NODE terwijl de app die van de PAGINA toont;
+  dat was hetzelfde getal en daarmee onzichtbaar.
+  EEN `test.skip` DIE NIET MEER KAN VUREN VERBERGT EEN FOUT: de geplande-boeking-test sloeg over als
+  `VANDAAG + 3` niet meer in de maand paste, en met de pin kan dat niet meer. GEMETEN: een sabotage die
+  de fixture terugzet op de echte dag liet die test OVERSLAAN in plaats van vallen, en overslaan telt
+  als groen. Hij meet nu zijn INVOER in plaats van hem weg te filteren.
 - **EEN ENTRY WORDT GEMERGD PER VELD, EN ELK VELD DRAAGT ZIJN EIGEN STEMPEL** (`v298`): `psd2DiagZet()`
   deed `D[accId]=Object.assign({op}, rec)` en VERVING dus de hele entry. De twee sync-routes schrijven niet
   hetzelfde: `psd2Refresh()` draagt sinds `v296` ook de pending-aanroep en `psd2IngestSession()` niet. Een
@@ -3228,26 +3260,14 @@ GEMETEN dat hij op `HEAD` net zo rood staat (1 failed, 13 passed), dus hij is ni
 hangen in plaats van aan vandaag, zodat het aantal volle weken vast staat. Dat raakt de piekdag-spec en
 niet deze ronde.
 
-**Bekend rood op de OP-EEN-NA-LAATSTE DAG van een maand, eigen ronde** (gemeten bij `v293`, uitgebreid
-bij `v295`): ZEVEN tests eisen het meervoud van het dagwoord en krijgen op zo'n dag "1 dag", want
-`maandDagenOver()` rekent `dim - elapsed` en sluit vandaag uit (`v257`). Het zijn
-`zwijgen-met-reden.spec.js` (2), `grafiekvormen.spec.js` (2), `tempo-zonder-vaste-lasten.spec.js` (1) en
-`dagbedrag-potjes.spec.js` (2). GEMETEN bij `v295` dat alle zeven op `HEAD` net zo rood staan, dus ze zijn
-van geen van beide rondes: ze kwamen op toen de klok over middernacht naar 29 september ging in een maand
-van 30 dagen.
-DE LIJST WAS BIJ `v293` TE KORT, en dat is zelf een meetles: hij is toen opgeschreven uit de uitvoer van
-die dag in plaats van uit het PATROON, en twee specs die dezelfde eigenschap op een andere manier
-formuleren stonden er daarom niet in. Wie zo'n lijst maakt zoekt de familie en niet de rijen.
-DE TWEEDE VORM IS SUBTIELER EN DAARMEE HET ECHTE PUNT: `dagbedrag-potjes.spec.js` eist
-`/De (komende|resterende) \d+ dagen? heb je /`, en dat LIJKT het enkelvoud toe te laten. Dat doet het niet:
-`dagen?` is "dage" plus een optionele "n", dus het matcht "dagen" en "dage" en nooit "dag". Een regex die
-het enkelvoud lijkt te dekken en het niet doet is erger dan een die het meervoud eist, want hij leest als
-al gerepareerd.
-DIT IS DEZELFDE FAMILIE ALS DE TWEE HIERONDER: een assertie die op een zin ankert bewijst de eigenschap
-niet, en die eigenschap is hier dat er een dagbedrag staat en niet hoe het dagwoord vervoegt. De reparatie
-is de vervoeging uit de regex halen, en dat raakt zeven specs in vier bestanden plus de vraag of de app
-zelf "1 dag" hoort te zeggen op een dag die bijna om is; die staat al als open punt onder de
-dagen-conventie van `v257`.
+**GEREPAREERD BIJ `v299`: de zeven kalender-afhankelijke dagwoord-tests.** Ze eisten het MEERVOUD van
+het dagwoord en vielen op de op-een-na-laatste dag van een maand, want `maandDagenOver()` rekent
+`dim - elapsed` en sluit vandaag uit (`v257`). Ze draaien nu op een gepinde klok; zie de staande regel
+"EEN TEST DIE OVER DE KALENDER GAAT PINT ZIJN EIGEN DAG". Daarmee gaat de lijst bekend rood van tien
+naar DRIE, en dat was het doel: tussen tien bekende rode valt een nieuwe rode niet meer op.
+WAT ER NIET IS GEREPAREERD, en dat is bewust: de app zegt nog steeds "1 dag" op zo'n dag. Of dat
+klopt is de dagen-conventie van `v257` en die staat nog als open punt; deze ronde raakt geen enkele
+regel app-code.
 
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
@@ -3262,7 +3282,8 @@ app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` 
 `tests/` en documentatie, dus de cache ging van `minder-v255` rechtstreeks naar `minder-v257`, en om
 dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `minder-v295`: `v292`
 en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfde geval, dus de
-bump van `v298` ging daarom van `minder-v296` naar `minder-v298`. Dat gat is geen fout maar de regel
+bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte alleen `tests/` en dit
+bestand, dus de eerstvolgende bump gaat naar `minder-v300`. Dat gat is geen fout maar de regel
 zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

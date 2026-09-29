@@ -4,6 +4,7 @@
 // tempoProjectie() extrapoleert alleen het variabele deel; vaste lasten tellen als waarneming mee.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { pinDag, vasteDatum } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -11,7 +12,9 @@ const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '
 const MS = [2, 1, 0].map((k) => ym(new Date(now.getFullYear(), now.getMonth() - k, 1)));
 const CUR = MS[2], VORIGE = MS[1];
 const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-const VANDAAG = Math.min(now.getDate(), dim);
+/* v299: de fixture zet zijn geplande boeking drie dagen na VANDAAG, dus dit moet DEZELFDE dag
+   zijn als die de klok in de pagina krijgt. */
+const VANDAAG = Math.min(vasteDatum().getDate(), dim);
 const dd = (n) => String(Math.max(1, Math.min(n, dim))).padStart(2, '0');
 
 /* De huur valt op dag 2, dus in de eerste week is hij al afgeschreven terwijl er nog nauwelijks
@@ -35,7 +38,12 @@ function seed(o = {}) {
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set),
     minder_own: JSON.stringify([MAIN]), minder_accmeta: '{}', minder_plan: '{}' };
 }
-async function boot(page, payload) {
+async function boot(page, payload, klok) {
+  /* v299: de klok op een vaste dag. De projectie deelt door de VERSTREKEN dagen en vermenigvuldigt
+     met de resterende, dus zonder pin verschuift de lat van deze test elke dag. Een test die een
+     ANDER moment nodig heeft geeft `klok` mee; zonder die parameter zou de pin hier hem meteen weer
+     overschrijven, en dat is precies wat er bij het bouwen van deze ronde gebeurde. */
+  if (klok) await page.clock.setFixedTime(klok); else await pinDag(page);
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
   await page.goto('/index.html');
@@ -56,10 +64,17 @@ test.describe('a · vaste lasten worden niet geëxtrapoleerd', () => {
     expect(r.proj).toBeLessThan(900 * r.dim / Math.max(r.elapsed, 1));
   });
 
+  /* v299: HIER STOND EEN `test.skip` op "deze maand heeft geen dag meer over". Die was nodig zolang
+     de fixture op de ECHTE dag stond: eind van de maand paste `VANDAAG + 3` er niet meer in. Met de
+     gepinde dag zijn dat altijd zeven dagen over, dus de skip kan per constructie niet meer vuren
+     EN hij verbergt een fout: een sabotage die de fixture weer op de echte dag zet liet deze test
+     OVERSLAAN in plaats van vallen, en overslaan telt als groen. In plaats daarvan meet hij nu de
+     INVOER: valt de geplande boeking werkelijk na vandaag, anders toetst de rest niets (meetles b). */
   test('een geplande boeking later deze maand telt mee, maar niet in het tempo', async ({ page }) => {
-    test.skip(VANDAAG + 3 > dim, 'deze maand heeft geen dag meer over voor een geplande boeking');
     await boot(page, seed({ gepland: true }));
     const r = await P(page);
+    expect(VANDAAG + 3, 'de geplande boeking moet in de toekomst liggen').toBeLessThanOrEqual(dim);
+    expect(r.elapsed, 'en de klok van de pagina moet op diezelfde dag staan').toBe(VANDAAG);
     expect(r.variLater).toBe(400);                       // wel in de projectie
     expect(r.variTot).toBe(40);                          // niet in het tempo
     expect(r.variTempo).toBe(Math.round(40 / Math.max(r.elapsed, 1) * r.dim));
@@ -127,20 +142,30 @@ test.describe('b · geen tempo-oordeel in de eerste week door de huur', () => {
 });
 
 test.describe('c · de dag van vandaag is een lokale dag', () => {
+  /* v299: DEZE TEST DRAAIT OP MIDDERNACHT, EN DAT IS DE REPARATIE EN NIET DE PIN. Hij heet "niet
+     UTC", en tussen middernacht en de UTC-offset lopen de lokale dag en de UTC-dag uiteen; de rest
+     van de dag zijn ze gelijk en kan hij per constructie niet vallen (de meetles over een test die
+     niet rood kan worden). Hij draaide altijd op het moment van de suite, dus meestal overdag, en
+     bewees dan niets. Met de klok op 00:30 is hij voor het eerst op zijn eigen geval gericht, en de
+     eerste assertie MEET dat het geval er is voordat de tweede iets toetst. */
   test('vandaagYMD volgt je eigen kalender, niet UTC', async ({ page }) => {
-    await boot(page);
+    const d = vasteDatum();
+    await boot(page, null, new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 30, 0));
     const r = await page.evaluate(() => ({ lokaal: vandaagYMD(), utc: new Date().toISOString().slice(0, 10),
       d: new Date().getDate() }));
+    expect(r.utc, 'zonder dit verschil toetst de regel hieronder niets').not.toBe(r.lokaal);
     expect(r.lokaal.slice(8, 10)).toBe(String(r.d).padStart(2, '0'));
-    // tussen middernacht en 02:00 zomertijd lopen die twee uiteen; dat mag het cijfer niet raken
     expect(r.lokaal.length).toBe(10);
   });
 
+  /* v299: de dag komt uit de klok van de PAGINA en niet uit die van Node. Dat was hiervoor dezelfde
+     dag en daarmee onzichtbaar; met een gepinde klok is het het verschil tussen de eigenschap (de
+     dag waarop je las) en een toevalligheid (de dag waarop de suite draait). */
   test('Gelezen op toont de dag waarop je las', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
     await page.waitForTimeout(130);
     const t = await page.evaluate(() => $('#s-maand').innerText);
-    expect(t).toContain(`Gelezen op ${new Date().getDate()} `);
+    expect(t).toContain(`Gelezen op ${vasteDatum().getDate()} `);
   });
 });

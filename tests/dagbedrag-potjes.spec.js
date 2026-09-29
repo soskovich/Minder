@@ -23,6 +23,7 @@
 // dagen" zegt, en dat is een tweede waarheid op de noemer. Het open punt staat in CLAUDE.md.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const fs = require('fs');
 const path = require('path');
 
@@ -71,7 +72,9 @@ function seed(o) {
    Hem na de boot zetten is dezelfde handeling als in de app zelf. */
 async function boot(page, o) {
   o = o || {};
-  if (o.klok) await page.clock.install({ time: o.klok });
+  /* v299: standaard staat de klok op een vaste dag met zeven dagen over, want elke regel hieronder
+     draagt dat restant. Een test die een ANDERE dag nodig heeft geeft `klok` mee, en die wint. */
+  if (o.klok) await page.clock.setFixedTime(o.klok); else await pinDag(page);
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof maandDagenOver === 'function');

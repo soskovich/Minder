@@ -8,6 +8,11 @@
 // deze spec legt dat allebei vast, zodat de diagnose niet opnieuw die kant op wijst.
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
+const { pinDag } = require('./vaste-dag');
+/* v299: de klok op een vaste dag, zodat het dagwoord niet met de kalender meebeweegt. Deze spec
+   eist het MEERVOUD, en op de op-een-na-laatste dag van een maand zegt de app "1 dag" (v257).
+   `open()` komt uit de gedeelde fixture en die pint niet zelf, want 73 specs lezen hem. */
+const bootVast = async (page, payload) => { await pinDag(page); await open(page, payload); };
 
 const REDEN = 'Geen bedrag per dag: een deel van je saldo is nog onbekend';
 const DAGBEDRAG = /Nog \d+ dagen deze maand, dus /;
@@ -33,7 +38,7 @@ const home = (page) => page.evaluate(() => { go('dash'); return $('#s-dash').inn
 
 test.describe('a - de drie staten van het dagbedrag', () => {
   test('alles bekend: het bedrag staat er, zonder reden-regel', async ({ page }) => {
-    await open(page, seed());
+    await bootVast(page, seed());
     const t = await home(page);
     expect(t).toMatch(DAGBEDRAG);
     expect(t).not.toContain(REDEN);
@@ -41,7 +46,7 @@ test.describe('a - de drie staten van het dagbedrag', () => {
   });
 
   test('deel onbekend: geen bedrag, wel de reden', async ({ page }) => {
-    await open(page, deelOnbekend());
+    await bootVast(page, deelOnbekend());
     const t = await home(page);
     expect(t).not.toMatch(DAGBEDRAG);
     expect(t).toContain(REDEN);
@@ -52,7 +57,7 @@ test.describe('a - de drie staten van het dagbedrag', () => {
   });
 
   test('niets bekend: de hero zegt het al, de regel zwijgt volledig', async ({ page }) => {
-    await open(page, geenSaldo());
+    await bootVast(page, geenSaldo());
     const t = await home(page);
     expect(t).toContain('onbekend');
     expect(t).not.toMatch(DAGBEDRAG);
@@ -64,7 +69,7 @@ test.describe('a - de drie staten van het dagbedrag', () => {
 
 test.describe('b - geen tweede vorm, en geen benadering', () => {
   test('de zin en de ingang komen uit de opbouw-sheet', async ({ page }) => {
-    await open(page, deelOnbekend());
+    await bootVast(page, deelOnbekend());
     const r = await page.evaluate(() => {
       const regel = vrijPerDagLine();
       openSafeToSpend();
@@ -82,7 +87,7 @@ test.describe('b - geen tweede vorm, en geen benadering', () => {
   });
 
   test('geen bedrag en geen benadering in de reden-regel', async ({ page }) => {
-    await open(page, deelOnbekend());
+    await bootVast(page, deelOnbekend());
     const r = await page.evaluate(() => vrijPerDagLine());
     const tekst = r.replace(/<[^>]*>/g, '');
     expect(tekst).not.toMatch(/€|\d/);           // geen enkel getal
@@ -90,7 +95,7 @@ test.describe('b - geen tweede vorm, en geen benadering', () => {
   });
 
   test('de regel staat op zijn eigen regel, niet tegen de saldo-regel aan', async ({ page }) => {
-    await open(page, deelOnbekend());
+    await bootVast(page, deelOnbekend());
     const regels = (await home(page)).split('\n').map((x) => x.trim()).filter(Boolean);
     const i = regels.findIndex((x) => x.indexOf(REDEN) >= 0);
     expect(i).toBeGreaterThan(-1);
@@ -101,7 +106,7 @@ test.describe('b - geen tweede vorm, en geen benadering', () => {
   for (const w of [360, 390]) {
     test(`geen horizontale overflow op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 800 });
-      await open(page, deelOnbekend());
+      await bootVast(page, deelOnbekend());
       await home(page);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
@@ -110,7 +115,7 @@ test.describe('b - geen tweede vorm, en geen benadering', () => {
 
 test.describe('c - de drempel is niet versoepeld', () => {
   test('volledig blijft dezelfde formule, en er wordt niets doorgerekend', async ({ page }) => {
-    await open(page, deelOnbekend());
+    await bootVast(page, deelOnbekend());
     const r = await page.evaluate(() => {
       const S = safeToSpend(); const V = vrijPerDag();
       return { formule: V.volledig === (S.known > 0 && !S.missing), volledig: V.volledig,
@@ -122,7 +127,7 @@ test.describe('c - de drempel is niet versoepeld', () => {
   });
 
   test('known en missing komen uit safeToSpend, niet uit een eigen afleiding', async ({ page }) => {
-    await open(page, deelOnbekend());
+    await bootVast(page, deelOnbekend());
     const r = await page.evaluate(() => {
       const S = safeToSpend(); const V = vrijPerDag();
       return [V.known === S.known, V.missing === S.missing];
@@ -133,7 +138,7 @@ test.describe('c - de drempel is niet versoepeld', () => {
 
 test.describe('d - de verbergen-instelling is niet de oorzaak', () => {
   test('SET.toonLegeRek raakt geen enkel cijfer', async ({ page }) => {
-    await open(page, deelOnbekend());
+    await bootVast(page, deelOnbekend());
     const meet = () => page.evaluate(() => {
       const tb = totalBalance(); const S = safeToSpend(); const L = monthLiquidity(); const V = vrijPerDag();
       return JSON.stringify({ tb, safe: S.safe, missing: S.missing, known: S.known,
@@ -148,7 +153,7 @@ test.describe('d - de verbergen-instelling is niet de oorzaak', () => {
   });
 
   test('hij filtert alleen de weergave van de rekeningenlijst', async ({ page }) => {
-    await open(page, deelOnbekend());
+    await bootVast(page, deelOnbekend());
     const r = await page.evaluate(() => {
       const a = { own: OWN.length, alle: allAccounts().length, zicht: zichtbareRek().length };
       SET.toonLegeRek = true; save();
@@ -169,7 +174,7 @@ test.describe('e - een rekening zonder boekingen raakt dit niet', () => {
     const s = JSON.parse(p.minder_set);
     s.psd2Accounts = { NL99LEEG0000008888: { label: 'Gesloten rekening', uid: 'u9', iban: 'NL99LEEG0000008888' } };
     p.minder_set = JSON.stringify(s);
-    await open(page, p);
+    await bootVast(page, p);
     const t = await home(page);
     expect(t).toMatch(DAGBEDRAG);
     expect(t).not.toContain(REDEN);

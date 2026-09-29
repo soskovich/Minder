@@ -3,6 +3,7 @@
 // terug, niet een kleinere versie van dezelfde vorm.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { pinDag } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -35,6 +36,9 @@ function seed(o = {}) {
     minder_own: JSON.stringify([MAIN]), minder_accmeta: '{}', minder_plan: '{}' };
 }
 async function boot(page, o) {
+  /* v299: de klok op een vaste dag. De drempelzinnen hieronder dragen "met nog N dagen te gaan",
+     en op de op-een-na-laatste dag van een maand is dat "1 dag" (v257). */
+  await pinDag(page);
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');
