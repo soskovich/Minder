@@ -95,6 +95,49 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN TELLER DIE ALLEEN BIJ EEN TREFFER SCHRIJFT KAN GEEN NUL MELDEN** (`v296`): `SET.pendBots[rekening]`
+  ontstond bij `v295` pas BIJ een botsing, dus een lege map betekende twee dingen tegelijk. GEMETEN op het
+  toestel: blok 13 zei "GEEN ENKELE METING, er is niet gesynchroniseerd sinds deze versie draait" terwijl
+  blok 8 een import van 43 seconden eerder meldde en blok 10 dezelfde sync per rekening aftekende. Het
+  blok had gelijk over zijn eigen data en ongelijk over de wereld, en dat is het verkeerde etiket dat dit
+  project verbiedt.
+  `syncs` IS DE DISCRIMINATOR, precies wat `gezien` bij `v277` was: de sync-routes zetten hem per rekening,
+  ook als er niets te tellen valt. HIJ DRAAGT GEEN BEDRAG, en daarom schrijft `pendBotsZet()` alleen een
+  `Bedrag`-veld als er een bedrag is meegegeven; een `syncsBedrag` op nul zou als meting lezen.
+  DE RIJEN VAN BLOK 13 HANGEN AAN DE MARKERING EN NIET AAN HET BESTAAN VAN EEN ENTRY. Dat onderscheid is
+  meetbaar omdat `applyPending()` een entry kan aanmaken zonder dat er is gesynchroniseerd (de dedup-teller),
+  en dat geval staat in de fixture.
+- **EEN LEGE PENDING-LIJST HEEFT DRIE VERKLARINGEN, EN TWEE ERVAN WERDEN STIL GESLIKT** (`v296`): GEMETEN
+  op het toestel bij `v295` stond er na een sync van zes rekeningen GEEN ENKELE pending-regel in `TX`. Of de
+  bank niets gaf, of de aanroep faalde, of `applyPending()` alles op zijn dedup liet vallen, was nergens te
+  zien: de aanroep zat in een `try/catch(e){}` zonder uitlezing. Blok 13 zegt nu per rekening `gaf`,
+  `gelezen`, de fout, en cumulatief `dedup`.
+  DE AANROEP IS NAAR DE EERSTE LUS VERHUISD, zodat een rekening EEN entry per sync heeft met alle drie de
+  aanroepen erin; `psd2DiagZet()` blijft de enige schrijver en overschrijft nog steeds (`v279`). WAT NIET
+  VERSCHUIFT is de volgorde die de botsing veroorzaakt: `applyPending()` draait nog steeds NA `commitTx()`,
+  en dat is precies wat blok 13 meet. Het aantal aanroepen per rekening blijft drie (`v289`).
+  DE KOPPEL-ROUTE LEGT NIETS VAST, en dat is geen omissie: die pending-tak is sinds `v270` stil kapot en
+  `rekeningen-diagnose.spec.js` pint die stand met opzet. Het blok zegt "niet vastgelegd" met die reden.
+- **SECTIE 4 MEET DE TWEEDE OORZAAK, EN DIE IS GEEN BOTSING** (`v296`): geeft een bank geen pending-regels,
+  dan is een kaartbetaling pas zichtbaar als hij GEBOEKT is, en een bank boekt niet in het weekend. Dat is
+  een ander gat dan dat van `v295`: de botsing duurt een sync, dit duurt tot de bank boekt.
+  DE POORT IS `telbareTx()` en niet `TX`, want dit gaat over GELD dat meetelt (`v285`). De eis is een GAT:
+  `t.date` later dan `t.betaalDatum`. Een boeking die op zijn eigen betaaldag is geboekt telt niet, ook niet
+  als die dag een zaterdag was, en dat geval staat in de fixture naast het geval dat het wel haalt.
+  EEN WEEKEND WORDT AANGEWEZEN DOOR ZIJN ZATERDAG, dus een zondagbetaling telt bij de zaterdag ervoor en
+  niet als een eigen weekend. Zonder dat zou het aantal weekends te hoog staan en het gemiddelde te laag.
+  DE VRIJDAGAVOND STAAT APART EN TELT NIET IN HET WEEKENDCIJFER: een vrijdagbetaling die pas maandag boekt
+  is net zo goed het hele weekend onzichtbaar, maar de vraag is afgebakend op de BETAALDAG en twee
+  afbakeningen in een getal is een verkeerd etiket. Hij staat er wel, want zonder hem leest het
+  weekendcijfer als alles wat er dat weekend miste. Het geval dat de twee grenzen onderscheidt is een
+  ZATERDAGBETALING DIE PAS DINSDAG BOEKT: zonder die rij is `===4` niet van `>=4` te onderscheiden, want
+  dan haalt geen enkele weekendbetaling de tweede eis (meetles o).
+  HET SALDOTYPE STAAT ERBIJ EN WORDT NIET UITGELEGD. Dekt het type ook wat nog niet geboekt is, dan is
+  alleen je maandtotaal te laag; dekt het dat niet, dan staat je saldo er ook boven. Welke code wat betekent
+  staat niet in deze code en wordt niet verzonnen; dat de twee banken niet dezelfde code teruggeven is zelf
+  de waarneming.
+  HET BLOK BESLIST HIER NIETS EN VOORSPELT NIETS: een gemiddelde over voorbije weekends is geen bedrag dat
+  er nu staat.
 - **DE PENDING-BOTSING WORDT GETELD, NIET GEDICHT** (`v295`): dit is de meetronde die `v292` als eerste
   stap vroeg. Blok 13 leest, `commitTx()` en `applyPending()` schrijven, en er verandert geen cijfer en
   geen poort. WAAROM ER GETELD MOET WORDEN IN PLAATS VAN GEKEKEN: er is geen import-tijdstip per boeking
@@ -119,6 +162,9 @@ genoemde versietag.)*
   EEN NUL IS PAS EEN METING ALS ER GESYNCHRONISEERD IS (`v59`/`v73`/`v173`): de teller is opgeslagen data
   en begint leeg, dus een rekening zonder entry is een ONTBREKENDE meting en niet een nul. Dat is dezelfde
   val als bij `SET.valutaTally` (`v277`/`v279`), en het blok zegt het per rekening.
+  DIE REGEL STOND HIER EN DE CODE HAALDE HEM NIET (`v296`): deze teller had geen discriminator, dus hij kon
+  "niet gemeten" en "gemeten, nul" niet scheiden en meldde op het toestel het eerste terwijl het tweede
+  waar was. Zie de regel over `syncs` bovenaan; de val herkennen is iets anders dan hem dichten.
   HET BLOK NOEMT DE BANK NIET. Die afleiding staat al op vier plekken (`v275`) en een vijfde kopie zou bij
   de eerste wijziging uiteenlopen (`v104`); de rekening-id is de sleutel en blok 8 zegt welke bank daarbij
   hoort. De noemer komt om dezelfde reden uit `SET.valutaTally[rekening].gezien` en wordt niet opnieuw
@@ -3079,7 +3125,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v295` → `minder-v296`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v296` → `minder-v297`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen

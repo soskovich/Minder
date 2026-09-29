@@ -16447,9 +16447,12 @@ function diagVoorautorisatie(){
    hoort zegt blok 8. */
 function diagPendBots(){
   const L=[];
-  L.push('WAT DIT BLOK MEET: of een kaartbetaling die ONGEWIJZIGD boekt een sync lang uit TX kan vallen.');
-  L.push('  Het repareert niets en er verandert geen cijfer (v292). Twee delen: wat er NU staat, en wat de');
-  L.push('  sync heeft geteld. De bank per rekening staat in blok 8.');
+  L.push('WAT DIT BLOK MEET: wanneer een kaartbetaling NIET in TX staat terwijl je hem al hebt gedaan.');
+  L.push('  Twee oorzaken, en ze staan los van elkaar. De eerste is de botsing van v295: een pending-regel');
+  L.push('  die zijn _p kwijt is laat commitTx() de geboekte versie overslaan. De tweede is simpeler: geeft');
+  L.push('  de bank helemaal geen pending-regels, dan is de betaling pas zichtbaar als hij GEBOEKT is, en');
+  L.push('  een bank boekt niet in het weekend.');
+  L.push('  Het repareert niets en er verandert geen cijfer (v292/v296). De bank per rekening staat in blok 8.');
   L.push('');
   L.push('1. NU, uit de opgeslagen gegevens: de pending-regels in TX');
   L.push('   `_p` AANWEZIG: deze regel is na de laatste boot binnengekomen en draagt zijn eigen id nog, dus');
@@ -16481,18 +16484,47 @@ function diagPendBots(){
     L.push('   die LET OP-telling hoort nul te zijn: commitTx() slaat de geboekte versie juist over, dus een');
     L.push('   tweede regel op dezelfde id zou betekenen dat er een pad is dat dit blok niet kent.');
   }
+  const P=(typeof SET!=='undefined'&&SET.pendBots)||{}, VT=(typeof SET!=='undefined'&&SET.valutaTally)||{};
+  const DG=(typeof SET!=='undefined'&&SET.psd2Diag)||{};
+  const rek=Object.keys(P).filter(k=>P[k]&&typeof P[k]==='object');
+  const gesynct=rek.filter(a=>(+P[a].syncs||0)>0);
   L.push('');
-  L.push('2. UIT DE SYNC, cumulatief per rekening (vastgelegd op het moment zelf, want achteraf is het weg)');
+  L.push('2. UIT DE SYNC: WAT DE PENDING-AANROEP PER REKENING TERUGGAF (de laatste sync)');
+  L.push('   gaf     = het aantal regels dat de bank teruggaf op transaction_status=PDNG');
+  L.push('   gelezen = hoeveel daarvan mapPsd2Tx() tot een boeking maakte');
+  L.push('   dedup   = hoeveel applyPending() er cumulatief liet vallen omdat er binnen zes dagen al een');
+  L.push('             geboekte regel van hetzelfde bedrag op die rekening stond');
+  L.push('   een lege lijst en een mislukte aanroep zien er in TX hetzelfde uit, en dat is precies wat');
+  L.push('   deze regels scheiden. De foutkant werd tot v296 stil geslikt.');
+  if(!gesynct.length){
+    L.push('   GEEN ENKELE METING, en dat is geen nul: er is niet gesynchroniseerd sinds deze versie draait');
+    L.push('   (v59/v73/v173). Ververs eerst en lees dit blok dan opnieuw.');
+  } else {
+    for(const a of gesynct.sort()){
+      const r=P[a], d=DG[a]||{};
+      const gaf = (d.pendN==null) ? 'niet vastgelegd' : String(d.pendN);
+      L.push('   '+String(a).padEnd(20)
+        +' gaf '+gaf.padStart(5)
+        +'   gelezen '+(d.pendMap==null?'-':String(d.pendMap)).padStart(5)
+        +'   dedup '+String(+r.dedup||0).padStart(4)+' ('+euro0(+r.dedupBedrag||0)+')'
+        +'   syncs '+String(+r.syncs||0)
+        +(d.pendFout?('   FOUT: '+d.pendFout):''));
+    }
+    L.push('   "niet vastgelegd" is de koppel-route (psd2IngestSession): daar is de pending-tak stil kapot');
+    L.push('   sinds v270 en die staat als gemeten stand vast; repareren is een eigen ronde.');
+    const stil=Object.keys((typeof SET!=='undefined'&&SET.psd2Accounts)||{}).filter(a=>gesynct.indexOf(a)<0);
+    L.push('   gekoppelde rekeningen ZONDER sync sinds deze versie: '+(stil.length?stil.join(', '):'geen')
+      +(stil.length?'   <-- daar is niets gemeten, dus een nul zegt over die rekeningen niets':''));
+  }
+  L.push('');
+  L.push('3. UIT DE SYNC: DE BOTSING, cumulatief per rekening');
   L.push('   bots  = commitTx() sloeg een binnenkomende regel over omdat zijn id al op een PENDING regel stond');
   L.push('   kwijt = daarvan stond na applyPending() geen enkele regel meer met die id: die boeking is weg');
   L.push('   het verschil tussen de twee is de regel die de bank in DEZELFDE sync ook nog als pending gaf');
-  const P=(typeof SET!=='undefined'&&SET.pendBots)||{}, VT=(typeof SET!=='undefined'&&SET.valutaTally)||{};
-  const rek=Object.keys(P).filter(k=>P[k]&&typeof P[k]==='object');
-  if(!rek.length){
-    L.push('   GEEN ENKELE METING, en dat is geen nul: de teller is opgeslagen data en begint leeg, dus er is');
-    L.push('   niet gesynchroniseerd sinds deze versie draait (v59/v73/v173). Ververs eerst, lees dan opnieuw.');
+  if(!gesynct.length){
+    L.push('   GEEN ENKELE METING, om dezelfde reden als hierboven. Een nul hier zou onwaar zijn.');
   } else {
-    for(const a of rek.sort()){
+    for(const a of gesynct.sort()){
       const r=P[a], g=(VT[a]&&+VT[a].gezien)||0;
       L.push('   '+String(a).padEnd(20)
         +' bots '+String(+r.bots||0).padStart(4)+' ('+euro0(+r.botsBedrag||0)+')'
@@ -16500,14 +16532,76 @@ function diagPendBots(){
         +'   van '+g+' psd2-regels langs commitTx'
         +'   laatst '+(r.op||'?'));
     }
-    const stil=Object.keys((typeof SET!=='undefined'&&SET.psd2Accounts)||{}).filter(a=>rek.indexOf(a)<0);
-    L.push('   gekoppelde rekeningen ZONDER entry: '+(stil.length?stil.join(', '):'geen')
-      +(stil.length?'   <-- daar is niets gemeten, dus een nul zegt over die rekeningen niets':''));
   }
   L.push('   de noemer is SET.valutaTally[rekening].gezien, dezelfde opgeslagen teller die blok 10 afdrukt;');
   L.push('   hij wordt hier gelezen en niet opnieuw uitgerekend (v104).');
   L.push('');
-  L.push('3. WAT DIT BLOK NIET KAN ZEGGEN, EN WAT DE KEUZE IS');
+  L.push('4. WAT ER TUSSEN BETALEN EN BOEKEN NIET IN TX STAAT');
+  L.push('   Levert de pending-aanroep bij een bank niets, dan is een kaartbetaling daar pas zichtbaar als');
+  L.push('   de bank hem BOEKT, en een bank boekt niet in het weekend. Deze sectie meet uit de opgeslagen');
+  L.push('   gegevens hoeveel dat is geweest: boekingen die een betaaldatum uit hun desc dragen (v273) en');
+  L.push('   waarvan t.date LATER valt. De poort is telbareTx(), dus dit is geld dat meetelt.');
+  L.push('   ALLEEN WAAR HET VELD BESTAAT. Een bron zonder kaart-kenmerk in de desc draagt geen betaaldatum,');
+  L.push('   dus over die rekeningen zegt deze sectie niets; meting 1 van blok 10 geeft de dekking.');
+  {
+    const laat=_dT(()=>telbareTx(),[]).filter(t=>t && t.amount<0 && t.betaalDatum
+      && String(t.date).slice(0,10)>String(t.betaalDatum).slice(0,10));
+    if(!laat.length){
+      L.push('   geen enkele boeking draagt een betaaldatum die eerder valt dan zijn boekdatum');
+    } else {
+      const dk=['ma','di','wo','do','vr','za','zo'];
+      const wknd=laat.filter(t=>_piekDagIdx(t.betaalDatum)>=5);
+      const bedrag=a=>a.reduce((x,t)=>x+Math.abs(t.amount),0);
+      const dagTel=a=>{ const c=[0,0,0,0,0,0,0]; for(const t of a) c[_piekDagIdx(t.date)]++;
+        return c.map((n,i)=>n?dk[i]+' '+n:'').filter(Boolean).join('  '); };
+      L.push('   boekingen die later zijn geboekt dan betaald: '+laat.length+'   samen '+euro0(bedrag(laat)));
+      L.push('     de boekdag daarvan: '+dagTel(laat));
+      L.push('   daarvan BETAALD IN HET WEEKEND: '+wknd.length+'   samen '+euro0(bedrag(wknd)));
+      L.push('     de boekdag daarvan: '+dagTel(wknd));
+      /* DE VRIJDAGAVOND STAAT APART EN TELT NIET IN HET WEEKENDCIJFER. Een betaling van vrijdag die pas
+         op maandag boekt is net zo goed het hele weekend onzichtbaar, maar de vraag is afgebakend op de
+         BETAALDAG, en twee afbakeningen in een getal is precies het etiket dat dit project verbiedt. Hij
+         staat er wel, want zonder hem leest het weekendcijfer als alles wat er in dat weekend miste. */
+      const vrij=laat.filter(t=>_piekDagIdx(t.betaalDatum)===4
+        && String(t.date).slice(0,10)>=_piekPlus(t.betaalDatum,3));
+      L.push('   NIET MEEGETELD, maar wel het weekend onzichtbaar: betaald op vrijdag en pas op of na de');
+      L.push('     maandag erna geboekt: '+vrij.length+'   samen '+euro0(bedrag(vrij)));
+      /* PER WEEKEND EN NIET PER MAAND, want dat is de eenheid van de vraag: hoeveel stond er op een
+         zaterdag en zondag niet in TX. Een weekend wordt aangewezen door de ZATERDAG ervan, dus een
+         zondagbetaling telt bij de zaterdag ervoor. */
+      const perWk={};
+      for(const t of wknd){ const i=_piekDagIdx(t.betaalDatum);
+        const za=_piekPlus(t.betaalDatum, i===5?0:-1);
+        (perWk[za]=perWk[za]||[]).push(t); }
+      const wkKeys=Object.keys(perWk).sort();
+      if(wkKeys.length){
+        const somWk=wkKeys.map(k=>bedrag(perWk[k]));
+        const tot=somWk.reduce((a,b)=>a+b,0);
+        const hoog=Math.max.apply(null,somWk);
+        L.push('   weekends met zo\'n betaling: '+wkKeys.length+'   van '+wkKeys[0]+' t/m '+wkKeys[wkKeys.length-1]);
+        L.push('   gemiddeld per zo\'n weekend: '+euro0(tot/wkKeys.length)+'   hoogste: '+euro0(hoog));
+        L.push('   de laatste tien, nieuwste eerst (zaterdag van dat weekend, aantal, bedrag):');
+        for(const k of wkKeys.slice(-10).reverse()){
+          L.push('     '+k+'   '+String(perWk[k].length).padStart(2)+' boekingen   '+euro0(bedrag(perWk[k])));
+        }
+      }
+      /* PER REKENING, want de vraag is per bank en dit blok noemt geen banknaam (v275/v104):
+         welke bank bij welke rekening hoort staat in blok 8. */
+      const perRek={};
+      for(const t of wknd){ const a=String(t.acc||'-'); (perRek[a]=perRek[a]||[]).push(t); }
+      L.push('   per rekening, met het saldotype dat de bank bij de laatste sync teruggaf:');
+      for(const a of Object.keys(perRek).sort((x,y)=>bedrag(perRek[y])-bedrag(perRek[x]))){
+        L.push('     '+String(a).padEnd(20)+' '+String(perRek[a].length).padStart(3)+' boekingen   '
+          +euro0(bedrag(perRek[a])).padStart(8)+'   saldotype '+(((DG[a]||{}).balTypes)||'niet vastgelegd'));
+      }
+      L.push('   HET SALDOTYPE BESLIST OF JE VEILIG TE BESTEDEN OOK TE HOOG STAAT, en dit blok legt die code');
+      L.push('   niet uit: dekt het type ook wat nog niet geboekt is, dan is alleen je maandtotaal te laag;');
+      L.push('   dekt het dat niet, dan staat je saldo er ook boven en telt dit bedrag dubbel mee als ruimte.');
+      L.push('   De twee banken geven hier niet dezelfde code, en dat is zelf de waarneming.');
+    }
+  }
+  L.push('');
+  L.push('5. WAT DIT BLOK NIET KAN ZEGGEN, EN WAT DE KEUZE IS');
   L.push('   Het telt de botsing en de schade, niet hoe vaak een pending-regel ongewijzigd boekt: een regel');
   L.push('   die met een ander bedrag of een andere omschrijving boekt krijgt een andere id en botst nooit.');
   L.push('   Bij een voorautorisatie speelt het daarom niet, want daar verschilt het bedrag (v293); het raakt');
@@ -16519,8 +16613,13 @@ function diagPendBots(){
   L.push('       eis in dit veld, want elke bestaande pending-id verandert dan mee (v270).');
   L.push('   (b) applyPending() voor commitTx() laten wissen. Haalt de overslag weg zonder een id aan te raken.');
   L.push('   (c) de pending-vlag uit de identiteit halen en de twee op t.pending laten scheiden.');
-  L.push('   WAT DEZE UITVOER BESLIST: staat kwijt op nul terwijl er wel is gesynchroniseerd, dan kost het');
-  L.push('   vandaag niets en is dichten een keuze over het risico. Staat er iets, dan is het bedrag de maat.');
+  L.push('   WAT DEZE UITVOER BESLIST OVER DE BOTSING: staat kwijt op nul terwijl er wel is gesynchroniseerd,');
+  L.push('   dan kost hij vandaag niets en is dichten een keuze over het risico. Staat er iets, dan is het');
+  L.push('   bedrag de maat.');
+  L.push('   OVER SECTIE 4 BESLIST HIJ NIETS. Dat is een meting over wat er WAS en geen voorspelling: dat een');
+  L.push('   volgend weekend weer een bedrag onzichtbaar staat volgt eruit zolang de bank geen pending geeft,');
+  L.push('   maar hoeveel hangt af van wat je doet. Een gemiddelde is geen bedrag dat er nu staat.');
+  L.push('   EN HET IS GEEN ZELFDE GAT ALS DE BOTSING: die duurt een sync, deze duurt tot de bank boekt.');
   return L;
 }
 const DIAG_BLOKKEN=[
@@ -17003,7 +17102,7 @@ async function psd2Refresh(silent){
   /* v198: de datumstempel bij het saldo was toISOString().slice(0,10), en dat is de UTC-dag: tussen
      middernacht en 02:00 zomertijd stempelt die gisteren, waardoor een vers opgehaald saldo als
      achterlopend zou lezen. De datums in TX zijn lokale kalenderdagen (v177), dus deze ook. */
-  const allTx=[]; const balances={}; let authFail=false, anyOk=false;
+  const allTx=[]; const pend=[]; const balances={}; let authFail=false, anyOk=false;
   for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue;
     let cont=null, guard=0, txN=0, txFout='';
     do{
@@ -17018,8 +17117,29 @@ async function psd2Refresh(silent){
     try{ const b=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/balances'); bal=pickBalance(b, bu); }
     catch(e){ balFout=String((e&&e.message)||e).slice(0,90); }
     if(bal!=null) balances[accId]={balance:bal,date:vandaagYMD()};
+    /* ===== DE PENDING-AANROEP WORDT VASTGELEGD (v296) =====
+       DE AANROEP STOND IN EEN TWEEDE LUS NA commitTx() en zijn fout werd stil geslikt, dus een lege
+       pending-lijst en een mislukte aanroep zagen er vanaf het diagnosescherm identiek uit. Hij staat nu
+       in DEZELFDE lus als de transactie- en de balances-aanroep, zodat een entry per rekening alle drie
+       de aanroepen draagt en de vroege terugkeer hieronder ze alle drie bewaart.
+       DE VOLGORDE DIE ERTOE DOET VERANDERT NIET: wat de botsing van v295 veroorzaakt is dat
+       `applyPending()` NA `commitTx()` draait, en dat blijft zo. Alleen het ophalen verschuift naar voren;
+       het aantal aanroepen per rekening blijft drie (v289).
+       DE FOUT WORDT GEMELD EN NIET AFGEHANDELD: de sync gaat gewoon door, precies zoals hij deed. */
+    let pendN=0, pendMap=0, pendFout='';
+    try{ const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fromStr+'&transaction_status=PDNG');
+      const prij=(dp.transactions||[]); pendN=prij.length;
+      for(const raw of prij){ const t=mapPsd2Tx(raw, accId, true); if(t){ pend.push(t); pendMap++; } }
+    }catch(e){ pendFout=String((e&&e.message)||e).slice(0,90); }
     psd2DiagZet(accId, {txN, txPag:guard, txFout, balUit:bal, balGeland:bal!=null, balFout,
-      balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||''});
+      balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||'',
+      pendN, pendMap, pendFout, pendGeland:!pendFout});
+    /* v296: DE MARKERING DAT DEZE REKENING IS GESYNCHRONISEERD. Zonder hem bestaat er voor deze rekening
+       geen entry zolang er geen botsing was, en dan is "nul botsingen" niet te onderscheiden van "er is
+       niet gesynchroniseerd" (v59/v73/v173, dezelfde discriminator als `gezien` bij v277). De teller
+       wordt hier in WOORDEN genoemd en niet bij naam, want een bronzoekende test telt een comment mee
+       (v276). */
+    pendBotsZet(accId,'syncs');
   }
   /* DE UITLEZING MOET DE MISLUKKING OVERLEVEN, en dat is precies het geval dat je wil zien: zonder deze
      save() gaat wat er net is vastgelegd verloren op de enige route die hier vroeg terugkeert. */
@@ -17028,15 +17148,10 @@ async function psd2Refresh(silent){
   const added=commitTx(allTx, balances);
   /* v197: hier stond `if(SET.psd2Pending!==false)`. Dat las als een instelling, maar niets schreef
      dat veld ooit, dus de andere tak was onbereikbaar. Er komt ook geen instelling: een pending
-     afschrijving is geld dat weg is, dus die hoort altijd mee te tellen. */
-  { const pend=[];
-    for(const accId of keys){ const uid=meta[accId].uid; if(!uid) continue;
-      try{ const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fromStr+'&transaction_status=PDNG');
-        for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); }
-      }catch(e){}
-    }
-    applyPending(pend);
-  }
+     afschrijving is geld dat weg is, dus die hoort altijd mee te tellen.
+     v296: het OPHALEN staat nu in de lus hierboven; dit blijft de plek waar de snapshot landt, NA
+     commitTx(), want die volgorde is wat blok 13 meet. */
+  applyPending(pend);
   curMonth=null; render();
   if(added) try{ pushTopNotif(); updateNotifBadge(); }catch(_){}
   if(!silent) psd2SyncToast(added? `${ICON('check')} ${added} nieuwe transacties` : 'Bijgewerkt, geen nieuwe (van vandaag soms nog niet geboekt)');
@@ -17145,6 +17260,11 @@ async function psd2IngestSession(s){
     if(bal!=null) balances[accId]={balance:bal,date:vandaagYMD()};
     psd2DiagZet(accId, {txN, txPag:guard, txFout, balUit:bal, balGeland:bal!=null, balFout,
       balLijst:bu.lijst, balTypes:bu.types||'', balGekozen:bu.gekozen||'', balRuw:bu.ruw||'', balReden:bu.reden||''});
+    /* v296: de sync-markering, zodat "nul botsingen" hier ook een meting is. DEZE ROUTE LEGT DE
+       PENDING-AANROEP NIET VAST, en dat is geen omissie maar de stand die v270 heeft gemeten en die
+       `rekeningen-diagnose.spec.js` met opzet vastpint: de tak hieronder is stil kapot, want de aanroep
+       staat achter een comment op dezelfde regel. Repareren is een eigen ronde; blok 13 zegt het erbij. */
+    pendBotsZet(accId,'syncs');
     { try{ const fp=new Date(); fp.setMonth(fp.getMonth()-1);   // v197: pending telt altijd mee const dp=await psd2Api('/accounts/'+encodeURIComponent(uid)+'/transactions?date_from='+fp.toISOString().slice(0,10)+'&transaction_status=PDNG');
       for(const raw of (dp.transactions||[])){ const t=mapPsd2Tx(raw, accId, true); if(t) pend.push(t); } }catch(e){} }
   }
@@ -17311,7 +17431,9 @@ function pendBotsZet(acc, veld, bedrag){
   const P=SET.pendBots=SET.pendBots||{};
   const r=P[acc]=(P[acc]&&typeof P[acc]==='object')?P[acc]:{};
   r[veld]=(+r[veld]||0)+1;
-  r[veld+'Bedrag']=Math.round(((+r[veld+'Bedrag']||0)+Math.abs(+bedrag||0))*100)/100;
+  /* v296: ZONDER BEDRAG KOMT ER GEEN BEDRAG-VELD. `syncs` telt hoe vaak deze rekening is
+     gesynchroniseerd en heeft geen euro's; een veld `syncsBedrag` op nul zou als meting lezen. */
+  if(bedrag!==undefined) r[veld+'Bedrag']=Math.round(((+r[veld+'Bedrag']||0)+Math.abs(+bedrag||0))*100)/100;
   r.op=vandaagYMD();
 }
 function applyPending(list){
@@ -17320,7 +17442,10 @@ function applyPending(list){
   let add=0;
   for(const t of (list||[])){ if(!t) continue;
     const dup=booked.some(b=>b.acc===t.acc && Math.abs(b.amount-t.amount)<0.01 && Math.abs((new Date(b.date)-new Date(t.date))/86400000)<=6);
-    if(dup) continue;
+    /* v296: EEN PENDING-REGEL DIE HIER VALT IS NIET HETZELFDE ALS EEN DIE DE BANK NIET GAF, en dat is
+       de tweede verklaring voor een lege pending-stand. Zonder deze telling zijn de twee vanaf het
+       diagnosescherm niet te onderscheiden: in beide gevallen staat er niets in TX. */
+    if(dup){ pendBotsZet(String(t.acc||'-'),'dedup',t.amount); continue; }
     TX.push(t); add++;
   }
   /* v295: HIER WORDT DE SCHADE GEMETEN EN NIET HET PLAFOND. `commitTx()` heeft de botsingen van deze sync

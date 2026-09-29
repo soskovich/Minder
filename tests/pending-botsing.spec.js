@@ -159,7 +159,10 @@ test.describe('1 - de botsing', () => {
     await zetPending(page, PEND);
     const r = await sync(page, [AH], [AH]);
     expect(r.added).toBe(1);
-    expect(await page.evaluate(() => SET.pendBots || null)).toBe(null);
+    /* v296: `SET.pendBots` is hier niet meer leeg, want applyPending() telt sindsdien ook wat hij op zijn
+       dedup liet vallen. Wat deze test vasthoudt is de BOTSING, en die hoort er niet te zijn. */
+    const P = await page.evaluate(() => JSON.parse(JSON.stringify(SET.pendBots || {})));
+    expect(Object.keys(P).every((a) => P[a].bots === undefined)).toBe(true);
   });
 
   test('na de boot slaat commitTx de geboekte regel over en telt de botsing per rekening', async ({ page }) => {
@@ -182,6 +185,7 @@ test.describe('1 - de botsing', () => {
     const r = await sync(page, [ETOS], []);
     expect(r.added).toBe(0);
     expect(await page.evaluate(() => SET.pendBots || null)).toBe(null);
+    expect(r.pendBots).toEqual({});
   });
 });
 
@@ -245,9 +249,10 @@ test.describe('3 - de overdracht tussen de twee functies lekt niet', () => {
 test.describe('4 - het blok', () => {
   test('zonder meting zegt het blok dat er niets gemeten is, en nergens een nul', async ({ page }) => {
     await boot(page);
-    const t = deel(await blok(page), 2);
-    expect(t).toContain('GEEN ENKELE METING');
-    expect(t).not.toMatch(/bots\s+0/);
+    const t = await blok(page);
+    expect(deel(t, 2)).toContain('GEEN ENKELE METING');
+    expect(deel(t, 3)).toContain('GEEN ENKELE METING');
+    expect(deel(t, 3)).not.toMatch(/bots\s+0/);
   });
 
   test('sectie 1 scheidt de regels met _p van de scherpe, per rekening en met het bedrag', async ({ page }) => {
@@ -270,12 +275,16 @@ test.describe('4 - het blok', () => {
     }
   });
 
-  test('sectie 2 drukt bots en kwijt per rekening af, met de noemer uit valutaTally', async ({ page }) => {
+  test('sectie 3 drukt bots en kwijt per rekening af, met de noemer uit valutaTally', async ({ page }) => {
     await boot(page);
     await zetPending(page, PEND);
     await bootSweep(page);
     await sync(page, [AH, VOM, KIO, ETOS], [VOM]);
-    const t = deel(await blok(page), 2);
+    /* v296: de rijen staan er alleen voor een rekening die IS gesynchroniseerd, dus de markering moet
+       er staan voordat deze sectie iets kan tonen. `sync()` gaat niet door psd2Refresh(), dus de test
+       zet hem zoals de sync dat doet. Zonder die stap meet deze assertie de markering en niet de rij. */
+    await page.evaluate((r) => { for (const a of r) pendBotsZet(a, 'syncs'); }, [ACC1, ACC2]);
+    const t = deel(await blok(page), 3);
     /* DE NOEMER WORDT NIET IN DE TEST UITGEREKEND MAAR UIT DE OPGESLAGEN TELLER GELEZEN (v104): de sync
        hierboven laat `gezien` zelf oplopen (drie psd2-regels op ACC1, een op ACC2, bovenop de seed), dus
        een vast getal uit de fixture zou hier iets anders beweren dan het blok leest. */
@@ -320,22 +329,28 @@ test.describe('5 - de bron: een schrijver, twee aanroepers, een lezer', () => {
      functie de teller, dan telt die treffer nergens mee en valt deze test. */
   const tel = (s, re) => (s.match(re) || []).length;
 
-  test('pendBotsZet() wordt alleen vanuit commitTx en applyPending aangeroepen', async () => {
+  /* v296: DE VIER AANROEPERS EN WAT ELK ERVAN TELT. commitTx() telt de botsing, applyPending() telt de
+     schade EN wat hij op zijn dedup liet vallen, en de twee sync-routes zetten de markering dat er
+     werkelijk is gesynchroniseerd. Een vijfde aanroeper telt nergens mee en laat deze test vallen. */
+  test('pendBotsZet() wordt alleen vanuit commitTx, applyPending en de twee sync-routes aangeroepen', async () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
     const re = /pendBotsZet\(/g;
-    const delen = ['function pendBotsZet(', 'function commitTx(', 'function applyPending(list){']
-      .map((n) => sectieVan(src, n));
-    expect(tel(src, re)).toBe(3);
+    const namen = ['function pendBotsZet(', 'function commitTx(', 'function applyPending(list){',
+      'async function psd2Refresh(', 'async function psd2IngestSession('];
+    const delen = namen.map((n) => sectieVan(src, n));
+    expect(tel(src, re)).toBe(6);
     expect(delen.reduce((a, d) => a + tel(d, re), 0)).toBe(tel(src, re));
     expect(tel(delen[1], re)).toBe(1);
-    expect(tel(delen[2], re)).toBe(1);
+    expect(tel(delen[2], re)).toBe(2);
+    expect(tel(delen[3], re)).toBe(1);
+    expect(tel(delen[4], re)).toBe(1);
   });
 
   test('SET.pendBots wordt alleen door de schrijver en door blok 13 aangeraakt', async () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
     const re = /SET\.pendBots/g;
     const delen = ['function pendBotsZet(', 'function diagPendBots('].map((n) => sectieVan(src, n));
-    expect(tel(src, re)).toBeGreaterThan(2);
+    expect(tel(src, re)).toBe(3);
     expect(delen.reduce((a, d) => a + tel(d, re), 0)).toBe(tel(src, re));
     expect(tel(delen[1], re)).toBe(1);
   });
@@ -347,5 +362,246 @@ test.describe('5 - de bron: een schrijver, twee aanroepers, een lezer', () => {
       .map((n) => sectieVan(src, n));
     expect(tel(src, re)).toBeGreaterThan(3);
     expect(delen.reduce((a, d) => a + tel(d, re), 0)).toBe(tel(src, re));
+  });
+});
+
+/* ===== v296: WAT DE PENDING-AANROEP DEED, EN WAT ER TUSSEN BETALEN EN BOEKEN NIET IN TX STAAT =====
+ *
+ * DE AANLEIDING STAAT IN DE UITVOER VAN v295 ZELF. Blok 13 zei "GEEN ENKELE METING ... er is niet
+ * gesynchroniseerd sinds deze versie draait", terwijl blok 8 een import van drieenveertig seconden eerder
+ * meldde. `SET.pendBots[rekening]` werd alleen aangemaakt BIJ een botsing, dus een lege map betekende twee
+ * dingen tegelijk: niet gemeten, of gemeten en nul. Dat is precies de discriminator die `gezien` bij v277
+ * wel had en deze teller niet. `syncs` is die discriminator.
+ *
+ * DE TWEEDE VONDST VAN DIE UITVOER: er stond geen enkele pending-regel in TX na een sync van zes
+ * rekeningen. Of de bank niets gaf, of de aanroep faalde, of `applyPending()` alles op zijn dedup liet
+ * vallen, was nergens te zien: de aanroep stond in een `try/catch(e){}` die elke fout slikte en nergens
+ * werd vastgelegd wat hij teruggaf. Alle drie de verklaringen zijn nu apart te lezen.
+ *
+ * WAT DE FIXTURE DRAAGT, en elk geval onderscheidt een regel van zijn voor de hand liggende variant:
+ *  - een rekening waarvan de pending-aanroep LUKT en twee regels teruggeeft waarvan er EEN leesbaar is,
+ *    zodat "gaf" en "gelezen" niet hetzelfde getal zijn;
+ *  - een rekening waarvan de pending-aanroep GOOIT, zodat "gaf 0" te onderscheiden is van een fout;
+ *  - een sync ZONDER enige botsing, want dat is het geval waarop v295 het verkeerde antwoord gaf;
+ *  - een pending-regel die op de dedup van applyPending() valt naast een die er wel bij komt;
+ *  - voor sectie 4: betaald op zaterdag en op zondag van HETZELFDE weekend (die horen bij een weekend),
+ *    een tweede weekend, een boeking die LATER is geboekt maar niet in het weekend is betaald, een die op
+ *    zijn eigen betaaldag is geboekt (dus geen gat), en een die door de poort van telbareTx() valt.
+ */
+const ZA1 = (() => { const d = new Date(now); d.setDate(d.getDate() - 10);
+  while (d.getDay() !== 6) d.setDate(d.getDate() - 1); return d; })();
+const dPlus = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const ZO1 = dPlus(ZA1, 1), MA1 = dPlus(ZA1, 2), WO1 = dPlus(ZA1, -3), VR1 = dPlus(ZA1, -1);
+const ZA2 = dPlus(ZA1, -7), MA2 = dPlus(ZA2, 2), DI2 = dPlus(ZA2, 3);
+
+/* De ABN-vorm die betaalMoment() leest: een kaart-kenmerk plus dd.mm.yy met een tijd erachter. */
+const kaart = (naam, d, tijd) => 'BEA, Betaalpas ' + naam + ' NR:AB1C2D, '
+  + String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.'
+  + String(d.getFullYear()).slice(2) + '/' + tijd + ' PURMEREND';
+
+function weekendSeed() {
+  const tx = [];
+  const add = (boek, bedrag, naam, betaald, tijd) => tx.push({ id: 'w' + tx.length, date: ymd(boek),
+    amount: -bedrag, acc: ACC1, src: 'psd2', name: naam,
+    desc: kaart(naam, betaald || boek, tijd || '14:32'), typ: '', ref: '', accName: '', refNums: [] });
+  add(MA1, 41.20, 'ZATERDAGWINKEL', ZA1, '15:01');   // betaald za, geboekt ma
+  add(MA1, 18.35, 'ZONDAGWINKEL', ZO1, '11:22');     // betaald zo, HETZELFDE weekend
+  add(MA1, 99.99, 'UITGESLOTEN', ZA1, '09:09');      // betaald za, maar valt door de poort in een test
+  add(MA2, 63.10, 'VORIGWEEKEND', ZA2, '16:40');     // een TWEEDE weekend
+  add(VR1, 27.00, 'DOORDEWEEKS', WO1, '12:00');      // later geboekt, maar niet in het weekend betaald
+  add(ZA1, 10.00, 'ZELFDEDAG', ZA1, '08:15');        // betaald za en geboekt za: geen gat
+  add(MA1, 55.40, 'VRIJDAGAVOND', VR1, '21:45');     // vrijdag betaald, maandag geboekt: wel het weekend
+                                                     // onzichtbaar, maar GEEN weekendbetaling
+  add(DI2, 12.50, 'ZALAATGEBOEKT', ZA2, '13:13');    // za betaald, pas DINSDAG geboekt. Zonder dit geval
+                                                     // is de vrijdag-lijn op `===4` niet te onderscheiden
+                                                     // van `>=4`, want dan valt geen weekendbetaling
+                                                     // binnen zijn tweede eis (meetles o)
+  return { minder_tx: JSON.stringify(tx), minder_ovr: '{}',
+    minder_set: JSON.stringify({ limit: 70, autoIncome: false, income: 4000,
+      manualBal: { [ACC1]: 3000 }, budgets: { boodschappen: 500, overig: 400 },
+      psd2Accounts: { [ACC1]: { uid: 'u1', label: 'Main' } },
+      psd2Diag: { [ACC1]: { balTypes: 'ITBD' } } }),
+    minder_own: JSON.stringify([ACC1]),
+    minder_accmeta: JSON.stringify({ [ACC1]: { balance: 3000, date: VANDAAG } }),
+    minder_plan: '{}' };
+}
+
+async function bootWeekend(page) {
+  await page.route('**/sw.js', (r) => r.abort());
+  await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, weekendSeed());
+  await page.goto('/index.html');
+  await page.waitForFunction(() => typeof diagPendBots === 'function' && typeof telbareTx === 'function');
+}
+
+/* De stub vervangt psd2Api, zodat psd2Refresh() zelf draait: de test loopt door de echte functie en
+   niet langs een nagebootste versie ervan (meetles c en g). */
+const REFRESH = `
+  SET.psd2Url='https://x.test'; SET.psd2Token='t';
+  SET.psd2Accounts={'%A1%':{uid:'u1',label:'Main'},'%A2%':{uid:'u2',label:'Zakgeld'}};
+  psd2Api = async (pad) => {
+    if(/transaction_status=PDNG/.test(pad)){
+      if(pad.indexOf('u1')>-1) return { transactions:[
+        { transaction_amount:{amount:'12.34'}, credit_debit_indicator:'DBIT', booking_date:'%D%',
+          creditor:{name:'Pending Winkel'}, remittance_information:'Test',
+          bank_transaction_code:{description:'PMNT'} },
+        { transaction_amount:{amount:'geen getal'}, credit_debit_indicator:'DBIT', booking_date:'%D%',
+          creditor:{name:'Onleesbaar'}, remittance_information:'', bank_transaction_code:{description:'PMNT'} } ] };
+      throw new Error('ASPSP_RATE_LIMIT_EXCEEDED');
+    }
+    if(/\\/balances/.test(pad)) return { balances:[] };
+    return { transactions:[] };
+  };
+  await psd2Refresh(true);
+  return JSON.parse(JSON.stringify({ diag:SET.psd2Diag||{}, bots:SET.pendBots||{} }));
+`;
+const draaiRefresh = (page) => page.evaluate(new Function('return (async()=>{'
+  + REFRESH.split('%A1%').join(ACC1).split('%A2%').join(ACC2).split('%D%').join(VANDAAG) + '})()'));
+
+test.describe('6 - de sync legt vast wat de pending-aanroep deed', () => {
+  test('een gelukte aanroep draagt zijn aantal en wat ervan leesbaar was', async ({ page }) => {
+    await boot(page);
+    const r = await draaiRefresh(page);
+    expect(r.diag[ACC1].pendN).toBe(2);
+    expect(r.diag[ACC1].pendMap).toBe(1);
+    expect(r.diag[ACC1].pendFout).toBe('');
+    expect(r.diag[ACC1].pendGeland).toBe(true);
+  });
+
+  /* ZONDER DIT GEVAL IS "gaf 0" NIET VAN EEN FOUT TE ONDERSCHEIDEN, en dat was precies het gat: de
+     catch slikte de fout en er bleef een lege pending-lijst over die als meting las. */
+  test('een mislukte aanroep draagt zijn fout, en dat is iets anders dan nul regels', async ({ page }) => {
+    await boot(page);
+    const r = await draaiRefresh(page);
+    expect(r.diag[ACC2].pendN).toBe(0);
+    expect(r.diag[ACC2].pendGeland).toBe(false);
+    expect(r.diag[ACC2].pendFout).toContain('RATE_LIMIT');
+    const t = deel(await blok(page), 2);
+    expect(t).toMatch(new RegExp(ACC1 + '\\s+gaf\\s+2\\s+gelezen\\s+1'));
+    expect(t).toMatch(new RegExp(ACC2 + '[^\\n]*FOUT: [^\\n]*RATE_LIMIT'));
+  });
+
+  /* DE KERN VAN DEZE RONDE: een sync zonder enkele botsing is een GEMETEN nul en geen ontbrekende meting. */
+  test('een sync zonder botsing is een gemeten nul en niet "niet gemeten"', async ({ page }) => {
+    await boot(page);
+    const r = await draaiRefresh(page);
+    expect(r.bots[ACC1].syncs).toBe(1);
+    expect(r.bots[ACC2].syncs).toBe(1);
+    expect(r.bots[ACC1].bots).toBe(undefined);
+    const t = await blok(page);
+    expect(deel(t, 2)).not.toContain('GEEN ENKELE METING');
+    expect(deel(t, 3)).not.toContain('GEEN ENKELE METING');
+    expect(deel(t, 3)).toMatch(new RegExp(ACC1 + '\\s+bots\\s+0\\s+\\(€0\\)\\s+kwijt\\s+0'));
+  });
+
+  test('syncs draagt geen bedrag, want een sync is geen euro', async ({ page }) => {
+    await boot(page);
+    const r = await draaiRefresh(page);
+    expect('syncsBedrag' in r.bots[ACC1]).toBe(false);
+  });
+
+  /* DE MARKERING IS DE POORT VAN DE RIJEN: een rekening die nooit is gesynchroniseerd hoort er niet te
+     staan, ook niet als er ooit iets anders in zijn entry is geschreven. */
+  test('een rekening zonder sync staat apart en niet als rij', async ({ page }) => {
+    await boot(page);
+    await draaiRefresh(page);
+    await page.evaluate((a) => { SET.psd2Accounts[a] = { uid: 'u9', label: 'Stil' }; }, '999100999');
+    const t = deel(await blok(page), 2);
+    expect(t).toContain('ZONDER sync sinds deze versie: 999100999');
+    expect(t.split('\n').some((l) => /^\s+999100999\s+gaf/.test(l))).toBe(false);
+  });
+});
+
+test.describe('7 - wat applyPending op zijn dedup liet vallen', () => {
+  test('een pending-regel die op de dedup valt telt apart, een die erbij komt niet', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate((o) => {
+      /* een geboekte regel van hetzelfde bedrag op dezelfde dag: daar valt de pending-kant op */
+      TX.push({ id: 'geboekt1', date: o.vandaag, amount: -25, acc: o.acc, src: 'psd2',
+        name: 'Al Geboekt', desc: 'Al Geboekt PMNT', typ: '', ref: '', accName: '', refNums: [] });
+      const mk = (bedrag, naam) => mapPsd2Tx({ transaction_amount: { amount: bedrag },
+        credit_debit_indicator: 'DBIT', booking_date: o.vandaag, creditor: { name: naam },
+        remittance_information: '', bank_transaction_code: { description: 'PMNT' } }, o.acc, true);
+      applyPending([mk('25.00', 'Al Geboekt'), mk('33.33', 'Nieuw Pending')]);
+      return { bots: JSON.parse(JSON.stringify(SET.pendBots || {})),
+        pend: TX.filter((t) => t.pending).map((t) => Math.abs(t.amount)) };
+    }, { acc: ACC1, vandaag: VANDAAG });
+    expect(r.bots[ACC1].dedup).toBe(1);
+    expect(r.bots[ACC1].dedupBedrag).toBe(25);
+    expect(r.pend).toEqual([33.33]);
+  });
+
+  /* EEN ENTRY ZONDER SYNC IS GEEN METING, en dit is het geval dat dat onderscheidt: applyPending() kan
+     een entry aanmaken zonder dat psd2Refresh() eraan te pas kwam. Leest het blok de entries in plaats
+     van de markering, dan zegt hij hier "bots 0" over een rekening die nooit is gesynchroniseerd. */
+  test('een entry zonder sync-markering maakt van nul nog geen meting', async ({ page }) => {
+    await boot(page);
+    await page.evaluate((o) => {
+      TX.push({ id: 'geboekt2', date: o.vandaag, amount: -25, acc: o.acc, src: 'psd2',
+        name: 'Al Geboekt', desc: 'Al Geboekt PMNT', typ: '', ref: '', accName: '', refNums: [] });
+      applyPending([mapPsd2Tx({ transaction_amount: { amount: '25.00' }, credit_debit_indicator: 'DBIT',
+        booking_date: o.vandaag, creditor: { name: 'Al Geboekt' }, remittance_information: '',
+        bank_transaction_code: { description: 'PMNT' } }, o.acc, true)]);
+    }, { acc: ACC1, vandaag: VANDAAG });
+    expect(await page.evaluate((a) => (SET.pendBots[a] || {}).dedup, ACC1)).toBe(1);
+    expect(await page.evaluate((a) => (SET.pendBots[a] || {}).syncs, ACC1)).toBe(undefined);
+    const t = await blok(page);
+    expect(deel(t, 2)).toContain('GEEN ENKELE METING');
+    expect(deel(t, 3)).toContain('GEEN ENKELE METING');
+    expect(deel(t, 3)).not.toMatch(/bots\s+0/);
+  });
+});
+
+test.describe('8 - sectie 4: betaald voor het weekend om, geboekt daarna', () => {
+  test('de fixture draagt de betaaldatums die de comment belooft', async ({ page }) => {
+    await bootWeekend(page);
+    const r = await page.evaluate(() => TX.map((t) => [t.name, t.betaalDatum || null, t.date]));
+    expect(r.length).toBe(8);
+    expect(r.every((x) => x[1])).toBe(true);
+    const za = r.find((x) => x[0] === 'ZATERDAGWINKEL');
+    expect(za[1] < za[2]).toBe(true);
+    const zd = r.find((x) => x[0] === 'ZELFDEDAG');
+    expect(zd[1]).toBe(zd[2]);
+  });
+
+  test('alleen een gat telt, en alleen een weekendbetaling telt als weekend', async ({ page }) => {
+    await bootWeekend(page);
+    const t = deel(await blok(page), 4);
+    /* zes van de zeven zijn later geboekt (ZELFDEDAG niet), VIER daarvan zijn in het weekend betaald */
+    expect(t).toMatch(/later zijn geboekt dan betaald: 7\s+samen €318/);
+    expect(t).toMatch(/BETAALD IN HET WEEKEND: 5\s+samen €235/);
+    expect(t).toContain('weekends met zo\'n betaling: 2');
+    /* DE GRENS IS DE BETAALDAG: vrijdag is het weekend wel onzichtbaar en telt toch niet in dat cijfer.
+       Zonder dit geval is de drempel op zaterdag niet van een drempel op vrijdag te onderscheiden. */
+    expect(t).toMatch(/maandag erna geboekt: 1\s+samen €55/);
+  });
+
+  test('zaterdag en zondag van dezelfde week zijn EEN weekend', async ({ page }) => {
+    await bootWeekend(page);
+    const t = deel(await blok(page), 4);
+    const za1 = ymd(ZA1), za2 = ymd(ZA2);
+    expect(t).toMatch(new RegExp(za1 + '\\s+3 boekingen\\s+€160'));
+    expect(t).toMatch(new RegExp(za2 + '\\s+2 boekingen\\s+€76'));
+    expect(t).toContain('gemiddeld per zo\'n weekend: €118');
+    expect(t).toContain('hoogste: €160');
+  });
+
+  /* DE POORT: sectie 4 leest telbareTx() en niet TX, dus een boeking die je zelf als dubbel hebt
+     bevestigd telt niet mee. Zonder dit geval is "leest de poort" niet te onderscheiden van "leest TX". */
+  test('een boeking die door de poort valt telt niet mee', async ({ page }) => {
+    await bootWeekend(page);
+    const voor = deel(await blok(page), 4);
+    expect(voor).toMatch(/BETAALD IN HET WEEKEND: 5\s+samen €235/);
+    await page.evaluate(() => { const t = TX.find((x) => x.name === 'UITGESLOTEN');
+      SET.dubbelPaar = { proef: { weg: String(t.id), op: '2026-01-01' } }; });
+    const na = deel(await blok(page), 4);
+    expect(na).toMatch(/BETAALD IN HET WEEKEND: 4\s+samen €135/);
+    expect(na).toMatch(new RegExp(ymd(ZA1) + '\\s+2 boekingen\\s+€60'));
+  });
+
+  test('het saldotype staat per rekening erbij, en wordt niet uitgelegd', async ({ page }) => {
+    await bootWeekend(page);
+    const t = deel(await blok(page), 4);
+    expect(t).toMatch(new RegExp(ACC1 + '\\s+5 boekingen\\s+€235\\s+saldotype ITBD'));
+    expect(t).not.toMatch(/interim|expected|booked/i);
   });
 });
