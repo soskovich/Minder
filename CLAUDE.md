@@ -95,6 +95,41 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DEZELFDE PAREN, TWEE KEER GETELD: DE IMPORT EN WAT ER NOG MEETELT** (`v300`): de parenscan van blok 10
+  loopt over de ruwe `TX`, dus zijn kruisbron-paren zijn het getal van vóór `v284` en `v288`. Dat is `v285`
+  op deze sectie: wie de IMPORT telt leest `TX`, wie GELD telt leest de poort. De scan blijft op `TX` en
+  zegt dat er nu bij; ernaast staat hoeveel paren er nog meetellen (beide kanten door `telbareTx()`) en bij
+  hoeveel er al een kant wegviel. Per uitgeschreven paar staat of hij met beide kanten, een kant of geen
+  kant meetelt. Er verandert geen cijfer en geen poort (`v244`).
+  DE POORT WORDT NIET OPNIEUW UITGEDRUKT: `csvDubbel()`, `dubbelWeg()` en `vorautWeg()` zijn de drie
+  predicaten die `vorautBron()` en `telbareTx()` zelf lezen (`v104`). ALLE DRIE STAAN ER OOK OP NUL, want
+  een poort die niet in de lijst staat is niet te onderscheiden van een poort waarop niets viel
+  (`v59`/`v73`/`v173`). DE CSV-POORT KAN OP EEN PAAR BINNEN EEN REKENING PER CONSTRUCTIE NIET VUREN:
+  `csvPsd2Paring()` paart alleen een rekening met EEN bron en een kruisbron-paar heeft er twee. Dat staat
+  als reden in het blok, nagelezen en niet gemeten.
+  HET BEDRAG IS EEN PLAFOND EN GEEN SCHADE, dezelfde vorm als `bots` tegen `kwijt` bij `v295`: een paar is
+  twee boekingen van hetzelfde bedrag, en ALS het dezelfde betaling is telt er precies EEN van de twee
+  dubbel. Dat "als" is niet vastgesteld (`v290`), dus het bedrag telt EEN kant per paar en heet een
+  plafond. ALLEEN WAAR DIE KANT ALS UITGAVE TELT, want een interne overboeking telt nergens als uitgave en
+  daar valt in de normsommen niets dubbel te tellen; het interne paar staat dus in het AANTAL en draagt NUL
+  in het bedrag, en zonder dat geval is het aantal paren niet van het aantal paren met een bedrag te
+  onderscheiden. Een boeking kan in meer dan een paar zitten, en dat staat erbij.
+- **EEN TEST DIE OVERSLAAT OMDAT ZIJN INVOER HET GEVAL NIET DRAAGT, MELDT GROEN** (`v300`): de twee
+  overgeslagen tests van de suite zijn nagegaan, en het waren er geen twee met een vastgelegde reden maar
+  twee met een invoer die het geval per constructie niet kon dragen. Dat is de vorm van de
+  geplande-boeking-test van `v299`, en de reparatie is dezelfde: de invoer meten in plaats van de uitkomst
+  wegfilteren.
+  DE MEEVALLER-REGEL (`coachitems-verhuizing.spec.js`): de bonus van 4000 kwam wel in `TX` en wel in
+  `maandInkomen()` (alles 7000), maar `totals().income` leest bij `autoIncome:false` gewoon `SET.income`,
+  dus elke maand stond op 3000 en `windfallA` was leeg. DAARNAAST zetten de twee Spaarpot-boekingen van de
+  basisfixture `hasAutoSaving()` op true, en dat is de vierde eis van dezelfde regel. TWEE EISEN DIE
+  HETZELFDE GEVAL UITSLOTEN, en dan toetst het geval geen van beide (meetles r).
+  DE GROOTSTE WINKEL (`spiegel-en-gevolg.spec.js`): signaal 4 eist minstens vijf losse afschrijvingen in de
+  maand plus een grootste winkel van vier keer de mediaan, en `piekScope()` hield daar precies 1 boeking.
+  DE SKIP IS EEN ASSERTIE GEWORDEN en de eisen staan als eigen meting op de INVOER. De skip zelf is daarmee
+  onbereikbaar, en een sabotage die hem terugzet blijft dus groen; wat de regressie vangt is de
+  invoermeting plus die assertie, en die twee gaan samen rood. Daarmee gaat de suite van 2 overgeslagen
+  naar 0, dus er is geen overslaan meer dat als groen kan lezen.
 - **EEN TEST DIE OVER DE KALENDER GAAT PINT ZIJN EIGEN DAG, GETELD VANAF HET EINDE VAN DE MAAND**
   (`v299`): zeven tests in vier bestanden eisten het meervoud van het dagwoord en stonden rood op de
   op-een-na-laatste dag van een maand. Tien bekende rode tests maken kapot waarvoor een suite bestaat:
@@ -176,6 +211,8 @@ genoemde versietag.)*
   EERST METEN HOEVEEL ER NA `v284` EN `v288` NOG OVER ZIJN. Die twee rondes hebben de csv-kant en negen
   bevestigde paren al uit de sommen gehaald, en een reparatie bouwen op een telling van vóór die rondes is
   precies de meetles bovenaan: reproduceer de bevinding voordat je hem bouwt.
+  DIE METING LIGT ER SINDS `v300`: blok 10 zegt naast het import-getal hoeveel paren er nog MEETELLEN en wat
+  het plafond in euro's is. Wie deze stap oppakt begint dus bij die twee getallen en niet bij de 96.
   (2) DE HUUR DIE `recurringCats()` NIET ALS TERUGKEREND ZIET, zodat `WEEK_SCOPE_UIT` de huur niet meer BIJ
   NAAM hoeft uit te sluiten. Die uitsluiting is sinds `v265` een hardcode met een tripdraad eromheen, en de
   tripdraad bestaat juist om te vallen zodra dit is opgelost. GEMETEN op het toestel ziet `recurringCats()`
@@ -2940,6 +2977,16 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   plek. Elke ronde daarna leunde op een instructie die niet klopte. Lees dus terug wat er staat,
   niet of het commando lukte, en let daarbij op wat er **bij** is gekomen en niet alleen op wat je
   bedoelde te veranderen.
+- **EEN SABOTAGE-SCRIPT DAT TUSSEN SCHRIJVEN EN TERUGZETTEN STERFT, LAAT DE SABOTAGE STAAN** (`v300`):
+  mijn controle-script schreef de sabotage weg en viel daarna om op een ontbrekende omgevingsvariabele,
+  dus het terugzetten kwam nooit. Het script erna las die gesaboteerde file als ORIGINEEL en zette hem
+  aan het eind netjes terug: de sabotage stond er daarmee permanent in. GEMETEN gevolg: twee tests in
+  `spiegel-en-gevolg.spec.js` stonden rood in de volle suite en groen in de ronde ervoor, en de oorzaak
+  lag niet in de code maar in mijn gereedschap. Dat is dezelfde familie als de heredoc-les hierboven, nu
+  met een sabotage-runner als instrument. DE WERKAFSPRAAK: zet het terugzetten in een `try/finally`, lees
+  de omgeving VOORDAT je iets wegschrijft, en controleer na een sabotage-ronde met `git diff` dat er niets
+  is achtergebleven. Een suite die na een sabotage-ronde anders telt dan ervoor, is eerst een vraag over
+  je gereedschap en pas daarna over je code.
 - **Dode code meet je met bereikbaarheid, niet met verwijzingen.** Loop vanaf de echte startpunten
   (de HTML buiten het script, plus de boot-code buiten elke functie) de aanroepgraaf af. Een groep
   dode functies die naar elkaar verwijst houdt zichzelf levend en heeft altijd twee of meer
@@ -3275,7 +3322,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v298` → `minder-v299`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v300` → `minder-v301`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -3283,7 +3330,7 @@ app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` 
 dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `minder-v295`: `v292`
 en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfde geval, dus de
 bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte alleen `tests/` en dit
-bestand, dus de eerstvolgende bump gaat naar `minder-v300`. Dat gat is geen fout maar de regel
+bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`. Dat gat is geen fout maar de regel
 zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

@@ -14860,7 +14860,7 @@ function diagDubbel(){
   }
   L.push('');
   L.push('PAREN: zelfde rekening, zelfde bedrag, binnen '+DIAG_PAAR_VENSTER+' dagen');
-  L.push('  met VERSCHILLENDE bron: '+paren.length);
+  L.push('  met VERSCHILLENDE bron: '+paren.length+'   (in de IMPORT, dus op TX)');
   L.push('    per dagafstand: '+(Object.keys(perAfstand).length?Object.keys(perAfstand).sort((x,y)=>x-y).map(d=>d+' dag'+(d==='1'?'':'en')+' '+perAfstand[d]).join(', '):'geen'));
   L.push('  met DEZELFDE bron: '+Object.values(zelfdeSrc).reduce((a,b)=>a+b,0)
     +(Object.keys(zelfdeSrc).length?('   per dagafstand: '+Object.keys(zelfdeSrc).sort((x,y)=>x-y).map(d=>d+'='+zelfdeSrc[d]).join(', ')):''));
@@ -14898,13 +14898,55 @@ function diagDubbel(){
     L.push('  beide kanten dezelfde categorie: '+nCatGelijk+' van '+paren.length);
     L.push('  categorie-paren: '+Object.entries(catPaar).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+v+'x').join(', '));
     L.push('  som van de kanten die als UITGAVE tellen: '+Math.round(somNietIntern)+'   (dat is wat er in catSpendMap() zit)');
+    /* v300: DEZELFDE PAREN, TWEE KEER GETELD, EN DAT IS `v285` OP DEZE SECTIE. De lus hierboven leest
+       `TX`, want de vraag is wat de IMPORT draagt; wat er nog DUBBEL MEETELT is een andere vraag en die
+       leest de poort. Zonder dat onderscheid staat hier het getal van vóór `v284` en `v288`: die twee
+       rondes hebben de csv-kant en negen bevestigde paren al uit de sommen gehaald, en een reparatie
+       bouwen op een telling van daarvoor is precies de meetles over eerst reproduceren.
+       DE POORT WORDT NIET OPNIEUW UITGEDRUKT: `csvDubbel()`, `dubbelWeg()` en `vorautWeg()` zijn de drie
+       predicaten die `vorautBron()` en `telbareTx()` zelf lezen, dus wat hier wegvalt is letterlijk wat
+       daar wegvalt (v104). De reden staat per poort, want die zegt WELKE ronde het geval al ophaalde, en
+       alle drie staan er ook op nul: een poort die niet in de lijst staat is niet van "geen enkele kant
+       viel hierop" te onderscheiden (v59/v73/v173).
+       HET BEDRAG IS EEN PLAFOND EN GEEN SCHADE, in dezelfde vorm als `bots` tegen `kwijt` bij `v295`: een
+       paar is twee boekingen van hetzelfde bedrag, en ALS het dezelfde betaling is telt er precies EEN van
+       de twee dubbel. Dat "als" is niet vastgesteld (v290: een bedrag dat binnen een venster overeenkomt is
+       een correspondentie en geen identiteit), dus het bedrag telt EEN kant per paar en heet een plafond. */
+    const teltSet=new Set(_dT(()=>telbareTx(),[]).map(t=>t.id));
+    const POORTEN=[['bevestigd dubbel', t=>_dT(()=>dubbelWeg(t),false)],
+                   ['bevestigde reservering', t=>_dT(()=>vorautWeg(t),false)],
+                   ['csv in het venster van zijn psd2-kant', t=>_dT(()=>csvDubbel(t),false)]];
+    let beideTellen=0, plafondImp=0, nImp=0, plafondTelt=0, nTelt=0;
+    const perPoort={}; for(const [nm] of POORTEN) perPoort[nm]=0;
+    for(const p of paren){
+      const tb=teltSet.has(p.a.id) && teltSet.has(p.b.id);
+      if(tb) beideTellen++;
+      else for(const t of [p.a,p.b]) for(const [nm,f] of POORTEN){ if(f(t)) perPoort[nm]++; }
+      /* EEN KANT PER PAAR, en alleen als die kant als UITGAVE telt: een interne overboeking telt nergens
+         als uitgave, dus daar valt in de normsommen niets dubbel te tellen. */
+      const kant=[p.a,p.b].find(t=>{ const c=catOf(t); return CATS[c] && CATS[c].type==='expense' && t.amount<0; });
+      if(kant){ plafondImp+=-kant.amount; nImp++; if(tb){ plafondTelt+=-kant.amount; nTelt++; } }
+    }
+    L.push('');
+    L.push('  nog MEETELLEND, beide kanten door telbareTx(): '+beideTellen+' van '+paren.length);
+    L.push('  bij de rest valt minstens een kant al weg: '+(paren.length-beideTellen)
+      +'   per poort: '+POORTEN.map(([nm])=>nm+' '+perPoort[nm]+'x').join(' | '));
+    L.push('    (de csv-poort kan op een paar binnen EEN rekening per constructie niet vuren: csvPsd2Paring()');
+    L.push('     paart alleen een rekening met EEN bron en een kruisbron-paar heeft er twee. Nagelezen, niet gemeten.)');
+    L.push('  PLAFOND van wat er dubbel telt, EEN kant per paar, alleen waar die kant als uitgave telt:');
+    L.push('    in de import:   '+Math.round(plafondImp)+' euro over '+nImp+' paren');
+    L.push('    nog meetellend: '+Math.round(plafondTelt)+' euro over '+nTelt+' paren');
+    L.push('    (een plafond en geen schade: dat de twee kanten dezelfde BETALING zijn staat niet vast, en');
+    L.push('     een boeking kan in meer dan een paar zitten, dus het aantal paren is een bovengrens)');
     L.push('');
     L.push('  de paren, nieuwste eerst (maximaal '+DIAG_PAAR_MAX+'):');
     const gesorteerd=paren.slice().sort((x,y)=>String(y.a.date).localeCompare(String(x.a.date)));
     for(const p of gesorteerd.slice(0,DIAG_PAAR_MAX)){
       L.push('    '+p.a.acc+'   '+Math.round(-Math.min(p.a.amount,0)||p.a.amount)+'   '+p.d+' dag'+(p.d===1?'':'en')+' ertussen'
         +'   softKey '+(_softKey(p.a)===_softKey(p.b)?'gelijk':'anders')
-        +'   dupSig '+(_dupSig(p.a)===_dupSig(p.b)?'gelijk':'anders'));
+        +'   dupSig '+(_dupSig(p.a)===_dupSig(p.b)?'gelijk':'anders')
+        +'   telt '+(teltSet.has(p.a.id)&&teltSet.has(p.b.id)?'beide kanten'
+          :(teltSet.has(p.a.id)||teltSet.has(p.b.id)?'een kant':'geen kant')));
       for(const t of [p.a,p.b]){
         L.push('      '+String(t.date)+'  src='+src(t).padEnd(5)+'  bankRef='+(t.bankRef?kort(t.bankRef,18):'-')+'  '+_diagCatBron(t)+'  name="'+kort(t.name,26)+'"');
         L.push('        desc="'+kort(t.desc,110)+'"');

@@ -35,7 +35,15 @@ function seed(o = {}) {
     if (o.oploop) add(`${m}-08`, -(120 + k * 90), 'Apotheek', 'BEA, BETAALPAS APOTHEEK CENTRUM');
     // v230: signaal 2 vuurt alleen op een afgeronde maand, dus de uitschieter valt in de VORIGE maand
     if (o.uitschieter) add(`${m}-16`, m === MS[2] ? -700 : -60, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT');
-    if (o.winkel && m === CUR) add(`${m}-14`, -900, 'Mediamarkt', 'BEA, BETAALPAS MEDIAMARKT');
+    /* v300: de winkel-opzet droeg ALLEEN deze ene boeking, en signaal 4 eist minstens vijf losse
+       afschrijvingen in de maand (`vis.length>=5`) plus een grootste winkel van minstens vier keer
+       de mediaan. GEMETEN op de oude vorm: `piekScope(CUR)` hield precies 1 boeking, dus het
+       signaal kon per constructie niet vuren en de test sloeg OVER in plaats van te vallen. De vijf
+       kleine winkels zijn wat de teller en de mediaan nodig hebben; ze staan op opeenvolgende dagen,
+       dus ze bouwen geen weekdag-gewoonte en de piekdag blijft stil. */
+    if (o.winkel && m === CUR) { add(`${m}-14`, -900, 'Mediamarkt', 'BEA, BETAALPAS MEDIAMARKT');
+      ['10', '11', '12', '13', '15'].forEach((d, k) =>
+        add(`${m}-${d}`, -30, 'Kiosk ' + 'ABCDE'[k], 'BEA, BETAALPAS KIOSK ' + 'ABCDE'[k])); }
     /* v239: vrijdag is de gewoonte (historie ~45% van het losse geld), en in de lopende maand
        springt hij eruit (~80%). Dat is een afwijking van ongeveer 1,8x, dus boven PIEK_FACTOR. */
     if (o.piek) { const isCur = m === CUR;
@@ -74,6 +82,29 @@ const regelVoor = (page, label, m) => page.evaluate(([m, l]) => {
   return { txt: d.innerText.replace(/\s+/g, ' '), html: d.innerHTML };
 }, [m || CUR, label]);
 
+test.describe('0 · de fixtures dragen wat ze beloven', () => {
+  /* De winkel-opzet is de enige van de vier met een TELPOORT eronder, en die poort zat er langer in
+     dan de fixture hem kon halen. Deze meting staat op de INVOER en niet op de uitkomst: hoeveel
+     losse afschrijvingen de maand draagt en hoe de grootste winkel zich tot de mediaan verhoudt.
+     Zonder deze test kan de fixture terugzakken naar één boeking zonder dat iemand het ziet. */
+  test('de winkel-opzet draagt genoeg losse afschrijvingen, en een winkel die eruit springt', async ({ page }) => {
+    await boot(page, seed({ winkel: true, set: { budgets: { huur: 900 } } }));
+    const r = await page.evaluate((m) => {
+      const los = piekScope(m);
+      const af = los.filter((x) => x.amount < 0);
+      const perWinkel = {};
+      for (const x of los) { const nm = cleanMerch(x.name) || x.name; perWinkel[nm] = (perWinkel[nm] || 0) + -x.amount; }
+      const bedragen = Object.values(perWinkel).filter((v) => v > 0).sort((a, b) => a - b);
+      return { af: af.length, winkels: bedragen.length, grootste: bedragen[bedragen.length - 1],
+        mediaan: bedragen[Math.floor(bedragen.length / 2)] };
+    }, CUR);
+    expect(r.af, 'minstens vijf losse afschrijvingen').toBeGreaterThanOrEqual(5);
+    expect(r.winkels, 'meer dan een winkel, anders is er geen mediaan om tegen af te zetten').toBeGreaterThan(1);
+    expect(r.grootste, 'de grootste winkel ligt minstens vier keer boven de mediaan').toBeGreaterThanOrEqual(r.mediaan * 4);
+    expect(r.grootste, 'en boven de ondergrens van veertig euro').toBeGreaterThanOrEqual(40);
+  });
+});
+
 test.describe('1 · elk signaal draagt een duiding en een dus-wat', () => {
   const GEVALLEN = [
     ['categorie loopt op', { oploop: true }, 'Zorg & apotheek', 'loopt al drie maanden op'],
@@ -86,7 +117,10 @@ test.describe('1 · elk signaal draagt een duiding en een dus-wat', () => {
       await boot(page, seed(opt));
       const alle = await signalen(page, maand);
       const s = alle.find((x) => x.kpiLabel === label);
-      test.skip(!s, `deze fixture levert het signaal ${label} niet`);
+      /* v300: hier stond een `test.skip` op "deze fixture levert het signaal niet". Die sloeg bij
+         de grootste winkel werkelijk over, en overslaan telt als groen; de fixture eronder draagt
+         het geval nu en de meting staat als eigen test in blok 0. */
+      expect(s, `de fixture moet het signaal ${label} leveren; zie blok 0`).toBeTruthy();
       expect(s.hyp, 'duiding').toBeTruthy();
       expect(s.imp, 'dus-wat').toBeTruthy();
       // een tik, of expliciet gemarkeerd als alleen-spiegel: nooit stilzwijgend geen van beide

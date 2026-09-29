@@ -54,17 +54,48 @@ test.describe('a · regel 1: spaarstortingen tellen als uitgave', () => {
 });
 
 test.describe('b · regel 2: meevaller-afhankelijkheid', () => {
-  // een maand met een flinke meevaller naast de gewone maanden, en te weinig overgehouden
+  /* een maand met een flinke meevaller naast de gewone maanden, en te weinig overgehouden.
+     v300: DEZE FIXTURE DROEG DAT GEVAL NIET, en de test sloeg daardoor OVER in plaats van te
+     vallen; overslaan telt als groen. Dat is dezelfde vorm als de geplande-boeking-test van v299,
+     en de reparatie is dezelfde: de invoer meten in plaats van de uitkomst wegfilteren.
+     TWEE EISEN SLOTEN HET GEVAL UIT, en allebei zijn ze gemeten. (1) De bonus van 4000 kwam wel in
+     `TX` en wel in `maandInkomen()` (alles 7000), maar `totals().income` leest bij
+     `autoIncome:false` gewoon `SET.income`, dus elke maand stond op 3000 en `windfallA` was per
+     constructie leeg. (2) De twee Spaarpot-boekingen van de basisfixture zetten `hasAutoSaving()`
+     op true, en dat is de vierde eis van dezelfde regel. De fixture zet `autoIncome` nu aan en
+     haalt die twee boekingen weg; de test eronder meet dat de invoer het geval werkelijk draagt. */
   const fixture = () => bouw((s, tx) => {
     boek(tx, M1, '06', 4000, 'Bonus', 'EXTRA UITKERING');
     for (const m of [M2, M1]) boek(tx, m, '14', -1200, 'Diverse', 'BEA, BETAALPAS DIVERSE');
     s.savingAmount = 900;
+    s.autoIncome = true;
+    for (let i = tx.length - 1; i >= 0; i--) if (tx[i].name === 'Spaarpot') tx.splice(i, 1);
+  });
+
+  test('de fixture draagt het geval: een meevaller-maand, een gewone maand en geen automatische inleg', async ({ page }) => {
+    await boot(page, fixture());
+    const r = await page.evaluate(() => {
+      const cur = thisYM();
+      const af = months().filter((m) => m < cur).slice(-6);
+      return { af, base: baseIncome(), factor: MEEVALLER_FACTOR, auto: hasAutoSaving(),
+        inc: af.map((m) => totals(m).income), gespaard: af.map((m) => totals(m).income - totals(m).spend),
+        target: Math.round(monthlySavingTarget()) };
+    });
+    expect(r.af.length, 'twee afgeronde maanden, anders vuurt de regel nooit').toBeGreaterThanOrEqual(2);
+    const grens = r.base * r.factor;
+    expect(r.inc.filter((v) => v > grens).length, 'een maand boven de meevallergrens').toBeGreaterThanOrEqual(1);
+    expect(r.inc.filter((v) => v <= grens).length, 'en een gewone maand ernaast').toBeGreaterThanOrEqual(1);
+    expect(r.target, 'er is een maandbedrag om tegen af te zetten').toBeGreaterThan(0);
+    const normaal = r.gespaard.filter((_, i) => r.inc[i] <= grens);
+    const gem = normaal.reduce((a, b) => a + b, 0) / normaal.length;
+    expect(gem, 'en in die gewone maand hou je te weinig over').toBeLessThan(r.target * 0.7);
+    expect(r.auto, 'geen automatische inleg, anders zwijgt de regel over de meevaller').toBe(false);
   });
 
   test('vuurt op zijn voorwaarde, met zijn eigen tekst', async ({ page }) => {
     await boot(page, fixture());
     const n = await sig(page, 'meevaller');
-    test.skip(!n, 'deze opzet haalt de voorwaarde niet');
+    expect(n, 'de regel moet vuren; de invoermeting hierboven zegt dat het geval er is').toBeTruthy();
     expect(n.l1).toBe('Zonder meevaller spaar je te weinig');
     expect(n.l2).toMatch(/automatisch opzij zodra je salaris binnen is\.$/);
     expect(n.t).toBe('bad');
