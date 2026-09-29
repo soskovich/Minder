@@ -95,6 +95,59 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **OPEN PUNT, NIET GEBOUWD: EEN SCHRIJVER MET MINDER VELDEN WIST STIL WAT ZIJN BUUR MAT** (`v297`):
+  `psd2DiagZet()` doet `D[accId]=Object.assign({op:vandaagYMD()}, rec)`, dus hij VERVANGT de hele entry.
+  De twee sync-routes schrijven niet hetzelfde: `psd2Refresh()` draagt sinds `v296` ook `pendN`, `pendMap`,
+  `pendFout` en `pendGeland`, en `psd2IngestSession()` draagt die vier niet. Een herkoppeling gooit daarmee
+  de pending-meting weg die een vernieuwing net had vastgelegd, zonder dat er iets faalt.
+  GEMETEN OP HET TOESTEL op 29 sep 2026, twee keer in een avond: na een herkoppeling van N26 zei blok 13
+  bij alle vijf de N26-rekeningen "gaf niet vastgelegd" terwijl `syncs` op 3 stond en die rekeningen dus
+  wel degelijk twee keer langs `psd2Refresh()` waren geweest; een gewone vernieuwing erna zette alle zes de
+  rijen op `gaf 0`. Dat de twee sync-aantallen uiteenliepen (N26 3, ABN 2) en dat de transactie-aantallen bij
+  het venster van 24 maanden van de koppel-route hoorden en niet bij de 2 maanden van de vernieuw-route, was
+  de aanwijzing; de tweede uitlezing was de bevestiging.
+  DE VORM VAN DE REPARATIE IS MERGEN PER VELD in plaats van de entry vervangen. Dat raakt de v270-tak niet:
+  die route schrijft dan gewoon zijn eigen velden en laat de rest staan, en de stille breuk in haar
+  pending-tak blijft precies zo staan als `rekeningen-diagnose.spec.js` hem met opzet vastpint.
+  WAT ER DAN BIJ HOORT, want mergen maakt een nieuwe val: een veld dat blijft staan is niet meer per
+  definitie van de LAATSTE sync. `op` is dan de datum van de laatste schrijver en niet van elk veld eraan,
+  en een lezer die "de laatste sync" zegt over een veld dat een oudere route heeft achtergelaten draagt
+  hetzelfde verkeerde etiket dat deze ronde juist wegneemt. Wie dit bouwt kiest eerst of `op` per veld gaat
+  of dat de uitlezing zegt welke route welk veld schreef.
+  DIT IS DEZELFDE FAMILIE ALS `v296` ZELF, een stap verderop: daar kon een teller "niet gemeten" niet van
+  "gemeten, nul" scheiden, hier maakt een tweede schrijver van een gemeten waarde weer een ontbrekende.
+- **OPEN PUNT, GEMETEN EN NIET GEDICHT: BIJ ABN STAAT EEN WEEKENDBETALING TOT MAANDAG NIET IN `TX`**
+  (`v297`): de premisse is gemeten en niet aangenomen. GEMETEN op het toestel op 29 sep 2026 gaf de
+  pending-aanroep bij ALLE ZES de gekoppelde rekeningen nul regels terug, zonder fout, in vier syncs op een
+  dag (blok 13 sectie 2). Levert een bank geen pending-regels, dan is een kaartbetaling pas zichtbaar als hij
+  GEBOEKT is, en een bank boekt niet in het weekend.
+  DE MAAT, uit blok 13 sectie 4 over de opgeslagen gegevens: 117 boekingen zijn later geboekt dan betaald
+  (samen 2.150 euro), waarvan er 102 in het WEEKEND zijn betaald (1.985 euro) en op maandag (89) of dinsdag
+  (13) boekten. Dat raakt 30 van de 87 weekends in het venster 2025-01-11 tot 2026-09-05, dus GEMIDDELD 66
+  EURO PER GETROFFEN WEEKEND, 23 euro over alle weekends, hoogste 448. Daarnaast 3 vrijdagbetalingen (29
+  euro) die pas op of na de maandag erna boekten; die staan apart en tellen niet in het weekendcijfer, want
+  de vraag is op de BETAALDAG afgebakend en twee afbakeningen in een getal is een verkeerd etiket.
+  HET IS EEN ABN-VERSCHIJNSEL EN GEEN DEKKINGSGEBREK, en dat is de meting die het onderscheidt. Sectie 4
+  kan alleen lezen waar `t.betaalDatum` bestaat, en dat is alleen bij ABN. Maar blok 10 sectie 3 zegt
+  onafhankelijk wat er bij N26 gebeurt: daar draagt `t.date` zelf 37 en 40 procent weekend tegen 7 en 10
+  procent maandag, terwijl de ABN-kaartregels 35 procent maandag en 11 procent weekend dragen. Bij N26 IS
+  `t.date` dus al de betaaldag en bestaat dit gat niet; bij ABN wel.
+  OP DIT TOESTEL IS HET RECENT KLEIN, en dat hoort erbij zodat het bedrag niet als stand leest: de laatste
+  tien getroffen weekends dragen 10, 25, 1, 10, 0, 30, 6, 104, 16 en 102 euro, want de kaart loopt inmiddels
+  vrijwel volledig via N26 (blok 10 meting 1: ABN dekt 5.079 van 36.097 in-scope euro's). De 66 euro is het
+  gemiddelde over anderhalf jaar waarin ABN de kaart droeg.
+  VOOR EEN GEBRUIKER MET ALLEEN EEN ABN-PAS SPEELT HET VOLUIT, en dat is de reden dat dit als open punt
+  blijft staan in plaats van als een historische voetnoot. Daar draagt de kaart de hele maand, en dan staat
+  je maandtotaal elk weekend te laag.
+  DE OPEN VRAAG IS HET SALDOTYPE, en die wordt niet verzonnen: ABN geeft `ITBD` en N26 `XPCD`, en wat die
+  codes dekken staat niet in deze code. Dekt het type ook wat nog niet geboekt is, dan is alleen je
+  maandtotaal te laag; dekt het dat niet, dan staat je saldo er ook boven en telt het bedrag dubbel mee als
+  ruimte, en te hoog is de gevaarlijke kant (`v168`). Dat de twee banken niet dezelfde code teruggeven is
+  zelf de waarneming.
+  HET IS EEN ANDER GAT DAN DAT VAN `v292`: die botsing duurt een sync, deze duurt tot de bank boekt. En de
+  nul van de pending-aanroep is de stand van EEN dag met vier syncs, niet het bewijs dat een bank het nooit
+  levert; een bank zonder openstaande kaartbetaling en een bank die de PDNG-filter negeert zien er hier
+  hetzelfde uit.
 - **EEN TELLER DIE ALLEEN BIJ EEN TREFFER SCHRIJFT KAN GEEN NUL MELDEN** (`v296`): `SET.pendBots[rekening]`
   ontstond bij `v295` pas BIJ een botsing, dus een lege map betekende twee dingen tegelijk. GEMETEN op het
   toestel: blok 13 zei "GEEN ENKELE METING, er is niet gesynchroniseerd sinds deze versie draait" terwijl
@@ -338,6 +391,10 @@ genoemde versietag.)*
   BIJ EEN VOORAUTORISATIE SPEELT HET NIET, en dat is waarom het deze ronde niets oplost: daar verschilt het
   BEDRAG (de reservering en de echte tankbeurt), dus de twee id's verschillen en `commitTx()` slaat niets
   over. Het raakt de gewone kaartbetaling die ongewijzigd boekt.
+  HIJ IS VANDAAG INERT, EN DAT IS GEMETEN EN GEEN AANNAME (`v297`): de pending-aanroep gaf bij alle zes de
+  rekeningen nul regels terug, dus `applyPending()` zet niets in `TX` en `commitTx()` vindt nooit een
+  pending-regel om overheen te slaan. `bots` en `kwijt` staan daarmee niet alleen op nul, die nul is ook
+  verklaard. Het gebrek blijft echt voor de dag dat een bank wel pending gaat leveren.
   DE METING BESTAAT SINDS `v295` en het gebrek staat er nog: blok 13 telt bij elke sync `bots` en `kwijt`
   per rekening. Tot die ronde was dit uit de opgeslagen data niet te zien, want er is geen import-tijdstip
   per boeking (`v291`) en `applyPending()` heeft de pending-kant al gewist tegen de tijd dat je kijkt.
@@ -3131,7 +3188,8 @@ Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en ee
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
 `tests/` en documentatie, dus de cache ging van `minder-v255` rechtstreeks naar `minder-v257`, en om
 dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `minder-v295`: `v292`
-en `v294` raakten allebei alleen dit bestand en de changelog. Dat gat is geen fout maar de regel
+en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfde geval, dus de
+eerstvolgende bump gaat van `minder-v296` naar `minder-v298`. Dat gat is geen fout maar de regel
 zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
