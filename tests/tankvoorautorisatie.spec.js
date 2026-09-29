@@ -61,6 +61,7 @@
  * De service worker staat globaal uit via playwright.config.js.
  */
 const { test, expect } = require('@playwright/test');
+const { sectieVan } = require('./bron-sectie');
 
 const A = '521200806';
 /* de vier drietallen zoals blok 9 ze op het toestel afdrukt: voorautorisatie, echte tankbeurt, terug */
@@ -176,9 +177,12 @@ test.describe('v290 de tankvoorautorisatie', () => {
     expect(t).toMatch(/ZONDER bijschrijving:.*125\.00 1x/);
     /* en er staat geen bedrag en geen winkelnaam in de bron (v266) */
     const bron = await page.evaluate(() => fetch('/index.html').then((r) => r.text()));
-    const lijf = bron.slice(bron.indexOf('function diagVoorautorisatie('));
-    const eind = lijf.indexOf('\nconst DIAG_BLOKKEN');
-    expect(lijf.slice(0, eind)).not.toMatch(/\b(125|150|Shell|Tango|Esso)\b/);
+    /* v295: DE SLICE LIEP TOT HET REGISTER, dus elk blok dat er later tussen kwam viel onder dit verbod.
+       Bij v295 kwam blok 13 erbij en had deze assertie daar per ongeluk ook op kunnen vallen. Dat is
+       meetles (t), nu op een slice; `sectieVan()` bakent precies een functie af. */
+    const lijf = sectieVan(bron, 'function diagVoorautorisatie(');
+    expect(lijf).toContain('vorautDrietallen');
+    expect(lijf).not.toMatch(/\b(125|150|Shell|Tango|Esso)\b/);
   });
 
   /* (a) DE VIER VORMEN, EN DE TOESTEL-VORM IS GEEN VAN DE TWEE UIT DE VRAAG */

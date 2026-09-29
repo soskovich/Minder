@@ -16439,6 +16439,90 @@ function diagVoorautorisatie(){
   L.push('    die de app al opslaat zonder hem te lezen.');
   return L;
 }
+/* ===== BLOK 13: DE PENDING-BOTSING (v295) =====
+   MEET EN BESLIST NIETS, roept geen netwerk aan en schrijft niets (v244). De twee tellers die hij leest
+   worden bij de SYNC geschreven (`commitTx()` en `applyPending()`) en niet hier.
+   HIJ NOEMT DE BANK NIET. Die afleiding staat al op vier plekken en een vijfde kopie zou bij de eerste
+   wijziging uiteenlopen (v104, het open punt van v275). De rekening-id is de sleutel; welke bank daarbij
+   hoort zegt blok 8. */
+function diagPendBots(){
+  const L=[];
+  L.push('WAT DIT BLOK MEET: of een kaartbetaling die ONGEWIJZIGD boekt een sync lang uit TX kan vallen.');
+  L.push('  Het repareert niets en er verandert geen cijfer (v292). Twee delen: wat er NU staat, en wat de');
+  L.push('  sync heeft geteld. De bank per rekening staat in blok 8.');
+  L.push('');
+  L.push('1. NU, uit de opgeslagen gegevens: de pending-regels in TX');
+  L.push('   `_p` AANWEZIG: deze regel is na de laatste boot binnengekomen en draagt zijn eigen id nog, dus');
+  L.push('     zijn geboekte versie krijgt een ANDERE id en botst niet.');
+  L.push('   `_p` AFWEZIG: categorize() heeft de id herschreven en die is nu gelijk aan die van de geboekte');
+  L.push('     versie. Zo\'n regel is SCHERP: de eerstvolgende sync die de boeking brengt slaat hem over.');
+  const pend=TX.filter(t=>t&&t.pending);
+  if(!pend.length){
+    L.push('   er staat geen enkele pending-regel in TX, dus er is vandaag niets scherp');
+  } else {
+    const per={}, tel={};
+    for(const t of TX){ const k=String(t.id); tel[k]=(tel[k]||0)+1; }
+    for(const t of pend){
+      const a=String(t.acc||'-');
+      const r=per[a]=per[a]||{n:0,p:0,z:0,bed:0,dub:0};
+      r.n++;
+      if(String(t.id||'').slice(-2)==='_p') r.p++;
+      else { r.z++; r.bed+=Math.abs(+t.amount||0); if(tel[String(t.id)]>1) r.dub++; }
+    }
+    for(const a of Object.keys(per).sort()){
+      const r=per[a];
+      L.push('   '+String(a).padEnd(20)
+        +' pending '+String(r.n).padStart(3)
+        +'   met _p '+String(r.p).padStart(3)
+        +'   zonder _p '+String(r.z).padStart(3)
+        +'   scherp voor '+euro0(r.bed)
+        +(r.dub?('   LET OP: '+r.dub+' met al een TWEEDE regel op dezelfde id'):''));
+    }
+    L.push('   die LET OP-telling hoort nul te zijn: commitTx() slaat de geboekte versie juist over, dus een');
+    L.push('   tweede regel op dezelfde id zou betekenen dat er een pad is dat dit blok niet kent.');
+  }
+  L.push('');
+  L.push('2. UIT DE SYNC, cumulatief per rekening (vastgelegd op het moment zelf, want achteraf is het weg)');
+  L.push('   bots  = commitTx() sloeg een binnenkomende regel over omdat zijn id al op een PENDING regel stond');
+  L.push('   kwijt = daarvan stond na applyPending() geen enkele regel meer met die id: die boeking is weg');
+  L.push('   het verschil tussen de twee is de regel die de bank in DEZELFDE sync ook nog als pending gaf');
+  const P=(typeof SET!=='undefined'&&SET.pendBots)||{}, VT=(typeof SET!=='undefined'&&SET.valutaTally)||{};
+  const rek=Object.keys(P).filter(k=>P[k]&&typeof P[k]==='object');
+  if(!rek.length){
+    L.push('   GEEN ENKELE METING, en dat is geen nul: de teller is opgeslagen data en begint leeg, dus er is');
+    L.push('   niet gesynchroniseerd sinds deze versie draait (v59/v73/v173). Ververs eerst, lees dan opnieuw.');
+  } else {
+    for(const a of rek.sort()){
+      const r=P[a], g=(VT[a]&&+VT[a].gezien)||0;
+      L.push('   '+String(a).padEnd(20)
+        +' bots '+String(+r.bots||0).padStart(4)+' ('+euro0(+r.botsBedrag||0)+')'
+        +'   kwijt '+String(+r.kwijt||0).padStart(4)+' ('+euro0(+r.kwijtBedrag||0)+')'
+        +'   van '+g+' psd2-regels langs commitTx'
+        +'   laatst '+(r.op||'?'));
+    }
+    const stil=Object.keys((typeof SET!=='undefined'&&SET.psd2Accounts)||{}).filter(a=>rek.indexOf(a)<0);
+    L.push('   gekoppelde rekeningen ZONDER entry: '+(stil.length?stil.join(', '):'geen')
+      +(stil.length?'   <-- daar is niets gemeten, dus een nul zegt over die rekeningen niets':''));
+  }
+  L.push('   de noemer is SET.valutaTally[rekening].gezien, dezelfde opgeslagen teller die blok 10 afdrukt;');
+  L.push('   hij wordt hier gelezen en niet opnieuw uitgerekend (v104).');
+  L.push('');
+  L.push('3. WAT DIT BLOK NIET KAN ZEGGEN, EN WAT DE KEUZE IS');
+  L.push('   Het telt de botsing en de schade, niet hoe vaak een pending-regel ongewijzigd boekt: een regel');
+  L.push('   die met een ander bedrag of een andere omschrijving boekt krijgt een andere id en botst nooit.');
+  L.push('   Bij een voorautorisatie speelt het daarom niet, want daar verschilt het bedrag (v293); het raakt');
+  L.push('   de gewone kaartbetaling. Het herstelt zichzelf de sync erna, want dan staat de pending-regel er');
+  L.push('   niet meer, maar die ene sync lang staat je maandtotaal te LAAG en je veilig te besteden te HOOG,');
+  L.push('   en dat is de gevaarlijke kant (v168).');
+  L.push('   DRIE KANTEN OM HET TE DICHTEN, en de keuze is niet gemaakt:');
+  L.push('   (a) categorize() het achtervoegsel laten staan. Het kortst in regels, en het raakt de zwaarste');
+  L.push('       eis in dit veld, want elke bestaande pending-id verandert dan mee (v270).');
+  L.push('   (b) applyPending() voor commitTx() laten wissen. Haalt de overslag weg zonder een id aan te raken.');
+  L.push('   (c) de pending-vlag uit de identiteit halen en de twee op t.pending laten scheiden.');
+  L.push('   WAT DEZE UITVOER BESLIST: staat kwijt op nul terwijl er wel is gesynchroniseerd, dan kost het');
+  L.push('   vandaag niets en is dichten een keuze over het risico. Staat er iets, dan is het bedrag de maat.');
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -16452,6 +16536,7 @@ const DIAG_BLOKKEN=[
   {titel:'dubbele boekingen en wat t.date betekent', lees:diagDubbel},
   {titel:'de csv-import tegen de psd2-koppeling, per rekening', lees:diagCsvPsd2},
   {titel:'de tankvoorautorisatie en haar terugboeking', lees:diagVoorautorisatie},
+  {titel:'de pending-botsing: kan een boeking een sync lang verdwijnen', lees:diagPendBots},
 ];
 
 async function diagTekst(){
@@ -17196,6 +17281,39 @@ function pickBalance(b, uitleg){
 }
 // gedeelde commit voor kant-en-klare TX-objecten (zelfde dedup als ingest)
 
+/* ===== DE PENDING-BOTSING: WAT HET KOST DAT `_p` GEEN BOOT OVERLEEFT (v295) =====
+   ALLEEN METEN, NIETS REPAREREN. Er verandert geen cijfer, geen som leest deze telling en er gaat geen
+   boeking anders door de poort. Wat er gebeurt is precies wat er al gebeurde; het wordt nu geteld.
+   HET GEVAL, nagelezen bij v291 en vastgelegd bij v292: `mapPsd2Tx()` zet `t.id+='_p'` op een pending-regel,
+   maar `categorize()` doet `t.id=txId(t)` en de boot loopt met `TX.forEach(categorize)` over ALLE boekingen.
+   Na een boot heeft die pending-regel dus exact de id die zijn GEBOEKTE versie zou krijgen, want `txId()`
+   hasht over rekening, datum, bedrag en omschrijving en die zijn bij een kaartbetaling die ongewijzigd boekt
+   alle vier gelijk. `commitTx()` loopt EERST en slaat die geboekte regel dan over als bestaand; daarna wist
+   `applyPending()` de pending-kant met `TX=TX.filter(t=>!t.pending)`, en dan staat die boeking nergens.
+   WAAROM HET NIET UIT DE OPGESLAGEN DATA TE HALEN IS: er is geen import-tijdstip per boeking (v291) en
+   `applyPending()` heeft de pending-kant al gewist tegen de tijd dat je kijkt. Meten betekent hier dus iets
+   vastleggen op het MOMENT van de sync, zoals de sync-diagnose van v279 doet. Die functie wordt hier in
+   WOORDEN genoemd en niet bij naam, want een bronzoekende teller telt zijn naam ook in een comment mee
+   (v276): de spec van v279 eist precies drie treffers en viel op deze uitleg.
+   TWEE TELLINGEN EN NIET EEN, want ze zeggen iets anders. `bots` is de botsing bij `commitTx()`, en dat is
+   het PLAFOND van de schade: de geboekte regel is overgeslagen. `kwijt` is wat er na `applyPending()` echt
+   niet meer in `TX` staat, en dat is de schade zelf. Ze lopen uiteen zodra de bank dezelfde regel in dezelfde
+   sync OOK nog als pending teruggeeft: dan zet `applyPending()` hem terug en telt het bedrag gewoon mee
+   (v197). Een plafond dat als schade leest is precies het verkeerde etiket dat dit project verbiedt.
+   DE LIJST IS EEN OVERDRACHT TUSSEN TWEE FUNCTIES EN GEEN OPSLAG: `commitTx()` maakt hem leeg en vult hem,
+   `applyPending()` leest hem en maakt hem leeg. Een import zonder pending-kant (mt940, csv) laat hem dus
+   hoogstens tot de volgende `commitTx()` staan en nooit langer.
+   EEN NUL IS PAS EEN METING ALS ER GESYNCHRONISEERD IS (v59/v73/v173): de teller is opgeslagen data en
+   begint leeg, dus een rekening zonder entry is een ONTBREKENDE meting. Dat is dezelfde val als bij
+   `SET.valutaTally` (v277/v279), en blok 13 zegt het per rekening. */
+let PENDBOTS_OPEN=[];
+function pendBotsZet(acc, veld, bedrag){
+  const P=SET.pendBots=SET.pendBots||{};
+  const r=P[acc]=(P[acc]&&typeof P[acc]==='object')?P[acc]:{};
+  r[veld]=(+r[veld]||0)+1;
+  r[veld+'Bedrag']=Math.round(((+r[veld+'Bedrag']||0)+Math.abs(+bedrag||0))*100)/100;
+  r.op=vandaagYMD();
+}
 function applyPending(list){
   TX=TX.filter(t=>!t.pending);            // wis vorige pending-snapshot
   const booked=TX.slice();                // dedup alleen tegen geboekte/geïmporteerde tx
@@ -17204,6 +17322,14 @@ function applyPending(list){
     const dup=booked.some(b=>b.acc===t.acc && Math.abs(b.amount-t.amount)<0.01 && Math.abs((new Date(b.date)-new Date(t.date))/86400000)<=6);
     if(dup) continue;
     TX.push(t); add++;
+  }
+  /* v295: HIER WORDT DE SCHADE GEMETEN EN NIET HET PLAFOND. `commitTx()` heeft de botsingen van deze sync
+     in PENDBOTS_OPEN gezet; pas hier staat vast of de pending-kant is teruggekomen. Staat er geen enkele
+     regel meer met die id (met of zonder `_p`), dan is die boeking deze sync werkelijk nergens. */
+  if(PENDBOTS_OPEN.length){
+    const ids=new Set(TX.map(x=>String(x.id)));
+    for(const b of PENDBOTS_OPEN){ if(!ids.has(b.id) && !ids.has(b.id+'_p')) pendBotsZet(b.acc,'kwijt',b.bedrag); }
+    PENDBOTS_OPEN=[];
   }
   TX.sort((a,b)=>a.date.localeCompare(b.date));
   applyOwnAccounts(); buildAccMeta(); save();
@@ -17330,6 +17456,7 @@ function commitTx(newTxns, balances){
      EEN OUDERE VLAKKE METING BLIJFT LEESBAAR: het blok ziet aan de vorm van een entry of hij van vóór
      deze ronde is en zet hem apart in plaats van hem als rekening te lezen. */
   let added=0;
+  PENDBOTS_OPEN=[];   // v295: de overdracht naar applyPending() geldt per sync en niet langer
   const vdRek={};
   const vdTel=(t,k)=>{ const a=String(t.acc||'-'); (vdRek[a]=vdRek[a]||{gezien:0,veld:0,anders:0,nieuw:0,verrijkt:0})[k]++; };
   const existing=new Map(); for(const t of TX){ existing.set(t.id, t); }
@@ -17338,7 +17465,14 @@ function commitTx(newTxns, balances){
     if(t.src==='psd2'){ vdTel(t,'gezien');
       if(t.valutaDatum){ vdTel(t,'veld'); if(String(t.valutaDatum)!==String(t.date).slice(0,10)) vdTel(t,'anders'); } }
     const oud=existing.get(t.id);
-    if(oud){ if(t.valutaDatum && !oud.valutaDatum){ oud.valutaDatum=t.valutaDatum; vdTel(t,'verrijkt'); } continue; }
+    if(oud){
+      /* v295: DE BOTSING. Stond die id op een PENDING regel, dan slaat deze functie de GEBOEKTE versie over
+         en wist `applyPending()` straks de pending-kant. Beide sync-routes geven hier alleen niet-pending
+         regels door (nagelezen: de pending-lijst gaat rechtstreeks naar `applyPending()`), dus een toets op
+         `t.pending` zou een voorwaarde zijn die per constructie niet kan vuren (meetles p). */
+      if(oud.pending){ pendBotsZet(t.acc,'bots',t.amount); PENDBOTS_OPEN.push({acc:String(t.acc||'-'), id:String(t.id), bedrag:t.amount}); }
+      if(t.valutaDatum && !oud.valutaDatum){ oud.valutaDatum=t.valutaDatum; vdTel(t,'verrijkt'); }
+      continue; }
     const sk=_softKey(t), ex=soft.get(sk);
     if(ex && ex.acc!==t.acc && ex.src!==t.src) continue;   // dedup alleen over verschillende bronnen (bv. CSV↔PSD2); twee PSD2-rekeningen (Main/Zakgeld) worden niet meer tegen elkaar weggegooid
     TX.push(t); existing.set(t.id, t); soft.set(sk,{acc:t.acc,src:t.src}); added++;

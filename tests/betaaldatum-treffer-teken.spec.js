@@ -28,6 +28,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { sectieVan } = require('./bron-sectie');
 
 const now = new Date();
 const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -219,9 +220,9 @@ test.describe('2 - de bron', () => {
      spraken sindsdien de uitvoer ernaast tegen. */
   test('geen tekst in het blok belooft nog dat de eerste treffer wint', async () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-    const i = src.indexOf('function diagDubbel(){');
-    const j = src.indexOf('\nconst DIAG_BLOKKEN=[', i);
-    const blok = src.slice(i, j);
+    /* v295: DE SLICE LIEP TOT HET REGISTER en nam daarmee blok 11, 12 en 13 mee, terwijl deze assertie
+       over blok 10 gaat. `sectieVan()` bakent precies een functie af; zie de helper voor de meetles. */
+    const blok = sectieVan(src, 'function diagDubbel(){');
     expect(blok).not.toContain('de eerste treffer wint');
     expect(blok).not.toContain('de eerste treffer is verworpen');
     expect(blok).toContain('de treffer met een tijd wint, anders de eerste');

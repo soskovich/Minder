@@ -27,6 +27,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { sectieVan } = require('./bron-sectie');
 
 const now = new Date();
 const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -329,9 +330,8 @@ test.describe('4 - de reparatie en de afbakening', () => {
      sleutel in een diagnoseblok veroudert stil zodra de gegevens veranderen. */
   test('geen rekeningnummer als string in de bron van het blok', async () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-    const i = src.indexOf('function diagDubbel(){');
-    const j = src.indexOf('\nconst DIAG_BLOKKEN=[', i);
-    const body = src.slice(i, j);
+    /* v295: zie `bron-sectie.js`. Deze slice liep tot het register en toetste daarmee vier blokken. */
+    const body = sectieVan(src, 'function diagDubbel(){');
     expect(body).toContain('for(const acc of meerdere)');
     expect(body.match(/\b\d{9,18}\b/g)).toBe(null);
   });

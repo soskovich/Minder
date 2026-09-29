@@ -95,6 +95,49 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE PENDING-BOTSING WORDT GETELD, NIET GEDICHT** (`v295`): dit is de meetronde die `v292` als eerste
+  stap vroeg. Blok 13 leest, `commitTx()` en `applyPending()` schrijven, en er verandert geen cijfer en
+  geen poort. WAAROM ER GETELD MOET WORDEN IN PLAATS VAN GEKEKEN: er is geen import-tijdstip per boeking
+  (`v291`) en `applyPending()` heeft de pending-kant al gewist tegen de tijd dat je het diagnosescherm
+  opent, dus de meting hoort op het MOMENT van de sync, precies zoals `psd2DiagZet()` (`v279`).
+  TWEE TELLINGEN EN NIET EEN, en elk heeft zijn eigen geval in de fixture: `bots` is de botsing bij
+  `commitTx()` en dat is het PLAFOND van de schade, `kwijt` is wat er na `applyPending()` werkelijk niet
+  meer in `TX` staat en dat is de schade zelf. Ze lopen uiteen zodra de bank dezelfde regel in DEZELFDE
+  sync ook nog als pending teruggeeft: dan zet `applyPending()` hem terug en telt het bedrag gewoon mee
+  (`v197`). Een plafond dat als schade leest is precies het verkeerde etiket dat dit project verbiedt, en
+  zonder dat geval in de fixture is `kwijt` niet van `bots` te onderscheiden (meetles o).
+  DE OVERDRACHT IS EEN LIJST EN GEEN OPSLAG: `commitTx()` maakt `PENDBOTS_OPEN` leeg en vult hem,
+  `applyPending()` leest hem en maakt hem leeg. Een import zonder pending-kant (mt940, csv) laat hem dus
+  hoogstens tot de volgende `commitTx()` staan. Beide kanten zijn apart gesaboteerd, want zonder die twee
+  tests is een teller die dubbel telt niet van een teller die klopt te onderscheiden.
+  GEEN TOETS OP `t.pending` VAN DE INKOMENDE REGEL. Beide sync-routes geven aan `commitTx()` alleen
+  niet-pending regels door (nagelezen: de pending-lijst gaat rechtstreeks naar `applyPending()`), dus zo'n
+  toets zou per constructie niet kunnen vuren (meetles p).
+  SECTIE 1 MEET DE ARMERING EN NIET HET VUREN, uit de opgeslagen gegevens: een pending-regel die zijn `_p`
+  nog draagt botst niet, een die het kwijt is draagt de id van zijn geboekte versie en is SCHERP. Die twee
+  standen wisselen met de boot, dus wat sectie 1 zegt hangt af van wanneer je kijkt, en het blok zegt dat.
+  EEN NUL IS PAS EEN METING ALS ER GESYNCHRONISEERD IS (`v59`/`v73`/`v173`): de teller is opgeslagen data
+  en begint leeg, dus een rekening zonder entry is een ONTBREKENDE meting en niet een nul. Dat is dezelfde
+  val als bij `SET.valutaTally` (`v277`/`v279`), en het blok zegt het per rekening.
+  HET BLOK NOEMT DE BANK NIET. Die afleiding staat al op vier plekken (`v275`) en een vijfde kopie zou bij
+  de eerste wijziging uiteenlopen (`v104`); de rekening-id is de sleutel en blok 8 zegt welke bank daarbij
+  hoort. De noemer komt om dezelfde reden uit `SET.valutaTally[rekening].gezien` en wordt niet opnieuw
+  uitgerekend.
+- **EEN BRONZOEKENDE SLICE DIE TOT HET REGISTER LOOPT, TOETST ELK BLOK DAT ER LATER TUSSEN KOMT** (`v295`):
+  drie tests sneden van hun eigen `function diagX(){` tot `\nconst DIAG_BLOKKEN=[`, en dat is niet het einde
+  van dat blok maar het einde van het REGISTER. De v266-assertie van blok 12 verbiedt de bedragen 125 en
+  150 in de bron van dat blok; GEMETEN met de oude snede zette een 125 in het nieuwe blok 13 die test ROOD,
+  dus hij sloeg alarm over een blok waar hij niet over gaat. Met `sectieVan()` is diezelfde sabotage GROEN
+  terwijl een 125 in blok 12 zelf nog steeds ROOD is, en dat paar is wat de grens bewijst.
+  DAT IS MEETLES (t), NU OP EEN SNEDE IN PLAATS VAN OP EEN INDENTATIE: bij `v291` telde een assertie over
+  blok 12 er per ongeluk sectie 2b bij, en de reparatie was toen dezelfde, namelijk eerst afbakenen en dan
+  tellen. Die reparatie bereikte de andere twee specs niet, en dat is precies waarom de VORM hier wordt
+  gerepareerd en niet alleen het geval (`v271`/`v272`/`v293`).
+  DE AFBAKENING IS DE EERSTVOLGENDE DEFINITIE OP KOLOM NUL en niet de naam van de buur: op de naam binden
+  zou dezelfde koppeling terugbrengen die de helper juist weghaalt. `sectieVan()` staat in
+  `tests/bron-sectie.js`, heeft drie lezers, en FAALT LUID bij een naam die er niet staat en bij een snede
+  die meer dan een functie draagt. Een lege string laat elke `not.toContain` per constructie slagen, en dat
+  is een test die niet kan vallen.
 - **VORM 3 IS EEN RESERVERING DIE DE APP BEWAART, EN DAT IS BUITEN DE APP BEVESTIGD** (`v291`): in de
   bank-app staat bij een van de vijf drietallen alleen de DERDE regel als boeking; de eerste twee zijn een
   reservering en haar vrijgave. Het is dus geen dubbele betaling van de bank maar een regel die de app
@@ -249,10 +292,9 @@ genoemde versietag.)*
   BIJ EEN VOORAUTORISATIE SPEELT HET NIET, en dat is waarom het deze ronde niets oplost: daar verschilt het
   BEDRAG (de reservering en de echte tankbeurt), dus de twee id's verschillen en `commitTx()` slaat niets
   over. Het raakt de gewone kaartbetaling die ongewijzigd boekt.
-  NIET GEMETEN OP HET TOESTEL, en dat is de eerste stap voor wie dit oppakt: hoe vaak een pending-regel
-  ongewijzigd boekt is uit de opgeslagen data niet te zien, want er is geen import-tijdstip per boeking
-  (`v291`) en `applyPending()` heeft de pending-kant al gewist tegen de tijd dat je kijkt. Meten betekent
-  hier dus iets vastleggen op het moment van de sync, zoals `psd2DiagZet()` doet (`v279`).
+  DE METING BESTAAT SINDS `v295` en het gebrek staat er nog: blok 13 telt bij elke sync `bots` en `kwijt`
+  per rekening. Tot die ronde was dit uit de opgeslagen data niet te zien, want er is geen import-tijdstip
+  per boeking (`v291`) en `applyPending()` heeft de pending-kant al gewist tegen de tijd dat je kijkt.
   DRIE KANTEN OM HET TE DICHTEN, en de keuze is niet gemaakt: (a) `categorize()` het achtervoegsel laten
   staan, wat het goedkoopst lijkt en raakt aan de zwaarste eis in dit veld, want elke bestaande pending-id
   verandert dan mee (`v270`); (b) `applyPending()` vóór `commitTx()` laten wissen, wat de overslag weghaalt
@@ -2910,6 +2952,9 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   maar om de verkeerde reden. De reparatie is de SECTIE eerst afbakenen en dan tellen. Dat is de familie
   "een test die een zin of een teller als anker gebruikt", nu met een opmaak als anker, en het is de derde
   keer in dit blok dat een nieuwe sectie een oudere assertie raakt.
+  DE VORM IS BIJ `v295` GEREPAREERD, niet alleen het geval: drie bronzoekende tests sneden tot
+  `const DIAG_BLOKKEN=[` en toetsten daarmee elk blok dat er later tussen kwam. `sectieVan()` in
+  `tests/bron-sectie.js` bakent precies een functie af; zie de staande regel daarover.
   (u) DE FIXTURE SCHREEF EEN VELD DAT DE APP BIJ DE BOOT HERSCHRIJFT (`v291`). De pending-vlag moest in de
   fixture, en ik zette er ook het `_p`-achtervoegsel op de id bij, want zo komt hij binnen. Maar
   `categorize()` doet `t.id=txId(t)` en de boot loopt over alle `TX`, dus dat achtervoegsel is weg voordat
@@ -3007,16 +3052,25 @@ GEMETEN dat hij op `HEAD` net zo rood staat (1 failed, 13 passed), dus hij is ni
 hangen in plaats van aan vandaag, zodat het aantal volle weken vast staat. Dat raakt de piekdag-spec en
 niet deze ronde.
 
-**Bekend rood op de OP-EEN-NA-LAATSTE DAG van een maand, eigen ronde** (gemeten bij `v293`): vijf tests
-eisen het meervoud in `/Nog \d+ dagen deze maand, dus /` en krijgen op zo'n dag "Nog 1 dag", want
+**Bekend rood op de OP-EEN-NA-LAATSTE DAG van een maand, eigen ronde** (gemeten bij `v293`, uitgebreid
+bij `v295`): ZEVEN tests eisen het meervoud van het dagwoord en krijgen op zo'n dag "1 dag", want
 `maandDagenOver()` rekent `dim - elapsed` en sluit vandaag uit (`v257`). Het zijn
-`zwijgen-met-reden.spec.js` (2), `grafiekvormen.spec.js` (2) en `tempo-zonder-vaste-lasten.spec.js` (1).
-GEMETEN dat ze op `HEAD` net zo rood staan, dus ze zijn niet van die ronde: ze kwamen op toen de klok
-tijdens een suite-run over middernacht naar 29 september ging in een maand van 30 dagen.
-DIT IS DEZELFDE FAMILIE ALS DE TWEE HIERONDER: een assertie die op een getal in een zin ankert bewijst de
-eigenschap niet, en die eigenschap is hier dat er een dagbedrag staat en niet hoe het dagwoord vervoegt.
-De reparatie is het meervoud uit de regex halen, en dat raakt vijf specs in drie bestanden plus de vraag
-of de app zelf "1 dag" hoort te zeggen op een dag die bijna om is; die staat al als open punt onder de
+`zwijgen-met-reden.spec.js` (2), `grafiekvormen.spec.js` (2), `tempo-zonder-vaste-lasten.spec.js` (1) en
+`dagbedrag-potjes.spec.js` (2). GEMETEN bij `v295` dat alle zeven op `HEAD` net zo rood staan, dus ze zijn
+van geen van beide rondes: ze kwamen op toen de klok over middernacht naar 29 september ging in een maand
+van 30 dagen.
+DE LIJST WAS BIJ `v293` TE KORT, en dat is zelf een meetles: hij is toen opgeschreven uit de uitvoer van
+die dag in plaats van uit het PATROON, en twee specs die dezelfde eigenschap op een andere manier
+formuleren stonden er daarom niet in. Wie zo'n lijst maakt zoekt de familie en niet de rijen.
+DE TWEEDE VORM IS SUBTIELER EN DAARMEE HET ECHTE PUNT: `dagbedrag-potjes.spec.js` eist
+`/De (komende|resterende) \d+ dagen? heb je /`, en dat LIJKT het enkelvoud toe te laten. Dat doet het niet:
+`dagen?` is "dage" plus een optionele "n", dus het matcht "dagen" en "dage" en nooit "dag". Een regex die
+het enkelvoud lijkt te dekken en het niet doet is erger dan een die het meervoud eist, want hij leest als
+al gerepareerd.
+DIT IS DEZELFDE FAMILIE ALS DE TWEE HIERONDER: een assertie die op een zin ankert bewijst de eigenschap
+niet, en die eigenschap is hier dat er een dagbedrag staat en niet hoe het dagwoord vervoegt. De reparatie
+is de vervoeging uit de regex halen, en dat raakt zeven specs in vier bestanden plus de vraag of de app
+zelf "1 dag" hoort te zeggen op een dag die bijna om is; die staat al als open punt onder de
 dagen-conventie van `v257`.
 
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
@@ -3025,13 +3079,14 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v293` → `minder-v294`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v295` → `minder-v296`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
 `tests/` en documentatie, dus de cache ging van `minder-v255` rechtstreeks naar `minder-v257`, en om
-dezelfde reden van `minder-v291` naar `minder-v293` (`v292` was het open punt in dit bestand). Dat
-gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
+dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `minder-v295`: `v292`
+en `v294` raakten allebei alleen dit bestand en de changelog. Dat gat is geen fout maar de regel
+zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
 `minder-vN` in één greep terug te vinden in `CHANGELOG.md` en in de comments in `index.html`.
