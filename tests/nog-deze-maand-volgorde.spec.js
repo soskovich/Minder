@@ -1,4 +1,5 @@
-// v253: de volgorde van de vier posten onder "Wat er nog komt".
+// v253: de volgorde van de posten onder "Wat er nog komt" (sinds v260 "Nog deze maand").
+// v309: het waren er vier; de potjes-post is het hoofdgetal van de stand-kaart geworden.
 //
 // DE WEG VAN JE GELD DOOR DE MAAND: wat binnenkomt, wat je opzij zet, wat vastligt, en wat er voor
 // je potjes overblijft. Tot v252 stond de volgorde op de scheiding van v204 (waarneming boven, plan
@@ -90,14 +91,26 @@ const blok = (page) => page.evaluate(() => {
 });
 
 
-const VOLGORDE = ['Nog te ontvangen', 'Nog te sparen', 'Nog te betalen \u00b7 vast', 'Nog uit je potjes'];
+/* v309: DE VIERDE POST IS VERHUISD naar het hoofdgetal van de stand-kaart, dus de reeks is er een
+   korter. De EIGENSCHAP die deze spec vasthoudt verandert niet: de overgebleven posten houden
+   dezelfde onderlinge orde, ook als er een wegvalt. */
+const VOLGORDE = ['Nog te ontvangen', 'Nog te sparen', 'Nog te betalen \u00b7 vast'];
 const labels = (page) => page.evaluate(() => [...document.querySelectorAll('#insNogLijst .ins-nog-lab')]
   .map((x) => x.innerText.replace(/\s+/g, ' ').trim()));
 
-test.describe('a \u00b7 de vier posten staan in de weg van je geld', () => {
-  test('alle vier aanwezig: precies deze volgorde', async ({ page }) => {
+test.describe('a \u00b7 de posten staan in de weg van je geld', () => {
+  test('alle drie aanwezig: precies deze volgorde', async ({ page }) => {
     await boot(page);
     expect(await labels(page)).toEqual(VOLGORDE);
+  });
+
+  test('en de verhuisde post staat op de stand-kaart, niet in deze lijst', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => { const k = document.getElementById('insStand');
+      return { kaart: k ? k.innerText.replace(/\s+/g, ' ') : '',
+        lijst: (document.getElementById('insNogLijst') || {}).innerText || '' }; });
+    expect(r.kaart).toMatch(/nog in je potjes|te veel uitgegeven/);
+    expect(r.lijst).not.toMatch(/uit je potjes|Te veel uitgegeven/);
   });
 
   /* Een ontbrekende post mag de rest niet omgooien. De volgorde is een eigenschap van de reeks en
@@ -120,43 +133,36 @@ test.describe('a \u00b7 de vier posten staan in de weg van je geld', () => {
   }
 });
 
-test.describe('b \u00b7 de tekortregel blijft bij de potjes', () => {
-  test('de noot hangt onder Nog uit je potjes en nergens anders', async ({ page }) => {
+test.describe('b \u00b7 de tekortregel is met de potjes-post meeverhuisd', () => {
+  /* v309: de noot hing onder "Nog uit je potjes" en is het ACHTERVOEGSEL van het hoofdgetal
+     geworden, want als eigen regel op de kaart kost hij 23px en gaat de hoogte-eis van v241 om
+     (gemeten in `inzichten-hoofdgetal.spec.js`, blok f: 199px tegen 222px). Wat hier blijft is de
+     afbakening van deze lijst: geen enkele post draagt nog een noot, en de bron laat er ook geen
+     toe. */
+  test('geen enkele post in deze lijst draagt nog een noot', async ({ page }) => {
     await boot(page);
-    const r = await page.evaluate(() => {
-      const rijen = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')];
-      return rijen.map((x) => ({
-        lab: (x.querySelector('.ins-nog-lab') || {}).innerText || '',
-        noot: (x.querySelector('.ins-nog-noot') || {}).innerText || null }));
-    });
-    const metNoot = r.filter((x) => x.noot);
-    // de fixture heeft geen overschrijding, dus de noot hoeft er niet te staan; staat hij er wel,
-    // dan hoort hij bij de potjes-post en bij geen andere
-    for (const x of metNoot) expect(x.lab).toMatch(/uit je potjes|te veel uitgegeven/i);
-    // en de bron laat geen tweede drager toe: alleen de potjes-post krijgt een noot mee
+    const n = await page.evaluate(() =>
+      [...document.querySelectorAll('#insNogLijst .ins-nog-noot')].length);
+    expect(n).toBe(0);
     const src = await page.evaluate(() => nogDezeMaandPosten.toString());
-    expect((src.match(/noot:/g) || []).length).toBe(1);
+    expect((src.match(/noot:/g) || []).length).toBe(0);
   });
 
-  test('met een overschreden potje staat de noot er, en onder de potjes-post', async ({ page }) => {
+  test('met een overschreden potje staat de krapte op de kaart en niet in de lijst', async ({ page }) => {
     await boot(page, seed({ budgets: { boodschappen: 40, uiteten: 100, huur: 900 } }));
-    const r = await page.evaluate(() => {
-      const rij = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
-        .find((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText));
-      const n = rij && rij.querySelector('.ins-nog-noot');
-      const andere = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
-        .filter((x) => !/uit je potjes|te veel uitgegeven/i.test(x.innerText))
-        .some((x) => x.querySelector('.ins-nog-noot'));
-      return { er: !!n, tekst: n ? n.innerText.replace(/\s+/g, ' ') : '', andere };
-    });
-    expect(r.er).toBe(true);
-    expect(r.tekst).toMatch(/tekort/);
-    expect(r.andere).toBe(false);
+    const r = await page.evaluate(() => { const k = document.getElementById('insStand');
+      return { kaart: k ? k.innerText.replace(/\s+/g, ' ') : '',
+        lijstNoten: [...document.querySelectorAll('#insNogLijst .ins-nog-noot')].length,
+        // de invoer: er MOET hier een overschreden potje zijn, anders meet deze test niets
+        gebruikt: varPotjeStand(thisYM()).gebruikt, budget: varBudget() }; });
+    expect(r.gebruikt).toBeGreaterThan(r.budget);
+    expect(r.kaart).toMatch(/te veel uitgegeven/);
+    expect(r.lijstNoten).toBe(0);
   });
 });
 
 test.describe('c \u00b7 er staat geen totaal en geen restregel', () => {
-  test('geen enkele regel telt de vier bij elkaar op of trekt ze af', async ({ page }) => {
+  test('geen enkele regel telt de posten bij elkaar op of trekt ze af', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => {
       const m = curMonth || months()[months().length - 1];
@@ -197,7 +203,9 @@ test.describe('c \u00b7 er staat geen totaal en geen restregel', () => {
        onbestede deel in de tempo-som droeg; sinds de klem op de resterende dagen lopen ze uiteen.
        De identiteit gaat over wat safe werkelijk aftrekt, dus over de reservering. */
     expect(r.aftrekRest).toBe(r.identiteit);
-    // en met de GETOONDE post wijkt hij nog eens de overschrijding af (reserve = inPotjes + potOver)
+    /* en met het getal dat sinds v309 als hoofdgetal op de kaart staat wijkt hij nog eens de
+       overschrijding af (reserve = inPotjes + potOver). Dat is precies waarom er geen restregel
+       onder deze lijst hoort: welke van de twee je ook neemt, hij laat wat er al staat weg. */
     expect(r.aftrekPot).toBe(r.identiteit + r.potOver);
     // en je huidige saldo zit er niet in, dus de aftrekking is niet de prognose
     expect(r.spendSaldo).toBeGreaterThan(0);

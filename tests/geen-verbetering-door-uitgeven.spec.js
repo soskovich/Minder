@@ -62,9 +62,17 @@ const meet = (page) => page.evaluate(() => {
     if (l && v) tegels[l.innerText.trim()] = eur(v.innerText);
   }
   const tekst = d.innerText.replace(/\s+/g, ' ');
-  // v204: het variabele deel stond als voetregel onder de tegels ('plus EUR X variabel uit je potjes') en is een vierde tegel geworden, 'Nog uit je potjes'. Het bedrag en de bron zijn ongewijzigd; alleen de vindplaats verschuift.
-  const vp = tekst.match(/nog uit je potjes\s*€([\d.]+)/i);
+  /* v204: het variabele deel stond als voetregel onder de tegels ('plus EUR X variabel uit je
+     potjes') en werd een vierde tegel, 'Nog uit je potjes'. v309: die post is het HOOFDGETAL van de
+     stand-kaart geworden, dus hij komt daar vandaan; de bron is onveranderd varBudget() min
+     varPotjeStand().gebruikt. */
+  go('ins'); const k = document.getElementById('insStand');
+  const rij = k ? [...k.querySelectorAll('div.row')]
+    .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
+  const sp2 = rij ? [...rij.querySelectorAll('span')] : [];
+  const vp = sp2.length ? sp2[0].innerText.match(/€([\d.]+)/) : null;
   return { tegels, varPlan: vp ? +vp[1].replace(/\./g, '') : 0, tekst,
+    kaartTekst: k ? k.innerText.replace(/\s+/g, ' ') : '',
     uitgegeven: Math.round(catSpendMap(curMonth || months()[months().length - 1]).boodschappen || 0) };
 });
 
@@ -112,6 +120,12 @@ test.describe('a \u00b7 de vier stappen', () => {
    deel in de tempo-som droeg. Sinds de klem op de resterende dagen ligt de tempo-som eronder zodra
    een potje achterloopt, en dan staat hij niet op het scherm. De helper geeft dus null als de regel
    er niet is. */
+/* v309: DE REGEL IS HET ACHTERVOEGSEL VAN HET HOOFDGETAL OP DE STAND-KAART GEWORDEN, met EEN bedrag
+   in plaats van twee: het GAT en niet ook de tempo-som. GEMETEN: met beide bedragen breekt de kop op
+   360px naar 46px in plaats van 32px, al bij de kleinste getallen. De tempo-som volgt uit het
+   restant erboven plus het gat, en die aansluiting is wat de test hieronder vasthoudt. EN HIJ STAAT
+   ER ALLEEN BIJ EEN POSITIEF RESTANT: bij een negatief restant is het gat per constructie positief
+   en zou het een groter getal over dezelfde overschrijding zetten (meetles p). */
 const schermNoot = ({ noot }) => {
   const m = String(noot || '').replace(/\s+/g, ' ').match(/\u20ac([\d.]+)/);
   return m ? +m[1].replace(/\./g, '') : null;
@@ -124,13 +138,24 @@ const schermNoot = ({ noot }) => {
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
         const VP = varPotjeStand(m);
-        const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
-        return { getoond: { noot: (d.querySelector('.nog-noot') || {}).innerText || '', alles: d.innerText },
+        go('ins'); const k = document.getElementById('insStand');
+        const rij = k ? [...k.querySelectorAll('div.row')]
+          .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
+        const sp = rij ? [...rij.querySelectorAll('span')] : [];
+        const vol = sp.length > 1 ? sp[1].innerText.replace(/\s+/g, ' ').trim() : '';
+        const achter = vol.includes(' \u00b7 ') ? vol.slice(vol.indexOf(' \u00b7 ') + 3) : '';
+        const eur = (t) => { const x = String(t).match(/\u20ac([\d.]+)/); return x ? +x[1].replace(/\./g, '') : null; };
+        return { getoond: { noot: /tekort/.test(achter) ? achter : '', alles: k ? k.innerText : '' },
+          val: sp.length ? eur(sp[0].innerText) : null,
+          inPotjes: VP.budget - VP.gebruikt,
           bron: varPlanRemaining(m), gat: varPlanRemaining(m) - (VP.budget - VP.gebruikt) };
       });
       const op = schermNoot(r.getoond);
-      expect(op != null, `bij +${extra}: de regel staat er precies dan als er een gat is`).toBe(r.gat > 0);
-      if (op != null) { expect(op, `bij +${extra}`).toBe(r.bron); gezien++; }
+      expect(op != null, `bij +${extra}: de krapte staat er precies dan als er een gat is en het restant positief`)
+        .toBe(r.gat > 0 && r.inPotjes > 0);
+      // v309: het achtervoegsel draagt het gat; de tempo-som volgt uit het restant erboven
+      if (op != null) { expect(op, `bij +${extra}`).toBe(r.gat);
+        expect(r.val + op, `bij +${extra}`).toBe(r.bron); gezien++; }
     }
     /* ZONDER DEZE EIS LOOPT DE VERGELIJKING LEEG: zonder enige stap met een gat is de tweezijdige
        eis overal met een null vervuld en is de bron nooit tegen het scherm gelegd. De stappen gaan
@@ -191,7 +216,12 @@ test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
       const eur = (s) => { const x = String(s).match(/€\s?([\d.]+)/); return x ? +x[1].replace(/\./g, '') : null; };
       const tg = {};
       for (const t of d.querySelectorAll('.wvo-tile')) tg[t.querySelector('.wvo-tl').innerText.trim()] = eur(t.querySelector('.wvo-tv').innerText);
-      const vp = d.innerText.replace(/\s+/g, ' ').match(/nog uit je potjes\s*€([\d.]+)/i);
+      // v309: het vierde feit staat als hoofdgetal op de stand-kaart en niet meer in deze lijst
+      go('ins'); const k = document.getElementById('insStand');
+      const rij = k ? [...k.querySelectorAll('div.row')]
+        .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
+      const sp = rij ? [...rij.querySelectorAll('span')] : [];
+      const vp = sp.length ? sp[0].innerText.match(/€([\d.]+)/) : null;
       const VP = varPotjeStand(m);
       return { tg, varPlan: vp ? +vp[1].replace(/\./g, '') : 0,
         fixDue: Math.round(L.fixDue), incDue: Math.round(L.incDue),

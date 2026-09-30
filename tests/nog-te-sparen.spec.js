@@ -44,16 +44,20 @@ test.describe('a · de tegel toont wat er nog opzij moet', () => {
     expect(t).toContain('€100');
     expect(t).toContain(`van €${TARGET}`);
     expect(t).toContain(`€${GESPAARD} opzij`);
-    // v241: geen twee kolommen meer maar een lijst. De volgorde zelf staat in
-    // nog-deze-maand-volgorde.spec.js; hier telt alleen dat de spaarpost naast de andere staat.
-    expect(await tegels(page).count()).toBeGreaterThanOrEqual(3);
+    /* v241: geen twee kolommen meer maar een lijst. De volgorde zelf staat in
+       nog-deze-maand-volgorde.spec.js; hier telt alleen dat de spaarpost naast een andere staat.
+       v309: de potjes-post is naar de stand-kaart verhuisd, dus de lijst is er een korter en de
+       ondergrens gaat van drie naar twee. */
+    expect(await tegels(page).count()).toBeGreaterThanOrEqual(2);
     /* En de bestaande posten staan er onveranderd bij. v260: 'nog te ontvangen' hoort daar niet
        meer bij in deze fixture, want het salaris is al binnen en een post van nul zonder uitkomst
        verdwijnt. Dat is geen eigenschap van de spaarpost, dus de test bindt aan de buren die er
        wel horen te staan. */
     const kt = (await kaart(page).innerText()).toLowerCase();
     expect(kt).toContain('nog te betalen');
-    expect(kt).toContain('nog uit je potjes');
+    /* v309: 'nog uit je potjes' stond hier als tweede buur en is naar het hoofdgetal van de
+       stand-kaart verhuisd, dus deze lijst draagt hem niet meer. */
+    expect(kt).not.toContain('nog uit je potjes');
   });
 
   test('het is exact het bedrag dat "veilig te besteden" al reserveert', async ({ page }) => {
@@ -88,8 +92,11 @@ test.describe('b · randgevallen', () => {
     const kt = (await kaart(page).innerText()).toLowerCase();
     expect(kt).not.toContain('nog te sparen');
     expect(kt).toContain('nog te betalen');
-    expect(kt).toContain('nog uit je potjes');   // v260: zie de toelichting hierboven
-    expect(await tegels(page).count()).toBeGreaterThanOrEqual(2);
+    /* v309: 'nog uit je potjes' stond hier als de buur die er wel hoort te staan; die post is naar
+       het hoofdgetal van de stand-kaart verhuisd, dus de buur is nu de vaste-lastenpost hierboven.
+       Dat de kaart het potjesgetal draagt staat in inzichten-hoofdgetal.spec.js. */
+    expect(kt).not.toContain('nog uit je potjes');
+    expect(await tegels(page).count()).toBeGreaterThanOrEqual(1);
   });
 
   test('doel al gehaald: €0 met "gehaald", in groen', async ({ page }) => {
@@ -133,8 +140,9 @@ test('d · de posten passen op 360 en 390px', async ({ page }) => {
     expect(r.pagina, `${w}px`).toBe(0);
     expect(r.buiten, `${w}px`).toBe(0);
     expect(r.afgekapt, `${w}px`).toBe(0);                                // geen afgekapt bedrag
-    // v241: het aantal ligt niet vast; elke post neemt de volle breedte, dus geen enkele wordt smal
-    expect(r.breedtes.length, `${w}px`).toBeGreaterThanOrEqual(3);
+    /* v241: het aantal ligt niet vast; elke post neemt de volle breedte, dus geen enkele wordt
+       smal. v309: de lijst is er een korter, dus de ondergrens gaat van drie naar twee. */
+    expect(r.breedtes.length, `${w}px`).toBeGreaterThanOrEqual(2);
     expect(new Set(r.breedtes).size, `${w}px`).toBe(1);
   }
 });

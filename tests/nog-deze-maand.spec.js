@@ -93,12 +93,15 @@ test.describe('a · de rij scheidt waarneming van plan', () => {
      nog komend springt die aftrekking van +2.025 naar -975 terwijl safeToSpend() op 3.720 blijft.
      Er staat daarom geen totaal en geen restregel, en die afwezigheid is wat de test in blok b
      vasthoudt. */
-  test('vier posten, vier regels, in de weg van je geld door de maand', async ({ page }) => {
+  test('drie posten, drie regels, in de weg van je geld door de maand', async ({ page }) => {
     await boot(page);
     const b = await blok(page);
     expect(b).not.toBeNull();
+    /* v309: het waren er vier. De potjes-post is het HOOFDGETAL van de stand-kaart geworden, dus
+       hij staat hier niet meer; wat deze test vasthoudt (elke post op zijn eigen regel, in deze
+       volgorde, met de bedragen tegen dezelfde rechterkant) verandert daar niet van. */
     expect(b.tegels.map((t) => t.label)).toEqual([
-      'Nog te ontvangen', 'Nog te sparen', 'Nog te betalen · vast', 'Nog uit je potjes']);
+      'Nog te ontvangen', 'Nog te sparen', 'Nog te betalen · vast']);
     // v241: elke post staat op zijn eigen regel, in de volgorde waarin hij hierboven staat
     for (let i = 1; i < b.tegels.length; i++) expect(b.tegels[i].top).toBeGreaterThan(b.tegels[i - 1].top);
     // en de bedragen staan tegen dezelfde rechterkant, dus je kunt ze met elkaar vergelijken
@@ -117,18 +120,28 @@ test.describe('a · de rij scheidt waarneming van plan', () => {
     expect(sub('Nog te betalen · vast')).toMatch(/incasso|niets herkend|al afgeschreven/i);
     expect(sub('Nog te ontvangen')).toBe('inkomen');
     expect(sub('Nog te sparen')).toMatch(/van €|gehaald/);
-    // v208: de potjes-tegel is een voortgang geworden, met dezelfde noemer-vorm als de tegel ernaast
-    expect(sub('Nog uit je potjes')).toMatch(/van €.*gebruikt|variabel/);
+    /* v208 maakte de potjes-tegel een voortgang met dezelfde noemer-vorm als de tegel ernaast.
+       v309 heeft die post naar het hoofdgetal van de stand-kaart verhuisd, en zijn sub is NIET
+       meegegaan: de kaart draagt een eigen regel boven de balk met totals().spendNorm tegen
+       totals().budget, en dat is een andere noemer (v257). Wat hier overblijft is dat de post er
+       niet meer is. */
+    expect(sub('Nog uit je potjes')).toBeUndefined();
     // geen groepskoppen: de rij bestaat uit tegels en verder niets
     const koppen = await page.evaluate(() =>
       document.querySelectorAll('#insNogLijst > :not(.ins-nog-rij)').length);
     expect(koppen).toBe(0);
   });
 
-  test('de variabele post is een tegel, geen voetregel meer', async ({ page }) => {
+  test('de oude voetregel komt in geen enkele vorm terug', async ({ page }) => {
     await boot(page);
     const b = await blok(page);
-    const pot = b.tegels[3];
+    /* v309: hier stond `const pot = b.tegels[3]`, de potjes-post. Die is naar de stand-kaart
+       verhuisd, dus wat deze test nog kan vasthouden is de oude voetregel zelf: de regel die ná de
+       posten stond en het variabele bedrag herhaalde. Die mag in geen van de twee weergaven terug. */
+    const pot = { waarde: await page.evaluate(() => { const k = document.getElementById('insStand');
+      const rij = k && [...k.querySelectorAll('div.row')]
+        .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent));
+      return rij ? rij.querySelector('span').innerText.trim() : ''; }) };
     expect(pot.waarde).toMatch(/€/);
     /* v250: hier stond expect(pot.tik).toBe(true). De tik is verhuisd naar de regel onder het
        bedrag, want die noemt het bedrag dat openReservedPotjes() in zijn kop zet; het grote getal
@@ -197,9 +210,11 @@ test.describe('b · er telt niets op in dit blok', () => {
    hieronder vast. */
 test.describe('c · elk aantal posten leest hetzelfde', () => {
   for (const [naam, opt, aantal, laatste] of [
-    // v253: de volgorde is ontvangen, sparen, betalen, potjes; valt er een weg, dan schuift de rest op
-    ['zonder potjes: drie regels', { geenPotjes: true }, 3, 'Nog te betalen · vast'],
-    ['zonder spaardoel: drie regels', { geenSpaardoel: true }, 3, 'Nog uit je potjes'],
+    /* v253: de volgorde is ontvangen, sparen, betalen; valt er een weg, dan schuift de rest op.
+       v309: de potjes-post is verhuisd, dus "zonder potjes" verandert deze lijst niet meer en de
+       twee gevallen die hem noemden vallen samen met het geval ernaast. */
+    ['zonder potjes: nog steeds drie regels', { geenPotjes: true }, 3, 'Nog te betalen · vast'],
+    ['zonder spaardoel: twee regels', { geenSpaardoel: true }, 2, 'Nog te betalen · vast'],
     ['zonder spaardoel en zonder potjes: twee regels', { geenSpaardoel: true, geenPotjes: true }, 2, 'Nog te betalen · vast'],
   ]) {
     test(naam, async ({ page }) => {
@@ -228,25 +243,27 @@ test.describe('d · de vier situaties uit de controlelijst', () => {
   test('halverwege de maand', async ({ page }) => {
     await boot(page);
     const b = await blok(page);
-    expect(b.tegels.length).toBe(4);
+    expect(b.tegels.length).toBe(3);      // v309: de potjes-post staat op de stand-kaart
     // v253: op label, want de vaste post staat niet meer vooraan
     expect(b.tegels.find((t) => t.label === 'Nog te betalen · vast').waarde).toMatch(/€/);
   });
 
-  test('aan het begin van de maand is de potjes-post de grootste', async ({ page }) => {
+  test('aan het begin van de maand is het potjesgetal groter dan je spaardoel, en het staat op de kaart', async ({ page }) => {
     await boot(page, seed({}, { beginMaand: true }));
     const b = await blok(page);
     const eur = (s) => Math.abs(parseFloat(String(s).replace(/[^\d,-]/g, '').replace(/\./g, '').replace(',', '.')) || 0);
-    // v253: op label, want de volgorde is veranderd; de eigenschap is dezelfde
-    const pot = eur(b.tegels.find((t) => t.label === 'Nog uit je potjes').waarde);
+    /* v253 bond op label in plaats van op plek. v309 heeft de potjes-post naar de stand-kaart
+       verhuisd, dus het getal komt van daar; de eigenschap is dezelfde. Wat hier vervalt is de
+       vergelijking van de LETTERGROOTTE met zijn buurman in de lijst: hij heeft geen buurman meer,
+       en dat hij het grootste getal van de kaart is staat in inzichten-hoofdgetal.spec.js. */
+    const pot = await page.evaluate(() => { const k = document.getElementById('insStand');
+      const rij = [...k.querySelectorAll('div.row')]
+        .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent));
+      return rij.querySelector('span').innerText.trim(); });
     const spaar = eur(b.tegels.find((t) => t.label === 'Nog te sparen').waarde);
-    expect(pot).toBeGreaterThan(spaar);
-    // en hij staat in dezelfde vorm als zijn buurman, niet meer in de kleinste graad
-    const zelfde = await page.evaluate(() => {
-      const t = [...document.querySelectorAll('#insNogLijst .ins-nog-val')];
-      return getComputedStyle(t[t.length - 2]).fontSize === getComputedStyle(t[t.length - 1]).fontSize;
-    });
-    expect(zelfde).toBe(true);
+    expect(eur(pot)).toBeGreaterThan(spaar);
+    // en de lijst noemt hem niet meer
+    expect(b.tegels.map((t) => t.label)).not.toContain('Nog uit je potjes');
   });
 
   test('met alles betaald blijft de tegel staan en kleurt hij niet rood', async ({ page }) => {

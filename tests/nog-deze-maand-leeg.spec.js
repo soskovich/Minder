@@ -139,19 +139,24 @@ test.describe('b · een bereikte uitkomst blijft', () => {
     expect(p.sub).not.toMatch(/niets herkend/);   // de gemeten onwaarheid
   });
 
-  test('Nog uit je potjes op precies nul blijft, want dat is een stand', async ({ page }) => {
-    await boot(page, { potjesOp: true });
-    const p = vind(await posten(page), 'Nog uit je potjes');
-    expect(p).toBeTruthy();
-    expect(p.val).toMatch(/0/);
-    expect(p.sub).toMatch(/100%/);
-  });
-
-  test('een negatief bedrag verdwijnt niet, want dat is informatie', async ({ page }) => {
-    await boot(page, { overBudget: true });
-    const p = vind(await posten(page), 'Te veel uitgegeven');
-    expect(p).toBeTruthy();
-    expect(p.val).toMatch(/70/);
+  /* v309: DE POTJES-POST IS UIT DEZE LIJST VERHUISD naar het hoofdgetal van de stand-kaart. Hier
+     stonden twee tests over zijn `leeg`-regel: nul blijft staan want dat is een stand, en een
+     negatief bedrag blijft want dat is informatie. Die twee eigenschappen gelden nog, alleen op een
+     andere plek, en ze staan daar getoetst (`inzichten-hoofdgetal.spec.js`, blok d: een restant van
+     nul houdt zijn label zonder achtervoegsel, een negatief restant heet "te veel uitgegeven").
+     Ze hier ook nog eens toetsen zou dezelfde eigenschap op twee plekken pinnen.
+     WAT HIER BLIJFT is de afbakening van deze lijst: in BEIDE standen staat de post er niet meer.
+     Dat is wat de verhuizing moet aantonen, en het is precies het geval waarop een halve
+     verhuizing zou vallen. */
+  test('in beide standen staat de potjes-post niet meer in deze lijst', async ({ page }) => {
+    for (const opt of [{ potjesOp: true }, { overBudget: true }]) {
+      await boot(page, opt);
+      const L = await posten(page);
+      expect(vind(L, 'Nog uit je potjes'), JSON.stringify(opt)).toBeNull();
+      expect(vind(L, 'Te veel uitgegeven'), JSON.stringify(opt)).toBeNull();
+      // en de lijst is niet leeg geworden, dus de andere posten zijn niet meegesneuveld
+      expect(L.length, JSON.stringify(opt)).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -180,7 +185,9 @@ test.describe('c · geen post, geen kop', () => {
     const L = await posten(page);
     const s = await scherm(page);
     expect(s.rijen).toBe(L.length);
-    expect(L.length).toBe(3);   // ontvangen weg, sparen + betalen + potjes blijven
+    // v260: ontvangen valt weg. v309: de potjes-post is naar de stand-kaart verhuisd.
+    expect(L.length).toBe(2);   // sparen + betalen
+    expect(L.map((x) => x.lab).join(' | ')).toMatch(/sparen[\s\S]*betalen/i);
   });
 });
 

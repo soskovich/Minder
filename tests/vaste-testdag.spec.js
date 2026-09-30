@@ -85,7 +85,12 @@ test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron',
   const NODIG = ['tempo-zonder-vaste-lasten', 'dagbedrag-potjes', 'zwijgen-met-reden', 'grafiekvormen',
     'potjesregel-diagnose', 'potjesregel-aansluiting', 'potjes-reservering', 'potje-overschreden',
     'een-definitie-variabel', 'budget-liquiditeit', 'geen-verbetering-door-uitgeven',
-    'potjes-aansluiting-exact'];
+    'potjes-aansluiting-exact',
+    /* v309: `uit-reservering` meet de HOOGTE van de stand-kaart, en de kop van die kaart draagt
+       sinds v309 een achtervoegsel dat aan de dag hangt (de tempo-krapte of het dagbedrag), terwijl
+       budgetOverZin() op de laatste dag een andere zin zegt. GEMETEN gaf het zwaarste geval op
+       30 september 217px op 360px en 199px op 390px; met de pin 199px op beide. */
+    'uit-reservering'];
   test('geen enkele van hen rekent zijn eigen vaste dag uit', () => {
     for (const f of NODIG) {
       const src = fs.readFileSync(path.join(__dirname, f + '.spec.js'), 'utf8');
@@ -107,24 +112,21 @@ test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron',
     }
   });
 
-  /* WIE EEN KLOK ZET LEEST DE GEDEELDE BRON, MET EEN UITZONDERING DIE ZIJN REDEN DRAAGT.
-     `potjes-weekvenster.spec.js` LOOPT DE VENSTERRAND AF en heeft dus juist MEER dan een dag nodig;
-     een gedeelde vaste dag zou daar precies de meting weghalen. Hij is om dezelfde reden niet een
-     van de zeven die omvielen: hij leidt zijn eigen maand van DERTIG dagen af in plaats van de
-     echte maand te nemen, dus zijn dagen staan al vast. Deze test houdt die twee dingen vast: dat
-     de lijst uitzonderingen niet stilletjes groeit, en dat de uitzondering zelf niet op de echte
-     dag-van-de-maand leunt. */
-  test('wie een klok zet leest de gedeelde bron, op een uitzondering na die zijn eigen dagen aflopt', () => {
-    const UITZONDERING = 'potjes-weekvenster.spec.js';
+  /* WIE EEN KLOK ZET LEEST DE GEDEELDE BRON, EN ER IS GEEN UITZONDERING MEER.
+     Tot v308 was `potjes-weekvenster.spec.js` de ene uitzondering: hij liep de VENSTERRAND van de
+     weekregel af en had dus juist meer dan een dag nodig, en hij leidde zijn eigen maand van
+     dertig dagen af. Die weekregel is bij v309 vervallen (de eenheid is de dag geworden, voor
+     Inzichten en Home) en met hem die spec, dus de lijst uitzonderingen is nu LEEG. Dat is
+     strenger dan de oude vorm en geen verzwakking: elke klokzetter leest de gedeelde bron.
+     DE LOOP MAG NIET LEEG ZIJN, anders toetst deze test niets (meetles a): er moet minstens een
+     zetter zijn en die moet de bron lezen. */
+  test('wie een klok zet leest de gedeelde bron, zonder uitzondering', () => {
     const zetters = fs.readdirSync(__dirname).filter((f) => f.endsWith('.js') && f !== 'vaste-dag.js'
       && /clock\.(setFixedTime|install)/.test(fs.readFileSync(path.join(__dirname, f), 'utf8')));
-    expect(zetters, 'de uitzondering moet er zijn, anders toetst de rest niets').toContain(UITZONDERING);
+    expect(zetters.length, 'geen enkele klokzetter, dus deze test toetst niets').toBeGreaterThan(0);
+    expect(zetters).not.toContain('potjes-weekvenster.spec.js');
     for (const f of zetters) {
       const src = fs.readFileSync(path.join(__dirname, f), 'utf8');
-      if (f === UITZONDERING) {
-        expect(src, 'de uitzondering leidt zijn eigen maandlengte af').toMatch(/maand30/);
-        continue;
-      }
       expect(src, f + ' zet een klok zonder de gedeelde bron te lezen').toMatch(/require\('\.\/vaste-dag'\)/);
     }
   });

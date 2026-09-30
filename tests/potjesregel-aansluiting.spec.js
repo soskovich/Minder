@@ -104,20 +104,39 @@ async function boot(page, o) {
   await page.evaluate(() => go('ins'));
 }
 
-// de regel zoals hij op het scherm staat, plus de bronnen waar hij uit hoort te komen
+/* v309: DE REGEL IS HET HOOFDGETAL VAN DE STAND-KAART GEWORDEN. `val` is het grote getal, `lab`
+   het label, en `noot` het deel van het achtervoegsel dat de tempo-krapte draagt (de oude noot).
+   `sub` bestaat NIET meer: die noemde de potjes-noemer ("van EUR 1.200 . EUR 1.070 gebruikt . 89%")
+   en is niet meeverhuisd, want de kaart draagt een eigen regel met totals().spendNorm tegen
+   totals().budget en dat is een andere noemer (v257). Wat daar nu staat heet `noemerRegel`, en de
+   tests eronder toetsen juist dat die twee uiteenlopen.
+   `lijstPost` is er om te toetsen dat de post in de lijst NIET meer staat. */
 const meet = (page) => page.evaluate(() => {
   const m = curMonth || months()[months().length - 1];
   const VP = varPotjeStand(m);
-  const r = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
-    .find((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText));
-  const q = (c) => { const e = r && r.querySelector(c); return e ? e.innerText.replace(/\s+/g, ' ').trim() : null; };
+  const kaart = document.getElementById('insStand');
+  const r = kaart ? [...kaart.querySelectorAll('div.row')]
+    .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
+  const sp = r ? [...r.querySelectorAll('span')] : [];
+  const vol = sp.length > 1 ? sp[1].innerText.replace(/\s+/g, ' ').trim() : null;
+  const achter = vol && vol.includes(' \u00b7 ') ? vol.slice(vol.indexOf(' \u00b7 ') + 3) : '';
+  /* de regel boven de balk, niet de kop: die laatste draagt bij een negatief restant zelf het
+     woord "uitgegeven" ("te veel uitgegeven"), dus de toets is de noemer plus het percentage. */
+  const noemer = kaart ? [...kaart.querySelectorAll('div.row')]
+    .find((x) => /van \u20ac[\d.]+ (maandbudget|je inkomen-limiet)/.test(x.textContent)) : null;
   const eur = (t) => (t == null ? null : Math.abs(Math.round(parseFloat(String(t).replace(/[^\d,-]/g, '').replace(/\./g, '').replace(',', '.')) || 0)));
+  const t = totals(m);
   return {
-    er: !!r, lab: q('.ins-nog-lab'), val: q('.ins-nog-val'), valEur: eur(q('.ins-nog-val')),
-    sub: q('.ins-nog-sub'), noot: q('.ins-nog-noot'),
+    er: !!r, lab: vol ? vol.split(' \u00b7 ')[0] : null,
+    val: sp.length ? sp[0].innerText.trim() : null, valEur: eur(sp.length ? sp[0].innerText : null),
+    achter, noot: /tekort/.test(achter) ? achter : null,
+    noemerRegel: noemer ? noemer.innerText.replace(/\s+/g, ' ').trim() : null,
+    lijstPost: [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
+      .some((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText)),
     rijTik: !!(r && r.getAttribute('onclick')),
-    nootTik: !!(r && r.querySelector('.ins-nog-noot') && r.querySelector('.ins-nog-noot').getAttribute('onclick')),
+    nootTik: !!(r && r.querySelector('[onclick]')),
     budget: VP.budget, gebruikt: VP.gebruikt, rest: varPlanRemaining(m), reserve: varPotjesReserve(m),
+    kaartBudget: Math.round(t.budget), kaartSpend: Math.round(t.spendNorm),
     inPotjes: VP.budget - VP.gebruikt, gat: varPlanRemaining(m) - (VP.budget - VP.gebruikt),
   };
 });
@@ -129,7 +148,8 @@ test.describe('a · het grote getal is de aftrekking die eronder staat', () => {
     expect(r.er).toBe(true);
     expect(r.valEur).toBe(r.inPotjes);          // de aftrekking
     expect(r.valEur).not.toBe(r.rest);          // en in deze fixture wijkt die echt af
-    expect(r.lab).toBe('Nog uit je potjes');
+    expect(r.lab).toBe('nog in je potjes');
+    expect(r.lijstPost).toBe(false);            // v309: verhuisd, niet gekopieerd
     /* v308: hier stond gat > 0. Op de GEMELDE stand is dat sinds v308 niet meer zo, en dat is de
        reparatie zelf: drie van de vier potjes lopen achter op hun tempo, dus bij dat tempo vragen
        ze samen minder dan er in zit. Wat deze test vasthoudt is het grote getal, en dat is
@@ -138,14 +158,35 @@ test.describe('a · het grote getal is de aftrekking die eronder staat', () => {
     expect(r.noot).toBeNull();
   });
 
-  test('de sub noemt dezelfde twee getallen waaruit het grote getal volgt', async ({ page }) => {
+  test('de regel eronder noemt een ANDERE noemer, en dat staat er ook', async ({ page }) => {
     await boot(page, gemeld());
     const r = await meet(page);
-    // "van €1.200 · €1.070 gebruikt · 89%" - en 1200 min 1070 is wat er groot staat
-    const g = [...r.sub.matchAll(/€([\d.]+)/g)].map((x) => +x[1].replace(/\./g, ''));
-    expect(g[0]).toBe(r.budget);
-    expect(g[1]).toBe(r.gebruikt);
-    expect(g[0] - g[1]).toBe(r.valEur);
+    /* v250 had hier een sub "van EUR 1.200 . EUR 1.070 gebruikt . 89%", en 1200 min 1070 was wat er
+       groot stond: de sub was de aftrekking. v309 heeft die sub NIET meeverhuisd. De kaart draagt
+       een eigen regel met totals().spendNorm tegen totals().budget, en die twee frames lopen echt
+       uiteen: het rekenkundige restant van die regel is iets anders dan het potjes-restant.
+       DAAROM DRAGEN ZE EEN EIGEN NAAM ("je potjes" tegen "maandbudget"), want hetzelfde woord voor
+       twee getallen is wat v91 verbiedt. Deze test meet die divergentie, zodat een volgende ronde
+       niet denkt dat de een uit de ander volgt. */
+    const g = [...r.noemerRegel.matchAll(/€([\d.]+)/g)].map((x) => +x[1].replace(/\./g, ''));
+    expect(g[0]).toBe(r.kaartSpend);
+    expect(g[1]).toBe(r.kaartBudget);
+    expect(r.noemerRegel).toMatch(/maandbudget/);
+    expect(r.lab).not.toMatch(/maandbudget/);
+    /* DE TWEE NOEMERS LOPEN UITEEN EN DE TWEE RESTANTEN VALLEN OP DEZE FIXTURE SAMEN, en dat staat
+       er allebei in plaats van dat het als bevestiging leest. De gemelde stand draagt een
+       terugkerend potje (huur 1.200) dat volledig is afgeschreven, dus totals().budget is 2.930 en
+       varBudget() 1.730 terwijl beide restanten op 598 uitkomen. Die stand blijft de stand die hij
+       is (v251/v256), dus de DIVERGENTIE van de restanten wordt gemeten waar ze bestaat: in
+       `inzichten-hoofdgetal.spec.js`, 42 tegen -98, een gat van 140. Wat hier vastligt is dat elk
+       van de twee zijn eigen bron leest en dat de noemers verschillen. */
+    const kaartRestant = r.kaartBudget - r.kaartSpend;
+    expect(r.valEur).toBe(r.inPotjes);
+    expect(r.budget).not.toBe(r.kaartBudget);
+    expect(r.budget).toBe(1730);
+    expect(r.kaartBudget).toBe(2930);
+    expect(kaartRestant).toBe(r.inPotjes);      // toeval van deze fixture, en dat zegt de test
+    console.log(`### potjes ${r.gebruikt} van ${r.budget} -> ${r.inPotjes}; kaart ${r.kaartSpend} van ${r.kaartBudget} -> ${kaartRestant}`);
   });
 
   test('niets gebruikt: het hele potje staat er, zonder extra regel', async ({ page }) => {
@@ -161,13 +202,19 @@ test.describe('a · het grote getal is de aftrekking die eronder staat', () => {
 });
 
 test.describe('b · de reservering staat eronder, met het verschil erbij', () => {
-  test('de extra regel noemt varPlanRemaining en het gat', async ({ page }) => {
+  test('het achtervoegsel noemt het gat, en de tempo-som volgt uit de kop', async ({ page }) => {
     await boot(page, gat());
     const r = await meet(page);
+    /* v250 zette hier TWEE bedragen in de regel: "Bij je tempo nog EUR 493 nodig . EUR 363 tekort".
+       v309 heeft er het achtervoegsel van de kop van gemaakt, en daar past maar EEN bedrag:
+       GEMETEN breekt de vorm met beide bedragen op 360px naar 46px in plaats van 32px, en dat al
+       bij de kleinste getallen (EUR 82 nodig, EUR 12 tekort). Er gaat niets verloren: de kop toont
+       het restant en de tempo-som is dat restant PLUS het gat, dus de derde volgt uit de twee die
+       er staan. Die aansluiting is wat deze test vasthoudt. */
     const g = [...r.noot.matchAll(/€([\d.]+)/g)].map((x) => +x[1].replace(/\./g, ''));
-    expect(g[0]).toBe(r.rest);                  // "heb je nog €493 nodig"
-    expect(g[1]).toBe(r.gat);                   // "€363 meer dan er in zit"
-    expect(g[0] - g[1]).toBe(r.valEur);         // en de drie sluiten op elkaar aan
+    expect(g.length).toBe(1);
+    expect(g[0]).toBe(r.gat);
+    expect(r.valEur + r.gat).toBe(r.rest);      // kop plus gat is de tempo-som
     expect(r.noot).not.toMatch(/^(zet|verlaag|stop|houd|pas)/i);   // geen gebiedende wijs
   });
 
@@ -185,19 +232,26 @@ test.describe('b · de reservering staat eronder, met het verschil erbij', () =>
     expect(r.nootTik).toBe(false);
   });
 
-  test('de extra regel draagt geen alarmkleur', async ({ page }) => {
+  test('het achtervoegsel draagt geen alarmkleur', async ({ page }) => {
     await boot(page, gat());
     const kleur = await page.evaluate(() => {
-      const n = document.querySelector('#insNogLijst .ins-nog-noot');
+      const k = document.getElementById('insStand');
+      const n = [...k.querySelectorAll('div.row')]
+        .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)).querySelectorAll('span')[1];
       const c = getComputedStyle(n).color;
       const los = (v) => { const d = document.createElement('div'); d.style.color = v; document.body.appendChild(d); const x = getComputedStyle(d).color; d.remove(); return x; };
       const rs = getComputedStyle(document.documentElement);
       return { c, rood: los(rs.getPropertyValue('--red').trim()), amber: los(rs.getPropertyValue('--amber').trim()),
-        mut2: los(rs.getPropertyValue('--mut2').trim()) };
+        mut: los(rs.getPropertyValue('--mut').trim()), mut2: los(rs.getPropertyValue('--mut2').trim()) };
     });
     expect(kleur.c).not.toBe(kleur.rood);
     expect(kleur.c).not.toBe(kleur.amber);
-    expect(kleur.c).toBe(kleur.mut2);
+    /* v309: de krapte reist mee in het LABEL van de kop, en een label naast een groot getal draagt
+       in dit blok `small muted` (de oude kop deed dat ook voor het woord "uitgegeven"). Als eigen
+       regel droeg hij --mut2; wat de eigenschap is, is dat hij geen aandacht claimt (v78/v93), en
+       dat is hier de kleur van het label waarin hij staat. */
+    expect(kleur.c).toBe(kleur.mut);
+    expect([kleur.mut, kleur.mut2]).toContain(kleur.c);
   });
 });
 
@@ -206,16 +260,20 @@ test.describe('c · meer uitgegeven dan er in je potjes zat', () => {
     await boot(page, { boekingen: OVERAL });
     const r = await meet(page);
     expect(r.inPotjes).toBeLessThan(0);
-    expect(r.lab).toBe('Te veel uitgegeven');
+    expect(r.lab).toBe('te veel uitgegeven');
     expect(r.val).not.toContain('-');
     expect(r.valEur).toBe(-r.inPotjes);
   });
 
-  test('de sub laat het percentage weg, want de hero zegt het al', async ({ page }) => {
+  test('de kop draagt geen percentage en geen achtervoegsel', async ({ page }) => {
     await boot(page, { boekingen: OVERAL });
     const r = await meet(page);
-    expect(r.sub).not.toMatch(/%/);
-    expect(r.sub).toMatch(/^van €[\d.]+ · €[\d.]+ gebruikt$/);
+    /* v250 liet het percentage uit de sub weg zodra je erover was, want de hero zei het al. Die sub
+       is bij v309 vervallen; het percentage staat nu op de regel eronder, waar het bij zijn eigen
+       noemer hoort. Wat hier blijft is dat de kop zelf niets herhaalt. */
+    expect(r.lab).toBe('te veel uitgegeven');
+    expect(r.achter).toBe('');
+    expect(r.noemerRegel).toMatch(/%/);
   });
 });
 
@@ -243,12 +301,13 @@ test.describe('e · een tik komt uit op het bedrag waarop je tikte', () => {
      die sheet de reservering (varPotjesReserve) en niet meer de tempo-som, dus dezelfde tik zou
      weer op een ander getal uitkomen dan waarop je tikte. Er is geen bestaand scherm dat de
      tempo-som toont, dus er is geen tik. De sheet blijft bereikbaar vanaf Home. */
-  test('de extra regel heeft geen tik meer, want geen scherm toont de tempo-som', async ({ page }) => {
+  test('de kop heeft geen tik, want geen scherm toont dit getal', async ({ page }) => {
     await boot(page, gat());
     const r = await meet(page);
     expect(r.noot).not.toBeNull();
     expect(r.nootTik).toBe(false);
-    await page.click('#insNogLijst .ins-nog-noot');
+    expect(r.rijTik).toBe(false);
+    await page.click('#insStand div.row');
     expect(await page.locator('#sheetBg.show').count()).toBe(0);
     // en de sheet die er wel is toont een ander getal, dus die tik hoorde er niet meer te zijn
     const kop = await page.evaluate(() => { openReservedPotjes();

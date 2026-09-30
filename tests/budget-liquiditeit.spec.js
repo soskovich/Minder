@@ -121,10 +121,13 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     const t = await text(page, '#s-ins');
     expect(t).not.toMatch(/\(tempo\)/);                  // het tempo is geen grondslag meer
     const plan = await page.evaluate((m) => varPlanRemaining(m), await page.evaluate(() => curMonth));
-    // v204: die regel is de tegel 'Nog uit je potjes' geworden; zelfde bedrag, zelfde bron.
-    // v241: lijstregel in plaats van tegel, dus label en bedrag staan naast elkaar op één regel
-    if (potjes > 0) expect(t).toMatch(/(nog uit je potjes|te veel uitgegeven)[\s\S]{0,40}€[\d.]+/i);
-    else expect(t).not.toMatch(/nog uit je potjes|te veel uitgegeven/i);
+    /* v204: die regel is de tegel 'Nog uit je potjes' geworden; zelfde bedrag, zelfde bron.
+       v241: lijstregel in plaats van tegel, dus label en bedrag staan naast elkaar op één regel.
+       v309: de post is naar het HOOFDGETAL van de stand-kaart verhuisd en heet daar "nog in je
+       potjes". Het bedrag staat nu VOOR het label in plaats van erachter, want het is het grote
+       getal geworden; de bron is onveranderd varBudget() min varPotjeStand().gebruikt. */
+    if (potjes > 0) expect(t).toMatch(/€[\d.]+[\s\S]{0,40}(nog in je potjes|te veel uitgegeven)/i);
+    else expect(t).not.toMatch(/nog in je potjes|te veel uitgegeven/i);
     expect(plan).toBeGreaterThanOrEqual(0);
   });
 

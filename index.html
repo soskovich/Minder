@@ -842,10 +842,47 @@ function ymdVan(d){ const x=(d instanceof Date)?d:new Date(d);
 function vandaagYMD(){ return ymdVan(new Date()); }
 function nextYM(ym){ let [y,mo]=String(ym).split('-').map(Number); mo++; if(mo>12){mo=1;y++;} return y+'-'+String(mo).padStart(2,'0'); }
 function ymFull(ym){ const mo=+String(ym).split('-')[1]; return MFULL[mo-1]||''; }
+/* v309: HET POTJEBEDRAG PER CATEGORIE PER MAAND, BEWAARD EN NIET GELEZEN.
+   WAAROM HET NIET AF TE LEIDEN IS: `SET.budgets` is EEN map voor de LOPENDE maand, en
+   `effectiveBudgets(m)` negeert zijn maandargument voor de bedragen en leest diezelfde map. Er is
+   dus nergens vastgelegd wat een potje in een afgesloten maand WAS, en `rolloverBudgets()`
+   overschrijft de map bij de maandwissel uit `budgetsNext`. Een latere spiegel die zegt "twee
+   maanden op rij onder je potje" kan daarom alleen tegen het potje van VANDAAG meten, en dan zou
+   het potje VERHOGEN met terugwerkende kracht twee maanden "onder je potje" maken. Dat is precies
+   de vorm die v235 aan de overschrijdingskant dichtzette: het potje verhogen laat een signaal
+   verschijnen of verdwijnen zonder dat je anders uitgeeft.
+   `SET.valtOpLog` KAN HET NIET AANVULLEN: daar staat `if(over<DREMPEL_EUR) continue` VOOR het
+   record wordt aangemaakt, dus een potje dat onder zijn bedrag bleef krijgt per constructie nooit
+   een record. Juist die potjes zijn wat een spiegel nodig heeft.
+   HET MOMENT IS DE MAANDWISSEL, EN DE SCHRIJVER STAAT VOOR DE DOORSCHUIF. Op dat punt draagt
+   `SET.budgets` nog de bedragen van de maand die NET afsloot, inclusief een bijstelling van v235
+   (die schrijft `SET.budgets[k]` voor de lopende maand). Dat is dezelfde meetlat die
+   `valtOpAfsluiten()` gebruikt, en die functie draait bij de boot NA deze (regel-orde in de
+   boot-regel), dus zonder deze plek is de stand al doorgeschoven.
+   EEN BESTAANDE MAAND WORDT NOOIT OVERSCHREVEN (v277): de bedragen van een afgesloten maand zijn
+   historie, en historie die stil wordt herschreven is geen meting. Alleen bedragen boven nul gaan
+   erin; een potje dat er niet was krijgt geen sleutel met een nul (v59/v73/v173).
+   GEEN LEZER IN DE APP, en dat is de afbakening van deze ronde: er is geen weergave. Wat er wel is
+   is een uitlezing in blok 6 van DIAG_BLOKKEN, en die is er om een reden die dit veld bijzonder
+   maakt: of de opslag werkt is pas te zien NA een maandwissel, en die wissel is de enige kans om
+   die maand vast te leggen. Zonder uitlezing gaat een stille fout voor altijd verloren. Blok 6
+   scheidt daarom "er is nog niet gewisseld sinds deze versie draait" van "er is gewisseld en er
+   staat niets", precies de discriminator van v296.
+   HIJ IS NIET BEGRENSD, net als `SET.valtOpLog` en `SET.maandAccept`: het is een getal per potje
+   per maand, en historie weggooien die je niet kunt terughalen is duurder dan die bytes. */
+function budgetHistLeg(maand, B){
+  if(!maand || !B) return;
+  const H=SET.budgetHist=SET.budgetHist||{};
+  if(H[maand]) return;                                  // v277: een bestaande maand blijft staan
+  const rij={}; let n=0;
+  for(const k in B){ const v=+B[k]||0; if(v>0){ rij[k]=v; n++; } }
+  if(n>0) H[maand]=rij;
+}
 function rolloverBudgets(){
   const ym=thisYM();
   if(!SET.budgetMonth){ SET.budgetMonth=ym; save(); return; }
   if(SET.budgetMonth===ym) return;
+  try{ budgetHistLeg(SET.budgetMonth, SET.budgets); }catch(_){}
   const N=SET.budgetsNext||{}, NM=SET.potMetaNext||{};
   if(Object.keys(N).length){ SET.budgets=SET.budgets||{};
     for(const k in N){ const v=+N[k]; if(v>0) SET.budgets[k]=v; else delete SET.budgets[k]; } }
@@ -2784,16 +2821,18 @@ function safeToSpend(){
    dagen" zegt, en dat is een tweede waarheid op de noemer. De klem op 1 houdt de deling heel op de
    laatste dag. Dat die dag dan bijna om is staat als open punt in CLAUDE.md; het omzetten raakt
    deze functie, potjeRest() en budgetOverZin() tegelijk en is dus een eigen ronde. */
-/* v263: het venster van de potjesregel. Een dagbedrag is een getal waar je niets mee doet - elke
-   dag eronder voelt als winst en elke dag erboven als incident - en een week is de eenheid waarin
-   je boodschappen doet en uitgaat, groot genoeg om één dure dag te dragen.
-   ROLLEND EN BINNEN DE MAAND: wat heb je de komende zeven dagen, en in de laatste week loopt dat
-   vanzelf terug naar wat er nog is. Geen kalenderweken en geen restweek van twee dagen. Over de
-   maandgrens kijken zou nauwkeuriger zijn en botst met de rest van dat scherm: dan telt de eerste
-   week van de volgende maand mee, waarin je potjes weer vol staan.
-   EEN CONSTANTE EN GEEN EIGEN FUNCTIE: er is precies één lezer, dus een tweede lezer is straks een
-   regel erbij en geen tweede afleiding van hetzelfde venster. */
-const POTJE_VENSTER_DAGEN=7;
+/* v309: HIER STOND POTJE_VENSTER_DAGEN, HET VENSTER VAN DE WEEKREGEL VAN v263, EN HET IS
+   VERVALLEN. Die regel zei "De komende 7 dagen heb je EUR X" onder de post "Nog uit je potjes";
+   v309 heeft die post naar het hoofdgetal van de stand-kaart verhuisd en de eenheid op DAG gezet,
+   voor beide schermen. Daarmee had de constante nog precies EEN treffer in de bron, zijn eigen
+   declaratie, en een dode constante is wat een volgende ronde verkeerd leest.
+   DE OPEN VRAAG VAN v263 IS DAARMEE BESLIST EN NIET VERDWENEN: dat open punt vroeg of een week of
+   een dag de eenheid van een bestedingsruimte is, en stelde vast dat het antwoord voor Inzichten
+   EN Home tegelijk moest gelden. Het is de dag geworden, met twee bronnen en twee namen: Home deelt
+   `safeToSpend().safe` en heet "veilig te besteden", de stand-kaart deelt de potjes en heet "nog in
+   je potjes". Wat v263 tegen een dagbedrag had (elke dag eronder voelt als winst) staat nog; wat de
+   week ertegenover kostte was een venster dat rond de maandwissel twee budgetten mengt.
+   `maandDagenOver()` BLIJFT DE ENE NOEMER, met dezelfde twee lezers als eerst. */
 function maandDagenOver(ym){
   let d={dim:30,elapsed:0}; try{ d=daysElapsed(ym); }catch(_){}
   return Math.max(d.dim-d.elapsed,1);
@@ -8840,11 +8879,10 @@ function nogDezeMaandPosten(){
      rekende datzelfde deel met potjeRest, en dat liep ver uiteen: bij een normaal tempo €150 plan
      tegen €931 prognose, dus Home zei "+€1.450 veilig te besteden" terwijl hier "-€931" stond.
      Potjes zijn je sturingsmechanisme, dus het plan stuurt. varPlanRemaining() is de enige bron. */
-  const varPlan=(function(){ try{ return varPlanRemaining(curMonth||months()[months().length-1]); }catch(_){ return 0; } })();
-  /* v250: VP staat hier en niet meer bij de post, want de blokpoort leest hem mee. Bleef die op
-     varPlan staan, dan viel het hele blok weg op de dag dat al je potjes over zijn en daysLeft nul
-     is, en dat is dezelfde fout als de postpoort hieronder. */
-  const VP=(function(){ try{ return varPotjeStand(curMonth||months()[months().length-1]); }catch(_){ return null; } })();
+  /* v309: hier stonden varPlan en VP. Ze hadden EEN lezer, de post die naar insBudgetBlok() is
+     verhuisd, en ze zijn met die post meegegaan. De kaart leest varPotjeStand(m) met de maand van
+     het blok zelf in plaats van met `curMonth||de laatste maand`: dat blok weet welke maand het
+     toont, en de oude vorm was een terugval omdat deze lijst die maand niet meekreeg. */
   /* v260: hier stond een voorpoort die het hele blok liet vallen tenzij fixDue, varPlan, incDue of
      een potje boven nul stond. Die poort kende de twee UITKOMSTEN niet, en dat is precies wat deze
      ronde toevoegt. GEMETEN: met alleen een gehaald spaardoel (geen vaste lasten, geen potjes)
@@ -8937,77 +8975,19 @@ function nogDezeMaandPosten(){
   posten.push({lab:`Nog te betalen · vast`, val:euro0(teBetalen),
     col:teBetalen>0?'var(--red)':'var(--mut)', sub, tik:teBetalen>0?'openFixedDue()':'',
     leeg: teBetalen<=0 && !allesBetaald});
-  /* v208: de potjes-tegel is het instrument voor variabele lasten geworden, dus hoort te zien te
-     zijn waar je staat en niet alleen wat er over is. De sub volgt de vorm van 'Nog te sparen' in
-     dezelfde rij ('van <noemer> · <wat er al is>'), zodat de twee plan-tegels gelijksoortig blijven.
-     Het deel staat er alleen zolang je binnen je potjes zit: boven de 100% zegt de hero al
-     '<bedrag> over je potjes, met nog N dagen te gaan', en dat percentage zou datzelfde in een
-     tweede vorm herhalen (v191: tot de drempel een percentage, daarboven een vaststelling). Geen
-     alarmkleur, want wat je jezelf hebt opgelegd is geen tekort (v78/v93). */
-  /* v250: het grote getal was varPlanRemaining(), en dat is geen restant maar een reservering:
-     bij een overschreden potje geeft potjeRest() het geplande dagtempo maal de resterende dagen
-     terug (v111). Onder "van X · Y gebruikt" leest dat als een aftrekking en dat is het niet.
-     Gemeten stond er €1.089 waar €1.730 min €1.132 gelijk is aan €598, en dat gat groeide binnen
-     twee dagen van €385 naar €491. Het grote getal is nu wél die aftrekking, uit dezelfde twee
-     bronnen als de sub eronder. De reservering is niet weg: hij staat als eigen regel eronder, met
-     het verschil erbij, want dat verschil is wat deze regel te zeggen heeft.
-     DE POORT IS varBudget() EN NIET varPlan. Op de laatste dag van de maand is daysLeft nul, dus
-     geeft elk potje nul terug (v111 het overschreden potje, sinds v308 ook het potje met ruimte);
-     met de oude poort verdween de regel dan precies wanneer "te veel uitgegeven" het meest te
-     zeggen heeft.
-     GEEN TIK, OP GEEN VAN BEIDE REGELS (v254). Tot v253 opende de noot openReservedPotjes(), want
-     die sheet telde toen ook potjeRest() op en had dus hetzelfde koptotaal. Sinds v254 toont die
-     sheet de reservering (varPotjesReserve) en niet meer de tempo-som, dus die tik zou weer op een
-     ander getal uitkomen dan waarop je tikte. Er is geen bestaand scherm dat de tempo-som toont, en
-     het grote getal heeft om dezelfde reden nooit een tik gehad. Liever geen tik dan een verkeerde.
-     De sheet blijft bereikbaar vanaf Home, via 'Gereserveerd in je potjes' in de opbouw van veilig
-     te besteden. */
-  if(VP && VP.budget>0){
-    const inPotjes=VP.budget-VP.gebruikt;        // wat er werkelijk nog in je potjes zit
-    const gat=varPlan-inPotjes;                  // wat de reservering daar bovenop vraagt
-    const vsub = VP.gebruikt<=0 ? `van ${euro0(VP.budget)} · nog niets gebruikt`
-      : VP.over ? `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt`
-      : `van ${euro0(VP.budget)} · ${euro0(VP.gebruikt)} gebruikt · ${VP.deel}%`;
-    /* v257: DRIE REGELS, ÉÉN BRON. De stand (het grote getal met zijn sub), die stand per dag, en
-       wat je geplande tempo daar bovenop vraagt. Alle drie lezen varPotjeStand() en varPlanRemaining(),
-       dus ze kunnen elkaar niet tegenspreken: de eerste is het restant, de tweede datzelfde restant
-       vlak verdeeld over de dagen die nog komen, de derde het verschil met je eigen potjesverdeling.
-       WAAROM inPotjes EN NIET budget MIN uitgegeven MIN vaste lasten. Die handberekening uit de
-       hero lijkt hetzelfde en is het niet: het maandbudget telt alle potjes, uitgegeven telt ook
-       categorieën ZONDER potje, en fixDue komt uit recurringSchedule() en niet uit een categorie.
-       Gemeten op dezelfde fixture: in het gemelde geval komen beide op 520 uit, maar met 200 uitgegeven
-       buiten een potje zegt de aftrekking 320 tegen 520, en met een incasso van 420 bij een potje van
-       389 zegt hij 489 tegen 520. Dat verschil hoort bij het open punt van budgetOverZin() en niet
-       bij deze regel; hier telt dat de dagregel hetzelfde getal deelt als dat erboven staat.
-       DE NOEMER KOMT UIT maandDagenOver(), dezelfde bron als vrijPerDag() op Home, dus vandaag telt
-       niet mee en de laatste dag klemt op 1.
-       GEEN DAGREGEL ZODRA HET RESTANT OP IS. Bij precies nul zegt het grote getal het al en zou
-       "€0 per dag" datzelfde herhalen; bij een negatief restant staat er "Te veel uitgegeven" en
-       zegt een dagbedrag niets (dezelfde grond als v158, dat bij een negatieve ruimte ook geen
-       bedrag toont). De constatering zit dan in het label en niet in een eigen berekening. */
-    /* v263: DEZELFDE BRON, EEN ANDERE DELER. maandDagenOver() blijft de enige plek die zegt hoeveel
-       dagen er nog in de maand zitten; het venster is een klem daarop en geen tweede tijdas.
-       HET BEDRAG IS HET RESTANT OP HETZELFDE DAGTEMPO, rest/dagen maal het venster, en niet
-       rest/venster. Gemeten aan de twee voorbeelden uit de opdracht: met een restant van €270 en
-       nog vijf dagen hoort er €270 te staan, en rest/venster geeft daar €54 - precies het dagbedrag
-       dat deze regel juist vervangt. In de laatste week valt venster samen met dagen en is het
-       bedrag dus letterlijk het restant.
-       DE REGEL NOEMT ALTIJD ZIJN AANTAL DAGEN, anders weet je niet of €380 een week is of een
-       restje. 'komende' zolang de maand langer is dan het venster, 'resterende' zodra hij korter
-       wordt; dat verschil is de enige manier waarop de regel zegt dat de maand bijna om is. */
-    const dagen=maandDagenOver(curMonth||months()[months().length-1]);
-    const venster=Math.min(dagen,POTJE_VENSTER_DAGEN);
-    const vensterW=venster===1?'dag':'dagen';
-    const vensterBedrag=Math.round(inPotjes/dagen*venster);
-    posten.push({lab: inPotjes<0?'Te veel uitgegeven':'Nog uit je potjes',
-      val:euro0(Math.abs(inPotjes)), col:'var(--txt)', sub:vsub, tik:'',
-      dagRegel: inPotjes>0?`${venster<dagen?'De komende':'De resterende'} ${venster} ${vensterW} heb je ${euro0(vensterBedrag)}`:'',
-      /* Nul is hier een STAND en geen afwezigheid: je potjes zijn precies op, en de sub zegt
-         "van X, X gebruikt, 100%". Een negatief restant heet 'Te veel uitgegeven' en is helemaal
-         informatie. Dus nooit leeg; de post staat er alleen al niet als je geen potjes hebt
-         (VP.budget>0 hierboven). */
-      leeg:false,
-      noot: gat>0?`Bij je tempo nog ${euro0(varPlan)} nodig · ${euro0(gat)} tekort`:'', nootTik:''}); }
+  /* v309: HIER STOND DE POST "Nog uit je potjes", EN HIJ IS VERHUISD NAAR insBudgetBlok().
+     Hij is daar het HOOFDGETAL van de stand-kaart geworden, met zijn dagbedrag op dezelfde regel.
+     Verplaatsen is nooit kopieren: stond hij op beide plekken, dan kost hetzelfde getal twee keer
+     een verificatie. Deze lijst houdt de andere drie posten (inkomen, sparen, vast).
+     WAT ER MEE VERHUISDE EN WAT NIET. Het grote getal en de dagregel staan nu in de kop. De sub
+     ("van X . Y gebruikt . Z%") is er NIET mee gegaan: de kaart draagt een eigen regel boven de
+     balk met `totals().spendNorm` tegen `totals().budget`, en dat is een ANDERE noemer (v257).
+     Twee subs met dezelfde vorm en een andere bron onder een getal is precies de tweede waarheid
+     die deze verhuizing juist weghaalt.
+     DE NOOT VAN v308 IS MEEGEGAAN naar de kaart en niet laten vallen. Hij is sinds v308 een echt
+     signaal (het gat is positief zodra de reservering van de overschreden potjes meer vraagt dan
+     de ruimte die de andere potjes bij hun tempo niet opmaken), en een gemeten signaal stil
+     weghalen is wat dit project verbiedt. */
   return posten.filter(p=>!p.leeg);
 }
 /* De tegelvorm. Hij staat nog maar op één plek: de terugval-kaart wanneer er geen budget is, en
@@ -12513,11 +12493,21 @@ function naarGripSignaal(id){ window._valtOpOpen=id||null; go('maand'); }
    Wat je op dat moment nodig hebt zijn twee getallen: hoeveel je eroverheen bent en hoeveel tijd er
    nog is. Allebei bestonden ze al; hier wordt niets gerekend wat er niet stond. Op de grens
    dezelfde vorm met de nul erin. */
-function budgetOverZin(sp,bud,d,over,opDeGrens){
+/* v309: DE ZIN NOEMT DE NOEMER WAARMEE HIJ REKENT. Hij zei "over je potjes" en rekent met
+   `totals().budget` tegen `totals().spendNorm`, dus met ALLE potjes en ook met uitgaven in
+   categorieen ZONDER potje. Dat was al een verkeerd etiket (open punt sinds v250/v251, gemeten:
+   de zin zegt EUR 300 over je potjes waar de potjesregel op EUR 100 uitkomt), en sinds v309 staat
+   het hoofdgetal van deze kaart op de POTJES-bron. Daarmee kwam er "EUR 42 nog in je potjes" boven
+   "EUR 98 over je potjes" op een en dezelfde kaart, en dat is hetzelfde woord voor twee getallen
+   (v91). Het woord komt nu van de aanroeper, zodat het letterlijk hetzelfde woord is als op de
+   regel boven de balk en er geen tweede spelling van die noemer ontstaat (v104).
+   HET GETAL IS NIET AANGERAAKT: het open punt van v250/v251 staat nog, dit is het label. */
+function budgetOverZin(sp,bud,d,over,opDeGrens,noemer){
   if(!over&&!opDeGrens) return '';
+  const N=noemer||'je maandbudget';
   const dagen=Math.max(d.dim-d.elapsed,0);
   const rest=dagen===1?'met nog 1 dag te gaan':(dagen>0?`met nog ${dagen} dagen te gaan`:'op de laatste dag van de maand');
-  const kop=over?`${euro0(sp-bud)} over je potjes`:'Je potjes zijn precies op';
+  const kop=over?`${euro0(sp-bud)} over ${N}`:`${N.charAt(0).toUpperCase()+N.slice(1)} is precies op`;
   // dezelfde kleur als de balk erboven: een stand krijgt er niet twee (v78/v93)
   const kleur=over?'var(--red)':'var(--amber)';
   return `<div class="small" style="color:${kleur};margin-top:5px;line-height:1.45">${kop}, ${rest}.</div>`;
@@ -12554,6 +12544,101 @@ function insBudgetBlok(m){
   const over=pctEcht>MAAND_DREMPEL.budgetVol;
   const opDeGrens=!over && pctEcht>=MAAND_DREMPEL.budgetVol;
   const balkKleur=over?'var(--red)':(opDeGrens?'var(--amber)':'var(--accent)');
+  /* v309: HET HOOFDGETAL IS VOORUITKIJKEND, EN HET IS VERHUISD EN NIET GEKOPIEERD. Tot v308 was
+     het grootste getal hier `spendNorm`, dus wat je AL kwijt was, en stond wat er nog in je potjes
+     zit als vierde post onder "Nog deze maand". Die post is hierheen verhuisd en staat daar NIET
+     meer; `nogDezeMaandPosten()` houdt de andere drie. Twee plekken met hetzelfde getal zou een
+     verificatie kosten die niets oplevert, en dat is precies wat "verplaatsen is nooit kopieren"
+     verbiedt.
+     HET IS DE POTJES-BRON EN NIET DE SOM VAN DEZE KAART, en die twee lopen echt uiteen (v257):
+     dit getal is `varBudget()` min `varPotjeStand().gebruikt`, dus alleen de VARIABELE potjes, en
+     de regel eronder is `totals().spendNorm` tegen `totals().budget`, dus ook de categorieen
+     ZONDER potje en de terugkerende potjes. GEMETEN op de fixture van deze ronde: het rekenkundige
+     restant van die regel is -98 en dit getal 42, een gat van 140. Ze staan daarom onder een EIGEN
+     naam ("je potjes" tegen "maandbudget"), want hetzelfde woord voor twee getallen is wat v91
+     verbiedt, en de regel eronder noemt zijn eigen noemer zodat het percentage zegt waarvan het is.
+     GEEN TIK OP HET HOOFDGETAL (v250/v254): er is geen scherm dat dit getal toont.
+     `openPotjesVerdeling()` toont alle potjes zonder besteding, `openReservedPotjes()` de
+     reservering, dus elke tik zou op een ander bedrag uitkomen dan waarop je tikte. De twee tikken
+     die er WEL waren blijven op de regel eronder staan, en dat is geen keuze: die regel is de
+     enige ingang op Inzichten naar `openMonthSpend(m)` en naar `openPotjesVerdeling(m)`.
+     HET DAGBEDRAG STAAT OP DEZELFDE REGEL als het hoofdgetal, en dat is de hoogte-eis van v241:
+     een eigen regel kost 23px (gemeten v269) en de kaart staat in het zwaarste geval al op 213px.
+     Het is HETZELFDE getal gedeeld door dezelfde noemer als de regel die hier vandaan komt:
+     `maandDagenOver(m)`, ook de bron van `vrijPerDag()` op Home, dus vandaag telt niet mee en de
+     laatste dag klemt op 1 (v257). Bij een restant van nul of lager staat er geen dagbedrag, om
+     dezelfde reden als in de oude regel: dan zegt het grote getal het al.
+     ALLEEN OP DE LOPENDE MAAND EN ALLEEN MET VARIABELE POTJES. "Nog in je potjes" is geen uitspraak
+     over een maand die om is (v194), en zonder variabele potjes is er niets om over te rapporteren
+     (`varBudget()` telt de niet-terugkerende potjes, `totals().budget` alle). In beide gevallen
+     houdt de kaart zijn terugkijkende hoofdgetal en staat de regel eronder er NIET, want die zou
+     dat getal dan verdubbelen. */
+  let VP=null; try{ VP=varPotjeStand(m); }catch(_){}
+  const potjesKop = isLopendeMaand(m) && !!VP && VP.budget>0;
+  const inPotjes = potjesKop ? VP.budget-VP.gebruikt : 0;
+  const potjesDagen = potjesKop ? maandDagenOver(m) : 0;
+  const perDag = (inPotjes>0 && potjesDagen>0) ? Math.round(inPotjes/potjesDagen) : 0;
+  /* v309: DE NOOT VAN v308, MEEVERHUISD MET ZIJN POST. Hij zegt wat je geplande tempo boven het
+     restant van je potjes vraagt, en dat is sinds v308 een echt signaal: het gat is positief zodra
+     de reservering van de overschreden potjes meer vraagt dan de ruimte die de andere potjes bij
+     hun tempo niet opmaken. Op de gemelde stand van v308 is er daarom geen gat. Hij staat in
+     dezelfde stijl en dezelfde kleur als in de lijst (var(--mut2)), en zonder tik om de reden van
+     v254: `openReservedPotjes()` toont de reservering en niet de tempo-som, dus die tik zou op een
+     ander bedrag uitkomen dan waarop je tikte.
+     HIJ HANGT AAN potjesKop, want hij rekent tegen hetzelfde `inPotjes` dat in de kop staat; zonder
+     die kop is er geen getal waar hij iets boven kan vragen. */
+  /* HIJ LEEST VP.rest EN ROEPT DE TEMPO-SOM NIET OPNIEUW AAN. Dat is v104, want VP.rest IS die
+     som: varPotjeStand() doet die aanroep al. En het is de goedkope kant, want elke aanroep ervan
+     kost een catSpendMap en een recurringCats. GEMETEN per renderIns() op dezelfde fixture: voor
+     v309 17 keer catSpendMap, 89 keer telbareTx en 2 keer de tempo-som; na v309 16, 88 en 1. Deze
+     kaart is dus goedkoper dan de post die hij vervangt.
+     DE NAAM STAAT HIER BEWUST ZONDER HAAKJE: `inzichten-hoofdgetal.spec.js` eist dat deze functie
+     die aanroep niet doet, en zo'n bronzoekende test kan een comment niet van code onderscheiden
+     (v276). */
+  const varPlan = potjesKop ? VP.rest : 0;
+  const tempoGat = potjesKop ? varPlan-inPotjes : 0;
+  /* HET ACHTERVOEGSEL IS HET DAGBEDRAG, OF DE TEMPO-KRAPTE ALS DIE ER IS, EN DAT IS EEN GEMETEN
+     KEUZE EN GEEN VOORKEUR. De noot van v308 als EIGEN regel kost 23px, en dan gaat het zwaarste
+     geval van 199px naar 222px terwijl het voor deze ronde op 213px stond: hoger dus, en over de
+     200px van v241. In het achtervoegsel kost hij nul.
+     WAAROM DE KRAPTE WINT VAN HET DAGBEDRAG en niet andersom: het dagbedrag is de VLAKKE deling van
+     wat er nog in je potjes zit, en de krapte zegt dat je eigen potje-verdeling deze maand meer
+     vraagt dan er in zit. Staat die krapte er, dan is die vlakke deling de minst ware van de twee,
+     en twee getallen naast elkaar in een achtervoegsel breekt op 360px alsnog naar een tweede regel.
+     HET IS DEZELFDE UITDRUKKING ALS IN DE POST: de tempo-som min het restant, dus er komt geen
+     tweede meting naast (v104/v308).
+     BIJ EEN NEGATIEF RESTANT STAAT ER GEEN ACHTERVOEGSEL, en dat is een afbakening met een meting
+     eronder. Is het restant negatief, dan is het gat per constructie positief (het is de tempo-som
+     PLUS de overschrijding) en zegt het vrijwel hetzelfde als het getal ervoor: GEMETEN op een
+     potje van 500 met 570 besteed staat er "EUR 70 te veel uitgegeven" en zou het achtervoegsel
+     "bij je tempo EUR 93 tekort" zeggen, een groter getal over dezelfde overschrijding. Een signaal
+     dat in een hele tak per constructie vuurt is geen signaal (v284/meetles p), en het dagbedrag
+     was daar al weg om dezelfde reden als in de oude post (v257). */
+  const achtervoegsel = !(inPotjes>0) ? ''
+    : (tempoGat>0 ? ` \u00b7 bij je tempo ${euro0(tempoGat)} tekort`
+                  : (perDag>0 ? ` \u00b7 ${euro0(perDag)} per dag` : ''));
+  /* DE NOEMER STAAT EEN KEER EN DE ZIN LEIDT ZIJN VORM ERUIT AF. `noemer` is letterlijk de string
+     die deze kaart altijd al droeg ('maandbudget' of 'je inkomen-limiet'), en `budgetOverZin()`
+     krijgt 'je ' plus diezelfde naam. Mijn eerste vorm maakte er twee varianten van en streepte in
+     de kaartregel `je ` weg; dat haalde het lidwoord OOK bij de inkomen-limiet weg, waar het er
+     altijd stond, en `zwijgen-bij-onbekend.spec.js` viel daar terecht op. */
+  const noemer = t.potTotal>0?'maandbudget':'je inkomen-limiet';
+  const noemerZin = 'je '+noemer.replace(/^je /,'');
+  const pctKleur = over?'var(--red)':(opDeGrens?'var(--amber)':'var(--txt)');
+  /* De twee tikken staan in beide vormen op dezelfde twee bedragen, dus er verdwijnt geen ingang.
+     In de nieuwe vorm zakt deze regel naar de kleine stijl en houdt hij zijn plek boven de balk,
+     zodat het percentage naast de noemer staat waarvan het het percentage is. */
+  const uitgegevenRegel = (klein) => `<span style="cursor:pointer" onclick="openMonthSpend('${m}')">`
+    + (klein?`${euro0(sp)} uitgegeven`:`<span style="font-size:var(--fs-xl);font-weight:800">${euro0(sp)}</span> <span class="small muted">uitgegeven</span>`)
+    + `</span>`
+    + `<span class="small muted" style="flex:1;min-width:0;cursor:pointer" onclick="openPotjesVerdeling('${m}')">van ${euro0(bud)} ${noemer} \u203a</span>`
+    + `<span style="font-weight:700;white-space:nowrap;color:${pctKleur}">${usedPct}%</span>`;
+  const kop = potjesKop
+    ? `<div class="row" style="align-items:baseline;gap:6px">
+      <span style="font-size:var(--fs-xl);font-weight:800;color:${inPotjes<0?'var(--red)':'var(--txt)'}">${euro0(Math.abs(inPotjes))}</span>
+      <span class="small muted" style="flex:1;min-width:0">${inPotjes<0?'te veel uitgegeven':'nog in je potjes'}${achtervoegsel}</span></div>
+    <div class="row small muted" style="align-items:baseline;gap:8px;margin-top:5px">${uitgegevenRegel(true)}</div>`
+    : `<div class="row" style="align-items:baseline;gap:8px">${uitgegevenRegel(false)}</div>`;
   /* Drie ingangen, elk op zijn eigen woorden - de ring en de titel van monthStatusCard vielen weg
      op de lopende maand, dus de kop en de twee bedragen nemen die rol over (v135). */
   /* v178: 'boven inkomen-limiet' was een oordeel over je plan, niet over hoe deze maand loopt,
@@ -12563,10 +12648,7 @@ function insBudgetBlok(m){
      welke maand je leest en hoe ver die is, en dat is context bij de hele pagina en niet bij dit
      ene blok. Ze staan nu in de eyebrow erboven (insEyebrow); hun tikgedrag is meeverhuisd. */
   return `<div>
-    <div class="row" style="align-items:baseline;gap:8px">
-      <span style="cursor:pointer" onclick="openMonthSpend('${m}')"><span style="font-size:var(--fs-xl);font-weight:800">${euro0(sp)}</span> <span class="small muted">uitgegeven</span></span>
-      <span class="small muted" style="flex:1;min-width:0;cursor:pointer" onclick="openPotjesVerdeling('${m}')">van ${euro0(bud)} ${t.potTotal>0?'maandbudget':'je inkomen-limiet'} ›</span>
-      <span style="font-weight:700;white-space:nowrap;color:${over?'var(--red)':(opDeGrens?'var(--amber)':'var(--txt)')}">${usedPct}%</span></div>
+    ${kop}
     <!-- v189: het dagpercentage stond als losse zin naast de balk, dus je moest zelf vergelijken
          hoe ver je uitgaven staan tegenover hoe ver de maand is. De streep in de balk doet dat werk;
          de zin eronder is nu zijn legenda in plaats van een tweede weergave. -->
@@ -12578,7 +12660,12 @@ function insBudgetBlok(m){
     <div style="position:relative;margin:8px 0 0">
       <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${balkKleur}"></div></div>
       ${isLopendeMaand(m)?`<i title="de maand is ${dayPct}% voorbij" style="position:absolute;top:-3px;height:15px;left:${Math.min(Math.max(dayPct,0),100)}%;width:2px;background:var(--mut2);border-radius:1px"></i>`:''}</div>
-    ${isLopendeMaand(m)?`<div class="small" style="color:var(--mut2);margin-top:5px">de streep staat waar de maand nu is: ${dayPct}% voorbij</div>`:''}${budgetOverZin(sp,bud,d,over,opDeGrens)}
+    <!-- v309: hier stond de legenda "de streep staat waar de maand nu is: N% voorbij". Die staat
+         sinds v241 al in de eyebrow BOVEN de kaart, als "dag 23 van 30", en die eyebrow rendert op
+         elke maand waarvoor daysElapsed() werkt. De streep zelf blijft met zijn title; wat verviel
+         is de tweede weergave van dezelfde dagteller, en dat is de 23px die de nieuwe regel boven
+         de balk kost. -->
+    ${budgetOverZin(sp,bud,d,over,opDeGrens,noemerZin)}
     ${geenNormRegels(t,m)}${uitReserveringRegels(t,m)}${csvDubbelRegels(m)}${mt940DubbelRegels(m)}</div>`;
 }
 /* v258: hier stond één regel die ALLE geenNorm-categorieën optelde tot t.buitenNorm en naar
@@ -12801,7 +12888,10 @@ function renderIns(){
      van monthStatusCard() met de nog-deze-maand-kaart eronder, want daar is dat kader het enige
      wat die posten bij elkaar houdt. */
   const A=insBudgetBlok(m);
-  const stand = A ? `<div class="card" style="margin-bottom:12px">${A}</div>` : (statusBlock + (nu?nogDezeMaandCard():''));
+  /* v309: de kaart draagt een id, om dezelfde reden als `insNogLijst`: de hoogte-eis van v241
+     wordt per ronde gemeten en "de eerste zichtbare .card met een hoogte boven de 40px" is geen
+     afbakening maar een gok die met elk blok erboven kan omvallen. */
+  const stand = A ? `<div class="card" id="insStand" style="margin-bottom:12px">${A}</div>` : (statusBlock + (nu?nogDezeMaandCard():''));
   /* Alleen op de lopende maand: insNogLijst() leest monthLiquidity() en safeToSpend(), en die
      kennen alleen vandaag. Onder een historische kop zou dat lezen als de stand van die maand
      (v176). Zonder budget draagt de terugval hierboven de posten al. */
@@ -14609,6 +14699,34 @@ function diagPotjes(){
     +_dV(()=>{ try{ return safeToSpend().potOver; }catch(_){ return null; } }));
   L.push('safeToSpend().reserved (is varPlanRemaining, en gaat wel in safe): '
     +_dV(()=>{ try{ return safeToSpend().reserved; }catch(_){ return null; } }));
+  /* v309: DE OPGESLAGEN POTJEBEDRAGEN PER MAAND, ALLEEN GELEZEN (v244). Het veld heeft geen lezer
+     in de app en deze uitlezing is er om een reden die het bijzonder maakt: of de opslag werkt is
+     pas te zien NA een maandwissel, en die wissel is de ENIGE kans om die maand vast te leggen.
+     Zonder uitlezing gaat een stille fout voor altijd verloren, en dat is precies de familie van
+     v296 en v298.
+     DE DISCRIMINATOR IS SET.budgetMonth, net als `syncs` bij v296: is die gelijk aan de lopende
+     maand en staat er niets in de historie, dan is er sinds deze versie NIET gewisseld en is dit
+     een ONTBREKENDE meting, geen nul (v59/v73/v173). Staat de lopende maand er WEL in, dan heeft
+     iets hem te vroeg vastgelegd, want een maand die nog loopt is niet afgesloten (v194). */
+  L.push('');
+  L.push('POTJEBEDRAGEN PER MAAND (v309, SET.budgetHist, geen lezer in de app)');
+  const H=(SET.budgetHist||{}); const hm=Object.keys(H).sort();
+  L.push('  budgetMonth (de maand waarvoor SET.budgets geldt): '+(SET.budgetMonth||'niet gezet'));
+  if(!hm.length){
+    L.push(SET.budgetMonth
+      ? '  LEEG, en dat is een ONTBREKENDE meting: er is niet gewisseld sinds deze versie draait.'
+      : '  LEEG, en budgetMonth is niet gezet: deze installatie heeft nog geen maand gezien.');
+  } else {
+    for(const mm of hm){ const r=H[mm]||{}; const ks=Object.keys(r);
+      let som=0; for(const k in r) som+=+r[k]||0;
+      L.push(`  ${mm}: ${ks.length} potje(s), samen ${Math.round(som)}`
+        + (mm===thisYM()?'   LET OP: dit is de LOPENDE maand en die is niet afgesloten':''));
+      L.push('     '+ks.map(k=>(CATS[k]?CATS[k].name:k)+' '+Math.round(+r[k]||0)).join(', '));
+    }
+    L.push(`  maanden vastgelegd: ${hm.length}, van ${hm[0]} tot ${hm[hm.length-1]}`);
+  }
+  L.push('  de lopende maand staat in SET.budgets en hoort hier niet in: '
+    +(H[thisYM()]?'STAAT ER WEL':'klopt'));
   return L;
 }
 

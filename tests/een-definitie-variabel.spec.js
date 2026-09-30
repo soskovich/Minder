@@ -69,10 +69,24 @@ const SITUATIES = [
    op het scherm en is er niets om aan te binden. De helper geeft daarom null als de regel er niet
    is, en de test bindt de tweezijdige eis: de regel staat er precies dan als er een gat is, en als
    hij er staat draagt hij varPlanRemaining(). */
+/* v309: DE REGEL IS HET ACHTERVOEGSEL VAN HET HOOFDGETAL OP DE STAND-KAART GEWORDEN, en hij draagt
+   nu EEN bedrag in plaats van twee: het GAT en niet ook de tempo-som. GEMETEN waarom: met beide
+   bedragen breekt de kop op 360px naar 46px in plaats van 32px, en dat al bij de kleinste getallen.
+   Er gaat niets verloren, want de kop toont het restant en de tempo-som is dat restant PLUS het
+   gat; die aansluiting is wat de tests hieronder vasthouden. */
 const schermNoot = ({ noot }) => {
   const m = String(noot || '').replace(/\s+/g, ' ').match(/\u20ac([\d.]+)/);
   return m ? +m[1].replace(/\./g, '') : null;
 };
+// de kop van de stand-kaart: het grote getal en het achtervoegsel, in de pagina zelf
+const KOP = `(() => { go('ins'); const k=document.getElementById('insStand');
+  const r=k?[...k.querySelectorAll('div.row')].find(x=>/nog in je potjes|te veel uitgegeven/.test(x.textContent)):null;
+  const sp=r?[...r.querySelectorAll('span')]:[];
+  const vol=sp.length>1?sp[1].innerText.replace(/\\s+/g,' ').trim():'';
+  const achter=vol.includes(' \u00b7 ')?vol.slice(vol.indexOf(' \u00b7 ')+3):'';
+  const eur=t=>{ const m=String(t).match(/\u20ac([\\d.]+)/); return m?+m[1].replace(/\\./g,''):null; };
+  return { val: sp.length?eur(sp[0].innerText):null, label: vol.split(' \u00b7 ')[0],
+    noot: /tekort/.test(achter)?achter:'', achter, alles: k?k.innerText:'' }; })()`;
 
 test.describe('a · elke plek leest dezelfde bron', () => {
   for (const [naam, opt] of SITUATIES) {
@@ -87,11 +101,17 @@ test.describe('a · elke plek leest dezelfde bron', () => {
           gat: varRest - (varPotjeStand(m).budget - varPotjeStand(m).gebruikt),
           safe: Math.round(safeToSpend().reserved),
           reserve: varPotjesReserve(m),
-          // wat Inzichten er letterlijk van maakt: het bedrag uit de regel onder de tegel
-          scherm: (function(){ const d=document.createElement('div'); d.innerHTML=nogDezeMaandBody();
-            // v204: het variabele deel stond als voetregel onder de tegels en is een tegel geworden.
-            // v250: en staat sindsdien in de regel eronder zodra hij van de aftrekking afwijkt.
-            return { noot: (d.querySelector('.nog-noot') || {}).innerText || '', alles: d.innerText }; })(),
+          inPotjes: varPotjeStand(m).budget - varPotjeStand(m).gebruikt,
+          /* wat Inzichten er letterlijk van maakt. v204: het variabele deel stond als voetregel
+             onder de tegels en werd een tegel. v250: en stond sindsdien in de regel eronder zodra
+             hij van de aftrekking afweek. v309: het is het achtervoegsel van het hoofdgetal op de
+             stand-kaart, met het GAT erin. */
+          scherm: (function(){ go('ins'); const k=document.getElementById('insStand');
+            const rr=k?[...k.querySelectorAll('div.row')].find(x=>/nog in je potjes|te veel uitgegeven/.test(x.textContent)):null;
+            const sp=rr?[...rr.querySelectorAll('span')]:[];
+            const vol=sp.length>1?sp[1].innerText.replace(/\s+/g,' ').trim():'';
+            const achter=vol.includes(' \u00b7 ')?vol.slice(vol.indexOf(' \u00b7 ')+3):'';
+            return { noot: /tekort/.test(achter)?achter:'', alles: k?k.innerText:'' }; })(),
           // dezelfde som, met de hand: potjeRest per niet-recurring potje
           hand: (function () {
             const sp = catSpendMap(m), B = SET.budgets || {}, rc = recurringCats();
@@ -110,8 +130,17 @@ test.describe('a · elke plek leest dezelfde bron', () => {
       expect(r.safe).toBe(r.reserve);
       expect(r.hand).toBe(r.bron);
       const op = schermNoot(r.scherm);
-      expect(op != null, 'de regel staat er precies dan als er een gat is').toBe(r.gat > 0);
-      if (op != null) expect(op).toBe(r.bron);     // en dan is het het bedrag dat Inzichten toont
+      /* v309: de eis is tweezijdig en heeft er een voorwaarde bij. Het achtervoegsel draagt de
+         krapte precies dan als er een gat is EN het restant boven nul staat: bij een negatief
+         restant is het gat per constructie positief (het is de tempo-som PLUS de overschrijding)
+         en zou het een groter getal over dezelfde overschrijding zetten. Een signaal dat in een
+         hele tak altijd vuurt is geen signaal (meetles p). */
+      expect(op != null, 'de krapte staat er precies dan als er een gat is en het restant positief')
+        .toBe(r.gat > 0 && r.inPotjes > 0);
+      /* v309: het achtervoegsel draagt het GAT, en de tempo-som volgt uit het restant erboven.
+         Die aansluiting is strenger dan de oude vorm, want ze bindt twee getallen aan elkaar in
+         plaats van een getal aan een bron. */
+      if (op != null) { expect(op).toBe(r.gat); expect(r.inPotjes + op).toBe(r.bron); }
     });
   }
   /* ZONDER DEZE TEST KAN DE VERGELIJKING HIERBOVEN LEEGLOPEN: staat de regel in geen van de vijf
@@ -119,16 +148,22 @@ test.describe('a · elke plek leest dezelfde bron', () => {
      Inzichten toont' nooit getoetst. Deze stand is de overschreden variant uit de lijst hierboven,
      nu met de eis dat hij de regel WERKELIJK draagt. */
   test('minstens een van de standen laat de regel zien, en dan met varPlanRemaining erin', async ({ page }) => {
-    await boot(page, seed({ boodschappen: 900 }));
+    /* EEN POTJE EROVERHEEN EN HET TOTAAL NOG POSITIEF: boodschappen 600 van 500 en uiteten 0 van
+       200 geeft een restant van 100 en een tempo-som erboven. `boodschappen: 900` stond hier en
+       geeft een NEGATIEF restant, en dan draagt het achtervoegsel per constructie niets (zie de
+       voorwaarde hierboven), dus die stand kon deze test niet meer dragen. */
+    await boot(page, seed({ boodschappen: 600, uiteten: 0 }));
+    const k = await page.evaluate(KOP);
     const r = await page.evaluate(() => {
       const m = curMonth || months()[months().length - 1];
       const VP = varPotjeStand(m);
-      const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
       return { bron: varPlanRemaining(m), gat: varPlanRemaining(m) - (VP.budget - VP.gebruikt),
-        noot: (d.querySelector('.nog-noot') || {}).innerText || '' };
+        inPotjes: VP.budget - VP.gebruikt };
     });
     expect(r.gat).toBeGreaterThan(0);
-    expect(schermNoot(r)).toBe(r.bron);
+    expect(r.inPotjes).toBeGreaterThan(0);      // de invoer: anders draagt de kop niets
+    expect(schermNoot(k)).toBe(r.gat);
+    expect(k.val + r.gat).toBe(r.bron);      // en de tempo-som volgt uit het restant erboven
   });
 });
 
@@ -230,8 +265,14 @@ test.describe('d · Nog te betalen mengt geen twee soorten zekerheid', () => {
        dat de waarneming boven staat en het plan eronder, en het bedrag van die tegel is de
        aftrekking. */
     expect(r.inPotjes).toBeGreaterThan(0);
-    expect(r.txt.replace(/\s+/g, ' ').toLowerCase())
-      .toContain(`nog uit je potjes €${r.inPotjes.toLocaleString('nl-NL')}`);
+    /* v309: de post is naar het hoofdgetal van de stand-kaart verhuisd, dus de waarneming staat nu
+       BOVEN het plan in plaats van eronder. Wat vastligt is hetzelfde: het bedrag van die plek is de
+       aftrekking (varBudget min gebruikt) en niet de tempo-som, en het is nergens bij de
+       waargenomen vaste lasten opgeteld. */
+    const kop = await page.evaluate(KOP);
+    expect(kop.val).toBe(r.inPotjes);
+    expect(kop.label).toBe('nog in je potjes');
+    expect(r.txt.replace(/\s+/g, ' ').toLowerCase()).not.toContain('nog uit je potjes');
     // en dat bedrag is nergens opgeteld bij de waargenomen vaste lasten
     if (r.fix > 0) expect(r.txt).not.toContain(`€${(r.fix + r.inPotjes).toLocaleString('nl-NL')}`);
   });

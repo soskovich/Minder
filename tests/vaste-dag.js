@@ -9,8 +9,12 @@
  * van 30") haalt de dag eruit maar niet de MAANDLENGTE: dan is het restant 5 dagen in februari en
  * 8 in maart, en elke assertie die met dat restant rekent beweegt nog steeds mee met de kalender.
  * Wat deze tests werkelijk vasthouden is het RESTANT, dus dat is wat vast moet staan. `dim - 7`
- * geeft exact zeven dagen over in elke maand, en dat is ook het venster van `POTJE_VENSTER_DAGEN`,
- * dus de regel op Inzichten leest dan "De resterende 7 dagen" in plaats van "De komende 7".
+ * geeft exact zeven dagen over in elke maand.
+ * DE ZEVEN KWAM UIT `POTJE_VENSTER_DAGEN`, het venster van de weekregel van v263, en die constante
+ * is bij v309 vervallen toen die regel een dagbedrag werd. Het getal blijft 7 om de reden waarvoor
+ * deze pin bestaat en niet om die oude: het is het kleinste restant waarbij elk van deze tests het
+ * MEERVOUD van het dagwoord krijgt en geen enkele deling op een klem uitkomt. Een tweede getal
+ * ernaast zou een tweede waarheid zijn over welke dag deze tests bekijken (v104).
  *
  * HIJ ZET ALLEEN DE TIJD EN RAAKT GEEN TIMER. `page.clock.setFixedTime()` vervangt `Date`, en niet
  * `setTimeout`: een toast die na twee seconden verdwijnt blijft dus gewoon werken. `clock.install()`

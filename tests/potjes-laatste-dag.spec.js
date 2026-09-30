@@ -71,14 +71,23 @@ const meet = (page) => page.evaluate(() => {
   for (const k in B) { const bud = +B[k] || 0; if (bud <= 0 || rc.has(k)) continue;
     onbesteed += Math.max(bud - (sp[k] || 0), 0);
     tempoSom += Math.round(bud / Math.max(d.dim, 1) * daysLeft); }
+  /* v309: de post is naar het hoofdgetal van de stand-kaart verhuisd, dus de stand en zijn
+     achtervoegsel worden daar gelezen. De lijst wordt ook gelezen, maar om te toetsen dat de post
+     daar NIET meer staat (verplaatsen is nooit kopieren). */
   const rij = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
     .find((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText));
-  const q = (c) => { const e = rij && rij.querySelector(c); return e ? e.innerText.replace(/\s+/g, ' ').trim() : null; };
+  const kaart = document.getElementById('insStand');
+  const kop = kaart ? [...kaart.querySelectorAll('div.row')]
+    .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
+  const sp2 = kop ? [...kop.querySelectorAll('span')] : [];
   return { dim: d.dim, elapsed: d.elapsed, daysLeft,
     budget: VP.budget, gebruikt: VP.gebruikt, inPotjes: VP.budget - VP.gebruikt,
     plan: varPlanRemaining(m), reserve: varPotjesReserve(m),
     onbesteed: Math.round(onbesteed), bovengrens: Math.round(tempoSom),
-    dagRegel: q('.ins-nog-dag'), noot: q('.ins-nog-noot'), val: q('.ins-nog-val') };
+    postInLijst: !!rij,
+    val: sp2.length ? sp2[0].innerText.trim() : null,
+    achtervoegsel: sp2.length > 1 ? sp2[1].innerText.replace(/\s+/g, ' ').trim() : null,
+    kaartTekst: kaart ? kaart.innerText.split(String.fromCharCode(10)).join(' | ') : '' };
 });
 
 test.describe('a · de gemelde regel op de laatste dag van de maand', () => {
@@ -94,20 +103,26 @@ test.describe('a · de gemelde regel op de laatste dag van de maand', () => {
     expect(r.onbesteed - r.inPotjes).toBe(GEMELD.oudeGat);        // en het gat dat eruit volgde
   });
 
-  test('de projectie is nul, en de regel eronder staat er niet meer', async ({ page }) => {
+  test('de projectie is nul, en de tekortregel staat er niet meer', async ({ page }) => {
     await boot(page, 0);
     const r = await meet(page);
     expect(r.plan).toBe(0);
     expect(r.plan).not.toBe(GEMELD.oudePlan);
-    expect(r.noot).toBeNull();
+    /* v309: de tekortregel is het achtervoegsel van het hoofdgetal geworden. Met een projectie van
+       nul is het gat negatief, dus hij vuurt niet en draagt het achtervoegsel het dagbedrag. */
+    expect(r.achtervoegsel).not.toMatch(/tekort/);
+    expect(r.kaartTekst).not.toMatch(/tekort/);
   });
 
-  test('de stand en het bedrag per dag blijven staan, want die klopten', async ({ page }) => {
+  test('de stand blijft staan met zijn dagbedrag, want die klopten', async ({ page }) => {
     await boot(page, 0);
     const r = await meet(page);
-    expect(r.val).toBe('€319');
-    expect(r.dagRegel).toBe('De resterende 1 dag heb je €319.');
-    expect(r.reserve).toBe(GEMELD.oudePlan);   // de reservering is onaangeroerd (v254)
+    /* v309: dezelfde twee feiten, op hun nieuwe plek. Op de laatste dag klemt maandDagenOver() op
+       1 (v257), dus het dagbedrag is het hele restant; dat is onveranderd gedrag. */
+    expect(r.val).toBe('\u20ac319');
+    expect(r.achtervoegsel).toBe('nog in je potjes \u00b7 \u20ac319 per dag');
+    expect(r.postInLijst).toBe(false);          // en de post staat niet meer in de lijst
+    expect(r.reserve).toBe(GEMELD.oudePlan);    // de reservering is onaangeroerd (v254)
   });
 });
 

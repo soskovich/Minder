@@ -137,11 +137,24 @@ test.describe('c · de dagmarkering hoort bij de balk', () => {
     expect(r.buiten).toBe(true);          // buiten de vulling, dus leesbaar op elke kleur
   });
 
-  test('de zin eronder is de legenda van die streep, niet een tweede weergave', async ({ page }) => {
+  test('de streep draagt zijn eigen uitleg, en de dagteller staat een keer op de pagina', async ({ page }) => {
+    /* v189 zette de losse zin over hoe ver de maand is om in de LEGENDA van deze streep, en deze
+       test pinde die zin. v309 heeft die legenda laten vervallen: de dagteller staat sinds v241 al
+       in de eyebrow BOVEN de kaart ("dag 23 van 30"), dus de zin was de tweede weergave geworden
+       die v189 juist wegnam. Wat de eigenschap nu vasthoudt is strenger dan de oude vorm: de
+       streep heeft een eigen uitleg in zijn title, en de dagteller staat PRECIES EEN keer in de
+       tekst van het scherm. */
     await boot(page);
     const t = await tekst(page, 'ins');
-    expect(t).toMatch(/de streep staat waar de maand nu is: \d+% voorbij/);
-    expect(t).not.toMatch(/de maand is \d+% voorbij/);
+    expect(t).not.toMatch(/de streep staat waar de maand nu is/);
+    const r = await page.evaluate(() => {
+      const track = document.querySelector('#s-ins .bar-track');
+      const mark = track ? [...track.parentElement.children]
+        .find((e) => (e.getAttribute('style') || '').includes('position:absolute')) : null;
+      return { title: mark ? mark.getAttribute('title') : null }; });
+    expect(r.title).toMatch(/de maand is \d+% voorbij/);
+    // de eyebrow zegt het een keer, en niets anders op het scherm herhaalt het
+    expect((t.match(/dag \d+ van \d+/g) || []).length).toBe(1);
   });
 
   test('een afgesloten maand heeft geen dagmarkering', async ({ page }) => {

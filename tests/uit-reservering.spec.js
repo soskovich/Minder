@@ -14,6 +14,7 @@
  * De service worker staat globaal uit via playwright.config.js.
  */
 const { test, expect } = require('@playwright/test');
+const { pinDag } = require('./vaste-dag');
 const fs = require('fs');
 const path = require('path');
 
@@ -55,8 +56,15 @@ function seed(opt) {
       uitReservering: opt.uitReservering || undefined }),
     minder_own: '[]', minder_accmeta: '{}', minder_plan: '{}' };
 }
+/* v309: DEZE SPEC PINT ZIJN DAG, op dezelfde as als v306. Blok e meet de HOOGTE van de stand-kaart,
+   en sinds v309 draagt de kop van die kaart een achtervoegsel dat aan de dag hangt: bij een
+   tempo-krapte de krapte, anders het dagbedrag, en `budgetOverZin()` zegt op de laatste dag "op de
+   laatste dag van de maand" in plaats van "met nog N dagen te gaan". GEMETEN op 30 september (dag
+   30 van 30) gaf het zwaarste geval 217px op 360px en 199px op 390px; met de pin is het 199px op
+   beide. Een hoogte-eis die per dag een ander getal geeft, meet de kalender mee. */
 async function boot(page, opt) {
   await page.route('**/sw.js', (r) => r.abort());
+  await pinDag(page);
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(opt));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof uitReserveringBedrag === 'function' && typeof catSpendMap === 'function');
@@ -86,6 +94,11 @@ const LEES = () => {
     aggSpend: Math.round(monthAgg(m).spend),
     effBelasting: Math.round(effectiveBudgets(m).out.belasting || 0),
     posten: nogDezeMaandPosten().map((p) => String(p.lab).replace(/<[^>]*>/g, '') + ' ' + p.val),
+    /* v309: de potjes-post is het hoofdgetal van de stand-kaart geworden, dus de stand wordt daar
+       gelezen. `posten` blijft, om te toetsen dat hij in de lijst NIET meer staat. */
+    kopPotjes: (() => { try { const k = insBudgetBlok(thisYM());
+      const m2 = /(&euro;|\u20ac)\s?([\d.]+)<\/span>\s*<span class="small muted"[^>]*>(nog in je potjes|te veel uitgegeven)/.exec(k);
+      return m2 ? m2[3] + ' ' + m2[2] : null; } catch (_) { return null; } })(),
   };
 };
 
@@ -119,7 +132,10 @@ test.describe('a - zonder vlag: de huidige situatie, ongewijzigd', () => {
     expect(r.over).toBe(true);
     expect(r.signalen).toEqual(['belasting +363']);
     expect(r.overCat).toBe('belasting +363');
-    expect(r.posten.some((p) => /Te veel uitgegeven/.test(p))).toBe(true);
+    /* v309: deze stand stond als post onder "Nog deze maand" en staat nu als hoofdgetal op de
+       stand-kaart. De lijst draagt hem niet meer, en dat is de andere helft van de verhuizing. */
+    expect(r.kopPotjes).toMatch(/^te veel uitgegeven /);
+    expect(r.posten.some((p) => /Te veel uitgegeven|uit je potjes/.test(p))).toBe(false);
   });
 });
 
@@ -163,8 +179,8 @@ test.describe('b - mijn geval: twee boetes samen 463 gevlagd', () => {
     expect(r.planRest).toBeLessThanOrEqual(r.reserve);
     expect(r.potOver).toBe(0);
     expect(r.reserved).toBe(355);
-    expect(r.posten.some((p) => /Nog uit je potjes/.test(p))).toBe(true);
-    expect(r.posten.some((p) => /Te veel uitgegeven/.test(p))).toBe(false);
+    expect(r.kopPotjes).toMatch(/^nog in je potjes /);       // v309: op de kaart, niet in de lijst
+    expect(r.posten.some((p) => /uit je potjes|Te veel uitgegeven/.test(p))).toBe(false);
   });
 
   test('elke lezer uit het onderzoek doet wat er gemeld is', async ({ page }) => {
@@ -308,11 +324,11 @@ test.describe('e - de hoogte van de stand-kaart, gemeten', () => {
       save(); render(); });
   };
   const meet = `(() => { const m=thisYM();
-    const kaart=()=>{ go('ins'); return [...document.querySelectorAll('.card')]
-      .filter(x=>x.offsetParent!==null && x.getBoundingClientRect().height>40)[0]; };
+    // v309: de kaart draagt een id, dus dit is geen gok meer op "de eerste zichtbare .card"
+    const kaart=()=>{ go('ins'); return document.getElementById('insStand'); };
     const h=e=>Math.round(e.getBoundingClientRect().height);
     const k=kaart(); const hoogte=h(k);
-    const overZin=/over je potjes/.test(k.innerText);
+    const overZin=/over je maandbudget|over je inkomen-limiet/.test(k.innerText);
     const tekst=k.innerText.split(String.fromCharCode(10)).join(' | ');
     const rijen=[...k.querySelectorAll('div')].filter(x=>/uit een reservering/.test(x.textContent) && x.children.length===0);
     const n=rijen.length; rijen.forEach(x=>x.remove());
@@ -330,7 +346,7 @@ test.describe('e - de hoogte van de stand-kaart, gemeten', () => {
       const na = await page.evaluate(meet);
       expect(voor.gn).toBe(2);
       expect(voor.nRijen).toBe(0);
-      expect(voor.hoogte).toBe(190);
+      expect(voor.hoogte).toBe(175);
       expect(na.nRijen).toBe(1);
       expect(voor.overZin).toBe(true);
       expect(na.overZin).toBe(false);         // spendNorm zakt onder je budget, dus die zin valt weg
@@ -341,7 +357,14 @@ test.describe('e - de hoogte van de stand-kaart, gemeten', () => {
          anders afbreken dan op 390px. Niet verder uitgesplitst: wat de eis van v241 toetst is de
          hoogte van de kaart, en die is op beide breedtes onder de 200px. */
       expect(na.regelKost).toBe(23);        // 18px tekst plus de 5px marge erboven
-      expect(na.hoogte).toBe(w === 360 ? 190 : 175);
+      /* v309: hier stond `w === 360 ? 190 : 175`. De twee breedtes liepen uiteen doordat de oude
+         kop en de budgetzin op 360px anders afbraken dan op 390px; met het hoofdgetal op de
+         potjes-bron breekt er op geen van beide iets af, dus ze zijn nu gelijk. En de kaart is
+         voor EN na het vlaggen even hoog: voor het vlaggen draagt de kop geen achtervoegsel
+         (het restant is negatief) en staat budgetOverZin er wel, na het vlaggen andersom plus de
+         reserveringsregel, en dat weegt precies tegen elkaar op. */
+      expect(voor.hoogte).toBe(175);
+      expect(na.hoogte).toBe(175);
       expect(na.hoogte).toBeLessThan(200);
     });
 
@@ -356,13 +379,17 @@ test.describe('e - de hoogte van de stand-kaart, gemeten', () => {
       expect(r.overZin).toBe(true);
       expect(r.spendNorm).toBeGreaterThan(r.budget);
       console.log(`### worst case @${w}px: ${r.hoogte}px (2 geenNorm-regels + de reserveringsregel + budgetOverZin), spendNorm ${r.spendNorm} tegen budget ${r.budget}`);
-      expect(r.regelKost).toBe(23);
-      /* BEVINDING, en de eis van v241 is NIET opgeschoven: deze combinatie gaat over de 200px.
-         Twee geenNorm-categorieen met uitgaven, een gevlagde boeking, en nog boven je budget.
-         Dat is precies wat v258 voorspelde voor een derde regel in dit blok; de vorm van het blok
-         is dan een eigen ronde. */
-      expect(r.hoogte).toBe(213);
-      expect(r.hoogte).toBeGreaterThan(200);
+      expect(r.regelKost).toBe(24);   // v309: 24 in plaats van 23, want deze regel is hier de laatste
+      /* v269 MAT HIER 213px EN NOEMDE DAT EEN BEVINDING: deze combinatie (twee geenNorm-categorieen
+         met uitgaven, een gevlagde boeking, en nog boven je budget) ging over de 200px van v241, en
+         de vorm van het blok was daarmee een eigen ronde. Die ronde was v309, en dit is de uitkomst:
+         199px op 360 EN 390px. De legenda onder de balk is vervallen (23px) en de regel
+         "EUR X uitgegeven van EUR Y . Z%" is naar een eigen regel boven de balk gezakt; wat de
+         winst oplevert is dat de oude kop met zijn drie flex-delen hoger was dan die kleine regel.
+         DE EIS VAN v241 WORDT DUS WEER GEHAALD, en het open punt van v258/v269 is daarmee dicht. */
+      expect(r.hoogte).toBe(199);
+      expect(r.hoogte).toBeLessThan(200);
+      expect(r.hoogte).toBeLessThan(213);      // lager dan de stand van v269
     });
   }
 });

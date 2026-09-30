@@ -1,6 +1,14 @@
 // v257: de stand per dag onder "Nog uit je potjes". v263 maakte er een rollend venster van zeven
-// dagen van; deze spec bewaakt onveranderd de noemer, de randgevallen en de plek op het scherm,
-// met de ankers verschoven naar de nieuwe vorm. Het venster zelf staat in potjes-weekvenster.spec.js.
+// dagen van; v309 heeft de post naar het HOOFDGETAL van de stand-kaart verhuisd en de eenheid weer
+// op DAG gezet, voor Inzichten en Home tegelijk, en daarmee is het weekvenster vervallen (de
+// constante POTJE_VENSTER_DAGEN en potjes-weekvenster.spec.js zijn weg).
+// DEZE SPEC BEWAAKT ONVERANDERD dezelfde eigenschappen: welke bron het getal deelt, welke noemer,
+// de randgevallen en de plek op het scherm. Alleen de ankers zijn meeverhuisd naar de kop.
+// WAT NIET MEEVERHUISDE is de sub van de post ("van EUR 1.832 . EUR 1.312 gebruikt . 28%"). De
+// kaart draagt een eigen regel boven de balk met totals().spendNorm tegen totals().budget, en dat
+// is een ANDERE noemer (zie hieronder); twee subs met dezelfde vorm en een andere bron onder een
+// getal is de tweede waarheid die deze verhuizing juist weghaalt. Wat je in je potjes hebt gebruikt
+// is via de tik op die regel en via "Gereserveerd in je potjes" op Home te bereiken.
 //
 // GEMELD: op Inzichten staat alleen een maandstand, terwijl de vraag in de winkel is wat er nog
 // per dag kan. De opdracht rekende dat met de hand uit de hero: maandbudget 3.421 min 2.512
@@ -85,15 +93,25 @@ async function boot(page, o) {
   if (o.na) await page.evaluate(o.na);
   await page.evaluate(() => { render(); go('ins'); });
 }
+/* v309: de stand staat als hoofdgetal op de stand-kaart. `post` blijft, om te toetsen dat hij in
+   de lijst NIET meer staat; `kop` is het grote getal, `label` het label en `achter` het
+   achtervoegsel (het dagbedrag, of de tempo-krapte als die er is). */
 const potjesPost = (page) => page.evaluate(() => {
   const p = nogDezeMaandPosten().find((x) => /Nog uit je potjes|Te veel uitgegeven/.test(x.lab)) || null;
   const m = kijkMaand();
-  const rij = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
-    .find((e) => /Nog uit je potjes|Te veel uitgegeven/.test(e.innerText)) || null;
-  return { post: p, dagen: maandDagenOver(m), VP: varPotjeStand(m),
+  const kaart = document.getElementById('insStand');
+  const rij = kaart ? [...kaart.querySelectorAll('div.row')]
+    .find((e) => /nog in je potjes|te veel uitgegeven/.test(e.textContent)) : null;
+  const sp = rij ? [...rij.querySelectorAll('span')] : [];
+  const vol = sp.length > 1 ? sp[1].innerText.replace(/\s+/g, ' ').trim() : null;
+  const VP = varPotjeStand(m);
+  return { post: p, dagen: maandDagenOver(m), VP,
     vrijPerDagDagen: vrijPerDag().dagenResterend,
-    regels: rij ? rij.innerText.split('\n').map((x) => x.trim()).filter(Boolean) : null,
-    dagInDom: rij ? (rij.querySelector('.ins-nog-dag') || {}).innerText || null : null };
+    kop: sp.length ? sp[0].innerText.trim() : null,
+    label: vol ? vol.split(' \u00b7 ')[0] : null,
+    achter: vol && vol.includes(' \u00b7 ') ? vol.slice(vol.indexOf(' \u00b7 ') + 3) : '',
+    gat: VP.rest - (VP.budget - VP.gebruikt),
+    kaartTekst: kaart ? kaart.innerText.split(String.fromCharCode(10)).join(' | ') : '' };
 });
 
 test.describe('a · de gemelde toestand', () => {
@@ -107,43 +125,45 @@ test.describe('a · de gemelde toestand', () => {
     expect(t).toEqual({ budget: 3421, spendNorm: 2512, buitenNorm: 497, fixDue: 389 });
     expect(r.VP.budget).toBe(1832);
     expect(r.VP.gebruikt).toBe(1312);
-    expect(r.post.val).toBe('€520');
-    expect(r.post.lab).toBe('Nog uit je potjes');
-    /* v263: het anker is verschoven van een dagbedrag naar een venster; de eigenschap is dezelfde
-       gebleven, namelijk dat de regel dit restant over de resterende dagen verdeelt. Het venster is
-       min(dagen, 7) en het bedrag is het restant op datzelfde dagtempo. */
-    const venster = Math.min(r.dagen, 7);
-    const verwacht = Math.round(520 / r.dagen * venster);
-    const woord = venster === 1 ? 'dag' : 'dagen';
-    const soort = venster < r.dagen ? 'De komende' : 'De resterende';
-    expect(r.post.dagRegel).toBe(`${soort} ${venster} ${woord} heb je €${verwacht.toLocaleString('nl-NL')}`);
+    expect(r.kop).toBe('€520');
+    expect(r.label).toBe('nog in je potjes');
+    expect(r.post).toBeNull();                 // v309: en niet meer in de lijst eronder
+    /* v263 verschoof het anker van een dagbedrag naar een venster; v309 schuift het terug naar een
+       dagbedrag, nu in het achtervoegsel van de kop. De eigenschap is over alle drie de vormen
+       dezelfde: dit restant wordt over de resterende dagen verdeeld, met maandDagenOver() als
+       noemer. Zonder tempo-krapte draagt het achtervoegsel dat dagbedrag. */
+    expect(r.gat).toBeLessThanOrEqual(0);
+    expect(r.achter).toBe(`€${Math.round(520 / r.dagen).toLocaleString('nl-NL')} per dag`);
   });
 
   /* Op de meetdag van deze ronde (dag 23 van een maand van 30) zijn dat 7 dagen. Het getal zelf
      hangt aan de kalender, dus de test hierboven leest de dagen live; deze legt de meting vast voor
      precies die dag, met de klok erop gezet.
-     v263: anker verschoven. Tot v262 stond hier "7 dagen en €74 per dag"; het venster valt op die
-     dag samen met de rest van de maand, dus het bedrag is nu het hele restant van €520 - €74 maal
-     zeven, hetzelfde tempo in de eenheid waarin je het gebruikt. */
-  test('gemeten op dag 23 van 30: een venster van 7 dagen met het hele restant', async ({ page }) => {
+     DRIE ANKERS OVER DRIE RONDES, EEN EIGENSCHAP: v257 "7 dagen en €74 per dag", v263 "De resterende
+     7 dagen heb je €520" (hetzelfde tempo in de eenheid van een week), v309 weer "€74 per dag" maar
+     nu in de kop. 520 gedeeld door 7 is 74, en dat is de hele rekensom. */
+  test('gemeten op dag 23 van 30: 7 dagen en €74 per dag', async ({ page }) => {
     await boot(page, { klok: new Date(now.getFullYear(), now.getMonth(), 23, 12, 0, 0) });
     const r = await potjesPost(page);
     expect(r.dagen).toBe(Math.max(DIM - 23, 1));
     if (DIM === 30) {
       expect(r.dagen).toBe(7);
-      expect(r.post.val).toBe('€520');
-      expect(r.post.dagRegel).toBe('De resterende 7 dagen heb je €520');
+      expect(r.kop).toBe('€520');
+      expect(r.achter).toBe('€74 per dag');
     }
   });
 
-  test('de drie regels staan in volgorde: de stand, die stand per dag, en het tempo', async ({ page }) => {
+  test('het getal, zijn label en zijn achtervoegsel staan in die volgorde op een regel', async ({ page }) => {
     await boot(page);
     const r = await potjesPost(page);
-    expect(r.regels[0]).toBe('Nog uit je potjes');
-    expect(r.regels[1]).toMatch(/^van €1\.832 · €1\.312 gebruikt/);
-    // v263: anker verschoven naar de venstervorm; de volgorde van de drie regels is de eigenschap
-    expect(r.regels[2]).toMatch(/^De (komende|resterende) \d+ dagen? heb je €[\d.]+\.$/);
-    expect(r.dagInDom).toMatch(/heb je €[\d.]+\.$/);
+    /* v309: tot v308 waren dit drie regels onder elkaar (de stand, zijn sub, en die stand per dag).
+       Het zijn er nu twee delen op EEN regel, en de sub is niet meegegaan: zie de kop van dit
+       bestand. De volgorde blijft de eigenschap. */
+    expect(r.kaartTekst.indexOf(r.kop)).toBeLessThan(r.kaartTekst.indexOf(r.label));
+    expect(r.kaartTekst.indexOf(r.label)).toBeLessThan(r.kaartTekst.indexOf(r.achter));
+    // en de potjes-noemer staat hier niet meer; de regel eronder noemt een andere noemer
+    expect(r.kaartTekst).not.toMatch(/van €1\.832/);
+    expect(r.kaartTekst).toMatch(/van €3\.421 maandbudget/);
   });
 });
 
@@ -160,9 +180,11 @@ test.describe('b · de noemer is die van de app', () => {
     await boot(page, { klok: new Date(now.getFullYear(), now.getMonth(), DIM, 12, 0, 0) });
     const r = await potjesPost(page);
     expect(r.dagen).toBe(1);
-    // v263: anker verschoven; de klem op 1 en het hele restant zijn dezelfde eigenschap als in v257
-    expect(r.post.dagRegel).toMatch(/^De resterende 1 dag heb je €\d/);
-    const bedrag = Number((r.post.dagRegel.match(/heb je €([\d.]+)$/)[1]).replace(/\./g, ''));
+    // v263/v309: het anker schoof twee keer mee; de klem op 1 en het hele restant zijn dezelfde
+    // eigenschap als in v257
+    expect(r.gat).toBeLessThanOrEqual(0);
+    expect(r.achter).toMatch(/^€[\d.]+ per dag$/);
+    const bedrag = Number((r.achter.match(/^€([\d.]+) per dag$/)[1]).replace(/\./g, ''));
     expect(Number.isFinite(bedrag)).toBe(true);
     expect(bedrag).toBe(Math.abs(r.VP.budget - r.VP.gebruikt));   // één dag, dus het hele restant
   });
@@ -176,9 +198,9 @@ test.describe('c · wanneer de regel er niet staat', () => {
     await boot(page, { extraTx: (add) => add('x1', CUR, '17', -900, 'Zalando', 'BEA, BETAALPAS ZALANDO') });
     const r = await potjesPost(page);
     expect(r.VP.gebruikt).toBeGreaterThan(r.VP.budget);
-    expect(r.post.lab).toBe('Te veel uitgegeven');
-    expect(r.post.dagRegel).toBe('');
-    expect(r.dagInDom).toBe(null);
+    expect(r.label).toBe('te veel uitgegeven');
+    expect(r.achter).toBe('');
+    expect(r.kaartTekst).not.toMatch(/per dag/);
   });
 
   /* Precies op nul: het grote getal zegt het al, dus "€0 per dag" zou datzelfde herhalen. */
@@ -186,10 +208,10 @@ test.describe('c · wanneer de regel er niet staat', () => {
     await boot(page, { extraTx: (add) => add('x2', CUR, '17', -520, 'Zalando', 'BEA, BETAALPAS ZALANDO') });
     const r = await potjesPost(page);
     expect(r.VP.budget - r.VP.gebruikt).toBe(0);
-    expect(r.post.lab).toBe('Nog uit je potjes');
-    expect(r.post.val).toBe('€0');
-    expect(r.post.dagRegel).toBe('');
-    expect(r.dagInDom).toBe(null);
+    expect(r.label).toBe('nog in je potjes');
+    expect(r.kop).toBe('€0');
+    expect(r.achter).toBe('');
+    expect(r.kaartTekst).not.toMatch(/per dag/);
   });
 });
 
@@ -200,13 +222,13 @@ test.describe('d · de dagregel leest de potjes en niets anders', () => {
      handberekening uit de hero. */
   test('fixDue op nul verandert het restant en de dagregel niet', async ({ page }) => {
     const a = await (async () => { await boot(page); return potjesPost(page); })();
-    expect(a.post.dagRegel).toBeTruthy();
+    expect(a.achter).toBeTruthy();
     // het abonnement komt deze maand alsnog langs, dus fixDue valt weg
     await boot(page, { extraTx: (add) => add('ab' + CUR, CUR, '08', -389, 'Ziggo', 'SEPA INCASSO ZIGGO ABONNEMENT') });
     const b = await potjesPost(page);
     expect(await page.evaluate(() => monthLiquidity().fixDue)).toBe(0);
-    expect(b.post.val).toBe(a.post.val);
-    expect(b.post.dagRegel).toBe(a.post.dagRegel);
+    expect(b.kop).toBe(a.kop);
+    expect(b.achter).toBe(a.achter);
   });
 
   /* En een uitgave buiten elk potje raakt hem ook niet, terwijl de handberekening uit de hero er
@@ -217,45 +239,68 @@ test.describe('d · de dagregel leest de potjes en niets anders', () => {
     const hand = await page.evaluate(() => { const m = kijkMaand(); const t = totals(m);
       return Math.round(t.budget) - Math.round(t.spendNorm) - monthLiquidity().fixDue; });
     expect(r.VP.budget - r.VP.gebruikt).toBe(520);
-    expect(r.post.val).toBe('€520');
+    expect(r.kop).toBe('€520');
     expect(hand).toBe(320);                       // de aftrekking zakt mee, het restant niet
   });
 });
 
-/* De vouw kan hier niet door bewegen, en dat is structureel: 'Wat opvalt' staat sinds v252 VOOR
-   'Wat er nog komt', dus een regel die in die tweede sectie bijkomt valt onder de signalen. Deze
-   test legt die volgorde vast op de plek waar de regel zelf staat; inzichten-indeling.spec.js
-   bewaakt de vouw zelf met zijn eigen drempels (567px op 360x640, 771px op 390x844). */
-test.describe('e · de regel staat onder de signalen', () => {
+/* v257 NOEMDE HET ALS OPEN PUNT: het dagbedrag stond onder de vouw op 360x640 (het begon op 592px
+   bij 567px zichtbaar), en dat haalde de reden weg waarom het gevraagd werd, want dit is het enige
+   getal op Inzichten dat je BUITEN DE DEUR gebruikt. De richting die daar stond was: de plek waar
+   dit getal hoort is de hero, bij de balk die al zegt hoeveel van je maandbudget op is, met als
+   HARDE VOORWAARDE dat het daar HETZELFDE getal blijft lezen en niet de hero-meting.
+   v309 HEEFT DAT GEDAAN, en aan die voorwaarde is voldaan: de kop deelt `varBudget()` min
+   `varPotjeStand().gebruikt`, precies het getal dat de oude regel deelde, en de hero-meting
+   (`totals().budget` min `totals().spendNorm`) staat als EIGEN regel eronder met zijn eigen noemer.
+   DE EIGENSCHAP KEERT DAARMEE OM: het dagbedrag stond ONDER het laatste signaal en staat er nu
+   BOVEN, want de stand-kaart staat boven "Wat opvalt". Wat blijft is dat de signalen binnen het
+   eerste scherm vallen (de eis van v241, bewaakt door inzichten-indeling.spec.js met 567px op
+   360x640 en 771px op 390x844); wat erbij komt is dat het dagbedrag dat nu ook doet. */
+test.describe('e · het dagbedrag staat boven de vouw, en boven de signalen', () => {
   // shopping gaat 268 over zijn potje, dus er is een valt-op-signaal; er blijft 20 in de potjes
   const MET_SIGNAAL = { extraTx: (add) => add('x4', CUR, '16', -500, 'Zalando', 'BEA, BETAALPAS ZALANDO') };
 
-  test('op 360x640 staat de dagregel onder het laatste signaal, niet erboven', async ({ page }) => {
-    await page.setViewportSize({ width: 360, height: 640 });
-    await boot(page, MET_SIGNAAL);
-    const r = await page.evaluate(() => {
-      const el = document.querySelector('#s-ins');
-      const sig = [...el.querySelectorAll('.valtop-rij,.valtop-patroon')];
-      const dag = el.querySelector('.ins-nog-dag');
-      const nav = document.querySelector('.nav') || document.querySelector('nav');
-      return { signalen: sig.length, dag: !!dag,
-        sigBodem: sig.length ? Math.round(sig[sig.length - 1].getBoundingClientRect().bottom + window.scrollY) : null,
-        dagTop: dag ? Math.round(dag.getBoundingClientRect().top + window.scrollY) : null,
-        zichtbaar: window.innerHeight - (nav ? Math.round(nav.getBoundingClientRect().height) : 0) };
+  for (const [w, h] of [[360, 640], [390, 844]]) {
+    test(`op ${w}x${h} staat het achtervoegsel boven het laatste signaal en binnen het eerste scherm`,
+      async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await boot(page, MET_SIGNAAL);
+      const r = await page.evaluate(() => {
+        const el = document.querySelector('#s-ins');
+        const sig = [...el.querySelectorAll('.valtop-rij,.valtop-patroon')];
+        const kaart = document.getElementById('insStand');
+        const rij = kaart ? [...kaart.querySelectorAll('div.row')]
+          .find((e) => /nog in je potjes|te veel uitgegeven/.test(e.textContent)) : null;
+        const nav = document.querySelector('.nav') || document.querySelector('nav');
+        return { signalen: sig.length, kop: !!rij,
+          sigBodem: sig.length ? Math.round(sig[sig.length - 1].getBoundingClientRect().bottom + window.scrollY) : null,
+          kopBodem: rij ? Math.round(rij.getBoundingClientRect().bottom + window.scrollY) : null,
+          tekst: rij ? rij.innerText.split(String.fromCharCode(10)).join(' ') : '',
+          zichtbaar: window.innerHeight - (nav ? Math.round(nav.getBoundingClientRect().height) : 0) };
+      });
+      // de invoer: zonder signaal en zonder kop meet deze test niets
+      expect(r.signalen, 'geen signaal in deze fixture').toBeGreaterThan(0);
+      expect(r.kop, 'geen potjes-kop in deze fixture').toBe(true);
+      expect(r.tekst).toMatch(/per dag|bij je tempo/);
+      console.log(`### @${w}x${h}: kop tot ${r.kopBodem}px, laatste signaal tot ${r.sigBodem}px, zichtbaar ${r.zichtbaar}px`);
+      expect(r.kopBodem).toBeLessThan(r.sigBodem);
+      expect(r.kopBodem).toBeLessThanOrEqual(r.zichtbaar);
+      expect(r.sigBodem).toBeLessThanOrEqual(r.zichtbaar);
     });
-    expect(r.signalen, 'geen signaal in deze fixture, dan meet deze test niets').toBeGreaterThan(0);
-    expect(r.dag, 'geen dagregel in deze fixture, dan meet deze test niets').toBe(true);
-    expect(r.dagTop).toBeGreaterThan(r.sigBodem);
-    expect(r.sigBodem, JSON.stringify(r)).toBeLessThanOrEqual(r.zichtbaar);
-  });
+  }
 
-  test('en de regel staat er ook bij een overschreden potje, zolang er nog iets in zit', async ({ page }) => {
+  test('en het achtervoegsel staat er ook bij een overschreden potje, zolang er nog iets in zit', async ({ page }) => {
     await boot(page, MET_SIGNAAL);
     const r = await potjesPost(page);
     expect(r.VP.over).toBe(false);          // in totaal nog binnen, één potje eroverheen
-    expect(r.post.val).toBe('€20');
-    // v263: anker verschoven; dat de regel er staat zolang er iets in zit is de eigenschap
-    expect(r.post.dagRegel).toMatch(/^De (komende|resterende) \d+ dagen? heb je €[\d.]+$/);
+    expect(r.kop).toBe('\u20ac20');
+    /* v263 verschoof het anker naar de venstervorm, v309 naar het achtervoegsel. Dat er iets staat
+       zolang er iets in je potjes zit is de eigenschap; WELKE van de twee vormen het is volgt uit
+       het gat, en dat leest deze test uit de app zelf in plaats van het aan te nemen. */
+    expect(r.achter).toBe(r.gat > 0
+      ? `bij je tempo \u20ac${r.gat.toLocaleString('nl-NL')} tekort`
+      : `\u20ac${Math.round((r.VP.budget - r.VP.gebruikt) / r.dagen).toLocaleString('nl-NL')} per dag`);
+    console.log(`### overschreden potje: kop ${r.kop}, gat ${r.gat}, achtervoegsel "${r.achter}"`);
   });
 });
 
@@ -298,14 +343,23 @@ test.describe('f · de bron: één afleiding van de resterende dagen', () => {
     expect(m[1]).toMatch(/maandDagenOver\(/);
   });
 
-  test('de dagregel deelt varPotjeStand() en niet de aftrekking uit de hero', () => {
-    const m = /function nogDezeMaandPosten\(\)\{([\s\S]*?)\n\}/.exec(CODE);
+  test('het dagbedrag deelt varPotjeStand() en niet de aftrekking uit de hero', () => {
+    /* v309: deze afleiding stond in nogDezeMaandPosten() en staat nu in insBudgetBlok(), want daar
+       is de kop. De HARDE VOORWAARDE van het open punt van v257 is precies deze assertie: hij mag
+       daar niet de hero-meting gaan lezen omdat hij nu in de hero staat. */
+    const m = /function insBudgetBlok\(m\)\{([\s\S]*?)\n\}/.exec(CODE);
     expect(m).toBeTruthy();
     const body = m[1];
-    expect(body).toMatch(/dagRegel:/);
+    expect(body).toMatch(/per dag/);
     // de deler is inPotjes, en dat is VP.budget - VP.gebruikt
-    expect(body).toMatch(/const inPotjes=VP\.budget-VP\.gebruikt/);
-    expect(body).toMatch(/inPotjes\/dagen/);
-    expect(body).not.toMatch(/spendNorm/);
+    expect(body).toMatch(/const inPotjes = potjesKop \? VP\.budget-VP\.gebruikt/);
+    expect(body).toMatch(/inPotjes\/potjesDagen/);
+    // en het percentage naast de noemer eronder leest wel spendNorm, dus dat is de scherpte:
+    // het dagbedrag deelt inPotjes en niet bud-sp
+    expect(body).not.toMatch(/\(bud\s*-\s*sp\)\s*\/|sp\s*\/\s*potjesDagen/);
+    // en nogDezeMaandPosten() draagt hem niet meer
+    const n = /function nogDezeMaandPosten\(\)\{([\s\S]*?)\n\}/.exec(CODE);
+    expect(n[1]).not.toMatch(/dagRegel:/);
+    expect(n[1]).not.toMatch(/per dag/);
   });
 });

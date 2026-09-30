@@ -56,6 +56,7 @@ const balk = (page) => page.evaluate(() => {
   return { spend: Math.round(t.spend), budget: Math.round(t.budget),
     breedte: fill ? fill.style.width : null, kleur: fill ? fill.style.background : null,
     markBuiten: !!mark && !track.contains(mark), markLinks: mark ? mark.style.left : null,
+    streepTitle: mark ? mark.getAttribute('title') : null,     // v309: de streep draagt zijn eigen uitleg
     tekst: d.innerText.replace(/\s+/g, ' ') };
 });
 
@@ -65,7 +66,7 @@ test.describe('a · de budgetbalk kent drie standen', () => {
     const b = await balk(page);
     expect(b.spend).toBeLessThan(b.budget);
     expect(b.kleur).toContain('--accent');
-    expect(b.tekst).not.toMatch(/over je potjes|precies op/);
+    expect(b.tekst).not.toMatch(/over je maandbudget|precies op/);
   });
 
   test('precies op de grens: een eigen stand, niet dezelfde als eronder', async ({ page }) => {
@@ -76,7 +77,12 @@ test.describe('a · de budgetbalk kent drie standen', () => {
     expect(b.kleur).toContain('--amber');               // niet het accent van 'ruim eronder'
     expect(b.kleur).not.toContain('--red');             // en niet het rood van 'eroverheen'
     expect(b.breedte).toBe('100%');
-    expect(b.tekst).toMatch(/Je potjes zijn precies op, met nog \d+ dagen te gaan/);
+    /* v309: de zin noemt de noemer waarmee hij rekent. Hij zei "je potjes" en rekent met
+       totals().budget tegen totals().spendNorm, dus met alle potjes EN met uitgaven in categorieen
+       zonder potje; sinds v309 staat het potjes-restant als hoofdgetal boven deze zin en stond er
+       tweemaal "potjes" voor twee verschillende getallen (v91). */
+    expect(b.tekst).toMatch(/Je maandbudget is precies op, met nog \d+ dagen te gaan/);
+    expect(b.tekst).not.toMatch(/potjes zijn precies op/);
   });
 
   test('ruim eroverheen: de balk klemt, de drempelzin draagt het bedrag en de tijd', async ({ page }) => {
@@ -87,8 +93,9 @@ test.describe('a · de budgetbalk kent drie standen', () => {
     expect(b.kleur).toContain('--red');
     expect(b.breedte).toBe('100%');                     // de norm blijft op 100, de as beweegt niet
     const over = await page.evaluate((n) => euro0(n), b.spend - b.budget);
-    expect(b.tekst).toContain(`${over} over je potjes`);
-    expect(b.tekst).toMatch(/over je potjes, met nog \d+ dagen te gaan/);
+    expect(b.tekst).toContain(`${over} over je maandbudget`);   // v309: zie hierboven
+    expect(b.tekst).not.toMatch(/over je potjes/);
+    expect(b.tekst).toMatch(/over je maandbudget, met nog \d+ dagen te gaan/);
   });
 
   test('de grens staat in de drempelconstante, niet inline', async ({ page }) => {
@@ -106,7 +113,11 @@ test.describe('a · de budgetbalk kent drie standen', () => {
       const d = await page.evaluate((m) => daysElapsed(m), CUR);
       expect(b.markBuiten, `bij ${nu}`).toBe(true);
       expect(b.markLinks).toBe(Math.round(d.elapsed / d.dim * 100) + '%');
-      expect(b.tekst).toMatch(/de streep staat waar de maand nu is/);
+      /* v309: de legenda onder de balk is vervallen. De streep draagt zijn eigen uitleg in zijn
+         title, en de dagteller staat sinds v241 al in de eyebrow boven de kaart; de zin eronder was
+         daarmee de tweede weergave geworden die v189 juist wegnam. */
+      expect(b.tekst).not.toMatch(/de streep staat waar de maand nu is/);
+      expect(b.streepTitle).toMatch(/de maand is \d+% voorbij/);
     }
   });
 });

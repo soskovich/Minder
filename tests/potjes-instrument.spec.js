@@ -11,21 +11,27 @@ const { seed, open } = require('./budget-fixture');
 
 const ins = (page) => page.evaluate(() => { go('ins'); return $('#s-ins').innerText; });
 const maand = (page) => page.evaluate(() => { go('maand'); return $('#s-maand').innerText; });
+/* v309: DE REGEL IS HET HOOFDGETAL VAN DE STAND-KAART GEWORDEN en staat niet meer in de lijst.
+   `lab` is het label, `val` het grote getal, `sub` de regel boven de balk (met een ANDERE noemer
+   dan de oude sub: totals().spendNorm tegen totals().budget in plaats van de potjes, v257), en
+   `noot` het deel van het achtervoegsel dat de tempo-krapte draagt. */
 const potjesTegel = (page) => page.evaluate(() => {
   go('ins');
-  /* v250: het label is niet meer vast. Zit je boven de som van je variabele potjes, dan heet de
-     regel 'Te veel uitgegeven'; daaronder 'Nog uit je potjes'. De regel is dus op allebei te
-     vinden, niet op de ene zin. */
-  const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText));
+  const kaart = document.getElementById('insStand');
+  const t = kaart ? [...kaart.querySelectorAll('div.row')]
+    .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
   if (!t) return null;
-  /* v241: lijstregel in plaats van tegel, dus het bedrag staat rechts naast het label en niet
-     eronder. Lezen per element en niet per tekstregel, anders hangt de test aan de volgorde
-     waarin innerText de kolommen afloopt. */
-  const q = (c) => { const e = t.querySelector(c); return e ? e.innerText : ''; };
-  const n = t.querySelector('.ins-nog-noot');
-  return { lab: q('.ins-nog-lab'), val: q('.ins-nog-val'), sub: q('.ins-nog-sub'),
-    noot: n ? n.innerText : null, nootTik: n ? n.getAttribute('onclick') : null,
-    tik: t.getAttribute('onclick') };
+  const sp = [...t.querySelectorAll('span')];
+  const vol = sp.length > 1 ? sp[1].innerText.replace(/\s+/g, ' ').trim() : '';
+  const achter = vol.includes(' \u00b7 ') ? vol.slice(vol.indexOf(' \u00b7 ') + 3) : '';
+  const noemer = [...kaart.querySelectorAll('div.row')]
+    .find((x) => /van \u20ac[\d.]+ (maandbudget|je inkomen-limiet)/.test(x.textContent));
+  return { lab: vol.split(' \u00b7 ')[0], val: sp.length ? sp[0].innerText.trim() : '',
+    sub: noemer ? noemer.innerText.replace(/\s+/g, ' ').trim() : '',
+    achter, noot: /tekort/.test(achter) ? achter : null,
+    nootTik: null, tik: t.getAttribute('onclick'),
+    inLijst: [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
+      .some((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText)) };
 });
 
 // potjes zonder uitgaven: alles staat nog open
@@ -114,14 +120,18 @@ test.describe('b - de kerncijfers op Maand zijn ongemoeid', () => {
 });
 
 test.describe('c - de potjes-tegel is een voortgang', () => {
-  test('halverwege: bedrag, noemer en deel', async ({ page }) => {
+  test('halverwege: bedrag, label en de noemer eronder', async ({ page }) => {
     await open(page, seed());
     const t = await potjesTegel(page);
     expect(t).not.toBeNull();
-    expect(t.lab).toMatch(/NOG UIT JE POTJES/i);
+    expect(t.lab).toMatch(/nog in je potjes/i);
     expect(t.val).toMatch(/^€/);
-    expect(t.sub).toMatch(/^van €[\d.]+ · €[\d.]+ gebruikt · \d+%$/);
-    // de vorm volgt de post erboven: dezelfde noemer-vorm voor de twee plan-posten (v204)
+    expect(t.inLijst).toBe(false);                 // v309: verhuisd, niet gekopieerd
+    /* v204 gaf de twee plan-posten dezelfde noemer-vorm ("van EUR X . EUR Y gebruikt . Z%"). v309
+       heeft deze post naar de kaart verhuisd en zijn sub NIET meegenomen: de kaart draagt een eigen
+       regel met een andere noemer, en twee subs met dezelfde vorm en een andere bron onder een
+       getal is de tweede waarheid die deze verhuizing juist weghaalt. De spaarpost houdt zijn vorm. */
+    expect(t.sub).toMatch(/^€[\d.]+ uitgegeven van €[\d.]+ maandbudget › \d+%$/);
     const spaar = await page.evaluate(() => {
       const x = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((e) => /nog te sparen/i.test(e.innerText));
       const s = x && x.querySelector('.ins-nog-sub');
@@ -151,12 +161,19 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
       TX = TX.filter((t) => !(t.date.slice(0, 7) === m && ['boodschappen', 'uiteten'].includes(catOf(t))));
       render(); go('ins');
       const VP = varPotjeStand(m);
-      const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((x) => /uit je potjes/i.test(x.innerText));
-      const s = t && t.querySelector('.ins-nog-sub');
-      return { VP, sub: s ? s.innerText : null };
+      const kaart = document.getElementById('insStand');
+      const t = kaart ? [...kaart.querySelectorAll('div.row')]
+        .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
+      const sp = t ? [...t.querySelectorAll('span')] : [];
+      return { VP, val: sp.length ? sp[0].innerText.trim() : null,
+        vol: sp.length > 1 ? sp[1].innerText.replace(/\s+/g, ' ').trim() : null };
     });
     expect(r.VP.gebruikt).toBe(0);
-    expect(r.sub).toMatch(/^van €[\d.]+ · nog niets gebruikt$/);
+    /* v309: de sub zei hier "van EUR X . nog niets gebruikt". Die sub is niet meeverhuisd; wat de
+       kop met niets gebruikt zegt is het HELE potje, en dat is de scherpste vorm van dezelfde
+       uitspraak. */
+    expect(r.val).toBe(`\u20ac${r.VP.budget.toLocaleString('nl-NL')}`);
+    expect(r.vol).toMatch(/^nog in je potjes/);
   });
 
   test('overschreden: bedrag en noemer, maar geen percentage', async ({ page }) => {
@@ -165,8 +182,12 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
     expect(r.over).toBe(true);
     expect(r.gebruikt).toBeGreaterThan(r.budget);
     const t = await potjesTegel(page);
-    expect(t.sub).toMatch(/^van €[\d.]+ · €[\d.]+ gebruikt$/);
-    expect(t.sub).not.toMatch(/%/);              // de hero zegt al hoeveel je erover bent
+    /* v309: de sub liet bij een overschrijding het percentage weg, want de hero zei het al. Die sub
+       is vervallen; het percentage staat nu op de regel eronder, bij de noemer waarvan het het
+       percentage IS. Wat de kop zelf zegt is het bedrag en het label, en verder niets. */
+    expect(t.lab).toBe('te veel uitgegeven');
+    expect(t.achter).toBe('');
+    expect(t.sub).toMatch(/%/);
   });
 
   /* OPEN PUNT, gemeten bij v250 en bewust niet aangeraakt: budgetOverZin() in de hero zegt
@@ -174,12 +195,16 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
      potjes en met uitgaven uit categorieen zonder potje. Deze regel rekent alleen variabel.
      Gemeten met EUR 200 bij een categorie zonder potje: de hero zegt 300 over je potjes waar de
      regel op 100 uitkomt. Hetzelfde soort verkeerde etiket als deze regel had. */
-  test('de hero noemt de overschrijding, de tegel herhaalt hem niet', async ({ page }) => {
+  test('de zin onder de balk noemt zijn eigen noemer, en de kop herhaalt hem niet', async ({ page }) => {
     await open(page, overschreden());
     const t = await ins(page);
-    expect(t).toMatch(/over je potjes/);          // budgetOverZin, in de hero
+    /* v309: budgetOverZin zei "over je potjes" en rekent met totals(); sinds het hoofdgetal de
+       POTJES leest stond er tweemaal "potjes" voor twee getallen (v91), dus hij noemt nu zijn eigen
+       noemer. Het open punt hierboven (dat het GETAL van die zin een ander frame is) staat nog. */
+    expect(t).toMatch(/over je maandbudget/);
+    expect(t).not.toMatch(/over je potjes/);
     const tegel = await potjesTegel(page);
-    expect(tegel.sub).not.toMatch(/over je potjes|te gaan/);
+    expect(tegel.lab + tegel.achter).not.toMatch(/over je maandbudget|te gaan/);
   });
 
   test('zonder potjes staat de tegel er niet', async ({ page }) => {
@@ -193,11 +218,16 @@ test.describe('c - de potjes-tegel is een voortgang', () => {
     await open(page, overschreden());
     const kleur = await page.evaluate(() => {
       go('ins');
-      const t = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')].find((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText));
-      return t ? t.querySelector('.ins-nog-val').getAttribute('style') : '';
+      const k = document.getElementById('insStand');
+      const t = [...k.querySelectorAll('div.row')]
+        .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent));
+      return t ? t.querySelector('span').getAttribute('style') : '';
     });
-    expect(kleur).toContain('var(--txt)');
-    expect(kleur).not.toMatch(/--red|--amber/);
+    /* v309: bij een NEGATIEF restant kleurt het grote getal rood, en dat is geen alarmkleur op een
+       plan-tegel maar dezelfde stand die het label noemt ("te veel uitgegeven"). Wat deze test
+       vasthoudt is dat een POSITIEF restant er niet gekleurd bij staat. */
+    expect(kleur).toMatch(/var\(--red\)|var\(--txt\)/);
+    expect(kleur).not.toMatch(/--amber/);
   });
 });
 
@@ -218,6 +248,7 @@ test.describe('d - de tegel leidt naar het instrument', () => {
     const t = await potjesTegel(page);
     expect(t.tik).toBeNull();
     expect(t.nootTik).toBeNull();
+    expect(t.inLijst).toBe(false);
     const viaHome = await page.evaluate(() => { go('dash'); openSafeToSpend();
       return [...document.querySelectorAll('#sheet [onclick]')]
         .some((x) => /gereserveerd in je potjes/i.test(x.innerText)); });

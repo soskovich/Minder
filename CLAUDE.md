@@ -63,7 +63,9 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
 - **Inzichten** (`ins`) — hoe loopt deze maand (operationeel). Sinds `v241` vier blokken onder
   elkaar, elk met een kop die zijn vraag noemt: een eyebrow met de maandkiezer en de dagteller, de
   stand-kaart, "Wat opvalt", "Nog deze maand" (tot `v260` "Wat er nog komt") en "Over de maanden
-  heen". Die middelste twee staan
+  heen". Sinds `v309` draagt de stand-kaart als HOOFDGETAL wat er nog in je potjes zit, met het
+  dagbedrag op dezelfde regel, en staat `€X uitgegeven van €Y · Z%` als eigen regel boven de balk;
+  "Nog deze maand" houdt drie posten in plaats van vier. Die middelste twee staan
   sinds `v252` in die volgorde en niet meer andersom (zie de vouw-regel). Draagt sinds `v227` ook de
   meermaands-grafiek "Uitgaven vs budget". Dat is een omkering van `v178`, dat hem juist naar Maand
   haalde omdat hij maanden naast elkaar zet; het argument van `v178` staat nog en `BESLISSINGEN.md`
@@ -288,6 +290,141 @@ genoemde versietag.)*
   ronde erover MAT blijft staan: `doelTempo()` en `p.eta` hielden beide de `alloc` van deze maand constant,
   dus de rij op Plan en de alinea eronder gaven dezelfde datum omdat ze dezelfde alloc lazen en niet omdat
   ze de doorzak modelleerden.
+- **HET HOOFDGETAL OP INZICHTEN IS VOORUITKIJKEND, EN DE POST IS VERHUISD EN NIET GEKOPIEERD**
+  (`v309`): het grootste getal op de stand-kaart was `totals().spendNorm`, dus wat je AL kwijt was, en
+  wat er nog in je potjes zit stond als vierde post onder "Nog deze maand". Die post is nu het
+  HOOFDGETAL, met zijn dagbedrag op dezelfde regel, en `€X uitgegeven van €Y · Z%` is naar een eigen
+  regel boven de balk gezakt. De post staat NIET meer in de lijst; die houdt de andere drie.
+  HET IS DE POTJES-BRON EN NIET DE SOM VAN DE KAART, en die twee lopen echt uiteen (`v257`): het
+  hoofdgetal is `varBudget()` min `varPotjeStand().gebruikt`, dus alleen de VARIABELE potjes, en de
+  regel eronder is `totals().spendNorm` tegen `totals().budget`, dus ook de categorieën ZONDER potje
+  en de terugkerende potjes. GEMETEN op de fixture van deze ronde: het rekenkundige restant van die
+  regel is -98 en het hoofdgetal 42, een gat van 140. Op de fixture van `potjesregel-aansluiting`
+  lopen de NOEMERS uiteen (1.730 tegen 2.930) terwijl de restanten samenvallen, en dat staat er ook.
+  Ze dragen daarom een EIGEN naam ("je potjes" tegen "maandbudget"): hetzelfde woord voor twee
+  getallen is wat `v91` verbiedt, en de regel eronder noemt zijn eigen noemer zodat het percentage
+  zegt waarvan het is.
+  GEEN TIK OP HET HOOFDGETAL (`v250`/`v254`): er is geen scherm dat dit getal toont.
+  `openPotjesVerdeling()` toont alle potjes zonder besteding en `openReservedPotjes()` de
+  reservering, dus elke tik zou op een ander bedrag uitkomen dan waarop je tikte. De twee tikken die
+  er WEL waren blijven op de regel eronder, en dat is geen keuze: die regel is de ENIGE ingang op
+  Inzichten naar `openMonthSpend(m)` en naar `openPotjesVerdeling(m)`.
+  DE SUB VAN DE POST IS NIET MEEGEGAAN, en dat is een benoemd verlies. Die zei "van €1.832 · €1.312
+  gebruikt · 28%", dus de POTJES-noemer, en de kaart draagt een eigen regel met de totals-noemer.
+  Twee subs met dezelfde vorm en een andere bron onder een getal is precies de tweede waarheid die
+  deze verhuizing weghaalt. Wat je in je potjes hebt gebruikt is nog te bereiken via de tik op die
+  regel en via "Gereserveerd in je potjes" op Home.
+  ALLEEN OP DE LOPENDE MAAND EN ALLEEN MET VARIABELE POTJES. "Nog in je potjes" is geen uitspraak over
+  een maand die om is (`v194`), en zonder variabele potjes is er niets om over te rapporteren. In
+  beide gevallen houdt de kaart zijn terugkijkende hoofdgetal en staat de gezakte regel er NIET, want
+  die zou dat getal dan verdubbelen.
+  DE KAART IS LAGER DAN HIJ WAS, EN HAALT DE EIS VAN `v241` WEER. GEMETEN op precies dezelfde stand:
+  het zwaarste geval van `v269` (twee `geenNorm`-categorieën met uitgaven, een gevlagde boeking, en
+  nog boven je budget) gaat van 213px naar 199px op 360 EN 390px. De legenda van 23px viel weg en de
+  gezakte regel kost er 23; wat de winst oplevert is dat de oude kop met zijn drie flex-delen hoger
+  was dan die kleine regel. Het open punt van `v258`/`v269` over de 200px is daarmee DICHT. Het
+  gemelde geval van `v269` gaat van 190/175 naar 175 op beide breedtes en is nu voor EN na het
+  vlaggen even hoog, want de kop draagt bij een negatief restant geen achtervoegsel terwijl
+  `budgetOverZin()` er dan wel staat, en na het vlaggen precies andersom plus de reserveringsregel.
+  DE KAART DRAAGT EEN ID (`#insStand`), om dezelfde reden als `#insNogLijst`: de hoogte-eis wordt per
+  ronde gemeten en "de eerste zichtbare `.card` boven de 40px" is geen afbakening maar een gok.
+  HIJ IS GOEDKOPER DAN DE POST DIE HIJ VERVANGT, en dat is gemeten: de kop leest `VP.rest` en roept de
+  tempo-som niet zelf aan, want `varPotjeStand()` doet die aanroep al (`v104`). GEMETEN per
+  `renderIns()` op dezelfde fixture: vóór `v309` 17 keer `catSpendMap`, 89 keer `telbareTx` en 2 keer
+  `varPlanRemaining`; na `v309` 16, 88 en 1. Die 88 is meteen het vertrekpunt voor een prestatie-ronde.
+  EENENZEVENTIG BESTAANDE TESTS VIELEN EROP, in ZESTIEN bestanden, en dat is de omvang van een element
+  dat van plek gaat. Ze hadden alle eenenzeventig gelijk: ze pinden de post in de lijst, de
+  venstervorm van de weekregel, de legenda, "over je potjes", de hoogtes en de posttellingen.
+- **DE TEMPO-KRAPTE ZIT IN HET ACHTERVOEGSEL VAN DE KOP, MET EEN BEDRAG EN NIET TWEE** (`v309`): de
+  noot van `v308` ("Bij je tempo nog €216 nodig · €174 tekort") hing onder de post die naar de kop
+  verhuisde. Als EIGEN regel op de kaart kost hij 23px, en dan gaat het zwaarste geval van 199px naar
+  222px: hoger dan de stand van `v308` EN over de 200px van `v241`. In het achtervoegsel kost hij nul.
+  HIJ DRAAGT EEN BEDRAG, en dat is gemeten en geen voorkeur: met de tempo-som erbij breekt de kop op
+  360px naar 46px in plaats van 32px, en dat al bij de kleinste getallen (€82 nodig, €12 tekort). Er
+  gaat niets verloren, want de kop toont het RESTANT en de tempo-som is dat restant PLUS het gat; die
+  aansluiting staat als assertie vast in plaats van dat het derde getal wordt afgedrukt.
+  DE KRAPTE WINT VAN HET DAGBEDRAG en niet andersom: het dagbedrag is de VLAKKE deling van wat er nog
+  in je potjes zit, en de krapte zegt dat je eigen potje-verdeling deze maand meer vraagt dan er in
+  zit. Staat die krapte er, dan is die vlakke deling de minst ware van de twee.
+  BIJ EEN RESTANT VAN NUL OF LAGER STAAT ER GEEN ACHTERVOEGSEL. Bij een negatief restant is het gat
+  per constructie positief (het is de tempo-som PLUS de overschrijding) en zou het een groter getal
+  over dezelfde overschrijding zetten: GEMETEN op een potje van 500 met 570 besteed staat er "€70 te
+  veel uitgegeven" en zou het achtervoegsel "bij je tempo €93 tekort" zeggen. Een signaal dat in een
+  hele tak per constructie vuurt is geen signaal (meetles p). Bij precies nul zegt het grote getal het
+  al, net als in de oude post (`v257`/`v260`).
+  DE KLEUR IS DIE VAN HET LABEL WAARIN HIJ STAAT (`--mut`) en niet meer `--mut2`. Wat de eigenschap is,
+  is dat hij geen aandacht claimt (`v78`/`v93`); een label naast een groot getal draagt in dit blok
+  `small muted`, en de oude kop deed dat ook voor het woord "uitgegeven".
+- **`budgetOverZin()` NOEMT DE NOEMER WAARMEE HIJ REKENT** (`v309`): hij zei "over je potjes" en
+  rekent met `totals().budget` tegen `totals().spendNorm`, dus met ALLE potjes en ook met uitgaven in
+  categorieën ZONDER potje. Dat was al een verkeerd etiket (open punt sinds `v250`/`v251`, gemeten:
+  de zin zegt €300 over je potjes waar de potjesregel op €100 uitkomt), en sinds `v309` staat het
+  potjes-restant als hoofdgetal boven die zin: dan stond er "€42 nog in je potjes" boven "€98 over je
+  potjes" op één kaart. Het woord komt nu van de aanroeper, zodat het letterlijk hetzelfde woord is
+  als op de regel boven de balk en er geen tweede spelling ontstaat (`v104`).
+  DE KAARTREGEL HOUDT ZIJN EIGEN SPELLING en de zin leidt de zijne eruit af: de kaart noemde zijn
+  noemer altijd 'maandbudget' zonder lidwoord en 'je inkomen-limiet' MET. Mijn eerste vorm maakte er
+  twee varianten van en streepte in de kaartregel `je ` weg; dat haalde het lidwoord ook bij de
+  inkomen-limiet weg, waar het er altijd stond, en `zwijgen-bij-onbekend.spec.js` viel daar terecht op.
+  HET GETAL IS NIET AANGERAAKT: het open punt van `v250`/`v251` staat nog, dit is het label.
+- **DE LEGENDA ONDER DE BALK IS VERVALLEN** (`v309`): "de streep staat waar de maand nu is: N%
+  voorbij" was sinds `v189` de legenda van de dagstreep, en dat argument is omgedraaid door `v241`:
+  de dagteller staat sindsdien in de eyebrow BOVEN de kaart ("dag 23 van 30"), en `insEyebrow` rendert
+  die op elke maand waarvoor `daysElapsed(m)` werkt. Daarmee was de zin de tweede weergave geworden
+  die `v189` juist wegnam. De streep zelf blijft, met zijn eigen uitleg in zijn `title`.
+  DE TEST IS STERKER GEWORDEN EN NIET ZWAKKER: `getal-en-gevolg.spec.js` pinde die zin; hij eist nu
+  dat de streep een eigen uitleg draagt EN dat de dagteller PRECIES EEN keer in de tekst van het
+  scherm staat.
+- **HET DAGBEDRAG STAAT BOVEN DE VOUW, EN DAT BESLIST HET OPEN PUNT VAN `v257`** (`v309`): dat punt
+  mat dat het dagbedrag op 360x640 op 592px begon bij 567px zichtbaar, en noemde als richting de hero
+  bij de balk, met als HARDE VOORWAARDE dat het daar HETZELFDE getal blijft lezen en niet de
+  hero-meting. GEMETEN na deze ronde: de kop eindigt op 148px, dus binnen het eerste scherm op
+  360x640 EN 390x844, en de signalen blijven waar ze waren (321px). Aan de voorwaarde is voldaan: de
+  kop deelt `varBudget()` min `varPotjeStand().gebruikt` en `dagbedrag-potjes.spec.js` bindt dat op de
+  bron. DE EIGENSCHAP IS DAARMEE OMGEKEERD: het dagbedrag stond ONDER het laatste signaal en staat er
+  nu BOVEN, en die test is meeverhuisd in plaats van weggehaald.
+- **DE WEEK ALS EENHEID IS VERVALLEN, EN DAT BESLIST HET OPEN PUNT VAN `v263`** (`v309`):
+  `POTJE_VENSTER_DAGEN` had na de verhuizing nog precies EEN treffer in de bron, zijn eigen
+  declaratie, en een dode constante is wat een volgende ronde verkeerd leest. Dat open punt vroeg of
+  een week of een dag de eenheid van een bestedingsruimte is, en stelde vast dat het antwoord voor
+  Inzichten EN Home tegelijk moest gelden. HET IS DE DAG GEWORDEN, met twee bronnen en twee namen:
+  Home deelt `safeToSpend().safe` en heet "veilig te besteden", de stand-kaart deelt de potjes en heet
+  "nog in je potjes". Wat `v263` tegen een dagbedrag had (elke dag eronder voelt als winst) staat nog;
+  wat de week ertegenover kostte is een venster dat rond de maandwissel twee budgetten mengt.
+  `maandDagenOver()` BLIJFT DE ENE NOEMER, met dezelfde twee lezers als eerst.
+  `potjes-weekvenster.spec.js` IS MET HET VENSTER VERVALLEN, en daarmee is de lijst uitzonderingen in
+  `vaste-testdag.spec.js` LEEG. Dat is strenger dan de oude vorm: elke klokzetter leest de gedeelde
+  bron. De 360/390px-meting die die spec droeg is meeverhuisd naar de kop, waar hij zwaarder is
+  (drie delen op een regel, gemeten 32px tot en met €39.430 met €5.633 per dag).
+- **HET POTJEBEDRAG PER CATEGORIE PER MAAND WORDT BEWAARD, EN NIET GELEZEN** (`v309`): `SET.budgets`
+  is EEN map voor de LOPENDE maand, en `effectiveBudgets(m)` negeert zijn maandargument voor de
+  bedragen en leest diezelfde map. Er is dus nergens vastgelegd wat een potje in een afgesloten maand
+  WAS, en `rolloverBudgets()` overschrijft de map uit `budgetsNext`.
+  WAAROM DAT NODIG IS: een latere symmetrische spiegel die zegt "twee maanden op rij onder je potje"
+  kan alleen tegen het potje van VANDAAG meten, en dan zou het potje VERHOGEN met terugwerkende kracht
+  twee maanden "onder je potje" maken. Dat is precies de vorm die `v235` aan de overschrijdingskant
+  dichtzette: het potje verhogen laat een signaal verschijnen of verdwijnen zonder dat je anders
+  uitgeeft. `SET.valtOpLog` KAN HET NIET AANVULLEN, en dat is nagelezen en als assertie vastgelegd:
+  daar staat `if(over<DREMPEL_EUR) continue` VOOR het record wordt aangemaakt, dus een potje dat onder
+  zijn bedrag bleef krijgt per constructie nooit een record. Juist die potjes zijn wat een spiegel
+  nodig heeft.
+  DE SCHRIJVER STAAT VOOR DE DOORSCHUIF, en dat is het geval dat de twee vormen onderscheidt: op dat
+  punt draagt `SET.budgets` nog de bedragen van de maand die NET afsloot, inclusief een bijstelling van
+  `v235`. `valtOpAfsluiten()` draait bij de boot NA `rolloverBudgets()` en leest om precies deze reden
+  zijn meetlat uit het eigen record. In de fixture wijkt `budgetsNext.boodschappen` (850) af van
+  `budgets.boodschappen` (800), en zonder dat verschil meet "voor de doorschuif" niets.
+  EEN BESTAANDE MAAND WORDT NOOIT OVERSCHREVEN (`v277`): de bedragen van een afgesloten maand zijn
+  historie, en historie die stil wordt herschreven is geen meting. Alleen bedragen boven nul gaan erin
+  (`v59`/`v73`/`v173`), en een maand zonder enig potje krijgt geen entry.
+  GEEN LEZER IN DE APP EN GEEN WEERGAVE, en dat is de afbakening van deze ronde. Wat er wel is, is een
+  uitlezing in blok 6 van `DIAG_BLOKKEN`, en die is er om een reden die dit veld bijzonder maakt: of de
+  opslag werkt is pas te zien NA een maandwissel, en die wissel is de ENIGE kans om die maand vast te
+  leggen. Zonder uitlezing gaat een stille fout voor altijd verloren (`v296`/`v298`). `SET.budgetMonth`
+  is de discriminator, net als `syncs` bij `v296`: is die gezet en staat de historie leeg, dan is er
+  niet gewisseld en is dat een ONTBREKENDE meting. Een LOPENDE maand in de historie wordt aangewezen
+  en niet stil geslikt, want dat is de enige stand die niet mag bestaan (`v194`).
+  HIJ IS NIET BEGRENSD, net als `SET.valtOpLog` en `SET.maandAccept`: het is een getal per potje per
+  maand, en historie weggooien die je niet kunt terughalen is duurder dan die bytes.
 - **DE TEMPO-PROJECTIE VOLGT DE RESTERENDE DAGEN, IN BEIDE TAKKEN** (`v308`): `potjeRest()` had twee
   takken die niet dezelfde vraag beantwoordden. Voor een OVERSCHREDEN potje gaf hij het geplande
   dagtempo maal de resterende dagen (`v111`), dus nul op de laatste dag; voor een potje MET ruimte
@@ -2289,7 +2426,10 @@ genoemde versietag.)*
   `openCategory()` HOUDT HET GELD in zijn kop, want dat is de som van de rijen eronder, en zegt
   eronder welk deel uit een reservering kwam. Zonder die regel wijkt die sheet af van het potje op
   Inzichten zonder dat er staat waarom.
-- **OPEN PUNT: de stand-kaart gaat in het worst case over de 200px van `v241`** (`v269`): niet
+- **GEDICHT BIJ `v309`: de stand-kaart gaat in het worst case over de 200px van `v241`** (`v269`,
+  gedicht bij `v309`): het zwaarste geval staat sinds die ronde op 199px op 360 EN 390px; zie de
+  regel over het hoofdgetal bovenaan. Wat hieronder staat is waarom het punt bestond en wat het
+  toen mat. Niet
   opgelost en de eis is niet opgeschoven. GEMETEN in de levende kaart op 360 EN 390px: de kaart is
   144px zonder `geenNorm`-regels, 167px met één en 190px met twee (exact de getallen van `v258`), en
   de reserveringsregel kost 23px (18px tekst plus de 5px marge erboven).
@@ -3050,7 +3190,14 @@ genoemde versietag.)*
   die bijna om is) en het omzetten raakt `maandDagenOver()`, `potjeRest()` en `budgetOverZin()`
   tegelijk; dat blijft een eigen ronde.
   DE RANDGEVALLEN VAN `v257` STAAN ONGEWIJZIGD: restant nul of negatief geeft geen regel.
-- **OPEN PUNT: Home draagt nog een dagbedrag** (`v263`): `vrijPerDagLine()` zegt "Nog 5 dagen deze
+- **BESLIST BIJ `v309`: Home draagt nog een dagbedrag** (`v263`, beslist bij `v309`): de vraag die
+  hieronder stond was welke eenheid bij een bestedingsruimte hoort, en dat het antwoord voor BEIDE
+  schermen moest gelden. Het is de DAG geworden, en daarmee is de tegenstelling weg: Inzichten droeg
+  een week en draagt nu een dagbedrag, Home droeg er al een. Twee bronnen en twee namen (Home deelt
+  `safeToSpend().safe` en heet "veilig te besteden", de kaart deelt de potjes en heet "nog in je
+  potjes"), nergens hetzelfde woord voor twee getallen. `vrijPerDagLine()` is NIET aangeraakt, en dat
+  is de afbakening: de eenheid was de vraag en die is beslist, de formulering daar niet.
+  Wat hieronder staat is de oorspronkelijke redenering. `vrijPerDagLine()` zegt "Nog 5 dagen deze
   maand, dus €54 per dag", en het argument voor een week geldt daar net zo hard - dat is daar
   hetzelfde onbruikbare getal. Het is GEEN tweede waarheid zoals bij `savedThisMonth` (`v262`), want
   de twee regels beantwoorden verschillende vragen en delen alleen hun noemer: Home deelt
@@ -3095,7 +3242,12 @@ genoemde versietag.)*
   Meet vóór het weghalen wat eraan hangt: interne boekingen vallen al buiten `spendNorm` en
   `spend` via `CATS[k].type`, dus wat de schakelaar zou moeten doen is de LIJST filteren, en dat is
   iets wat de app nergens anders doet.
-- **OPEN PUNT: het dagbedrag staat onder de vouw op 360x640** (`v257`): gemeten begint de dagregel
+- **GEDICHT BIJ `v309`: het dagbedrag staat onder de vouw op 360x640** (`v257`, gedicht bij `v309`):
+  het staat sinds die ronde in de kop van de stand-kaart en eindigt op 148px, dus binnen het eerste
+  scherm op 360x640 en 390x844. AAN DE HARDE VOORWAARDE HIERONDER IS VOLDAAN: hij leest daar
+  `varBudget()` min `varPotjeStand().gebruikt` en niet de hero-meting, en een bronzoekende assertie in
+  `dagbedrag-potjes.spec.js` houdt dat vast. Wat hieronder staat is de richting die dit punt uitzette,
+  en die is gevolgd. Gemeten begint de dagregel
   op 592px terwijl er 567px zichtbaar is, dus op de kleinste telefoon kost hij een scroll. De
   signalen blijven er ruim boven (335px tegen 567px, 321px tegen 771px op 390x844), dus de eis van
   `v241` wordt gehaald en de tripdraad in `inzichten-indeling.spec.js` is niet verschoven. Toch is
@@ -3838,7 +3990,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v308` → `minder-v309`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v309` → `minder-v310`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -3849,7 +4001,7 @@ bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte 
 bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`; `v301` raakt wel app-code
 en bumpt dus gewoon door naar `minder-v301`, en `v302` tot en met `v305` net zo. `v306` raakt alleen
 `tests/` en dit bestand, dus hij bumpte niet en `v307` ging daarom van `minder-v305` naar `minder-v307`;
-`v308` raakt app-code en bumpt dus gewoon door naar `minder-v308`.
+`v308` en `v309` raken app-code en bumpen dus gewoon door naar `minder-v308` en `minder-v309`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
