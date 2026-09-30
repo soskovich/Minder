@@ -37,7 +37,7 @@ function seedPot({ uit = 700, saldo = null } = {}) {
   add('eet-' + CUR, CUR, '06', -50, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT');
   return {
     minder_tx: JSON.stringify(tx), minder_ovr: '{}',
-    minder_set: JSON.stringify({ limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 3000, savingMode: 'amount', savingAmount: 0, budgets: { boodschappen: 500, uiteten: 200 }, manualBal: { [MAIN]: saldo } }),
+    minder_set: JSON.stringify({ bufferNorm: 3, limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 3000, savingMode: 'amount', savingAmount: 0, budgets: { boodschappen: 500, uiteten: 200 }, manualBal: { [MAIN]: saldo } }),
     minder_own: JSON.stringify([MAIN]), minder_accmeta: '{}', minder_plan: '{}',
   };
 }

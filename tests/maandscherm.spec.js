@@ -32,6 +32,10 @@ function seedM(set = {}, opt = {}) {
   return {
     minder_tx: JSON.stringify(tx), minder_ovr: '{}',
     minder_set: JSON.stringify(Object.assign({
+    /* v305: de ondergrens is sinds v305 een KEUZE en heeft geen default meer, dus de fixture kiest
+       hem hier. Deze spec is geschreven toen drie maanden een vaste grens was; dat getal staat nu
+       waar het thuishoort, in de gegevens van de gebruiker. */
+    bufferNorm: 3,
       limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 3000,
       savingMode: 'amount', savingAmount: 300, nfMaanden: 3,
       manualBal: { [MAIN]: 1500, [RES]: 2000, [SAV]: 20000 },
@@ -99,13 +103,19 @@ test.describe('b · de regels', () => {
     expect(uit.regelBuf).toBe(String(uit.bm).replace('.', ','));
   });
 
-  test('bufferMaanden is spaargeld gedeeld door de essentiële crisis-last', async ({ page }) => {
+  /* v305: DEZE TEST PINDE DE OUDE TELLER. `bufferMaanden()` deelde het SALDO van je spaarrekening;
+     sinds v305 is het de TOEWIJZING aan je noodfonds (besluit 1), zodat Plan en Grip hetzelfde getal
+     tonen. Hij is herschreven naar de nieuwe deling en tegelijk sterker gemaakt: hij meet dat de twee
+     tellers in deze fixture werkelijk UITEENLOPEN, want anders zou hij de oude vorm niet afwijzen. */
+  test('bufferMaanden is de toewijzing gedeeld door de essentiële crisis-last', async ({ page }) => {
     await boot(page);
     const uit = await page.evaluate(() => {
       const M = noodfondsModel();
-      return { bm: bufferMaanden(), spaar: M.spaar, ess: Math.round(M.essCrisis) };
+      return { bm: bufferMaanden(), teller: bufferTeller(), spaar: M.spaar, ess: Math.round(M.essCrisis) };
     });
-    expect(uit.bm).toBeCloseTo(uit.spaar / uit.ess, 5);
+    expect(uit.teller, 'de toewijzing is niet het saldo, anders toetst deze test niets')
+      .not.toBe(uit.spaar);
+    expect(uit.bm).toBeCloseTo(uit.teller / uit.ess, 5);
   });
 
   test('bufferMaanden is null zonder bekend spaarsaldo', async ({ page }) => {
@@ -129,14 +139,20 @@ test.describe('c · de statussen', () => {
     expect((await R(page)).find((r) => r.key === 'dekking').status).toBe('onbekend');
   });
 
-  test('buffer: tekort onder drie maanden, let op onder je richtbedrag, anders ok', async ({ page }) => {
-    await boot(page, seedM({ nfMaanden: 6 }));
+  /* v305: de grens is de GEKOZEN ondergrens (de fixture kiest 3) en de teller is de toewijzing, dus
+     de stand wordt hier met `nfToegewezen` verzet en niet meer met het rekeningsaldo. De drie
+     uitkomsten zijn dezelfde als voorheen; alleen de knop waaraan je draait is een andere. */
+  test('buffer: tekort onder je ondergrens, let op onder je richtbedrag, anders ok', async ({ page }) => {
+    /* de toewijzingen samen blijven binnen het spaarsaldo van 20.000: het doel krijgt er 1.000, dus
+       de buffer 19.000. Zonder die aftrek meldt de controle van besluit 2 dat er meer is toegewezen
+       dan er staat, en dan is `ok` per constructie onbereikbaar. */
+    await boot(page, seedM({ nfMaanden: 6, nfDoelVast: 19000, nfToegewezen: 19000 }));
     const meet = async () => (await R(page)).find((r) => r.key === 'buffer').status;
-    expect(await meet()).toBe('ok');                                                // 20000 / 1000 = 20 mnd
-    await page.evaluate((a) => { SET.manualBal[a] = 4000; save(); }, SAV);
+    expect(await meet()).toBe('ok');                                                // 19000 / 1000 = 19 mnd
+    await page.evaluate(() => { SET.nfToegewezen = 4000; save(); });
     expect(await meet()).toBe('let op');                                            // 4 mnd, richt 6
-    await page.evaluate((a) => { SET.manualBal[a] = 2000; save(); }, SAV);
-    expect(await meet()).toBe('tekort');                                            // 2 mnd
+    await page.evaluate(() => { SET.nfToegewezen = 2000; save(); });
+    expect(await meet()).toBe('tekort');                                            // 2 mnd, onder 3
   });
 
   /* v172: het noodfonds claimt niet meer zijn doel maar zijn toewijzing, dus het doel omhoog
@@ -316,7 +332,7 @@ test.describe('d · het oordeel', () => {
      meer op Maand. Een richtbedrag boven de stand zet de buffer op 'let op' zonder dat er iets
      misgaat, en dat is precies de stand die deze zin beschrijft. */
   test('c: alleen let op', async ({ page }) => {
-    await boot(page, seedM({ nfMaanden: 40 }));
+    await boot(page, seedM({ nfMaanden: 40, nfDoelVast: 19000, nfToegewezen: 19000 }));
     const r = await R(page);
     expect(r.filter((x) => x.status === 'tekort').length).toBe(0);
     expect(r.filter((x) => x.status === 'let op').length).toBe(1);

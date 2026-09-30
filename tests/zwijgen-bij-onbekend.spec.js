@@ -28,7 +28,7 @@ function seed(o = {}) {
   }
   const bal = o.geenSaldo ? {} : { [MAIN]: 3000 };
   if (o.spaar && !o.geenSaldo) bal[SAV] = 4000;
-  const set = Object.assign({ mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
+  const set = Object.assign({ bufferNorm: 3, mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
     manualBal: bal, budgets: o.geenBudget ? {} : { boodschappen: 500, huur: 900 },
     goals: [{ id: 'g1', naam: 'Reis', doel: 5000, gespaard: 0, allocMode: 'auto' }],
     // Maand draagt de meermaands-grafiek; één reservering geeft dat scherm zijn body

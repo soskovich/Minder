@@ -4315,17 +4315,61 @@ function doelTempoLine(p){
    kopcijfer op Plan, dat toen per geval is opgelost door de graad van die kaart te halen; de regel
    staat nu vast, zodat hij niet ergens anders terugkomt. */
 /* v226: twee drempels erbij, en ze staan hier omdat ze de STATUS bepalen en niets anders. Beide
-   staan op drie maanden, en dat is dezelfde grens als bufferKritiek en om dezelfde reden: drie
-   maanden is de horizon waarop een maandbedrag nog iets kan doen.
+   staan op drie maanden. Tot v304 was dat ook de buffernorm en noemde deze comment die gelijkheid;
+   sinds v305 is de norm een eigen keuze en volgen deze twee hem UITDRUKKELIJK niet, want een
+   meetperiode is geen grens waaronder iets te weinig is. De reden om ze op drie te houden staat nog:
+   drie maanden is de horizon waarop een maandbedrag nog iets kan doen.
      bufferTempoVenster  over hoeveel afgeronde maanden de richting van je buffer wordt gemeten.
                          Korter is geen richting, langer laat een inleg die vorig jaar stopte te
                          lang meetellen.
      dekkingMarge        hoeveel maanden het knelmoment minstens weg moet liggen voordat de regel
                          geen beslissing meer vraagt. Dekking heeft één instrument, het maandtempo
                          benodigdPerMaand; een gat binnen drie maanden haal je daar niet meer mee op. */
-const MAAND_DREMPEL = { bufferKritiek:3, dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelStatus:'tekort',
+const MAAND_DREMPEL = { dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelStatus:'tekort',
   onbekendDeel:0.5, onbekendMin:3, budgetVol:100,   // v194: de grens waarop je potjes precies op zijn
   bufferTempoVenster:3, dekkingMarge:3 };
+/* v305: DE BUFFERNORM IS EEN EIGEN KEUZE EN STOND ALS VASTE 3 IN MAAND_DREMPEL. Hij is de ONDERGRENS
+   waaronder een buffer te weinig opvangt, en dat is een andere vraag dan je RICHTBEDRAG: `nfMaanden()`
+   bepaalt het DOEL en deze grens bepaalt wanneer een tekort een tekort is. Die twee horen los, want
+   besluit (3) van de buffernorm-ronde zegt dat de norm de ondergrens is en niet het doel.
+   ER IS GEEN DEFAULT, OOK NIET VOOR DE STATUS. Die drie was een grens die niemand had gekozen, en een
+   ongekozen grens die wel een tekort meldt is precies wat `v59`/`v73`/`v173` verbieden: zonder norm is
+   er niets om de buffer aan af te meten, dus zegt de regel wat hij MEET (het aantal maanden) en vraagt
+   hij om die grens, in plaats van een oordeel te vellen dat op niets rust.
+   EEN WAARDE VAN NUL OF LEEG IS GEEN KEUZE en geeft dus `null`, want een norm van nul zou elke buffer
+   vol verklaren en dat is de gevaarlijke kant (`v168`).
+   `MAAND_DREMPEL.bufferTempoVenster` VOLGT HEM UITDRUKKELIJK NIET, ook al stonden ze tot v304 op
+   hetzelfde getal en noemde de comment daar die gelijkheid. Dat venster is de MEETPERIODE waarover
+   de richting van je buffer wordt vastgesteld en niet een grens waaronder iets te weinig is; een
+   meetperiode die met een normkeuze meebeweegt maakt de reeks van v226 onvergelijkbaar. */
+function bufferNorm(){
+  const v=SET.bufferNorm; const n=(v==null||v==='')?NaN:Math.round(+v);
+  return (isFinite(n)&&n>0)?n:null;
+}
+/* v305: WAT EEN NORMKEUZE MET JE DOEL ZOU DOEN, EN VERDER NIETS. De optil is een HANDELING en geen
+   afleiding: `noodfondsModel()` tilt niets op, want een grens die je niet hebt gekozen mag je doel niet
+   verzetten (MECHANISM_SPEC.defaultEffect: nooit een default die stilletjes een doel zet).
+   DEZE FUNCTIE REKENT ALLEEN VOOR, zodat de sheet het VOOR het vastzetten kan tonen. Ligt je doel al op
+   of boven de norm, dan zegt hij dat en verandert er niets aan je doel.
+   `nu` KOMT UIT `noodfondsModel().doel` EN WORDT NIET OPNIEUW AFGELEID (v104); de noemer is `essCrisis`,
+   dezelfde die `bufferMaanden()` deelt. */
+function normDoelVoorstel(n){
+  const m=Math.round(+n||0); if(!(m>0)) return null;
+  let M=null; try{ M=noodfondsModel(); }catch(_){ return null; }
+  if(!M||!(M.essCrisis>0)) return null;
+  const nu=Math.round(+M.doel||0), naar=Math.round(M.essCrisis*m);
+  return {maanden:m, nu, naar, ess:Math.round(M.essCrisis), tilt:(naar>nu)};
+}
+/* v305: DE DREMPEL VOOR BELEGGEN IS EEN EIGEN KEUZE, LOS VAN DE BUFFERNORM (besluit 4). Tot v304
+   las `beleggenKlaar()` het veld `kritiek` van de bufferregel, dus de vaste 3; met de norm als
+   ondergrens zou beleggen dan aan jouw normkeuze hangen terwijl dat een andere afweging is.
+   ZONDER EIGEN DREMPEL VALT HIJ TERUG OP DE NORM, en is er ook geen norm, dan is er geen drempel en
+   dus geen uitspraak (`null`). Dat is dezelfde keuze als bij de bufferregel: een grens die niemand
+   heeft gekozen mag geen groen of rood licht geven. */
+function beleggenDrempel(){
+  const v=SET.beleggenDrempel; const n=(v==null||v==='')?NaN:Math.round(+v);
+  return (isFinite(n)&&n>0)?n:bufferNorm();
+}
 /* v194: een verloop is pas een verloop bij genoeg punten. Onder deze drempel verandert er geen
    beslissing door de vórm van een lijn of een reeks staven - je leest een richting en verder niets -
    en is een getal met zijn vorige waarde sterker. Eén constante voor de maandgrafiek en de
@@ -4342,11 +4386,66 @@ const MAAND_ERNST = {tekort:0, 'let op':1, ok:2, onbekend:3};
 /* De enige nieuwe som op dit scherm, en met opzet niet meer dan een deling van twee bestaande
    uitkomsten: hoeveel maanden essentiële crisis-last dekt je spaargeld? null zodra een van beide
    ontbreekt - nooit een schatting (v59/v73). */
+/* v305: DE TELLER IS WAT PLAN AAN HET NOODFONDS HEEFT TOEGEWEZEN, EN NIET HET REKENINGSALDO
+   (besluit 1). De aanleiding is gemeten: staan alle spaardoelen op EEN spaarrekening, dan telde het
+   geld voor die doelen als buffer mee, want de teller was dat rekeningsaldo. Plan en Grip lezen nu
+   hetzelfde getal, en er komt geen tweede afleiding uit het saldo naast te staan.
+   DE BRON BESTAAT AL: `planMap()[PLAN_NF].gespaard` is `SET.nfToegewezen` geklemd op het doel, en
+   dat is precies de voortgang die de noodfonds-regel op Plan toont (v172).
+   DRIE LEZERS GAAN SAMEN MEE (v104): deze deling, `meevallerNodig('buffer')` en de buffer-tak van
+   `maandTekort()`. GEMETEN wat er gebeurt als alleen de eerste meeverhuist, bij 2.500 toegewezen op
+   een saldo van 4.000 met essCrisis 1.520: de deling gaat van 2,63 naar 1,64 terwijl "wat is er
+   nodig" op 560 blijft staan en de verdeelregel niets meldt in plaats van 1.500. Dan komen het getal
+   op Grip en het bedrag ernaast uit twee tellers.
+   `fireInputs()` IS DE VIERDE LEZER EN GAAT UITDRUKKELIJK NIET MEE. Die stelt een andere vraag: hij
+   rolt je vermogen vooruit en wil het geld dat er STAAT, niet het label dat je eraan hing. Dat is
+   `v216` letterlijk, een voornemen verdringt geen feit, en die regel wijst hier de andere kant op dan
+   bij de bufferregel. Zijn `nfDoel` beweegt wel mee, want dat is hetzelfde doel.
+   EEN ONBEKENDE VOORTGANG GEEFT NULL (v173). Tot v304 was dat `spaarSaldo().missing`; nu is het
+   `nfOnbekend`, het veld waarmee `planMap()` zegt dat `migrateNfToegewezen()` nooit heeft kunnen
+   draaien. Dat is dezelfde toestand met een andere naam, want die migratie leest datzelfde saldo. */
+function bufferTeller(){
+  let pm=null; try{ pm=planMap()[PLAN_NF]; }catch(_){ return null; }
+  if(!pm || pm.nfOnbekend) return null;
+  return Math.max(Math.round(+pm.gespaard||0),0);
+}
 function bufferMaanden(){
-  let ess=0, sp=null;
-  try{ const M=noodfondsModel(); ess=Math.round(M.essCrisis||0); sp=(M.spaar!=null)?Math.round(M.spaar):null; }catch(_){ return null; }
+  let ess=0; try{ ess=Math.round(noodfondsModel().essCrisis||0); }catch(_){ return null; }
+  const sp=bufferTeller();
   if(sp==null||!(ess>0)) return null;
+  /* v305: ZONDER BEKEND SPAARSALDO GEEN REGEL, en dat is geen restant van de oude teller maar de
+     VOORWAARDE van de controle hieronder. De teller is sinds deze ronde een toewijzing, en een
+     toewijzing zonder saldo ernaast is een getal dat de app niet kan nalopen: dan zou de buffer vol
+     kunnen lezen op geld dat er niet is, en te hoog is de gevaarlijke kant (v168). Tot v304 gaf deze
+     deling om dezelfde uitkomst null (de teller WAS dat saldo), dus de stand op het scherm verandert
+     hier niet: zonder aangewezen spaarrekening staat de bufferregel niet op Grip, en `spaarVrijLine()`
+     op Plan zegt daar waarom en wijst de stap aan. */
+  let S=null; try{ S=spaarSaldo(); }catch(_){ return null; }
+  if(!S||S.missing) return null;
   return sp/ess;
+}
+/* v305: DE CONTROLE IS HET SALDO (besluit 2). De teller is een TOEWIJZING, en een toewijzing kan
+   hoger staan dan wat er werkelijk op de spaarrekening ligt; dan zou de buffer vol lezen op geld dat
+   er niet is, en te hoog is de gevaarlijke kant (v168). Is de som over alle bestemmingen hoger dan
+   het saldo, dan telt de buffer NIET als vol tot je hebt gekozen van welk doel het verschil komt.
+   DIE MEETWAARDE BESTOND AL, EN ER KOMT ER GEEN TWEEDE NAAST (v104). Mijn eerste vorm van deze ronde
+   telde `planMap()` zelf op en legde die som naast `spaarSaldo()`; dat is letterlijk `spaarOver()`,
+   sinds v217 de bron van de regel op Plan, en de twee zouden bij de eerste wijziging uiteenlopen.
+   `spaarVrij()` sluit de aflos-items al uit doordat hij over `SET.goals` loopt en niet over
+   `planMap()`, en dat is ook wat hier moet: hun voortgang is afgeloste schuld en geen geld op een
+   rekening.
+   PLAN ZEI DIT AL EN GRIP NIET, en dat is wat besluit 2 hier toevoegt: dezelfde detectie, twee
+   weergaven (v235). Plan draagt de regel met de handeling (`spaarOverLine()`, met de tik die het
+   verschil weghaalt), Grip laat de bufferregel niet op `ok` komen en zegt in zijn gevolg van welk
+   doel het verschil zou komen. De volgorde van die namen komt uit `spaarOverRaakt()` en wordt hier
+   niet opnieuw uitgedrukt.
+   EEN ONBEKEND SALDO KOMT HIER NIET AAN: `spaarVrij()` geeft dan nul op beide kanten, en
+   `bufferMaanden()` heeft de regel dan al weggehouden. */
+function toewijzingBovenSaldo(){
+  let V=null; try{ V=spaarOver(); }catch(_){ return null; }
+  if(!V||!(V.over>0)) return null;
+  let raakt=[]; try{ raakt=spaarOverRaakt(); }catch(_){}
+  return {som:V.toegewezen, saldo:V.saved, verschil:V.over, raakt};
 }
 /* ===== Ligt de buffer op tempo? (v226) =====
  * De statusdrempel toetste of de norm NU gehaald wordt, niet of hij op tijd gehaald wordt. Een
@@ -4632,22 +4731,60 @@ function maandRegels(){
          verkeerd groen licht daar kost geld dat binnen een jaar nodig is (v154).
          Het richtbedrag blijft de tweede grens, en die staat boven kritiek: een richt van één maand
          maakt een buffer van twee maanden niet in orde. */
-      const kritiek = bm<MAAND_DREMPEL.bufferKritiek;
+      /* v305: de grens is de GEKOZEN ondergrens en niet meer een vaste 3. GEMETEN op de oude vorm met
+         een eigen richt van 2 en een kritieke grens van 3: bij 2,63 maanden stond de status op
+         `tekort` terwijl die eigen ondergrens ruim gehaald was, en `ok` kwam pas bij 3,29. De tweede
+         grens (`richt`) blijft erboven staan: een richt van een maand maakt een buffer van twee
+         maanden niet in orde.
+         EN `ok` IS GEBLOKKEERD ZOLANG ER MEER IS TOEGEWEZEN DAN ER OP DE REKENING STAAT (besluit 2).
+         De teller is een toewijzing, dus zonder die blokkade leest de buffer vol op geld dat er niet
+         is; te hoog is de gevaarlijke kant (v168). Het wordt `let op` en geen `tekort`: de meting
+         zegt niet dat je buffer te klein is, alleen dat er een keuze open staat. */
+      /* v305: ZONDER GEKOZEN ONDERGRENS IS ER NIETS TE OORDELEN. `bufferNorm()` geeft `null` zolang
+         je niets hebt gekozen, en dan is `kritiek` niet vast te stellen: de regel toont wat hij MEET
+         en vraagt om die grens, met status `onbekend` en dus in de neutrale kleur (v78/v93). Een
+         tekort melden tegen een grens die niemand koos is precies wat v59/v73/v173 verbieden, en het
+         is ook de grens die tot v304 als vaste 3 in `MAAND_DREMPEL` stond. */
+      const norm = bufferNorm();
+      const kritiek = (norm!=null) && bm<norm;
       let T=null; try{ T=bufferTempo(); }catch(_){}
       const opTempo = kritiek && !!(T&&T.stijgt);
-      const st = kritiek ? (opTempo?'let op':'tekort') : (bm<richt ? 'let op' : 'ok');
+      let TB=null; try{ TB=toewijzingBovenSaldo(); }catch(_){}
+      const st = (norm==null) ? 'onbekend'
+               : kritiek ? (opTempo?'let op':'tekort')
+               : ((bm<richt||TB) ? 'let op' : 'ok');
       const n=Math.round(bm*10)/10;
       const nTxt=String(n).replace('.',',');
-      uit.push({key:'buffer', naam:'Buffer in maanden', status:st, kritiek, opTempo,
-        waarde:nTxt, eenheid:`maanden op je rekening · je richt staat op ${richt}`,
+      /* v305: HET LABEL NOEMT DE TELLER DIE ER LIGT. Het zei "maanden op je rekening", en dat was
+         waar zolang de teller het rekeningsaldo was; sinds besluit 1 is het de toewijzing aan je
+         noodfonds, en dan belooft dat label meer dan het getal draagt. Datzelfde label-gebrek staat
+         bij v302 gemeld op het woord "essentiele lasten" en is daar niet gerepareerd; hier wel,
+         want deze ronde verlegt juist die teller. */
+      /* v305: DE RIJ DRAAGT HET GETAL, en dat is geen luxe maar de eis van deze laag: de laag die de
+         voorwaarden voor beleggen samenstelt leest de rijen die hier al zijn opgeleverd en roept de
+         drie metingen erachter geen tweede keer aan (v187). Mijn eerste vorm van deze ronde deed dat
+         wel en de spec zette hem rood. `waarde` is de WEERGAVE (een string met een komma) en
+         `maanden` de meting, dus een drempel die tegen `waarde` toetst zou op een tekst rekenen. */
+      uit.push({key:'buffer', naam:'Buffer in maanden', status:st, kritiek, opTempo, maanden:bm, norm,
+        waarde:nTxt, eenheid: norm==null
+          ? `maanden toegewezen aan je noodfonds · je richt staat op ${richt}, je ondergrens is nog niet gekozen`
+          : `maanden toegewezen aan je noodfonds · je richt staat op ${richt}`,
         /* De op-tempo-zin noemt de meting, wat die betekent, en de richting - in die volgorde en
            zonder 'maar', want dat woord maakt van een vaststelling een bemoediging. Het venster
            staat erin omdat het de afbakening van de meting is: drie maanden gemeten is niet
            hetzelfde als 'altijd'. */
-        gevolg: st==='ok' ? `Je buffer dekt ${nTxt} maanden essentiële lasten, op of boven je eigen richtbedrag.`
-              : opTempo ? `Je buffer dekt ${nTxt} maanden essentiële lasten. Onder de drie maanden vangt hij weinig op. Er ging de afgelopen ${MAAND_DREMPEL.bufferTempoVenster} maanden elke maand geld naartoe, dus hij loopt op.`
+        /* v305: "onder de drie maanden" is de GEKOZEN ondergrens geworden, en zonder keuze is er geen
+           zin die een oordeel velt. En de controle van besluit 2 heeft een eigen tak: die zegt niet
+           dat je buffer te klein is, maar dat er meer is toegewezen dan er staat en van welk doel dat
+           verschil zou komen. Hij staat alleen boven de norm, want daaronder zegt de meting zelf al
+           het dringendste (een ding tegelijk), en de namen komen uit `spaarOverRaakt()` via `TB.raakt`
+           en worden hier niet opnieuw afgeleid. */
+        gevolg: norm==null ? `Je buffer dekt ${nTxt} maanden essentiële lasten. Zonder ondergrens valt er niet te zeggen of dat genoeg is; die grens kies je zelf.`
+              : (!kritiek && TB) ? `Er is ${euro0(TB.som)} aan je plan toegewezen terwijl er ${euro0(TB.saldo)} op je spaarrekening staat, ${euro0(TB.verschil)} meer.${TB.raakt.length?` Op je eigen volgorde komt dat verschil van ${opsomming(TB.raakt.map(spaarOverNaam))}.`:''} Tot je die keuze maakt telt je buffer niet als vol.`
+              : st==='ok' ? `Je buffer dekt ${nTxt} maanden essentiële lasten, op of boven je eigen richtbedrag.`
+              : opTempo ? `Je buffer dekt ${nTxt} maanden essentiële lasten. Onder ${norm} maanden vangt hij weinig op. Er ging de afgelopen ${MAAND_DREMPEL.bufferTempoVenster} maanden elke maand geld naartoe, dus hij loopt op.`
               : st==='let op' ? `Je buffer dekt ${nTxt} maanden. Je richt staat op ${richt}.`
-              : `Je buffer dekt ${nTxt} maanden essentiële lasten. Onder de drie maanden vangt hij weinig op.`,
+              : `Je buffer dekt ${nTxt} maanden essentiële lasten. Onder ${norm} maanden vangt hij weinig op.`,
         act:'openNoodfondsPanel()'});
     } }catch(_){}
   /* v187: hier stond de regel 'Aansluiting spaargeld'. Hij is van dit scherm af, want hij
@@ -4700,15 +4837,17 @@ function maandRegels(){
  *
  * Alle drie staan al als losse regel op dit scherm. Deze laag stelt alleen de SAMENSTELLING vast en
  * rekent zelf niets: hij leest de rijen die maandRegels() al opleverde en roept dekking(),
- * bufferMaanden() en doelTempo() dus geen tweede keer aan. De drempels komen uit MAAND_DREMPEL,
- * dezelfde constante die de statussen bepaalt.
+ * bufferMaanden() en doelTempo() dus geen tweede keer aan. De drempels van dekking en doel komen uit
+ * MAAND_DREMPEL, dezelfde constante die de statussen bepaalt; die van de buffer is sinds v305
+ * beleggenDrempel() en dus een eigen keuze (besluit 4), met je ondergrens als terugval.
  *
- * Buffer haalt de voorwaarde ook bij status 'let op': die stand betekent boven de drie maanden maar
- * onder je eigen richtbedrag, en de voorwaarde is de drie maanden. Bij dekking en doel is 'ok' de
+ * Buffer haalt de voorwaarde ook bij status 'let op': die stand betekent boven zijn eigen drempel maar
+ * onder je eigen richtbedrag, en de voorwaarde is die drempel. Bij dekking en doel is 'ok' de
  * enige stand die haalt.
  *
- * v226: de buffer wordt daarvoor niet meer aan zijn STATUS gemeten maar aan r.kritiek, het veld dat
- * zegt of hij onder de drie maanden staat. Sinds een buffer die op tempo ligt naar 'let op' schuift
+ * v226/v305: de buffer wordt daarvoor niet aan zijn STATUS gemeten. v226 koos daarvoor r.kritiek, het
+ * veld dat zegt of hij onder de norm staat; v305 leest bufferMaanden() tegen beleggenDrempel(), omdat
+ * de norm sinds die ronde jouw keuze is en beleggen een andere afweging. Sinds een buffer die op tempo ligt naar 'let op' schuift
  * zijn dat twee verschillende dingen, en 'status is niet tekort' zou hier een buffer van 1,1 maanden
  * groen licht geven. Dat is precies het verkeerde groene licht van v154. Dekking is al veilig: die
  * eist 'ok', en op tempo is 'let op'.
@@ -4722,7 +4861,7 @@ function maandRegels(){
  * dan is er GEEN uitspraak: geen 'bijna', geen 'waarschijnlijk nog niet', geen gedeeltelijke
  * uitkomst. Een verkeerd groen licht hier kost geld dat binnen een jaar nodig is. */
 const BELEGGEN_VOORWAARDEN=[
-  {key:'buffer',  label:'buffer',                drempel:()=>`${MAAND_DREMPEL.bufferKritiek} maanden`},
+  {key:'buffer',  label:'buffer',                drempel:()=>{ const d=beleggenDrempel(); return d==null?'nog geen grens gekozen':`${d} maanden`; }},
   {key:'dekking', label:'dekking reserveringen', drempel:()=>`${MAAND_DREMPEL.dekkingOk}%`},
   {key:'doel',    label:'',                      drempel:()=>euro0(MAAND_DREMPEL.doelOk)},
 ];
@@ -4744,7 +4883,18 @@ function beleggenKlaar(R){
         waarde:'onbekend', drempel:v.drempel(), status:'onbekend', eenheid:r?r.eenheid:''});
       continue;
     }
-    const gehaald = v.key==='buffer' ? !r.kritiek : r.status==='ok';
+    /* v305: de buffer-voorwaarde leest zijn EIGEN drempel en niet meer `r.kritiek` (besluit 4).
+       Tot v304 was dat het veld van de bufferregel en dus de vaste 3; met de norm als eigen keuze zou
+       beleggen daarmee aan die normkeuze hangen, en dat is een andere afweging dan "vangt mijn buffer
+       genoeg op". `beleggenDrempel()` valt terug op de norm, dus wie niets kiest houdt de oude stand.
+       HET GETAL KOMT UIT DE RIJ (`r.maanden`), want deze laag rekent niets zelf: de drie metingen
+       achter de rijen worden hier geen tweede keer aangeroepen (v187). Mijn eerste vorm van deze ronde
+       deed dat wel en de spec zette hem rood; die spec leest deze BRON, dus hij valt ook op de naam van
+       zo'n meting in een comment, en daarom staat die naam hier niet (v276).
+       DE STATUS BLIJFT ONGELEZEN, en dat is de reden waarom v226 hier `kritiek` koos: die vraag kent
+       geen tempo, dus een buffer die op tempo ligt geeft hier geen groen licht (v154). */
+    const d = v.key==='buffer' ? beleggenDrempel() : null;
+    const gehaald = v.key==='buffer' ? (r.maanden!=null && d!=null && r.maanden>=d) : r.status==='ok';
     voorwaarden.push({key:v.key, naam:v.label||r.naam, gehaald, ontbreekt:false,
       waarde:beleggenWaarde(v.key,r), drempel:v.drempel(), status:gehaald?r.status:'tekort', eenheid:r.eenheid});
   }
@@ -4782,7 +4932,7 @@ function maandBeleggenRegel(R){
      die je niet uit een zichtbare rij kunt aflezen. Zegt de rij van de blokkade zelf al 'tekort',
      dan zwijgt hij.
      De buffer is de uitzondering: die haalt de voorwaarde ook bij status 'let op' (v154, boven de
-     drie maanden maar onder je eigen richtbedrag). 'Let op' en 'haalt de voorwaarde' zijn dan twee
+     zijn eigen drempel maar onder je eigen richtbedrag). 'Let op' en 'haalt de voorwaarde' zijn dan twee
      verschillende oordelen, dus daar herhaalt hij niets. */
   if(!B.klaar && B.blokkade && B.blokkade.key!=='buffer'){
     const rij=(Array.isArray(R)?R:[]).find(x=>x.key===B.blokkade.key);
@@ -4795,7 +4945,7 @@ function maandBeleggenRegel(R){
      zegt het nu zelf.
      GEEN LOGICAWIJZIGING en geen tweede bron: de vlag is r.opTempo, hetzelfde veld dat de rij en de
      suggestie lezen, en de dot blijft de status van de blokkade volgen. Alleen de FORMULERING is van
-     hier (v222): die uit de gevolgzin van de bufferregel overnemen zou een zin over drie maanden
+     hier (v222): die uit de gevolgzin van de bufferregel overnemen zou een zin over de gemeten norm
      meting in een kaart over een drempel zetten. */
   const groeit = !B.klaar && B.blokkade && B.blokkade.key==='buffer'
     && !!((Array.isArray(R)?R:[]).find(x=>x.key==='buffer')||{}).opTempo;
@@ -4825,9 +4975,38 @@ function openBeleggenVoorwaarden(){
     ${B.voorwaarden.map(rij).join('')}
     <div class="small muted" style="margin-top:12px;line-height:1.5">${B.volledig
       ? (B.klaar ? 'Alle drie gehaald.' : `Eerst ${esc(B.blokkade.naam)}.`)
-      : 'Zolang een van de drie niet te beoordelen is, staat er geen uitkomst.'}</div>`;
+      : 'Zolang een van de drie niet te beoordelen is, staat er geen uitkomst.'}</div>
+    ${beleggenDrempelRij()}`;
   showSheetBg();
 }
+/* v305: DE DREMPEL VOOR BELEGGEN IS EEN EIGEN KEUZE (besluit 4), en hij staat hier en niet in de
+   noodfonds-sheet: dit is de enige plek waar de vraag "mag ik beleggen" wordt gesteld, en de rij
+   erboven leest hem al als zijn drempel.
+   HIJ VALT TERUG OP DE ONDERGRENS en niet op een eigen constante, dus wie niets kiest houdt de stand
+   van v304 (toen was dat dezelfde vaste drie). Dat is ook waarom de rij dat met zoveel woorden zegt:
+   een leeg veld met alleen een placeholder zou beloven dat er niets geldt (v59/v73).
+   GEEN OORDEEL EN GEEN AANBEVELING bij welk getal dan ook: deze laag stelt vast (v154/v187). */
+function beleggenDrempelRij(){
+  const v=SET.beleggenDrempel, eigen=(v!=null&&v!==''), n=beleggenDrempel(), norm=bufferNorm();
+  const veld=`<div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid ${eigen?'var(--teal)':'var(--line)'};border-radius:9px;padding:4px 9px;width:118px">
+      <input id="beleggenDrempel" type="number" inputmode="numeric" min="1" max="24" step="1" value="${eigen?Math.round(+v):''}" placeholder="${norm!=null?norm:'kies'}" onchange="setBeleggenDrempel(this.value)"
+        style="flex:1;min-width:0;background:transparent;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;padding:0">
+      <span class="small muted">mnd</span></div>`;
+  return `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:11px">
+    <div class="row" style="gap:8px;align-items:center"><label class="small muted" style="flex:1;text-align:left">Buffer die je hiervoor wilt hebben</label>${veld}</div>
+    <div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">${eigen
+      ? `De bufferrij hierboven toetst tegen ${n} maanden. <span style="color:var(--teal);cursor:pointer" onclick="resetBeleggenDrempel()">terug naar je ondergrens</span>`
+      : (norm!=null
+        ? `Leeg = je ondergrens, nu ${norm} maanden. Wil je hier een ruimere buffer voor, vul dan een eigen aantal in.`
+        : 'Je hebt nog geen ondergrens voor je buffer gekozen, dus er is hier ook geen grens om tegen te toetsen. Kies er een in de noodfonds-sheet, of vul hier een eigen aantal in.')}</div></div>`;
+}
+function setBeleggenDrempel(v){
+  const s=(''+v).trim(), n=Math.round(+s);
+  if(s===''||!isFinite(n)||n<=0) delete SET.beleggenDrempel;
+  else SET.beleggenDrempel=Math.min(n,24);
+  save(); openBeleggenVoorwaarden(); try{renderMaand();}catch(_){}
+}
+function resetBeleggenDrempel(){ delete SET.beleggenDrempel; save(); openBeleggenVoorwaarden(); try{renderMaand();}catch(_){} }
 /* ===== De verdeelregel voor onregelmatig inkomen (v155) =====
  * Bonus, vakantiegeld, dertiende maand of een nabetaling landt zonder regel stil in vrij
  * besteedbaar. De regel wordt daarom vooraf vastgelegd, terwijl het geld er nog niet is: een vast
@@ -4866,9 +5045,15 @@ function meevallerNodig(key, rijen){
   const r = (rijen || []).find(x => x.key === key);
   if (key === 'dekking') return r ? Math.max(Math.round(r.tekortPerMaand || 0), 0) : null;
   if (key === 'buffer'){
+    /* v305: dezelfde teller als bufferMaanden() en dezelfde grens als de bufferregel. Las hij het
+       rekeningsaldo terwijl de deling de toewijzing leest, dan komen het getal op Grip en de euro's
+       die de norm nog vraagt uit twee tellers (v104). */
     let M = null; try { M = noodfondsModel(); } catch(_){ return null; }
-    if (!M || M.spaar == null || !(M.essCrisis > 0)) return null;
-    return Math.max(Math.round(MAAND_DREMPEL.bufferKritiek * M.essCrisis - M.spaar), 0);
+    const sp = bufferTeller();
+    if (!M || sp == null || !(M.essCrisis > 0)) return null;
+    const nrm = bufferNorm();
+    if (nrm == null) return null;                        // v305: geen gekozen grens, dus geen bedrag (v173)
+    return Math.max(Math.round(nrm * M.essCrisis - sp), 0);
   }
   if (key === 'doel'){
     let d = null; try { d = maandDoel(); } catch(_){ return null; }
@@ -5085,8 +5270,10 @@ function maandTekort(r){
   if(r.key==='dekking') return t>0?{bedrag:t, soort:'stand'}:null;
   if(r.key==='doel')    return t>0?{bedrag:t, soort:'maand'}:null;
   if(r.key==='buffer'){
-    let doel=0, spaar=null;
-    try{ const nf=noodfondsModel(); doel=Math.round(+nf.doel||0); spaar=(nf.spaar!=null)?Math.round(+nf.spaar):null; }catch(_){}
+    // v305: de derde lezer van de teller, en hij gaat mee met de andere twee (v104).
+    let doel=0;
+    try{ doel=Math.round(+noodfondsModel().doel||0); }catch(_){}
+    const spaar=bufferTeller();
     if(!(doel>0)||spaar==null) return null;
     const gat=Math.max(doel-spaar,0);
     return gat>0?{bedrag:gat, soort:'totaal'}:null;
@@ -6640,20 +6827,35 @@ function spaarOver(){
 function spaarOverItems(P){
   return (P||allocatePlan()).filter(x=>(x.type==='goal'||x.type==='noodfonds')&&(+x.gespaard||0)>0).reverse();
 }
+/* v305: WIE ER WERKELIJK INLEVERT, op een plek. Deze lus stond binnen `spaarOverLine()` en had er
+   een tweede lezer bij nodig: de bufferregel op Grip zegt sinds v305 van welk doel het verschil zou
+   komen (besluit 2), en dat is dezelfde volgorde en hetzelfde bedrag. Twee kopieen lopen bij de
+   eerste wijziging uiteen (v104).
+   NIET DE HELE RIJ: wie niets hoeft in te leveren hoort niet in de zin, anders noemt de melding een
+   post die ongemoeid blijft. De volgorde is die van `spaarOverItems()` en `spaarOverAf()` houdt hem
+   aan, dus wat de zin noemt is wat de knop doet. */
+function spaarOverRaakt(P){
+  const V=spaarOver(); if(!(V.over>0)) return [];
+  const raakt=[]; let rest=V.over;
+  for(const it of spaarOverItems(P)){
+    if(rest<=0) break;
+    const af=Math.min(Math.max(+it.gespaard||0,0),rest);
+    if(af<=0) continue;
+    raakt.push({id:it.id, type:it.type, naam:it.naam, af}); rest-=af;
+  }
+  return raakt;
+}
+/* De naam waaronder een plan-item in zo'n zin staat. Het noodfonds heet geen "Noodfonds" maar "je
+   noodfonds", en dat staat een keer omdat twee oppervlakken hem lezen. */
+function spaarOverNaam(x){ return x.type==='noodfonds'?'je noodfonds':esc(x.naam); }
 /* De melding. Mut en niet amber (v78/v93): er is niets mis met je geld, er staat een cijfer dat
    achterloopt op je saldo. Zegt met zoveel woorden waar het vanaf gaat, want als dat het noodfonds
    is wil je dat weten voordat je tikt: dat is de post die je het minst wilt verlagen. */
 function spaarOverLine(P){
   const V=spaarOver(); if(!(V.over>0)) return '';
-  const rij=spaarOverItems(P); if(!rij.length) return '';
   const kort=isMode('rustig');
-  /* Wie er werkelijk inlevert, in dezelfde volgorde als spaarOverAf() aanhoudt. Niet de hele rij:
-     wie niets hoeft in te leveren hoort niet in de zin, anders noemt de melding een post die
-     ongemoeid blijft. */
-  const raakt=[]; let rest=V.over;
-  for(const it of rij){ if(rest<=0) break; const af=Math.min(Math.max(+it.gespaard||0,0),rest); if(af<=0) continue; raakt.push(it); rest-=af; }
-  const noem=x=>x.type==='noodfonds'?'je noodfonds':esc(x.naam);
-  const naam=opsomming(raakt.map(noem));
+  const raakt=spaarOverRaakt(P); if(!raakt.length) return '';
+  const naam=opsomming(raakt.map(spaarOverNaam));
   const nfRaakt=raakt.some(x=>x.type==='noodfonds');
   const anderen=raakt.filter(x=>x.type!=='noodfonds').length;
   const txt=kort
@@ -8770,6 +8972,16 @@ function noodfondsModel(){
   // (hero, plan-item, mijlpaal, coach) hetzelfde getal ziet. doelAuto blijft naast doel staan
   // zodat de sheet eerlijk kan tonen wat de schatting nú zou zeggen.
   const essNormaal=vast+varNormaal, maanden=nfMaanden(), doelAuto=Math.round(essCrisis*maanden);
+  /* v305: DE NORM RAAKT HET DOEL HIER NIET, en dat is een besluit en geen omissie. De ondergrens kan
+     je noodfonds optillen (besluit 3), maar dat gebeurt als HANDELING op het moment dat jij een norm
+     kiest of wijzigt, met het gevolg in beeld vóór het vastzetten. Zou het model het zelf doen, dan
+     verzet een grens die je niet hebt gekozen je eigen doel, en dat is precies de default die
+     MECHANISM_SPEC.defaultEffect verbiedt.
+     GEMETEN WAT DIE TAK KOSTTE toen hij hier wel stond: 42 van de 3054 tests vielen om, allemaal op
+     fixtures met een doel onder drie maanden essCrisis, dus het is geen randgeval maar de normale
+     stand van wie een eigen bedrag invult. De voorstel-functie bij de keuze rekent het voor en de
+     vastzet-handeling voert het uit; hun namen staan hier niet, want een bronzoekende test kan een
+     comment niet van een aanroep onderscheiden (v276). */
   const doelVast=nfDoelVast(), doel=(doelVast!=null)?doelVast:doelAuto;
   // voortgang uit dezelfde bron als de hero en het plan-item (v67/v68): spaarrekening + extra
   // spaargeld, met terugval op je totale saldo. null = saldi onbekend, dan tonen we geen percentage.
@@ -8821,7 +9033,8 @@ function renderNfSheet(){
       <div style="font-size:32px;font-weight:800;letter-spacing:-1px;margin:4px 0">${euro0(M.doel)}</div>
       <div class="small muted">${euro0(M.essCrisis)}/mnd essentieel</div>
       <div class="chips" id="nfMaandChips" style="margin-top:10px">${chips}</div>
-      ${nfDoelVastRij(M)}</div>
+      ${nfDoelVastRij(M)}
+      ${bufferNormRij(M)}</div>
     ${nfAllocCard()}
     ${listCard}
     <div style="height:8px"></div>`;
@@ -8829,6 +9042,86 @@ function renderNfSheet(){
 /* De keuze tussen "schat het" en "ik bepaal het". Default is de schatting: laat je dit veld leeg,
    dan verandert er niets aan het oude gedrag. Staat er een bedrag, dan zeggen we er eerlijk bij
    wat de schatting nú zou zeggen, en is het in één tik terug te draaien (MECHANISM_SPEC.defaultEffect). */
+/* v305: DE ONDERGRENS IS EEN EIGEN KEUZE (besluit 3), en hij staat hier omdat hij je doel kan
+   optillen. Tot v304 was drie maanden een vaste constante in `MAAND_DREMPEL` die twee dingen besliste:
+   wanneer de bufferregel op Grip een beslissing vraagt, en sinds deze ronde ook of je doel omhoog gaat.
+   DAT GETAL BESTAAT NIET MEER, OOK NIET ALS DEFAULT. Zolang je niets kiest is er geen grens, en dan
+   zegt de bufferregel wat hij meet en vraagt hij hierom, in plaats van een tekort te melden tegen een
+   grens die niemand heeft gekozen (v59/v73/v173).
+   HIJ IS NIET HETZELFDE GETAL ALS DE CHIPS EROVEN, en de rij zegt dat met zoveel woorden: die chips
+   zijn je RICHT (hoeveel maanden je wilt hebben, en daarmee de schatting van het doel), dit is de
+   ONDERGRENS (waaronder de app zegt dat je buffer te weinig opvangt). Zonder dat onderscheid staan er
+   twee maanden-velden in een kaart die hetzelfde lijken te vragen (v91).
+   HET GEVOLG VOOR JE DOEL STAAT ER VOOR HET VASTZETTEN, met beide bedragen. Een keuze die je doel
+   verzet zonder dat je dat vooraf ziet is precies wat dit project verbiedt; ligt je doel al op of boven
+   de gekozen norm, dan zegt de rij dat er niets aan je doel verandert.
+   DE KEUZE IS EEN TUSSENSTAND EN GEEN DATA: `_normKeuze` staat in het geheugen, net als `_nfSheet`,
+   want een half ingevulde keuze hoort niet in `SET` te belanden. */
+let _normKeuze=null;
+function normKeuzeZet(v){
+  const t=(''+v).trim(), n=Math.round(+t);
+  _normKeuze=(t===''||!isFinite(n)||n<=0)?null:Math.min(n,24);
+  renderNfSheet();
+}
+/* Vastzetten doet de twee dingen die bij elkaar horen: de grens opslaan en, als hij het doel optilt,
+   dat doel zetten. DE OUDE WAARDE GAAT MEE IN DE VLAG, anders is de knop niet in een tik terug te
+   draaien en is zijn belofte onwaar (v288). Ligt je doel er al boven, dan wordt er aan het doel niets
+   geschreven en blijft er dus ook niets terug te draaien. */
+function normVastzetten(){
+  const n=_normKeuze; if(!(n>0)) return;
+  const V=normDoelVoorstel(n);
+  if(V&&V.tilt){
+    SET.bufferNormDoelVoor={doel:(SET.nfDoelVast!=null&&SET.nfDoelVast!=='')?Math.round(+SET.nfDoelVast):null, norm:(SET.bufferNorm!=null?SET.bufferNorm:null)};
+    SET.nfDoelVast=V.naar;
+  }else{
+    delete SET.bufferNormDoelVoor;
+  }
+  SET.bufferNorm=n; _normKeuze=null;
+  save(); renderNfSheet(); try{renderVooruit();}catch(_){} try{renderMaand();}catch(_){}
+}
+/* Terugdraaien zet beide terug: de grens en het doel dat hij optilde. Zonder de grens mee terug te
+   zetten zou de rij een norm tonen waarvan het gevolg net is weggehaald. */
+function normTerugdraaien(){
+  const v=SET.bufferNormDoelVoor;
+  if(v&&typeof v==='object'){
+    if(v.doel!=null) SET.nfDoelVast=v.doel; else delete SET.nfDoelVast;
+    if(v.norm!=null) SET.bufferNorm=v.norm; else delete SET.bufferNorm;
+  }
+  delete SET.bufferNormDoelVoor; _normKeuze=null;
+  save(); renderNfSheet(); try{renderVooruit();}catch(_){} try{renderMaand();}catch(_){}
+}
+function bufferNormWis(){
+  delete SET.bufferNorm; delete SET.bufferNormDoelVoor; _normKeuze=null;
+  save(); renderNfSheet(); try{renderVooruit();}catch(_){} try{renderMaand();}catch(_){}
+}
+function bufferNormRij(M){
+  const nu=bufferNorm(), keuze=_normKeuze, terug=SET.bufferNormDoelVoor;
+  const veldWaarde=(keuze!=null)?keuze:(nu!=null?nu:'');
+  const veld=`<div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid ${(keuze!=null||nu!=null)?'var(--teal)':'var(--line)'};border-radius:9px;padding:4px 9px;width:118px">
+      <input id="bufferNorm" type="number" inputmode="numeric" min="1" max="24" step="1" value="${veldWaarde}" placeholder="kies" onchange="normKeuzeZet(this.value)"
+        style="flex:1;min-width:0;background:transparent;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;padding:0">
+      <span class="small muted">mnd</span></div>`;
+  let onder='';
+  if(keuze!=null && keuze!==nu){
+    const V=normDoelVoorstel(keuze);
+    const gevolg=!V ? 'Er is nog niet genoeg bekend om te zeggen wat dit met je doel doet.'
+      : V.tilt ? `Vastzetten tilt je noodfonds op van ${euro0(V.nu)} naar ${euro0(V.naar)}, want ${keuze} maanden van ${euro0(V.ess)} vraagt dat.`
+      : `Je doel van ${euro0(V.nu)} ligt daar al op of boven, dus er verandert niets aan je doel.`;
+    onder=`<div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">${gevolg}</div>
+      <div class="small" style="margin-top:6px;text-align:left"><span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="normVastzetten()">vastzetten ›</span>
+      <span style="color:var(--mut2);cursor:pointer;margin-left:12px" onclick="normKeuzeZet('')">laat staan</span></div>`;
+  }else if(nu==null){
+    onder=`<div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">Zonder ondergrens zegt de bufferregel op Grip alleen hoeveel maanden je buffer dekt, en niet of dat genoeg is. Dit is niet hetzelfde als de maanden hierboven: die bepalen hoe hoog je doel staat.</div>`;
+  }else{
+    const tilt=(terug&&typeof terug==='object')
+      ? ` Je noodfonds is hiervoor opgetild${terug.doel!=null?` van ${euro0(terug.doel)}`:''} naar ${euro0(M.doel)}. <span style="color:var(--teal);cursor:pointer" onclick="normTerugdraaien()">terugdraaien</span>`
+      : ` <span style="color:var(--teal);cursor:pointer" onclick="bufferNormWis()">grens weghalen</span>`;
+    onder=`<div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">Onder deze grens vraagt je buffer op Grip een beslissing; erboven is hij in orde. Dit is niet hetzelfde als de maanden hierboven: die bepalen hoe hoog je doel staat.${tilt}</div>`;
+  }
+  return `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:11px">
+    <div class="row" style="gap:8px;align-items:center"><label class="small muted" style="flex:1;text-align:left">Ondergrens in maanden</label>${veld}</div>
+    ${onder}</div>`;
+}
 function nfDoelVastRij(M){
   const v=M.doelVast;
   const veld=`<div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid ${v!=null?'var(--teal)':'var(--line)'};border-radius:9px;padding:4px 9px;width:118px">
@@ -12978,7 +13271,7 @@ function setBudget(){
     <div class="small" style="margin-top:8px">Nu: <b>${euro0(monthBudget(baseIncome()))}</b> besteden · <b style="color:var(--teal)">${euro0(monthlySavingTarget())}</b> sparen per maand.</div>
     <label class="fld">Meevallers: deel dat vrij blijft (%)</label>
     <input type="number" min="0" max="100" value="${SET.meevallerVrijPct!=null&&SET.meevallerVrijPct!==''?SET.meevallerVrijPct:''}" placeholder="${MEEVALLER_VRIJ_DEFAULT}" oninput="SET.meevallerVrijPct=this.value===''?'':numIn(this.value);save();">
-    <div class="small muted" style="margin-top:6px">Bij bonus, vakantiegeld of een nabetaling blijft <b>${meevallerVrijPct()}%</b> vrij besteedbaar. De rest gaat naar de eerste voorwaarde die nog niet gehaald is: eerst je reserveringen tot ze gedekt zijn, dan je buffer tot ${MAAND_DREMPEL.bufferKritiek} maanden, dan je aankoopdoel. Je legt de regel nu vast; bij binnenkomst zie je het voorstel en bevestig je zelf per post. <span style="color:var(--teal);cursor:pointer" onclick="openMeevaller(0,'handmatig')">Nu doorrekenen ›</span></div>
+    <div class="small muted" style="margin-top:6px">Bij bonus, vakantiegeld of een nabetaling blijft <b>${meevallerVrijPct()}%</b> vrij besteedbaar. De rest gaat naar de eerste voorwaarde die nog niet gehaald is: eerst je reserveringen tot ze gedekt zijn, dan je buffer tot je eigen ondergrens${bufferNorm()!=null?` van ${bufferNorm()} maanden`:', zodra je die hebt gekozen'}, dan je aankoopdoel. Je legt de regel nu vast; bij binnenkomst zie je het voorstel en bevestig je zelf per post. <span style="color:var(--teal);cursor:pointer" onclick="openMeevaller(0,'handmatig')">Nu doorrekenen ›</span></div>
     <label class="fld">Nachtje over slapen vanaf (€)</label>
     <input type="number" min="0" step="5" value="${SET.slaapDrempel!=null&&SET.slaapDrempel!==''?SET.slaapDrempel:''}" placeholder="${SLAAP_DREMPEL_DEFAULT}" oninput="SET.slaapDrempel=this.value===''?'':Math.max(0,numIn(this.value)||0);save();">
     <div class="small muted" style="margin-top:6px">Boven dit bedrag stelt de koopcheck voor om er een nacht over te slapen. Je kiest zelf: parkeren tot morgen, of meteen de uitkomst zien. Op ${euro0(0)} staat de stap uit.</div>
@@ -14009,15 +14302,22 @@ function diagGrendel(){
   L.push('');
   L.push('SET.nfToegewezen: '+_dV(()=>SET.nfToegewezen)+' | migrated: '+_dV(()=>SET.nfToegewezenMigrated));
   L.push('SET.nfDoelVast: '+_dV(()=>SET.nfDoelVast));
+  L.push('SET.bufferNorm: '+_dV(()=>SET.bufferNorm)+'   bufferNorm(): '+_dT(()=>bufferNorm(),'?')
+    +'   (leeg = geen gekozen grens, dus geen oordeel)');
+  L.push('SET.beleggenDrempel: '+_dV(()=>SET.beleggenDrempel)+'   beleggenDrempel(): '
+    +_dT(()=>beleggenDrempel(),'?')+'   (leeg = je ondergrens)');
   L.push('noodfondsModel().doel: '+_dV(()=>Math.round(noodfondsModel().doel||0)));
   L.push('noodfondsModel().spaar: '+_dV(()=>noodfondsModel().spaar));
   L.push('spaarSaldo(): '+_dV(()=>spaarSaldo()));
   L.push('te gaan volgens het PLAN   (doel - nfToegewezen): '+_dV(()=>{
     const d=Math.round(noodfondsModel().doel||0), t=Math.max(Math.round(+SET.nfToegewezen||0),0);
     return Math.max(d-t,0); }));
-  L.push('te gaan volgens de BUFFER  (doel - spaarsaldo):   '+_dV(()=>{
+  L.push('te gaan volgens het SALDO  (doel - spaarsaldo):   '+_dV(()=>{
     const d=Math.round(noodfondsModel().doel||0), s=spaarSaldo();
     return s.missing?'onbekend':Math.max(d-Math.round(s.cur),0); }));
+  L.push('SINDS v305 LEEST DE BUFFERREGEL DE EERSTE VAN DIE TWEE, en dat staat er omdat de tweede regel');
+  L.push('anders als de bufferkant leest: bufferMaanden() deelt bufferTeller() (de toewijzing) door');
+  L.push('essCrisis, en het saldo is alleen nog de controle. Blok 14 schrijft beide kanten uit.');
   return L;
 }
 
@@ -16941,7 +17241,13 @@ function diagBuffernorm(){
   L.push('niet na te rekenen. Blok 8 zegt WELKE rekeningen er zijn; hier staat welke daarvan als');
   L.push('spaargeld TELLEN, en dat is een andere vraag.');
   L.push('');
-  L.push('1. DE TELLER: spaarSaldo().cur');
+  L.push('SINDS v305 IS DE TELLER EEN ANDERE, en dit blok zegt dat in zijn eigen uitvoer omdat de');
+  L.push('secties hieronder anders twee antwoorden onder gelijkende koppen geven (v287). De teller is');
+  L.push('bufferTeller(), de TOEWIJZING aan je noodfonds uit planMap(); het SALDO van sectie 1 is sinds');
+  L.push('die ronde de CONTROLE (besluit 2) en niet meer de teller. Beide staan er, want een verschil');
+  L.push('tussen het getal op Grip en wat je in je bank-app ziet kan uit elk van de twee komen.');
+  L.push('');
+  L.push('1. HET SPAARSALDO: spaarSaldo().cur, tot v304 de teller en sinds v305 de controle');
   L.push('   de selectie komt uit isSavingsAcc(): een eigen keuze in SET.savingsAcc wint, en anders');
   L.push('   beslist de standaard op de laatste cijfers van de rekening-id OF van de iban ('
     +_dT(()=>SAV_DEFAULT_ENDS.join(' / '),'?')+').');
@@ -16997,10 +17303,13 @@ function diagBuffernorm(){
     +((S && Math.round(verwacht*100)===Math.round((+S.cur||0)*100))?'JA':'NEE (blok '+verwacht+', app '+(S?S.cur:'?')+')'));
   L.push('   DE SOM WORDT EEN KEER AFGEROND EN NIET PER RIJ (v271): tel je de afgeronde rijen hierboven');
   L.push('   op, dan kun je een euro naast dit getal uitkomen. Daarom staan de rijen met centen.');
-  L.push('   ONBEKEND SALDO OP EEN MEEGETELDE REKENING ZET DE HELE TELLER OP NULL: noodfondsModel().spaar');
-  L.push('   leest spaarSaldo().missing en geeft dan null, bufferMaanden() geeft null, en dan staat de');
-  L.push('   bufferregel NIET op Grip. meegeteld zonder bekend saldo: '+(meetel.length-bekend.length));
-  L.push('   noodfondsModel().spaar (de teller van de deling): '+_dV(()=>noodfondsModel().spaar));
+  L.push('   ONBEKEND SALDO OP EEN MEEGETELDE REKENING HOUDT DE BUFFERREGEL VAN GRIP AF, en sinds v305');
+  L.push('   om een andere reden dan ervoor: de teller is dan bekend (het is een toewijzing), maar de');
+  L.push('   CONTROLE kan niet lopen, en een toewijzing die de app niet kan nalopen zou vol kunnen lezen');
+  L.push('   op geld dat er niet is (v168). bufferMaanden() geeft daarom null zodra spaarSaldo().missing');
+  L.push('   waar is. meegeteld zonder bekend saldo: '+(meetel.length-bekend.length));
+  L.push('   noodfondsModel().spaar: '+_dV(()=>noodfondsModel().spaar)
+    +'   dit is NIET meer de teller van de deling, alleen nog de voortgang in de noodfonds-sheet');
   /* v303: DE DERDE OORZAAK VAN EEN VERSCHIL IS EEN BEWEGING EN GEEN STAND. Een rekening die niet
      meetelt en een saldo van een oudere dag zijn uit sectie 1 te lezen; een ONTTREKKING is dat niet, want
      die verlaagt het saldo zonder dat er iets aan de rij te zien is. DE BRON IS savedNet() EN savedTx()
@@ -17085,7 +17394,7 @@ function diagBuffernorm(){
     L.push('   gemeld, niet gerepareerd: het is een label dat meer belooft dan het getal draagt.');
     L.push('');
     L.push('3. DE DELING, EN HET VENSTER VAN DE AFRONDING');
-    const sp=_dT(()=>noodfondsModel().spaar,null), ess=Math.round(M.essCrisis||0);
+    const sp=_dT(()=>bufferTeller(),null), ess=Math.round(M.essCrisis||0);
     const bm=_dT(()=>bufferMaanden(),null);
     L.push('   bufferMaanden(): '+(bm==null?'null, dus de rij staat NIET op Grip':bm.toFixed(4)));
     if(bm!=null && ess>0){
@@ -17093,21 +17402,35 @@ function diagBuffernorm(){
       const lo=Math.ceil((d-0.05)*ess), hi=Math.ceil((d+0.05)*ess)-1;
       L.push('   Grip toont er '+String(d).replace('.',',')+' van, want de weergave is Math.round(bm*10)/10.');
       L.push('   OM OP DIT CIJFER UIT TE KOMEN MOET DE TELLER TUSSEN '+lo+' EN '+hi+' LIGGEN, bij noemer '+ess+'.');
-      L.push('   Valt je eigen getal daarbuiten, dan is dat niet de teller die de app gebruikt, en zeggen de');
-      L.push('   rijen van sectie 1 waar het verschil zit. VIJF KANDIDATEN: een rekening die niet meetelt,');
-      L.push('   een handmatig saldo dat voorgaat op dat van de bank, een saldo van een oudere dag,');
-      L.push('   extraSavings erbovenop, of een ONTTREKKING die het saldo al verlaagde (de beweging in');
-      L.push('   sectie 1).');
+      L.push('   Valt je eigen getal daarbuiten, dan is dat niet de teller die de app gebruikt. DE TELLER IS');
+      L.push('   SINDS v305 EEN TOEWIJZING, dus hij komt uit SET.nfToegewezen geklemd op het doel, en niet');
+      L.push('   uit de saldi van sectie 1: die vijf kandidaten (een rekening die niet meetelt, een');
+      L.push('   handmatig saldo, een saldo van een oudere dag, extraSavings, een onttrekking) verklaren nu');
+      L.push('   een verschil met je bank-app en niet meer een verschil in dit cijfer.');
       L.push('   teller nu: '+sp+'   noemer nu: '+ess+'   '+sp+' / '+ess+' = '+(sp/ess).toFixed(4));
-      L.push('   de grenzen die de rij leest: kritiek onder '+_dT(()=>MAAND_DREMPEL.bufferKritiek,'?')
-        +' maanden, en je eigen richt staat op '+_dT(()=>nfMaanden(),'?')+'.');
+      L.push('   de klem van planMap() staat erbij, want die is het PLAFOND van deze deling: gespaard is');
+      L.push('   Math.min(nfToegewezen, doel), dus bm kan niet boven doel/essCrisis = '
+        +(ess>0?(Math.round(+M.doel||0)/ess).toFixed(4):'?')+' komen, ook niet als er meer op de rekening staat.');
+      L.push('   SET.nfToegewezen: '+_dV(()=>SET.nfToegewezen)+'   doel: '+Math.round(+M.doel||0)
+        +'   geklemd: '+_dV(()=>bufferTeller()));
+      const nrm=_dT(()=>bufferNorm(),null);
+      L.push('   de grenzen die de rij leest: de ondergrens is '
+        +(nrm==null?'NIET GEKOZEN, dus de rij velt geen oordeel en staat op onbekend':nrm+' maanden')
+        +', je eigen richt staat op '+_dT(()=>nfMaanden(),'?')+', en de beleggen-rij toetst tegen '
+        +_dT(()=>{ const d=beleggenDrempel(); return d==null?'geen grens':d+' maanden'; },'?')+'.');
+      L.push('   DE NORM TILT HET DOEL NIET ZELF OP (besluit 3): dat gebeurt als handeling bij het kiezen.');
+      L.push('   wat een keuze nu met je doel zou doen: '+_dT(()=>{
+        const V=normDoelVoorstel(nrm||3);
+        return V?('bij '+V.maanden+' maanden van '+V.ess+' wordt het doel '+V.naar+' tegen '+V.nu+' nu, '
+          +(V.tilt?'dus optillen':'dus geen wijziging')):'niet te bepalen'; },'?'));
     }
   }
   L.push('');
-  L.push('4. WAT DE VOLGENDE RONDE NODIG HEEFT, alleen gemeten en nergens gelezen');
-  L.push('   De teller is vandaag het SALDO van je spaarrekeningen, en daar staat ook het geld van je');
-  L.push('   doelen op. Dan telt dat geld mee als buffer. Dit zijn de bedragen die op Plan aan een');
-  L.push('   bestemming zijn TOEGEWEZEN, uit planMap(), naast dat saldo:');
+  L.push('4. DE CONTROLE VAN BESLUIT 2, en deze wordt sinds v305 WEL gelezen');
+  L.push('   Tot v304 stond hier de meting die deze ronde droeg: de teller was het saldo, en daar staat');
+  L.push('   ook het geld van je doelen op. Sinds v305 is de teller de toewijzing, en is dit de controle');
+  L.push('   erop: is de som van de toewijzingen hoger dan het saldo, dan telt de buffer niet als vol.');
+  L.push('   De bedragen komen uit planMap(), het saldo uit sectie 1:');
   const PM=_dT(()=>planMap(),{});
   let somToe=0;
   for(const k of Object.keys(PM)){
@@ -17123,6 +17446,22 @@ function diagBuffernorm(){
   L.push('   het saldo niet draagt. Aflos-items staan er niet bij: hun voortgang is afgeloste schuld en');
   L.push('   geen geld op een rekening. De reserveringenrekening hangt uitdrukkelijk NIET aan');
   L.push('   isSavingsAcc() (v128), en of dat op dit toestel ook zo uitvalt staat in sectie 1.');
+  const TB=_dT(()=>toewijzingBovenSaldo(),null);
+  const SO=_dT(()=>spaarOver(),null);
+  L.push('   wat de app ervan zegt: toewijzingBovenSaldo() = '
+    +(TB?('verschil '+TB.verschil+' (som '+TB.som+' tegen saldo '+TB.saldo+')'):'null, dus de controle komt door'));
+  L.push('   DIE MEETWAARDE KOMT UIT spaarOver() EN NIET UIT EEN EIGEN SOM (v104): '
+    +(SO?('over '+SO.over+', toegewezen '+SO.toegewezen+', saldo '+SO.saved):'FOUT'));
+  L.push('   sluit aan op de som hierboven: '
+    +((SO && SO.toegewezen===somToe)?'JA':'NEE (blok '+somToe+', spaarOver() '+(SO?SO.toegewezen:'?')+')')
+    +'   die twee kunnen alleen uiteenlopen als planMap() een bestemming draagt die niet in SET.goals staat');
+  L.push('   TWEE WEERGAVEN, EEN DETECTIE (v235): Plan draagt de regel met de handeling');
+  L.push('   (spaarOverLine(), de tik die het verschil weghaalt), Grip houdt de bufferregel van ok af en');
+  L.push('   zegt van welk doel het verschil zou komen. Die volgorde komt uit spaarOverRaakt():');
+  const RK=_dT(()=>spaarOverRaakt(),[]);
+  if(!RK.length) L.push('     (geen: er is niets meer toegewezen dan er staat, of er valt niets weg te halen)');
+  for(const r of RK) L.push('     '+String(r.naam||r.id).slice(0,26).padEnd(27)+'levert in '+String(r.af).padStart(8)
+    +'   '+(r.type==='noodfonds'?'(je noodfonds, als laatste)':'(doel)'));
   L.push('   DIT BLOK BESLIST NIETS EN VERANDERT NIETS (v244).');
   return L;
 }const DIAG_BLOKKEN=[

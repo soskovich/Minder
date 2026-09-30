@@ -209,40 +209,100 @@ genoemde versietag.)*
   bevestiging leest: `essCrisis` telt precies de bedragen op die ook een rij krijgen. Hij staat er om een rij
   te vangen die uit de LIJST valt terwijl zijn bedrag in de som blijft, en dat is dezelfde keuze als bij de
   bakken van `v301`.
-- **DE BUFFERNORM-RONDE: ONTWERP VASTGELEGD, NIET GEBOUWD** (`v302`, aangescherpt bij `v303`): staan alle
-  spaardoelen op EEN spaarrekening, dan telt het geld voor die doelen vandaag als buffer mee, want de teller
-  van `bufferMaanden()` is dat rekeningsaldo. Vier besluiten, en ze komen van de gebruiker:
-  (1) DE TELLER WORDT WAT PLAN AAN HET NOODFONDS HEEFT TOEGEWEZEN, dezelfde bron als de noodfonds-regel op
-  Plan, en dus GEEN tweede afleiding uit het saldo. Plan en Grip tonen daarmee hetzelfde getal. Die bron
-  bestaat al: `planMap()[PLAN_NF].gespaard`, dat is `SET.nfToegewezen` geklemd op het doel.
-  (2) DE CONTROLE IS HET SALDO: is de som van wat aan de doelen is toegewezen HOGER dan het saldo van de
-  spaarrekening, dan zeggen Plan EN Grip dat, met de vraag van welk doel het verschil komt. Tot die keuze
-  telt de buffer NIET als vol.
-  (3) DE BUFFERNORM IS DE ONDERGRENS, niet het doel. Een eigen noodfonds dat hoger ligt blijft het doel op
-  Plan zolang het niet onder de norm zakt; dat mechanisme bestaat al als `nfDoelVast()` (`v101`).
-  (4) DE DREMPEL VOOR BELEGGEN IS EEN EIGEN KEUZE, los van de buffernorm.
-  VIER DINGEN DIE UIT DE BRON VOLGEN EN DIE DE RONDE MOET RESPECTEREN, nagelezen en niet gemeten:
-  `M.spaar` HEEFT DRIE LEZERS IN DEZE VRAAG, en ze moeten samen mee of samen blijven (`v104`):
-  `bufferMaanden()` (de deling), `meevallerNodig('buffer')` (`bufferKritiek * essCrisis - spaar`, de euro's
-  die de kritieke buffer nog vraagt) en de buffer-tak van de verdeelregel (`doel - spaar`). Verlegt alleen de
-  eerste zijn teller, dan komen het getal op Grip en "wat is er nodig" uit twee tellers.
-  DE KLEM VAN `planMap()` GAAT DAN MEE: `gespaard` is `Math.min(nfToegewezen, doel)`, dus de buffer in
-  maanden kan straks niet meer boven `doel / essCrisis` komen, ook niet als er meer op de rekening staat.
-  Of die klem hier juist is, is een keuze die vooraf hoort te worden gemaakt en niet een gevolg dat je
-  achteraf ontdekt.
-  `beleggenKlaar()` LEEST VANDAAG `kritiek` en niet een eigen grens (`v.key==='buffer' ? !r.kritiek : ...`),
-  dus besluit (4) vraagt een grens die nog niet bestaat. Zolang die er niet is hangt beleggen aan
-  `MAAND_DREMPEL.bufferKritiek`.
-  EN DE STATUS-TAK KLOPT NIET MEER ZODRA DE NORM DE ONDERGRENS IS: `st = kritiek ? ... : (bm<richt ? 'let
-  op' : 'ok')`, met `kritiek = bm < 3`. Met een eigen richt van 2 is `ok` per constructie onbereikbaar
-  zolang `bm` onder 3 ligt, dus je eigen ondergrens halen leest nog steeds als een tekort.
-  DE METING LIGT ER AL, en leest niets: sectie 4 van blok 14 zet de toewijzing per bestemming uit
-  `planMap()` naast de teller van sectie 1, met het verschil. AFLOS-ITEMS HOREN ER NIET BIJ, want hun
-  voortgang is afgeloste schuld en geen geld op een rekening. DE RESERVERINGENREKENING HANGT UITDRUKKELIJK
-  NIET AAN `isSavingsAcc()` (`v128`), maar kan er wel aan voldoen op de laatste cijfers, en dan telt dat
-  geld ook als buffer; blok 14 wijst hem daarom bij naam aan.
-  DE FIXTURE DRAAGT DE KANT DIE KNELT: er is MEER toegewezen dan er op de rekening staat, want dat is het
-  geval waarvoor de controle bestaat.
+- **DE BUFFERNORM: VIER BESLUITEN, EN ELK RAAKT EEN ANDERE KANT VAN DEZELFDE DELING** (`v305`, ontworpen
+  bij `v302`/`v303`): staan alle spaardoelen op EEN spaarrekening, dan telde het geld voor die doelen als
+  buffer mee, want de teller van `bufferMaanden()` was dat rekeningsaldo.
+  (1) DE TELLER IS WAT PLAN AAN HET NOODFONDS HEEFT TOEGEWEZEN: `bufferTeller()` leest
+  `planMap()[PLAN_NF].gespaard`, dus `SET.nfToegewezen` geklemd op het doel, en dat is dezelfde bron als
+  de noodfonds-regel op Plan. Plan en Grip tonen hetzelfde getal.
+  DRIE LEZERS GINGEN SAMEN MEE (`v104`): de deling, `meevallerNodig('buffer')` en de buffer-tak van
+  `maandTekort()`. GEMETEN wat er gebeurt als alleen de eerste meeverhuist, bij 2.500 toegewezen op een
+  saldo van 4.000 met essCrisis 1.520: de deling gaat van 2,63 naar 1,64 terwijl "wat is er nodig" op 560
+  blijft staan en de verdeelregel niets meldt in plaats van 1.500.
+  DE VIERDE LEZER GAAT UITDRUKKELIJK NIET MEE: `fireInputs()` rolt je vermogen vooruit en wil het geld dat
+  er STAAT (`v216`). Zijn `nfDoel` beweegt wel mee, want dat is hetzelfde doel.
+  HET LABEL OP DE RIJ IS MEEVERHUISD: "maanden op je rekening" is "maanden toegewezen aan je noodfonds"
+  geworden, want het oude label beloofde meer dan het getal draagt.
+  JE KUNT NU NIET MEER TEGELIJK EEN VOLLE PLAN-BUFFER EN EEN KRITIEKE GEMETEN BUFFER HEBBEN, en dat is
+  precies de bedoeling van besluit (1). GEMETEN in `budget-fixture.js`: die zette de buffer met
+  `nfToegewezen: 9e7` op vol terwijl er 2.500 op de rekening stond, en dat kon alleen zolang de twee
+  verschillende bronnen lazen. Het spaarsaldo van die fixture is daarom naar 5.000 gegaan; `SAFE`
+  verandert daar niet van, want `SPAAR_SALDO` valt daar tegen zichzelf weg.
+  (2) DE CONTROLE IS HET SALDO: is er meer aan je bestemmingen toegewezen dan er op de spaarrekening staat,
+  dan telt de buffer NIET als vol. Het wordt `let op` en geen `tekort`: de meting zegt niet dat je buffer te
+  klein is, alleen dat er een keuze open staat.
+  DIE MEETWAARDE BESTOND AL, EN ER KWAM ER GEEN TWEEDE NAAST (`v104`). Mijn eerste vorm telde `planMap()`
+  zelf op en legde die som naast `spaarSaldo()`; dat is letterlijk `spaarOver()`, sinds `v217` de bron van
+  de regel op Plan. `toewijzingBovenSaldo()` leest die functie nu, en de volgorde van wie zou inleveren komt
+  uit `spaarOverRaakt()`, een lus die uit `spaarOverLine()` is gelicht en twee lezers heeft. Dat is `v235`:
+  EEN detectie, twee weergaven. Plan draagt de regel met de handeling, Grip houdt de bufferregel van `ok`
+  af en noemt het doel.
+  ZONDER BEKEND SPAARSALDO STAAT DE BUFFERREGEL NIET OP GRIP, en sinds `v305` om een ANDERE reden: de teller
+  is dan bekend (het is een toewijzing), maar de controle kan niet lopen, en een toewijzing die de app niet
+  kan nalopen zou vol kunnen lezen op geld dat er niet is (`v168`).
+  (3) DE NORM IS DE ONDERGRENS, EN ER IS GEEN DEFAULT. `SET.bufferNorm` is leeg tot jij kiest, en dan geeft
+  `bufferNorm()` `null`: de bufferregel toont wat hij MEET en vraagt om die grens, met status `onbekend` en
+  dus in de neutrale kleur (`v78`/`v93`). Een tekort melden tegen een grens die niemand koos is precies wat
+  `v59`/`v73`/`v173` verbieden, en die vaste 3 stond tot `v304` als `MAAND_DREMPEL.bufferKritiek` in de code.
+  DE OPTIL IS EEN HANDELING EN GEEN AFLEIDING, en dat is de correctie op mijn eigen eerste vorm.
+  `noodfondsModel()` tilde het doel op zodra het onder de norm lag; GEMETEN kostte die tak 42 van de 3054
+  tests, allemaal op fixtures met een doel onder drie maanden essCrisis, en hij botst met
+  `MECHANISM_SPEC.defaultEffect`: een default die stilletjes een doel zet. `normDoelVoorstel(n)` rekent nu
+  alleen VOOR wat een keuze zou doen, de sheet toont dat met beide bedragen, en pas `normVastzetten()` legt
+  de grens vast en zet het doel. Ligt je doel er al op of boven, dan verandert er niets aan je doel en staat
+  dat er ook.
+  DE OUDE WAARDE GAAT MEE IN `SET.bufferNormDoelVoor`, zodat `normTerugdraaien()` grens en doel samen
+  terugzet; zonder dat is de belofte "in een tik terug" onwaar (`v288`).
+  DE TWEE MAANDEN-VELDEN IN DIE SHEET ZIJN NIET HETZELFDE GETAL, en de rij zegt dat: de chips zijn je RICHT
+  (hoeveel maanden je wilt hebben, en daarmee de schatting van het doel), de nieuwe rij is de ONDERGRENS.
+  (4) DE DREMPEL VOOR BELEGGEN IS EEN EIGEN KEUZE (`SET.beleggenDrempel`, leeg = je ondergrens), want "mag ik
+  beleggen" is een andere afweging dan "vangt mijn buffer genoeg op". `beleggenKlaar()` leest niet meer
+  `r.kritiek` maar `r.maanden` tegen die drempel; zonder gekozen grens is er geen drempel en dus geen
+  uitspraak.
+  DIE LAAG REKENT NOG STEEDS NIETS ZELF: mijn eerste vorm riep de bufferdeling daar opnieuw aan en
+  `beleggen-voorwaarden.spec.js` zette dat rood (`v187`). De rij draagt daarom `maanden` naast `waarde`.
+  Diezelfde spec leest de BRON, dus hij valt ook op de naam van zo'n meting in een COMMENT (`v276`).
+  ELKE BESTAANDE FIXTURE KIEST NU EEN NORM, en dat is geen verzwakking maar het tegendeel: die specs zijn
+  geschreven toen drie maanden een vaste grens was, en dat getal staat nu waar het thuishoort, in de
+  gegevens. Zonder die keuze zou de bufferregel overal op `onbekend` staan en zou geen enkele spec over de
+  maandregels nog meten wat hij zegt te meten.
+  EN VIER FIXTURES MOESTEN HUN BUFFER OPNIEUW OPBOUWEN, want besluit (1) maakt twee wensen die ze combineerden
+  onmogelijk: "de grendel staat open" eist `toewijzing >= doel` en "de buffer komt tekort" eist
+  `toewijzing < norm x essCrisis`. Tot `v304` kon dat samen, want de grendel las de TOEWIJZING en de
+  bufferregel het SALDO. Nu lezen ze hetzelfde getal, dus beide kan alleen als het DOEL onder de norm ligt;
+  die fixtures zetten daarom een eigen doel van 2.300 op een essCrisis van 1.220, en de toewijzingen samen
+  blijven binnen het spaarsaldo zodat de controle van besluit (2) zwijgt. DAT IS GEEN FIXTURE-TRUC MAAR DE
+  REGEL ZELF: wie een volle plan-buffer en een kritieke gemeten buffer tegelijk wil, vraagt om twee tellers.
+  EEN FIXTURE DIE EEN DOEL VAN 100 OP EEN SALDO VAN 40.000 ZETTE IS OM DEZELFDE REDEN OMGEZET: daar was de
+  buffer in orde zolang de teller het saldo was, en met de klem op het doel is 100 juist een tekort.
+  VEERTIEN SABOTAGES, EN TWEE GINGEN NIET METEEN ROOD. De eerste was de sabotage zelf: de `break` uit
+  `spaarOverRaakt()` halen is per constructie inert, want de regel eronder klemt het bedrag op het restant
+  (`v281`). De tweede was een echt gat: een sabotage die de `onchange` van het normveld weghaalt bleef groen,
+  want elke test schreef via de setter en kwam langs het veld nooit (meetles c). Er staat nu een test die het
+  PAD loopt, met de tik op het element zelf.
+  DE VOORTGANGSCHECK OP `✘` WAS GEEN METING, en die fout heeft mij zes berichten lang "nul rood" laten
+  melden op een run die er 67 had: de `line`-reporter print dat teken niet. Een voortgangssignaal dat per
+  constructie leeg is, is dezelfde familie als een test die niet kan falen; lees de SAMENVATTING.
+  WAT ER NIET IS GEBOUWD EN DE VOLGENDE RONDE IS: of `doelTempo()` en `p.eta` de TERUGVAL moeten
+  meerekenen. GEMETEN dat ze dat vandaag niet doen: beide houden de `alloc` van deze maand constant, dus de
+  rij op Plan en de alinea eronder geven vandaag dezelfde datum omdat ze dezelfde alloc lezen, en niet omdat
+  ze de doorzak modelleren. Met de hand doorgerekend geeft de terugval Kosten Koper vol in juni 2027 tegen
+  juli 2027 in de app.
+- **OPEN PUNT, GEMETEN EN NIET GEREPAREERD: `etaDatum()` slaat een maand over op een lange dag**
+  (`v305`, gevonden bij het meten van de terugval): hij doet `d.setMonth(d.getMonth()+n)` op de dag van
+  VANDAAG, en die dag bestaat niet in elke maand. GEMETEN op 30 september: `n=5` en `n=6` geven BEIDE
+  `mrt 2027`, want 30 februari rolt door naar maart. Op dag 15 van een maand van 28 dagen klopt elke
+  waarde, op dag 29 en 30 schuift alleen `n=5`, en op een 31e schuift elke waarde waarvan de doelmaand
+  korter is.
+  HET GEVOLG IS EEN DATUM DIE EEN MAAND TE LAAT LEEST, en dat is de gevaarlijke kant niet (te laat is
+  voorzichtig), maar het maakt twee verschillende tempo's op het scherm gelijk. Dat is precies het
+  etiket dat dit project verbiedt: twee getallen die uiteenlopen lezen als hetzelfde.
+  ZES LEZERS, dus het is een eigen ronde en geen bijvangst: `saveFasterTip()` (twee keer),
+  `planGrendelDatum()`, `etaTekst()`, `vatRegels()` (twee keer) en `tipEffect()`. De vorm die het dicht
+  is rekenen vanaf de EERSTE van de maand en niet vanaf vandaag, want een eta in maanden draagt geen
+  dag; wie dit oppakt kijkt eerst of een van de zes wel een dag bedoelt.
+  DE METING IS MET EEN VASTE KLOK TE HERHALEN (`tests/vaste-dag.js`, `v299`), dus dit is te toetsen
+  zonder op de kalender te wachten.
 - **EEN ONTTREKKING IS EEN BEWEGING EN GEEN STAND, EN DUS UIT EEN RIJ NIET TE LEZEN** (`v303`): sectie 1 van
   blok 14 laat een rekening die niet meetelt en een saldo van een oudere dag zien, maar een ONTTREKKING
   verlaagt het saldo zonder dat er aan die rij iets te zien is. Dat is de derde kandidaat voor een verschil
@@ -3572,7 +3632,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v304` → `minder-v305`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v305` → `minder-v306`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -3581,7 +3641,7 @@ dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `m
 en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfde geval, dus de
 bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte alleen `tests/` en dit
 bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`; `v301` raakt wel app-code
-en bumpt dus gewoon door naar `minder-v301`, en `v302`, `v303` en `v304` net zo. Dat gat is geen fout maar de regel
+en bumpt dus gewoon door naar `minder-v301`, en `v302` tot en met `v305` net zo. Dat gat is geen fout maar de regel
 zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

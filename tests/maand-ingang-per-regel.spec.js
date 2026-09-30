@@ -40,6 +40,10 @@ function seed(o) {
     add('r' + m, RES, m, '10', 100, 'Reserveringen', 'NAAR RESERVERINGEN');
   }
   const set = Object.assign({
+    /* v305: de ondergrens is sinds v305 een KEUZE en heeft geen default meer, dus de fixture kiest
+       hem hier. Deze spec is geschreven toen drie maanden een vaste grens was; dat getal staat nu
+       waar het thuishoort, in de gegevens van de gebruiker. */
+    bufferNorm: 3,
     limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 4000,
     manualBal: { [MAIN]: 2000, [SPAAR]: o.spaar != null ? o.spaar : 3100, [RES]: 400 },
     budgets: { boodschappen: 900, huur: 1500 },
@@ -209,7 +213,11 @@ test.describe('d - de oude ingang onder de kaart is weg, de andere takken niet',
   });
 
   test('de derde tak blijft ook: een gesprek juist wanneer er niets te beslissen valt', async ({ page }) => {
-    await boot(page, { spaar: 40000, set: { nfToegewezen: 40000, goals: [], reserveringen: [], nfDoelVast: 100 } });
+    /* v305: het doel was 100 terwijl er 40.000 op de rekening stond, en dat gaf een buffer in orde
+       zolang de teller het SALDO was. Sinds v305 is de teller de toewijzing, geklemd op het doel, dus
+       een doel van 100 geeft een buffer van 100 en dus een tekort. Het doel is daarom het bedrag dat
+       er ook werkelijk staat; wat deze test wil is een stand waarin geen enkele regel iets vraagt. */
+    await boot(page, { spaar: 40000, set: { nfToegewezen: 40000, goals: [], reserveringen: [], nfDoelVast: 40000 } });
     const h = await page.evaluate(() => maandCoachIngang(maandMetAccept(maandRegels())));
     expect(h).toContain('niets te beslissen');
     expect(h).toContain("coStart('algemeen'");

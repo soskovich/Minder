@@ -39,6 +39,10 @@ function seed(o) {
   }
   for (const b of (o.boekingen || [])) add(b[0], CUR, b[1], b[2], b[3], b[4]);
   const set = Object.assign({
+    /* v305: de ondergrens is sinds v305 een KEUZE en heeft geen default meer, dus de fixture kiest
+       hem hier. Deze spec is geschreven toen drie maanden een vaste grens was; dat getal staat nu
+       waar het thuishoort, in de gegevens van de gebruiker. */
+    bufferNorm: 3,
     limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 6000,
     manualBal: { [MAIN]: 4000 }, savingMode: 'amount', savingAmount: 0,
     budgets: o.budgets || { overig: 500, uiteten: 55, vices: 20, boodschappen: 500, vervoer: 300,

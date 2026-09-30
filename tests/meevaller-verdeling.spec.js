@@ -42,8 +42,18 @@ function seed(o = {}) {
   // de omschrijving moet als inkomen categoriseren, anders is het geen inkomensboeking
   if (o.meevaller) add('mv', MAIN, CUR, '20', o.meevaller, 'Werkgever', 'SALARIS LOON VAKANTIEGELD');
   const set = {
+    /* v305: de ondergrens is sinds v305 een KEUZE en heeft geen default meer, dus de fixture kiest
+       hem hier. Deze spec is geschreven toen drie maanden een vaste grens was; dat getal staat nu
+       waar het thuishoort, in de gegevens van de gebruiker. */
+    bufferNorm: 3,
     // v243: de grendel staat hier open; deze spec gaat over wat er daarna gebeurt
     nfToegewezen: 9e7, nfToegewezenMigrated: true,
+    /* v305: EN DAT VRAAGT EEN DOEL ONDER DE ONDERGRENS. Sinds v305 leest de bufferregel dezelfde
+       toewijzing als het plan, dus "de grendel staat open" (toewijzing >= doel) en "de buffer heeft
+       nog iets nodig" (toewijzing < norm x essCrisis) kunnen alleen samen bestaan als het doel ONDER
+       die norm ligt. Met een richt van 2 maanden is de buffer vol en vraagt de norm van 3 nog een
+       maand, en dat is precies de post die deze spec toetst. */
+    nfMaanden: 2,
 
     limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 3000,
     manualBal: { [MAIN]: 2000, [SPAAR]: spaar, [RES]: resSaldo },
@@ -121,7 +131,10 @@ test.describe('b · de opbouw van de posten', () => {
     const ref = await page.evaluate(() => {
       const D = dekking(12), M = noodfondsModel(), d = maandDoel();
       return { dekking: Math.max(Math.round(D.tekort), 0),
-        buffer: Math.max(Math.round(MAAND_DREMPEL.bufferKritiek * M.essCrisis - M.spaar), 0),
+        /* v305: de grens is de GEKOZEN ondergrens en niet meer een vaste constante, en de teller is
+           de toewijzing en niet het saldo. Zonder die twee rekende deze referentie met undefined en
+           gaf hij NaN, en dan toetst de vergelijking niets. */
+        buffer: Math.max(Math.round(bufferNorm() * M.essCrisis - bufferTeller()), 0),
         doel: Math.max(Math.round(d.T.gat * d.T.maandenTot), 0) };
     });
     expect(n).toEqual(ref);

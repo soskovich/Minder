@@ -31,7 +31,7 @@ function seed(o = {}) {
   });
   const bal = { [MAIN]: 4000 };
   if (o.spaar) bal[SAV] = 9000;
-  const set = Object.assign({ mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
+  const set = Object.assign({ bufferNorm: 3, mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
     manualBal: bal, budgets: { huur: 1000, boodschappen: 500 } }, o.set || {});
   if (o.spaar) set.savingsEnds = ['4323'];
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set),

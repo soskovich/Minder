@@ -39,6 +39,10 @@ function seed(o = {}) {
   }
   add('r1', RES, M1, '10', 50, 'Reserveringen', 'NAAR RESERVERINGEN');
   const set = {
+    /* v305: de ondergrens is sinds v305 een KEUZE en heeft geen default meer, dus de fixture kiest
+       hem hier. Deze spec is geschreven toen drie maanden een vaste grens was; dat getal staat nu
+       waar het thuishoort, in de gegevens van de gebruiker. */
+    bufferNorm: 3,
     limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 3000,
     manualBal: { [MAIN]: 2000, [SPAAR]: spaar, [RES]: resSaldo },
     budgets: { boodschappen: 500, huur: 900 },
@@ -75,15 +79,26 @@ const statusVan = (page, key) => page.evaluate((k) => {
 }, key);
 
 test.describe('a · de samenstelling', () => {
-  test('de drempels komen uit MAAND_DREMPEL, niet uit een eigen constante', async ({ page }) => {
+  /* v305: DEZE TEST PINDE DE OUDE GRENS. Hij eiste `MAAND_DREMPEL.bufferKritiek === 3` en die naam
+     letterlijk in de bron van de drempel; sinds v305 is de buffernorm een eigen keuze (besluit 4) en
+     bestaat die constante niet meer. Hij is herschreven naar wat hij moet vasthouden en daarbij
+     STERKER gemaakt: de constante mag ook niet TERUGKOMEN, en de buffer-drempel moet uit een functie
+     komen in plaats van uit een getal in deze laag. Dekking en doel houden hun MAAND_DREMPEL. */
+  test('elke drempel komt uit een bron en niet uit een getal in deze laag', async ({ page }) => {
     await boot(page);
     const d = await page.evaluate(() => MAAND_DREMPEL);
-    expect(d.bufferKritiek).toBe(3);
+    expect(d.bufferKritiek, 'de vaste 3 is weg en komt niet terug').toBe(undefined);
     expect(d.dekkingOk).toBe(100);
     const src = await page.evaluate(() => BELEGGEN_VOORWAARDEN.map((v) => v.drempel.toString()).join(' '));
-    expect(src).toContain('MAAND_DREMPEL.bufferKritiek');
+    expect(src, 'de buffer leest zijn eigen drempel').toContain('beleggenDrempel()');
+    expect(src).not.toContain('bufferKritiek');
     expect(src).toContain('MAAND_DREMPEL.dekkingOk');
     expect(src).toContain('MAAND_DREMPEL.doelOk');
+    const bron = await page.evaluate(() => beleggenDrempel.toString() + ' ' + bufferNorm.toString());
+    expect(bron, 'beleggenDrempel() valt terug op de norm en niet op een eigen getal').toContain('bufferNorm()');
+    expect(bron, 'en die norm heeft geen default: zonder keuze is er geen grens (v305)').toContain('null');
+    const zonder = await page.evaluate(() => { delete SET.bufferNorm; return beleggenDrempel(); });
+    expect(zonder, 'dus ook geen drempel om tegen te toetsen').toBe(null);
   });
 
   test('beleggenKlaar rekent niets: hij leest de rijen van maandRegels', async ({ page }) => {

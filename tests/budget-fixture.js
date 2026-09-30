@@ -71,6 +71,11 @@ function seed({ giftCharged = true, maanden = 3 } = {}) {
     /* v243: de grendel van v242 staat hier open. Elke spec die deze fixture gebruikt gaat over wat
        er na de buffer gebeurt; een dichte grendel zou daar overal de verdeling stilzetten. */
     nfToegewezen: 9e7, nfToegewezenMigrated: true,
+    /* v305: de ondergrens van de buffer is sinds v305 een KEUZE en heeft geen default meer. Deze
+       fixture is geschreven toen drie maanden een vaste grens was, dus die keuze staat nu expliciet
+       in de gegevens; zonder hem zou de bufferregel overal op `onbekend` staan en zou geen enkele
+       spec die over de maandregels gaat nog meten wat hij zegt te meten. */
+    bufferNorm: 3,
     savingMode: 'amount', savingAmount: 300,
     savingsEnds: ['4323'],
     manualBal: { [MAIN]: 4000, [SAV]: 2500 },

@@ -49,6 +49,10 @@ function seed(o) {
     if (o.opname) add('u' + m, SPAAR, m, '27', -o.opname, 'Opname', 'VAN SPAREN');
   }
   const set = Object.assign({
+    /* v305: de ondergrens is sinds v305 een KEUZE en heeft geen default meer, dus de fixture kiest
+       hem hier. Deze spec is geschreven toen drie maanden een vaste grens was; dat getal staat nu
+       waar het thuishoort, in de gegevens van de gebruiker. */
+    bufferNorm: 3,
     limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 4000,
     manualBal: { [MAIN]: 2000, [SPAAR]: o.spaar != null ? o.spaar : 2000, [RES]: 400 },
     budgets: { boodschappen: 1000, huur: 1500 },
@@ -137,7 +141,9 @@ test.describe('a - de buffer kijkt naar de richting, niet alleen naar de stand',
     await boot(page);
     const r = await regel(page, 'buffer');
     expect(r.gevolg).toMatch(/maanden essenti/);
-    expect(r.gevolg).toContain('Onder de drie maanden vangt hij weinig op');
+    /* v305: de zin noemt de GEKOZEN ondergrens en niet meer een vaste drie. De fixture kiest 3, dus
+       de tekst is inhoudelijk dezelfde; wat verandert is dat het getal uit je keuze komt. */
+    expect(r.gevolg).toContain('Onder 3 maanden vangt hij weinig op');
     expect(r.gevolg).toContain('elke maand geld naartoe');
     // geen bemoediging, geen felicitatie
     expect(r.gevolg).not.toMatch(/goed bezig|mooi|prima|gelukt/i);

@@ -37,6 +37,10 @@ function seed(o) {
   add('s' + M2, SPAAR, M2, '26', 3000, 'Spaarpot', 'NAAR SPAREN');
   add('s' + M1, SPAAR, M1, '26', 3000, 'Spaarpot', 'NAAR SPAREN');
   const set = Object.assign({
+    /* v305: de ondergrens is sinds v305 een KEUZE en heeft geen default meer, dus de fixture kiest
+       hem hier. Deze spec is geschreven toen drie maanden een vaste grens was; dat getal staat nu
+       waar het thuishoort, in de gegevens van de gebruiker. */
+    bufferNorm: 3,
     limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 6000,
     manualBal: { [MAIN]: 4000, [SPAAR]: 9000 },
     budgets: { boodschappen: 500, huur: 1200 },
@@ -254,7 +258,11 @@ test.describe('c · wat er in staat', () => {
       await open(page);
       const t = await uit(page);
       expect(t).toContain('te gaan volgens het PLAN   (doel - nfToegewezen): 0');
-      expect(t).toContain('te gaan volgens de BUFFER  (doel - spaarsaldo):   1000');
+      /* v305: die regel heet nu "volgens het SALDO", want de bufferregel leest sinds die ronde de
+       toewijzing en niet het saldo. Het blok zegt dat er zelf bij, en dat staat hier als eigen
+       assertie: zonder die regel lezen de twee bedragen als twee antwoorden op dezelfde vraag. */
+    expect(t).toContain('te gaan volgens het SALDO  (doel - spaarsaldo):   1000');
+    expect(t).toContain('SINDS v305 LEEST DE BUFFERREGEL DE EERSTE VAN DIE TWEE');
       expect(t).toContain('planGrendel(): null');
     });
 

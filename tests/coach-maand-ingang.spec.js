@@ -28,7 +28,12 @@ const metDoel = (extra) => tweak((s) => {
 
 // twee tekorten: de buffer van de fixture dekt maar twee maanden, en het doel haalt zijn datum
 // niet. buffer staat vóór doel in MAAND_VOLGORDE, dus die hoort te winnen.
-const tweeTekorten = (extra) => metDoel(extra);
+/* v305: de buffer komt hier werkelijk tekort. De basisfixture zet `nfToegewezen` hoog om de grendel
+   open te houden, en tot v304 kon de bufferregel daarnaast een tekort melden omdat die het SALDO las.
+   Sinds v305 lezen ze hetzelfde getal, dus een tekort is een LAGE toewijzing; het spaarsaldo draagt
+   hem, dus de controle van besluit 2 zwijgt. `eenTekort` blijft werken zoals hij deed: daar is de
+   toewijzing wel vol en dus de buffer in orde. */
+const tweeTekorten = (extra) => metDoel((s) => { s.nfToegewezen = 500; if (extra) extra(s); });
 
 // één tekort: met een ruime spaarrekening is de buffer op peil en blijft alleen het doel over
 const eenTekort = (extra) => metDoel((s) => {

@@ -21,6 +21,16 @@ function drieTekorten(extra) {
   s.resAcc = 'NL01SAVE0000004323';
   s.goals = [{ id: 'g1', naam: 'Vakantie', doel: 4000, gespaard: 200, allocMode: 'fixed', perMaand: 50, streefdatum: plusM(3) }];
   s.planOrder = ['g1', 'noodfonds'];
+  /* v305: EN EEN BUFFER DIE WERKELIJK TEKORT KOMT, ZONDER DE GRENDEL TE SLUITEN. De basisfixture zet
+     `nfToegewezen` hoog om de grendel open te houden, en tot v304 kon de bufferregel daarnaast een
+     tekort melden omdat die het SALDO las. Sinds v305 lezen ze hetzelfde getal, en dan kunnen
+     "grendel open" (toewijzing >= doel) en "buffer tekort" (toewijzing < norm x essCrisis) alleen
+     samen bestaan als het DOEL onder de norm ligt. Met 2300 op een essCrisis van 1220 is dat 1,9
+     maanden: de buffer is vol en komt toch tekort tegen de gekozen grens van 3.
+     EN DE TOEWIJZINGEN SAMEN BLIJVEN BINNEN HET SPAARSALDO van 2500 (2300 plus de 200 van het doel),
+     want anders meldt de controle van besluit 2 dat er meer is toegewezen dan er staat en schuift de
+     regel naar `let op` in plaats van `tekort`. */
+  s.nfDoelVast = 2300; s.nfToegewezen = 2300;
   if (extra) extra(s);
   p.minder_set = JSON.stringify(s);
   return p;

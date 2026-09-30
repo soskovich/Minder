@@ -25,7 +25,7 @@ function seed(o = {}) {
   }
   const bal = { [MAIN]: 1500 };
   if (!o.geenSpaar) bal[SAV] = o.spaarSaldo != null ? o.spaarSaldo : 2000;
-  const set = Object.assign({ mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
+  const set = Object.assign({ bufferNorm: 3, mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
     manualBal: bal, budgets: { huur: 1200, boodschappen: 500 },
     savingMode: 'amount', savingAmount: 200,
     nfDoelVast: o.nfDoel != null ? o.nfDoel : 1500,
@@ -169,17 +169,24 @@ test.describe('d · de vrij-regel stuurt het handmatige cijfer bij', () => {
 });
 
 test.describe('e · de gemeten buffer blijft gemeten', () => {
-  test('bufferMaanden en de maandregel lezen je rekening, niet je toewijzing', async ({ page }) => {
+  test('de sheet blijft het saldo tonen, de bufferregel leest de toewijzing', async ({ page }) => {
     await boot(page, seed({ spaarSaldo: 2000, nfToegewezen: 100 }));
     const r = await page.evaluate(() => ({
-      buf: bufferMaanden(), spaar: noodfondsModel().spaar,
+      buf: bufferMaanden(), spaar: noodfondsModel().spaar, teller: bufferTeller(),
+      ess: Math.round(noodfondsModel().essCrisis),
       regel: maandRegels().find((x) => x.key === 'buffer'),
       src: bufferMaanden.toString(),
     }));
-    expect(r.spaar).toBe(2000);                       // het saldo, niet de toewijzing van 100
-    expect(r.buf).toBeGreaterThan(0);
-    expect(r.regel.eenheid).toContain('op je rekening');
-    expect(r.src).not.toContain('nfToegewezen');
+    /* v305: DEZE TEST PINDE DE OUDE BETEKENIS, en de gebruiker heeft hem met besluit 1 vervangen:
+       de bufferregel leest sinds v305 juist WEL je toewijzing, zodat Plan en Grip hetzelfde getal
+       tonen. Wat er van de oude eigenschap OVERBLIJFT is dat `noodfondsModel().spaar` nog steeds het
+       gemeten saldo is, want de noodfonds-sheet toont daarmee je voortgang; die twee staan nu naast
+       elkaar en dat is wat hier vastligt. */
+    expect(r.spaar, 'de sheet blijft het gemeten saldo tonen').toBe(2000);
+    expect(r.teller, 'de teller is de toewijzing').toBe(100);
+    expect(r.buf, 'en de deling leest die teller').toBeCloseTo(100 / r.ess, 5);
+    expect(r.regel.eenheid).toContain('toegewezen aan je noodfonds');
+    expect(r.regel.eenheid, 'het oude label beloofde meer dan het getal draagt').not.toContain('op je rekening');
   });
 
   test('beleggenKlaar leunt niet op een toegewezen bedrag', async ({ page }) => {
@@ -189,7 +196,8 @@ test.describe('e · de gemeten buffer blijft gemeten', () => {
       return { buffer: (R.find((x) => x.key === 'buffer') || {}).status, src: beleggenKlaar.toString() };
     });
     expect(['ok', 'let op', 'tekort']).toContain(r.buffer);
-    expect(r.src).not.toContain('nfToegewezen');
+    expect(r.src, 'en hij leest die toewijzing via bufferTeller() en niet via een eigen veld')
+      .not.toContain('nfToegewezen');
   });
 });
 

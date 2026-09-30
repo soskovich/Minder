@@ -98,6 +98,10 @@ function seed(opt) {
   return {
     minder_tx: JSON.stringify(tx), minder_ovr: '{}',
     minder_set: JSON.stringify({
+    /* v305: de ondergrens is sinds v305 een KEUZE en heeft geen default meer, dus de fixture kiest
+       hem hier. Deze spec is geschreven toen drie maanden een vaste grens was; dat getal staat nu
+       waar het thuishoort, in de gegevens van de gebruiker. */
+    bufferNorm: 3,
       limit: 70, autoIncome: false, income: 3000, rules: REGELS,
       savingsAcc: { [SP2]: false, [SP3]: true },
       manualBal: { [SP3]: 200.6 }, manualBalDatum: { [SP3]: '2026-09-19' },
@@ -241,7 +245,16 @@ test.describe('1 - de teller per onderdeel', () => {
     expect(t).toContain('Math.round(som van de saldi) + extraSavings = 4681 + 300 = 4981');
     expect(t).toContain('sluit aan op spaarSaldo().cur: JA');
     expect(t).toContain('meegeteld zonder bekend saldo: 0');
-    expect(t).toContain('noodfondsModel().spaar (de teller van de deling): 4981');
+    /* v305: DEZE REGEL HEETTE "de teller van de deling" EN IS DAT NIET MEER. De teller is sinds die
+       ronde bufferTeller(), de toewijzing; dit saldo is de controle. De assertie is daarom verlegd naar
+       wat het blok nu moet zeggen, en niet verzwakt: hij eist dat het blok ZELF zegt dat dit niet de
+       teller is, want zonder die regel geven sectie 1 en sectie 3 twee antwoorden onder gelijkende
+       koppen (v287). */
+    expect(t).toContain('noodfondsModel().spaar: 4981   dit is NIET meer de teller van de deling');
+    expect(t, 'de kop van sectie 1 zegt wat hij is').toContain(
+      '1. HET SPAARSALDO: spaarSaldo().cur, tot v304 de teller en sinds v305 de controle');
+    expect(t, 'en de intro zegt welke teller de deling wel leest').toContain(
+      'De teller is\nbufferTeller(), de TOEWIJZING aan je noodfonds uit planMap()');
   });
 });
 
@@ -293,12 +306,17 @@ test.describe('2 - een meegetelde rekening zonder saldo zet de hele teller op nu
   test('dan geeft bufferMaanden() null en staat de rij niet op Grip', async ({ page }) => {
     await boot(page, { resZonderSaldo: true });
     const t = await regels(page);
+    /* v305: DEZELFDE UITKOMST, EEN ANDERE REDEN, en die staat er apart bij omdat de teller intussen
+       WEL bekend is: bufferTeller() leest de toewijzing en die staat er gewoon. Wat ontbreekt is de
+       CONTROLE, en een toewijzing die de app niet kan nalopen zou vol kunnen lezen op geld dat er niet
+       is (v168). Zonder de eerste assertie hieronder is die reden niet van de oude te onderscheiden. */
     const echt = await page.evaluate(() => ({ bm: bufferMaanden(), spaar: noodfondsModel().spaar,
-      missing: spaarSaldo().missing, cur: spaarSaldo().cur }));
+      teller: bufferTeller(), missing: spaarSaldo().missing, cur: spaarSaldo().cur }));
     expect(echt.missing, 'een meegetelde rekening zonder bekend saldo').toBe(true);
     expect(echt.cur, 'de som van de bekende kant loopt wel door').toBe(3981);
     expect(echt.spaar, 'maar noodfondsModel() geeft null').toBe(null);
-    expect(echt.bm, 'en dan is er geen deling').toBe(null);
+    expect(echt.teller, 'de TELLER is wel bekend: hij leest de toewijzing en niet dit saldo').toBe(2000);
+    expect(echt.bm, 'en toch geen deling, want de controle van besluit 2 kan niet lopen').toBe(null);
     expect(t).toContain('meegeteld zonder bekend saldo: 1');
     expect(t).toContain('bufferMaanden(): null, dus de rij staat NIET op Grip');
     expect(rijVan(t, RES)).toContain('ONBEKEND');
@@ -353,25 +371,51 @@ test.describe('4 - de deling en het venster van de afronding', () => {
   test('het blok noemt de deling, het getoonde cijfer en het venster van de teller', async ({ page }) => {
     await boot(page);
     const t = await regels(page);
-    const echt = await page.evaluate(() => bufferMaanden());
-    expect(echt, '4981 / 1550').toBeCloseTo(3.2135, 3);
-    expect(t).toContain('bufferMaanden(): 3.2135');
-    expect(t).toContain('Grip toont er 3,2 van');
-    expect(t, 'de grenzen komen uit de afronding zelf: 1550 maal 3,15 en 3,25')
-      .toContain('MOET DE TELLER TUSSEN 4883 EN 5037 LIGGEN, bij noemer 1550');
-    expect(t).toContain('teller nu: 4981   noemer nu: 1550   4981 / 1550 = 3.2135');
-    expect(t).toContain('kritiek onder 3 maanden, en je eigen richt staat op 4');
+    /* v305: DE TELLER IS DE TOEWIJZING (2000) EN NIET HET SALDO (4981), en dat is precies wat deze
+       test nu vasthoudt: met de oude teller stond hier 3,2135 en nu 1,2903. Beide getallen staan in
+       dezelfde uitvoer, dus een sabotage die de oude teller terugzet valt op de eerste assertie en niet
+       op een tekst. */
+    const echt = await page.evaluate(() => ({ bm: bufferMaanden(), teller: bufferTeller(),
+      saldo: spaarSaldo().cur }));
+    expect(echt.teller, 'nfToegewezen 2000, geklemd op doel 6200').toBe(2000);
+    expect(echt.saldo, 'het saldo is hoger en doet hier niet mee').toBe(4981);
+    expect(echt.bm, '2000 / 1550').toBeCloseTo(1.2903, 3);
+    expect(t).toContain('bufferMaanden(): 1.2903');
+    expect(t).toContain('Grip toont er 1,3 van');
+    expect(t, 'de grenzen komen uit de afronding zelf: 1550 maal 1,25 en 1,35')
+      .toContain('MOET DE TELLER TUSSEN 1938 EN 2092 LIGGEN, bij noemer 1550');
+    expect(t).toContain('teller nu: 2000   noemer nu: 1550   2000 / 1550 = 1.2903');
+    expect(t, 'de klem van planMap() is het plafond van de deling: 6200 / 1550')
+      .toContain('bm kan niet boven doel/essCrisis = 4.0000 komen');
+    expect(t).toContain('SET.nfToegewezen: 2000   doel: 6200   geklemd: 2000');
+    expect(t).toContain('de ondergrens is 3 maanden, je eigen richt staat op 4,'
+      + ' en de beleggen-rij toetst tegen 3 maanden');
+    /* v305: de norm tilt het doel niet zelf op (besluit 3), dus het blok zegt dat en rekent alleen
+       VOOR wat een keuze zou doen. Zonder die regel leest de sectie als de oude vorm, waarin het
+       model het doel wel verzette. */
+    expect(t).toContain('DE NORM TILT HET DOEL NIET ZELF OP (besluit 3)');
+    expect(t, 'en wat een keuze zou doen staat als voorrekening erbij')
+      .toContain('bij 3 maanden van 1550 wordt het doel 4650 tegen 6200 nu, dus geen wijziging');
   });
 
   test('de toewijzingen op Plan staan naast de teller, want daar gaat de volgende ronde over', async ({ page }) => {
     await boot(page);
     const t = await regels(page);
-    const s = sectie(t, '4. WAT DE VOLGENDE RONDE NODIG HEEFT');
+    /* v305: DEZE SECTIE WAS DE METING VOOR DE VOLGENDE RONDE EN IS NU DE CONTROLE ZELF. De kop is
+       daarom verlegd en de assertie leest wat de app met de uitkomst doet, want zonder die regel is de
+       sectie niet van de oude, ongelezen meting te onderscheiden (v287). */
+    const s = sectie(t, '4. DE CONTROLE VAN BESLUIT 2');
     expect(s, 'het noodfonds draagt SET.nfToegewezen').toContain('toegewezen     2000   van     6200   (SET.nfToegewezen)');
     expect(s, 'en een doel draagt zijn eigen gespaard').toContain('Kosten Koper');
-    expect(s, 'samen is er meer toegewezen dan er op de rekening staat, en dat is de controle die de'
-      + ' volgende ronde bouwt').toContain('som van de toewijzingen: 5500   tegen de teller van sectie 1: 4981   verschil: -519');
+    expect(s, 'samen is er meer toegewezen dan er op de rekening staat, en dat is de controle')
+      .toContain('som van de toewijzingen: 5500   tegen de teller van sectie 1: 4981   verschil: -519');
     expect(s, 'een aflos-item hoort er niet bij').toContain('Aflos-items staan er niet bij');
+    expect(s, 'en de app zegt er nu iets over').toContain(
+      'toewijzingBovenSaldo() = verschil 519 (som 5500 tegen saldo 4981)');
+    expect(s, 'die meetwaarde komt uit spaarOver() en niet uit een eigen som (v104)')
+      .toContain('spaarOver() EN NIET UIT EEN EIGEN SOM (v104): over 519, toegewezen 5500, saldo 4981');
+    expect(s, 'de twee sommen sluiten aan').toContain('sluit aan op de som hierboven: JA');
+    expect(s, 'en de volgorde van wie inlevert staat erbij').toContain('levert in');
   });
 });
 
