@@ -192,7 +192,13 @@ test.describe('c · ETA volgt de definitieve toewijzing', () => {
     const P = await alloc(page);
     expect(P[0].alloc).toBe(350);
     expect(P[0].eta).toBe(Math.ceil(5000 / 350));       // niet ceil(5000/100)
-    expect(P[1].eta).toBe(Math.ceil(5000 / 150));
+    /* v307: DE TERUGVAL. Tot v306 stond hier ceil(5000/150) = 34, want p.eta hield de alloc van deze
+       maand constant. Kosten koper is na 15 maanden vol (5000 bij 350, en in die vijftiende maand
+       heeft hij er nog 100 nodig dus zakt er 400 door), en daarna gaat de hele 500 naar Vakantie.
+       GEMETEN: Vakantie staat na maand 15 op 2.650 en heeft er dan nog 2.350 te gaan bij 500 per
+       maand, dus 5 maanden erbij. Dat is 20 en geen 34. */
+    expect(P[1].eta).toBe(20);
+    expect(P[1].eta).toBeLessThan(Math.ceil(5000 / 150));
     await openPlanZone(page);
     // v193: boven een jaar toont de regel de datum in plaats van het aantal maanden; de eta zelf
     // (hierboven getoetst) is onveranderd de bron van allebei.

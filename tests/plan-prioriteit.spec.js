@@ -64,9 +64,13 @@ test.describe('a · planItems en de waterfall', () => {
     expect(P.map((x) => x.id)).toEqual(['gA', 'gB', 'noodfonds']);
 
     expect(P[0].alloc).toBe(100);                     // perMaand 100 wordt niet overschreden
-    expect(P[0].eta).toBe(10);                        // 1000 / 100
+    /* v307: DE TERUGVAL. Tot v306 stond hier 10 (1000 / 100). gB is na 3 maanden vol en maakt daarbij
+       zijn 200 vrij, dus gA gaat van 100 naar 300 per maand: 200 na twee maanden, 400 na de derde
+       (waarin er 100 doorzakt) en dan 300 per maand tot 1.000. GEMETEN 5 maanden. */
+    expect(P[0].eta).toBe(5);
+    expect(P[0].eta).toBeLessThan(10);
     expect(P[1].alloc).toBe(200);                     // zonder perMaand: wat er overblijft
-    expect(P[1].eta).toBe(3);                         // ceil(500 / 200)
+    expect(P[1].eta).toBe(3);                         // ceil(500 / 200), en onder hem valt niets vrij
     expect(P[2].alloc).toBe(0);                       // niets meer over
     // v242: met een open grendel is de buffer per definitie vol, dus dit item is 'bereikt'
     expect(P[2].status).toBe('bereikt');

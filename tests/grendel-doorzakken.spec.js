@@ -491,22 +491,49 @@ function body(naam) {
   const volgende = HEADERS.find((x) => x.i > h.i);
   return CODE.slice(h.i, volgende ? volgende.i : CODE.length);
 }
+/* v307: DE FUNCTIE DIE DE RONDES DRAAGT, GEZOCHT OP ZIJN INHOUD EN NIET OP ZIJN NAAM. Tot v306 stonden
+   de twee rondes in allocatePlan() en bonden de drie tests hieronder daarop; bij v307 zijn ze naar
+   planVerdeelMaand() gelicht zodat planVooruit() dezelfde verdeling kan herhalen, en toen vielen ze
+   alle drie. Ze hadden gelijk over de eigenschap en ongelijk over de plek, en dat is meetles (t): een
+   assertie die ankert op de functie waarin de code TOEVALLIG staat.
+   DE DOORZAK-LUS IS HERKENBAAR AAN `extra+=`, en dat is precies het kenmerk dat elders in deze spec al
+   als "dit is werkelijk de doorzak-lus" wordt gebruikt. ER MOET ER PRECIES EEN ZIJN: staat de lus
+   tweemaal, dan is de verdeling gesplitst en zeggen de drie tests niets meer over de tweede kopie. */
+function rondesBody() {
+  const treffers = HEADERS.filter((h) => /extra\s*\+=/.test(body(h.naam) || ''));
+  expect(treffers.map((x) => x.naam), 'de doorzak-lus hoort in precies een functie te staan')
+    .toHaveLength(1);
+  return body(treffers[0].naam);
+}
 
 test.describe('h · de bron: ronde 2 komt niet langs de grendel zonder de poort', () => {
-  test('allocatePlan() leest planBufferKlaar() in een variabele', () => {
-    const b = body('allocatePlan');
-    expect(b, 'allocatePlan() niet gevonden: de zoekvorm klopt niet meer').toBeTruthy();
+  test('de functie met de rondes leest planBufferKlaar() in een variabele', () => {
+    const b = rondesBody();
+    expect(b, 'de rondes zijn niet af te bakenen: de zoekvorm klopt niet meer').toBeTruthy();
     expect(b).toMatch(/(?:const|let)\s+[A-Za-z_$][\w$]*\s*=\s*planBufferKlaar\(/);
+  });
+
+  /* v307: EN DE TWEE LEZERS NOEMEN HEM BEIDE. Zonder deze assertie kan een volgende ronde de rondes
+     terugkopiëren naar een van de twee en houdt de test hierboven nog steeds groen op de andere. */
+  test('allocatePlan en planVooruit lezen beide de functie met de rondes', () => {
+    const treffers = HEADERS.filter((h) => /extra\s*\+=/.test(body(h.naam) || ''));
+    const naam = treffers[0].naam;
+    for (const lezer of ['allocatePlan', 'planVooruit']) {
+      const b = body(lezer);
+      expect(b, lezer + ' niet gevonden').toBeTruthy();
+      expect(b, lezer + ' noemt ' + naam + ' niet').toContain(naam + '(');
+    }
   });
 
   /* Het slot: elke plek in allocatePlan() die een niet-noodfonds-item overslaat moet de uitkomst
      van planBufferKlaar() noemen. Valt die uitzondering weg, of komt er een tweede guard naast die
      zelf beslist, dan valt deze test om. */
-  test('elke guard op p.type!==noodfonds noemt de uitkomst van planBufferKlaar()', () => {
-    const b = body('allocatePlan');
+  test('elke guard op type!==noodfonds noemt de uitkomst van planBufferKlaar()', () => {
+    const b = rondesBody();
     const v = /(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*planBufferKlaar\(/.exec(b);
     expect(v, 'geen variabele uit planBufferKlaar()').toBeTruthy();
-    const regels = b.split('\n').filter((ln) => /type!==\s*'noodfonds'/.test(ln) && /continue/.test(ln));
+    const regels = b.split('\n').filter((ln) => /type!==\s*'noodfonds'/.test(ln) && /continue/.test(ln)
+      && !/status='wacht op de buffer'/.test(ln));
     expect(regels.length, 'geen enkele guard gevonden: de zoekvorm klopt niet meer').toBeGreaterThan(0);
     const ongedekt = regels.filter((ln) => !new RegExp(`\\b${v[1]}\\b`).test(ln));
     expect(ongedekt.map((x) => x.trim())).toEqual([]);
@@ -525,10 +552,10 @@ test.describe('h · de bron: ronde 2 komt niet langs de grendel zonder de poort'
      volgende ronde niet iets afdicht dat al dicht is of het opendraait in de veronderstelling dat
      het al meetelde. */
   test('ronde 2 leest geen verdeelmodus', () => {
-    const b = body('allocatePlan');
+    const b = rondesBody();
     const ronde2 = lusNa(b, 'planBufferKlaar(');
     expect(ronde2, 'de lus van ronde 2 is niet af te bakenen').toBeTruthy();
-    expect(ronde2).toMatch(/p\.extra\s*\+=/);          // dit is werkelijk de doorzak-lus
+    expect(ronde2).toMatch(/\.extra\s*\+=/);           // dit is werkelijk de doorzak-lus
     expect(ronde2).not.toMatch(/\bmode\b/);
     expect(ronde2).not.toMatch(/perMaand|\bpct\b/);
   });

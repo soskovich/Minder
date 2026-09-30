@@ -40,4 +40,24 @@ async function pinDag(page, dagenOver = DAGEN_OVER) {
   return d;
 }
 
-module.exports = { DAGEN_OVER, vasteDatum, pinDag };
+/* v307: EEN PIN OP EEN GENOEMDE DAG, NAAST DIE OP HET RESTANT. Dat is geen tweede waarheid over
+   welke dag een test bekijkt (v104) maar een andere vraag: `pinDag` houdt het RESTANT van de maand
+   vast, want dat is wat de zeven dagwoord-tests en de zes potjes-tests meten. Een test over de
+   KALENDER zelf (een 31e, een schrikkeldag) heeft juist die genoemde dag nodig, en die is uit een
+   restant niet te halen: de 31e van januari is `dim - 0` en de 29e van februari 2024 is `dim - 0`
+   van een andere maandlengte.
+   HIJ STAAT HIER en niet in de spec die hem gebruikt, zodat `page.clock` op een plek wordt
+   aangeroepen en `vaste-testdag.spec.js` zijn lijst zetters volledig kan houden.
+   DE MIDDAG OM DEZELFDE REDEN ALS HIERBOVEN: op middernacht kan een zomertijdsprong de dag
+   verschuiven. */
+async function pinDatum(page, ymd) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ''));
+  if (!m) throw new Error('vaste-dag: pinDatum wil jjjj-mm-dd, kreeg ' + ymd);
+  const d = new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0);
+  if (d.getMonth() !== +m[2] - 1 || d.getDate() !== +m[3])
+    throw new Error('vaste-dag: ' + ymd + ' bestaat niet');
+  await page.clock.setFixedTime(d);
+  return d;
+}
+
+module.exports = { DAGEN_OVER, vasteDatum, pinDag, pinDatum };

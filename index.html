@@ -4107,16 +4107,26 @@ function planForget(id){ if(SET.planOrder) SET.planOrder=planOrderList().filter(
    maand genoemd waarin hij opengaat.
    GEEN DOELBEDRAG, GEEN GRENDEL: zonder buffer-doel is er niets te vullen en valt er niets te
    blokkeren. Dat is dezelfde lijn als elders: geen meting, geen oordeel. */
-function planGrendel(){
-  let nf=null; try{ nf=planMap()[PLAN_NF]; }catch(_){ return null; }
+/* v307: DE REGEL IS GELICHT UIT DE TOESTAND WAARIN HIJ WORDT GELEZEN. planGrendel() leest de stand
+   van NU uit planMap(); planVooruit() moet dezelfde vraag stellen over een GEPROJECTEERDE stand, want
+   een buffer die vol raakt opent de grendel en dan gaat de inleg naar de doelen. Een tweede
+   uitdrukking van "wanneer zit de grendel dicht" zou bij de eerste wijziging uiteenlopen (v104).
+   DE REST GAAT VOOR HET PAAR doel/gespaard, en dat is geen tweede rekensom maar dezelfde: een rij uit
+   allocatePlan() draagt zijn rest al, een entry uit planMap() niet. */
+function planGrendelVan(nf, cap){
   if(!nf) return null;
   const doel=Math.max(Math.round(+nf.doel||0),0);
   if(!(doel>0)) return null;
   if(nf.nfOnbekend) return {dicht:true, doel, rest:null, maanden:null, onbekend:true};
-  const rest=Math.max(doel-Math.max(Math.round(+nf.gespaard||0),0),0);
+  const rest=(nf.rest!=null)?Math.max(Math.round(+nf.rest||0),0)
+                            :Math.max(doel-Math.max(Math.round(+nf.gespaard||0),0),0);
   if(rest<=0) return null;                       // vol: open, zonder dat je iets hoeft te doen
-  let cap=0; try{ cap=planCapacity(); }catch(_){}
   return {dicht:true, doel, rest, maanden:(cap>0)?Math.ceil(rest/cap):null, onbekend:false};
+}
+function planGrendel(){
+  let nf=null; try{ nf=planMap()[PLAN_NF]; }catch(_){ return null; }
+  let cap=0; try{ cap=planCapacity(); }catch(_){}
+  return planGrendelVan(nf, cap);
 }
 /* De maand waarin verdelen opengaat, op het tempo dat de buffer nu krijgt. Leeg zodra we het niet
    weten: geen spaarinleg of een onbekende stand geeft geen datum, en dan staat er niets. */
@@ -4254,8 +4264,26 @@ function doelTempo(goal, alloc){
   }
   const benodigd=Math.ceil(rest/maandenTot);
   const gat=benodigd-Math.max(Math.round(+alloc||0),0);
+  /* v307: HAALBAAR LEEST DE PROJECTIE EN NIET HET GAT, zodra de aanroeper er een heeft. `gat<=0`
+     vraagt of je HUIDIGE alloc de datum haalt, en met de terugval erin is dat de verkeerde vraag: wat
+     een doel dat vol is niet meer nodig heeft gaat naar het volgende doel, dus een doel kan de datum
+     halen terwijl zijn alloc van nu dat niet zou doen. Dan zei de alinea "je komt X per maand tekort"
+     terwijl de rij een vol-datum vóór de streefdatum noemde, en dat is precies het etiket dat dit
+     project verbiedt.
+     DE RIJ EN DE ALINEA LEZEN DAARMEE DEZELFDE BRON: beide rekenen hun speling als
+     `maandenTot - eta`, en beide beslissen op dezelfde `haalbaar`. De speling in de alinea is dus per
+     constructie het verschil tussen de twee datums in de rij.
+     `eta` KOMT VAN DE RIJ ZELF en niet als vierde parameter: alle vier de aanroepers geven een rij uit
+     allocatePlan() mee (ze lezen `p.alloc`), dus het veld is er al. Een object zonder eta valt terug op
+     het gat, en dat is de oude vorm; `benodigd` en `gat` blijven onaangeroerd, want "wat heb je per
+     maand nodig voor DIT doel" is een andere vraag dan "haal je de datum".
+     DE GRENDEL-TAKKEN HIERBOVEN DOEN HIER NIET AAN MEE, en dat is v255: p.eta is bij een doorgezakt
+     doel `ceil(rest / de rest van de maand van je buffer)` en dus niet het tempo van dat doel. Die
+     takken printen ook geen vol-datum, dus er is daar geen datumpaar dat kan botsen. */
+  const eta=(g.eta!=null&&isFinite(+g.eta)&&+g.eta>0)?Math.round(+g.eta):null;
+  const haalbaar=(eta!=null)?(eta<=maandenTot):(gat<=0);
   return {soort:'normaal', maandenTot, start:0, startLabel:'', venster:maandenTot,
-          benodigd, gat, haalbaar:gat<=0, knelt:gat>0};
+          benodigd, gat, haalbaar, knelt:!haalbaar};
 }
 /* De zin eromheen: spiegel (wat je nu doet), gevolg (wat de datum vraagt), keuze (het verschil).
    Geen oordeel, geen aanmoediging. Spreekt eta niet tegen: beide lezen dezelfde rest en alloc,
@@ -6550,49 +6578,112 @@ function planBufferKlaar(P,G){
   if(nf.status==='gepauzeerd') return false;
   return Math.round(+nf.alloc||0)>=Math.round(+nf.rest||0);
 }
+/* v307: EEN MAAND VERDELEN STAAT OP EEN PLEK, MET TWEE LEZERS. allocatePlan() verdeelt de maand die
+   nu loopt; planVooruit() herhaalt diezelfde verdeling maand na maand om te zien wanneer een doel vol
+   is. Tot v306 stonden de twee rondes alleen in allocatePlan(), dus een projectie vroeg om een tweede
+   uitdrukking van de verdeling en die zou bij de eerste wijziging uiteenlopen (v104). De rondes staan
+   hier en de SCOPE komt van de aanroeper, net als bij piekScope() (v285).
+   DE RIJEN WORDEN TER PLEKKE GEMUTEERD (alloc, base, extra, status), want dat deed allocatePlan() ook
+   en de projectie heeft juist die mutatie nodig om de volgende maand te kunnen rekenen.
+   GEPAUZEERD EN BEREIKT KOMEN VAN BUITEN: dat is een toestand van het item en geen uitkomst van de
+   verdeling, en de projectie leidt ze per maand zelf af uit de rest die hij bijhoudt. */
+function planVerdeelMaand(rows, cap, G){
+  let left=Math.max(Math.round(+cap||0),0);
+  for(const r of rows){
+    r.alloc=0; r.base=0; r.extra=0;
+    if(r.status==='gepauzeerd'||r.status==='bereikt') continue;
+    if(G && r.type!=='noodfonds'){ r.status='wacht op de buffer'; continue; }   // v242
+    let wens;
+    if(G)                     wens=r.rest;                      // v242: dicht = de buffer pakt alles
+    else if(r.mode==='fixed') wens=Math.min(r.perMaand,r.rest);
+    else if(r.mode==='pct')   wens=Math.min(Math.round(cap*r.pct/100),r.rest);
+    else                      wens=r.rest;                      // auto: pakt wat er nog is
+    r.alloc=Math.max(Math.min(wens,left),0); r.base=r.alloc; left-=r.alloc;
+  }
+  /* ronde 2: het restant vult de lopende doelen bij, in dezelfde prioriteitsvolgorde. Zie
+     planBufferKlaar() voor waarom dat ook langs een DICHTE grendel mag (v255). */
+  const bufferKlaar=planBufferKlaar(rows,G);
+  for(const r of rows){
+    if(left<=0) break;
+    if(G && !bufferKlaar && r.type!=='noodfonds') continue;      // v242/v255: zie planBufferKlaar()
+    if(r.status==='gepauzeerd'||r.rest<=0) continue;            // gepauzeerd en bereikt slaan we over
+    const ruimte=r.rest-r.alloc; if(ruimte<=0) continue;        // dit doel heeft al wat het nodig heeft
+    const bij=Math.min(ruimte,left); r.alloc+=bij; r.extra+=bij; left-=bij;
+  }
+  return left;
+}
+/* v307: DE TERUGVAL. Wat een doel dat vol is niet meer nodig heeft gaat naar het volgende doel op
+   volgorde, en dat gebeurt ELKE maand opnieuw. Tot v306 was p.eta `ceil(rest/alloc)` met de alloc van
+   DEZE maand, dus de rij op Plan las alsof een doel zijn huidige tempo tot het eind houdt.
+   GEMETEN op de stand van het toestel (inleg 2.200 in 70/30, Kosten Koper 15.000, Inrichting 3.000,
+   beide vanaf nul): Inrichting is na 5 maanden vol en in die vijfde maand zakt er 300 door, dus Kosten
+   Koper staat na 5 maanden op 8.000 en pakt daarna 2.200 per maand. Dat is 9 maanden en geen 10.
+   ELKE GEPROJECTEERDE MAAND LOOPT DOOR planVerdeelMaand(), dus de verdeling wordt niet opnieuw
+   uitgedrukt (v104), en DE GRENDEL BEWEEGT MEE via planGrendelVan(): een buffer die vol raakt opent
+   hem en dan gaat de inleg naar de doelen.
+   EEN AFLOS-ITEM HOUDT ZIJN ALLOC VOOR ALTIJD, en dat is een benoemde grens en geen omissie. Wanneer
+   een schuld af is komt uit payoffMonths(), een gesloten formule MET rente; die maand na maand
+   naspelen zou een tweede uitdrukking van diezelfde aflossing zijn (v104). Zolang de projectie hem
+   niet laat vrijvallen komt een doel eronder LATER aan zijn geld dan in werkelijkheid, en dat is de
+   voorzichtige kant (v168). Het is bovendien precies wat er vóór v307 al gebeurde, dus er gaat niets
+   verloren; zijn eigen eta blijft payoffMonths().
+   WAT DE LUS BEGRENST IS HET PLAFOND EN NIET DE UITGANG. `bewoog` stopt een plan waarin niets meer
+   beweegt (een gepauzeerde buffer achter een dichte grendel geeft elk doel nul, voor altijd), en dat
+   scheelt zeshonderd nutteloze rondjes. Het is dus een SNELKOPPELING en geen regel: een sabotage erop
+   verandert geen enkele uitkomst, en dat is gemeten. Mijn eerste vorm zette er ook een hermarkering
+   van `bereikt` per maand bij met een tweede uitgang erop; die bleek net zo onobserveerbaar (een rij
+   met rest nul vraagt in ronde 1 nul en valt in ronde 2 af op zijn rest) en is eruit, want dood
+   gewicht in een lus is precies wat een volgende ronde verkeerd leest. */
+const PLAN_VOORUIT_MAX = 600;
+function planVooruit(P, cap, G){
+  const uit={};
+  P=P||allocatePlan();
+  if(cap==null){ try{ cap=planCapacity(); }catch(_){ cap=0; } }
+  if(!(cap>0)) return uit;
+  const rows=P.map(p=>({id:p.id, type:p.type, mode:p.mode, perMaand:p.perMaand, pct:p.pct,
+    doel:Math.max(Math.round(+p.doel||0),0), rest:Math.max(Math.round(+p.rest||0),0),
+    nfOnbekend:!!p.nfOnbekend, status:(p.status==='gepauzeerd')?'gepauzeerd':'',
+    houdt:(p.type==='aflossen')}));
+  for(let m=1;m<=PLAN_VOORUIT_MAX;m++){
+    planVerdeelMaand(rows, cap, planGrendelVan(rows.find(r=>r.type==='noodfonds'), cap));
+    let bewoog=false;
+    for(const r of rows){
+      if(r.status==='gepauzeerd'||r.houdt) continue;
+      const a=Math.max(Math.round(+r.alloc||0),0); if(a<=0) continue;
+      r.rest=Math.max(r.rest-a,0); bewoog=true;
+      if(r.rest<=0&&uit[r.id]==null) uit[r.id]=m;
+    }
+    if(!bewoog) break;
+  }
+  return uit;
+}
 function allocatePlan(){
-  const cap=planCapacity(); let left=cap;
+  const cap=planCapacity();
   /* v242: de grendel. Dicht betekent dat de buffer de hele inleg pakt en de rest wacht. Het is
      geen verdeling met nullen erin maar een andere toestand, en de rijen zeggen dat ook zo. */
   const G=planGrendel();
   const P=planItems().map(it=>{
     const rest=Math.max(Math.round(it.doel-it.gespaard),0);
-    let alloc=0, status='';
+    let status='';
     if(planPaused(it.id)) status='gepauzeerd';
     else if(rest<=0) status='bereikt';
-    else if(G && it.type!=='noodfonds') status='wacht op de buffer';   // v242
-    else {
-      let wens;
-      if(G)                    wens=rest;                       // v242: dicht = de buffer pakt alles
-      else if(it.mode==='fixed')    wens=Math.min(it.perMaand,rest);
-      else if(it.mode==='pct') wens=Math.min(Math.round(cap*it.pct/100),rest);
-      else                     wens=rest;                       // auto: pakt wat er nog is
-      alloc=Math.max(Math.min(wens,left),0); left-=alloc;
-    }
-    return Object.assign({},it,{rest,alloc,base:alloc,extra:0,status});
+    return Object.assign({},it,{rest,alloc:0,base:0,extra:0,status});
   });
-  /* ronde 2: het restant vult de lopende doelen bij, in dezelfde prioriteitsvolgorde.
-     v255 DRAAIT DE v242-REGEL HIER TERUG. Tot v254 stond hier "dicht is dicht, ook in ronde 2", en
-     daarmee bleef liggen wat de buffer niet meer kon gebruiken. Gemeten op het gemelde geval:
-     buffer nog 2.534 nodig van 3.000 inleg, noodfonds krijgt 2.534, en 466 bleef staan bij
-     "Blijft over" terwijl Kosten Koper op plek 2 wachtte. In de maand dat de buffer vol raakt was
-     het erger: nog 800 nodig, 2.200 bleef liggen. Dat is een maand verloren aan geld waar de
-     buffer geen bestemming meer voor heeft. De poort is nu planBufferKlaar().
-     RONDE 2 LEEST DE MODUS NIET, en dus splitst een vast maandbedrag hier nog steeds niets: het
-     restant zakt op volgorde door en het eerste lopende doel neemt wat het nodig heeft, nooit
-     meer. Wat de grendel tegen het splitsen doet zit volledig in RONDE 1, die de modus van een
-     niet-buffer-item overslaat zolang G waar is, en sinds v255 ook in planVastMag() bij de
-     schrijvers. Dicht hier dus niets af dat al dicht is, en draai hier niets open in de
-     veronderstelling dat een vast bedrag al meetelde. */
-  const bufferKlaar=planBufferKlaar(P,G);
-  for(const p of P){
-    if(left<=0) break;
-    if(G && !bufferKlaar && p.type!=='noodfonds') continue;      // v242/v255: zie planBufferKlaar()
-    if(p.status==='gepauzeerd'||p.rest<=0) continue;            // gepauzeerd en bereikt slaan we over
-    const ruimte=p.rest-p.alloc; if(ruimte<=0) continue;        // dit doel heeft al wat het nodig heeft
-    const bij=Math.min(ruimte,left); p.alloc+=bij; p.extra+=bij; left-=bij;
-  }
+  planVerdeelMaand(P,cap,G);
+  /* v255 DRAAIDE DE v242-REGEL IN RONDE 2 TERUG, en die rondes staan sinds v307 in
+     planVerdeelMaand(). Tot v254 stond daar "dicht is dicht, ook in ronde 2", en daarmee bleef liggen
+     wat de buffer niet meer kon gebruiken. Gemeten op het gemelde geval: buffer nog 2.534 nodig van
+     3.000 inleg, noodfonds krijgt 2.534, en 466 bleef staan bij "Blijft over" terwijl Kosten Koper op
+     plek 2 wachtte. In de maand dat de buffer vol raakt was het erger: nog 800 nodig, 2.200 bleef
+     liggen. De poort is planBufferKlaar().
+     RONDE 2 LEEST DE MODUS NIET, en dus splitst een vast maandbedrag daar nog steeds niets: het
+     restant zakt op volgorde door en het eerste lopende doel neemt wat het nodig heeft, nooit meer.
+     Wat de grendel tegen het splitsen doet zit volledig in RONDE 1, die de modus van een
+     niet-buffer-item overslaat zolang G waar is, en sinds v255 ook in planVastMag() bij de schrijvers.
+     Dicht daar dus niets af dat al dicht is, en draai er niets open in de veronderstelling dat een
+     vast bedrag al meetelde. */
   // status + eta op de definitieve toewijzing; en bij "wacht op capaciteit": wie het opmaakt
+  const VOL=planVooruit(P,cap,G);
   let auto1=null;
   for(const p of P){
     if(p.status==='gepauzeerd'||p.status==='bereikt'){ p.eta=null; continue; }
@@ -6612,7 +6703,10 @@ function allocatePlan(){
     p.eta=null;
     if(p.alloc>0){
       if(p.type==='aflossen'){ const mm=payoffMonths(p.rest,(p.debtPer||0)+p.alloc,p.rente); p.eta=isFinite(mm)&&mm>0?mm:null; }
-      else p.eta=Math.ceil(p.rest/p.alloc);
+      /* v307: uit de projectie en niet uit ceil(rest/alloc). Zonder iets om door te zakken zijn die
+         twee per constructie gelijk; met de terugval erin is de projectie een maand of meer eerder.
+         Zegt de projectie het niet, dan staat er niets (v173) in plaats van een tempo dat niet klopt. */
+      else p.eta=(VOL[p.id]!=null)?VOL[p.id]:null;
     }
     // een auto-doel erboven pakt alles wat er nog was — dát is waarom dit item niets krijgt
     if(p.status==='wacht op capaciteit'&&auto1) p.blokkeerder={id:auto1.id,naam:auto1.naam,type:auto1.type};
@@ -6666,9 +6760,21 @@ function planModeLabel(p){
 }
 // "over ~8 maanden" wordt pas concreet met een datum erbij. Zelfde patroon als de oude hero:
 // vandaag + het aantal maanden, als maand + jaar (bv. "rond mrt 2027").
+/* v307: HIJ REKENT VANAF DE EERSTE VAN DE MAAND EN NIET VANAF VANDAAG. De oude vorm deed
+   `d.setMonth(d.getMonth()+n)` op de dag van vandaag, en die dag bestaat niet in elke maand: 30
+   februari rolt door naar maart, dus de uitkomst las een maand TE LAAT. GEMETEN op 30 september
+   2026 gaven n=5 en n=6 beide `mrt 2027`; op een 31e schoven ZES van de veertien waarden en op 29
+   februari 2024 gaven n=12 en n=13 beide `mrt 2025`.
+   TE LAAT IS NIET DE GEVAARLIJKE KANT, en dat is precies waarom dit toch een reparatie is: het maakt
+   twee VERSCHILLENDE tempo's op het scherm gelijk. De rij op Plan las "vol in mrt 2027 · moet in
+   maart 2027" terwijl de alinea eronder "met 1 maand speling" zei, en dat is het etiket dat dit
+   project verbiedt.
+   EEN ETA IN MAANDEN DRAAGT GEEN DAG, en dat is nagelezen bij alle zes de lezers: geen van hen toont
+   meer dan maand en jaar, dus de eerste van de maand verliest niets. `new Date(j, m+n, 1)` normaliseert
+   de maandindex zelf, dus er is ook geen jaargrens om apart te behandelen. */
 function etaDatum(maanden){
   const n=Math.round(+maanden||0); if(n<=0) return '';
-  const d=new Date(); d.setMonth(d.getMonth()+n);
+  const t=new Date(); const d=new Date(t.getFullYear(), t.getMonth()+n, 1);
   return d.toLocaleDateString('nl-NL',{month:'short',year:'numeric'}).replace('.','');
 }
 /* v193: "~7 maanden" en "rond apr 2027" stonden allebei op de regel, en dat is hetzelfde feit

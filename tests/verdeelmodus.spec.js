@@ -53,7 +53,12 @@ test.describe('a · de drie modi', () => {
     expect(P[2].alloc).toBe(0);
     // v242: met een open grendel is de buffer per definitie vol, dus dit item is 'bereikt'
     expect(P[2].status).toBe('bereikt');
-    expect(P[0].eta).toBe(Math.ceil(2000 / 120));       // ETA volgt de toewijzing
+    /* v307: DE TERUGVAL. Tot v306 stond hier ceil(2000/120) = 17. Laptop is na 12 maanden vol (2000
+       bij 180, en in die twaalfde maand heeft hij er nog 20 nodig dus zakt er 160 door), en daarna
+       gaat de hele 300 naar Vakantie. GEMETEN: Vakantie staat na maand 12 op 1.600 en haalt de 2.000
+       in maand 14. Laptop zelf verandert niet, want onder hem valt niets vrij. */
+    expect(P[0].eta).toBe(14);
+    expect(P[0].eta).toBeLessThan(Math.ceil(2000 / 120));
     expect(P[1].eta).toBe(Math.ceil(2000 / 180));
   });
 

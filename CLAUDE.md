@@ -284,26 +284,107 @@ genoemde versietag.)*
   melden op een run die er 67 had: de `line`-reporter print dat teken niet. Een voortgangssignaal dat per
   constructie leeg is, is dezelfde familie als een test die niet kan falen; lees de SAMENVATTING.
   DE OMVANG IS BIJ `v306` NAGEGAAN EN BLEEK TOT DEZE RONDE BEPERKT; zie de meetles daarover.
-  WAT ER NIET IS GEBOUWD EN DE VOLGENDE RONDE IS: of `doelTempo()` en `p.eta` de TERUGVAL moeten
-  meerekenen. GEMETEN dat ze dat vandaag niet doen: beide houden de `alloc` van deze maand constant, dus de
-  rij op Plan en de alinea eronder geven vandaag dezelfde datum omdat ze dezelfde alloc lezen, en niet omdat
-  ze de doorzak modelleren. Met de hand doorgerekend geeft de terugval Kosten Koper vol in juni 2027 tegen
-  juli 2027 in de app.
-- **OPEN PUNT, GEMETEN EN NIET GEREPAREERD: `etaDatum()` slaat een maand over op een lange dag**
-  (`v305`, gevonden bij het meten van de terugval): hij doet `d.setMonth(d.getMonth()+n)` op de dag van
-  VANDAAG, en die dag bestaat niet in elke maand. GEMETEN op 30 september: `n=5` en `n=6` geven BEIDE
-  `mrt 2027`, want 30 februari rolt door naar maart. Op dag 15 van een maand van 28 dagen klopt elke
-  waarde, op dag 29 en 30 schuift alleen `n=5`, en op een 31e schuift elke waarde waarvan de doelmaand
-  korter is.
-  HET GEVOLG IS EEN DATUM DIE EEN MAAND TE LAAT LEEST, en dat is de gevaarlijke kant niet (te laat is
-  voorzichtig), maar het maakt twee verschillende tempo's op het scherm gelijk. Dat is precies het
-  etiket dat dit project verbiedt: twee getallen die uiteenlopen lezen als hetzelfde.
-  ZES LEZERS, dus het is een eigen ronde en geen bijvangst: `saveFasterTip()` (twee keer),
-  `planGrendelDatum()`, `etaTekst()`, `vatRegels()` (twee keer) en `tipEffect()`. De vorm die het dicht
-  is rekenen vanaf de EERSTE van de maand en niet vanaf vandaag, want een eta in maanden draagt geen
-  dag; wie dit oppakt kijkt eerst of een van de zes wel een dag bedoelt.
-  DE METING IS MET EEN VASTE KLOK TE HERHALEN (`tests/vaste-dag.js`, `v299`), dus dit is te toetsen
-  zonder op de kalender te wachten.
+  DE TERUGVAL DIE HIER ALS VOLGENDE RONDE STOND IS BIJ `v307` GEBOUWD; zie de regel daarover. Wat deze
+  ronde erover MAT blijft staan: `doelTempo()` en `p.eta` hielden beide de `alloc` van deze maand constant,
+  dus de rij op Plan en de alinea eronder gaven dezelfde datum omdat ze dezelfde alloc lazen en niet omdat
+  ze de doorzak modelleerden.
+- **`etaDatum()` REKENT VANAF DE EERSTE VAN DE MAAND** (`v307`): hij deed `d.setMonth(d.getMonth()+n)` op
+  de dag van VANDAAG, en die dag bestaat niet in elke maand. GEMETEN op 30 september 2026 gaven `n=5` en
+  `n=6` beide `mrt 2027`; op een 31e schoven ZES van de veertien waarden (`2026-01-31`: mrt, mei, jul, okt,
+  dec, mrt); op 29 februari 2024 gaven `n=12` en `n=13` beide `mrt 2025`, en dat is het enige geval waarin
+  de overloop op een JAARgrens valt. Op 28 februari en op dag 15 schuift er niets.
+  DAT WAS EEN GROTERE OMVANG DAN `v305` OPSCHREEF: die regel zei "op dag 29 en 30 schuift alleen `n=5`",
+  en dat klopt voor die twee dagen maar niet voor een 31e. Een open punt dat een ondergrens noemt terwijl
+  het een bovengrens leest, stuurt de ronde die hem oppakt te klein op weg.
+  EEN ETA IN MAANDEN DRAAGT GEEN DAG, en dat is bij alle ZES de lezers nagelezen voordat de vorm werd
+  gekozen: `saveFasterTip()` (twee keer), `planGrendelDatum()`, `etaTekst()`, `vatRegels()` (twee keer) en
+  `tipEffect()` tonen alle zes alleen maand en jaar. `new Date(j, m+n, 1)` normaliseert de maandindex zelf,
+  dus er is ook geen jaargrens om apart te behandelen.
+  DE VERWACHTING STAAT ALS LIJST VAN VEERTIEN LABELS PER DAG IN DE SPEC, uitgeschreven en niet nagerekend:
+  de uitkomst met een eigen maandoptelling narekenen zou de code onder test aan BEIDE kanten van de
+  vergelijking zetten (meetles a). Zes gepinde dagen, en `2026-02-28` en `2026-04-15` staan erbij als
+  TEGENPROEF: zonder een dag waarop niets schuift is "hij repareert de overloop" niet te onderscheiden van
+  "hij verschuift alles een maand".
+  DE DAG KLEMMEN OP 28 IS EEN SABOTAGE DIE PER CONSTRUCTIE GROEN BLIJFT, en dat is een eigenschap en geen
+  gat: 28 bestaat in elke maand, dus voor een label van maand en jaar geeft elke dag van 1 tot 28 exact
+  dezelfde veertien waarden. Er staat wel een test die MEET dat de dag uit de rekensom valt (drie dagen in
+  dezelfde maand geven dezelfde reeks), en die is de reden dat de keuze voor de eerste leesbaar blijft.
+  DE PIN IS `pinDatum()` IN `tests/vaste-dag.js` en geen tweede klok (`v104`): `pinDag()` houdt het
+  RESTANT van de maand vast, want dat is wat de zeven dagwoord-tests en de zes potjes-tests meten, en een
+  test over de KALENDER zelf heeft juist een genoemde dag nodig. Uit een restant is de 31e van januari niet
+  van de 29e van februari 2024 te onderscheiden.
+- **DE TERUGVAL: WAT EEN VOL DOEL NIET MEER NODIG HEEFT GAAT NAAR HET VOLGENDE DOEL, ELKE MAAND OPNIEUW**
+  (`v307`): `p.eta` was `ceil(rest/alloc)` met de alloc van DEZE maand, dus de rij op Plan las alsof een doel
+  zijn huidige tempo tot het eind houdt. GEMETEN op de stand van het toestel (inleg 2.200 in 70/30, Kosten
+  Koper 15.000 en Inrichting 3.000, beide vanaf nul): Inrichting is na 5 maanden vol en in die vijfde maand
+  zakt er 300 door, dus Kosten Koper staat na 5 maanden op 8.000 en pakt daarna 2.200 per maand. Dat is 9
+  maanden tegen de 10 die de app zei, en met de datum erbij juni 2027 tegen juli 2027.
+  EEN MAAND VERDELEN STAAT NU OP EEN PLEK, MET TWEE LEZERS (`v104`): `planVerdeelMaand(rows, cap, G)` draagt
+  de twee rondes, `allocatePlan()` verdeelt de maand die nu loopt en `planVooruit()` herhaalt diezelfde
+  verdeling maand na maand. Dat is de vorm van `v285`: de beslissing staat binnen, de SCOPE komt van de
+  aanroeper. Een projectie ernaast zou een tweede uitdrukking van de verdeling zijn.
+  DE GRENDEL BEWEEGT MEE, en dat is het geval dat de extractie niet-inert maakt. `planGrendelVan(nf, cap)`
+  is uit `planGrendel()` gelicht zodat de projectie er zijn EIGEN rest aan kan geven; een buffer die vol
+  raakt opent de grendel en dan gaat de inleg naar de doelen. GEMETEN met nog 800 nodig van een inleg van
+  2.200: er zakt 1.400 door naar Kosten Koper en het oude tempo las dat als `ceil(15000/1400)` = 11 maanden,
+  terwijl de buffer volgende maand vol is en de projectie op 9 uitkomt. Zou de projectie de grendel van NU
+  vasthouden, dan bleef hij op 11 staan.
+  EEN AFLOS-ITEM HOUDT ZIJN ALLOC VOOR ALTIJD, en dat is een benoemde grens en geen omissie. Wanneer een
+  schuld af is komt uit `payoffMonths()`, een gesloten formule MET rente; die maand na maand naspelen zou een
+  tweede uitdrukking van diezelfde aflossing zijn (`v104`). Zolang de projectie hem niet laat vrijvallen komt
+  een doel eronder LATER aan zijn geld dan in werkelijkheid, en dat is de voorzichtige kant (`v168`). Het is
+  bovendien precies wat er vóór `v307` al gebeurde, dus er gaat niets verloren. DE TEST BINDT OP DE
+  EIGENSCHAP: de id van de schuld komt NIET in de uitkomst van `planVooruit()` voor. Mijn eerste vorm zette
+  daar een ondergrens op de eta van de doelen eronder, en die stond te ruim: de sabotage bleef er groen op
+  (meetles d).
+  DE VOLGORDE IS MET TWEE VOLGORDES GEMETEN EN NIET MET EEN. Mijn eerste vorm eiste dat het DERDE doel
+  niets opschiet, en de meting heeft die premisse weerlegd: zodra het doel op plek 2 zelf vol is gaat alles
+  naar plek 3, dus ook dat doel wordt sneller. Wat de volgorde vasthoudt is niet "wie wint iets" maar "wie
+  wint MEER", en dat is alleen te zien door hetzelfde drietal in twee volgordes te leggen.
+  DE LUS WORDT BEGRENSD DOOR HET PLAFOND EN NIET DOOR ZIJN UITGANG. `bewoog` stopt een plan waarin niets
+  meer beweegt (een gepauzeerde buffer achter een dichte grendel geeft elk doel nul, voor altijd) en scheelt
+  zeshonderd nutteloze rondjes; een sabotage erop verandert geen enkele uitkomst, en dat is gemeten. Mijn
+  eerste vorm zette er ook een hermarkering van `bereikt` per maand bij met een tweede uitgang erop, en die
+  bleek net zo onobserveerbaar (een rij met rest nul vraagt in ronde 1 nul en valt in ronde 2 af op zijn
+  rest). Die is eruit: dood gewicht in een lus is precies wat een volgende ronde verkeerd leest.
+  DE GRENDEL-TAKKEN VAN `doelTempo()` DOEN NIET MEE, en dat is `v255`: bij een doorgezakt doel is `p.eta`
+  `ceil(rest / de rest van de maand van je buffer)` en dus niet het tempo van dat doel. Die takken printen
+  ook geen vol-datum, dus er is daar geen datumpaar dat kan botsen. Een doel dat op de buffer WACHT houdt
+  `eta` null en dus de v255-vorm ("verdelen gaat open rond Y", geen vol-datum).
+- **DE RIJ EN DE ALINEA OP PLAN LEZEN DEZELFDE BRON, EN DE SPELING IS HET VERSCHIL TUSSEN DE TWEE DATUMS**
+  (`v307`): beide rekenden hun speling al uit `maandenTot - p.eta`, dus de formule was al een. Wat uiteenliep
+  was de WEERGAVE: de rij printte de overgelopen `etaDatum()`, dus er stond "vol in mrt 2027 · moet in maart
+  2027" (verschil nul) onder een alinea die "met 1 maand speling" zei. De assertie bindt die twee nu aan
+  elkaar in plaats van aan een getal.
+  `haalbaar` LEEST DE PROJECTIE EN NIET HET GAT. `gat<=0` vraagt of je HUIDIGE alloc de datum haalt, en met
+  de terugval erin is dat de verkeerde vraag: een doel kan de datum halen terwijl zijn alloc van nu dat niet
+  zou doen. Dan zei de alinea "je komt X per maand tekort" terwijl de rij een vol-datum vóór de streefdatum
+  noemde. `benodigd` en `gat` blijven onaangeroerd, want "wat heb je per maand nodig voor DIT doel" is een
+  andere vraag dan "haal je de datum".
+  `eta` KOMT VAN DE RIJ ZELF en niet als vierde parameter: alle VIER de aanroepers van `doelTempo()` geven
+  een rij uit `allocatePlan()` mee (ze lezen `p.alloc`), dus het veld is er al. Een object zonder `eta` valt
+  terug op het gat, en dat is de oude vorm.
+  HET GEVAL DAT DE TWEE ONDERSCHEIDT STAAT IN DE FIXTURE, met zijn tegenproef ernaast: een doel dat de datum
+  ALLEEN met de terugval haalt (`gat > 0`, `ceil(rest/alloc)` voorbij de streefdatum, projectie erbinnen) en
+  een doel dat het ook met de terugval niet haalt. Zonder die eerste blijft de sabotage die `haalbaar` weer
+  op `gat<=0` zet groen; zonder de tweede is "haalbaar leest de projectie" niet te onderscheiden van
+  "haalbaar staat altijd op waar".
+  TWAALF SABOTAGES, ELF ROOD. De twaalfde is `bewoog` en die is per constructie inert; zie de regel hierboven.
+  Daarnaast is het klemmen van de dag op 28 in `etaDatum()` inert, met dezelfde soort reden.
+  ZES BESTAANDE TESTS VIELEN EROP, en dat is wat de suite hier waard is. DRIE WAREN GEDRAG en die
+  eta's zijn met de hand nagerekend en daarna gemeten: `plan-doorzakken` gaat van 34 naar 20 maanden,
+  `plan-prioriteit` van 10 naar 5 en `verdeelmodus` van 17 naar 14. Alle drie de rekensommen staan bij de
+  assertie, met een tweede assertie erbij dat de nieuwe waarde LAGER is dan de oude vorm; zonder die
+  tweede is een hardgecodeerd getal niet van een willekeurig getal te onderscheiden.
+  DRIE WAREN BRONZOEKEND EN ANKERDEN OP DE FUNCTIE WAARIN DE RONDES TOEVALLIG STONDEN
+  (`grendel-doorzakken.spec.js`, sectie h): ze eisten `planBufferKlaar()` binnen `allocatePlan()`. Dat is
+  meetles (t), nu niet op een snede of een indentatie maar op een FUNCTIENAAM. Ze zoeken de functie nu op
+  zijn INHOUD (de doorzak-lus is te herkennen aan `extra+=`) en eisen dat die er PRECIES EEN is, want een
+  gesplitste verdeling zou de drie asserties over de tweede kopie stil laten zwijgen. Er staat een vierde
+  test bij die eist dat `allocatePlan()` en `planVooruit()` die functie BEIDE noemen; zonder hem kan een
+  volgende ronde de rondes naar een van de twee terugkopiëren en blijft de eerste test groen op de andere.
+  GEMETEN: de sabotage die de lus dupliceert zet er drie rood, en de sabotage die `planVooruit()` zijn
+  eigen verdeling geeft precies die vierde.
 - **EEN ONTTREKKING IS EEN BEWEGING EN GEEN STAND, EN DUS UIT EEN RIJ NIET TE LEZEN** (`v303`): sectie 1 van
   blok 14 laat een rekening die niet meetelt en een saldo van een oudere dag zien, maar een ONTTREKKING
   verlaagt het saldo zonder dat er aan die rij iets te zien is. Dat is de derde kandidaat voor een verschil
@@ -413,6 +494,13 @@ genoemde versietag.)*
   test in `vaste-testdag.spec.js`. EEN SPEC DIE EEN ANDER MOMENT NODIG HEEFT GEEFT HET MEE: `boot()`
   neemt een klok en die wint van de pin. Zonder dat overschreef mijn eigen standaard-pin de
   middernacht-test, en dat is bij het bouwen van deze ronde ook echt gebeurd.
+  ER IS SINDS `v307` EEN TWEEDE PIN IN DEZELFDE BRON, EN DAT IS GEEN TWEEDE WAARHEID: `pinDag()` houdt het
+  RESTANT van de maand vast en `pinDatum(page, 'jjjj-mm-dd')` een GENOEMDE dag. Dat zijn twee vragen: de
+  dagwoord- en potjes-tests meten het restant, en een test over de KALENDER zelf (een 31e, een schrikkeldag)
+  heeft juist die dag nodig en kan hem uit een restant niet halen. Hij staat in `vaste-dag.js` en niet in de
+  spec die hem gebruikt, zodat `page.clock` op een plek wordt aangeroepen en de lijst zetters volledig blijft.
+  HIJ FAALT LUID bij een datum die niet bestaat, want een stille terugval op 1 maart zou een schrikkeldag-test
+  in een gewone dag veranderen.
   EEN UITZONDERING, MET HAAR REDEN: `potjes-weekvenster.spec.js` LOOPT DE VENSTERRAND AF en heeft dus
   meer dan een dag nodig; een gedeelde vaste dag zou daar de meting weghalen. Hij viel ook niet om, want
   hij leidt zijn eigen maand van dertig dagen af. De spec pint die uitzondering bij naam, zodat de lijst
@@ -3674,7 +3762,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v305` → `minder-v307`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v307` → `minder-v308`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -3684,8 +3772,8 @@ en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfd
 bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte alleen `tests/` en dit
 bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`; `v301` raakt wel app-code
 en bumpt dus gewoon door naar `minder-v301`, en `v302` tot en met `v305` net zo. `v306` raakt alleen
-`tests/` en dit bestand, dus hij bumpt niet en de eerstvolgende app-code-ronde gaat van `minder-v305`
-naar `minder-v307`. Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
+`tests/` en dit bestand, dus hij bumpte niet en `v307` ging daarom van `minder-v305` naar `minder-v307`.
+Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
 `minder-vN` in één greep terug te vinden in `CHANGELOG.md` en in de comments in `index.html`.
