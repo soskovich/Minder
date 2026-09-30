@@ -18,11 +18,20 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { open } = require('./budget-fixture');
+/* v306: DE DAG STAAT VAST, want deze spec meet een RESERVERING en die is op de laatste dag van de
+   maand per constructie nul. `daysElapsed()` geeft daar `elapsed === dim`, dus `potjeRest()` geeft
+   voor een overschreden potje `bud/dim * 0` en het gat is dan exact gelijk aan de overschrijding.
+   Dezelfde as als de zeven dagwoord-tests van v299, een dag verderop, en dus dezelfde pin.
+   HIJ STAAT IN EEN EIGEN `boot()` en niet elf keer los: `open()` van de fixture doet de goto, en
+   de pin moet ervoor (v299). */
+const { pinDag, DAGEN_OVER } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 const CUR = ym(now), M1 = ym(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+
+const boot = async (page, payload) => { await pinDag(page); await open(page, payload); };
 
 // boodschappen-potje 500 met `uit` uitgegeven, uiteten-potje 200 met 50 uitgegeven
 function seedPot({ uit = 700, saldo = null } = {}) {
@@ -44,7 +53,7 @@ function seedPot({ uit = 700, saldo = null } = {}) {
 
 test.describe('a · de rekenregel', () => {
   test('binnen budget verandert er niets: het onbestede deel', async ({ page }) => {
-    await open(page, seedPot());
+    await boot(page, seedPot());
     const r = await page.evaluate(() => ({
       ruim: potjeRest(500, 200, 30, 10),
       precies: potjeRest(500, 500, 30, 10),
@@ -56,7 +65,7 @@ test.describe('a · de rekenregel', () => {
   });
 
   test('overschreden reserveert het geplande dagtempo maal de resterende dagen', async ({ page }) => {
-    await open(page, seedPot());
+    await boot(page, seedPot());
     const r = await page.evaluate(() => ({
       vroeg: potjeRest(500, 700, 30, 25),      // 500/30 * 25
       laat: potjeRest(500, 700, 30, 3),        // 500/30 * 3
@@ -68,7 +77,7 @@ test.describe('a · de rekenregel', () => {
   });
 
   test('de reservering hangt aan je plan, niet aan hoe ver je eroverheen ging', async ({ page }) => {
-    await open(page, seedPot());
+    await boot(page, seedPot());
     const r = await page.evaluate(() => ({
       beetjeOver: potjeRest(500, 550, 30, 10),
       veelOver: potjeRest(500, 2000, 30, 10),
@@ -79,7 +88,7 @@ test.describe('a · de rekenregel', () => {
   });
 
   test('in een afgeronde maand valt alleen het overschreden potje weg', async ({ page }) => {
-    await open(page, seedPot());
+    await boot(page, seedPot());
     const r = await page.evaluate((m) => {
       const d = daysElapsed(m), sp = catSpendMap(m), left = Math.max(d.dim - d.elapsed, 0);
       return { left, plan: varPlanRemaining(m),
@@ -100,7 +109,7 @@ test.describe('b · het gemelde geval', () => {
      eigenschap omgekeerd: een leeg potje reserveert nul, en de overschrijding is wel nog apart
      zichtbaar via potOver en via de prognoseregel onder de sheet. */
   test('een overschreden potje reserveert nul, en de overschrijding blijft zichtbaar', async ({ page }) => {
-    await open(page, seedPot());
+    await boot(page, seedPot());
     const r = await page.evaluate((m) => {
       const S = safeToSpend(), t = totals(m), d = daysElapsed(m), left = Math.max(d.dim - d.elapsed, 0);
       const sp = catSpendMap(m);
@@ -122,9 +131,9 @@ test.describe('b · het gemelde geval', () => {
   });
 
   test('meer uitgeven maakt veilig te besteden niet ruimer', async ({ page }) => {
-    await open(page, seedPot({ uit: 550 }));
+    await boot(page, seedPot({ uit: 550 }));
     const weinig = await page.evaluate(() => ({ safe: safeToSpend().safe, res: safeToSpend().reserved }));
-    await open(page, seedPot({ uit: 900 }));
+    await boot(page, seedPot({ uit: 900 }));
     const veel = await page.evaluate(() => ({ safe: safeToSpend().safe, res: safeToSpend().reserved }));
     expect(veel.safe).toBeLessThan(weinig.safe);             // saldo daalt mee
     expect(veel.res).toBe(weinig.res);                       // de reservering blijft aan het plan hangen
@@ -137,7 +146,7 @@ test.describe('c · één bron', () => {
      wat zit er nog in je potjes (veilig te besteden en de sheet). Twee vragen, twee functies. Wat
      één bron moet blijven is de sheet tegenover veilig te besteden, en dat staat hieronder. */
   test('veilig te besteden leest de reservering, Inzichten de tempo-som', async ({ page }) => {
-    await open(page, seedPot());
+    await boot(page, seedPot());
     const r = await page.evaluate((m) => ({ plan: varPlanRemaining(m), reserve: varPotjesReserve(m),
       safe: safeToSpend().reserved, potOver: safeToSpend().potOver,
       budget: varBudget(), gebruikt: varPotjeStand(m).gebruikt }), CUR);
@@ -148,7 +157,7 @@ test.describe('c · één bron', () => {
   });
 
   test('de drill-down spreekt het hoofdgetal niet tegen', async ({ page }) => {
-    await open(page, seedPot());
+    await boot(page, seedPot());
     await page.evaluate(() => openReservedPotjes());
     await page.waitForTimeout(80);
     const r = await page.evaluate(() => {
@@ -165,14 +174,19 @@ test.describe('c · één bron', () => {
      reserveert niets meer, dus de rij zegt dat, en de prognose staat als eigen regel onder de
      lijst in plaats van in het totaal. */
   test('een leeg potje staat er met nul, en de prognose staat onder de lijst', async ({ page }) => {
-    await open(page, seedPot());
+    await boot(page, seedPot());
     const left = await page.evaluate((m) => { const d = daysElapsed(m); return d.dim - d.elapsed; }, CUR);
     await page.evaluate(() => openReservedPotjes());
     await page.waitForTimeout(80);
     const s = await page.locator('#sheet').innerText();
     expect(s).toContain('potje op');
     expect(s).not.toContain('eigen dagtempo');
-    if (left > 0) expect(s).toMatch(/Bij je tempo verwacht je deze maand nog \u20ac[\d.]+ uit te geven/);
+    /* v306: DIT WAS `if (left > 0)`, EN DAT FILTERDE DE UITKOMST WEG. Op de laatste dag van de
+       maand is `left` nul en dan stond de prognoseregel er niet, dus de assertie sloeg daar stil
+       over. Met de pin staat de invoer vast, en die wordt nu GEMETEN in plaats van dat de uitkomst
+       wordt weggefilterd (dezelfde reparatie als v299/v300). */
+    expect(left, 'de pin laat zeven dagen over, dus de prognoseregel is bereikbaar').toBe(DAGEN_OVER);
+    expect(s).toMatch(/Bij je tempo verwacht je deze maand nog \u20ac[\d.]+ uit te geven/);
   });
 });
 
@@ -180,7 +194,7 @@ test.describe('d · smalle mobiel', () => {
   for (const w of [360, 390]) {
     test(`de potjes-sheet past op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 860 });
-      await open(page, seedPot());
+      await boot(page, seedPot());
       await page.evaluate(() => openReservedPotjes());
       await page.waitForTimeout(80);
       const over = await page.evaluate(() => {

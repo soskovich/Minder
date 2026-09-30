@@ -70,13 +70,36 @@ test.describe('b - de app ziet die dag ook echt', () => {
   });
 });
 
-test.describe('c - de vier specs lezen dezelfde bron', () => {
+test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron', () => {
   /* EEN TWEEDE PIN NAAST DEZE ZOU EEN TWEEDE WAARHEID ZIJN over welke dag een test bekijkt (v104).
-     Deze test valt zodra een van de vier zijn eigen datum gaat uitrekenen. */
-  test('geen enkele van de vier rekent zijn eigen vaste dag uit', () => {
-    for (const f of ['tempo-zonder-vaste-lasten', 'dagbedrag-potjes', 'zwijgen-met-reden', 'grafiekvormen']) {
+     Deze test valt zodra een van hen zijn eigen datum gaat uitrekenen.
+     DE LIJST STAAT BIJ NAAM EN IS NIET AFGELEID, en dat is met opzet: hij is de verzameling specs
+     waarvan de asserties AAN DE DAG hangen, en dat is een eigenschap van hun asserties en niet van
+     hun broncode. Een spec die geen vaste dag nodig heeft hoort er niet in gedwongen te worden.
+     Wat de test wel vangt is de enige fout die hier telt: een van hen die de pin loslaat.
+     VIER KWAMEN ER BIJ v306 BIJ, op een tweede as: de zeven van v299 eisten het MEERVOUD van het
+     dagwoord en vielen op de op-een-na-laatste dag; deze zes meten een RESERVERING en vielen op
+     de LAATSTE, want daar is `potjeRest()` per constructie nul. */
+  const NODIG = ['tempo-zonder-vaste-lasten', 'dagbedrag-potjes', 'zwijgen-met-reden', 'grafiekvormen',
+    'potjesregel-diagnose', 'potjesregel-aansluiting', 'potjes-reservering', 'potje-overschreden'];
+  test('geen enkele van hen rekent zijn eigen vaste dag uit', () => {
+    for (const f of NODIG) {
       const src = fs.readFileSync(path.join(__dirname, f + '.spec.js'), 'utf8');
       expect(src, f + ' leest de gedeelde pin niet').toMatch(/require\('\.\/vaste-dag'\)/);
+      expect(src, f + ' rekent zijn eigen vaste dag uit').not.toMatch(/clock\.(setFixedTime|install)\(new Date/);
+    }
+  });
+
+  /* ZONDER DEZE TEST IS DE PIN IN DE VIER NIEUWE SPECS INERT TE MAKEN ZONDER DAT IETS OPVALT: hij
+     moet VOOR de goto staan (v299), en een `pinDag` erachter leest de app niet meer. Dit is de
+     vorm van meetles (c): de test loopt het pad dat de eigenschap draagt. */
+  test('wie de pin gebruikt zet hem voor de eerste goto', () => {
+    for (const f of NODIG) {
+      const src = fs.readFileSync(path.join(__dirname, f + '.spec.js'), 'utf8');
+      const pin = src.indexOf('pinDag(page)');
+      const goto = src.indexOf("page.goto(");
+      if (pin < 0 || goto < 0) continue;            // deze spec pint via een eigen klok-argument
+      expect(pin, f + ' zet de pin na de goto').toBeLessThan(goto);
     }
   });
 

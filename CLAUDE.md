@@ -283,6 +283,7 @@ genoemde versietag.)*
   DE VOORTGANGSCHECK OP `✘` WAS GEEN METING, en die fout heeft mij zes berichten lang "nul rood" laten
   melden op een run die er 67 had: de `line`-reporter print dat teken niet. Een voortgangssignaal dat per
   constructie leeg is, is dezelfde familie als een test die niet kan falen; lees de SAMENVATTING.
+  DE OMVANG IS BIJ `v306` NAGEGAAN EN BLEEK TOT DEZE RONDE BEPERKT; zie de meetles daarover.
   WAT ER NIET IS GEBOUWD EN DE VOLGENDE RONDE IS: of `doelTempo()` en `p.eta` de TERUGVAL moeten
   meerekenen. GEMETEN dat ze dat vandaag niet doen: beide houden de `alloc` van deze maand constant, dus de
   rij op Plan en de alinea eronder geven vandaag dezelfde datum omdat ze dezelfde alloc lezen, en niet omdat
@@ -416,6 +417,29 @@ genoemde versietag.)*
   meer dan een dag nodig; een gedeelde vaste dag zou daar de meting weghalen. Hij viel ook niet om, want
   hij leidt zijn eigen maand van dertig dagen af. De spec pint die uitzondering bij naam, zodat de lijst
   niet stilletjes groeit.
+  ER IS EEN TWEEDE AS, EN DIE IS BIJ `v306` GEPIND: zes potjes-tests in vier bestanden vielen op de
+  LAATSTE dag van de maand. Daar geeft `daysElapsed()` `elapsed === dim`, dus `potjeRest()` geeft voor een
+  overschreden potje `bud/dim * 0` en is elke RESERVERING nul; dan is het gat exact gelijk aan de
+  zichtbare overschrijding en meet een assertie op "het gat is groter" niets. GEMETEN op 30 september
+  2026: `expect(r.gat).toBeGreaterThan(r.overs)` viel op 150 tegen 150, en alle zes zijn met de pin groen.
+  DEZELFDE PIN EN GEEN TWEEDE: `dim - 7` laat zeven dagen over en dat is precies wat deze tests nodig
+  hebben, dus er komt geen tweede getal naast (`v104`). De lijst in `vaste-testdag.spec.js` gaat daarmee
+  van vier naar ACHT namen.
+  DE LIJST STAAT BIJ NAAM EN IS NIET AFGELEID, en dat is met een reden: hij is de verzameling specs
+  waarvan de ASSERTIES aan de dag hangen, en dat is geen eigenschap van hun broncode. Een sabotage die een
+  naam uit de lijst HAALT blijft daarom per constructie groen, want dan loopt de lus over minder
+  bestanden; dat is de familie van meetles (s). Wat de test wel vangt is de enige fout die hier telt, en
+  dat is GEMETEN: een listed spec die de pin loslaat zet twee tests rood (de lijst-test en de potjes-test
+  zelf).
+  EEN PIN NA DE `goto` IS NIET INERT MAAR HALF WERKZAAM, en dat is het geval dat een eigen assertie
+  vroeg. `setFixedTime()` na de boot verandert wel wat de app DAARNA uitrekent, dus de zes potjes-tests
+  blijven er groen op; alleen wat de boot zelf al las blijft de echte klok. GEMETEN: die sabotage laat de
+  zes groen en zet ALLEEN de nieuwe ordening-assertie rood, dus zonder die assertie zou een spec die de
+  pin te laat zet er stil doorheen komen.
+  EEN GUARD DIE DOOR DE PIN ONBEREIKBAAR WORDT GAAT ERUIT: `potje-overschreden.spec.js` had
+  `if (left > 0) expect(...)` om de laatste dag heen, en dat filterde de uitkomst weg. Met de pin staat de
+  invoer vast, en die wordt nu GEMETEN (`expect(left).toBe(DAGEN_OVER)`) in plaats van dat de uitkomst
+  wordt overgeslagen. Dat is dezelfde reparatie als bij de overgeslagen tests van `v299`/`v300`.
   TWEE TESTS ZIJN ER STERKER VAN GEWORDEN, en dat is geen bijvangst maar het gevolg van een klok die je
   kunt kiezen. "vandaagYMD volgt je eigen kalender, niet UTC" draaide op het moment van de suite en dus
   meestal overdag, waar de lokale dag en de UTC-dag gelijk zijn: hij kon per constructie niet vallen.
@@ -3293,6 +3317,29 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   bestandsnaam per run, en bij een afwijkende looptijd eerst tellen HOEVEEL samenvattingen er in het
   bestand staan. Meer dan één betekent dat geen van de twee iets bewijst. Dit is dezelfde familie als de
   heredoc-les hierboven: een geslaagd commando is niet hetzelfde als de juiste uitvoer.
+- **HETZELFDE GREP-COMMANDO IS OP DE ENE UITVOER EEN METING EN OP DE ANDERE PER CONSTRUCTIE LEEG**
+  (`v306`, nagegaan over 33 bewaarde volle runs): de `list`-reporter print `✓` en `✘` alleen als hij naar
+  een TERMINAL schrijft. Naar een BESTAND schrijft hij `[n/m] › titel` zonder teken. Beide vormen staan in
+  de bewaarde uitvoer van dit project, en een `grep -c "✘"` is op de eerste vorm exact het aantal rode
+  tests en op de tweede altijd nul.
+  DAT IS GEMETEN EN NIET AANGENOMEN: bij `vol300`, `vol300b`, `vol301`, `full9`, `full271`, `full272`,
+  `full273` en `full273b` is het aantal kruisjes gelijk aan het aantal uit de samenvatting (5, 3, 3, 3, 2,
+  3, 14, 2). Bij `vol295` tot `vol299`, `v302full`, `v303full`, `v304full2` en `vol305*` staat er geen
+  enkel teken in het bestand. De check was dus in de ene ronde geldig en in de andere blind, en aan het
+  commando is dat niet te zien.
+  DE AFBAKENING VAN DE SCHADE, want dat was de vraag: het `✘`-commando is als ENIG signaal gebruikt op
+  twee bestanden, beide in `v305`. Op `vol305.txt`, een run die ik op 327 van 3054 had afgebroken en die
+  dus geen samenvatting had, en op `vol305b.txt`, dat er 67 rood had. In alle andere rondes stond de
+  samenvatting in hetzelfde commando of in het bestand dat wel tekens draagt.
+  DE 33 RUNS ZIJN OPNIEUW GETELD OP DE JUISTE MANIER (`passed + failed + skipped` tegen het aantal uit
+  `Running N tests`): elk bestand draagt precies EEN samenvatting en elke som klopt op de test. Geen
+  enkele afgeronde ronde is dus groen gemeld terwijl er onbekend rood in zat. WAT ER WEL IN ZAT, en dat
+  is de enige vondst: bij `v302` stond naast de gedocumenteerde `diag-entry-merge`-test een TWEEDE test
+  van datzelfde bestand rood (`blok 13 markeert de pending-kolommen van de herkoppelde rekening`), en die
+  is niet opgeschreven. Hij is vanaf `v303` groen en heeft vrijwel zeker dezelfde oorzaak als zijn buur,
+  de stub die soms niet levert.
+  DE WERKAFSPRAAK: lees de SAMENVATTING, en tel `passed + failed + skipped` tegen `--list`. Een
+  voortgangssignaal uit de uitvoer mag daarnaast staan, nooit ervoor.
 - **Twee mechanische fixture-fouten die niets met de invariant te maken hebben** (`v280`): ze kostten samen
   twee rondes en ze zijn goedkoop te herkennen.
   (1) `toISOString().slice(0,10)` IN EEN TEST GEEFT DE UTC-DAG. Ik zette een boeking op "morgen" met
@@ -3604,17 +3651,12 @@ WAT ER NIET IS GEREPAREERD, en dat is bewust: de app zegt nog steeds "1 dag" op 
 klopt is de dagen-conventie van `v257` en die staat nog als open punt; deze ronde raakt geen enkele
 regel app-code.
 
-**Bekend rood op EEN DAG per maand, gemeten bij `v302`: zes potjes-tests vallen op de LAATSTE dag van de
-maand.** `potjesregel-diagnose.spec.js` (2), `potjes-reservering.spec.js` (2), `potje-overschreden.spec.js`
-en `potjesregel-aansluiting.spec.js`. DE OORZAAK IS PER CONSTRUCTIE EN GEEN FLAKE: `daysElapsed()` geeft op
-de laatste dag `elapsed === dim`, dus `daysLeft` is NUL, en `potjeRest()` geeft voor een overschreden potje
-`Math.round(bud/dim * 0)` en dus nul. Elke reservering is daar nul, en dan is het gat exact gelijk aan de
-zichtbare overschrijding. GEMETEN: `expect(r.gat).toBeGreaterThan(r.overs)` viel op `150` tegen `150`, en
-alle zes staan op `HEAD` net zo rood (7 failed, 57 passed in een eigen run), dus ze zijn niet van `v302`.
-DIT IS DE FAMILIE VAN `v299`, OP EEN TWEEDE AS: die ronde pinde de tests die het dagWOORD eisten en viel op
-de op-een-na-laatste dag; deze eisen dat er nog RESERVERING is en vallen op de laatste. De reparatie is
-dezelfde (`tests/vaste-dag.js`, de dag geteld vanaf het einde van de maand), en de dagen-conventie van
-`v257` blijft er los van: die vraag gaat over de app en deze over de fixture.
+**GEREPAREERD BIJ `v306`: de zes potjes-tests die op de LAATSTE dag van de maand vielen.** Ze zijn met
+dezelfde pin als `v299` op een vaste dag gezet; zie de staande regel "EEN TEST DIE OVER DE KALENDER GAAT
+PINT ZIJN EIGEN DAG", die er nu een tweede as bij draagt. Daarmee gaat de lijst bekend rood van negen
+naar DRIE, en dat is dezelfde reden als bij `v299`: tussen negen bekende rode valt een nieuwe rode niet
+meer op. `index.html` is niet aangeraakt, en de dagen-conventie van `v257` blijft los daarvan staan: die
+vraag gaat over de app en deze over de fixture.
 
 **Onstabiel, oorzaak gemeten, eigen ronde:** `diag-entry-merge.spec.js` "blok 8 noemt welke groep uit een
 eerdere sync komt" valt ongeveer een op de vier keer (GEMETEN 3 van 4 groen in vier runs achter elkaar, en
@@ -3632,7 +3674,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v305` → `minder-v306`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v305` → `minder-v307`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -3641,8 +3683,9 @@ dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `m
 en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfde geval, dus de
 bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte alleen `tests/` en dit
 bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`; `v301` raakt wel app-code
-en bumpt dus gewoon door naar `minder-v301`, en `v302` tot en met `v305` net zo. Dat gat is geen fout maar de regel
-zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
+en bumpt dus gewoon door naar `minder-v301`, en `v302` tot en met `v305` net zo. `v306` raakt alleen
+`tests/` en dit bestand, dus hij bumpt niet en de eerstvolgende app-code-ronde gaat van `minder-v305`
+naar `minder-v307`. Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
 `minder-vN` in één greep terug te vinden in `CHANGELOG.md` en in de comments in `index.html`.

@@ -11,6 +11,11 @@
 // als er een gat is, en dat een tik altijd uitkomt op het bedrag waarop je tikte.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+/* v306: DE DAG STAAT VAST, want deze spec meet een RESERVERING en die is op de laatste dag van de
+   maand per constructie nul. `daysElapsed()` geeft daar `elapsed === dim`, dus `potjeRest()` geeft
+   voor een overschreden potje `bud/dim * 0` en het gat is dan exact gelijk aan de overschrijding.
+   Dezelfde as als de zeven dagwoord-tests van v299, een dag verderop, en dus dezelfde pin. */
+const { pinDag } = require('./vaste-dag');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -51,9 +56,11 @@ function seed(o) {
    WAT NIET VAST TE ZETTEN IS: de €1.089 en het gat van €491. potjeRest() geeft voor een
    overschreden potje bud/dim maal de RESTERENDE DAGEN terug, dus die twee hangen aan de dag van
    de maand: op dag 20 was het gat €385, op dag 22 €491. Een fixture die ze als getal vastlegt zou
-   morgen rood staan zonder dat er iets mis is. De potjes zijn daarom zo gekozen dat het gat op
-   dag 22 van een maand van 30 dagen precies op €491 uitkomt, en elke test leest hem verder live
-   uit varPlanRemaining() in plaats van hem te herhalen. */
+   morgen rood staan zonder dat er iets mis is, en elke test leest ze daarom live uit
+   varPlanRemaining() in plaats van ze te herhalen.
+   SINDS v306 STAAT DE DAG VAST op zeven dagen over (`vaste-dag.js`), en dat verandert aan die
+   keuze niets: wat vastligt is nog steeds de IDENTITEIT en niet het bedrag. De pin haalt alleen
+   de LAATSTE dag van de maand weg, en daar is de reservering nul en valt er geen gat te meten. */
 const GEMELD_BUDGETS = { boodschappen: 600, uiteten: 400, vervoer: 330, shopping: 400, huur: 1200 };
 const GEMELD = [['b1', '03', -931, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN'],
   ['u1', '06', -120, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT'],
@@ -72,6 +79,7 @@ const PRECIES = [['b1', '03', -500, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN
   ['u1', '06', -400, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT']];
 
 async function boot(page, o) {
+  await pinDag(page);                      // v306: vóór de goto, anders leest de boot de echte klok
   await page.setViewportSize({ width: 360, height: 800 });
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');

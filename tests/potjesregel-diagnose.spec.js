@@ -16,6 +16,11 @@
 // correctie: welke van de twee getallen op die plek hoort is een aparte beslissing.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+/* v306: DE DAG STAAT VAST, want deze spec meet een RESERVERING en die is op de laatste dag van de
+   maand per constructie nul. `daysElapsed()` geeft daar `elapsed === dim`, dus `potjeRest()` geeft
+   voor een overschreden potje `bud/dim * 0` en het gat is dan exact gelijk aan de overschrijding.
+   Dezelfde as als de zeven dagwoord-tests van v299, een dag verderop, en dus dezelfde pin. */
+const { pinDag } = require('./vaste-dag');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -58,6 +63,7 @@ const BINNEN = [['b1', '03', -120, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN'
   ['u1', '06', -80, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT']];
 
 async function boot(page, o) {
+  await pinDag(page);                      // v306: vóór de goto, anders leest de boot de echte klok
   await page.setViewportSize({ width: 360, height: 800 });
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');

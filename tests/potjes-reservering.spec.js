@@ -15,6 +15,11 @@
 // lijst, en alleen als er een leeg potje is.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+/* v306: DE DAG STAAT VAST, want deze spec meet een RESERVERING en die is op de laatste dag van de
+   maand per constructie nul. `daysElapsed()` geeft daar `elapsed === dim`, dus `potjeRest()` geeft
+   voor een overschreden potje `bud/dim * 0` en het gat is dan exact gelijk aan de overschrijding.
+   Dezelfde as als de zeven dagwoord-tests van v299, een dag verderop, en dus dezelfde pin. */
+const { pinDag } = require('./vaste-dag');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -23,10 +28,13 @@ const M1 = ym(new Date(now.getFullYear(), now.getMonth() - 1, 1));
 const M2 = ym(new Date(now.getFullYear(), now.getMonth() - 2, 1));
 const MAIN = 'NL01MAIN0000001111';
 
-/* De gemelde toestand: zes variabele potjes, drie ervan op. De reserves van die drie zijn op dag 22
+/* De gemelde toestand: zes variabele potjes, drie ervan op. De reserves van die drie waren op dag 22
    van een maand van 30 dagen precies 133, 15 en 5, samen de gemelde 153; het sheet-totaal was 1.063
    en wordt 910. Huur en abonnement staan er als terugkerende potjes naast, want die horen in geen
-   van beide sommen thuis en dat toetsen we hieronder. */
+   van beide sommen thuis en dat toetsen we hieronder.
+   DIE DRIE BEDRAGEN STAAN HIER ALS HERKOMST EN NIET ALS ASSERTIE: ze hangen aan de dag van de
+   maand, en sinds v306 pint deze spec die dag op zeven dagen over. Wat de tests lezen komt live
+   uit de app. */
 function seed(o) {
   o = o || {};
   const tx = [];
@@ -65,6 +73,7 @@ const GEEN_OP = [['o1', '04', -100, 'Blokker', 'BEA, BETAALPAS BLOKKER'],
   ['c1', '09', -40, 'Shell', 'BEA, BETAALPAS SHELL TANKSTATION']];
 
 async function boot(page, bk) {
+  await pinDag(page);                      // v306: vóór de goto, anders leest de boot de echte klok
   await page.setViewportSize({ width: 360, height: 800 });
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed({ boekingen: bk }));
   await page.goto('/index.html');
@@ -95,7 +104,9 @@ const meet = (page) => page.evaluate(() => {
 test.describe('a · de gemelde toestand: drie lege potjes', () => {
   /* HET VERSCHIL HANGT AAN DE DAG VAN DE MAAND en staat daarom niet als getal in deze tests.
      potjeRest() is bud/dim maal de RESTERENDE dagen (v111), dus de tempo-som krimpt elke dag: op
-     dag 22 van een maand van 30 was het gemelde verschil €153, op dag 23 is het €135. Tot v255
+     dag 22 van een maand van 30 was het gemelde verschil €153, op dag 23 is het €135. Op de
+     LAATSTE dag is hij nul, en dan valt er niets te verschillen; dat is de dag waarop deze twee
+     tests tot v306 rood stonden en waarom de pin er sinds v306 staat. Tot v255
      stond die 153 hier drie keer hardgecodeerd terwijl alles eromheen live werd gelezen, en de
      suite viel om zodra de kalender een dag verder stond. Dezelfde vorm als de fixture-regel in
      CLAUDE.md, alleen niet op een bedrag van het toestel maar op een afgeleide van vandaag.
@@ -231,6 +242,7 @@ test.describe('d · de subregel raakt zijn aanpassen niet meer kwijt', () => {
 
   for (const breedte of [360, 390]) {
     test(`op ${breedte}px past aanpassen op elke rij, en de rij blijft laag`, async ({ page }) => {
+      await pinDag(page);
       await page.setViewportSize({ width: breedte, height: 800 });
       await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed({ boekingen: DRIE_OP }));
       await page.goto('/index.html');
