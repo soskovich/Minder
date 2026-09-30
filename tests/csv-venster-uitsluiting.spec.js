@@ -248,7 +248,7 @@ test.describe('2 · wat de sommen ervan merken', () => {
     await boot(page);
     const r = await page.evaluate((m) => {
       const na = totals(m).spendNorm;
-      const uit = TX.filter((t) => t.date.slice(0, 7) === m && csvDubbel(t) && csvDubbelTelt(t))
+      const uit = TX.filter((t) => t.date.slice(0, 7) === m && csvDubbel(t) && dubbelBronTelt(t))
         .reduce((s, t) => s - t.amount, 0);
       /* de tegenmeting: dezelfde som zonder de poort, met dezelfde afronding als totals() */
       const zonder = TX.filter((t) => t.date.slice(0, 7) === m)
@@ -327,9 +327,9 @@ test.describe('3 · wat de gebruiker ervan ziet', () => {
       const d = document.createElement('div'); d.innerHTML = csvDubbelRegels(m);
       const som = [...d.children].map((x) => +(x.textContent.match(/€\s*([\d.]+)/) || [0, 0])[1].replace(/\./g, ''))
         .reduce((a, b) => a + b, 0);
-      const norm = TX.filter((t) => t.date.slice(0, 7) === m && csvDubbel(t) && csvDubbelTelt(t))
+      const norm = TX.filter((t) => t.date.slice(0, 7) === m && csvDubbel(t) && dubbelBronTelt(t))
         .reduce((s, t) => s - t.amount, 0);
-      const opname = TX.filter((t) => t.date.slice(0, 7) === m && csvDubbel(t) && !csvDubbelTelt(t))
+      const opname = TX.filter((t) => t.date.slice(0, 7) === m && csvDubbel(t) && !dubbelBronTelt(t))
         .reduce((s, t) => s - t.amount, 0);
       return { som: Math.round(som), norm: Math.round(norm), opname: Math.round(opname) };
     }, M3);

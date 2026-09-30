@@ -17,6 +17,16 @@
  *    overboeking telt nergens als uitgave. Zonder dit geval is het aantal paren niet te onderscheiden
  *    van het aantal paren dat een bedrag draagt;
  *  - EEN PAAR BINNEN DEZELFDE BRON, dat in geen van de twee tellingen mag staan.
+ *
+ * BIJGEWERKT BIJ v304, EN DAT IS EEN ANDERE UITKOMST EN GEEN ANDERE FIXTURE. De mt940-poort van v304
+ * haalt op een rekening die zelf psd2 EN mt940 draagt de mt940-kant binnen het psd2-venster uit de
+ * sommen, en dat is precies wat deze rekening is. Drie van de vier mt940-kanten vallen daarmee weg, dus
+ * "nog meetellend" gaat van 2 van 4 naar 1 van 4. Dat is de stap die v298 als punt (1) openliet: de
+ * kruisbron-paren op deze rekening telden dubbel, en na v304 doen ze dat niet meer.
+ * DE VIERDE mt940-KANT BLIJFT, EN DAT IS DE VENSTERRAND VAN v301: `a-mt` staat op 06-03 en de eerste
+ * psd2-boeking op 06-04, dus hij ligt VOOR het venster en de poort raakt hem niet. Die rand is hier dus
+ * niet geconstrueerd maar een gevolg van de fixture, en hij staat als eigen assertie vast: zonder dat
+ * geval is "binnen het venster" niet van "alles van deze rekening" te onderscheiden.
  * De service worker staat globaal uit via playwright.config.js.
  */
 const { test, expect } = require('@playwright/test');
@@ -85,15 +95,23 @@ test.describe('0 - de fixture draagt wat de comment belooft', () => {
       /* NIET OP DE FIXTURE-ID: `categorize()` doet `t.id=txId(t)` en de boot loopt over alle `TX`, dus
          de ids uit de fixture bestaan hier niet meer (meetles u). Datum plus bedrag is wat overblijft. */
       const wie = (t) => t.date + '|' + t.amount + '|' + t.src;
+      const rand = TX.find((t) => t.src === 'mt940' && t.date === '2026-06-03');
       return { bronnen, n: TX.length,
+        venster: (({ van, tot }) => ({ van, tot }))(mt940Paar().map['521200806']),
+        randMt940: telt.has(rand.id),
         weg: TX.filter((t) => !telt.has(t.id)).map(wie).sort(),
         intern: TX.filter((t) => t.amount === -150).map((t) => CATS[catOf(t)].type),
         uitgave: TX.filter((t) => t.amount === -60).map((t) => CATS[catOf(t)].type) };
     });
     expect(r.bronnen, 'een rekening met twee bronnen, anders is er geen kruisbron-paar').toEqual(['mt940', 'psd2']);
     expect(r.n).toBe(10);
-    expect(r.weg, 'precies de twee bevestigde kanten vallen weg')
-      .toEqual(['2026-06-07|-45|psd2', '2026-06-10|-31|psd2']);
+    /* v304: de twee bevestigde kanten PLUS de drie mt940-kanten binnen het psd2-venster. De psd2-kant
+       van dit venster loopt van 06-04 t/m 06-18, dus `a-mt` op 06-03 ligt ervoor en blijft staan. */
+    expect(r.weg, 'de twee bevestigde kanten en de mt940-kanten binnen het psd2-venster')
+      .toEqual(['2026-06-06|-45|mt940', '2026-06-07|-45|psd2', '2026-06-09|-31|mt940',
+                '2026-06-10|-31|psd2', '2026-06-13|-150|mt940']);
+    expect(r.venster, 'het psd2-venster van deze rekening').toEqual({ van: '2026-06-04', tot: '2026-06-18' });
+    expect(r.randMt940, 'de mt940-kant VOOR het venster blijft meetellen (v301)').toBe(true);
     expect(r.intern, 'het vierde paar is intern en telt dus nergens als uitgave').toEqual(['internal', 'internal']);
     expect(r.uitgave, 'het eerste paar draagt aan BEIDE kanten een uitgave').toEqual(['expense', 'expense']);
   });
@@ -104,8 +122,10 @@ test.describe('1 - twee tellingen over dezelfde paren', () => {
     await boot(page);
     const t = await regels(page);
     expect(t).toContain('met VERSCHILLENDE bron: 4   (in de IMPORT, dus op TX)');
-    expect(t).toContain('nog MEETELLEND, beide kanten door telbareTx(): 2 van 4');
-    expect(t).toContain('bij de rest valt minstens een kant al weg: 2');
+    /* v304: van 2 van 4 naar 1 van 4, want de mt940-kant van drie paren valt nu ook weg. Alleen het
+       eerste paar houdt beide kanten, en dat komt doordat zijn mt940-kant VOOR het psd2-venster ligt. */
+    expect(t).toContain('nog MEETELLEND, beide kanten door telbareTx(): 1 van 4');
+    expect(t).toContain('bij de rest valt minstens een kant al weg: 3');
   });
 
   test('een paar binnen dezelfde bron staat in geen van de twee tellingen', async ({ page }) => {
@@ -125,6 +145,9 @@ test.describe('1 - twee tellingen over dezelfde paren', () => {
        zijn nul staan: een poort die ontbreekt is niet te onderscheiden van een poort waarop niets viel
        (v59/v73/v173). Dat hij niet kan vuren staat als reden in het blok zelf. */
     expect(rij).toContain('csv in het venster van zijn psd2-kant 0x');
+    /* v304: de vierde poort, en hij vuurt hier op drie kanten. Hij staat in dezelfde lijst, dus deze
+       telling drukt geen eigen voorwaarde uit. */
+    expect(rij).toContain('mt940 in het psd2-venster van dezelfde rekening 3x');
     expect(t).toContain('per constructie niet vuren');
   });
 });
@@ -159,8 +182,13 @@ test.describe('3 - per paar staat erbij of hij nog meetelt', () => {
     const t = await regels(page);
     const rijen = t.split('\n').filter((l) => / telt (beide kanten|een kant|geen kant)$/.test(l));
     expect(rijen.length, 'elk uitgeschreven paar draagt de markering').toBe(4);
-    expect(rijen.filter((l) => l.endsWith('telt beide kanten')).length).toBe(2);
-    expect(rijen.filter((l) => l.endsWith('telt een kant')).length).toBe(2);
+    /* v304: paar 1 houdt beide kanten (zijn mt940-kant ligt voor het venster), het interne paar houdt
+       er een (de psd2-kant), en bij paar 2 en 3 valt nu ELKE kant weg: de bevestiging en de mt940-poort
+       raken elk een andere kant. Die derde markering was er tot v304 niet, en zonder dit geval is
+       "geen kant" niet van "een kant" te onderscheiden. */
+    expect(rijen.filter((l) => l.endsWith('telt beide kanten')).length).toBe(1);
+    expect(rijen.filter((l) => l.endsWith('telt een kant')).length).toBe(1);
+    expect(rijen.filter((l) => l.endsWith('telt geen kant')).length).toBe(2);
   });
 });
 
@@ -170,7 +198,7 @@ test.describe('4 - de bron: een poort, niet een tweede formulering', () => {
   test('de tweede telling leest telbareTx() en de drie poort-predicaten, en drukt geen eigen voorwaarde uit', () => {
     const s = sectie();
     expect(s).toContain('telbareTx()');
-    for (const fn of ['dubbelWeg(', 'vorautWeg(', 'csvDubbel(']) expect(s, fn).toContain(fn);
+    for (const fn of ['dubbelWeg(', 'vorautWeg(', 'csvDubbel(', 'mt940Dubbel(']) expect(s, fn).toContain(fn);
     /* geen eigen venster- of bron-toets naast de poort: die zou bij de eerste wijziging van
        vorautBron() uiteenlopen (v104). De parenscan zelf leest TX, en dat is de IMPORT-vraag. */
     expect(s, 'geen eigen kopie van de csv-venstertoets').not.toMatch(/csvPaar\(\)\.map/);

@@ -95,6 +95,87 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE POORT IS EEN LIJST MET EEN NAAM PER POORT, ZODAT EEN METING ER PRECIES EEN KAN OVERSLAAN** (`v304`):
+  `TELPOORTEN` draagt de vier eisen (`csvDubbel` v284, `mt940Dubbel` v304, `dubbelWeg` v288, `vorautWeg`
+  v293), `telbareTx(behalve)` leest die lijst en `vorautBron()` is `telbareTx('voraut')` en dus letterlijk
+  uit de lijst afgeleid in plaats van ernaast geschreven.
+  DE VORM IS DOOR DE mt940-POORT ZELF AFGEDWONGEN, en dat is GEMETEN en geen voorzorg: blok 10 MEET of
+  `t.date` bij een bron al de betaaldag is, en die poort haalt juist die bron uit de sommen. Met de volle
+  poort zei sectie 4 `bron psd2   8 boekingen` op een rekening die twee regels hoger in dezelfde uitvoer
+  `mt940+psd2` heet, en sectie 2 kwam op nul boekingen met het veld. ZEVEN BESTAANDE TESTS IN TWEE
+  BESTANDEN VIELEN EROP, en dat is wat de suite hier waard is: het was geen theorie maar een regressie die
+  bijna was gecommit. Dat is meetles (a) en (m): een meting waarvan de verzameling het geval niet kan
+  bevatten waarop hij gericht is.
+  SECTIE 2, 3 EN 4 VAN BLOK 10 LEZEN DAAROM `telbareTx('mt940')`, en dat is de DERDE uitzondering naast
+  blok 11 (`v285`) en blok 12 (`v293`). Ze zeggen het in hun EIGEN uitvoer, want een lezer met alleen de
+  uitvoer in de hand moet weten welke lijst onder een getal ligt (`v287`).
+  DE EURO-KOLOMMEN EN SECTIE 6 HOUDEN DE VOLLE POORT, en dat is `v285` en geen inconsistentie: die tellen
+  GELD en niet de import. Een bron die door een poort valt draagt daar dus nul euro en krijgt geen groep,
+  en sectie 6 zegt dat erbij, zodat een ontbrekende mt940-groep niet als "die bron bestaat niet" leest.
+  DE TEST BINDT OP BEIDE KANTEN TEGELIJK: sectie 4 leest de hele mt940-kant en sectie 6 alleen de euro's
+  die de poort overlaat (in de fixture 133 tegen meer). Zonder die tweede helft blijft een sabotage die
+  alles op de ongefilterde lijst zet groen.
+  DE ASSERTIE VAN `v293` ANKERDE OP EEN SPELLING en is herschreven: hij eiste letterlijk de regel
+  `vorautBron().filter(t=>!vorautWeg(t))`. Dat is meetles over een test die te dicht op de implementatie
+  staat (`v276`); wat vast moet liggen is dat elke eis EEN keer in de lijst staat en dat beide ingangen
+  die lijst lezen, en dat is strenger dan de oude vorm.
+  DE KRUISBRON-PAREN OP DE ABN-REKENING TELLEN HIERMEE NIET MEER DUBBEL, en dat is stap (1) van `v298`
+  afgerond. GEMETEN in de fixture van `v300`: "nog meetellend, beide kanten" gaat van 2 van 4 naar 1 van 4,
+  en er komt een derde markering bij die er nooit was (`telt geen kant`), want bij twee paren raakt de
+  bevestiging de ene kant en de mt940-poort de andere. HET VIERDE PAAR HOUDT BEIDE KANTEN, en dat is de
+  vensterrand van `v301`: zijn mt940-kant ligt een dag VOOR de eerste psd2-boeking en valt dus buiten het
+  venster. Die rand is daar niet geconstrueerd maar een gevolg van de fixture, en hij staat nu als eigen
+  assertie vast.
+- **DE MT940-KANT VAN EEN REKENING DIE OOK PSD2 DRAAGT TELT NIET MEE** (`v304`): `mt940Dubbel(t)` is de
+  poort en hij staat als regel in `TELPOORTEN`, dus elke som volgt.
+  DE AANLEIDING IS GEMETEN in sectie 4d van blok 10:
+  van de 84 mt940-regels op `521200806` liggen er 84 BINNEN het psd2-venster, en de een-op-een-match geeft
+  84 van 84 een tegenhanger 1 tot 5 dagen later (1d 36, 2d 43, 3d 4, 5d 1). NIET GEMATCHT is NUL, dus de
+  PRIJS is nul boekingen en nul euro: de mt940-kant is daar een volledige deelverzameling van psd2 en elke
+  euro telde twee keer. De hypothese erachter is ook bevestigd: bij de import vielen de doordeweekse regels
+  weg op een gelijke datum en bleven juist de weekendregels staan, want psd2 boekt die op maandag (4c:
+  mt940-kant 92 procent weekend, psd2-kant 92 procent maandag).
+  DE POORT KEYT OP "DEZE REKENING DRAAGT OOK PSD2" EN NIET OP "DE BRON IS MT940", en dat is het hele
+  verschil met `v284`. Daar ging het om TWEE rekeningen (een csv-rekening gepaard aan een psd2-rekening),
+  hier om EEN rekening die beide bronnen zelf draagt. Een rekening met alleen mt940 heeft geen tweede bron
+  die de boeking kan dragen, en daar zou uitsluiten precies de boekingen weghalen die nergens anders staan:
+  GEMETEN is dat `636222403` met 115 boekingen, en die blijft volledig meetellen. De sabotage die op de
+  bron keyt zet dat geval rood.
+  DE BRON-TOETS IS HIER DRAGEND EN GEEN GUARD, en dat is het tweede verschil. Bij `v284` kon hij vanuit de
+  verse stand per constructie niet vuren (meetles p), want een gepaarde rekening draagt alleen csv. Hier
+  draagt dezelfde rekening beide bronnen, dus zonder die toets valt de psd2-kant er ook uit en is de hele
+  rekening leeg. De sabotage erop is dus niet inert maar meteen rood.
+  DE PRIJS IS NUL IN EURO'S EN NIET NUL IN BETEKENIS, en die wordt benoemd en niet weggerekend: bij die 84
+  boekingen verdwijnt de ENIGE bron waar `t.date` de betaaldag IS. GEMETEN in 4a: bij mt940 is GELIJK 42 van
+  42 (100 procent) en bij psd2 154 van 271 (57 procent). Bij de KAARTREGELS vangt `t.betaalDatum` dat op
+  (271 van de 272 psd2-kaartregels op die rekening dragen het veld); bij de NIET-kaartregels niet, want hun
+  desc draagt geen kaart-kenmerk en kan het veld per constructie nooit krijgen. Dat is dezelfde grens als
+  `v281` en geen nieuw gebrek.
+  HET VENSTER IS DAT VAN DE PSD2-KANT OP DIEZELFDE REKENING, van zijn eerste tot zijn laatste boeking.
+  Buiten dat venster kan de koppeling de regel per definitie niet dragen. In de fixture ligt daarom een
+  mt940-regel VOOR het venster; zonder dat geval is "binnen het venster" niet te onderscheiden van "alles
+  van deze rekening" en blijft de sabotage die het venster negeert groen. Op het toestel bestaat dat geval
+  niet (0 erbuiten), dus hij is geconstrueerd en dat staat in de spec.
+  HET IS EEN CACHE EN GEEN OPSLAG (`MT940PAAR`), net als `CSVPAAR`: `buildAccMeta()` gooit hem weg en
+  `mt940Paar()` bouwt hem lui opnieuw. Er wordt niets per boeking bewaard.
+  DE BOEKING BLIJFT IN `TX` EN IN DE LIJST, en zegt daar dat hij niet meetelt in DEZELFDE subregel en met
+  DEZELFDE woorden als de csv-uitsluiting. Dat is bewust een gedeelde tekst en geen tweede zin: de reden is
+  voor de gebruiker letterlijk dezelfde ("deze boeking kwam ook via je bankkoppeling binnen") en hij hoeft
+  het verschil tussen twee importformaten hier niet te weten (`v91`).
+  DE REGEL OP DE KAART IS DE GEENNORM-VORM, met een eigen sheet erachter. Wat de twee poorten delen staat
+  een keer (`dubbelBronTelt()` voor de maat, `dubbelBronPer()` voor de telling, `dubbelBronRegels()` voor de
+  regel en `dubbelBronSheet()` voor de sheet); wat verschilt is ALLEEN de uitleg-alinea, en die verschilt
+  echt: bij csv staat dezelfde rekening twee keer in je lijst en noemt de alinea de andere, bij mt940 is het
+  EEN rekening met twee bronnen en is er geen andere om te noemen. `csvDubbelTelt()` heet daarom nu
+  `dubbelBronTelt()`: een naam die een bron noemt terwijl hij er twee dient is precies het etiket dat dit
+  project verbiedt (`v301`).
+  DE TWEE POORTEN KUNNEN NOOIT DEZELFDE REKENING NOEMEN, en dat is per constructie zo: een csv-gepaarde
+  rekening draagt ALLEEN csv (`csvPsd2Paring()` eist dat) en een rekening in deze tweede poort draagt mt940
+  EN psd2. De twee verzamelingen zijn disjunct, dus er komen nooit twee regels voor een rekening. Dat staat
+  als eigen assertie in de spec.
+  BLOK 10 NOEMT DE VIERDE POORT, OOK OP NUL (`v300`), en 4d zegt nu in zijn EIGEN uitvoer wat de app met de
+  uitkomst doet. Dat laatste is `v287`: die sectie meet over `TX` en de sommen lezen de poort, dus zonder die
+  regel staan er twee antwoorden onder een gelijkende kop.
 - **EEN DELING MET TWEE SAMENGESTELDE KANTEN IS PAS EEN METING ALS BEIDE KANTEN PER ONDERDEEL TE LEZEN
   ZIJN** (`v302`): de bufferregel op Grip is `spaarSaldo().cur / noodfondsModel().essCrisis`, en geen van
   beide kanten was uit te splitsen: blok 3 print `spaarSaldo()` als GEHEEL en de noemer staat alleen in de
@@ -3491,7 +3572,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v303` → `minder-v304`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v304` → `minder-v305`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -3500,7 +3581,7 @@ dezelfde reden van `minder-v291` naar `minder-v293` en van `minder-v293` naar `m
 en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfde geval, dus de
 bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte alleen `tests/` en dit
 bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`; `v301` raakt wel app-code
-en bumpt dus gewoon door naar `minder-v301`, en `v302` en `v303` net zo. Dat gat is geen fout maar de regel
+en bumpt dus gewoon door naar `minder-v301`, en `v302`, `v303` en `v304` net zo. Dat gat is geen fout maar de regel
 zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

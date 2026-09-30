@@ -947,7 +947,7 @@ function buildAccMeta(){
     const prev=ACCMETA[a]||{};
     ACCMETA[a]=Object.assign({},prev,{role,count:list.length,income:inc,label,bank:bankVanRek(a,list,pm)});
   }
-  CSVPAAR=null;   // v284: TX is veranderd, dus de paring en haar vensters worden opnieuw afgeleid
+  CSVPAAR=null; MT940PAAR=null;   // v284/v304: TX is veranderd, dus de paring en haar vensters worden opnieuw afgeleid
 }
 
 /* ===== v284: DE CSV-IMPORT EN DE PSD2-KOPPELING DRAGEN DEZELFDE BOEKING =====
@@ -971,7 +971,7 @@ function buildAccMeta(){
    weinig tellen niet (v168).
    HET VENSTER IS DAT VAN DE PSD2-REKENING ZELF, van zijn eerste tot zijn laatste boeking. Buiten dat
    venster kan de koppeling de csv-regel per definitie niet dragen, dus daar blijft hij meetellen. */
-let CSVPAAR=null;
+let CSVPAAR=null, MT940PAAR=null;
 /* DE PARING IS EEN AFLEIDING EN GEEN OPSLAG, en hij staat op EEN plek: blok 11 leest dezelfde functie
    voor zijn tabel als de uitsluiting voor haar vensters. Een tweede uitdrukking ernaast zou bij de
    eerste wijziging van de gronden uiteenlopen (v104). Wat blok 11 er zelf bij rekent is de telling op
@@ -1050,7 +1050,63 @@ function csvDubbel(t){
 /* DE MAAT IS WAT HET GETAL OP DE KAART DRAAGT: netto uitgave in een categorie MET norm, dus precies de
    bijdrage aan spendNorm die wegvalt. Een uitgesloten overboeking of een uitgesloten inkomen telde daar
    per constructie nooit in mee, en die staan daarom niet in het bedrag maar wel in de sheet erachter. */
-function csvDubbelTelt(t){ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !geenNorm(c)); }
+function dubbelBronTelt(t){ const c=catOf(t); return !!(CATS[c] && CATS[c].type==='expense' && !geenNorm(c)); }
+
+/* ===== v304: DEZELFDE REKENING, TWEE BRONNEN BINNEN ZICHZELF =====
+   DE AANLEIDING IS GEMETEN IN SECTIE 4d VAN BLOK 10. Rekening `521200806` draagt psd2 EN mt940, en van
+   de 84 mt940-regels liggen er 84 binnen het psd2-venster; de een-op-een-match geeft 84 van 84 een
+   tegenhanger 1 tot 5 dagen later, dus NIET GEMATCHT is NUL en de prijs is nul boekingen en nul euro.
+   De mt940-kant is daar dus een volledige DEELVERZAMELING van psd2, en elke euro telde twee keer.
+   DIT IS DE VORM VAN `v284` OP EEN ANDERE AS, en dat verschil is de hele poort. Daar ging het om TWEE
+   rekeningen (een csv-rekening gepaard aan een psd2-rekening); hier gaat het om EEN rekening die beide
+   bronnen zelf draagt. De poort keyt daarom op "deze rekening draagt OOK psd2" en niet op "de bron is
+   mt940": een rekening met alleen mt940 heeft geen tweede bron die de boeking kan dragen, en daar zou
+   uitsluiten precies de boekingen weghalen die nergens anders staan. GEMETEN op het toestel is dat
+   `636222403` met zijn 115 mt940-boekingen, en die blijft dus volledig meetellen.
+   DE BRON-TOETS IS HIER DRAGEND EN GEEN GUARD, en dat is het tweede verschil met `v284`. Daar kon hij
+   vanuit de verse stand per constructie niet vuren (meetles p), want een gepaarde rekening draagt alleen
+   csv. Hier draagt dezelfde rekening beide bronnen, dus zonder die toets valt de psd2-kant er ook uit en
+   is de hele rekening leeg. Een sabotage erop is dus niet inert maar meteen rood.
+   DE PRIJS IS NUL IN EURO'S EN NIET NUL IN BETEKENIS, en die staat in CLAUDE.md: bij die 84 boekingen
+   verdwijnt de enige bron waar `t.date` de betaaldag IS (4a: GELIJK 42 van 42 bij mt940 tegen 57 procent
+   bij psd2). Bij de kaartregels vangt het veld uit de desc dat op, bij de niet-kaartregels niet. Dat is
+   dezelfde grens als `v281` en geen nieuw gebrek. DE VELDNAAM STAAT HIER NIET UITGESCHREVEN, en dat is
+   geen kieskeurigheid: de bronzoekende teller van `v273` eist dat elke treffer van dat veld binnen zijn
+   eigen lezers ligt, en hij kan een comment niet van een lezer onderscheiden. Die strengheid is precies
+   waarvoor hij bestaat, dus de tekst wijkt en de lijst niet (v276).
+   HET IS EEN CACHE EN GEEN OPSLAG, net als `CSVPAAR`: `buildAccMeta()` gooit hem weg en `mt940Paar()`
+   bouwt hem lui opnieuw. Er wordt niets per boeking bewaard, want zulke data veroudert zonder dat
+   iemand het merkt (v284). */
+function mt940Psd2Vensters(){
+  const own=(typeof OWN!=='undefined'&&OWN)||[];
+  const per={}; for(const a of own) per[a]=[];
+  for(const t of (typeof TX!=='undefined'?TX:[])){ if(per[t.acc]) per[t.acc].push(t); }
+  const uit=[];
+  for(const a of own){
+    const lj=per[a]||[];
+    const mt=lj.filter(t=>(t.src||'')==='mt940'), ps=lj.filter(t=>(t.src||'')==='psd2');
+    if(!mt.length || !ps.length) continue;   // EEN bron is geen tweede bron die de boeking kan dragen
+    const d=ps.map(t=>String(t.date).slice(0,10)).filter(Boolean).sort();
+    if(!d.length) continue;
+    uit.push({acc:a, van:d[0], tot:d[d.length-1], nMt940:mt.length, nPsd2:ps.length});
+  }
+  return uit;
+}
+function mt940Paar(){
+  if(!MT940PAAR){
+    const rijen=mt940Psd2Vensters(), map={};
+    for(const r of rijen) map[r.acc]={van:r.van, tot:r.tot, nMt940:r.nMt940, nPsd2:r.nPsd2};
+    MT940PAAR={rijen, map};
+  }
+  return MT940PAAR;
+}
+/* DE POORT, EN VERDER NIETS. De boeking blijft in TX en in de transactielijst staan en zegt daar dat hij
+   niet meetelt, in dezelfde subregel als de csv-uitsluiting (v281/v284). */
+function mt940Dubbel(t){
+  if(!t || (t.src||'')!=='mt940') return false;
+  const e=mt940Paar().map[t.acc];
+  return !!(e && t.date>=e.van && t.date<=e.tot);
+}
 
 /* ---------- MT940 parser (ABN AMRO, beide :86:-formaten) ---------- */
 function parseMT940(text){
@@ -1273,12 +1329,30 @@ function months(){ const base=[...new Set(TX.map(t=>t.date.slice(0,7)))]; if(!ba
    over dezelfde snede in hetzelfde blok. Wie boekingen telt leest daarom deze lijst en niet `TX`.
    `TX` ZELF BLIJFT WAT HET WAS: er wordt niets weggegooid, en wie de IMPORT telt (hoeveel boekingen
    draagt deze bron, welke rekeningen bestaan er) leest `TX` gewoon, want dat is een andere vraag. */
-/* DE POORT IN TWEE STUKKEN, EN DAT IS GEEN TWEEDE WAARHEID (v293). Een bevestigd drietal moet in de
-   LIJST blijven staan, anders is de keuze niet meer terug te draaien en verdwijnt het geval uit zicht
-   (v288). `vorautBron()` is daarom de poort ZONDER zijn eigen uitkomst en `telbareTx()` is die poort
-   plus `vorautWeg()`. Er staat geen eis twee keer: de tweede is letterlijk uit de eerste afgeleid. */
-function vorautBron(){ return TX.filter(t=>!csvDubbel(t) && !dubbelWeg(t)); }   // v288: een bevestigde dubbele kant valt langs dezelfde poort weg
-function telbareTx(){ return vorautBron().filter(t=>!vorautWeg(t)); }           // v293: een bevestigde reservering en haar vrijgave ook
+/* v304: DE POORT IS EEN LIJST MET EEN NAAM PER POORT, en die vorm is door de mt940-poort zelf
+   afgedwongen. Blok 10 MEET of `t.date` bij een bron al de betaaldag is, en die vraag gaat juist over
+   de kant die deze poort weghaalt: leest zo'n sectie de volle poort, dan meet hij zijn eigen uitkomst
+   en zegt hij per constructie dat die bron niets draagt. GEMETEN bij het bouwen van deze ronde, en het
+   was een echte regressie en geen theorie: sectie 4 zei `bron psd2 8 boekingen` op een rekening die twee
+   regels hoger in dezelfde uitvoer `mt940+psd2` heet, en sectie 2 kwam op nul boekingen met het veld.
+   Dat is meetles (a) en (m): een meting waarvan de verzameling het geval niet kan bevatten waarop hij
+   gericht is.
+   EEN POORT OVERSLAAN GEBEURT DAAROM BIJ NAAM, en de andere drie worden niet opnieuw uitgedrukt (v104):
+   `telbareTx('mt940')` is deze lijst min die ene regel, en `vorautBron()` is `telbareTx('voraut')` en
+   daarmee letterlijk uit de lijst afgeleid in plaats van ernaast geschreven. Zonder naam moet elke
+   uitzondering de resterende eisen kopieren, en dat is precies de tweede waarheid die v285 opruimde.
+   DE NAMEN ZIJN VOOR LEZERS BINNEN DIT BESTAND en staan nergens in opslag: wie een poort hernoemt
+   hernoemt zijn lezers mee, net als bij `csvNiet`/`psdOver` (v301). */
+const TELPOORTEN=[
+  ['csv',    t=>csvDubbel(t)],       // v284: de csv-kant binnen het venster van zijn gepaarde psd2-rekening
+  ['mt940',  t=>mt940Dubbel(t)],     // v304: de mt940-kant binnen het psd2-venster van dezelfde rekening
+  ['dubbel', t=>dubbelWeg(t)],       // v288: een bevestigde dubbele kant
+  ['voraut', t=>vorautWeg(t)],       // v293: een bevestigde reservering en haar vrijgave
+];
+function telbareTx(behalve){ return TX.filter(t=>TELPOORTEN.every(([nm,p])=>nm===behalve||!p(t))); }
+/* DE POORT IN TWEE STUKKEN BLIJFT (v293): `vorautBron()` is de poort ZONDER zijn eigen uitkomst, want een
+   bevestigd drietal moet in de LIJST blijven staan of de keuze is niet terug te draaien (v288). */
+function vorautBron(){ return telbareTx('voraut'); }
 function txOfMonth(m){ return telbareTx().filter(t=>t.date.slice(0,7)===m); }
 /* v264: DE WEEKAS, ALS BRON EN NOG ZONDER SCHERM. Blokken van zeven dagen vanaf de 1e van elke
    maand, dus 1-7, 8-14, 15-21 en 22-28; wat er daarna van de maand overblijft is GEEN blok en komt
@@ -10431,7 +10505,11 @@ function renderTxList(){
        dubbele die je ziet (v281). Maar hem ONgemarkeerd tonen terwijl hij nergens meetelt is zelf een
        leugen, dus hij zegt het hier, in dezelfde subregel die 'in behandeling' en 'afwijkend bedrag'
        al dragen. Geen nieuw element en geen tweede detectie: dezelfde csvDubbel() als de sommen. */
-    const dub=csvDubbel(t), dwg=dubbelWeg(t), vwg=vorautWeg(t);   // v288/v293: een bevestigde dubbele kant en een bevestigde reservering zeggen het hier om dezelfde reden
+    /* v304: de mt940-kant van een rekening die ook psd2 draagt zegt hier LETTERLIJK hetzelfde als de
+       csv-uitsluiting ("deze boeking kwam ook via je bankkoppeling binnen"), dus hij deelt de tekst in
+       plaats van er een tweede zin naast te zetten. Twee spellingen van dezelfde reden zijn twee
+       waarheden (v91), en de gebruiker hoeft het verschil tussen twee importformaten hier niet te weten. */
+    const dub=csvDubbel(t)||mt940Dubbel(t), dwg=dubbelWeg(t), vwg=vorautWeg(t);   // v288/v293: een bevestigde dubbele kant en een bevestigde reservering zeggen het hier om dezelfde reden
     body+=`<div class="tx" onclick="openSheet('${t.id}')"${pnd?' style="opacity:.62"':''}>
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
       <div class="info"><div class="nm">${esc(t.name)}</div>${vwg?`<div class="cat" style="color:var(--mut)">• telt niet mee, je legde dit vast als reservering</div>`:(dwg?`<div class="cat" style="color:var(--mut)">• telt niet mee, je legde dit vast als dubbel</div>`:(dub?`<div class="cat" style="color:var(--mut)">• telt niet mee, ook via je bankkoppeling</div>`:(pnd?`<div class="cat" style="color:var(--mut)">• in behandeling</div>`:(ong?`<div class="cat" style="color:var(--mut)">• ${jrg('afwijkendbedrag','afwijkend bedrag')}</div>`:''))))}</div>
@@ -12060,7 +12138,7 @@ function insBudgetBlok(m){
       <div class="bar-track" style="margin:0"><div class="bar-fill" style="width:${Math.min(Math.max(usedPct,0),100)}%;background:${balkKleur}"></div></div>
       ${isLopendeMaand(m)?`<i title="de maand is ${dayPct}% voorbij" style="position:absolute;top:-3px;height:15px;left:${Math.min(Math.max(dayPct,0),100)}%;width:2px;background:var(--mut2);border-radius:1px"></i>`:''}</div>
     ${isLopendeMaand(m)?`<div class="small" style="color:var(--mut2);margin-top:5px">de streep staat waar de maand nu is: ${dayPct}% voorbij</div>`:''}${budgetOverZin(sp,bud,d,over,opDeGrens)}
-    ${geenNormRegels(t,m)}${uitReserveringRegels(t,m)}${csvDubbelRegels(m)}</div>`;
+    ${geenNormRegels(t,m)}${uitReserveringRegels(t,m)}${csvDubbelRegels(m)}${mt940DubbelRegels(m)}</div>`;
 }
 /* v258: hier stond één regel die ALLE geenNorm-categorieën optelde tot t.buitenNorm en naar
    onvoorzien tikte. Met een tweede geenNorm-categorie klopt die tik niet meer: gemeten zei hij
@@ -12108,44 +12186,74 @@ function uitReserveringRegels(t,m){
    HET BEDRAG IS DE BIJDRAGE AAN spendNorm DIE WEGVALT, dus netto en alleen uit categorieen met een norm.
    Een uitgesloten overboeking telde nooit als uitgave; die staat in de sheet en niet in dit bedrag.
    GEEN PARING, GEEN REGEL. Wie geen csv-import naast een koppeling heeft ziet hier niets. */
+/* DE REGEL PER REKENING, VOOR BEIDE UITSLUITINGEN UIT EEN BRON (v284/v304). Een regel per rekening en
+   niet een totaal met een tik, om de reden van `v258`: de vensters verschillen per rekening, dus een tik
+   op een totaal komt uit op een ander bedrag dan waarop je tikte.
+   DE TWEE KUNNEN NOOIT DEZELFDE REKENING NOEMEN, en dat is per constructie zo en niet per geluk: een
+   csv-gepaarde rekening draagt ALLEEN csv (`csvPsd2Paring()` eist dat) en een mt940-rekening in deze
+   tweede poort draagt mt940 EN psd2. De twee verzamelingen zijn dus disjunct en er komen geen twee regels
+   voor een rekening. */
+function dubbelBronPer(m, pred){
+  const per={};
+  for(const t of TX){
+    if(String(t.date).slice(0,7)!==m || !pred(t) || !dubbelBronTelt(t)) continue;
+    const r=(per[t.acc]=per[t.acc]||{n:0,eur:0}); r.n++; r.eur+=-t.amount;
+  }
+  return per;
+}
+function dubbelBronRegels(m, pred, opener){
+  const per=dubbelBronPer(m, pred);
+  const ks=Object.keys(per).filter(a=>Math.round(per[a].eur)>0)
+    .sort((a,b)=>per[b].eur-per[a].eur || (a<b?-1:1));
+  return ks.map(a=>`<div class="small" style="color:var(--mut2);margin-top:5px;cursor:pointer" onclick="${opener}('${esc(a)}','${m}')">+ ${euro0(Math.round(per[a].eur))} ${esc(accShort(a))}, ook via je bankkoppeling &rsaquo;</div>`).join('');
+}
 function csvDubbelRegels(m){
   let P=null; try{ P=csvPaar(); }catch(_){ return ''; }
   if(!P || !Object.keys(P.map).length) return '';
-  const per={};
-  for(const t of TX){
-    if(String(t.date).slice(0,7)!==m || !csvDubbel(t) || !csvDubbelTelt(t)) continue;
-    const r=(per[t.acc]=per[t.acc]||{n:0,eur:0}); r.n++; r.eur+=-t.amount;
-  }
-  const ks=Object.keys(per).filter(a=>Math.round(per[a].eur)>0)
-    .sort((a,b)=>per[b].eur-per[a].eur || (a<b?-1:1));
-  return ks.map(a=>`<div class="small" style="color:var(--mut2);margin-top:5px;cursor:pointer" onclick="openCsvDubbel('${esc(a)}','${m}')">+ ${euro0(Math.round(per[a].eur))} ${esc(accShort(a))}, ook via je bankkoppeling ›</div>`).join('');
+  return dubbelBronRegels(m, csvDubbel, 'openCsvDubbel');
+}
+function mt940DubbelRegels(m){
+  let P=null; try{ P=mt940Paar(); }catch(_){ return ''; }
+  if(!P || !Object.keys(P.map).length) return '';
+  return dubbelBronRegels(m, mt940Dubbel, 'openMt940Dubbel');
 }
 /* DE LIJST ACHTER HET CIJFER, en die telt per constructie op tot dat cijfer (v104). Dat is waarom deze
    sheet bestaat in plaats van een regel zonder tik: het bedrag op de kaart is nergens anders te zien en
    zonder deze lijst is het niet na te rekenen. Boven staan de vier feiten die de regel zelf niet kwijt
    kan: welke rekening, welk venster, hoeveel boekingen en hoeveel euro. Eronder staat hoeveel andere
    boekingen in datzelfde venster vielen; die telden nooit als uitgave, maar ze verdwijnen wel uit je
-   maandsommen en dat mag niet stil blijven. */
-function openCsvDubbel(acc, m){
-  const e=csvPaar().map[acc]; if(!e) return;
-  const alle=TX.filter(t=>t.acc===acc && String(t.date).slice(0,7)===m && csvDubbel(t));
-  const items=alle.filter(csvDubbelTelt).sort((a,b)=>b.date.localeCompare(a.date));
+   maandsommen en dat mag niet stil blijven.
+   DE UITLEG-ALINEA IS HET ENIGE DAT PER BRON VERSCHILT, en die verschilt echt: bij csv staat dezelfde
+   rekening TWEE KEER in je lijst en noemt de alinea de andere; bij mt940 is het EEN rekening met twee
+   bronnen en is er geen andere om te noemen. De rest van de sheet is er een keer. */
+function dubbelBronSheet(acc, m, e, pred, uitleg){
+  if(!e) return;
+  const alle=TX.filter(t=>t.acc===acc && String(t.date).slice(0,7)===m && pred(t));
+  const items=alle.filter(dubbelBronTelt).sort((a,b)=>b.date.localeCompare(a.date));
   if(!items.length) return;
   const tot=items.reduce((sm,t)=>sm-t.amount,0);
   const rest=alle.length-items.length;
-  const dag=d=>new Date(String(d).slice(0,10)).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px">
       <div style="font-weight:800;font-size:var(--fs-lg)">${esc(accShort(acc))}, ook via je bankkoppeling</div>
-      <div class="muted small">${items.length} boeking${items.length===1?'':'en'} · ${esc(monthLabel(m))}</div>
+      <div class="muted small">${items.length} boeking${items.length===1?'':'en'} &middot; ${esc(monthLabel(m))}</div>
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${euro(tot)}</div></div>
-    <div class="small muted" style="margin:0 2px 10px;line-height:1.5">Deze rekening kwam eerst als bestand binnen en loopt nu ook via je bankkoppeling (${esc(accShort(e.psd2))}). Boekingen tussen ${dag(e.van)} en ${dag(e.tot)} staan daardoor twee keer in je gegevens. Ze tellen een keer mee, via de koppeling, en het bedrag hierboven is wat er daarom niet in je maandtotaal zit. Er wordt niets weggegooid: in je transacties staan ze er gewoon bij.</div>
+    <div class="small muted" style="margin:0 2px 10px;line-height:1.5">${uitleg}</div>
     ${rest>0?`<div class="small" style="color:var(--mut2);margin:0 2px 10px;line-height:1.5">In hetzelfde venster ${rest===1?'valt nog 1 boeking':'vallen nog '+rest+' boekingen'} van deze rekening. Die telde${rest===1?'':'n'} nooit als uitgave, dus ${rest===1?'hij zit':'ze zitten'} niet in het bedrag hierboven.</div>`:''}
     ${items.map(t=>`<div class="tx" style="cursor:default">
       <div class="ava" style="background:var(--card2)">${CATS[catOf(t)]?CATS[catOf(t)].icon:''}</div>
       <div class="info"><div class="nm">${esc(t.name)}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})}</div></div>
       <div class="amt ${t.amount>0?'pos':'neg'}">${t.amount>0?'+':''}${euro(t.amount)}</div></div>`).join('')}`;
   showSheetBg();
+}
+function dubbelBronDag(d){ return new Date(String(d).slice(0,10)).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'}); }
+function openCsvDubbel(acc, m){
+  const e=csvPaar().map[acc];
+  dubbelBronSheet(acc, m, e, csvDubbel, e?`Deze rekening kwam eerst als bestand binnen en loopt nu ook via je bankkoppeling (${esc(accShort(e.psd2))}). Boekingen tussen ${dubbelBronDag(e.van)} en ${dubbelBronDag(e.tot)} staan daardoor twee keer in je gegevens. Ze tellen een keer mee, via de koppeling, en het bedrag hierboven is wat er daarom niet in je maandtotaal zit. Er wordt niets weggegooid: in je transacties staan ze er gewoon bij.`:'');
+}
+function openMt940Dubbel(acc, m){
+  const e=mt940Paar().map[acc];
+  dubbelBronSheet(acc, m, e, mt940Dubbel, e?`Van deze rekening heb je een bestand ingelezen en ze loopt ook via je bankkoppeling. Dat zijn twee bronnen voor dezelfde rekening, dus boekingen tussen ${dubbelBronDag(e.van)} en ${dubbelBronDag(e.tot)} staan twee keer in je gegevens. Ze tellen een keer mee, via de koppeling, en het bedrag hierboven is wat er daarom niet in je maandtotaal zit. Er wordt niets weggegooid: in je transacties staan ze er gewoon bij.`:'');
 }
 function geenNormRegels(t,m){
   const B=t.byCat||{};
@@ -14903,7 +15011,7 @@ function diagDubbel(){
        leest de poort. Zonder dat onderscheid staat hier het getal van vóór `v284` en `v288`: die twee
        rondes hebben de csv-kant en negen bevestigde paren al uit de sommen gehaald, en een reparatie
        bouwen op een telling van daarvoor is precies de meetles over eerst reproduceren.
-       DE POORT WORDT NIET OPNIEUW UITGEDRUKT: `csvDubbel()`, `dubbelWeg()` en `vorautWeg()` zijn de drie
+       DE POORT WORDT NIET OPNIEUW UITGEDRUKT: `csvDubbel()`, `mt940Dubbel()`, `dubbelWeg()` en `vorautWeg()` zijn de vier
        predicaten die `vorautBron()` en `telbareTx()` zelf lezen, dus wat hier wegvalt is letterlijk wat
        daar wegvalt (v104). De reden staat per poort, want die zegt WELKE ronde het geval al ophaalde, en
        alle drie staan er ook op nul: een poort die niet in de lijst staat is niet van "geen enkele kant
@@ -14915,7 +15023,8 @@ function diagDubbel(){
     const teltSet=new Set(_dT(()=>telbareTx(),[]).map(t=>t.id));
     const POORTEN=[['bevestigd dubbel', t=>_dT(()=>dubbelWeg(t),false)],
                    ['bevestigde reservering', t=>_dT(()=>vorautWeg(t),false)],
-                   ['csv in het venster van zijn psd2-kant', t=>_dT(()=>csvDubbel(t),false)]];
+                   ['csv in het venster van zijn psd2-kant', t=>_dT(()=>csvDubbel(t),false)],
+                   ['mt940 in het psd2-venster van dezelfde rekening', t=>_dT(()=>mt940Dubbel(t),false)]];
     let beideTellen=0, plafondImp=0, nImp=0, plafondTelt=0, nTelt=0;
     const perPoort={}; for(const [nm] of POORTEN) perPoort[nm]=0;
     const bak={hard:{n:0,eur:0}, anders:{n:0,eur:0}, geen:{n:0,eur:0}}; let bakEen=0;
@@ -15044,12 +15153,21 @@ function diagDubbel(){
      `TX` voor hun aantallen; hun euro-kolommen gaan via `inScopeSet`, dat de poort al draagt. */
   const inScope=piekInScope;
   const inScopeSet=new Set(_dT(()=>piekScope(),[])||[]);
+  /* v304: DE SECTIES DIE DE AS METEN LEZEN DE POORT MET DE mt940-POORT ERUIT, en dat is de derde
+     uitzondering naast blok 11 (v285) en blok 12 (v293). De vraag van sectie 2, 3 en 4 is OF `t.date`
+     bij een bron al de betaaldag is, en de mt940-poort haalt juist die bron uit de sommen; leest zo'n
+     sectie de volle poort, dan meet hij zijn eigen uitkomst. GEMETEN bij het bouwen van v304: sectie 4
+     zei `bron psd2` op een rekening die twee regels hoger `mt940+psd2` heet.
+     DE POORT WORDT NIET OPNIEUW UITGEDRUKT: dit is `TELPOORTEN` min die ene regel, bij naam (v104).
+     DE EURO-KOLOMMEN BLIJVEN DE VOLLE POORT LEZEN (`inScopeSet`), want die tellen GELD en niet de
+     import, en dat onderscheid is precies `v285`. */
+  const asTx=()=>_dT(()=>telbareTx('mt940'),[]);
   const heeftDescDatum=t=>BETAALDATUM_RE.test(String(t.desc||''));
   const DATUM_ALLE=new RegExp(BETAALDATUM_RE.source,'g');   // hetzelfde patroon, nu alle treffers
   let kaart=0, metVeld=0, metTijd=0, descGeenVeld=0, meerdereDatums=0; const redenen={};
   const verschil={}; const wdTx=[0,0,0,0,0,0,0], wdBet=[0,0,0,0,0,0,0];
   let somTx=0, nScope=0; const voorbeelden=[];
-  for(const t of telbareTx()){
+  for(const t of asTx()){
     const isKaart=KAART_RE.test(String(t.desc||''));
     if(isKaart) kaart++;
     if((String(t.desc||'').match(DATUM_ALLE)||[]).length>1) meerdereDatums++;
@@ -15070,6 +15188,10 @@ function diagDubbel(){
   }
   L.push('');
   L.push('BOEKDATUM TEGEN BETAALDATUM (het veld t.betaalDatum, alleen kaartbetalingen)');
+  L.push('  bron: telbareTx() MET de mt940-poort van v304 eruit. Deze sectie vraagt of t.date bij een bron');
+  L.push('        al de betaaldag IS, en die poort haalt juist die bron uit de sommen; met de volle poort');
+  L.push('        meet deze sectie zijn eigen uitkomst. De euro-kolommen hieronder tellen GELD en lezen');
+  L.push('        daarom wel de volle poort (v285). Hetzelfde geldt voor sectie 3 en 4.');
   L.push('  boekingen met een kaart-kenmerk (BEA/eCom/betaalpas): '+kaart);
   L.push('  boekingen MET het veld:      '+metVeld+'   waarvan met een tijd erbij: '+metTijd);
   L.push('  een datum in de desc maar GEEN veld: '+descGeenVeld+'   (per reden, uit betaalMoment zelf)');
@@ -15155,6 +15277,8 @@ function diagDubbel(){
   };
   L.push('');
   L.push('1. DE DEKKING VAN HET VELD PER BRON EN PER REKENING (dezelfde scope en maat als blok 9)');
+  L.push('  de aantallen tellen de IMPORT en lezen TX; de euro-kolom telt GELD en leest de volle poort,');
+  L.push('  dus een bron die door een poort valt staat daar op nul euro (v285/v304).');
   L.push('  per bron:');
   dekPrint(dekRij(src));
   L.push('  per rekening:');
@@ -15224,10 +15348,11 @@ function diagDubbel(){
      want anders is het verschil tussen de kolommen vooral de dekking en niet de kalender (v273). */
   L.push('');
   L.push('3. DE WEEKDAGVERDELING OP t.date PER REKENING EN PER STIJL');
+  L.push('  bron: telbareTx() met de mt940-poort van v304 eruit, om de reden bovenaan dit blok');
   L.push('  scope: piekVerdeling() (uitgave, niet vast, niet geenNorm, netto) plus kaartachtig,');
   L.push('         min een incasso en min een periodieke overboeking');
   const wg={};
-  for(const t of telbareTx()){
+  for(const t of asTx()){
     if(!(inScope(t) && t.amount<0)) continue;
     const st=stijl(t); if(!st) continue;
     if(_dT(()=>isIncasso(t),false) || _dT(()=>isPeriodicTransfer(t),false)) continue;
@@ -15322,9 +15447,11 @@ function diagDubbel(){
     : 'netto niets of negatief, geen aandeel te rekenen');
   L.push('');
   L.push('4. DE BRON BINNEN EEN REKENING (afgeleid: de rekening met meer dan een bron)');
+  L.push('  bron: telbareTx() met de mt940-poort van v304 eruit. Zonder dat leest deze sectie op de enige');
+  L.push('        rekening waarover hij gaat maar EEN bron, en dan zegt 4a t/m 4d per constructie niets.');
   if(!meerdere.length) L.push('  geen rekening draagt twee bronnen, dus hier valt niets te splitsen');
   for(const acc of meerdere){
-    const rij=telbareTx().filter(t=>String(t.acc)===String(acc));
+    const rij=asTx().filter(t=>String(t.acc)===String(acc));
     const sc=rij.filter(t=>inScope(t)&&t.amount<0);
     L.push('');
     L.push('  rekening '+acc+'   bank '+bankVan(acc)+'   '+rij.length+' boekingen, '+sc.length+' in de scope van piekVerdeling()');
@@ -15501,6 +15628,14 @@ function diagDubbel(){
           .map(n=>n+' '+nm[n]+'x').join(' | '));
       }
       L.push('    OVER (psd2): '+psdRest.length+' van '+psdL.length+'   dat is het deel dat psd2 MEER draagt dan de mt940-import');
+      /* v304: WAT DE APP MET DE UITKOMST DOET STAAT IN DE UITVOER ZELF, en niet alleen in dit bestand.
+         Dat is de les van v287: deze sectie meet over TX en de sommen lezen de poort, dus zonder deze
+         regel staan er twee antwoorden onder een gelijkende kop en weet een lezer niet welke van de twee
+         de app gebruikt. */
+      const mp=_dT(()=>mt940Paar().map[acc],null);
+      L.push('    DE APP SLUIT DAAROM UIT: '+(mp
+        ? 'mt940-boekingen van '+acc+' met een datum van '+mp.van+' t/m '+mp.tot+' tellen niet mee in txOfMonth() en periodTx() (v304); dat is het psd2-venster van deze rekening zelf.'
+        : 'niets op deze rekening; mt940Dubbel() vindt hier geen tweede bron, dus alles telt gewoon mee.'));
       L.push('    WAT 4d BESLIST: is NIET GEMATCHT (bijna) nul, dan is de mt940-kant een deelverzameling en');
       L.push('      kan dezelfde vensterregel als v284 hem uitsluiten, met de prijs hierboven als kosten.');
       L.push('      Blijft er een rest staan, dan raakt een vensterregel die euro\'s kwijt en is de scheider');
@@ -15668,6 +15803,10 @@ function diagDubbel(){
      de uitvoer onvergelijkbaar maken met het signaal dat hij moet beoordelen. */
   L.push('');
   L.push("6. PER MAAND: WELK DEEL VAN DE IN-SCOPE EURO'S KOMT VAN EEN BRON DIE DE BETAALDAG DRAAGT");
+  L.push('  bron: piekScope(), dus de VOLLE poort, en dat is met opzet: deze sectie telt GELD (v285).');
+  L.push('        Een bron die door een poort valt draagt hier dus nul euro en krijgt geen groep. Staat er');
+  L.push('        geen mt940-groep terwijl sectie 4 er wel een mt940-kant leest, dan is dat de poort van');
+  L.push('        v304 en niet het ontbreken van die bron.');
   const lm=thisYM();
   const refM=months().filter(x=>x<lm).slice(-3);
   L.push('  de maanden die signaal 3 leest: de lopende maand '+lm
@@ -17930,13 +18069,13 @@ function geldmaatMist(a, b, d){
    DRIE OF MEER IS GEEN PAAR. Bij drie boekingen met dezelfde sleutel valt niet te zeggen welke van welke
    een dubbel is, en dan zwijgt de lijst erover in plaats van er twee te kiezen (v59/v73/v173). Het AANTAL
    van die groepen staat wel in de sheet: stil overslaan is precies wat dit project verbiedt.
-   EEN BOEKING DIE AL BUITEN DE SOMMEN VALT KOMT HIER NIET IN. `csvDubbel()` sluit hem al uit om een andere
-   reden, en hem hier nog eens aanbieden zou een tweede poort op dezelfde boeking zijn. */
+   EEN BOEKING DIE AL BUITEN DE SOMMEN VALT KOMT HIER NIET IN. `csvDubbel()` en `mt940Dubbel()` sluiten hem
+   al uit om een andere reden, en hem hier nog eens aanbieden zou een tweede poort op dezelfde boeking zijn. */
 function dubbelSleutel(t){ return String(t.acc||'')+'|'+_softKey(t); }
 function dubbelParen(){
   const groep=new Map();
   for(const t of TX){
-    if(csvDubbel(t)) continue;
+    if(csvDubbel(t) || mt940Dubbel(t)) continue;   // v304: om dezelfde reden als de csv-kant
     const k=dubbelSleutel(t);
     let g=groep.get(k); if(!g) groep.set(k, g=[]);
     g.push(t);

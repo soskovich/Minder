@@ -320,9 +320,16 @@ test.describe('v293 de reservering aan de pomp', () => {
     expect(bron.split("vorm='3 (").length - 1).toBe(1);
     /* de kandidatenlijst drukt de vorm-keuze niet opnieuw uit: hij LEEST het vorm-veld */
     expect(bron.split("String(r.vorm).charAt(0)!=='3'").length - 1).toBe(1);
-    /* en de poort staat op een plek, met telbareTx() eruit afgeleid */
+    /* EN DE POORT STAAT OP EEN PLEK, MET vorautBron() ERUIT AFGELEID. Deze assertie ankerde tot v304 op
+       de letterlijke regel `vorautBron().filter(t=>!vorautWeg(t))`, en dat is een anker op een SPELLING
+       en niet op de eigenschap (v276). Sinds v304 staat de poort als lijst met een naam per poort, zodat
+       een meting er precies EEN kan overslaan zonder de rest te kopieren; de eigenschap die vast moet
+       liggen is dat elke eis EEN keer in die lijst staat en dat beide ingangen die lijst lezen. */
     expect(bron.split('function vorautWeg(').length - 1).toBe(1);
     expect(bron.split('function vorautBron(').length - 1).toBe(1);
-    expect(bron.split('vorautBron().filter(t=>!vorautWeg(t))').length - 1).toBe(1);
+    expect(bron.split('const TELPOORTEN=').length - 1).toBe(1);
+    for (const pred of ['csvDubbel(t)', 'mt940Dubbel(t)', 'dubbelWeg(t)', 'vorautWeg(t)'])
+      expect(bron.split('t=>' + pred).length - 1, pred + ' staat een keer in de poortlijst').toBe(1);
+    expect(bron.split("function vorautBron(){ return telbareTx('voraut'); }").length - 1).toBe(1);
   });
 });
