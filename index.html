@@ -1796,6 +1796,19 @@ function uitReserveringBedrag(t){
   return Math.min(v, -t.amount);
 }
 function isUitReservering(t){ return uitReserveringBedrag(t)>0; }
+/* v308: DE UITGAVE ZOALS EEN NORM HEM TELT, en dat is het bedrag min het deel dat uit een
+   reservering is betaald. Deze uitdrukking stond alleen IN catSpendMap(), en daardoor telde de
+   piekdag en de grootste uitgave het volle bedrag: GEMELD op 30 september stond er "Grootste
+   uitgave EUR 500 (CJIB Verkeersboetes)" terwijl de stand-kaart drie regels hoger "+ EUR 463
+   belasting & boetes, uit een reservering" zei. Dat is hetzelfde bedrag, in dezelfde maand, op
+   hetzelfde scherm, een keer wel en een keer niet gevlagd.
+   HET IS EEN BEDRAG EN GEEN JA/NEE (v269): is er EUR 463 gereserveerd voor een boeking van EUR
+   500, dan is die 37 gewoon uitgave en telt hij hier ook mee. De vlag liegt niet over het
+   ongedekte deel.
+   EEN geenNorm-CATEGORIE KAN DE VLAG NIET DRAGEN, dus deze functie is daar per constructie gelijk
+   aan het volle bedrag (zie uitReserveringBedrag()). Daarmee blijft catSpendMap() karakter voor
+   karakter dezelfde som als hiervoor. */
+function uitgaveNorm(t){ return (-t.amount)-uitReserveringBedrag(t); }
 function uitReserveringSom(txns){ let s=0; for(const t of (txns||[])) s+=uitReserveringBedrag(t); return s; }
 function zetUitReservering(id, bedrag, heropen){
   const t=TX.find(x=>x.id===id); if(!t) return;
@@ -2539,25 +2552,38 @@ function renderEmpty(){
 // maand-liquiditeit: wat is deze maand NOG niet ontvangen/betaald?
 // "Due" = terugkerende post die deze kalendermaand nog niet in je transacties voorkomt
 // (niet op basis van de typische dag, die kan al gepasseerd zijn terwijl het bedrag nog moet komen).
-/* Wat heeft dit potje de rest van de maand nog nodig? (v111)
-   Zolang er ruimte is: het onbestede deel. Maar een OVERSCHREDEN potje reserveerde nul, en
-   daardoor werd "veilig te besteden" juist ruimer naarmate je verder over je budget ging -
-   terwijl het uitgeven natuurlijk gewoon doorloopt. Voor de resterende dagen rekenen we dan met
-   het geplande dagtempo van dat potje: je eigen plan als maat. Bewust niet het tempo van déze
-   maand; na één grote aankoop is dat onbruikbaar hoog (700 in 6 dagen zou 2.800 projecteren).
-   Aan het eind van de maand is daysLeft 0, dus dan reserveert een leeg potje weer niets. */
+/* Wat geeft dit potje bij je geplande tempo de rest van de maand nog uit? (v111, v308)
+   HET GEPLANDE DAGTEMPO IS DE MAAT, en dat is bud/dim per dag: je eigen plan. Bewust niet het
+   tempo van déze maand; na één grote aankoop is dat onbruikbaar hoog (700 in 6 dagen zou 2.800
+   projecteren). Over de dagen die nog komen is dat bud/dim maal daysLeft.
+   EEN POTJE MET RUIMTE PROJECTEERT NOOIT MEER DAN ER IN ZIT, dus daar is het de kleinste van de
+   twee. Loop je achter op je tempo, dan bindt het tempo; loop je voor, dan bindt het restant.
+   EEN OVERSCHREDEN POTJE RESERVEERT HET TEMPO EN NIET NUL (v111): anders werd "veilig te besteden"
+   juist ruimer naarmate je verder over je budget ging, terwijl het uitgeven gewoon doorloopt. Daar
+   is er geen restant om op te klemmen, dus daar staat het tempo alleen.
+   v308: HET RESTANT STOND HIER ZONDER KLEM, en dat is de vondst van deze ronde: de ene tak volgde
+   de resterende dagen en de andere keek er niet naar. GEMETEN op 30 september (dag 30 van 30) zei
+   de regel op Inzichten "De resterende 1 dag heb je €319. Bij je tempo nog €710 nodig €391
+   tekort": die 710 is de som van de onbestede delen, dus een bedrag dat in één dag niet past, en
+   het gat van 391 was precies de overschrijding van het andere potje. Met de klem is de projectie
+   op de laatste dag nul, want er is geen dag meer om het in uit te geven.
+   OP TEMPO IS DE UITKOMST DEZELFDE ALS DAARVOOR: bij spent = bud x elapsed/dim zijn restant en
+   tempo gelijk. Wat verandert is alleen het potje dat ACHTERLOOPT, en juist dat potje droeg de
+   onmogelijke projectie. */
 function potjeRest(bud, uitgegeven, dim, daysLeft){
   bud=+bud||0; uitgegeven=+uitgegeven||0;
-  if(uitgegeven<=bud) return bud-uitgegeven;
-  return Math.round(bud/Math.max(dim,1)*Math.max(daysLeft,0));
+  const tempo=Math.round(bud/Math.max(dim,1)*Math.max(daysLeft,0));
+  if(uitgegeven>bud) return tempo;
+  return Math.min(bud-uitgegeven, tempo);
 }
 // Onbestede variabele potjes deze maand (potjes = je plan; gedeeld door de liquiditeitskaart en safeToSpend).
 /* v208: de stand van je variabele potjes, uit de bestaande partitie. Geen nieuwe berekening: het
    restant komt uit varPlanRemaining() en het budget uit varBudget(), en het gebruikte deel loopt
    over dezelfde recurringCats()-scheiding die die twee al gebruiken.
-   Let op dat rest + gebruikt NIET altijd budget is: bij een overschreden potje slaat potjeRest om
-   naar het geplande dagtempo maal de resterende dagen (v111), en dat is met opzet geen rekenkundig
-   restant maar een reservering voor de rest van de maand.
+   Let op dat rest + gebruikt NIET altijd budget is: potjeRest() geeft het geplande dagtempo maal de
+   resterende dagen zodra dat onder het onbestede deel ligt (v111 voor een overschreden potje, v308
+   ook voor een potje dat achterloopt), en dat is met opzet geen rekenkundig restant maar wat je bij
+   je eigen tempo de rest van de maand nog uitgeeft.
    v250: "de tegel toont ze als losse feiten en telt ze nergens op" stond hier, en dat klopte niet
    meer met het scherm. Sinds v208 staat de sub direct onder het grote getal in de vorm
    "van X · Y gebruikt", en die vorm leest als een aftrekking; gemeten stond er €1.089 waar €1.730
@@ -2583,8 +2609,12 @@ function varPotjeStand(ym){
    het potje het geplande dagtempo maal de resterende dagen terug (v111). Dat is een prognose, en
    als reservering klopt hij niet: gemeten stonden er drie lege potjes voor samen EUR 153 in de
    sheet "Gereserveerd in je potjes" terwijl er niets meer in zat, en dat bedrag ging af van je
-   veilig te besteden. Wat je daarna in zo'n categorie uitgeeft is niet meer door een potje gedekt
-   en hoort gewoon van je vrije geld af te gaan, op het moment dat je het uitgeeft.
+   veilig te besteden.
+   EN SINDS v308 OOK IN HET POTJE DAT ACHTERLOOPT, de andere kant op: potjeRest() klemt daar op
+   datzelfde tempo, dus de tempo-som ligt ONDER de reservering. Een reservering mag dat niet doen -
+   wat er in je potje zit zit er, ook als je het deze maand niet meer opmaakt.
+   Wat je daarna in zo'n categorie uitgeeft is niet meer door een potje gedekt en hoort gewoon van
+   je vrije geld af te gaan, op het moment dat je het uitgeeft.
    DEZELFDE POORT als varPlanRemaining(): bud>0 en niet terugkerend, en dezelfde catSpendMap(). Een
    potje telt in allebei mee of in geen van beide.
    POTJEREST() BLIJFT ZOALS HIJ IS. Hij heeft nog twee lezers die de prognose juist nodig hebben:
@@ -8922,8 +8952,9 @@ function nogDezeMaandPosten(){
      bronnen als de sub eronder. De reservering is niet weg: hij staat als eigen regel eronder, met
      het verschil erbij, want dat verschil is wat deze regel te zeggen heeft.
      DE POORT IS varBudget() EN NIET varPlan. Op de laatste dag van de maand is daysLeft nul, dus
-     geeft elk overschreden potje nul terug; met de oude poort verdween de regel dan precies
-     wanneer "te veel uitgegeven" het meest te zeggen heeft.
+     geeft elk potje nul terug (v111 het overschreden potje, sinds v308 ook het potje met ruimte);
+     met de oude poort verdween de regel dan precies wanneer "te veel uitgegeven" het meest te
+     zeggen heeft.
      GEEN TIK, OP GEEN VAN BEIDE REGELS (v254). Tot v253 opende de noot openReservedPotjes(), want
      die sheet telde toen ook potjeRest() op en had dus hetzelfde koptotaal. Sinds v254 toont die
      sheet de reservering (varPotjesReserve) en niet meer de tempo-som, dus die tik zou weer op een
@@ -10796,7 +10827,7 @@ function toggleCollap(which){ SET[which]=!collapOpen(which); save(); render(); }
    renderCatBreak() en renderTxList() tellen hun eigen lijst op en komen hier niet langs, dus hun
    totaal blijft per constructie gelijk aan de rijen eronder. Daarom kon deze functie de norm
    worden in plaats van dat er een tweede map naast kwam. */
-function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+(-t.amount)-uitReserveringBedrag(t); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
+function catSpendMap(m){ const by={}; for(const t of txOfMonth(m)){ if(CATS[catOf(t)].type==='expense') by[catOf(t)]=(by[catOf(t)]||0)+uitgaveNorm(t); } for(const k in by){ if(by[k]<=0) delete by[k]; } return by; }   // netto per categorie; terugstorting verlaagt de uitgave, netto ≤0 telt niet als uitgave
 
 /* ----- COACH (lichtgewicht AI-regels) ----- */
 
@@ -11302,8 +11333,11 @@ function _catSpendOf(mm){ return catSpendMap(mm); }   // netto per categorie (te
        kreeg er een zin bij die zegt waar het normaal-bedrag vandaan komt. Zonder die zin leest een
        afgeleide als een meting:
        hyp: "... Bij dat gebruikelijke aandeel hoort deze maand ongeveer <normaal>."
-     grootste winkel
+     grootste uitgave (v308: heette "grootste winkel")
        hyp: "Een winkel domineert je losse uitgaven."
+       v308: de app meet een NAAM (cleanMerch) en weet niet of daar een winkel achter zit; gemeld
+       stond er CJIB Verkeersboetes onder. De zin stelt nu vast wat hij meet:
+       hyp: "Eén naam draagt een groot deel van je losse uitgaven."
        imp: "Reken je deze maand niet rijk of arm aan dit ene bedrag." */
 // v174: pctWord() ging in v165 mee als dode code. De piekdag-zin gebruikte hem; hier staat het
 // percentage zelf, zodat de zin verder woordelijk blijft zoals hij geschreven was.
@@ -11341,10 +11375,13 @@ function piekVerdeling(m, negeerWinkel){
   const lijst=piekScope(m);
   const uit = negeerWinkel ? lijst.filter(x=>(cleanMerch(x.name)||x.name||'onbekend')!==negeerWinkel) : lijst;
   const sumd=[0,0,0,0,0,0,0];
-  for(const x of uit) sumd[(new Date(x.date).getDay()+6)%7]+=-x.amount;   // dag-sommen netto, telpoort op afschrijvingen
+  for(const x of uit) sumd[(new Date(x.date).getDay()+6)%7]+=uitgaveNorm(x);   // v308: dag-sommen netto en zonder het deel uit een reservering
   const tot=sumd.reduce((a,b)=>a+b,0);
   if(!(tot>0)) return null;
-  return {sumd, tot, aandeel:sumd.map(v=>v/tot), n:uit.filter(x=>x.amount<0).length};
+  /* v308: DE TELPOORT LEEST DEZELFDE UITDRUKKING ALS DE SOMMEN. Een boeking die volledig uit een
+     reservering is betaald draagt nul in de verdeling, dus hem wel meetellen in het minimum zou de
+     poort openen op boekingen die aan de meting niets bijdragen. */
+  return {sumd, tot, aandeel:sumd.map(v=>v/tot), n:uit.filter(x=>uitgaveNorm(x)>0).length};
 }
 /* Minder dan drie bruikbare maanden geeft null, en dan zwijgt het signaal. GEEN TERUGVAL op een
    gelijke verdeling: een zevende per dag is geen meting van jouw patroon maar een aanname, en dan
@@ -11434,13 +11471,13 @@ function insSignals(m,exclude){
   /* v239: losse geld is zonder onvoorzien, in de telpoort EN in de sommen. Zie de comment boven
      piekVerdeling(): dit waren de enige twee signalen in deze functie die geenNorm nog meetelden. */
   const losAll=piekScope(m);   // v234; v285: dezelfde snede als piekVerdeling(), uit een bron
-  const vis=losAll.filter(x=>x.amount<0);          // telpoort: alleen afschrijvingen
+  const vis=losAll.filter(x=>uitgaveNorm(x)>0);    // v308: telpoort op wat een norm telt, zie piekVerdeling()
   const visAll=losAll;                             // sommen: netto, dus incl. terugstortingen
   /* 4) grootste netto uitgave per winkel. Hij wordt hier al BEPAALD maar pas onderaan gepusht: de
      piekdag heeft hem nodig voor de tegentest, want een winkel mag geen twee regels dragen. */
   let dom=null;
   if(vis.length>=5){
-    const byM={}; for(const x of visAll){ const nm=cleanMerch(x.name)||x.name||'onbekend'; byM[nm]=(byM[nm]||0)+(-x.amount); }
+    const byM={}; for(const x of visAll){ const nm=cleanMerch(x.name)||x.name||'onbekend'; byM[nm]=(byM[nm]||0)+uitgaveNorm(x); }
     const arr=Object.entries(byM).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
     const vals=arr.map(e=>e[1]).sort((a,b)=>a-b); const med=vals[Math.floor(vals.length/2)]||0;
     if(arr.length && med>0 && arr[0][1]>=med*4 && arr[0][1]>=40) dom={naam:arr[0][0], bedrag:arr[0][1]};
@@ -11480,7 +11517,12 @@ function insSignals(m,exclude){
   }
   if(dom) out.push({pri:6,act:`openMerchant('${esc(String(dom.naam).toUpperCase().replace(/'/g,"\\'"))}')`,
     kpiLabel:'Grootste uitgave', kpiVal:euro0(dom.bedrag), kpiSub:esc(dom.naam),
-    hyp:`Een winkel domineert je losse uitgaven.`,
+    /* v308: HIER STOND "Een winkel domineert je losse uitgaven", en dat is een bewering die de
+       app niet kan doen. GEMELD op de eigen gegevens: de naam eronder was CJIB Verkeersboetes.
+       De eenheid die deze meting maakt is cleanMerch(x.name), dus een NAAM; of daar een winkel
+       achter zit weet de app niet. De naam staat al in de sub, dus de zin noemt hem niet nog een
+       keer. Geen nieuw woord voor die eenheid (v91): "naam" is wat er staat. */
+    hyp:`Eén naam draagt een groot deel van je losse uitgaven.`,
     imp:`Reken je deze maand niet rijk of arm aan dit ene bedrag.`});
   return out;
 }
@@ -14468,9 +14510,10 @@ function diagAlloc(){
       Gemeld: "Nog uit je potjes €1.089, van €1.730 · €1.132 gebruikt · 65%", terwijl 1.730 min
       1.132 gelijk is aan 598. Alle vier de getallen rekenen over DEZELFDE potjes (elke k in
       SET.budgets met bud>0 die niet in recurringCats() zit) en dezelfde transacties
-      (catSpendMap). Het verschil zit in potjeRest(): bij een potje waar je overheen bent gegaan
-      geeft die niet het negatieve restant terug maar bud/dim maal de resterende dagen, als
-      reservering voor de rest van de maand (v111).
+      (catSpendMap). Het verschil zit in potjeRest(): die geeft bud/dim maal de resterende dagen
+      zodra dat onder het onbestede deel ligt. Bij een potje waar je overheen bent gegaan is dat het
+      hele antwoord, want een negatief restant reserveert niets (v111); bij een potje dat achterloopt
+      op zijn tempo is het de klem erop (v308).
       Sinds v250 toont de regel de aftrekking als groot getal en de reservering als eigen regel
       eronder, met het gat erbij. Dit blok leest precies die twee getallen terug en rekent het gat
       per potje uit, zodat op de eigen gegevens te zien is waar het vandaan komt. */
@@ -14501,8 +14544,15 @@ function diagPotjes(){
   L.push(gat>0?'  de regel staat er dus.':'  geen gat, dus die regel staat er niet.');
   L.push('');
   L.push('per potje. meetelt: alle drie de sommen lopen over dezelfde poort (bud>0 en niet');
-  L.push('terugkerend), dus een potje telt overal mee of nergens. reserve is wat potjeRest()');
-  L.push('teruggeeft bij een overschrijding, en bijdrage is reserve plus de overschrijding zelf.');
+  L.push('terugkerend), dus een potje telt overal mee of nergens. restant is wat potjeRest() geeft,');
+  L.push('en bijdrage is dat restant min het rekenkundige restant (potje min besteed).');
+  /* v308: HIER STOND "bijdrage is reserve plus de overschrijding zelf", en dat gold alleen voor een
+     OVERSCHREDEN potje. Sinds potjeRest() ook de tak met ruimte op het geplande dagtempo maal de
+     resterende dagen klemt, draagt een potje dat ACHTERLOOPT op zijn tempo een NEGATIEVE bijdrage:
+     bij dat tempo geeft het deze maand minder uit dan er in zit. De optelling verandert er niet
+     van, want het blok rekent bij per potje en niet per soort. */
+  L.push('een potje dat achterloopt op zijn tempo draagt een negatieve bijdrage: bij dat tempo');
+  L.push('geeft het deze maand minder uit dan er in zit (v308).');
   /* v271: DE RIJEN ZIJN AFGEROND VOOR DE WEERGAVE, DE AANSLUITING REKENT ONAFGEROND. Hiervoor telde
      dit blok de AFGERONDE bedragen per potje op en legde die som naast een app-getal dat de som
      afrondt; dat scheelt een euro zodra er centen in het spel zijn, en dan zei de aansluiting NEE

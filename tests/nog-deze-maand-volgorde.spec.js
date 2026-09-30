@@ -187,13 +187,18 @@ test.describe('c \u00b7 er staat geen totaal en geen restregel', () => {
       const L = monthLiquidity(), S = safeToSpend(), VP = varPotjeStand(m);
       const inc = Math.round(L.incDue), fix = Math.round(L.fixDue);
       const spaar = Math.max(Math.round(S.saveReserved), 0);
-      const rest = varPlanRemaining(m), inPotjes = VP.budget - VP.gebruikt;
-      return { aftrekRest: inc - spaar - fix - rest, aftrekPot: inc - spaar - fix - inPotjes,
-        identiteit: S.safe - S.spendSaldo, gat: rest - inPotjes,
+      const reserve = varPotjesReserve(m), inPotjes = VP.budget - VP.gebruikt;
+      return { aftrekRest: inc - spaar - fix - reserve, aftrekPot: inc - spaar - fix - inPotjes,
+        identiteit: S.safe - S.spendSaldo, potOver: S.potOver,
         spendSaldo: S.spendSaldo, projected: Math.round(L.projected) };
     });
+    /* v308: hier stond varPlanRemaining(). safeToSpend() trekt sinds v254 varPotjesReserve() af, en
+       die twee waren op deze fixture hetzelfde getal zolang een potje met ruimte zijn hele
+       onbestede deel in de tempo-som droeg; sinds de klem op de resterende dagen lopen ze uiteen.
+       De identiteit gaat over wat safe werkelijk aftrekt, dus over de reservering. */
     expect(r.aftrekRest).toBe(r.identiteit);
-    expect(r.aftrekPot).toBe(r.identiteit + r.gat);
+    // en met de GETOONDE post wijkt hij nog eens de overschrijding af (reserve = inPotjes + potOver)
+    expect(r.aftrekPot).toBe(r.identiteit + r.potOver);
     // en je huidige saldo zit er niet in, dus de aftrekking is niet de prognose
     expect(r.spendSaldo).toBeGreaterThan(0);
     expect(r.aftrekRest).not.toBe(r.projected);

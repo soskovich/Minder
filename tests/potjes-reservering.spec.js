@@ -98,6 +98,15 @@ const meet = (page) => page.evaluate(() => {
     reserve: varPotjesReserve(m), plan: varPlanRemaining(m),
     reserved: Math.round(S.reserved), safe: S.safe, potOver: S.potOver,
     inPotjes: VP.budget - VP.gebruikt,
+    /* v308: de tempo-som van de LEGE potjes apart, uit dezelfde poort en dezelfde potjeRest() als
+       de sheet zelf. Tot v308 was dit getal gelijk aan plan min reserve, want een potje MET ruimte
+       droeg in beide sommen hetzelfde bedrag; sinds de klem op de resterende dagen is dat niet meer
+       zo en is die aftrekking dus niet langer de tempo-som van de lege potjes. */
+    tempoOp: (function(){ const B=SET.budgets||{}, rc=recurringCats(), sp=catSpendMap(m);
+      const d=daysElapsed(m), left=Math.max(d.dim-d.elapsed,0); let v=0;
+      for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue;
+        if((sp[k]||0)>bud) v+=potjeRest(bud, sp[k]||0, d.dim, left); }
+      return Math.round(v); })(),
   };
 });
 
@@ -114,7 +123,14 @@ test.describe('a · de gemelde toestand: drie lege potjes', () => {
      waarmee veilig te besteden ruimer werd, en precies wat de prognoseregel noemt. Die wordt hier
      getoetst, met de eis dat hij boven nul ligt zodat de test niet leegloopt op een dag waarop er
      niets te verschillen valt. */
-  test('de drie dragen nul, en veilig te besteden wordt met het hele verschil ruimer', async ({ page }) => {
+  /* v308: DIT HEETTE "...wordt met het hele verschil ruimer", en die richting hing aan de oude
+     potjeRest(): een potje MET ruimte droeg in beide sommen hetzelfde bedrag, dus plan min reserve
+     was precies de tempo-som van de lege potjes en dus positief. Met de klem dragen de volle
+     potjes in de tempo-som MINDER, en dan kan die aftrekking ook negatief zijn (in deze fixture is
+     hij dat). Wat vastligt is de IDENTITEIT en niet de richting: veilig te besteden verschilt met
+     precies het bedrag waarmee de twee sommen verschillen. Dat de drie lege potjes nul dragen en
+     dat de kop de reservering is, verandert niet: de klem raakt alleen potjes MET ruimte. */
+  test('de drie dragen nul, en veilig te besteden verschilt met precies het verschil', async ({ page }) => {
     await boot(page, DRIE_OP);
     const r = await meet(page);
     const op = r.rijen.filter((x) => /potje op/.test(x.sub));
@@ -122,7 +138,7 @@ test.describe('a · de gemelde toestand: drie lege potjes', () => {
     for (const x of op) expect(x.bedrag).toBe(0);
     // de tempo-som is wat de sheet vroeger in zijn kop zette; het verschil is wat dat kostte
     const verschil = r.plan - r.reserve;
-    expect(verschil, 'de drie lege potjes leveren geen verschil op').toBeGreaterThan(0);
+    expect(verschil, 'de twee sommen meten in deze fixture hetzelfde, dus de test loopt leeg').not.toBe(0);
     expect(r.kop).toBe(r.reserve);
     /* en veilig te besteden is met precies datzelfde bedrag ruimer geworden. safe trekt de
        reservering af, dus safe met de oude bron is safe min het verschil tussen de twee sommen. */
@@ -153,19 +169,23 @@ test.describe('a · de gemelde toestand: drie lege potjes', () => {
   test('de prognoseregel staat onder de lijst en telt nergens in mee', async ({ page }) => {
     await boot(page, DRIE_OP);
     const r = await meet(page);
-    const verschil = r.plan - r.reserve;
-    expect(verschil).toBeGreaterThan(0);
+    /* v308: het getal in de zin is de tempo-som van de potjes die AL OP ZIJN, en dat is wat
+       openReservedPotjes() optelt. Tot v308 stond hier plan min reserve, en die aftrekking was
+       hetzelfde getal zolang een potje met ruimte in beide sommen gelijk meedeed; dat is met de
+       klem niet meer waar, en het anker hoort dus bij de bron van de zin en niet bij een identiteit
+       die er per ongeluk mee samenviel. */
+    expect(r.tempoOp).toBeGreaterThan(0);
     /* euro0() is app-code en bestaat hier niet, dus de zin wordt op zijn vorm getoetst en het
        bedrag erin op zijn waarde. Dat is ook het juiste anker: wat vaststaat is dat het getal in
-       de zin de tempo-som min de reservering is, niet hoe het is opgemaakt. */
+       de zin de tempo-som van de lege potjes is, niet hoe het is opgemaakt. */
     expect(r.prognose).toMatch(/^Bij je tempo verwacht je deze maand nog €[\d.]+ uit te geven in potjes die al op zijn\.$/);
-    expect(eur(/nog (€[\d.]+) uit te geven/.exec(r.prognose)[1])).toBe(verschil);
+    expect(eur(/nog (€[\d.]+) uit te geven/.exec(r.prognose)[1])).toBe(r.tempoOp);
     /* en hij telt nergens in mee: niet in de kop (die is de reservering, niet de reservering plus
        de prognose) en niet als eigen post in de lijst. Tot v255 stond hier r.kop !== r.kop + 153,
        en dat is waar voor elk getal behalve nul, dus die assert kon niet vallen. */
     expect(r.kop).toBe(r.reserve);
-    expect(r.kop).not.toBe(r.reserve + verschil);
-    expect(r.rijen.some((x) => x.bedrag === verschil)).toBe(false);
+    expect(r.kop).not.toBe(r.reserve + r.tempoOp);
+    expect(r.rijen.some((x) => x.bedrag === r.tempoOp)).toBe(false);
   });
 });
 
@@ -173,7 +193,13 @@ test.describe('b · geen enkel potje leeg', () => {
   test('totaal en veilig te besteden ongewijzigd, en geen prognoseregel', async ({ page }) => {
     await boot(page, GEEN_OP);
     const r = await meet(page);
-    expect(r.reserve).toBe(r.plan);            // zonder leeg potje meten de twee hetzelfde
+    /* v308: hier stond "zonder leeg potje meten de twee hetzelfde". Dat gold zolang een potje met
+       ruimte zijn hele onbestede deel in de tempo-som droeg; met de klem draagt het er hoogstens
+       zijn tempo, dus de tempo-som ligt eronder. Wat zonder leeg potje wel vast blijft: de
+       reservering IS de aftrekking, er is niets over de grens, en er is geen prognoseregel. */
+    expect(r.reserve).toBe(r.inPotjes);
+    expect(r.plan).toBeLessThanOrEqual(r.reserve);
+    expect(r.tempoOp).toBe(0);
     expect(r.kop).toBe(r.reserve);
     expect(r.potOver).toBe(0);
     expect(r.prognose).toBeNull();
@@ -211,7 +237,10 @@ test.describe('c · de twee functies naast elkaar', () => {
     expect(r.reserved).toBe(r.reserve);
   });
 
-  test('potjeRest is onaangeroerd, en houdt zijn twee lezers', async ({ page }) => {
+  /* v308: dit heette "potjeRest is onaangeroerd". Hij is wel aangeroerd: zijn tak voor een potje
+     MET ruimte klemt sinds v308 op het geplande dagtempo maal de resterende dagen. Wat deze test
+     vasthoudt is wat hij altijd moest vasthouden, namelijk WIE hem leest. */
+  test('potjeRest klemt op de resterende dagen, en houdt zijn twee lezers', async ({ page }) => {
     await boot(page, DRIE_OP);
     /* De bron zonder commentaar: een naam die alleen in een comment staat is geen lezer, en dit
        bestand legt juist in commentaar uit welke functie waar gebleven is. */
@@ -221,7 +250,9 @@ test.describe('c · de twee functies naast elkaar', () => {
         plan: kaal(varPlanRemaining), reserve: kaal(varPotjesReserve),
         sheet: kaal(openReservedPotjes), safe: kaal(safeToSpend) };
     });
-    expect(r.rest).toContain('return Math.round(bud/Math.max(dim,1)*Math.max(daysLeft,0));');
+    // beide takken rekenen met dezelfde resterende dagen, en de tak met ruimte klemt erop
+    expect(r.rest).toContain('const tempo=Math.round(bud/Math.max(dim,1)*Math.max(daysLeft,0));');
+    expect(r.rest).toContain('return Math.min(bud-uitgegeven, tempo);');
     expect(r.plan).toContain('potjeRest(');          // de tempo-som leest hem nog
     expect(r.sheet).toContain('potjeRest(');         // en de prognoseregel onder de sheet ook
     expect(r.reserve).not.toContain('potjeRest(');   // de reservering niet

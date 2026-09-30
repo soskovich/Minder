@@ -10,6 +10,10 @@
 const { test, expect } = require('@playwright/test');
 const F = require('./budget-fixture.js');
 const { open, seed, CUR, LIMIET, POTJES, SPEND_CUR, FIXDUE, VARPLAN, SALDO, SPAAR_SALDO, SAVE_REMAINING, SAFE } = F;
+/* v308: DE DAG STAAT VAST voor de test die de twee modellen naast elkaar zet. De tempo-som klemt
+   sinds v308 op de resterende dagen, en op de laatste dag van de maand is hij nul; de prognose is
+   daar ook nul, en dan is "twee modellen, bewust niet gelijkgetrokken" niet meer te meten. */
+const { pinDag } = require('./vaste-dag');
 
 const text = (page, sel) => page.locator(sel).innerText();
 
@@ -82,11 +86,17 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
      sindsdien las niemand hem. Het plan komt uit varPlanRemaining(), de enige bron; de forecast
      blijft een apart model. */
   test('het plan komt uit varPlanRemaining; de forecast blijft apart', async ({ page }) => {
+    await pinDag(page);                                    // v308: voor de goto in open()
     await open(page);
-    const r = await page.evaluate(() => ({ L: monthLiquidity(), plan: varPlanRemaining(curMonth) }));
+    const r = await page.evaluate(() => ({ L: monthLiquidity(), plan: varPlanRemaining(curMonth),
+      reserve: varPotjesReserve(curMonth) }));
     const L = r.L;
     expect(L.varPlan).toBe(undefined);                     // geen tweede plek meer waar het staat
-    expect(r.plan).toBe(VARPLAN);                          // potjes-kant
+    /* v308: hier stond r.plan === VARPLAN. Die constante is de RESERVERING (zie budget-fixture.js);
+       de tempo-som klemt sinds v308 op de resterende dagen en hangt dus aan de dag van de maand.
+       Wat vastligt is dat de reservering die constante is en dat de tempo-som er niet boven komt. */
+    expect(r.reserve).toBe(VARPLAN);                       // potjes-kant
+    expect(r.plan).toBeLessThanOrEqual(r.reserve);
     expect(L.fixDue).toBe(FIXDUE);
     expect(L.sum).toBe(SALDO);
     // forecast-formule ongewijzigd: saldo + inkomen - vast - variabel-op-tempo

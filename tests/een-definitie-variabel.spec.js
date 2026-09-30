@@ -5,6 +5,12 @@
 // varPlanRemaining() is nu de enige bron. varDue blijft bestaan als prognose, alleen in de spiegel.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+/* v308: DE DAG STAAT VAST. Sectie c eist dat de prognose en het plan uiteenlopen, en op de laatste
+   dag van de maand zijn ze allebei nul: `potjeRest()` klemt sinds v308 op de resterende dagen, dus
+   dan valt er niets te verschillen. Dezelfde as en dezelfde pin als de zes potjes-tests van v306.
+   Sectie a en b worden er ook van: met een vaste dag staat vast welke van de vijf standen de regel
+   onder de tegel laat zien. */
+const { pinDag } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -32,6 +38,7 @@ function seed(o = {}) {
     minder_own: JSON.stringify([MAIN]), minder_accmeta: '{}', minder_plan: '{}' };
 }
 async function boot(page, payload) {
+  await pinDag(page);                      // v308: voor de goto, anders leest de boot de echte klok
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
   await page.goto('/index.html');
@@ -55,11 +62,16 @@ const SITUATIES = [
    v251: die regel wordt hier op zijn ELEMENT gezocht (.nog-noot) en niet op zijn zin. De eerste
    versie matchte "heb je nog EUR X nodig", en toen de zin korter moest om op 360px op één regel te
    passen viel deze spec om op de formulering terwijl de eigenschap ongemoeid was. */
-const schermPlan = ({ noot, alles }) => {
-  const bedrag = (t) => { const m = String(t).replace(/\s+/g, ' ').match(/\u20ac([\d.]+)/); return m ? +m[1].replace(/\./g, '') : null; };
-  if (noot) return bedrag(noot);
-  const g = String(alles).replace(/\s+/g, ' ').match(/(?:nog uit je potjes|te veel uitgegeven)\s*\u20ac([\d.]+)/i);
-  return g ? +g[1].replace(/\./g, '') : 0;
+/* v308: DE TERUGVAL OP HET GROTE GETAL IS VERVALLEN, en dat is niet een zwakkere maar een scherpere
+   vorm. Die terugval leunde op "zonder gat zijn het per definitie dezelfde twee getallen", en dat
+   gold zolang een potje MET ruimte zijn hele onbestede deel in de tempo-som droeg. Sinds de klem op
+   de resterende dagen ligt de tempo-som eronder zodra een potje achterloopt, dus dan STAAT hij niet
+   op het scherm en is er niets om aan te binden. De helper geeft daarom null als de regel er niet
+   is, en de test bindt de tweezijdige eis: de regel staat er precies dan als er een gat is, en als
+   hij er staat draagt hij varPlanRemaining(). */
+const schermNoot = ({ noot }) => {
+  const m = String(noot || '').replace(/\s+/g, ' ').match(/\u20ac([\d.]+)/);
+  return m ? +m[1].replace(/\./g, '') : null;
 };
 
 test.describe('a · elke plek leest dezelfde bron', () => {
@@ -72,6 +84,7 @@ test.describe('a · elke plek leest dezelfde bron', () => {
         const varRest = (function () { try { return varPlanRemaining(m); } catch (_) { return null; } })();
         return {
           bron: varRest,
+          gat: varRest - (varPotjeStand(m).budget - varPotjeStand(m).gebruikt),
           safe: Math.round(safeToSpend().reserved),
           reserve: varPotjesReserve(m),
           // wat Inzichten er letterlijk van maakt: het bedrag uit de regel onder de tegel
@@ -96,9 +109,27 @@ test.describe('a · elke plek leest dezelfde bron', () => {
          blijft: elke plek rekent met dezelfde potjes en dezelfde boekingen, zonder tweede som. */
       expect(r.safe).toBe(r.reserve);
       expect(r.hand).toBe(r.bron);
-      expect(schermPlan(r.scherm)).toBe(r.bron);   // en dat is ook het bedrag dat Inzichten toont
+      const op = schermNoot(r.scherm);
+      expect(op != null, 'de regel staat er precies dan als er een gat is').toBe(r.gat > 0);
+      if (op != null) expect(op).toBe(r.bron);     // en dan is het het bedrag dat Inzichten toont
     });
   }
+  /* ZONDER DEZE TEST KAN DE VERGELIJKING HIERBOVEN LEEGLOPEN: staat de regel in geen van de vijf
+     standen, dan is de tweezijdige eis overal met een null vervuld en is 'dat is ook het bedrag dat
+     Inzichten toont' nooit getoetst. Deze stand is de overschreden variant uit de lijst hierboven,
+     nu met de eis dat hij de regel WERKELIJK draagt. */
+  test('minstens een van de standen laat de regel zien, en dan met varPlanRemaining erin', async ({ page }) => {
+    await boot(page, seed({ boodschappen: 900 }));
+    const r = await page.evaluate(() => {
+      const m = curMonth || months()[months().length - 1];
+      const VP = varPotjeStand(m);
+      const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
+      return { bron: varPlanRemaining(m), gat: varPlanRemaining(m) - (VP.budget - VP.gebruikt),
+        noot: (d.querySelector('.nog-noot') || {}).innerText || '' };
+    });
+    expect(r.gat).toBeGreaterThan(0);
+    expect(schermNoot(r)).toBe(r.bron);
+  });
 });
 
 /* v192: hier stond de identiteit safe === eigenKracht + spendSaldo - saveReserved, die Home aan
@@ -122,13 +153,14 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
         const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
         const t = d.innerText.replace(/\s+/g, ' ');
         return { bron: varPlanRemaining(m), home: Math.round(safeToSpend().reserved),
-          reserve: varPotjesReserve(m),
+          reserve: varPotjesReserve(m), gat: varPlanRemaining(m) - (varPotjeStand(m).budget - varPotjeStand(m).gebruikt),
           inzichten: { noot: (d.querySelector('.nog-noot') || {}).innerText || '', alles: d.innerText },
           tekst: t,
           srcSafe: safeToSpend.toString(), srcBody: nogDezeMaandPosten.toString() };
       });
       expect(r.home).toBe(r.reserve);   // v254: Home leest de reservering, Inzichten de tempo-som
-      expect(schermPlan(r.inzichten)).toBe(r.bron);
+      const op = schermNoot(r.inzichten);
+      if (op != null) expect(op).toBe(r.bron);     // v308: zie de helper; geen regel, geen bedrag
       expect(r.srcSafe).toContain('varPlanRemaining(');
       expect(r.srcBody).toContain('varPlanRemaining(');
       // en er staat geen getal meer dat die planrest bij een waarneming optelt
@@ -184,19 +216,24 @@ test.describe('d · Nog te betalen mengt geen twee soorten zekerheid', () => {
     const r = await page.evaluate(() => {
       const m = curMonth || months()[months().length - 1];
       const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
+      const VP = varPotjeStand(m);
       return { txt: d.innerText.replace(/\s+/g, ' '), html: d.innerHTML,
-        fix: Math.round(monthLiquidity().fixDue), plan: varPlanRemaining(m) };
+        fix: Math.round(monthLiquidity().fixDue), plan: varPlanRemaining(m),
+        inPotjes: VP.budget - VP.gebruikt };
     });
     expect(r.txt).toContain('Nog te betalen · vast');
     expect(r.txt).not.toMatch(/\(tempo\)/);
-    if (r.plan > 0) {
-      // v204: het plan staat nu als eigen tegel naast 'Nog te sparen' in plaats van als
-      // voetregel eronder. Waarneming boven, plan onder; het bedrag is hetzelfde.
-      expect(r.txt.replace(/\s+/g, ' ').toLowerCase())
-        .toContain(`nog uit je potjes €${r.plan.toLocaleString('nl-NL')}`);
-      // en dat bedrag is nergens opgeteld bij de waargenomen vaste lasten
-      if (r.fix > 0) expect(r.txt).not.toContain(`€${(r.fix + r.plan).toLocaleString('nl-NL')}`);
-    }
+    /* v308: hier stond r.plan, en het grote getal op die tegel is sinds v250 de AFTREKKING
+       (varBudget min gebruikt) en niet de tempo-som. Die twee waren op deze fixture hetzelfde
+       getal zolang een potje met ruimte zijn hele onbestede deel in de tempo-som droeg; met de klem
+       op de resterende dagen lopen ze uiteen (gemeten 147 tegen 150). Wat deze test vasthoudt is
+       dat de waarneming boven staat en het plan eronder, en het bedrag van die tegel is de
+       aftrekking. */
+    expect(r.inPotjes).toBeGreaterThan(0);
+    expect(r.txt.replace(/\s+/g, ' ').toLowerCase())
+      .toContain(`nog uit je potjes €${r.inPotjes.toLocaleString('nl-NL')}`);
+    // en dat bedrag is nergens opgeteld bij de waargenomen vaste lasten
+    if (r.fix > 0) expect(r.txt).not.toContain(`€${(r.fix + r.inPotjes).toLocaleString('nl-NL')}`);
   });
 
   test('kijken verandert niets', async ({ page }) => {

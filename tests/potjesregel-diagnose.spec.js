@@ -55,9 +55,17 @@ function seed(o) {
   };
 }
 // twee potjes eroverheen, één erbinnen
+/* v308: DE UITETEN-BOEKING IS VAN 120 NAAR 240 GEGAAN, en dat is geen truc maar de reparatie van
+   een assertie die niets meer meette. Sinds potjeRest() ook de tak met ruimte op het geplande
+   dagtempo klemt, draagt een potje dat ACHTERLOOPT een negatieve bijdrage aan het gat. Met 120
+   besteed van 400 liep uiteten zo ver achter dat die negatieve bijdrage de reservering van de twee
+   overschreden potjes precies opat: GEMETEN gat 150 tegen een overschrijding van 150, en dan meet
+   "het gat is groter dan de overschrijding" niets (dezelfde vorm als de zes potjes-tests van v306).
+   Met 240 besteed loopt uiteten nog wel achter, maar minder ver, en dan houdt het gat zijn
+   betekenis: er komt een reservering bovenop de zichtbare overschrijding. */
 const OVER = [['b1', '03', -620, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN'],
   ['v1', '04', -330, 'Shell', 'BEA, BETAALPAS SHELL TANKSTATION'],
-  ['u1', '06', -120, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT']];
+  ['u1', '06', -240, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT']];
 // alles ruim binnen de potjes
 const BINNEN = [['b1', '03', -120, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN'],
   ['u1', '06', -80, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT']];
@@ -124,27 +132,38 @@ test.describe('b · wat het blok vaststelt', () => {
     expect(t).toContain('de regel staat er dus.');
   });
 
-  /* De kern: het gat is per overschreden potje de reservering uit potjeRest() PLUS de
-     overschrijding zelf. Nagerekend uit potjeRest(), niet uit een eigen formule. */
-  test('het gat is per potje de reservering plus de overschrijding, en telt precies op', async ({ page }) => {
+  /* De kern: het gat is de som van de bijdragen PER POTJE, en een bijdrage is wat potjeRest()
+     teruggeeft min het rekenkundige restant. Nagerekend uit potjeRest(), niet uit een eigen formule.
+     v308: HIER STOND "per overschreden potje de reservering PLUS de overschrijding", en de lus sloeg
+     de potjes met ruimte over. Dat gold zolang zo'n potje in beide sommen hetzelfde bedrag droeg;
+     sinds de klem op de resterende dagen draagt een potje dat ACHTERLOOPT een negatieve bijdrage,
+     en dan telt een som over alleen de overschreden potjes niet meer op tot het gat. De lus loopt
+     nu over ALLE meetellende potjes, en de twee soorten bijdrage staan apart zodat de test meet dat
+     ze allebei voorkomen. */
+  test('het gat is de som van de bijdragen per potje, en telt precies op', async ({ page }) => {
     await boot(page, { boekingen: OVER });
     const r = await page.evaluate(() => {
       const m = curMonth || months()[months().length - 1];
       const B = SET.budgets || {}, sp = catSpendMap(m), rc = recurringCats();
       const d = daysElapsed(m), daysLeft = Math.max(d.dim - d.elapsed, 0);
-      let gat = 0, overs = 0, n = 0;
+      let gat = 0, overs = 0, n = 0, nOver = 0, nOnder = 0, bijOnder = 0;
       for (const k in B) {
         const bud = Math.round(+B[k] || 0); if (bud <= 0 || rc.has(k)) continue;
         const besteed = Math.round(sp[k] || 0);
-        if (besteed <= bud) continue;
         n++;
-        overs += besteed - bud;
-        gat += Math.round(potjeRest(bud, besteed, d.dim, daysLeft)) - (bud - besteed);
+        const bij = Math.round(potjeRest(bud, besteed, d.dim, daysLeft)) - (bud - besteed);
+        gat += bij;
+        if (besteed > bud) { nOver++; overs += besteed - bud; }
+        else if (bij < 0) { nOnder++; bijOnder += bij; }
       }
       const VP = varPotjeStand(m);
-      return { gat, overs, n, echt: varPlanRemaining(m) - (varBudget() - VP.gebruikt) };
+      return { gat, overs, n, nOver, nOnder, bijOnder, echt: varPlanRemaining(m) - (varBudget() - VP.gebruikt) };
     });
-    expect(r.n).toBe(2);
+    expect(r.nOver).toBe(2);
+    /* en er is minstens een potje dat achterloopt, anders is de lus over ALLE potjes niet te
+       onderscheiden van de oude lus over alleen de overschreden potjes */
+    expect(r.nOnder).toBeGreaterThan(0);
+    expect(r.bijOnder).toBeLessThan(0);
     expect(r.gat).toBe(r.echt);
     // en het gat is groter dan de zichtbare overschrijding alleen: dat is precies de melding
     expect(r.gat).toBeGreaterThan(r.overs);
@@ -166,14 +185,19 @@ test.describe('b · wat het blok vaststelt', () => {
     expect(t).toMatch(/Huur\s+1200\s+1200\s+-\s+-\s+-\s+nee \(terugkerend\)/);
   });
 
-  /* Zonder overschrijding IS het grote getal wel het verschil. Dat pint vast dat het mechanisme
-     alleen bij een overschreden potje toeslaat, en niet ergens anders vandaan komt. */
-  test('zonder een overschreden potje is het gat nul en klopt de aftrekking gewoon', async ({ page }) => {
+  /* Zonder overschrijding staat de regel er niet, en het blok zegt dat.
+     v308: hier stond dat het gat dan NUL is en dat de tempo-som dan het verschil IS. Dat gold
+     zolang een potje met ruimte zijn hele onbestede deel in de tempo-som droeg; met de klem op de
+     resterende dagen ligt de tempo-som eronder en is het gat NEGATIEF. De regel staat er in beide
+     gevallen niet, en dat is wat deze test vasthoudt. */
+  test('zonder een overschreden potje is er geen gat en staat de regel er niet', async ({ page }) => {
     await boot(page, { boekingen: BINNEN });
     const c = await cijfers(page);
-    expect(c.rest).toBe(c.budget - c.gebruikt);
+    const gat = c.rest - (c.budget - c.gebruikt);
+    expect(gat).toBeLessThanOrEqual(0);
+    expect(c.rest).toBeLessThanOrEqual(c.budget - c.gebruikt);
     const t = await page.evaluate(() => diagPotjes().join('\n'));
-    expect(t).toContain('HET GAT                        : 0');
+    expect(t).toContain(`HET GAT                        : ${gat}`);
     expect(t).toContain('geen gat, dus die regel staat er niet.');
     expect(t).toContain('0 overschreden');
   });

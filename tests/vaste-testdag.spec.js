@@ -79,9 +79,13 @@ test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron',
      Wat de test wel vangt is de enige fout die hier telt: een van hen die de pin loslaat.
      VIER KWAMEN ER BIJ v306 BIJ, op een tweede as: de zeven van v299 eisten het MEERVOUD van het
      dagwoord en vielen op de op-een-na-laatste dag; deze zes meten een RESERVERING en vielen op
-     de LAATSTE, want daar is `potjeRest()` per constructie nul. */
+     de LAATSTE, want daar is `potjeRest()` per constructie nul.
+     EN EEN BIJ v308, op die tweede as: `een-definitie-variabel` eist dat de prognose en het plan
+     uiteenlopen, en sinds de klem op de resterende dagen zijn die op de laatste dag allebei nul. */
   const NODIG = ['tempo-zonder-vaste-lasten', 'dagbedrag-potjes', 'zwijgen-met-reden', 'grafiekvormen',
-    'potjesregel-diagnose', 'potjesregel-aansluiting', 'potjes-reservering', 'potje-overschreden'];
+    'potjesregel-diagnose', 'potjesregel-aansluiting', 'potjes-reservering', 'potje-overschreden',
+    'een-definitie-variabel', 'budget-liquiditeit', 'geen-verbetering-door-uitgeven',
+    'potjes-aansluiting-exact'];
   test('geen enkele van hen rekent zijn eigen vaste dag uit', () => {
     for (const f of NODIG) {
       const src = fs.readFileSync(path.join(__dirname, f + '.spec.js'), 'utf8');

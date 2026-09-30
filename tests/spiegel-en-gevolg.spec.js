@@ -110,7 +110,10 @@ test.describe('1 · elk signaal draagt een duiding en een dus-wat', () => {
     ['categorie loopt op', { oploop: true }, 'Zorg & apotheek', 'loopt al drie maanden op'],
     ['ver boven je normaal', { uitschieter: true }, 'Uit eten & café', 'een groter deel van je uitgaven dan je gewend bent', MS[2]],   // v230: de maat van de conditie, op een afgeronde maand
     ['piekdag', { piek: true }, 'Piekdag', 'van je losse geld ging op'],   // v239: en de referentie erachter
-    ['grootste winkel', { winkel: true, set: { budgets: { huur: 900 } } }, 'Grootste uitgave', 'domineert je losse uitgaven'],
+    /* v308: de duiding zei "Een winkel domineert je losse uitgaven" en claimde daarmee een soort
+       bedrijf die de app niet kent; de eenheid is cleanMerch(x.name), dus een naam. De assertie
+       bindt op het werkwoord en de eenheid van de meting, niet op het zelfstandig naamwoord. */
+    ['grootste uitgave', { winkel: true, set: { budgets: { huur: 900 } } }, 'Grootste uitgave', 'draagt een groot deel van je losse uitgaven'],
   ];
   for (const [naam, opt, label, zin, maand] of GEVALLEN) {
     test(`${naam}: duiding, dus-wat en een tik of de melding dat die er niet is`, async ({ page }) => {

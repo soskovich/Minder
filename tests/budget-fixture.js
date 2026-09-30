@@ -17,7 +17,11 @@ const POTJES = 900 + 20 + 25 + 800 + 400 + 255;   // 2400, boven de limiet
 const POTJES_NEXT = POTJES + 50;                  // 2450, de 'volgende maand'-laag
 const SPEND_CUR = 20 + 25 + 300 + 100;            // 445
 const FIXDUE = 900;                               // huur: incasso, deze maand nog niet afgeschreven
-const VARPLAN = 0 + 500 + 300 + 255;              // 1055 = onbestede NIET-recurring potjes
+/* 1055 = onbestede NIET-recurring potjes, en dus varPotjesReserve() en safeToSpend().reserved.
+   v308: NIET varPlanRemaining(). Die som klemt sinds v308 op het geplande dagtempo maal de
+   resterende dagen, dus hij ligt hieronder en hangt aan de dag van de maand; een constante kan hem
+   niet dragen. Wie de tempo-som nodig heeft leest hem live uit de app. */
+const VARPLAN = 0 + 500 + 300 + 255;
 const SALDO = 4000 + 2500;
 const SPAAR_SALDO = 2500;
 const SAVE_REMAINING = 300 - 200;                 // maandbedrag min wat deze maand al gespaard is

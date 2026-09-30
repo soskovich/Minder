@@ -19,9 +19,16 @@
  * DE BEDRAGEN ZIJN OOK ZO GEKOZEN DAT DRIE AFRONDINGEN NIET ÉÉN AFRONDING ZIJN: 601 min 300 is 301,
  * en 600,60 min 300,40 in één keer afgerond is 300. Zonder dat verschil zou een blok dat één keer
  * afrondt er groen doorheen komen, en dat is precies de sabotage die eerst groen bleef.
- * ELK POTJE BLIJFT ONDER ZIJN BUDGET, dus potjeRest() is daar bud min besteed en het restant hangt
- * niet aan de dag van de maand. Geen enkele som ligt in de buurt van een halve euro, dus de test
- * kan niet op een afrondingsgrens gaan wiebelen.
+ * ELK POTJE BLIJFT ONDER ZIJN BUDGET EN LIGT VOOR OP ZIJN TEMPO, dus potjeRest() geeft daar het
+ * rekenkundige restant. Geen enkele som ligt in de buurt van een halve euro, dus de test kan niet
+ * op een afrondingsgrens gaan wiebelen.
+ * v308: DAT "VOOR OP ZIJN TEMPO" IS NIEUW EN DRAGEND. potjeRest() klemt sinds v308 ook de tak met
+ * ruimte op het geplande dagtempo maal de resterende dagen, en dan zou een potje dat achterloopt
+ * een AFGEROND tempo-bedrag dragen: geen centen in de restant-kolom, en dus geen verschil tussen
+ * per rij afronden en de som afronden. Met de bestedingen op 180,60 / 180,60 / 179,20 bindt bij elk
+ * potje het restant, en dat is hetzelfde getal bij elke maandlengte.
+ * DE DAG STAAT DAARVOOR VAST (vaste-dag.js): op de laatste dag van de maand is het tempo nul en
+ * draagt elke rij nul, en dan meet de restant-kolom niets.
  * De service worker staat globaal uit via playwright.config.js.
  */
 const { test, expect } = require('@playwright/test');
@@ -29,8 +36,9 @@ const { test, expect } = require('@playwright/test');
 const now = new Date();
 const CUR = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
 const MAIN = 'NL01MAIN0000001111';
+const { pinDag } = require('./vaste-dag');
 const POTJE = 200.20;
-const SPEND = { boodschappen: 100.60, uiteten: 100.60, overig: 99.20 };
+const SPEND = { boodschappen: 180.60, uiteten: 180.60, overig: 179.20 };
 
 function seed() {
   const tx = [];
@@ -50,6 +58,7 @@ function seed() {
 }
 
 async function boot(page) {
+  await pinDag(page);                      // v308: voor de goto, anders leest de boot de echte klok
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed());
   await page.goto('/index.html');
@@ -94,8 +103,8 @@ test.describe('1 - alle vijf de aansluitingen staan exact op JA', () => {
     await boot(page);
     const t = await page.evaluate(() => window.REGELS_());
     expect(t).toContain('de rijen zijn afgerond voor de weergave; de totalen en de aansluiting rekenen onafgerond.');
-    // de rij toont hele euro's: 200,20 wordt 200, 100,60 wordt 101 en het restant 99,60 wordt 100
-    expect(t).toMatch(/Boodschappen\s+200\s+101\s+100\s/);
+    // de rij toont hele euro's: 200,20 wordt 200, 180,60 wordt 181 en het restant 19,60 wordt 20
+    expect(t).toMatch(/Boodschappen\s+200\s+181\s+20\s/);
   });
 });
 
@@ -105,8 +114,8 @@ test.describe('2 - de totalen zijn de afgeronde sommen van de app', () => {
     const t = await page.evaluate(() => window.REGELS_());
     const app = await page.evaluate(() => { const m = curMonth || thisYM();
       return { budget: varBudget(), gebruikt: varPotjeStand(m).gebruikt, rest: varPlanRemaining(m) }; });
-    // 3x 200,20 = 600,60 -> 601;  100,60+100,60+99,20 = 300,40 -> 300;  99,60+99,60+101 = 300,20 -> 300
-    expect(app).toEqual({ budget: 601, gebruikt: 300, rest: 300 });
+    // 3x 200,20 = 600,60 -> 601;  180,60+180,60+179,20 = 540,40 -> 540;  19,60+19,60+21 = 60,20 -> 60
+    expect(app).toEqual({ budget: 601, gebruikt: 540, rest: 60 });
     const rij = t.split(String.fromCharCode(10)).find((r) => /^ {2}TOTAAL/.test(r));
     expect(rij).toBeTruthy();
     const n = rij.match(/-?\d+/g).map(Number);

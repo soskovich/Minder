@@ -9,6 +9,10 @@
 // potje heen, precies de stand waar potjeRest van tak wisselt).
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+/* v308: DE DAG STAAT VAST. De tempo-som klemt sinds v308 op de resterende dagen, en op de laatste
+   dag van de maand is hij nul: dan staat de regel onder de tegel in geen enkele stap, en is de eis
+   dat hij de bron draagt nergens getoetst. Dezelfde pin als de zes potjes-tests van v306. */
+const { pinDag } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -39,6 +43,7 @@ function seed(extra) {
 }
 
 async function boot(page, extra) {
+  await pinDag(page);                      // v308: voor de goto, anders leest de boot de echte klok
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(extra));
   await page.goto('/index.html');
@@ -98,30 +103,39 @@ test.describe('a \u00b7 de vier stappen', () => {
 
 /* v250: het grote getal op de potjesregel is de aftrekking (varBudget min gebruikt) geworden; de
    reservering uit varPlanRemaining() staat als eigen regel eronder, en alleen wanneer die twee
-   uiteenlopen. Wat deze spec vasthoudt is de BRON en niet de plek, dus lees de reservering waar hij
-   staat: uit de regel eronder zodra die er is, en anders uit het grote getal - want zonder gat zijn
-   het per definitie dezelfde twee getallen.
+   uiteenlopen.
    v251: die regel wordt hier op zijn ELEMENT gezocht (.nog-noot) en niet op zijn zin. De eerste
    versie matchte "heb je nog EUR X nodig", en toen de zin korter moest om op 360px op één regel te
-   passen viel deze spec om op de formulering terwijl de eigenschap ongemoeid was. */
-const schermPlan = ({ noot, alles }) => {
-  const bedrag = (t) => { const m = String(t).replace(/\s+/g, ' ').match(/\u20ac([\d.]+)/); return m ? +m[1].replace(/\./g, '') : null; };
-  if (noot) return bedrag(noot);
-  const g = String(alles).replace(/\s+/g, ' ').match(/(?:nog uit je potjes|te veel uitgegeven)\s*\u20ac([\d.]+)/i);
-  return g ? +g[1].replace(/\./g, '') : 0;
+   passen viel deze spec om op de formulering terwijl de eigenschap ongemoeid was.
+   v308: DE TERUGVAL OP HET GROTE GETAL IS VERVALLEN. Die leunde op "zonder gat zijn het per
+   definitie dezelfde twee getallen", en dat gold zolang een potje MET ruimte zijn hele onbestede
+   deel in de tempo-som droeg. Sinds de klem op de resterende dagen ligt de tempo-som eronder zodra
+   een potje achterloopt, en dan staat hij niet op het scherm. De helper geeft dus null als de regel
+   er niet is. */
+const schermNoot = ({ noot }) => {
+  const m = String(noot || '').replace(/\s+/g, ' ').match(/\u20ac([\d.]+)/);
+  return m ? +m[1].replace(/\./g, '') : null;
 };
 
   test('de planrest blijft de planrest, ook boven het potje', async ({ page }) => {
+    let gezien = 0;
     for (const extra of STAPPEN) {
       await boot(page, extra);
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
+        const VP = varPotjeStand(m);
         const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
         return { getoond: { noot: (d.querySelector('.nog-noot') || {}).innerText || '', alles: d.innerText },
-          bron: varPlanRemaining(m) };
+          bron: varPlanRemaining(m), gat: varPlanRemaining(m) - (VP.budget - VP.gebruikt) };
       });
-      expect(schermPlan(r.getoond), `bij +${extra}`).toBe(r.bron);
+      const op = schermNoot(r.getoond);
+      expect(op != null, `bij +${extra}: de regel staat er precies dan als er een gat is`).toBe(r.gat > 0);
+      if (op != null) { expect(op, `bij +${extra}`).toBe(r.bron); gezien++; }
     }
+    /* ZONDER DEZE EIS LOOPT DE VERGELIJKING LEEG: zonder enige stap met een gat is de tweezijdige
+       eis overal met een null vervuld en is de bron nooit tegen het scherm gelegd. De stappen gaan
+       tot ver over het potje, dus er is er minstens een. */
+    expect(gezien, 'geen enkele stap toont de regel, dus de bron is nergens tegen het scherm gelegd').toBeGreaterThan(0);
   });
 
   test('de tegels zijn waarnemingen en bewegen niet mee met een variabele uitgave', async ({ page }) => {
@@ -178,13 +192,18 @@ test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
       const tg = {};
       for (const t of d.querySelectorAll('.wvo-tile')) tg[t.querySelector('.wvo-tl').innerText.trim()] = eur(t.querySelector('.wvo-tv').innerText);
       const vp = d.innerText.replace(/\s+/g, ' ').match(/nog uit je potjes\s*€([\d.]+)/i);
+      const VP = varPotjeStand(m);
       return { tg, varPlan: vp ? +vp[1].replace(/\./g, '') : 0,
         fixDue: Math.round(L.fixDue), incDue: Math.round(L.incDue),
-        saveReserved: Math.max(Math.round(S.saveReserved), 0), bron: varPlanRemaining(m) };
+        saveReserved: Math.max(Math.round(S.saveReserved), 0), bron: varPlanRemaining(m),
+        inPotjes: VP.budget - VP.gebruikt };
     });
     expect(r.tg['Nog te betalen · vast']).toBe(r.fixDue);
     expect(r.tg['Nog te ontvangen']).toBe(r.incDue);
     expect(r.tg['Nog te sparen']).toBe(r.saveReserved);
-    expect(r.varPlan).toBe(r.bron);
+    /* v308: hier stond r.bron, de tempo-som. Het getal op die regel is sinds v250 de AFTREKKING,
+       en die twee waren hetzelfde zolang een potje met ruimte zijn hele onbestede deel in de
+       tempo-som droeg. De vierde tegel leest dus varBudget min gebruikt. */
+    expect(r.varPlan).toBe(r.inPotjes);
   });
 });

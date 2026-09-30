@@ -157,7 +157,10 @@ test.describe('b - mijn geval: twee boetes samen 463 gevlagd', () => {
     expect(r.signalen).toEqual([]);
     expect(r.overCat).toBe(null);
     expect(r.reserve).toBe(355);
-    expect(r.planRest).toBe(355);
+    /* v308: hier stond 355 voor de tempo-som. potjeRest() klemt sinds v308 ook de tak met ruimte op
+       het geplande dagtempo maal de resterende dagen, dus die som hangt aan de dag van de maand en
+       ligt onder de reservering. Wat deze test over de vlag vasthoudt is de reservering. */
+    expect(r.planRest).toBeLessThanOrEqual(r.reserve);
     expect(r.potOver).toBe(0);
     expect(r.reserved).toBe(355);
     expect(r.posten.some((p) => /Nog uit je potjes/.test(p))).toBe(true);
@@ -485,9 +488,15 @@ test.describe('i - een bron kan niet uit elkaar lopen', () => {
       for (let k = sc.indexOf('{', i); k < sc.length; k++) {
         if (sc[k] === '{') d++; else if (sc[k] === '}') { d--; if (!d) return sc.slice(i, k + 1); } }
       return sc.slice(i); };
-    // de norm-kant: wie hier de vlag niet leest, laat een tweede waarheid ontstaan
+    /* de norm-kant: wie hier de vlag niet leest, laat een tweede waarheid ontstaan.
+       v308: catSpendMap() had de aftrekking als losse uitdrukking in zijn lus staan, en daardoor
+       telde de piekdag en de grootste uitgave het volle bedrag. Die uitdrukking heet nu
+       uitgaveNorm() en heeft drie lezers; wie hier de vlag leest mag dat dus via die functie doen. */
     for (const naam of ['catSpendMap', 'totals', 'splitFixedVar', 'baselineSpend', 'weekBedragen', 'weekRestdagen'])
-      expect(fn(naam), naam + ' leest de vlag niet').toContain('uitReservering');
+      expect(fn(naam), naam + ' leest de vlag niet').toMatch(/uitReservering|uitgaveNorm/);
+    // en die ene uitdrukking leest de vlag zelf, en staat er precies een keer
+    expect(fn('uitgaveNorm')).toContain('uitReserveringBedrag(');
+    expect((sc.match(/function uitgaveNorm\(/g) || []).length).toBe(1);
     // de geld-kant: netSpend blijft het geld, anders is er geen bron voor het maandtotaal meer
     expect(fn('netSpend')).not.toContain('uitReservering');
     // de vlag hangt aan t.id in een eigen map en niet in OVR (v259)

@@ -66,6 +66,23 @@ const GEMELD = [['b1', '03', -931, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN'
   ['u1', '06', -120, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT'],
   ['v1', '04', -81, 'Shell', 'BEA, BETAALPAS SHELL TANKSTATION']];
 const gemeld = () => ({ boekingen: GEMELD, budgets: GEMELD_BUDGETS });
+/* v308: EEN TWEEDE FIXTURE, EN HIJ HEET NIET "gemeld". Sinds v308 klemt potjeRest() ook de tak
+   voor een potje MET ruimte op het geplande dagtempo maal de resterende dagen, en dan is er op de
+   GEMELDE stand geen gat meer: die drie potjes lopen ver achter op hun tempo, dus wat ze bij dat
+   tempo nog vragen ligt onder wat er in zit. Dat is de reparatie en geen regressie, maar de vier
+   tests over de regel eronder hebben wel een stand nodig waarin er wel een gat is.
+   WAT DEZE STAND DRAAGT: een potje dat precies OP tempo ligt (dan valt er aan de klem niets te
+   verliezen, dus het gat is wat het potje eroverheen vraagt) en een potje dat er ver overheen is.
+   Hij is GECONSTRUEERD en niet gemeten. Het potje op tempo is groot genoeg dat er na de
+   overschrijding nog iets in de potjes zit, zodat de regel boven de noot "Nog uit je potjes" zegt
+   en niet "Te veel uitgegeven"; dat laatste is sectie c.
+   DE STAND GEEFT BIJ ELKE MAANDLENGTE EEN GAT: het potje eroverheen vraagt bij zijn tempo nog
+   iets EN draagt zijn overschrijding, en daar staat bij het potje op tempo per constructie geen
+   verloren ruimte tegenover. */
+const GAT_BUDGETS = { boodschappen: 600, uiteten: 1800, huur: 1200 };
+const GAT = [['b1', '03', -931, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN'],
+  ['u1', '06', -1380, 'Restaurant De Kade', 'BEA, BETAALPAS RESTAURANT']];
+const gat = () => ({ boekingen: GAT, budgets: GAT_BUDGETS });
 // alles ruim binnen de potjes: geen gat
 const BINNEN = [['b1', '03', -120, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN']];
 // meer uitgegeven dan de som van alle variabele potjes
@@ -100,7 +117,7 @@ const meet = (page) => page.evaluate(() => {
     sub: q('.ins-nog-sub'), noot: q('.ins-nog-noot'),
     rijTik: !!(r && r.getAttribute('onclick')),
     nootTik: !!(r && r.querySelector('.ins-nog-noot') && r.querySelector('.ins-nog-noot').getAttribute('onclick')),
-    budget: VP.budget, gebruikt: VP.gebruikt, rest: varPlanRemaining(m),
+    budget: VP.budget, gebruikt: VP.gebruikt, rest: varPlanRemaining(m), reserve: varPotjesReserve(m),
     inPotjes: VP.budget - VP.gebruikt, gat: varPlanRemaining(m) - (VP.budget - VP.gebruikt),
   };
 });
@@ -112,8 +129,13 @@ test.describe('a · het grote getal is de aftrekking die eronder staat', () => {
     expect(r.er).toBe(true);
     expect(r.valEur).toBe(r.inPotjes);          // de aftrekking
     expect(r.valEur).not.toBe(r.rest);          // en in deze fixture wijkt die echt af
-    expect(r.gat).toBeGreaterThan(0);
     expect(r.lab).toBe('Nog uit je potjes');
+    /* v308: hier stond gat > 0. Op de GEMELDE stand is dat sinds v308 niet meer zo, en dat is de
+       reparatie zelf: drie van de vier potjes lopen achter op hun tempo, dus bij dat tempo vragen
+       ze samen minder dan er in zit. Wat deze test vasthoudt is het grote getal, en dat is
+       ongewijzigd. De regel eronder wordt op de GAT-stand getoetst. */
+    expect(r.gat).toBeLessThan(0);
+    expect(r.noot).toBeNull();
   });
 
   test('de sub noemt dezelfde twee getallen waaruit het grote getal volgt', async ({ page }) => {
@@ -130,14 +152,17 @@ test.describe('a · het grote getal is de aftrekking die eronder staat', () => {
     await boot(page, { boekingen: [] });
     const r = await meet(page);
     expect(r.valEur).toBe(r.budget);
-    expect(r.gat).toBe(0);
+    /* v308: hier stond gat == 0. Met niets gebruikt is het restant het hele potje en het tempo
+       maar een deel van de maand, dus de tempo-som ligt eronder: het gat is negatief en de regel
+       staat er net zo goed niet. */
+    expect(r.gat).toBeLessThanOrEqual(0);
     expect(r.noot).toBeNull();
   });
 });
 
 test.describe('b · de reservering staat eronder, met het verschil erbij', () => {
   test('de extra regel noemt varPlanRemaining en het gat', async ({ page }) => {
-    await boot(page, gemeld());
+    await boot(page, gat());
     const r = await meet(page);
     const g = [...r.noot.matchAll(/€([\d.]+)/g)].map((x) => +x[1].replace(/\./g, ''));
     expect(g[0]).toBe(r.rest);                  // "heb je nog €493 nodig"
@@ -146,18 +171,22 @@ test.describe('b · de reservering staat eronder, met het verschil erbij', () =>
     expect(r.noot).not.toMatch(/^(zet|verlaag|stop|houd|pas)/i);   // geen gebiedende wijs
   });
 
-  test('geen enkel potje over zijn grens: het gat is nul en de regel staat er niet', async ({ page }) => {
+  test('geen enkel potje over zijn grens: geen gat en de regel staat er niet', async ({ page }) => {
     await boot(page, { boekingen: BINNEN });
     const r = await meet(page);
     expect(r.er).toBe(true);
-    expect(r.gat).toBe(0);
-    expect(r.rest).toBe(r.inPotjes);
+    /* v308: hier stond gat == 0 en rest == inPotjes. Zonder een potje over de grens is de
+       reservering nog steeds de aftrekking, maar de tempo-som ligt eronder zodra een potje
+       achterloopt op zijn tempo. */
+    expect(r.gat).toBeLessThanOrEqual(0);
+    expect(r.reserve).toBe(r.inPotjes);
+    expect(r.rest).toBeLessThanOrEqual(r.inPotjes);
     expect(r.noot).toBeNull();
     expect(r.nootTik).toBe(false);
   });
 
   test('de extra regel draagt geen alarmkleur', async ({ page }) => {
-    await boot(page, gemeld());
+    await boot(page, gat());
     const kleur = await page.evaluate(() => {
       const n = document.querySelector('#insNogLijst .ins-nog-noot');
       const c = getComputedStyle(n).color;
@@ -215,7 +244,7 @@ test.describe('e · een tik komt uit op het bedrag waarop je tikte', () => {
      weer op een ander getal uitkomen dan waarop je tikte. Er is geen bestaand scherm dat de
      tempo-som toont, dus er is geen tik. De sheet blijft bereikbaar vanaf Home. */
   test('de extra regel heeft geen tik meer, want geen scherm toont de tempo-som', async ({ page }) => {
-    await boot(page, gemeld());
+    await boot(page, gat());
     const r = await meet(page);
     expect(r.noot).not.toBeNull();
     expect(r.nootTik).toBe(false);
@@ -248,7 +277,11 @@ test.describe('e · een tik komt uit op het bedrag waarop je tikte', () => {
       return { er: !!el, bron: Math.round(safeToSpend().reserved) };
     });
     expect(home.er).toBe(true);
-    expect(home.bron).toBe(r.rest);
+    /* v308: hier stond r.rest. safeToSpend().reserved leest sinds v254 varPotjesReserve(), en dat
+       was op deze fixture hetzelfde getal als de tempo-som zolang een potje met ruimte zijn hele
+       onbestede deel droeg. Sinds de klem lopen ze uiteen, en de bron die de regel op Home leest
+       is de reservering. */
+    expect(home.bron).toBe(r.reserve);
   });
 });
 

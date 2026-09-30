@@ -12,9 +12,13 @@
 // varPotjesReserve() - de som van max(potje - besteed, 0) - en reserveert een leeg potje dus weer
 // nul. Wat je daarna in zo'n categorie uitgeeft gaat van je vrije geld af op het moment dat je het
 // uitgeeft, en dat is precies wat v111 toen niet wilde.
-// WAT VAN v111 BLIJFT STAAN, en hieronder ook getoetst: potjeRest() zelf is onaangeroerd, meer
-// uitgeven maakt veilig te besteden niet ruimer, en de drill-down spreekt het hoofdgetal niet
-// tegen. De prognose is niet weg maar staat onder de lijst in plaats van in het totaal.
+// WAT VAN v111 BLIJFT STAAN, en hieronder ook getoetst: meer uitgeven maakt veilig te besteden
+// niet ruimer, de drill-down spreekt het hoofdgetal niet tegen, en een overschreden potje
+// reserveert het geplande dagtempo en niet nul. De prognose is niet weg maar staat onder de lijst
+// in plaats van in het totaal.
+// WAT ER BIJ v308 IS VERVALLEN: "potjeRest() zelf is onaangeroerd". De tak voor een potje MET
+// ruimte gaf het onbestede deel terug zonder naar de resterende dagen te kijken, en dat gaf op de
+// laatste dag van de maand een projectie die in een dag niet past. Zie sectie a.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { open } = require('./budget-fixture');
@@ -52,16 +56,29 @@ function seedPot({ uit = 700, saldo = null } = {}) {
 }
 
 test.describe('a · de rekenregel', () => {
-  test('binnen budget verandert er niets: het onbestede deel', async ({ page }) => {
+  /* v308: HIER STOND "binnen budget verandert er niets: het onbestede deel", en dat was v111's
+     antwoord op een vraag die v254 heeft weggehaald. Wat potjeRest() nog beantwoordt is "wat geef
+     je bij je geplande tempo de rest van de maand nog uit", en dan kan het onbestede deel van een
+     potje waar je ACHTERLOOPT niet het antwoord zijn: op de laatste dag van de maand zei die tak
+     dat je het hele restant nog uitgeeft, in één dag. Nu is het de kleinste van de twee. */
+  test('binnen budget bindt het tempo zodra je achterloopt', async ({ page }) => {
     await boot(page, seedPot());
     const r = await page.evaluate(() => ({
-      ruim: potjeRest(500, 200, 30, 10),
+      ruim: potjeRest(500, 200, 30, 10),       // restant 300, tempo 500/30 x 10 = 167
       precies: potjeRest(500, 500, 30, 10),
-      niets: potjeRest(500, 0, 30, 10),
+      niets: potjeRest(500, 0, 30, 10),        // restant 500, tempo 167
+      voor: potjeRest(500, 450, 30, 10),       // restant 50, tempo 167: het restant bindt
+      opTempo: potjeRest(500, 300, 30, 12),    // 18 van de 30 dagen om, dus precies op tempo
     }));
-    expect(r.ruim).toBe(300);
+    expect(r.ruim).toBe(167);
     expect(r.precies).toBe(0);
-    expect(r.niets).toBe(500);
+    expect(r.niets).toBe(167);
+    expect(r.voor).toBe(50);
+    /* DE TEGENPROEF: op tempo verandert er niets. Restant en tempo zijn daar hetzelfde getal, dus
+       een sabotage die de klem weghaalt is hier per constructie inert en de twee regels erboven
+       zijn wat hem rood zet. */
+    expect(r.opTempo).toBe(200);
+    expect(r.opTempo).toBe(500 - 300);
   });
 
   test('overschreden reserveert het geplande dagtempo maal de resterende dagen', async ({ page }) => {
@@ -87,7 +104,10 @@ test.describe('a · de rekenregel', () => {
     expect(r.beetjeOver).toBe(167);
   });
 
-  test('in een afgeronde maand valt alleen het overschreden potje weg', async ({ page }) => {
+  /* v308: dit heette "in een afgeronde maand valt alleen het overschreden potje weg". Sinds de
+     klem valt ELK potje daar weg, en dat is de hele reparatie: zonder dagen is er niets meer te
+     projecteren. */
+  test('in een afgeronde maand projecteert elk potje nul', async ({ page }) => {
     await boot(page, seedPot());
     const r = await page.evaluate((m) => {
       const d = daysElapsed(m), sp = catSpendMap(m), left = Math.max(d.dim - d.elapsed, 0);
@@ -96,9 +116,11 @@ test.describe('a · de rekenregel', () => {
         uiteten: potjeRest(200, sp.uiteten || 0, d.dim, left) };
     }, M1);
     expect(r.left).toBe(0);                    // volledig verstreken maand
-    // in M1 is 400 van 500 besteed: onbesteed deel telt gewoon, er is niets overschreden
-    expect(r.boodschappen).toBe(100);
-    expect(r.plan).toBe(r.boodschappen + r.uiteten);
+    // in M1 is 400 van 500 besteed, dus er is 100 onbesteed en niets overschreden - en toch nul,
+    // want er is geen dag meer om het in uit te geven
+    expect(r.boodschappen).toBe(0);
+    expect(r.uiteten).toBe(0);
+    expect(r.plan).toBe(0);
     // en zou er wél overschreden zijn, dan reserveert dat niets meer: geen dagen over
     expect(await page.evaluate(() => potjeRest(500, 700, 31, 0))).toBe(0);
   });

@@ -288,6 +288,75 @@ genoemde versietag.)*
   ronde erover MAT blijft staan: `doelTempo()` en `p.eta` hielden beide de `alloc` van deze maand constant,
   dus de rij op Plan en de alinea eronder gaven dezelfde datum omdat ze dezelfde alloc lazen en niet omdat
   ze de doorzak modelleerden.
+- **DE TEMPO-PROJECTIE VOLGT DE RESTERENDE DAGEN, IN BEIDE TAKKEN** (`v308`): `potjeRest()` had twee
+  takken die niet dezelfde vraag beantwoordden. Voor een OVERSCHREDEN potje gaf hij het geplande
+  dagtempo maal de resterende dagen (`v111`), dus nul op de laatste dag; voor een potje MET ruimte
+  gaf hij het hele onbestede deel en keek hij niet naar de dagen. GEMELD en GEMETEN op 30 september,
+  dag 30 van 30: "De resterende 1 dag heb je €319. Bij je tempo nog €710 nodig · €391 tekort". Die
+  710 is de optelling van de onbestede delen en de 391 precies de overschrijding van het andere
+  potje, dus de regel zei dat je in één dag 710 zou uitgeven. De tak met ruimte klemt nu op datzelfde
+  tempo: `Math.min(bud - uitgegeven, round(bud/dim * daysLeft))`.
+  WAT POTJEREST NOG BEANTWOORDT IS ÉÉN VRAAG, en dat is waarom de klem hoort en geen verlies is:
+  `v254` heeft de RESERVERING naar `varPotjesReserve()` gehaald, dus wat overblijft is "wat geef je
+  bij je geplande tempo de rest van de maand nog uit". Het onbestede deel van een potje waar je
+  ACHTERLOOPT kan daarop niet het antwoord zijn, want er is geen dag om het in uit te geven.
+  OP TEMPO VERANDERT ER NIETS, en dat is de tegenproef: bij `spent = bud x elapsed/dim` zijn restant
+  en tempo hetzelfde getal. Vóór je tempo bindt het restant, achter je tempo het tempo, en alleen dat
+  laatste potje droeg de onmogelijke uitkomst. Zonder het geval "op tempo" in de spec is "de klem
+  raakt alleen wie achterloopt" niet te onderscheiden van "de klem raakt elk potje".
+  DE DRIE LEZERS VOLGEN, EN DAT IS `v104`: de regel op Inzichten, `coachStatus().projEnd` en blok 6.
+  `varPotjesReserve()` is NIET aangeraakt, dus `safeToSpend().reserved`, de regel op Home en de sheet
+  lezen nog steeds wat er in je potjes ZIT. Die twee sommen liepen tot `v308` alleen uiteen bij een
+  LEEG potje en sinds `v308` ook bij een potje dat achterloopt, de andere kant op.
+  DE REGEL ONDER DE TEGEL IS DAARMEE EEN ECHT SIGNAAL. Het gat is de tempo-som min wat er in je
+  potjes zit, en dat was positief zodra er één potje over de grens was; nu is het positief als de
+  reservering van de overschreden potjes meer vraagt dan de ruimte die de andere potjes bij hun tempo
+  niet opmaken. GEMETEN op de gemelde stand is er daarom geen gat meer, want drie van de vier potjes
+  liepen ver achter. `potjesregel-aansluiting.spec.js` draagt daarom een TWEEDE, geconstrueerde stand
+  met een gat (een potje op tempo naast een potje eroverheen), en de gemelde stand blijft de stand die
+  hij is (`v251`/`v256`).
+  DE OVERSCHRIJDING VAN EEN LOSSE CATEGORIE GAAT NIET VERLOREN: die staat in signaal 1 van
+  `valtOpSignals()`, per categorie, en dat is de plek die daarover gaat (`v235`).
+  TWEEENDERTIG BESTAANDE TESTS IN TIEN BESTANDEN VIELEN EROP, en ze hadden alle tweeendertig gelijk:
+  ze pinden identiteiten die alleen golden zolang een potje met ruimte in beide sommen hetzelfde
+  bedrag droeg. De constante `VARPLAN` in `budget-fixture.js` is de RESERVERING en zegt dat nu ook.
+  VIER SPECS HEBBEN ER EEN VASTE DAG BIJ GEKREGEN, want met de klem hangen hun asserties aan de dag:
+  `een-definitie-variabel`, `budget-liquiditeit`, `geen-verbetering-door-uitgeven` en
+  `potjes-aansluiting-exact`. De lijst in `vaste-testdag.spec.js` gaat van acht naar TWAALF namen.
+  EEN FIXTURE DIE PER RIJ AFRONDT MOET ZIJN CENTEN HOUDEN: met de klem draagt een potje dat
+  achterloopt een AFGEROND tempo-bedrag, dus geen centen, en dan meet
+  `potjes-aansluiting-exact.spec.js` niets meer in zijn restant-kolom. Die fixture ligt daarom nu bij
+  elk potje VOOR op zijn tempo, zodat het restant bindt en de centen blijven.
+- **DE UITGAVE ZOALS EEN NORM HEM TELT STAAT OP EEN PLEK** (`v308`): `uitgaveNorm(t)` is het bedrag
+  min het deel dat uit een reservering is betaald, en `catSpendMap()`, `piekVerdeling()` en signaal 4
+  lezen hem. Die uitdrukking stond alleen IN de lus van `catSpendMap()`, dus de piekdag en de
+  grootste uitgave telden het volle bedrag. GEMELD op 30 september, op hetzelfde scherm en in
+  dezelfde maand: de stand-kaart zei "+ €463 belasting & boetes, uit een reservering" en "Wat opvalt"
+  zei "Grootste uitgave · €500 (CJIB Verkeersboetes)".
+  HET IS EEN BEDRAG EN GEEN JA/NEE (`v269`): met 463 gevlagd op 500 telt die naam nog 37, en dan
+  valt de regel weg omdat hij de mediaan niet meer viermaal overtreft. Vlag je maar een deel, dan
+  telt de rest gewoon mee; zonder dat geval is "het gevlagde deel valt weg" niet te onderscheiden van
+  "de hele boeking valt weg".
+  DE PIEKDAG MOEST MEE, EN DAT IS GEMETEN EN NIET BEREDENEERD: sluit je de vlag alleen in signaal 4
+  uit, dan valt `dom` weg en vervalt daarmee de tegentest van `v239` die de piekdag tegenhoudt zodra
+  een winkel al een regel draagt. GEMETEN op de fixture verscheen dan "Piekdag · dinsdag €500
+  (normaal €166) · Ongeveer 69% van je losse geld ging op dinsdag" op precies dezelfde boekingen. De
+  leugen verhuist dan een regel naar boven, en dat is het geval dat de twee vormen onderscheidt.
+  DE TELPOORT LEEST DEZELFDE UITDRUKKING ALS DE SOMMEN, in `piekVerdeling().n` en in de `vis` van
+  signaal 4: een boeking die volledig uit een reservering is betaald draagt nul in de verdeling, dus
+  hem meetellen in het minimum van vijf losse afschrijvingen zou de poort openen op boekingen die aan
+  de meting niets bijdragen. DE SABOTAGE EROP BLEEF EERST GROEN, want na het vlaggen bleven er zeven
+  afschrijvingen over en dat is nog steeds boven vijf; er staat nu een tweede stand die er zes houdt
+  waarvan drie volledig gedekt (meetles over een sabotage die de drempel niet haalt).
+  EEN geenNorm-CATEGORIE KAN DE VLAG NIET DRAGEN, dus `uitgaveNorm()` is daar per constructie het
+  volle bedrag en `catSpendMap()` blijft karakter voor karakter dezelfde som (`v269`).
+- **DE DUIDING VAN SIGNAAL 4 CLAIMT GEEN WINKEL** (`v308`): "Een winkel domineert je losse uitgaven"
+  is "Eén naam draagt een groot deel van je losse uitgaven" geworden. De eenheid die deze meting
+  maakt is `cleanMerch(x.name)`, dus een NAAM; of daar een winkel achter zit weet de app niet, en
+  GEMELD stond CJIB Verkeersboetes eronder. GEEN NIEUW WOORD VOOR DIE EENHEID (`v91`): "naam" is wat
+  er staat, en de naam zelf staat al in de sub, dus de zin noemt hem niet nog een keer. Het woord
+  "winkel" blijft elders staan waar het over een winkel gaat (de zoekbalk, de dubbelen-sheet); wat
+  hier verviel is de BEWERING dat de app weet wat voor bedrijf het is.
 - **`etaDatum()` REKENT VANAF DE EERSTE VAN DE MAAND** (`v307`): hij deed `d.setMonth(d.getMonth()+n)` op
   de dag van VANDAAG, en die dag bestaat niet in elke maand. GEMETEN op 30 september 2026 gaven `n=5` en
   `n=6` beide `mrt 2027`; op een 31e schoven ZES van de veertien waarden (`2026-01-31`: mrt, mei, jul, okt,
@@ -2570,6 +2639,10 @@ genoemde versietag.)*
   voor de resterende dagen (`v111`), en dus een RESERVERING en geen restant. Per overschreden
   potje is de bijdrage aan het gat `reserve + overschrijding`, en daarom was het gat veel groter
   dan de zichtbare overschrijding: gemeten €385 op dag 20 en €491 op dag 22.
+  SINDS `v308` KLEMT OOK DE TAK MET RUIMTE OP DAT TEMPO, dus een potje dat ACHTERLOOPT draagt een
+  NEGATIEVE bijdrage aan het gat en de regel eronder staat er veel minder vaak. "Het gat is groter
+  dan de zichtbare overschrijding" is daarmee geen eigenschap van het mechanisme meer maar van de
+  stand; zie de regel over de tempo-projectie bovenaan.
   HET GROTE GETAL IS NU DE AFTREKKING, `varBudget()` min `varPotjeStand().gebruikt`, dus dezelfde
   twee getallen als de sub eronder. De reservering is niet weg: die staat als eigen regel eronder,
   met het verschil erbij, en alleen als dat verschil boven nul ligt. Loopt de aftrekking onder
@@ -2611,7 +2684,9 @@ genoemde versietag.)*
   en voedt de tweede regel op Inzichten; `varPotjesReserve()` vraagt wat er nog IN je potjes zit,
   `Σ max(potje - besteed, 0)`, en voedt `safeToSpend().reserved` en de sheet. DEZELFDE POORT
   (`bud>0` en niet in `recurringCats()`) en dezelfde `catSpendMap()`, dus een potje telt in allebei
-  mee of in geen van beide. IDENTITEIT: `varPotjesReserve()` is de aftrekking van de Inzichten-regel
+  mee of in geen van beide. SINDS `v308` LOPEN DE TWEE OOK BIJ EEN POTJE DAT ACHTERLOOPT UITEEN, de
+  andere kant op: de tempo-som ligt dan ONDER de reservering, want wat er in je potje zit zit er ook
+  als je het deze maand niet meer opmaakt. IDENTITEIT: `varPotjesReserve()` is de aftrekking van de Inzichten-regel
   plus `safeToSpend().potOver`; die laatste heeft daarmee eindelijk een lezer in de vorm van een
   toets, niet van een berekening. Gemeten: de sheet 1.063 naar 910, veilig te besteden 2.937 naar
   3.090, precies de 153.
@@ -3714,13 +3789,14 @@ bestand en lees de exit code apart uit. Toets daarna `passed + skipped` tegen
 **Draai onder `TZ=Europe/Amsterdam`.** Op UTC lopen `ymdVan()` en `toISOString()` nooit uiteen, dus
 `lokale-kalenderdag.spec.js` bewijst daar niets en staat er rood; onder CEST is hij groen.
 
-**Bekend rood, eigen ronde:** `geen-verbetering-door-uitgeven.spec.js` "de oude som steeg met elke
-uitgegeven euro, en staat nergens meer" valt op een BOTSING en niet op de eigenschap. De test eist dat
-het bedrag van de vervallen som (`incDue - fixDue - varPlan`) nergens in de tekst staat; bij stap +200
-komt die som op 300 uit en dan botst hij met "Nog te sparen €300 van €300", een legitiem ander
-getal. GEMETEN dat hij op `HEAD` net zo rood staat (1 failed, 6 passed), dus hij is niet van `v271`;
-`varPlan` hangt aan de resterende dagen van de maand, dus de botsing komt en gaat met de kalender. Dit
-is de meetles dat een test die op een getal in een zin ankert de invariant niet bewijst.
+**GEREPAREERD BIJ `v308`: `geen-verbetering-door-uitgeven.spec.js` "de oude som steeg met elke
+uitgegeven euro, en staat nergens meer".** Hij viel op een BOTSING en niet op de eigenschap: de test
+eist dat het bedrag van de vervallen som (`incDue - fixDue - varPlan`) nergens in de tekst staat, en
+bij stap +200 kwam die som op 300 uit en botste met "Nog te sparen €300 van €300", een legitiem ander
+getal. WELK bedrag daar staat hing aan de kalender, en die spec draait sinds `v308` op een vaste dag;
+daarmee is hij groen. WAT NIET IS GEREPAREERD is de vorm: een test die op een getal in een zin ankert
+bewijst de invariant niet, en met een andere dag of een andere fixture botst hij opnieuw. De lijst
+bekend rood gaat hiermee van drie naar TWEE.
 
 **Bekend rood, eigen ronde:** `piekdag-diagnose.spec.js` "het rapport schrijft zes volle weken uit" eist
 `volle weken in je import: 8` en de kalender geeft er 7. De fixture zet zijn boekingen op een afstand in
@@ -3762,7 +3838,7 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v307` → `minder-v308`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v308` → `minder-v309`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -3772,7 +3848,8 @@ en `v294` raakten allebei alleen dit bestand en de changelog. `v297` is hetzelfd
 bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte alleen `tests/` en dit
 bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`; `v301` raakt wel app-code
 en bumpt dus gewoon door naar `minder-v301`, en `v302` tot en met `v305` net zo. `v306` raakt alleen
-`tests/` en dit bestand, dus hij bumpte niet en `v307` ging daarom van `minder-v305` naar `minder-v307`.
+`tests/` en dit bestand, dus hij bumpte niet en `v307` ging daarom van `minder-v305` naar `minder-v307`;
+`v308` raakt app-code en bumpt dus gewoon door naar `minder-v308`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
