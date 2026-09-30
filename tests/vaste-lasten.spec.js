@@ -8,9 +8,14 @@
 // vuurde nooit; hij leest nu de gedeelde lijst.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { pinDag, vasteDatum } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
-const now = new Date();
+/* v310: DE FIXTURE LEEST DEZELFDE DAG ALS DE PAGINA. `pinDag()` zet de klok van de pagina, maar
+     deze regel bouwt de datums in Node, en met de echte klok lopen de twee dan uiteen: de app denkt
+     dag dim-7 en de fixture schrijft dag 1. Dat is een NIEUWE scheiding die de pin zelf maakt, en
+     ze is gemeten: met alleen de pin gingen er in deze groep drie tests rood die eerst groen waren. */
+const now = vasteDatum();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 const mnd = (i) => ym(new Date(now.getFullYear(), now.getMonth() - i, 1));
 const CUR = mnd(0);
@@ -38,6 +43,7 @@ function seed(o) {
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set), minder_own: JSON.stringify([MAIN]), minder_accmeta: '{}', minder_plan: '{}' };
 }
 async function boot(page, p) {
+  await pinDag(page);                                   // v310: voor de goto, anders leest de boot de echte klok
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, p || seed());
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof vasteLasten === 'function');

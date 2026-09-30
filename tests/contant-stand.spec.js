@@ -18,7 +18,15 @@
 // coFirstPotCat(), coachRuleOptions(), openPotjePick() en setBudget() wijzen hem dan aan.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { pinDag } = require('./vaste-dag');
 
+/* v310: DE TELDAG HANGT AAN DE KLOK, DUS DEZE SPEC PINT ZIJN DAG.
+   De fixture zet zijn opname op dag 02 met de reden die er twee regels lager staat: ruim voor
+   vandaag, zodat de datumgrens van contantVerwacht() (t.date > de teldag) in de gewone tests niet
+   meespeelt. Op de 1e van de maand is dag 02 MORGEN, dus die grens valt dan juist wel en telt de
+   opname als 'na de teldag'. GEMETEN op 1 oktober 2026: elf van de zeventien tests rood, en de
+   premisse in de comment hieronder was onwaar. Dat is dezelfde vorm als v299/v306: een assertie
+   die aan de dag hangt, nu niet aan het RESTANT van de maand maar aan de afstand tot dag 02. */
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 const CUR = ym(now);
@@ -58,6 +66,7 @@ function seed(o) {
 }
 
 async function boot(page, o) {
+  await pinDag(page);                                   // v310: voor de goto, anders leest de boot de echte klok
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof totals === 'function' && typeof contantVerwacht === 'function');

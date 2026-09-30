@@ -24,6 +24,7 @@
  * De service worker staat globaal uit via playwright.config.js.
  */
 const { test, expect } = require('@playwright/test');
+const { pinDatum } = require('./vaste-dag');
 
 const A = '100110012848184840';
 
@@ -71,6 +72,12 @@ function seed() {
 }
 
 async function boot(page) {
+/* v310: DEZE SPEC PINT EEN GENOEMDE DAG EN NIET HET RESTANT, want zijn fixture draagt een
+     HARDGECODEERDE maand ('2026-09'). Zolang dat september 2026 was stond hij groen; op 1 oktober
+     kijkt de transactielijst naar de LOPENDE maand en is die leeg, dus zei hij 'Geen transacties in
+     deze periode'. Dat hangt niet aan de dag maar aan de MAAND, en `pinDag()` zou dat niet raken.
+     Met een genoemde dag in zijn eigen maand is hij voor altijd deterministisch. */
+  await pinDatum(page, '2026-09-24');   // voor de goto, anders leest de boot de echte klok
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed());

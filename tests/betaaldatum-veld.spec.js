@@ -25,11 +25,16 @@
  * De service worker staat globaal uit via playwright.config.js.
  */
 const { test, expect } = require('@playwright/test');
+const { pinDag, vasteDatum } = require('./vaste-dag');
 const fs = require('fs');
 const path = require('path');
 const { sectieVan } = require('./bron-sectie');
 
-const now = new Date();
+/* v310: DE FIXTURE LEEST DEZELFDE DAG ALS DE PAGINA. `pinDag()` zet de klok van de pagina, maar
+     deze regel bouwt de datums in Node, en met de echte klok lopen de twee dan uiteen: de app denkt
+     dag dim-7 en de fixture schrijft dag 1. Dat is een NIEUWE scheiding die de pin zelf maakt, en
+     ze is gemeten: met alleen de pin gingen er in deze groep drie tests rood die eerst groen waren. */
+const now = vasteDatum();
 const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const MAANDAG = new Date(now); MAANDAG.setDate(MAANDAG.getDate() - ((now.getDay() + 6) % 7) - 7);
 const ZATERDAG = new Date(MAANDAG); ZATERDAG.setDate(ZATERDAG.getDate() - 2);
@@ -82,6 +87,7 @@ function seed() {
 }
 
 async function boot(page) {
+  await pinDag(page);                                   // v310: voor de goto, anders leest de boot de echte klok
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed());
   await page.goto('/index.html');

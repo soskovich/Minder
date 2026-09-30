@@ -30,9 +30,10 @@
  * verschillende saldodata zodat de regel de OUDSTE moet noemen.
  */
 const { test, expect } = require('@playwright/test');
+const { pinDatum } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
-const d0 = new Date();
+const d0 = new Date(2026, 8, 24, 12);   // v310: dezelfde dag als de pin hierboven, anders lopen fixture en pagina uiteen
 const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const dagenTerug = (n) => { const d = new Date(d0); d.setDate(d.getDate() - n); return ymd(d); };
 const maandenVooruit = (n) => { const d = new Date(d0); d.setMonth(d.getMonth() + n); return ymd(d); };
@@ -133,6 +134,13 @@ function vormSeed() {
 }
 
 async function boot(page, seed, w) {
+  /* v310: EEN GENOEMDE DAG EN NIET HET RESTANT, want een van deze tests hangt aan de WEEKDAG.
+     Sectie 6 van blok 10 groepeert per weekdag, en de terugstorting van de terugstorting-test staat op
+     dag 4 van de lopende maand. In september 2026 zijn dag 1 tot 4 di, wo, do en vr; in oktober do,
+     vr, ZA en ZO. Daardoor werd het weekend-aandeel van de samenvattingsregel negatief, en die regel
+     draagt de terugstorting-noot niet, dus de test pakte een rij waar hij niet over gaat.
+     Het restant van de maand pint de weekdag niet, dus `pinDag()` kan dit niet dekken. */
+  await pinDatum(page, '2026-09-24');   // voor de goto, anders leest de boot de echte klok
   await page.setViewportSize({ width: w || 390, height: 844 });
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed);
@@ -595,14 +603,25 @@ test.describe('7 · het diagnosescherm leest en verzint niets', () => {
       zet(1, -200, 'z1'); zet(2, -200, 'z2'); zet(3, -200, 'z3');
       /* DE TERUGSTORTING MOET DE WEEKDAG DRAGEN, niet alleen de dag. GEMETEN: met 150 viel de vierde
          dag op dezelfde weekdag als vijf andere boekingen uit de fixture en werd hij netto POSITIEF
-         (`vr 0%`), dus de test bewees niets. Vier ligt vast op weekdag, niet op dagnummer, en de
-         andere boekingen dragen samen hoogstens 125, dus 400 maakt die weekdag onmiskenbaar negatief. */
+         (`vr 0%`), dus de test bewees niets. De andere boekingen dragen samen hoogstens 125, dus 400
+         maakt die weekdag onmiskenbaar negatief.
+         v310: HIER STOND DAT DAG VIER OP EEN WEEKDAG VASTLAG EN NIET OP EEN DAGNUMMER, en dat was
+         onwaar: `dag(4)` is dag 4 van de LOPENDE maand en zijn weekdag beweegt per maand. GEMETEN is
+         dat dag 1 tot 4 in september 2026 di, wo, do en vr zijn en in oktober do, vr, za en zo, en
+         met die twee in het weekend werd het weekend-aandeel van de SAMENVATTINGSREGEL negatief,
+         terwijl die regel de terugstorting-noot niet draagt. De spec pint daarom een genoemde dag;
+         de assertie hieronder MEET die weekdag in plaats van hem aan te nemen. */
       zet(4, -50, 'z4'); zet(4, 400, 'z5');
       TX.forEach(categorize);
       const L = diagDubbel();
-      return { neg: L.filter((x) => /\s-\d+%/.test(x)), alle: L.filter((x) => /op t\.date:/.test(x)) };
+      return { neg: L.filter((x) => /\s-\d+%/.test(x)), alle: L.filter((x) => /op t\.date:/.test(x)),
+        weekdagen: [1, 2, 3, 4].map((n) => new Date(dag(n) + 'T12:00:00').getDay()) };
     });
     expect(r.alle.length, 'het blok moet rijen met aandelen opleveren').toBeGreaterThan(0);
+    /* v310: DE INVOER WORDT GEMETEN EN NIET AANGENOMEN. Valt een van deze vier dagen in het weekend,
+       dan gaat het weekend-aandeel van de samenvattingsregel mee omlaag en pakt `neg` een rij waar
+       deze test niet over gaat. 2 tot 5 is di tot vr. */
+    expect(r.weekdagen, 'de vier dagen moeten doordeweeks liggen').toEqual([2, 3, 4, 5]);
     const rr = r.neg;
     expect(rr.length, 'de fixture moet werkelijk een negatief aandeel opleveren').toBeGreaterThan(0);
     for (const rij of rr) expect(rij).toMatch(/negatief aandeel is een terugstorting/);

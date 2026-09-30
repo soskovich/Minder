@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { seed, open } = require('./budget-fixture');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
+const { kaalBron } = require('./bron-kaal');
 
 const dimVan = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 
@@ -90,10 +91,28 @@ test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron',
        sinds v309 een achtervoegsel dat aan de dag hangt (de tempo-krapte of het dagbedrag), terwijl
        budgetOverZin() op de laatste dag een andere zin zegt. GEMETEN gaf het zwaarste geval op
        30 september 217px op 360px en 199px op 390px; met de pin 199px op beide. */
-    'uit-reservering'];
+    'uit-reservering',
+    /* v310: NEGEN ERBIJ, OP EEN DERDE AS. De zeven van v299 vielen op de op-een-na-laatste dag en de
+       zes van v306 op de laatste; deze negen vielen op de EERSTE. Hun fixtures zetten hun boekingen
+       op de eerste dagen van de lopende maand met de reden dat die "ruim voor vandaag" liggen, en op
+       dag 1 liggen ze in de TOEKOMST: dan valt de datumgrens van contantVerwacht() juist wel, staat
+       daysElapsed() op 1 zodat het potje-voorstel verschuift en #valtOpSave uitgeschakeld blijft, en
+       is een opzegdatum van vandaag eerder dan een afschrijving van dag 4. GEMETEN op 1 oktober 2026:
+       twaalf rood in de volle suite, waarvan elf in contant-stand.
+       DRIE VAN DE NEGEN PINNEN EEN GENOEMDE DAG en niet het restant, elk met zijn eigen reden in de
+       spec: twee dragen een HARDGECODEERDE maand ('2026-09') en de derde hangt aan de WEEKDAG. Een
+       restant pint geen maand en geen weekdag, dus daar kan pinDag() niets. */
+    'contant-stand', 'betaaldatum-veld', 'dubbele-boekingen-bevestigen', 'inleg-voor-bestemming',
+    'oud-saldo-melden', 'reservering-bevestigen', 'scope-een-bron', 'valt-op-signalen',
+    'vaste-lasten'];
+  /* v310: DE BRON WORDT KAAL GELEZEN. Deze drie tests zochten in de RUWE bron, dus een
+     `require('./vaste-dag')` of een `pinDag(page)` in een COMMENT hield ze groen. Dat is de vorm die
+     v309b heeft opgeruimd, en deze spec was er nog een van (meetles: een bronzoekende assertie die
+     een aanroep eist, staat groen op een vermelding). */
+  const lees = (f) => kaalBron(fs.readFileSync(path.join(__dirname, f + '.spec.js'), 'utf8'));
   test('geen enkele van hen rekent zijn eigen vaste dag uit', () => {
     for (const f of NODIG) {
-      const src = fs.readFileSync(path.join(__dirname, f + '.spec.js'), 'utf8');
+      const src = lees(f);
       expect(src, f + ' leest de gedeelde pin niet').toMatch(/require\('\.\/vaste-dag'\)/);
       expect(src, f + ' rekent zijn eigen vaste dag uit').not.toMatch(/clock\.(setFixedTime|install)\(new Date/);
     }
@@ -103,13 +122,22 @@ test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron',
      moet VOOR de goto staan (v299), en een `pinDag` erachter leest de app niet meer. Dit is de
      vorm van meetles (c): de test loopt het pad dat de eigenschap draagt. */
   test('wie de pin gebruikt zet hem voor de eerste goto', () => {
+    let gemeten = 0;
     for (const f of NODIG) {
-      const src = fs.readFileSync(path.join(__dirname, f + '.spec.js'), 'utf8');
-      const pin = src.indexOf('pinDag(page)');
+      const src = lees(f);
+      /* v310: OOK `pinDatum`, want drie van de negen pinnen een genoemde dag. Alleen op `pinDag`
+         zoeken zou die drie stil overslaan, en dan meet deze test ze niet. */
+      const pin = Math.min(...['pinDag(page)', 'pinDatum(page'].map((n) => {
+        const i = src.indexOf(n); return i < 0 ? Infinity : i;
+      }));
       const goto = src.indexOf("page.goto(");
-      if (pin < 0 || goto < 0) continue;            // deze spec pint via een eigen klok-argument
+      if (!isFinite(pin) || goto < 0) continue;     // deze spec pint via een eigen klok-argument
+      gemeten++;
       expect(pin, f + ' zet de pin na de goto').toBeLessThan(goto);
     }
+    /* ZONDER DEZE ONDERGRENS TOETST DE LUS NIETS zodra elke spec via een klok-argument pint
+       (meetles a): dan valt hij per constructie in de `continue`. */
+    expect(gemeten, 'geen enkele spec gemeten, dus deze test toetst niets').toBeGreaterThan(5);
   });
 
   /* WIE EEN KLOK ZET LEEST DE GEDEELDE BRON, EN ER IS GEEN UITZONDERING MEER.
@@ -126,7 +154,7 @@ test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron',
     expect(zetters.length, 'geen enkele klokzetter, dus deze test toetst niets').toBeGreaterThan(0);
     expect(zetters).not.toContain('potjes-weekvenster.spec.js');
     for (const f of zetters) {
-      const src = fs.readFileSync(path.join(__dirname, f), 'utf8');
+      const src = kaalBron(fs.readFileSync(path.join(__dirname, f), 'utf8'));
       expect(src, f + ' zet een klok zonder de gedeelde bron te lezen').toMatch(/require\('\.\/vaste-dag'\)/);
     }
   });

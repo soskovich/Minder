@@ -11,6 +11,7 @@
 // dat je minder uitgeeft, en zonder telling is dat de makkelijkste knop.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { pinDag } = require('./vaste-dag');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -47,6 +48,7 @@ function seed(o) {
 }
 
 async function boot(page, o) {
+  await pinDag(page);                                   // v310: voor de goto, anders leest de boot de echte klok
   const d = seed(o);
   // Eenmalig: bij een reload moet de opgeslagen SET blijven staan, anders meet je je eigen fixture.
   await page.addInitScript((s) => {

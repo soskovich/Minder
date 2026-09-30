@@ -9,8 +9,13 @@
 // belegging en hoort juist wél te compounderen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { pinDag, vasteDatum } = require('./vaste-dag');
 
-const now = new Date();
+/* v310: DE FIXTURE LEEST DEZELFDE DAG ALS DE PAGINA. `pinDag()` zet de klok van de pagina, maar
+     deze regel bouwt de datums in Node, en met de echte klok lopen de twee dan uiteen: de app denkt
+     dag dim-7 en de fixture schrijft dag 1. Dat is een NIEUWE scheiding die de pin zelf maakt, en
+     ze is gemeten: met alleen de pin gingen er in deze groep drie tests rood die eerst groen waren. */
+const now = vasteDatum();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 const CUR = ym(now);
 const M1 = ym(new Date(now.getFullYear(), now.getMonth() - 1, 1));
@@ -48,7 +53,15 @@ function seed(o) {
   const vol = o.nfVol !== false;
   const set = {
     limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 4000,
-    manualBal: { [MAIN]: 1579, [SPAAR]: 2000, [RES]: 0 },
+    /* v310: HET SPAARSALDO VOLGT DE TOEWIJZING, want `vol` betekent dat het noodfonds vol is en
+       `fireInputs()` leest daarvoor het SALDO en niet de toewijzing (v216/v305). Met 2.000 op de
+       rekening naast een toewijzing van 8.000 vulde het noodfonds zich in de projectie nog drie
+       maanden, en `wens` telt de spaardoelen pas mee vanaf het JAAR waarin het vol is
+       (`year < volYear ? 0 : _doel`). GEMETEN met fixture en klok uitgelijnd: op 24 september groen
+       (drie maanden is december, hetzelfde jaar) en op 24 oktober rood (januari 2027, een ander
+       jaar). De fixture droeg dus iets anders dan zijn eigen `vol` zegt, en de kalender besliste
+       welke van de twee je zag. */
+    manualBal: { [MAIN]: 1579, [SPAAR]: vol ? 8000 : 2000, [RES]: 0 },
     budgets: { boodschappen: 500, huur: 1200 },
     savingMode: 'amount', savingAmount: o.savingAmount != null ? o.savingAmount : 2500,
     savingsAcc: { [SPAAR]: true }, resAcc: RES,
@@ -64,6 +77,7 @@ function seed(o) {
   };
 }
 async function boot(page, o) {
+  await pinDag(page);                                   // v310: voor de goto, anders leest de boot de echte klok
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof reisModel === 'function');

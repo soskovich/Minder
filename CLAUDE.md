@@ -744,6 +744,28 @@ genoemde versietag.)*
   meer dan een dag nodig; een gedeelde vaste dag zou daar de meting weghalen. Hij viel ook niet om, want
   hij leidt zijn eigen maand van dertig dagen af. De spec pint die uitzondering bij naam, zodat de lijst
   niet stilletjes groeit.
+  ER IS EEN DERDE AS, EN DIE IS BIJ `v310` GEPIND: negen specs vielen op de EERSTE dag van de maand.
+  Hun fixtures zetten de boekingen van de lopende maand op de eerste dagen met de reden dat die "ruim
+  voor vandaag" liggen, en op dag 1 liggen ze in de TOEKOMST. GEMETEN op 1 oktober 2026: twaalf rood in
+  de volle suite, elf ervan in `contant-stand.spec.js`, waar `contantVerwacht()` alleen opnames NA de
+  teldag telt en de opname van dag 02 er dus opeens in viel. De andere gevallen: `daysElapsed()` op 1
+  laat het potje-voorstel verschuiven en houdt `#valtOpSave` uitgeschakeld, en een opzegdatum van
+  vandaag ligt voor een afschrijving van dag 4.
+  DE PIN ALLEEN IS NIET GENOEG, EN DAT IS GEMETEN: `pinDag()` zet de klok van de PAGINA, en vijf van de
+  negen bouwen hun datums in Node. Met alleen de pin denkt de app dag `dim-7` terwijl de fixture dag 1
+  schrijft, en daarop gingen DRIE tests rood die eerst groen waren. Wie de pin neemt en zijn eigen
+  datums bouwt, leest `vasteDatum()` voor zijn `now`. Dat is de grens die dit bestand zelf noemde ("de
+  maand blijft de echte maand"), nu een stap verder: de DAG moet aan beide kanten dezelfde zijn.
+  DRIE VAN DE NEGEN PINNEN EEN GENOEMDE DAG, en dat is geen voorkeur maar een eigenschap van hun
+  assertie. Twee dragen een HARDGECODEERDE maand (`'2026-09'`) en stonden alleen groen zolang dat de
+  lopende maand was; de derde hangt aan de WEEKDAG, want sectie 6 van blok 10 groepeert per weekdag en
+  dag 4 van de maand is in september 2026 een vrijdag en in oktober een ZONDAG. Een restant pint geen
+  maand en geen weekdag, dus `pinDag()` kan die drie per constructie niet dekken.
+  DE LIJST LAS ZIJN BRON RUW, en dat is bij `v310` gerepareerd: een `require('./vaste-dag')` of een
+  `pinDag(page)` in een COMMENT hield hem groen. Hij leest nu via `kaalBron()`, kent ook `pinDatum(`,
+  en draagt een ondergrens op het aantal gemeten specs. De lijst gaat van dertien naar TWEEENTWINTIG
+  namen. GEMETEN sabotage: de pin uit `contant-stand` halen zet elf tests van die spec EN de lijst-test
+  rood.
   ER IS EEN TWEEDE AS, EN DIE IS BIJ `v306` GEPIND: zes potjes-tests in vier bestanden vielen op de
   LAATSTE dag van de maand. Daar geeft `daysElapsed()` `elapsed === dim`, dus `potjeRest()` geeft voor een
   overschreden potje `bud/dim * 0` en is elke RESERVERING nul; dan is het gat exact gelijk aan de
@@ -4040,6 +4062,14 @@ transactie-velden niet, `_op` gaat dus niet vooruit, en de pending-groep leest d
 is monotoon geklemd en daarmee deterministisch zodra de tweede schrijver werkelijk schrijft. Wie dit oppakt
 maakt de stub betrouwbaar of meet in de spec eerst dat de tweede aanroep gelukt is, zoals de invoermeting van
 `v299`/`v300`.
+
+**GEREPAREERD BIJ `v310`: de negen specs die op de EERSTE dag van de maand vielen.** GEMETEN op
+1 oktober 2026 gaf de volle suite twaalf rood waar dezelfde inhoud op 30 september drie had; met de
+pin is dat weer drie. Zie de derde as in de staande regel "EEN TEST DIE OVER DE KALENDER GAAT PINT
+ZIJN EIGEN DAG". `index.html` is in dat deel niet aangeraakt.
+WAT DAARMEE OOK VERVALT is de `v309`-bevinding dat `oud-saldo-melden` en `vaste-lasten`
+ORDENINGSAFHANKELIJK waren. Dat was de verkeerde toeschrijving: het is bij beide de kalender, en met
+de pin zijn ze groen in de volle suite EN in een kleine selectie.
 
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de

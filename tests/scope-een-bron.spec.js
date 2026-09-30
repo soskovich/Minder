@@ -27,6 +27,7 @@
  * De service worker staat globaal uit via playwright.config.js.
  */
 const { test, expect } = require('@playwright/test');
+const { pinDag, vasteDatum } = require('./vaste-dag');
 const fs = require('fs');
 
 const PSD = '100110012848184840';
@@ -34,7 +35,11 @@ const CSV = 'N26 Zakgeld';
 
 /* een lokale kalenderdag n dagen terug, net als ymdVan() in de app. toISOString() zou hier de
    UTC-dag geven en dat is onder CEST rond middernacht de dag ervoor (v199, meetles v280). */
-const jetzt = new Date();
+/* v310: DE FIXTURE LEEST DEZELFDE DAG ALS DE PAGINA. `pinDag()` zet de klok van de pagina, maar
+     deze regel bouwt de datums in Node, en met de echte klok lopen de twee dan uiteen: de app denkt
+     dag dim-7 en de fixture schrijft dag 1. Dat is een NIEUWE scheiding die de pin zelf maakt, en
+     ze is gemeten: met alleen de pin gingen er in deze groep drie tests rood die eerst groen waren. */
+const jetzt = vasteDatum();
 function D(n) {
   const d = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate() - n);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -86,6 +91,7 @@ function seed(opt) {
   };
 }
 async function boot(page, opt) {
+  await pinDag(page);                                   // v310: voor de goto, anders leest de boot de echte klok
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(opt));
