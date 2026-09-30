@@ -11,6 +11,7 @@
 //     Inzichten en staat nu op Grip, en op precies één van de twee.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -76,9 +77,7 @@ test.describe('a · het patroon staat op precies één plek', () => {
     expect(src).toContain('maandPatroon()');
     /* En maandRegels roept hem niet meer aan. Commentaar telt niet als aanroep: de functie legt in
        een comment uit welke regel er stond en waarom hij weg is (dezelfde meetfout als v164). */
-    const kaal = (await page.evaluate(() => maandRegels.toString()))
-      .replace(/\/\*[\s\S]*?\*\//g, ' ').split(String.fromCharCode(10))
-      .map((r) => r.replace(/(^|[^:\w])\/\/.*$/, '$1')).join(' ');
+    const kaal = (await kaalUit(page, 'maandRegels')).split(String.fromCharCode(10)).join(' ');
     expect(kaal).not.toContain('maandPatroon');
   });
 
@@ -182,8 +181,7 @@ test.describe('d · de coach-inzichten hebben één bron', () => {
     await boot(page);
     expect(await page.evaluate(() => typeof window.renderBehavior)).toBe('undefined');
     expect(await page.evaluate(() => typeof coachItems)).toBe('undefined');
-    const kaal = (await page.evaluate(() => renderIns.toString()))
-      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const kaal = await kaalUit(page, 'renderIns');
     expect(kaal).not.toContain('coachItems');
     expect(kaal).not.toContain('renderBehavior');
     expect(kaal).not.toContain('openBehavior');

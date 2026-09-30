@@ -6,6 +6,7 @@
 // zetten zou suggereren dat je buffer toen op dat niveau stond.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 // v177: de app legt de LOKALE dag vast (vandaagYMD), niet de UTC-dag. Tussen middernacht
 // en 02:00 zomertijd verschillen die, en dan toonde "Gelezen op" de dag ervoor.
@@ -167,7 +168,7 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
         potjes: [...h.matchAll(/openPotjesVerdeling\('(\d{4}-\d{2})'/g)].map((x) => x[1]), nu: thisYM() }; });
     for (const m of r.maanden.concat(r.potjes)) expect(m).toBe(r.nu);
     const src = await page.evaluate(() => renderMaand.toString() + maandIngang.toString() + maandCoachIngang.toString() + maandPlanRegels.toString());
-    expect(src.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/kijkMaand\(\)|curMonth/);
+    expect(kaalBron(src)).not.toMatch(/kijkMaand\(\)|curMonth/);
   });
 
   test('wat wel per maand rekent blijft staan', async ({ page }) => {
@@ -206,7 +207,7 @@ test.describe('e · maandGelezen is van de lopende maand', () => {
     await page.evaluate(() => go('maand'));
     await page.waitForTimeout(130);
     expect(await page.evaluate(() => SET.maandGelezen)).toBe(vandaag());   // v233: Grip is altijd de lopende maand
-    expect(await page.evaluate(() => /isLopendeMaand\(\)/.test(go.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);   // de guard is weg
+    expect(/isLopendeMaand\(\)/.test(await kaalUit(page, 'go'))).toBe(false);   // de guard is weg
   });
 
   test('en onderdrukt de structurele signalen van nu niet', async ({ page }) => {

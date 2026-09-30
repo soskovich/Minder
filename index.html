@@ -9004,8 +9004,7 @@ function nogDezeMaandBody(){
       <div class="wvo-tl">${p.lab}</div>
       <div class="wvo-tv" style="color:${p.col}">${p.val}</div>
       ${p.sub?`<div class="wvo-ts">${p.sub}</div>`:''}
-      ${p.dagRegel?`<div class="wvo-ts nog-dag" style="color:var(--mut2);margin-top:3px">${p.dagRegel}.</div>`:''}
-      ${p.noot?`<div class="wvo-ts nog-noot" style="color:var(--mut2);margin-top:3px${p.nootTik?';cursor:pointer':''}"${p.nootTik?` onclick="event.stopPropagation();${p.nootTik}"`:''}>${p.noot}${p.nootTik?' \u203a':''}</div>`:''}</div>`;
+      </div>`;
   return `<div class="wvo-tiles" style="grid-template-columns:1fr 1fr">${posten.map(tegel).join('')}</div>`;
 }
 /* v241: dezelfde posten als lijst, voor Inzichten. Een raster scan je, een lijst lees je, en van
@@ -9018,13 +9017,18 @@ function insNogLijst(){
   let posten=[]; try{ posten=nogDezeMaandPosten(); }catch(_){ return ''; }
   if(!posten.length) return '';
   /* lab en sub dragen opzettelijk HTML (jrg() bij 'Nog te sparen', ICON('check') bij gehaald),
-     precies zoals de tegels ze al doorgaven. Niet escapen dus; de bron is deze code en geen invoer. */
+     precies zoals de tegels ze al doorgaven. Niet escapen dus; de bron is deze code en geen invoer.
+     v309: DE RIJ DROEG OOK EEN `dagRegel` EN EEN `noot`, en die zijn eruit. Ze waren gebouwd voor de
+     post "Nog uit je potjes", de enige die ze ooit meegaf, en die post is het hoofdgetal van de
+     stand-kaart geworden. Daarmee hadden die twee takken geen schrijver meer, en een dode conditie
+     is wat een volgende ronde verkeerd leest. Het is opruimwerk en geen lacune, want de schrijver is
+     deze ronde bewust weggehaald: de vorm van een rij is nu lab, sub, bedrag en een tik. Een post
+     met een derde regel is een keuze voor wie hem nodig heeft. */
   const rij=(p,i)=>`<div class="ins-nog-rij" style="display:flex;gap:10px;align-items:baseline;padding:8px 2px${i?';border-top:1px solid var(--line)':''}${p.tik?';cursor:pointer':''}"${p.tik?` onclick="${p.tik}"`:''}>
       <span style="flex:1;min-width:0">
         <span class="ins-nog-lab" style="font-size:13px">${p.lab}</span>
         ${p.sub?`<span class="small ins-nog-sub" style="display:block;color:var(--mut);margin-top:1px;line-height:1.4">${p.sub}</span>`:''}
-        ${p.dagRegel?`<span class="small ins-nog-dag" style="display:block;color:var(--mut2);margin-top:3px;line-height:1.4">${p.dagRegel}.</span>`:''}
-        ${p.noot?`<span class="small ins-nog-noot" style="display:block;color:var(--mut2);margin-top:3px;line-height:1.4${p.nootTik?';cursor:pointer':''}"${p.nootTik?` onclick="event.stopPropagation();${p.nootTik}"`:''}>${p.noot}${p.nootTik?' \u203a':''}</span>`:''}</span>
+        </span>
       <span class="ins-nog-val" style="font-weight:800;white-space:nowrap;text-align:right;color:${p.col}">${p.val}</span></div>`;
   return `<div id="insNogLijst">${posten.map(rij).join('')}</div>`;
 }

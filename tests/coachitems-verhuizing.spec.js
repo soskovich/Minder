@@ -8,6 +8,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 function bouw(fn) {
   const p = seed();
@@ -225,11 +226,14 @@ test.describe('f · deel A sloopt nog niets', () => {
     await boot(page);
     const r = await page.evaluate(() => {
       const H = grootsteHefboom();
-      const src = grootsteHefboom.toString().replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-      return { H, zin: hefboomZin(), venster: /slice\(-6\)/.test(src),
-        afgerond: /filter\(x=>x<nowYM\)/.test(src.replace(/\s/g, '')),
-        variabel: /isExpenseTx\(t\)&&!isFixed\(t\)/.test(src.replace(/\s/g, '')) };
+      const src = grootsteHefboom.toString();
+      return { H, zin: hefboomZin(), src };
     });
+    // v309: strippen gebeurt in Node, op een plek (tests/bron-kaal.js)
+    const hefSrc = kaalBron(r.src);
+    r.venster = /slice\(-6\)/.test(hefSrc);
+    r.afgerond = /filter\(x=>x<nowYM\)/.test(hefSrc.replace(/\s/g, ''));
+    r.variabel = /isExpenseTx\(t\)&&!isFixed\(t\)/.test(hefSrc.replace(/\s/g, ''));
     test.skip(!r.H, 'deze fixture heeft geen variabele historie');
     expect(r.venster).toBe(true);                  // zes maanden
     expect(r.afgerond).toBe(true);                 // en alleen afgeronde
@@ -242,11 +246,9 @@ test.describe('f · deel A sloopt nog niets', () => {
 
   test('de context verschijnt alleen waar er ook iets te kiezen valt', async ({ page }) => {
     await boot(page);
-    const r = await page.evaluate(() => {
-      const kaal = (f) => f.toString().replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-      return ['coTopicLek', 'coTopicHorizon', 'coTopicMaand']
-        .map((n) => /rules\.length[\s\S]{0,90}hefboomZin\(\)/.test(kaal(window[n])));
-    });
+    const r = [];
+    for (const n of ['coTopicLek', 'coTopicHorizon', 'coTopicMaand'])
+      r.push(/rules\.length[\s\S]{0,90}hefboomZin\(\)/.test(await kaalUit(page, n)));
     expect(r).toEqual([true, true, true]);
   });
 

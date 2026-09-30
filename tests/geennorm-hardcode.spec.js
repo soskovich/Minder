@@ -22,23 +22,14 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { kaalBron } = require('./bron-kaal');
 
 const BRON = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 /* Comments eruit, maar niet de // in een URL of in een string; blokcomments worden vervangen door
    spaties zodat de regelnummers blijven kloppen. Overgenomen uit grendel-schrijvers.spec.js,
    dezelfde valkuil (een te agressieve strip maakt treffers onzichtbaar). */
-function strip(t) {
-  t = t.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
-  return t.split('\n').map((ln) => {
-    const m = /(^|[\s;})])\/\/(?!\/)/.exec(ln);
-    if (!m) return ln;
-    const voor = ln.slice(0, m.index + m[1].length);
-    if (/http/.test(ln.slice(Math.max(0, m.index - 8), m.index))) return ln;
-    const even = (x, c) => (x.split(c).length - 1) % 2 === 0;
-    if (!even(voor, "'") || !even(voor, '"') || !even(voor, '`')) return ln;
-    return voor;
-  }).join('\n');
-}
+// v309: de strip staat op EEN plek (tests/bron-kaal.js); deze vorm kwam hier vandaan.
+const strip = kaalBron;
 const CODE = strip(BRON);
 const HEADERS = [...CODE.matchAll(/\nfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => ({ i: m.index, naam: m[1] }));
 function functieRond(index) {

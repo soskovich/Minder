@@ -4,6 +4,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { pinDag } = require('./vaste-dag');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -100,8 +101,8 @@ test.describe('a · de budgetbalk kent drie standen', () => {
 
   test('de grens staat in de drempelconstante, niet inline', async ({ page }) => {
     await boot(page, {});
-    const r = await page.evaluate(() => ({ grens: MAAND_DREMPEL.budgetVol,
-      src: insBudgetBlok.toString().replace(/\/\*[\s\S]*?\*\//g, '') }));
+    const r = await page.evaluate(() => ({ grens: MAAND_DREMPEL.budgetVol }));
+    r.src = await kaalUit(page, 'insBudgetBlok');    // v309: strippen in Node, op een plek
     expect(r.grens).toBe(100);
     expect(r.src).toContain('MAAND_DREMPEL.budgetVol');
   });
@@ -234,9 +235,9 @@ test.describe('c · de staafgrafiek plot alleen afgeronde maanden', () => {
 
   test('de drempel is één constante, gedeeld met de sparklines', async ({ page }) => {
     await boot(page, {});
-    const r = await page.evaluate(() => ({ min: GRAFIEK_MIN,
-      chart: spendVsBudgetChart.toString().replace(/\/\*[\s\S]*?\*\//g, ''),
-      tegel: kpiTegels.toString().replace(/\/\*[\s\S]*?\*\//g, '') }));
+    const r = await page.evaluate(() => ({ min: GRAFIEK_MIN }));
+    r.chart = await kaalUit(page, 'spendVsBudgetChart');
+    r.tegel = await kaalUit(page, 'kpiTegels');
     expect(r.min).toBe(6);
     expect(r.chart).toContain('GRAFIEK_MIN');
     expect(r.tegel).toContain('GRAFIEK_MIN');

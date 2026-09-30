@@ -5,6 +5,7 @@
 // opgeheven en het moment dat hij belichaamde leeft voort als timing op Maand.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const RES = 'NL01RESE0000009999';
@@ -61,8 +62,8 @@ test.describe('a · de verse-startkaart bestaat niet meer', () => {
       weg: ['freshStartCard', 'freshStartSave', 'freshStartDue', 'freshStartDismiss',
         'freshToggleCouple', 'voornemenCarry'].map((n) => typeof window[n]),
       // comments tellen niet als verwijzing (v165), dus die gaan er eerst uit
-      dashSrc: renderDash.toString().replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''),
     }));
+    r.dashSrc = await kaalUit(page, 'renderDash');   // v309: strippen in Node, op een plek
     for (const t of r.weg) expect(t).toBe('undefined');
     expect(r.dashSrc).not.toMatch(/freshStart|voornemen/i);
   });

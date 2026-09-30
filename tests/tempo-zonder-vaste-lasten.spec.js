@@ -5,6 +5,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { pinDag, vasteDatum } = require('./vaste-dag');
+const { kaalBron } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -97,8 +98,7 @@ test.describe('a · vaste lasten worden niet geëxtrapoleerd', () => {
     }
     /* En niemand deelt nog de hele uitgave door de verstreken dagen. Commentaar telt niet als
        gebruik: beide functies leggen in een comment uit welke formule er stond. */
-    const kaal = (t) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').split('\n')
-      .map((r) => r.replace(/(^|[^:\w])\/\/.*$/, '$1')).join(' ');
+    const kaal = (t) => kaalBron(t).split('\n').join(' ');   // v309: de gedeelde strip
     expect(kaal(src.sig)).not.toMatch(/t\.spend\/el\*de\.dim/);
     expect(kaal(src.coach)).not.toMatch(/bud\*elapsed\/dim/);
   });

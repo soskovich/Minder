@@ -30,6 +30,7 @@
  * verschillende saldodata zodat de regel de OUDSTE moet noemen.
  */
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const d0 = new Date();
 const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -319,9 +320,7 @@ test.describe('3 · de melding vuurt per falende rekening', () => {
 
   test('beide sync-routes lezen dezelfde melding, en niemand formuleert er een tweede', async ({ page }) => {
     await boot(page, deviceSeed());
-    const r = await page.evaluate(() => ({
-      ref: psd2Refresh.toString().replace(/\/\*[\s\S]*?\*\//g, ''),
-      ing: psd2IngestSession.toString().replace(/\/\*[\s\S]*?\*\//g, '') }));
+    const r = { ref: await kaalUit(page, 'psd2Refresh'), ing: await kaalUit(page, 'psd2IngestSession') };
     expect(r.ref).toContain('psd2SyncToast(');
     expect(r.ing).toContain('psd2SyncToast(');
     // en het predicaat staat op precies één plek
@@ -331,7 +330,7 @@ test.describe('3 · de melding vuurt per falende rekening', () => {
        opschreven, en dat is de reden dat falendPredikaat() bestaat. Drie plekken zeggen dit over
        dezelfde toestand met een ander onderwerp ervoor; de bewering erachter is er één. */
     for (const k of ['psd2Refresh', 'psd2IngestSession', 'bankStand', 'setBank', 'psd2FalendZin']) {
-      const src = await page.evaluate((n) => window[n].toString().replace(/\/\*[\s\S]*?\*\//g, ''), k);
+      const src = await kaalUit(page, k);
       expect(src, k + ' mag het predicaat niet zelf opschrijven').not.toMatch(/geen saldo op/);
     }
     const pred = await page.evaluate(() => [falendPredikaat(1), falendPredikaat(2)]);
@@ -550,7 +549,7 @@ test.describe('7 · het diagnosescherm leest en verzint niets', () => {
     await boot(page, deviceSeed());
     const src = await page.evaluate(() => {
       const b = DIAG_BLOKKEN.find((x) => /rekeningen en de bankverbindingen/.test(x.titel));
-      return b.lees.toString().replace(/\/\*[\s\S]*?\*\//g, '');
+      return b.lees.toString();
     });
     expect(src).toContain('psd2Falend()');
     expect(src, 'geen tweede filter op balGeland naast psd2Falend()').not.toMatch(/filter\([^)]*balGeland/);

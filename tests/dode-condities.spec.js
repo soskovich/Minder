@@ -6,6 +6,7 @@
 // bewuste keuze is en geen stille verschuiving.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -36,9 +37,8 @@ async function boot(page, o) {
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof savingsModel === 'function');
 }
-const bron = (page, fn) => page.evaluate((n) => window[n].toString()
-  .replace(/\/\*[\s\S]*?\*\//g, '')
-  .split('\n').map((l) => l.replace(/(^|[\s;})])\/\/(?!\/).*$/, '$1')).join('\n'), fn);
+// v309: de pagina levert de RUWE bron, het strippen gebeurt in Node met de gedeelde helper
+const bron = (page, fn) => kaalUit(page, fn);
 
 test.describe('a · guards die door een eerdere guard al waren afgevangen', () => {
   test('scoreNotifs toetst TX.length één keer, bovenin', async ({ page }) => {
@@ -89,7 +89,7 @@ test.describe('c · een pending afschrijving is geld dat weg is', () => {
   test('psd2Pending is geen conditie meer', async ({ page }) => {
     await boot(page);
     const bronnen = await page.evaluate(() => {
-      const kaal = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '')
+      const kaal = (t) => kaalBron(t)
         .split('\n').map((l) => l.replace(/(^|[\s;})])\/\/(?!\/).*$/, '$1')).join('\n');
       const uit = [];
       for (const n of Object.getOwnPropertyNames(window)) {
@@ -160,17 +160,17 @@ test.describe('e · posten zonder invoerkanaal', () => {
 
   test('stsBuffer staat niet meer in de briefingexport', async ({ page }) => {
     await boot(page);
-    const treffers = await page.evaluate(() => {
+    const treffers = await page.evaluate((kj) => {
+      const kaal = eval(kj);   // v309: de gedeelde strip, geinjecteerd (een sweep kent geen namen)
       const uit = [];
       for (const n of Object.getOwnPropertyNames(window)) {
         let f; try { f = window[n]; } catch (_) { continue; }
         if (typeof f !== 'function') continue;
-        let src; try { src = f.toString(); } catch (_) { continue; }
-        src = src.replace(/\/\*[\s\S]*?\*\//g, '');
+        let src; try { src = kaal(f.toString()); } catch (_) { continue; }
         if (/stsBuffer|safeToSpendBuffer/.test(src)) uit.push(n);
       }
       return uit;
-    });
+    }, KAAL_JS);
     expect(treffers).toEqual([]);
     // de lezer rekent nu rechtstreeks met nul, met dezelfde uitkomst als altijd
     expect(await bron(page, '_signaalSafeToSpend')).toMatch(/rest>0/);

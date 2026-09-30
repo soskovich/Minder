@@ -8,6 +8,7 @@
 // vuurde nooit; hij leest nu de gedeelde lijst.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -78,7 +79,7 @@ test.describe('a - één lijst uit één bron', () => {
     const set = await page.evaluate(() => { go('set'); toggleSet('trans'); return document.querySelector('#s-set').innerText.replace(/\s+/g, ' '); });
     expect(set).toContain('Vaste lasten');
     expect(set).toContain('4 herkend');
-    expect(await page.evaluate(() => /subsCard/.test(renderMaand.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);
+    expect(/subsCard/.test(await kaalUit(page, 'renderMaand'))).toBe(false);
   });
 });
 

@@ -5,6 +5,7 @@
 // niet met 'en' plakt.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -394,9 +395,9 @@ test.describe('j · een dekkingsgraad toont geen percentage boven de drempel', (
     const r = await page.evaluate(() => ({
       tekst: dekkingTekst(dekking(12)),
       kaart: resDekkingCard(),
-      bronnen: [dekkingTekst.toString(), resDekkingCard.toString()]
-        .map((t) => t.replace(/\/\*[\s\S]*?\*\//g, ' ')),
+      bronnen: [dekkingTekst.toString(), resDekkingCard.toString()],
     }));
+    r.bronnen = r.bronnen.map(kaalBron);    // v309: strippen in Node, op een plek
     expect(r.tekst).not.toMatch(/\d+%/);
     expect(r.kaart).not.toMatch(/\d+%/);
     for (const b of r.bronnen) expect(b).not.toContain('graad');

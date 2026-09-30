@@ -6,6 +6,7 @@
 // thuishoort: bufferMaanden() en de bufferregel op Maand lezen onverkort spaarSaldo().
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const SAV = 'NL01SAVE0000004323';
@@ -54,7 +55,7 @@ test.describe('a · één betekenis in de kolom', () => {
     expect(await page.evaluate(() => Math.round(spaarSaldo().cur))).toBe(2000);
     /* v173: planMap raadpleegt spaarSaldo() nog wel, maar alleen om vast te stellen of de
        toewijzing ooit is gemigreerd - nooit om de voortgang te berekenen. */
-    const kaal = (await page.evaluate(() => planMap.toString())).replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const kaal = await kaalUit(page, 'planMap');
     expect(kaal).not.toMatch(/gespaard:[^,]*spaarSaldo/);
     expect(kaal).toContain('nfToegewezen');
   });

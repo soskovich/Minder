@@ -6,6 +6,7 @@
 // richting, want zodra daar een richting in staat gaat iemand rekenen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const TWEE = 'NL01TWEE0000002222';
@@ -172,8 +173,7 @@ test.describe('c · de regel noemt geen bedrag en geen richting', () => {
      functie", dus hij loopt nu over alle drie. */
   test('geen enkele drager van de tekst rekent met een bedrag', async ({ page }) => {
     await boot(page, {});
-    const src = await page.evaluate(() => [saldoAchterZinnen, saldoAchterRegel, saldoAchterHero]
-      .map((f) => f.toString().replace(/\/\*[\s\S]*?\*\//g, '')).join('\n'));
+    const src = await kaalUit(page, 'saldoAchterZinnen', 'saldoAchterRegel', 'saldoAchterHero');
     expect(src).not.toMatch(/euro0|euro\(|accBalance\(/);   // ze lezen alleen datums en namen
   });
 });
@@ -198,7 +198,7 @@ test.describe('d · geen enkele berekening verandert', () => {
 
   test('accBalance leest nog steeds alleen het bedrag', async ({ page }) => {
     await boot(page, {});
-    const src = await page.evaluate(() => accBalance.toString().replace(/\/\*[\s\S]*?\*\//g, ''));
+    const src = await kaalUit(page, 'accBalance');
     expect(src).not.toMatch(/\.date|manualBalDatum/);
   });
 });
@@ -299,7 +299,7 @@ test.describe('f · de regel staat in de opbouw-sheet, bij het saldo', () => {
 
   test('renderReminder is ongemoeid: die gaat over verouderde transacties', async ({ page }) => {
     await boot(page, {});
-    const src = await page.evaluate(() => renderReminder.toString().replace(/\/\*[\s\S]*?\*\//g, ''));
+    const src = await kaalUit(page, 'renderReminder');
     expect(src).toContain('laatsteImport()');
     expect(src).not.toMatch(/saldoAchter|accBalanceDatum/);
   });

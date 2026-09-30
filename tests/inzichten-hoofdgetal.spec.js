@@ -24,6 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const { pinDag, DAGEN_OVER } = require('./vaste-dag');
 const { sectieVan } = require('./bron-sectie.js');
+const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 
@@ -533,8 +534,7 @@ test.describe('j - de bron: een bron per getal en geen extra dure aanroep', () =
   });
 
   test('nogDezeMaandPosten draagt de post en zijn twee bronnen niet meer', () => {
-    const f = sectieVan(SRC, 'function nogDezeMaandPosten(){')
-      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const f = kaalBron(sectieVan(SRC, 'function nogDezeMaandPosten(){'));
     expect(f).not.toContain('varPotjeStand' + '(');
     expect(f).not.toContain('varPlanRemaining' + '(');
     expect(f).not.toContain('Nog uit je potjes');

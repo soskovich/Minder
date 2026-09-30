@@ -4,6 +4,7 @@
 // verwijzing naar 'act' staat.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const RES = 'NL01RESE0000009999';
@@ -36,7 +37,7 @@ async function boot(page, o) {
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof coStart === 'function');
 }
-const kaal = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+const kaal = kaalBron;   // v309: de gedeelde strip (tests/bron-kaal.js)
 
 test.describe('a · het scherm bestaat niet meer', () => {
   test('geen sectie, geen nav-item, geen renderer', async ({ page }) => {
@@ -57,8 +58,8 @@ test.describe('a · het scherm bestaat niet meer', () => {
 
   test('geen enkele functie noemt het scherm nog, comments niet meegeteld', async ({ page }) => {
     await boot(page);
-    const treffers = await page.evaluate(() => {
-      const kaal = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const treffers = await page.evaluate((kj) => {
+      const kaal = eval(kj);   // v309: de gedeelde strip, geinjecteerd (tests/bron-kaal.js)
       const uit = [];
       for (const n of Object.getOwnPropertyNames(window)) {
         let f; try { f = window[n]; } catch (_) { continue; }
@@ -67,7 +68,7 @@ test.describe('a · het scherm bestaat niet meer', () => {
         if (/go\(['"]act['"]\)|s-act|renderActions|toggleActDeep|toggleStep\(/.test(src)) uit.push(n);
       }
       return uit;
-    });
+    }, KAAL_JS);
     expect(treffers).toEqual([]);
   });
 
@@ -115,8 +116,8 @@ test.describe('b · de vier gespreksingangen blijven werken', () => {
 
   test('elk van de vier schermen draagt zijn eigen ingang', async ({ page }) => {
     await boot(page);
-    const r = await page.evaluate(() => {
-      const kaal = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const r = await page.evaluate((kj) => {
+      const kaal = eval(kj);   // v309: de gedeelde strip, geinjecteerd (tests/bron-kaal.js)
       /* v235: de Valt op-kaart op Inzichten is vervallen en met haar de CTA-voetregel. De
          lek-ingang hangt nu aan de chevron in de kop van de open valt-op-kaart op Grip. Grip draagt
          daarmee twee ingangen; Inzichten draagt er geen meer. Wat deze test vasthoudt is dat elk
@@ -125,7 +126,7 @@ test.describe('b · de vier gespreksingangen blijven werken', () => {
         plan: /coStart\('horizon'/.test(kaal(coHorizonVraag.toString())),
         maand: /coStart\('maand'/.test(kaal(maandCoachIngang.toString())),
         algemeen: /coStart\('algemeen'/.test(kaal(maandCoachIngang.toString())) };
-    });
+    }, KAAL_JS);
     expect(r).toEqual({ ins: true, plan: true, maand: true, algemeen: true });
   });
 
@@ -135,8 +136,8 @@ test.describe('b · de vier gespreksingangen blijven werken', () => {
      opent' zonder aanleiding; het gesprek is voortaan altijd een antwoord op iets. */
   test('algemeen wordt alleen contextueel opgeroepen', async ({ page }) => {
     await boot(page);
-    const r = await page.evaluate(() => {
-      const kaal = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const r = await page.evaluate((kj) => {
+      const kaal = eval(kj);   // v309: de gedeelde strip, geinjecteerd (tests/bron-kaal.js)
       const uit = [];
       for (const n of Object.getOwnPropertyNames(window)) {
         let f; try { f = window[n]; } catch (_) { continue; }
@@ -145,7 +146,7 @@ test.describe('b · de vier gespreksingangen blijven werken', () => {
         if (/coStart\('algemeen'/.test(src)) uit.push(n);
       }
       return uit.sort();
-    });
+    }, KAAL_JS);
     expect(r.length).toBeGreaterThan(0);
     expect(r).toContain('maandCoachIngang');       // alles ok: een rustige vraag
     expect(r).toContain('scoreNotifs');            // het geparkeerde-aankoopsignaal

@@ -26,6 +26,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -219,7 +220,7 @@ test.describe('c · de zin claimt geen winkel', () => {
     expect(i).toBeGreaterThan(-1);
     const eind = src.indexOf('\nfunction ', i + 10);
     const body = src.slice(i, eind);
-    const kaal = body.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:\w])\/\/[^\n]*/g, '$1');
+    const kaal = kaalBron(body);   // v309: de gedeelde strip (tests/bron-kaal.js)
     expect(kaal).not.toMatch(/winkel/i);
   });
 });

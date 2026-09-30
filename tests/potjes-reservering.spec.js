@@ -20,6 +20,7 @@ const { test, expect } = require('@playwright/test');
    voor een overschreden potje `bud/dim * 0` en het gat is dan exact gelijk aan de overschrijding.
    Dezelfde as als de zeven dagwoord-tests van v299, een dag verderop, en dus dezelfde pin. */
 const { pinDag } = require('./vaste-dag');
+const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -245,11 +246,13 @@ test.describe('c · de twee functies naast elkaar', () => {
     /* De bron zonder commentaar: een naam die alleen in een comment staat is geen lezer, en dit
        bestand legt juist in commentaar uit welke functie waar gebleven is. */
     const r = await page.evaluate(() => {
-      const kaal = (f) => f.toString().replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-      return { rest: kaal(potjeRest).replace(/\s+/g, ' '),
+      const kaal = (f) => f.toString();     // v309: strippen gebeurt in Node, na de evaluate
+      return { rest: kaal(potjeRest),
         plan: kaal(varPlanRemaining), reserve: kaal(varPotjesReserve),
         sheet: kaal(openReservedPotjes), safe: kaal(safeToSpend) };
     });
+    for (const k of Object.keys(r)) r[k] = kaalBron(r[k]);   // v309: strippen in Node, op een plek
+    r.rest = r.rest.replace(/\s+/g, ' ');
     // beide takken rekenen met dezelfde resterende dagen, en de tak met ruimte klemt erop
     expect(r.rest).toContain('const tempo=Math.round(bud/Math.max(dim,1)*Math.max(daysLeft,0));');
     expect(r.rest).toContain('return Math.min(bud-uitgegeven, tempo);');

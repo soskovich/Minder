@@ -8,6 +8,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR, M1 } = require('./budget-fixture');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const MFULL = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
 const naam = (m) => MFULL[+m.slice(5, 7) - 1];
@@ -31,7 +32,7 @@ test.describe('a - op Vermogen, niet op Maand', () => {
     expect(await tekst(page, 'vermogen')).toMatch(/spaarquote/i);
     expect(await tekst(page, 'maand')).not.toMatch(/spaarquote/i);
     expect(await page.evaluate(() => document.querySelectorAll('#s-maand [data-kpi]').length)).toBe(0);
-    expect(await page.evaluate(() => /maandKpiBlok/.test(renderMaand.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);
+    expect(/maandKpiBlok/.test(await kaalUit(page, 'renderMaand'))).toBe(false);
   });
 
   test('ook bij een afgesloten maand op de kiezer staat hij niet op Maand', async ({ page }) => {

@@ -4,6 +4,7 @@
 // niet aangeroepen. Verplichtingen voer je zelf in; niets wordt uit transacties gedetecteerd.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -407,8 +408,7 @@ test.describe('h · weergave', () => {
     expect(r.scherm).toContain('Dekking reserveringen');
     /* En resDekkingCard roept die zin niet meer aan. Commentaar telt niet als aanroep: de functie
        legt in een comment uit wat er stond en waarom (dezelfde meetfout als v164). */
-    const kaal = (await page.evaluate(() => resDekkingCard.toString()))
-      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const kaal = await kaalUit(page, 'resDekkingCard');
     expect(kaal).not.toContain('dekkingTekst');
     expect(kaal).not.toContain('D.graad');
   });

@@ -22,6 +22,7 @@
  * De service worker staat globaal uit via playwright.config.js.
  */
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const OUD = 'psd2_94a07621';            // de wees: geen eigen IBAN, dus een nieuwe id bij een herkoppeling
 const NIEUW = '100110012351717586';     // zijn opvolger, id uit ibanNum()
@@ -256,7 +257,7 @@ test.describe('3 · de tijd uit de desc is een scheider en nooit een samenvoeger
 
   test('_descTijden leest BETAALDATUM_RE en geen eigen patroon', async ({ page }) => {
     await boot(page);
-    const src = await page.evaluate(() => _descTijden.toString().replace(/\/\*[\s\S]*?\*\//g, ''));
+    const src = await kaalUit(page, '_descTijden');
     expect(src).toContain('BETAALDATUM_RE.source');
     expect(src).not.toMatch(/\\d\{2\}\)\[\.\\-/);        // geen tweede uitgeschreven patroon
     expect(src).not.toMatch(/betaalTijd|betaalMoment/);  // en geen lezer van het veld van v273

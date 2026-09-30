@@ -15,6 +15,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -251,7 +252,7 @@ test.describe('het meetscript', () => {
     expect(uit).not.toContain('[object Object]');
     // leest alleen
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
-    const bron = fs.readFileSync('piekdag-meten.js', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const bron = kaalBron(fs.readFileSync('piekdag-meten.js', 'utf8'));
     expect(bron).not.toMatch(/save\(\)|localStorage\.|fetch\(|XMLHttpRequest|SET\s*\./);
   });
 });

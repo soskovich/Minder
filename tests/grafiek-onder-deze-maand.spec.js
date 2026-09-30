@@ -17,6 +17,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 /* GRAFIEK_MIN is 6 afgeronde maanden; 8 maanden fixture geeft er 7.
    go() rendert alleen 'maand' opnieuw; de andere schermen leunen op de render bij het opstarten.
@@ -130,7 +131,7 @@ test.describe('d - wat niet met hem mee verhuisde', () => {
   test('de abonnementenkaart is niet mee naar Inzichten gegaan', async ({ page }) => {
     await boot(page);
     expect(await tekst(page, 'ins')).not.toMatch(/abonnementen/i);
-    expect(await page.evaluate(() => /subsCard/.test(renderIns.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);
+    expect(/subsCard/.test(await kaalUit(page, 'renderIns'))).toBe(false);
   });
 
   /* Wat de grafiek meet is niet aangeraakt: de lopende maand blijft eruit (v194). Dit staat hier

@@ -6,6 +6,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 async function boot(page, scherm, payload) {
   await open(page, payload || seed());
@@ -64,8 +65,8 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
     expect(t.maand).not.toMatch(/uitgaven vs budget/i);
     /* Zonder comments gemeten: renderMaand() noemt de functie nog in een comment dat vertelt dát
        hij verhuisd is, en een naam in een comment is geen aanroep. */
-    expect(await page.evaluate(() => /spendVsBudgetChart/.test(renderIns.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(true);
-    expect(await page.evaluate(() => /spendVsBudgetChart/.test(renderMaand.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);
+    expect(/spendVsBudgetChart/.test(await kaalUit(page, 'renderIns'))).toBe(true);
+    expect(/spendVsBudgetChart/.test(await kaalUit(page, 'renderMaand'))).toBe(false);
   });
 
   /* v231: de abonnementenkaart is van Maand af en de lijst staat onder Instellingen (Vaste
@@ -77,7 +78,7 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
     expect(t.maand).not.toMatch(/abonnementen/i);
     expect(t.ins).not.toMatch(/abonnementen/i);
     // comments tellen niet als verwijzing: renderMaand noemt subsCard nog in de notitie over de verhuizing
-    expect(await page.evaluate(() => /subsCard/.test((renderIns.toString() + renderMaand.toString()).replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);
+    expect(/subsCard/.test(await kaalUit(page, 'renderIns', 'renderMaand'))).toBe(false);
   });
 
   test('de ingang uit het coachgesprek wijst naar de nieuwe plek', async ({ page }) => {
@@ -126,8 +127,7 @@ test.describe('c · een maandregel laat je niet van scherm wisselen', () => {
   test('geen enkele maandregel stuurt je naar een ander scherm', async ({ page }) => {
     await boot(page, 'maand');
     const src = await page.evaluate(() => maandRegels.toString());
-    const kaal = src.replace(/\/\*[\s\S]*?\*\//g, ' ').split('\n')
-      .map((r) => r.replace(/(^|[^:\w])\/\/.*$/, '$1')).join(' ');
+    const kaal = kaalBron(src).split('\n').join(' ');   // v309: de gedeelde strip
     expect(kaal).not.toContain("go('ins')");
     expect(kaal).not.toContain("go('vooruit')");
     const acts = await page.evaluate(() => (maandRegels() || []).map((r) => r.act || ''));

@@ -290,6 +290,39 @@ genoemde versietag.)*
   ronde erover MAT blijft staan: `doelTempo()` en `p.eta` hielden beide de `alloc` van deze maand constant,
   dus de rij op Plan en de alinea eronder gaven dezelfde datum omdat ze dezelfde alloc lazen en niet omdat
   ze de doorzak modelleerden.
+- **EEN BRONZOEKENDE TEST LEEST DE BRON ZONDER COMMENTAAR, EN DIE STRIP STAAT OP EEN PLEK**
+  (`v309`): `tests/bron-kaal.js` draagt hem, met DRIE ingangen en EEN implementatie: `kaalBron(t)`
+  voor Node, `kaalUit(page, ...namen)` die de bron van app-functies uit de pagina haalt en hier
+  strept, en `KAAL_JS` als letterlijke bron om te injecteren. Die derde is nodig en geen luxe: een
+  test die over ALLE `window`-functies veegt kan geen namen meegeven, dus daar moet het strippen in
+  de pagina gebeuren, en dan reist dezelfde implementatie mee in plaats van dat er een tweede komt.
+  DE AANLEIDING IS GEMETEN EN NIET BEDACHT: een test die `fn.toString()` leest, leest de LIVE functie
+  MET haar commentaar. `een-definitie-variabel.spec.js` eiste dat `safeToSpend()` de tempo-som
+  aanroept, en die aanroep staat daar sinds `v254` NIET meer in de code maar nog wel twee keer in de
+  uitleg: GEMETEN nul treffers in de code, twee in de comments. Diezelfde test eiste hetzelfde van
+  `nogDezeMaandPosten()`, en daar werd het bij `v309` waar op precies dezelfde manier. Twee asserties
+  die groen stonden op een vermelding, en een van de twee al vijf ronden lang.
+  ER WAREN DRIE VERSCHILLENDE STRIPS, EN GEEN VAN DE DRIE WAS VOLLEDIG. GEMETEN over de suite: 21
+  bestanden streepten alleen BLOK-comments weg en 7 alleen REGEL-comments, verdeeld over 63 plekken.
+  In beide groepen kon een aanroep zich dus in de andere soort verstoppen. Dat is niet een reeks
+  incidenten maar een vorm: elke ronde schreef er een bij uit de spec ernaast.
+  DE STRIP IS VOORZICHTIG, en dat is de meetles uit dit bestand: een strip die elke `//` weghaalt
+  breekt op `https://` en op een `//` binnen een string, en dan lijkt een schrijver onzichtbaar
+  terwijl hij er staat. De gekozen vorm komt uit `dagbedrag-potjes.spec.js`, de enige van de drie die
+  compleet was, en hij vervangt een blok-comment door SPATIES zodat regelnummers blijven kloppen.
+  DE TRIPDRAAD IS DE VORM EN NIET HET GEVAL (`v271`/`v272`/`v293`): `bron-kaal.spec.js` eist dat GEEN
+  ENKELE spec zelf commentaar wegstreept, en dat de helper echte lezers heeft (ten minste 25, gemeten
+  33), want anders staat die eerste eis ook groen in een suite die helemaal niet meer naar de bron
+  kijkt. De sabotage staat er als TEST: een voorbeeldfunctie met een naam die alleen in een
+  blok-comment staat en een die alleen in een regel-comment staat, plus een echte aanroep ernaast.
+  `kaalUit()` FAALT LUID bij een naam die niet in de pagina bestaat, om dezelfde reden als
+  `sectieVan()`: een lege string laat elke `not.toContain` per constructie slagen.
+  DE VOLLE STRIP ZETTE ASSERTIES ROOD DIE OP EEN REGEL-COMMENT STONDEN, en die zijn per stuk
+  nagegaan in plaats van weggefilterd. Vier daarvan waren mijn eigen conversiefout (de strip weg zonder
+  de Node-kant erbij), en dat is meteen de reden dat deze omzetting per bestand met een assertie is
+  gedaan en niet met een regex over de suite: mijn eerste, blinde poging vrat twee ontvangers op
+  (`window[n].toStringkaalBron()`) en zette de helper binnen een `page.evaluate()`, waar hij niet
+  bestaat.
 - **HET HOOFDGETAL OP INZICHTEN IS VOORUITKIJKEND, EN DE POST IS VERHUISD EN NIET GEKOPIEERD**
   (`v309`): het grootste getal op de stand-kaart was `totals().spendNorm`, dus wat je AL kwijt was, en
   wat er nog in je potjes zit stond als vierde post onder "Nog deze maand". Die post is nu het
@@ -3617,6 +3650,22 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
 - **Een kleurinventaris loopt via de stylesheet, niet via computed colours.** Match elke CSS-regel
   die `--teal`/`--accent` noemt tegen het gerenderde scherm en neem elke inline stijl mee: een
   vergelijking op de berekende kleur mist `color-mix` en gradients.
+- **DE SUITE HEEFT EEN DATUM, EN DIE VERANDERT ZIJN UITSLAG** (`v309`, gemeten aan de maandgrens):
+  een volle run die op 30 september om 23:53 eindigde gaf 3150 groen en 3 rood, alle drie de
+  gedocumenteerde bekende. Dezelfde commit, zonder enige wijziging, om 00:29 op 1 oktober: VEERTIEN
+  rood in slechts vier van die specs. Dat is de maandwissel, en hij raakt de bekende plek:
+  `budget-fixture.js` bouwt zijn maandsleutels uit `new Date()` in Node en doet dat voor 73 specs,
+  en op dag 1 draagt de lopende maand geen historie. `contant-stand.spec.js` liep er 400 naast,
+  precies zijn opnamebedrag.
+  WAT DAARUIT VOLGT VOOR HET MELDEN: een groene suite is een meting op EEN MOMENT, en rond een
+  maandgrens is hij niet te reproduceren. Noem dus het moment bij de uitslag, en attribueer bij een
+  onverwachte rode eerst tegen DEZELFDE commit op DAT moment voordat je hem aan je wijziging
+  toeschrijft. Ik dacht eerst dat mijn eigen opruiming van vier dode render-takken de oorzaak was;
+  de stash-vergelijking wees de maand aan.
+  EN HET IS HET SCHERPSTE ARGUMENT DAT ER IS voor de ronde die `v299` al openliet: de fixtures naar
+  een vaste maand. Die ronde stond er als "een eigen ronde"; dit is wat het kost om hem uit te
+  stellen, namelijk een suite die twaalf keer per jaar een nacht lang niet als scheidsrechter kan
+  dienen.
 - **De looptijd van de suite is een meetinstrument.** Bij een suite waarvan je de normale duur
   kent, zegt een sprong meer dan de uitvoer. Van 2,8 naar 13,4 minuten zijn 88 timeouts van dertig
   seconden, en dat is een harder signaal dan een regel tekst die je makkelijk verkeerd leest. Kijk
@@ -3881,6 +3930,14 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
   opneemt, en als die sabotage groen blijft, zoek dan eerst het pad naar de code die je saboteerde.
   Blijft hij ook daarna groen, dan toetst de test iets anders dan hij zegt.
+- **EN ANDERSOM: EEN BRONZOEKENDE ASSERTIE DIE EEN AANROEP EIST, STAAT GROEN OP EEN VERMELDING**
+  (`v309`): dat is de spiegel van de meetles hieronder. Daar maakte commentaar een teller te STRENG;
+  hier maakt het een eis te ZWAK, want `fn.toString()` geeft de functie MET haar uitleg en een naam
+  in die uitleg is geen aanroep. GEMETEN: twee asserties in `een-definitie-variabel.spec.js` stonden
+  groen op een comment, en een van de twee al sinds `v254`. De vorm die dat afdekt staat als staande
+  regel bovenaan: er is EEN strip (`tests/bron-kaal.js`) en een tripdraad die een tweede verbiedt.
+  DE VRAAG DIE JE STELT bij zo'n assertie is dus niet alleen "kan hij rood worden", maar "kan hij
+  rood worden om de JUISTE reden": haalt hij zijn groen uit de code of uit de tekst eromheen.
 - **EEN BRONZOEKENDE TELLER MAAKT COMMENTAAR DEEL VAN ZIJN OPPERVLAK** (`v276`): de test die eist dat elke
   treffer van `betaalDatum`/`betaalTijd` binnen `betaalMoment`, `categorize` of een diagnoseblok ligt, viel op
   een COMMENT. Ik noemde `t.betaalDatum` in de uitleg boven de nieuwe valutadatum in `mapPsd2Tx()`, en die
@@ -3988,6 +4045,12 @@ maakt de stub betrouwbaar of meet in de spec eerst dat de tweede aanroep gelukt 
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
 `v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
+
+**Een bronzoekende test leest de bron via `tests/bron-kaal.js`.** `kaalBron(t)` in Node,
+`kaalUit(page, ...namen)` voor een app-functie uit de pagina, `KAAL_JS` om te injecteren in een
+sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `toContain` of
+`toMatch`: dat leest de functie MET haar commentaar, en dan is een naam in de uitleg genoeg om de
+assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
 (`minder-v309` → `minder-v310`, en zo verder). Dit is de enige plek waar die regel staat.

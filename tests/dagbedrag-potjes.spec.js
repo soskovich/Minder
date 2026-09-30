@@ -34,6 +34,7 @@ const { test, expect } = require('@playwright/test');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const fs = require('fs');
 const path = require('path');
+const { kaalBron } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -306,18 +307,8 @@ test.describe('e · het dagbedrag staat boven de vouw, en boven de signalen', ()
 
 test.describe('f · de bron: één afleiding van de resterende dagen', () => {
   const BRON = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  function strip(t) {
-    t = t.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
-    return t.split('\n').map((ln) => {
-      const m = /(^|[\s;})])\/\/(?!\/)/.exec(ln);
-      if (!m) return ln;
-      const voor = ln.slice(0, m.index + m[1].length);
-      if (/http/.test(ln.slice(Math.max(0, m.index - 8), m.index))) return ln;
-      const even = (x, c) => (x.split(c).length - 1) % 2 === 0;
-      if (!even(voor, "'") || !even(voor, '"') || !even(voor, '`')) return ln;
-      return voor;
-    }).join('\n');
-  }
+  // v309: de strip staat op EEN plek (tests/bron-kaal.js); deze vorm kwam hier vandaan.
+  const strip = kaalBron;
   const CODE = strip(BRON);
 
   test('maandDagenOver() bestaat en klemt op 1', () => {

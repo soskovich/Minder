@@ -21,6 +21,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { kaalBron } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -234,18 +235,8 @@ const BRON = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 /* Comments eruit, maar niet de // in een URL of in een string; blokcomments worden vervangen door
    spaties zodat de regelnummers in een foutmelding blijven kloppen. Overgenomen uit
    lokale-kalenderdag.spec.js, dezelfde valkuil (een te agressieve strip maakt schrijvers onzichtbaar). */
-function strip(t) {
-  t = t.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
-  return t.split('\n').map((ln) => {
-    const m = /(^|[\s;})])\/\/(?!\/)/.exec(ln);
-    if (!m) return ln;
-    const voor = ln.slice(0, m.index + m[1].length);
-    if (/http/.test(ln.slice(Math.max(0, m.index - 8), m.index))) return ln;
-    const even = (x, c) => (x.split(c).length - 1) % 2 === 0;
-    if (!even(voor, "'") || !even(voor, '"') || !even(voor, '`')) return ln;
-    return voor;
-  }).join('\n');
-}
+// v309: de strip staat op EEN plek (tests/bron-kaal.js); deze vorm kwam hier vandaan.
+const strip = kaalBron;
 const CODE = strip(BRON);
 
 /* De functie waarin een positie in de bron valt, plus zijn body. De koppen worden één keer

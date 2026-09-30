@@ -4,6 +4,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR, M1, M2, MAIN } = require('./budget-fixture');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const vorigeMaandTs = (dag) => {
   const n = new Date();
@@ -121,7 +122,7 @@ test.describe('c · niet te toetsen is een volwaardige uitkomst', () => {
     const U = await page.evaluate(() => afspraakUitkomst(vorigeAfspraak()));
     expect(U).toEqual({ status: 'niet te toetsen', tekst: 'ik ga minder uitgeven aan boodschappen', toen: null, nu: null });
     // de tekst noemt een categorie, maar er wordt niet op trefwoorden herkend
-    expect(await page.evaluate(() => /boodschappen|indexOf|match|test\(/.test(afspraakUitkomst.toString().replace(/\/\*[\s\S]*?\*\//g, '')))).toBe(false);
+    expect(/boodschappen|indexOf|match|test\(/.test(await kaalUit(page, 'afspraakUitkomst'))).toBe(false);
   });
 
   test('een regelKey zonder categorie is niet toetsbaar', async ({ page }) => {

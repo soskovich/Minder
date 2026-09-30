@@ -22,6 +22,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { kaalBron } = require('./bron-kaal');
 
 const NORM = 5216, EXTRA = 2550;   // de norm van het toestel, en 5.000 bruto op het bijzonder tarief
 const now = new Date();
@@ -325,16 +326,8 @@ test.describe('h · de bron kan niet uit elkaar lopen', () => {
      die zelf over income-boekingen telt, dan valt deze test. baseIncome() is de bewuste
      uitzondering: die is gemeten robuust (onderste-helft-mediaan) en blijft op verzoek ongemoeid. */
   const BRON = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  const CODE = BRON.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .split('\n').map((ln) => {
-      const m = /(^|[\s;})])\/\/(?!\/)/.exec(ln);
-      if (!m) return ln;
-      const voor = ln.slice(0, m.index + m[1].length);
-      if (/http/.test(ln.slice(Math.max(0, m.index - 8), m.index))) return ln;
-      const even = (x, c) => (x.split(c).length - 1) % 2 === 0;
-      if (!even(voor, "'") || !even(voor, '"') || !even(voor, '`')) return ln;
-      return voor;
-    }).join('\n');
+  // v309: de strip staat op EEN plek (tests/bron-kaal.js); deze vorm kwam hier vandaan.
+  const CODE = kaalBron(BRON);
 
   test('de drie lezers halen hun maandinkomen uit maandInkomen()', () => {
     const HEADERS = [...CODE.matchAll(/\nfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => ({ i: m.index, naam: m[1] }));

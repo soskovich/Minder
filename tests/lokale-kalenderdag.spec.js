@@ -10,24 +10,15 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const BRON = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 
 /* Comments eruit, maar niet de // in een URL of in een string: dat weghalen maakt juist regels
    onzichtbaar (die fout maakte de v197-analyse eerst onbruikbaar). Blokcomments worden door lege
    regels vervangen in plaats van verwijderd, zodat de regelnummers in een foutmelding kloppen. */
-function strip(t) {
-  t = t.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
-  return t.split('\n').map((ln) => {
-    const m = /(^|[\s;})])\/\/(?!\/)/.exec(ln);
-    if (!m) return ln;
-    const voor = ln.slice(0, m.index + m[1].length);
-    if (/http/.test(ln.slice(Math.max(0, m.index - 8), m.index))) return ln;
-    const even = (x, c) => (x.split(c).length - 1) % 2 === 0;
-    if (!even(voor, "'") || !even(voor, '"') || !even(voor, '`')) return ln;
-    return voor;
-  }).join('\n');
-}
+// v309: de strip staat op EEN plek (tests/bron-kaal.js); deze vorm kwam hier vandaan.
+const strip = kaalBron;
 const CODE = strip(BRON);
 const REGELS = CODE.split('\n');
 
@@ -162,7 +153,7 @@ test.describe('d · de accshort-sleutel noemt de dag die je ziet', () => {
     await page.route('**/sw.js', (r) => r.abort());
     await page.goto('/index.html');
     await page.waitForFunction(() => typeof scoreNotifs === 'function');
-    const src = await page.evaluate(() => scoreNotifs.toString().replace(/\/\*[\s\S]*?\*\//g, ''));
+    const src = await kaalUit(page, 'scoreNotifs');
     expect(src).toContain("'accshort-'+s.acc+'-'+ymdVan(s.t)");
     expect(src).not.toMatch(/accshort[^;]*toISOString/);
   });

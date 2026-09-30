@@ -11,6 +11,7 @@ const { test, expect } = require('@playwright/test');
    Sectie a en b worden er ook van: met een vaste dag staat vast welke van de vijf standen de regel
    onder de tegel laat zien. */
 const { pinDag } = require('./vaste-dag');
+const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -187,17 +188,47 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
         const m = curMonth || months()[months().length - 1];
         const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
         const t = d.innerText.replace(/\s+/g, ' ');
+        /* v309: het variabele deel staat op Inzichten in het ACHTERVOEGSEL van het hoofdgetal op de
+           stand-kaart. Tot deze reparatie las deze test `.nog-noot` uit `nogDezeMaandBody()`, en die
+           is sinds de verhuizing ALTIJD leeg: `op` was dus per constructie null en de assertie
+           erachter onbereikbaar (meetles a). */
+        go('ins'); const k = document.getElementById('insStand');
+        const rij = k ? [...k.querySelectorAll('div.row')]
+          .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
+        const sp = rij ? [...rij.querySelectorAll('span')] : [];
+        const vol = sp.length > 1 ? sp[1].innerText.replace(/\s+/g, ' ').trim() : '';
+        const achter = vol.includes(' \u00b7 ') ? vol.slice(vol.indexOf(' \u00b7 ') + 3) : '';
+        const eur = (x) => { const y = String(x).match(/\u20ac([\d.]+)/); return y ? +y[1].replace(/\./g, '') : null; };
+        /* DE BRON ZONDER COMMENTAAR. Deze assertie las `safeToSpend.toString()`, en dat is de LIVE
+           functie MET haar comments; daar staat `varPlanRemaining()` nog in de uitleg terwijl de code
+           hem sinds v254 niet meer aanroept. GEMETEN: nul treffers in de code, twee in de comments,
+           dus deze test stond groen op een comment, en na v309 gold datzelfde voor
+           `nogDezeMaandPosten`. Dat is meetles v276 bij een test die de live functie leest. */
+        const kaal = (f) => f.toString();     // v309: strippen gebeurt in Node, hieronder
         return { bron: varPlanRemaining(m), home: Math.round(safeToSpend().reserved),
           reserve: varPotjesReserve(m), gat: varPlanRemaining(m) - (varPotjeStand(m).budget - varPotjeStand(m).gebruikt),
-          inzichten: { noot: (d.querySelector('.nog-noot') || {}).innerText || '', alles: d.innerText },
+          inPotjes: varPotjeStand(m).budget - varPotjeStand(m).gebruikt,
+          kop: sp.length ? eur(sp[0].innerText) : null,
+          inzichten: { noot: /tekort/.test(achter) ? achter : '' },
           tekst: t,
-          srcSafe: safeToSpend.toString(), srcBody: nogDezeMaandPosten.toString() };
+          srcSafe: kaal(safeToSpend), srcKaart: kaal(insBudgetBlok), srcStand: kaal(varPotjeStand) };
       });
+      for (const k of ['srcSafe', 'srcKaart', 'srcStand']) r[k] = kaalBron(r[k]);   // v309: in Node
       expect(r.home).toBe(r.reserve);   // v254: Home leest de reservering, Inzichten de tempo-som
       const op = schermNoot(r.inzichten);
-      if (op != null) expect(op).toBe(r.bron);     // v308: zie de helper; geen regel, geen bedrag
-      expect(r.srcSafe).toContain('varPlanRemaining(');
-      expect(r.srcBody).toContain('varPlanRemaining(');
+      /* v309: het achtervoegsel draagt het GAT en niet de tempo-som, want met beide bedragen breekt
+         de kop op 360px. De tempo-som volgt uit het restant erboven plus dat gat, en die aansluiting
+         is wat hier vastligt. */
+      expect(op != null).toBe(r.gat > 0 && r.inPotjes > 0);
+      if (op != null) { expect(op).toBe(r.gat); expect(r.kop + op).toBe(r.bron); }
+      /* EEN BRON PER GETAL, op de functie die hem WERKELIJK aanroept en op comment-vrije code.
+         Home telt de reservering (v254), de kaart leest varPotjeStand(), en die ene functie is de
+         enige plek die de tempo-som aanroept. */
+      expect(r.srcSafe).toContain('varPotjesReserve(');
+      expect(r.srcSafe).not.toContain('varPlanRemaining(');
+      expect(r.srcKaart).toContain('varPotjeStand(');
+      expect(r.srcKaart).not.toContain('varPlanRemaining(');
+      expect(r.srcStand).toContain('varPlanRemaining(');
       // en er staat geen getal meer dat die planrest bij een waarneming optelt
       expect(r.tekst).not.toMatch(/eigen kracht/i);
     });
@@ -219,8 +250,7 @@ test.describe('c · het tempo is prognose, geen grondslag', () => {
     expect(r.varDue).not.toBe(r.plan);              // en die wijkt in deze fixture echt af
     /* Geen van de drie plekken rekent nog met het tempo. Commentaar telt niet als gebruik: beide
        functies leggen in een comment uit waar varDue stond, en dat is precies de bedoeling. */
-    const kaal = (t) => t.replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .replace(/(^|[^:\w])\/\/[^\n]*/g, '$1');
+    const kaal = kaalBron;   // v309: de gedeelde strip (tests/bron-kaal.js)
     for (const [naam, src] of [['nogDezeMaandBody', r.ndm], ['coachStatus', r.coach]]) {
       expect(kaal(src), naam).not.toMatch(/varDue/);
     }

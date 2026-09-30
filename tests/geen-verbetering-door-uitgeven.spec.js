@@ -13,6 +13,7 @@ const { test, expect } = require('@playwright/test');
    dag van de maand is hij nul: dan staat de regel onder de tegel in geen enkele stap, en is de eis
    dat hij de bron draagt nergens getoetst. Dezelfde pin als de zes potjes-tests van v306. */
 const { pinDag } = require('./vaste-dag');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const now = new Date();
@@ -193,8 +194,9 @@ test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
     const r = await page.evaluate(() => {
       const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
       return { chips: d.querySelectorAll('.wvo-chip').length, streep: d.querySelectorAll('.ndm-net').length,
-        src: nogDezeMaandBody.toString().replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '') };
+        src: nogDezeMaandBody.toString() };
     });
+    r.src = kaalBron(r.src);        // v309: strippen in Node, op een plek
     expect(r.chips).toBe(0);
     expect(r.streep).toBe(0);
     expect(r.src).not.toContain('netto');

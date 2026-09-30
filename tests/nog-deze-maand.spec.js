@@ -5,6 +5,7 @@
 // scheiding. Er telt hier niets op, dus vier tegels suggereren geen waterval.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalBron, kaalUit } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -193,8 +194,7 @@ test.describe('b · er telt niets op in dit blok', () => {
   test('de bron rekent niets samen', async ({ page }) => {
     await boot(page);
     // commentaar telt niet: de v169-notitie noemt bedragen met een minteken erin
-    const src = await page.evaluate(() => nogDezeMaandBody.toString()
-      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, ''));
+    const src = await kaalUit(page, 'nogDezeMaandBody');
     // geen aftrekking of optelling tussen de drie posten (dat was de chip van v192)
     expect(src).not.toMatch(/incDue\s*-\s*/);
     expect(src).not.toMatch(/teOntvangen\s*-\s*teBetalen/);
