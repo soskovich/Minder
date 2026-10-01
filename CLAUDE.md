@@ -161,8 +161,11 @@ genoemde versietag.)*
   geval bij (meetles o).
   DE STIPPELLIJN STAAT IN DE TAK VAN DE ONTVANGER, op de plek en de breedte van het segment van de
   GEVER, dus in hetzelfde assenstelsel als de inlegbalk en recht onder het volle blok van de gever.
-  Een lijn die de twee rijen echt verbindt zou de posities na het renderen moeten opmeten, en dat
-  doet niets in dit bestand; dat is de afwijking van de mockup en hij staat hier benoemd.
+  EEN LIJN DIE DE TWEE RIJEN ECHT VERBINDT KOMT ER NIET, en dat is sinds `v317` een besluit en geen
+  openstaande afwijking van de mockup: het blok in de tak plus de tekstregel eronder zegt hetzelfde
+  (van wie, hoeveel breed, vanaf welke maand), en een doorlopende lijn zou de posities NA het
+  renderen moeten opmeten. Zo'n meet-hook bestaat nergens in dit bestand, en hij zou een tweede bron
+  worden voor een plek die de segmenten al dragen (`v104`).
   GEEN BEDRAG IN DE REGEL: het blok IS het segment van de gever en draagt dus de maat, en de rij van
   de gever draagt het getal. Een bedrag erbij zou een tweede bron voor datzelfde getal zijn (`v104`)
   en het zou niet kloppen voor de vulmaand, waarin de gever nog zijn laatste rest neemt.
