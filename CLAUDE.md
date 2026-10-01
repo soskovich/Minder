@@ -97,6 +97,25 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **OPEN PUNT, GEMETEN EN NIET GEREPAREERD: DE WATERVAL REKENT IN HELE JAREN OVER EEN MAANDELIJKS
+  MOMENT** (`v310`): `fireInputs()` doet `wens = _res + ((year < volYear) ? 0 : _doel)`, dus de
+  spaardoelen tellen pas mee vanaf het JAAR waarin het noodfonds vol is. `volYear` komt uit het
+  spaarSALDO en niet uit de toewijzing, en dat is `v216`/`v305` en geen vergissing.
+  HET GEVOLG IS EEN VERHAAL DAT MET DE KALENDER MEEBEWEEGT ZONDER DAT ER AAN JE GELD IETS VERANDERT.
+  GEMETEN op dezelfde fixture met klok en gegevens uitgelijnd: een noodfonds dat nog drie maanden
+  vulling nodig heeft, laat de waterval in SEPTEMBER zeggen dat je bestemmingen `€0 van €2.600` vragen
+  (december valt in hetzelfde jaar) en in OKTOBER `€0 van €100` (januari valt in het volgende). Het
+  verschil is precies de spaardoelen-term van 2.500.
+  DAT IS GEEN FIXTURE-PROBLEEM, en dat onderscheid is de reden dat dit hier staat: de fixture van
+  `inleg-voor-bestemming` is bij `v310` gerepareerd omdat hij iets anders droeg dan zijn eigen `vol`
+  zei (een toewijzing van 8.000 op een saldo van 2.000), en daarmee is de spec maand-onafhankelijk.
+  Wat eronder ligt blijft: voor een gebruiker die zijn buffer in januari vol heeft, zwijgt de hele
+  rest van het voorgaande jaar over zijn spaardoelen.
+  WIE DIT OPPAKT KIEST EERST DE EENHEID. De hele `fireInputs()`-laag rekent per jaar (`v32`: laag B is
+  puur en de projectie loopt per jaar), dus de spaardoelen per MAAND laten meelopen is geen
+  reparatie van deze regel maar een andere as voor die laag. De tussenvorm is de term wegen naar het
+  deel van het jaar dat NA `volYear`'s maand ligt, en dat is een derde uitdrukking van hetzelfde
+  moment; dan hoort hij uit een bestaande bron te komen en niet ernaast geschreven (`v104`).
 - **DE POORT WORDT EEN KEER PER STAND VAN DE GEGEVENS UITGEREKEND** (`v310`): `telbareTx()` filterde bij
   ELKE aanroep de hele `TX` door de vier poorten, en `dubbelWeg()` en `vorautWeg()` lopen PER BOEKING over
   hun hele lijst paren, dus de lus is TX maal het aantal paren.
