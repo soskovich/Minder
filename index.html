@@ -1425,7 +1425,7 @@ const TELPOORTEN=[
    en een aanroeper die hem ooit sorteert zou de cache stil bederven. GEMETEN kost die slice 12 ms
    van de 1059 aanroepen op Grip, tegen de 582 ms die de memo weghaalt. */
 let _telbaar=null, _telbaarGen=-1;
-function telbaarVergeten(){ _telbaar=null; _telbaarGen=-1; }
+function telbaarVergeten(){ _telbaar=null; _telbaarGen=-1; _txm=null; _txmGen=-1; }   // v311: txOfMonth hangt aan dezelfde twee dingen, dus een tweede vergeet-functie zou uiteenlopen
 function telbareTx(behalve){
   const k=behalve||'';
   if(_telbaarGen!==_dataGen || !_telbaar){ _telbaar={}; _telbaarGen=_dataGen; }
@@ -1435,7 +1435,24 @@ function telbareTx(behalve){
 /* DE POORT IN TWEE STUKKEN BLIJFT (v293): `vorautBron()` is de poort ZONDER zijn eigen uitkomst, want een
    bevestigd drietal moet in de LIJST blijven staan of de keuze is niet terug te draaien (v288). */
 function vorautBron(){ return telbareTx('voraut'); }
-function txOfMonth(m){ return telbareTx().filter(t=>t.date.slice(0,7)===m); }
+/* v311: DEZELFDE MEMO-VORM ALS `telbareTx()`, PER MAAND. Die eerste memo haalde de poort-evaluaties
+   weg, maar de FILTER bleef per aanroep over de hele `TX` lopen: GEMETEN op de fixture van v310 (TX
+   1597, 21 maanden) doet `renderMaand()` 1053 aanroepen en `openBudgetEditor()` 378, dus ruim anderhalf
+   miljoen datum-vergelijkingen per render van Grip.
+   DE SLEUTEL IS DE MAAND NAAST `_dataGen`, want dat is het enige argument. Een lezer vraagt dezelfde
+   maand tientallen keren binnen een render, en de maandas zelf verandert alleen als de gegevens
+   veranderen; `telbaarVergeten()` gooit beide caches samen weg, want ze hangen aan precies dezelfde
+   twee dingen (de teller en de paar-vensters) en twee invalidaties naast elkaar zouden uiteenlopen.
+   HIJ GEEFT EEN EIGEN ARRAY TERUG, en dat is hier zwaarder dan bij `telbareTx()`: `totals().list` IS
+   deze array, en een aanroeper die `list` ooit sorteert zou de cache bederven. De slice gaat over de
+   boekingen van EEN maand en niet over de hele TX, dus hij kost een fractie van wat hij afdekt. */
+let _txm=null, _txmGen=-1;
+function txOfMonth(m){
+  if(_txmGen!==_dataGen || !_txm){ _txm={}; _txmGen=_dataGen; }
+  const k=String(m);
+  if(!_txm[k]) _txm[k]=telbareTx().filter(t=>t.date.slice(0,7)===k);
+  return _txm[k].slice();
+}
 /* v264: DE WEEKAS, ALS BRON EN NOG ZONDER SCHERM. Blokken van zeven dagen vanaf de 1e van elke
    maand, dus 1-7, 8-14, 15-21 en 22-28; wat er daarna van de maand overblijft is GEEN blok en komt
    hier niet in voor. GEREKEND op de kalender van 2026: kalenderweken laten 10,1 procent van de
@@ -3405,16 +3422,39 @@ function laatsteImport(){
   return {datum, dagen:Math.floor((Date.now()-new Date(datum))/86400000)};
 }
 // dezelfde tik als de herinnering: één ingang om je data bij te werken, geen tweede CTA-patroon
+/* v311: DRIE TAKKEN, EN DE BANK GAAT VOOR HET BESTAND. Deze functie gaf altijd een bestand-route,
+   ook bij een gebruiker die zijn gegevens via een bankkoppeling binnenhaalt; die kreeg dus
+   "Bestand toevoegen" aangeboden terwijl er geen bestand te kiezen valt. Dat is een label dat een
+   handeling belooft die bij hem niet bestaat.
+   DE DERDE TAK KOMT UIT `v280` EN NIET UIT DE OPDRACHT, en dat is een afwijking die hier hoort te
+   staan: haalt de koppeling geen gegevens op, dan is "vernieuwen precies wat net niets opleverde"
+   en is opnieuw verbinden de handeling. Zonder die tak zou deze functie een gebruiker met een
+   kapotte koppeling een knop geven die per constructie niets doet.
+   DE TOETS KOMT UIT `bankStand()` en wordt niet opnieuw uitgedrukt (`v104`): dat is de ENE plek die
+   zegt hoeveel rekeningen er gekoppeld zijn en of de verbinding verlopen of stuk is.
+   `zin` HOORT ERBIJ EN IS GEEN LUXE: `renderReminder()` zei onvoorwaardelijk "Importeer je nieuwste
+   bankbestand", en naast een knop "Vernieuwen" is dat twee verschillende handelingen in een regel.
+   De zin komt daarom uit dezelfde bron als de knop; een tweede formulering ernaast zou bij de eerste
+   herziening uiteenlopen (`v91`). */
 function importCta(){
-  return {act:(FSA&&SET.folderName)?'syncFolder(true)':"document.getElementById('file').click()",
-          lab:(FSA&&SET.folderName)?'Synchroniseer map':'Bestand toevoegen'};
+  let B=null; try{ B=bankStand(); }catch(_){}
+  if(B && B.n>0){
+    if(B.verlopen||B.stuk) return {act:'psd2Connect()', lab:'Opnieuw verbinden',
+      zin:'Je bankkoppeling haalt nu geen gegevens op, dus opnieuw inloggen is de stap.'};
+    return {act:'psd2Refresh(false)', lab:'Vernieuwen',
+      zin:'Vernieuw je bankkoppeling voor een actueel beeld.'};
+  }
+  const map=FSA&&SET.folderName;
+  return {act:map?'syncFolder(true)':"document.getElementById('file').click()",
+          lab:map?'Synchroniseer map':'Bestand toevoegen',
+          zin:map?'Synchroniseer je map voor een actueel beeld.':'Importeer je nieuwste bankbestand voor een actueel beeld.'};
 }
 function renderReminder(){
   const L=laatsteImport(); if(!L) return '';
   const days=L.dagen;
   if(days<8) return '';
-  const {act,lab}=importCta();
-  return `<div class="signal warn" style="margin-bottom:2px"><div class="si">${ICON('clock')}</div><div class="st"><b>Je data is ${days} dagen oud.</b> Importeer je nieuwste bankbestand voor een actueel beeld. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="${act}">${lab} ›</span></div></div>`;
+  const {act,lab,zin}=importCta();
+  return `<div class="signal warn" style="margin-bottom:2px"><div class="si">${ICON('clock')}</div><div class="st"><b>Je data is ${days} dagen oud.</b> ${esc(zin)} <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="${act}">${lab} ›</span></div></div>`;
 }
 function toast(msg){ let el=document.getElementById('toast'); if(!el){ el=document.createElement('div'); el.id='toast'; document.body.appendChild(el); } el.innerHTML=msg; el.className='show'; clearTimeout(window._tt); window._tt=setTimeout(()=>{el.className='';},3500); }
 
@@ -12576,11 +12616,36 @@ function insBudgetBlok(m){
     /* v241: hier stond een tweede maandKiezerKop(). De kiezer staat sinds v241 in de eyebrow
        boven de kaart, dus deze tak zette hem een tweede keer neer zodra er over deze maand nog
        geen data was. Dat was een echte dubbeling en geen bijwerking van de herindeling. */
-    return `<div>
-      <div class="row" style="align-items:baseline;gap:8px">
+    /* v311: DE POTJES VERDWIJNEN NIET VAN DE PAGINA. Deze tak zette `onbekend` als hoofdgetal en
+       daarmee stond er op een dag zonder boekingen van deze maand nergens meer wat je deze maand aan
+       potjes hebt staan: het grootste getal van het scherm was een woord, en de potjes waren pas weer
+       te zien zodra er data binnenkwam. Wat er nu staat is je POTJESBEDRAG, met `uitgegeven: nog
+       onbekend` eronder.
+       HET IS EEN BUDGET EN GEEN RESTANT, en dat verschil zit in het WOORD en niet in het getal: met
+       nul boekingen is het restant rekenkundig gelijk aan het budget, dus "nog in je potjes" zou
+       hetzelfde cijfer tonen en tegelijk beweren dat er gemeten is wat je gebruikte. Daarom "in je
+       potjes deze maand" en niet "nog in je potjes". Dat is dezelfde grens als `v59`/`v73`/`v173`:
+       nul uitgaven en geen data zijn niet hetzelfde.
+       HET IS DE POTJES-BRON (`varBudget()`) EN NIET `totals().budget`, want het label zegt "je
+       potjes" en dat woord hoort sinds `v309` bij precies dat getal (`v91`). Zonder variabele potjes
+       is er niets te noemen en blijft de oude vorm staan.
+       ALLEEN OP DE LOPENDE MAAND, om dezelfde reden als `v309`: `varBudget()` leest `SET.budgets` en
+       dat is de map van de LOPENDE maand, dus bij een andere maand zou dit getal een bedrag van nu
+       naast een maand van toen zetten.
+       DE ZIN BLIJFT DE REDEN, en het bedrag claimt niets over je uitgaven: wat er niet gemeten is
+       staat er met zoveel woorden. */
+    let vb=0; if(isLopendeMaand(m)){ try{ vb=varBudget(); }catch(_){ vb=0; } }
+    const datumZin=`Je laatste boeking is van ${new Date(L.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}, dus over deze maand is nog niets binnengekomen. Nul uitgaven en geen data zijn niet hetzelfde.`;
+    const kopLeeg = vb>0
+      ? `<div class="row" style="align-items:baseline;gap:6px">
+        <span style="font-size:var(--fs-xl);font-weight:800">${euro0(vb)}</span>
+        <span class="small muted" style="flex:1;min-width:0">in je potjes deze maand</span></div>
+      <div class="row small muted" style="align-items:baseline;gap:8px;margin-top:5px"><span>uitgegeven: nog onbekend</span></div>`
+      : `<div class="row" style="align-items:baseline;gap:8px">
         <span style="font-size:var(--fs-xl);font-weight:800;color:var(--mut)">onbekend</span>
-        <span class="small muted" style="flex:1;min-width:0">uitgegeven</span></div>
-      <div class="small" style="color:var(--mut);margin-top:6px;line-height:1.5">Je laatste boeking is van ${new Date(L.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}, dus over deze maand is nog niets binnengekomen. Nul uitgaven en geen data zijn niet hetzelfde.</div>
+        <span class="small muted" style="flex:1;min-width:0">uitgegeven</span></div>`;
+    return `<div>${kopLeeg}
+      <div class="small" style="color:var(--mut);margin-top:6px;line-height:1.5">${datumZin}</div>
       <div class="small" style="margin-top:6px"><span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="${act}">${esc(lab)} ›</span></div></div>`;
   }
   const usedPct=Math.round(sp/bud*100), dayPct=Math.round(d.elapsed/d.dim*100);

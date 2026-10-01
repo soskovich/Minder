@@ -86,12 +86,16 @@ test.describe('a - de poort wordt een keer per stand uitgerekend', () => {
       const uit = {};
       for (const [label, fn] of [['Home', renderDash], ['Inzichten', renderIns], ['Plan', renderVooruit],
         ['Grip', renderMaand], ['Vermogen', renderVermogen]]) {
-        let n = 0; const e = window.telbareTx;
-        window.telbareTx = function (...a) { n++; return e.apply(this, a); };
+        /* v311: DE GUARD TELT `txOfMonth` EN NIET `telbareTx`. Sinds de tweede memo vraagt een render
+           de poort hoogstens een keer per maand, dus "dit oppervlak roept telbareTx werkelijk aan"
+           staat op een warme memo per constructie op nul en zou deze test laten vallen om de
+           verkeerde reden. Wat de guard moet zeggen is dat het oppervlak de SNEDE echt leest. */
+        let n = 0; const e = window.txOfMonth;
+        window.txOfMonth = function (...a) { n++; return e.apply(this, a); };
         window.__poort = 0;
         fn();
         uit[label] = { aanroepen: n, poorten: window.__poort };
-        window.telbareTx = e;
+        window.txOfMonth = e;
       }
       uit._n = TX.length;
       return uit;
@@ -99,7 +103,7 @@ test.describe('a - de poort wordt een keer per stand uitgerekend', () => {
     const n = r._n;
     for (const [label, v] of Object.entries(r)) {
       if (label === '_n') continue;
-      expect(v.aanroepen, label + ' moet telbareTx werkelijk aanroepen, anders toetst deze test niets')
+      expect(v.aanroepen, label + ' moet de snede werkelijk lezen, anders toetst deze test niets')
         .toBeGreaterThan(5);
       /* DE LAT: ten hoogste vier passes over TX, ongeacht het aantal aanroepen. Vier omdat er drie
          `behalve`-sleutels bestaan ('', 'voraut', 'mt940') plus ruimte voor een vierde. Zonder de
@@ -306,6 +310,118 @@ test.describe('b2 - het contract: de memo volgt save()', () => {
   });
 });
 
+test.describe('a2 - txOfMonth vraagt de poort een keer per maand (v311)', () => {
+  /* DE MAAT IS HET AANTAL `telbareTx()`-AANROEPEN, en dat is de spiegel van blok a: daar meet het
+     aantal poort-evaluaties wat de EERSTE memo weghaalt, hier meet het aantal aanroepen van
+     `telbareTx()` wat de TWEEDE weghaalt. Beide zijn deterministisch; het aantal `txOfMonth()`-
+     aanroepen verandert door de memo niet (1053 blijft 1053) en kan de winst dus niet zien. */
+  test('een render vraagt de poort een keer per maand en niet een keer per aanroep', async ({ page }) => {
+    await pinDag(page); await open(page, groot());
+    const r = await page.evaluate(() => {
+      const uit = {};
+      const echtTel = window.telbareTx, echtTom = window.txOfMonth;
+      /* DIRECT TEGEN VIA-txOfMonth, en dat onderscheid is nodig en geen fijnslijpen: GEMETEN roept
+         `renderMaand()` de poort ZES keer rechtstreeks aan (`contantVerwacht()` en de andere lezers
+         van v285), en 1053 keer via `txOfMonth`. Een telling die die twee op een hoop gooit kan dus
+         niet op nul staan, en een marge eromheen zou de eigenschap niet meer meten. */
+      let diep = 0;
+      for (const [label, fn] of [['Home', renderDash], ['Inzichten', renderIns], ['Plan', renderVooruit],
+        ['Grip', renderMaand], ['Vermogen', renderVermogen]]) {
+        fn();                                            // de maanden die dit oppervlak leest staan nu in de memo
+        let viaTom = 0, direct = 0, tom = 0;
+        window.txOfMonth = function (...a) {
+          tom++; diep++;
+          try { return echtTom.apply(this, a); } finally { diep--; }
+        };
+        window.telbareTx = function (...a) { if (diep) viaTom++; else direct++; return echtTel.apply(this, a); };
+        fn();
+        window.telbareTx = echtTel; window.txOfMonth = echtTom;
+        uit[label] = { viaTom, direct, tom };
+      }
+      uit._maanden = months().length;
+      return uit;
+    });
+    for (const [label, v] of Object.entries(r)) {
+      if (label === '_maanden') continue;
+      expect(v.tom, label + ' moet txOfMonth werkelijk aanroepen, anders toetst dit niets')
+        .toBeGreaterThan(10);
+      /* ZONDER DE MEMO IS DIT GELIJK AAN `tom`, en dat is op Grip ruim duizend. */
+      expect(v.viaTom, label + ': ' + v.tom + ' txOfMonth-aanroepen vroegen de poort ' + v.viaTom + ' keer')
+        .toBe(0);
+    }
+    expect(r._maanden).toBeGreaterThan(18);
+  });
+
+  test('een koude memo vraagt de poort een keer per maand, en niet meer', async ({ page }) => {
+    await pinDag(page); await open(page, groot());
+    const r = await page.evaluate(() => {
+      telbaarVergeten();
+      const ms = months();
+      let tel = 0; const echt = window.telbareTx;
+      window.telbareTx = function (...a) { tel++; return echt.apply(this, a); };
+      for (const m of ms) txOfMonth(m);
+      const eerste = tel; tel = 0;
+      for (const m of ms) txOfMonth(m);
+      window.telbareTx = echt;
+      return { n: ms.length, eerste, tweede: tel };
+    });
+    expect(r.n).toBeGreaterThan(18);
+    expect(r.eerste, 'elke maand vraagt de poort een keer').toBe(r.n);
+    expect(r.tweede, 'de tweede ronde vraagt hem niet meer').toBe(0);
+  });
+
+  test('na een mutatie staat de nieuwe boeking in zijn eigen maand', async ({ page }) => {
+    await pinDag(page); await open(page, groot());
+    const r = await page.evaluate(() => {
+      const m = thisYM();
+      const voor = txOfMonth(m).length;
+      const andereVoor = txOfMonth(months()[1]).length;
+      commitTx([{ date: m + '-13', amount: -31, acc: OWN[0], name: 'Nieuwe Winkel',
+        desc: 'BEA, BETAALPAS NIEUWE WINKEL', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] }], null);
+      return { voor, na: txOfMonth(m).length, andereVoor, andereNa: txOfMonth(months()[1]).length };
+    });
+    expect(r.na).toBe(r.voor + 1);
+    /* DE ANDERE MAAND VERANDERT NIET, en dat is wat een memo PER MAAND moet dragen: zonder die
+       sleutel zou een mutatie in de lopende maand ook de uitkomst van een andere maand vervangen. */
+    expect(r.andereNa).toBe(r.andereVoor);
+  });
+
+  test('een bevestigd dubbel valt meteen uit de maand', async ({ page }) => {
+    await pinDag(page); await open(page, groot());
+    const r = await page.evaluate(() => {
+      const m = thisYM();
+      const t = txOfMonth(m).find((x) => x.name === 'Jumbo');
+      const voor = txOfMonth(m).length;
+      SET.dubbelPaar = SET.dubbelPaar || {};
+      SET.dubbelPaar['nieuw'] = { weg: t.id, op: vandaagYMD(), ovr: {} };
+      save(); buildAccMeta();
+      const L = txOfMonth(m);
+      return { voor, na: L.length, erin: L.some((x) => x.id === t.id) };
+    });
+    expect(r.na).toBe(r.voor - 1);
+    expect(r.erin).toBe(false);
+  });
+
+  test('totals().list is de aanroeper zijn eigen array', async ({ page }) => {
+    await pinDag(page); await open(page, groot());
+    const r = await page.evaluate(() => {
+      /* `totals().list` IS de uitkomst van `txOfMonth(m)`, dus zonder de slice zou een aanroeper die
+         `list` sorteert de memo bederven voor elke andere lezer van diezelfde maand. */
+      const m = thisYM();
+      const a = totals(m).list;
+      const eersteVoor = a[0].id, n = a.length;
+      a.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+      a.length = 2;
+      const b = totals(m).list, c = txOfMonth(m);
+      return { eersteVoor, n, listEerste: b[0].id, listN: b.length, tomN: c.length };
+    });
+    expect(r.n).toBeGreaterThan(10);
+    expect(r.listEerste).toBe(r.eersteVoor);
+    expect(r.listN).toBe(r.n);
+    expect(r.tomN).toBe(r.n);
+  });
+});
+
 test.describe('c - de aanroeper krijgt een eigen array', () => {
   test('sorteren van de uitkomst bederft de cache niet', async ({ page }) => {
     await pinDag(page); await open(page, groot());
@@ -352,6 +468,11 @@ test.describe('e - een memo en geen tweede waarheid', () => {
     expect(src).toMatch(/function telbareTx\(behalve\)\{[\s\S]{0,400}_dataGen/);
     expect((src.match(/_telbaarGen/g) || []).length, 'de memo staat op een plek').toBe(4);
     expect((src.match(/function telbaarVergeten\(\)/g) || []).length).toBe(1);
+    /* v311: DE TWEEDE MEMO LEEST DEZELFDE TELLER EN DEZELFDE VERGEET-FUNCTIE. Twee vergeet-functies
+       naast elkaar zouden uiteenlopen, want ze hangen aan precies dezelfde twee dingen. */
+    expect(src).toMatch(/function txOfMonth\(m\)\{[\s\S]{0,300}_dataGen/);
+    expect((src.match(/_txmGen/g) || []).length, 'ook die staat op een plek').toBe(4);
+    expect(src, 'telbaarVergeten gooit beide caches weg').toMatch(/function telbaarVergeten\(\)\{[^}]*_telbaar=null[^}]*_txm=null/);
   });
 
   test('de tweede invalidatie staat waar de paar-vensters al worden weggegooid', async () => {
@@ -369,6 +490,10 @@ test.describe('e - een memo en geen tweede waarheid', () => {
     expect(bron, 'de uitkomst gaat als eigen array naar de aanroeper').toMatch(/\.slice\(\)/);
     const src = kaalBron(fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'));
     expect(src, 'een aanroeper die de uitkomst muteert zou de cache bederven')
-      .not.toMatch(/(telbareTx\([^)]*\)|vorautBron\(\)|periodTx\(\))\.(sort|push|splice|reverse|shift|pop|unshift)\(/);
+      .not.toMatch(/(telbareTx\([^)]*\)|vorautBron\(\)|periodTx\(\)|txOfMonth\([^)]*\))\.(sort|push|splice|reverse|shift|pop|unshift)\(/);
+    const tom = await kaalUit(page, 'txOfMonth');
+    expect(tom, 'ook txOfMonth geeft een eigen array').toMatch(/\.slice\(\)/);
+    expect(src, 'en niemand muteert totals().list')
+      .not.toMatch(/\.list\.(sort|push|splice|reverse|shift|pop|unshift)\(/);
   });
 });

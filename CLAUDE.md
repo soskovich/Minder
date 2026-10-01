@@ -97,6 +97,92 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE SNEDE PER MAAND WORDT OOK EEN KEER PER STAND UITGEREKEND** (`v311`): `txOfMonth()` liep na de
+  memo van `v310` nog steeds per aanroep over de hele `TX`. De poort-evaluaties waren weg, de FILTER niet.
+  GEMETEN op de fixture van `v310` (TX 1597, 21 maanden): `renderMaand()` doet 1053 aanroepen en
+  `openBudgetEditor()` 378, dus ruim anderhalf miljoen datum-vergelijkingen per render van Grip.
+  VOOR EN NA, op dezelfde fixture en in dezelfde sessie: Grip 71 -> 45 ms, budget-editor 34 -> 21, Home
+  18 -> 5, Inzichten 12 -> 6, Vermogen 6 -> 2, Plan 3 -> 3. Samen met `v310` gaat Grip daarmee van 608
+  naar 45 ms en de editor van 258 naar 21.
+  DE MAAT IS HET AANTAL `telbareTx()`-AANROEPEN, en dat is de spiegel van de maat van `v310`: daar meet
+  het aantal POORT-EVALUATIES wat de eerste memo weghaalt, hier meet het aantal AANROEPEN van de poort
+  wat de tweede weghaalt. GEMETEN op Grip: 1059 -> 6. Die zes zijn de DIRECTE lezers van `v285`
+  (`contantVerwacht()` en de andere), en de test scheidt die van de aanroepen via `txOfMonth()` met een
+  diepte-teller; een telling die de twee op een hoop gooit kan per constructie niet op nul staan en zou
+  een marge nodig hebben, en dan meet hij de eigenschap niet meer.
+  DE SLEUTEL IS DE MAAND NAAST `_dataGen`, want dat is het enige argument. Een mutatie in de lopende
+  maand mag de uitkomst van een andere maand niet vervangen, en dat staat als eigen assertie vast; de
+  sabotage die de maand uit de sleutel haalt zet drie tests rood.
+  `telbaarVergeten()` GOOIT BEIDE CACHES WEG, en er komt geen tweede vergeet-functie naast: ze hangen aan
+  precies dezelfde twee dingen (de teller en de paar-vensters van `buildAccMeta()`). Een tweede zou bij de
+  eerste wijziging uiteenlopen (`v104`), en de sabotage die de maand-memo laat staan zet de koude-memo-test
+  rood.
+  DE EIGEN ARRAY IS HIER ZWAARDER DAN BIJ `telbareTx()`: `totals().list` IS deze array, dus een aanroeper
+  die `list` ooit sorteert zou de memo bederven voor elke andere lezer van diezelfde maand. De slice gaat
+  over de boekingen van EEN maand en niet over de hele `TX`.
+  DE GUARD IN BLOK a VAN DE SPEC MOEST MEE: die telde `telbareTx()`-aanroepen om te zeggen dat een
+  oppervlak de functie werkelijk aanroept, en dat staat op een warme memo per constructie op nul. Hij telt
+  nu `txOfMonth()`, want wat hij moet zeggen is dat het oppervlak de SNEDE leest.
+  DE VOLGENDE HEFBOOM IS GEMETEN EN NIET GEBOUWD: `totals()` doet 140 aanroepen op Grip. MEETPROEF met
+  diezelfde memo-vorm erbij: Grip 46 -> 33 ms en de budget-editor 18 -> 5. Hij is NIET zomaar dezelfde
+  ingreep: `totals()` geeft een OBJECT terug met `list`, `byCat` en `uitResCat`, en die zijn alle drie
+  muteerbaar, dus de aliasing-vraag ligt daar anders dan bij een array.
+- **DE POTJES VERDWIJNEN NIET VAN DE PAGINA OP EEN DAG ZONDER BOEKINGEN VAN DEZE MAAND** (`v311`): de
+  lege tak van `insBudgetBlok()` zette `onbekend` als hoofdgetal, en dan was het grootste getal van het
+  scherm een WOORD en stond je potjesbedrag nergens meer. Er staat nu `€X in je potjes deze maand` met
+  `uitgegeven: nog onbekend` eronder.
+  HET IS EEN BUDGET EN GEEN RESTANT, EN HET VERSCHIL ZIT IN HET WOORD EN NIET IN HET GETAL: met nul
+  boekingen is `varBudget()` min `varPotjeStand().gebruikt` precies `varBudget()`, dus "nog in je potjes"
+  zou hetzelfde cijfer tonen en tegelijk beweren dat er gemeten is wat je gebruikte. Die gelijkheid staat
+  als eigen assertie vast, want zonder haar is "het is het budget" niet van "het is het restant" te
+  scheiden. Dat is `v59`/`v73`/`v173` op een label in plaats van op een cijfer.
+  HET IS DE POTJES-BRON EN NIET `totals().budget`, want het label zegt "je potjes" en dat woord hoort
+  sinds `v309` bij precies dat getal (`v91`). GEMETEN op de fixture van deze ronde lopen die twee echt
+  uiteen: `varBudget()` 770 tegen `totals().budget` 1.670, want het huur-potje van 900 is terugkerend.
+  Zonder dat verschil is "het leest varBudget()" niet van "het leest totals().budget" te onderscheiden.
+  ZONDER VARIABEL POTJE BLIJFT DE OUDE VORM STAAN, en de reden blijft in beide gevallen staan: de zin over
+  je laatste boeking en "nul uitgaven en geen data zijn niet hetzelfde".
+  DE LOPENDE-MAAND-EIS IS EEN GUARD DIE HET SCHERM NIET KAN BEREIKEN, en dat is gemeten: `months()` is elke
+  maand uit `TX` PLUS de lopende, en deze tak vuurt alleen als de laatste boeking VOOR de maand ligt, dus
+  een maand in de kiezer die na je laatste boeking ligt kan alleen de lopende zijn. Hij blijft staan om de
+  reden van `v284` (`varBudget()` leest `SET.budgets`, de map van de LOPENDE maand) en de test maakt het
+  pad dat de functie wel heeft: haar eigen maandargument.
+  DE HOOGTE IS GEMETEN, identiek op 360 EN 390px: de lege vorm met het potjesbedrag is 175px, de oude
+  `onbekend`-vorm 152px en een GEVULDE kaart 106px. De nieuwe regel kost dus 23px en blijft onder de 200px
+  van `v241`. Wat de lege vorm zo hoog maakt is niet het getal maar de zin met de reden, die over drie
+  regels loopt; er is 25px over, en dat is minder dan bij een gevulde kaart.
+- **`importCta()` KENT DRIE HANDELINGEN, EN DE BANK GAAT VOOR HET BESTAND** (`v311`): hij gaf altijd een
+  bestand-route, ook bij een gebruiker die zijn gegevens via een bankkoppeling binnenhaalt. Die kreeg dus
+  "Bestand toevoegen" aangeboden terwijl er geen bestand te kiezen valt, en dat is een label dat een
+  handeling belooft die bij hem niet bestaat.
+  DE DERDE TAK KOMT UIT `v280` EN NIET UIT DE OPDRACHT, en dat is een bewuste afwijking: haalt de koppeling
+  geen gegevens op, dan is "vernieuwen precies wat net niets opleverde" en is opnieuw inloggen de
+  handeling. Zonder die tak zou deze functie een gebruiker met een verlopen of falende koppeling een knop
+  geven die per constructie niets doet. De toets komt uit `bankStand()` en wordt niet opnieuw uitgedrukt
+  (`v104`).
+  `zin` HOORT ERBIJ EN IS GEEN LUXE: `renderReminder()` zei onvoorwaardelijk "Importeer je nieuwste
+  bankbestand", en naast een knop "Vernieuwen" zijn dat twee verschillende handelingen in een regel. De
+  zin komt nu uit dezelfde bron als de knop; een tweede formulering ernaast zou bij de eerste herziening
+  uiteenlopen (`v91`). De sabotage die die zin terugzet zet twee tests rood.
+  EEN ASSERTIE DIE DE WOORDORDE PINDE IS HERSCHREVEN EN NIET VERZWAKT: `zwijgen-bij-onbekend.spec.js`
+  eiste letterlijk "onbekend uitgegeven". Wat hij moet vasthouden is dat het woord ONBEKEND bij het
+  uitgegeven-getal staat en dat er geen nul en geen percentage wordt beweerd; de volgorde is dat niet. Hij
+  eist er nu bij dat het potjesbedrag NIET als restant wordt gelabeld, en dat is strenger dan de oude vorm.
+- **EEN SKIP DIE ALS GROEN LEEST, DE LAATSTE VAN DE SUITE** (`v311`): `ontdubbeling-schermen.spec.js` sloeg
+  een test over met de reden "deze fixture levert geen patroonsignaal". Dat las als een vastgelegde grens en
+  was de INVOER die het geval niet droeg. GEMETEN: `MAAND_PATROON` is `['budget-','discr-','tempo']`, een
+  `budget-`-signaal eist een categorie MET een potje die er minstens 15 euro over is, en op die fixture gaf
+  `scoreNotifs()` alleen `res-check`, `savefaster` en `room`. Boodschappen stond op 300 van 400 en de
+  Mediamarkt-uitgave landt op `shopping`, een categorie ZONDER potje, dus geen van de drie prefixen kon
+  vuren. Dat is dezelfde vorm als `v299`/`v300`, en de reparatie is dezelfde: de invoer meten in plaats van
+  de uitkomst overslaan.
+  HET IS BOODSCHAPPEN GEWORDEN EN NIET SHOPPING, en dat is geen willekeur: een potje op `shopping` zou de
+  LEK-helft van diezelfde fixture weghalen, want `noPotLeak()` kijkt juist naar de grootste winkel ZONDER
+  potje, en de comment in de fixture zegt dat die ene boeking beide draagt.
+  DE SUITE HEEFT DAARMEE NUL OVERGESLAGEN TESTS, dus er is geen overslaan meer dat als groen kan lezen. WAT
+  ER WEL STAAT zijn 35 voorwaardelijke `test.skip()`-aanroepen in 14 bestanden die in de laatste volle run
+  geen van alle vuurden. Die zijn LATENT en niet nagegaan: een fixture die verandert kan er een laten
+  vuren, en dan leest hij weer als groen. Wie dat oppakt doet dezelfde meting per stuk.
 - **OPEN PUNT, GEMETEN EN NIET GEREPAREERD: DE WATERVAL REKENT IN HELE JAREN OVER EEN MAANDELIJKS
   MOMENT** (`v310`): `fireInputs()` doet `wens = _res + ((year < volYear) ? 0 : _doel)`, dus de
   spaardoelen tellen pas mee vanaf het JAAR waarin het noodfonds vol is. `volYear` komt uit het
@@ -4163,7 +4249,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v310` → `minder-v311`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v311` → `minder-v312`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -4176,7 +4262,8 @@ en bumpt dus gewoon door naar `minder-v301`, en `v302` tot en met `v305` net zo.
 `tests/` en dit bestand, dus hij bumpte niet en `v307` ging daarom van `minder-v305` naar `minder-v307`;
 `v308` en `v309` raken app-code en bumpen dus gewoon door naar `minder-v308` en `minder-v309`. `v310`
 raakt app-code (de poort-memo) en bumpt door naar `minder-v310`; het kalender-deel van die ronde raakte
-alleen `tests/` en dit bestand en bumpte op zichzelf dus niet.
+alleen `tests/` en dit bestand en bumpte op zichzelf dus niet. `v311` raakt app-code (de maand-memo en
+de lege stand) en bumpt door naar `minder-v311`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

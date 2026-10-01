@@ -32,6 +32,16 @@ function seed(o = {}) {
   }
   // een forse losse uitgave deze maand: hier komt zowel een melding als een lek uit
   if (o.uitschieter !== false) add(CUR, dd(5), -420, 'Mediamarkt', 'BEA, BETAALPAS MEDIAMARKT');
+  /* v311: EEN CATEGORIE OVER ZIJN POTJE, want zonder die boeking kon `maandPatroon()` hier per
+     constructie niets opleveren en sloeg de test eronder over. `MAAND_PATROON` is
+     `['budget-','discr-','tempo']`, en een `budget-`-signaal eist een categorie MET een potje die er
+     minstens 15 euro over is. GEMETEN op de oude fixture: `scoreNotifs()` gaf `res-check`,
+     `savefaster` en `room`, boodschappen stond op 300 van 400 en de Mediamarkt-uitgave landt op
+     `shopping`, een categorie ZONDER potje. Geen van de drie prefixen kon dus vuren.
+     HET IS BOODSCHAPPEN EN NIET SHOPPING, en dat is geen willekeur: een potje op `shopping` zou de
+     LEK-helft van deze fixture weghalen, want `noPotLeak()` kijkt juist naar de grootste winkel
+     ZONDER potje. De comment hierboven zegt dat die ene boeking beide draagt, en die blijft zo. */
+  if (o.overPotje !== false) add(CUR, dd(6), -200, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
   const set = Object.assign({ mode: 'begeleid', autoIncome: false, income: 3000, limit: 70,
     manualBal: { [MAIN]: 4000 }, budgets: { huur: 900, boodschappen: 400 },
     // de dekking-test vraagt om een dekkingsregel op Maand; die komt uit een reservering
@@ -65,7 +75,15 @@ test.describe('a · het patroon staat op precies één plek', () => {
       const p = maandPatroon();
       return p ? { key: p.key, h: p.h, inLijst: notifList().some((n) => n.key === p.key) } : null;
     });
-    test.skip(!r, 'deze fixture levert geen patroonsignaal');
+    /* v311: DE SKIP IS EEN ASSERTIE GEWORDEN, en de eis staat als eigen meting op de INVOER. Hij
+       sloeg over op "deze fixture levert geen patroonsignaal", en dat las als een vastgelegde grens
+       terwijl het de invoer was die het geval niet droeg: overslaan telt als groen (`v299`/`v300`).
+       DE INVOERMETING STAAT ERBIJ en niet alleen de uitkomst, want de assertie hieronder zegt niets
+       zodra er weer geen signaal is: dan valt hij wel, maar om een reden die een volgende ronde in
+       de verkeerde hoek laat zoeken. */
+    expect(r, 'de fixture moet een patroonsignaal leveren, anders toetst deze test niets').not.toBeNull();
+    expect(r.key, 'en het moet een budget-signaal zijn, de enige van de drie die deze fixture kan dragen')
+      .toMatch(/^budget-/);
     expect(r.h).toBe('direct');
     expect(r.inLijst).toBe(true);
   });

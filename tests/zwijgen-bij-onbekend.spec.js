@@ -116,9 +116,17 @@ test.describe('3 · nul uitgaven is niet hetzelfde als geen data', () => {
   test('een import van vóór deze maand geeft onbekend, geen 0%', async ({ page }) => {
     await boot(page, seed({ oudeImport: true }));
     const t = await scherm(page, 'ins');
-    expect(t).toMatch(/onbekend uitgegeven/);
+    /* v311: DEZE ASSERTIE PINDE DE WOORDORDE EN NIET DE EIGENSCHAP. Hij eiste letterlijk "onbekend
+       uitgegeven", en sinds v311 draagt deze kaart het potjesbedrag als hoofdgetal met "uitgegeven:
+       nog onbekend" eronder, zodat je potjes op een dag zonder boekingen niet van de pagina
+       verdwijnen. Wat hij moet vasthouden is dat het woord ONBEKEND bij het uitgegeven-getal staat
+       en dat er geen nul en geen percentage wordt beweerd; de volgorde van die twee woorden is dat
+       niet. Hij is daarom herschreven en tegelijk STERKER: hij eist nu ook dat het potjesbedrag NIET
+       als restant wordt gelabeld, want dat zou wel een meting claimen. */
+    expect(t).toMatch(/uitgegeven[^.]{0,30}onbekend|onbekend[^.]{0,30}uitgegeven/);
     expect(t).not.toMatch(/€0 uitgegeven/);
     expect(t).not.toMatch(/\b0%/);
+    expect(t).not.toMatch(/nog in je potjes/);                  // dat is het restant en dus een meting
     expect(t).toMatch(/Nul uitgaven en geen data zijn niet hetzelfde/);
     expect(t).toMatch(/Bestand toevoegen|Synchroniseer map/);   // dezelfde tik als de herinnering
   });
