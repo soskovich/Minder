@@ -86,6 +86,10 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Plan rekent in **maandtempo**
   (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
   restant van déze maand. Beide kloppen; wat ze verbindt hoort op Plan te staan en nergens anders.
+  Draagt sinds `v318` de VERTAKTE WATERVAL: de inlegbalk bovenaan, de vaten naast elkaar op schaal
+  van het doelbedrag met hun tak erboven, en de terugval als gestippelde elleboog. Een bestemming is
+  daar TWEE elementen in twee rasterrijen (`.wf-kol` voor het beeld, `.plan-item.wf-tekst` voor de
+  tekst), dus bind op `.plan-item[data-id]` en niet op een omhullende rij.
 
 Daarnaast bestaan `tx` (Transacties), `vermogen` en `set` (Instellingen). Die dragen geen
 horizon en zijn alleen via knoppen bereikbaar, dus zet er niets op wat een van de vier hoort
@@ -99,6 +103,104 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE VATEN STAAN NAAST ELKAAR EN OP SCHAAL VAN HET DOELBEDRAG** (`v318`): Plan zette de
+  bestemmingen onder elkaar met een horizontale tak per rij, en dat was niet de opbouw van het
+  ontwerp. Ze staan nu in een raster met de tak recht boven elk vat, hangend aan de inlegbalk.
+  DAT DRAAIT DE HELFT VAN `v248` OM DIE OVER DE HOOGTE GING, en alleen die helft: bij doelen ONDER
+  elkaar kostte een vat op schaal verticale ruimte zonder iets te zeggen ("een leeg vat van ruim
+  300px zegt alleen dat een doel ver weg is"), en NAAST elkaar kost de hoogte geen stapel meer en
+  draagt hij de verhouding tussen de doelbedragen. Wat van `v248` staat is dat de BREEDTE gelijk
+  blijft: elke kolom is `minmax(0,1fr)`, want anders hangt de leesbaarheid van een naam aan het
+  bedrag ernaast.
+  `planVatKolommen(n)` IS HET AANTAL VATEN TOT `VAT_KOL_MAX` (3), dus bij twee vaten twee brede
+  kolommen zoals de mockup en vanaf vier een tweede rij. Een vast raster van drie zou bij twee
+  vaten een lege kolom laten staan.
+  DE BODEM IS `VAT_MIN` (40) EN HIJ WORDT GEMARKEERD: een vat dat erop staat is niet op schaal en
+  zegt dat met een gestippelde bovenrand (de markering van `v246` terug), met de uitleg achter de
+  ⓘ. GEMETEN waarom dat telt: op de stand van het toestel (15.000 tegen 3.000, dus 5:1) komt het
+  kleine vat op 36 uit en wordt het op 40 geklemd, en dan leest de verhouding als 4,5:1.
+  `planTakDikte(alloc)` IS DEZELFDE BRON ALS HET BALKSEGMENT (`TAK_PER_EURO` 0,014, ondergrens 2px):
+  de dikte van de tak en de breedte van zijn segment zijn twee weergaven van p.alloc en geen tweede
+  berekening. De `v317`-regel dat tak en segment hun GEOMETRIE delen is daarmee vervallen voor de
+  tak, want hij ligt niet meer in het assenstelsel van de balk; `SEG_MIN_PCT` en de absolute balk
+  blijven ongemoeid.
+  DE TERUGVAL IS EEN GESTIPPELDE ELLEBOOG MET EEN PIJLPUNT, van de kolom van de gever naar die van
+  de ontvanger. DE RICHTING KOMT UIT `planTerugval()` en niet uit de mockup, en de x volgt uit het
+  kolomnummer en de y uit de vathoogtes, allebei bekend op het moment van renderen: er wordt niets
+  NA het renderen opgemeten, want zo'n meet-hook bestaat nergens in dit bestand (`v317`).
+  ELKE `.wf-vatbox` IS EVEN HOOG (de hoogste vathoogte) en de vaten zijn BOVEN uitgelijnd, want ze
+  hangen aan de balk. Dat is de voorwaarde onder de elleboog: zo begint de strook voor elke kolom op
+  dezelfde y. De sabotage die de box op het vat zelf zet bleef eerst GROEN omdat de assertie de
+  EERSTE box las, en dat is per constructie de kolom met het hoogste vat (meetles a).
+  EEN OVERDRACHT TUSSEN TWEE RASTERRIJEN KRIJGT GEEN LIJN MAAR WEL ZIJN REGEL, en die regel noemt
+  sindsdien de GEVER EN DE ONTVANGER: zonder lijn is hij de enige drager van de richting. Dat is
+  geen tweede weergave van de lijn maar wat hem zelfstandig maakt.
+  `.plan-item` ZIT OP HET TEKSTBLOK EN NIET OP HET RASTER, want `.plan-item[data-id]` is sinds
+  `v225` de naam waaronder een bestemming te vinden is, en dat is de helft met de naam, het bedrag,
+  de stand en het datumpaar. Het raster is een omhulsel van drie rasterrijen en geen bestemming, dus
+  een telling over `.plan-item` blijft een telling van bestemmingen. Er komt geen tweede attribuut
+  naast `data-id` (`v91`); de knoppenrij en de terugval-regel dragen hun eigen `data-acties` en
+  `data-erfnaar`, want die staan over de volle breedte en kunnen per constructie niet in het
+  tekstblok zitten. GEMETEN wat dat waard was: met `plan-item` op het raster vielen 21 tests, en de
+  verhuizing naar het tekstblok maakte dertien bestaande bestanden in één keer weer groen.
+  NAMEN WORDEN NIET AFGEKAPT: `.vat-naam` deed dat met een ellipsis, en dat is wat `v281`/`v284`
+  verbieden voor gegevens. Een naam die niet past loopt door op een tweede regel.
+  DE TEKST SCHAALT NIET MEE: op elk toestel de vaste tekstgrootte van de app, en in een SMALLE kolom
+  de korte vormen ("streef mrt 2027") en in een brede de lange ("moet in maart 2027"). De aanroeper
+  weet hoeveel kolommen er staan, dus `vatRegels(p,smal)` kiest op dat ene argument welke woorden
+  erbij horen; dat is de vorm van `v285` (de beslissing staat binnen, de scope komt van buiten).
+  HET DATUMPAAR IS GESPLITST: "vol" met zijn datum staat apart boven de regels, en de regels dragen
+  de streefdatum en de marge. Daarmee kan een assertie over de streefdatum niet meer per ongeluk op
+  de vol-datum slagen.
+  HET MAANDBEDRAG STAAT ER OOK OP NUL, en dat is geen detail: een bestemming die wacht krijgt
+  vandaag niets, en die nul is een meting (`v59`/`v73`/`v173`). Zonder hem moet je uit de
+  AFWEZIGHEID van een getal afleiden dat het getal nul is. Eén bron (`planBedragDeel`), twee plekken
+  naar gelang de breedte.
+  EEN VOL NOODFONDS STAAT OP ZIJN EIGEN PLEK en niet bovenaan: het draagt geen tak en dus geen vat,
+  dus het is een regel, maar de volgorde van de waterval is de hele reden dat dit scherm bestaat.
+  De rasterblokken breken daarom op zo'n regel af in plaats van dat de regels naar boven worden
+  gehaald.
+  HET MAANDBEDRAG STAAT ALLEEN NAAST DE TAK BIJ EEN KOLOM, en dat is gemeten op het scherm en niet
+  beredeneerd: dat label staat absoluut vanaf de middenlijn van de kolom en mag niet afbreken (het is
+  een getal), dus het is ~95px breed vanaf dat midden. Een kolom is 120px op 360 en 133 op 390 zodra
+  er twee staan, dus het liep over de BUURKOLOM heen; bij EEN kolom is er 318 respectievelijk 348px.
+  `labelNaast` IS DAAROM EEN EIGEN VLAG NAAST `smal`: `smal` kiest de WOORDEN (kort of lang) en deze
+  de PLEK van het bedrag. Ze vallen bij drie kolommen samen en bij twee niet, dus een vlag zou een
+  van de twee verkeerd beantwoorden.
+  DE PRIJS IN PIXELS, GEMETEN OP DE STAND VAN HET TOESTEL (twee doelen op 90/10 van EUR 2.200) EN
+  NIET WEGGEREKEND: de waterval-kaart gaat op 360px van 526 naar 697px en op 390px van 506 naar 679,
+  dus PLUS 171 EN PLUS 173. De kolom is 224px (de tak van 44 plus het hoogste vat van 180) tegen
+  288px voor twee bestemmingen onder elkaar, dus de vaten naast elkaar WINNEN 64px; het TEKSTBLOK is
+  192px op 360 en 174 op 390, en daar gaat die winst heen, want elke kolom is 120 respectievelijk
+  133px breed en naam, bedrag, stand, vol-datum en datumpaar breken alle vijf af. 18px daarvan is het
+  maandbedrag, dat bij twee kolommen naar het tekstblok zakt. Met drie doelen is de kolom 77/86px en
+  het tekstblok 228px op BEIDE breedtes, en dan is de kaart 788px.
+  ALLE TEKSTBLOKKEN ZIJN EVEN HOOG, want ze staan in EEN rasterrij: zo beginnen de regels van alle
+  kolommen op dezelfde hoogte, ook als het ene vat 180px is en het andere 40. De prijs is dat de
+  HOOGSTE tekst de hoogte van alle kolommen zet.
+  DE LAATSTE BESTEMMING VALT OP 360px ONDER DE VOUW (737px bij een vouw van 567, waar `v317` op 566
+  van 567 eindigde) en op 390px niet (719 van 771). NIET INGEKORT, en dat is de opdracht en geen
+  keuze van mij: de hoogte wordt eerst gemeld. Wie dit oppakt begint bij het TEKSTBLOK en niet bij
+  de vathoogte, want daar zitten de 192px.
+  VIJFTIEN SABOTAGES, ALLE VIJFTIEN ROOD, en twee pas na een reparatie: de markering-sabotage zocht
+  op een regel die anders was gespeld, en de box-hoogte-sabotage bleef groen op de assertie die de
+  eerste box las.
+  DE OVERLOPENDE LABELS ZIJN DOOR EEN SCHERMAFDRUK GEVONDEN EN NIET DOOR DE SUITE, en dat hoort hier
+  te staan: de 125 tests over deze kaart stonden groen terwijl "90% - EUR 1.980/mnd" zichtbaar over de
+  buurkolom liep. Geen enkele assertie vroeg of een absoluut geplaatst label BINNEN zijn kolom
+  blijft, en een overflow-meting op de ZONE ziet het niet, want `overflow:hidden` op de kaart kapt
+  het af. Wie een absoluut element plaatst, meet zijn rechterrand tegen die van zijn kolom.
+- **DE DUBBELE INFO-CIRKEL KWAM UIT DE CSS EN NIET UIT EEN TWEEDE AANROEP** (`v318`, gemeten naar
+  aanleiding van een melding): op het toestel stonden drie info-icoontjes bij "Te verdelen uit je
+  spaarinleg", één naast het woord en twee op de regel eronder. `.jrg::after` zette een cirkel
+  achter ELKE `.jrg`, en `noteIcon()` gebruikt diezelfde klasse en schrijft zijn eigen cirkel in de
+  INHOUD: elke notitie droeg er dus twee. GEMETEN op 360px: 3 zichtbare cirkels, waarvan twee op een
+  tweede regel, en de kop 41px in plaats van 20.
+  DE `::after` IS WEG en niet de klasse: de stippellijn onder een term blijft als uitleg van die
+  term, zonder eigen cirkel, en de ⓘ is voor de notitie. Dat is de keuze van de melding zelf.
+  MIJN EERSTE REPRODUCTIE DROEG HET NIET, en dat is de meetles: ik telde het teken in `innerHTML`,
+  en een CSS-`::after` staat daar niet in. Gemeten `glyphAantal: 1` tegen 3 werkelijk zichtbare. Wie
+  een zichtbaar teken telt, telt wat de browser RENDERT en niet wat de bron schrijft.
 - **EEN EENMALIGE POST BINNEN HET VENSTER TELT MEE IN DE OPBOUW-EIS** (`v317`): `dekking()` rekende
   `opgebouwd` alleen `if(x.intervalM>0)`, dus een eenmalige post droeg NUL in `benodigdeStand` en
   viel daarmee uit `graad` en uit `tekort`. GEMELD EN GEREPRODUCEERD: met EUR 500 op de
@@ -218,7 +320,10 @@ genoemde versietag.)*
   BLOK 4 VAN HET DIAGNOSESCHERM LOOPT NU ELKE PLEK AF in plaats van twee richtingen, en leest
   `planPlekMag()` in plaats van de regel zelf nog eens uit te drukken. Dat laatste was een tweede
   uitdrukking in precies het blok dat zo'n tegenspraak moet vangen.
-- **TAK EN BALKSEGMENT DELEN HUN MINIMUMBREEDTE EN HUN GEOMETRIE** (`v317`): `.plan-tak i` had
+- **TAK EN BALKSEGMENT DELEN HUN MINIMUMBREEDTE EN HUN GEOMETRIE** (`v317`; de GEOMETRIE-helft is
+  bij `v318` vervallen, want de tak staat sindsdien verticaal boven zijn eigen vat en ligt niet meer
+  in het assenstelsel van de balk. `SEG_MIN_PCT` en de absolute balk blijven; zie de v318-regel
+  bovenaan): `.plan-tak i` had
   `min-width:3px` en het balksegment niet, en de balk was bovendien `display:flex`. GEMETEN bij een
   bestemming op 0,5 procent van de inleg: het balksegment werd 1,5px en de tak 3px, en de rechterrand
   van de tak landde op 302px op een balk van 300px. De `v246`-regel ("dikte en plek komen uit
@@ -232,7 +337,11 @@ genoemde versietag.)*
   en is het verschil per constructie nul; `overflow:hidden` op beide kapt op dezelfde plek.
   HERSCHALEN IS VERWORPEN: dat zou de andere segmenten een breedte geven die hun bedrag niet draagt,
   een tweede vertekening om een eerste te verbergen.
-- **DE VATEN BLIJVEN GELIJK, EN DE UITLEG BELOOFT GEEN HOOGTE MEER** (`v317`): de mockup vroeg de
+- **DE VATEN BLIJVEN GELIJK, EN DE UITLEG BELOOFT GEEN HOOGTE MEER** (`v317`; bij `v318` is de
+  eerste helft omgedraaid: de vaten staan naast elkaar en dus weer op schaal, en de uitleg belooft
+  die hoogte weer omdat de code hem weer heeft. Wat staande blijft is de REDEN waarom dit hier
+  stond, namelijk dat een uitleg die gedrag belooft dat de code niet heeft elke volgende ronde de
+  verkeerde kant op stuurt): de mockup vroeg de
   vaten op schaal van het doelbedrag terug, en dat is bij `v248` met een meting weggehaald ("een leeg
   vat van ruim 300px zegt alleen dat een doel ver weg is"). Die keuze staat; wat niet stond is de
   TEKST eromheen. `NOTES.planUitleg` zei nog "de hoogte van een vat is het doelbedrag" en twee
@@ -4744,7 +4853,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v317` → `minder-v318`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v318` → `minder-v319`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -4761,8 +4870,8 @@ alleen `tests/` en dit bestand en bumpte op zichzelf dus niet. `v311` raakt app-
 de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md` en de changelog
 (een besluit en een open punt), dus hij bumpt niet, en `v313` raakt app-code en gaat daarom van
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
-`minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316` en `v317` naar
-`minder-v317`.
+`minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
+`minder-v317` en `v318` naar `minder-v318`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

@@ -249,8 +249,16 @@ test.describe('c · de editors', () => {
        alloc en niet alleen het aandeel. Wat deze test vasthoudt is dat de rij zijn modus benoemt
        naast zijn bedrag; het bedrag toetsen we tegen de bron in plaats van tegen een vast getal. */
     const A = await page.evaluate(() => allocatePlan().find((x) => x.id === 'gA'));
-    expect(await page.locator('.plan-item[data-id="gA"]').innerText()).toContain(`30% · €${A.alloc}/mnd`);
-    expect(await page.locator('.plan-item[data-id="gB"]').innerText()).toContain('vast · €50/mnd');
+    /* v318: het maandbedrag staat NAAST de tak zodra de kolom breed is en anders in de eerste
+       tekstregel. Eén bron (planBedragDeel), twee plekken, dus de assertie leest beide helften
+       samen in plaats van een van de twee te kiezen. */
+    const rij = (id) => page.evaluate((i) => {
+      const kol = document.querySelector(`#s-vooruit .wf-kol[data-id="${i}"]`);
+      const tk = document.querySelector(`#s-vooruit .plan-item[data-id="${i}"]`);
+      return ((kol ? kol.innerText : '') + ' ' + (tk ? tk.innerText : '')).replace(/\s+/g, ' ');
+    }, id);
+    expect(await rij('gA')).toContain(`30% · €${A.alloc}/mnd`);
+    expect(await rij('gB')).toContain('vast · €50/mnd');
   });
 });
 

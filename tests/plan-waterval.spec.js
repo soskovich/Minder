@@ -38,11 +38,18 @@ async function openV(page, payload) {
   await page.evaluate(() => go('vooruit'));
   await page.waitForSelector('#s-vooruit .card');
 }
-/* v246: het nummer staat in .vat-naam, de kop van het vat. Bindt aan de naamregel en niet aan de
-   hele rijtekst: die draagt sinds de vertakte waterval ook de stand en het datumpaar. */
-const rijen = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .plan-item')]
-  .map((x) => ({ id: x.dataset.id, tekst: x.innerText.replace(/\s+/g, ' '),
-    naam: ((x.querySelector('.vat-naam') || {}).innerText || '').replace(/\s+/g, ' ').trim() })));
+/* v318: EEN BESTEMMING IS TWEE ELEMENTEN. De vaten staan naast elkaar in een raster, dus het beeld
+   (`.wf-kol`, met de tak en het vat) en de tekst (`.wf-tekst`, met de naam, het bedrag, de stand en
+   het datumpaar) staan in twee RASTERRIJEN en kunnen per constructie geen gedeelde omhulling hebben.
+   Een bestemming is daarom te vinden op `.plan-item[data-id="<id>"]`; een VOL noodfonds draagt geen vat en
+   blijft zijn eigen regel met `data-id`.
+   Het nummer staat in de naamregel (`.wf-naam`, of `.vat-naam` bij die ene regel) en niet in de hele
+   rijtekst: die draagt ook de stand en het datumpaar. */
+const rijen = (page) => page.evaluate(() =>
+  [...document.querySelectorAll('#s-vooruit .plan-rij[data-id], #s-vooruit .wf-tekst')]
+    .map((x) => ({ id: x.dataset.id, tekst: x.innerText.replace(/\s+/g, ' '),
+      naam: ((x.querySelector('.wf-naam') || x.querySelector('.vat-naam') || {}).innerText || '')
+        .replace(/\s+/g, ' ').trim() })));
 const scherm = (page) => page.locator('#s-vooruit').innerText();
 
 /* ---------------------------------------------------------------------------------------- */
@@ -83,26 +90,25 @@ test.describe('a · de kaart toont het mechanisme', () => {
 
   test('elke rij noemt zijn maandbedrag rechts en zijn stand eronder', async ({ page }) => {
     await openV(page, metDoelen([{ id: 'gA', naam: 'Kosten koper', doel: 9000, gespaard: 1500, allocMode: 'fixed', perMaand: 200 }]));
-    const r = await page.evaluate(() => {
-      const it = document.querySelector('#s-vooruit .plan-item[data-id="gA"]');
-      return { rij: it.querySelector('.row').innerText.replace(/\s+/g, ' '),
-        heel: it.innerText.replace(/\s+/g, ' ') };
-    });
-    expect(r.rij).toMatch(/Kosten koper/);
+    const r = await page.evaluate(() => ({
+      naam: document.querySelector('#s-vooruit .wf-naam').innerText.replace(/\s+/g, ' '),
+      heel: document.querySelector('#s-vooruit .plan-item[data-id="gA"]').innerText.replace(/\s+/g, ' '),
+      label: (document.querySelector('#s-vooruit .wf-kol[data-id="gA"] .wf-taklabel') || {}).innerText }));
+    expect(r.naam).toMatch(/Kosten koper/);
     // wat deze bestemming per maand krijgt: het bedrag uit de waterval, niet het ingestelde
     const alloc = await page.evaluate(() => euro0(allocatePlan().find((x) => x.id === 'gA').alloc));
-    expect(r.rij).toContain(alloc + '/mnd');
+    /* v318: het bedrag staat NAAST de tak zodra er ruimte is, want de tak IS dat bedrag. Met één
+       vat is de kolom breed, dus hier staat het bij de tak en niet in het tekstblok. */
+    expect(r.label.replace(/\s+/g, ' ')).toContain(alloc + '/mnd');
     expect(r.heel).toMatch(/€1\.500 toegewezen \/ €9\.000/);   // en waar hij staat
-    /* v246b: de tak droeg dit bedrag ook, en sinds de tekst boven het vat staat noemt de kop het
-       één regel hoger. Twee keer hetzelfde getal is een tweede bron, dus de tak draagt alleen nog
-       kleur en dikte; die dikte komt uit hetzelfde segment als de balk erboven. */
+    expect(r.heel).not.toContain(alloc + '/mnd');
+    // de dikte van de tak komt uit het maandbedrag en niet uit het segment van de balk
     const tak = await page.evaluate(() => {
-      const t = document.querySelector('.plan-tak[data-tak="gA"]');
-      return { tekst: t.innerText.trim(), w: parseFloat(t.querySelector('i').style.width) };
+      const i = document.querySelector('#s-vooruit .wf-kol[data-id="gA"] .wf-tak i[data-takkleur]');
+      return { w: parseFloat(i.style.width),
+        dik: planTakDikte(allocatePlan().find((x) => x.id === 'gA').alloc) };
     });
-    expect(tak.tekst).toBe('');
-    expect(tak.w).toBeCloseTo(await page.evaluate(() =>
-      allocatePlan().find((x) => x.id === 'gA').alloc / planCapacity() * 100), 1);
+    expect(tak.w).toBe(tak.dik);
   });
 });
 
@@ -138,7 +144,9 @@ test.describe('c · een wachtende bestemming noemt waarop, en nooit wanneer', ()
     expect(await page.evaluate(() => allocatePlan().find((x) => x.id === 'gB').status)).toBe('wacht op capaciteit');
     const rij = await page.locator('#s-vooruit .plan-item[data-id="gB"]').innerText();
     expect(rij).toMatch(/Wacht op .Vakantie./);
-    expect(rij).toMatch(/€0\/mnd/);                  // want er gaat niets heen
+    /* v318: met twee vaten zakt het bedrag naar het tekstblok, want naast de tak zou het over de
+       buurkolom lopen. De NUL staat er, en dat is een meting en geen leegte (v59/v73/v173). */
+    expect(rij).toMatch(/€0\s*\/mnd/);
   });
 
   /* Wanneer een wachtende bestemming ZELF vol is hangt af van keuzes die nog niet gemaakt zijn, dus
@@ -160,10 +168,12 @@ test.describe('c · een wachtende bestemming noemt waarop, en nooit wanneer', ()
      een EIGEN element naast het datumpaar, dus hij kan de regel hierboven niet vervuilen. */
   test('maar wel vanaf wanneer de ruimte van zijn blokkeerder hierheen gaat', async ({ page }) => {
     await openV(page, metBlokkeerder());
-    const rij = page.locator('#s-vooruit .plan-item[data-id="gB"]');
-    const erf = rij.locator('[data-erfregel]');
+    /* v318: de terugval-regel staat niet IN het tekstblok maar als eigen rasterregel over de volle
+       breedte, want een overdracht verbindt twee kolommen. Hij draagt de ONTVANGER, dus hij is per
+       bestemming te vinden zonder dat hij in haar element zit. */
+    const erf = page.locator('#s-vooruit [data-erfregel][data-erfnaar="gB"]');
     expect(await erf.count()).toBe(1);
-    expect(await erf.innerText()).toMatch(/^vanaf \w+ \d{4} ook de ruimte van /);
+    expect(await erf.innerText()).toMatch(/^vanaf \w+ \d{4} gaat de ruimte van /);
     // en de maand komt uit de projectie en niet uit een eigen telling
     const e = await page.evaluate(() => planTerugval().find((x) => x.naar === 'gB'));
     expect(await erf.innerText()).toContain(await page.evaluate((m) => etaDatum(m), e.vanaf));
@@ -222,27 +232,30 @@ test.describe('e · de volgorde blijft de hoofdhandeling', () => {
      eigenschap nog steeds moet vasthouden is dat een rij ZONDER tik geen keuzes toont. */
   test('een rij zonder tik toont geen knoppen, en de pijlen zijn er niet meer', async ({ page }) => {
     await openV(page, twee());
-    const rij = page.locator('#s-vooruit .plan-item[data-id="gB"]');
-    expect(await rij.locator('.plan-mv').count()).toBe(0);
-    expect(await rij.innerText()).not.toMatch(/pauzeren|openen|uit plan halen/);
+    expect(await page.locator('#s-vooruit .plan-mv').count()).toBe(0);
+    expect(await page.locator('#s-vooruit [data-acties]').count()).toBe(0);
   });
 
   test('een tik op de rij haalt pauzeren en openen tevoorschijn', async ({ page }) => {
     await openV(page, twee());
     await page.locator('#s-vooruit .plan-item[data-id="gB"] >> text=Vakantie').click();
-    await page.waitForSelector('#s-vooruit .plan-item[data-id="gB"] >> text=pauzeren');
-    const t = await page.locator('#s-vooruit .plan-item[data-id="gB"]').innerText();
+    /* v318: de knoppen staan als eigen rasterregel onder de bestemming die je aantikte, want ze
+       lopen over de volle breedte. Ze dragen hun eigen id, dus "alleen bij die ene" is nog te
+       meten zonder dat ze in haar element zitten. */
+    await page.waitForSelector('#s-vooruit [data-acties="gB"]');
+    const t = await page.locator('#s-vooruit [data-acties="gB"]').innerText();
     expect(t).toMatch(/openen/);
     expect(t).toMatch(/pauzeren/);
-    // en alleen bij die ene rij
-    expect(await page.locator('#s-vooruit .plan-item[data-id="gA"]').innerText()).not.toMatch(/pauzeren/);
+    expect(await page.locator('#s-vooruit [data-acties]').count()).toBe(1);
   });
 
   test('het volgorde-veld verschuift de rij en laat de nummers meelopen', async ({ page }) => {
     await openV(page, twee());
     await page.evaluate(() => openGoal('gB'));
     await page.locator('#planOrdeChips .chip[data-plek="0"]').click();
-    await page.waitForFunction(() => (document.querySelector('#s-vooruit .plan-item') || {}).dataset.id === 'gB');
+    await page.waitForFunction(() =>
+      (document.querySelector('#s-vooruit .plan-rij[data-id], #s-vooruit .wf-tekst') || {})
+        .dataset.id === 'gB');
     const R = await rijen(page);
     expect(R[0].id).toBe('gB');
     expect(R[0].naam).toMatch(/^1\s/);
@@ -262,12 +275,17 @@ test.describe('f · de controlelijst', () => {
     await openV(page, metDoelen([
       { id: 'gA', naam: 'Kosten koper', doel: 9000, gespaard: 1200, allocMode: 'fixed', perMaand: 200 },
     ], (s) => { s.planPaused = { noodfonds: true, gA: true }; }));
+    /* v318: de vulling zit in het VAT en het bedrag bij de TAK, dus de rij is twee elementen. Het
+       label leest €0/mnd, en die nul is een meting (v59/v73/v173). */
     const r = await page.evaluate(() => {
-      const it = document.querySelector('#s-vooruit .plan-item[data-id="gA"]');
-      return { tekst: it.innerText.replace(/\s+/g, ' '),
-        fills: [...it.querySelectorAll('.bar-fill')].map((x) => x.getAttribute('style') || '') };
+      const kol = document.querySelector('#s-vooruit .wf-kol[data-id="gA"]');
+      return { tekst: document.querySelector('#s-vooruit .plan-item[data-id="gA"]').innerText.replace(/\s+/g, ' '),
+        label: ((kol.querySelector('.wf-taklabel') || {}).innerText || '').replace(/\s+/g, ' '),
+        tak: !!kol.querySelector('.wf-tak i[data-takkleur]'),
+        fills: [...kol.querySelectorAll('.wf-vat i')].map((x) => x.getAttribute('style') || '') };
     });
-    expect(r.tekst).toMatch(/€0\/mnd/);
+    expect(r.label).toMatch(/€0\s*\/mnd/);
+    expect(r.tak, 'geen tak, want er gaat niets heen').toBe(false);
     expect(r.tekst).toMatch(/Gepauzeerd . krijgt nu niets/);
     expect(r.fills.length).toBe(1);                  // geen groei-segment
     expect(r.fills[0]).toMatch(/--mut/);
@@ -311,7 +329,7 @@ test.describe('f · de controlelijst', () => {
       expect(o.body).toBeLessThanOrEqual(1);
 
       await page.locator('#s-vooruit .plan-item[data-id="gA"] >> text=Kosten koper').click();
-      await page.waitForSelector('#s-vooruit .plan-item[data-id="gA"] >> text=pauzeren');
+      await page.waitForSelector('#s-vooruit [data-acties="gA"]');
       o = await meet();
       expect(o.v).toBeLessThanOrEqual(1);
       expect(o.body).toBeLessThanOrEqual(1);

@@ -52,16 +52,38 @@ async function boot(page, o) {
 }
 const TV = (page) => page.evaluate(() => planTerugval()
   .map((e) => ({ van: e.van, naar: e.naar, maand: e.maand, vanaf: e.vanaf })));
-const blokken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .plan-tak')]
+/* v318: DE OVERDRACHT IS EEN STIPPELLIJN IN DE STROOK ONDER DE VATEN en niet meer een gestippeld
+   blok in de tak van de ontvanger. De vorm komt uit de mockup: een elleboog van de kolom van de
+   gever naar die van de ontvanger, met een pijlpunt. Eén `.wf-lijn` per overdracht, met de gever EN
+   de ontvanger erop; de vier `<i>` erin zijn de stukken (verticaal, horizontaal, verticaal, punt).
+   HET OMHULSEL IS NODIG EN GEEN LUXE: zonder hem zijn die vier stukken alleen op volgorde aan
+   elkaar te koppelen, en dan leest een tweede overdracht als een deel van de eerste. */
+const blokken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-kol')]
   .map((t) => {
-    const vol = t.querySelector('i[data-takkleur]');
-    return { id: t.dataset.tak,
-      vol: vol ? { l: vol.style.left, w: vol.style.width } : null,
-      erf: [...t.querySelectorAll('i.tak-erf')].map((e) => ({ van: e.dataset.erf, l: e.style.left, w: e.style.width })) };
+    const vol = t.querySelector('.wf-tak i[data-takkleur]');
+    return { id: t.dataset.id,
+      vol: vol ? { w: parseFloat(vol.style.width) } : null,
+      erf: [...document.querySelectorAll(`#s-vooruit .wf-lijn[data-erf-naar="${t.dataset.id}"]`)]
+        .map((e) => ({ van: e.dataset.erfVan, delen: e.querySelectorAll('i').length })) };
   }));
+/* De elleboog in horizontale posities: waar hij begint (de kolom van de gever), waar hij eindigt en
+   waar de pijlpunt staat. Alle drie uit de stijl die renderPlan() zelf schrijft, want die is
+   deterministisch; er wordt niets na het renderen opgemeten. */
+const lijnen = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-lijn')]
+  .map((e) => { const i = [...e.querySelectorAll('i')];
+    return { van: e.dataset.erfVan, naar: e.dataset.erfNaar,
+      xVan: parseFloat(i[0].style.left), xNaar: parseFloat(i[2].style.left),
+      punt: !!i[3] && i[3].classList.contains('p') }; }));
 const regels = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit [data-erfregel]')]
-  .map((e) => ({ van: e.dataset.erfregel, tekst: e.innerText.trim(),
-    rij: e.closest('.plan-item').dataset.id })));
+  .map((e) => ({ van: e.dataset.erfregel, naar: e.dataset.erfnaar, tekst: e.innerText.trim() })));
+/* De middenlijn van kolom k van K, in procenten van de strook. Dezelfde uitdrukking als
+   renderPlan(), en dat is hier geen tweede waarheid maar de meting: de spec rekent voor WAAR de
+   elleboog hoort te beginnen en te eindigen, en vergelijkt dat met waar hij staat. */
+const xMid = (k, K) => (k + 0.5) / K * 100;
+const kolVan = (page, id) => page.evaluate((i) => {
+  const ks = [...document.querySelectorAll('#s-vooruit .wf-kol')].map((e) => e.dataset.id);
+  return { k: ks.indexOf(i), K: ks.length };
+}, id);
 
 /* het gemelde plan: een doel dat eerder vol is en zijn ruimte aan het grote doel geeft */
 const DOORZAK = { cap: 2500, order: ['noodfonds', A, B], goals: [
@@ -193,8 +215,8 @@ test.describe('b · de ontvanger wordt gemeten en niet uit de volgorde geraden',
     // en de regel staat op het scherm, bij de ontvanger
     const r = await regels(page);
     expect(r.length).toBe(1);
-    expect(r[0].rij).toBe(B);
-    expect(r[0].tekst).toBe('vanaf jun 2027 ook de ruimte van Kosten Koper');
+    expect(r[0].naar).toBe(B);
+    expect(r[0].tekst).toBe('vanaf jun 2027 gaat de ruimte van Kosten Koper naar Inrichting woning');
   });
 
   test('bij een gelijke stijging wint de eerste op volgorde, dus de uitkomst is bepaald', async ({ page }) => {
@@ -212,44 +234,83 @@ test.describe('b · de ontvanger wordt gemeten en niet uit de volgorde geraden',
 
 /* ===== c) DE STIPPELLIJN OP HET SCHERM ===== */
 test.describe('c · de stippellijn en de regel', () => {
-  test('de ontvanger draagt een gestippeld blok op de plek van het segment van de gever', async ({ page }) => {
+  /* v317 zette de ruimte van de gever als gestippeld BLOK in de tak van de ontvanger, op de plek en
+     de breedte van het segment van de gever. v318 maakt er een elleboog van: hij begint bij de
+     KOLOM van de gever en eindigt met een pijlpunt bij die van de ontvanger. Dat is de vorm van de
+     mockup, en het zegt meer dan het blok: niet alleen hoeveel er doorzakt maar ook waarvandaan.
+     DE PLEK WORDT NAGEREKEND EN NIET OPGEMETEN: de kolommen zijn gelijke breedten, dus de
+     middenlijn van kolom k volgt uit k en het aantal kolommen. */
+  test('de lijn loopt van de kolom van de gever naar die van de ontvanger', async ({ page }) => {
     await boot(page, DOORZAK);
-    const seg = await page.evaluate(() => planSegmenten(allocatePlan(), planCapacity()).segs);
-    const bl = await blokken(page);
-    const naarA = bl.find((x) => x.id === A);
-    const sB = seg.find((x) => x.id === B);
-    expect(naarA.erf.length).toBe(1);
-    expect(naarA.erf[0].van).toBe(B);
-    /* DEZELFDE getallen als het segment van de gever, en dus als zijn eigen tak. De browser
-       normaliseert '79.20%' naar '79.2%', dus de vergelijking gaat over het getal. */
-    const pct = (v) => Math.round(parseFloat(v) * 100) / 100;
-    expect(pct(naarA.erf[0].l)).toBeCloseTo(sB.van, 2);
-    expect(pct(naarA.erf[0].w)).toBeCloseTo(sB.breed, 2);
-    const takB = bl.find((x) => x.id === B);
-    expect(pct(takB.vol.l)).toBeCloseTo(pct(naarA.erf[0].l), 2);
-    expect(pct(takB.vol.w)).toBeCloseTo(pct(naarA.erf[0].w), 2);
+    const L = await lijnen(page);
+    expect(L.length).toBe(1);
+    expect(L[0]).toMatchObject({ van: B, naar: A, punt: true });
+    const kG = await kolVan(page, B), kR = await kolVan(page, A);
+    expect(kG.k).toBeGreaterThanOrEqual(0);
+    expect(kR.k).toBeGreaterThanOrEqual(0);
+    expect(kG.k, 'de gever staat niet op dezelfde kolom als de ontvanger').not.toBe(kR.k);
+    expect(L[0].xVan).toBeCloseTo(xMid(kG.k, kG.K), 2);
+    expect(L[0].xNaar).toBeCloseTo(xMid(kR.k, kR.K), 2);
+    // en de ontvanger weet het van zijn eigen kant
+    const naarA = (await blokken(page)).find((x) => x.id === A);
+    expect(naarA.erf.map((e) => e.van)).toEqual([B]);
+    expect(naarA.erf[0].delen).toBe(4);
   });
 
-  test('het blok is gestippeld en draagt geen vulling', async ({ page }) => {
+  /* DE SABOTAGE DIE DE BOX-HOOGTE OP HET VAT ZELF ZET BLEEF EERST GROEN, en dat lag aan de
+     assertie: blok g las de EERSTE `.wf-vatbox`, en dat is de kolom met het HOOGSTE vat, waar de
+     box-hoogte en de vathoogte per constructie samenvallen (meetles a). Wat de twee vormen
+     onderscheidt is de kolom met het KLEINE vat: daar is de box nog steeds even hoog als het
+     hoogste vat, want anders begint de terugval-strook per kolom op een andere y en hangt de
+     stippellijn ergens in de lucht.
+     DE STOMP VAN DE GEVER WORDT DAAROM OOK GEMETEN: zijn top is de bodem van het vat van de gever,
+     uitgedrukt als afstand tot de strook, en dat is precies `-(maxH - h)`. Die uitdrukking staat in
+     renderPlan() en de spec rekent hem na uit de GEMETEN vathoogtes; er wordt niets opgemeten dat de
+     app zelf opmeet. */
+  test('elke box is even hoog, en de lijn begint op de bodem van het vat van de gever', async ({ page }) => {
     await boot(page, DOORZAK);
-    const st = await page.evaluate(() => {
-      const el = document.querySelector('#s-vooruit .plan-tak i.tak-erf');
-      const c = getComputedStyle(el);
-      return { stijl: c.borderBottomStyle, bg: c.backgroundColor };
+    const r = await page.evaluate(() => {
+      const z = document.querySelector('#s-vooruit');
+      const boxen = [...z.querySelectorAll('.wf-vatbox')].map((e) => Math.round(e.getBoundingClientRect().height));
+      const H = {}; for (const v of z.querySelectorAll('.wf-vat')) H[v.dataset.vat] = +v.dataset.h;
+      const lijn = z.querySelector('.wf-lijn');
+      const i = [...lijn.querySelectorAll('i')];
+      return { boxen, H, van: lijn.dataset.erfVan, naar: lijn.dataset.erfNaar,
+        topVan: parseFloat(i[0].style.top), topPunt: parseFloat(i[3].style.top) };
     });
-    expect(st.stijl).toBe('dashed');
-    expect(st.bg).toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    // de invoer: de vaten lopen in hoogte uiteen, anders meet de box-eis niets
+    expect(new Set(Object.values(r.H)).size).toBeGreaterThan(1);
+    expect(new Set(r.boxen).size, 'boxen: ' + r.boxen.join(',')).toBe(1);
+    const maxH = Math.max(...Object.values(r.H));
+    expect(r.boxen[0]).toBe(maxH);
+    expect(r.topVan).toBeCloseTo(-(maxH - r.H[r.van]), 1);
+    expect(r.topPunt).toBeCloseTo(-(maxH - r.H[r.naar]), 1);
+  });
+
+  test('de lijn is gestippeld en draagt geen vulling', async ({ page }) => {
+    await boot(page, DOORZAK);
+    const st = await page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-lijn i')]
+      .map((el) => { const c = getComputedStyle(el);
+        return { v: c.borderLeftStyle, h: c.borderTopStyle, bg: c.backgroundColor }; }));
+    expect(st.length).toBe(4);
+    expect(st[0].v).toBe('dashed');
+    expect(st[1].h).toBe('dashed');
+    expect(st[2].v).toBe('dashed');
+    for (const x of st) expect(x.bg).toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
   });
 
   test('de regel staat bij de ontvanger, met de maand uit de projectie en de naam van de gever', async ({ page }) => {
     await boot(page, DOORZAK);
     const r = await regels(page);
     expect(r.length).toBe(1);
-    expect(r[0].rij).toBe(A);
+    expect(r[0].naar).toBe(A);
     expect(r[0].van).toBe(B);
     const e = (await TV(page))[0];
     const lbl = await page.evaluate((m) => etaDatum(m), e.vanaf);
-    expect(r[0].tekst).toBe(`vanaf ${lbl} ook de ruimte van Inrichting`);
+    /* v318: de regel noemt de gever EN de ontvanger. Dat is geen tweede weergave van de lijn maar
+       wat hem zelfstandig maakt: zodra gever en ontvanger in verschillende rasterrijen staan is er
+       geen lijn, en dan is deze regel de enige drager van de richting. */
+    expect(r[0].tekst).toBe(`vanaf ${lbl} gaat de ruimte van Inrichting naar Kosten Koper`);
   });
 
   /* GEEN BEDRAG IN DE REGEL: het blok draagt de maat en de rij van de gever het getal. Een bedrag
@@ -276,14 +337,14 @@ test.describe('c · de stippellijn en de regel', () => {
       set: { nfDoelVast: 12000, nfToegewezen: 2000 } });
     expect(await page.evaluate((id) => allocatePlan().find((p) => p.id === id).alloc, A)).toBe(0);
     const t = (await blokken(page)).find((x) => x.id === A);
-    expect(t.vol).toBe(null);
+    expect(t.vol, 'geen eigen tak, want hij krijgt vandaag nul').toBe(null);
     expect(t.erf.map((x) => x.van)).toEqual(['noodfonds']);
   });
 
   test('zonder overdracht staat er geen blok en geen regel', async ({ page }) => {
     await boot(page, { cap: 2500, order: ['noodfonds', A], goals: [
       { id: A, naam: 'Alleen', doel: 5000, gespaard: 0, streefdatum: '2027-06', allocMode: 'auto' }] });
-    expect(await page.locator('#s-vooruit .tak-erf').count()).toBe(0);
+    expect(await page.locator('#s-vooruit .wf-lijn').count()).toBe(0);
     expect(await page.locator('#s-vooruit [data-erfregel]').count()).toBe(0);
   });
 
@@ -298,6 +359,12 @@ test.describe('c · de stippellijn en de regel', () => {
     const t = (await blokken(page)).find((x) => x.id === A);
     expect(t.erf.length).toBe(2);
     expect((await regels(page)).length).toBe(2);
+    /* TWEE LIJNEN OP VERSCHILLENDE HOOGTE, anders liggen ze over elkaar en leest het als één
+       overdracht. De y-afstand komt uit de index in de strook en wordt hier niet nagerekend; wat
+       vastligt is dat ze verschillen. */
+    const ys = await page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-lijn i.h')]
+      .map((e) => parseFloat(e.style.top)));
+    expect(new Set(ys).size).toBe(2);
   });
 });
 
@@ -312,13 +379,18 @@ test.describe('d · de marge komt uit dezelfde sp als "net op tijd"', () => {
     const r = await page.evaluate((id) => {
       const p = allocatePlan().find((x) => x.id === id);
       const T = doelTempo(p, p.alloc);
-      return { eta: p.eta, tot: T.maandenTot, regels: vatRegels(p).regels };
+      const R = vatRegels(p);
+      return { eta: p.eta, tot: T.maandenTot, regels: R.regels, vol: R.vol };
     }, A);
     const sp = r.tot - r.eta;
     expect(sp).toBeGreaterThan(0);
-    expect(r.regels.length).toBe(1);
-    expect(r.regels[0]).toContain(`${sp} ${sp === 1 ? 'maand' : 'maanden'} speling`);
-    expect(r.regels[0]).toMatch(/^vol in \w+ \d{4} · moet in \w+ \d{4} · \d+ maanden? speling$/);
+    /* v318: het datumpaar is GESPLITST. "vol" met zijn datum staat apart boven de regels (besluit 2
+       van die ronde: naam, bedrag, vol met datum, streefdatum en marge), en de regels dragen de
+       streefdatum en de marge. De SPELING blijft hetzelfde getal uit dezelfde `sp`. */
+    expect(r.vol).toEqual({ woord: 'vol', datum: await page.evaluate((n) => etaDatum(n), r.eta) });
+    expect(r.regels.length).toBe(2);
+    expect(r.regels[0]).toMatch(/^moet in \w+ \d{4}$/);
+    expect(r.regels[1]).toBe(`${sp} ${sp === 1 ? 'maand' : 'maanden'} speling`);
   });
 
   test('bij nul of minder speling blijft "net op tijd" staan en komt er geen getal', async ({ page }) => {
@@ -351,48 +423,60 @@ test.describe('d · de marge komt uit dezelfde sp als "net op tijd"', () => {
   });
 });
 
-/* ===== e) TAK EN BALKSEGMENT ZIJN EVEN BREED ===== */
-test.describe('e · tak en balksegment, ook onder 1 procent', () => {
+/* ===== e) DE MINIMUMBREEDTE BLIJFT IN DE SEGMENTEN =====
+   v317 legde vast dat de tak en het balksegment dezelfde minimumbreedte EN dezelfde geometrie
+   delen, want de tak lag toen in het assenstelsel van de balk: hij droeg `left` en `width` in
+   procenten, net als het segment.
+   v318 HAALT DAT ASSENSTELSEL WEG, en daarmee de helft van die regel die over de tak ging: de tak
+   staat verticaal boven zijn eigen vat en zijn maat is een DIKTE in pixels (zie
+   plan-vaten-naast-elkaar.spec.js blok c). Er is dus geen gedeelde plek meer om te laten uiteenlopen.
+   WAT BLIJFT STAAN IS DE BALK-HELFT, en die is onveranderd: `SEG_MIN_PCT` staat in de SEGMENTEN en
+   dus in de data, de balk staat absoluut zodat de som boven 100 procent geen enkel segment laat
+   krimpen, en een segment van nul blijft nul. Zonder die helft zou een bestemming die bijna niets
+   krijgt uit de balk verdwijnen. */
+test.describe('e · de minimumbreedte van een segment', () => {
   const MINI = { cap: 2200, order: ['noodfonds', A, B], goals: [
     { id: A, naam: 'Groot', doel: 50000, gespaard: 0, streefdatum: '2029-01', allocMode: 'pct', pct: 99.5 },
     { id: B, naam: 'Mini', doel: 600, gespaard: 0, streefdatum: '2027-06', allocMode: 'pct', pct: 0.5 }] };
 
   for (const w of [360, 390]) {
-    test(`op ${w}px zijn de twee even breed en staan ze op dezelfde plek`, async ({ page }) => {
+    test(`op ${w}px blijft een segment onder 1 procent zichtbaar en krimpt er niets`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: w === 360 ? 640 : 844 });
       await boot(page, MINI);
-      const r = await page.evaluate(() => {
-        const balk = document.querySelector('#s-vooruit .inleg-balk');
-        const bb = balk.getBoundingClientRect();
-        const px = (e) => { const b = e.getBoundingClientRect();
-          return { l: Math.round((b.left - bb.left) * 100) / 100, w: Math.round(b.width * 100) / 100 }; };
-        const seg = {}; for (const e of balk.querySelectorAll('.bar-fill')) seg[e.dataset.seg] = px(e);
-        const tak = {}; for (const t of document.querySelectorAll('#s-vooruit .plan-tak')) {
-          const v = t.querySelector('i[data-takkleur]'); if (v) tak[t.dataset.tak] = px(v); }
-        return { seg, tak, balk: Math.round(bb.width) };
-      });
-      // de invoer: er IS een segment onder de minimumbreedte
+      // de invoer: er IS een aandeel onder de minimumbreedte
       expect(await page.evaluate((id) => {
         const P = allocatePlan(); return P.find((p) => p.id === id).alloc / planCapacity() * 100; }, B))
         .toBeLessThan(1);
-      for (const id of [A, B]) {
-        expect(r.seg[id], `${id} breedte`).toEqual(r.tak[id]);
-      }
-      // en het kleine segment is op beide plekken de minimumbreedte van 1 procent
-      expect(r.seg[B].w).toBeCloseTo(r.balk / 100, 1);
+      const r = await page.evaluate(() => {
+        const balk = document.querySelector('#s-vooruit .inleg-balk');
+        const bb = balk.getBoundingClientRect();
+        const seg = {}; for (const e of balk.querySelectorAll('.bar-fill'))
+          seg[e.dataset.seg] = Math.round(e.getBoundingClientRect().width * 100) / 100;
+        return { seg, balk: Math.round(bb.width),
+          pos: getComputedStyle(balk.querySelector('.bar-fill')).position,
+          disp: getComputedStyle(balk).display };
+      });
+      expect(r.seg[B]).toBeCloseTo(r.balk / 100, 1);     // precies de minimumbreedte van 1 procent
+      /* ABSOLUUT EN GEEN FLEX, en dat is de meting van v317 die hier staande blijft: met de
+         minimumbreedte erin kan de som boven 100 procent uitkomen, en flex zou dan ALLE segmenten
+         proportioneel laten krimpen. Dan is het kleine segment opeens 2,98px in plaats van 3px. */
+      expect(r.pos).toBe('absolute');
+      expect(r.disp).not.toBe('flex');
     });
   }
 
-  test('de minimumbreedte staat in de segmenten, zodat beide lezers hem delen', async ({ page }) => {
+  test('de minimumbreedte staat in de segmenten en niet in de CSS van een lezer', async ({ page }) => {
     await boot(page, MINI);
     const src = await kaalUit(page, 'planSegmenten');
     expect(src).toContain('SEG_MIN_PCT');
     const rp = await kaalUit(page, 'renderPlan');
     expect(rp).not.toContain('min-width:3px');
-    // en de tak-CSS draagt hem niet meer
+    /* En de tak-CSS draagt geen eigen minimum. Sinds v318 heet die klasse `.wf-tak i` en is zijn
+       maat een dikte in px; een `min-width` daar zou een tweede ondergrens zijn naast de 2px die
+       planTakDikte() al klemt (v104). */
     const css = await page.evaluate(() => [...document.styleSheets]
       .flatMap((s) => { try { return [...s.cssRules]; } catch (_) { return []; } })
-      .filter((r) => r.selectorText && /\.plan-tak i$/.test(r.selectorText))
+      .filter((r) => r.selectorText && /\.(plan-tak|wf-tak) i$/.test(r.selectorText))
       .map((r) => r.style.minWidth));
     expect(css.every((x) => !x)).toBe(true);
   });
@@ -406,141 +490,195 @@ test.describe('e · tak en balksegment, ook onder 1 procent', () => {
     expect(sB.alloc).toBe(0);
     expect(sB.breed).toBe(0);
     expect(await page.locator('#s-vooruit .inleg-balk .bar-fill[data-seg="' + B + '"]').count()).toBe(0);
+    // en dan is er ook geen tak, want die maat IS het maandbedrag
+    expect(await page.locator('#s-vooruit .wf-kol[data-id="' + B + '"] .wf-tak i[data-takkleur]').count()).toBe(0);
   });
 });
 
-/* ===== f) DE UITLEG BELOOFT GEEN HOOGTE MEER ===== */
+/* ===== f) DE UITLEG ZEGT WAT ER STAAT =====
+   v317 haalde hier een BELOFTE weg die de code niet had: de uitleg zei nog "de hoogte van een vat
+   is het doelbedrag" terwijl v248 elke balk gelijk had gemaakt. v318 maakt die belofte weer WAAR,
+   en dan hoort hij er juist te staan. Wat deze groep vasthoudt is daarom omgedraaid: de uitleg
+   noemt de schaal, de bodem en de markering, en hij wijst nergens naar iets dat er niet is. */
 test.describe('f · de uitleg achter het info-icoon', () => {
-  test('geen belofte over de hoogte van een balk', async ({ page }) => {
+  const uitleg = (page) => page.evaluate(() => {
+    const el = document.createElement('div'); el.innerHTML = (NOTES.planUitleg || '');
+    return el.innerText;
+  });
+
+  test('de uitleg noemt de schaal, de bodem, de markering en het streepje', async ({ page }) => {
     await boot(page, DOORZAK);
-    const t = await page.evaluate(() => {
-      const el = document.createElement('div'); el.innerHTML = NOTES.planUitleg || '';
-      return el.innerText;
-    });
-    expect(t).not.toMatch(/hoogte/i);
-    expect(t).not.toMatch(/tijdas/i);
-    // en hij zegt wat er wel staat
-    expect(t).toContain('dezelfde balk');
-    expect(t).toContain('voortgang in procenten');
+    const t = await uitleg(page);
+    expect(t).toMatch(/hoogte van een vat is het doelbedrag/i);
+    expect(t).toMatch(/minimumhoogte/i);
+    expect(t).toMatch(/gestippelde bovenrand/i);
     expect(t).toContain('streepje');
+    expect(t).toMatch(/dikte van de tak/i);
+    expect(t).toMatch(/stippellijn/i);
   });
 
-  test('en hij wijst niet meer naar pijlen die er niet zijn', async ({ page }) => {
+  test('en hij wijst niet naar pijlen of een tijdas die er niet zijn', async ({ page }) => {
     await boot(page, DOORZAK);
-    const t = await page.evaluate(() => {
-      const el = document.createElement('div'); el.innerHTML = NOTES.planUitleg || '';
-      return el.innerText;
-    });
-    expect(t).not.toMatch(/pijl/i);
+    const t = await uitleg(page);
+    /* v317 verbood hier het woord "pijl", want de twee pijltjes waarmee je een bestemming
+       verplaatste waren toen weg. v318 heeft WEL een pijl: de punt op de stippellijn. Wat verboden
+       blijft is dus het PIJLTJE als bediening, en dat is een ander woord. */
+    expect(t).not.toMatch(/pijltje/i);
+    expect(t).toMatch(/stippellijn met de pijl/i);
+    expect(t).not.toMatch(/tijdas/i);
+    /* "dezelfde balk" was de v248-formulering en is sinds v318 onwaar: de vaten staan op schaal.
+       Een uitleg die beide beweringen draagt is erger dan een die er een draagt. */
+    expect(t).not.toContain('dezelfde balk');
   });
 
-  /* De twee CSS-comments beloofden hetzelfde. Een bronzoekende assertie, want een comment is voor
-     de volgende ronde net zo sturend als een label op het scherm (v276/v277). */
-  test('de CSS-comments bij .vat en .vat-laat beloven geen hoogte en geen stippelrand', async ({ page }) => {
+  /* De CSS-comments beloven hetzelfde als de uitleg. Een bronzoekende assertie, want een comment is
+     voor de volgende ronde net zo sturend als een label op het scherm (v276/v277). */
+  test('de CSS-comments bij de waterval beloven geen gelijke hoogte meer', async ({ page }) => {
     await boot(page, DOORZAK);
     const css = await page.evaluate(() => {
       const st = [...document.querySelectorAll('style')].map((s) => s.textContent).join('\n');
-      const i = st.indexOf('.vat{position:relative');
-      const j = st.indexOf('.vat-vol{');
+      const i = st.indexOf('.wf{position:relative');
+      const j = st.indexOf('.sr-only{');
       return st.slice(Math.max(st.lastIndexOf('/*', i), 0), j);
     });
-    /* De comments mogen de oude vorm wel als GESCHIEDENIS noemen; wat er niet meer mag staan is een
-       bewering in de tegenwoordige tijd over een hoogte of een rand die deze regels niet zetten. */
-    expect(css).not.toMatch(/Hoogte is het doelbedrag/);
-    expect(css).not.toMatch(/staat op de minimumhoogte/);
-    expect(css).not.toMatch(/de gestippelde bovenrand zegt dat/);
-    expect(css).toMatch(/v317/);
-    expect(css).toMatch(/voor elke bestemming even hoog/);
+    expect(css).not.toMatch(/voor elke bestemming even hoog/);
+    expect(css).toMatch(/v318/);
+    expect(css).toMatch(/niet op schaal/i);
   });
 });
 
 /* ===== g) DE PRIJS IN PIXELS, GEMETEN OP DE STAND VAN HET TOESTEL =====
-   Twee doelen op 90/10 van EUR 2.200, een volle buffer, en een reserveringspost. De getallen staan
-   hier vast zodat een volgende ronde ziet wat deze uitgeeft.
-   WAT DEZE RONDE KOST: de terugval-regel is 21px op de ontvanger. WAT HIJ OPLEVERT: de twee
-   pijltjes zijn weg (de ingeklapte noodfonds-rij gaat van 65 naar 55px) en de alinea onder de
-   waterval gaat van 113 naar 38px op 360px. Netto is de kaart 64px lager en de hele zone 94px.
-   DE LAATSTE BESTEMMING EINDIGT OP 566px BIJ EEN VOUW VAN 567, dus met EEN pixel marge. Dat is
-   gemeten en niet weggerekend: de regel die er bij kwam past net, en een regel erbij past niet.
-   OP 390x844 IS ER RUIMTE: daar eindigt de laatste bestemming op 544 van 771 en past ook de regel
-   onder de waterval (tot 612) in het eerste scherm. */
+   Twee doelen op 90/10 van EUR 2.200, een volle buffer, en geen reserveringenlijst.
+   v318 KOST HOOGTE, EN DAT IS GEMETEN EN NIET WEGGEREKEND. De waterval-kaart gaat op 360px van
+   526px (v317) naar 697px, en op 390px van 506 naar 679: PLUS 171 EN PLUS 173 PIXELS. De hele zone
+   gaat van 835 naar 1006 en van 814 naar 988.
+   WAAR DIE 171px ZIT, en dat is het getal dat de volgende ronde nodig heeft:
+   - de kolom is 224px (de tak van 44 plus het hoogste vat van 180), en bij doelen ONDER elkaar
+     kostte elke bestemming 144px, dus twee bestemmingen 288. De vaten naast elkaar winnen daar 64px.
+   - het TEKSTBLOK is 192px op 360px en 174px op 390px, en dat is waar de winst weer heen gaat. Elke
+     kolom is 120px breed op 360 en 133 op 390, en de tekst schaalt NIET mee (besluit v318: op elk
+     toestel de vaste tekstgrootte van de app), dus naam, maandbedrag, stand, vol-datum en het
+     datumpaar breken alle vijf af. Twee bestemmingen onder elkaar droegen diezelfde tekst over de
+     volle breedte en hadden hem niet nodig.
+   - 18px daarvan is het MAANDBEDRAG, dat bij twee kolommen naar het tekstblok zakt. Naast de tak
+     staan kan daar niet: dat label staat absoluut vanaf de middenlijn en breekt niet af, dus het
+     liep over de buurkolom heen. Bij EEN kolom staat het er wel naast en kost het nul.
+   - de strook met de stippellijn kost 23px, en de regel eronder 36px.
+   ALLE TEKSTBLOKKEN ZIJN EVEN HOOG, want ze staan in EEN rasterrij. Dat is met opzet: zo beginnen
+   de regels van alle kolommen op dezelfde hoogte, ook als het ene vat 180px is en het andere 40px.
+   De prijs is dat de HOOGSTE tekst de hoogte van alle kolommen zet.
+   MET DRIE DOELEN IS DE KOLOM 77px BREED OP 360 EN 86px OP 390, en dan is het tekstblok 228px en de
+   kaart 788px op BEIDE breedtes. Dat is de prijs van de derde kolom: 54px tekst erbij.
+   DE LAATSTE BESTEMMING VALT OP 360px ONDER DE VOUW: de waterval eindigt op 737px bij een vouw van
+   567. Op 390px eindigt hij op 719 bij 771 en past hij dus nog net. Op 360px is dat een echte
+   achteruitgang tegenover v317 (566 van 567, met EEN pixel marge) en hij staat hier als assertie
+   zodat hij niet als detail wegzakt. NIET INGEKORT: de opdracht was de hoogte MELDEN voordat er iets
+   wordt ingekort. */
 test.describe('g · de hoogte op het toestel', () => {
   const TOESTEL = { cap: 2200, order: ['noodfonds', A, B], goals: [
     { id: A, naam: 'Kosten Koper', doel: 15000, gespaard: 0, streefdatum: '2027-05', allocMode: 'pct', pct: 90 },
     { id: B, naam: 'Inrichting woning', doel: 3000, gespaard: 0, streefdatum: '2027-03', allocMode: 'pct', pct: 10 }] };
-  /* DE ZONE IS DIE VAN DEZE FIXTURE en niet die van het toestel: hier staat geen
-     reserveringenlijst, dus de kaart eronder is de kale 'instellen'-vorm. Op de gemeten stand van
-     het toestel (met een post van EUR 299 en een pot van EUR 37) is de zone 946px op 360 en 926px
-     op 390; dat verschil van 111px is die kaart en niet de waterval. */
   const PX = {
-    360: { vouw: 567, kaart: 526, nf: 55, zonderErf: 144, metErf: 165, regel: 38, laatsteTot: 566, zone: 835 },
-    390: { vouw: 771, kaart: 506, nf: 55, zonderErf: 144, metErf: 165, regel: 38, laatsteTot: 545, zone: 814 },
+    360: { vouw: 567, kaart: 697, nf: 55, wf: 491, tekst: 192, vatB: 120, tot: 737, zone: 1006, v317kaart: 526 },
+    390: { vouw: 771, kaart: 679, nf: 55, wf: 473, tekst: 174, vatB: 133, tot: 719, zone: 988, v317kaart: 506 },
   };
 
   for (const w of [360, 390]) {
-    test(`${w}px: de kaart, de rijen en de regel`, async ({ page }) => {
+    test(`${w}px: de kaart, de kolommen en de tekst`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: w === 360 ? 640 : 844 });
       await boot(page, TOESTEL);
       const d = await page.evaluate(() => {
         const nav = document.querySelector('nav,.nav,#nav');
         const z = document.querySelector('#s-vooruit');
         const h = (e) => (e ? Math.round(e.getBoundingClientRect().height) : null);
-        const bot = (e) => Math.round(e.getBoundingClientRect().bottom + window.scrollY);
         const kaart = [...z.querySelectorAll('.card')].find((c) => c.querySelector('.inleg-balk'));
         const regel = [...z.querySelectorAll('.small.mut2')].find((x) => /te gaan/.test(x.innerText));
-        const rij = [...z.querySelectorAll('.plan-rij')];
+        const wf = z.querySelector('.wf');
         return { vouw: window.innerHeight - (nav ? Math.round(nav.getBoundingClientRect().height) : 0),
-          kaart: h(kaart), rijen: rij.map(h), erf: rij.map((e) => e.querySelectorAll('[data-erfregel]').length),
-          regel: h(regel), laatsteTot: bot(rij[rij.length - 1]), zone: h(z),
-          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+          kaart: h(kaart), nf: h(z.querySelector('.plan-rij.vat-vol')), wf: h(wf),
+          kolom: h(z.querySelector('.wf-kol')), vatbox: h(z.querySelector('.wf-vatbox')),
+          vaten: [...z.querySelectorAll('.wf-vat')].map((v) => Math.round(v.getBoundingClientRect().height)),
+          vatB: Math.round(z.querySelector('.wf-vat').getBoundingClientRect().width),
+          teksten: [...z.querySelectorAll('.wf-tekst')].map(h),
+          erf: h(z.querySelector('.wf-erf')), erfRegel: h(z.querySelector('[data-erfregel]')),
+          regel: h(regel), tot: Math.round(wf.getBoundingClientRect().bottom + window.scrollY),
+          zone: h(z), overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
       });
       const p = PX[w];
       expect(d.vouw).toBe(p.vouw);
       expect(d.kaart).toBe(p.kaart);
-      expect(d.rijen).toEqual([p.nf, p.zonderErf, p.metErf]);
-      expect(d.erf).toEqual([0, 0, 1]);              // alleen de ontvanger draagt de regel
-      expect(d.rijen[2] - d.rijen[1]).toBe(21);      // wat de terugval-regel kost
-      expect(d.regel).toBe(p.regel);
-      expect(d.laatsteTot).toBe(p.laatsteTot);
+      expect(d.nf).toBe(p.nf);
+      expect(d.wf).toBe(p.wf);
+      // de kolom is de tak plus het HOOGSTE vat, en het kleine vat staat op de bodem
+      expect(d.kolom).toBe(44 + 180);
+      expect(d.vatbox).toBe(180);
+      expect(d.vaten).toEqual([180, 40]);
+      expect(d.vatB).toBe(p.vatB);
+      // alle tekstblokken even hoog, want ze staan in een rasterrij
+      expect(new Set(d.teksten).size).toBe(1);
+      expect(d.teksten[0]).toBe(p.tekst);
+      expect(d.erf).toBe(23);
+      expect(d.erfRegel).toBe(36);
+      expect(d.regel).toBe(38);
+      expect(d.tot).toBe(p.tot);
       expect(d.zone).toBe(p.zone);
       expect(d.overflow).toBeLessThanOrEqual(1);
+      /* DE ACHTERUITGANG STAAT ALS ASSERTIE, want anders zakt hij weg als detail. De v317-kaart
+         staat hier als getal en niet als meting: hij is niet meer te draaien. */
+      expect(d.kaart - p.v317kaart).toBeGreaterThan(165);
     });
   }
 
-  /* De bestemmingen blijven binnen het eerste scherm, op 360px met EEN pixel marge. Dat is geen
-     comfortabele marge en het staat er daarom als eigen assertie: een regel erbij valt eronder. */
-  test('360px: de laatste bestemming blijft boven de vouw, met één pixel marge', async ({ page }) => {
-    await page.setViewportSize({ width: 360, height: 640 });
-    await boot(page, TOESTEL);
-    const r = await page.evaluate(() => {
-      const nav = document.querySelector('nav,.nav,#nav');
-      const rij = [...document.querySelectorAll('#s-vooruit .plan-rij')];
-      return { vouw: window.innerHeight - (nav ? Math.round(nav.getBoundingClientRect().height) : 0),
-        tot: Math.round(rij[rij.length - 1].getBoundingClientRect().bottom + window.scrollY) };
-    });
-    expect(r.tot).toBeLessThan(r.vouw);
-    expect(r.vouw - r.tot).toBe(1);
+  /* 360px: de waterval valt onder de vouw. Bij v317 eindigde de laatste bestemming op 566 van 567,
+     met EEN pixel marge; nu eindigt hij op 719. Op 390px past hij nog net (701 van 771). */
+  test('360px valt de waterval onder de vouw, 390px niet', async ({ page }) => {
+    const uit = {};
+    for (const [w, h] of [[360, 640], [390, 844]]) {
+      await page.setViewportSize({ width: w, height: h });
+      await boot(page, TOESTEL);
+      uit[w] = await page.evaluate(() => {
+        const nav = document.querySelector('nav,.nav,#nav');
+        const wf = document.querySelector('#s-vooruit .wf');
+        return { vouw: window.innerHeight - (nav ? Math.round(nav.getBoundingClientRect().height) : 0),
+          tot: Math.round(wf.getBoundingClientRect().bottom + window.scrollY) };
+      });
+    }
+    expect(uit[360].tot).toBeGreaterThan(uit[360].vouw);
+    expect(uit[390].tot).toBeLessThan(uit[390].vouw);
   });
 
-  /* Met drie doelen past de waterval niet meer in het eerste scherm, en dat was vóór deze ronde al
-     zo (gemeten: de derde bestemming eindigde toen op 554 van 567 en de vierde viel eronder). De
-     terugval verandert dat niet; wat hij kost is 21px per ontvanger. */
-  test('met drie doelen groeit de kaart, en de terugval kost 21px per regel', async ({ page }) => {
-    await page.setViewportSize({ width: 360, height: 640 });
-    await boot(page, { cap: 2200, order: ['noodfonds', A, B, C], goals: [
+  /* Met drie doelen is de kolom 77px breed op 360 en 86px op 390, en dan breekt de tekst verder af:
+     228px op BEIDE breedtes, dus de kaart is daar even hoog. Dat is de prijs van de derde kolom. */
+  test('met drie doelen is het tekstblok 228px en de kaart op beide breedtes gelijk', async ({ page }) => {
+    const DRIE = { cap: 2200, order: ['noodfonds', A, B, C], goals: [
       { id: A, naam: 'Kosten Koper', doel: 15000, gespaard: 0, streefdatum: '2027-05', allocMode: 'pct', pct: 60 },
       { id: B, naam: 'Inrichting woning', doel: 3000, gespaard: 0, streefdatum: '2027-03', allocMode: 'pct', pct: 30 },
-      { id: C, naam: 'Vakantie', doel: 900, gespaard: 0, streefdatum: '2027-08', allocMode: 'pct', pct: 10 }] });
-    const d = await page.evaluate(() => {
-      const z = document.querySelector('#s-vooruit');
-      const rij = [...z.querySelectorAll('.plan-rij')];
-      return { rijen: rij.map((e) => Math.round(e.getBoundingClientRect().height)),
-        erf: rij.map((e) => e.querySelectorAll('[data-erfregel]').length) };
-    });
-    // de ontvanger van twee gevers draagt twee regels, dus 2 x 21px boven de kale 144px
-    const n = d.erf.reduce((a, x) => a + x, 0);
-    expect(n).toBe(2);
-    const metTwee = d.rijen[d.erf.indexOf(2)];
-    expect(metTwee).toBe(144 + 42);
+      { id: C, naam: 'Vakantie', doel: 900, gespaard: 0, streefdatum: '2027-08', allocMode: 'pct', pct: 10 }] };
+    const uit = {};
+    for (const [w, h] of [[360, 640], [390, 844]]) {
+      await page.setViewportSize({ width: w, height: h });
+      await boot(page, DRIE);
+      uit[w] = await page.evaluate(() => {
+        const z = document.querySelector('#s-vooruit');
+        const H = (e) => Math.round(e.getBoundingClientRect().height);
+        const kaart = [...z.querySelectorAll('.card')].find((c) => c.querySelector('.inleg-balk'));
+        return { kaart: H(kaart), wf: H(z.querySelector('.wf')),
+          tekst: H(z.querySelector('.wf-tekst')),
+          vatB: Math.round(z.querySelector('.wf-vat').getBoundingClientRect().width),
+          kolommen: z.querySelectorAll('.wf-kol').length,
+          erf: H(z.querySelector('.wf-erf')),
+          regels: [...z.querySelectorAll('[data-erfregel]')].map((e) => e.dataset.erfnaar) };
+      });
+    }
+    for (const w of [360, 390]) {
+      expect(uit[w].kolommen, w + ' kolommen').toBe(3);
+      expect(uit[w].tekst, w + ' tekst').toBe(228);
+      expect(uit[w].wf, w + ' wf').toBe(582);
+      expect(uit[w].kaart, w + ' kaart').toBe(788);
+      expect(uit[w].erf, w + ' strook').toBe(34);          // twee lijnen in plaats van een
+      expect(uit[w].regels, w + ' regels').toEqual([A, A]);  // twee gevers, een ontvanger
+    }
+    expect(uit[360].vatB).toBe(77);
+    expect(uit[390].vatB).toBe(86);
   });
 });

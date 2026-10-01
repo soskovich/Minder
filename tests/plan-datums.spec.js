@@ -364,7 +364,13 @@ test.describe('c - de rij en de alinea lezen dezelfde bron', () => {
       await boot(page);
       const r = await page.evaluate((gid) => {
         const p = allocatePlan().find((x) => x.id === gid);
-        return { regels: vatRegels(p).regels, alinea: doelTempoLine(p).replace(/<[^>]+>/g, ''), eta: p.eta };
+        /* v318: het datumpaar is gesplitst. "vol" met zijn datum staat apart boven de regels, dus de
+           rij is de vol-regel PLUS de regels. De spec zet ze hier samen in plaats van de een te
+           negeren: de bewering gaat over het VERSCHIL tussen de twee datums, en die staan nu in twee
+           velden van dezelfde bron. */
+        const R = vatRegels(p);
+        return { regels: (R.vol ? [`vol in ${R.vol.datum}`] : []).concat(R.regels),
+          alinea: doelTempoLine(p).replace(/<[^>]+>/g, ''), eta: p.eta };
       }, id);
       const rij = r.regels.join(' · ');
       const vol = maand((/vol in ([a-z]+ \d{4})/.exec(rij) || [])[1] || '');
@@ -395,7 +401,9 @@ test.describe('c - de rij en de alinea lezen dezelfde bron', () => {
       return { alloc: p.alloc, rest: p.rest, eta: p.eta, gat: T.gat, benodigd: T.benodigd,
         haalbaar: T.haalbaar, knelt: T.knelt, maandenTot: T.maandenTot,
         zonder: Math.ceil(p.rest / p.alloc),
-        regels: vatRegels(p).regels, alinea: doelTempoLine(p).replace(/<[^>]+>/g, '') };
+        regels: (() => { const R = vatRegels(p);
+          return (R.vol ? [`vol in ${R.vol.datum}`] : []).concat(R.regels); })(),
+        alinea: doelTempoLine(p).replace(/<[^>]+>/g, '') };
     }, ID_KK);
     expect(r.gat, 'de fixture moet een doel dragen waarvan het huidige tempo tekortkomt').toBeGreaterThan(0);
     expect(r.zonder, 'en zonder terugval zou het niet op tijd zijn').toBeGreaterThan(r.maandenTot);
@@ -420,7 +428,9 @@ test.describe('c - de rij en de alinea lezen dezelfde bron', () => {
       const p = allocatePlan().find((x) => x.id === gid);
       const T = doelTempo(p, p.alloc);
       return { eta: p.eta, maandenTot: T.maandenTot, knelt: T.knelt, benodigd: T.benodigd,
-        regels: vatRegels(p).regels, alinea: doelTempoLine(p).replace(/<[^>]+>/g, '') };
+        regels: (() => { const R = vatRegels(p);
+          return (R.vol ? [`vol in ${R.vol.datum}`] : []).concat(R.regels); })(),
+        alinea: doelTempoLine(p).replace(/<[^>]+>/g, '') };
     }, ID_KK);
     expect(r.eta).toBeGreaterThan(r.maandenTot);
     expect(r.knelt).toBe(true);

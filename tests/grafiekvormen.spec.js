@@ -131,11 +131,14 @@ test.describe('b · de plan-balk: stilstand is grijs, beweging krijgt een segmen
       planOrder: ['a', 'b', 'c', 'noodfonds'],
       planPaused: { noodfonds: true, c: true }, savingAmount: 300 } };
 
+  /* v318: de vulling zit in het VAT en niet meer in een liggende balk, dus de lagen staan in
+     `.wf-kol .wf-vat i` en hun maat is een HOOGTE. De eigenschap is onveranderd: één laag bij
+     stilstand, twee zodra er deze maand iets bij komt, en de kleur uit planTint(). */
   const rijen = (page) => page.evaluate(() => {
     const P = allocatePlan();
     const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-    return [...d.querySelectorAll('.plan-item')].map((el) => {
-      const f = el.querySelectorAll('.bar-fill');
+    return [...d.querySelectorAll('.wf-kol')].map((el) => {
+      const f = el.querySelectorAll('.wf-vat i');
       const p = P.find((x) => x.id === el.dataset.id) || {};
       return { id: el.dataset.id, status: p.status, alloc: p.alloc,
         kleur: f[0] ? f[0].style.background : null, segmenten: f.length };
@@ -178,12 +181,13 @@ test.describe('b · de plan-balk: stilstand is grijs, beweging krijgt een segmen
     const r = await page.evaluate(() => {
       const p = allocatePlan().find((x) => x.type === 'aflossen');
       const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-      /* v246 zette het segment in de hoogte, want het vat vulde van onderaf; v248 legt de balk weer
-         en dan is het weer de breedte, precies zoals v190 hem legde. De eigenschap is onveranderd:
-         het segment is alloc plus je bestaande termijn, hetzelfde bedrag dat de rij noemt. */
-      const f = d.querySelector('.plan-item[data-id="af:d1"] .bar-fill:nth-child(2)');
+      /* v246 zette het segment in de hoogte, want het vat vulde van onderaf; v248 legde de balk en
+         maakte het weer de breedte; v318 zet de vaten naast elkaar en dan is het opnieuw de hoogte.
+         De eigenschap is door alle drie onveranderd: het segment is alloc plus je bestaande termijn,
+         hetzelfde bedrag dat de regel eronder noemt. */
+      const f = d.querySelector('.wf-kol[data-id="af:d1"] .wf-vat i:nth-child(2)');
       return { alloc: p.alloc, debtPer: p.debtPer, doel: p.doel, gespaard: p.gespaard,
-        breedte: f ? parseFloat(f.style.width) : null };
+        breedte: f ? parseFloat(f.style.height) : null };
     });
     const verwacht = Math.min((r.alloc + r.debtPer) / r.doel * 100,
       100 - Math.min(Math.round(r.gespaard / r.doel * 100), 100));

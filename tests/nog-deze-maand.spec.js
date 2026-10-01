@@ -311,11 +311,17 @@ test.describe('e · de plan-rij houdt drie rollen en herhaalt de uitleg niet', (
     await boot(page);
     const r = await page.evaluate(() => {
       go('vooruit');
-      return [...document.querySelectorAll('#s-vooruit .plan-item')].map((x) => ({
-        tekst: x.innerText.replace(/\s+/g, ' '),
-        balk: x.querySelectorAll('.bar-track').length,
-        keuze: x.querySelectorAll('.plan-act, [onclick]').length,   // v317: .plan-mv bestaat niet meer
-      }));
+      /* v318: een bestemming is twee elementen. De BALK is het vat in de kolom ernaast, en de KEUZE
+         is de tik op de bestemming zelf (beide helften dragen hun eigen onclick naar planRij). De
+         drie rollen zijn dus nog alle drie te meten; ze staan alleen niet meer in één element. */
+      return [...document.querySelectorAll('#s-vooruit .plan-item')].map((x) => {
+        const kol = x.dataset.id
+          ? document.querySelector(`#s-vooruit .wf-kol[data-id="${x.dataset.id}"]`) : null;
+        return { tekst: x.innerText.replace(/\s+/g, ' '),
+          balk: (kol || x).querySelectorAll('.wf-vat, .bar-track').length,
+          keuze: [x, ...x.querySelectorAll('.plan-act, [onclick]')]
+            .filter((e) => e.getAttribute('onclick')).length };
+      });
     });
     const lopend = r.find((x) => /op dit tempo/.test(x.tekst));
     const wacht = r.find((x) => /Wacht op/.test(x.tekst));

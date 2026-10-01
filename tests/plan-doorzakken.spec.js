@@ -245,7 +245,9 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
 
     // en die blokkeerder is vanaf zijn eigen rij te openen
     await page.locator('#s-vooruit .plan-item[data-id="gA"] >> text=Vakantie').click();
-    await page.locator('#s-vooruit .plan-item[data-id="gA"] >> text=openen').click();
+    /* v318: de knoppen staan als eigen rasterregel onder de bestemming die je aantikte, want ze
+       lopen over de volle breedte van het raster. Ze dragen hun eigen id. */
+    await page.locator('#s-vooruit [data-acties="gA"] >> text=openen').click();
     await page.waitForSelector('#gModes');
     expect(await page.locator('#gNaam').inputValue()).toBe('Vakantie');
 
@@ -277,7 +279,7 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
        kleine sheet was alleen via de wachthint bereikbaar. Nu staat hij achter de tik op de rij,
        waar hij hoort. */
     await page.locator('#s-vooruit .plan-item[data-id="af:d1"] >> text=Creditcard').click();
-    await page.locator('#s-vooruit .plan-item[data-id="af:d1"] >> text=maandbedrag').click();
+    await page.locator('#s-vooruit [data-acties="af:d1"] >> text=maandbedrag').click();
     await page.waitForSelector('#paModes');
     expect(await page.locator('#paModes .chip').count()).toBe(3);
     await page.locator('#paModes .chip', { hasText: 'Vast bedrag' }).click();

@@ -229,15 +229,16 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
     await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
     const r = await page.evaluate(() => {
       /* v246: de eerste rij kan een ingeklapt vol noodfonds zijn, en dat is een regel en geen vat.
-         Deze test gaat over een bestemming die nog loopt, dus die zoeken we op. */
-      const item = [...document.querySelectorAll('#s-vooruit .plan-item')]
-        .find((x) => !x.querySelector('.vat-vol') && x.querySelector('.vat')) 
-        || document.querySelector('#s-vooruit .plan-item');
-      const rij = item.querySelector('.row');
-      const naam = rij.children[0], bedrag = rij.children[1];
+         Deze test gaat over een bestemming die nog loopt, dus die zoeken we op.
+         v318: zo'n bestemming is `.wf-tekst`, met de naam in `.wf-naam` en het maandbedrag bij de
+         tak of in de eerste tekstregel. De verhouding die hier vastligt is dezelfde: het BEDRAG
+         draagt het gewicht en de NAAM stapt terug. */
+      const item = document.querySelector('#s-vooruit .wf-tekst');
+      const naam = item.querySelector('.wf-naam');
+      const kol = document.querySelector(`#s-vooruit .wf-kol[data-id="${item.dataset.id}"]`);
+      const bedrag = kol.querySelector('.wf-taklabel') || item.querySelector('.small');
       const b = bedrag.querySelector('b');
-      // v246: de stand staat in het vat, als eigen regel onder de kop
-      const sub = item.querySelector('.vat-stand') || item.querySelector('.row + .small');
+      const sub = item.querySelector('.vat-stand');
       return { naamGewicht: +getComputedStyle(naam).fontWeight,
                bedragGewicht: b ? +getComputedStyle(b).fontWeight : null,
                bedragTekst: b ? b.innerText : '',
@@ -264,25 +265,39 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
     if (t) expect(t).toMatch(/onbekend|€/);
   });
 
-  /* DEZE TEST IS VOOR DE TWEEDE KEER OMGEDRAAID, en dat is precies waarom hij hier staat.
+  /* DEZE TEST IS VOOR DE DERDE KEER OMGEDRAAID, en dat is precies waarom hij hier staat.
      Oorspronkelijk: "de rij wordt er niet hoger van", elke rij onder 150px. Bij v246 werd dat "de
      vaten staan op schaal, met een bodem en een budget", want de hoogte droeg toen het doelbedrag.
-     Bij v248 is de hoogte geen drager meer: elke bestemming krijgt dezelfde liggende balk en de
-     vulling draagt de voortgang. Daarmee geldt het oorspronkelijke weer, en scherper: niet "onder
-     150px" maar "alle balken precies even hoog", want gelijkheid is nu de eigenschap zelf. */
-  test('elke bestemming krijgt dezelfde balk, en de rij blijft laag', async ({ page }) => {
+     Bij v248 was de hoogte geen drager meer: elke bestemming kreeg dezelfde liggende balk.
+     BIJ v318 STAAN DE VATEN NAAST ELKAAR, en dan kost de hoogte geen stapel meer en draagt hij weer
+     het doelbedrag. De BREEDTE blijft gelijk, want elke kolom is `minmax(0,1fr)`: de leesbaarheid
+     van een naam mag niet aan het bedrag ernaast hangen. Daarmee splitst deze test in de twee helften
+     die nu echt verschillende dingen beweren, en de reeks hierboven staat erbij zodat een volgende
+     ronde niet denkt dat hij iets nieuws ontdekt.
+     DE HOOGTE VAN DE TEKST STAAT ALS GEMETEN GETAL ERBIJ en niet als "onder 150px": die grens was
+     van de gestapelde vorm, en naast elkaar is de hoogte van de tekst de PRIJS van de kolombreedte
+     (zie de v318-regel in CLAUDE.md). Een grens die altijd gehaald wordt meet niets. */
+  test('de vaten staan op schaal, de kolommen zijn even breed', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
     const r = await page.evaluate(() => ({
-      balken: [...document.querySelectorAll('#s-vooruit .vat')].map((v) => ({
-        id: v.closest('.plan-item').dataset.id,
+      balken: [...document.querySelectorAll('#s-vooruit .wf-vat')].map((v) => ({
+        id: v.dataset.vat,
+        doel: (allocatePlan().find((p) => p.id === v.dataset.vat) || {}).doel,
         h: Math.round(v.getBoundingClientRect().height),
         w: Math.round(v.getBoundingClientRect().width) })),
-      rijen: [...document.querySelectorAll('#s-vooruit .plan-item')].map((x) => x.offsetHeight) }));
+      teksten: [...document.querySelectorAll('#s-vooruit .wf-tekst')].map((x) => x.offsetHeight),
+      boxen: [...document.querySelectorAll('#s-vooruit .wf-vatbox')]
+        .map((x) => Math.round(x.getBoundingClientRect().height)) }));
     expect(r.balken.length).toBeGreaterThan(1);
-    expect(new Set(r.balken.map((x) => x.h)).size, 'hoogtes: ' + r.balken.map((x) => x.h).join(',')).toBe(1);
     expect(new Set(r.balken.map((x) => x.w)).size, 'breedtes: ' + r.balken.map((x) => x.w).join(',')).toBe(1);
-    for (const x of r.rijen) expect(x).toBeLessThan(150);
+    // de hoogte volgt het doelbedrag: een groter doel staat nooit lager
+    const op = [...r.balken].sort((a, b) => a.doel - b.doel);
+    for (let i = 1; i < op.length; i++) expect(op[i].h, op[i].id).toBeGreaterThanOrEqual(op[i - 1].h);
+    // en elke box is even hoog, zodat de strook eronder voor elke kolom op dezelfde y begint
+    expect(new Set(r.boxen).size, 'boxen: ' + r.boxen.join(',')).toBe(1);
+    // alle tekstblokken even hoog, want ze staan in één rasterrij
+    expect(new Set(r.teksten).size, 'teksten: ' + r.teksten.join(',')).toBe(1);
   });
 });
 
@@ -344,9 +359,13 @@ test.describe('f · een gepauzeerd doel blijft grijs en stil (v194, regressie)',
     await boot(page, seed({ planPaused: { g3: true } }));
     await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
     const r = await page.evaluate(() => {
+      /* v318: de vulling zit in het VAT, dus in de kolom naast het tekstblok. De eigenschap is
+         onveranderd: grijs, en geen tweede laag, want er komt niets bij. */
       const rij = [...document.querySelectorAll('#s-vooruit .plan-item')]
         .find((x) => /Keuken/.test(x.innerText));
-      const fills = [...rij.querySelectorAll('.bar-fill')].map((x) => x.getAttribute('style') || '');
+      const kol = document.querySelector(`#s-vooruit .wf-kol[data-id="${rij.dataset.id}"]`);
+      const fills = [...(kol || rij).querySelectorAll('.wf-vat i, .bar-fill')]
+        .map((x) => x.getAttribute('style') || '');
       return { tekst: rij.innerText.replace(/\s+/g, ' '), fills };
     });
     expect(r.tekst).toMatch(/Gepauzeerd . krijgt nu niets/);

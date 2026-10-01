@@ -68,7 +68,13 @@ const meet = page => page.evaluate(()=>{
   return {alloc:kk.alloc, rest:kk.rest, eta:kk.eta,
     maandenTot:T.maandenTot, benodigd:T.benodigd, gat:T.gat, knelt:T.knelt, haalbaar:T.haalbaar,
     status:d.status, waarde:d.waarde, eenheid:d.eenheid, gevolg:d.gevolg, tpm:d.tekortPerMaand,
-    plan:(()=>{try{return vatRegels(kk,T).regels.join(' · ');}catch(e){return 'FOUT '+e.message;}})(),
+    /* v318: `vatRegels(p,smal)` kiest op dat tweede argument de korte of de lange vormen, en de
+       vol-datum staat sindsdien APART boven de regels. Deze helper gaf hier `T` mee, en dat was tot
+       v317 een genegeerd argument; nu zou het de KORTE vormen kiezen, dus hij geeft niets mee en
+       zet de vol-regel er zelf voor. */
+    plan:(()=>{try{const R=vatRegels(kk);
+      return (R.vol?[`vol in ${R.vol.datum}`]:[]).concat(R.regels).join(' · ');}
+      catch(e){return 'FOUT '+e.message;}})(),
     volDatum:kk.eta?etaDatum(kk.eta):''};
 });
 

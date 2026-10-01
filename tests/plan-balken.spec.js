@@ -71,29 +71,37 @@ async function boot(page, o, breed) {
   await page.waitForFunction(() => typeof doelStreepje === 'function');
   await page.evaluate(() => go('vooruit'));
 }
-/* De tekst van een bestemming staat boven zijn balk, in .vat-kop; .vat draagt de balk zelf plus
-   het streepje. Hoogte en breedte zijn voor elke bestemming gelijk, dus die meten we ook. */
-const balken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .vat')].map((v) => {
-  const it = v.closest('.plan-item');
+/* v318: DE BESTEMMINGEN STAAN NAAST ELKAAR. Een bestemming is nu twee elementen: `.wf-kol` met de
+   tak en het vat, en `.wf-tekst` met de naam, de stand en het datumpaar. Het streepje ligt dwars op
+   het vat en staat in de box eromheen, want het vat heeft overflow:hidden. De hoogte van een vat is
+   sinds v318 zijn DOELBEDRAG en niet meer voor elke bestemming gelijk; wat dat precies moet zijn
+   staat in plan-vaten-naast-elkaar.spec.js en niet hier. */
+const balken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-vat')].map((v) => {
+  const box = v.parentElement, id = v.dataset.vat;
+  const tk = document.querySelector(`#s-vooruit .wf-tekst[data-id="${id}"]`);
   const r = v.getBoundingClientRect();
-  const st = v.querySelector('.doel-streep');
-  return { id: it.dataset.id, h: Math.round(r.height), w: Math.round(r.width),
-    vulling: [...v.querySelectorAll('.bar-fill')].map((f) => parseFloat(f.style.width)),
+  const st = box.querySelector('.wf-streep');
+  return { id, h: Math.round(r.height), w: Math.round(r.width),
+    vulling: [...v.querySelectorAll('i')].map((f) => parseFloat(f.style.height)),
     streep: st ? parseFloat(st.dataset.pct) : null,
     sr: st ? st.textContent.replace(/\s+/g, ' ').trim() : null,
-    laat: v.dataset.laat === '1',
-    dat: (it.querySelector('.vat-dat') || { innerText: '' }).innerText.replace(/\s+/g, ' ').trim() };
+    laat: tk ? tk.dataset.laat === '1' : false,
+    /* `vol` en `dat` zijn sinds v318 TWEE velden en geen één string. Het ontwerp zet "vol" met zijn
+       datum apart boven het datumpaar (besluit 2), dus een assertie over de streefdatum mag niet
+       meer per ongeluk op de vol-datum slagen en omgekeerd. */
+    vol: tk && tk.querySelector('[data-vol]')
+      ? tk.querySelector('[data-vol]').innerText.replace(/\s+/g, ' ').trim() : '',
+    dat: tk && tk.querySelector('.vat-dat')
+      ? tk.querySelector('.vat-dat').innerText.replace(/\s+/g, ' ').trim() : '' };
 }));
-// de tak draagt sinds v246b geen tekst: het bedrag staat in de kop één regel erboven
-/* v317: EEN TAK KAN TWEE SOORTEN BLOKKEN DRAGEN. Het volle blok is wat deze bestemming NU krijgt
-   (`i[data-takkleur]`), de gestippelde zijn de terugval: de ruimte van een bestemming die vol
-   raakt (`i.tak-erf`). Een helper die `querySelector('i')` pakt leest bij een ontvanger zonder
-   eigen inleg het GESTIPPELDE blok als zijn dikte, en dat is een ander getal. */
-const takken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .plan-tak')]
-  .map((t) => {
-    const vol = t.querySelector('i[data-takkleur]');
-    return { id: t.dataset.tak, w: vol ? parseFloat(vol.style.width) : null,
-      erf: [...t.querySelectorAll('i.tak-erf')].map((e) => e.dataset.erf) };
+/* v318: de tak is verticaal en zijn DIKTE is het maandbedrag. De terugval staat niet meer in de tak
+   maar als stippellijn in de strook eronder, met de gever en de ontvanger op dezelfde `.wf-lijn`. */
+const takken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-kol')]
+  .map((k) => {
+    const vol = k.querySelector('.wf-tak i[data-takkleur]');
+    return { id: k.dataset.id, w: vol ? +vol.getBoundingClientRect().width.toFixed(1) : null,
+      erf: [...document.querySelectorAll(`#s-vooruit .wf-lijn[data-erf-naar="${k.dataset.id}"]`)]
+        .map((e) => e.dataset.erfVan) };
   }));
 /* alleen de bestemmingen met een eigen, gevulde tak */
 const gevuld = async (page) => (await takken(page)).filter((t) => t.w != null);
@@ -130,14 +138,30 @@ test.describe('a · de grendel in beeld', () => {
     expect(await page.evaluate(() => planGrendel())).toMatchObject({ dicht: true, rest: 4201 });
     const T = await gevuld(page);
     expect(T.map((x) => x.id)).toEqual(['noodfonds']);      // de andere twee krijgen niets
-    expect(T[0].w).toBeCloseTo(100, 1);                     // de hele inleg, dus de volle breedte
-    /* v317: het doel erachter heeft wel een tak, met alleen een GESTIPPELD blok: dat is de ruimte
-       van de buffer, die er volgens de projectie heen gaat zodra hij vol is. */
-    const erf = (await takken(page)).filter((t) => t.w == null);
-    expect(erf.map((t) => t.erf)).toEqual([['noodfonds']]);
-    // en het bedrag staat in de kop erboven, één keer
-    expect(await page.locator('#s-vooruit .plan-item[data-id="noodfonds"] .vat-kop').innerText())
+    /* v318: de tak is geen segment van de balk meer maar een verticale tak, en zijn maat is dus
+       een DIKTE in pixels en geen percentage. Hij komt uit planTakDikte() en wordt hier niet
+       opnieuw uitgedrukt (v104). */
+    expect(T[0].w).toBeCloseTo(await page.evaluate(() => planTakDikte(allocatePlan()
+      .find((p) => p.id === 'noodfonds').alloc)), 1);
+    /* v317 zette de ruimte van de buffer als GESTIPPELD blok in de tak van het doel erachter. v318
+       maakt er een stippellijn van, in de strook onder de vaten, met de gever en de ontvanger op
+       dezelfde `.wf-lijn`. De overdrachten komen uit planTerugval() en worden hier niet opnieuw
+       uitgedrukt (v104, besluit v318).
+       HET ZIJN ER TWEE EN NIET ÉÉN, en dat is gemeten en niet verwacht: de projectie ketent door.
+       De buffer geeft zijn ruimte aan Kosten Koper, en Kosten Koper die van hém aan Inrichting.
+       Een assertie op één overdracht zou de tweede stil laten vallen. */
+    const erf = (await takken(page)).filter((t) => t.erf.length);
+    const TV = await page.evaluate(() => planTerugval(allocatePlan(), planCapacity())
+      .map((e) => [e.naar, e.van]));
+    expect(TV.length).toBeGreaterThan(1);
+    expect(erf.map((t) => [t.id, t.erf])).toEqual(TV.map(([naar, van]) => [naar, [van]]));
+    expect(erf.every((t) => t.w == null), 'geen ontvanger krijgt vandaag zelf al iets').toBe(true);
+    /* En het bedrag staat één keer bij die tak. Met drie vaten is de kolom SMAL, dus het zakt naar
+       de eerste tekstregel onder het vat; staat er ruimte naast de tak, dan staat het daar. Eén
+       bron (planBedragDeel), twee plekken naar gelang de breedte (v318). */
+    expect(await page.locator('#s-vooruit .plan-item[data-id="noodfonds"]').innerText())
       .toContain('€3.000/mnd');
+    expect(await page.locator('#s-vooruit .wf-taklabel').count()).toBe(0);
   });
 
   test('het noodfonds noemt de maand waarin hij vol is, en de twee doelen wachten', async ({ page }) => {
@@ -145,10 +169,20 @@ test.describe('a · de grendel in beeld', () => {
     const V = await balken(page);
     const nf = V.find((x) => x.id === 'noodfonds');
     const dat = await page.evaluate(() => planGrendelDatum());
-    expect(nf.dat).toBe(`vol in ${dat}`);
+    /* v318: "vol" met zijn datum staat apart boven het datumpaar, dus het noodfonds draagt hier
+       een vol-regel en GEEN datumpaar. Dat tweede is de eigenschap die v242 vastlegde (het
+       noodfonds heeft geen streefdatum) en die staat nu op het veld dat hem kan dragen. */
+    expect(nf.vol).toBe(`vol ${dat}`);
+    expect(nf.dat).toBe('');
+    /* Met drie kolommen is het vat SMAL, dus de korte vormen (besluit v318). Het label komt uit
+       doelDatumLabel() en wordt hier niet opnieuw uitgedrukt (v104). */
     for (const id of [ID_KK, ID_IW]) {
       const v = V.find((x) => x.id === id);
-      expect(v.dat, id).toMatch(/^moet in \w+ \d{4}/);
+      const lbl = await page.evaluate((i) =>
+        doelDatumLabel(((SET.goals || []).find((g) => g.id === i) || {}).streefdatum, true), id);
+      expect(lbl, id + ' heeft een korte streefdatum').toMatch(/^\w+ \d{4}$/);
+      expect(v.dat, id).toContain(`streef ${lbl}`);
+      expect(v.dat, id).not.toContain('moet in');
       expect(v.dat, id).toContain(`verdelen gaat open rond ${dat}`);
       expect(v.laat, id).toBe(false);          // wachten is geen achterstand
     }
@@ -156,8 +190,8 @@ test.describe('a · de grendel in beeld', () => {
 
   test('de wachtende vaten staan doffer en de dofheid hangt aan de status', async ({ page }) => {
     await boot(page, dicht);
-    const r = await page.evaluate(() => [...document.querySelectorAll('#s-vooruit .vat')].map((v) => ({
-      id: v.closest('.plan-item').dataset.id, dof: v.classList.contains('vat-dof') })));
+    const r = await page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-tekst')]
+      .map((v) => ({ id: v.dataset.id, dof: v.classList.contains('wf-dof') })));
     expect(r.find((x) => x.id === 'noodfonds').dof).toBe(false);
     expect(r.filter((x) => x.id !== 'noodfonds').every((x) => x.dof)).toBe(true);
   });
@@ -168,7 +202,7 @@ test.describe('a · de grendel in beeld', () => {
       expect(await page.evaluate(() => planGrendel())).toBe(null);
       const r = await page.evaluate(() => {
         const it = document.querySelector('#s-vooruit .plan-item[data-id="noodfonds"]');
-        return { vol: it.classList.contains('vat-vol'), vat: !!it.querySelector('.vat'),
+        return { vol: it.classList.contains('vat-vol'), vat: !!it.querySelector('.wf-vat'),
           h: Math.round(it.getBoundingClientRect().height) };
       });
       expect(r.vol).toBe(true);
@@ -185,8 +219,11 @@ test.describe('b · het datumpaar', () => {
         goals: [KK({ streefdatum: overMnd(40) }), IW({ streefdatum: overMnd(60), allocMode: 'fixed', perMaand: 0 })],
         planOrder: ['noodfonds', ID_KK, ID_IW] }, VOL));
       const v = (await balken(page)).find((x) => x.id === ID_KK);
-      /* v317: de speling staat er sindsdien als getal bij, uit dezelfde sp als 'net op tijd'. */
-      expect(v.dat).toMatch(/^vol in \w+ \d{4} · moet in \w+ \d{4} · \d+ maanden? speling$/);
+      /* v317: de speling staat er sindsdien als getal bij, uit dezelfde sp als 'net op tijd'.
+         v318: de vol-datum staat apart boven het paar, en met twee kolommen is het vat BREED, dus
+         de lange vorm ("moet in"). */
+      expect(v.vol).toMatch(/^vol \w+ \d{4}$/);
+      expect(v.dat).toMatch(/^moet in \w+ \d{4} \d+ maanden? speling$/);
       expect(v.laat).toBe(false);
     });
 
@@ -267,20 +304,31 @@ test.describe('b · het datumpaar', () => {
   });
 });
 
-/* v248: HIER STOND 'c · de schaal'. Die groep toetste de bodem, het budget, de onderlinge
-   verhouding van de vathoogten en de markering "niet op schaal". Alle vier bestaan niet meer:
-   elke bestemming heeft dezelfde balk, dus er valt niets te schalen en niets te klemmen. Wat
-   ervoor in de plaats komt is wat de balk nu wel moet zeggen. */
-test.describe('c · de balken zijn gelijk, de vulling is de voortgang', () => {
+/* v248 HAALDE HIER 'c · de schaal' WEG en zette er 'de balken zijn gelijk' voor in de plaats, want
+   bij doelen ONDER elkaar kostte een vat op schaal verticale ruimte zonder iets te zeggen. v318
+   draait die ene helft terug: de vaten staan NAAST elkaar, dus de hoogte kost geen stapel meer en
+   draagt weer de verhouding tussen de doelbedragen. De SCHAAL zelf (vatMax, de bodem, de
+   markering, de onderlinge verhouding) staat daarom in `plan-vaten-naast-elkaar.spec.js` blok b en
+   niet hier; wat hier blijft is de VULLING, en die is onveranderd de voortgang.
+   DE BREEDTE BLIJFT GELIJK, en dat is geen restje van v248 maar de rasterkeuze van v318: elke
+   kolom is `minmax(0,1fr)`, dus een smal doel krijgt niet minder ruimte voor zijn naam dan een
+   groot. Zonder die assertie zou een volgende ronde de breedte net zo goed op het doelbedrag
+   kunnen zetten, en dan hangt de leesbaarheid van een naam aan het bedrag ernaast. */
+test.describe('c · de balken staan op schaal, de vulling is de voortgang', () => {
   const drie = { goals: [KK({ streefdatum: KK_STREEF }), IW({ streefdatum: IW_STREEF })],
     planOrder: ['noodfonds', ID_KK, ID_IW] };
 
-  test('drie balken van gelijke hoogte en gelijke breedte', async ({ page }) => {
+  test('drie vaten van gelijke breedte, en de hoogtes lopen uiteen', async ({ page }) => {
     await boot(page, drie);
     const B = await balken(page);
     expect(B.length).toBe(3);
-    expect(new Set(B.map((x) => x.h)).size, 'hoogtes: ' + B.map((x) => x.h).join(',')).toBe(1);
     expect(new Set(B.map((x) => x.w)).size, 'breedtes: ' + B.map((x) => x.w).join(',')).toBe(1);
+    /* De drie doelbedragen van het toestel lopen uiteen (noodfonds, 10.000, 3.000), dus de hoogtes
+       horen dat ook te doen. Zonder die meting op de INVOER is "ze lopen uiteen" niet van "ze zijn
+       toevallig gelijk" te onderscheiden (v299/v300). */
+    const D = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, p.doel])));
+    expect(new Set(B.map((x) => D[x.id])).size, 'doelen: ' + B.map((x) => D[x.id]).join(',')).toBe(3);
+    expect(new Set(B.map((x) => x.h)).size, 'hoogtes: ' + B.map((x) => x.h).join(',')).toBeGreaterThan(1);
   });
 
   test('de vulling is gespaard gedeeld door doel, in procenten', async ({ page }) => {
@@ -500,7 +548,7 @@ test.describe('d · de balk en de takken', () => {
       const uit = [];
       for (const seg of document.querySelectorAll('.inleg-balk > .bar-fill')) {
         const id = seg.dataset.seg; if (id === 'vrij') continue;
-        const tak = document.querySelector(`.plan-tak[data-tak="${id}"] i`);
+        const tak = document.querySelector(`.wf-kol[data-id="${id}"] .wf-tak i[data-takkleur]`);
         uit.push({ id, seg: getComputedStyle(seg).backgroundColor,
           tak: tak ? getComputedStyle(tak).backgroundColor : null });
       }
@@ -521,29 +569,44 @@ test.describe('d · de balk en de takken', () => {
         KK({ streefdatum: overMnd(40), allocMode: 'fixed', perMaand: 2000 }),
         IW({ streefdatum: overMnd(40), allocMode: 'fixed', perMaand: 0 })] }));
       const r = await page.evaluate(() => ({
-        takken: [...document.querySelectorAll('.plan-tak')].map((t) => {
-          const vol = t.querySelector('i[data-takkleur]');
-          return { id: t.dataset.tak, w: vol ? parseFloat(vol.style.width) : null };
+        takken: [...document.querySelectorAll('#s-vooruit .wf-kol')].map((t) => {
+          const vol = t.querySelector('.wf-tak i[data-takkleur]');
+          return { id: t.dataset.id, w: vol ? parseFloat(vol.style.width) : null };
         }),
         alloc: Object.fromEntries(allocatePlan().map((p) => [p.id, p.alloc])),
-        cap: planCapacity() }));
+        dik: Object.fromEntries(allocatePlan().map((p) => [p.id, planTakDikte(p.alloc)])) }));
       const g = r.takken.filter((t) => t.w != null);
       expect(g.map((t) => t.id)).toEqual([ID_KK]);      // de tweede krijgt niets, dus geen gevuld blok
-      expect(g[0].w).toBeCloseTo(r.alloc[ID_KK] / r.cap * 100, 1);
+      /* v318: de maat is een DIKTE in px, uit planTakDikte(), en die rekent de spec niet na
+         (v104). Wat hij vasthoudt is dat de dikte uit het MAANDBEDRAG komt. */
+      expect(g[0].w).toBeCloseTo(r.dik[ID_KK], 1);
+      expect(r.dik[ID_KK]).toBeGreaterThan(r.dik[ID_IW]);
+      expect(r.alloc[ID_KK]).toBeGreaterThan(r.alloc[ID_IW]);
     });
 
-  /* v246b: de tak droeg een label met het maandbedrag, en sinds de tekst boven het vat staat noemt
-     de kop dat bedrag één regel hoger. Twee keer hetzelfde getal is een tweede bron, dus de tak
-     draagt alleen nog kleur en dikte. */
-  test('het maandbedrag staat één keer, in de kop boven de tak', async ({ page }) => {
+  /* v246b legde vast dat de tak zelf GEEN label draagt, want de kop erboven noemde het bedrag al.
+     v318 draait dat om: de tak staat verticaal en zijn DIKTE is het maandbedrag, dus het label hoort
+     ernaast. Wat de eigenschap blijft is dat het bedrag ER ÉÉN KEER staat, nooit op beide plekken.
+     DE PLEK HANGT AAN HET AANTAL KOLOMMEN, en dat is gemeten: het label staat absoluut vanaf de
+     middenlijn en breekt niet af, dus bij twee kolommen liep het over de buurkolom heen. Met twee
+     vaten zakt het daarom naar het tekstblok; met één staat het naast de tak. */
+  test('het maandbedrag staat één keer, en de plek volgt het aantal kolommen', async ({ page }) => {
     await boot(page, twee);
     const alloc = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, euro0(p.alloc)])));
+    expect(await page.locator('#s-vooruit .wf-kol').count()).toBe(2);
+    expect(await page.locator('#s-vooruit .wf-taklabel').count()).toBe(0);
     for (const t of await gevuld(page)) {
-      const kop = await page.locator(`#s-vooruit .plan-item[data-id="${t.id}"] .vat-kop`).innerText();
-      expect(kop, t.id).toContain(alloc[t.id] + '/mnd');
+      const tk = await page.locator(`#s-vooruit .plan-item[data-id="${t.id}"]`).innerText();
+      expect(tk, t.id).toContain(alloc[t.id] + '/mnd');
     }
-    expect(await page.evaluate(() =>
-      [...document.querySelectorAll('#s-vooruit .plan-tak')].every((t) => !t.innerText.trim()))).toBe(true);
+    // en met één bestemming staat hij er wel naast, en dan NIET in het tekstblok
+    await boot(page, Object.assign({ goals: [KK({ doel: 1500, streefdatum: overMnd(40),
+      allocMode: 'fixed', perMaand: 1500 })], planOrder: ['noodfonds', ID_KK] }, VOL));
+    expect(await page.locator('#s-vooruit .wf-kol').count()).toBe(1);
+    const a1 = await page.evaluate((id) => euro0(allocatePlan().find((x) => x.id === id).alloc), ID_KK);
+    expect(await page.locator('#s-vooruit .wf-taklabel').innerText()).toContain(a1 + '/mnd');
+    expect(await page.locator(`#s-vooruit .plan-item[data-id="${ID_KK}"]`).innerText())
+      .not.toContain(a1 + '/mnd');
   });
 });
 

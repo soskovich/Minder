@@ -213,8 +213,13 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
     expect(P.by.kk.status).toBe('');
     expect(P.by.kk.doorzak).toBe(true);
     const r = await page.evaluate(() => {
-      const rij = [...document.querySelectorAll('#s-vooruit .plan-rij')].find((e) => /Kosten Koper/.test(e.innerText));
-      return { dof: rij.innerHTML.includes('vat-dof'), tak: !!rij.querySelector('.plan-tak'),
+      /* v318: een bestemming is twee elementen in twee rasterrijen. De DOFHEID zit op het
+         tekstblok (`.plan-item[data-id]`) en de TAK in de kolom ernaast, dus ze zijn elk op hun
+         eigen helft te lezen en niet in één omhullende rij. */
+      const tk = document.querySelector('#s-vooruit .plan-item[data-id="kk"]');
+      const kol = document.querySelector('#s-vooruit .wf-kol[data-id="kk"]');
+      return { dof: tk.classList.contains('wf-dof'),
+        tak: !!kol.querySelector('.wf-tak i[data-takkleur]'),
         tint: planTint(allocatePlan().find((p) => p.id === 'kk'), 1) };
     });
     expect(r.dof).toBe(false);
@@ -244,29 +249,54 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
     expect(t).not.toMatch(/per maand/);
   });
 
-  test('de drie regels passen elk op één regel, op 360 en op 390px', async ({ page }) => {
+  /* v317 EISTE HIER DAT ELKE REGEL OP ÉÉN REGEL PAST, en dat kon omdat een bestemming toen de volle
+     breedte van de kaart had. v318 zet de vaten naast elkaar, dus de kolom is 120px op 360 en 133
+     op 390, en dan past "verdelen gaat open rond dec 2026" daar niet op één regel.
+     BESLUIT v318 IS DAT ER NIET WORDT INGEKORT: een regel die niet past loopt door op een tweede
+     regel. De eigenschap draait dus om, en wat vast moet liggen is dat er niets WEGVALT: de drie
+     regels staan er voluit, er wordt niets afgekapt en er is geen ellipsis.
+     DE HOOGTE STAAT ALS GEMETEN GETAL ERBIJ, zodat een volgende ronde ziet wat het afbreken kost
+     in plaats van dat hij het opnieuw moet meten. */
+  test('de drie regels staan voluit en breken af in plaats van te worden ingekort', async ({ page }) => {
+    const PX = { 360: 109, 390: 109 };
     for (const w of [360, 390]) {
       await page.setViewportSize({ width: w, height: 800 });
       await boot(page);
       const r = await page.evaluate(() => {
-        const rij = [...document.querySelectorAll('#s-vooruit .plan-rij')].find((e) => /Kosten Koper/.test(e.innerText));
-        const dat = rij.querySelector('.vat-dat');
+        const dat = document.querySelector('#s-vooruit .plan-item[data-id="kk"] .vat-dat');
+        const c = getComputedStyle(dat);
         return { h: Math.round(dat.getBoundingClientRect().height),
-          lh: Math.round(parseFloat(getComputedStyle(dat).lineHeight)),
-          n: vatRegels(allocatePlan().find((p) => p.id === 'kk')).regels.length };
+          lh: Math.round(parseFloat(c.lineHeight)), ws: c.whiteSpace, ov: c.textOverflow,
+          tekst: dat.innerText.replace(/\s+/g, ' ').trim(),
+          klem: dat.scrollHeight - dat.clientHeight,
+          /* DE VORM VOLGT DE BREEDTE, en de spec leest dat uit het SCHERM in plaats van het aan te
+             nemen: met drie kolommen staan de korte vormen er en met minder de lange (besluit
+             v318). Een hardgecodeerde `false` zou hier een vorm toetsen die het scherm niet draagt. */
+          regels: vatRegels(allocatePlan().find((p) => p.id === 'kk'),
+            document.querySelectorAll('#s-vooruit .wf .wf-kol').length >= 3).regels };
       });
-      expect(r.n, `${w}px`).toBe(3);
-      expect(r.h, `${w}px: ${r.h}px op ${r.n} regels van ${r.lh}px`).toBe(r.n * r.lh);
+      expect(r.regels.length, `${w}px`).toBe(3);
+      // elke regel staat voluit in de tekst van het vat
+      for (const reg of r.regels) expect(r.tekst, `${w}px`).toContain(reg);
+      expect(r.ws, `${w}px`).not.toBe('nowrap');
+      expect(r.ov, `${w}px`).not.toBe('ellipsis');
+      expect(r.klem, `${w}px: er valt niets buiten`).toBeLessThanOrEqual(1);
+      // en het afbreken kost regels: meer dan drie regelhoogtes
+      expect(r.h, `${w}px: ${r.h}px op 3 regels van ${r.lh}px`).toBe(PX[w]);
+      expect(r.h).toBeGreaterThan(3 * r.lh);
     }
   });
 
-  /* Het bedrag staat al in de kop van de rij. Bij een dichte grendel is base altijd nul voor een
-     doel, dus extra is gelijk aan alloc en zou "waarvan X doorgezakt" datzelfde getal herhalen. */
+  /* Het bedrag staat al bij de tak. Bij een dichte grendel is base altijd nul voor een doel, dus
+     extra is gelijk aan alloc en zou "waarvan X doorgezakt" datzelfde getal herhalen.
+     v318: het staat NAAST de tak zolang de kolom breed is en anders in de eerste tekstregel, dus de
+     assertie leest beide helften samen. */
   test('het doorgezakte bedrag staat er niet een tweede keer bij', async ({ page }) => {
     await boot(page, { kkMode: 'fixed', kkPer: 250 });
     const t = await page.evaluate(() => {
-      const rij = [...document.querySelectorAll('#s-vooruit .plan-rij')].find((e) => /Kosten Koper/.test(e.innerText));
-      return rij.innerText;
+      const kol = document.querySelector('#s-vooruit .wf-kol[data-id="kk"]');
+      const tk = document.querySelector('#s-vooruit .plan-item[data-id="kk"]');
+      return (kol.innerText + ' ' + tk.innerText).replace(/\s+/g, ' ');
     });
     expect(t).toContain('€466');
     expect(t).not.toMatch(/doorgezakt/);

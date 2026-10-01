@@ -285,37 +285,68 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
    met de voortgang als vulling. v317: de uitleg die hier stond beschreef de vorm van v246, die v248
    heeft teruggedraaid, en beloofde dus gedrag dat de code niet meer heeft. De wrapper blijft
    relatief staan omdat het streepje erbuiten hangt. */
-.vat{position:relative;margin:0 0 11px}
-/* v246b: de tekst van een bestemming staat boven zijn vat en niet erin. Elke regel in het vat tilde
-   de minimumhoogte op, en daarmee vielen er meer vaten onder de bodem en stonden ze even hoog
-   terwijl hun bedragen sterk verschilden. */
-.vat-kop{padding:0}
-.vat .bar-track{height:11px;margin:0}
-/* Het streepje staat buiten de track: die heeft overflow:hidden, en een markering op 0% of 100%
-   zou daarbinnen half wegvallen. Geen nieuwe kleur, geen oordeel: --mut2 zoals elke andere
-   informatieve markering (v78/v93). */
-.doel-streep{position:absolute;top:-2px;bottom:-2px;width:2px;margin-left:-1px;background:var(--mut2);border-radius:1px}
+/* v318: DE VERTAKTE WATERVAL. De vaten staan NAAST elkaar in een raster, elk met zijn tak recht
+   erboven, en ze hangen aan de inlegbalk. Tot v317 stonden ze onder elkaar met een horizontale tak
+   per rij; dat kostte 144px per bestemming en liet de doelen niet naast elkaar vergelijken.
+   DRIE RASTERRIJEN EN GEEN DRIE LOSSE BLOKKEN: de vaten, de terugval-strook en de tekst. De strook
+   loopt over alle kolommen (`grid-column:1/-1`), want een terugval verbindt twee kolommen en kan
+   dus niet in een kolom zitten. De tekst staat in een eigen rasterrij zodat de regels van alle
+   kolommen op dezelfde hoogte beginnen, ook als het ene vat 180px is en het andere 40px.
+   DE VATEN ZIJN BOVEN UITGELIJND, want ze hangen aan de balk: hun bodem verschilt en dat IS de
+   schaal. De box eromheen is even hoog als het hoogste vat, zodat de strook eronder voor elke
+   kolom op dezelfde y begint en de stippellijn per constructie te plaatsen is zonder iets op te
+   meten (v317: er is geen meet-hook in dit bestand). */
+.wf{position:relative;display:grid;margin:9px 0 0}
+.wf-kol{position:relative;min-width:0;padding:0 5px}
+/* De dikte van de tak IS het maandbedrag (1,4px per 100), net als in het ontwerp. De breedte van
+   het balksegment erboven is dat aandeel over de hele breedte; dat zijn twee weergaven van
+   hetzelfde getal en geen tweede bron. */
+.wf-tak{position:relative;display:flex;justify-content:center;align-items:stretch}
+.wf-tak i{display:block;background:var(--teal);border-radius:0 0 2px 2px}
+/* Het maandbedrag naast zijn tak, zoals in het ontwerp. Alleen bij een of twee kolommen: in een
+   derde past het er niet naast en zakt het naar de tekst onder het vat. */
+.wf-taklabel{position:absolute;top:50%;left:50%;transform:translate(0,-50%);margin-left:11px;
+  font-size:var(--fs-sm);color:var(--mut);line-height:1.2;white-space:nowrap}
+.wf-taklabel b{color:var(--txt);font-weight:700}
+.wf-vatbox{position:relative}
+/* Het vat is open aan de bovenkant: het vangt op wat de tak erin laat lopen. Geen rand boven, en
+   de onderhoeken rond, precies de vorm uit het ontwerp. */
+.wf-vat{position:absolute;left:7%;right:7%;top:0;border:1.6px solid var(--txt);border-top:0;
+  border-radius:0 0 9px 9px;overflow:hidden}
+.wf-vat i{position:absolute;left:0;right:0;display:block}
+/* v246 terug: een vat onder de bodem staat NIET op schaal, en dat zegt het met een gestippelde
+   bovenrand in plaats van dat het stil een verkeerde verhouding toont. */
+.wf-vat.wf-klem{border-top:2px dotted var(--mut2)}
+/* Het streepje ligt dwars op het vat: waar je nu zou moeten staan om je streefdatum te halen. Het
+   steekt aan beide kanten uit, want het vat heeft overflow:hidden en op 0 of 100 procent zou een
+   markering binnenin half wegvallen. */
+.wf-streep{position:absolute;left:-4px;right:-4px;height:2px;background:var(--mut2);border-radius:1px}
+.wf-tekst{min-width:0;padding:0 5px;margin-top:9px}
+/* Geen ellipsis en geen nowrap: een naam die niet past loopt door op een tweede regel (besluit v318).
+   `.vat-naam` deed het omgekeerde en kapte af, en dat is wat v281/v284 verbieden voor gegevens. */
+.wf-naam{font-weight:600;font-size:var(--fs-md);line-height:1.3;overflow-wrap:anywhere}
+.wf-vol{display:block;margin-top:4px;color:var(--mut2)}
+.wf-vol b{display:block;color:var(--txt);font-weight:700;font-size:var(--fs-md);line-height:1.25}
+.wf-dof{opacity:.72}
+/* Een bestemming die zijn streefdatum niet haalt: gedempt en geen alarmkleur, want er is niets fout
+   gedaan en de verdeling is later dan bedoeld (v78/v93). */
+.wf-laat{border-left:3px solid var(--mut2);padding-left:7px;margin-left:-2px}
+/* De terugval-strook. De stippellijn loopt van onder het vat van de GEVER naar het vat van de
+   ONTVANGER, met een pijl erop. x komt uit het kolomnummer en y uit de vathoogtes, allebei bekend
+   op het moment van renderen, dus er wordt niets opgemeten. De strook staat `overflow:visible`
+   zodat de stomp van een laag vat omhoog kan reiken tot zijn eigen bodem. */
+.wf-erf{position:relative;grid-column:1/-1;overflow:visible}
+.wf-erf .wf-lijn{position:absolute;left:0;right:0;top:0;bottom:0;display:block}
+.wf-erf i{position:absolute;display:block}
+.wf-erf i.v{border-left:1.4px dashed var(--mut2)}
+.wf-erf i.h{border-top:1.4px dashed var(--mut2)}
+.wf-erf i.p{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;
+  border-bottom:6px solid var(--mut2)}
 .vat-in{position:relative;display:flex;gap:10px;align-items:flex-start;padding:2px 2px 6px}
 .vat-naam{font-weight:600;font-size:var(--fs-md);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vat-stand{display:block;margin-top:2px}
 .vat-dat{display:block;margin-top:3px;color:var(--mut2);line-height:1.45}
-.vat-dof{opacity:.72}
-/* De linkerrand markeert een bestemming die zijn streefdatum niet haalt: gedempt en geen
-   alarmkleur, want er is niets fout gedaan en de verdeling is later dan bedoeld (v78/v93).
-   v317: de uitleg die hier stond ging over een vat-vorm uit v246 die v248 heeft teruggedraaid
-   (VAT_MIN en planVatHoogten() hebben nul treffers), dus hij beschreef een rand en een schaal die
-   deze regel niet zet. */
-.vat-laat{border-left:3px solid var(--mut2)}
 .vat-vol{padding:2px 0}
-/* De tak, direct boven zijn eigen vat. Dikte en plek komen uit hetzelfde segment als de balk. */
-/* v317: `overflow:hidden` staat hier en de minimumbreedte in planSegmenten(), zodat de tak en het
-   balksegment op dezelfde plek beginnen, even breed zijn en op dezelfde plek worden gekapt. De
-   `min-width:3px` die hier stond deed dat juist niet: die gold voor de tak en niet voor de balk. */
-.plan-tak{position:relative;height:13px;overflow:hidden}
-.plan-tak i{position:absolute;top:0;bottom:0;border-radius:0 0 2px 2px}
-/* v317: het gestippelde blok is de terugval: de ruimte van een bestemming die vol raakt. Geen eigen
-   kleur en geen vulling, want er gaat nu nog niets heen (v78/v93). */
-.plan-tak i.tak-erf{background:transparent;border:1px dashed var(--mut2);border-top:0}
 .inleg-balk{position:relative;height:11px}
 .inleg-balk .bar-fill{position:absolute;top:0;bottom:0;height:auto;transition:none}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -577,7 +608,11 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
 .tag{display:inline-block;font-size:var(--fs-xs);padding:2px 8px;border-radius:999px;background:var(--card2);color:var(--mut);margin-left:6px}
 /* micro-uitleg: onderstippelde vakterm + mini-popover (nooit een browserdialoog, die breekt de flow) */
 .jrg{border-bottom:1px dotted currentColor;cursor:help}
-.jrg::after{content:"\00a0\24D8";font-size:.9em;opacity:.75}
+/* v318: hier stond een ::after met een cirkel achter ELKE .jrg. `noteIcon()` gebruikt dezelfde
+   klasse EN zette zijn eigen cirkel als tekst, dus elke notitie droeg er twee en de kop van Plan
+   drie: een van de term `spaarinleg` en twee van de notitie. GEMETEN op 360px drie zichtbare
+   cirkels, waarvan twee op een tweede regel omdat de kop daardoor brak (41px in plaats van 20px).
+   De stippellijn is nu de enige markering van een TERM, de cirkel alleen nog van een NOTITIE. */
 .jrg:focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:3px}
 #tipPop{position:fixed;background:var(--surface);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:12px;line-height:1.45;box-shadow:0 8px 28px rgba(0,0,0,.5);z-index:120;display:none}
 #tipPop.show{display:block}
@@ -4405,10 +4440,18 @@ function doelMaandenTot(ym){
   const nu=new Date();
   return (+m[1]-nu.getFullYear())*12 + (mo-(nu.getMonth()+1));
 }
-function doelDatumLabel(ym){
+/* v318: `kort` geeft dezelfde datum met de maandnaam van drie letters, de vorm die `etaDatum()`
+   ook gebruikt. EEN formatter en geen tweede: in een smal vat past 'maart 2027' niet en 'mrt 2027'
+   wel, en twee aparte functies voor dezelfde datum zouden bij de eerste herziening uiteenlopen
+   (v104). De aanroeper kiest de vorm, de afleiding staat hier (v285). */
+function doelDatumLabel(ym,kort){
   const m=/^(\d{4})-(\d{2})$/.exec(String(ym||'')); if(!m) return '';
   const mo=+m[2]; if(mo<1||mo>12) return '';
-  return MFULL[mo-1]+' '+m[1];
+  if(!kort) return MFULL[mo-1]+' '+m[1];
+  /* De korte maandnaam komt uit dezelfde locale-formatter als `etaDatum()`, en niet uit de eerste
+     drie letters van MFULL: dat zou 'maa 2027' geven waar `etaDatum()` 'mrt 2027' zegt, en dan
+     noemt het ene vat een maand anders dan het andere. */
+  return new Date(+m[1], mo-1, 1).toLocaleDateString('nl-NL',{month:'short',year:'numeric'}).replace('.','');
 }
 /* v243: de grendel zat hier nog niet in. Een doel dat op de buffer wacht krijgt tot die vol is per
    definitie niets, dus het venster begint niet vandaag maar op de maand dat de grendel opengaat.
@@ -7957,18 +8000,17 @@ function planTint(p,i){
 /* De verdeling van de inlegbalk. Eén bron met de tak: beide lezen p.alloc, dus wat er uit je
    spaarinleg vertrekt. Bij een aflos-item telt debtPer NIET mee: dat is je bestaande termijn en die
    komt niet uit deze balk. Wat onverdeeld blijft is een eigen segment en geen weggelaten rest. */
-/* v317: DE MINIMUMBREEDTE STAAT IN DE SEGMENTEN EN NIET IN DE CSS VAN EEN VAN DE TWEE LEZERS.
-   `.plan-tak i` had `min-width:3px` en `.inleg-balk .bar-fill` had die niet, dus de twee liepen
-   uiteen precies waar ze klein worden. GEMETEN bij een bestemming op 0,5 procent van de inleg: het
-   balksegment werd 1,5px en de tak 3px, en de rechterrand van de tak landde op 302px op een balk van
-   300px. De v246-regel ("dikte en plek komen uit hetzelfde segment, dus ze kunnen niet uiteenlopen")
-   gold daarmee voor de data en niet voor het beeld.
-   EEN PERCENTAGE EN GEEN PIXELS, want dat is de eenheid waarin beide lezers rekenen: 1 procent is
-   3px op de 300px-balk van 360px en 3,3px op 390px. Een pixelminimum zou de twee opnieuw scheiden,
-   want de een leest `width` en de ander `left`+`width`.
-   DE SOM KAN BOVEN 100 UITKOMEN zodra het minimum bijt, en dat klemt niet: beide lezers hebben
-   `overflow:hidden`, dus ze kappen op dezelfde plek. Herschalen zou de andere segmenten een breedte
-   geven die hun bedrag niet draagt, en dat is een tweede vertekening om een eerste te verbergen. */
+/* v317: DE MINIMUMBREEDTE STAAT IN DE SEGMENTEN EN NIET IN DE CSS VAN EEN LEZER. Een bestemming
+   die iets krijgt moet zichtbaar iets krijgen, en dat hoort in de data te staan en niet in de
+   opmaak van een van de twee weergaven, anders loopt de ene lezer uiteen met de andere.
+   EEN PERCENTAGE EN GEEN PIXELS, want dat is de eenheid waarin de balk rekent: 1 procent is 3px op
+   de 300px-balk van 360px en 3,3px op 390px.
+   DE SOM KAN BOVEN 100 UITKOMEN zodra het minimum bijt, en dat klemt niet: de balk heeft
+   `overflow:hidden`. Herschalen zou de andere segmenten een breedte geven die hun bedrag niet
+   draagt, en dat is een tweede vertekening om een eerste te verbergen.
+   v318: de tweede lezer is sinds die ronde de DIKTE van de verticale tak (planTakDikte), en die
+   heeft zijn eigen ondergrens in pixels om dezelfde reden. De twee delen hun BRON (p.alloc) en niet
+   hun eenheid: een balk verdeelt een breedte, een tak draagt een dikte. */
 const SEG_MIN_PCT=1;
 function planSegmenten(P,cap){
   const segs=[]; let acc=0;
@@ -7996,72 +8038,115 @@ function planStand(p){
    HET NOODFONDS DRAAGT GEEN TWEEDE DATUM (punt 9). Dat is het zichtbare verschil tussen de buffer
    en een doel, en het vervangt elke uitleg daarover: de buffer heeft geen streefdatum, dus er is
    niets om tegen af te zetten. */
-function vatRegels(p){
-  if(p.nfOnbekend) return {regels:['<span class="muted">onbekend</span>'], laat:false};
+/* v318: DEZELFDE BRON, MET DE VOL-DATUM ALS EIGEN VELD EN EEN KORTE VORM.
+   `vol` is wat het vat groot afdrukt ("vol" klein, de maand groot, zoals het ontwerp), `regels` is
+   de rest. Het is geen tweede afleiding: de datum die hier uit `p.eta` komt stond vóór v318 als
+   tekst in `regels[0]` en wordt alleen anders OPGEMAAKT (v104).
+   `smal` kiest de korte vormen voor een vat in een smalle kolom: de maand van drie letters en
+   'mnd' in plaats van 'maanden'. De AANROEPER weet hoeveel kolommen er staan, dus die kiest, en de
+   beslissing welke woorden erbij horen staat hier (v285). */
+function vatRegels(p,smal){
+  const kort=t=>smal?String(t).replace(/\bmaanden\b/g,'mnd').replace(/\bmaand\b/g,'mnd'):t;
+  const uit=(regels,laat,vol)=>({regels:regels.filter(Boolean).map(kort), laat:!!laat, vol:vol||null});
+  if(p.nfOnbekend) return uit(['<span class="muted">onbekend</span>'],false);
   if(p.status==='gepauzeerd'||p.status==='bereikt'||p.status==='wacht op capaciteit')
-    return {regels:[planSub(p,true)], laat:false};
+    return uit([planSub(p,true)],false);
   if(p.type!=='goal'){
     const et=p.eta?etaDatum(p.eta):'';
-    if(p.type==='aflossen') return {regels:[et?`schuldenvrij rond ${et}`:'nog niet te zeggen wanneer hij af is'], laat:false};
-    return {regels:[et?`vol in ${et}`:'nog niet te zeggen wanneer hij vol is'], laat:false};
+    if(p.type==='aflossen')
+      return et?uit([],false,{woord:'schuldenvrij',datum:et}):uit(['nog niet te zeggen wanneer hij af is'],false);
+    return et?uit([],false,{woord:'vol',datum:et}):uit(['nog niet te zeggen wanneer hij vol is'],false);
   }
   /* Een doel van vóór v242 zonder streefdatum. Er valt geen datumpaar te maken, dus hier blijft
      planSub() staan: die draagt het tempo en wat er is doorgezakt, en dat zegt het vat niet zelf. */
   const dm=planDatumRegel(p);
-  if(dm) return {regels:[planSub(p,true),dm].filter(Boolean), laat:false};
-  const lbl=doelDatumLabel(p.streefdatum);
-  const moet=lbl?`moet in ${lbl}`:'';
+  if(dm) return uit([planSub(p,true),dm],false);
+  const lbl=doelDatumLabel(p.streefdatum,smal);
+  const moet=lbl?(smal?`streef ${lbl}`:`moet in ${lbl}`):'';
   const T=doelTempo(p, p.alloc);
-  if(!T) return {regels:[moet||planSub(p,true)].filter(Boolean), laat:false};
+  if(!T) return uit([moet||planSub(p,true)],false);
   if(T.soort==='onbekend')
-    return {regels:[moet,'wanneer je buffer vol is is nog niet bekend'].filter(Boolean), laat:false};
+    return uit([moet,'wanneer je buffer vol is is nog niet bekend'],false);
   /* Te laat door de grendel: de openingsmaand valt op of na de streefdatum. Geen bedrag per maand,
      want dat bestaat niet (v243); wel de markering, want zwijgen is hier een stil verlies. */
   if(T.soort==='telaat')
-    return {regels:[`${moet} · niet te halen`, `je buffer is pas rond ${T.startLabel} vol`].filter(Boolean), laat:true};
+    return uit([`${moet} · niet te halen`, `je buffer is pas rond ${T.startLabel} vol`],true);
   /* Wacht op de buffer, maar de datum is na de openingsmaand nog te halen. Geen markering: dit doel
      is niet te laat, het is nog niet begonnen. T.knelt is hier altijd waar, want alloc is nul
      zolang de grendel dicht zit, en dat is geen achterstand. */
   if(p.status==='wacht op de buffer')
-    return {regels:[moet, `verdelen gaat open rond ${T.startLabel}`].filter(Boolean), laat:false};
+    return uit([moet, `verdelen gaat open rond ${T.startLabel}`],false);
   /* v255: de grendel is dicht en dit doel krijgt tóch geld, want wat de buffer niet meer kon
      gebruiken is doorgezakt. "Wacht op je buffer" is dan niet waar, maar een achterstand rekenen
      ook niet: p.eta is hier ceil(rest / het doorgezakte bedrag), en dat bedrag is DE REST VAN DE
-     MAAND VAN JE BUFFER en niet het tempo van dit doel. Gemeten zou Kosten Koper met 466
-     doorgezakt uitkomen op "25 maanden te laat · 1.600 per maand haalt het wel", terwijl de buffer
-     volgende maand vol is en er dan 3.000 per maand heen kan. Dezelfde grond als v242: wachten op
-     de buffer is geen achterstand, dus geen markering en geen bedrag per maand.
-     DRIE REGELS, en de derde is de bestaande zin uit dezelfde bron. Die zegt het tweede feit al:
-     je eigen maandbedrag komt zodra de buffer vol is. Een tweede formulering ernaast zou een term
-     erbij zijn (v91). Gemeten op 360px: 252px beschikbaar in .vat-dat, en "krijgt wat je buffer
-     overhoudt" is 171px. De twee feiten in één zin haalt dat niet: "krijgt wat je buffer overhoudt
-     · eigen maandbedrag kan zodra hij vol is" is 422px en breekt op 360 én 390px. */
+     MAAND VAN JE BUFFER en niet het tempo van dit doel. Dezelfde grond als v242: wachten op de
+     buffer is geen achterstand, dus geen markering en geen bedrag per maand. */
   if(p.grendelDoorzak){
     const dt=planGrendelDatum(p.grendelDoorzak);
-    return {regels:[moet,'krijgt wat je buffer overhoudt',dt?`verdelen gaat open rond ${dt}`:''].filter(Boolean), laat:false};
+    return uit([moet,'krijgt wat je buffer overhoudt',dt?`verdelen gaat open rond ${dt}`:''],false);
   }
   if(T.knelt){
     const ach=(p.eta!=null)?(p.eta-T.maandenTot):null;
     const kop=(ach!=null&&ach>0)?`${moet} · ${ach} ${ach===1?'maand':'maanden'} te laat`:`${moet} · nog niet te halen`;
-    return {regels:[kop, `${euro0(T.benodigd)} per maand haalt het wel`].filter(Boolean), laat:true};
+    /* v318: OOK EEN DOEL DAT TE LAAT IS NOEMT ZIJN VOL-DATUM. Die stond er tot v317 niet, en op de
+       stand van het toestel zijn BEIDE doelen te laat, dus de datum die het vat groot hoort te
+       dragen kwam daar nergens in beeld. Hij is geen nieuwe afleiding: de achterstand hierboven IS
+       `p.eta - T.maandenTot`, dus dezelfde eta stond er al in verwerkte vorm. Met de datum erbij
+       zegt het vat wanneer hij vol is EN hoeveel dat na de streefdatum is, in plaats van alleen het
+       verschil. */
+    const et=p.eta?etaDatum(p.eta):'';
+    return uit([kop, `${euro0(T.benodigd)} per maand haalt het wel`],true,et?{woord:'vol',datum:et}:null);
   }
   const vol=p.eta?etaDatum(p.eta):'';
-  const eerste=[vol?`vol in ${vol}`:'',moet].filter(Boolean).join(' · ');
   const sp=(p.eta!=null)?(T.maandenTot-p.eta):null;
+  const volDeel=vol?{woord:'vol',datum:vol}:null;
   /* Is de speling kleiner dan een maand, dan zegt het vat dat het NET op tijd is. "Het klopt" en
      "het klopt met nul maanden speling" zijn niet hetzelfde bericht. */
-  if(sp!=null&&sp<=0) return {regels:[eerste,'net op tijd'], laat:false};
+  if(sp!=null&&sp<=0) return uit([moet,'net op tijd'],false,volDeel);
   /* v317: DE SPELING STAAT ER ALS GETAL, UIT DEZELFDE `sp` ALS "net op tijd". Tot v316 werd die
      uitgerekend en alleen gebruikt om de net-op-tijd-tak te kiezen; met zeven maanden speling zei het
      vat "vol in jan 2027 · moet in augustus 2027" en moest je het verschil zelf tellen. Dat is
-     dezelfde bron en geen tweede afleiding (v104): een andere formulering van het verschil tussen
-     diezelfde twee datums zou bij de eerste herziening uiteenlopen.
+     dezelfde bron en geen tweede afleiding (v104).
      GEEN TWEEDE DATUM EN GEEN OORDEEL: het is het verschil tussen de twee datums die er al staan, en
      de rij zegt niet of dat veel of weinig is. */
   if(sp!=null&&sp>0)
-    return {regels:[`${eerste} · ${sp} ${sp===1?'maand':'maanden'} speling`], laat:false};
-  return {regels:[eerste], laat:false};
+    return uit([moet, `${sp} ${sp===1?'maand':'maanden'} speling`],false,volDeel);
+  return uit([moet],false,volDeel);
 }
+/* v318: DE MATEN VAN DE WATERVAL, op een plek.
+   VAT_MAX is de hoogte van het grootste vat en VAT_MIN de bodem waaronder een vat niet leesbaar
+   meer is. De schaal van het ontwerp is 180 per 10.000, en dat is wat VAT_MAX hier doet: het
+   grootste doel krijgt 180 en de rest zijn aandeel daarvan. GEMETEN op de stand van het toestel
+   (15.000 tegen 3.000, dus 5:1): het kleine vat komt op 36 en wordt dus op 40 geklemd, en dan
+   staat 180:40 voor een verhouding die 5:1 is. Daarom KRIJGT EEN GEKLEMD VAT EEN MARKERING
+   (v246 terug): een gestippelde bovenrand en een regel voor de schermlezer. Stil een verkeerde
+   verhouding tonen is precies wat dit project verbiedt.
+   VAT_TAK_H is de lengte van de tak tussen de balk en het vat; TAK_PER_EURO is de dikte van die
+   tak, 1,4px per 100 euro, de maat uit het ontwerp. */
+const VAT_MAX=180, VAT_MIN=40, VAT_TAK_H=44, TAK_PER_EURO=0.014, VAT_KOL_MAX=3;
+/* Het aantal kolommen IS het aantal vaten, tot drie. Bij twee vaten twee brede kolommen, zoals het
+   ontwerp; vanaf vier komt er een tweede rij. Een vast raster van drie zou bij twee vaten een lege
+   derde kolom laten staan, en dat is ruimte die niets zegt. */
+function planVatKolommen(n){ return Math.max(1,Math.min(Math.round(+n||0),VAT_KOL_MAX)); }
+/* De hoogtes van alle vaten in één keer, want ze zijn alleen tegen ELKAAR te bepalen: de schaal is
+   het aandeel van het grootste doelbedrag. Per vat komt er ook uit of hij op de bodem is geklemd,
+   zodat de markering uit dezelfde som komt als de hoogte en de twee niet uiteen kunnen lopen. */
+function planVatHoogten(items){
+  const L=items||[]; const mx=Math.max(0,...L.map(p=>Math.max(+p.doel||0,0)));
+  const uit={};
+  for(const p of L){
+    const d=Math.max(+p.doel||0,0);
+    const ruw=(mx>0)?d/mx*VAT_MAX:VAT_MAX;
+    const h=Math.max(Math.round(ruw),VAT_MIN);
+    uit[p.id]={h, geklemd:h>Math.round(ruw)};
+  }
+  return uit;
+}
+/* De dikte van de tak is het maandbedrag. Hetzelfde getal draagt hierboven de BREEDTE van zijn
+   segment in de inlegbalk; dat zijn twee weergaven van één bron en geen tweede berekening. De
+   ondergrens van 2px is dezelfde keuze als SEG_MIN_PCT in planSegmenten(): een bestemming die iets
+   krijgt moet zichtbaar iets krijgen. */
+function planTakDikte(alloc){ return Math.max(Math.round(Math.max(+alloc||0,0)*TAK_PER_EURO),2); }
 function renderPlan(bare){
   const P=allocatePlan(); const cap=planCapacity(); const n=P.length;
   const G=planGrendel();
@@ -8071,121 +8156,167 @@ function renderPlan(bare){
   const klein=new Set(P.filter(p=>p.type==='noodfonds'&&!G&&p.rest<=0).map(p=>p.id));
   const SEG=planSegmenten(P,cap);
   const tints={}; P.forEach((p,i)=>{ tints[p.id]=planTint(p,i); });
-  /* v317: de overdrachten uit de projectie, gegroepeerd op de ONTVANGER, want daar wordt de
-     stippellijn getekend: in zijn tak, op de plek en de breedte van het segment van de gever. Een
-     bestemming kan meer dan een gever hebben (gemeten met drie doelen: twee overdrachten naar
-     hetzelfde doel), dus het is een lijst per ontvanger en geen enkele waarde. */
-  const TVnaar={};
-  try{ for(const e of planTerugval(P,cap)) (TVnaar[e.naar]=TVnaar[e.naar]||[]).push(e); }catch(_){}
-  const naamVan=id=>{ const x=P.find(y=>y.id===id); return x?spaarOverNaam(x):''; };
-  const rows=P.map((p,i)=>{
-    const uit=window._planRij===p.id;
-    const act=(kl,tk,fn)=>`<span class="small" style="color:var(--${kl});cursor:pointer" onclick="event.stopPropagation();${fn}">${tk}</span>`;
-    const acties=uit?`<div class="row" style="margin:9px 2px 2px;gap:14px;flex-wrap:wrap">
-        ${act('teal', p.type==='noodfonds'?'verfijnen ›':'openen ›', planOpen(p))}
-        ${p.type==='aflossen'?act('teal','maandbedrag ›',planAllocOpen(p)):''}
-        ${act('mut2', planPaused(p.id)?'hervatten':'pauzeren', `planTogglePause('${p.id}')`)}
-        ${p.type==='aflossen'?act('mut2','uit plan halen',`planRemove('${p.id}')`):''}
-      </div>`:'';
-    /* v317: HIER STONDEN DE TWEE PIJLTJES. De volgorde zet je sinds deze ronde in de editor van de
-       bestemming zelf (`planOrdeVeld()`), en de terugval-stippellijn laat zien waar het geld heen
-       gaat als een bestemming vol is. Twee knoppen per rij die alleen een plek verschuiven zijn dan
-       de duurste 64px van het scherm.
-       DE v245-REGEL IS MEEVERHUISD EN NIET VERVALLEN: een plek die niet mag is in het veld
-       uitgeschakeld en niet weggelaten, want een bediening die er bruikbaar uitziet en het niet is,
-       is erger dan geen bediening. */
-    const nr=`<span class="plan-1${i===0?'':' n'}">${i+1}</span>`;
-    const D=planBedragDeel(p);
-    const kop=`<div class="row"><span class="vat-naam">${nr} ${esc(p.naam)}</span><span class="small" style="white-space:nowrap;flex-shrink:0">${D.mod?`<span class="muted">${D.mod}</span>`:''}<b style="font-weight:700">${D.bedrag}</b><span class="muted">/mnd</span></span></div>`;
-    /* Punt 10: één regel, en dus ook echt één regel. De naam draagt zijn status ernaast en de stand
-       staat rechts, waar bij een vat het maandbedrag staat; dat bedrag is hier nul, want een vol
-       noodfonds krijgt niets meer. */
-    if(klein.has(p.id))
-      return `<div class="plan-item plan-rij vat-vol" data-id="${p.id}">
-        <div class="vat-in" style="align-items:center;padding:7px 11px">
-          <div class="row" style="flex:1;min-width:0;cursor:pointer" onclick="planRij('${p.id}')">
-            <span class="vat-naam">${nr} ${esc(p.naam)}<span class="muted" style="font-weight:400"> · ${planSub(p,true)}</span></span>
-            <span class="small vat-stand" style="margin:0;white-space:nowrap;flex-shrink:0">${planStand(p)}</span></div>
-          </div>${acties}</div>`;
+  /* v318: DE VERTAKTE WATERVAL. De bestemmingen die een vat krijgen staan naast elkaar; een vol
+     noodfonds is zijn eigen regel erboven en doet in het raster niet mee (het draagt geen tak, dus
+     ook geen vat). */
+  const vaten=P.filter(p=>!klein.has(p.id));
+  /* DE VOLGORDE VAN DE WATERVAL BLIJFT DE VOLGORDE VAN `P`, en dat is de hele reden dat dit scherm
+     bestaat: wie eerst aan de beurt is staat bovenaan. Een vol noodfonds is een eigen regel en geen
+     vat, dus hij staat op ZIJN plek tussen de rasterblokken en niet bovenaan.
+     DE BLOKKEN VOLGEN DAARUIT: elke aaneengesloten reeks vaten wordt een raster van ten hoogste
+     KOL kolommen, en een regel ertussen breekt die reeks af. */
+  const KOL=planVatKolommen(vaten.length);
+  const HG=planVatHoogten(vaten);
+  const maxH=Math.max(VAT_MIN,...vaten.map(p=>HG[p.id].h));
+  /* In een smalle kolom de korte vormen, in een brede de lange (besluit v318). De AANROEPER weet
+     hoeveel kolommen er staan; vatRegels() kiest op dat ene argument welke woorden erbij horen. */
+  const smal=KOL>=3;
+  /* HET LABEL STAAT ALLEEN NAAST DE TAK BIJ EEN KOLOM, en dat is gemeten en geen voorzichtigheid:
+     het staat absoluut vanaf de middenlijn van de kolom en mag niet afbreken (het is één getal), dus
+     het is ~95px breed vanaf dat midden. Een kolom is 120px op 360px en 133 op 390 zodra er twee
+     staan, dus het label liep dan over de buurkolom heen. Bij EEN kolom is er 318 respectievelijk
+     348px en past het ruim.
+     DIT IS EEN ANDERE VRAAG DAN `smal`, en daarom een eigen naam: `smal` kiest de WOORDEN (kort of
+     lang) en dit kiest de PLEK van het bedrag. Ze vallen bij drie kolommen samen en bij twee niet. */
+  const labelNaast=KOL===1;
+  const act=(kl,tk,fn)=>`<span class="small" style="color:var(--${kl});cursor:pointer" onclick="event.stopPropagation();${fn}">${tk}</span>`;
+  const acties=p=>window._planRij===p.id?`<div class="row" data-acties="${p.id}" style="grid-column:1/-1;margin:9px 2px 2px;gap:14px;flex-wrap:wrap">
+      ${act('teal', p.type==='noodfonds'?'verfijnen ›':'openen ›', planOpen(p))}
+      ${p.type==='aflossen'?act('teal','maandbedrag ›',planAllocOpen(p)):''}
+      ${act('mut2', planPaused(p.id)?'hervatten':'pauzeren', `planTogglePause('${p.id}')`)}
+      ${p.type==='aflossen'?act('mut2','uit plan halen',`planRemove('${p.id}')`):''}
+    </div>`:'';
+  const nrVan=p=>{ const i=P.indexOf(p); return `<span class="plan-1${i===0?'':' n'}">${i+1}</span>`; };
+  /* De volle noodfonds-regel, ongewijzigd van vorm: één regel met de naam, zijn status en de stand
+     rechts, op de plek waar een vat zijn maandbedrag heeft. Dat bedrag is hier nul, want een vol
+     noodfonds krijgt niets meer. */
+  const kleinRij=p=>
+    `<div class="plan-item plan-rij vat-vol" data-id="${p.id}">
+      <div class="vat-in" style="align-items:center;padding:7px 11px">
+        <div class="row" style="flex:1;min-width:0;cursor:pointer" onclick="planRij('${p.id}')">
+          <span class="vat-naam">${nrVan(p)} ${esc(p.naam)}<span class="muted" style="font-weight:400"> · ${planSub(p,true)}</span></span>
+          <span class="small vat-stand" style="margin:0;white-space:nowrap;flex-shrink:0">${planStand(p)}</span></div>
+        </div>${acties(p)}</div>`;
 
-    const tint=tints[p.id];
-    const seg=SEG.segs.find(s=>s.id===p.id)||{alloc:0,van:0,breed:0};
-    /* De tak. Dikte en horizontale plek komen uit hetzelfde segment als in de balk erboven, dus
-       ze kunnen niet uiteenlopen. Een doel dat nu niets krijgt heeft geen tak (punt 6). */
-    const dzB=(+p.extra>0&&p.mode!=='auto'&&!p.grendelDoorzak)?Math.round(+p.extra):0;   // v255: zie planSub()
-    /* v246b: de tak had een label met het maandbedrag. Sinds de tekst boven het vat staat noemt de
-       kop dat bedrag één regel hoger, en twee keer hetzelfde getal is een tweede bron. De tak
-       draagt nu alleen kleur en dikte; die twee komen uit hetzelfde segment als de balk erboven. */
-    /* v317: DE TERUGVAL ALS STIPPELLIJN. Wat een doel dat vol raakt niet meer nodig heeft gaat naar
-       dit doel, en dat staat in de tak van de ONTVANGER als een gestippeld blok op de plek en de
-       breedte van het segment van de GEVER. Daarmee staat het in hetzelfde assenstelsel als de
-       inlegbalk erboven en als de eigen tak, en ligt het gestippelde blok recht onder het volle blok
-       van de gever.
-       GEEN BEDRAG IN DE REGEL: het blok draagt de maat (het IS het segment van de gever) en de rij
-       van de gever draagt het getal. Een bedrag erbij zou een tweede bron voor datzelfde getal zijn
-       (v104) en het zou niet kloppen voor de maand waarin de gever zijn laatste rest nog neemt. De
-       maand komt uit `e.vanaf`, de maand waarin de projectie de overdracht MEET.
-       EEN ONTVANGER ZONDER EIGEN SEGMENT KRIJGT TOCH EEN TAK, en dat is het geval dat telt: een doel
-       dat vandaag nul krijgt (wacht op capaciteit, of staat achter een dichte grendel) heeft de
-       terugval als enige vooruitzicht, en juist dan mag de lijn niet wegvallen. */
-    const erf=(TVnaar[p.id]||[]).map(e=>{
-      const sg=SEG.segs.find(x=>x.id===e.van);
-      if(!sg||!(sg.breed>0)) return '';
-      return `<i class="tak-erf" data-erf="${e.van}" style="left:${sg.van.toFixed(2)}%;width:${sg.breed.toFixed(2)}%"></i>`;
+  /* De terugval, uit planTerugval() en dus uit dezelfde projectie als elke vol-datum (v307). De
+     RICHTING komt daar vandaan en ligt niet vast in de vorm: op de ene stand geeft het kleine doel
+     zijn ruimte aan het grote, op de andere andersom. */
+  let TV=[]; try{ TV=planTerugval(P,cap); }catch(_){ TV=[]; }
+  const naamVan=id=>{ const x=P.find(y=>y.id===id); return x?spaarOverNaam(x):''; };
+  /* De blokken in de volgorde van `P`: een regel voor een vol noodfonds, en een raster per reeks
+     vaten. `plek` zegt per vat in welk raster en in welke kolom hij staat, en dat is wat de
+     terugval-lijn nodig heeft: twee vaten in HETZELFDE raster kunnen een lijn dragen, twee in
+     verschillende rasters niet (daar zou de plek na het renderen opgemeten moeten worden). */
+  const delen=[]; let run=[];
+  const flush=()=>{ for(let i=0;i<run.length;i+=KOL) delen.push({groep:run.slice(i,i+KOL)}); run=[]; };
+  for(const p of P){ if(klein.has(p.id)){ flush(); delen.push({regel:p}); } else run.push(p); }
+  flush();
+  const plek={}; delen.forEach((d,r)=>{ if(d.groep) d.groep.forEach((p,k)=>{ plek[p.id]={rij:r, kol:k}; }); });
+
+  const blok=(groep,rij)=>{
+    const K=KOL;
+    const xMid=k=>((k+0.5)/K*100);
+    const kolommen=groep.map(p=>{
+      const h=HG[p.id].h, klem=HG[p.id].geklemd;
+      const dik=planTakDikte(p.alloc);
+      const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
+      const perMnd=Math.max(Math.round(+p.alloc||0),0)+(p.type==='aflossen'?Math.max(Math.round(+p.debtPer||0),0):0);
+      const groei=(p.doel>0&&perMnd>0)?Math.max(Math.min(perMnd/p.doel*100,100-pct),0):0;
+      const tint=tints[p.id];
+      const ST=p.nfOnbekend?null:doelStreepje(p);
+      /* Het streepje staat in de box en niet in het vat: het vat heeft overflow:hidden, en een
+         markering op 0 of 100 procent zou daarbinnen half wegvallen. De afstand tot de onderkant
+         van de BOX is de lege ruimte onder dit vat plus zijn eigen percentage, allebei in px die we
+         hier al kennen; er wordt niets opgemeten. */
+      const streep=ST?`<span class="wf-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="bottom:${((maxH-h)+h*ST.pct/100).toFixed(1)}px"><span class="sr-only">${doelStreepjeTekst(p,ST)}</span></span>`:'';
+      const vul=p.nfOnbekend?''
+        :`<i class="wf-vul" style="bottom:0;height:${pct}%;background:${tint}"></i>`
+         +(groei>0?`<i class="wf-groei" style="bottom:${pct}%;height:${groei.toFixed(1)}%;background:color-mix(in srgb,${tint} 38%,transparent)"></i>`:'');
+      const klemUit=klem?`<span class="sr-only">Dit vat staat op de bodem en dus niet op schaal: het doelbedrag is kleiner dan de hoogte laat zien.</span>`:'';
+      /* Het maandbedrag staat NAAST de tak zodra er ruimte is, precies als in het ontwerp: de tak
+         IS dat bedrag (zijn dikte), dus het label hoort ernaast en niet vier regels lager. In een
+         smalle kolom past het er niet naast en zakt het naar de eerste tekstregel. Eén bron
+         (planBedragDeel), twee plekken naar gelang de breedte. */
+      const BD=planBedragDeel(p);
+      /* HET BEDRAG STAAT ER OOK OP NUL, en dat is geen detail: een bestemming die wacht krijgt
+         vandaag niets, en die nul is een meting (v59/v73/v173). Zonder hem zegt alleen de
+         statusregel dat er niets heen gaat, en dan moet je uit de afwezigheid van een getal
+         afleiden dat het getal nul is. */
+      /* DEZELFDE WOORDORDE ALS IN HET TEKSTBLOK, en dat is `v91` en geen smaak: `planBedrag()` zet
+         de modus VOOR het bedrag ("30% · €660/mnd"), en twee spellingen van hetzelfde label lopen bij
+         de eerste herziening uiteen. */
+      const takLabel=!labelNaast?'':`<span class="wf-taklabel">${BD.mod?`<span class="muted">${BD.mod}</span>`:''}<b>${BD.bedrag}</b>/mnd</span>`;
+      return `<div class="wf-kol" data-id="${p.id}" style="cursor:pointer" onclick="planRij('${p.id}')">
+        <div class="wf-tak" style="height:${VAT_TAK_H}px">${p.alloc>0?`<i data-takkleur style="width:${dik}px;background:${tint}"></i>`:''}${takLabel}</div>
+        <div class="wf-vatbox" style="height:${maxH}px">
+          <div class="wf-vat${klem?' wf-klem':''}" data-vat="${p.id}" data-h="${h}" style="height:${h}px">${vul}</div>${streep}${klemUit}
+        </div></div>`;
     }).join('');
-    const tak=(seg.alloc>0||erf)
-      ? `<div class="plan-tak" data-tak="${p.id}">${seg.alloc>0?`<i data-takkleur style="left:${seg.van.toFixed(2)}%;width:${seg.breed.toFixed(2)}%;background:${tint}"></i>`:''}${erf}</div>`
-      : '';
-    const erfRegels=(TVnaar[p.id]||[]).map(e=>{
-      const n=naamVan(e.van), dt=etaDatum(e.vanaf);
-      return (n&&dt)?`<div class="small vat-dat" data-erfregel="${e.van}">vanaf ${dt} ook de ruimte van ${n}</div>`:'';
+    /* DE TERUGVAL-STROOK. Alleen de overdrachten waarvan gever en ontvanger in DEZELFDE rasterrij
+       staan krijgen een lijn: een lijn tussen twee rijen zou de posities na het renderen moeten
+       opmeten, en dat doet niets in dit bestand. De REGEL eronder staat er in beide gevallen, dus
+       er gaat geen feit verloren. */
+    const eigen=TV.filter(e=>plek[e.van]&&plek[e.naar]&&plek[e.van].rij===rij&&plek[e.naar].rij===rij);
+    const strook=eigen.map((e,k)=>{
+      const Y=8+k*11, xG=xMid(plek[e.van].kol), xR=xMid(plek[e.naar].kol);
+      const topG=-(maxH-HG[e.van].h), topR=-(maxH-HG[e.naar].h);
+      const l=Math.min(xG,xR), w=Math.abs(xR-xG);
+      /* Eén lijn per overdracht, in een eigen omhulsel met de gever EN de ontvanger erop. Zonder dat
+         omhulsel zijn de vier stukken alleen op volgorde aan elkaar te koppelen, en dan leest een
+         tweede overdracht als een deel van de eerste. */
+      return `<span class="wf-lijn" data-erf-van="${e.van}" data-erf-naar="${e.naar}">`
+        +`<i class="v" style="left:${xG.toFixed(2)}%;top:${topG}px;height:${(Y-topG).toFixed(1)}px"></i>`
+        +`<i class="h" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%;top:${Y}px"></i>`
+        +`<i class="v" style="left:${xR.toFixed(2)}%;top:${(topR+6).toFixed(1)}px;height:${(Y-topR-6).toFixed(1)}px"></i>`
+        +`<i class="p" style="left:calc(${xR.toFixed(2)}% - 4px);top:${topR}px"></i></span>`;
     }).join('');
-    const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
-    /* Wat er per maand bij komt, als tweede laag boven de stand. Bij een aflos-item is dat alloc
-       plus je bestaande termijn: hetzelfde bedrag dat de rij noemt (v190/v194). */
-    const perMnd=Math.max(Math.round(+p.alloc||0),0)+(p.type==='aflossen'?Math.max(Math.round(+p.debtPer||0),0):0);
-    const groei=(p.doel>0&&perMnd>0)?Math.max(Math.min(perMnd/p.doel*100,100-pct),0):0;
-    const R=vatRegels(p);
-    const dof=(p.status==='wacht op de buffer')?' vat-dof':'';
-    const laat=R.laat?' vat-laat':'';
-    /* v248: de balk ligt weer, en elke bestemming krijgt dezelfde. De hoogte naar doelbedrag was
-       meetkundig juist maar leverde niets op: een leeg vat van ruim 300px zegt alleen dat het ver
-       weg is. De vulling is nu de voortgang in procenten, zodat de doelen onderling vergelijkbaar
-       worden op wat telt. Dit is letterlijk de vorm van vóór ronde B (v194): "nog te gaan" is de
-       lege rest van de track en geen eigen element, dus de telling van de vullagen blijft 1 bij
-       stilstand en 2 bij beweging. */
-    const vulling=p.nfOnbekend?''
-      :`<div class="bar-track" style="display:flex"><div class="bar-fill" style="width:${pct}%;background:${tint}${groei>0?';border-radius:6px 0 0 6px':''}"></div>${groei>0?`<div class="bar-fill bar-groei" style="width:${groei.toFixed(1)}%;background:color-mix(in srgb,${tint} 38%,transparent);border-radius:0 6px 6px 0"></div>`:''}</div>`;
-    /* Het streepje: waar je nu zou moeten staan om je streefdatum te halen. Het staat buiten de
-       track, want die heeft overflow:hidden en dan zou een markering op de rand wegvallen. */
-    const ST=p.nfOnbekend?null:doelStreepje(p);
-    const streep=ST?`<span class="doel-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="left:${ST.pct.toFixed(2)}%"><span class="sr-only">${doelStreepjeTekst(p,ST)}</span></span>`:'';
-    /* Wat er is doorgezakt hoort bij de stand: het is binnengekomen zonder dat jij het hebt
-       verdeeld. De tak draagt het niet meer, want die draagt sinds v246b helemaal geen tekst. */
-    const dzR=dzB>0?`<span class="muted"> · ${euro0(dzB)} doorgezakt</span>`:'';
-    return `<div class="plan-item plan-rij" data-id="${p.id}">
-      <div class="vat-kop${dof}">
-        <div class="vat-in">
-          <div style="flex:1;min-width:0;cursor:pointer" onclick="planRij('${p.id}')">${kop}
-            ${p.nfOnbekend?'':`<div class="small vat-stand">${planStand(p)}${dzR}</div>`}
-            <div class="small vat-dat">${R.regels.join('<br>')}</div>${erfRegels}
-          </div>
-        </div>
-      </div>${tak}
-      <div class="vat${laat}${dof}" data-laat="${R.laat?1:0}">${vulling}${streep}</div>${acties}</div>`;
-  }).join('');
+    const erf=`<div class="wf-erf" style="height:${eigen.length?8+eigen.length*11+4:0}px">${strook}</div>`;
+    const teksten=groep.map(p=>{
+      const R=vatRegels(p,smal);
+      const D=planBedragDeel(p);
+      const dzB=(+p.extra>0&&p.mode!=='auto'&&!p.grendelDoorzak)?Math.round(+p.extra):0;   // v255: zie planSub()
+      const dzR=dzB>0?`<span class="muted"> · ${euro0(dzB)} doorgezakt</span>`:'';
+      const dof=(p.status==='wacht op de buffer')?' wf-dof':'';
+      const laat=R.laat?' wf-laat':'';
+      return `<div class="plan-item wf-tekst${laat}${dof}" data-id="${p.id}" data-laat="${R.laat?1:0}" style="cursor:pointer" onclick="planRij('${p.id}')">
+        <div class="wf-naam">${nrVan(p)} ${esc(p.naam)}</div>
+        ${labelNaast?'':`<div class="small">${D.mod?`<span class="muted">${D.mod}</span>`:''}<b style="font-weight:700">${D.bedrag}</b><span class="muted">/mnd</span></div>`}
+        ${p.nfOnbekend?'':`<div class="small vat-stand">${planStand(p)}${dzR}</div>`}
+        ${R.vol?`<span class="wf-vol" data-vol="${p.id}">${R.vol.woord}<b>${R.vol.datum}</b></span>`:''}
+        ${R.regels.length?`<div class="small vat-dat">${R.regels.join('<br>')}</div>`:''}
+      </div>`;
+    }).join('');
+    /* De regel bij de lijn. Hij noemt de maand, de gever en de ontvanger, en GEEN bedrag: de dikte
+       van de tak van de gever draagt de maat al, en een bedrag erbij zou een tweede bron voor
+       datzelfde getal zijn (v104). */
+    const regels=TV.filter(e=>plek[e.naar]&&plek[e.naar].rij===rij).map(e=>{
+      const nv=naamVan(e.van), nn=naamVan(e.naar), dt=etaDatum(e.vanaf);
+      return (nv&&nn&&dt)?`<div class="small vat-dat" data-erfregel="${e.van}" data-erfnaar="${e.naar}" style="grid-column:1/-1;margin-top:7px">vanaf ${dt} gaat de ruimte van ${nv} naar ${nn}</div>`:'';
+    }).join('');
+    /* `plan-item` ZIT OP HET TEKSTBLOK EN NIET OP DIT RASTER, en dat is de keuze die de rest van de
+       app overeind houdt: `.plan-item[data-id]` is sinds v225 de naam waaronder een bestemming te
+       vinden is, en dat is de helft met de naam, het bedrag, de stand en het datumpaar. Het raster
+       is een omhulsel van drie rasterrijen en geen bestemming, dus een telling over `.plan-item`
+       blijft een telling van bestemmingen. Twee namen voor dezelfde bestemming zou zijn wat v91
+       verbiedt, dus er komt geen tweede attribuut naast `data-id`. */
+    return `<div class="wf" style="grid-template-columns:repeat(${K},minmax(0,1fr))">${kolommen}${erf}${teksten}${regels}${groep.map(acties).join('')}</div>`;
+  };
+  const rows=delen.map((d,r)=>d.regel?kleinRij(d.regel):blok(d.groep,r)).join('');
+
   // Wat het scherm eerst in zinnen zei staat nu achter het uitlegteken bovenin de kaart.
   NOTES.planUitleg=[
     planCapTerugval()
       ? 'Je hebt nog geen spaarinleg ingesteld, dus dit plan verdeelt je comfortabele ruimte: wat er na je vaste lasten en je gewone uitgaven overblijft.'
       : 'Je spaarinleg gaat van boven naar beneden: elke bestemming krijgt wat hij nodig heeft, en wat overblijft zakt door naar de volgende. Je plek in de rij zet je bij de bestemming zelf.',
-    /* v317: hier stond "de hoogte van een vat is het doelbedrag". Dat was waar bij v246 en NIET meer
-       sinds v248, dat de hoogte terugdraaide naar een gelijke balk met de voortgang erin; gemeten zijn
-       alle balken 11px. Een uitleg die gedrag belooft dat de code niet heeft stuurt elke volgende ronde
-       de verkeerde kant op, dus hij zegt nu wat er wel staat. Het streepje had nog helemaal geen
-       zichtbare uitleg: alleen een sr-only-regel per balk. */
-    'Elke bestemming heeft dezelfde balk en de vulling is je voortgang in procenten, zodat je de doelen onderling kunt vergelijken. Het doelbedrag staat in de regel erboven.',
-    'Het streepje op een balk is waar je zou moeten staan om je streefdatum te halen. Je noodfonds heeft er geen, want dat heeft geen streefdatum.',
+    /* v318: de vaten staan weer op schaal, nu naast elkaar. De uitleg zegt dat, en noemt de bodem
+       en de markering erbij: zonder die zin is een gestippelde bovenrand een streepje waarvan je de
+       betekenis moet raden. De tekst is hier de ENIGE plek waar de schaal wordt uitgelegd (besluit
+       v318: de uitleg hoort achter de i). */
+    'De hoogte van een vat is het doelbedrag, dus een doel dat twee keer zo groot is staat twee keer zo hoog. De vulling is wat je er al aan hebt toegewezen.',
+    'Een doel dat te klein is om leesbaar te blijven krijgt een minimumhoogte. Dat vat staat dan niet op schaal en zegt dat met een gestippelde bovenrand.',
+    'De dikte van de tak boven een vat is wat die bestemming per maand krijgt; samen zijn dat de segmenten van de balk bovenin.',
+    'Het streepje dwars op een vat is waar je zou moeten staan om je streefdatum te halen. Je noodfonds heeft er geen, want dat heeft geen streefdatum.',
+    'Raakt een bestemming vol, dan gaat zijn maandbedrag naar de volgende. De stippellijn met de pijl laat zien waarheen, en vanaf welke maand.',
     planMaandTekst()
   ].filter(Boolean).map(t=>`<div style="margin-bottom:7px">${t}</div>`).join('');
   /* Punt 5: de inlegbalk is verdeeld in segmenten per bestemming, naar wat ze deze maand krijgen.
