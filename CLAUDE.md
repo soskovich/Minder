@@ -99,6 +99,67 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE DOEL-RIJ OP GRIP LEEST DEZELFDE LAT ALS PLAN, EN DAT IS `knelt`** (`v316`): Grip zei "EUR 1.980
+  per maand tegen EUR 2.143 nodig, EUR 163 tekort" terwijl Plan bij diezelfde EUR 1.980 "vol in mei 2027,
+  net op tijd" zei. Twee antwoorden op een vraag (`v104`).
+  DE OORZAAK IS NIET EEN ANDERE MAANDTELLING, en dat is gemeten: beide schermen rekenen met 7 maanden.
+  `doelMaandenTot('2027-05')` op 1 oktober 2026 is 7 en `etaDatum(7)` is mei 2027, dus de telling was al
+  gedeeld. Wat uiteenliep is de LAT: `vatRegels()` leest sinds `v307` `T.knelt` en dus de projectie van
+  `planVooruit()`, en deze rij las `T.gat` en dus de VLAKKE som. Een doel kan zijn datum halen terwijl die
+  vlakke som dat niet zegt, want wat een vol doel niet meer nodig heeft zakt door.
+  `v243` LEGDE DIT AL VAST ("alles wat telt leest `T.knelt` en niet `T.gat>0`") en deze rij was de
+  overgebleven overtreding; `v307` bouwde `haalbaar`/`knelt` en bedraadde alleen de alinea op Plan.
+  DAT DE ALLOC MOET STIJGEN IS PER CONSTRUCTIE ZO: bij een constante alloc is `eta = ceil(rest/alloc)` en
+  `benodigd = ceil(rest/maandenTot)`, dus `gat>0` geeft `eta>maandenTot`. Haalt de projectie de datum toch,
+  dan is er een bestemming die voorgaat en eerder vol is, en het gevolg zegt dat ook.
+  DE EENHEID LAAT DE VLAKKE EIS DAAR VALLEN, want "EUR 2.143 nodig" naast een inleg van 1.980 leest als een
+  tekort en dat is precies de bewering die hier wegvalt. Hij zegt dan de UITKOMST en noemt geen tweede
+  datum: de sub draagt de streefdatum al (`v314`) en Plan draagt de vol-datum. `benodigd` en `gat` blijven
+  onaangeroerd (`v307`) en het gevolg noemt de vlakke eis als context, dus er gaat geen getal weg.
+  `tekortPerMaand` VOLGT VANZELF en wordt nul, dus `beleggenWaarde('doel')` claimt geen tekort meer over een
+  datum die uitkomt. Dat is de tweede lezer die meegaat (`v314`).
+  DE DREMPEL BLIJFT IN DE BESLISSING (`knelt && gat>MAAND_DREMPEL.doelOk`) en de sabotage die hem eruit
+  haalt blijft GROEN. Dat is gemeten en geen gat: op standen die `allocatePlan()` kan maken impliceert
+  `knelt` een gat boven nul, dus bij `doelOk:0` zijn de twee vormen daar karakter voor karakter gelijk. MIJN
+  EERSTE VORM VAN DIE TEST BEWEERDE DAT ALGEMEEN en is door zijn eigen meting weerlegd: bij `alloc 2143` met
+  `eta 8` is het gat nul en knelt hij toch, en dat paar is alleen niet bereikbaar (de projectie kan de alloc
+  alleen laten stijgen). Hij staat er toch, want het label van de beleggen-voorwaarde drukt diezelfde
+  constante af; zonder hem beloven label en gedrag verschillende dingen zodra iemand hem op iets anders dan
+  nul zet. De spec houdt de implicatie op het bereikbare deel vast EN het paar waarop ze breekt.
+  DE RAND VAN DIE DREMPEL HEEFT EEN EIGEN GEVAL, want zonder een gat van PRECIES nul blijft de sabotage die
+  `gat>` door `gat>=` vervangt groen (meetles o): bij een inleg van 2.143 op een eis van 2.143 hoort de
+  vlakke eis er juist te staan.
+  TWAALF SABOTAGES, ELF ROOD, en GEEN ENKELE BESTAANDE TEST VIEL EROP: 357 tests in vijftien bestanden die
+  de doel-rij raken bleven groen, want geen spec legde het oordeel van Grip naast dat van Plan.
+- **OPEN PUNT, GEMETEN EN NIET VERANDERD: DE LOPENDE MAAND TELT BIJ GEEN VAN DE TWEE MEE** (`v316`): de
+  vraag was of de inleg van oktober meetelt op 1 oktober. GEMETEN: nee, en op BEIDE schermen niet.
+  `doelMaandenTot()` is het kalenderverschil in maanden en sluit de lopende maand uit (van oktober 2026 naar
+  mei 2027 is 7), en `planVooruit()` begint bij `m=1` terwijl `etaDatum(1)` op NOVEMBER landt, dus de eerste
+  inleg van de projectie valt in de maand na deze. De twee tellingen zijn daarmee gelijk en de rij spreekt
+  zichzelf niet tegen.
+  WAT HET KOST: wie op de 1e inlegt doet tot en met mei ACHT stortingen en de app rekent met zeven, dus elk
+  doel staat een maand verder weg dan het is. Dat is de voorzichtige kant (`v168`): een inleg meetellen die
+  nog niet is gedaan laat een doel eerder haalbaar lezen dan het is.
+  WIE DIT OPPAKT VERZET BEIDE TELLINGEN TEGELIJK, en dat is de reden dat het hier blijft staan: `etaDatum()`
+  heeft zes lezers (`v307`) en `doelMaandenTot()` voedt de hele doel-laag, dus een maand erbij schuift elke
+  vol-datum, elke streefdatum-toets en elke speling op Plan en Grip in een keer. En het antwoord hangt aan
+  iets dat de app niet weet: op welke dag van de maand je inlegt. Een vaste dag aannemen is precies de
+  aanname die `v59`/`v73`/`v173` verbieden.
+- **DE BUFFERREGEL ONTBREEKT OP EEN ONBEKEND SPAARSALDO, EN NIET OP EEN WEGGEVALLEN NORM** (`v316`, gemeten
+  naar aanleiding van een melding): op Grip stond geen bufferregel, geen "Staat goed", en de
+  beleggen-kaart zei "Niet te beoordelen zolang buffer ontbreekt". GEMETEN dat de norm daar niets mee te
+  maken heeft: `rolloverBudgets()` draagt hem over en laat hem anders staan, in alle vijf de standen die hij
+  kan hebben (eerste keuze met vlag, een keuze voor volgende maand, alleen een huidige norm, en een
+  `bufferNormNext` die leeg of nul is). In alle vijf blijft `bufferNorm()` na de wissel staan of wordt hij de
+  gekozen waarde, en de vlag gaat weg.
+  WAT HET WEL IS: `bufferMaanden()` geeft `null` zodra `spaarSaldo().missing` waar is, en dat is waar zodra
+  EEN meegetelde spaarrekening geen bekend saldo heeft. Dan valt de rij weg (`v305`: zonder bekend spaarsaldo
+  staat de bufferregel niet op Grip), en daarmee valt "Staat goed" weg omdat er geen `ok`-rij overblijft en
+  zegt de beleggen-kaart dat de buffer niet te beoordelen is. GEMETEN op een fixture met de norm op 2: alle
+  drie de symptomen tegelijk, met `bufferNorm()` onveranderd 2.
+  DE DRIE KANDIDATEN STAAN IN BLOK 14 (`v302`/`v303`), per rekening met saldo en datum, en dat is de plek om
+  dit op een toestel te plaatsen. Deze ronde raakt die laag niet: het gedrag is dat van `v305` en de oorzaak
+  is een rekening zonder saldo.
 - **"VOLGENDE MAAND ANDERS" IS EEN EIGEN HANDELING, EN DE LAAG KOMT VAN DE AANROEPER** (`v315`): de
   knop op de signaalkaart gaat via `openPotje()` naar `savePotje()`, en die schrijft `SET.budgetsNext`.
   `valtOpPotjeGewijzigd()` zette daar `potje_bijgesteld` met `potje_na` uit de VOLGENDE maand, dus de log
@@ -4530,7 +4591,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v315` → `minder-v316`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v316` → `minder-v317`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -4547,7 +4608,7 @@ alleen `tests/` en dit bestand en bumpte op zichzelf dus niet. `v311` raakt app-
 de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md` en de changelog
 (een besluit en een open punt), dus hij bumpt niet, en `v313` raakt app-code en gaat daarom van
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
-`minder-v314`, en `v315` net zo naar `minder-v315`.
+`minder-v314`, `v315` net zo naar `minder-v315`, en `v316` naar `minder-v316`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

@@ -5047,8 +5047,28 @@ function maandRegels(){
          'onbekend' is de andere kant: niets te rekenen, dus geen oordeel (v59/v73). */
       const telaat = !!(T && T.soort==='telaat');
       const onbek  = !!(T && T.soort==='onbekend');
+      /* v316: DE STATUS LEEST `knelt` EN NIET ALLEEN HET VLAKKE GAT. `doelTempo()` draagt sinds v307
+         `haalbaar`/`knelt`, en die lezen de PROJECTIE van `planVooruit()`: wat een vol doel niet meer
+         nodig heeft zakt door naar het volgende, dus een doel kan zijn datum halen terwijl zijn alloc
+         van nu dat vlak gerekend niet zou doen. Deze rij besliste op `T.gat` en dus op die vlakke som,
+         en dan zegt Grip 'EUR 163 per maand tekort' terwijl Plan op dezelfde rij 'vol in mei 2027, net
+         op tijd' zegt. Twee antwoorden op een vraag (v104), en v243 legde al vast dat alles wat telt
+         `T.knelt` leest en niet `T.gat>0`.
+         DE DREMPEL HOUDT ZIJN LEZER, en dat is geen plichtpleging: `knelt` is in de tak zonder eta per
+         constructie `gat<=0` negeren, dus `knelt && gat>doelOk` is daar KARAKTER VOOR KARAKTER de oude
+         uitdrukking. Alleen waar er een projectie IS schuift hij, en dan de kant op die de projectie
+         zegt. Zou ik hier alleen `knelt` lezen, dan verdwijnt `MAAND_DREMPEL.doelOk` stil uit de
+         beslissing terwijl het label van de beleggen-voorwaarde hem nog afdrukt.
+         DE TELAAT- EN ONBEKEND-TAK KOMEN HIER NIET, dus `gat` is op deze regel altijd een getal; in
+         die twee takken is hij null en zou de vergelijking per constructie false geven. */
       const st = !T ? 'onbekend' : telaat ? 'tekort' : onbek ? 'onbekend'
-               : (T.gat>MAAND_DREMPEL.doelOk ? 'tekort' : 'ok');
+               : ((T.knelt && T.gat>MAAND_DREMPEL.doelOk) ? 'tekort' : 'ok');
+      /* De stand die deze ronde repareert: de datum komt uit, en de vlakke som zou dat niet zeggen.
+         DAT KAN ALLEEN DOORDAT DE ALLOC STIJGT, en dat is per constructie zo en niet aangenomen: bij
+         een constante alloc is `eta = ceil(rest/alloc)` en `benodigd = ceil(rest/maandenTot)`, dus
+         `gat>0` betekent `alloc < rest/maandenTot` en daarmee `eta > maandenTot`. Haalt de projectie
+         de datum tóch, dan is er een bestemming die voorgaat en eerder vol is. */
+      const viaDoorzak = (st==='ok' && T && T.gat>MAAND_DREMPEL.doelOk);
       const vanaf = (T && T.startLabel) ? `vanaf ${T.startLabel} ` : '';
       /* v314: DE WAARDE IS WAT JE INLEGT, DE EENHEID WAT ER NODIG IS. Het stond omgekeerd, en dan
          was het grote getal van de rij een bedrag dat je NIET inlegt. De rij hoort te zeggen waar je
@@ -5059,8 +5079,13 @@ function maandRegels(){
          die laag verschuift hier niet mee. */
       uit.push({key:'doel', naam:d.p.naam||'Aankoopdoel', status:st, telaat,
         waarde: telaat ? 'niet te halen' : (T&&!onbek) ? euro0(d.p.alloc) : 'onbekend',
+        /* v316: `EUR X nodig` IS DE VLAKKE EIS, en die staat er niet meer als de projectie de datum
+           wel haalt: naast een inleg die lager is leest dat getal als een tekort, en dat is precies
+           de bewering die deze ronde weghaalt. De eenheid zegt dan de UITKOMST en noemt geen tweede
+           datum, want de sub draagt de streefdatum al (v314) en Plan draagt de vol-datum. */
         eenheid: telaat ? `zolang je buffer voorgaat · ${esc(doelDatumLabel(d.p.streefdatum))}`
                : onbek ? 'nog niet te rekenen'
+               : viaDoorzak ? 'per maand · genoeg voor je datum'
                : T ? `per maand · ${euro0(T.benodigd)} nodig` : 'geen streefdatum',
         sub: (d.p.doel>0||d.p.streefdatum)
           ? [d.p.doel>0?euro0(d.p.doel):'', d.p.streefdatum?`in ${doelDatumLabel(d.p.streefdatum)}`:''].filter(Boolean).join(' ')
@@ -5068,6 +5093,7 @@ function maandRegels(){
         gevolg: !T ? 'Zonder streefdatum valt er niets terug te rekenen.'
               : telaat ? `Je buffer is op dit tempo pas rond ${T.startLabel} vol, terwijl je streefdatum ${doelDatumLabel(d.p.streefdatum)} is. Tot die tijd gaat je hele spaarinleg naar die buffer, dus dit doel staat stil.`
               : onbek ? 'Er is nog niet bekend wanneer je buffer vol is, dus er valt voor dit doel niets terug te rekenen.'
+              : viaDoorzak ? `Je legt nu ${euro0(d.p.alloc)} per maand in en dat haalt je datum, doordat een bestemming die voorgaat eerder vol is: die ruimte zakt dan hierheen. Op deze inleg alleen zou je ${euro0(T.benodigd)} per maand nodig hebben.`
               : st==='ok' ? `Je huidige inleg haalt de datum.`
               : `Je legt nu ${euro0(d.p.alloc)} per maand in en je hebt ${vanaf}${euro0(T.benodigd)} nodig. Je komt ${euro0(T.gat)} per maand tekort.`,
         tekortPerMaand: (st==='tekort'&&!telaat)?T.gat:0, act:`openGoal('${d.p.id}')`});
