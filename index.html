@@ -12464,12 +12464,47 @@ const VALTOP_RAND_STIL='border-left:1px solid var(--mut2);padding:9px 2px 9px 14
 const valtOpLijn=i=>i?'border-top:1px solid var(--line);':'';
 /* Spiegel (uitgegeven van potje), gevolg (het bedrag boven het potje), keuze (de kaart op Grip).
    Geen accentkleur op het bedrag: status zit in het label, niet in de kleur (v78/v93). */
+/* ===== HET JAARBEDRAG ONDER EEN OVERSCHRIJDING (v313) =====
+   DE REGEL LEEST `s.over` EN VERDER NIETS, en dat is `v240` in zijn kortste vorm: een signaal toont
+   de maat waarop het vuurt. `s.over` is het getal dat de regel EEN regel hoger al afdrukt, dus de
+   jaarregel is letterlijk datzelfde getal maal twaalf en geen tweede afleiding (`v104`). Geen
+   tempo-projectie naar het einde van de maand: wat de rij meet is wat er AL boven het potje staat,
+   en een jaarbedrag dat van de dag van de maand afhangt zou met de kalender meebewegen zonder dat
+   er aan je geld iets verandert.
+   GEEN AFRONDING EN GEEN "ONGEVEER": `s.over` is in `valtOpSignals()` al op hele euro's gerond, dus
+   de vermenigvuldiging is exact en `euro0()` heeft niets te doen.
+   DE SABOTAGE DIE OPNIEUW AFTREKT IS PER CONSTRUCTIE INERT (meetles p): `valtOpSignals()` zet
+   `over = uitgegeven - potje` over al afgeronde bedragen, dus `(s.uitgegeven - s.potje) * 12` geeft
+   via de echte route exact hetzelfde getal. Wat die twee vormen WEL onderscheidt is een object
+   waarin ze uiteenlopen, en `valtOpRij()` is een pure render-functie, dus de spec roept hem daar
+   rechtstreeks mee aan. Dat geval is GECONSTRUEERD en niet gemeten, om dezelfde reden als de
+   Kiosk-regel van `v274`: zonder hem is "hij leest het veld dat hij afdrukt" niet te onderscheiden
+   van "hij rekent het opnieuw uit".
+   ALLEEN BIJ EEN OVERSCHRIJDING. `insPatroonRij()` draagt hem niet, en dat is geen vergetelheid: een
+   patroon, de piekdag en het lek meten geen bedrag BOVEN een grens die jij hebt gezet, dus daar is
+   er niets om maal twaalf te doen. Een lek van EUR 1.480 is geen EUR 17.760 per jaar; dat is een
+   uitgave en geen overschrijding.
+   HIJ STAAT ALLEEN OP INZICHTEN. `valtOpRij()` heeft een aanroeper (`insSignalRows()`), en de kaart
+   op Grip (`gripSignalCards()`) is niet aangeraakt: die draagt de historie en de drie handelingen,
+   en daar is de vraag wat je nu gaat doen en niet wat het op een jaar zou zijn.
+   GEEN OORDEEL EN GEEN AANDACHT (`v78`/`v93`): `small muted` is de kleur van elke subregel in dit
+   blok, dus de regel claimt niets wat de rij erboven niet al zei.
+   DE HOOGTE IS GEMETEN, in het zwaarste geval dat de app kan maken (twee overschrijdingen met de
+   langste categorienamen die er zijn, Persoonlijke overboeking van 24 tekens en Sport & gezondheid
+   van 18, en vier cijfers in elk bedrag): de onderkant van het laatste signaal gaat van 396 naar
+   445px op 360x640 en van 377 naar 426px op 390x844, tegen een vouw van 567 en 771. Elke rij gaat
+   van 56/57 naar 80/81px: de regel zelf is 19px en de marge erboven 5px. Er blijft 122px over op de
+   kleinste telefoon.
+   DE EIS VAN `v241` WORDT DUS GEHAALD ZONDER DAT ER IETS IS INGEKORT, en dat is gemeten op het
+   zwaarste geval en niet op het geval dat de ronde zelf koos. */
 function valtOpRij(s, i){
+  const jaar=s.over*12;
   return `<div class="valtop-rij" data-sig="${esc(s.id)}" style="${valtOpLijn(i)}${VALTOP_RAND};cursor:pointer" onclick="naarGripSignaal('${esc(s.id)}')">
     <div class="row" style="gap:8px">
       <span style="flex:1;min-width:0;font-size:13px"><b>${esc(s.naam)}</b> <span class="muted">${euro0(s.uitgegeven)} van ${euro0(s.potje)}</span> · ${euro0(s.over)} boven je potje</span>
       <span class="small" style="color:var(--teal);font-weight:600;white-space:nowrap">in Grip ›</span>
-    </div></div>`;
+    </div>
+    <div class="small muted" style="margin-top:6px;line-height:1.5">Als dit elke maand gebeurt, is dat ${euro0(jaar)} per jaar.</div></div>`;
 }
 /* Dezelfde schil voor een patroon uit insSignals(). De duiding en het dus-wat blijven staan: die
    waren de reden dat v174 ze ging tonen, en zonder gevolg is een constatering geen signaal (v228).

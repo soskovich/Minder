@@ -97,6 +97,43 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **HET JAARBEDRAG ONDER EEN OVERSCHRIJDING LEEST HET GETAL VAN DE RIJ ZELF** (`v313`): onder elke
+  rij uit `valtOpSignals()` staat op Inzichten "Als dit elke maand gebeurt, is dat EUR X per jaar",
+  en X is `s.over` maal twaalf. Dat is `v240` in zijn kortste vorm, een signaal toont de maat waarop
+  hij vuurt: `s.over` is het getal dat de rij EEN regel hoger al afdrukt, dus de jaarregel is geen
+  tweede afleiding (`v104`).
+  GEEN TEMPO-PROJECTIE EN GEEN "ONGEVEER". Wat de rij meet is wat er AL boven het potje staat; een
+  jaarbedrag dat naar het einde van de maand projecteert zou met de kalender meebewegen zonder dat er
+  aan je geld iets verandert, en dat is dezelfde fout als de waterval van `v310`. `s.over` is in
+  `valtOpSignals()` al op hele euro's gerond, dus de vermenigvuldiging is exact en een
+  onzekerheidswoord zou meer beloven dan de meting draagt.
+  DE SABOTAGE DIE OPNIEUW AFTREKT IS PER CONSTRUCTIE INERT (meetles p): `valtOpSignals()` zet
+  `over = uitgegeven - potje` over al afgeronde bedragen, dus `(s.uitgegeven - s.potje) * 12` geeft
+  via de echte route exact hetzelfde getal. Wat de twee vormen WEL onderscheidt is een object waarin
+  ze uiteenlopen, en `valtOpRij()` is een pure render-functie, dus de spec roept hem daar
+  rechtstreeks mee aan (`over:100` op `900` van `400` moet 1.200 geven en niet 6.000). Dat geval is
+  GECONSTRUEERD en niet gemeten, om dezelfde reden als de Kiosk-regel van `v274`.
+  ALLEEN BIJ EEN OVERSCHRIJDING, EN ALLEEN OP INZICHTEN. `insPatroonRij()` draagt hem niet: een
+  patroon, de piekdag en het lek meten geen bedrag BOVEN een grens die jij hebt gezet, dus daar is er
+  niets om maal twaalf te doen (een lek van 1.480 is geen 17.760 per jaar, dat is een uitgave). De
+  kaart op Grip draagt hem ook niet: die gaat over wat je NU doet, met de historie en de drie
+  handelingen. DE GRIP-ASSERTIE VROEG TWEE SIGNALEN, en dat is gemeten: Grip rendert de eerste kaart
+  OPEN en de rest DICHT, dus met een signaal bestaat de dichte vorm niet en bleef de sabotage daarin
+  per constructie groen (meetles p opnieuw).
+  DE HOOGTE IS GEMETEN IN HET ZWAARSTE GEVAL dat de app kan maken, en niet in het geval dat de ronde
+  zelf koos: twee overschrijdingen met de langste categorienamen die er zijn (Persoonlijke
+  overboeking van 24 tekens via een eigen regel, Sport & gezondheid van 18) en vier cijfers in elk
+  bedrag. De onderkant van het laatste signaal gaat van 396 naar 445px op 360x640 en van 377 naar
+  426px op 390x844, tegen een vouw van 567 en 771; de rijen gaan van 56/57 naar 80/81px, waarvan 19px
+  de regel zelf is. DE EIS VAN `v241` WORDT GEHAALD ZONDER DAT ER IETS IS INGEKORT.
+  DE PRIJS STAAT APART VAN DE VOUW, want de vouw houdt 122px over en kan een regel die stilletjes
+  hoger wordt dus niet zien: GEMETEN blijft de vouw-test groen bij een `line-height` van 4.5 (bodem
+  519px). De hoogte van de regel en van de rij staan daarom als eigen assertie vast, zodat een
+  volgende ronde ziet wat hij uitgeeft.
+  NEGEN SABOTAGES, ALLE NEGEN ROOD, en twee ervan pas na een reparatie van de TEST: de Grip-sabotage
+  (zie hierboven) en de hoogte-sabotage. GEEN ENKELE BESTAANDE TEST VIEL EROP, en dat is nagegaan en
+  niet aangenomen: elke assertie over deze rij gebruikt `toContain` en geen enkele pinde de volle
+  tekst of de hoogte, dus een regel BINNEN de rij raakt ze niet.
 - **OPEN PUNT MET EEN WERKAFSPRAAK: VIJFENDERTIG LATENTE `test.skip()`-AANROEPEN** (`v312`): ze staan in
   14 bestanden en vuurden in de volle run van `v311` geen van alle, dus vandaag leest er geen enkele als
   groen. Dat is een momentopname en geen eigenschap: een fixture die verandert kan er een laten vuren, en
@@ -4264,7 +4301,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v311` → `minder-v312`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v313` → `minder-v314`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -4279,8 +4316,8 @@ en bumpt dus gewoon door naar `minder-v301`, en `v302` tot en met `v305` net zo.
 raakt app-code (de poort-memo) en bumpt door naar `minder-v310`; het kalender-deel van die ronde raakte
 alleen `tests/` en dit bestand en bumpte op zichzelf dus niet. `v311` raakt app-code (de maand-memo en
 de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md` en de changelog
-(een besluit en een open punt), dus hij bumpt niet en de eerstvolgende app-ronde gaat van
-`minder-v311` naar zijn eigen tag.
+(een besluit en een open punt), dus hij bumpt niet, en `v313` raakt app-code en gaat daarom van
+`minder-v311` rechtstreeks naar `minder-v313`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
