@@ -99,6 +99,152 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN EENMALIGE POST BINNEN HET VENSTER TELT MEE IN DE OPBOUW-EIS** (`v317`): `dekking()` rekende
+  `opgebouwd` alleen `if(x.intervalM>0)`, dus een eenmalige post droeg NUL in `benodigdeStand` en
+  viel daarmee uit `graad` en uit `tekort`. GEMELD EN GEREPRODUCEERD: met EUR 500 op de
+  reserveringsrekening en een boete van EUR 299 eenmalig in november zei Plan "Blijft over EUR 500"
+  terwijl die 299 volgende maand vertrekt. Te gunstig is de gevaarlijke kant (`v168`).
+  DE WATERVAL IN DEZELFDE FUNCTIE TELDE HEM AL VOLUIT (`run-=x.bedrag`), dus `gat` en `gedektTot`
+  kenden die post en `benodigdeStand` niet: EEN functie met twee antwoorden over dezelfde post
+  (`v104`). Met het hele bedrag erin zeggen Plan en Grip hetzelfde, en dat was de eis.
+  HET HELE BEDRAG EN GEEN DEEL, want de pro-rata vorm deelt door het INTERVAL en dat is de periode
+  waarover je voor de VOLGENDE termijn spaart. Een eenmalige post heeft die niet; hij is verschuldigd.
+  Delen door de HORIZON zou de eis laten afhangen van het venster dat de aanroeper kiest
+  (`dekking(12)`), en dat is een meting die van een weergavekeuze afhangt (`v259`).
+  DIT DRAAIT DE `v131`-REDENERING OM ("bij een eenmalige post hoeft er ook niets opgebouwd te zijn"),
+  en die blijft kloppen voor een post BUITEN het venster: die valt per constructie al af in
+  `verplichtingen()`. GEMETEN wat dat verschuift: `graad` wordt voor een lijst met alleen eenmalige
+  posten een echt percentage in plaats van `null`, en op een pot van 100 tegen een post van 299 leest
+  dat als 33 procent met een tekort van 199. Een jaarpost is ONGEMOEID (299 elf maanden voor zijn
+  vervaldag geeft 274), en dat paar staat als eigen geval in de spec.
+  "N POSTEN" TELT DAARBIJ DEZELFDE VERZAMELING ALS DE RIJEN. `D.aantal` is de LIJST en `inVenster` de
+  posten met een voorkomen binnen de horizon; de kop las de eerste boven rijen die uit de tweede
+  komen. GEMETEN: "2 posten" boven EEN rij, met een verstreken eenmalige aanslag als tweede post.
+  Wat erbuiten valt wordt GENOEMD (`zonder bedrag`, `zonder termijn dit jaar`) en niet weggelaten,
+  want een post die je zelf invoerde en stil van het scherm verdwijnt is wat `v281`/`v284` verbieden.
+  DE LEGE-LIJST-POORT BLIJFT OP `aantal`: met alleen een verstreken post heb je wél verplichtingen
+  ingevoerd, en dan hoort er geen 'instellen'-kaart te staan.
+  DE v132-TAK BLIJFT LEVEND, en dat is gemeten en niet aangenomen: `graad` is nog steeds `null` zodra
+  `benodigdeStand` nul is, en dat kan nog bij een post MET interval die verder weg ligt dan dat
+  interval (een kwartaalpost over vijf maanden geeft `intervalM-offset = -2`, geklemd op nul). Dan
+  valt de eenheid terug op het percentage van de eerstvolgende post. Zonder dat geval zou die tak
+  alleen nog levend LIJKEN (meetles p), en het staat als eigen test vast.
+  BIJ EEN EENMALIGE POST VALLEN DE TWEE NOEMERS SAMEN, want de eis IS de post, en dat staat er als
+  assertie bij: daarmee verandert het percentage niet maar wel zijn LABEL, van "van de eerstvolgende
+  post" naar "van wat nu nodig is". VIJF BESTAANDE TESTS IN TWEE BESTANDEN VIELEN EROP en ze hadden
+  alle vijf gelijk: vier pinden dat label en die null, en een eiste met zoveel woorden dat een
+  eenmalige post niets bijdroeg.
+  GEEN MIN-TEKENS BIJ DE POSTEN, en dat is gemeten en geen smaak: met min-tekens lezen de rijen als
+  een aftrekking en die telt niet op. Bij een jaarpost is stand min post 201 terwijl het verschil
+  eronder 226 is, want dat verschil is de stand min de OPBOUW-EIS. Dat is de vorm die `v249`/`v250`
+  verbieden.
+- **DE TERUGVAL STAAT OP HET SCHERM, EN DE ONTVANGER WORDT GEMETEN** (`v317`): de terugval bestond
+  sinds `v307` alleen in de REKENSOM. `p.eta` werd er een maand of meer vroeger van en niets zei
+  WAAR de ruimte van een vol doel heen gaat. `planTerugval()` leent diezelfde projectie via een
+  COLLECTOR die de aanroeper meegeeft, dus er komt geen tweede maandlus naast (`v104`) en de twee
+  bestaande lezers (`allocatePlan()`, `normGevolgen()`) zien per constructie geen verschil.
+  DE ONTVANGER IS DE GROOTSTE STIJGER VAN `alloc` EN NIET "DE VOLGENDE OP VOLGORDE". Ronde 2 deelt
+  van boven naar beneden uit aan de eerste rij met ruimte, en dat kan een rij BOVEN de gever zijn:
+  GEMETEN met een doel op `vast 500` bovenaan en een doel op `vast 2000` eronder is het ONDERSTE
+  eerder vol en gaat zijn ruimte naar boven.
+  EN DE MAAT IS `alloc` EN NIET `extra`, want anders valt de belangrijkste overdracht weg. Raakt je
+  BUFFER vol, dan gaat zijn ruimte via RONDE 1 naar het eerste doel (de grendel opent en een
+  `auto`-doel vraagt zijn hele rest), dus `extra` blijft daar nul. GEMETEN: met `extra` als maat
+  leverde een buffer die in maand 4 vol is NUL overdrachten.
+  HIJ KIJKT IN TWEE MAANDEN, en dat is ook gemeten. In de VULMAAND neemt de gever nog zijn laatste
+  rest en zakt de rest van zijn aandeel diezelfde maand al door; in de maand ERNA valt zijn hele
+  aandeel vrij. Welke van de twee de stijging draagt hangt van de stand af: op de stand van het
+  toestel (twee doelen op 90/10 van EUR 2.200) is het de VULMAAND, en alleen op de maand erna meten
+  gaf daar nul overdrachten; bij een buffer is het de maand ERNA. De vulmaand gaat voor, want dat is
+  het eerste moment waarop er iets verschuift. EEN SABOTAGE OP DE VULMAAND BLEEF EERST GROEN en dat
+  lag aan de spec: zijn fixture droeg alleen de buffer-vorm. De 90/10-stand staat er nu als eigen
+  geval bij (meetles o).
+  DE STIPPELLIJN STAAT IN DE TAK VAN DE ONTVANGER, op de plek en de breedte van het segment van de
+  GEVER, dus in hetzelfde assenstelsel als de inlegbalk en recht onder het volle blok van de gever.
+  Een lijn die de twee rijen echt verbindt zou de posities na het renderen moeten opmeten, en dat
+  doet niets in dit bestand; dat is de afwijking van de mockup en hij staat hier benoemd.
+  GEEN BEDRAG IN DE REGEL: het blok IS het segment van de gever en draagt dus de maat, en de rij van
+  de gever draagt het getal. Een bedrag erbij zou een tweede bron voor datzelfde getal zijn (`v104`)
+  en het zou niet kloppen voor de vulmaand, waarin de gever nog zijn laatste rest neemt.
+  EEN ONTVANGER ZONDER EIGEN INLEG KRIJGT TOCH EEN TAK, en dat is het geval dat telt: een doel dat
+  vandaag nul krijgt heeft de terugval als enige vooruitzicht. De naam komt uit `spaarOverNaam()`,
+  dus het noodfonds heet "je noodfonds" en niet "Noodfonds" (derde lezer van die ene bron).
+  DE REGEL MAG EEN MAAND NOEMEN BIJ EEN WACHTENDE BESTEMMING, en dat is een afbakening van de
+  `v59`/`v73`/`v173`-regel en geen omkering: wat verboden blijft is de EIGEN vol-datum, het eigen
+  tempo en een achterstand van zo'n doel, want die zouden tegen de verkeerde alloc gerekend zijn.
+  Wanneer de RUIMTE van een ander doel hierheen komt is een gemeten uitkomst van dezelfde projectie.
+- **DE MARGE STAAT IN HET DATUMPAAR, UIT DEZELFDE `sp` ALS "NET OP TIJD"** (`v317`): die werd sinds
+  `v307` gerekend en alleen gebruikt om de net-op-tijd-tak te kiezen, dus met zeven maanden speling
+  zei het vat "vol in jan 2027 · moet in augustus 2027" en moest je het verschil zelf tellen. Hij
+  staat nu als derde deel op diezelfde regel. EEN KEER GEREKEND, en dat staat als bronzoekende
+  assertie vast: `T.maandenTot - p.eta` komt precies EEN keer in `vatRegels()` voor. Bij nul of
+  minder blijft "net op tijd" staan, en een doel dat te laat is noemt geen speling.
+- **DE REGEL ONDER DE WATERVAL LEEST DE PROJECTIE EN REKENT NIET ZELF** (`v317`): `planTotaalRegel()`
+  was een alinea van vijf zinnen (gemeten 113px op 360px en 94px op 390px) die `ceil(gatLopend/cap)`
+  deed. Dat was de DERDE telling over dezelfde vraag naast het datumpaar in elk vat, dat sinds `v307`
+  `planVooruit()` leest. `planKlaarMaand()` geeft de LAATSTE maand waarin een bestemming die meedoet
+  vol raakt, en de regel is 38px.
+  IN HET NORMALE GEVAL VALLEN DE TWEE SAMEN, want zolang elk item meedoet verdeelt de projectie elke
+  maand de hele inleg. HET GEVAL DAT ZE ONDERSCHEIDT IS EEN AFLOS-ITEM: `planTotaal()` laat dat uit
+  het gat (schuld is een andere vraag) terwijl de oude deling door de HELE plancapaciteit deelde, en
+  die schuld houdt zijn alloc voor altijd (`v307`). De vlakke deling leest daar te optimistisch.
+  DAT IS GEEN ACADEMISCH GEVAL: op een doel dat achter de grendel op de buffer wacht draagt het VAT
+  helemaal geen vol-datum, en de regel noemt er wel een. Dat is wat de regel toevoegt aan wat de
+  vaten zeggen, en het is het tegenvoorbeeld waarop deze ronde is getoetst.
+  WAT ERAF IS: het totaal, het toegewezen bedrag en de streefdatum-zin. Die laatste bestond alleen om
+  uit te leggen dat de maanden over het hele plan gingen en de datum bij EEN doel hoorde; met een
+  echte vol-maand is er geen verwarring om weg te schrijven. Het gepauzeerde bedrag houdt zijn eigen
+  zin, om de reden van `v221`: het zit in het verschil en niet in de maand.
+  ZONDER MAAND STAAT DE REDEN ERBIJ (`v59`/`v73`/`v173`), en een plan waarin niets meer meedoet zegt
+  niets in plaats van "valt niet te zeggen".
+- **DE VOLGORDE ZET JE IN DE EDITOR, EN DE PIJLTJES ZIJN VERVALLEN** (`v317`): twee knoppen per rij
+  die alleen een plek verschuiven kostten 64px aan de rand van elke bestemming, en de terugval-lijn
+  laat nu zien waar het geld heen gaat als een bestemming vol is. `planOrdeVeld(id)` is een chip per
+  plek, in de doel-editor EN in de noodfonds-sheet.
+  TWEE INGANGEN, EEN VELD (`v61`), en die tweede is geen luxe: zonder hem is het noodfonds na het
+  weghalen van de pijltjes helemaal niet meer te verplaatsen. Dat is de meetles over een element dat
+  de enige drager van een ingang is, en de spec toetst beide ingangen.
+  DE REGEL GAAT OVER EEN VOLGORDE EN NIET OVER EEN VERSCHUIVING. `planOrdeMag(ids)` is de ene
+  uitdrukking, `planOrdeNa(id,plek)` de ene verschuiving, en `planPlekMag()` en `planPlekZet()` lezen
+  die twee. `planMove()` en `planMoveMag()` bestaan niet meer: de eerste had alleen de pijltjes als
+  aanroeper en de tweede alleen de rij die ze tekende.
+  DE `v245`-REGEL IS MEEVERHUISD EN NIET VERVALLEN: een plek die niet mag is uitgeschakeld en niet
+  weggelaten, want een bediening die er bruikbaar uitziet en het niet is, is erger dan geen
+  bediening. De plek waar je STAAT draagt geen handler, want een tik erop zou schrijven en
+  hertekenen zonder dat er iets verandert.
+  BLOK 4 VAN HET DIAGNOSESCHERM LOOPT NU ELKE PLEK AF in plaats van twee richtingen, en leest
+  `planPlekMag()` in plaats van de regel zelf nog eens uit te drukken. Dat laatste was een tweede
+  uitdrukking in precies het blok dat zo'n tegenspraak moet vangen.
+- **TAK EN BALKSEGMENT DELEN HUN MINIMUMBREEDTE EN HUN GEOMETRIE** (`v317`): `.plan-tak i` had
+  `min-width:3px` en het balksegment niet, en de balk was bovendien `display:flex`. GEMETEN bij een
+  bestemming op 0,5 procent van de inleg: het balksegment werd 1,5px en de tak 3px, en de rechterrand
+  van de tak landde op 302px op een balk van 300px. De `v246`-regel ("dikte en plek komen uit
+  hetzelfde segment, dus ze kunnen niet uiteenlopen") gold voor de data en niet voor het beeld.
+  `SEG_MIN_PCT` STAAT IN `planSegmenten()` en dus in de data die beide lezers lezen, als PERCENTAGE
+  omdat dat de eenheid is waarin ze rekenen. Een pixelminimum zou ze opnieuw scheiden, want de een
+  leest `width` en de ander `left`+`width`.
+  EN DE BALK STAAT ABSOLUUT, PRECIES ZOALS DE TAK. Met de minimumbreedte erin kan de som boven 100
+  procent uitkomen, en dan KROMP flex alle segmenten proportioneel terwijl de tak niet krimpt:
+  gemeten 2,98px tegen 3px en 297,02 tegen 298,5. Nu lezen beide `van` en `breed` op dezelfde manier
+  en is het verschil per constructie nul; `overflow:hidden` op beide kapt op dezelfde plek.
+  HERSCHALEN IS VERWORPEN: dat zou de andere segmenten een breedte geven die hun bedrag niet draagt,
+  een tweede vertekening om een eerste te verbergen.
+- **DE VATEN BLIJVEN GELIJK, EN DE UITLEG BELOOFT GEEN HOOGTE MEER** (`v317`): de mockup vroeg de
+  vaten op schaal van het doelbedrag terug, en dat is bij `v248` met een meting weggehaald ("een leeg
+  vat van ruim 300px zegt alleen dat een doel ver weg is"). Die keuze staat; wat niet stond is de
+  TEKST eromheen. `NOTES.planUitleg` zei nog "de hoogte van een vat is het doelbedrag" en twee
+  CSS-comments beschreven een geklemde hoogte en een gestippelde bovenrand die sinds `v248` niet meer
+  bestaan (`VAT_MIN` en `planVatHoogten()` hebben nul treffers, en gemeten is elke balk 11px). Een
+  uitleg die gedrag belooft dat de code niet heeft stuurt elke volgende ronde de verkeerde kant op.
+  DE UITLEG ZEGT NU WAT ER WEL STAAT en noemt het streepje, dat tot deze ronde alleen een
+  `sr-only`-regel per balk had en dus geen zichtbare uitleg.
+  DE PRIJS VAN DEZE RONDE IN PIXELS, op de stand van het toestel (twee doelen op 90/10 van EUR 2.200):
+  de terugval-regel kost 21px op de ONTVANGER, de pijltjes leveren 10px op de ingeklapte
+  noodfonds-rij op (65 naar 55px) en de regel onder de waterval gaat van 113 naar 38px. Netto is de
+  waterval-kaart 64px lager (590 naar 526px) en de hele zone 94px.
+  DE LAATSTE BESTEMMING EINDIGT OP 566px BIJ EEN VOUW VAN 567, dus met EEN pixel marge, en dat staat
+  als eigen assertie vast: een regel erbij past niet. Op 390x844 is er ruimte (544 van 771, en de
+  regel onder de waterval past tot 612). Niet ingekort.
 - **DE DOEL-RIJ OP GRIP LEEST DEZELFDE LAT ALS PLAN, EN DAT IS `knelt`** (`v316`): Grip zei "EUR 1.980
   per maand tegen EUR 2.143 nodig, EUR 163 tekort" terwijl Plan bij diezelfde EUR 1.980 "vol in mei 2027,
   net op tijd" zei. Twee antwoorden op een vraag (`v104`).
@@ -3296,7 +3442,7 @@ genoemde versietag.)*
   druk op de voetregel in Instellingen (`diagOpen()`) is een uitlezing van wat de app op dít
   toestel meet, want de gegevens van de gebruiker staan alleen daar en op een telefoon is er geen
   console. KIJKEN VERANDERT NIETS: geen `save()`, niets naar `SET`, niets naar `localStorage`, geen
-  netwerk, en `planMove()` wordt nagerekend op een kopie en niet uitgevoerd. `diagnose-scherm.spec.js`
+  netwerk, en de volgorde-regel wordt nagerekend op een kopie en niet uitgevoerd. `diagnose-scherm.spec.js`
   meet dat op `localStorage.setItem` en niet alleen op de inhoud achteraf: een schrijver die
   dezelfde waarde terugzet is ook een schrijver. De blokken staan in `DIAG_BLOKKEN` en nergens
   anders; `diagTekst()` en het scherm kennen geen enkel blok bij naam, dus een blok erbij is een
@@ -3501,6 +3647,8 @@ genoemde versietag.)*
   het maandbedrag staat in de kop één regel hoger, en twee keer hetzelfde getal is een tweede bron.
   KLEUR DRAAGT DE VERBINDING die de afstand niet meer draagt: segment en tak delen hun tint uit
   `planTint()`, mengsels van de bestaande `--teal` met `--card2`, en geen nieuwe tokens.
+  DE PIJLTJES ZIJN BIJ `v317` VERVALLEN; zie de regel daarover bovenaan. Alles hieronder over hun
+  poort blijft gelden voor het volgorde-veld dat ervoor in de plaats staat.
   ELKE BESTEMMING KRIJGT DEZELFDE LIGGENDE BALK (`v248`). `v246` gaf elk doel een vat op hoogte van
   zijn doelbedrag; de verhouding klopte, maar leverde niets op, want een leeg vat van ruim 300px
   zegt alleen dat een doel ver weg is. De vulling is nu de voortgang in procenten, zodat de doelen
@@ -3824,7 +3972,7 @@ genoemde versietag.)*
   een GEPAUZEERDE buffer bij een dichte grendel: de buffer krijgt nul en er blijft €3.000 over, dus
   zonder die eis gaat je hele inleg langs een lege buffer naar het eerste doel. Bij een onbekende
   stand volgt het al uit de rekensom, maar `v173` mag niet van een toevallige uitkomst afhangen.
-  Hij staat als eigen functie om dezelfde reden als `planMoveMag()` (`v245`).
+  Hij staat als eigen functie om dezelfde reden als de volgorde-poort (`v245`).
   **RONDE 2 LEEST DE VERDEELMODUS NIET**, en dus splitst een vast maandbedrag daar nog steeds
   niets: het restant zakt op volgorde door en het eerste doel neemt wat het nodig heeft, nooit
   meer. Wat de grendel tegen het splitsen doet zit in RONDE 1, die de modus van een
@@ -3860,8 +4008,10 @@ genoemde versietag.)*
   onbekend: is de voortgang niet vastgesteld, dan blijft de grendel dicht en wordt er geen maand
   genoemd waarin hij opengaat. Geen buffer-doel is geen grendel. Ronde 2 van `allocatePlan()` (het
   restant zakt door naar het volgende lopende item op volgorde) is ongemoeid en blijft de terugval.
-  ELKE SCHRIJVER GAAT ERDOOR, EN DE PIJLTJES ZEGGEN WAT ZE DOEN (`v245`): `planMoveMag(id,dir)` is de
-  enige poort, gelezen door `planMove()` én door de rij die de pijltjes tekent. Die twee besloten
+  ELKE SCHRIJVER GAAT ERDOOR, EN DE BEDIENING ZEGT WAT HIJ DOET (`v245`; sinds `v317` is dat het
+  volgorde-veld en niet meer de pijltjes, en heet de poort `planPlekMag()` met `planOrdeMag()` als
+  regel): `planMoveMag(id,dir)` was de enige poort, gelezen door `planMove()` én door de rij die de
+  pijltjes tekent. Die twee besloten
   apart, en gemeten op echte gegevens (buffer 1.100 van 5.301) rendeerde een GEBLOKKEERD pijltje als
   een gewone actieve knop; een knop die er bruikbaar uitziet en het niet hoort te zijn, is erger dan
   geen knop. `planPromoteDebt()` zette een aflos-item ongehinderd op plek 1 en heeft nu dezelfde
@@ -4591,7 +4741,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v316` → `minder-v317`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v317` → `minder-v318`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -4608,7 +4758,8 @@ alleen `tests/` en dit bestand en bumpte op zichzelf dus niet. `v311` raakt app-
 de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md` en de changelog
 (een besluit en een open punt), dus hij bumpt niet, en `v313` raakt app-code en gaat daarom van
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
-`minder-v314`, `v315` net zo naar `minder-v315`, en `v316` naar `minder-v316`.
+`minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316` en `v317` naar
+`minder-v317`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

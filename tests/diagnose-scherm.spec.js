@@ -5,7 +5,7 @@
 // telefoon is er geen console. Dit scherm leest die staat uit.
 //
 // DE VOORWAARDE IS HARD EN DIT BESTAND IS DE PLEK WAAR HIJ STAAT: kijken verandert niets. Geen
-// save(), niets naar SET, niets naar localStorage, en planMove() wordt niet uitgevoerd maar
+// save(), niets naar SET, niets naar localStorage, en de volgorde-schrijver wordt niet uitgevoerd maar
 // nagerekend. Gemeten op localStorage.setItem en niet alleen op de inhoud achteraf: een schrijver
 // die dezelfde waarde terugzet is ook een schrijver, en byte-gelijkheid ziet die niet.
 //
@@ -114,11 +114,13 @@ test.describe('a · kijken verandert niets', () => {
 
   test('blok 4 rekent na en voert niet uit: een verkeerd opgeslagen volgorde blijft verkeerd staan',
     async ({ page }) => {
-      // planMove() zou hier corrigeren noch bewaren; het scherm mag hem al helemaal niet aanraken
+      // de schrijver zou hier corrigeren noch bewaren; het scherm mag hem al helemaal niet aanraken
       await boot(page, { goals: DRIE, set: { planOrder: ['g1', 'noodfonds', 'g2'] } });
       await open(page);
       const t = await uit(page);
-      expect(t).toContain('GEBLOKKEERD');
+      // v317: blok 4 loopt elke PLEK af in plaats van twee richtingen; BLOK is zijn woord voor
+      // 'die plek mag niet'.
+      expect(t).toContain('=BLOK');
       expect(await page.evaluate(() => SET.planOrder)).toEqual(['g1', 'noodfonds', 'g2']);
     });
 });
@@ -218,24 +220,27 @@ test.describe('c · wat er in staat', () => {
     expect(t).toContain('=== EINDE ===');
   });
 
-  /* v245: deze probe zocht planGrendel() letterlijk in planMove(). Sinds de check via
-     planMoveMag() loopt stond daar 'NEE (oude code)' terwijl de code precies goed was, en de
-     suite ving dat. Een probe die de vorm van vandaag vastlegt in plaats van de eigenschap
-     veroudert met de eerste refactor; deze toetst de route, en de oude inline-vorm telt nog
-     steeds mee zodat een oude worker over zijn eigen versie de waarheid vertelt. */
-  test('blok 1 laat zien of planMove() de grendelcheck draagt, via welke route dan ook',
+  /* v245: deze probe zocht planGrendel() letterlijk in planMove(). Sinds de check via een poort
+     loopt stond daar 'NEE (oude code)' terwijl de code precies goed was, en de suite ving dat. Een
+     probe die de vorm van vandaag vastlegt in plaats van de eigenschap veroudert met de eerste
+     refactor; deze toetst de route, en de oudere vormen tellen nog steeds mee zodat een oude worker
+     over zijn eigen versie de waarheid vertelt.
+     v317: de schrijver heet planPlekZet() en de poort planOrdeMag(); planMove() en planMoveMag()
+     bestaan niet meer. Dat is precies de refactor waar deze probe tegen is gebouwd, dus hij moet er
+     groen door blijven. */
+  test('blok 1 laat zien of de volgorde-schrijver de grendelcheck draagt, via welke route dan ook',
     async ({ page }) => {
       await boot(page, { goals: DRIE });
       await open(page);
-      expect(await uit(page)).toContain('planMove draagt de grendelcheck: JA');
+      expect(await uit(page)).toContain('de schrijver van je volgorde draagt de grendelcheck: JA');
     });
 
-  test('blok 1 toetst ook de twee andere routes en de pijltjes', async ({ page }) => {
+  test('blok 1 toetst ook de twee andere routes en het volgorde-veld', async ({ page }) => {
     await boot(page, { goals: DRIE });
     await open(page);
     const t = await uit(page);
     expect(t).toContain('de twee andere routes dragen hem: planPromoteDebt JA | setNfAlloc JA');
-    expect(t).toContain('de pijltjes lezen dezelfde poort: JA');
+    expect(t).toContain('het volgorde-veld leest dezelfde poort: JA');
   });
 
   test('blok 3 noemt het veld waar de getoonde toegewezen-regel zijn bedrag haalt', async ({ page }) => {
@@ -272,7 +277,13 @@ test.describe('c · wat er in staat', () => {
     const t = await uit(page);
     expect(t).toContain('grendel dicht: JA');
     expect(t).toContain('wacht op de buffer');
-    expect(t).toMatch(/Noodfonds \(noodfonds\) omlaag: GEBLOKKEERD/);
+    /* v317: het noodfonds mag bij een dichte grendel nergens anders heen, dus plek 2 en 3 staan op
+       BLOK en plek 1 is zijn huidige. Dat is dezelfde regel als het oude 'omlaag: GEBLOKKEERD',
+       over elke plek in plaats van over een richting. */
+    expect(t).toMatch(/Noodfonds \(noodfonds\): 1=nu 2=BLOK 3=BLOK/);
+    // en de lijst die de schrijver zou wegschrijven staat er alleen bij de plekken die DOOR mogen
+    expect(t).toMatch(/Vakantie -> plek 3: \["noodfonds","g2","g1"\]/);
+    expect(t).not.toMatch(/Vakantie -> plek 1:/);
   });
 });
 

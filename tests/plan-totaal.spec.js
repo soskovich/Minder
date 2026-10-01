@@ -6,8 +6,15 @@
 // (type 'goal' en alloc > 0): die hoort bij maandelijkse bestemmingen en werkt hier averechts,
 // want een doel dat 'wacht op capaciteit' heeft alloc 0 en dat is juist het doel waar de vraag
 // over gaat. Een gepauzeerd doel telt wel in het totaal en niet in de maanden.
+// v317: DE REGEL LEEST DE PROJECTIE EN REKENT NIET ZELF. De alinea deed `ceil(gatLopend/cap)` plus
+// de eerstvolgende streefdatum, en dat was de DERDE telling over dezelfde vraag naast het datumpaar
+// in elk vat (dat sinds v307 `planVooruit()` leest). Blok b meet nu de projectie, en het geval dat
+// de twee onderscheidt staat erbij: met een aflos-item in het plan is de VLAKKE deling te
+// optimistisch, want die deelt door de hele plancapaciteit terwijl de schuld er elke maand een deel
+// van opeet.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { pinDatum } = require('./vaste-dag');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -46,6 +53,7 @@ async function boot(page, o) {
   await page.waitForFunction(() => typeof planTotaal === 'function');
 }
 const T = (page) => page.evaluate(() => planTotaal());
+const K = (page) => page.evaluate(() => planKlaarMaand());
 const regel = (page) => page.evaluate(() => {
   const d = document.createElement('div'); d.innerHTML = planTotaalRegel();
   return d.textContent.replace(/\s+/g, ' ').trim();
@@ -73,10 +81,15 @@ test.describe('a - de optelling telt op', () => {
     expect(uit.T.gat).toBe(uit.rest);
   });
 
-  test('het noodfonds telt mee, anders klopt het woord totaal niet', async ({ page }) => {
+  /* v317: de regel noemde het TOTAAL (nodig) en doet dat niet meer; wat hij noemt is wat er nog te
+     gaan is. Dat het noodfonds in de sommen MEEtelt blijft de eigenschap, en die is nu aan het
+     verschil af te lezen: zonder het noodfonds zou `gatLopend` 16.000 zijn in plaats van 18.834. */
+  test('het noodfonds telt mee, anders klopt de optelling niet', async ({ page }) => {
     await boot(page);
     expect((await T(page)).nf).toBe(true);
-    expect(await regel(page)).toContain('€21.334');
+    expect((await T(page)).gatLopend).toBe(18834);
+    expect(await regel(page)).toContain('€18.834');
+    expect(await regel(page)).not.toContain('€21.334');
   });
 
   test('een aflos-item telt niet mee: schuld is een andere vraag', async ({ page }) => {
@@ -101,46 +114,97 @@ test.describe('a - de optelling telt op', () => {
   });
 });
 
-test.describe('b - het gat afgezet tegen de tijd', () => {
-  test('maanden is het gat gedeeld door de plancapaciteit', async ({ page }) => {
+test.describe('b - de maand komt uit de projectie', () => {
+  /* De invoer eerst: deze fixture IS het tegenvoorbeeld dat de ronde vroeg. Kosten Koper wacht op
+     de buffer, dus zijn vat draagt helemaal GEEN vol-datum, en de regel noemt er wel een. Dat is
+     precies wat de regel toevoegt aan wat de vaten zeggen. */
+  test('de invoer: het doel wacht op de buffer en heeft dus zelf geen vol-datum', async ({ page }) => {
     await boot(page);
-    const t = await T(page);
-    expect(t.cap).toBe(1039);
-    expect(t.mnd).toBe(Math.ceil(t.gatLopend / t.cap));
-    expect(t.mnd).toBe(19);
+    const kk = await page.evaluate(() => allocatePlan().find((p) => p.id === 'g1'));
+    expect(kk.status).toBe('wacht op de buffer');
+    expect(kk.alloc).toBe(0);
+    expect(kk.eta).toBe(null);
+    const vat = await page.evaluate(() => vatRegels(allocatePlan().find((p) => p.id === 'g1')).regels.join(' | '));
+    expect(vat).not.toMatch(/vol in/);
   });
 
-  test('de eerstvolgende streefdatum is de datum die knelt', async ({ page }) => {
+  test('en de projectie plaatst hem toch, want de grendel gaat erin open', async ({ page }) => {
+    await boot(page);
+    const k = await K(page);
+    expect(k.laatste.id).toBe('g1');
+    expect(k.laatste.maand).toBe(19);
+    expect(k.zonder).toEqual([]);
+    expect(k.mee).toBe(2);
+    // en de regel drukt diezelfde maand af, via etaDatum()
+    const lbl = await page.evaluate(() => etaDatum(19));
+    expect(await regel(page)).toContain(`vol in ${lbl}`);
+  });
+
+  test('de maand is de LAATSTE van de projectie en niet de eerste', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => ({ vol: planVooruit(), k: planKlaarMaand() }));
+    expect(r.vol.noodfonds).toBe(3);                 // de buffer is er eerder
+    expect(r.k.laatste.maand).toBe(Math.max(...Object.values(r.vol)));
+  });
+
+  /* HET GEVAL DAT DE PROJECTIE VAN DE VLAKKE DELING ONDERSCHEIDT. `planTotaal()` laat een aflos-item
+     uit het gat (schuld is een andere vraag), maar de capaciteit die de oude deling gebruikte was de
+     HELE plancapaciteit, terwijl die schuld er elke maand een deel van opeet en zijn alloc volgens
+     v307 voor altijd houdt. De vlakke deling leest daardoor te optimistisch; de projectie niet.
+     Zonder dit geval is "hij leest de projectie" niet van "hij deelt het gat door de capaciteit" te
+     onderscheiden (meetles a). */
+  test('met een aflos-item loopt de projectie uiteen met de vlakke deling', async ({ page }) => {
+    /* DE BUFFER MOET VOL ZIJN, anders pakt de grendel de hele inleg en krijgt de schuld nul: dan is
+       de stand niet die waarop de twee vormen uiteenlopen (meetles a). */
+    await boot(page, { set: {
+      nfToegewezen: 5334,
+      debts: [{ id: 'd1', naam: 'Lening', rest: 8000, start: 12000, perMaand: 0, rente: 4, type: 'lening' }],
+      planOrder: ['noodfonds', 'af:d1', 'g1'],
+      planAlloc: { 'af:d1': { mode: 'fixed', perMaand: 300 } },
+    } });
+    expect(await page.evaluate(() => planGrendel())).toBe(null);
+    const r = await page.evaluate(() => ({
+      alloc: Object.fromEntries(allocatePlan().map((p) => [p.id, p.alloc])),
+      cap: planCapacity(), T: planTotaal(), k: planKlaarMaand() }));
+    expect(r.alloc['af:d1']).toBe(300);                       // de schuld pakt elke maand 300
+    const vlak = Math.ceil(r.T.gatLopend / r.cap);            // de oude vorm
+    expect(r.k.laatste.maand).toBeGreaterThan(vlak);          // en de projectie is langzamer
+    const lbl = await page.evaluate((m) => etaDatum(m), r.k.laatste.maand);
+    expect(await regel(page)).toContain(`vol in ${lbl}`);
+    expect(await regel(page)).not.toContain(await page.evaluate((m) => etaDatum(m), vlak));
+  });
+
+  test('zonder capaciteit staat er geen maand in plaats van een verzonnen tempo', async ({ page }) => {
+    await boot(page, { set: { savingMode: 'amount', savingAmount: 0 } });
+    const k = await K(page);
+    expect(k.laatste).toBe(null);
+    expect(k.zonder.length).toBeGreaterThan(0);
+    const r = await regel(page);
+    expect(r).not.toContain('vol in');
+    expect(r).toContain('valt niet te zeggen wanneer het vol is');
+  });
+
+  /* v317: de streefdatum-zin is vervallen. Die bestond alleen om uit te leggen dat de maanden over
+     het hele plan gingen en de datum bij EEN doel hoorde; met een echte vol-maand is er geen
+     verwarring om weg te schrijven, en de streefdatum per doel staat in het datumpaar van dat doel. */
+  test('de regel noemt geen streefdatum van een los doel meer', async ({ page }) => {
     await boot(page, { goals: [
       { id: 'g1', naam: 'Later', doel: 8000, gespaard: 0, streefdatum: STREEF, allocMode: 'auto' },
       { id: 'g2', naam: 'Eerder', doel: 4000, gespaard: 0, streefdatum: VROEG, allocMode: 'auto' },
     ] });
-    expect((await T(page)).eerste.naam).toBe('Eerder');
-  });
-
-  test('de regel zegt dat de maanden en de datum niet uit dezelfde verzameling komen', async ({ page }) => {
-    await boot(page);
-    const t = await regel(page);
-    expect(t).toContain('over je hele plan gaan');
-    expect(t).toContain('je noodfonds meegeteld');
-    expect(t).toContain('Kosten Koper');
-  });
-
-  test('zonder enig doel met streefdatum valt de datumvergelijking weg', async ({ page }) => {
-    await boot(page, { goals: [{ id: 'g1', naam: 'Geen datum', doel: 9000, gespaard: 0, allocMode: 'auto' }] });
-    const t = await T(page);
-    expect(t.eerste).toBe(null);
     const r = await regel(page);
-    expect(r).toContain('maanden');           // het tempo blijft
-    expect(r).not.toContain('streefdatum');   // de vergelijking niet
+    expect(r).not.toContain('streefdatum');
+    expect(r).not.toContain('Eerder');
+    expect(r).not.toContain('over je hele plan gaan');
   });
 
-  test('zonder capaciteit staat er geen tempo in plaats van een nul', async ({ page }) => {
-    await boot(page, { set: { savingMode: 'amount', savingAmount: 0 } });
-    const t = await T(page);
-    expect(t.cap).toBe(0);
-    expect(t.mnd).toBe(null);
-    expect(await regel(page)).not.toContain('per maand is');
+  /* De regel is EEN regel. De oude alinea was vijf zinnen; dit houdt vast dat er niet stilletjes
+     weer een vierde bij komt. */
+  test('het is een regel en geen alinea', async ({ page }) => {
+    await boot(page);
+    const r = await regel(page);
+    expect(r.split('.').filter((x) => x.trim()).length).toBeLessThanOrEqual(2);
+    expect(r.length).toBeLessThan(140);
   });
 });
 
@@ -154,28 +218,23 @@ test.describe('c - een gepauzeerd doel telt wel in het totaal en niet in de maan
     expect(t.gatLopend).toBe(2834);
   });
 
-  test('de maanden gaan alleen over wat wel inleg krijgt', async ({ page }) => {
+  test('de maand gaat alleen over wat wel inleg krijgt', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => planTogglePause('g1'));
-    const t = await T(page);
-    expect(t.mnd).toBe(Math.ceil(2834 / 1039));
-    expect(t.mnd).toBe(3);
+    const k = await K(page);
+    expect(k.mee).toBe(1);                   // alleen het noodfonds doet mee
+    expect(k.laatste.id).toBe('noodfonds');
+    expect(k.laatste.maand).toBe(3);
+    expect(k.zonder).toEqual([]);            // een gepauzeerd doel staat niet in de lijst zonder maand
   });
 
-  test('en de regel noemt dat vóór de maanden, niet als naschrift', async ({ page }) => {
+  test('en de regel noemt het gepauzeerde bedrag apart, want het zit niet in de maand', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => planTogglePause('g1'));
     const r = await regel(page);
-    expect(r).toContain('€16.000 daarvan hoort bij een gepauzeerd doel en krijgt geen inleg');
-    expect(r).toContain('de overige €2.834');
-    // anders leest 'het verschil is X, op Y per maand is dat Z' als een deling die niet klopt
-    expect(r.indexOf('gepauzeerd doel')).toBeLessThan(r.indexOf('per maand'));
-  });
-
-  test('een gepauzeerd doel levert ook geen streefdatum', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => planTogglePause('g1'));
-    expect((await T(page)).eerste).toBe(null);
+    expect(r).toContain('€2.834');                                   // wat er wel inleg krijgt
+    expect(r).toContain('€16.000 hoort bij een gepauzeerd doel en krijgt geen inleg');
+    expect(r).toContain('dat zit hier niet in');
   });
 });
 
@@ -202,8 +261,12 @@ test.describe('d - de randen', () => {
       set: { nfDoelVast: 2000, nfToegewezen: 2000 } });
     const t = await T(page);
     expect(t.gat).toBe(0);
-    expect(t.mnd).toBe(null);
+    const k = await K(page);
+    expect(k.mee).toBe(0);          // niets doet mee, dus geen maand en geen 'valt niet te zeggen'
+    expect(k.laatste).toBe(null);
     const r = await regel(page);
+    expect(r).not.toContain('vol in');
+    expect(r).not.toContain('valt niet te zeggen');
     expect(r).toContain('€0');
     for (const w of ['goed bezig', 'gefeliciteerd', 'knap', 'mooi']) expect(r.toLowerCase()).not.toContain(w);
   });
@@ -247,7 +310,7 @@ test.describe('f - plaatsing en veilig-te-besteden', () => {
     await page.evaluate(() => go('vooruit'));
     const t = await page.locator('#s-vooruit').innerText();
     const lijst = t.indexOf('Kosten Koper');
-    const totaal = t.indexOf('Je plan vraagt in totaal');
+    const totaal = t.indexOf('te gaan, en op deze verdeling');
     const res = t.indexOf('Reserveringen');
     expect(lijst).toBeGreaterThanOrEqual(0);
     expect(totaal).toBeGreaterThan(lijst);
@@ -258,7 +321,7 @@ test.describe('f - plaatsing en veilig-te-besteden', () => {
     await boot(page);
     await page.evaluate(() => { SET.vooruitDoelOpen = false; save(); go('vooruit'); });
     const t = await page.locator('#s-vooruit').innerText();
-    expect(t).toContain('Je plan vraagt in totaal');
+    expect(t).toContain('te gaan, en op deze verdeling');
   });
 
   test('KRITIEK: veilig te besteden is niet geraakt door het doelbedrag', async ({ page }) => {

@@ -124,12 +124,14 @@ test.describe('b · herordenen en het plan', () => {
     expect(await page.locator('#s-vooruit .plan-item').first().getAttribute('data-id')).toBe('noodfonds');
   });
 
-  test('▲ verandert SET.planOrder en de hero volgt het nieuwe #1', async ({ page }) => {
+  test('een plek in de doel-editor verandert SET.planOrder en de hero volgt het nieuwe #1', async ({ page }) => {
     await openV(page);
     await openPlanZone(page);
 
-    // tweede kaart (gA) een plek omhoog
-    await page.locator('#s-vooruit .plan-item[data-id="gA"] .plan-mv').first().click();
+    /* v317: dit tikte het pijltje omhoog van de tweede kaart. De pijltjes zijn van het scherm; de
+       plek zet je in de editor van de bestemming, met dezelfde poort erachter. */
+    await page.evaluate(() => openGoal('gA'));
+    await page.locator('#planOrdeChips .chip[data-plek="0"]').click();
     expect(await page.evaluate(() => SET.planOrder)).toEqual(['gA', 'noodfonds', 'gB']);
 
     const S = await page.evaluate(() => savingsModel());
@@ -179,7 +181,7 @@ test.describe('c · het noodfonds', () => {
     expect(await page.evaluate(() => planItems().some((x) => x.id === 'noodfonds'))).toBe(true);
 
     // v242: zakken kan zolang de grendel open is, dus met een volle buffer
-    await page.evaluate(() => planMove('noodfonds', 1));
+    await page.evaluate(() => planPlekZet('noodfonds', 1));
     expect(await page.evaluate(() => planItems()[0].id)).toBe('gA');
   });
 
@@ -191,9 +193,9 @@ test.describe('c · het noodfonds', () => {
     await openV(page, tweak((s) => { s.nfToegewezen = 0; s.goals = doelen(); }));
     expect(await page.evaluate(() => !!planGrendel())).toBe(true);
     const voor = await page.evaluate(() => planItems().map((x) => x.id));
-    await page.evaluate(() => planMove('noodfonds', 1));
+    await page.evaluate(() => planPlekZet('noodfonds', 1));
     expect(await page.evaluate(() => planItems().map((x) => x.id))).toEqual(voor);
-    await page.evaluate(() => planMove('gA', -1));
+    await page.evaluate(() => planPlekZet('gA', 0));
     expect(await page.evaluate(() => planItems().map((x) => x.id))).toEqual(voor);
   });
 });

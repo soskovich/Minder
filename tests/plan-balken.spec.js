@@ -85,8 +85,18 @@ const balken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-v
     dat: (it.querySelector('.vat-dat') || { innerText: '' }).innerText.replace(/\s+/g, ' ').trim() };
 }));
 // de tak draagt sinds v246b geen tekst: het bedrag staat in de kop één regel erboven
+/* v317: EEN TAK KAN TWEE SOORTEN BLOKKEN DRAGEN. Het volle blok is wat deze bestemming NU krijgt
+   (`i[data-takkleur]`), de gestippelde zijn de terugval: de ruimte van een bestemming die vol
+   raakt (`i.tak-erf`). Een helper die `querySelector('i')` pakt leest bij een ontvanger zonder
+   eigen inleg het GESTIPPELDE blok als zijn dikte, en dat is een ander getal. */
 const takken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .plan-tak')]
-  .map((t) => ({ id: t.dataset.tak, w: parseFloat(t.querySelector('i').style.width) })));
+  .map((t) => {
+    const vol = t.querySelector('i[data-takkleur]');
+    return { id: t.dataset.tak, w: vol ? parseFloat(vol.style.width) : null,
+      erf: [...t.querySelectorAll('i.tak-erf')].map((e) => e.dataset.erf) };
+  }));
+/* alleen de bestemmingen met een eigen, gevulde tak */
+const gevuld = async (page) => (await takken(page)).filter((t) => t.w != null);
 /* De echte ids van het toestel. Ze dragen hun aanmaakmoment in base36 ('gmrsd1piu' is 19 juli
    2026), en dat is wat de terugval leest; ID_KK zou naar 1970 decoderen en dus geen streepje geven.
    Een spec die het beginmoment toetst moet daarom met plausibele ids werken. */
@@ -115,12 +125,16 @@ test.describe('a · de grendel in beeld', () => {
   const dicht = { goals: [KK({ streefdatum: KK_STREEF }), IW({ streefdatum: IW_STREEF })],
     planOrder: ['noodfonds', ID_KK, ID_IW] };
 
-  test('dichte grendel op de gemeten toestand: één tak, en die gaat naar de buffer', async ({ page }) => {
+  test('dichte grendel op de gemeten toestand: één gevulde tak, en die gaat naar de buffer', async ({ page }) => {
     await boot(page, dicht);
     expect(await page.evaluate(() => planGrendel())).toMatchObject({ dicht: true, rest: 4201 });
-    const T = await takken(page);
-    expect(T.map((x) => x.id)).toEqual(['noodfonds']);      // de andere twee krijgen niets, dus geen tak
+    const T = await gevuld(page);
+    expect(T.map((x) => x.id)).toEqual(['noodfonds']);      // de andere twee krijgen niets
     expect(T[0].w).toBeCloseTo(100, 1);                     // de hele inleg, dus de volle breedte
+    /* v317: het doel erachter heeft wel een tak, met alleen een GESTIPPELD blok: dat is de ruimte
+       van de buffer, die er volgens de projectie heen gaat zodra hij vol is. */
+    const erf = (await takken(page)).filter((t) => t.w == null);
+    expect(erf.map((t) => t.erf)).toEqual([['noodfonds']]);
     // en het bedrag staat in de kop erboven, één keer
     expect(await page.locator('#s-vooruit .plan-item[data-id="noodfonds"] .vat-kop').innerText())
       .toContain('€3.000/mnd');
@@ -171,7 +185,8 @@ test.describe('b · het datumpaar', () => {
         goals: [KK({ streefdatum: overMnd(40) }), IW({ streefdatum: overMnd(60), allocMode: 'fixed', perMaand: 0 })],
         planOrder: ['noodfonds', ID_KK, ID_IW] }, VOL));
       const v = (await balken(page)).find((x) => x.id === ID_KK);
-      expect(v.dat).toMatch(/^vol in \w+ \d{4} · moet in \w+ \d{4}$/);
+      /* v317: de speling staat er sindsdien als getal bij, uit dezelfde sp als 'net op tijd'. */
+      expect(v.dat).toMatch(/^vol in \w+ \d{4} · moet in \w+ \d{4} · \d+ maanden? speling$/);
       expect(v.laat).toBe(false);
     });
 
@@ -506,12 +521,15 @@ test.describe('d · de balk en de takken', () => {
         KK({ streefdatum: overMnd(40), allocMode: 'fixed', perMaand: 2000 }),
         IW({ streefdatum: overMnd(40), allocMode: 'fixed', perMaand: 0 })] }));
       const r = await page.evaluate(() => ({
-        takken: [...document.querySelectorAll('.plan-tak')].map((t) => ({
-          id: t.dataset.tak, w: parseFloat(t.querySelector('i').style.width) })),
+        takken: [...document.querySelectorAll('.plan-tak')].map((t) => {
+          const vol = t.querySelector('i[data-takkleur]');
+          return { id: t.dataset.tak, w: vol ? parseFloat(vol.style.width) : null };
+        }),
         alloc: Object.fromEntries(allocatePlan().map((p) => [p.id, p.alloc])),
         cap: planCapacity() }));
-      expect(r.takken.map((t) => t.id)).toEqual([ID_KK]);      // de tweede krijgt niets, dus geen tak
-      expect(r.takken[0].w).toBeCloseTo(r.alloc[ID_KK] / r.cap * 100, 1);
+      const g = r.takken.filter((t) => t.w != null);
+      expect(g.map((t) => t.id)).toEqual([ID_KK]);      // de tweede krijgt niets, dus geen gevuld blok
+      expect(g[0].w).toBeCloseTo(r.alloc[ID_KK] / r.cap * 100, 1);
     });
 
   /* v246b: de tak droeg een label met het maandbedrag, en sinds de tekst boven het vat staat noemt
@@ -520,7 +538,7 @@ test.describe('d · de balk en de takken', () => {
   test('het maandbedrag staat één keer, in de kop boven de tak', async ({ page }) => {
     await boot(page, twee);
     const alloc = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, euro0(p.alloc)])));
-    for (const t of await takken(page)) {
+    for (const t of await gevuld(page)) {
       const kop = await page.locator(`#s-vooruit .plan-item[data-id="${t.id}"] .vat-kop`).innerText();
       expect(kop, t.id).toContain(alloc[t.id] + '/mnd');
     }
@@ -533,16 +551,18 @@ test.describe('e · de bediening en de omgeving', () => {
   const drie = { goals: [KK({ streefdatum: KK_STREEF }), IW({ streefdatum: IW_STREEF })],
     planOrder: ['noodfonds', ID_KK, ID_IW] };
 
-  test('een pijltje dat niet mag is een uitgeschakelde knop, en tikken doet niets', async ({ page }) => {
+  /* v317: dit tikte op een uitgeschakeld pijltje. De bediening staat sinds die ronde in de editor,
+     dus de eigenschap leest daar: een plek die niet mag heeft geen handler, en forceren verandert
+     niets. */
+  test('een plek die niet mag heeft geen handler, en tikken doet niets', async ({ page }) => {
     await boot(page, drie);
     const voor = await page.evaluate(() => planItems().map((x) => x.id));
-    const knop = page.locator('#s-vooruit .plan-item[data-id="noodfonds"] .plan-mv').nth(1);
-    await expect(knop).toBeDisabled();
-    expect(await page.evaluate(() => {
-      const el = document.querySelectorAll('#s-vooruit .plan-item[data-id="noodfonds"] .plan-mv')[1];
-      return el.tagName.toLowerCase();
-    })).toBe('button');
-    await knop.click({ force: true });
+    await page.evaluate(() => openNoodfondsPanel());
+    const chip = page.locator('#planOrdeChips .chip[data-plek="1"]');
+    await chip.scrollIntoViewIfNeeded();
+    await expect(chip).toHaveClass(/off/);
+    expect(await chip.getAttribute('onclick')).toBe(null);
+    await chip.click({ force: true });
     await page.waitForTimeout(150);
     expect(await page.evaluate(() => planItems().map((x) => x.id))).toEqual(voor);
   });
@@ -551,7 +571,7 @@ test.describe('e · de bediening en de omgeving', () => {
     await boot(page, drie);
     const r = await page.evaluate(() => {
       const el = document.querySelector('#s-vooruit');
-      const alinea = [...el.querySelectorAll('.small.mut2')].find((x) => /in totaal|van je plan staat er nog niet/.test(x.textContent));
+      const alinea = [...el.querySelectorAll('.small.mut2')].find((x) => /te gaan|van je plan staat er nog niet/.test(x.textContent));
       const kaart = [...el.querySelectorAll('.card')].find((c) => /Te verdelen/.test(c.textContent));
       const res = [...el.querySelectorAll('.card')].find((c) => /eservering/.test(c.textContent));
       return { inKaart: !!(alinea && kaart && kaart.contains(alinea)),

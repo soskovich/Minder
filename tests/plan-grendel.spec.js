@@ -95,9 +95,9 @@ test.describe('a · de grendel', () => {
     await boot(page, { goals: DRIE });
     const r = await page.evaluate(() => {
       const voor = planItems().map((x) => x.id);
-      planMove('noodfonds', 1);                         // omlaag duwen
+      planPlekZet('noodfonds', 1);                      // v317: omlaag duwen via de plek
       const naOmlaag = planItems().map((x) => x.id);
-      planMove('g1', -1);                               // een doel erboven trekken
+      planPlekZet('g1', 0);                             // v317: een doel naar plek 1 trekken
       const naOmhoog = planItems().map((x) => x.id);
       setNfAllocMode('fixed');
       return { voor, naOmlaag, naOmhoog, mode: planAllocOf(planAllocCfg('noodfonds')).mode };
@@ -118,7 +118,7 @@ test.describe('a · de grendel', () => {
     expect(P.find((p) => p.type === 'noodfonds').status).toBe('bereikt');
     expect(P.filter((p) => p.type === 'goal').every((p) => p.status !== 'wacht op de buffer')).toBe(true);
     // en dan mag het noodfonds wel schuiven
-    const na = await page.evaluate(() => { planMove('noodfonds', 1); return planItems().map((x) => x.id); });
+    const na = await page.evaluate(() => { planPlekZet('noodfonds', 1); return planItems().map((x) => x.id); });
     expect(na[0]).not.toBe('noodfonds');
   });
 

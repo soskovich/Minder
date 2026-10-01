@@ -83,12 +83,18 @@ test.describe('a · de wachtuitleg is vervallen; de rij noemt zijn blokkeerder',
     const t = (await planHtml(page)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
     expect(t).not.toMatch(/doelen eronder wachten/);
     expect(t).not.toMatch(/maandbedrag instellen/);
-    /* geen datum bij een wachtend doel: wanneer het aan de beurt komt hangt af van keuzes die nog
-       niet gemaakt zijn, en een maand-en-jaar zou daar een precisie aan geven die er niet is */
+    /* geen eigen datum bij een wachtend doel: wanneer het ZELF vol is hangt af van keuzes die nog
+       niet gemaakt zijn, en een maand-en-jaar zou daar een precisie aan geven die er niet is.
+       v317: de terugval-regel is een EIGEN element naast het datumpaar en mag wel een maand noemen,
+       want vanaf wanneer de RUIMTE van een ander doel hierheen komt is een gemeten uitkomst van de
+       projectie die elk vat sinds v307 al leest. De assertie leest daarom het datumpaar en de
+       statusregel, en niet de hele rij. */
     const wacht = await page.evaluate(() => {
       const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-      return [...d.querySelectorAll('.plan-item')].map((x) => x.innerText)
-        .filter((x) => /Wacht op/.test(x));
+      return [...d.querySelectorAll('.plan-item')]
+        .filter((x) => /Wacht op/.test(x.innerText))
+        .map((x) => [...x.querySelectorAll('.vat-dat:not([data-erfregel]), .vat-stand')]
+          .map((e) => e.innerText).join(' '));
     });
     expect(wacht.length).toBe(2);
     for (const w of wacht) expect(w).not.toMatch(/rond \w+ \d{4}|20\d\d/);

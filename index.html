@@ -281,10 +281,10 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .cz-pot .cp-sub.warn{color:var(--amber)}
 .cz-pot .cp-btn{flex-shrink:0;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:7px 12px;font-size:var(--fs-sm);font-weight:600;cursor:pointer}
 .cz-pot .cp-btn.make{border-color:var(--teal);color:var(--teal)}
-.plan-mv{width:34px;height:30px;border-radius:8px;background:var(--card2);border:1px solid var(--line);color:var(--mut);font-size:var(--fs-xs);line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
-.plan-mv.off,.plan-mv:disabled{opacity:.22;cursor:default}
-/* v246: het vat. Hoogte is het doelbedrag, de vullagen staan van onderaf gestapeld en de tekst
-   ligt erbovenop. Alles HTML en CSS: de knoppen in het vat blijven echte knoppen. */
+/* De balk van een bestemming: EEN liggende balk, voor elke bestemming even hoog (gemeten 11px),
+   met de voortgang als vulling. v317: de uitleg die hier stond beschreef de vorm van v246, die v248
+   heeft teruggedraaid, en beloofde dus gedrag dat de code niet meer heeft. De wrapper blijft
+   relatief staan omdat het streepje erbuiten hangt. */
 .vat{position:relative;margin:0 0 11px}
 /* v246b: de tekst van een bestemming staat boven zijn vat en niet erin. Elke regel in het vat tilde
    de minimumhoogte op, en daarmee vielen er meer vaten onder de bodem en stonden ze even hoog
@@ -299,21 +299,25 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .vat-naam{font-weight:600;font-size:var(--fs-md);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vat-stand{display:block;margin-top:2px}
 .vat-dat{display:block;margin-top:3px;color:var(--mut2);line-height:1.45}
-.vat-pijl{display:flex;flex-direction:column;gap:4px;flex-shrink:0}
 .vat-dof{opacity:.72}
-/* Een geklemd vat staat op de minimumhoogte en is dus NIET op schaal; de gestippelde bovenrand
-   zegt dat, en de sr-only-regel erin zegt het in woorden. Een te laat vat draagt een gedempte
-   markering en geen alarmkleur: er is niets fout gedaan, de verdeling is later dan bedoeld. */
+/* De linkerrand markeert een bestemming die zijn streefdatum niet haalt: gedempt en geen
+   alarmkleur, want er is niets fout gedaan en de verdeling is later dan bedoeld (v78/v93).
+   v317: de uitleg die hier stond ging over een vat-vorm uit v246 die v248 heeft teruggedraaid
+   (VAT_MIN en planVatHoogten() hebben nul treffers), dus hij beschreef een rand en een schaal die
+   deze regel niet zet. */
 .vat-laat{border-left:3px solid var(--mut2)}
 .vat-vol{padding:2px 0}
-/* De twee pijltjes onder elkaar zijn 64px hoog en dat is wat een ingeklapte rij hoog maakt, niet
-   zijn tekst (gemeten: 78px inhoud voor één regel). In de ingeklapte rij staan ze dus naast
-   elkaar; het blijven dezelfde knoppen met dezelfde poort. */
-.vat-vol .vat-pijl{flex-direction:row}
 /* De tak, direct boven zijn eigen vat. Dikte en plek komen uit hetzelfde segment als de balk. */
-.plan-tak{position:relative;height:13px}
-.plan-tak i{position:absolute;top:0;bottom:0;min-width:3px;border-radius:0 0 2px 2px}
-.inleg-balk{display:flex;height:11px}
+/* v317: `overflow:hidden` staat hier en de minimumbreedte in planSegmenten(), zodat de tak en het
+   balksegment op dezelfde plek beginnen, even breed zijn en op dezelfde plek worden gekapt. De
+   `min-width:3px` die hier stond deed dat juist niet: die gold voor de tak en niet voor de balk. */
+.plan-tak{position:relative;height:13px;overflow:hidden}
+.plan-tak i{position:absolute;top:0;bottom:0;border-radius:0 0 2px 2px}
+/* v317: het gestippelde blok is de terugval: de ruimte van een bestemming die vol raakt. Geen eigen
+   kleur en geen vulling, want er gaat nu nog niets heen (v78/v93). */
+.plan-tak i.tak-erf{background:transparent;border:1px dashed var(--mut2);border-top:0}
+.inleg-balk{position:relative;height:11px}
+.inleg-balk .bar-fill{position:absolute;top:0;bottom:0;height:auto;transition:none}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .plan-tab{display:grid;grid-template-columns:1fr auto;gap:3px 12px;line-height:1.4;margin-top:1px}
 .plan-tab .v{color:var(--txt);font-weight:700;text-align:right;white-space:nowrap}
@@ -528,6 +532,9 @@ input[type=search],input[type=number]{width:100%;background:var(--card2);border:
 .chips.wrap{flex-wrap:wrap;overflow-x:visible}
 .chip{flex-shrink:0;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:var(--r-pill);padding:6px 13px;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap}
 .chip.on{background:var(--teal-d);border-color:var(--teal);color:#fff}
+/* v317: een plek die de regel nu niet toelaat. Zichtbaar en niet aantikbaar, zoals een geblokkeerd
+   pijltje dat was (v245): een plek weglaten zou de lijst korter maken en de reden verbergen. */
+.chip.off{opacity:.3;cursor:default}
 .btn{display:block;width:100%;background:var(--teal);color:var(--on-accent);border:none;border-radius:var(--r-inner);padding:13px;font-size:var(--fs-md);font-weight:700;cursor:pointer;text-align:center}
 .btn:active{filter:brightness(1.1)}
 .btn.sec{background:transparent;border:1px solid var(--ln2);color:var(--txt);font-weight:600}
@@ -4178,6 +4185,7 @@ function renderGoalSheet(id, g, modeOverride){
     <label class="fld" style="margin-top:10px">Streefdatum</label><input id="gDatum" type="month" value="${esc(d.streefdatum||'')}" style="width:100%">
     <div class="small muted" style="margin-top:6px">${(!isNew&&!d.streefdatum)?'Dit doel komt van vóór deze versie en heeft er nog geen. Zonder datum valt er niets terug te rekenen. ':''}Elk doel heeft er een; alleen je noodfonds niet, want dat is geen doel met een einddatum maar de bodem eronder.</div>
     ${(function(){ try{ const pi=id?allocatePlan().find(x=>x.id===id):null; return pi?doelTempoLine(pi):''; }catch(_){ return ''; } })()}
+    ${id?(function(){ try{ return planOrdeVeld(id); }catch(_){ return ''; } })():''}
     <label class="fld" style="margin-top:12px">Hoeveel gaat hier maandelijks heen?</label>
     ${vastMag
       ? `<div id="gModes">${planModeChips(mode,'goalMode')}</div>${bedrag}`
@@ -6665,7 +6673,27 @@ function dekking(maanden){
     const perMaand=x.bedrag/Math.max(x.offset,1);
     benodigdPerMaand+=perMaand;
     let opgebouwd=0;
-    if(x.intervalM>0 && eerste[x.id]===x.offset)
+    /* v317: EEN EENMALIGE POST BINNEN HET VENSTER DRAAGT ZIJN HELE BEDRAG. Tot v316 rekende deze
+       lus `opgebouwd` alleen `if(x.intervalM>0)`, dus een eenmalige post droeg NUL in de opbouw-eis
+       en viel daarmee volledig uit `benodigdeStand`, uit `graad` en uit `tekort`. Gemeld en gemeten:
+       met 500 op de reserveringsrekening en een boete van 299 eenmalig in november zei Plan
+       "Blijft over 500" terwijl die 299 volgende maand vertrekt. Te gunstig is de gevaarlijke kant
+       (v168).
+       DE WATERVAL IN DEZELFDE FUNCTIE TELDE HEM AL VOLUIT (`run-=x.bedrag`), dus `gat` en `gedektTot`
+       kenden die post en `benodigdeStand` niet: EEN functie die twee dingen zegt over dezelfde post
+       (v104). Met het hele bedrag erin zeggen Plan en Grip hetzelfde.
+       WAAROM HET HELE BEDRAG EN GEEN DEEL: de pro-rata vorm eronder deelt door het INTERVAL, en dat
+       is de periode waarover je voor de volgende termijn spaart. Een eenmalige post heeft geen
+       volgende termijn en dus geen noemer; hij is simpelweg verschuldigd. Delen door de HORIZON zou
+       de eis laten afhangen van het venster dat de aanroeper kiest (`dekking(12)`), en dat is een
+       meting die van een weergavekeuze afhangt (v259).
+       DIT DRAAIT DE v131-REDENERING OM, en dat staat erbij in plaats van stil te gebeuren: die zei
+       "bij een eenmalige post hoeft er ook niets opgebouwd te zijn". Dat klopt voor een post die nog
+       BUITEN het venster ligt, en die valt hier per constructie al af (`verplichtingen()` levert hem
+       niet). Binnen het venster is het geld wel degelijk vergeven. `graad` wordt daarmee voor een
+       lijst met alleen eenmalige posten een echt percentage in plaats van null. */
+    if(x.intervalM<=0) opgebouwd=x.bedrag;
+    else if(eerste[x.id]===x.offset)
       opgebouwd=x.bedrag*Math.min(Math.max(x.intervalM-x.offset,0),x.intervalM)/x.intervalM;
     benodigdeStand+=opgebouwd;
     regels.push({soort:'post', id:x.id, naam:x.naam, bedrag:x.bedrag, maand:x.maand, offset:x.offset,
@@ -6690,8 +6718,19 @@ function dekking(maanden){
     regels.push({soort:'rekening', id:acc, naam:acctNiceName(acc), bedrag:stand});
   }
   const volledig = !!acc && stand!=null && zonderBedrag.length===0;
+  /* v317: TWEE TELLINGEN, EN ELKE LEZER NEEMT DE ZIJNE. `aantal` is de LIJST en beslist of je
+     verplichtingen hebt ingevoerd; `inVenster` is het aantal posten uit die lijst dat binnen de
+     horizon werkelijk een voorkomen heeft, en dat is de verzameling waar de RIJEN uit komen.
+     Gemeten waarom dat twee getallen moet zijn: met een boete in november en een verstreken
+     eenmalige aanslag zei de kaart "2 posten" boven EEN rij, want `verplichtingen()` laat een post
+     zonder volgende termijn vallen. Een post die je hebt ingevoerd en die van het scherm verdwijnt
+     zonder dat er staat waarom is precies wat v281/v284 verbieden.
+     HET IS EEN TELLING VAN POSTEN EN NIET VAN RIJEN: een kwartaalpost levert vier voorkomens binnen
+     twaalf maanden en is EEN post uit je lijst. */
+  const inVenster=new Set(V.map(x=>x.id)).size;
   return {benodigdPerMaand, benodigdeStand, werkelijkeStand:stand, graad, gedektTot, gat, tekort,
-          regels, volledig, zonderBedrag:zonderBedrag.map(v=>v.naam||'Verplichting'), aantal:lijst.length, horizon:H};
+          regels, volledig, zonderBedrag:zonderBedrag.map(v=>v.naam||'Verplichting'),
+          aantal:lijst.length, inVenster, horizon:H};
 }
 function resMaandLabel(ym){ const m=+String(ym||'').slice(5,7); return m?(MFULL[m-1]+' '+String(ym).slice(0,4)):''; }
 // De zin: spiegel, gevolg, keuze. Geen oordeel, geen felicitatie.
@@ -6708,6 +6747,25 @@ function dekkingTekst(D){
   if(!D.gat) return `Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}. ${perM}`;
   const tot=D.gedektTot?`Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}.`:'Je pot dekt de eerstvolgende post nu al niet.';
   return `${tot} In ${resMaandLabel(D.gat.maand)} komt ${euro0(D.gat.bedrag)} en dan kom je ${euro0(D.gat.tekort)} tekort. ${perM}`;
+}
+/* v317: DE TELLING BOVEN DE RIJEN TELT DEZELFDE VERZAMELING ALS DE RIJEN. Hij las `D.aantal`, de
+   LIJST, terwijl de rijen uit `verplichtingen()` komen en dus alleen de posten met een voorkomen
+   binnen de horizon dragen. Gemeten: "2 posten" boven EEN rij, met een verstreken eenmalige aanslag
+   als tweede post.
+   WAT ERBUITEN VALT WORDT GENOEMD EN NIET WEGGELATEN, want een post die je zelf hebt ingevoerd en
+   die van dit scherm verdwijnt zonder reden is dezelfde stille verdwijning die v281/v284 verbieden.
+   TWEE REDENEN, BEIDE UIT BESTAANDE VELDEN: `zonderBedrag` kent de posten die geen bedrag hebben
+   (die rollen niet uit, v131), en wat daarna overblijft heeft geen termijn binnen het venster
+   (verstreken en eenmalig, afgevinkt als betaald, of verder weg dan de horizon). Er wordt niets
+   opnieuw afgeleid (v104). */
+function resPostTelling(D){
+  const nV=Math.max(+D.inVenster||0,0);
+  const zb=(D.zonderBedrag||[]).length;
+  const gt=Math.max((+D.aantal||0)-nV-zb,0);
+  const delen=[`${nV} ${nV===1?'post':'posten'}`];
+  if(zb>0) delen.push(`${zb} zonder bedrag`);
+  if(gt>0) delen.push(`${gt} zonder termijn dit jaar`);
+  return delen.join(' · ');
 }
 function resDekkingCard(){
   const D=dekking(12);
@@ -6764,7 +6822,7 @@ function resDekkingCard(){
   })();
   return `<div class="card" style="cursor:pointer" onclick="openReserveringen()">
     <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span>${standKop}</div>
-    <div class="small muted" style="margin-top:4px">${D.aantal} ${D.aantal===1?'post':'posten'} · ${resAcc?`gemeten op ${esc(acctNiceName(resAcc))}`:'nog geen rekening aangewezen'} · <span style="color:var(--teal)">bekijk ›</span></div>
+    <div class="small muted" style="margin-top:4px">${resPostTelling(D)} · ${resAcc?`gemeten op ${esc(acctNiceName(resAcc))}`:'nog geen rekening aangewezen'} · <span style="color:var(--teal)">bekijk ›</span></div>
     ${kosten}${verschil}
     <!-- v243: hier stonden drie zinnen die elkaar tegenspraken. 'Of je genoeg opzij hebt staan, lees
          je op Grip' kwam uit v187, toen dit blok alleen het saldo droeg; sinds v242 staat het
@@ -7130,7 +7188,43 @@ function planVerdeelMaand(rows, cap, G){
    met rest nul vraagt in ronde 1 nul en valt in ronde 2 af op zijn rest) en is eruit, want dood
    gewicht in een lus is precies wat een volgende ronde verkeerd leest. */
 const PLAN_VOORUIT_MAX = 600;
-function planVooruit(P, cap, G){
+/* v317: DE OVERDRACHTEN KOMEN UIT DEZELFDE PROJECTIE, VIA EEN COLLECTOR VAN DE AANROEPER. De
+   terugval bestond sinds v307 alleen in de REKENSOM: `p.eta` werd er een maand of meer eerder van,
+   en niets op het scherm zei dat de ruimte van een vol doel naar een ander doel gaat.
+   HIJ KRIJGT GEEN EIGEN LUS, want dat zou een tweede uitdrukking van de verdeling zijn (v104) en
+   `planVerdeelMaand()` staat sinds v307 juist op een plek. De vorm is die van v285: de beslissing
+   staat binnen, de aanroeper geeft mee WAT hij wil weten. De twee bestaande lezers
+   (`allocatePlan()` en `normGevolgen()`) geven niets mee en zien dus geen verschil.
+   DE ONTVANGER WORDT GEMETEN EN NIET AFGELEID UIT DE VOLGORDE. Ronde 2 deelt het vrijgekomen bedrag
+   van boven naar beneden uit aan de eerste rij met ruimte, en dat kan een rij BOVEN de gever zijn
+   als die op een vast bedrag of een percentage staat dat onder zijn rest ligt. "De volgende op
+   volgorde" zou daar het verkeerde doel noemen. GEMETEN met een doel op `vast 500` bovenaan en een
+   doel op `vast 2000` eronder: het ONDERSTE is als eerste vol en zijn ruimte gaat naar het doel
+   BOVEN hem.
+   DE MAAT IS DE STIJGING VAN `alloc` EN NIET `extra`, en dat is gemeten en geen voorkeur. Mijn
+   eerste vorm nam de eerste rij met `extra` in de maand erna, want dat is wat ronde 2 uitdeelt.
+   Die laat precies de belangrijkste overdracht vallen: raakt je BUFFER vol, dan gaat zijn ruimte
+   naar het eerste doel via RONDE 1 (een `auto`-doel vraagt gewoon zijn hele rest, en met de grendel
+   open vraagt de buffer niets meer), dus `extra` blijft daar nul. GEMETEN op een buffer die in maand
+   4 vol is: met `extra` als maat leverde de projectie NUL overdrachten, met de stijging van `alloc`
+   de juiste (het doel erachter gaat van 0 naar 2.500). Bij een gelijke stijging wint de eerste op
+   volgorde, zodat de uitkomst niet van de rij-iteratie afhangt.
+   HIJ KIJKT IN TWEE MAANDEN, en dat is gemeten en geen voorzorg. In de VULMAAND neemt de gever nog
+   zijn laatste rest en zakt de rest van zijn aandeel diezelfde maand al door; in de maand ERNA valt
+   zijn hele aandeel vrij. Welke van de twee de stijging draagt hangt af van de stand: GEMETEN met
+   twee doelen op 90/10 raakt het eerste doel in maand 8 vol en stijgt het tweede in diezelfde maand
+   8 (van 220 naar 1.060), waarna het in maand 9 juist DAALT omdat het dan zelf bijna vol is. Alleen
+   op de maand erna meten gaf daar nul overdrachten. Bij een BUFFER die vol raakt is het omgekeerd:
+   daar staat het doel erachter in de vulmaand nog op nul, want de grendel gaat pas de maand erna
+   open. De vulmaand gaat voor, want dat is het eerste moment waarop er iets verschuift.
+   `vanaf` IS DE MAAND WAARIN HIJ DE STIJGING MEET, en dus niet een optelling bij de vulmaand: dat
+   zou een tweede uitdrukking van datzelfde moment zijn.
+   EEN OVERDRACHT ZONDER ONTVANGER BLIJFT OP null EN WORDT DOOR DE AANROEPER WEGGEFILTERD. Dat is
+   het geval van de LAATSTE bestemming: die raakt vol, de lus stopt, en er is niemand die zijn
+   ruimte krijgt. Daarmee is er geen aparte toets nodig op "is er nog een rij met rest", en die zou
+   hier ook onjuist zijn: de rest van de rijen onder de gever is op dat punt in de lus nog niet
+   afgeboekt. */
+function planVooruit(P, cap, G, terug){
   const uit={};
   P=P||allocatePlan();
   if(cap==null){ try{ cap=planCapacity(); }catch(_){ cap=0; } }
@@ -7139,18 +7233,55 @@ function planVooruit(P, cap, G){
     doel:Math.max(Math.round(+p.doel||0),0), rest:Math.max(Math.round(+p.rest||0),0),
     nfOnbekend:!!p.nfOnbekend, status:(p.status==='gepauzeerd')?'gepauzeerd':'',
     houdt:(p.type==='aflossen')}));
+  let vorig=null;
+  /* de grootste stijger van deze maand ten opzichte van de vorige, de gever zelf uitgezonderd */
+  const wieSteeg=(nu,vg,van)=>{
+    let best=null;
+    for(const r of rows){
+      if(r.id===van) continue;
+      const d=(nu[r.id]||0)-(vg[r.id]||0);
+      if(d>0 && (!best || d>best.d)) best={id:r.id, d};
+    }
+    return best;
+  };
   for(let m=1;m<=PLAN_VOORUIT_MAX;m++){
     planVerdeelMaand(rows, cap, planGrendelVan(rows.find(r=>r.type==='noodfonds'), cap));
+    let nu=null;
+    if(terug){
+      nu={}; for(const r of rows) nu[r.id]=Math.max(Math.round(+r.alloc||0),0);
+      if(vorig) for(const e of terug) if(e.naar==null && e.maand===m-1){
+        const b=wieSteeg(nu,vorig,e.van);
+        if(b){ e.naar=b.id; e.vanaf=m; }
+      }
+    }
     let bewoog=false;
     for(const r of rows){
       if(r.status==='gepauzeerd'||r.houdt) continue;
       const a=Math.max(Math.round(+r.alloc||0),0); if(a<=0) continue;
       r.rest=Math.max(r.rest-a,0); bewoog=true;
-      if(r.rest<=0&&uit[r.id]==null) uit[r.id]=m;
+      if(r.rest<=0&&uit[r.id]==null){
+        uit[r.id]=m;
+        if(terug) terug.push({van:r.id, maand:m, naar:null, vanaf:null});
+      }
     }
+    /* de entries van DEZE maand: zakte er in de vulmaand zelf al iets door, dan is dat het moment */
+    if(terug&&nu&&vorig) for(const e of terug) if(e.naar==null && e.maand===m){
+      const b=wieSteeg(nu,vorig,e.van);
+      if(b){ e.naar=b.id; e.vanaf=m; }
+    }
+    if(terug) vorig=nu;
     if(!bewoog) break;
   }
   return uit;
+}
+/* v317: de overdrachten als lijst, voor het scherm. Hij leent de projectie en rekent niets na: wat
+   hij zelf doet is de entries weggooien die geen ontvanger kregen (de laatste bestemming). */
+function planTerugval(P, cap){
+  P=P||allocatePlan();
+  if(cap==null){ try{ cap=planCapacity(); }catch(_){ cap=0; } }
+  const log=[];
+  try{ planVooruit(P, cap, planGrendel(), log); }catch(_){ return []; }
+  return log.filter(e=>e.naar&&e.vanaf!=null);
 }
 function allocatePlan(){
   const cap=planCapacity();
@@ -7218,25 +7349,71 @@ function planVrij(P){
 /* v242: zolang de grendel dicht zit staat het noodfonds vooraan. Onderling schuiven mag, langs
    de buffer heen niet: die volgorde geldt pas als de grendel open is, en tot die tijd zou hij
    tonen dat er geld langs een lege buffer gaat terwijl dat niet gebeurt.
-   v245: dit stond inline in planMove(), en de rij tekende zijn pijltjes daar los van. Gemeten op
-   echte gegevens (buffer 1.100 van 5.301): het pijltje omlaag bij het noodfonds was GEBLOKKEERD
-   en rendeerde als een gewone actieve knop. Een knop die er bruikbaar uitziet en het niet hoort te
-   zijn, is erger dan geen knop, dus leest de rij nu dezelfde functie. Een tweede toets ernaast zou
-   een tweede waarheid zijn. FALSE BIJ EEN ONTBREKENDE BUUR: dat is ook 'deze verschuiving kan
-   niet', en de rij hoeft die twee gevallen niet uit elkaar te houden. planMove() wel, want alleen
-   de grendel verdient een uitleg; aan de rand van de lijst valt er niets te melden. */
-function planMoveMag(id,dir){
-  const ids=planItems().map(x=>x.id); const i=ids.indexOf(id); const j=i+dir;
-  if(i<0||j<0||j>=ids.length) return false;
-  ids.splice(j,0,ids.splice(i,1)[0]);
-  return !(planGrendel() && ids[0]!==PLAN_NF);
+   v245: dit stond inline in de schrijver en het scherm tekende zijn bediening daar los van. Gemeten
+   op echte gegevens (buffer 1.100 van 5.301): het pijltje omlaag bij het noodfonds was GEBLOKKEERD
+   en rendeerde als een gewone actieve knop. Een bediening die er bruikbaar uitziet en het niet
+   hoort te zijn is erger dan geen bediening, dus lezen het veld, de poort en de schrijver sindsdien
+   dezelfde functie. Een tweede toets ernaast zou een tweede waarheid zijn.
+   v317: DE RICHTING IS VERVALLEN EN DE REGEL NIET. `planMoveMag(id,dir)` toetste een stap omhoog of
+   omlaag en had de twee pijltjes als enige lezer; die zijn deze ronde van het scherm en de functie
+   dus mee. Wat ervoor in de plaats staat is `planPlekMag(id,plek)`, dezelfde regel over een
+   RESULTERENDE lijst in plaats van over een verschuiving, en daarmee dekt hij ook de plekken die een
+   pijltje nooit kon bereiken. FALSE BUITEN DE LIJST: dat is ook 'deze plek kan niet', en het veld
+   hoeft die twee gevallen niet uit elkaar te houden. */
+/* v317: DE REGEL GAAT OVER EEN VOLGORDE EN NIET OVER EEN VERSCHUIVING. `planMoveMag()` toetste de
+   grendel op de UITKOMST van een stap omhoog of omlaag; sinds deze ronde kun je je plek ook
+   rechtstreeks in de doel-editor kiezen, en dat is dezelfde regel over een andere weg erheen. Hij
+   staat daarom op EEN plek, met drie lezers (het veld, de poort eronder en de schrijver), om dezelfde
+   reden als bij v245: een tweede toets ernaast zou een tweede waarheid zijn.
+   `planOrdeNa()` IS DE ENE VERSCHUIVING. Zonder hem zou elke lezer de splice zelf uitdrukken, en dan
+   kan de poort iets anders toetsen dan de schrijver wegschrijft. */
+function planOrdeMag(ids){ return !(planGrendel() && ids[0]!==PLAN_NF); }
+function planOrdeNa(id,naar){
+  const ids=planItems().map(x=>x.id); const i=ids.indexOf(id);
+  if(i<0||naar<0||naar>=ids.length) return null;
+  ids.splice(naar,0,ids.splice(i,1)[0]);
+  return ids;
 }
-function planMove(id,dir){
-  const ids=planItems().map(x=>x.id); const i=ids.indexOf(id); const j=i+dir;
-  if(i<0||j<0||j>=ids.length) return;
-  if(!planMoveMag(id,dir)){ toast(GRENDEL_TOAST); return; }
-  ids.splice(j,0,ids.splice(i,1)[0]);
-  SET.planOrder=ids; save(); render();
+function planPlekMag(id,naar){ const ids=planOrdeNa(id,naar); return !!ids && planOrdeMag(ids); }
+
+/* v317: DE SCHRIJVER ZET EEN PLEK EN GEEN RICHTING. Hier stond `planMove(id,dir)`, de handler van de
+   twee pijltjes op het scherm. Die pijltjes zijn deze ronde vervallen en de volgorde zet je in de
+   editor van de bestemming zelf, dus de handler krijgt de PLEK mee.
+   HIJ SCHRIJFT DE LIJST DIE DE POORT HEEFT GETOETST, en dat is waarom `planOrdeNa()` bestaat: de
+   oude vorm deed de splice twee keer, een keer in `planMoveMag()` om te toetsen en een keer hier om
+   weg te schrijven. Twee uitdrukkingen van dezelfde verschuiving (v104).
+   DE TOAST IS DEZELFDE (`GRENDEL_TOAST`), want het is dezelfde regel. */
+function planPlekZet(id,naar){
+  const ids=planOrdeNa(id,Math.round(+naar));
+  if(!ids) return;
+  if(!planOrdeMag(ids)){ toast(GRENDEL_TOAST); return; }
+  SET.planOrder=ids; save();
+  try{ if(window._goalEdit!==undefined&&window._goalEdit===id) renderGoalSheet(id,(SET.goals||[]).find(x=>x.id===id),null); }catch(_){}
+  try{ if(id===PLAN_NF&&document.getElementById('nfMaandChips')) renderNfSheet(); }catch(_){}
+  render();
+}
+/* v317: HET VELD. Een chip per plek, en een plek die de regel niet toelaat is uitgeschakeld in
+   plaats van weggelaten: dan zie je dat de plek bestaat en dat hij nu niet kan, wat precies de
+   keuze van v245 is voor de pijltjes die hier zijn vervallen. De poort is `planPlekMag()`, dus het
+   veld en de schrijver beslissen niet apart.
+   TWEE INGANGEN, EEN VELD (v61): de doel-editor en de noodfonds-sheet renderen hetzelfde component.
+   Zonder dat tweede zou het noodfonds na het weghalen van de pijltjes helemaal niet meer te
+   verplaatsen zijn, en dat is de meetles over een element dat de enige drager van een ingang is.
+   MET EEN BESTEMMING VALT ER NIETS TE ORDENEN en staat er niets. */
+function planOrdeVeld(id){
+  let ids=[]; try{ ids=planItems().map(x=>x.id); }catch(_){ return ''; }
+  const nu=ids.indexOf(id);
+  if(nu<0||ids.length<2) return '';
+  const chips=ids.map((_,i)=>{
+    if(i===nu) return `<span class="chip on" data-plek="${i}" aria-current="true">${i+1}</span>`;
+    return planPlekMag(id,i)
+      ? `<span class="chip" data-plek="${i}" onclick="planPlekZet('${id}',${i})">${i+1}</span>`
+      : `<span class="chip off" data-plek="${i}" aria-disabled="true">${i+1}</span>`;
+  }).join('');
+  const geblokt=ids.some((_,i)=>i!==nu&&!planPlekMag(id,i));
+  return `<label class="fld" style="margin-top:12px">Plek in je plan</label>
+    <div class="chips" id="planOrdeChips">${chips}</div>
+    <div class="small muted" style="margin-top:2px;line-height:1.45">De volgorde bepaalt waar je inleg heen gaat: elke bestemming krijgt wat hij nodig heeft en wat overblijft zakt door naar de volgende.${geblokt?` ${GRENDEL_TOAST}.`:''}</div>`;
 }
 function planTogglePause(id){ SET.planPaused=SET.planPaused||{}; if(SET.planPaused[id]) delete SET.planPaused[id]; else SET.planPaused[id]=true; save(); render(); }
 function planRemove(id){ if(id===PLAN_NF) return; planForget(id); save(); render(); }   // noodfonds is niet verwijderbaar
@@ -7645,9 +7822,10 @@ function planMaandTekst(){
    bestemming noemt op welke bestemming hij wacht en nooit wanneer hij aan de beurt is - dat hangt
    af van keuzes die nog niet gemaakt zijn, en een datum zou daar een precisie aan geven die er
    niet is (v59/v73/v173).
-   De volgorde is de hoofdhandeling van dit scherm, dus de pijlen blijven zichtbaar. Pauzeren,
-   verfijnen en uit plan halen verschijnen pas na een tik op de rij: dat zijn keuzes bij een
-   bestemming, en ze concurreerden met de knoppen die het mechanisme zelf bedienen. */
+   v317: de twee pijltjes per rij zijn vervallen; je plek in de rij zet je in de editor van de
+   bestemming. Pauzeren, verfijnen en uit plan halen verschijnen nog steeds pas na een tik op de
+   rij: dat zijn keuzes bij een bestemming, en ze concurreerden met de knoppen die het mechanisme
+   zelf bedienen. */
 function planRij(id){ window._planRij=(window._planRij===id)?null:id; render(); }
 
 /* ===== De vertakte waterval (v246) =====
@@ -7779,11 +7957,25 @@ function planTint(p,i){
 /* De verdeling van de inlegbalk. Eén bron met de tak: beide lezen p.alloc, dus wat er uit je
    spaarinleg vertrekt. Bij een aflos-item telt debtPer NIET mee: dat is je bestaande termijn en die
    komt niet uit deze balk. Wat onverdeeld blijft is een eigen segment en geen weggelaten rest. */
+/* v317: DE MINIMUMBREEDTE STAAT IN DE SEGMENTEN EN NIET IN DE CSS VAN EEN VAN DE TWEE LEZERS.
+   `.plan-tak i` had `min-width:3px` en `.inleg-balk .bar-fill` had die niet, dus de twee liepen
+   uiteen precies waar ze klein worden. GEMETEN bij een bestemming op 0,5 procent van de inleg: het
+   balksegment werd 1,5px en de tak 3px, en de rechterrand van de tak landde op 302px op een balk van
+   300px. De v246-regel ("dikte en plek komen uit hetzelfde segment, dus ze kunnen niet uiteenlopen")
+   gold daarmee voor de data en niet voor het beeld.
+   EEN PERCENTAGE EN GEEN PIXELS, want dat is de eenheid waarin beide lezers rekenen: 1 procent is
+   3px op de 300px-balk van 360px en 3,3px op 390px. Een pixelminimum zou de twee opnieuw scheiden,
+   want de een leest `width` en de ander `left`+`width`.
+   DE SOM KAN BOVEN 100 UITKOMEN zodra het minimum bijt, en dat klemt niet: beide lezers hebben
+   `overflow:hidden`, dus ze kappen op dezelfde plek. Herschalen zou de andere segmenten een breedte
+   geven die hun bedrag niet draagt, en dat is een tweede vertekening om een eerste te verbergen. */
+const SEG_MIN_PCT=1;
 function planSegmenten(P,cap){
   const segs=[]; let acc=0;
   for(const p of (P||[])){
     const a=Math.max(Math.round(+p.alloc||0),0);
-    const breed=(cap>0)?Math.max(a/cap*100,0):0;
+    let breed=(cap>0)?Math.max(a/cap*100,0):0;
+    if(a>0 && breed>0 && breed<SEG_MIN_PCT) breed=SEG_MIN_PCT;
     segs.push({id:p.id, alloc:a, van:acc, breed});
     acc+=breed;
   }
@@ -7859,6 +8051,15 @@ function vatRegels(p){
   /* Is de speling kleiner dan een maand, dan zegt het vat dat het NET op tijd is. "Het klopt" en
      "het klopt met nul maanden speling" zijn niet hetzelfde bericht. */
   if(sp!=null&&sp<=0) return {regels:[eerste,'net op tijd'], laat:false};
+  /* v317: DE SPELING STAAT ER ALS GETAL, UIT DEZELFDE `sp` ALS "net op tijd". Tot v316 werd die
+     uitgerekend en alleen gebruikt om de net-op-tijd-tak te kiezen; met zeven maanden speling zei het
+     vat "vol in jan 2027 · moet in augustus 2027" en moest je het verschil zelf tellen. Dat is
+     dezelfde bron en geen tweede afleiding (v104): een andere formulering van het verschil tussen
+     diezelfde twee datums zou bij de eerste herziening uiteenlopen.
+     GEEN TWEEDE DATUM EN GEEN OORDEEL: het is het verschil tussen de twee datums die er al staan, en
+     de rij zegt niet of dat veel of weinig is. */
+  if(sp!=null&&sp>0)
+    return {regels:[`${eerste} · ${sp} ${sp===1?'maand':'maanden'} speling`], laat:false};
   return {regels:[eerste], laat:false};
 }
 function renderPlan(bare){
@@ -7870,6 +8071,13 @@ function renderPlan(bare){
   const klein=new Set(P.filter(p=>p.type==='noodfonds'&&!G&&p.rest<=0).map(p=>p.id));
   const SEG=planSegmenten(P,cap);
   const tints={}; P.forEach((p,i)=>{ tints[p.id]=planTint(p,i); });
+  /* v317: de overdrachten uit de projectie, gegroepeerd op de ONTVANGER, want daar wordt de
+     stippellijn getekend: in zijn tak, op de plek en de breedte van het segment van de gever. Een
+     bestemming kan meer dan een gever hebben (gemeten met drie doelen: twee overdrachten naar
+     hetzelfde doel), dus het is een lijst per ontvanger en geen enkele waarde. */
+  const TVnaar={};
+  try{ for(const e of planTerugval(P,cap)) (TVnaar[e.naar]=TVnaar[e.naar]||[]).push(e); }catch(_){}
+  const naamVan=id=>{ const x=P.find(y=>y.id===id); return x?spaarOverNaam(x):''; };
   const rows=P.map((p,i)=>{
     const uit=window._planRij===p.id;
     const act=(kl,tk,fn)=>`<span class="small" style="color:var(--${kl});cursor:pointer" onclick="event.stopPropagation();${fn}">${tk}</span>`;
@@ -7879,13 +8087,13 @@ function renderPlan(bare){
         ${act('mut2', planPaused(p.id)?'hervatten':'pauzeren', `planTogglePause('${p.id}')`)}
         ${p.type==='aflossen'?act('mut2','uit plan halen',`planRemove('${p.id}')`):''}
       </div>`:'';
-    /* v245: de poort is planMoveMag() en niet de positie in de lijst. v246: een pijltje dat niet
-       mag is een <button disabled> en geen <span>, zodat een schermlezer een uitgeschakelde
-       bediening ziet in plaats van een element zonder knopbetekenis. */
-    const pijl=(dir,lbl,teken)=>planMoveMag(p.id,dir)
-      ? `<button class="plan-mv" onclick="event.stopPropagation();planMove('${p.id}',${dir})" aria-label="${lbl}">${teken}</button>`
-      : `<button class="plan-mv off" disabled aria-label="${lbl}, kan nu niet">${teken}</button>`;
-    const pijlen=`<div class="vat-pijl">${pijl(-1,'Hoger','&#9650;')}${pijl(1,'Lager','&#9660;')}</div>`;
+    /* v317: HIER STONDEN DE TWEE PIJLTJES. De volgorde zet je sinds deze ronde in de editor van de
+       bestemming zelf (`planOrdeVeld()`), en de terugval-stippellijn laat zien waar het geld heen
+       gaat als een bestemming vol is. Twee knoppen per rij die alleen een plek verschuiven zijn dan
+       de duurste 64px van het scherm.
+       DE v245-REGEL IS MEEVERHUISD EN NIET VERVALLEN: een plek die niet mag is in het veld
+       uitgeschakeld en niet weggelaten, want een bediening die er bruikbaar uitziet en het niet is,
+       is erger dan geen bediening. */
     const nr=`<span class="plan-1${i===0?'':' n'}">${i+1}</span>`;
     const D=planBedragDeel(p);
     const kop=`<div class="row"><span class="vat-naam">${nr} ${esc(p.naam)}</span><span class="small" style="white-space:nowrap;flex-shrink:0">${D.mod?`<span class="muted">${D.mod}</span>`:''}<b style="font-weight:700">${D.bedrag}</b><span class="muted">/mnd</span></span></div>`;
@@ -7898,7 +8106,7 @@ function renderPlan(bare){
           <div class="row" style="flex:1;min-width:0;cursor:pointer" onclick="planRij('${p.id}')">
             <span class="vat-naam">${nr} ${esc(p.naam)}<span class="muted" style="font-weight:400"> · ${planSub(p,true)}</span></span>
             <span class="small vat-stand" style="margin:0;white-space:nowrap;flex-shrink:0">${planStand(p)}</span></div>
-          ${pijlen}</div>${acties}</div>`;
+          </div>${acties}</div>`;
 
     const tint=tints[p.id];
     const seg=SEG.segs.find(s=>s.id===p.id)||{alloc:0,van:0,breed:0};
@@ -7908,9 +8116,30 @@ function renderPlan(bare){
     /* v246b: de tak had een label met het maandbedrag. Sinds de tekst boven het vat staat noemt de
        kop dat bedrag één regel hoger, en twee keer hetzelfde getal is een tweede bron. De tak
        draagt nu alleen kleur en dikte; die twee komen uit hetzelfde segment als de balk erboven. */
-    const tak=seg.alloc>0
-      ? `<div class="plan-tak" data-tak="${p.id}"><i data-takkleur style="left:${seg.van.toFixed(2)}%;width:${seg.breed.toFixed(2)}%;background:${tint}"></i></div>`
+    /* v317: DE TERUGVAL ALS STIPPELLIJN. Wat een doel dat vol raakt niet meer nodig heeft gaat naar
+       dit doel, en dat staat in de tak van de ONTVANGER als een gestippeld blok op de plek en de
+       breedte van het segment van de GEVER. Daarmee staat het in hetzelfde assenstelsel als de
+       inlegbalk erboven en als de eigen tak, en ligt het gestippelde blok recht onder het volle blok
+       van de gever.
+       GEEN BEDRAG IN DE REGEL: het blok draagt de maat (het IS het segment van de gever) en de rij
+       van de gever draagt het getal. Een bedrag erbij zou een tweede bron voor datzelfde getal zijn
+       (v104) en het zou niet kloppen voor de maand waarin de gever zijn laatste rest nog neemt. De
+       maand komt uit `e.vanaf`, de maand waarin de projectie de overdracht MEET.
+       EEN ONTVANGER ZONDER EIGEN SEGMENT KRIJGT TOCH EEN TAK, en dat is het geval dat telt: een doel
+       dat vandaag nul krijgt (wacht op capaciteit, of staat achter een dichte grendel) heeft de
+       terugval als enige vooruitzicht, en juist dan mag de lijn niet wegvallen. */
+    const erf=(TVnaar[p.id]||[]).map(e=>{
+      const sg=SEG.segs.find(x=>x.id===e.van);
+      if(!sg||!(sg.breed>0)) return '';
+      return `<i class="tak-erf" data-erf="${e.van}" style="left:${sg.van.toFixed(2)}%;width:${sg.breed.toFixed(2)}%"></i>`;
+    }).join('');
+    const tak=(seg.alloc>0||erf)
+      ? `<div class="plan-tak" data-tak="${p.id}">${seg.alloc>0?`<i data-takkleur style="left:${seg.van.toFixed(2)}%;width:${seg.breed.toFixed(2)}%;background:${tint}"></i>`:''}${erf}</div>`
       : '';
+    const erfRegels=(TVnaar[p.id]||[]).map(e=>{
+      const n=naamVan(e.van), dt=etaDatum(e.vanaf);
+      return (n&&dt)?`<div class="small vat-dat" data-erfregel="${e.van}">vanaf ${dt} ook de ruimte van ${n}</div>`:'';
+    }).join('');
     const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
     /* Wat er per maand bij komt, als tweede laag boven de stand. Bij een aflos-item is dat alloc
        plus je bestaande termijn: hetzelfde bedrag dat de rij noemt (v190/v194). */
@@ -7939,9 +8168,8 @@ function renderPlan(bare){
         <div class="vat-in">
           <div style="flex:1;min-width:0;cursor:pointer" onclick="planRij('${p.id}')">${kop}
             ${p.nfOnbekend?'':`<div class="small vat-stand">${planStand(p)}${dzR}</div>`}
-            <div class="small vat-dat">${R.regels.join('<br>')}</div>
+            <div class="small vat-dat">${R.regels.join('<br>')}</div>${erfRegels}
           </div>
-          ${pijlen}
         </div>
       </div>${tak}
       <div class="vat${laat}${dof}" data-laat="${R.laat?1:0}">${vulling}${streep}</div>${acties}</div>`;
@@ -7950,16 +8178,28 @@ function renderPlan(bare){
   NOTES.planUitleg=[
     planCapTerugval()
       ? 'Je hebt nog geen spaarinleg ingesteld, dus dit plan verdeelt je comfortabele ruimte: wat er na je vaste lasten en je gewone uitgaven overblijft.'
-      : 'Je spaarinleg gaat van boven naar beneden: elke bestemming krijgt wat hij nodig heeft, en wat overblijft zakt door naar de volgende. Met de pijlen zet je wat eerst moet.',
-    'De hoogte van een vat is het doelbedrag. Er staat geen tijdas naast: met meerdere bestemmingen is hoogte niet hetzelfde als duur.',
+      : 'Je spaarinleg gaat van boven naar beneden: elke bestemming krijgt wat hij nodig heeft, en wat overblijft zakt door naar de volgende. Je plek in de rij zet je bij de bestemming zelf.',
+    /* v317: hier stond "de hoogte van een vat is het doelbedrag". Dat was waar bij v246 en NIET meer
+       sinds v248, dat de hoogte terugdraaide naar een gelijke balk met de voortgang erin; gemeten zijn
+       alle balken 11px. Een uitleg die gedrag belooft dat de code niet heeft stuurt elke volgende ronde
+       de verkeerde kant op, dus hij zegt nu wat er wel staat. Het streepje had nog helemaal geen
+       zichtbare uitleg: alleen een sr-only-regel per balk. */
+    'Elke bestemming heeft dezelfde balk en de vulling is je voortgang in procenten, zodat je de doelen onderling kunt vergelijken. Het doelbedrag staat in de regel erboven.',
+    'Het streepje op een balk is waar je zou moeten staan om je streefdatum te halen. Je noodfonds heeft er geen, want dat heeft geen streefdatum.',
     planMaandTekst()
   ].filter(Boolean).map(t=>`<div style="margin-bottom:7px">${t}</div>`).join('');
   /* Punt 5: de inlegbalk is verdeeld in segmenten per bestemming, naar wat ze deze maand krijgen.
      Wat onverdeeld blijft is een eigen leeg segment en geen weggelaten rest, zodat de balk zelf
      optelt tot wat er te verdelen is. */
+  /* v317: DE SEGMENTEN STAAN ABSOLUUT, PRECIES ZOALS DE TAKKEN. De balk was `display:flex`, dus
+     zodra de breedtes samen boven 100 procent uitkwamen (en dat kan sinds de minimumbreedte van
+     SEG_MIN_PCT) KROMP flex ze allemaal proportioneel, terwijl de tak met `left`+`width` niet krimpt.
+     GEMETEN bij een bestemming op 0,5 procent: hetzelfde segment werd 2,98px in de balk en 3px in de
+     tak, en het grote segment 297,02 tegen 298,5. Dezelfde getallen, twee geometrieen. Nu lezen beide
+     `van` en `breed` op dezelfde manier, en is het verschil per constructie nul. */
   const balk=cap>0?`<div class="bar-track inleg-balk" style="margin:9px 0 1px">
-      ${SEG.segs.filter(s=>s.alloc>0).map(s=>`<div class="bar-fill" data-seg="${s.id}" style="width:${s.breed.toFixed(2)}%;background:${tints[s.id]};border-radius:0"></div>`).join('')}
-      ${SEG.vrij>0.05?`<div class="bar-fill" data-seg="vrij" style="width:${SEG.vrij.toFixed(2)}%;background:var(--card2);border-radius:0"></div>`:''}
+      ${SEG.segs.filter(s=>s.alloc>0).map(s=>`<div class="bar-fill" data-seg="${s.id}" style="left:${s.van.toFixed(2)}%;width:${s.breed.toFixed(2)}%;background:${tints[s.id]};border-radius:0"></div>`).join('')}
+      ${SEG.vrij>0.05?`<div class="bar-fill" data-seg="vrij" style="left:${(100-SEG.vrij).toFixed(2)}%;width:${SEG.vrij.toFixed(2)}%;background:var(--card2);border-radius:0"></div>`:''}
     </div>`:'';
   const kopBalk=`<div class="row"><span style="font-weight:600;font-size:var(--fs-md)">Te verdelen uit je ${planCapTerugval()?'comfortabele ruimte':jrg('spaarinleg','spaarinleg')} ${noteIcon('planUitleg','hoe dit plan verdeelt')}</span><span style="font-weight:800;font-size:var(--fs-md);color:${cap>0?'var(--teal)':'var(--mut)'}">${cap>0?`${euro0(cap)}/mnd`:'nog niet bekend'}</span></div>${balk}`;
   /* Niets blijft liggen, en het staat er ook wanneer er niets overblijft: dat is de sluitpost van
@@ -8006,7 +8246,7 @@ function debtNudgeCard(){
 }
 function planPromoteDebt(debtId){
   const key=planDebtKey(debtId);
-  /* v245: dit zet een item op plek 1 en is daarmee precies de verschuiving die planMove() tegenhoudt.
+  /* v245: dit zet een item op plek 1 en is daarmee precies de verschuiving die planOrdeMag() tegenhoudt.
      Hij deed dat ongehinderd: gemeten ging noodfonds,g1,g2,g3 naar af:d1,noodfonds,g1,g2,g3 bij een
      dichte grendel. allocatePlan() hangt aan type en niet aan positie, dus er lekte geen geld weg;
      het scherm toonde alleen een volgorde die de verdeling niet volgt. Dezelfde regel, dezelfde zin. */
@@ -9583,6 +9823,7 @@ function renderNfSheet(){
       ${nfDoelVastRij(M)}
       ${bufferNormRij(M)}</div>
     ${nfAllocCard()}
+    ${(function(){ try{ const v=planOrdeVeld(PLAN_NF); return v?`<div class="card">${v}</div>`:''; }catch(_){ return ''; } })()}
     ${listCard}
     <div style="height:8px"></div>`;
 }
@@ -9988,44 +10229,77 @@ function planTotaal(P){
   const pauze=items.filter(p=>p.status==='gepauzeerd');
   const gatPauze=pauze.reduce((a,p)=>a+rest(p),0);
   const gatLopend=Math.max(gat-gatPauze,0);
-  let cap=0; try{ cap=planCapacity(); }catch(_){}
-  const mnd=(cap>0&&gatLopend>0)?Math.ceil(gatLopend/cap):null;
-  /* De eerstvolgende streefdatum: die knelt als eerste, de latere zijn pas aan de beurt als die
-     is opgelost. Een gepauzeerd of bereikt doel levert er geen, want daar wordt niets naartoe
-     gerekend. */
-  const metDatum=items.filter(p=>p.type==='goal'&&p.streefdatum&&p.status!=='gepauzeerd'&&rest(p)>0)
-    .slice().sort((a,b)=>String(a.streefdatum).localeCompare(String(b.streefdatum)));
-  const eerste=metDatum[0]||null;
-  let tot=null; if(eerste){ try{ tot=doelMaandenTot(eerste.streefdatum); }catch(_){} }
-  return {nodig, toe, gat, gatLopend, gatPauze, pauze:pauze.length, cap, mnd, eerste, tot,
+  /* v317: HIER STOND DE EIGEN DELING, `Math.ceil(gatLopend/cap)`, plus de eerstvolgende
+     streefdatum. Dat was de DERDE telling over dezelfde vraag: de vaten lezen sinds v307 de
+     projectie van `planVooruit()` en deze regel niet. Gemeten liepen de twee uiteen op precies het
+     geval dat de regel moest dragen: met een doel dat achter de grendel op de buffer wacht zei de
+     alinea "10 maanden" terwijl het traagste vat `eta` 4 had en het wachtende doel helemaal geen
+     vol-datum droeg. In het normale geval vielen ze samen, want zolang elk item meedoet verdeelt de
+     projectie elke maand de hele inleg, en dan is de laatste maand per constructie `ceil(gat/cap)`.
+     Een tweede uitdrukking die meestal hetzelfde zegt is precies wat v104 verbiedt.
+     DE STREEFDATUM-ZIN IS DAARMEE OOK VERVALLEN: die bestond alleen om uit te leggen dat de maanden
+     over het hele plan gingen en de datum bij EEN doel hoorde. Met een echte vol-maand uit de
+     projectie is er geen verwarring meer om weg te schrijven, en de streefdatum per doel staat in
+     het datumpaar van dat doel.
+     `cap` BLIJFT, want de regel in rustig leest hem niet maar `planKlaarMaand()` heeft hem nodig en
+     de aanroeper geeft hem mee. */
+  return {nodig, toe, gat, gatLopend, gatPauze, pauze:pauze.length,
     nf:items.some(p=>p.type==='noodfonds')};
 }
+/* v317: WANNEER IS JE PLAN VOL. Uit `planVooruit()` en niets anders: de laatste maand waarin een
+   bestemming die meedoet vol raakt. Daarmee leest deze regel dezelfde projectie als het datumpaar in
+   elk vat, en kan hij er niet meer van afwijken.
+   WIE MEEDOET: geen aflos-item (dat is een andere vraag, en de projectie laat zijn alloc voor altijd
+   staan, v307), niet bereikt, niet gepauzeerd, en rest boven nul. Een GEPAUZEERD doel zit wel in het
+   bedrag en niet in de maand, net als voorheen; de regel zegt dat ook.
+   WAT ZONDER MAAND BLIJFT WORDT GENOEMD EN NIET WEGGELATEN (v59/v73/v173). Zonder bekende inleg geeft
+   `planVooruit()` een lege map en is er over geen enkel doel een maand te zeggen; dan staat er geen
+   maand in plaats van een verzonnen tempo. */
+function planKlaarMaand(P,cap){
+  P=P||allocatePlan();
+  if(cap==null){ try{ cap=planCapacity(); }catch(_){ cap=0; } }
+  let VOL={}; try{ VOL=planVooruit(P,cap,planGrendel())||{}; }catch(_){}
+  const mee=(P||[]).filter(p=>p&&p.type!=='aflossen'&&p.status!=='bereikt'
+    &&p.status!=='gepauzeerd'&&Math.round(+p.rest||0)>0);
+  let laatste=null;
+  for(const p of mee){
+    const m=VOL[p.id];
+    if(m!=null&&(laatste==null||m>laatste.maand)) laatste={id:p.id, naam:p.naam, maand:m};
+  }
+  return {laatste, zonder:mee.filter(p=>VOL[p.id]==null).map(p=>p.naam), mee:mee.length};
+}
+/* v317: EEN REGEL IN PLAATS VAN EEN ALINEA, EN DE MAAND KOMT UIT DE PROJECTIE. De alinea droeg vijf
+   zinnen (gemeten 113px op 360px en 94px op 390px) en rekende zelf `ceil(gatLopend/cap)`; zie
+   planTotaal() voor waarom die deling eruit is.
+   WAT DE REGEL NOG ZEGT zijn de twee dingen die de vaten NIET zeggen: wat je plan bij elkaar nog
+   vraagt, en wanneer het hele plan vol is. Dat tweede is op het gemeten tegenvoorbeeld meer dan de
+   vaten tonen: een doel dat achter de grendel op de buffer wacht heeft helemaal geen vol-datum in
+   zijn vat, en de projectie geeft er wel een.
+   WAT ERAF IS: het totaal (`nodig`) en het toegewezen bedrag (`toe`). Die twee staan per bestemming
+   in de stand-regel ("EUR 0 toegewezen / EUR 15.000"), dus de som ervan is op te tellen en het
+   VERSCHIL is wat je niet uit de rijen afleest. Dat is de keuze die de regel tot een regel maakt;
+   `planTotaal()` blijft ze leveren voor wie ze nodig heeft.
+   HET GEPAUZEERDE BEDRAG HOUDT ZIJN EIGEN ZIN, om de reden van v221: het zit in het verschil en
+   niet in de maand, dus zonder die zin leest "nog X te gaan en vol in Y" als een belofte over geld
+   dat geen inleg krijgt. */
 function planTotaalRegel(P){
   const T=planTotaal(P); if(!T) return '';
   const kort=isMode('rustig');
-  const som=`Je plan vraagt in totaal <b>${euro0(T.nodig)}</b> en daar staat <b>${euro0(T.toe)}</b> tegenover. Het verschil is <b>${euro0(T.gat)}</b>.`;
   if(kort) return `<div class="small mut2" style="margin:0 2px 9px;line-height:1.45">${euro0(T.gat)} van je plan staat er nog niet.</div>`;
-  const delen=[som];
-  /* Gepauzeerd geld eerst, en niet als naschrift. Het zit wel in het verschil en niet in de
-     maanden, dus zonder die zin ervoor leest 'het verschil is X, op Y per maand is dat Z maanden'
-     als één deling die niet klopt. Nu noemt de tempo-zin het bedrag waar hij werkelijk over gaat. */
-  if(T.gatPauze>0) delen.push(`${euro0(T.gatPauze)} daarvan hoort bij ${T.pauze===1?'een gepauzeerd doel':'gepauzeerde doelen'} en krijgt geen inleg.`);
-  /* Het tempo. Zonder capaciteit of zonder gat valt er niets te vergelijken, en dan staat er niets
-     in plaats van een nul die een tempo suggereert. */
-  if(T.mnd!=null){
-    delen.push(T.gatPauze>0
-      ? `Op ${euro0(T.cap)} per maand zijn de overige ${euro0(T.gatLopend)} nog ${T.mnd} ${T.mnd===1?'maand':'maanden'}.`
-      : `Op ${euro0(T.cap)} per maand is dat ${T.mnd} ${T.mnd===1?'maand':'maanden'}.`);
-    /* Waarom die twee getallen niet uit dezelfde verzameling komen: de maanden gaan over je hele
-       plan, je noodfonds meegeteld, en de datum hoort bij één doel. Dat staat er met zoveel
-       woorden, want anders lijkt het één som. */
-    if(T.eerste && T.tot!=null && T.tot>0){
-      const lbl=(typeof doelDatumLabel==='function')?doelDatumLabel(T.eerste.streefdatum):'';
-      if(lbl) delen.push(`Je eerste streefdatum is ${lbl}, over ${T.tot} ${T.tot===1?'maand':'maanden'}: die hoort bij ${esc(T.eerste.naam)}, terwijl die ${T.mnd} over je hele plan gaan${T.nf?', je noodfonds meegeteld':''}.`);
-    } else if(T.nf){
-      delen.push(`Die ${T.mnd} gaan over je hele plan, je noodfonds meegeteld.`);
-    }
-  }
+  let cap=0; try{ cap=planCapacity(); }catch(_){}
+  const K=planKlaarMaand(P,cap);
+  const lbl=(K.laatste&&K.laatste.maand!=null)?etaDatum(K.laatste.maand):'';
+  const delen=[];
+  delen.push(lbl
+    ? `Nog <b>${euro0(T.gatLopend)}</b> te gaan, en op deze verdeling is je plan vol in <b>${lbl}</b>.`
+    : `Nog <b>${euro0(T.gatLopend)}</b> te gaan.`);
+  if(T.gatPauze>0) delen.push(`${euro0(T.gatPauze)} hoort bij ${T.pauze===1?'een gepauzeerd doel':'gepauzeerde doelen'} en krijgt geen inleg, dus dat zit hier niet in.`);
+  /* Zonder maand staat de reden erbij in plaats van niets: zonder bekende inleg valt er over geen
+     enkele bestemming een maand te zeggen, en dat is iets anders dan een plan dat al vol is. */
+  if(!lbl&&K.mee>0) delen.push(cap>0
+    ? `Wanneer het vol is valt nog niet te zeggen.`
+    : `Zonder bekende ${planCapLabel()} valt niet te zeggen wanneer het vol is.`);
+  else if(lbl&&K.zonder.length) delen.push(`${opsomming(K.zonder.map(esc))} ${K.zonder.length===1?'zit':'zitten'} daar niet in.`);
   return `<div class="small mut2" style="margin:0 2px 9px;line-height:1.5">${delen.join(' ')}</div>`;
 }
 function vooruitZone(key,label,teaser,open,content){
@@ -15169,8 +15443,8 @@ const _dT=(fn,terugval)=>{ try{ const v=fn(); return (v===undefined||v===null)?t
 
 /* 1. Draait er oude code? De cachenaam zegt welke versie de service worker heeft opgeslagen. Dat
       is niet hetzelfde als welke code er nu in het geheugen staat, dus daar staat een bronprobe
-      naast: leest planMove() de grendel wel. Staat daar NEE, dan is de rest van dit scherm niet
-      het antwoord en is de oude worker het. */
+      naast: leest de schrijver van je volgorde de grendel wel. Staat daar NEE, dan is de rest van
+      dit scherm niet het antwoord en is de oude worker het. */
 function diagVersie(){
   const L=[];
   return Promise.resolve().then(async()=>{
@@ -15182,17 +15456,23 @@ function diagVersie(){
       L.push('sw wachtend: '+(r?((r.waiting?'ja (oude worker nog actief)':'nee')+' | installing: '+(r.installing?'ja':'nee')):'<geen registratie>')); }
     catch(e){ L.push('sw wachtend: FOUT: '+e.message); }
     L.push('planGrendel bestaat: '+(typeof planGrendel));
-    /* v245: dit zocht planGrendel() letterlijk in planMove(). Sindsdien loopt de check via
-       planMoveMag(), dus die vorm zou 'oude code' melden op code die precies goed is. De probe
-       toetst nu de route en houdt de oude inline-vorm erbij, want een oude worker moet hier nog
-       steeds JA kunnen zeggen over zijn eigen versie. */
-    L.push('planMove draagt de grendelcheck: '+_dS(()=>{
-      const inline=/planGrendel\(\)/.test(planMove.toString());
-      const viaMag=typeof planMoveMag==='function' && /planMoveMag\(/.test(planMove.toString())
+    /* v245: dit zocht planGrendel() letterlijk in planMove(). Sindsdien loopt de check via een
+       poort, dus de literale vorm zou 'oude code' melden op code die precies goed is. De probe
+       toetst de ROUTE en houdt de oudere vormen erbij, want een oude worker moet hier nog steeds JA
+       kunnen zeggen over zijn eigen versie.
+       v317: de schrijver heet `planPlekZet()` en de poort `planOrdeMag()`; `planMove()` en
+       `planMoveMag()` bestaan niet meer, dus die namen staan achter een typeof. */
+    L.push('de schrijver van je volgorde draagt de grendelcheck: '+_dS(()=>{
+      const nu=typeof planPlekZet==='function' && typeof planOrdeMag==='function'
+        && /planOrdeMag\(/.test(planPlekZet.toString())
+        && /planGrendel\(\)/.test(planOrdeMag.toString());
+      const oudInline=typeof planMove==='function' && /planGrendel\(\)/.test(planMove.toString());
+      const oudViaMag=typeof planMove==='function' && typeof planMoveMag==='function'
+        && /planMoveMag\(/.test(planMove.toString())
         && /planGrendel\(\)/.test(planMoveMag.toString());
-      return (inline||viaMag)?'JA':'NEE (oude code)'; }));
+      return (nu||oudInline||oudViaMag)?'JA':'NEE (oude code)'; }));
     /* v255: DEZELFDE VAL ALS HIERBOVEN, een versie later. setNfAlloc() leest de grendel nu via
-       planVastMag(), zoals planMove() hem via planMoveMag() leest, en de literale vorm zou dus
+       planVastMag(), zoals de volgorde-schrijver hem via planOrdeMag() leest, en de literale vorm zou dus
        'NEE' melden op code die precies goed is. De oude vorm blijft erbij staan, want een oude
        worker moet hier nog steeds JA kunnen zeggen over zijn eigen versie. */
     L.push('de twee andere routes dragen hem: '+_dS(()=>{
@@ -15201,8 +15481,12 @@ function diagVersie(){
         || (typeof planVastMag==='function' && /planVastMag\(/.test(setNfAlloc.toString())
             && /planGrendel\(\)/.test(planVastMag.toString()));
       return `planPromoteDebt ${a?'JA':'NEE'} | setNfAlloc ${b?'JA':'NEE'}`; }));
-    L.push('de pijltjes lezen dezelfde poort: '+_dS(()=>
-      /planMoveMag\(/.test(renderPlan.toString())?'JA':'NEE (oude code)'));
+    /* v317: hier stond 'de pijltjes lezen dezelfde poort', met planMoveMag() in renderPlan(). De
+       pijltjes zijn van het scherm en de bediening staat in het veld, dus de probe leest het veld. */
+    L.push('het volgorde-veld leest dezelfde poort: '+_dS(()=>{
+      const nu=typeof planOrdeVeld==='function' && /planPlekMag\(/.test(planOrdeVeld.toString());
+      const oud=typeof planMoveMag==='function' && /planMoveMag\(/.test(renderPlan.toString());
+      return (nu||oud)?'JA':'NEE (oude code)'; }));
     L.push('doelTempo: '+(typeof doelTempo)+' | insEyebrow: '+(typeof insEyebrow)+' | diagOpen: '+(typeof diagOpen));
     return L;
   });
@@ -15274,20 +15558,38 @@ function diagGrendel(){
   return L;
 }
 
-/* 4. Wat de grendelcheck in planMove() zou beslissen, voor elk item en beide richtingen. Dit is de
-      regel zelf, nagerekend op een kopie van de lijst. planMove() wordt niet aangeroepen. */
+/* 4. Wat de grendelregel zou beslissen, voor elk item en ELKE plek. KIJKEN VERANDERT NIETS: dit
+      leest `planPlekMag()`, een pure toets op een kopie van de lijst, en `planPlekZet()` wordt niet
+      aangeroepen.
+      v317: dit liep over twee RICHTINGEN, want de bediening waren twee pijltjes. Het veld in de
+      editor biedt elke plek aan, dus het blok moet elke plek nalopen: een plek die het veld toont
+      en de schrijver weigert zou hier anders onzichtbaar blijven.
+      HIJ LEEST DE POORT EN DRUKT DE REGEL NIET ZELF UIT. De oude vorm toetste `G && ids[0]!==PLAN_NF`
+      zelf, en dat is sinds v317 `planOrdeMag()`: een tweede uitdrukking zou precies de tegenspraak
+      maken die dit blok moet vangen (v104). De resulterende lijst staat erbij, want dat is wat de
+      schrijver zou wegschrijven. */
 function diagPlanMove(){
   const L=[];
   let G=null, items=[];
   try{ G=planGrendel(); items=planItems(); }catch(e){ return ['FOUT: '+e.message]; }
-  const ids0=items.map(x=>x.id);
   L.push('grendel dicht: '+(G?'JA':'NEE'));
   items.forEach((it,i)=>{
-    [[-1,'omhoog'],[1,'omlaag']].forEach(([dir,lbl])=>{
-      const ids=ids0.slice(), j=i+dir;
-      if(j<0||j>=ids.length){ L.push(`  ${i}. ${it.naam} ${lbl}: geen buur, valt uit op de grens`); return; }
-      ids.splice(j,0,ids.splice(i,1)[0]);
-      L.push(`  ${i}. ${it.naam} (${it.id}) ${lbl}: ${(G&&ids[0]!==PLAN_NF)?'GEBLOKKEERD':'DOORGELATEN'} -> ${_dJ(ids)}`);
+    const delen=items.map((_,j)=>{
+      if(j===i) return `${j+1}=nu`;
+      let mag=null, na=null;
+      try{ mag=planPlekMag(it.id,j); na=planOrdeNa(it.id,j); }catch(e){ return `${j+1}=FOUT`; }
+      return `${j+1}=${mag?'DOOR':'BLOK'}${(mag&&na)?'':''}`;
+    });
+    L.push(`  ${i}. ${it.naam} (${it.id}): ${delen.join(' ')}`);
+  });
+  /* De lijst die de schrijver zou wegschrijven, voor de plekken die DOOR mogen. Apart, want per
+     plek een lijst erbij maakt de regel hierboven onleesbaar. */
+  items.forEach((it,i)=>{
+    items.forEach((_,j)=>{
+      if(j===i) return;
+      let mag=false, na=null;
+      try{ mag=planPlekMag(it.id,j); na=planOrdeNa(it.id,j); }catch(_){ return; }
+      if(mag&&na) L.push(`    ${it.naam} -> plek ${j+1}: ${_dJ(na)}`);
     });
   });
   return L;
@@ -18457,7 +18759,7 @@ function diagBuffernorm(){
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
   {titel:'de grendel', lees:diagGrendel},
-  {titel:'wat planMove() zou beslissen (nagerekend, niet uitgevoerd)', lees:diagPlanMove},
+  {titel:'wat de grendelregel per plek zou beslissen (nagerekend, niet uitgevoerd)', lees:diagPlanMove},
   {titel:'wat allocatePlan() zegt', lees:diagAlloc},
   {titel:'de potjesregel op Inzichten', lees:diagPotjes},
   {titel:'haalt de weekreeks zijn drempel', lees:diagWeekblokken},

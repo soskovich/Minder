@@ -204,11 +204,16 @@ test.describe('c · de statussen', () => {
   });
 });
 
-test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
+test.describe('c2 · dekking van een eenmalige post (v131, herzien bij v317)', () => {
   // gemeld: pot 50, verplichting 25, en toch "onbekend". Bij een eenmalige post of een jaarpost die
-  // twaalf maanden of verder weg ligt is benodigdeStand nul, dus geeft dekking() terecht graad null.
-  // Dat las het maandscherm als onbekend, met status tekort. Er is niets onbekends: er hoeft alleen
-  // nog niets opgebouwd te zijn.
+  // twaalf maanden of verder weg ligt was benodigdeStand nul, dus gaf dekking() graad null, en dat
+  // las het maandscherm als onbekend met status tekort. Er is niets onbekends.
+  /* v317: EEN EENMALIGE POST BINNEN HET VENSTER DRAAGT ZIJN HELE BEDRAG IN DE OPBOUW-EIS, want hij
+     heeft geen volgende termijn om over te spreiden en de waterval in dezelfde functie trok hem al
+     voluit af. Daarmee IS er voor zo'n post een percentage, en de noemer heet "wat nu nodig is" in
+     plaats van "de eerstvolgende post" - die twee zijn bij een eenmalige post per constructie
+     hetzelfde getal, en dat staat als eigen assertie vast. De v131-uitkomst blijft: ok en niet
+     onbekend. De tak zonder opbouw-eis is NIET dood; zie het kwartaalgeval onderaan dit blok. */
   /* v189: de waardekolom mengde vijf soorten waarde. Hij toont er nu een: wat er in je
      reserveringenpot staat, of het woord onbekend. Het oordeel dat eruit gehaald is - het
      percentage, of waarom er geen is - staat in de eenheid ernaast, met dezelfde noemers. */
@@ -222,7 +227,10 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
   test('een eenmalige post die je kunt betalen is ok, niet onbekend', async ({ page }) => {
     await boot(page, seedM({ reserveringen: [eenmalig(25, 2)], manualBal: { [MAIN]: 1500, [RES]: 50, [SAV]: 20000 } }));
     const d = await dek(page);
-    expect(await page.evaluate(() => dekking(12).graad)).toBeNull();     // geen percentage te delen
+    /* v317: er IS nu een percentage, want de post draagt zijn hele bedrag in de eis: 50 van 25 is
+       200 procent. De uitkomst van v131 staat: ok, en niet onbekend. */
+    expect(await page.evaluate(() => dekking(12).graad)).toBe(200);
+    expect(await page.evaluate(() => dekking(12).benodigdeStand)).toBe(25);
     expect(d.status).toBe('ok');
     expect(d.waarde).toBe('€50');                                       // v189: je potsaldo
     expect(d.waarde).not.toBe('onbekend');
@@ -240,7 +248,11 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     const d = await dek(page);
     expect(d.status).toBe('tekort');
     expect(d.waarde).toBe('€10');                                       // v189: je potsaldo
-    expect(d.eenheid).toBe('in je pot · 40% van de eerstvolgende post'); // v132 percentage, nu in de eenheid
+    /* v317: de noemer heet "wat nu nodig is", want de opbouw-eis bestaat nu voor deze post. Bij een
+       eenmalige post binnen het venster zijn de twee noemers hetzelfde getal: de eis IS de post. */
+    expect(d.eenheid).toBe('in je pot · 40% van wat nu nodig is');
+    expect(await page.evaluate(() => {
+      const d2 = dekking(12); return [d2.benodigdeStand, d2.gat.bedrag]; })).toEqual([25, 25]);
     expect(d.gevolg).toMatch(/€15 tekort/);                             // het bedrag staat in de zin
     expect(d.gevolg).not.toMatch(/gedekt tot en met \./);               // geen lege maand meer
   });
@@ -268,7 +280,7 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     await boot(page, seedM({ reserveringen: [eenmalig(25, 2)], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 20000 } }));
     let d = await dek(page);
     expect(d.waarde).toBe('€10');                                        // v189: je potsaldo
-    expect(d.eenheid).toBe('in je pot · 40% van de eerstvolgende post');  // 10 van 25
+    expect(d.eenheid).toBe('in je pot · 40% van wat nu nodig is');        // v317: 10 van 25
     expect(d.gevolg).toMatch(/€15 tekort/);                              // bedrag in de zin, niet dubbel
 
     // met opbouw-eis: percentage van wat nu nodig is
@@ -289,8 +301,24 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     await boot(page, seedM({ reserveringen: [eenmalig(25, 2)], manualBal: { [MAIN]: 1500, [RES]: 0, [SAV]: 20000 } }));
     const d = await dek(page);
     expect(d.waarde).toBe('€0');                                         // v189: een lege pot is nul
-    expect(d.eenheid).toBe('in je pot · 0% van de eerstvolgende post');   // geen verzonnen getal
+    expect(d.eenheid).toBe('in je pot · 0% van wat nu nodig is');          // v317, geen verzonnen getal
     expect(d.gevolg).toMatch(/€25 tekort/);
+  });
+
+  /* v317: DE TAK ZONDER OPBOUW-EIS IS NIET DOOD, en dat is gemeten en niet aangenomen. Een
+     kwartaalpost die verder weg ligt dan zijn eigen interval heeft `intervalM - offset <= 0` en
+     draagt dus nul in de eis, terwijl hij wel een voorkomen binnen de horizon heeft. Dan is `graad`
+     null en valt de eenheid terug op het percentage van de eerstvolgende post (v132). Zonder dit
+     geval zou die tak alleen nog levend LIJKEN. */
+  test('een kwartaalpost verder weg dan zijn interval heeft geen opbouw-eis, en dan geldt v132', async ({ page }) => {
+    await boot(page, seedM({ reserveringen: [{ id: 'a', naam: 'Kwartaal', bedrag: 120, vervalmaand: over(5), intervalM: 3 }],
+      manualBal: { [MAIN]: 1500, [RES]: 60, [SAV]: 20000 } }));
+    const g = await page.evaluate(() => { const x = dekking(12); return { eis: x.benodigdeStand, graad: x.graad, n: x.regels.filter((r) => r.soort === 'post').length }; });
+    expect(g.n).toBeGreaterThan(0);          // hij rolt wel uit
+    expect(g.eis).toBe(0);                   // en draagt toch niets in de eis
+    expect(g.graad).toBeNull();
+    const d = await dek(page);
+    expect(d.eenheid).toBe('in je pot · 50% van de eerstvolgende post');
   });
 
   test('zonder tekort blijft de eenheid schoon', async ({ page }) => {

@@ -141,14 +141,32 @@ test.describe('c · een wachtende bestemming noemt waarop, en nooit wanneer', ()
     expect(rij).toMatch(/€0\/mnd/);                  // want er gaat niets heen
   });
 
-  /* Wanneer een wachtende bestemming aan de beurt komt hangt af van keuzes die nog niet gemaakt
-     zijn. Een maand-en-jaar zou daar een precisie aan geven die er niet is - dezelfde fout als een
-     streefjaar noemen dat nergens op steunt (v59/v73/v173). */
-  test('en nooit wanneer hij aan de beurt is', async ({ page }) => {
+  /* Wanneer een wachtende bestemming ZELF vol is hangt af van keuzes die nog niet gemaakt zijn, dus
+     daar komt geen datum (v59/v73/v173).
+     v317: EEN GEMETEN OVERDRACHT IS EEN ANDERE BEWERING, en die mag wel een maand noemen. De
+     terugval-regel zegt vanaf wanneer de RUIMTE van de blokkeerder hierheen gaat, en dat komt uit
+     dezelfde projectie die elk vat sinds v307 al leest. Wat verboden blijft is de eigen vol-datum,
+     het eigen tempo en een achterstand van deze bestemming: die drie zouden tegen de verkeerde
+     alloc gerekend zijn. De assertie leest daarom de regels van het VAT en niet de hele rij. */
+  test('en nooit zijn eigen vol-datum of tempo', async ({ page }) => {
     await openV(page, metBlokkeerder());
-    const rij = await page.locator('#s-vooruit .plan-item[data-id="gB"]').innerText();
-    expect(rij).not.toMatch(/20\d\d/);
-    expect(rij).not.toMatch(/rond |over \d+ maanden|op dit tempo/);
+    const dat = await page.evaluate(() =>
+      document.querySelector('#s-vooruit .plan-item[data-id="gB"] .vat-dat').innerText);
+    expect(dat).not.toMatch(/20\d\d/);
+    expect(dat).not.toMatch(/rond |over \d+ maanden|op dit tempo|vol in/);
+  });
+
+  /* v317: en de terugval-regel staat er wel, met de maand en de naam van de blokkeerder. Hij is
+     een EIGEN element naast het datumpaar, dus hij kan de regel hierboven niet vervuilen. */
+  test('maar wel vanaf wanneer de ruimte van zijn blokkeerder hierheen gaat', async ({ page }) => {
+    await openV(page, metBlokkeerder());
+    const rij = page.locator('#s-vooruit .plan-item[data-id="gB"]');
+    const erf = rij.locator('[data-erfregel]');
+    expect(await erf.count()).toBe(1);
+    expect(await erf.innerText()).toMatch(/^vanaf \w+ \d{4} ook de ruimte van /);
+    // en de maand komt uit de projectie en niet uit een eigen telling
+    const e = await page.evaluate(() => planTerugval().find((x) => x.naar === 'gB'));
+    expect(await erf.innerText()).toContain(await page.evaluate((m) => etaDatum(m), e.vanaf));
   });
 
   test('zonder blokkeerder blijft het bij de status', async ({ page }) => {
@@ -200,10 +218,12 @@ test.describe('e · de volgorde blijft de hoofdhandeling', () => {
     { id: 'gB', naam: 'Vakantie', doel: 3000, gespaard: 0, allocMode: 'fixed', perMaand: 100 },
   ]);
 
-  test('de pijlen staan er zonder tik, de knoppen niet', async ({ page }) => {
+  /* v317: hier stond dat de twee pijltjes er zonder tik staan. Die zijn van het scherm; wat de
+     eigenschap nog steeds moet vasthouden is dat een rij ZONDER tik geen keuzes toont. */
+  test('een rij zonder tik toont geen knoppen, en de pijlen zijn er niet meer', async ({ page }) => {
     await openV(page, twee());
     const rij = page.locator('#s-vooruit .plan-item[data-id="gB"]');
-    expect(await rij.locator('.plan-mv').count()).toBe(2);
+    expect(await rij.locator('.plan-mv').count()).toBe(0);
     expect(await rij.innerText()).not.toMatch(/pauzeren|openen|uit plan halen/);
   });
 
@@ -218,9 +238,10 @@ test.describe('e · de volgorde blijft de hoofdhandeling', () => {
     expect(await page.locator('#s-vooruit .plan-item[data-id="gA"]').innerText()).not.toMatch(/pauzeren/);
   });
 
-  test('de pijl verschuift de rij en laat de nummers meelopen', async ({ page }) => {
+  test('het volgorde-veld verschuift de rij en laat de nummers meelopen', async ({ page }) => {
     await openV(page, twee());
-    await page.locator('#s-vooruit .plan-item[data-id="gB"] .plan-mv').first().click();
+    await page.evaluate(() => openGoal('gB'));
+    await page.locator('#planOrdeChips .chip[data-plek="0"]').click();
     await page.waitForFunction(() => (document.querySelector('#s-vooruit .plan-item') || {}).dataset.id === 'gB');
     const R = await rijen(page);
     expect(R[0].id).toBe('gB');

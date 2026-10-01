@@ -6,7 +6,13 @@
 // GEBLOKKEERD`. Wat de uitlezing wél liet zien is dat datzelfde pijltje als een gewone actieve
 // knop rendeerde. De reparatie zit dus niet in de grendel maar in wat de knop belooft.
 //
-// DRIE ROUTES, ÉÉN REGEL. planMove() had de check, planPromoteDebt() en setNfAlloc() niet.
+// DRIE ROUTES, ÉÉN REGEL. De volgorde-schrijver had de check, planPromoteDebt() en setNfAlloc() niet.
+//
+// v317: DE PIJLTJES ZIJN VAN HET SCHERM EN DE REGEL IS GEBLEVEN. Je plek in de rij zet je sinds die
+// ronde in de editor van de bestemming, met een chip per plek, en `planMove()`/`planMoveMag()`
+// bestaan niet meer. Blok a leest daarom het VELD en niet de rij: een plek die de regel niet
+// toelaat is `.chip.off` zonder onclick, precies wat een uitgeschakeld pijltje was. De poort heet
+// `planPlekMag()` en de regel zelf `planOrdeMag()`.
 // De twee bronzoekende tests onderaan zijn het echte slot: ze lezen index.html en eisen dat
 // ELKE schrijver van SET.randorde en elke schrijver van een vast maandbedrag door de bijbehorende
 // grens gaat. Komt er een vierde schrijver bij, dan faalt de suite bij het bouwen. Dat is bewust
@@ -73,98 +79,127 @@ const DRIE = [
 async function boot(page, o) {
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof planMoveMag === 'function');
+  await page.waitForFunction(() => typeof planPlekMag === 'function');
   await page.evaluate(() => go('vooruit'));
 }
 const orde = (page) => page.evaluate(() => planItems().map((x) => x.id));
 
-/* De pijltjes van één rij, gelezen uit de DOM zoals ze op het scherm staan: is het een knop of een
-   uitgegrijsde span. Het anker is de rij-positie in de lijst, niet een tekst. */
-async function pijlen(page, index) {
+/* v317: HET VOLGORDE-VELD VAN ÉÉN BESTEMMING, gelezen uit de DOM zoals het op het scherm staat.
+   Per plek: is hij aantikbaar, is hij de huidige, en hangt er een handler aan. Het anker is
+   `data-plek` en geen tekst.
+   DE TWEE EDITORS ZIJN TWEE INGANGEN NAAR HETZELFDE VELD, dus de helper opent de juiste. Zonder het
+   noodfonds-pad zou de spec de helft van het veld niet toetsen, en juist die helft is de reden dat
+   het veld in twee sheets staat: zonder hem is het noodfonds na het weghalen van de pijltjes
+   helemaal niet meer te verplaatsen. */
+async function plekken(page, id) {
   return page.evaluate((i) => {
-    const rijen = [...document.querySelectorAll('#s-vooruit .plan-mv')];
-    const per = [];
-    for (let k = 0; k < rijen.length; k += 2) per.push([rijen[k], rijen[k + 1]]);
-    const r = per[i];
-    if (!r) return null;
-    /* v246: een pijltje dat niet mag is een <button disabled> en geen <span>. Een schermlezer
-       ziet daarmee een uitgeschakelde bediening in plaats van een element zonder knopbetekenis. */
-    const lees = (el) => (!el ? null : { tag: el.tagName.toLowerCase(),
-      off: el.classList.contains('off'), disabled: !!el.disabled });
-    return { op: lees(r[0]), neer: lees(r[1]) };
-  }, index);
+    if (i === 'noodfonds') openNoodfondsPanel(); else openGoal(i);
+    const els = [...document.querySelectorAll('#planOrdeChips .chip')];
+    if (!els.length) return null;
+    return els.map((el) => ({
+      plek: +el.dataset.plek,
+      nu: el.classList.contains('on'),
+      off: el.classList.contains('off'),
+      handler: el.hasAttribute('onclick'),
+    }));
+  }, id);
 }
+/* Wat de poort van dezelfde bestemming zegt, los van de DOM. */
+const poort = (page, id) => page.evaluate((i) =>
+  planItems().map((_, k) => planPlekMag(i, k)), id);
 
-test.describe('a · de pijltjes zeggen wat ze doen', () => {
-  test('dichte grendel op de toestand van het toestel: beide pijltjes bij het noodfonds staan uit',
+test.describe('a · het volgorde-veld zegt wat het doet', () => {
+  test('dichte grendel op de toestand van het toestel: plek 1 is voor het noodfonds en staat uit bij een doel',
     async ({ page }) => {
       await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, TOESTEL));
       // eerst vaststellen dat dit werkelijk de gemelde toestand is
       expect(await page.evaluate(() => planGrendel())).toMatchObject({ dicht: true, rest: 4201, maanden: 2 });
-      const nf = await pijlen(page, 0);
-      expect(nf.op).toEqual({ tag: 'button', off: true, disabled: true });     // geen buur boven
-      expect(nf.neer).toEqual({ tag: 'button', off: true, disabled: true });   // langs de buffer heen mag niet
+      const g1 = await plekken(page, 'g1');
+      expect(g1.length).toBe(3);
+      expect(g1[0]).toEqual({ plek: 0, nu: false, off: true, handler: false });   // langs de buffer heen mag niet
+      expect(g1[1]).toEqual({ plek: 1, nu: true, off: false, handler: false });   // waar hij nu staat
+      expect(g1[2]).toEqual({ plek: 2, nu: false, off: false, handler: true });
     });
 
-  test('en het doel er direct onder heeft zijn pijltje omhoog uit, dat omlaag aan', async ({ page }) => {
+  test('en het noodfonds kan bij een dichte grendel nergens anders heen', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, TOESTEL));
-    const g1 = await pijlen(page, 1);
-    expect(g1.op).toEqual({ tag: 'button', off: true, disabled: true });
-    expect(g1.neer).toEqual({ tag: 'button', off: false, disabled: false });
+    const nf = await plekken(page, 'noodfonds');
+    expect(nf.map((x) => x.nu)).toEqual([true, false, false]);
+    expect(nf.map((x) => x.off)).toEqual([false, true, true]);
+    expect(nf.some((x) => x.handler)).toBe(false);
   });
 
   test('een buffer die bijna vol is gedraagt zich net zo: bijna vol is niet vol', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, BIJNA));
     expect(await page.evaluate(() => planGrendel())).toMatchObject({ dicht: true, rest: 101, maanden: 1 });
-    expect((await pijlen(page, 0)).neer).toEqual({ tag: 'button', off: true, disabled: true });
-    expect((await pijlen(page, 1)).op).toEqual({ tag: 'button', off: true, disabled: true });
+    expect((await plekken(page, 'g1'))[0].off).toBe(true);
+    expect((await plekken(page, 'noodfonds'))[1].off).toBe(true);
   });
 
-  test('zodra de buffer vol is gaan ze vanzelf aan, zonder knop en zonder vlag', async ({ page }) => {
+  test('zodra de buffer vol is gaat elke plek vanzelf open, zonder knop en zonder vlag', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, VOL));
     expect(await page.evaluate(() => planGrendel())).toBe(null);
-    expect((await pijlen(page, 0)).neer).toEqual({ tag: 'button', off: false, disabled: false });
-    expect((await pijlen(page, 1)).op).toEqual({ tag: 'button', off: false, disabled: false });
+    expect((await plekken(page, 'g1')).map((x) => x.off)).toEqual([false, false, false]);
+    expect((await plekken(page, 'noodfonds')).map((x) => x.off)).toEqual([false, false, false]);
   });
 
-  test('de rand van de lijst blijft uit staan, ook met een open grendel', async ({ page }) => {
+  /* v317: DE PLEK WAAR JE STAAT DRAAGT GEEN HANDLER, en dat is geen detail: met een handler zou een
+     tik op je eigen plek een schrijfactie en een render doen zonder dat er iets verandert. */
+  test('de plek waar je staat is gemarkeerd en niet aantikbaar', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, VOL));
-    expect((await pijlen(page, 0)).op).toEqual({ tag: 'button', off: true, disabled: true });
-    expect((await pijlen(page, 2)).neer).toEqual({ tag: 'button', off: true, disabled: true });
+    const g1 = await plekken(page, 'g1');
+    const nu = g1.filter((x) => x.nu);
+    expect(nu.length).toBe(1);
+    expect(nu[0].plek).toBe(1);
+    expect(nu[0].handler).toBe(false);
   });
 
   test('onderling schuiven onder de buffer mag en werkt, ook bij een dichte grendel', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, TOESTEL));
-    const knop = page.locator('#s-vooruit .plan-mv').nth(3);   // rij 1 (g1), pijltje omlaag
-    await knop.click();
+    await plekken(page, 'g1');
+    await page.locator('#planOrdeChips .chip[data-plek="2"]').click();
     expect(await orde(page)).toEqual(['noodfonds', 'g2', 'g1']);
   });
 
-  test('de knop die er staat doet ook echt iets: het pijltje van het noodfonds is er geen',
-    async ({ page }) => {
-      // het bewijs dat de uitgegrijsde vorm geen knop is: er hangt geen onclick aan
-      await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, TOESTEL));
-      // v246: geen onclick, en bovendien echt uitgeschakeld
-      const r = await page.evaluate(() => {
-        const els = [...document.querySelectorAll('#s-vooruit .plan-mv')].slice(0, 2);
-        return { handler: els.some((el) => el.hasAttribute('onclick')), uit: els.every((el) => el.disabled) };
-      });
-      expect(r.handler).toBe(false);
-      expect(r.uit).toBe(true);
-    });
+  /* v317: DE VOLGORDE IS VIA DE EDITOR TE ZETTEN, en dat is de assertie die vóór het weghalen van de
+     pijltjes groen moest staan. Beide ingangen, want het noodfonds heeft geen doel-editor. */
+  test('en het noodfonds schuift via zijn eigen sheet, want daar is zijn enige ingang', async ({ page }) => {
+    await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, VOL));
+    await plekken(page, 'noodfonds');
+    await page.locator('#planOrdeChips .chip[data-plek="2"]').click();
+    expect(await orde(page)).toEqual(['g1', 'g2', 'noodfonds']);
+  });
 
-  test('planMoveMag is de enige poort: de rij en planMove() beslissen niet apart', async ({ page }) => {
+  test('de pijltjes staan niet meer op het scherm', async ({ page }) => {
+    await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, VOL));
+    expect(await page.locator('#s-vooruit .plan-mv').count()).toBe(0);
+    expect(await page.evaluate(() => typeof planMove)).toBe('undefined');
+    expect(await page.evaluate(() => typeof planMoveMag)).toBe('undefined');
+  });
+
+  test('planPlekMag is de enige poort: het veld en de schrijver beslissen niet apart', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, TOESTEL));
-    // elke rij: wat de DOM toont moet gelijk zijn aan wat planMoveMag zegt
-    const paren = await page.evaluate(() => planItems().map((it, i) => ({
-      i, id: it.id, op: planMoveMag(it.id, -1), neer: planMoveMag(it.id, 1) })));
-    /* v246: beide vormen zijn nu een <button>, dus de poort is af te lezen aan disabled en niet
-       meer aan het soort element. Dat is precies de winst: een uitgeschakelde bediening. */
-    for (const p of paren) {
-      const d = await pijlen(page, p.i);
-      expect(!d.op.disabled, `rij ${p.i} omhoog`).toBe(p.op);
-      expect(!d.neer.disabled, `rij ${p.i} omlaag`).toBe(p.neer);
+    for (const id of ['noodfonds', 'g1', 'g2']) {
+      const mag = await poort(page, id);
+      const dom = await plekken(page, id);
+      for (const c of dom) {
+        if (c.nu) continue;
+        expect(!c.off, `${id} plek ${c.plek} in de DOM`).toBe(mag[c.plek]);
+        expect(c.handler, `${id} plek ${c.plek} handler`).toBe(mag[c.plek]);
+      }
     }
+  });
+
+  /* v317: EEN GEWEIGERDE PLEK SCHRIJFT NIETS, ook als je de schrijver rechtstreeks aanroept. Het
+     veld biedt hem niet aan, dus dit pad loopt alleen via een aanroep; dat is de keuze van v284 over
+     een poort die vanuit het scherm niet bereikbaar is. */
+  test('de schrijver weigert een plek die de regel niet toelaat', async ({ page }) => {
+    await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, TOESTEL));
+    await page.evaluate(() => planPlekZet('g1', 0));
+    expect(await orde(page)).toEqual(['noodfonds', 'g1', 'g2']);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('minder_set')).planOrder))
+      .toEqual(['noodfonds', 'g1', 'g2']);
+    expect((await page.locator('#toast').textContent())).toContain('buffer gaat eerst');
   });
 });
 
@@ -180,11 +215,11 @@ test.describe('b · planPromoteDebt', () => {
       .toEqual(['noodfonds', 'g1', 'g2']);
   });
 
-  test('en hij zegt hetzelfde als planMove(), want het is dezelfde regel', async ({ page }) => {
+  test('en hij zegt hetzelfde als de volgorde-schrijver, want het is dezelfde regel', async ({ page }) => {
     await boot(page, Object.assign({ goals: DRIE, set: { planOrder: ['noodfonds', 'g1', 'g2'] } }, TOESTEL, MET_SCHULD));
     await page.evaluate(() => planPromoteDebt('d1'));
     const a = await page.locator('#toast').textContent();
-    await page.evaluate(() => planMove('noodfonds', 1));
+    await page.evaluate(() => planPlekZet('noodfonds', 1));
     const b = await page.locator('#toast').textContent();
     expect(a.trim()).toBe(b.trim());
     expect(a).toContain('buffer gaat eerst');
@@ -275,7 +310,10 @@ test.describe('d · de bron: elke schrijver gaat door de grens', () => {
         // planForget() haalt alleen een id wég. planItems() zet het noodfonds vooraan terug zodra
         // hij niet in de lijst staat (de unshift-tak), dus deze schrijver kan de invariant niet breken.
         if (x.fn === 'planForget') return false;
-        return !/planGrendel\(\)|planMoveMag\(/.test(x.body || '');
+        /* v317: `planOrdeMag()` is sinds die ronde de ene uitdrukking van de regel, en de
+           schrijver leest hem. De oudere namen blijven in de vorm staan, want een oude bron moet
+           hier nog steeds gedekt kunnen zijn. */
+        return !/planGrendel\(\)|planMoveMag\(|planOrdeMag\(/.test(x.body || '');
       });
       expect(ongedekt.map((x) => `${x.fn} (regel ${x.regel}): ${x.tekst}`)).toEqual([]);
     });
@@ -337,7 +375,7 @@ test.describe('d · de bron: elke schrijver gaat door de grens', () => {
   });
 
   /* planVastMag() is de enige toets. Een tweede planGrendel() naast hem in dezelfde functie zou
-     een tweede waarheid zijn, precies de fout die planMoveMag() bij v245 wegnam. */
+     een tweede waarheid zijn, precies de fout die de volgorde-poort bij v245 wegnam. */
   test('geen schrijver toetst de grendel daarnaast nog een keer zelf', () => {
     const w = schrijvers(/setPlanAlloc\(/).filter((x) => x.fn !== 'setPlanAlloc');
     const dubbel = w.filter((x) => /planGrendel\(/.test(x.body || ''));
@@ -349,5 +387,19 @@ test.describe('d · de bron: elke schrijver gaat door de grens', () => {
     expect(w).toContain('setPlanAllocVeld');
     expect(w).toContain('setNfAlloc');
     expect(schrijvers(/SET\.planOrder\s*=/).map((x) => x.fn)).toContain('planPromoteDebt');
+    expect(schrijvers(/SET\.planOrder\s*=/).map((x) => x.fn)).toContain('planPlekZet');
+  });
+
+  /* v317: DE REGEL STAAT OP EEN PLEK. `planOrdeMag()` is de enige functie die de grendel tegen een
+     VOLGORDE toetst; het veld en de schrijver lezen hem via `planPlekMag()`. Een tweede
+     planGrendel() in een van die twee zou de tegenspraak terugbrengen die v245 wegnam. */
+  test('het veld en de schrijver drukken de regel niet zelf nog eens uit', () => {
+    for (const naam of ['planOrdeVeld', 'planPlekZet', 'planPlekMag']) {
+      const f = functieRond(CODE.indexOf('\nfunction ' + naam + '('));
+      expect(f.naam, naam).toBe(naam);
+      expect(/planGrendel\(/.test(f.body), `${naam} toetst de grendel zelf`).toBe(false);
+    }
+    const g = functieRond(CODE.indexOf('\nfunction planOrdeMag('));
+    expect(g.body).toMatch(/planGrendel\(/);
   });
 });

@@ -126,11 +126,27 @@ test.describe('b · de dekkingssom', () => {
     expect(d.benodigdeStand).toBe(80);                          // alleen het eerste voorkomen
   });
 
-  test('een eenmalige post draagt niets bij aan de stand', async ({ page }) => {
+  /* v317: HERZIEN. Dit eiste dat een eenmalige post NIETS bijdroeg aan de stand, en dat was de
+     v131-redenering ("er hoeft nog niets opgebouwd te zijn"). Gemeten gevolg op het toestel: met
+     EUR 500 in de pot en een boete van EUR 299 eenmalig in november zei Plan "Blijft over EUR 500"
+     terwijl die 299 volgende maand vertrekt, en de WATERVAL in dezelfde functie trok hem al voluit
+     af. Een eenmalige post heeft geen volgende termijn om over te spreiden, dus hij is verschuldigd
+     en draagt zijn hele bedrag. `benodigdPerMaand` is ongemoeid: dat is wat je per maand opzij moet
+     zetten en dat blijft het bedrag gedeeld door de maanden tot de vervaldag. */
+  test('een eenmalige post draagt zijn hele bedrag bij aan de stand', async ({ page }) => {
     await boot(page, seedRes({ reserveringen: [{ id: 'a', naam: 'Eenmalig', bedrag: 600, vervalmaand: over(6), intervalM: 0 }] }));
     const d = await D(page);
-    expect(d.benodigdeStand).toBe(0);
-    expect(d.benodigdPerMaand).toBe(100);                       // 600 / 6
+    expect(d.benodigdeStand).toBe(600);
+    expect(d.benodigdPerMaand).toBe(100);                       // 600 / 6, ongewijzigd
+  });
+
+  /* En de pro-rata vorm voor een post MET interval is niet aangeraakt: dat is het geval dat de twee
+     takken onderscheidt. */
+  test('een jaarpost houdt zijn pro-rata deel', async ({ page }) => {
+    await boot(page, seedRes({ reserveringen: [{ id: 'a', naam: 'Jaarlijks', bedrag: 600, vervalmaand: over(6), intervalM: 12 }] }));
+    const d = await D(page);
+    expect(d.benodigdeStand).toBe(300);                         // 600 x (12-6)/12
+    expect(d.benodigdPerMaand).toBe(100);
   });
 
   test('gedektTot telt chronologisch af vanaf de huidige stand', async ({ page }) => {

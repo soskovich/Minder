@@ -314,7 +314,7 @@ test.describe('e · de plan-rij houdt drie rollen en herhaalt de uitleg niet', (
       return [...document.querySelectorAll('#s-vooruit .plan-item')].map((x) => ({
         tekst: x.innerText.replace(/\s+/g, ' '),
         balk: x.querySelectorAll('.bar-track').length,
-        keuze: x.querySelectorAll('.plan-mv, .plan-act, [onclick]').length,
+        keuze: x.querySelectorAll('.plan-act, [onclick]').length,   // v317: .plan-mv bestaat niet meer
       }));
     });
     const lopend = r.find((x) => /op dit tempo/.test(x.tekst));
