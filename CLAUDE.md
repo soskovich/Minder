@@ -99,6 +99,43 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **"VOLGENDE MAAND ANDERS" IS EEN EIGEN HANDELING, EN DE LAAG KOMT VAN DE AANROEPER** (`v315`): de
+  knop op de signaalkaart gaat via `openPotje()` naar `savePotje()`, en die schrijft `SET.budgetsNext`.
+  `valtOpPotjeGewijzigd()` zette daar `potje_bijgesteld` met `potje_na` uit de VOLGENDE maand, dus de log
+  las "EUR 400 -> EUR 450" terwijl het potje van DEZE maand op 400 bleef staan. Dat is de v237-val in
+  spiegelbeeld, bij `v314` gemeld en als bestaand gedrag opgeschreven; de handeling heet nu
+  `volgende_maand` en draagt `volgend_voor` (het potje van deze maand) en `volgend_na`.
+  DRIE INGANGEN NAAR DEZELFDE ROUTE EN ALLE DRIE GAAN MEE: de knop op Grip, de potje-editor via Inzichten
+  en het budgetraster in de instellingen. Er komt geen vierde schrijver bij (`v61`).
+  `setCatBudget()` EN `savePotje()` GEVEN HUN LAAG MEE, want `exists` BESLIST daar naar welke laag ze
+  schrijven; die toets in de haak nog eens uitdrukken zou een tweede waarheid zijn over dezelfde keuze
+  (`v104`). Dat is de vorm van `v285`: de beslissing staat binnen, de SCOPE komt van buiten.
+  DE V237-GUARD IS DAARMEE VERVALLEN, en dat is het tegendeel van een verzwakking: die toetste of
+  `potje_na` al gelijk was aan het potje van deze maand en was een BENADERING van de vraag die nu
+  rechtstreeks wordt gesteld. Wat hij daarnaast deed (een Grip-bijstelling niet laten overschrijven) doet
+  de actie-guard, en strenger, want die geldt voor ELKE andere actie. De haak leest `SET.budgets` nergens
+  meer, en dat staat als bronzoekende assertie vast.
+  DE THIS-MONTH-TAK IS VANUIT DE TWEE AANROEPERS NIET BEREIKBAAR, GEMETEN en niet beredeneerd: een record
+  bestaat alleen als er een signaal vuurde en dat vraagt een potje boven nul, dus `exists` is daar per
+  constructie waar. Hij blijft staan omdat de laag van buiten komt, en de spec loopt het pad met een
+  rechtstreekse aanroep (`v284`).
+  DE UITKOMST LEEST TEGEN HET POTJE, via de LAATSTE tak van `valtOpUitkomst()` en zonder eigen tak: deze
+  handeling verzet de lat van deze maand niet, dus een tak die hetzelfde teruggeeft zou dood gewicht zijn.
+  GEMETEN waarom dat telt: met `volgend_na` als lat zou een maand die 150 boven zijn potje eindigde als
+  binnen-het-potje lezen, en te gunstig is de gevaarlijke kant (`v168`). Wat de wijziging volgende maand
+  oplevert is geen uitkomst van DEZE maand, en dat meten vraagt twee bewaarde maanden (`v309`).
+  DE RIJ ZEGT `nu EUR 400 -> EUR 450` en een bijstelling houdt zijn kale pijl: zonder dat woord leest
+  hetzelfde paar als een potje dat vandaag veranderde. HIJ STAAT ONVOORWAARDELIJK IN DE TELLING, naast
+  `potje bijgesteld` en niet erin, om de reden van `v314`: het is wat JIJ kunt doen, dus een nul is een
+  meting (`v59`/`v73`/`v173`).
+  DE PRIJS IS 19px OP 390px EN NUL OP 360px, gemeten op de telregel zelf: die is op beide breedtes 75px
+  (vijf regels), en zonder de vierde teller 75 op 360 en 56 op 390. Op 360 liep hij dus al over vijf regels.
+  ZESTIEN SABOTAGES, ALLE ZESTIEN ROOD, en EEN pas na een reparatie van de TEST: de sabotage die het woord
+  van de handeling door 'potje bijgesteld' vervangt bleef groen op een assertie over de VOLLE kaarttekst,
+  want de TELREGEL draagt datzelfde woord. Dat is meetles (r) op een tweede bron in dezelfde tekst; de
+  asserties lezen nu de RIJ en de TELREGEL apart.
+  ZEVEN BESTAANDE TESTS VIELEN EROP en ze hadden alle zeven gelijk: vier pinden het oude label op de twee
+  editor-routes, twee de vorm van de teller en een de hoogte van het logboek.
 - **DE BUFFERNORM GELDT VANAF VOLGENDE MAAND, HET DOEL BEWEEGT NU** (`v315`): `bufferNorm()` is de norm
   van de LOPENDE maand en `bufferNormNext()` die van de volgende, in de vorm van `plannedBudgets()`
   (eigen veld, terugval op de huidige). Daarmee gaat elke bestaande lezer vanzelf mee: de bufferregel,
@@ -176,7 +213,8 @@ genoemde versietag.)*
   DE REGEL KOST 17px en staat als eigen assertie vast, GEMETEN op 390px met een record dat er een draagt naast
   een correctie die er geen draagt. OP 360px IS DAT PAAR GEEN METING, en dat staat erbij: de vergelijkingsrij
   breekt daar over twee regels (51 tegen 32px), dus het verschil zou de AFBREKING meten. De vanaf-kaart is
-  250/232px en het logboek 373/317px. GRIP HEEFT GEEN 200px-EIS (die van `v241` is Inzichten).
+  250/232px en het logboek 373/336px (317px voordat de vierde teller van de reparatie erbij kwam; zie de
+  regel daarover bovenaan). GRIP HEEFT GEEN 200px-EIS (die van `v241` is Inzichten).
 - **DE SAMENVATTING OP GRIP TELT DE POTJES MEE, EN STAAT VOOR DE SIGNAALKAARTEN** (`v314`): hij stond
   erachter, dus je las eerst "EUR 214 boven je potje" en daarna "er is niets dat vastloopt".
   `maandOordeel(R, nPot)` krijgt het aantal uit `valtOpSignals()` van de AANROEPER: `renderMaand()`
@@ -203,11 +241,11 @@ genoemde versietag.)*
   weg zonder dat er iets verandert.
   WAT ERVOOR IN DE PLAATS KOMT IS DE MAAND ERNA, via een BESTAANDE route: `openPotje()` schrijft
   `SET.budgetsNext` via `savePotje()`. Er komt dus geen tweede potje-editor bij (`v61`).
-  GEMELD EN NIET GEREPAREERD: die route roept `valtOpPotjeGewijzigd()` aan, dus het record van DEZE
-  maand krijgt `potje_bijgesteld` met `potje_voor` uit `SET.budgets` en `potje_na` uit de volgende
-  maand. De log leest dan "EUR 400 -> EUR 450" terwijl het potje van deze maand op 400 bleef staan.
-  Dat is de v237-val in spiegelbeeld, het is bestaand gedrag van die route (hij is ook via Inzichten
-  en de budgeteditor te bereiken), en het hoort bij de logboek-ronde en niet hier.
+  GEMELD BIJ `v314` EN GEREPAREERD BIJ `v315`: die route roept `valtOpPotjeGewijzigd()` aan, en die
+  zette op het record van DEZE maand `potje_bijgesteld` met `potje_na` uit de volgende maand, dus de
+  log las "EUR 400 -> EUR 450" terwijl het potje van deze maand op 400 bleef staan. Het was de
+  v237-val in spiegelbeeld en bestaand gedrag van die route, ook via Inzichten en de budgeteditor.
+  De handeling heet sinds `v315` `volgende_maand`; zie de regel daarover bovenaan.
   HET DAGWOORD IN DE KNOP LEEST DEZELFDE `valtOpDagenRest()` als de regel erboven, zodat "de laatste
   3 dagen" in de knop en in de kop niet uiteen kunnen lopen. De constante heet geen D-woord, en dat is
   geen smaak: `valt-op-signalen.spec.js` eist dat deze functie de detectie niet herhaalt en toetst dat

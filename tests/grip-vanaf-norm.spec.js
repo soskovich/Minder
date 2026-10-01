@@ -654,8 +654,13 @@ test('e4 de gevolgen lenen de projectie en rekenen hem niet na', async ({page})=
    vergelijkingsrij draagt rechts 'vervallen na correctie' en dat breekt daar over twee regels
    (51px tegen 32px op 390px). Het verschil zou dan de AFBREKING meten en niet de nieuwe regel.
    Beide hoogtes staan er wel, want de kaart wordt op beide breedtes gemeten. */
-const PX={360:{vanaf:250, log:373, metUit:49, zonderUit:51, delta:null},
-          390:{vanaf:232, log:317, metUit:49, zonderUit:32, delta:17}};
+/* v315, de reparatie uit ronde A: DE VIERDE TELLER KOST 19px OP 390px EN NUL OP 360px, en dat is
+   GEMETEN op precies deze stand en niet geschat. De telregel is op beide breedtes 75px (vijf regels
+   van 15); zonder 'volgende maand anders' erin is hij 75px op 360 en 56px op 390. Op 360 liep hij
+   dus al over vijf regels en paste de vierde teller binnen die vijf; op 390 kwam er een regel bij.
+   De kaart gaat daarmee van 373 naar 373px en van 317 naar 336px. */
+const PX={360:{vanaf:250, log:373, tel:75, metUit:49, zonderUit:51, delta:null},
+          390:{vanaf:232, log:336, tel:75, metUit:49, zonderUit:32, delta:17}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de prijs in pixels van de vanaf-kaart en de uitkomst-regel`, async ({page})=>{
     await page.setViewportSize({width:w, height:h});
@@ -673,7 +678,8 @@ for (const [w,h] of [[360,640],[390,844]]) {
       const rijen=[...lg.children].filter(c=>c.tagName==='DIV'&&c.querySelector(':scope > .row'));
       const uit=rijen.filter(c=>/eindigde|daarna|uitkomst na/.test(c.innerText));
       const zonder=rijen.filter(c=>!/eindigde|daarna|uitkomst na/.test(c.innerText));
-      return {vanaf:hh(va), log:hh(lg), metUit:uit.map(hh), zonderUit:zonder.map(hh),
+      return {vanaf:hh(va), log:hh(lg), tel:hh(lg.lastElementChild),
+        metUit:uit.map(hh), zonderUit:zonder.map(hh),
         nUit:uit.length, nZonder:zonder.length};
     });
     const p=PX[w];
@@ -681,6 +687,7 @@ for (const [w,h] of [[360,640],[390,844]]) {
     expect(r.nZonder).toBe(1);                 // en één zonder: de correctie
     expect(r.vanaf).toBe(p.vanaf);
     expect(r.log).toBe(p.log);
+    expect(r.tel, 'de telregel, waar de vierde handeling van v315 in landt').toBe(p.tel);
     expect(Math.min(...r.metUit)).toBe(p.metUit);
     expect(r.zonderUit[0]).toBe(p.zonderUit);
     if(p.delta!=null) expect(p.metUit-p.zonderUit).toBe(p.delta);   // wat de regel kost

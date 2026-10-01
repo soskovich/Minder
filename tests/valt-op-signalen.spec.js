@@ -393,13 +393,20 @@ test.describe('de drie handelingen', () => {
 });
 
 test.describe('de vastlegging', () => {
-  test('een potjeverhoging via de budgeteditor telt ook mee', async ({ page }) => {
+  /* v315: DEZE ROUTE SCHRIJFT `budgetsNext`, dus de handeling heet `volgende_maand` en niet
+     `potje_bijgesteld`. Tot v314 kreeg hij dat tweede label en las de log "€200 → €350" terwijl het
+     potje van DEZE maand op 200 bleef staan; die stand wordt hier nu MEEGEMETEN, want zonder haar
+     is 'de handeling heeft een eigen naam' niet van 'hij is hernoemd' te onderscheiden. */
+  test('een potjewijziging via de budgeteditor telt mee, als volgende_maand', async ({ page }) => {
     await boot(page, DRIE);
     await page.evaluate(() => setCatBudget('boodschappen', '350'));
     const r = (await logVan(page))[`${CUR}|boodschappen`];
-    expect(r.actie).toBe('potje_bijgesteld');
-    expect(r.potje_voor).toBe(200);
-    expect(r.potje_na).toBe(350);
+    expect(r.actie).toBe('volgende_maand');
+    expect(r.volgend_voor).toBe(200);
+    expect(r.volgend_na).toBe(350);
+    expect(r.potje_na == null).toBe(true);                 // de lat van deze maand is niet verzet
+    expect(await page.evaluate(() => SET.budgets.boodschappen)).toBe(200);
+    expect(await page.evaluate(() => SET.budgetsNext.boodschappen)).toBe(350);
     expect(await sigKeys(page)).not.toContain('boodschappen');
   });
 
@@ -410,8 +417,8 @@ test.describe('de vastlegging', () => {
     await boot(page, DRIE);
     await page.evaluate(() => { setCatBudget('boodschappen', '3'); setCatBudget('boodschappen', '35'); setCatBudget('boodschappen', '350'); });
     const r = (await logVan(page))[`${CUR}|boodschappen`];
-    expect(r.potje_voor).toBe(200);
-    expect(r.potje_na).toBe(350);
+    expect(r.volgend_voor).toBe(200);
+    expect(r.volgend_na).toBe(350);
   });
 
   test('terugtypen naar de oude stand telt niet als actie', async ({ page }) => {
@@ -419,6 +426,7 @@ test.describe('de vastlegging', () => {
     await page.evaluate(() => { setCatBudget('boodschappen', '350'); setCatBudget('boodschappen', '200'); });
     const r = (await logVan(page))[`${CUR}|boodschappen`];
     expect(r.actie).toBe(null);
+    expect(r.volgend_na == null).toBe(true);
     expect(r.potje_na).toBe(null);
     expect(await sigKeys(page)).toContain('boodschappen');   // het signaal staat er dus weer
   });
@@ -433,13 +441,14 @@ test.describe('de vastlegging', () => {
     expect((await logVan(page))[`${CUR}|boodschappen`].actie).toBe('grens_gezet');
   });
 
-  test('een potjeverhoging via openPotje telt ook mee', async ({ page }) => {
+  test('een potjewijziging via openPotje telt ook mee, als volgende_maand', async ({ page }) => {
     await boot(page, DRIE);
     await page.evaluate(() => { openPotje('boodschappen'); potDraftSet('vast', 420); savePotje('boodschappen'); });
     const r = (await logVan(page))[`${CUR}|boodschappen`];
-    expect(r.actie).toBe('potje_bijgesteld');
-    expect(r.potje_voor).toBe(200);
-    expect(r.potje_na).toBe(420);
+    expect(r.actie).toBe('volgende_maand');
+    expect(r.volgend_voor).toBe(200);
+    expect(r.volgend_na).toBe(420);
+    expect(await page.evaluate(() => SET.budgets.boodschappen)).toBe(200);
   });
 
   test('de telling op Grip loopt mee', async ({ page }) => {
@@ -713,7 +722,13 @@ test.describe('de lek-regel op Inzichten', () => {
 /* v237: de log ging liegen. De knop op Grip verzet de LOPENDE maand, setCatBudget() de volgende.
    Zonder guard overschreef een latere editor-wijziging potje_na, en dan las de log "€200 → €200"
    terwijl het potje van deze maand op €450 stond: precies bij de handeling die de vastlegging
-   moest vangen. */
+   moest vangen.
+   v315: DEZE TESTS STAAN NU OM EEN ANDERE REDEN GROEN, en dat staat erbij zodat een volgende ronde
+   niet denkt dat de v237-guard er nog is. Die guard RAADDE welke laag had geschreven door potje_na
+   naast het potje van deze maand te leggen; de laag komt nu van de aanroeper, en wat een
+   Grip-bijstelling beschermt is de actie-guard (`r.actie && r.actie!==act`), die voor ELKE andere
+   actie geldt. De eigenschap die deze twee tests vasthouden is onveranderd en strenger te lezen:
+   een editor-wijziging raakt het bedrag van de Grip-route niet. */
 test.describe('terugtypen na de knop op Grip', () => {
   test('de log houdt het bedrag van de Grip-route vast', async ({ page }) => {
     await boot(page, DRIE);
@@ -739,8 +754,8 @@ test.describe('terugtypen na de knop op Grip', () => {
     await boot(page, DRIE);
     await page.evaluate(() => { valtOpSignals(thisYM()); setCatBudget('boodschappen', '3'); setCatBudget('boodschappen', '35'); setCatBudget('boodschappen', '350'); });
     let r = (await logVan(page))[`${CUR}|boodschappen`];
-    expect(r.potje_voor).toBe(200);
-    expect(r.potje_na).toBe(350);
+    expect(r.volgend_voor).toBe(200);
+    expect(r.volgend_na).toBe(350);
     await page.evaluate(() => setCatBudget('boodschappen', '200'));
     r = (await logVan(page))[`${CUR}|boodschappen`];
     expect(r.actie).toBe(null);                      // terug op de oude stand telt niet als actie

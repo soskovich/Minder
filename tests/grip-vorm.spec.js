@@ -296,7 +296,8 @@ test('d: zo gelaten staat onvoorwaardelijk in de telling, de correctie niet', as
 test('d: de telling kent zo_gelaten als eigen sleutel', async ({ page }) => {
   await boot(page);
   const r = await page.evaluate(() => Object.keys(valtOpTelling().n));
-  expect(r).toEqual(['potje_bijgesteld', 'grens_gezet', 'zo_gelaten', 'correctie', 'geen']);
+  // v315: 'volgende_maand' staat ernaast en niet erin: de lat van deze maand verzetten is iets anders
+  expect(r).toEqual(['potje_bijgesteld', 'volgende_maand', 'grens_gezet', 'zo_gelaten', 'correctie', 'geen']);
 });
 
 /* ===== e) Staat goed, met de linker-sub ===== */

@@ -104,7 +104,11 @@ test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron',
        restant pint geen maand en geen weekdag, dus daar kan pinDag() niets. */
     'contant-stand', 'betaaldatum-veld', 'dubbele-boekingen-bevestigen', 'inleg-voor-bestemming',
     'oud-saldo-melden', 'reservering-bevestigen', 'scope-een-bron', 'valt-op-signalen',
-    'vaste-lasten'];
+    'vaste-lasten',
+    /* v315: de knop 'Volgende maand anders' staat alleen in de laatste VALTOP_LAATSTE_DAGEN dagen,
+       dus de test die hem langs zijn echte pad tikt pint een dag waarop hij er is. De rest van die
+       spec hangt aan de lopende maand en pint het restant. */
+    'volgende-maand-actie'];
   /* v310: DE BRON WORDT KAAL GELEZEN. Deze drie tests zochten in de RUWE bron, dus een
      `require('./vaste-dag')` of een `pinDag(page)` in een COMMENT hield ze groen. Dat is de vorm die
      v309b heeft opgeruimd, en deze spec was er nog een van (meetles: een bronzoekende assertie die

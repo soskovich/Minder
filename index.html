@@ -1621,7 +1621,7 @@ function setCatBudget(k,val){ // bestaand potje wijzigen = vanaf volgende maand;
   /* v235: staat er voor deze categorie deze maand een open valt-op-signaal, dan is dit dezelfde
      handeling als de knop op Grip en hoort hij in hetzelfde record. Zonder deze haak zou juist de
      makkelijkste route om een signaal te laten verdwijnen de enige zijn die niet geteld wordt. */
-  try{ valtOpPotjeGewijzigd(k, voor, v); }catch(_){}
+  try{ valtOpPotjeGewijzigd(k, voor, v, exists); }catch(_){}   // v315: de laag die hij schreef, want `exists` beslist of het budgetsNext was
   const g=document.getElementById('potGridTotal'); if(g) g.innerHTML=potRoomLineHTML(totalBudget(), plannedTotalBudget()); renderIns(); } // settings niet herrenderen (focus)
 // budgetvoorstel met VASTE LASTEN als vertrekpunt:
 // - vaste lasten op historisch niveau (committed, niet schalen)
@@ -6105,6 +6105,10 @@ function valtOpPotjeOpslaan(id){
    - grens gezet: het aantal boekingen dat er na de grens nog bij kwam. Een grens raakt geen potje,
      dus een bedrag boven een potje zegt niets over wat de grens deed.
    - zo gelaten en niets gedaan: tegen het potje, want er is niets verzet.
+   - volgende maand anders (v315): ook tegen het potje, want deze handeling laat de lat van DEZE
+     maand staan. Dat is de laatste tak en geen eigen tak: een tak die hetzelfde teruggeeft is dood
+     gewicht dat een volgende ronde verkeerd leest. Wat de wijziging volgende maand oplevert is geen
+     uitkomst van deze maand, en dat meten vraagt twee bewaarde maanden (v309).
    - vervallen na correctie: niets, want de handeling zegt het al (v289).
    ALLES UIT HET RECORD EN NIETS HERREKEND: wat er bij de afsluiting is gemeten staat vast, ook als
    de cijfers sindsdien zijn verschoven door een hercategorisering (v235).
@@ -6145,7 +6149,7 @@ function valtOpLogBlok(){
   /* 'niet getoond' is een eigen stand, geen variant van 'nog open': dat record hoort bij een
      overschrijding die buiten de twee plekken viel. Juist die wil je terugzien - anders weet je niet
      wat je niet gezien hebt. */
-  const woord={potje_bijgesteld:'potje bijgesteld', grens_gezet:'grens gezet', zo_gelaten:'zo gelaten', correctie:'vervallen na correctie', geen:'niets gedaan'};
+  const woord={potje_bijgesteld:'potje bijgesteld', volgende_maand:'volgende maand anders', grens_gezet:'grens gezet', zo_gelaten:'zo gelaten', correctie:'vervallen na correctie', geen:'niets gedaan'};
   /* v238: de dekking hoort in dezelfde regel, anders leest de log "50 naar 96" en zwijgt hij over
      waar die 46 vandaan kwam. Een lege lijst hoort bij een record van voor v238 en zegt niets. */
   const dekTekst=r=>{ const D=(r&&r.dekking)||[]; if(!D.length) return '';
@@ -6155,11 +6159,20 @@ function valtOpLogBlok(){
      categorie weg. Over de volle breedte eronder leest hij als wat hij is: wat die handeling
      opleverde. Geen uitkomst (een correctie, of een record van voor de afsluiting) geeft geen
      regel, in plaats van een lege. */
+  /* v315: HET BEDRAGPAAR NOEMT ZIJN EIGEN LAAG. Bij een bijstelling verschoof de lat van DEZE
+     maand, dus staat er alleen een pijl; bij 'volgende maand anders' bleef die lat staan en zegt
+     `nu` welk getal van de twee deze maand geldt. Zonder dat woord leest hetzelfde paar als een
+     potje dat vandaag veranderde, en dat is precies het etiket dat deze ronde weghaalt. */
+  const bedragen=r=>{
+    if(r.actie==='potje_bijgesteld' && r.potje_voor!=null) return ` · ${euro0(r.potje_voor)} → ${euro0(r.potje_na||0)}`;
+    if(r.actie==='volgende_maand' && r.volgend_voor!=null) return ` · nu ${euro0(r.volgend_voor)} → ${euro0(r.volgend_na||0)}`;
+    return '';
+  };
   const regel=r=>{ const u=valtOpUitkomst(r);
     return `<div style="padding:6px 0;border-top:1px solid var(--line)">
       <div class="row" style="gap:8px">
         <span style="flex:1;min-width:0;font-size:13px">${esc(r.categorie||r.potjeId||'')} <span class="muted">· ${esc(monthLabel(r.maand))}</span></span>
-        <span class="small muted" style="white-space:nowrap">${esc(r.actie?woord[r.actie]||r.actie:(r.getoond?'nog open':'niet getoond'))}${r.actie==='potje_bijgesteld'&&r.potje_voor!=null?` · ${euro0(r.potje_voor)} → ${euro0(r.potje_na||0)}`:''}${dekTekst(r)}</span>
+        <span class="small muted" style="white-space:nowrap">${esc(r.actie?woord[r.actie]||r.actie:(r.getoond?'nog open':'niet getoond'))}${bedragen(r)}${dekTekst(r)}</span>
       </div>
       ${u?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:2px">${esc(u)}</div>`:''}
     </div>`; };
@@ -6172,7 +6185,11 @@ function valtOpLogBlok(){
      (v59/v73/v173) en geen lege regel; een correctie is een uitkomst die je niet kiest, en die
      groeit de regel alleen als hij is voorgekomen. 'niets gedaan' blijft apart staan en wordt niet
      met 'zo gelaten' samengevoegd: dat is precies het verschil tussen een keuze en een stilte. */
-  const tel=[`${T.n.potje_bijgesteld}× potje bijgesteld`, `${T.n.grens_gezet}× grens gezet`, `${T.n.zo_gelaten}× zo gelaten`]
+  /* v315: 'volgende maand anders' staat er om dezelfde reden onvoorwaardelijk bij als de andere
+     drie: het is wat JIJ kunt doen, dus een nul daar is een meting (v59/v73/v173). En hij staat
+     NAAST 'potje bijgesteld' en niet erin: het verschil tussen de lat van deze maand verzetten en
+     die laten staan is de hele reden dat deze handeling een eigen naam kreeg. */
+  const tel=[`${T.n.potje_bijgesteld}× potje bijgesteld`, `${T.n.volgende_maand}× volgende maand anders`, `${T.n.grens_gezet}× grens gezet`, `${T.n.zo_gelaten}× zo gelaten`]
     .concat(T.n.correctie?[`${T.n.correctie}× vervallen na correctie`]:[])
     .concat([`${T.n.geen}× niets gedaan`]).join(' · ');
   const sinds=T.eerste?` sinds ${esc(monthLabel(T.eerste))}`:'';
@@ -11153,7 +11170,7 @@ function savePotje(k,del){
     if(exists){ // bestaand potje weghalen = grens loslaten → pas volgende maand
       SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[k]=0;
       SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[k]=null; save();
-      try{ valtOpPotjeGewijzigd(k, +(SET.budgets||{})[k]||0, 0); }catch(_){}   // v235
+      try{ valtOpPotjeGewijzigd(k, +(SET.budgets||{})[k]||0, 0, true); }catch(_){}   // v235, v315: deze tak schrijft budgetsNext
       msg=`${CATS[k].name}-potje stopt vanaf ${vanaf}`;
     } else { // alleen een geplande wijziging of nieuw concept → meteen weg
       if(SET.budgetsNext) delete SET.budgetsNext[k];
@@ -11169,7 +11186,7 @@ function savePotje(k,del){
     if(exists){ // wijziging aan bestaand potje → de meetlat blijft deze maand staan, geldt vanaf volgende maand
       SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[k]= total>0?total:0;
       SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[k]= meta; save();
-      try{ valtOpPotjeGewijzigd(k, +(SET.budgets||{})[k]||0, total>0?total:0); }catch(_){}   // v235
+      try{ valtOpPotjeGewijzigd(k, +(SET.budgets||{})[k]||0, total>0?total:0, true); }catch(_){}   // v235, v315: deze tak schrijft budgetsNext
       msg=`${CATS[k].name}-potje: ${euro0(total)}/mnd vanaf ${vanaf}`;
     } else { // nieuw potje → meteen actief (er is nog geen grens om te verschuiven)
       SET.budgets=SET.budgets||{}; if(total>0) SET.budgets[k]=total; else delete SET.budgets[k];
@@ -11688,40 +11705,62 @@ function valtOpActieZet(id, actie, extra){
   if(extra) for(const f in extra) r[f]=extra[f];
   save(); return r;
 }
-/* Een potjewijziging via openPotje() of de budgeteditor is dezelfde handeling als de knop op Grip,
-   dus hij hoort in hetzelfde record. Zonder dit zou juist de makkelijkste route om een signaal te
-   laten verdwijnen de enige zijn die niet geteld wordt.
-   potje_voor houdt zijn eerste waarde vast: setCatBudget() vuurt per toetsaanslag, en de stand van
-   vóór het typen is wat je wilt terugzien. */
-function valtOpPotjeGewijzigd(k, voor, na){
+/* ===== EEN WIJZIGING VANAF VOLGENDE MAAND IS EEN EIGEN HANDELING (v315) =====
+   Een potjewijziging via openPotje() of de budgeteditor is dezelfde handeling als de knop op Grip,
+   dus hij hoort in hetzelfde record. Zonder deze haak zou juist de makkelijkste route om een
+   signaal te laten verdwijnen de enige zijn die niet geteld wordt.
+   MAAR HET IS NIET DEZELFDE HANDELING, en dat was de v314-val in spiegelbeeld: deze twee routes
+   schrijven `SET.budgetsNext` en laten het potje van DEZE maand staan, terwijl het record
+   `potje_bijgesteld` kreeg met `potje_na` uit de volgende maand. De log las dan "€400 → €450"
+   terwijl het potje van deze maand op €400 bleef, en dat is precies het verkeerde etiket dat dit
+   project verbiedt. De handeling heet nu `volgende_maand` en draagt zijn eigen velden.
+   DE LAAG KOMT VAN DE AANROEPER EN WORDT HIER NIET AFGELEID. `setCatBudget()` en `savePotje()`
+   hebben `exists` al in de hand en dat veld BESLIST naar welke laag ze schrijven; die toets hier
+   nog eens uitdrukken zou een tweede waarheid zijn over dezelfde keuze (v104). Dat is de vorm van
+   v285: de beslissing staat binnen, de SCOPE komt van buiten.
+   DE V237-GUARD IS HIERMEE VERVALLEN, en dat is geen verzwakking maar het tegendeel. Die guard
+   toetste of `potje_na` al gelijk was aan het potje van deze maand, en dat was een BENADERING van
+   de vraag die nu rechtstreeks wordt gesteld: welke laag schreef deze wijziging. Een route die de
+   volgende maand verzet raakt `potje_na` niet meer, dus de stand die hij moest beschermen kan niet
+   meer ontstaan; wat hij daarnaast deed (een Grip-bijstelling niet laten overschrijven) doet de
+   actie-guard hieronder, en strenger, want die geldt voor elke andere actie.
+   `volgend_voor` IS HET POTJE VAN DEZE MAAND en niet de stand die er voor volgende maand al klaar
+   stond: dat is het getal waartegen het signaal is gemeten en het getal dat je in de editor zag.
+   Die twee kunnen echt uiteenlopen, want de Grip-route zet zelf een terugzetting in `budgetsNext`.
+   DE UITKOMST LEEST TEGEN HET POTJE, en dat volgt uit dezelfde keuze: deze handeling verzet de lat
+   van deze maand niet, dus `valtOpUitkomst()` valt er door naar zijn laatste tak, net als bij 'zo
+   gelaten'. Wat de wijziging volgende maand oplevert is geen uitkomst van DEZE maand, en meten of
+   het potje van de maand erna genoeg was vraagt twee bewaarde maanden (v309).
+   potje_voor/volgend_voor houdt zijn eerste waarde vast: setCatBudget() vuurt per toetsaanslag, en
+   de stand van vóór het typen is wat je wilt terugzien. */
+function valtOpPotjeGewijzigd(k, voor, na, vanafNext){
   try{
     const r=(SET.valtOpLog||{})[valtOpId(thisYM(), k)];
     if(!r) return;
+    /* De this-month-tak is vanuit de twee huidige aanroepers NIET bereikbaar, en dat is gemeten en
+       niet aangenomen: een record bestaat alleen als er een signaal vuurde, en dat vraagt een potje
+       boven nul, dus `exists` is daar per constructie waar. Hij blijft staan omdat de laag van
+       buiten komt en een derde aanroeper hem morgen wel kan hebben; de spec loopt het pad met een
+       rechtstreekse aanroep (v284). */
+    const act = vanafNext ? 'volgende_maand' : 'potje_bijgesteld';
     /* setCatBudget() vuurt per TOETSAANSLAG. Bij het typen van 350 komt eerst 3 langs, dan 35: een
-       guard die bij de eerste actie stopt bevriest potje_na op 3. Een eerdere bijstelling mag dus
-       worden bijgewerkt; een grens is een andere keuze en blijft staan. */
-    if(r.actie && r.actie!=='potje_bijgesteld') return;
-    /* v237: de knop op Grip verzet de LOPENDE maand, setCatBudget() en savePotje() de volgende.
-       Staat potje_na al gelijk aan het potje dat nu voor deze maand geldt, dan is die waarde langs
-       de Grip-route gezet en mag een volgende-maand-wijziging hem niet overschrijven. Zonder deze
-       regel las de log "200 -> 200" terwijl het potje van deze maand op 450 stond, en dan zegt de
-       vastlegging dat er niets gebeurde bij precies de handeling die ze moest vangen.
-       Het bijwerken per toetsaanslag raakt dit niet: daar blijft SET.budgets[k] ongemoeid, dus
-       potje_na kan er nooit gelijk aan staan (wordt het dat wel, dan is het de tak hieronder die
-       de actie juist terugdraait). */
-    if(r.potje_na!=null && r.potje_na===Math.round(+(SET.budgets||{})[k]||0)) return;
+       guard die bij de eerste actie stopt bevriest het bedrag op 3. Een eerdere wijziging van
+       DEZELFDE soort mag dus worden bijgewerkt; elke andere actie is een andere keuze en blijft
+       staan - ook een Grip-bijstelling, die de lat van deze maand wel verzette. */
+    if(r.actie && r.actie!==act) return;
+    const vV = vanafNext ? 'volgend_voor' : 'potje_voor', vN = vanafNext ? 'volgend_na' : 'potje_na';
     const v=Math.round(+voor||0), n=Math.round(+na||0);
     if(v===n){
-      /* Terug op de oude stand: dan heb je niets bijgesteld. Alleen een bijstelling die uit dit
-         tikken zelf kwam wordt teruggedraaid, zodat de telling niet meetelt wat je ongedaan maakte. */
-      if(r.actie==='potje_bijgesteld' && r.potje_voor===v){
-        r.actie=null; r.actie_op=null; r.potje_voor=null; r.potje_na=null; save();
+      /* Terug op de oude stand: dan heb je niets verzet. Alleen een wijziging die uit dit tikken
+         zelf kwam wordt teruggedraaid, zodat de telling niet meetelt wat je ongedaan maakte. */
+      if(r.actie===act && r[vV]===v){
+        r.actie=null; r.actie_op=null; r[vV]=null; r[vN]=null; save();
       }
       return;
     }
-    r.actie='potje_bijgesteld'; r.actie_op=vandaagYMD();
-    if(r.potje_voor==null) r.potje_voor=v;
-    r.potje_na=n;
+    r.actie=act; r.actie_op=vandaagYMD();
+    if(r[vV]==null) r[vV]=v;
+    r[vN]=n;
     save();
   }catch(_){}
 }
@@ -11776,7 +11815,7 @@ function valtOpCorrectieBedrag(maand, potjeId){
 }
 function valtOpTelling(){
   const L=SET.valtOpLog||{};
-  const n={potje_bijgesteld:0, grens_gezet:0, zo_gelaten:0, correctie:0, geen:0}; const perCat={}; let totaal=0, eerste='';   // v289: een correctie is een eigen uitkomst en geen variant van 'niets gedaan'. v314: 'zo gelaten' is een KEUZE en 'geen' een stilte, dus twee tellers.
+  const n={potje_bijgesteld:0, volgende_maand:0, grens_gezet:0, zo_gelaten:0, correctie:0, geen:0}; const perCat={}; let totaal=0, eerste='';   // v289: een correctie is een eigen uitkomst en geen variant van 'niets gedaan'. v314: 'zo gelaten' is een KEUZE en 'geen' een stilte, dus twee tellers. v315: 'volgende maand anders' verzet de lat van deze maand NIET en is dus een eigen handeling.
   for(const id in L){ const r=L[id]; if(!r) continue; totaal++;
     if(r.actie && n[r.actie]!=null) n[r.actie]++;
     perCat[r.potjeId]=(perCat[r.potjeId]||0)+1;

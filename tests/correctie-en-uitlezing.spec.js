@@ -193,7 +193,8 @@ test.describe('v289 correctie en uitlezing', () => {
     /* en de telling telt hem NIET ook nog eens bij 'niets gedaan' */
     expect(await page.evaluate(() => valtOpTelling().n)).toEqual(
       // v314: 'zo gelaten' is een eigen uitkomst naast 'niets gedaan' - een keuze tegenover een stilte
-      { potje_bijgesteld: 1, grens_gezet: 0, zo_gelaten: 0, correctie: 1, geen: 3 });
+      // v315: 'volgende maand anders' is de vierde handeling en staat onvoorwaardelijk in de teller
+      { potje_bijgesteld: 1, volgende_maand: 0, grens_gezet: 0, zo_gelaten: 0, correctie: 1, geen: 3 });
   });
 
   /* ZONDER CORRECTIE STAAT DE TERM ER NIET, want een telregel die altijd een nul meedraagt groeit voor
