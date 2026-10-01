@@ -592,7 +592,7 @@ test.describe('8 - sectie 4: betaald voor het weekend om, geboekt daarna', () =>
     const voor = deel(await blok(page), 4);
     expect(voor).toMatch(/BETAALD IN HET WEEKEND: 5\s+samen €235/);
     await page.evaluate(() => { const t = TX.find((x) => x.name === 'UITGESLOTEN');
-      SET.dubbelPaar = { proef: { weg: String(t.id), op: '2026-01-01' } }; });
+      SET.dubbelPaar = { proef: { weg: String(t.id), op: '2026-01-01' } }; save(); });   /* v310: save() hoort hier, want de poort-memo hangt aan `_dataGen` en elke route in de app bumpt die. Zonder deze regel leest de meting de stand van voor de mutatie. */
     const na = deel(await blok(page), 4);
     expect(na).toMatch(/BETAALD IN HET WEEKEND: 4\s+samen €135/);
     expect(na).toMatch(new RegExp(ymd(ZA1) + '\\s+2 boekingen\\s+€60'));

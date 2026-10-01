@@ -222,7 +222,7 @@ test.describe('1 · de poort', () => {
       csvPaar();                                  // de cache staat nu, en blijft staan
       TX.push({ id: 'laat1', date: m + '-10', amount: -70, acc: 'N26 Main', src: 'psd2',
         name: 'Laat', desc: 'Laat Purmerend PMNT', typ: '', ref: '', accName: '', refNums: [] });
-      TX.forEach(categorize);
+      TX.forEach(categorize); save();   /* v310: save() hoort hier, want de poort-memo hangt aan `_dataGen` en elke route in de app bumpt die. Zonder deze regel leest de meting de stand van voor de mutatie. De paar-cache blijft wel staan: die gooit alleen buildAccMeta() weg, en dat is precies het pad dat deze test loopt. */
       const t = TX[TX.length - 1];
       return { dub: csvDubbel(t), inMaand: txOfMonth(m).some((x) => x.id === t.id) };
     }, M3);

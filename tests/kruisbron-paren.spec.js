@@ -81,6 +81,7 @@ async function boot(page) {
     const vind = (n) => (TX.find((t) => t.date.endsWith(n) && t.src === 'psd2') || {}).id;
     SET.dubbelPaar = { 'k-dubbel': { weg: vind('-07'), op: '2026-06-20' } };
     SET.vorautPaar = { 'k-voraut': { weg: [vind('-10')], op: '2026-06-20' } };
+    save();   /* v310: save() hoort hier, want de poort-memo hangt aan `_dataGen` en elke route in de app bumpt die. Zonder deze regel leest de meting de stand van voor de mutatie. */
     window.REGELS_ = () => diagDubbel().join(String.fromCharCode(10));
   });
 }

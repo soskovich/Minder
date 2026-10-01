@@ -123,6 +123,7 @@ test.describe('b - netto per blok', () => {
       TX.push({ id: 'terug', date: d, amount: 40, acc: '100110012555096222', name: 'Albert Heijn',
                 desc: 'Albert Heijn', typ: '', ref: '', src: 'psd2', accName: '', refNums: [],
                 ruleCat: 'boodschappen', autoCat: 'boodschappen' });
+      save();   /* v310: save() hoort hier, want de poort-memo hangt aan `_dataGen` en elke route in de app bumpt die. Zonder deze regel leest de meting de stand van voor de mutatie. */
     }, m + '-05');
     const na = await page.evaluate((k) => weekBedragen()[k], m + '#1');
     expect(Math.round(voor - na)).toBe(40);

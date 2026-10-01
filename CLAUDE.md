@@ -97,6 +97,58 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE POORT WORDT EEN KEER PER STAND VAN DE GEGEVENS UITGEREKEND** (`v310`): `telbareTx()` filterde bij
+  ELKE aanroep de hele `TX` door de vier poorten, en `dubbelWeg()` en `vorautWeg()` lopen PER BOEKING over
+  hun hele lijst paren, dus de lus is TX maal het aantal paren.
+  DE AANLEIDING IS GEMELD EN DAARNA GEMETEN: de gebruiker meldde dat het wisselen van pagina en de
+  budget-editor traag zijn. GEMETEN op een fixture van de omvang van het toestel (TX 1597, 21 maanden, 12
+  dubbel-paren, 10 voraut-paren) kostte een enkele `telbareTx()` 0,55 ms, en `renderMaand()` riep hem 1059
+  keer aan en `openBudgetEditor()` 378 keer, vrijwel allemaal via `txOfMonth()`. Dat is 582 van de 608 ms
+  en 208 van de 258 ms, dus 96 en 81 procent: precies de twee die gemeld werden.
+  DE WINST IS GEMETEN, VOOR EN NA, op dezelfde fixture: Grip 608 -> 98 ms, budget-editor 258 -> 22, Home
+  109 -> 14, Inzichten 124 -> 15, Plan 28 -> 5, Vermogen 61 -> 9. Zes tot twaalf keer.
+  HIJ MEMOISEERT OP `_dataGen`, EN DAT IS `v104` EN GEEN NIEUW MECHANISME: die teller bestaat al, `save()`
+  en `load()` bumpen hem, en vier caches lazen hem (`recurringKeys`, `recurringCats`, `noodfondsModel`,
+  `merchStats`). Een eigen signaal ernaast zou een tweede waarheid zijn over wanneer de gegevens zijn
+  veranderd, en het zou te vergeten zijn: elke schrijver roept `save()` al aan.
+  ER ZIJN TWEE INVALIDATIES EN ELK DEKT EEN ROUTE DIE DE ANDER NIET DEKT, en dat is gemeten en niet
+  beredeneerd. `telbaarVergeten()` staat op de regel waar `CSVPAAR` en `MT940PAAR` al worden weggegooid,
+  want op VIJF plekken staat `save()` VOOR `buildAccMeta()` (de twee bevestigingsroutes, twee
+  hercategoriseer-routes en de boot) en dan bumpt de teller terwijl de paar-vensters nog de oude zijn. De
+  `_dataGen`-toets dekt op zijn beurt `contantOpslaan()`, de ENIGE schrijver van `TX` die geen
+  `buildAccMeta()` aanroept. GEMETEN: de sabotage op de tweede zet de instellingen-test rood, en die op de
+  eerste zet zes tests in `contant-stand.spec.js` rood. Geen van de twee is dus een vangnet.
+  EEN OVERRIDE VERANDERT DE UITKOMST NIET, en dat is nagelezen en als assertie vastgelegd in plaats van
+  als tak gebouwd: de vier poorten lezen `t.src`, `t.acc`, `t.date` en `t.id`, en een override schrijft
+  `OVR[t.id]`. Hij invalideert de memo toch, want hij roept `save()` aan, dus de eis van de opdracht is
+  gehaald zonder dat er iets voor bestaat. Een tak daarvoor zou per constructie niet kunnen vuren
+  (meetles p), en wat de test vasthoudt is de EIGENSCHAP: dezelfde lijst voor en na.
+  DE AANROEPER KRIJGT EEN EIGEN ARRAY (`slice()`), en dat is de voorzichtige kant. Vandaag muteert geen
+  enkele aanroeper de uitkomst (nagegaan op sort, push, splice, reverse, shift, pop en unshift, en op elke
+  variabele die hem vasthoudt), maar het contract van vóór `v310` was dat je een eigen array kreeg, en een
+  aanroeper die hem ooit sorteert zou de cache stil bederven. GEMETEN kost die slice 12 ms van de 1059
+  aanroepen op Grip, tegen de 582 ms die de memo weghaalt.
+  DE MAAT VAN DE TEST IS HET AANTAL POORT-EVALUATIES EN NIET DE TIJD, want het AANTAL AANROEPEN van
+  `telbareTx()` verandert door de memo niet (1059 blijft 1059) en daarop meten zou de winst niet kunnen
+  zien. Wat de memo weghaalt is hoe vaak de vier poorten per boeking worden uitgevoerd, en dat is
+  deterministisch: ten hoogste vier passes over `TX` per render in plaats van een pass per aanroep. De
+  prestatiegrens in milliseconden staat er los naast en is ruim, want een testmachine is geen telefoon.
+  DE PRIJS IS EEN CONTRACT VOOR TESTS, EN DIE STAAT ERBIJ IN PLAATS VAN DAT HIJ EEN VERRASSING IS: een
+  test die rechtstreeks in `TX` of in een poort-instelling schrijft moet `save()` aanroepen, want de
+  memo volgt die teller. GEMETEN bij `v310`: ZES specs deden dat niet en vielen op de volle suite
+  (`csv-venster-uitsluiting`, `kruisbron-paren`, `oud-saldo-melden`, `pending-botsing`,
+  `reservering-bevestigen`, `weekreeks-scope`). Ze zijn de route van de app gaan lopen; de invalidatie
+  is NIET verzwakt. EEN VINGERAFDRUK OP `TX.length` ZOU VIJF VAN DIE ZES HEBBEN GEDEKT en is bewust
+  niet gekozen: dan is de memo SOMS juist en is het restgeval (een veld dat in plaats wordt gewijzigd)
+  onzichtbaar, en een halve invalidatie die er als een hele uitziet is het etiket dat dit project
+  verbiedt. Beide kanten van het contract staan als test vast, en `telbaarVergeten()` is de uitweg.
+  DAT CONTRACT BESTOND AL EN IS ALLEEN GAAN BIJTEN: de vier memo's die er al op `_dataGen` hingen
+  hebben exact dezelfde blootstelling, en deze zes specs lazen die vier niet.
+  DE VOLGENDE HEFBOOM IS GEMETEN EN NIET GEBOUWD: `txOfMonth()` doet na de memo nog steeds een filter over
+  de hele `TX` per aanroep, 1053 keer op Grip. MEETPROEF met diezelfde memo-vorm op `txOfMonth` erbij:
+  Grip 96 -> 59 ms, budget-editor 18 -> 7, Inzichten 15 -> 9. Daarna is `totals()` met 140 aanroepen op
+  Grip het volgende. Niet in deze ronde, want de opdracht ging over `telbareTx()` en de gemelde klacht is
+  met 608 -> 98 en 258 -> 22 weg.
 - **DE POORT IS EEN LIJST MET EEN NAAM PER POORT, ZODAT EEN METING ER PRECIES EEN KAN OVERSLAAN** (`v304`):
   `TELPOORTEN` draagt de vier eisen (`csvDubbel` v284, `mt940Dubbel` v304, `dubbelWeg` v288, `vorautWeg`
   v293), `telbareTx(behalve)` leest die lijst en `vorautBron()` is `telbareTx('voraut')` en dus letterlijk
@@ -4076,6 +4128,15 @@ binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de
 `v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
 locale-afhankelijk (gemeten onder `nl-NL`): de test legt gedrag vast dat het veld niet heeft.
 
+**Een test die `TX` of een poort-instelling rechtstreeks muteert, roept `save()` aan.** Sinds `v310`
+hangt `telbareTx()` aan `_dataGen`, net als `recurringKeys`, `recurringCats`, `noodfondsModel` en
+`merchStats`, en die teller bumpt in `save()` en `load()`. Elke route in de app roept `save()` aan, dus
+voor de app is dit geen beperking; een test die in `page.evaluate()` rechtstreeks in `TX`,
+`SET.dubbelPaar` of `SET.vorautPaar` schrijft leest zonder die aanroep de stand van VOOR zijn eigen
+mutatie. GEMETEN bij `v310`: zes specs deden dat, en ze zijn de route van de app gaan lopen in plaats
+van dat de invalidatie is verzwakt. Wie geen `save()` wil doen, roept `telbaarVergeten()` aan. Beide
+kanten staan als test in `telbare-cache.spec.js`, zodat dit geen verrassing is maar een contract.
+
 **Een bronzoekende test leest de bron via `tests/bron-kaal.js`.** `kaalBron(t)` in Node,
 `kaalUit(page, ...namen)` voor een app-functie uit de pagina, `KAAL_JS` om te injecteren in een
 sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `toContain` of
@@ -4083,7 +4144,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v309` → `minder-v310`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v310` → `minder-v311`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -4094,7 +4155,9 @@ bump van `v298` ging daarom van `minder-v296` naar `minder-v298`; `v299` raakte 
 bestand, dus de bump van `v300` ging van `minder-v298` naar `minder-v300`; `v301` raakt wel app-code
 en bumpt dus gewoon door naar `minder-v301`, en `v302` tot en met `v305` net zo. `v306` raakt alleen
 `tests/` en dit bestand, dus hij bumpte niet en `v307` ging daarom van `minder-v305` naar `minder-v307`;
-`v308` en `v309` raken app-code en bumpen dus gewoon door naar `minder-v308` en `minder-v309`.
+`v308` en `v309` raken app-code en bumpen dus gewoon door naar `minder-v308` en `minder-v309`. `v310`
+raakt app-code (de poort-memo) en bumpt door naar `minder-v310`; het kalender-deel van die ronde raakte
+alleen `tests/` en dit bestand en bumpte op zichzelf dus niet.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

@@ -984,7 +984,10 @@ function buildAccMeta(){
     const prev=ACCMETA[a]||{};
     ACCMETA[a]=Object.assign({},prev,{role,count:list.length,income:inc,label,bank:bankVanRek(a,list,pm)});
   }
-  CSVPAAR=null; MT940PAAR=null;   // v284/v304: TX is veranderd, dus de paring en haar vensters worden opnieuw afgeleid
+  CSVPAAR=null; MT940PAAR=null; telbaarVergeten();   // v284/v304: TX is veranderd, dus de paring en haar vensters worden opnieuw afgeleid
+  /* v310: de poort-cache hangt aan die twee vensters, en op vijf plekken staat save() VOOR deze
+     functie; zonder deze regel landt een telbareTx() daartussen onder het nieuwe _dataGen met de
+     oude vensters, en dan is hij pas bij de volgende mutatie weer waar. */
 }
 
 /* ===== v284: DE CSV-IMPORT EN DE PSD2-KOPPELING DRAGEN DEZELFDE BOEKING =====
@@ -1386,7 +1389,49 @@ const TELPOORTEN=[
   ['dubbel', t=>dubbelWeg(t)],       // v288: een bevestigde dubbele kant
   ['voraut', t=>vorautWeg(t)],       // v293: een bevestigde reservering en haar vrijgave
 ];
-function telbareTx(behalve){ return TX.filter(t=>TELPOORTEN.every(([nm,p])=>nm===behalve||!p(t))); }
+/* v310: DE POORT WORDT EEN KEER PER STAND VAN DE GEGEVENS UITGEREKEND.
+   DE AANLEIDING IS GEMETEN op een fixture van de omvang van het toestel (TX 1597, 21 maanden, 12
+   dubbel-paren, 10 voraut-paren): een enkele `telbareTx()` kost 0,55 ms, en Grip riep hem 1059 keer
+   aan en de budget-editor 378 keer, vrijwel allemaal via `txOfMonth()`. Dat is 582 van de 608 ms van
+   een `renderMaand()` en 208 van de 258 ms van de editor, dus 96 en 81 procent. De klacht was dat
+   het wisselen van pagina en de budget-editor traag zijn, en dat is precies waar deze twee staan.
+   DE KOSTEN ZITTEN IN DE POORTEN EN NIET IN DE FILTER: `dubbelWeg()` en `vorautWeg()` lopen PER
+   BOEKING over hun hele lijst paren, dus de lus is TX maal het aantal paren en niet TX.
+   HIJ MEMOISEERT OP `_dataGen` EN NIET OP EEN EIGEN SIGNAAL, en dat is v104: die teller bestaat al,
+   `save()` en `load()` bumpen hem, en vier caches lezen hem (`recurringKeys`, `recurringCats`,
+   `noodfondsModel`, `merchStats`). Een eigen invalidatie ernaast zou een tweede waarheid zijn over
+   wanneer de gegevens veranderd zijn, en hij zou te vergeten zijn: elke schrijver roept `save()`
+   al aan, dus elk van de vijf soorten wijzigingen komt er langs zonder dat iemand eraan denkt.
+   DIE TOETS IS DRAGEND EN GEEN VANGNET, en de route die hem nodig heeft is GEMETEN en met naam:
+   `contantOpslaan()` duwt een boeking in `TX` en doet alleen `save()`. Elke andere schrijver van TX
+   of van een poort-instelling komt langs `buildAccMeta()` (`commitTx()`, de twee bevestigingsroutes,
+   de samenvoeging, het verwijderen van boekingen, de import en de boot) en dus langs de tweede
+   invalidatie hieronder. Zonder de `_dataGen`-toets valt precies de contant-boeking buiten de
+   sommen: de sabotage erop zet zes tests in `contant-stand.spec.js` rood.
+   EEN TWEEDE INVALIDATIE IS ER TOCH, EN DIE IS GEMETEN EN GEEN VOORZORG: op vijf plekken staat
+   `save()` VOOR `buildAccMeta()` (de twee bevestigingsroutes, twee hercategoriseer-routes en de
+   boot). Daar bumpt de teller dus terwijl de paar-vensters nog de oude zijn, en een `telbareTx()`
+   daartussen zou onder het NIEUWE nummer met de OUDE vensters in de cache landen. Daarom staat
+   `telbaarVergeten()` op precies de regel waar `CSVPAAR` en `MT940PAAR` al worden weggegooid: een
+   derde plek zou een derde waarheid zijn.
+   EEN OVERRIDE VERANDERT DE UITKOMST NIET, en dat is nagelezen en als assertie vastgelegd: de vier
+   poorten lezen `t.src`, `t.acc`, `t.date` en `t.id`, en een override schrijft `OVR[t.id]`. Hij
+   invalideert de cache toch, want hij roept `save()` aan, dus de eis van de opdracht is gehaald
+   zonder dat er een tak voor bestaat. De sabotage erop is per constructie inert (meetles p) en wat
+   de test vasthoudt is de EIGENSCHAP: dezelfde lijst voor en na.
+   HIJ GEEFT EEN EIGEN ARRAY TERUG (`slice()`) EN NIET DE GECACHETE. Vandaag muteert geen enkele
+   aanroeper de uitkomst (nagegaan op sort, push, splice, reverse, shift, pop en unshift, en op elke
+   variabele die hem vasthoudt), maar het contract van voor v310 was dat je een eigen array kreeg,
+   en een aanroeper die hem ooit sorteert zou de cache stil bederven. GEMETEN kost die slice 12 ms
+   van de 1059 aanroepen op Grip, tegen de 582 ms die de memo weghaalt. */
+let _telbaar=null, _telbaarGen=-1;
+function telbaarVergeten(){ _telbaar=null; _telbaarGen=-1; }
+function telbareTx(behalve){
+  const k=behalve||'';
+  if(_telbaarGen!==_dataGen || !_telbaar){ _telbaar={}; _telbaarGen=_dataGen; }
+  if(!_telbaar[k]) _telbaar[k]=TX.filter(t=>TELPOORTEN.every(([nm,p])=>nm===behalve||!p(t)));
+  return _telbaar[k].slice();
+}
 /* DE POORT IN TWEE STUKKEN BLIJFT (v293): `vorautBron()` is de poort ZONDER zijn eigen uitkomst, want een
    bevestigd drietal moet in de LIJST blijven staan of de keuze is niet terug te draaien (v288). */
 function vorautBron(){ return telbareTx('voraut'); }

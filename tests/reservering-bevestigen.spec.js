@@ -271,7 +271,7 @@ test.describe('v293 de reservering aan de pomp', () => {
     const sheet = await page.evaluate(() => { openVoraut(); return $('#sheet').innerText; });
     expect(sheet).toContain('Terugdraaien');
     /* en zonder enig geval staat er niets */
-    const leeg = await page.evaluate(() => { TX.length = 0; return vorautRegel(); });
+    const leeg = await page.evaluate(() => { TX.length = 0; save(); return vorautRegel(); });   /* v310: save() hoort hier, want de poort-memo hangt aan `_dataGen` en elke route in de app bumpt die. Zonder deze regel leest de meting de stand van voor de mutatie. */
     expect(leeg).toBe('');
   });
 

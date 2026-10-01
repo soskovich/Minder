@@ -612,7 +612,7 @@ test.describe('7 · het diagnosescherm leest en verzint niets', () => {
          terwijl die regel de terugstorting-noot niet draagt. De spec pint daarom een genoemde dag;
          de assertie hieronder MEET die weekdag in plaats van hem aan te nemen. */
       zet(4, -50, 'z4'); zet(4, 400, 'z5');
-      TX.forEach(categorize);
+      TX.forEach(categorize); save();   /* v310: save() hoort hier, want de poort-memo hangt aan `_dataGen` en elke route in de app bumpt die. Zonder deze regel leest de meting de stand van voor de mutatie. */
       const L = diagDubbel();
       return { neg: L.filter((x) => /\s-\d+%/.test(x)), alle: L.filter((x) => /op t\.date:/.test(x)),
         weekdagen: [1, 2, 3, 4].map((n) => new Date(dag(n) + 'T12:00:00').getDay()) };
