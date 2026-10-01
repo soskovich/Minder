@@ -97,6 +97,19 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **OPEN PUNT MET EEN WERKAFSPRAAK: VIJFENDERTIG LATENTE `test.skip()`-AANROEPEN** (`v312`): ze staan in
+  14 bestanden en vuurden in de volle run van `v311` geen van alle, dus vandaag leest er geen enkele als
+  groen. Dat is een momentopname en geen eigenschap: een fixture die verandert kan er een laten vuren, en
+  dan is hij weer een overgeslagen test die als groen leest (`v299`/`v300`/`v311`).
+  ZE WORDEN NIET IN EEN RONDE OMGEZET, en dat is een keuze met een reden: elke skip vraagt dezelfde meting
+  als die van `v311` (waarom draagt de invoer het geval niet, en wat zou hem wel laten dragen), en dat is
+  per stuk werk op een fixture die je dan toch moet begrijpen. Vijfendertig daarvan in een ronde is een
+  ronde die niets meet en alles aanraakt.
+  DE WERKAFSPRAAK: raakt een ronde zo'n bestand toch aan, dan gaat de skip daar in dezelfde ronde om naar
+  een ASSERTIE met de invoermeting ernaast, in de vorm van `v300` en `v311`. Zo lopen ze mee met de
+  bestanden die om een andere reden al open liggen, en meet elke omzetting iets.
+  DE LIJST IS AFLEIDBAAR EN STAAT DAAROM NIET HIER: `grep -c "test\.skip(" tests/*.spec.js` geeft hem, en
+  een lijst bij naam zou verouderen zonder dat iemand het merkt (`v275`).
 - **DE SNEDE PER MAAND WORDT OOK EEN KEER PER STAND UITGEREKEND** (`v311`): `txOfMonth()` liep na de
   memo van `v310` nog steeds per aanroep over de hele `TX`. De poort-evaluaties waren weg, de FILTER niet.
   GEMETEN op de fixture van `v310` (TX 1597, 21 maanden): `renderMaand()` doet 1053 aanroepen en
@@ -123,10 +136,15 @@ genoemde versietag.)*
   DE GUARD IN BLOK a VAN DE SPEC MOEST MEE: die telde `telbareTx()`-aanroepen om te zeggen dat een
   oppervlak de functie werkelijk aanroept, en dat staat op een warme memo per constructie op nul. Hij telt
   nu `txOfMonth()`, want wat hij moet zeggen is dat het oppervlak de SNEDE leest.
-  DE VOLGENDE HEFBOOM IS GEMETEN EN NIET GEBOUWD: `totals()` doet 140 aanroepen op Grip. MEETPROEF met
-  diezelfde memo-vorm erbij: Grip 46 -> 33 ms en de budget-editor 18 -> 5. Hij is NIET zomaar dezelfde
-  ingreep: `totals()` geeft een OBJECT terug met `list`, `byCat` en `uitResCat`, en die zijn alle drie
-  muteerbaar, dus de aliasing-vraag ligt daar anders dan bij een array.
+  `totals()` WORDT NIET GEMEMOISEERD, EN DAT IS EEN BESLUIT EN GEEN OPEN PUNT (`v312`). De meetproef lag
+  er: 140 aanroepen op Grip, en met diezelfde memo-vorm erbij gaat Grip van 46 naar 33 ms en de
+  budget-editor van 18 naar 5. DE WINST IS NIET HET ARGUMENT, DE PRIJS IS HET: `totals()` geeft een OBJECT
+  terug met `list`, `byCat` en `uitResCat`, en die zijn alle drie muteerbaar. Bij een array is de aliasing
+  met een `slice()` af te dekken en is dat bewijsbaar volledig; bij een object zou elke veld-kopie een
+  tweede uitdrukking van de vorm van `totals()` zijn, die bij de eerste nieuwe sleutel uiteenloopt
+  (`v104`), en een ondiepe kopie dekt `byCat` niet. 45 ms op Grip is genoeg, en een cache die SOMS
+  verouderd geheugen deelt is precies het etiket dat dit project verbiedt. Wie hier ooit toch aan begint,
+  begint bij de vraag wie `byCat` muteert en niet bij de milliseconden.
 - **DE POTJES VERDWIJNEN NIET VAN DE PAGINA OP EEN DAG ZONDER BOEKINGEN VAN DEZE MAAND** (`v311`): de
   lege tak van `insBudgetBlok()` zette `onbekend` als hoofdgetal, en dan was het grootste getal van het
   scherm een WOORD en stond je potjesbedrag nergens meer. Er staat nu `€X in je potjes deze maand` met
@@ -179,10 +197,7 @@ genoemde versietag.)*
   HET IS BOODSCHAPPEN GEWORDEN EN NIET SHOPPING, en dat is geen willekeur: een potje op `shopping` zou de
   LEK-helft van diezelfde fixture weghalen, want `noPotLeak()` kijkt juist naar de grootste winkel ZONDER
   potje, en de comment in de fixture zegt dat die ene boeking beide draagt.
-  DE SUITE HEEFT DAARMEE NUL OVERGESLAGEN TESTS, dus er is geen overslaan meer dat als groen kan lezen. WAT
-  ER WEL STAAT zijn 35 voorwaardelijke `test.skip()`-aanroepen in 14 bestanden die in de laatste volle run
-  geen van alle vuurden. Die zijn LATENT en niet nagegaan: een fixture die verandert kan er een laten
-  vuren, en dan leest hij weer als groen. Wie dat oppakt doet dezelfde meting per stuk.
+  DE SUITE HEEFT DAARMEE NUL OVERGESLAGEN TESTS, dus er is geen overslaan meer dat als groen kan lezen.
 - **OPEN PUNT, GEMETEN EN NIET GEREPAREERD: DE WATERVAL REKENT IN HELE JAREN OVER EEN MAANDELIJKS
   MOMENT** (`v310`): `fireInputs()` doet `wens = _res + ((year < volYear) ? 0 : _doel)`, dus de
   spaardoelen tellen pas mee vanaf het JAAR waarin het noodfonds vol is. `volYear` komt uit het
@@ -4263,7 +4278,9 @@ en bumpt dus gewoon door naar `minder-v301`, en `v302` tot en met `v305` net zo.
 `v308` en `v309` raken app-code en bumpen dus gewoon door naar `minder-v308` en `minder-v309`. `v310`
 raakt app-code (de poort-memo) en bumpt door naar `minder-v310`; het kalender-deel van die ronde raakte
 alleen `tests/` en dit bestand en bumpte op zichzelf dus niet. `v311` raakt app-code (de maand-memo en
-de lege stand) en bumpt door naar `minder-v311`.
+de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md` en de changelog
+(een besluit en een open punt), dus hij bumpt niet en de eerstvolgende app-ronde gaat van
+`minder-v311` naar zijn eigen tag.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
