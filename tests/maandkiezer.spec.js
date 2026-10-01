@@ -167,7 +167,8 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
       return { maanden: [...h.matchAll(/coStart\('maand','(\d{4}-\d{2})'/g)].map((x) => x[1]),
         potjes: [...h.matchAll(/openPotjesVerdeling\('(\d{4}-\d{2})'/g)].map((x) => x[1]), nu: thisYM() }; });
     for (const m of r.maanden.concat(r.potjes)) expect(m).toBe(r.nu);
-    const src = await page.evaluate(() => renderMaand.toString() + maandIngang.toString() + maandCoachIngang.toString() + maandPlanRegels.toString());
+    // v315: maandPlanRegels() is vervallen; maandVanafRegels() is de lezer die er in de plaats kwam
+    const src = await page.evaluate(() => renderMaand.toString() + maandIngang.toString() + maandCoachIngang.toString() + maandVanafRegels.toString());
     expect(kaalBron(src)).not.toMatch(/kijkMaand\(\)|curMonth/);
   });
 

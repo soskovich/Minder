@@ -267,28 +267,36 @@ test.describe('3 - de norm is de ondergrens, en hij tilt je doel alleen op als j
     expect(r.doel, 'en het doel is onaangeraakt').toBe(1200);
   });
 
+  /* v315: de keuze loopt via de chips en niet meer via een leeg veld, dus deze test tikt op de
+     knop. Dat is het PAD dat de gebruiker loopt en dus strenger dan een `value`-zetter (meetles c).
+     De formulering van het gevolg is ook veranderd: het staat nu als rij in het gevolgen-blok. Wat
+     de test vasthoudt is wat hij altijd vasthield: BEIDE bedragen staan er voordat je vastzet, en
+     pas de tik legt iets vast. */
   test('de sheet zegt het gevolg voordat je vastzet, en pas de tik voert het uit', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => openNoodfondsPanel());
-    const keuze = await page.evaluate(() => {
-      const el = document.getElementById('bufferNorm');
-      el.value = '3'; el.dispatchEvent(new Event('change'));
-      return { txt: document.getElementById('sheet').innerText, norm: bufferNorm(),
-        doel: noodfondsModel().doel, sleutel: 'bufferNorm' in SET };
-    });
-    expect(keuze.txt, 'het gevolg staat er met beide bedragen')
-      .toContain('Vastzetten tilt je noodfonds op van €1.200 naar €1.500');
+    await page.locator('#bufferNormChips .chip', { hasText: '3 maanden' }).click();
+    const keuze = await page.evaluate(() => ({ txt: document.getElementById('sheet').innerText,
+      norm: bufferNorm(), vlg: bufferNormNext(),
+      doel: noodfondsModel().doel, sleutel: 'bufferNorm' in SET }));
+    expect(keuze.txt, 'het gevolg staat er met beide bedragen').toContain('€1.200');
+    expect(keuze.txt).toContain('€1.500');
+    expect(keuze.txt).toContain('Noodfonds');
     expect(keuze.norm, 'maar er is nog niets vastgelegd').toBe(null);
+    expect(keuze.vlg).toBe(null);
     expect(keuze.doel).toBe(1200);
     expect(keuze.sleutel).toBe(false);
     const na = await page.evaluate(() => { normVastzetten(); return { norm: bufferNorm(),
-      doel: noodfondsModel().doel, vast: SET.nfDoelVast, terug: SET.bufferNormDoelVoor,
-      txt: document.getElementById('sheet').innerText }; });
-    expect(na.norm, 'de tik legt de grens vast').toBe(3);
+      vlg: bufferNormNext(), doel: noodfondsModel().doel, vast: SET.nfDoelVast,
+      terug: SET.bufferNormDoelVoor, txt: document.getElementById('sheet').innerText }; });
+    /* v315: een EERSTE keuze geldt ook meteen, want zonder norm vraagt de bufferregel erom; een
+       WIJZIGING geldt vanaf volgende maand. Zie grip-vanaf-norm.spec.js blok 7. */
+    expect(na.norm, 'de tik legt de grens vast, en bij een eerste keuze meteen').toBe(3);
+    expect(na.vlg).toBe(3);
     expect(na.doel, 'en tilt het doel op').toBe(1500);
     expect(na.vast).toBe(1500);
-    expect(na.terug, 'met de oude waarde erbij, anders is de knop niet terug te draaien')
-      .toEqual({ doel: 1200, norm: null });
+    expect(na.terug, 'met de oude waarden erbij, anders is de knop niet terug te draaien')
+      .toEqual({ tilt: true, doel: 1200, norm: null, next: null });
     expect(na.txt).toContain('terugdraaien');
   });
 
@@ -305,16 +313,21 @@ test.describe('3 - de norm is de ondergrens, en hij tilt je doel alleen op als j
     expect(r.terug, 'en er blijft geen lege sleutel achter').toBe(false);
   });
 
+  /* v315: de zin staat nu als rij in het gevolgen-blok, en de vlag wordt ALTIJD geschreven omdat
+     er sinds de maanddimensie ook zonder optil iets terug te draaien valt (de grens zelf). Wat de
+     test vasthoudt is dat er aan je DOEL niets verandert, en dat `tilt` dat zegt. */
   test('ligt je doel al boven de gekozen grens, dan verandert er niets aan je doel', async ({ page }) => {
     await boot(page, { doelVast: 5000 });
     await page.evaluate(() => { openNoodfondsPanel(); normKeuzeZet('3'); });
     const voor = await page.evaluate(() => document.getElementById('sheet').innerText);
-    expect(voor).toContain('Je doel van €5.000 ligt daar al op of boven, dus er verandert niets aan je doel.');
+    expect(voor).toContain('blijft €5.000');
+    expect(voor).toContain('ligt al op of boven');
     const na = await page.evaluate(() => { normVastzetten(); return { norm: bufferNorm(),
-      doel: noodfondsModel().doel, terug: 'bufferNormDoelVoor' in SET }; });
+      doel: noodfondsModel().doel, terug: SET.bufferNormDoelVoor }; });
     expect(na.norm).toBe(3);
     expect(na.doel).toBe(5000);
-    expect(na.terug, 'er is niets opgetild, dus er valt niets terug te draaien').toBe(false);
+    expect(na.terug.tilt, 'er is niets opgetild').toBe(false);
+    expect(na.terug.doel, 'en de vlag draagt het doel van toen, zodat terugdraaien het laat staan').toBe(5000);
   });
 
   test('de schatting wordt nooit meegetild, want die is de schatting', async ({ page }) => {
@@ -434,14 +447,34 @@ test.describe('5 - de bron: een grens per vraag, en niet meer een vaste drie', (
        dit project elders verbiedt: hij verschuift zodra er een regel bij komt zonder dat de
        eigenschap verandert. Wat vast moet liggen is dat geen enkele LEZER het veld rechtstreeks
        leest; schrijven doen alleen de getter, de drie handelingen rond de keuze en het diagnoseblok. */
+    /* v315: `rolloverBudgets()` is de VIERDE schrijver van de lopende norm: hij draagt de norm van
+       volgende maand over zodra de maand omslaat. Hij staat in de lijst omdat hij een SCHRIJVER is
+       en geen lezer die een oordeel velt - dat is de eigenschap die deze test bewaakt - en zijn
+       eigen regel staat hieronder apart vast. */
     const toegestaan = ['function bufferNorm(){', 'function normVastzetten(){',
-      'function normTerugdraaien(){', 'function bufferNormWis(){', 'function diagGrendel(){'];
+      'function normTerugdraaien(){', 'function bufferNormWis(){', 'function diagGrendel(){',
+      'function rolloverBudgets(){'];
     const gedekt = toegestaan.map((fn) => sectieVan(s, fn)).join('\n');
-    const alle = (s.match(/SET\.bufferNorm(?!DoelVoor)/g) || []).length;
-    const binnen = (gedekt.match(/SET\.bufferNorm(?!DoelVoor)/g) || []).length;
+    const alle = (s.match(/SET\.bufferNorm(?!DoelVoor|Next)/g) || []).length;
+    const binnen = (gedekt.match(/SET\.bufferNorm(?!DoelVoor|Next)/g) || []).length;
     expect(binnen, 'elke treffer ligt binnen de getter, de drie handelingen of het diagnoseblok')
       .toBe(alle);
     expect(alle, 'en er is er minstens een, anders toetst deze test niets').toBeGreaterThan(0);
+    /* v315: HET VELD VAN VOLGENDE MAAND KRIJGT ZIJN EIGEN LIJST, en die is niet dezelfde: de
+       overdracht bij de maandwissel is een vierde schrijver en die mag `SET.bufferNorm` juist WEL
+       zetten. Twee aparte tellingen in plaats van de oude regex verruimen, want dan zou een lezer
+       van het volgende-maand-veld buiten elke lijst kunnen vallen zonder dat deze test het ziet. */
+    const toegestaanNext = ['function bufferNormNext(){', 'function normVastzetten(){',
+      'function normTerugdraaien(){', 'function bufferNormWis(){', 'function rolloverBudgets(){'];
+    const gedektNext = toegestaanNext.map((fn) => sectieVan(s, fn)).join('\n');
+    const alleNext = (s.match(/SET\.bufferNormNext/g) || []).length;
+    const binnenNext = (gedektNext.match(/SET\.bufferNormNext/g) || []).length;
+    expect(binnenNext, 'elke treffer van het volgende-maand-veld ligt binnen zijn eigen vijf plekken')
+      .toBe(alleNext);
+    expect(alleNext).toBeGreaterThan(0);
+    /* en de overdracht is de ENIGE plek buiten de keuze-handelingen die de lopende norm zet */
+    expect(sectieVan(s, 'function rolloverBudgets(){'), 'de maandwissel draagt hem over')
+      .toContain('SET.bufferNorm=nn');
   });
 
   test('de teller staat op een plek en de drie lezers noemen hem', async () => {

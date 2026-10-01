@@ -77,7 +77,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. Draagt sinds `v235` de
   valt-op-kaarten: dezelfde signalen die Inzichten constateert, met de historie en de handelingen
   eraan. Sinds `v314` staat de SAMENVATTING daarvoor (hij telt de potjes mee) en staan de handelingen
-  in volgorde van het moment in de maand, met "Zo laten" als eigen actie. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
+  in volgorde van het moment in de maand, met "Zo laten" als eigen actie. Draagt sinds `v315` de kaart
+  "Vanaf <maand>" met drie ingangen naar wat er klaarstaat, en toont het logboek de UITKOMST per handeling. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
   de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten. Sinds `v237` is dat niet
   meer de enige ingang: `coachLeak()` levert ook een patroonregel op Inzichten. Twee ingangen naar
   hetzelfde gesprek, maar nooit voor hetzelfde geval. Draagt sinds `v258` ook `contantKaart()`, maar
@@ -98,6 +99,84 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE BUFFERNORM GELDT VANAF VOLGENDE MAAND, HET DOEL BEWEEGT NU** (`v315`): `bufferNorm()` is de norm
+  van de LOPENDE maand en `bufferNormNext()` die van de volgende, in de vorm van `plannedBudgets()`
+  (eigen veld, terugval op de huidige). Daarmee gaat elke bestaande lezer vanzelf mee: de bufferregel,
+  `meevallerNodig('buffer')` en `beleggenDrempel()` oordelen over NU.
+  DE OVERDRACHT STAAT IN `rolloverBudgets()`, want dat is de ENIGE plek die een maandwissel vaststelt
+  (`SET.budgetMonth` is de discriminator). Een tweede detectie ernaast zou een tweede waarheid zijn over
+  wanneer de maand omsloeg (`v104`). Een nul of een lege waarde wordt daar weggegooid en niet overgenomen.
+  WAAROM NIET METEEN: een maand waarin je al leeft is geen maand om halverwege anders te beoordelen.
+  Omhoog zou vandaag een beslissing vragen over een maand die bijna om is, omlaag zou een tekort laten
+  verdwijnen zonder dat er aan je geld iets veranderde. Dat is `v235` op een grens in plaats van een potje.
+  EEN EERSTE KEUZE GELDT TOCH METEEN, en dat is een benoemde grens: zonder norm MEET de bufferregel alleen
+  en vraagt hij erom (`v305`), dus een eerste keuze die een maand wacht laat het scherm vragen om iets dat
+  je net hebt gekozen. WEGHALEN GELDT OOK METEEN, en dat is de ene asymmetrie: zonder grens velt de app geen
+  oordeel, dus weghalen haalt een oordeel WEG en voegt er nooit een toe (`v59`/`v73`/`v173`).
+  HET DOEL GAAT NIET MEE, en dat is de grens van deze regel: `SET.nfDoelVast` heeft geen maanddimensie en
+  Plan rekent met het doel dat er NU staat. GEMELD EN ALS ASSERTIE VASTGELEGD wat daaruit volgt: `bufferTeller()`
+  is de toewijzing GEKLEMD op het doel (`v305`, besluit 1), dus een optil laat een toewijzing die erboven
+  uitkwam weer meetellen en bewegen de bufferregel EN `meevallerNodig()` in dezelfde maand mee. GEMETEN: de
+  teller gaat van 3.000 naar 6.000 zodra de norm naar zes gaat. Dat is het doel en niet de norm.
+  `SET.beleggenDrempel` KRIJGT GEEN EIGEN MAANDDIMENSIE (dat is een eigen keuze die meteen geldt), maar zijn
+  TERUGVAL schuift mee: `beleggenDrempelNext()` leest de eigen keuze en anders `bufferNormNext()`.
+- **DE NORM-SHEET LEENT DE PROJECTIE EN REKENT HEM NIET NA** (`v315`): `normGevolgen(n)` zegt wat een
+  normkeuze met je PLAN doet, naast wat `normDoelVoorstel()` met je DOEL doet. `planVooruit()` draagt sinds
+  `v307` de terugval en herberekent de grendel per maand, dus een hypothetisch doel beweegt de hele keten
+  vanzelf mee; deze functie kiest alleen de SCOPE, in de vorm van `v285` (de rijen van `allocatePlan()` met
+  alleen het doel van het noodfonds vervangen).
+  DE TWEEDE PROJECTIE LOOPT OP HET DOEL DAT ER ECHT KOMT, dus op `V.naar` ALLEEN bij een optil:
+  `normVastzetten()` schrijft het doel niet als de keuze eronder ligt, en een projectie op `V.naar` zou daar
+  een plan tonen bij een doel dat nooit wordt gezet. GEMETEN: twee maanden van 1.218 geeft 2.436 tegen een
+  doel van 3.000, en op die 2.436 vult de buffer sneller dan hij zal doen. ZONDER OPTIL ZIJN DE TWEE DAARMEE
+  PER CONSTRUCTIE GELIJK, en dan zegt het blok dat in EEN regel in plaats van vier rijen die alle vier 'en
+  dat verandert niet' zeggen. Dat is de kant die je ziet bij een norm naar BENEDEN, want een lagere norm
+  verlaagt je doel nooit.
+  `nfGespaardBij()` IS DE KLEM, OP EEN PLEK EN MET TWEE LEZERS: `planMap()` drukte hem zelf uit, en de
+  projectie heeft hem nodig omdat de klem bij een hoger doel terugloopt. GEMETEN waarom dat geen detail is:
+  met een toewijzing van 6.000 op een doel van 3.000 zou een projectie bij 7.308 nog 4.308 te gaan zien in
+  plaats van 1.308, en dus vier maanden grendel in plaats van twee. DIE STAND IS IN DE FIXTURE GECONSTRUEERD
+  (`v274`): `migrateNfToegewezen()` klemt al bij het SCHRIJVEN, dus hij ontstaat alleen als je je doel daarna
+  verlaagt - en dan is het een echte stand, die Grip zelf meldt.
+  EEN AFLOS-ITEM DOET NIET MEE (`v307`: zijn alloc blijft voor altijd staan), zonder bekende toewijzing is er
+  geen projectie (`v173`), en de afspraak staat er alleen als hij over je buffer gaat en rekent niets: wat het
+  blok kan zeggen is dat de grens verschuift en niet wat de uitkomst wordt.
+  TWEE KNOPPEN EN HET VELD ALS DERDE OPTIE, zonder default: zolang je niets kiest is er geen grens (`v305`),
+  en een voorgeselecteerde knop zou een grens beweren die je niet hebt gezet. Het veld staat open zodra je
+  eigen getal geen knop is, anders is een norm van vier maanden niet te zien.
+- **DE KAART 'VANAF <MAAND>' OP GRIP DRAAGT DRIE INGANGEN, EN ELKE RIJ ALLEEN ALS ER IETS VERANDERT**
+  (`v315`): potjes, de ondergrens voor je buffer en de buffer die je voor beleggen wilt, elk naar de
+  bestaande sheet. 'Vanaf <maand>' over een getal dat niet verschuift is een verkeerd etiket, dus verandert
+  er niets, dan is er geen kaart.
+  DE POTJES-RIJ IS VERHUISD EN NIET GEKOPIEERD: hij stond onder een streep in de laatste kaart die regels
+  droeg (de voet van `v223`), en die plek klopte zolang het EEN rij was. `maandVoet()`, `maandVoetBlok()` en
+  `maandPlanRegels()` zijn er mee vervallen, want die rij was hun enige inhoud sinds `v228`; twee comments die
+  die namen nog noemden zijn bijgewerkt in plaats van blijven staan (`v275`).
+  DE BELEGGINGSDREMPEL KAN HIER STAAN ZONDER EIGEN MAANDDIMENSIE, want zonder eigen keuze volgt hij de norm.
+  Met een eigen drempel blijft de rij per constructie weg, en de rij zegt die herkomst erbij: een drempel die
+  meebeweegt zonder dat je hem hebt aangeraakt is anders niet te plaatsen.
+- **HET LOGBOEK TOONT DE UITKOMST, MET EEN ANDERE LAT PER HANDELING** (`v315`): `valtOpUitkomst(r)` is de ene
+  bron en `valtOpLogBlok()` leidt er niets zelf uit af. De log zei WAT je deed en niet wat eruit kwam, en
+  daarmee miste hij de helft van zijn reden van bestaan.
+  EEN BIJGESTELD POTJE WORDT TEGEN HET OORSPRONKELIJKE POTJE GELEZEN, want de vraag is of de maand alsnog
+  boven de grens eindigde die je toen had; tegen het bijgestelde potje meten zou de bijstelling met zichzelf
+  beoordelen. `valtOpAfsluiten()` schrijft `over_oorspronkelijk` naast `over_eind_maand`, uit DEZELFDE
+  `catSpendMap()`-aanroep: EEN meting tegen TWEE latten, en dus geen tweede waarheid (`v104`).
+  HIJ IS NIET AFLEIDBAAR, en dat is de reden dat het een veld is: `over_eind_maand` is op nul geklemd, dus
+  juist in het geval dat telt (de bijstelling haalde het rood weg) zegt hij niets meer. GEMETEN: 0 tegen de
+  bijgestelde lat en 150 tegen de oorspronkelijke, en de enige plausibele afleiding komt op 200 uit.
+  EEN GRENS KRIJGT HET AANTAL BOEKINGEN DAT ER NA HET ZETTEN BIJ KWAM, en `valtOpGrensZet()` legt zijn
+  meetlat in het RECORD vast: `SET.valtOpGrens[k]` is per categorie en wordt door de grens van een volgende
+  maand overschreven, dus na een maandwissel valt er niets meer uit te reconstrueren. Dat is dezelfde reden
+  waarom de afsluiting zijn potje uit het record leest (`v235`).
+  'ZO GELATEN' EN 'NIETS GEDAAN' LEZEN TEGEN HET POTJE, en 'vervallen na correctie' zwijgt omdat de handeling
+  het al zegt (`v289`). DE LOPENDE MAAND ZEGT WANNEER DE UITKOMST ER IS in plaats van leeg te blijven, met
+  `daysElapsed()` als enige kalenderbron. EEN RECORD VAN VOOR DEZE RONDE draagt de nieuwe velden niet en noemt
+  de lat die hij WEL heeft, in plaats van een getal te tonen dat tegen een andere lat is gemeten (`v298`).
+  DE REGEL KOST 17px en staat als eigen assertie vast, GEMETEN op 390px met een record dat er een draagt naast
+  een correctie die er geen draagt. OP 360px IS DAT PAAR GEEN METING, en dat staat erbij: de vergelijkingsrij
+  breekt daar over twee regels (51 tegen 32px), dus het verschil zou de AFBREKING meten. De vanaf-kaart is
+  250/232px en het logboek 373/317px. GRIP HEEFT GEEN 200px-EIS (die van `v241` is Inzichten).
 - **DE SAMENVATTING OP GRIP TELT DE POTJES MEE, EN STAAT VOOR DE SIGNAALKAARTEN** (`v314`): hij stond
   erachter, dus je las eerst "EUR 214 boven je potje" en daarna "er is niets dat vastloopt".
   `maandOordeel(R, nPot)` krijgt het aantal uit `valtOpSignals()` van de AANROEPER: `renderMaand()`
@@ -3959,6 +4038,21 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   de omgeving VOORDAT je iets wegschrijft, en controleer na een sabotage-ronde met `git diff` dat er niets
   is achtergebleven. Een suite die na een sabotage-ronde anders telt dan ervoor, is eerst een vraag over
   je gereedschap en pas daarna over je code.
+- **EEN SAMENVATTING LEZEN IS NIET DE LAATSTE REGEL MET 'passed' PAKKEN** (`v315`): mijn sabotage-runner
+  nam `[l for l in out if 'passed' in l][-1]`, en bij een falende run print de line-reporter eerst
+  `7 failed` en daarna `30 passed`. Elke rode sabotage las daarmee als groen, en ik heb drieëndertig
+  uitkomsten als 'N passed' gemeld voordat ik het zag. Dat is de `✘`-fout van `v305` in een nieuwe vorm: een
+  voortgangssignaal dat per constructie het verkeerde getal pakt. LEES DE HELE SAMENVATTING EN DE EXITCODE.
+- **EEN SABOTAGE-RUNNER DIE HARD WORDT AFGEBROKEN VERVUILT DE BACKUP VAN DE VOLGENDE RUN** (`v315`): dit is
+  `v300` een stap verderop. Daar stierf het script tussen schrijven en terugzetten en bleef de sabotage staan;
+  de `try/finally` die daaruit volgde dekt dat af, MAAR niet een SIGKILL door een tijdslimiet. De run daarna
+  kopieerde die gesaboteerde bron als 'origineel' en zette hem aan het eind netjes terug, dus de sabotage werd
+  PERMANENT. GEMETEN gevolg: `index.html` droeg twee sabotages tegelijk (`meevallerNodig()` en
+  `beleggenDrempel()` lazen de norm van volgende maand), en de spec viel er terecht op terwijl ik de oorzaak
+  eerst in mijn eigen code zocht. DE WERKAFSPRAAK: meet dat de suite GROEN is voordat je de backup schrijft,
+  draai de runner vanaf het begin in de achtergrond zodat geen tijdslimiet hem kan doden, en controleer na een
+  ronde niet alleen `git diff --stat` maar ook elke zoektekst van je sabotages tegen de bron. Een suite die na
+  een sabotage-ronde anders telt dan ervoor is eerst een vraag over je gereedschap.
 - **Dode code meet je met bereikbaarheid, niet met verwijzingen.** Loop vanaf de echte startpunten
   (de HTML buiten het script, plus de boot-code buiten elke functie) de aanroepgraaf af. Een groep
   dode functies die naar elkaar verwijst houdt zichzelf levend en heeft altijd twee of meer
@@ -4357,7 +4451,11 @@ vraag gaat over de app en deze over de fixture.
 
 **Onstabiel, oorzaak gemeten, eigen ronde:** `diag-entry-merge.spec.js` "blok 8 noemt welke groep uit een
 eerdere sync komt" valt ongeveer een op de vier keer (GEMETEN 3 van 4 groen in vier runs achter elkaar, en
-ook rood op `HEAD`). "Flake" is geen oorzaak, dus hier staat wat de uitvoer zegt: bij een rode run meldt de
+ook rood op `HEAD`). HET ZIJN TWEE TESTS EN NIET EEN, en dat is bij `v315` gemeten en niet aangenomen: ook
+"blok 13 markeert de pending-kolommen van de herkoppelde rekening" valt erop, en die twee vielen bij `v315`
+samen in de volle run. Dat is precies de tweede test die `v306` als niet-opgeschreven aanwees. GEMETEN op
+`HEAD` zonder enige wijziging: 1 rood op 64 runs van dat bestand (`--repeat-each=4`), dus de instabiliteit
+is van de spec en niet van de ronde die hem tegenkomt. "Flake" is geen oorzaak, dus hier staat wat de uitvoer zegt: bij een rode run meldt de
 rij `FOUT: Failed to fetch` op de transactie-aanroep van de tweede sync. Die route schrijft dan de
 transactie-velden niet, `_op` gaat dus niet vooruit, en de pending-groep leest daardoor `vers` in plaats van
 `uit een EERDERE sync`. Het is de STUB van de spec die soms niet levert en niet `psd2DiagZet()`: het stempel
@@ -4394,7 +4492,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v314` → `minder-v315`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v315` → `minder-v316`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -4411,7 +4509,7 @@ alleen `tests/` en dit bestand en bumpte op zichzelf dus niet. `v311` raakt app-
 de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md` en de changelog
 (een besluit en een open punt), dus hij bumpt niet, en `v313` raakt app-code en gaat daarom van
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
-`minder-v314`.
+`minder-v314`, en `v315` net zo naar `minder-v315`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

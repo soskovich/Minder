@@ -553,7 +553,10 @@ test('h: de potjes-rij noemt het potje dat verandert', async ({ page }) => {
   // de fixture verandert precies één potje: sport komt erbij voor €50
   expect(r.P.sport).toBe(50);
   expect(r.B.sport).toBe(undefined);
-  expect(r.tekst).toContain('Je potjes vanaf volgende maand');
+  /* v315: de rij staat in de kaart 'Vanaf <maand>' en heet daar 'Je potjes'; de woorden 'vanaf
+     volgende maand' zijn naar de KOP van die kaart verhuisd. De sub is onveranderd. */
+  expect(r.tekst.toUpperCase()).toContain('VANAF ');
+  expect(r.tekst).toContain('Je potjes');
   expect(r.tekst).toContain('Sport & gezondheid erbij voor €50, de rest ongewijzigd');
 });
 
@@ -579,12 +582,14 @@ for (const [w, h, zichtbaar] of [[360, 640, 567], [390, 844, 771]]) {
       const K = [...document.querySelectorAll('#s-maand .card')];
       const sig = K.find(c => /boven je potje/.test(c.innerText));
       const sg = K.find(c => /STAAT GOED/.test(c.innerText));
+      const va = K.find(c => /^VANAF /.test(c.innerText));
       const nav = document.querySelector('.nav, nav, #nav');
       return { sam: Math.round(K[0].getBoundingClientRect().height),
         samBodem: Math.round(K[0].getBoundingClientRect().bottom),
         sigTop: Math.round(sig.getBoundingClientRect().top),
         sigBodem: Math.round(sig.getBoundingClientRect().bottom),
         sgH: Math.round(sg.getBoundingClientRect().height),
+        vaH: va ? Math.round(va.getBoundingClientRect().height) : 0,
         navH: nav ? Math.round(nav.getBoundingClientRect().height) : 0,
         hand: [...sig.querySelectorAll('.valtop-hand')].map(x => Math.round(x.getBoundingClientRect().bottom)) };
     });
@@ -601,11 +606,17 @@ for (const [w, h, zichtbaar] of [[360, 640, 567], [390, 844, 771]]) {
       // GEMETEN PRIJS: op de kleinste telefoon valt de derde handeling net onder de vouw
       expect(r.sigBodem).toBe(615);
       expect(r.hand[2]).toBe(569);
-      expect(r.sgH).toBe(307);
+      /* v315: 'Staat goed' is 77px lager, want de potjes-rij hing hier onder de streep en staat nu
+         in zijn eigen kaart. Die kaart kost 118px op 360 en 103px op 390, dus de pagina wordt 41 en
+         41px hoger; de sub breekt op 360px over twee regels en dat is het verschil tussen de twee.
+         De prijs staat als assertie vast, zodat een volgende ronde ziet wat hij uitgeeft. */
+      expect(r.sgH).toBe(230);
+      expect(r.vaH).toBe(118);
     } else {
       expect(r.sigBodem).toBe(576);
       expect(r.sigBodem).toBeLessThan(zichtbaar);
-      expect(r.sgH).toBe(277);
+      expect(r.sgH).toBe(215);
+      expect(r.vaH).toBe(103);
     }
   });
 }

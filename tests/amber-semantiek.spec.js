@@ -18,10 +18,11 @@ async function boot(page, payload) {
 }
 // v166: de ring-tak van monthStatusCard() werd berekend en weggegooid - de enige aanroeper is de
 // terugval in renderIns(), en die vuurt alleen zonder budget. De budgetstand woont in de hero.
-/* v178: 'boven inkomen-limiet' is een oordeel over je plan en staat op Maand (maandPlanRegels).
+/* v178: 'boven inkomen-limiet' is een oordeel over je plan en stond op Maand onder de streep.
    De budgetstand op Inzichten toont alleen nog hoe deze maand loopt. */
 const kaartHtml = (page) => page.evaluate((m) => insBudgetBlok(m), CUR);
-const planHtml = (page) => page.evaluate(() => maandPlanRegels());
+// v315: maandPlanRegels() is vervallen; de rij staat in maandVanafRegels()
+const planHtml = (page) => page.evaluate(() => maandVanafRegels().join(''));
 
 test.describe('a · de budget-kaart', () => {
   test('binnen budget kleurt nooit amber, ook niet als je sneller gaat dan de maand', async ({ page }) => {
@@ -54,8 +55,9 @@ test.describe('a · de budget-kaart', () => {
   });
 
   /* v228: de rij 'Boven je inkomen-limiet' is vervallen (tests/vaststellen-zonder-gevolg.spec.js).
-     Wat er in maandPlanRegels() overblijft draagt geen status en dus ook geen amber. */
-  test('wat er onder de streep op Maand staat draagt geen amber', async ({ page }) => {
+     Wat er in de vanaf-kaart overblijft draagt geen status en dus ook geen amber (v315: die rijen
+     stonden tot dan onder een streep in de regelkaart). */
+  test('wat er in de vanaf-kaart op Grip staat draagt geen amber', async ({ page }) => {
     await boot(page);
     const html = await planHtml(page);
     expect(html).not.toContain('inkomen-limiet');

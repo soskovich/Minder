@@ -883,6 +883,18 @@ function rolloverBudgets(){
   if(!SET.budgetMonth){ SET.budgetMonth=ym; save(); return; }
   if(SET.budgetMonth===ym) return;
   try{ budgetHistLeg(SET.budgetMonth, SET.budgets); }catch(_){}
+  /* v315: DE NORM SCHUIFT MEE OP DEZELFDE MAANDWISSEL, en hij staat hier omdat dit de ENIGE plek
+     is die zo'n wissel vaststelt (`SET.budgetMonth` is de discriminator). Een tweede detectie
+     ernaast zou een tweede waarheid zijn over wanneer de maand omsloeg (v104), en die twee kunnen
+     dan op een boot uiteenlopen. De functie houdt zijn naam, want die discriminator is van de
+     potjes; hem hernoemen raakt elke aanroeper zonder dat er iets aan verandert.
+     EEN ONGELDIGE WAARDE WORDT WEGGEGOOID EN NIET OVERGENOMEN: een norm van nul of leeg is geen
+     keuze (v59/v73/v173), en hem laten staan zou hem bij elke volgende wissel opnieuw aanbieden. */
+  if(SET.bufferNormNext!=null && SET.bufferNormNext!==''){
+    const nn=Math.round(+SET.bufferNormNext);
+    if(isFinite(nn)&&nn>0) SET.bufferNorm=nn;
+    delete SET.bufferNormNext; delete SET.bufferNormDoelVoor;
+  }
   const N=SET.budgetsNext||{}, NM=SET.potMetaNext||{};
   if(Object.keys(N).length){ SET.budgets=SET.budgets||{};
     for(const k in N){ const v=+N[k]; if(v>0) SET.budgets[k]=v; else delete SET.budgets[k]; } }
@@ -4328,6 +4340,19 @@ function setPlanAlloc(id,patch){
   SET.planAlloc=SET.planAlloc||{}; SET.planAlloc[id]=Object.assign({},SET.planAlloc[id]||{},patch);
   save(); try{render();}catch(_){}
 }
+/* v315: DE KLEM OP DE TOEWIJZING, OP EEN PLEK EN MET TWEE LEZERS. `planMap()` zette hem zelf
+   neer, en `normGevolgen()` heeft hem nodig om een HYPOTHETISCH doel door te rekenen: bij een
+   hoger doel loopt de klem terug, en wie meer heeft toegewezen dan zijn doel ziet die toewijzing
+   dan vanzelf weer meetellen. GEMETEN op de fixture van deze ronde waarom dat geen detail is: met
+   een toewijzing van 6.000 op een doel van 3.000 is `gespaard` 3.000, en zonder deze functie zou de
+   projectie bij een doel van 7.308 nog 4.308 te gaan zien in plaats van 1.308 - een verschil van
+   precies de 3.000 die de klem wegnam, en dus vier maanden grendel in plaats van twee.
+   HIJ WORDT NIET TWEE KEER UITGEDRUKT (v104): de klem bestaat uit een `Math.min` en een
+   nul-doel-tak, en die twee samen zijn precies wat er bij de eerste herziening uiteen zou lopen. */
+function nfGespaardBij(doel){
+  const toe=Math.max(Math.round(+SET.nfToegewezen||0),0), d=Math.max(Math.round(+doel||0),0);
+  return d>0?Math.min(toe,d):toe;
+}
 function planMap(){
   const by={};
   let nfDoel=0; try{ nfDoel=Math.round(noodfondsModel().doel||0); }catch(_){}
@@ -4336,14 +4361,14 @@ function planMap(){
      bestond alleen om het verschil te melden dat daaruit ontstond. Nu is elke voortgang in het
      plan een TOEGEWEZEN bedrag, ook die van het noodfonds. De gemeten buffer blijft bestaan waar
      hij thuishoort: bufferMaanden() en de bufferregel op Maand lezen onverkort spaarSaldo(). */
-  const nfToe=Math.max(Math.round(+SET.nfToegewezen||0),0);
+  const nfToe=Math.max(Math.round(+SET.nfToegewezen||0),0);   // v315: de klem erop staat in nfGespaardBij()
   /* v173: zonder bekend spaarsaldo heeft migrateNfToegewezen() nooit kunnen draaien, dus die 0 is
      geen toewijzing van jou maar een gat. Een voortgang, een tempo en een einddatum die daarop
      gerekend zijn liegen; de rij zwijgt dan over alle drie. */
   const nfOnbekend=(function(){ if(SET.nfToegewezenMigrated) return false;
     try{ return !!spaarSaldo().missing; }catch(_){ return true; } })();
   by[PLAN_NF]=Object.assign({id:PLAN_NF,type:'noodfonds',naam:'Noodfonds',doel:nfDoel,nfOnbekend,
-    gespaard:nfDoel>0?Math.min(nfToe,nfDoel):nfToe}, planAllocOf(planAllocCfg(PLAN_NF)));
+    gespaard:nfGespaardBij(nfDoel)}, planAllocOf(planAllocCfg(PLAN_NF)));
   for(const g of (SET.goals||[])) if(g&&g.id)
     by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,
              streefdatum:g.streefdatum||'',
@@ -4528,6 +4553,16 @@ function bufferNorm(){
   const v=SET.bufferNorm; const n=(v==null||v==='')?NaN:Math.round(+v);
   return (isFinite(n)&&n>0)?n:null;
 }
+/* v315: DE NORM VANAF VOLGENDE MAAND, in dezelfde vorm als `plannedBudgets()`. `bufferNorm()`
+   blijft de norm van de LOPENDE maand, en daarom gaat elke bestaande lezer vanzelf mee: de
+   bufferregel, `meevallerNodig('buffer')` en `beleggenDrempel()` oordelen over NU en lezen dus
+   onveranderd de huidige grens. Dat is wat "de lopende maand houdt zijn norm" betekent.
+   DE TERUGVAL IS DE HUIDIGE NORM EN GEEN NULL, net als bij `plannedBudgets()`: staat er niets
+   klaar, dan is de norm van volgende maand die van nu. */
+function bufferNormNext(){
+  const v=SET.bufferNormNext; const n=(v==null||v==='')?NaN:Math.round(+v);
+  return (isFinite(n)&&n>0)?n:bufferNorm();
+}
 /* v305: WAT EEN NORMKEUZE MET JE DOEL ZOU DOEN, EN VERDER NIETS. De optil is een HANDELING en geen
    afleiding: `noodfondsModel()` tilt niets op, want een grens die je niet hebt gekozen mag je doel niet
    verzetten (MECHANISM_SPEC.defaultEffect: nooit een default die stilletjes een doel zet).
@@ -4551,6 +4586,15 @@ function normDoelVoorstel(n){
 function beleggenDrempel(){
   const v=SET.beleggenDrempel; const n=(v==null||v==='')?NaN:Math.round(+v);
   return (isFinite(n)&&n>0)?n:bufferNorm();
+}
+/* v315: DEZELFDE DREMPEL, GELEZEN VANAF VOLGENDE MAAND. `SET.beleggenDrempel` krijgt GEEN
+   maanddimensie: dat is een eigen keuze die meteen geldt, en een tweede maanddimensie ernaast zou
+   een mechanisme zijn waar niets om vraagt. Wat wel vanaf volgende maand verschuift is de
+   TERUGVAL, want die leest de norm. Heb je een eigen drempel, dan geeft deze functie per
+   constructie hetzelfde als `beleggenDrempel()` en zegt de kaart op Grip er niets over. */
+function beleggenDrempelNext(){
+  const v=SET.beleggenDrempel; const n=(v==null||v==='')?NaN:Math.round(+v);
+  return (isFinite(n)&&n>0)?n:bufferNormNext();
 }
 /* v194: een verloop is pas een verloop bij genoeg punten. Onder deze drempel verandert er geen
    beslissing door de vórm van een lijn of een reeks staven - je leest een richting en verder niets -
@@ -5651,10 +5695,28 @@ function maandRij(r,compact){
    regel is van Maand af en de sheet had geen andere aanroeper. Het bijsturen zelf zit onveranderd
    in spaarVrijLine() op Plan, met spaarVrijDoel()/spaarVrijToe() - nog steeds één route naar een
    toewijzing (v172). */
-function maandPlanRegels(){
-  let tb=0, pb=0;
-  try{ tb=totalBudget(); pb=plannedTotalBudget(); }catch(_){ return ''; }
+/* ===== WAT ER VANAF VOLGENDE MAAND VERANDERT (v315) =====
+   Drie ingangen naar bestaande sheets, en verder niets: wat je klaar hebt staan voor de maand die
+   nog niet begonnen is. Tot v315 stond hier alleen de potjes-rij, onder een streep in de laatste
+   kaart die regels droeg (de 'voet' van v223). Die plek klopte zolang het EEN rij was; met de
+   buffernorm en de beleggingsdrempel erbij is het een eigen vraag met een eigen kop, en een streep
+   onder 'Staat goed' zou drie vooruitblikken aan een oordeel over nu vastplakken.
+   DE POTJES-RIJ IS VERHUISD EN NIET GEKOPIEERD: de voet, `maandVoet()` en `maandVoetBlok()` zijn er
+   mee vervallen, want die rij was hun enige inhoud sinds v228. Een lege voet laten staan is dood
+   gewicht dat een volgende ronde verkeerd leest.
+   ELKE RIJ STAAT ER ALLEEN ALS ER IETS VERANDERT, en dat is geen beknoptheid maar de kop: 'vanaf
+   <maand>' over een getal dat niet verschuift is een verkeerd etiket. Verandert er niets, dan is er
+   geen kaart.
+   DE BELEGGINGSDREMPEL HEEFT GEEN EIGEN MAANDDIMENSIE, en kan hier tóch staan: zonder eigen keuze
+   valt hij terug op de norm (v305, besluit 4), dus hij schuift mee zodra die norm schuift. Heb je
+   een eigen drempel, dan geeft `beleggenDrempelNext()` per constructie hetzelfde en blijft de rij
+   weg. De rij zegt die herkomst er ook bij, want een drempel die meebeweegt zonder dat je hem hebt
+   aangeraakt is anders niet te plaatsen. */
+function maandVanafRegels(){
   const rijen=[];
+  const rij=(lab, sub, waarde, act)=>`<div class="row" style="justify-content:space-between;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${act}">
+    <span style="flex:1;min-width:0"><span class="small">${esc(lab)}</span>${sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(sub)}</div>`:''}</span>
+    <span class="small" style="font-weight:700;color:var(--teal);white-space:nowrap">${esc(waarde)} ›</span></div>`;
   /* v314: DE RIJ NOEMT HET POTJE DAT VERANDERT. Hij zei alleen 'Je potjes vanaf volgende maand ·
      €3.375', dus je zag dat er iets klaarstond en niet wat. Bij ÉÉN wijziging staan beide bedragen
      erbij, met 'de rest ongewijzigd' als er meer potjes zijn; bij meer wijzigingen het aantal, want
@@ -5663,53 +5725,41 @@ function maandPlanRegels(){
      drie soorten wijziging zijn dezelfde als in openPotjesVerdeling(): nieuw (nu nul), gestopt (dan
      nul) en een ander bedrag. Een tweede vergelijking ernaast zou bij de eerste wijziging uiteen
      gaan lopen (v104). */
-  if(tb>0 && pb!==tb){
-    const B=SET.budgets||{}, P=plannedBudgets();
-    const keys={}; for(const k in B) if(+B[k]>0&&CATS[k]) keys[k]=1; for(const k in P) if(+P[k]>0&&CATS[k]) keys[k]=1;
-    const an=Object.keys(keys).filter(k=>(+P[k]||0)!==(+B[k]||0));
-    let sub='';
-    if(an.length===1){ const k=an[0], nu=+B[k]||0, pl=+P[k]||0;
-      const naam=CATS[k].name;
-      sub = !nu ? `${naam} erbij voor ${euro0(pl)}`
-          : !pl ? `${naam} stopt, nu ${euro0(nu)}`
-          : `${naam} ${pl>nu?'omhoog':'terug'} van ${euro0(nu)} naar ${euro0(pl)}`;
-      if(Object.keys(keys).length>1) sub+=', de rest ongewijzigd';
-    } else if(an.length>1) sub=`${an.length} potjes veranderen`;
-    rijen.push(`<div class="row" style="justify-content:space-between;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openPotjesVerdeling('${esc(thisYM())}','next')">
-    <span style="flex:1;min-width:0"><span class="small">Je potjes vanaf volgende maand</span>${sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(sub)}</div>`:''}</span>
-    <span class="small" style="font-weight:700;color:var(--teal);white-space:nowrap">${euro0(pb)} ›</span></div>`);
-  }
-  /* v223: de kop 'Je plan' en de kaart eromheen zijn vervallen; deze rij staat onder de streep in
-     de kaart met je maandregels. Geen statusdot, want hij vraagt geen beslissing. */
-  return rijen.join('');
+  try{
+    const tb=totalBudget(), pb=plannedTotalBudget();
+    if(tb>0 && pb!==tb){
+      const B=SET.budgets||{}, P=plannedBudgets();
+      const keys={}; for(const k in B) if(+B[k]>0&&CATS[k]) keys[k]=1; for(const k in P) if(+P[k]>0&&CATS[k]) keys[k]=1;
+      const an=Object.keys(keys).filter(k=>(+P[k]||0)!==(+B[k]||0));
+      let sub='';
+      if(an.length===1){ const k=an[0], nu=+B[k]||0, pl=+P[k]||0; const naam=CATS[k].name;
+        sub = !nu ? `${naam} erbij voor ${euro0(pl)}`
+            : !pl ? `${naam} stopt, nu ${euro0(nu)}`
+            : `${naam} ${pl>nu?'omhoog':'terug'} van ${euro0(nu)} naar ${euro0(pl)}`;
+        if(Object.keys(keys).length>1) sub+=', de rest ongewijzigd';
+      } else if(an.length>1) sub=`${an.length} potjes veranderen`;
+      rijen.push(rij('Je potjes', sub, euro0(pb), `openPotjesVerdeling('${esc(thisYM())}','next')`));
+    }
+  }catch(_){}
+  try{
+    const nu=bufferNorm(), vlg=bufferNormNext();
+    if(nu!=null && vlg!=null && vlg!==nu)
+      rijen.push(rij('Ondergrens voor je buffer', `nu ${nu} ${nu===1?'maand':'maanden'}, daarna ${vlg}`,
+        `${vlg} mnd`, 'openNoodfondsPanel()'));
+  }catch(_){}
+  try{
+    const nu=beleggenDrempel(), vlg=beleggenDrempelNext();
+    if(nu!=null && vlg!=null && vlg!==nu)
+      rijen.push(rij('Buffer die je wilt voor beleggen', `volgt je ondergrens, dus nu ${nu} ${nu===1?'maand':'maanden'} en daarna ${vlg}`,
+        `${vlg} mnd`, 'openBeleggenVoorwaarden()'));
+  }catch(_){}
+  return rijen;
 }
-/* v223: wat wel telt maar geen beslissing vraagt, onder een streep in dezelfde kaart als je
-   maandregels. De streep draagt het onderscheid: erboven staat wat een beslissing of aandacht
-   vraagt, met een statusdot; eronder staan constateringen zonder dot.
-   Daarom hangt de voet aan de LAATSTE kaart die regels draagt en niet vast aan de eerste: staat er
-   na de streep nog een kaart met dots, dan scheidt hij niets meer.
-   v226: de spaarquote is hier weg en staat weer als eigen kaart. Hij is een UITKOMST en geen stand
-   tegen een norm, dus hij hoorde niet in de kaart met de regels die een beslissing of aandacht
-   vragen - ook niet onder de streep, want daar staan constateringen over die regels.
-   Wat overblijft is de plan-rij. De streep houdt daarmee zijn werk: hij scheidt op soort en
-   niet op aantal, en één rij zonder dot onder rijen met een dot is precies dat onderscheid. Staat
-   er niets onder, dan valt hij al weg (maandVoetBlok). Sinds v228 is dat de gewone toestand: de
-   enige rij, 'Je potjes vanaf volgende maand', staat er alleen als er iets verandert. */
-/* m wordt sinds v226 niet meer gelezen - maandPlanRegels() leest kijkMaand() zelf. De parameter
-   blijft staan omdat hij bij maandVoetBlok(m, metRegelsErboven) de tweede positie draagt; hem
-   daar weghalen zou elke bestaande aanroep met twee argumenten stil verkeerd laten landen. */
-function maandVoet(m){
-  const delen=[];
-  try{ const pr=maandPlanRegels(); if(pr) delen.push(pr); }catch(_){}
-  return delen.join('');
-}
-/* De streep komt er alleen bij als er iets onder staat EN iets erboven: zonder inhoud eronder
-   scheidt hij niets, en zonder regels erboven staat hij aan de bovenkant van een kaart. */
-function maandVoetBlok(m, metRegelsErboven){
-  const v=maandVoet(m); if(!v) return '';
-  return metRegelsErboven
-    ? `<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:2px">${v}</div>`
-    : v;
+function maandVanafKaart(){
+  let R=[]; try{ R=maandVanafRegels(); }catch(_){ return ''; }
+  if(!R.length) return '';
+  const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
+  return `<div class="card"><div class="hlabel" style="margin:0 0 2px">Vanaf ${esc(vanaf)}</div>${R.join('')}</div>`;
 }
 function maandGelezen(){
   const d=SET.maandGelezen; if(!d) return '';
@@ -6044,6 +6094,48 @@ function valtOpPotjeOpslaan(id){
 /* De kop draagt bewust niet het woord 'signaal': meldingen-horizon bewaakt sinds v162 dat een
    structureel signaal op Grip geen eigen blok krijgt, en toetst dat op de koppen van alle kaarten.
    'Overschrijdingen' zegt hier bovendien preciezer wat er in de log staat. */
+/* ===== DE UITKOMST VAN EEN HANDELING (v315) =====
+   De log zei WAT je deed en niet wat eruit kwam, en daarmee miste hij de helft van zijn reden van
+   bestaan: het potje verhogen laat een signaal verdwijnen zonder dat je minder uitgeeft, en of dat
+   gebeurde staat in de uitkomst en niet in de handeling.
+   PER SOORT HANDELING EEN ANDERE LAT, want de handelingen beweren iets anders:
+   - potje bijgesteld: tegen je OORSPRONKELIJKE potje, want de vraag is of de maand alsnog boven de
+     grens eindigde die je toen had. Tegen het bijgestelde potje meten zou de bijstelling met
+     zichzelf beoordelen.
+   - grens gezet: het aantal boekingen dat er na de grens nog bij kwam. Een grens raakt geen potje,
+     dus een bedrag boven een potje zegt niets over wat de grens deed.
+   - zo gelaten en niets gedaan: tegen het potje, want er is niets verzet.
+   - vervallen na correctie: niets, want de handeling zegt het al (v289).
+   ALLES UIT HET RECORD EN NIETS HERREKEND: wat er bij de afsluiting is gemeten staat vast, ook als
+   de cijfers sindsdien zijn verschoven door een hercategorisering (v235).
+   DE LOPENDE MAAND HEEFT GEEN UITKOMST, en zegt wanneer die er is in plaats van leeg te blijven.
+   `daysElapsed()` is de enige kalenderbron, dus de einddatum kan niet uiteenlopen met de dagteller
+   die de kaart erboven leest. */
+function valtOpUitkomst(r){
+  if(!r||!r.maand) return '';
+  if(String(r.maand)>=thisYM()){
+    let dim=0; try{ dim=daysElapsed(r.maand).dim; }catch(_){}
+    return dim?`uitkomst na ${dim} ${ymFull(r.maand)}`:'';
+  }
+  if(r.over_eind_maand==null) return '';
+  const over=Math.round(+r.over_eind_maand||0);
+  if(r.actie==='correctie') return '';
+  if(r.actie==='grens_gezet' && r.grens_na){
+    const n=Math.round(+r.grens_na.n||0);
+    return n>0 ? `daarna nog ${n} ${n===1?'boeking':'boekingen'} voor ${euro0(r.grens_na.bedrag)}`
+               : 'daarna geen boeking meer in deze categorie';
+  }
+  if(r.actie==='potje_bijgesteld'){
+    const orig=Math.round(+r.potje_bij_detectie||0);
+    if(r.over_oorspronkelijk==null)
+      return over>0 ? `eindigde ${euro0(over)} boven je bijgestelde potje`
+                    : 'bleef binnen je bijgestelde potje';
+    const oo=Math.round(+r.over_oorspronkelijk||0);
+    return oo>0 ? `eindigde ${euro0(oo)} boven je oorspronkelijke potje van ${euro0(orig)}`
+                : `bleef binnen je oorspronkelijke potje van ${euro0(orig)}`;
+  }
+  return over>0 ? `eindigde ${euro0(over)} boven je potje` : 'eindigde binnen je potje';
+}
 function valtOpLogBlok(){
   const T=valtOpTelling(); if(!T.totaal) return '';
   const L=SET.valtOpLog||{};
@@ -6058,10 +6150,19 @@ function valtOpLogBlok(){
      waar die 46 vandaan kwam. Een lege lijst hoort bij een record van voor v238 en zegt niets. */
   const dekTekst=r=>{ const D=(r&&r.dekking)||[]; if(!D.length) return '';
     return ' · uit ' + D.map(x=>`${esc(x.categorie)} ${euro0(x.potje_voor)} → ${euro0(x.potje_na)}`).join(', '); };
-  const regel=r=>`<div class="row" style="gap:8px;padding:6px 0;border-top:1px solid var(--line)">
-      <span style="flex:1;min-width:0;font-size:13px">${esc(r.categorie||r.potjeId||'')} <span class="muted">· ${esc(monthLabel(r.maand))}</span></span>
-      <span class="small muted" style="white-space:nowrap">${esc(r.actie?woord[r.actie]||r.actie:(r.getoond?'nog open':'niet getoond'))}${r.actie==='potje_bijgesteld'&&r.potje_voor!=null?` · ${euro0(r.potje_voor)} → ${euro0(r.potje_na||0)}`:''}${dekTekst(r)}</span>
-    </div>`;
+  /* v315: DE UITKOMST STAAT OP EEN EIGEN REGEL en niet achter de handeling. De handeling staat
+     rechts en moet op één regel passen; een uitkomstzin daarachter breekt daar af en duwt de
+     categorie weg. Over de volle breedte eronder leest hij als wat hij is: wat die handeling
+     opleverde. Geen uitkomst (een correctie, of een record van voor de afsluiting) geeft geen
+     regel, in plaats van een lege. */
+  const regel=r=>{ const u=valtOpUitkomst(r);
+    return `<div style="padding:6px 0;border-top:1px solid var(--line)">
+      <div class="row" style="gap:8px">
+        <span style="flex:1;min-width:0;font-size:13px">${esc(r.categorie||r.potjeId||'')} <span class="muted">· ${esc(monthLabel(r.maand))}</span></span>
+        <span class="small muted" style="white-space:nowrap">${esc(r.actie?woord[r.actie]||r.actie:(r.getoond?'nog open':'niet getoond'))}${r.actie==='potje_bijgesteld'&&r.potje_voor!=null?` · ${euro0(r.potje_voor)} → ${euro0(r.potje_na||0)}`:''}${dekTekst(r)}</span>
+      </div>
+      ${u?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:2px">${esc(u)}</div>`:''}
+    </div>`; };
   /* v289: de correctie telt APART en niet bij 'niets gedaan'. De telling is de reden dat de log bestaat
      (het potje verhogen laat een signaal verdwijnen zonder dat je minder uitgeeft), en een overschrijding
      die bij nader inzien niet bestond hoort daar niet in mee te wegen. Hij staat er alleen als hij is
@@ -6088,8 +6189,8 @@ function renderMaand(){
      hele regelblok en het oordeel al weg en bleef er een leeg scherm over dat uitlegde waarom. Dat
      scherm bestaat niet meer: er valt op Grip geen maand te kiezen. De kiezer, de banner en curMonth
      blijven voor Inzichten, waar categorie a wel doorrekent op de gekozen maand. Grip noemt nergens
-     een maand en elke lezer vanaf Grip (maandIngang, maandSuggestie, maandCoachIngang,
-     maandPlanRegels) geeft thisYM() mee, zodat Grip en Inzichten niet stil uiteen kunnen lopen:
+     een maand en elke lezer vanaf Grip (maandIngang, maandSuggestie, maandCoachIngang, en sinds
+     v315 de vanaf-kaart) geeft thisYM() mee, zodat Grip en Inzichten niet stil uiteen kunnen lopen:
      Grip heeft geen maand, en Inzichten zegt met zijn banner welke hij toont.
      De kop 'Je maand' is meegegaan: zonder kiezer valt er geen maand te kiezen, en de kop sprak de
      schermnaam tegen. De oordeelzin draagt het scherm. */
@@ -6174,11 +6275,11 @@ function renderMaand(){
     ${beslis.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt een beslissing</div>
       ${beslis.map(r=>maandRij(r,false)).join('')}
       ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
-      ${aandacht.length?'':maandVoetBlok(m,true)}</div>`:''}
+      </div>`:''}
     ${aandacht.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt aandacht</div>
       ${aandacht.map(r=>maandRij(r,false)).join('')}
       ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
-      ${maandVoetBlok(m,true)}</div>`:''}
+      </div>`:''}
     ${/* v219: de ingang naar het gesprek stond vier blokken lager, achter de spaarquote, de
           uitgavengrafiek en de beleggen-regel. De kaart erboven belooft een beslissing en de
           plek waar die te maken valt lag buiten beeld. Hij staat nu onder de regels die iets
@@ -6188,10 +6289,12 @@ function renderMaand(){
     ${(beslis.length||aandacht.length)?maandCoachIngang(RO):''}
     ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
       ${goed.map(r=>maandRij(r,true)).join('')}
-      ${(beslis.length||aandacht.length)?'':maandVoetBlok(m,true)}</div>`:''}
-    ${/* geen enkele regelkaart: dan heeft de voet geen kaart om in op te gaan en geen streep om
-          iets van te scheiden, dus staat hij er als eigen kaart. */''}
-    ${(beslis.length||aandacht.length||goed.length)?'':(maandVoet(m)?`<div class="card">${maandVoet(m)}</div>`:'')}
+      </div>`:''}
+    ${/* v315: hier stond de voet (v223), een streep onder de laatste regelkaart met één rij
+          eronder. Die rij staat nu in maandVanafKaart() met twee rijen ernaast, als eigen kaart
+          met een kop die zijn vraag noemt. Hij staat NA 'Staat goed' en voor het logboek: eerst wat
+          iets vraagt, dan wat goed staat, dan wat verandert, dan wat je deed. */''}
+    ${maandVanafKaart()}
     ${/* v226: de spaarquote stond hier als eigen kaart, achter de regels. v232: hij staat op
           Vermogen. Hij meet welk deel van je inkomen naar vermogensopbouw ging, en dat is de
           instroom van de vermogenslaag, niet een oordeel over of je systeem standhoudt. Alles ging
@@ -9459,68 +9562,239 @@ function renderNfSheet(){
    DE KEUZE IS EEN TUSSENSTAND EN GEEN DATA: `_normKeuze` staat in het geheugen, net als `_nfSheet`,
    want een half ingevulde keuze hoort niet in `SET` te belanden. */
 let _normKeuze=null;
+/* v315: HET VELD IS EEN DERDE OPTIE EN GEEN DEFAULT. De twee knoppen dekken de keuze die vrijwel
+   iedereen maakt, en "ander aantal" opent hetzelfde veld dat er sinds v305 staat. De vlag staat in
+   het geheugen naast `_normKeuze`, want een open veld is een tussenstand en geen data.
+   HIJ STAAT OPEN ZODRA JE EIGEN GETAL GEEN KNOP IS, anders is je norm van 4 maanden niet te zien
+   en lijkt er niets gekozen. */
+let _normEigen=false;
 function normKeuzeZet(v){
   const t=(''+v).trim(), n=Math.round(+t);
   _normKeuze=(t===''||!isFinite(n)||n<=0)?null:Math.min(n,24);
   renderNfSheet();
 }
+function normChipZet(n){ _normEigen=false; normKeuzeZet(n); }
+function normEigenOpen(){ _normEigen=true; renderNfSheet(); }
 /* Vastzetten doet de twee dingen die bij elkaar horen: de grens opslaan en, als hij het doel optilt,
    dat doel zetten. DE OUDE WAARDE GAAT MEE IN DE VLAG, anders is de knop niet in een tik terug te
    draaien en is zijn belofte onwaar (v288). Ligt je doel er al boven, dan wordt er aan het doel niets
    geschreven en blijft er dus ook niets terug te draaien. */
+/* v315: DE GRENS GELDT VANAF VOLGENDE MAAND, HET DOEL BEWEEGT NU. Dat is geen inconsistentie maar
+   twee dingen met een eigen eenheid, en ze staan hier naast elkaar zodat de sheet het kan zeggen.
+   DE GRENS: een maand waarin je al leeft is geen maand om halverwege anders te beoordelen. Zet je
+   de norm omhoog, dan zou de bufferregel vandaag opeens een beslissing vragen over een maand die
+   bijna om is; zet je hem omlaag, dan verdwijnt een tekort zonder dat er aan je geld iets
+   veranderde. Dat is dezelfde vorm als het potje van v235, en daarom dezelfde oplossing.
+   HET DOEL NIET: `SET.nfDoelVast` heeft geen maanddimensie, en Plan rekent met het doel dat er NU
+   staat. Een doel dat een maand achterblijft bij de norm die je koos, laat `planVooruit()` een
+   verdeling projecteren naar een doel dat je al had vervangen. Een maanddimensie op het doel zou
+   een tweede mechanisme zijn voor iets dat geen maandvraag is.
+   EEN EERSTE KEUZE GELDT OOK METEEN, en dat is een benoemde grens en geen uitzondering voor het
+   gemak: zonder norm MEET de bufferregel alleen en vraagt hij om die grens (v305). Zou een eerste
+   keuze een maand wachten, dan bleef het scherm vragen om iets dat je net hebt gekozen, en dat is
+   een label dat liegt. Een WIJZIGING heeft dat probleem niet: daar staat al een grens.
+   DE OUDE WAARDEN GAAN ALLE DRIE MEE IN DE VLAG, anders is de knop niet in een tik terug te draaien
+   en is zijn belofte onwaar (v288). `tilt` staat erbij omdat de vlag nu ook zonder optil wordt
+   geschreven: zonder dat veld zou terugdraaien een doel terugzetten dat nooit is opgetild. */
 function normVastzetten(){
   const n=_normKeuze; if(!(n>0)) return;
+  const eerste=(bufferNorm()==null);
   const V=normDoelVoorstel(n);
-  if(V&&V.tilt){
-    SET.bufferNormDoelVoor={doel:(SET.nfDoelVast!=null&&SET.nfDoelVast!=='')?Math.round(+SET.nfDoelVast):null, norm:(SET.bufferNorm!=null?SET.bufferNorm:null)};
-    SET.nfDoelVast=V.naar;
-  }else{
-    delete SET.bufferNormDoelVoor;
-  }
-  SET.bufferNorm=n; _normKeuze=null;
+  const tilt=!!(V&&V.tilt);
+  SET.bufferNormDoelVoor={tilt,
+    doel:(SET.nfDoelVast!=null&&SET.nfDoelVast!=='')?Math.round(+SET.nfDoelVast):null,
+    norm:(SET.bufferNorm!=null&&SET.bufferNorm!=='')?Math.round(+SET.bufferNorm):null,
+    next:(SET.bufferNormNext!=null&&SET.bufferNormNext!=='')?Math.round(+SET.bufferNormNext):null};
+  if(tilt) SET.nfDoelVast=V.naar;
+  SET.bufferNormNext=n;
+  if(eerste) SET.bufferNorm=n;
+  _normKeuze=null; _normEigen=false;
   save(); renderNfSheet(); try{renderVooruit();}catch(_){} try{renderMaand();}catch(_){}
 }
 /* Terugdraaien zet beide terug: de grens en het doel dat hij optilde. Zonder de grens mee terug te
    zetten zou de rij een norm tonen waarvan het gevolg net is weggehaald. */
+/* Terugdraaien zet alles terug wat het vastzetten verzette: de grens van volgende maand, de grens
+   van deze maand als die werd meegeschreven, en het doel als dat werd opgetild.
+   EEN VLAG ZONDER `tilt` IS DE OUDE VORM EN DUS EEN OPTIL: tot v315 werd de vlag alleen bij een
+   optil geschreven, dus `undefined` betekent daar waar. Zonder die regel zou een terugdraaien op
+   een bestaand toestel het doel laten staan dat de vlag juist bewaarde. */
 function normTerugdraaien(){
   const v=SET.bufferNormDoelVoor;
   if(v&&typeof v==='object'){
-    if(v.doel!=null) SET.nfDoelVast=v.doel; else delete SET.nfDoelVast;
+    const tilt=(v.tilt===undefined)?true:!!v.tilt;
+    if(tilt){ if(v.doel!=null) SET.nfDoelVast=v.doel; else delete SET.nfDoelVast; }
     if(v.norm!=null) SET.bufferNorm=v.norm; else delete SET.bufferNorm;
+    if(v.next!=null) SET.bufferNormNext=v.next; else delete SET.bufferNormNext;
   }
-  delete SET.bufferNormDoelVoor; _normKeuze=null;
+  delete SET.bufferNormDoelVoor; _normKeuze=null; _normEigen=false;
   save(); renderNfSheet(); try{renderVooruit();}catch(_){} try{renderMaand();}catch(_){}
 }
+/* Weghalen geldt METEEN en niet vanaf volgende maand, en dat is de ene asymmetrie in deze
+   maanddimensie. Zonder grens velt de app geen oordeel over je buffer, dus weghalen haalt een
+   oordeel WEG en voegt er nooit een toe: dat is de kant die niets kan beweren wat je niet hebt
+   gekozen (v59/v73/v173). Een grens nog een maand laten staan nadat je hebt gezegd dat je er geen
+   wilt, is precies het omgekeerde. */
 function bufferNormWis(){
-  delete SET.bufferNorm; delete SET.bufferNormDoelVoor; _normKeuze=null;
+  delete SET.bufferNorm; delete SET.bufferNormNext; delete SET.bufferNormDoelVoor;
+  _normKeuze=null; _normEigen=false;
   save(); renderNfSheet(); try{renderVooruit();}catch(_){} try{renderMaand();}catch(_){}
 }
+/* ===== WAT EEN NORMKEUZE MET JE PLAN DOET (v315) =====
+   `normDoelVoorstel()` zegt wat de keuze met je DOEL doet; deze functie zegt wat dat doel met je
+   PLAN doet. Dat is de vraag die de sheet moest beantwoorden en die je nergens kon stellen: een
+   norm van twee naar drie maanden tilt je noodfonds op, en dan houdt de grendel je andere
+   bestemmingen langer dicht (v242).
+   DE PROJECTIE KOMT UIT `planVooruit()` EN WORDT NIET NAGEREKEND (v104). Die functie draagt sinds
+   v307 de terugval (wat een vol doel niet meer nodig heeft zakt door naar het volgende) en
+   herberekent de grendel per maand, dus een hypothetisch doel beweegt de hele keten vanzelf mee.
+   Wat deze functie doet is de SCOPE kiezen, in de vorm van v285: de rijen van `allocatePlan()`,
+   met alleen het doel van het noodfonds vervangen.
+   TWEE PROJECTIES, EN HET VERSCHIL IS HET GEVOLG. Eén projectie zou alleen zeggen hoe je plan er
+   met de nieuwe norm uitziet, en dan weet je niet of dat anders is dan nu.
+   DE TOEWIJZING WORDT PER DOEL OPNIEUW GEKLEMD, via `nfGespaardBij()`, en dat is GEMETEN en geen
+   voorzorg: `nf.gespaard` uit `allocatePlan()` is al geklemd op het doel van NU, dus bij een hoger
+   doel zou een toewijzing die boven dat oude doel uitkwam blijven wegvallen. Op de fixture van deze
+   ronde (toewijzing 6.000, doel 3.000) scheelde dat 3.000 euro en twee maanden grendel. De klem
+   staat daarom op een plek met twee lezers en niet twee keer uitgeschreven (v104).
+   EEN AFLOS-ITEM DOET NIET MEE, om de reden van v307: `planVooruit()` laat zijn alloc voor altijd
+   staan, dus een rij met 'vol in' zou daar een datum beweren die de projectie niet modelleert.
+   ZONDER BEKENDE TOEWIJZING IS ER GEEN PROJECTIE (`nfOnbekend`): een grendel en een einddatum
+   gerekend op een gat liegen (v173), dus dan staan er geen plan-rijen en zegt het blok dat. */
+function normGevolgen(n){
+  const m=Math.round(+n||0); if(!(m>0)) return null;
+  const V=normDoelVoorstel(m); if(!V) return null;
+  let cap=0; try{ cap=Math.round(planCapacity()||0); }catch(_){}
+  let P=[]; try{ P=allocatePlan()||[]; }catch(_){ P=[]; }
+  const nf=P.find(p=>p&&p.type==='noodfonds')||null;
+  const onbekend=!!(nf&&nf.nfOnbekend);
+  const loop=(doel)=>{
+    if(!P.length||!(cap>0)||onbekend||!nf) return null;
+    const rows=P.map(p=>Object.assign({},p));
+    const r0=rows.find(r=>r.type==='noodfonds');
+    r0.doel=Math.max(Math.round(+doel||0),0);
+    r0.gespaard=nfGespaardBij(r0.doel);
+    r0.rest=Math.max(r0.doel-r0.gespaard,0);
+    r0.status=(r0.rest<=0&&r0.status!=='gepauzeerd')?'bereikt':r0.status;
+    let uit={}; try{ uit=planVooruit(rows,cap)||{}; }catch(_){ uit={}; }
+    let G=null; try{ G=planGrendelVan(r0,cap); }catch(_){}
+    return {uit, rest:r0.rest, grendel:G?G.maanden:0};
+  };
+  /* DE TWEEDE PROJECTIE LOOPT OP HET DOEL DAT ER ECHT KOMT, en dat is `V.naar` ALLEEN bij een
+     optil: `normVastzetten()` schrijft `SET.nfDoelVast` niet als de keuze onder je doel ligt, dus
+     een projectie op `V.naar` zou daar een plan tonen bij een doel dat nooit wordt gezet. GEMETEN
+     waarom dat niet alleen theorie is: een norm van 2 maanden van 1.218 geeft 2.436 tegen een doel
+     van 3.000, en op die 2.436 vult de buffer sneller en gaat de grendel eerder open dan hij zal
+     doen. Zo is de gelijkheid bij `!tilt` ook per constructie waar en mag het blok hem in één
+     regel afdoen. */
+  const A=loop(V.nu), B=loop(V.tilt?V.naar:V.nu);
+  const rijen=[];
+  for(const p of P){
+    if(!p||p.type==='noodfonds'||p.type==='aflossen') continue;
+    if(p.status==='gepauzeerd'||p.status==='bereikt') continue;
+    rijen.push({id:p.id, naam:p.naam||'Doel',
+      voor:(A&&A.uit[p.id])||null, na:(B&&B.uit[p.id])||null});
+  }
+  return {maanden:m, voorstel:V, cap, onbekend, plan:!!(A&&B), rijen,
+    nf:{voor:(A&&A.uit[PLAN_NF])||null, na:(B&&B.uit[PLAN_NF])||null,
+        restVoor:A?A.rest:null, restNa:B?B.rest:null},
+    grendel:{voor:A?A.grendel:null, na:B?B.grendel:null}};
+}
+/* HET BLOK ONDER DE KEUZE. Elke rij noemt de uitkomst NU en de uitkomst met deze norm, want het
+   verschil is waar je op beslist; vallen de twee samen, dan zegt de rij dat met zoveel woorden in
+   plaats van weg te blijven (v59/v73/v173).
+   DE AFSPRAAK STAAT ER ALLEEN ALS HIJ OVER JE BUFFER GAAT, en hij rekent niets: een afspraak is
+   een keuze over een maand en de norm is de grens waartegen die maand straks wordt gelezen. Wat
+   het blok daarover kan zeggen is dat de grens verschuift en niet wat de uitkomst wordt. */
+function normGevolgBlok(n){
+  const G=normGevolgen(n); if(!G) return '';
+  const V=G.voorstel;
+  const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
+  const rij=(lab, tekst)=>`<div class="row" style="gap:8px;align-items:flex-start;padding:5px 0;border-top:1px solid var(--line)">
+      <span class="small muted" style="flex:0 0 40%;text-align:left">${esc(lab)}</span>
+      <span class="small" style="flex:1;min-width:0;text-align:left;line-height:1.4">${esc(tekst)}</span></div>`;
+  const R=[];
+  R.push(rij('Noodfonds', V.tilt
+    ? `${euro0(V.nu)} → ${euro0(V.naar)}, want ${G.maanden} ${G.maanden===1?'maand':'maanden'} van ${euro0(V.ess)} vraagt dat`
+    : `blijft ${euro0(V.nu)}, want je doel ligt al op of boven ${G.maanden} ${G.maanden===1?'maand':'maanden'}`));
+  if(G.onbekend){
+    R.push(rij('Je plan', 'niet door te rekenen zolang je spaarsaldo onbekend is'));
+  }else if(!G.plan){
+    R.push(rij('Je plan', 'niet door te rekenen zonder maandelijkse spaarinleg'));
+  }else if(!V.tilt){
+    /* ZONDER OPTIL IS DE PROJECTIE PER CONSTRUCTIE DEZELFDE, want beide lopen dan op hetzelfde doel.
+       Vier rijen die alle vier 'en dat verandert niet' zeggen, zijn geen vier metingen maar een
+       tautologie, en ze verbergen wat er WEL verandert: alleen waartegen Grip je buffer leest. Dit
+       is de kant die je ziet bij een norm naar BENEDEN, want een lagere norm verlaagt je doel nooit. */
+    R.push(rij('Je plan', 'verandert hier niet van, want je doel blijft hetzelfde; alleen de grens waartegen Grip je buffer leest schuift'));
+  }else{
+    /* DE PIJL EN NIET 'WORDT': de drie soorten uitkomst zijn een stand ('al vol'), een maandtekst
+       en 'nog niet in zicht', en die passen niet alle drie in één werkwoord ('is al vol wordt ~1
+       maand'). Het is dezelfde pijl als in de log, waar hij al een voor-en-na draagt. */
+    const paar=(a,b)=> a===b ? `${a}, en dat verandert niet` : `${a} → ${b}`;
+    const vol=(mnd, rest)=> (rest!=null&&rest<=0) ? 'al vol' : (mnd?etaTekst(mnd):'nog niet in zicht');
+    R.push(rij('Buffer vol', paar(vol(G.nf.voor,G.nf.restVoor), vol(G.nf.na,G.nf.restNa))));
+    const gTxt=(x)=> (!x||x<=0) ? 'staat open' : `gaat open ${etaTekst(x)}`;
+    R.push(rij('Verdelen', paar(gTxt(G.grendel.voor), gTxt(G.grendel.na))));
+    for(const r of G.rijen){
+      const a=r.voor?etaTekst(r.voor):'nog niet in zicht', b=r.na?etaTekst(r.na):'nog niet in zicht';
+      R.push(rij(r.naam, paar(a,b)));
+    }
+  }
+  let af=null; try{ af=coachThisMonthAfspraak(); }catch(_){}
+  if(af && af.regel==='buffer')
+    R.push(rij('Je afspraak', `"${af.text||''}" is gemaakt tegen je grens van nu; vanaf ${vanaf} leest de bufferregel hem tegen ${G.maanden} ${G.maanden===1?'maand':'maanden'}`));
+  return `<div style="margin-top:9px;text-align:left">${R.join('')}</div>`;
+}
+/* v315: TWEE KNOPPEN, EN HET VELD ALS DERDE OPTIE. De rij vroeg een getal in een leeg veld,
+   zonder te zeggen welk getal gebruikelijk is; twee en drie maanden dekken vrijwel elke keuze en
+   het veld blijft bestaan voor wie iets anders wil (1 tot 24). GEEN DEFAULT op een van de twee:
+   zolang je niets kiest is er geen grens (v305), en een voorgeselecteerde knop zou een grens
+   beweren die je niet hebt gezet.
+   DE GEVOLGEN STAAN BIJ DE KEUZE EN NIET ERACHTER, en ze rekenen mee met wat er gekozen is, ook
+   bij een eigen getal: `normGevolgBlok()` leest `keuze` en niets anders.
+   DE RIJ NOEMT WANNEER DE GRENS GELDT, en dat is de hele reden dat de maanddimensie bestaat: een
+   keuze die vanaf volgende maand geldt en dat niet zegt, leest als een keuze die nu geldt. Bij een
+   EERSTE keuze staat er dat hij ook meteen geldt, want dat is wat `normVastzetten()` dan doet. */
 function bufferNormRij(M){
-  const nu=bufferNorm(), keuze=_normKeuze, terug=SET.bufferNormDoelVoor;
-  const veldWaarde=(keuze!=null)?keuze:(nu!=null?nu:'');
-  const veld=`<div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid ${(keuze!=null||nu!=null)?'var(--teal)':'var(--line)'};border-radius:9px;padding:4px 9px;width:118px">
-      <input id="bufferNorm" type="number" inputmode="numeric" min="1" max="24" step="1" value="${veldWaarde}" placeholder="kies" onchange="normKeuzeZet(this.value)"
-        style="flex:1;min-width:0;background:transparent;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;padding:0">
-      <span class="small muted">mnd</span></div>`;
+  const nu=bufferNorm(), vlg=bufferNormNext(), keuze=_normKeuze, terug=SET.bufferNormDoelVoor;
+  const wacht=(vlg!=null&&nu!=null&&vlg!==nu);
+  const basis=(keuze!=null)?keuze:vlg;
+  const eigen=_normEigen || (basis!=null && basis!==2 && basis!==3);
+  const chip=(x)=>`<span class="chip ${basis===x?'on':''}" onclick="normChipZet(${x})">${x} maanden</span>`;
+  const veld=`<span class="chip ${eigen?'on':''}" style="display:flex;align-items:center;gap:5px;cursor:default">
+      <input id="bufferNorm" type="number" inputmode="numeric" min="1" max="24" step="1" value="${eigen&&basis!=null?basis:''}" placeholder="kies" onchange="normKeuzeZet(this.value)" onclick="event.stopPropagation()"
+        style="width:40px;background:var(--bg);border:1px solid var(--line);border-radius:7px;color:var(--txt);font-size:var(--fs-sm);font-weight:700;text-align:center;padding:2px 4px">
+      mnd</span>`;
+  const kiezer=`<div class="chips" id="bufferNormChips" style="margin-top:8px;justify-content:flex-start">${chip(2)}${chip(3)}${
+    eigen?veld:`<span class="chip" onclick="normEigenOpen()">ander aantal</span>`}</div>`;
+  const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
   let onder='';
-  if(keuze!=null && keuze!==nu){
-    const V=normDoelVoorstel(keuze);
-    const gevolg=!V ? 'Er is nog niet genoeg bekend om te zeggen wat dit met je doel doet.'
-      : V.tilt ? `Vastzetten tilt je noodfonds op van ${euro0(V.nu)} naar ${euro0(V.naar)}, want ${keuze} maanden van ${euro0(V.ess)} vraagt dat.`
-      : `Je doel van ${euro0(V.nu)} ligt daar al op of boven, dus er verandert niets aan je doel.`;
-    onder=`<div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">${gevolg}</div>
+  if(keuze!=null && keuze!==vlg){
+    const geldt=(nu==null)
+      ? `Vastzetten laat deze grens meteen gelden, want je had er nog geen.`
+      : `Vastzetten laat deze grens vanaf ${vanaf} gelden. Deze maand blijft op ${nu} ${nu===1?'maand':'maanden'} staan.${normDoelVoorstel(keuze)&&normDoelVoorstel(keuze).tilt?' Je doel verschuift wel meteen, want Plan verdeelt je inleg naar het doel dat er nu staat.':''}`;
+    onder=`${normGevolgBlok(keuze)}
+      <div class="small muted" style="font-size:var(--fs-xs);margin-top:9px;text-align:left">${geldt}</div>
       <div class="small" style="margin-top:6px;text-align:left"><span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="normVastzetten()">vastzetten ›</span>
       <span style="color:var(--mut2);cursor:pointer;margin-left:12px" onclick="normKeuzeZet('')">laat staan</span></div>`;
-  }else if(nu==null){
+  }else if(nu==null && !wacht){
     onder=`<div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">Zonder ondergrens zegt de bufferregel op Grip alleen hoeveel maanden je buffer dekt, en niet of dat genoeg is. Dit is niet hetzelfde als de maanden hierboven: die bepalen hoe hoog je doel staat.</div>`;
   }else{
-    const tilt=(terug&&typeof terug==='object')
-      ? ` Je noodfonds is hiervoor opgetild${terug.doel!=null?` van ${euro0(terug.doel)}`:''} naar ${euro0(M.doel)}. <span style="color:var(--teal);cursor:pointer" onclick="normTerugdraaien()">terugdraaien</span>`
+    const tilt=(terug&&typeof terug==='object'&&(terug.tilt===undefined||terug.tilt))
+      ? ` Je noodfonds is hiervoor opgetild${terug.doel!=null?` van ${euro0(terug.doel)}`:''} naar ${euro0(M.doel)}.`
+      : '';
+    const weg=(terug&&typeof terug==='object')
+      ? ` <span style="color:var(--teal);cursor:pointer" onclick="normTerugdraaien()">terugdraaien</span>`
       : ` <span style="color:var(--teal);cursor:pointer" onclick="bufferNormWis()">grens weghalen</span>`;
-    onder=`<div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">Onder deze grens vraagt je buffer op Grip een beslissing; erboven is hij in orde. Dit is niet hetzelfde als de maanden hierboven: die bepalen hoe hoog je doel staat.${tilt}</div>`;
+    const staat=wacht
+      ? `Deze maand toetst je buffer tegen ${nu} ${nu===1?'maand':'maanden'}; vanaf ${vanaf} tegen ${vlg}.`
+      : `Onder deze grens vraagt je buffer op Grip een beslissing; erboven is hij in orde. Dit is niet hetzelfde als de maanden hierboven: die bepalen hoe hoog je doel staat.`;
+    onder=`<div class="small muted" style="font-size:var(--fs-xs);margin-top:7px;text-align:left">${staat}${tilt}${weg}</div>`;
   }
   return `<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:11px">
-    <div class="row" style="gap:8px;align-items:center"><label class="small muted" style="flex:1;text-align:left">Ondergrens in maanden</label>${veld}</div>
+    <div class="row" style="gap:8px;align-items:center"><label class="small muted" style="flex:1;text-align:left">Ondergrens in maanden</label>${
+      (nu!=null||wacht)?`<span class="small" style="font-weight:700">${wacht?`${nu} → ${vlg}`:nu} mnd</span>`:'<span class="small muted">niet gekozen</span>'}</div>
+    ${kiezer}
     ${onder}</div>`;
 }
 function nfDoelVastRij(M){
@@ -11527,6 +11801,30 @@ function valtOpAfsluiten(){
     const lat=(r.actie==='potje_bijgesteld' && r.potje_na!=null) ? Math.round(+r.potje_na||0) : Math.round(+r.potje_bij_detectie||0);
     let sp=0; try{ sp=Math.round((catSpendMap(r.maand)||{})[r.potjeId]||0); }catch(_){}
     r.over_eind_maand=Math.max(sp-lat,0);
+    /* v315: DE UITKOMST TEGEN HET OORSPRONKELIJKE POTJE, uit DEZELFDE `sp` als de regel erboven.
+       `over_eind_maand` meet tegen de LAT, en dat is bij een bijstelling je nieuwe potje: precies
+       het getal dat nul wordt doordat je het potje verhoogde. Dat is de vraag die de log moet
+       kunnen stellen, dus die tweede meting staat hier.
+       GEEN TWEEDE WAARHEID (v104): het is EEN meting van je uitgave tegen TWEE latten, uit een
+       enkele `catSpendMap(r.maand)`-aanroep. Twee aanroepen zouden bij een hercategorisering
+       tussendoor uiteen kunnen lopen.
+       NIET AFLEIDBAAR UIT `over_eind_maand`, en dat is de reden dat het een veld is: die is op nul
+       geklemd, dus juist in het geval dat telt (de bijstelling haalde het rood weg) zegt hij niets
+       meer over je uitgave.
+       EN NIET TERUGGEREKEND BIJ HET RENDEREN: een afgesloten maand staat vast. Een record dat voor
+       v315 is afgesloten draagt dit veld niet; de log zegt daar welke lat hij wel heeft, in plaats
+       van een getal te tonen dat tegen een andere lat is gemeten (v298).
+       EN DE UITKOMST VAN EEN GRENS: hoeveel boekingen er na het zetten nog bij kwamen. 'Volgende'
+       is precies 'stond er nog niet in toen je de grens zette', dezelfde bepaling als de melding
+       zelf, en de id-lijst komt uit het record (zie valtOpGrensZet). */
+    const orig=Math.round(+r.potje_bij_detectie||0);
+    if(orig>0) r.over_oorspronkelijk=Math.max(sp-orig,0);
+    if(r.actie==='grens_gezet' && Array.isArray(r.grens_bekend)){
+      const was=new Set(r.grens_bekend); let gn=0, gb=0;
+      try{ for(const t of txOfMonth(r.maand)){ if(catOf(t)!==r.potjeId||was.has(t.id)) continue;
+        if(t.amount<0){ gn++; gb+=-t.amount; } } }catch(_){}
+      r.grens_na={n:gn, bedrag:Math.round(gb)};
+    }
     /* v289: EEN OVERSCHRIJDING DIE DOOR EEN CORRECTIE VERDWEEN IS GEEN 'NIETS GEDAAN'. De eis is dat de
        correctie het VERSCHIL MAAKTE: de maand eindigt op of onder het potje EN zonder wat de correctie
        eruit haalde was hij er nog overheen. Zonder die tweede helft zou het label ook staan op een maand
@@ -11555,7 +11853,12 @@ function valtOpGrensZet(id){
   SET.valtOpGrens=SET.valtOpGrens||{};
   SET.valtOpGrens[k]={ym:m, stand, op:vandaagYMD(), bekend};
   save();
-  valtOpActieZet(id,'grens_gezet');
+  /* v315: DE MEETLAT GAAT MEE IN HET RECORD, zodat de uitkomst van een grens later te lezen is.
+     `SET.valtOpGrens[k]` is per CATEGORIE en wordt door de grens van een volgende maand
+     overschreven, dus na een maandwissel kan de log er niets meer uit reconstrueren. Dat is
+     dezelfde reden waarom `valtOpAfsluiten()` zijn potje uit het record leest en niet uit
+     SET.budgets (v235): een afsluiting mag niet van de volgorde in de bootregel afhangen. */
+  valtOpActieZet(id,'grens_gezet',{grens_stand:stand, grens_bekend:bekend});
   closeSheet(); render();
   toast(`${ICON('check')} Grens op ${euro0(stand)} · ${CATS[k].name.toLowerCase()}`);
 }
@@ -12988,8 +13291,9 @@ function insBudgetBlok(m){
   /* Drie ingangen, elk op zijn eigen woorden - de ring en de titel van monthStatusCard vielen weg
      op de lopende maand, dus de kop en de twee bedragen nemen die rol over (v135). */
   /* v178: 'boven inkomen-limiet' was een oordeel over je plan, niet over hoe deze maand loopt,
-     en verhuisde naar Maand (maandPlanRegels). Daar is hij in v228 vervallen. De lege
-     placeholder die hier sindsdien stond is toen meegegaan. */
+     en verhuisde naar Maand, naar de voetregel onder de maandregels. Daar is hij in v228
+     vervallen, en die voetregel zelf bij v315. De lege placeholder die hier sindsdien stond is
+     bij v228 meegegaan. */
   /* v241: de maandkiezer en de dagteller stonden hier als eerste regel binnen de kaart. Ze zeggen
      welke maand je leest en hoe ver die is, en dat is context bij de hele pagina en niet bij dit
      ene blok. Ze staan nu in de eyebrow erboven (insEyebrow); hun tikgedrag is meeverhuisd. */

@@ -13,6 +13,13 @@
 // v228: de rij 'Boven je inkomen-limiet' is vervallen. De voet draagt nog één rij, 'Je potjes vanaf
 // volgende maand', en die staat er alleen als je potjes veranderen. Deze spec vult de voet daarom
 // met een volgende-maand-laag (NEXT) in plaats van met potjes boven de limiet (OVER).
+// v315: DE VOET ZELF IS VERVALLEN. Die ene rij is verhuisd naar de kaart 'Vanaf <maand>', met de
+// buffernorm en de beleggingsdrempel ernaast, en daarmee zijn maandVoet(), maandVoetBlok() en
+// maandPlanRegels() weg. Wat deze spec nog vasthoudt is wat er NIET verloren is gegaan: de twee
+// kaarten van v223 bestaan nog steeds niet, de tegel-renderer draagt alles, en de rij staat op
+// precies een plek met een eigen kop en zonder statusdot. Blok c is daarom omgedraaid: het pint niet
+// meer WAAR de voet hangt maar DAT hij er niet meer is, en dat is de 'beide schermen'-eis bij een
+// verhuizing. Wat de nieuwe kaart zelf moet doen staat in grip-vanaf-norm.spec.js.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 
@@ -60,13 +67,13 @@ function seed(o) {
 async function boot(page, o) {
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof maandVoet === 'function');
+  await page.waitForFunction(() => typeof renderMaand === 'function');
   await page.evaluate(() => go('maand'));
 }
 const kaarten = (page) => page.evaluate(() => [...document.querySelectorAll('#s-maand .card')].map((c) => ({
   kop: ((c.querySelector('.hlabel') || {}).textContent || '').trim(),
   spaarquote: /Spaarquote/.test(c.textContent),
-  voet: /potjes vanaf volgende maand/.test(c.textContent),
+  voet: /Je potjes/.test(c.textContent),
   streep: /border-top:1px solid var\(--line\)/.test(c.innerHTML),
 })));
 const tekst = (page) => page.evaluate(() => document.querySelector('#s-maand').innerText.replace(/\s+/g, ' '));
@@ -138,10 +145,11 @@ test.describe('b - geen informatieverlies', () => {
     expect(h).toMatch(/openKpiDetail\('inleg','\d{4}-\d{2}'\)/);   // v232: het detail opent op dezelfde maand
   });
 
+  // v315: de rij staat nu in maandVanafRegels(), met hetzelfde bedrag en dezelfde ingang
   test('de plan-rij gaat mee, met bedrag en ingang', async ({ page }) => {
     await boot(page, { set: NEXT });
-    const h = await page.evaluate(() => maandPlanRegels());
-    expect(h).toContain('Je potjes vanaf volgende maand');
+    const h = await page.evaluate(() => maandVanafRegels().join(''));
+    expect(h).toContain('Je potjes');
     expect(h).toContain('openPotjesVerdeling');
     expect(h).toContain('€2.500');   // 1500 huur + 1000 boodschappen vanaf volgende maand
     // v228: de tweede rij ('Boven je inkomen-limiet') is vervallen
@@ -149,68 +157,45 @@ test.describe('b - geen informatieverlies', () => {
   });
 });
 
-test.describe('c - de streep en waar de voet hangt', () => {
-  /* v226: alle drie de regels moeten dan werkelijk een beslissing vragen. Geen inleg op de
-     spaarrekening (de buffer ligt dus niet op tempo) en een gat binnen de marge. */
-  test('bij alleen een beslissingskaart hangt de voet daar, met streep', async ({ page }) => {
-    await boot(page, { set: NEXT, geenSpaar: true, knel: 2 });
-    const k = await kaarten(page);
-    expect(k.map((x) => x.kop)).not.toContain('Vraagt aandacht');
-    const c = k.find((x) => x.kop === 'Vraagt een beslissing');
-    expect(c.voet).toBe(true);
-    expect(c.streep).toBe(true);
-    expect(c.spaarquote).toBe(false);   // die staat sinds v226 in zijn eigen kaart
-  });
-
-  test('is er ook een aandachtskaart, dan hangt de voet daar en niet erboven', async ({ page }) => {
-    await boot(page, { spaar: 9000, set: Object.assign({ nfMaanden: 6, nfDoelVast: 0, nfToegewezen: 9000 }, NEXT) });
-    const k = await kaarten(page);
-    const b = k.find((x) => x.kop === 'Vraagt een beslissing');
-    const a = k.find((x) => x.kop === 'Vraagt aandacht');
-    expect(b).toBeTruthy(); expect(a).toBeTruthy();
-    expect(b.voet).toBe(false);
-    expect(a.voet).toBe(true);
-    // en er staan geen statusdots meer ná de streep
-    expect(a.streep).toBe(true);
-    expect(b.spaarquote).toBe(false); expect(a.spaarquote).toBe(false);
-  });
-
-  test('de streep staat er precies één keer', async ({ page }) => {
+/* v315: DE VOET BESTAAT NIET MEER, en dit blok houdt dat vast in plaats van waar hij hing. De drie
+   functies zijn weg, de streep eronder is weg, en de rij staat op precies EEN plek: de eigen kaart.
+   Dat laatste is de 'verplaatsen is nooit kopiëren'-eis, hier van de kant van het oude scherm. */
+test.describe('c - de voet is vervallen, de rij staat in een eigen kaart', () => {
+  test('de drie voet-functies bestaan niet meer', async ({ page }) => {
     await boot(page, { set: NEXT });
-    const n = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length);
-    expect(n).toBe(1);
+    const r = await page.evaluate(() => ['maandVoet', 'maandVoetBlok', 'maandPlanRegels']
+      .map((n) => typeof window[n]));
+    expect(r).toEqual(['undefined', 'undefined', 'undefined']);
   });
 
-  test('zonder volgende-maand-laag is de voet leeg en valt de streep weg', async ({ page }) => {
+  test('de rij staat in een eigen kaart met een eigen kop, en niet in een regelkaart', async ({ page }) => {
+    await boot(page, { set: NEXT });
+    const k = await kaarten(page);
+    const met = k.filter((x) => x.voet);
+    expect(met.length, 'precies een kaart draagt de rij').toBe(1);
+    expect(met[0].kop).toMatch(/^Vanaf /);
+    /* NIET OP DE border-top BINDEN: de rijen van deze kaart scheiden zichzelf met een border-top,
+       dus de vlag van kaarten() zegt hier niets meer. Wat vast moet liggen is dat GEEN regelkaart
+       de rij nog draagt, en dat is wat de streep van v223 betekende. */
+    expect(k.filter((x) => /^Vraagt |^Staat goed/.test(x.kop) && x.voet).length).toBe(0);
+  });
+
+  test('zonder volgende-maand-laag is er geen rij en geen kaart', async ({ page }) => {
     await boot(page);
     const t = await tekst(page);
-    expect(t).not.toContain('vanaf volgende maand');
-    /* v226: hier stond dat de streep blijft omdat de spaarquote er nog onder staat. Die staat nu
-       in een eigen kaart, dus zonder volgende-maand-rij is de voet leeg en valt de streep weg.
-       De spaarquote zelf staat er onverkort, alleen elders. v228: potjes boven de limiet vullen de
-       voet niet meer, dus dit is sindsdien de gewone toestand. */
+    expect(t).not.toContain('Je potjes');
+    expect(t.toUpperCase()).not.toContain('VANAF ');
     expect(t).not.toMatch(/spaarquote/i);   // v232: de spaarquote staat op Vermogen
-    const streep = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length);
-    expect(streep).toBe(0);
+    const n = await page.evaluate(() => maandVanafRegels().length);
+    expect(n).toBe(0);
   });
 
-  test('zonder spaarquote en zonder volgende-maand-laag valt de voet en de streep weg', async ({ page }) => {
-    await boot(page, { geenSpaar: true, set: { savingsAcc: {}, savingMode: 'amount', savingAmount: 0 } });
-    const leeg = await page.evaluate(() => maandVoet(curMonth || thisYM()));
-    if (leeg === '') {
-      const n = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length);
-      expect(n).toBe(0);
-    } else {
-      // er staat toch een plan-rij onder; dan hoort de streep er juist wel te staan
-      expect(leeg).toMatch(/potjes vanaf volgende maand/);
-    }
-  });
-
-  test('maandVoetBlok zonder regels erboven draagt geen streep', async ({ page }) => {
+  test('de streep onder een regelkaart is met de voet vervallen', async ({ page }) => {
     await boot(page, { set: NEXT });
-    const h = await page.evaluate(() => maandVoetBlok(curMonth || thisYM(), false));
-    expect(h).not.toContain('border-top');
-    expect(h).toContain('Je potjes vanaf volgende maand');
+    const n = await page.evaluate(() => [...document.querySelectorAll('#s-maand .card')]
+      .filter((c) => /^Vraagt |^Staat goed/i.test(((c.querySelector('.hlabel') || {}).textContent || '').trim()))
+      .filter((c) => /border-top:1px solid var\(--line\)/.test(c.innerHTML)).length);
+    expect(n).toBe(0);
   });
 });
 
@@ -228,22 +213,20 @@ test.describe('d - de rest van het scherm blijft staan', () => {
   });
 
   // v226: de voet hangt aan de laatste kaart die regels draagt, en dat is hier de aandachtskaart
-  test('geen sectiekop binnen de kaart', async ({ page }) => {
+  // v315: een kop per kaart, en de vanaf-kaart draagt alleen zijn eigen
+  test('geen tweede sectiekop binnen de kaart', async ({ page }) => {
     await boot(page, { set: NEXT });
-    const k = (await kaarten(page)).find((x) => x.voet);
     const koppen = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /potjes vanaf volgende maand/.test(x.textContent));
+      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /Je potjes/.test(x.textContent));
       return [...c.querySelectorAll('.hlabel')].length;
     });
-    expect(k.kop).toMatch(/^Vraagt /);
-    expect(k.streep).toBe(true);
     expect(koppen).toBe(1);   // alleen de kaartkop zelf
   });
 
-  test('de regels onder de streep dragen geen statusdot', async ({ page }) => {
+  test('de rijen in de vanaf-kaart dragen geen statusdot', async ({ page }) => {
     await boot(page, { set: NEXT });
     const uit = await page.evaluate(() => {
-      const v = document.createElement('div'); v.innerHTML = maandVoet(curMonth || thisYM());
+      const v = document.createElement('div'); v.innerHTML = maandVanafKaart();
       return /border-radius:50%/.test(v.innerHTML);
     });
     expect(uit).toBe(false);

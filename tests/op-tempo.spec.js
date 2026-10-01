@@ -422,7 +422,8 @@ test.describe('f - een kaart zonder enig tekort', () => {
 test.describe('g - de spaarquote staat niet meer op Maand', () => {
   test('niet in de voet, niet als kaart', async ({ page }) => {
     await boot(page);
-    const voet = await page.evaluate(() => maandVoet(curMonth || thisYM()));
+    // v315: de voet is vervallen; wat eronder stond is de vanaf-kaart
+    const voet = await page.evaluate(() => maandVanafKaart());
     expect(voet).not.toMatch(/maandKpiBlok|wvo-tile/);
     const k = await kaarten(page);
     expect(k.filter((x) => x.spaarquote)).toEqual([]);
@@ -430,18 +431,18 @@ test.describe('g - de spaarquote staat niet meer op Maand', () => {
   });
 
   /* v228: de rij 'Boven je inkomen-limiet' is vervallen, dus potjes boven de limiet vullen de voet
-     niet meer. Een volgende-maand-laag doet dat nog wel; de eigenschap blijft dezelfde. */
-  test('de streep houdt zijn werk met alleen de plan-rij eronder', async ({ page }) => {
+     niet meer. Een volgende-maand-laag doet dat nog wel; de eigenschap blijft dezelfde.
+     v315: de voet is vervallen en die rij staat in zijn eigen kaart. Wat deze test vasthoudt is
+     wat hij altijd vasthield: de spaarquote staat niet in de kaart die die rij draagt. */
+  test('de kaart met de plan-rij draagt de spaarquote niet', async ({ page }) => {
     await boot(page, { set: { budgetsNext: { boodschappen: 1100 } } });
     const uit = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /potjes vanaf volgende maand/.test(x.textContent));
+      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /Je potjes/.test(x.textContent));
       return { kop: ((c.querySelector('.hlabel') || {}).textContent || '').trim(),
-        streep: /border-top:1px solid var\(--line\)/.test(c.innerHTML),
         spaarquote: /Spaarquote/.test(c.textContent) };
     });
-    expect(uit.streep).toBe(true);
     expect(uit.spaarquote).toBe(false);
-    expect(uit.kop).toMatch(/Vraagt/);
+    expect(uit.kop).toMatch(/^Vanaf /);
   });
 });
 

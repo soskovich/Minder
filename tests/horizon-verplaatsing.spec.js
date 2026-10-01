@@ -38,11 +38,21 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
   test("'vanaf volgende maand' staat op Maand en niet meer op Inzichten", async ({ page }) => {
     await boot(page, 'maand');
     const t = await beide(page);
-    expect(t.maand).toMatch(/Je potjes vanaf volgende maand/i);
-    expect(t.ins).not.toMatch(/vanaf volgende maand/i);
+    /* v315: de rij heet 'Je potjes' en staat onder de kop 'Vanaf <maand>' in een eigen kaart; de
+       woorden 'vanaf volgende maand' zaten tot dan in de rij zelf. Wat de regel vasthoudt is dat
+       het element op Grip staat en niet op Inzichten, en dat is de kop plus de rij. */
+    /* DE KOP MET DE MAAND EROP EN NIET HET LOSSE WOORD 'VANAF': Inzichten zegt zelf 'vanaf 6
+       afgeronde maanden zie je hier je verloop', en op dat woord binden maakt de tweede helft van
+       deze test per constructie rood. Hetzelfde geldt voor 'je potjes': de stand-kaart op Inzichten
+       zegt 'nog in je potjes' (v309). De kop met de maandnaam is uniek voor dit element. */
+    const kop = ('Vanaf ' + (await page.evaluate(() => ymFull(nextYM(SET.budgetMonth || thisYM()))))).toUpperCase();
+    expect(t.maand.toUpperCase()).toContain(kop);
+    expect(t.maand).toMatch(/Je potjes/i);
+    expect(t.ins.toUpperCase()).not.toContain(kop);
     // en het is dezelfde sheet als voorheen: de volgende-maand-laag van openPotjesVerdeling
-    expect(await page.evaluate(() => maandPlanRegels())).toContain("openPotjesVerdeling");
-    expect(await page.evaluate(() => maandPlanRegels())).toContain("'next'");
+    const rij = await page.evaluate(() => maandVanafRegels().join(''));
+    expect(rij).toContain("openPotjesVerdeling");
+    expect(rij).toContain("'next'");
   });
 
   /* v228: 'boven je inkomen-limiet' verhuisde in v178 naar Maand en is daar vervallen. De regel

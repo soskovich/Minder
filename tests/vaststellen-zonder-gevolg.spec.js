@@ -53,7 +53,8 @@ async function bootPatroon(page, o) {
   await page.waitForFunction(() => typeof scoreNotifs === 'function' && typeof maandStructureel === 'function');
 }
 const schermTekst = (page, s) => page.evaluate((x) => { go(x); return $('#s-' + x).innerText.replace(/\s+/g, ' '); }, s);
-const planTekst = (page) => page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = maandPlanRegels(); return d.innerText.replace(/\s+/g, ' '); });
+// v315: maandPlanRegels() is vervallen; de rij staat in maandVanafRegels()
+const planTekst = (page) => page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = maandVanafRegels().join(''); return d.innerText.replace(/\s+/g, ' '); });
 const bron = (page) => page.evaluate(() => [...document.querySelectorAll('script')].map((s) => s.textContent).join('\n'));
 
 test.describe('1 - Boven je inkomen-limiet is weg', () => {
@@ -66,9 +67,9 @@ test.describe('1 - Boven je inkomen-limiet is weg', () => {
     expect(await page.evaluate(() => monthBudget(3000))).toBe(LIMIET);
   });
 
-  test('maandPlanRegels rendert de rij niet, ook niet boven de grens', async ({ page }) => {
+  test('de vanaf-rijen dragen de rij niet, ook niet boven de grens', async ({ page }) => {
     await open(page, seed());
-    const h = await page.evaluate(() => maandPlanRegels());
+    const h = await page.evaluate(() => maandVanafRegels().join(''));
     expect(h).not.toContain('inkomen-limiet');
     expect(h).not.toContain('spiegel, geen plafond');
   });
@@ -80,28 +81,30 @@ test.describe('1 - Boven je inkomen-limiet is weg', () => {
     }
   });
 
-  test('maandPlanRegels houdt één rij over, en die is voorwaardelijk', async ({ page }) => {
+  test('er blijft één potjes-rij over, en die is voorwaardelijk', async ({ page }) => {
     await open(page, seed());                       // budgetsNext wijkt af: de rij staat er
     const met = await planTekst(page);
-    expect(met).toContain('Je potjes vanaf volgende maand');
+    expect(met).toContain('Je potjes');
     expect(met).toContain('€2.450');
-    const rijen = await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = maandPlanRegels(); return d.children.length; });
+    const rijen = await page.evaluate(() => maandVanafRegels().length);
     expect(rijen).toBe(1);
-    // zonder wijziging aan je potjes is de functie leeg
-    const zonder = await page.evaluate(() => { SET.budgetsNext = {}; return maandPlanRegels(); });
-    expect(zonder).toBe('');
+    // zonder wijziging aan je potjes is er geen rij
+    const zonder = await page.evaluate(() => { SET.budgetsNext = {}; return maandVanafRegels().length; });
+    expect(zonder).toBe(0);
   });
 
-  test('zonder die rij is de voet leeg en valt de streep weg', async ({ page }) => {
+  /* v315: hier stond dat de voet en de streep wegvallen. De voet bestaat niet meer; wat ervoor in
+     de plaats staat is de kaart, en die valt in zijn geheel weg. */
+  test('zonder die rij is er geen vanaf-kaart', async ({ page }) => {
     const p = seed();
     const set = JSON.parse(p.minder_set); delete set.budgetsNext; p.minder_set = JSON.stringify(set);
     await open(page, p);
-    const r = await page.evaluate((m) => ({ voet: maandVoet(m), blok: maandVoetBlok(m, true) }), CUR);
-    expect(r.voet).toBe('');
-    expect(r.blok).toBe('');
+    const r = await page.evaluate(() => ({ n: maandVanafRegels().length, kaart: maandVanafKaart() }));
+    expect(r.n).toBe(0);
+    expect(r.kaart).toBe('');
     await page.evaluate(() => go('maand'));
-    const strepen = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length);
-    expect(strepen).toBe(0);
+    const t = await page.evaluate(() => document.querySelector('#s-maand').innerText.toUpperCase());
+    expect(t).not.toContain('VANAF ');
   });
 
   test('met die rij staat de streep er precies één keer', async ({ page }) => {
