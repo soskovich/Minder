@@ -383,7 +383,13 @@ test.describe('j · een dekkingsgraad toont geen percentage boven de drempel', (
     const r = await page.evaluate(() => ({ graad: dekking(12).graad,
       d: (maandRegels() || []).find((x) => x.key === 'dekking') }));
     test.skip(!r.d || !(r.graad > 100), 'deze opzet geeft geen graad boven de honderd');
-    expect(r.d.eenheid).toContain('op peil');
+    /* v314: de EIGENSCHAP is dat er boven de drempel geen percentage staat, en die staat. Het WOORD
+       is veranderd: zonder gat draagt de kolom sinds v314 wat er na de eerstvolgende post overblijft
+       ('€X blijft over'), en dat is een vaststelling net als 'op peil'. graadTekst() houdt zijn
+       op-peil-tak voor de stand MET een gat en een graad boven de honderd, en die is gemeten
+       bereikbaar (pot 100, jaarpost 900 over 11 maanden: graad 133, gat, 'op peil voor wat nu nodig
+       is'); die tak staat als eigen geval in maandscherm.spec.js. */
+    expect(r.d.eenheid).toMatch(/op peil|blijft over/);
     expect(r.d.eenheid).not.toMatch(/\d+%/);
     expect(r.d.waarde).toMatch(/^€/);                      // het bedrag blijft in de kolom staan
   });

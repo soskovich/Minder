@@ -122,9 +122,10 @@ test.describe('b · onderwerpenmenu', () => {
       await page.waitForFunction(() => document.querySelectorAll('#coCh .cch').length > 0, null, { timeout: 15000 });
       expect(await draad(page), onderwerp).toMatch(verwacht);
       expect(await page.evaluate(() => SET.coachTopic), onderwerp).toBeTruthy();
-      expect((await keuzes(page)).some((k) => /terug naar de onderwerpen/i.test(k)), onderwerp).toBe(true);
+      // v314: het label zegt wat je daar doet in plaats van waar je vandaan komt
+      expect((await keuzes(page)).some((k) => /een ander onderwerp kiezen/i.test(k)), onderwerp).toBe(true);
 
-      await kies(page, 'Terug naar de onderwerpen');             // skipbaar
+      await kies(page, 'Een ander onderwerp kiezen');            // skipbaar
       await wachtKeuze(page, 'Bespaartips');
     }
   });

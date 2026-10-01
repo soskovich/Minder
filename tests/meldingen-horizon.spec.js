@@ -135,7 +135,9 @@ test.describe('c · structureel op het maandscherm', () => {
     const src = await page.evaluate(() => renderMaand.toString());
     expect(src).toContain('maandCoachIngang(RO)');
     expect(src).toContain('maandVerband(RO)');
-    expect(src).toContain('maandOordeel(RO)');
+    // v314: het oordeel krijgt sinds deze ronde ook het AANTAL potje-signalen mee. De eigenschap is
+    // dat zijn eerste argument RO is, dus dezelfde lijst als de coach-ingang en het verband.
+    expect(src).toContain('maandOordeel(RO');
   });
 });
 

@@ -7,6 +7,7 @@
 // afspraaklus kijkt.
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
+const { kaalUit } = require('./bron-kaal');
 
 const CUR = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
 const plusM = (n) => { const d = new Date(); const x = new Date(d.getFullYear(), d.getMonth() + n, 1);
@@ -152,11 +153,11 @@ test.describe('b - accepteren verplaatst de regel, en telt niet meer als tekort'
 
   test('renderMaand geeft beleggenKlaar de onbewerkte regels', async ({ page }) => {
     await open(page, drieTekorten());
-    const bron = await page.evaluate(() => {
-      const src = [...document.querySelectorAll('script')].map((s) => s.textContent).join('\n');
-      const i = src.indexOf('function renderMaand(');
-      return src.slice(i, i + 4000);
-    });
+    /* v314: dit sneed 4000 TEKENS vanaf het begin van renderMaand(), en toen er een comment bijkwam
+       viel `maandBeleggenRegel(R)` buiten die snede. De eigenschap gaat over WELK argument die functie
+       krijgt en niet over een byte-afstand; dat is meetles (t), nu op een lengte in plaats van op een
+       indentatie. De hele functie, zonder commentaar, want een naam in een comment is geen aanroep. */
+    const bron = await kaalUit(page, 'renderMaand');
     expect(bron).toContain('maandBeleggenRegel(R)');
     expect(bron).not.toContain('maandBeleggenRegel(RO)');
     expect(bron).toContain('maandMetAccept(R).concat(STR)');

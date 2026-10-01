@@ -4861,6 +4861,14 @@ function maandRegels(){
       const norm = !D.gat && !(D.graad!=null && D.graad<MAAND_DREMPEL.dekkingOk);
       const st = !D.volledig ? 'onbekend' : norm ? 'ok' : opTempo ? 'let op' : 'tekort';
       const komt = D.regels.some(r=>r.soort==='post');   // valt er dit jaar iets binnen de horizon?
+      /* v314: DE EERSTVOLGENDE POST EN WAT ER NA HEM OVERBLIJFT. `D.regels` is al gesorteerd op
+         offset (verplichtingen() levert hem zo en dekking() loopt hem in die volgorde af voor
+         `gedektTot`), dus de eerste post IS de eerstvolgende; er wordt hier niets gesorteerd of
+         opnieuw gezocht. `over1` is je potstand min die ene post en niet min `benodigdeStand`: de
+         sub noemt die ene post, dus het getal ernaast hoort bij hetzelfde feit (v91). Bij een gat is
+         `over1` negatief en staat hij er niet; dan zegt de eenheid het tekort al. */
+      const eerstePost=(D.regels||[]).find(r=>r.soort==='post')||null;
+      const over1=(D.werkelijkeStand!=null&&eerstePost)?Math.round(D.werkelijkeStand-eerstePost.bedrag):null;
       uit.push({key:'dekking', naam:'Dekking reserveringen', status:st,
         // v132: bij een tekort horen het percentage en het bedrag allebei zichtbaar te zijn, met de
         // noemer erbij - anders staat hetzelfde woord voor twee verschillende verhoudingen.
@@ -4877,10 +4885,13 @@ function maandRegels(){
       /* v133: de eenheid staat in een smalle kolom, dus kort houden. v189: hij draagt nu het
          oordeel dat uit de waardekolom is gehaald - het percentage, of waarom er geen is. */
       eenheid: !D.volledig ? 'niet te beoordelen'
+        : (!D.gat && over1!=null) ? `in je pot · ${euro0(over1)} blijft over`
         : D.graad!=null ? `in je pot · ${graadTekst(D.graad,'wat nu nodig is')}`
         : (D.gat && D.gat.gedektPct!=null) ? `in je pot · ${graadTekst(D.gat.gedektPct,'de eerstvolgende post')}`
         : D.gat ? `in je pot · ${euro0(D.gat.tekort)} tekort`
         : komt ? 'in je pot · er hoeft nu nog niets opzij' : 'in je pot · niets aankomend dit jaar',
+        sub: eerstePost?`verwacht: ${euro0(eerstePost.bedrag)} in ${resMaandLabel(eerstePost.maand)}`:'',
+        benodigdeStand: D.volledig?D.benodigdeStand:null,
         maand: (st==='tekort'&&D.gedektTot)?D.gedektTot:null,
         // de zin komt uit dekkingTekst(): die kent alle takken al, inclusief een pot die de
         // eerstvolgende post nu al niet dekt en een lijst waar dit jaar niets uit valt. Hier een
@@ -4947,7 +4958,12 @@ function maandRegels(){
          drie metingen erachter geen tweede keer aan (v187). Mijn eerste vorm van deze ronde deed dat
          wel en de spec zette hem rood. `waarde` is de WEERGAVE (een string met een komma) en
          `maanden` de meting, dus een drempel die tegen `waarde` toetst zou op een tekst rekenen. */
+      /* v314: de sub noemt de GRENS waartegen de rij staat en komt uit `norm`, het veld dat deze rij
+         sinds v305 al draagt. De rechterkolom noemt de richt, en die twee zijn niet hetzelfde getal
+         (v305): de richt bepaalt hoe hoog je doel staat, de norm waaronder de app zegt dat je buffer
+         te weinig opvangt. Zonder gekozen norm is er niets te noemen en staat de sub er niet. */
       uit.push({key:'buffer', naam:'Buffer in maanden', status:st, kritiek, opTempo, maanden:bm, norm,
+        sub: norm==null?'':`je norm: ${norm} ${norm===1?'maand':'maanden'}`,
         waarde:nTxt, eenheid: norm==null
           ? `maanden toegewezen aan je noodfonds · je richt staat op ${richt}, je ondergrens is nog niet gekozen`
           : `maanden toegewezen aan je noodfonds · je richt staat op ${richt}`,
@@ -4990,11 +5006,21 @@ function maandRegels(){
       const st = !T ? 'onbekend' : telaat ? 'tekort' : onbek ? 'onbekend'
                : (T.gat>MAAND_DREMPEL.doelOk ? 'tekort' : 'ok');
       const vanaf = (T && T.startLabel) ? `vanaf ${T.startLabel} ` : '';
+      /* v314: DE WAARDE IS WAT JE INLEGT, DE EENHEID WAT ER NODIG IS. Het stond omgekeerd, en dan
+         was het grote getal van de rij een bedrag dat je NIET inlegt. De rij hoort te zeggen waar je
+         staat, en het gevolg eronder zegt het tekort al voluit ('Je legt nu €X per maand in en je
+         hebt €Y nodig. Je komt €Z per maand tekort.'), dus er gaat geen getal weg. Alleen in de
+         normale tak: 'niet te halen' en 'onbekend' zijn geen bedragen en blijven staan waar ze
+         stonden. `beleggenWaarde('doel')` leest `telaat` en `tekortPerMaand` en niet `waarde`, dus
+         die laag verschuift hier niet mee. */
       uit.push({key:'doel', naam:d.p.naam||'Aankoopdoel', status:st, telaat,
-        waarde: telaat ? 'niet te halen' : (T&&!onbek) ? euro0(T.benodigd) : 'onbekend',
+        waarde: telaat ? 'niet te halen' : (T&&!onbek) ? euro0(d.p.alloc) : 'onbekend',
         eenheid: telaat ? `zolang je buffer voorgaat · ${esc(doelDatumLabel(d.p.streefdatum))}`
                : onbek ? 'nog niet te rekenen'
-               : T ? `per maand nodig · nu ${euro0(d.p.alloc)}` : 'geen streefdatum',
+               : T ? `per maand · ${euro0(T.benodigd)} nodig` : 'geen streefdatum',
+        sub: (d.p.doel>0||d.p.streefdatum)
+          ? [d.p.doel>0?euro0(d.p.doel):'', d.p.streefdatum?`in ${doelDatumLabel(d.p.streefdatum)}`:''].filter(Boolean).join(' ')
+          : '',
         gevolg: !T ? 'Zonder streefdatum valt er niets terug te rekenen.'
               : telaat ? `Je buffer is op dit tempo pas rond ${T.startLabel} vol, terwijl je streefdatum ${doelDatumLabel(d.p.streefdatum)} is. Tot die tijd gaat je hele spaarinleg naar die buffer, dus dit doel staat stil.`
               : onbek ? 'Er is nog niet bekend wanneer je buffer vol is, dus er valt voor dit doel niets terug te rekenen.'
@@ -5042,9 +5068,15 @@ function maandRegels(){
  * KRITIEK - zwijgen bij onvolledigheid. Ontbreekt een van de drie rijen, of staat er 'onbekend',
  * dan is er GEEN uitspraak: geen 'bijna', geen 'waarschijnlijk nog niet', geen gedeeltelijke
  * uitkomst. Een verkeerd groen licht hier kost geld dat binnen een jaar nodig is. */
+/* v314: DE DREMPEL LEEST DE RIJ, zodat hij in dezelfde eenheid staat als de waarde ernaast. Bij
+   dekking stond `€500` tegen `100%` in dezelfde kolom: een euro tegen een percentage, en dan is er
+   niets te vergelijken zonder zelf te gaan rekenen. 100% van de dekking IS je potstand tegen wat er
+   nu in hoort te staan (`D.benodigdeStand`, uit v131), dus de euro-vorm is dezelfde voorwaarde en
+   geen tweede. Zonder die stand (een onvolledige dekking) valt hij terug op het percentage, want
+   dan is er geen bedrag om tegen af te zetten. */
 const BELEGGEN_VOORWAARDEN=[
   {key:'buffer',  label:'buffer',                drempel:()=>{ const d=beleggenDrempel(); return d==null?'nog geen grens gekozen':`${d} maanden`; }},
-  {key:'dekking', label:'dekking reserveringen', drempel:()=>`${MAAND_DREMPEL.dekkingOk}%`},
+  {key:'dekking', label:'dekking reserveringen', drempel:(r)=>(r&&r.benodigdeStand!=null)?euro0(r.benodigdeStand):`${MAAND_DREMPEL.dekkingOk}%`},
   {key:'doel',    label:'',                      drempel:()=>euro0(MAAND_DREMPEL.doelOk)},
 ];
 function beleggenWaarde(key, r){
@@ -5062,7 +5094,7 @@ function beleggenKlaar(R){
     if(!r || r.status==='onbekend'){
       volledig=false;
       voorwaarden.push({key:v.key, naam:v.label||(r?r.naam:v.key), gehaald:false, ontbreekt:true,
-        waarde:'onbekend', drempel:v.drempel(), status:'onbekend', eenheid:r?r.eenheid:''});
+        waarde:'onbekend', drempel:v.drempel(r), status:'onbekend', eenheid:r?r.eenheid:''});
       continue;
     }
     /* v305: de buffer-voorwaarde leest zijn EIGEN drempel en niet meer `r.kritiek` (besluit 4).
@@ -5078,7 +5110,7 @@ function beleggenKlaar(R){
     const d = v.key==='buffer' ? beleggenDrempel() : null;
     const gehaald = v.key==='buffer' ? (r.maanden!=null && d!=null && r.maanden>=d) : r.status==='ok';
     voorwaarden.push({key:v.key, naam:v.label||r.naam, gehaald, ontbreekt:false,
-      waarde:beleggenWaarde(v.key,r), drempel:v.drempel(), status:gehaald?r.status:'tekort', eenheid:r.eenheid});
+      waarde:beleggenWaarde(v.key,r), drempel:v.drempel(r), status:gehaald?r.status:'tekort', eenheid:r.eenheid});
   }
   const blokkade=voorwaarden.find(v=>!v.gehaald)||null;   // vaste volgorde: buffer, dekking, doel
   return {klaar: volledig && voorwaarden.every(v=>v.gehaald), voorwaarden, blokkade, volledig};
@@ -5131,12 +5163,22 @@ function maandBeleggenRegel(R){
      meting in een kaart over een drempel zetten. */
   const groeit = !B.klaar && B.blokkade && B.blokkade.key==='buffer'
     && !!((Array.isArray(R)?R:[]).find(x=>x.key==='buffer')||{}).opTempo;
+  /* v314: 'JE DREMPEL' STAAT ALLEEN BIJ DE BUFFER, want dat is de enige van de drie die je zelf
+     kiest (SET.beleggenDrempel, besluit 4 van v305). De 100% van de dekking en de €0 van het doel
+     komen uit MAAND_DREMPEL en zijn geen keuze van jou; 'je drempel' erbij zetten zou beweren dat
+     je ze hebt gekozen. */
+  const eigenDrempel = !B.klaar && B.blokkade && B.blokkade.key==='buffer';
   const zin = B.klaar
     ? 'Je drie voorwaarden voor beleggen zijn alle drie gehaald.'
-    : `Nog niet aan je voorwaarden voor beleggen: ${B.blokkade.naam} ${B.blokkade.waarde} tegen ${B.blokkade.drempel}.${groeit?' Hij groeit, maar de drempel is nog niet gehaald.':''}`;
+    : `Nog niet aan je voorwaarden voor beleggen: ${B.blokkade.naam} ${B.blokkade.waarde} tegen ${eigenDrempel?'je drempel van ':''}${B.blokkade.drempel}.${groeit?' Hij groeit, maar de drempel is nog niet gehaald.':''}`;
+  /* v314: NIET GEHAALD IS GEEN FOUT, dus de dot is hier neutraal en niet rood of amber (v78/v93).
+     Hij volgde de status van de blokkerende regel, en die regel staat met zijn eigen kleur al los
+     boven deze kaart; de kleur hier zei dus twee keer hetzelfde en claimde aandacht voor een
+     drempel die je zelf hebt gezet en nog niet hebt gehaald. Bij groen blijft de dot groen: dat is
+     een uitkomst die uit geen van de drie regels afzonderlijk volgt. */
   return `<div class="card" style="cursor:pointer" onclick="openBeleggenVoorwaarden()">${kop}
     <div class="row" style="gap:9px;align-items:flex-start;padding:7px 0">
-      ${maandDot(B.klaar?'ok':B.blokkade.status)}
+      ${maandDot(B.klaar?'ok':'neutraal')}
       <div style="flex:1;min-width:0;line-height:1.45">${esc(zin)}</div>
       <span style="color:var(--teal);font-weight:700">›</span>
     </div></div>`;
@@ -5349,8 +5391,23 @@ function opsomming(lijst){
   if(a.length<=1) return a[0]||'';
   return a.slice(0,-1).join(', ')+' en '+a[a.length-1];
 }
-function maandOordeel(R){
-  if(!R.length) return {zin:'Er is nog niets te beoordelen.', sub:''};
+/* v314: DE POTJES TELLEN MEE IN DE SAMENVATTING, en het aantal komt van de AANROEPER. Deze functie
+   roept valtOpSignals() niet zelf aan: renderMaand() haalt die lijst één keer op voor de kaarten, en
+   een tweede aanroep hier zou een tweede waarheid zijn over hetzelfde aantal (v104) en een tweede
+   save() doen.
+   EEN POTJE IS GEEN REGEL, en daarom staat het in een EIGEN zin vóór de bestaande en telt het niet
+   mee in `R.length`, `ok.length` of de tekort-telling. Die telzinnen gaan over de regels die
+   maandRegels() en maandStructureel() opleveren; een potje-overschrijding is een signaal uit
+   valtOpSignals() en heeft zijn eigen kaart met zijn eigen handelingen (v235). Zou hij in dezelfde
+   telling landen, dan zegt 'Alle 3 regels staan goed' iets anders dan het meet.
+   DE OK-ZIN WORDT 'DE REST STAAT GOED' ZODRA ER EEN POTJE IS, want 'Alle 3 regels staan goed'
+   naast 'Eén potje vraagt aandacht' leest als een tegenspraak terwijl beide waar zijn. De sub
+   noemt onveranderd WELKE regels dat zijn, dus er gaat geen informatie weg. */
+function maandOordeel(R, nPot){
+  const nP=Math.max(0, Math.round(+nPot||0));
+  const potZin = nP===1 ? 'Eén potje vraagt aandacht.' : `${nP} potjes vragen aandacht.`;
+  const met = z => nP ? `${potZin} ${z}` : z;
+  if(!R.length) return {zin: nP?potZin:'Er is nog niets te beoordelen.', sub:''};
   const tekort=R.filter(r=>r.status==='tekort');
   const letop=R.filter(r=>r.status==='let op');
   const ok=R.filter(r=>r.status==='ok');
@@ -5359,12 +5416,12 @@ function maandOordeel(R){
      'Onbekend: buffer, doel.' waar de rest van de app 'buffer en doel' zegt. opsomming() (v189) is
      de enige plek waar een reeks tot een zin wordt gemaakt; hij werd hier nog niet gelezen. */
   if(R.length>=MAAND_DREMPEL.onbekendMin && onb.length/R.length>MAAND_DREMPEL.onbekendDeel)
-    return {zin:'Er ontbreekt te veel om een oordeel te geven.', sub:`Onbekend: ${opsomming(onb.map(r=>r.naam.toLowerCase()))}.`};
+    return {zin:met('Er ontbreekt te veel om een oordeel te geven.'), sub:`Onbekend: ${opsomming(onb.map(r=>r.naam.toLowerCase()))}.`};
   /* v173: onder de drempel viel een lijst met alleen onbekende regels door naar de telzin, en die
      telde er dan nul. Geen nieuwe formulering: dezelfde zin als bij een lege lijst (v167), met de
      bestaande opsomming van wat onbekend is. */
   if(!ok.length && !tekort.length && !letop.length)
-    return {zin:'Er is nog niets te beoordelen.',
+    return {zin:met('Er is nog niets te beoordelen.'),
       sub: onb.length?`Onbekend: ${opsomming(onb.map(r=>r.naam.toLowerCase()))}.`:''};
   const metMaand=tekort.find(r=>r.maand);
   let zin;
@@ -5375,9 +5432,11 @@ function maandOordeel(R){
   /* Het werkelijke aantal, niet vijf: welke regels er staan hangt af van wat je hebt ingesteld.
      'Alle' mag alleen als er ook niets onbekend is, anders leest de zin als een volledig oordeel
      over een onvolledige lijst. */
+  else if(nP) zin='De rest staat goed.';
   else if(ok.length===1) zin='De enige regel die te toetsen is staat goed.';
   else zin = (ok.length===R.length) ? `Alle ${ok.length} regels staan goed.`
                                     : `De ${ok.length} regels die te toetsen zijn staan goed.`;
+  zin=met(zin);
   const sub = ok.length
     ? `${opsomming(ok.map(r=>r.naam.toLowerCase()))} ${ok.length===1?'is':'zijn'} in orde.`
     : '';
@@ -5417,8 +5476,11 @@ function graadTekst(graad, noemer){
   const g=Math.round(+graad||0);
   return g>MAAND_DREMPEL.dekkingOk ? `op peil voor ${noemer}` : `${g}% van ${noemer}`;
 }
+/* v314: 'neutraal' staat er expliciet bij. Hij valt op dezelfde kleur uit als de default, maar een
+   aanroeper die hem bewust kiest (de beleggen-kaart: nog niet gehaald is geen fout) mag niet op een
+   default leunen die een volgende ronde kan verzetten. */
 function maandDot(st){
-  const c = st==='tekort'?'var(--red)':st==='let op'?'var(--amber)':st==='ok'?'var(--green)':'var(--bar)';
+  const c = st==='tekort'?'var(--red)':st==='let op'?'var(--amber)':st==='ok'?'var(--green)':st==='neutraal'?'var(--bar)':'var(--bar)';
   return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};flex-shrink:0;margin-top:6px"></span>`;
 }
 /* v222: de kaart 'Vraagt een beslissing' stelde alleen vast. Elke regel zei wat er aan de hand
@@ -5538,8 +5600,15 @@ function maandRij(r,compact){
      dezelfde rechterkolom als de uitgeklapte rij - waarde met de eenheid eronder - en laat alleen
      het gevolg weg. Dat is wat 'compact' hier hoort te betekenen: minder zin, niet minder getal.
      Geen tweede formulering: r.eenheid is het veld dat maandRegels() al levert. */
+  /* v314: DE COMPACTE RIJ DRAAGT EEN LINKER-SUB, en dat is waar 'Staat goed' zonder stond: een rij
+     zei 'Buffer in maanden · 2,3' en noemde de grens waartegen dat goed is alleen in de rechterkolom,
+     waar hij met de richt om de ruimte vocht. De sub noemt waartegen de rij staat (je norm, de
+     eerstvolgende post, je doelbedrag en streefdatum) en komt uit `r.sub`, een veld dat maandRegels()
+     levert. Geen tweede formulering en geen eigen afleiding hier: wat er niet in `r.sub` staat, staat
+     er niet. Alleen in de compacte vorm, want de uitgeklapte rij draagt al de volle gevolgzin. */
   if(compact) return `<div class="row" style="gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${r.act}">
-    ${maandDot(r.status)}<span class="small" style="flex:1;min-width:0">${esc(r.naam)}</span>
+    ${maandDot(r.status)}<div style="flex:1;min-width:0"><div class="small">${esc(r.naam)}</div>
+      ${r.sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(r.sub)}</div>`:''}</div>
     <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:52%">
       <div class="small" style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
       ${r.eenheid?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div>`:''}</div></div>`;
@@ -5556,7 +5625,12 @@ function maandRij(r,compact){
            enige handeling (v193), en vastleggen doe je in het gesprek onder de kaart. */
         return `<div class="small muted" style="line-height:1.45;margin-top:2px">${esc(r.gevolg||'')}${(r.gevolg&&sug)?' ':''}${sug?`<span class="mut2">${esc(sug)}</span>`:''}</div>`; })()}
       ${r.geaccepteerd?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:4px">Je hebt dit bewust geaccepteerd${r.geaccepteerd.tot?`, tot ${esc(resMaandLabel(r.geaccepteerd.tot))}`:''}.</div>`:''}
-      ${(r.afspraak&&!r.geaccepteerd)?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:4px">Hier loopt een afspraak over: ${esc(r.afspraak.text||'')}.</div>`:''}</div>
+      ${/* v314: hier stond 'Hier loopt een afspraak over: <tekst>.' Diezelfde tekst staat als eigen
+            kaart in maandCoachIngang(), dus je las je afspraak twee keer op één scherm, en de
+            kaart is de plek waar hij ook aan te passen is. Eén afspraak per maand, dus één plek.
+            Wat de regel verliest is de verbinding naar die afspraak, en die staat nu aan de andere
+            kant: de kaart noemt de regel die hij raakt. r.afspraak blijft op de rij staan, want
+            maandMetAfspraak() zet daarmee ook de status om van tekort naar let op. */''}</div>
     <div style="text-align:right;flex:0 1 auto;min-width:0;max-width:42%"><div style="font-weight:700;white-space:nowrap">${esc(r.waarde)}</div>
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>
     ${(function(){ const ing=maandIngang(r, thisYM()); return ing?`<div style="padding:0 0 10px 17px">${ing}</div>`:''; })()}
@@ -5581,9 +5655,30 @@ function maandPlanRegels(){
   let tb=0, pb=0;
   try{ tb=totalBudget(); pb=plannedTotalBudget(); }catch(_){ return ''; }
   const rijen=[];
-  if(tb>0 && pb!==tb) rijen.push(`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openPotjesVerdeling('${esc(thisYM())}','next')">
-    <span class="small">Je potjes vanaf volgende maand</span>
-    <span class="small" style="font-weight:700;color:var(--teal)">${euro0(pb)} ›</span></div>`);
+  /* v314: DE RIJ NOEMT HET POTJE DAT VERANDERT. Hij zei alleen 'Je potjes vanaf volgende maand ·
+     €3.375', dus je zag dat er iets klaarstond en niet wat. Bij ÉÉN wijziging staan beide bedragen
+     erbij, met 'de rest ongewijzigd' als er meer potjes zijn; bij meer wijzigingen het aantal, want
+     drie namen in een subregel breken af en de sheet erachter noemt ze alle drie met hun bedrag.
+     DE BRON IS DEZELFDE ALS DIE VAN HET BEDRAG (SET.budgets tegen plannedBudgets(), v112), en de
+     drie soorten wijziging zijn dezelfde als in openPotjesVerdeling(): nieuw (nu nul), gestopt (dan
+     nul) en een ander bedrag. Een tweede vergelijking ernaast zou bij de eerste wijziging uiteen
+     gaan lopen (v104). */
+  if(tb>0 && pb!==tb){
+    const B=SET.budgets||{}, P=plannedBudgets();
+    const keys={}; for(const k in B) if(+B[k]>0&&CATS[k]) keys[k]=1; for(const k in P) if(+P[k]>0&&CATS[k]) keys[k]=1;
+    const an=Object.keys(keys).filter(k=>(+P[k]||0)!==(+B[k]||0));
+    let sub='';
+    if(an.length===1){ const k=an[0], nu=+B[k]||0, pl=+P[k]||0;
+      const naam=CATS[k].name;
+      sub = !nu ? `${naam} erbij voor ${euro0(pl)}`
+          : !pl ? `${naam} stopt, nu ${euro0(nu)}`
+          : `${naam} ${pl>nu?'omhoog':'terug'} van ${euro0(nu)} naar ${euro0(pl)}`;
+      if(Object.keys(keys).length>1) sub+=', de rest ongewijzigd';
+    } else if(an.length>1) sub=`${an.length} potjes veranderen`;
+    rijen.push(`<div class="row" style="justify-content:space-between;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openPotjesVerdeling('${esc(thisYM())}','next')">
+    <span style="flex:1;min-width:0"><span class="small">Je potjes vanaf volgende maand</span>${sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(sub)}</div>`:''}</span>
+    <span class="small" style="font-weight:700;color:var(--teal);white-space:nowrap">${euro0(pb)} ›</span></div>`);
+  }
   /* v223: de kop 'Je plan' en de kaart eromheen zijn vervallen; deze rij staat onder de streep in
      de kaart met je maandregels. Geen statusdot, want hij vraagt geen beslissing. */
   return rijen.join('');
@@ -5666,8 +5761,11 @@ function contantKaart(){
     <div class="small" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="contantTellen()">Tel wat je in je zak hebt ›</div>
   </div>`;
 }
-function gripSignalCards(){
-  let L=[]; try{ L=valtOpSignals(thisYM())||[]; }catch(_){ return ''; }
+/* v314: de lijst mag worden MEEGEGEVEN, zodat renderMaand() hem één keer ophaalt en zowel deze
+   kaarten als maandOordeel() eruit leest. Zonder argument haalt hij hem zelf op, want dat is het
+   contract van vóór v314 en de specs die deze functie los aanroepen hangen eraan. */
+function gripSignalCards(lijst){
+  let L=[]; try{ L=Array.isArray(lijst)?lijst:(valtOpSignals(thisYM())||[]); }catch(_){ return ''; }
   if(!L.length) return '';
   // eerste kaart open, tenzij je vanaf Inzichten op de tweede regel tikte
   const open = L.some(s=>s.id===window._valtOpOpen) ? window._valtOpOpen : L[0].id;
@@ -5697,20 +5795,61 @@ function valtOpKaartOpen(s){
   const chev = lek
     ? `<span style="color:var(--teal);font-weight:700;cursor:pointer;padding:0 2px" onclick="event.stopPropagation();coStart('lek','${esc(thisYM())}')">›</span>`
     : '';
-  const hand=(lab,sub,knop,act)=>`<div class="row valtop-hand" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
+  const hand=(lab,sub,knop,act,pri)=>`<div class="row valtop-hand" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
       <span style="flex:1;min-width:0"><span style="font-size:13px">${lab}</span>${sub?`<div class="small muted" style="margin-top:2px;line-height:1.45">${sub}</div>`:''}</span>
-      <button class="btn sec" style="width:auto;padding:8px 13px;white-space:nowrap;font-size:13px" onclick="${act}">${knop}</button></div>`;
+      <button class="btn${pri?'':' sec'}" style="width:auto;padding:8px 13px;white-space:nowrap;font-size:13px" onclick="${act}">${knop}</button></div>`;
+  /* v314: DE VOLGORDE HANGT AF VAN HET MOMENT IN DE MAAND, en de eerste handeling is de primaire.
+     Drie even zware knoppen lieten de keuze aan de kleur van niets, en in de laatste dagen was
+     'Bijstellen' daarmee de knop die het rood weghaalt zonder dat er iets verandert: op dag 30 van
+     30 is valtOpVoorstel() ceil5(max(uitgegeven, prognose)) en is de prognose GELIJK aan de
+     uitgave, dus het voorstel absorbeert precies de overschrijding en potjeRest() reserveert nul
+     (bud/dim maal nul resterende dagen). Daarom staat bijstellen daar NIET meer: niet omdat het
+     verboden is, maar omdat de maand om is en er niets meer te verdelen valt.
+     WAT ER IN DE PLAATS KOMT IS DE MAAND ERNA, en dat is een BESTAANDE route (openPotje schrijft
+     SET.budgetsNext via savePotje). Er komt dus geen tweede potje-editor bij; dit is een extra
+     ingang (v61).
+     HET VENSTER IS EEN BENOEMDE CONSTANTE en leest dezelfde dagen als de regel erboven
+     (valtOpDagenRest), zodat 'de laatste 3 dagen' in de knop en in de kop niet uiteen kunnen lopen.
+     Hij heet hier geen D-woord, en dat is geen smaak: valt-op-signalen.spec.js eist dat deze functie
+     de detectie niet herhaalt en toetst dat op de RUWE bron, dus een comment dat dat woord noemt zet
+     die test rood (v276: bij een bronzoekende teller is commentaar deel van het oppervlak). */
+  const laatst = dagen<=VALTOP_LAATSTE_DAGEN;
+  const volg = ymFull(nextYM(SET.budgetMonth||thisYM()));
+  const volgKnop = volg?volg.charAt(0).toUpperCase()+volg.slice(1):'Volgende maand';
+  const grensLab = laatst
+    ? `Grens voor ${dagen===1?'de laatste dag':`de laatste ${dagen} dagen`}`
+    : 'Grens voor de rest van de maand';
+  const hBekijk = (pri)=>hand('Bekijk de transacties','','Bekijken',`openCategory('${esc(s.potjeId)}','${esc(s.maand)}')`,pri);
+  const hVolgend = (pri)=>hand('Volgende maand anders',`Je potje voor ${esc(volg)} aanpassen. Deze maand blijft zoals hij is.`,volgKnop,`openPotje('${esc(s.potjeId)}')`,pri);
+  const hGrens = (pri)=>hand(grensLab,'Je krijgt een melding bij elke volgende boeking in deze categorie.','Grens zetten',`valtOpGrensZet('${esc(s.id)}')`,pri);
+  const hBij = (pri)=>hand('Potje bijstellen','Je potje gaat deze maand omhoog. Je uitgave verandert er niet van.','Bijstellen',`valtOpPotjeSheet('${esc(s.id)}')`,pri);
+  const handelingen = laatst
+    ? hBekijk(true)+hVolgend(false)+hGrens(false)
+    : hBij(true)+hGrens(false)+hBekijk(false);
+  /* v314: ZO LATEN IS EEN EIGEN ACTIE EN GEEN STILTE. Tot v313 was 'niets gedaan' de uitkomst die
+     valtOpAfsluiten() aan elk record zonder actie gaf, dus een maand waarin je bewust besloot het
+     te laten zoals het was, las precies hetzelfde als een maand waarin je het scherm nooit opende.
+     Dat is de vorm die dit project elders verbiedt: een stilte die als keuze leest. 'zo_gelaten'
+     staat daarom naast 'geen' en niet in de plaats ervan, en de telling onder het logboek houdt de
+     twee apart. */
+  const zoLaten=`<div class="small" style="padding:9px 0 1px;border-top:1px solid var(--line);color:var(--teal);font-weight:600;cursor:pointer" onclick="valtOpZoLaten('${esc(s.id)}')">Zo laten <span class="muted" style="font-weight:400">· komt in je logboek als keuze</span></div>`;
   return `<div class="card valtop-kaart valtop-open" data-sig="${esc(s.id)}" style="margin:0 0 9px">
     <div class="row" style="gap:8px">
       <span style="flex:1;min-width:0;font-weight:600;font-size:var(--fs-md)">${ICON('bulb')} ${esc(s.naam)} <span class="muted" style="font-weight:400">${euro0(s.uitgegeven)} van ${euro0(s.potje)}</span></span>
       ${chev}</div>
     <div class="small" style="margin-top:6px;line-height:1.5">${euro0(s.over)} boven je potje, met ${rest} te gaan.</div>
     <div class="small" style="color:var(--mut2);margin-top:4px;line-height:1.45">${hist}</div>
-    <div style="margin-top:10px">
-      ${hand('Potje bijstellen','Je potje gaat deze maand omhoog. Je uitgave verandert er niet van.','Bijstellen',`valtOpPotjeSheet('${esc(s.id)}')`)}
-      ${hand('Grens voor de rest van de maand','Je krijgt een melding bij elke volgende boeking in deze categorie.','Grens zetten',`valtOpGrensZet('${esc(s.id)}')`)}
-      ${hand('Bekijk de transacties','','Bekijken',`openCategory('${esc(s.potjeId)}','${esc(s.maand)}')`)}
-    </div></div>`;
+    <div style="margin-top:10px">${handelingen}${zoLaten}</div></div>`;
+}
+/* De laatste dagen van de maand: daar verandert het potje bijstellen niets meer en is de maand erna
+   de plek waar een keuze nog iets doet. Eén constante, gelezen door de volgorde én door het label
+   van de grens, zodat die twee hetzelfde venster noemen. */
+const VALTOP_LAATSTE_DAGEN = 3;
+function valtOpZoLaten(id){
+  const r=(SET.valtOpLog||{})[id]; if(!r) return;
+  valtOpActieZet(id,'zo_gelaten');
+  render();
+  toast(`${ICON('check')} Zo gelaten · ${String(r.categorie||'').toLowerCase()}`);
 }
 /* Bijstellen geldt voor de LOPENDE maand, en dat is een uitzondering op de regel dat een bestaand
    potje pas volgende maand verschuift (setCatBudget, savePotje). Daarom schrijft hij SET.budgets
@@ -5779,6 +5918,15 @@ function valtOpDekHerreken(){
                                   : `Je potje gaat niet omhoog, dus er valt niets te dekken.`));
   const tot=document.getElementById('valtOpTotaal');
   if(tot) tot.innerHTML = `Maandtotaal: <b>${euro0(valtOpNieuwTotaal())}</b> · nu ${euro0(Math.round(totalBudget()))}`;
+  /* v314: het aantal wijzigingen is dit potje plus elk dekkend potje met een bedrag boven nul. Niet
+     het aantal GEKOZEN potjes: een aangewezen potje waar je nog niets hebt ingevuld verandert niets,
+     en valtOpPotjeOpslaan() slaat hem om dezelfde reden over (`if(!(bedrag>0)) continue`). Dezelfde
+     eis op dezelfde plek, zodat de zin niet iets anders telt dan er wordt weggeschreven. */
+  const g=document.getElementById('valtOpGeldt');
+  if(g){ const d2=valtOpDek()||{dek:{}};
+    let n=1; for(const k in (d2.dek||{})) if(Math.round(+d2.dek[k]||0)>0) n++;
+    const kop = n===1 ? 'Deze wijziging geldt' : n===2 ? 'Allebei de wijzigingen gelden' : `Alle ${n} wijzigingen gelden`;
+    g.innerHTML = `${kop} voor deze maand. Vanaf ${esc(d2.vanaf||'')} staan je potjes weer zoals ze stonden, of op de wijziging die je al had klaarstaan.`; }
   const b=document.getElementById('valtOpSave');
   if(b){ if(valtOpMag()) b.removeAttribute('disabled'); else b.setAttribute('disabled',''); }
 }
@@ -5824,8 +5972,8 @@ function valtOpDekBlok(){
   const knop = kand.length
     ? `<div class="small" style="margin-top:8px;color:var(--teal);font-weight:600;cursor:pointer" onclick="valtOpDekLijst()">${d.lijst?'Verbergen':(gekozen.length?'Nog een potje aanwijzen':'Potje aanwijzen')} ›</div>`
     : '';
-  return `<div id="valtOpTekort" class="small" style="line-height:1.5"></div>
-    ${gekozen.map(rij).join('')}
+  /* v314: #valtOpTekort staat niet meer hier maar direct boven de knop. Zie valtOpPotjeSheet(). */
+  return `${gekozen.map(rij).join('')}
     ${knop}
     ${d.lijst?kand.map(kies).join(''):''}
     ${leeg}
@@ -5837,7 +5985,7 @@ function valtOpPotjeSheet(id){
   let s=null; try{ s=(valtOpSignals(thisYM())||[]).find(x=>x.id===id); }catch(_){}
   if(!s) return;
   const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
-  window._valtOpDek={id, k:s.potjeId, voor:Math.round(s.potje), na:valtOpVoorstel(s), dek:{}, lijst:false};
+  window._valtOpDek={id, k:s.potjeId, voor:Math.round(s.potje), na:valtOpVoorstel(s), dek:{}, lijst:false, vanaf};   // v314: vanaf gaat mee, want valtOpDekHerreken() schrijft de geldt-zin bij
   window._setSheet=null;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">${esc(s.naam)}-potje bijstellen</div>
@@ -5847,8 +5995,18 @@ function valtOpPotjeSheet(id){
     <div style="border-top:1px solid var(--line);margin:14px 0 12px"></div>
     <div class="hlabel" style="margin:0 0 8px">Waar komt het vandaan</div>
     <div id="valtOpDekBlok">${valtOpDekBlok()}</div>
-    <div class="small" style="color:var(--mut2);margin-top:10px;line-height:1.45">Allebei de wijzigingen gelden voor deze maand. Vanaf ${esc(vanaf)} staan je potjes weer zoals ze stonden, of op de wijziging die je al had klaarstaan.</div>
-    <button class="btn" id="valtOpSave" disabled style="margin-top:14px;width:100%" onclick="valtOpPotjeOpslaan('${esc(id)}')">${ICON('check')} Vastzetten voor deze maand</button>`;
+    ${/* v314: DE REDEN STAAT BIJ DE KNOP. #valtOpTekort stond bovenaan het dekkingsblok, met de
+          potjesrijen, 'Potje aanwijzen' en het maandtotaal ertussen, dus de knop was grijs en de
+          reden stond drie blokken hoger. Hij is VERPLAATST en niet gekopieerd: valtOpDekHerreken()
+          schrijft naar dit ene element op id, waar het ook staat (v104). #valtOpTotaal blijft in
+          het blok: dat gaat over je maandtotaal en niet over waarom de knop uit staat.
+          v314: 'Allebei de wijzigingen' las de werkelijkheid niet. Hij stond er onvoorwaardelijk,
+          ook zonder gekozen dekking (dan is er ÉÉN wijziging) en ook bij twee dekkende potjes (dan
+          zijn er drie). De zin leest nu het aantal, en omdat de dekking na het renderen wordt
+          gekozen schrijft valtOpDekHerreken() hem bij. */''}
+    <div id="valtOpGeldt" class="small" style="color:var(--mut2);margin-top:10px;line-height:1.45"></div>
+    <div id="valtOpTekort" class="small" style="margin-top:10px;line-height:1.5"></div>
+    <button class="btn" id="valtOpSave" disabled style="margin-top:8px;width:100%" onclick="valtOpPotjeOpslaan('${esc(id)}')">${ICON('check')} Vastzetten voor deze maand</button>`;
   showSheetBg();
   valtOpDekHerreken();
 }
@@ -5895,7 +6053,7 @@ function valtOpLogBlok(){
   /* 'niet getoond' is een eigen stand, geen variant van 'nog open': dat record hoort bij een
      overschrijding die buiten de twee plekken viel. Juist die wil je terugzien - anders weet je niet
      wat je niet gezien hebt. */
-  const woord={potje_bijgesteld:'potje bijgesteld', grens_gezet:'grens gezet', correctie:'vervallen na correctie', geen:'niets gedaan'};
+  const woord={potje_bijgesteld:'potje bijgesteld', grens_gezet:'grens gezet', zo_gelaten:'zo gelaten', correctie:'vervallen na correctie', geen:'niets gedaan'};
   /* v238: de dekking hoort in dezelfde regel, anders leest de log "50 naar 96" en zwijgt hij over
      waar die 46 vandaan kwam. Een lege lijst hoort bij een record van voor v238 en zegt niets. */
   const dekTekst=r=>{ const D=(r&&r.dekking)||[]; if(!D.length) return '';
@@ -5908,7 +6066,12 @@ function valtOpLogBlok(){
      (het potje verhogen laat een signaal verdwijnen zonder dat je minder uitgeeft), en een overschrijding
      die bij nader inzien niet bestond hoort daar niet in mee te wegen. Hij staat er alleen als hij is
      voorgekomen, zodat de regel niet groeit voor wie hem nooit haalt. */
-  const tel=[`${T.n.potje_bijgesteld}× potje bijgesteld`, `${T.n.grens_gezet}× grens gezet`]
+  /* v314: 'zo gelaten' staat ONVOORWAARDELIJK in de telling, net als de andere twee handelingen en
+     anders dan de correctie. Die drie zijn wat JIJ kunt doen, dus een nul daar is een meting
+     (v59/v73/v173) en geen lege regel; een correctie is een uitkomst die je niet kiest, en die
+     groeit de regel alleen als hij is voorgekomen. 'niets gedaan' blijft apart staan en wordt niet
+     met 'zo gelaten' samengevoegd: dat is precies het verschil tussen een keuze en een stilte. */
+  const tel=[`${T.n.potje_bijgesteld}× potje bijgesteld`, `${T.n.grens_gezet}× grens gezet`, `${T.n.zo_gelaten}× zo gelaten`]
     .concat(T.n.correctie?[`${T.n.correctie}× vervallen na correctie`]:[])
     .concat([`${T.n.geen}× niets gedaan`]).join(' · ');
   const sinds=T.eerste?` sinds ${esc(monthLabel(T.eerste))}`:'';
@@ -5948,7 +6111,13 @@ function renderMaand(){
      overschrijding, maar zonder buffer, dekking of doel, is R leeg en STR leeg terwijl er wel
      degelijk iets staat. Dat is exact de fout die v188 bij de structurele signalen repareerde,
      en hij komt terug zodra er een derde bron bij komt die deze tak niet kent. */
-  const VS=(function(){ try{ return gripSignalCards(); }catch(_){ return ''; } })();
+  /* v314: de SIGNALEN WORDEN EEN KEER OPGEHAALD en daarna twee keer gelezen: gripSignalCards()
+     rendert ze en maandOordeel() telt ze mee. Zou elk van de twee valtOpSignals() zelf aanroepen,
+     dan staat er een tweede waarheid over hoeveel potjes er aandacht vragen (v104), en die functie
+     SCHRIJFT ook (hij maakt de log-records aan en zet `getoond`), dus twee aanroepen per render is
+     ook twee keer save(). Eén aanroep, twee lezers - de vorm van v235. */
+  const SIG=(function(){ try{ return valtOpSignals(thisYM())||[]; }catch(_){ return []; } })();
+  const VS=(function(){ try{ return gripSignalCards(SIG); }catch(_){ return ''; } })();
   /* v258: de contant-kaart staat naast de valt-op-kaarten bovenaan Grip, en om dezelfde reden ook
      in de leegte-terugval hieronder: een scherm dat zijn eigen leegte niet kent vult hem met een
      claim (v188), en dit is de derde bron die die tak moet kennen. */
@@ -5964,7 +6133,7 @@ function renderMaand(){
   // v229: de afspraak-poort ligt over beide lijsten, want een afspraak kan ook over een structureel
   // signaal gaan ('Alleen vastleggen' draagt ook daar de regelKey).
   const RO=maandMetAfspraak(maandMetAccept(R).concat(STR));
-  const O=maandOordeel(RO);
+  const O=maandOordeel(RO, SIG.length);
   /* v134: beslissing en aandacht zijn twee dingen, en de beslisboom gebruikt die woorden al zo -
      tekort vraagt een beslissing, let op vraagt aandacht. Stonden ze samen onder één kop, dan telde
      de zin (alleen de tekorten) iets anders dan wat eronder stond. Nu een kaart per betekenis; een
@@ -5980,11 +6149,22 @@ function renderMaand(){
   const goed=R.filter(r=>r.status==='ok');
   const verband=maandVerband(RO);
   $('#s-maand').innerHTML=`
-    ${VS}${CK}${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
+    ${/* v314: DE SAMENVATTING STAAT VOOR DE SIGNAALKAARTEN. Hij stond erachter, dus je las eerst
+          "€214 boven je potje" en daarna "er is niets dat vastloopt": de geruststelling kwam na de
+          schrik. Nu hij de potjes meetelt, is hij ook pas waar op die plek: een samenvatting die het
+          grootste signaal van het scherm niet kende, kon er niet boven staan.
+          DE DRIE LUSSEN BLIJVEN ERBOVEN, en dat is een keuze met een reden. Het zijn terugblikken op
+          de maand die net om is (een verlopen acceptatie, de afspraak van vorige maand, het
+          maandmoment), ze staan er maar een paar dagen, en v141 heeft de afspraaklus met zoveel
+          woorden vóór het oordeel gezet. 'Bovenaan' gaat hier dus over de vaste inhoud van het
+          scherm; een terugblik die er drie dagen staat verdringt hem niet. GEMETEN: vijf tests in
+          afspraak-lus.spec.js lezen de eerste kaart en pinnen die volgorde. */''}
+    ${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
     <div class="card">
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
       ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
     </div>
+    ${VS}${CK}
     ${/* v223: 'Vermogensopbouw' en 'Je plan' waren eigen kaarten met een kop en een uitlegzin voor
           één cijfer. Ze staan nu als voet onder de streep, in de laatste kaart die regels draagt:
           aandacht als die er is, anders beslissing, anders 'Staat goed'. Is er geen enkele
@@ -6058,10 +6238,25 @@ function maandAcceptSluit(key){ maandAcceptWis(key); renderMaand(); }
 function maandCoachIngang(R){
   const m=thisYM();   // v233: Grip leest nu, niet de kiezer van Inzichten
   const af=(typeof coachThisMonthAfspraak==='function')?coachThisMonthAfspraak():null;
-  if(af) return `<div class="card">
+  /* v314: DE KAART NOEMT DE REGEL DIE DE AFSPRAAK RAAKT, en alleen als die regel op `ok` staat. Dat
+     is het geval waarin de afspraak nu over niets gaat: je hebt afgesproken iets bij te sturen en de
+     meting zegt dat het al in orde is. Zonder die zin is dat alleen uit het ontbreken van een rode
+     rij af te leiden.
+     ALLEEN BIJ `ok`, en dat is een afbakening en geen voorzichtigheid: bij `tekort` of `let op` zegt
+     de rij zelf al wat er aan de hand is en zou deze zin dat herhalen, en maandMetAfspraak() heeft
+     de status dan juist naar `let op` gezet omdat er een afspraak over loopt. De naam komt uit de rij
+     en wordt hier niet opnieuw afgeleid (v104). */
+  if(af){
+    const rij=(Array.isArray(R)?R:[]).find(x=>x&&x.key===af.regel);
+    const noot=(rij && rij.status==='ok')
+      ? `<div class="small" style="color:var(--mut2);margin-top:6px;line-height:1.45">Je ${esc(String(rij.naam||'').toLowerCase())} staat goed, dus deze afspraak gaat nu niet over een tekort.</div>`
+      : '';
+    return `<div class="card">
     <div class="hlabel" style="margin:0 0 6px">Je afspraak deze maand</div>
     <div style="line-height:1.45">${esc(af.text||'')}</div>
+    ${noot}
     <div class="small" style="margin-top:8px;color:var(--teal);cursor:pointer;font-weight:600" onclick="coStart('maand','${esc(m)}')">Aanpassen ›</div></div>`;
+  }
   /* v195: het maandmoment. In de eerste dagen van een nieuwe maand krijgt de uitnodiging een
      aanhef, want dat is het ijkpunt waarop een voornemen het meest waard is. Bewust een aanhef op
      de bestaande ingang en geen tweede kaart: de vraag staat er al, alleen de aanleiding ontbrak. */
@@ -9984,7 +10179,9 @@ async function coAfspraakOpen(m){
   if(!coMagAfspraak()) return;   // v139: niet bereikbaar vanuit een terloops onderwerp, en zo blijft dat
   const _g=_coGen; const af=coachThisMonthAfspraak();
   if(!af){ coachMenu(m); return; }
-  await coSay(`<span class="hl">${esc(af.text)}</span> — dat sprak je deze maand af.`,{html:true,accent:true}); if(_g!==_coGen)return;
+  // v314: het gedachtestreepje eruit, alleen in deze zin. De rest van het bestand draagt er nog
+  // ruim dertig, en die zijn een eigen ronde: hier verandert de leesbaarheid van één zin.
+  await coSay(`<span class="hl">${esc(af.text)}</span>, dat sprak je deze maand af.`,{html:true,accent:true}); if(_g!==_coGen)return;
   coChoices([
     // v141: de oude blijft staan tot de nieuwe is geschreven (coAfspraakSchrijf). Breek je hier af,
     // dan heb je nog steeds je afspraak van deze maand.
@@ -10300,7 +10497,7 @@ function coTopic(k,m){
   const fn={tips:coTopicTips, potjes:coTopicPotjes, vast:coTopicVast, impuls:coTopicImpuls, schuld:coTopicSchuld}[k];
   (fn||coachMenu)(m);
 }
-const coTerug=m=>({l:'Terug naar de onderwerpen', act:()=>coachMenu(m)});
+const coTerug=m=>({l:'Een ander onderwerp kiezen', act:()=>coachMenu(m)});   // v314: het label zegt wat je daar doet in plaats van waar je vandaan komt
 // hoeveel maanden eerder ben je bij je doel met +save/mnd erbij (alleen waar het te rekenen valt)
 function coDoelEffect(save){
   const D=coachDoel(); if(!D||!(save>0)) return '';
@@ -11305,7 +11502,7 @@ function valtOpCorrectieBedrag(maand, potjeId){
 }
 function valtOpTelling(){
   const L=SET.valtOpLog||{};
-  const n={potje_bijgesteld:0, grens_gezet:0, correctie:0, geen:0}; const perCat={}; let totaal=0, eerste='';   // v289: een correctie is een eigen uitkomst en geen variant van 'niets gedaan'
+  const n={potje_bijgesteld:0, grens_gezet:0, zo_gelaten:0, correctie:0, geen:0}; const perCat={}; let totaal=0, eerste='';   // v289: een correctie is een eigen uitkomst en geen variant van 'niets gedaan'. v314: 'zo gelaten' is een KEUZE en 'geen' een stilte, dus twee tellers.
   for(const id in L){ const r=L[id]; if(!r) continue; totaal++;
     if(r.actie && n[r.actie]!=null) n[r.actie]++;
     perCat[r.potjeId]=(perCat[r.potjeId]||0)+1;

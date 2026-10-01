@@ -124,7 +124,15 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
     /* v305: het label noemt de teller die er ligt, en dat is sinds die ronde de toewijzing aan je
        noodfonds en niet je rekeningsaldo. */
     expect(per['Vraagt aandacht']).toContain('maanden toegewezen aan je noodfonds');
-    expect(per['Vraagt aandacht']).toContain('Hier loopt een afspraak over: Ik verhoog het bedrag dat ik per maand opzij zet.');
+    /* v314: DE AFSPRAAK STAAT OP EEN PLEK, en dat is de kaart. Hij stond ook in de rij, dus je las
+       dezelfde tekst twee keer op een scherm, en alleen de kaart heeft de ingang om hem aan te
+       passen. De verbinding tussen de twee is niet weg maar omgedraaid: de kaart noemt de regel.
+       De assertie is daarmee strenger dan de oude, want hij eist ook dat het er PRECIES EEN keer
+       staat. */
+    const heel = await page.evaluate(() => document.getElementById('s-maand').innerText);
+    expect(per['Vraagt aandacht']).not.toContain('Hier loopt een afspraak over');
+    expect((heel.match(/Ik verhoog het bedrag dat ik per maand opzij zet/g) || []).length).toBe(1);
+    expect(heel).toContain('JE AFSPRAAK DEZE MAAND');
     expect(per['Vraagt een beslissing']).not.toContain('Buffer in maanden');
     // de andere twee blijven een beslissing vragen
     expect(per['Vraagt een beslissing']).toContain('Dekking');
@@ -194,7 +202,12 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
       s.coachLog = [{ ts: Date.now(), type: 'afspraak', text: 'Ik pak buffer in maanden deze maand op', regel: 'buffer', cat: null }];
     }));
     const per = await rijen(page);
-    expect(per['Vraagt aandacht']).toContain('Hier loopt een afspraak over: Ik pak buffer in maanden deze maand op.');
+    const heel = await page.evaluate(() => document.getElementById('s-maand').innerText);
+    // v314: de regelKey doet nog steeds zijn werk (de rij schuift naar aandacht), en de tekst staat
+    // op de kaart in plaats van in de rij
+    expect(per['Vraagt aandacht']).toContain('Buffer in maanden');
+    expect(per['Vraagt aandacht']).not.toContain('Hier loopt een afspraak over');
+    expect((heel.match(/Ik pak buffer in maanden deze maand op/g) || []).length).toBe(1);
   });
 
   for (const w of [360, 390]) {

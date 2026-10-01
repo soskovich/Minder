@@ -74,9 +74,10 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   "Over de maanden heen". Hij rendert alleen op de lopende maand.
 - **Grip** (`maand`, sinds `v233`; heette Maand) — houdt mijn systeem stand (structureel). Leest
   altijd de lopende maand en heeft geen maandkiezer; de kiezer (`curMonth`, `kijkMaand()`) is van
-  Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. Draagt sinds `v235` bovenaan
-  de valt-op-kaarten: dezelfde signalen die Inzichten constateert, met de historie en de drie
-  handelingen eraan. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
+  Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. Draagt sinds `v235` de
+  valt-op-kaarten: dezelfde signalen die Inzichten constateert, met de historie en de handelingen
+  eraan. Sinds `v314` staat de SAMENVATTING daarvoor (hij telt de potjes mee) en staan de handelingen
+  in volgorde van het moment in de maand, met "Zo laten" als eigen actie. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
   de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten. Sinds `v237` is dat niet
   meer de enige ingang: `coachLeak()` levert ook een patroonregel op Inzichten. Twee ingangen naar
   hetzelfde gesprek, maar nooit voor hetzelfde geval. Draagt sinds `v258` ook `contantKaart()`, maar
@@ -97,6 +98,98 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE SAMENVATTING OP GRIP TELT DE POTJES MEE, EN STAAT VOOR DE SIGNAALKAARTEN** (`v314`): hij stond
+  erachter, dus je las eerst "EUR 214 boven je potje" en daarna "er is niets dat vastloopt".
+  `maandOordeel(R, nPot)` krijgt het aantal uit `valtOpSignals()` van de AANROEPER: `renderMaand()`
+  haalt die lijst een keer op en geeft hem aan `gripSignalCards()` EN aan het oordeel. Twee aanroepen
+  zouden een tweede waarheid over hetzelfde aantal zijn (`v104`) en ook twee keer `save()` doen, want
+  die functie maakt de log-records aan en zet `getoond`.
+  EEN POTJE IS GEEN REGEL, en daarom staat het in een EIGEN zin en telt het niet mee in `R.length`,
+  `ok.length` of de tekort-telling. Die telzinnen gaan over wat `maandRegels()` en `maandStructureel()`
+  opleveren; een overschrijding heeft zijn eigen kaart met zijn eigen handelingen (`v235`). De ok-zin
+  wordt "De rest staat goed" zodra er een potje is, want "Alle 3 regels staan goed" ernaast leest als
+  een tegenspraak terwijl beide waar zijn; de sub blijft noemen WELKE regels in orde zijn.
+  DE DRIE LUSSEN BLIJVEN ERBOVEN. Een verlopen acceptatie, de afspraak van vorige maand en het
+  maandmoment zijn terugblikken op de maand die net om is, ze staan er een paar dagen, en `v141` heeft
+  de afspraaklus met zoveel woorden voor het oordeel gezet. 'Bovenaan' gaat hier over de vaste inhoud
+  van het scherm. GEMETEN: vijf tests in `afspraak-lus.spec.js` lezen de eerste kaart, en met de
+  samenvatting absoluut eerst vielen ze alle vijf; dat geval staat nu als eigen assertie vast.
+- **DE HANDELINGEN OP DE SIGNAALKAART STAAN IN VOLGORDE VAN HET MOMENT, MET EEN PRIMAIRE KNOP**
+  (`v314`): drie even zware knoppen lieten de keuze aan de kleur van niets. Ruim voor het eind staat
+  bijstellen eerst; in de laatste `VALTOP_LAATSTE_DAGEN` (3) dagen staat "Bekijk de transacties"
+  eerst, dan "Volgende maand anders", dan de grens.
+  BIJSTELLEN IS DAAR WEG, EN DAT IS GEMETEN EN GEEN SMAAK: op dag 30 van 30 is `valtOpVoorstel()`
+  `ceil5(max(uitgegeven, prognose))` en is de prognose GELIJK aan de uitgave, dus het voorstel
+  absorbeert precies de overschrijding en `potjeRest()` reserveert nul. De knop haalt daar het rood
+  weg zonder dat er iets verandert.
+  WAT ERVOOR IN DE PLAATS KOMT IS DE MAAND ERNA, via een BESTAANDE route: `openPotje()` schrijft
+  `SET.budgetsNext` via `savePotje()`. Er komt dus geen tweede potje-editor bij (`v61`).
+  GEMELD EN NIET GEREPAREERD: die route roept `valtOpPotjeGewijzigd()` aan, dus het record van DEZE
+  maand krijgt `potje_bijgesteld` met `potje_voor` uit `SET.budgets` en `potje_na` uit de volgende
+  maand. De log leest dan "EUR 400 -> EUR 450" terwijl het potje van deze maand op 400 bleef staan.
+  Dat is de v237-val in spiegelbeeld, het is bestaand gedrag van die route (hij is ook via Inzichten
+  en de budgeteditor te bereiken), en het hoort bij de logboek-ronde en niet hier.
+  HET DAGWOORD IN DE KNOP LEEST DEZELFDE `valtOpDagenRest()` als de regel erboven, zodat "de laatste
+  3 dagen" in de knop en in de kop niet uiteen kunnen lopen. De constante heet geen D-woord, en dat is
+  geen smaak: `valt-op-signalen.spec.js` eist dat deze functie de detectie niet herhaalt en toetst dat
+  op de RUWE bron, dus een comment dat dat woord noemt zet die test rood (`v276`).
+- **"ZO LATEN" IS EEN EIGEN ACTIE, ZODAT EEN STILTE NOOIT ALS KEUZE LEEST** (`v314`): tot `v313` was
+  `geen` de uitkomst die `valtOpAfsluiten()` aan elk record zonder actie gaf, dus een maand waarin je
+  bewust besloot het te laten las precies hetzelfde als een maand waarin je het scherm nooit opende.
+  `zo_gelaten` STAAT NAAST `geen` EN NIET IN DE PLAATS ERVAN, en de telling onder het logboek houdt de
+  twee apart; dat verschil is de hele reden dat de actie bestaat.
+  HIJ STAAT ONVOORWAARDELIJK IN DIE TELLING, net als de andere twee handelingen en anders dan de
+  correctie: die drie zijn wat JIJ kunt doen, dus een nul daar is een meting (`v59`/`v73`/`v173`); een
+  correctie is een uitkomst die je niet kiest en groeit de regel alleen als hij voorkwam.
+  HET SIGNAAL VERDWIJNT EROP, want `valtOpIsOpen()` is `!r.actie` en dat geldt voor elke actie. Dat is
+  de bedoeling: je hebt gekozen, en de keuze staat in het logboek.
+- **"STAAT GOED" DRAAGT EEN LINKER-SUB DIE ZEGT WAARTEGEN DE RIJ STAAT** (`v314`): de compacte rij
+  noemde alleen zijn naam, dus de grens stond in de rechterkolom waar hij met de richt om de ruimte
+  vocht. De buffer-sub noemt de NORM (het veld dat de rij sinds `v305` al draagt), de dekking-sub de
+  eerstvolgende post uit `dekking()`, de doel-sub het doelbedrag met de streefdatum. Het komt uit
+  `r.sub` en `maandRij()` leidt er niets zelf af.
+  DE FIXTURE LAAT DE GETALLEN UITEENLOPEN, en dat is de meting die de assertie draagt: norm 2 tegen
+  richt 3, en potstand 500 tegen de post 299 tegen de opbouw-eis 249. Met samenvallende getallen is
+  "hij leest de norm" niet van "hij leest de richt" te onderscheiden (meetles a).
+  ALLEEN IN DE COMPACTE VORM: de uitgeklapte rij draagt al de volle gevolgzin.
+  DE WAARDE VAN DE DOEL-RIJ IS WAT JE INLEGT en de eenheid wat er nodig is. Het stond omgekeerd, en
+  dan was het grote getal van de rij een bedrag dat je juist NIET inlegt; het gevolg noemt het tekort
+  onveranderd voluit. `beleggenWaarde('doel')` leest `telaat` en `tekortPerMaand` en niet `waarde`,
+  dus die laag verschuift niet mee.
+  ZONDER GAT NOEMT DE DEKKING-RIJ WAT ER NA DE EERSTVOLGENDE POST OVERBLIJFT. De kolom zei "op peil
+  voor wat nu nodig is" of "er hoeft nu nog niets opzij", en dat zijn feiten over de opbouw-EIS; nu
+  staat er wat er van je POT overblijft, in dezelfde eenheid als de waarde ernaast. De tak vuurt per
+  constructie alleen bij status `ok`, want geen gat impliceert een graad op of boven de 100 (`v131`).
+  `graadTekst()` HOUDT ZIJN OP-PEIL-TAK en die is GEMETEN bereikbaar: pot 100 met een jaarpost van 900
+  over 11 maanden geeft graad 133 MET een gat, en dan staat er "op peil voor wat nu nodig is". Zonder
+  die meting zou deze ronde een tak achterlaten die alleen levend lijkt.
+- **DE AFSPRAAK STAAT OP EEN PLEK, EN DE KAART NOEMT DE REGEL** (`v314`): hij stond als eigen kaart
+  EN als regel in `maandRij()`, dus je las dezelfde tekst twee keer op een scherm terwijl alleen de
+  kaart de ingang heeft om hem aan te passen. De verbinding is omgedraaid.
+  ALLEEN BIJ `ok`, en dat is een afbakening en geen voorzichtigheid: bij `tekort` of `let op` zegt de
+  rij zelf al wat er aan de hand is, en `maandMetAfspraak()` heeft de status dan juist naar `let op`
+  gezet omdat er een afspraak over loopt. `r.afspraak` blijft op de rij staan, want daarmee zet die
+  functie de status om.
+- **NIET AAN JE VOORWAARDEN VOOR BELEGGEN IS NEUTRAAL** (`v314`): de dot volgde de status van de
+  blokkerende regel en was dus rood of amber, terwijl die regel met zijn eigen kleur al los boven de
+  kaart staat en nog niet gehaald geen fout is (`v78`/`v93`). Bij groen blijft hij groen: dat is een
+  uitkomst die uit geen van de drie regels afzonderlijk volgt.
+  "JE DREMPEL" STAAT ALLEEN BIJ DE BUFFER, want dat is de enige van de drie die je zelf kiest
+  (`SET.beleggenDrempel`, besluit 4 van `v305`). De 100% van de dekking en de EUR 0 van het doel komen
+  uit `MAAND_DREMPEL`, en "je drempel" erbij zetten zou beweren dat je ze hebt gekozen.
+  DE SABOTAGE EROP BLEEF EERST GROEN, en dat lag aan de test: mijn assertie stond achter een
+  `if (r.zin)` en de kaart rendert bij een dekking op `tekort` per constructie NIET (`v187` laat hem
+  zwijgen zodra de blokkerende rij het al zegt). Dat is het weggefilterde geval van `v299`/`v300`. De
+  stand die het wel draagt is een dekking op TEMPO: een grote post voorbij `MAAND_DREMPEL.dekkingMarge`
+  geeft status `let op`, en dan is de dekking de blokkade EN staat de kaart er.
+- **DE PRIJS VAN DE SAMENVATTING STAAT IN PIXELS, EN IS NIET WEGGEREKEND** (`v314`): op 360x640 (567px
+  zichtbaar) stond de signaalkaart voor deze ronde van 70 tot 446px en dus volledig boven de vouw; nu
+  loopt hij van 210 tot 615px, want de samenvatting van 124px staat erboven en de "Zo laten"-regel kost
+  er 29. De primaire handeling (322-400px) en de tweede (400-517px) blijven boven de vouw, de derde
+  eindigt op 569px en "Zo laten" loopt van 569 tot 598px. Op 390x844 past de hele kaart (576 van 771).
+  NIET INGEKORT, en dat is een keuze: de samenvatting is wat er bovenaan hoort te staan en de twee
+  zwaarste handelingen staan boven de vouw. De getallen staan als assertie vast, zodat een volgende
+  ronde ziet wat hij uitgeeft. GRIP HEEFT GEEN 200px-EIS: die van `v241` is de stand-kaart op Inzichten.
 - **HET JAARBEDRAG ONDER EEN OVERSCHRIJDING LEEST HET GETAL VAN DE RIJ ZELF** (`v313`): onder elke
   rij uit `valtOpSignals()` staat op Inzichten "Als dit elke maand gebeurt, is dat EUR X per jaar",
   en X is `s.over` maal twaalf. Dat is `v240` in zijn kortste vorm, een signaal toont de maat waarop
@@ -4301,7 +4394,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v313` → `minder-v314`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v314` → `minder-v315`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -4317,7 +4410,8 @@ raakt app-code (de poort-memo) en bumpt door naar `minder-v310`; het kalender-de
 alleen `tests/` en dit bestand en bumpte op zichzelf dus niet. `v311` raakt app-code (de maand-memo en
 de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md` en de changelog
 (een besluit en een open punt), dus hij bumpt niet, en `v313` raakt app-code en gaat daarom van
-`minder-v311` rechtstreeks naar `minder-v313`.
+`minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
+`minder-v314`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

@@ -342,7 +342,13 @@ test.describe('e - de beleggen-voorwaarde gaat niet mee', () => {
     expect(uit.tekst).toContain('Nog niet aan je voorwaarden voor beleggen');
     expect(uit.tekst).toContain('groeit');
     expect(uit.tekst).toContain('drempel is nog niet gehaald');
-    expect(uit.html).toContain('var(--red)');   // de dot volgt onveranderd de blokkade
+    /* v314: de dot is NEUTRAAL en niet rood. Nog niet gehaald is geen fout (v78/v93), en de rij van
+       de buffer staat met zijn eigen amber al los boven deze kaart, dus de kleur hier zei twee keer
+       hetzelfde. Wat de kaart moet dragen is de ZIN, en die eist deze test hierboven al: hij groeit
+       en de drempel is nog niet gehaald. Dat is precies wat uit twee kleuren niet te lezen was. */
+    expect(uit.html).toContain('var(--bar)');
+    expect(uit.html).not.toContain('var(--red)');
+    expect(uit.html).not.toContain('var(--amber)');
   });
 
   test('een blokkade die niet op tempo ligt krijgt die zin niet', async ({ page }) => {

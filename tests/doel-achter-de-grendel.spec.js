@@ -201,8 +201,13 @@ test.describe('d · Grip en de coach zeggen hetzelfde', () => {
     const r = await regel(page);
     const m = await meet(page);
     expect(r.status).toBe('tekort');
-    expect(r.waarde).toBe('€300');
-    expect(r.waarde).toBe(`€${m.T.benodigd}`);
+    /* v314: DE KOLOMMEN STAAN OMGEKEERD. De waarde is wat je NU inlegt en de eenheid wat er nodig is;
+       daarvoor stond het benodigde bedrag als het grote getal van de rij, en dat is een bedrag dat je
+       juist niet inlegt. De EIGENSCHAP van deze test blijft: Grip noemt hetzelfde bedrag als Plan, en
+       dat bedrag staat nu in de eenheid. Het gevolg noemt het onveranderd voluit. */
+    expect(r.waarde).toBe(`€${m.alloc}`);
+    expect(r.eenheid).toContain(`€${m.T.benodigd} nodig`);
+    expect(m.T.benodigd).toBe(300);
     expect(r.gevolg).toContain(`vanaf ${m.T.startLabel} €300 nodig`);
     expect(r.tekortPerMaand).toBe(300);
   });

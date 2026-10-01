@@ -140,7 +140,8 @@ test.describe('b · elk van de drie als blokkade', () => {
     expect(b.blokkade.key).toBe('buffer');
     const h = await regel(page);
     expect(h).toContain('Nog niet aan je voorwaarden voor beleggen: buffer');
-    expect(h).toContain('tegen 3 maanden');
+    // v314: de bufferdrempel is sinds v305 JOUW keuze (SET.beleggenDrempel), en de zin zegt dat
+    expect(h).toContain('tegen je drempel van 3 maanden');
   });
 
   /* v187: de regel toont zich alleen nog wanneer hij iets zegt wat de losse regels niet zeggen.
@@ -276,7 +277,19 @@ test.describe('e · geen advies', () => {
     expect(sheet).toContain('buffer');
     expect(sheet).toContain('dekking reserveringen');
     expect(sheet).toMatch(/tegen 3 maanden/);
-    expect(sheet).toMatch(/tegen 100%/);
+    /* v314: ELKE RIJ STAAT IN EEN EENHEID. De dekking-rij zette `€1.200` naast `tegen 100%`, een euro
+       tegen een percentage in dezelfde kolom, en dan is er niets te vergelijken zonder zelf te gaan
+       rekenen. 100% van de dekking IS je potstand tegen wat er nu in hoort te staan, dus de drempel
+       staat nu in euro's en leest dat getal uit de rij. De assertie bindt op de BRON van dat getal en
+       niet op een bedrag uit de fixture. */
+    const D = await page.evaluate(() => {
+      const v = beleggenKlaar(maandRegels()).voorwaarden.find((x) => x.key === 'dekking');
+      return { waarde: v.waarde, drempel: v.drempel, stand: dekking(12).benodigdeStand };
+    });
+    expect(D.drempel).toBe('€' + D.stand.toLocaleString('nl-NL'));
+    expect(D.waarde.startsWith('€')).toBe(true);
+    expect(sheet).toContain('tegen ' + D.drempel);
+    expect(sheet).not.toMatch(/tegen 100%/);
     expect(await page.locator('#sheet button').count()).toBe(0);   // niets dat iets in gang zet
   });
 

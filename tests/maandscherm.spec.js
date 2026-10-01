@@ -60,7 +60,7 @@ async function boot(page, payload) {
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof maandRegels === 'function');
 }
 
-const R = (page) => page.evaluate(() => maandRegels().map((r) => ({ key: r.key, status: r.status, waarde: r.waarde, eenheid: r.eenheid, gevolg: r.gevolg, maand: r.maand || null })));
+const R = (page) => page.evaluate(() => maandRegels().map((r) => ({ key: r.key, status: r.status, waarde: r.waarde, eenheid: r.eenheid, sub: r.sub, gevolg: r.gevolg, maand: r.maand || null })));   // v314: sub erbij, de linker-sub van de compacte rij
 const O = (page) => page.evaluate(() => maandOordeel(maandRegels()));
 const VB = (page) => page.evaluate(() => maandVerband(maandRegels()));
 
@@ -90,7 +90,7 @@ test.describe('b · de regels', () => {
     const uit = await page.evaluate(() => {
       const rr = maandRegels();
       const D = dekking(12), bm = bufferMaanden(), V = spaarVrij();
-      return { dekGraad: D.graad, regelDek: rr.find((r) => r.key === 'dekking').waarde,
+      return { dekGraad: D.graad, dekGat: !!D.gat, regelDek: rr.find((r) => r.key === 'dekking').waarde,
         regelDekEenheid: rr.find((r) => r.key === 'dekking').eenheid,
         potStand: euro0(Math.round(D.werkelijkeStand || 0)),
         bm: Math.round(bm * 10) / 10, regelBuf: rr.find((r) => r.key === 'buffer').waarde, vrij: V.vrij };
@@ -98,7 +98,11 @@ test.describe('b · de regels', () => {
     expect(uit.regelDek).toBe(uit.potStand);          // v189: de kolom toont je potsaldo
     /* v191: een dekkingsgraad toont een percentage tot en met de drempel en daarboven een
        vaststelling; boven de 100% verandert het exacte getal geen enkele beslissing. */
-    if (uit.dekGraad <= 100) expect(uit.regelDekEenheid).toContain(uit.dekGraad + '%');
+    /* v314: zonder gat draagt de kolom wat er na de eerstvolgende post overblijft, en dan staat er
+       per definitie geen percentage. Met een gat beslist graadTekst() onveranderd: tot en met de
+       drempel een percentage, daarboven 'op peil'. */
+    if (!uit.dekGat) { expect(uit.regelDekEenheid).toContain('blijft over'); expect(uit.regelDekEenheid).not.toMatch(/%/); }
+    else if (uit.dekGraad <= 100) expect(uit.regelDekEenheid).toContain(uit.dekGraad + '%');
     else { expect(uit.regelDekEenheid).toContain('op peil'); expect(uit.regelDekEenheid).not.toMatch(/%/); }
     expect(uit.regelBuf).toBe(String(uit.bm).replace('.', ','));
   });
@@ -222,7 +226,13 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
     expect(d.status).toBe('ok');
     expect(d.waarde).toBe('€50');                                       // v189: je potsaldo
     expect(d.waarde).not.toBe('onbekend');
-    expect(d.eenheid).toBe('in je pot · er hoeft nu nog niets opzij');
+    /* v314: de kolom zei 'er hoeft nu nog niets opzij' - een feit over de opbouw-EIS - en zegt nu wat
+       er na de eerstvolgende post van je pot OVERBLIJFT. Dat is een feit over je pot, in dezelfde
+       eenheid als de waarde ernaast, en de linker-sub noemt de post waar het over gaat. Beide
+       uitspraken zijn waar; deze gaat over de vraag die de rij stelt. */
+    expect(d.eenheid).toBe('in je pot · €25 blijft over');
+    expect(d.eenheid).not.toMatch(/%/);
+    expect(d.sub).toMatch(/^verwacht: €25 in /);
   });
 
   test('kun je hem niet betalen, dan is het tekort, met de maand erbij', async ({ page }) => {
@@ -286,7 +296,7 @@ test.describe('c2 · dekking zonder opbouw-eis (v131)', () => {
   test('zonder tekort blijft de eenheid schoon', async ({ page }) => {
     await boot(page, seedM({ reserveringen: [eenmalig(25, 2)], manualBal: { [MAIN]: 1500, [RES]: 50, [SAV]: 20000 } }));
     const d = await dek(page);
-    expect(d.eenheid).toBe('in je pot · er hoeft nu nog niets opzij');
+    expect(d.eenheid).toBe('in je pot · €25 blijft over');   // v314, zie hierboven
     expect(d.eenheid).not.toMatch(/tekort/);
   });
 
