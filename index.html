@@ -288,30 +288,34 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 /* v318: DE VERTAKTE WATERVAL. De vaten staan NAAST elkaar in een raster, elk met zijn tak recht
    erboven, en ze hangen aan de inlegbalk. Tot v317 stonden ze onder elkaar met een horizontale tak
    per rij; dat kostte 144px per bestemming en liet de doelen niet naast elkaar vergelijken.
-   DRIE RASTERRIJEN EN GEEN DRIE LOSSE BLOKKEN: de vaten, de terugval-strook en de tekst. De strook
-   loopt over alle kolommen (`grid-column:1/-1`), want een terugval verbindt twee kolommen en kan
-   dus niet in een kolom zitten. De tekst staat in een eigen rasterrij zodat de regels van alle
-   kolommen op dezelfde hoogte beginnen, ook als het ene vat 180px is en het andere 40px.
+   DE TEKST STAAT IN HET VAT EN LOOPT ERONDER DOOR, en dat is wat de hoogte terugbrengt. Hij begint
+   aan de BOVENKANT van het vat en stroomt naar beneden: wat binnen de hoogte van dat vat past staat
+   erin, en wat niet past loopt er onder door. Er wordt dus NIETS opgemeten en er is geen regel die
+   telt hoeveel regels er passen - de normale tekststroom beslist dat, en bij een hoog vat past
+   alles erin terwijl bij een geklemd vat alleen de naam erin staat.
+   DE KOLOM IS EEN RASTERCEL EN GEEN TWEE: het vat is een ABSOLUUT achtergrondvlak binnen de box en
+   de tekst stroomt er normaal doorheen, dus de box is `max(vathoogte, teksthoogte)` hoog. Daarmee
+   maakt een lang tekstblok onder het ENE vat de andere kolommen niet hoger; vóór die wissel stonden
+   de teksten in een eigen rasterrij en zette de langste de hoogte voor alle kolommen.
    DE VATEN ZIJN BOVEN UITGELIJND, want ze hangen aan de balk: hun bodem verschilt en dat IS de
-   schaal. De box eromheen is even hoog als het hoogste vat, zodat de strook eronder voor elke
-   kolom op dezelfde y begint en de stippellijn per constructie te plaatsen is zonder iets op te
-   meten (v317: er is geen meet-hook in dit bestand). */
-.wf{position:relative;display:grid;margin:9px 0 0}
-.wf-kol{position:relative;min-width:0;padding:0 5px}
+   schaal. */
+.wf{position:relative;display:grid;align-items:start;margin:9px 0 0}
+.wf-kol{position:relative;min-width:0;padding:0 2px}
 /* De dikte van de tak IS het maandbedrag (1,4px per 100), net als in het ontwerp. De breedte van
    het balksegment erboven is dat aandeel over de hele breedte; dat zijn twee weergaven van
    hetzelfde getal en geen tweede bron. */
 .wf-tak{position:relative;display:flex;justify-content:center;align-items:stretch}
 .wf-tak i{display:block;background:var(--teal);border-radius:0 0 2px 2px}
-/* Het maandbedrag naast zijn tak, zoals in het ontwerp. Alleen bij een of twee kolommen: in een
-   derde past het er niet naast en zakt het naar de tekst onder het vat. */
+/* Het maandbedrag naast zijn tak, zoals in het ontwerp. Alleen bij EEN kolom: bij twee of meer
+   loopt dit label over de buurkolom heen en zakt het naar de eerste tekstregel. */
 .wf-taklabel{position:absolute;top:50%;left:50%;transform:translate(0,-50%);margin-left:11px;
   font-size:var(--fs-sm);color:var(--mut);line-height:1.2;white-space:nowrap}
 .wf-taklabel b{color:var(--txt);font-weight:700}
 .wf-vatbox{position:relative}
 /* Het vat is open aan de bovenkant: het vangt op wat de tak erin laat lopen. Geen rand boven, en
-   de onderhoeken rond, precies de vorm uit het ontwerp. */
-.wf-vat{position:absolute;left:7%;right:7%;top:0;border:1.6px solid var(--txt);border-top:0;
+   de onderhoeken rond, precies de vorm uit het ontwerp. Het is een achtergrondvlak, dus de tekst
+   erboven bepaalt de hoogte van de box en niet andersom. */
+.wf-vat{position:absolute;left:0;right:0;top:0;border:1.6px solid var(--txt);border-top:0;
   border-radius:0 0 9px 9px;overflow:hidden}
 .wf-vat i{position:absolute;left:0;right:0;display:block}
 /* v246 terug: een vat onder de bodem staat NIET op schaal, en dat zegt het met een gestippelde
@@ -321,21 +325,23 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
    steekt aan beide kanten uit, want het vat heeft overflow:hidden en op 0 of 100 procent zou een
    markering binnenin half wegvallen. */
 .wf-streep{position:absolute;left:-4px;right:-4px;height:2px;background:var(--mut2);border-radius:1px}
-.wf-tekst{min-width:0;padding:0 5px;margin-top:9px}
+.wf-tekst{position:relative;z-index:1;min-width:0;padding:4px 5px 0}
 /* Geen ellipsis en geen nowrap: een naam die niet past loopt door op een tweede regel (besluit v318).
    `.vat-naam` deed het omgekeerde en kapte af, en dat is wat v281/v284 verbieden voor gegevens. */
 .wf-naam{font-weight:600;font-size:var(--fs-md);line-height:1.3;overflow-wrap:anywhere}
-.wf-vol{display:block;margin-top:4px;color:var(--mut2)}
-.wf-vol b{display:block;color:var(--txt);font-weight:700;font-size:var(--fs-md);line-height:1.25}
+.wf-vol{display:block;margin-top:3px;color:var(--mut2)}
+.wf-vol b{color:var(--txt);font-weight:700}
 .wf-dof{opacity:.72}
 /* Een bestemming die zijn streefdatum niet haalt: gedempt en geen alarmkleur, want er is niets fout
    gedaan en de verdeling is later dan bedoeld (v78/v93). */
-.wf-laat{border-left:3px solid var(--mut2);padding-left:7px;margin-left:-2px}
-/* De terugval-strook. De stippellijn loopt van onder het vat van de GEVER naar het vat van de
-   ONTVANGER, met een pijl erop. x komt uit het kolomnummer en y uit de vathoogtes, allebei bekend
-   op het moment van renderen, dus er wordt niets opgemeten. De strook staat `overflow:visible`
-   zodat de stomp van een laag vat omhoog kan reiken tot zijn eigen bodem. */
-.wf-erf{position:relative;grid-column:1/-1;overflow:visible}
+.wf-laat .wf-naam{border-left:3px solid var(--mut2);padding-left:6px;margin-left:-2px}
+/* De terugval-strook, als eigen rasterrij ONDER de kolommen. De elleboog loopt volledig BINNEN die
+   strook: een stompje omlaag bij de gever, horizontaal naar de kolom van de ontvanger, en daar een
+   pijl omhoog. Hij reikt niet meer tot de bodem van een vat, en dat is sinds de tekst in het vat
+   staat geen keuze maar een eis: de kolommen zijn nu verschillend hoog, dus een stomp naar een
+   vatbodem zou dwars door de tekst van een andere kolom lopen. x komt uit het kolomnummer, y uit de
+   plek in de strook, allebei bekend op het moment van renderen (v317: er wordt niets opgemeten). */
+.wf-erf{position:relative;grid-column:1/-1}
 .wf-erf .wf-lijn{position:absolute;left:0;right:0;top:0;bottom:0;display:block}
 .wf-erf i{position:absolute;display:block}
 .wf-erf i.v{border-left:1.4px dashed var(--mut2)}
@@ -343,7 +349,9 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .wf-erf i.p{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;
   border-bottom:6px solid var(--mut2)}
 .vat-in{position:relative;display:flex;gap:10px;align-items:flex-start;padding:2px 2px 6px}
-.vat-naam{font-weight:600;font-size:var(--fs-md);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* v318: GEEN ELLIPSIS, dezelfde regel als in en onder de vaten. Deze rij was de laatste plek waar
+   een naam die je zelf invoerde stil werd afgekapt (v281/v284), en dat is nergens anders meer zo. */
+.vat-naam{font-weight:600;font-size:var(--fs-md);min-width:0;overflow-wrap:anywhere}
 .vat-stand{display:block;margin-top:2px}
 .vat-dat{display:block;margin-top:3px;color:var(--mut2);line-height:1.45}
 .vat-vol{padding:2px 0}
@@ -8124,6 +8132,9 @@ function vatRegels(p,smal){
    VAT_TAK_H is de lengte van de tak tussen de balk en het vat; TAK_PER_EURO is de dikte van die
    tak, 1,4px per 100 euro, de maat uit het ontwerp. */
 const VAT_MAX=180, VAT_MIN=40, VAT_TAK_H=44, TAK_PER_EURO=0.014, VAT_KOL_MAX=3;
+/* De terugval-strook onder de kolommen: hoe diep de horizontale lijn ligt en hoeveel een tweede
+   overdracht eronder zakt. */
+const ERF_TOP=11, ERF_STAP=9;
 /* Het aantal kolommen IS het aantal vaten, tot drie. Bij twee vaten twee brede kolommen, zoals het
    ontwerp; vanaf vier komt er een tweede rij. Een vast raster van drie zou bij twee vaten een lege
    derde kolom laten staan, en dat is ruimte die niets zegt. */
@@ -8167,7 +8178,6 @@ function renderPlan(bare){
      KOL kolommen, en een regel ertussen breekt die reeks af. */
   const KOL=planVatKolommen(vaten.length);
   const HG=planVatHoogten(vaten);
-  const maxH=Math.max(VAT_MIN,...vaten.map(p=>HG[p.id].h));
   /* In een smalle kolom de korte vormen, in een brede de lange (besluit v318). De AANROEPER weet
      hoeveel kolommen er staan; vatRegels() kiest op dat ene argument welke woorden erbij horen. */
   const smal=KOL>=3;
@@ -8213,9 +8223,33 @@ function renderPlan(bare){
   flush();
   const plek={}; delen.forEach((d,r)=>{ if(d.groep) d.groep.forEach((p,k)=>{ plek[p.id]={rij:r, kol:k}; }); });
 
+  /* DE TEKST VAN EEN BESTEMMING, in de volgorde van het ontwerp: naam, bedrag, stand, vol met
+     datum, en de streefdatum met de marge of het te-laat. Hij staat IN de vatbox en stroomt vanaf de
+     bovenkant van het vat naar beneden, dus wat binnen de hoogte van dat vat past staat erin en de
+     rest loopt eronder door. Er wordt niets geteld en niets opgemeten: de tekststroom beslist. */
+  const vatTekst=p=>{
+    const R=vatRegels(p,smal);
+    const D=planBedragDeel(p);
+    const dzB=(+p.extra>0&&p.mode!=='auto'&&!p.grendelDoorzak)?Math.round(+p.extra):0;   // v255: zie planSub()
+    const dzR=dzB>0?`<span class="muted"> · ${euro0(dzB)} doorgezakt</span>`:'';
+    const dof=(p.status==='wacht op de buffer')?' wf-dof':'';
+    const laat=R.laat?' wf-laat':'';
+    return `<div class="plan-item wf-tekst${laat}${dof}" data-id="${p.id}" data-laat="${R.laat?1:0}">
+      <div class="wf-naam">${nrVan(p)} ${esc(p.naam)}</div>
+      ${labelNaast?'':`<div class="small">${D.mod?`<span class="muted">${D.mod}</span>`:''}<b style="font-weight:700">${D.bedrag}</b><span class="muted">/mnd</span></div>`}
+      ${p.nfOnbekend?'':`<div class="small vat-stand">${planStand(p)}${dzR}</div>`}
+      ${R.vol?`<span class="wf-vol small" data-vol="${p.id}">${R.vol.woord} <b>${R.vol.datum}</b></span>`:''}
+      ${R.regels.length?`<div class="small vat-dat">${R.regels.join('<br>')}</div>`:''}
+    </div>`;
+  };
+
   const blok=(groep,rij)=>{
     const K=KOL;
     const xMid=k=>((k+0.5)/K*100);
+    /* EEN RASTERCEL PER BESTEMMING: de tak, het vat en de tekst zitten in dezelfde kolom, en de
+       tekst stroomt door het vat heen. Daarmee is de kolom `tak + max(vathoogte, teksthoogte)` hoog
+       in plaats van `tak + hoogste vat + hoogste tekst`, en maakt een lang tekstblok onder het ENE
+       vat de andere kolommen niet langer hoger. */
     const kolommen=groep.map(p=>{
       const h=HG[p.id].h, klem=HG[p.id].geklemd;
       const dik=planTakDikte(p.alloc);
@@ -8228,7 +8262,7 @@ function renderPlan(bare){
          markering op 0 of 100 procent zou daarbinnen half wegvallen. De afstand tot de onderkant
          van de BOX is de lege ruimte onder dit vat plus zijn eigen percentage, allebei in px die we
          hier al kennen; er wordt niets opgemeten. */
-      const streep=ST?`<span class="wf-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="bottom:${((maxH-h)+h*ST.pct/100).toFixed(1)}px"><span class="sr-only">${doelStreepjeTekst(p,ST)}</span></span>`:'';
+      const streep=ST?`<span class="wf-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="top:${(h-h*ST.pct/100).toFixed(1)}px"><span class="sr-only">${doelStreepjeTekst(p,ST)}</span></span>`:'';
       const vul=p.nfOnbekend?''
         :`<i class="wf-vul" style="bottom:0;height:${pct}%;background:${tint}"></i>`
          +(groei>0?`<i class="wf-groei" style="bottom:${pct}%;height:${groei.toFixed(1)}%;background:color-mix(in srgb,${tint} 38%,transparent)"></i>`:'');
@@ -8248,8 +8282,8 @@ function renderPlan(bare){
       const takLabel=!labelNaast?'':`<span class="wf-taklabel">${BD.mod?`<span class="muted">${BD.mod}</span>`:''}<b>${BD.bedrag}</b>/mnd</span>`;
       return `<div class="wf-kol" data-id="${p.id}" style="cursor:pointer" onclick="planRij('${p.id}')">
         <div class="wf-tak" style="height:${VAT_TAK_H}px">${p.alloc>0?`<i data-takkleur style="width:${dik}px;background:${tint}"></i>`:''}${takLabel}</div>
-        <div class="wf-vatbox" style="height:${maxH}px">
-          <div class="wf-vat${klem?' wf-klem':''}" data-vat="${p.id}" data-h="${h}" style="height:${h}px">${vul}</div>${streep}${klemUit}
+        <div class="wf-vatbox" style="min-height:${h}px">
+          <div class="wf-vat${klem?' wf-klem':''}" data-vat="${p.id}" data-h="${h}" style="height:${h}px">${vul}</div>${streep}${klemUit}${vatTekst(p)}
         </div></div>`;
     }).join('');
     /* DE TERUGVAL-STROOK. Alleen de overdrachten waarvan gever en ontvanger in DEZELFDE rasterrij
@@ -8258,34 +8292,22 @@ function renderPlan(bare){
        er gaat geen feit verloren. */
     const eigen=TV.filter(e=>plek[e.van]&&plek[e.naar]&&plek[e.van].rij===rij&&plek[e.naar].rij===rij);
     const strook=eigen.map((e,k)=>{
-      const Y=8+k*11, xG=xMid(plek[e.van].kol), xR=xMid(plek[e.naar].kol);
-      const topG=-(maxH-HG[e.van].h), topR=-(maxH-HG[e.naar].h);
+      const Y=ERF_TOP+k*ERF_STAP, xG=xMid(plek[e.van].kol), xR=xMid(plek[e.naar].kol);
       const l=Math.min(xG,xR), w=Math.abs(xR-xG);
       /* Eén lijn per overdracht, in een eigen omhulsel met de gever EN de ontvanger erop. Zonder dat
          omhulsel zijn de vier stukken alleen op volgorde aan elkaar te koppelen, en dan leest een
-         tweede overdracht als een deel van de eerste. */
+         tweede overdracht als een deel van de eerste.
+         DE ELLEBOOG LIGT VOLLEDIG IN DE STROOK: een stompje omlaag bij de gever, de horizontale lijn,
+         en bij de ontvanger een stompje omhoog met de pijl erop. Hij reikt niet tot een vatbodem,
+         want de kolommen zijn verschillend hoog en zo'n stomp zou door de tekst van een andere
+         kolom lopen. */
       return `<span class="wf-lijn" data-erf-van="${e.van}" data-erf-naar="${e.naar}">`
-        +`<i class="v" style="left:${xG.toFixed(2)}%;top:${topG}px;height:${(Y-topG).toFixed(1)}px"></i>`
+        +`<i class="v" style="left:${xG.toFixed(2)}%;top:0;height:${Y}px"></i>`
         +`<i class="h" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%;top:${Y}px"></i>`
-        +`<i class="v" style="left:${xR.toFixed(2)}%;top:${(topR+6).toFixed(1)}px;height:${(Y-topR-6).toFixed(1)}px"></i>`
-        +`<i class="p" style="left:calc(${xR.toFixed(2)}% - 4px);top:${topR}px"></i></span>`;
+        +`<i class="v" style="left:${xR.toFixed(2)}%;top:6px;height:${(Y-6).toFixed(1)}px"></i>`
+        +`<i class="p" style="left:calc(${xR.toFixed(2)}% - 4px);top:0"></i></span>`;
     }).join('');
-    const erf=`<div class="wf-erf" style="height:${eigen.length?8+eigen.length*11+4:0}px">${strook}</div>`;
-    const teksten=groep.map(p=>{
-      const R=vatRegels(p,smal);
-      const D=planBedragDeel(p);
-      const dzB=(+p.extra>0&&p.mode!=='auto'&&!p.grendelDoorzak)?Math.round(+p.extra):0;   // v255: zie planSub()
-      const dzR=dzB>0?`<span class="muted"> · ${euro0(dzB)} doorgezakt</span>`:'';
-      const dof=(p.status==='wacht op de buffer')?' wf-dof':'';
-      const laat=R.laat?' wf-laat':'';
-      return `<div class="plan-item wf-tekst${laat}${dof}" data-id="${p.id}" data-laat="${R.laat?1:0}" style="cursor:pointer" onclick="planRij('${p.id}')">
-        <div class="wf-naam">${nrVan(p)} ${esc(p.naam)}</div>
-        ${labelNaast?'':`<div class="small">${D.mod?`<span class="muted">${D.mod}</span>`:''}<b style="font-weight:700">${D.bedrag}</b><span class="muted">/mnd</span></div>`}
-        ${p.nfOnbekend?'':`<div class="small vat-stand">${planStand(p)}${dzR}</div>`}
-        ${R.vol?`<span class="wf-vol" data-vol="${p.id}">${R.vol.woord}<b>${R.vol.datum}</b></span>`:''}
-        ${R.regels.length?`<div class="small vat-dat">${R.regels.join('<br>')}</div>`:''}
-      </div>`;
-    }).join('');
+    const erf=`<div class="wf-erf" style="height:${eigen.length?ERF_TOP+(eigen.length-1)*ERF_STAP+4:0}px">${strook}</div>`;
     /* De regel bij de lijn. Hij noemt de maand, de gever en de ontvanger, en GEEN bedrag: de dikte
        van de tak van de gever draagt de maat al, en een bedrag erbij zou een tweede bron voor
        datzelfde getal zijn (v104). */
@@ -8296,10 +8318,10 @@ function renderPlan(bare){
     /* `plan-item` ZIT OP HET TEKSTBLOK EN NIET OP DIT RASTER, en dat is de keuze die de rest van de
        app overeind houdt: `.plan-item[data-id]` is sinds v225 de naam waaronder een bestemming te
        vinden is, en dat is de helft met de naam, het bedrag, de stand en het datumpaar. Het raster
-       is een omhulsel van drie rasterrijen en geen bestemming, dus een telling over `.plan-item`
+       is een omhulsel van rasterrijen en geen bestemming, dus een telling over `.plan-item`
        blijft een telling van bestemmingen. Twee namen voor dezelfde bestemming zou zijn wat v91
        verbiedt, dus er komt geen tweede attribuut naast `data-id`. */
-    return `<div class="wf" style="grid-template-columns:repeat(${K},minmax(0,1fr))">${kolommen}${erf}${teksten}${regels}${groep.map(acties).join('')}</div>`;
+    return `<div class="wf" style="grid-template-columns:repeat(${K},minmax(0,1fr))">${kolommen}${erf}${regels}${groep.map(acties).join('')}</div>`;
   };
   const rows=delen.map((d,r)=>d.regel?kleinRij(d.regel):blok(d.groep,r)).join('');
 

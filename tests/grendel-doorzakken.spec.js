@@ -250,15 +250,16 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
   });
 
   /* v317 EISTE HIER DAT ELKE REGEL OP ÉÉN REGEL PAST, en dat kon omdat een bestemming toen de volle
-     breedte van de kaart had. v318 zet de vaten naast elkaar, dus de kolom is 120px op 360 en 133
-     op 390, en dan past "verdelen gaat open rond dec 2026" daar niet op één regel.
+     breedte van de kaart had. v318 zet de vaten naast elkaar, dus het vat is 146px breed op 360 en
+     161 op 390, en dan past "verdelen gaat open rond dec 2026" daar niet op één regel.
      BESLUIT v318 IS DAT ER NIET WORDT INGEKORT: een regel die niet past loopt door op een tweede
      regel. De eigenschap draait dus om, en wat vast moet liggen is dat er niets WEGVALT: de drie
      regels staan er voluit, er wordt niets afgekapt en er is geen ellipsis.
      DE HOOGTE STAAT ALS GEMETEN GETAL ERBIJ, zodat een volgende ronde ziet wat het afbreken kost
-     in plaats van dat hij het opnieuw moet meten. */
+     in plaats van dat hij het opnieuw moet meten. Hij VERSCHILT per breedte (127 tegen 109), en dat
+     is de meting zelf: op 360px breekt er een regel meer af dan op 390. */
   test('de drie regels staan voluit en breken af in plaats van te worden ingekort', async ({ page }) => {
-    const PX = { 360: 109, 390: 109 };
+    const PX = { 360: 127, 390: 109 };
     for (const w of [360, 390]) {
       await page.setViewportSize({ width: w, height: 800 });
       await boot(page);

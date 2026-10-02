@@ -274,9 +274,10 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
      van een naam mag niet aan het bedrag ernaast hangen. Daarmee splitst deze test in de twee helften
      die nu echt verschillende dingen beweren, en de reeks hierboven staat erbij zodat een volgende
      ronde niet denkt dat hij iets nieuws ontdekt.
-     DE HOOGTE VAN DE TEKST STAAT ALS GEMETEN GETAL ERBIJ en niet als "onder 150px": die grens was
-     van de gestapelde vorm, en naast elkaar is de hoogte van de tekst de PRIJS van de kolombreedte
-     (zie de v318-regel in CLAUDE.md). Een grens die altijd gehaald wordt meet niets. */
+     DE TWEEDE HELFT IS BINNEN v318 NOG EEN KEER OMGEDRAAID: eerst stonden de tekstblokken in een
+     eigen rasterrij en waren ze per constructie even hoog; sinds de tekst IN het vat staat is elke
+     kolom zo hoog als zijn eigen vat plus zijn eigen tekst. Wat hier vastligt is dus niet een grens
+     in pixels maar de FORMULE, en de invoermeting ernaast zegt dat het geval er is (meetles a). */
   test('de vaten staan op schaal, de kolommen zijn even breed', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
@@ -294,10 +295,18 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
     // de hoogte volgt het doelbedrag: een groter doel staat nooit lager
     const op = [...r.balken].sort((a, b) => a.doel - b.doel);
     for (let i = 1; i < op.length; i++) expect(op[i].h, op[i].id).toBeGreaterThanOrEqual(op[i - 1].h);
-    // en elke box is even hoog, zodat de strook eronder voor elke kolom op dezelfde y begint
-    expect(new Set(r.boxen).size, 'boxen: ' + r.boxen.join(',')).toBe(1);
-    // alle tekstblokken even hoog, want ze staan in één rasterrij
-    expect(new Set(r.teksten).size, 'teksten: ' + r.teksten.join(',')).toBe(1);
+    /* v318 (tweede helft): ELKE KOLOM IS ZO HOOG ALS ZIJN EIGEN VAT PLUS ZIJN EIGEN TEKST. De tekst
+       staat IN het vat en loopt eronder door, dus de box is `max(vathoogte, teksthoogte)` en niet de
+       hoogste van de rij. Tot deze wissel stonden de teksten in een EIGEN rasterrij en zette de
+       langste de hoogte van alle kolommen; dat was de prijs die deze ronde weghaalt.
+       DE INVOER WORDT EERST GEMETEN, anders is `max(vat,tekst)` niet van `vat` te onderscheiden
+       (meetles a): er moet een kolom zijn waar de tekst ONDER het vat door loopt. */
+    expect(r.teksten.length).toBe(r.balken.length);
+    expect(r.balken.some((b, i) => r.teksten[i] > b.h),
+      'tekst/vat: ' + r.balken.map((b, i) => r.teksten[i] + '/' + b.h).join(' ')).toBe(true);
+    r.balken.forEach((b, i) => {
+      expect(r.boxen[i], b.id + ': box is max(vat,tekst)').toBe(Math.max(b.h, r.teksten[i]));
+    });
   });
 });
 

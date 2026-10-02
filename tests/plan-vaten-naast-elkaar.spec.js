@@ -415,3 +415,89 @@ test.describe('i · wat deze vorm kost', () => {
     });
   }
 });
+
+/* ===== j) DE TEKST STAAT IN HET VAT, EN ELKE KOLOM DRAAGT ZIJN EIGEN HOOGTE =====
+   Dit is de wissel die de hoogte van v318 terugbrengt. De eerste vorm van deze ronde zette alle
+   tekst in een EIGEN rasterrij ONDER de vaten, en dat kostte 171px op 360 en 173 op 390 tegenover
+   v317. Het ontwerp zet de tekst IN het vat.
+   ER WORDT NIETS OPGEMETEN EN ER WORDT GEEN REGEL GETELD (v317): het vat is een absoluut
+   achtergrondvlak binnen de box en de tekst stroomt er normaal doorheen vanaf de BOVENKANT van dat
+   vat. Wat binnen de hoogte van dat vat past staat er dus in, en de rest loopt eronder door. Bij een
+   hoog vat is dat alles, bij een geklemd vat alleen de naam.
+   DE DRIE EISEN STAAN HIER ELK ALS EIGEN TEST, want ze kunnen los van elkaar breken. */
+test.describe('j · de tekst in het vat', () => {
+  const posities = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-kol')]
+    .map((k) => { const v = k.querySelector('.wf-vat').getBoundingClientRect();
+      const t = k.querySelector('.wf-tekst').getBoundingClientRect();
+      const b = k.querySelector('.wf-vatbox').getBoundingClientRect();
+      return { id: k.dataset.id, vatTop: Math.round(v.top), vatBot: Math.round(v.bottom),
+        tekstTop: Math.round(t.top), tekstBot: Math.round(t.bottom),
+        vat: Math.round(v.height), tekst: Math.round(t.height), box: Math.round(b.height) }; }));
+
+  test('de tekst begint op de bovenkant van zijn eigen vat', async ({ page }) => {
+    await boot(page, Object.assign({ breedte: 360 }, TOESTEL));
+    const r = await posities(page);
+    expect(r.length).toBe(2);
+    for (const k of r) expect(k.tekstTop, k.id).toBe(k.vatTop);
+  });
+
+  /* HET HOGE VAT DRAAGT ZIJN TEKST BINNENIN EN HET GEKLEMDE NIET, en dat paar is de meting: met
+     alleen het hoge vat is "de tekst staat in het vat" niet te onderscheiden van "de tekst staat
+     boven het vat", en met alleen het geklemde niet van "de tekst staat eronder" (meetles a). */
+  test('bij het hoge vat past alles erin, bij het geklemde loopt hij eronder door', async ({ page }) => {
+    await boot(page, Object.assign({ breedte: 360 }, TOESTEL));
+    const r = await posities(page);
+    const hoog = r.find((k) => k.vat === 180), klem = r.find((k) => k.vat === 40);
+    expect(hoog, JSON.stringify(r)).toBeTruthy();
+    expect(klem, JSON.stringify(r)).toBeTruthy();
+    expect(hoog.tekstBot, 'het hoge vat draagt zijn tekst binnenin').toBeLessThanOrEqual(hoog.vatBot);
+    expect(klem.tekstBot, 'het geklemde vat niet').toBeGreaterThan(klem.vatBot);
+    // en de box is per kolom `max(vat, tekst)`
+    for (const k of r) expect(k.box, k.id).toBe(Math.max(k.vat, k.tekst));
+  });
+
+  /* DE TWEEDE EIS VAN DEZE RONDE: een lang tekstblok onder het ENE vat maakt de ANDERE kolommen niet
+     hoger. Dat is alleen te zien door dezelfde stand twee keer te renderen met ALLEEN de naam van de
+     tweede bestemming anders: tot deze wissel stonden de teksten in een rasterrij en groeide de
+     eerste kolom mee. */
+  test('een langere tekst in de ene kolom laat de andere ongemoeid', async ({ page }) => {
+    const met = (naam) => ({ cap: 2200, order: ['noodfonds', 'kk', 'iw'], goals: [
+      { id: 'kk', naam: 'Kosten Koper', doel: 15000, gespaard: 0, streefdatum: '2027-05', allocMode: 'pct', pct: 90 },
+      { id: 'iw', naam, doel: 3000, gespaard: 0, streefdatum: '2027-03', allocMode: 'pct', pct: 10 }] });
+    const lees = () => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-kol')]
+      .map((k) => ({ id: k.dataset.id, h: Math.round(k.getBoundingClientRect().height) })));
+    await boot(page, Object.assign({ breedte: 360 }, met('Inrichting')));
+    const kort = await lees();
+    await boot(page, Object.assign({ breedte: 360 },
+      met('Inrichting woning keuken badkamer en vloer')));
+    const lang = await lees();
+    // de invoer: de tweede kolom wordt er echt hoger van
+    expect(lang[1].h, 'tweede kolom: ' + kort[1].h + ' -> ' + lang[1].h)
+      .toBeGreaterThan(kort[1].h);
+    // en de eerste niet
+    expect(lang[0].h, 'eerste kolom').toBe(kort[0].h);
+  });
+
+  /* DE DERDE EIS: de noodfondsregel kapt zijn naam niet af. Dat was de LAATSTE plek op dit scherm
+     waar een naam die je zelf invoerde stil werd ingekort (v281/v284); `.vat-naam` droeg een
+     ellipsis met nowrap. DE PRIJS IS 21px: de regel gaat van 55 naar 76px, want "Noodfonds · Bereikt"
+     past naast het toegewezen bedrag niet op één regel. Dat staat hier als getal, zodat een volgende
+     ronde ziet wat de regel kost in plaats van het opnieuw te moeten meten. */
+  test('de noodfondsregel kapt zijn naam niet af', async ({ page }) => {
+    await boot(page, Object.assign({ breedte: 360 }, TOESTEL));
+    const r = await page.evaluate(() => {
+      const rij = document.querySelector('#s-vooruit .plan-rij.vat-vol');
+      const n = rij.querySelector('.vat-naam');
+      const cs = getComputedStyle(n);
+      return { ellipsis: cs.textOverflow, wrap: cs.whiteSpace,
+        afgekapt: n.scrollWidth > n.clientWidth + 1,
+        tekst: n.innerText.replace(/\s+/g, ' ').trim(),
+        rij: Math.round(rij.getBoundingClientRect().height) };
+    });
+    expect(r.ellipsis).not.toBe('ellipsis');
+    expect(r.wrap).not.toBe('nowrap');
+    expect(r.afgekapt).toBe(false);
+    expect(r.tekst).toMatch(/Noodfonds/);
+    expect(r.rij, 'de prijs van het niet-afkappen').toBe(76);
+  });
+});

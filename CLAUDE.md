@@ -87,9 +87,9 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
   restant van déze maand. Beide kloppen; wat ze verbindt hoort op Plan te staan en nergens anders.
   Draagt sinds `v318` de VERTAKTE WATERVAL: de inlegbalk bovenaan, de vaten naast elkaar op schaal
-  van het doelbedrag met hun tak erboven, en de terugval als gestippelde elleboog. Een bestemming is
-  daar TWEE elementen in twee rasterrijen (`.wf-kol` voor het beeld, `.plan-item.wf-tekst` voor de
-  tekst), dus bind op `.plan-item[data-id]` en niet op een omhullende rij.
+  van het doelbedrag met hun tak erboven, en de terugval als gestippelde elleboog ONDER de kolommen.
+  Een bestemming is daar EEN rastercel (`.wf-kol`) met het tekstblok (`.plan-item.wf-tekst`) erin,
+  dus bind op `.plan-item[data-id]` en niet op de kolom of op een omhullende rij.
 
 Daarnaast bestaan `tx` (Transacties), `vermogen` en `set` (Instellingen). Die dragen geen
 horizon en zijn alleen via knoppen bereikbaar, dus zet er niets op wat een van de vier hoort
@@ -128,23 +128,45 @@ genoemde versietag.)*
   de ontvanger. DE RICHTING KOMT UIT `planTerugval()` en niet uit de mockup, en de x volgt uit het
   kolomnummer en de y uit de vathoogtes, allebei bekend op het moment van renderen: er wordt niets
   NA het renderen opgemeten, want zo'n meet-hook bestaat nergens in dit bestand (`v317`).
-  ELKE `.wf-vatbox` IS EVEN HOOG (de hoogste vathoogte) en de vaten zijn BOVEN uitgelijnd, want ze
-  hangen aan de balk. Dat is de voorwaarde onder de elleboog: zo begint de strook voor elke kolom op
-  dezelfde y. De sabotage die de box op het vat zelf zet bleef eerst GROEN omdat de assertie de
-  EERSTE box las, en dat is per constructie de kolom met het hoogste vat (meetles a).
+  DE TEKST STAAT IN HET VAT EN LOOPT ERONDER DOOR, en dat is wat de hoogte van deze ronde
+  terugbrengt. Het vat is een ABSOLUUT achtergrondvlak binnen `.wf-vatbox` en de tekst stroomt er
+  normaal doorheen vanaf de BOVENKANT van dat vat: wat binnen die hoogte past staat erin, en de rest
+  loopt eronder door. ER WORDT NIETS OPGEMETEN EN ER WORDT GEEN REGEL GETELD (`v317`) - de normale
+  tekststroom beslist dat, en op de stand van het toestel draagt het vat van 180 zijn hele tekst
+  binnenin terwijl het geklemde vat van 40 alleen de naam draagt.
+  ELKE `.wf-vatbox` IS `max(vathoogte, teksthoogte)` EN DUS NIET MEER EVEN HOOG. De eerste vorm van
+  deze ronde zette de teksten in een EIGEN rasterrij, en dan zette de LANGSTE tekst de hoogte van
+  alle kolommen; nu is elke kolom zijn eigen vat plus zijn eigen tekst. De vaten blijven BOVEN
+  uitgelijnd, want ze hangen aan de balk, en hun bodem verschilt: dat IS de schaal.
+  DE ELLEBOOG LOOPT DAAROM VOLLEDIG BINNEN ZIJN EIGEN STROOK onder de kolommen en reikt niet meer
+  tot de bodem van een vat. Dat is geen vormkeuze maar een gevolg: met verschillende kolomhoogtes
+  zou een stomp naar een vatbodem dwars door de tekst van een andere kolom lopen.
+  DE SABOTAGE DIE DE BOX OP HET VAT ZELF ZET BLEEF EERST GROEN omdat de assertie de EERSTE box las,
+  en dat is per constructie de kolom met het hoogste vat (meetles a). De eis is daarom per kolom
+  uitgeschreven, met een INVOERMETING ernaast dat er een kolom is waar de tekst onder zijn vat door
+  loopt: zonder dat geval is `max(vat,tekst)` niet van `vat` te onderscheiden.
   EEN OVERDRACHT TUSSEN TWEE RASTERRIJEN KRIJGT GEEN LIJN MAAR WEL ZIJN REGEL, en die regel noemt
   sindsdien de GEVER EN DE ONTVANGER: zonder lijn is hij de enige drager van de richting. Dat is
   geen tweede weergave van de lijn maar wat hem zelfstandig maakt.
   `.plan-item` ZIT OP HET TEKSTBLOK EN NIET OP HET RASTER, want `.plan-item[data-id]` is sinds
   `v225` de naam waaronder een bestemming te vinden is, en dat is de helft met de naam, het bedrag,
-  de stand en het datumpaar. Het raster is een omhulsel van drie rasterrijen en geen bestemming, dus
+  de stand en het datumpaar. Het raster is een omhulsel van rasterrijen en geen bestemming, dus
   een telling over `.plan-item` blijft een telling van bestemmingen. Er komt geen tweede attribuut
   naast `data-id` (`v91`); de knoppenrij en de terugval-regel dragen hun eigen `data-acties` en
   `data-erfnaar`, want die staan over de volle breedte en kunnen per constructie niet in het
   tekstblok zitten. GEMETEN wat dat waard was: met `plan-item` op het raster vielen 21 tests, en de
   verhuizing naar het tekstblok maakte dertien bestaande bestanden in één keer weer groen.
-  NAMEN WORDEN NIET AFGEKAPT: `.vat-naam` deed dat met een ellipsis, en dat is wat `v281`/`v284`
-  verbieden voor gegevens. Een naam die niet past loopt door op een tweede regel.
+  DE TIK STAAT OP DE KOLOM EN NIET OOK OP HET TEKSTBLOK: dat tekstblok ligt binnen de kolom, dus een
+  tweede handler naar diezelfde `planRij()` zou een tweede ingang zijn naar dezelfde editor (`v61`).
+  NAMEN WORDEN NIET AFGEKAPT, OOK NIET OP DE NOODFONDSREGEL: `.vat-naam` deed dat met een ellipsis
+  en een `nowrap`, en dat is wat `v281`/`v284` verbieden voor gegevens. Een naam die niet past loopt
+  door op een tweede regel. DAT WAS DE LAATSTE PLEK OP DIT SCHERM waar een naam die je zelf invoerde
+  stil werd ingekort, en DE PRIJS IS 21px: die regel gaat van 55 naar 76px, want
+  "Noodfonds · Bereikt" past naast het toegewezen bedrag niet op een regel.
+  EEN `nowrap` OP DE SUB MAAKT HET ERGER EN IS GEMETEN VERWORPEN: dan is "· Bereikt" breder dan de
+  ruimte die overblijft, en breekt de hele rij over DRIE regels (96px in plaats van 76). Een
+  `&nbsp;` tussen de punt en het icoon doet niets, want een inline SVG draagt zijn eigen
+  afbreekkans; dat is nagegaan op het scherm en niet aangenomen.
   DE TEKST SCHAALT NIET MEE: op elk toestel de vaste tekstgrootte van de app, en in een SMALLE kolom
   de korte vormen ("streef mrt 2027") en in een brede de lange ("moet in maart 2027"). De aanroeper
   weet hoeveel kolommen er staan, dus `vatRegels(p,smal)` kiest op dat ene argument welke woorden
@@ -162,29 +184,33 @@ genoemde versietag.)*
   gehaald.
   HET MAANDBEDRAG STAAT ALLEEN NAAST DE TAK BIJ EEN KOLOM, en dat is gemeten op het scherm en niet
   beredeneerd: dat label staat absoluut vanaf de middenlijn van de kolom en mag niet afbreken (het is
-  een getal), dus het is ~95px breed vanaf dat midden. Een kolom is 120px op 360 en 133 op 390 zodra
-  er twee staan, dus het liep over de BUURKOLOM heen; bij EEN kolom is er 318 respectievelijk 348px.
+  een getal), dus het is ~95px breed vanaf dat midden. Een kolom is 150px op 360 en 165 op 390 zodra
+  er twee staan, dus er is 75 respectievelijk 82px vanaf dat midden en liep het over de BUURKOLOM
+  heen; bij EEN kolom is er 318 respectievelijk 348px.
   `labelNaast` IS DAAROM EEN EIGEN VLAG NAAST `smal`: `smal` kiest de WOORDEN (kort of lang) en deze
   de PLEK van het bedrag. Ze vallen bij drie kolommen samen en bij twee niet, dus een vlag zou een
   van de twee verkeerd beantwoorden.
   DE PRIJS IN PIXELS, GEMETEN OP DE STAND VAN HET TOESTEL (twee doelen op 90/10 van EUR 2.200) EN
-  NIET WEGGEREKEND: de waterval-kaart gaat op 360px van 526 naar 697px en op 390px van 506 naar 679,
-  dus PLUS 171 EN PLUS 173. De kolom is 224px (de tak van 44 plus het hoogste vat van 180) tegen
-  288px voor twee bestemmingen onder elkaar, dus de vaten naast elkaar WINNEN 64px; het TEKSTBLOK is
-  192px op 360 en 174 op 390, en daar gaat die winst heen, want elke kolom is 120 respectievelijk
-  133px breed en naam, bedrag, stand, vol-datum en datumpaar breken alle vijf af. 18px daarvan is het
-  maandbedrag, dat bij twee kolommen naar het tekstblok zakt. Met drie doelen is de kolom 77/86px en
-  het tekstblok 228px op BEIDE breedtes, en dan is de kaart 788px.
-  ALLE TEKSTBLOKKEN ZIJN EVEN HOOG, want ze staan in EEN rasterrij: zo beginnen de regels van alle
-  kolommen op dezelfde hoogte, ook als het ene vat 180px is en het andere 40. De prijs is dat de
-  HOOGSTE tekst de hoogte van alle kolommen zet.
-  DE LAATSTE BESTEMMING VALT OP 360px ONDER DE VOUW (737px bij een vouw van 567, waar `v317` op 566
-  van 567 eindigde) en op 390px niet (719 van 771). NIET INGEKORT, en dat is de opdracht en geen
-  keuze van mij: de hoogte wordt eerst gemeld. Wie dit oppakt begint bij het TEKSTBLOK en niet bij
-  de vathoogte, want daar zitten de 192px.
-  VIJFTIEN SABOTAGES, ALLE VIJFTIEN ROOD, en twee pas na een reparatie: de markering-sabotage zocht
-  op een regel die anders was gespeld, en de box-hoogte-sabotage bleef groen op de assertie die de
-  eerste box las.
+  NIET WEGGEREKEND: de waterval-kaart is op BEIDE breedtes 509px, tegen 526 op 360 en 506 op 390 bij
+  `v317`. Dat is 17px MINDER op 360 en 3px meer op 390.
+  DE TUSSENVORM VAN DEZE RONDE STAAT ERBIJ, want dat is het getal dat zegt wat de tekst-in-het-vat
+  waard was: met alle tekst in een EIGEN rasterrij onder de vaten was de kaart 697 en 679px, dus
+  PLUS 171 EN PLUS 173 tegenover `v317`. De kolom was daar 224px (de tak van 44 plus het hoogste vat
+  van 180) tegen 288px voor twee bestemmingen onder elkaar, dus de vaten naast elkaar WINNEN 64px,
+  en het TEKSTBLOK van 192/174px at die winst op. Met de tekst in het vat is de kolom
+  `tak + max(vat, tekst)`: 44+180 bij het grote doel en 44+175 op 360 en 44+157 op 390 bij het
+  kleine, want daar wint de tekst van een vat dat op de bodem van 40 staat.
+  MET DRIE DOELEN is de kolom 96px breed op 360 en 106 op 390, is het hoogste tekstblok 212px op
+  beide breedtes en is de kaart 593px; de tussenvorm was daar 788. De derde kolom kost dus 84px en
+  niet 195.
+  DE WATERVAL PAST OP BEIDE BREEDTES BOVEN DE VOUW: hij eindigt op 548px bij een vouw van 567 op
+  360x640 en 771 op 390x844. `v317` eindigde op 566 van 567, dus met EEN pixel marge; dat is nu 19.
+  De tussenvorm eindigde op 737 en viel er dus onder, en dat is gemeld voordat er iets is ingekort.
+  ER IS NIETS INGEKORT, en dat is de hele vorm van deze ronde: de hoogte is weggehaald door de tekst
+  op zijn plek te zetten en niet door woorden te schrappen.
+  VIJFTIEN SABOTAGES OP DE EERSTE VORM, ALLE VIJFTIEN ROOD, en twee pas na een reparatie: de
+  markering-sabotage zocht op een regel die anders was gespeld, en de box-hoogte-sabotage bleef groen
+  op de assertie die de eerste box las. VIJF ERBIJ OP DE TEKST-IN-HET-VAT, alle vijf rood.
   DE OVERLOPENDE LABELS ZIJN DOOR EEN SCHERMAFDRUK GEVONDEN EN NIET DOOR DE SUITE, en dat hoort hier
   te staan: de 125 tests over deze kaart stonden groen terwijl "90% - EUR 1.980/mnd" zichtbaar over de
   buurkolom liep. Geen enkele assertie vroeg of een absoluut geplaatst label BINNEN zijn kolom

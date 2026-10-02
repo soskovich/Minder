@@ -311,15 +311,18 @@ test.describe('e · de plan-rij houdt drie rollen en herhaalt de uitleg niet', (
     await boot(page);
     const r = await page.evaluate(() => {
       go('vooruit');
-      /* v318: een bestemming is twee elementen. De BALK is het vat in de kolom ernaast, en de KEUZE
-         is de tik op de bestemming zelf (beide helften dragen hun eigen onclick naar planRij). De
-         drie rollen zijn dus nog alle drie te meten; ze staan alleen niet meer in één element. */
+      /* v318: een bestemming is zijn TEKSTBLOK (`.plan-item[data-id]`, v225) binnen zijn KOLOM, en
+         de kolom draagt het vat, de tak en de tik. De drie rollen zijn dus alle drie te meten; ze
+         staan alleen niet meer alle drie in het element dat de naam draagt. De tik staat op de
+         kolom en niet ook nog eens op het tekstblok: twee handlers naar dezelfde planRij() zouden
+         een tweede ingang zijn naar dezelfde editor (v61). */
       return [...document.querySelectorAll('#s-vooruit .plan-item')].map((x) => {
         const kol = x.dataset.id
           ? document.querySelector(`#s-vooruit .wf-kol[data-id="${x.dataset.id}"]`) : null;
+        const bron = kol || x;
         return { tekst: x.innerText.replace(/\s+/g, ' '),
-          balk: (kol || x).querySelectorAll('.wf-vat, .bar-track').length,
-          keuze: [x, ...x.querySelectorAll('.plan-act, [onclick]')]
+          balk: bron.querySelectorAll('.wf-vat, .bar-track').length,
+          keuze: [bron, ...bron.querySelectorAll('.plan-act, [onclick]')]
             .filter((e) => e.getAttribute('onclick')).length };
       });
     });

@@ -257,34 +257,44 @@ test.describe('c · de stippellijn en de regel', () => {
     expect(naarA.erf[0].delen).toBe(4);
   });
 
-  /* DE SABOTAGE DIE DE BOX-HOOGTE OP HET VAT ZELF ZET BLEEF EERST GROEN, en dat lag aan de
-     assertie: blok g las de EERSTE `.wf-vatbox`, en dat is de kolom met het HOOGSTE vat, waar de
-     box-hoogte en de vathoogte per constructie samenvallen (meetles a). Wat de twee vormen
-     onderscheidt is de kolom met het KLEINE vat: daar is de box nog steeds even hoog als het
-     hoogste vat, want anders begint de terugval-strook per kolom op een andere y en hangt de
-     stippellijn ergens in de lucht.
-     DE STOMP VAN DE GEVER WORDT DAAROM OOK GEMETEN: zijn top is de bodem van het vat van de gever,
-     uitgedrukt als afstand tot de strook, en dat is precies `-(maxH - h)`. Die uitdrukking staat in
-     renderPlan() en de spec rekent hem na uit de GEMETEN vathoogtes; er wordt niets opgemeten dat de
-     app zelf opmeet. */
-  test('elke box is even hoog, en de lijn begint op de bodem van het vat van de gever', async ({ page }) => {
+  /* v318: DE ELLEBOOG LOOPT VOLLEDIG BINNEN DE STROOK ONDER DE KOLOMMEN, en dat is sinds de tekst
+     IN het vat staat geen vormkeuze meer maar een eis. Elke kolom is nu zo hoog als zijn EIGEN vat
+     plus zijn EIGEN tekst, dus de kolommen verschillen in hoogte; een stomp die tot de bodem van
+     een vat reikt zou dwars door de tekst van een andere kolom lopen.
+     WAT ER DAARVOOR IN DE PLAATS VASTLIGT is de formule die de kolomhoogte zet: de box is
+     `max(vathoogte, teksthoogte)`. Die vervangt de oude eis dat alle boxen EVEN hoog waren, want
+     die hoort bij het tekstblok in een eigen rasterrij en dat bestaat niet meer.
+     DE INVOER WORDT EERST GEMETEN (meetles a): de vaten lopen in hoogte uiteen EN er is een kolom
+     waar de tekst onder het vat door loopt. Zonder dat tweede geval is `max(vat,tekst)` niet van
+     `vat` te onderscheiden, en zonder het eerste meet de kolomeis niets. */
+  test('elke kolom is zijn eigen vat plus zijn eigen tekst, en de elleboog blijft in de strook', async ({ page }) => {
     await boot(page, DOORZAK);
     const r = await page.evaluate(() => {
       const z = document.querySelector('#s-vooruit');
-      const boxen = [...z.querySelectorAll('.wf-vatbox')].map((e) => Math.round(e.getBoundingClientRect().height));
-      const H = {}; for (const v of z.querySelectorAll('.wf-vat')) H[v.dataset.vat] = +v.dataset.h;
+      const H = (e) => Math.round(e.getBoundingClientRect().height);
+      const kol = [...z.querySelectorAll('.wf-kol')].map((k) => ({
+        id: k.dataset.id,
+        box: H(k.querySelector('.wf-vatbox')),
+        vat: +k.querySelector('.wf-vat').dataset.h,
+        tekst: H(k.querySelector('.wf-tekst')) }));
       const lijn = z.querySelector('.wf-lijn');
       const i = [...lijn.querySelectorAll('i')];
-      return { boxen, H, van: lijn.dataset.erfVan, naar: lijn.dataset.erfNaar,
-        topVan: parseFloat(i[0].style.top), topPunt: parseFloat(i[3].style.top) };
+      return { kol, van: lijn.dataset.erfVan, naar: lijn.dataset.erfNaar,
+        strook: H(z.querySelector('.wf-erf')),
+        tops: i.map((e) => parseFloat(e.style.top)),
+        hoogtes: i.map((e) => parseFloat(e.style.height) || 0) };
     });
-    // de invoer: de vaten lopen in hoogte uiteen, anders meet de box-eis niets
-    expect(new Set(Object.values(r.H)).size).toBeGreaterThan(1);
-    expect(new Set(r.boxen).size, 'boxen: ' + r.boxen.join(',')).toBe(1);
-    const maxH = Math.max(...Object.values(r.H));
-    expect(r.boxen[0]).toBe(maxH);
-    expect(r.topVan).toBeCloseTo(-(maxH - r.H[r.van]), 1);
-    expect(r.topPunt).toBeCloseTo(-(maxH - r.H[r.naar]), 1);
+    // de invoer: de vaten lopen uiteen, en ergens loopt de tekst onder zijn vat door
+    expect(new Set(r.kol.map((k) => k.vat)).size).toBeGreaterThan(1);
+    expect(r.kol.some((k) => k.tekst > k.vat),
+      'tekst/vat: ' + r.kol.map((k) => k.tekst + '/' + k.vat).join(' ')).toBe(true);
+    // de formule, per kolom
+    for (const k of r.kol) expect(k.box, k.id).toBe(Math.max(k.vat, k.tekst));
+    /* EN DE ELLEBOOG RAAKT GEEN ENKELE KOLOM: elk stuk begint op of onder de bovenkant van de strook
+       en eindigt binnen de hoogte die renderPlan() die strook geeft. Een negatieve top zou betekenen
+       dat hij alsnog omhoog de kolommen in steekt. */
+    for (const t of r.tops) expect(t).toBeGreaterThanOrEqual(0);
+    r.tops.forEach((t, i) => expect(t + r.hoogtes[i]).toBeLessThanOrEqual(r.strook));
   });
 
   test('de lijn is gestippeld en draagt geen vulling', async ({ page }) => {
@@ -549,38 +559,33 @@ test.describe('f · de uitleg achter het info-icoon', () => {
 
 /* ===== g) DE PRIJS IN PIXELS, GEMETEN OP DE STAND VAN HET TOESTEL =====
    Twee doelen op 90/10 van EUR 2.200, een volle buffer, en geen reserveringenlijst.
-   v318 KOST HOOGTE, EN DAT IS GEMETEN EN NIET WEGGEREKEND. De waterval-kaart gaat op 360px van
-   526px (v317) naar 697px, en op 390px van 506 naar 679: PLUS 171 EN PLUS 173 PIXELS. De hele zone
-   gaat van 835 naar 1006 en van 814 naar 988.
-   WAAR DIE 171px ZIT, en dat is het getal dat de volgende ronde nodig heeft:
-   - de kolom is 224px (de tak van 44 plus het hoogste vat van 180), en bij doelen ONDER elkaar
-     kostte elke bestemming 144px, dus twee bestemmingen 288. De vaten naast elkaar winnen daar 64px.
-   - het TEKSTBLOK is 192px op 360px en 174px op 390px, en dat is waar de winst weer heen gaat. Elke
-     kolom is 120px breed op 360 en 133 op 390, en de tekst schaalt NIET mee (besluit v318: op elk
-     toestel de vaste tekstgrootte van de app), dus naam, maandbedrag, stand, vol-datum en het
-     datumpaar breken alle vijf af. Twee bestemmingen onder elkaar droegen diezelfde tekst over de
-     volle breedte en hadden hem niet nodig.
-   - 18px daarvan is het MAANDBEDRAG, dat bij twee kolommen naar het tekstblok zakt. Naast de tak
-     staan kan daar niet: dat label staat absoluut vanaf de middenlijn en breekt niet af, dus het
-     liep over de buurkolom heen. Bij EEN kolom staat het er wel naast en kost het nul.
-   - de strook met de stippellijn kost 23px, en de regel eronder 36px.
-   ALLE TEKSTBLOKKEN ZIJN EVEN HOOG, want ze staan in EEN rasterrij. Dat is met opzet: zo beginnen
-   de regels van alle kolommen op dezelfde hoogte, ook als het ene vat 180px is en het andere 40px.
-   De prijs is dat de HOOGSTE tekst de hoogte van alle kolommen zet.
-   MET DRIE DOELEN IS DE KOLOM 77px BREED OP 360 EN 86px OP 390, en dan is het tekstblok 228px en de
-   kaart 788px op BEIDE breedtes. Dat is de prijs van de derde kolom: 54px tekst erbij.
-   DE LAATSTE BESTEMMING VALT OP 360px ONDER DE VOUW: de waterval eindigt op 737px bij een vouw van
-   567. Op 390px eindigt hij op 719 bij 771 en past hij dus nog net. Op 360px is dat een echte
-   achteruitgang tegenover v317 (566 van 567, met EEN pixel marge) en hij staat hier als assertie
-   zodat hij niet als detail wegzakt. NIET INGEKORT: de opdracht was de hoogte MELDEN voordat er iets
-   wordt ingekort. */
+   DE TEKST STAAT IN HET VAT, en dat is wat de hoogte van v318 terugbrengt. De waterval-kaart is op
+   BEIDE breedtes 509px: op 360 is dat 17px ONDER de 526 van v317 en op 390 3px erboven (506).
+   De tussenvorm van deze ronde, met alle tekst in een EIGEN rasterrij onder de vaten, was 697 en
+   679; de tekst in het vat haalt daar 188 respectievelijk 170 pixels van af.
+   WAAR DIE HOOGTE ZIT, en dat is het getal dat een volgende ronde nodig heeft:
+   - de kolom is `tak + max(vathoogte, teksthoogte)`. Bij het grote doel is dat 44 + 180 (het vat
+     wint) en bij het kleine 44 + 175 op 360 en 44 + 157 op 390 (de tekst wint, want zijn vat staat
+     op de bodem van 40). De 135px die de tekst daar onder het vat uitsteekt zijn de enige pixels
+     die de tekst nog los kost.
+   - ELKE KOLOM IS ZIJN EIGEN HOOGTE. Dat is de tweede helft van deze ronde: tot hier stonden de
+     teksten in een eigen rasterrij en zette de LANGSTE de hoogte van alle kolommen.
+   - de strook met de stippellijn kost 15px, de regel eronder 36px en de regel onder de waterval 38.
+   - de noodfondsregel gaat van 55 naar 76px, en dat is de prijs van besluit 3 van deze ronde: zijn
+     naam werd met een ellipsis afgekapt en breekt nu af op een tweede regel (v281/v284). Het is de
+     laatste plek op dit scherm waar een naam die je zelf invoerde stil werd ingekort.
+   DE WATERVAL PAST OP BEIDE BREEDTES BOVEN DE VOUW: hij eindigt op 548px bij een vouw van 567 op
+   360x640 en 771 op 390x844. v317 eindigde op 566 van 567, dus met EEN pixel marge; dat is nu 19.
+   MET DRIE DOELEN is de kolom 96px breed op 360 en 106 op 390, is het hoogste tekstblok 212px op
+   beide breedtes en is de kaart 593px. De derde kolom kost dus 84px, en niet de 195 van de
+   tussenvorm. */
 test.describe('g · de hoogte op het toestel', () => {
   const TOESTEL = { cap: 2200, order: ['noodfonds', A, B], goals: [
     { id: A, naam: 'Kosten Koper', doel: 15000, gespaard: 0, streefdatum: '2027-05', allocMode: 'pct', pct: 90 },
     { id: B, naam: 'Inrichting woning', doel: 3000, gespaard: 0, streefdatum: '2027-03', allocMode: 'pct', pct: 10 }] };
   const PX = {
-    360: { vouw: 567, kaart: 697, nf: 55, wf: 491, tekst: 192, vatB: 120, tot: 737, zone: 1006, v317kaart: 526 },
-    390: { vouw: 771, kaart: 679, nf: 55, wf: 473, tekst: 174, vatB: 133, tot: 719, zone: 988, v317kaart: 506 },
+    360: { vouw: 567, kaart: 509, nf: 76, wf: 282, tekst: 175, vatB: 146, tot: 548, zone: 818, v317kaart: 526 },
+    390: { vouw: 771, kaart: 509, nf: 76, wf: 282, tekst: 157, vatB: 161, tot: 548, zone: 818, v317kaart: 506 },
   };
 
   for (const w of [360, 390]) {
@@ -596,7 +601,8 @@ test.describe('g · de hoogte op het toestel', () => {
         const wf = z.querySelector('.wf');
         return { vouw: window.innerHeight - (nav ? Math.round(nav.getBoundingClientRect().height) : 0),
           kaart: h(kaart), nf: h(z.querySelector('.plan-rij.vat-vol')), wf: h(wf),
-          kolom: h(z.querySelector('.wf-kol')), vatbox: h(z.querySelector('.wf-vatbox')),
+          kolommen: [...z.querySelectorAll('.wf-kol')].map(h),
+          boxen: [...z.querySelectorAll('.wf-vatbox')].map(h),
           vaten: [...z.querySelectorAll('.wf-vat')].map((v) => Math.round(v.getBoundingClientRect().height)),
           vatB: Math.round(z.querySelector('.wf-vat').getBoundingClientRect().width),
           teksten: [...z.querySelectorAll('.wf-tekst')].map(h),
@@ -609,29 +615,30 @@ test.describe('g · de hoogte op het toestel', () => {
       expect(d.kaart).toBe(p.kaart);
       expect(d.nf).toBe(p.nf);
       expect(d.wf).toBe(p.wf);
-      // de kolom is de tak plus het HOOGSTE vat, en het kleine vat staat op de bodem
-      expect(d.kolom).toBe(44 + 180);
-      expect(d.vatbox).toBe(180);
       expect(d.vaten).toEqual([180, 40]);
       expect(d.vatB).toBe(p.vatB);
-      // alle tekstblokken even hoog, want ze staan in een rasterrij
-      expect(new Set(d.teksten).size).toBe(1);
-      expect(d.teksten[0]).toBe(p.tekst);
-      expect(d.erf).toBe(23);
+      /* DE KOLOM IS DE TAK PLUS `max(vat, tekst)`, en de twee kolommen zijn daarom NIET even hoog:
+         bij het grote doel wint het vat, bij het kleine de tekst. Dat is de eigenschap die deze
+         ronde invoert, hier in pixels. */
+      expect(d.boxen).toEqual([180, p.tekst]);
+      expect(d.kolommen).toEqual([44 + 180, 44 + p.tekst]);
+      expect(d.teksten).toEqual([p.tekst, p.tekst]);
+      expect(d.erf).toBe(15);
       expect(d.erfRegel).toBe(36);
       expect(d.regel).toBe(38);
       expect(d.tot).toBe(p.tot);
       expect(d.zone).toBe(p.zone);
       expect(d.overflow).toBeLessThanOrEqual(1);
-      /* DE ACHTERUITGANG STAAT ALS ASSERTIE, want anders zakt hij weg als detail. De v317-kaart
-         staat hier als getal en niet als meting: hij is niet meer te draaien. */
-      expect(d.kaart - p.v317kaart).toBeGreaterThan(165);
+      /* DE WINST STAAT ALS ASSERTIE, want anders zakt hij weg als detail. De v317-kaart staat hier
+         als getal en niet als meting: die versie is niet meer te draaien. */
+      expect(d.kaart).toBeLessThanOrEqual(p.v317kaart + 3);
     });
   }
 
-  /* 360px: de waterval valt onder de vouw. Bij v317 eindigde de laatste bestemming op 566 van 567,
-     met EEN pixel marge; nu eindigt hij op 719. Op 390px past hij nog net (701 van 771). */
-  test('360px valt de waterval onder de vouw, 390px niet', async ({ page }) => {
+  /* DE WATERVAL PAST OP BEIDE BREEDTES BOVEN DE VOUW. Bij v317 eindigde de laatste bestemming op
+     566 van 567, met EEN pixel marge; de tussenvorm van deze ronde (alle tekst in een eigen
+     rasterrij) eindigde op 737 en viel er dus onder. */
+  test('de waterval blijft op beide breedtes boven de vouw', async ({ page }) => {
     const uit = {};
     for (const [w, h] of [[360, 640], [390, 844]]) {
       await page.setViewportSize({ width: w, height: h });
@@ -643,13 +650,17 @@ test.describe('g · de hoogte op het toestel', () => {
           tot: Math.round(wf.getBoundingClientRect().bottom + window.scrollY) };
       });
     }
-    expect(uit[360].tot).toBeGreaterThan(uit[360].vouw);
+    expect(uit[360].tot).toBeLessThan(uit[360].vouw);
     expect(uit[390].tot).toBeLessThan(uit[390].vouw);
+    // en de marge op 360 is meer dan de ene pixel van v317
+    expect(uit[360].vouw - uit[360].tot).toBeGreaterThan(1);
   });
 
-  /* Met drie doelen is de kolom 77px breed op 360 en 86px op 390, en dan breekt de tekst verder af:
-     228px op BEIDE breedtes, dus de kaart is daar even hoog. Dat is de prijs van de derde kolom. */
-  test('met drie doelen is het tekstblok 228px en de kaart op beide breedtes gelijk', async ({ page }) => {
+  /* Met drie doelen is de kolom 96px breed op 360 en 106px op 390, en dan breekt de tekst verder af.
+     HET HOOGSTE TEKSTBLOK IS 212px OP BEIDE BREEDTES en de kaart dus ook gelijk, maar de andere twee
+     kolommen lopen wel uiteen (175/157 op 360 tegen 157/139 op 390): dat is precies de eigenschap
+     dat elke kolom zijn eigen hoogte heeft. */
+  test('met drie doelen is het hoogste tekstblok 212px en de kaart op beide breedtes gelijk', async ({ page }) => {
     const DRIE = { cap: 2200, order: ['noodfonds', A, B, C], goals: [
       { id: A, naam: 'Kosten Koper', doel: 15000, gespaard: 0, streefdatum: '2027-05', allocMode: 'pct', pct: 60 },
       { id: B, naam: 'Inrichting woning', doel: 3000, gespaard: 0, streefdatum: '2027-03', allocMode: 'pct', pct: 30 },
@@ -662,8 +673,10 @@ test.describe('g · de hoogte op het toestel', () => {
         const z = document.querySelector('#s-vooruit');
         const H = (e) => Math.round(e.getBoundingClientRect().height);
         const kaart = [...z.querySelectorAll('.card')].find((c) => c.querySelector('.inleg-balk'));
+        /* De tekstblokken met `offsetHeight` en niet met de rect: die laatste is op 390px 211,5 en
+           rondt dus op een halve pixel, en een assertie die op afronding staat meet de afronding. */
         return { kaart: H(kaart), wf: H(z.querySelector('.wf')),
-          tekst: H(z.querySelector('.wf-tekst')),
+          teksten: [...z.querySelectorAll('.wf-tekst')].map((e) => e.offsetHeight),
           vatB: Math.round(z.querySelector('.wf-vat').getBoundingClientRect().width),
           kolommen: z.querySelectorAll('.wf-kol').length,
           erf: H(z.querySelector('.wf-erf')),
@@ -672,13 +685,16 @@ test.describe('g · de hoogte op het toestel', () => {
     }
     for (const w of [360, 390]) {
       expect(uit[w].kolommen, w + ' kolommen').toBe(3);
-      expect(uit[w].tekst, w + ' tekst').toBe(228);
-      expect(uit[w].wf, w + ' wf').toBe(582);
-      expect(uit[w].kaart, w + ' kaart').toBe(788);
-      expect(uit[w].erf, w + ' strook').toBe(34);          // twee lijnen in plaats van een
+      expect(uit[w].teksten[0], w + ' hoogste tekst').toBe(212);
+      expect(uit[w].wf, w + ' wf').toBe(366);
+      expect(uit[w].kaart, w + ' kaart').toBe(593);
+      expect(uit[w].erf, w + ' strook').toBe(24);          // twee lijnen in plaats van een
       expect(uit[w].regels, w + ' regels').toEqual([A, A]);  // twee gevers, een ontvanger
     }
-    expect(uit[360].vatB).toBe(77);
-    expect(uit[390].vatB).toBe(86);
+    // en de kolommen eronder lopen per breedte uiteen: elke kolom draagt zijn eigen tekst
+    expect(uit[360].teksten).toEqual([212, 175, 157]);
+    expect(uit[390].teksten).toEqual([212, 157, 139]);
+    expect(uit[360].vatB).toBe(96);
+    expect(uit[390].vatB).toBe(106);
   });
 });
