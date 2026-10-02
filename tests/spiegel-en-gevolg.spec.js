@@ -168,28 +168,58 @@ test.describe('1 · elk signaal draagt een duiding en een dus-wat', () => {
   });
 });
 
+/* v321: DE VOLGENDE STAP BIJ EEN TEKORT IS VERANDERD, EN DE EIGENSCHAP NIET. Tot deze ronde was de
+   stap in elke modus "Maak potje", ook bij iemand die al potjes heeft; die poort leest sindsdien
+   totalBudget(), en wat een krappe maand nu zegt is de regel van safeKrapRegel() met de route naar
+   de post die het zwaarst weegt. De eigenschap die dit blok vasthoudt is dezelfde: een tekort krijgt
+   in ELKE modus een zin met een route, en die zin is in alle drie dezelfde. */
+const heroVan = async (page) => {
+  await page.evaluate(() => go('dash'));
+  await page.waitForTimeout(110);
+  return page.evaluate(() => ({
+    txt: $('#s-dash .homehero').innerText.replace(/\s+/g, ' '),
+    html: $('#s-dash .homehero').innerHTML,
+    routes: [...$('#s-dash .homehero').querySelectorAll('[onclick]')].map((e) => e.getAttribute('onclick')),
+  }));
+};
+
 test.describe('2 · een tekort krijgt in elke modus dezelfde volgende stap', () => {
   for (const mode of ['rustig', 'begeleid', 'expert']) {
     test(`${mode}: spiegel, gevolg en keuze`, async ({ page }) => {
       await boot(page, seed({ mode, saldo: 100 }));
-      await page.evaluate(() => go('dash'));
-      await page.waitForTimeout(110);
-      const r = await page.evaluate(() => ({
-        txt: $('#s-dash .homehero').innerText.replace(/\s+/g, ' '),
-        html: $('#s-dash .homehero').innerHTML }));
-      expect(r.txt, mode).toContain('Eén potje geeft je grip op waar het heen gaat.');
-      expect(r.html, mode).toContain('openPotjePick()');
-      expect(r.txt, mode).toContain('Maak potje');
+      const r = await heroVan(page);
+      // spiegel en gevolg: het tekort staat er als feit
+      expect(r.txt, mode).toContain('Je plan vraagt');
+      expect(r.txt, mode).toContain('meer dan er deze maand is');
+      // keuze: de grootste claim draagt een route naar een bestaand scherm
+      expect(r.txt, mode).toContain('De grootste claims');
+      expect(r.routes.length, mode).toBeGreaterThan(1);
     });
   }
 
-  test('Rustig houdt zijn eigen aanhef en zijn gedempte kleur', async ({ page }) => {
+  test('zonder enig potje is "Maak potje" de stap, in elke modus', async ({ page }) => {
+    for (const mode of ['rustig', 'begeleid', 'expert']) {
+      await boot(page, seed({ mode, saldo: 100, set: { budgets: {} } }));
+      const r = await heroVan(page);
+      expect(r.txt, mode).toContain('Eén potje geeft je grip op waar het heen gaat.');
+      expect(r.html, mode).toContain('openPotjePick()');
+      expect(r.txt, mode).toContain('Maak potje');
+    }
+  });
+
+  test('Rustig houdt zijn gedempte kleur, en zegt het tekort niet twee keer', async ({ page }) => {
     await boot(page, seed({ mode: 'rustig', saldo: 100 }));
-    await page.evaluate(() => go('dash'));
-    await page.waitForTimeout(110);
-    const h = await page.evaluate(() => $('#s-dash .homehero').innerHTML);
-    expect(h).toContain('Je zit deze maand krap.');
-    expect(h).toContain('var(--amber)');
+    const rustig = await heroVan(page);
+    expect(rustig.html).toContain('var(--amber)');
+    /* v321: de aanhef "Je zit deze maand krap." is vervallen, want de regel erboven zegt datzelfde
+       feit met een bedrag erbij (v91). Wat Rustig apart houdt is de kleur, en die zit in safeCol.
+       DE ASSERTIE IS STERKER DAN DE OUDE: de tekst van Rustig is nu KARAKTER VOOR KARAKTER gelijk
+       aan die van Begeleid, en dat kon de oude vorm niet zeggen. */
+    expect(rustig.txt).not.toContain('Je zit deze maand krap');
+    await boot(page, seed({ mode: 'begeleid', saldo: 100 }));
+    const begeleid = await heroVan(page);
+    expect(begeleid.html).not.toContain('var(--amber)');
+    expect(rustig.txt).toBe(begeleid.txt);
   });
 
   test('zonder tekort staat de stap er niet', async ({ page }) => {

@@ -65,7 +65,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   stand-kaart, "Wat opvalt", "Nog deze maand" (tot `v260` "Wat er nog komt") en "Over de maanden
   heen". Sinds `v309` draagt de stand-kaart als HOOFDGETAL wat er nog in je potjes zit, met het
   dagbedrag op dezelfde regel, en staat `€X uitgegeven van €Y · Z%` als eigen regel boven de balk;
-  "Nog deze maand" houdt drie posten in plaats van vier. Die middelste twee staan
+  "Nog deze maand" houdt drie posten in plaats van vier. De post "Nog te
+  ontvangen" noemt sinds `v321` zijn noemer (`van EUR X per maand` of `EUR Y al binnen van EUR X`). Die middelste twee staan
   sinds `v252` in die volgorde en niet meer andersom (zie de vouw-regel). Draagt sinds `v227` ook de
   meermaands-grafiek "Uitgaven vs budget". Dat is een omkering van `v178`, dat hem juist naar Maand
   haalde omdat hij maanden naast elkaar zet; het argument van `v178` staat nog en `BESLISSINGEN.md`
@@ -108,6 +109,120 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **HET INKOMENSVENSTER IS DRIE AFGERONDE MAANDEN, EN DE VORM BLIJFT DE ONDERSTE HELFT** (`v321`):
+  `baseIncome()` las de laatste ZES afgeronde maanden, en GEMELD op een toestel met een netto-inkomen
+  van EUR 5.216 (in loondienst sinds 1 september) stond er "Nog te ontvangen EUR 3.464".
+  DE OORZAAK IS NIET DE MEDIAAN MAAR HET VENSTER, en dat is nagerekend en niet beredeneerd: de
+  onderste-helft-mediaan is voor ELK venster van 3 tot en met 6 maanden precies de TWEEDE LAAGSTE
+  maand (`lower[floor(len/2)]` kiest EEN element en rekent geen gemiddelde). Een nieuw en hoger loon
+  zit dus per constructie in de bovenste helft en wordt weggegooid. GEMETEN op de reeks van het
+  toestel (apr t/m sep 2900, 3464, 4100, 3800, 5000, 5216 en daarna 5216): met zes maanden las de app
+  3464 in oktober, 3800 in november, 4100 in december, 5000 in januari en pas 5216 in FEBRUARI. Vijf
+  maanden achterstand, in stapjes.
+  HET VENSTER BEPAALT DE SNELHEID EN NIET DE ROBUUSTHEID, en die meting versmalde de keuze tot een
+  venster. Op een salaris van 5216 met dips van 2600 geeft de onderste-helft-mediaan bij ELK venster
+  van 3 tot 6 hetzelfde antwoord: bij EEN dip 5216 en bij TWEE dips 2600. Een piek (vakantiegeld) is
+  bij 3 en bij 6 maanden even onschadelijk. Een kort venster kost dus niets aan
+  uitschieter-bescherming en levert drie maanden tijd op: op dezelfde reeks 5000 in oktober en 5216
+  vanaf december.
+  VIER ALTERNATIEVEN ZIJN NAGEREKEND EN VERWORPEN, en dat staat erbij zodat een volgende ronde ze
+  niet opnieuw voorstelt. Een GEWOGEN gemiddelde weegt de nieuwste maand zwaarst en tilt de norm op
+  vakantiegeld (5216 -> 5930), en te hoog is de gevaarlijke kant (`v168`), want `baseIncome()` voedt
+  `incDue` en dus veilig te besteden. Een GEWONE mediaan over zes maanden houdt nog drie maanden
+  achterstand (3950 in oktober). De LAAGSTE van drie laat elke dip meteen bijten (3800 in oktober,
+  5000 in november). En een BEVESTIGINGSVRAAG zou een default moeten hebben, en een default die stil
+  een inkomen zet is wat `MECHANISM_SPEC.defaultEffect` verbiedt.
+  DE TWEE DIPS BLIJVEN BIJTEN, en dat is de prijs, uitgeschreven in plaats van verzwegen: twee lage
+  maanden van de drie zetten je norm op die lage maand. Bij zes maanden deed hij dat ook, dus het is
+  geen nieuwe zwakte, en de spec draagt dat geval als eigen assertie.
+  HET VENSTER STAAT OP EEN PLEK, MET TWEE LEZERS (`v104`): `INKOMEN_VENSTER` (3) en
+  `inkomenVenster()`, gelezen door `baseIncome()` en door blok 3 van het diagnosescherm. Dat blok
+  moet kunnen zeggen WELKE maanden het getal maakten, en een tweede uitdrukking van dezelfde snede
+  loopt bij de eerstvolgende wijziging uiteen.
+  `baseIncome(metDetail)` GEEFT OP VERZOEK ZIJN EIGEN MAANDEN TERUG, in de vorm van
+  `betaalMoment(t, metReden)` (`v273`): het blok leest zo wat DEZE functie gebruikte in plaats van de
+  som ernaast opnieuw uit te drukken. De acht gewone lezers zien geen verschil. De eigen lus van
+  `v259` is daarbij alleen GESPLITST zodat de maand bij zijn bedrag blijft; de optelling is karakter
+  voor karakter dezelfde en blijft dus de lus die `v259` met opzet naast `maandInkomen()` liet staan.
+- **DE LOPENDE MAAND MAG HET MAANDINKOMEN NIET OMLAAG HALEN** (`v321`, gemeten naar aanleiding van
+  dezelfde melding): `totals()` zet `basis='gedetecteerd'` zodra er EEN euro inkomen binnen is, ook
+  op de 2e van de maand, en dan is het maandinkomen van de app wat er tot nu toe langskwam. GEMETEN
+  op een basisnorm van 3464: zodra er 1752 binnen is zakt `income` van 3464 naar 1752, en daarmee de
+  inkomen-limiet en elke KPI die hem als noemer leest. Een gedeeltelijke betaling maakte je maand dus
+  ARMER dan een maand waarin nog niets was binnengekomen. Dat is `v194` ("een halve maand is geen
+  maand") op een plek waar die regel nog niet gold.
+  ALLEEN OMLAAG, EN ALLEEN DEZE MAAND. Meer binnen dan je norm is een echte meting en blijft staan
+  (gemeten 7000 blijft 7000, basis `gedetecteerd`); een AFGERONDE maand blijft de gemeten maand, want
+  die is af en dan is de meting beter dan de norm (gemeten september 5216 en niet de norm 5000).
+  `incomeAlles` GAAT NIET MEE en wordt daarom VOOR de klem vastgelegd: dat is het GELD (`v259`) en
+  niet de norm, en zijn vier lezers tellen echt binnengekomen euro's. Met de klem erin zouden die een
+  bedrag tellen dat er niet is (`v168`). GEMETEN: `income` 5000 naast `incomeAlles` 1752.
+  DE BASIS HEET `halvemaand` EN NIET `basisnorm`, want het is een derde geval: er IS gemeten, en wat
+  het scherm toont is de norm omdat de meting nog niet compleet is. `KPI_INCBRON` draagt zijn
+  herkomst-label, want die map heeft een terugval die de kale sleutel afdrukt.
+- **DE POST "NOG TE ONTVANGEN" NOEMT ZIJN NOEMER** (`v321`): de sub was de kale string `'inkomen'`,
+  dus op het scherm was niet te zien of dat getal een RESTANT was of je hele maandinkomen. GEMETEN
+  dat die twee niet te onderscheiden waren: bij een norm van 3464 waarvan nog niets binnen is en bij
+  een norm van 5216 waarvan 1752 al binnen is staat er in beide gevallen `EUR 3.464`. Er staat nu
+  `van EUR X per maand` of `EUR Y al binnen van EUR X`.
+  DE TWEE GETALLEN KOMEN UIT `monthLiquidity()` ZELF (`v104`): `incDue` IS `incNorm` min `incBinnen`,
+  en die twee kanten komen sinds `v321` mee in de uitkomst. De post drukt ze af en rekent niets na;
+  een bronzoekende assertie eist dat hij `baseIncome(` niet noemt.
+  ER IS GEEN ONBEKEND-GEVAL: de post staat er alleen als `teOntvangen` boven nul is, en dat kan alleen
+  als `incNorm` boven `incBinnen` ligt, dus de noemer is per constructie bekend (`v59`/`v73`/`v173`
+  is hier dus geen tak maar een gevolg van de poort die `v260` al zette).
+- **DE ZIN ONDER EEN NEGATIEF HEROGETAL ZEGT WAT HET GETAL IS EN WAAR HET ZIT** (`v321`): er stond
+  "Je ruimte voor deze maand is op, met nog 29 dagen te gaan", een DAGENtelling onder een MAANDgetal.
+  GEMELD op een stand waar het herogetal -556 was terwijl er 3.464 salaris moest komen en er 1.730 in
+  de potjes zat: de zin noemde geen van de twee, en de dagen suggereren op de 2e van de maand dat het
+  erger wordt. `safeKrapRegel()` zegt nu "Je plan vraagt EUR X meer dan er deze maand is" met de twee
+  grootste claims en hun route.
+  HET BEDRAG IS HET TEKORT ZELF en wordt niet opnieuw gerekend: het is `-safe`, en dat staat er groot
+  boven. De onvolledig-tak blijft in `vrijPerDagLine()` en komt hier niet langs, dus er staat geen
+  bedrag op een onbekend saldo.
+  ER ZIJN TWEE CLAIMS EN GEEN DRIE: GEMETEN is de regel met twee claims 54px op 360 EN 390px, tegen
+  36px en 18px voor de oude zin, dus hij kost 18px op 360 en 36px op 390. Een derde claim is een
+  vierde regel, en wat de vraag beantwoordt is waar het grootste deel zit; de rest staat een tik
+  verder in de opbouw-sheet. De hero gaat van 165 naar 184px op 360 en van 147 naar 184px op 390, en
+  de regel eindigt op 244px bij een vouw van 567 en 771.
+  `SAFE_CLAIMS` IS DE ENE PLEK WAAR EEN CLAIM ZIJN NAAM EN ZIJN ROUTE HEEFT, met twee lezers (`v104`,
+  `v91`): de opbouw-sheet droeg ze als losse strings in zijn eigen rijen, en deze regel zou ze een
+  tweede keer spellen. `fixDueBudgetExtra` DRAAGT GEEN ROUTE, en dat is geen omissie: er is geen
+  scherm dat alleen dat deel toont (de sheet laat die rij ook zonder chevron staan), en de regel valt
+  daar terug op de opbouw-sheet, die wel een bestaande ingang is.
+  HIJ SORTEERT OP BEDRAG en de sheet houdt zijn eigen vaste volgorde: de regel vraagt WELKE post het
+  zwaarst weegt, de sheet is een opbouw en geen rangschikking.
+- **"MAAK POTJE" STAAT ER ALLEEN ALS ER NOG GEEN POTJE IS** (`v321`): de poort was
+  `safe<0 && balKnown`, dus de regel bood die handeling aan bij iemand die al potjes heeft, en dan
+  belooft hij iets dat er niet meer is terwijl de echte stap (een potje VERLAGEN) er niet staat. Wat
+  een krappe maand nu zegt staat een regel hoger, met de route naar de post die het zwaarst weegt.
+  `totalBudget()` IS DE TOETS EN NIET `varBudget()`, want de vraag is of je al EEN potje hebt en een
+  terugkerend potje is er ook een. GEMETEN dat die twee uiteenlopen: met alleen een huur-potje is
+  `varBudget()` nul en `totalBudget()` 1.200, en zonder dat geval is de keuze niet te meten
+  (meetles a).
+- **DE RUSTIG-AANHEF BIJ EEN TEKORT IS VERVALLEN, DE GEDEMPTE KLEUR NIET** (`v321`): `krapNote` zette
+  in Rustig "Je zit deze maand krap. " voor de potje-zin, en dat was de aanhef die `v174` daar liet
+  staan. Sinds `safeKrapRegel()` datzelfde feit MET een bedrag zegt is die aanhef een tweede
+  formulering van hetzelfde (`v91`), en hij zou in een stand zonder potjes naast de nieuwe regel
+  komen te staan.
+  WAT VAN `v174` STAAT is dat elke modus dezelfde volgende stap krijgt, en dat is nu letterlijk
+  dezelfde ZIN in alle drie; wat Rustig apart houdt is de gedempte kleur, en die zit in `safeCol` en
+  is niet aangeraakt. DE ASSERTIE IS DAARDOOR STERKER GEWORDEN: `spiegel-en-gevolg.spec.js` eist nu
+  dat de tekst van Rustig KARAKTER VOOR KARAKTER gelijk is aan die van Begeleid, en dat kon de oude
+  vorm (die een eigen aanhef toetste) per constructie niet zeggen.
+  WAT HET KOST, en dat staat erbij in plaats van weggerekend: in de stand waarin een deel van je
+  saldo onbekend is geeft `vrijPerDagLine()` zijn eigen reden-regel en komt `safeKrapRegel()` niet
+  langs, dus daar staat zonder potjes alleen nog de potje-zin zonder aanhef.
+- **BLOK 3 DRUKT HET INKOMEN EN DE TERMEN VAN VEILIG TE BESTEDEN ALTIJD AF** (`v321`): `baseIncome()`
+  stond er alleen in de `percent`- en de `auto`-tak van `SET.savingMode`, dus bij een VAST spaarbedrag
+  nergens. GEMELD op een toestel waar "Nog te ontvangen EUR 3.464" op het scherm stond en geen enkele
+  uitlezing kon zeggen of dat een restant was of een heel maandinkomen.
+  DE GEKOZEN MAAND IS GEMARKEERD, want de onderste-helft-mediaan KIEST een maand en rekent geen
+  gemiddelde; dat is precies wat je wilt zien zodra het getal je verbaast. De maanden komen uit
+  `baseIncome(metDetail)` en niet uit een tweede snede.
+  EN DE ZES TERMEN VAN `safeToSpend()` MET DE OPTELLING ERBIJ, uit `SAFE_CLAIMS`, zodat de aansluiting
+  er als waarneming staat en niet als bevestiging (`v301`). Alleen lezen (`v244`), en dat staat als
+  eigen assertie vast op `localStorage.setItem` en niet op de inhoud achteraf.
 - **EEN BESLISSING IS EEN LIJSTREGEL, EN DE VOLLE TEKST STAAT EEN TIK DIEPER** (`v320`): de kaart
   'Vraagt een beslissing' droeg per regel de gevolgzin, de suggestie EN de gespreksingang. GEMETEN op
   de stand van het toestel (dekking EUR 262 tekort, Kosten Koper EUR 163 per maand tekort) was die
@@ -4780,8 +4895,8 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   het verschil ontstond zonder dat iemand iets deed. Toets bij het weghalen van een signaal dus
   niet alleen wie het kan veroorzaken, maar ook wat er kan bewegen zonder dat iemand iets doet.
   Twee cijfers die niet uit dezelfde meting komen lopen uiteen zodra één van de twee stilstaat.
-- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** NEGENENTWINTIG keer in
-  vijfentwintig rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los
+- **EEN TEST DIE NIET KAN FALEN IS ERGER DAN GEEN TEST, en dit is de familie.** EENENDERTIG keer in
+  zesentwintig rondes is er een test opgenomen die groen stond op een eigenschap die hij niet raakte. Los
   lazen ze als incidenten; samen zijn het zes manieren waarop dezelfde fout binnenkomt, en de vraag die ze
   alle had gevangen is dezelfde: KAN DEZE TEST ROOD WORDEN, EN WAARDOOR PRECIES.
   (a) DE TRIPDRAAD DIE NIET KON VALLEN (`v265`). De uitsluiting van huur uit `weekScope()` moest een
@@ -4939,7 +5054,20 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   sommen zijn dan identiek. TOETS BIJ EEN SCHRIJVER DUS OOK DE TWEEDE AANROEP, en bij een terugdraaien
   niet alleen of de cijfers terug zijn maar ook of de TOESTAND terug is. Beide zijn de familie van (c):
   de test liep niet langs het pad dat de code beschermt.
-  WAT DE NEGENENTWINTIG GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
+  (w) DE KLEM KON OP DIE MAAND NIET VUREN (`v321`). De klem van `v321` zet het maandinkomen alleen
+  OMHOOG, en mijn assertie dat een AFGERONDE maand de meting houdt stond op september, dat met 5216
+  juist BOVEN de norm van 5000 ligt. De sabotage die de klem ook op afgeronde maanden zet bleef
+  daarom groen: op die maand kan hij per constructie niets doen. Het geval dat de twee vormen
+  onderscheidt is een afgeronde maand ONDER de norm, en die stond in dezelfde fixture (juli, 3800).
+  Dat is (a) opnieuw, nu op de RICHTING van een klem in plaats van op de verzameling.
+  (x) DE CODE ONDER TEST STOND AAN BEIDE KANTEN VAN DE VERGELIJKING (`v321`). De regel onder het
+  herogetal noemt de twee GROOTSTE claims, en mijn test nam die twee uit `safeClaims()` en legde ze
+  naast de tekst. Die functie doet de sortering, dus de sabotage die de sortering weghaalt
+  verschoof beide kanten mee en bleef groen. De verwachting komt nu uit de RUWE termen van
+  `safeToSpend()`, met een invoermeting ernaast dat de volgorde op bedrag WERKELIJK afwijkt van de
+  vaste volgorde van de sheet; zonder die meting is "hij sorteert" niet van "hij sorteert niet" te
+  onderscheiden. Dat is dezelfde vorm als (a) en (m), nu in een sortering.
+  WAT DE EENENDERTIG GEMEEN HEBBEN: de test was geldig geformuleerd en raakte de code niet. Een groene
   sabotage is dus een vraag over je test en geen vrijbrief om de code te versimpelen, en welke van
   de twee het is beslis je door het pad te zoeken en niet door te kiezen wat het minste werk is.
   DE WERKAFSPRAAK die hieruit volgt: zet elke nieuwe invariant met een sabotage rood VOORDAT je hem
@@ -5089,7 +5217,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v320` → `minder-v321`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v321` → `minder-v322`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5107,7 +5235,8 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 (een besluit en een open punt), dus hij bumpt niet, en `v313` raakt app-code en gaat daarom van
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
-`minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319` en `v320` naar `minder-v320`.
+`minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320` en `v321` naar
+`minder-v321`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

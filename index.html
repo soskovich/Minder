@@ -2034,28 +2034,84 @@ function totals(m){
     if(income>0){ inc=income; basis='gedetecteerd'; }
     else { inc=baseIncome(); basis = inc>0?'basisnorm':'onbekend'; }
   } else { inc=SET.income||0; basis='handmatig'; }
+  /* v321: DE LOPENDE MAAND MAG DE NORM NIET OMLAAG HALEN, want een halve maand is geen maand
+     (v194). De tak hierboven zet `gedetecteerd` zodra er EEN euro inkomen binnen is, ook op de 2e
+     van de maand, en dan is het maandinkomen van de app wat er tot nu toe langskwam. GEMETEN op een
+     fixture met een basisnorm van 3464: zodra er 1752 binnen is zakt income van 3464 naar 1752, en
+     daarmee de inkomen-limiet en elke KPI die hem als noemer leest. Een gedeeltelijke betaling
+     maakte je maand dus armer dan een maand waarin nog niets was binnengekomen.
+     ALLEEN OMLAAG, EN ALLEEN DEZE MAAND. Meer binnen dan je norm is een echte meting en blijft
+     staan; een AFGERONDE maand blijft de gemeten maand, want die is af en dan is de meting beter
+     dan de norm. De klem geldt dus precies in het venster waarin de maand nog niet af is.
+     `incomeAlles` GAAT NIET MEE en wordt daarom VOOR de klem vastgelegd: dat is het GELD (v259) en
+     niet de norm, en zijn vier lezers (de opbouwlijn op Vermogen, financeModel(), spaarDekking() en
+     de expert-regel op Home) tellen echt binnengekomen euro's. Met de klem erin zouden die een
+     bedrag tellen dat er niet is, en dat is de gevaarlijke kant (v168).
+     DE BASIS HEET `halvemaand` EN NIET `basisnorm`, want het is een derde geval: er IS gemeten, en
+     wat het scherm toont is de norm omdat de meting nog niet compleet is. Met `basisnorm` zou de
+     KPI-herkomst zeggen dat er niets gemeten was. */
+  const _gedetecteerd0 = (basis==='gedetecteerd');
+  if(_gedetecteerd0 && String(m)===thisYM()){
+    const bn=baseIncome();
+    if(bn>inc){ inc=bn; basis='halvemaand'; }
+  }
   const limit = monthBudget(inc);      // inkomen-limiet: sinds potjes leidend zijn is dit de REFERENTIE voor de spiegel, niet meer het plafond
   const pot = totalBudget();           // som van je potjes = leidend maandtotaal
   const budget = pot>0 ? pot : limit;  // geen potjes? val terug op de inkomen-limiet, zodat de app niet zonder budget valt
   /* incomeAlles volgt dezelfde tak als income: in handmatige modus is je norm je norm, en dan is
      er geen gemeten maandbedrag om het onregelmatige deel bij op te tellen. Alleen bij een
      gedetecteerd inkomen bestaat het verschil, en daar is het precies MI.onregelmatig. */
-  const incAlles = (basis==='gedetecteerd') ? MI.alles : inc;
+  const incAlles = _gedetecteerd0 ? MI.alles : inc;
   /* detectedIncome houdt zijn eigen betekenis, alles wat er aan inkomen binnenkwam, want het label
      in Instellingen zegt "Gedetecteerd deze maand". Wat de app ERMEE doet staat in income. */
   return {list,income:inc,incomeAlles:incAlles,onregelmatig:Math.round(MI.onregelmatig),detectedIncome:MI.alles,spend,spendNorm,buitenNorm,uitReservering:Math.round(uitRes),uitResCat,internal,byCat,budget,limit,potTotal:pot,incomeBasis:basis};
 }
-// basis-inkomen = conservatieve norm over je RECENTE maanden (laatste 6): mediaan van de ONDERSTE helft.
-// Recent venster → een salarisverhoging telt meteen mee en oudere/lagere maanden wegen niet meer mee.
+// basis-inkomen = conservatieve norm over je RECENTE maanden: mediaan van de ONDERSTE helft.
+// Recent venster → een salarisverhoging telt mee en oudere/lagere maanden wegen niet meer mee.
 // Onderste helft → incidentele pieken (vakantiegeld, dividend, onkosten) blazen je norm niet op.
-function baseIncome(){
-  if(!SET.autoIncome) return +SET.income||0;
-  let recent=months().filter(m=>m<nowYMstr()).slice(-6);   // laatste 6 AFGERONDE maanden; de lopende maand vervuilt de schatting
-  if(!recent.length) recent=months().slice(-6);            // brand-new gebruiker: val terug op wat er is
-  const vals=recent.map(m=>{let s=0;for(const t of txOfMonth(m)){if(CATS[catOf(t)].type==='income')s+=Math.max(t.amount,0);}return s;}).filter(v=>v>0).sort((a,b)=>a-b);
-  if(!vals.length) return 0;
+/* v321: HET VENSTER IS DRIE AFGERONDE MAANDEN EN WAS ZES. GEMETEN wat dat kostte op een
+   inkomenswijziging: de onderste-helft-mediaan is voor elk venster van 3 tot en met 6 maanden
+   precies de TWEEDE LAAGSTE maand (nagerekend met oplopende, unieke waarden), dus een nieuw en
+   hoger loon zit per constructie in de bovenste helft en wordt weggegooid. Op een reeks met loon
+   vanaf sep 2026 (apr t/m sep 2900, 3464, 4100, 3800, 5000, 5216 en daarna 5216) las de app
+   3464 in oktober, 3800 in november, 4100 in december, 5000 in januari en pas 5216 in FEBRUARI:
+   vijf maanden achterstand, in stapjes.
+   HET VENSTER BEPAALT DE SNELHEID EN NIET DE ROBUUSTHEID, en dat is de meting die de keuze
+   versmalde. Op een salaris van 5216 met dips van 2600 geeft de onderste-helft-mediaan bij ELK
+   venster van 3 tot 6 hetzelfde antwoord: bij EEN dip 5216 (immuun) en bij TWEE dips 2600 (hij
+   bijt). Een piek is bij 3 en bij 6 maanden even onschadelijk. Een korter venster kost dus niets
+   aan uitschieter-bescherming en levert drie maanden tijd op: op dezelfde reeks leest het 5000 in
+   oktober en 5216 vanaf december.
+   DE VORM BLIJFT DE ONDERSTE HELFT en wordt geen gewogen gemiddelde: dat weegt de nieuwste maand
+   zwaarst en tilt je norm op vakantiegeld (gemeten 5216 -> 5930), en te hoog is de gevaarlijke
+   kant (v168), want baseIncome() voedt incDue en dus veilig te besteden. En het wordt geen
+   bevestigingsvraag: die zou een default moeten hebben, en een default die stil een inkomen zet is
+   precies wat MECHANISM_SPEC.defaultEffect verbiedt.
+   HET VENSTER STAAT OP EEN PLEK, MET TWEE LEZERS (v104): deze functie en blok 3 van het
+   diagnosescherm. Dat blok moet kunnen zeggen WELKE maanden het getal maakten, en een tweede
+   uitdrukking van dezelfde snede loopt bij de eerstvolgende wijziging uiteen. */
+const INKOMEN_VENSTER=3;
+function inkomenVenster(){
+  let recent=months().filter(m=>m<nowYMstr()).slice(-INKOMEN_VENSTER);   // AFGERONDE maanden; de lopende maand vervuilt de schatting
+  if(!recent.length) recent=months().slice(-INKOMEN_VENSTER);            // brand-new gebruiker: val terug op wat er is
+  return recent;
+}
+/* metDetail geeft naast de waarde de maanden en de gekozen maand terug, in de vorm van
+   betaalMoment(t, metReden) (v273): het diagnosescherm leest zo wat DEZE functie gebruikte in
+   plaats van de som ernaast opnieuw uit te drukken. De acht gewone lezers zien geen verschil. */
+function baseIncome(metDetail){
+  const uit=(waarde,tak,venster,perMaand,gekozen)=>metDetail?{waarde,tak,venster,perMaand,gekozen}:waarde;
+  if(!SET.autoIncome) return uit(+SET.income||0,'SET.income, een instelling (autoIncome staat uit)',[],[],null);
+  const recent=inkomenVenster();
+  /* v259 liet deze lus met opzet staan naast maandInkomen(): hij is gemeten robuust en bleef op
+     verzoek ongemoeid. Hij is hier alleen gesplitst zodat de maand bij zijn bedrag blijft; de
+     optelling zelf is karakter voor karakter dezelfde. */
+  const perMaand=recent.map(m=>{let s=0;for(const t of txOfMonth(m)){if(CATS[catOf(t)].type==='income')s+=Math.max(t.amount,0);}return {m,inc:s};});
+  const vals=perMaand.map(x=>x.inc).filter(v=>v>0).sort((a,b)=>a-b);
+  if(!vals.length) return uit(0,'geen afgeronde maand met inkomen',recent,perMaand,null);
   const lower=vals.slice(0,Math.ceil(vals.length/2));
-  return Math.round(lower[Math.floor(lower.length/2)]);
+  const gekozen=lower[Math.floor(lower.length/2)];
+  return uit(Math.round(gekozen),'onderste-helft-mediaan over '+vals.length+' maand(en) met inkomen',recent,perMaand,gekozen);
 }
 // vaste/variabele splitsing over een maand
 function splitFixedVar(m){ let fixed=0,vari=0;
@@ -2864,7 +2920,12 @@ function monthLiquidity(){
      detectie: het is letterlijk de andere helft van die ene filter. */
   const fixDueBetaald=sched.filter(s=>s.type==='fixed' && s.intervalM===1 && (s.incasso||s.periodic) && seen.has(s.key)).length;
   // verwacht inkomen dat nog moet komen = basisinkomen minus wat al deze maand binnen is
-  const incDue=Math.max(baseIncome()-incomeThisMonth,0);
+  /* v321: de twee kanten van deze aftrekking komen mee in de uitkomst, want de post "Nog te
+     ontvangen" op Inzichten noemt sindsdien zijn noemer en moet dus weten tegen WAT hij rekent.
+     Ze opnieuw uitdrukken naast deze regel zou een tweede waarheid zijn over hetzelfde verschil
+     (v104); zo leest de post letterlijk de twee getallen die incDue maakten. */
+  const incNorm=baseIncome();
+  const incDue=Math.max(incNorm-incomeThisMonth,0);
   // variabel resterend = tempo-bewust: blend historisch gemiddelde (per dag) met je werkelijke tempo deze maand
   const spentVarMtd=splitFixedVar(ym).vari;        // al variabel uitgegeven deze maand
   const elapsedM=Math.max(dom,1);
@@ -2877,7 +2938,7 @@ function monthLiquidity(){
   const projected=Math.round(sum+incDue-fixDue-varDue);   // forecast blijft de eerlijke voorspelling (Optie B)
   // v170: varPlan is hier weg. Hij voedde de spiegel op de liquiditeitskaart en die verviel; sindsdien
   // las niemand hem. Wie het variabele plan nodig heeft roept varPlanRemaining() aan, de enige bron.
-  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems,fixDueExclCount,fixDueBetaald};
+  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),incNorm:Math.round(incNorm),incBinnen:Math.round(incomeThisMonth),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems,fixDueExclCount,fixDueBetaald};
 }
 // Veilig te besteden = saldo - nog-niet-betaalde vaste lasten deze maand - nog gereserveerde potjes (budget minus al uitgegeven)
 function safeToSpend(){
@@ -2930,6 +2991,50 @@ function safeToSpend(){
   const safe=Math.round(spendSaldo + incDue - fixedStillToGo - reservedVar - saveRemaining);
   return {saldo:tb.sum, savedBal:Math.round(savedBal), resBal:Math.round(resBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, known:tb.known,
     incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), fixDueBudgetExtra:Math.max(fixedStillToGo-Math.round(L.fixDue||0),0), reserved:Math.round(reservedVar), potOver:Math.round(potOver), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
+}
+/* v321: WELKE POSTEN EEN CLAIM OP JE SALDO ZIJN, OP EEN PLEK, MET TWEE LEZERS (v104). De
+   opbouw-sheet droeg de naam en de route van elke post als losse string in zijn eigen rij, en de
+   regel onder het herogetal noemt sinds v321 de grootste twee. Twee kopieen van dezelfde naam
+   lopen bij de eerstvolgende herformulering uiteen (v91), en twee kopieen van dezelfde route
+   zouden op twee plekken naar een ander scherm kunnen gaan.
+   `fixDueBudgetExtra` DRAAGT GEEN ROUTE, en dat is geen omissie: er is geen scherm dat alleen dat
+   deel toont (de sheet laat die rij ook zonder chevron staan). De regel valt daar terug op de
+   opbouw-sheet zelf, en dat is wel een bestaande ingang (de premisse: een keuze leidt altijd naar
+   een bestaande ingang).
+   HIJ SORTEERT OP BEDRAG en filtert nul weg, want de vraag van de regel is WELKE post het zwaarst
+   weegt; de sheet houdt zijn eigen vaste volgorde, want die is een opbouw en geen rangschikking. */
+const SAFE_CLAIMS=[
+  {key:'savedBal',          label:'Al op je spaarrekening',    act:'closeSheet();openSavingsPots()'},
+  {key:'resBal',            label:'In je reserveringspot',     act:'openReserveringen()'},
+  {key:'fixDueRecurring',   label:'Vaste lasten die nog komen',act:'openFixedDue()'},
+  {key:'fixDueBudgetExtra', label:'Vaste lasten uit je budget',act:''},
+  {key:'reserved',          label:'Gereserveerd in je potjes', act:'openReservedPotjes()'},
+  {key:'saveReserved',      label:'Nog te sparen deze maand',  act:'toggleSaveEdit()'},
+];
+function safeClaim(key){ return SAFE_CLAIMS.find(c=>c.key===key)||{key,label:'',act:''}; }
+function safeClaims(S){
+  let s=S; if(!s){ try{ s=safeToSpend(); }catch(_){ return []; } }
+  if(!s) return [];
+  return SAFE_CLAIMS.map(c=>({key:c.key,label:c.label,act:c.act,bedrag:Math.round(s[c.key]||0)}))
+    .filter(c=>c.bedrag>0).sort((a,b)=>b.bedrag-a.bedrag);
+}
+/* v321: DE ZIN ONDER EEN NEGATIEF HEROGETAL ZEGT WAT HET GETAL IS EN WAAR HET ZIT. Tot deze ronde
+   stond er "Je ruimte voor deze maand is op, met nog 29 dagen te gaan": een DAGENtelling onder een
+   MAANDgetal, en dat is de verkeerde eenheid (het bedrag is geen dagbedrag), terwijl de dagen op
+   de 2e van de maand juist suggereren dat het erger wordt. GEMELD op een stand waar het herogetal
+   -556 was terwijl er 3.464 salaris moest komen en er 1.730 in de potjes zat: de zin zei dat je
+   ruimte op was en noemde geen van de twee.
+   HET BEDRAG IS HET TEKORT ZELF en wordt niet opnieuw gerekend: het is -safe, en safe staat er
+   groot boven. GEEN BEDRAG BIJ EEN ONVOLLEDIG SALDO: die tak zit in vrijPerDagLine() en gaat hier
+   niet langs (v59/v73/v173).
+   DE CLAIMS KOMEN UIT safeClaims() EN ZIJN ER TWEE. Drie is op 360px een derde regel, en wat de
+   vraag beantwoordt is waar het grootste deel zit; de rest staat een tik verder in de sheet. */
+function safeKrapRegel(){
+  let S=null; try{ S=safeToSpend(); }catch(_){ return ''; }
+  if(!S) return '';
+  const cl=safeClaims(S).slice(0,2);
+  const deel=cl.map(c=>`<span style="cursor:pointer" onclick="${c.act||'openSafeToSpend()'}">${esc(c.label)} ${euro0(c.bedrag)} <span style="color:var(--teal)">\u203a</span></span>`).join(' \u00b7 ');
+  return `<div data-krap="1" style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px">Je plan vraagt ${euro0(Math.round(-S.safe))} meer dan er deze maand is.${cl.length?`<br>De grootste claims: ${deel}`:''}</div>`;
 }
 /* ===== Vrij besteedbaar per dag (v158) =====
  * Het dagbedrag voor variabele uitgaven was een uitkomst, geen stuurgetal: totale variabele kosten
@@ -3008,7 +3113,7 @@ function vrijPerDagLine(){
     return `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px"><span style="cursor:pointer" onclick="openBalances()">Geen bedrag per dag: een deel van je saldo is nog onbekend <span style="color:var(--teal)">›</span></span></div>`;
   }
   const dag=V.dagenResterend===1?'dag':'dagen';
-  if(V.ruimte<=0) return `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px">Je ruimte voor deze maand is op, met nog ${V.dagenResterend} ${dag} te gaan.</div>`;
+  if(V.ruimte<=0) return safeKrapRegel();   // v321: geen dagentelling onder een maandgetal; zie safeKrapRegel()
   return `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px">Nog ${V.dagenResterend} ${dag} deze maand, dus ${euro0(V.perDag)} per dag.</div>`;
 }
 // drill-down: welke vaste lasten moeten nog betaald worden, en wanneer
@@ -3341,8 +3446,20 @@ function renderDash(){
      zonder uitweg - precies omgekeerd aan wat die modusnamen beloven. Zelfde zin, zelfde route,
      alleen de aanhef verschilt: Rustig dempt het getal en zegt er iets bij, de andere modi tonen
      het getal en krijgen dezelfde stap. */
-  const krapNote=(S2.safe<0 && balKnown)
-    ? `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:8px">${krapRustig?'Je zit deze maand krap. ':''}E\u00e9n potje geeft je grip op waar het heen gaat. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="openPotjePick()">Maak potje \u203a</span></div>`
+  /* v321: EN ALLEEN ALS ER NOG GEEN POTJE IS. De poort was `safe<0 && balKnown`, dus de regel
+     bood "Maak potje" aan bij iemand die al potjes heeft, en dan belooft hij een handeling die er
+     niet meer is (en de echte stap, een potje VERLAGEN, staat er niet). Wat een krappe maand nu
+     zegt staat een regel hoger, in safeKrapRegel(), met de route naar de post die het zwaarst
+     weegt. `totalBudget()` is de toets en niet `varBudget()`: de vraag is of je al EEN potje hebt,
+     en een terugkerend potje is er ook een. */
+  const krapNote=(S2.safe<0 && balKnown && totalBudget()<=0)
+    /* v321: DE RUSTIG-AANHEF IS HIER VERVALLEN, en dat is een gevolg en geen bijvangst: de regel
+       een plek hoger ZEGT sinds deze ronde wat er aan de hand is ("Je plan vraagt EUR X meer dan er
+       deze maand is"), en "Je zit deze maand krap." ernaast is een tweede formulering van datzelfde
+       feit (v91). Wat van v174 staat is dat elke modus dezelfde volgende stap krijgt, en dat is nu
+       letterlijk dezelfde ZIN in alle drie; wat Rustig apart houdt is de gedempte kleur, en die zit
+       in safeCol en is niet aangeraakt. */
+    ? `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:8px">E\u00e9n potje geeft je grip op waar het heen gaat. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="openPotjePick()">Maak potje \u203a</span></div>`
     : '';
   // Zonder \u00e9\u00e9n bekend saldo rekent safeToSpend met 0. Dat getal dan groot tonen is even onwaar als "totaal saldo \u20ac0,00":
   // het hoofdgetal gaat mee in de onbekend-staat, met de saldo-invoer als volgende stap. De berekening blijft ongemoeid.
@@ -3448,17 +3565,17 @@ function openSafeToSpend(){
     ${balUnknown?'':onregelmatigOpbouwRegel()}
     ${S.incDue>0?`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:var(--fs-md)">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
-    ${S.savedBal>0?line('Al op je spaarrekening', S.savedBal, 'var(--mut)', "closeSheet();openSavingsPots()", 'staat apart om te sparen, niet vrij besteedbaar'):''}
-    ${S.resBal>0?line('In je reserveringspot', S.resBal, 'var(--mut)', "openReserveringen()", 'al vergeven aan posten die nog moeten komen'):''}
-    ${S.fixDueRecurring>0?line('Vaste lasten die nog komen', S.fixDueRecurring, 'var(--mut)', 'openFixedDue()', 'wat deze maand nog wordt afgeschreven'):''}
-    ${S.fixDueBudgetExtra>0?line('Vaste lasten uit je budget', S.fixDueBudgetExtra, 'var(--mut)', '', 'budget voor vaste categorieën waar nog geen incasso voor is herkend'):''}
+    ${S.savedBal>0?line(safeClaim('savedBal').label, S.savedBal, 'var(--mut)', safeClaim('savedBal').act, 'staat apart om te sparen, niet vrij besteedbaar'):''}
+    ${S.resBal>0?line(safeClaim('resBal').label, S.resBal, 'var(--mut)', safeClaim('resBal').act, 'al vergeven aan posten die nog moeten komen'):''}
+    ${S.fixDueRecurring>0?line(safeClaim('fixDueRecurring').label, S.fixDueRecurring, 'var(--mut)', safeClaim('fixDueRecurring').act, 'wat deze maand nog wordt afgeschreven'):''}
+    ${S.fixDueBudgetExtra>0?line(safeClaim('fixDueBudgetExtra').label, S.fixDueBudgetExtra, 'var(--mut)', safeClaim('fixDueBudgetExtra').act, 'budget voor vaste categorieën waar nog geen incasso voor is herkend'):''}
     <!-- v254: de poort was S.reserved>0. Sinds een leeg potje nul reserveert kan die som nul zijn
          terwijl je wel potjes hebt, en dan viel deze regel weg. Dat is precies de toestand die je
          wilt zien, en het is sinds v254 ook de enige route naar de sheet: de tik op de tweede regel
          van Inzichten is weg omdat die over de tempo-som gaat. Gemeten op vier potjes die alle vier
          op waren: reserved 0, regel weg, sheet nergens meer te openen. De poort leest nu of je
          variabele potjes hebt. -->
-    ${varBudget()>0?line('Gereserveerd in je potjes', S.reserved, 'var(--mut)', "openReservedPotjes()", S.reserved>0?'budget dat je per categorie apart zette':'je potjes zijn op, er staat niets meer apart'):''}
+    ${varBudget()>0?line(safeClaim('reserved').label, S.reserved, 'var(--mut)', safeClaim('reserved').act, S.reserved>0?'budget dat je per categorie apart zette':'je potjes zijn op, er staat niets meer apart'):''}
     ${varTempoMirror(S.reserved, S.varForecast, 'safe')}
     ${(function(){
       const tgt=S.saveTarget||0, onSav=Math.min(S.savedThisMonth||0,tgt);
@@ -3466,18 +3583,18 @@ function openSafeToSpend(){
         const pct=tgt>0?Math.max(Math.min(Math.round((S.savedThisMonth||0)/tgt*100),100),0):0;
         const bn=(d,s)=>`<div onclick="adjustSaveTarget(${d})" style="width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;cursor:pointer">${s}</div>`;
         return `<div style="background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin:8px 0 2px">
-          <div style="font-size:13px;font-weight:700;margin-bottom:2px">Nog te sparen deze maand</div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:2px">${safeClaim('saveReserved').label}</div>
           <div style="display:flex;align-items:center;gap:13px;margin:9px 0 4px">${bn(-25,'−')}<div style="font-size:var(--fs-xl);font-weight:800;min-width:84px;text-align:center;color:var(--teal)">${euro0(tgt)}</div>${bn(25,'+')}<div class="small muted" style="margin-left:2px">maandbedrag</div></div>
           <div style="height:7px;border-radius:5px;background:var(--card);overflow:hidden;margin:9px 0 3px"><div style="height:100%;width:${pct}%;background:var(--teal);border-radius:5px"></div></div>
           <div class="small muted">${onSav<0?`je haalde deze maand ${euro0(-onSav)} uit je spaarrekening`:`${euro0(onSav)} van ${euro0(tgt)} maandbedrag heb je deze maand al gespaard`}</div>
-          <div class="row" style="padding:8px 0 0;border-bottom:none"><div style="flex:1" class="small">Nog te sparen deze maand</div><div style="font-weight:800;color:${S.saveReserved>0?'var(--txt)':'var(--green)'}">${euro0(S.saveReserved)}</div></div>
+          <div class="row" style="padding:8px 0 0;border-bottom:none"><div style="flex:1" class="small">${safeClaim('saveReserved').label}</div><div style="font-weight:800;color:${S.saveReserved>0?'var(--txt)':'var(--green)'}">${euro0(S.saveReserved)}</div></div>
           <div style="text-align:right;margin-top:6px"><span onclick="toggleSaveEdit()" style="color:var(--teal);font-weight:700;font-size:13px;cursor:pointer">Klaar</span></div>
         </div>`;
       }
       // v262: onSav kan nu onder nul staan, en dan is 'al gespaard' onwaar. Zelfde woorden als op
       // Inzichten, want het is hetzelfde feit op een tweede oppervlak (v91).
-      if(S.saveReserved>0) return line('Nog te sparen deze maand', S.saveReserved, 'var(--mut)', 'toggleSaveEdit()', `je maandbedrag ${euro0(tgt)}${onSav>0?` min ${euro0(onSav)} deze maand al gespaard`:(onSav<0?` plus ${euro0(-onSav)} die je eruit haalde`:``)}`);
-      if(tgt>0) return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="toggleSaveEdit()"><div style="flex:1"><div style="font-size:var(--fs-md)">Nog te sparen deze maand</div><div class="small" style="color:var(--green)">je maandbedrag van ${euro0(tgt)} heb je deze maand al gespaard</div></div><div style="font-weight:700;color:var(--green)">${euro0(0)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`;
+      if(S.saveReserved>0) return line(safeClaim('saveReserved').label, S.saveReserved, 'var(--mut)', safeClaim('saveReserved').act, `je maandbedrag ${euro0(tgt)}${onSav>0?` min ${euro0(onSav)} deze maand al gespaard`:(onSav<0?` plus ${euro0(-onSav)} die je eruit haalde`:``)}`);
+      if(tgt>0) return `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${safeClaim('saveReserved').act}"><div style="flex:1"><div style="font-size:var(--fs-md)">${safeClaim('saveReserved').label}</div><div class="small" style="color:var(--green)">je maandbedrag van ${euro0(tgt)} heb je deze maand al gespaard</div></div><div style="font-weight:700;color:var(--green)">${euro0(0)}</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`;
       return '';
     })()}
     <div class="row" style="gap:10px;padding:13px 0;margin-top:4px;border-top:2px solid var(--line)">
@@ -10069,8 +10186,20 @@ function nogDezeMaandPosten(){
      helemaal onbekend. Dat derde geval is gemeten (baseIncome 0, incomeBasis 'onbekend') en zei
      toch gewoon "0 euro, inkomen": een nul die als meting leest terwijl er niets gemeten is,
      precies wat v59/v73/v173 verbieden. Weghalen lost alle drie op. */
+  /* v321: DE SUB NOEMT ZIJN NOEMER, en dat was de melding. De sub was de kale string 'inkomen',
+     dus op het scherm was niet te zien of dit getal een RESTANT was of je hele maandinkomen:
+     "Nog te ontvangen EUR 3.464" leest hetzelfde bij een norm van 3.464 waarvan nog niets binnen is
+     en bij een norm van 5.216 waarvan 1.752 al binnen is. Dat is de vorm die v91 en v309 elders in
+     deze app juist afdwingen: een getal noemt de noemer waartegen het staat.
+     DE TWEE GETALLEN KOMEN UIT monthLiquidity() ZELF (v104): incDue IS incNorm min incBinnen, dus
+     de sub drukt de twee kanten van diezelfde aftrekking af en rekent niets na.
+     ER IS GEEN ONBEKEND-GEVAL: deze post staat er alleen als teOntvangen boven nul is, en dat kan
+     alleen als incNorm boven incBinnen ligt, dus de noemer is per constructie bekend. */
   posten.push({lab:'Nog te ontvangen', val:euro0(teOntvangen),
-    col:teOntvangen>0?'var(--green)':'var(--mut)', sub:'inkomen', tik:'', leeg:teOntvangen<=0});
+    col:teOntvangen>0?'var(--green)':'var(--mut)',
+    sub: L.incBinnen>0 ? `${euro0(L.incBinnen)} al binnen van ${euro0(L.incNorm)}`
+                       : `van ${euro0(L.incNorm)} per maand`,
+    tik:'', leeg:teOntvangen<=0});
   // wat je opzij zet. Zonder alarmkleur, want dit is geen tekort (v78/v93).
   /* Nul is hier NOOIT leeg: hij betekent dat je je maandbedrag hebt gehaald, en dat is het enige
      moment waarop de app dat zegt. Zonder spaardoel staat de post er sowieso niet (spaarOn). */
@@ -13435,7 +13564,7 @@ function kpiTx(key,m){
 /* Het inkomen in de restsaldo-quote komt uit totals() en dat is lang niet altijd de som van je
    inkomsten-transacties: met autoIncome uit is het je eigen instelling (index.html:1441).
    Doen alsof de transacties dat getal maken zou onwaar zijn, dus we noemen de bron. */
-const KPI_INCBRON={handmatig:'zelf ingesteld', gedetecteerd:'herkend uit je transacties', basisnorm:'je basisnorm uit eerdere maanden', onbekend:'onbekend'};
+const KPI_INCBRON={handmatig:'zelf ingesteld', gedetecteerd:'herkend uit je transacties', basisnorm:'je basisnorm uit eerdere maanden', halvemaand:'je basisnorm, deze maand is nog niet af', onbekend:'onbekend'};
 /* Wat heeft één transactie aan dit cijfer gedaan? (v105) Dezelfde noemer als het cijfer zelf
    (kpiAfstand().basis: je potjes bij budgetnaleving, anders je inkomen), zodat de bijdragen
    optellen tot het getal erboven. Het teken volgt de betekenis: bij sparen dúwt een uitgave het
@@ -15982,6 +16111,61 @@ function diagGrendel(){
   L.push('SET.autoIncome: '+(inkAuto?'aan (baseIncome(), gemeten)':'uit (SET.income, een instelling)'));
   L.push('planCapTerugval(): '+_dV(()=>planCapTerugval())
     +'   waar = de cap is NIET je spaarinleg maar noodfondsModel().comfortTot');
+  L.push('');
+  /* v321: HET INKOMEN, ALTIJD EN NIET ALLEEN BIJ EEN PERCENTAGE. De regels hierboven drukken
+     baseIncome() af in de percent- en de auto-tak van savingMode, dus bij een VAST spaarbedrag
+     stond het nergens: GEMELD op een toestel waar "Nog te ontvangen EUR 3.464" op het scherm stond
+     en er geen enkele uitlezing was die zei of dat een restant was of een heel maandinkomen.
+     DE MAANDEN KOMEN UIT baseIncome(metDetail) ZELF en niet uit een tweede snede (v104): dit blok
+     moet zeggen welke maanden HET GETAL maakten, en inkomenVenster() nog eens uitdrukken zou bij de
+     eerstvolgende wijziging uiteenlopen. De gekozen maand is gemarkeerd, want de onderste-helft-
+     mediaan KIEST een maand en rekent geen gemiddelde; dat is precies wat je wilt zien.
+     EN DE TERMEN VAN safeToSpend(), met de optelling erbij. Dat getal is een aftrekking van zes
+     claims en er was geen plek waar die naast elkaar stonden met hun som; de aansluiting staat er
+     daarom als waarneming en niet als bevestiging (v301). Alleen lezen (v244). */
+  L.push('HET INKOMEN: WAAR DE NORM VANDAAN KOMT');
+  const BI=_dT(()=>baseIncome(true),null);
+  L.push('   SET.autoIncome: '+(inkAuto?'aan':'uit')+'   SET.income: '+_dV(()=>+SET.income||0));
+  L.push('   baseIncome(): '+(BI?BI.waarde:'?')+'   tak: '+(BI?BI.tak:'?'));
+  L.push('   INKOMEN_VENSTER: '+INKOMEN_VENSTER+' afgeronde maanden   venster: '
+    +((BI&&BI.venster.length)?BI.venster.join(', '):'(leeg)'));
+  for(const r of ((BI&&BI.perMaand)||[]))
+    L.push('       '+r.m+String(Math.round(r.inc)).padStart(10)
+      +(r.inc<=0?'   (nul, valt uit de mediaan)':'')
+      +((BI.gekozen!=null && r.inc===BI.gekozen)?'   <- dit is de gekozen maand':''));
+  const LQ=_dT(()=>monthLiquidity(),null);
+  const TO=_dT(()=>totals(thisYM()),null);
+  L.push('   deze maand ('+_dT(()=>thisYM(),'?')+'):');
+  L.push('       al binnen (maandInkomen().norm): '+(LQ?LQ.incBinnen:'?'));
+  L.push('       incNorm (= baseIncome()):        '+(LQ?LQ.incNorm:'?'));
+  L.push('       incDue  (= incNorm - al binnen): '+(LQ?LQ.incDue:'?')+'   <- "Nog te ontvangen" op Inzichten');
+  L.push('       de sub die Inzichten daarbij zet: '+_dS(()=>{
+    const pp=(nogDezeMaandPosten()||[]).find(x=>/Nog te ontvangen/.test(x.lab||''));
+    return pp?(pp.val+' \u00b7 '+pp.sub):'(de post staat er niet: er komt niets meer binnen)'; }));
+  L.push('       totals().income: '+(TO?TO.income:'?')+'   basis: '+(TO?TO.incomeBasis:'?')
+    +'   <- halvemaand = de lopende maand mocht de norm niet omlaag halen (v321/v194)');
+  L.push('       totals().incomeAlles: '+(TO?TO.incomeAlles:'?')+'   (het GELD, zonder die klem)');
+  L.push('');
+  L.push('VEILIG TE BESTEDEN, PER TERM');
+  const ST=_dT(()=>safeToSpend(),null);
+  if(!ST) L.push('   (safeToSpend() gaf niets terug)');
+  else{
+    L.push('   saldo:            '+ST.saldo+(ST.missing?'   ('+ST.missing+' rekening(en) zonder bekend saldo)':''));
+    L.push('   + incDue:         '+ST.incDue);
+    for(const c of SAFE_CLAIMS){
+      const v=Math.round(ST[c.key]||0);
+      L.push('   - '+c.key.padEnd(17)+String(v).padStart(8)+'   '+c.label+(c.act?'   -> '+c.act:'   (geen eigen route)'));
+    }
+    const som=ST.saldo+ST.incDue-SAFE_CLAIMS.reduce((a,c)=>a+Math.round(ST[c.key]||0),0);
+    L.push('   = safe:           '+ST.safe+'   sluit aan: '+(Math.abs(som-ST.safe)<=1?'JA':'NEE (nagerekend '+som+')'));
+    L.push('   de regel die Home hierbij toont:');
+    L.push('     '+_dS(()=>{ const h=vrijPerDagLine();
+      return h?String(h).replace(/<br\s*\/?>/g,' | ').replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim():'(geen regel)'; }));
+    const cl=_dT(()=>safeClaims(ST),[]);
+    L.push('   safeClaims(), op bedrag: '+(cl.length?cl.map(c=>c.key+' '+c.bedrag).join(', '):'(geen claim boven nul)'));
+    L.push('   "Maak potje" staat er: '+_dV(()=>(ST.safe<0 && ST.known>0 && totalBudget()<=0))
+      +'   <- alleen zonder enig potje; totalBudget(): '+_dV(()=>totalBudget()));
+  }
   L.push('');
   /* v319: EN WAT ER WERKELIJK OPZIJ GING. Tot deze ronde las Plan nergens een boeking, dus de cap
      hierboven en je gedrag konden onbeperkt uiteenlopen zonder dat iets het zei. De regel onder de

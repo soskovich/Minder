@@ -119,7 +119,10 @@ test.describe('a · de rij scheidt waarneming van plan', () => {
        twee onderscheidbare dingen en de sub zei in allebei de gevallen "niets herkend"; sinds
        v260 zegt hij bij alles-al-betaald wat er werkelijk aan de hand is. */
     expect(sub('Nog te betalen · vast')).toMatch(/incasso|niets herkend|al afgeschreven/i);
-    expect(sub('Nog te ontvangen')).toBe('inkomen');
+    /* v321: de sub was de kale string 'inkomen' en noemde dus GEEN bron. Hij noemt nu de noemer
+       waartegen het getal staat, in twee vormen, en dat is precies de eigenschap die deze test
+       zegt vast te houden. De oude assertie pinde de string. */
+    expect(sub('Nog te ontvangen')).toMatch(/^van €[\d.]+ per maand$|^€[\d.]+ al binnen van €[\d.]+$/);
     expect(sub('Nog te sparen')).toMatch(/van €|gehaald/);
     /* v208 maakte de potjes-tegel een voortgang met dezelfde noemer-vorm als de tegel ernaast.
        v309 heeft die post naar het hoofdgetal van de stand-kaart verhuisd, en zijn sub is NIET

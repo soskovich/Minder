@@ -93,7 +93,10 @@ test.describe('b · de regel', () => {
   test('halverwege de maand: dagen en bedrag per dag', async ({ page }) => {
     await boot(page);
     const v = await V(page);
-    test.skip(!(v.ruimte > 0), 'deze fixture heeft deze maand geen positieve ruimte');
+    /* v321: dit was een test.skip op de uitkomst, en die leest als groen zodra de fixture het geval
+       niet meer draagt (v299/v300/v312). Het is een INVOERMETING geworden: deze fixture HEEFT een
+       positieve ruimte, en als dat ooit verandert valt de test in plaats van over te slaan. */
+    expect(v.ruimte).toBeGreaterThan(0);
     const t = await regel(page);
     expect(t).toContain(`Nog ${v.dagenResterend}`);
     expect(t).toMatch(/per dag/);
@@ -106,8 +109,13 @@ test.describe('b · de regel', () => {
     expect(v.ruimte).toBeLessThan(0);
     expect(v.perDag).toBe(0);
     const t = await regel(page);
-    expect(t).toMatch(/ruimte voor deze maand is op/i);
+    /* v321: de zin is veranderd en de drie eigenschappen niet. Wat deze test vasthoudt is dat er
+       GEEN dagbedrag en geen minteken staat bij een negatieve ruimte; de oude assertie pinde
+       daarnaast de formulering ("ruimte voor deze maand is op"), en die zei niets over het tekort
+       en zette een dagentelling onder een maandgetal. */
+    expect(t).toMatch(/Je plan vraagt .* meer dan er deze maand is/);
     expect(t).not.toMatch(/per dag/);
+    expect(t).not.toMatch(/dagen te gaan/);
     expect(t).not.toMatch(/-€|−€/);
   });
 
