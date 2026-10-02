@@ -186,11 +186,34 @@ genoemde versietag.)*
   centen om de keuze van `v271` te kunnen meten (de som wordt een keer afgerond en niet per rij).
   WAT BLOK 14 ERBIJ DOET STAAT DAAR EN WORDT HIER NIET HERHAALD: de aansluiting op `savedNet()` en de
   onttrekkingen over drie maanden (`v303`).
-- **OBSERVATIE, NIET VERANDERD: DE `G`-PARAMETER VAN `planVooruit()` IS DOOD** (`v319`): hij neemt een
-  grendel mee en herberekent hem per maand zelf met `planGrendelVan()`, dus de meegegeven waarde doet
-  niets. Dat is sinds `v307` zo en het is correct gedrag (de grendel MOET per maand bewegen); wat
-  misleidt is de parameter. Wie hem weghaalt raakt de twee bestaande aanroepers en `planTerugval()`,
-  en dat is een eigen ronde.
+- **OPEN PUNT VOOR EEN OPRUIMRONDE: DE `G`-PARAMETER VAN `planVooruit()` IS DOOD** (`v319`, gemeten):
+  de signatuur is `planVooruit(P, cap, G, terug)` en `G` wordt in de hele body NIET GELEZEN. GEMETEN op
+  de kale bron (commentaar weggestreept): precies EEN treffer van `G`, en dat is de signatuur zelf. De
+  grendel komt per maand uit `planGrendelVan(rows.find(r=>r.type==='noodfonds'), cap)` binnen de lus.
+  HET GEDRAG IS JUIST EN DE PARAMETER MISLEIDT, en dat onderscheid is de hele reden dat dit blijft
+  staan: `v307` heeft met een meting vastgelegd dat de grendel per maand MOET bewegen (met nog 800
+  nodig van een inleg van 2.200 geeft de grendel van NU 11 maanden en de projectie 9). Een parameter
+  die de grendel van nu aanneemt is dus niet alleen dood gewicht maar draagt juist de waarde die die
+  ronde heeft verworpen.
+  EN EEN AANROEPER GEEFT PRECIES DIE WAARDE MEE: `allocatePlan()` doet `planVooruit(P,cap,G)` met zijn
+  EIGEN `G`, de grendel van de lopende maand. Zou de parameter ooit gelezen worden, dan is dat de
+  v307-bug terug. Dat is het scherpste argument om hem weg te halen in plaats van hem te laten staan.
+  DRIE AANROEPERS GEVEN EEN DERDE ARGUMENT, en dat is de hele omvang: `allocatePlan()` (zijn eigen
+  `G`), `planTerugval()` (`planVooruit(P, cap, planGrendel(), log)`) en `planKlaarMaand()`
+  (`planVooruit(P,cap,planGrendel())`). De andere veertien aanroepen geven twee argumenten of geen.
+  BIJ TWEE VAN DE DRIE IS HET EEN NODELOZE AANROEP: `planGrendel()` leest `planMap()` EN
+  `planCapacity()`, en die uitkomst wordt weggegooid. Bij `planTerugval()` staat hij er zelfs
+  uitsluitend als POSITIEVULLING vóór `log`.
+  DE VAL VOOR DIE RONDE IS DAT `terug` EEN PLEK OPSCHUIFT. `planTerugval()` is de ENIGE aanroeper die
+  een vierde argument meegeeft, dus die ene aanroep moet mee naar `planVooruit(P, cap, log)`. Vergeet
+  je hem, dan landt `planGrendel()` in de `terug`-slot en wordt `log` genegeerd: `terug.push(...)`
+  gooit op een object zonder `push` (of de hele collector wordt overgeslagen als `planGrendel()` null
+  geeft), de `try/catch` in `planTerugval()` slikt het, en de functie geeft een LEGE lijst terug. De
+  elleboog op Plan verdwijnt dan STIL. Dat is te meten: `plan-terugval-lijn.spec.js`.
+  WAT HET NIET BREEKT, en dat is nagegaan en niet aangenomen: de twee bronzoekende asserties in
+  `plan-datums.spec.js` binden op `sectieVan(src, 'function planVooruit(')` en op de INHOUD van die
+  body (`planVerdeelMaand(rows, cap,` en `planGrendelVan(`). De zoekstring draagt de argumentenlijst
+  niet, en beide aanroepen blijven in de body staan, dus die twee gaan ongemoeid mee.
 - **DE VATEN STAAN NAAST ELKAAR EN OP SCHAAL VAN HET DOELBEDRAG** (`v318`): Plan zette de
   bestemmingen onder elkaar met een horizontale tak per rij, en dat was niet de opbouw van het
   ontwerp. Ze staan nu in een raster met de tak recht boven elk vat, hangend aan de inlegbalk.
