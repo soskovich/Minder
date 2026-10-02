@@ -294,12 +294,15 @@ test('g. de zin noemt het tekort en de twee grootste claims met hun route', asyn
   /* DE TWEE GROOTSTE CLAIMS, EN DE VOLGORDE WORDT HIER ZELF UITGEREKEND. Mijn eerste vorm nam de
      eerste twee uit safeClaims() en legde die naast de tekst; die functie staat zelf onder test, dus
      de sabotage die de sortering weghaalt bleef groen (meetles a: de code onder test aan beide kanten
-     van de vergelijking). De verwachting komt nu uit de RUWE termen van safeToSpend(). */
-  const ruw = await page.evaluate(() => {
+     van de vergelijking). De verwachting komt nu uit de RUWE termen van safeToSpend(), en WELKE
+     termen een claim zijn staat hier als eigen lijst en niet als een leesbeurt op de vlag in de
+     bron: anders schuift de sabotage die er een post bij laat die lijst mee. */
+  const MAAND_CLAIMS = ['fixDueRecurring', 'fixDueBudgetExtra', 'reserved', 'saveReserved'];
+  const ruw = await page.evaluate((keys) => {
     const S = safeToSpend();
-    return SAFE_CLAIMS.map((c) => ({ key: c.key, label: c.label, bedrag: Math.round(S[c.key] || 0) }))
+    return keys.map((k) => ({ key: k, label: safeClaim(k).label, bedrag: Math.round(S[k] || 0) }))
       .filter((c) => c.bedrag > 0);
-  });
+  }, MAAND_CLAIMS);
   const opBedrag = ruw.slice().sort((a, b) => b.bedrag - a.bedrag);
   // de fixture moet werkelijk een ANDERE volgorde op bedrag hebben dan de vaste volgorde van de
   // sheet, anders is "hij sorteert" niet van "hij sorteert niet" te onderscheiden
@@ -311,6 +314,31 @@ test('g. de zin noemt het tekort en de twee grootste claims met hun route', asyn
   for (const c of opBedrag.slice(0, 2)) expect(r.tekst).toContain(c.label);
   // de derde claim staat er NIET: die staat een tik verder in de sheet
   if (opBedrag[2]) expect(r.tekst).not.toContain(opBedrag[2].label);
+});
+
+test('g. wat al opzij staat is geen claim op deze maand', async ({ page }) => {
+  await boot(page);
+  const r = await page.evaluate(() => {
+    const S = safeToSpend();
+    return { savedBal: S.savedBal, resBal: S.resBal, claims: safeClaims(S).map((c) => c.key),
+             labels: [safeClaim('savedBal').label, safeClaim('resBal').label] };
+  });
+  /* DE INVOER DRAAGT HET GEVAL: er staat werkelijk EUR 4.000 op de spaarrekening, en dat is het
+     GROOTSTE bedrag van alle zes de termen, dus zonder deze regel zou het de eerste claim zijn. */
+  expect(r.savedBal).toBe(4000);
+  expect(r.resBal).toBeGreaterThan(0);
+  expect(r.claims).not.toContain('savedBal');
+  expect(r.claims).not.toContain('resBal');
+
+  // en de twee labels staan dus ook niet in de regel, met geen van hun routes erachter
+  const h = await homeRegel(page);
+  for (const l of r.labels) expect(h.tekst).not.toContain(l);
+  expect(h.html).not.toContain('openSavingsPots()');
+  expect(h.html).not.toContain('openReserveringen()');
+
+  // de opbouw-sheet toont ze onveranderd WEL: daar gaat het over je hele saldo
+  const sheet = await page.evaluate(() => { openSafeToSpend(); return document.querySelector('#sheet').innerText; });
+  for (const l of r.labels) expect(sheet).toContain(l);
 });
 
 test('g. de dagentelling onder het maandgetal is weg', async ({ page }) => {

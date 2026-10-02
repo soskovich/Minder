@@ -185,9 +185,19 @@ genoemde versietag.)*
   vierde regel, en wat de vraag beantwoordt is waar het grootste deel zit; de rest staat een tik
   verder in de opbouw-sheet. De hero gaat van 165 naar 184px op 360 en van 147 naar 184px op 390, en
   de regel eindigt op 244px bij een vouw van 567 en 771.
-  `SAFE_CLAIMS` IS DE ENE PLEK WAAR EEN CLAIM ZIJN NAAM EN ZIJN ROUTE HEEFT, met twee lezers (`v104`,
-  `v91`): de opbouw-sheet droeg ze als losse strings in zijn eigen rijen, en deze regel zou ze een
-  tweede keer spellen. `fixDueBudgetExtra` DRAAGT GEEN ROUTE, en dat is geen omissie: er is geen
+  DE CLAIMS ZIJN WAT DEZE MAAND NOG VRAAGT, EN DAT ZIJN VIER VAN DE ZES TERMEN: wat er in je potjes
+  zit, wat je nog wilt sparen, en de vaste lasten die nog komen. `savedBal` en `resBal` doen NIET mee
+  (de `maand`-vlag in `SAFE_CLAIMS`): dat geld is al eerder opzij gezet, dus het hoort niet in een
+  regel die zegt wat je plan DEZE MAAND meer vraagt dan er is, en met een route erachter leest het
+  als een uitnodiging om je buffer aan te spreken. De opbouw-sheet toont ze onveranderd wel, want
+  die gaat over je hele saldo; dat is dezelfde splitsing als `spend` tegen `spendNorm` (`v234`).
+  DE FIXTURE DRAAGT HET GEVAL EN NIET ALLEEN DE REGEL: er staat EUR 4.000 op de spaarrekening, en
+  dat is het GROOTSTE van alle zes de termen, dus zonder deze regel zou het de eerste claim zijn.
+  DE SPEC NOEMT DE VIER SLEUTELS ZELF en leest de vlag niet uit de bron, want anders schuift de
+  sabotage die er een post bij laat de verwachting mee (meetles x).
+  `SAFE_CLAIMS` IS DE ENE PLEK WAAR EEN CLAIM ZIJN NAAM, ZIJN ROUTE EN ZIJN SCOPE HEEFT, met twee
+  lezers (`v104`, `v91`): de opbouw-sheet droeg naam en route als losse strings in zijn eigen rijen,
+  en deze regel zou ze een tweede keer spellen. `fixDueBudgetExtra` DRAAGT GEEN ROUTE, en dat is geen omissie: er is geen
   scherm dat alleen dat deel toont (de sheet laat die rij ook zonder chevron staan), en de regel valt
   daar terug op de opbouw-sheet, die wel een bestaande ingang is.
   HIJ SORTEERT OP BEDRAG en de sheet houdt zijn eigen vaste volgorde: de regel vraagt WELKE post het

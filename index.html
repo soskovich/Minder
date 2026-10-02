@@ -3003,19 +3003,26 @@ function safeToSpend(){
    een bestaande ingang).
    HIJ SORTEERT OP BEDRAG en filtert nul weg, want de vraag van de regel is WELKE post het zwaarst
    weegt; de sheet houdt zijn eigen vaste volgorde, want die is een opbouw en geen rangschikking. */
+/* `maand` ZEGT OF DE POST IETS IS DAT DEZE MAAND NOG VRAAGT. Alle zes gaan van je saldo af en
+   staan daarom in de opbouw-sheet, maar maar vier ervan zijn een CLAIM op de maand die loopt: wat
+   er in je potjes zit, wat je nog wilt sparen, en de vaste lasten die nog komen. Wat er AL op je
+   spaarrekening of in je reserveringspot staat is geld dat je eerder opzij hebt gezet; dat telt
+   niet mee in wat je plan deze maand vraagt, en met een route erachter zou de regel onder een
+   tekort lezen als een uitnodiging om je buffer aan te spreken. */
 const SAFE_CLAIMS=[
-  {key:'savedBal',          label:'Al op je spaarrekening',    act:'closeSheet();openSavingsPots()'},
-  {key:'resBal',            label:'In je reserveringspot',     act:'openReserveringen()'},
-  {key:'fixDueRecurring',   label:'Vaste lasten die nog komen',act:'openFixedDue()'},
-  {key:'fixDueBudgetExtra', label:'Vaste lasten uit je budget',act:''},
-  {key:'reserved',          label:'Gereserveerd in je potjes', act:'openReservedPotjes()'},
-  {key:'saveReserved',      label:'Nog te sparen deze maand',  act:'toggleSaveEdit()'},
+  {key:'savedBal',          label:'Al op je spaarrekening',    act:'closeSheet();openSavingsPots()', maand:false},
+  {key:'resBal',            label:'In je reserveringspot',     act:'openReserveringen()',            maand:false},
+  {key:'fixDueRecurring',   label:'Vaste lasten die nog komen',act:'openFixedDue()',                 maand:true},
+  {key:'fixDueBudgetExtra', label:'Vaste lasten uit je budget',act:'',                               maand:true},
+  {key:'reserved',          label:'Gereserveerd in je potjes', act:'openReservedPotjes()',           maand:true},
+  {key:'saveReserved',      label:'Nog te sparen deze maand',  act:'toggleSaveEdit()',               maand:true},
 ];
-function safeClaim(key){ return SAFE_CLAIMS.find(c=>c.key===key)||{key,label:'',act:''}; }
+function safeClaim(key){ return SAFE_CLAIMS.find(c=>c.key===key)||{key,label:'',act:'',maand:false}; }
 function safeClaims(S){
   let s=S; if(!s){ try{ s=safeToSpend(); }catch(_){ return []; } }
   if(!s) return [];
-  return SAFE_CLAIMS.map(c=>({key:c.key,label:c.label,act:c.act,bedrag:Math.round(s[c.key]||0)}))
+  return SAFE_CLAIMS.filter(c=>c.maand)
+    .map(c=>({key:c.key,label:c.label,act:c.act,bedrag:Math.round(s[c.key]||0)}))
     .filter(c=>c.bedrag>0).sort((a,b)=>b.bedrag-a.bedrag);
 }
 /* v321: DE ZIN ONDER EEN NEGATIEF HEROGETAL ZEGT WAT HET GETAL IS EN WAAR HET ZIT. Tot deze ronde
@@ -3028,7 +3035,10 @@ function safeClaims(S){
    groot boven. GEEN BEDRAG BIJ EEN ONVOLLEDIG SALDO: die tak zit in vrijPerDagLine() en gaat hier
    niet langs (v59/v73/v173).
    DE CLAIMS KOMEN UIT safeClaims() EN ZIJN ER TWEE. Drie is op 360px een derde regel, en wat de
-   vraag beantwoordt is waar het grootste deel zit; de rest staat een tik verder in de sheet. */
+   vraag beantwoordt is waar het grootste deel zit; de rest staat een tik verder in de sheet.
+   EN HET ZIJN ALLEEN DE POSTEN DIE DEZE MAAND NOG IETS VRAGEN (de `maand`-vlag in SAFE_CLAIMS):
+   wat er al op je spaarrekening of in je reserveringspot staat is al opzij gezet, dus het hoort
+   niet in een regel die zegt wat je plan deze maand MEER vraagt dan er is. */
 function safeKrapRegel(){
   let S=null; try{ S=safeToSpend(); }catch(_){ return ''; }
   if(!S) return '';
@@ -16162,7 +16172,9 @@ function diagGrendel(){
     L.push('     '+_dS(()=>{ const h=vrijPerDagLine();
       return h?String(h).replace(/<br\s*\/?>/g,' | ').replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim():'(geen regel)'; }));
     const cl=_dT(()=>safeClaims(ST),[]);
-    L.push('   safeClaims(), op bedrag: '+(cl.length?cl.map(c=>c.key+' '+c.bedrag).join(', '):'(geen claim boven nul)'));
+    L.push('   safeClaims(), wat deze maand nog vraagt, op bedrag: '
+      +(cl.length?cl.map(c=>c.key+' '+c.bedrag).join(', '):'(geen claim boven nul)')
+      +'   <- savedBal en resBal doen hier niet mee: al opzij gezet');
     L.push('   "Maak potje" staat er: '+_dV(()=>(ST.safe<0 && ST.known>0 && totalBudget()<=0))
       +'   <- alleen zonder enig potje; totalBudget(): '+_dV(()=>totalBudget()));
   }
