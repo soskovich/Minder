@@ -574,18 +574,26 @@ test.describe('f · de uitleg achter het info-icoon', () => {
    - de noodfondsregel gaat van 55 naar 76px, en dat is de prijs van besluit 3 van deze ronde: zijn
      naam werd met een ellipsis afgekapt en breekt nu af op een tweede regel (v281/v284). Het is de
      laatste plek op dit scherm waar een naam die je zelf invoerde stil werd ingekort.
-   DE WATERVAL PAST OP BEIDE BREEDTES BOVEN DE VOUW: hij eindigt op 548px bij een vouw van 567 op
-   360x640 en 771 op 390x844. v317 eindigde op 566 van 567, dus met EEN pixel marge; dat is nu 19.
+   DE WATERVAL PAST OP BEIDE BREEDTES BOVEN DE VOUW: bij v318 eindigde hij op 548px bij een vouw van
+   567 op 360x640 en 771 op 390x844, en met de inleg-regel van v319 op 564, dus met 3px marge. v317
+   eindigde op 566 van 567, dus met EEN pixel.
    MET DRIE DOELEN is de kolom 96px breed op 360 en 106 op 390, is het hoogste tekstblok 212px op
-   beide breedtes en is de kaart 593px. De derde kolom kost dus 84px, en niet de 195 van de
-   tussenvorm. */
+   beide breedtes en is de kaart 608px (593 bij v318). De derde kolom kost dus 84px, en niet de 195
+   van de tussenvorm. */
 test.describe('g · de hoogte op het toestel', () => {
   const TOESTEL = { cap: 2200, order: ['noodfonds', A, B], goals: [
     { id: A, naam: 'Kosten Koper', doel: 15000, gespaard: 0, streefdatum: '2027-05', allocMode: 'pct', pct: 90 },
     { id: B, naam: 'Inrichting woning', doel: 3000, gespaard: 0, streefdatum: '2027-03', allocMode: 'pct', pct: 10 }] };
+  /* v319: DE INLEG-REGEL KOST 15px NETTO EN DE WATERVAL BLIJFT BOVEN DE VOUW. De regel zelf is 18px
+     plus 2px marge; daarvan komt 5px terug omdat de balk zijn 9px tot de KOP niet meer nodig heeft
+     zodra er een regel tussen staat. GEMETEN: kaart 509 -> 524 op beide breedtes, waterval-bodem
+     548 -> 564 bij een vouw van 567, dus 3px marge in plaats van 19 (v317 had 1px).
+     DE REGEL STAAT ER OOK OP NUL, en dat is waarom hij in deze fixture meetelt: de klok staat op de
+     1e en er is deze maand nog niets naar de spaarrekening gegaan, dus savedNet() is 0 en de regel
+     zegt "deze maand EUR 0 van EUR 2.200 opzij". Een nul is daar een meting (v59/v73/v173). */
   const PX = {
-    360: { vouw: 567, kaart: 509, nf: 76, wf: 282, tekst: 175, vatB: 146, tot: 548, zone: 818, v317kaart: 526 },
-    390: { vouw: 771, kaart: 509, nf: 76, wf: 282, tekst: 157, vatB: 161, tot: 548, zone: 818, v317kaart: 506 },
+    360: { vouw: 567, kaart: 524, nf: 76, wf: 282, tekst: 175, vatB: 146, tot: 564, zone: 833, v318kaart: 509 },
+    390: { vouw: 771, kaart: 524, nf: 76, wf: 282, tekst: 157, vatB: 161, tot: 564, zone: 833, v318kaart: 509 },
   };
 
   for (const w of [360, 390]) {
@@ -607,7 +615,9 @@ test.describe('g · de hoogte op het toestel', () => {
           vatB: Math.round(z.querySelector('.wf-vat').getBoundingClientRect().width),
           teksten: [...z.querySelectorAll('.wf-tekst')].map(h),
           erf: h(z.querySelector('.wf-erf')), erfRegel: h(z.querySelector('[data-erfregel]')),
-          regel: h(regel), tot: Math.round(wf.getBoundingClientRect().bottom + window.scrollY),
+          regel: h(regel), regelInleg: h(z.querySelector('#planInleg')),
+          balkMt: getComputedStyle(z.querySelector('.inleg-balk')).marginTop,
+          tot: Math.round(wf.getBoundingClientRect().bottom + window.scrollY),
           zone: h(z), overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
       });
       const p = PX[w];
@@ -629,15 +639,18 @@ test.describe('g · de hoogte op het toestel', () => {
       expect(d.tot).toBe(p.tot);
       expect(d.zone).toBe(p.zone);
       expect(d.overflow).toBeLessThanOrEqual(1);
-      /* DE WINST STAAT ALS ASSERTIE, want anders zakt hij weg als detail. De v317-kaart staat hier
-         als getal en niet als meting: die versie is niet meer te draaien. */
-      expect(d.kaart).toBeLessThanOrEqual(p.v317kaart + 3);
+      /* WAT DEZE RONDE UITGEEFT STAAT ALS ASSERTIE, want anders zakt het weg als detail. De
+         v318-kaart staat hier als getal en niet als meting: die versie is niet meer te draaien. */
+      expect(d.regelInleg).toBe(18);
+      expect(d.balkMt).toBe('4px');
+      expect(d.kaart - p.v318kaart).toBe(15);
     });
   }
 
   /* DE WATERVAL PAST OP BEIDE BREEDTES BOVEN DE VOUW. Bij v317 eindigde de laatste bestemming op
-     566 van 567, met EEN pixel marge; de tussenvorm van deze ronde (alle tekst in een eigen
-     rasterrij) eindigde op 737 en viel er dus onder. */
+     566 van 567, met EEN pixel marge; de tussenvorm van v318 (alle tekst in een eigen rasterrij)
+     eindigde op 737 en viel er dus onder. Bij v318 was het 548 van 567; met de inleg-regel van v319
+     is het 564, dus 3px marge. De eis blijft dezelfde eis en is niet verzwakt (v251). */
   test('de waterval blijft op beide breedtes boven de vouw', async ({ page }) => {
     const uit = {};
     for (const [w, h] of [[360, 640], [390, 844]]) {
@@ -687,7 +700,7 @@ test.describe('g · de hoogte op het toestel', () => {
       expect(uit[w].kolommen, w + ' kolommen').toBe(3);
       expect(uit[w].teksten[0], w + ' hoogste tekst').toBe(212);
       expect(uit[w].wf, w + ' wf').toBe(366);
-      expect(uit[w].kaart, w + ' kaart').toBe(593);
+      expect(uit[w].kaart, w + ' kaart').toBe(608);   // v318: 593, plus de 15px van de inleg-regel
       expect(uit[w].erf, w + ' strook').toBe(24);          // twee lijnen in plaats van een
       expect(uit[w].regels, w + ' regels').toEqual([A, A]);  // twee gevers, een ontvanger
     }

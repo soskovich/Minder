@@ -83,7 +83,10 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   meer de enige ingang: `coachLeak()` levert ook een patroonregel op Inzichten. Twee ingangen naar
   hetzelfde gesprek, maar nooit voor hetzelfde geval. Draagt sinds `v258` ook `contantKaart()`, maar
   alleen als er iets te tellen is (`contantVraagt()`); geen opname en geen telling is zwijgen.
-- **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Plan rekent in **maandtempo**
+- **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Draagt sinds `v319` onder de
+  inleg-kop wat er deze maand werkelijk opzij ging (`planInlegRegel()`, uit `savedNet()`) en op de
+  vrij-regel een tweede knop die het niet-toegewezen spaargeld verdeelt zoals de waterval het zou
+  doen (`openSpaarVerdeel()`). Plan rekent in **maandtempo**
   (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
   restant van déze maand. Beide kloppen; wat ze verbindt hoort op Plan te staan en nergens anders.
   Draagt sinds `v318` de VERTAKTE WATERVAL: de inlegbalk bovenaan, de vaten naast elkaar op schaal
@@ -103,6 +106,91 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE WERKELIJKE INLEG STAAT NAAST DE INGESTELDE, UIT DEZELFDE BRON ALS INZICHTEN** (`v319`): de cap
+  op Plan is `monthlySavingTarget()` en dus een INSTELLING met drie takken (een vast bedrag, een
+  percentage van je inkomen, of inkomen min budget), en hij leest geen enkele boeking. GEMETEN op een
+  fixture met de vorm van het toestel: bij een werkelijke inleg van 2.200, 900 en NUL was de hele
+  waterval-kaart KARAKTER VOOR KARAKTER gelijk - dezelfde cap, dezelfde alloc, dezelfde eta - en geen
+  woord op het scherm noemde het verschil. `planInlegRegel()` leest `savedNet(thisYM())`, dezelfde
+  bron als de post "Nog te sparen" op Inzichten, die hem via `safeToSpend().savedThisMonth` leest.
+  GEEN TWEEDE TELLING, en dat staat als bronzoekende assertie vast: de functie noemt `savedNet(` en
+  telt zelf geen boeking.
+  DRIE VORMEN, DEZELFDE ALS DE POST OP INZICHTEN (`v262`): op of boven je instelling staat er wat je
+  opzij zette, eronder staat het NAAST je instelling ("deze maand EUR 900 van EUR 2.200 opzij"), en
+  onder nul staat er wat je eruit haalde. HET WOORD 'GEHAALD' BLIJFT OP INZICHTEN: daar gaat de post
+  OVER het maandbedrag, hier staat de instelling een regel hoger al en zou het een tweede oordeel over
+  hetzelfde getal zijn (`v104`).
+  HIJ STAAT ER OOK OP NUL, want dat is een meting (`v59`/`v73`/`v173`). ONBEKEND IS GEEN NUL: zonder
+  bekende meting (`savedNet()` is `null`) staat de regel er niet, en bij de TERUGVAL op
+  `noodfondsModel().comfortTot` ook niet, want dan is de cap niet je spaarinleg en zou "van EUR X" het
+  verkeerde getal noemen. GEEN AMBER (`v78`/`v93`): de regel stelt vast en vraagt geen aandacht.
+  DE PRIJS IS 15px NETTO EN NIET 20, en die 5px is geen cosmetiek maar de reden dat de waterval boven
+  de vouw blijft: de balk had 9px marge om hem van de KOP te scheiden, en met een regel ertussen doet
+  die regel dat al. GEMETEN: met de volle 20px eindigt de waterval op 569px bij een vouw van 567 op
+  360x640, en met 15px op 564, dus 3px marge (`v318` had 19, `v317` had 1). De kaart gaat van 509 naar
+  524px op beide breedtes, en met drie doelen van 593 naar 608.
+  TWEE ANDERE PLEKKEN ZIJN GEMETEN EN VERWORPEN, en dat hoort erbij omdat de opdracht "naast de
+  EUR 2.200 per maand" zei: als achtervoegsel ACHTER het bedrag in dezelfde rij breekt die rij over
+  twee regels (20 -> 41px) en kost het dus EXACT dezelfde 20px, en als tweede regel in de linkerkolom
+  wordt de rij 102px en de kaart 590. Het is dus geen keuze tussen 20px en nul. Dat is `v309` in
+  spiegelbeeld: daar was het achtervoegsel in de kop gratis, hier niet, want deze rij draagt een lang
+  label en beide delen staan op `fs-md`.
+  WAT ER NIET IN DEZE RONDE ZIT, op verzoek: de datums laten MEEBEWEGEN met een lagere werkelijke
+  inleg. De regel stelt het verschil vast; de projectie rekent onveranderd met de instelling.
+- **HET VRIJE SPAARGELD IS IN EEN TIK TE VERDELEN ZOALS DE WATERVAL HET ZOU DOEN** (`v319`): er stond
+  geld op de spaarrekening dat aan geen bestemming was toegewezen, en de enige handeling ervoor was
+  `spaarVrijToe()`, die ALLES naar het bovenste lopende doel zet. GEMETEN op de stand van het toestel:
+  EUR 9.000 niet toegewezen terwijl BEIDE doelen "te laat" lazen.
+  `spaarVerdeelVoorstel()` LEENT `planVerdeelMaand()` MET HET VRIJE BEDRAG ALS CAP, en dat is de vorm
+  van `v285`/`v315`: de verdeling staat binnen, de SCOPE komt van de aanroeper. Er komt geen tweede
+  verdeling naast (`v104`), en `planGrendelVan()` gaat mee, want de buffer gaat voor (`v242`): zonder
+  die grendel zou het vrije geld langs een lege buffer naar het eerste doel gaan.
+  DE NIEUWE VOL-DATUM KOMT UIT `planVooruit()` OP DE STAND NA DE TOEWIJZING, dezelfde projectie als
+  het datumpaar in elk vat (`v307`), met alleen de toewijzing opgehoogd. De OUDE datum staat ernaast
+  zodra hij verschuift, want zonder hem is "vol in feb 2027" een getal zonder gevolg. Een rij die na
+  de toewijzing op nul rest staat is VOL en heeft geen datum: `planVooruit()` zet geen entry voor een
+  rij die geen alloc meer vraagt, dus zonder dat onderscheid zou juist het doel dat je net vol maakt
+  "geen vol-datum" lezen.
+  DE PROJECTIE LOOPT OP JE MAANDINLEG EN NIET OP HET VRIJE BEDRAG, want dat laatste is eenmalig: wat
+  er na deze handeling per maand bij komt is `planCapacity()`.
+  EEN AFLOS-ITEM DOET NIET MEE (`v100`/`v307`): zijn voortgang volgt uit de restschuld en zijn alloc
+  blijft voor altijd staan, dus spaargeld eraan toewijzen is een andere handeling.
+  DE TWEEDE KNOP STAAT ER ALLEEN ALS HIJ IETS ANDERS DOET DAN DE EERSTE (`v61`): raakt het voorstel
+  maar EEN bestemming, dan zet de waterval net als `spaarVrijToe()` het hele bedrag daarheen en zijn
+  de twee handelingen per constructie gelijk. `spaarVerdeelMag()` eist daarom meer dan een regel.
+  NOOIT VANZELF, EN HET GEVOLG STAAT ERVOOR (`MECHANISM_SPEC.defaultEffect`): de sheet toont per
+  bestemming het bedrag EN de nieuwe vol-datum, en pas "Zo verdelen" schrijft. Het voorstel zelf
+  schrijft niets, en dat staat als eigen assertie vast.
+  DE SCHRIJVER TELT OP EN LEEST HET VOORSTEL OPNIEUW. Optellen, want wat er al was toegewezen is een
+  keuze van jou; opnieuw lezen, want tussen het openen en het bevestigen kan er een import of een
+  saldo binnenkomen en dan is het bewaarde bedrag niet meer het bedrag dat je zag (een bron, ook over
+  de tijd). GEMETEN: met een saldo dat tussen die twee momenten van 9.000 naar 4.000 gaat verdeelt hij
+  3.600/400 en niet 8.100/900.
+  OP DE STAND VAN HET TOESTEL GEVEN DE TWEE KNOPPEN DEZELFDE DATUMS EN ANDERE BEDRAGEN, en dat is
+  gemeten en niet aangenomen: beide komen op feb 2027 en mrt 2027 uit, maar knop 1 zet 9.000/0 en knop
+  2 8.100/900. EEN TEST OP ALLEEN DE DATUMS ONDERSCHEIDT ZE DUS NIET (meetles a), en de bedragen staan
+  er daarom als eigen assertie bij.
+  DE PRIJS IS 18px OP 360px EN NUL OP 390px: de twee knoppen op de vrij-regel passen op 390 naast
+  elkaar en breken op 360 over twee regels. De sheet is 403px op 360x640.
+- **BLOK 5 ZEGT WELKE TAK HET GETAL MAAKTE, EN WAT ER WERKELIJK OPZIJ GING** (`v319`): uit de uitkomst
+  van `monthlySavingTarget()` alleen is niet te zien of hij een instelling, een percentage of inkomen
+  min budget was, en dat is precies de vraag die je stelt zodra het getal je verbaast. Het blok drukt
+  `SET.savingMode` af met de INVOER van de gekozen tak, plus `SET.autoIncome` en `planCapTerugval()`,
+  en rekent de uitkomst niet na (`v244`).
+  ERNAAST STAAT `savedNet()` PER MAAND EN PER REKENING over de laatste twee maanden, met het verschil
+  tegen `planCapacity()`, plus de regel die Plan daaruit toont. En wat de TWEE KNOPPEN met het vrije
+  geld doen, uit `spaarVerdeelVoorstel()` zelf: welke uitkomst dat is hangt aan je verdeelmodi en is
+  uit het scherm alleen niet na te rekenen.
+  `savedPerRek(ym)` IS DE ENE GROEPERING, MET TWEE LEZERS (`v104`): blok 14 droeg die lus al en blok 5
+  had hem nodig, dus hij is ERUIT GELICHT en niet gekopieerd. Hij rondt NIET af, want blok 14 draagt
+  centen om de keuze van `v271` te kunnen meten (de som wordt een keer afgerond en niet per rij).
+  WAT BLOK 14 ERBIJ DOET STAAT DAAR EN WORDT HIER NIET HERHAALD: de aansluiting op `savedNet()` en de
+  onttrekkingen over drie maanden (`v303`).
+- **OBSERVATIE, NIET VERANDERD: DE `G`-PARAMETER VAN `planVooruit()` IS DOOD** (`v319`): hij neemt een
+  grendel mee en herberekent hem per maand zelf met `planGrendelVan()`, dus de meegegeven waarde doet
+  niets. Dat is sinds `v307` zo en het is correct gedrag (de grendel MOET per maand bewegen); wat
+  misleidt is de parameter. Wie hem weghaalt raakt de twee bestaande aanroepers en `planTerugval()`,
+  en dat is een eigen ronde.
 - **DE VATEN STAAN NAAST ELKAAR EN OP SCHAAL VAN HET DOELBEDRAG** (`v318`): Plan zette de
   bestemmingen onder elkaar met een horizontale tak per rij, en dat was niet de opbouw van het
   ontwerp. Ze staan nu in een raster met de tak recht boven elk vat, hangend aan de inlegbalk.
@@ -206,6 +294,9 @@ genoemde versietag.)*
   DE WATERVAL PAST OP BEIDE BREEDTES BOVEN DE VOUW: hij eindigt op 548px bij een vouw van 567 op
   360x640 en 771 op 390x844. `v317` eindigde op 566 van 567, dus met EEN pixel marge; dat is nu 19.
   De tussenvorm eindigde op 737 en viel er dus onder, en dat is gemeld voordat er iets is ingekort.
+  BIJ `v319` IS DIT 524px EN 564px: de inleg-regel kost 15px netto, de marge op 360 gaat van 19 naar
+  3, en met drie doelen is de kaart 608 in plaats van 593. De getallen hierboven zijn de stand van
+  `v318`; zie de v319-regel bovenaan voor wat er bij komt en waarom het 15 en niet 20 is.
   ER IS NIETS INGEKORT, en dat is de hele vorm van deze ronde: de hoogte is weggehaald door de tekst
   op zijn plek te zetten en niet door woorden te schrappen.
   VIJFTIEN SABOTAGES OP DE EERSTE VORM, ALLE VIJFTIEN ROOD, en twee pas na een reparatie: de
@@ -4879,7 +4970,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v318` → `minder-v319`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v319` → `minder-v320`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -4897,7 +4988,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 (een besluit en een open punt), dus hij bumpt niet, en `v313` raakt app-code en gaat daarom van
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
-`minder-v317` en `v318` naar `minder-v318`.
+`minder-v317`, `v318` naar `minder-v318` en `v319` naar `minder-v319`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

@@ -2497,6 +2497,18 @@ function savedTx(ym){
   if(sav.size) return txOfMonth(ym).filter(t=>sav.has(t.acc));
   return txOfMonth(ym).filter(t=>catOf(t)==='sparen'&&t.amount<0);
 }
+/* v319: DE RIJEN ACHTER savedNet(), PER REKENING. Deze groepering stond uitgeschreven in blok 14
+   en blok 5 heeft hem ook nodig, want dat blok moet zeggen waar de meting naast je inleg-instelling
+   vandaan komt. Twee kopieen van dezelfde groepering lopen bij de eerste wijziging uiteen (v104).
+   DE BRON IS savedTx(), dus de rijen tellen per constructie op tot savedNet() van diezelfde maand.
+   Blok 14 TOETST die aansluiting en rekent hem niet na; daarom geeft deze functie de bedragen
+   ONAFGEROND terug (v271/v302): rondt de lezer per rij af, dan kan de som een euro afwijken, en dat
+   verschil hoort zichtbaar te zijn in plaats van weggerekend. */
+function savedPerRek(ym){
+  const per={};
+  for(const t of savedTx(ym)){ const a=String(t.acc||'-'); per[a]=(per[a]||0)+(+t.amount||0); }
+  return Object.keys(per).sort((x,y)=>per[x]-per[y]).map(a=>({acc:a, bedrag:per[a]}));
+}
 /* Waar kwam je spaarinleg vandaan? (v117) De spaarquote meet wat er naar je spaarrekening ging,
    niet waar dat geld vandaan kwam. Stort je meer dan je die maand overhield, dan kwam het verschil
    uit je buffer: je zette wel geld opzij, maar je vermogen groeide er niet mee - en dan kan de
@@ -7148,6 +7160,35 @@ function planCapTerugval(){
   try{ return !(Math.round(monthlySavingTarget()||0)>0) && planCapacity()>0; }catch(_){ return false; }
 }
 function planCapLabel(){ return planCapTerugval()?'comfortabele ruimte':'spaarinleg'; }
+/* v319: WAT ER WERKELIJK OPZIJ GING, NAAST WAT JE HEBT INGESTELD.
+   De cap op Plan is een INSTELLING (monthlySavingTarget(): een eigen bedrag, een percentage van je
+   inkomen, of inkomen min budget) en leest geen enkele boeking. Deze regel is de METING ernaast, uit
+   savedNet(thisYM()) - dezelfde bron als de post "Nog te sparen" op Inzichten, die hem via
+   safeToSpend().savedThisMonth leest. Er komt dus geen tweede telling bij (v104).
+   HIJ ZEGT HET ALS FEIT EN NIET ALS TEKORT: geen amber en geen rood (v78/v93), en geen handeling.
+   Minder opzij zetten dan je instelling is geen fout; het is wat er gebeurde. Wat het KOST staat
+   bewust nog nergens: de datums rekenen door met de instelling, en dat meebewegen is een eigen ronde.
+   NIETS BIJ EEN ONBEKENDE INLEG. savedNet() geeft null zodra er geen rekening als spaarrekening is
+   aangewezen EN er geen boeking op de categorie sparen staat, en dan is er niets gemeten
+   (v59/v73/v173). Dat is een BEWUST verschil met Inzichten: safeToSpend() leest diezelfde null als
+   nul, want daar gaat het getal in `safe` en is nul de voorzichtige kant (v168). Hier zou nul een
+   meting beweren die er niet is.
+   EN NIETS OP DE TERUGVAL. Is planCapTerugval() waar, dan is de cap niet je spaarinleg maar
+   comfortTot, en savedNet() daarnaast zetten zou twee verschillende grootheden vergelijken. */
+function planInlegRegel(){
+  if(planCapTerugval()) return '';
+  const cap=planCapacity(); if(!(cap>0)) return '';
+  let n=null; try{ n=savedNet(thisYM()); }catch(_){}
+  if(n==null) return '';
+  /* Drie vormen, dezelfde als de post op Inzichten (v262): boven of op je instelling staat er wat
+     je opzij zette, eronder staat het naast je instelling, en onder nul staat er wat je eruit haalde.
+     Het woord 'gehaald' blijft op Inzichten: daar gaat de post OVER het maandbedrag, hier staat de
+     instelling er een regel hoger al en zou het een tweede oordeel over hetzelfde getal zijn. */
+  const txt = n<0   ? `deze maand ${euro0(-n)} eruit gehaald`
+            : n>=cap ? `deze maand ${euro0(n)} opzij`
+            :          `deze maand ${euro0(n)} van ${euro0(cap)} opzij`;
+  return `<div id="planInleg" class="small" data-inleg="${n}" data-cap="${cap}" style="color:var(--mut);margin:2px 0 0">${txt}</div>`;
+}
 function planCapacity(){
   let cap=Math.round(monthlySavingTarget()||0);
   if(!(cap>0)){ try{ cap=Math.round(noodfondsModel().comfortTot||0); }catch(_){} }
@@ -7746,9 +7787,14 @@ function spaarVrijLine(P){
   const txt=kort
     ? `${euro0(V.vrij)} is nog niet toegewezen.`
     : `Er staat ${euro0(V.vrij)} op je spaarrekening dat aan geen enkel item in je plan is toegewezen.`;
-  const cta=t
+  /* v319: TWEE HANDELINGEN NAAST ELKAAR. De eerste zet alles op het bovenste lopende doel, de tweede
+     verdeelt het zoals je plan dat zou doen. De tweede staat er alleen als hij een ANDERE uitkomst
+     geeft; zie spaarVerdeelMag(). */
+  const verdeel=spaarVerdeelMag(P)
+    ? `<span style="color:var(--teal);font-weight:600;cursor:pointer;margin-left:12px;white-space:nowrap" onclick="event.stopPropagation();openSpaarVerdeel()">Verdeel volgens je plan ›</span>` : '';
+  const cta=(t
     ? `<span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="event.stopPropagation();spaarVrijToe('${t.id}')">toewijzen aan ${esc(t.naam)} ›</span>`
-    : `<span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="event.stopPropagation();openGoal()">voeg een doel toe ›</span>`;
+    : `<span style="color:var(--teal);font-weight:600;cursor:pointer" onclick="event.stopPropagation();openGoal()">voeg een doel toe ›</span>`)+verdeel;
   return `<div class="card spaar-vrij" style="border-left:3px solid var(--teal);border-radius:0 16px 16px 0;padding:12px 14px;margin:0 0 9px">
     <div class="small" style="line-height:1.5">${txt}</div>
     <div class="small" style="margin-top:6px">${cta}</div></div>`;
@@ -7771,6 +7817,106 @@ function spaarVrijToe(id){
   g.gespaard=Math.round((+g.gespaard||0)+bij);
   save(); render();
   toast(`${ICON('check')} ${euro0(bij)} toegewezen aan ${g.naam||'je doel'}`);
+}
+/* v319: HET VRIJE SPAARGELD VERDELEN ZOALS DE WATERVAL DAT ZOU DOEN.
+   De bestaande knop zet het hele vrije bedrag op EEN doel, het bovenste lopende (spaarVrijDoel()).
+   Dat is de snelste handeling en niet de verdeling die je zelf hebt ingesteld: met twee doelen op
+   90/10 zet hij alles op het eerste. Deze route leent DEZELFDE planVerdeelMaand() als
+   allocatePlan() en planVooruit(), met het VRIJE BEDRAG als cap in plaats van je maandinleg. Er
+   komt dus geen tweede verdeling naast (v104); de SCOPE komt van de aanroeper (v285).
+   DE GRENDEL GELDT OOK HIER, en dat is geen keuze maar een gevolg: planGrendelVan() krijgt diezelfde
+   cap, dus een buffer die nog niet vol is pakt het vrije geld eerst, precies zoals een maandinleg.
+   EEN AFLOS-ITEM DOET NIET MEE, om de reden van v100: zijn voortgang volgt uit de restschuld en is
+   geen toewijzing die je mag ophogen. spaarOverItems() en spaarVrijDoel() sluiten hem om precies
+   diezelfde reden uit, dus dit is geen derde afbakening. Wat de waterval hem zou geven zakt daarmee
+   door naar de volgende bestemming, en dat is wat er ook werkelijk gebeurt: geld op je spaarrekening
+   lost geen schuld af door toegewezen te worden. */
+function spaarVerdeelRijen(P){
+  return (P||allocatePlan()).filter(p=>p.type==='goal'||p.type==='noodfonds');
+}
+/* Het voorstel: per bestemming het bedrag en de vol-datum die eruit volgt. Hij SCHRIJFT NIETS; de
+   gevolgen staan op het scherm voordat je bevestigt (MECHANISM_SPEC.defaultEffect). */
+function spaarVerdeelVoorstel(P){
+  let V=null; try{ V=spaarVrij(); }catch(_){ return null; }
+  if(!V||!(V.vrij>0)) return null;
+  P=P||allocatePlan();
+  const mee=spaarVerdeelRijen(P);
+  if(!mee.length) return null;
+  const rows=mee.map(p=>({id:p.id, type:p.type, mode:p.mode, perMaand:p.perMaand, pct:p.pct,
+    doel:Math.max(Math.round(+p.doel||0),0), rest:Math.max(Math.round(+p.rest||0),0),
+    nfOnbekend:!!p.nfOnbekend,
+    status:(p.status==='gepauzeerd')?'gepauzeerd':(Math.round(+p.rest||0)<=0?'bereikt':'')}));
+  planVerdeelMaand(rows, V.vrij, planGrendelVan(rows.find(r=>r.type==='noodfonds'), V.vrij));
+  const bij={}; let som=0;
+  for(const r of rows){ const a=Math.max(Math.round(+r.alloc||0),0); if(a>0){ bij[r.id]=a; som+=a; } }
+  if(!(som>0)) return null;
+  /* DE NIEUWE VOL-DATUM KOMT UIT DEZELFDE PROJECTIE als het datumpaar in elk vat (v307), met alleen
+     de toewijzing opgehoogd. Dat is de vorm van normGevolgen() bij v315: de functie kiest de SCOPE
+     en herrekent de keten niet. De projectie loopt op je MAANDINLEG, want dat is wat er na deze
+     handeling per maand bij komt; het vrije bedrag is eenmalig. */
+  let cap=0; try{ cap=planCapacity(); }catch(_){}
+  const na=P.map(p=>{ const b=bij[p.id]||0; if(!b) return p;
+    return Object.assign({},p,{gespaard:Math.round((+p.gespaard||0)+b),
+      rest:Math.max(Math.round((+p.rest||0)-b),0)}); });
+  let voorV={}, naV={};
+  try{ voorV=planVooruit(P,cap)||{}; }catch(_){}
+  try{ naV=planVooruit(na,cap)||{}; }catch(_){}
+  const regels=[];
+  for(const p of mee){
+    const b=bij[p.id]; if(!b) continue;
+    const r=na.find(x=>x.id===p.id);
+    /* rest nul na de toewijzing is VOL en geen ontbrekende datum: planVooruit() zet geen entry voor
+       een rij die al op nul staat, want die krijgt geen alloc meer. Zonder dit onderscheid zou juist
+       het doel dat je net vol maakt "geen vol-datum" lezen. */
+    const eta=(r && r.rest<=0)?0:(naV[p.id]!=null?naV[p.id]:null);
+    regels.push({id:p.id, naam:p.naam, bij:b, type:p.type,
+      etaVoor:(voorV[p.id]!=null?voorV[p.id]:null), eta,
+      datum:(eta===0)?'':(eta?etaDatum(eta):'')});
+  }
+  return {vrij:V.vrij, som, rest:Math.max(V.vrij-som,0), regels};
+}
+/* De tweede knop staat er alleen als hij iets ANDERS doet dan de eerste. Raakt het voorstel maar EEN
+   bestemming, dan zet de waterval net als spaarVrijToe() het hele bedrag daarheen en zijn de twee
+   handelingen per constructie gelijk; een tweede knop die hetzelfde doet is een keuze zonder verschil. */
+function spaarVerdeelMag(P){ const V=spaarVerdeelVoorstel(P); return !!(V&&V.regels.length>1); }
+function openSpaarVerdeel(){ renderSpaarVerdeelSheet(); showSheetBg(); }
+function renderSpaarVerdeelSheet(){
+  const V=spaarVerdeelVoorstel();
+  if(!V){ closeSheet(); return; }
+  const rijen=V.regels.map(r=>{
+    /* De OUDE vol-datum staat ernaast zodra hij verschuift: zonder hem is "vol in feb 2027" een
+       getal zonder gevolg, en het gevolg is juist wat deze sheet moet tonen. */
+    const nu=(r.etaVoor!=null&&r.eta!=null&&r.etaVoor>r.eta)?etaDatum(r.etaVoor):'';
+    const sub=(r.eta===0)?'daarmee vol'
+      :(r.datum?`vol in ${r.datum}${nu?` · nu ${nu}`:''}`:'nog geen vol-datum te geven');
+    return `<div class="row" data-verdeel="${r.id}" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><div style="font-size:var(--fs-md);font-weight:600;overflow-wrap:anywhere">${esc(r.naam)}</div>
+        <div class="small muted" data-verdeeldatum="${r.id}">${sub}</div></div>
+      <div data-verdeelbedrag="${r.id}" style="font-weight:800;white-space:nowrap">+ ${euro0(r.bij)}</div></div>`;
+  }).join('');
+  const over=V.rest>0
+    ? `<div class="small muted" style="margin-top:9px">${euro0(V.rest)} blijft staan: je bestemmingen hebben samen niet meer nodig.</div>`
+    : '';
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg);flex:1">Verdeel volgens je plan</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Annuleer</span></div>
+    <div class="card"><div class="small" style="line-height:1.5;margin-bottom:4px">${euro0(V.vrij)} staat nog niet toegewezen. Dit is wat je plan ermee zou doen.</div>
+      ${rijen}${over}</div>
+    <button class="btn" style="width:100%;margin-top:10px" onclick="spaarVerdeelDoen()">Zo verdelen</button>
+    <div class="small muted" style="margin-top:8px;line-height:1.45">Je verandert hiermee alleen wat er aan elke bestemming is toegewezen. Je spaarrekening blijft zoals hij is, en je kunt het per doel weer aanpassen.</div>`;
+}
+/* De schrijver. Hij leest het voorstel OPNIEUW in plaats van het bij het openen te onthouden: tussen
+   het openen en het bevestigen kan er een import of een saldo binnenkomen, en dan is het bewaarde
+   bedrag niet meer het bedrag dat je zag. Eén bron, ook over de tijd (v104). */
+function spaarVerdeelDoen(){
+  const V=spaarVerdeelVoorstel();
+  if(!V){ closeSheet(); render(); return; }
+  for(const r of V.regels){
+    if(r.id===PLAN_NF){ SET.nfToegewezen=Math.max(Math.round(+SET.nfToegewezen||0),0)+r.bij; continue; }
+    const g=(SET.goals||[]).find(x=>x.id===r.id); if(!g) continue;
+    g.gespaard=Math.round((+g.gespaard||0)+r.bij);
+  }
+  save(); closeSheet(); render();
+  toast(`${ICON('check')} ${euro0(V.som)} verdeeld over ${V.regels.length} bestemmingen`);
 }
 // waar stel je het maandbedrag/percentage van dít item in?
 function planAllocOpen(it){
@@ -8350,11 +8496,18 @@ function renderPlan(bare){
      GEMETEN bij een bestemming op 0,5 procent: hetzelfde segment werd 2,98px in de balk en 3px in de
      tak, en het grote segment 297,02 tegen 298,5. Dezelfde getallen, twee geometrieen. Nu lezen beide
      `van` en `breed` op dezelfde manier, en is het verschil per constructie nul. */
-  const balk=cap>0?`<div class="bar-track inleg-balk" style="margin:9px 0 1px">
+  /* v319: DE BALK HOUDT ZIJN AFSTAND TOT DE KOP EN NIET TOT DE REGEL ERTUSSEN. Zijn 9px bestond om
+     hem van de kop te scheiden, en met de inleg-regel ertussen doet die regel dat al; 9px erbovenop
+     zet een gat van 29px tussen twee getallen die bij elkaar horen. GEMETEN wat het oplevert: 5px,
+     en dat is precies wat de waterval op 360x640 weer boven de vouw brengt (569 van 567 naar 564). */
+  const inlegRegel=planInlegRegel();
+  const balk=cap>0?`<div class="bar-track inleg-balk" style="margin:${inlegRegel?4:9}px 0 1px">
       ${SEG.segs.filter(s=>s.alloc>0).map(s=>`<div class="bar-fill" data-seg="${s.id}" style="left:${s.van.toFixed(2)}%;width:${s.breed.toFixed(2)}%;background:${tints[s.id]};border-radius:0"></div>`).join('')}
       ${SEG.vrij>0.05?`<div class="bar-fill" data-seg="vrij" style="left:${(100-SEG.vrij).toFixed(2)}%;width:${SEG.vrij.toFixed(2)}%;background:var(--card2);border-radius:0"></div>`:''}
     </div>`:'';
-  const kopBalk=`<div class="row"><span style="font-weight:600;font-size:var(--fs-md)">Te verdelen uit je ${planCapTerugval()?'comfortabele ruimte':jrg('spaarinleg','spaarinleg')} ${noteIcon('planUitleg','hoe dit plan verdeelt')}</span><span style="font-weight:800;font-size:var(--fs-md);color:${cap>0?'var(--teal)':'var(--mut)'}">${cap>0?`${euro0(cap)}/mnd`:'nog niet bekend'}</span></div>${balk}`;
+  /* v319: de werkelijke inleg staat DIRECT onder de twee getallen die hij vergelijkt, en boven de
+     balk: de balk verdeelt de INSTELLING, dus de meting hoort ertussen en niet eronder. */
+  const kopBalk=`<div class="row"><span style="font-weight:600;font-size:var(--fs-md)">Te verdelen uit je ${planCapTerugval()?'comfortabele ruimte':jrg('spaarinleg','spaarinleg')} ${noteIcon('planUitleg','hoe dit plan verdeelt')}</span><span style="font-weight:800;font-size:var(--fs-md);color:${cap>0?'var(--teal)':'var(--mut)'}">${cap>0?`${euro0(cap)}/mnd`:'nog niet bekend'}</span></div>${inlegRegel}${balk}`;
   /* Niets blijft liggen, en het staat er ook wanneer er niets overblijft: dat is de sluitpost van
      de waterval, en een sluitpost die alleen bij een positief bedrag verschijnt laat je raden of
      hij er niet was of dat hij nul was. Een keuze staat er alleen als er iets te kiezen valt. */
@@ -15671,6 +15824,75 @@ function diagGrendel(){
   L.push('planGrendelDatum(): '+_dV(()=>planGrendelDatum()));
   L.push('planCapacity(): '+_dV(()=>planCapacity()));
   L.push('monthlySavingTarget(): '+_dV(()=>monthlySavingTarget()));
+  /* v319: WELKE TAK DAT GETAL MAAKTE. planCapacity() stond hier als uitkomst zonder herkomst, en
+     monthlySavingTarget() heeft drie vormen die niets met elkaar te maken hebben: een eigen bedrag
+     (een instelling), een percentage van je inkomen, of inkomen min budget. Uit de uitkomst alleen
+     is niet te zien welke het was, en dat is precies de vraag die je stelt zodra het getal je
+     verbaast. GEEN TWEEDE BEREKENING: het blok drukt de INVOER van de gekozen tak af en rekent de
+     uitkomst niet na (v244). */
+  const mode=String(SET.savingMode||'auto');
+  const inkAuto=!!SET.autoIncome;
+  L.push('SET.savingMode: '+mode+'   <- welke tak monthlySavingTarget() leest');
+  if(mode==='amount')       L.push('   amount  -> SET.savingAmount: '+_dV(()=>+SET.savingAmount||0)+'   een INSTELLING, geen meting');
+  else if(mode==='percent') L.push('   percent -> SET.savingPercent: '+_dV(()=>+SET.savingPercent||0)+'%  van '
+                              +(inkAuto?'baseIncome(): '+_dV(()=>baseIncome()):'SET.income: '+_dV(()=>+SET.income||0)));
+  else                      L.push('   auto    -> '+(inkAuto?'baseIncome(): '+_dV(()=>baseIncome()):'SET.income: '+_dV(()=>+SET.income||0))
+                              +' min monthBudget(): '+_dV(()=>monthBudget(inkAuto?baseIncome():(+SET.income||0))));
+  L.push('SET.autoIncome: '+(inkAuto?'aan (baseIncome(), gemeten)':'uit (SET.income, een instelling)'));
+  L.push('planCapTerugval(): '+_dV(()=>planCapTerugval())
+    +'   waar = de cap is NIET je spaarinleg maar noodfondsModel().comfortTot');
+  L.push('');
+  /* v319: EN WAT ER WERKELIJK OPZIJ GING. Tot deze ronde las Plan nergens een boeking, dus de cap
+     hierboven en je gedrag konden onbeperkt uiteenlopen zonder dat iets het zei. De regel onder de
+     kop leest savedNet(), dezelfde bron als de post "Nog te sparen" op Inzichten; dit blok drukt
+     dat getal af met de rijen eronder, zodat een verschil te plaatsen is.
+     DE RIJEN KOMEN UIT savedPerRek(), dezelfde groepering die blok 14 leest (v104). Wat blok 14 er
+     daar bij doet is de AANSLUITING op savedNet() en de onttrekkingen over drie maanden; dat staat
+     daar en wordt hier niet herhaald. */
+  L.push('WAT ER WERKELIJK OPZIJ GING, uit savedNet() - dezelfde bron als "Nog te sparen" op Inzichten');
+  const meetelR=_dT(()=>n26SavingsAccounts(),[]);
+  L.push('   tak: '+(meetelR.length
+    ? 'de rekening-tak, elk bedrag op '+meetelR.length+' meegetelde rekening(en), ongeacht de categorie'
+    : 'de TERUGVAL: geen rekening telt mee, dus de afschrijvingen naar de categorie sparen'));
+  const mm=_dT(()=>months(),[]).slice(-2);
+  if(!mm.length) L.push('   (geen maand in je gegevens)');
+  for(const m of mm){
+    const n=_dT(()=>savedNet(m),null);
+    const c=_dT(()=>planCapacity(),0);
+    L.push('   '+m+(m===_dT(()=>thisYM(),'')?' (deze maand)':'')
+      +'   savedNet(): '+(n==null?'onbekend':n)
+      +'   planCapacity(): '+c
+      +(n==null?'':'   verschil: '+(n-c)));
+    for(const r of _dT(()=>savedPerRek(m),[]))
+      L.push('       '+String(r.acc).slice(0,21).padEnd(22)+String(Math.round(r.bedrag)).padStart(10)
+        +'   '+(r.bedrag<0?'ERUIT':'erin'));
+  }
+  L.push('   de regel die Plan hieruit toont (planInlegRegel()):');
+  L.push('     '+_dS(()=>{ const h=planInlegRegel();
+    return h?String(h).replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim()
+            :'(geen regel: onbekende inleg, geen cap, of de terugval op comfortTot)'; }));
+  L.push('   de per-rekening-aansluiting op savedNet() over drie maanden staat in blok 14, sectie 1.');
+  L.push('');
+  /* v319: EN WAT HET VRIJE SPAARGELD ZOU DOEN. De twee knoppen op de vrij-regel geven een ANDERE
+     uitkomst, en welke dat is hangt aan je verdeelmodi; dat is uit het scherm alleen niet na te
+     rekenen. Het blok LEEST spaarVerdeelVoorstel() en schrijft niets (v244). */
+  const VV=_dT(()=>spaarVerdeelVoorstel(),null);
+  L.push('HET VRIJE SPAARGELD, en wat de twee knoppen ermee doen');
+  L.push('   spaarVrij(): '+_dV(()=>spaarVrij()));
+  const bovenste=_dT(()=>spaarVrijDoel(),null);
+  L.push('   knop 1, spaarVrijToe() -> alles naar het bovenste lopende doel: '
+    +(bovenste?bovenste.naam:'(geen bestemming)'));
+  if(!VV) L.push('   knop 2, Verdeel volgens je plan: geen voorstel (niets vrij, of geen bestemming die iets kan opnemen)');
+  else{
+    L.push('   knop 2, Verdeel volgens je plan - planVerdeelMaand() met '+VV.vrij+' als cap:');
+    for(const r of VV.regels)
+      L.push('       '+String(r.naam).slice(0,21).padEnd(22)+('+'+Math.round(r.bij)).padStart(10)
+        +'   vol in '+(r.eta===0?'nu':(r.datum||'-'))
+        +(r.etaVoor!=null&&r.eta!=null&&r.etaVoor>r.eta?'   (nu '+etaDatum(r.etaVoor)+')':''));
+    L.push('       verdeeld: '+VV.som+'   blijft vrij: '+VV.rest);
+    L.push('   de knop staat op het scherm: '+_dV(()=>spaarVerdeelMag())
+      +'   <- alleen bij meer dan EEN bestemming; met een is hij gelijk aan knop 1');
+  }
   L.push('');
   /* v246: dit las planRegel(), en die functie is opgegaan in planStand() plus het datumpaar in het
      vat. De regel die het scherm toont is nu planStand(), en die wordt hier nog steeds door de app
@@ -18770,16 +18992,16 @@ function diagBuffernorm(){
   if(!ms.length) L.push('     (geen maand in je gegevens)');
   for(const m of ms){
     const lijst=_dT(()=>savedTx(m),[]);
-    const perRek={};
-    for(const t of lijst){ const a=String(t.acc||'-'); perRek[a]=(perRek[a]||0)+(+t.amount||0); }
-    const somRij=Object.keys(perRek).reduce((x,a)=>x+perRek[a],0);
+    /* v319: de groepering staat in savedPerRek() en niet meer hier, want blok 5 leest hem ook. */
+    const rij=_dT(()=>savedPerRek(m),[]);
+    const somRij=rij.reduce((x,r)=>x+r.bedrag,0);
     const netto=_dT(()=>savedNet(m),null);
     L.push('     '+m+'   savedNet(): '+(netto==null?'onbekend':netto)
       +'   som van de rijen: '+Math.round(somRij)
       +'   sluit aan: '+((netto!=null && Math.round(somRij)===netto)?'JA':'NEE'));
-    for(const a of Object.keys(perRek).sort((x,y)=>perRek[x]-perRek[y]))
-      L.push('       '+String(a).slice(0,21).padEnd(22)+String(Math.round(perRek[a])).padStart(10)
-        +'   '+(perRek[a]<0?'ERUIT':'erin'));
+    for(const r of rij)
+      L.push('       '+String(r.acc).slice(0,21).padEnd(22)+String(Math.round(r.bedrag)).padStart(10)
+        +'   '+(r.bedrag<0?'ERUIT':'erin'));
     const eruit=lijst.filter(t=>(+t.amount||0)<0).sort((x,y)=>x.amount-y.amount);
     if(eruit.length){
       L.push('       eruit gehaald: '+eruit.length+' boeking(en), samen '
