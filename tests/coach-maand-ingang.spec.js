@@ -5,6 +5,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR } = require('./budget-fixture');
+const { beslisIngangen } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 
 const overMaanden = (n) => {
   const d = new Date(); d.setMonth(d.getMonth() + n);
@@ -46,6 +47,12 @@ async function maand(page, payload) {
   await page.evaluate(() => go('maand'));
   await page.waitForSelector('#s-maand .card');
 }
+/* v320: de weg naar het gesprek loopt sinds deze ronde via de sheet: de lijstregel is de knop en
+   de vraag staat daarin. Twee tikken, dus het staat hier een keer in plaats van bij elke test. */
+async function opentGesprek(page) {
+  await page.locator('.row[data-beslis]').first().click();
+  await page.locator('#sheet [data-beslisknop]').first().click();
+}
 const wachtKeuze = (page) => page.waitForFunction(
   () => document.querySelectorAll('#coCh .cch').length > 0, null, { timeout: 15000 });
 async function kies(page, txt) {
@@ -62,8 +69,7 @@ const afspraken = async (page) => JSON.parse(await log(page)).filter((l) => l.ty
 test.describe('a · elke regel met een tekort draagt zijn eigen ingang', () => {
   test('één tekort: één ingang, op die regel', async ({ page }) => {
     await maand(page);
-    const h = await page.locator('#s-maand').innerHTML();
-    const keys = [...h.matchAll(/coStart\('maand','[^']*','([^']*)'\)/g)].map((x) => x[1]);
+    const keys = await beslisIngangen(page);   // v320: de ingang staat in de sheet achter de regel
     expect(keys).toEqual(['doel']);
     // de rangorde zelf blijft bestaan voor het gesprek zonder sleutel
     const z = await page.evaluate(() => coMaandZwaarste(maandRegels()));
@@ -77,8 +83,7 @@ test.describe('a · elke regel met een tekort draagt zijn eigen ingang', () => {
     const tekorten = st.filter((x) => x[1] === 'tekort').map((x) => x[0]);
     expect(tekorten.length).toBeGreaterThan(1);
 
-    const h = await page.locator('#s-maand').innerHTML();
-    const keys = [...h.matchAll(/coStart\('maand','[^']*','([^']*)'\)/g)].map((x) => x[1]);
+    const keys = await beslisIngangen(page);   // v320: de ingang staat in de sheet achter de regel
     expect(keys).toEqual(tekorten);           // geen keuze meer, ze staan er allemaal
     expect(keys).toContain('buffer');
     expect(keys).toContain('doel');
@@ -120,7 +125,7 @@ test.describe('b · alles ok, en alleen onbekend', () => {
 test.describe('c · het gesprek', () => {
   test('opent bij die ene regel, in de zin van het scherm, zonder groet', async ({ page }) => {
     await maand(page);
-    await page.locator('#s-maand').getByText(/Wil je kijken|Wil je hier een afspraak/).first().click();   // v224: de ingang staat op de regel zelf
+    await opentGesprek(page);   // v320: eerst de lijstregel, dan de knop in de sheet
     await wachtKeuze(page);
     const draad = await page.locator('#coThr').innerText();
     const R = await page.evaluate(() => coMaandRegel('doel'));
@@ -334,7 +339,7 @@ test.describe('g · de andere ingangen blijven zoals ze waren', () => {
     test(`geen horizontale overflow op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 780 });
       await maand(page);
-      await page.locator('#s-maand').getByText(/Wil je kijken|Wil je hier een afspraak/).first().click();   // v224: de ingang staat op de regel zelf
+      await opentGesprek(page);   // v320: eerst de lijstregel, dan de knop in de sheet
       await wachtKeuze(page);
       const over = await page.evaluate(() => ({
         maand: document.querySelector('#s-maand').scrollWidth - document.querySelector('#s-maand').clientWidth,

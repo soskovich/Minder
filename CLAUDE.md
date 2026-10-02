@@ -76,7 +76,9 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   altijd de lopende maand en heeft geen maandkiezer; de kiezer (`curMonth`, `kijkMaand()`) is van
   Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. Draagt sinds `v235` de
   valt-op-kaarten: dezelfde signalen die Inzichten constateert, met de historie en de handelingen
-  eraan. Sinds `v314` staat de SAMENVATTING daarvoor (hij telt de potjes mee) en staan de handelingen
+  eraan. Sinds `v320` staan de regels in "Vraagt een beslissing" als LIJSTREGEL (de vorm van "Staat
+  goed") met de volle uitleg en de handeling in een sheet erachter; "Vraagt aandacht" houdt de
+  uitgeklapte vorm van `maandRij(r,false)`. Sinds `v314` staat de SAMENVATTING daarvoor (hij telt de potjes mee) en staan de handelingen
   in volgorde van het moment in de maand, met "Zo laten" als eigen actie. Draagt sinds `v315` de kaart
   "Vanaf <maand>" met drie ingangen naar wat er klaarstaat, en toont het logboek de UITKOMST per handeling. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
   de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten. Sinds `v237` is dat niet
@@ -106,6 +108,94 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN BESLISSING IS EEN LIJSTREGEL, EN DE VOLLE TEKST STAAT EEN TIK DIEPER** (`v320`): de kaart
+  'Vraagt een beslissing' droeg per regel de gevolgzin, de suggestie EN de gespreksingang. GEMETEN op
+  de stand van het toestel (dekking EUR 262 tekort, Kosten Koper EUR 163 per maand tekort) was die
+  kaart 623px op 360px en 530px op 390px, dus de tweede beslissing stond 248px onder de vouw: je moest
+  scrollen om te zien wat er nog openstond. Elke regel is nu EEN lijstregel in de vorm van 'Staat goed'
+  (stip, naam, de oorzaak eronder, het tekort rechts, een chevron) en de hele regel opent een sheet.
+  ER VERDWIJNT GEEN TEKST, HIJ VERHUIST: de gevolgzin, de suggestie en de ingang staan in de sheet, en
+  een assertie eist dat de KAART ze niet meer draagt (verplaatsen is nooit kopiëren).
+  `maandBeslisDeel(r)` IS DE ENE BRON VOOR DE OORZAAK EN HET BEDRAG, met de REGEL en de SHEET als twee
+  lezers (`v235`). Dat is geen plichtpleging: die twee getallen staan binnen één tik naast elkaar, dus
+  een tweede uitdrukking loopt precies daar uiteen (`v104`). HET BEDRAG KOMT UIT `maandTekort(r)`, de
+  bron die `v224` daarvoor heeft aangewezen en die de suggestie en de ingang al lezen, en de EENHEID
+  uit zijn `soort`: bij dekking een STAND (`tekort`), bij een doel een MAANDBEDRAG
+  (`per maand tekort`), bij de buffer een TOTAAL (`tot je richtbedrag`). Zonder dat woord lees je een
+  stand als een maandbedrag.
+  DE OORZAAK KOMT PER SOORT UIT EEN VELD DAT ER AL WAS, en staat op de RIJ en niet in de weergave
+  (`maandRij()` leidt niets zelf af, en deze regel evenmin): bij dekking de eerstvolgende post met
+  NAAM, bedrag en maand, bij een doel de streefdatum, bij een doel dat te laat is de maand waarop je
+  buffer vol is (`T.startLabel`), bij de buffer de meting naast de norm, en bij een structureel signaal
+  `l1`. DAT LAATSTE IS EEN ANDERE BESTAANDE STRING DAN DE NAAM (die is `n.kort`), dus er komt geen
+  formulering bij.
+  HET JAARTAL BLIJFT IN DE DEKKINGS-OORZAAK, en dat is gemeten: 'in november' kan 2026 niet van 2027
+  onderscheiden, en met het jaartal blijft de regel op 360px op EEN regel (kolom 227px, rij 49px).
+  Alleen een lange postnaam breekt af naar twee regels (64px), en dat is wat `v281`/`v284` eisen.
+  DE OORZAAK EN HET BEDRAG VAN DE BUFFER LEZEN TWEE VERSCHILLENDE GRENZEN, en dat staat er omdat het
+  geen vergissing is: de rij is rood tegen je NORM en het bedrag is het gat naar je RICHTBEDRAG
+  (`v305` houdt die twee met opzet apart). Beide noemen daarom hun eigen noemer (`v91`), en de volle
+  gevolgzin in de sheet legt ze naast elkaar. DE FIXTURE LAAT ZE UITEENLOPEN (norm 3, richt 4), want
+  met gelijke getallen is 'hij leest de norm' niet van 'hij leest de richt' te onderscheiden (meetles a).
+  TWEE SOORTEN DRAGEN GEEN BEDRAG, en dat is geen omissie maar `v59`/`v73`/`v173`. Een doel dat TE LAAT
+  is heeft per `v243` geen bedrag per maand dat de datum haalbaar maakt, dus daar staat de UITKOMST met
+  zijn voorwaarde ('niet te halen' / 'zolang je buffer voorgaat'), uit de velden die die tak al had. Een
+  STRUCTUREEL signaal heeft er helemaal geen - `maandTekort()` geeft bij `r.structureel` bij ontwerp
+  null - dus daar staat rechts niets en alleen de chevron.
+  DRIE SOORTEN KUNNEN HIER STAAN NAAST DE VASTE REGELS, en dat is nagegaan en niet aangenomen:
+  `STRUCT_STATUS` zet `bad` en `warn` op `tekort`, en dat zijn precies `meevaller` en `overstreak`;
+  `rente-*` is `info` en kan hier per constructie nooit staan. Een `onbekend`-rij landt niet in de
+  kaart, en een rij die je accepteerde of waarover een afspraak loopt schuift naar 'let op'. EN EEN
+  DEKKINGS-RIJ IN DEZE KAART HEEFT ALTIJD EEN EERSTVOLGENDE POST: zonder post is `benodigdeStand` nul
+  en is de status `ok`, dus de oorzaak kan niet leeg vallen. Een doel heeft altijd een streefdatum,
+  want `maandDoel()` kiest alleen een doel dat er een heeft.
+  DE KLEUR BLIJFT IN DE STIP. Die is rood (een tekort dat een beslissing vraagt is echte aandacht) en
+  het bedrag houdt de gewone kleur: de status staat al in de stip, en een tweede drager van datzelfde
+  oordeel is wat dit project elders juist weghaalt. DAT WIJKT AF VAN DE MOCKUP, die het bedrag rood
+  zet, en dat staat hier zodat een volgende ronde het verschil niet als vergissing leest.
+  DE VRAAG IN DE KNOP STAAT OP EEN PLEK EN HEEFT TWEE VORMEN: `maandIngangTekst(r)` draagt de drie
+  formuleringen, `maandIngang()` is de inline-vorm en `maandIngangKnop()` de knop in de sheet. Dat is
+  de vorm van `v285` (de beslissing binnen, de weergave van buiten); een eigen label op de knop zou een
+  tweede formulering van dezelfde vraag zijn (`v91`).
+  DE ROUTE NAAR DE EDITOR VERHUIST MEE. De tik op de rij was vóór `v320` `r.act`, en die tik opent nu
+  de sheet, dus zonder de regel onderin de sheet verliest Grip zijn ingang naar de reserveringen, de
+  noodfonds-sheet en de doel-editor. EEN STRUCTUREEL SIGNAAL HEET DAAR NIET 'AANPASSEN', want zijn
+  `act` leidt naar de cijfers waar het signaal over gaat en niet naar een editor; 'Maanden boven je
+  grens aanpassen' zou een handeling beloven die niet bestaat.
+  DE SHEET ZOEKT ZIJN RIJ OPNIEUW OP in plaats van hem bij het renderen te onthouden, om dezelfde reden
+  als de verdeelsheet van `v319`: tussen het tekenen en de tik kan er een import of een saldo
+  binnenkomen. De twee lagen eroverheen gaan mee, zodat de sheet geen beslissing kan tonen die het
+  scherm niet meer stelt.
+  DE PRIJS IN PIXELS: de kaart is 200px op BEIDE breedtes, elke rij 49px, en de laatste beslissing
+  eindigt op 392px bij een vouw van 567 op 360x640. GRIP HEEFT GEEN 200px-EIS (die van `v241` is de
+  stand-kaart op Inzichten); dat het hier precies 200 is, is toeval en geen grens.
+  VEERTIEN BESTAANDE TESTS IN ZES BESTANDEN VIELEN EROP, en ze hadden alle veertien gelijk: twaalf telden
+  de gespreksingang in de HTML VAN HET SCHERM (`coStart('maand','<m>','<key>')`) en die staat nu in de
+  sheet, en een dertiende toetste dat de ZIN van een structureel signaal nergens op het scherm stond -
+  een proxy voor 'de naam is geen zin' die juist omdraait zodra die zin de OORZAAK wordt. Die telling
+  staat nu op EEN plek (`tests/beslis-sheet.js`, met `beslisIngangen()` en `beslisTekstAlles()`), want zes
+  eigen lussen zouden bij de eerstvolgende wijziging uiteenlopen (`v104`), en de naam-eis staat nu
+  rechtstreeks op de twee velden in plaats van op die proxy.
+  DE VEERTIENDE WAS GEEN GEVOLG VAN DEZE RONDE MAAR EEN VONDST ERDOOR: `grip-vanaf-norm.spec.js` koos zijn
+  kaart met een `innerText`-toets op 'vanaf' en mat daarmee de BESLISSINGSKAART in plaats van de
+  vanaf-kaart. Zie de correctie in de `v315`-regel hieronder; dat is meetles (t) op een losse tekstmatch,
+  en het getal is via die test in dit bestand beland.
+  NEGENTIEN SABOTAGES OP DE NIEUWE REGELS, ALLE NEGENTIEN ROOD, en twee erbij op de verhuizing zelf: de
+  knop uit de sheet halen zet dertien van de verhuisde tests rood en de gevolgzin weghalen een. DE
+  SABOTAGE DIE DE OUDE `innerText`-SELECTOR TERUGZET IS PER CONSTRUCTIE GROEN, en dat is een eigenschap
+  en geen gat: met de gevolgzin in de sheet draagt geen enkele kaart boven de vanaf-kaart het woord nog,
+  dus de verkeerde kaart is van het scherm niet meer te bereiken (meetles p). Wat de regressie vangt is de
+  assertie op de KOP.
+- **DE ZIN OVER NIETS TE BESLISSEN TOETST WAT HIJ BELOOFT** (`v320`, gemeten naar aanleiding van een
+  melding): `maandCoachIngang()` liet 'Nieuwe maand. Er valt deze maand niets te beslissen.' zien zodra
+  er EEN `ok`-rij was, en `renderMaand()` roept die functie juist OOK aan wanneer er wél beslissingen
+  staan (de ingang hoort onder de regels die iets vragen). GEMETEN op de stand van het toestel stond die
+  zin onder twee rode regels en onder een kop die zegt dat er twee dingen een beslissing vragen. De
+  poort toetst nu geen tekort en geen aandacht.
+  DE OK-EIS BLIJFT ERNAAST STAAN, en dat is geen poort maar een tweede eis: met alleen onbekende regels
+  valt er niets door te nemen, en dat ligt sinds `v173` als eigen test vast
+  (`coach-maand-ingang.spec.js`: 'alleen onbekende regels geeft geen ingang'). Hem laten vallen zou een
+  bestaande invariant omgooien om een poort te repareren die er los van staat.
 - **DE WERKELIJKE INLEG STAAT NAAST DE INGESTELDE, UIT DEZELFDE BRON ALS INZICHTEN** (`v319`): de cap
   op Plan is `monthlySavingTarget()` en dus een INSTELLING met drie takken (een vast bedrag, een
   percentage van je inkomen, of inkomen min budget), en hij leest geen enkele boeking. GEMETEN op een
@@ -672,8 +762,14 @@ genoemde versietag.)*
   DE REGEL KOST 17px en staat als eigen assertie vast, GEMETEN op 390px met een record dat er een draagt naast
   een correctie die er geen draagt. OP 360px IS DAT PAAR GEEN METING, en dat staat erbij: de vergelijkingsrij
   breekt daar over twee regels (51 tegen 32px), dus het verschil zou de AFBREKING meten. De vanaf-kaart is
-  250/232px en het logboek 373/336px (317px voordat de vierde teller van de reparatie erbij kwam; zie de
+  231/216px en het logboek 373/336px (317px voordat de vierde teller van de reparatie erbij kwam; zie de
   regel daarover bovenaan). GRIP HEEFT GEEN 200px-EIS (die van `v241` is Inzichten).
+  DIE 231/216 IS EEN CORRECTIE VAN `v320`, EN HET GETAL DAT HIER STOND WAS EEN ANDERE KAART: de spec koos
+  zijn kaart met een `innerText`-toets op het woord 'vanaf', en de gevolgzin van een doel achter de grendel
+  zegt 'je hebt vanaf mrt 2027 EUR X nodig'. Die zin stond tot `v320` in de kaart 'Vraagt een beslissing',
+  dus de test mat die kaart (250/232px) onder een naam die de vanaf-kaart noemt. GEMETEN op v319 EN v320:
+  de vanaf-kaart is in beide 231/216px, dus deze ronde heeft hem niet verschoven. De spec bindt sindsdien
+  op de KOP en zegt in een eigen assertie welke kop hij mat.
 - **DE SAMENVATTING OP GRIP TELT DE POTJES MEE, EN STAAT VOOR DE SIGNAALKAARTEN** (`v314`): hij stond
   erachter, dus je las eerst "EUR 214 boven je potje" en daarna "er is niets dat vastloopt".
   `maandOordeel(R, nPot)` krijgt het aantal uit `valtOpSignals()` van de AANROEPER: `renderMaand()`
@@ -4993,7 +5089,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v319` → `minder-v320`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v320` → `minder-v321`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5011,7 +5107,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 (een besluit en een open punt), dus hij bumpt niet, en `v313` raakt app-code en gaat daarom van
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
-`minder-v317`, `v318` naar `minder-v318` en `v319` naar `minder-v319`.
+`minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319` en `v320` naar `minder-v320`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

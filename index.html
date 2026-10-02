@@ -4939,6 +4939,11 @@ function maandStructureel(){
       .map(n=>({key:n.key, naam:kortNaam(n),
         status:STRUCT_STATUS[n.t]||MAAND_DREMPEL.structureelStatus, waarde:'', eenheid:'',
         gevolg:'',                                   // was dezelfde zin als naam
+        /* v320: de oorzaak voor de lijstregel is `l1`, de zin die zegt wat er aan de hand is. Dat is
+           een ANDERE bestaande string dan de naam (die is `n.kort`), dus er komt geen formulering
+           bij; de tags gaan eruit zoals kortNaam() dat ook doet, want een sub is tekst en geen
+           opmaak. */
+        oorzaak: String(n.l1||'').replace(/<[^>]*>/g,'').trim(),
         act:n.act||"go('ins')", sig:n, structureel:true}));
   }catch(_){ return []; }
 }
@@ -5006,6 +5011,15 @@ function maandRegels(){
         : D.gat ? `in je pot · ${euro0(D.gat.tekort)} tekort`
         : komt ? 'in je pot · er hoeft nu nog niets opzij' : 'in je pot · niets aankomend dit jaar',
         sub: eerstePost?`verwacht: ${euro0(eerstePost.bedrag)} in ${resMaandLabel(eerstePost.maand)}`:'',
+        /* v320: DE OORZAAK IN EEN PAAR WOORDEN, voor de lijstregel in 'Vraagt een beslissing'. Hij
+           noemt de post BIJ NAAM en niet het woord 'verwacht' uit de sub hierboven: dat woord zegt
+           dat er iets komt, en bij een beslissing is de vraag WAT er komt. Drie velden die
+           `eerstePost` al draagt, dus er wordt hier niets gezocht of opnieuw gesorteerd (v104).
+           HET JAARTAL BLIJFT STAAN, en dat is gemeten en geen voorzorg: 'in november' kan 2026 niet
+           van 2027 onderscheiden, en de regel blijft met het jaartal op 360px op EEN regel (kolom
+           227px, rij 49px). Alleen een lange postnaam breekt af naar twee regels (64px), en dat is
+           wat v281/v284 eisen: een naam die je zelf invoerde wordt niet ingekort. */
+        oorzaak: eerstePost?`${eerstePost.naam} van ${euro0(eerstePost.bedrag)} in ${resMaandLabel(eerstePost.maand)}`:'',
         benodigdeStand: D.volledig?D.benodigdeStand:null,
         maand: (st==='tekort'&&D.gedektTot)?D.gedektTot:null,
         // de zin komt uit dekkingTekst(): die kent alle takken al, inclusief een pot die de
@@ -5079,6 +5093,11 @@ function maandRegels(){
          te weinig opvangt. Zonder gekozen norm is er niets te noemen en staat de sub er niet. */
       uit.push({key:'buffer', naam:'Buffer in maanden', status:st, kritiek, opTempo, maanden:bm, norm,
         sub: norm==null?'':`je norm: ${norm} ${norm===1?'maand':'maanden'}`,
+        /* v320: de oorzaak voor de lijstregel: de meting naast de grens die hem rood maakt. Dat is
+           een ANDERE grens dan het bedrag ernaast - dat is het gat naar je RICHTBEDRAG, uit
+           maandTekort() - en daarom noemen die twee elk hun eigen noemer (v91). Twee velden die de
+           rij al draagt, dus geen tweede uitdrukking van de norm. */
+        oorzaak: norm==null?'':`nu ${nTxt} ${n===1?'maand':'maanden'}, je norm is ${norm}`,
         waarde:nTxt, eenheid: norm==null
           ? `maanden toegewezen aan je noodfonds · je richt staat op ${richt}, je ondergrens is nog niet gekozen`
           : `maanden toegewezen aan je noodfonds · je richt staat op ${richt}`,
@@ -5158,6 +5177,12 @@ function maandRegels(){
                : onbek ? 'nog niet te rekenen'
                : viaDoorzak ? 'per maand · genoeg voor je datum'
                : T ? `per maand · ${euro0(T.benodigd)} nodig` : 'geen streefdatum',
+        /* v320: de oorzaak voor de lijstregel. Normaal de streefdatum, want die maakt deze rij een
+           beslissing; bij 'te laat' de maand waarop je buffer vol is, want dan is de datum niet het
+           probleem maar de grendel ervoor. Beide komen uit velden die er al zijn (`d.p.streefdatum`,
+           `T.startLabel`), en in de telaat-tak is `T` per constructie een object. */
+        oorzaak: telaat ? (T.startLabel?`buffer pas vol rond ${T.startLabel}`:'')
+               : (d.p.streefdatum?`streefdatum ${doelDatumLabel(d.p.streefdatum)}`:''),
         sub: (d.p.doel>0||d.p.streefdatum)
           ? [d.p.doel>0?euro0(d.p.doel):'', d.p.streefdatum?`in ${doelDatumLabel(d.p.streefdatum)}`:''].filter(Boolean).join(' ')
           : '',
@@ -5721,18 +5746,31 @@ function maandSuggestie(r, m){
    "waar kan dat vandaan komen" vraagt om een keuze, en er valt niets te kiezen zolang de norm op
    tijd gehaald wordt. Een expliciete opTempo-toets ernaast zou een tweede waarheid zijn over
    dezelfde poort; een test legt vast dat deze ene het doet. */
-function maandIngang(r, m){
+/* v320: DE VRAAG STAAT OP EEN PLEK EN HEEFT TWEE VORMEN. Sinds deze ronde staat de ingang in de
+   sheet achter de lijstregel en niet meer onder de rij, en dan zou de knop zijn eigen formulering
+   krijgen. Dat is precies de tweede waarheid die v91 verbiedt, dus de TEKST staat hier een keer en
+   de aanroeper kiest de vorm - de vorm van v285, de beslissing binnen, de weergave van buiten. */
+function maandIngangTekst(r){
   if(!r || r.status!=='tekort' || r.geaccepteerd) return '';
-  const mm=m||thisYM();   // v233: Grip leest nu
-  const tik=(v)=>`<div class="small" style="margin:2px 0 0;line-height:1.45;color:var(--mut2);cursor:pointer" onclick="event.stopPropagation();coStart('maand','${esc(mm)}','${esc(r.key)}')">${v} <span style="color:var(--teal);font-weight:700">›</span></div>`;
-  if(r.structureel) return tik('Wil je hier een afspraak over maken?');
+  if(r.structureel) return 'Wil je hier een afspraak over maken?';
   /* v243: een doel dat achter de grendel niet meer op tijd komt heeft geen bedrag per maand, want
      dat bestaat niet. Zonder eigen tak viel de ingang daarmee weg bij precies de regel die de
      zwaarste is, en een melding die de enige drager van een ingang is mag niet stil verdwijnen.
      Dus dezelfde vorm als bij een structureel signaal: een vraag zonder bedrag. */
-  if(r.telaat) return tik('Wil je kijken wat je met deze datum wilt?');
+  if(r.telaat) return 'Wil je kijken wat je met deze datum wilt?';
   const T=maandTekort(r); if(!T) return '';
-  return tik(`Wil je kijken waar die ${euro0(T.bedrag)}${T.soort==='maand'?' per maand':''} vandaan kan komen?`);
+  return `Wil je kijken waar die ${euro0(T.bedrag)}${T.soort==='maand'?' per maand':''} vandaan kan komen?`;
+}
+function maandIngang(r, m){
+  const v=maandIngangTekst(r); if(!v) return '';
+  const mm=m||thisYM();   // v233: Grip leest nu
+  return `<div class="small" style="margin:2px 0 0;line-height:1.45;color:var(--mut2);cursor:pointer" onclick="event.stopPropagation();coStart('maand','${esc(mm)}','${esc(r.key)}')">${esc(v)} <span style="color:var(--teal);font-weight:700">›</span></div>`;
+}
+// dezelfde vraag als knop, voor de sheet achter een lijstregel (v320)
+function maandIngangKnop(r, m){
+  const v=maandIngangTekst(r); if(!v) return '';
+  const mm=m||thisYM();
+  return `<button class="btn" data-beslisknop="${esc(r.key)}" style="width:100%;margin-top:10px" onclick="coStart('maand','${esc(mm)}','${esc(r.key)}')">${esc(v)}</button>`;
 }
 function maandRij(r,compact){
   /* v193: de compacte rij liet de eenheid weg om kort te blijven, dus er stond 'Buffer in maanden
@@ -5776,6 +5814,97 @@ function maandRij(r,compact){
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(r.eenheid)}</div></div></div>
     ${(function(){ const ing=maandIngang(r, thisYM()); return ing?`<div style="padding:0 0 10px 17px">${ing}</div>`:''; })()}
   </div>`;
+}
+
+/* ===== WAT EEN BESLISSING VRAAGT, IN EEN REGEL (v320) =====
+   De kaart 'Vraagt een beslissing' droeg per regel de volle gevolgzin, de suggestie en de
+   gespreksingang. GEMETEN op de stand van het toestel (dekking EUR 262 tekort, Kosten Koper EUR 163
+   per maand tekort) was die kaart 623px op 360px en 530px op 390px, dus op de kleine telefoon stond
+   de tweede beslissing 248px onder de vouw: je moest scrollen om te zien wat er nog openstond.
+   Elke regel is nu EEN lijstregel in dezelfde vorm als 'Staat goed' - stip, naam, de oorzaak
+   eronder, het bedrag rechts, een chevron - en de hele regel opent een sheet met precies de tekst
+   die eerst in de kaart stond. ER VERDWIJNT GEEN TEKST, hij verhuist een tik dieper.
+   EEN BRON: `maandBeslisDeel(r)` is de ene plek waar de oorzaak en het bedrag van een beslissing
+   worden gekozen, en de REGEL EN DE SHEET lezen hem. Een tweede uitdrukking in de sheet zou bij de
+   eerste wijziging uiteenlopen (v104), en het bedrag van de regel en dat van de sheet is juist het
+   paar dat een gebruiker binnen een tik naast elkaar ziet.
+   HET BEDRAG KOMT UIT `maandTekort(r)`, de bron die v224 daarvoor heeft aangewezen en die de
+   suggestie en de gespreksingang al lezen. DE EENHEID KOMT UIT ZIJN `soort`, want die verschilt per
+   regel: bij dekking is het een STAND (D.tekort, je pot tegen wat er nu in hoort te staan), bij een
+   doel een MAANDBEDRAG en bij de buffer een TOTAAL naar je richtbedrag. Zonder dat woord lees je een
+   stand als een maandbedrag.
+   DE OORZAAK EN HET BEDRAG VAN DE BUFFER LEZEN TWEE VERSCHILLENDE GRENZEN, en dat staat er met
+   zoveel woorden omdat het geen vergissing is: de rij is rood tegen je NORM (de gekozen ondergrens)
+   en het bedrag is het gat naar je RICHTBEDRAG. Beide noemen daarom hun eigen noemer, en de volle
+   gevolgzin in de sheet legt ze naast elkaar.
+   TWEE SOORTEN DRAGEN GEEN BEDRAG, en dat is geen omissie maar wat v59/v73/v173 eisen. Een doel dat
+   'te laat' is heeft per v243 geen bedrag per maand dat de datum haalbaar maakt, dus daar staat de
+   UITKOMST met zijn voorwaarde ('niet te halen' / 'zolang je buffer voorgaat'). Een structureel
+   signaal heeft er helemaal geen - `maandTekort()` geeft bij een structurele rij bij ontwerp null -
+   dus daar staat rechts niets en alleen de chevron.
+   DE KLEUR BLIJFT IN DE STIP. Die is rood, want een tekort dat een beslissing vraagt is echte
+   aandacht (v78/v93), en het bedrag houdt de gewone kleur: de status staat al in de stip, en een
+   tweede drager van datzelfde oordeel is wat dit project elders juist weghaalt. Dat wijkt af van de
+   mockup, die het bedrag rood zet.
+   DE RIJ WORDT ANDERS GETELD DAN DE KAART: `.row[data-beslis]` is de naam waaronder een beslissing
+   te vinden is, net zoals `.plan-item[data-id]` dat op Plan is (v225). */
+const BESLIS_EENHEID={stand:'tekort', maand:'per maand tekort', totaal:'tot je richtbedrag'};
+function maandBeslisDeel(r){
+  if(!r) return {oorzaak:'', waarde:'', eenheid:''};
+  const o=String(r.oorzaak||'');
+  if(r.telaat) return {oorzaak:o, waarde:'niet te halen', eenheid:'zolang je buffer voorgaat'};
+  const T=maandTekort(r);
+  if(!T) return {oorzaak:o, waarde:'', eenheid:''};
+  return {oorzaak:o, waarde:euro0(T.bedrag), eenheid:BESLIS_EENHEID[T.soort]||''};
+}
+function maandBeslisRij(r){
+  const B=maandBeslisDeel(r);
+  const rechts=(B.waarde||B.eenheid)?`<div data-beslisbedrag="${esc(r.key)}" style="text-align:right;flex:0 1 auto;min-width:0;max-width:52%">
+      ${B.waarde?`<div class="small" style="font-weight:700;white-space:nowrap">${esc(B.waarde)}</div>`:''}
+      ${B.eenheid?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(B.eenheid)}</div>`:''}</div>`:'';
+  return `<div class="row" data-beslis="${esc(r.key)}" style="gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openMaandBeslis('${esc(r.key)}')">
+    ${maandDot(r.status)}<div style="flex:1;min-width:0"><div class="small">${esc(r.naam)}</div>
+      ${B.oorzaak?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(B.oorzaak)}</div>`:''}</div>
+    ${rechts}<span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span></div>`;
+}
+/* De sheet achter de regel. Hij zoekt de rij OPNIEUW op in plaats van hem bij het renderen te
+   onthouden, om dezelfde reden als de verdeelsheet van v319: tussen het tekenen en de tik kan er een
+   import of een saldo binnenkomen, en dan is de bewaarde rij niet meer de rij die je zag. De twee
+   lagen eroverheen gaan mee (een acceptatie en een lopende afspraak schuiven een regel naar
+   'let op'), zodat de sheet geen beslissing kan tonen die het scherm niet meer stelt. */
+function maandBeslisZoek(key){
+  let R=[], STR=[];
+  try{ R=maandRegels()||[]; }catch(_){}
+  try{ STR=maandStructureel()||[]; }catch(_){}
+  try{ return maandMetAfspraak(maandMetAccept(R).concat(STR)).find(x=>x&&x.key===key)||null; }catch(_){ return null; }
+}
+function openMaandBeslis(key){ renderMaandBeslisSheet(key); showSheetBg(); }
+function renderMaandBeslisSheet(key){
+  const r=maandBeslisZoek(key); if(!r){ closeSheet(); return; }
+  const B=maandBeslisDeel(r), m=thisYM();   // v233: Grip leest nu
+  let sug=''; try{ sug=maandSuggestie(r, m)||''; }catch(_){}
+  /* Een structureel signaal heeft geen `gevolg` (maandStructureel zet hem leeg, want dat was
+     dezelfde zin als de naam) en krijgt ook geen suggestie. Wat het WEL draagt is l2, de zin die in
+     de kaart nooit heeft gestaan en hier dus de enige uitleg is; l1 staat al als oorzaak boven. */
+  const l2=(r.structureel&&r.sig)?String(r.sig.l2||'').replace(/<[^>]*>/g,'').trim():'';
+  const uitleg=[r.gevolg||'', sug, l2].filter(Boolean);
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="gap:10px;align-items:flex-start;margin-bottom:10px">
+      <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:var(--fs-lg);overflow-wrap:anywhere">${esc(r.naam)}</div>
+        ${B.oorzaak?`<div class="small muted" style="line-height:1.4;margin-top:2px">${esc(B.oorzaak)}</div>`:''}</div>
+      ${(B.waarde||B.eenheid)?`<div data-sheetbedrag="${esc(r.key)}" style="text-align:right;flex:0 1 auto;min-width:0;max-width:42%">
+        ${B.waarde?`<div style="font-weight:800;white-space:nowrap">${esc(B.waarde)}</div>`:''}
+        ${B.eenheid?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(B.eenheid)}</div>`:''}</div>`:''}</div>
+    ${uitleg.length?`<div class="card"><div class="small" style="line-height:1.5">${uitleg.map(z=>esc(z)).join(' ')}</div></div>`:''}
+    ${maandIngangKnop(r, m)}
+    ${/* De editor van de regel was vóór v320 de tik OP de rij. Die tik opent nu deze sheet, dus de
+          route erheen verhuist mee: zonder hem verliest Grip zijn ingang naar de reserveringen, de
+          noodfonds-sheet en de doel-editor (v61 laat twee ingangen toe, een ingang weghalen niet).
+          EEN STRUCTUREEL SIGNAAL HEEFT GEEN EDITOR, en daarom zegt zijn label niet 'aanpassen': zijn
+          `act` leidt naar de cijfers waar het signaal over gaat (go('vooruit'), openMonthSpend()),
+          en 'Maanden boven je grens aanpassen' zou een handeling beloven die daar niet bestaat.
+          Dat is hetzelfde soort verkeerd etiket dat dit project elders juist weghaalt. */''}
+    <div class="small" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet();${r.act}">${r.structureel?'Bekijken':`${esc(r.naam)} aanpassen`} \u203a</div>`;
 }
 /* v178: twee oordelen over je plan die op Inzichten in het blok over deze maand stonden. Het
    eerste gaat over een periode die nog niet begon, het tweede woog je potjes tegen je
@@ -6386,8 +6515,11 @@ function renderMaand(){
           regelkaart, dan blijft de voet een eigen kaart zonder streep (zie onder).
           v226: van die twee is alleen 'Je plan' daar nog. De spaarquote is geen constatering over
           een maandregel maar een uitkomst, en staat weer als eigen kaart verderop. */''}
+    ${/* v320: de regels staan hier als LIJSTREGEL en niet meer in de uitgeklapte vorm; de volle
+          tekst staat in de sheet erachter. maandRij(r,false) blijft de vorm van 'Vraagt aandacht'
+          hieronder, want daar past geen beslissing achter een tik. */''}
     ${beslis.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt een beslissing</div>
-      ${beslis.map(r=>maandRij(r,false)).join('')}
+      ${beslis.map(r=>maandBeslisRij(r)).join('')}
       ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
       </div>`:''}
     ${aandacht.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt aandacht</div>
@@ -6488,7 +6620,16 @@ function maandCoachIngang(R){
      en de regel hieronder biedt een gesprek juist wanneer er niets te beslissen valt.
      coMaandZwaarste() blijft ook bestaan: coTopicMaand() valt erop terug wanneer het gesprek zonder
      sleutel wordt geopend, en dat is precies wat 'Aanpassen' hierboven doet. */
-  if(R.some(r=>r.status==='ok')) return `<div class="card" style="cursor:pointer" onclick="coStart('algemeen','${esc(m)}')">
+  /* v320: DE POORT VRAAGT WAT DE ZIN BELOOFT. Hij was `R.some(r=>r.status==='ok')`, en renderMaand
+     roept deze functie juist OOK aan wanneer er wel beslissingen staan (de ingang hoort onder de
+     regels die iets vragen). GEMETEN op de stand van het toestel: onder twee rode regels en een kop
+     die zegt dat er twee dingen een beslissing vragen stond 'Er valt deze maand niets te beslissen'.
+     De poort toetst nu geen tekort en geen aandacht, en dat is precies de bewering van de zin.
+     DE OK-EIS BLIJFT ERNAAST STAAN, en dat is geen poort maar een tweede eis: met alleen onbekende
+     regels valt er niets door te nemen, en dat ligt sinds v173 als eigen test vast
+     (coach-maand-ingang.spec.js: 'alleen onbekende regels geeft geen ingang'). */
+  if(!R.some(r=>r.status==='tekort') && !R.some(r=>r.status==='let op') && R.some(r=>r.status==='ok'))
+    return `<div class="card" style="cursor:pointer" onclick="coStart('algemeen','${esc(m)}')">
     <div class="row" style="gap:8px"><span style="flex:1;min-width:0;line-height:1.45" class="muted">${nieuw}Er valt deze maand niets te beslissen. Wil je toch iets doornemen?</span>
       <span style="color:var(--teal);font-weight:700">›</span></div></div>`;
   return '';

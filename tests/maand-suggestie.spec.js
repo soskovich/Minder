@@ -9,6 +9,7 @@
 // buffer het totale gat naar je richtbedrag, en alleen bij doel een maandbedrag.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { beslisIngangen, beslisTekstAlles } = require('./beslis-sheet');   // v320: in de sheet
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -111,10 +112,12 @@ test.describe('a - elke regel met een tekort draagt een suggestie', () => {
     expect(r.sug).toContain('houdt die streefdatum haalbaar');
   });
 
-  test('en ze staan alle drie op het scherm', async ({ page }) => {
+  /* v320: de suggestie staat in de SHEET achter de lijstregel en niet meer in de kaart; de drie
+     zinnen zijn ongewijzigd. */
+  test('en ze staan alle drie in hun eigen sheet', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
-    const t = await page.locator('#s-maand').innerText();
+    const t = await beslisTekstAlles(page);
     expect(t).toContain('brengt je pot op de stand');
     expect(t).toContain('brengt je buffer in totaal');
     expect(t).toContain('je streefdatum of je doelbedrag');   // v243: te laat, zie hierboven
@@ -251,8 +254,7 @@ test.describe('e - elke regel opent het gesprek op zijn eigen onderwerp', () => 
   test('elke tekort-regel heeft een ingang op zijn eigen sleutel', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
-    const html = await page.locator('#s-maand').innerHTML();
-    const m = [...html.matchAll(/coStart\('maand','[^']*','([^']*)'\)/g)].map((x) => x[1]);
+    const m = await beslisIngangen(page);   // v320: in de sheet achter de regel
     const tekorten = await page.evaluate(() => maandMetAccept(maandRegels()).concat(maandStructureel())
       .filter((r) => r.status === 'tekort').map((r) => r.key));
     expect(m).toEqual(tekorten);

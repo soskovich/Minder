@@ -11,6 +11,7 @@
 // de vier structurele signalen hadden geen korte naam, zodat hun hele l1 als regelnaam diende.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { beslisIngangen } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -123,13 +124,24 @@ test.describe('b - elk structureel signaal draagt een korte naam', () => {
 
   /* v224: de korte naam werd hier getoetst via de uitnodiging 'Zullen we <naam> doorlopen?' onder
      de kaart. Die tak is vervallen, maar de naam draagt nog steeds de regel op het scherm en de
-     kop van het gesprek. Daar staat hij nu, en de eis is dezelfde: een naam en geen volzin. */
+     kop van het gesprek. Daar staat hij nu, en de eis is dezelfde: een naam en geen volzin.
+     v320: de oude vorm toetste dat `l1` NERGENS op het scherm stond, en dat was een proxy voor
+     'de naam is geen zin'. Sinds v320 staat `l1` er juist WEL, als de oorzaak onder de naam, dus
+     die proxy meet de verkeerde eigenschap. De eis staat nu rechtstreeks op de twee velden: de
+     NAAM is de korte naam en de ZIN staat als oorzaak. Dat is strenger dan de oude vorm, want
+     die kon ook groen staan op een scherm zonder dit signaal. */
   test('de naam leest als een naam, niet als een zin', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
+    const r = await page.evaluate(() => {
+      const x = maandStructureel().find((y) => y.key === 'overstreak');
+      return { naam: x.naam, oorzaak: x.oorzaak, l1: x.sig.l1 };
+    });
+    expect(r.naam).toBe('Maanden boven je grens');
+    expect(r.naam).not.toBe(r.l1);
+    expect(r.oorzaak, 'de zin staat als oorzaak en niet als naam').toBe(r.l1);
     const t = await page.locator('#s-maand').innerText();
     expect(t).toContain('Maanden boven je grens');
-    expect(t).not.toContain('Je geeft al maanden te veel uit');
   });
 });
 
@@ -138,24 +150,26 @@ test.describe('c - de ingang staat bij de belofte', () => {
      Nu draagt elke regel met een tekort er zelf een. De eigenschap die deze groep bewaakt blijft:
      de ingang staat bij wat hij belooft, en niet elders op het scherm. Alleen is 'bij' nu de regel
      in plaats van de kaart. */
-  test('elke ingang staat binnen de kaart die een beslissing belooft', async ({ page }) => {
+  /* v320: de ingang staat niet meer IN de kaart maar in de SHEET achter de lijstregel. De
+     eigenschap die deze test bewaakt is dezelfde en nu scherper: hij staat achter de regel die hij
+     belooft, en nergens anders op het scherm. */
+  test('elke ingang staat achter de regel die een beslissing belooft', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
-    const uit = await page.evaluate(() => {
-      const kaart = [...document.querySelectorAll('#s-maand .card')].find((c) => /Vraagt een beslissing/.test(c.textContent));
-      const inKaart = (kaart.innerHTML.match(/coStart\('maand'/g) || []).length;
-      const opScherm = (document.querySelector('#s-maand').innerHTML.match(/coStart\('maand'/g) || []).length;
-      return { inKaart, opScherm };
-    });
-    expect(uit.inKaart).toBeGreaterThan(0);
-    expect(uit.inKaart).toBe(uit.opScherm);   // geen enkele ingang buiten de kaart
+    const opScherm = await page.evaluate(() =>
+      (document.querySelector('#s-maand').innerHTML.match(/coStart\('maand','[^']*','[^']*'\)/g) || []).length);
+    expect(opScherm, 'geen enkele ingang los op het scherm').toBe(0);
+    const keys = await beslisIngangen(page);
+    expect(keys.length).toBeGreaterThan(0);
+    const rijen = await page.evaluate(() =>
+      [...document.querySelectorAll('.row[data-beslis]')].map((x) => x.dataset.beslis));
+    expect(keys, 'precies een ingang per regel, op zijn eigen sleutel').toEqual(rijen);
   });
 
   test('één per regel met een tekort, niet meer en niet minder', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
-    const html = await page.locator('#s-maand').innerHTML();
-    const keys = [...html.matchAll(/coStart\('maand','[^']*','([^']*)'\)/g)].map((x) => x[1]);
+    const keys = await beslisIngangen(page);
     const tekorten = await page.evaluate(() => maandMetAccept(maandRegels()).concat(maandStructureel())
       .filter((r) => r.status === 'tekort').map((r) => r.key));
     expect(keys).toEqual(tekorten);

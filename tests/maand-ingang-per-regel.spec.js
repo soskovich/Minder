@@ -10,6 +10,7 @@
 // en is één zin voor het hele plan - dus alleen de vorm is overgenomen.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { beslisIngangen } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -127,10 +128,12 @@ test.describe('a - elke regel met een tekort draagt zijn eigen ingang', () => {
     }
   });
 
-  test('en ze staan alle drie op het scherm', async ({ page }) => {
+  /* v320: ze staan alle drie in de SHEET achter hun eigen lijstregel, en niet meer los op het
+     scherm. De eigenschap is dezelfde: drie regels met een tekort, drie ingangen op hun eigen
+     sleutel, in schermvolgorde. */
+  test('en ze staan alle drie achter hun eigen regel', async ({ page }) => {
     await boot(page);
-    const h = await page.locator('#s-maand').innerHTML();
-    const keys = [...h.matchAll(/coStart\('maand','[^']*','([^']*)'\)/g)].map((x) => x[1]);
+    const keys = await beslisIngangen(page);
     expect(keys).toEqual(['dekking', 'buffer', 'doel']);
   });
 });

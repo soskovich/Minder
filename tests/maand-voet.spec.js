@@ -22,6 +22,7 @@
 // verhuizing. Wat de nieuwe kaart zelf moet doen staat in grip-vanaf-norm.spec.js.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { beslisIngangen } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -206,7 +207,8 @@ test.describe('d - de rest van het scherm blijft staan', () => {
     expect(t).not.toContain('JE MAAND');   // v233: Grip heeft geen maandkiezer en geen kop meer
     expect(t).toMatch(/beslissing vra/);   // 'vraagt' bij één, 'vragen' bij meer
     // v224: één ingang per regel met een tekort, niet meer één per scherm
-    const ingangen = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/coStart\('maand'/g) || []).length);
+    // v320: en die ingang staat in de sheet achter de lijstregel
+    const ingangen = (await beslisIngangen(page)).length;
     const tekorten = await page.evaluate(() => maandMetAccept(maandRegels()).concat(maandStructureel()).filter((r) => r.status === 'tekort').length);
     expect(ingangen).toBe(tekorten);
     expect(ingangen).toBeGreaterThan(0);

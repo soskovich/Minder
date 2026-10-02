@@ -659,8 +659,11 @@ test('e4 de gevolgen lenen de projectie en rekenen hem niet na', async ({page})=
    van 15); zonder 'volgende maand anders' erin is hij 75px op 360 en 56px op 390. Op 360 liep hij
    dus al over vijf regels en paste de vierde teller binnen die vijf; op 390 kwam er een regel bij.
    De kaart gaat daarmee van 373 naar 373px en van 317 naar 336px. */
-const PX={360:{vanaf:250, log:373, tel:75, metUit:49, zonderUit:51, delta:null},
-          390:{vanaf:232, log:336, tel:75, metUit:49, zonderUit:32, delta:17}};
+/* v320: `vanaf` was 250/232 en dat was de kaart 'Vraagt een beslissing', niet de vanaf-kaart; zie
+   de reden bij de selector hieronder. De vanaf-kaart is 231/216px, en dat is in v319 EN v320
+   gemeten, dus deze ronde heeft hem niet verschoven. */
+const PX={360:{vanaf:231, log:373, tel:75, metUit:49, zonderUit:51, delta:null},
+          390:{vanaf:216, log:336, tel:75, metUit:49, zonderUit:32, delta:17}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de prijs in pixels van de vanaf-kaart en de uitkomst-regel`, async ({page})=>{
     await page.setViewportSize({width:w, height:h});
@@ -671,20 +674,31 @@ for (const [w,h] of [[360,640],[390,844]]) {
     await boot(page, {set:{valtOpLog:L, budgetsNext:{huur:900,boodschappen:450,vervoer:150}}});
     const r=await page.evaluate(()=>{
       normChipZet(6); normVastzetten(); closeSheet(); go('maand');
-      const kaart=n=>[...document.querySelectorAll('#s-maand .card')].find(c=>n.test(c.innerText));
-      const va=kaart(/VANAF /i), lg=kaart(/OVERSCHRIJDINGEN/i);
+      /* v320: deze selector las `c.innerText` en pakte daarmee de EERSTE kaart waarin het woord
+         ergens voorkwam. GEMETEN dat dat de verkeerde kaart was: de gevolgzin van een doel achter
+         de grendel zegt 'je hebt vanaf mrt 2027 EUR X nodig', en die zin stond tot v320 in de kaart
+         'Vraagt een beslissing'. Die kaart werd dus gemeten (250/232px) en de vanaf-kaart niet
+         (231/216px, in beide versies), en het getal uit die meting is als 'de vanaf-kaart' in
+         CLAUDE.md beland. Nu bindt hij op de KOP, en de assertie eronder zegt welke kop dat was. */
+      const kaart=n=>[...document.querySelectorAll('#s-maand .card')]
+        .find(c=>n.test(((c.querySelector('.hlabel')||{}).textContent||'').trim()));
+      const va=kaart(/^Vanaf /i), lg=kaart(/overschrijdingen/i);
       const hh=e=>e?Math.round(e.getBoundingClientRect().height):0;
       // een logrij is te herkennen aan zijn genestelde .row; de telzin onderaan heeft die niet
       const rijen=[...lg.children].filter(c=>c.tagName==='DIV'&&c.querySelector(':scope > .row'));
       const uit=rijen.filter(c=>/eindigde|daarna|uitkomst na/.test(c.innerText));
       const zonder=rijen.filter(c=>!/eindigde|daarna|uitkomst na/.test(c.innerText));
-      return {vanaf:hh(va), log:hh(lg), tel:hh(lg.lastElementChild),
+      return {vaLab:((va.querySelector('.hlabel')||{}).textContent||'').trim(),
+        lgLab:((lg.querySelector('.hlabel')||{}).textContent||'').trim(),
+        vanaf:hh(va), log:hh(lg), tel:hh(lg.lastElementChild),
         metUit:uit.map(hh), zonderUit:zonder.map(hh),
         nUit:uit.length, nZonder:zonder.length};
     });
     const p=PX[w];
     expect(r.nUit).toBe(3);                    // drie records met een uitkomst
     expect(r.nZonder).toBe(1);                 // en één zonder: de correctie
+    expect(r.vaLab, 'en het is werkelijk de vanaf-kaart die gemeten wordt').toMatch(/^Vanaf /i);
+    expect(r.lgLab).toMatch(/overschrijdingen/i);
     expect(r.vanaf).toBe(p.vanaf);
     expect(r.log).toBe(p.log);
     expect(r.tel, 'de telregel, waar de vierde handeling van v315 in landt').toBe(p.tel);
