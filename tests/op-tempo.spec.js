@@ -7,7 +7,7 @@
 // van het noodfonds-item: dat is een voornemen, en v216 legt vast dat een voornemen geen feit
 // verdringt. Eén reeks voor beide richtingen: savedNet > 0 in elke maand van het venster sluit een
 // maand zonder inleg en een maand met onttrekking samen uit.
-// Dekking: geen beslissing zolang het knelmoment ver genoeg weg ligt. Dat moment is D.gat.maand en
+// Dekking: geen beslissing zolang het gat voor het knelmoment te dichten is (v322; tot v321 een vaste marge). Dat moment is D.gat.maand en
 // niet gedektTot - die twee kunnen maanden uit elkaar liggen.
 //
 // KRITIEK: een regel die naar 'let op' schuift houdt geen gespreksingang, want die vraagt om een
@@ -42,7 +42,12 @@ function seed(o) {
     add('i' + m, MAIN, m, '05', 4000, 'Werkgever', 'SALARIS LOON');
     add('h' + m, MAIN, m, '02', -1500, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
     add('a' + m, MAIN, m, '06', -900, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
-    add('r' + m, RES, m, '10', 100, 'Reserveringen', 'NAAR RESERVERINGEN');
+    /* v322: het stortingstempo naar de reserveringsrekening beslist sinds v322 of een dekkingsgat te
+       dichten is (`dekkingDichten()`), en de oude marge van drie maanden is vervallen. Met 100 per
+       maand was het gat van 2.600 over zeven maanden (372 per maand) niet te dichten en dus terecht
+       een beslissing; deze spec gaat over de grens tussen aandacht en beslissing, dus het tempo staat
+       op 400 en de grens ligt tussen zes en zeven maanden. */
+    add('r' + m, RES, m, '10', o.resPer != null ? o.resPer : 400, 'Reserveringen', 'NAAR RESERVERINGEN');
     // de rekening bestaat ook in de stilstaande fixture: één boeking buiten het venster van drie
     if (per !== 0) add('s' + m, SPAAR, m, '26', per, 'Spaarpot', 'NAAR SPAREN');
     else if (i === 11) add('s' + m, SPAAR, m, '26', 300, 'Spaarpot', 'NAAR SPAREN');
@@ -198,11 +203,15 @@ test.describe('c - dekking meet het knelmoment, niet de stand van nu', () => {
     expect(r.opTempo).toBe(true);
   });
 
-  /* De marge is de grens en staat op één plek; deze twee leggen hem aan beide kanten vast. */
-  test('precies op de marge is het nog aandacht, eronder een beslissing', async ({ page }) => {
-    await boot(page, { resIn: 3 });
+  /* v322: de grens is niet meer een vaste marge maar het gat per maand tegen het stortingstempo.
+     2.600 over zeven maanden is 372 en past in 400; over zes maanden is het 434 en past niet. Een
+     post op drie maanden, die onder de oude marge van v226 nog aandacht was, is nu een beslissing. */
+  test('de grens ligt bij het stortingstempo en niet bij een vaste marge', async ({ page }) => {
+    await boot(page, { resIn: 7 });
     expect((await regel(page, 'dekking')).status).toBe('let op');
-    await boot(page, { resIn: 2 });
+    await boot(page, { resIn: 6 });
+    expect((await regel(page, 'dekking')).status).toBe('tekort');
+    await boot(page, { resIn: 3 });
     expect((await regel(page, 'dekking')).status).toBe('tekort');
   });
 

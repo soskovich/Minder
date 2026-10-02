@@ -313,7 +313,8 @@ test('e: de drie rijen dragen een linker-sub uit hun eigen bron', async ({ page 
   });
   // buffer: de sub noemt de NORM, de rechterkolom de RICHT, en die twee zijn in deze fixture 2 en 3
   expect(r.subs.buffer).toBe(`je norm: ${NORM} maanden`);
-  expect(r.eenheden.buffer).toContain(`je richt staat op ${RICHT}`);
+  expect(r.eenheden.buffer).toContain(`je richtbedrag is ${RICHT} maanden`);
+  expect(r.eenheden.buffer).not.toMatch(/je richt staat/);   // v322: het woord is afgemaakt
   expect(r.subs.buffer).not.toContain(String(RICHT));
   // dekking: de eerstvolgende post links, wat er na die post overblijft rechts
   expect(r.subs.dekking).toBe(`verwacht: €${POST} in ${new Intl.DateTimeFormat('nl-NL', { month: 'long', year: 'numeric' }).format(new Date(PLUS(2) + '-01'))}`);
@@ -431,12 +432,14 @@ test('g: je drempel staat alleen bij de buffer en niet bij dekking of doel', asy
      deze test zette alleen de potstand op 50; dan staat de dekking op 'tekort', verdwijnt de kaart
      en sloeg de assertie zichzelf over achter een `if (r.zin)`. Dat is precies het weggefilterde
      geval van v299/v300, en de sabotage die 'je drempel' onvoorwaardelijk maakt bleef er groen op.
-     DE STAND DIE HET WEL DRAAGT is een dekking op TEMPO: een grote post die verder dan
-     MAAND_DREMPEL.dekkingMarge maanden weg ligt geeft status 'let op', en dan is de dekking de
-     blokkade EN rendert de kaart. */
+     DE STAND DIE HET WEL DRAAGT is een dekking op TEMPO: een gat dat voor zijn vervaldag te dichten
+     is geeft status 'let op', en dan is de dekking de blokkade EN rendert de kaart. v322: dat hangt
+     niet meer aan een vaste marge maar aan het stortingstempo (40 per maand in deze fixture), dus de
+     tweede post is zo gekozen dat het gat (299 + 500 - 500 = 299 over acht maanden, 38 per maand)
+     binnen dat tempo past. Met 5.000 was het 600 per maand en dus terecht een beslissing. */
   await boot(page, { set: { reserveringen: [
     { id: 'r1', naam: 'Waterschapsbelasting', bedrag: POST, vervalmaand: PLUS(2), intervalM: 12, cat: 'belasting' },
-    { id: 'r2', naam: 'Dakrenovatie', bedrag: 5000, vervalmaand: PLUS(8), intervalM: 12, cat: 'onderhoud' } ] } });
+    { id: 'r2', naam: 'Dakrenovatie', bedrag: 500, vervalmaand: PLUS(8), intervalM: 12, cat: 'onderhoud' } ] } });
   const r = await page.evaluate(() => {
     const R = maandRegels();
     const c = [...document.querySelectorAll('#s-maand .card')].find(x => /VOORWAARDEN VOOR BELEGGEN/.test(x.innerText));
@@ -611,12 +614,14 @@ for (const [w, h, zichtbaar] of [[360, 640, 567], [390, 844, 771]]) {
          in zijn eigen kaart. Die kaart kost 118px op 360 en 103px op 390, dus de pagina wordt 41 en
          41px hoger; de sub breekt op 360px over twee regels en dat is het verschil tussen de twee.
          De prijs staat als assertie vast, zodat een volgende ronde ziet wat hij uitgeeft. */
-      expect(r.sgH).toBe(230);
+      /* v322: 15px hoger op beide breedtes, want "je richtbedrag is 3 maanden" is langer dan "je richt
+         staat op 3" en breekt in de rechterkolom van de bufferrij een regel verder af. */
+      expect(r.sgH).toBe(245);
       expect(r.vaH).toBe(118);
     } else {
       expect(r.sigBodem).toBe(576);
       expect(r.sigBodem).toBeLessThan(zichtbaar);
-      expect(r.sgH).toBe(215);
+      expect(r.sgH).toBe(230);
       expect(r.vaH).toBe(103);
     }
   });

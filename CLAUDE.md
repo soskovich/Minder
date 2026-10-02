@@ -109,6 +109,46 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN DEKKINGSGAT DAT LATER VALT EN NOG TE DICHTEN IS, VRAAGT AANDACHT** (`v322`): GEMELD op het
+  toestel: EUR 37 in de pot en een boete van EUR 299 in november stond rood onder 'Vraagt een
+  beslissing' met EUR 262 tekort, terwijl er deze maand niets tekort is. De toets was
+  `doelMaandenTot(gat) >= dekkingMarge` (drie maanden), en een vaste marge zegt niets over de GROOTTE
+  van het gat. `dekkingMarge` is vervallen; `dekkingDichten(D)` is de ene plek die het beslist, en de
+  status, de eenheid en de gevolgzin lezen hem (`v104`).
+  DRIE UITKOMSTEN: `tekort` als de post in de lopende maand valt of het gat niet te dichten is, `let op`
+  als het wel te dichten is (de eenheid zegt dan "EUR X per maand tot november"), en `ok` als de pot
+  het dekt. Alleen de MAANDNAAM: de horizon is twaalf maanden, dus binnen dat venster wijst hij een
+  maand aan.
+  DE MAANDEN ZIJN `doelMaandenTot()`, en die sluit de lopende maand uit (`v316`). Dat betekent dat het
+  gemelde getal EUR 131 alleen klopt op een dag in SEPTEMBER: op 2 oktober is november EEN maand weg en
+  is het EUR 262 per maand. Dat staat als eigen assertie in de spec, want het is precies het verschil
+  dat de gebruiker op zijn scherm ziet.
+  DE DREMPEL IS HET GEMETEN STORTINGSTEMPO NAAR JE RESERVERINGSREKENING (`resStortTempo()`): de mediaan
+  van de bijschrijvingen op `SET.resAcc` over drie afgeronde maanden, in de vorm van `bufferTempo()`
+  (`v226`). Te dichten is `ceil(gat/maanden) <= tempo`. HET IS NIET `benodigdPerMaand`, en dat is
+  gemeten en beredeneerd: die som telt voor elke post `bedrag/maanden-tot-die-post` op, dus maal de
+  maanden tot het gat is hij minstens alles wat er tot dan valt, en dan is elk gat buiten de lopende
+  maand per constructie te dichten. Een drempel die niet kan vallen is geen drempel (meetles a); blok e
+  van `dekking-te-dichten.spec.js` meet dat op de fixture.
+  DE MEDIAAN EN GEEN GEMIDDELDE: 0, 0 en 900 geeft een gemiddelde van 300 en zou een gat te dichten
+  noemen op geld dat een keer kwam (`v168`). ONBEKEND IS NIET TE DICHTEN: zonder drie afgeronde maanden
+  of zonder aangewezen rekening is er geen tempo, en dan blijft het een beslissing (`v59`/`v73`/`v173`).
+  WAT HET NIET MEET, en dat is een benoemde grens: of de stortingen ook de LATERE posten moeten dragen.
+  Het tempo wordt tegen het eerste gat gelegd; een lijst die na dat gat nog meer vraagt ziet dat terug
+  zodra het volgende gat het eerste is.
+- **"JE RICHT" IS "JE RICHTBEDRAG"** (`v322`): de bufferregel zei "je richt staat op 2", een afgekapt
+  woord. Hij zegt nu "je richtbedrag is 2 maanden", hetzelfde woord als de suggestie en de sheet al
+  gebruikten (`v91`). Het diagnoseblok (blok 3) houdt zijn eigen label. DE PRIJS IS 15px OP 360 EN
+  390px: de kaart 'Staat goed' gaat van 230 naar 245 en van 215 naar 230, want de langere eenheid
+  breekt in de rechterkolom van de bufferrij een regel verder af. De vouw-asserties van `v314` blijven
+  groen.
+- **DERTIEN BESTAANDE TESTS VIELEN OP `v322`, EN ZE HADDEN GELIJK** (`v322`): negen in
+  `op-tempo.spec.js`, een in `grip-vorm.spec.js` en een in `maandscherm.spec.js` stonden op de vaste
+  marge van drie maanden, en hun fixtures stortten te weinig om hun gat te dichten (EUR 100 per maand
+  tegen EUR 372 nodig, EUR 40 tegen EUR 600, en geen drie afgeronde maanden). Onder de nieuwe regel is
+  dat terecht een beslissing. De fixtures dragen nu een tempo dat het gat dicht, en `op-tempo` legt de
+  NIEUWE grens vast (zeven maanden aandacht, zes maanden beslissing) in plaats van de oude marge. De
+  twee overige zijn de hoogtes van 'Staat goed', zie hierboven.
 - **HET INKOMENSVENSTER IS DRIE AFGERONDE MAANDEN, EN DE VORM BLIJFT DE ONDERSTE HELFT** (`v321`):
   `baseIncome()` las de laatste ZES afgeronde maanden, en GEMELD op een toestel met een netto-inkomen
   van EUR 5.216 (in loondienst sinds 1 september) stond er "Nog te ontvangen EUR 3.464".
@@ -5227,7 +5267,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v321` → `minder-v322`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v322` → `minder-v323`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5245,8 +5285,8 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 (een besluit en een open punt), dus hij bumpt niet, en `v313` raakt app-code en gaat daarom van
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
-`minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320` en `v321` naar
-`minder-v321`.
+`minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
+`minder-v321` en `v322` naar `minder-v322`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

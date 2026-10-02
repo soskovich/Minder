@@ -609,7 +609,15 @@ test.describe('g · leesmoment en robuustheid', () => {
   test('de waardekolom blijft een kolom, geen verticale strook', async ({ page }) => {
     // v133: een lange eenheid perste zich in de ongelimiteerde rechterkolom tot een woord per regel
     await page.setViewportSize({ width: 360, height: 780 });
-    await boot(page, seedM({ reserveringen: [{ id: 'a', naam: 'Gemeentelijke aanslag', bedrag: 25, vervalmaand: over(3), intervalM: 0 }], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 4000 } }));
+    /* v322: de rij moet in zijn UITGEKLAPTE vorm staan, dus op 'let op'. Dat hing aan de vaste marge
+       van drie maanden; sinds v322 aan een gemeten stortingstempo, en daarvoor zijn drie afgeronde
+       maanden met een storting op de reserveringsrekening nodig. */
+    const P = seedM({ reserveringen: [{ id: 'a', naam: 'Gemeentelijke aanslag', bedrag: 25, vervalmaand: over(3), intervalM: 0 }], manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 4000 } });
+    const T = JSON.parse(P.minder_tx);
+    for (const n of [-3, -2, -1]) T.push({ id: 'rs' + n, date: over(n) + '-12', amount: 20, acc: RES, name: 'Eigen rekening', desc: 'RESERVERINGEN', typ: '', ref: '', src: 'csv', accName: 'Res', refNums: [] });
+    P.minder_tx = JSON.stringify(T);
+    await boot(page, P);
+    expect(await page.evaluate(() => maandRegels().find((r) => r.key === 'dekking').status)).toBe('let op');
     await page.evaluate(() => go('maand'));
     const uit = await page.evaluate(() => {
       const rij = [...document.querySelectorAll('#s-maand .row')]
