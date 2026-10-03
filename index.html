@@ -19746,7 +19746,88 @@ function diagBuffernorm(){
     +'   '+(r.type==='noodfonds'?'(je noodfonds, als laatste)':'(doel)'));
   L.push('   DIT BLOK BESLIST NIETS EN VERANDERT NIETS (v244).');
   return L;
-}const DIAG_BLOKKEN=[
+}
+/* ===== BLOK 15: SLUIT DE STAND-KAART OP INZICHTEN AAN OP HET MAANDBUDGET (v326) =====
+   GEMELD op 3 oktober 2026: maandbudget EUR 3.375, nog in je potjes EUR 1.654, uitgegeven EUR 175 en
+   nog te betalen vast EUR 957. Samen 2.786, dus EUR 589 staat nergens. De vier getallen komen uit
+   vier verschillende bronnen, en dit blok legt ze per categorie naast elkaar:
+   - maandbudget: `totals().budget`, dus `totalBudget()`, ALLE potjes;
+   - nog in je potjes: `varBudget()` min `varPotjeStand().gebruikt`, alleen de potjes die NIET in
+     `recurringCats()` staan;
+   - uitgegeven: `totals().spendNorm`, ook in categorieen ZONDER potje;
+   - nog te betalen vast: `monthLiquidity().fixDue`, per INCASSO en niet per potje, zonder de
+     uitgesloten posten (`SET.fixDueExcl`), en met een terugval op incasso's van vorige maand die
+     het schema niet kent.
+   PER CATEGORIE: rest = budget - uitgegeven - in potjes - vast. Wat daar overblijft staat in geen
+   van de vier. De som van de rest is het gat van de kaart, en dat STAAT ER in plaats van dat het
+   wordt aangenomen (v301).
+   ALLEEN LEZEN (v244). Niets wordt herrekend: elk getal komt uit de functie die het scherm leest
+   (v104). Een incasso uit de terugval draagt geen categorie, en de categorie komt dan uit zijn
+   boeking van vorige maand; dat staat erbij. */
+function diagStandKaart(){
+  const L=[]; const ym=thisYM();
+  L.push('maand: '+ym+' (de stand-kaart rekent alleen op de lopende maand)');
+  const T=_dT(()=>totals(ym),null); const ML=_dT(()=>monthLiquidity(),null);
+  const VP=_dT(()=>varPotjeStand(ym),null); const vb=_dT(()=>varBudget(),0);
+  if(!T||!ML||!VP) return L.concat(['totals(), monthLiquidity() of varPotjeStand() gaf niets']);
+  const B=SET.budgets||{}; const sp=_dT(()=>catSpendMap(ym),{}); const rc=_dT(()=>recurringCats(),new Set());
+  const kaart={budget:Math.round(T.budget), inPot:vb-VP.gebruikt, uit:Math.round(T.spendNorm), vast:Math.round(ML.fixDue)};
+  const gat=kaart.budget-kaart.inPot-kaart.uit-kaart.vast;
+  L.push('');
+  L.push('de vier getallen zoals het scherm ze leest:');
+  L.push(`  maandbudget      totals().budget              ${kaart.budget}`);
+  L.push(`  nog in potjes    varBudget() - gebruikt       ${kaart.inPot}  (${vb} - ${VP.gebruikt})`);
+  L.push(`  uitgegeven       totals().spendNorm           ${kaart.uit}`);
+  L.push(`  nog te betalen   monthLiquidity().fixDue      ${kaart.vast}`);
+  L.push(`  staat nergens    budget - de andere drie      ${gat}`);
+  /* de categorie van een vaste post: uit het schema, en anders uit zijn boeking van vorige maand */
+  const vorige=_dT(()=>{ const ms=months(); const i=ms.indexOf(ym); return i>0?ms[i-1]:null; },null);
+  const catVan=s=>{ if(s.cat) return {cat:s.cat, bron:'schema'};
+    let c=null; _dT(()=>{ for(const t of txOfMonth(vorige)){ if(t.amount<0 && recurKey(t)===s.key){ c=catOf(t); break; } } },null);
+    return {cat:c||'(geen)', bron:'vorige maand'}; };
+  const items=(ML.fixDueItems||[]).map(s=>Object.assign({},catVan(s),{key:s.key,name:s.name,amount:Math.round(+s.amount||0),excl:!!s.excl}));
+  const vastPer={}, exclPer={};
+  for(const it of items){ const tgt=it.excl?exclPer:vastPer; tgt[it.cat]=(tgt[it.cat]||0)+it.amount; }
+  const ks=new Set(Object.keys(B).filter(k=>+B[k]>0));
+  for(const k in sp) if(Math.round(sp[k]||0)!==0) ks.add(k);
+  for(const k in vastPer) ks.add(k); for(const k in exclPer) ks.add(k);
+  const naam=k=>(CATS[k]||{}).name||k;
+  const rijen=[...ks].map(k=>{
+    const bud=Math.round(+B[k]||0), uit=Math.round(sp[k]||0), terug=rc.has(k);
+    const inPot=(bud>0 && !terug)?bud-uit:0;
+    const vast=vastPer[k]||0, excl=exclPer[k]||0;
+    const rest=bud-uit-inPot-vast;
+    const reden=[];
+    if(bud>0 && terug && excl) reden.push(`terugkerend potje, ${excl} aan uitgesloten incasso's`);
+    if(bud>0 && terug && !vast && !excl) reden.push(uit>0?'terugkerend potje, deze maand al afgeschreven':'terugkerend potje zonder openstaande incasso');
+    if(bud>0 && terug && vast && vast+uit!==bud) reden.push(`terugkerend potje, incasso ${vast} tegen potje ${bud}`);
+    if(!bud && uit) reden.push('uitgave zonder potje');
+    if(!bud && vast) reden.push('vaste last zonder potje');
+    if(bud>0 && !terug && vast) reden.push('vaste last OOK in een variabel potje: telt twee keer');
+    return {k, bud, uit, terug, inPot, vast, excl, rest, reden};
+  }).sort((a,b)=>Math.abs(b.rest)-Math.abs(a.rest) || naam(a.k).localeCompare(naam(b.k),'nl'));
+  L.push('');
+  L.push('per categorie: budget | uitgegeven | in potjes | vast | rest (rest = staat nergens)');
+  for(const r of rijen) L.push(`  ${naam(r.k).padEnd(26)} ${String(r.bud).padStart(6)} ${String(r.uit).padStart(6)} ${String(r.inPot).padStart(6)} ${String(r.vast).padStart(6)} ${String(r.rest).padStart(6)}  ${r.terug?'terugkerend':'variabel'}${r.reden.length?' · '+r.reden.join(' · '):''}`);
+  const som=f=>rijen.reduce((s,r)=>s+r[f],0);
+  L.push(`  ${'som'.padEnd(26)} ${String(som('bud')).padStart(6)} ${String(som('uit')).padStart(6)} ${String(som('inPot')).padStart(6)} ${String(som('vast')).padStart(6)} ${String(som('rest')).padStart(6)}`);
+  L.push('');
+  L.push('aansluiting op de kaart (per categorie afgerond, de kaart rondt per som af):');
+  L.push(`  budget      ${som('bud')} tegen ${kaart.budget}  ${som('bud')===kaart.budget?'JA':'NEE'}`);
+  L.push(`  uitgegeven  ${som('uit')} tegen ${kaart.uit}  ${som('uit')===kaart.uit?'JA':'NEE, catSpendMap() en spendNorm verschillen hier'}`);
+  L.push(`  in potjes   ${som('inPot')} tegen ${kaart.inPot}  ${som('inPot')===kaart.inPot?'JA':'NEE'}`);
+  L.push(`  vast        ${som('vast')} tegen ${kaart.vast}  ${som('vast')===kaart.vast?'JA':'NEE'}`);
+  L.push(`  rest        ${som('rest')} tegen ${gat}  ${som('rest')===gat?'JA':'NEE'}`);
+  L.push('');
+  L.push('de vaste posten van monthLiquidity(), met hun categorie en bron:');
+  if(!items.length) L.push('  geen');
+  for(const it of items) L.push(`  ${String(it.amount).padStart(6)}  ${naam(it.cat).padEnd(24)} ${it.excl?'UITGESLOTEN':'telt mee  '}  bron ${it.bron}  ${it.name}`);
+  L.push('');
+  L.push('recurringCats(): '+([...rc].map(naam).join(', ')||'leeg'));
+  L.push('potjes die NIET terugkerend zijn (staan in "nog in je potjes"): '+(Object.keys(B).filter(k=>+B[k]>0&&!rc.has(k)).map(naam).join(', ')||'geen'));
+  return L;
+}
+const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
   {titel:'de grendel', lees:diagGrendel},
@@ -19761,6 +19842,7 @@ function diagBuffernorm(){
   {titel:'de tankvoorautorisatie en haar terugboeking', lees:diagVoorautorisatie},
   {titel:'de pending-botsing: kan een boeking een sync lang verdwijnen', lees:diagPendBots},
   {titel:'de teller en de noemer van bufferMaanden()', lees:diagBuffernorm},
+  {titel:'de stand-kaart op Inzichten tegen zijn maandbudget, per categorie', lees:diagStandKaart},
 ];
 
 async function diagTekst(){

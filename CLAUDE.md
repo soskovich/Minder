@@ -109,6 +109,42 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE STAND-KAART SLUIT NIET AAN OP ZIJN MAANDBUDGET, EN BLOK 15 MEET WAAR HET ZIT** (`v326`, alleen
+  gemeten, niets veranderd aan het scherm): GEMELD op 3 oktober 2026 stond er maandbudget EUR 3.375,
+  nog in je potjes EUR 1.654, uitgegeven EUR 175 en nog te betalen vast EUR 957; samen 2.786, dus EUR 589
+  nergens. DE VIER GETALLEN KOMEN UIT VIER BRONNEN met elk een eigen afbakening: het budget is ALLE
+  potjes (`totalBudget()`), "nog in je potjes" alleen de potjes buiten `recurringCats()`, uitgegeven
+  ook de categorieen zonder potje (`spendNorm`), en "nog te betalen" telt per INCASSO
+  (`monthLiquidity().fixDue`) en niet per potje. Per categorie geldt dus: rest = budget - uitgegeven
+  - in potjes - vast, en wat daar overblijft staat op geen van de vier plekken.
+  NAGELEZEN EN OP EEN FIXTURE GEMETEN, NIET OP HET TOESTEL: (a) een UITGESLOTEN incasso
+  (`SET.fixDueExcl`) in een terugkerend potje valt uit "nog in je potjes" (het potje is terugkerend)
+  EN uit "nog te betalen" (hij is uitgesloten), dus zijn hele potje staat nergens. Dat is de eerste
+  vermoede oorzaak, BEVESTIGD als mechanisme. (b) Een potje dat `recurringCats()` NIET als terugkerend
+  ziet (de huur, `v254`/`v265`) staat met zijn hele bedrag in "nog in je potjes". Dat maakt het gat NIET
+  groter, het zit in een ander getal; staat de incasso daarnaast ook in "nog te betalen" (via de
+  terugval op vorige maand, die geen categorie draagt en `recurringCats()` niet voedt), dan telt hij
+  twee keer en wordt het gat juist KLEINER. De tweede vermoede oorzaak is dus WEERLEGD als oorzaak van
+  het gat. (c) Verder kan een gat ontstaan uit een terugkerend potje waarvan de incasso afwijkt van het
+  potjebedrag, en een negatieve rest uit een uitgave of vaste last zonder potje.
+  BLOK 15 VAN `DIAG_BLOKKEN` (`diagStandKaart()`) GEEFT PER CATEGORIE budget, uitgegeven, in potjes,
+  vast en rest, met de reden, en de aansluiting van elke kolom op het getal van het scherm. Alleen
+  lezen (`v244`); elk getal komt uit de functie die het scherm leest (`v104`).
+  HET VOORSTEL IS NIET GEBOUWD, op verzoek: elk deel van het maandbudget in precies een getal, met een
+  terugkerend potje zonder herkende incasso als "nog te betalen" tot het geld eraf is. Dat wacht op
+  de uitvoer van blok 15 op het toestel.
+- **OPEN PUNT, GEMETEN EN NIET GEBOUWD: DE PIEKDAG KAN IN DE EERSTE TWEE WEKEN PER CONSTRUCTIE VUREN**
+  (`v326`): de enige poort is `PIEK_MIN_TX` (8 losse afschrijvingen), en er is geen minimum aan
+  verstreken dagen. De maand wordt vergeleken met afgeronde maanden, waarin elke weekdag vier of vijf
+  keer voorkomt. GEREKEND: bij gelijke uitgave per dag is het aandeel van een weekdag
+  `keer/dagen` tegen een referentie van ongeveer 1/7, dus de verhouding is `7 x ceil(d/7) / d`. Die
+  haalt `PIEK_FACTOR` (1,5) zonder dat er iets scheef staat op dag 1 tot en met 4 (dag 3: 2,33) en op
+  dag 8 en 9 (1,75 en 1,56). Vanaf dag 10 is het hoogstens 1,4 (dag 10 en 15), daarna 1,27 (dag 22).
+  DE STRUCTURELE ONDERGRENS IS DUS 10 DAGEN. VOORSTEL: `PIEK_MIN_DAGEN = 14`, omdat dan elke weekdag
+  minstens twee keer is voorgekomen en een enkele dure dag niet meer "een weekdag" is; dat is het
+  argument tegen toeval, en 10 is alleen het argument tegen de rekensom. De marge op dag 15 is smal
+  (1,4 tegen 1,5); de schonere vorm is het aandeel per VOORKOMEN van een weekdag te meten, en dat is
+  een eigen keuze.
 - **HET LOGBOEK STAAT PER AFGESLOTEN MAAND, MET EEN KOP, EEN VRAAG EN DE REST KORT** (`v325`): de
   kaart "Wat je met deze overschrijdingen deed" zei per regel wat je deed, maar niet wat de maand je
   kostte en hij vroeg niets. Per afgesloten maand (nieuwste eerst, hooguit `VALTOP_LOG_TOON` = 3) staat
@@ -5385,7 +5421,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v325` → `minder-v326`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v326` → `minder-v327`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5404,7 +5440,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324` en `v325` naar `minder-v325`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325` en `v326` naar `minder-v326`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
