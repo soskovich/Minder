@@ -116,14 +116,20 @@ test.describe('b - accepteren verplaatst de regel, en telt niet meer als tekort'
 
   test('het scherm zegt dat je hem bewust hebt geaccepteerd', async ({ page }) => {
     await open(page, drieTekorten());
-    const t = await page.evaluate(() => { maandAcceptZet('buffer'); go('maand'); return $('#s-maand').innerText; });
-    expect(t).toContain('Je hebt dit bewust geaccepteerd');
-    // de kaart Vraagt een beslissing noemt hem niet meer
-    const kaart = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => (x.innerText || '').indexOf('Vraagt een beslissing') === 0);
-      return c ? c.innerText : '';
-    });
-    expect(kaart).not.toContain('Buffer in maanden');
+    await page.evaluate(() => { maandAcceptZet('buffer'); go('maand'); renderMaand(); });
+    /* v324: de regel staat onder 'Vraagt aandacht' als lijstregel, en de zin staat in de sheet
+       erachter. De kaarten worden op hun KOP gekozen: innerText geeft de kop in hoofdletters, dus de
+       oude toets op 'Vraagt een beslissing' vond nooit een kaart en kon niet vallen (meetles t). */
+    const kaart = (kop) => page.evaluate((kop) => {
+      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => x.querySelector('.hlabel') && x.querySelector('.hlabel').innerText.trim().toUpperCase() === kop);
+      return c ? c.innerText : null;
+    }, kop);
+    expect(await kaart('VRAAGT AANDACHT')).toContain('Buffer in maanden');
+    const beslis = await kaart('VRAAGT EEN BESLISSING');
+    expect(beslis).not.toBeNull();   // de andere twee tekorten staan er nog, dus de kaart bestaat
+    expect(beslis).not.toContain('Buffer in maanden');
+    await page.locator('.row[data-beslis="buffer"]').click();
+    expect(await page.locator('#sheet').innerText()).toContain('Je hebt dit bewust geaccepteerd');
   });
 
   test('het maandoordeel telt hem niet meer als tekort', async ({ page }) => {
