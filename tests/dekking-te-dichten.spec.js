@@ -70,7 +70,8 @@ test.describe('a · EUR 37 en EUR 299 in november, op 3 oktober', () => {
     await boot(page);
     const r = await lees(page);
     expect(r.aandacht).toContain('Dekking reserveringen');
-    expect(r.aandacht).toContain('€131 per maand tot november');
+    // v324: een lijstregel, met het bedrag en zijn eenheid op twee regels
+    expect(r.aandacht).toMatch(/€131\s+per maand tot november/);
     expect(r.beslis).not.toContain('Dekking reserveringen');
   });
 });

@@ -122,9 +122,10 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
     await maand(page, metLopende());
     const per = await rijen(page);
     expect(per['Vraagt aandacht']).toContain('Buffer in maanden');
-    /* v305: het label noemt de teller die er ligt, en dat is sinds die ronde de toewijzing aan je
-       noodfonds en niet je rekeningsaldo. */
-    expect(per['Vraagt aandacht']).toContain('maanden toegewezen aan je noodfonds');
+    /* v324: 'Vraagt aandacht' is een lijstregel, dus de rij draagt de OORZAAK en niet meer de
+       eenheid van de uitgeklapte vorm. Het label van v305 staat in die vorm ook onder 'Vraagt een
+       beslissing' niet, en dat is sinds v320 zo. */
+    expect(per['Vraagt aandacht']).toContain('je norm is 3');
     /* v314: DE AFSPRAAK STAAT OP EEN PLEK, en dat is de kaart. Hij stond ook in de rij, dus je las
        dezelfde tekst twee keer op een scherm, en alleen de kaart heeft de ingang om hem aan te
        passen. De verbinding tussen de twee is niet weg maar omgedraaid: de kaart noemt de regel.
@@ -194,8 +195,12 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
     expect(r.geaccepteerd).toBe(true);
     expect(r.afspraak).toBe(false);
     const per = await rijen(page);
-    expect(per['Vraagt aandacht']).toContain('Je hebt dit bewust geaccepteerd');
+    expect(per['Vraagt aandacht']).toContain('Buffer in maanden');
     expect(per['Vraagt aandacht']).not.toContain('Hier loopt een afspraak over');
+    // v324: de acceptatie-zin staat in de sheet achter de lijstregel, en niet meer in de kaart
+    expect(per['Vraagt aandacht']).not.toContain('Je hebt dit bewust geaccepteerd');
+    await page.locator('.row[data-beslis="buffer"]').click();
+    expect(await page.locator('#sheet').innerText()).toContain('Je hebt dit bewust geaccepteerd');
   });
 
   test('"Alleen vastleggen" telt ook: de afspraak draagt de regelKey', async ({ page }) => {
