@@ -78,8 +78,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. Draagt sinds `v235` de
   valt-op-kaarten: dezelfde signalen die Inzichten constateert, met de historie en de handelingen
   eraan. Sinds `v320` staan de regels in "Vraagt een beslissing" als LIJSTREGEL (de vorm van "Staat
-  goed") met de volle uitleg en de handeling in een sheet erachter; "Vraagt aandacht" houdt de
-  uitgeklapte vorm van `maandRij(r,false)`. Sinds `v314` staat de SAMENVATTING daarvoor (hij telt de potjes mee) en staan de handelingen
+  goed") met de volle uitleg en de handeling in een sheet erachter; sinds `v324` leest "Vraagt aandacht"
+  dezelfde lijstregel (`maandBeslisRij()`), dus alleen de kop en de stip verschillen. Sinds `v314` staat de SAMENVATTING daarvoor (hij telt de potjes mee) en staan de handelingen
   in volgorde van het moment in de maand, met "Zo laten" als eigen actie. Draagt sinds `v315` de kaart
   "Vanaf <maand>" met drie ingangen naar wat er klaarstaat, en toont het logboek de UITKOMST per handeling. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
   de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten. Sinds `v237` is dat niet
@@ -109,6 +109,30 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **"VRAAGT AANDACHT" IS DEZELFDE LIJSTREGEL ALS "VRAAGT EEN BESLISSING"** (`v324`): sinds `v323`
+  schuift een dekkingsgat van de ene kaart naar de andere zodra de post niet meer in de lopende maand
+  valt, en dan veranderde ook zijn VORM (een lijstregel tegen een alinea). Beide kaarten lezen nu
+  `maandBeslisRij()` en `maandBeslisDeel()`; wat verschilt is de kop en de kleur van de stip. De
+  gevolgzin, de suggestie en de acceptatie-zin staan in de sheet (`renderMaandBeslisSheet()`), en de
+  sheet van een aandacht-regel draagt geen gespreksknop, want `maandIngangTekst()` eist `tekort`.
+  EEN DEKKINGSGAT DAT LATER VALT DRAAGT EEN MAANDBEDRAG EN GEEN STAND: `maandBeslisDeel()` leest dan
+  `r.perMaandTot` (uit `dekkingDichten()`) en toont "EUR 131 · per maand tot november"; een post in de
+  lopende maand heeft dat veld niet en houdt de stand uit `maandTekort()` ("EUR 262 · tekort"). Dat is
+  de enige plek waar de twee kaarten een ANDER bedrag kiezen, en het is de keuze van de gebruiker.
+  GEMETEN op de stand van het toestel: de aandacht-kaart was 295px op 360 en 238px op 390 en is nu
+  118px op beide breedtes.
+  NAGEGAAN WELKE REGELS ONDER "VRAAGT AANDACHT" KUNNEN STAAN, en twee wijken af (gemeld, niet gebouwd):
+  dekking (later gat, of een acceptatie of afspraak over een tekort), buffer, een doel (alleen via een
+  acceptatie of afspraak: `maandRegels()` geeft een doel nooit `let op`) en een structureel signaal met
+  `t:'info'` (`rente-*`, en die kan dus WEL onder aandacht staan). Dekking, doel, structureel en de
+  op-tempo-buffer lezen hun oorzaak en bedrag uit dezelfde velden als bij een beslissing. DE AFWIJKINGEN
+  ZITTEN BIJ DE BUFFER: (a) een buffer BOVEN zijn norm en onder zijn richtbedrag is amber om de RICHT,
+  maar de oorzaak zegt "nu X maanden, je norm is Y" en noemt dus de grens die hij wel haalt; (b) een
+  buffer die amber is omdat er meer is toegewezen dan er op de spaarrekening staat
+  (`toewijzingBovenSaldo()`) noemt die reden niet in zijn oorzaak, en heeft bij een vol doel geen bedrag.
+  OPEN PUNT: de uitgeklapte tak van `maandRij(r,false)` en `maandIngang()` hebben op het scherm geen
+  aanroeper meer; alleen tests roepen ze nog rechtstreeks aan (zes bestanden). Opruimen is een eigen
+  ronde.
 - **EEN DEKKINGSGAT DAT NIET DEZE MAAND VALT, VRAAGT AANDACHT** (`v323`, keuze van de gebruiker):
   de stortingstoets van `v322` hieronder is VERVALLEN. GEMELD na `v322`: dezelfde boete stond nog
   steeds rood, want op het toestel ging er niets naar de reserveringsrekening en dan is het gat per
@@ -5293,7 +5317,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v323` → `minder-v324`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v324` → `minder-v325`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5312,7 +5336,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322` en `v323` naar `minder-v323`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323` en `v324` naar `minder-v324`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

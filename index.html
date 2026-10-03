@@ -5992,6 +5992,16 @@ function maandBeslisDeel(r){
   if(!r) return {oorzaak:'', waarde:'', eenheid:''};
   const o=String(r.oorzaak||'');
   if(r.telaat) return {oorzaak:o, waarde:'niet te halen', eenheid:'zolang je buffer voorgaat'};
+  /* v324: EEN DEKKINGSGAT DAT LATER VALT DRAAGT EEN MAANDBEDRAG en geen stand. Sinds v323 staat zo'n
+     rij onder 'Vraagt aandacht', en wat hij daar zegt is wat het per maand vraagt tot de post valt.
+     `D.tekort` (de stand uit maandTekort()) is dezelfde achterstand gemeten tegen NU, en die twee naast
+     elkaar in een sheet zouden lezen als twee verschillende tekorten. Het bedrag komt uit
+     `r.perMaandTot`, het veld dat maandRegels() uit dekkingDichten() zet (v104): hier wordt niets
+     opnieuw gedeeld. Een post in de lopende maand heeft dat veld niet en valt door naar de stand. */
+  if(r.perMaandTot && r.perMaandTot.bedrag!=null){
+    const mnd=MFULL[+String(r.perMaandTot.maand).slice(5,7)-1]||'';
+    return {oorzaak:o, waarde:euro0(r.perMaandTot.bedrag), eenheid:`per maand tot ${mnd}`};
+  }
   const T=maandTekort(r);
   if(!T) return {oorzaak:o, waarde:'', eenheid:''};
   return {oorzaak:o, waarde:euro0(T.bedrag), eenheid:BESLIS_EENHEID[T.soort]||''};
@@ -6035,6 +6045,9 @@ function renderMaandBeslisSheet(key){
         ${B.waarde?`<div style="font-weight:800;white-space:nowrap">${esc(B.waarde)}</div>`:''}
         ${B.eenheid?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(B.eenheid)}</div>`:''}</div>`:''}</div>
     ${uitleg.length?`<div class="card"><div class="small" style="line-height:1.5">${uitleg.map(z=>esc(z)).join(' ')}</div></div>`:''}
+    ${/* v324: een regel die je bewust accepteerde staat onder 'Vraagt aandacht', en de uitgeklapte
+          rij daar zei dat erbij. Die rij is nu een lijstregel, dus de zin verhuist mee naar hier. */
+      r.geaccepteerd?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:8px">Je hebt dit bewust geaccepteerd${r.geaccepteerd.tot?`, tot ${esc(resMaandLabel(r.geaccepteerd.tot))}`:''}.</div>`:''}
     ${maandIngangKnop(r, m)}
     ${/* De editor van de regel was vóór v320 de tik OP de rij. Die tik opent nu deze sheet, dus de
           route erheen verhuist mee: zonder hem verliest Grip zijn ingang naar de reserveringen, de
@@ -6655,14 +6668,17 @@ function renderMaand(){
           v226: van die twee is alleen 'Je plan' daar nog. De spaarquote is geen constatering over
           een maandregel maar een uitkomst, en staat weer als eigen kaart verderop. */''}
     ${/* v320: de regels staan hier als LIJSTREGEL en niet meer in de uitgeklapte vorm; de volle
-          tekst staat in de sheet erachter. maandRij(r,false) blijft de vorm van 'Vraagt aandacht'
-          hieronder, want daar past geen beslissing achter een tik. */''}
+          tekst staat in de sheet erachter.
+          v324: 'Vraagt aandacht' leest DEZELFDE renderer. Sinds v323 schuift een dekkingsgat van de
+          ene kaart naar de andere zodra de maand omslaat, en dan veranderde ook zijn VORM: dezelfde
+          regel was een lijstregel of een alinea naar gelang zijn status. Wat er nu tussen de twee
+          kaarten verschilt is de kop en de kleur van de stip, en verder niets. */''}
     ${beslis.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt een beslissing</div>
       ${beslis.map(r=>maandBeslisRij(r)).join('')}
       ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
       </div>`:''}
     ${aandacht.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt aandacht</div>
-      ${aandacht.map(r=>maandRij(r,false)).join('')}
+      ${aandacht.map(r=>maandBeslisRij(r)).join('')}
       ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
       </div>`:''}
     ${/* v219: de ingang naar het gesprek stond vier blokken lager, achter de spaarquote, de
