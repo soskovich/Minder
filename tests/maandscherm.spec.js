@@ -635,7 +635,9 @@ test.describe('g · leesmoment en robuustheid', () => {
     const uit = await page.evaluate(() => {
       const rij = [...document.querySelectorAll('#s-maand .row')]
         .find((r) => /dekking reserveringen/i.test(r.innerText));
-      const rechts = rij.lastElementChild.getBoundingClientRect();
+      /* v324: de rij is een lijstregel en eindigt op de chevron, dus de waardekolom wordt bij naam
+         gezocht in plaats van als laatste kind. */
+      const rechts = rij.querySelector('[data-beslisbedrag]').getBoundingClientRect();
       return { breedte: Math.round(rechts.width), hoogte: Math.round(rechts.height), rij: Math.round(rij.getBoundingClientRect().width) };
     });
     expect(uit.breedte / uit.rij).toBeLessThanOrEqual(0.45);   // begrensd, dus de zin houdt ruimte
