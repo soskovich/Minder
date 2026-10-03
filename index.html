@@ -6573,10 +6573,9 @@ function valtOpUitkomst(r){
    potjes, een vraag over de grootste afwijking die nog geen antwoord heeft, en de rest kort.
    EEN BRON VOOR HET BEDRAG (v104): `valtOpBoven(r)` zegt per record of hij boven, binnen of
    vervallen eindigde en met welk bedrag. De kop telt precies die bedragen op, de rij drukt precies
-   dat bedrag af, en de trend leest dezelfde maandsom. Er wordt niets herrekend: het is
-   `over_eind_maand` uit de afsluiting (v235), dus tegen de lat van DIE maand, en dat is bij een
-   bijstelling het bijgestelde potje. De meting tegen het oorspronkelijke potje (v315) blijft in het
-   record en in `valtOpUitkomst()`.
+   dat bedrag af, en de trend en de tegels lezen dezelfde maandsom. Er wordt niets herrekend: het is
+   de meting uit de afsluiting (v235), `over_eind_maand`, en bij een BIJSTELLING
+   `over_oorspronkelijk`, want tegen het bijgestelde potje eindigt bijstellen per definitie binnen.
    VERVALLEN TELT NIET MEE, in het bedrag niet en in de noemer niet: een overschrijding die bij
    nader inzien niet bestond is geen potje dat boven eindigde (v289).
    EEN RECORD ZONDER METING (een afgesloten maand zonder `over_eind_maand`) telt ook niet mee en
@@ -6584,10 +6583,24 @@ function valtOpUitkomst(r){
 function valtOpBoven(r){
   if(!r || !r.maand || String(r.maand)>=thisYM()) return null;
   if(r.actie==='correctie') return {soort:'vervallen', bedrag:0};
-  if(r.over_eind_maand==null) return {soort:'onbekend', bedrag:0};
-  const b=Math.round(+r.over_eind_maand||0);
+  /* EEN BIJSTELLING TELT TEGEN HET OORSPRONKELIJKE POTJE (v315, bevestigd bij v325). Tegen het
+     bijgestelde bedrag eindigt bijstellen per definitie binnen, en dan meet de tegel
+     "bijgesteld -> binnen" niets. Een record van voor v315 draagt dat veld niet en heet daarom
+     onbekend, in plaats van een getal te tonen dat tegen een andere lat is gemeten (v298). */
+  const veld = r.actie==='potje_bijgesteld' ? r.over_oorspronkelijk : r.over_eind_maand;
+  if(veld==null) return {soort:'onbekend', bedrag:0};
+  const b=Math.round(+veld||0);
   return b>0 ? {soort:'boven', bedrag:b} : {soort:'binnen', bedrag:0};
 }
+/* Bij een bijstelling noemt de korte regel BEIDE latten: hoe de maand eindigde tegen het
+   bijgestelde potje, en tegen het oorspronkelijke. Het bedrag rechts is het tweede, want dat telt
+   in de kop (valtOpBoven). */
+function valtOpLatten(r){ if(r.actie!=='potje_bijgesteld' || r.over_eind_maand==null) return '';
+    const bij=Math.round(+r.over_eind_maand||0);
+    const a = bij>0 ? ` · ${euro0(bij)} boven` : ' · binnen';
+    if(r.over_oorspronkelijk==null) return a;
+    const oo=Math.round(+r.over_oorspronkelijk||0);
+    return a + (oo>0 ? ` · ${euro0(oo)} boven je oorspronkelijke potje` : ' · binnen je oorspronkelijke potje'); }
 function valtOpYmPlus(ym, n){ const [y,mo]=String(ym).split('-').map(Number); const d=new Date(y, mo-1+n, 1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function valtOpMaandStand(m){
@@ -6626,7 +6639,9 @@ function valtOpVraag(maanden){
 function valtOpVraagZin(r){
   const n=esc(r.categorie||r.potjeId||'');
   if(r.actie==='grens_gezet') return `${n} bleef ook met een grens boven je potje.`;
-  if(r.actie==='potje_bijgesteld') return `${n} bleef ook na bijstellen boven je potje.`;
+  if(r.actie==='potje_bijgesteld') return Math.round(+r.over_eind_maand||0)>0
+    ? `${n} bleef ook na bijstellen boven je potje.`
+    : `${n} ging boven je oorspronkelijke potje, en je stelde het bij.`;
   if(r.actie==='zo_gelaten') return `${n} ging boven je potje, en je liet het zo.`;
   if(r.actie==='volgende_maand') return `${n} ging boven je potje, en je paste het voor de maand erna aan.`;
   if(r.actie==='geen') return `${n} ging boven je potje, zonder dat je iets deed.`;
@@ -6705,7 +6720,7 @@ function valtOpLogBlok(){
      in het label (v78/v93). */
   const rechts=u=> u.soort==='boven' ? `<span class="vl-bedrag" data-boven="${u.bedrag}">+${euro0(u.bedrag)}</span>`
     : `<span class="vl-woord">${u.soort==='binnen'?'binnen':u.soort==='vervallen'?'vervallen':'niet gemeten'}</span>`;
-  const kort=x=>`<div class="vl-rij" data-id="${esc(x.r.id||valtOpId(x.r.maand,x.r.potjeId))}"><span class="vl-naam">${esc(x.r.categorie||x.r.potjeId||'')}<span class="vl-hand">${hand(x.r)}</span></span>${rechts(x.u)}</div>`;
+  const kort=x=>`<div class="vl-rij" data-id="${esc(x.r.id||valtOpId(x.r.maand,x.r.potjeId))}"><span class="vl-naam">${esc(x.r.categorie||x.r.potjeId||'')}<span class="vl-hand">${hand(x.r)}${valtOpLatten(x.r)}</span></span>${rechts(x.u)}</div>`;
   const vraagKaart=r=>{ const u=valtOpBoven(r); const id=esc(r.id||valtOpId(r.maand,r.potjeId));
     return `<div class="vl-vraag" data-vraag="${id}">
       <span class="vl-chip">${euro0(u.bedrag)} boven</span>

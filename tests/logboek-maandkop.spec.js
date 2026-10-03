@@ -3,6 +3,9 @@
    +84 zonder handeling, Sport bijgesteld en binnen, Vervoer grens en binnen, Belasting zonder
    handeling en binnen, Overig vervallen na correctie. De klok staat op 3 oktober 2026, zodat de
    maandsleutels vast zijn (v299/v310) en september de enige afgesloten maand is.
+   SPORT IS BIJGESTELD VAN 50 NAAR 96 EN EINDIGDE OP 90: binnen het bijgestelde potje, en 40 boven het
+   oorspronkelijke. Een bijstelling telt tegen het oorspronkelijke potje (v315, bevestigd bij v325),
+   dus de kop van september is 194 + 84 + 40 = EUR 318, en 3 van de 5.
    DE RECORDS DRAGEN HUN AFSLUITING AL (`over_eind_maand`), dus `valtOpAfsluiten()` raakt ze niet
    en de uitkomst hangt niet aan boekingen die deze fixture niet draagt. */
 const { test, expect } = require('@playwright/test');
@@ -70,19 +73,19 @@ test('a1 de kop is de som van precies de bedragen die de regels eronder tonen', 
   expect(r.maanden.length).toBe(1);
   const s=r.maanden[0];
   expect(s.maand).toBe(SEP);
-  expect(s.kop).toBe(278);
-  expect(s.kopTekst).toContain('€278');
+  expect(s.kop).toBe(318);
+  expect(s.kopTekst).toContain('€318');
   expect(s.kopTekst).toContain('boven je potjes');
-  // de bedragen op het scherm: de vraag (194) en de korte rij (84), en samen de kop
+  // de bedragen op het scherm: de vraag (194) en de korte rijen (84 en 40), en samen de kop
   const opScherm=s.rijBoven.concat(s.chips.map(c=>+c.replace(/\D/g,'')));
-  expect(opScherm.sort((a,b)=>a-b)).toEqual([84,194]);
+  expect(opScherm.sort((a,b)=>a-b)).toEqual([40,84,194]);
   expect(opScherm.reduce((a,b)=>a+b,0)).toBe(s.kop);
 });
 
-test('a2 vervallen telt niet mee in de noemer: 2 van de 5', async ({page})=>{
+test('a2 vervallen telt niet mee in de noemer: 3 van de 5', async ({page})=>{
   await boot(page, SEPTEMBER());
   const s=(await lees(page)).maanden[0];
-  expect(s.kopTekst).toContain('2 van de 5 potjes met een signaal eindigden erboven.');
+  expect(s.kopTekst).toContain('3 van de 5 potjes met een signaal eindigden erboven.');
   expect(s.kopTekst).not.toContain('van de 6');
 });
 
@@ -99,12 +102,12 @@ test('a3 de vraag gaat over de grootste afwijking, en de zin volgt de handeling'
 test('a4 de rest staat kort: boven met bedrag, binnen en vervallen ingeklapt', async ({page})=>{
   await boot(page, SEPTEMBER());
   const s=(await lees(page)).maanden[0];
-  expect(s.lijst).toEqual(['Boodschappen niets gedaan +€84']);
-  expect(s.rest).toBe('4 binnen of vervallen ›');
+  expect(s.lijst).toEqual(['Boodschappen niets gedaan +€84',
+    'Sport & gezondheid potje bijgesteld · €50 → €96 · binnen · €40 boven je oorspronkelijke potje +€40']);
+  expect(s.rest).toBe('3 binnen of vervallen ›');
   expect(s.restRijen).toEqual([
     'Belasting & boetes niets gedaan binnen',
     'Overig vervallen na correctie vervallen',
-    'Sport & gezondheid potje bijgesteld · €50 → €96 binnen',
     'Vervoer & auto grens gezet binnen',
   ]);
 });
@@ -143,9 +146,9 @@ test('b1 het antwoord staat op het record met keuze en datum, en de vraag gaat n
   expect(s.antwoorden[0].t).toContain('3 okt');
   expect(await page.locator('[data-antwoord]').evaluate(e=>e.classList.contains('vl-dim'))).toBe(true);
   // de kop verandert niet door een antwoord
-  expect(s.kop).toBe(278);
+  expect(s.kop).toBe(318);
   // Boodschappen is nu de vraag en staat dus niet meer als korte rij
-  expect(s.lijst).toEqual([]);
+  expect(s.lijst.map(x=>x.split(' ')[0])).toEqual(['Sport']);
 });
 
 test('b2 "Potje past niet" opent de route volgende maand anders voor dat potje', async ({page})=>{
@@ -167,20 +170,32 @@ test('b3 een vraag tegelijk, ook met twee onbeantwoorde afwijkingen', async ({pa
   expect(await page.locator('[data-vraag]').count()).toBe(1);
   await page.evaluate(id=>valtOpAntwoord(id,'past_niet'), SEP+'|boodschappen');
   await page.evaluate(()=>{ closeSheet(); go('maand'); });
+  expect(await page.locator('[data-vraag]').count()).toBe(1);     // Sport, tegen het oorspronkelijke potje
+  await page.evaluate(id=>valtOpAntwoord(id,'uitzondering'), SEP+'|sport');
   expect(await page.locator('[data-vraag]').count()).toBe(0);
-  expect(await page.locator('[data-antwoord]').count()).toBe(2);
+  expect(await page.locator('[data-antwoord]').count()).toBe(3);
 });
 
 test('b4 de zin bij een bijstelling die toch boven bleef', async ({page})=>{
-  const log=SEPTEMBER(); log[2].over_eind_maand=30;   // Sport, bijgesteld en toch erboven
+  const log=SEPTEMBER(); log[2].over_eind_maand=30; log[2].over_oorspronkelijk=76;   // Sport, bijgesteld en toch erboven
   await boot(page, log);
   await page.evaluate(id=>valtOpAntwoord(id,'uitzondering'), SEP+'|uiteten');
   await page.evaluate(id=>valtOpAntwoord(id,'uitzondering'), SEP+'|boodschappen');
   const s=(await lees(page)).maanden[0];
   expect(s.vraag).toBe(SEP+'|sport');
   expect(s.vraagTekst).toContain('Sport & gezondheid bleef ook na bijstellen boven je potje.');
-  expect(s.kop).toBe(308);
+  expect(s.kop).toBe(354);
   expect(s.kopTekst).toContain('3 van de 5');
+});
+
+test('b6 een bijstelling die binnen het bijgestelde potje bleef, vraagt naar het oorspronkelijke', async ({page})=>{
+  await boot(page, SEPTEMBER());
+  await page.evaluate(id=>valtOpAntwoord(id,'uitzondering'), SEP+'|uiteten');
+  await page.evaluate(id=>valtOpAntwoord(id,'uitzondering'), SEP+'|boodschappen');
+  const s=(await lees(page)).maanden[0];
+  expect(s.vraag).toBe(SEP+'|sport');
+  expect(s.vraagTekst).toContain('Sport & gezondheid ging boven je oorspronkelijke potje, en je stelde het bij.');
+  expect(s.chips).toEqual(['€194 boven','€84 boven','€40 boven']);
 });
 
 test('b5 een antwoord is in een tik te wijzigen', async ({page})=>{
@@ -195,7 +210,9 @@ test('b5 een antwoord is in een tik te wijzigen', async ({page})=>{
 /* ===== c) DE POORT EN DE DERDE STAND ===== */
 const DRIE=()=>[
   R(JUL,'uiteten','Uit eten & café',{actie:'grens_gezet', over_eind_maand:120, antwoord:{keuze:'past_niet',op:'2026-08-02'}}),
-  R(JUL,'sport','Sport & gezondheid',{actie:'potje_bijgesteld', potje_voor:50, potje_na:90, over_eind_maand:0}),
+  /* JULI: EEN BIJSTELLING DIE PRECIES DE OVERSCHRIJDING ABSORBEERT. Uitgegeven 90, potje 50 bijgesteld
+     naar 90: tegen het bijgestelde potje 0, tegen het oorspronkelijke 40. */
+  R(JUL,'sport','Sport & gezondheid',{actie:'potje_bijgesteld', potje_bij_detectie:50, potje_voor:50, potje_na:90, over_eind_maand:0, over_oorspronkelijk:40}),
   R(AUG,'uiteten','Uit eten & café',{actie:'geen', over_eind_maand:150, antwoord:{keuze:'past_niet',op:'2026-09-02'}}),
   R(AUG,'vervoer','Vervoer & auto',{actie:'grens_gezet', over_eind_maand:0}),
 ].concat(SEPTEMBER());
@@ -206,13 +223,13 @@ test('c1 met drie afgesloten maanden staan trend, tegels en patroon er', async (
   expect(r.note).toBe('');
   expect(r.trend).toBe(true);
   expect(r.trendN).toBe(3);
-  expect(r.mlab).toBe('jul €120 aug €150 sep €278');
+  expect(r.mlab).toBe('jul €160 aug €150 sep €318');
   /* grens gezet: jul 120 boven, aug vervoer binnen, sep uiteten boven, sep vervoer binnen = 2/4 */
   const g=r.tegels.find(t=>t.a==='grens_gezet');
   expect(g.t).toContain('2/4');
   expect([g.in, g.n]).toEqual([2,4]);
   const b=r.tegels.find(t=>t.a==='potje_bijgesteld');
-  expect(b.t).toContain('2/2');
+  expect(b.t).toContain('0/2');
   const n=r.tegels.find(t=>t.a==='geen');
   expect(n.t).toContain('1/3');     // aug uiteten boven, sep boodschappen boven, sep belasting binnen
   expect(r.tegels.find(t=>t.a==='correctie')).toBeUndefined();
@@ -237,7 +254,7 @@ test('c3 een maand zonder signaal telt mee als maand logboek', async ({page})=>{
   await boot(page, DRIE().filter(x=>x.maand!==AUG));
   const r=await lees(page);
   expect(r.trend).toBe(true);
-  expect(r.mlab).toBe('jul €120 aug €0 sep €278');
+  expect(r.mlab).toBe('jul €160 aug €0 sep €318');
   expect(r.patroon).toBe('');       // augustus ging niet boven, dus geen drie op rij
 });
 
@@ -254,6 +271,27 @@ test('c5 "Potje vast ophogen" opent de editor van de maand erna', async ({page})
   expect(await page.evaluate(()=>document.querySelector('#sheet').innerText)).toContain('Uit eten & café-potje');
 });
 
+test('c6 een bijstelling die precies de overschrijding absorbeert, telt in de tegel als boven', async ({page})=>{
+  await boot(page, DRIE());
+  const invoer=await page.evaluate(()=>['2026-07|sport','2026-09|sport'].map(id=>{ const r=SET.valtOpLog[id];
+    return {eind:r.over_eind_maand, orig:r.over_oorspronkelijk, boven:valtOpBoven(r)}; }));
+  // tegen het bijgestelde potje eindigden beide binnen; dat is precies wat niets meet
+  expect(invoer.map(x=>x.eind)).toEqual([0,0]);
+  expect(invoer.map(x=>x.boven)).toEqual([{soort:'boven',bedrag:40},{soort:'boven',bedrag:40}]);
+  const b=(await lees(page)).tegels.find(t=>t.a==='potje_bijgesteld');
+  expect(b.t).toContain('0/2');
+  expect([b.in, b.n]).toEqual([0,2]);
+});
+
+test('c7 een bijstelling zonder meting tegen het oorspronkelijke potje heet niet gemeten', async ({page})=>{
+  const log=SEPTEMBER(); delete log[2].over_oorspronkelijk;
+  await boot(page, log);
+  const s=(await lees(page)).maanden[0];
+  expect(s.kop).toBe(278);
+  expect(s.kopTekst).toContain('2 van de 4');
+  expect(s.restRijen).toContain('Sport & gezondheid potje bijgesteld · €50 → €96 · binnen niet gemeten');
+});
+
 /* ===== d) EEN BRON ===== */
 test('d1 kop, rij en trend lezen dezelfde bron', async ({page})=>{
   await boot(page, SEPTEMBER());
@@ -261,15 +299,17 @@ test('d1 kop, rij en trend lezen dezelfde bron', async ({page})=>{
   expect(stand).toContain('valtOpBoven(');
   expect(blok).toContain('valtOpMaandStand(');
   expect(blok).not.toContain('over_eind_maand');
+  expect(blok).not.toContain('over_oorspronkelijk');
   expect(blok).not.toContain('catSpendMap');
   expect(blok).toContain('valtOpUitkomst(r)');   // de lopende maand houdt zijn uitkomst (v315)
 });
 
 /* ===== p) DE PRIJS IN PIXELS ===== */
-/* GEMETEN op deze stand, en niet weggerekend: in stand 1 is de vraagkaart het grootste deel (177px op
-   360), en in stand 2 staan er twee kaarten (de gedempte met het antwoord en de nieuwe vraag). GRIP
+/* GEMETEN op deze stand, en niet weggerekend: in stand 1 is de vraagkaart het grootste deel, en in stand 2 staan er twee kaarten (de gedempte met het antwoord en de nieuwe vraag). GRIP
    HEEFT GEEN 200px-EIS (die van v241 is de stand-kaart op Inzichten). */
-const PX={360:{een:569, twee:616}, 390:{een:535, twee:582}};
+/* v325, na de correctie: Sport telt tegen het oorspronkelijke potje en staat dus als korte rij boven
+   de ingeklapte rest, met beide latten op zijn handelingsregel. Dat kost 66px in stand 1. */
+const PX={360:{een:635, twee:687}, 390:{een:601, twee:653}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de hoogte van het logboek in stand 1 en 2`, async ({page})=>{
     await page.setViewportSize({width:w, height:h});

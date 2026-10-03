@@ -591,16 +591,18 @@ test('10f de lopende maand houdt zijn uitkomstregel, een afgesloten maand staat 
   const r=await page.evaluate((v)=>{ go('maand');
     const kaart=document.querySelector('#valtOpLog');
     const blok=kaart.querySelector(`.vl-maand[data-maand="${v}"]`);
-    const rij=k=>{ const e=blok.querySelector(`.vl-rij[data-id="${v}|${k}"]`); return e?e.textContent.replace(/\s+/g,' ').trim():''; };
+    const vr=blok.querySelector(`[data-vraag="${v}|boodschappen"]`);
     // de kop zegt 'eindigde(n) erboven'; een uitkomstzin noemt een bedrag of 'binnen'
     return {n:(kaart.innerText.match(/eindigde (€|binnen)|daarna|uitkomst na/g)||[]).length,
-      uitkomstNa:/uitkomst na/.test(kaart.innerText), boodschappen:rij('boodschappen'), kop:!!blok.querySelector('[data-maandboven]')};
+      uitkomstNa:/uitkomst na/.test(kaart.innerText), kop:!!blok.querySelector('[data-maandboven]'),
+      vraag:vr?vr.innerText.replace(/\s+/g,' '):''};
   }, VORIG);
   expect(r.n).toBe(1);                        // alleen de lopende maand draagt nog een uitkomstzin
   expect(r.uitkomstNa).toBe(true);
   expect(r.kop).toBe(true);
-  expect(r.boodschappen).toContain('potje bijgesteld');
-  expect(r.boodschappen).toContain('binnen');   // tegen het bijgestelde potje, de lat van die maand
+  /* binnen het bijgestelde potje, maar EUR 150 boven het oorspronkelijke: dat telt (v315, v325) */
+  expect(r.vraag).toContain('€150 boven');
+  expect(r.vraag).toContain('Boodschappen ging boven je oorspronkelijke potje, en je stelde het bij.');
 });
 
 test('10g de grens schrijft zijn meetlat in het record', async ({page})=>{
@@ -671,12 +673,14 @@ test('e4 de gevolgen lenen de projectie en rekenen hem niet na', async ({page})=
 /* v320: `vanaf` was 250/232 en dat was de kaart 'Vraagt een beslissing', niet de vanaf-kaart; zie
    de reden bij de selector hieronder. De vanaf-kaart is 231/216px, en dat is in v319 EN v320
    gemeten, dus deze ronde heeft hem niet verschoven. */
-/* v325: HET LOGBOEK GAAT VAN 373 NAAR 583px OP 360 EN VAN 336 NAAR 549px OP 390, GEMETEN op deze
+/* v325: HET LOGBOEK GING VAN 373 NAAR 583px OP 360 EN VAN 336 NAAR 549px OP 390, GEMETEN op deze
    stand. Wat erbij kwam is de maandkop van de afgesloten maand, de vraag over de grootste afwijking
    (die vraagkaart is het grootste deel) en de regel over wanneer de tegels komen. De uitkomstregel
    van v315 staat alleen nog bij de lopende maand, dus het paar met en zonder uitkomst is vervallen. */
-const PX={360:{vanaf:231, log:583, tel:75, metUit:49},
-          390:{vanaf:216, log:549, tel:75, metUit:49}};
+/* Na de correctie van v325 (een bijstelling telt tegen het oorspronkelijke potje) is de bijstelling
+   van boodschappen hier de vraag, en Vervoer een korte rij: 639 en 605px. */
+const PX={360:{vanaf:231, log:639, tel:75, metUit:49},
+          390:{vanaf:216, log:605, tel:75, metUit:49}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de prijs in pixels van de vanaf-kaart en de uitkomst-regel`, async ({page})=>{
     await page.setViewportSize({width:w, height:h});

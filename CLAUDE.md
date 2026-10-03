@@ -112,7 +112,7 @@ genoemde versietag.)*
 - **HET LOGBOEK STAAT PER AFGESLOTEN MAAND, MET EEN KOP, EEN VRAAG EN DE REST KORT** (`v325`): de
   kaart "Wat je met deze overschrijdingen deed" zei per regel wat je deed, maar niet wat de maand je
   kostte en hij vroeg niets. Per afgesloten maand (nieuwste eerst, hooguit `VALTOP_LOG_TOON` = 3) staat
-  er nu een kop "EUR 278 boven je potjes" met "2 van de 5 potjes met een signaal eindigden erboven",
+  er nu een kop "EUR 318 boven je potjes" met "3 van de 5 potjes met een signaal eindigden erboven",
   een vraag over de grootste afwijking zonder antwoord, en de overige regels kort (naam, handeling
   klein, rechts "+EUR 84", "binnen" of "vervallen"; binnen en vervallen ingeklapt tot "N binnen of
   vervallen ›"). De lopende maand staat er ongewijzigd boven, met "uitkomst na <einddatum>", en de
@@ -120,11 +120,19 @@ genoemde versietag.)*
   EEN BRON (`v104`): `valtOpBoven(r)` zegt per record boven, binnen, vervallen of onbekend met het
   bedrag, en `valtOpMaandStand(m)` telt precies die bedragen op. De kop, de rij, de vraag en de trend
   lezen die twee; `valtOpLogBlok()` noemt `over_eind_maand` nergens zelf.
-  HET BEDRAG IS `over_eind_maand`, DUS TEGEN DE LAT VAN DIE MAAND, en dat is bij een bijstelling het
-  BIJGESTELDE potje. Dat volgt uit de gemelde stand ("Sport bijgesteld binnen") en uit de vraagzin
-  ("bleef ook na bijstellen boven je potje"), en het draait voor de KORTE RIJ de keuze van `v315`
-  om, die een bijstelling tegen het oorspronkelijke potje las. `over_oorspronkelijk` en
-  `valtOpUitkomst()` zijn niet aangeraakt; de uitkomstzin staat alleen nog bij de lopende maand.
+  HET BEDRAG IS `over_eind_maand`, EN BIJ EEN BIJSTELLING `over_oorspronkelijk` (`v315`, bevestigd
+  door de gebruiker bij `v325`). Tegen het bijgestelde potje eindigt bijstellen per definitie binnen,
+  en dan wordt de tegel "potje bijgesteld -> binnen" altijd n/n, wat niets meet. De eerste vorm van
+  deze ronde telde tegen het bijgestelde bedrag en is op die grond teruggedraaid. De korte regel noemt
+  beide latten (`valtOpLatten()`): "potje bijgesteld · EUR 50 -> EUR 96 · binnen · EUR 40 boven je
+  oorspronkelijke potje", met rechts het getelde bedrag. Een bijstelling zonder
+  `over_oorspronkelijk` (een record van voor `v315`) heet "niet gemeten" en telt niet mee (`v298`).
+  De vraagzin zegt bij een bijstelling die binnen het bijgestelde potje bleef "ging boven je
+  oorspronkelijke potje, en je stelde het bij", en anders "bleef ook na bijstellen boven je potje".
+  De uitkomstzin van `valtOpUitkomst()` staat alleen nog bij de lopende maand.
+  OP SEPTEMBER: Sport eindigde (in de fixture) op EUR 90 tegen een oorspronkelijk potje van EUR 50, dus
+  de kop is 194 + 84 + 40 = EUR 318 en 3 van de 5. Het echte getal op het toestel is EUR 278 plus
+  de overschrijding van Sport tegen EUR 50, en die staat in het record.
   VERVALLEN TELT NIET MEE, in het bedrag niet en in de noemer niet (`v289`). Een afgesloten record
   zonder meting heet "niet gemeten" en telt ook niet mee (`v59`/`v73`/`v173`).
   DE VRAAG: een tegelijk, over de grootste afwijking zonder antwoord in de nieuwste getoonde maand
@@ -149,11 +157,13 @@ genoemde versietag.)*
   zin noemt de drie maanden bij naam.
   KLEUR: de trend en de tegels gebruiken `--bar` en `--teal`, geen rood. De stand staat in het woord
   (`v78`/`v93`).
-  GEMETEN: het logboek op de septemberstand is 569px op 360 en 535px op 390 (stand 1), en 616 en 582
-  na het eerste antwoord. De vraagkaart is daarvan 177px op 360. Op de fixture van
-  `grip-vanaf-norm.spec.js` ging het van 373/336 naar 583/549px. GRIP HEEFT GEEN 200px-EIS.
+  GEMETEN: het logboek op de septemberstand is 635px op 360 en 601px op 390 (stand 1), en 687 en 653
+  na het eerste antwoord. Op de fixture van `grip-vanaf-norm.spec.js` ging het van 373/336 naar
+  639/605px. GRIP HEEFT GEEN 200px-EIS.
   VIER BESTAANDE TESTS IN TWEE BESTANDEN VIELEN EROP en ze hadden gelijk: ze lazen de uitkomstzin of
-  de oude rij van een AFGESLOTEN maand. Dertien sabotages op de nieuwe regels.
+  de oude rij van een AFGESLOTEN maand. Zeventien sabotages op de nieuwe regels, alle zeventien rood;
+  de sabotage die tegen het bijgestelde bedrag telt zet dertien tests rood, waaronder de toets dat een
+  bijstelling die precies de overschrijding absorbeert in de tegel als boven telt.
 - **"VRAAGT AANDACHT" IS DEZELFDE LIJSTREGEL ALS "VRAAGT EEN BESLISSING"** (`v324`): sinds `v323`
   schuift een dekkingsgat van de ene kaart naar de andere zodra de post niet meer in de lopende maand
   valt, en dan veranderde ook zijn VORM (een lijstregel tegen een alinea). Beide kaarten lezen nu
