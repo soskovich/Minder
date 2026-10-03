@@ -121,7 +121,8 @@ genoemde versietag.)*
   de enige plek waar de twee kaarten een ANDER bedrag kiezen, en het is de keuze van de gebruiker.
   GEMETEN op de stand van het toestel: de aandacht-kaart was 295px op 360 en 238px op 390 en is nu
   118px op beide breedtes.
-  NAGEGAAN WELKE REGELS ONDER "VRAAGT AANDACHT" KUNNEN STAAN, en twee wijken af (gemeld, niet gebouwd):
+  NAGEGAAN WELKE REGELS ONDER "VRAAGT AANDACHT" KUNNEN STAAN, en twee wijken af (gemeld, en daarna op
+  keuze van de gebruiker gebouwd; zie de regel over de buffer-oorzaak hieronder):
   dekking (later gat, of een acceptatie of afspraak over een tekort), buffer, een doel (alleen via een
   acceptatie of afspraak: `maandRegels()` geeft een doel nooit `let op`) en een structureel signaal met
   `t:'info'` (`rente-*`, en die kan dus WEL onder aandacht staan). Dekking, doel, structureel en de
@@ -130,6 +131,14 @@ genoemde versietag.)*
   maar de oorzaak zegt "nu X maanden, je norm is Y" en noemt dus de grens die hij wel haalt; (b) een
   buffer die amber is omdat er meer is toegewezen dan er op de spaarrekening staat
   (`toewijzingBovenSaldo()`) noemt die reden niet in zijn oorzaak, en heeft bij een vol doel geen bedrag.
+  DE BUFFER-OORZAAK NOEMT DE GRENS DIE HIJ NIET HAALT (`v324`, keuze van de gebruiker), in de
+  volgorde van de gevolgzin: is er meer toegewezen dan er staat (en ligt de buffer boven de norm), dan
+  "EUR X minder op je spaarrekening dan toegewezen" met rechts dat verschil en "meer toegewezen", ook
+  bij een vol doel; anders onder het richtbedrag "nu N maanden, je richtbedrag is M". Onder de norm
+  blijft het de norm. Het verschil staat op de RIJ (`r.bovenSaldo`, uit `toewijzingBovenSaldo()`) en
+  `maandTekort()` is NIET aangeraakt, want die heeft meer lezers dan de lijstregel. Vijf sabotages, en
+  de vijfde bleef eerst groen omdat geen fixture een buffer ONDER de norm met een toewijzing boven het
+  saldo droeg (meetles a); dat geval staat er nu bij.
   OPEN PUNT: de uitgeklapte tak van `maandRij(r,false)` en `maandIngang()` hebben op het scherm geen
   aanroeper meer; alleen tests roepen ze nog rechtstreeks aan (zes bestanden). Opruimen is een eigen
   ronde.
@@ -5291,10 +5300,14 @@ WAT DAARMEE OOK VERVALT is de `v309`-bevinding dat `oud-saldo-melden` en `vaste-
 ORDENINGSAFHANKELIJK waren. Dat was de verkeerde toeschrijving: het is bij beide de kalender, en met
 de pin zijn ze groen in de volle suite EN in een kleine selectie.
 
-**Bekend rood, eigen ronde (gevonden bij `v323`):** `correctie-en-uitlezing.spec.js` "blok 10 markeert
-elke groep en elke bevestigde boeking" verwacht vijf gemarkeerde regels en krijgt er vier. GEMETEN dat
-hij op `HEAD` zonder `v323` net zo rood staat op 3 oktober 2026, dus hij is niet van deze ronde; de
-oorzaak is niet nagegaan en hoort vermoedelijk bij de kalender-as van `v299`/`v310`.
+**GEREPAREERD BIJ `v324`: `correctie-en-uitlezing.spec.js` "blok 10 markeert elke groep en elke
+bevestigde boeking".** Hij werd rood door de KALENDER en niet door een commit: de fixture draagt een
+vaste maand (`2026-08`) en blok 10 leest alleen de laatste `DIAG_RECENT_DAGEN` (60) dagen, dus op
+3 oktober 2026 viel het paar van 08-03 buiten het venster. GEMETEN met dezelfde code: groen met de klok
+op 2 oktober, rood op 3 oktober. Een bisect zou hier niets vinden, want elke commit is op die dag rood.
+De spec pint nu 15 september en staat in de lijst van `vaste-testdag.spec.js`. Dit is de kalender-as
+van `v299`/`v310` op de rand van een VENSTER in plaats van een maandgrens, en dezelfde vorm kan nog in
+elke spec zitten die een vaste maand naast een venster vanaf vandaag legt.
 
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de

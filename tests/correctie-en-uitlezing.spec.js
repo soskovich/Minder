@@ -34,6 +34,15 @@
  * De service worker staat globaal uit via playwright.config.js.
  */
 const { test, expect } = require('@playwright/test');
+const { pinDatum } = require('./vaste-dag');
+/* v324: DE KLOK STAAT OP EEN GENOEMDE DAG, en dat is gemeten en niet voorzichtig. De fixture draagt
+   een HARDGECODEERDE maand (2026-08) en blok 10 leest alleen de laatste DIAG_RECENT_DAGEN (60) dagen.
+   Op 3 oktober 2026 ligt de grens op 4 augustus, dus het Zwanebloem-paar van 08-03 viel erbuiten en
+   stonden er vier gemarkeerde regels in plaats van vijf. GEMETEN met DEZELFDE code: groen met de klok
+   op 2 oktober, rood op 3 oktober. Er is dus geen commit die hem rood maakte; het is de kalender-as
+   van v299/v310, op de rand van een venster in plaats van op een maandgrens. Op 15 september valt heel
+   augustus binnen het venster en is augustus een afgeronde maand, wat valtOpAfsluiten() eist. */
+const DAG = '2026-09-15';
 
 const A = '100110012848184840';
 const M = '2026-08';                    // een AFGERONDE maand, anders sluit valtOpAfsluiten() niets af
@@ -86,6 +95,7 @@ async function boot(page) {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed());
+  await pinDatum(page, DAG);
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof valtOpCorrectieBedrag === 'function');
   await page.evaluate(() => {

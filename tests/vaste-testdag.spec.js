@@ -108,7 +108,11 @@ test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron',
     /* v315: de knop 'Volgende maand anders' staat alleen in de laatste VALTOP_LAATSTE_DAGEN dagen,
        dus de test die hem langs zijn echte pad tikt pint een dag waarop hij er is. De rest van die
        spec hangt aan de lopende maand en pint het restant. */
-    'volgende-maand-actie'];
+    'volgende-maand-actie',
+    /* v324: blok 10 leest een venster van 60 dagen vanaf vandaag, en de fixture draagt een vaste maand
+       (2026-08). Op 3 oktober 2026 viel het eerste paar uit dat venster: groen op 2 oktober, rood op 3,
+       met dezelfde code. Een restant pint geen maand, dus deze pint een genoemde dag. */
+    'correctie-en-uitlezing'];
   /* v310: DE BRON WORDT KAAL GELEZEN. Deze drie tests zochten in de RUWE bron, dus een
      `require('./vaste-dag')` of een `pinDag(page)` in een COMMENT hield ze groen. Dat is de vorm die
      v309b heeft opgeruimd, en deze spec was er nog een van (meetles: een bronzoekende assertie die

@@ -5236,7 +5236,20 @@ function maandRegels(){
            een ANDERE grens dan het bedrag ernaast - dat is het gat naar je RICHTBEDRAG, uit
            maandTekort() - en daarom noemen die twee elk hun eigen noemer (v91). Twee velden die de
            rij al draagt, dus geen tweede uitdrukking van de norm. */
-        oorzaak: norm==null?'':`nu ${nTxt} ${n===1?'maand':'maanden'}, je norm is ${norm}`,
+        /* v324: DE OORZAAK NOEMT DE GRENS DIE DE RIJ NIET HAALT, in dezelfde volgorde als de gevolgzin
+           hieronder. Boven de norm is een rij op 'let op' amber om iets anders dan de norm: om een
+           toewijzing boven het saldo (besluit 2 van v305) of om het richtbedrag. "je norm is 2" bij een
+           buffer van 2,5 noemde de grens die hij WEL haalt, en dat is een oorzaak die de kleur van de
+           stip niet verklaart. Onder de norm blijft het de norm, want dan is dat de grens die knelt. */
+        oorzaak: norm==null ? ''
+               : (!kritiek && TB) ? `${euro0(TB.verschil)} minder op je spaarrekening dan toegewezen`
+               : (!kritiek && bm<richt) ? `nu ${nTxt} ${n===1?'maand':'maanden'}, je richtbedrag is ${richt}`
+               : `nu ${nTxt} ${n===1?'maand':'maanden'}, je norm is ${norm}`,
+        /* v324: het verschil tussen wat er is toegewezen en wat er staat, als bedrag voor de lijstregel.
+           Het staat op de RIJ (v320: de weergave leidt niets af) en komt uit `toewijzingBovenSaldo()`,
+           dezelfde bron als de gevolgzin. Ook bij een vol doel, want dan heeft `maandTekort()` geen gat
+           naar het richtbedrag en stond er rechts niets terwijl de rij wel amber was. */
+        bovenSaldo: (norm!=null && !kritiek && TB) ? Math.round(+TB.verschil||0) : null,
         waarde:nTxt, eenheid: norm==null
           ? `maanden toegewezen aan je noodfonds · je richtbedrag is ${richt} ${richt===1?'maand':'maanden'}, je ondergrens is nog niet gekozen`
           : `maanden toegewezen aan je noodfonds · je richtbedrag is ${richt} ${richt===1?'maand':'maanden'}`,
@@ -6002,6 +6015,10 @@ function maandBeslisDeel(r){
     const mnd=MFULL[+String(r.perMaandTot.maand).slice(5,7)-1]||'';
     return {oorzaak:o, waarde:euro0(r.perMaandTot.bedrag), eenheid:`per maand tot ${mnd}`};
   }
+  /* v324: een buffer die amber is omdat er meer is toegewezen dan er op de spaarrekening staat, draagt
+     DAT verschil en niet het gat naar zijn richtbedrag: dat is de reden van de kleur, en bij een vol
+     doel is er geen gat. Het veld staat op de rij (`r.bovenSaldo`), net als `r.perMaandTot`. */
+  if(r.bovenSaldo>0) return {oorzaak:o, waarde:euro0(r.bovenSaldo), eenheid:'meer toegewezen'};
   const T=maandTekort(r);
   if(!T) return {oorzaak:o, waarde:'', eenheid:''};
   return {oorzaak:o, waarde:euro0(T.bedrag), eenheid:BESLIS_EENHEID[T.soort]||''};
