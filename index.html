@@ -2860,7 +2860,10 @@ function varPotjeStand(ym){
   const budget=varBudget();
   let rest=0; try{ rest=varPlanRemaining(ym); }catch(_){}
   gebruikt=Math.round(gebruikt);
-  return {budget, gebruikt, rest, potjes,
+  /* v327: `nog` is "nog in je potjes" zoals de stand-kaart hem toont: de variabele helft
+     (budget min gebruikt, mag negatief) plus de rest van de terugkerende potjes uit terugPotjes(). */
+  let terug=0; try{ terug=terugPotjes(ym).rest; }catch(_){}
+  return {budget, gebruikt, rest, potjes, terug, nog:budget-gebruikt+terug,
     deel: budget>0?Math.round(gebruikt/budget*100):null,
     over: budget>0 && gebruikt>budget};
 }
@@ -2885,12 +2888,51 @@ function varPotjesReserve(ym){
   const sp=catSpendMap(ym), B=SET.budgets||{}; let v=0;
   const rc=recurringCats();
   for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; v+=Math.max(bud-(sp[k]||0),0); }
+  v+=terugPotjes(ym).rest;   // v327: de rest van een terugkerend potje zit er ook nog in
   return Math.round(v);
+}
+/* v327: WAT ER IN EEN TERUGKEREND POTJE ZIT BOVEN DE INCASSO'S DIE NOG KOMEN. Een potje van een
+   categorie in recurringCats() telde tot v326 nergens mee: niet in "nog in je potjes" (die las
+   alleen de variabele helft) en alleen met zijn INCASSO in "nog te betalen". GEMETEN op het toestel
+   (blok 15, 3 oktober 2026): Vervoer & auto EUR 1.100 met EUR 603 aan incasso's en EUR 99 uitgegeven,
+   dus EUR 398 tankbudget dat op geen van de vier plekken van de stand-kaart stond. Samen met
+   Verzekeringen, Online shopping, Belasting & boetes en Bankkosten was dat EUR 726, en veilig te
+   besteden reserveerde het niet.
+   DE REST IS BUDGET DAT JE NOG BESTEEDT EN GEEN VASTE LAST (keuze van de gebruiker), dus hij telt
+   in "nog in je potjes" en niet in "nog te betalen". budget - uitgegeven - herkende incasso's die
+   nog komen, NIET ONDER NUL: een terugkerend potje dat al op is reserveert niets meer (v254).
+   EEN UITGESLOTEN INCASSO (SET.fixDueExcl) WORDT NIET AFGETROKKEN, dus zijn bedrag blijft in de rest
+   staan: het potje houdt het vast. Dat is waar, en het wordt op Grip gemeld in plaats van stil
+   weggerekend (uitgeslotenPotjes(), MECHANISM_SPEC.defaultEffect).
+   ALLEEN DE LOPENDE MAAND: welke incasso's nog komen is een uitspraak over vandaag
+   (monthLiquidity()), en van een afgeronde maand valt niets meer te verwachten (v194).
+   EEN BRON MET DRIE LEZERS (v104): varPotjeStand() voor de stand-kaart, varPotjesReserve() voor
+   veilig te besteden en de sheet "Gereserveerd in je potjes". */
+function terugPotjes(ym){
+  const out={rijen:[], rest:0};
+  if(!ym || ym!==thisYM()) return out;
+  const B=SET.budgets||{}; let rc=new Set(); try{ rc=recurringCats(); }catch(_){ return out; }
+  if(![...rc].some(k=>(+B[k]||0)>0)) return out;
+  let L=null; try{ L=monthLiquidity(); }catch(_){ return out; }
+  const sp=catSpendMap(ym);
+  const open={}, excl={};
+  for(const s of (L&&L.fixDueItems)||[]){ if(!s.cat) continue;
+    if(s.excl) (excl[s.cat]=excl[s.cat]||[]).push(s); else if(!s.inPotje) open[s.cat]=(open[s.cat]||0)+(+s.amount||0); }
+  for(const k in B){ const bud=+B[k]||0; if(bud<=0||!rc.has(k)) continue;
+    const uit=sp[k]||0, vast=open[k]||0, rest=Math.max(bud-uit-vast,0);
+    out.rijen.push({k, bud, uit, vast, rest, excl:excl[k]||[]}); out.rest+=rest; }
+  out.rest=Math.round(out.rest);
+  return out;
 }
 function varPlanRemaining(ym){
   const sp=catSpendMap(ym), B=SET.budgets||{}; let v=0;
   const rc=recurringCats(); const d=daysElapsed(ym), daysLeft=Math.max(d.dim-d.elapsed,0);
   for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; v+=potjeRest(bud, sp[k]||0, d.dim, daysLeft); }   // potjes van niet-recurring categorieën = variabel plan; recurring loopt via fixDue (geen dubbeltelling)
+  /* v327: de rest van een terugkerend potje telt hier zoals hij is, ZONDER tempo-projectie: de
+     uitgave in zo'n categorie mengt incasso's en losse besteding, dus een dagtempo erover zegt
+     niets. Zo verschuift de tempo-krapte op Inzichten niet door deze term, want hij staat aan
+     beide kanten van dat verschil. */
+  try{ v+=terugPotjes(ym).rest; }catch(_){}
   return Math.round(v);
 }
 // Spiegel (Optie B): je variabele plan (potjes) vs je verwachte tempo (prognose). Leeg als het gat niet materieel is.
@@ -2928,9 +2970,9 @@ function monthLiquidity(){
   // robuust vangnet: vaste lasten die VORIGE maand langskwamen maar deze maand nog niet (vangt incasso's die het strikte schema mist door wisselende omschrijvingen of korte historie)
   try{ const _ms=months(); const _idx=_ms.indexOf(ym); const _prev=_idx>0?_ms[_idx-1]:null;
     if(_prev){ const _have=new Set(fixDueItems.map(s=>s.key)); const _byk={};
-      for(const t of txOfMonth(_prev)){ if(t.amount<0 && (isIncasso(t)||isPeriodicTransfer(t))){ const k=recurKey(t); if(!k) continue; const dd=+t.date.slice(8,10); const e=(_byk[k]=_byk[k]||{amt:0,name:t.name,day:dd,tot:0,inc:0,per:0}); e.amt+=-t.amount; if(dd>e.day) e.day=dd; e.tot++; if(isIncasso(t)) e.inc++; if(isPeriodicTransfer(t)) e.per++; } }
+      for(const t of txOfMonth(_prev)){ if(t.amount<0 && (isIncasso(t)||isPeriodicTransfer(t))){ const k=recurKey(t); if(!k) continue; const dd=+t.date.slice(8,10); const e=(_byk[k]=_byk[k]||{amt:0,name:t.name,day:dd,tot:0,inc:0,per:0,cat:null,catAmt:0}); e.amt+=-t.amount; if(-t.amount>e.catAmt){ e.catAmt=-t.amount; e.cat=catOf(t); } if(dd>e.day) e.day=dd; e.tot++; if(isIncasso(t)) e.inc++; if(isPeriodicTransfer(t)) e.per++; } }
       // betaalvorm meegeven met dezelfde meerderheidsregel als recurringSchedule, anders komen vangnet-posten zonder incasso/periodic binnen
-      for(const k in _byk){ if(seen.has(k)||_have.has(k)) continue; const it=_byk[k]; if(it.amt<5) continue; fixDueItems.push({key:k,name:it.name,amount:Math.round(it.amt),day:it.day,type:'fixed',intervalM:1,incasso:(it.tot>0 && it.inc/it.tot>=0.5),periodic:(it.tot>0 && it.per/it.tot>=0.5)}); }
+      for(const k in _byk){ if(seen.has(k)||_have.has(k)) continue; const it=_byk[k]; if(it.amt<5) continue; fixDueItems.push({key:k,name:it.name,amount:Math.round(it.amt),day:it.day,type:'fixed',intervalM:1,cat:it.cat||null,terugval:true,incasso:(it.tot>0 && it.inc/it.tot>=0.5),periodic:(it.tot>0 && it.per/it.tot>=0.5)}); }
     } }catch(_){}
   // provider-dedupe: schreef ditzelfde bedrijf deze maand al iets af (ook een afwijkend/incidenteel bedrag), dan die vaste last niet nog eens voorspellen
   try{ const _cl=x=>(x||'').toUpperCase().replace(/[0-9]/g,'').replace(/[^A-Z ]/g,'').replace(/\s+/g,' ').trim();
@@ -2941,7 +2983,16 @@ function monthLiquidity(){
   // door de gebruiker uitgesloten posten (opgezegd/niet meer terugkerend) — onthouden per incasso-sleutel
   const _fdExcl=SET.fixDueExcl||{};
   fixDueItems.forEach(s=>{ s.excl=!!_fdExcl[s.key]; });
-  const fixDue=fixDueItems.filter(s=>!s.excl).reduce((a,s)=>a+s.amount,0);
+  /* v327: EEN POST WAARVAN DE CATEGORIE AL IN "NOG IN JE POTJES" VALT, TELT DAAR EN NIET NOG EENS
+     HIER. Dat kan alleen een post uit de terugval op vorige maand zijn: een post uit het schema
+     draagt een categorie die recurringCats() per constructie terugkerend noemt, en een terugkerend
+     potje staat niet in de variabele helft. GEMETEN op het toestel (blok 15): Shurgard EUR 137 uit
+     de terugval op het variabele potje Huur van EUR 750 stond in "nog te betalen" EN in "nog in je
+     potjes", dus hij telde twee keer. De post blijft in de lijst, met `inPotje`, zodat de sheet
+     zegt waar hij telt in plaats van dat hij stil verdwijnt (v281/v284). */
+  { const _B=SET.budgets||{}; let _rc=new Set(); try{ _rc=recurringCats(); }catch(_){}
+    fixDueItems.forEach(s=>{ s.inPotje=!s.excl && !!s.cat && (+_B[s.cat]||0)>0 && !_rc.has(s.cat); }); }
+  const fixDue=fixDueItems.filter(s=>!s.excl && !s.inPotje).reduce((a,s)=>a+s.amount,0);
   const fixDueExclCount=fixDueItems.reduce((a,s)=>a+(s.excl?1:0),0);
   /* v260: hoeveel herkende maandlasten deze maand AL langskwamen. Zonder dit getal is fixDue nul
      om twee onderscheidbare redenen die de app niet kon onderscheiden, en de sub onder "Nog te
@@ -3022,17 +3073,18 @@ function safeToSpend(){
   const saveRemaining=Math.max(saveTarget-savedThisMonth,0);
   const safe=Math.round(spendSaldo + incDue - fixedStillToGo - reservedVar - saveRemaining);
   return {saldo:tb.sum, savedBal:Math.round(savedBal), resBal:Math.round(resBal), spendSaldo:Math.round(spendSaldo), missing:tb.missing, known:tb.known,
-    incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), fixDueBudgetExtra:Math.max(fixedStillToGo-Math.round(L.fixDue||0),0), reserved:Math.round(reservedVar), potOver:Math.round(potOver), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
+    incDue, fixDue:fixedStillToGo, fixDueRecurring:Math.round(L.fixDue||0), reserved:Math.round(reservedVar), potOver:Math.round(potOver), varForecast:Math.round(L.varDue||0), saveReserved:saveRemaining, saveTarget, savedThisMonth, safe};
 }
 /* v321: WELKE POSTEN EEN CLAIM OP JE SALDO ZIJN, OP EEN PLEK, MET TWEE LEZERS (v104). De
    opbouw-sheet droeg de naam en de route van elke post als losse string in zijn eigen rij, en de
    regel onder het herogetal noemt sinds v321 de grootste twee. Twee kopieen van dezelfde naam
    lopen bij de eerstvolgende herformulering uiteen (v91), en twee kopieen van dezelfde route
    zouden op twee plekken naar een ander scherm kunnen gaan.
-   `fixDueBudgetExtra` DRAAGT GEEN ROUTE, en dat is geen omissie: er is geen scherm dat alleen dat
-   deel toont (de sheet laat die rij ook zonder chevron staan). De regel valt daar terug op de
-   opbouw-sheet zelf, en dat is wel een bestaande ingang (de premisse: een keuze leidt altijd naar
-   een bestaande ingang).
+   `fixDueBudgetExtra` IS BIJ v327 VERVALLEN: hij was `fixedStillToGo - L.fixDue` en die twee zijn
+   per constructie hetzelfde getal, dus hij stond altijd op nul onder een label ("budget voor vaste
+   categorieen waar nog geen incasso voor is herkend") dat iets beloofde wat de code niet deed. Wat
+   dat label beloofde is sinds v327 echt, en het staat in `reserved`: de rest van een terugkerend
+   potje is budget dat je nog besteedt en dus hetzelfde soort claim als een variabel potje.
    HIJ SORTEERT OP BEDRAG en filtert nul weg, want de vraag van de regel is WELKE post het zwaarst
    weegt; de sheet houdt zijn eigen vaste volgorde, want die is een opbouw en geen rangschikking. */
 /* `maand` ZEGT OF DE POST IETS IS DAT DEZE MAAND NOG VRAAGT. Alle zes gaan van je saldo af en
@@ -3045,7 +3097,6 @@ const SAFE_CLAIMS=[
   {key:'savedBal',          label:'Al op je spaarrekening',    act:'closeSheet();openSavingsPots()', maand:false},
   {key:'resBal',            label:'In je reserveringspot',     act:'openReserveringen()',            maand:false},
   {key:'fixDueRecurring',   label:'Vaste lasten die nog komen',act:'openFixedDue()',                 maand:true},
-  {key:'fixDueBudgetExtra', label:'Vaste lasten uit je budget',act:'',                               maand:true},
   {key:'reserved',          label:'Gereserveerd in je potjes', act:'openReservedPotjes()',           maand:true},
   {key:'saveReserved',      label:'Nog te sparen deze maand',  act:'toggleSaveEdit()',               maand:true},
 ];
@@ -3161,7 +3212,8 @@ function vrijPerDagLine(){
 // drill-down: welke vaste lasten moeten nog betaald worden, en wanneer
 function openFixedDue(){
   const L=monthLiquidity(); const all=(L.fixDueItems||[]).slice().sort((a,b)=>a.day-b.day);
-  const active=all.filter(s=>!s.excl), excl=all.filter(s=>s.excl);
+  const active=all.filter(s=>!s.excl && !s.inPotje), excl=all.filter(s=>s.excl);
+  const inPot=all.filter(s=>s.inPotje);   // v327: telt in zijn potje, niet nog eens hier
   const now=new Date(); const mo=now.getMonth(); const dim=new Date(now.getFullYear(),mo+1,0).getDate();
   const fmt=day=>Math.min(day,dim)+' '+MNAMES[mo];
   const sw=(isExcl)=>`<div style="width:40px;height:24px;border-radius:13px;flex-shrink:0;position:relative;cursor:pointer;background:${isExcl?'var(--card2)':'color-mix(in srgb,var(--accent) 30%,transparent)'};border:1px solid ${isExcl?'var(--line)':'var(--teal)'}"><i style="position:absolute;top:2px;width:18px;height:18px;border-radius:50%;${isExcl?'left:2px;background:var(--mut2)':'left:19px;background:var(--teal)'}"></i></div>`;
@@ -3177,6 +3229,7 @@ function openFixedDue(){
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0;color:var(--teal)">${euro(L.fixDue)}</div></div>
     ${active.length?active.map(s=>row(s,false)).join(''):'<div class="muted small center" style="padding:16px">Geen vaste lasten die deze maand nog meetellen.</div>'}
     ${excl.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Uitgesloten · telt niet mee</div>${excl.map(s=>row(s,true)).join('')}`:''}
+    ${inPot.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">In een potje · telt daar</div>${inPot.map(s=>{const c=CATS[s.cat]||CATS.overig; return `<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${c.icon}</div><div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">${fmt(s.day)} · uit je potje ${c.name}</div></div><div class="amt" style="color:var(--mut)">${euro(s.amount)}</div></div>`;}).join('')}`:''}
     <div style="font-size:11.5px;color:var(--mut2);margin-top:14px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:9px">Heb je een post opgezegd, of was hij eenmalig? Zet 'm uit met de schakelaar: dan telt hij niet mee in 'nog te betalen' en 'veilig te besteden', wordt hij niet opnieuw voorspeld, en meldt Minder het als hij toch wordt afgeschreven. Dezelfde lijst staat onder Instellingen, Vaste lasten. Terugzetten kan altijd.</div>`;
   showSheetBg();
 }
@@ -3274,6 +3327,9 @@ function openReservedPotjes(){
     // tempo: wat potjeRest() voor dit potje zou reserveren. Alleen voor de regel onder de lijst.
     rows.push({k,bud,spent,rest:Math.max(bud-spent,0),over:spent>bud,
       tempo:spent>bud?potjeRest(bud,spent,d.dim,daysLeft):0}); }   // potjes van niet-recurring categorieën = variabel plan
+  /* v327: ook de terugkerende potjes, met hun rest boven de incasso's die nog komen. Zonder deze
+     rijen telt de lijst niet meer op tot het bedrag in de opbouw van veilig te besteden (v104). */
+  for(const r of terugPotjes(ym).rijen) rows.push({k:r.k,bud:r.bud,spent:r.uit,rest:r.rest,over:false,tempo:0,vast:r.vast,terug:true});   // 'potje op' is het woord voor een variabel potje waar je overheen ging
   rows.sort((a,b)=>(b.rest-a.rest)||((b.spent-b.bud)-(a.spent-a.bud)));
   const tot=rows.reduce((a,r)=>a+r.rest,0);
   const tempoOp=Math.round(rows.reduce((a,r)=>a+r.tempo,0));
@@ -3283,10 +3339,10 @@ function openReservedPotjes(){
       <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0;color:var(--teal)">${euro(tot)}</div></div>
     ${rows.length?rows.map(r=>{const c=CATS[r.k]||CATS.overig;return `<div class="tx res-rij" style="cursor:pointer" onclick="openPotje('${esc(r.k)}')">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${c.name}</div><div class="cat">${euro0(r.spent)} van ${euro0(r.bud)} gebruikt${r.over?` · potje op, dit reserveert niets meer`:''} · aanpassen ›</div></div>
+      <div class="info"><div class="nm">${c.name}</div><div class="cat">${euro0(r.spent)} van ${euro0(r.bud)} gebruikt${r.terug&&r.vast>0?` · ${euro0(r.vast)} incasso nog te gaan`:''}${r.over?` · potje op, dit reserveert niets meer`:''} · aanpassen ›</div></div>
       <div class="amt" style="font-weight:700;color:${r.over?'var(--amber)':(r.rest>0?'var(--teal)':'var(--mut)')}">${euro(r.rest)}</div></div>`;}).join(''):`<div class="muted small center" style="padding:16px">Nog geen variabele potjes met budget. <span style="color:var(--teal);cursor:pointer" onclick="openPotjePick()">Maak een potje ›</span></div>`}
     ${tempoOp>0?`<div class="small" style="color:var(--mut2);margin-top:12px;line-height:1.45">Bij je tempo verwacht je deze maand nog ${euro0(tempoOp)} uit te geven in potjes die al op zijn.</div>`:''}
-    <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Dit is het deel van je variabele potjes dat je deze maand nog niet hebt uitgegeven. Het staat apart, zodat 'veilig te besteden' je potjes respecteert. Wil je minder variabel uitgeven, dan verlaag je hier een potje.</div>`;
+    <div style="font-size:var(--fs-xs);color:var(--mut2);margin-top:14px;padding:8px 10px;background:rgba(159,176,199,.07);border-radius:8px">Dit is het deel van je potjes dat je deze maand nog niet hebt uitgegeven; bij een potje met een vaste last is dat wat er overblijft naast de incasso's die nog komen. Het staat apart, zodat 'veilig te besteden' je potjes respecteert. Wil je minder variabel uitgeven, dan verlaag je hier een potje.</div>`;
   showSheetBg();
 }
 /* Read-only drill-downs achter de budgetkaart op Inzichten (v114, gesplitst in v115): het getal
@@ -3610,14 +3666,13 @@ function openSafeToSpend(){
     ${S.savedBal>0?line(safeClaim('savedBal').label, S.savedBal, 'var(--mut)', safeClaim('savedBal').act, 'staat apart om te sparen, niet vrij besteedbaar'):''}
     ${S.resBal>0?line(safeClaim('resBal').label, S.resBal, 'var(--mut)', safeClaim('resBal').act, 'al vergeven aan posten die nog moeten komen'):''}
     ${S.fixDueRecurring>0?line(safeClaim('fixDueRecurring').label, S.fixDueRecurring, 'var(--mut)', safeClaim('fixDueRecurring').act, 'wat deze maand nog wordt afgeschreven'):''}
-    ${S.fixDueBudgetExtra>0?line(safeClaim('fixDueBudgetExtra').label, S.fixDueBudgetExtra, 'var(--mut)', safeClaim('fixDueBudgetExtra').act, 'budget voor vaste categorieën waar nog geen incasso voor is herkend'):''}
     <!-- v254: de poort was S.reserved>0. Sinds een leeg potje nul reserveert kan die som nul zijn
          terwijl je wel potjes hebt, en dan viel deze regel weg. Dat is precies de toestand die je
          wilt zien, en het is sinds v254 ook de enige route naar de sheet: de tik op de tweede regel
          van Inzichten is weg omdat die over de tempo-som gaat. Gemeten op vier potjes die alle vier
          op waren: reserved 0, regel weg, sheet nergens meer te openen. De poort leest nu of je
          variabele potjes hebt. -->
-    ${varBudget()>0?line(safeClaim('reserved').label, S.reserved, 'var(--mut)', safeClaim('reserved').act, S.reserved>0?'budget dat je per categorie apart zette':'je potjes zijn op, er staat niets meer apart'):''}
+    ${totalBudget()>0?line(safeClaim('reserved').label, S.reserved, 'var(--mut)', safeClaim('reserved').act, S.reserved>0?'budget dat je per categorie apart zette':'je potjes zijn op, er staat niets meer apart'):''}
     ${varTempoMirror(S.reserved, S.varForecast, 'safe')}
     ${(function(){
       const tgt=S.saveTarget||0, onSav=Math.min(S.savedThisMonth||0,tgt);
@@ -6212,6 +6267,47 @@ function valtOpToon(id){ window._valtOpOpen=id; renderMaand(); }
    SPIEGEL, GEVOLG, KEUZE. De spiegel is gemeten (de opnames, de stand, de ouderdom), het gevolg
    zegt wat dat voor je cijfers betekent, en de keuze is de enige handeling die er is. Geen
    aanmoediging en geen teller: hoe vaak je telt is nergens vastgelegd. */
+/* v327: EEN TERUGKEREND POTJE MET EEN UITGESLOTEN INCASSO HOUDT DAT BEDRAG VAST, EN DAT STAAT HIER.
+   terugPotjes() trekt een uitgesloten incasso (SET.fixDueExcl) niet af, dus zijn bedrag blijft in
+   "nog in je potjes" staan en gaat van veilig te besteden af terwijl de incasso niet meer komt.
+   GEMETEN op het toestel (blok 15): DELA EUR 160 in Verzekeringen, Huurwoningen EUR 30 in Belasting
+   & boetes en Parkeergelden EUR 19 in Vervoer & auto.
+   NIET STIL VERLAGEN (MECHANISM_SPEC.defaultEffect, keuze van de gebruiker): de kaart noemt het
+   bedrag en biedt de bestaande route naar het potje van VOLGENDE maand (openPotje() en dan
+   savePotje(), dus SET.budgetsNext), met het verlaagde bedrag ingevuld. Er komt geen tweede
+   potje-editor (v61).
+   HET BEDRAG IS min(uitgesloten, rest): meer dan er nog in het potje zit kan het niet vasthouden.
+   HIJ ZWIJGT ZODRA JE VOOR VOLGENDE MAAND AL LAGER KOOS: dan staat die keuze op de kaart
+   "Vanaf <maand>" (v315), en hier nog eens zou een kopie zijn. */
+function uitgeslotenPotjes(){
+  const ym=thisYM(); const BN=SET.budgetsNext||{}; const out=[];
+  for(const r of terugPotjes(ym).rijen){
+    if(!r.excl.length || !(r.rest>0)) continue;
+    const som=r.excl.reduce((a,x)=>a+(+x.amount||0),0);
+    const houdt=Math.round(Math.min(som, r.rest)); if(houdt<=0) continue;
+    if(BN[r.k]!=null && +BN[r.k] < r.bud) continue;
+    out.push({k:r.k, bud:r.bud, houdt, namen:r.excl.map(x=>x.name), voorstel:Math.max(r.bud-houdt,0)});
+  }
+  return out;
+}
+function uitgeslotenPotjeVerlaag(k){
+  const P=uitgeslotenPotjes().find(x=>x.k===k); openPotje(k);
+  if(P){ window._potDraft={type:'vast', vast:P.voorstel}; renderPotSheet(k); }
+}
+function uitgeslotenKaart(){
+  let U=[]; try{ U=uitgeslotenPotjes(); }catch(_){ return ''; }
+  if(!U.length) return '';
+  const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
+  const rij=u=>{ const c=CATS[u.k]||{}; const n=u.namen.map(x=>esc(x)).join(', ');
+    return `<div style="padding:8px 0;border-top:1px solid var(--line)" data-uitgesloten="${esc(u.k)}">
+      <div style="line-height:1.45;font-size:var(--fs-md)">Potje ${esc(c.name||u.k)} houdt ${euro0(u.houdt)} vast voor ${u.namen.length===1?'een uitgesloten incasso':u.namen.length+" uitgesloten incasso's"} (${n}).</div>
+      <div class="small" style="margin-top:6px;color:var(--teal);cursor:pointer;font-weight:600" onclick="uitgeslotenPotjeVerlaag('${esc(u.k)}')">Potje verlagen naar ${euro0(u.voorstel)} vanaf ${vanaf} ›</div></div>`; };
+  return `<div class="card" id="uitgeslotenKaart" style="padding:13px 15px;margin:0 0 9px">
+    <div class="hlabel" style="margin:0 0 6px">Uitgesloten incasso in een potje</div>
+    ${U.map(rij).join('')}
+    <div class="small" style="color:var(--mut2);line-height:1.5;margin-top:6px">Dat bedrag staat in 'nog in je potjes' en gaat dus af van veilig te besteden, terwijl de incasso niet meer komt. Deze maand blijft het potje zoals het is.</div>
+  </div>`;
+}
 function contantKaart(){
   let V='', T=null, ops=[], oud=null;
   try{ V=contantVraagt(); T=contantTelling(); ops=contantOpnamesSinds(); oud=contantOuderdom(); }catch(_){ return ''; }
@@ -6840,8 +6936,9 @@ function renderMaand(){
      in de leegte-terugval hieronder: een scherm dat zijn eigen leegte niet kent vult hem met een
      claim (v188), en dit is de derde bron die die tak moet kennen. */
   const CK=(function(){ try{ return contantKaart(); }catch(_){ return ''; } })();
-  if(!R.length && !STR.length && !CK){
-    $('#s-maand').innerHTML= VS + CK + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpLogBlok();
+  const UK=(function(){ try{ return uitgeslotenKaart(); }catch(_){ return ''; } })();   // v327
+  if(!R.length && !STR.length && !CK && !UK){
+    $('#s-maand').innerHTML= VS + CK + UK + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpLogBlok();
     return;
   }
   /* v207: een regel die je bewust hebt geaccepteerd telt niet meer als tekort, dus het oordeel,
@@ -6882,7 +6979,7 @@ function renderMaand(){
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
       ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
     </div>
-    ${VS}${CK}
+    ${VS}${CK}${UK}
     ${/* v223: 'Vermogensopbouw' en 'Je plan' waren eigen kaarten met een kop en een uitlegzin voor
           één cijfer. Ze staan nu als voet onder de streep, in de laatste kaart die regels draagt:
           aandacht als die er is, anders beslissing, anders 'Staat goed'. Is er geen enkele
@@ -14385,7 +14482,7 @@ function insBudgetBlok(m){
        naast een maand van toen zetten.
        DE ZIN BLIJFT DE REDEN, en het bedrag claimt niets over je uitgaven: wat er niet gemeten is
        staat er met zoveel woorden. */
-    let vb=0; if(isLopendeMaand(m)){ try{ vb=varBudget(); }catch(_){ vb=0; } }
+    let vb=0; if(isLopendeMaand(m)){ try{ vb=varBudget()+terugPotjes(m).rest; }catch(_){ vb=0; } }   // v327: ook de rest van de terugkerende potjes
     const datumZin=`Je laatste boeking is van ${new Date(L.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}, dus over deze maand is nog niets binnengekomen. Nul uitgaven en geen data zijn niet hetzelfde.`;
     const kopLeeg = vb>0
       ? `<div class="row" style="align-items:baseline;gap:6px">
@@ -14439,8 +14536,11 @@ function insBudgetBlok(m){
      houdt de kaart zijn terugkijkende hoofdgetal en staat de regel eronder er NIET, want die zou
      dat getal dan verdubbelen. */
   let VP=null; try{ VP=varPotjeStand(m); }catch(_){}
-  const potjesKop = isLopendeMaand(m) && !!VP && VP.budget>0;
-  const inPotjes = potjesKop ? VP.budget-VP.gebruikt : 0;
+  /* v327: "nog in je potjes" is VP.nog, en dat telt sindsdien ook de rest van een terugkerend
+     potje boven zijn incasso's mee (terugPotjes()). De kaart staat er dus ook met alleen
+     terugkerende potjes. */
+  const potjesKop = isLopendeMaand(m) && !!VP && (VP.budget>0 || VP.terug>0);
+  const inPotjes = potjesKop ? VP.nog : 0;
   const potjesDagen = potjesKop ? maandDagenOver(m) : 0;
   const perDag = (inPotjes>0 && potjesDagen>0) ? Math.round(inPotjes/potjesDagen) : 0;
   /* v309: DE NOOT VAN v308, MEEVERHUISD MET ZIJN POST. Hij zegt wat je geplande tempo boven het
@@ -19783,39 +19883,42 @@ function diagStandKaart(){
   const VP=_dT(()=>varPotjeStand(ym),null); const vb=_dT(()=>varBudget(),0);
   if(!T||!ML||!VP) return L.concat(['totals(), monthLiquidity() of varPotjeStand() gaf niets']);
   const B=SET.budgets||{}; const sp=_dT(()=>catSpendMap(ym),{}); const rc=_dT(()=>recurringCats(),new Set());
-  const kaart={budget:Math.round(T.budget), inPot:vb-VP.gebruikt, uit:Math.round(T.spendNorm), vast:Math.round(ML.fixDue)};
+  const kaart={budget:Math.round(T.budget), inPot:VP.nog, uit:Math.round(T.spendNorm), vast:Math.round(ML.fixDue)};
   const gat=kaart.budget-kaart.inPot-kaart.uit-kaart.vast;
   L.push('');
   L.push('de vier getallen zoals het scherm ze leest:');
   L.push(`  maandbudget      totals().budget              ${kaart.budget}`);
-  L.push(`  nog in potjes    varBudget() - gebruikt       ${kaart.inPot}  (${vb} - ${VP.gebruikt})`);
+  L.push(`  nog in potjes    varPotjeStand().nog          ${kaart.inPot}  (variabel ${vb} - ${VP.gebruikt}, terugkerend ${VP.terug})`);
   L.push(`  uitgegeven       totals().spendNorm           ${kaart.uit}`);
   L.push(`  nog te betalen   monthLiquidity().fixDue      ${kaart.vast}`);
   L.push(`  staat nergens    budget - de andere drie      ${gat}`);
   /* de categorie van een vaste post: uit het schema, en anders uit zijn boeking van vorige maand */
   const vorige=_dT(()=>{ const ms=months(); const i=ms.indexOf(ym); return i>0?ms[i-1]:null; },null);
-  const catVan=s=>{ if(s.cat) return {cat:s.cat, bron:'schema'};
+  const catVan=s=>{ if(s.cat) return {cat:s.cat, bron:s.terugval?'vorige maand':'schema'};
     let c=null; _dT(()=>{ for(const t of txOfMonth(vorige)){ if(t.amount<0 && recurKey(t)===s.key){ c=catOf(t); break; } } },null);
     return {cat:c||'(geen)', bron:'vorige maand'}; };
-  const items=(ML.fixDueItems||[]).map(s=>Object.assign({},catVan(s),{key:s.key,name:s.name,amount:Math.round(+s.amount||0),excl:!!s.excl}));
-  const vastPer={}, exclPer={};
-  for(const it of items){ const tgt=it.excl?exclPer:vastPer; tgt[it.cat]=(tgt[it.cat]||0)+it.amount; }
+  const items=(ML.fixDueItems||[]).map(s=>Object.assign({},catVan(s),{key:s.key,name:s.name,amount:Math.round(+s.amount||0),excl:!!s.excl,inPotje:!!s.inPotje}));
+  const vastPer={}, exclPer={}, inPotPer={};
+  for(const it of items){ const tgt=it.excl?exclPer:(it.inPotje?inPotPer:vastPer); tgt[it.cat]=(tgt[it.cat]||0)+it.amount; }
   const ks=new Set(Object.keys(B).filter(k=>+B[k]>0));
   for(const k in sp) if(Math.round(sp[k]||0)!==0) ks.add(k);
   for(const k in vastPer) ks.add(k); for(const k in exclPer) ks.add(k);
   const naam=k=>(CATS[k]||{}).name||k;
   const rijen=[...ks].map(k=>{
     const bud=Math.round(+B[k]||0), uit=Math.round(sp[k]||0), terug=rc.has(k);
-    const inPot=(bud>0 && !terug)?bud-uit:0;
-    const vast=vastPer[k]||0, excl=exclPer[k]||0;
+    const vast=vastPer[k]||0, excl=exclPer[k]||0, inPotPost=inPotPer[k]||0;
+    /* v327: een terugkerend potje telt zijn rest boven de incasso's die nog komen in "nog in je
+       potjes" (terugPotjes()), niet onder nul. */
+    const inPot=bud>0 ? (terug ? Math.max(bud-uit-vast,0) : bud-uit) : 0;
     const rest=bud-uit-inPot-vast;
     const reden=[];
-    if(bud>0 && terug && excl) reden.push(`terugkerend potje, ${excl} aan uitgesloten incasso's`);
-    if(bud>0 && terug && !vast && !excl) reden.push(uit>0?'terugkerend potje, deze maand al afgeschreven':'terugkerend potje zonder openstaande incasso');
-    if(bud>0 && terug && vast && vast+uit!==bud) reden.push(`terugkerend potje, incasso ${vast} tegen potje ${bud}`);
+    if(bud>0 && terug && excl) reden.push(`terugkerend potje, ${excl} aan uitgesloten incasso's (blijft in het potje)`);
+    if(bud>0 && terug && inPot>0) reden.push(`terugkerend potje, ${inPot} boven de incasso's in "nog in je potjes"`);
+    if(bud>0 && terug && bud-uit-vast<0) reden.push(`terugkerend potje, incasso's en uitgaven ${uit+vast} boven potje ${bud}`);
+    if(inPotPost) reden.push(`${inPotPost} aan vaste lasten uit de terugval telt in dit potje en niet in "nog te betalen"`);
     if(!bud && uit) reden.push('uitgave zonder potje');
     if(!bud && vast) reden.push('vaste last zonder potje');
-    if(bud>0 && !terug && vast) reden.push('vaste last OOK in een variabel potje: telt twee keer');
+    if(bud>0 && !terug && vast) reden.push('vaste last OOK in een variabel potje: telt twee keer (hoort sinds v327 niet meer te kunnen)');
     return {k, bud, uit, terug, inPot, vast, excl, rest, reden};
   }).sort((a,b)=>Math.abs(b.rest)-Math.abs(a.rest) || naam(a.k).localeCompare(naam(b.k),'nl'));
   L.push('');
@@ -19833,7 +19936,7 @@ function diagStandKaart(){
   L.push('');
   L.push('de vaste posten van monthLiquidity(), met hun categorie en bron:');
   if(!items.length) L.push('  geen');
-  for(const it of items) L.push(`  ${String(it.amount).padStart(6)}  ${naam(it.cat).padEnd(24)} ${it.excl?'UITGESLOTEN':'telt mee  '}  bron ${it.bron}  ${it.name}`);
+  for(const it of items) L.push(`  ${String(it.amount).padStart(6)}  ${naam(it.cat).padEnd(24)} ${it.excl?'UITGESLOTEN':(it.inPotje?'IN POTJE   ':'telt mee  ')}  bron ${it.bron}  ${it.name}`);
   L.push('');
   L.push('recurringCats(): '+([...rc].map(naam).join(', ')||'leeg'));
   L.push('potjes die NIET terugkerend zijn (staan in "nog in je potjes"): '+(Object.keys(B).filter(k=>+B[k]>0&&!rc.has(k)).map(naam).join(', ')||'geen'));

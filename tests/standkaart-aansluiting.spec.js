@@ -53,7 +53,8 @@ test('a1 de invoer: drie incasso-categorieen verschillen, en twee vermoede oorza
   expect(r.rc).toContain(k.zorg);
   expect(r.rc).not.toContain(k.gym);                       // Basic Fit kwam maar een keer
   expect(r.items.find(x=>x.name==='Zilveren Kruis').excl).toBe(true);
-  expect(r.items.find(x=>x.name==='Basic Fit').cat).toBe(null);   // uit de terugval, zonder categorie
+  /* v327: een post uit de terugval draagt zijn categorie mee, uit zijn boeking van vorige maand */
+  expect(r.items.find(x=>x.name==='Basic Fit').cat).toBe(k.gym);
 });
 
 test('a2 de rest per categorie telt op tot het gat van de kaart, en elke kolom sluit aan', async ({page})=>{
@@ -63,22 +64,26 @@ test('a2 de rest per categorie telt op tot het gat van de kaart, en elke kolom s
     expect(t, k).toMatch(new RegExp(`^\\s+${k}\\s+-?\\d+ tegen -?\\d+\\s+JA`,'m'));
 });
 
-test('a3 een uitgesloten incasso in een terugkerend potje staat nergens', async ({page})=>{
+/* v327: dat was de stand van v326. Sinds v327 blijft het bedrag van een uitgesloten incasso in de
+   rest van zijn terugkerende potje staan, en die rest telt in "nog in je potjes". */
+test('a3 een uitgesloten incasso in een terugkerend potje staat in "nog in je potjes"', async ({page})=>{
   await boot(page);
   const t=await blok(page);
   const z=rij(t,'Verzekeringen')||rij(t,'Zorg');
   expect(z, t).not.toBe(null);
-  expect([z.bud,z.uit,z.inPot,z.vast,z.rest]).toEqual([140,0,0,0,140]);
-  expect(z.tekst).toContain("140 aan uitgesloten incasso's");
+  expect([z.bud,z.uit,z.inPot,z.vast,z.rest]).toEqual([140,0,140,0,0]);
+  expect(z.tekst).toContain("140 aan uitgesloten incasso's (blijft in het potje)");
 });
 
-test('a4 een vaste last uit de terugval in een variabel potje telt twee keer', async ({page})=>{
+/* v327: tot v326 telde zo'n post twee keer. Nu telt hij in zijn potje en niet in "nog te betalen". */
+test('a4 een vaste last uit de terugval in een variabel potje telt alleen in dat potje', async ({page})=>{
   const k=await boot(page);
   const t=await blok(page);
   const naam=await page.evaluate(c=>CATS[c].name, k.gym);
   const g=rij(t,naam);
-  expect([g.bud,g.uit,g.inPot,g.vast,g.rest]).toEqual([60,0,60,60,-60]);
-  expect(g.tekst).toContain('telt twee keer');
+  expect([g.bud,g.uit,g.inPot,g.vast,g.rest]).toEqual([60,0,60,0,0]);
+  expect(g.tekst).toContain('60 aan vaste lasten uit de terugval telt in dit potje en niet in "nog te betalen"');
+  expect(g.tekst).not.toContain('telt twee keer');
   expect(t).toMatch(/Basic Fit/);
   expect(t).toMatch(/bron vorige maand/);
 });
@@ -86,7 +91,7 @@ test('a4 een vaste last uit de terugval in een variabel potje telt twee keer', a
 test('a5 de vier getallen zijn die van het scherm', async ({page})=>{
   await boot(page);
   const r=await page.evaluate(()=>{ const T=totals(thisYM()), ML=monthLiquidity(), VP=varPotjeStand(thisYM());
-    return {txt:diagStandKaart().join('\n'), b:Math.round(T.budget), u:Math.round(T.spendNorm), v:Math.round(ML.fixDue), p:varBudget()-VP.gebruikt}; });
+    return {txt:diagStandKaart().join('\n'), b:Math.round(T.budget), u:Math.round(T.spendNorm), v:Math.round(ML.fixDue), p:VP.nog}; });
   expect(r.txt).toMatch(new RegExp(`maandbudget\\s+totals\\(\\)\\.budget\\s+${r.b}\\b`));
   expect(r.txt).toMatch(new RegExp(`staat nergens\\s+budget - de andere drie\\s+${r.b-r.p-r.u-r.v}\\b`));
 });

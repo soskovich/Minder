@@ -342,8 +342,9 @@ test.describe('f · de bron: één afleiding van de resterende dagen', () => {
     expect(m).toBeTruthy();
     const body = m[1];
     expect(body).toMatch(/per dag/);
-    // de deler is inPotjes, en dat is VP.budget - VP.gebruikt
-    expect(body).toMatch(/const inPotjes = potjesKop \? VP\.budget-VP\.gebruikt/);
+    // de deler is inPotjes, en dat is VP.nog (v327: de variabele aftrekking plus de rest van de
+    // terugkerende potjes, beide uit varPotjeStand())
+    expect(body).toMatch(/const inPotjes = potjesKop \? VP\.nog/);
     expect(body).toMatch(/inPotjes\/potjesDagen/);
     // en het percentage naast de noemer eronder leest wel spendNorm, dus dat is de scherpte:
     // het dagbedrag deelt inPotjes en niet bud-sp

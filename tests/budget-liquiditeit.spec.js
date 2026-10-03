@@ -211,7 +211,7 @@ test.describe('v55 vast = herkende herhaling', () => {
     const S = await page.evaluate(() => safeToSpend());
     expect(S.fixDue).toBe(FIXDUE);
     expect(S.reserved).toBe(VARPLAN);          // huur (900) en goededoel (20) zitten hier NIET in
-    expect(S.fixDueBudgetExtra).toBe(0);       // het budget-vangnet + de v54-cap zijn vervallen
+    expect(S.fixDueBudgetExtra).toBeUndefined();   // v327: het veld is vervallen (het stond per constructie op nul)
     expect(S.saveReserved).toBe(SAVE_REMAINING);
     expect(S.savedBal).toBe(SPAAR_SALDO);
     expect(S.safe).toBe(SAFE);

@@ -297,7 +297,7 @@ test('g. de zin noemt het tekort en de twee grootste claims met hun route', asyn
      van de vergelijking). De verwachting komt nu uit de RUWE termen van safeToSpend(), en WELKE
      termen een claim zijn staat hier als eigen lijst en niet als een leesbeurt op de vlag in de
      bron: anders schuift de sabotage die er een post bij laat die lijst mee. */
-  const MAAND_CLAIMS = ['fixDueRecurring', 'fixDueBudgetExtra', 'reserved', 'saveReserved'];
+  const MAAND_CLAIMS = ['fixDueRecurring', 'reserved', 'saveReserved'];   // v327: fixDueBudgetExtra is vervallen
   const ruw = await page.evaluate((keys) => {
     const S = safeToSpend();
     return keys.map((k) => ({ key: k, label: safeClaim(k).label, bedrag: Math.round(S[k] || 0) }))

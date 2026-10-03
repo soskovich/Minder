@@ -509,7 +509,7 @@ test.describe('j - de bron: een bron per getal en geen extra dure aanroep', () =
 
   test('de kop leest varPotjeStand en de regel eronder totals', () => {
     expect(blok).toContain('varPotjeStand(m)');
-    expect(blok).toMatch(/const inPotjes = potjesKop \? VP\.budget-VP\.gebruikt/);
+    expect(blok).toMatch(/const inPotjes = potjesKop \? VP\.nog/);   // v327: varPotjeStand().nog
   });
 
   test('hij roept de tempo-som niet zelf aan, maar leest VP.rest', () => {

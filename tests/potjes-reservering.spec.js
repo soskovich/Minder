@@ -208,25 +208,32 @@ test.describe('b · geen enkel potje leeg', () => {
 });
 
 test.describe('c · de twee functies naast elkaar', () => {
-  test('dezelfde poort: terugkerende potjes tellen in geen van beide mee', async ({ page }) => {
+  /* v327: dit heette "terugkerende potjes tellen in geen van beide mee", en dat was de afbakening
+     die het gat van blok 15 maakte. Sinds v327 telt een terugkerend potje in BEIDE met dezelfde
+     rest: budget min uitgegeven min de incasso's die nog komen, niet onder nul. Die rest wordt hier
+     met de hand nagerekend uit monthLiquidity(), en niet uit terugPotjes() gelezen (meetles a). */
+  test('dezelfde poort: een terugkerend potje telt in beide met zijn rest boven de incasso\'s', async ({ page }) => {
     await boot(page, DRIE_OP);
     const r = await page.evaluate(() => {
       const m = curMonth || months()[months().length - 1];
       const B = SET.budgets || {}, rc = recurringCats(), sp = catSpendMap(m);
-      let handReserve = 0, handPlan = 0;
+      let handReserve = 0, handPlan = 0, handTerug = 0;
       const d = daysElapsed(m), left = Math.max(d.dim - d.elapsed, 0);
-      for (const k in B) { const bud = +B[k] || 0; if (bud <= 0 || rc.has(k)) continue;
+      const open = {}; for (const s of monthLiquidity().fixDueItems) if (s.cat && !s.excl && !s.inPotje) open[s.cat] = (open[s.cat] || 0) + s.amount;
+      for (const k in B) { const bud = +B[k] || 0; if (bud <= 0) continue;
+        if (rc.has(k)) { handTerug += Math.max(bud - (sp[k] || 0) - (open[k] || 0), 0); continue; }
         handReserve += Math.max(bud - (sp[k] || 0), 0); handPlan += potjeRest(bud, sp[k] || 0, d.dim, left); }
       openReservedPotjes();
       const namen = [...document.querySelectorAll('#sheet .tx.res-rij .nm')].map((x) => x.innerText);
       return { rc: [...rc], namen, reserve: varPotjesReserve(m), plan: varPlanRemaining(m),
-        handReserve: Math.round(handReserve), handPlan: Math.round(handPlan) };
+        handReserve: Math.round(handReserve), handPlan: Math.round(handPlan), handTerug: Math.round(handTerug) };
     });
     expect(r.rc).toContain('huur');
     expect(r.rc).toContain('abonnement');
-    expect(r.namen.join(' ')).not.toMatch(/Huur|Abonnement/);
-    expect(r.reserve).toBe(r.handReserve);
-    expect(r.plan).toBe(r.handPlan);
+    expect(r.namen.join(' ')).toMatch(/Huur/);
+    expect(r.namen.join(' ')).toMatch(/Abonnement/);
+    expect(r.reserve).toBe(r.handReserve + r.handTerug);
+    expect(r.plan).toBe(r.handPlan + r.handTerug);
   });
 
   /* De identiteit die de twee verbindt: wat er nog in je potjes zit is de aftrekking van de regel

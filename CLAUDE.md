@@ -109,6 +109,47 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **ELK DEEL VAN HET MAANDBUDGET STAAT IN PRECIES EEN GETAL VAN DE STAND-KAART** (`v327`, gebouwd
+  na blok 15 van het toestel): budget = uitgegeven + nog in je potjes + nog te betalen, met een rest
+  van nul. GEMETEN op het toestel (3 oktober 2026) stond EUR 589 nergens: Vervoer & auto 398,
+  Verzekeringen 171, Online shopping 95, Belasting & boetes 40, Bankkosten 22 en Huur -137.
+  DE REST VAN EEN TERUGKEREND POTJE STAAT IN "NOG IN JE POTJES" (keuze van de gebruiker, en een
+  afwijking van mijn voorstel): budget - uitgegeven - herkende incasso's die nog komen, niet onder
+  nul. Tanken, Online shopping en Bankkosten zijn budget dat je nog besteedt en geen vaste last.
+  `terugPotjes(ym)` is de ENE bron, met drie lezers (`v104`): `varPotjeStand().nog` (de kaart),
+  `varPotjesReserve()` (veilig te besteden en de sheet "Gereserveerd in je potjes") en
+  `varPlanRemaining()`. In die laatste staat hij ZONDER tempo-projectie, want de uitgave in zo'n
+  categorie mengt incasso's en losse besteding; daarmee staat hij aan beide kanten van de
+  tempo-krapte en verschuift die niet. ALLEEN DE LOPENDE MAAND (`v194`).
+  EEN UITGESLOTEN INCASSO WORDT NIET AFGETROKKEN, dus het potje houdt zijn bedrag vast, en Grip meldt
+  het (`uitgeslotenKaart()`): "Potje Verzekeringen houdt EUR 160 vast voor een uitgesloten incasso
+  (DELA ...)", met als keuze de bestaande route naar het potje van VOLGENDE maand
+  (`openPotje()`/`savePotje()`, `SET.budgetsNext`) met het verlaagde bedrag ingevuld. NIET STIL
+  VERLAGEN (`MECHANISM_SPEC.defaultEffect`): renderen en de tik schrijven niets, en dat staat als
+  assertie vast. Na de keuze zwijgt de melding, want de kaart "Vanaf <maand>" (`v315`) draagt hem.
+  EEN POST UIT DE TERUGVAL OP VORIGE MAAND DRAAGT ZIJN CATEGORIE (uit zijn grootste boeking van die
+  maand), en valt die in een VARIABEL potje, dan telt hij daar (`s.inPotje`) en niet nog eens in
+  "nog te betalen". Dat haalt de dubbele Shurgard (EUR 137 in Huur) weg. Een post uit het schema kan
+  dit per constructie niet, want zijn categorie is wat `recurringCats()` terugkerend noemt. De post
+  blijft in de sheet van "nog te betalen" staan onder "In een potje · telt daar".
+  `fixDueBudgetExtra` IS VERVALLEN: hij was `fixedStillToGo - L.fixDue`, twee keer hetzelfde getal,
+  dus per constructie nul onder een label dat beloofde wat sinds `v327` in `reserved` zit.
+  OP DE STAND VAN HET TOESTEL, met een fixture die op `v326` exact het scherm gaf (3.375 / 1.654 /
+  175 / 957, veilig 1.113): nog in je potjes 2.380 (EUR 85 per dag), nog te betalen 820, rest 0, en
+  veilig te besteden 524 in plaats van 1.113 (EUR 19 per dag). Dat verschil is de 726 die nu
+  gereserveerd staat min de 137 die niet meer dubbel telt, en het is de voorzichtige kant (`v168`):
+  het oude getal reserveerde het tankbudget niet.
+  GEMETEN OP 360 EN 390px: de stand-kaart blijft 106px (de eis van `v241` is 200), en de kaart op
+  Grip is 360px op beide breedtes met de drie potjes van het toestel, zonder overloop. GRIP HEEFT
+  GEEN 200px-EIS; de kaart staat er alleen zolang er een uitgesloten incasso in een potje zit.
+  VIER BESTAANDE TESTS VIELEN EROP en ze hadden gelijk: twee bronzoekende pinden
+  `VP.budget-VP.gebruikt` als hoofdgetal, en twee in `potjes-reservering.spec.js` eisten dat een
+  terugkerend potje in geen van beide sommen meetelt, precies de afbakening die het gat maakte.
+  Tien sabotages, alle tien rood; de tiende (de klem op wat het potje nog bevat) pas nadat de
+  fixture een potje kreeg waarvan de uitgesloten incasso groter is dan de rest (meetles a).
+  DIT KOST ZICHTBAAR GELD OP HOME, en dat hoort zo: een deel van die 726 is budget voor een
+  opgezegde incasso (DELA 160, Huurwoningen 30, Parkeergelden 19), en dat geld komt vrij zodra je
+  het potje verlaagt. Daarom staat de melding op Grip.
 - **DE STAND-KAART SLUIT NIET AAN OP ZIJN MAANDBUDGET, EN BLOK 15 MEET WAAR HET ZIT** (`v326`, alleen
   gemeten, niets veranderd aan het scherm): GEMELD op 3 oktober 2026 stond er maandbudget EUR 3.375,
   nog in je potjes EUR 1.654, uitgegeven EUR 175 en nog te betalen vast EUR 957; samen 2.786, dus EUR 589
@@ -130,9 +171,9 @@ genoemde versietag.)*
   BLOK 15 VAN `DIAG_BLOKKEN` (`diagStandKaart()`) GEEFT PER CATEGORIE budget, uitgegeven, in potjes,
   vast en rest, met de reden, en de aansluiting van elke kolom op het getal van het scherm. Alleen
   lezen (`v244`); elk getal komt uit de functie die het scherm leest (`v104`).
-  HET VOORSTEL IS NIET GEBOUWD, op verzoek: elk deel van het maandbudget in precies een getal, met een
-  terugkerend potje zonder herkende incasso als "nog te betalen" tot het geld eraf is. Dat wacht op
-  de uitvoer van blok 15 op het toestel.
+  HET VOORSTEL IS BIJ `v327` GEBOUWD, met een afwijking van de gebruiker: de rest van een
+  terugkerend potje staat in "nog in je potjes" en niet in "nog te betalen". Zie de regel daarover
+  bovenaan.
 - **DE PIEKDAG VUURT PAS VANAF 14 VERSTREKEN DAGEN** (`v326`, keuze van de gebruiker):
   `PIEK_MIN_DAGEN` (14) staat naast `PIEK_MIN_TX` (8). GEMELD op 3 oktober 2026: "donderdag EUR 42
   (normaal EUR 9), 55% van je losse geld" op dag 3. De maand wordt vergeleken met afgeronde maanden
@@ -5429,7 +5470,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v326` → `minder-v327`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v327` → `minder-v328`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5448,7 +5489,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325` en `v326` naar `minder-v326`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326` en `v327` naar `minder-v327`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
