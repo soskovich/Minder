@@ -197,7 +197,11 @@ test.describe('v289 correctie en uitlezing', () => {
     await sluit(page);
     const t = await page.evaluate(() => { const d = document.createElement('div');
       d.innerHTML = valtOpLogBlok(); return d.innerText.replace(/\s+/g, ' '); });
-    expect(t).toContain('Overig · augustus 2026 vervallen na correctie');
+    /* v325: een afgesloten maand staat kort onder zijn kop: de handeling klein, rechts het woord */
+    const rij = await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = valtOpLogBlok();
+      const e = [...d.querySelectorAll('.vl-rij')].find(x => /\|overig$/.test(x.dataset.id));
+      return e ? {hand: e.querySelector('.vl-hand').textContent, rechts: e.querySelector('.vl-woord').textContent} : null; });
+    expect(rij).toEqual({hand: 'vervallen na correctie', rechts: 'vervallen'});
     expect(t).toContain('1× vervallen na correctie');
     expect(t).toContain('3× niets gedaan');
     /* en de telling telt hem NIET ook nog eens bij 'niets gedaan' */

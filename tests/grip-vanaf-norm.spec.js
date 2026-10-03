@@ -582,16 +582,25 @@ test('10e de lopende maand noemt wanneer de uitkomst er is', async ({page})=>{
   expect(r.uit).toBe(`uitkomst na ${r.dim} ${r.maand}`);
 });
 
-test('10f de uitkomst staat op een eigen regel onder de handeling', async ({page})=>{
+/* v325: DE UITKOMSTREGEL HOORT NU BIJ DE LOPENDE MAAND. Een afgesloten maand staat sinds v325 onder
+   een kop met wat hij boven je potjes eindigde, en zijn regels staan kort: naam, handeling, en rechts
+   het bedrag erboven of het woord. Dat bedrag is `over_eind_maand`, dus tegen de lat van die maand;
+   de meting tegen het OORSPRONKELIJKE potje blijft in het record en in `valtOpUitkomst()` (10a). */
+test('10f de lopende maand houdt zijn uitkomstregel, een afgesloten maand staat kort onder zijn kop', async ({page})=>{
   await boot(page, {set:{valtOpLog:LOG()}});
-  const r=await page.evaluate(()=>{ go('maand');
-    const kaart=[...document.querySelectorAll('#s-maand .card')]
-      .find(c=>/OVERSCHRIJDINGEN/i.test(c.innerText));
-    return {t:kaart.innerText, n:(kaart.innerText.match(/eindigde|daarna|uitkomst na/g)||[]).length};
-  });
-  expect(r.n).toBe(3);                        // drie records, drie uitkomsten
-  expect(r.t).toContain('potje bijgesteld');
-  expect(r.t).toContain('eindigde €150 boven je oorspronkelijke potje');
+  const r=await page.evaluate((v)=>{ go('maand');
+    const kaart=document.querySelector('#valtOpLog');
+    const blok=kaart.querySelector(`.vl-maand[data-maand="${v}"]`);
+    const rij=k=>{ const e=blok.querySelector(`.vl-rij[data-id="${v}|${k}"]`); return e?e.textContent.replace(/\s+/g,' ').trim():''; };
+    // de kop zegt 'eindigde(n) erboven'; een uitkomstzin noemt een bedrag of 'binnen'
+    return {n:(kaart.innerText.match(/eindigde (€|binnen)|daarna|uitkomst na/g)||[]).length,
+      uitkomstNa:/uitkomst na/.test(kaart.innerText), boodschappen:rij('boodschappen'), kop:!!blok.querySelector('[data-maandboven]')};
+  }, VORIG);
+  expect(r.n).toBe(1);                        // alleen de lopende maand draagt nog een uitkomstzin
+  expect(r.uitkomstNa).toBe(true);
+  expect(r.kop).toBe(true);
+  expect(r.boodschappen).toContain('potje bijgesteld');
+  expect(r.boodschappen).toContain('binnen');   // tegen het bijgestelde potje, de lat van die maand
 });
 
 test('10g de grens schrijft zijn meetlat in het record', async ({page})=>{
@@ -662,8 +671,12 @@ test('e4 de gevolgen lenen de projectie en rekenen hem niet na', async ({page})=
 /* v320: `vanaf` was 250/232 en dat was de kaart 'Vraagt een beslissing', niet de vanaf-kaart; zie
    de reden bij de selector hieronder. De vanaf-kaart is 231/216px, en dat is in v319 EN v320
    gemeten, dus deze ronde heeft hem niet verschoven. */
-const PX={360:{vanaf:231, log:373, tel:75, metUit:49, zonderUit:51, delta:null},
-          390:{vanaf:216, log:336, tel:75, metUit:49, zonderUit:32, delta:17}};
+/* v325: HET LOGBOEK GAAT VAN 373 NAAR 583px OP 360 EN VAN 336 NAAR 549px OP 390, GEMETEN op deze
+   stand. Wat erbij kwam is de maandkop van de afgesloten maand, de vraag over de grootste afwijking
+   (die vraagkaart is het grootste deel) en de regel over wanneer de tegels komen. De uitkomstregel
+   van v315 staat alleen nog bij de lopende maand, dus het paar met en zonder uitkomst is vervallen. */
+const PX={360:{vanaf:231, log:583, tel:75, metUit:49},
+          390:{vanaf:216, log:549, tel:75, metUit:49}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de prijs in pixels van de vanaf-kaart en de uitkomst-regel`, async ({page})=>{
     await page.setViewportSize({width:w, height:h});
@@ -695,15 +708,15 @@ for (const [w,h] of [[360,640],[390,844]]) {
         nUit:uit.length, nZonder:zonder.length};
     });
     const p=PX[w];
-    expect(r.nUit).toBe(3);                    // drie records met een uitkomst
-    expect(r.nZonder).toBe(1);                 // en één zonder: de correctie
+    /* v325: alleen de LOPENDE maand draagt nog een uitkomstregel. De afgesloten records (ook de
+       correctie) staan kort onder hun maandkop, dus het paar met en zonder uitkomst bestaat niet meer. */
+    expect(r.nUit).toBe(1);
+    expect(r.nZonder).toBe(0);
     expect(r.vaLab, 'en het is werkelijk de vanaf-kaart die gemeten wordt').toMatch(/^Vanaf /i);
     expect(r.lgLab).toMatch(/overschrijdingen/i);
     expect(r.vanaf).toBe(p.vanaf);
     expect(r.log).toBe(p.log);
     expect(r.tel, 'de telregel, waar de vierde handeling van v315 in landt').toBe(p.tel);
     expect(Math.min(...r.metUit)).toBe(p.metUit);
-    expect(r.zonderUit[0]).toBe(p.zonderUit);
-    if(p.delta!=null) expect(p.metUit-p.zonderUit).toBe(p.delta);   // wat de regel kost
   });
 }

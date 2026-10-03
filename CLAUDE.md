@@ -81,7 +81,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   goed") met de volle uitleg en de handeling in een sheet erachter; sinds `v324` leest "Vraagt aandacht"
   dezelfde lijstregel (`maandBeslisRij()`), dus alleen de kop en de stip verschillen. Sinds `v314` staat de SAMENVATTING daarvoor (hij telt de potjes mee) en staan de handelingen
   in volgorde van het moment in de maand, met "Zo laten" als eigen actie. Draagt sinds `v315` de kaart
-  "Vanaf <maand>" met drie ingangen naar wat er klaarstaat, en toont het logboek de UITKOMST per handeling. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
+  "Vanaf <maand>" met drie ingangen naar wat er klaarstaat, en toont het logboek de UITKOMST per handeling. Sinds `v325` staat het logboek per afgesloten maand, met een kop, een vraag en de rest kort. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
   de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten. Sinds `v237` is dat niet
   meer de enige ingang: `coachLeak()` levert ook een patroonregel op Inzichten. Twee ingangen naar
   hetzelfde gesprek, maar nooit voor hetzelfde geval. Draagt sinds `v258` ook `contantKaart()`, maar
@@ -109,6 +109,51 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **HET LOGBOEK STAAT PER AFGESLOTEN MAAND, MET EEN KOP, EEN VRAAG EN DE REST KORT** (`v325`): de
+  kaart "Wat je met deze overschrijdingen deed" zei per regel wat je deed, maar niet wat de maand je
+  kostte en hij vroeg niets. Per afgesloten maand (nieuwste eerst, hooguit `VALTOP_LOG_TOON` = 3) staat
+  er nu een kop "EUR 278 boven je potjes" met "2 van de 5 potjes met een signaal eindigden erboven",
+  een vraag over de grootste afwijking zonder antwoord, en de overige regels kort (naam, handeling
+  klein, rechts "+EUR 84", "binnen" of "vervallen"; binnen en vervallen ingeklapt tot "N binnen of
+  vervallen ›"). De lopende maand staat er ongewijzigd boven, met "uitkomst na <einddatum>", en de
+  telling van `v314`/`v315` staat er ongewijzigd onder.
+  EEN BRON (`v104`): `valtOpBoven(r)` zegt per record boven, binnen, vervallen of onbekend met het
+  bedrag, en `valtOpMaandStand(m)` telt precies die bedragen op. De kop, de rij, de vraag en de trend
+  lezen die twee; `valtOpLogBlok()` noemt `over_eind_maand` nergens zelf.
+  HET BEDRAG IS `over_eind_maand`, DUS TEGEN DE LAT VAN DIE MAAND, en dat is bij een bijstelling het
+  BIJGESTELDE potje. Dat volgt uit de gemelde stand ("Sport bijgesteld binnen") en uit de vraagzin
+  ("bleef ook na bijstellen boven je potje"), en het draait voor de KORTE RIJ de keuze van `v315`
+  om, die een bijstelling tegen het oorspronkelijke potje las. `over_oorspronkelijk` en
+  `valtOpUitkomst()` zijn niet aangeraakt; de uitkomstzin staat alleen nog bij de lopende maand.
+  VERVALLEN TELT NIET MEE, in het bedrag niet en in de noemer niet (`v289`). Een afgesloten record
+  zonder meting heet "niet gemeten" en telt ook niet mee (`v59`/`v73`/`v173`).
+  DE VRAAG: een tegelijk, over de grootste afwijking zonder antwoord in de nieuwste getoonde maand
+  waar er een is. De zin volgt de handeling (grens, niets gedaan, bijgesteld, en ook zo gelaten en
+  volgende maand anders). Twee antwoorden: "Potje past niet" opent `openPotje()` en dus de bestaande
+  route "volgende maand anders" (`SET.budgetsNext`, `v61`), en "Uitzondering". Het antwoord staat op
+  het record (`r.antwoord = {keuze, op}`), de beantwoorde kaart blijft gedempt staan met het antwoord
+  en de datum, en "wijzigen" haalt het antwoord in een tik weg. HET ANTWOORD VERZET NIETS: "Potje past
+  niet" opent de editor en schrijft zelf geen potje.
+  "DURE MAAND" IS NIET GEBOUWD, op verzoek: de vraag was welke regel bepaalt welk potje
+  boodschappen-achtig is, en die keuze is aan de gebruiker. Overal staat "Uitzondering", onder de
+  sleutel `uitzondering`, zodat alleen het label hoeft te wijzigen.
+  DE POORT (`VALTOP_POORT_MAANDEN` = 3): een trend van het bedrag per maand, tegels per handeling ("2/5
+  binnen") en een patroonkaart staan er pas bij drie afgesloten maanden logboek. Die maanden tellen
+  van de eerste maand met een record tot en met vorige maand, OOK EEN MAAND ZONDER SIGNAAL: anders
+  wacht de poort op een slechte maand. Daaronder staat "Na N maand(en). Vanaf <maand> staat hier ook
+  wat bij jou werkt.", met de maand `thisYM() + (3 - N)`.
+  HET PATROON is hetzelfde potje boven in de drie afgesloten maanden voor deze, met de eigen
+  antwoorden erbij ("Twee keer zei je "potje past niet".") en twee handelingen: "Potje vast ophogen
+  vanaf <maand>" (`openPotje()`, `SET.budgetsNext`) en "Zo laten" (`r.patroon_gelaten` op het record van
+  de laatste van de drie). Geen chip "3 maanden op rij" zoals in de mockup: dat is een teller, en de
+  zin noemt de drie maanden bij naam.
+  KLEUR: de trend en de tegels gebruiken `--bar` en `--teal`, geen rood. De stand staat in het woord
+  (`v78`/`v93`).
+  GEMETEN: het logboek op de septemberstand is 569px op 360 en 535px op 390 (stand 1), en 616 en 582
+  na het eerste antwoord. De vraagkaart is daarvan 177px op 360. Op de fixture van
+  `grip-vanaf-norm.spec.js` ging het van 373/336 naar 583/549px. GRIP HEEFT GEEN 200px-EIS.
+  VIER BESTAANDE TESTS IN TWEE BESTANDEN VIELEN EROP en ze hadden gelijk: ze lazen de uitkomstzin of
+  de oude rij van een AFGESLOTEN maand. Dertien sabotages op de nieuwe regels.
 - **"VRAAGT AANDACHT" IS DEZELFDE LIJSTREGEL ALS "VRAAGT EEN BESLISSING"** (`v324`): sinds `v323`
   schuift een dekkingsgat van de ene kaart naar de andere zodra de post niet meer in de lopende maand
   valt, en dan veranderde ook zijn VORM (een lijstregel tegen een alinea). Beide kaarten lezen nu
@@ -5330,7 +5375,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v324` → `minder-v325`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v325` → `minder-v326`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5349,7 +5394,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323` en `v324` naar `minder-v324`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324` en `v325` naar `minder-v325`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
