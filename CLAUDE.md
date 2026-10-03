@@ -109,6 +109,35 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN UITGESLOTEN INCASSO IN EEN POTJE KRIJGT DRIE KEUZES PER POST, ZONDER VOORSELECTIE** (`v329`,
+  keuze van de gebruiker): "Telt weer mee", "Potje verlagen" en "Wordt een reservering". De kaart van
+  `v327` vroeg per POTJE en bood alleen verlagen aan, en GEMELD op het toestel betekent uitsluiten niet
+  altijd opgezegd: DELA komt per kwartaal, Huurwoningen is opgezegd en Parkeergelden komt elke maand
+  met een ander bedrag. De app kan dat verschil niet zien, dus hij vraagt het per POST
+  (`uitgeslotenPotjes()` geeft een rij per uitgesloten incasso, met `key`).
+  GEEN STANDAARDKEUZE: de drie knoppen hebben hetzelfde gewicht, renderen schrijft niets, en de regel
+  staat er tot je kiest (`MECHANISM_SPEC.defaultEffect`). Een assertie leest kleur, gewicht en grootte
+  van de drie knoppen en eist dat ze gelijk zijn.
+  DE REGEL ZWIJGT OP DE GEGEVENS EN NIET OP EEN VLAG VAN DE KAART: de uitsluiting is weg, het potje van
+  volgende maand ligt lager (dat geldt per potje, want het potje is wat je verlaagt), of er staat een
+  reservering met `bron` op de incasso-sleutel. Een reservering verwijderen brengt de regel dus terug.
+  "TELT WEER MEE" haalt `SET.fixDueExcl[key]` weg (`uitgeslotenTeltMee()`); de post staat dan in "nog
+  te betalen" en gaat van de rest van zijn potje af, en de kaart sluit nog steeds op nul (gemeten:
+  Huurwoningen, fixDue +30 en nog in je potjes -30).
+  "POTJE VERLAGEN" is de route van `v327` (`openPotje()`/`savePotje()`, `SET.budgetsNext`), met als
+  voorstel het potje min wat DEZE post vasthoudt.
+  "WORDT EEN RESERVERING" (`uitgeslotenNaarRes()`) zet de post in `SET.reserveringen` met het bedrag, het
+  interval uit het schema (DELA per kwartaal) en DEZE MAAND als termijn: een post staat alleen op de kaart
+  als hij in "nog te betalen" van de lopende maand valt. Een post uit de terugval kent geen interval en
+  heet maandelijks. DE UITSLUITING BLIJFT STAAN, anders telt hij in "nog te betalen" en in je
+  reserveringen. `saveReservering()` houdt `bron` bij een wijziging, en een tweede tik maakt er geen
+  tweede van.
+  WAT HET NIET DOET, en dat staat erbij in plaats van weggerekend: een reservering verlaagt het potje
+  niet. Het bedrag blijft in "nog in je potjes" staan tot je het potje zelf verlaagt, en de reservering
+  vraagt het daarnaast op je reserveringsrekening. Dat zijn twee keuzes en de kaart maakt er geen een
+  van.
+  MEERDERE POSTEN IN EEN POTJE delen de rest: samen houden ze niet meer vast dan er nog in zit.
+  GEMETEN: de kaart is 384px op 360 en 345px op 390, zonder overloop. Tien sabotages, alle tien rood.
 - **DE TERUGVAL OP VORIGE MAAND LAAT EEN POST DIE HET SCHEMA KENT MET RUST** (`v328`): de terugval in
   `monthLiquidity()` vangt incasso's die het schema mist, en toetste alleen tegen de posten die DEZE maand
   op de lijst staan. Een post die het schema wel kent met een langer interval staat daar per constructie
@@ -124,10 +153,8 @@ genoemde versietag.)*
   DE FIXTURE VAN `standkaart-sluit` DRAAGT DELA NU ZOALS HET TOESTEL (drie keer) en geeft op `v326`
   nog steeds exact 3.375 / 1.654 / 175 / 957 en veilig 1.113: de fout zat er toen al in. De sabotage die
   de reparatie terugdraait zet drie tests rood.
-  OPEN PUNT, NIET GEBOUWD: de uitsluit-schakelaar heet "opgezegd" (`v231`), maar wordt ook gebruikt voor
-  een incasso die blijft komen met een wisselend bedrag (Parkeergelden). De kaart van `v327` kan die twee
-  niet scheiden en adviseert dan verlagen. Voorstel aan de gebruiker: per post drie keuzes, "telt weer
-  mee", "potje verlagen" en "wordt een reservering", elk via een bestaande route.
+  DE UITSLUIT-SCHAKELAAR DIE OOK VOOR EEN WISSELEND BEDRAG WERD GEBRUIKT IS BIJ `v329` OPGEPAKT, met
+  drie keuzes per post; zie de regel daarover bovenaan.
 - **ELK DEEL VAN HET MAANDBUDGET STAAT IN PRECIES EEN GETAL VAN DE STAND-KAART** (`v327`, gebouwd
   na blok 15 van het toestel): budget = uitgegeven + nog in je potjes + nog te betalen, met een rest
   van nul. GEMETEN op het toestel (3 oktober 2026) stond EUR 589 nergens: Vervoer & auto 398,
@@ -5489,7 +5516,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v328` → `minder-v329`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v329` → `minder-v330`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5508,7 +5535,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327` en `v328` naar `minder-v328`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328` en `v329` naar `minder-v329`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

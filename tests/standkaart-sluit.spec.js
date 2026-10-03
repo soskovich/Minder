@@ -118,9 +118,10 @@ test('d1 Grip meldt elk terugkerend potje met een uitgesloten incasso, met het b
   await bootStand(page);
   const t=await page.evaluate(()=>{ go('maand'); renderMaand(); const k=document.querySelector('#uitgeslotenKaart'); return k?k.innerText:''; });
   expect(t).not.toContain('Verzekeringen');    // v328: DELA is een kwartaalpost en geen uitgesloten maandlast
-  expect(t).toContain('Potje Belasting & boetes houdt €30 vast voor een uitgesloten incasso (Huurwoningen).');
-  expect(t).toContain('Potje Vervoer & auto houdt €19 vast voor een uitgesloten incasso (Stparkeergelden via Rive).');
-  expect(t).toContain('Potje verlagen naar €10 vanaf november');
+  expect(t).toContain('Potje Belasting & boetes houdt €30 vast voor Huurwoningen, een uitgesloten incasso.');
+  expect(t).toContain('Potje Vervoer & auto houdt €19 vast voor Stparkeergelden via Rive, een uitgesloten incasso.');
+  expect(t).toContain('Potje verlagen naar €10');
+  expect(t).toContain('geldt vanaf november');
 });
 
 test('d2 niet stil verlagen: renderen en de tik schrijven geen potje', async ({page})=>{
@@ -163,8 +164,8 @@ test('d5 meer dan er nog in het potje zit kan het niet vasthouden', async ({page
     const rij=terugPotjes(thisYM()).rijen.find(x=>x.k==='vervoer');
     go('maand'); renderMaand(); const k=document.querySelector('#uitgeslotenKaart'); return {rest:rij.rest, t:k?k.innerText:''}; });
   expect(r.rest).toBe(13);
-  expect(r.t).toContain('Potje Vervoer & auto houdt €13 vast voor een uitgesloten incasso');
-  expect(r.t).toContain('Potje verlagen naar €702 vanaf november');
+  expect(r.t).toContain('Potje Vervoer & auto houdt €13 vast voor Stparkeergelden via Rive');
+  expect(r.t).toContain('Potje verlagen naar €702');
 });
 
 for (const w of [360, 390]) {

@@ -47,9 +47,9 @@ const CATMAP={'Stichting Beheer Derdeng':'bankkosten','Stparkeergelden via Rive'
   'Appstore Kleintje':'abonnement','Albert Heijn':'boodschappen','Hema Winkel':'overig','Cafe De Kroeg':'uiteten'};
 const POTJES={vervoer:1100,verzekering:335,huur:750,shopping:95,belasting:40,bankkosten:25,abonnement:5,boodschappen:400,overig:500,sport:50,uiteten:55,vices:20};
 const UIT=['Stparkeergelden via Rive','Huurwoningen','DELA Natura- en levensv'];
-async function bootStand(page){
+async function bootStand(page, datum='2026-10-03'){   // v329: een andere dag voor de kwartaalmaand van DELA
   const { pinDatum } = require('./vaste-dag');
-  await pinDatum(page,'2026-10-03');
+  await pinDatum(page,datum);
   await page.addInitScript(s=>{for(const k in s)localStorage.setItem(k,s[k]);}, seed());
   await page.goto('/index.html');
   await page.waitForFunction(()=>typeof window.monthLiquidity==='function' && TX.length>0);

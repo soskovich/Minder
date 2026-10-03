@@ -6285,33 +6285,83 @@ function valtOpToon(id){ window._valtOpOpen=id; renderMaand(); }
    HET BEDRAG IS min(uitgesloten, rest): meer dan er nog in het potje zit kan het niet vasthouden.
    HIJ ZWIJGT ZODRA JE VOOR VOLGENDE MAAND AL LAGER KOOS: dan staat die keuze op de kaart
    "Vanaf <maand>" (v315), en hier nog eens zou een kopie zijn. */
+/* v329: DRIE KEUZES PER POST, ZONDER VOORSELECTIE (keuze van de gebruiker). Een uitgesloten
+   incasso is niet altijd opgezegd: GEMELD op het toestel komt DELA per kwartaal, is Huurwoningen
+   opgezegd en wisselt Parkeergelden per maand. De kaart kan dat verschil niet zien, dus hij vraagt
+   het per POST en niet per potje:
+   - "Telt weer mee" haalt de uitsluiting weg (SET.fixDueExcl), en dan staat de post weer in
+     "nog te betalen" en gaat hij van de rest van zijn potje af.
+   - "Potje verlagen" is de bestaande route naar het potje van volgende maand (v327, v61).
+   - "Wordt een reservering" zet hem in SET.reserveringen met het bedrag, de maand en het interval
+     die de app al herkent (uitgeslotenResVoorstel()), met `bron` op de incasso-sleutel. De
+     uitsluiting blijft staan, anders telt hij twee keer.
+   GEEN STANDAARDKEUZE: de drie knoppen hebben hetzelfde gewicht en de regel staat er tot je
+   kiest. Renderen schrijft niets (MECHANISM_SPEC.defaultEffect).
+   DE REGEL ZWIJGT na elk van de drie, en elk om een reden die in de gegevens staat en niet in een
+   vlag van deze kaart: de uitsluiting is weg, het potje van volgende maand ligt lager, of er is een
+   reservering met deze bron. Een reservering verwijderen brengt de regel dus terug. */
 function uitgeslotenPotjes(){
   const ym=thisYM(); const BN=SET.budgetsNext||{}; const out=[];
+  const bronnen=new Set(resLijst().map(x=>x&&x.bron).filter(Boolean));
   for(const r of terugPotjes(ym).rijen){
     if(!r.excl.length || !(r.rest>0)) continue;
-    const som=r.excl.reduce((a,x)=>a+(+x.amount||0),0);
-    const houdt=Math.round(Math.min(som, r.rest)); if(houdt<=0) continue;
     if(BN[r.k]!=null && +BN[r.k] < r.bud) continue;
-    out.push({k:r.k, bud:r.bud, houdt, namen:r.excl.map(x=>x.name), voorstel:Math.max(r.bud-houdt,0)});
+    let rest=r.rest;
+    for(const x of r.excl){
+      const houdt=Math.round(Math.min(+x.amount||0, rest)); if(houdt<=0) continue;
+      rest-=houdt;
+      if(bronnen.has(x.key)) continue;
+      out.push({key:x.key, k:r.k, bud:r.bud, houdt, naam:x.name, voorstel:Math.max(r.bud-houdt,0)});
+    }
   }
   return out;
 }
-function uitgeslotenPotjeVerlaag(k){
-  const P=uitgeslotenPotjes().find(x=>x.k===k); openPotje(k);
+/* Wat de app al over de post weet. DE MAAND IS DEZE MAAND, en dat is geen aanname: een post staat
+   alleen op deze kaart als hij in "nog te betalen" van de lopende maand valt (monthLiquidity()), en
+   bij een post met een langer interval eist die lijst al dat zijn termijn deze maand is. Het
+   INTERVAL komt uit het schema (DELA per kwartaal); een post uit de terugval op vorige maand kent
+   alleen zijn bedrag en heet maandelijks, want zo stond hij ook in "nog te betalen". Een interval
+   dat RES_INTERVAL niet kent wordt het dichtstbijzijnde dat hij wel kent. */
+function uitgeslotenResVoorstel(key){
+  let L=null; try{ L=monthLiquidity(); }catch(_){ return null; }
+  const it=((L&&L.fixDueItems)||[]).find(s=>s.key===key); if(!it) return null;
+  let sc=null; try{ sc=recurringSchedule().find(s=>s.key===key&&s.type==='fixed'); }catch(_){}
+  const ivs=RES_INTERVAL.map(x=>x[0]).filter(x=>x>0);
+  const ivRuw=Math.max(Math.round(+((sc||it).intervalM)||1),1);
+  const iv=ivs.reduce((a,x)=>Math.abs(x-ivRuw)<Math.abs(a-ivRuw)?x:a, ivs[0]);
+  return {naam:it.name||'Verplichting', bedrag:Math.round(+((sc||it).amount)||+it.amount||0), vervalmaand:thisYM(), intervalM:iv, cat:it.cat||'', bron:key};
+}
+function uitgeslotenTeltMee(key){
+  if(!key || !(SET.fixDueExcl||{})[key]) return;
+  delete SET.fixDueExcl[key]; save();
+  try{ render(); }catch(_){}; try{ renderMaand(); }catch(_){}
+  toast('Post telt weer mee');
+}
+function uitgeslotenNaarRes(key){
+  if(resLijst().some(x=>x&&x.bron===key)) return;
+  const v=uitgeslotenResVoorstel(key); if(!v) return;
+  const g=Object.assign({id:'r'+Date.now().toString(36)}, v);
+  SET.reserveringen=resLijst().slice(); SET.reserveringen.push(g); save();
+  try{ render(); }catch(_){}; try{ renderMaand(); }catch(_){}
+  toast(`${ICON('check')} ${esc(v.naam)} staat in je reserveringen`);
+}
+function uitgeslotenPotjeVerlaag(k, key){
+  const P=uitgeslotenPotjes().find(x=>x.k===k && (!key || x.key===key)); openPotje(k);
   if(P){ window._potDraft={type:'vast', vast:P.voorstel}; renderPotSheet(k); }
 }
 function uitgeslotenKaart(){
   let U=[]; try{ U=uitgeslotenPotjes(); }catch(_){ return ''; }
   if(!U.length) return '';
   const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
-  const rij=u=>{ const c=CATS[u.k]||{}; const n=u.namen.map(x=>esc(x)).join(', ');
-    return `<div style="padding:8px 0;border-top:1px solid var(--line)" data-uitgesloten="${esc(u.k)}">
-      <div style="line-height:1.45;font-size:var(--fs-md)">Potje ${esc(c.name||u.k)} houdt ${euro0(u.houdt)} vast voor ${u.namen.length===1?'een uitgesloten incasso':u.namen.length+" uitgesloten incasso's"} (${n}).</div>
-      <div class="small" style="margin-top:6px;color:var(--teal);cursor:pointer;font-weight:600" onclick="uitgeslotenPotjeVerlaag('${esc(u.k)}')">Potje verlagen naar ${euro0(u.voorstel)} vanaf ${vanaf} ›</div></div>`; };
+  const knop=(t,f)=>`<span class="small" style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="${f}">${t} ›</span>`;
+  const rij=u=>{ const c=CATS[u.k]||{}; const kk=esc(String(u.key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+    return `<div style="padding:8px 0;border-top:1px solid var(--line)" data-uitgesloten="${esc(u.k)}" data-sleutel="${esc(u.key)}">
+      <div style="line-height:1.45;font-size:var(--fs-md)">Potje ${esc(c.name||u.k)} houdt ${euro0(u.houdt)} vast voor ${esc(u.naam)}, een uitgesloten incasso.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px">${knop('Telt weer mee',`uitgeslotenTeltMee('${kk}')`)}${knop('Potje verlagen naar '+euro0(u.voorstel),`uitgeslotenPotjeVerlaag('${esc(u.k)}','${kk}')`)}${knop('Wordt een reservering',`uitgeslotenNaarRes('${kk}')`)}</div></div>`; };
   return `<div class="card" id="uitgeslotenKaart" style="padding:13px 15px;margin:0 0 9px">
     <div class="hlabel" style="margin:0 0 6px">Uitgesloten incasso in een potje</div>
     ${U.map(rij).join('')}
-    <div class="small" style="color:var(--mut2);line-height:1.5;margin-top:6px">Dat bedrag staat in 'nog in je potjes' en gaat dus af van veilig te besteden, terwijl de incasso niet meer komt. Deze maand blijft het potje zoals het is.</div>
+    <div class="small" style="color:var(--mut2);line-height:1.5;margin-top:6px">Dat bedrag staat in 'nog in je potjes' en gaat dus af van veilig te besteden. Komt de incasso wel, maar niet elke maand, dan hoort hij in je reserveringen. Een lager potje geldt vanaf ${vanaf}; deze maand blijft het zoals het is.</div>
   </div>`;
 }
 function contantKaart(){
@@ -7727,6 +7777,7 @@ function saveReservering(id){
     vervalmaand:maand,
     intervalM:(window._resIv!=null?window._resIv:(+oud.intervalM||0)),
     cat:String(v('rCat')||'') };
+  if(oud.bron) g.bron=oud.bron;   // v329: de koppeling aan de incasso blijft bij een wijziging
   SET.reserveringen=resLijst().slice();
   const i=SET.reserveringen.findIndex(x=>x.id===id);
   if(i>=0) SET.reserveringen[i]=g; else SET.reserveringen.push(g);
