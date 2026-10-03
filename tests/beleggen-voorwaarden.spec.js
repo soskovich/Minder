@@ -20,7 +20,9 @@ const OVER = ym(new Date(now.getFullYear() + 1, now.getMonth(), 1));
 // aandacht in plaats van een beslissing, en dan staat de dekkingsrij niet meer op 'tekort'. Deze
 // tests gaan over de samenstelling van de drie voorwaarden, niet over dat moment, dus het
 // knelmoment ligt hier binnen de marge.
-const BINNENKORT = ym(new Date(now.getFullYear(), now.getMonth() + 2, 1));
+// v323: sinds v323 is alleen een post in de LOPENDE maand een beslissing; elke latere post met een gat is aandacht.
+// Deze tests gaan over de samenstelling van de drie voorwaarden, dus de post valt deze maand.
+const BINNENKORT = ym(new Date(now.getFullYear(), now.getMonth(), 1));
 
 // Eén basis, en per test schuiven we precies één knop: het spaarsaldo (buffer), de stand van de
 // reserveringenpot (dekking) of de inleg op het doel (aankoopdoel).

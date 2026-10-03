@@ -21,7 +21,10 @@ const RES = 'NL01RESV0000009999';
    Sinds v226 vraagt een gat dat MAAND_DREMPEL.dekkingMarge maanden of verder weg ligt aandacht in
    plaats van een beslissing, en deze tests gaan over de ingang bij een tekort. Het bedrag schuift
    mee: benodigdeStand is 3000 x (12 - 2) / 12 = 2500 tegen 400 in de pot. */
-const KNEL = ym(new Date(now.getFullYear(), now.getMonth() + 2, 1));
+/* v323: sinds v323 is alleen een post in de LOPENDE maand een beslissing; elke latere post met een gat is aandacht. Deze tests gaan over de
+   regel bij een tekort, dus het knelmoment ligt in de lopende maand: benodigdeStand is dan de hele
+   post (3000) tegen 400 in de pot. */
+const KNEL = ym(new Date(now.getFullYear(), now.getMonth(), 1));
 const DOELDATUM = ym(new Date(now.getFullYear() + 1, now.getMonth(), 1));
 
 function seed(o) {
@@ -79,7 +82,7 @@ const ing = (page, key) => page.evaluate((k) => {
 }, key);
 
 test.describe('a - elke regel met een tekort draagt zijn eigen ingang', () => {
-  for (const [key, bedrag] of [['dekking', '€2.100'], ['buffer', '€4.100']]) {
+  for (const [key, bedrag] of [['dekking', '€2.600'], ['buffer', '€4.100']]) {
     test(`${key} opent op zijn eigen sleutel, met zijn eigen bedrag`, async ({ page }) => {
       await boot(page);
       const r = await ing(page, key);

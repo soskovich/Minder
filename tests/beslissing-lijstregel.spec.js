@@ -1,7 +1,7 @@
 /* v320: 'Vraagt een beslissing' als LIJSTREGEL, met de volle tekst een tik dieper.
  *
  * DE FIXTURE DRAAGT DE STAND VAN HET TOESTEL, en niet een paar getallen dat op dezelfde uitkomst
- * uitkomt (v251/v256): pot EUR 37 tegen een eenmalige boete van EUR 299 in de maand na deze geeft
+ * uitkomt (v251/v256): pot EUR 37 tegen een eenmalige boete van EUR 299 in DEZE maand (v323) geeft
  * EUR 262 tekort, en Kosten Koper van EUR 15.000 in de zevende maand op 90 procent van een inleg van
  * EUR 2.200 geeft EUR 1.980 tegen EUR 2.143 nodig, dus EUR 163 per maand tekort. Elk blok MEET die
  * invoer voordat het de uitkomst toetst: zonder die meting is 'de regel leest het tekort' niet van
@@ -58,7 +58,11 @@ function seed(o = {}) {
     manualBal: { [MAIN]: 3000, [SAV]: 30000, [RES]: POT },
     budgets: { huur: 900, boodschappen: 400 }, budgetMonth: THIS,
     savingMode: 'amount', savingAmount: INLEG,
-    reserveringen: [{ id: 'r1', naam: POSTNAAM, bedrag: POST, vervalmaand: PLUS(1), intervalM: 0, cat: 'belasting' }],
+    /* v323: de boete valt in de LOPENDE maand en niet in de maand erna. Sinds v323 is een post die
+       later valt aandacht en geen beslissing, en dat is ook wat de stand van het toestel nu laat zien;
+       deze spec gaat over de VORM van een beslissing en heeft daarvoor twee regels in die kaart nodig.
+       Het tekort blijft EUR 262, want een eenmalige post draagt zijn hele bedrag in de eis (v317). */
+    reserveringen: [{ id: 'r1', naam: POSTNAAM, bedrag: POST, vervalmaand: PLUS(0), intervalM: 0, cat: 'belasting' }],
     goals: [
       { id: 'g1', naam: 'Kosten Koper', doel: KK, gespaard: 0, streefdatum: PLUS(7), allocMode: 'pct', pct: 90 },
       { id: 'g2', naam: 'Inrichting', doel: INR, gespaard: 0, streefdatum: PLUS(18), allocMode: 'pct', pct: 10 },

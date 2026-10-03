@@ -20,8 +20,11 @@ const RES = 'NL01RESV0000009999';
    MAAND_DREMPEL.dekkingMarge maanden of verder weg ligt vraagt sindsdien aandacht en geen
    beslissing, en een regel op tempo krijgt geen suggestie - dat is precies wat deze tests niet
    meten. De bedragen schuiven mee: benodigdeStand is 3000 x (12 - 2) / 12 = 2500 tegen 400 in de
-   pot, dus een achterstand van 2100, en het maandtempo is 3000 / 2 = 1500. */
-const KNEL = ym(new Date(now.getFullYear(), now.getMonth() + 2, 1));
+   pot, dus een achterstand van 2100, en het maandtempo is 3000 / 2 = 1500. Sinds v323 valt de post in de lopende maand: achterstand 2600, maandtempo 3000. */
+/* v323: sinds v323 is alleen een post in de LOPENDE maand een beslissing; elke latere post met een gat is aandacht. Deze tests gaan over de
+   regel bij een tekort, dus het knelmoment ligt in de lopende maand: benodigdeStand is dan de hele
+   post (3000) tegen 400 in de pot. */
+const KNEL = ym(new Date(now.getFullYear(), now.getMonth(), 1));
 const DOELDATUM = ym(new Date(now.getFullYear() + 1, now.getMonth(), 1));
 
 function seed(o) {
@@ -77,7 +80,7 @@ test.describe('a - elke regel met een tekort draagt een suggestie', () => {
     await boot(page);
     const r = await sug(page, 'dekking');
     expect(r.status).toBe('tekort');
-    expect(r.sug).toContain('€2.100');
+    expect(r.sug).toContain('€2.600');
   });
 
   test('buffer', async ({ page }) => {
@@ -169,9 +172,9 @@ test.describe('b - het bedrag komt uit de regel en wordt nergens opnieuw bereken
   test('dekking houdt de twee grootheden uit elkaar', async ({ page }) => {
     await boot(page);
     const d = (await sug(page, 'dekking')).sug;
-    expect(d).toContain('€1.500');          // het lopende tempo uit de gevolgzin
+    expect(d).toContain('€3.000');          // het lopende tempo uit de gevolgzin
     expect(d).toContain('maandtempo');
-    expect(d.indexOf('€2.100')).toBeLessThan(d.indexOf('€1.500'));
+    expect(d.indexOf('€2.600')).toBeLessThan(d.indexOf('€3.000'));
   });
 });
 

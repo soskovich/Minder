@@ -18,7 +18,8 @@ const SAV = 'NL01SAVE0000004323';
 function drieTekorten(extra) {
   const p = seed();
   const s = JSON.parse(p.minder_set);
-  s.reserveringen = [{ id: 'r1', naam: 'Waterschap', bedrag: 9000, intervalM: 12, vervalmaand: plusM(2) }];
+  // v323: sinds v323 is alleen een post in de LOPENDE maand een beslissing; elke latere post met een gat is aandacht.
+  s.reserveringen = [{ id: 'r1', naam: 'Waterschap', bedrag: 9000, intervalM: 12, vervalmaand: plusM(0) }];
   s.resAcc = SAV;
   s.goals = [{ id: 'g1', naam: 'Vakantie', doel: 4000, gespaard: 200, allocMode: 'fixed', perMaand: 50, streefdatum: plusM(3) }];
   s.planOrder = ['g1', 'noodfonds'];

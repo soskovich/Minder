@@ -42,12 +42,10 @@ function seed(o) {
     add('i' + m, MAIN, m, '05', 4000, 'Werkgever', 'SALARIS LOON');
     add('h' + m, MAIN, m, '02', -1500, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
     add('a' + m, MAIN, m, '06', -900, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
-    /* v322: het stortingstempo naar de reserveringsrekening beslist sinds v322 of een dekkingsgat te
-       dichten is (`dekkingDichten()`), en de oude marge van drie maanden is vervallen. Met 100 per
-       maand was het gat van 2.600 over zeven maanden (372 per maand) niet te dichten en dus terecht
-       een beslissing; deze spec gaat over de grens tussen aandacht en beslissing, dus het tempo staat
-       op 400 en de grens ligt tussen zes en zeven maanden. */
-    add('r' + m, RES, m, '10', o.resPer != null ? o.resPer : 400, 'Reserveringen', 'NAAR RESERVERINGEN');
+    /* v322 zette hier een stortingstempo van 400 neer, omdat dat toen de drempel was. Sinds v323
+       beslist alleen de kalender, en de grens-test zet het tempo op nul om dat te bewijzen. Bij
+       resPer 0 blijft er wel een boeking op de rekening, anders valt hij uit allAccounts(). */
+    add('r' + m, RES, m, '10', o.resPer != null && o.resPer !== 0 ? o.resPer : (o.resPer === 0 ? 1 : 400), 'Reserveringen', 'NAAR RESERVERINGEN');
     // de rekening bestaat ook in de stilstaande fixture: één boeking buiten het venster van drie
     if (per !== 0) add('s' + m, SPAAR, m, '26', per, 'Spaarpot', 'NAAR SPAREN');
     else if (i === 11) add('s' + m, SPAAR, m, '26', 300, 'Spaarpot', 'NAAR SPAREN');
@@ -189,8 +187,9 @@ test.describe('b - bufferTempo zwijgt waar hij niets meet', () => {
 });
 
 test.describe('c - dekking meet het knelmoment, niet de stand van nu', () => {
-  test('gedekt tot volgende maand: een beslissing', async ({ page }) => {
-    await boot(page, { resIn: 1 });
+  // v323: alleen een post in de LOPENDE maand is nog een beslissing
+  test('een gat in de lopende maand: een beslissing', async ({ page }) => {
+    await boot(page, { resIn: 0 });
     const r = await regel(page, 'dekking');
     expect(r.status).toBe('tekort');
     expect(r.opTempo).toBe(false);
@@ -203,15 +202,16 @@ test.describe('c - dekking meet het knelmoment, niet de stand van nu', () => {
     expect(r.opTempo).toBe(true);
   });
 
-  /* v322: de grens is niet meer een vaste marge maar het gat per maand tegen het stortingstempo.
-     2.600 over zeven maanden is 372 en past in 400; over zes maanden is het 434 en past niet. Een
-     post op drie maanden, die onder de oude marge van v226 nog aandacht was, is nu een beslissing. */
-  test('de grens ligt bij het stortingstempo en niet bij een vaste marge', async ({ page }) => {
-    await boot(page, { resIn: 7 });
+  /* v323: de grens is de lopende maand, en niets anders. De stortingstoets van v322 is vervallen:
+     een gat dat volgende maand valt is aandacht, hoe groot het ook is en wat er ook naar de rekening
+     gaat. Het tempo staat hier daarom op 1 euro per maand (een boeking houdt de rekening in
+     allAccounts()), want met een echte storting erbij bewijst deze test niets. */
+  test('de grens is de lopende maand, ook zonder stortingen', async ({ page }) => {
+    await boot(page, { resIn: 1, resPer: 0 });
     expect((await regel(page, 'dekking')).status).toBe('let op');
-    await boot(page, { resIn: 6 });
-    expect((await regel(page, 'dekking')).status).toBe('tekort');
-    await boot(page, { resIn: 3 });
+    await boot(page, { resIn: 6, resPer: 0 });
+    expect((await regel(page, 'dekking')).status).toBe('let op');
+    await boot(page, { resIn: 0, resPer: 0 });
     expect((await regel(page, 'dekking')).status).toBe('tekort');
   });
 

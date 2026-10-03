@@ -109,6 +109,26 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN DEKKINGSGAT DAT NIET DEZE MAAND VALT, VRAAGT AANDACHT** (`v323`, keuze van de gebruiker):
+  de stortingstoets van `v322` hieronder is VERVALLEN. GEMELD na `v322`: dezelfde boete stond nog
+  steeds rood, want op het toestel ging er niets naar de reserveringsrekening en dan is het gat per
+  die definitie nooit te dichten. De gebruiker koos: alleen een post in de LOPENDE maand is een
+  beslissing, elke latere post met een gat is aandacht met het bedrag per maand erbij, hoe groot het
+  gat ook is. `resStortTempo()` is weg; `dekkingDichten(D)` leest alleen de kalender.
+  DE LOPENDE MAAND TELT MEE, ook een keuze van de gebruiker: op 3 oktober zijn er voor november twee
+  maanden, dus EUR 262 is EUR 131 per maand. Dat is `doelMaandenTot() + 1` en ALLEEN hier; de
+  doel-tellingen van `v316` op Plan en Grip blijven zoals ze zijn. De gevolgzin zegt "deze maand
+  meegeteld", zodat het bedrag naast een vol-datum op Plan niet als tegenspraak leest.
+  WAT HET KOST, en dat staat erbij: de regel vraagt geen beslissing meer bij een gat dat met geen
+  enkel realistisch maandbedrag te dichten is (gemeten: EUR 29.963 volgende maand geeft "let op" met
+  EUR 14.982 per maand). Het bedrag staat er, dus de omvang is zichtbaar; het oordeel is aan jou.
+  EN DE v132-TAK IN DE EENHEID IS ONBEREIKBAAR GEWORDEN: een tekort valt nu in de lopende maand, en
+  daar draagt elke post zijn hele bedrag in de eis, dus `graad` is bij een tekort nooit null. De
+  test van `v317` die die tak levend hield toetst nu de let-op-eenheid van dezelfde kwartaalpost.
+  DERTIG BESTAANDE TESTS IN TIEN BESTANDEN VIELEN EROP en ze hadden gelijk: ze gebruikten een gat in
+  een LATERE maand als generiek beslissingsgeval. Hun post staat nu in de lopende maand, en waar een
+  test juist over een later gat ging verwacht hij nu `let op`. Drie sabotages op de nieuwe regel,
+  alle drie rood.
 - **EEN DEKKINGSGAT DAT LATER VALT EN NOG TE DICHTEN IS, VRAAGT AANDACHT** (`v322`): GEMELD op het
   toestel: EUR 37 in de pot en een boete van EUR 299 in november stond rood onder 'Vraagt een
   beslissing' met EUR 262 tekort, terwijl er deze maand niets tekort is. De toets was
@@ -135,7 +155,8 @@ genoemde versietag.)*
   of zonder aangewezen rekening is er geen tempo, en dan blijft het een beslissing (`v59`/`v73`/`v173`).
   WAT HET NIET MEET, en dat is een benoemde grens: of de stortingen ook de LATERE posten moeten dragen.
   Het tempo wordt tegen het eerste gat gelegd; een lijst die na dat gat nog meer vraagt ziet dat terug
-  zodra het volgende gat het eerste is.
+  zodra het volgende gat het eerste is. DE STORTINGSTOETS IS BIJ `v323` VERVALLEN; zie de regel
+  daarboven. Wat hier blijft staan is waarom `benodigdPerMaand` geen drempel kan zijn.
 - **"JE RICHT" IS "JE RICHTBEDRAG"** (`v322`): de bufferregel zei "je richt staat op 2", een afgekapt
   woord. Hij zegt nu "je richtbedrag is 2 maanden", hetzelfde woord als de suggestie en de sheet al
   gebruikten (`v91`). Het diagnoseblok (blok 3) houdt zijn eigen label. DE PRIJS IS 15px OP 360 EN
@@ -5246,6 +5267,11 @@ WAT DAARMEE OOK VERVALT is de `v309`-bevinding dat `oud-saldo-melden` en `vaste-
 ORDENINGSAFHANKELIJK waren. Dat was de verkeerde toeschrijving: het is bij beide de kalender, en met
 de pin zijn ze groen in de volle suite EN in een kleine selectie.
 
+**Bekend rood, eigen ronde (gevonden bij `v323`):** `correctie-en-uitlezing.spec.js` "blok 10 markeert
+elke groep en elke bevestigde boeking" verwacht vijf gemarkeerde regels en krijgt er vier. GEMETEN dat
+hij op `HEAD` zonder `v323` net zo rood staat op 3 oktober 2026, dus hij is niet van deze ronde; de
+oorzaak is niet nagegaan en hoort vermoedelijk bij de kalender-as van `v299`/`v310`.
+
 **Bekend rood, eigen ronde:** `decimaalteken.spec.js` "een bedrag dat je intikt komt als heel bedrag
 binnen" tikt `3219,50` in een `type="number"`-veld. Chromium wist de komma in de DOM (precies de
 `v215`-regel), dus er komt `321950` binnen in plaats van `3220`. Niet tijdzone- en niet
@@ -5267,7 +5293,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v322` → `minder-v323`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v323` → `minder-v324`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5286,7 +5312,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321` en `v322` naar `minder-v322`.
+`minder-v321`, `v322` naar `minder-v322` en `v323` naar `minder-v323`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

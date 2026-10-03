@@ -120,16 +120,17 @@ test.describe('b · Plan en Grip lezen dezelfde bron', () => {
     });
     expect(r.graad).toBe(33);
     expect(r.tekort).toBe(199);
-    // de rij op Grip valt om op dezelfde post: 100 dekt de 299 niet
-    expect(r.status).toBe('tekort');
+    // de rij op Grip valt om op dezelfde post: 100 dekt de 299 niet. v323: november ligt na deze
+    // maand, dus dat is aandacht en geen beslissing
+    expect(r.status).toBe('let op');
     expect(r.gat).toMatchObject({ naam: 'Boetes cjib', bedrag: 299, tekort: 199 });
     expect(r.gedektTot).toBe(null);
     // en zijn zin noemt dezelfde maand, hetzelfde bedrag en hetzelfde tekort
     expect(r.zin).toContain('november 2026');
     expect(r.zin).toContain('€299');
     expect(r.zin).toContain('€199');
-    // de eenheid draagt de graad die ook uit dekking(12) komt
-    expect(r.eenheid).toContain('33%');
+    // v323: de eenheid draagt het gat per maand uit dezelfde dekking(12): 199 over oktober en november
+    expect(r.eenheid).toContain('€100 per maand tot november');
   });
 
   test('zonder de reparatie zou Grip zwijgen waar Plan een tekort toont', async ({ page }) => {

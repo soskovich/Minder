@@ -4726,8 +4726,7 @@ function doelTempoLine(p){
    drie maanden is de horizon waarop een maandbedrag nog iets kan doen.
      bufferTempoVenster  over hoeveel afgeronde maanden de richting van je buffer wordt gemeten.
                          Korter is geen richting, langer laat een inleg die vorig jaar stopte te
-                         lang meetellen. Sinds v322 meet hij ook het stortingstempo naar je
-                         reserveringsrekening (`resStortTempo()`).
+                         lang meetellen.
      dekkingMarge is bij v322 vervallen: een vaste marge van drie maanden zei niets over de grootte
      van het gat. Of een dekkingsgat een beslissing vraagt staat nu in `dekkingDichten()`. */
 const MAAND_DREMPEL = { dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelStatus:'tekort',
@@ -5109,7 +5108,8 @@ function maandRegels(){
          er deze maand niets tekort is. Een vaste marge zegt niets over de grootte van het gat: EUR 262
          over twee maanden en EUR 26.200 over twee maanden kregen hetzelfde oordeel.
          `dekkingDichten(D)` is de ene plek die zegt of het gat VOOR de vervaldag te dichten is; de
-         status, de eenheid en de gevolgzin lezen hem (v104). Zie daar welke drempel het beslist. */
+         status, de eenheid en de gevolgzin lezen hem (v104). Sinds v323 is dat alleen nog de
+         kalender: een post in de lopende maand is een beslissing, elke latere post aandacht. */
       const DD = D.gat ? dekkingDichten(D) : null;
       const opTempo = !D.gat || !!(DD && DD.teDichten);
       const norm = !D.gat && !(D.graad!=null && D.graad<MAAND_DREMPEL.dekkingOk);
@@ -7091,53 +7091,34 @@ function dekkingTekst(D){
   const tot=D.gedektTot?`Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}.`:'Je pot dekt de eerstvolgende post nu al niet.';
   return `${tot} In ${resMaandLabel(D.gat.maand)} komt ${euro0(D.gat.bedrag)} en dan kom je ${euro0(D.gat.tekort)} tekort. ${perM}`;
 }
-/* v322: IS HET GAT VOOR DE VERVALDAG TE DICHTEN? Dit beslist of de dekkingsregel een beslissing
+/* v323: VALT HET GAT DEZE MAAND, OF IS ER NOG TIJD? Dit beslist of de dekkingsregel een beslissing
    vraagt (`tekort`) of aandacht (`let op`).
-   DE MAANDEN komen uit `doelMaandenTot()`, de bestaande telling, en die sluit de lopende maand uit
-   (v316): een post in november heeft op 2 oktober EEN maand, op 15 september twee. Valt de post in
-   de lopende maand, dan is het nul en is er niets meer te dichten.
-   HET BEDRAG PER MAAND is het gat (`D.gat.tekort`, de eerste post die je pot niet meer draagt) door
-   die maanden, naar boven afgerond: een halve euro tekort is nog steeds tekort.
-   DE DREMPEL IS WAT ER GEMETEN PER MAAND NAAR JE RESERVERINGSREKENING GAAT (`resStortTempo()`), en
-   niet het maandtempo `benodigdPerMaand` van je lijst. Dat tweede is GEMETEN EN BEREDENEERD
-   tautologisch: het telt voor elke post bedrag/maanden-tot-die-post op, dus maal de maanden tot het
-   gat is het minstens alles wat er tot dan valt, en daarmee is elk gat buiten de lopende maand per
-   constructie 'te dichten'. Een drempel die niet kan vallen is geen drempel (meetles a). Wat er werkelijk
-   binnenkomt is de meting die het onderscheid draagt, in dezelfde vorm als `bufferTempo()` bij de
-   buffer (v226): drie afgeronde maanden, de lopende telt niet mee.
-   ONBEKEND GEEFT NOOIT 'TE DICHTEN' (v59/v73/v173): zonder drie afgeronde maanden geschiedenis is er
-   geen tempo om op te leunen, en dan blijft het een beslissing. Dat is de voorzichtige kant (v168). */
-function resStortTempo(){
-  const acc=resAccId(); if(!acc) return null;
-  const nu=thisYM(), venster=MAAND_DREMPEL.bufferTempoVenster;
-  const win=months().filter(m=>m<nu).slice(-venster);
-  if(win.length<venster) return null;
-  const reeks=win.map(mm=>{ let v=0; for(const t of txOfMonth(mm)) if(t.acc===acc && t.amount>0) v+=t.amount; return Math.round(v); });
-  /* De MEDIAAN van drie en geen gemiddelde: een eenmalige grote storting tilt een gemiddelde op en
-     laat een gat te dichten lijken op geld dat niet elke maand komt (v168); een maand overslaan
-     drukt de mediaan niet naar nul. */
-  const med=reeks.slice().sort((a,b)=>a-b)[1];
-  return {maanden:win, reeks, perMaand:med};
-}
+   DE KEUZE VAN DE GEBRUIKER, en hij draait de stortingstoets van v322 terug: die eiste dat er al
+   gemeten zoveel per maand naar de reserveringsrekening ging. GEMELD op het toestel: EUR 37 in de pot
+   en een boete van EUR 299 in november bleef daardoor rood, want er ging niets naartoe. Een post die
+   later valt is nog te dichten zolang er tijd is, en dat is een vraag over de KALENDER en niet over
+   je stortingen. Alleen een post in de lopende maand vraagt nog een beslissing.
+   DE LOPENDE MAAND TELT MEE, ook dat is de keuze van de gebruiker: op 3 oktober zijn er voor een post
+   in november twee maanden (oktober en november), dus EUR 262 is EUR 131 per maand. Dat wijkt bewust
+   af van `doelMaandenTot()` elders (v316), en ALLEEN HIER: de doel-tellingen op Plan en Grip blijven
+   ongemoeid. De telling leest wel `doelMaandenTot()` en telt er een bij, zodat er geen tweede
+   kalenderverschil naast komt (v104).
+   HET BEDRAG PER MAAND is het gat (`D.gat.tekort`) door die maanden, naar boven afgerond: een halve
+   euro tekort is nog steeds tekort. */
 function dekkingDichten(D){
   if(!D || !D.gat) return null;
-  const k=doelMaandenTot(D.gat.maand);
+  const k0=doelMaandenTot(D.gat.maand);
   const tekort=Math.max(Math.round(+D.gat.tekort||0),0);
-  if(k==null || k<=0) return {maanden:k, perMaand:null, tempo:null, teDichten:false, dezeMaand:true};
-  const perMaand=Math.ceil(tekort/k);
-  let T=null; try{ T=resStortTempo(); }catch(_){}
-  const tempo=T?T.perMaand:null;
-  return {maanden:k, perMaand, tempo, teDichten: tempo!=null && perMaand<=tempo, dezeMaand:false};
+  if(k0==null || k0<=0) return {maanden:k0, perMaand:null, teDichten:false, dezeMaand:true};
+  const k=k0+1;   // de lopende maand telt mee
+  return {maanden:k, perMaand:Math.ceil(tekort/k), teDichten:true, dezeMaand:false};
 }
-// de zin achter dekkingTekst(): wat het gat per maand vraagt, en waartegen dat is gemeten (v322)
+// de zin achter dekkingTekst(): wat het gat per maand vraagt (v322/v323)
 function dekkingDichtenZin(DD, D){
   if(!DD) return '';
   if(DD.dezeMaand) return 'Die post valt deze maand, dus er is geen maand meer om dat bij te leggen.';
   const mnd=MFULL[+String(D.gat.maand).slice(5,7)-1];
-  const vraag=`Dat is ${euro0(DD.perMaand)} per maand tot ${mnd}`;
-  const v=MAAND_DREMPEL.bufferTempoVenster;
-  if(DD.tempo==null) return `${vraag}; hoeveel er per maand naar je reserveringsrekening gaat is nog niet te meten.`;
-  return `${vraag}, en de afgelopen ${v} maanden ging er ${euro0(DD.tempo)} per maand naar je reserveringsrekening.`;
+  return `Dat is ${euro0(DD.perMaand)} per maand tot ${mnd}, deze maand meegeteld.`;
 }
 /* v317: DE TELLING BOVEN DE RIJEN TELT DEZELFDE VERZAMELING ALS DE RIJEN. Hij las `D.aantal`, de
    LIJST, terwijl de rijen uit `verplichtingen()` komen en dus alleen de posten met een voorkomen
