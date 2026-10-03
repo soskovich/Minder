@@ -109,6 +109,25 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE TERUGVAL OP VORIGE MAAND LAAT EEN POST DIE HET SCHEMA KENT MET RUST** (`v328`): de terugval in
+  `monthLiquidity()` vangt incasso's die het schema mist, en toetste alleen tegen de posten die DEZE maand
+  op de lijst staan. Een post die het schema wel kent met een langer interval staat daar per constructie
+  niet, want zijn volgende termijn valt later, en de terugval zette hem dan als MAANDLAST terug. GEMELD
+  EN GEMETEN op het toestel: DELA komt per kwartaal (maart, juni, september), het schema zegt interval 3
+  met de volgende in december, en toch stond hij in oktober in "nog te betalen". De gebruiker had hem
+  daarom uitgesloten, en sinds `v327` zei Grip daardoor "Potje Verzekeringen houdt EUR 160 vast voor een
+  uitgesloten incasso" met het advies het potje te verlagen; in december was dat een tekort geworden.
+  DE TOETS IS NU HET HELE SCHEMA (`type==='fixed'`), en het schema beslist wanneer zo'n post komt.
+  DE UITSLUITING VAN DELA STAAT NOG OP HET TOESTEL, en die wordt niet stil weggehaald
+  (`MECHANISM_SPEC.defaultEffect`): in december zou hij anders uit "nog te betalen" blijven. De gebruiker
+  zet hem zelf terug.
+  DE FIXTURE VAN `standkaart-sluit` DRAAGT DELA NU ZOALS HET TOESTEL (drie keer) en geeft op `v326`
+  nog steeds exact 3.375 / 1.654 / 175 / 957 en veilig 1.113: de fout zat er toen al in. De sabotage die
+  de reparatie terugdraait zet drie tests rood.
+  OPEN PUNT, NIET GEBOUWD: de uitsluit-schakelaar heet "opgezegd" (`v231`), maar wordt ook gebruikt voor
+  een incasso die blijft komen met een wisselend bedrag (Parkeergelden). De kaart van `v327` kan die twee
+  niet scheiden en adviseert dan verlagen. Voorstel aan de gebruiker: per post drie keuzes, "telt weer
+  mee", "potje verlagen" en "wordt een reservering", elk via een bestaande route.
 - **ELK DEEL VAN HET MAANDBUDGET STAAT IN PRECIES EEN GETAL VAN DE STAND-KAART** (`v327`, gebouwd
   na blok 15 van het toestel): budget = uitgegeven + nog in je potjes + nog te betalen, met een rest
   van nul. GEMETEN op het toestel (3 oktober 2026) stond EUR 589 nergens: Vervoer & auto 398,
@@ -5470,7 +5489,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v327` → `minder-v328`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v328` → `minder-v329`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5489,7 +5508,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326` en `v327` naar `minder-v327`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327` en `v328` naar `minder-v328`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

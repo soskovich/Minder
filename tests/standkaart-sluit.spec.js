@@ -23,11 +23,22 @@ test('a1 de invoer is de stand van het toestel: dezelfde incasso\'s, categorieen
   expect(rc).toEqual(['bankkosten','belasting','shopping','sport','vervoer','verzekering']);
   const per=n=>r.items.find(x=>x.name===n);
   expect(per('Shurgard NL')).toMatchObject({cat:'huur',terugval:true,excl:false,inPotje:true,amount:137});
-  expect(per('DELA Natura- en levensv')).toMatchObject({cat:'verzekering',terugval:true,excl:true,amount:160});
+  /* v328: DELA komt per kwartaal; het schema kent hem (volgende in december) en dan zet de terugval
+     hem niet als maandlast in oktober. Op v327 stond hij hier als terugval-post. */
+  expect(per('DELA Natura- en levensv')).toBeUndefined();
   expect(per('Huurwoningen')).toMatchObject({cat:'belasting',excl:true,amount:30});
   expect(per('Stparkeergelden via Rive')).toMatchObject({cat:'vervoer',excl:true,amount:19});
   expect(r.items.filter(x=>!x.excl&&!x.inPotje).reduce((a,x)=>a+x.amount,0)).toBe(820);
   expect(r.items.some(x=>x.cat==='shopping')).toBe(false);          // Online shopping: geen openstaande incasso
+});
+
+test('a1b een post die het schema met een langer interval kent, zet de terugval niet in deze maand', async ({page})=>{
+  await bootStand(page);
+  const r=await page.evaluate(()=>{ const s=recurringSchedule().find(x=>/DELA/.test(x.name));
+    return {iv:s&&s.intervalM, next:s&&ymdVan(s.nextDate), inLijst:monthLiquidity().fixDueItems.some(x=>/DELA/.test(x.name))}; });
+  expect(r.iv).toBe(3);                         // invoermeting: het schema kent hem als kwartaalpost
+  expect(r.next.slice(0,7)).toBe('2026-12');
+  expect(r.inLijst).toBe(false);
 });
 
 test('a2 budget = uitgegeven + nog in je potjes + nog te betalen, rest nul, op de stand van het toestel', async ({page})=>{
@@ -106,30 +117,30 @@ test('c1 de stand-kaart toont €2.380 nog in je potjes, met €85 per dag', asy
 test('d1 Grip meldt elk terugkerend potje met een uitgesloten incasso, met het bedrag', async ({page})=>{
   await bootStand(page);
   const t=await page.evaluate(()=>{ go('maand'); renderMaand(); const k=document.querySelector('#uitgeslotenKaart'); return k?k.innerText:''; });
-  expect(t).toContain('Potje Verzekeringen houdt €160 vast voor een uitgesloten incasso (DELA Natura- en levensv).');
+  expect(t).not.toContain('Verzekeringen');    // v328: DELA is een kwartaalpost en geen uitgesloten maandlast
   expect(t).toContain('Potje Belasting & boetes houdt €30 vast voor een uitgesloten incasso (Huurwoningen).');
   expect(t).toContain('Potje Vervoer & auto houdt €19 vast voor een uitgesloten incasso (Stparkeergelden via Rive).');
-  expect(t).toContain('Potje verlagen naar €175 vanaf november');
+  expect(t).toContain('Potje verlagen naar €10 vanaf november');
 });
 
 test('d2 niet stil verlagen: renderen en de tik schrijven geen potje', async ({page})=>{
   await bootStand(page);
   const r=await page.evaluate(()=>{ const voor=JSON.stringify([SET.budgets,SET.budgetsNext||{}]);
-    go('maand'); renderMaand(); uitgeslotenPotjeVerlaag('verzekering');
+    go('maand'); renderMaand(); uitgeslotenPotjeVerlaag('belasting');
     const veld=document.querySelector('#sheet input'); return {na:JSON.stringify([SET.budgets,SET.budgetsNext||{}]), voor, veld:veld&&veld.value}; });
   expect(r.na).toBe(r.voor);
-  expect(r.veld).toBe('175');
+  expect(r.veld).toBe('10');
 });
 
 test('d3 de keuze loopt via de bestaande route naar volgende maand, en daarna zwijgt de melding', async ({page})=>{
   await bootStand(page);
-  const r=await page.evaluate(()=>{ uitgeslotenPotjeVerlaag('verzekering'); savePotje('verzekering');
+  const r=await page.evaluate(()=>{ uitgeslotenPotjeVerlaag('belasting'); savePotje('belasting');
     go('maand'); renderMaand(); const k=document.querySelector('#uitgeslotenKaart');
-    return {nu:SET.budgets.verzekering, next:SET.budgetsNext.verzekering, t:k?k.innerText:''}; });
-  expect(r.nu).toBe(335);
-  expect(r.next).toBe(175);
-  expect(r.t).not.toContain('Verzekeringen');
-  expect(r.t).toContain('Belasting & boetes');
+    return {nu:SET.budgets.belasting, next:SET.budgetsNext.belasting, t:k?k.innerText:''}; });
+  expect(r.nu).toBe(40);
+  expect(r.next).toBe(10);
+  expect(r.t).not.toContain('Belasting & boetes');
+  expect(r.t).toContain('Vervoer & auto');
 });
 
 test('d4 zonder uitgesloten incasso in een terugkerend potje staat er geen kaart', async ({page})=>{
@@ -147,13 +158,13 @@ test('e1 Home toont het lagere veilig te besteden, met het bedrag per dag', asyn
 
 test('d5 meer dan er nog in het potje zit kan het niet vasthouden', async ({page})=>{
   await bootStand(page);
-  /* invoermeting: met een potje van 300 is de rest 300 - 164 = 136, kleiner dan DELA 160 */
-  const r=await page.evaluate(()=>{ SET.budgets.verzekering=300; save();
-    const rij=terugPotjes(thisYM()).rijen.find(x=>x.k==='verzekering');
+  /* invoermeting: met een potje van 715 is de rest 715 - 99 - 603 = 13, kleiner dan Parkeergelden 19 */
+  const r=await page.evaluate(()=>{ SET.budgets.vervoer=715; save();
+    const rij=terugPotjes(thisYM()).rijen.find(x=>x.k==='vervoer');
     go('maand'); renderMaand(); const k=document.querySelector('#uitgeslotenKaart'); return {rest:rij.rest, t:k?k.innerText:''}; });
-  expect(r.rest).toBe(136);
-  expect(r.t).toContain('Potje Verzekeringen houdt €136 vast voor een uitgesloten incasso');
-  expect(r.t).toContain('Potje verlagen naar €164 vanaf november');
+  expect(r.rest).toBe(13);
+  expect(r.t).toContain('Potje Vervoer & auto houdt €13 vast voor een uitgesloten incasso');
+  expect(r.t).toContain('Potje verlagen naar €702 vanaf november');
 });
 
 for (const w of [360, 390]) {

@@ -2,7 +2,9 @@
    fixture die "de gemelde stand" heet draagt die getallen). Op de code van v326 geeft hij exact
    wat het toestel toonde: maandbudget 3.375, nog in je potjes 1.654, uitgegeven 175, nog te
    betalen 957, dus 589 nergens, en veilig te besteden 1.113. De incasso's dragen dezelfde namen,
-   bedragen, categorieen en dezelfde bron (schema of de terugval op vorige maand) als in blok 15;
+   bedragen, categorieen en dezelfde bron (schema of de terugval op vorige maand) als in blok 15
+   (v328: DELA staat er zoals op het toestel, in maart, juni en september; op v326 en v327 zette de
+   terugval hem desondanks als maandlast in oktober, en dat was de fout);
    de saldi zijn die van blok 3 (4.744,83 in totaal, 4.000 op de spaarrekening, 37 in de
    reserveringspot), en het spaarbedrag is 2.200 per maand. */
 const MAIN='NL01MAIN0000001111', SPAAR='NL01SPAR0000002222', RES='NL01RESV0000003333';
@@ -28,7 +30,7 @@ function seed(){
   }
   for(const m of ['2026-02','2026-05','2026-08']) inc(m,'16','Bol Abonnement Select',95);   // per kwartaal, volgende in november: deze maand niets open
   inc('2026-09','22','Shurgard NL',137);                       // een keer: alleen de terugval kent hem
-  inc('2026-09','26','DELA Natura- en levensv',160);           // een keer, en uitgesloten
+  for(const m of ['2026-03','2026-06','2026-09']) inc(m,'26','DELA Natura- en levensv',160);   // per kwartaal (toestel: maart, juni, september), en uitgesloten
   const bea=(d,a,n)=>add(MAIN,OKT+'-'+d,-a,n,'BEA, BETAALPAS '+n.toUpperCase());
   bea('01',99,'Tango Tankstation'); bea('01',1,'Appstore Kleintje'); bea('02',16,'Albert Heijn');
   bea('02',7,'Hema Winkel'); bea('02',52,'Cafe De Kroeg');
