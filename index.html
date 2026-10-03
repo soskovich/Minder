@@ -6337,13 +6337,55 @@ function uitgeslotenTeltMee(key){
   try{ render(); }catch(_){}; try{ renderMaand(); }catch(_){}
   toast('Post telt weer mee');
 }
-function uitgeslotenNaarRes(key){
-  if(resLijst().some(x=>x&&x.bron===key)) return;
+/* v330: 'Wordt een reservering' schrijft niet meer bij de tik. Eerst staan BEIDE gevolgen in een
+   sheet: de post in je reserveringen (bedrag, interval, termijn) en het potje van volgende maand,
+   verlaagd met wat deze post vasthoudt. Eén knop schrijft allebei. Het verlagen staat aan en is in
+   hetzelfde scherm uit te zetten; dan zegt de sheet dat het bedrag in je potje EN in je
+   reserveringen blijft staan. Openen en het vinkje omzetten schrijven niets (MECHANISM_SPEC.defaultEffect). */
+function uitgeslotenResSheet(key){
   const v=uitgeslotenResVoorstel(key); if(!v) return;
+  const P=uitgeslotenPotjes().find(x=>x.key===key)||null;
+  const kk=esc(String(key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+  const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
+  const c=P?(CATS[P.k]||{}):{}; const pn=P?esc(c.name||P.k):'';
+  const term=`${ymFull(v.vervalmaand)} ${String(v.vervalmaand).slice(0,4)}`;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:4px">${esc(v.naam)} wordt een reservering</div>
+    <div class="small muted" style="margin-bottom:12px">Dit verandert er als je bevestigt.</div>
+    <div data-gevolg="reservering" style="border-top:1px solid var(--line);padding:10px 0">
+      <div style="font-weight:600;font-size:var(--fs-md)">In je reserveringen</div>
+      <div class="small" style="line-height:1.5;margin-top:3px">${esc(v.naam)} · ${euro0(v.bedrag)} · ${resIntervalLabel(v.intervalM)} · eerste termijn ${term}</div>
+    </div>
+    ${P?`<label data-gevolg="potje" class="row" style="gap:9px;cursor:pointer;border-top:1px solid var(--line);padding:10px 0;align-items:flex-start"><input type="checkbox" id="uitResVerlaag" checked onchange="uitgeslotenResVerlaagToon()"><span style="flex:1"><span style="font-weight:600;font-size:var(--fs-md);display:block">Potje ${pn} verlagen vanaf ${vanaf}</span><span class="small" style="display:block;line-height:1.5;margin-top:3px">${euro0(P.bud)} naar ${euro0(P.voorstel)}, min de ${euro0(P.houdt)} die deze post vasthoudt. Deze maand blijft het potje ${euro0(P.bud)}.</span></span></label>
+    <div id="uitResDubbel" class="small" style="display:none;color:var(--mut2);line-height:1.5;padding:0 0 10px">Het potje blijft ${euro0(P.bud)}. Dan staat ${euro0(P.houdt)} volgende maand in je potje én in je reserveringen.</div>`:''}
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" style="flex:1" onclick="uitgeslotenNaarRes('${kk}')">Bevestigen</button><button class="btn sec" onclick="closeSheet()">Annuleren</button></div>`;
+  showSheetBg();
+}
+function uitgeslotenResVerlaagToon(){
+  const cb=document.getElementById('uitResVerlaag'), d=document.getElementById('uitResDubbel');
+  if(cb&&d) d.style.display=cb.checked?'none':'block';
+}
+/* De schrijver. Hij leest het voorstel en het potje OPNIEUW in plaats van wat de sheet toonde
+   (v319): tussen openen en bevestigen kan er een import binnenkomen. Het verlagen loopt via
+   dezelfde laag als savePotje() bij een bestaand potje (SET.budgetsNext, met potMetaNext op vast)
+   en voedt valtOpPotjeGewijzigd() net zo, dus de log ziet het als 'volgende maand anders'.
+   `verlaag` komt van het vinkje; zonder sheet (een rechtstreekse aanroep) verlaagt hij niets. */
+function uitgeslotenNaarRes(key, verlaag){
+  if(verlaag===undefined){ const cb=document.getElementById('uitResVerlaag'); verlaag=!!(cb&&cb.checked); }
+  if(resLijst().some(x=>x&&x.bron===key)){ try{ closeSheet(); }catch(_){}; return; }
+  const v=uitgeslotenResVoorstel(key); if(!v) return;
+  const P=verlaag ? uitgeslotenPotjes().find(x=>x.key===key) : null;
   const g=Object.assign({id:'r'+Date.now().toString(36)}, v);
-  SET.reserveringen=resLijst().slice(); SET.reserveringen.push(g); save();
+  SET.reserveringen=resLijst().slice(); SET.reserveringen.push(g);
+  if(P){
+    SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[P.k]=P.voorstel;
+    SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[P.k]=null;
+  }
+  save();
+  if(P){ try{ valtOpPotjeGewijzigd(P.k, P.bud, P.voorstel, true); }catch(_){} }
+  try{ closeSheet(); }catch(_){}
   try{ render(); }catch(_){}; try{ renderMaand(); }catch(_){}
-  toast(`${ICON('check')} ${esc(v.naam)} staat in je reserveringen`);
+  toast(`${ICON('check')} ${esc(v.naam)} staat in je reserveringen${P?`, potje ${esc((CATS[P.k]||{}).name||P.k)} ${euro0(P.voorstel)} vanaf ${ymFull(nextYM(SET.budgetMonth||thisYM()))}`:''}`);
 }
 function uitgeslotenPotjeVerlaag(k, key){
   const P=uitgeslotenPotjes().find(x=>x.k===k && (!key || x.key===key)); openPotje(k);
@@ -6357,7 +6399,7 @@ function uitgeslotenKaart(){
   const rij=u=>{ const c=CATS[u.k]||{}; const kk=esc(String(u.key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
     return `<div style="padding:8px 0;border-top:1px solid var(--line)" data-uitgesloten="${esc(u.k)}" data-sleutel="${esc(u.key)}">
       <div style="line-height:1.45;font-size:var(--fs-md)">Potje ${esc(c.name||u.k)} houdt ${euro0(u.houdt)} vast voor ${esc(u.naam)}, een uitgesloten incasso.</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px">${knop('Telt weer mee',`uitgeslotenTeltMee('${kk}')`)}${knop('Potje verlagen naar '+euro0(u.voorstel),`uitgeslotenPotjeVerlaag('${esc(u.k)}','${kk}')`)}${knop('Wordt een reservering',`uitgeslotenNaarRes('${kk}')`)}</div></div>`; };
+      <div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px">${knop('Telt weer mee',`uitgeslotenTeltMee('${kk}')`)}${knop('Potje verlagen naar '+euro0(u.voorstel),`uitgeslotenPotjeVerlaag('${esc(u.k)}','${kk}')`)}${knop('Wordt een reservering',`uitgeslotenResSheet('${kk}')`)}</div></div>`; };
   return `<div class="card" id="uitgeslotenKaart" style="padding:13px 15px;margin:0 0 9px">
     <div class="hlabel" style="margin:0 0 6px">Uitgesloten incasso in een potje</div>
     ${U.map(rij).join('')}

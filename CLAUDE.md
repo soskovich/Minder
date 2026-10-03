@@ -109,6 +109,23 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **"WORDT EEN RESERVERING" TOONT BEIDE GEVOLGEN EN SCHRIJFT ZE MET EEN BEVESTIGING** (`v330`, keuze
+  van de gebruiker): de tik schrijft niets meer en opent een sheet (`uitgeslotenResSheet()`) met de post
+  in je reserveringen (bedrag, interval, eerste termijn) EN het potje van volgende maand, verlaagd met
+  wat deze post vasthoudt. "Bevestigen" schrijft allebei (`uitgeslotenNaarRes(key, verlaag)`).
+  HET VERLAGEN STAAT AAN EN IS IN HETZELFDE SCHERM UIT TE ZETTEN; uit zegt de sheet dat het bedrag dan
+  volgende maand in je potje en in je reserveringen staat. Dat het vinkje aan staat is geen stille
+  default: het gevolg staat er met beide bedragen, en er wordt pas iets geschreven bij de bevestiging.
+  Openen, het vinkje omzetten en annuleren schrijven niets (`MECHANISM_SPEC.defaultEffect`).
+  DE LAAG IS DIE VAN `savePotje()` BIJ EEN BESTAAND POTJE: `SET.budgetsNext[k]` en `potMetaNext[k]=null`,
+  met `valtOpPotjeGewijzigd(k, bud, voorstel, true)`, dus de log ziet het als "volgende maand anders".
+  Deze maand blijft het potje staan. DE BEVESTIGING LEEST HET POTJE OPNIEUW (`v319`) en niet wat de
+  sheet toonde. Een rechtstreekse aanroep zonder `verlaag` verlaagt niets.
+  DE TOETS: na de keuze is het potje van volgende maand plus de reservering het oude potje, en niet het
+  oude potje plus de post (`uitgesloten-reservering-bevestig.spec.js`). Sheet 381px op 360 en 361px op
+  390, zonder overloop. Tien sabotages, alle tien rood.
+  WAT BLIJFT: DEZE maand houdt het potje het bedrag nog vast, want een lager potje geldt pas vanaf de
+  volgende maand (`v235`).
 - **EEN UITGESLOTEN INCASSO IN EEN POTJE KRIJGT DRIE KEUZES PER POST, ZONDER VOORSELECTIE** (`v329`,
   keuze van de gebruiker): "Telt weer mee", "Potje verlagen" en "Wordt een reservering". De kaart van
   `v327` vroeg per POTJE en bood alleen verlagen aan, en GEMELD op het toestel betekent uitsluiten niet
@@ -5516,7 +5533,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v329` → `minder-v330`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v330` → `minder-v331`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5535,7 +5552,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328` en `v329` naar `minder-v329`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329` en `v330` naar `minder-v330`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
