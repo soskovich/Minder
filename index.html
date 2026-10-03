@@ -13123,6 +13123,14 @@ const pctWoord=p=>`Ongeveer ${p}%`;
    zien wat andere waarden op je eigen maanden doen. */
 const PIEK_MIN_TX = 8;     // minimum aantal losse transacties in de maand (was 6)
 const PIEK_FACTOR = 1.5;   // keer je eigen gemiddelde aandeel voor die weekdag
+/* v326: EEN MINIMUM AAN VERSTREKEN DAGEN, NAAST HET MINIMUM AAN BOEKINGEN. GEMELD op 3 oktober 2026:
+   "donderdag EUR 42 (normaal EUR 9), 55%" op dag 3. De maand wordt vergeleken met afgeronde maanden
+   waarin elke weekdag vier of vijf keer voorkomt, dus vroeg in de maand is een weekdag per
+   constructie zwaar. GEREKEND bij gelijke uitgave per dag: de verhouding is 7 x ceil(d/7) / d, en die
+   haalt PIEK_FACTOR op dag 1 tot en met 4 en op dag 8 en 9. Vanaf dag 10 kan dat niet meer; 14 is
+   gekozen omdat dan elke weekdag twee keer is voorgekomen, zodat een enkele dure dag geen weekdag
+   is. Een AFGERONDE maand telt al zijn dagen (daysElapsed), dus daar verandert niets. */
+const PIEK_MIN_DAGEN = 14;
 /* ===== PIEKDAG: de snede en de noemer (v239) =====
  * LOSSE GELD IS ZONDER ONVOORZIEN. Signaal 3 en 4 waren de enige twee plekken in de normlaag waar
  * `geenNorm` niet werd uitgesloten, terwijl signaal 1 en 2 in dezelfde functie dat al deden (v234).
@@ -13154,7 +13162,10 @@ function piekVerdeling(m, negeerWinkel){
   /* v308: DE TELPOORT LEEST DEZELFDE UITDRUKKING ALS DE SOMMEN. Een boeking die volledig uit een
      reservering is betaald draagt nul in de verdeling, dus hem wel meetellen in het minimum zou de
      poort openen op boekingen die aan de meting niets bijdragen. */
-  return {sumd, tot, aandeel:sumd.map(v=>v/tot), n:uit.filter(x=>uitgaveNorm(x)>0).length};
+  /* v326: de verstreken dagen gaan mee, uit daysElapsed() als enige kalenderbron. Zonder maand (de
+     hele import, voor blok 9 en 10) is er geen maandpoort en is het veld null. */
+  let dagen=null; if(m!=null){ try{ dagen=daysElapsed(m).elapsed; }catch(_){} }
+  return {sumd, tot, aandeel:sumd.map(v=>v/tot), n:uit.filter(x=>uitgaveNorm(x)>0).length, dagen};
 }
 /* Minder dan drie bruikbare maanden geeft null, en dan zwijgt het signaal. GEEN TERUGVAL op een
    gelijke verdeling: een zevende per dag is geen meting van jouw patroon maar een aanname, en dan
@@ -13189,6 +13200,7 @@ function piekReferentie(m){
    twee percentages, en dat is de rekensom die je zonder het maandtotaal kunt maken. */
 function piekVuurt(V, ref){
   if(!V || !ref || V.n<PIEK_MIN_TX) return null;
+  if(V.dagen!=null && V.dagen<PIEK_MIN_DAGEN) return null;   // v326
   const peak=V.aandeel.indexOf(Math.max(...V.aandeel));
   if(!(ref[peak]>0) || V.aandeel[peak] < ref[peak]*PIEK_FACTOR) return null;
   return {peak, share:Math.round(V.aandeel[peak]*100), norm:Math.round(ref[peak]*100),

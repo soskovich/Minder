@@ -92,6 +92,10 @@ test.describe('c - de specs die een vaste dag nodig hebben lezen dezelfde bron',
        budgetOverZin() op de laatste dag een andere zin zegt. GEMETEN gaf het zwaarste geval op
        30 september 217px op 360px en 199px op 390px; met de pin 199px op beide. */
     'uit-reservering',
+    /* v326: VIER ERBIJ, want de piekdag heeft sinds v326 een minimum van 14 verstreken dagen
+       (PIEK_MIN_DAGEN). Deze specs lazen het signaal op de lopende maand met de echte klok, en op
+       3 oktober 2026 vielen er elf tests op. Met de pin staat de dag op dim - 7. */
+    'grootste-uitgave-reservering', 'piekdag-bedrag', 'piekdag-noemer', 'spiegel-en-gevolg',
     /* v310: NEGEN ERBIJ, OP EEN DERDE AS. De zeven van v299 vielen op de op-een-na-laatste dag en de
        zes van v306 op de laatste; deze negen vielen op de EERSTE. Hun fixtures zetten hun boekingen
        op de eerste dagen van de lopende maand met de reden dat die "ruim voor vandaag" liggen, en op

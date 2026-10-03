@@ -133,18 +133,26 @@ genoemde versietag.)*
   HET VOORSTEL IS NIET GEBOUWD, op verzoek: elk deel van het maandbudget in precies een getal, met een
   terugkerend potje zonder herkende incasso als "nog te betalen" tot het geld eraf is. Dat wacht op
   de uitvoer van blok 15 op het toestel.
-- **OPEN PUNT, GEMETEN EN NIET GEBOUWD: DE PIEKDAG KAN IN DE EERSTE TWEE WEKEN PER CONSTRUCTIE VUREN**
-  (`v326`): de enige poort is `PIEK_MIN_TX` (8 losse afschrijvingen), en er is geen minimum aan
-  verstreken dagen. De maand wordt vergeleken met afgeronde maanden, waarin elke weekdag vier of vijf
-  keer voorkomt. GEREKEND: bij gelijke uitgave per dag is het aandeel van een weekdag
-  `keer/dagen` tegen een referentie van ongeveer 1/7, dus de verhouding is `7 x ceil(d/7) / d`. Die
-  haalt `PIEK_FACTOR` (1,5) zonder dat er iets scheef staat op dag 1 tot en met 4 (dag 3: 2,33) en op
-  dag 8 en 9 (1,75 en 1,56). Vanaf dag 10 is het hoogstens 1,4 (dag 10 en 15), daarna 1,27 (dag 22).
-  DE STRUCTURELE ONDERGRENS IS DUS 10 DAGEN. VOORSTEL: `PIEK_MIN_DAGEN = 14`, omdat dan elke weekdag
-  minstens twee keer is voorgekomen en een enkele dure dag niet meer "een weekdag" is; dat is het
-  argument tegen toeval, en 10 is alleen het argument tegen de rekensom. De marge op dag 15 is smal
-  (1,4 tegen 1,5); de schonere vorm is het aandeel per VOORKOMEN van een weekdag te meten, en dat is
-  een eigen keuze.
+- **DE PIEKDAG VUURT PAS VANAF 14 VERSTREKEN DAGEN** (`v326`, keuze van de gebruiker):
+  `PIEK_MIN_DAGEN` (14) staat naast `PIEK_MIN_TX` (8). GEMELD op 3 oktober 2026: "donderdag EUR 42
+  (normaal EUR 9), 55% van je losse geld" op dag 3. De maand wordt vergeleken met afgeronde maanden
+  waarin elke weekdag vier of vijf keer voorkomt. GEREKEND bij gelijke uitgave per dag: de
+  verhouding is `7 x ceil(d/7) / d`, en die haalt `PIEK_FACTOR` (1,5) zonder dat er iets scheef
+  staat op dag 1 tot en met 4 (dag 3: 2,33) en op dag 8 en 9 (1,75 en 1,56). Vanaf dag 10 is het
+  hoogstens 1,4 (dag 10 en 15). DE STRUCTURELE ONDERGRENS IS 10; 14 IS GEKOZEN omdat dan elke weekdag
+  twee keer is voorgekomen en een enkele dure dag geen weekdag is.
+  DE DAGEN KOMEN UIT `daysElapsed()` en staan op `piekVerdeling(m).dagen`; een afgeronde maand telt
+  al zijn dagen, dus daar verandert niets, en zonder maand (blok 9 en 10) is er geen maandpoort.
+  VIER SPECS DIE HET SIGNAAL OP DE ECHTE KLOK LAZEN VIELEN EROP (elf tests op 3 oktober) en pinnen nu
+  `pinDag()`. `piekdag-min-dagen.spec.js` draagt de gemelde stand: geen piekdag op dag 3 en 13,
+  dezelfde boekingen op dag 14 en 15 wel.
+- **OPEN PUNT VOOR DE PIEKDAG-RONDE (variant C): HET AANDEEL PER KEER DAT EEN WEEKDAG VOORKWAM**
+  (`v326`): de poort van 14 dagen haalt het ingebouwde vuren weg, maar de marge op dag 15 is smal
+  (1,4 tegen 1,5), want daar is een weekdag drie keer voorgekomen en de rest twee keer. Dezelfde
+  scheefheid zit, kleiner, in elke maand van 29 tot 31 dagen. De schonere vorm deelt het aandeel van
+  een weekdag door het aantal keer dat hij in die maand voorkwam, in de maand EN in de referentie,
+  en vergelijkt dan per voorkomen. Dan is de dagenpoort alleen nog een argument tegen toeval en niet
+  meer tegen de rekensom. Niet gebouwd; hij hoort bij de ronde die variant C afmaakt.
 - **HET LOGBOEK STAAT PER AFGESLOTEN MAAND, MET EEN KOP, EEN VRAAG EN DE REST KORT** (`v325`): de
   kaart "Wat je met deze overschrijdingen deed" zei per regel wat je deed, maar niet wat de maand je
   kostte en hij vroeg niets. Per afgesloten maand (nieuwste eerst, hooguit `VALTOP_LOG_TOON` = 3) staat

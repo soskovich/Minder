@@ -6,6 +6,9 @@
 // de data volgt, dan zegt de regel dat het een observatie is.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+/* v326: de piekdag vuurt pas vanaf PIEK_MIN_DAGEN (14) verstreken dagen, dus deze spec pint een dag
+   na de veertiende. pinDag() laat zeven dagen over en blijft in de echte maand (v299). */
+const { pinDag } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111';
 const SAV = 'NL01SAVE0000004323';
@@ -65,6 +68,7 @@ function seed(o = {}) {
     minder_own: JSON.stringify(o.spaar ? [MAIN, SAV] : [MAIN]), minder_accmeta: '{}', minder_plan: '{}' };
 }
 async function boot(page, payload) {
+  await pinDag(page);
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
   await page.goto('/index.html');

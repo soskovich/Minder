@@ -14,6 +14,9 @@
 // is de eenheid waarop signaal 4 vuurt.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+/* v326: de piekdag vuurt pas vanaf PIEK_MIN_DAGEN (14) verstreken dagen, dus deze spec pint een dag
+   na de veertiende. pinDag() laat zeven dagen over en blijft in de echte maand (v299). */
+const { pinDag } = require('./vaste-dag');
 const fs = require('fs');
 const { kaalBron, kaalUit } = require('./bron-kaal');
 
@@ -54,6 +57,7 @@ function bouw(maanden) {
       income: 3000, manualBal: { [MAIN]: 4000 }, budgets: { boodschappen: 900 }, budgetMonth: CUR }) };
 }
 async function boot(page, maanden, opOnvoorzien) {
+  await pinDag(page);
   await page.addInitScript((s) => { if (localStorage.getItem('minder_tx')) return;
     for (const k in s) localStorage.setItem(k, s[k]); }, bouw(maanden));
   await page.goto('/');

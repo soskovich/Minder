@@ -24,6 +24,9 @@
  * De service worker staat globaal uit via playwright.config.js.
  */
 const { test, expect } = require('@playwright/test');
+/* v326: de piekdag vuurt pas vanaf PIEK_MIN_DAGEN (14) verstreken dagen, dus deze spec pint een dag
+   na de veertiende. pinDag() laat zeven dagen over en blijft in de echte maand (v299). */
+const { pinDag } = require('./vaste-dag');
 const fs = require('fs');
 const path = require('path');
 const { kaalBron, kaalUit, KAAL_JS } = require('./bron-kaal');
@@ -70,6 +73,7 @@ function seed(o) {
 }
 
 async function boot(page, o) {
+  await pinDag(page);
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(o));
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof insSignals === 'function');
