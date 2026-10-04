@@ -181,15 +181,17 @@ test.describe('d - wat er niet in gaat', () => {
   });
 });
 
-test.describe('e - geen lezer in de app', () => {
-  test('het veld staat alleen bij zijn schrijver, zijn aanroeper en zijn uitlezing', () => {
-    /* Dezelfde vorm als v276 bij t.valutaDatum: het veld wordt opgevangen en verder niets, en deze
-       assertie valt zodra er een lezer buiten die drie bijkomt. */
+test.describe('e - een lezer in de app, en precies een', () => {
+  test('het veld staat alleen bij zijn schrijver, zijn aanroeper, zijn uitlezing en zijn ene lezer', () => {
+    /* Dezelfde vorm als v276 bij t.valutaDatum. Tot v335 had het veld geen lezer; sinds v335 leest
+       maandPotjes() het, voor de bridge en de budgetlijn op Inzichten. Deze assertie valt zodra er
+       een tweede lezer bijkomt: die hoort maandPotjes() aan te roepen in plaats van het veld. */
     const totaal = (SRC.match(/budgetHist/g) || []).length;
     const perSectie = [
       sectieVan(SRC, 'function budgetHistLeg('),
       sectieVan(SRC, 'function rolloverBudgets(){'),
       sectieVan(SRC, 'function diagPotjes('),
+      sectieVan(SRC, 'function maandPotjes('),
     ].reduce((n, sec) => n + (sec.match(/budgetHist/g) || []).length, 0);
     console.log(`### budgetHist-treffers: ${totaal} in de bron, ${perSectie} in de drie toegestane secties`);
     expect(totaal).toBeGreaterThan(0);

@@ -14915,7 +14915,11 @@ function spendVsBudgetChart(){
   if(afgerond.length<GRAFIEK_MIN) return `<div id="insSpendCard">${head}${open?`<div class="small muted">Vanaf ${GRAFIEK_MIN} afgeronde maanden zie je hier je verloop. Je hebt er nu ${afgerond.length}.</div>`:''}</div>`;
   if(!open) return `<div id="insSpendCard">${head}<div class="small" style="color:var(--mut2);margin-top:6px">Je uitgaven per maand naast je budget · tik om te bekijken</div></div>`;
   const last=afgerond.slice(-12);
-  const rows=last.map(mm=>{ const t=totals(mm); return {m:mm, spend:Math.max(t.spendNorm,0), budget:Math.max(t.budget,0)}; });   // v234: de grafiek zet uitgaven naast je budget, dus zonder onvoorzien
+  const rows=last.map(mm=>{ const t=totals(mm), P=maandPotjes(mm);
+    /* v335: de budgetlijn van een maand met bewaarde potjebedragen leest die bedragen, want de bridge
+       begint bij dat getal (v104). Zonder bewaarde bedragen blijft hij totals().budget. */
+    const bud=P.bron==='bewaard'?maandPotjesSom(P.B):t.budget;
+    return {m:mm, spend:Math.max(t.spendNorm,0), budget:Math.max(bud,0)}; });   // v234: de grafiek zet uitgaven naast je budget, dus zonder onvoorzien   // v234: de grafiek zet uitgaven naast je budget, dus zonder onvoorzien
   const G=CHART_GEO, {W,H,L,R,TOP,BASE,XLAB}=G;
   const niceTop=reisNiceCeil(Math.max(...rows.map(r=>Math.max(r.spend,r.budget)),1)*1.08);
   const slot=(W-L-R)/rows.length, bw=Math.min(slot*0.62,34);
@@ -14923,6 +14927,7 @@ function spendVsBudgetChart(){
   /* v194: alleen de piekstaaf droeg een waardelabel, dus je kon geen twee maanden vergelijken
      zonder er een aan te tikken. Bij twaalf of minder staven passen ze allemaal; boven negen gaat
      de tekengrootte een stap omlaag zodat ze niet in elkaar lopen. */
+  const kies=rows.some(r=>r.m===window._brugMaand)?window._brugMaand:null;
   const fs=rows.length>9?7.5:8.5;
   const toon=new Set(rows.map((_,i)=>i));
   /* v194: de budgetlijn werd twee keer gecodeerd - als gestreepte segmenten per maand én als tag
@@ -14941,14 +14946,12 @@ function spendVsBudgetChart(){
     const cx=L+slot*i+slot/2, x=cx-bw/2, yy=y(r.spend), h=Math.max(BASE-yy,1.5);
     // v194: één datakleur voor alle staven. De lopende maand had een eigen accent en staat er niet
     // meer in; boven of onder budget lees je aan de gestreepte budgetlijn, geen tweede kleur nodig.
-    const col='var(--bar)';
+    const col=(r.m===kies)?'var(--teal)':'var(--bar)';   // v335: de gekozen maand draagt het accent, net als het eind van zijn bridge
     const bar=`<rect class="cbar" x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${col}"/>`;
     const bud=r.budget>0?`<line x1="${(L+slot*i+1).toFixed(1)}" x2="${(L+slot*(i+1)-1).toFixed(1)}" y1="${y(r.budget).toFixed(1)}" y2="${y(r.budget).toFixed(1)}" stroke="var(--ref)" stroke-width="1.4" stroke-dasharray="4 3"/>`:'';
     const val=toon.has(i)?`<text x="${cx.toFixed(1)}" y="${Math.max(yy-4,TOP-4).toFixed(1)}" font-size="${fs}" font-weight="700" fill="var(--txt)" text-anchor="middle">${chartK(r.spend)}</text>`:'';
     const lab=`<text x="${cx.toFixed(1)}" y="${XLAB}" font-size="9" fill="var(--lab)" text-anchor="middle">${MNAMES[+r.m.slice(5,7)-1]}</text>`;
-    // let op: geen aanhalingstekens in deze string, hij zit in een onclick-attribuut
-    const uit=`&lt;b&gt;${esc(monthLabel(r.m))}&lt;/b&gt; · ${euro0(r.spend)}${r.budget>0?` van ${euro0(r.budget)}`:''} · bekijk maand ›`;
-    const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+18).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="chartRead('spendRead','${uit}');window._spendPick='${r.m}'"><title>${MFULL[+r.m.slice(5,7)-1]} ${r.m.slice(0,4)} · ${euro0(r.spend)}</title></rect>`;
+    const hit=`<rect x="${(L+slot*i).toFixed(1)}" y="${TOP}" width="${slot.toFixed(1)}" height="${(BASE-TOP+18).toFixed(1)}" fill="transparent" style="cursor:pointer" onclick="brugKies('${r.m}')"><title>${MFULL[+r.m.slice(5,7)-1]} ${r.m.slice(0,4)} · ${euro0(r.spend)}</title></rect>`;
     return bud+bar+val+lab+hit;
   }).join('');
   /* v194: de legenda had drie items voor twee coderingen, en noemde 'maandbudget' ook als er
@@ -14956,6 +14959,8 @@ function spendVsBudgetChart(){
      een vaste lijst te zijn: elk item hangt aan een codering die op dat moment op het doek staat.
      Komt er ooit een codering bij, dan hoort hij hier als voorwaarde bij te komen en niet als regel
      tekst; een legenda-item zonder codering is een belofte over een vorm die er niet is. */
+  const rk=kies?rows.find(r=>r.m===kies):null;
+  const leesKies=rk?`<b>${esc(monthLabel(rk.m))}</b> · ${euro0(rk.spend)}${rk.budget>0?` van ${euro0(rk.budget)}`:''} · bekijk maand ›`:'';
   const leg=[{aan:true, i:'<i style="background:var(--bar)"></i>', l:'per maand'},
              {aan:heeftBudget, i:'<i class="d"></i>', l:'maandbudget'}].filter(x=>x.aan);
   return `<div id="insSpendCard">${head}
@@ -14965,10 +14970,174 @@ function spendVsBudgetChart(){
       ${bars}
       ${toonTag?chartTagRight(W-R, y(budNu)-4, 'budget '+chartK(budNu), 'var(--ref)'):''}
     </svg>
-    <div id="spendRead" class="small" style="color:var(--teal);font-size:var(--fs-xs);margin-top:2px;min-height:15px;cursor:pointer" onclick="if(window._spendPick)openBudgetCompare(window._spendPick)"><span style="color:var(--mut2)">Tik een maand voor het bedrag.</span></div>
+    <div id="spendRead" class="small" style="color:var(--teal);font-size:var(--fs-xs);margin-top:2px;min-height:15px;cursor:pointer" onclick="if(window._spendPick)openBudgetCompare(window._spendPick)">${leesKies||'<span style="color:var(--mut2)">Tik een maand voor het bedrag en de bridge.</span>'}</div>
     <div class="gc-leg">${leg.map(x=>`<span>${x.i}${x.l}</span>`).join('')}</div>
+    ${kies?brugBlok(kies):''}
   </div>`;
 }
+
+/* v335: DE BRIDGE ONDER DE STAVEN. Een tik op een afgesloten maand toont van het budget (of van de
+   maand ervoor) naar wat je die maand uitgaf, stap voor stap. Het is een weergave en geen keuze: de
+   schakelaar staat bij elke nieuwe maand op "tegen budget" en schrijft niets naar SET.
+   HET BUDGET VAN EEN MAAND KOMT UIT DE BEWAARDE POTJEBEDRAGEN (v309, via maandPotjes()), en dat is
+   sinds deze ronde ook de budgetlijn van de staaf zelf: de bridge begint bij dat getal, dus een lijn
+   met een ander bedrag erboven zou een tweede waarheid over dezelfde maand zijn (v104). Voor een
+   maand zonder bewaarde bedragen blijft de lijn wat hij was (totals().budget, je huidige potjes of
+   de inkomen-limiet), en de bridge zegt dan dat hij tegen je huidige potjes rekent.
+   HET EINDE IS DE STAAF: totals(m).spendNorm. Elke categorie draagt zijn netto norm-uitgave uit
+   DEZELFDE totals()-aanroep (-byCat - uitResCat over de uitgavencategorieen zonder geenNorm), en
+   die tellen per constructie op tot spendNorm. catSpendMap() is hier NIET de bron, want die laat een
+   categorie met een netto terugstorting vallen terwijl de staaf hem meetelt; dan zou de bridge naast
+   de staaf uitkomen.
+   DE STAPPEN TELLEN PRECIES OP, en dat is de afronding: de bijdragen per categorie worden afgerond
+   met de grootste-rest-methode op round(eind) - round(begin), dus begin plus de stappen is exact het
+   bedrag dat de staaf in euro's toont. Een groep (andere potjes, vaste lasten, zonder potje) is de som
+   van zijn afgeronde leden, en de uitsplitsing telt daarom op tot de stap. */
+function maandPotjes(m){
+  const H=SET.budgetHist||{};
+  if(m<thisYM() && H[m]) return {B:H[m], bron:'bewaard'};
+  return {B:SET.budgets||{}, bron:'huidig'};
+}
+function maandPotjesSom(B){ let s=0; for(const k in B){ const v=+B[k]||0; if(v>0) s+=v; } return s; }
+function brugVorige(m){ const [y,mo]=m.split('-').map(Number); const d=new Date(y,mo-2,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function brugNetto(t){
+  const n={};
+  for(const c in t.byCat){ const meta=CATS[c]; if(!meta||meta.type!=='expense'||meta.geenNorm) continue;
+    n[c]=-(t.byCat[c]||0)-((t.uitResCat||{})[c]||0); }
+  return n;
+}
+function brugAfronden(rauw, doel){
+  const r=rauw.map(x=>({k:x.k, v:x.v, f:Math.floor(x.v)}));
+  let rest=doel-r.reduce((s,x)=>s+x.f,0);
+  const volg=[...r].sort((a,b)=>((b.v-b.f)-(a.v-a.f)) || (a.k<b.k?-1:1));
+  for(let i=0; rest>0 && volg.length; i++){ volg[i%volg.length].f++; rest--; }
+  for(let i=volg.length-1; rest<0 && volg.length; i--){ volg[(i%volg.length+volg.length)%volg.length].f--; rest++; }
+  const o={}; for(const x of r) o[x.k]=x.f; return o;
+}
+const BRUG_LOS=4;
+function maandBrug(m, tegen){
+  if(!(m<thisYM())) return {leeg:'lopend'};
+  const t=totals(m), N=brugNetto(t);
+  const P=maandPotjes(m); const B={}; for(const k in P.B){ const v=+P.B[k]||0; if(v>0) B[k]=v; }
+  let begin, ref, vorige=null;
+  if(tegen==='vorige'){
+    vorige=brugVorige(m);
+    if(!months().includes(vorige)) return {leeg:'geenvorige'};
+    const tp=totals(vorige); begin=tp.spendNorm; ref=brugNetto(tp);
+  } else {
+    begin=maandPotjesSom(B); if(!(begin>0)) return {leeg:'geenpotjes'};
+    ref=B;
+  }
+  const eind=t.spendNorm;
+  if(eind<0 || begin<0) return {leeg:'negatief'};
+  const keys=[...new Set([...Object.keys(N), ...Object.keys(ref)])];
+  const rauw=keys.map(k=>({k, v:(N[k]||0)-(ref[k]||0)}));
+  /* De stappen sluiten per constructie (de categorieen tellen op tot spendNorm, de potjes tot het
+     begin). Doen ze dat niet, dan zou de afronding het verschil stil over de stappen verdelen en een
+     kloppend einde tonen boven verkeerde stappen; dan liever geen bridge. */
+  if(Math.abs(rauw.reduce((a,x)=>a+x.v,0)-(eind-begin))>0.5) return {leeg:'fout'};
+  const R=brugAfronden(rauw, Math.round(eind)-Math.round(begin));
+  const rc=recurringCats();
+  const soort=k=>rc.has(k)?'vast':((B[k]||0)>0?'potje':'zonder');
+  const naam=k=>(CATS[k]&&CATS[k].name)||k;
+  const per=keys.map(k=>({k, naam:naam(k), d:R[k], soort:soort(k)}));
+  const potjes=per.filter(x=>x.soort==='potje').sort((a,b)=>(Math.abs(b.d)-Math.abs(a.d)) || (a.naam<b.naam?-1:1));
+  const los=potjes.filter(x=>x.d!==0).slice(0,BRUG_LOS);
+  const rest=potjes.filter(x=>!los.includes(x) && x.d!==0);
+  const som=a=>a.reduce((s,x)=>s+x.d,0);
+  const vast=per.filter(x=>x.soort==='vast'&&x.d!==0), zonder=per.filter(x=>x.soort==='zonder'&&x.d!==0);
+  const b0=Math.round(begin), e0=Math.round(eind);
+  const stappen=[{soort:'begin', label:tegen==='vorige'?MNAMES[+vorige.slice(5,7)-1]:'budget', waarde:b0}];
+  for(const x of los) stappen.push({soort:'potje', k:x.k, label:x.naam, waarde:x.d});
+  if(rest.length) stappen.push({soort:'rest', label:'andere potjes', waarde:som(rest), leden:rest});
+  if(vast.length && som(vast)!==0) stappen.push({soort:'vast', label:'vaste lasten', waarde:som(vast), leden:vast});
+  if(zonder.length && som(zonder)!==0) stappen.push({soort:'zonder', label:'zonder potje', waarde:som(zonder), leden:zonder});
+  stappen.push({soort:'eind', label:tegen==='vorige'?MNAMES[+m.slice(5,7)-1]:'uitgegeven', waarde:e0});
+  return {m, tegen, vorige, bron:P.bron, begin:b0, eind:e0, stappen, potjes, per, rest};
+}
+const BRUG_TEL=['geen','Een','Twee','Drie','Vier','Vijf','Zes','Zeven','Acht','Negen','Tien','Elf','Twaalf'];
+/* De zin stelt vast en oordeelt niet (v78/v93): het verschil, en wie het droeg. Bij "tegen budget"
+   de potjes erboven tegen de potjes eronder, in de vorm van de mockup; bij "tegen vorige maand" de
+   twee categorieen met het grootste verschil. */
+function brugZin(Br){
+  const diff=Br.eind-Br.begin;
+  if(Br.tegen==='vorige'){
+    const mn=MFULL[+Br.vorige.slice(5,7)-1];
+    const kop=diff<0?`${euro0(-diff)} minder dan ${mn}.`:(diff>0?`${euro0(diff)} meer dan ${mn}.`:`Evenveel als ${mn}.`);
+    const top=Br.per.filter(x=>x.d!==0).sort((a,b)=>(Math.abs(b.d)-Math.abs(a.d)) || (a.naam<b.naam?-1:1)).slice(0,2);
+    const fm=x=>`${esc(x.naam)} (${x.d>0?'+':''}${euro0(x.d)})`;
+    const oorz=top.length===2?` Het grootste verschil zat in ${fm(top[0])} en ${fm(top[1])}.`:(top.length===1?` Het verschil zat in ${fm(top[0])}.`:'');
+    return `<b>${kop}</b>${oorz}`;
+  }
+  const kop=diff<0?`${euro0(-diff)} onder je budget.`:(diff>0?`${euro0(diff)} boven je budget.`:`Precies op je budget.`);
+  const boven=Br.potjes.filter(x=>x.d>0), onder=Br.potjes.filter(x=>x.d<0);
+  const sB=boven.reduce((s,x)=>s+x.d,0), sO=-onder.reduce((s,x)=>s+x.d,0);
+  const tel=n=>BRUG_TEL[n]||String(n);
+  let z='';
+  if(boven.length && onder.length) z=` ${tel(boven.length)} ${boven.length===1?'potje ging er':'potjes gingen er samen'} ${euro0(sB)} boven; de andere bleven ${euro0(sO)} onder.`;
+  else if(boven.length) z=` ${tel(boven.length)} ${boven.length===1?'potje ging er':'potjes gingen er samen'} ${euro0(sB)} boven.`;
+  else if(onder.length) z=` Geen potje ging erboven; samen bleven ze ${euro0(sO)} onder.`;
+  const st=s=>Br.stappen.find(x=>x.soort===s);
+  const v=st('vast'), zp=st('zonder');
+  if(v) z+=` Je vaste lasten kwamen samen ${euro0(Math.abs(v.waarde))} ${v.waarde>0?'boven':'onder'} hun potjes.`;
+  if(zp) z+=zp.waarde>0?` Zonder potje gaf je ${euro0(zp.waarde)} uit.`:` Zonder potje kreeg je netto ${euro0(-zp.waarde)} terug.`;
+  return `<b>${kop}</b>${z}`;
+}
+function brugTeken(w){ return w>0?'+'+euro0(w):euro0(w); }
+function brugGrafiek(Br){
+  const PH=112;
+  const lv=[]; let run=0;
+  const kol=Br.stappen.map(s=>{
+    let lo, hi;
+    if(s.soort==='begin'||s.soort==='eind'){ lo=0; hi=s.waarde; run=s.waarde; }
+    else { const van=run; run+=s.waarde; lo=Math.min(van,run); hi=Math.max(van,run); }
+    lv.push(hi); return {s, lo, hi, na:run};
+  });
+  const top=Math.max(...lv,1)*1.14;
+  const y=v=>PH-(v/top*PH);
+  const kleur=s=>s.soort==='begin'?(Br.tegen==='vorige'?'var(--bar)':'var(--ref)'):(s.soort==='eind'?'var(--teal)':(s.waarde>0?'var(--red)':'var(--mut2)'));
+  const n=kol.length;
+  return `<div class="brug" data-brug style="display:flex;gap:4px;margin-top:8px">${kol.map((c,i)=>{
+    const yt=y(c.hi), h=Math.max(y(c.lo)-yt,2);
+    const val=(c.s.soort==='begin'||c.s.soort==='eind')?euro0(c.s.waarde):brugTeken(c.s.waarde);
+    const lijn=i<n-1?`<i style="position:absolute;left:88%;width:calc(24% + 4px);top:${y(c.na).toFixed(1)}px;border-top:1px dashed var(--ref)"></i>`:'';
+    return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}" style="flex:1 1 0;min-width:0">
+      <div style="position:relative;height:${PH}px">
+        <span data-brugval style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>
+        <i style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${kleur(c.s)};border-radius:3px"></i>${lijn}
+      </div>
+      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;overflow-wrap:anywhere">${esc(c.s.label)}</div>
+    </div>`;}).join('')}</div>`;
+}
+function brugBlok(m){
+  const tegen=window._brugTegen==='vorige'?'vorige':'budget';
+  let Br=null; try{ Br=maandBrug(m, tegen); }catch(_){ Br={leeg:'fout'}; }
+  const vorigeKan=months().includes(brugVorige(m));
+  const knop=(k,l,uit)=>`<span class="chip${tegen===k?' on':''}${uit?' off':''}" data-brugtegen="${k}"${uit?'':` onclick="brugTegen('${k}')"`}>${l}</span>`;
+  const knoppen=`<div class="chips" style="padding:8px 0 0">${knop('budget','Tegen budget',false)}${knop('vorige','Tegen vorige maand',!vorigeKan)}</div>`;
+  if(Br.leeg){
+    const reden={lopend:'De bridge staat er na afloop van de maand.', geenvorige:'Voor de maand ervoor zijn er geen gegevens, dus er is niets om tegen af te zetten.',
+      geenpotjes:'Er zijn voor deze maand geen potjes om tegen af te zetten.', negatief:'Deze maand kreeg je netto meer terug dan je uitgaf, dus er is geen bridge te tekenen.', fout:'Deze bridge kon niet worden berekend.'}[Br.leeg]||'';
+    return `<div id="insBrug" data-brugleeg="${Br.leeg}">${knoppen}<div class="small" style="color:var(--mut2);margin-top:6px">${reden}</div></div>`;
+  }
+  const huidig=(tegen==='budget'&&Br.bron==='huidig')?`<div class="small" data-brughuidig style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px">Tegen je huidige potjes: de potjebedragen van ${esc(MFULL[+m.slice(5,7)-1])} zijn niet bewaard.</div>`:'';
+  const rs=Br.stappen.find(s=>s.soort==='rest');
+  const open=!!window._brugRestOpen;
+  const restKnop=rs?`<div class="small" data-brugrest style="color:var(--teal);cursor:pointer;margin-top:6px;font-weight:600" onclick="brugRest()">${open?'Andere potjes inklappen':'Andere potjes uitsplitsen ›'}</div>`:'';
+  const restLijst=(rs&&open)?`<div data-brugrestlijst style="margin-top:4px">${rs.leden.map(x=>`<div class="row" style="gap:9px;padding:4px 0;border-bottom:1px solid var(--line)"><span class="small" style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(x.naam)}</span><span class="small" style="font-weight:700;white-space:nowrap">${brugTeken(x.d)}</span></div>`).join('')}</div>`:'';
+  return `<div id="insBrug" data-brugtegenstand="${tegen}">${brugGrafiek(Br)}${huidig}
+    <div class="small" data-brugzin style="line-height:1.5;margin-top:8px">${brugZin(Br)}</div>
+    ${restKnop}${restLijst}${knoppen}</div>`;
+}
+function brugHerteken(){ const el=document.getElementById('insSpendCard'); if(el) el.outerHTML=spendVsBudgetChart(); }
+function brugKies(m){
+  if(window._brugMaand===m){ window._brugMaand=null; }
+  else { window._brugMaand=m; window._brugTegen='budget'; window._brugRestOpen=false; }
+  window._spendPick=window._brugMaand;
+  brugHerteken();
+}
+function brugTegen(k){ window._brugTegen=k; window._brugRestOpen=false; brugHerteken(); }
+function brugRest(){ window._brugRestOpen=!window._brugRestOpen; brugHerteken(); }
 
 /* v235: hier stond whatStandsOutLine(), de Valt op-kaart. Die deed twee dingen tegelijk: hij
    constateerde dat een categorie boven zijn potje zat, en bood in hetzelfde element de uitweg aan
@@ -17668,7 +17837,7 @@ function diagPotjes(){
      een ONTBREKENDE meting, geen nul (v59/v73/v173). Staat de lopende maand er WEL in, dan heeft
      iets hem te vroeg vastgelegd, want een maand die nog loopt is niet afgesloten (v194). */
   L.push('');
-  L.push('POTJEBEDRAGEN PER MAAND (v309, SET.budgetHist, geen lezer in de app)');
+  L.push('POTJEBEDRAGEN PER MAAND (v309, SET.budgetHist; sinds v335 gelezen door maandPotjes(), de bridge en de budgetlijn op Inzichten)');
   const H=(SET.budgetHist||{}); const hm=Object.keys(H).sort();
   L.push('  budgetMonth (de maand waarvoor SET.budgets geldt): '+(SET.budgetMonth||'niet gezet'));
   if(!hm.length){

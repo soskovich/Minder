@@ -72,7 +72,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   haalde omdat hij maanden naast elkaar zet; het argument van `v178` staat nog en `BESLISSINGEN.md`
   draagt beide kanten. Hij toont uitsluitend afgeronde maanden (`v194`); tot `v240` stond hij
   daardoor onder een kop die "Deze maand" zei zonder deze maand te tonen, en sinds `v241` onder
-  "Over de maanden heen". Hij rendert alleen op de lopende maand.
+  "Over de maanden heen". Hij rendert alleen op de lopende maand. Sinds `v335` toont een tik op
+  een staaf daaronder de BRIDGE van die maand (`brugBlok()`, `maandBrug()`); zie de staande regel.
 - **Grip** (`maand`, sinds `v233`; heette Maand) — houdt mijn systeem stand (structureel). Leest
   altijd de lopende maand en heeft geen maandkiezer; de kiezer (`curMonth`, `kijkMaand()`) is van
   Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. Draagt sinds `v235` de
@@ -109,6 +110,27 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN TIK OP EEN STAAF TOONT DE BRIDGE VAN DIE MAAND, EN DIE EINDIGT OP DE STAAF** (`v335`, variant C,
+  gevraagd door de gebruiker): onder "Over de maanden heen" selecteert een tik een afgesloten maand
+  (`brugKies()`, de staaf krijgt `--teal`) en `brugBlok()` toont eronder de stappen uit `maandBrug(m, tegen)`.
+  Een tweede tik sluit hem. DE SCHAKELAAR ("Tegen budget" / "Tegen vorige maand") IS EEN WEERGAVE: hij staat in
+  `window._brugTegen`, schrijft niets naar `SET` en springt bij elke nieuwe maand terug op tegen budget.
+  BEGIN: de som van de bewaarde potjebedragen (`maandPotjes(m)`, de ENIGE lezer van `SET.budgetHist`), of
+  `totals(vorige).spendNorm`. EIND: `totals(m).spendNorm`, de bron van de staaf. Per categorie de netto
+  norm-uitgave uit dezelfde `totals()` (`brugNetto()`: `-byCat - uitResCat`, zonder geenNorm), en NIET
+  `catSpendMap()`, die een netto terugstorting weglaat. DE BUDGETLIJN VAN DE STAAF LEEST SINDS `v335` OOK DE
+  BEWAARDE BEDRAGEN (anders begint de bridge bij een ander getal dan de lijn erboven); zonder bewaarde bedragen
+  blijft hij `totals().budget` en zegt de bridge "Tegen je huidige potjes" (`data-brughuidig`).
+  AFRONDING: `brugAfronden()` met de grootste-rest-methode op round(eind) - round(begin), dus begin plus de
+  afgeronde stappen is exact het bedrag van de staaf. INDELING: `recurringCats()` is "vaste lasten", een potje
+  is een potje, de rest "zonder potje"; hooguit `BRUG_LOS` (4) potjes los op de absolute grootte van hun
+  bijdrage, de andere als "andere potjes" met een uitsplitsing (`brugRest()`). Boven het budget `--red`, eronder
+  `--mut2`. De zin (`brugZin()`) noemt het verschil en wie het droeg, zonder oordeel.
+  DE LOPENDE MAAND HEEFT GEEN STAAF (`v194`), dus "bridge na afloop van de maand" kan vanaf de staven niet
+  voorkomen; de tak staat er voor een rechtstreekse aanroep.
+  GEMETEN: de kaart is 242px voor de tik, 497px met de bridge en 555px uitgesplitst, op 360 EN 390px, zonder
+  overloop; met negen kolommen geen overlappende bedragen en geen naam buiten de kaart. EEN BESTAANDE TEST VIEL
+  EROP en had gelijk: `potjebedrag-historie` eiste dat `SET.budgetHist` geen lezer had.
 - **EEN BOEKING KOPPEL JE AAN EEN SCHULD, EN DE RESTSCHULD DAALT MEE** (`v334`, gevraagd door de gebruiker):
   dezelfde vorm als `v332`. `SET.schuldKoppel[t.id]` per boeking en `SET.schuldRegels` met `{schuld, partij,
   soort, waarde}`; `schuldVan(t)` is de ENE lezer en `bezitRegelRaakt()` beslist of een regel raakt (geen
@@ -5662,7 +5684,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v334` → `minder-v335`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v335` → `minder-v336`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5681,7 +5703,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333` en `v334` naar `minder-v334`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334` en `v335` naar `minder-v335`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
