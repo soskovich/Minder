@@ -87,6 +87,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   meer de enige ingang: `coachLeak()` levert ook een patroonregel op Inzichten. Twee ingangen naar
   hetzelfde gesprek, maar nooit voor hetzelfde geval. Draagt sinds `v258` ook `contantKaart()`, maar
   alleen als er iets te tellen is (`contantVraagt()`); geen opname en geen telling is zwijgen.
+  Sinds `v337` staat bovenaan de MAANDAFSLUITING van de vorige maand (`afsluitKaart()`) tot je hem
+  afsluit, en draagt Grip daarna de lopende afspraken als eigen kaart (`afsprakenKaart()`).
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Draagt sinds `v319` onder de
   inleg-kop wat er deze maand werkelijk opzij ging (`planInlegRegel()`, uit `savedNet()`) en op de
   vrij-regel een tweede knop die het niet-toegewezen spaargeld verdeelt zoals de waterval het zou
@@ -110,6 +112,39 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN KEUZE OP GRIP DIE GEDRAG VRAAGT IS EEN AFSPRAAK, EN DE APP VINKT HEM ALLEEN AF ALS HIJ HET ZIET**
+  (`v337`, gevraagd door de gebruiker, voorstel "2 binnen 1" uit de mockup): `SET.afspraken` met per
+  afspraak `soort`, `wat`, een termijn (`van` t/m `tot`) en de meetgegevens; `afspraakStand(a)` is de ENE
+  lezer en leest alleen boekingen en instellingen. VOOR DEZE RONDE MAAKTE GEEN ENKELE GRIP-KEUZE EEN
+  AFSPRAAK: alleen het coachgesprek (`coCommit()`, `SET.coachLog`, v142/v207/v229) deed dat, en die lus
+  blijft zoals hij is. NU WEL: de knop "Ik stort €131 per maand tot november" in de sheet van de
+  dekkingsregel (bedrag en maand uit `r.perMaandTot`), een grens (`valtOpGrensZet()`), een potje dat
+  vanaf volgende maand LAGER ligt of stopt (`savePotje()` via `potjeAfspraak()`), "Inleg pauzeren"
+  (`belegKies()`), en "Potje verlagen" bij een uitgesloten incasso (dan meet hij of de AFSCHRIJVING
+  wegblijft, soort `incasso`). NIET: een potje omhoog, "Telt weer mee" en "Wordt een reservering", want
+  die vragen geen gedrag. Een nieuwe keuze over hetzelfde (soort plus categorie, bezitting of incasso)
+  herziet de lopende afspraak.
+  STANDEN: gezien, deels, nog niet gezien, herzien, en `loopt` (de termijn is bezig en er spreekt niets
+  tegen). Herzien (aanpassen of stoppen in de sheet) telt als afgerond. ER IS GEEN KNOP OM ZELF AF TE
+  VINKEN. Wat buiten de app gebeurt (een abonnement opzeggen) staat op `loopt` tot de termijnmaand
+  voorbij is zonder afschrijving. Een open punt is een feit: "storting in oktober nog niet gezien".
+- **DE MAANDAFSLUITING STAAT BOVENAAN GRIP TOT JE HEM AFSLUIT, EN NIETS SLUIT VANZELF** (`v337`):
+  `afsluitKaart()` toont vanaf dag 1 "<vorige maand> afsluiten" zolang die maand boekingen heeft en
+  `SET.maandAfsluiting[M]` leeg is, met een balk en punten die de app afvinkt (`afsluitPunten()`):
+  logboekvragen beantwoord (`valtOpMaandStand()`), potjes voor de nieuwe maand (`totalBudget()`), geen
+  boekingen die nog op Overig staan zonder eigen keuze (ER BESTAAT GEEN "ZONDER CATEGORIE" in de app;
+  Overig zonder override is het dichtste), de dekking deze maand rond (de dekkingsregel niet op
+  `tekort`), en handmatige standen bijgewerkt. DE DREMPEL VOOR STANDEN IS `STAND_MAX_DAGEN` (90): een
+  bezitting of schuld zonder invuldag of met een invuldag ouder dan 90 dagen; een schuld met gekoppelde
+  betalingen rekent zelf (v334) en vraagt niets. Een punt dat niet van toepassing is staat er niet.
+  Daaronder "Wat je afsprak" (`afsprakenVoor(M)`). "4 van 6 klaar" is een stand, geen score.
+  "Afsluiten" kan alleen als alles af is; anders "Afsluiten met open punten", dat eerst een sheet met die
+  punten toont (openen schrijft niets). `maandAfsluiten()` bewaart de punten, de afspraken en de open
+  punten met hun feit op dat moment, plus een vingerafdruk van de boekingen van die maand
+  (`afsluitVinger()`: id, categorie, bedrag). Daarna is het EEN regel ("September afgesloten op 4
+  oktober ›") met een sheet, en "gewijzigd na afsluiten" zodra die vingerafdruk verschuift.
+  VERPLAATSEN IS NIET KOPIEREN: lopende afspraken staan IN de open kaart, en anders als eigen kaart
+  (`afsprakenKaart()`, voor de vanaf-kaart). GEMETEN op de stand van 4 oktober: HOOGTE_HIER.
 - **DE AFLOSSING STAAT ALS EIGEN REGEL ONDER DE SPAARQUOTE, EN NIET ERIN** (`v336`, gevraagd door de
   gebruiker): `aflossingMaand(ym)` geeft per schuld met een gekoppelde betaling in die maand het
   AFLOSSINGSDEEL (niet de rente), uit `schuldStand()` (`v334`) en zonder tweede uitsplitsing (`v104`).
@@ -4788,6 +4823,11 @@ genoemde versietag.)*
   heeft de coach voor het eerst een GEMETEN basis in plaats van een deling, en dat is het moment.
   Nu omzetten zou de suggestie afhankelijk maken van twaalf weken historie en hem daaronder laten
   zwijgen, en dat is een verlies in een laag die nu gewoon werkt.
+  DE WEKELIJKSE CHECK-IN (optie 3 van de Grip-mockup van `v337`) IS NIET GEBOUWD, op keuze van de
+  gebruiker, en hoort bij dit punt: een moment per week waarop Grip de lopende afspraken en het
+  weekbedrag laat zien. HERZIEN ZODRA HET WEEKBEDRAG HERZIEN WORDT, want dan staat er een gemeten
+  weekbasis (de reeks van `v264`) waar zo'n check-in op kan leunen; zonder die basis zou hij een
+  deling van het potje tonen, en dat is precies wat dit punt al ter discussie stelt.
 - **Een week is de eenheid, en het venster rolt mee** (`v263`): de tweede regel onder "Nog uit je
   potjes" was een dagbedrag, en dat is een getal waar je niets mee doet: elke dag eronder voelt als
   winst en elke dag erboven als incident. Een week is de eenheid waarin je boodschappen doet en
@@ -5703,7 +5743,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v336` → `minder-v337`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v337` → `minder-v338`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5722,7 +5762,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335` en `v336` naar `minder-v336`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336` en `v337` naar `minder-v337`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

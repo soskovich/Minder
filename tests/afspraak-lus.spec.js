@@ -43,7 +43,10 @@ async function maand(page, payload) {
   await page.evaluate(() => go('maand'));
   await page.waitForSelector('#s-maand .card');
 }
-const kaart = (page) => page.locator('#s-maand .card').first().innerText();
+/* v337: de maandafsluiting staat bovenaan Grip, boven de terugblikken. Deze spec gaat over de
+   afspraaklus, dus hij leest de eerste kaart NA de afsluitkaart; dat die bovenaan staat toetst f. */
+const NA_AFSLUIT = '#s-maand > .card:not(#afsluitKaart):not(#afgeslotenRegel)';
+const kaart = (page) => page.locator(NA_AFSLUIT).first().innerText();
 
 test.describe('a · vorigeAfspraak kijkt precies één maand terug', () => {
   test('vindt de afspraak van vorige maand', async ({ page }) => {
@@ -221,11 +224,14 @@ test.describe('e · één keer per maand', () => {
 });
 
 test.describe('f · plaats en layout', () => {
-  test('de regel staat vóór het oordeel en vóór de regels', async ({ page }) => {
+  test('de regel staat na de maandafsluiting, vóór het oordeel en vóór de regels', async ({ page }) => {
     await maand(page, metAfspraak({ text: 'x', cat: 'boodschappen' }, 200));
-    const eerste = await page.locator('#s-maand > .card').first().innerText();
+    // v337: staat er een afsluitkaart, dan is die de eerste
+    const ids = await page.$$eval('#s-maand > .card', (L) => L.map((e) => e.id));
+    if (ids.includes('afsluitKaart')) expect(ids[0]).toBe('afsluitKaart');
+    const eerste = await page.locator(NA_AFSLUIT).first().innerText();
     expect(eerste).toMatch(/je afspraak van vorige maand/i);
-    const tweede = await page.locator('#s-maand > .card').nth(1).innerText();
+    const tweede = await page.locator(NA_AFSLUIT).nth(1).innerText();
     expect(tweede).toMatch(/beslissing|aandacht|staan goed|niets te beoordelen/i);   // v233: de oordeelkaart, zonder kop 'Je maand'
   });
 

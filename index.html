@@ -6206,6 +6206,7 @@ function belegKies(id, keuze){
   SET.belegKeuze=SET.belegKeuze||{};
   SET.belegKeuze[id]={maand:ym, keuze, op:vandaagYMD()};
   if(keuze==='pauze' && !a.pauze){ a.pauze={sinds:ym, perVoor:+a.per||0}; if(a.grow) a.per=0; }
+  if(keuze==='pauze'){ try{ afspraakMaak({soort:'pauze', assetId:id, naam:a.naam||'Bezitting', van:ym, tot:nextYM(ym), wat:`Inleg naar ${a.naam||'je bezitting'} zelf stilgezet`}); }catch(_){} }   // v337
   save(); closeSheet(); render();
 }
 function belegHervat(id){
@@ -6246,6 +6247,7 @@ function renderMaandBeslisSheet(key){
           rij daar zei dat erbij. Die rij is nu een lijstregel, dus de zin verhuist mee naar hier. */
       r.geaccepteerd?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:8px">Je hebt dit bewust geaccepteerd${r.geaccepteerd.tot?`, tot ${esc(resMaandLabel(r.geaccepteerd.tot))}`:''}.</div>`:''}
     ${maandIngangKnop(r, m)}
+    ${afspraakDekkingKnop(r)}
     ${/* De editor van de regel was vóór v320 de tik OP de rij. Die tik opent nu deze sheet, dus de
           route erheen verhuist mee: zonder hem verliest Grip zijn ingang naar de reserveringen, de
           noodfonds-sheet en de doel-editor (v61 laat twee ingangen toe, een ingang weghalen niet).
@@ -6476,7 +6478,7 @@ function uitgeslotenNaarRes(key, verlaag){
 }
 function uitgeslotenPotjeVerlaag(k, key){
   const P=uitgeslotenPotjes().find(x=>x.k===k && (!key || x.key===key)); openPotje(k);
-  if(P){ window._potDraft={type:'vast', vast:P.voorstel}; renderPotSheet(k); }
+  if(P){ window._potDraft={type:'vast', vast:P.voorstel}; window._potIncasso={key:P.key, naam:P.naam, k}; renderPotSheet(k); }
 }
 function uitgeslotenKaart(){
   let U=[]; try{ U=uitgeslotenPotjes(); }catch(_){ return ''; }
@@ -7192,6 +7194,297 @@ function valtOpLogBlok(){
     <div class="small vl-tel" style="margin-top:10px;color:var(--mut2);line-height:1.5">${tel}${sinds}.${T.top&&T.top.n>1?` ${esc(T.top.naam)} kwam het vaakst terug: ${T.top.n} keer.`:''}</div>
   </div>`;
 }
+/* ===== AFSPRAKEN MET OPVOLGING, EN DE MAANDAFSLUITING (v337) =====
+   Een afspraak ontstaat uit een keuze op Grip die GEDRAG vraagt: een storting voor de dekking, een
+   grens, een potje dat vanaf volgende maand lager ligt of stopt, de inleg naar een bezitting die je
+   zelf stilzet, en een uitgesloten incasso waarvan je het potje verlaagt. Elke afspraak draagt WAT,
+   WAARAAN de app hem meet en een TERMIJN (`van` tot en met `tot`, maanden).
+   DE APP VINKT ALLEEN AF WAT HIJ ZIET, in boekingen of instellingen; er is geen knop om zelf af te
+   vinken. Wat buiten de app moet gebeuren (een abonnement opzeggen) blijft open tot de afschrijving
+   wegblijft, en dat is pas na de termijnmaand te zeggen.
+   VIJF STANDEN: gezien, deels, nog niet gezien, herzien, en `loopt` (de termijn is nog bezig en er
+   is niets dat ertegen spreekt). Herzien (aanpassen of stoppen) telt als afgerond, niet als gemist.
+   EEN OPEN PUNT IS EEN FEIT ("storting in oktober nog niet gezien") en nooit een verwijt.
+   DE AFSPRAKEN UIT HET COACHGESPREK (SET.coachLog, v142/v207/v229) BLIJVEN HUN EIGEN LUS houden; die
+   gaan over een maand en hebben hun eigen terugblik bovenaan Grip. Wat deze laag van daar leent is
+   de meting (resThisMonth(), catSpendMap(), AFSPRAAK_MARGE), niet de opslag. */
+const STAND_MAX_DAGEN = 90;   // een handmatige stand die ouder is dan dit vraagt om bijwerken
+function afsprakenLijst(){ return Array.isArray(SET.afspraken)?SET.afspraken:[]; }
+function afspraakSleutel(a){ return String(a.soort)+'|'+String(a.cat||a.assetId||a.key||''); }
+function afspraakMaanden(van, tot){ const u=[]; if(!van||!tot) return u; for(let m=van; m<=tot && u.length<36; m=nextYM(m)) u.push(m); return u; }
+/* De schrijver. Een nieuwe keuze over HETZELFDE (zelfde soort, zelfde categorie, bezitting of
+   incasso) herziet de lopende afspraak: dat is aanpassen, en het telt als afgerond. */
+function afspraakMaak(a){
+  const L=afsprakenLijst().slice(), sl=afspraakSleutel(a), op=vandaagYMD();
+  for(const x of L) if(!x.herzien && afspraakSleutel(x)===sl && String(x.tot)>=thisYM()) x.herzien={op, hoe:'aangepast'};
+  const nw=Object.assign({id:'af'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:Date.now(), op, sinds:thisYM()}, a);
+  L.push(nw); SET.afspraken=L; return nw;
+}
+function afspraakHerzien(id, hoe){
+  const a=afsprakenLijst().find(x=>x.id===id); if(!a||a.herzien) return null;
+  a.herzien={op:vandaagYMD(), hoe:hoe==='gestopt'?'gestopt':'aangepast'}; return a;
+}
+const afMnd=ym=>ymFull(ym)||String(ym||'');
+const afDag=d=>{ try{ return new Date(String(d)+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'long'}); }catch(_){ return String(d||''); } };
+/* Waaraan de app de afspraak meet, in een zin. */
+function afspraakMeetZin(a){
+  const c=CATS[a.cat]; const cn=c?c.name:'';
+  if(a.soort==='storting') return 'gemeten aan wat er per maand op je reserveringsrekening bijkomt';
+  if(a.soort==='grens') return `gemeten aan je uitgaven in ${cn} tot het eind van ${afMnd(a.tot)}`;
+  if(a.soort==='potje') return a.bedrag>0 ? `gemeten aan je uitgaven in ${cn} in ${afMnd(a.van)}` : `gemeten in ${afMnd(a.van)}: komen er nog afschrijvingen in ${cn}?`;
+  if(a.soort==='pauze') return `gemeten aan gekoppelde inleg naar ${a.naam||'je bezitting'} na ${afDag(a.op)}`;
+  if(a.soort==='incasso') return `gemeten in ${afMnd(a.van)}: komt de afschrijving van ${a.naam||'deze post'} nog?`;
+  return '';
+}
+/* De stand van een afspraak. Leest alleen boekingen en instellingen. */
+function afspraakStand(a){
+  if(!a) return null;
+  if(a.herzien) return {status:'herzien', feit:a.herzien.hoe==='gestopt'?`gestopt op ${afDag(a.herzien.op)}`:`aangepast op ${afDag(a.herzien.op)}`, af:true};
+  const nu=thisYM();
+  const klaar=String(a.tot)<nu;   // de termijn is voorbij
+  const c=CATS[a.cat]; const cn=c?c.name:'';
+  if(a.soort==='storting'){
+    const b=Math.round(+a.bedrag||0); const ms=afspraakMaanden(a.van, a.tot).filter(m=>m<=nu);
+    if(!ms.length) return {status:'loopt', feit:`gemeten vanaf ${afMnd(a.van)}`, af:false};
+    const per=ms.map(m=>{ const g=Math.round(resThisMonth(m)||0); return {m, g, s: g>=b*(1-AFSPRAAK_MARGE)?'gezien':g>0?'deels':'niet'}; });
+    const niet=per.filter(x=>x.s!=='gezien');
+    if(!niet.length){
+      if(klaar || a.tot===nu && per[per.length-1].s==='gezien' && ms.length===afspraakMaanden(a.van,a.tot).length)
+        return {status:'gezien', feit:ms.length===1?`storting in ${afMnd(ms[0])} gezien`:'alle stortingen gezien', af:true, per};
+      return {status:'gezien', feit:`storting in ${afMnd(nu)} gezien · ${afMnd(nextYM(nu))} volgt`, af:true, per};
+    }
+    const x=niet[niet.length-1];
+    const feit = x.s==='deels' ? `${euro0(x.g)} van ${euro0(b)} in ${afMnd(x.m)} gezien` : `storting in ${afMnd(x.m)} nog niet gezien`;
+    const deels = x.s==='deels' || (klaar && per.some(y=>y.s==='gezien'));
+    return {status: deels?'deels':'nietgezien', feit, af:false, per};
+  }
+  if(a.soort==='grens'){
+    const sp=Math.round((catSpendMap(a.tot)||{})[a.cat]||0), g=Math.round(+a.bedrag||0);
+    if(sp>g) return {status:'nietgezien', feit:`${euro0(sp-g)} boven je grens van ${euro0(g)}`, af:false};
+    if(klaar) return {status:'gezien', feit:'binnen gebleven', af:true};
+    return {status:'loopt', feit:`tot nu binnen, uitkomst na ${afMnd(a.tot)}`, af:false};
+  }
+  if(a.soort==='potje' || a.soort==='incasso'){
+    if(nu<a.van) return {status:'loopt', feit:a.soort==='incasso'||!(a.bedrag>0)?`gemeten in ${afMnd(a.van)}`:`geldt vanaf ${afMnd(a.van)}`, af:false};
+    let sp=0;
+    if(a.soort==='incasso'){ for(const m of afspraakMaanden(a.van, a.tot).filter(m=>m<=nu)) for(const t of txOfMonth(m)) if(t.amount<0 && recurKey(t)===a.key) sp-=t.amount; sp=Math.round(sp); }
+    else sp=Math.round((catSpendMap(a.van)||{})[a.cat]||0);
+    const g=Math.round(+a.bedrag||0);
+    if(a.soort==='incasso' || !(g>0)){
+      if(sp>0) return {status:'nietgezien', feit:`in ${afMnd(a.van)} nog ${euro0(sp)} afgeschreven`, af:false};
+      if(klaar) return {status:'gezien', feit:`geen afschrijving meer in ${afMnd(a.van)}`, af:true};
+      return {status:'loopt', feit:`in ${afMnd(a.van)} tot nu geen afschrijving`, af:false};
+    }
+    if(sp>g) return {status:'nietgezien', feit:`${euro0(sp-g)} boven het nieuwe potje van ${euro0(g)}`, af:false};
+    if(klaar) return {status:'gezien', feit:`binnen ${euro0(g)} gebleven`, af:true};
+    return {status:'loopt', feit:`tot nu ${euro0(sp)} van ${euro0(g)}`, af:false};
+  }
+  if(a.soort==='pauze'){
+    let tx=[]; try{ tx=bezitGekoppeld(a.assetId).filter(t=>String(t.date)>String(a.op)); }catch(_){}
+    if(tx.length){ const t=tx[tx.length-1]; return {status:'nietgezien', feit:`inleg op ${afDag(t.date)} nog gezien`, af:false}; }
+    if(klaar) return {status:'gezien', feit:`geen inleg meer gezien sinds ${afDag(a.op)}`, af:true};
+    return {status:'loopt', feit:`sinds ${afDag(a.op)} geen inleg gezien, gemeten tot eind ${afMnd(a.tot)}`, af:false};
+  }
+  return null;
+}
+/* Wat er nog loopt: niet herzien en de termijn niet voorbij. */
+function afsprakenLopend(){ const nu=thisYM(); return afsprakenLijst().filter(a=>!a.herzien && String(a.tot)>=nu); }
+/* De afspraken die bij de afsluiting van maand M horen: wat er nog loopt, wat in M of daarna
+   afliep, en wat je na het begin van M herzag. */
+function afsprakenVoor(M){
+  return afsprakenLijst().filter(a=>{
+    if(String(a.tot)<M) return false;
+    if(a.herzien) return String(a.herzien.op).slice(0,7)>=M && String(a.sinds)<=nextYM(M);
+    return true;
+  }).sort((x,y)=>(x.ts||0)-(y.ts||0));
+}
+function afspraakBox(status){
+  const on=status==='gezien'||status==='herzien', half=status==='deels'||status==='nietgezien';
+  const st = on ? 'background:var(--green);border-color:var(--green);color:var(--bg)' : half ? 'border-color:var(--amber)' : '';
+  return `<span data-box="${on?'aan':half?'half':'uit'}" style="width:16px;height:16px;border-radius:5px;border:1.5px solid var(--bar);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:2px;${st}">${on?'✓':''}</span>`;
+}
+function afspraakRij(a, S){
+  S=S||afspraakStand(a)||{status:'loopt', feit:''};
+  return `<div class="row" data-afspraak="${esc(a.id)}" data-afstatus="${S.status}" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openAfspraak('${esc(a.id)}')">
+    ${afspraakBox(S.status)}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(a.wat||'')}</span>
+      <span class="small" data-affeit style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(S.feit||'')}</span></span>
+    <span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`;
+}
+/* Buiten de afsluiting een eigen kaart, met alleen wat nog loopt (rule 8 van de opdracht). */
+function afsprakenKaart(){
+  const L=afsprakenLopend(); if(!L.length) return '';
+  return `<div class="card" id="afsprakenKaart"><div class="hlabel" style="margin:0 0 2px">Wat je afsprak</div>${L.map(a=>afspraakRij(a)).join('')}</div>`;
+}
+function openAfspraak(id){ renderAfspraakSheet(id); showSheetBg(); }
+function renderAfspraakSheet(id){
+  const a=afsprakenLijst().find(x=>x.id===id); if(!a){ closeSheet(); return; }
+  const S=afspraakStand(a)||{};
+  const termijn = a.van===a.tot ? afMnd(a.van) : `${afMnd(a.van)} tot en met ${afMnd(a.tot)}`;
+  const per=(S.per||[]).map(x=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small">${esc(afMnd(x.m))}</span><span class="small" style="font-weight:700">${euro0(x.g)} van ${euro0(a.bedrag)}</span></div>`).join('');
+  const kan=!a.herzien;
+  const aanpas = !kan ? '' : a.soort==='storting'
+    ? `<div style="margin-top:12px" data-afaanpas><label class="fld">Per maand (€)</label><input id="afBedrag" type="number" min="0" inputmode="numeric" value="${Math.round(+a.bedrag||0)}" style="width:100%">
+       <label class="fld" style="margin-top:8px">Tot en met</label><input id="afTot" type="month" value="${esc(String(a.tot))}" style="width:100%">
+       <button class="btn sec" style="margin-top:10px;width:100%" onclick="afspraakAanpassen('${esc(a.id)}')">Aanpassen</button></div>`
+    : (a.soort==='potje'||a.soort==='incasso') && CATS[a.cat] ? `<button class="btn sec" style="margin-top:12px;width:100%" onclick="closeSheet();openPotje('${esc(a.cat)}')">Potje aanpassen</button>` : '';
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);overflow-wrap:anywhere">${esc(a.wat||'')}</div>
+    <div class="small muted" style="margin:2px 0 10px;line-height:1.45">Afgesproken op ${esc(afDag(a.op))} · ${esc(termijn)}</div>
+    <div class="row" style="gap:10px;align-items:flex-start">${afspraakBox(S.status)}<span class="small" data-afsheetfeit style="flex:1;line-height:1.45">${esc(S.feit||'')}</span></div>
+    <div class="small" style="color:var(--mut2);line-height:1.45;margin-top:8px">${esc(afspraakMeetZin(a))}. Minder vinkt af wat het in je boekingen of instellingen ziet.</div>
+    ${per?`<div style="margin-top:10px">${per}</div>`:''}
+    ${aanpas}
+    ${kan?`<div class="small" style="margin-top:14px;text-align:center;color:var(--mut2);cursor:pointer" onclick="afspraakStop('${esc(a.id)}')">Afspraak stoppen</div>
+      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45;margin-top:6px;text-align:center">Aanpassen of stoppen telt als afgerond.</div>`:''}`;
+}
+function afspraakStop(id){ if(!afspraakHerzien(id,'gestopt')) return; save(); closeSheet(); render(); toast('Afspraak gestopt'); }
+function afspraakAanpassen(id){
+  const a=afsprakenLijst().find(x=>x.id===id); if(!a||a.herzien||a.soort!=='storting') return;
+  const b=Math.round(+((document.getElementById('afBedrag')||{}).value)||0);
+  const tot=String((document.getElementById('afTot')||{}).value||a.tot);
+  if(!(b>0) || !/^\d{4}-\d{2}$/.test(tot) || tot<thisYM()) return;
+  afspraakMaak({soort:'storting', bedrag:b, van:thisYM(), tot, wat:`${euro0(b)} per maand naar je reserveringen tot ${afMnd(tot)}`});
+  save(); closeSheet(); render();
+}
+/* De keuze op de dekkingsregel die gedrag vraagt. Het bedrag en de maand komen uit r.perMaandTot
+   (v323), dus hier wordt niets opnieuw gerekend (v104). */
+function afspraakDekkingZet(){
+  let r=null; try{ r=maandRegels().find(x=>x.key==='dekking'); }catch(_){}
+  if(!r || !r.perMaandTot || !(r.perMaandTot.bedrag>0)) return;
+  const b=Math.round(r.perMaandTot.bedrag), tot=r.perMaandTot.maand;
+  afspraakMaak({soort:'storting', bedrag:b, van:thisYM(), tot, wat:`${euro0(b)} per maand naar je reserveringen tot ${afMnd(tot)}`});
+  save(); closeSheet(); render(); toast(`${ICON('check')} Afspraak: ${euro0(b)} per maand tot ${afMnd(tot)}`);
+}
+function afspraakDekkingKnop(r){
+  if(!r || r.key!=='dekking' || !r.perMaandTot || !(r.perMaandTot.bedrag>0)) return '';
+  const lopend=afsprakenLopend().find(a=>a.soort==='storting');
+  if(lopend) return `<div class="small" data-afdekking="loopt" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet();openAfspraak('${esc(lopend.id)}')">Je afspraak: ${esc(lopend.wat)} ›</div>`;
+  const mnd=afMnd(r.perMaandTot.maand);
+  return `<button class="btn" data-afdekking="nieuw" style="margin-top:12px;width:100%" onclick="afspraakDekkingZet()">Ik stort ${euro0(r.perMaandTot.bedrag)} per maand tot ${esc(mnd)}</button>`;
+}
+
+/* ===== DE MAANDAFSLUITING =====
+   Vanaf dag 1 van een nieuwe maand staat bovenaan Grip "<vorige maand> afsluiten", met punten die
+   de app zelf afvinkt. GEEN DEADLINE en NIETS SLUIT VANZELF: de kaart blijft tot jij afsluit.
+   "Afsluiten" kan zodra alles af is; met open punten alleen via "Afsluiten met open punten", en die
+   punten worden bij de maand bewaard (SET.maandAfsluiting[M]). Daarna is het EEN regel, en verandert
+   er later iets aan die maand (een late boeking, een andere categorie), dan zegt die regel dat.
+   GEEN TELLER DIE IETS GOEDKEURT: "4 van 6 klaar" is een stand en geen score, en er is geen reeks
+   over maanden heen. */
+function afsluitMaand(){ return valtOpYmPlus(thisYM(), -1); }
+/* De vingerafdruk van een maand: welke boekingen er zijn, met hun categorie en bedrag. Een late
+   boeking of een andere categorie verandert hem. */
+function afsluitVinger(M){
+  let s=''; try{ s=txOfMonth(M).map(t=>`${t.id}:${catOf(t)}:${t.amount}`).sort().join('|'); }catch(_){}
+  let h=5381; for(let i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))|0;
+  return (h>>>0).toString(36)+'.'+s.length;
+}
+/* Een handmatige stand die bijwerken vraagt: een bezitting of schuld zonder invuldag, of met een
+   invuldag ouder dan STAND_MAX_DAGEN. Een schuld met gekoppelde betalingen rekent zijn stand zelf
+   (v334) en vraagt dus niets. */
+function afsluitStanden(){
+  const grens=ymdVan(new Date(Date.now()-STAND_MAX_DAGEN*864e5)), uit=[];
+  for(const a of (SET.assets||[])){ if(!((+a.waarde||0)>0)) continue; if(!a.waardeOp || String(a.waardeOp)<grens) uit.push({soort:'asset', id:a.id, naam:a.naam||'Bezitting', op:a.waardeOp||null}); }
+  for(const d of (SET.debts||[])){ if(!((+d.rest||0)>0)) continue; let gk=[]; try{ gk=schuldGekoppeld(d.id); }catch(_){}
+    if(gk.length) continue; if(!d.restOp || String(d.restOp)<grens) uit.push({soort:'debt', id:d.id, naam:d.naam||'Schuld', op:d.restOp||null}); }
+  return uit;
+}
+/* De punten, in de volgorde van de opdracht. Een punt dat niet van toepassing is staat er niet
+   (geen potjes, geen reserveringen, geen standen): een vinkje bij iets dat niet bestaat is een
+   stand zonder meting. */
+function afsluitPunten(M){
+  const P=[], nu=thisYM();
+  try{ const S=valtOpMaandStand(M); const bov=S.rijen.filter(x=>x.u && x.u.soort==='boven');
+    if(bov.length){ const n=bov.filter(x=>x.r.antwoord).length;
+      P.push({punt:'logboek', naam:'Logboekvragen beantwoord', feit:`${n} van ${bov.length}`, af:n===bov.length, act:"go('logboek')"}); } }catch(_){}
+  try{ const had=Object.keys((SET.budgetHist||{})[M]||{}).length>0, tb=totalBudget();
+    if(had || tb>0) P.push({punt:'potjes', naam:`Potjes voor ${afMnd(nu)} staan`, feit:tb>0?`samen ${euro0(tb)}`:`nog geen potjes voor ${afMnd(nu)}`, af:tb>0, act:`openPotjesVerdeling('${nu}')`}); }catch(_){}
+  try{ const tx=txOfMonth(M).filter(t=>catOf(t)==='overig' && !OVR[t.id]);
+    P.push({punt:'categorie', naam:'Boekingen zonder categorie', feit:tx.length?`${tx.length} ${tx.length===1?'boeking staat':'boekingen staan'} nog op Overig`:'geen', af:!tx.length, act:tx.length?`openCategory('overig','${M}')`:''}); }catch(_){}
+  try{ const D=dekking(12); if(D.aantal && resAccId()){ const r=maandRegels().find(x=>x.key==='dekking');
+    if(r) P.push({punt:'dekking', naam:'Dekking van je reserveringen', feit:r.status==='tekort'?`${afMnd(nu)} niet rond`:`${afMnd(nu)} rond`, af:r.status!=='tekort', act:"openMaandBeslis('dekking')"}); } }catch(_){}
+  try{ const St=afsluitStanden(); if((SET.assets||[]).some(a=>(+a.waarde||0)>0) || (SET.debts||[]).some(d=>(+d.rest||0)>0)){
+    const een=St.length===1?St[0]:null;
+    P.push({punt:'standen', naam:St.length?'Standen bijwerken':'Standen bijgewerkt', feit:St.length?St.map(x=>x.naam).join(', '):`alle binnen ${STAND_MAX_DAGEN} dagen ingevuld`, af:!St.length,
+      act: een ? (een.soort==='asset'?`openAsset('${esc(een.id)}')`:`openDebt('${esc(een.id)}')`) : (St.length?"go('vermogen')":'')}); } }catch(_){}
+  return P;
+}
+function afsluitStand(M){
+  const P=afsluitPunten(M), A=afsprakenVoor(M).map(a=>({a, S:afspraakStand(a)||{status:'loopt',feit:'',af:false}}));
+  const tot=P.length+A.length, af=P.filter(p=>p.af).length+A.filter(x=>x.S.af).length;
+  return {M, P, A, tot, af, klaar:af===tot};
+}
+function afsluitNodig(M){
+  if((SET.maandAfsluiting||{})[M]) return false;
+  try{ return txOfMonth(M).length>0; }catch(_){ return false; }
+}
+function afsluitPuntRij(p){
+  const inh=`${afspraakBox(p.af?'gezien':'nietgezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(p.naam)}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(p.feit)}</span></span>${p.act?`<span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span>`:''}`;
+  return `<div class="row" data-afpunt="${p.punt}" data-af="${p.af?1:0}" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line)${p.act?';cursor:pointer':''}"${p.act?` onclick="${p.act}"`:''}>${inh}</div>`;
+}
+function afsluitKaart(){
+  const M=afsluitMaand();
+  const rec=(SET.maandAfsluiting||{})[M];
+  if(rec) return afgeslotenRegel(M, rec);
+  if(!afsluitNodig(M)) return '';
+  const S=afsluitStand(M), Mn=valtOpHoofd(M);
+  const pct=S.tot?Math.round(S.af/S.tot*100):0;
+  const knop = S.klaar
+    ? `<button class="btn" data-afsluit="klaar" style="margin-top:12px;width:100%" onclick="maandAfsluiten('${M}',false)">${esc(Mn)} afsluiten</button>`
+    : `<button class="btn sec" data-afsluit="open" style="margin-top:12px;width:100%" onclick="openAfsluitOpen('${M}')">Afsluiten met open punten</button>`;
+  return `<div class="card" id="afsluitKaart" data-maand="${M}">
+    <div class="row" style="gap:10px;align-items:baseline"><span style="flex:1;font-weight:700;font-size:var(--fs-md)">${esc(Mn)} afsluiten</span><span class="small muted" data-afteller="${S.af}/${S.tot}" style="white-space:nowrap">${S.af} van ${S.tot} klaar</span></div>
+    <div style="height:6px;border-radius:3px;background:var(--card2);margin:8px 0 2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
+    ${S.P.map(afsluitPuntRij).join('')}
+    ${S.A.length?`<div class="hlabel" style="margin:12px 0 0">Wat je afsprak</div>${S.A.map(x=>afspraakRij(x.a, x.S)).join('')}`:''}
+    ${knop}</div>`;
+}
+/* Wat er bij het afsluiten bewaard wordt: de stand van elk punt en elke afspraak op dat moment. */
+function maandAfsluiten(M, metOpen){
+  if(!M || (SET.maandAfsluiting||{})[M]) return;
+  const S=afsluitStand(M);
+  if(!S.klaar && !metOpen) return;
+  const punten=S.P.map(p=>({punt:p.punt, naam:p.naam, feit:p.feit, af:p.af}));
+  const afspraken=S.A.map(x=>({id:x.a.id, wat:x.a.wat, status:x.S.status, feit:x.S.feit, af:!!x.S.af}));
+  const open=punten.filter(p=>!p.af).map(p=>({naam:p.naam, feit:p.feit})).concat(afspraken.filter(a=>!a.af).map(a=>({naam:a.wat, feit:a.feit, afspraak:a.id})));
+  SET.maandAfsluiting=SET.maandAfsluiting||{};
+  SET.maandAfsluiting[M]={op:vandaagYMD(), punten, afspraken, open, vinger:afsluitVinger(M)};
+  save(); try{ closeSheet(); }catch(_){}; render();
+}
+function openAfsluitOpen(M){
+  const S=afsluitStand(M);
+  const open=S.P.filter(p=>!p.af).map(p=>({naam:p.naam, feit:p.feit})).concat(S.A.filter(x=>!x.S.af).map(x=>({naam:x.a.wat, feit:x.S.feit})));
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(valtOpHoofd(M))} afsluiten met open punten</div>
+    <div class="small muted" style="margin:2px 0 10px">Deze punten worden bij ${esc(afMnd(M))} bewaard.</div>
+    ${open.map(o=>`<div data-afopen style="padding:7px 0;border-top:1px solid var(--line)"><div class="small">${esc(o.naam)}</div><div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${esc(o.feit)}</div></div>`).join('')}
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" style="flex:1" onclick="maandAfsluiten('${M}',true)">Afsluiten</button><button class="btn sec" onclick="closeSheet()">Annuleren</button></div>`;
+  showSheetBg();
+}
+function afgeslotenGewijzigd(M, rec){ return !!(rec && rec.vinger && rec.vinger!==afsluitVinger(M)); }
+function afgeslotenRegel(M, rec){
+  const gew=afgeslotenGewijzigd(M, rec);
+  const nOpen=(rec.open||[]).length;
+  const sub = nOpen ? `${nOpen} open ${nOpen===1?'punt':'punten'} bewaard` : ((rec.afspraken||[]).length?'alle afspraken nagekomen of herzien':'alles klaar bij afsluiten');
+  return `<div class="card" id="afgeslotenRegel" data-maand="${M}" style="cursor:pointer;padding:13px 15px" onclick="openAfgesloten('${M}')">
+    <div class="row" style="gap:10px"><span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:var(--fs-md)">${esc(valtOpHoofd(M))} afgesloten op ${esc(afDag(rec.op))}</span>
+      <span class="small muted" style="display:block;margin-top:2px">${esc(sub)}${gew?` · <span data-afgewijzigd>gewijzigd na afsluiten</span>`:''}</span></span>
+    <span class="muted" style="font-size:18px">›</span></div></div>`;
+}
+function openAfgesloten(M){
+  const rec=(SET.maandAfsluiting||{})[M]; if(!rec) return;
+  const ids=afsprakenLijst();
+  const afs=(rec.afspraken||[]).map(x=>{ const a=ids.find(y=>y.id===x.id); const nu=a?afspraakStand(a):null;
+    const verder=nu && nu.feit!==x.feit ? `<div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">nu: ${esc(nu.feit)}</div>` : '';
+    return `<div data-afgeslotenafspraak="${esc(x.id)}" class="row" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">${afspraakBox(x.status)}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(x.wat)}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">bij afsluiten: ${esc(x.feit)}</span>${verder}</span></div>`; }).join('');
+  const pun=(rec.punten||[]).map(p=>`<div class="row" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">${afspraakBox(p.af?'gezien':'nietgezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(p.naam)}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${esc(p.feit)}</span></span></div>`).join('');
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(valtOpHoofd(M))} afgesloten op ${esc(afDag(rec.op))}</div>
+    ${afgeslotenGewijzigd(M,rec)?`<div class="small" data-afgewijzigd style="color:var(--mut2);line-height:1.45;margin-top:4px">Na het afsluiten is er iets aan ${esc(afMnd(M))} veranderd: een boeking erbij of een andere categorie.</div>`:''}
+    ${afs?`<div class="hlabel" style="margin:12px 0 0">Wat je afsprak</div>${afs}`:''}
+    ${pun?`<div class="hlabel" style="margin:12px 0 0">Bij het afsluiten</div>${pun}`:''}`;
+  showSheetBg();
+}
 function renderMaand(){
   /* v233: Grip leest altijd de lopende maand. Hier stond sinds v176 een maandkiezer met een
      afgesloten-maand-tak: banner, kop 'Je maand' met chip, een uitlegzin en 'Naar <nu>'. Alle
@@ -7235,8 +7528,13 @@ function renderMaand(){
   const CK=(function(){ try{ return contantKaart(); }catch(_){ return ''; } })();
   const UK=(function(){ try{ return uitgeslotenKaart(); }catch(_){ return ''; } })();   // v327
   const BV=(function(){ try{ return belegVragen(thisYM()); }catch(_){ return []; } })();   // v332
+  /* v337: de maandafsluiting staat BOVENAAN, ook boven de terugblikken: vanaf dag 1 van een nieuwe
+     maand is dat de eerste vraag. Zolang hij open is staan de afspraken erin; daarna als eigen kaart
+     (verplaatsen is niet kopieren). */
+  const AK=(function(){ try{ return afsluitKaart(); }catch(_){ return ''; } })();
+  const AFK=(function(){ try{ return /id="afsluitKaart"/.test(AK) ? '' : afsprakenKaart(); }catch(_){ return ''; } })();
   if(!R.length && !STR.length && !CK && !UK && !BV.length){
-    $('#s-maand').innerHTML= VS + CK + UK + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpGripBlok();
+    $('#s-maand').innerHTML= AK + VS + CK + UK + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpGripBlok();
     return;
   }
   /* v207: een regel die je bewust hebt geaccepteerd telt niet meer als tekort, dus het oordeel,
@@ -7272,7 +7570,7 @@ function renderMaand(){
           woorden vóór het oordeel gezet. 'Bovenaan' gaat hier dus over de vaste inhoud van het
           scherm; een terugblik die er drie dagen staat verdringt hem niet. GEMETEN: vijf tests in
           afspraak-lus.spec.js lezen de eerste kaart en pinnen die volgorde. */''}
-    ${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
+    ${AK}${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
     <div class="card">
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
       ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
@@ -7312,7 +7610,7 @@ function renderMaand(){
           eronder. Die rij staat nu in maandVanafKaart() met twee rijen ernaast, als eigen kaart
           met een kop die zijn vraag noemt. Hij staat NA 'Staat goed' en voor het logboek: eerst wat
           iets vraagt, dan wat goed staat, dan wat verandert, dan wat je deed. */''}
-    ${maandVanafKaart()}
+    ${AFK}${maandVanafKaart()}
     ${/* v226: de spaarquote stond hier als eigen kaart, achter de regels. v232: hij staat op
           Vermogen. Hij meet welk deel van je inkomen naar vermogensopbouw ging, en dat is de
           instroom van de vermogenslaag, niet een oordeel over of je systeem standhoudt. Alles ging
@@ -12819,6 +13117,7 @@ function potDraftTotal(){ const d=window._potDraft||{}; if(d.type==='freq') retu
 function potAssumptionLabel(k){ const meta=(SET.potMeta||{})[k]; if(!meta) return ''; if(meta.type==='freq') return `${meta.n}× à ${euro0(meta.per)}`; if(meta.type==='week') return `${euro0(meta.per)}/week`; return ''; }
 function openPotje(k){
   const c=CATS[k]; if(!c) return;
+  window._potIncasso=null;   // v337: alleen uitgeslotenPotjeVerlaag() zet hem, na deze aanroep
   const pendMeta=(SET.potMetaNext||{})[k]; const pendAmt=(SET.budgetsNext||{})[k];   // bewerk je een al geplande wijziging, begin daar dan vanaf
   const meta = (pendMeta!==undefined) ? (pendMeta||{}) : ((SET.potMeta||{})[k]||{});
   const cur  = (pendAmt!=null) ? +pendAmt : (+(SET.budgets||{})[k]||0);
@@ -12867,6 +13166,16 @@ function openPotjePick(){
     ${ks.length?ks.map(k=>`<div class="tx" style="cursor:pointer" onclick="openPotje('${k}')"><div class="ava" style="background:var(--card2)">${CATS[k].icon||''}</div><div class="info"><div class="nm">${CATS[k].name}</div></div><div class="amt" style="color:var(--teal)">+ potje</div></div>`).join(''):'<div class="small muted">Al je categorieën hebben een potje.</div>'}`;
   showSheetBg();
 }
+/* v337: een potje dat vanaf volgende maand LAGER ligt of stopt, vraagt gedrag, en dat is een
+   afspraak. Komt de verlaging uit de kaart van een uitgesloten incasso, dan is wat de app kan meten
+   of die AFSCHRIJVING wegblijft, en dan is het een incasso-afspraak. Hoger vraagt niets. */
+function potjeAfspraak(k, bedrag){
+  const van=nextYM(SET.budgetMonth||thisYM()), I=window._potIncasso;
+  if(I && I.k===k){ const r=afspraakMaak({soort:'incasso', key:I.key, naam:I.naam, cat:k, bedrag:0, van, tot:van, wat:`${I.naam} blijft weg vanaf ${afMnd(van)}`}); save(); return r; }
+  const cn=CATS[k]?CATS[k].name:k;
+  const r=afspraakMaak({soort:'potje', cat:k, bedrag, van, tot:van, wat: bedrag>0?`Potje ${cn} ${euro0(bedrag)} vanaf ${afMnd(van)}`:`${cn} stopt vanaf ${afMnd(van)}`});
+  save(); return r;
+}
 function savePotje(k,del){
   const exists = +(SET.budgets||{})[k] > 0;          // bestaat dit potje al deze maand?
   const vanaf = ymFull(nextYM(SET.budgetMonth||thisYM()));
@@ -12876,6 +13185,7 @@ function savePotje(k,del){
       SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[k]=0;
       SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[k]=null; save();
       try{ valtOpPotjeGewijzigd(k, +(SET.budgets||{})[k]||0, 0, true); }catch(_){}   // v235, v315: deze tak schrijft budgetsNext
+      try{ potjeAfspraak(k, 0); }catch(_){}   // v337
       msg=`${CATS[k].name}-potje stopt vanaf ${vanaf}`;
     } else { // alleen een geplande wijziging of nieuw concept → meteen weg
       if(SET.budgetsNext) delete SET.budgetsNext[k];
@@ -12892,6 +13202,7 @@ function savePotje(k,del){
       SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[k]= total>0?total:0;
       SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[k]= meta; save();
       try{ valtOpPotjeGewijzigd(k, +(SET.budgets||{})[k]||0, total>0?total:0, true); }catch(_){}   // v235, v315: deze tak schrijft budgetsNext
+      try{ if((total>0?total:0) < (+(SET.budgets||{})[k]||0)) potjeAfspraak(k, total>0?total:0); }catch(_){}   // v337: alleen lager vraagt gedrag
       msg=`${CATS[k].name}-potje: ${euro0(total)}/mnd vanaf ${vanaf}`;
     } else { // nieuw potje → meteen actief (er is nog geen grens om te verschuiven)
       SET.budgets=SET.budgets||{}; if(total>0) SET.budgets[k]=total; else delete SET.budgets[k];
@@ -12899,6 +13210,7 @@ function savePotje(k,del){
       msg=`${CATS[k].name}-potje gezet`;
     }
   }
+  window._potIncasso=null;
   closeSheet();
   const after=window._potAfter; window._potAfter=null;
   if(after){ try{ after(); }catch(_){ render(); } } else { render(); }
@@ -13603,6 +13915,7 @@ function valtOpGrensZet(id){
      dezelfde reden waarom `valtOpAfsluiten()` zijn potje uit het record leest en niet uit
      SET.budgets (v235): een afsluiting mag niet van de volgorde in de bootregel afhangen. */
   valtOpActieZet(id,'grens_gezet',{grens_stand:stand, grens_bekend:bekend});
+  try{ afspraakMaak({soort:'grens', cat:k, bedrag:stand, van:m, tot:m, wat:`Grens ${CATS[k].name} op ${euro0(stand)}`}); save(); }catch(_){}   // v337
   closeSheet(); render();
   toast(`${ICON('check')} Grens op ${euro0(stand)} · ${CATS[k].name.toLowerCase()}`);
 }
