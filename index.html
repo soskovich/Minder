@@ -9746,7 +9746,7 @@ function deleteDebt(id){ SET.debts=(SET.debts||[]).filter(x=>x.id!==id); save();
 function leaseAutoTotal(){ return (SET.debts||[]).reduce((s,d)=>s+((d.type==='financiallease'&&d.autoBezit)?(+d.dagwaarde||0):0),0); }
 function netWorth(){
   const liq=totalBalance().sum;
-  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0)+leaseAutoTotal();
+  const overig=(SET.assets||[]).reduce((s,a)=>s+bezitWaardeNu(a),0)+leaseAutoTotal();
   // doorstroomposten: uitgeleend geld is een vordering (bezitting), geleend geld een schuld
   const LT=loanTotals();
   const bez=liq+overig+LT.uit;
@@ -9768,9 +9768,9 @@ function loanRowsHTML(richting){
 }
 function renderAssets(){
   const liq=totalBalance().sum; const as=SET.assets||[];
-  const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}${a.grow?' <span style="color:var(--teal);font-size:10.5px">· groeit</span>':''}</div>${bezitInlegSub(a.id)}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+a.waarde||0)}</span><span class="muted">›</span></div></div>`).join('');
+  const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}${a.grow?' <span style="color:var(--teal);font-size:10.5px">· groeit</span>':''}</div>${bezitInlegSub(a)}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700" data-bezittotaal="${esc(a.id)}">${euro0(bezitWaardeNu(a))}</span><span class="muted">›</span></div></div>`).join('');
   const leaseRows=(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).map(d=>`<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Auto')} <span style="color:var(--mut2);font-size:10.5px">· via financial lease</span></div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+d.dagwaarde)}</span><span class="muted">›</span></div></div>`).join('');
-  const totalBez=(liq||0)+as.reduce((s,a)=>s+(+a.waarde||0),0)+(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).reduce((s,d)=>s+(+d.dagwaarde||0),0)+loanTotals().uit;
+  const totalBez=(liq||0)+as.reduce((s,a)=>s+bezitWaardeNu(a),0)+(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).reduce((s,d)=>s+(+d.dagwaarde||0),0)+loanTotals().uit;
   const open=SET.openBez===true;
   return `<div style="margin-top:14px">
     <div class="row" style="margin:0 2px 8px;cursor:pointer" onclick="toggleVerm('openBez')"><span class="hlabel" style="margin:0;flex:1">Bezittingen</span><span class="small muted">${euro0(totalBez)}</span><span class="muted" style="font-size:15px;margin-left:8px">${open?'▲':'›'}</span></div>
@@ -9830,8 +9830,16 @@ function beleggingZonderBezitting(){
     .sort((a, b) => b.som - a.som);
 }
 /* v332: wat er de laatste maanden werkelijk naar deze bezitting ging, uit je gekoppelde boekingen.
-   Het staat naast de waarde en wordt er niet bij opgeteld: de waarde is wat jij invult. */
-function bezitInlegSub(id){
+   v333: ging er inleg heen NA de dag waarop je de waarde invulde, dan staat hier de optelling die het
+   getal rechts maakt, en niet nog eens de maand: hetzelfde bedrag twee keer op een rij is een tweede
+   bron (v104). Staat de vraag over een waarde zonder invuldag open, dan staat die hier. */
+function bezitWaardeRegel(W){
+  return `${euro0(W.basis)} op ${esc(bezitDatumLabel(W.op))} + ${euro0(W.inleg)} inleg sindsdien = ${euro0(W.waarde)}`;
+}
+function bezitInlegSub(a){
+  const id=a.id; let W=null; try{ W=bezitWaarde(a); }catch(_){}
+  if(W && W.inleg>0) return `<div class="cp-sub" data-bezitwaarde="${esc(id)}">${bezitWaardeRegel(W)}</div>`;
+  if(W && W.vraag) return `<div class="cp-sub" data-bezitvraag="${esc(id)}">Zat de inleg van ${esc(bezitDatumLabel(W.vraag.datum))} al in de ${euro0(W.basis)}? <span style="color:var(--teal)">›</span></div>`;
   let r=[]; try{ r=bezitInlegRecent(id,3); }catch(_){ return ''; }
   if(!r.length) return '';
   const x=r[0];
@@ -9857,6 +9865,28 @@ function bezitEditorBlok(a){
   return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px" data-bezitgemeten>
     <div class="small" style="font-weight:600;margin-bottom:4px">Gemeten inleg</div>${inleg}${rg}</div>${vw}${pz}`;
 }
+/* v333: onder het waardeveld. De optelling als er inleg na de invuldag is, anders de invuldag zelf,
+   en zonder invuldag de vraag (een keer, met twee even zware knoppen en geen voorselectie). */
+function bezitWaardeBlok(a){
+  let W=null; try{ W=bezitWaarde(a); }catch(_){ return ''; }
+  const st='class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px;line-height:1.45"';
+  if(W.vraag) return `<div style="margin-top:8px" data-bezitvraagblok="${esc(a.id)}">
+      <div class="small" style="font-weight:600">Zat de inleg van ${esc(bezitDatumLabel(W.vraag.datum))} (${euro0(W.vraag.bedrag)}) al in de ${euro0(W.basis)}?</div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="btn sec" style="flex:1" data-bezitvraagknop="ja" onclick="bezitWaardeVraag('${a.id}',true);render();openAsset('${a.id}')">Ja, al meegeteld</button>
+        <button class="btn sec" style="flex:1" data-bezitvraagknop="nee" onclick="bezitWaardeVraag('${a.id}',false);render();openAsset('${a.id}')">Nee, tel erbij</button></div>
+      <div ${st}>Tot je kiest telt Minder hier niets bij op.</div></div>`;
+  if(!W.op) return '';
+  return `<div ${st} data-bezitwaarde="${esc(a.id)}">${W.inleg>0?bezitWaardeRegel(W):`Ingevuld op ${esc(bezitDatumLabel(W.op))}.`} Vul je een nieuwe waarde in, dan telt alleen inleg vanaf vandaag erbij.</div>`;
+}
+/* v333: naast het ingevulde maandbedrag wat er gemeten heen ging, zodat zichtbaar is als ze
+   uiteenlopen. De Vermogensreis rekent met het gemeten bedrag (bezitReisPer()). */
+function bezitPerRegel(a){
+  let G=null; try{ G=bezitGemetenGemiddeld(a.id); }catch(_){}
+  if(!G) return '';
+  const van=ymFull(G.maanden[0]), tot=ymFull(G.maanden[G.maanden.length-1]);
+  return `<div class="small" data-bezitper="${esc(a.id)}" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:6px;line-height:1.45">ingevuld ${euro0(+a.per||0)} · gemeten gemiddeld ${euro0(G.bedrag)} (${esc(van===tot?van:van+' t/m '+tot)}). De Vermogensreis rekent met het gemeten bedrag${a.pauze?', en zolang de inleg gepauzeerd is met nul':''}.</div>`;
+}
 function openAsset(id, naamVoorstel){
   // v157: een nieuwe bezitting mag met een naam beginnen als je hier vanuit een signaal komt.
   // Alleen de naam; het bedrag vul jij in, want de app kent de waarde niet.
@@ -9865,7 +9895,8 @@ function openAsset(id, naamVoorstel){
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px">${isNew?'Nieuwe bezitting':'Bezitting bewerken'}</div>
     <label class="fld">Wat is het?</label><input id="aNaam" type="text" value="${esc(a.naam||'')}" placeholder="bv. Spaarrekening, Beleggingen, Auto" style="width:100%">
-    <label class="fld" style="margin-top:10px">Huidige waarde (€)</label><input id="aWaarde" type="number" inputmode="numeric" value="${a.waarde||''}" placeholder="bv. 5000" style="width:100%">
+    <label class="fld" style="margin-top:10px">Huidige waarde (€)</label><input id="aWaarde" type="number" inputmode="numeric" value="${a0?bezitWaardeNu(a0):(a.waarde||'')}" placeholder="bv. 5000" style="width:100%">
+    ${a0?bezitWaardeBlok(a0):''}
     <label class="row" style="gap:9px;cursor:pointer;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:11px 0;margin:12px 0">
       <input type="checkbox" id="aGrow" ${g?'checked':''} onchange="document.getElementById('agrowf').style.display=this.checked?'block':'none'">
       <span style="flex:1"><span style="font-weight:600;font-size:13px">Groeit dit? (belegging/spaargeld)</span><span class="small muted" style="display:block">Toon een verwachte-waarde-projectie</span></span></label>
@@ -9880,6 +9911,7 @@ function openAsset(id, naamVoorstel){
         <div style="flex:1"><label class="fld">Netto rendement (%/jr)</label><input id="aRend" type="text" inputmode="decimal" value="${numUit(a.rend||'')}" placeholder="0" style="width:100%"></div>
         <div style="flex:1"><label class="fld">Periodieke inleg (€/mnd)</label><input id="aPer" type="number" inputmode="numeric" value="${a.per||''}" placeholder="0" style="width:100%"></div>
       </div>
+      ${a0?bezitPerRegel(a0):''}
       <div class="small muted" style="font-size:var(--fs-xs);margin-top:8px">"Netto" = na kosten en belasting. Rendement is niet gegarandeerd, en dit is geen advies. Inflatie en de horizon gelden voor je hele reis en stel je in bij "Rendement &amp; inflatie".</div>
       <div class="small mut2" style="font-size:var(--fs-xs);margin-top:6px">Laat je het rendement leeg, dan groeit deze bezitting niet in de Vermogensreis: de stand blijft staan op wat jij invult. Dat is de bedoeling bij een saldo dat je zelf bijwerkt.</div>
     </div>
@@ -9894,7 +9926,15 @@ function saveAsset(id){
   const naam=(v('aNaam')||'').trim(); const waarde=Math.round(numIn(v('aWaarde'))||0);
   if(!naam || waarde===0){ toast('Vul een naam en waarde in'); return; }
   const grow=!!((document.getElementById('aGrow')||{}).checked);
-  const a={id:id||('a'+Date.now().toString(36)), naam, waarde, grow};
+  /* v333: het veld toont de waarde MET de inleg sinds de invuldag. Staat daar nog hetzelfde getal,
+     dan is er niets opnieuw ingevuld en blijven de oude waarde en zijn datum staan; anders is het
+     een nieuw startpunt van vandaag. Zo kan een bewerking van alleen de naam de optelling niet
+     stil in a.waarde vastzetten. */
+  const oud0=(SET.assets||[]).find(x=>x.id===id);
+  let wOp=vandaagYMD(), wBron=null, wBasis=waarde;
+  if(oud0 && waarde===bezitWaardeNu(oud0)){ wBasis=+oud0.waarde||0; wOp=oud0.waardeOp||null; wBron=oud0.waardeOpBron||null; }
+  const a={id:id||('a'+Date.now().toString(36)), naam, waarde:wBasis, grow};
+  if(wOp){ a.waardeOp=wOp; if(wBron) a.waardeOpBron=wBron; }
   /* v214: a.infl, a.horizon en a.eenmalig worden niet meer geschreven. Er is bewust geen migratie:
      saveAsset() bouwt het object opnieuw op, dus een bestaande bezitting verliest die velden zodra
      je hem bewerkt, en tot die tijd staan ze er zonder iets te doen (dat deden ze al). Ze actief
@@ -9917,7 +9957,7 @@ function netWorthSeries(){
   for(const t of TX){ const m=t.date.slice(0,7); if(flow[m]!==undefined) flow[m]+=t.amount; }
   const balEnd={}; let runs=cur;
   for(let i=ms.length-1;i>=0;i--){ balEnd[ms[i]]=runs; runs-=flow[ms[i]]; }
-  const overig=(SET.assets||[]).reduce((s,a)=>s+(+a.waarde||0),0)+leaseAutoTotal();
+  const overig=(SET.assets||[]).reduce((s,a)=>s+bezitWaardeNu(a),0)+leaseAutoTotal();
   const sch=(SET.debts||[]).reduce((s,d)=>s+Math.max(+d.rest||0,0),0);
   return ms.map(m=>({m,nw:Math.round(balEnd[m]+overig-sch)}));
 }
@@ -9973,9 +10013,9 @@ function fireInputs(){
   const debtsEnriched=(SET.debts||[]).map(d=>Object.assign({},d,{inExp:debtInExpenses(d)}));   // detectie: zit de aflossing in je uitgaven?
   // Bezittingen splitsen: groeiende → belegd (groeit op FIRE-rendement), niet-groeiende → flat (vlak), lease-auto('s) → leaseItems (schrijven af)
   const _grow=(SET.assets||[]).filter(a=>a.grow), _flatA=(SET.assets||[]).filter(a=>!a.grow);
-  const belegd=_grow.reduce((s,a)=>s+Math.max(+a.waarde||0,0),0);
+  const belegd=_grow.reduce((s,a)=>s+Math.max(bezitWaardeNu(a),0),0);
   const _LT=loanTotals();   // doorstroomposten groeien niet: vlak meenemen, zodat assets − debt === netto blijft
-  const flat=_flatA.reduce((s,a)=>s+Math.max(+a.waarde||0,0),0)+_LT.uit-_LT.in;
+  const flat=_flatA.reduce((s,a)=>s+Math.max(bezitWaardeNu(a),0),0)+_LT.uit-_LT.in;
   /* v212: a.per (Periodieke inleg per bezitting) werd geschreven door saveAsset() maar nergens
      gelezen, dus de inleg naar bv. een pensioenpot landde als anonieme 'Nieuwe inleg'. Laag A geeft
      hem nu mee; laag B verschuift alleen de toewijzing en verandert het totaal niet. */
@@ -9985,8 +10025,8 @@ function fireInputs(){
      spaarpot, een restwaarde) groeide daardoor mee alsof het een belegging was. Laag A geeft het
      tarief nu mee; leeg is 0 en betekent: die stand blijft staan. Geen terugval op het globale
      tarief, want dat is een aanname over jouw geld die jij niet hebt gedaan. */
-  const belegdItems=_grow.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0), per:Math.max(Math.round(+a.per||0),0), rend:Math.max(+a.rend||0,0)}));
-  const flatItems=_flatA.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(+a.waarde||0,0)}));
+  const belegdItems=_grow.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(bezitWaardeNu(a),0), per:bezitReisPer(a), rend:Math.max(+a.rend||0,0)}));
+  const flatItems=_flatA.map(a=>({naam:a.naam||'Bezitting', waarde:Math.max(bezitWaardeNu(a),0)}));
   const leaseItems=(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).map(d=>({naam:d.naam||'Auto', dagwaarde:+d.dagwaarde||0, afschr:(+d.afschr||0)>0?+d.afschr:18}));   // afschrijving %/jr (declining balance, default 18)
   /* v211: bestemmingen uit je restsaldo die geen vermogen zijn. surplus = fNet telt alleen
      type==='expense' (forecastModel), en een reserveringsinleg loopt als interne overboeking en een
@@ -13993,8 +14033,8 @@ function beleggingsInleg(ym){
    boeking, dan is hij aan geen van beide gekoppeld (bezitRegelBotsing) en vraagt de lijst erom.
    ALLEEN EEN AFSCHRIJVING OP SPAREN & BELEGGEN, want die telt nergens als uitgave (type internal).
    Een uitgave koppelen zou hem twee keer laten tellen: in je maand en als inleg.
-   DE WAARDE VAN DE BEZITTING BLIJFT WAT JIJ INVULT. De inleg wordt niet opgeteld bij a.waarde en
-   er wordt geen groei op geschat: een stroom zegt niets over wat een positie nu waard is (v157). */
+   SINDS v333 TELT DE INLEG OP BIJ DE WAARDE, vanaf de dag waarop jij die waarde invulde (zie
+   bezitWaarde()). Er wordt geen groei op geschat: een stroom zegt niets over koersen (v157). */
 function bezitBestaat(id){ return !!id && (SET.assets||[]).some(a=>a.id===id); }
 function bezitNaam(id){ const a=(SET.assets||[]).find(x=>x.id===id); return a?(a.naam||'Bezitting'):''; }
 function bezitPartij(t){ return String((typeof cleanMerch==='function'?cleanMerch(t.name):t.name)||t.name||'').trim().toLowerCase(); }
@@ -14069,6 +14109,68 @@ function bezitRegelTekst(rg){
   return rg.soort==='kenmerk' ? `naar "${p}" met "${rg.waarde}" in de omschrijving`
        : rg.soort==='bedrag'  ? `naar "${p}" van ${euro(+rg.waarde||0)}`
        : `alle boekingen naar "${p}"`;
+}
+/* ===== DE WAARDE VAN EEN BEZITTING: WAT JIJ INVULDE PLUS WAT ER SINDSDIEN HEEN GING (v333) =====
+   Tot v333 bleef de waarde staan op wat je invulde, ook als er daarna een gekoppelde boeking heen
+   ging. Nu is hij de LAATST INGEVULDE WAARDE (a.waarde, op a.waardeOp) plus de gekoppelde inleg met
+   een datum NA die dag. Geen rendement en geen schatting: alleen geld dat je zelf aanwees (v157).
+   DE GRENS IS STRIKT NA DE INVULDAG, zoals bij de contante telling (v258): wat op die dag zelf
+   binnenkwam kan al in je getal zitten, en te hoog is de gevaarlijke kant (v168).
+   OPNIEUW INVULLEN IS EEN NIEUW STARTPUNT: saveAsset() zet de datum op vandaag zodra het getal
+   afwijkt van wat er stond, en dan telt alleen inleg daarna.
+   ZONDER INVULDAG WORDT ER NIETS OPGETELD en ook niets geraden: een waarde van voor v333 draagt geen
+   datum, en dan weet de app niet of de laatste inleg er al in zat. bezitWaarde() geeft dan de vraag
+   terug (de nieuwste gekoppelde boeking) en bezitWaardeVraag() zet de datum op jouw antwoord. */
+function bezitDatumLabel(ymd){ return new Date(String(ymd)+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}); }
+function bezitGekoppeld(id){
+  if(!id) return [];
+  return telbareTx().filter(t=>bezitVan(t)===id).sort((x,y)=>x.date<y.date?-1:x.date>y.date?1:0);
+}
+function bezitWaarde(a){
+  const basis=+(a&&a.waarde)||0, op=(a&&a.waardeOp)||null;
+  const tx=bezitGekoppeld(a&&a.id);
+  if(!op){
+    if(!tx.length) return {basis, op:null, inleg:0, aantal:0, waarde:basis, vraag:null};
+    const d=tx[tx.length-1].date;
+    const bedrag=Math.round(tx.filter(t=>t.date===d).reduce((s,t)=>s-t.amount,0));
+    return {basis, op:null, inleg:0, aantal:0, waarde:basis, vraag:{datum:d, bedrag}};
+  }
+  const na=tx.filter(t=>t.date>op);
+  const inleg=Math.round(na.reduce((s,t)=>s-t.amount,0));
+  return {basis, op, inleg, aantal:na.length, waarde:basis+inleg, vraag:null};
+}
+function bezitWaardeNu(a){ try{ return bezitWaarde(a).waarde; }catch(_){ return +(a&&a.waarde)||0; } }
+/* Een keer per bezitting, en alleen zolang er geen invuldag is. "Ja" zet de invuldag OP de dag van
+   die boeking (dus alles tot en met die dag zat erin), "nee" op de dag ervoor (dus die dag telt mee).
+   Een eerdere gekoppelde boeking blijft bij "nee" buiten de optelling: de vraag gaat over de
+   nieuwste, en over de rest is niets gezegd. */
+function bezitWaardeVraag(id, alMee){
+  const a=(SET.assets||[]).find(x=>x.id===id); if(!a || a.waardeOp) return;
+  const W=bezitWaarde(a); if(!W.vraag) return;
+  const d=W.vraag.datum;
+  a.waardeOp = alMee ? d : ymdVan(new Date(new Date(d+'T12:00').getTime()-864e5));
+  a.waardeOpBron = alMee ? 'ja' : 'nee';
+  save();
+}
+/* Gemeten gemiddeld per maand over de laatste drie AFGERONDE maanden (v194: een halve maand is geen
+   maand), gedeeld door het aantal maanden in dat venster: een maand zonder inleg is een nul en geen
+   gat, want de koppeling geldt voor elke boeking die er staat. Zonder enige gekoppelde boeking in het
+   venster is er geen meting (v59/v73/v173). */
+function bezitGemetenGemiddeld(id){
+  const cur=thisYM(); const ms=months().filter(m=>m<cur).slice(-3);
+  if(!ms.length) return null;
+  let tot=0, n=0;
+  for(const m of ms){ tot+=bezitInleg(id,m); n+=bezitInlegTx(id,m).length; }
+  if(!n) return null;
+  return {bedrag:Math.round(tot/ms.length), maanden:ms};
+}
+/* Wat de Vermogensreis per maand naar deze bezitting laat gaan. Een voornemen verdringt geen feit
+   (v216): staat er een gemeten inleg, dan wint die van het ingevulde bedrag. Een pauze is jouw keuze
+   en wint van allebei. */
+function bezitReisPer(a){
+  if(a.pauze) return 0;
+  let G=null; try{ G=bezitGemetenGemiddeld(a.id); }catch(_){}
+  return Math.max(Math.round(G ? G.bedrag : (+a.per||0)),0);
 }
 /* De teller van de spaarquote, met zijn opbouw erbij. null per deel = die stroom is niet bekend;
    totaal is null zodra geen enkele stroom bekend is. */

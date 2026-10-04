@@ -109,6 +109,24 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE WAARDE VAN EEN BEZITTING IS DE INGEVULDE WAARDE PLUS DE GEKOPPELDE INLEG SINDSDIEN** (`v333`, gevraagd
+  door de gebruiker): `bezitWaarde(a)` is de ENE bron, met als lezers de rij op Vermogen, `netWorth()`,
+  `netWorthSeries()`, het bezittingentotaal en `fireInputs()` (via `bezitWaardeNu()`). `a.waarde` blijft
+  het INGEVULDE getal met `a.waardeOp` als invuldag; er wordt nooit een optelling in `a.waarde` geschreven.
+  Inleg telt met een datum STRIKT NA de invuldag (`v258`). Geen rendement, geen schatting. De rij zegt
+  "€420 op 25 sep + €100 inleg sindsdien = €520" (`data-bezitwaarde`) in plaats van de gemeten maand.
+  OPNIEUW INVULLEN: het veld toont de opgetelde waarde, en `saveAsset()` zet een nieuw startpunt van
+  vandaag alleen als het getal afwijkt; alleen de naam wijzigen laat waarde en datum staan.
+  ZONDER INVULDAG (elke waarde van voor `v333`) telt er niets bij en vraagt de rij en de editor een keer
+  "Zat de inleg van 29 sep (€100) al in de €420?" (`bezitWaardeVraag()`), over de NIEUWSTE gekoppelde
+  boeking. Ja zet de invuldag op die dag, nee op de dag ervoor. Zonder gekoppelde boeking geen vraag.
+  PERIODIEKE INLEG: `bezitGemetenGemiddeld()` deelt de gekoppelde inleg van de laatste drie AFGERONDE maanden
+  door drie (`v194`), en de editor toont "ingevuld €50 · gemeten gemiddeld €33 (juli t/m september)"
+  (`data-bezitper`). `bezitReisPer()` laat de Vermogensreis met het gemeten bedrag rekenen zodra het er is
+  (`v216`), anders met `a.per`, en een pauze geeft nul.
+  GEMETEN: de rij met de optelling is 63px op 360 en 390px, zonder overloop. Tien sabotages, alle tien rood.
+  EEN BESTAANDE TEST VIEL EROP en had gelijk: `velden-zonder-lezer` somt de sleutels van een nieuwe
+  bezitting op, en `waardeOp` is er een met lezers.
 - **EEN BOEKING KOPPEL JE AAN EEN BEZITTING, EN DE APP RAADT NIET WELKE** (`v332`, gevraagd door de
   gebruiker): GEMETEN VOOR DEZE RONDE waren bezittingen puur handmatige invoer (`SET.assets`) zonder enige
   koppeling met boekingen. De "periodieke inleg" (`a.per`) is een ingevuld getal dat alleen de reis leest,
@@ -127,7 +145,8 @@ genoemde versietag.)*
   spiegel-toets, want die streepten op bedrag weg (gemeten: EUR 100 naar je spaarrekening in dezelfde maand
   haalde de EUR 100 naar de stichting uit de spaarquote). De bezitting toont hem (`bezitInlegSub()`,
   `bezitEditorBlok()`), Plan draagt `planBezitKaart()` BUITEN de waterval (een belegging is geen bestemming
-  van je spaarinleg), en de WAARDE blijft wat je invult: geen optelling, geen groei op de inleg.
+  van je spaarinleg). DE WAARDE TELT SINDS `v333` DE INLEG NA DE INVULDAG OP (zie de regel daarboven);
+  geen groei op de inleg.
   OF DE OMSCHRIJVING PEAKS (PENSIOEN) EN PEAKS (KAYANI) SCHEIDT IS HIER NIET TE METEN; dat staat alleen op
   het toestel. Blok 16 van `DIAG_BLOKKEN` (`diagBezitKoppeling()`) toont per partij de volle omschrijvingen
   en de woorden die niet in elke omschrijving staan.
@@ -5609,7 +5628,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v332` → `minder-v333`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v333` → `minder-v334`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5628,7 +5647,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331` en `v332` naar `minder-v332`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332` en `v333` naar `minder-v333`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

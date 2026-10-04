@@ -32,7 +32,7 @@ test.describe('a · de beleggingsinleg in de spaarquote, en geen koppeling', () 
   });
   test('zonder koppeling staat hij niet bij de bezitting en niet op Plan', async ({ page }) => {
     await start(page);
-    const r = await page.evaluate(() => { go('vooruit'); renderVooruit(); return { plan: !!document.querySelector('#planBezit'), sub: bezitInlegSub('kayani') }; });
+    const r = await page.evaluate(() => { go('vooruit'); renderVooruit(); return { plan: !!document.querySelector('#planBezit'), sub: bezitInlegSub(SET.assets.find((a) => a.id === 'kayani')) }; });
     expect(r.plan).toBe(false);
     expect(r.sub).toBe('');
   });
@@ -50,7 +50,7 @@ test.describe('b · een gekoppelde boeking is gemeten inleg bij die bezitting', 
     expect(r.pensioen).toBe(0);
     expect(r.deel).toBe(100);
   });
-  test('de waarde blijft wat je invulde, en de reis rekent er niets bij', async ({ page }) => {
+  test('zonder invuldag telt er niets bij op, en zonder afgeronde maand met inleg houdt de reis het ingevulde maandbedrag (v333)', async ({ page }) => {
     await start(page);
     const voor = await page.evaluate(() => fireInputs().belegdItems.map((x) => [x.naam, x.waarde, x.per]));
     await koppel(page, 'kayani');
@@ -63,6 +63,9 @@ test.describe('b · een gekoppelde boeking is gemeten inleg bij die bezitting', 
     await start(page);
     await koppel(page, 'kayani');
     const r = await page.evaluate(() => {
+      /* v333: zonder invuldag staat de vraag in de rij, en met een invuldag voor 29 september de
+         optelling. Op de invuldag van vandaag telt er niets bij en staat de gemeten maand er weer. */
+      SET.assets.find((a) => a.id === 'kayani').waardeOp = '2026-09-30';
       SET.openBez = true; go('vermogen'); renderVermogen();
       const sub = (document.querySelector('#s-vermogen [data-bezitinleg="kayani"]') || {}).innerText || '';
       openAsset('kayani'); const ed = (document.querySelector('#sheet [data-bezitgemeten]') || {}).innerText || ''; closeSheet();

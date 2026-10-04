@@ -104,7 +104,9 @@ test.describe('b - saveAsset schrijft ze niet meer', () => {
       saveAsset('');
     });
     const a = (await assets(page)).find((x) => x.naam === 'Nieuwe pot');
-    expect(Object.keys(a).sort()).toEqual(['grow', 'id', 'naam', 'per', 'rend', 'waarde']);
+    /* v333: een nieuwe bezitting draagt de dag waarop je de waarde invulde, want de gekoppelde inleg
+       daarna telt op (bezitWaarde()). Dat veld heeft lezers en hoort dus in deze lijst. */
+    expect(Object.keys(a).sort()).toEqual(['grow', 'id', 'naam', 'per', 'rend', 'waarde', 'waardeOp']);
   });
 
   test('er is geen migratie: een bezitting die je niet bewerkt houdt zijn oude velden', async ({ page }) => {
