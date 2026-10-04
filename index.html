@@ -6128,6 +6128,91 @@ function maandBeslisRij(r){
       ${B.oorzaak?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(B.oorzaak)}</div>`:''}</div>
     ${rechts}<span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span></div>`;
 }
+/* ===== BELEGGEN TERWIJL DE VOORWAARDEN NIET GEHAALD ZIJN (v332) =====
+   Per bezitting die groeit kies je of de voorwaarden voor beleggen ervoor gelden (a.voorwaarden,
+   true of false; leeg is een open vraag). Ging er deze maand gemeten inleg heen (bezitInleg(), dus
+   een gekoppelde boeking en geen ingevulde a.per) terwijl een voorwaarde MEETBAAR niet gehaald is,
+   dan staat er een regel onder 'Vraagt aandacht'. Bij 'nee' staat hij er niet. Bij een open vraag wel,
+   met de keuze in de sheet.
+   ONBEKEND IS GEEN ONTBREKEN: een voorwaarde die beleggenKlaar() niet kan beoordelen (geen
+   buffernorm, geen reserveringen, geen doel) zet de regel niet neer en staat niet in de sheet
+   (v59/v73/v173). De regel staat er zodra minstens EEN voorwaarde meetbaar niet gehaald is; een
+   onbekende ernaast verandert dat niet. Wat de sheet noemt is die meetbare voorwaarde, met zijn
+   eigen waarde en drempel uit beleggenKlaar(), dus hier wordt niets opnieuw gemeten (v187).
+   DE KEUZE GELDT VOOR EEN MAAND: SET.belegKeuze[id] = {maand, keuze, op}. Een maand later komt de vraag
+   terug zolang de voorwaarden niet gehaald zijn en er weer inleg heen ging. 'Inleg pauzeren' zet de
+   periodieke inleg in je reis op nul (a.pauze bewaart wat er stond); de overboeking zelf stop je bij je
+   bank, en dat zegt de sheet. Gaat er de maand erna toch weer inleg heen, dan staat de regel er weer. */
+function belegVoorwaardenNietGehaald(){
+  let B=null; try{ B=beleggenKlaar(maandRegels()); }catch(_){ return []; }
+  if(!B) return [];
+  return B.voorwaarden.filter(v=>!v.gehaald && !v.ontbreekt);
+}
+function belegVragen(ym){
+  ym=ym||thisYM();
+  const mist=belegVoorwaardenNietGehaald(); if(!mist.length) return [];
+  const K=SET.belegKeuze||{}, uit=[];
+  for(const a of (SET.assets||[])){
+    if(!a.grow || a.voorwaarden===false) continue;
+    const inleg=bezitInleg(a.id, ym); if(!(inleg>0)) continue;
+    if(K[a.id] && K[a.id].maand===ym) continue;
+    uit.push({key:'beleg:'+a.id, asset:a, inleg, open:a.voorwaarden!==true, mist});
+  }
+  return uit;
+}
+function belegVraagRij(v){
+  const naam=`Je belegde ${euro0(v.inleg)} in ${v.asset.naam||'Bezitting'}`;
+  const oorzaak=v.open?'voorwaarden nog niet gehaald · nog niet gekozen of ze hiervoor gelden':'voorwaarden nog niet gehaald';
+  return `<div class="row" data-beleg="${esc(v.asset.id)}" style="gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openBelegVraag('${esc(v.asset.id)}')">
+    ${maandDot('let op')}<div style="flex:1;min-width:0"><div class="small">${esc(naam)}</div>
+      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(oorzaak)}</div></div>
+    <span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span></div>`;
+}
+function openBelegVraag(id){ renderBelegVraag(id); showSheetBg(); }
+/* De sheet zoekt de vraag opnieuw op, om de reden van v319/v320: tussen tekenen en tikken kan er een
+   import of een saldo binnenkomen, en dan toont hij geen vraag die het scherm niet meer stelt. */
+function renderBelegVraag(id){
+  const v=belegVragen().find(x=>x.asset.id===id); if(!v){ closeSheet(); return; }
+  const a=v.asset, naam=esc(a.naam||'Bezitting');
+  const mist=v.mist.map(x=>`<div class="row" data-belegmist="${esc(x.key)}" style="justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)">
+      <span class="small">${esc(x.naam.charAt(0).toUpperCase()+x.naam.slice(1))}</span>
+      <span class="small" style="font-weight:700;text-align:right">${esc(x.waarde)} tegen ${esc(x.drempel)}</span></div>`).join('');
+  const per=+a.per||0;
+  const pauzeUitleg = per>0 ? `Pauzeren zet de periodieke inleg van ${naam} in je Vermogensreis van ${euro0(per)} op nul. De overboeking zelf stop je bij je bank.`
+                            : `Er staat geen periodieke inleg ingesteld voor ${naam}. Pauzeren legt de keuze vast; de overboeking zelf stop je bij je bank.`;
+  const tx=bezitInlegTx(a.id, thisYM());
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">Je belegde ${euro0(v.inleg)} in ${naam}</div>
+    <div class="small muted" style="margin:2px 0 10px">${tx.map(t=>`${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'long'})} · ${euro(-t.amount)} · ${esc(t.name)}`).join('<br>')}</div>
+    <div class="small" style="font-weight:600;margin-bottom:2px">${v.mist.length===1?'Deze voorwaarde is nog niet gehaald':'Deze voorwaarden zijn nog niet gehaald'}</div>
+    ${mist}
+    ${v.open?`<div style="margin-top:12px" data-belegopen>
+      <div class="small" style="font-weight:600">Gelden de voorwaarden voor beleggen voor ${naam}?</div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="btn sec" style="flex:1" onclick="zetBezitVoorwaarden('${a.id}',true);render();renderBelegVraag('${a.id}')">Ja</button>
+        <button class="btn sec" style="flex:1" onclick="zetBezitVoorwaarden('${a.id}',false);render();closeSheet()">Nee</button></div></div>`
+    :`<div class="row" style="gap:8px;margin-top:14px" data-belegkeuze>
+        <button class="btn sec" style="flex:1" onclick="belegKies('${a.id}','door')">Bewust doorgaan</button>
+        <button class="btn sec" style="flex:1" onclick="belegKies('${a.id}','pauze')">Inleg pauzeren</button></div>
+      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45;margin-top:8px">Bewust doorgaan geldt voor ${esc(MFULL[+thisYM().slice(5,7)-1])}. ${pauzeUitleg}</div>`}`;
+}
+function zetBezitVoorwaarden(id, ja){
+  const a=(SET.assets||[]).find(x=>x.id===id); if(!a) return;
+  a.voorwaarden=!!ja; save();
+}
+function belegKies(id, keuze){
+  const a=(SET.assets||[]).find(x=>x.id===id); if(!a||!['door','pauze'].includes(keuze)) return;
+  const ym=thisYM();
+  SET.belegKeuze=SET.belegKeuze||{};
+  SET.belegKeuze[id]={maand:ym, keuze, op:vandaagYMD()};
+  if(keuze==='pauze' && !a.pauze){ a.pauze={sinds:ym, perVoor:+a.per||0}; if(a.grow) a.per=0; }
+  save(); closeSheet(); render();
+}
+function belegHervat(id){
+  const a=(SET.assets||[]).find(x=>x.id===id); if(!a||!a.pauze) return;
+  if(a.grow) a.per=+a.pauze.perVoor||0;
+  delete a.pauze; save(); render();
+}
 /* De sheet achter de regel. Hij zoekt de rij OPNIEUW op in plaats van hem bij het renderen te
    onthouden, om dezelfde reden als de verdeelsheet van v319: tussen het tekenen en de tik kan er een
    import of een saldo binnenkomen, en dan is de bewaarde rij niet meer de rij die je zag. De twee
@@ -7149,7 +7234,8 @@ function renderMaand(){
      claim (v188), en dit is de derde bron die die tak moet kennen. */
   const CK=(function(){ try{ return contantKaart(); }catch(_){ return ''; } })();
   const UK=(function(){ try{ return uitgeslotenKaart(); }catch(_){ return ''; } })();   // v327
-  if(!R.length && !STR.length && !CK && !UK){
+  const BV=(function(){ try{ return belegVragen(thisYM()); }catch(_){ return []; } })();   // v332
+  if(!R.length && !STR.length && !CK && !UK && !BV.length){
     $('#s-maand').innerHTML= VS + CK + UK + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpGripBlok();
     return;
   }
@@ -7208,8 +7294,8 @@ function renderMaand(){
       ${beslis.map(r=>maandBeslisRij(r)).join('')}
       ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
       </div>`:''}
-    ${aandacht.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt aandacht</div>
-      ${aandacht.map(r=>maandBeslisRij(r)).join('')}
+    ${(aandacht.length||BV.length)?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt aandacht</div>
+      ${aandacht.map(r=>maandBeslisRij(r)).join('')}${BV.map(v=>belegVraagRij(v)).join('')}
       ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
       </div>`:''}
     ${/* v219: de ingang naar het gesprek stond vier blokken lager, achter de spaarquote, de
@@ -9682,7 +9768,7 @@ function loanRowsHTML(richting){
 }
 function renderAssets(){
   const liq=totalBalance().sum; const as=SET.assets||[];
-  const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}${a.grow?' <span style="color:var(--teal);font-size:10.5px">· groeit</span>':''}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+a.waarde||0)}</span><span class="muted">›</span></div></div>`).join('');
+  const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}${a.grow?' <span style="color:var(--teal);font-size:10.5px">· groeit</span>':''}</div>${bezitInlegSub(a.id)}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+a.waarde||0)}</span><span class="muted">›</span></div></div>`).join('');
   const leaseRows=(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).map(d=>`<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Auto')} <span style="color:var(--mut2);font-size:10.5px">· via financial lease</span></div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+d.dagwaarde)}</span><span class="muted">›</span></div></div>`).join('');
   const totalBez=(liq||0)+as.reduce((s,a)=>s+(+a.waarde||0),0)+(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).reduce((s,d)=>s+(+d.dagwaarde||0),0)+loanTotals().uit;
   const open=SET.openBez===true;
@@ -9743,6 +9829,34 @@ function beleggingZonderBezitting(){
     .map(r => ({ ...r, som: Math.round(r.som) }))
     .sort((a, b) => b.som - a.som);
 }
+/* v332: wat er de laatste maanden werkelijk naar deze bezitting ging, uit je gekoppelde boekingen.
+   Het staat naast de waarde en wordt er niet bij opgeteld: de waarde is wat jij invult. */
+function bezitInlegSub(id){
+  let r=[]; try{ r=bezitInlegRecent(id,3); }catch(_){ return ''; }
+  if(!r.length) return '';
+  const x=r[0];
+  return `<div class="cp-sub" data-bezitinleg="${esc(id)}">${euro0(x.bedrag)} ingelegd in ${MFULL[+x.ym.slice(5,7)-1]} · gemeten</div>`;
+}
+function bezitEditorBlok(a){
+  let r=[]; try{ r=bezitInlegRecent(a.id,3); }catch(_){}
+  const regels=(SET.bezitRegels||[]).filter(rg=>rg.asset===a.id);
+  const inleg = r.length
+    ? r.map(x=>`<div class="row" style="justify-content:space-between"><span class="small">${esc(resMaandLabel(x.ym))}</span><span class="small" style="font-weight:700">${euro0(x.bedrag)}${x.aantal>1?` · ${x.aantal} boekingen`:''}</span></div>`).join('')
+    : `<div class="small muted">Nog geen boeking aan deze bezitting gekoppeld. Dat doe je bij de boeking zelf.</div>`;
+  const rg = regels.length ? `<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:6px;line-height:1.45">${regels.map(x=>`Regel: ${esc(bezitRegelTekst(x))} <span style="color:var(--teal);cursor:pointer" onclick="bezitRegelWeg('${x.id}');openAsset('${a.id}')">weghalen</span>`).join('<br>')}</div>` : '';
+  /* De keuze over de voorwaarden. GEEN STANDAARD: zolang je niets kiest staat er dat de vraag open
+     is, en geen van de twee knoppen is voorgeselecteerd (MECHANISM_SPEC.defaultEffect). Alleen bij
+     een bezitting die groeit, want een saldo dat je zelf bijwerkt is geen belegging. */
+  const vw = a.grow ? (()=>{
+    const v=a.voorwaarden, knop=(ja,lab)=>`<button class="btn sec" data-vwknop="${ja?'ja':'nee'}" style="flex:1${v===ja?';border-color:var(--teal);color:var(--teal);font-weight:700':''}" onclick="zetBezitVoorwaarden('${a.id}',${ja});openAsset('${a.id}')">${lab}</button>`;
+    return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px" data-vwkeuze="${v===true?'ja':v===false?'nee':'open'}">
+      <div class="small" style="font-weight:600">Gelden de voorwaarden voor beleggen hiervoor?</div>
+      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin:2px 0 8px">${v==null?'Nog niet gekozen.':v?'Ja: gaat er inleg heen terwijl ze niet gehaald zijn, dan staat dat op Grip.':'Nee: inleg hierheen staat niet op Grip.'}</div>
+      <div class="row" style="gap:8px">${knop(true,'Ja')}${knop(false,'Nee')}</div></div>`; })() : '';
+  const pz = a.pauze ? `<div class="small" style="margin-top:10px;line-height:1.45">Inleg gepauzeerd sinds ${esc(resMaandLabel(a.pauze.sinds))}. <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="belegHervat('${a.id}');openAsset('${a.id}')">Hervatten</span></div>` : '';
+  return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px" data-bezitgemeten>
+    <div class="small" style="font-weight:600;margin-bottom:4px">Gemeten inleg</div>${inleg}${rg}</div>${vw}${pz}`;
+}
 function openAsset(id, naamVoorstel){
   // v157: een nieuwe bezitting mag met een naam beginnen als je hier vanuit een signaal komt.
   // Alleen de naam; het bedrag vul jij in, want de app kent de waarde niet.
@@ -9769,6 +9883,7 @@ function openAsset(id, naamVoorstel){
       <div class="small muted" style="font-size:var(--fs-xs);margin-top:8px">"Netto" = na kosten en belasting. Rendement is niet gegarandeerd, en dit is geen advies. Inflatie en de horizon gelden voor je hele reis en stel je in bij "Rendement &amp; inflatie".</div>
       <div class="small mut2" style="font-size:var(--fs-xs);margin-top:6px">Laat je het rendement leeg, dan groeit deze bezitting niet in de Vermogensreis: de stand blijft staan op wat jij invult. Dat is de bedoeling bij een saldo dat je zelf bijwerkt.</div>
     </div>
+    ${a0?bezitEditorBlok(a0):''}
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveAsset('${id||''}')">${ICON('check')} Opslaan</button>
     ${a0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteAsset('${id}')">Bezitting verwijderen</div>`:''}
     <div style="height:8px"></div>`;
@@ -9785,6 +9900,12 @@ function saveAsset(id){
      je hem bewerkt, en tot die tijd staan ze er zonder iets te doen (dat deden ze al). Ze actief
      uit SET halen zou een stille schrijfactie op jouw data zijn zonder dat er iets mee verandert. */
   if(grow){ a.rend=numIn(v('aRend'))||0; a.per=Math.round(numIn(v('aPer'))||0); }
+  /* v332: saveAsset() bouwt het object opnieuw op (v214), dus de keuze over de voorwaarden en een
+     pauze zouden bij elke bewerking stil verdwijnen. Die twee zijn keuzes van jou en geen invoer van
+     dit formulier, dus ze gaan mee. */
+  { const oud=(SET.assets||[]).find(x=>x.id===id);
+    if(oud){ if(oud.voorwaarden===true||oud.voorwaarden===false) a.voorwaarden=oud.voorwaarden;
+      if(oud.pauze) a.pauze=oud.pauze; } }
   SET.assets=SET.assets||[]; const i=SET.assets.findIndex(x=>x.id===id);
   if(i>=0) SET.assets[i]=a; else SET.assets.push(a);
   save(); closeSheet(); render(); toast(`${ICON('check')} Bezitting opgeslagen`);
@@ -11341,6 +11462,20 @@ const VOORUIT_FOOT=`<div class="scr-foot">De looptijden en datums hier zijn een 
 /* v179: dit scherm heet Plan. De interne sleutel blijft 'vooruit' (id s-vooruit, go('vooruit'),
    SET.vooruitDoelOpen, minder_view): dat is opslag en navigatie-state, geen tekst die je leest,
    en hernoemen zou een migratie vragen zonder dat er iets aan verandert. */
+/* v332: wat er deze maand gemeten naar een bezitting ging. Het staat op Plan omdat het geld is dat je
+   opzij zet, maar BUITEN de waterval: die verdeelt je spaarinleg over je bestemmingen, en een
+   overboeking naar een belegging is geen bestemming in dat plan. Hem in de waterval of in de regel
+   'deze maand X opzij' optellen zou die regel een tweede bron geven (v104). Zonder gekoppelde boeking
+   deze maand staat er niets: een nul hier zegt niet dat je niet belegde, alleen dat je niets koppelde. */
+function planBezitKaart(){
+  const ym=thisYM(); let rij=[];
+  try{ rij=(SET.assets||[]).map(a=>({a, b:bezitInleg(a.id, ym)})).filter(x=>x.b>0); }catch(_){ return ''; }
+  if(!rij.length) return '';
+  return `<div class="card" id="planBezit"><div class="hlabel" style="margin:0 0 4px">Naar je bezittingen</div>
+    ${rij.map(x=>`<div class="row" data-planbezit="${esc(x.a.id)}" style="justify-content:space-between;gap:10px;padding:5px 0;cursor:pointer" onclick="openAsset('${x.a.id}')">
+      <span class="small">${esc(x.a.naam||'Bezitting')}</span><span class="small" style="font-weight:700">${euro0(x.b)} <span style="color:var(--teal)">›</span></span></div>`).join('')}
+    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px;line-height:1.45">Deze maand, uit je gekoppelde boekingen. Dit staat los van je spaarinleg hierboven.</div></div>`;
+}
 function renderVooruit(){
   const ms=months();
   const m=curMonth||ms[ms.length-1];
@@ -11372,7 +11507,7 @@ function renderVooruit(){
   /* v246: planTotaalRegel() stond hier, tussen de bestemmingen en de reserveringen, en las
      daardoor alsof de reserveringen erin zaten. Hij hoort bij de waterval en staat sindsdien in
      renderPlan(), binnen dezelfde kaart, onder de sluitpost. */
-  $('#s-vooruit').innerHTML = doelZone + resDekkingCard() + VOORUIT_FOOT;
+  $('#s-vooruit').innerHTML = doelZone + planBezitKaart() + resDekkingCard() + VOORUIT_FOOT;
 }
 /* v221: de optelling over je plan. Per doel zag je toegewezen tegen doelbedrag en wat het per
    maand krijgt, maar nergens het totaal: wat vraagt je plan bij elkaar, wat staat daar tegenover,
@@ -13829,6 +13964,11 @@ function beleggingsTx(ym){
     if(catOf(t)!=='sparen') continue;
     if(al.has(t.id)) continue;                              // telt al als instroom op je spaarrekening
     if(potten.has(t.acc)) continue;                         // en een opname uit die pot al helemaal niet
+    /* v332: EEN BOEKING DIE JIJ AAN EEN BEZITTING KOPPELDE IS GEMETEN INLEG, en dan beslissen de twee
+       afleidingen hieronder niet meer. De spiegel-toets streept op BEDRAG weg: met EUR 100 naar je
+       spaarrekening in dezelfde maand verdween de EUR 100 naar de stichting uit de spaarquote, terwijl
+       jij hebt gezegd waar hij heen ging. Een keuze van jou wint van een afleiding (v289). */
+    if(bezitVan(t)){ uit.push(t); continue; }
     if((t.refNums||[]).some(n=>eigen.has(n))) continue;
     const i=spiegels.indexOf(Math.round(-t.amount));
     if(i>=0){ spiegels.splice(i,1); continue; }             // de andere kant van je eigen overboeking
@@ -13838,6 +13978,97 @@ function beleggingsTx(ym){
 }
 function beleggingsInleg(ym){
   return Math.max(Math.round(beleggingsTx(ym).reduce((s,t)=>s-t.amount,0)),0);
+}
+/* ===== EEN BOEKING KOPPELEN AAN EEN BEZITTING (v332) =====
+   GEMETEN VOOR DEZE RONDE: bezittingen waren puur handmatige invoer (SET.assets) en er bestond geen
+   enkele koppeling met boekingen. De "periodieke inleg" (a.per) is een getal dat jij invult en dat
+   alleen de Vermogensreis leest. De beleggingsinleg in de spaarquote komt uit beleggingsTx(): elke
+   afschrijving op Sparen & beleggen naar een rekening die niet van jou is, zonder dat de app weet
+   naar WELKE bezitting hij ging.
+   DE KOPPELING IS EEN KEUZE VAN JOU, op twee manieren: per boeking (SET.bezitKoppel[t.id], een
+   lege string is bewust geen bezitting) en met een regel voor de volgende (SET.bezitRegels). Een
+   keuze per boeking wint van een regel. Een regel draagt de naam van de tegenpartij en, als twee
+   bezittingen naar dezelfde partij gaan, een KENMERK uit de bankomschrijving of een BEDRAG: de app
+   raadt niet welke van de twee het is. Raken twee regels voor verschillende bezittingen dezelfde
+   boeking, dan is hij aan geen van beide gekoppeld (bezitRegelBotsing) en vraagt de lijst erom.
+   ALLEEN EEN AFSCHRIJVING OP SPAREN & BELEGGEN, want die telt nergens als uitgave (type internal).
+   Een uitgave koppelen zou hem twee keer laten tellen: in je maand en als inleg.
+   DE WAARDE VAN DE BEZITTING BLIJFT WAT JIJ INVULT. De inleg wordt niet opgeteld bij a.waarde en
+   er wordt geen groei op geschat: een stroom zegt niets over wat een positie nu waard is (v157). */
+function bezitBestaat(id){ return !!id && (SET.assets||[]).some(a=>a.id===id); }
+function bezitNaam(id){ const a=(SET.assets||[]).find(x=>x.id===id); return a?(a.naam||'Bezitting'):''; }
+function bezitPartij(t){ return String((typeof cleanMerch==='function'?cleanMerch(t.name):t.name)||t.name||'').trim().toLowerCase(); }
+function bezitKandidaat(t){
+  if(!t || !(t.amount<0)) return false;
+  let c=''; try{ c=catOf(t); }catch(_){ return false; }
+  return c==='sparen';
+}
+function bezitRegelRaakt(rg, t){
+  if(!rg || bezitPartij(t)!==rg.partij) return false;
+  if(rg.soort==='kenmerk') return !!rg.waarde && String(t.desc||'').toLowerCase().includes(String(rg.waarde).toLowerCase());
+  if(rg.soort==='bedrag')  return Math.abs((-t.amount)-(+rg.waarde||0))<0.005;
+  return rg.soort==='partij';
+}
+function bezitRegelsVoor(t){ return (SET.bezitRegels||[]).filter(rg=>bezitBestaat(rg.asset) && bezitRegelRaakt(rg,t)); }
+function bezitRegelBotsing(t){
+  if(!bezitKandidaat(t)) return false;
+  if(Object.prototype.hasOwnProperty.call(SET.bezitKoppel||{}, t.id)) return false;
+  return new Set(bezitRegelsVoor(t).map(rg=>rg.asset)).size>1;
+}
+function bezitVan(t){
+  if(!bezitKandidaat(t)) return null;
+  const K=SET.bezitKoppel||{};
+  if(Object.prototype.hasOwnProperty.call(K, t.id)) return bezitBestaat(K[t.id]) ? K[t.id] : null;
+  const ids=new Set(bezitRegelsVoor(t).map(rg=>rg.asset));
+  return ids.size===1 ? [...ids][0] : null;
+}
+function bezitInlegTx(id, ym){ if(!id) return []; return txOfMonth(ym).filter(t=>bezitVan(t)===id); }
+function bezitInleg(id, ym){ return Math.round(bezitInlegTx(id, ym).reduce((s,t)=>s-t.amount,0)); }
+/* De laatste drie maanden met gemeten inleg, nieuwste eerst. Een maand zonder inleg is een nul en
+   staat er dus niet: wat er staat is wat er ging, niet wat er had moeten gaan. */
+function bezitInlegRecent(id, n){
+  const ms=months().slice(-(n||3)).reverse();
+  return ms.map(m=>({ym:m, bedrag:bezitInleg(id,m), aantal:bezitInlegTx(id,m).length})).filter(x=>x.aantal>0);
+}
+function zetBezitKoppel(txId, assetId){
+  SET.bezitKoppel=SET.bezitKoppel||{};
+  if(assetId==null) delete SET.bezitKoppel[txId]; else SET.bezitKoppel[txId]=String(assetId);
+  save();
+}
+/* Een regel voor de volgende boekingen. De soort kies jij: 'partij' (alle boekingen naar deze naam),
+   'kenmerk' (de naam plus een stuk tekst uit de omschrijving) of 'bedrag' (de naam plus dit bedrag).
+   'partij' WORDT GEWEIGERD zodra een andere bezitting al een regel op dezelfde naam heeft: dan zou
+   de app moeten raden. Een kenmerk moet in DEZE boeking voorkomen, anders raakt de regel zijn eigen
+   aanleiding niet. Een tweede regel met dezelfde inhoud komt er niet bij. */
+function bezitRegelMag(t, assetId, soort, waarde){
+  if(!bezitKandidaat(t) || !bezitBestaat(assetId)) return 'geen';
+  if(soort==='kenmerk'){ const w=String(waarde||'').trim(); if(!w) return 'leeg';
+    if(!String(t.desc||'').toLowerCase().includes(w.toLowerCase())) return 'nietInOmschrijving'; }
+  if(soort==='partij'){ const p=bezitPartij(t);
+    if((SET.bezitRegels||[]).some(rg=>rg.partij===p && rg.asset!==assetId)) return 'gedeeld'; }
+  if(!['partij','kenmerk','bedrag'].includes(soort)) return 'geen';
+  return '';
+}
+function bezitRegelZet(txId, assetId, soort, waarde){
+  const t=TX.find(x=>x.id===txId); if(!t) return false;
+  const nee=bezitRegelMag(t, assetId, soort, waarde);
+  if(nee){ toast(nee==='gedeeld'?'Een andere bezitting heeft al een regel op deze naam. Kies een kenmerk of het bedrag.'
+                 : nee==='nietInOmschrijving'?'Dat kenmerk staat niet in de omschrijving van deze boeking.'
+                 : nee==='leeg'?'Vul het kenmerk in.':'Dit kan niet worden vastgelegd.'); return false; }
+  const rg={id:'br'+Date.now().toString(36), asset:assetId, partij:bezitPartij(t), soort,
+    waarde: soort==='kenmerk'?String(waarde).trim() : soort==='bedrag'?Math.round((-t.amount)*100)/100 : ''};
+  SET.bezitRegels=SET.bezitRegels||[];
+  if(!SET.bezitRegels.some(x=>x.asset===rg.asset&&x.partij===rg.partij&&x.soort===rg.soort&&String(x.waarde)===String(rg.waarde)))
+    SET.bezitRegels.push(rg);
+  zetBezitKoppel(txId, assetId);
+  return true;
+}
+function bezitRegelWeg(id){ SET.bezitRegels=(SET.bezitRegels||[]).filter(r=>r.id!==id); save(); }
+function bezitRegelTekst(rg){
+  const p=rg.partij;
+  return rg.soort==='kenmerk' ? `naar "${p}" met "${rg.waarde}" in de omschrijving`
+       : rg.soort==='bedrag'  ? `naar "${p}" van ${euro(+rg.waarde||0)}`
+       : `alle boekingen naar "${p}"`;
 }
 /* De teller van de spaarquote, met zijn opbouw erbij. null per deel = die stroom is niet bekend;
    totaal is null zodra geen enkele stroom bekend is. */
@@ -15393,6 +15624,68 @@ function uitReserveringBlok(t){
       <input type="text" inputmode="decimal" value="${numUit(b)}" style="width:110px;text-align:right"
              onchange="zetUitReservering('${t.id}', numIn(this.value))"></div>`:''}`;
 }
+/* v332: de rij in de boekingssheet. Hij staat alleen bij een afschrijving op Sparen & beleggen
+   (bezitKandidaat), zegt waar de koppeling vandaan komt (jouw keuze bij deze boeking, of een regel),
+   en een tik opent de keuze. Zonder bezittingen verwijst hij naar Vermogen in plaats van een lege
+   lijst te tonen; een keuze leidt altijd naar een bestaande ingang. */
+function bezitBlok(t){
+  if(!bezitKandidaat(t)) return '';
+  const as=SET.assets||[];
+  if(!as.length) return `<div class="row" style="padding:10px 0;gap:8px;border-top:1px solid var(--line)">
+      <span class="small" style="flex:1">Hoort dit bij een <b>bezitting</b>?<span style="display:block;color:var(--mut2)">je hebt nog geen bezittingen</span></span>
+      <span class="small" style="color:var(--teal);font-weight:600;cursor:pointer" onclick="closeSheet();openAsset()">Toevoegen ›</span></div>`;
+  const K=SET.bezitKoppel||{}, eigen=Object.prototype.hasOwnProperty.call(K,t.id);
+  const id=bezitVan(t);
+  let sub;
+  if(eigen) sub = id ? 'jouw keuze bij deze boeking' : 'je koos: geen bezitting';
+  else if(bezitRegelBotsing(t)) sub = 'twee regels raken deze boeking, kies zelf';
+  else if(id) sub = 'via je regel '+bezitRegelTekst(bezitRegelsVoor(t)[0]);
+  else sub = 'telt als beleggingsinleg, zonder bezitting';
+  return `<div class="row" data-bezitrij style="padding:10px 0;gap:8px;border-top:1px solid var(--line);cursor:pointer" onclick="openBezitPick('${t.id}')">
+      <span class="small" style="flex:1">Hoort bij <b>${id?esc(bezitNaam(id)):'geen bezitting'}</b><span style="display:block;color:var(--mut2)">${esc(sub)}</span></span>
+      <span style="color:var(--teal);font-weight:700">›</span></div>`;
+}
+function openBezitPick(txId){
+  const t=TX.find(x=>x.id===txId); if(!t) return;
+  const as=SET.assets||[], huidig=bezitVan(t);
+  const rij=(lab, sub, act, aan)=>`<div class="row" style="gap:10px;padding:11px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="${act}">
+      <span style="flex:1;min-width:0"><span class="small" style="font-weight:${aan?700:500}">${lab}</span>${sub?`<span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${sub}</span>`:''}</span>
+      <span style="color:var(--teal);font-weight:700">${aan?ICON('check'):'›'}</span></div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">Bij welke bezitting hoort dit?</div>
+    <div class="small muted" style="margin:2px 0 10px">${esc(t.name)} · ${euro(-t.amount)} · ${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}</div>
+    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45;margin-bottom:6px;word-break:break-word">Omschrijving: ${esc(t.desc||'')}</div>
+    <div data-bezitlijst>${as.map(a=>rij(esc(a.naam||'Bezitting'), a.grow?'groeit':'', `openBezitRegelVraag('${txId}','${a.id}')`, huidig===a.id)).join('')}
+    ${rij('Geen bezitting', 'blijft beleggingsinleg zonder bezitting', `bezitKies('${txId}','')`, false)}</div>
+    ${Object.prototype.hasOwnProperty.call(SET.bezitKoppel||{},txId)?`<div class="small" style="margin-top:12px;color:var(--teal);cursor:pointer;font-weight:600" onclick="bezitKies('${txId}',null)">Mijn keuze bij deze boeking weghalen ›</div>`:''}
+    <div class="small" style="margin-top:12px;color:var(--mut2);cursor:pointer" onclick="openSheet('${txId}')">Terug</div>`;
+  showSheetBg();
+}
+function bezitKies(txId, assetId){ zetBezitKoppel(txId, assetId); render(); openSheet(txId); }
+/* De tweede stap: alleen deze boeking, of ook de volgende. Er is geen voorselectie, en 'alle
+   boekingen naar deze naam' staat er uitgeschakeld met zijn reden zodra een andere bezitting al een
+   regel op die naam heeft: dan kiest de app niet tussen de twee. */
+function openBezitRegelVraag(txId, assetId){
+  const t=TX.find(x=>x.id===txId); if(!t||!bezitBestaat(assetId)) return;
+  const naam=esc(bezitNaam(assetId)), p=esc(bezitPartij(t));
+  const gedeeld=bezitRegelMag(t, assetId, 'partij')==='gedeeld';
+  const knop=(lab, act, uit)=>`<button class="btn sec" ${uit?'disabled':''} style="width:100%;margin-top:8px;text-align:left${uit?';opacity:.5':''}" onclick="${act}">${lab}</button>`;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">${naam}</div>
+    <div class="small muted" style="margin:2px 0 10px">Geldt dit alleen voor deze boeking, of ook voor de volgende?</div>
+    ${knop('Alleen deze boeking', `bezitKies('${txId}','${assetId}')`)}
+    ${knop(`Ook alle volgende van ${euro(-t.amount)} naar "${p}"`, `if(bezitRegelZet('${txId}','${assetId}','bedrag')){render();openSheet('${txId}')}`)}
+    <div class="card" style="margin-top:10px">
+      <div class="small" style="margin-bottom:6px">Ook alle volgende naar "${p}" met dit kenmerk in de omschrijving:</div>
+      <input id="bezitKenmerk" type="text" placeholder="bv. een contractnummer" style="width:100%">
+      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:6px;word-break:break-word">${esc(t.desc||'')}</div>
+      ${knop('Met dit kenmerk', `if(bezitRegelZet('${txId}','${assetId}','kenmerk',(document.getElementById('bezitKenmerk')||{}).value)){render();openSheet('${txId}')}`)}
+    </div>
+    ${knop(`Ook alle volgende naar "${p}"`, `if(bezitRegelZet('${txId}','${assetId}','partij')){render();openSheet('${txId}')}`, gedeeld)}
+    ${gedeeld?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px">Een andere bezitting heeft al een regel op deze naam, dus kies het bedrag of een kenmerk.</div>`:''}
+    <div class="small" style="margin-top:12px;color:var(--mut2);cursor:pointer" onclick="openBezitPick('${txId}')">Terug</div>`;
+  showSheetBg();
+}
 function openSheet(id){
   const t=TX.find(x=>x.id===id); if(!t)return;
   window._setSheet=null;
@@ -15406,7 +15699,7 @@ function openSheet(id){
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
-    ${onregelmatigBlok(t)}${uitReserveringBlok(t)}
+    ${onregelmatigBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}
     ${loanBlokHTML(t)}${leaseBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
     <div class="catgrid">${Object.entries(CATS).map(([k,c])=>`
@@ -16229,7 +16522,9 @@ function rekSamenvoegPlan(van, naar){
 }
 /* hoeveel van de vier vlagsoorten hangen aan deze boeking. Vier maps, een lijst: OVR plus de drie in
    SET. Een vijfde soort erbij is een regel erbij, en dan valt de spec die deze lijst leest. */
-const VLAG_MAPS=['onregelmatig','uitReservering','fixOvr'];
+/* v332: de koppeling van een boeking aan een bezitting hangt ook aan t.id, dus hij verhuist mee bij een
+   samenvoeging; anders is hij na de boot-sweep wees (v281). */
+const VLAG_MAPS=['onregelmatig','uitReservering','fixOvr','bezitKoppel'];
 function _vlagAantal(id){
   let n=0;
   if(typeof OVR!=='undefined' && OVR && Object.prototype.hasOwnProperty.call(OVR,id)) n++;
@@ -20155,6 +20450,49 @@ function diagStandKaart(){
   L.push('potjes die NIET terugkerend zijn (staan in "nog in je potjes"): '+(Object.keys(B).filter(k=>+B[k]>0&&!rc.has(k)).map(naam).join(', ')||'geen'));
   return L;
 }
+/* v332: BLOK 16 beantwoordt een vraag die alleen op het toestel te beantwoorden is: houdt de
+   bankomschrijving twee bezittingen die naar DEZELFDE partij gaan uit elkaar? Per partij (de naam
+   zoals bezitPartij() hem leest) de afschrijvingen op Sparen & beleggen van de laatste zes maanden,
+   met de volle omschrijving, de bezitting waaraan hij nu hangt en waar dat vandaan komt. Daaronder de
+   KENMERKEN: woorden of nummers van minstens vier tekens die in sommige maar niet alle
+   omschrijvingen van die partij staan. Staat er geen, dan scheidt de omschrijving niets en blijft het
+   bedrag of jouw keuze per boeking over. Het blok kiest geen kenmerk en schrijft niets (v244). */
+function diagBezitKoppeling(){
+  const L=[];
+  const ms=new Set(months().slice(-6));
+  const per=new Map();
+  for(const t of TX){
+    if(!ms.has(String(t.date).slice(0,7))) continue;
+    if(!bezitKandidaat(t)) continue;
+    const p=bezitPartij(t)||'(geen naam)';
+    if(!per.has(p)) per.set(p,[]); per.get(p).push(t);
+  }
+  L.push('bezittingen: '+((SET.assets||[]).map(a=>`${a.naam} (${a.id}${a.grow?', groeit':''}, voorwaarden ${a.voorwaarden===true?'ja':a.voorwaarden===false?'nee':'open'}${a.pauze?', gepauzeerd sinds '+a.pauze.sinds:''})`).join('; ')||'geen'));
+  L.push('regels: '+((SET.bezitRegels||[]).map(r=>`${bezitNaam(r.asset)||r.asset} <- ${bezitRegelTekst(r)}`).join('; ')||'geen'));
+  L.push('keuzes per boeking: '+Object.keys(SET.bezitKoppel||{}).length);
+  if(!per.size){ L.push('geen afschrijvingen op Sparen & beleggen in de laatste zes maanden'); return L; }
+  for(const [p,lijst] of per){
+    lijst.sort((a,b)=>a.date.localeCompare(b.date));
+    L.push('', `partij "${p}": ${lijst.length} afschrijving(en)`);
+    for(const t of lijst){
+      const K=SET.bezitKoppel||{}; const eigen=Object.prototype.hasOwnProperty.call(K,t.id);
+      const id=bezitVan(t);
+      const bron=eigen?'jouw keuze':bezitRegelBotsing(t)?'BOTSING tussen regels':id?'regel':'-';
+      L.push(`  ${t.date}  ${euro(-t.amount)}  -> ${id?bezitNaam(id):'geen bezitting'} (${bron})`);
+      L.push(`    ${String(t.desc||'')}`);
+    }
+    const tok=t=>new Set(String(t.desc||'').toUpperCase().match(/[A-Z0-9]{4,}/g)||[]);
+    const sets=lijst.map(tok), tel=new Map();
+    sets.forEach(S=>S.forEach(x=>tel.set(x,(tel.get(x)||0)+1)));
+    const ken=[...tel].filter(([,n])=>n<lijst.length).map(([x,n])=>`${x} (${n}x)`);
+    L.push(lijst.length<2 ? '  kenmerken: een boeking, dus niets te vergelijken'
+      : ken.length ? '  kenmerken die niet in elke omschrijving staan: '+ken.slice(0,12).join(', ')+'   (een datum of bedrag kan hier ook tussen staan)'
+      : '  kenmerken: GEEN; de omschrijving scheidt deze boekingen niet');
+    const bedr=[...new Set(lijst.map(t=>Math.round(-t.amount*100)/100))];
+    L.push('  bedragen: '+bedr.map(b=>euro(b)).join(', '));
+  }
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -20171,6 +20509,7 @@ const DIAG_BLOKKEN=[
   {titel:'de pending-botsing: kan een boeking een sync lang verdwijnen', lees:diagPendBots},
   {titel:'de teller en de noemer van bufferMaanden()', lees:diagBuffernorm},
   {titel:'de stand-kaart op Inzichten tegen zijn maandbudget, per categorie', lees:diagStandKaart},
+  {titel:'boekingen naar een beleggingspartij en hun bezitting', lees:diagBezitKoppeling},
 ];
 
 async function diagTekst(){

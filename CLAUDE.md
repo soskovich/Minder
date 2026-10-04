@@ -109,6 +109,44 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN BOEKING KOPPEL JE AAN EEN BEZITTING, EN DE APP RAADT NIET WELKE** (`v332`, gevraagd door de
+  gebruiker): GEMETEN VOOR DEZE RONDE waren bezittingen puur handmatige invoer (`SET.assets`) zonder enige
+  koppeling met boekingen. De "periodieke inleg" (`a.per`) is een ingevuld getal dat alleen de reis leest,
+  en de beleggingsinleg in de spaarquote kwam uit `beleggingsTx()` (elke afschrijving op Sparen & beleggen
+  naar een niet-eigen rekening) zonder te weten naar WELKE bezitting.
+  DE KOPPELING: `SET.bezitKoppel[t.id]` per boeking (een lege string is bewust geen bezitting, en een
+  keuze wint van een regel) en `SET.bezitRegels` met `{asset, partij, soort, waarde}`, soort `partij`,
+  `kenmerk` of `bedrag`. `bezitVan(t)` is de ENE lezer. Een regel op alleen de partij mag niet zodra een
+  andere bezitting een regel op die partij heeft (`bezitRegelMag()` geeft `gedeeld`), een kenmerk moet in
+  de omschrijving van de aanleiding staan, en raken regels voor twee bezittingen dezelfde boeking, dan is
+  hij aan geen van beide gekoppeld (`bezitRegelBotsing()`) en vraagt de boekingssheet om je keuze.
+  ALLEEN EEN AFSCHRIJVING OP SPAREN & BELEGGEN (`bezitKandidaat()`): die is `internal`, dus een gekoppelde
+  uitgave zou in je maand en als inleg tellen. `bezitKoppel` staat in `VLAG_MAPS` en verhuist mee bij een
+  samenvoeging (`v281`).
+  EEN GEKOPPELDE BOEKING IS GEMETEN INLEG: `beleggingsTx()` neemt hem op VOOR de refNums- en de
+  spiegel-toets, want die streepten op bedrag weg (gemeten: EUR 100 naar je spaarrekening in dezelfde maand
+  haalde de EUR 100 naar de stichting uit de spaarquote). De bezitting toont hem (`bezitInlegSub()`,
+  `bezitEditorBlok()`), Plan draagt `planBezitKaart()` BUITEN de waterval (een belegging is geen bestemming
+  van je spaarinleg), en de WAARDE blijft wat je invult: geen optelling, geen groei op de inleg.
+  OF DE OMSCHRIJVING PEAKS (PENSIOEN) EN PEAKS (KAYANI) SCHEIDT IS HIER NIET TE METEN; dat staat alleen op
+  het toestel. Blok 16 van `DIAG_BLOKKEN` (`diagBezitKoppeling()`) toont per partij de volle omschrijvingen
+  en de woorden die niet in elke omschrijving staan.
+- **INLEG NAAR EEN BEZITTING TERWIJL DE VOORWAARDEN NIET GEHAALD ZIJN, VRAAGT AANDACHT** (`v332`, keuze van
+  de gebruiker): per bezitting die groeit `a.voorwaarden` (`true`/`false`, leeg is een open vraag), in de
+  editor met twee even zware knoppen en GEEN STANDAARD. `belegVragen()` geeft een rij als er deze maand
+  GEMETEN inleg heen ging (`bezitInleg()`, geen `a.per`), de keuze niet `nee` is en minstens een voorwaarde
+  uit `beleggenKlaar()` MEETBAAR niet gehaald is; een voorwaarde die niet te beoordelen is zet hem niet neer
+  en staat niet in de sheet (`v59`/`v73`/`v173`). Grip toont hem onder "Vraagt aandacht" in de lijstvorm
+  (`belegVraagRij()`): "Je belegde EUR 100 in Peaks (Kayani) · voorwaarden nog niet gehaald". De sheet
+  (`renderBelegVraag()`, zoekt opnieuw op, `v319`) noemt de voorwaarde met zijn waarde en drempel uit
+  `beleggenKlaar()` ("Dekking reserveringen EUR 37 tegen EUR 299") en "Bewust doorgaan" / "Inleg pauzeren";
+  bij een open vraag eerst ja of nee.
+  DE KEUZE GELDT VOOR EEN MAAND: `SET.belegKeuze[id]={maand, keuze, op}`, en de maand erna komt de vraag
+  terug bij nieuwe inleg zolang de voorwaarden niet gehaald zijn. Pauzeren zet `a.per` op nul met
+  `a.pauze={sinds, perVoor}` (hervatten in de editor zet hem terug), en de sheet zegt dat je de overboeking
+  zelf bij je bank stopt. `saveAsset()` houdt `voorwaarden` en `pauze` vast.
+  GEMETEN: de aandacht-kaart gaat van 118 naar 167px op 360 EN 390px, zonder overloop. Twaalf sabotages,
+  alle twaalf rood.
 - **HET LOGBOEK IS EEN EIGEN SCHERM, EN GRIP DRAAGT EEN REGEL OF DE VRAAG** (`v331`): het logboek op
   Grip was 635px op 360 en 601px op 390 in een scherm dat over NU gaat. Grip toont nu
   (`valtOpGripBlok()`) zonder open vraag EEN regel voor de nieuwste afgesloten maand, "September · EUR 381
@@ -5571,7 +5609,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v331` → `minder-v332`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v332` → `minder-v333`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5590,7 +5628,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330` en `v331` naar `minder-v331`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331` en `v332` naar `minder-v332`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
