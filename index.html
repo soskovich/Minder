@@ -1005,6 +1005,7 @@ function applyOwnAccounts(){
     let intern = (t.refNums||[]).some(n=>OWN.includes(n));               // MT940/PSD2: eigen IBAN als tegenpartij
     if(!intern && t.src==='csv' && /transfer/i.test(t.typ||'') && ownNames.has((t.partner||'').toLowerCase())) intern=true; // N26 CSV: potje↔potje
     if(!intern && t.src==='psd2'){ const nm=(t.name||'').toLowerCase().trim(); if(ownNames.has(nm) || N26INT.test(t.name||'')) intern=true; } // N26 PSD2: Spaces/eigen naam
+    if(!intern && eigenOverboeking(t)) intern=true;   // v338b: een rekeningnaam uit je bankkoppeling die JIJ bevestigde
     t.autoCat = intern ? 'intern' : rc;
     if(!intern && rc==='intern' && t.amount>0) cands.push(t);   // positief + alleen 'intern' door de onbekende-bijschrijving-heuristiek
   }
@@ -1013,7 +1014,13 @@ function applyOwnAccounts(){
   if(cands.length){
     const norm=s=>(s||'').toUpperCase().replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().slice(0,20);
     const debits={};
-    for(const d of TX){ if(d.amount<0){ const c=catOf(d); if(CATS[c]&&CATS[c].type==='expense'){ const k=norm(d.name); if(k.length>=3) (debits[k]||(debits[k]=[])).push(d); } } }
+    /* v338b: een overboeking tussen je eigen rekeningen is geen afschrijving waar een terugbetaling bij
+       hoort, en geen terugbetaling. Zonder deze uitsluiting erfde "From Reservering to Leefgeld" (+50)
+       de categorie van zijn eigen tegenkant (-50), want de twee delen hun eerste twintig tekens. Hij
+       telt ook als de tegenkant een eigen keuze draagt (OVR), en dat is het geval dat hier telt: die
+       loopt niet langs de intern-regel hierboven. Aan de kant van de terugbetaling is geen toets nodig:
+       een bevestigde overboeking is daar al 'intern' en een eigen keuze komt per constructie niet in cands. */
+    for(const d of TX){ if(d.amount<0 && !eigenOverboeking(d)){ const c=catOf(d); if(CATS[c]&&CATS[c].type==='expense'){ const k=norm(d.name); if(k.length>=3) (debits[k]||(debits[k]=[])).push(d); } } }
     for(const t of cands){
       const arr=debits[norm(t.name)]; if(!arr) continue;
       let best=null;
@@ -7457,6 +7464,11 @@ function catVoorstel(t){
 function openAfsluitOverig(M){
   window._werklijst=null;
   const tx=afsluitOverigTx(M).slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  /* v338b: staan er boekingen in die op een rekeningnaam uit je koppeling lijken, dan wijst de lijst de weg
+     naar de kandidaten. Die beslis je daar, per rekeningnaam, en niet hier per boeking. */
+  let eigenHint=''; try{ const ids=new Set(eigenNaamKandidaten().filter(g=>g.status==='open').flatMap(g=>g.rijen.map(t=>t.id)));
+    const n=tx.filter(t=>ids.has(t.id)).length;
+    if(n) eigenHint=`<div class="small" data-eigenhint="${n}" style="color:var(--mut2);margin:0 0 8px;cursor:pointer" onclick="openEigenNamen()">${n===1?'1 hiervan lijkt een overboeking':n+' hiervan lijken overboekingen'} tussen je eigen rekeningen ›</div>`; }catch(_){}
   const rij=t=>{ const v=catVoorstel(t);
     return `<div class="row" data-werkrij="${esc(t.id)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
       <span style="flex:1;min-width:0;cursor:pointer" onclick="afsluitOverigOpen('${esc(t.id)}','${M}')">
@@ -7468,7 +7480,7 @@ function openAfsluitOverig(M){
     <div id="afsluitOverig" data-maand="${M}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Boekingen op Overig</div>
     <div class="small muted" data-werkteller="${tx.length}" style="margin:2px 0 10px">${tx.length?`${tx.length} ${tx.length===1?'boeking staat':'boekingen staan'} in ${esc(afMnd(M))} nog op Overig zonder eigen keuze. Tik een boeking om een categorie te kiezen.`:`Alle boekingen in ${esc(afMnd(M))} hebben een eigen keuze.`}</div>
-    ${tx.map(rij).join('')}
+    ${eigenHint}${tx.map(rij).join('')}
     <button class="btn sec" style="width:100%;margin-top:12px" onclick="openAfsluiting('${M}')">Terug naar de afsluiting</button></div>`;
   showSheetBg();
 }
@@ -17273,6 +17285,130 @@ function vorautWeg(t){
    iets te beslissen OF iets te herzien valt, met een andere tekst per geval.
    GEDEMPT EN NIET AMBER (`v78`/`v93`): de app kan hier niets vaststellen, en amber zou een vondst
    claimen die de code niet draagt. */
+/* ===== v338b: OVERBOEKINGEN TUSSEN JE EIGEN REKENINGEN, HERKEND AAN DE NAMEN UIT JE BANKKOPPELING =====
+   GEMETEN bij v338: "From Reservering to Leefgeld" stond op Overig, want de intern-detectie voor PSD2 kent
+   alleen een vaste lijst Space-namen (main, zakgeld, buffer, spaarpot). De namen die je bank zelf meegeeft
+   staan in SET.psd2Accounts (label = de naam van de rekening plus de laatste vier cijfers), en die zijn de
+   bron. NIETS WORDT STIL OMGEZET (MECHANISM_SPEC.defaultEffect): de app legt per rekeningnaam de boekingen
+   voor die hij zou omzetten, en pas jouw bevestiging (SET.eigenNamen) laat applyOwnAccounts() ze als
+   overboeking lezen. Een boeking met een eigen keuze (OVR) blijft die keuze houden. */
+function eigenNaamSleutel(n){ return String(n||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+function eigenNamenUitKoppeling(){
+  const uit=new Map();
+  for(const pm of Object.values(SET.psd2Accounts||{})){
+    const naam=String((pm&&pm.label)||'').replace(/\s*··\s*\d{4}\s*$/,'').trim();
+    const k=eigenNaamSleutel(naam);
+    if(k.length<3 || k==='rekening' || /^\d+$/.test(k) || uit.has(k)) continue;   // 'Rekening' is de terugval als de bank niets meegaf
+    uit.set(k, {key:k, naam, bank:(pm&&pm.bank)||''});
+  }
+  return [...uit.values()];
+}
+function eigenNaamRe(k){ const e=k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/ /g,'\\s+'); return new RegExp('(?:^|[^a-z0-9])(?:from|to|van|naar)\\s+'+e+'(?![a-z0-9])','i'); }
+/* Welke van deze sleutels draagt de naam van boeking t: "From X to Y" of precies de naam. */
+function eigenNaamTreffers(t, keys){
+  const nm=eigenNaamSleutel(t&&t.name); if(!nm) return [];
+  return keys.filter(k=> nm===k || eigenNaamRe(k).test(nm));
+}
+/* De ENE lezer van je bevestiging, met twee lezers in applyOwnAccounts() (de intern-regel en de uitsluiting
+   uit de terugbetalingskoppeling). */
+function eigenOverboeking(t){
+  const B=(typeof SET!=='undefined'&&SET.eigenNamen)||{}; const keys=Object.keys(B); if(!keys.length) return false;
+  return eigenNaamTreffers(t, keys).length>0;
+}
+/* De kandidaten: per rekeningnaam uit je koppeling die je nog niet beoordeelde, de boekingen die nu NIET
+   als overboeking tellen en wel die naam dragen. Een boeking met een eigen keuze telt apart. */
+function eigenNaamKandidaten(){
+  const B=SET.eigenNamen||{}, N=SET.eigenNamenNee||{};
+  const namen=eigenNamenUitKoppeling();
+  const lijst=telbareTx();
+  return namen.map(n=>{
+    const st = B[n.key] ? 'bevestigd' : N[n.key] ? 'nee' : 'open';
+    const rijen=[], eigen=[];
+    for(const t of lijst){ if(!eigenNaamTreffers(t,[n.key]).length) continue;
+      if(OVR[t.id]){ if(OVR[t.id]!=='intern') eigen.push(t); continue; }
+      if(st==='bevestigd' ? true : catOf(t)!=='intern') rijen.push(t); }
+    if(st==='bevestigd') return Object.assign({}, n, {status:st, op:B[n.key].op, rijen:rijen.filter(t=>catOf(t)==='intern'), eigen});
+    return Object.assign({}, n, {status:st, op:st==='nee'?N[n.key].op:null, rijen, eigen});
+  }).filter(g=>g.rijen.length || g.status!=='open');
+}
+/* Wat een bevestiging met een maand doet, uitgerekend en niet geschat: de bevestiging wordt in het geheugen
+   nagespeeld, gemeten en teruggezet. Er wordt niets opgeslagen (geen save()). */
+function eigenNaamMaat(M){
+  const t=totals(M); let V=null; try{ V=vermogensInleg(M); }catch(_){}
+  return {uit:Math.round(t.spendNorm||0), inleg:(V&&V.totaal!=null)?Math.round(V.totaal):null, inc:Math.round(t.income||0)};
+}
+function eigenNaamEffect(keys, M){
+  const voor=eigenNaamMaat(M), oud=SET.eigenNamen;
+  let na=voor;
+  try{
+    const nieuw=Object.assign({}, oud||{}); for(const k of keys) nieuw[k]={op:vandaagYMD()};
+    SET.eigenNamen=nieuw; _dataGen++; TX.forEach(categorize); applyOwnAccounts();
+    na=eigenNaamMaat(M);
+  } finally {
+    SET.eigenNamen=oud; if(oud===undefined) delete SET.eigenNamen;
+    _dataGen++; TX.forEach(categorize); applyOwnAccounts();
+  }
+  return {voor, na};
+}
+function eigenNaamQuote(m){ return (m.inc>0 && m.inleg!=null) ? Math.round(m.inleg/m.inc*100)+'%' : 'onbekend'; }
+function eigenNaamEffectRegel(E, M){
+  const mnd=ymFull(M)||M;
+  const uit = E.voor.uit===E.na.uit ? `uitgaven blijven ${euro0(E.voor.uit)}` : `uitgaven ${euro0(E.voor.uit)} \u2192 ${euro0(E.na.uit)}`;
+  const q1=eigenNaamQuote(E.voor), q2=eigenNaamQuote(E.na);
+  const qz = q1===q2 ? `spaarquote blijft ${q1}` : `spaarquote ${q1} \u2192 ${q2}`;
+  return `In ${esc(mnd)}: ${uit} (de staaf en de bridge van die maand eindigen op dat bedrag), ${qz}.`;
+}
+function eigenNaamRegel(){
+  let G=[]; try{ G=eigenNaamKandidaten(); }catch(_){ return ''; }
+  const open=G.filter(g=>g.status==='open'), n=new Set(open.flatMap(g=>g.rijen.map(t=>t.id))).size;
+  if(!open.length && !G.length) return '';
+  const tekst = open.length
+    ? (n===1?'1 boeking lijkt een overboeking tussen je eigen rekeningen':n+' boekingen lijken overboekingen tussen je eigen rekeningen')
+    : (G.length===1?'1 rekeningnaam heb je zelf beoordeeld':G.length+' rekeningnamen heb je zelf beoordeeld');
+  return `<div class="small" data-eigenregel style="margin-top:9px;color:var(--mut2);cursor:pointer" onclick="openEigenNamen()">${tekst} \u203a</div>`;
+}
+const EIGEN_TOON=8;
+function openEigenNamen(){
+  const G=eigenNaamKandidaten(), M=afsluitMaand();
+  const open=G.filter(g=>g.status==='open');
+  const ids=new Set(open.flatMap(g=>g.rijen.map(t=>t.id)));
+  const totaal = open.length ? `<div class="small" data-eigentotaal="${ids.size}" style="margin:2px 0 6px">${ids.size} ${ids.size===1?'boeking':'boekingen'} in totaal. ${eigenNaamEffectRegel(eigenNaamEffect(open.map(g=>g.key), M), M)}</div>` : '';
+  const rij=t=>`<div class="small" data-eigenrij="${esc(t.id)}" style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid var(--line)"><span style="min-width:0;word-break:break-word">${esc(afDag(t.date))} · ${esc(t.name||t.desc)}<span style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${esc((CATS[catOf(t)]||{}).name||catOf(t))} \u2192 ${esc(CATS.intern.name)}</span></span><span style="flex-shrink:0;font-weight:700">${t.amount>0?'+':''}${euro(t.amount)}</span></div>`;
+  const kaart=g=>{
+    const zicht=g.rijen.slice().sort((a,b)=>a.date<b.date?1:-1);
+    const toon=zicht.slice(0,EIGEN_TOON), meer=zicht.length-toon.length;
+    const eig = g.eigen.length ? `<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px">${g.eigen.length} ${g.eigen.length===1?'boeking houdt':'boekingen houden'} je eigen keuze en ${g.eigen.length===1?'verandert':'veranderen'} niet.</div>` : '';
+    let kop, knop, eff='';
+    if(g.status==='open'){
+      kop=`${g.rijen.length} ${g.rijen.length===1?'boeking':'boekingen'} met deze naam tellen nu niet als overboeking.`;
+      eff=`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:6px">${eigenNaamEffectRegel(eigenNaamEffect([g.key], M), M)}</div>`;
+      knop=`<div class="row" style="gap:8px;margin-top:8px"><button class="btn" style="flex:1;padding:9px" data-eigenja onclick="eigenNaamZet('${esc(g.key)}','ja')">Dit is mijn rekening</button><button class="btn sec" style="flex:1;padding:9px" data-eigennee onclick="eigenNaamZet('${esc(g.key)}','nee')">Niet mijn rekening</button></div>`;
+    } else {
+      kop = g.status==='bevestigd' ? `Bevestigd op ${esc(afDag(g.op))}: ${g.rijen.length} ${g.rijen.length===1?'boeking telt':'boekingen tellen'} als overboeking.` : `Op ${esc(afDag(g.op))} zei je dat dit niet je rekening is.`;
+      knop=`<button class="btn sec" style="width:auto;margin-top:8px;padding:7px 12px;font-size:var(--fs-xs)" data-eigenterug onclick="eigenNaamZet('${esc(g.key)}','terug')">Terugdraaien</button>`;
+    }
+    return `<div data-eigengroep="${esc(g.key)}" data-eigenstatus="${g.status}" style="padding:10px 0;border-top:1px solid var(--line)">
+      <div style="font-weight:700">${esc(g.naam)}<span class="small muted" style="font-weight:400"> · ${esc(g.bank)}</span></div>
+      <div class="small muted" style="margin:2px 0 4px">${kop}</div>
+      ${g.status==='open'?toon.map(rij).join('')+(meer>0?`<div class="small muted" style="padding-top:4px">en ${meer} eerdere</div>`:''):''}
+      ${eig}${eff}${knop}</div>`;
+  };
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="eigenNamen">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Overboekingen tussen je eigen rekeningen</div>
+    <div class="small muted" style="margin:2px 0 6px">Deze namen komen uit je bankkoppeling. Zeg per naam of het je eigen rekening is; pas dan tellen die boekingen als overboeking, en niet als uitgave of inkomen.</div>
+    ${totaal}${G.length?G.map(kaart).join(''):'<div class="small muted">Er is niets om te beoordelen.</div>'}</div>`;
+  showSheetBg();
+}
+function eigenNaamZet(k, keuze){
+  if(!eigenNamenUitKoppeling().some(n=>n.key===k) && keuze!=='terug') return;
+  SET.eigenNamen=SET.eigenNamen||{}; SET.eigenNamenNee=SET.eigenNamenNee||{};
+  if(keuze==='terug'){ delete SET.eigenNamen[k]; delete SET.eigenNamenNee[k]; }
+  else if(keuze==='ja'){ if(SET.eigenNamen[k]) return; delete SET.eigenNamenNee[k]; SET.eigenNamen[k]={op:vandaagYMD()}; }
+  else if(keuze==='nee'){ if(SET.eigenNamenNee[k]) return; delete SET.eigenNamen[k]; SET.eigenNamenNee[k]={op:vandaagYMD()}; }
+  if(!Object.keys(SET.eigenNamen).length) delete SET.eigenNamen;
+  if(!Object.keys(SET.eigenNamenNee).length) delete SET.eigenNamenNee;
+  TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); save(); render(); openEigenNamen();
+}
 function vorautRegel(){
   let K=[]; try{ K=vorautKandidaten(); }catch(_){ return ''; }
   const open=K.filter(x=>!x.keuze), klaar=K.length-open.length;
@@ -17821,7 +17957,8 @@ function setBank(){
     <div class="small muted">${zichtbareRek().length} rekening${zichtbareRek().length===1?'':'en'} in beeld. Saldo's en je spaarrekening stel je in bij <b>Inkomen &amp; rekeningen</b>.</div>
     ${rekOverlapRegel()}
     ${dubbelParenRegel()}
-    ${vorautRegel()}` : '';
+    ${vorautRegel()}
+    ${eigenNaamRegel()}` : '';
   return head + bestandHtml + aiHtml + briefHtml + accHtml + advHtml;
 }
 function bankAdvTap(){

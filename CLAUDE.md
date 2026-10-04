@@ -112,6 +112,34 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN OVERBOEKING TUSSEN JE EIGEN REKENINGEN HERKENT DE APP AAN DE NAMEN UIT JE BANKKOPPELING, EN JIJ
+  BEVESTIGT PER NAAM** (`v339`, gevraagd door de gebruiker): `eigenNamenUitKoppeling()` leest de namen uit
+  `SET.psd2Accounts` (het label zonder de laatste vier cijfers; de terugval `Rekening` telt niet), en
+  `eigenNaamTreffers()` herkent een boeking aan "from/to/van/naar <naam>" of aan precies die naam, nooit aan
+  een losse deelstring (een winkel "Leefgeld Bakkerij" telt niet). `eigenNaamKandidaten()` geeft per naam de
+  boekingen die NU niet als overboeking tellen; een boeking met een eigen keuze (`OVR`) houdt die en staat
+  apart geteld. NIETS WORDT STIL OMGEZET: pas "Dit is mijn rekening" (`eigenNaamZet()`, `SET.eigenNamen`)
+  laat `applyOwnAccounts()` ze als `intern` lezen, via `eigenOverboeking(t)` als de ENE lezer; "Niet mijn
+  rekening" (`SET.eigenNamenNee`) haalt de naam uit de open lijst en zet niets om; "Terugdraaien" zet elke
+  categorie terug. DE VASTE LIJST (main, zakgeld, buffer, spaarpot) BLIJFT STAAN: hem weghalen zou die
+  boekingen stil terugzetten.
+  DE TERUGBETALINGSKOPPELING ("fix 2") NEEMT GEEN BEVESTIGDE OVERBOEKING MEER ALS AFSCHRIJVING, ook niet als
+  die een eigen keuze draagt (dan loopt hij niet langs de intern-regel). Aan de kant van de bijschrijving is
+  geen toets nodig: een bevestigde overboeking is daar al `intern`, en een eigen keuze komt per constructie
+  niet in de kandidaten. In het gemelde geval doet de bevestiging het werk: beide delen worden `intern`, dus
+  geen van de twee voedt de koppeling nog. De uitsluiting doet ertoe als een deel "Overig klopt" draagt.
+  GEMETEN OP DE FIXTURE: ook de +80 van een overboeking in augustus erfde Overig van zijn eigen tegenkant,
+  dus het is geen eenmalig geval maar de vorm van elk paar tussen twee gekoppelde N26-rekeningen.
+  HET EFFECT STAAT VOORGEREKEND IN DE LIJST, uitgerekend en niet geschat: `eigenNaamEffect()` speelt de
+  bevestiging in het geheugen na, meet uitgaven (`totals().spendNorm`, de bron van de staaf en dus van de
+  bridge) en spaarquote (`vermogensInleg()` gedeeld door inkomen) voor de maand van de afsluiting, en zet
+  alles terug zonder `save()`. EEN SYMMETRISCH PAAR VERANDERT DE UITGAVEN NIET: de +50 en de -50 op Overig
+  heffen elkaar al op. Wat verandert is de afsluitpunt (twee boekingen minder) en een boeking waarvan de
+  tegenkant niet in je gegevens staat (gemeten op de fixture: -200 naar Reservering vanaf een
+  niet-gekoppelde rekening, uitgaven -200).
+  De werklijst van de afsluiting wijst naar de lijst (`data-eigenhint`), en Instellingen draagt
+  `eigenNaamRegel()` naast de regel van de reserveringen. GEMETEN: de lijst is 894px op 360 en 869px op
+  390, zonder overloop, met hooguit acht boekingen per naam. Veertien sabotages, alle veertien rood.
 - **"BOEKINGEN ZONDER CATEGORIE" OPENT EEN WERKLIJST, EN EEN EIGEN KEUZE IS EEN OVERRIDE, OOK OVERIG**
   (`v338`, gevraagd door de gebruiker): tot `v338` opende die afsluitpunt `openCategory('overig')`, en daar
   kun je niet hercategoriseren. `afsluitOverigTx(M)` is de ENE lijst (`catOf` Overig zonder `OVR`): de punt
@@ -133,8 +161,7 @@ genoemde versietag.)*
   in. Alleen is de +50 dan nog `intern` (onbekende bijschrijving); hij wordt Overig doordat "fix 2" hem de
   categorie laat erven van een afschrijving met dezelfde eerste twintig tekens, en dat is de -50 aan de
   andere kant van DEZELFDE overboeking, die zelf op Overig staat. Beide kanten staan dus in de werklijst.
-  NIET GEREPAREERD: de Space-namen uit `SET.psd2Accounts` lezen in plaats van de vaste lijst is een eigen
-  ronde, want het hercategoriseert elke bestaande boeking die zo'n naam draagt.
+  BIJ `v339` OPGEPAKT, met een bevestiging per rekeningnaam; zie de regel daarboven.
 - **EEN KEUZE OP GRIP DIE GEDRAG VRAAGT IS EEN AFSPRAAK, EN DE APP VINKT HEM ALLEEN AF ALS HIJ HET ZIET**
   (`v337`, gevraagd door de gebruiker, voorstel "2 binnen 1" uit de mockup): `SET.afspraken` met per
   afspraak `soort`, `wat`, een termijn (`van` t/m `tot`) en de meetgegevens; `afspraakStand(a)` is de ENE
@@ -5796,7 +5823,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v338` → `minder-v339`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v339` → `minder-v340`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5815,7 +5842,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337` en `v338` naar `minder-v338`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338` en `v339` naar `minder-v339`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
