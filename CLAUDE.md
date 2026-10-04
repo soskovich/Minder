@@ -109,6 +109,34 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN BOEKING KOPPEL JE AAN EEN SCHULD, EN DE RESTSCHULD DAALT MEE** (`v334`, gevraagd door de gebruiker):
+  dezelfde vorm als `v332`. `SET.schuldKoppel[t.id]` per boeking en `SET.schuldRegels` met `{schuld, partij,
+  soort, waarde}`; `schuldVan(t)` is de ENE lezer en `bezitRegelRaakt()` beslist of een regel raakt (geen
+  tweede uitdrukking van die toets). Dezelfde regels bij botsingen en bij een regel op alleen de naam.
+  KANDIDAAT IS ELKE GEBOEKTE AFSCHRIJVING DIE NIET AL BIJ EEN BEZITTING HOORT (`schuldKandidaat()`): een
+  boeking is inleg of aflossing, niet allebei. De rij in de boekingssheet (`schuldBlok()`) staat er alleen
+  als je schulden hebt. DE CATEGORIE VERANDERT NIET: een lease-termijn blijft een vaste last in je maand.
+  `schuldKoppel` staat in `VLAG_MAPS`. Een op Sparen & beleggen gekoppelde schuldbetaling is geen
+  beleggingsinleg meer (`beleggingsTx()`), en het lease-aanbod zwijgt voor een gekoppelde betaling.
+  DE RESTSCHULD (`schuldStand(d)`, met `schuldRestNu()` als lezer voor `netWorth()`, `netWorthSeries()`, de
+  rij, de editor, `fireInputs()`, het aflos-item van Plan, de mentale-boekhouding-coach): `d.rest` op
+  `d.restOp` min wat de gekoppelde betalingen STRIKT NA die dag aflosten. Per betaling eerst de rente
+  (restschuld x rente / 100 / 12), de rest is aflossing; ELKE BETALING TELT EEN MAAND RENTE, en daarom
+  "bij benadering". Zonder rente is alles aflossing en staat "zonder rente gerekend" erbij. De rij zegt
+  "€12.756 op 1 sep − €426 afgelost sindsdien = €12.330 · bij benadering" (`data-schuldstand`); er wordt
+  nooit een afgeleide stand in `d.rest` geschreven.
+  OPNIEUW INVULLEN: editor en snelle sheet tonen de afgeleide stand; een ander getal is een nieuw startpunt
+  van vandaag (`debtRestSet()`, `saveDebt()`), hetzelfde getal verzet niets. ZONDER `restOp` trekt Minder
+  niets af en vraagt een keer "Zat de betaling van 14 sep (€537,33) al in de €12.756?" met "Ja, al
+  meegeteld" en "Nee, trek af" (`schuldVraagBeantwoord()`).
+  GEMETEN TEGEN INGEVULD: `schuldGemetenPerMaand()` (drie afgeronde maanden gedeeld door drie) staat in de
+  editor naast het ingevulde maandbedrag, alleen als ze een euro of meer uiteenlopen (`data-schuldper`).
+  "RESTSCHULD WERK JE ZELF BIJ" EN DE DETECTIE "MAANDBETALING ... IN JE UITGAVEN" VERVALLEN bij een schuld met
+  gekoppelde betalingen; de snelle sheet zegt dan dat de stand meedaalt.
+  NIET GEBOUWD, ALLEEN GEMELD: de aflossing in de spaarquote. Zie `BESLISSINGEN.md` onder `v334`.
+  GEMETEN: de leaserij gaat van 182 naar 188px op 360 en 390px, zonder overloop. Zestien sabotages, alle
+  zestien rood; de zestiende (het lease-aanbod) pas nadat de fixture een herkende herhaling droeg, want
+  met een losse termijn zweeg het aanbod al zonder koppeling (meetles a).
 - **DE WAARDE VAN EEN BEZITTING IS DE INGEVULDE WAARDE PLUS DE GEKOPPELDE INLEG SINDSDIEN** (`v333`, gevraagd
   door de gebruiker): `bezitWaarde(a)` is de ENE bron, met als lezers de rij op Vermogen, `netWorth()`,
   `netWorthSeries()`, het bezittingentotaal en `fireInputs()` (via `bezitWaardeNu()`). `a.waarde` blijft
@@ -5634,7 +5662,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v333` → `minder-v334`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v334` → `minder-v335`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5653,7 +5681,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332` en `v333` naar `minder-v333`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333` en `v334` naar `minder-v334`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
