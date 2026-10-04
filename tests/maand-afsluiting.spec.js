@@ -190,13 +190,20 @@ test('j. Abonnementen: een afschrijving in november houdt hem open, wegblijven v
     // stand op 2 december zonder afschrijving in november
     window.Date = class extends oud { constructor(...x) { super(...(x.length ? x : [nov.getTime()])); } static now() { return nov.getTime(); } };
     const zonder = afspraakStand(a);
+    // midden in november, nog geen afschrijving: de termijn loopt nog, dus nog niet gezien
+    const midNov = new oud('2026-11-20T10:00:00').getTime();
+    window.Date = class extends oud { constructor(...x) { super(...(x.length ? x : [midNov])); } static now() { return midNov; } };
+    const halverwege = afspraakStand(a);
+    window.Date = class extends oud { constructor(...x) { super(...(x.length ? x : [nov.getTime()])); } static now() { return nov.getTime(); } };
     TX.push({ id: 'n11', date: '2026-11-12', amount: -15.99, acc: TX[0].acc, name: 'Netflix', desc: 'SEPA INCASSO NETFLIX INTERNATIONAL', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
     TX.forEach(categorize); save();
     const met = afspraakStand(a);
     window.Date = oud;
-    return { zonder, met, cat: catOf(TX.find((t) => t.date === '2026-11-12')) };
+    return { zonder, halverwege, met, cat: catOf(TX.find((t) => t.date === '2026-11-12')) };
   });
   expect(r.cat).toBe('abonnement');
+  expect(r.halverwege.status).toBe('loopt');
+  expect(r.halverwege.feit).toBe('in november tot nu geen afschrijving');
   expect(r.zonder.status).toBe('gezien');
   expect(r.zonder.feit).toBe('geen afschrijving meer in november');
   expect(r.met.status).toBe('nietgezien');
@@ -268,7 +275,17 @@ for (const w of [360, 390]) {
     });
     console.log(`grip ${w}px: voor ${h.voor} na ${h.na} kaart ${h.kaartH}`);
     expect(h.over).toBe(false);
-    expect(h.na).toBeGreaterThan(h.voor);
+    expect(Math.abs(h.na - h.voor - (h.kaartH + 16))).toBeLessThanOrEqual(1);   // de kaart plus zijn marge, en verder schuift er niets
+    // na afsluiten is het een regel
+    await stand(page); await maakAfspraken(page);
+    await page.evaluate(() => { maandAfsluiten('2026-09', true); go('maand'); });
+    const g = await page.evaluate(() => { const e = document.getElementById('afgeslotenRegel'); const s = document.getElementById('s-maand'); const r = e.getBoundingClientRect();
+      const over = [...e.querySelectorAll('*')].some((x) => x.getBoundingClientRect().right > r.right + 1);
+      const sam = [...s.querySelectorAll(':scope > .card')].find((c) => /vastloopt|vraagt|staan goed|staat goed/i.test(c.innerText.split('\n')[0]));
+      return { regel: Math.round(r.height), over, samTop: sam ? Math.round(sam.getBoundingClientRect().top) : null }; });
+    console.log(`afgesloten regel ${w}px: ${g.regel}, samenvatting begint op ${g.samTop}`);
+    expect(g.over).toBe(false);
+    expect(g.regel).toBeLessThan(80);
   });
 }
 
@@ -279,7 +296,9 @@ test('p. een uitgesloten incasso: verlagen meet of de afschrijving wegblijft, en
     openPotje('abonnement'); window._potIncasso = { key: recurKey(TX.find((t) => t.name === 'Netflix')), naam: 'Netflix', k: 'abonnement' };
     window._potDraft = { type: 'vast', vast: 10 }; savePotje('abonnement');
     const a = afsprakenLijst().find((x) => x.soort === 'incasso');
-    // een gewoon potje daarna is weer een potje-afspraak
+    // de route geannuleerd (vlag gezet, sheet dicht zonder opslaan), daarna hetzelfde potje gewoon
+    // geopend en verlaagd: dat is weer een potje-afspraak, de vlag lekt niet
+    openPotje('boodschappen'); window._potIncasso = { key: 'X', naam: 'X', k: 'boodschappen' }; closeSheet();
     openPotje('boodschappen'); window._potDraft = { type: 'vast', vast: 400 }; savePotje('boodschappen');
     return { a, S: afspraakStand(a), soorten: afsprakenLijst().map((x) => x.soort) };
   });

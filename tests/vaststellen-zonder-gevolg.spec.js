@@ -110,7 +110,8 @@ test.describe('1 - Boven je inkomen-limiet is weg', () => {
   test('met die rij staat de streep er precies één keer', async ({ page }) => {
     await open(page, seed());
     await page.evaluate(() => go('maand'));
-    const strepen = await page.evaluate(() => (document.querySelector('#s-maand').innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length);
+    /* v337: de rijen van de maandafsluiting dragen dezelfde scheidingslijn; die kaart telt hier niet mee */
+    const strepen = await page.evaluate(() => { const s = document.querySelector('#s-maand').cloneNode(true); const ak = s.querySelector('#afsluitKaart'); if (ak) ak.remove(); return (s.innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length; });
     expect(strepen).toBe(1);
   });
 });

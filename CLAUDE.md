@@ -144,7 +144,18 @@ genoemde versietag.)*
   (`afsluitVinger()`: id, categorie, bedrag). Daarna is het EEN regel ("September afgesloten op 4
   oktober ›") met een sheet, en "gewijzigd na afsluiten" zodra die vingerafdruk verschuift.
   VERPLAATSEN IS NIET KOPIEREN: lopende afspraken staan IN de open kaart, en anders als eigen kaart
-  (`afsprakenKaart()`, voor de vanaf-kaart). GEMETEN op de stand van 4 oktober: HOOGTE_HIER.
+  (`afsprakenKaart()`, voor de vanaf-kaart). GEMETEN op de stand van 4 oktober (vijf punten, twee afspraken): de kaart is 503px op 360 en 485px op
+  390, en Grip gaat van 887 naar 1407px en van 867 naar 1368px; verder schuift er niets. DAT IS DE PRIJS,
+  EN HIJ ZIT BOVENAAN: met de kaart open staan de beslissingen en de signaalkaarten op 360px onder de
+  vouw (de vouw-asserties van `v314`, `v320` en `v331` halen de kaart daarom eerst weg en pinnen de vorm
+  eronder). Na afsluiten is het een regel van 68px op beide breedtes. ZES BESTAANDE SPECS VIELEN EROP en
+  hadden gelijk: ze lazen de eerste kaart, een hoogte, de streep of het woord "punten". Een zevende viel
+  op een tweede lezer van `SET.budgetHist`, en die leest nu `maandPotjes()`; een achtste op een losse
+  `font-size:11px`, en dat is nu `var(--fs-xs)`.
+  ZEVENTIEN SABOTAGES, ALLE ZEVENTIEN ROOD, twee pas nadat de spec het geval droeg (meetles a): "de
+  incasso-vlag lekt" bleef groen omdat `savePotje()` hem na elke opslag al wist (het lek is een
+  GEANNULEERDE route gevolgd door hetzelfde potje), en "een stop is gezien voor de termijn om is" bleef
+  groen omdat de spec alleen december las en niet een dag midden in november.
 - **DE AFLOSSING STAAT ALS EIGEN REGEL ONDER DE SPAARQUOTE, EN NIET ERIN** (`v336`, gevraagd door de
   gebruiker): `aflossingMaand(ym)` geeft per schuld met een gekoppelde betaling in die maand het
   AFLOSSINGSDEEL (niet de rente), uit `schuldStand()` (`v334`) en zonder tweede uitsplitsing (`v104`).

@@ -171,7 +171,7 @@ test.describe('d · niets moedigt aan of scoort', () => {
       await boot(page, seed(opt));
       const t = await page.evaluate(async () => { go('maand');
         await new Promise((x) => setTimeout(x, 120)); return $('#s-maand').innerText; });
-      expect(t).not.toMatch(/goed bezig|knap|gefeliciteerd|op rij|streak|punten/i);
+      expect(t).not.toMatch(/goed bezig|knap|gefeliciteerd|op rij|streak|(?<!open )punten/i);   // v337: 'Afsluiten met open punten' is de knop die de gebruiker vroeg, geen score
       expect(t).not.toMatch(/[!—]/);
     }
   });
