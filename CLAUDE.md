@@ -5303,6 +5303,15 @@ Fouten die eerder zijn gemaakt bij het meten zelf. Ze kosten een hele ronde als 
   draai de runner vanaf het begin in de achtergrond zodat geen tijdslimiet hem kan doden, en controleer na een
   ronde niet alleen `git diff --stat` maar ook elke zoektekst van je sabotages tegen de bron. Een suite die na
   een sabotage-ronde anders telt dan ervoor is eerst een vraag over je gereedschap.
+- **NA ELKE SABOTAGERUN, OOK EEN AFGEBROKEN, EERST `git diff` TEGEN DE LAATSTE COMMIT** (werkafspraak van de
+  gebruiker, `v337`): voordat er iets gecommit wordt, controleer je met `git diff HEAD` dat de bron precies is
+  wat je bedoelde te veranderen en dat er geen sabotage in is blijven staan. EEN RUN DIE ZIJN TIJDSLIMIET
+  HAALT, ZET DE BRON TERUG OF STOPT MET EEN MELDING: de runner geeft elke spec-run een eigen `timeout` die
+  KLEINER is dan de limiet van het commando eromheen, zet bij het verlopen de backup terug, en vergelijkt aan
+  het eind de bron met de backup; wijken ze af, dan meldt hij dat luid en schrijft hij niets meer. De
+  aanleiding is GEMETEN bij `v337`: een runner die op zijn limiet van 600 seconden werd gedood liet de
+  sabotage op de standen-drempel in `index.html` staan, en alleen een grep tegen de backup vond hem terug.
+  Dat is de derde keer na `v300` en `v315`, dus de `try/finally` alleen is aantoonbaar geen afdekking.
 - **Dode code meet je met bereikbaarheid, niet met verwijzingen.** Loop vanaf de echte startpunten
   (de HTML buiten het script, plus de boot-code buiten elke functie) de aanroepgraaf af. Een groep
   dode functies die naar elkaar verwijst houdt zichzelf levend en heeft altijd twee of meer

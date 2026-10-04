@@ -6182,7 +6182,7 @@ function renderBelegVraag(id){
   const per=+a.per||0;
   /* v337: Minder stopt niets. De periodieke inleg in je reis blijft staan, want die is een voornemen
      dat je zelf invult; wat de app wel doet is je keuze bewaren en meten of er nog inleg heen gaat. */
-  const pauzeUitleg = `Minder stopt niets: de overboeking stop je zelf bij je bank.${per>0?` De periodieke inleg van ${euro0(per)} in je Vermogensreis blijft staan.`:''} Je voornemen wordt bewaard, en Minder kijkt of er na vandaag nog inleg naar ${naam} gaat.`;
+  const pauzeUitleg = `Minder stopt niets: je stopt de inleg voor ${naam} zelf, in de app waar je belegt of bij je bank.${per>0?` De periodieke inleg van ${euro0(per)} in je Vermogensreis blijft staan.`:''} Je voornemen wordt bewaard, en Minder kijkt of er na vandaag nog inleg naar ${naam} gaat.`;
   const tx=bezitInlegTx(a.id, thisYM());
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg)">Je belegde ${euro0(v.inleg)} in ${naam}</div>

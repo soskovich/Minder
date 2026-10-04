@@ -297,7 +297,7 @@ test.describe('g · een keuze geldt voor de maand', () => {
     await page.evaluate(() => zetBezitVoorwaarden('kayani', true));
     await grip(page);
     await page.locator('#s-maand [data-beleg="kayani"]').click();
-    await expect(page.locator('#sheet')).toContainText('Minder stopt niets: de overboeking stop je zelf bij je bank. De periodieke inleg van €100 in je Vermogensreis blijft staan. Je voornemen wordt bewaard');
+    await expect(page.locator('#sheet')).toContainText('Minder stopt niets: je stopt de inleg voor Peaks (Kayani) zelf, in de app waar je belegt of bij je bank. De periodieke inleg van €100 in je Vermogensreis blijft staan. Je voornemen wordt bewaard');
     const voorReis = await page.evaluate(() => fireInputs().belegdItems.find((x) => x.naam === 'Peaks (Kayani)').per);
     await page.locator('#sheet [data-belegkeuze] button', { hasText: 'Ik zet de inleg zelf stil' }).click();
     const r = await page.evaluate(() => { const a = SET.assets.find((x) => x.id === 'kayani');
