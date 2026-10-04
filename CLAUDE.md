@@ -110,6 +110,20 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE AFLOSSING STAAT ALS EIGEN REGEL ONDER DE SPAARQUOTE, EN NIET ERIN** (`v336`, gevraagd door de
+  gebruiker): `aflossingMaand(ym)` telt het AFLOSSINGSDEEL van de gekoppelde schuldbetalingen van die maand
+  op, uit `schuldStand()` (`v334`) en zonder tweede uitsplitsing (`v104`); `aflossingRegel(ym)` zet het onder
+  het percentage op de tegel van Vermogen (`kpiTegels()`) en in de sheet erachter (`openKpiDetail()`):
+  "+ €426 afgelost op je schulden, bij benadering · niet in dit percentage" (`data-aflossing`).
+  `vermogensInleg()` IS NIET AANGERAAKT: het percentage blijft spaarrekening, reserveringen en
+  beleggingsinleg, want een schuld die kleiner wordt is geen geld dat ergens staat (en bij een lease daalt
+  de dagwaarde mee). ONBEKEND IS GEEN NUL: heeft een schuld in die maand een gekoppelde betaling die zijn
+  stand niet rekent (op of voor de invuldag, of zonder invuldag), dan zegt de regel "niet te zeggen" met de
+  naam erbij. Zonder gekoppelde betaling in die maand staat er geen regel. De uitleg (`KPI_META.inleg`) en
+  de opbouw in de sheet zeggen het nu ook; de oude zin dat de app het aflossingsdeel niet kan weten klopt
+  alleen nog zonder koppeling. GEMETEN: de tegel gaat van 85 naar 122px op 360 EN 390px (de regel is twee
+  regels), zonder overloop. Acht sabotages, alle acht rood. EEN BESTAANDE TEST VIEL EROP en had gelijk:
+  `kerncijfers-splitsing` pinde die oude zin.
 - **EEN TIK OP EEN STAAF TOONT DE BRIDGE VAN DIE MAAND, EN DIE EINDIGT OP DE STAAF** (`v335`, variant C,
   gevraagd door de gebruiker): onder "Over de maanden heen" selecteert een tik een afgesloten maand
   (`brugKies()`, de staaf krijgt `--teal`) en `brugBlok()` toont eronder de stappen uit `maandBrug(m, tegen)`.
@@ -156,7 +170,7 @@ genoemde versietag.)*
   editor naast het ingevulde maandbedrag, alleen als ze een euro of meer uiteenlopen (`data-schuldper`).
   "RESTSCHULD WERK JE ZELF BIJ" EN DE DETECTIE "MAANDBETALING ... IN JE UITGAVEN" VERVALLEN bij een schuld met
   gekoppelde betalingen; de snelle sheet zegt dan dat de stand meedaalt.
-  NIET GEBOUWD, ALLEEN GEMELD: de aflossing in de spaarquote. Zie `BESLISSINGEN.md` onder `v334`.
+  DE AFLOSSING STAAT SINDS `v336` ALS EIGEN REGEL ONDER DE SPAARQUOTE, niet erin; zie de regel bovenaan.
   GEMETEN: de leaserij gaat van 182 naar 188px op 360 en 390px, zonder overloop. Zestien sabotages, alle
   zestien rood; de zestiende (het lease-aanbod) pas nadat de fixture een herkende herhaling droeg, want
   met een losse termijn zweeg het aanbod al zonder koppeling (meetles a).
@@ -5685,7 +5699,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v335` → `minder-v336`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v336` → `minder-v337`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5704,7 +5718,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334` en `v335` naar `minder-v335`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335` en `v336` naar `minder-v336`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

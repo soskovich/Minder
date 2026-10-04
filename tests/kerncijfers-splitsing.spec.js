@@ -127,7 +127,10 @@ test.describe('a · de spaarquote telt de hele vermogensopbouw', () => {
     const h = await page.evaluate((m) => kpiInlegOpbouw(m), AF);
     expect(h).toMatch(/aankoopdoel/i);
     expect(h).toMatch(/Aflossing op een lening/i);
-    expect(h).toMatch(/welk deel daarvan aflossing is en welk deel rente/i);
+    // v336: met een koppeling is het aflossingsdeel bij benadering bekend en staat het onder het
+    // percentage; zonder koppeling weet de app het niet. De zin noemt nu allebei.
+    expect(h).toMatch(/welk deel aflossing is en welk deel rente/i);
+    expect(h).toMatch(/Koppel je de betaling aan een schuld/i);
   });
 });
 

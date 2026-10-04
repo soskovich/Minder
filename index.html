@@ -13919,7 +13919,7 @@ const KPI_META={
   // het tegendeel en botste met de referentie-verdeling, die "sparen" wél als instroom op je
   // spaarrekening leest (healthSplitOver). Eén term per begrip (v91): dit is het restsaldo.
   inleg: {label:'Spaarquote',         bandTxt:'doel 20% of meer', band:20,  dir:'up',   sign:1,  base:0,
-    uitleg:'Welk deel van je inkomen er écht opzij ging: wat er naar je spaarrekening en je reserveringen stroomde plus je beleggingsinleg, gedeeld door je inkomen. Geld dat op je betaalrekening blijft staan telt hier niet mee. Een overboeking tussen je eigen potten telt één keer. Wat er niet in zit: een aflossing op een schuld en een inleg in een doel dat je zelf bijhoudt — die zijn niet uit je boekingen af te leiden. Zonder gemarkeerde spaarrekening valt dit terug op je spaar-categorie.'},
+    uitleg:'Welk deel van je inkomen er écht opzij ging: wat er naar je spaarrekening en je reserveringen stroomde plus je beleggingsinleg, gedeeld door je inkomen. Geld dat op je betaalrekening blijft staan telt hier niet mee. Een overboeking tussen je eigen potten telt één keer. Wat er niet in zit: een aflossing op een schuld en een inleg in een doel dat je zelf bijhoudt. Koppel je een betaling aan een schuld, dan staat het aflossingsdeel als eigen regel onder het percentage, en niet erin. Zonder gemarkeerde spaarrekening valt dit terug op je spaar-categorie.'},
   budget:{label:'Budgetnaleving',     bandTxt:'doel 100% of minder', band:100, dir:'down', sign:1, base:0,
     uitleg:'Welk deel van je maandbudget je hebt uitgegeven: uitgaven ÷ budget. Je budget is de som van je potjes; heb je die niet, dan je inkomen-limiet.'},
   vari:  {label:'Variabele-lasten-druk', bandTxt:'doel onder 30%', band:30, dir:'down', sign:1, base:0,
@@ -14347,6 +14347,40 @@ function schuldGemetenPerMaand(id){
   if(!tx.length) return null;
   return {bedrag:Math.round(tx.reduce((s,t)=>s-t.amount,0)/ms.size*100)/100, maanden:[...ms]};
 }
+/* v336: DE AFLOSSING VAN EEN MAAND, ALS EIGEN REGEL ONDER DE SPAARQUOTE EN NIET ERIN. Gevraagd door de
+   gebruiker na v334: de koppeling maakt het aflossingsdeel van een betaling bij benadering bekend, en een
+   aflossing is ook vermogen dat je opbouwt. Hij komt NIET in het percentage, en dat is de keuze: de
+   spaarquote telt geld dat ergens staat, en een aflossing is een schuld die kleiner wordt (bij een lease
+   daalt de dagwaarde van de auto er bovendien naast). Twee getallen naast elkaar, geen som.
+   DE BRON IS schuldStand() (v334): per gekoppelde betaling de aflossing na de rente, dezelfde rekensom als
+   de rij op Vermogen. Er komt geen tweede uitsplitsing naast (v104).
+   ONBEKEND IS GEEN NUL (v59/v73/v173): draagt een schuld in die maand een gekoppelde betaling die zijn
+   stand niet rekent (op of voor de invuldag, of zonder invuldag), dan is het aflossingsdeel niet te zeggen
+   en geldt dat voor de hele regel. Zonder enige gekoppelde betaling in die maand is er geen regel. */
+function aflossingMaand(ym){
+  let bedrag=0, n=0, zonderRente=false; const onbekend=[];
+  for(const d of (SET.debts||[])){
+    const tx=schuldGekoppeld(d.id).filter(t=>String(t.date).slice(0,7)===ym);
+    if(!tx.length) continue;
+    n++;
+    const S=schuldStand(d);
+    const bet=S.betalingen.filter(b=>String(b.datum).slice(0,7)===ym);
+    if(bet.length<tx.length){ onbekend.push(d.naam||'een schuld'); continue; }
+    for(const b of bet) bedrag+=b.aflossing;
+    if(S.zonderRente) zonderRente=true;
+  }
+  if(!n) return null;
+  if(onbekend.length) return {onbekend:true, namen:onbekend};
+  return {bedrag:Math.round(bedrag), zonderRente, aantal:n};
+}
+function aflossingRegel(ym){
+  let A=null; try{ A=aflossingMaand(ym); }catch(_){ return ''; }
+  if(!A) return '';
+  const tekst=A.onbekend
+    ? `Aflossing op je schulden: niet te zeggen, want bij ${esc(A.namen.join(' en '))} staat geen restschuld van voor deze betaling`
+    : `+ ${euro0(A.bedrag)} afgelost op je schulden, bij benadering${A.zonderRente?' · zonder rente gerekend':''} · niet in dit percentage`;
+  return `<div class="wvo-ts" data-aflossing="${A.onbekend?'onbekend':A.bedrag}" style="color:var(--mut2)">${tekst}</div>`;
+}
 /* De teller van de spaarquote, met zijn opbouw erbij. null per deel = die stroom is niet bekend;
    totaal is null zodra geen enkele stroom bekend is. */
 function vermogensInleg(ym){
@@ -14517,6 +14551,7 @@ function kpiTegels(items){
       <div class="wvo-ts">${k.band}${k.oordeel?` · <b style="color:${col}">${k.oordeel}</b>`:''}</div>
       ${(()=>{ const e=(!k.partial?kpiAfstandTxt(k.key,k.afst,true):'');
         return e?`<div class="wvo-ts kpi-afst" style="color:var(--mut2)">${e}</div>`:''; })()}
+      ${k.key==='inleg'&&k.m?aflossingRegel(k.m):''}
       ${spark||''}${''/* v173: de mededeling dat je nog moet wachten stond per tegel en nog eens
         onder de maandgrafiek: drie keer hetzelfde op één scherm. De grafiek zegt het nu als enige. */}
     </div>`;
@@ -14862,9 +14897,10 @@ function kpiInlegOpbouw(m){
     <div class="small muted" style="margin-top:8px;line-height:1.5">Dit cijfer zegt <b>hoeveel</b> er opzij ging, niet waar het vandaan kwam. Zette je iets opzij uit een pot in plaats van uit het inkomen van deze maand, dan telt dat hier gewoon mee; of je opbouw gedekt was door je overschot lees je op Grip bij je drie voorwaarden.</div>
     <div class="small muted" style="margin-top:8px;line-height:1.5">Hier buiten vallen twee stromen, bewust en niet bij vergissing.
       <b>Je aankoopdoel</b> heeft geen eigen rekening; de voortgang is een bedrag dat je zelf invult, en wordt het doel vanuit je
-      spaarrekening gevoed dan telt dat geld hierboven al mee. <b>Aflossing op een lening</b> valt er ook buiten: de app kan de
-      maandtermijn wel herkennen, maar niet welk deel daarvan aflossing is en welk deel rente. Schatten zou een cijfer opleveren
-      dat stelliger is dan wat de app weet.</div>`;
+      spaarrekening gevoed dan telt dat geld hierboven al mee. <b>Aflossing op een lening</b> valt er ook buiten: een schuld die
+      kleiner wordt is geen geld dat ergens staat. Koppel je de betaling aan een schuld, dan rekent de app bij benadering uit
+      welk deel aflossing is en welk deel rente, en dat staat onder het percentage. Zonder koppeling weet de app niet welk deel
+      wat is, en dan staat er niets.</div>`;
 }
 /* v232: het tweede argument is de maand van de tegel die je aantikte. Zonder dat opende het detail
    curMonth, de maand van de kiezer op Inzichten en Maand, en op Vermogen toont de tegel een andere
@@ -14881,6 +14917,7 @@ function openKpiDetail(key, mm){
       <div class="small muted">${esc(monthLabel(m))}${k.partial?' · tot nu toe':''}</div>
     </div>
     <div class="small" style="color:var(--mut2);margin-top:3px">${k.band}${k.key==='budget'&&k.budgetBedrag>0?` · ${euro0(k.budgetBedrag)}`:''}${k.oordeel&&!k.partial?` · ${k.oordeel}`:''}</div>
+    ${key==='inleg'?aflossingRegel(m):''}
     ${kpiDoelBalk(k)}
     ${key==='inleg'?kpiInlegOpbouw(m):''}
     ${kpiSpaarBrug(key,m)}
