@@ -268,7 +268,8 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
     // het derde signaal staat wel in de log (dat is de bedoeling: je ziet wat je niet gezien hebt),
     // maar niet als kaart
     expect((await page.locator('.valtop-kaart').allInnerTexts()).join('|')).not.toContain('Vervoer & auto');
-    await expect(page.locator('.card', { hasText: 'Wat je met deze overschrijdingen deed' })).toContainText('niet getoond');
+    await page.evaluate(() => go('logboek'));   // v331: de log is een eigen scherm
+    await expect(page.locator('#s-logboek #valtOpLog')).toContainText('niet getoond');
   });
 
   test('de historie komt uit de log en wordt niet herberekend', async ({ page }) => {
@@ -453,13 +454,14 @@ test.describe('de vastlegging', () => {
 
   test('de telling op Grip loopt mee', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
-    const blok = page.locator('.card', { hasText: 'Wat je met deze overschrijdingen deed' });
+    await page.evaluate(() => go('logboek'));   // v331: de telling staat in het logboek
+    const blok = page.locator('#s-logboek #valtOpLog');
     await expect(blok).toContainText('0× potje bijgesteld');
+    await page.evaluate(() => go('maand'));
     await page.locator('.valtop-open .valtop-hand button').first().click();
     await dek(page, 'Online shopping', +(await page.locator('#valtOpBedrag').inputValue()) - 200);
     await page.locator('#valtOpSave').click();
-    await page.evaluate(() => go('maand'));
+    await page.evaluate(() => go('logboek'));
     // v238: een verdeling raakt twee potjes maar blijft een handeling
     await expect(blok).toContainText('1× potje bijgesteld');
     await expect(blok).toContainText('€200');
@@ -872,8 +874,8 @@ test.describe('bijstellen is een verdeling', () => {
     await page.locator('#valtOpBedrag').fill('96');
     await dek(page, 'Boodschappen', 46);
     await page.locator('#valtOpSave').click();
-    await page.evaluate(() => go('maand'));
-    const blok = page.locator('.card', { hasText: 'Wat je met deze overschrijdingen deed' });
+    await page.evaluate(() => go('logboek'));   // v331
+    const blok = page.locator('#s-logboek #valtOpLog');
     await expect(blok).toContainText('€50 → €96');
     await expect(blok).toContainText('uit Boodschappen €400 → €354');
     await expect(blok).toContainText('1× potje bijgesteld');

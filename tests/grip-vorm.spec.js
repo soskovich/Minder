@@ -256,7 +256,7 @@ test('d: zo laten legt een eigen actie vast en haalt het signaal weg', async ({ 
     valtOpZoLaten(id);
     const L = SET.valtOpLog[id];
     return { voor, na: valtOpSignals(thisYM()).length, actie: L.actie, op: L.actie_op,
-      tel: valtOpTelling().n, log: document.getElementById('s-maand').innerText };
+      tel: valtOpTelling().n, log: (go('logboek'), document.getElementById('s-logboek').innerText) };   // v331: de log is een eigen scherm
   });
   expect(r.voor).toBe(1);
   expect(r.actie).toBe('zo_gelaten');
@@ -275,8 +275,8 @@ test('d: zo gelaten en niets gedaan zijn twee tellers', async ({ page }) => {
     valtOpZoLaten(id);
     SET.valtOpLog['stil'] = { id: 'stil', maand: '2020-01', categorie: 'Vervoer & auto', potjeId: 'vervoer',
       potje_bij_detectie: 100, over_bij_detectie: 50, getoond: true, actie: 'geen', over_eind_maand: 50 };
-    save(); renderMaand();
-    return { tel: valtOpTelling().n, tekst: document.getElementById('s-maand').innerText };
+    save(); renderMaand(); go('logboek');   // v331: de telregel staat in het logboek
+    return { tel: valtOpTelling().n, tekst: document.getElementById('s-logboek').innerText };
   });
   expect(r.tel.zo_gelaten).toBe(1);
   expect(r.tel.geen).toBe(1);
@@ -287,7 +287,7 @@ test('d: zo gelaten en niets gedaan zijn twee tellers', async ({ page }) => {
 
 test('d: zo gelaten staat onvoorwaardelijk in de telling, de correctie niet', async ({ page }) => {
   await boot(page);
-  const r = await page.evaluate(() => ({ tekst: document.getElementById('s-maand').innerText, tel: valtOpTelling().n }));
+  const r = await page.evaluate(() => ({ tekst: (go('logboek'), document.getElementById('s-logboek').innerText), tel: valtOpTelling().n }));
   expect(r.tel.zo_gelaten).toBe(0);
   expect(r.tekst).toContain('0× zo gelaten');          // een nul is hier een meting
   expect(r.tekst).not.toContain('vervallen na correctie');   // een uitkomst die niet voorkwam groeit de regel niet

@@ -81,7 +81,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   goed") met de volle uitleg en de handeling in een sheet erachter; sinds `v324` leest "Vraagt aandacht"
   dezelfde lijstregel (`maandBeslisRij()`), dus alleen de kop en de stip verschillen. Sinds `v314` staat de SAMENVATTING daarvoor (hij telt de potjes mee) en staan de handelingen
   in volgorde van het moment in de maand, met "Zo laten" als eigen actie. Draagt sinds `v315` de kaart
-  "Vanaf <maand>" met drie ingangen naar wat er klaarstaat, en toont het logboek de UITKOMST per handeling. Sinds `v325` staat het logboek per afgesloten maand, met een kop, een vraag en de rest kort. De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
+  "Vanaf <maand>" met drie ingangen naar wat er klaarstaat, en toont het logboek de UITKOMST per handeling. Sinds `v325` staat het logboek per afgesloten maand, met een kop, een vraag en de rest kort. Sinds `v331` is het logboek een EIGEN SCHERM (`logboek`, `renderLogboek()`), en draagt Grip alleen een regel voor de nieuwste afgesloten maand of de open vraag met "Logboek ›" eronder (`valtOpGripBlok()`). De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
   de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten. Sinds `v237` is dat niet
   meer de enige ingang: `coachLeak()` levert ook een patroonregel op Inzichten. Twee ingangen naar
   hetzelfde gesprek, maar nooit voor hetzelfde geval. Draagt sinds `v258` ook `contantKaart()`, maar
@@ -109,6 +109,44 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **HET LOGBOEK IS EEN EIGEN SCHERM, EN GRIP DRAAGT EEN REGEL OF DE VRAAG** (`v331`): het logboek op
+  Grip was 635px op 360 en 601px op 390 in een scherm dat over NU gaat. Grip toont nu
+  (`valtOpGripBlok()`) zonder open vraag EEN regel voor de nieuwste afgesloten maand, "September · EUR 381
+  boven je potjes", met als sub een feit uit de antwoorden (`valtOpMaandFeit()`: "3 boven, alle 3 een
+  uitzondering" of "3 boven · 1 uitzondering · 2x potje past niet") en een chevron naar het logboek. Met
+  een open vraag staat de vraag op Grip met daaronder "Logboek ›": EEN OPEN VRAAG STAAT NOOIT EEN TIK
+  DIEPER. Zonder afgesloten maand staat er "Logboek" met wanneer de uitkomst er is.
+  HET LOGBOEK (`renderLogboek()`, `#s-logboek`, terug via `terug()`) draagt ALLE afgesloten maanden,
+  nieuwste eerst, met per maand de kop, de regels, "N binnen of vervallen ›" en de telregel; de lopende
+  maand en alles achter de poort (trend, tegels, patroon) zijn meeverhuisd. VERPLAATSEN IS NIET
+  KOPIEREN: het record van de open vraag staat in het logboek als gewone rij ("vraag staat op Grip"),
+  niet als tweede vraagkaart. Een beantwoorde rij draagt zijn antwoord in de regel met "wijzigen"
+  ernaast (`v325`: in een tik terug); de gedempte antwoordkaart is vervallen. Staan onder een maand
+  alleen uitzonderingen, dan zegt het logboek wat Minder volgende maand doet ("Alle 3 waren een
+  uitzondering. Is een potje volgende maand weer een uitzondering, dan vraagt Minder je of dat nog zo is.").
+  DE VRAAG GAAT OVER DEZELFDE MAANDEN ALS VOOR `v331` (de nieuwste `VALTOP_LOG_TOON`), uit
+  `valtOpOpenVraag()`, met Grip en het logboek als twee lezers.
+  DE HERHAALDE UITZONDERING (`valtOpHerhaling()`): was het antwoord op hetzelfde potje in de afgesloten
+  maand ervoor "uitzondering", dan luidt de vraag "[Potje] was in [maand] ook een uitzondering. Is het
+  nog een uitzondering, of past het potje niet?" met "Potje past niet" en "Nog steeds". Het antwoord
+  wordt bewaard als elk ander, met `herhaling:true` en `vorige` (ook bij "Potje past niet"), en het
+  logboek noemt het "nog steeds een uitzondering".
+  JE UITZONDERINGEN (`valtOpUitzonderingen()`, `valtOpUitzKaart()`): staat er in elk van de drie
+  afgesloten maanden voor deze minstens een uitzondering, dan staat in het logboek "Je uitzonderingen · 3
+  maanden" met het gemiddelde per maand (de som van wat `valtOpBoven()` voor die records telt, gedeeld
+  door drie) en "N van M overschrijdingen noemde je een uitzondering". GEEN EIGEN POORT OP DRIE MAANDEN
+  LOGBOEK: de eis "elke maand een" sluit een kortere historie per constructie al uit, en een sabotage op
+  zo'n poort bleef groen. "Zo laten" schrijft `SET.valtOpUitzGelaten={tot}` op de nieuwste maand van het
+  venster, dus de kaart komt terug als het venster verschuift. Niets wordt vanzelf aangemaakt.
+  DE KNOP "VASTE RUIMTE VOOR UITZONDERINGEN" IS NIET GEBOUWD, op keuze van de gebruiker. GEMELD waarom de
+  bestemming een eigen vraag is: Onvoorzien is `geenNorm` en kan geen potje dragen (`v234`), en een eigen
+  potje "Uitzonderingen" vangt niets op, want de uitgaven landen in hun eigen categorie (Uit eten, Vices,
+  Boodschappen) en blijven daar boven hun potje staan.
+  GEMETEN op de septemberstand: Grip 762 naar 227px op 360 en 728 naar 227px op 390 met alles
+  beantwoord; met een open vraag 746 naar 412px en 712 naar 412px. Het logboekscherm is 435px op 360 en
+  419px op 390. TWEEENTWINTIG BESTAANDE TESTS IN VIER BESTANDEN VIELEN EROP en ze hadden gelijk: ze lazen de
+  telregel, de lopende maand, de patroonkaart of de vraag op Grip. Twaalf sabotages, elf rood; de
+  twaalfde was de poort hierboven, en die is daarom weggehaald.
 - **"WORDT EEN RESERVERING" TOONT BEIDE GEVOLGEN EN SCHRIJFT ZE MET EEN BEVESTIGING** (`v330`, keuze
   van de gebruiker): de tik schrijft niets meer en opent een sheet (`uitgeslotenResSheet()`) met de post
   in je reserveringen (bedrag, interval, eerste termijn) EN het potje van volgende maand, verlaagd met
@@ -5533,7 +5571,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v330` → `minder-v331`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v331` → `minder-v332`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5552,7 +5590,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329` en `v330` naar `minder-v330`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330` en `v331` naar `minder-v331`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

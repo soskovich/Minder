@@ -563,7 +563,7 @@ test('10d zo gelaten en niets gedaan lezen tegen het potje, een correctie zwijgt
     const z=SET.valtOpLog[v+'|uiteten'], c=SET.valtOpLog[v+'|shopping'];
     return {z:{over:z.over_eind_maand, actie:z.actie, uit:valtOpUitkomst(z)},
       c:{uit:valtOpUitkomst(c)},
-      txt:(go('maand'), document.getElementById('s-maand').innerText)};
+      txt:(go('logboek'), document.getElementById('s-logboek').innerText)};   // v331: de log is een eigen scherm
   }, VORIG);
   expect(r.z.actie).toBe('zo_gelaten');       // de keuze blijft staan, de uitkomst komt erbij
   expect(r.z.uit).toMatch(/^(eindigde €\d+ boven je potje|eindigde binnen je potje)$/);
@@ -589,13 +589,16 @@ test('10e de lopende maand noemt wanneer de uitkomst er is', async ({page})=>{
 test('10f de lopende maand houdt zijn uitkomstregel, een afgesloten maand staat kort onder zijn kop', async ({page})=>{
   await boot(page, {set:{valtOpLog:LOG()}});
   const r=await page.evaluate((v)=>{ go('maand');
+    /* v331: de open vraag staat op Grip, de maanden en de lopende maand in het logboek. */
+    const vr=document.querySelector(`#valtOpGrip [data-vraag="${v}|boodschappen"]`);
+    const vraagT=vr?vr.innerText.replace(/\s+/g,' '):'';
+    go('logboek');
     const kaart=document.querySelector('#valtOpLog');
     const blok=kaart.querySelector(`.vl-maand[data-maand="${v}"]`);
-    const vr=blok.querySelector(`[data-vraag="${v}|boodschappen"]`);
     // de kop zegt 'eindigde(n) erboven'; een uitkomstzin noemt een bedrag of 'binnen'
     return {n:(kaart.innerText.match(/eindigde (€|binnen)|daarna|uitkomst na/g)||[]).length,
       uitkomstNa:/uitkomst na/.test(kaart.innerText), kop:!!blok.querySelector('[data-maandboven]'),
-      vraag:vr?vr.innerText.replace(/\s+/g,' '):''};
+      vraag:vraagT};
   }, VORIG);
   expect(r.n).toBe(1);                        // alleen de lopende maand draagt nog een uitkomstzin
   expect(r.uitkomstNa).toBe(true);
@@ -679,8 +682,10 @@ test('e4 de gevolgen lenen de projectie en rekenen hem niet na', async ({page})=
    van v315 staat alleen nog bij de lopende maand, dus het paar met en zonder uitkomst is vervallen. */
 /* Na de correctie van v325 (een bijstelling telt tegen het oorspronkelijke potje) is de bijstelling
    van boodschappen hier de vraag, en Vervoer een korte rij: 639 en 605px. */
-const PX={360:{vanaf:231, log:639, tel:75, metUit:49},
-          390:{vanaf:216, log:605, tel:75, metUit:49}};
+/* v331: het logboek is een eigen scherm en de vraagkaart staat op Grip, dus hier staat dat record
+   als korte rij. GEMETEN op het logboekscherm: 499px op 360 en 483px op 390. */
+const PX={360:{vanaf:231, log:499, tel:75, metUit:49},
+          390:{vanaf:216, log:483, tel:75, metUit:49}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de prijs in pixels van de vanaf-kaart en de uitkomst-regel`, async ({page})=>{
     await page.setViewportSize({width:w, height:h});
@@ -699,15 +704,17 @@ for (const [w,h] of [[360,640],[390,844]]) {
          CLAUDE.md beland. Nu bindt hij op de KOP, en de assertie eronder zegt welke kop dat was. */
       const kaart=n=>[...document.querySelectorAll('#s-maand .card')]
         .find(c=>n.test(((c.querySelector('.hlabel')||{}).textContent||'').trim()));
-      const va=kaart(/^Vanaf /i), lg=kaart(/overschrijdingen/i);
+      const va=kaart(/^Vanaf /i);
       const hh=e=>e?Math.round(e.getBoundingClientRect().height):0;
+      const vaH=hh(va), vaLab=((va.querySelector('.hlabel')||{}).textContent||'').trim();
+      /* v331: het logboek staat op een eigen scherm; daar wordt hij gemeten. */
+      go('logboek'); const lg=document.querySelector('#valtOpLog');
       // een logrij is te herkennen aan zijn genestelde .row; de telzin onderaan heeft die niet
       const rijen=[...lg.children].filter(c=>c.tagName==='DIV'&&c.querySelector(':scope > .row'));
       const uit=rijen.filter(c=>/eindigde|daarna|uitkomst na/.test(c.innerText));
       const zonder=rijen.filter(c=>!/eindigde|daarna|uitkomst na/.test(c.innerText));
-      return {vaLab:((va.querySelector('.hlabel')||{}).textContent||'').trim(),
-        lgLab:((lg.querySelector('.hlabel')||{}).textContent||'').trim(),
-        vanaf:hh(va), log:hh(lg), tel:hh(lg.lastElementChild),
+      return {vaLab, lgLab:lg.closest('.screen').id,
+        vanaf:vaH, log:hh(lg), tel:hh(lg.lastElementChild),
         metUit:uit.map(hh), zonderUit:zonder.map(hh),
         nUit:uit.length, nZonder:zonder.length};
     });
@@ -717,7 +724,7 @@ for (const [w,h] of [[360,640],[390,844]]) {
     expect(r.nUit).toBe(1);
     expect(r.nZonder).toBe(0);
     expect(r.vaLab, 'en het is werkelijk de vanaf-kaart die gemeten wordt').toMatch(/^Vanaf /i);
-    expect(r.lgLab).toMatch(/overschrijdingen/i);
+    expect(r.lgLab).toBe('s-logboek');
     expect(r.vanaf).toBe(p.vanaf);
     expect(r.log).toBe(p.log);
     expect(r.tel, 'de telregel, waar de vierde handeling van v315 in landt').toBe(p.tel);

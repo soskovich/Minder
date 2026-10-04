@@ -110,6 +110,7 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 /* ===== v10 systeem, home pilot: geen dozen, ruimte + typografie ===== */
 .hsec{margin-top:30px}
 .vl-maand{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+#valtOpLog>.vl-maand:first-child{margin-top:0;padding-top:0;border-top:0}
 .vl-cap{font-size:var(--fs-xs);font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:6px}
 .vl-groot{font-size:var(--fs-xl);font-weight:800;line-height:1.1;color:var(--txt)}
 .vl-groot small{font-size:var(--fs-sm);font-weight:500;color:var(--mut);margin-left:6px}
@@ -689,6 +690,7 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
 <section class="screen" id="s-maand"></section>
 <section class="screen" id="s-vermogen"></section>
 <section class="screen" id="s-fire"></section>
+<section class="screen" id="s-logboek"></section>
 
 <input type="file" id="file" accept=".sta,.STA,.940,.txt,.mt940,.csv,.CSV" multiple style="display:none">
 <input type="file" id="backupFile" accept=".json,application/json" style="display:none" onchange="if(this.files&&this.files[0])restoreBackup(this.files[0])">
@@ -2760,7 +2762,7 @@ function geenData(){ return !TX.length; }
 function render(){
   if(geenData()){ renderEmpty(); return; }
   const ms=months(); if(!curMonth||!ms.includes(curMonth)) curMonth=ms[ms.length-1];
-  renderDash(); renderTx(); renderIns(); renderVooruit(); renderMaand(); renderVermogen(); renderFire(); renderSet();
+  renderDash(); renderTx(); renderIns(); renderVooruit(); renderMaand(); renderLogboek(); renderVermogen(); renderFire(); renderSet();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
   if(window._setSheet && $('#sheetBg').classList.contains('show')) renderInkomenSheet(); // open instellingen-sheet meeverversen
   if(window._nfSheet && $('#sheetBg').classList.contains('show')) renderNfSheet();
@@ -6846,7 +6848,10 @@ function valtOpVraagZin(r){
    komt geen tweede potje-editor bij (v61). Het antwoord zelf verzet niets. */
 function valtOpAntwoord(id, keuze){
   const r=(SET.valtOpLog||{})[id]; if(!r || !VALTOP_ANTWOORD[keuze]) return;
-  r.antwoord={keuze, op:vandaagYMD()}; save();
+  /* v331: het antwoord op een herhaalde uitzondering wordt bewaard zoals elk ander, met het feit
+     dat het een herhaling was en welke maand de vorige uitzondering was. */
+  const h=valtOpHerhaling(r);
+  r.antwoord={keuze, op:vandaagYMD()}; if(h){ r.antwoord.herhaling=true; r.antwoord.vorige=h; } save();
   render();
   if(keuze==='past_niet' && CATS[r.potjeId]) openPotje(r.potjeId);
 }
@@ -6873,6 +6878,120 @@ function valtOpPatroon(){
     if(!best || som>best.som || (som===best.som && String(recs[2].categorie).localeCompare(String(best.recs[2].categorie),'nl')<0)) best={k, recs, som, drie};
   }
   return best;
+}
+/* ===== v331: HET LOGBOEK IS EEN EIGEN SCHERM, EN GRIP DRAAGT EEN REGEL OF DE VRAAG =====
+   Grip las het hele logboek in een kaart van 635px. Nu staat op Grip EEN regel voor de nieuwste
+   afgesloten maand (de kop en een feit uit je antwoorden), of, als er een vraag openstaat, die vraag
+   met daaronder "Logboek". EEN OPEN VRAAG STAAT NOOIT EEN TIK DIEPER. Alles wat terugkijkt (alle
+   maanden, de lopende maand, de telregel, en wat achter de poort staat) staat op #s-logboek.
+   VERPLAATSEN IS NIET KOPIEREN: de vraag staat op Grip en in het logboek staat dat record als een
+   gewone korte rij. */
+
+/* De vraag gaat, zoals sinds v325, over de nieuwste VALTOP_LOG_TOON afgesloten maanden. Een bron, twee
+   lezers: Grip toont hem, het logboek laat hem weg uit zijn kaarten. */
+function valtOpOpenVraag(){
+  const LM=valtOpLogMaanden();
+  return valtOpVraag(LM.maanden.slice().reverse().slice(0,VALTOP_LOG_TOON));
+}
+/* Een herhaalde uitzondering: was het antwoord op hetzelfde potje in de afgesloten maand ervoor
+   "uitzondering", dan vraagt Minder of dat nog zo is (v331). Geeft de maand van die vorige
+   uitzondering, of null. */
+function valtOpHerhaling(r){
+  if(!r || !r.potjeId || !r.maand) return null;
+  const v=valtOpYmPlus(r.maand,-1);
+  const p=(SET.valtOpLog||{})[valtOpId(v, r.potjeId)];
+  return (p && p.antwoord && p.antwoord.keuze==='uitzondering') ? v : null;
+}
+function valtOpAntwoordWoord(a){
+  if(!a) return '';
+  if(a.keuze==='uitzondering' && a.herhaling) return 'nog steeds een uitzondering';
+  return (VALTOP_ANTWOORD[a.keuze]||a.keuze).toLowerCase();
+}
+/* Wat de antwoorden van een maand zeggen, in een regel. Een feit en geen oordeel. */
+function valtOpMaandFeit(S){
+  if(!S.nBoven) return S.n ? `geen van de ${S.n} ${S.n===1?'potje':'potjes'} eindigde erboven` : 'niets telt mee';
+  const bov=S.rijen.filter(x=>x.u && x.u.soort==='boven');
+  const u=bov.filter(x=>x.r.antwoord && x.r.antwoord.keuze==='uitzondering').length;
+  const p=bov.filter(x=>x.r.antwoord && x.r.antwoord.keuze==='past_niet').length;
+  if(u===S.nBoven) return S.nBoven===1 ? '1 boven, een uitzondering' : `${S.nBoven} boven, alle ${S.nBoven} een uitzondering`;
+  return `${S.nBoven} boven` + (u?` · ${u} ${u===1?'uitzondering':'uitzonderingen'}`:'') + (p?` · ${p}× potje past niet`:'');
+}
+function valtOpAlleUitz(S){
+  if(!S.nBoven) return false;
+  return S.rijen.filter(x=>x.u && x.u.soort==='boven').every(x=>x.r.antwoord && x.r.antwoord.keuze==='uitzondering');
+}
+const VALTOP_UITZ_MAANDEN = 3;
+/* v331: je uitzonderingen over de laatste drie afgesloten maanden, alleen als elke maand er minstens
+   een droeg. Het bedrag is precies wat valtOpBoven() per record telt, dus de kop van elke maand en
+   deze som lezen dezelfde bron (v104). "Zo laten" staat op de nieuwste maand van het venster, dus
+   de kaart komt terug zodra het venster verschuift. */
+function valtOpUitzonderingen(){
+  const nu=thisYM(); const ms=[]; for(let i=VALTOP_UITZ_MAANDEN;i>=1;i--) ms.push(valtOpYmPlus(nu,-i));
+  const per=ms.map(m=>{ const S=valtOpMaandStand(m); const bov=S.rijen.filter(x=>x.u && x.u.soort==='boven');
+    const uitz=bov.filter(x=>x.r.antwoord && x.r.antwoord.keuze==='uitzondering');
+    return {m, bedrag:uitz.reduce((a,x)=>a+x.u.bedrag,0), n:uitz.length, M:bov.length}; });
+  if(per.some(x=>x.n<1)) return null;
+  if(SET.valtOpUitzGelaten && SET.valtOpUitzGelaten.tot===ms[ms.length-1]) return null;
+  const som=per.reduce((a,x)=>a+x.bedrag,0);
+  return {per, gem:Math.round(som/per.length), n:per.reduce((a,x)=>a+x.n,0), M:per.reduce((a,x)=>a+x.M,0), tot:ms[ms.length-1]};
+}
+function valtOpUitzLaten(){
+  const U=valtOpUitzonderingen(); if(!U) return;
+  SET.valtOpUitzGelaten={tot:U.tot, op:vandaagYMD()}; save(); render();
+}
+function valtOpUitzKaart(){
+  const U=valtOpUitzonderingen(); if(!U) return '';
+  const max=Math.max(...U.per.map(x=>x.bedrag),0);
+  return `<div class="card" id="valtOpUitz" data-gem="${U.gem}">
+    <div class="vl-cap">Je uitzonderingen · ${U.per.length} maanden</div>
+    <div class="vl-groot">${euro0(U.gem)}<small>gemiddeld per maand</small></div>
+    <div class="vl-trend">${U.per.map(x=>`<i style="height:${max>0?Math.max(Math.round(x.bedrag/max*100),4):4}%"></i>`).join('')}</div>
+    <div class="vl-mlab">${U.per.map(x=>`<span>${esc(ymFull(x.m).slice(0,3))} ${euro0(x.bedrag)}</span>`).join('')}</div>
+    <div class="small" style="margin-top:10px;line-height:1.5" data-uitzteller="${U.n}/${U.M}">${U.n} van de ${U.M} overschrijdingen noemde je een uitzondering. Elke maand kwam er minstens één.</div>
+    <button class="btn sec" style="margin-top:10px" onclick="valtOpUitzLaten()">Zo laten</button>
+  </div>`;
+}
+/* De vraagkaart, met de herhaalde vorm als het potje de maand ervoor ook een uitzondering was. */
+function valtOpVraagKaart(r){
+  const u=valtOpBoven(r); const id=esc(r.id||valtOpId(r.maand,r.potjeId));
+  const h=valtOpHerhaling(r);
+  const zin = h ? `${esc(r.categorie||r.potjeId||'')} was in ${esc(ymFull(h))} ook een uitzondering.` : valtOpVraagZin(r);
+  const sub = h ? 'Is het nog een uitzondering, of past het potje niet?' : `Past het potje niet, of was ${esc(ymFull(r.maand))} een uitzondering?`;
+  const tweede = h ? 'Nog steeds' : VALTOP_ANTWOORD.uitzondering;
+  return `<div class="vl-vraag" data-vraag="${id}"${h?` data-herhaling="${esc(h)}"`:''}>
+      <span class="vl-chip">${euro0(u.bedrag)} boven</span>
+      <div class="vl-q">${zin}</div>
+      <div class="small muted" style="line-height:1.45">${sub}</div>
+      <div class="vl-twee"><button class="btn" onclick="valtOpAntwoord('${id}','past_niet')">${VALTOP_ANTWOORD.past_niet}</button><button class="btn sec" onclick="valtOpAntwoord('${id}','uitzondering')">${tweede}</button></div>
+    </div>`;
+}
+const valtOpHoofd=m=>{ const t=ymFull(m); return t.charAt(0).toUpperCase()+t.slice(1); };
+/* GRIP: een regel, of de vraag met "Logboek" eronder. */
+function valtOpGripBlok(){
+  const T=valtOpTelling(); if(!T.totaal) return '';
+  const vraag=valtOpOpenVraag();
+  const chev=`<span class="muted" style="font-size:18px">›</span>`;
+  let inhoud;
+  if(vraag){
+    inhoud = valtOpVraagKaart(vraag) + `<div class="row vl-naarlog" style="cursor:pointer;padding:10px 0 0;margin-top:10px;border-top:1px solid var(--line)" onclick="go('logboek')"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Logboek</span>${chev}</div>`;
+  } else {
+    const LM=valtOpLogMaanden(); const m=LM.maanden[LM.maanden.length-1];
+    if(m){
+      const S=valtOpMaandStand(m);
+      inhoud = `<div class="row vl-naarlog" data-gripmaand="${esc(m)}" style="cursor:pointer;gap:10px" onclick="go('logboek')"><span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:var(--fs-md)">${esc(valtOpHoofd(m))} · ${euro0(S.boven)} boven je potjes</span><span class="small muted vl-feit" style="display:block;margin-top:2px">${esc(valtOpMaandFeit(S))}</span></span>${chev}</div>`;
+    } else {
+      let dim=0; try{ dim=daysElapsed(thisYM()).dim; }catch(_){}
+      inhoud = `<div class="row vl-naarlog" style="cursor:pointer;gap:10px" onclick="go('logboek')"><span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:var(--fs-md)">Logboek</span><span class="small muted" style="display:block;margin-top:2px">${dim?`uitkomst na ${dim} ${esc(ymFull(thisYM()))}`:''}</span></span>${chev}</div>`;
+    }
+  }
+  return `<div class="card" id="valtOpGrip"><div class="hlabel" style="margin:0 0 8px">Wat je met overschrijdingen deed</div>${inhoud}</div>`;
+}
+function renderLogboek(){
+  const el=document.getElementById('s-logboek'); if(!el) return;
+  const ib='background:none;border:none;color:var(--teal);font-size:24px;cursor:pointer;padding:0 8px 0 0;line-height:1';
+  const head=`<div class="row" style="align-items:center;margin:2px 2px 14px;gap:6px"><button onclick="terug()" title="Terug" style="${ib}">‹</button><b style="font-size:var(--fs-lg);flex:1">Logboek</b></div>`;
+  const blok=valtOpLogBlok();
+  el.innerHTML = head + valtOpUitzKaart() + (blok || '<div class="card"><div class="small muted">Er staat nog niets in je logboek. Gaat een potje deze maand over zijn grens, dan staat hier wat je ermee deed.</div></div>');
 }
 function valtOpLogBlok(){
   const T=valtOpTelling(); if(!T.totaal) return '';
@@ -6907,28 +7026,21 @@ function valtOpLogBlok(){
       ${u?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:2px">${esc(u)}</div>`:''}
     </div>`; };
   const LM=valtOpLogMaanden();
-  const getoond=LM.maanden.slice().reverse().slice(0,VALTOP_LOG_TOON);
-  const vraag=valtOpVraag(getoond);
+  /* v331: ALLE afgesloten maanden, nieuwste eerst. */
+  const getoond=LM.maanden.slice().reverse();
+  const vraag=valtOpOpenVraag();
   const poort=LM.n>=VALTOP_POORT_MAANDEN;
   /* De rechterkant van een korte rij: het bedrag erboven, of het woord. Geen kleur: de stand staat
      in het label (v78/v93). */
   const rechts=u=> u.soort==='boven' ? `<span class="vl-bedrag" data-boven="${u.bedrag}">+${euro0(u.bedrag)}</span>`
     : `<span class="vl-woord">${u.soort==='binnen'?'binnen':u.soort==='vervallen'?'vervallen':'niet gemeten'}</span>`;
-  const kort=x=>`<div class="vl-rij" data-id="${esc(x.r.id||valtOpId(x.r.maand,x.r.potjeId))}"><span class="vl-naam">${esc(x.r.categorie||x.r.potjeId||'')}<span class="vl-hand">${hand(x.r)}${valtOpLatten(x.r)}</span></span>${rechts(x.u)}</div>`;
-  const vraagKaart=r=>{ const u=valtOpBoven(r); const id=esc(r.id||valtOpId(r.maand,r.potjeId));
-    return `<div class="vl-vraag" data-vraag="${id}">
-      <span class="vl-chip">${euro0(u.bedrag)} boven</span>
-      <div class="vl-q">${valtOpVraagZin(r)}</div>
-      <div class="small muted" style="line-height:1.45">Past het potje niet, of was ${esc(ymFull(r.maand))} een uitzondering?</div>
-      <div class="vl-twee"><button class="btn" onclick="valtOpAntwoord('${id}','past_niet')">${VALTOP_ANTWOORD.past_niet}</button><button class="btn sec" onclick="valtOpAntwoord('${id}','uitzondering')">${VALTOP_ANTWOORD.uitzondering}</button></div>
-    </div>`; };
-  const antwoordKaart=x=>{ const a=x.r.antwoord; const id=esc(x.r.id||valtOpId(x.r.maand,x.r.potjeId));
-    let op=''; try{ const d=new Date(a.op+'T00:00:00'); op=`${d.getDate()} ${MFULL[d.getMonth()].slice(0,3)}`; }catch(_){}
-    return `<div class="vl-vraag vl-dim" data-antwoord="${id}">
-      <span class="vl-chip">${euro0(x.u.bedrag)} boven</span>
-      <div class="vl-q" style="font-size:var(--fs-md)">${esc(x.r.categorie||x.r.potjeId||'')}</div>
-      <div class="vl-ans">${ICON('check')} ${esc(VALTOP_ANTWOORD[a.keuze]||a.keuze)}${op?` · ${esc(op)}`:''} <span class="vl-wis" onclick="valtOpAntwoordWis('${id}')">wijzigen</span></div>
-    </div>`; };
+  /* v331: een beantwoorde rij draagt zijn antwoord in de regel, met "wijzigen" ernaast (v325: in een
+     tik terug). De vraag zelf staat op Grip; hier staat dat record als gewone rij. */
+  const antw=r=>{ if(!r.antwoord) return r===vraag?' · vraag staat op Grip':'';
+    const id=esc(r.id||valtOpId(r.maand,r.potjeId));
+    return ` · ${esc(valtOpAntwoordWoord(r.antwoord))} <span class="vl-wis" style="margin-left:4px" onclick="valtOpAntwoordWis('${id}')">wijzigen</span>`; };
+  const kort=x=>{ const id=esc(x.r.id||valtOpId(x.r.maand,x.r.potjeId));
+    return `<div class="vl-rij" data-id="${id}"${x.r.antwoord?` data-antwoord="${id}" data-keuze="${esc(x.r.antwoord.keuze)}"`:''}><span class="vl-naam">${esc(x.r.categorie||x.r.potjeId||'')}<span class="vl-hand">${hand(x.r)}${valtOpLatten(x.r)}${antw(x.r)}</span></span>${rechts(x.u)}</div>`; };
   const kop=S=>{
     const zin = S.n===0 ? 'Geen potje met een signaal telt mee: wat er was verviel na een correctie.'
       : S.nBoven===0 ? `Geen van de ${S.n} ${S.n===1?'potje':'potjes'} met een signaal eindigde erboven.`
@@ -6965,19 +7077,22 @@ function valtOpLogBlok(){
       <button class="btn" style="margin-top:10px" onclick="openPotje('${esc(P.k)}')">Potje vast ophogen vanaf ${esc(vanaf)}</button>
       <button class="btn sec" style="margin-top:6px" onclick="valtOpPatroonLaten('${esc(P.recs[2].id||valtOpId(P.drie[2],P.k))}')">Zo laten</button>
     </div>`; };
+  /* v331: staat er onder een maand alleen uitzonderingen, dan zegt het logboek wat de app volgende
+     maand doet. Geen oordeel. */
+  const feit=S=>{ if(!valtOpAlleUitz(S)) return '';
+    const kopje = S.nBoven===1 ? 'Het was een uitzondering.' : `Alle ${S.nBoven} waren een uitzondering.`;
+    return `<div class="vl-note vl-uitzfeit"><b>${kopje}</b> Is een potje volgende maand weer een uitzondering, dan vraagt Minder je of dat nog zo is.</div>`; };
   const maandBlok=(m,i)=>{
     const S=valtOpMaandStand(m);
     if(!S.rijen.length) return '';
-    const kaarten=S.rijen.filter(x=>x.u && x.u.soort==='boven' && (x.r.antwoord || x.r===vraag))
-      .map(x=>x.r===vraag?vraagKaart(x.r):antwoordKaart(x)).join('');
-    const boven=S.rijen.filter(x=>x.u && x.u.soort==='boven' && !x.r.antwoord && x.r!==vraag).map(kort).join('');
+    const boven=S.rijen.filter(x=>x.u && x.u.soort==='boven').map(kort).join('');
     const rest=S.rijen.filter(x=>!x.u || x.u.soort!=='boven');
     const restBlok=rest.length?`<details class="vl-rest"><summary>${rest.length} binnen of vervallen <span class="muted">›</span></summary>${rest.map(kort).join('')}</details>`:'';
     const extra = (i===0 && poort) ? tegels()+patroon() : '';
     return `<div class="vl-maand" data-maand="${esc(m)}">
       <div class="vl-cap">${esc(monthLabel(m))}</div>
       ${kop(S)}${(i===0&&poort)?trend():''}
-      ${extra}${kaarten}${boven?`<div class="vl-lijst">${boven}</div>`:''}${restBlok}</div>`; };
+      ${extra}${boven?`<div class="vl-lijst">${boven}</div>`:''}${restBlok}${feit(S)}</div>`; };
   const note = (LM.n>=1 && LM.n<VALTOP_POORT_MAANDEN)
     ? `<div class="vl-note">Na ${LM.n} ${LM.n===1?'maand':'maanden'}. Vanaf ${esc(ymFull(valtOpYmPlus(nu, VALTOP_POORT_MAANDEN-LM.n)))} staat hier ook wat bij jou werkt.</div>` : '';
   /* v289/v314/v315: de telling onder het logboek, ongewijzigd. */
@@ -6986,11 +7101,10 @@ function valtOpLogBlok(){
     .concat([`${T.n.geen}× niets gedaan`]).join(' · ');
   const sinds=T.eerste?` sinds ${esc(monthLabel(T.eerste))}`:'';
   return `<div class="card" id="valtOpLog">
-    <div class="hlabel" style="margin:0 0 2px">Wat je met deze overschrijdingen deed</div>
-    ${lopend.map(regel).join('')}
+    ${lopend.length?`<div class="hlabel" style="margin:0 0 2px">Deze maand</div>${lopend.map(regel).join('')}`:''}
     ${getoond.map(maandBlok).join('')}
     ${note}
-    <div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${tel}${sinds}.${T.top&&T.top.n>1?` ${esc(T.top.naam)} kwam het vaakst terug: ${T.top.n} keer.`:''}</div>
+    <div class="small vl-tel" style="margin-top:10px;color:var(--mut2);line-height:1.5">${tel}${sinds}.${T.top&&T.top.n>1?` ${esc(T.top.naam)} kwam het vaakst terug: ${T.top.n} keer.`:''}</div>
   </div>`;
 }
 function renderMaand(){
@@ -7036,7 +7150,7 @@ function renderMaand(){
   const CK=(function(){ try{ return contantKaart(); }catch(_){ return ''; } })();
   const UK=(function(){ try{ return uitgeslotenKaart(); }catch(_){ return ''; } })();   // v327
   if(!R.length && !STR.length && !CK && !UK){
-    $('#s-maand').innerHTML= VS + CK + UK + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpLogBlok();
+    $('#s-maand').innerHTML= VS + CK + UK + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpGripBlok();
     return;
   }
   /* v207: een regel die je bewust hebt geaccepteerd telt niet meer als tekort, dus het oordeel,
@@ -7127,7 +7241,7 @@ function renderMaand(){
           liquiditeitsprognose, en alleen een afwijking komt terug: als melding. */''}
     ${maandBeleggenRegel(R)}
     ${(!beslis.length&&!aandacht.length)?maandCoachIngang(RO):''}
-    ${valtOpLogBlok()}
+    ${valtOpGripBlok()}
     ${maandGelezen()}
     <div style="height:12px"></div>`;
 }
@@ -20422,6 +20536,8 @@ function go(name){
        de guard op isLopendeMaand() is weg; de vlag stuurt nog steeds geen inhoud (v168). */
     if(name==='maand'){ try{ SET.maandGelezen=vandaagYMD(); save(); renderMaand(); }catch(_){} }
   }
+  /* v331: het logboek leest de stand van het moment waarop je hem opent. */
+  if(name==='logboek'){ try{ renderLogboek(); }catch(_){} }
   try{ localStorage.setItem('minder_view', name); }catch(_){}
   window.scrollTo(0,0);
 }

@@ -44,27 +44,42 @@ async function boot(page, log, extra){
   await page.waitForFunction(()=>typeof window.renderMaand==='function');
   await page.evaluate(()=>go('maand'));
 }
-const lees=page=>page.evaluate(()=>{
+/* v331: het logboek is een eigen scherm (#s-logboek) en de open vraag staat op Grip (#valtOpGrip).
+   `lees` leest beide, elk op zijn eigen zichtbare scherm, en zet de vraag bij de maand waar hij
+   over gaat, zodat de asserties hieronder dezelfde vragen blijven stellen. Een rij in de lijst is
+   zoals voor v331 een overschrijding zonder antwoord die niet de open vraag is. */
+const lees=async page=>{
+  const g=await page.evaluate(()=>{ go('maand'); const t=e=>e?e.innerText.replace(/\s+/g,' ').trim():'';
+    const v=document.querySelector('#valtOpGrip [data-vraag]');
+    return v?{id:v.dataset.vraag, t:t(v), chip:t(v.querySelector('.vl-chip'))}:null; });
+  const r=await page.evaluate(vraag=>{
+  go('logboek');
   const k=document.querySelector('#valtOpLog'); if(!k) return null;
   const t=e=>e?e.innerText.replace(/\s+/g,' ').trim():'';
-  const maanden=[...k.querySelectorAll('.vl-maand')].map(b=>({
+  const maanden=[...k.querySelectorAll('.vl-maand')].map(b=>{ const vr=vraag && vraag.id.startsWith(b.dataset.maand+'|') ? vraag : null;
+    const lijstRijen=[...b.querySelectorAll('.vl-lijst .vl-rij')].filter(e=>!e.dataset.antwoord && !(vr && e.dataset.id===vr.id));
+    const antwoordRijen=[...b.querySelectorAll('[data-antwoord]')];
+    return {
     maand:b.dataset.maand, kop:+b.querySelector('[data-maandboven]').dataset.maandboven,
     kopTekst:t(b.querySelector('.vl-kop')),
-    rijBoven:[...b.querySelectorAll('[data-boven]')].map(e=>+e.dataset.boven),
-    vraag:b.querySelector('[data-vraag]')?b.querySelector('[data-vraag]').dataset.vraag:null,
-    vraagTekst:t(b.querySelector('[data-vraag]')),
-    antwoorden:[...b.querySelectorAll('[data-antwoord]')].map(e=>({id:e.dataset.antwoord, t:t(e)})),
-    chips:[...b.querySelectorAll('.vl-vraag .vl-chip')].map(e=>t(e)),
+    rijBoven:lijstRijen.map(e=>+e.querySelector('[data-boven]').dataset.boven),
+    vraag:vr?vr.id:null,
+    vraagTekst:vr?vr.t:'',
+    antwoorden:antwoordRijen.map(e=>({id:e.dataset.antwoord, t:t(e)})),
+    chips:[...b.querySelectorAll('.vl-lijst .vl-rij')].filter(e=>e.dataset.antwoord || (vr && e.dataset.id===vr.id)).map(e=>'€'+e.querySelector('[data-boven]').dataset.boven+' boven'),
     rest:t(b.querySelector('.vl-rest summary')),
     restRijen:[...b.querySelectorAll('.vl-rest .vl-rij')].map(e=>[...e.querySelectorAll('.vl-naam, .vl-hand, .vl-bedrag, .vl-woord')].filter(x=>!x.classList.contains('vl-naam')).reduce((a,x)=>a+' '+x.textContent, e.querySelector('.vl-naam').firstChild.textContent).replace(/\s+/g,' ').trim()),
-    lijst:[...b.querySelectorAll('.vl-lijst .vl-rij')].map(e=>t(e)),
-  }));
-  return {maanden, alles:t(k), note:t(k.querySelector('.vl-note')),
+    lijst:lijstRijen.map(e=>t(e)),
+  }; });
+  return {maanden, alles:t(k), note:t(k.querySelector('.vl-note:not(.vl-uitzfeit)')),
     trend:!!k.querySelector('.vl-trend'), trendN:k.querySelector('.vl-trend')?+k.querySelector('.vl-trend').dataset.trend:0,
     mlab:t(k.querySelector('.vl-mlab')),
     tegels:[...k.querySelectorAll('[data-tegel]')].map(e=>({a:e.dataset.tegel, t:t(e), in:e.querySelectorAll('.vl-seg i.vl-in').length, n:e.querySelectorAll('.vl-seg i').length})),
     patroon:t(k.querySelector('[data-patroon]'))};
-});
+  }, g);
+  await page.evaluate(()=>go('maand'));
+  return r;
+};
 
 /* ===== a) STAND 1: OKTOBER ===== */
 test('a1 de kop is de som van precies de bedragen die de regels eronder tonen', async ({page})=>{
@@ -142,9 +157,10 @@ test('b1 het antwoord staat op het record met keuze en datum, en de vraag gaat n
   // de beantwoorde kaart blijft staan, gedempt, met het antwoord
   expect(s.antwoorden.length).toBe(1);
   expect(s.antwoorden[0].id).toBe(SEP+'|uiteten');
-  expect(s.antwoorden[0].t).toContain('Uitzondering');
-  expect(s.antwoorden[0].t).toContain('3 okt');
-  expect(await page.locator('[data-antwoord]').evaluate(e=>e.classList.contains('vl-dim'))).toBe(true);
+  /* v331: het antwoord staat in de regel van het logboek, met "wijzigen" ernaast; de datum staat op
+     het record (hierboven getoetst) en niet meer in een gedempte kaart. */
+  expect(s.antwoorden[0].t).toContain('uitzondering');
+  expect(s.antwoorden[0].t).toContain('wijzigen');
   // de kop verandert niet door een antwoord
   expect(s.kop).toBe(318);
   // Boodschappen is nu de vraag en staat dus niet meer als korte rij
@@ -201,7 +217,8 @@ test('b6 een bijstelling die binnen het bijgestelde potje bleef, vraagt naar het
 test('b5 een antwoord is in een tik te wijzigen', async ({page})=>{
   await boot(page, SEPTEMBER());
   await page.evaluate(id=>valtOpAntwoord(id,'uitzondering'), SEP+'|uiteten');
-  await page.locator('[data-antwoord] .vl-wis').click();
+  await page.evaluate(()=>go('logboek'));   // v331: het antwoord staat in het logboek
+  await page.locator('#s-logboek [data-antwoord] .vl-wis').click();
   const r=await page.evaluate(id=>SET.valtOpLog[id].antwoord, SEP+'|uiteten');
   expect(r).toBeUndefined();
   expect((await lees(page)).maanden[0].vraag).toBe(SEP+'|uiteten');
@@ -260,6 +277,7 @@ test('c3 een maand zonder signaal telt mee als maand logboek', async ({page})=>{
 
 test('c4 "Zo laten" haalt het patroon weg en staat op het record', async ({page})=>{
   await boot(page, DRIE());
+  await page.evaluate(()=>go('logboek'));   // v331: het patroon staat in het logboek
   await page.locator('[data-patroon] button', {hasText:'Zo laten'}).click();
   expect(await page.evaluate(id=>SET.valtOpLog[id].patroon_gelaten, SEP+'|uiteten')).toBe(NU);
   expect((await lees(page)).patroon).toBe('');
@@ -267,6 +285,7 @@ test('c4 "Zo laten" haalt het patroon weg en staat op het record', async ({page}
 
 test('c5 "Potje vast ophogen" opent de editor van de maand erna', async ({page})=>{
   await boot(page, DRIE());
+  await page.evaluate(()=>go('logboek'));
   await page.locator('[data-patroon] button', {hasText:'Potje vast ophogen'}).click();
   expect(await page.evaluate(()=>document.querySelector('#sheet').innerText)).toContain('Uit eten & café-potje');
 });
@@ -309,12 +328,15 @@ test('d1 kop, rij en trend lezen dezelfde bron', async ({page})=>{
    HEEFT GEEN 200px-EIS (die van v241 is de stand-kaart op Inzichten). */
 /* v325, na de correctie: Sport telt tegen het oorspronkelijke potje en staat dus als korte rij boven
    de ingeklapte rest, met beide latten op zijn handelingsregel. Dat kost 66px in stand 1. */
-const PX={360:{een:635, twee:687}, 390:{een:601, twee:653}};
+/* v331: het logboek staat op een eigen scherm, zonder vraagkaart (die staat op Grip) en met het antwoord
+   in de regel in plaats van een gedempte kaart. GEMETEN: 435px op 360 en 419px op 390, voor en na het
+   eerste antwoord even hoog, want het antwoord past in de handelingsregel die er al stond. */
+const PX={360:{een:435, twee:435}, 390:{een:419, twee:419}};
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`p${w} de hoogte van het logboek in stand 1 en 2`, async ({page})=>{
     await page.setViewportSize({width:w, height:h});
     await boot(page, SEPTEMBER());
-    const hh=()=>page.evaluate(()=>Math.round(document.querySelector('#valtOpLog').getBoundingClientRect().height));
+    const hh=()=>page.evaluate(()=>{ go('logboek'); return Math.round(document.querySelector('#valtOpLog').getBoundingClientRect().height); });
     const een=await hh();
     await page.evaluate(id=>valtOpAntwoord(id,'uitzondering'), SEP+'|uiteten');
     const twee=await hh();
