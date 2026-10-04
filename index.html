@@ -9846,11 +9846,15 @@ function bezitInlegSub(a){
   return `<div class="cp-sub" data-bezitinleg="${esc(id)}">${euro0(x.bedrag)} ingelegd in ${MFULL[+x.ym.slice(5,7)-1]} · gemeten</div>`;
 }
 function bezitEditorBlok(a){
-  let r=[]; try{ r=bezitInlegRecent(a.id,3); }catch(_){}
+  let r=[], alle=[]; try{ alle=bezitInlegRecent(a.id); r=alle.slice(0,3); }catch(_){}
   const regels=(SET.bezitRegels||[]).filter(rg=>rg.asset===a.id);
   const inleg = r.length
     ? r.map(x=>`<div class="row" style="justify-content:space-between"><span class="small">${esc(resMaandLabel(x.ym))}</span><span class="small" style="font-weight:700">${euro0(x.bedrag)}${x.aantal>1?` · ${x.aantal} boekingen`:''}</span></div>`).join('')
     : `<div class="small muted">Nog geen boeking aan deze bezitting gekoppeld. Dat doe je bij de boeking zelf.</div>`;
+  /* v333: de laatste drie maanden met inleg, en daaronder het totaal sinds de eerste gekoppelde boeking,
+     zodat een maand die buiten die drie valt niet uit beeld verdwijnt. */
+  const tot = alle.length ? (()=>{ const G=bezitGekoppeld(a.id), eerste=alle[alle.length-1].ym, som=Math.round(G.reduce((s,t)=>s-t.amount,0)), n=G.length;
+      return `<div class="row" data-bezitinlegtotaal="${esc(a.id)}" style="justify-content:space-between;border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span class="small">Sinds ${esc(resMaandLabel(eerste))}</span><span class="small" style="font-weight:700">${euro0(som)} · ${n} ${n===1?'boeking':'boekingen'}</span></div>`; })() : '';
   const rg = regels.length ? `<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:6px;line-height:1.45">${regels.map(x=>`Regel: ${esc(bezitRegelTekst(x))} <span style="color:var(--teal);cursor:pointer" onclick="bezitRegelWeg('${x.id}');openAsset('${a.id}')">weghalen</span>`).join('<br>')}</div>` : '';
   /* De keuze over de voorwaarden. GEEN STANDAARD: zolang je niets kiest staat er dat de vraag open
      is, en geen van de twee knoppen is voorgeselecteerd (MECHANISM_SPEC.defaultEffect). Alleen bij
@@ -9863,7 +9867,7 @@ function bezitEditorBlok(a){
       <div class="row" style="gap:8px">${knop(true,'Ja')}${knop(false,'Nee')}</div></div>`; })() : '';
   const pz = a.pauze ? `<div class="small" style="margin-top:10px;line-height:1.45">Inleg gepauzeerd sinds ${esc(resMaandLabel(a.pauze.sinds))}. <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="belegHervat('${a.id}');openAsset('${a.id}')">Hervatten</span></div>` : '';
   return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px" data-bezitgemeten>
-    <div class="small" style="font-weight:600;margin-bottom:4px">Gemeten inleg</div>${inleg}${rg}</div>${vw}${pz}`;
+    <div class="small" style="font-weight:600;margin-bottom:4px">Gemeten inleg</div>${inleg}${tot}${rg}</div>${vw}${pz}`;
 }
 /* v333: onder het waardeveld. De optelling als er inleg na de invuldag is, anders de invuldag zelf,
    en zonder invuldag de vraag (een keer, met twee even zware knoppen en geen voorselectie). */
@@ -14064,11 +14068,20 @@ function bezitVan(t){
 }
 function bezitInlegTx(id, ym){ if(!id) return []; return txOfMonth(ym).filter(t=>bezitVan(t)===id); }
 function bezitInleg(id, ym){ return Math.round(bezitInlegTx(id, ym).reduce((s,t)=>s-t.amount,0)); }
-/* De laatste drie maanden met gemeten inleg, nieuwste eerst. Een maand zonder inleg is een nul en
-   staat er dus niet: wat er staat is wat er ging, niet wat er had moeten gaan. */
+/* De maanden MET gekoppelde inleg, nieuwste eerst, en met n de nieuwste n daarvan. Een maand zonder
+   inleg staat er niet: wat er staat is wat er ging, niet wat er had moeten gaan.
+   v333: dit las de laatste drie maanden van months(), en daar hoort de LOPENDE maand bij. Op 4 oktober
+   was dat augustus, september en een lege oktober, dus de inleg van mei tot en met juli viel weg
+   terwijl hij wel gekoppeld was. Het venster is nu de maanden die inleg dragen, uit dezelfde lijst
+   gekoppelde boekingen als de waarde (bezitGekoppeld()). */
 function bezitInlegRecent(id, n){
-  const ms=months().slice(-(n||3)).reverse();
-  return ms.map(m=>({ym:m, bedrag:bezitInleg(id,m), aantal:bezitInlegTx(id,m).length})).filter(x=>x.aantal>0);
+  const per=new Map();
+  for(const t of bezitGekoppeld(id)){
+    const m=String(t.date).slice(0,7), x=per.get(m)||{ym:m, bedrag:0, aantal:0};
+    x.bedrag-=t.amount; x.aantal++; per.set(m,x);
+  }
+  const r=[...per.values()].sort((a,b)=>b.ym.localeCompare(a.ym)).map(x=>({...x, bedrag:Math.round(x.bedrag)}));
+  return n ? r.slice(0,n) : r;
 }
 function zetBezitKoppel(txId, assetId){
   SET.bezitKoppel=SET.bezitKoppel||{};

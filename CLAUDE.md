@@ -124,6 +124,12 @@ genoemde versietag.)*
   door drie (`v194`), en de editor toont "ingevuld €50 · gemeten gemiddeld €33 (juli t/m september)"
   (`data-bezitper`). `bezitReisPer()` laat de Vermogensreis met het gemeten bedrag rekenen zodra het er is
   (`v216`), anders met `a.per`, en een pauze geeft nul.
+  DE GEMETEN INLEG IN DE EDITOR TOONT DE LAATSTE DRIE MAANDEN MET INLEG en daaronder het totaal sinds de
+  eerste gekoppelde boeking (`data-bezitinlegtotaal`, uit `bezitGekoppeld()`, dus op de boekingen en niet op
+  afgeronde maanden). `bezitInlegRecent()` las de laatste drie maanden van `months()`, INCLUSIEF de lopende:
+  GEMELD op 4 oktober stonden er alleen augustus en september terwijl blok 16 gekoppelde boekingen vanaf mei
+  toonde. Een regel geldt voor elke boeking die hij raakt, ook een oudere dan de regel; dat stond goed, het
+  venster niet. Drie sabotages, alle drie rood.
   GEMETEN: de rij met de optelling is 63px op 360 en 390px, zonder overloop. Tien sabotages, alle tien rood.
   EEN BESTAANDE TEST VIEL EROP en had gelijk: `velden-zonder-lezer` somt de sleutels van een nieuwe
   bezitting op, en `waardeOp` is er een met lezers.

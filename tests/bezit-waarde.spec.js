@@ -181,3 +181,37 @@ for (const w of [360, 390]) {
     console.log(`rij ${w}px: ${r.h}px`);
   });
 }
+
+/* v333: de editor las de laatste drie maanden van months(), inclusief de lopende. Op 4 oktober was dat
+   augustus, september en een lege oktober, en viel de gekoppelde inleg van mei tot en met juli weg.
+   Een regel geldt voor ELKE boeking die hij raakt, ook een oudere dan de regel zelf. */
+const MACHT = 'STICHTING BEHEER DERDENGELDEN PEAKS MACHTIGING 9fa570110ce945fc8bef';
+const OUD = [['mei', '2026-05-12'], ['jun1', '2026-06-09'], ['jun2', '2026-06-23'], ['jul', '2026-07-14'], ['aug', '2026-08-11'], ['sep', '2026-09-01']]
+  .map(([id, date]) => ({ id, date, amount: -5.25, desc: MACHT }));
+test.describe('g · de gemeten inleg toont de maanden met inleg, en het totaal sinds de eerste', () => {
+  test('een regel die nu wordt gezet koppelt ook de boeking van mei', async ({ page }) => {
+    const ids = await start(page, KAYANI('2026-09-25'), { dag: '2026-10-04', extraTx: OUD });
+    const r = await page.evaluate(([sep, mei]) => { bezitRegelZet(sep, 'kayani', 'kenmerk', '9fa570110ce945fc8bef');
+      return bezitVan(TX.find((t) => t.id === mei)); }, [ids.sep, ids.mei]);
+    expect(r).toBe('kayani');
+  });
+  test('de editor toont september, augustus en juli, niet een lege oktober, en het totaal sinds mei', async ({ page }) => {
+    const ids = await start(page, KAYANI('2026-09-25'), { dag: '2026-10-04', extraTx: OUD });
+    const r = await page.evaluate((sep) => { bezitRegelZet(sep, 'kayani', 'kenmerk', '9fa570110ce945fc8bef'); openAsset('kayani');
+      const blok = document.querySelector('#sheet [data-bezitgemeten]');
+      return { tekst: blok.innerText, totaal: (blok.querySelector('[data-bezitinlegtotaal="kayani"]') || {}).innerText || '' }; }, ids.sep);
+    expect(r.tekst).toMatch(/september 2026\s+€105 · 2 boekingen/);
+    expect(r.tekst).toMatch(/augustus 2026\s+€5/);
+    expect(r.tekst).toMatch(/juli 2026\s+€5/);
+    expect(r.tekst).not.toContain('oktober');
+    expect(r.tekst, 'juni en mei vallen buiten de drie, en staan in het totaal').not.toContain('juni 2026');
+    expect(r.totaal).toMatch(/Sinds mei 2026\s+€132 · 7 boekingen/);
+  });
+  test('het totaal rekent op de boekingen en niet op afgeronde maanden', async ({ page }) => {
+    const ids = await start(page, KAYANI('2026-09-25'), { dag: '2026-10-04', extraTx: OUD });
+    const r = await page.evaluate((sep) => { bezitRegelZet(sep, 'kayani', 'kenmerk', '9fa570110ce945fc8bef');
+      return { maanden: bezitInlegRecent('kayani').reduce((s, x) => s + x.bedrag, 0), ruw: bezitGekoppeld('kayani').reduce((s, t) => s - t.amount, 0) }; }, ids.sep);
+    expect(r.ruw).toBeCloseTo(131.5, 2);
+    expect(r.maanden, 'per maand afgerond is het een ander getal, dus de keuze is niet inert').toBe(131);
+  });
+});
