@@ -112,6 +112,29 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **"BOEKINGEN ZONDER CATEGORIE" OPENT EEN WERKLIJST, EN EEN EIGEN KEUZE IS EEN OVERRIDE, OOK OVERIG**
+  (`v338`, gevraagd door de gebruiker): tot `v338` opende die afsluitpunt `openCategory('overig')`, en daar
+  kun je niet hercategoriseren. `afsluitOverigTx(M)` is de ENE lijst (`catOf` Overig zonder `OVR`): de punt
+  telt hem en `openAfsluitOverig(M)` toont precies hem. Een tik opent de bestaande transactie-sheet
+  (`openSheet()`, met de categoriekeuze en "Voortaan alle ..."), en na de keuze keert `setCat()` terug naar
+  de lijst (`window._werklijst`, gewist door `closeSheet()`). "OVERIG KLOPT" (`overigKlopt()`) ZET
+  `OVR[id]='overig'`, en vanuit de werklijst doet Overig kiezen in de sheet hetzelfde; buiten de werklijst
+  blijft `setCat()` een keuze gelijk aan `autoCat` weghalen zoals altijd. HET VOORSTEL (`catVoorstel(t)`)
+  komt ALLEEN uit een override op een andere boeking van dezelfde tegenpartij (`catTegenpartij()`, via
+  `cleanMerch()`), de nieuwste wint, nooit uit Overig of een automatische categorie; het staat bovenaan de
+  sheet met "Zo categoriseren" en er wordt niets vanzelf omgezet. GEMETEN op 360 EN 390px: een rij is 51px
+  (67px met voorstel), het voorstel in de sheet 66px, zonder overloop. DE EERSTE VORM GAF DE KNOP
+  `width:100%` VAN `.btn`, en dan was de naamkolom 0px breed: de laagste rij-meting vangt dat nu.
+  TWAALF SABOTAGES, ALLE TWAALF ROOD; "het voorstel leest ook een automatische categorie" pas nadat de fixture
+  een eerdere boeking van dezelfde tegenpartij met een automatische categorie droeg (meetles a).
+  WAAROM "FROM RESERVERING TO LEEFGELD" OP OVERIG STAAT (gemeten op een fixture, niet op het toestel): de
+  intern-detectie voor PSD2 kent alleen een vaste lijst Space-namen (`main`, `zakgeld`, `buffer`,
+  `spaarpot` in `N26INT` en de aliassen in `applyOwnAccounts()`), en Reservering en Leefgeld staan daar niet
+  in. Alleen is de +50 dan nog `intern` (onbekende bijschrijving); hij wordt Overig doordat "fix 2" hem de
+  categorie laat erven van een afschrijving met dezelfde eerste twintig tekens, en dat is de -50 aan de
+  andere kant van DEZELFDE overboeking, die zelf op Overig staat. Beide kanten staan dus in de werklijst.
+  NIET GEREPAREERD: de Space-namen uit `SET.psd2Accounts` lezen in plaats van de vaste lijst is een eigen
+  ronde, want het hercategoriseert elke bestaande boeking die zo'n naam draagt.
 - **EEN KEUZE OP GRIP DIE GEDRAG VRAAGT IS EEN AFSPRAAK, EN DE APP VINKT HEM ALLEEN AF ALS HIJ HET ZIET**
   (`v337`, gevraagd door de gebruiker, voorstel "2 binnen 1" uit de mockup): `SET.afspraken` met per
   afspraak `soort`, `wat`, een termijn (`van` t/m `tot`) en de meetgegevens; `afspraakStand(a)` is de ENE
@@ -5773,7 +5796,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v337` → `minder-v338`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v338` → `minder-v339`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5792,7 +5815,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336` en `v337` naar `minder-v337`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337` en `v338` naar `minder-v338`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

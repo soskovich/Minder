@@ -7402,8 +7402,8 @@ function afsluitPunten(M, R){
       P.push({punt:'logboek', naam:'Logboekvragen beantwoord', feit:`${n} van ${bov.length}`, af:n===bov.length, act:"go('logboek')"}); } }catch(_){}
   try{ const MP=maandPotjes(M), had=MP.bron==='bewaard' && Object.keys(MP.B||{}).length>0, tb=totalBudget();   // de bewaarde bedragen via hun ene lezer (v335)
     if(had || tb>0) P.push({punt:'potjes', naam:`Potjes voor ${afMnd(nu)} staan`, feit:tb>0?`samen ${euro0(tb)}`:`nog geen potjes voor ${afMnd(nu)}`, af:tb>0, act:`openPotjesVerdeling('${nu}')`}); }catch(_){}
-  try{ const tx=txOfMonth(M).filter(t=>catOf(t)==='overig' && !OVR[t.id]);
-    P.push({punt:'categorie', naam:'Boekingen zonder categorie', feit:tx.length?`${tx.length} ${tx.length===1?'boeking staat':'boekingen staan'} nog op Overig`:'geen', af:!tx.length, act:tx.length?`openCategory('overig','${M}')`:''}); }catch(_){}
+  try{ const tx=afsluitOverigTx(M);
+    P.push({punt:'categorie', naam:'Boekingen zonder categorie', feit:tx.length?`${tx.length} ${tx.length===1?'boeking staat':'boekingen staan'} nog op Overig`:'geen', af:!tx.length, act:tx.length?`openAfsluitOverig('${M}')`:''}); }catch(_){}
   try{ const D=dekking(12); if(D.aantal && resAccId()){ const r=(R||maandRegels()).find(x=>x.key==='dekking');
     if(r) P.push({punt:'dekking', naam:'Dekking van je reserveringen', feit:r.status==='tekort'?`${afMnd(nu)} niet rond`:`${afMnd(nu)} rond`, af:r.status!=='tekort', act:"openMaandBeslis('dekking')"}); } }catch(_){}
   try{ const St=afsluitStanden(); if((SET.assets||[]).some(a=>(+a.waarde||0)>0) || (SET.debts||[]).some(d=>(+d.rest||0)>0)){
@@ -7438,6 +7438,42 @@ function afsluitKaart(R){
     <div class="row" style="gap:10px;align-items:baseline"><span style="flex:1;min-width:0;font-weight:700;font-size:var(--fs-md)">${esc(Mn)} afsluiten</span><span class="small muted" data-afteller="${S.af}/${S.tot}" style="white-space:nowrap">${S.af} van ${S.tot}</span><span class="muted" style="font-size:18px;line-height:1">\u203a</span></div>
     <div style="height:6px;border-radius:3px;background:var(--card2);margin:8px 0 0;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div></div>`;
 }
+/* v338: DE WERKLIJST ACHTER "BOEKINGEN ZONDER CATEGORIE". Tot v337 opende die punt openCategory('overig'),
+   en daar kun je niet hercategoriseren. afsluitOverigTx() is de ENE lijst: de punt telt hem en de werklijst
+   toont precies hem, dus de teller en de rijen kunnen niet uiteenlopen (v104). Een eigen keuze is een
+   override (OVR), ook als die keuze Overig is: "Overig klopt" zet OVR[id]='overig'. */
+function afsluitOverigTx(M){ return txOfMonth(M).filter(t=>catOf(t)==='overig' && !OVR[t.id]); }
+/* Een voorstel komt ALLEEN uit een eerdere eigen keuze voor dezelfde tegenpartij (een override op een andere
+   boeking), de nieuwste wint. Geen keuze, geen voorstel; en er wordt niets vanzelf omgezet. */
+function catTegenpartij(t){ return (cleanMerch(t&&t.name)||(t&&t.name)||'').toUpperCase().replace(/\s+/g,' ').trim(); }
+function catVoorstel(t){
+  const k=catTegenpartij(t); if(!k) return null;
+  let best=null;
+  for(const x of TX){ if(x.id===t.id) continue; const c=OVR[x.id];
+    if(!c || c==='overig' || !CATS[c] || catTegenpartij(x)!==k) continue;
+    if(!best || x.date>best.date) best=x; }
+  return best ? {cat:OVR[best.id], datum:best.date, naam:best.name} : null;
+}
+function openAfsluitOverig(M){
+  window._werklijst=null;
+  const tx=afsluitOverigTx(M).slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  const rij=t=>{ const v=catVoorstel(t);
+    return `<div class="row" data-werkrij="${esc(t.id)}" style="gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
+      <span style="flex:1;min-width:0;cursor:pointer" onclick="afsluitOverigOpen('${esc(t.id)}','${M}')">
+        <span class="small" style="display:block;word-break:break-word">${esc(t.name||t.desc)}</span>
+        <span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${esc(afDag(t.date))} · ${t.amount>0?'+':''}${euro(t.amount)}${v?` · eerder koos je ${esc(CATS[v.cat].name)}`:''}</span></span>
+      <button class="btn sec" data-overigklopt style="width:auto;flex-shrink:0;padding:6px 10px;font-size:var(--fs-xs)" onclick="overigKlopt('${esc(t.id)}','${M}')">Overig klopt</button>
+      <span style="color:var(--teal);font-weight:700;flex-shrink:0;cursor:pointer" onclick="afsluitOverigOpen('${esc(t.id)}','${M}')">›</span></div>`; };
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div id="afsluitOverig" data-maand="${M}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Boekingen op Overig</div>
+    <div class="small muted" data-werkteller="${tx.length}" style="margin:2px 0 10px">${tx.length?`${tx.length} ${tx.length===1?'boeking staat':'boekingen staan'} in ${esc(afMnd(M))} nog op Overig zonder eigen keuze. Tik een boeking om een categorie te kiezen.`:`Alle boekingen in ${esc(afMnd(M))} hebben een eigen keuze.`}</div>
+    ${tx.map(rij).join('')}
+    <button class="btn sec" style="width:100%;margin-top:12px" onclick="openAfsluiting('${M}')">Terug naar de afsluiting</button></div>`;
+  showSheetBg();
+}
+function afsluitOverigOpen(id,M){ window._werklijst=M; openSheet(id); }
+function overigKlopt(id,M){ if(!TX.some(t=>t.id===id)) return; OVR[id]='overig'; save(); render(); openAfsluitOverig(M); }
 function openAfsluiting(M){ renderAfsluitSheet(M); showSheetBg(); }
 /* De sheet rekent opnieuw (v319/v320): tussen tekenen en tikken kan er een import binnenkomen. */
 function renderAfsluitSheet(M){
@@ -16585,7 +16621,10 @@ function openSheet(id){
   const t=TX.find(x=>x.id===id); if(!t)return;
   window._setSheet=null;
   const cur=catOf(t);
+  /* v338: vanuit de werklijst van de afsluiting staat een eerdere eigen keuze voor dezelfde tegenpartij bovenaan. */
+  const wv=window._werklijst ? catVoorstel(t) : null;
   $('#sheet').innerHTML=`<div class="grab"></div>
+    ${wv?`<div data-catvoorstel="${wv.cat}" class="row" style="gap:8px;align-items:center;padding:8px 10px;margin-bottom:8px;background:var(--card2);border-radius:10px"><span class="small" style="flex:1;min-width:0">Voorstel: <b>${esc(CATS[wv.cat].name)}</b><span style="display:block;color:var(--mut2);font-size:var(--fs-xs)">Dat koos je eerder voor ${esc(wv.naam)} op ${esc(afDag(wv.datum))}</span></span><button class="btn" style="width:auto;flex-shrink:0;padding:6px 10px;font-size:var(--fs-xs)" onclick="setCat('${id}','${wv.cat}')">Zo categoriseren</button></div>`:''}
     <div class="center" style="margin-bottom:4px"><div style="font-size:var(--fs-xl)">${CATS[cur].icon}</div>
       <div class="small muted">${JARGON[cur]?jrg(cur,CATS[cur].name):esc(CATS[cur].name)}</div>
       <div style="font-weight:700;margin-top:4px">${esc(t.name)}</div>
@@ -16605,14 +16644,17 @@ function openSheet(id){
 
 function setCat(id,k){
   const t=TX.find(x=>x.id===id); if(!t) return;
+  /* v338: vanuit de werklijst is elke keuze een eigen keuze, ook Overig, en daarna keer je terug naar de lijst. */
+  const wl=window._werklijst||null;
+  const terug=()=>{ if(wl){ if(k==='overig'){ OVR[id]='overig'; save(); render(); } openAfsluitOverig(wl); } };
   if(k!=='uitgeleend' && k!=='geleend' && unmarkLoan(id)) save();   // terug naar uitgave: post opruimen
   const mk=document.getElementById('mkrule');
   if(mk&&mk.checked){   // maak een blijvende regel van deze winkel
     const kw=((cleanMerch(t.name)||t.name)||'').toUpperCase().trim().slice(0,28);
     if(kw){ SET.rules=(SET.rules||[]).filter(r=>r.kw!==kw); SET.rules.unshift({kw,cat:k}); delete OVR[id];
-      save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); closeSheet(); render(); toast('Regel: '+kw+' → '+CATS[k].name); return; }
+      save(); TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); closeSheet(); render(); toast('Regel: '+kw+' → '+CATS[k].name); terug(); return; }
   }
-  if(t.autoCat===k) delete OVR[id]; else OVR[id]=k; save(); closeSheet(); render();
+  if(t.autoCat===k) delete OVR[id]; else OVR[id]=k; save(); closeSheet(); render(); terug();
 }
 // regels beheren
 
@@ -21727,7 +21769,7 @@ function showSheetBg(){ $('#sheetBg').classList.add('show'); try{ const _t=docum
    doen `if(window._txFilterSheet) openTxFilter()` - dat leest als "staat de sheet open, ververs hem
    dan" - maar de vlag betekende "is ooit geopend". Een filterwijziging liet de sheet daardoor de
    rest van de sessie weer openspringen nadat je hem had gesloten. */
-function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; window._txFilterSheet=false; hideTip();
+function closeSheet(){ $('#sheetBg').classList.remove('show'); window._stsEdit=false; window._nfSheet=false; window._budgetSheet=null; window._txFilterSheet=false; window._werklijst=null; hideTip();
   try{ coAfbreken(); }catch(_){}   // v138: de sheet dicht midden in een gesprek = coEnd(), zonder iets vast te leggen
 }
 
