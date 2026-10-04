@@ -99,11 +99,11 @@ test('a: de invoer draagt één overschrijding, drie goede regels en zeven reste
 test('b: de samenvatting staat vóór de signaalkaarten en telt het potje mee', async ({ page }) => {
   await boot(page);
   const r = await page.evaluate(() => {
-    /* v337: de maandafsluiting staat erboven; deze test gaat over de volgorde eronder */
+    /* v337: de maandafsluiting is een regel lager op Grip; deze test gaat over de volgorde erboven */
     const ak = document.querySelector('#s-maand > .card');
     const K = [...document.querySelectorAll('#s-maand .card')].filter(c => c.id !== 'afsluitKaart' && c.id !== 'afgeslotenRegel');
     const sig = K.findIndex(c => /boven je potje/.test(c.innerText));
-    return { eerste: K[0].innerText, sigIdx: sig, akEerst: !document.getElementById('afsluitKaart') || ak.id === 'afsluitKaart',
+    return { eerste: K[0].innerText, sigIdx: sig, akEerst: !document.getElementById('afsluitKaart') || ak.id !== 'afsluitKaart',   // v337: niet meer bovenaan
       zin: maandOordeel(maandRegels(), valtOpSignals(thisYM()).length).zin };
   });
   // de eerste kaart van het scherm IS de samenvatting, en de signaalkaart staat erna
@@ -585,9 +585,9 @@ for (const [w, h, zichtbaar] of [[360, 640, 567], [390, 844, 771]]) {
   test(`i: de hoogtes op ${w}px`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: h });
     await boot(page);
-    /* v337: DE MAANDAFSLUITING STAAT BOVENAAN en schuift alles hieronder met zijn eigen hoogte
-       omlaag. Deze test pint de vorm van v314 eronder en haalt die kaart dus eerst weg; wat hij
-       kost staat in maand-afsluiting.spec.js. */
+    /* v337: de maandafsluiting is een regel onder 'Vraagt een beslissing' en schuift wat eronder
+       staat met zijn eigen hoogte omlaag. Deze test pint de vorm van v314 en haalt die regel dus
+       eerst weg; wat hij kost staat in maand-afsluiting.spec.js. */
     await page.evaluate(() => { for (const id of ['afsluitKaart', 'afgeslotenRegel']) { const e = document.getElementById(id); if (e) e.remove(); } });
     const r = await page.evaluate(() => {
       const K = [...document.querySelectorAll('#s-maand .card')];

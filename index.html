@@ -6140,8 +6140,10 @@ function maandBeslisRij(r){
    onbekende ernaast verandert dat niet. Wat de sheet noemt is die meetbare voorwaarde, met zijn
    eigen waarde en drempel uit beleggenKlaar(), dus hier wordt niets opnieuw gemeten (v187).
    DE KEUZE GELDT VOOR EEN MAAND: SET.belegKeuze[id] = {maand, keuze, op}. Een maand later komt de vraag
-   terug zolang de voorwaarden niet gehaald zijn en er weer inleg heen ging. 'Inleg pauzeren' zet de
-   periodieke inleg in je reis op nul (a.pauze bewaart wat er stond); de overboeking zelf stop je bij je
+   terug zolang de voorwaarden niet gehaald zijn en er weer inleg heen ging. v337: 'Ik zet de inleg zelf
+   stil' (tot v337 'Inleg pauzeren') verandert NIETS meer: de periodieke inleg blijft staan, en de keuze
+   wordt bewaard als afspraak die Minder aan je gekoppelde boekingen meet. a.pauze en belegHervat()
+   blijven alleen voor een pauze van voor v337. De overboeking zelf stop je bij je
    bank, en dat zegt de sheet. Gaat er de maand erna toch weer inleg heen, dan staat de regel er weer. */
 function belegVoorwaardenNietGehaald(){
   let B=null; try{ B=beleggenKlaar(maandRegels()); }catch(_){ return []; }
@@ -6178,8 +6180,9 @@ function renderBelegVraag(id){
       <span class="small">${esc(x.naam.charAt(0).toUpperCase()+x.naam.slice(1))}</span>
       <span class="small" style="font-weight:700;text-align:right">${esc(x.waarde)} tegen ${esc(x.drempel)}</span></div>`).join('');
   const per=+a.per||0;
-  const pauzeUitleg = per>0 ? `Pauzeren zet de periodieke inleg van ${naam} in je Vermogensreis van ${euro0(per)} op nul. De overboeking zelf stop je bij je bank.`
-                            : `Er staat geen periodieke inleg ingesteld voor ${naam}. Pauzeren legt de keuze vast; de overboeking zelf stop je bij je bank.`;
+  /* v337: Minder stopt niets. De periodieke inleg in je reis blijft staan, want die is een voornemen
+     dat je zelf invult; wat de app wel doet is je keuze bewaren en meten of er nog inleg heen gaat. */
+  const pauzeUitleg = `Minder stopt niets: de overboeking stop je zelf bij je bank.${per>0?` De periodieke inleg van ${euro0(per)} in je Vermogensreis blijft staan.`:''} Je voornemen wordt bewaard, en Minder kijkt of er na vandaag nog inleg naar ${naam} gaat.`;
   const tx=bezitInlegTx(a.id, thisYM());
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg)">Je belegde ${euro0(v.inleg)} in ${naam}</div>
@@ -6193,7 +6196,7 @@ function renderBelegVraag(id){
         <button class="btn sec" style="flex:1" onclick="zetBezitVoorwaarden('${a.id}',false);render();closeSheet()">Nee</button></div></div>`
     :`<div class="row" style="gap:8px;margin-top:14px" data-belegkeuze>
         <button class="btn sec" style="flex:1" onclick="belegKies('${a.id}','door')">Bewust doorgaan</button>
-        <button class="btn sec" style="flex:1" onclick="belegKies('${a.id}','pauze')">Inleg pauzeren</button></div>
+        <button class="btn sec" style="flex:1" onclick="belegKies('${a.id}','pauze')">Ik zet de inleg zelf stil</button></div>
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45;margin-top:8px">Bewust doorgaan geldt voor ${esc(MFULL[+thisYM().slice(5,7)-1])}. ${pauzeUitleg}</div>`}`;
 }
 function zetBezitVoorwaarden(id, ja){
@@ -6205,8 +6208,8 @@ function belegKies(id, keuze){
   const ym=thisYM();
   SET.belegKeuze=SET.belegKeuze||{};
   SET.belegKeuze[id]={maand:ym, keuze, op:vandaagYMD()};
-  if(keuze==='pauze' && !a.pauze){ a.pauze={sinds:ym, perVoor:+a.per||0}; if(a.grow) a.per=0; }
-  if(keuze==='pauze'){ try{ afspraakMaak({soort:'pauze', assetId:id, naam:a.naam||'Bezitting', van:ym, tot:nextYM(ym), wat:`Inleg naar ${a.naam||'je bezitting'} zelf stilgezet`}); }catch(_){} }   // v337
+  // v337: geen a.per=0 en geen a.pauze meer; de keuze is een afspraak, gemeten aan gekoppelde inleg
+  if(keuze==='pauze'){ try{ afspraakMaak({soort:'pauze', assetId:id, naam:a.naam||'Bezitting', van:ym, tot:nextYM(ym), wat:`Inleg naar ${a.naam||'je bezitting'} zelf stilzetten`}); }catch(_){} }
   save(); closeSheet(); render();
 }
 function belegHervat(id){
@@ -7420,8 +7423,10 @@ function afsluitNodig(M){
 }
 function afsluitPuntRij(p){
   const inh=`${afspraakBox(p.af?'gezien':'nietgezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(p.naam)}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(p.feit)}</span></span>${p.act?`<span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span>`:''}`;
-  return `<div class="row" data-afpunt="${p.punt}" data-af="${p.af?1:0}" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line)${p.act?';cursor:pointer':''}"${p.act?` onclick="${p.act}"`:''}>${inh}</div>`;
+  return `<div class="row" data-afpunt="${p.punt}" data-af="${p.af?1:0}" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line)${p.act?';cursor:pointer':''}"${p.act?` onclick="closeSheet();${p.act}"`:''}>${inh}</div>`;
 }
+/* v337: OP GRIP EEN REGEL MET DE BALK, de volle lijst een tik dieper (keuze van de gebruiker). De regel
+   staat onder "Vraagt een beslissing": een beslissing over nu gaat voor een terugblik op vorige maand. */
 function afsluitKaart(R){
   const M=afsluitMaand();
   const rec=(SET.maandAfsluiting||{})[M];
@@ -7429,11 +7434,22 @@ function afsluitKaart(R){
   if(!afsluitNodig(M)) return '';
   const S=afsluitStand(M, R), Mn=valtOpHoofd(M);
   const pct=S.tot?Math.round(S.af/S.tot*100):0;
+  return `<div class="card" id="afsluitKaart" data-maand="${M}" style="cursor:pointer;padding:13px 15px" onclick="openAfsluiting('${M}')">
+    <div class="row" style="gap:10px;align-items:baseline"><span style="flex:1;min-width:0;font-weight:700;font-size:var(--fs-md)">${esc(Mn)} afsluiten</span><span class="small muted" data-afteller="${S.af}/${S.tot}" style="white-space:nowrap">${S.af} van ${S.tot}</span><span class="muted" style="font-size:18px;line-height:1">\u203a</span></div>
+    <div style="height:6px;border-radius:3px;background:var(--card2);margin:8px 0 0;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div></div>`;
+}
+function openAfsluiting(M){ renderAfsluitSheet(M); showSheetBg(); }
+/* De sheet rekent opnieuw (v319/v320): tussen tekenen en tikken kan er een import binnenkomen. */
+function renderAfsluitSheet(M){
+  M=M||afsluitMaand();
+  if((SET.maandAfsluiting||{})[M] || !afsluitNodig(M)){ closeSheet(); return; }
+  const S=afsluitStand(M), Mn=valtOpHoofd(M);
+  const pct=S.tot?Math.round(S.af/S.tot*100):0;
   const knop = S.klaar
     ? `<button class="btn" data-afsluit="klaar" style="margin-top:12px;width:100%" onclick="maandAfsluiten('${M}',false)">${esc(Mn)} afsluiten</button>`
     : `<button class="btn sec" data-afsluit="open" style="margin-top:12px;width:100%" onclick="openAfsluitOpen('${M}')">Afsluiten met open punten</button>`;
-  return `<div class="card" id="afsluitKaart" data-maand="${M}">
-    <div class="row" style="gap:10px;align-items:baseline"><span style="flex:1;font-weight:700;font-size:var(--fs-md)">${esc(Mn)} afsluiten</span><span class="small muted" data-afteller="${S.af}/${S.tot}" style="white-space:nowrap">${S.af} van ${S.tot} klaar</span></div>
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="afsluitSheet" data-maand="${M}">
+    <div class="row" style="gap:10px;align-items:baseline"><span style="flex:1;font-weight:800;font-size:var(--fs-lg)">${esc(Mn)} afsluiten</span><span class="small muted" data-afteller="${S.af}/${S.tot}" style="white-space:nowrap">${S.af} van ${S.tot} klaar</span></div>
     <div style="height:6px;border-radius:3px;background:var(--card2);margin:8px 0 2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
     ${S.P.map(afsluitPuntRij).join('')}
     ${S.A.length?`<div class="hlabel" style="margin:12px 0 0">Wat je afsprak</div>${S.A.map(x=>afspraakRij(x.a, x.S)).join('')}`:''}
@@ -7528,9 +7544,9 @@ function renderMaand(){
   const CK=(function(){ try{ return contantKaart(); }catch(_){ return ''; } })();
   const UK=(function(){ try{ return uitgeslotenKaart(); }catch(_){ return ''; } })();   // v327
   const BV=(function(){ try{ return belegVragen(thisYM()); }catch(_){ return []; } })();   // v332
-  /* v337: de maandafsluiting staat BOVENAAN, ook boven de terugblikken: vanaf dag 1 van een nieuwe
-     maand is dat de eerste vraag. Zolang hij open is staan de afspraken erin; daarna als eigen kaart
-     (verplaatsen is niet kopieren). */
+  /* v337: de maandafsluiting is een regel met een balk, direct onder "Vraagt een beslissing" (of
+     op die plek als er geen beslissing is). Zolang hij open is staan de afspraken in zijn sheet;
+     daarna als eigen kaart (verplaatsen is niet kopieren). */
   const AK=(function(){ try{ return afsluitKaart(R); }catch(_){ return ''; } })();
   const AFK=(function(){ try{ return /id="afsluitKaart"/.test(AK) ? '' : afsprakenKaart(); }catch(_){ return ''; } })();
   if(!R.length && !STR.length && !CK && !UK && !BV.length){
@@ -7570,7 +7586,7 @@ function renderMaand(){
           woorden vóór het oordeel gezet. 'Bovenaan' gaat hier dus over de vaste inhoud van het
           scherm; een terugblik die er drie dagen staat verdringt hem niet. GEMETEN: vijf tests in
           afspraak-lus.spec.js lezen de eerste kaart en pinnen die volgorde. */''}
-    ${AK}${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
+    ${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
     <div class="card">
       <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
       ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
@@ -7592,6 +7608,7 @@ function renderMaand(){
       ${beslis.map(r=>maandBeslisRij(r)).join('')}
       ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
       </div>`:''}
+    ${AK}
     ${(aandacht.length||BV.length)?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt aandacht</div>
       ${aandacht.map(r=>maandBeslisRij(r)).join('')}${BV.map(v=>belegVraagRij(v)).join('')}
       ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}

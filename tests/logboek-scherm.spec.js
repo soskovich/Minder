@@ -197,7 +197,7 @@ test('e5 renderen schrijft niets', async ({page})=>{
 for (const [w,h] of [[360,640],[390,844]]) {
   test(`f${w} Grip is lager, met en zonder open vraag`, async ({page})=>{
     await page.setViewportSize({width:w,height:h});
-    /* v337: de maandafsluiting staat bovenaan Grip met zijn eigen hoogte (maand-afsluiting.spec.js);
+    /* v337: de maandafsluiting staat op Grip met zijn eigen hoogte (maand-afsluiting.spec.js);
        deze test meet wat het logboek van v331 kost en haalt die kaart dus eerst weg. */
     const zonder=()=>page.evaluate(()=>{ for (const id of ['afsluitKaart', 'afgeslotenRegel']) { const e = document.getElementById(id); if (e) e.remove(); } });
     await boot(page, SEPTEMBER(true)); await zonder();

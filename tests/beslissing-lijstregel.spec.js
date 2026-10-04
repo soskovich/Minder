@@ -360,10 +360,8 @@ test.describe('f - de zin over niets te beslissen zegt wat de poort toetst', () 
 for (const w of [360, 390]) {
   test(`g - ${w}px: de kaart is 200px, tegen ${V319_KAART[w]} bij v319`, async ({ page }) => {
     await boot(page, { w });
-    /* v337: de maandafsluiting staat bovenaan Grip en schuift deze kaart met zijn eigen hoogte omlaag;
-       met die kaart open staan de beslissingen op 360px onder de vouw, en dat staat gemeten in
-       maand-afsluiting.spec.js. Deze test pint de vorm van v320 en haalt hem dus weg. */
-    await page.evaluate(() => { for (const id of ['afsluitKaart', 'afgeslotenRegel']) { const e = document.getElementById(id); if (e) e.remove(); } });
+    /* v337: de maandafsluiting staat ONDER deze kaart, dus hij schuift hem niet omlaag; daarom
+       wordt hij hier niet weggehaald. */
     const d = await page.evaluate(() => {
       const c = [...document.querySelectorAll('#s-maand .card')]
         .find((x) => /VRAAGT EEN BESLISSING/i.test((x.querySelector('.hlabel') || {}).textContent || ''));

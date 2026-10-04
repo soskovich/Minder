@@ -212,7 +212,7 @@ test.describe('f · Je belegde EUR 100 in Peaks (Kayani) onder Vraagt aandacht',
     await expect(page.locator('#sheet [data-belegmist="dekking"]')).toContainText('Dekking reserveringen');
     await expect(page.locator('#sheet [data-belegmist="dekking"]')).toContainText('€37 tegen €299');
     await expect(page.locator('#sheet [data-belegmist]')).toHaveCount(1);
-    await expect(page.locator('#sheet [data-belegkeuze] button')).toHaveText(['Bewust doorgaan', 'Inleg pauzeren']);
+    await expect(page.locator('#sheet [data-belegkeuze] button')).toHaveText(['Bewust doorgaan', 'Ik zet de inleg zelf stil']);   // v337: heette 'Inleg pauzeren'
     await expect(page.locator('#sheet')).toContainText('29 september');
   });
   test('met voorwaarden op nee staat er geen regel', async ({ page }) => {
@@ -289,19 +289,31 @@ test.describe('g · een keuze geldt voor de maand', () => {
     expect(g.rij).toBe(true);
     expect(g.aandacht).toContain('Je belegde €100 in Peaks (Kayani)');
   });
-  test('inleg pauzeren zet de periodieke inleg op nul, bewaart wat er stond, en hervatten zet hem terug', async ({ page }) => {
+  /* v337: "Ik zet de inleg zelf stil" (tot v337 "Inleg pauzeren") verandert NIETS: de periodieke inleg
+     blijft staan en de keuze wordt een afspraak. Een pauze van voor v337 (a.pauze) blijft te hervatten. */
+  test('ik zet de inleg zelf stil: Minder stopt niets, de periodieke inleg blijft, het voornemen wordt bewaard', async ({ page }) => {
     await start(page);
     await koppel(page, 'kayani');
-    const r = await page.evaluate(() => { zetBezitVoorwaarden('kayani', true); belegKies('kayani', 'pauze');
-      const a = SET.assets.find((x) => x.id === 'kayani'); const na = { per: a.per, pauze: a.pauze, keuze: SET.belegKeuze.kayani.keuze,
-        reis: fireInputs().belegdItems.find((x) => x.naam === 'Peaks (Kayani)').per };
-      belegHervat('kayani'); return { na, terug: a.per, weg: a.pauze }; });
-    expect(r.na.per).toBe(0);
-    expect(r.na.pauze).toEqual({ sinds: '2026-09', perVoor: 100 });
-    expect(r.na.keuze).toBe('pauze');
-    expect(r.na.reis).toBe(0);
-    expect(r.terug).toBe(100);
-    expect(r.weg).toBe(undefined);
+    await page.evaluate(() => zetBezitVoorwaarden('kayani', true));
+    await grip(page);
+    await page.locator('#s-maand [data-beleg="kayani"]').click();
+    await expect(page.locator('#sheet')).toContainText('Minder stopt niets: de overboeking stop je zelf bij je bank. De periodieke inleg van €100 in je Vermogensreis blijft staan. Je voornemen wordt bewaard');
+    const voorReis = await page.evaluate(() => fireInputs().belegdItems.find((x) => x.naam === 'Peaks (Kayani)').per);
+    await page.locator('#sheet [data-belegkeuze] button', { hasText: 'Ik zet de inleg zelf stil' }).click();
+    const r = await page.evaluate(() => { const a = SET.assets.find((x) => x.id === 'kayani');
+      return { per: a.per, pauze: a.pauze, keuze: SET.belegKeuze.kayani.keuze, reis: fireInputs().belegdItems.find((x) => x.naam === 'Peaks (Kayani)').per,
+        af: afsprakenLijst().filter((x) => x.soort === 'pauze').map((x) => ({ asset: x.assetId, wat: x.wat })) }; });
+    expect(r.per).toBe(100);
+    expect(r.pauze).toBe(undefined);
+    expect(r.keuze).toBe('pauze');
+    expect(r.reis).toBe(voorReis);
+    expect(r.af).toEqual([{ asset: 'kayani', wat: 'Inleg naar Peaks (Kayani) zelf stilzetten' }]);
+  });
+  test('een pauze van voor v337 blijft te hervatten', async ({ page }) => {
+    await start(page);
+    const r = await page.evaluate(() => { const a = SET.assets.find((x) => x.id === 'kayani'); a.pauze = { sinds: '2026-08', perVoor: 100 }; a.per = 0;
+      belegHervat('kayani'); return { per: a.per, pauze: a.pauze }; });
+    expect(r).toEqual({ per: 100, pauze: undefined });
   });
 });
 

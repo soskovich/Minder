@@ -119,8 +119,8 @@ genoemde versietag.)*
   AFSPRAAK: alleen het coachgesprek (`coCommit()`, `SET.coachLog`, v142/v207/v229) deed dat, en die lus
   blijft zoals hij is. NU WEL: de knop "Ik stort €131 per maand tot november" in de sheet van de
   dekkingsregel (bedrag en maand uit `r.perMaandTot`), een grens (`valtOpGrensZet()`), een potje dat
-  vanaf volgende maand LAGER ligt of stopt (`savePotje()` via `potjeAfspraak()`), "Inleg pauzeren"
-  (`belegKies()`), en "Potje verlagen" bij een uitgesloten incasso (dan meet hij of de AFSCHRIJVING
+  vanaf volgende maand LAGER ligt of stopt (`savePotje()` via `potjeAfspraak()`), "Ik zet de inleg
+  zelf stil" (`belegKies()`, tot deze ronde "Inleg pauzeren"; hij zet sindsdien `a.per` niet meer op nul), en "Potje verlagen" bij een uitgesloten incasso (dan meet hij of de AFSCHRIJVING
   wegblijft, soort `incasso`). NIET: een potje omhoog, "Telt weer mee" en "Wordt een reservering", want
   die vragen geen gedrag. Een nieuwe keuze over hetzelfde (soort plus categorie, bezitting of incasso)
   herziet de lopende afspraak.
@@ -128,31 +128,38 @@ genoemde versietag.)*
   tegen). Herzien (aanpassen of stoppen in de sheet) telt als afgerond. ER IS GEEN KNOP OM ZELF AF TE
   VINKEN. Wat buiten de app gebeurt (een abonnement opzeggen) staat op `loopt` tot de termijnmaand
   voorbij is zonder afschrijving. Een open punt is een feit: "storting in oktober nog niet gezien".
-- **DE MAANDAFSLUITING STAAT BOVENAAN GRIP TOT JE HEM AFSLUIT, EN NIETS SLUIT VANZELF** (`v337`):
-  `afsluitKaart()` toont vanaf dag 1 "<vorige maand> afsluiten" zolang die maand boekingen heeft en
-  `SET.maandAfsluiting[M]` leeg is, met een balk en punten die de app afvinkt (`afsluitPunten()`):
+- **DE MAANDAFSLUITING IS EEN REGEL MET EEN BALK ONDER "VRAAGT EEN BESLISSING", EN NIETS SLUIT VANZELF**
+  (`v337`, de vorm op keuze van de gebruiker): `afsluitKaart()` toont vanaf dag 1 "<vorige maand>
+  afsluiten · 4 van 6 ›" met de balk, zolang die maand boekingen heeft en `SET.maandAfsluiting[M]` leeg
+  is. "VRAAGT EEN BESLISSING" STAAT ALTIJD ERBOVEN: de regel staat direct onder die kaart, of op die
+  plek als er geen beslissing is. Een tik opent de sheet (`renderAfsluitSheet()`, die opnieuw rekent)
+  met de punten die de app afvinkt (`afsluitPunten()`; een punt sluit eerst de sheet en opent dan zijn
+  ingang):
   logboekvragen beantwoord (`valtOpMaandStand()`), potjes voor de nieuwe maand (`totalBudget()`), geen
   boekingen die nog op Overig staan zonder eigen keuze (ER BESTAAT GEEN "ZONDER CATEGORIE" in de app;
   Overig zonder override is het dichtste), de dekking deze maand rond (de dekkingsregel niet op
   `tekort`), en handmatige standen bijgewerkt. DE DREMPEL VOOR STANDEN IS `STAND_MAX_DAGEN` (90): een
   bezitting of schuld zonder invuldag of met een invuldag ouder dan 90 dagen; een schuld met gekoppelde
   betalingen rekent zelf (v334) en vraagt niets. Een punt dat niet van toepassing is staat er niet.
-  Daaronder "Wat je afsprak" (`afsprakenVoor(M)`). "4 van 6 klaar" is een stand, geen score.
+  In de sheet daaronder "Wat je afsprak" (`afsprakenVoor(M)`). "4 van 6" is een stand, geen score.
   "Afsluiten" kan alleen als alles af is; anders "Afsluiten met open punten", dat eerst een sheet met die
   punten toont (openen schrijft niets). `maandAfsluiten()` bewaart de punten, de afspraken en de open
   punten met hun feit op dat moment, plus een vingerafdruk van de boekingen van die maand
   (`afsluitVinger()`: id, categorie, bedrag). Daarna is het EEN regel ("September afgesloten op 4
   oktober ›") met een sheet, en "gewijzigd na afsluiten" zodra die vingerafdruk verschuift.
-  VERPLAATSEN IS NIET KOPIEREN: lopende afspraken staan IN de open kaart, en anders als eigen kaart
-  (`afsprakenKaart()`, voor de vanaf-kaart). GEMETEN op de stand van 4 oktober (vijf punten, twee afspraken): de kaart is 503px op 360 en 485px op
-  390, en Grip gaat van 887 naar 1407px en van 867 naar 1368px; verder schuift er niets. DAT IS DE PRIJS,
-  EN HIJ ZIT BOVENAAN: met de kaart open staan de beslissingen en de signaalkaarten op 360px onder de
-  vouw (de vouw-asserties van `v314`, `v320` en `v331` halen de kaart daarom eerst weg en pinnen de vorm
-  eronder). Na afsluiten is het een regel van 68px op beide breedtes. ZES BESTAANDE SPECS VIELEN EROP en
-  hadden gelijk: ze lazen de eerste kaart, een hoogte, de streep of het woord "punten". Een zevende viel
-  op een tweede lezer van `SET.budgetHist`, en die leest nu `maandPotjes()`; een achtste op een losse
+  VERPLAATSEN IS NIET KOPIEREN: lopende afspraken staan IN de sheet van de open afsluiting, en anders als eigen kaart
+  (`afsprakenKaart()`, voor de vanaf-kaart). GEMETEN op de stand van 4 oktober (vijf punten, twee afspraken): de regel is 62px op 360 EN 390px, en
+  Grip gaat van 887 naar 966px op 360 en van 867 naar 945px op 390; verder schuift er niets. De sheet is
+  456px. MET EEN BESLISSING (een post in de lopende maand met een gat) eindigt de eerste beslissing op
+  302px, boven de vouw van 568 op 360x640 en 772 op 390x844, en begint de afsluitregel op 335px. Na
+  afsluiten is het een regel van 68px. DE EERSTE VORM VAN DEZE RONDE was de volle kaart bovenaan Grip
+  (503/485px, Grip 1407/1368px, de beslissingen op 360px onder de vouw) en is op die grond omgezet.
+  ZES BESTAANDE SPECS VIELEN OP DE EERSTE VORM en hadden gelijk: ze lazen de eerste kaart, een hoogte, de
+  streep of het woord "punten". Twee daarvan halen de regel nog weg om de vorm van `v314` en `v331` te
+  pinnen; `beslissing-lijstregel` niet meer, want de regel staat onder die kaart. Een zevende viel op een
+  tweede lezer van `SET.budgetHist`, en die leest nu `maandPotjes()`; een achtste op een losse
   `font-size:11px`, en dat is nu `var(--fs-xs)`.
-  ZEVENTIEN SABOTAGES, ALLE ZEVENTIEN ROOD, twee pas nadat de spec het geval droeg (meetles a): "de
+  TWEEENTWINTIG SABOTAGES, ALLE TWEEENTWINTIG ROOD, twee pas nadat de spec het geval droeg (meetles a): "de
   incasso-vlag lekt" bleef groen omdat `savePotje()` hem na elke opslag al wist (het lek is een
   GEANNULEERDE route gevolgd door hetzelfde potje), en "een stop is gezien voor de termijn om is" bleef
   groen omdat de spec alleen december las en niet een dag midden in november.
@@ -279,12 +286,15 @@ genoemde versietag.)*
   en staat niet in de sheet (`v59`/`v73`/`v173`). Grip toont hem onder "Vraagt aandacht" in de lijstvorm
   (`belegVraagRij()`): "Je belegde EUR 100 in Peaks (Kayani) · voorwaarden nog niet gehaald". De sheet
   (`renderBelegVraag()`, zoekt opnieuw op, `v319`) noemt de voorwaarde met zijn waarde en drempel uit
-  `beleggenKlaar()` ("Dekking reserveringen EUR 37 tegen EUR 299") en "Bewust doorgaan" / "Inleg pauzeren";
+  `beleggenKlaar()` ("Dekking reserveringen EUR 37 tegen EUR 299") en "Bewust doorgaan" / "Ik zet de inleg
+  zelf stil" (tot `v337` "Inleg pauzeren");
   bij een open vraag eerst ja of nee.
   DE KEUZE GELDT VOOR EEN MAAND: `SET.belegKeuze[id]={maand, keuze, op}`, en de maand erna komt de vraag
-  terug bij nieuwe inleg zolang de voorwaarden niet gehaald zijn. Pauzeren zet `a.per` op nul met
-  `a.pauze={sinds, perVoor}` (hervatten in de editor zet hem terug), en de sheet zegt dat je de overboeking
-  zelf bij je bank stopt. `saveAsset()` houdt `voorwaarden` en `pauze` vast.
+  terug bij nieuwe inleg zolang de voorwaarden niet gehaald zijn. SINDS `v337` VERANDERT "IK ZET DE INLEG
+  ZELF STIL" NIETS: Minder stopt niets, `a.per` blijft staan, en het voornemen wordt bewaard als afspraak
+  die aan de gekoppelde inleg wordt gemeten. Tot `v337` zette "Inleg pauzeren" `a.per` op nul met
+  `a.pauze={sinds, perVoor}`; die velden en het hervatten in de editor blijven alleen voor een pauze van
+  daarvoor. `saveAsset()` houdt `voorwaarden` en `pauze` vast.
   GEMETEN: de aandacht-kaart gaat van 118 naar 167px op 360 EN 390px, zonder overloop. Twaalf sabotages,
   alle twaalf rood.
 - **HET LOGBOEK IS EEN EIGEN SCHERM, EN GRIP DRAAGT EEN REGEL OF DE VRAAG** (`v331`): het logboek op

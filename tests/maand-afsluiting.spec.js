@@ -28,17 +28,33 @@ async function maakAfspraken(page) {
   await page.click('[data-afdekking="nieuw"]');
   await page.evaluate(() => { openPotje('abonnement'); savePotje('abonnement', true); go('maand'); });
 }
-const kaart = (page) => page.evaluate(() => {
-  const k = document.getElementById('afsluitKaart'); if (!k) return null;
-  const t = (e) => (e ? e.innerText.replace(/\s+/g, ' ').trim() : '');
-  return {
-    tekst: t(k), teller: k.querySelector('[data-afteller]').dataset.afteller,
-    punten: [...k.querySelectorAll('[data-afpunt]')].map((e) => ({ punt: e.dataset.afpunt, af: e.dataset.af === '1', tekst: t(e) })),
-    afspraken: [...k.querySelectorAll('[data-afspraak]')].map((e) => ({ status: e.dataset.afstatus, tekst: t(e), box: e.querySelector('[data-box]').dataset.box })),
-    knop: k.querySelector('[data-afsluit]') ? k.querySelector('[data-afsluit]').dataset.afsluit : null,
-    eerste: document.querySelector('#s-maand > .card') === k,
-  };
-});
+/* v337: op Grip staat EEN regel met de balk; de lijst staat in de sheet erachter. Deze helper leest
+   de regel, opent de sheet en leest daar de punten en de afspraken. */
+const kaart = async (page) => {
+  const rij = await page.evaluate(() => {
+    const k = document.getElementById('afsluitKaart'); if (!k) return null;
+    const K = [...document.querySelectorAll('#s-maand > .card')];
+    const kop = (c) => ((c.querySelector('.hlabel') || {}).textContent || '').toUpperCase();
+    const ib = K.findIndex((c) => kop(c).includes('VRAAGT EEN BESLISSING'));
+    const ia = K.findIndex((c) => kop(c).includes('VRAAGT AANDACHT'));
+    return { teller: k.querySelector('[data-afteller]').dataset.afteller, regel: k.innerText.replace(/\s+/g, ' ').trim(),
+      ik: K.indexOf(k), ib, ia, rijen: k.querySelectorAll('[data-afpunt],[data-afspraak]').length };
+  });
+  if (!rij) return null;
+  await page.evaluate(() => openAfsluiting(document.getElementById('afsluitKaart').dataset.maand));
+  const sh = await page.evaluate(() => {
+    const k = document.getElementById('afsluitSheet');
+    const t = (e) => (e ? e.innerText.replace(/\s+/g, ' ').trim() : '');
+    return {
+      tekst: t(k), sheetTeller: k.querySelector('[data-afteller]').dataset.afteller,
+      punten: [...k.querySelectorAll('[data-afpunt]')].map((e) => ({ punt: e.dataset.afpunt, af: e.dataset.af === '1', tekst: t(e) })),
+      afspraken: [...k.querySelectorAll('[data-afspraak]')].map((e) => ({ status: e.dataset.afstatus, tekst: t(e), box: e.querySelector('[data-box]').dataset.box })),
+      knop: k.querySelector('[data-afsluit]') ? k.querySelector('[data-afsluit]').dataset.afsluit : null,
+    };
+  });
+  await page.evaluate(() => closeSheet());
+  return Object.assign({}, rij, sh);
+};
 
 test('a. invoer: dekking let op met EUR 131 per maand tot november, en september draagt boekingen', async ({ page }) => {
   await stand(page);
@@ -54,7 +70,13 @@ test('b. de stand op 4 oktober: logboek afgevinkt, dekking open, Abonnementen op
   await maakAfspraken(page);
   const k = await kaart(page);
   expect(k).not.toBeNull();
-  expect(k.eerste).toBe(true);                               // bovenaan Grip
+  // op Grip een regel met de balk, en geen lijst
+  expect(k.regel).toBe('September afsluiten 4 van 7 ›');
+  expect(k.rijen).toBe(0);
+  expect(k.sheetTeller).toBe(k.teller);
+  // onder 'Vraagt een beslissing' (als die er is) en boven 'Vraagt aandacht'
+  if (k.ib >= 0) expect(k.ik).toBeGreaterThan(k.ib);
+  expect(k.ia).toBeGreaterThan(k.ik);
   expect(k.tekst).toContain('September afsluiten');
   const log = k.punten.find((p) => p.punt === 'logboek');
   expect(log.af).toBe(true);
@@ -131,6 +153,7 @@ test('e. zonder open punten kan het gewoon, en niets sluit vanzelf', async ({ pa
   expect(k.punten.every((p) => p.af)).toBe(true);
   expect(k.knop).toBe('klaar');
   expect(k.teller).toBe(`${k.punten.length}/${k.punten.length}`);
+  await page.evaluate(() => openAfsluiting('2026-09'));
   await page.click('[data-afsluit="klaar"]');
   const regel = await page.evaluate(() => document.getElementById('afgeslotenRegel').innerText.replace(/\s+/g, ' '));
   expect(regel).toContain('September afgesloten op 4 oktober');
@@ -236,10 +259,12 @@ test('m. de pauze maakt een afspraak, en inleg na de afspraak houdt hem open', a
   await stand(page);
   const r = await page.evaluate(() => {
     belegKies('kayani', 'pauze');
-    const a = afsprakenLijst().find((x) => x.soort === 'pauze');
-    return { a, S: afspraakStand(a) };
+    const a = afsprakenLijst().find((x) => x.soort === 'pauze'); const b = SET.assets.find((x) => x.id === 'kayani');
+    return { a, S: afspraakStand(a), per: b.per, pauze: b.pauze };
   });
   expect(r.a.assetId).toBe('kayani');
+  expect(r.per).toBe(100);                                     // Minder stopt niets
+  expect(r.pauze).toBe(undefined);
   expect(r.a.tot).toBe('2026-11');
   expect(r.S.status).toBe('loopt');
   expect(r.S.feit).toContain('sinds 4 oktober geen inleg gezien');
@@ -258,9 +283,9 @@ test('n. een potje omhoog maakt geen afspraak, omlaag wel', async ({ page }) => 
   expect(r.wat[0]).toBe('Potje Boodschappen €400 vanaf november');
 });
 
-for (const w of [360, 390]) {
+for (const [w, vh] of [[360, 640], [390, 844]]) {
   test(`o. hoogte van Grip voor en na op ${w}px, zonder overloop`, async ({ page }) => {
-    await page.setViewportSize({ width: w, height: 800 });
+    await page.setViewportSize({ width: w, height: vh });
     await stand(page);
     await maakAfspraken(page);
     const h = await page.evaluate(() => {
@@ -273,19 +298,42 @@ for (const w of [360, 390]) {
       const voor = s.scrollHeight;
       return { na, voor, kaartH: Math.round(kaartH), over };
     });
-    console.log(`grip ${w}px: voor ${h.voor} na ${h.na} kaart ${h.kaartH}`);
+    console.log(`grip ${w}px: voor ${h.voor} na ${h.na} regel ${h.kaartH}`);
     expect(h.over).toBe(false);
-    expect(Math.abs(h.na - h.voor - (h.kaartH + 16))).toBeLessThanOrEqual(1);   // de kaart plus zijn marge, en verder schuift er niets
+    expect(h.kaartH).toBeLessThan(80);                            // een regel met de balk
+    expect(Math.abs(h.na - h.voor - (h.kaartH + 16))).toBeLessThanOrEqual(1);   // de regel plus zijn marge, en verder schuift er niets
+    // de sheet past zonder overloop
+    await page.evaluate(() => openAfsluiting('2026-09'));
+    const sh = await page.evaluate(() => { const k = document.getElementById('sheet'); const r = k.getBoundingClientRect();
+      return { over: [...k.querySelectorAll('*')].some((e) => e.getBoundingClientRect().right > r.right + 1), h: Math.round(document.getElementById('afsluitSheet').getBoundingClientRect().height) }; });
+    console.log(`afsluitsheet ${w}px: ${sh.h}`);
+    expect(sh.over).toBe(false);
     // na afsluiten is het een regel
     await stand(page); await maakAfspraken(page);
     await page.evaluate(() => { maandAfsluiten('2026-09', true); go('maand'); });
-    const g = await page.evaluate(() => { const e = document.getElementById('afgeslotenRegel'); const s = document.getElementById('s-maand'); const r = e.getBoundingClientRect();
-      const over = [...e.querySelectorAll('*')].some((x) => x.getBoundingClientRect().right > r.right + 1);
-      const sam = [...s.querySelectorAll(':scope > .card')].find((c) => /vastloopt|vraagt|staan goed|staat goed/i.test(c.innerText.split('\n')[0]));
-      return { regel: Math.round(r.height), over, samTop: sam ? Math.round(sam.getBoundingClientRect().top) : null }; });
-    console.log(`afgesloten regel ${w}px: ${g.regel}, samenvatting begint op ${g.samTop}`);
+    const g = await page.evaluate(() => { const e = document.getElementById('afgeslotenRegel'); const r = e.getBoundingClientRect();
+      return { regel: Math.round(r.height), over: [...e.querySelectorAll('*')].some((x) => x.getBoundingClientRect().right > r.right + 1) }; });
+    console.log(`afgesloten regel ${w}px: ${g.regel}`);
     expect(g.over).toBe(false);
     expect(g.regel).toBeLessThan(80);
+  });
+  test(`o2. met een beslissing staat die boven de afsluiting en boven de vouw op ${w}px`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: vh });
+    // een post in de lopende maand met een gat: dan vraagt de dekking een beslissing (v323)
+    await stand(page, { reserveringen: [{ id: 'p1', naam: 'Boetes cjib', bedrag: 299, vervalmaand: '2026-10', intervalM: 0 }] });
+    const r = await page.evaluate(() => {
+      const nav = document.querySelector('.nav').getBoundingClientRect().height;
+      const K = [...document.querySelectorAll('#s-maand > .card')];
+      const b = K.find((c) => /VRAAGT EEN BESLISSING/i.test((c.querySelector('.hlabel') || {}).textContent || ''));
+      const rij = b && b.querySelector('[data-beslis]');
+      const k = document.getElementById('afsluitKaart');
+      return { vouw: Math.round(innerHeight - nav), rijBodem: rij ? Math.round(rij.getBoundingClientRect().bottom) : null,
+        ib: K.indexOf(b), ik: K.indexOf(k), kTop: Math.round(k.getBoundingClientRect().top) };
+    });
+    console.log(`beslissing ${w}px: eerste rij eindigt op ${r.rijBodem}, vouw ${r.vouw}, afsluiting begint op ${r.kTop}`);
+    expect(r.ib).toBeGreaterThanOrEqual(0);
+    expect(r.ik).toBe(r.ib + 1);                                   // direct onder 'Vraagt een beslissing'
+    expect(r.rijBodem).toBeLessThan(r.vouw);
   });
 }
 
@@ -329,4 +377,13 @@ test('r. een boeking op Overig zonder eigen keuze is een open punt, met keuze ni
   await page.evaluate((i) => { OVR[i] = 'overig'; save(); go('maand'); }, id);
   c = (await kaart(page)).punten.find((p) => p.punt === 'categorie');
   expect(c.af).toBe(true);
+});
+
+test('s. een punt in de sheet sluit de sheet en opent zijn ingang', async ({ page }) => {
+  await stand(page);
+  await page.click('#afsluitKaart');
+  await expect(page.locator('#afsluitSheet')).toBeVisible();
+  await page.click('#afsluitSheet [data-afpunt="logboek"]');
+  expect(await page.evaluate(() => document.getElementById('sheetBg').classList.contains('show'))).toBe(false);
+  await expect(page.locator('#s-logboek')).toBeVisible();
 });

@@ -224,11 +224,11 @@ test.describe('e · één keer per maand', () => {
 });
 
 test.describe('f · plaats en layout', () => {
-  test('de regel staat na de maandafsluiting, vóór het oordeel en vóór de regels', async ({ page }) => {
+  test('de regel staat vóór het oordeel en vóór de regels, en boven de maandafsluiting', async ({ page }) => {
     await maand(page, metAfspraak({ text: 'x', cat: 'boodschappen' }, 200));
-    // v337: staat er een afsluitkaart, dan is die de eerste
+    // v337: de maandafsluiting staat lager op Grip, onder 'Vraagt een beslissing', en niet bovenaan
     const ids = await page.$$eval('#s-maand > .card', (L) => L.map((e) => e.id));
-    if (ids.includes('afsluitKaart')) expect(ids[0]).toBe('afsluitKaart');
+    expect(ids[0]).not.toBe('afsluitKaart');
     const eerste = await page.locator(NA_AFSLUIT).first().innerText();
     expect(eerste).toMatch(/je afspraak van vorige maand/i);
     const tweede = await page.locator(NA_AFSLUIT).nth(1).innerText();
