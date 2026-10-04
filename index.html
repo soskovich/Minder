@@ -15115,8 +15115,11 @@ function brugBlok(m){
   const vorigeKan=months().includes(brugVorige(m));
   const knop=(k,l,uit)=>`<span class="chip${tegen===k?' on':''}${uit?' off':''}" data-brugtegen="${k}"${uit?'':` onclick="brugTegen('${k}')"`}>${l}</span>`;
   const knoppen=`<div class="chips" style="padding:8px 0 0">${knop('budget','Tegen budget',false)}${knop('vorige','Tegen vorige maand',!vorigeKan)}</div>`;
+  /* De lopende maand heeft geen staaf (v194), dus deze tak is vanaf het scherm niet bereikbaar; een
+     rechtstreekse aanroep krijgt niets in plaats van een tekst die nergens staat. */
+  if(Br.leeg==='lopend') return '';
   if(Br.leeg){
-    const reden={lopend:'De bridge staat er na afloop van de maand.', geenvorige:'Voor de maand ervoor zijn er geen gegevens, dus er is niets om tegen af te zetten.',
+    const reden={geenvorige:'Voor de maand ervoor zijn er geen gegevens, dus er is niets om tegen af te zetten.',
       geenpotjes:'Er zijn voor deze maand geen potjes om tegen af te zetten.', negatief:'Deze maand kreeg je netto meer terug dan je uitgaf, dus er is geen bridge te tekenen.', fout:'Deze bridge kon niet worden berekend.'}[Br.leeg]||'';
     return `<div id="insBrug" data-brugleeg="${Br.leeg}">${knoppen}<div class="small" style="color:var(--mut2);margin-top:6px">${reden}</div></div>`;
   }

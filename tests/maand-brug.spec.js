@@ -203,6 +203,16 @@ test.describe('d - een maand van voor v309', () => {
   });
 });
 
+test.describe('d2 - de lopende maand', () => {
+  test('heeft geen staaf, en een rechtstreekse aanroep geeft niets', async ({ page }) => {
+    await boot(page);
+    expect(await page.locator('#insSpendChart rect[onclick*="2026-10"]').count()).toBe(0);
+    const r = await page.evaluate(() => ({ b: brugBlok('2026-10'), m: maandBrug('2026-10', 'budget').leeg }));
+    expect(r.m).toBe('lopend');
+    expect(r.b).toBe('');
+  });
+});
+
 test.describe('e - afronding: de afgeronde stappen tellen precies op', () => {
   test('met centen eindigt de bridge op het bedrag van de staaf', async ({ page }) => {
     const sep = { uiteten: 494.4, vices: 303.4, boodschappen: 784.4, shopping: 100.4, vervoer: 193.4, sport: 50.4, huur: 1171 };

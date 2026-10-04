@@ -126,8 +126,9 @@ genoemde versietag.)*
   is een potje, de rest "zonder potje"; hooguit `BRUG_LOS` (4) potjes los op de absolute grootte van hun
   bijdrage, de andere als "andere potjes" met een uitsplitsing (`brugRest()`). Boven het budget `--red`, eronder
   `--mut2`. De zin (`brugZin()`) noemt het verschil en wie het droeg, zonder oordeel.
-  DE LOPENDE MAAND HEEFT GEEN STAAF (`v194`), dus "bridge na afloop van de maand" kan vanaf de staven niet
-  voorkomen; de tak staat er voor een rechtstreekse aanroep.
+  DE LOPENDE MAAND HEEFT GEEN STAAF (`v194`), dus een bridge voor die maand kan vanaf de staven niet voorkomen;
+  een rechtstreekse aanroep van `brugBlok()` geeft dan niets. De tekst "bridge na afloop van de maand" is daarom
+  weggehaald, op keuze van de gebruiker.
   GEMETEN: de kaart is 242px voor de tik, 497px met de bridge en 555px uitgesplitst, op 360 EN 390px, zonder
   overloop; met negen kolommen geen overlappende bedragen en geen naam buiten de kaart. EEN BESTAANDE TEST VIEL
   EROP en had gelijk: `potjebedrag-historie` eiste dat `SET.budgetHist` geen lezer had.
