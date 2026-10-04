@@ -111,19 +111,23 @@ ene staat en op het andere niet.
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
 - **DE AFLOSSING STAAT ALS EIGEN REGEL ONDER DE SPAARQUOTE, EN NIET ERIN** (`v336`, gevraagd door de
-  gebruiker): `aflossingMaand(ym)` telt het AFLOSSINGSDEEL van de gekoppelde schuldbetalingen van die maand
-  op, uit `schuldStand()` (`v334`) en zonder tweede uitsplitsing (`v104`); `aflossingRegel(ym)` zet het onder
-  het percentage op de tegel van Vermogen (`kpiTegels()`) en in de sheet erachter (`openKpiDetail()`):
-  "+ €426 afgelost op je schulden, bij benadering · niet in dit percentage" (`data-aflossing`).
+  gebruiker): `aflossingMaand(ym)` geeft per schuld met een gekoppelde betaling in die maand het
+  AFLOSSINGSDEEL (niet de rente), uit `schuldStand()` (`v334`) en zonder tweede uitsplitsing (`v104`).
+  `aflossingRegel(ym)` zet onder het percentage, op de tegel van Vermogen (`kpiTegels()`) en in de sheet
+  erachter (`openKpiDetail()`), "Daarnaast €X afgelost op je schulden ›" (`data-aflossing`); X is de SOM VAN
+  DE AFGERONDE RIJEN van de uitsplitsing (`v271`/`v325`). Een tik (`openAflossing()`, met
+  `event.stopPropagation()` zodat de tegel-sheet niet opent) toont per schuld de aflossing met de betaling
+  en de rente als context, "bij benadering", en bij een lease met de auto als bezitting (`schuldMetAuto()`,
+  ook gelezen door de rij op Vermogen) "de auto verliest ook waarde", ZONDER BEDRAG.
   `vermogensInleg()` IS NIET AANGERAAKT: het percentage blijft spaarrekening, reserveringen en
-  beleggingsinleg, want een schuld die kleiner wordt is geen geld dat ergens staat (en bij een lease daalt
-  de dagwaarde mee). ONBEKEND IS GEEN NUL: heeft een schuld in die maand een gekoppelde betaling die zijn
-  stand niet rekent (op of voor de invuldag, of zonder invuldag), dan zegt de regel "niet te zeggen" met de
-  naam erbij. Zonder gekoppelde betaling in die maand staat er geen regel. De uitleg (`KPI_META.inleg`) en
-  de opbouw in de sheet zeggen het nu ook; de oude zin dat de app het aflossingsdeel niet kan weten klopt
-  alleen nog zonder koppeling. GEMETEN: de tegel gaat van 85 naar 122px op 360 EN 390px (de regel is twee
-  regels), zonder overloop. Acht sabotages, alle acht rood. EEN BESTAANDE TEST VIEL EROP en had gelijk:
-  `kerncijfers-splitsing` pinde die oude zin.
+  beleggingsinleg, gedeeld door inkomen. ONBEKEND IS GEEN NUL, EN ER WORDT NIETS GESCHAT: een schuld met een
+  gekoppelde betaling die zijn stand niet rekent (op of voor de invuldag, of zonder invuldag) heet in de
+  uitsplitsing "niet te zeggen"; is dat een deel, dan zegt de regel "deels onbekend" en telt hij alleen wat
+  bekend is; is het alles, dan staat de regel er niet. Zonder gekoppelde betaling in die maand ook niet.
+  De uitleg (`KPI_META.inleg`) en de opbouw in de sheet zeggen dat aflossing er niet in zit maar eronder
+  staat. GEMETEN: de tegel gaat van 85 naar 105px op 360 EN 390px (de regel past op een regel), zonder
+  overloop. Twaalf sabotages, alle twaalf rood. EEN BESTAANDE TEST VIEL EROP en had gelijk:
+  `kerncijfers-splitsing` pinde de oude zin dat de app het aflossingsdeel niet kan weten.
 - **EEN TIK OP EEN STAAF TOONT DE BRIDGE VAN DIE MAAND, EN DIE EINDIGT OP DE STAAF** (`v335`, variant C,
   gevraagd door de gebruiker): onder "Over de maanden heen" selecteert een tik een afgesloten maand
   (`brugKies()`, de staaf krijgt `--teal`) en `brugBlok()` toont eronder de stappen uit `maandBrug(m, tegen)`.

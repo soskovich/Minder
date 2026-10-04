@@ -9617,7 +9617,7 @@ function renderDebts(){
         if(mnd>laatsteN) laatsteN=mnd;
       }
     }
-    const coupled=(d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0);
+    const coupled=schuldMetAuto(d);
     if(coupled && rest>0){ sub+=(sub?' · ':'')+`eigen deel ${euro0((+d.dagwaarde||0)-rest)}`; }
     const nmLabel=coupled?' <span style="color:var(--mut2);font-size:10.5px">· gekoppeld aan bezitting</span>':'';
     // Detectie: zit de MAANDBETALING in je uitgaven? (v100) Die groene regel zei "aflossing …",
@@ -13919,7 +13919,7 @@ const KPI_META={
   // het tegendeel en botste met de referentie-verdeling, die "sparen" wél als instroom op je
   // spaarrekening leest (healthSplitOver). Eén term per begrip (v91): dit is het restsaldo.
   inleg: {label:'Spaarquote',         bandTxt:'doel 20% of meer', band:20,  dir:'up',   sign:1,  base:0,
-    uitleg:'Welk deel van je inkomen er écht opzij ging: wat er naar je spaarrekening en je reserveringen stroomde plus je beleggingsinleg, gedeeld door je inkomen. Geld dat op je betaalrekening blijft staan telt hier niet mee. Een overboeking tussen je eigen potten telt één keer. Wat er niet in zit: een aflossing op een schuld en een inleg in een doel dat je zelf bijhoudt. Koppel je een betaling aan een schuld, dan staat het aflossingsdeel als eigen regel onder het percentage, en niet erin. Zonder gemarkeerde spaarrekening valt dit terug op je spaar-categorie.'},
+    uitleg:'Welk deel van je inkomen er écht opzij ging: wat er naar je spaarrekening en je reserveringen stroomde plus je beleggingsinleg, gedeeld door je inkomen. Geld dat op je betaalrekening blijft staan telt hier niet mee. Een overboeking tussen je eigen potten telt één keer. Wat er niet in zit: een aflossing op een schuld en een inleg in een doel dat je zelf bijhoudt. Een aflossing zit er niet in, maar staat eronder: koppel je een betaling aan een schuld, dan staat het aflossingsdeel (zonder de rente) als eigen regel onder het percentage. Zonder gemarkeerde spaarrekening valt dit terug op je spaar-categorie.'},
   budget:{label:'Budgetnaleving',     bandTxt:'doel 100% of minder', band:100, dir:'down', sign:1, base:0,
     uitleg:'Welk deel van je maandbudget je hebt uitgegeven: uitgaven ÷ budget. Je budget is de som van je potjes; heb je die niet, dan je inkomen-limiet.'},
   vari:  {label:'Variabele-lasten-druk', bandTxt:'doel onder 30%', band:30, dir:'down', sign:1, base:0,
@@ -14353,33 +14353,58 @@ function schuldGemetenPerMaand(id){
    spaarquote telt geld dat ergens staat, en een aflossing is een schuld die kleiner wordt (bij een lease
    daalt de dagwaarde van de auto er bovendien naast). Twee getallen naast elkaar, geen som.
    DE BRON IS schuldStand() (v334): per gekoppelde betaling de aflossing na de rente, dezelfde rekensom als
-   de rij op Vermogen. Er komt geen tweede uitsplitsing naast (v104).
+   de rij op Vermogen. Er komt geen tweede uitsplitsing naast (v104). Alleen het aflossingsdeel telt; de
+   rente staat in de uitsplitsing als context.
+   DE REGEL IS DE SOM VAN DE AFGERONDE RIJEN VAN DE UITSPLITSING (v271/v325), zodat wie de rijen optelt op
+   het bedrag van de regel uitkomt.
    ONBEKEND IS GEEN NUL (v59/v73/v173): draagt een schuld in die maand een gekoppelde betaling die zijn
-   stand niet rekent (op of voor de invuldag, of zonder invuldag), dan is het aflossingsdeel niet te zeggen
-   en geldt dat voor de hele regel. Zonder enige gekoppelde betaling in die maand is er geen regel. */
+   stand niet rekent (op of voor de invuldag, of zonder invuldag), dan is zijn aflossingsdeel niet te
+   zeggen. Is dat bij elke schuld zo, dan staat er geen regel; bij een deel zegt de regel "deels onbekend"
+   en telt alleen wat bekend is. Zonder gekoppelde betaling in die maand staat er geen regel. */
+function schuldMetAuto(d){ return !!(d && d.type==='financiallease' && d.autoBezit && (+d.dagwaarde||0)>0); }
 function aflossingMaand(ym){
-  let bedrag=0, n=0, zonderRente=false; const onbekend=[];
+  const regels=[];
   for(const d of (SET.debts||[])){
     const tx=schuldGekoppeld(d.id).filter(t=>String(t.date).slice(0,7)===ym);
     if(!tx.length) continue;
-    n++;
     const S=schuldStand(d);
     const bet=S.betalingen.filter(b=>String(b.datum).slice(0,7)===ym);
-    if(bet.length<tx.length){ onbekend.push(d.naam||'een schuld'); continue; }
-    for(const b of bet) bedrag+=b.aflossing;
-    if(S.zonderRente) zonderRente=true;
+    const betaald=Math.round(tx.reduce((s,t)=>s-t.amount,0));
+    if(bet.length<tx.length){ regels.push({id:d.id, naam:d.naam||'Schuld', onbekend:true, betaald, auto:schuldMetAuto(d)}); continue; }
+    regels.push({id:d.id, naam:d.naam||'Schuld', onbekend:false, betaald,
+      aflossing:Math.round(bet.reduce((s,b)=>s+b.aflossing,0)), rente:Math.round(bet.reduce((s,b)=>s+b.rente,0)),
+      zonderRente:S.zonderRente, auto:schuldMetAuto(d)});
   }
-  if(!n) return null;
-  if(onbekend.length) return {onbekend:true, namen:onbekend};
-  return {bedrag:Math.round(bedrag), zonderRente, aantal:n};
+  if(!regels.length) return null;
+  const bekend=regels.filter(r=>!r.onbekend);
+  if(!bekend.length) return {regels, bedrag:null, deels:false};
+  return {regels, bedrag:bekend.reduce((s,r)=>s+r.aflossing,0), deels:bekend.length<regels.length};
 }
 function aflossingRegel(ym){
   let A=null; try{ A=aflossingMaand(ym); }catch(_){ return ''; }
-  if(!A) return '';
-  const tekst=A.onbekend
-    ? `Aflossing op je schulden: niet te zeggen, want bij ${esc(A.namen.join(' en '))} staat geen restschuld van voor deze betaling`
-    : `+ ${euro0(A.bedrag)} afgelost op je schulden, bij benadering${A.zonderRente?' · zonder rente gerekend':''} · niet in dit percentage`;
-  return `<div class="wvo-ts" data-aflossing="${A.onbekend?'onbekend':A.bedrag}" style="color:var(--mut2)">${tekst}</div>`;
+  if(!A || A.bedrag==null) return '';
+  return `<div class="wvo-ts" data-aflossing="${A.bedrag}" style="color:var(--mut2);cursor:pointer" onclick="event.stopPropagation();openAflossing('${esc(ym)}')">Daarnaast ${euro0(A.bedrag)} afgelost op je schulden${A.deels?' · deels onbekend':''} ›</div>`;
+}
+function openAflossing(ym){
+  let A=null; try{ A=aflossingMaand(ym); }catch(_){ return; }
+  if(!A) return;
+  window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;
+  const rij=r=>{
+    const sub=r.onbekend
+      ? `niet te zeggen: er staat geen restschuld van voor deze betaling · ${euro0(r.betaald)} betaald`
+      : `van ${euro0(r.betaald)} betaald${r.zonderRente?' · zonder rente gerekend':` · ${euro0(r.rente)} rente`} · bij benadering`;
+    return `<div class="row" data-aflosrij="${esc(String(r.id))}" style="gap:9px;padding:9px 0;border-bottom:1px solid var(--line);align-items:flex-start">
+      <div style="flex:1;min-width:0"><div class="small" style="font-weight:600;overflow-wrap:anywhere">${esc(r.naam)}</div>
+        <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45">${sub}${r.auto?' · <span data-aflosauto>de auto verliest ook waarde</span>':''}</div></div>
+      <div class="small" style="font-weight:700;white-space:nowrap">${r.onbekend?'onbekend':euro0(r.aflossing)}</div></div>`;
+  };
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div class="row" style="margin-bottom:6px"><div style="font-weight:800;font-size:var(--fs-lg)">Afgelost in ${esc(MFULL[+ym.slice(5,7)-1])}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="small muted" style="line-height:1.5">Het aflossingsdeel van de betalingen die je aan een schuld koppelde: eerst gaat de rente eraf, de rest maakt je schuld kleiner. Dit staat naast je spaarquote en telt er niet in mee.</div>
+    <div data-aflossheet style="margin-top:8px">${A.regels.map(rij).join('')}</div>
+    ${A.bedrag!=null?`<div class="row" style="gap:9px;padding:9px 0"><span class="small" style="flex:1;font-weight:600">Samen${A.deels?', van wat bekend is':''}</span><span class="small" style="font-weight:700">${euro0(A.bedrag)}</span></div>`:''}
+    <div style="height:8px"></div>`;
+  showSheetBg();
 }
 /* De teller van de spaarquote, met zijn opbouw erbij. null per deel = die stroom is niet bekend;
    totaal is null zodra geen enkele stroom bekend is. */
