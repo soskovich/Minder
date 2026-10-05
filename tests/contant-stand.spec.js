@@ -317,13 +317,22 @@ test.describe('wanneer de app vraagt te tellen', () => {
     expect(await page.evaluate(() => contantKaart())).toBe('');
   });
 
-  test('de kaart staat op Grip en draagt spiegel, gevolg en keuze', async ({ page }) => {
+  /* v340: de kaart staat niet meer los op Grip maar achter de Let op-regel [data-letop="contant"], in de
+     sheet #gripLetOpSheet. De test opent die regel zoals een tik dat doet en eist dat de kaart niet meer
+     los op Grip staat. */
+  test('de kaart staat achter Let op op Grip en draagt spiegel, gevolg en keuze', async ({ page }) => {
     await boot(page, {});
-    await page.evaluate(() => { go('maand'); });
+    await page.evaluate(() => { go('maand'); renderMaand(); });
     const r = await page.evaluate(() => {
-      const el = document.querySelector('#s-maand');
-      return { tekst: el.innerText, tik: /contantTellen\(\)/.test(el.innerHTML) };
+      const grip = document.querySelector('#s-maand');
+      const opGrip = /contantTellen\(\)/.test(grip.innerHTML);
+      const regel = document.querySelector('#s-maand #gripLetOp [data-letop="contant"]');
+      if (regel) regel.click();
+      const el = document.querySelector('#gripLetOpSheet');
+      return { regel: !!regel, opGrip, tekst: el ? el.innerText : '', tik: !!el && /contantTellen\(\)/.test(el.innerHTML) };
     });
+    expect(r.regel).toBe(true);
+    expect(r.opGrip).toBe(false);
     expect(r.tekst).toMatch(/contant/i);         // de hlabel staat in kapitalen via CSS
     expect(r.tekst).toMatch(/€\s?400/);          // spiegel: het gemeten bedrag
     expect(r.tekst).toMatch(/in je zak/);        // gevolg

@@ -183,14 +183,13 @@ test.describe('d · een opsomming plakt niet met en', () => {
     expect(r.gaten).toBe('a en c');
   });
 
-  test('het maandoordeel gebruikt hem', async ({ page }) => {
+  /* v340: 'het maandoordeel gebruikt hem' is vervallen, want maandOordeel() en zijn subregel bestaan niet
+     meer. De opsomming op Grip zit nu in "Deze maand" (welke potjes voorlopen), via gripNamen(). */
+  test('de opsomming op Grip gebruikt hem', async ({ page }) => {
     await boot(page);
-    const zin = await page.evaluate(() => {
-      const mk = (n) => Array.from({ length: n }, (_, i) => ({ key: 'r' + i, naam: 'Regel ' + i, status: 'ok' }));
-      return maandOordeel(mk(3)).sub;
-    });
-    expect(zin).toBe('Regel 0, regel 1 en regel 2 zijn in orde.');
-    expect(zin).not.toContain('en regel 1 en');
+    const zin = await page.evaluate(() => gripNamen([{ naam: 'Boodschappen' }, { naam: 'Uit eten' }, { naam: 'Vervoer' }]));
+    expect(zin).toBe('Boodschappen, Uit eten en Vervoer');
+    expect(zin).not.toContain('Uit eten en Vervoer en');
   });
 });
 

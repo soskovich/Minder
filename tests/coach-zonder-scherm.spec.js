@@ -124,7 +124,9 @@ test.describe('b · de vier gespreksingangen blijven werken', () => {
          onderwerp een bestaande ingang heeft, niet op welk scherm die staat. */
       return { ins: /coStart\('lek'/.test(kaal(valtOpKaartOpen.toString())),
         plan: /coStart\('horizon'/.test(kaal(coHorizonVraag.toString())),
-        maand: /coStart\('maand'/.test(kaal(maandCoachIngang.toString())),
+        /* v340: de maandingang staat niet meer in maandCoachIngang() (die opent nu alleen het gewone
+           gesprek) maar als knop in de sheet achter een tegel, en bij een lopende afspraak in "Deze maand". */
+        maand: /coStart\('maand'/.test(kaal(maandIngangKnop.toString())) && /coStart\('maand'/.test(kaal(dezeMaandKaart.toString())),
         algemeen: /coStart\('algemeen'/.test(kaal(maandCoachIngang.toString())) };
     }, KAAL_JS);
     expect(r).toEqual({ ins: true, plan: true, maand: true, algemeen: true });

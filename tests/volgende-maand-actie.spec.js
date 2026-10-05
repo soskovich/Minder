@@ -141,10 +141,15 @@ test('b2 het budgetraster zet dezelfde handeling via setCatBudget', async ({page
 /* DE KNOP OP GRIP LOOPT HET ECHTE PAD: hij staat alleen in de laatste dagen (v314), dus deze test
    pint twee dagen voor het eind. Hij tikt de knop, vult het veld van de sheet en zet vast; een
    rechtstreekse aanroep van savePotje() zou de ingang zelf niet meten (meetles c). */
+/* v340: de signaalkaart staat niet meer open op Grip maar achter de regel onder "Let op"
+   ([data-letop="sig"]), in de sheet #gripLetOpSheet. De test tikt die regel eerst aan; de knop en de
+   route erachter zijn dezelfde. */
 test('b3 de knop "Volgende maand anders" op Grip komt in het logboek als volgende_maand', async ({page})=>{
   await boot(page,{dagen:2});
   await page.evaluate(()=>go('maand'));
-  await expect(page.locator('.valtop-open')).toContainText('Volgende maand anders');
+  expect(await page.locator('#s-maand .valtop-open').count()).toBe(0);
+  await page.locator('#gripLetOp [data-letop="sig"]').first().click();
+  await expect(page.locator('#gripLetOpSheet .valtop-open')).toContainText('Volgende maand anders');
   const oc=await page.evaluate(()=>{
     const el=[...document.querySelectorAll('.valtop-open [onclick]')]
       .find(x=>/openPotje\(/.test(x.getAttribute('onclick')||''));

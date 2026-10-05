@@ -5,7 +5,7 @@
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
 const { seed, open, CUR } = require('./budget-fixture');
-const { beslisIngangen } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
+const { beslisIngangen, beslisKeys } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 
 const overMaanden = (n) => {
   const d = new Date(); d.setMonth(d.getMonth() + n);
@@ -49,8 +49,10 @@ async function maand(page, payload) {
 }
 /* v320: de weg naar het gesprek loopt sinds deze ronde via de sheet: de lijstregel is de knop en
    de vraag staat daarin. Twee tikken, dus het staat hier een keer in plaats van bij elke test. */
+/* v340: de lijstregel is een tegel geworden (of een regel onder Let op); de eerste in schermvolgorde. */
 async function opentGesprek(page) {
-  await page.locator('.row[data-beslis]').first().click();
+  const k = (await beslisKeys(page))[0];
+  await page.locator(`#s-maand [data-tegel="${k}"], #s-maand [data-letop="str"][onclick*="'${k}'"]`).first().click();
   await page.locator('#sheet [data-beslisknop]').first().click();
 }
 const wachtKeuze = (page) => page.waitForFunction(
@@ -113,7 +115,11 @@ test.describe('b · alles ok, en alleen onbekend', () => {
     const html = await page.evaluate(() => maandCoachIngang([{ key: 'buffer', status: 'ok' }, { key: 'doel', status: 'ok' }]));
     expect(html).toContain("coStart('algemeen'");
     expect(html).toMatch(/niets te beslissen/);
-    expect(html).not.toMatch(/goed|knap|mooi|gefeliciteerd|top/i);
+    /* v340: de regel draagt nu inline stijl met `padding-top` en `border-top`, dus de woordtoets loopt
+       over de tekst die je leest en niet over de HTML. */
+    const tekst = await page.evaluate((h) => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent; }, html);
+    expect(tekst).toMatch(/niets te beslissen/);
+    expect(tekst).not.toMatch(/goed|knap|mooi|gefeliciteerd|top/i);
   });
 
   test('alleen onbekende regels geeft geen ingang', async ({ page }) => {

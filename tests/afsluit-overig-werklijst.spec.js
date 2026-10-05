@@ -20,9 +20,12 @@ async function stand(page) {
     save(); go('maand');
   });
 }
-/* De echte route: de regel op Grip, de punt in de sheet. */
-async function viaPunt(page) {
-  await page.click('#afsluitKaart');
+/* De echte route: de regel op Grip, de punt in de sheet.
+   v340: de afsluitregel op Grip bestaat niet meer; de afsluiting is een pop-up, en de vaste ingang
+   ernaar is de regel "<maand> afsluiten" bovenaan het logboek ([data-logopen]). */
+async function viaPunt(page, o) {
+  if (!(o && o.alOpLogboek)) await page.evaluate(() => { closeSheet(); go('logboek'); });
+  await page.click('#logTijdlijn [data-logopen="2026-09"]');
   await page.click('#afsluitSheet [data-afpunt="categorie"]');
   await expect(page.locator('#afsluitOverig')).toBeVisible();
 }
@@ -88,9 +91,13 @@ test('e. een eerdere eigen keuze voor dezelfde tegenpartij staat bovenaan, en op
   await stand(page);
   const xy = await id(page, 'Xyzzy Winkel', '2026-09-20');
   const q4 = await id(page, 'Qwrtz 4', '2026-09-06');
+  /* v340: naar het logboek gaan (de route naar de afsluiting) rekent de signalen opnieuw en mag
+     schrijven; dat gebeurt hier VOOR de teller, zodat hij alleen het openen van de werklijst en het
+     voorstel meet, zoals voor v340. */
+  await page.evaluate(() => { closeSheet(); go('logboek'); });
   await page.evaluate(() => { window._schrijf = 0; const o = localStorage.setItem.bind(localStorage); localStorage.setItem = (k, v) => { window._schrijf++; return o(k, v); }; });
   const voor = await page.evaluate(() => JSON.stringify(OVR));
-  await viaPunt(page);
+  await viaPunt(page, { alOpLogboek: true });
   const l = await lijst(page);
   expect(await page.locator(`[data-werkrij="${xy}"]`).innerText()).toContain('eerder koos je Boodschappen');
   expect(await page.locator(`[data-werkrij="${q4}"]`).innerText()).not.toContain('eerder koos je');

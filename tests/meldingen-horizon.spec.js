@@ -3,6 +3,7 @@
 // verschijnt op precies één plek.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
+const { kaalUit } = require('./bron-kaal');
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -110,11 +111,17 @@ test.describe('c · structureel op het maandscherm', () => {
     const verwacht = await page.evaluate(() => maandStructureel().map((r) =>
       (STRUCT_STATUS[(r.sig || {}).t] || MAAND_DREMPEL.structureelStatus)));
     for (let i = 0; i < str.length; i++) expect(str[i].status).toBe(verwacht[i]);
-    const r = await page.evaluate(() => {
-      const R = maandRegels(), S = maandStructureel();
-      return { zonder: maandOordeel(R).zin, met: maandOordeel(R.concat(S)).zin };
-    });
-    expect(r.met).not.toBe(r.zonder);            // het telt mee in de beslisboom
+    /* v340: de oordeelzin is vervallen. Wat blijft: het signaal staat op Grip onder "Let op", met de
+       stip in de kleur van zijn status, dus een blokkade leest als rood en een observatie als amber. */
+    const rijen = await page.evaluate(() => { go('maand');
+      return [...document.querySelectorAll('#gripLetOp [data-letop="str"]')].map((x) => ({ t: x.innerText, h: x.innerHTML })); });
+    expect(rijen.length).toBe(str.length);
+    for (let i = 0; i < str.length; i++) {
+      const naam = await page.evaluate((k) => maandStructureel().find((r) => r.key === k).naam, str[i].key);
+      const rij = rijen.find((x) => x.t.includes(naam));
+      expect(rij, naam).toBeTruthy();
+      expect(rij.h).toContain(str[i].status === 'tekort' ? 'var(--red)' : 'var(--amber)');
+    }
   });
 
   test('het loopt mee als gewone regel, niet als tweede blok', async ({ page }) => {
@@ -122,22 +129,25 @@ test.describe('c · structureel op het maandscherm', () => {
     const str = await structureel(page);
     test.skip(!str.length, 'deze fixture levert geen structureel signaal');
     await page.evaluate(() => { delete SET.maandGelezen; renderMaand(); });
+    /* v340: 'Vraagt een beslissing' is vervallen. Een structureel signaal is een gewone regel onder
+       "Let op", tussen de andere signalen, en krijgt geen eigen kaart of kop. */
     const kaarten = await page.evaluate(() => [...document.querySelectorAll('#s-maand .card .hlabel')].map((e) => e.textContent));
-    expect(kaarten.filter((k) => /vraagt een beslissing/i.test(k)).length).toBe(1);
+    expect(kaarten.filter((k) => /^let op$/i.test(k.trim())).length).toBe(1);
+    expect(await page.locator('#gripLetOp [data-letop="str"]').count()).toBe(str.length);
     expect(kaarten.some((k) => /signaal|patroon|melding/i.test(k))).toBe(false);
   });
 
   /* v175: dit legde vast dat de coach-ingang R kreeg en dus de structurele signalen miste. Daardoor
      wees de ingang onderaan naar een andere regel dan de oordeelzin bovenaan noemde. Beide lezen nu
      RO, en coMaandRegel() kent de structurele sleutels, zodat het gesprek niet meteen sluit. */
-  test('de coach-ingang en het oordeel lezen dezelfde lijst', async ({ page }) => {
+  test('de coach-ingang leest de lijst met de structurele signalen', async ({ page }) => {
     await boot(page);
-    const src = await page.evaluate(() => renderMaand.toString());
-    expect(src).toContain('maandCoachIngang(RO)');
-    expect(src).toContain('maandVerband(RO)');
-    // v314: het oordeel krijgt sinds deze ronde ook het AANTAL potje-signalen mee. De eigenschap is
-    // dat zijn eerste argument RO is, dus dezelfde lijst als de coach-ingang en het verband.
-    expect(src).toContain('maandOordeel(RO');
+    /* v340: het oordeel is vervallen, en het verband staat in de sheet van een tekort-regel en leest daar
+       die ene rij (maandVerband([r])). Wat blijft: de coach-ingang krijgt RO, via "Deze maand". */
+    const src = await kaalUit(page, 'renderMaand');
+    expect(src).toContain('dezeMaandKaart(RO)');
+    expect(await kaalUit(page, 'dezeMaandKaart')).toContain('maandCoachIngang(RO');
+    expect(src).not.toMatch(/maandCoachIngang\(R\)/);
   });
 });
 

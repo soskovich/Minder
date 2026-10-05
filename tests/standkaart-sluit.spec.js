@@ -114,9 +114,12 @@ test('c1 de stand-kaart toont €2.380 nog in je potjes, met €85 per dag', asy
   expect(t).toMatch(/€175 uitgegeven\s*van €3\.375 maandbudget/);
 });
 
+/* v340: de kaart staat niet meer op Grip maar achter de Let op-regel [data-letop="uit"], in de sheet
+   #gripLetOpSheet. De tests openen die regel zoals een tik dat doet en eisen dat de kaart niet meer los
+   op Grip staat; zonder regel is er geen kaart. */
 test('d1 Grip meldt elk terugkerend potje met een uitgesloten incasso, met het bedrag', async ({page})=>{
   await bootStand(page);
-  const t=await page.evaluate(()=>{ go('maand'); renderMaand(); const k=document.querySelector('#uitgeslotenKaart'); return k?k.innerText:''; });
+  const t=await page.evaluate(()=>{ go('maand'); renderMaand(); const k=(()=>{ if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip'); const g=document.querySelector('#gripLetOp [data-letop="uit"]'); if(!g) return null; g.click(); return document.querySelector('#gripLetOpSheet #uitgeslotenKaart'); })(); return k?k.innerText:''; });
   expect(t).not.toContain('Verzekeringen');    // v328: DELA is een kwartaalpost en geen uitgesloten maandlast
   expect(t).toContain('Potje Belasting & boetes houdt €30 vast voor Huurwoningen, een uitgesloten incasso.');
   expect(t).toContain('Potje Vervoer & auto houdt €19 vast voor Stparkeergelden via Rive, een uitgesloten incasso.');
@@ -136,7 +139,7 @@ test('d2 niet stil verlagen: renderen en de tik schrijven geen potje', async ({p
 test('d3 de keuze loopt via de bestaande route naar volgende maand, en daarna zwijgt de melding', async ({page})=>{
   await bootStand(page);
   const r=await page.evaluate(()=>{ uitgeslotenPotjeVerlaag('belasting'); savePotje('belasting');
-    go('maand'); renderMaand(); const k=document.querySelector('#uitgeslotenKaart');
+    go('maand'); renderMaand(); const k=(()=>{ if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip'); const g=document.querySelector('#gripLetOp [data-letop="uit"]'); if(!g) return null; g.click(); return document.querySelector('#gripLetOpSheet #uitgeslotenKaart'); })();
     return {nu:SET.budgets.belasting, next:SET.budgetsNext.belasting, t:k?k.innerText:''}; });
   expect(r.nu).toBe(40);
   expect(r.next).toBe(10);
@@ -146,7 +149,7 @@ test('d3 de keuze loopt via de bestaande route naar volgende maand, en daarna zw
 
 test('d4 zonder uitgesloten incasso in een terugkerend potje staat er geen kaart', async ({page})=>{
   await bootStand(page);
-  const n=await page.evaluate(()=>{ SET.fixDueExcl={}; save(); go('maand'); renderMaand(); return document.querySelectorAll('#uitgeslotenKaart').length; });
+  const n=await page.evaluate(()=>{ SET.fixDueExcl={}; save(); go('maand'); renderMaand(); return document.querySelectorAll('#uitgeslotenKaart, #gripLetOp [data-letop="uit"]').length; });
   expect(n).toBe(0);
 });
 
@@ -162,7 +165,7 @@ test('d5 meer dan er nog in het potje zit kan het niet vasthouden', async ({page
   /* invoermeting: met een potje van 715 is de rest 715 - 99 - 603 = 13, kleiner dan Parkeergelden 19 */
   const r=await page.evaluate(()=>{ SET.budgets.vervoer=715; save();
     const rij=terugPotjes(thisYM()).rijen.find(x=>x.k==='vervoer');
-    go('maand'); renderMaand(); const k=document.querySelector('#uitgeslotenKaart'); return {rest:rij.rest, t:k?k.innerText:''}; });
+    go('maand'); renderMaand(); const k=(()=>{ if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip'); const g=document.querySelector('#gripLetOp [data-letop="uit"]'); if(!g) return null; g.click(); return document.querySelector('#gripLetOpSheet #uitgeslotenKaart'); })(); return {rest:rij.rest, t:k?k.innerText:''}; });
   expect(r.rest).toBe(13);
   expect(r.t).toContain('Potje Vervoer & auto houdt €13 vast voor Stparkeergelden via Rive');
   expect(r.t).toContain('Potje verlagen naar €702');
@@ -172,9 +175,9 @@ for (const w of [360, 390]) {
   test(`f1 op ${w}px: de Grip-kaart loopt niet over, en de stand-kaart blijft onder 200px`, async ({page})=>{
     await page.setViewportSize({width:w, height:w===360?640:844});
     await bootStand(page);
-    const r=await page.evaluate(()=>{ go('maand'); renderMaand(); const k=document.querySelector('#uitgeslotenKaart');
+    const r=await page.evaluate(()=>{ go('maand'); renderMaand(); const k=(()=>{ if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip'); const g=document.querySelector('#gripLetOp [data-letop="uit"]'); if(!g) return null; g.click(); return document.querySelector('#gripLetOpSheet #uitgeslotenKaart'); })();
       const kr=k.getBoundingClientRect(); const over=[...k.querySelectorAll('*')].some(e=>e.getBoundingClientRect().right>kr.right+0.5);
-      go('ins'); renderIns(); const s=document.querySelector('#insStand').getBoundingClientRect();
+      closeSheet(); go('ins'); renderIns(); const s=document.querySelector('#insStand').getBoundingClientRect();
       return {kh:Math.round(kr.height), over, sh:Math.round(s.height), sw:document.documentElement.scrollWidth, vw:innerWidth}; });
     expect(r.over).toBe(false);
     expect(r.sw).toBeLessThanOrEqual(r.vw);

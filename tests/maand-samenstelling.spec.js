@@ -6,7 +6,11 @@
 // C. maandCoachIngang en maandVerband kregen R zonder de structurele regels, dus de ingang onderaan
 //    wees naar een andere regel dan de oordeelzin bovenaan noemde.
 // De service worker staat globaal uit via playwright.config.js.
+// v340: de kaarten 'Vraagt een beslissing' en 'Vraagt aandacht' en de oordeelzin zijn vervallen. Een
+//    structureel signaal staat nu als regel [data-letop=str] onder "Let op", met de stip in zijn eigen
+//    status; de regels dekking, buffer en doel zijn tegels.
 const { test, expect } = require('@playwright/test');
+const { kaalUit } = require('./bron-kaal');
 
 const MAIN = 'NL01MAIN0000001111';
 const SAV = 'NL01SAVE0000004323';
@@ -44,34 +48,32 @@ async function boot(page, payload) {
   await page.waitForFunction(() => typeof maandStructureel === 'function');
 }
 const str = (page) => page.evaluate(() => maandStructureel().map((r) => ({ key: r.key, t: r.sig && r.sig.t, status: r.status })));
-const kaarten = (page) => page.evaluate(async () => {
+const letOp = (page) => page.evaluate(async () => {
   go('maand'); await new Promise((r) => setTimeout(r, 120));
-  const uit = {};
-  for (const c of document.querySelectorAll('#s-maand .card')) {
-    const kop = (c.querySelector('.hlabel') || {}).textContent || '';
-    if (/beslissing/i.test(kop)) uit.beslis = c.innerText.replace(/\s+/g, ' ');
-    if (/aandacht/i.test(kop)) uit.aandacht = c.innerText.replace(/\s+/g, ' ');
-  }
-  return uit;
+  return [...document.querySelectorAll('#gripLetOp [data-letop="str"]')]
+    .map((r) => ({ tekst: r.innerText.replace(/\s+/g, ' '), html: r.innerHTML }));
 });
 
 test.describe('a · beide kaarten putten uit dezelfde lijst', () => {
-  test('de filters lezen allebei RO', async ({ page }) => {
+  /* v340: de twee filters zijn vervallen met hun kaarten. Wat blijft: de tegels en de Let op-regels
+     lezen allebei RO, de lijst MET de structurele signalen en met acceptatie en afspraak erop. */
+  test('de tegels en Let op lezen allebei RO', async ({ page }) => {
     await boot(page);
-    const src = await page.evaluate(() => renderMaand.toString());
-    expect(src).toContain("RO.filter(r=>r.status==='tekort')");
-    expect(src).toContain("RO.filter(r=>r.status==='let op')");
+    const src = await kaalUit(page, 'renderMaand');
+    expect(src).toContain('RO=maandMetAfspraak(maandMetAccept(R).concat(STR))');
+    expect(src).toContain('gripTegels(RO, R)');
+    expect(src).toContain('gripLetOpItems(RO, SIG, BV)');
   });
 
-  test('een structureel signaal met let op staat in de aandachtskaart', async ({ page }) => {
+  test('een structureel signaal met let op staat onder Let op', async ({ page }) => {
     await boot(page, seed({ rente: true }));
     const S = await str(page);
     const obs = S.filter((x) => x.status === 'let op');
     test.skip(!obs.length, 'deze fixture levert geen observatie');
-    const k = await kaarten(page);
-    expect(k.aandacht, 'aandachtskaart bestaat').toBeTruthy();
+    const L = await letOp(page);
+    expect(L.length, 'Let op draagt een structurele regel').toBeGreaterThan(0);
     const naam = await page.evaluate((key) => (maandStructureel().find((r) => r.key === key) || {}).naam, obs[0].key);
-    expect(k.aandacht).toContain(naam);
+    expect(L.map((x) => x.tekst).join(' ')).toContain(naam);
   });
 
   test('geen enkel signaal valt tussen de twee kaarten door', async ({ page }) => {
@@ -108,17 +110,18 @@ test.describe('b · de zwaarte komt uit het signaal', () => {
     }
   });
 
-  test('een observatie trekt de oordeelzin niet naar een tekort', async ({ page }) => {
+  /* v340: de oordeelzin is vervallen. Wat blijft: een observatie draagt op Grip de amber stip van
+     'let op' en niet het rood van een tekort. */
+  test('een observatie staat er als let op, niet als tekort', async ({ page }) => {
     await boot(page, seed({ rente: true }));
     const r = await page.evaluate(() => {
-      const R = maandRegels(), STR = maandStructureel();
-      return { obs: STR.filter((x) => x.status === 'let op').length,
-        blok: STR.filter((x) => x.status === 'tekort').length,
-        eigenTekort: R.filter((x) => x.status === 'tekort').length,
-        zin: maandOordeel(R.concat(STR)).zin };
+      const STR = maandStructureel();
+      return { obs: STR.filter((x) => x.status === 'let op').length, blok: STR.filter((x) => x.status === 'tekort').length };
     });
     test.skip(!r.obs || r.blok, 'deze fixture levert niet alleen observaties');
-    if (!r.eigenTekort) expect(r.zin).not.toMatch(/beslissing vraagt|beslissing vragen/);
+    const L = await letOp(page);
+    expect(L.length).toBe(r.obs);
+    for (const x of L) { expect(x.html).toContain('var(--amber)'); expect(x.html).not.toContain('var(--red)'); }
   });
 });
 
@@ -133,8 +136,7 @@ test.describe('c · de ingang en het oordeel wijzen naar dezelfde regel', () => 
         const R = maandRegels(), STR = maandStructureel(), RO = R.concat(STR);
         const z = coMaandZwaarste(RO);
         const ing = $('#s-maand').innerHTML.match(/coStart\('maand','[^']*','([^']*)'\)/);
-        return { zwaarste: z && z.key, ingang: ing && ing[1], zin: maandOordeel(RO).zin,
-          naam: z && z.naam };
+        return { zwaarste: z && z.key, ingang: ing && ing[1], naam: z && z.naam };   // v340: de oordeelzin is vervallen
       });
       if (r.ingang) expect(r.ingang, naam).toBe(r.zwaarste);
       // en die regel is oplosbaar, dus het gesprek sluit niet meteen

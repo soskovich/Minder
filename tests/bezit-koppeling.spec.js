@@ -8,13 +8,17 @@ const { boot, MAIN, SPAAR, PENSIOEN_DESC } = require('./bezit-koppeling.fixture'
 let T = null, ID = {};
 async function start(page, o) { ID = await boot(page, o); T = ID.peaks0929; return ID; }
 const koppel = (page, asset) => page.evaluate(([id, a]) => { zetBezitKoppel(id, a); }, [T, asset]);
+/* v340: de vraag staat niet meer onder 'Vraagt aandacht' maar als regel [data-letop="beleg"] in de kaart
+   'Let op' (#gripLetOp); een tik opent openBelegVraag(id). 'beslis' is nu de tegelrij (#gripTegels), want
+   de kaart 'Vraagt een beslissing' bestaat niet meer. De regel draagt geen asset-id meer, dus hij wordt
+   herkend aan de naam van de bezitting. */
 const grip = (page) => page.evaluate(() => {
   go('maand'); renderMaand();
-  const kaart = (kop) => { const c = [...document.querySelectorAll('#s-maand .card')].find((x) => x.querySelector('.hlabel') && x.querySelector('.hlabel').innerText.trim().toUpperCase() === kop.toUpperCase()); return c || null; };
-  const a = kaart('Vraagt aandacht'), b = kaart('Vraagt een beslissing');
-  return { aandacht: a ? a.innerText : '', beslis: b ? b.innerText : '', rij: !!document.querySelector('#s-maand [data-beleg="kayani"]'),
-    rijTekst: (document.querySelector('#s-maand [data-beleg="kayani"]') || {}).innerText || '' };
+  const a = document.querySelector('#s-maand #gripLetOp'), b = document.querySelector('#s-maand #gripTegels');
+  const rij = [...document.querySelectorAll('#s-maand #gripLetOp [data-letop="beleg"]')].find((x) => x.innerText.includes('Peaks (Kayani)'));
+  return { aandacht: a ? a.innerText : '', beslis: b ? b.innerText : '', rij: !!rij, rijTekst: rij ? rij.innerText : '' };
 });
+const belegRij = (page) => page.locator('#s-maand #gripLetOp [data-letop="beleg"]', { hasText: 'Peaks (Kayani)' });
 
 /* ===== a) de meting: wat er was voor deze ronde ===== */
 test.describe('a · de beleggingsinleg in de spaarquote, en geen koppeling', () => {
@@ -208,7 +212,7 @@ test.describe('f · Je belegde EUR 100 in Peaks (Kayani) onder Vraagt aandacht',
     await koppel(page, 'kayani');
     await page.evaluate(() => zetBezitVoorwaarden('kayani', true));
     await grip(page);
-    await page.locator('#s-maand [data-beleg="kayani"]').click();
+    await belegRij(page).click();
     await expect(page.locator('#sheet [data-belegmist="dekking"]')).toContainText('Dekking reserveringen');
     await expect(page.locator('#sheet [data-belegmist="dekking"]')).toContainText('€37 tegen €299');
     await expect(page.locator('#sheet [data-belegmist]')).toHaveCount(1);
@@ -226,8 +230,10 @@ test.describe('f · Je belegde EUR 100 in Peaks (Kayani) onder Vraagt aandacht',
     await koppel(page, 'kayani');
     const g = await grip(page);
     expect(g.rij).toBe(true);
+    /* v340, bewust rood gelaten: de Let op-regel zegt bij een open vraag alleen nog 'voorwaarden nog niet
+       gehaald'. Tot v340 zei belegVraagRij() erbij dat je nog niet koos of ze hiervoor gelden. */
     expect(g.rijTekst).toContain('nog niet gekozen of ze hiervoor gelden');
-    await page.locator('#s-maand [data-beleg="kayani"]').click();
+    await belegRij(page).click();
     await expect(page.locator('#sheet [data-belegopen]')).toBeVisible();
     await expect(page.locator('#sheet [data-belegkeuze]')).toHaveCount(0);
     await page.locator('#sheet [data-belegopen] button', { hasText: 'Ja' }).click();
@@ -264,7 +270,7 @@ test('f · een meetbaar falende voorwaarde naast een onbekende laat de regel sta
   await koppel(page, 'kayani');
   await page.evaluate(() => zetBezitVoorwaarden('kayani', true));
   expect((await grip(page)).rij).toBe(true);
-  await page.locator('#s-maand [data-beleg="kayani"]').click();
+  await belegRij(page).click();
   await expect(page.locator('#sheet [data-belegmist]')).toHaveCount(1);
   await expect(page.locator('#sheet [data-belegmist="dekking"]')).toContainText('€37 tegen €299');
 });
@@ -296,7 +302,7 @@ test.describe('g · een keuze geldt voor de maand', () => {
     await koppel(page, 'kayani');
     await page.evaluate(() => zetBezitVoorwaarden('kayani', true));
     await grip(page);
-    await page.locator('#s-maand [data-beleg="kayani"]').click();
+    await belegRij(page).click();
     await expect(page.locator('#sheet')).toContainText('Minder stopt niets: je stopt de inleg voor Peaks (Kayani) zelf, in de app waar je belegt of bij je bank. De periodieke inleg van €100 in je Vermogensreis blijft staan. Je voornemen wordt bewaard');
     const voorReis = await page.evaluate(() => fireInputs().belegdItems.find((x) => x.naam === 'Peaks (Kayani)').per);
     await page.locator('#sheet [data-belegkeuze] button', { hasText: 'Ik zet de inleg zelf stil' }).click();
@@ -319,18 +325,18 @@ test.describe('g · een keuze geldt voor de maand', () => {
 
 /* ===== h) hoogte ===== */
 for (const w of [360, 390]) {
-  test(`h · de aandacht-kaart op ${w}px, zonder overloop`, async ({ page }) => {
+  test(`h · de Let op-kaart op ${w}px, zonder overloop`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await start(page);
     const voor = await page.evaluate(() => { go('maand'); renderMaand();
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => x.querySelector('.hlabel') && /vraagt aandacht/i.test(x.querySelector('.hlabel').innerText));
+      const c = document.querySelector('#s-maand #gripLetOp');
       return c ? Math.round(c.getBoundingClientRect().height) : 0; });
     await koppel(page, 'kayani');
     await page.evaluate(() => zetBezitVoorwaarden('kayani', true));
     const na = await page.evaluate(() => { go('maand'); renderMaand();
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => x.querySelector('.hlabel') && /vraagt aandacht/i.test(x.querySelector('.hlabel').innerText));
+      const c = document.querySelector('#s-maand #gripLetOp');
       return { h: Math.round(c.getBoundingClientRect().height), over: document.documentElement.scrollWidth > window.innerWidth }; });
-    console.log(`aandacht-kaart ${w}px: ${voor} -> ${na.h}`);
+    console.log(`Let op-kaart ${w}px: ${voor} -> ${na.h}`);
     expect(na.over).toBe(false);
     expect(na.h).toBeGreaterThan(voor);
   });

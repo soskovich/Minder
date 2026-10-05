@@ -222,8 +222,9 @@ test.describe('d · Grip en de coach zeggen hetzelfde', () => {
     expect(r.gevolg).toMatch(/Je buffer is op dit tempo pas rond .+ vol, terwijl je streefdatum .+ is/);
     expect(r.gevolg).toMatch(/dit doel staat stil/);
     expect(r.gevolg).not.toMatch(/\bZet\b|\bGeef\b|\bMoet\b|\bZorg\b/);
-    // en de regel verdwijnt niet uit het oordeel
-    expect(await page.evaluate(() => maandOordeel(maandRegels()).zin)).toMatch(/beslissing/i);
+    // en de regel verdwijnt niet van Grip: v340, de oordeelzin is vervallen, de tegel is rood
+    expect(await page.evaluate(() => { go('maand');
+      const t = document.querySelector('#gripTegels [data-tegel="doel"]'); return t ? t.dataset.kleur : null; })).toBe('rood');
     // de voorwaarde voor beleggen leest hem ook, en zegt niet 'geen tekort'
     expect(await page.evaluate(() => beleggenWaarde('doel', (maandRegels() || []).find((x) => x.key === 'doel'))))
       .toBe('datum niet te halen');

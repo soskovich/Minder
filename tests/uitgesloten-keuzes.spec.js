@@ -2,9 +2,18 @@
 const { test, expect } = require('@playwright/test');
 const { bootStand } = require('./standkaart-sluit.fixture');
 
+/* v340: de kaart staat niet meer op Grip maar achter de Let op-regel [data-letop="uit"], in de
+   sheet #gripLetOpSheet. De helper opent die regel zoals een tik dat doet, leest de kaart daar, en eist
+   dat hij niet meer los op Grip staat. Zonder regel is er geen kaart, en dan zijn er geen rijen. */
 const rijen = page => page.evaluate(()=>{ go('maand'); renderMaand();
-  return [...document.querySelectorAll('#uitgeslotenKaart [data-sleutel]')].map(r=>({k:r.dataset.uitgesloten, key:r.dataset.sleutel, t:r.innerText,
-    knoppen:[...r.querySelectorAll('[onclick]')].map(b=>{ const cs=getComputedStyle(b); return {t:b.innerText.trim(), kleur:cs.color, gewicht:cs.fontWeight, grootte:cs.fontSize}; })})); });
+  if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip');
+  const regel=document.querySelector('#gripLetOp [data-letop="uit"]');
+  if(!regel){ if(typeof closeSheet==='function') closeSheet(); return []; }
+  regel.click();
+  const sh=document.querySelector('#gripLetOpSheet');
+  const R=[...(sh?sh.querySelectorAll('#uitgeslotenKaart [data-sleutel]'):[])].map(r=>({k:r.dataset.uitgesloten, key:r.dataset.sleutel, t:r.innerText,
+    knoppen:[...r.querySelectorAll('[onclick]')].map(b=>{ const cs=getComputedStyle(b); return {t:b.innerText.trim(), kleur:cs.color, gewicht:cs.fontWeight, grootte:cs.fontSize}; })}));
+  closeSheet(); return R; });
 const sluit = page => page.evaluate(()=>{ const VP=varPotjeStand(thisYM()), L=monthLiquidity(), T=totals(thisYM());
   return {budget:Math.round(T.budget), som:Math.round(T.spendNorm+VP.nog+L.fixDue), fixDue:L.fixDue, nog:VP.nog}; });
 
@@ -101,7 +110,7 @@ for (const w of [360, 390]) {
   test(`h op ${w}px loopt de kaart niet over`, async ({page})=>{
     await page.setViewportSize({width:w, height:w===360?640:844});
     await bootStand(page);
-    const r=await page.evaluate(()=>{ go('maand'); renderMaand(); const k=document.querySelector('#uitgeslotenKaart'); const kr=k.getBoundingClientRect();
+    const r=await page.evaluate(()=>{ go('maand'); renderMaand(); openGripLetOp('uit'); const k=document.querySelector('#gripLetOpSheet #uitgeslotenKaart'); const kr=k.getBoundingClientRect();
       return {over:[...k.querySelectorAll('*')].some(e=>e.getBoundingClientRect().right>kr.right+0.5), h:Math.round(kr.height), sw:document.documentElement.scrollWidth, vw:innerWidth}; });
     console.log(`kaart ${w}px: ${r.h}px`);
     expect(r.over).toBe(false);

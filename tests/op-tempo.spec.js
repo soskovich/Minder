@@ -333,44 +333,47 @@ test.describe('e - de beleggen-voorwaarde gaat niet mee', () => {
     expect(uit.klaar).toBe(false);
   });
 
-  /* De rij zegt in amber dat hij groeit, deze kaart in rood dat de voorwaarde niet gehaald is, over
-     hetzelfde cijfer en direct onder elkaar. Dat verschil moet uit de zin te lezen zijn en niet uit
-     twee kleuren. */
-  test('de beleggen-regel zegt zelf dat de buffer groeit en de drempel niet haalt', async ({ page }) => {
+  /* v340: de kaart 'Voorwaarden voor beleggen' (maandBeleggenRegel) is vervallen, en daarmee de zin
+     'groeit, maar de drempel is nog niet gehaald' die het verschil tussen de amber bufferrij en die
+     kaart uitlegde. Beleggen is nu een tegel, en die draagt het oordeel NEUTRAAL (v314): grijs met
+     'wacht' en waar hij op wacht, nooit rood of amber. Wat deze test vasthoudt is dat de twee tegels
+     niet hetzelfde oordeel in twee kleuren geven: de buffer amber, beleggen grijs. */
+  test('de beleggen-tegel wacht op de buffer, neutraal naast de amber buffer', async ({ page }) => {
     await boot(page, { set: { goals: [
       { id: 'g1', naam: 'Vakantie', doel: 4800, gespaard: 0, allocMode: 'fixed', perMaand: 50, streefdatum: vooruit(12) },
     ], assets: [{ id: 'a1', naam: 'Index', waarde: 1000 }] } });
     const uit = await page.evaluate(() => {
-      const R = maandRegels(); const B = beleggenKlaar(R);
-      const d = document.createElement('div'); d.innerHTML = maandBeleggenRegel(R);
+      const R = maandRegels(); const B = beleggenKlaar(R); renderMaand();
+      const t = document.querySelector('#s-maand [data-tegel="beleggen"]');
+      const buf = document.querySelector('#s-maand [data-tegel="buffer"]');
       return { blok: B.blokkade && B.blokkade.key, opTempo: !!R.find((r) => r.key === 'buffer').opTempo,
-        tekst: d.textContent.replace(/\s+/g, ' ').trim(), html: d.innerHTML };
+        kleur: t && t.dataset.kleur, waarde: t && t.querySelector('.kt-val').innerText,
+        maat: t && t.querySelector('.kt-maat').innerText, html: t ? t.outerHTML : '', buffer: buf && buf.dataset.kleur };
     });
     expect(uit.blok).toBe('buffer');
     expect(uit.opTempo).toBe(true);
-    expect(uit.tekst).toContain('Nog niet aan je voorwaarden voor beleggen');
-    expect(uit.tekst).toContain('groeit');
-    expect(uit.tekst).toContain('drempel is nog niet gehaald');
-    /* v314: de dot is NEUTRAAL en niet rood. Nog niet gehaald is geen fout (v78/v93), en de rij van
-       de buffer staat met zijn eigen amber al los boven deze kaart, dus de kleur hier zei twee keer
-       hetzelfde. Wat de kaart moet dragen is de ZIN, en die eist deze test hierboven al: hij groeit
-       en de drempel is nog niet gehaald. Dat is precies wat uit twee kleuren niet te lezen was. */
+    expect(uit.buffer).toBe('amber');
+    expect(uit.kleur).toBe('grijs');
+    expect(uit.waarde).toBe('wacht');
+    expect(uit.maat).toBe('op je buffer');
     expect(uit.html).toContain('var(--bar)');
     expect(uit.html).not.toContain('var(--red)');
     expect(uit.html).not.toContain('var(--amber)');
   });
 
-  test('een blokkade die niet op tempo ligt krijgt die zin niet', async ({ page }) => {
+  /* v340: 'een blokkade die niet op tempo ligt krijgt die zin niet' is vervallen, want de zin bestaat
+     niet meer (zie de test hierboven). Wat blijft: zonder inleg is de buffer een tekort. */
+  test('een blokkade die niet op tempo ligt is een tekort', async ({ page }) => {
     await boot(page, { spaarPer: 0, set: { goals: [
       { id: 'g1', naam: 'Vakantie', doel: 4800, gespaard: 0, allocMode: 'fixed', perMaand: 50, streefdatum: vooruit(12) },
     ], assets: [{ id: 'a1', naam: 'Index', waarde: 1000 }] } });
     const uit = await page.evaluate(() => {
-      const R = maandRegels();
-      const d = document.createElement('div'); d.innerHTML = maandBeleggenRegel(R);
-      return { status: R.find((r) => r.key === 'buffer').status, tekst: d.textContent };
+      const R = maandRegels(); renderMaand();
+      return { status: R.find((r) => r.key === 'buffer').status,
+        kleur: document.querySelector('#s-maand [data-tegel="buffer"]').dataset.kleur };
     });
     expect(uit.status).toBe('tekort');
-    expect(uit.tekst).not.toContain('groeit');
+    expect(uit.kleur).toBe('rood');
   });
 
   test('boven de drie maanden haalt hij de voorwaarde wel, ook onder je richtbedrag', async ({ page }) => {
@@ -389,30 +392,32 @@ test.describe('e - de beleggen-voorwaarde gaat niet mee', () => {
 });
 
 test.describe('f - een kaart zonder enig tekort', () => {
-  test('de kaart Vraagt een beslissing staat er niet, en het oordeel zegt dat niets vastloopt', async ({ page }) => {
+  /* v340: de kaarten 'Vraagt een beslissing' en 'Vraagt aandacht' zijn tegels geworden, met het
+     oordeel als kleur. De oordeelzin ('niets dat vastloopt', maandOordeel) is vervallen, want Grip
+     draagt geen samenvatting meer. */
+  test('geen rode tegel, en de twee regels staan amber', async ({ page }) => {
     await boot(page);
-    const uit = await page.evaluate(() => ({
+    const uit = await page.evaluate(() => { renderMaand(); return {
       statussen: maandRegels().map((r) => r.key + ':' + r.status),
       struct: maandStructureel().length,
-      zin: maandOordeel(maandMetAccept(maandRegels()).concat(maandStructureel())).zin,
-    }));
+      tegels: [...document.querySelectorAll('#s-maand [data-tegel]')].map((t) => t.dataset.tegel + ':' + t.dataset.kleur),
+    }; });
     expect(uit.struct).toBe(0);
     expect(uit.statussen.sort()).toEqual(['buffer:let op', 'dekking:let op']);
-    expect(uit.zin).toContain('niets dat vastloopt');
-    const k = await kaarten(page);
-    expect(k.map((x) => x.kop)).not.toContain('Vraagt een beslissing');
-    expect(k.map((x) => x.kop)).toContain('Vraagt aandacht');
+    expect(uit.tegels.filter((x) => /:rood$/.test(x))).toEqual([]);
+    expect(uit.tegels.sort()).toEqual(['buffer:amber', 'dekking:amber']);
   });
 
-  test('geen maand in de kop, want er is geen maand waarop iets vastloopt', async ({ page }) => {
+  /* v340: de kop (de oordeelzin) bestaat niet meer; wat blijft is dat de rij geen maand draagt
+     waarop iets vastloopt, en dat Grip er ook geen noemt. */
+  test('geen maand waarop iets vastloopt', async ({ page }) => {
     await boot(page);
     const uit = await page.evaluate(() => {
-      const R = maandRegels();
-      return { maand: R.find((r) => r.key === 'dekking').maand,
-        zin: maandOordeel(maandMetAccept(R).concat(maandStructureel())).zin };
+      const R = maandRegels(); renderMaand();
+      return { maand: R.find((r) => r.key === 'dekking').maand, scherm: document.querySelector('#s-maand').innerText };
     });
     expect(uit.maand).toBeNull();
-    expect(uit.zin).not.toMatch(/houdt stand tot/);
+    expect(uit.scherm).not.toMatch(/houdt stand tot/);
   });
 
   /* De horizon verdwijnt niet uit het scherm: hij staat voluit in de gevolgzin van de regel zelf,
@@ -432,8 +437,9 @@ test.describe('g - de spaarquote staat niet meer op Maand', () => {
   test('niet in de voet, niet als kaart', async ({ page }) => {
     await boot(page);
     // v315: de voet is vervallen; wat eronder stond is de vanaf-kaart
-    const voet = await page.evaluate(() => maandVanafKaart());
-    expect(voet).not.toMatch(/maandKpiBlok|wvo-tile/);
+    // v340: en die staat nu in de tijdlijn 'Komende 3 maanden'; geen van beide draagt de quote
+    const voet = await page.evaluate(() => { renderMaand(); return document.querySelector('#s-maand').innerHTML; });
+    expect(voet).not.toMatch(/maandKpiBlok|wvo-tile|Spaarquote/);
     const k = await kaarten(page);
     expect(k.filter((x) => x.spaarquote)).toEqual([]);
     expect(await page.evaluate(() => document.querySelector('#s-maand').innerHTML.indexOf('id="maandKpiBlok"'))).toBe(-1);
@@ -443,15 +449,22 @@ test.describe('g - de spaarquote staat niet meer op Maand', () => {
      niet meer. Een volgende-maand-laag doet dat nog wel; de eigenschap blijft dezelfde.
      v315: de voet is vervallen en die rij staat in zijn eigen kaart. Wat deze test vasthoudt is
      wat hij altijd vasthield: de spaarquote staat niet in de kaart die die rij draagt. */
+  /* v340: de rij 'Je potjes' van de vanaf-kaart staat nu als punt in de tijdlijn 'Komende 3 maanden'
+     (`[data-tlsoort="vanaf"]`), uit maandVanafData(). */
   test('de kaart met de plan-rij draagt de spaarquote niet', async ({ page }) => {
     await boot(page, { set: { budgetsNext: { boodschappen: 1100 } } });
     const uit = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /Je potjes/.test(x.textContent));
+      renderMaand();
+      const c = document.querySelector('#gripTijdlijn');
       return { kop: ((c.querySelector('.hlabel') || {}).textContent || '').trim(),
+        vanaf: [...c.querySelectorAll('[data-tlsoort="vanaf"]')].map((x) => x.innerText),
+        data: maandVanafData().map((x) => x.lab),
         spaarquote: /Spaarquote/.test(c.textContent) };
     });
+    expect(uit.data).toContain('Je potjes');
+    expect(uit.vanaf.length).toBeGreaterThan(0);
     expect(uit.spaarquote).toBe(false);
-    expect(uit.kop).toMatch(/^Vanaf /);
+    expect(uit.kop).toBe('Komende 3 maanden');
   });
 });
 

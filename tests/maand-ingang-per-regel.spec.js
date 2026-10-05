@@ -204,18 +204,26 @@ test.describe('d - de oude ingang onder de kaart is weg, de andere takken niet',
   /* Direct op de functie en niet via de DOM: deze test gaat over de vraag of de afspraak-tak
      bestaat, niet over wanneer renderMaand() hem plaatst. Dat laatste hangt aan condities die
      buiten deze ronde vallen, en een DOM-assertie zou die meemeten. */
-  test('de afspraak-kaart blijft: dat is een andere taak van dezelfde functie', async ({ page }) => {
+  /* v340: de afspraak-kaart was een tak van maandCoachIngang(); hij is een rij bij de lopende
+     afspraken onder 'Deze maand' geworden (`[data-afspraak="coach"]`). maandCoachIngang() zwijgt
+     dan, want een afspraak per maand. De eigenschap blijft: de afspraak staat er, is aan te passen,
+     en opent het gesprek zonder sleutel. */
+  test('de afspraak-rij blijft, onder Deze maand', async ({ page }) => {
     await boot(page);
     const h = await page.evaluate(() => {
       SET.coachLog = (SET.coachLog || []).concat([{ type: 'afspraak', ts: Date.now(), text: 'Ik zet 100 extra opzij' }]);
-      save();
-      return { gevonden: !!coachThisMonthAfspraak(), kaart: maandCoachIngang(maandMetAccept(maandRegels())) };
+      save(); renderMaand();
+      const rij = document.querySelector('#gripDezeMaand [data-afspraak="coach"]');
+      return { gevonden: !!coachThisMonthAfspraak(), ingang: maandCoachIngang(maandMetAccept(maandRegels())),
+        tekst: rij ? rij.innerText : '', onclick: rij ? rij.getAttribute('onclick') : '' };
     });
     expect(h.gevonden).toBe(true);
-    expect(h.kaart).toContain('Je afspraak deze maand');
-    expect(h.kaart).toContain('Aanpassen');
+    expect(h.ingang).toBe('');
+    expect(h.tekst).toContain('Ik zet 100 extra opzij');
+    expect(h.tekst).toContain('Je afspraak deze maand');
+    expect(h.tekst).toContain('aanpassen');
     // en die opent het gesprek zonder sleutel, het pad dat op coMaandZwaarste terugvalt
-    expect(h.kaart).toMatch(/coStart\('maand','[^']*'\)/);
+    expect(h.onclick).toMatch(/^coStart\('maand','[^']*'\)$/);
   });
 
   test('de derde tak blijft ook: een gesprek juist wanneer er niets te beslissen valt', async ({ page }) => {

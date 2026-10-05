@@ -31,7 +31,8 @@ async function openVolgende(page, payload) {
   await page.evaluate(() => go('maand'));
   await page.waitForSelector('#s-maand .card');
   // v315: de rij heet 'Je potjes' en staat in de kaart 'Vanaf <maand>'; de ingang is dezelfde
-  await page.locator('#s-maand >> text=Je potjes').first().click();
+  // v340: die kaart is opgegaan in de tijdlijn op Grip; de rij is daar een punt met dezelfde ingang
+  await page.locator('#s-maand #gripTijdlijn [data-tlsoort="vanaf"][onclick*="openPotjesVerdeling"]').first().click();
   await page.waitForSelector(SHEET);
 }
 
@@ -140,7 +141,7 @@ test.describe('c · de volgende maand is een eigen lijst', () => {
     await openVerdeling(page, p);
     expect(await sheetTxt(page)).not.toMatch(/Bekijk je potjes vanaf/);
     expect(await page.locator('#s-ins').innerText()).not.toContain('vanaf volgende maand');
-    expect(await page.evaluate(() => maandVanafRegels().length), 'geen wijziging, geen rij').toBe(0);
+    expect(await page.evaluate(() => maandVanafData().length), 'geen wijziging, geen rij').toBe(0);
 
     await page.evaluate(() => openPotjesVerdeling(null, 'next'));
     expect(await sheetTxt(page)).toMatch(/Er staat niets klaar voor \w+: dit is dezelfde verdeling als deze maand\./);

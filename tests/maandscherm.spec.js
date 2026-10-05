@@ -61,7 +61,14 @@ async function boot(page, payload) {
 }
 
 const R = (page) => page.evaluate(() => maandRegels().map((r) => ({ key: r.key, status: r.status, waarde: r.waarde, eenheid: r.eenheid, sub: r.sub, gevolg: r.gevolg, maand: r.maand || null })));   // v314: sub erbij, de linker-sub van de compacte rij
-const O = (page) => page.evaluate(() => maandOordeel(maandRegels()));
+/* v340: maandOordeel() (de samenvattingszin) is vervallen zonder opvolger. Wat het oordeel TELDE staat nu
+   in de kleur van de tegels op Grip: rood voor tekort, amber voor let op, groen voor ok. */
+const tegels = async (page) => {
+  await page.evaluate(() => go('maand'));
+  return page.evaluate(() => [...document.querySelectorAll('#gripTegels [data-tegel]')]
+    .map((t) => ({ key: t.dataset.tegel, kleur: t.dataset.kleur, tekst: t.innerText })));
+};
+const KLEUR = { tekort: 'rood', 'let op': 'amber', ok: 'groen' };
 const VB = (page) => page.evaluate(() => maandVerband(maandRegels()));
 
 test.describe('a · het scherm bestaat naast de andere', () => {
@@ -351,176 +358,106 @@ test.describe('c2 · dekking van een eenmalige post (v131, herzien bij v317)', (
 });
 
 test.describe('d · het oordeel', () => {
-  test('a: tekort met een maand noemt die maand', async ({ page }) => {
-    // een kleine post die nog wél past, zodat er een 'gedekt tot'-maand is
-    // v226: het gat valt twee maanden vooruit en blijft daarmee binnen de marge, zodat deze zin
-    // over een regel gaat die werkelijk een beslissing vraagt.
-    await boot(page, seedM({ reserveringen: [
-      // v323: alleen een post in de LOPENDE maand is nog een beslissing, dus het knelmoment staat in deze maand.
-      { id: 'k', naam: 'Auto', bedrag: 60, vervalmaand: over(0), intervalM: 12 },
-      { id: 'a', naam: 'Gemeente', bedrag: 480, vervalmaand: over(0), intervalM: 12 },
-    ] }));
-    await page.evaluate((a) => { SET.manualBal[a] = 100; save(); }, RES);            // dekking tekort met gedektTot
-    const o = await O(page);
-    expect(o.zin).toMatch(/^Je systeem houdt stand tot \w+ \d{4}\. Daarna loopt het vast op je dekking reserveringen\.$/);
-  });
-
-  test('b: één tekort zonder maand', async ({ page }) => {
+  /* v340: de oordeelzin ("Je systeem houdt stand tot ...", "Er is deze maand één ding dat ...", "Alle N
+     regels staan goed.", "Er ontbreekt te veel om een oordeel te geven.") en zijn subregel zijn
+     vervallen met maandOordeel(), want Grip heeft geen samenvatting meer. De tests a, d2, e en "de
+     subregel" toetsten alleen die zin en zijn weg. Wat bleef: de statussen die het oordeel telde, en
+     die staan nu als kleur in de tegels. */
+  test('b: één tekort, één rode tegel', async ({ page }) => {
     await boot(page, seedM({ nfMaanden: 3, manualBal: { [MAIN]: 1500, [RES]: 2000, [SAV]: 2000 } }));
     const r = await R(page);
     expect(r.filter((x) => x.status === 'tekort').map((x) => x.key)).toEqual(['buffer']);
-    expect((await O(page)).zin).toBe('Er is deze maand één ding dat een beslissing vraagt: buffer in maanden.');
+    const t = await tegels(page);
+    expect(t.filter((x) => x.kleur === 'rood').map((x) => x.key)).toEqual(['buffer']);
   });
 
-  test('b: meerdere tekorten tellen', async ({ page }) => {
+  test('b: meerdere tekorten, evenveel rode tegels', async ({ page }) => {
     await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 }, reserveringen: [{ id: 'a', naam: 'Gemeente', bedrag: 480, vervalmaand: over(0), intervalM: 0 }] }));   // v323
     const r = await R(page);
-    expect(r.filter((x) => x.status === 'tekort').length).toBeGreaterThan(1);
-    expect((await O(page)).zin).toMatch(/^Er zijn deze maand \d+ dingen die een beslissing vragen\.$/);
+    const tekort = r.filter((x) => x.status === 'tekort').map((x) => x.key);
+    expect(tekort.length).toBeGreaterThan(1);
+    const t = await tegels(page);
+    expect(t.filter((x) => x.kleur === 'rood').map((x) => x.key).sort()).toEqual(tekort.sort());
   });
 
-  /* v187: de standaardfixture had zijn enige 'let op' in de aansluitingsregel, en die staat niet
-     meer op Maand. Een richtbedrag boven de stand zet de buffer op 'let op' zonder dat er iets
-     misgaat, en dat is precies de stand die deze zin beschrijft. */
+  /* v187: een richtbedrag boven de stand zet de buffer op 'let op' zonder dat er iets misgaat. */
   test('c: alleen let op', async ({ page }) => {
     await boot(page, seedM({ nfMaanden: 40, nfDoelVast: 19000, nfToegewezen: 19000 }));
     const r = await R(page);
     expect(r.filter((x) => x.status === 'tekort').length).toBe(0);
     expect(r.filter((x) => x.status === 'let op').length).toBe(1);
-    expect((await O(page)).zin).toBe('Er is niets dat vastloopt. 1 regel vraagt aandacht.');
+    const t = await tegels(page);
+    expect(t.filter((x) => x.kleur === 'rood').length).toBe(0);
+    expect(t.filter((x) => x.kleur === 'amber').length).toBe(1);
   });
 
-  // v167: de zin noemde altijd vijf, ook als er drie regels stonden. Hij telt nu wat er is, en
-  // zegt 'alle' alleen als er ook niets onbekend is.
-  test('d: alles goed, punt, geen felicitatie', async ({ page }) => {
+  test('d: alles goed, geen felicitatie', async ({ page }) => {
     await boot(page);
-    // v172: aansluiting sluit aan door toe te wijzen, niet door het doel te verhogen
     await page.evaluate(() => { const s = Math.round(spaarSaldo().cur);
-      /* v242: 'alles ok' vraagt sinds de grendel ook een VOLLE buffer. Blijft er een gat, dan gaat
-         de hele spaarinleg daarheen en krijgt het doel niets, en dat is geen ok-regel. Het doel
-         van de buffer is dus precies wat er na de toewijzing aan het doel overblijft. */
+      /* v242: 'alles ok' vraagt sinds de grendel ook een VOLLE buffer. */
       const b = s - Math.round(+SET.goals[0].gespaard || 0);
       SET.nfDoelVast = b; SET.nfToegewezen = b; save(); });
-    const r = await page.evaluate(() => {
-      const R = maandRegels();
-      return { n: R.length, ok: R.filter((x) => x.status === 'ok').length, o: maandOordeel(R) };
-    });
+    const r = await page.evaluate(() => { const R = maandRegels(); return { n: R.length, ok: R.filter((x) => x.status === 'ok').length }; });
     expect(r.ok).toBe(r.n);                                                          // alles ok in deze opzet
-    expect(r.o.zin).toBe(`Alle ${r.n} regels staan goed.`);
-    expect(r.o.zin).not.toContain('vijf');
-    expect(r.o.zin).not.toMatch(/[!—]/);
-    expect(r.o.zin).not.toMatch(/mooi|knap|goed bezig|gefeliciteerd/i);
-  });
-
-  test('d2: het aantal is het werkelijke aantal, en alle telt alleen bij volledig', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => {
-      const mk = (n, st) => Array.from({ length: n }, (_, i) => ({ key: 'r' + i, naam: 'Regel ' + (i + 1), status: st }));
-      return {
-        drie: maandOordeel(mk(3, 'ok')).zin,
-        een: maandOordeel(mk(1, 'ok')).zin,
-        gemengd: maandOordeel(mk(2, 'ok').concat(mk(1, 'onbekend'))).zin,
-        nul: maandOordeel([]).zin,
-      };
-    });
-    expect(r.drie).toBe('Alle 3 regels staan goed.');
-    expect(r.een).toBe('De enige regel die te toetsen is staat goed.');
-    expect(r.gemengd).toBe('De 2 regels die te toetsen zijn staan goed.');           // niet 'alle'
-    expect(r.nul).toBe('Er is nog niets te beoordelen.');
-  });
-
-  /* v186: Maand houdt vier regels sinds de patroonregel verviel, en drie daarvan vallen bij een
-     ontbrekend spaarsaldo helemaal weg in plaats van onbekend te worden (v168). Er is dus geen
-     fixture meer die de drempel uit v173 haalt met echte data. Het oordeel zelf is puur, dus we
-     toetsen hem met een regellijst, zoals d2 hierboven al doet. */
-  test('e: te veel onbekend', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => {
-      const mk = (n, st, p) => Array.from({ length: n }, (_, i) => ({ key: (p || 'r') + i, naam: 'Regel ' + i, status: st }));
-      return {
-        drieVanVier: maandOordeel(mk(3, 'onbekend').concat(mk(1, 'ok', 'x'))),
-        tweeVanDrie: maandOordeel(mk(2, 'onbekend').concat(mk(1, 'ok', 'x'))),
-        // onder de ondergrens uit v173 zegt een aandeel niets over volledigheid
-        eenVanTwee: maandOordeel(mk(1, 'onbekend').concat(mk(1, 'ok', 'x'))).zin,
-        eenVanEen: maandOordeel(mk(1, 'onbekend')).zin,
-      };
-    });
-    expect(r.drieVanVier.zin).toBe('Er ontbreekt te veel om een oordeel te geven.');
-    expect(r.drieVanVier.sub).toMatch(/^Onbekend: /);
-    expect(r.tweeVanDrie.zin).toBe('Er ontbreekt te veel om een oordeel te geven.');
-    expect(r.eenVanTwee).toBe('De enige regel die te toetsen is staat goed.');
-    expect(r.eenVanEen).toBe('Er is nog niets te beoordelen.');
-  });
-
-  test('de subregel zegt wat er wel goed staat', async ({ page }) => {
-    await boot(page);
-    const o = await O(page);
-    expect(o.sub).toMatch(/in orde\.$/);
-    expect(o.sub).toMatch(/dekking reserveringen|buffer in maanden|vakantie/i);
+    const t = (await tegels(page)).filter((x) => x.key !== 'beleggen');
+    expect(t.length).toBe(r.n);
+    expect(t.every((x) => x.kleur === 'groen')).toBe(true);
+    const tekst = await page.locator('#s-maand').innerText();
+    expect(tekst).not.toMatch(/[!—]/);
+    expect(tekst).not.toMatch(/mooi|knap|goed bezig|gefeliciteerd/i);
   });
 });
 
 test.describe('e · indeling', () => {
-  test('de kaarten scheiden beslissing van aandacht', async ({ page }) => {
+  /* v340: de kaarten "Vraagt een beslissing", "Vraagt aandacht" en "Staat goed" zijn vervallen; het
+     onderscheid zit nu in de kleur van elke tegel. */
+  test('de tegels scheiden beslissing van aandacht in hun kleur', async ({ page }) => {
     await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 } }));
-    await page.evaluate(() => go('maand'));
-    const t = await page.locator('#s-maand').innerText();
-    expect(t).toMatch(/vraagt een beslissing/i);      // .hlabel rendert uppercase
     const R2 = await R(page);
-    if (R2.some((r) => r.status === 'let op')) expect(t).toMatch(/vraagt aandacht/i);
-    if (R2.some((r) => r.status === 'ok')) expect(t).toMatch(/staat goed/i);
+    const t = await tegels(page);
+    for (const r of R2) expect(t.find((x) => x.key === r.key).kleur, r.key).toBe(KLEUR[r.status]);
+    expect(t.some((x) => x.kleur === 'rood')).toBe(true);
+    const tekst = await page.locator('#s-maand').innerText();
+    expect(tekst).not.toMatch(/vraagt een beslissing|vraagt aandacht|staat goed/i);
   });
 
-  test('de zin telt precies wat er in de beslissingskaart staat', async ({ page }) => {
-    // v134: de zin telde alleen de tekorten terwijl de kaart ook de let-op-regels toonde
-    // v226: de post twee maanden vooruit, zodat dekking een beslissing blijft en er dus meer dan
-    // een tekort te tellen valt.
+  /* v134: de zin telde alleen de tekorten terwijl de kaart ook de let-op-regels toonde.
+     v340: de zin en de beslissingskaart zijn vervallen. Wat blijft: precies de tekorten zijn rood. */
+  test('precies de tekorten zijn rood, en niet de let-op-regels', async ({ page }) => {
     await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 },
       reserveringen: [{ id: 'a', naam: 'Gemeente', bedrag: 480, vervalmaand: over(0), intervalM: 12 }] }));   // v323
-    await page.evaluate(() => go('maand'));
-    const uit = await page.evaluate(() => {
-      const R3 = maandRegels();
-      const kaarten = [...document.querySelectorAll('#s-maand .card')];
-      const kaart = kaarten.find((c) => /vraagt een beslissing/i.test(c.innerText));
-      return { zin: maandOordeel(R3).zin, tekort: R3.filter((r) => r.status === 'tekort').length,
-        letop: R3.filter((r) => r.status === 'let op').length,
-        inKaart: kaart ? kaart.querySelectorAll('.row').length : 0 };
-    });
-    expect(uit.tekort).toBeGreaterThan(1);
-    expect(uit.letop).toBeGreaterThanOrEqual(0);                // aandacht-regels zijn optioneel
-    expect(uit.inKaart).toBe(uit.tekort);                       // alleen de tekorten staan in de kaart
-    expect(uit.zin).toBe(`Er zijn deze maand ${uit.tekort} dingen die een beslissing vragen.`);
+    const R3 = await R(page);
+    const t = await tegels(page);
+    expect(R3.filter((r) => r.status === 'tekort').length).toBeGreaterThan(1);
+    expect(t.filter((x) => x.kleur === 'rood').length).toBe(R3.filter((r) => r.status === 'tekort').length);
+    expect(t.filter((x) => x.kleur === 'amber').length).toBe(R3.filter((r) => r.status === 'let op').length);
   });
 
-  test('elke kaart houdt de vaste volgorde aan', async ({ page }) => {
+  /* v340: de kaarten zijn tegels geworden, gesorteerd op kleur (rood, amber, groen, grijs) en binnen een
+     kleur op de vaste volgorde van MAAND_VOLGORDE. De oude vorm van deze test las kaarten die niet
+     meer bestaan en stond daardoor groen op een lege lijst. */
+  test('de tegels staan op kleur, en binnen een kleur in de vaste volgorde', async ({ page }) => {
     await boot(page, seedM({ manualBal: { [MAIN]: 1500, [RES]: 10, [SAV]: 2000 } }));
-    await page.evaluate(() => go('maand'));
-    const uit = await page.evaluate(() => {
-      const namen = maandRegels().reduce((m, r) => (m[r.naam.toLowerCase()] = r.key, m), {});
-      const lees = (titel) => {
-        const kaart = [...document.querySelectorAll('#s-maand .card')].find((c) => new RegExp(titel, 'i').test(c.innerText));
-        if (!kaart) return [];
-        return [...kaart.querySelectorAll('.row')].map((r) => namen[(/^[^\n]*/.exec(r.innerText) || [''])[0].trim().toLowerCase()]);
-      };
-      return { beslis: lees('vraagt een beslissing'), aandacht: lees('vraagt aandacht'), volgorde: MAAND_VOLGORDE };
-    });
-    for (const lijst of [uit.beslis, uit.aandacht]) {
-      const idx = lijst.filter(Boolean).map((k) => uit.volgorde.indexOf(k));
-      expect(idx).toEqual(idx.slice().sort((a, b) => a - b));
-    }
+    const t = await tegels(page);
+    const volg = await page.evaluate(() => MAAND_VOLGORDE);
+    const rang = { rood: 0, amber: 1, groen: 2, grijs: 3 };
+    expect(t.length).toBeGreaterThan(1);
+    const sleutel = t.map((x) => [rang[x.kleur], x.key === 'beleggen' ? 99 : volg.indexOf(x.key)]);
+    const gesorteerd = sleutel.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    expect(sleutel).toEqual(gesorteerd);
   });
 
-  test('een lege kaart wordt weggelaten', async ({ page }) => {
+  test('alles ok: geen rode of amber tegel', async ({ page }) => {
     await boot(page);
     // v172: alles ok betekent ook: al je spaargeld is toegewezen
     await page.evaluate(() => { const s = Math.round(spaarSaldo().cur);
       const b = s - Math.round(+SET.goals[0].gespaard || 0);   // v242: de buffer moet vol zijn
       SET.nfDoelVast = b; SET.nfToegewezen = b;
       save(); go('maand'); });
-    const t = await page.locator('#s-maand').innerText();
-    expect(t).not.toMatch(/vraagt een beslissing/i);   // alles ok, dus die kaarten vallen weg
-    expect(t).not.toMatch(/vraagt aandacht/i);
-    expect(t).toMatch(/staat goed/i);
+    /* v340: er zijn geen kaarten meer om weg te laten; bij alles ok is geen enkele tegel rood of amber. */
+    const t = await tegels(page);
+    expect(t.length).toBeGreaterThan(0);
+    expect(t.filter((x) => x.kleur === 'rood' || x.kleur === 'amber')).toEqual([]);
   });
 
   test('zonder enige bron: één rustige regel met een tik naar Instellingen', async ({ page }) => {
@@ -593,7 +530,8 @@ test.describe('g · leesmoment en robuustheid', () => {
     expect(d).toBe(nu.getFullYear() + '-' + String(nu.getMonth() + 1).padStart(2, '0') + '-' + String(nu.getDate()).padStart(2, '0'));
     await page.evaluate(() => go('maand'));
     const t = await page.locator('#s-maand').innerText();
-    expect(t).toMatch(/Gelezen op \d{1,2} \w+ \d{4}\./);
+    /* v340: de regel "Gelezen op <datum>" is vervallen; SET.maandGelezen wordt nog wel gezet (hierboven). */
+    expect(t).not.toMatch(/Gelezen op/);
     expect(t).not.toMatch(/streak|op rij|dagen achter|\d+x gelezen/i);
   });
 
@@ -631,14 +569,13 @@ test.describe('g · leesmoment en robuustheid', () => {
     P.minder_tx = JSON.stringify(T);
     await boot(page, P);
     expect(await page.evaluate(() => maandRegels().find((r) => r.key === 'dekking').status)).toBe('let op');
-    await page.evaluate(() => go('maand'));
+    /* v340: de lijstregel op Grip is een tegel geworden; de waarde met haar eenheid staat naast de naam
+       in de sheet erachter, en daar geldt dezelfde eis. */
+    await page.evaluate(() => openMaandBeslis('dekking'));
     const uit = await page.evaluate(() => {
-      const rij = [...document.querySelectorAll('#s-maand .row')]
-        .find((r) => /dekking reserveringen/i.test(r.innerText));
-      /* v324: de rij is een lijstregel en eindigt op de chevron, dus de waardekolom wordt bij naam
-         gezocht in plaats van als laatste kind. */
-      const rechts = rij.querySelector('[data-beslisbedrag]').getBoundingClientRect();
-      return { breedte: Math.round(rechts.width), hoogte: Math.round(rechts.height), rij: Math.round(rij.getBoundingClientRect().width) };
+      const kol = document.querySelector('#sheet [data-sheetbedrag="dekking"]');
+      const rechts = kol.getBoundingClientRect();
+      return { breedte: Math.round(rechts.width), hoogte: Math.round(rechts.height), rij: Math.round(kol.parentElement.getBoundingClientRect().width) };
     });
     expect(uit.breedte / uit.rij).toBeLessThanOrEqual(0.45);   // begrensd, dus de zin houdt ruimte
     expect(uit.breedte).toBeGreaterThan(80);                   // maar breed genoeg voor twee woorden

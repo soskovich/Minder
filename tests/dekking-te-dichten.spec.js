@@ -41,10 +41,14 @@ const lees = (page) => page.evaluate(() => {
   const D = dekking(12);
   const r = maandRegels().find((x) => x.key === 'dekking');
   go('maand'); renderMaand();
-  const kaart = (kop) => { const c = [...document.querySelectorAll('#s-maand .card')].find((x) => x.querySelector('.hlabel') && x.querySelector('.hlabel').innerText.trim().toUpperCase() === kop.toUpperCase()); return c ? c.innerText : ''; };
+  /* v340: de kaarten 'Vraagt een beslissing' en 'Vraagt aandacht' zijn weg; het oordeel is de kleur
+     van de tegel (rood = beslissing, amber = aandacht), en naam en bedrag staan in de sheet erachter. */
+  const t = document.querySelector('#s-maand [data-tegel="dekking"]');
+  let sheet = '';
+  if (t) { openMaandBeslis('dekking'); sheet = document.querySelector('#sheet').innerText; closeSheet(); }
   return { gat: D.gat, status: r.status, eenheid: r.eenheid, gevolg: r.gevolg, perMaandTot: r.perMaandTot,
     dmt: doelMaandenTot(D.gat ? D.gat.maand : ''), DD: D.gat ? dekkingDichten(D) : null,
-    beslis: kaart('Vraagt een beslissing'), aandacht: kaart('Vraagt aandacht') };
+    kleur: t ? t.dataset.kleur : null, sheet };
 });
 
 /* ===== a) het gemelde geval ===== */
@@ -66,13 +70,13 @@ test.describe('a · EUR 37 en EUR 299 in november, op 3 oktober', () => {
     expect(r.perMaandTot).toEqual({ bedrag: 131, maand: NOV });
     expect(r.gevolg).toContain('Dat is €131 per maand tot november, deze maand meegeteld.');
   });
-  test('op het scherm: onder Vraagt aandacht en niet onder Vraagt een beslissing', async ({ page }) => {
+  test('op het scherm: een amber tegel (aandacht) en geen rode (beslissing)', async ({ page }) => {
     await boot(page);
     const r = await lees(page);
-    expect(r.aandacht).toContain('Dekking reserveringen');
-    // v324: een lijstregel, met het bedrag en zijn eenheid op twee regels
-    expect(r.aandacht).toMatch(/€131\s+per maand tot november/);
-    expect(r.beslis).not.toContain('Dekking reserveringen');
+    expect(r.kleur).toBe('amber');
+    expect(r.sheet).toContain('Dekking reserveringen');
+    // v324: het bedrag en zijn eenheid op twee regels, nu in de sheet achter de tegel
+    expect(r.sheet).toMatch(/€131\s+per maand tot november/);
   });
 });
 
@@ -83,8 +87,8 @@ test('b · dezelfde post in de lopende maand is een beslissing', async ({ page }
   expect(r.dmt).toBe(0);
   expect(r.status).toBe('tekort');
   expect(r.gevolg).toContain('Die post valt deze maand');
-  expect(r.beslis).toContain('Dekking reserveringen');
-  expect(r.aandacht).not.toContain('Dekking reserveringen');
+  expect(r.kleur).toBe('rood');
+  expect(r.sheet).toContain('Dekking reserveringen');
 });
 
 /* ===== c) de grootte van het gat beslist niet meer ===== */

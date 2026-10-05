@@ -71,11 +71,19 @@ async function boot(page, payload) {
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof beleggenKlaar === 'function');
 }
 const B = (page) => page.evaluate(() => beleggenKlaar(maandRegels()));
-const regel = (page) => page.evaluate(() => maandBeleggenRegel(maandRegels()));
-const tekst = (page) => page.evaluate(() => {
-  const d = document.createElement('div'); d.innerHTML = maandBeleggenRegel(maandRegels());
-  return d.textContent.replace(/\s+/g, ' ').trim();
-});
+/* v340: maandBeleggenRegel() is vervallen. De uitkomst staat nu in de tegel [data-tegel=beleggen] op
+   Grip (groen 'klaar' of grijs 'wacht' met 'op je <blokkade>'), en de opbouw met waarde en drempel in
+   de sheet openBeleggenVoorwaarden(). `tegel` leest de gerenderde tegel; '' als hij er niet staat. */
+const tegel = async (page) => {
+  await page.evaluate(() => go('maand'));
+  return page.evaluate(() => {
+    const t = document.querySelector('#s-maand [data-tegel="beleggen"]');
+    return t ? { kleur: t.dataset.kleur, waarde: t.querySelector('.kt-val').textContent.trim(),
+      maat: t.querySelector('.kt-maat').textContent.trim(), tekst: t.textContent.replace(/\s+/g, ' ').trim() } : null;
+  });
+};
+const tekst = async (page) => { const t = await tegel(page); return t ? t.tekst : ''; };
+const sheetTekst = async (page) => { await page.evaluate(() => openBeleggenVoorwaarden()); return page.locator('#sheet').innerText(); };
 const statusVan = (page, key) => page.evaluate((k) => {
   const r = maandRegels().find((x) => x.key === k); return r ? r.status : null;
 }, key);
@@ -110,7 +118,7 @@ test.describe('a · de samenstelling', () => {
       expect(src).not.toContain(fn);
     }
     const voor = await page.evaluate(() => ({ tx: TX.length, set: JSON.stringify(SET) }));
-    await page.evaluate(() => { beleggenKlaar(maandRegels()); maandBeleggenRegel(maandRegels()); });
+    await page.evaluate(() => { beleggenKlaar(maandRegels()); gripTegels(maandRegels(), maandRegels()); });
     expect(await page.evaluate(() => ({ tx: TX.length, set: JSON.stringify(SET) }))).toEqual(voor);
   });
 
@@ -122,7 +130,10 @@ test.describe('a · de samenstelling', () => {
     expect(b.voorwaarden.every((v) => v.gehaald)).toBe(true);
     expect(b.klaar).toBe(true);
     expect(b.blokkade).toBe(null);
-    expect(await regel(page)).toContain('Je drie voorwaarden voor beleggen zijn alle drie gehaald.');
+    const t = await tegel(page);
+    expect(t.kleur).toBe('groen');
+    expect(t.waarde).toBe('klaar');
+    expect(t.maat).toBe('alle drie gehaald');
   });
 
   test('buffer telt ook als hij tussen drie maanden en je richtbedrag staat', async ({ page }) => {
@@ -140,22 +151,25 @@ test.describe('b · elk van de drie als blokkade', () => {
     const b = await B(page);
     expect(b.klaar).toBe(false);
     expect(b.blokkade.key).toBe('buffer');
-    const h = await regel(page);
-    expect(h).toContain('Nog niet aan je voorwaarden voor beleggen: buffer');
-    // v314: de bufferdrempel is sinds v305 JOUW keuze (SET.beleggenDrempel), en de zin zegt dat
-    expect(h).toContain('tegen je drempel van 3 maanden');
+    const t = await tegel(page);
+    expect(t.kleur, 'niet gehaald is geen fout (v314): grijs').toBe('grijs');
+    expect(t.waarde).toBe('wacht');
+    expect(t.maat).toBe('op je buffer');
+    /* v340: de drempel van 3 maanden staat niet meer in een zin op Grip maar in de sheet, naast de waarde. */
+    expect(await sheetTekst(page)).toMatch(/tegen 3 maanden/);
   });
 
-  /* v187: de regel toont zich alleen nog wanneer hij iets zegt wat de losse regels niet zeggen.
-     Blokkeert dekking of doel en staat die rij zichtbaar op 'tekort', dan herhaalt hij de rij die
-     er drie regels boven staat, en zwijgt hij. Het oordeel zelf verandert niet: beleggenKlaar()
-     blijft dezelfde blokkade aanwijzen. */
-  test('dekking blokkeert: het oordeel staat, de regel zwijgt want de rij zegt het al', async ({ page }) => {
+  /* v187: de regel zweeg zodra de blokkerende rij het al zei.
+     v340: dat zwijgen is vervallen, want de regel is een tegel en die staat er altijd zolang beleggen
+     zichtbaar is; hij noemt de blokkade in een woord en herhaalt geen cijfer. Wat blijft: dezelfde
+     blokkade als beleggenKlaar() aanwijst. */
+  test('dekking blokkeert: de tegel noemt de reserveringen', async ({ page }) => {
     await boot(page, seed({ resSaldo: 10 }));
     expect(await statusVan(page, 'dekking')).toBe('tekort');
     const b = await B(page);
     expect(b.blokkade.key).toBe('dekking');
-    expect(await regel(page)).toBe('');
+    const t = await tegel(page);
+    expect([t.kleur, t.waarde, t.maat]).toEqual(['grijs', 'wacht', 'op je reserveringen']);
   });
 
   test('het aankoopdoel blokkeert: idem, de rij zegt het al', async ({ page }) => {
@@ -163,7 +177,8 @@ test.describe('b · elk van de drie als blokkade', () => {
     expect(await statusVan(page, 'doel')).toBe('tekort');
     const b = await B(page);
     expect(b.blokkade.key).toBe('doel');
-    expect(await regel(page)).toBe('');
+    const t = await tegel(page);
+    expect([t.kleur, t.waarde, t.maat]).toEqual(['grijs', 'wacht', 'op Vakantie']);
   });
 
   test('precies twee niet gehaald: alleen de eerste in de volgorde wordt genoemd', async ({ page }) => {
@@ -173,7 +188,7 @@ test.describe('b · elk van de drie als blokkade', () => {
     const nietGehaald = b.voorwaarden.filter((v) => !v.gehaald).map((v) => v.key);
     expect(nietGehaald).toEqual(['dekking', 'doel']);             // precies twee
     expect(b.blokkade.key).toBe('dekking');                       // maar alleen de eerste telt
-    expect(await regel(page)).toBe('');                           // en de rij zegt het al
+    expect((await tegel(page)).maat).toBe('op je reserveringen'); // en de tegel noemt alleen die
   });
 
   test('alle drie niet gehaald: nog steeds één blokkade', async ({ page }) => {
@@ -181,10 +196,9 @@ test.describe('b · elk van de drie als blokkade', () => {
     const b = await B(page);
     expect(b.voorwaarden.filter((v) => !v.gehaald).map((v) => v.key)).toEqual(['buffer', 'dekking', 'doel']);
     expect(b.blokkade.key).toBe('buffer');
-    const h = await regel(page);
-    expect(h).toContain('buffer');
-    expect(h).not.toContain('dekking reserveringen');
-    expect((h.match(/tegen/g) || []).length).toBe(1);             // één ding tegelijk
+    const t = await tegel(page);
+    expect(t.maat).toBe('op je buffer');                          // één ding tegelijk
+    expect(t.tekst).not.toMatch(/reserveringen|Vakantie/);
   });
 });
 
@@ -200,8 +214,10 @@ test.describe('c · zwijgen bij onvolledigheid', () => {
     const b = await B(page);
     expect(b.volledig).toBe(false);
     expect(b.klaar).toBe(false);
-    geenUitspraak(await regel(page));
-    expect(await regel(page)).toContain('Niet te beoordelen');
+    geenUitspraak(await tekst(page));
+    expect((await tegel(page)).waarde).not.toBe('klaar');
+    /* v340: "Niet te beoordelen" staat niet meer op Grip maar in de sheet achter de tegel. */
+    expect(await sheetTekst(page)).toMatch(/niet te beoordelen/i);
   });
 
   test('geen doel met streefdatum: geen uitspraak', async ({ page }) => {
@@ -209,14 +225,14 @@ test.describe('c · zwijgen bij onvolledigheid', () => {
     expect(await page.evaluate(() => maandRegels().some((r) => r.key === 'doel'))).toBe(false);
     const b = await B(page);
     expect(b.volledig).toBe(false);
-    geenUitspraak(await regel(page));
+    geenUitspraak(await tekst(page));
   });
 
   test('geen verplichtingen ingevoerd: geen uitspraak', async ({ page }) => {
     await boot(page, seed({ reserveringen: [] }));
     const b = await B(page);
     expect(b.volledig).toBe(false);
-    geenUitspraak(await regel(page));
+    geenUitspraak(await tekst(page));
   });
 
   test('onvolledig kan nooit klaar worden, ook niet als de rest goed staat', async ({ page }) => {
@@ -232,27 +248,24 @@ test.describe('d · zichtbaarheid en plek', () => {
   test('zonder spaardoel en zonder vermogen staat de regel er niet', async ({ page }) => {
     await boot(page, seed({ goals: [] }));
     expect(await page.evaluate(() => beleggenZichtbaar())).toBe(false);
-    expect(await regel(page)).toBe('');
-    await page.evaluate(() => go('maand'));
-    expect(await page.locator('#s-maand').innerText()).not.toMatch(/voorwaarden voor beleggen/i);
+    expect(await tegel(page)).toBe(null);
+    expect(await page.locator('#s-maand').innerText()).not.toMatch(/beleggen/i);
   });
 
   test('een vermogensinstelling alleen is genoeg om hem te tonen', async ({ page }) => {
     await boot(page, seed({ goals: [], assets: [{ id: 'a1', naam: 'Index', waarde: 5000, grow: true, rend: 6 }] }));
     expect(await page.evaluate(() => beleggenZichtbaar())).toBe(true);
-    expect(await regel(page)).not.toBe('');
+    expect(await tegel(page)).not.toBe(null);
   });
 
-  test('de regel staat onder de regels en boven de coach-ingang', async ({ page }) => {
+  /* v340: de volgorde "onder de regels, boven de coach-ingang" is vervallen, want die kaarten bestaan
+     niet meer. Wat blijft: beleggen is een tegel tussen de andere tegels, en er staat geen aparte kaart
+     "Voorwaarden voor beleggen" meer op Grip. */
+  test('beleggen is een tegel in het raster, geen eigen kaart', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => go('maand'));
-    const t = await page.locator('#s-maand').innerText();
-    const iRegels = Math.max(t.indexOf('Buffer in maanden'), t.indexOf('Dekking reserveringen'));
-    const iBeleg = t.toLowerCase().indexOf('voorwaarden voor beleggen');
-    const iCoach = Math.max(t.indexOf('Zullen we dat doorlopen'), t.indexOf('Wil je toch iets doornemen'),
-      t.indexOf('Je afspraak deze maand'));
-    expect(iBeleg).toBeGreaterThan(iRegels);
-    if (iCoach > -1) expect(iBeleg).toBeLessThan(iCoach);
+    await tegel(page);
+    expect(await page.locator('#gripTegels [data-tegel="beleggen"]').count()).toBe(1);
+    expect(await page.locator('#s-maand').innerText()).not.toMatch(/voorwaarden voor beleggen/i);
   });
 
   test('de regel herhaalt de cijfers van de regels niet', async ({ page }) => {

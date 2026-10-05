@@ -436,61 +436,68 @@ test('8i de rij noemt wanneer de grens geldt, en bij een eerste keuze dat hij me
   expect(b).not.toContain('Deze maand blijft op');
 });
 
-/* ===== 9) DE KAART 'VANAF <MAAND>' ===== */
-test('9a zonder wijziging is er geen kaart', async ({page})=>{
+/* ===== 9) DE KAART 'VANAF <MAAND>' =====
+   v340: de kaart is opgegaan in de tijdlijn op Grip (#gripTijdlijn). De rijen komen uit
+   maandVanafData() met hun volle zin (lab, sub, waarde, act) en staan in de tijdlijn als punt
+   ([data-tlsoort="vanaf"]) met de korte vorm `kort`, in de kolom van volgende maand. */
+test('9a zonder wijziging is er geen punt', async ({page})=>{
   await boot(page);
   const r=await page.evaluate(()=>{ go('maand');
-    return {n:maandVanafRegels().length, kaart:maandVanafKaart(),
+    return {n:maandVanafData().length, punten:document.querySelectorAll('#s-maand [data-tlsoort="vanaf"]').length,
       txt:document.getElementById('s-maand').innerText}; });
   expect(r.n).toBe(0);
-  expect(r.kaart).toBe('');
+  expect(r.punten).toBe(0);
   expect(r.txt.toUpperCase()).not.toContain('VANAF ');
 });
 
 test('9b drie rijen, elk alleen als er iets verandert', async ({page})=>{
   await boot(page, {set:{budgetsNext:{huur:900,boodschappen:450,vervoer:150}}});
   const r=await page.evaluate(()=>{
-    const potjes=maandVanafRegels().length;
-    normChipZet(6); normVastzetten();
+    const potjes=maandVanafData().length;
+    normChipZet(6); normVastzetten(); closeSheet();
     go('maand');
-    const txt=document.getElementById('s-maand').innerText;
-    return {potjes, n:maandVanafRegels().length, txt, vol:ymFull(nextYM(SET.budgetMonth||thisYM()))};
+    const D=maandVanafData();
+    const punten=[...document.querySelectorAll('#gripTijdlijn [data-tlsoort="vanaf"]')].map(e=>({
+      maand:e.closest('[data-tlmaand]').dataset.tlmaand, tekst:e.textContent, act:e.getAttribute('onclick')}));
+    return {potjes, n:D.length, D, punten, vol:nextYM(SET.budgetMonth||thisYM())};
   });
   expect(r.potjes).toBe(1);                   // de potjes-rij stond er al
   expect(r.n).toBe(3);                        // norm en drempel komen erbij
-  expect(r.txt.toUpperCase()).toContain('VANAF '+r.vol.toUpperCase());
-  expect(r.txt).toContain('Je potjes');
-  expect(r.txt).toContain('Ondergrens voor je buffer');
-  expect(r.txt).toContain('Buffer die je wilt voor beleggen');
-  expect(r.txt).toContain('volgt je ondergrens');
+  expect(r.D.map(v=>v.lab)).toEqual(['Je potjes','Ondergrens voor je buffer','Buffer die je wilt voor beleggen']);
+  expect(r.D[2].sub).toContain('volgt je ondergrens');
+  // op Grip: drie punten in de kolom van volgende maand, met de korte vorm en dezelfde ingang
+  expect(r.punten.map(x=>x.maand)).toEqual([r.vol,r.vol,r.vol]);
+  expect(r.punten.map(x=>x.tekst)).toEqual(r.D.map(v=>v.kort));
+  expect(r.punten.map(x=>x.act)).toEqual(r.D.map(v=>v.act));
 });
 
 test('9c met een eigen beleggingsdrempel blijft die rij weg', async ({page})=>{
   await boot(page, {set:{beleggenDrempel:8}});
   const r=await page.evaluate(()=>{
-    normChipZet(6); normVastzetten(); go('maand');
-    return {n:maandVanafRegels().length, txt:document.getElementById('s-maand').innerText};
+    normChipZet(6); normVastzetten(); closeSheet(); go('maand');
+    return {D:maandVanafData(), txt:document.getElementById('gripTijdlijn').innerText};
   });
-  expect(r.n).toBe(1);
-  expect(r.txt).toContain('Ondergrens voor je buffer');
-  expect(r.txt).not.toContain('Buffer die je wilt voor beleggen');
+  expect(r.D.length).toBe(1);
+  expect(r.D[0].lab).toBe('Ondergrens voor je buffer');
+  expect(r.txt).toContain(r.D[0].kort);
+  expect(r.txt).not.toContain('buffer voor beleggen');
 });
 
 test('9d de potjes-rij is VERHUISD en staat precies een keer op Grip', async ({page})=>{
   await boot(page, {set:{budgetsNext:{huur:900,boodschappen:450,vervoer:150}}});
   const r=await page.evaluate(()=>{ go('maand');
+    const kort=maandVanafData()[0].kort;
     const t=document.getElementById('s-maand').innerText;
-    const kaarten=[...document.querySelectorAll('#s-maand .card')].map(c=>c.innerText);
-    return {n:(t.match(/Je potjes/g)||[]).length,
-      inVanaf:kaarten.filter(c=>/VANAF /i.test(c)&&/Je potjes/.test(c)).length,
-      inRegels:kaarten.filter(c=>/STAAT GOED|VRAAGT /i.test(c)&&/Je potjes/.test(c)).length,
-      voet:typeof window.maandVoetBlok, plan:typeof window.maandPlanRegels};
+    const kaarten=[...document.querySelectorAll('#s-maand .card')].filter(c=>c.innerText.includes(kort)).map(c=>c.id);
+    return {kort, n:t.split(kort).length-1, kaarten, vanafKop:/^VANAF /im.test(t),
+      voet:typeof window.maandVoetBlok, plan:typeof window.maandPlanRegels, kaart:typeof window.maandVanafKaart};
   });
   expect(r.n).toBe(1);
-  expect(r.inVanaf).toBe(1);
-  expect(r.inRegels).toBe(0);                 // niet meer onder een streep in de regelkaart
+  expect(r.kaarten).toEqual(['gripTijdlijn']);   // in de tijdlijn en in geen andere kaart
+  expect(r.vanafKop).toBe(false);                // de eigen kaart 'Vanaf <maand>' bestaat niet meer
   expect(r.voet).toBe('undefined');           // de voet is met de verhuizing vervallen
   expect(r.plan).toBe('undefined');
+  expect(r.kaart).toBe('undefined');
 });
 
 /* ===== 10) DE UITKOMST IN HET LOGBOEK ===== */
@@ -589,16 +596,18 @@ test('10e de lopende maand noemt wanneer de uitkomst er is', async ({page})=>{
 test('10f de lopende maand houdt zijn uitkomstregel, een afgesloten maand staat kort onder zijn kop', async ({page})=>{
   await boot(page, {set:{valtOpLog:LOG()}});
   const r=await page.evaluate((v)=>{ go('maand');
-    /* v331: de open vraag staat op Grip, de maanden en de lopende maand in het logboek. */
-    const vr=document.querySelector(`#valtOpGrip [data-vraag="${v}|boodschappen"]`);
-    const vraagT=vr?vr.innerText.replace(/\s+/g,' '):'';
+    const opGrip=document.querySelectorAll('#s-maand [data-vraag]').length;
+    /* v331: de open vraag staat op Grip, de maanden en de lopende maand in het logboek.
+       v340: de open vraag staat bovenaan het logboek (#logVraag) en niet meer op Grip. */
     go('logboek');
+    const vr=document.querySelector(`#logVraag [data-vraag="${v}|boodschappen"]`);
+    const vraagT=vr?vr.innerText.replace(/\s+/g,' '):'';
     const kaart=document.querySelector('#valtOpLog');
     const blok=kaart.querySelector(`.vl-maand[data-maand="${v}"]`);
     // de kop zegt 'eindigde(n) erboven'; een uitkomstzin noemt een bedrag of 'binnen'
     return {n:(kaart.innerText.match(/eindigde (€|binnen)|daarna|uitkomst na/g)||[]).length,
       uitkomstNa:/uitkomst na/.test(kaart.innerText), kop:!!blok.querySelector('[data-maandboven]'),
-      vraag:vraagT};
+      vraag:vraagT, opGrip};
   }, VORIG);
   expect(r.n).toBe(1);                        // alleen de lopende maand draagt nog een uitkomstzin
   expect(r.uitkomstNa).toBe(true);
@@ -606,6 +615,7 @@ test('10f de lopende maand houdt zijn uitkomstregel, een afgesloten maand staat 
   /* binnen het bijgestelde potje, maar EUR 150 boven het oorspronkelijke: dat telt (v315, v325) */
   expect(r.vraag).toContain('€150 boven');
   expect(r.vraag).toContain('Boodschappen ging boven je oorspronkelijke potje, en je stelde het bij.');
+  expect(r.opGrip).toBe(0);
 });
 
 test('10g de grens schrijft zijn meetlat in het record', async ({page})=>{
@@ -684,10 +694,15 @@ test('e4 de gevolgen lenen de projectie en rekenen hem niet na', async ({page})=
    van boodschappen hier de vraag, en Vervoer een korte rij: 639 en 605px. */
 /* v331: het logboek is een eigen scherm en de vraagkaart staat op Grip, dus hier staat dat record
    als korte rij. GEMETEN op het logboekscherm: 499px op 360 en 483px op 390. */
-const PX={360:{vanaf:231, log:499, tel:75, metUit:49},
-          390:{vanaf:216, log:483, tel:75, metUit:49}};
+/* v340: de vanaf-kaart is opgegaan in de tijdlijn op Grip, dus zijn hoogte (231/216px) is vervallen;
+   de hoogte van het logboek blijft gemeten. */
+/* v340: GEMETEN 514px op 360 (was 499): de rij van het record met de open vraag zegt nu "vraag staat
+   bovenaan" in plaats van "vraag staat op Grip", en breekt op 360 een regel verder af. Op 390 past hij
+   nog en blijft het 483. */
+const PX={360:{log:514, tel:75, metUit:49},
+          390:{log:483, tel:75, metUit:49}};
 for (const [w,h] of [[360,640],[390,844]]) {
-  test(`p${w} de prijs in pixels van de vanaf-kaart en de uitkomst-regel`, async ({page})=>{
+  test(`p${w} de prijs in pixels van het logboek en de uitkomst-regel`, async ({page})=>{
     await page.setViewportSize({width:w, height:h});
     const L=LOG({
       [VORIG+'|shopping']:{maand:VORIG,potjeId:'shopping',categorie:'Online shopping',
@@ -696,25 +711,15 @@ for (const [w,h] of [[360,640],[390,844]]) {
     await boot(page, {set:{valtOpLog:L, budgetsNext:{huur:900,boodschappen:450,vervoer:150}}});
     const r=await page.evaluate(()=>{
       normChipZet(6); normVastzetten(); closeSheet(); go('maand');
-      /* v320: deze selector las `c.innerText` en pakte daarmee de EERSTE kaart waarin het woord
-         ergens voorkwam. GEMETEN dat dat de verkeerde kaart was: de gevolgzin van een doel achter
-         de grendel zegt 'je hebt vanaf mrt 2027 EUR X nodig', en die zin stond tot v320 in de kaart
-         'Vraagt een beslissing'. Die kaart werd dus gemeten (250/232px) en de vanaf-kaart niet
-         (231/216px, in beide versies), en het getal uit die meting is als 'de vanaf-kaart' in
-         CLAUDE.md beland. Nu bindt hij op de KOP, en de assertie eronder zegt welke kop dat was. */
-      const kaart=n=>[...document.querySelectorAll('#s-maand .card')]
-        .find(c=>n.test(((c.querySelector('.hlabel')||{}).textContent||'').trim()));
-      const va=kaart(/^Vanaf /i);
       const hh=e=>e?Math.round(e.getBoundingClientRect().height):0;
-      const vaH=hh(va), vaLab=((va.querySelector('.hlabel')||{}).textContent||'').trim();
       /* v331: het logboek staat op een eigen scherm; daar wordt hij gemeten. */
       go('logboek'); const lg=document.querySelector('#valtOpLog');
       // een logrij is te herkennen aan zijn genestelde .row; de telzin onderaan heeft die niet
       const rijen=[...lg.children].filter(c=>c.tagName==='DIV'&&c.querySelector(':scope > .row'));
       const uit=rijen.filter(c=>/eindigde|daarna|uitkomst na/.test(c.innerText));
       const zonder=rijen.filter(c=>!/eindigde|daarna|uitkomst na/.test(c.innerText));
-      return {vaLab, lgLab:lg.closest('.screen').id,
-        vanaf:vaH, log:hh(lg), tel:hh(lg.lastElementChild),
+      return {lgLab:lg.closest('.screen').id,
+        log:hh(lg), tel:hh(lg.lastElementChild),
         metUit:uit.map(hh), zonderUit:zonder.map(hh),
         nUit:uit.length, nZonder:zonder.length};
     });
@@ -723,9 +728,7 @@ for (const [w,h] of [[360,640],[390,844]]) {
        correctie) staan kort onder hun maandkop, dus het paar met en zonder uitkomst bestaat niet meer. */
     expect(r.nUit).toBe(1);
     expect(r.nZonder).toBe(0);
-    expect(r.vaLab, 'en het is werkelijk de vanaf-kaart die gemeten wordt').toMatch(/^Vanaf /i);
     expect(r.lgLab).toBe('s-logboek');
-    expect(r.vanaf).toBe(p.vanaf);
     expect(r.log).toBe(p.log);
     expect(r.tel, 'de telregel, waar de vierde handeling van v315 in landt').toBe(p.tel);
     expect(Math.min(...r.metUit)).toBe(p.metUit);

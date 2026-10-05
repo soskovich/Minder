@@ -92,7 +92,7 @@ test.describe('b · regel patroon bestaat niet meer', () => {
   test('zonder boekingen staat er geen enkele regel', async ({ page }) => {
     await boot(page, leeg());
     expect(await page.evaluate(() => maandRegels())).toEqual([]);
-    expect(await page.evaluate(() => maandOordeel(maandRegels()))).toEqual({ zin: 'Er is nog niets te beoordelen.', sub: '' });
+    /* v340: de oordeelzin ('Er is nog niets te beoordelen.') is vervallen met maandOordeel(). */
   });
 
   test('met boekingen staat hij er ook niet, want hij is geen regel meer', async ({ page }) => {
@@ -110,25 +110,17 @@ test.describe('b · regel patroon bestaat niet meer', () => {
       renderMaand();
       window.maandRegels = echt;
     });
+    /* v340: de lege staat staat nu op de plek van de tegels, en zegt dat er geen tegels zijn. */
     const t = await page.evaluate(() => $('#s-maand').innerText);
-    expect(t).toContain('te weinig ingesteld om je maand samen te vatten');
+    expect(t).toContain('Er is nog te weinig ingesteld om tegels te tonen.');
+    expect(await page.evaluate(() => document.querySelectorAll('#s-maand [data-tegel]').length)).toBe(0);
+    expect(await page.evaluate(() => $('#s-maand').innerHTML)).toContain("go('set')");
     expect(t).not.toMatch(/regels staan goed/);
   });
 });
 
-test.describe('c · het oordeel telt wat er staat', () => {
-  test('nooit meer een hardcoded vijf', async ({ page }) => {
-    await boot(page, metData());
-    const src = await page.evaluate(() => maandOordeel.toString());
-    expect(src).not.toContain('Alle vijf');
-    const r = await page.evaluate(() => {
-      const mk = (n, st) => Array.from({ length: n }, (_, i) => ({ key: 'r' + i, naam: 'R' + i, status: st }));
-      return { drie: maandOordeel(mk(3, 'ok')).zin, vijf: maandOordeel(mk(5, 'ok')).zin };
-    });
-    expect(r.drie).toBe('Alle 3 regels staan goed.');
-    expect(r.vijf).toBe('Alle 5 regels staan goed.');
-  });
-});
+/* v340: describe 'c · het oordeel telt wat er staat' (nooit meer een hardcoded vijf) is vervallen, want
+   de oordeelzin die hij toetste bestaat niet meer: maandOordeel() is weg zonder opvolger. */
 
 test.describe('d · bewaard voor later', () => {
   test('het kopgetal is een aftrekking van wat er al staat', async ({ page }) => {

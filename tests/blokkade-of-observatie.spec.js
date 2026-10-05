@@ -11,7 +11,7 @@
 // de vier structurele signalen hadden geen korte naam, zodat hun hele l1 als regelnaam diende.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
-const { beslisIngangen } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
+const { beslisIngangen, beslisKeys } = require('./beslis-sheet');   // v320: de ingang staat in de sheet
 
 const now = new Date();
 const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -161,8 +161,11 @@ test.describe('c - de ingang staat bij de belofte', () => {
     expect(opScherm, 'geen enkele ingang los op het scherm').toBe(0);
     const keys = await beslisIngangen(page);
     expect(keys.length).toBeGreaterThan(0);
-    const rijen = await page.evaluate(() =>
-      [...document.querySelectorAll('.row[data-beslis]')].map((x) => x.dataset.beslis));
+    /* v340: een regel is een tegel of een Let op-regel; de regels die een beslissing beloven zijn die
+       met status tekort, in schermvolgorde. */
+    const alle = await beslisKeys(page);
+    const rijen = await page.evaluate((ks) => ks.filter((k) => maandBeslisZoek(k).status === 'tekort'), alle);
+    expect(rijen.length).toBeGreaterThan(0);
     expect(keys, 'precies een ingang per regel, op zijn eigen sleutel').toEqual(rijen);
   });
 

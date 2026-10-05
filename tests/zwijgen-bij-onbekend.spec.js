@@ -151,42 +151,10 @@ test.describe('3 · nul uitgaven is niet hetzelfde als geen data', () => {
   });
 });
 
-test.describe('4 · de drempel voor onvolledigheid', () => {
-  test('de drempel staat in MAAND_DREMPEL, als aandeel plus ondergrens', async ({ page }) => {
-    await boot(page);
-    const d = await page.evaluate(() => ({ deel: MAAND_DREMPEL.onbekendDeel, min: MAAND_DREMPEL.onbekendMin }));
-    expect(d.deel).toBe(0.5);
-    expect(d.min).toBe(3);
-    expect(await page.evaluate(() => maandOordeel.toString())).toContain('MAAND_DREMPEL.onbekendDeel');
-  });
-
-  test('één onbekende regel van één is geen "er ontbreekt te veel"', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => {
-      const mk = (n, st) => Array.from({ length: n }, (_, i) => ({ key: 'r' + i, naam: 'R' + i, status: st }));
-      return { een: maandOordeel(mk(1, 'onbekend')), twee: maandOordeel(mk(2, 'onbekend')),
-        tweeVanDrie: maandOordeel(mk(2, 'onbekend').concat(mk(1, 'ok'))).zin,
-        tweeVanVijf: maandOordeel(mk(2, 'onbekend').concat(mk(3, 'ok'))).zin };
-    });
-    expect(r.een.zin).toBe('Er is nog niets te beoordelen.');
-    expect(r.een.sub).toMatch(/^Onbekend:/);            // wel benoemen wat er ontbreekt
-    expect(r.twee.zin).toBe('Er is nog niets te beoordelen.');
-    expect(r.tweeVanDrie).toBe('Er ontbreekt te veel om een oordeel te geven.');
-    expect(r.tweeVanVijf).not.toMatch(/ontbreekt te veel/);
-  });
-
-  test('nooit meer "De 0 regels"', async ({ page }) => {
-    await boot(page);
-    const zinnen = await page.evaluate(() => {
-      const mk = (n, st) => Array.from({ length: n }, (_, i) => ({ key: 'r' + i, naam: 'R' + i, status: st }));
-      const uit = [];
-      for (let n = 0; n <= 5; n++) for (let o = 0; o <= n; o++)
-        uit.push(maandOordeel(mk(o, 'onbekend').concat(mk(n - o, 'ok'))).zin);
-      return uit;
-    });
-    for (const z of zinnen) expect(z).not.toMatch(/\b0 regels/);
-  });
-});
+/* v340: describe '4 · de drempel voor onvolledigheid' is vervallen. Hij toetste dat maandOordeel() bij te
+   veel onbekende regels "Er ontbreekt te veel om een oordeel te geven." zei, met MAAND_DREMPEL.onbekendDeel
+   en onbekendMin als grens. De oordeelzin is weg zonder opvolger, dus er is geen oordeel meer om bij
+   onvolledigheid in te houden; een onbekende regel krijgt op Grip een grijze tegel. */
 
 test.describe('5 · geen beweerde oorzaak meer', () => {
   test('de zin over twee doelen tegelijk bestaat niet meer', async ({ page }) => {

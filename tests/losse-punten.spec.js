@@ -36,7 +36,7 @@ async function boot(page, payload) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof maandOordeel === 'function');
+  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof renderMaand === 'function');
 }
 
 const maand = (page) => page.evaluate(() => { renderMaand(); return $('#s-maand').innerText.replace(/\s+/g, ' '); });
@@ -52,8 +52,10 @@ test.describe('a · de terugval op Maand vuurt alleen bij werkelijke leegte', ()
     expect(r.str.length).toBeGreaterThan(0);
 
     const t = await maand(page);
+    /* v340: de oordeelzin die telde wat er stond ('... vraagt een beslissing', '... aandacht') is
+       vervallen, want Grip draagt geen samenvatting meer. Wat blijft is dat het scherm geen leegte
+       claimt zolang er een signaal staat. */
     expect(t).not.toContain('Er is nog te weinig ingesteld');
-    expect(t).toMatch(/beslissing vraagt|aandacht/);          // het oordeel telt wat er staat
     /* En het signaal staat er zelf ook. Sinds v219 draagt het een korte naam ('Maanden boven je
        grens') in plaats van zijn hele l1: de rij toont die naam en het gesprek gebruikt hem in
        zijn vraag. Bindt daarom aan de sleutel en niet aan de zin, want de zin kan hernoemd worden
@@ -71,51 +73,14 @@ test.describe('a · de terugval op Maand vuurt alleen bij werkelijke leegte', ()
     expect(await maand(page)).toContain('Er is nog te weinig ingesteld');
   });
 
-  test('de guard leest allebei de bronnen, en leest ze vóór hij beslist', async ({ page }) => {
-    await boot(page);
-    const src = await page.evaluate(() => renderMaand.toString());
-    expect(src).toContain('!R.length && !STR.length');
-    // maandStructureel() moet vóór de guard staan, anders is STR er nog niet
-    expect(src.indexOf('maandStructureel()')).toBeLessThan(src.indexOf('!R.length && !STR.length'));
-  });
+  /* v340: 'de guard leest allebei de bronnen' (de bronstring `!R.length && !STR.length` in
+     renderMaand) is vervallen: die guard bestaat niet meer, renderMaand toetst nu alleen of er tegels
+     zijn. Of het scherm leegte claimt naast een signaal, toetst de eerste test van dit blok op het
+     scherm zelf. */
 });
 
-test.describe('b · een opsomming van onbekende regels plakt niet met een komma', () => {
-  const rij = (naam, status) => ({ key: naam, naam, status, waarde: '', eenheid: '', gevolg: '' });
-
-  test('twee ontbrekende regels krijgen "en", niet een komma', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => {
-      const mk = (n) => ({ key: n, naam: n, status: 'onbekend', waarde: '', eenheid: '', gevolg: '' });
-      return maandOordeel([mk('Buffer in maanden'), mk('Aankoopdoel')]);
-    });
-    expect(r.sub).toBe('Onbekend: buffer in maanden en aankoopdoel.');
-  });
-
-  test('drie ontbrekende regels: komma’s tussendoor, "en" voor het laatste', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => {
-      const mk = (n) => ({ key: n, naam: n, status: 'onbekend', waarde: '', eenheid: '', gevolg: '' });
-      return maandOordeel([mk('Buffer'), mk('Doel'), mk('Dekking')]);
-    });
-    expect(r.zin).toBe('Er ontbreekt te veel om een oordeel te geven.');
-    expect(r.sub).toBe('Onbekend: buffer, doel en dekking.');
-  });
-
-  test('één ontbrekende regel houdt zijn enkelvoud', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => maandOordeel([
-      { key: 'b', naam: 'Buffer', status: 'onbekend', waarde: '', eenheid: '', gevolg: '' }]));
-    expect(r.sub).toBe('Onbekend: buffer.');
-  });
-
-  test('beide takken lopen via opsomming(), geen eigen join meer', async ({ page }) => {
-    await boot(page);
-    const src = await page.evaluate(() => maandOordeel.toString());
-    expect(src).not.toMatch(/onb\.map\([^)]*\)\.join/);
-    expect((src.match(/opsomming\(/g) || []).length).toBeGreaterThanOrEqual(3);
-  });
-});
+/* v340: blok b (de opsomming van onbekende regels in de oordeelzin, maandOordeel()) is vervallen,
+   want maandOordeel() en de samenvatting op Grip bestaan niet meer. */
 
 test.describe('c · de coachschakelaar zegt wat hij doet', () => {
   /* SET.coachOff wordt op precies een functionele plek gelezen: de guard in scoreNotifs(). Hij zet

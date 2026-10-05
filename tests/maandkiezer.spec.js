@@ -66,7 +66,12 @@ test.describe('a · de lopende maand is de standaard', () => {
     await page.waitForFunction(() => typeof kijkMaand === 'function');
     expect(await page.evaluate(() => kijkMaand())).toBe(await page.evaluate(() => thisYM()));
     // en de keuze staat nergens in de opslag
-    expect(await page.evaluate(() => JSON.stringify(SET))).not.toContain(VORIGE);
+    /* v340: SET.afsluitPopup draagt de maand die je afsluit, en dat is per constructie de vorige maand
+       (afsluitMaand()), los van de kiezer. Die ene sleutel telt daarom niet als de keuze. */
+    const opslag = await page.evaluate(() => { const S = Object.assign({}, SET);
+      const af = S.afsluitPopup; delete S.afsluitPopup; return { rest: JSON.stringify(S), af: af ? af.maand : null, afMaand: afsluitMaand() }; });
+    expect(opslag.rest).not.toContain(VORIGE);
+    if (opslag.af) expect(opslag.af).toBe(opslag.afMaand);
   });
 
   test('de keuze blijft wel staan binnen de sessie, ook tussen de schermen', async ({ page }) => {
@@ -153,7 +158,7 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
   test('met de kiezer op een eerdere maand rendert Grip byte-identiek', async ({ page }) => {
     await boot(page);
     const nu = await page.evaluate(() => { go('maand'); return $('#s-maand').innerHTML; });
-    expect(nu).toMatch(/buffer in maanden/i);
+    expect(nu).toContain('data-tegel="buffer"');   // v340: de bufferregel is een tegel
     await kies(page, VORIGE);
     const daarna = await page.evaluate(() => { go('maand'); return $('#s-maand').innerHTML; });
     expect(daarna).toBe(nu);
@@ -167,9 +172,11 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
       return { maanden: [...h.matchAll(/coStart\('maand','(\d{4}-\d{2})'/g)].map((x) => x[1]),
         potjes: [...h.matchAll(/openPotjesVerdeling\('(\d{4}-\d{2})'/g)].map((x) => x[1]), nu: thisYM() }; });
     for (const m of r.maanden.concat(r.potjes)) expect(m).toBe(r.nu);
-    // v315: maandPlanRegels() is vervallen; maandVanafRegels() is de lezer die er in de plaats kwam
-    const src = await page.evaluate(() => renderMaand.toString() + maandIngang.toString() + maandCoachIngang.toString() + maandVanafRegels.toString());
-    expect(kaalBron(src)).not.toMatch(/kijkMaand\(\)|curMonth/);
+    /* v315: maandPlanRegels() is vervallen. v340: maandVanafRegels() ook; wat vanaf volgende maand
+       verandert leest de tijdlijn uit maandVanafData(). Alle bouwstenen van Grip worden gelezen. */
+    const src = await kaalUit(page, 'renderMaand', 'maandIngang', 'maandCoachIngang', 'maandVanafData',
+      'gripTegels', 'gripLetOpItems', 'dezeMaandKaart', 'gripTijdlijnData', 'renderMaandBeslisSheet');
+    expect(src).not.toMatch(/kijkMaand\(\)|curMonth/);
   });
 
   test('wat wel per maand rekent blijft staan', async ({ page }) => {

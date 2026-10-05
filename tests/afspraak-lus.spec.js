@@ -43,10 +43,16 @@ async function maand(page, payload) {
   await page.evaluate(() => go('maand'));
   await page.waitForSelector('#s-maand .card');
 }
-/* v337: de maandafsluiting staat bovenaan Grip, boven de terugblikken. Deze spec gaat over de
-   afspraaklus, dus hij leest de eerste kaart NA de afsluitkaart; dat die bovenaan staat toetst f. */
-const NA_AFSLUIT = '#s-maand > .card:not(#afsluitKaart):not(#afgeslotenRegel)';
-const kaart = (page) => page.locator(NA_AFSLUIT).first().innerText();
+/* v340: de afspraaklus is geen eigen kaart bovenaan Grip meer, maar een regel onder "Let op"
+   ([data-letop="afspraaklus"]) met de kaart in een sheet (#gripLetOpSheet). `kaart` tikt die regel
+   aan en leest de sheet; de chips en "Gezien" staan daar. Staat de regel er niet, dan is er geen
+   kaart om te lezen en faalt de tik luid. */
+const SHEET = '#gripLetOpSheet';
+const kaart = async (page) => {
+  const open = await page.evaluate((sel) => !!document.querySelector(sel) && $('#sheetBg').classList.contains('show'), SHEET);
+  if (!open) await page.locator('#s-maand [data-letop="afspraaklus"]').click();
+  return page.locator(SHEET).innerText();
+};
 
 test.describe('a · vorigeAfspraak kijkt precies één maand terug', () => {
   test('vindt de afspraak van vorige maand', async ({ page }) => {
@@ -159,7 +165,7 @@ test.describe('d · de zelfopgave', () => {
     let t = await kaart(page);
     expect(t).toMatch(/niet uit je cijfers af te lezen. is het gelukt\?/i);
 
-    await page.locator('#s-maand .chip', { hasText: 'Gelukt' }).first().click();
+    await page.locator(SHEET + ' .chip', { hasText: 'Gelukt' }).first().click();
     await page.waitForFunction(() => (SET.coachLog || []).some((l) => l.type === 'reflectie'));
 
     const r = await page.evaluate(() => (SET.coachLog || []).find((l) => l.type === 'reflectie'));
@@ -174,7 +180,8 @@ test.describe('d · de zelfopgave', () => {
 
   test('"niet gelukt" werkt net zo en wordt zonder verwijt getoond', async ({ page }) => {
     await maand(page, metAfspraak({ text: 'iets afspreken', regel: 'buffer' }));
-    await page.locator('#s-maand .chip', { hasText: 'Niet gelukt' }).first().click();
+    await kaart(page);
+    await page.locator(SHEET + ' .chip', { hasText: 'Niet gelukt' }).first().click();
     await page.waitForFunction(() => (SET.coachLog || []).some((l) => l.type === 'reflectie'));
     const t = await kaart(page);
     expect(t).toMatch(/je gaf zelf aan: niet gelukt/i);
@@ -184,7 +191,8 @@ test.describe('d · de zelfopgave', () => {
   test('de afspraak zelf wordt niet aangeraakt', async ({ page }) => {
     await maand(page, metAfspraak({ text: 'iets', regel: 'buffer' }));
     const voor = await page.evaluate(() => JSON.stringify((SET.coachLog || []).filter((l) => l.type === 'afspraak')));
-    await page.locator('#s-maand .chip', { hasText: 'Gelukt' }).first().click();
+    await kaart(page);
+    await page.locator(SHEET + ' .chip', { hasText: 'Gelukt' }).first().click();
     await page.waitForFunction(() => (SET.coachLog || []).some((l) => l.type === 'reflectie'));
     expect(await page.evaluate(() => JSON.stringify((SET.coachLog || []).filter((l) => l.type === 'afspraak')))).toBe(voor);
   });
@@ -193,11 +201,14 @@ test.describe('d · de zelfopgave', () => {
 test.describe('e · één keer per maand', () => {
   test('"Gezien" laat de regel verdwijnen en onthoudt dat', async ({ page }) => {
     await maand(page, metAfspraak({ text: 'x', cat: 'boodschappen' }, 200));
-    expect(await page.locator('#s-maand').innerText()).toMatch(/vorige maand sprak je af/i);
+    // v340: de regel staat onder "Let op", de kaart met "Gezien" in de sheet erachter
+    expect(await page.locator('#s-maand [data-letop="afspraaklus"]').count()).toBe(1);
+    expect(await kaart(page)).toMatch(/vorige maand sprak je af/i);
 
-    await page.locator('#s-maand >> text=Gezien').click();
+    await page.locator(SHEET + ' >> text=Gezien').click();
     await page.waitForFunction(() => !!SET.afspraakGezien);
-    expect(await page.locator('#s-maand').innerText()).not.toMatch(/vorige maand sprak je af/i);
+    expect(await page.locator('#s-maand [data-letop="afspraaklus"]').count()).toBe(0);
+    expect(await page.evaluate(() => $('#sheetBg').classList.contains('show'))).toBe(false);   // de sheet sluit als zijn kaart weg is
 
     const G = await page.evaluate(() => SET.afspraakGezien);
     const af = await page.evaluate(() => vorigeAfspraak());
@@ -205,7 +216,7 @@ test.describe('e · één keer per maand', () => {
     // dezelfde vorm als coachRecall: dezelfde afspraak, dezelfde maand
     expect(G.ym).toBe(await page.evaluate(() => coYm(Date.now())));
     await page.evaluate(() => { load(); renderMaand(); });
-    expect(await page.locator('#s-maand').innerText()).not.toMatch(/vorige maand sprak je af/i);
+    expect(await page.locator('#s-maand [data-letop="afspraaklus"]').count()).toBe(0);
   });
 
   test('een afspraak van deze maand laat de regel ook verdwijnen', async ({ page }) => {
@@ -224,15 +235,15 @@ test.describe('e · één keer per maand', () => {
 });
 
 test.describe('f · plaats en layout', () => {
-  test('de regel staat vóór het oordeel en vóór de regels, en boven de maandafsluiting', async ({ page }) => {
+  /* v340: de oordeelkaart en de afsluitkaart bestaan niet meer, dus 'voor het oordeel' en 'boven de
+     maandafsluiting' zijn vervallen. Wat blijft: de terugblik is een regel onder "Let op", en de
+     terugblikken staan daar bovenaan, voor de signalen van nu. */
+  test('de regel staat onder Let op, als eerste regel', async ({ page }) => {
     await maand(page, metAfspraak({ text: 'x', cat: 'boodschappen' }, 200));
-    // v337: de maandafsluiting staat lager op Grip, onder 'Vraagt een beslissing', en niet bovenaan
-    const ids = await page.$$eval('#s-maand > .card', (L) => L.map((e) => e.id));
-    expect(ids[0]).not.toBe('afsluitKaart');
-    const eerste = await page.locator(NA_AFSLUIT).first().innerText();
-    expect(eerste).toMatch(/je afspraak van vorige maand/i);
-    const tweede = await page.locator(NA_AFSLUIT).nth(1).innerText();
-    expect(tweede).toMatch(/beslissing|aandacht|staan goed|niets te beoordelen/i);   // v233: de oordeelkaart, zonder kop 'Je maand'
+    expect(await page.locator('#afsluitKaart').count()).toBe(0);
+    const soorten = await page.$$eval('#gripLetOp [data-letop]', (L) => L.map((e) => e.dataset.letop));
+    expect(soorten[0]).toBe('afspraaklus');
+    expect(await page.locator('#gripLetOp [data-letop="afspraaklus"]').innerText()).toMatch(/je afspraak van vorige maand/i);
   });
 
   for (const w of [360, 390]) {

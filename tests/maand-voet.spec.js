@@ -147,9 +147,11 @@ test.describe('b - geen informatieverlies', () => {
   });
 
   // v315: de rij staat nu in maandVanafRegels(), met hetzelfde bedrag en dezelfde ingang
+  // v340: die functie is opgegaan in maandVanafData(), en de rij staat in de tijdlijn op Grip
   test('de plan-rij gaat mee, met bedrag en ingang', async ({ page }) => {
     await boot(page, { set: NEXT });
-    const h = await page.evaluate(() => maandVanafRegels().join(''));
+    const d = await page.evaluate(() => maandVanafData());
+    const h = d.map((v) => [v.lab, v.sub, v.waarde, v.act].join(' ')).join(' ');
     expect(h).toContain('Je potjes');
     expect(h).toContain('openPotjesVerdeling');
     expect(h).toContain('€2.500');   // 1500 huur + 1000 boodschappen vanaf volgende maand
@@ -161,7 +163,7 @@ test.describe('b - geen informatieverlies', () => {
 /* v315: DE VOET BESTAAT NIET MEER, en dit blok houdt dat vast in plaats van waar hij hing. De drie
    functies zijn weg, de streep eronder is weg, en de rij staat op precies EEN plek: de eigen kaart.
    Dat laatste is de 'verplaatsen is nooit kopiëren'-eis, hier van de kant van het oude scherm. */
-test.describe('c - de voet is vervallen, de rij staat in een eigen kaart', () => {
+test.describe('c - de voet is vervallen, de rij staat in de tijdlijn', () => {
   test('de drie voet-functies bestaan niet meer', async ({ page }) => {
     await boot(page, { set: NEXT });
     const r = await page.evaluate(() => ['maandVoet', 'maandVoetBlok', 'maandPlanRegels']
@@ -169,69 +171,58 @@ test.describe('c - de voet is vervallen, de rij staat in een eigen kaart', () =>
     expect(r).toEqual(['undefined', 'undefined', 'undefined']);
   });
 
-  test('de rij staat in een eigen kaart met een eigen kop, en niet in een regelkaart', async ({ page }) => {
+  /* v340: de kaart 'Vanaf <maand>' is opgegaan in de tijdlijn. De rij staat daar precies een keer, als
+     punt met de korte vorm uit maandVanafData(), en geen enkele kaart op Grip draagt hem nog voluit. */
+  test('de rij staat precies een keer in de tijdlijn, en niet als eigen kaart', async ({ page }) => {
     await boot(page, { set: NEXT });
     const k = await kaarten(page);
-    const met = k.filter((x) => x.voet);
-    expect(met.length, 'precies een kaart draagt de rij').toBe(1);
-    expect(met[0].kop).toMatch(/^Vanaf /);
-    /* NIET OP DE border-top BINDEN: de rijen van deze kaart scheiden zichzelf met een border-top,
-       dus de vlag van kaarten() zegt hier niets meer. Wat vast moet liggen is dat GEEN regelkaart
-       de rij nog draagt, en dat is wat de streep van v223 betekende. */
-    expect(k.filter((x) => /^Vraagt |^Staat goed/.test(x.kop) && x.voet).length).toBe(0);
+    expect(k.filter((x) => x.voet).length, 'geen kaart draagt de rij voluit').toBe(0);
+    expect(k.filter((x) => /^Vanaf /.test(x.kop)).length).toBe(0);
+    const r = await page.evaluate(() => ({ n: document.querySelectorAll('#gripTijdlijn [data-tlsoort="vanaf"]').length,
+      tekst: (document.querySelector('#gripTijdlijn [data-tlsoort="vanaf"]') || {}).textContent,
+      onclick: (document.querySelector('#gripTijdlijn [data-tlsoort="vanaf"]') || { getAttribute: () => '' }).getAttribute('onclick'),
+      kort: maandVanafData()[0].kort }));
+    expect(r.n).toBe(1);
+    expect(r.tekst).toBe(r.kort);
+    expect(r.onclick).toContain('openPotjesVerdeling');
   });
 
-  test('zonder volgende-maand-laag is er geen rij en geen kaart', async ({ page }) => {
+  test('zonder volgende-maand-laag is er geen rij en geen punt', async ({ page }) => {
     await boot(page);
     const t = await tekst(page);
     expect(t).not.toContain('Je potjes');
     expect(t.toUpperCase()).not.toContain('VANAF ');
     expect(t).not.toMatch(/spaarquote/i);   // v232: de spaarquote staat op Vermogen
-    const n = await page.evaluate(() => maandVanafRegels().length);
+    const n = await page.evaluate(() => maandVanafData().length);
     expect(n).toBe(0);
+    expect(await page.locator('#s-maand [data-tlsoort="vanaf"]').count()).toBe(0);
   });
 
-  test('de streep onder een regelkaart is met de voet vervallen', async ({ page }) => {
-    await boot(page, { set: NEXT });
-    const n = await page.evaluate(() => [...document.querySelectorAll('#s-maand .card')]
-      .filter((c) => /^Vraagt |^Staat goed/i.test(((c.querySelector('.hlabel') || {}).textContent || '').trim()))
-      .filter((c) => /border-top:1px solid var\(--line\)/.test(c.innerHTML)).length);
-    expect(n).toBe(0);
-  });
+  /* v340: 'de streep onder een regelkaart is met de voet vervallen' is vervallen, want de regelkaarten
+     (Vraagt een beslissing, Vraagt aandacht, Staat goed) bestaan niet meer; de regels zijn tegels. */
 });
 
 test.describe('d - de rest van het scherm blijft staan', () => {
-  test('oordeel en coach-ingang, zonder kiezer en zonder kop', async ({ page }) => {
+  /* v340: de oordeelzin ('... vraagt een beslissing') is vervallen met de samenvatting; de ingang per
+     tekort staat nog in de sheet achter de tegel. */
+  test('coach-ingang per tekort, zonder kiezer en zonder kop', async ({ page }) => {
     await boot(page, { set: NEXT });
     const t = await tekst(page);
     expect(t).not.toContain('JE MAAND');   // v233: Grip heeft geen maandkiezer en geen kop meer
-    expect(t).toMatch(/beslissing vra/);   // 'vraagt' bij één, 'vragen' bij meer
     // v224: één ingang per regel met een tekort, niet meer één per scherm
-    // v320: en die ingang staat in de sheet achter de lijstregel
+    // v320: en die ingang staat in de sheet achter de regel
     const ingangen = (await beslisIngangen(page)).length;
     const tekorten = await page.evaluate(() => maandMetAccept(maandRegels()).concat(maandStructureel()).filter((r) => r.status === 'tekort').length);
     expect(ingangen).toBe(tekorten);
     expect(ingangen).toBeGreaterThan(0);
   });
 
-  // v226: de voet hangt aan de laatste kaart die regels draagt, en dat is hier de aandachtskaart
-  // v315: een kop per kaart, en de vanaf-kaart draagt alleen zijn eigen
-  test('geen tweede sectiekop binnen de kaart', async ({ page }) => {
+  /* v340: 'geen tweede sectiekop binnen de kaart' en 'de rijen in de vanaf-kaart dragen geen statusdot'
+     zijn vervallen, want de vanaf-kaart bestaat niet meer. De tijdlijn draagt een kop: */
+  test('de tijdlijn draagt een kop', async ({ page }) => {
     await boot(page, { set: NEXT });
-    const koppen = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => /Je potjes/.test(x.textContent));
-      return [...c.querySelectorAll('.hlabel')].length;
-    });
-    expect(koppen).toBe(1);   // alleen de kaartkop zelf
-  });
-
-  test('de rijen in de vanaf-kaart dragen geen statusdot', async ({ page }) => {
-    await boot(page, { set: NEXT });
-    const uit = await page.evaluate(() => {
-      const v = document.createElement('div'); v.innerHTML = maandVanafKaart();
-      return /border-radius:50%/.test(v.innerHTML);
-    });
-    expect(uit).toBe(false);
+    const koppen = await page.evaluate(() => document.querySelectorAll('#gripTijdlijn .hlabel').length);
+    expect(koppen).toBe(1);
   });
 });
 

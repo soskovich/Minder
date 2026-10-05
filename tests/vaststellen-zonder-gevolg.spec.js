@@ -54,7 +54,9 @@ async function bootPatroon(page, o) {
 }
 const schermTekst = (page, s) => page.evaluate((x) => { go(x); return $('#s-' + x).innerText.replace(/\s+/g, ' '); }, s);
 // v315: maandPlanRegels() is vervallen; de rij staat in maandVanafRegels()
-const planTekst = (page) => page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = maandVanafRegels().join(''); return d.innerText.replace(/\s+/g, ' '); });
+// v340: maandVanafRegels() is vervallen; de rijen komen uit maandVanafData() en staan in de tijdlijn op Grip
+const vanafTekst = (page) => page.evaluate(() => maandVanafData().map((v) => [v.lab, v.sub, v.waarde, v.kort].join(' ')).join(' ').replace(/\s+/g, ' '));
+const planTekst = vanafTekst;
 const bron = (page) => page.evaluate(() => [...document.querySelectorAll('script')].map((s) => s.textContent).join('\n'));
 
 test.describe('1 - Boven je inkomen-limiet is weg', () => {
@@ -69,7 +71,7 @@ test.describe('1 - Boven je inkomen-limiet is weg', () => {
 
   test('de vanaf-rijen dragen de rij niet, ook niet boven de grens', async ({ page }) => {
     await open(page, seed());
-    const h = await page.evaluate(() => maandVanafRegels().join(''));
+    const h = await vanafTekst(page);
     expect(h).not.toContain('inkomen-limiet');
     expect(h).not.toContain('spiegel, geen plafond');
   });
@@ -86,10 +88,10 @@ test.describe('1 - Boven je inkomen-limiet is weg', () => {
     const met = await planTekst(page);
     expect(met).toContain('Je potjes');
     expect(met).toContain('€2.450');
-    const rijen = await page.evaluate(() => maandVanafRegels().length);
+    const rijen = await page.evaluate(() => maandVanafData().length);
     expect(rijen).toBe(1);
     // zonder wijziging aan je potjes is er geen rij
-    const zonder = await page.evaluate(() => { SET.budgetsNext = {}; return maandVanafRegels().length; });
+    const zonder = await page.evaluate(() => { SET.budgetsNext = {}; return maandVanafData().length; });
     expect(zonder).toBe(0);
   });
 
@@ -99,20 +101,26 @@ test.describe('1 - Boven je inkomen-limiet is weg', () => {
     const p = seed();
     const set = JSON.parse(p.minder_set); delete set.budgetsNext; p.minder_set = JSON.stringify(set);
     await open(page, p);
-    const r = await page.evaluate(() => ({ n: maandVanafRegels().length, kaart: maandVanafKaart() }));
-    expect(r.n).toBe(0);
-    expect(r.kaart).toBe('');
+    /* v340: de kaart is opgegaan in de tijdlijn; zonder rij staat daar geen vanaf-punt */
+    const n = await page.evaluate(() => maandVanafData().length);
+    expect(n).toBe(0);
     await page.evaluate(() => go('maand'));
-    const t = await page.evaluate(() => document.querySelector('#s-maand').innerText.toUpperCase());
-    expect(t).not.toContain('VANAF ');
+    const r = await page.evaluate(() => ({ t: document.querySelector('#s-maand').innerText.toUpperCase(),
+      vanaf: document.querySelectorAll('#s-maand [data-tlsoort="vanaf"]').length }));
+    expect(r.t).not.toContain('VANAF ');
+    expect(r.vanaf).toBe(0);
   });
 
-  test('met die rij staat de streep er precies één keer', async ({ page }) => {
+  /* v340: 'de streep staat er precies een keer' is vervallen, want de streep was de vanaf-kaart en die
+     bestaat niet meer; Grip scheidt nu elke afspraakregel met dezelfde lijn. Wat overblijft is dat de
+     ene rij precies een keer in de tijdlijn staat. */
+  test('met die rij staat er precies een vanaf-punt in de tijdlijn', async ({ page }) => {
     await open(page, seed());
     await page.evaluate(() => go('maand'));
-    /* v337: de rijen van de maandafsluiting dragen dezelfde scheidingslijn; die kaart telt hier niet mee */
-    const strepen = await page.evaluate(() => { const s = document.querySelector('#s-maand').cloneNode(true); const ak = s.querySelector('#afsluitKaart'); if (ak) ak.remove(); return (s.innerHTML.match(/border-top:1px solid var\(--line\)/g) || []).length; });
-    expect(strepen).toBe(1);
+    const r = await page.evaluate(() => ({ n: document.querySelectorAll('#gripTijdlijn [data-tlsoort="vanaf"]').length,
+      tekst: (document.querySelector('#gripTijdlijn [data-tlsoort="vanaf"]') || {}).textContent, kort: maandVanafData()[0].kort }));
+    expect(r.n).toBe(1);
+    expect(r.tekst).toBe(r.kort);
   });
 });
 

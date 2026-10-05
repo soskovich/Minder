@@ -1,5 +1,11 @@
 /* v320: 'Vraagt een beslissing' als LIJSTREGEL, met de volle tekst een tik dieper.
  *
+ * v340: DE LIJSTREGEL IS EEN TEGEL. Grip is een dashboard; een regel met status tekort is een rode
+ * tegel (`[data-tegel]`, `data-kleur="rood"`), een structureel signaal een regel onder 'Let op'
+ * (`[data-letop="str"]`), en de oorzaak en het bedrag staan in de sheet erachter
+ * (`renderMaandBeslisSheet`, `[data-sheetbedrag]`). Deze spec leest die plekken via
+ * `tests/beslis-sheet.js`.
+ *
  * DE FIXTURE DRAAGT DE STAND VAN HET TOESTEL, en niet een paar getallen dat op dezelfde uitkomst
  * uitkomt (v251/v256): pot EUR 37 tegen een eenmalige boete van EUR 299 in DEZE maand (v323) geeft
  * EUR 262 tekort, en Kosten Koper van EUR 15.000 in de zevende maand op 90 procent van een inleg van
@@ -17,6 +23,7 @@
 const { test, expect } = require('@playwright/test');
 const { pinDag, vasteDatum, DAGEN_OVER } = require('./vaste-dag');
 const { kaalBron, kaalUit } = require('./bron-kaal');
+const { beslisRegels } = require('./beslis-sheet');
 const fs = require('fs');
 const path = require('path');
 
@@ -34,9 +41,6 @@ const POT = 37, POST = 299, POSTNAAM = 'Verkeersboete', DEK_TEKORT = POST - POT;
 const KK = 15000, INR = 3000, INLEG = 2200, DOEL_TEKORT = 163;
 const NORM = 3, RICHT = 4, NF_TOEGEWEZEN = 1500, NF_DOEL = 9000, BUF_GAT = NF_DOEL - NF_TOEGEWEZEN;   // 7500
 
-/* De hoogte van de kaart bij v319, gemeten op precies deze stand. Hij staat hier zodat een volgende
-   ronde ziet wat deze ronde opleverde; de assertie eist het nieuwe getal EN dat het lager is. */
-const V319_KAART = { 360: 623, 390: 530 };
 
 function seed(o = {}) {
   const tx = []; let i = 0;
@@ -77,20 +81,14 @@ async function boot(page, o = {}) {
   await pinDag(page, o.dagen);
   await page.addInitScript((s) => { for (const k in s) localStorage.setItem(k, s[k]); }, seed(o));
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof window.maandBeslisRij === 'function');
+  await page.waitForFunction(() => typeof window.renderMaand === 'function');
   await page.evaluate(() => go('maand'));
 }
 
 const BRON = () => kaalBron(fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'));
 
-// wat er op het scherm staat, per lijstregel
-const regels = (page) => page.evaluate(() => [...document.querySelectorAll('.row[data-beslis]')].map((x) => {
-  const b = x.querySelector('[data-beslisbedrag]');
-  return { key: x.dataset.beslis, h: Math.round(x.getBoundingClientRect().height),
-    bodem: Math.round(x.getBoundingClientRect().bottom + window.scrollY),
-    bedrag: b ? b.innerText.split('\n').map((s) => s.trim()).filter(Boolean) : [],
-    tekst: x.innerText.replace(/\n/g, ' | ') };
-}));
+// v340: per regel die een beslissing vraagt (status tekort), met oorzaak en bedrag uit de sheet
+const regels = async (page) => (await beslisRegels(page)).filter((r) => r.status === 'tekort');
 
 const sheetVan = (page, key) => page.evaluate((k) => {
   openMaandBeslis(k);
@@ -140,15 +138,16 @@ test.describe('b - de regel: stip, naam, oorzaak, het tekort, een chevron', () =
     // en bij het doel de streefdatum als oorzaak en het maandbedrag rechts
     expect(r[1].tekst).toMatch(/streefdatum \w+ \d{4}/);
     expect(r[1].bedrag).toEqual([`€${DOEL_TEKORT}`, 'per maand tekort']);
-    // de rode stip blijft: een tekort dat een beslissing vraagt is echte aandacht
-    const stip = await page.evaluate(() => {
-      const d = document.querySelector('.row[data-beslis] span'); return getComputedStyle(d).backgroundColor; });
+    // v340: de rode stip is een rode tegel: een tekort dat een beslissing vraagt is echte aandacht
+    expect(r.map((x) => x.kleur)).toEqual(['rood', 'rood']);
+    const rand = await page.evaluate(() => {
+      const d = document.querySelector('#s-maand [data-tegel="dekking"]'); return getComputedStyle(d).borderLeftColor; });
     const rood = await page.evaluate(() => { const e = document.createElement('div');
       e.style.color = 'var(--red)'; document.body.appendChild(e); const c = getComputedStyle(e).color;
       e.remove(); return c; });
-    expect(stip).toBe(rood);
-    // en de hele regel is de knop
-    const act = await page.evaluate(() => document.querySelector('.row[data-beslis]').getAttribute('onclick'));
+    expect(rand).toBe(rood);
+    // en de hele tegel is de knop
+    const act = await page.evaluate(() => document.querySelector('#s-maand [data-tegel="dekking"]').getAttribute('onclick'));
     expect(act).toBe("openMaandBeslis('dekking')");
   });
 
@@ -174,20 +173,14 @@ test.describe('b - de regel: stip, naam, oorzaak, het tekort, een chevron', () =
 });
 
 test.describe('c - een bron: de regel en de sheet lezen dezelfde velden', () => {
-  test('het bedrag op de regel is het bedrag in de sheet, bij elke soort', async ({ page }) => {
-    await boot(page);
-    const r = await regels(page);
-    for (const rij of r) {
-      const sh = await sheetVan(page, rij.key);
-      expect(sh.bedrag, `${rij.key}: regel en sheet`).toEqual(rij.bedrag);
-    }
-    // en dat is geen toeval van gelijke lege waarden
-    expect(r[0].bedrag.length).toBe(2);
-  });
+  /* v340: 'het bedrag op de regel is het bedrag in de sheet' is vervallen, want de regel is een tegel
+     en draagt dat bedrag niet meer: het staat alleen nog in de sheet, en een tweede plek om tegen te
+     leggen is er niet. */
 
   test('beide lezers noemen maandBeslisDeel, en de regel rekent het bedrag niet zelf', async ({ page }) => {
     await boot(page);
-    const rij = await kaalUit(page, 'maandBeslisRij');
+    // v340: de tweede lezer is de Let op-regel van een structureel signaal (hij leest de oorzaak)
+    const rij = await kaalUit(page, 'gripLetOpItems');
     const sheet = await kaalUit(page, 'renderMaandBeslisSheet');
     const deel = await kaalUit(page, 'maandBeslisDeel');
     expect(rij).toContain('maandBeslisDeel(');
@@ -205,7 +198,7 @@ test.describe('c - een bron: de regel en de sheet lezen dezelfde velden', () => 
   test('de oorzaak komt van de rij en wordt in de regel niet afgeleid', async ({ page }) => {
     await boot(page);
     const deel = await kaalUit(page, 'maandBeslisDeel');
-    const rij = await kaalUit(page, 'maandBeslisRij');
+    const rij = (await kaalUit(page, 'gripLetOpItems')) + (await kaalUit(page, 'gripTegels'));
     expect(deel).toContain('r.oorzaak');
     // geen tweede afleiding van de post, de streefdatum of de norm in de weergave
     for (const naam of ['resMaandLabel(', 'doelDatumLabel(', 'bufferNorm(']) {
@@ -230,11 +223,8 @@ test.describe('d - de sheet draagt de tekst die uit de kaart verdween', () => {
     // en de knop opent het gesprek op precies deze regel
     expect(sh.html).toContain("coStart('maand'");
     expect(sh.html).toContain("'dekking')");
-    // de kaart draagt die tekst niet meer: hij is verhuisd en niet gekopieerd
-    const kaart = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')]
-        .find((x) => /VRAAGT EEN BESLISSING/i.test((x.querySelector('.hlabel') || {}).textContent || ''));
-      return c.innerText; });
+    // het scherm draagt die tekst niet: hij staat in de sheet en is niet gekopieerd
+    const kaart = await page.evaluate(() => document.querySelector('#s-maand').innerText);
     expect(kaart).not.toContain(w.gevolg);
     expect(kaart).not.toContain(w.sug);
     expect(kaart).not.toContain(w.ing);
@@ -299,8 +289,12 @@ test.describe('e - geen bedrag waar er geen bedrag is', () => {
     const r = await regels(page);
     expect(r.map((x) => x.key)).toContain(sig.key);
     const rij = r.find((x) => x.key === sig.key);
+    expect(rij.kleur, 'een structureel signaal heeft geen tegel maar een Let op-regel').toBe(null);
     expect(rij.bedrag, 'rechts staat niets en alleen de chevron').toEqual([]);
     expect(rij.tekst).toContain(sig.oorzaak);
+    // en de Let op-regel op Grip noemt diezelfde oorzaak
+    const letop = await page.evaluate(() => [...document.querySelectorAll('#s-maand [data-letop="str"]')].map((x) => x.innerText).join('\n'));
+    expect(letop).toContain(sig.oorzaak);
     // de sheet draagt l2, de zin die in de kaart nooit heeft gestaan
     const sh = await sheetVan(page, sig.key);
     expect(sh.tekst).toContain(sig.l2);
@@ -357,24 +351,5 @@ test.describe('f - de zin over niets te beslissen zegt wat de poort toetst', () 
   });
 });
 
-for (const w of [360, 390]) {
-  test(`g - ${w}px: de kaart is 200px, tegen ${V319_KAART[w]} bij v319`, async ({ page }) => {
-    await boot(page, { w });
-    /* v337: de maandafsluiting staat ONDER deze kaart, dus hij schuift hem niet omlaag; daarom
-       wordt hij hier niet weggehaald. */
-    const d = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('#s-maand .card')]
-        .find((x) => /VRAAGT EEN BESLISSING/i.test((x.querySelector('.hlabel') || {}).textContent || ''));
-      const b = c.getBoundingClientRect();
-      return { kaart: Math.round(b.height), top: Math.round(b.top + window.scrollY),
-        navH: Math.round(document.querySelector('.nav').getBoundingClientRect().height) }; });
-    const r = await regels(page);
-    expect(r.length).toBe(2);
-    for (const rij of r) expect(rij.h, 'elke lijstregel is een regel hoog').toBe(49);
-    expect(d.kaart).toBe(200);
-    expect(d.kaart, 'en dus lager dan bij v319').toBeLessThan(V319_KAART[w]);
-    // en daarmee staan BEIDE beslissingen boven de vouw, ook op de kleine telefoon
-    const vouw = (w === 360 ? 640 : 844) - d.navH;
-    expect(r[r.length - 1].bodem).toBeLessThan(vouw);
-  });
-}
+/* v340: blok g (de hoogte van de kaart 'Vraagt een beslissing' en de lijstregels van 49px boven de
+   vouw) is vervallen, want die kaart bestaat niet meer: de beslissingen zijn tegels. */

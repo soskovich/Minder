@@ -22,7 +22,11 @@ async function boot(page, payload) {
    De budgetstand op Inzichten toont alleen nog hoe deze maand loopt. */
 const kaartHtml = (page) => page.evaluate((m) => insBudgetBlok(m), CUR);
 // v315: maandPlanRegels() is vervallen; de rij staat in maandVanafRegels()
-const planHtml = (page) => page.evaluate(() => maandVanafRegels().join(''));
+/* v340: maandVanafRegels() is ook vervallen. Wat 'Vanaf <maand>' droeg staat in de tijdlijn
+   'Komende 3 maanden' op Grip (`[data-tlsoort="vanaf"]`), uit maandVanafData(). Beide worden
+   gelezen: de data (met label en sub) en wat er van op het scherm staat. */
+const planHtml = (page) => page.evaluate(() => { go('maand'); renderMaand();
+  return JSON.stringify(maandVanafData()) + [...document.querySelectorAll('#s-maand [data-tlsoort="vanaf"]')].map((x) => x.outerHTML).join(''); });
 
 test.describe('a · de budget-kaart', () => {
   test('binnen budget kleurt nooit amber, ook niet als je sneller gaat dan de maand', async ({ page }) => {
@@ -57,7 +61,7 @@ test.describe('a · de budget-kaart', () => {
   /* v228: de rij 'Boven je inkomen-limiet' is vervallen (tests/vaststellen-zonder-gevolg.spec.js).
      Wat er in de vanaf-kaart overblijft draagt geen status en dus ook geen amber (v315: die rijen
      stonden tot dan onder een streep in de regelkaart). */
-  test('wat er in de vanaf-kaart op Grip staat draagt geen amber', async ({ page }) => {
+  test('wat er vanaf volgende maand op Grip staat draagt geen amber', async ({ page }) => {
     await boot(page);
     const html = await planHtml(page);
     expect(html).not.toContain('inkomen-limiet');

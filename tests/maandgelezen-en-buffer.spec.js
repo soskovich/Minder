@@ -63,7 +63,10 @@ test.describe('a · het scherm spreekt zichzelf niet meer tegen', () => {
     const drie = await openMaand(page);
     expect(twee).toBe(een);
     expect(drie).toBe(een);
-    expect(een).toMatch(/beslissing vraagt|aandacht|staat goed|te beoordelen/);
+    /* v340: de oordeelzin en de kaarten met die koppen zijn vervallen; Grip draagt nu tegels, "Deze
+       maand" en de link naar het logboek, dus de vergelijking hierboven loopt over een gevuld scherm. */
+    expect(een).toMatch(/Deze maand/i);
+    expect(een).toContain('Logboek');
   });
 
   test('de gelezen-vlag stuurt geen inhoud meer aan', async ({ page }) => {
@@ -98,15 +101,16 @@ test.describe('a · het scherm spreekt zichzelf niet meer tegen', () => {
   });
 });
 
-test.describe('b · Gelezen op klopt bij de render waarin hij staat', () => {
-  test('de eerste keer openen toont de datum van vandaag', async ({ page }) => {
+test.describe('b · de gelezen-vlag staat bij de render waarin hij geldt', () => {
+  /* v340: de regel "Gelezen op <datum>" op Grip is vervallen. SET.maandGelezen wordt nog gezet (de
+     pop-up van de maandafsluiting leest hem), dus dat deel blijft; de tekst op het scherm niet. */
+  test('de eerste keer openen zet de datum van vandaag', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('maand'));
     await page.waitForTimeout(120);
     const r = await page.evaluate(() => ({ txt: $('#s-maand').innerText, vlag: SET.maandGelezen }));
-    const d = new Date();
     expect(r.vlag).toBe(vandaag());
-    expect(r.txt).toContain(`Gelezen op ${d.getDate()} `);
+    expect(r.txt).not.toContain('Gelezen op');
   });
 
   test('de vlag staat vóór de render, niet erna', async ({ page }) => {

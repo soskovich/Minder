@@ -7,6 +7,8 @@
  *       maandTekort() geen gat en stond er rechts niets);
  *   (a) anders, onder het richtbedrag: "nu N maanden, je richtbedrag is M".
  * Onder de norm blijft het de norm, want dan is dat de grens die knelt.
+ * v340: de lijstregel onder 'Vraagt aandacht' is een amber TEGEL (`[data-tegel="buffer"]`), en de
+ * oorzaak en het bedrag staan in de sheet erachter (`[data-sheetbedrag]`). Die leest deze spec nu.
  * DE GETALLEN ZIJN GEMETEN OP DEZE FIXTURE: essCrisis is EUR 1.140 (huur 900 plus boodschappen,
  * verlaagd met de crisispercentages), en elk blok meet die invoer voordat het de uitkomst toetst.
  */
@@ -44,18 +46,26 @@ async function boot(page, set, w) {
   await pinDag(page);
   await page.addInitScript((s) => { for (const k in s) localStorage.setItem(k, s[k]); }, seed(set));
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof window.maandBeslisRij === 'function');
+  await page.waitForFunction(() => typeof window.renderMaand === 'function');
   await page.evaluate(() => { go('maand'); renderMaand(); });
 }
 const lees = (page) => page.evaluate(() => {
   const r = maandRegels().find((x) => x.key === 'buffer');
-  const c = [...document.querySelectorAll('#s-maand .card')].find((x) => x.querySelector('.hlabel') && x.querySelector('.hlabel').innerText.trim().toUpperCase() === 'VRAAGT AANDACHT');
-  const rij = c ? c.querySelector('.row[data-beslis="buffer"]') : null;
-  const b = rij ? rij.querySelector('[data-beslisbedrag]') : null;
+  // v340: de regel is een tegel; amber is 'let op', en oorzaak en bedrag staan in de sheet erachter
+  const tegel = document.querySelector('#s-maand [data-tegel="buffer"]');
+  let oorzaak = '', bedrag = [];
+  if (tegel) {
+    openMaandBeslis('buffer');
+    const sh = document.querySelector('#sheet');
+    const o = sh.querySelector('.small.muted');
+    oorzaak = o ? o.innerText : '';
+    const b = sh.querySelector('[data-sheetbedrag]');
+    bedrag = b ? b.innerText.split('\n').map((s) => s.trim()).filter(Boolean) : [];
+    closeSheet();
+  }
   return { status: r.status, maanden: r.maanden, norm: r.norm, richt: nfMaanden(), ess: Math.round(noodfondsModel().essCrisis),
     doel: Math.round(noodfondsModel().doel), teller: bufferTeller(), TB: toewijzingBovenSaldo(), gat: maandTekort(r),
-    rij: !!rij, oorzaak: rij && rij.querySelectorAll('.small')[1] ? rij.querySelectorAll('.small')[1].innerText : '',
-    bedrag: b ? b.innerText.split('\n').map((s) => s.trim()).filter(Boolean) : [], hoogte: c ? Math.round(c.getBoundingClientRect().height) : 0 };
+    rij: !!tegel && tegel.dataset.kleur === 'amber', oorzaak, bedrag };
 });
 
 /* (a) norm 2, richtbedrag 6, toegewezen drie maanden: boven de norm, onder het richtbedrag */
@@ -104,7 +114,7 @@ test.describe('b · meer toegewezen dan er op de spaarrekening staat', () => {
     expect(r.oorzaak).toBe('€2.750 minder op je spaarrekening dan toegewezen');
     expect(r.bedrag).toEqual(['€2.750', 'meer toegewezen']);
     // in de sheet staat hetzelfde bedrag, uit dezelfde bron
-    await page.locator('.row[data-beslis="buffer"]').click();
+    await page.locator('#s-maand [data-tegel="buffer"]').click();
     const sb = (await page.locator('#sheet [data-sheetbedrag="buffer"]').innerText()).replace(/\s+/g, ' ').trim();
     expect(sb).toBe('€2.750 meer toegewezen');
     expect(await page.locator('#sheet').innerText()).toContain('Tot je die keuze maakt telt je buffer niet als vol.');
@@ -140,12 +150,5 @@ test('c · onder de norm met een toewijzing boven het saldo: de norm, en het gat
   expect(r.deel.eenheid).toBe('tot je richtbedrag');
 });
 
-test.describe('d · de hoogte van de kaart', () => {
-  for (const w of [360, 390]) test(`op ${w}px`, async ({ page }) => {
-    await boot(page, B, w);
-    const r = await lees(page);
-    // GEMETEN 118px op beide breedtes: de oorzaak past op een regel, dus de kaart is even hoog als die
-    // van het dekkingsgat in aandacht-lijstregel.spec.js
-    expect(r.hoogte).toBe(118);
-  });
-});
+/* v340: blok d (de hoogte van de kaart 'Vraagt aandacht', 118px) is vervallen, want die kaart bestaat
+   niet meer: de buffer is een tegel op Grip. */

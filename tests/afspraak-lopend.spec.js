@@ -41,15 +41,20 @@ function drieTekorten(extra) {
 const bufferAfspraak = (ts, extra) => Object.assign({ ts, type: 'afspraak', text: 'Ik verhoog het bedrag dat ik per maand opzij zet',
   regel: 'buffer', vorm: 'inleg', meet: 'spaar', basis: 0, instelling: 300 }, extra || {});
 const uitkomst = (page) => page.evaluate(() => afspraakUitkomst(vorigeAfspraak()));
-const rijen = (page) => page.evaluate(() => {
-  const kaarten = [...document.querySelectorAll('#s-maand .card')];
+/* v340: de kaarten 'Vraagt een beslissing' en 'Vraagt aandacht' zijn tegels geworden. Een tegel
+   draagt zijn status als kleur (tekort rood, let op amber), en de oorzaak die tot v339 op de
+   lijstregel stond komt uit dezelfde bron als de sheet erachter (maandBeslisDeel). `tegels` geeft per
+   sleutel de kleur, de tekst van de tegel en die oorzaak. */
+const tegels = (page) => page.evaluate(() => {
   const per = {};
-  for (const c of kaarten) {
-    const kop = ((c.querySelector('.hlabel') || {}).textContent || '').trim();
-    if (kop) per[kop] = c.innerText.replace(/\s+/g, ' ');
+  for (const el of document.querySelectorAll('#s-maand #gripTegels [data-tegel]')) {
+    const k = el.dataset.tegel; const r = k === 'beleggen' ? null : maandBeslisZoek(k);
+    per[k] = { kleur: el.dataset.kleur, tekst: el.innerText.replace(/\s+/g, ' '),
+      oorzaak: r ? ((maandBeslisDeel(r) || {}).oorzaak || '') : '' };
   }
   return per;
 });
+const grip = (page) => page.evaluate(() => document.getElementById('s-maand').innerText);
 async function maand(page, p) {
   await open(page, p);
   await page.evaluate(() => go('maand'));
@@ -120,25 +125,25 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
 
   test('de bufferregel schuift naar let op, met de afspraak erbij, en houdt zijn waarde', async ({ page }) => {
     await maand(page, metLopende());
-    const per = await rijen(page);
-    expect(per['Vraagt aandacht']).toContain('Buffer in maanden');
-    /* v324: 'Vraagt aandacht' is een lijstregel, dus de rij draagt de OORZAAK en niet meer de
-       eenheid van de uitgeklapte vorm. Het label van v305 staat in die vorm ook onder 'Vraagt een
-       beslissing' niet, en dat is sinds v320 zo. */
-    expect(per['Vraagt aandacht']).toContain('je norm is 3');
-    /* v314: DE AFSPRAAK STAAT OP EEN PLEK, en dat is de kaart. Hij stond ook in de rij, dus je las
-       dezelfde tekst twee keer op een scherm, en alleen de kaart heeft de ingang om hem aan te
-       passen. De verbinding tussen de twee is niet weg maar omgedraaid: de kaart noemt de regel.
-       De assertie is daarmee strenger dan de oude, want hij eist ook dat het er PRECIES EEN keer
-       staat. */
-    const heel = await page.evaluate(() => document.getElementById('s-maand').innerText);
-    expect(per['Vraagt aandacht']).not.toContain('Hier loopt een afspraak over');
+    const T = await tegels(page);
+    // v340: 'Vraagt aandacht' is een amberkleurige tegel; de oorzaak komt uit maandBeslisDeel (v324)
+    expect(T.buffer.kleur).toBe('amber');
+    expect(T.buffer.tekst).toContain('Buffer');
+    expect(T.buffer.oorzaak).toContain('je norm is 3');
+    /* v314: DE AFSPRAAK STAAT OP EEN PLEK. v340: die plek is de rij onder "Deze maand"
+       ([data-afspraak="coach"]), met "Je afspraak deze maand" erbij. Precies een keer op Grip, en
+       niet op de tegel. */
+    const heel = await grip(page);
+    expect(heel).not.toContain('Hier loopt een afspraak over');
     expect((heel.match(/Ik verhoog het bedrag dat ik per maand opzij zet/g) || []).length).toBe(1);
-    expect(heel).toContain('JE AFSPRAAK DEZE MAAND');
-    expect(per['Vraagt een beslissing']).not.toContain('Buffer in maanden');
+    const rij = await page.locator('#gripDezeMaand [data-afspraak="coach"]').innerText();
+    expect(rij).toContain('Ik verhoog het bedrag dat ik per maand opzij zet');
+    expect(rij).toContain('Je afspraak deze maand');
+    expect(T.buffer.tekst).not.toContain('Ik verhoog');
     // de andere twee blijven een beslissing vragen
-    expect(per['Vraagt een beslissing']).toContain('Dekking');
-    expect(per['Vraagt een beslissing']).toMatch(/Vakantie|aankoopdoel/i);
+    expect(T.dekking.kleur).toBe('rood');
+    expect(T.doel.kleur).toBe('rood');
+    expect(T.doel.tekst).toMatch(/Vakantie|aankoopdoel/i);
   });
 
   test('de suggestie en de gespreksingang vervallen voor die regel, en alleen voor die regel', async ({ page }) => {
@@ -161,10 +166,12 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
     expect(html).not.toContain("coStart('maand','" + CUR + "','buffer')");
   });
 
-  test('het oordeel telt de regel niet meer als beslissing', async ({ page }) => {
+  /* v340: de oordeelzin ('2 dingen die een beslissing vragen') is vervallen met de samenvatting. De
+     eigenschap staat in de tegels: precies twee zijn rood, en de buffer is daar niet een van. */
+  test('de tegels tellen de regel niet meer als beslissing', async ({ page }) => {
     await maand(page, metLopende());
-    const zin = await page.evaluate(() => document.querySelector('#s-maand .card div[style*="font-weight:700"]').innerText);
-    expect(zin).toMatch(/2 dingen die een beslissing vragen/);
+    const rood = await page.$$eval('#gripTegels [data-tegel][data-kleur="rood"]', (L) => L.map((e) => e.dataset.tegel).sort());
+    expect(rood).toEqual(['dekking', 'doel']);
   });
 
   test('de meting zelf is niet aangeraakt: maandRegels zegt nog tekort, en niet op tempo', async ({ page }) => {
@@ -177,9 +184,9 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
 
   test('een afspraak van vorige maand doet dit niet', async ({ page }) => {
     await maand(page, drieTekorten((s) => { s.coachLog = [bufferAfspraak(VORIGE_TS)]; }));
-    const per = await rijen(page);
-    expect(per['Vraagt een beslissing']).toContain('Buffer in maanden');
-    expect(JSON.stringify(per)).not.toContain('Hier loopt een afspraak over');
+    const T = await tegels(page);
+    expect(T.buffer.kleur).toBe('rood');
+    expect(await grip(page)).not.toContain('Hier loopt een afspraak over');
   });
 
   test('een acceptatie loopt via zijn eigen poort en krijgt niet ook deze', async ({ page }) => {
@@ -194,12 +201,13 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
     expect(r.status).toBe('let op');
     expect(r.geaccepteerd).toBe(true);
     expect(r.afspraak).toBe(false);
-    const per = await rijen(page);
-    expect(per['Vraagt aandacht']).toContain('Buffer in maanden');
-    expect(per['Vraagt aandacht']).not.toContain('Hier loopt een afspraak over');
-    // v324: de acceptatie-zin staat in de sheet achter de lijstregel, en niet meer in de kaart
-    expect(per['Vraagt aandacht']).not.toContain('Je hebt dit bewust geaccepteerd');
-    await page.locator('.row[data-beslis="buffer"]').click();
+    const T = await tegels(page);
+    expect(T.buffer.kleur).toBe('amber');
+    const heel = await grip(page);
+    expect(heel).not.toContain('Hier loopt een afspraak over');
+    // v324: de acceptatie-zin staat in de sheet achter de regel; v340: die regel is de tegel
+    expect(heel).not.toContain('Je hebt dit bewust geaccepteerd');
+    await page.locator('#gripTegels [data-tegel="buffer"]').click();
     expect(await page.locator('#sheet').innerText()).toContain('Je hebt dit bewust geaccepteerd');
   });
 
@@ -207,12 +215,12 @@ test.describe('b - een regel met een lopende afspraak vraagt geen beslissing', (
     await maand(page, drieTekorten((s) => {
       s.coachLog = [{ ts: Date.now(), type: 'afspraak', text: 'Ik pak buffer in maanden deze maand op', regel: 'buffer', cat: null }];
     }));
-    const per = await rijen(page);
-    const heel = await page.evaluate(() => document.getElementById('s-maand').innerText);
+    const T = await tegels(page);
+    const heel = await grip(page);
     // v314: de regelKey doet nog steeds zijn werk (de rij schuift naar aandacht), en de tekst staat
-    // op de kaart in plaats van in de rij
-    expect(per['Vraagt aandacht']).toContain('Buffer in maanden');
-    expect(per['Vraagt aandacht']).not.toContain('Hier loopt een afspraak over');
+    // bij de afspraak in plaats van in de rij (v340: onder "Deze maand")
+    expect(T.buffer.kleur).toBe('amber');
+    expect(heel).not.toContain('Hier loopt een afspraak over');
     expect((heel.match(/Ik pak buffer in maanden deze maand op/g) || []).length).toBe(1);
   });
 

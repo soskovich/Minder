@@ -230,11 +230,15 @@ test.describe('e · de over-budget-observatie heeft één detectie', () => {
     const ins = await page.locator('.valtop-rij').first().innerText();
     expect(ins).toContain(sig[0].naam);
     // Grip leest dezelfde functie en doet geen eigen meting
-    const src = await page.evaluate(() => gripSignalCards.toString() + valtOpKaartOpen.toString() + valtOpKaartDicht.toString());
+    /* v340: gripSignalCards() en valtOpKaartDicht() bestaan niet meer. Het signaal staat als Let op-regel
+       (gripLetOpItems, gevoed vanuit renderMaand) en de kaart in de sheet (renderGripLetOp, valtOpKaartOpen). */
+    const src = await kaalUit(page, 'renderMaand', 'gripLetOpItems', 'renderGripLetOp', 'valtOpKaartOpen');
     expect(src).toMatch(/valtOpSignals\(/);
     expect(src).not.toMatch(/budgetOverCat|budgetBand|effectiveBudgets/);
-    await page.evaluate(() => go('maand'));
-    expect(await page.locator('.valtop-open').innerText()).toContain(sig[0].naam);
+    await page.evaluate(() => { go('maand'); renderMaand(); });
+    await page.locator('#s-maand #gripLetOp [data-letop="sig"]', { hasText: sig[0].naam }).click();
+    expect(await page.locator('#gripLetOpSheet .valtop-open').innerText()).toContain(sig[0].naam);
+    await expect(page.locator('#s-maand .valtop-open')).toHaveCount(0);
   });
 
   test('en verschijnt maar één keer per scherm', async ({ page }) => {
@@ -245,9 +249,11 @@ test.describe('e · de over-budget-observatie heeft één detectie', () => {
     await page.evaluate(() => go('ins'));
     const rijen = await page.locator('.valtop-rij').allInnerTexts();
     expect(rijen.filter((t) => t.includes(sig[0].naam)).length).toBe(1);
-    await page.evaluate(() => go('maand'));
-    const kaarten = await page.locator('.valtop-kaart').allInnerTexts();
-    expect(kaarten.filter((t) => t.includes(sig[0].naam)).length).toBe(1);
+    /* v340: op Grip staat het signaal als Let op-regel, en de kaart pas in de sheet erachter */
+    await page.evaluate(() => { go('maand'); renderMaand(); });
+    const regels = await page.locator('#s-maand [data-letop="sig"]').allInnerTexts();
+    expect(regels.filter((t) => t.includes(sig[0].naam)).length).toBe(1);
+    expect(await page.locator('#s-maand .valtop-kaart').count()).toBe(0);
   });
 });
 
@@ -289,32 +295,10 @@ test.describe('g · de aansluiting staat op Plan, niet op Maand', () => {
   });
 });
 
-test.describe('h · de beleggen-regel herhaalt geen zichtbare rij', () => {
-  test('bij een zichtbaar tekort op dekking of doel zwijgt hij', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => {
-      const R = maandRegels(); const B = beleggenKlaar(R);
-      return { blok: B.blokkade ? B.blokkade.key : null, klaar: B.klaar,
-        rij: B.blokkade ? (R.find((x) => x.key === B.blokkade.key) || {}).status : null,
-        regel: maandBeleggenRegel(R) };
-    });
-    if (r.blok && r.blok !== 'buffer' && r.rij === 'tekort') expect(r.regel).toBe('');
-  });
-
-  /* v226: hier stond een assertie op de brontekst van beleggenKlaar() - /r.status!=='tekort'/ -
-     en die legde de implementatie vast in plaats van de eigenschap. Sinds de buffer daar aan
-     r.kritiek wordt gemeten en niet aan zijn status klopte de tekst niet meer, terwijl de
-     eigenschap onveranderd geldt: de bufferblokkade wordt nooit weggelaten omdat de rij iets
-     anders zegt. Die uitzondering zit in maandBeleggenRegel() en dat is wat dit blok over gaat, dus
-     daar hangt de test nu alleen nog aan. Dat de voorwaarde zelf de STAND volgt en niet de status
-     staat met echte data in op-tempo.spec.js, blok e; deze fixture heeft geen spaarrekening en dus
-     geen bufferregel om dat op te meten. */
-  test('de bufferblokkade blijft altijd staan: let op is een ander oordeel', async ({ page }) => {
-    await boot(page);
-    const src = await page.evaluate(() => maandBeleggenRegel.toString());
-    expect(src).toContain("B.blokkade.key!=='buffer'");
-  });
-});
+/* v340: blok h ('de beleggen-regel herhaalt geen zichtbare rij') vervallen, want maandBeleggenRegel() en
+   de kaart 'Voorwaarden voor beleggen' bestaan niet meer. Beleggen is nu een eigen tegel
+   ([data-tegel="beleggen"]) die altijd zijn stand draagt (klaar, of wacht op je blokkade); er is geen
+   regel meer die bij een zichtbare rij zwijgt. */
 
 test.describe('i · de terugval claimt geen leegte die er niet is', () => {
   /* v188: de terugval keek alleen naar maandRegels() en negeerde maandStructureel(). Sinds er nog
@@ -345,20 +329,24 @@ test.describe('i · de terugval claimt geen leegte die er niet is', () => {
         status: 'tekort', waarde: '', eenheid: '', gevolg: '', act: '', structureel: true }];
       renderMaand();
       const t = $('#s-maand').innerText.replace(/\s+/g, ' ');
+      const rij = document.querySelector('#s-maand #gripLetOp [data-letop="str"]');
+      const dot = rij ? getComputedStyle(rij.querySelector('span')).backgroundColor : '';
+      const rood = (() => { const e = document.createElement('span'); e.style.background = 'var(--red)'; document.body.appendChild(e);
+        const c = getComputedStyle(e).backgroundColor; e.remove(); return c; })();
       window.maandStructureel = orig;
-      return { t, regels: maandRegels().length };
+      return { t, regels: maandRegels().length, rij: rij ? rij.innerText : '', dot, rood };
     });
     expect(r.regels).toBe(0);                                   // geen enkele gewone regel
-    expect(r.t).not.toContain('Er is nog te weinig ingesteld');  // dus geen claim van leegte
-    expect(r.t).toContain('Je geeft al maanden te veel uit');    // het signaal staat er
-    expect(r.t).toMatch(/beslissing vraagt/);                    // met een oordeel dat het telt
+    /* v340: de terugval gaat nu alleen over de tegels ('te weinig ingesteld om tegels te tonen'), en dat
+       is waar: een structureel signaal heeft geen tegel. Een claim dat er NIETS is, mag er niet staan. */
+    expect(r.t).not.toMatch(/Er is nog te weinig ingesteld(?! om tegels te tonen)/);
+    expect(r.rij).toContain('Je geeft al maanden te veel uit');  // het signaal staat er, onder Let op
+    /* v340: 'vraagt een beslissing' bestaat niet meer als kop; het oordeel zit in de rode stip van de regel */
+    expect(r.dot).toBe(r.rood);
   });
 
-  test('de guard leest allebei de bronnen', async ({ page }) => {
-    await boot(page);
-    const src = await page.evaluate(() => renderMaand.toString());
-    expect(src).toContain('!R.length && !STR.length');
-  });
+  /* v340: 'de guard leest allebei de bronnen' vervallen, want de terugval van renderMaand() zegt alleen
+     nog dat er geen tegels zijn, en de structurele signalen staan los daarvan onder Let op. */
 });
 
 test.describe('j · het bedrag staat bij het oordeel, niet op twee schermen', () => {

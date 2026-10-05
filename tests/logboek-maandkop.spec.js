@@ -45,12 +45,13 @@ async function boot(page, log, extra){
   await page.evaluate(()=>go('maand'));
 }
 /* v331: het logboek is een eigen scherm (#s-logboek) en de open vraag staat op Grip (#valtOpGrip).
-   `lees` leest beide, elk op zijn eigen zichtbare scherm, en zet de vraag bij de maand waar hij
-   over gaat, zodat de asserties hieronder dezelfde vragen blijven stellen. Een rij in de lijst is
+   v340: de open vraag staat niet meer op Grip maar bovenaan het logboek (#logVraag). `lees` leest
+   hem daar en zet hem bij de maand waar hij over gaat, zodat de asserties hieronder dezelfde vragen
+   blijven stellen. Een rij in de lijst is
    zoals voor v331 een overschrijding zonder antwoord die niet de open vraag is. */
 const lees=async page=>{
-  const g=await page.evaluate(()=>{ go('maand'); const t=e=>e?e.innerText.replace(/\s+/g,' ').trim():'';
-    const v=document.querySelector('#valtOpGrip [data-vraag]');
+  const g=await page.evaluate(()=>{ go('logboek'); const t=e=>e?e.innerText.replace(/\s+/g,' ').trim():'';
+    const v=document.querySelector('#logVraag [data-vraag]');
     return v?{id:v.dataset.vraag, t:t(v), chip:t(v.querySelector('.vl-chip'))}:null; });
   const r=await page.evaluate(vraag=>{
   go('logboek');
@@ -112,6 +113,8 @@ test('a3 de vraag gaat over de grootste afwijking, en de zin volgt de handeling'
   expect(s.vraagTekst).toContain('Potje past niet');
   expect(s.vraagTekst).toContain('Uitzondering');
   expect(s.chips).toEqual(['€194 boven']);
+  // v340: de vraag staat in het logboek en niet meer op Grip
+  expect(await page.evaluate(()=>{ go('maand'); return document.querySelectorAll('#s-maand [data-vraag]').length; })).toBe(0);
 });
 
 test('a4 de rest staat kort: boven met bedrag, binnen en vervallen ingeklapt', async ({page})=>{
@@ -148,7 +151,8 @@ test('a6 de lopende maand blijft zoals hij was, met uitkomst na de einddatum', a
 /* ===== b) STAND 2: NA JE ANTWOORD ===== */
 test('b1 het antwoord staat op het record met keuze en datum, en de vraag gaat naar Boodschappen', async ({page})=>{
   await boot(page, SEPTEMBER());
-  await page.locator('[data-vraag] button', {hasText:'Uitzondering'}).click();
+  await page.evaluate(()=>go('logboek'));   // v340: de vraag staat bovenaan het logboek
+  await page.locator('#logVraag [data-vraag] button', {hasText:'Uitzondering'}).click();
   const rec=await page.evaluate(id=>SET.valtOpLog[id].antwoord, SEP+'|uiteten');
   expect(rec).toEqual({keuze:'uitzondering', op:NU});
   const s=(await lees(page)).maanden[0];
@@ -169,7 +173,8 @@ test('b1 het antwoord staat op het record met keuze en datum, en de vraag gaat n
 
 test('b2 "Potje past niet" opent de route volgende maand anders voor dat potje', async ({page})=>{
   await boot(page, SEPTEMBER());
-  await page.locator('[data-vraag] button', {hasText:'Potje past niet'}).click();
+  await page.evaluate(()=>go('logboek'));   // v340: de vraag staat bovenaan het logboek
+  await page.locator('#logVraag [data-vraag] button', {hasText:'Potje past niet'}).click();
   const r=await page.evaluate(id=>({a:SET.valtOpLog[id].antwoord, sheet:document.querySelector('#sheet').innerText}), SEP+'|uiteten');
   expect(r.a).toEqual({keuze:'past_niet', op:NU});
   expect(r.sheet).toContain('Uit eten & café-potje');
@@ -181,11 +186,12 @@ test('b2 "Potje past niet" opent de route volgende maand anders voor dat potje',
 
 test('b3 een vraag tegelijk, ook met twee onbeantwoorde afwijkingen', async ({page})=>{
   await boot(page, SEPTEMBER());
+  await page.evaluate(()=>go('logboek'));   // v340: de vraag staat bovenaan het logboek
   expect(await page.locator('[data-vraag]').count()).toBe(1);
   await page.evaluate(id=>valtOpAntwoord(id,'uitzondering'), SEP+'|uiteten');
   expect(await page.locator('[data-vraag]').count()).toBe(1);
   await page.evaluate(id=>valtOpAntwoord(id,'past_niet'), SEP+'|boodschappen');
-  await page.evaluate(()=>{ closeSheet(); go('maand'); });
+  await page.evaluate(()=>{ closeSheet(); go('logboek'); });
   expect(await page.locator('[data-vraag]').count()).toBe(1);     // Sport, tegen het oorspronkelijke potje
   await page.evaluate(id=>valtOpAntwoord(id,'uitzondering'), SEP+'|sport');
   expect(await page.locator('[data-vraag]').count()).toBe(0);

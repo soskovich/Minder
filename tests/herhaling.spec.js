@@ -383,21 +383,23 @@ test.describe('i · het nulgeval van een kerncijfer', () => {
   });
 });
 
-test.describe('j · de beleggen-regel somt op zoals de rest', () => {
-  test('meerdere ontbrekende bronnen: kommas en een "en", met meervoud', async ({ page }) => {
+/* v340: de beleggen-regel ("Niet te beoordelen zolang a, b en c ontbreken") is vervallen met
+   maandBeleggenRegel(), en daarmee de opsomming die deze groep toetste. De tegel noemt een ding
+   ('op je buffer'); welke voorwaarden niet te beoordelen zijn staat per rij in de sheet erachter. Wat
+   hier blijft is dat de sheet elke ontbrekende bron noemt, in plaats van ze in een zin te plakken. */
+test.describe('j · de beleggen-sheet noemt elke ontbrekende bron', () => {
+  test('meerdere ontbrekende bronnen: elk een rij met onbekend', async ({ page }) => {
     // zonder spaarrekening en zonder streefdatum ontbreken buffer en doel allebei; het spaardoel
-    // maakt de regel zichtbaar (beleggenZichtbaar)
+    // maakt beleggen zichtbaar (beleggenZichtbaar)
     await boot(page, { set: { goals: [{ id: 'g', naam: 'Vakantie', doel: 3000, gespaard: 0,
       allocMode: 'fixed', perMaand: 100 }], planOrder: ['g', 'noodfonds'] } });
-    const r = await page.evaluate(() => {
-      const d = document.createElement('div'); d.innerHTML = maandBeleggenRegel(maandRegels());
-      return d.innerText.replace(/\s+/g, ' ');
-    });
-    test.skip(!/Niet te beoordelen/.test(r), 'alle bronnen aanwezig in deze opzet');
-    expect(r).not.toMatch(/ en .* en /);         // geen 'a en b en c'
-    if (/,/.test(r)) expect(r).toMatch(/, .* en /);
-    const n = r.replace(/^.*zolang /, '').replace(/ ontbre.*$/, '').split(/, | en /).length;
-    expect(r).toMatch(n > 1 ? /ontbreken\./ : /ontbreekt\./);
+    const ontbreekt = await page.evaluate(() => beleggenKlaar(maandRegels()).voorwaarden.filter((v) => v.ontbreekt).map((v) => v.naam));
+    test.skip(ontbreekt.length < 2, 'minder dan twee bronnen ontbreken in deze opzet');
+    await page.evaluate(() => openBeleggenVoorwaarden());
+    const sheet = await page.locator('#sheet').innerText();
+    for (const n of ontbreekt) expect(sheet).toContain(n);
+    expect((sheet.match(/\bonbekend\b/g) || []).length).toBe(ontbreekt.length);
+    expect(sheet).toMatch(/niet te beoordelen/i);
   });
 });
 

@@ -3,8 +3,12 @@ const { test, expect } = require('@playwright/test');
 const { bootStand } = require('./standkaart-sluit.fixture');
 
 const VELDEN = () => JSON.stringify([SET.fixDueExcl, resLijst(), SET.budgets, SET.budgetsNext||{}, SET.potMetaNext||{}]);
+/* v340: de kaart staat achter de Let op-regel [data-letop="uit"] op Grip, in de sheet #gripLetOpSheet.
+   De tik op 'Wordt een reservering' komt daar vandaan en vervangt die sheet door de bevestiging. */
 const openVervoer = page => page.evaluate(()=>{ go('maand'); renderMaand();
-  const r=document.querySelector('#uitgeslotenKaart [data-uitgesloten="vervoer"]');
+  if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip');
+  document.querySelector('#gripLetOp [data-letop="uit"]').click();
+  const r=document.querySelector('#gripLetOpSheet #uitgeslotenKaart [data-uitgesloten="vervoer"]');
   const P=uitgeslotenPotjes().find(x=>x.key===r.dataset.sleutel);
   [...r.querySelectorAll('[onclick]')].find(b=>/Wordt een reservering/.test(b.innerText)).click();
   const sh=document.getElementById('sheet');

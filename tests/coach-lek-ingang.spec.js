@@ -52,12 +52,16 @@ function alleenSignaal() {
   p.minder_set = JSON.stringify(set);
   return p;
 }
+/* v340: de valt-op-kaart staat niet meer op Grip maar achter de Let op-regel [data-letop="sig"], in de
+   sheet #gripLetOpSheet. ins() opent die regel zoals een tik dat doet, als hij er is; de kaart, de
+   chevron en de handelingen worden daarna in die sheet gelezen. */
 async function ins(page, payload) {
   await open(page, payload || metLekEnSignaal());
   await page.evaluate(() => go('maand'));
   await page.waitForSelector('#s-maand .card');
+  await page.evaluate(() => { const r = document.querySelector('#s-maand #gripLetOp [data-letop="sig"]'); if (r) r.click(); });
 }
-const chevron = (page) => page.locator('.valtop-open [onclick*="coStart"]');
+const chevron = (page) => page.locator('#gripLetOpSheet .valtop-open [onclick*="coStart"]');
 const wachtKeuze = (page) => page.waitForFunction(
   () => document.querySelectorAll('#coCh .cch').length > 0, null, { timeout: 15000 });
 const log = (page) => page.evaluate(() => JSON.stringify(SET.coachLog || []));
@@ -70,17 +74,18 @@ test.describe('a · de ingang op Grip', () => {
   test('a1 · de chevron staat in de kop van de open kaart, en nergens anders', async ({ page }) => {
     await ins(page);
     await expect(chevron(page)).toHaveCount(1);
+    await expect(page.locator('#s-maand .valtop-open')).toHaveCount(0);   // v340: niet meer los op Grip
     const onclick = await chevron(page).getAttribute('onclick');
     expect(onclick).toContain("coStart('lek'");
     expect(onclick).toContain(CUR);                              // Grip leest altijd de lopende maand (v233)
     // niet als vierde knop tussen de handelingen
-    expect(await page.locator('.valtop-hand [onclick*="coStart"]').count()).toBe(0);
-    await expect(page.locator('.valtop-open .valtop-hand button')).toHaveCount(3);
+    expect(await page.locator('#gripLetOpSheet .valtop-hand [onclick*="coStart"]').count()).toBe(0);
+    await expect(page.locator('#gripLetOpSheet .valtop-open .valtop-hand button')).toHaveCount(3);
   });
 
   test('a2 · de kaart eromheen draagt de bevinding met bedrag en naam', async ({ page }) => {
     await ins(page);
-    const t = await page.locator('.valtop-open').innerText();
+    const t = await page.locator('#gripLetOpSheet .valtop-open').innerText();
     expect(t).toMatch(/boodschappen/i);
     expect(t).toMatch(/€\d/);
     expect(t).not.toMatch(/coach/i);                             // geen neutrale knop naar de coach
@@ -91,7 +96,7 @@ test.describe('a · de ingang op Grip', () => {
     expect(await page.evaluate(() => valtOpSignals(thisYM()).map((x) => x.potjeId))).toEqual(['boodschappen']);
     expect(await page.evaluate((m) => coachWeekRisk(m).tone, CUR)).toBe('ok');
     expect(await page.evaluate((m) => coachLeak(m), CUR)).toBe(null);
-    await expect(page.locator('.valtop-open')).toHaveCount(1);    // de kaart staat er wel
+    await expect(page.locator('#gripLetOpSheet .valtop-open')).toHaveCount(1);    // de kaart staat er wel
     await expect(chevron(page)).toHaveCount(0);                   // de ingang niet
     expect(await page.locator('#s-maand').innerText()).not.toMatch(/kunt doen\?/);
   });
@@ -106,7 +111,10 @@ test.describe('a · de ingang op Grip', () => {
       expect(await page.evaluate((s) => (document.querySelector('#s-' + s) || {}).innerHTML || '', scherm))
         .not.toContain("coStart('lek'");
     }
-    const per = async (s) => page.evaluate((x) => document.querySelectorAll('#s-' + x + " [onclick*=\"coStart('lek'\"]").length, s);
+    /* v340: de ingang van Grip zit in de sheet die de Let op-regel opent, dus Grip telt #s-maand plus
+       #gripLetOpSheet */
+    const per = async (s) => page.evaluate((x) => document.querySelectorAll('#s-' + x + " [onclick*=\"coStart('lek'\"]"
+      + (x === 'maand' ? ", #gripLetOpSheet [onclick*=\"coStart('lek'\"]" : '')).length, s);
     expect(await per('ins')).toBeLessThanOrEqual(1);
     expect(await per('maand')).toBeLessThanOrEqual(1);
     // deze fixture draagt allebei de gevallen: een lek zonder overschrijding (shopping, geen potje)

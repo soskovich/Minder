@@ -116,32 +116,31 @@ test.describe('b - accepteren verplaatst de regel, en telt niet meer als tekort'
 
   test('het scherm zegt dat je hem bewust hebt geaccepteerd', async ({ page }) => {
     await open(page, drieTekorten());
-    await page.evaluate(() => { maandAcceptZet('buffer'); go('maand'); renderMaand(); });
-    /* v324: de regel staat onder 'Vraagt aandacht' als lijstregel, en de zin staat in de sheet
-       erachter. De kaarten worden op hun KOP gekozen: innerText geeft de kop in hoofdletters, dus de
-       oude toets op 'Vraagt een beslissing' vond nooit een kaart en kon niet vallen (meetles t). */
-    const kaart = (kop) => page.evaluate((kop) => {
-      const c = [...document.querySelectorAll('#s-maand .card')].find((x) => x.querySelector('.hlabel') && x.querySelector('.hlabel').innerText.trim().toUpperCase() === kop);
-      return c ? c.innerText : null;
-    }, kop);
-    expect(await kaart('VRAAGT AANDACHT')).toContain('Buffer in maanden');
-    const beslis = await kaart('VRAAGT EEN BESLISSING');
-    expect(beslis).not.toBeNull();   // de andere twee tekorten staan er nog, dus de kaart bestaat
-    expect(beslis).not.toContain('Buffer in maanden');
-    await page.locator('.row[data-beslis="buffer"]').click();
+    const kleuren = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#gripTegels [data-tegel]')]
+      .map((t) => [t.dataset.tegel, t.dataset.kleur])));
+    await page.evaluate(() => { go('maand'); renderMaand(); });
+    expect((await kleuren()).buffer, 'voor het accepteren is de buffer een beslissing').toBe('rood');
+    await page.evaluate(() => { maandAcceptZet('buffer'); renderMaand(); });
+    /* v340: de kaarten 'Vraagt aandacht' en 'Vraagt een beslissing' zijn tegels geworden; de regel
+       schuift van rood naar amber, en de zin staat in de sheet achter de tegel. */
+    const k = await kleuren();
+    expect(k.buffer).toBe('amber');
+    expect(k.dekking).toBe('rood');   // de andere twee tekorten staan er nog
+    expect(k.doel).toBe('rood');
+    await page.locator('#gripTegels [data-tegel="buffer"]').click();
     expect(await page.locator('#sheet').innerText()).toContain('Je hebt dit bewust geaccepteerd');
   });
 
-  test('het maandoordeel telt hem niet meer als tekort', async ({ page }) => {
+  /* v340: de oordeelzin is vervallen; wat hij telde zijn nu de rode tegels. */
+  test('Grip telt hem niet meer als tekort', async ({ page }) => {
     await open(page, drieTekorten());
-    const r = await page.evaluate(() => {
-      const a = maandOordeel(maandMetAccept(maandRegels())).zin;
-      maandAcceptZet('buffer');
-      return { a, b: maandOordeel(maandMetAccept(maandRegels())).zin };
-    });
-    expect(r.a).not.toBe(r.b);
-    expect(r.a).toContain('3');   // drie dingen die een beslissing vragen
-    expect(r.b).toContain('2');
+    const rood = () => page.evaluate(() => { renderMaand(); return document.querySelectorAll('#gripTegels [data-kleur="rood"]').length; });
+    await page.evaluate(() => go('maand'));
+    const a = await rood();
+    await page.evaluate(() => maandAcceptZet('buffer'));
+    const b = await rood();
+    expect(a).toBe(3);   // drie dingen die een beslissing vragen
+    expect(b).toBe(2);
   });
 
   test('KRITIEK: beleggenKlaar ziet het tekort onverkort', async ({ page }) => {
@@ -164,10 +163,14 @@ test.describe('b - accepteren verplaatst de regel, en telt niet meer als tekort'
        viel `maandBeleggenRegel(R)` buiten die snede. De eigenschap gaat over WELK argument die functie
        krijgt en niet over een byte-afstand; dat is meetles (t), nu op een lengte in plaats van op een
        indentatie. De hele functie, zonder commentaar, want een naam in een comment is geen aanroep. */
+    /* v340: maandBeleggenRegel() is de tegel geworden; gripTegels() krijgt RO voor de tegels en R voor
+       beleggen, en leest beleggenKlaar() op die onbewerkte R. */
     const bron = await kaalUit(page, 'renderMaand');
-    expect(bron).toContain('maandBeleggenRegel(R)');
-    expect(bron).not.toContain('maandBeleggenRegel(RO)');
+    expect(bron).toContain('gripTegels(RO, R)');
     expect(bron).toContain('maandMetAccept(R).concat(STR)');
+    const tegel = await kaalUit(page, 'gripTegels');
+    expect(tegel).toContain('beleggenKlaar(R)');
+    expect(tegel).not.toContain('beleggenKlaar(RO)');
   });
 });
 
@@ -220,14 +223,20 @@ test.describe('c - de acceptatie kent een einde', () => {
       maandAcceptZet('doel');
       SET.maandAccept.doel.tot = thisYM(); save();   // de maand is er
       go('maand');
-      const met = $('#s-maand').innerText;
+      /* v340: de terugblik is een regel onder "Let op" en de kaart staat in de sheet erachter. */
+      const rij = !!document.querySelector('#gripLetOp [data-letop="accept"]');
+      openGripLetOp('accept');
+      const met = (document.getElementById('gripLetOpSheet') || {}).innerText || '';
       maandAcceptSluit('doel');
-      return { met, zonder: $('#s-maand').innerText, weg: !(SET.maandAccept || {}).doel };
+      return { rij, met, sheetWeg: !$('#sheetBg').classList.contains('show'),
+        rijWeg: !document.querySelector('#gripLetOp [data-letop="accept"]'),
+        zonder: $('#s-maand').innerText, weg: !(SET.maandAccept || {}).doel };
     });
-    // .hlabel is text-transform:uppercase, en innerText geeft de getransformeerde tekst terug,
-    // dus toetsen op de kop zelf zoekt naar iets wat er niet zo staat. De zin eronder is de bron.
+    expect(r.rij).toBe(true);
     expect(r.met).toContain('Je accepteerde');
     expect(r.met).toContain('Die maand is er');
+    expect(r.sheetWeg).toBe(true);
+    expect(r.rijWeg).toBe(true);
     expect(r.zonder).not.toContain('Je accepteerde');
     expect(r.weg).toBe(true);
   });
