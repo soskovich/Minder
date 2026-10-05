@@ -2797,6 +2797,7 @@ function render(){
   if($('#sheetBg').classList.contains('show')){
     try{ const a=document.getElementById('afsluitSheet'); if(a) renderAfsluitSheet(a.dataset.maand); }catch(_){}
     try{ if(document.getElementById('gripLetOpSheet')) renderGripLetOp(); }catch(_){}
+    try{ if(document.getElementById('gripLetOpLijst')) renderGripLetOpLijst(); }catch(_){}
     try{ if(document.getElementById('gripVooruit')) renderGripVooruit(); }catch(_){}
     try{ if(document.getElementById('logMaand')) renderLogMaand(); }catch(_){}
   }
@@ -4836,10 +4837,8 @@ function doelTempoLine(p){
    placeholder; het scherm werkt ook met een deel ervan. (v186/v187: van vijf regels naar drie -
    patroon dubbelde met de meldingenlijst, aansluiting is een administratief verschil en geen
    oordeel over je positie. De bronnen zelf zijn ongemoeid.) */
-/* v173: "Er ontbreekt te veel om een oordeel te geven" vuurde bij één onbekende regel van één.
-   Een zuiver aandeel kan dat niet oplossen (100% ligt boven elke drempel), dus er hoort een
-   ondergrens bij: onder onbekendMin regels zegt een verhouding niets over volledigheid, en dan
-   meldt het scherm gewoon de regels die het wél heeft. */
+/* v340: de twee drempels voor onvolledigheid (v173) zijn weg. Hun enige lezer was de oordeelzin
+   van maandOordeel(), en die bestaat niet meer; een onbekende regel is op Grip een grijze tegel. */
 /* v191: dekkingOk draagt twee betekenissen die dezelfde grens zijn, dus bewust één getal en geen
    tweede constante ernaast (v154): het is de graad waarboven de status ok is, en tegelijk het
    plafond waarboven een dekkingsgraad geen percentage meer toont. Boven de 100% is de vraag
@@ -4858,7 +4857,7 @@ function doelTempoLine(p){
      dekkingMarge is bij v322 vervallen: een vaste marge van drie maanden zei niets over de grootte
      van het gat. Of een dekkingsgat een beslissing vraagt staat nu in `dekkingDichten()`. */
 const MAAND_DREMPEL = { dekkingOk:100, doelOk:0, kpiMinBedrag:100, structureelStatus:'tekort',
-  onbekendDeel:0.5, onbekendMin:3, budgetVol:100,   // v194: de grens waarop je potjes precies op zijn
+  budgetVol:100,   // v194: de grens waarop je potjes precies op zijn
   bufferTempoVenster:3 };
 /* v305: DE BUFFERNORM IS EEN EIGEN KEUZE EN STOND ALS VASTE 3 IN MAAND_DREMPEL. Hij is de ONDERGRENS
    waaronder een buffer te weinig opvangt, en dat is een andere vraag dan je RICHTBEDRAG: `nfMaanden()`
@@ -7449,13 +7448,35 @@ function gripLetOpItems(RO, SIG, BV){
   for(const v of (BV||[])) L.push({soort:'beleg', key:v.asset.id, naam:`Je belegde ${euro0(v.inleg)} in ${v.asset.naam||'Bezitting'}`, sub:v.open?'voorwaarden nog niet gehaald · nog niet gekozen of ze hiervoor gelden':'voorwaarden nog niet gehaald', dot:'let op', act:`openBelegVraag('${esc(v.asset.id)}')`});
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
-  return L;
+  /* DE BELANGRIJKSTE EERST: de status van de regel (tekort voor let op), en daarbinnen de volgorde
+     waarin ze hierboven staan. Die volgorde is de bestaande rang van Grip: de terugblikken bovenaan
+     (v141/v314), dan de structurele signalen, de potjes op euro's boven hun grens (valtOpSignals()
+     sorteert al), beleggen, de uitgesloten incasso's en contant. sort() is stabiel, dus binnen een
+     status verandert er niets aan die volgorde. */
+  const rang=d=>d==='tekort'?0:d==='let op'?1:2;
+  return L.sort((a,b)=>rang(a.dot)-rang(b.dot));
+}
+/* v340: "Let op" toont HOOGUIT GRIP_LETOP_MAX regels en daaronder "nog N ›" naar een lijst met de rest.
+   Een kaart die met de signalen meegroeit duwt Deze maand en de tijdlijn onder de vouw. */
+const GRIP_LETOP_MAX=2;
+function gripLetOpRij(x){
+  return `<div class="row" data-letop="${esc(x.soort)}" style="gap:9px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${x.act}">
+    ${maandDot(x.dot)}<div style="flex:1;min-width:0"><div class="small">${esc(x.naam)}</div>${x.sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(x.sub)}</div>`:''}</div>
+    <span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span></div>`;
 }
 function gripLetOpKaart(L){
+  window._gripLetOpL=L||[];
   if(!L.length) return '';
-  return `<div class="card" id="gripLetOp" style="padding:11px 15px"><div class="hlabel" style="margin:0 0 2px">Let op</div>${L.map(x=>`<div class="row" data-letop="${esc(x.soort)}" style="gap:9px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${x.act}">
-    ${maandDot(x.dot)}<div style="flex:1;min-width:0"><div class="small">${esc(x.naam)}</div>${x.sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(x.sub)}</div>`:''}</div>
-    <span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span></div>`).join('')}</div>`;
+  const rest=L.length-GRIP_LETOP_MAX;
+  return `<div class="card" id="gripLetOp" style="padding:11px 15px"><div class="hlabel" style="margin:0 0 2px">Let op</div>${L.slice(0,GRIP_LETOP_MAX).map(gripLetOpRij).join('')}${rest>0?`<div class="small" data-letopnog="${rest}" style="padding:7px 0 1px;border-top:1px solid var(--line);color:var(--teal);font-weight:600;cursor:pointer" onclick="openGripLetOpLijst()">nog ${rest} \u203a</div>`:''}</div>`;
+}
+/* De lijst met de rest leest de regels van de laatste render van Grip (renderMaand() rekent bij elke
+   wijziging opnieuw) en sluit als er niets meer achter de eerste twee staat. */
+function openGripLetOpLijst(){ renderGripLetOpLijst(); showSheetBg(); }
+function renderGripLetOpLijst(){
+  const rest=(window._gripLetOpL||[]).slice(GRIP_LETOP_MAX);
+  if(!rest.length){ if(document.getElementById('gripLetOpLijst')) closeSheet(); return; }
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripLetOpLijst"><div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:6px">Let op</div>${rest.map(gripLetOpRij).join('')}</div>`;
 }
 function openGripLetOp(soort, key){ window._gripLetOp={soort, key:key||''}; renderGripLetOp(); showSheetBg(); }
 /* De sheet zoekt zijn inhoud opnieuw op (v319/v320) en sluit als het signaal weg is. */
@@ -7746,6 +7767,7 @@ function renderMaand(){
   /* Een terugblik sluit met "Gezien" via renderMaand() en niet via render(); de sheet erachter rekent
      daarom ook hier mee, en sluit als zijn kaart weg is. */
   try{ if(document.getElementById('gripLetOpSheet') && $('#sheetBg').classList.contains('show')) renderGripLetOp(); }catch(_){}
+  try{ if(document.getElementById('gripLetOpLijst') && $('#sheetBg').classList.contains('show')) renderGripLetOpLijst(); }catch(_){}
 }
 /* De terugblik op een acceptatie, en de enige plek waar er een komt. Hij verschijnt zodra de maand
    waarin het gat zou vallen is bereikt - dat kan maanden na de keuze zijn, en daarom past hij niet

@@ -184,8 +184,16 @@ genoemde versietag.)*
   de sheet `openBeleggenVoorwaarden()`, waar de buffer als niet gehaald staat terwijl zijn tegel amber is;
   (4) de Let op-regel van een belegging zegt "nog niet gekozen of ze hiervoor gelden" bij een open keuze,
   zoals de lijstregel van `v332`. En het woord "vooruitblik" staat op geen scherm (`v179`): de kaart zegt
-  "Komt uit rond" en "Waar je maand uitkomt". BIJVANGST, niet opgeruimd: `MAAND_DREMPEL.onbekendDeel` en
-  `onbekendMin` hebben sinds `maandOordeel()` weg is geen lezer meer.
+  "Komt uit rond" en "Waar je maand uitkomt". `MAAND_DREMPEL.onbekendDeel` en `onbekendMin` zijn
+  weggehaald: hun enige lezer was de oordeelzin van `maandOordeel()`.
+  LET OP TOONT HOOGUIT TWEE REGELS (`GRIP_LETOP_MAX`), de belangrijkste eerst: op status (tekort voor let
+  op) en daarbinnen de bestaande rang van Grip (terugblikken, structureel, potjes op euro's, beleggen,
+  uitgesloten, contant; `sort()` is stabiel). Daaronder "nog N ›" (`data-letopnog`) naar een sheet met de
+  REST (`openGripLetOpLijst()`, `#gripLetOpLijst`), elke regel naar zijn eigen sheet. GEMETEN met drie
+  regels: de kaart is 169px op 360 EN 390px, zonder overloop.
+  DE BAND GAAT ALLEEN OVER HET DEEL VAN DE MAAND DAT NOG KOMT, en dat stond er al: per afgeronde maand de
+  uitgaven NA dezelfde dag (`d>el`), daarvan het laagste en het hoogste. Hij wordt dus smaller naarmate de
+  maand vordert en is op de laatste dag nul; de test draagt dag 4 (250), dag 25 (200) en 31 oktober (0).
 - **EEN OVERBOEKING TUSSEN JE EIGEN REKENINGEN HERKENT DE APP AAN DE NAMEN UIT JE BANKKOPPELING, EN JIJ
   BEVESTIGT PER NAAM** (`v339`, gevraagd door de gebruiker): `eigenNamenUitKoppeling()` leest de namen uit
   `SET.psd2Accounts` (het label zonder de laatste vier cijfers; de terugval `Rekening` telt niet), en

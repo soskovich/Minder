@@ -286,3 +286,58 @@ test('q. een voorwaarde die niet te beoordelen is: de beleggen-tegel zegt onbeke
   expect(r.tekst).toBe('Beleggen onbekend je reserveringen nog niet te beoordelen');
   expect(r.kleur).toBe('grijs');
 });
+
+/* De band gaat alleen over het deel van de maand dat nog moet komen: per afgeronde maand de uitgaven na
+   dezelfde dag, en daarvan het laagste en het hoogste. Hij wordt dus smaller naarmate de maand vordert,
+   en is op de laatste dag nul. De fixture verschilt per maand op dag 10 en op dag 28, zodat de breedte
+   op dag 4 en op dag 25 een andere is. */
+const BAND = [['2026-07', -50, -100], ['2026-08', -150, -100], ['2026-09', -100, -300]].flatMap(([m, a, b], i) => [
+  { id: 'bd' + i + 'a', date: m + '-10', amount: a, name: 'Restaurant Lona', desc: 'BEA, BETAALPAS RESTAURANT LONA' },
+  { id: 'bd' + i + 'b', date: m + '-28', amount: b, name: 'Restaurant Lona', desc: 'BEA, BETAALPAS RESTAURANT LONA' }]);
+for (const [dag, breed] of [['2026-10-04', 250], ['2026-10-25', 200], ['2026-10-31', 0]]) {
+  test(`r. de band op ${dag} is ${breed} breed: alleen het deel van de maand dat nog komt`, async ({ page }) => {
+    await stand(page, UITSET, { extraTx: BAND, dag });
+    const V = await page.evaluate(() => { const V = maandVooruit(); return { min: V.band.min, max: V.band.max, el: V.el, dim: V.dim, rest: V.rest }; });
+    expect(V.max - V.min).toBe(breed);
+    if (breed === 0) { expect(V.el).toBe(V.dim); expect(V.rest).toBe(0); }
+  });
+}
+
+/* Let op toont hooguit twee regels, de belangrijkste eerst, met daaronder "nog N ›" naar de rest. */
+const DRIE = [
+  ...UIT,
+  { id: 'u10', date: '2026-10-03', amount: -90, name: 'Restaurant Lona', desc: 'BEA, BETAALPAS RESTAURANT LONA' },
+  { id: 'z1', date: '2026-10-02', amount: -140, name: 'Zalando', desc: 'BEA, BETAALPAS ZALANDO' },
+  { id: 'g1', date: '2026-10-03', amount: -100, name: 'Geldmaat', desc: 'GEA, BETAALPAS GELDMAAT KOESTRAAT' },
+];
+test('s. Let op toont twee regels en "nog 1 ›", en die opent een lijst met de rest', async ({ page }) => {
+  await stand(page, { budgets: { boodschappen: 500, huur: 900, abonnement: 30, uiteten: 150, shopping: 50 } }, { extraTx: DRIE });
+  await page.evaluate(() => { closeSheet(); go('maand'); });
+  const r = await page.evaluate(() => { const k = document.getElementById('gripLetOp');
+    return { alle: window._gripLetOpL.map((x) => x.soort), rijen: [...k.querySelectorAll('[data-letop]')].map((e) => e.innerText.replace(/\s+/g, ' ')), nog: k.querySelector('[data-letopnog]') ? k.querySelector('[data-letopnog]').innerText : null }; });
+  // invoermeting: er zijn er werkelijk drie, anders toetst de grens niets
+  expect(r.alle).toEqual(['sig', 'sig', 'contant']);
+  expect(r.rijen).toEqual(['Online shopping €90 boven je potje ›', 'Uit eten & café €40 boven je potje ›']);
+  expect(r.nog).toBe('nog 1 ›');
+  await page.evaluate(() => document.querySelector('[data-letopnog]').click());
+  const l = await page.evaluate(() => [...document.querySelectorAll('#gripLetOpLijst [data-letop]')].map((e) => e.dataset.letop));
+  expect(l).toEqual(['contant']);                         // de rest, en niet nog eens de eerste twee
+  await page.evaluate(() => document.querySelector('#gripLetOpLijst [data-letop]').click());
+  expect(await page.evaluate(() => document.getElementById('gripLetOpSheet').dataset.soort)).toBe('contant');
+});
+
+test('t. een tekort gaat voor een let op, en daarbinnen houdt Let op de bestaande volgorde', async ({ page }) => {
+  await stand(page);
+  /* geconstrueerd: een structureel signaal op tekort naast twee potjes op let op. Op deze stand staat er
+     geen; wat de test vasthoudt is de sortering en niet hoe vaak dit voorkomt. */
+  const L = await page.evaluate(() => gripLetOpItems([{ structureel: true, key: 'overstreak', naam: 'Maanden boven je grens', status: 'tekort' }],
+    [{ id: 'a', naam: 'A', over: 90 }, { id: 'b', naam: 'B', over: 40 }], []).map((x) => x.soort + ':' + (x.key || '')));
+  expect(L).toEqual(['str:overstreak', 'sig:a', 'sig:b']);
+  const L2 = await page.evaluate(() => gripLetOpItems([{ structureel: true, key: 'rente-x', naam: 'Rente', status: 'let op' }],
+    [{ id: 'a', naam: 'A', over: 90 }], []).map((x) => x.soort));
+  expect(L2).toEqual(['str', 'sig']);
+  // het geval dat de sortering onderscheidt: een let op dat in de lijst VOOR een tekort komt
+  const L3 = await page.evaluate(() => gripLetOpItems([{ structureel: true, key: 'rente-x', naam: 'Rente', status: 'let op' },
+    { structureel: true, key: 'overstreak', naam: 'Maanden boven je grens', status: 'tekort' }], [], []).map((x) => x.key));
+  expect(L3).toEqual(['overstreak', 'rente-x']);
+});
