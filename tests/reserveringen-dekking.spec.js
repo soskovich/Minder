@@ -414,14 +414,23 @@ test.describe('h · weergave', () => {
 
   test('het oordeel staat op Maand, en daar maar één keer', async ({ page }) => {
     await boot(page);
+    /* v340: op Grip staat de dekking als EEN tegel [data-tegel="dekking"], en het oordeel (de gevolgzin
+       uit dekkingTekst) staat in de sheet die de tegel opent, niet meer als regel op het scherm. */
     const r = await page.evaluate(() => {
-      go('maand');
+      go('maand'); renderMaand();
+      const tegels = document.querySelectorAll('#s-maand #gripTegels [data-tegel="dekking"]');
+      const scherm = $('#s-maand').innerText.replace(/\s+/g, ' ');
+      if (tegels.length) tegels[0].click();
       return { regel: (maandRegels() || []).find((x) => x.key === 'dekking'),
-        zin: dekkingTekst(dekking(12)), scherm: $('#s-maand').innerText };
+        zin: dekkingTekst(dekking(12)), scherm, tegels: tegels.length,
+        sheet: ($('#sheet').innerText || '').replace(/\s+/g, ' ') };
     });
     expect(r.regel).toBeTruthy();
     expect(r.regel.gevolg).toBe(r.zin);                 // het oordeel komt uit dekkingTekst
-    expect(r.scherm).toContain('Dekking reserveringen');
+    expect(r.tegels).toBe(1);                           // op Grip, en daar maar een keer
+    expect(r.sheet).toContain('Dekking reserveringen');
+    expect(r.sheet).toContain(r.zin.replace(/\s+/g, ' '));
+    expect(r.scherm).not.toContain(r.zin.replace(/\s+/g, ' '));
     /* En resDekkingCard roept die zin niet meer aan. Commentaar telt niet als aanroep: de functie
        legt in een comment uit wat er stond en waarom (dezelfde meetfout als v164). */
     const kaal = await kaalUit(page, 'resDekkingCard');

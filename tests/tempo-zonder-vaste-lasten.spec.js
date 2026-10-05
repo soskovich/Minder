@@ -161,11 +161,17 @@ test.describe('c · de dag van vandaag is een lokale dag', () => {
   /* v299: de dag komt uit de klok van de PAGINA en niet uit die van Node. Dat was hiervoor dezelfde
      dag en daarmee onzichtbaar; met een gepinde klok is het het verschil tussen de eigenschap (de
      dag waarop je las) en een toevalligheid (de dag waarop de suite draait). */
-  test('Gelezen op toont de dag waarop je las', async ({ page }) => {
+  /* v340: de regel "Gelezen op" staat niet meer op Grip. Het leesmoment bestaat nog als
+     SET.maandGelezen (go('maand') zet hem, en de pop-up van de maandafsluiting leest hem), dus de
+     eigenschap wordt daar gelezen: de dag waarop je las, uit de klok van de pagina. */
+  test('het leesmoment is de dag waarop je las', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => go('maand'));
+    await page.evaluate(() => { SET.maandGelezen = null; go('dash'); go('maand'); });
     await page.waitForTimeout(130);
-    const t = await page.evaluate(() => $('#s-maand').innerText);
-    expect(t).toContain(`Gelezen op ${vasteDatum().getDate()} `);
+    const r = await page.evaluate(() => ({ g: SET.maandGelezen, t: $('#s-maand').innerText }));
+    const d = vasteDatum();
+    const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    expect(r.g).toBe(ymd);
+    expect(r.t).not.toContain('Gelezen op');
   });
 });

@@ -190,18 +190,25 @@ test.describe('d · alleen bij een overschrijding', () => {
      open (`valtOpKaartOpen`) en de rest dicht (`valtOpKaartDicht`), dus met een signaal bestaat de
      dichte vorm niet en kan een sabotage daarin per constructie niet vuren. Met twee staan beide
      vormen op het scherm, en dat wordt eerst gemeten. */
-  test('geen van de twee kaartvormen op Grip draagt hem', async ({ page }) => {
+  /* v340: de dichte kaartvorm (valtOpKaartDicht) is vervallen. Op Grip staat elk signaal nu als Let
+     op-regel [data-letop="sig"], en de open kaart (valtOpKaartOpen) staat in de sheet erachter. Twee
+     signalen blijven de invoer: dan zijn er twee regels en twee sheets om te lezen. */
+  test('geen Let op-regel op Grip en geen kaart erachter draagt hem', async ({ page }) => {
     await boot(page, { tweede: true });
     const r = await page.evaluate(() => { go('maand'); renderMaand();
       const el = document.querySelector('#s-maand');
-      return { open: el.querySelectorAll('.valtop-kaart.valtop-open').length,
-        dicht: [...el.querySelectorAll('.valtop-kaart')].filter((k) => !k.classList.contains('valtop-open')).length,
-        tekst: el.innerText };
+      const regels = [...el.querySelectorAll('#gripLetOp [data-letop="sig"]')];
+      const sheets = regels.map((_, i) => { renderMaand(); document.querySelectorAll('#s-maand #gripLetOp [data-letop="sig"]')[i].click();
+        const sh = document.querySelector('#gripLetOpSheet'); return sh && sh.querySelector('.valtop-open') ? sh.innerText : ''; });
+      return { regels: regels.length, kaartOpGrip: el.querySelectorAll('.valtop-kaart').length, tekst: el.innerText, sheets };
     });
-    expect(r.open).toBe(1);                         // invoermeting: beide kaartvormen staan er
-    expect(r.dicht).toBe(1);
+    expect(r.regels).toBe(2);                       // invoermeting: beide signalen staan er
+    expect(r.kaartOpGrip).toBe(0);
     expect(r.tekst).toContain('Sport & gezondheid');
     expect(r.tekst).not.toContain('per jaar');
+    expect(r.sheets.every((t) => t.length > 0)).toBe(true);
+    expect(r.sheets.join(' ')).toContain('Sport & gezondheid');
+    for (const t of r.sheets) expect(t).not.toContain('per jaar');
   });
 });
 

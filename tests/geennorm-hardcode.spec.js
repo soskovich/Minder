@@ -65,6 +65,15 @@ function treffers(sleutels) {
   return uit;
 }
 const TOEGESTAAN = new Set(['contantOpslaan']);
+/* v340: de soort van een Let op-regel op Grip heet ook 'contant', en dat is een naam van een REGEL
+   (gripLetOpItems() zet hem, renderGripLetOp() kiest er de kaart mee) en geen categoriesleutel. Die
+   twee plekken zijn per REGELVORM toegestaan en niet per functie, zodat een echte categorie-hardcode
+   in diezelfde functies nog steeds valt. */
+const TOEGESTAAN_REGEL = [
+  { fn: 'gripLetOpItems', re: /terug\('contant',/ },
+  { fn: 'renderGripLetOp', re: /G\.soort==='contant'/ },
+];
+const regelMag = (t) => TOEGESTAAN_REGEL.some((x) => x.fn === t.fn && x.re.test(t.tekst));
 
 test('er zijn minstens twee geenNorm-categorieen, en ze komen uit de bron', () => {
   const ks = geenNormSleutels();
@@ -76,7 +85,7 @@ test('er zijn minstens twee geenNorm-categorieen, en ze komen uit de bron', () =
 
 test('geen enkele geenNorm-categorie wordt bij naam aangewezen, behalve door zijn eigen schrijver', () => {
   const ks = geenNormSleutels();
-  const fout = treffers(ks).filter((t) => !TOEGESTAAN.has(t.fn));
+  const fout = treffers(ks).filter((t) => !TOEGESTAAN.has(t.fn) && !regelMag(t));
   const uitleg = fout.map((t) => `regel ${t.regel} in ${t.fn}(): ${t.tekst}`).join('\n');
   expect(fout, `Een geenNorm-categorie staat hier bij naam in de code. Lees de vlag (geenNorm(k) of c.geenNorm) in plaats van de sleutel, of zet de functie in TOEGESTAAN met de reden erbij.\n${uitleg}`).toEqual([]);
 });
@@ -84,6 +93,9 @@ test('geen enkele geenNorm-categorie wordt bij naam aangewezen, behalve door zij
 test('de enige toegestane schrijver bestaat ook echt', () => {
   // een uitzondering op een functie die niet meer bestaat is een lek dat groen staat
   for (const naam of TOEGESTAAN) expect(HEADERS.some((h) => h.naam === naam), `${naam}() bestaat niet meer`).toBe(true);
+  // en een uitzondering per regelvorm moet ook echt een treffer dekken
+  const ks = geenNormSleutels();
+  for (const x of TOEGESTAAN_REGEL) expect(treffers(ks).some((t) => t.fn === x.fn && x.re.test(t.tekst)), `${x.fn}(): ${x.re} dekt niets meer`).toBe(true);
 });
 
 test('de twee gerepareerde plekken lezen de vlag en niet de sleutel', () => {
