@@ -90,8 +90,11 @@ test('d. een tik op een tegel opent de bestaande sheet met uitleg, afspraak en h
   expect(await page.evaluate(() => $('#sheet').innerText)).toContain('Voorwaarden voor beleggen');
 });
 
+/* Een vaste last NA vandaag (dag 12) in de drie maanden ervoor: die staat in "vast nog" en mag niet nog
+   eens in wat er gemiddeld bijkomt tellen. De huur valt op dag 2 en kan dat per constructie niet laten zien. */
+const NETFLIX = ['2026-06', '2026-07', '2026-08', '2026-09'].map((m, i) => ({ id: 'n' + i, date: m + '-12', amount: -15.99, name: 'Netflix', desc: 'SEPA INCASSO NETFLIX INTERNATIONAL' }));
 test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de waterval', async ({ page }) => {
-  await stand(page);
+  await stand(page, null, { extraTx: NETFLIX });
   await page.evaluate(() => { closeSheet(); openMaandBeslis('dekking'); afspraakDekkingZet(); go('maand'); });
   const r = await page.evaluate(() => { const V = maandVooruit(); const k = document.getElementById('gripDezeMaand');
     return { V: { uit: V.uit, vast: V.vast, rest: V.rest, projectie: V.projectie, band: V.band, budget: V.budget, huur: V.restCat.huur || 0, ah: V.restCat.boodschappen || 0 }, tekst: k.innerText.replace(/\s+/g, ' '), afspraak: k.querySelectorAll('[data-afspraak]').length }; });
@@ -99,6 +102,11 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
   // de huur is een vaste last en staat al in "vast nog": hij telt niet nog eens mee in wat er gemiddeld bijkomt
   expect(r.V.vast).toBeGreaterThanOrEqual(900);
   expect(r.V.huur).toBe(0);
+  // invoermeting: Netflix is een herkende vaste last van na vandaag, en telt niet mee in wat er bijkomt
+  const nf = await page.evaluate(() => ({ vast: TX.filter((t) => t.name === 'Netflix').every((t) => isFixed(t)), rest: maandVooruit().restCat.abonnement || 0, dag: daysElapsed(thisYM()).elapsed }));
+  expect(nf.vast).toBe(true);
+  expect(nf.dag).toBeLessThan(12);
+  expect(nf.rest).toBe(0);
   // en de boodschappen na dag 4 (300 op dag 5 in elke maand) wel
   expect(r.V.ah).toBe(300);
   expect(r.V.band.min).toBeLessThanOrEqual(r.V.projectie);
@@ -158,6 +166,8 @@ test('i. na afsluiten verschijnt de pop-up nooit meer voor oktober, en oktober s
   for (const dag of ['2026-11-01', '2026-11-02', '2026-11-29']) {
     await heropen(page, dag);
     expect(await popupOpen(page)).toBe(false);
+    // ook geen stille poging: de sheet zou zichzelf sluiten, dus wat telt is dat er niets wordt geschreven
+    expect(await page.evaluate(() => SET.afsluitPopup.dag)).toBe('2026-11-01');
     await page.evaluate(() => go('maand'));
     expect(await popupOpen(page)).toBe(false);
   }

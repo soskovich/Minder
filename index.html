@@ -5585,7 +5585,7 @@ function openBeleggenVoorwaarden(){
       <div class="muted small">Beleggen hoort met geld dat je op korte termijn niet nodig hebt.</div></div>
     ${B.voorwaarden.map(rij).join('')}
     <div class="small muted" style="margin-top:12px;line-height:1.5">${B.volledig
-      ? (B.klaar ? 'Alle drie gehaald.' : `Eerst ${esc(B.blokkade.naam)}.`)
+      ? (B.klaar ? 'Alle drie gehaald.' : `Eerst ${esc(B.blokkade.naam)}.`+((B.blokkade.key==='buffer' && ((maandRegels().find(x=>x.key==='buffer')||{}).opTempo))?' Hij groeit, maar de drempel is nog niet gehaald.':''))
       : 'Zolang een van de drie niet te beoordelen is, staat er geen uitkomst.'}</div>
     ${beleggenDrempelRij()}`;
   showSheetBg();
@@ -7423,7 +7423,8 @@ function gripTegels(RO, R){
   try{ if(beleggenZichtbaar()){ const B=beleggenKlaar(R);
     if(B){ const naam=k=>k==='buffer'?'je buffer':k==='dekking'?'je reserveringen':((R||[]).find(x=>x.key===k)||{}).naam||'je doel';
       const wacht=B.voorwaarden.find(v=>!v.gehaald);
-      T.push({key:'beleggen', label:'Beleggen', waarde:B.klaar?'klaar':'wacht', maat:B.klaar?'alle drie gehaald':`op ${naam(wacht?wacht.key:'')}`,
+      const onb=!!(wacht && wacht.ontbreekt);
+      T.push({key:'beleggen', label:'Beleggen', waarde:B.klaar?'klaar':onb?'onbekend':'wacht', maat:B.klaar?'alle drie gehaald':onb?`${naam(wacht.key)} nog niet te beoordelen`:`op ${naam(wacht?wacht.key:'')}`,
         kleur:B.klaar?'groen':'grijs', act:'openBeleggenVoorwaarden()', v:8}); } } }catch(_){}
   return T.sort((a,b)=>GRIP_RANG[a.kleur]-GRIP_RANG[b.kleur] || a.v-b.v);
 }
@@ -7445,7 +7446,7 @@ function gripLetOpItems(RO, SIG, BV){
   for(const r of (RO||[])) if(r && r.structureel){ let B={}; try{ B=maandBeslisDeel(r)||{}; }catch(_){}
     L.push({soort:'str', key:r.key, naam:r.naam, sub:B.oorzaak||'', dot:r.status, act:`openMaandBeslis('${esc(r.key)}')`}); }
   for(const s of (SIG||[])) L.push({soort:'sig', key:s.id, naam:s.naam, sub:`${euro0(s.over)} boven je potje`, dot:'let op', act:`openGripLetOp('sig','${esc(s.id)}')`});
-  for(const v of (BV||[])) L.push({soort:'beleg', key:v.asset.id, naam:`Je belegde ${euro0(v.inleg)} in ${v.asset.naam||'Bezitting'}`, sub:'voorwaarden nog niet gehaald', dot:'let op', act:`openBelegVraag('${esc(v.asset.id)}')`});
+  for(const v of (BV||[])) L.push({soort:'beleg', key:v.asset.id, naam:`Je belegde ${euro0(v.inleg)} in ${v.asset.naam||'Bezitting'}`, sub:v.open?'voorwaarden nog niet gehaald · nog niet gekozen of ze hiervoor gelden':'voorwaarden nog niet gehaald', dot:'let op', act:`openBelegVraag('${esc(v.asset.id)}')`});
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   return L;
@@ -7544,7 +7545,7 @@ function dezeMaandKaart(RO){
   if(!V || V.onbekend){
     const T=totals(m); const bud=Math.round(T.budget||0);
     boven=`<div data-vooruit="onbekend"><div style="font-weight:700;font-size:var(--fs-md)">${euro0(Math.round(T.spendNorm||0))} uitgegeven${bud>0?` van ${euro0(bud)}`:''}</div>
-      <div class="small muted" style="margin-top:3px;line-height:1.45">Een vooruitblik rekent met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div></div>`;
+      <div class="small muted" style="margin-top:3px;line-height:1.45">Waar je maand uitkomt rekent Minder met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div></div>`;
   } else {
     const voor=V.voor.length?` · ${gripNamen(V.voor.slice(0,2))} ${V.voor.length===1?'loopt':'lopen'} voor`:'';
     const vs=gripVerschil(V.projectie, V.budget);
@@ -7734,8 +7735,11 @@ function renderMaand(){
   const RO=maandMetAfspraak(maandMetAccept(R).concat(STR));
   const T=(function(){ try{ return gripTegels(RO, R); }catch(_){ return []; } })();
   const L=(function(){ try{ return gripLetOpItems(RO, SIG, BV); }catch(_){ return []; } })();
+  /* De terugval staat er alleen als er niets is om in te stellen: geen tegel en geen ander signaal dan een
+     potje boven zijn grens. Dat is de poort van v188 (regels, structurele signalen, contant, uitgesloten,
+     beleggen); een potje-signaal staat er ook dan bij, maar zegt niets over wat er is ingesteld. */
   const tegels=T.length?`<div class="kt-raster" id="gripTegels">${T.map(gripTegelHtml).join('')}</div>`
-    : `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om tegels te tonen. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
+    : L.some(x=>x.soort!=='sig') ? '' : `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om tegels te tonen. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
   $('#s-maand').innerHTML=`${tegels}${gripLetOpKaart(L)}${dezeMaandKaart(RO)}${gripTijdlijn()}
     <div class="small" id="gripNaarLogboek" style="text-align:center;margin:14px 0 4px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek \u203a</div>
     <div style="height:12px"></div>`;
