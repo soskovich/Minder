@@ -76,19 +76,22 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   een staaf daaronder de BRIDGE van die maand (`brugBlok()`, `maandBrug()`); zie de staande regel.
 - **Grip** (`maand`, sinds `v233`; heette Maand) — houdt mijn systeem stand (structureel). Leest
   altijd de lopende maand en heeft geen maandkiezer; de kiezer (`curMonth`, `kijkMaand()`) is van
-  Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. Draagt sinds `v235` de
-  valt-op-kaarten: dezelfde signalen die Inzichten constateert, met de historie en de handelingen
-  eraan. Sinds `v320` staan de regels in "Vraagt een beslissing" als LIJSTREGEL (de vorm van "Staat
-  goed") met de volle uitleg en de handeling in een sheet erachter; sinds `v324` leest "Vraagt aandacht"
-  dezelfde lijstregel (`maandBeslisRij()`), dus alleen de kop en de stip verschillen. Sinds `v314` staat de SAMENVATTING daarvoor (hij telt de potjes mee) en staan de handelingen
-  in volgorde van het moment in de maand, met "Zo laten" als eigen actie. Draagt sinds `v315` de kaart
-  "Vanaf <maand>" met drie ingangen naar wat er klaarstaat, en toont het logboek de UITKOMST per handeling. Sinds `v325` staat het logboek per afgesloten maand, met een kop, een vraag en de rest kort. Sinds `v331` is het logboek een EIGEN SCHERM (`logboek`, `renderLogboek()`), en draagt Grip alleen een regel voor de nieuwste afgesloten maand of de open vraag met "Logboek ›" eronder (`valtOpGripBlok()`). De lek-ingang (`coStart('lek')`) hangt sindsdien aan de chevron in de kop van
-  de open kaart; dat was de voetregel van de Valt op-kaart op Inzichten. Sinds `v237` is dat niet
-  meer de enige ingang: `coachLeak()` levert ook een patroonregel op Inzichten. Twee ingangen naar
-  hetzelfde gesprek, maar nooit voor hetzelfde geval. Draagt sinds `v258` ook `contantKaart()`, maar
-  alleen als er iets te tellen is (`contantVraagt()`); geen opname en geen telling is zwijgen.
-  Sinds `v337` staat bovenaan de MAANDAFSLUITING van de vorige maand (`afsluitKaart()`) tot je hem
-  afsluit, en draagt Grip daarna de lopende afspraken als eigen kaart (`afsprakenKaart()`).
+  Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. SINDS `v340` EEN DASHBOARD MET
+  DRIE BLOKKEN (`renderMaand()`): de KPI-TEGELS (`gripTegels()`: Reserveringen, Buffer, het doel uit
+  `maandRegels()` en Beleggen, 2x2, gesorteerd rood, amber, groen, grijs; een tik opent de bestaande
+  sheet), met een kaart "Let op" eronder als er een signaal zonder eigen tegel is (`gripLetOpItems()`:
+  een structureel signaal, een potje boven zijn grens, beleggen zonder voorwaarden, een uitgesloten
+  incasso, contant, en de terugblikken op vorige maand); "DEZE MAAND" (`dezeMaandKaart()`: de
+  vooruitblik `maandVooruit()` met de lopende afspraken, en een tik opent de waterval met "Wat je deze
+  maand kunt doen", `renderGripVooruit()`); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
+  <maand>" is opgegaan). Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
+  `renderAfsluitSheet()`), geen kaart. Het logboek (`logboek`, `renderLogboek()`) draagt sinds `v340` de
+  afgesloten maanden als tijdlijn (`logTijdlijn()`), met per maand de bridge, de antwoorden en de
+  afspraken (`openLogMaand()`). Tot `v339` stonden op Grip de samenvatting, Vraagt een beslissing,
+  Vraagt aandacht, Staat goed, Voorwaarden voor beleggen, Vanaf <maand>, de afsluitregel en de
+  logboekkaart; zie de staande regel van `v340` voor waar elk ervan heen ging. De lek-ingang
+  (`coStart('lek')`) hangt aan de chevron van de open valt-op-kaart, en die staat sinds `v340` in de
+  sheet achter de Let op-regel. `coachLeak()` levert daarnaast een patroonregel op Inzichten (`v237`).
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Draagt sinds `v319` onder de
   inleg-kop wat er deze maand werkelijk opzij ging (`planInlegRegel()`, uit `savedNet()`) en op de
   vrij-regel een tweede knop die het niet-toegewezen spaargeld verdeelt zoals de waterval het zou
@@ -112,6 +115,67 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **GRIP IS EEN KPI-DASHBOARD MET DE MAAND IN DE TIJD, EN DE MAANDAFSLUITING IS EEN POP-UP** (`v340`,
+  gevraagd door de gebruiker, mockups "KPI en tijd", "V1 met handelingen", "KPI vorige maand"): drie
+  blokken en een link. (1) DE TEGELS (`gripTegels()`): Reserveringen, Buffer, het doel van `maandRegels()`
+  (het eerstvolgende, `maandDoel()`) en Beleggen; EEN getal, EEN maatstaf (`tegelMaat` op de dekkingsrij,
+  `sub` bij de buffer, `eenheid` bij het doel) en EEN kleur uit de bestaande status (tekort rood, let op
+  amber, ok groen, anders grijs), gesorteerd rood, amber, groen, grijs en daarbinnen `MAAND_VOLGORDE`. De
+  tegel leest dezelfde lagen als de sheet (`maandMetAfspraak(maandMetAccept(R))`); Beleggen leest de
+  ONBEWERKTE `R` zoals `maandBeleggenRegel()` en is nooit rood of amber (`v314`): groen "klaar" of grijs
+  "wacht · op je reserveringen". Een tik opent de bestaande sheet (`openMaandBeslis()`,
+  `openBeleggenVoorwaarden()`). Geen trendpijl. "LET OP" (`gripLetOpItems()`) staat er alleen als er een
+  signaal is zonder eigen tegel: een structureel signaal (stilstaand geld, maanden boven je grens), een
+  potje boven zijn grens (`valtOpSignals()`, nog steeds bij elke render aangeroepen, want hij schrijft de
+  log), beleggen zonder voorwaarden, een uitgesloten incasso, contant, en de drie terugblikken (acceptatie,
+  afspraak van vorige maand, voornemen). Elke regel opent de KAART DIE ER WAS in een sheet
+  (`renderGripLetOp()`), die opnieuw rekent en sluit zodra het signaal weg is.
+  (2) DEZE MAAND (`dezeMaandKaart()`): "Komt uit rond" uit `maandVooruit()` = uitgegeven (`spendNorm`) +
+  vast nog (`monthLiquidity().fixDue`) + per categorie het GEMIDDELDE van wat je in je laatste drie
+  afgeronde maanden NA dezelfde dag uitgaf, in de snede van `piekInScope()` (zonder vaste lasten, dus geen
+  dubbeltelling met "vast nog"). Het gemiddelde en geen mediaan: de som van de gemiddelden is het
+  gemiddelde van de maandtotalen, dus "rond" ligt per constructie binnen de BAND (het laagste en hoogste
+  van die drie maanden, en zo heet hij ook). Zonder drie afgeronde maanden met boekingen geen vooruitblik
+  en de reden erbij. Daaronder de lopende afspraken (`afsprakenLopend()` en de afspraak uit het gesprek).
+  Een tik opent de WATERVAL (`renderGripVooruit()`) die op precies dat getal eindigt, met "Wat je deze
+  maand kunt doen": per potje dat op tempo boven zijn bedrag eindigt en nog ruimte heeft "nog €X tot
+  <einddatum> −€Y" (X = wat er nog in zit, Y = de verwachte overschrijding), en een knop die eerst het
+  gevolg toont (`openGrensRest()`); pas "Grens zetten" schrijft een AFSPRAAK (soort grens, bedrag = je
+  potje). Verschuiven ("Of schuif €X van A naar B €0") staat er alleen als A verwacht onder eindigt EN
+  er voor B een open valt-op-record is: de enige route die een bestaand potje deze maand wijzigt is de
+  bijstelling van `v238`.
+  (3) KOMENDE 3 MAANDEN (`gripTijdlijn()`): deze maand en twee erna, met de verwachte kosten uit je
+  reserveringen, een storting die je afsprak en wat er vanaf volgende maand verandert (`maandVanafData()`,
+  dezelfde gegevens als de vroegere kaart "Vanaf <maand>"). Elk punt opent zijn sheet.
+  DE POP-UP (`afsluitPopupMisschien()`, bij het openen van de app en van Grip): zolang de vorige maand
+  boekingen heeft en niet is afgesloten, hooguit een keer per dag (`SET.afsluitPopup.dag`). "Later" sluit
+  hem. DE EERSTE KEER DAT GRIP OOIT OPENT (geen `SET.maandGelezen`) telt als gezien zonder pop-up: dan was
+  er geen maandwissel. Hij draagt drie tegels van vorige maand (`afsluitTegels()`: boven je potjes,
+  antwoorden, totaal tegen budget via `maandStaaf()`), de punten, de open logboekvraag (een open vraag
+  staat nooit een tik dieper, `v331`) en de afspraken. Na afsluiten nooit meer voor die maand.
+  HET LOGBOEK (`logTijdlijn()`): hooguit drie afgeronde maanden, de open vorige maand als regel
+  "<maand> afsluiten" (de ingang buiten de pop-up), en per maand uitgaven en verschil met het budget;
+  zonder bewaarde potjebedragen "tegen huidige potjes". Een tik opent de maand (`openLogMaand()`: bridge,
+  antwoorden, afspraken uit het afsluitrecord). `maandStaaf()` is de ENE bron voor de staaf, met de
+  grafiek op Inzichten, de pop-up en het logboek als lezers.
+  WAAR DE OUDE KAARTEN HEEN GINGEN: de samenvatting (`maandOordeel()`) heeft geen lezer meer op het scherm,
+  de tegels zijn het oordeel; Vraagt een beslissing, Vraagt aandacht en Staat goed zijn tegels en Let
+  op-regels; Voorwaarden voor beleggen is de tegel Beleggen plus een verwijzing in de sheet van de
+  blokkerende regel; Vanaf <maand> zit in de tijdlijn; de afsluitregel is de pop-up; de logboekkaart is de
+  link. Het verband tussen een gat en een uitgave (`maandVerband()`) staat in de sheet van die regel.
+  HET MAANDMOMENT (`MECHANISM_SPEC.freshStart`) BLIJFT: `maandCoachIngang()` is de laatste regel van Deze
+  maand, met dezelfde poort en "Nieuwe maand." in de eerste dagen; de afspraak uit het gesprek is een rij bij
+  de lopende afspraken. DE OPEN LOGBOEKVRAAG staat in de pop-up zolang de maand open is en bovenaan het
+  logboek (`#logVraag`); op Grip niet meer, en dat draait de helft van `v331` om ("een open vraag staat
+  nooit een tik dieper"), op keuze van de gebruiker (de logboekkaart verdwijnt van Grip).
+  NERGENS MEER: de samenvattingszin (`maandOordeel()`), de zin "staat goed, dus deze afspraak gaat nu niet
+  over een tekort", "je drempel van N maanden" in de beleggen-zin, en de regel "Gelezen op <datum>"
+  (`maandGelezen()`; `SET.maandGelezen` wordt nog gezet en de pop-up leest hem). Opgeruimd als dode code:
+  `gripSignalCards`, `valtOpKaartDicht`, `valtOpToon`, `maandOordeel`, `maandGelezen`, `maandBeleggenRegel`,
+  `maandVanafKaart`, `maandVanafRegels`, `afsluitKaart`, `afgeslotenRegel`, `afsprakenKaart`,
+  `valtOpGripBlok`, `maandBeslisRij`, `belegVraagRij`.
+  GEMETEN op de stand van 4 oktober met de afspraak van EUR 131: Grip 582px op 360 en 564px op 390 (tegels
+  171, Deze maand 176/158, tijdlijn 129), tegen 966/945px op v339.
 - **EEN OVERBOEKING TUSSEN JE EIGEN REKENINGEN HERKENT DE APP AAN DE NAMEN UIT JE BANKKOPPELING, EN JIJ
   BEVESTIGT PER NAAM** (`v339`, gevraagd door de gebruiker): `eigenNamenUitKoppeling()` leest de namen uit
   `SET.psd2Accounts` (het label zonder de laatste vier cijfers; de terugval `Rekening` telt niet), en
@@ -5823,7 +5887,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v339` → `minder-v340`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v340` → `minder-v341`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5842,7 +5906,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338` en `v339` naar `minder-v339`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339` en `v340` naar `minder-v340`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

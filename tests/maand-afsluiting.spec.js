@@ -28,33 +28,33 @@ async function maakAfspraken(page) {
   await page.click('[data-afdekking="nieuw"]');
   await page.evaluate(() => { openPotje('abonnement'); savePotje('abonnement', true); go('maand'); });
 }
-/* v337: op Grip staat EEN regel met de balk; de lijst staat in de sheet erachter. Deze helper leest
-   de regel, opent de sheet en leest daar de punten en de afspraken. */
+/* v340: de afsluiting is een pop-up en staat niet meer op Grip. Deze helper opent hem (de sheet die
+   ook de pop-up is) en leest daar de teller, de punten en de afspraken. Geen afsluiting nodig: null. */
 const kaart = async (page) => {
-  const rij = await page.evaluate(() => {
-    const k = document.getElementById('afsluitKaart'); if (!k) return null;
-    const K = [...document.querySelectorAll('#s-maand > .card')];
-    const kop = (c) => ((c.querySelector('.hlabel') || {}).textContent || '').toUpperCase();
-    const ib = K.findIndex((c) => kop(c).includes('VRAAGT EEN BESLISSING'));
-    const ia = K.findIndex((c) => kop(c).includes('VRAAGT AANDACHT'));
-    return { teller: k.querySelector('[data-afteller]').dataset.afteller, regel: k.innerText.replace(/\s+/g, ' ').trim(),
-      ik: K.indexOf(k), ib, ia, rijen: k.querySelectorAll('[data-afpunt],[data-afspraak]').length };
-  });
-  if (!rij) return null;
-  await page.evaluate(() => openAfsluiting(document.getElementById('afsluitKaart').dataset.maand));
+  const nodig = await page.evaluate(() => afsluitNodig(afsluitMaand()));
+  if (!nodig) return null;
+  await page.evaluate(() => openAfsluiting(afsluitMaand()));
   const sh = await page.evaluate(() => {
     const k = document.getElementById('afsluitSheet');
     const t = (e) => (e ? e.innerText.replace(/\s+/g, ' ').trim() : '');
     return {
-      tekst: t(k), sheetTeller: k.querySelector('[data-afteller]').dataset.afteller,
+      tekst: t(k), teller: k.querySelector('[data-afteller]').dataset.afteller, sheetTeller: k.querySelector('[data-afteller]').dataset.afteller,
       punten: [...k.querySelectorAll('[data-afpunt]')].map((e) => ({ punt: e.dataset.afpunt, af: e.dataset.af === '1', tekst: t(e) })),
       afspraken: [...k.querySelectorAll('[data-afspraak]')].map((e) => ({ status: e.dataset.afstatus, tekst: t(e), box: e.querySelector('[data-box]').dataset.box })),
       knop: k.querySelector('[data-afsluit]') ? k.querySelector('[data-afsluit]').dataset.afsluit : null,
+      grip: !!document.querySelector('#s-maand #afsluitKaart, #s-maand [data-afteller]'),
     };
   });
   await page.evaluate(() => closeSheet());
-  return Object.assign({}, rij, sh);
+  return sh;
 };
+/* Een afgesloten maand staat in het logboek: in de tijdlijn, en een tik opent hem met wat er bij het
+   afsluiten werd bewaard. */
+const afgesloten = async (page, M) => page.evaluate((m) => {
+  go('logboek'); const kol = document.querySelector(`[data-logmaand="${m}"]`);
+  openLogMaand(m); const t = document.getElementById('logMaand').innerText.replace(/\s+/g, ' ');
+  closeSheet(); return { kol: kol ? kol.innerText.replace(/\s+/g, ' ') : null, tekst: t };
+}, M);
 
 test('a. invoer: dekking let op met EUR 131 per maand tot november, en september draagt boekingen', async ({ page }) => {
   await stand(page);
@@ -70,13 +70,8 @@ test('b. de stand op 4 oktober: logboek afgevinkt, dekking open, Abonnementen op
   await maakAfspraken(page);
   const k = await kaart(page);
   expect(k).not.toBeNull();
-  // op Grip een regel met de balk, en geen lijst
-  expect(k.regel).toBe('September afsluiten 4 van 7 ›');
-  expect(k.rijen).toBe(0);
-  expect(k.sheetTeller).toBe(k.teller);
-  // onder 'Vraagt een beslissing' (als die er is) en boven 'Vraagt aandacht'
-  if (k.ib >= 0) expect(k.ik).toBeGreaterThan(k.ib);
-  expect(k.ia).toBeGreaterThan(k.ik);
+  // v340: op Grip staat geen afsluiting meer; hij is een pop-up
+  expect(k.grip).toBe(false);
   expect(k.tekst).toContain('September afsluiten');
   const log = k.punten.find((p) => p.punt === 'logboek');
   expect(log.af).toBe(true);
@@ -92,8 +87,8 @@ test('b. de stand op 4 oktober: logboek afgevinkt, dekking open, Abonnementen op
   expect(ab.tekst).toContain('gemeten in november');
   expect(ab.status).toBe('loopt');
   expect(k.knop).toBe('open');                               // met open punten alleen via die knop
-  // verplaatsen is niet kopieren: zolang de kaart open is, geen eigen afsprakenkaart
-  expect(await page.evaluate(() => !!document.getElementById('afsprakenKaart'))).toBe(false);
+  // v340: de lopende afspraken staan onder Deze maand op Grip; de pop-up toont ze ook, want hij is een terugblik
+  expect(await page.evaluate(() => document.querySelectorAll('#gripDezeMaand [data-afspraak]').length)).toBe(2);
   expect(k.teller).toBe('4/7');
 });
 
@@ -133,12 +128,15 @@ test('d. afsluiten met open punten bewaart ze bij september, en de kaart wordt e
   expect(rec.op).toBe('2026-10-04');
   expect(rec.open.map((o) => o.feit)).toEqual(expect.arrayContaining(['storting in oktober nog niet gezien', 'gemeten in november']));
   expect(rec.afspraken.length).toBe(2);
-  const r = await page.evaluate(() => { const s = document.getElementById('s-maand'); return { kaart: !!s.querySelector('#afsluitKaart'), regel: s.querySelector('#afgeslotenRegel') ? s.querySelector('#afgeslotenRegel').innerText.replace(/\s+/g, ' ') : null, eigen: !!s.querySelector('#afsprakenKaart') }; });
-  expect(r.kaart).toBe(false);
-  expect(r.regel).toContain('September afgesloten op 4 oktober');
-  expect(r.regel).toMatch(/open punten bewaard/);
-  expect(r.eigen).toBe(true);                                // doorlopende afspraken nu als eigen kaart
-  expect(r.regel).not.toContain('gewijzigd na afsluiten');
+  // v340: de maand staat in het logboek, met wat er bij het afsluiten werd bewaard
+  const r = await afgesloten(page, '2026-09');
+  expect(r.kol).toContain('afgesloten');
+  expect(r.tekst).toContain('Afgesloten op 4 oktober');
+  expect(r.tekst).toContain('storting in oktober nog niet gezien');
+  expect(r.tekst).not.toContain('gewijzigd na afsluiten');
+  expect(await kaart(page)).toBeNull();
+  // doorlopende afspraken staan onder Deze maand
+  expect(await page.evaluate(() => document.querySelectorAll('#gripDezeMaand [data-afspraak]').length)).toBe(2);
 });
 
 test('e. zonder open punten kan het gewoon, en niets sluit vanzelf', async ({ page }) => {
@@ -155,17 +153,17 @@ test('e. zonder open punten kan het gewoon, en niets sluit vanzelf', async ({ pa
   expect(k.teller).toBe(`${k.punten.length}/${k.punten.length}`);
   await page.evaluate(() => openAfsluiting('2026-09'));
   await page.click('[data-afsluit="klaar"]');
-  const regel = await page.evaluate(() => document.getElementById('afgeslotenRegel').innerText.replace(/\s+/g, ' '));
-  expect(regel).toContain('September afgesloten op 4 oktober');
-  expect(regel).toContain('alles klaar bij afsluiten');
+  const r = await afgesloten(page, '2026-09');
+  expect(r.tekst).toContain('Afgesloten op 4 oktober');
+  expect(await page.evaluate(() => SET.maandAfsluiting['2026-09'].open.length)).toBe(0);
 });
 
 test('f. een late boeking in september zegt "gewijzigd na afsluiten"', async ({ page }) => {
   await stand(page);
   await page.evaluate(() => { maandAfsluiten('2026-09', true); go('maand'); });
-  expect(await page.textContent('#afgeslotenRegel')).not.toContain('gewijzigd na afsluiten');
+  expect((await afgesloten(page, '2026-09')).tekst).not.toContain('veranderd');
   await page.evaluate(() => { TX.push({ id: 'laat', date: '2026-09-30', amount: -12, acc: TX[0].acc, name: 'Bakker', desc: 'BEA, BETAALPAS BAKKER', typ: '', ref: '', src: 'csv', accName: '', refNums: [] }); TX.forEach(categorize); save(); go('maand'); });
-  expect(await page.textContent('#afgeslotenRegel')).toContain('gewijzigd na afsluiten');
+  expect((await afgesloten(page, '2026-09')).tekst).toContain('Na het afsluiten is er iets aan september veranderd');
 });
 
 test('g. herzien telt als afgerond: stoppen vinkt af met "gestopt"', async ({ page }) => {
@@ -281,61 +279,21 @@ test('n. een potje omhoog maakt geen afspraak, omlaag wel', async ({ page }) => 
   expect(r.na1).toBe(0);
   expect(r.na2).toBe(1);
   expect(r.wat[0]).toBe('Potje Boodschappen €400 vanaf november');
-});
-
-for (const [w, vh] of [[360, 640], [390, 844]]) {
-  test(`o. hoogte van Grip voor en na op ${w}px, zonder overloop`, async ({ page }) => {
+});for (const [w, vh] of [[360, 640], [390, 844]]) {
+  /* v340: de afsluiting staat niet meer op Grip; de hoogte van Grip staat in grip-dashboard.spec.js. Wat
+     hier blijft: de pop-up past zonder overloop, met de drie tegels erin. */
+  test(`o. de pop-up past zonder overloop op ${w}px`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: vh });
     await stand(page);
     await maakAfspraken(page);
-    const h = await page.evaluate(() => {
-      const s = document.getElementById('s-maand');
-      const na = s.scrollHeight;
-      const k = document.getElementById('afsluitKaart');
-      const kaartH = k.getBoundingClientRect().height;
-      const over = [...k.querySelectorAll('*')].some((e) => e.getBoundingClientRect().right > k.getBoundingClientRect().right + 1);
-      k.remove();
-      const voor = s.scrollHeight;
-      return { na, voor, kaartH: Math.round(kaartH), over };
-    });
-    console.log(`grip ${w}px: voor ${h.voor} na ${h.na} regel ${h.kaartH}`);
-    expect(h.over).toBe(false);
-    expect(h.kaartH).toBeLessThan(80);                            // een regel met de balk
-    expect(Math.abs(h.na - h.voor - (h.kaartH + 16))).toBeLessThanOrEqual(1);   // de regel plus zijn marge, en verder schuift er niets
-    // de sheet past zonder overloop
     await page.evaluate(() => openAfsluiting('2026-09'));
     const sh = await page.evaluate(() => { const k = document.getElementById('sheet'); const r = k.getBoundingClientRect();
-      return { over: [...k.querySelectorAll('*')].some((e) => e.getBoundingClientRect().right > r.right + 1), h: Math.round(document.getElementById('afsluitSheet').getBoundingClientRect().height) }; });
-    console.log(`afsluitsheet ${w}px: ${sh.h}`);
+      return { over: [...k.querySelectorAll('*')].some((e) => e.getBoundingClientRect().right > r.right + 1), tegels: k.querySelectorAll('[data-afsluittegel]').length }; });
     expect(sh.over).toBe(false);
-    // na afsluiten is het een regel
-    await stand(page); await maakAfspraken(page);
-    await page.evaluate(() => { maandAfsluiten('2026-09', true); go('maand'); });
-    const g = await page.evaluate(() => { const e = document.getElementById('afgeslotenRegel'); const r = e.getBoundingClientRect();
-      return { regel: Math.round(r.height), over: [...e.querySelectorAll('*')].some((x) => x.getBoundingClientRect().right > r.right + 1) }; });
-    console.log(`afgesloten regel ${w}px: ${g.regel}`);
-    expect(g.over).toBe(false);
-    expect(g.regel).toBeLessThan(80);
-  });
-  test(`o2. met een beslissing staat die boven de afsluiting en boven de vouw op ${w}px`, async ({ page }) => {
-    await page.setViewportSize({ width: w, height: vh });
-    // een post in de lopende maand met een gat: dan vraagt de dekking een beslissing (v323)
-    await stand(page, { reserveringen: [{ id: 'p1', naam: 'Boetes cjib', bedrag: 299, vervalmaand: '2026-10', intervalM: 0 }] });
-    const r = await page.evaluate(() => {
-      const nav = document.querySelector('.nav').getBoundingClientRect().height;
-      const K = [...document.querySelectorAll('#s-maand > .card')];
-      const b = K.find((c) => /VRAAGT EEN BESLISSING/i.test((c.querySelector('.hlabel') || {}).textContent || ''));
-      const rij = b && b.querySelector('[data-beslis]');
-      const k = document.getElementById('afsluitKaart');
-      return { vouw: Math.round(innerHeight - nav), rijBodem: rij ? Math.round(rij.getBoundingClientRect().bottom) : null,
-        ib: K.indexOf(b), ik: K.indexOf(k), kTop: Math.round(k.getBoundingClientRect().top) };
-    });
-    console.log(`beslissing ${w}px: eerste rij eindigt op ${r.rijBodem}, vouw ${r.vouw}, afsluiting begint op ${r.kTop}`);
-    expect(r.ib).toBeGreaterThanOrEqual(0);
-    expect(r.ik).toBe(r.ib + 1);                                   // direct onder 'Vraagt een beslissing'
-    expect(r.rijBodem).toBeLessThan(r.vouw);
+    expect(sh.tegels).toBe(3);
   });
 }
+
 
 test('p. een uitgesloten incasso: verlagen meet of de afschrijving wegblijft, en de vlag lekt niet', async ({ page }) => {
   await stand(page);
@@ -381,7 +339,7 @@ test('r. een boeking op Overig zonder eigen keuze is een open punt, met keuze ni
 
 test('s. een punt in de sheet sluit de sheet en opent zijn ingang', async ({ page }) => {
   await stand(page);
-  await page.click('#afsluitKaart');
+  await page.evaluate(() => openAfsluiting('2026-09'));
   await expect(page.locator('#afsluitSheet')).toBeVisible();
   await page.click('#afsluitSheet [data-afpunt="logboek"]');
   expect(await page.evaluate(() => document.getElementById('sheetBg').classList.contains('show'))).toBe(false);

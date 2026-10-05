@@ -384,6 +384,23 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .vat-in{position:relative;display:flex;gap:10px;align-items:flex-start;padding:2px 2px 6px}
 /* v318: GEEN ELLIPSIS, dezelfde regel als in en onder de vaten. Deze rij was de laatste plek waar
    een naam die je zelf invoerde stil werd afgekapt (v281/v284), en dat is nergens anders meer zo. */
+/* v340: de KPI-tegels op Grip en in de afsluit-pop-up, en de tijdlijn van drie maanden. De kleur zit in
+   de linkerrand en is de bestaande status (rood, amber, groen, grijs); het getal houdt de gewone kleur. */
+.kt-raster{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:var(--s2)}
+.kt{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--bar);border-radius:12px;padding:10px 11px;cursor:pointer;min-width:0}
+.kt-lab{font-size:var(--fs-xs);color:var(--lab);overflow-wrap:anywhere}
+.kt-val{font-weight:800;font-size:var(--fs-lg);margin-top:2px;overflow-wrap:anywhere}
+.kt-maat{font-size:var(--fs-xs);color:var(--mut2);line-height:1.35;margin-top:2px;overflow-wrap:anywhere}
+.kt3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:10px}
+.kt-s{padding:8px 8px;border-left-width:1px}
+.kt-s .kt-val{font-size:var(--fs-md)}
+.tl3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;position:relative}
+.tl3::before{content:'';position:absolute;left:0;right:0;top:4px;border-top:1px solid var(--line)}
+.tl3-kol{position:relative;min-width:0}
+.tl3-dot{width:9px;height:9px;border-radius:50%;background:var(--bar);position:relative}
+.tl3-dot.nu{background:var(--teal)}
+.tl3-m{font-weight:700;font-size:var(--fs-sm);margin:6px 0 2px}
+.tl3-e{font-size:var(--fs-xs);color:var(--mut);line-height:1.35;margin-top:3px;cursor:pointer;overflow-wrap:anywhere}
 .vat-naam{font-weight:600;font-size:var(--fs-md);min-width:0;overflow-wrap:anywhere}
 .vat-stand{display:block;margin-top:2px}
 .vat-dat{display:block;margin-top:3px;color:var(--mut2);line-height:1.45}
@@ -2774,6 +2791,15 @@ function render(){
   if(window._setSheet && $('#sheetBg').classList.contains('show')) renderInkomenSheet(); // open instellingen-sheet meeverversen
   if(window._nfSheet && $('#sheetBg').classList.contains('show')) renderNfSheet();
   if(window._budgetSheet && $('#sheetBg').classList.contains('show')) renderBudgetSheet();
+  /* v340: een open sheet van Grip rekent mee na een handeling erin (de pop-up, een Let op-kaart, de
+     vooruitblik, een maand uit het logboek). Alleen als die sheet er nog staat: een handeling die zelf
+     een andere sheet opent, wordt niet overschreven. */
+  if($('#sheetBg').classList.contains('show')){
+    try{ const a=document.getElementById('afsluitSheet'); if(a) renderAfsluitSheet(a.dataset.maand); }catch(_){}
+    try{ if(document.getElementById('gripLetOpSheet')) renderGripLetOp(); }catch(_){}
+    try{ if(document.getElementById('gripVooruit')) renderGripVooruit(); }catch(_){}
+    try{ if(document.getElementById('logMaand')) renderLogMaand(); }catch(_){}
+  }
 }
 
 function onboardManual(){ if(FSA){ connectFolder(); } else { document.getElementById('file').click(); } }
@@ -5260,6 +5286,9 @@ function maandRegels(){
            227px, rij 49px). Alleen een lange postnaam breekt af naar twee regels (64px), en dat is
            wat v281/v284 eisen: een naam die je zelf invoerde wordt niet ingekort. */
         oorzaak: eerstePost?`${eerstePost.naam} van ${euro0(eerstePost.bedrag)} in ${resMaandLabel(eerstePost.maand)}`:'',
+        /* v340: de maatstaf onder het getal op de KPI-tegel. Dezelfde eerstvolgende post als de oorzaak
+           hierboven, in de kortste vorm die op een halve schermbreedte past. */
+        tegelMaat: !D.volledig ? 'niet te beoordelen' : eerstePost ? `${euro0(eerstePost.bedrag)} nodig in ${MFULL[+String(eerstePost.maand).slice(5,7)-1]}` : (komt ? 'er hoeft nu niets opzij' : 'niets aankomend dit jaar'),
         benodigdeStand: D.volledig?D.benodigdeStand:null,
         maand: (st==='tekort'&&D.gedektTot)?D.gedektTot:null,
         // de zin komt uit dekkingTekst(): die kent alle takken al, inclusief een pot die de
@@ -5540,69 +5569,7 @@ function beleggenKlaar(R){
 function beleggenZichtbaar(){
   try{ return ((SET.goals||[]).length>0) || ((SET.assets||[]).length>0); }catch(_){ return false; }
 }
-/* De regel op het maandscherm. Stelt vast, raadt niets aan: geen bedrag, geen product, geen
-   percentage, geen aanmoediging bij groen. Bij niet-klaar alleen de EERSTE blokkade, want een ding
-   tegelijk. De cijfers van de drie regels worden hier niet herhaald - die staan er al los boven;
-   in de sheet mag de opbouw wel volledig staan. */
-function maandBeleggenRegel(R){
-  if(!beleggenZichtbaar()) return '';
-  let B=null; try{ B=beleggenKlaar(R); }catch(_){ return ''; }
-  if(!B) return '';
-  const kop=`<div class="hlabel" style="margin:0 0 2px">Voorwaarden voor beleggen</div>`;
-  if(!B.volledig){
-    const mist=B.voorwaarden.filter(v=>v.ontbreekt).map(v=>v.naam).filter(Boolean);
-    if(!mist.length) return '';
-    // v193: join(' en ') gaf bij drie bronnen 'a en b en c', en 'ontbreekt' bleef enkelvoud bij een
-    // opsomming. opsomming() bestaat sinds v189 en werd hier nog niet gelezen.
-    return `<div class="card">${kop}
-      <div class="row" style="gap:9px;align-items:flex-start;padding:7px 0">
-        ${maandDot('onbekend')}
-        <div class="small muted" style="flex:1;min-width:0;line-height:1.45">Niet te beoordelen zolang ${esc(opsomming(mist))} ${mist.length===1?'ontbreekt':'ontbreken'}.</div>
-      </div></div>`;
-  }
-  /* v187: op een scherm waar buffer en dekking al als eigen regel staan, herhaalde deze
-     samenstelling ze. Hij toont zich daarom alleen nog wanneer hij iets zegt wat die regels niet
-     zeggen: bij groen (de conclusie volgt uit geen van de drie afzonderlijk), en bij een blokkade
-     die je niet uit een zichtbare rij kunt aflezen. Zegt de rij van de blokkade zelf al 'tekort',
-     dan zwijgt hij.
-     De buffer is de uitzondering: die haalt de voorwaarde ook bij status 'let op' (v154, boven de
-     zijn eigen drempel maar onder je eigen richtbedrag). 'Let op' en 'haalt de voorwaarde' zijn dan twee
-     verschillende oordelen, dus daar herhaalt hij niets. */
-  if(!B.klaar && B.blokkade && B.blokkade.key!=='buffer'){
-    const rij=(Array.isArray(R)?R:[]).find(x=>x.key===B.blokkade.key);
-    if(rij && rij.status==='tekort') return '';
-  }
-  /* v226: staat de buffer op 'let op' omdat hij op tempo ligt, dan zegt de rij hierboven in amber
-     dat hij groeit en deze kaart in rood dat de voorwaarde niet gehaald is - over hetzelfde cijfer,
-     direct onder elkaar. Dat verschil is verdedigbaar (de rij vraagt of je moet bijsturen, deze
-     kaart of de voorwaarde gehaald is) maar het viel alleen uit twee kleuren af te leiden. De zin
-     zegt het nu zelf.
-     GEEN LOGICAWIJZIGING en geen tweede bron: de vlag is r.opTempo, hetzelfde veld dat de rij en de
-     suggestie lezen, en de dot blijft de status van de blokkade volgen. Alleen de FORMULERING is van
-     hier (v222): die uit de gevolgzin van de bufferregel overnemen zou een zin over de gemeten norm
-     meting in een kaart over een drempel zetten. */
-  const groeit = !B.klaar && B.blokkade && B.blokkade.key==='buffer'
-    && !!((Array.isArray(R)?R:[]).find(x=>x.key==='buffer')||{}).opTempo;
-  /* v314: 'JE DREMPEL' STAAT ALLEEN BIJ DE BUFFER, want dat is de enige van de drie die je zelf
-     kiest (SET.beleggenDrempel, besluit 4 van v305). De 100% van de dekking en de €0 van het doel
-     komen uit MAAND_DREMPEL en zijn geen keuze van jou; 'je drempel' erbij zetten zou beweren dat
-     je ze hebt gekozen. */
-  const eigenDrempel = !B.klaar && B.blokkade && B.blokkade.key==='buffer';
-  const zin = B.klaar
-    ? 'Je drie voorwaarden voor beleggen zijn alle drie gehaald.'
-    : `Nog niet aan je voorwaarden voor beleggen: ${B.blokkade.naam} ${B.blokkade.waarde} tegen ${eigenDrempel?'je drempel van ':''}${B.blokkade.drempel}.${groeit?' Hij groeit, maar de drempel is nog niet gehaald.':''}`;
-  /* v314: NIET GEHAALD IS GEEN FOUT, dus de dot is hier neutraal en niet rood of amber (v78/v93).
-     Hij volgde de status van de blokkerende regel, en die regel staat met zijn eigen kleur al los
-     boven deze kaart; de kleur hier zei dus twee keer hetzelfde en claimde aandacht voor een
-     drempel die je zelf hebt gezet en nog niet hebt gehaald. Bij groen blijft de dot groen: dat is
-     een uitkomst die uit geen van de drie regels afzonderlijk volgt. */
-  return `<div class="card" style="cursor:pointer" onclick="openBeleggenVoorwaarden()">${kop}
-    <div class="row" style="gap:9px;align-items:flex-start;padding:7px 0">
-      ${maandDot(B.klaar?'ok':'neutraal')}
-      <div style="flex:1;min-width:0;line-height:1.45">${esc(zin)}</div>
-      <span style="color:var(--teal);font-weight:700">›</span>
-    </div></div>`;
-}
+/* v340: maandBeleggenRegel() is vervallen; Grip is een dashboard (zie renderMaand). */
 function openBeleggenVoorwaarden(){
   let B=null; try{ B=beleggenKlaar(maandRegels()); }catch(_){}
   if(!B) return;
@@ -5811,57 +5778,7 @@ function opsomming(lijst){
   if(a.length<=1) return a[0]||'';
   return a.slice(0,-1).join(', ')+' en '+a[a.length-1];
 }
-/* v314: DE POTJES TELLEN MEE IN DE SAMENVATTING, en het aantal komt van de AANROEPER. Deze functie
-   roept valtOpSignals() niet zelf aan: renderMaand() haalt die lijst één keer op voor de kaarten, en
-   een tweede aanroep hier zou een tweede waarheid zijn over hetzelfde aantal (v104) en een tweede
-   save() doen.
-   EEN POTJE IS GEEN REGEL, en daarom staat het in een EIGEN zin vóór de bestaande en telt het niet
-   mee in `R.length`, `ok.length` of de tekort-telling. Die telzinnen gaan over de regels die
-   maandRegels() en maandStructureel() opleveren; een potje-overschrijding is een signaal uit
-   valtOpSignals() en heeft zijn eigen kaart met zijn eigen handelingen (v235). Zou hij in dezelfde
-   telling landen, dan zegt 'Alle 3 regels staan goed' iets anders dan het meet.
-   DE OK-ZIN WORDT 'DE REST STAAT GOED' ZODRA ER EEN POTJE IS, want 'Alle 3 regels staan goed'
-   naast 'Eén potje vraagt aandacht' leest als een tegenspraak terwijl beide waar zijn. De sub
-   noemt onveranderd WELKE regels dat zijn, dus er gaat geen informatie weg. */
-function maandOordeel(R, nPot){
-  const nP=Math.max(0, Math.round(+nPot||0));
-  const potZin = nP===1 ? 'Eén potje vraagt aandacht.' : `${nP} potjes vragen aandacht.`;
-  const met = z => nP ? `${potZin} ${z}` : z;
-  if(!R.length) return {zin: nP?potZin:'Er is nog niets te beoordelen.', sub:''};
-  const tekort=R.filter(r=>r.status==='tekort');
-  const letop=R.filter(r=>r.status==='let op');
-  const ok=R.filter(r=>r.status==='ok');
-  const onb=R.filter(r=>r.status==='onbekend');
-  /* v202: deze twee opsommingen plakten met join(', '), dus bij twee onbekende regels stond er
-     'Onbekend: buffer, doel.' waar de rest van de app 'buffer en doel' zegt. opsomming() (v189) is
-     de enige plek waar een reeks tot een zin wordt gemaakt; hij werd hier nog niet gelezen. */
-  if(R.length>=MAAND_DREMPEL.onbekendMin && onb.length/R.length>MAAND_DREMPEL.onbekendDeel)
-    return {zin:met('Er ontbreekt te veel om een oordeel te geven.'), sub:`Onbekend: ${opsomming(onb.map(r=>r.naam.toLowerCase()))}.`};
-  /* v173: onder de drempel viel een lijst met alleen onbekende regels door naar de telzin, en die
-     telde er dan nul. Geen nieuwe formulering: dezelfde zin als bij een lege lijst (v167), met de
-     bestaande opsomming van wat onbekend is. */
-  if(!ok.length && !tekort.length && !letop.length)
-    return {zin:met('Er is nog niets te beoordelen.'),
-      sub: onb.length?`Onbekend: ${opsomming(onb.map(r=>r.naam.toLowerCase()))}.`:''};
-  const metMaand=tekort.find(r=>r.maand);
-  let zin;
-  if(metMaand) zin=`Je systeem houdt stand tot ${resMaandLabel(metMaand.maand)}. Daarna loopt het vast op je ${metMaand.naam.toLowerCase()}.`;
-  else if(tekort.length===1) zin=`Er is deze maand één ding dat een beslissing vraagt: ${tekort[0].naam.toLowerCase()}.`;
-  else if(tekort.length>1) zin=`Er zijn deze maand ${tekort.length} dingen die een beslissing vragen.`;
-  else if(letop.length) zin=`Er is niets dat vastloopt. ${letop.length} ${letop.length===1?'regel vraagt':'regels vragen'} aandacht.`;
-  /* Het werkelijke aantal, niet vijf: welke regels er staan hangt af van wat je hebt ingesteld.
-     'Alle' mag alleen als er ook niets onbekend is, anders leest de zin als een volledig oordeel
-     over een onvolledige lijst. */
-  else if(nP) zin='De rest staat goed.';
-  else if(ok.length===1) zin='De enige regel die te toetsen is staat goed.';
-  else zin = (ok.length===R.length) ? `Alle ${ok.length} regels staan goed.`
-                                    : `De ${ok.length} regels die te toetsen zijn staan goed.`;
-  zin=met(zin);
-  const sub = ok.length
-    ? `${opsomming(ok.map(r=>r.naam.toLowerCase()))} ${ok.length===1?'is':'zijn'} in orde.`
-    : '';
-  return {zin, sub:sub.charAt(0).toUpperCase()+sub.slice(1)};
-}
+/* v340: maandOordeel() is vervallen; Grip is een dashboard (zie renderMaand). */
 /* Precies twee vaste verbandregels. Niets afgeleid met een model of heuristiek. */
 function maandVerband(R){
   /* v186: het patroon is geen eigen regel meer (die dubbelde met de meldingenlijst), maar dit
@@ -6125,16 +6042,7 @@ function maandBeslisDeel(r){
   if(!T) return {oorzaak:o, waarde:'', eenheid:''};
   return {oorzaak:o, waarde:euro0(T.bedrag), eenheid:BESLIS_EENHEID[T.soort]||''};
 }
-function maandBeslisRij(r){
-  const B=maandBeslisDeel(r);
-  const rechts=(B.waarde||B.eenheid)?`<div data-beslisbedrag="${esc(r.key)}" style="text-align:right;flex:0 1 auto;min-width:0;max-width:52%">
-      ${B.waarde?`<div class="small" style="font-weight:700;white-space:nowrap">${esc(B.waarde)}</div>`:''}
-      ${B.eenheid?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35">${esc(B.eenheid)}</div>`:''}</div>`:'';
-  return `<div class="row" data-beslis="${esc(r.key)}" style="gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openMaandBeslis('${esc(r.key)}')">
-    ${maandDot(r.status)}<div style="flex:1;min-width:0"><div class="small">${esc(r.naam)}</div>
-      ${B.oorzaak?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(B.oorzaak)}</div>`:''}</div>
-    ${rechts}<span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span></div>`;
-}
+/* v340: maandBeslisRij() is vervallen; Grip is een dashboard (zie renderMaand). */
 /* ===== BELEGGEN TERWIJL DE VOORWAARDEN NIET GEHAALD ZIJN (v332) =====
    Per bezitting die groeit kies je of de voorwaarden voor beleggen ervoor gelden (a.voorwaarden,
    true of false; leeg is een open vraag). Ging er deze maand gemeten inleg heen (bezitInleg(), dus
@@ -6169,14 +6077,7 @@ function belegVragen(ym){
   }
   return uit;
 }
-function belegVraagRij(v){
-  const naam=`Je belegde ${euro0(v.inleg)} in ${v.asset.naam||'Bezitting'}`;
-  const oorzaak=v.open?'voorwaarden nog niet gehaald · nog niet gekozen of ze hiervoor gelden':'voorwaarden nog niet gehaald';
-  return `<div class="row" data-beleg="${esc(v.asset.id)}" style="gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openBelegVraag('${esc(v.asset.id)}')">
-    ${maandDot('let op')}<div style="flex:1;min-width:0"><div class="small">${esc(naam)}</div>
-      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(oorzaak)}</div></div>
-    <span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span></div>`;
-}
+/* v340: belegVraagRij() is vervallen; Grip is een dashboard (zie renderMaand). */
 function openBelegVraag(id){ renderBelegVraag(id); showSheetBg(); }
 /* De sheet zoekt de vraag opnieuw op, om de reden van v319/v320: tussen tekenen en tikken kan er een
    import of een saldo binnenkomen, en dan toont hij geen vraag die het scherm niet meer stelt. */
@@ -6256,6 +6157,13 @@ function renderMaandBeslisSheet(key){
     ${/* v324: een regel die je bewust accepteerde staat onder 'Vraagt aandacht', en de uitgeklapte
           rij daar zei dat erbij. Die rij is nu een lijstregel, dus de zin verhuist mee naar hier. */
       r.geaccepteerd?`<div class="small" style="color:var(--mut2);line-height:1.45;margin-top:8px">Je hebt dit bewust geaccepteerd${r.geaccepteerd.tot?`, tot ${esc(resMaandLabel(r.geaccepteerd.tot))}`:''}.</div>`:''}
+    ${/* v340: het verband tussen een gat en een uitgave (maandVerband) stond onder de kaart 'Vraagt een
+          beslissing'. Die kaart is weg, dus hij staat hier, bij de regel waar hij over gaat. */(function(){ try{
+        if(r.status!=='tekort' || !['dekking','doel'].includes(r.key)) return '';
+        const v=maandVerband([r]); return v?`<div class="small" data-verband style="color:var(--mut2);line-height:1.5;margin-top:8px">${v}</div>`:''; }catch(_){ return ''; } })()}
+    ${/* v340: de samenhang met beleggen, die tot v339 een eigen kaart was ('Voorwaarden voor beleggen'). */(function(){ try{
+        if(!beleggenZichtbaar()) return ''; const B=beleggenKlaar(maandRegels()); if(!B || B.klaar || !B.blokkade || B.blokkade.key!==r.key) return '';
+        return `<div class="small" data-beleggenlink style="margin-top:8px;line-height:1.45">Is dit gehaald, dan ben je een stap dichter bij je <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openBeleggenVoorwaarden()">voorwaarden voor beleggen ›</span></div>`; }catch(_){ return ''; } })()}
     ${maandIngangKnop(r, m)}
     ${afspraakDekkingKnop(r)}
     ${/* De editor van de regel was vóór v320 de tik OP de rij. Die tik opent nu deze sheet, dus de
@@ -6299,60 +6207,42 @@ function renderMaandBeslisSheet(key){
    een eigen drempel, dan geeft `beleggenDrempelNext()` per constructie hetzelfde en blijft de rij
    weg. De rij zegt die herkomst er ook bij, want een drempel die meebeweegt zonder dat je hem hebt
    aangeraakt is anders niet te plaatsen. */
-function maandVanafRegels(){
-  const rijen=[];
-  const rij=(lab, sub, waarde, act)=>`<div class="row" style="justify-content:space-between;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${act}">
-    <span style="flex:1;min-width:0"><span class="small">${esc(lab)}</span>${sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(sub)}</div>`:''}</span>
-    <span class="small" style="font-weight:700;color:var(--teal);white-space:nowrap">${esc(waarde)} ›</span></div>`;
-  /* v314: DE RIJ NOEMT HET POTJE DAT VERANDERT. Hij zei alleen 'Je potjes vanaf volgende maand ·
-     €3.375', dus je zag dat er iets klaarstond en niet wat. Bij ÉÉN wijziging staan beide bedragen
-     erbij, met 'de rest ongewijzigd' als er meer potjes zijn; bij meer wijzigingen het aantal, want
-     drie namen in een subregel breken af en de sheet erachter noemt ze alle drie met hun bedrag.
-     DE BRON IS DEZELFDE ALS DIE VAN HET BEDRAG (SET.budgets tegen plannedBudgets(), v112), en de
-     drie soorten wijziging zijn dezelfde als in openPotjesVerdeling(): nieuw (nu nul), gestopt (dan
-     nul) en een ander bedrag. Een tweede vergelijking ernaast zou bij de eerste wijziging uiteen
-     gaan lopen (v104). */
+/* v340: wat er vanaf volgende maand verandert. De kaart "Vanaf <maand>" is opgegaan in de tijdlijn op Grip
+   (gripTijdlijnData), en `kort` is de vorm daarvoor. */
+function maandVanafData(){
+  const uit=[];
   try{
     const tb=totalBudget(), pb=plannedTotalBudget();
     if(tb>0 && pb!==tb){
       const B=SET.budgets||{}, P=plannedBudgets();
       const keys={}; for(const k in B) if(+B[k]>0&&CATS[k]) keys[k]=1; for(const k in P) if(+P[k]>0&&CATS[k]) keys[k]=1;
       const an=Object.keys(keys).filter(k=>(+P[k]||0)!==(+B[k]||0));
-      let sub='';
+      let sub='', kort=`potjes ${euro0(pb)}`;
       if(an.length===1){ const k=an[0], nu=+B[k]||0, pl=+P[k]||0; const naam=CATS[k].name;
         sub = !nu ? `${naam} erbij voor ${euro0(pl)}`
             : !pl ? `${naam} stopt, nu ${euro0(nu)}`
             : `${naam} ${pl>nu?'omhoog':'terug'} van ${euro0(nu)} naar ${euro0(pl)}`;
+        kort = !nu ? `${naam} erbij` : !pl ? `${naam} stopt` : `${naam} naar ${euro0(pl)}`;
         if(Object.keys(keys).length>1) sub+=', de rest ongewijzigd';
-      } else if(an.length>1) sub=`${an.length} potjes veranderen`;
-      rijen.push(rij('Je potjes', sub, euro0(pb), `openPotjesVerdeling('${esc(thisYM())}','next')`));
+      } else if(an.length>1){ sub=`${an.length} potjes veranderen`; kort=sub; }
+      uit.push({lab:'Je potjes', sub, waarde:euro0(pb), act:`openPotjesVerdeling('${esc(thisYM())}','next')`, kort});
     }
   }catch(_){}
   try{
     const nu=bufferNorm(), vlg=bufferNormNext();
     if(nu!=null && vlg!=null && vlg!==nu)
-      rijen.push(rij('Ondergrens voor je buffer', `nu ${nu} ${nu===1?'maand':'maanden'}, daarna ${vlg}`,
-        `${vlg} mnd`, 'openNoodfondsPanel()'));
+      uit.push({lab:'Ondergrens voor je buffer', sub:`nu ${nu} ${nu===1?'maand':'maanden'}, daarna ${vlg}`, waarde:`${vlg} mnd`, act:'openNoodfondsPanel()', kort:`ondergrens buffer ${vlg} mnd`});
   }catch(_){}
   try{
     const nu=beleggenDrempel(), vlg=beleggenDrempelNext();
     if(nu!=null && vlg!=null && vlg!==nu)
-      rijen.push(rij('Buffer die je wilt voor beleggen', `volgt je ondergrens, dus nu ${nu} ${nu===1?'maand':'maanden'} en daarna ${vlg}`,
-        `${vlg} mnd`, 'openBeleggenVoorwaarden()'));
+      uit.push({lab:'Buffer die je wilt voor beleggen', sub:`volgt je ondergrens, dus nu ${nu} ${nu===1?'maand':'maanden'} en daarna ${vlg}`, waarde:`${vlg} mnd`, act:'openBeleggenVoorwaarden()', kort:`buffer voor beleggen ${vlg} mnd`});
   }catch(_){}
-  return rijen;
+  return uit;
 }
-function maandVanafKaart(){
-  let R=[]; try{ R=maandVanafRegels(); }catch(_){ return ''; }
-  if(!R.length) return '';
-  const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
-  return `<div class="card"><div class="hlabel" style="margin:0 0 2px">Vanaf ${esc(vanaf)}</div>${R.join('')}</div>`;
-}
-function maandGelezen(){
-  const d=SET.maandGelezen; if(!d) return '';
-  const dt=new Date(d); if(isNaN(dt)) return '';
-  return `<div class="small" style="color:var(--mut2);text-align:center;margin-top:14px">Gelezen op ${dt.getDate()} ${MFULL[dt.getMonth()]} ${dt.getFullYear()}.</div>`;
-}
+/* v340: maandVanafRegels() is vervallen; Grip is een dashboard (zie renderMaand). */
+/* v340: maandVanafKaart() is vervallen; Grip is een dashboard (zie renderMaand). */
+/* v340: maandGelezen() is vervallen; Grip is een dashboard (zie renderMaand). */
 /* ===== VALT OP OP GRIP (v235) =====
  * Dezelfde lijst als op Inzichten, in dezelfde volgorde, uit dezelfde valtOpSignals(). Geen eigen
  * detectie en geen eigen drempel: Grip leest wat Inzichten bepaalt en rendert alleen anders.
@@ -6361,7 +6251,7 @@ function maandGelezen(){
  * hoe deze maand loopt, niet bij de vraag of je systeem standhoudt.
  * Valt de lijst leeg, dan rendert dit niets en toont Grip alleen zijn bestaande onderdelen. */
 function valtOpDagenRest(){ const d=daysElapsed(thisYM()); return Math.max(d.dim-d.elapsed,0); }
-function valtOpToon(id){ window._valtOpOpen=id; renderMaand(); }
+/* v340: valtOpToon() is vervallen; Grip is een dashboard (zie renderMaand). */
 /* DE KAART OP GRIP. Grip vraagt of mijn systeem standhoudt, en een contante stand die je nooit
    telt is precies zo'n systeem dat stilletjes uit de pas loopt. Drie aanleidingen, alle drie uit
    contantVraagt() en geen enkele uit een eigen meting hier (v235: één detectie, twee weergaven).
@@ -6531,24 +6421,8 @@ function contantKaart(){
     <div class="small" style="margin-top:10px;color:var(--teal);cursor:pointer;font-weight:600" onclick="contantTellen()">Tel wat je in je zak hebt ›</div>
   </div>`;
 }
-/* v314: de lijst mag worden MEEGEGEVEN, zodat renderMaand() hem één keer ophaalt en zowel deze
-   kaarten als maandOordeel() eruit leest. Zonder argument haalt hij hem zelf op, want dat is het
-   contract van vóór v314 en de specs die deze functie los aanroepen hangen eraan. */
-function gripSignalCards(lijst){
-  let L=[]; try{ L=Array.isArray(lijst)?lijst:(valtOpSignals(thisYM())||[]); }catch(_){ return ''; }
-  if(!L.length) return '';
-  // eerste kaart open, tenzij je vanaf Inzichten op de tweede regel tikte
-  const open = L.some(s=>s.id===window._valtOpOpen) ? window._valtOpOpen : L[0].id;
-  return L.map(s=>s.id===open?valtOpKaartOpen(s):valtOpKaartDicht(s)).join('');
-}
-function valtOpKaartDicht(s){
-  return `<div class="card valtop-kaart" data-sig="${esc(s.id)}" style="cursor:pointer;padding:13px 15px;margin:0 0 9px" onclick="valtOpToon('${esc(s.id)}')">
-    <div class="row" style="gap:8px">
-      <span style="flex:1;min-width:0;font-weight:600;font-size:var(--fs-md)">${esc(s.naam)}</span>
-      <span class="small muted" style="white-space:nowrap">${euro0(s.over)} boven je potje</span>
-      <span style="color:var(--mut2);font-size:16px">▼</span>
-    </div></div>`;
-}
+/* v340: gripSignalCards() en valtOpKaartDicht() zijn vervallen: elk signaal staat als regel onder
+   'Let op' op Grip en opent valtOpKaartOpen() in een sheet (renderGripLetOp). */
 function valtOpKaartOpen(s){
   const dagen=valtOpDagenRest();
   const rest=dagen===1?'nog 1 dag':(dagen>0?`nog ${dagen} dagen`:'de laatste dag');
@@ -7063,32 +6937,16 @@ function valtOpVraagKaart(r){
     </div>`;
 }
 const valtOpHoofd=m=>{ const t=ymFull(m); return t.charAt(0).toUpperCase()+t.slice(1); };
-/* GRIP: een regel, of de vraag met "Logboek" eronder. */
-function valtOpGripBlok(){
-  const T=valtOpTelling(); if(!T.totaal) return '';
-  const vraag=valtOpOpenVraag();
-  const chev=`<span class="muted" style="font-size:18px">›</span>`;
-  let inhoud;
-  if(vraag){
-    inhoud = valtOpVraagKaart(vraag) + `<div class="row vl-naarlog" style="cursor:pointer;padding:10px 0 0;margin-top:10px;border-top:1px solid var(--line)" onclick="go('logboek')"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Logboek</span>${chev}</div>`;
-  } else {
-    const LM=valtOpLogMaanden(); const m=LM.maanden[LM.maanden.length-1];
-    if(m){
-      const S=valtOpMaandStand(m);
-      inhoud = `<div class="row vl-naarlog" data-gripmaand="${esc(m)}" style="cursor:pointer;gap:10px" onclick="go('logboek')"><span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:var(--fs-md)">${esc(valtOpHoofd(m))} · ${euro0(S.boven)} boven je potjes</span><span class="small muted vl-feit" style="display:block;margin-top:2px">${esc(valtOpMaandFeit(S))}</span></span>${chev}</div>`;
-    } else {
-      let dim=0; try{ dim=daysElapsed(thisYM()).dim; }catch(_){}
-      inhoud = `<div class="row vl-naarlog" style="cursor:pointer;gap:10px" onclick="go('logboek')"><span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:var(--fs-md)">Logboek</span><span class="small muted" style="display:block;margin-top:2px">${dim?`uitkomst na ${dim} ${esc(ymFull(thisYM()))}`:''}</span></span>${chev}</div>`;
-    }
-  }
-  return `<div class="card" id="valtOpGrip"><div class="hlabel" style="margin:0 0 8px">Wat je met overschrijdingen deed</div>${inhoud}</div>`;
-}
+/* v340: valtOpGripBlok() is vervallen; Grip is een dashboard (zie renderMaand). */
 function renderLogboek(){
   const el=document.getElementById('s-logboek'); if(!el) return;
   const ib='background:none;border:none;color:var(--teal);font-size:24px;cursor:pointer;padding:0 8px 0 0;line-height:1';
   const head=`<div class="row" style="align-items:center;margin:2px 2px 14px;gap:6px"><button onclick="terug()" title="Terug" style="${ib}">‹</button><b style="font-size:var(--fs-lg);flex:1">Logboek</b></div>`;
   const blok=valtOpLogBlok();
-  el.innerHTML = head + valtOpUitzKaart() + (blok || '<div class="card"><div class="small muted">Er staat nog niets in je logboek. Gaat een potje deze maand over zijn grens, dan staat hier wat je ermee deed.</div></div>');
+  /* v340: de open vraag staat bovenaan het logboek. Grip draagt geen logboekkaart meer; zolang de maand
+     open is staat de vraag ook in de pop-up van de afsluiting, en daarna alleen hier. */
+  let vraag=''; try{ const v=valtOpOpenVraag(); if(v) vraag=`<div class="card" id="logVraag">${valtOpVraagKaart(v)}</div>`; }catch(_){}
+  el.innerHTML = head + vraag + logTijdlijn() + valtOpUitzKaart() + (blok || '<div class="card"><div class="small muted">Er staat nog niets in je logboek. Gaat een potje deze maand over zijn grens, dan staat hier wat je ermee deed.</div></div>');
 }
 function valtOpLogBlok(){
   const T=valtOpTelling(); if(!T.totaal) return '';
@@ -7133,7 +6991,7 @@ function valtOpLogBlok(){
     : `<span class="vl-woord">${u.soort==='binnen'?'binnen':u.soort==='vervallen'?'vervallen':'niet gemeten'}</span>`;
   /* v331: een beantwoorde rij draagt zijn antwoord in de regel, met "wijzigen" ernaast (v325: in een
      tik terug). De vraag zelf staat op Grip; hier staat dat record als gewone rij. */
-  const antw=r=>{ if(!r.antwoord) return r===vraag?' · vraag staat op Grip':'';
+  const antw=r=>{ if(!r.antwoord) return r===vraag?' · vraag staat bovenaan':'';
     const id=esc(r.id||valtOpId(r.maand,r.potjeId));
     return ` · ${esc(valtOpAntwoordWoord(r.antwoord))} <span class="vl-wis" style="margin-left:4px" onclick="valtOpAntwoordWis('${id}')">wijzigen</span>`; };
   const kort=x=>{ const id=esc(x.r.id||valtOpId(x.r.maand,x.r.potjeId));
@@ -7320,11 +7178,7 @@ function afspraakRij(a, S){
       <span class="small" data-affeit style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(S.feit||'')}</span></span>
     <span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`;
 }
-/* Buiten de afsluiting een eigen kaart, met alleen wat nog loopt (rule 8 van de opdracht). */
-function afsprakenKaart(){
-  const L=afsprakenLopend(); if(!L.length) return '';
-  return `<div class="card" id="afsprakenKaart"><div class="hlabel" style="margin:0 0 2px">Wat je afsprak</div>${L.map(a=>afspraakRij(a)).join('')}</div>`;
-}
+/* v340: afsprakenKaart() is vervallen; Grip is een dashboard (zie renderMaand). */
 function openAfspraak(id){ renderAfspraakSheet(id); showSheetBg(); }
 function renderAfspraakSheet(id){
   const a=afsprakenLijst().find(x=>x.id===id); if(!a){ closeSheet(); return; }
@@ -7432,19 +7286,7 @@ function afsluitPuntRij(p){
   const inh=`${afspraakBox(p.af?'gezien':'nietgezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(p.naam)}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(p.feit)}</span></span>${p.act?`<span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span>`:''}`;
   return `<div class="row" data-afpunt="${p.punt}" data-af="${p.af?1:0}" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line)${p.act?';cursor:pointer':''}"${p.act?` onclick="closeSheet();${p.act}"`:''}>${inh}</div>`;
 }
-/* v337: OP GRIP EEN REGEL MET DE BALK, de volle lijst een tik dieper (keuze van de gebruiker). De regel
-   staat onder "Vraagt een beslissing": een beslissing over nu gaat voor een terugblik op vorige maand. */
-function afsluitKaart(R){
-  const M=afsluitMaand();
-  const rec=(SET.maandAfsluiting||{})[M];
-  if(rec) return afgeslotenRegel(M, rec);
-  if(!afsluitNodig(M)) return '';
-  const S=afsluitStand(M, R), Mn=valtOpHoofd(M);
-  const pct=S.tot?Math.round(S.af/S.tot*100):0;
-  return `<div class="card" id="afsluitKaart" data-maand="${M}" style="cursor:pointer;padding:13px 15px" onclick="openAfsluiting('${M}')">
-    <div class="row" style="gap:10px;align-items:baseline"><span style="flex:1;min-width:0;font-weight:700;font-size:var(--fs-md)">${esc(Mn)} afsluiten</span><span class="small muted" data-afteller="${S.af}/${S.tot}" style="white-space:nowrap">${S.af} van ${S.tot}</span><span class="muted" style="font-size:18px;line-height:1">\u203a</span></div>
-    <div style="height:6px;border-radius:3px;background:var(--card2);margin:8px 0 0;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div></div>`;
-}
+/* v340: afsluitKaart() is vervallen; Grip is een dashboard (zie renderMaand). */
 /* v338: DE WERKLIJST ACHTER "BOEKINGEN ZONDER CATEGORIE". Tot v337 opende die punt openCategory('overig'),
    en daar kun je niet hercategoriseren. afsluitOverigTx() is de ENE lijst: de punt telt hem en de werklijst
    toont precies hem, dus de teller en de rijen kunnen niet uiteenlopen (v104). Een eigen keuze is een
@@ -7496,12 +7338,20 @@ function renderAfsluitSheet(M){
   const knop = S.klaar
     ? `<button class="btn" data-afsluit="klaar" style="margin-top:12px;width:100%" onclick="maandAfsluiten('${M}',false)">${esc(Mn)} afsluiten</button>`
     : `<button class="btn sec" data-afsluit="open" style="margin-top:12px;width:100%" onclick="openAfsluitOpen('${M}')">Afsluiten met open punten</button>`;
+  /* v340: de pop-up draagt vorige maand in drie tegels, de punten, de open logboekvraag en de
+     afspraken. De vraag staat hier en niet een tik dieper (v331: een open vraag staat nooit een tik
+     dieper); na het afsluiten staat hij in het logboek. */
+  let tegels=''; try{ tegels=`<div class="kt3">${afsluitTegels(M).map(t=>`<div class="kt kt-s" data-afsluittegel="${t.key}" onclick="${t.act}"><div class="kt-lab">${esc(t.label)}</div><div class="kt-val">${esc(t.waarde)}</div><div class="kt-maat">${esc(t.maat)}</div></div>`).join('')}</div>`; }catch(_){}
+  let vraag=''; try{ const v=valtOpOpenVraag(); if(v) vraag=`<div class="hlabel" style="margin:12px 0 4px">Logboekvraag</div>${valtOpVraagKaart(v)}`; }catch(_){}
   $('#sheet').innerHTML=`<div class="grab"></div><div id="afsluitSheet" data-maand="${M}">
     <div class="row" style="gap:10px;align-items:baseline"><span style="flex:1;font-weight:800;font-size:var(--fs-lg)">${esc(Mn)} afsluiten</span><span class="small muted" data-afteller="${S.af}/${S.tot}" style="white-space:nowrap">${S.af} van ${S.tot} klaar</span></div>
-    <div style="height:6px;border-radius:3px;background:var(--card2);margin:8px 0 2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
+    ${tegels}
+    <div style="height:6px;border-radius:3px;background:var(--card2);margin:10px 0 2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
     ${S.P.map(afsluitPuntRij).join('')}
+    ${vraag}
     ${S.A.length?`<div class="hlabel" style="margin:12px 0 0">Wat je afsprak</div>${S.A.map(x=>afspraakRij(x.a, x.S)).join('')}`:''}
-    ${knop}</div>`;
+    ${knop}
+    <div class="small" data-afsluitlater style="text-align:center;margin-top:10px;color:var(--mut2);cursor:pointer" onclick="afsluitLater()">Later</div></div>`;
 }
 /* Wat er bij het afsluiten bewaard wordt: de stand van elk punt en elke afspraak op dat moment. */
 function maandAfsluiten(M, metOpen){
@@ -7526,173 +7376,372 @@ function openAfsluitOpen(M){
   showSheetBg();
 }
 function afgeslotenGewijzigd(M, rec){ return !!(rec && rec.vinger && rec.vinger!==afsluitVinger(M)); }
-function afgeslotenRegel(M, rec){
-  const gew=afgeslotenGewijzigd(M, rec);
-  const nOpen=(rec.open||[]).length;
-  const sub = nOpen ? `${nOpen} open ${nOpen===1?'punt':'punten'} bewaard` : ((rec.afspraken||[]).length?'alle afspraken nagekomen of herzien':'alles klaar bij afsluiten');
-  return `<div class="card" id="afgeslotenRegel" data-maand="${M}" style="cursor:pointer;padding:13px 15px" onclick="openAfgesloten('${M}')">
-    <div class="row" style="gap:10px"><span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:var(--fs-md)">${esc(valtOpHoofd(M))} afgesloten op ${esc(afDag(rec.op))}</span>
-      <span class="small muted" style="display:block;margin-top:2px">${esc(sub)}${gew?` · <span data-afgewijzigd>gewijzigd na afsluiten</span>`:''}</span></span>
-    <span class="muted" style="font-size:18px">›</span></div></div>`;
-}
-function openAfgesloten(M){
-  const rec=(SET.maandAfsluiting||{})[M]; if(!rec) return;
+/* v340: afgeslotenRegel() is vervallen; Grip is een dashboard (zie renderMaand). */
+/* v340: de inhoud staat los, want twee lezers: de sheet hieronder en de maand in het logboek. */
+function afgeslotenInhoud(M, rec){
   const ids=afsprakenLijst();
   const afs=(rec.afspraken||[]).map(x=>{ const a=ids.find(y=>y.id===x.id); const nu=a?afspraakStand(a):null;
     const verder=nu && nu.feit!==x.feit ? `<div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">nu: ${esc(nu.feit)}</div>` : '';
     return `<div data-afgeslotenafspraak="${esc(x.id)}" class="row" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">${afspraakBox(x.status)}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(x.wat)}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">bij afsluiten: ${esc(x.feit)}</span>${verder}</span></div>`; }).join('');
   const pun=(rec.punten||[]).map(p=>`<div class="row" style="gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line)">${afspraakBox(p.af?'gezien':'nietgezien')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(p.naam)}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${esc(p.feit)}</span></span></div>`).join('');
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(valtOpHoofd(M))} afgesloten op ${esc(afDag(rec.op))}</div>
-    ${afgeslotenGewijzigd(M,rec)?`<div class="small" data-afgewijzigd style="color:var(--mut2);line-height:1.45;margin-top:4px">Na het afsluiten is er iets aan ${esc(afMnd(M))} veranderd: een boeking erbij of een andere categorie.</div>`:''}
+  return `${afgeslotenGewijzigd(M,rec)?`<div class="small" data-afgewijzigd style="color:var(--mut2);line-height:1.45;margin-top:8px">Na het afsluiten is er iets aan ${esc(afMnd(M))} veranderd: een boeking erbij of een andere categorie.</div>`:''}
+    <div class="small muted" data-afgeslotenop style="margin-top:12px">Afgesloten op ${esc(afDag(rec.op))}</div>
     ${afs?`<div class="hlabel" style="margin:12px 0 0">Wat je afsprak</div>${afs}`:''}
     ${pun?`<div class="hlabel" style="margin:12px 0 0">Bij het afsluiten</div>${pun}`:''}`;
+}
+function openAfgesloten(M){
+  const rec=(SET.maandAfsluiting||{})[M]; if(!rec) return;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(valtOpHoofd(M))} afgesloten op ${esc(afDag(rec.op))}</div>
+    ${afgeslotenInhoud(M, rec)}`;
   showSheetBg();
 }
-function renderMaand(){
-  /* v233: Grip leest altijd de lopende maand. Hier stond sinds v176 een maandkiezer met een
-     afgesloten-maand-tak: banner, kop 'Je maand' met chip, een uitlegzin en 'Naar <nu>'. Alle
-     regels lezen een saldo van vandaag (categorie c uit v176), dus bij een andere maand viel het
-     hele regelblok en het oordeel al weg en bleef er een leeg scherm over dat uitlegde waarom. Dat
-     scherm bestaat niet meer: er valt op Grip geen maand te kiezen. De kiezer, de banner en curMonth
-     blijven voor Inzichten, waar categorie a wel doorrekent op de gekozen maand. Grip noemt nergens
-     een maand en elke lezer vanaf Grip (maandIngang, maandSuggestie, maandCoachIngang, en sinds
-     v315 de vanaf-kaart) geeft thisYM() mee, zodat Grip en Inzichten niet stil uiteen kunnen lopen:
-     Grip heeft geen maand, en Inzichten zegt met zijn banner welke hij toont.
-     De kop 'Je maand' is meegegaan: zonder kiezer valt er geen maand te kiezen, en de kop sprak de
-     schermnaam tegen. De oordeelzin draagt het scherm. */
-  const m=thisYM();
-  const R=maandRegels();
-  /* v162: structurele signalen lopen mee in het oordeel volgens de bestaande beslisboom. Ze gaan
-     bewust NIET naar maandCoachIngang() of maandVerband(): die kennen alleen de vaste regels, en een
-     gesprek openen op een sleutel die coTopicMaand() niet kent zou een half pad opleveren. */
-  const STR=maandStructureel();
-  /* Niets te toetsen EN geen enkel structureel signaal: dan vat dit scherm niets samen. Bij nul
-     transacties komt hier niemand meer langs - render() en go() vallen dan terug op renderEmpty() -
-     maar een scherm dat zijn eigen leegte niet kent, vult hem met een claim.
-     v188: deze terugval keek alleen naar R en negeerde de structurele signalen. Toen er na v186 en
-     v187 nog drie regels overbleven werd hij bereikbaar, en dan las je 'er is nog te weinig
-     ingesteld' terwijl er wel degelijk iets stond. Stellig zijn over de afwezigheid van iets dat er
-     wel is, is precies wat deze reeks weghaalt. */
-  /* v235: de valt-op-kaarten staan bovenaan Grip en lezen valtOpSignals(). Ze worden hier als
-     eerste gebouwd, want de leegte-terugval hieronder moet ze kennen: met potjes en een
-     overschrijding, maar zonder buffer, dekking of doel, is R leeg en STR leeg terwijl er wel
-     degelijk iets staat. Dat is exact de fout die v188 bij de structurele signalen repareerde,
-     en hij komt terug zodra er een derde bron bij komt die deze tak niet kent. */
-  /* v314: de SIGNALEN WORDEN EEN KEER OPGEHAALD en daarna twee keer gelezen: gripSignalCards()
-     rendert ze en maandOordeel() telt ze mee. Zou elk van de twee valtOpSignals() zelf aanroepen,
-     dan staat er een tweede waarheid over hoeveel potjes er aandacht vragen (v104), en die functie
-     SCHRIJFT ook (hij maakt de log-records aan en zet `getoond`), dus twee aanroepen per render is
-     ook twee keer save(). Eén aanroep, twee lezers - de vorm van v235. */
-  const SIG=(function(){ try{ return valtOpSignals(thisYM())||[]; }catch(_){ return []; } })();
-  const VS=(function(){ try{ return gripSignalCards(SIG); }catch(_){ return ''; } })();
-  /* v258: de contant-kaart staat naast de valt-op-kaarten bovenaan Grip, en om dezelfde reden ook
-     in de leegte-terugval hieronder: een scherm dat zijn eigen leegte niet kent vult hem met een
-     claim (v188), en dit is de derde bron die die tak moet kennen. */
-  const CK=(function(){ try{ return contantKaart(); }catch(_){ return ''; } })();
-  const UK=(function(){ try{ return uitgeslotenKaart(); }catch(_){ return ''; } })();   // v327
-  const BV=(function(){ try{ return belegVragen(thisYM()); }catch(_){ return []; } })();   // v332
-  /* v337: de maandafsluiting is een regel met een balk, direct onder "Vraagt een beslissing" (of
-     op die plek als er geen beslissing is). Zolang hij open is staan de afspraken in zijn sheet;
-     daarna als eigen kaart (verplaatsen is niet kopieren). */
-  const AK=(function(){ try{ return afsluitKaart(R); }catch(_){ return ''; } })();
-  const AFK=(function(){ try{ return /id="afsluitKaart"/.test(AK) ? '' : afsprakenKaart(); }catch(_){ return ''; } })();
-  if(!R.length && !STR.length && !CK && !UK && !BV.length){
-    $('#s-maand').innerHTML= AK + VS + CK + UK + `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om je maand samen te vatten. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>` + valtOpGripBlok();
-    return;
+/* ===== GRIP ALS DASHBOARD (v340) =====
+   Grip bestaat uit drie blokken: de KPI-tegels (met een regel "Let op" eronder als er een signaal
+   zonder eigen tegel is), "Deze maand" met de lopende afspraken, en "Komende 3 maanden". Onderaan een
+   rustige link naar het logboek. De maandafsluiting is een pop-up en geen vaste kaart.
+   EEN TEGEL REKENT NIETS ZELF: hij leest de rij uit maandRegels() (via dezelfde lagen als de sheet:
+   acceptatie en afspraak) en zijn kleur is de bestaande status. Een tik opent de bestaande sheet. */
+const GRIP_KLEUR={tekort:'rood', 'let op':'amber', ok:'groen'};
+const GRIP_RANG={rood:0, amber:1, groen:2, grijs:3};
+const GRIP_RAND={rood:'var(--red)', amber:'var(--amber)', groen:'var(--green)', grijs:'var(--bar)'};
+function gripTegels(RO, R){
+  const T=[], volg=k=>{ const i=MAAND_VOLGORDE.indexOf(k); return i<0?9:i; };
+  for(const r of (RO||[])){
+    if(!r || r.structureel || !['dekking','buffer','doel'].includes(r.key)) continue;
+    if(T.some(x=>x.key===r.key)) continue;
+    const kleur=GRIP_KLEUR[r.status]||'grijs';
+    let label, waarde, maat;
+    if(r.key==='dekking'){ label='Reserveringen'; waarde=r.waarde; maat=r.tegelMaat||r.eenheid||''; }
+    else if(r.key==='buffer'){ label='Buffer'; waarde=r.maanden!=null?`${r.waarde} mnd`:r.waarde; maat=r.sub||'nog geen norm gekozen'; }
+    else { label=r.naam; waarde=r.waarde; maat=r.eenheid||''; }
+    T.push({key:r.key, label, waarde, maat, kleur, act:`openMaandBeslis('${esc(r.key)}')`, v:volg(r.key)});
   }
-  /* v207: een regel die je bewust hebt geaccepteerd telt niet meer als tekort, dus het oordeel,
-     de twee kaarten, het verband en de coach-ingang lezen de gewogen lijst. maandBeleggenRegel(R)
-     hieronder houdt bewust de ONBEWERKTE R: een tekort dat jij accepteert is nog steeds een tekort,
-     en beleggenKlaar() gaat over geld dat je binnen een jaar nodig hebt (v154). */
-  // v229: de afspraak-poort ligt over beide lijsten, want een afspraak kan ook over een structureel
-  // signaal gaan ('Alleen vastleggen' draagt ook daar de regelKey).
+  /* Beleggen is een samenstelling van de drie: groen als alle drie gehaald zijn, anders grijs met
+     waar het op wacht. Niet gehaald is geen fout (v314), dus nooit rood of amber. Hij leest de
+     ONBEWERKTE R, zoals maandBeleggenRegel(): een geaccepteerd tekort is nog steeds een tekort. */
+  try{ if(beleggenZichtbaar()){ const B=beleggenKlaar(R);
+    if(B){ const naam=k=>k==='buffer'?'je buffer':k==='dekking'?'je reserveringen':((R||[]).find(x=>x.key===k)||{}).naam||'je doel';
+      const wacht=B.voorwaarden.find(v=>!v.gehaald);
+      T.push({key:'beleggen', label:'Beleggen', waarde:B.klaar?'klaar':'wacht', maat:B.klaar?'alle drie gehaald':`op ${naam(wacht?wacht.key:'')}`,
+        kleur:B.klaar?'groen':'grijs', act:'openBeleggenVoorwaarden()', v:8}); } } }catch(_){}
+  return T.sort((a,b)=>GRIP_RANG[a.kleur]-GRIP_RANG[b.kleur] || a.v-b.v);
+}
+function gripTegelHtml(t){
+  return `<div class="kt" data-tegel="${esc(t.key)}" data-kleur="${t.kleur}" style="border-left-color:${GRIP_RAND[t.kleur]}" onclick="${t.act}">
+    <div class="kt-lab">${esc(t.label)}</div><div class="kt-val">${esc(t.waarde)}</div><div class="kt-maat">${esc(t.maat)}</div></div>`;
+}
+/* ===== LET OP: EEN REGEL PER SIGNAAL ZONDER EIGEN TEGEL =====
+   Alles wat vroeger als eigen kaart op Grip stond en niet bij een tegel hoort: structurele signalen
+   (stilstaand geld, maanden boven je grens), een potje boven zijn grens, beleggen terwijl de
+   voorwaarden niet gehaald zijn, een uitgesloten incasso in een potje, contant geld, en de
+   terugblikken op vorige maand. Elke regel opent de kaart die er al was, nu in een sheet. */
+function gripLetOpItems(RO, SIG, BV){
+  const L=[];
+  const terug=(soort, naam, sub, dot)=>({soort, naam, sub, dot:dot||'let op', act:`openGripLetOp('${soort}')`});
+  try{ if(maandAcceptLus()) L.push(terug('accept','Wat je hebt geaccepteerd','de maand is er')); }catch(_){}
+  try{ if(maandAfspraakLus()) L.push(terug('afspraaklus','Je afspraak van vorige maand','terugblik')); }catch(_){}
+  try{ if(freshStartReflection()) L.push(terug('voornemen','Je voornemen van vorige maand','terugblik')); }catch(_){}
+  for(const r of (RO||[])) if(r && r.structureel){ let B={}; try{ B=maandBeslisDeel(r)||{}; }catch(_){}
+    L.push({soort:'str', key:r.key, naam:r.naam, sub:B.oorzaak||'', dot:r.status, act:`openMaandBeslis('${esc(r.key)}')`}); }
+  for(const s of (SIG||[])) L.push({soort:'sig', key:s.id, naam:s.naam, sub:`${euro0(s.over)} boven je potje`, dot:'let op', act:`openGripLetOp('sig','${esc(s.id)}')`});
+  for(const v of (BV||[])) L.push({soort:'beleg', key:v.asset.id, naam:`Je belegde ${euro0(v.inleg)} in ${v.asset.naam||'Bezitting'}`, sub:'voorwaarden nog niet gehaald', dot:'let op', act:`openBelegVraag('${esc(v.asset.id)}')`});
+  try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
+  try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
+  return L;
+}
+function gripLetOpKaart(L){
+  if(!L.length) return '';
+  return `<div class="card" id="gripLetOp" style="padding:11px 15px"><div class="hlabel" style="margin:0 0 2px">Let op</div>${L.map(x=>`<div class="row" data-letop="${esc(x.soort)}" style="gap:9px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);cursor:pointer" onclick="${x.act}">
+    ${maandDot(x.dot)}<div style="flex:1;min-width:0"><div class="small">${esc(x.naam)}</div>${x.sub?`<div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(x.sub)}</div>`:''}</div>
+    <span style="color:var(--teal);font-weight:700;margin-top:3px;flex-shrink:0">›</span></div>`).join('')}</div>`;
+}
+function openGripLetOp(soort, key){ window._gripLetOp={soort, key:key||''}; renderGripLetOp(); showSheetBg(); }
+/* De sheet zoekt zijn inhoud opnieuw op (v319/v320) en sluit als het signaal weg is. */
+function renderGripLetOp(){
+  const G=window._gripLetOp||{}; let html='';
+  try{
+    if(G.soort==='sig'){ const s=(valtOpSignals(thisYM())||[]).find(x=>x.id===G.key); html=s?valtOpKaartOpen(s):''; }
+    else if(G.soort==='uit') html=uitgeslotenKaart();
+    else if(G.soort==='contant') html=contantKaart();
+    else if(G.soort==='accept') html=maandAcceptLus();
+    else if(G.soort==='afspraaklus') html=maandAfspraakLus();
+    else if(G.soort==='voornemen') html=freshStartReflection();
+  }catch(_){ html=''; }
+  if(!html){ window._gripLetOp=null; if(document.getElementById('gripLetOpSheet')) closeSheet(); return; }
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripLetOpSheet" data-soort="${esc(G.soort)}">${html}</div>`;
+}
+
+/* ===== DEZE MAAND: DE VOORUITBLIK (v340) =====
+   "Komt uit rond" is wat er al uit is, plus de vaste lasten die nog komen, plus per categorie wat je
+   in het deel van de maand dat nog moet komen GEMIDDELD uitgaf in je laatste drie afgeronde maanden.
+   De band is het laagste en het hoogste van die drie, voor dat deel van de maand, en zo heet hij ook:
+   met drie maanden is het geen statistische band.
+   DE SNEDE IS DIE VAN piekVerdeling() (piekInScope: uitgaven, niet vast, niet onvoorzien, netto), want
+   de vaste lasten die nog komen staan al in "vast nog" (monthLiquidity().fixDue). Een vaste last zou
+   anders twee keer tellen.
+   HET GEMIDDELDE EN NIET DE MEDIAAN, en dat is geen smaak: de som van de gemiddelden per categorie is
+   het gemiddelde van de maandtotalen, dus "rond" ligt per constructie binnen de band. Bij een mediaan
+   per categorie kan de som erbuiten vallen.
+   ONBEKEND BLIJFT ONBEKEND (v59/v73/v173): zonder drie afgeronde maanden met boekingen is er geen
+   vooruitblik, en dan zegt de kaart dat in plaats van een getal te verzinnen. */
+const VOORUIT_MAANDEN=3, VOORUIT_LOS=4;
+function maandVooruit(){
+  const m=thisYM(); const E=daysElapsed(m); const el=E.elapsed, over=Math.max(E.dim-el,0);
+  const P=[]; for(let i=1;i<=VOORUIT_MAANDEN;i++) P.push(valtOpYmPlus(m,-i));
+  if(P.some(p=>!txOfMonth(p).length)) return {onbekend:true, m, el, dim:E.dim};
+  const restCat={}, totP=[], tot0={};
+  for(const p of P){ let s=0;
+    for(const t of txOfMonth(p)){ if(!piekInScope(t)) continue; const d=+String(t.date).slice(8,10), c=catOf(t), v=uitgaveNorm(t);
+      if(d>el){ restCat[c]=(restCat[c]||0)+v/VOORUIT_MAANDEN; s+=v; } else tot0[c]=(tot0[c]||0)+v/VOORUIT_MAANDEN; }
+    totP.push(s); }
+  const T=totals(m), L=(function(){ try{ return monthLiquidity(); }catch(_){ return {fixDue:0}; } })();
+  const uit=Math.round(T.spendNorm||0), vast=Math.round(+L.fixDue||0);
+  let restTot=0; for(const c in restCat) restTot+=restCat[c];
+  const rest=Math.round(Math.max(restTot,0));
+  const projectie=uit+vast+rest, budget=Math.round(T.budget||0);
+  const band={min:uit+vast+Math.round(Math.min(...totP)), max:uit+vast+Math.round(Math.max(...totP)), maanden:P.slice().reverse()};
+  /* Per potje: wat er al uit is, wat er gemiddeld nog bijkomt, en waar het eindigt. Alleen de potjes
+     van varBudget() (een potje, geen terugkerende last), want daar is een grens een keuze. */
+  const B=SET.budgets||{}, S=catSpendMap(m)||{}; let rc=new Set(); try{ rc=recurringCats(); }catch(_){}
+  const potjes=[];
+  for(const k in B){ const bud=+B[k]||0; if(!(bud>0) || rc.has(k) || !CATS[k] || geenNorm(k)) continue;
+    const u=+S[k]||0, r=Math.max(+restCat[k]||0,0);
+    potjes.push({k, naam:CATS[k].name, bud:Math.round(bud), uit:Math.round(u), rest:Math.round(r), eind:Math.round(u+r), typisch:Math.round(Math.max(+tot0[k]||0,0))}); }
+  potjes.forEach(x=>x.over=x.eind-x.bud);
+  const voor=potjes.filter(x=>x.over>0).sort((a,b)=>b.over-a.over || (a.naam<b.naam?-1:1));
+  /* Wat je deze maand kunt doen: alleen voor een potje dat op zijn tempo boven zijn bedrag eindigt en
+     waar nog iets in zit. Het voorstel is wat er nog in zit, en het effect is wat je dan minder
+     uitgeeft dan je gemiddeld zou doen. Een potje dat al leeg is staat onder "Let op" (valtOpSignals). */
+  const handelingen=voor.filter(x=>x.bud-x.uit>0).map(x=>{ const grens=Math.floor(x.bud-x.uit);
+    return {k:x.k, naam:x.naam, uit:x.uit, typisch:x.typisch, grens, effect:Math.round(x.eind-x.bud), perWeek:over>0?Math.round(grens/over*7):grens}; });
+  /* Verschuiven alleen vanaf een potje dat verwacht onder eindigt, en alleen als de route bestaat:
+     een bestaand potje deze maand wijzigen kan alleen via de bijstelling van een signaal (v238). */
+  let schuif=null;
+  try{ const doel=handelingen[0]||voor[0];
+    if(doel){ const rec=(SET.valtOpLog||{})[valtOpId(m, doel.k)];
+      const van=potjes.filter(x=>x.k!==doel.k && x.bud-x.eind>=5).sort((a,b)=>(b.bud-b.eind)-(a.bud-a.eind))[0];
+      const ov=(voor.find(x=>x.k===doel.k)||{}).over||0;
+      const bedrag=van?Math.floor(Math.min(van.bud-van.eind, ov)/5)*5:0;
+      if(van && bedrag>=5 && rec && !rec.actie) schuif={van:van.k, vanNaam:van.naam, naar:doel.k, naarNaam:doel.naam, bedrag, sig:rec.id||valtOpId(m,doel.k)}; } }catch(_){}
+  const effect=handelingen.reduce((a,h)=>a+h.effect,0);
+  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
+}
+const gripNamen=L=>opsomming(L.map(x=>x.naam));
+function gripVerschil(bedrag, budget){
+  if(!(budget>0)) return '';
+  const d=Math.round(bedrag-budget);
+  return d>0 ? `${euro0(d)} boven je budget` : d<0 ? `${euro0(-d)} onder je budget` : 'precies je budget';
+}
+function dezeMaandKaart(RO){
+  const m=thisYM(); let V=null; try{ V=maandVooruit(); }catch(_){ V=null; }
+  /* De lopende afspraken staan hier, onder deze maand: wat je afsprak gaat over wat je nu doet.
+     Een afspraak uit het coachgesprek (coachThisMonthAfspraak) staat er in dezelfde vorm bij. */
+  let af=''; try{ af=afsprakenLopend().map(a=>afspraakRij(a)).join(''); }catch(_){}
+  try{ const c=coachThisMonthAfspraak(); if(c) af+=`<div class="row" data-afspraak="coach" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('loopt')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(c.text||'')}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
+  const kop=`<div class="hlabel" style="margin:0 0 6px">Deze maand · ${esc(ymFull(m))}</div>`;
+  let boven;
+  if(!V || V.onbekend){
+    const T=totals(m); const bud=Math.round(T.budget||0);
+    boven=`<div data-vooruit="onbekend"><div style="font-weight:700;font-size:var(--fs-md)">${euro0(Math.round(T.spendNorm||0))} uitgegeven${bud>0?` van ${euro0(bud)}`:''}</div>
+      <div class="small muted" style="margin-top:3px;line-height:1.45">Een vooruitblik rekent met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div></div>`;
+  } else {
+    const voor=V.voor.length?` · ${gripNamen(V.voor.slice(0,2))} ${V.voor.length===1?'loopt':'lopen'} voor`:'';
+    const vs=gripVerschil(V.projectie, V.budget);
+    const met=V.metGrenzen!=null?`<div class="small" data-metgrenzen style="margin-top:6px;color:var(--mut2)">Met ${V.handelingen.length===1?'een grens':V.handelingen.length+' grenzen'}: rond ${euro0(V.metGrenzen)}${V.budget>0?` · ${gripVerschil(V.metGrenzen,V.budget)}`:''}</div>`:'';
+    boven=`<div data-vooruit="${V.projectie}" style="cursor:pointer" onclick="openGripVooruit()">
+      <div class="row" style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0;font-weight:700;font-size:var(--fs-lg)">Komt uit rond ${euro0(V.projectie)}</span><span style="color:var(--teal);font-weight:700">›</span></div>
+      ${(vs||voor)?`<div class="small muted" style="margin-top:2px;line-height:1.45">${esc((vs||'')+(vs?voor:voor.replace(/^ · /,'')))}</div>`:''}${met}</div>`;
+  }
+  let ing=''; try{ ing=maandCoachIngang(RO||[]); }catch(_){}
+  return `<div class="card" id="gripDezeMaand">${kop}${boven}${af?`<div style="margin-top:8px">${af}</div>`:''}${ing}</div>`;
+}
+function openGripVooruit(){ renderGripVooruit(); showSheetBg(); }
+/* De waterval: donker wat er al uit is, de vaste lasten die nog komen, per potje wat er gemiddeld nog
+   bijkomt (rood als het potje daarmee boven zijn bedrag eindigt), en de rest. Rechts de band van je
+   laatste drie maanden. De sheet rekent opnieuw (v319). */
+function vooruitGrafiek(V){
+  const st=[{lab:'uitgegeven', w:V.uit, kl:'var(--ref)', soort:'uit'}, {lab:'vast nog', w:V.vast, kl:'var(--bar)', soort:'vast'}];
+  const los=V.potjes.slice().sort((a,b)=>b.rest-a.rest || (a.naam<b.naam?-1:1)).filter(x=>x.rest>0).slice(0,VOORUIT_LOS);
+  let losSom=0; for(const x of los){ st.push({lab:x.naam, w:x.rest, kl:x.over>0?'var(--red)':'var(--mut2)', soort:'potje', k:x.k}); losSom+=x.rest; }
+  const ov=V.rest-losSom; if(ov) st.push({lab:'overige', w:ov, kl:'var(--mut2)', soort:'overig'});
+  const PH=112; let run=0; const kol=st.map(s=>{ const van=run; run+=s.w; return {s, lo:Math.min(van,run), hi:Math.max(van,run), na:run}; });
+  kol.push({s:{lab:ymFull(V.m).slice(0,3), w:V.projectie, kl:'var(--teal)', soort:'eind'}, lo:0, hi:V.projectie, na:V.projectie});
+  const top=Math.max(V.projectie, V.budget, V.band.max, 1)*1.14, y=v=>PH-(v/top*PH);
+  const lijn=V.budget>0?`<i data-budgetlijn style="position:absolute;left:0;right:0;top:${y(V.budget).toFixed(1)}px;border-top:1px dashed var(--amber);opacity:.8"></i>`:'';
+  const n=kol.length;
+  return `<div style="position:relative;margin-top:10px">${lijn}<div style="display:flex;gap:4px">${kol.map((c,i)=>{
+    const yt=y(c.hi), h=Math.max(y(c.lo)-yt,2), eind=c.s.soort==='eind';
+    const val=(eind||c.s.soort==='uit')?euro0(c.s.w):`+${euro0(c.s.w)}`;
+    const band=eind?`<i data-band style="position:absolute;right:0;width:4px;top:${y(V.band.max).toFixed(1)}px;height:${Math.max(y(V.band.min)-y(V.band.max),2).toFixed(1)}px;background:var(--teal);opacity:.45;border-radius:2px"></i>`:'';
+    const verb=i<n-1?`<i style="position:absolute;left:88%;width:calc(24% + 4px);top:${y(c.na).toFixed(1)}px;border-top:1px dashed var(--ref)"></i>`:'';
+    return `<div data-vstap="${c.s.soort}" data-vwaarde="${c.s.w}" style="flex:1 1 0;min-width:0"><div style="position:relative;height:${PH}px">
+      <span style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap">${val}</span>
+      <i style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.kl};border-radius:3px"></i>${verb}${band}</div>
+      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;overflow-wrap:anywhere">${esc(c.s.lab)}</div></div>`; }).join('')}</div></div>`;
+}
+function renderGripVooruit(){
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  if(!V || V.onbekend){ if(document.getElementById('gripVooruit')) closeSheet(); return; }
+  const Mn=valtOpHoofd(V.m), einde=`${V.dim} ${ymFull(V.m)}`;
+  const banden=V.band.maanden.map(x=>ymFull(x)).join(', ');
+  const hand=V.handelingen.map(h=>`<div class="row" data-handeling="${esc(h.k)}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
+      <span style="flex:1;min-width:0"><span style="font-size:13px">${esc(h.naam)}: nog ${euro0(h.grens)} tot ${esc(einde)} <b data-effect="${h.effect}">−${euro0(h.effect)}</b></span>
+      <div class="small muted" style="margin-top:2px;line-height:1.45">${euro0(h.uit)} in ${V.el} ${V.el===1?'dag':'dagen'}, gemiddeld ${euro0(h.typisch)}. Met ${euro0(h.grens)} voor de rest blijf je binnen je potje: ongeveer ${euro0(h.perWeek)} per week.</div></span>
+      <button class="btn sec" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px" onclick="openGrensRest('${esc(h.k)}')">Grens op ${euro0(h.grens)}</button></div>`).join('');
+  const sch=V.schuif?`<div class="row" data-schuif style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
+      <span style="flex:1;min-width:0"><span style="font-size:13px">Of schuif ${euro0(V.schuif.bedrag)} van ${esc(V.schuif.vanNaam)} naar ${esc(V.schuif.naarNaam)} <b>${euro0(0)}</b></span>
+      <div class="small muted" style="margin-top:2px;line-height:1.45">${esc(V.schuif.vanNaam)} eindigt verwacht onder zijn potje. Je potjes kloppen dan, maar je geeft niet minder uit.</div></span>
+      <button class="btn sec" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px" onclick="valtOpPotjeSheet('${esc(V.schuif.sig)}')">Potjes verschuiven</button></div>`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripVooruit" data-projectie="${V.projectie}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(Mn)} vooruit</div>
+    <div class="small muted" style="margin-top:2px">rond ${euro0(V.projectie)}${V.budget>0?` · ${gripVerschil(V.projectie,V.budget)} · budget ${euro0(V.budget)}`:''}</div>
+    ${vooruitGrafiek(V)}
+    <div class="small" style="color:var(--mut2);line-height:1.5;margin-top:8px">Donker is wat er al uit is. Per potje wat je in de rest van de maand gemiddeld uitgaf in ${esc(banden)}; rood eindigt daarmee boven zijn potje. Rechts het laagste en het hoogste van die drie maanden voor dit deel van de maand: <span data-bandtekst>${euro0(V.band.min)} tot ${euro0(V.band.max)}</span>.</div>
+    ${hand||sch?`<div class="hlabel" style="margin:14px 0 0">Wat je deze maand kunt doen</div>${hand}${sch}
+      ${V.metGrenzen!=null?`<div class="small" data-metgrenzentot style="padding-top:9px;border-top:1px solid var(--line);font-weight:600">Met ${V.handelingen.length===1?'deze grens':(V.handelingen.length===2?'beide grenzen':'alle '+V.handelingen.length+' grenzen')} rond ${euro0(V.metGrenzen)}${V.budget>0?` · ${gripVerschil(V.metGrenzen,V.budget)}`:''}</div>`:''}
+      <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45;margin-top:6px">Niets wordt vanzelf ingesteld. Een grens die je kiest wordt een afspraak.</div>`
+    :`<div class="small muted" style="margin-top:12px">Geen potje eindigt op dit tempo boven zijn bedrag.</div>`}</div>`;
+}
+/* Een grens voor de rest van de maand: eerst het gevolg, pas "Grens zetten" schrijft
+   (MECHANISM_SPEC.defaultEffect). De grens is een afspraak, gemeten aan je uitgaven in die categorie
+   tot het eind van de maand, met als lat wat er al uit is plus de grens: je potje. */
+function openGrensRest(k){
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  const h=V&&!V.onbekend?V.handelingen.find(x=>x.k===k):null; if(!h){ closeSheet(); return; }
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="grensRest" data-cat="${esc(k)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Grens op ${esc(h.naam)}</div>
+    <div class="small" style="line-height:1.5;margin-top:6px">Je gaf deze maand ${euro0(h.uit)} uit aan ${esc(h.naam.toLowerCase())}. Met nog ${euro0(h.grens)} tot ${V.dim} ${esc(ymFull(V.m))} blijf je binnen je potje van ${euro0(h.uit+h.grens)}: ongeveer ${euro0(h.perWeek)} per week.</div>
+    <div class="small" style="color:var(--mut2);line-height:1.5;margin-top:6px">Dat scheelt rond ${euro0(h.effect)} tegen wat je in de rest van de maand gemiddeld uitgaf. De grens wordt een afspraak en staat onder Deze maand.</div>
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" style="flex:1" onclick="grensRestZet('${esc(k)}')">Grens zetten</button><button class="btn sec" onclick="openGripVooruit()">Terug</button></div></div>`;
+  showSheetBg();
+}
+function grensRestZet(k){
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  const h=V&&!V.onbekend?V.handelingen.find(x=>x.k===k):null; if(!h || !CATS[k]) return;   // opnieuw gelezen (v319)
+  const m=thisYM();
+  afspraakMaak({soort:'grens', cat:k, bedrag:h.uit+h.grens, van:m, tot:m, wat:`Grens ${CATS[k].name}: nog ${euro0(h.grens)} tot ${V.dim} ${ymFull(m)}`});
+  save(); closeSheet(); render(); toast(`${ICON('check')} Afspraak: nog ${euro0(h.grens)} aan ${CATS[k].name.toLowerCase()}`);
+}
+
+/* ===== KOMENDE 3 MAANDEN (v340) =====
+   Wat er de komende drie maanden (deze meegeteld) gebeurt: verwachte kosten uit je reserveringen, een
+   storting die je afsprak, en wat er vanaf volgende maand verandert (de rijen van maandVanafData(),
+   die tot v340 een eigen kaart "Vanaf <maand>" waren). Elk punt opent de bestaande sheet. */
+function gripTijdlijnData(){
+  const m0=thisYM(), ms=[m0, valtOpYmPlus(m0,1), valtOpYmPlus(m0,2)], E={}; ms.forEach(x=>E[x]=[]);
+  try{ for(const a of afsprakenLopend()) if(a.soort==='storting') for(const x of ms) if(x>=a.van && x<=a.tot) E[x].push({tekst:`${euro0(a.bedrag)} bijleggen`, act:`openAfspraak('${esc(a.id)}')`, soort:'storting'}); }catch(_){}
+  try{ const D=dekking(12); for(const r of (D.regels||[])) if(r.soort==='post' && E[r.maand]) E[r.maand].push({tekst:`${r.naam} ${euro0(r.bedrag)}`, act:'openReserveringen()', soort:'post'}); }catch(_){}
+  try{ const vm=nextYM(SET.budgetMonth||m0); if(E[vm]) for(const v of maandVanafData()) E[vm].push({tekst:v.kort, act:v.act, soort:'vanaf'}); }catch(_){}
+  return ms.map(x=>({m:x, items:E[x]}));
+}
+function gripTijdlijn(){
+  const D=gripTijdlijnData(); if(!D.some(x=>x.items.length)) return '';
+  return `<div class="card" id="gripTijdlijn"><div class="hlabel" style="margin:0 0 8px">Komende 3 maanden</div>
+    <div class="tl3">${D.map((x,i)=>`<div class="tl3-kol" data-tlmaand="${x.m}"><div class="tl3-dot${i===0?' nu':''}"></div>
+      <div class="tl3-m">${esc(MNAMES[+x.m.slice(5,7)-1])}${i===0?' <span class="muted" style="font-weight:400">nu</span>':''}</div>
+      ${x.items.map(e=>`<div class="tl3-e" data-tlsoort="${e.soort}" onclick="${e.act}">${esc(e.tekst)}</div>`).join('')}</div>`).join('')}</div></div>`;
+}
+
+/* ===== DE MAANDAFSLUITING ALS POP-UP (v340) =====
+   Bij de eerste keer openen in een nieuwe maand verschijnt "<maand> afsluiten" als pop-up. "Later"
+   sluit hem; hij komt hooguit een keer per dag terug tot de maand is afgesloten. SET.afsluitPopup
+   draagt de dag waarop hij het laatst verscheen. De eerste keer dat Grip ooit opent telt als gezien,
+   want dan is er geen maandwissel geweest (SET.maandGelezen bestaat nog niet). */
+function afsluitPopupMag(){
+  const M=afsluitMaand(); if(!afsluitNodig(M)) return false;
+  return (SET.afsluitPopup||{}).dag!==vandaagYMD();
+}
+function afsluitPopupMisschien(){
+  try{
+    if(!afsluitPopupMag()) return false;
+    const M=afsluitMaand();
+    SET.afsluitPopup={maand:M, dag:vandaagYMD()};
+    if(!SET.maandGelezen){ save(); return false; }   // eerste keer ooit: geen maandwissel, wel 'vandaag gezien'
+    save(); openAfsluiting(M); return true;
+  }catch(_){ return false; }
+}
+function afsluitLater(){ SET.afsluitPopup={maand:afsluitMaand(), dag:vandaagYMD()}; save(); closeSheet(); }
+/* De drie tegels van vorige maand: wat er boven de potjes eindigde, hoe je de vragen beantwoordde,
+   en het totaal tegen je budget (dezelfde staaf als de grafiek en de bridge, maandStaaf()). */
+function afsluitTegels(M){
+  const T=[];
+  try{ const S=valtOpMaandStand(M); T.push({key:'boven', label:'Boven potjes', waarde:euro0(S.boven), maat:S.n?`${S.nBoven} van ${S.n} potjes`:'geen signaal', act:"closeSheet();go('logboek')"});
+    const bov=S.rijen.filter(x=>x.u && x.u.soort==='boven'), n=bov.filter(x=>x.r.antwoord).length;
+    const tel={}; bov.forEach(x=>{ if(x.r.antwoord) tel[x.r.antwoord.keuze]=(tel[x.r.antwoord.keuze]||0)+1; });
+    const top=Object.keys(tel).sort((a,b)=>tel[b]-tel[a])[0];
+    T.push({key:'antwoord', label:top?VALTOP_ANTWOORD[top]||top:'Antwoorden', waarde:bov.length?`${n} van ${bov.length}`:'geen', maat:bov.length?'beantwoord':'geen vragen', act:"closeSheet();go('logboek')"}); }catch(_){}
+  try{ const St=maandStaaf(M); const d=Math.round(St.spend-St.budget);
+    T.push({key:'totaal', label:'Totaal', waarde:St.budget>0?(d<0?`−${euro0(-d)}`:`+${euro0(d)}`):euro0(Math.round(St.spend)), maat:St.budget>0?(d<=0?'onder budget':'boven budget')+(St.bron==='bewaard'?'':' · huidige potjes'):'geen budget', act:`openLogMaand('${M}')`}); }catch(_){}
+  return T;
+}
+/* De staaf van een afgesloten maand: uitgaven tegen budget, met de bewaarde potjebedragen als die er
+   zijn (v335) en anders je huidige potjes. Een bron, drie lezers: de grafiek, de pop-up, het logboek. */
+function maandStaaf(m){
+  const t=totals(m), P=maandPotjes(m);
+  const bud=P.bron==='bewaard'?maandPotjesSom(P.B):t.budget;
+  return {m, spend:Math.max(t.spendNorm,0), budget:Math.max(bud,0), bron:P.bron};
+}
+
+/* ===== HET LOGBOEK: DE AFGESLOTEN MAANDEN ALS TIJDLIJN (v340) =====
+   Hooguit drie afgeronde maanden, met per maand de uitgaven en het verschil met het budget. De vorige
+   maand staat er pas in als hij is afgesloten; tot dan staat er "<maand> afsluiten". Een maand zonder
+   bewaarde potjebedragen (van voor v309) rekent met je huidige potjes en zegt dat erbij. */
+function logTijdlijnData(){
+  const nu=thisYM(), M=afsluitMaand(), open=afsluitNodig(M);
+  const ms=months().filter(x=>x<nu && !(open && x===M)).slice(-3);
+  return {open:open?M:null, maanden:ms.map(m=>{ const S=maandStaaf(m); return {m, spend:Math.round(S.spend), budget:Math.round(S.budget), verschil:Math.round(S.spend-S.budget), bron:S.bron, afgesloten:!!(SET.maandAfsluiting||{})[m]}; })};
+}
+function logTijdlijn(){
+  const D=logTijdlijnData(); let open='';
+  if(D.open){ const S=afsluitStand(D.open);
+    open=`<div class="row" data-logopen="${D.open}" style="gap:10px;cursor:pointer;padding:2px 0 10px" onclick="openAfsluiting('${D.open}')"><span style="flex:1;font-weight:700">${esc(valtOpHoofd(D.open))} afsluiten</span><span class="small muted">${S.af} van ${S.tot}</span><span class="muted" style="font-size:18px">›</span></div>`; }
+  if(!D.maanden.length && !open) return '';
+  const kol=x=>`<div class="tl3-kol" data-logmaand="${x.m}" style="cursor:pointer" onclick="openLogMaand('${x.m}')"><div class="tl3-dot"></div>
+    <div class="tl3-m">${esc(MNAMES[+x.m.slice(5,7)-1])}</div><div class="tl3-e" style="font-weight:700;color:var(--txt)">${euro0(x.spend)}</div>
+    ${x.budget>0?`<div class="tl3-e" data-logverschil="${x.verschil}">${x.verschil>0?'+':x.verschil<0?'−':''}${euro0(Math.abs(x.verschil))} ${x.verschil>0?'boven':'onder'}</div>`:''}
+    ${x.afgesloten?`<div class="tl3-e" data-logafgesloten style="color:var(--mut2)">afgesloten</div>`:''}${x.bron==='bewaard'?'':`<div class="tl3-e" style="color:var(--mut2)">tegen huidige potjes</div>`}</div>`;
+  return `<div class="card" id="logTijdlijn"><div class="hlabel" style="margin:0 0 8px">Afgesloten maanden</div>${open}
+    ${D.maanden.length?`<div class="tl3">${D.maanden.map(kol).join('')}</div><div class="small" style="color:var(--mut2);margin-top:8px">Tik op een maand voor de bridge, je antwoorden en je afspraken.</div>`:''}</div>`;
+}
+function openLogMaand(m){ window._logMaand=m; renderLogMaand(); showSheetBg(); }
+function renderLogMaand(){
+  const m=window._logMaand; if(!m || !(m<thisYM())){ closeSheet(); return; }
+  const S=maandStaaf(m), Mn=valtOpHoofd(m), d=Math.round(S.spend-S.budget);
+  let brug=''; try{ brug=brugBlok(m).replace('id="insBrug"','id="logBrug"'); }catch(_){}
+  let ant=''; try{ const V=valtOpMaandStand(m); if(V.rijen.length) ant=`<div class="hlabel" style="margin:14px 0 0">Je antwoorden</div><div class="small" data-logfeit style="margin:4px 0 2px">${esc(valtOpMaandFeit(V))}</div>`+
+    V.rijen.filter(x=>x.u && x.u.soort==='boven').map(x=>`<div class="row" style="gap:8px;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;min-width:0">${esc(x.r.categorie||x.r.potjeId||'')}</span><span class="small muted">${x.r.antwoord?esc(valtOpAntwoordWoord(x.r.antwoord)):'nog geen antwoord'}</span><span class="small" style="font-weight:700">+${euro0(x.u.bedrag)}</span></div>`).join(''); }catch(_){}
+  const rec=(SET.maandAfsluiting||{})[m];
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="logMaand" data-maand="${m}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(Mn)}</div>
+    <div class="small muted" style="margin-top:2px">${euro0(Math.round(S.spend))} uitgegeven${S.budget>0?` tegen ${euro0(Math.round(S.budget))} · ${d>0?euro0(d)+' boven':euro0(-d)+' onder'} je budget`:''}${S.bron==='bewaard'?'':' · tegen je huidige potjes, de potjebedragen van toen zijn niet bewaard'}</div>
+    ${brug}${ant}${rec?afgeslotenInhoud(m, rec):`<div class="small muted" style="margin-top:14px">Deze maand is van voor de maandafsluiting, dus er zijn geen afspraken bij bewaard.</div>`}</div>`;
+}
+function renderMaand(){
+  /* v233: Grip leest altijd de lopende maand en heeft geen maandkiezer.
+     v340: GRIP IS EEN DASHBOARD MET DRIE BLOKKEN: de KPI-tegels (met "Let op" eronder als er een
+     signaal zonder eigen tegel is), "Deze maand" met de lopende afspraken, en "Komende 3 maanden".
+     Onderaan een rustige link naar het logboek. Wat er tot v339 stond (de samenvatting, Vraagt een
+     beslissing, Vraagt aandacht, Staat goed, Voorwaarden voor beleggen, Vanaf <maand>, de afsluitregel
+     en de logboekkaart) staat in de sheets achter de tegels, in de pop-up of in het logboek. */
+  const R=maandRegels();
+  const STR=maandStructureel();
+  /* De signalen worden een keer opgehaald (v314): valtOpSignals() schrijft ook (de log-records en
+     `getoond`), dus het moet bij elke render van Grip blijven gebeuren, ook nu de kaarten in een
+     sheet staan. */
+  const SIG=(function(){ try{ return valtOpSignals(thisYM())||[]; }catch(_){ return []; } })();
+  const BV=(function(){ try{ return belegVragen(thisYM()); }catch(_){ return []; } })();
   const RO=maandMetAfspraak(maandMetAccept(R).concat(STR));
-  const O=maandOordeel(RO, SIG.length);
-  /* v134: beslissing en aandacht zijn twee dingen, en de beslisboom gebruikt die woorden al zo -
-     tekort vraagt een beslissing, let op vraagt aandacht. Stonden ze samen onder één kop, dan telde
-     de zin (alleen de tekorten) iets anders dan wat eronder stond. Nu een kaart per betekenis; een
-     lege kaart valt weg, dus in de praktijk zie je zelden drie kaarten. */
-  const opVolgorde=a=>{ const i=MAAND_VOLGORDE.indexOf(a.key); return i<0?99:i; };   // v162: structurele signalen achter de vaste regels
-  const beslis=RO.filter(r=>r.status==='tekort').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
-  /* v175: beslis filterde op RO en aandacht op R, dus een structureel signaal met status 'let op'
-     landde in geen van beide kaarten en telde alleen mee in de oordeelzin. Dat is verlies, geen
-     weergavefout: het scherm noemt het dan wel in de kop maar toont het nergens. Beide kaarten
-     putten nu uit dezelfde lijst. 'goed' blijft op R: een structureel signaal is per definitie
-     geen 'ok', en zou daar alleen ruis toevoegen. */
-  const aandacht=RO.filter(r=>r.status==='let op').sort((a,b)=>opVolgorde(a)-opVolgorde(b));
-  const goed=R.filter(r=>r.status==='ok');
-  const verband=maandVerband(RO);
-  $('#s-maand').innerHTML=`
-    ${/* v314: DE SAMENVATTING STAAT VOOR DE SIGNAALKAARTEN. Hij stond erachter, dus je las eerst
-          "€214 boven je potje" en daarna "er is niets dat vastloopt": de geruststelling kwam na de
-          schrik. Nu hij de potjes meetelt, is hij ook pas waar op die plek: een samenvatting die het
-          grootste signaal van het scherm niet kende, kon er niet boven staan.
-          DE DRIE LUSSEN BLIJVEN ERBOVEN, en dat is een keuze met een reden. Het zijn terugblikken op
-          de maand die net om is (een verlopen acceptatie, de afspraak van vorige maand, het
-          maandmoment), ze staan er maar een paar dagen, en v141 heeft de afspraaklus met zoveel
-          woorden vóór het oordeel gezet. 'Bovenaan' gaat hier dus over de vaste inhoud van het
-          scherm; een terugblik die er drie dagen staat verdringt hem niet. GEMETEN: vijf tests in
-          afspraak-lus.spec.js lezen de eerste kaart en pinnen die volgorde. */''}
-    ${maandAcceptLus()}${maandAfspraakLus()}${freshStartReflection()}
-    <div class="card">
-      <div style="font-size:var(--fs-lg);font-weight:700;line-height:1.4">${esc(O.zin)}</div>
-      ${O.sub?`<div class="small muted" style="margin-top:6px">${esc(O.sub)}</div>`:''}
-    </div>
-    ${VS}${CK}${UK}
-    ${/* v223: 'Vermogensopbouw' en 'Je plan' waren eigen kaarten met een kop en een uitlegzin voor
-          één cijfer. Ze staan nu als voet onder de streep, in de laatste kaart die regels draagt:
-          aandacht als die er is, anders beslissing, anders 'Staat goed'. Is er geen enkele
-          regelkaart, dan blijft de voet een eigen kaart zonder streep (zie onder).
-          v226: van die twee is alleen 'Je plan' daar nog. De spaarquote is geen constatering over
-          een maandregel maar een uitkomst, en staat weer als eigen kaart verderop. */''}
-    ${/* v320: de regels staan hier als LIJSTREGEL en niet meer in de uitgeklapte vorm; de volle
-          tekst staat in de sheet erachter.
-          v324: 'Vraagt aandacht' leest DEZELFDE renderer. Sinds v323 schuift een dekkingsgat van de
-          ene kaart naar de andere zodra de maand omslaat, en dan veranderde ook zijn VORM: dezelfde
-          regel was een lijstregel of een alinea naar gelang zijn status. Wat er nu tussen de twee
-          kaarten verschilt is de kop en de kleur van de stip, en verder niets. */''}
-    ${beslis.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt een beslissing</div>
-      ${beslis.map(r=>maandBeslisRij(r)).join('')}
-      ${verband?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
-      </div>`:''}
-    ${AK}
-    ${(aandacht.length||BV.length)?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Vraagt aandacht</div>
-      ${aandacht.map(r=>maandBeslisRij(r)).join('')}${BV.map(v=>belegVraagRij(v)).join('')}
-      ${(!beslis.length&&verband)?`<div class="small" style="margin-top:10px;color:var(--mut2);line-height:1.5">${verband}</div>`:''}
-      </div>`:''}
-    ${/* v219: de ingang naar het gesprek stond vier blokken lager, achter de spaarquote, de
-          uitgavengrafiek en de beleggen-regel. De kaart erboven belooft een beslissing en de
-          plek waar die te maken valt lag buiten beeld. Hij staat nu onder de regels die iets
-          vragen en boven 'Staat goed', want daar hoort hij niet bij. De rij zelf blijft een
-          eigen tik naar zijn sheet houden (v193): twee handelingen op één element is geen
-          verbetering, dus de ingang blijft een eigen element. */''}
-    ${(beslis.length||aandacht.length)?maandCoachIngang(RO):''}
-    ${goed.length?`<div class="card"><div class="hlabel" style="margin:0 0 2px">Staat goed</div>
-      ${goed.map(r=>maandRij(r,true)).join('')}
-      </div>`:''}
-    ${/* v315: hier stond de voet (v223), een streep onder de laatste regelkaart met één rij
-          eronder. Die rij staat nu in maandVanafKaart() met twee rijen ernaast, als eigen kaart
-          met een kop die zijn vraag noemt. Hij staat NA 'Staat goed' en voor het logboek: eerst wat
-          iets vraagt, dan wat goed staat, dan wat verandert, dan wat je deed. */''}
-    ${AFK}${maandVanafKaart()}
-    ${/* v226: de spaarquote stond hier als eigen kaart, achter de regels. v232: hij staat op
-          Vermogen. Hij meet welk deel van je inkomen naar vermogensopbouw ging, en dat is de
-          instroom van de vermogenslaag, niet een oordeel over of je systeem standhoudt. Alles ging
-          mee: label, percentage, sparkline, band en de tik naar het detail. */''}
-    ${/* v227: hier stond spendVsBudgetChart(). Die staat nu op Inzichten, onder het blok over deze
-          maand. Dat is een omkering van v178, dat hem juist hierheen haalde omdat hij maanden naast
-          elkaar zet en dat een structurele vraag is; de afweging staat in BESLISSINGEN.md met beide
-          kanten erbij. Verplaatsen is nooit kopiëren: hij staat hier niet meer. */''}
-    ${/* v231: hier stond subsCard(), de abonnementenkaart. Een lijst is structureel, maar op het
-          maandmoment gaat het over of je systeem standhoudt, niet over welke abonnementen je hebt.
-          De lijst staat nu onder Instellingen (Vaste lasten), samengevoegd met de lijst van de
-          liquiditeitsprognose, en alleen een afwijking komt terug: als melding. */''}
-    ${maandBeleggenRegel(R)}
-    ${(!beslis.length&&!aandacht.length)?maandCoachIngang(RO):''}
-    ${valtOpGripBlok()}
-    ${maandGelezen()}
+  const T=(function(){ try{ return gripTegels(RO, R); }catch(_){ return []; } })();
+  const L=(function(){ try{ return gripLetOpItems(RO, SIG, BV); }catch(_){ return []; } })();
+  const tegels=T.length?`<div class="kt-raster" id="gripTegels">${T.map(gripTegelHtml).join('')}</div>`
+    : `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om tegels te tonen. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
+  $('#s-maand').innerHTML=`${tegels}${gripLetOpKaart(L)}${dezeMaandKaart(RO)}${gripTijdlijn()}
+    <div class="small" id="gripNaarLogboek" style="text-align:center;margin:14px 0 4px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek \u203a</div>
     <div style="height:12px"></div>`;
+  /* Een terugblik sluit met "Gezien" via renderMaand() en niet via render(); de sheet erachter rekent
+     daarom ook hier mee, en sluit als zijn kaart weg is. */
+  try{ if(document.getElementById('gripLetOpSheet') && $('#sheetBg').classList.contains('show')) renderGripLetOp(); }catch(_){}
 }
 /* De terugblik op een acceptatie, en de enige plek waar er een komt. Hij verschijnt zodra de maand
    waarin het gat zou vallen is bereikt - dat kan maanden na de keuze zijn, en daarom past hij niet
@@ -7714,59 +7763,21 @@ function maandAcceptLus(){
   return `<div class="card">${kop}${spiegel}${stand}${sluit}</div>`;
 }
 function maandAcceptSluit(key){ maandAcceptWis(key); renderMaand(); }
-/* v141: de ingang naar het maandgesprek, onder de regels. Geen neutrale knop: de zin zegt
-   waar het over gaat, afgeleid van de zwaarste regel, in de woorden die het scherm zelf gebruikt
-   (tekort vraagt een beslissing, let op vraagt aandacht). Staat er al een afspraak voor deze maand,
-   dan staat die hier in plaats van de ingang: één afspraak per maand, dus niet twee wegen naar een
-   nieuwe. Alleen onbekende regels betekent geen ingang. */
+/* v340: DE UITNODIGING VOOR HET GESPREK, als laatste regel van "Deze maand". Tot v339 een eigen kaart
+   onder de regels (v141/v195/v224/v320). Twee takken bleven over: de kaart "Je afspraak deze maand"
+   is nu een rij bij de lopende afspraken (dezeMaandKaart), en de uitnodiging zelf staat hier. Hij
+   draagt het maandmoment (MECHANISM_SPEC.freshStart): in de eerste VERSE_START_DAGEN de aanhef
+   "Nieuwe maand." De poort is onveranderd: geen tekort, geen aandacht, en minstens een regel op ok
+   (met alleen onbekende regels valt er niets door te nemen, v173). Staat er al een afspraak uit het
+   gesprek deze maand, dan is er niets meer te framen: een afspraak per maand. */
 function maandCoachIngang(R){
-  const m=thisYM();   // v233: Grip leest nu, niet de kiezer van Inzichten
-  const af=(typeof coachThisMonthAfspraak==='function')?coachThisMonthAfspraak():null;
-  /* v314: DE KAART NOEMT DE REGEL DIE DE AFSPRAAK RAAKT, en alleen als die regel op `ok` staat. Dat
-     is het geval waarin de afspraak nu over niets gaat: je hebt afgesproken iets bij te sturen en de
-     meting zegt dat het al in orde is. Zonder die zin is dat alleen uit het ontbreken van een rode
-     rij af te leiden.
-     ALLEEN BIJ `ok`, en dat is een afbakening en geen voorzichtigheid: bij `tekort` of `let op` zegt
-     de rij zelf al wat er aan de hand is en zou deze zin dat herhalen, en maandMetAfspraak() heeft
-     de status dan juist naar `let op` gezet omdat er een afspraak over loopt. De naam komt uit de rij
-     en wordt hier niet opnieuw afgeleid (v104). */
-  if(af){
-    const rij=(Array.isArray(R)?R:[]).find(x=>x&&x.key===af.regel);
-    const noot=(rij && rij.status==='ok')
-      ? `<div class="small" style="color:var(--mut2);margin-top:6px;line-height:1.45">Je ${esc(String(rij.naam||'').toLowerCase())} staat goed, dus deze afspraak gaat nu niet over een tekort.</div>`
-      : '';
-    return `<div class="card">
-    <div class="hlabel" style="margin:0 0 6px">Je afspraak deze maand</div>
-    <div style="line-height:1.45">${esc(af.text||'')}</div>
-    ${noot}
-    <div class="small" style="margin-top:8px;color:var(--teal);cursor:pointer;font-weight:600" onclick="coStart('maand','${esc(m)}')">Aanpassen ›</div></div>`;
-  }
-  /* v195: het maandmoment. In de eerste dagen van een nieuwe maand krijgt de uitnodiging een
-     aanhef, want dat is het ijkpunt waarop een voornemen het meest waard is. Bewust een aanhef op
-     de bestaande ingang en geen tweede kaart: de vraag staat er al, alleen de aanleiding ontbrak. */
+  const m=thisYM();
+  try{ if(coachThisMonthAfspraak()) return ''; }catch(_){}
   const nieuw=verseStart()?'Nieuwe maand. ':'';
-  /* v224: hier stond de uitnodiging 'Zullen we <regel> doorlopen?', jarenlang de enige ingang naar
-     het gesprek. Hij koos via coMaandZwaarste() welke regel hij opende, en dat was het probleem:
-     een structureel signaal valt buiten MAAND_VOLGORDE, krijgt daardoor index -1 en kwam dus altijd
-     vóór dekking, buffer en doel - terwijl maandRegelOpties() daar geen drie vormen voor levert.
-     De regels met opties waren zo onbereikbaar. Elke regel met een tekort draagt nu zijn eigen
-     ingang (maandIngang), dus er valt niets meer te kiezen en die verdringing is weg.
-     De twee andere takken van deze functie blijven: de afspraak-kaart hierboven is een andere taak,
-     en de regel hieronder biedt een gesprek juist wanneer er niets te beslissen valt.
-     coMaandZwaarste() blijft ook bestaan: coTopicMaand() valt erop terug wanneer het gesprek zonder
-     sleutel wordt geopend, en dat is precies wat 'Aanpassen' hierboven doet. */
-  /* v320: DE POORT VRAAGT WAT DE ZIN BELOOFT. Hij was `R.some(r=>r.status==='ok')`, en renderMaand
-     roept deze functie juist OOK aan wanneer er wel beslissingen staan (de ingang hoort onder de
-     regels die iets vragen). GEMETEN op de stand van het toestel: onder twee rode regels en een kop
-     die zegt dat er twee dingen een beslissing vragen stond 'Er valt deze maand niets te beslissen'.
-     De poort toetst nu geen tekort en geen aandacht, en dat is precies de bewering van de zin.
-     DE OK-EIS BLIJFT ERNAAST STAAN, en dat is geen poort maar een tweede eis: met alleen onbekende
-     regels valt er niets door te nemen, en dat ligt sinds v173 als eigen test vast
-     (coach-maand-ingang.spec.js: 'alleen onbekende regels geeft geen ingang'). */
   if(!R.some(r=>r.status==='tekort') && !R.some(r=>r.status==='let op') && R.some(r=>r.status==='ok'))
-    return `<div class="card" style="cursor:pointer" onclick="coStart('algemeen','${esc(m)}')">
-    <div class="row" style="gap:8px"><span style="flex:1;min-width:0;line-height:1.45" class="muted">${nieuw}Er valt deze maand niets te beslissen. Wil je toch iets doornemen?</span>
-      <span style="color:var(--teal);font-weight:700">›</span></div></div>`;
+    return `<div class="row" data-coachingang style="gap:8px;cursor:pointer;margin-top:10px;padding-top:9px;border-top:1px solid var(--line)" onclick="coStart('algemeen','${esc(m)}')">
+      <span class="small" style="flex:1;min-width:0;line-height:1.45;color:var(--mut2)">${nieuw}Er valt deze maand niets te beslissen. Wil je toch iets doornemen?</span>
+      <span style="color:var(--teal);font-weight:700">›</span></div>`;
   return '';
 }
 /* ---------- DE AFSPRAAKLUS (v142) ----------
@@ -15355,11 +15366,10 @@ function spendVsBudgetChart(){
   if(afgerond.length<GRAFIEK_MIN) return `<div id="insSpendCard">${head}${open?`<div class="small muted">Vanaf ${GRAFIEK_MIN} afgeronde maanden zie je hier je verloop. Je hebt er nu ${afgerond.length}.</div>`:''}</div>`;
   if(!open) return `<div id="insSpendCard">${head}<div class="small" style="color:var(--mut2);margin-top:6px">Je uitgaven per maand naast je budget · tik om te bekijken</div></div>`;
   const last=afgerond.slice(-12);
-  const rows=last.map(mm=>{ const t=totals(mm), P=maandPotjes(mm);
-    /* v335: de budgetlijn van een maand met bewaarde potjebedragen leest die bedragen, want de bridge
-       begint bij dat getal (v104). Zonder bewaarde bedragen blijft hij totals().budget. */
-    const bud=P.bron==='bewaard'?maandPotjesSom(P.B):t.budget;
-    return {m:mm, spend:Math.max(t.spendNorm,0), budget:Math.max(bud,0)}; });   // v234: de grafiek zet uitgaven naast je budget, dus zonder onvoorzien   // v234: de grafiek zet uitgaven naast je budget, dus zonder onvoorzien
+  /* v335: de budgetlijn van een maand met bewaarde potjebedragen leest die bedragen, want de bridge
+     begint bij dat getal (v104). Zonder bewaarde bedragen blijft hij totals().budget. v340: dat staat
+     in maandStaaf(), met de pop-up en het logboek als twee andere lezers. */
+  const rows=last.map(mm=>{ const S=maandStaaf(mm); return {m:mm, spend:S.spend, budget:S.budget}; });   // v234: de grafiek zet uitgaven naast je budget, dus zonder onvoorzien   // v234: de grafiek zet uitgaven naast je budget, dus zonder onvoorzien
   const G=CHART_GEO, {W,H,L,R,TOP,BASE,XLAB}=G;
   const niceTop=reisNiceCeil(Math.max(...rows.map(r=>Math.max(r.spend,r.budget)),1)*1.08);
   const slot=(W-L-R)/rows.length, bw=Math.min(slot*0.62,34);
@@ -15572,7 +15582,7 @@ function brugBlok(m){
     <div class="small" data-brugzin style="line-height:1.5;margin-top:8px">${brugZin(Br)}</div>
     ${restKnop}${restLijst}${knoppen}</div>`;
 }
-function brugHerteken(){ const el=document.getElementById('insSpendCard'); if(el) el.outerHTML=spendVsBudgetChart(); }
+function brugHerteken(){ const el=document.getElementById('insSpendCard'); if(el) el.outerHTML=spendVsBudgetChart(); try{ if(document.getElementById('logMaand')) renderLogMaand(); }catch(_){} }
 function brugKies(m){
   if(window._brugMaand===m){ window._brugMaand=null; }
   else { window._brugMaand=m; window._brugTegen='budget'; window._brugRestOpen=false; }
@@ -15631,7 +15641,7 @@ const valtOpLijn=i=>i?'border-top:1px solid var(--line);':'';
    er niets om maal twaalf te doen. Een lek van EUR 1.480 is geen EUR 17.760 per jaar; dat is een
    uitgave en geen overschrijding.
    HIJ STAAT ALLEEN OP INZICHTEN. `valtOpRij()` heeft een aanroeper (`insSignalRows()`), en de kaart
-   op Grip (`gripSignalCards()`) is niet aangeraakt: die draagt de historie en de drie handelingen,
+   op Grip (de kaart in de sheet achter de Let op-regel) draagt hem niet: die draagt de historie en de drie handelingen,
    en daar is de vraag wat je nu gaat doen en niet wat het op een jaar zou zijn.
    GEEN OORDEEL EN GEEN AANDACHT (`v78`/`v93`): `small muted` is de kleur van elke subregel in dit
    blok, dus de regel claimt niets wat de rij erboven niet al zei.
@@ -15748,7 +15758,7 @@ function insSignalRows(m, nu){
 }
 /* De rij is de ingang naar de kaart op Grip. Geen tweede detectie: de id is de sleutel van hetzelfde
    signaal, en Grip opent die kaart in plaats van de bovenste. */
-function naarGripSignaal(id){ window._valtOpOpen=id||null; go('maand'); }
+function naarGripSignaal(id){ go('maand'); if(id) openGripLetOp('sig', id); }   // v340: het signaal staat onder 'Let op' en opent in een sheet
 
 /* Herokaart op Inzichten (v135): budgetstand en "Nog deze maand" beantwoorden dezelfde vraag -
    hoe sta ik er halverwege de maand voor - dus staan ze in één kaart. Bewust twee blokken die elk
@@ -21947,7 +21957,7 @@ function go(name){
        nu veilig, want de vlag stuurt geen inhoud meer aan (v168). */
     /* v176: het leesmoment gaat over de lopende maand. v233: Grip is altijd de lopende maand, dus
        de guard op isLopendeMaand() is weg; de vlag stuurt nog steeds geen inhoud (v168). */
-    if(name==='maand'){ try{ SET.maandGelezen=vandaagYMD(); save(); renderMaand(); }catch(_){} }
+    if(name==='maand'){ try{ const pop=afsluitPopupMisschien(); SET.maandGelezen=vandaagYMD(); save(); renderMaand(); if(pop) renderAfsluitSheet(afsluitMaand()); }catch(_){} }
   }
   /* v331: het logboek leest de stand van het moment waarop je hem opent. */
   if(name==='logboek'){ try{ renderLogboek(); }catch(_){} }
@@ -23104,6 +23114,8 @@ document.addEventListener('drop',async e=>{
 load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
+// v340: de maandafsluiting als pop-up bij het openen, hooguit een keer per dag (go('maand') doet het zelf)
+try{ if(TX.length && !new URLSearchParams(location.search).get('code') && localStorage.getItem('minder_view')!=='maand') afsluitPopupMisschien(); }catch(_){}
 try{ if(TX.length) pushTopNotif(); updateNotifBadge(); }catch(_){}
 try{ if(Object.keys(SET.psd2Accounts||{}).length && (Date.now()-(SET.psd2LastSync||0))>4*3600000) psd2Refresh(true); }catch(_){}
 if(new URLSearchParams(location.search).get('code')) psd2HandleCallback(); // terug van bank (PSD2-consent)

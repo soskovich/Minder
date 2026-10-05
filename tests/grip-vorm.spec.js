@@ -1,5 +1,10 @@
 /* v314 ronde A: de vorm van Grip en de kleine logica eromheen.
  *
+ * v340: GRIP IS EEN DASHBOARD. De samenvatting, 'Staat goed', de beleggen-kaart en de hoogtes van
+ * v314 zijn met die kaarten vervallen (zie grip-dashboard.spec.js); wat hier blijft is de volgorde van
+ * de handelingen op de valt-op-kaart (nu in de sheet achter 'Let op'), zo laten, de maatstaf op de
+ * tegels, de afspraak onder Deze maand, de tegel Beleggen en de potjes-wijziging in de tijdlijn.
+ *
  * ZES DINGEN, EN ZE RAKEN ELKAAR VIA DE SAMENVATTING: die telt sinds deze ronde de
  * potje-overschrijdingen mee, en daarmee is het aantal signalen een invoer van het oordeel geworden.
  * Daarom meet elk blok eerst zijn eigen INVOER (hoeveel signalen, welke statussen, hoeveel dagen de
@@ -77,6 +82,12 @@ async function boot(page, o = {}) {
   await page.evaluate(() => go('maand'));
 }
 
+/* v340: de valt-op-kaart staat achter de regel onder 'Let op' op Grip, in een sheet. */
+async function kaart(page) {
+  await page.locator('#gripLetOp [data-letop="sig"]').first().click();
+  await page.locator('#gripLetOpSheet .valtop-open').waitFor();
+}
+
 const BRON = () => kaalBron(fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'));
 
 /* ===== a) de invoer draagt de gevallen ===== */
@@ -95,88 +106,10 @@ test('a: de invoer draagt één overschrijding, drie goede regels en zeven reste
   expect(r.stru).toBe(0);
 });
 
-/* ===== b) de samenvatting ===== */
-test('b: de samenvatting staat vóór de signaalkaarten en telt het potje mee', async ({ page }) => {
-  await boot(page);
-  const r = await page.evaluate(() => {
-    /* v337: de maandafsluiting is een regel lager op Grip; deze test gaat over de volgorde erboven */
-    const ak = document.querySelector('#s-maand > .card');
-    const K = [...document.querySelectorAll('#s-maand .card')].filter(c => c.id !== 'afsluitKaart' && c.id !== 'afgeslotenRegel');
-    const sig = K.findIndex(c => /boven je potje/.test(c.innerText));
-    return { eerste: K[0].innerText, sigIdx: sig, akEerst: !document.getElementById('afsluitKaart') || ak.id !== 'afsluitKaart',   // v337: niet meer bovenaan
-      zin: maandOordeel(maandRegels(), valtOpSignals(thisYM()).length).zin };
-  });
-  // de eerste kaart van het scherm IS de samenvatting, en de signaalkaart staat erna
-  expect(r.eerste).toContain('Eén potje vraagt aandacht.');
-  expect(r.eerste).toContain('De rest staat goed.');
-  expect(r.sigIdx).toBe(1);
-  expect(r.akEerst).toBe(true);
-  expect(r.zin).toBe('Eén potje vraagt aandacht. De rest staat goed.');
-});
-
-test('b: een terugblik op de vorige maand staat erboven', async ({ page }) => {
-  /* 'BOVENAAN' GAAT OVER DE VASTE INHOUD. De drie lussen (een verlopen acceptatie, de afspraak van
-     vorige maand, het maandmoment) zijn terugblikken die er een paar dagen staan, en v141 heeft de
-     afspraaklus met zoveel woorden vóór het oordeel gezet. Ze blijven dus boven de samenvatting; wat
-     deze ronde verplaatst is de samenvatting ten opzichte van de SIGNAALKAARTEN. Zonder dit geval is
-     'de samenvatting is de eerste kaart' niet te onderscheiden van 'de samenvatting staat voor de
-     signalen', en vijf tests in afspraak-lus.spec.js hangen aan de eerste kaart. */
-  await boot(page, { set: { coachLog: [{ type: 'afspraak', cat: 'boodschappen', ts: new Date(NU.getFullYear(), NU.getMonth() - 1, 15).getTime(),
-    text: 'strakker op boodschappen' }] } });
-  const r = await page.evaluate(() => {
-    const K = [...document.querySelectorAll('#s-maand > .card')].filter(c => c.id !== 'afsluitKaart' && c.id !== 'afgeslotenRegel');   // v337
-    return { koppen: K.slice(0, 3).map(c => c.innerText.split('\n')[0].slice(0, 40)) };
-  });
-  expect(r.koppen[0].toUpperCase()).toContain('JE AFSPRAAK VAN VORIGE MAAND');
-  expect(r.koppen[1]).toContain('potje vraagt aandacht');
-  expect(r.koppen[2]).toContain('Boodschappen');
-});
-
-test('b: zonder potje blijft de oude telzin staan, met potje niet', async ({ page }) => {
-  await boot(page);
-  const r = await page.evaluate(() => {
-    const R = maandRegels();
-    return { nul: maandOordeel(R, 0).zin, een: maandOordeel(R, 1).zin, twee: maandOordeel(R, 2).zin,
-      sub: maandOordeel(R, 1).sub };
-  });
-  expect(r.nul).toBe('Alle 3 regels staan goed.');
-  expect(r.een).toBe('Eén potje vraagt aandacht. De rest staat goed.');
-  expect(r.twee).toBe('2 potjes vragen aandacht. De rest staat goed.');
-  // de sub blijft noemen WELKE regels in orde zijn, dus 'de rest' is niet vaag
-  expect(r.sub.toLowerCase()).toContain('dekking reserveringen');
-  expect(r.sub.toLowerCase()).toContain('buffer in maanden');
-});
-
-test('b: een potje telt niet mee in het aantal REGELS', async ({ page }) => {
-  await boot(page);
-  const r = await page.evaluate(() => {
-    const R = maandRegels();
-    return { len: R.length, nul: maandOordeel(R, 0).zin, drie: maandOordeel(R, 3).zin };
-  });
-  // het aantal regels is en blijft 3; het potje krijgt een eigen zin en verschuift de telling niet
-  expect(r.len).toBe(3);
-  expect(r.nul).toContain('Alle 3 regels');
-  expect(r.drie.startsWith('3 potjes vragen aandacht.')).toBe(true);
-  expect(r.drie).not.toContain('4');
-});
-
-test('b: het oordeel haalt de signalen van de aanroeper en rekent ze niet zelf uit', async ({ page }) => {
-  await boot(page);
-  const bron = await kaalUit(page, 'maandOordeel', 'renderMaand', 'gripSignalCards');
-  const sec = (n) => bron.split('function ' + n)[1] || '';
-  // maandOordeel roept valtOpSignals() niet aan: één bron voor het aantal (v104)
-  expect(/function maandOordeel/.test(bron)).toBe(true);
-  expect(bron.split('function maandOordeel')[1].split('function ')[0]).not.toContain('valtOpSignals');
-  // renderMaand haalt de lijst één keer op en geeft hem aan beide lezers mee
-  const rm = bron.split('function renderMaand')[1].split('\nfunction ')[0];
-  expect((rm.match(/valtOpSignals\(/g) || []).length).toBe(1);
-  expect(rm).toContain('gripSignalCards(SIG)');
-  expect(rm).toContain('maandOordeel(RO, SIG.length)');
-});
-
 /* ===== c) de handelingen in volgorde van het moment ===== */
 test('c: ruim voor het eind staat bijstellen eerst en is hij de enige primaire knop', async ({ page }) => {
   await boot(page);
+  await kaart(page);
   const r = await page.evaluate(() => {
     const k = document.querySelector('.valtop-open');
     return { dagen: valtOpDagenRest(),
@@ -192,6 +125,7 @@ test('c: ruim voor het eind staat bijstellen eerst en is hij de enige primaire k
 
 test('c: in de laatste dagen staat bekijken eerst, dan volgende maand, dan de grens', async ({ page }) => {
   await boot(page, { dagen: 2 });
+  await kaart(page);
   const r = await page.evaluate(() => {
     const k = document.querySelector('.valtop-open');
     return { dagen: valtOpDagenRest(),
@@ -213,6 +147,7 @@ test('c: in de laatste dagen staat bekijken eerst, dan volgende maand, dan de gr
 
 test('c: het dagwoord in de grens-knop volgt dezelfde dagen als de regel erboven', async ({ page }) => {
   await boot(page, { dagen: 1 });
+  await kaart(page);
   const r = await page.evaluate(() => {
     const k = document.querySelector('.valtop-open');
     return { dagen: valtOpDagenRest(), tekst: k.innerText,
@@ -236,6 +171,7 @@ test('c: de grens voor de volgorde is een benoemde constante met twee lezers', a
 
 test('c: op de grensdag zelf geldt de laatste-dagen-volgorde nog', async ({ page }) => {
   await boot(page, { dagen: 3 });
+  await kaart(page);
   const r = await page.evaluate(() => ({ dagen: valtOpDagenRest(),
     labels: [...document.querySelectorAll('.valtop-open .valtop-hand')].map(x => x.innerText.split('\n')[0]) }));
   expect(r.dagen).toBe(3);
@@ -244,6 +180,7 @@ test('c: op de grensdag zelf geldt de laatste-dagen-volgorde nog', async ({ page
 
 test('c: één dag erboven is de andere volgorde', async ({ page }) => {
   await boot(page, { dagen: 4 });
+  await kaart(page);
   const r = await page.evaluate(() => ({ dagen: valtOpDagenRest(),
     labels: [...document.querySelectorAll('.valtop-open .valtop-hand')].map(x => x.innerText.split('\n')[0]) }));
   expect(r.dagen).toBe(4);
@@ -303,35 +240,33 @@ test('d: de telling kent zo_gelaten als eigen sleutel', async ({ page }) => {
   expect(r).toEqual(['potje_bijgesteld', 'volgende_maand', 'grens_gezet', 'zo_gelaten', 'correctie', 'geen']);
 });
 
-/* ===== e) Staat goed, met de linker-sub ===== */
-test('e: de drie rijen dragen een linker-sub uit hun eigen bron', async ({ page }) => {
+/* ===== e) de maatstaf op de tegels ===== */
+/* v340: 'Staat goed' is vervallen; de rijen staan als KPI-tegel op Grip. De sub van de buffer (de NORM)
+   is de maatstaf van zijn tegel, de dekking noemt de eerstvolgende post, het doel zijn eenheid. De
+   velden op de rij zijn ongewijzigd, en de fixture laat norm en richt uiteenlopen (2 tegen 3). */
+test('e: de tegels dragen hun maatstaf uit hun eigen bron', async ({ page }) => {
   await boot(page);
   const r = await page.evaluate(() => {
     const R = maandRegels(); const by = {}; R.forEach(x => by[x.key] = x);
-    const sg = [...document.querySelectorAll('#s-maand .card')].find(c => /STAAT GOED/.test(c.innerText));
-    return { subs: { buffer: by.buffer.sub, dekking: by.dekking.sub, doel: by.doel.sub },
-      waarden: { buffer: by.buffer.waarde, dekking: by.dekking.waarde, doel: by.doel.waarde },
-      eenheden: { buffer: by.buffer.eenheid, dekking: by.dekking.eenheid, doel: by.doel.eenheid },
-      alloc: by.doel.waarde, benodigdeStand: by.dekking.benodigdeStand, tekst: sg.innerText };
+    const T = Object.fromEntries([...document.querySelectorAll('#gripTegels [data-tegel]')].map(e => [e.dataset.tegel, e.querySelector('.kt-maat').innerText]));
+    return { subs: { buffer: by.buffer.sub, dekking: by.dekking.sub }, eenheden: { buffer: by.buffer.eenheid, dekking: by.dekking.eenheid, doel: by.doel.eenheid },
+      waarden: { dekking: by.dekking.waarde }, benodigdeStand: by.dekking.benodigdeStand, T, sg: document.getElementById('s-maand').innerText };
   });
-  // buffer: de sub noemt de NORM, de rechterkolom de RICHT, en die twee zijn in deze fixture 2 en 3
   expect(r.subs.buffer).toBe(`je norm: ${NORM} maanden`);
+  expect(r.T.buffer).toBe(`je norm: ${NORM} maanden`);
+  expect(r.T.buffer).not.toContain(String(RICHT));
   expect(r.eenheden.buffer).toContain(`je richtbedrag is ${RICHT} maanden`);
   expect(r.eenheden.buffer).not.toMatch(/je richt staat/);   // v322: het woord is afgemaakt
-  expect(r.subs.buffer).not.toContain(String(RICHT));
-  // dekking: de eerstvolgende post links, wat er na die post overblijft rechts
   expect(r.subs.dekking).toBe(`verwacht: €${POST} in ${new Intl.DateTimeFormat('nl-NL', { month: 'long', year: 'numeric' }).format(new Date(PLUS(2) + '-01'))}`);
+  expect(r.T.dekking).toBe(`€${POST} nodig in ${new Intl.DateTimeFormat('nl-NL', { month: 'long' }).format(new Date(PLUS(2) + '-01'))}`);
   expect(r.waarden.dekking).toBe(`€${POTSTAND}`);
   expect(r.eenheden.dekking).toBe(`in je pot · €${BLIJFT} blijft over`);
-  // en dat is de potstand min DEZE post, niet min de opbouw-eis: die twee verschillen hier echt
   expect(r.benodigdeStand).not.toBe(POST);
-  expect(r.eenheden.dekking).not.toContain(String(POTSTAND - r.benodigdeStand));
-  // doel: de waarde is wat je INLEGT, de eenheid wat er nodig is
-  expect(r.subs.doel).toContain('€10.000');
-  expect(r.eenheden.doel).toContain('nodig');
-  expect(r.tekst).toContain(`je norm: ${NORM} maanden`);
-  expect(r.tekst).toContain(`€${BLIJFT} blijft over`);
+  expect(r.T.doel).toBe(r.eenheden.doel);
+  expect(r.T.doel).toContain('nodig');
+  expect(r.sg.toUpperCase()).not.toContain('STAAT GOED');
 });
+
 
 test('e: de waarde van het doel is de inleg en de eenheid het benodigde, en die twee verschillen', async ({ page }) => {
   await boot(page);
@@ -354,109 +289,45 @@ test('e: de compacte rij rendert de sub en de uitgeklapte rij niet', async ({ pa
   expect(r.vol).not.toContain(`je norm: ${NORM} maanden`);
 });
 
-/* ===== f) de afspraak één keer ===== */
-test('f: de afspraak staat als kaart en niet in de regel', async ({ page }) => {
+/* ===== f) de afspraak een keer ===== */
+/* v340: de afspraak uit het gesprek staat onder 'Deze maand', bij de lopende afspraken, en niet op een
+   tegel. De zin "staat goed, dus deze afspraak gaat nu niet over een tekort" is met maandCoachIngang()
+   vervallen. */
+test('f: de afspraak staat onder Deze maand en niet op een tegel', async ({ page }) => {
   await boot(page, { set: { coachLog: [{ type: 'afspraak', regel: 'buffer', ts: NU.getTime(),
     text: 'Ik verhoog het bedrag dat ik per maand opzij zet' }] } });
   const r = await page.evaluate(() => {
     const t = document.getElementById('s-maand').innerText;
     const R = maandMetAfspraak(maandRegels());
-    return { tekst: t, n: (t.match(/Ik verhoog het bedrag dat ik per maand opzij zet/g) || []).length,
-      rij: maandRij(R.find(x => x.key === 'buffer'), false),
+    return { n: (t.match(/Ik verhoog het bedrag dat ik per maand opzij zet/g) || []).length,
+      deze: document.getElementById('gripDezeMaand').innerText, tegels: document.getElementById('gripTegels').innerText,
       vlag: !!R.find(x => x.key === 'buffer').afspraak };
   });
   expect(r.n).toBe(1);
-  expect(r.tekst).toContain('JE AFSPRAAK DEZE MAAND');
-  expect(r.tekst).not.toContain('Hier loopt een afspraak over');
-  expect(r.rij).not.toContain('Hier loopt een afspraak over');
-  // de vlag blijft wel op de rij staan: maandMetAfspraak() zet daarmee de status om
+  expect(r.deze).toContain('Ik verhoog het bedrag dat ik per maand opzij zet');
+  expect(r.tegels).not.toContain('Ik verhoog');
   expect(r.vlag).toBe(true);
 });
 
-test('f: de kaart noemt de regel als die op ok staat', async ({ page }) => {
-  await boot(page, { set: { coachLog: [{ type: 'afspraak', regel: 'buffer', ts: NU.getTime(),
-    text: 'Ik verhoog het bedrag dat ik per maand opzij zet' }] } });
-  const r = await page.evaluate(() => ({
-    st: maandRegels().find(x => x.key === 'buffer').status,
-    tekst: document.getElementById('s-maand').innerText }));
-  expect(r.st).toBe('ok');
-  expect(r.tekst).toContain('Je buffer in maanden staat goed, dus deze afspraak gaat nu niet over een tekort.');
-});
-
-test('f: bij een regel die niet op ok staat zegt de kaart dat niet', async ({ page }) => {
-  // een afspraak over het doel, met een doel dat zijn datum niet haalt
-  await boot(page, { set: { spaarInleg: 50,
-    goals: [{ id: 'g1', naam: 'Kosten Koper', doel: DOELBEDRAG, gespaard: 0, streefdatum: PLUS(3), allocMode: 'auto' }],
-    coachLog: [{ type: 'afspraak', regel: 'doel', ts: NU.getTime(), text: 'Ik leg meer per maand in' }] } });
-  const r = await page.evaluate(() => ({
-    st: maandRegels().find(x => x.key === 'doel').status,
-    tekst: document.getElementById('s-maand').innerText }));
-  expect(r.st).not.toBe('ok');
-  expect(r.tekst).toContain('JE AFSPRAAK DEZE MAAND');
-  expect(r.tekst).not.toContain('gaat nu niet over een tekort');
-});
-
-/* ===== g) beleggen: neutraal, en 'je drempel' alleen waar het jouw keuze is ===== */
-test('g: niet gehaald is neutraal en geen alarm', async ({ page }) => {
+/* ===== g) beleggen: neutraal ===== */
+/* v340: de kaart 'Voorwaarden voor beleggen' is de tegel Beleggen. Niet gehaald is grijs (v314: geen
+   alarm), gehaald groen. */
+test('g: niet gehaald is grijs en geen alarm', async ({ page }) => {
   await boot(page, { set: { beleggenDrempel: 6 } });
-  const r = await page.evaluate(() => {
-    const c = [...document.querySelectorAll('#s-maand .card')].find(x => /VOORWAARDEN VOOR BELEGGEN/.test(x.innerText));
-    const dot = c.querySelector('span[style*="border-radius:50%"]');
-    const cs = getComputedStyle(document.documentElement);
-    const hex = (n) => cs.getPropertyValue(n).trim();
-    const rgb = (h) => { const m = h.replace('#', ''); return 'rgb(' + [0, 2, 4].map(i => parseInt(m.slice(i, i + 2), 16)).join(', ') + ')'; };
-    return { kleur: getComputedStyle(dot).backgroundColor, bar: rgb(hex('--bar')), red: rgb(hex('--red')), amber: rgb(hex('--amber')),
-      zin: c.innerText, blok: beleggenKlaar(maandRegels()).blokkade.key };
-  });
+  const r = await page.evaluate(() => { const e = document.querySelector('[data-tegel="beleggen"]');
+    return { kleur: e.dataset.kleur, tekst: e.innerText.replace(/\s+/g, ' '), blok: beleggenKlaar(maandRegels()).blokkade.key }; });
   expect(r.blok).toBe('buffer');
-  expect(r.kleur).toBe(r.bar);
-  expect(r.kleur).not.toBe(r.red);
-  expect(r.kleur).not.toBe(r.amber);
-  expect(r.zin).toContain('tegen je drempel van 6 maanden');
+  expect(r.kleur).toBe('grijs');
+  expect(r.tekst).toBe('Beleggen wacht op je buffer');
 });
 
 test('g: gehaald blijft groen', async ({ page }) => {
   await boot(page);
-  const r = await page.evaluate(() => {
-    const c = [...document.querySelectorAll('#s-maand .card')].find(x => /VOORWAARDEN VOOR BELEGGEN/.test(x.innerText));
-    const dot = c.querySelector('span[style*="border-radius:50%"]');
-    const cs = getComputedStyle(document.documentElement);
-    const h = cs.getPropertyValue('--green').trim().replace('#', '');
-    return { kleur: getComputedStyle(dot).backgroundColor, zin: c.innerText,
-      green: 'rgb(' + [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)).join(', ') + ')' };
-  });
-  expect(r.zin).toContain('alle drie gehaald');
-  expect(r.kleur).toBe(r.green);
+  const r = await page.evaluate(() => { const e = document.querySelector('[data-tegel="beleggen"]'); return { kleur: e.dataset.kleur, tekst: e.innerText.replace(/\s+/g, ' ') }; });
+  expect(r.kleur).toBe('groen');
+  expect(r.tekst).toContain('alle drie gehaald');
 });
 
-test('g: je drempel staat alleen bij de buffer en niet bij dekking of doel', async ({ page }) => {
-  /* DE DEKKING MOET BLOKKEREN EN DE KAART MOET TOCH RENDEREN, en die twee eisen vechten met elkaar:
-     v187 laat de kaart ZWIJGEN zodra de blokkerende rij zelf al 'tekort' zegt. Mijn eerste vorm van
-     deze test zette alleen de potstand op 50; dan staat de dekking op 'tekort', verdwijnt de kaart
-     en sloeg de assertie zichzelf over achter een `if (r.zin)`. Dat is precies het weggefilterde
-     geval van v299/v300, en de sabotage die 'je drempel' onvoorwaardelijk maakt bleef er groen op.
-     DE STAND DIE HET WEL DRAAGT is een dekking op TEMPO: een gat dat voor zijn vervaldag te dichten
-     is geeft status 'let op', en dan is de dekking de blokkade EN rendert de kaart. v322: dat hangt
-     niet meer aan een vaste marge maar aan het stortingstempo (40 per maand in deze fixture), dus de
-     tweede post is zo gekozen dat het gat (299 + 500 - 500 = 299 over acht maanden, 38 per maand)
-     binnen dat tempo past. Met 5.000 was het 600 per maand en dus terecht een beslissing. */
-  await boot(page, { set: { reserveringen: [
-    { id: 'r1', naam: 'Waterschapsbelasting', bedrag: POST, vervalmaand: PLUS(2), intervalM: 12, cat: 'belasting' },
-    { id: 'r2', naam: 'Dakrenovatie', bedrag: 500, vervalmaand: PLUS(8), intervalM: 12, cat: 'onderhoud' } ] } });
-  const r = await page.evaluate(() => {
-    const R = maandRegels();
-    const c = [...document.querySelectorAll('#s-maand .card')].find(x => /VOORWAARDEN VOOR BELEGGEN/.test(x.innerText));
-    return { blok: beleggenKlaar(R).blokkade, dek: R.find(x => x.key === 'dekking').status,
-      buf: R.find(x => x.key === 'buffer').status, zin: c ? c.innerText : '' };
-  });
-  // de invoer: de buffer haalt zijn drempel, de dekking niet, en de kaart staat er echt
-  expect(r.buf).toBe('ok');
-  expect(r.dek).toBe('let op');
-  expect(r.blok.key).toBe('dekking');
-  expect(r.zin).toContain('Nog niet aan je voorwaarden voor beleggen');
-  // die drempel komt uit MAAND_DREMPEL en is geen keuze van jou
-  expect(r.zin).not.toContain('je drempel');
-});
 
 /* ===== h) de zes quick wins ===== */
 test('h: de afspraak-zin in het gesprek draagt geen gedachtestreepje', async ({ page }) => {
@@ -551,85 +422,30 @@ test('h: het label van de coach zegt waar je heen gaat', async ({ page }) => {
   expect(bron).not.toContain('Terug naar de onderwerpen');
 });
 
-test('h: de potjes-rij noemt het potje dat verandert', async ({ page }) => {
+/* v340: "Vanaf <maand>" is opgegaan in de tijdlijn op Grip. De volle zin staat in maandVanafData(), de
+   tijdlijn draagt de korte vorm in de maand waarin hij ingaat. */
+test('h: de potjes-wijziging noemt het potje dat verandert', async ({ page }) => {
   await boot(page);
-  const r = await page.evaluate(() => {
-    const t = document.getElementById('s-maand').innerText;
-    return { tekst: t, B: SET.budgets, P: plannedBudgets() };
-  });
-  // de fixture verandert precies één potje: sport komt erbij voor €50
+  const r = await page.evaluate(() => ({ data: maandVanafData(), B: SET.budgets, P: plannedBudgets(),
+    tl: [...document.querySelectorAll('#gripTijdlijn .tl3-e[data-tlsoort="vanaf"]')].map(e => [e.closest('[data-tlmaand]').dataset.tlmaand, e.innerText]) }));
   expect(r.P.sport).toBe(50);
   expect(r.B.sport).toBe(undefined);
-  /* v315: de rij staat in de kaart 'Vanaf <maand>' en heet daar 'Je potjes'; de woorden 'vanaf
-     volgende maand' zijn naar de KOP van die kaart verhuisd. De sub is onveranderd. */
-  expect(r.tekst.toUpperCase()).toContain('VANAF ');
-  expect(r.tekst).toContain('Je potjes');
-  expect(r.tekst).toContain('Sport & gezondheid erbij voor €50, de rest ongewijzigd');
+  expect(r.data[0].lab).toBe('Je potjes');
+  expect(r.data[0].sub).toBe('Sport & gezondheid erbij voor €50, de rest ongewijzigd');
+  expect(r.tl).toEqual([[PLUS(1), 'Sport & gezondheid erbij']]);
 });
+
 
 test('h: bij meer dan één wijziging noemt de rij het aantal', async ({ page }) => {
   await boot(page, { set: { budgetsNext: { huur: 950, boodschappen: 450, sport: 50 } } });
-  const r = await page.evaluate(() => document.getElementById('s-maand').innerText);
+  const r = await page.evaluate(() => document.getElementById('gripTijdlijn').innerText);
   expect(r).toContain('3 potjes veranderen');
 });
 
 test('h: een potje dat terugzakt heet terug en niet omhoog', async ({ page }) => {
   await boot(page, { set: { budgets: { huur: 900, boodschappen: POTJE, sport: 96 },
     budgetsNext: { huur: 900, boodschappen: POTJE, sport: 50 } } });
-  const r = await page.evaluate(() => document.getElementById('s-maand').innerText);
-  expect(r).toContain('Sport & gezondheid terug van €96 naar €50, de rest ongewijzigd');
+  const r = await page.evaluate(() => ({ sub: maandVanafData()[0].sub, tl: document.getElementById('gripTijdlijn').innerText }));
+  expect(r.sub).toBe('Sport & gezondheid terug van €96 naar €50, de rest ongewijzigd');
+  expect(r.tl).toContain('Sport & gezondheid naar €50');
 });
-
-/* ===== i) de hoogtes, gemeten en vastgepind ===== */
-for (const [w, h, zichtbaar] of [[360, 640, 567], [390, 844, 771]]) {
-  test(`i: de hoogtes op ${w}px`, async ({ page }) => {
-    await page.setViewportSize({ width: w, height: h });
-    await boot(page);
-    /* v337: de maandafsluiting is een regel onder 'Vraagt een beslissing' en schuift wat eronder
-       staat met zijn eigen hoogte omlaag. Deze test pint de vorm van v314 en haalt die regel dus
-       eerst weg; wat hij kost staat in maand-afsluiting.spec.js. */
-    await page.evaluate(() => { for (const id of ['afsluitKaart', 'afgeslotenRegel']) { const e = document.getElementById(id); if (e) e.remove(); } });
-    const r = await page.evaluate(() => {
-      const K = [...document.querySelectorAll('#s-maand .card')];
-      const sig = K.find(c => /boven je potje/.test(c.innerText));
-      const sg = K.find(c => /STAAT GOED/.test(c.innerText));
-      const va = K.find(c => /^VANAF /.test(c.innerText));
-      const nav = document.querySelector('.nav, nav, #nav');
-      return { sam: Math.round(K[0].getBoundingClientRect().height),
-        samBodem: Math.round(K[0].getBoundingClientRect().bottom),
-        sigTop: Math.round(sig.getBoundingClientRect().top),
-        sigBodem: Math.round(sig.getBoundingClientRect().bottom),
-        sgH: Math.round(sg.getBoundingClientRect().height),
-        vaH: va ? Math.round(va.getBoundingClientRect().height) : 0,
-        navH: nav ? Math.round(nav.getBoundingClientRect().height) : 0,
-        hand: [...sig.querySelectorAll('.valtop-hand')].map(x => Math.round(x.getBoundingClientRect().bottom)) };
-    });
-    expect(h - r.navH).toBe(zichtbaar);
-    // DE SAMENVATTING STAAT VOLLEDIG BOVEN DE VOUW, op beide breedtes
-    expect(r.sam).toBe(124);
-    expect(r.samBodem).toBe(194);
-    expect(r.samBodem).toBeLessThan(zichtbaar);
-    expect(r.sigTop).toBe(210);
-    // de primaire handeling en de tweede staan boven de vouw
-    expect(r.hand[0]).toBeLessThan(zichtbaar);
-    expect(r.hand[1]).toBeLessThan(zichtbaar);
-    if (w === 360) {
-      // GEMETEN PRIJS: op de kleinste telefoon valt de derde handeling net onder de vouw
-      expect(r.sigBodem).toBe(615);
-      expect(r.hand[2]).toBe(569);
-      /* v315: 'Staat goed' is 77px lager, want de potjes-rij hing hier onder de streep en staat nu
-         in zijn eigen kaart. Die kaart kost 118px op 360 en 103px op 390, dus de pagina wordt 41 en
-         41px hoger; de sub breekt op 360px over twee regels en dat is het verschil tussen de twee.
-         De prijs staat als assertie vast, zodat een volgende ronde ziet wat hij uitgeeft. */
-      /* v322: 15px hoger op beide breedtes, want "je richtbedrag is 3 maanden" is langer dan "je richt
-         staat op 3" en breekt in de rechterkolom van de bufferrij een regel verder af. */
-      expect(r.sgH).toBe(245);
-      expect(r.vaH).toBe(118);
-    } else {
-      expect(r.sigBodem).toBe(576);
-      expect(r.sigBodem).toBeLessThan(zichtbaar);
-      expect(r.sgH).toBe(230);
-      expect(r.vaH).toBe(103);
-    }
-  });
-}

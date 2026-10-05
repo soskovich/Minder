@@ -3,13 +3,17 @@
 const { test, expect } = require('@playwright/test');
 const { boot, R, U, SEPTEMBER, AUG, SEP, OKT, JUL } = require('./logboek-scherm.fixture');
 
-const grip = page => page.evaluate(()=>{ const s=document.getElementById('s-maand'); const k=s.querySelector('#valtOpGrip');
-  const t=e=>e?e.innerText.replace(/\s+/g,' ').trim():'';
-  return {kaart:t(k), regels:[...(k?k.querySelectorAll('.vl-naarlog'):[])].map(t), vraag:k&&k.querySelector('[data-vraag]')?k.querySelector('[data-vraag]').dataset.vraag:null,
-    herhaling:k&&k.querySelector('[data-herhaling]')?k.querySelector('[data-herhaling]').dataset.herhaling:null,
-    vraagTekst:t(k&&k.querySelector('[data-vraag]')), knoppen:k?[...k.querySelectorAll('[data-vraag] button')].map(t):[],
-    logInGrip:!!s.querySelector('#valtOpLog'), maandInGrip:s.querySelectorAll('.vl-maand').length,
-    hoogte:Math.round(s.getBoundingClientRect().height)}; });
+/* v340: Grip draagt geen logboekkaart meer. De open vraag staat bovenaan het logboek (en in de pop-up
+   van de afsluiting zolang de maand open is). Deze helper leest Grip en de vraag in het logboek. */
+const grip = async page => { await page.evaluate(()=>{ closeSheet(); go('logboek'); });
+  const v = await page.evaluate(()=>{ const k=document.getElementById('logVraag'); const t=e=>e?e.innerText.replace(/\s+/g,' ').trim():'';
+    return {vraag:k&&k.querySelector('[data-vraag]')?k.querySelector('[data-vraag]').dataset.vraag:null,
+      herhaling:k&&k.querySelector('[data-herhaling]')?k.querySelector('[data-herhaling]').dataset.herhaling:null,
+      vraagTekst:t(k&&k.querySelector('[data-vraag]')), knoppen:k?[...k.querySelectorAll('[data-vraag] button')].map(t):[]}; });
+  await page.evaluate(()=>go('maand'));
+  const g = await page.evaluate(()=>{ const s=document.getElementById('s-maand'); const t=e=>e?e.innerText.replace(/\s+/g,' ').trim():'';
+    return {kaart:t(s), logInGrip:!!s.querySelector('#valtOpLog'), maandInGrip:s.querySelectorAll('.vl-maand').length, vraagInGrip:s.querySelectorAll('[data-vraag]').length}; });
+  return Object.assign(g, v); };
 const logboek = async page => { await page.evaluate(()=>go('logboek'));
   return page.evaluate(()=>{ const s=document.getElementById('s-logboek'); const t=e=>e?e.innerText.replace(/\s+/g,' ').trim():'';
     return {alles:t(s), maanden:[...s.querySelectorAll('.vl-maand')].map(b=>({m:b.dataset.maand, kop:+b.querySelector('[data-maandboven]').dataset.maandboven,
@@ -18,47 +22,48 @@ const logboek = async page => { await page.evaluate(()=>go('logboek'));
       vraag:s.querySelectorAll('[data-vraag]').length, tel:t(s.querySelector('.vl-tel')),
       uitz:s.querySelector('#valtOpUitz')?{gem:+s.querySelector('#valtOpUitz').dataset.gem, tel:s.querySelector('[data-uitzteller]').dataset.uitzteller, t:t(s.querySelector('#valtOpUitz')),
         knoppen:[...s.querySelectorAll('#valtOpUitz button')].map(t)}:null,
-      zichtbaar:document.getElementById('s-logboek').classList.contains('active')}; }); };
-
-/* ===== a) GRIP ZONDER OPEN VRAAG: EEN REGEL ===== */
-test('a1 mijn september geeft op Grip een regel met "3 boven, alle 3 een uitzondering"', async ({page})=>{
+      zichtbaar:document.getElementById('s-logboek').classList.contains('active')}; }); };/* ===== a) GRIP DRAAGT GEEN LOGBOEK, DE POP-UP EN HET LOGBOEK WEL ===== */
+test('a1 mijn september: de pop-up zegt €381 boven je potjes, alle 3 een uitzondering', async ({page})=>{
   await boot(page, SEPTEMBER(true));
   const g=await grip(page);
-  expect(g.regels).toEqual(['September · €381 boven je potjes 3 boven, alle 3 een uitzondering ›']);
   expect(g.vraag).toBe(null);
   expect(g.logInGrip).toBe(false);
   expect(g.maandInGrip).toBe(0);
-});
-test('a2 de regel opent het logboek als eigen scherm, en terug brengt je op Grip', async ({page})=>{
+  await page.evaluate(()=>openAfsluiting(afsluitMaand()));
+  const T=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[data-afsluittegel]')].map(e=>[e.dataset.afsluittegel, e.innerText.replace(/\s+/g,' ').trim()])));
+  expect(T.boven).toBe('Boven potjes €381 3 van 5 potjes');
+  expect(T.antwoord).toBe('Uitzondering 3 van 3 beantwoord');
+});test('a2 de link op Grip opent het logboek als eigen scherm, en terug brengt je op Grip', async ({page})=>{
   await boot(page, SEPTEMBER(true));
-  await page.click('#valtOpGrip .vl-naarlog');
+  await page.evaluate(()=>{ closeSheet(); go('maand'); });
+  await page.click('#gripNaarLogboek');
   expect(await page.evaluate(()=>document.getElementById('s-logboek').classList.contains('active'))).toBe(true);
   await page.evaluate(()=>terug());
   expect(await page.evaluate(()=>document.getElementById('s-maand').classList.contains('active'))).toBe(true);
-});
-test('a3 het feit noemt een gemengd antwoord als telling', async ({page})=>{
+});test('a3 het feit noemt een gemengd antwoord als telling, in de maand in het logboek', async ({page})=>{
   const log=SEPTEMBER(true); log[1].antwoord={keuze:'past_niet', op:'2026-10-02'}; delete log[2].antwoord; log[2].antwoord={keuze:'past_niet',op:'2026-10-02'};
   await boot(page, log);
-  expect((await grip(page)).regels[0]).toContain('3 boven · 1 uitzondering · 2× potje past niet');
-});
-
-/* ===== b) GRIP MET OPEN VRAAG ===== */
-test('b1 met een open vraag staat de vraag op Grip, met daaronder "Logboek"', async ({page})=>{
+  const f=await page.evaluate(()=>{ openLogMaand('2026-09'); return document.querySelector('#logMaand [data-logfeit]').innerText; });
+  expect(f).toContain('3 boven · 1 uitzondering · 2× potje past niet');
+});/* ===== b) DE OPEN VRAAG ===== */
+test('b1 met een open vraag staat de vraag bovenaan het logboek en in de pop-up, en niet op Grip', async ({page})=>{
   await boot(page, SEPTEMBER(false));
   const g=await grip(page);
   expect(g.vraag).toBe(SEP+'|uiteten');
   expect(g.vraagTekst).toContain('Uit eten & café bleef ook met een grens boven je potje.');
   expect(g.knoppen).toEqual(['Potje past niet','Uitzondering']);
-  expect(g.regels).toEqual(['Logboek ›']);
+  expect(g.vraagInGrip).toBe(0);
   expect(g.herhaling).toBe(null);
-});
-test('b2 verplaatsen is geen kopie: het logboek draagt de vraag niet, en wel het record als rij', async ({page})=>{
+  await page.evaluate(()=>openAfsluiting(afsluitMaand()));
+  expect(await page.evaluate(()=>document.querySelector('#afsluitSheet [data-vraag]').dataset.vraag)).toBe(SEP+'|uiteten');
+});test('b2 het logboek draagt de vraag een keer, en het record als rij', async ({page})=>{
   await boot(page, SEPTEMBER(false));
   const L=await logboek(page);
-  expect(L.vraag).toBe(0);
+  expect(L.vraag).toBe(1);
   expect(L.maanden[0].boven).toEqual([194,103,84]);
-  expect(L.alles).toContain('vraag staat op Grip');
+  expect(L.alles).toContain('vraag staat bovenaan');
 });
+
 
 /* ===== c) HET LOGBOEK ===== */
 test('c1 de maand met kop, regels, rest, feit en telregel', async ({page})=>{
@@ -121,7 +126,7 @@ test('d1 een tweede uitzondering op hetzelfde potje krijgt de herhaalvraag', asy
 });
 test('d2 "Nog steeds" bewaart het antwoord met het feit dat het een herhaling was', async ({page})=>{
   await boot(page, SEPTEMBER(true).concat(OKTOBER()), {}, NOV);
-  await page.click('#valtOpGrip [data-vraag] button:has-text("Nog steeds")');
+  await grip(page); await page.evaluate(()=>go('logboek')); await page.click('#logVraag [data-vraag] button:has-text("Nog steeds")');
   const a=await page.evaluate(()=>SET.valtOpLog['2026-10|uiteten'].antwoord);
   expect(a).toMatchObject({keuze:'uitzondering', herhaling:true, vorige:'2026-09'});
   /* de volgende vraag (Kleding) heeft geen uitzondering ervoor en is de gewone vorm */
@@ -134,7 +139,7 @@ test('d2 "Nog steeds" bewaart het antwoord met het feit dat het een herhaling wa
 });
 test('d3 ook "Potje past niet" op een herhaalvraag bewaart de herhaling', async ({page})=>{
   await boot(page, SEPTEMBER(true).concat(OKTOBER()), {}, NOV);
-  await page.click('#valtOpGrip [data-vraag] button:has-text("Potje past niet")');
+  await grip(page); await page.evaluate(()=>go('logboek')); await page.click('#logVraag [data-vraag] button:has-text("Potje past niet")');
   const a=await page.evaluate(()=>SET.valtOpLog['2026-10|uiteten'].antwoord);
   expect(a).toMatchObject({keuze:'past_niet', herhaling:true, vorige:'2026-09'});
 });
@@ -189,26 +194,12 @@ test('e5 renderen schrijft niets', async ({page})=>{
   const voor=await page.evaluate(()=>JSON.stringify([SET.budgets,SET.budgetsNext||{},SET.valtOpUitzGelaten||null]));
   await logboek(page); await page.evaluate(()=>{ go('maand'); renderMaand(); go('logboek'); });
   expect(await page.evaluate(()=>JSON.stringify([SET.budgets,SET.budgetsNext||{},SET.valtOpUitzGelaten||null]))).toBe(voor);
+});/* ===== f) GRIP DRAAGT GEEN LOGBOEK ===== */
+/* v340: de logboekkaart is van Grip af; daar staat alleen de link (zie grip-dashboard.spec.js voor de hoogte). */
+test('f Grip draagt geen logboekkaart en geen vraag, alleen de link', async ({page})=>{
+  await boot(page, SEPTEMBER(false));
+  const g=await grip(page);
+  expect(g.vraagInGrip).toBe(0);
+  expect(await page.evaluate(()=>!!document.querySelector('#s-maand #valtOpGrip'))).toBe(false);
+  expect(g.kaart).toContain('Logboek ›');
 });
-
-/* ===== f) DE HOOGTE VAN GRIP ===== */
-/* GEMETEN voor v331 op dezelfde fixture: Grip 762px op 360 en 728px op 390 met alles beantwoord, waarvan
-   635 en 601px logboek; met een open vraag 746 en 712px. */
-for (const [w,h] of [[360,640],[390,844]]) {
-  test(`f${w} Grip is lager, met en zonder open vraag`, async ({page})=>{
-    await page.setViewportSize({width:w,height:h});
-    /* v337: de maandafsluiting staat op Grip met zijn eigen hoogte (maand-afsluiting.spec.js);
-       deze test meet wat het logboek van v331 kost en haalt die kaart dus eerst weg. */
-    const zonder=()=>page.evaluate(()=>{ for (const id of ['afsluitKaart', 'afgeslotenRegel']) { const e = document.getElementById(id); if (e) e.remove(); } });
-    await boot(page, SEPTEMBER(true)); await zonder();
-    const a=await grip(page);
-    await boot(page, SEPTEMBER(false)); await zonder();
-    const b=await grip(page);
-    console.log(`GRIP ${w}px: beantwoord ${a.hoogte}px, open vraag ${b.hoogte}px`);
-    expect(a.hoogte).toBeLessThan(300);
-    expect(b.hoogte).toBeLessThan(460);
-    const over=await page.evaluate(()=>{ const k=document.getElementById('valtOpGrip'), r=k.getBoundingClientRect();
-      return [...k.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>r.right+0.5).length; });
-    expect(over).toBe(0);
-  });
-}

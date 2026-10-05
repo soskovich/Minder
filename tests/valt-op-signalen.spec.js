@@ -59,6 +59,12 @@ async function boot(page, o) {
   await page.waitForFunction(() => typeof valtOpSignals === 'function');
 }
 
+/* v340: op Grip staat elk signaal als regel onder 'Let op'; een tik opent de kaart in een sheet. */
+async function kaart(page, n) {
+  await page.evaluate(() => { closeSheet(); go('maand'); });
+  await page.locator('#gripLetOp [data-letop="sig"]').nth(n || 0).click();
+  await page.locator('#gripLetOpSheet .valtop-open').waitFor();
+}
 const sigKeys = (page) => page.evaluate(() => valtOpSignals(thisYM()).map((s) => s.potjeId));
 const logVan = (page) => page.evaluate(() => JSON.parse(JSON.stringify(SET.valtOpLog || {})));
 
@@ -126,7 +132,7 @@ test.describe('valtOpSignals: de detectie', () => {
     const src = await page.evaluate(() => valtOpSignals.toString());
     expect(src).toMatch(/const DREMPEL_EUR\s*=\s*25/);
     // één detectie: Grip rekent niet zelf
-    const grip = await page.evaluate(() => gripSignalCards.toString() + valtOpKaartOpen.toString());
+    const grip = await page.evaluate(() => renderGripLetOp.toString() + valtOpKaartOpen.toString());
     expect(grip).not.toMatch(/DREMPEL|effectiveBudgets|catSpendMap/);
     expect(grip).toMatch(/valtOpSignals\(/);
   });
@@ -218,19 +224,22 @@ test.describe('Inzichten: constateren, niet oplossen', () => {
 });
 
 test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
-  test('dezelfde twee in dezelfde volgorde, eerste open, tweede dicht', async ({ page }) => {
+  /* v340: Grip toont de signalen als regels onder 'Let op', in dezelfde volgorde als Inzichten, en een
+     tik opent de kaart van DAT signaal in een sheet. De vorm "eerste kaart open, tweede dicht" is
+     vervallen met de kaarten op het scherm. */
+  test('dezelfde twee in dezelfde volgorde, als regels onder Let op', async ({ page }) => {
     await boot(page, DRIE);
     await page.evaluate(() => go('maand'));
-    await expect(page.locator('.valtop-kaart')).toHaveCount(2);
-    await expect(page.locator('.valtop-open')).toHaveCount(1);
-    const ids = await page.locator('.valtop-kaart').evaluateAll((els) => els.map((e) => e.dataset.sig));
-    expect(ids).toEqual([`${CUR}|boodschappen`, `${CUR}|uiteten`]);
-    expect(await page.locator('.valtop-open').getAttribute('data-sig')).toBe(`${CUR}|boodschappen`);
-    // de ingeklapte kaart draagt kop plus bedrag, en verder niets
-    const dicht = await page.locator('.valtop-kaart:not(.valtop-open)').innerText();
-    expect(dicht).toContain('Uit eten');
-    expect(dicht).toContain('boven je potje');
-    expect(dicht).not.toContain('Bijstellen');
+    const rijen = page.locator('#gripLetOp [data-letop="sig"]');
+    await expect(rijen).toHaveCount(2);
+    const t = await rijen.allInnerTexts();
+    expect(t[0]).toContain('Boodschappen');
+    expect(t[1]).toContain('Uit eten');
+    expect(t[1]).toContain('boven je potje');
+    expect(t.join('|')).not.toContain('Bijstellen');
+    await expect(page.locator('#s-maand .valtop-kaart')).toHaveCount(0);   // de kaart staat niet op het scherm
+    await rijen.nth(1).click();
+    expect(await page.locator('#gripLetOpSheet .valtop-open').getAttribute('data-sig')).toBe(`${CUR}|uiteten`);
   });
 
   /* De rij op Inzichten belooft "in Grip". Tik je op de TWEEDE rij, dan hoort die kaart open te
@@ -240,18 +249,13 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
     await page.evaluate(() => go('ins'));
     await page.locator('.valtop-rij').nth(1).click();
     await expect(page.locator('#s-maand')).toHaveClass(/active/);
-    expect(await page.locator('.valtop-open').getAttribute('data-sig')).toBe(`${CUR}|uiteten`);
-    // de volgorde van de kaarten verandert daar niet van
-    const ids = await page.locator('.valtop-kaart').evaluateAll((els) => els.map((e) => e.dataset.sig));
-    expect(ids).toEqual([`${CUR}|boodschappen`, `${CUR}|uiteten`]);
-    // en de ingeklapte kaart laat zich openen
-    await page.locator('.valtop-kaart:not(.valtop-open)').click();
-    expect(await page.locator('.valtop-open').getAttribute('data-sig')).toBe(`${CUR}|boodschappen`);
+    expect(await page.locator('#gripLetOpSheet .valtop-open').getAttribute('data-sig')).toBe(`${CUR}|uiteten`);
+    await expect(page.locator('#gripLetOpSheet .valtop-kaart')).toHaveCount(1);
   });
 
   test('de open kaart draagt het bedrag, de dagen, de historie en drie handelingen', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     const t = await page.locator('.valtop-open').innerText();
     expect(t).toContain('boven je potje');
     expect(t).toMatch(/nog \d+ dagen te gaan|nog 1 dag te gaan|de laatste dag/);
@@ -260,14 +264,14 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
       .toEqual(['Bijstellen', 'Grens zetten', 'Bekijken']);
   });
 
-  test('geen patroonregels en geen derde kaart op Grip', async ({ page }) => {
+  test('geen patroonregels en geen derde signaal op Grip', async ({ page }) => {
     await boot(page, DRIE);
     await page.evaluate(() => go('maand'));
     await expect(page.locator('#s-maand .valtop-patroon')).toHaveCount(0);
-    await expect(page.locator('.valtop-kaart')).toHaveCount(2);
+    await expect(page.locator('#gripLetOp [data-letop="sig"]')).toHaveCount(2);
     // het derde signaal staat wel in de log (dat is de bedoeling: je ziet wat je niet gezien hebt),
-    // maar niet als kaart
-    expect((await page.locator('.valtop-kaart').allInnerTexts()).join('|')).not.toContain('Vervoer & auto');
+    // maar niet op Grip
+    expect(await page.locator('#gripLetOp').innerText()).not.toContain('Vervoer & auto');
     await page.evaluate(() => go('logboek'));   // v331: de log is een eigen scherm
     await expect(page.locator('#s-logboek #valtOpLog')).toContainText('niet getoond');
   });
@@ -278,7 +282,7 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
       potje_bij_detectie: 200, over_bij_detectie: 60, gedetecteerd_op: `${M1}-20`, getoond: true,
       actie: 'geen', actie_op: null, potje_voor: null, potje_na: null, over_eind_maand: 60 };
     await boot(page, Object.assign({}, DRIE, { set: Object.assign({}, DRIE.set, { valtOpLog: vorig }) }));
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await expect(page.locator('.valtop-open')).toContainText('één keer');
     const src = await page.evaluate(() => valtOpHistorie.toString());
     expect(src).not.toMatch(/catSpendMap|effectiveBudgets/);
@@ -286,7 +290,7 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
 
   test('de lek-ingang leeft verder als chevron in de kop', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     const chev = page.locator('.valtop-open [onclick*="coStart"]');
     await expect(chev).toHaveCount(1);
     expect(await chev.getAttribute('onclick')).toContain("coStart('lek'");
@@ -300,7 +304,7 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
 test.describe('de drie handelingen', () => {
   test('potje bijstellen: voorstel boven de stand, deze maand, en vastgelegd', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
     const voorstel = +(await page.locator('#valtOpBedrag').inputValue());
     // KRITIEK: nooit onder de huidige stand, anders verdwijnt het signaal terwijl je er nog boven staat
@@ -322,7 +326,7 @@ test.describe('de drie handelingen', () => {
 
   test('een handmatig lager bedrag mag, en de vastlegging laat dat zien', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
     await page.locator('#valtOpBedrag').fill('220');
     await dek(page, 'Online shopping', 20);
@@ -336,7 +340,7 @@ test.describe('de drie handelingen', () => {
 
   test('een actie laat het signaal van beide schermen vallen, ook na herladen, en de derde schuift door', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
     await dek(page, 'Online shopping', +(await page.locator('#valtOpBedrag').inputValue()) - 200);
     await page.locator('#valtOpSave').click();
@@ -345,7 +349,7 @@ test.describe('de drie handelingen', () => {
     await expect(page.locator('.valtop-rij')).toHaveCount(2);
     await expect(page.locator('#insSignalRows')).not.toContainText('Boodschappen');
     await page.evaluate(() => go('maand'));
-    expect((await page.locator('.valtop-kaart').allInnerTexts()).join('|')).not.toContain('Boodschappen');
+    expect(await page.locator('#gripLetOp').innerText()).not.toContain('Boodschappen');
     await page.reload();
     await page.waitForFunction(() => typeof valtOpSignals === 'function');
     expect(await sigKeys(page)).toEqual(['uiteten', 'vervoer']);
@@ -353,7 +357,7 @@ test.describe('de drie handelingen', () => {
 
   test('grens zetten legt de stand vast en laat het signaal vallen', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').nth(1).click();
     const g = await page.evaluate(() => JSON.parse(JSON.stringify(SET.valtOpGrens)));
     expect(g.boodschappen.stand).toBe(300);
@@ -365,7 +369,7 @@ test.describe('de drie handelingen', () => {
 
   test('een boeking na de grens levert een melding, de bekende boeking niet', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').nth(1).click();
     expect(await page.evaluate(() => scoreNotifs().filter((n) => /^grens-/.test(n.key)).length)).toBe(0);
     // een nieuwe boeking in dezelfde categorie
@@ -381,7 +385,7 @@ test.describe('de drie handelingen', () => {
 
   test('transacties bekijken is geen actie: het signaal blijft staan', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').nth(2).click();
     await expect(page.locator('#sheet')).toContainText('Boodschappen');
     expect((await logVan(page))[`${CUR}|boodschappen`].actie).toBe(null);
@@ -436,7 +440,7 @@ test.describe('de vastlegging', () => {
      overschrijven, anders telt de log de verkeerde handeling. */
   test('een grens blijft staan als je daarna het potje wijzigt', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').nth(1).click();
     await page.evaluate(() => setCatBudget('boodschappen', '500'));
     expect((await logVan(page))[`${CUR}|boodschappen`].actie).toBe('grens_gezet');
@@ -457,7 +461,7 @@ test.describe('de vastlegging', () => {
     await page.evaluate(() => go('logboek'));   // v331: de telling staat in het logboek
     const blok = page.locator('#s-logboek #valtOpLog');
     await expect(blok).toContainText('0× potje bijgesteld');
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
     await dek(page, 'Online shopping', +(await page.locator('#valtOpBedrag').inputValue()) - 200);
     await page.locator('#valtOpSave').click();
@@ -470,7 +474,7 @@ test.describe('de vastlegging', () => {
 
   test('de opslag hangt onder SET en overleeft een herstart', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').nth(1).click();
     await page.reload();
     await page.waitForFunction(() => typeof valtOpSignals === 'function');
@@ -567,7 +571,7 @@ test.describe('layout', () => {
         expect(over.body, scherm).toBeLessThanOrEqual(1);
       }
       // de knop rechts blijft op één regel staan naast zijn label
-      await page.evaluate(() => go('maand'));
+      await kaart(page);
       const knop = await page.locator('.valtop-open .valtop-hand button').first().boundingBox();
       const rij = await page.locator('.valtop-open .valtop-hand').first().boundingBox();
       expect(knop.x + knop.width).toBeLessThanOrEqual(rij.x + rij.width + 1);
@@ -577,7 +581,7 @@ test.describe('layout', () => {
   test('de sheet past ook, en het veld is een heel bedrag', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
     const veld = page.locator('#valtOpBedrag');
     // v215: hele euro's mogen type=number/inputmode=numeric houden
@@ -613,7 +617,7 @@ test.describe('de lek-regel op Inzichten', () => {
     await expect(lekRij(page)).toHaveCount(1);
     expect(await ingang(page, 'ins')).toBe(1);
     await page.evaluate(() => go('maand'));
-    await expect(page.locator('.valtop-kaart')).toHaveCount(0);
+    await expect(page.locator('#gripLetOp [data-letop="sig"]')).toHaveCount(0);
     expect(await ingang(page, 'maand')).toBe(0);
   });
 
@@ -629,8 +633,8 @@ test.describe('de lek-regel op Inzichten', () => {
     await expect(lekRij(page)).toHaveCount(0);          // de budgetregel draagt hem al
     await expect(page.locator('.valtop-rij')).toHaveCount(1);
     expect(await ingang(page, 'ins')).toBe(0);
-    await page.evaluate(() => go('maand'));
-    expect(await ingang(page, 'maand')).toBe(1);
+    await kaart(page);   // v340: de chevron staat in de kaart achter de Let op-regel
+    expect(await page.evaluate(() => document.querySelectorAll("#gripLetOpSheet [onclick*=\"coStart('lek'\"]").length)).toBe(1);
   });
 
   test('een lek in een categorie die al als patroonregel staat: geen lek-regel', async ({ page }) => {
@@ -734,7 +738,7 @@ test.describe('de lek-regel op Inzichten', () => {
 test.describe('terugtypen na de knop op Grip', () => {
   test('de log houdt het bedrag van de Grip-route vast', async ({ page }) => {
     await boot(page, DRIE);
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
     await page.locator('#valtOpBedrag').fill('450');
     await dek(page, 'Online shopping', 250);
@@ -777,7 +781,7 @@ test.describe('bijstellen is een verdeling', () => {
     set: { budgets: { sport: 50, boodschappen: 400, uiteten: 100 } },   // totaal 550
   };
   const open = async (page) => {
-    await page.evaluate(() => go('maand'));
+    await kaart(page);
     await page.locator('.valtop-open .valtop-hand button').first().click();
   };
   const totaal = (page) => page.evaluate(() => Math.round(totalBudget()));
@@ -851,7 +855,7 @@ test.describe('bijstellen is een verdeling', () => {
     await expect(page.locator('#valtOpDekBlok')).toContainText('Geen enkel ander potje heeft deze maand nog ruimte');
     await expect(page.locator('#valtOpSave')).toBeDisabled();
     // de kaart houdt zijn twee andere handelingen, dus je zit niet vast
-    await page.evaluate(() => closeSheet());
+    await kaart(page);
     await expect(page.locator('.valtop-open .valtop-hand button')).toHaveCount(3);
   });
 

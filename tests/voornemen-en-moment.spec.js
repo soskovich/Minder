@@ -51,9 +51,16 @@ async function boot(page, o = {}) {
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof verseStart === 'function');
 }
-const maand = async (page) => { await page.evaluate(() => go('maand'));
+/* v340: Grip is een dashboard. De terugblikken staan als regel onder 'Let op' en openen hun kaart in
+   een sheet; deze helper leest Grip plus de kaart achter elke terugblik-regel, in die volgorde. */
+const maand = async (page) => { await page.evaluate(() => { closeSheet(); go('maand'); });
   await page.waitForSelector('#s-maand .card');
-  return page.evaluate(() => $('#s-maand').innerText.replace(/\s+/g, ' ')); };
+  return page.evaluate(() => {
+    let t = $('#s-maand').innerText;
+    for (const e of document.querySelectorAll('#gripLetOp [data-letop]')) {
+      const k = e.dataset.letop; if (!['accept', 'afspraaklus', 'voornemen'].includes(k)) continue;
+      openGripLetOp(k); t += ' ' + document.getElementById('gripLetOpSheet').innerText; closeSheet(); }
+    return t.replace(/\s+/g, ' '); }); };
 
 test.describe('a · de verse-startkaart bestaat niet meer', () => {
   test('de functies zijn weg, en Home rendert zonder', async ({ page }) => {
@@ -147,9 +154,10 @@ test.describe('c · een afspraak van vorige maand staat er los van', () => {
   test('dag 3 met een afspraak van vorige maand: terugblik boven, uitnodiging onder', async ({ page }) => {
     await boot(page, metAfspraak(3));
     const t = await maand(page);
-    expect(t).toMatch(/Je afspraak van vorige maand/i);      // de terugblik
-    expect(t).toMatch(/Minder bestellen/);
-    expect(t).toMatch(/Nieuwe maand\./);                      // en het moment eronder
+    expect(t).toMatch(/Je afspraak van vorige maand/i);      // de terugblik, als regel onder Let op
+    expect(t).toMatch(/Minder bestellen/);                    // in de kaart erachter
+    expect(t).toMatch(/Nieuwe maand\./);                      // en het moment onder Deze maand
+    expect(t.indexOf('Je afspraak van vorige maand')).toBeLessThan(t.indexOf('Nieuwe maand.'));
   });
 
   test('dag 3 zonder afspraak van vorige maand: alleen de uitnodiging', async ({ page }) => {
@@ -194,9 +202,11 @@ test.describe('d · een openstaand voornemen krijgt zijn terugblik precies een k
   test('na Gezien komt hij niet meer terug', async ({ page }) => {
     await boot(page, metVoornemen());
     expect(await maand(page)).toMatch(/Je voornemen van/i);
-    await page.locator('#s-maand >> text=Gezien').first().click();
+    await page.locator('#gripLetOp [data-letop="voornemen"]').click();
+    await page.locator('#gripLetOpSheet >> text=Gezien').first().click();
     await page.waitForTimeout(120);
-    const na = await page.evaluate(() => $('#s-maand').innerText.replace(/\s+/g, ' '));
+    expect(await page.evaluate(() => !!document.getElementById('gripLetOpSheet') && $('#sheetBg').classList.contains('show'))).toBe(false);
+    const na = await maand(page);
     expect(na).not.toMatch(/Je voornemen van/i);
     expect(await page.evaluate(() => SET.voornemenReflectedFor)).toBe(VORIG);
     // en ook niet na opnieuw openen
