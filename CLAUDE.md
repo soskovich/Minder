@@ -194,6 +194,33 @@ genoemde versietag.)*
   DE BAND GAAT ALLEEN OVER HET DEEL VAN DE MAAND DAT NOG KOMT, en dat stond er al: per afgeronde maand de
   uitgaven NA dezelfde dag (`d>el`), daarvan het laagste en het hoogste. Hij wordt dus smaller naarmate de
   maand vordert en is op de laatste dag nul; de test draagt dag 4 (250), dag 25 (200) en 31 oktober (0).
+- **KOSTEN VAN EEN BEZITTING ZIJN GEEN INLEG, EN PLAN DRAAGT GEEN BEZITTINGEN** (`v341`, gevraagd door de
+  gebruiker): GEMELD werd EUR 3 in oktober aan de stichting (kosten van de Peaks-rekening) als inleg geteld, en
+  de waarde ging van EUR 620 naar 623. In de lijst van een gekoppelde boeking staat nu "Dit zijn kosten, geen
+  inleg" (`openBezitKostenVraag()`): eerst het gevolg met het bedrag, dan "Alleen deze boeking", een regel op een
+  KENMERK of een regel op het BEDRAG. DE KEUZE ZET DE CATEGORIE OP BANKKOSTEN (`OVR[t.id]`, de vorige keuze in
+  `SET.bezitKosten[t.id].voorOvr`), en daarmee volgt de rest zonder tweede uitzondering: een bezitting telt alleen
+  afschrijvingen op Sparen & beleggen (`bezitKandidaat()`), dus de boeking valt uit de inleg, de waarde
+  (`bezitWaarde()`), het gemeten gemiddelde en de spaarquote (`beleggingsTx()`), en telt als uitgave op
+  Bankkosten. EEN REGEL (`SET.bezitKostenRegels`) wordt in `applyOwnAccounts()` toegepast op een afschrijving
+  op Sparen & beleggen zonder eigen keuze, via `bezitRegelRaakt()` (geen tweede toets). EEN REGEL RAAKT OOK
+  EERDERE BOEKINGEN, en daarom staat bij elke keuze welke andere hij nog meer tot kosten maakt, met datum en
+  bedrag; een weigering op "raakt inleg" zou juist de eerdere, nog niet aangewezen kosten tegenhouden. DE
+  VOORSTELLEN (`bezitKostenWoorden()`) zijn woorden uit DEZE omschrijving die niet in elke andere boeking naar
+  die partij staan, met het minst geraakte eerst; alleen cijfers tellen niet (een datum of volgnummer staat bij
+  de volgende niet weer). De app kiest geen woord. De rij in de boekingssheet (`bezitKostenBlok()`) zegt
+  "Kosten van <bezitting>, geen inleg" met "Terugdraaien" of "Regel weghalen". `bezitKosten` staat in
+  `VLAG_MAPS`. WAT NIET TE METEN IS: of de omschrijving van de echte EUR 3 verschilt van een inleg staat alleen
+  op het toestel. Blok 16 toont daarvoor per kenmerk de bedragen van de boekingen waarin hij staat, de kosten
+  naast de inleg, en waaruit het gemeten gemiddelde per bezitting bestaat (venster, boekingen, en welke kosten
+  er niet in zitten). DE WAARDE VAN PEAKS (KAYANI) HERSTELT ZICH NA JE KEUZE en niet ervoor: EUR 620 op
+  4 oktober plus alleen de echte inleg daarna (gemeten op de fixture: 723 wordt 720, en met alleen de kosten 620).
+  Er wordt niets stil omgezet (`MECHANISM_SPEC.defaultEffect`).
+  DE KAART "NAAR JE BEZITTINGEN" OP PLAN (`planBezitKaart()`, `v332`) IS WEG: gemeten inleg is geen plan, en hij
+  staat bij de bezitting op Vermogen en in de spaarquote. Er leunde niets anders op: de kaart had alleen
+  `renderVooruit()` als aanroeper en zijn rij opende `openAsset()`, dat ook vanaf Vermogen opent. GEMETEN: de
+  kostensheet is 571px op 360 en 552px op 390, zonder overloop. Tien sabotages, alle tien rood; "cijfers als
+  kenmerk" pas nadat de fixture een getal droeg dat niet in elke omschrijving staat (meetles r).
 - **EEN OVERBOEKING TUSSEN JE EIGEN REKENINGEN HERKENT DE APP AAN DE NAMEN UIT JE BANKKOPPELING, EN JIJ
   BEVESTIGT PER NAAM** (`v339`, gevraagd door de gebruiker): `eigenNamenUitKoppeling()` leest de namen uit
   `SET.psd2Accounts` (het label zonder de laatste vier cijfers; de terugval `Rekening` telt niet), en
@@ -404,7 +431,8 @@ genoemde versietag.)*
   EEN GEKOPPELDE BOEKING IS GEMETEN INLEG: `beleggingsTx()` neemt hem op VOOR de refNums- en de
   spiegel-toets, want die streepten op bedrag weg (gemeten: EUR 100 naar je spaarrekening in dezelfde maand
   haalde de EUR 100 naar de stichting uit de spaarquote). De bezitting toont hem (`bezitInlegSub()`,
-  `bezitEditorBlok()`), Plan draagt `planBezitKaart()` BUITEN de waterval (een belegging is geen bestemming
+  `bezitEditorBlok()`). Plan droeg tot `v341` `planBezitKaart()` BUITEN de waterval; die kaart is weg (zie de regel
+  van `v341` bovenaan), want gemeten inleg is geen plan en een belegging is geen bestemming
   van je spaarinleg). DE WAARDE TELT SINDS `v333` DE INLEG NA DE INVULDAG OP (zie de regel daarboven);
   geen groei op de inleg.
   OF DE OMSCHRIJVING PEAKS (PENSIOEN) EN PEAKS (KAYANI) SCHEIDT IS HIER NIET TE METEN; dat staat alleen op
@@ -5905,7 +5933,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v340` → `minder-v341`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v341` → `minder-v342`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5924,7 +5952,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339` en `v340` naar `minder-v340`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340` en `v341` naar `minder-v341`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

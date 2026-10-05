@@ -1024,6 +1024,9 @@ function applyOwnAccounts(){
     if(!intern && t.src==='psd2'){ const nm=(t.name||'').toLowerCase().trim(); if(ownNames.has(nm) || N26INT.test(t.name||'')) intern=true; } // N26 PSD2: Spaces/eigen naam
     if(!intern && eigenOverboeking(t)) intern=true;   // v338b: een rekeningnaam uit je bankkoppeling die JIJ bevestigde
     t.autoCat = intern ? 'intern' : rc;
+    /* v341: een kosten-regel van een bezitting maakt van een afschrijving op Sparen & beleggen Bankkosten.
+       Een eigen keuze (OVR) wint, want die is hierboven al overgeslagen. */
+    if(t.autoCat==='sparen' && t.amount<0){ try{ if(bezitKostenRegelVoor(t)) t.autoCat='bankkosten'; }catch(_){} }
     if(!intern && rc==='intern' && t.amount>0) cands.push(t);   // positief + alleen 'intern' door de onbekende-bijschrijving-heuristiek
   }
   // Fix 2: een terugstorting (bv. een tank-reservering die deels terugkomt) erft de uitgavencategorie van
@@ -11962,15 +11965,9 @@ const VOORUIT_FOOT=`<div class="scr-foot">De looptijden en datums hier zijn een 
    overboeking naar een belegging is geen bestemming in dat plan. Hem in de waterval of in de regel
    'deze maand X opzij' optellen zou die regel een tweede bron geven (v104). Zonder gekoppelde boeking
    deze maand staat er niets: een nul hier zegt niet dat je niet belegde, alleen dat je niets koppelde. */
-function planBezitKaart(){
-  const ym=thisYM(); let rij=[];
-  try{ rij=(SET.assets||[]).map(a=>({a, b:bezitInleg(a.id, ym)})).filter(x=>x.b>0); }catch(_){ return ''; }
-  if(!rij.length) return '';
-  return `<div class="card" id="planBezit"><div class="hlabel" style="margin:0 0 4px">Naar je bezittingen</div>
-    ${rij.map(x=>`<div class="row" data-planbezit="${esc(x.a.id)}" style="justify-content:space-between;gap:10px;padding:5px 0;cursor:pointer" onclick="openAsset('${x.a.id}')">
-      <span class="small">${esc(x.a.naam||'Bezitting')}</span><span class="small" style="font-weight:700">${euro0(x.b)} <span style="color:var(--teal)">›</span></span></div>`).join('')}
-    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin-top:4px;line-height:1.45">Deze maand, uit je gekoppelde boekingen. Dit staat los van je spaarinleg hierboven.</div></div>`;
-}
+/* v341: de kaart "Naar je bezittingen" (planBezitKaart, v332) is weg. Gemeten inleg is geen plan: hij staat
+   bij de bezitting op Vermogen (bezitInlegSub, bezitEditorBlok) en in de spaarquote (vermogensInleg). De
+   kaart had geen andere lezer en zijn rij opende openAsset(), dat ook vanaf Vermogen opent. */
 function renderVooruit(){
   const ms=months();
   const m=curMonth||ms[ms.length-1];
@@ -12002,7 +11999,7 @@ function renderVooruit(){
   /* v246: planTotaalRegel() stond hier, tussen de bestemmingen en de reserveringen, en las
      daardoor alsof de reserveringen erin zaten. Hij hoort bij de waterval en staat sindsdien in
      renderPlan(), binnen dezelfde kaart, onder de sluitpost. */
-  $('#s-vooruit').innerHTML = doelZone + planBezitKaart() + resDekkingCard() + VOORUIT_FOOT;
+  $('#s-vooruit').innerHTML = doelZone + resDekkingCard() + VOORUIT_FOOT;
 }
 /* v221: de optelling over je plan. Per doel zag je toegewezen tegen doelbedrag en wat het per
    maand krijgt, maar nergens het totaal: wat vraagt je plan bij elkaar, wat staat daar tegenover,
@@ -14653,6 +14650,104 @@ function bezitReisPer(a){
   let G=null; try{ G=bezitGemetenGemiddeld(a.id); }catch(_){}
   return Math.max(Math.round(G ? G.bedrag : (+a.per||0)),0);
 }
+/* ===== KOSTEN VAN EEN BEZITTING, GEEN INLEG (v341) =====
+   GEMELD: EUR 3 in oktober naar de stichting is kosten van de Peaks-rekening en geen inleg, en hij
+   verhoogde de waarde (EUR 620 + EUR 3). Een gekoppelde boeking is per definitie inleg (v332), dus de
+   app had geen manier om dat verschil te dragen.
+   DE KEUZE ZET DE CATEGORIE OP BANKKOSTEN, en daarmee volgt de rest zonder tweede uitzondering: een
+   bezitting telt alleen afschrijvingen op Sparen & beleggen (bezitKandidaat), dus de boeking valt uit
+   de inleg, uit de waarde (bezitWaarde), uit het gemeten gemiddelde en uit de spaarquote
+   (beleggingsTx leest dezelfde categorie). Een tweede vlag die al die lezers apart zouden moeten
+   kennen is precies wat v104 verbiedt.
+   PER BOEKING IS HET JOUW KEUZE (OVR[t.id]='bankkosten', met de vorige keuze in SET.bezitKosten zodat
+   hij in een tik terug kan). EEN REGEL (SET.bezitKostenRegels) onthoudt het voor de volgende, op een
+   kenmerk of een bedrag bij dezelfde partij, en bezitRegelRaakt() beslist of hij raakt (geen tweede
+   uitdrukking van die toets). EEN REGEL RAAKT OOK EERDERE BOEKINGEN, en daarom staat bij elke keuze
+   welke andere boekingen hij nog meer tot kosten maakt, met hun bedrag, voordat je kiest
+   (MECHANISM_SPEC.defaultEffect: niets stil). Een weigering op "raakt een inleg" zou juist de eerdere
+   kosten tegenhouden die nog niet als kosten gemarkeerd zijn, want die tellen tot je keuze als inleg.
+   De app stelt kenmerken voor uit DEZE omschrijving die niet in elke boeking naar die partij staan,
+   met het minst geraakte eerst; hij kiest er geen. */
+function bezitKostenRegelVoor(t){
+  const R=(typeof SET!=='undefined'&&SET.bezitKostenRegels)||[];
+  if(!R.length || !t || !(t.amount<0)) return null;
+  return R.find(rg=>bezitRegelRaakt(rg,t))||null;
+}
+function bezitKostenVan(t){
+  if(!t) return null;
+  let c=''; try{ c=catOf(t); }catch(_){ return null; }
+  if(c!=='bankkosten') return null;
+  const K=(SET.bezitKosten||{})[t.id];
+  if(K && OVR[t.id]==='bankkosten') return {bron:'keuze', asset:K.asset||'', regel:null};
+  if(!OVR[t.id]){ const rg=bezitKostenRegelVoor(t); if(rg) return {bron:'regel', asset:rg.asset||'', regel:rg}; }
+  return null;
+}
+/* De inleg naar dezelfde partij waartegen een kosten-regel wordt gemeten: afschrijvingen op Sparen &
+   beleggen, behalve deze boeking zelf. */
+function bezitInlegVanPartij(t){
+  const p=bezitPartij(t);
+  return TX.filter(x=>x!==t && x.id!==t.id && bezitKandidaat(x) && bezitPartij(x)===p);
+}
+function bezitDescWoorden(t){ return [...new Set(String(t.desc||'').toUpperCase().match(/[A-Z0-9]{4,}/g)||[])]; }
+/* Wat een kosten-regel nog meer zou raken: de andere afschrijvingen op Sparen & beleggen naar dezelfde
+   partij waarop hij past. Leest bezitRegelRaakt(), dus precies de toets die de regel straks uitvoert. */
+function bezitKostenRaakt(t, soort, waarde){
+  const rg={partij:bezitPartij(t), soort, waarde: soort==='bedrag'?Math.round((-t.amount)*100)/100:waarde};
+  return bezitInlegVanPartij(t).filter(x=>bezitRegelRaakt(rg,x));
+}
+/* Kenmerken uit deze omschrijving die NIET in elke andere boeking naar dezelfde partij staan, met per
+   woord wat hij nog meer raakt. Alleen cijfers tellen niet: een datum of volgnummer staat bij de
+   volgende kosten niet weer. Zonder andere boekingen naar die partij valt er niets te vergelijken. */
+function bezitKostenWoorden(t){
+  const andere=bezitInlegVanPartij(t); if(!andere.length) return null;
+  return bezitDescWoorden(t).filter(w=>!/^\d+$/.test(w))
+    .map(w=>({woord:w, raakt:bezitKostenRaakt(t,'kenmerk',w)}))
+    .filter(x=>x.raakt.length<andere.length)
+    .sort((a,b)=>a.raakt.length-b.raakt.length || a.woord.localeCompare(b.woord));
+}
+function bezitKostenRegelMag(t, soort, waarde){
+  if(!bezitKandidaat(t)) return 'geen';
+  if(soort==='kenmerk'){ const w=String(waarde||'').trim(); if(!w) return 'leeg';
+    if(!String(t.desc||'').toLowerCase().includes(w.toLowerCase())) return 'nietInOmschrijving'; }
+  else if(soort!=='bedrag') return 'geen';
+  return '';
+}
+function bezitKostenHerreken(){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); save(); }
+function bezitKostenZet(txId, soort, waarde){
+  const t=TX.find(x=>x.id===txId); if(!t || !bezitKandidaat(t)) return false;
+  if(soort){
+    const nee=bezitKostenRegelMag(t, soort, waarde);
+    if(nee){ toast(nee==='nietInOmschrijving'?'Dat kenmerk staat niet in de omschrijving van deze boeking.'
+                 : nee==='leeg'?'Kies een kenmerk.':'Dit kan niet worden vastgelegd.'); return false; }
+    const rg={id:'bk'+Date.now().toString(36), asset:bezitVan(t)||'', partij:bezitPartij(t), soort,
+      waarde: soort==='kenmerk'?String(waarde).trim() : Math.round((-t.amount)*100)/100};
+    SET.bezitKostenRegels=SET.bezitKostenRegels||[];
+    if(!SET.bezitKostenRegels.some(x=>x.partij===rg.partij&&x.soort===rg.soort&&String(x.waarde).toLowerCase()===String(rg.waarde).toLowerCase()))
+      SET.bezitKostenRegels.push(rg);
+  }
+  SET.bezitKosten=SET.bezitKosten||{};
+  SET.bezitKosten[txId]={asset:bezitVan(t)||'', op:vandaagYMD(), voorOvr:OVR[txId]||null};
+  OVR[txId]='bankkosten';
+  bezitKostenHerreken();
+  return true;
+}
+/* Terug: de eigen keuze gaat weg en de vorige categorie-keuze komt terug. Raakt een regel deze boeking
+   nog, dan blijft hij kosten, en de sheet zegt dan welke regel het doet. */
+function bezitKostenTerug(txId){
+  const K=(SET.bezitKosten||{})[txId]; if(!K) return;
+  if(OVR[txId]==='bankkosten'){ if(K.voorOvr) OVR[txId]=K.voorOvr; else delete OVR[txId]; }
+  delete SET.bezitKosten[txId];
+  if(!Object.keys(SET.bezitKosten).length) delete SET.bezitKosten;
+  bezitKostenHerreken();
+}
+function bezitKostenRegelWeg(id){
+  SET.bezitKostenRegels=(SET.bezitKostenRegels||[]).filter(r=>r.id!==id);
+  if(!SET.bezitKostenRegels.length) delete SET.bezitKostenRegels;
+  bezitKostenHerreken();
+}
+function bezitKostenRegelTekst(rg){
+  return rg.soort==='kenmerk' ? `naar "${rg.partij}" met "${rg.waarde}" in de omschrijving` : `naar "${rg.partij}" van ${euro(+rg.waarde||0)}`;
+}
 /* ===== EEN BOEKING KOPPELEN AAN EEN SCHULD (v334) =====
    Dezelfde vorm als bij een bezitting (v332): een keuze per boeking (SET.schuldKoppel[t.id], een lege
    string is bewust geen schuld) en regels voor de volgende (SET.schuldRegels, met {schuld, partij,
@@ -16581,12 +16676,48 @@ function openBezitPick(txId){
     <div class="small muted" style="margin:2px 0 10px">${esc(t.name)} · ${euro(-t.amount)} · ${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}</div>
     <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45;margin-bottom:6px;word-break:break-word">Omschrijving: ${esc(t.desc||'')}</div>
     <div data-bezitlijst>${as.map(a=>rij(esc(a.naam||'Bezitting'), a.grow?'groeit':'', `openBezitRegelVraag('${txId}','${a.id}')`, huidig===a.id)).join('')}
-    ${rij('Geen bezitting', 'blijft beleggingsinleg zonder bezitting', `bezitKies('${txId}','')`, false)}</div>
+    ${rij('Geen bezitting', 'blijft beleggingsinleg zonder bezitting', `bezitKies('${txId}','')`, false)}
+    ${rij('Dit zijn kosten, geen inleg', 'telt dan niet als inleg en wordt Bankkosten', `openBezitKostenVraag('${txId}')`, false)}</div>
     ${Object.prototype.hasOwnProperty.call(SET.bezitKoppel||{},txId)?`<div class="small" style="margin-top:12px;color:var(--teal);cursor:pointer;font-weight:600" onclick="bezitKies('${txId}',null)">Mijn keuze bij deze boeking weghalen ›</div>`:''}
     <div class="small" style="margin-top:12px;color:var(--mut2);cursor:pointer" onclick="openSheet('${txId}')">Terug</div>`;
   showSheetBg();
 }
 function bezitKies(txId, assetId){ zetBezitKoppel(txId, assetId); render(); openSheet(txId); }
+/* v341: kosten in plaats van inleg. Eerst het gevolg met het bedrag, dan de keuze: alleen deze boeking,
+   of ook de volgende op een kenmerk of het bedrag. Geen voorselectie; een regel die ook inleg zou raken
+   staat er uitgeschakeld met zijn reden. De kenmerken komen uit bezitKostenWoorden(): woorden die hier
+   staan en in geen enkele inleg naar dezelfde partij. */
+function openBezitKostenVraag(txId){
+  const t=TX.find(x=>x.id===txId); if(!t || !bezitKandidaat(t)) return;
+  const id=bezitVan(t), naam=id?esc(bezitNaam(id)):'', p=esc(bezitPartij(t));
+  const W=bezitKostenWoorden(t);
+  const knop=(lab, sub, act, attr)=>`<button class="btn sec" ${attr||''} style="width:100%;margin-top:8px;text-align:left" onclick="${act}">${lab}${sub?`<span style="display:block;font-weight:400;color:var(--mut2);font-size:var(--fs-xs);margin-top:2px">${sub}</span>`:''}</button>`;
+  const ookTekst=L=>L.length?`maakt ook ${L.length} andere boeking${L.length>1?'en':''} tot kosten: ${L.slice(0,4).map(x=>`${bezitDatumLabel(x.date)} ${euro(-x.amount)}`).join(', ')}${L.length>4?', ...':''}`:'raakt nu geen andere boeking';
+  const woorden = W===null ? `<div class="small" data-kostenwoorden="geen" style="color:var(--mut2);margin-top:8px">Er is geen andere boeking naar "${p}" om de omschrijving tegen te meten, dus Minder stelt geen kenmerk voor.</div>`
+    : W.length ? W.slice(0,4).map(x=>knop(`Ook de volgende met "${esc(x.woord)}" in de omschrijving`, ookTekst(x.raakt), `bezitKostenKies('${txId}','kenmerk','${esc(x.woord)}')`, `data-kostenkenmerk="${esc(x.woord)}"`)).join('')
+    : `<div class="small" data-kostenwoorden="geen" style="color:var(--mut2);margin-top:8px">Elk woord in deze omschrijving staat ook in je andere boekingen naar "${p}": de omschrijving scheidt kosten hier niet van inleg.</div>`;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">Dit zijn kosten, geen inleg</div>
+    <div class="small muted" style="margin:2px 0 10px">${esc(t.name)} · ${euro(-t.amount)} · ${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}</div>
+    <div class="small" data-kostengevolg style="line-height:1.5">Deze ${euro(-t.amount)} telt dan niet als inleg${naam?` bij ${naam}`:''}, niet in ${naam?'de waarde':'de waarde van een bezitting'} en niet in je spaarquote. De categorie wordt Bankkosten.</div>
+    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45;margin-top:8px;word-break:break-word">Omschrijving: ${esc(t.desc||'')}</div>
+    ${knop('Alleen deze boeking', '', `bezitKostenKies('${txId}','','')`, 'data-kostenalleen')}
+    ${woorden}
+    ${knop(`Ook de volgende van ${euro(-t.amount)} naar "${p}"`, ookTekst(bezitKostenRaakt(t,'bedrag')), `bezitKostenKies('${txId}','bedrag','')`, 'data-kostenbedrag')}
+    <div class="small" style="margin-top:12px;color:var(--mut2);cursor:pointer" onclick="openBezitPick('${txId}')">Terug</div>`;
+  showSheetBg();
+}
+function bezitKostenKies(txId, soort, waarde){ if(bezitKostenZet(txId, soort||'', waarde)){ render(); openSheet(txId); } }
+/* De rij in de boekingssheet van een boeking die als kosten van een bezitting telt, met de weg terug. */
+function bezitKostenBlok(t){
+  const K=bezitKostenVan(t); if(!K) return '';
+  const naam=K.asset&&bezitBestaat(K.asset)?bezitNaam(K.asset):'';
+  const sub=K.bron==='keuze'?'jouw keuze bij deze boeking':'via je regel '+bezitKostenRegelTekst(K.regel);
+  const act=K.bron==='keuze'?`bezitKostenTerug('${t.id}');render();openSheet('${t.id}')`:`bezitKostenRegelWeg('${K.regel.id}');render();openSheet('${t.id}')`;
+  return `<div class="row" data-kostenrij style="padding:10px 0;gap:8px;border-top:1px solid var(--line)">
+      <span class="small" style="flex:1">Kosten${naam?` van <b>${esc(naam)}</b>`:''}, geen inleg<span style="display:block;color:var(--mut2)">${esc(sub)}</span></span>
+      <span class="small" style="color:var(--teal);font-weight:600;cursor:pointer" onclick="${act}">${K.bron==='keuze'?'Terugdraaien':'Regel weghalen'} ›</span></div>`;
+}
 /* De tweede stap: alleen deze boeking, of ook de volgende. Er is geen voorselectie, en 'alle
    boekingen naar deze naam' staat er uitgeschakeld met zijn reden zodra een andere bezitting al een
    regel op die naam heeft: dan kiest de app niet tussen de twee. */
@@ -16681,7 +16812,7 @@ function openSheet(id){
     <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Bankomschrijving</summary>
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
-    ${onregelmatigBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${schuldBlok(t)}
+    ${onregelmatigBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
     ${loanBlokHTML(t)}${leaseBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
     <div class="catgrid">${Object.entries(CATS).map(([k,c])=>`
@@ -17633,7 +17764,7 @@ function rekSamenvoegPlan(van, naar){
    SET. Een vijfde soort erbij is een regel erbij, en dan valt de spec die deze lijst leest. */
 /* v332: de koppeling van een boeking aan een bezitting hangt ook aan t.id, dus hij verhuist mee bij een
    samenvoeging; anders is hij na de boot-sweep wees (v281). */
-const VLAG_MAPS=['onregelmatig','uitReservering','fixOvr','bezitKoppel','schuldKoppel'];
+const VLAG_MAPS=['onregelmatig','uitReservering','fixOvr','bezitKoppel','schuldKoppel','bezitKosten'];
 function _vlagAantal(id){
   let n=0;
   if(typeof OVR!=='undefined' && OVR && Object.prototype.hasOwnProperty.call(OVR,id)) n++;
@@ -21573,22 +21704,26 @@ function diagBezitKoppeling(){
   const per=new Map();
   for(const t of TX){
     if(!ms.has(String(t.date).slice(0,7))) continue;
-    if(!bezitKandidaat(t)) continue;
+    if(!bezitKandidaat(t) && !bezitKostenVan(t)) continue;
     const p=bezitPartij(t)||'(geen naam)';
     if(!per.has(p)) per.set(p,[]); per.get(p).push(t);
   }
   L.push('bezittingen: '+((SET.assets||[]).map(a=>`${a.naam} (${a.id}${a.grow?', groeit':''}, voorwaarden ${a.voorwaarden===true?'ja':a.voorwaarden===false?'nee':'open'}${a.pauze?', gepauzeerd sinds '+a.pauze.sinds:''})`).join('; ')||'geen'));
   L.push('regels: '+((SET.bezitRegels||[]).map(r=>`${bezitNaam(r.asset)||r.asset} <- ${bezitRegelTekst(r)}`).join('; ')||'geen'));
   L.push('keuzes per boeking: '+Object.keys(SET.bezitKoppel||{}).length);
+  L.push('kosten-regels (v341): '+((SET.bezitKostenRegels||[]).map(r=>bezitKostenRegelTekst(r)).join('; ')||'geen'));
+  L.push('kosten per boeking (v341): '+Object.keys(SET.bezitKosten||{}).length);
   if(!per.size){ L.push('geen afschrijvingen op Sparen & beleggen in de laatste zes maanden'); return L; }
   for(const [p,lijst] of per){
     lijst.sort((a,b)=>a.date.localeCompare(b.date));
     L.push('', `partij "${p}": ${lijst.length} afschrijving(en)`);
     for(const t of lijst){
+      const KO=bezitKostenVan(t);
       const K=SET.bezitKoppel||{}; const eigen=Object.prototype.hasOwnProperty.call(K,t.id);
       const id=bezitVan(t);
       const bron=eigen?'jouw keuze':bezitRegelBotsing(t)?'BOTSING tussen regels':id?'regel':'-';
-      L.push(`  ${t.date}  ${euro(-t.amount)}  -> ${id?bezitNaam(id):'geen bezitting'} (${bron})`);
+      L.push(KO ? `  ${t.date}  ${euro(-t.amount)}  -> KOSTEN, geen inleg (${KO.bron==='keuze'?'jouw keuze':'regel '+bezitKostenRegelTekst(KO.regel)})`
+                : `  ${t.date}  ${euro(-t.amount)}  -> ${id?bezitNaam(id):'geen bezitting'} (${bron})`);
       L.push(`    ${String(t.desc||'')}`);
     }
     const tok=t=>new Set(String(t.desc||'').toUpperCase().match(/[A-Z0-9]{4,}/g)||[]);
@@ -21598,8 +21733,32 @@ function diagBezitKoppeling(){
     L.push(lijst.length<2 ? '  kenmerken: een boeking, dus niets te vergelijken'
       : ken.length ? '  kenmerken die niet in elke omschrijving staan: '+ken.slice(0,12).join(', ')+'   (een datum of bedrag kan hier ook tussen staan)'
       : '  kenmerken: GEEN; de omschrijving scheidt deze boekingen niet');
+    /* v341: per kenmerk de bedragen van de boekingen waarin hij staat. Dat beantwoordt of een kostenpost
+       een eigen woord draagt: staat een woord alleen bij de kleine bedragen en een ander alleen bij de
+       inleg, dan scheidt de omschrijving ze. Alleen cijfers staan er niet, want een datum of volgnummer
+       verschilt per boeking en staat bij de volgende niet weer. Het blok kiest geen woord (v244). */
+    if(lijst.length>1){
+      const woord=[...tel].filter(([x,n])=>n<lijst.length && !/^\d+$/.test(x)).map(([x])=>x).sort();
+      L.push('  per kenmerk de bedragen waarin hij staat: '+(woord.length?'':'geen'));
+      for(const w of woord.slice(0,12)) L.push(`    ${w}: `+lijst.filter((t,k)=>sets[k].has(w)).map(t=>euro(-t.amount)).join(', '));
+    }
     const bedr=[...new Set(lijst.map(t=>Math.round(-t.amount*100)/100))];
     L.push('  bedragen: '+bedr.map(b=>euro(b)).join(', '));
+  }
+  /* v341: waaruit het gemeten gemiddelde per bezitting bestaat. Het venster en de som komen uit
+     bezitGemetenGemiddeld() en bezitInlegTx() zelf (v104); daaronder staat wat er in dat venster naar
+     dezelfde partij ging en als kosten telt, en dus NIET in het gemiddelde zit. */
+  const cur=thisYM(); const venster=months().filter(m=>m<cur).slice(-3);
+  L.push('', 'GEMETEN GEMIDDELD PER BEZITTING (laatste drie afgeronde maanden: '+(venster.join(', ')||'geen')+')');
+  for(const a of (SET.assets||[])){
+    let G=null; try{ G=bezitGemetenGemiddeld(a.id); }catch(_){}
+    const tx=venster.flatMap(m=>bezitInlegTx(a.id,m));
+    if(!G && !tx.length) continue;
+    L.push(`  ${a.naam||a.id}: ${G?euro0(G.bedrag)+' per maand':'geen meting'} uit ${tx.length} boeking(en)`);
+    for(const t of tx) L.push(`    ${t.date}  ${euro(-t.amount)}  ${String(t.desc||'').slice(0,90)}`);
+    const partijen=new Set(tx.map(bezitPartij));
+    const kosten=TX.filter(t=>venster.includes(String(t.date).slice(0,7)) && partijen.has(bezitPartij(t)) && bezitKostenVan(t));
+    L.push('    kosten naar dezelfde partij in dit venster, niet meegeteld: '+(kosten.length?kosten.map(t=>`${t.date} ${euro(-t.amount)}`).join(', '):'geen'));
   }
   return L;
 }

@@ -63,7 +63,8 @@ test.describe('b · een gekoppelde boeking is gemeten inleg bij die bezitting', 
     expect(na.waarde).toBe(1450);
     expect(na.items).toEqual(voor);
   });
-  test('de bezitting, de editor en Plan tonen de gemeten inleg', async ({ page }) => {
+  /* v341: de kaart "Naar je bezittingen" op Plan is weg; de inleg staat bij de bezitting en in de spaarquote. */
+  test('de bezitting en de editor tonen de gemeten inleg, en Plan niet', async ({ page }) => {
     await start(page);
     await koppel(page, 'kayani');
     const r = await page.evaluate(() => {
@@ -73,14 +74,12 @@ test.describe('b · een gekoppelde boeking is gemeten inleg bij die bezitting', 
       SET.openBez = true; go('vermogen'); renderVermogen();
       const sub = (document.querySelector('#s-vermogen [data-bezitinleg="kayani"]') || {}).innerText || '';
       openAsset('kayani'); const ed = (document.querySelector('#sheet [data-bezitgemeten]') || {}).innerText || ''; closeSheet();
-      go('vooruit'); renderVooruit(); const plan = (document.querySelector('#planBezit') || {}).innerText || '';
+      go('vooruit'); renderVooruit(); const plan = !!document.querySelector('#planBezit') || document.getElementById('s-vooruit').innerText.includes('Naar je bezittingen');
       return { sub, ed, plan };
     });
     expect(r.sub).toContain('€100 ingelegd in september');
     expect(r.ed).toMatch(/september 2026\s+€100/);
-    expect(r.plan).toContain('Peaks (Kayani)');
-    expect(r.plan).toContain('€100');
-    expect(r.plan).toContain('los van je spaarinleg');
+    expect(r.plan).toBe(false);
   });
   test('de koppeling staat in de boekingssheet, en een keuze daar schrijft hem', async ({ page }) => {
     await start(page);
