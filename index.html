@@ -1027,6 +1027,10 @@ function applyOwnAccounts(){
     /* v341: een kosten-regel van een bezitting maakt van een afschrijving op Sparen & beleggen Bankkosten.
        Een eigen keuze (OVR) wint, want die is hierboven al overgeslagen. */
     if(t.autoCat==='sparen' && t.amount<0){ try{ if(bezitKostenRegelVoor(t)) t.autoCat='bankkosten'; }catch(_){} }
+    /* v342: een storting van contant geld is geen terugbetaling bij een winkel. Een regel zet hem op intern
+       (niet als inkomen), en ook een storting die aan zijn omschrijving herkend wordt erft in fix 2 geen
+       uitgavencategorie. */
+    if(t.amount>0){ try{ if(stortRegelVoor(t)){ t.autoCat='intern'; continue; } if(stortKenmerk(t)) continue; }catch(_){} }
     if(!intern && rc==='intern' && t.amount>0) cands.push(t);   // positief + alleen 'intern' door de onbekende-bijschrijving-heuristiek
   }
   // Fix 2: een terugstorting (bv. een tank-reservering die deels terugkomt) erft de uitgavencategorie van
@@ -2245,17 +2249,17 @@ function forecastModel(){
    Het bedrag is type="text" inputmode="decimal" (v215): in contant geld hebben centen betekenis,
    en type="number" wist een komma al in de DOM voordat numIn() er iets aan kan doen. */
 function contantTellen(){
-  const V=contantVerwacht(), T=contantTelling(), ops=contantOpnamesSinds();
+  const V=contantVerwacht(), T=contantTelling(), ops=contantOpnamesSinds(), ins=contantInSinds(), sts=contantStortingenSinds();
   const opSom=ops.reduce((a,t)=>a-t.amount,0);
   const uitleg = T
-    ? `Je telde voor het laatst op ${new Date(T.datum+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}: ${euro0(T.stand)}.${ops.length?` Daarna pinde je ${euro0(opSom)}${ops.length>1?` in ${ops.length} opnames`:''}.`:''}`
+    ? `Je telde voor het laatst op ${new Date(T.datum+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'long'})}: ${euro0(T.stand)}.${ops.length?` Daarna pinde je ${euro0(opSom)}${ops.length>1?` in ${ops.length} opnames`:''}.`:''}${ins.length?` Je kreeg ${euro0(ins.reduce((a,x)=>a+x.bedrag,0))} contant terug.`:''}${sts.length?` Je stortte ${euro0(sts.reduce((a,t)=>a+t.amount,0))} op je rekening.`:''}`
     : `Dit is je eerste telling, dus er valt nog niets te vergelijken. Vanaf nu rekent de app het verschil uit.`;
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:4px">Hoeveel contant heb je nu?</div>
     <div class="small muted" style="line-height:1.5;margin-bottom:12px">${uitleg}</div>
     ${V!=null?`<div class="small" style="color:var(--mut2);margin-bottom:10px;line-height:1.5">De app verwacht ${euro0(V)}. Tel je minder, dan is het verschil wat je contant hebt uitgegeven.</div>`:''}
     <label class="fld" style="margin-top:0">In je zak (€)</label>
-    <input id="contInput" type="text" inputmode="decimal" value="${V!=null?numUit(V):''}" placeholder="bv. 35,50" style="width:100%">
+    <input id="contInput" type="text" inputmode="decimal" value="${V!=null?numUit(Math.max(V,0)):''}" placeholder="bv. 35,50" style="width:100%">
     <div class="row" style="gap:8px;margin-top:14px">
       <button class="btn" style="flex:1" onclick="contantOpslaan()">Vastleggen</button>
       <button class="btn sec" onclick="closeSheet()">Later</button></div>
@@ -2309,7 +2313,10 @@ function contantOpslaan(){
       TX.sort((a,b)=>a.date.localeCompare(b.date));
     }
   }
-  SET.contant={stand:geteld, datum:dag};
+  /* v342: het moment, voor een contante ontvangst op dezelfde dag. Monotoon na elke ontvangst die er al
+     staat, want deze telling bevat die ontvangst. */
+  const opT=Math.max(Date.now(), ...contantIns().map(x=>(+x.op||0)+1), ((SET.contant||{}).op||0)+1);
+  SET.contant={stand:geteld, datum:dag, op:opT};
   save(); closeSheet(); render();
   toast(V!=null && Math.abs(V-geteld)>=0.01 ? `Vastgelegd. ${euro0(Math.abs(V-geteld))} ${V>geteld?'contant uitgegeven':'erbij'}.` : 'Vastgelegd.');
 }
@@ -2348,7 +2355,7 @@ function isOpnameTx(t){
 /* De laatste telling. Twee velden, want een stand zonder datum is geen meting: hij zegt niet
    waarover hij gaat en je kunt er dus ook niet van zeggen dat hij oud is (dezelfde les als v198,
    waar het saldo zijn datum kwijtraakte). */
-function contantTelling(){ const C=SET.contant||{}; return (C.stand==null||C.stand==='')?null:{stand:+C.stand, datum:C.datum||''}; }
+function contantTelling(){ const C=SET.contant||{}; return (C.stand==null||C.stand==='')?null:{stand:+C.stand, datum:C.datum||'', op:+C.op||0}; }
 /* HET ENIGE CONTANTE BEDRAG IN DE APP: je laatste telling plus de opnames daarna. Elke lezer leest
    deze functie, dus totalBalance() en het telscherm kunnen niet uiteenlopen (v104/v169).
    NULL ZOLANG JE NOG NOOIT TELDE, en dat is geen nul. Zonder beginpunt zou dit 'alle opnames ooit'
@@ -2368,6 +2375,10 @@ function contantVerwacht(){
      bevestiging zou zichzelf dan tegenspreken. Hetzelfde geldt voor een csv-opname binnen het venster van
      v284: die telde hier ook nog mee. */
   let op=0; for(const t of telbareTx()){ if(t.date>T.datum && isOpnameTx(t)) op+=-t.amount; }
+  /* v342: een storting van contant geld gaat er af, met dezelfde datumgrens als een opname; een contante
+     ontvangst (een lening die contant terugkwam) komt erbij, met de grens van contantInTelt(). */
+  for(const t of contantStortingenSinds()) op-=t.amount;
+  for(const x of contantInSinds()) op+=x.bedrag;
   return Math.round((T.stand+op)*100)/100;
 }
 /* Hoe oud de telling is, in hele dagen, of null als er niet geteld is. Hele dagen en lokale
@@ -2385,6 +2396,140 @@ function contantOpnamesSinds(){
   const T=contantTelling();
   return telbareTx().filter(t=>isOpnameTx(t) && (!T || t.date>T.datum)).sort((a,b)=>b.date.localeCompare(a.date));   // v288: dezelfde poort als contantVerwacht(), anders telt de lijst iets anders op dan het bedrag erboven (v104)
 }
+/* ===== STORTING VAN CONTANT GELD (v342) =====
+   De spiegel van een opname: geld uit je zak op je rekening. Je saldo stijgt, maar je bezit niet, dus het
+   gaat van je contante stand af en telt niet als inkomen. Zonder dit stond je contante stand na een storting
+   te HOOG, en boekte je volgende telling het verschil als "Contant besteed": een uitgave die je niet deed.
+   DRIE BRONNEN, en een eigen keuze wint: (1) jouw keuze bij deze boeking (SET.contantStort[id], ja of nee),
+   (2) een regel op een kenmerk (SET.contantStortRegels, getoetst met bezitRegelRaakt(), dus geen tweede
+   uitdrukking van die toets), (3) de omschrijving, zoals bij een opname (STORT_KW).
+   NIET RADEN: de omschrijving telt alleen voor een bijschrijving die al 'intern' is en niet van een eigen
+   rekening komt, en ze zet geen categorie om. Wordt een storting niet herkend, dan is het jouw keuze in de
+   boekingssheet; een keuze of regel zet de boeking op 'intern', zodat hij niet als inkomen telt.
+   Het woord STORTING telt alleen los, dus een TERUGSTORTING (een retour bij een winkel) valt erbuiten. */
+const STORT_KW=/GELDMAAT|(^|[^A-Z])STORTING/;
+function stortKenmerk(t){
+  if(!t || !(t.amount>0)) return false;
+  if((t.refNums||[]).some(n=>OWN.includes(n))) return false;          // van een eigen rekening: een overboeking
+  return STORT_KW.test(String(t.desc||'').toUpperCase());
+}
+function stortRegelVoor(t){
+  const R=(typeof SET!=='undefined'&&SET.contantStortRegels)||[];
+  if(!R.length || !t || !(t.amount>0)) return null;
+  return R.find(rg=>bezitRegelRaakt(rg,t))||null;
+}
+function contantStorting(t){
+  if(!t || !(t.amount>0)) return null;
+  const K=(SET.contantStort||{})[t.id];
+  if(K && K.nee) return null;
+  let c=''; try{ c=catOf(t); }catch(_){ return null; }
+  if(c!=='intern') return null;                                      // zelf op inkomen gezet: dan is het inkomen
+  if(K && K.ja) return {bron:'keuze'};
+  if(!OVR[t.id]){ const rg=stortRegelVoor(t); if(rg) return {bron:'regel', regel:rg}; }
+  if(stortKenmerk(t)) return {bron:'omschrijving'};
+  return null;
+}
+function contantStortingenSinds(){
+  const T=contantTelling();
+  return telbareTx().filter(t=>(!T || t.date>T.datum) && contantStorting(t)).sort((a,b)=>b.date.localeCompare(a.date));
+}
+/* Wat een storting-regel nog meer zou raken: de andere bijschrijvingen naar dezelfde partij waarop hij past. */
+function stortRegelRaakt(t, woord){
+  const rg={partij:bezitPartij(t), soort:'kenmerk', waarde:woord};
+  return TX.filter(x=>x!==t && x.id!==t.id && x.amount>0 && bezitRegelRaakt(rg,x));
+}
+function stortWoorden(t){
+  return bezitDescWoorden(t).filter(w=>!/^\d+$/.test(w)).map(w=>({woord:w, raakt:stortRegelRaakt(t,w)}))
+    .sort((a,b)=>a.raakt.length-b.raakt.length || a.woord.localeCompare(b.woord));
+}
+function contantStortHerreken(){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); save(); }
+function contantStortZet(txId, woord){
+  const t=TX.find(x=>x.id===txId); if(!t || !(t.amount>0)) return false;
+  if(woord){
+    const w=String(woord).trim();
+    if(!w || !String(t.desc||'').toLowerCase().includes(w.toLowerCase())){ toast('Dat kenmerk staat niet in de omschrijving van deze boeking.'); return false; }
+    const rg={id:'cs'+Date.now().toString(36), partij:bezitPartij(t), soort:'kenmerk', waarde:w};
+    SET.contantStortRegels=SET.contantStortRegels||[];
+    if(!SET.contantStortRegels.some(x=>x.partij===rg.partij&&String(x.waarde).toLowerCase()===w.toLowerCase())) SET.contantStortRegels.push(rg);
+  }
+  SET.contantStort=SET.contantStort||{};
+  SET.contantStort[txId]={ja:true, op:vandaagYMD(), voorOvr:OVR[txId]||null};
+  OVR[txId]='intern';
+  contantStortHerreken();
+  return true;
+}
+/* "Geen storting": een eigen nee, ook tegen de omschrijving of een regel in. De categorie blijft staan. */
+function contantStortNee(txId){
+  const t=TX.find(x=>x.id===txId); if(!t) return;
+  const oud=(SET.contantStort||{})[txId];
+  if(oud && oud.ja && OVR[txId]==='intern'){ if(oud.voorOvr) OVR[txId]=oud.voorOvr; else delete OVR[txId]; }
+  SET.contantStort=SET.contantStort||{};
+  SET.contantStort[txId]={nee:true, op:vandaagYMD()};
+  contantStortHerreken();
+}
+function contantStortTerug(txId){
+  const K=(SET.contantStort||{})[txId]; if(!K) return;
+  if(K.ja && OVR[txId]==='intern'){ if(K.voorOvr) OVR[txId]=K.voorOvr; else delete OVR[txId]; }
+  delete SET.contantStort[txId];
+  if(!Object.keys(SET.contantStort).length) delete SET.contantStort;
+  contantStortHerreken();
+}
+function contantStortRegelWeg(id){
+  SET.contantStortRegels=(SET.contantStortRegels||[]).filter(r=>r.id!==id);
+  if(!SET.contantStortRegels.length) delete SET.contantStortRegels;
+  contantStortHerreken();
+}
+/* ===== CONTANT TERUGONTVANGEN (v342) =====
+   Een lening die contant terugkomt: de vordering daalt en hetzelfde bedrag komt in je contante stand, dus je
+   netto vermogen blijft gelijk. SET.contantIn=[{id, datum, op, bedrag, loanId, naam}] is de ENE plek waar
+   zo'n ontvangst staat; de lening draagt geen tweede lijst. DE GRENS: een ontvangst telt mee als hij na je
+   laatste telling ligt, op dezelfde dag op het moment (op) en niet op de datum alleen, want je drukt de
+   knop vaak op de dag dat je ook telt. Een telling van voor v342 draagt geen moment en ligt per constructie
+   eerder dan elke ontvangst. */
+function contantIns(){ return Array.isArray(SET.contantIn)?SET.contantIn:[]; }
+function contantInTelt(x, T){
+  T=T===undefined?contantTelling():T; if(!T) return false;
+  return x.datum>T.datum || (x.datum===T.datum && (+x.op||0)>(+T.op||0));
+}
+function contantInSinds(){ const T=contantTelling(); return contantIns().filter(x=>contantInTelt(x,T)); }
+function contantInVan(loanId){ return contantIns().filter(x=>x.loanId===loanId); }
+/* Het gevolg voor de sheet, uit dezelfde functies die het scherm leest: geen tweede som. */
+function loanContantGevolg(id, bedrag, geteld){
+  const l=loans().find(x=>x.id===id); if(!l) return null;
+  const open=Math.max(Math.round(+l.open||0),0);
+  const b=Math.min(Math.max(Math.round(+bedrag||0),0), open);
+  const V=contantVerwacht(), nw=netWorth().netto;
+  const naV = V==null ? (geteld==null?null:Math.round(+geteld*100)/100) : Math.round((V+b)*100)/100;
+  const naNw = V==null ? (naV==null?null:nw-b+naV) : nw;
+  return {b, open, naOpen:open-b, V, naV, nw, naNw, geteld:V==null};
+}
+function loanContantOntvangen(id, bedrag, geteld){
+  const l=loans().find(x=>x.id===id); if(!l || l.richting==='in') return false;
+  const G=loanContantGevolg(id, bedrag, geteld); if(!G || !(G.b>0)) { toast('Vul een bedrag in'); return false; }
+  if(G.geteld && !(geteld>=0)){ toast('Vul in hoeveel je nu contant hebt'); return false; }
+  /* Het moment ligt altijd NA je laatste telling, ook als de klok die twee niet scheidt (de monotone klem
+     van v298): anders telt een ontvangst vlak na een telling op dezelfde dag niet mee. */
+  const T0=contantTelling(), nu=Math.max(Date.now(), T0?(+T0.op||0)+1:0), dag=vandaagYMD();
+  SET.contantIn=contantIns().concat([{id:'ci'+nu.toString(36), datum:dag, op:nu, bedrag:G.b, loanId:l.id, naam:l.naam||''}]);
+  l.open=G.naOpen;
+  /* Nog nooit geteld: de telling met de ontvangst erin wordt nu je eerste telling, met een moment NA de
+     ontvangst. Die telt dan niet nog eens mee, en een eerste telling schrijft geen boeking. */
+  if(G.geteld) SET.contant={stand:Math.max(+geteld||0,0), datum:dag, op:nu+1};
+  save(); closeSheet(); render();
+  toast(`${ICON('check')} ${euro0(G.b)} contant terug van ${esc(l.naam||'')}`);
+  return true;
+}
+/* Terugdraaien kan zolang de ontvangst nog in je contante stand telt. Telde je daarna, dan zit hij in die
+   telling, en zou terugdraaien de vordering ophogen zonder dat je contant daalt. */
+function loanContantTerug(inId){
+  const x=contantIns().find(y=>y.id===inId); if(!x) return;
+  if(!contantInTelt(x)){ toast('Je telde daarna; die telling bevat dit geld al'); return; }
+  const l=loans().find(y=>y.id===x.loanId);
+  if(l) l.open=Math.min(Math.round((+l.open||0)+x.bedrag), Math.max(+l.bedrag||0, Math.round((+l.open||0)+x.bedrag)));
+  SET.contantIn=contantIns().filter(y=>y.id!==inId);
+  if(!SET.contantIn.length) delete SET.contantIn;
+  save(); render(); if(l) openLoan(l.id);
+}
 /* WANNEER DE APP VRAAGT TE TELLEN. Niet dagelijks en niet stil: twee momenten, allebei bestaand.
    a) er is gepind sinds je laatste telling - dat is het moment waarop het bedrag verandert en waarop
       je het geld in je hand hebt, dus tellen kost je daar niets extra;
@@ -2396,6 +2541,7 @@ function contantOpnamesSinds(){
 function contantVraagt(){
   const T=contantTelling();
   if(contantOpnamesSinds().length) return T?'gepind':'eerste';
+  if(T && contantInSinds().length) return 'gepind';                 // v342: een contante ontvangst, net als een opname
   /* De maand-tak eist een telling van VÓÓR deze maand, niet een telling die ouder is dan vandaag.
      Dat tweede vroeg elke dag van de eerste week opnieuw zodra je op dag 1 geteld had, en dat is
      precies het zeuren dat 'niet dagelijks' moest uitsluiten. Nu één keer per maand, en zodra je
@@ -6410,8 +6556,17 @@ function contantKaart(){
       : `Je pinde ${euro0(som)} in ${ops.length} opnames, de laatste op ${dag(ops[0].date)}.`;
     gevolg = `Dat ging van je saldo af, maar je hebt het niet uitgegeven: het zit in je zak. Zolang je niet telt, weet de app niet dat het er is, en staat je veilig te besteden dus te laag.`;
   } else if(V==='gepind'){
-    spiegel = `Je pinde ${euro0(som)} sinds je telling van ${dag(T.datum)}. De app rekent nu met ${euro0(contantVerwacht())} contant.`;
-    gevolg = `Dat is je telling plus die opnames, dus wat je er intussen van uitgaf zit er nog niet af.`;
+    const ins=contantInSinds(), inSom=ins.reduce((a,x)=>a+x.bedrag,0);
+    if(!ins.length){
+      spiegel = `Je pinde ${euro0(som)} sinds je telling van ${dag(T.datum)}. De app rekent nu met ${euro0(contantVerwacht())} contant.`;
+      gevolg = `Dat is je telling plus die opnames, dus wat je er intussen van uitgaf zit er nog niet af.`;
+    } else {
+      /* v342: een contante ontvangst zet de kaart aan, net als een opname. */
+      const delen=[]; if(ops.length) delen.push(`pinde je ${euro0(som)}`);
+      delen.push(`kreeg je ${euro0(inSom)} contant terug${ins.length===1&&ins[0].naam?` van ${esc(ins[0].naam)}`:''}`);
+      spiegel = `Sinds je telling van ${dag(T.datum)} ${delen.join(' en ')}. De app rekent nu met ${euro0(contantVerwacht())} contant.`;
+      gevolg = `Dat is je telling plus die bedragen, dus wat je er intussen van uitgaf zit er nog niet af.`;
+    }
   } else {
     spiegel = `Je telde ${oud} dagen geleden: ${euro0(T.stand)} contant.`;
     gevolg = `Dat bedrag telt nog steeds voor de volle mep mee in je saldo. Wat je sindsdien contant uitgaf, zit er niet in.`;
@@ -16590,12 +16745,59 @@ function openLoan(id){
     <label class="fld" style="margin-top:10px">Eigen betaallink (optioneel)</label><input id="loanLink" type="text" value="${esc(l.link||'')}" placeholder="bv. je Tikkie-link" onchange="setLoanField('${l.id}','link',this.value)" style="width:100%">
     <div class="small muted" style="margin-top:6px">Minder verstuurt zelf niets. "Stuur betaalverzoek" zet dit bericht klaar: <span style="color:var(--txt)" id="loanShareVb">${esc(loanShareText(l))}</span></div>
     <button class="btn sec" id="loanShareBtn" style="margin-top:12px" onclick="loanShare('${l.id}')">${ICON('swap')} Stuur betaalverzoek</button>`:''}
+    ${uit&&(+l.open||0)>0?`<button class="btn sec" data-contantterug style="margin-top:8px" onclick="openLoanContant('${l.id}')">${ICON('coins')} Contant terugontvangen</button>`:''}
+    ${uit?loanContantLijst(l):''}
     <button class="btn" style="margin-top:${uit?'8px':'14px'}" onclick="loanRepay('${l.id}',${Math.max(+l.open||0,0)})">${ICON('check')} Helemaal terugbetaald</button>
     ${uit?`<button class="btn sec" style="margin-top:8px" onclick="loanWriteOff('${l.id}','persoonlijk')">Kwijtgescholden · boek als uitgave</button>`:''}
     <div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="loanDelete('${l.id}')">Markering ongedaan maken</div>
     <div style="height:8px"></div>`;
   showSheetBg();
 }
+/* v342: de contante ontvangsten bij deze lening, met terugdraaien zolang hij nog in je contante stand telt. */
+function loanContantLijst(l){
+  const xs=contantInVan(l.id); if(!xs.length) return '';
+  const T=contantTelling();
+  return `<div class="small" data-contantinlijst style="margin-top:12px;line-height:1.5">${xs.map(x=>`<div class="row" style="gap:8px;padding:4px 0">
+      <span style="flex:1">${euro0(x.bedrag)} contant terug op ${loanDatumKort(x.datum)}<span style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${contantInTelt(x,T)?'telt in je contante stand':'zit in je telling van '+loanDatumKort(T&&T.datum)}</span></span>
+      ${contantInTelt(x,T)?`<span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanContantTerug('${x.id}')">Terugdraaien</span>`:''}</div>`).join('')}</div>`;
+}
+/* Eerst het gevolg, dan bevestigen (MECHANISM_SPEC.defaultEffect). Het gevolg wordt bij elke invoer
+   opnieuw gerekend uit loanContantGevolg(), dus wat er staat is wat er gebeurt. Nog nooit geteld: dan
+   vraagt dezelfde sheet eerst wat je nu hebt, met het bedrag al ingevuld. */
+function openLoanContant(id){
+  const l=loans().find(x=>x.id===id); if(!l) return;
+  const open=Math.max(Math.round(+l.open||0),0), nooit=contantTelling()==null;
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">Contant terugontvangen</div>
+    <div class="small muted" style="margin:2px 0 10px">${esc(l.naam||'')} · nog open ${euro0(open)}</div>
+    <label class="fld" style="margin-top:0">Bedrag (€)</label>
+    <input id="lcBedrag" type="text" inputmode="decimal" value="${open}" style="width:100%" oninput="loanContantToon('${l.id}')">
+    ${nooit?`<label class="fld" style="margin-top:10px">Hoeveel contant heb je nu, met dit bedrag erbij? (€)</label>
+    <input id="lcGeteld" type="text" inputmode="decimal" value="${open}" style="width:100%" oninput="loanContantToon('${l.id}')">
+    <div class="small" style="color:var(--mut2);margin-top:6px;line-height:1.5">Je hebt nog nooit geteld. Dit wordt je eerste telling, zodat de app weet waar dit geld is.</div>`:''}
+    <div id="lcGevolg" data-contantgevolg class="small" style="margin-top:12px;line-height:1.6"></div>
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button class="btn" data-contantbevestig style="flex:1" onclick="loanContantBevestig('${l.id}')">Bevestigen</button>
+      <button class="btn sec" onclick="openLoan('${l.id}')">Terug</button></div>`;
+  showSheetBg();
+  loanContantToon(l.id);
+}
+function loanContantInvoer(){
+  const b=$('#lcBedrag'), g=$('#lcGeteld');
+  return {bedrag:b?numIn(b.value):0, geteld:g?(String(g.value).trim()===''?null:numIn(g.value)):null};
+}
+function loanContantToon(id){
+  const I=loanContantInvoer(), G=loanContantGevolg(id, I.bedrag, I.geteld), el=$('#lcGevolg');
+  if(!el || !G) return;
+  const l=loans().find(x=>x.id===id);
+  const nw = G.naNw==null ? 'pas te zeggen als je hebt ingevuld wat je hebt'
+    : (Math.round(G.naNw)===Math.round(G.nw) ? `blijft ${euro0(G.nw)}` : `${euro0(G.nw)} → ${euro0(G.naNw)}, want je overige contante geld telt voortaan mee`);
+  el.innerHTML = `<div>Vordering ${esc(l.naam||'')}: ${euro0(G.open)} → <b>${euro0(G.naOpen)}</b></div>
+    <div>Contant: ${G.V==null?'nog niet geteld':euro0(G.V)} → <b>${G.naV==null?'?':euro0(G.naV)}</b></div>
+    <div>Netto vermogen: ${nw}</div>
+    ${Math.round(I.bedrag)>G.open?`<div style="color:var(--mut2)">Er staat maar ${euro0(G.open)} open, dus meer telt niet.</div>`:''}`;
+}
+function loanContantBevestig(id){ const I=loanContantInvoer(); if(loanContantOntvangen(id, I.bedrag, I.geteld)) openLoan(id); }
 // Zacht aanbod bij een herkende, terugkerende lease-betaling: wegklikbaar, en na afwijzen weg.
 function leaseBlokHTML(t){
   const o=leaseLinkOffer(t); if(!o) return '';
@@ -16665,6 +16867,42 @@ function bezitBlok(t){
       <span class="small" style="flex:1">Hoort bij <b>${id?esc(bezitNaam(id)):'geen bezitting'}</b><span style="display:block;color:var(--mut2)">${esc(sub)}</span></span>
       <span style="color:var(--teal);font-weight:700">›</span></div>`;
 }
+/* v342: de rij bij een bijschrijving. Herkend: wat het doet en waarom, met de weg terug. Niet herkend: de
+   keuze, nooit vanzelf. */
+function contantStortBlok(t){
+  if(!(t.amount>0)) return '';
+  const S=contantStorting(t), K=(SET.contantStort||{})[t.id];
+  if(S){
+    const sub = S.bron==='keuze' ? 'jouw keuze bij deze boeking' : S.bron==='regel' ? `via je regel met "${esc(S.regel.waarde)}"` : 'herkend aan de omschrijving';
+    const weg = S.bron==='keuze' ? `contantStortTerug('${t.id}')` : S.bron==='regel' ? `contantStortRegelWeg('${S.regel.id}')` : `contantStortNee('${t.id}')`;
+    const lab = S.bron==='keuze' ? 'Terugdraaien' : S.bron==='regel' ? 'Regel weghalen' : 'Geen storting';
+    return `<div class="row" data-stortrij style="padding:10px 0;gap:8px;border-top:1px solid var(--line)">
+      <span class="small" style="flex:1"><b>Storting van contant geld</b><span style="display:block;color:var(--mut2)">${sub} · gaat van je contante stand af, geen inkomen</span></span>
+      <span class="small" style="color:var(--teal);font-weight:600;cursor:pointer" onclick="${weg};openSheet('${t.id}')">${lab}</span></div>`;
+  }
+  return `<div class="row" data-stortrij style="padding:10px 0;gap:8px;border-top:1px solid var(--line);cursor:pointer" onclick="openContantStortVraag('${t.id}')">
+      <span class="small" style="flex:1">Dit is een <b>storting van contant geld</b><span style="display:block;color:var(--mut2)">${K&&K.nee?'je koos: geen storting':'gaat dan van je contante stand af'}</span></span>
+      <span style="color:var(--teal);font-weight:700">›</span></div>`;
+}
+function openContantStortVraag(txId){
+  const t=TX.find(x=>x.id===txId); if(!t || !(t.amount>0)) return;
+  const V=contantVerwacht(), c=catOf(t), inkomen=CATS[c]&&CATS[c].type==='income';
+  const knop=(lab, sub, act, attr)=>`<button class="btn sec" ${attr||''} style="width:100%;margin-top:8px;text-align:left" onclick="${act}">${lab}${sub?`<span style="display:block;font-weight:400;color:var(--mut2);font-size:var(--fs-xs);margin-top:2px">${sub}</span>`:''}</button>`;
+  const ookTekst=L=>L.length?`maakt ook ${L.length} andere bijschrijving${L.length>1?'en':''} tot storting: ${L.slice(0,4).map(x=>`${bezitDatumLabel(x.date)} ${euro(x.amount)}`).join(', ')}${L.length>4?', ...':''}`:'raakt nu geen andere boeking';
+  const W=stortWoorden(t);
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">Storting van contant geld</div>
+    <div class="small muted" style="margin:2px 0 8px">${esc(t.name||'')} · ${euro(t.amount)} · ${bezitDatumLabel(t.date)}</div>
+    <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45;margin-bottom:8px;word-break:break-word">Omschrijving: ${esc(t.desc||'')}</div>
+    <div class="small" data-stortgevolg style="line-height:1.6">
+      <div>Contant: ${V==null?'nog niet geteld, dus er is geen stand om te verlagen':`${euro0(V)} → <b>${euro0(V-(contantStorting(t)?0:t.amount))}</b>`}</div>
+      <div>${inkomen?`Telt nu als inkomen (${esc(CATS[c].name)}); daarna niet meer.`:'Telt niet als inkomen.'}</div></div>
+    ${knop('Alleen deze boeking','', `contantStortKies('${txId}','')`, 'data-stortalleen')}
+    ${W.slice(0,4).map(x=>knop(`Ook de volgende met "${esc(x.woord)}" in de omschrijving`, ookTekst(x.raakt), `contantStortKies('${txId}','${esc(x.woord)}')`, `data-stortkenmerk="${esc(x.woord)}"`)).join('')}
+    <div class="small" style="margin-top:12px;color:var(--mut2);cursor:pointer" onclick="openSheet('${txId}')">Terug</div>`;
+  showSheetBg();
+}
+function contantStortKies(txId, woord){ if(contantStortZet(txId, woord)){ render(); openSheet(txId); } }
 function openBezitPick(txId){
   const t=TX.find(x=>x.id===txId); if(!t) return;
   const as=SET.assets||[], huidig=bezitVan(t);
@@ -16813,7 +17051,7 @@ function openSheet(id){
       <div class="small muted" style="margin-top:6px;word-break:break-word">${esc(t.desc)}</div></details>
     <label class="row" style="padding:10px 0;gap:8px;cursor:pointer;border-top:1px solid var(--line);margin-top:8px"><input type="checkbox" id="mkrule"><span class="small">Voortaan <b>alle "${esc((cleanMerch(t.name)||t.name||'').slice(0,24))}"</b> automatisch zo categoriseren</span></label>
     ${onregelmatigBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
-    ${loanBlokHTML(t)}${leaseBlokHTML(t)}
+    ${contantStortBlok(t)}${loanBlokHTML(t)}${leaseBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
     <div class="catgrid">${Object.entries(CATS).map(([k,c])=>`
       <div class="catpick ${cur===k?'on':''}" onclick="setCat('${id}','${k}')">
@@ -17764,7 +18002,7 @@ function rekSamenvoegPlan(van, naar){
    SET. Een vijfde soort erbij is een regel erbij, en dan valt de spec die deze lijst leest. */
 /* v332: de koppeling van een boeking aan een bezitting hangt ook aan t.id, dus hij verhuist mee bij een
    samenvoeging; anders is hij na de boot-sweep wees (v281). */
-const VLAG_MAPS=['onregelmatig','uitReservering','fixOvr','bezitKoppel','schuldKoppel','bezitKosten'];
+const VLAG_MAPS=['onregelmatig','uitReservering','fixOvr','bezitKoppel','schuldKoppel','bezitKosten','contantStort'];
 function _vlagAantal(id){
   let n=0;
   if(typeof OVR!=='undefined' && OVR && Object.prototype.hasOwnProperty.call(OVR,id)) n++;
@@ -21762,6 +22000,45 @@ function diagBezitKoppeling(){
   }
   return L;
 }
+/* v342: BLOK 17, HOE EEN STORTING VAN CONTANT GELD ER BIJ JOUW BANKEN UITZIET. Alleen lezen (v244).
+   Per bank de bijschrijvingen waarvan de omschrijving een woord draagt dat bij een automaat of een
+   storting hoort, met wat de app ervan zegt en waarom. Ter vergelijking per bank de vorm van een opname.
+   De herkenning komt uit contantStorting() en STORT_KW; het blok rekent niets zelf (v104). */
+const DIAG_STORT_RUIM=/GELDMAAT|STORT|CONTANT|CASH|GEA|EINZAHL|BARGELD|DEPOSIT/;
+function diagContantStorting(){
+  const L=[];
+  const T=contantTelling(), V=contantVerwacht();
+  L.push('telling: '+(T?`${T.stand} op ${T.datum}${T.op?'':' (zonder moment, van voor v342)'}`:'nooit geteld')+' · de app rekent met: '+(V==null?'geen stand':V));
+  L.push('herkenning op de omschrijving: '+STORT_KW.source+' (alleen een bijschrijving die intern is en niet van een eigen rekening komt)');
+  L.push('contante ontvangsten: '+(contantIns().map(x=>`${x.datum} ${x.bedrag} van ${x.naam||'?'}${contantInTelt(x,T)?' (telt)':' (zit in een latere telling)'}`).join('; ')||'geen'));
+  L.push('regels: '+((SET.contantStortRegels||[]).map(r=>`"${r.waarde}" naar "${r.partij}"`).join('; ')||'geen')+' · keuzes per boeking: '+Object.keys(SET.contantStort||{}).length);
+  L.push('stortingen na je telling: '+(contantStortingenSinds().map(t=>`${t.date} ${t.amount}`).join(', ')||'geen'));
+  const bankVan=t=>((ACCMETA[t.acc]||{}).bank)||(t.acc?'onbekend':'-');
+  const per=new Map(), opn=new Map();
+  for(const t of TX){
+    const U=String(t.desc||'').toUpperCase();
+    if(t.amount>0 && DIAG_STORT_RUIM.test(U)){ const b=bankVan(t); if(!per.has(b)) per.set(b,[]); per.get(b).push(t); }
+    if(isOpnameTx(t)){ const b=bankVan(t); if(!opn.has(b)) opn.set(b,[]); opn.get(b).push(t); }
+  }
+  const banken=[...new Set([...per.keys(), ...opn.keys()])].sort();
+  if(!banken.length) L.push('geen bijschrijving met een automaat- of stortingswoord, en geen opname');
+  for(const b of banken){
+    const xs=(per.get(b)||[]).sort((a,c)=>c.date.localeCompare(a.date));
+    L.push(`bank ${b}: ${xs.length} bijschrijving(en) met een automaat- of stortingswoord`);
+    for(const t of xs.slice(0,8)){
+      const S=contantStorting(t), K=(SET.contantStort||{})[t.id];
+      const waarom = S ? 'STORTING ('+S.bron+')'
+        : K&&K.nee ? 'geen storting (jouw keuze)'
+        : catOf(t)!=='intern' ? 'geen storting: categorie '+catOf(t)
+        : (t.refNums||[]).some(n=>OWN.includes(n)) ? 'geen storting: van een eigen rekening'
+        : 'geen storting: omschrijving herkent niet';
+      L.push(`  ${t.date} +${t.amount} ${waarom} | ${String(t.desc||'').slice(0,90)}`);
+    }
+    const os=(opn.get(b)||[]).sort((a,c)=>c.date.localeCompare(a.date));
+    if(os.length) L.push(`  ter vergelijking, de nieuwste opname: ${os[0].date} ${os[0].amount} | ${String(os[0].desc||'').slice(0,90)}`);
+  }
+  return L;
+}
 const DIAG_BLOKKEN=[
   {titel:'welke versie draait', lees:diagVersie},
   {titel:'de volgorde', lees:diagVolgorde},
@@ -21779,6 +22056,7 @@ const DIAG_BLOKKEN=[
   {titel:'de teller en de noemer van bufferMaanden()', lees:diagBuffernorm},
   {titel:'de stand-kaart op Inzichten tegen zijn maandbudget, per categorie', lees:diagStandKaart},
   {titel:'boekingen naar een beleggingspartij en hun bezitting', lees:diagBezitKoppeling},
+  {titel:'hoe een storting van contant geld er bij je banken uitziet', lees:diagContantStorting},
 ];
 
 async function diagTekst(){

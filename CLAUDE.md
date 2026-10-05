@@ -115,6 +115,37 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **CONTANT TERUGONTVANGEN GAAT NAAR DE CONTANTE STAND, EN EEN STORTING VAN CONTANT GELD GAAT ER WEER AF**
+  (`v342`, gevraagd door de gebruiker): GEMETEN VOOR DEZE RONDE: "Nog open" lager zetten liet de vordering
+  dalen zonder dat het geld ergens bij kwam (netto vermogen omlaag), en een storting van contant geld ging niet
+  van de contante stand af (`isOpnameTx()` kent alleen afschrijvingen), dus de volgende telling boekte hem als
+  "Contant besteed". GEEN BEZITTING "CONTANT": contant geld is al een stand in je saldo (`contantVerwacht()`,
+  `v258`), en een ontvangst is een term erin, net als een opname. `SET.contantIn=[{id, datum, op, bedrag,
+  loanId, naam}]` is de ENE plek; de lening draagt geen tweede lijst.
+  "CONTANT TERUGONTVANGEN" (`openLoanContant()`, `[data-contantterug]`) staat bij een uitgeleend bedrag met iets
+  open. Eerst het gevolg (`loanContantGevolg()`: vordering, contant, netto vermogen), dan Bevestigen
+  (`loanContantOntvangen()`); openen en annuleren schrijven niets. Het bedrag klemt op wat open staat. NOG
+  NOOIT GETELD: dezelfde sheet vraagt wat je nu hebt, met het bedrag ingevuld, en dat wordt je eerste telling;
+  zegt hij meer, dan stijgt het netto vermogen met dat overige geld en staat dat er. DE GRENS IS EEN MOMENT
+  (`contantInTelt()`): een ontvangst telt na je telling, op dezelfde dag op `op`, en telling en ontvangst zijn
+  monotoon geklemd (`v298`), want de knop valt vaak op de teldag en een stilstaande klok scheidt ze anders
+  niet. Terugdraaien kan zolang de ontvangst nog telt; na een latere telling zit hij in die telling.
+  Een contante ontvangst zet de contant-melding aan (`contantVraagt()` geeft `gepind`), net als een opname.
+  DE STORTING (`contantStorting(t)`, de ENE lezer): jouw keuze (`SET.contantStort[id]`, ja of nee) wint, dan
+  een regel op een kenmerk (`SET.contantStortRegels`, via `bezitRegelRaakt()`), dan de omschrijving
+  (`STORT_KW`: Geldmaat of het losse woord storting, dus geen TERUGSTORTING). NIET RADEN: de omschrijving telt
+  alleen bij een bijschrijving die al intern is en niet van een eigen rekening komt, en zet geen categorie om.
+  Een keuze of regel zet de boeking op intern, dus geen inkomen. De rij in de boekingssheet
+  (`contantStortBlok()`, `[data-stortrij]`) zegt herkend of niet; de sheet (`openContantStortVraag()`) toont eerst
+  het gevolg en per kenmerk wat de regel nog meer raakt. `contantStort` staat in `VLAG_MAPS`. Een herkende
+  storting erft in fix 2 geen uitgavencategorie.
+  BLOK 17 (`diagContantStorting()`) toont per bank de bijschrijvingen met een automaat- of stortingswoord, wat
+  de app ervan zegt en waarom, en ter vergelijking de nieuwste opname. Hoe een storting er bij de banken van de
+  gebruiker uitziet staat alleen op het toestel.
+  GEMETEN (het gevraagde geval): Ma €400 contant terug: netto vermogen gelijk, contant €50 naar €450, vordering
+  op nul; daarna €400 gestort: contant €50, geen inkomen, en een telling van €50 boekt geen "Contant besteed"
+  (met een nee op die storting boekt hij er wel een van €400). De sheet is 286px en de stortingsheet 431px op
+  360 EN 390px, de rij 57px, zonder overloop.
 - **GRIP IS EEN KPI-DASHBOARD MET DE MAAND IN DE TIJD, EN DE MAANDAFSLUITING IS EEN POP-UP** (`v340`,
   gevraagd door de gebruiker, mockups "KPI en tijd", "V1 met handelingen", "KPI vorige maand"): drie
   blokken en een link. (1) DE TEGELS (`gripTegels()`): Reserveringen, Buffer, het doel van `maandRegels()`
@@ -5933,7 +5964,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v341` → `minder-v342`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v342` → `minder-v343`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5952,7 +5983,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340` en `v341` naar `minder-v341`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341` en `v342` naar `minder-v342`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

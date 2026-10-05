@@ -333,7 +333,7 @@ test.describe('4 · de vier markeringen verhuizen mee', () => {
     await boot(page);
     const r = await page.evaluate(() => ({ maps: VLAG_MAPS.slice(), verhuis: _vlagVerhuis.toString(),
       tel: _vlagAantal.toString() }));
-    expect(r.maps).toEqual(['onregelmatig', 'uitReservering', 'fixOvr', 'bezitKoppel', 'schuldKoppel', 'bezitKosten']);   // v332, v334, v341
+    expect(r.maps).toEqual(['onregelmatig', 'uitReservering', 'fixOvr', 'bezitKoppel', 'schuldKoppel', 'bezitKosten', 'contantStort']);   // v332, v334, v341, v342
     expect(r.verhuis).toContain('VLAG_MAPS');
     expect(r.verhuis).toContain('OVR');
     expect(r.tel).toContain('VLAG_MAPS');
