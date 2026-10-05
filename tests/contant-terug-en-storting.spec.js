@@ -123,7 +123,9 @@ test.describe('het geval: Ma €400 contant terug, daarna gestort', () => {
 });
 
 test.describe('contant terugontvangen: de rest van het gedrag', () => {
-  test('een deel: Pam €100 van €300, en meer dan er open staat telt niet', async ({ page }) => {
+  // v343: dit was "meer dan er open staat telt niet", en dat liet de rest vallen terwijl het geld er was.
+  // Wat er nu over meer dan open staat te zeggen is staat in lening-overschot.spec.js.
+  test('een deel: Pam €100 van €300, en meer dan er open staat vraagt wat de rest is', async ({ page }) => {
     await boot(page);
     await contantTerug(page, 'PAM', 100);
     expect(await page.evaluate(() => [lening('PAM').open, contantVerwacht()])).toEqual([200, 150]);
@@ -134,7 +136,9 @@ test.describe('contant terugontvangen: de rest van het gedrag', () => {
       return page.locator('[data-contantgevolg]').innerText();
     })();
     expect(gevolg).toContain('€200 → €0');
-    expect(gevolg).toContain('maar €200 open');
+    expect(gevolg).not.toContain('maar €200 open');
+    expect(gevolg).toContain('Contant: €150 → €1.050');
+    expect(await page.locator('[data-overschot]').innerText()).toContain('€700 meer dan er open stond');
   });
 
   test('het gevolg schrijft niets: openen en annuleren laat alles staan', async ({ page }) => {

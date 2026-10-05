@@ -1433,11 +1433,20 @@ function categorize(t){
   t.id=txId(t);
   const match=w=>{ const wu=(w||'').toUpperCase(); if(!wu) return false; const wz=wu.replace(/\s/g,''); return U.includes(wu) || (wz.length>=4 && Z.includes(wz)); };
   let cat='overig';
+  /* v343: EEN BOEKING ZONDER BANK DRAAGT ZIJN EIGEN CATEGORIE (vasteCat). De app schrijft er twee: de
+     contant-telling (v258) en een terugbetaling die met een lening meekwam. Hun omschrijving staat in geen
+     regel, dus zonder dit veld maakte de boot er Overig van. GEMETEN bij v343: een "Contant besteed" stond
+     na een herstart op Overig en telde dus tegen een potje. Een telling van voor v343 draagt het veld niet
+     en wordt herkend aan haar vorm: geen rekening, en bankRef is precies bron|datum. */
+  if(!t.vasteCat && !t.acc && t.src && t.bankRef===t.src+'|'+t.date && CATS[t.src]) t.vasteCat=t.src;
+  if(t.vasteCat && CATS[t.vasteCat]) cat=t.vasteCat;
+  else {
   // 1) eigen regels winnen van de ingebouwde categorisatie
   for(const r of (typeof SET!=='undefined'&&SET.rules)||[]){ if(CATS[r.cat] && match(r.kw)){ cat=r.cat; break; } }
   // 2) ingebouwde keyword-regels
   if(cat==='overig'){ for(const [k,kws] of RULES){ if(kws.some(match)){ cat=k; break; } } }
   if(cat==='overig' && t.amount>0) cat='intern'; // onbekende bijschrijving = meestal eigen overboeking
+  }
   t.ruleCat=cat;
   t.autoCat=cat;   // wordt evt. overschreven door applyOwnAccounts()
   /* v273: de betaaldatum als EIGEN veld naast t.date, en wissen zodra de poort niet meer geldt.
@@ -2066,6 +2075,10 @@ function maandInkomen(m){
     const v=Math.max(t.amount,0); alles+=v;
     onregelmatig+=onregelmatigBedrag(t);
   }
+  /* v343: een cadeau of rente die met een lening meekwam is geld dat binnenkwam (alles) en onregelmatig,
+     dus de norm en baseIncome() veranderen niet. Het staat niet in een boeking: bij contant is er geen, en
+     bij de bank is de boeking zelf een terugbetaling (intern). */
+  const ov=overschotInkomen(m); alles+=ov; onregelmatig+=ov;
   return {alles, onregelmatig, norm:alles-onregelmatig};
 }
 function totals(m){
@@ -2309,7 +2322,7 @@ function contantOpslaan(){
          override over om hem alsnog ergens anders heen te zetten. */
       TX.push({id:'cash_'+dag, date:dag, amount:-totaal, acc:'', name:'Contant besteed',
         desc:'CONTANT TELLING '+dag, typ:'', ref:'', src:'contant', accName:'', refNums:[],
-        bankRef:ref, ruleCat:'contant', autoCat:'contant'});
+        bankRef:ref, ruleCat:'contant', autoCat:'contant', vasteCat:'contant'});
       TX.sort((a,b)=>a.date.localeCompare(b.date));
     }
   }
@@ -2493,24 +2506,100 @@ function contantInTelt(x, T){
 }
 function contantInSinds(){ const T=contantTelling(); return contantIns().filter(x=>contantInTelt(x,T)); }
 function contantInVan(loanId){ return contantIns().filter(x=>x.loanId===loanId); }
+/* ===== MEER TERUG DAN ER OPEN STOND (v343) =====
+   Tot v343 klemde de ontvangst op wat er open stond, en dan viel de rest weg terwijl het geld er wel was.
+   De volle ontvangst telt nu (bij contant in je contante stand, bij de bank staat hij al op je rekening),
+   de vordering gaat naar nul, en voor de rest vraagt de sheet wat het is. GEEN VOORKEUZE
+   (MECHANISM_SPEC.defaultEffect): de app weet niet of het een cadeau is of geld dat je bewaart, en die twee
+   verschillen precies het hele bedrag in je netto vermogen.
+   SET.leenOverschot=[{id, loanId, naam, bedrag, soort, datum, maand, cat, inId|txId, vtxRef, bewaarId}] is de
+   ENE plek. Per soort het gevolg, elk via een bestaande laag:
+   - cadeau, rente: eenmalige inkomsten in maandInkomen() (alles en onregelmatig), dus niet in je norm en
+     niet in baseIncome();
+   - terug: een boeking zonder bank (vasteCat) die de uitgave in de gekozen maand en categorie netto
+     verlaagt, zoals een terugstorting (v265);
+   - bewaar: een schuld (SET.loans, richting in, soort bewaar), dus netto vermogen gelijk. */
+const OVERSCHOT_SOORTEN=[
+  {k:'cadeau', l:'Een cadeau of extraatje', sub:'eenmalige inkomsten, niet in je maandinkomen'},
+  {k:'rente',  l:'Rente of een vergoeding op de lening', sub:'eenmalige inkomsten, niet in je maandinkomen'},
+  {k:'terug',  l:n=>`Terugbetaling van iets wat ik voor ${n} betaalde`, sub:'verlaagt die uitgave in de maand en categorie die je kiest'},
+  {k:'bewaar', l:n=>`Geld dat ik voor ${n} bewaar`, sub:n=>`een schuld aan ${n}`},
+];
+function overschotten(){ return Array.isArray(SET.leenOverschot)?SET.leenOverschot:[]; }
+function overschotInkomen(m){
+  let s=0; for(const o of overschotten()) if((o.soort==='cadeau'||o.soort==='rente') && o.maand===m) s+=+o.bedrag||0;
+  return s;
+}
+/* De keuze is pas compleet met alles wat de soort nodig heeft; terug vraagt een maand en een categorie. */
+function overschotKeuzeKlaar(K){
+  if(!K || !OVERSCHOT_SOORTEN.some(x=>x.k===K.soort)) return false;
+  if(K.soort==='terug') return !!(K.maand && K.cat && CATS[K.cat] && CATS[K.cat].type==='expense');
+  return true;
+}
+/* Wat de rest met je netto vermogen doet: alles erbij, behalve geld dat je bewaart (dat is een schuld). */
+function overschotNetto(rest, K){ return (K && K.soort==='bewaar') ? 0 : rest; }
+function overschotMaak(o){
+  const id='lo'+Math.max(Date.now(), ...overschotten().map(x=>parseInt(String(x.id).slice(2),36)+1||0)).toString(36);
+  const r=Object.assign({id}, o);
+  if(r.soort==='terug'){
+    r.vtxRef='overschot|'+id;
+    const dag = (r.datum||'').slice(0,7)===r.maand ? r.datum : r.maand+'-01';
+    const t={date:dag, amount:+r.bedrag, acc:'', name:`Terugbetaald door ${r.naam||''}`.trim(),
+      desc:'TERUGBETALING VIA LENING '+(r.naam||'').toUpperCase(), typ:'', ref:'', src:'lening', accName:'',
+      refNums:[], bankRef:r.vtxRef, vasteCat:r.cat};
+    categorize(t); TX.push(t); TX.sort((a,b)=>a.date.localeCompare(b.date));
+  }
+  if(r.soort==='bewaar'){
+    r.bewaarId='l'+id;
+    SET.loans=loans().concat([{id:r.bewaarId, txId:'', naam:(r.naam||'').slice(0,40), richting:'in', soort:'bewaar',
+      bedrag:Math.round(+r.bedrag), open:Math.round(+r.bedrag), datum:r.datum, terug:'', bron:id}]);
+  }
+  SET.leenOverschot=overschotten().concat([r]);
+  return r;
+}
+function overschotWeg(oid){
+  const o=overschotten().find(x=>x.id===oid); if(!o) return;
+  if(o.vtxRef) TX=TX.filter(t=>t.bankRef!==o.vtxRef);
+  if(o.bewaarId) SET.loans=loans().filter(l=>l.id!==o.bewaarId);
+  SET.leenOverschot=overschotten().filter(x=>x.id!==oid);
+  if(!SET.leenOverschot.length) delete SET.leenOverschot;
+}
+function overschotVan(loanId){ return overschotten().filter(o=>o.loanId===loanId); }
+function overschotLabel(o){
+  const n=o.naam||'';
+  if(o.soort==='cadeau') return 'cadeau of extraatje';
+  if(o.soort==='rente') return 'rente of vergoeding';
+  if(o.soort==='terug') return `terugbetaling, ${CATS[o.cat]?CATS[o.cat].name.toLowerCase():''} in ${maandNaamKort(o.maand)}`;
+  return `bewaard voor ${n}`;
+}
+function maandNaamKort(ym){ const d=new Date(ym+'-01T12:00:00'); return isNaN(d)?ym:d.toLocaleDateString('nl-NL',{month:'long',year:'numeric'}); }
 /* Het gevolg voor de sheet, uit dezelfde functies die het scherm leest: geen tweede som. */
-function loanContantGevolg(id, bedrag, geteld){
+function loanContantGevolg(id, bedrag, geteld, K){
   const l=loans().find(x=>x.id===id); if(!l) return null;
   const open=Math.max(Math.round(+l.open||0),0);
-  const b=Math.min(Math.max(Math.round(+bedrag||0),0), open);
+  const b=Math.max(Math.round(+bedrag||0),0), af=Math.min(b, open), rest=b-af;
   const V=contantVerwacht(), nw=netWorth().netto;
   const naV = V==null ? (geteld==null?null:Math.round(+geteld*100)/100) : Math.round((V+b)*100)/100;
-  const naNw = V==null ? (naV==null?null:nw-b+naV) : nw;
-  return {b, open, naOpen:open-b, V, naV, nw, naNw, geteld:V==null};
+  const kies = rest>0 && !overschotKeuzeKlaar(K);
+  const extra = rest>0 ? overschotNetto(rest, K) : 0;
+  const naNw = kies ? null : (V==null ? (naV==null?null:nw-af+naV-(rest-extra)) : nw+extra);
+  return {b, af, rest, open, naOpen:open-af, V, naV, nw, naNw, geteld:V==null, kies};
 }
-function loanContantOntvangen(id, bedrag, geteld){
+function loanContantOntvangen(id, bedrag, geteld, K){
   const l=loans().find(x=>x.id===id); if(!l || l.richting==='in') return false;
-  const G=loanContantGevolg(id, bedrag, geteld); if(!G || !(G.b>0)) { toast('Vul een bedrag in'); return false; }
+  const G=loanContantGevolg(id, bedrag, geteld, K); if(!G || !(G.b>0)) { toast('Vul een bedrag in'); return false; }
   if(G.geteld && !(geteld>=0)){ toast('Vul in hoeveel je nu contant hebt'); return false; }
+  if(G.kies){ toast(`Kies wat de ${euro0(G.rest)} is`); return false; }
   /* Het moment ligt altijd NA je laatste telling, ook als de klok die twee niet scheidt (de monotone klem
      van v298): anders telt een ontvangst vlak na een telling op dezelfde dag niet mee. */
   const T0=contantTelling(), nu=Math.max(Date.now(), T0?(+T0.op||0)+1:0), dag=vandaagYMD();
-  SET.contantIn=contantIns().concat([{id:'ci'+nu.toString(36), datum:dag, op:nu, bedrag:G.b, loanId:l.id, naam:l.naam||''}]);
+  const x={id:'ci'+nu.toString(36), datum:dag, op:nu, bedrag:G.b, aflossing:G.af, loanId:l.id, naam:l.naam||''};
+  if(G.rest>0){
+    const o=overschotMaak({loanId:l.id, naam:l.naam||'', bedrag:G.rest, soort:K.soort, datum:dag,
+      maand:K.soort==='terug'?K.maand:dag.slice(0,7), cat:K.soort==='terug'?K.cat:'', inId:x.id});
+    x.overschot=o.id;
+  }
+  SET.contantIn=contantIns().concat([x]);
   l.open=G.naOpen;
   /* Nog nooit geteld: de telling met de ontvangst erin wordt nu je eerste telling, met een moment NA de
      ontvangst. Die telt dan niet nog eens mee, en een eerste telling schrijft geen boeking. */
@@ -2520,12 +2609,14 @@ function loanContantOntvangen(id, bedrag, geteld){
   return true;
 }
 /* Terugdraaien kan zolang de ontvangst nog in je contante stand telt. Telde je daarna, dan zit hij in die
-   telling, en zou terugdraaien de vordering ophogen zonder dat je contant daalt. */
+   telling, en zou terugdraaien de vordering ophogen zonder dat je contant daalt. Een rest gaat mee terug. */
 function loanContantTerug(inId){
   const x=contantIns().find(y=>y.id===inId); if(!x) return;
   if(!contantInTelt(x)){ toast('Je telde daarna; die telling bevat dit geld al'); return; }
   const l=loans().find(y=>y.id===x.loanId);
-  if(l) l.open=Math.min(Math.round((+l.open||0)+x.bedrag), Math.max(+l.bedrag||0, Math.round((+l.open||0)+x.bedrag)));
+  const af = x.aflossing!=null ? +x.aflossing : x.bedrag;
+  if(l) l.open=Math.min(Math.round((+l.open||0)+af), Math.max(+l.bedrag||0, Math.round((+l.open||0)+af)));
+  if(x.overschot) overschotWeg(x.overschot);
   SET.contantIn=contantIns().filter(y=>y.id!==inId);
   if(!SET.contantIn.length) delete SET.contantIn;
   save(); render(); if(l) openLoan(l.id);
@@ -10371,7 +10462,7 @@ function loanRowsHTML(richting){
     + ls.map(l=>{
         const dt=l.terug?new Date(l.terug):null;
         const laat=dt && dt.getTime()<Date.now();
-        const sub=`${new Date(l.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}${l.terug?` · terug ${dt.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}${laat?' (verstreken)':''}`:''}${l.soort==='borg'?' · borg':''}`;
+        const sub=`${new Date(l.datum).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}${l.terug?` · terug ${dt.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}${laat?' (verstreken)':''}`:''}${l.soort==='borg'?' · borg':''}${l.soort==='bewaar'?' · bewaard':''}`;
         return `<div class="cz-pot" style="cursor:pointer" onclick="openLoan('${l.id}')"><div class="cp-info"><div class="cp-nm">${esc(l.naam)}</div><div class="cp-sub${laat?' warn':''}">${sub}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+l.open||0)}</span><span class="muted">›</span></div></div>`;
       }).join('');
 }
@@ -16692,7 +16783,7 @@ function loanMatch(t){
   const beste=kand.slice().sort((a,b)=>score(a)-score(b))[0];
   const zelfde=nm && (beste.naam||'').toUpperCase().slice(0,8)===nm.slice(0,8);
   if(!zelfde && Math.abs((+beste.open||0)-bedrag)>Math.max((+beste.open||0)*0.1,5)) return null;
-  return {loan:beste, bedrag:Math.min(bedrag,+beste.open||0), deels:bedrag<(+beste.open||0)};
+  return {loan:beste, bedrag:Math.min(bedrag,+beste.open||0), deels:bedrag<(+beste.open||0), over:Math.max(bedrag-Math.round(+beste.open||0),0)};
 }
 // het blok in de transactie-sheet: één tik om te zeggen "dit was geen uitgave"
 function loanBlokHTML(t){
@@ -16710,7 +16801,18 @@ function loanBlokHTML(t){
   }
   // binnenkomend geld dat bij een open vordering past: bied aan het als terugbetaling te boeken
   if(+t.amount>0){
+    if(String(t.bankRef||'').startsWith('overschot|')) return '';     // v343: de terugbetaling die de app zelf schreef
+    const O=overschotten().find(o=>o.txId===t.id);
+    if(O) return `<div class="card" data-overschotrij style="margin:10px 0 6px;padding:12px 13px">
+      <div class="small" style="font-weight:700;color:var(--teal)">Terugbetaling van ${esc(O.naam||'')}</div>
+      <div class="small muted" style="margin-top:4px">${euro0(O.aflossing)} van de lening, en ${euro0(O.bedrag)} meer: ${esc(overschotLabel(O))}. Telt niet als inkomen in je maand.</div>
+      <div class="row" style="margin-top:9px;gap:12px"><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanBankTerug('${O.id}');openSheet('${t.id}')">Terugdraaien</span></div></div>`;
     const m=loanMatch(t);
+    if(m && m.over>0) return `<div class="card" data-overschotaanbod style="margin:10px 0 6px;padding:12px 13px;border-color:color-mix(in srgb,var(--accent) 35%,transparent)">
+      <div class="small" style="font-weight:700;color:var(--teal)">Is dit een terugbetaling?</div>
+      <div class="small muted" style="margin-top:4px">Je hebt nog ${euro0(m.loan.open)} open bij <b style="color:var(--txt)">${esc(m.loan.naam)}</b>, en dit is ${euro0(m.over)} meer.</div>
+      <button class="btn" style="margin-top:10px" onclick="openLoanOverschotBank('${m.loan.id}','${t.id}')">Ja, en de ${euro0(m.over)} erboven is… ›</button>
+    </div>`;
     if(m) return `<div class="card" style="margin:10px 0 6px;padding:12px 13px;border-color:color-mix(in srgb,var(--accent) 35%,transparent)">
       <div class="small" style="font-weight:700;color:var(--teal)">Is dit een terugbetaling?</div>
       <div class="small muted" style="margin-top:4px">Je hebt nog ${euro0(m.loan.open)} open bij <b style="color:var(--txt)">${esc(m.loan.naam)}</b>. Boek je dit zo, dan telt het niet als inkomen.</div>
@@ -16734,7 +16836,7 @@ function openLoan(id){
   const uit=l.richting!=='in';
   window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="row" id="loanHead" style="margin-bottom:2px"><div style="font-weight:800;font-size:var(--fs-lg)">${uit?(l.soort==='borg'?'Borg / voorschot':'Uitgeleend'):'Geleend'}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div class="row" id="loanHead" style="margin-bottom:2px"><div style="font-weight:800;font-size:var(--fs-lg)">${uit?(l.soort==='borg'?'Borg / voorschot':'Uitgeleend'):(l.soort==='bewaar'?'Bewaard voor iemand':'Geleend')}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
     <div class="small muted" style="margin-bottom:12px">${uit?'Een vordering: dit geld is van jou, het staat alleen ergens anders.':'Een schuld: dit geld is niet van jou.'} Het telt niet mee als ${uit?'uitgave':'inkomen'}.</div>
     <label class="fld">Van wie / aan wie</label><input id="loanNaam" type="text" value="${esc(l.naam||'')}" onchange="setLoanField('${l.id}','naam',this.value)" style="width:100%">
     <label class="fld" style="margin-top:10px">Nog open (€)</label><input id="loanOpen" type="number" inputmode="numeric" min="0" value="${Math.max(+l.open||0,0)}" onchange="setLoanField('${l.id}','open',this.value)" style="width:100%">
@@ -16749,24 +16851,30 @@ function openLoan(id){
     ${uit?loanContantLijst(l):''}
     <button class="btn" style="margin-top:${uit?'8px':'14px'}" onclick="loanRepay('${l.id}',${Math.max(+l.open||0,0)})">${ICON('check')} Helemaal terugbetaald</button>
     ${uit?`<button class="btn sec" style="margin-top:8px" onclick="loanWriteOff('${l.id}','persoonlijk')">Kwijtgescholden · boek als uitgave</button>`:''}
-    <div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="loanDelete('${l.id}')">Markering ongedaan maken</div>
+    ${l.bron?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="overschotTerug('${l.bron}')">Ontvangst terugdraaien</div>`
+      :`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="loanDelete('${l.id}')">Markering ongedaan maken</div>`}
     <div style="height:8px"></div>`;
   showSheetBg();
 }
 /* v342: de contante ontvangsten bij deze lening, met terugdraaien zolang hij nog in je contante stand telt. */
 function loanContantLijst(l){
-  const xs=contantInVan(l.id); if(!xs.length) return '';
-  const T=contantTelling();
+  const xs=contantInVan(l.id), bank=overschotVan(l.id).filter(o=>o.txId); if(!xs.length && !bank.length) return '';
+  const T=contantTelling(), OV=overschotten();
+  const rest=x=>{ const o=x.overschot&&OV.find(y=>y.id===x.overschot); return o?` · ${euro0(o.bedrag)} meer: ${esc(overschotLabel(o))}`:''; };
   return `<div class="small" data-contantinlijst style="margin-top:12px;line-height:1.5">${xs.map(x=>`<div class="row" style="gap:8px;padding:4px 0">
-      <span style="flex:1">${euro0(x.bedrag)} contant terug op ${loanDatumKort(x.datum)}<span style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${contantInTelt(x,T)?'telt in je contante stand':'zit in je telling van '+loanDatumKort(T&&T.datum)}</span></span>
-      ${contantInTelt(x,T)?`<span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanContantTerug('${x.id}')">Terugdraaien</span>`:''}</div>`).join('')}</div>`;
+      <span style="flex:1">${euro0(x.bedrag)} contant terug op ${loanDatumKort(x.datum)}<span style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${contantInTelt(x,T)?'telt in je contante stand':'zit in je telling van '+loanDatumKort(T&&T.datum)}${rest(x)}</span></span>
+      ${contantInTelt(x,T)?`<span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanContantTerug('${x.id}')">Terugdraaien</span>`:''}</div>`).join('')}${bank.map(o=>`<div class="row" data-overschotbank style="gap:8px;padding:4px 0">
+      <span style="flex:1">${euro0((+o.aflossing||0)+(+o.bedrag||0))} terug via de bank op ${loanDatumKort(o.datum)}<span style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${euro0(o.bedrag)} meer: ${esc(overschotLabel(o))}</span></span>
+      <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="loanBankTerug('${o.id}')">Terugdraaien</span></div>`).join('')}</div>`;
 }
 /* Eerst het gevolg, dan bevestigen (MECHANISM_SPEC.defaultEffect). Het gevolg wordt bij elke invoer
    opnieuw gerekend uit loanContantGevolg(), dus wat er staat is wat er gebeurt. Nog nooit geteld: dan
-   vraagt dezelfde sheet eerst wat je nu hebt, met het bedrag al ingevuld. */
+   vraagt dezelfde sheet eerst wat je nu hebt, met het bedrag al ingevuld. Is het bedrag hoger dan wat er
+   open staat, dan vraagt hij wat de rest is (v343), zonder voorkeuze. */
 function openLoanContant(id){
   const l=loans().find(x=>x.id===id); if(!l) return;
   const open=Math.max(Math.round(+l.open||0),0), nooit=contantTelling()==null;
+  window._ovK=null; window._ovToon=()=>loanContantToon(l.id);
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg)">Contant terugontvangen</div>
     <div class="small muted" style="margin:2px 0 10px">${esc(l.naam||'')} · nog open ${euro0(open)}</div>
@@ -16775,6 +16883,7 @@ function openLoanContant(id){
     ${nooit?`<label class="fld" style="margin-top:10px">Hoeveel contant heb je nu, met dit bedrag erbij? (€)</label>
     <input id="lcGeteld" type="text" inputmode="decimal" value="${open}" style="width:100%" oninput="loanContantToon('${l.id}')">
     <div class="small" style="color:var(--mut2);margin-top:6px;line-height:1.5">Je hebt nog nooit geteld. Dit wordt je eerste telling, zodat de app weet waar dit geld is.</div>`:''}
+    <div id="ovKeuze"></div>
     <div id="lcGevolg" data-contantgevolg class="small" style="margin-top:12px;line-height:1.6"></div>
     <div class="row" style="gap:8px;margin-top:14px">
       <button class="btn" data-contantbevestig style="flex:1" onclick="loanContantBevestig('${l.id}')">Bevestigen</button>
@@ -16786,18 +16895,123 @@ function loanContantInvoer(){
   const b=$('#lcBedrag'), g=$('#lcGeteld');
   return {bedrag:b?numIn(b.value):0, geteld:g?(String(g.value).trim()===''?null:numIn(g.value)):null};
 }
+/* De keuze voor de rest, gedeeld door de contante en de bankroute. Vier rijen van gelijk gewicht en geen
+   voorkeuze; alleen bij terug komen er een maand en een categorie bij, ook die zonder voorkeuze. */
+function overschotKies(k){ window._ovK=Object.assign({}, window._ovK||{}, {soort:k}); if(window._ovToon) window._ovToon(); }
+function overschotVeld(){
+  const m=$('#ovMaand'), c=$('#ovCat');
+  window._ovK=Object.assign({}, window._ovK||{}, {maand:m?m.value:'', cat:c?c.value:''});
+  if(window._ovToon) window._ovToon();
+}
+function overschotMaanden(){
+  const uit=[], d=new Date(thisYM()+'-01T12:00:00');
+  for(let i=0;i<12;i++){ uit.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); d.setMonth(d.getMonth()-1); }
+  return uit;
+}
+function overschotKeuzeHTML(naam, rest, K){
+  K=K||{};
+  const rij=x=>{ const lab=typeof x.l==='function'?x.l(esc(naam)):x.l, sub=typeof x.sub==='function'?x.sub(esc(naam)):x.sub, aan=K.soort===x.k;
+    return `<div class="cz-pot" data-overschotsoort="${x.k}" aria-pressed="${aan}" style="cursor:pointer;${aan?'box-shadow:inset 3px 0 0 var(--teal)':''}" onclick="overschotKies('${x.k}')">
+      <div class="cp-info" style="padding-left:${aan?'8px':'0'}"><div class="cp-nm">${lab}</div><div class="cp-sub">${sub}</div></div>
+      <span style="color:${aan?'var(--teal)':'var(--mut2)'};font-weight:700">${aan?ICON('check'):''}</span></div>`; };
+  const terug = K.soort==='terug' ? `<div class="row" style="gap:8px;margin-top:8px">
+      <select id="ovMaand" data-overschotmaand style="flex:1;min-width:0" onchange="overschotVeld()"><option value="">Welke maand</option>${overschotMaanden().map(m=>`<option value="${m}"${K.maand===m?' selected':''}>${maandNaamKort(m)}</option>`).join('')}</select>
+      <select id="ovCat" data-overschotcat style="flex:1;min-width:0" onchange="overschotVeld()"><option value="">Welke categorie</option>${Object.keys(CATS).filter(k=>CATS[k].type==='expense').map(k=>`<option value="${k}"${K.cat===k?' selected':''}>${esc(CATS[k].name)}</option>`).join('')}</select></div>` : '';
+  return `<div data-overschot style="margin-top:14px">
+    <div class="small" style="font-weight:700;margin:0 2px 6px">${euro0(rest)} meer dan er open stond. Wat is het?</div>
+    <div class="cz-card" style="padding:2px 14px">${OVERSCHOT_SOORTEN.map(rij).join('')}</div>${terug}</div>`;
+}
+/* Wat de keuze doet, in een regel van het gevolg. */
+function overschotGevolgRegel(naam, rest, K, maandVanZelf){
+  if(!overschotKeuzeKlaar(K)) return `<div style="color:var(--mut2)">De ${euro0(rest)} erboven: kies hieronder wat het is.</div>`;
+  if(K.soort==='bewaar') return `<div>Schuld aan ${esc(naam)}: <b>${euro0(rest)}</b></div>`;
+  if(K.soort==='terug') return `<div>Uitgaven ${esc(CATS[K.cat].name.toLowerCase())} in ${maandNaamKort(K.maand)}: <b>${euro0(rest)} lager</b></div>`;
+  return `<div>Eenmalige inkomsten in ${maandNaamKort(maandVanZelf)}: <b>${euro0(rest)}</b>, niet in je maandinkomen</div>`;
+}
+function overschotKeuzeToon(naam, rest){
+  const el=$('#ovKeuze'); if(!el) return;
+  const K=window._ovK||{}, sig=rest>0 ? [rest, K.soort||''].join('|') : '';
+  if(el.dataset.sig===sig) return;                 // een maand of categorie kiezen hertekent de keuze niet
+  el.dataset.sig=sig; el.innerHTML = rest>0 ? overschotKeuzeHTML(naam, rest, K) : '';
+}
 function loanContantToon(id){
-  const I=loanContantInvoer(), G=loanContantGevolg(id, I.bedrag, I.geteld), el=$('#lcGevolg');
+  const I=loanContantInvoer(), K=window._ovK, G=loanContantGevolg(id, I.bedrag, I.geteld, K), el=$('#lcGevolg');
   if(!el || !G) return;
   const l=loans().find(x=>x.id===id);
-  const nw = G.naNw==null ? 'pas te zeggen als je hebt ingevuld wat je hebt'
-    : (Math.round(G.naNw)===Math.round(G.nw) ? `blijft ${euro0(G.nw)}` : `${euro0(G.nw)} → ${euro0(G.naNw)}, want je overige contante geld telt voortaan mee`);
+  overschotKeuzeToon(l.naam||'', G.rest);
+  const reden = G.geteld ? ', want je overige contante geld telt voortaan mee' : (G.rest>0 ? `, want de ${euro0(G.rest)} is van jou` : '');
+  const nw = G.kies ? 'hangt af van wat de rest is'
+    : G.naNw==null ? 'pas te zeggen als je hebt ingevuld wat je hebt'
+    : (Math.round(G.naNw)===Math.round(G.nw) ? `blijft ${euro0(G.nw)}` : `${euro0(G.nw)} → ${euro0(G.naNw)}${reden}`);
   el.innerHTML = `<div>Vordering ${esc(l.naam||'')}: ${euro0(G.open)} → <b>${euro0(G.naOpen)}</b></div>
     <div>Contant: ${G.V==null?'nog niet geteld':euro0(G.V)} → <b>${G.naV==null?'?':euro0(G.naV)}</b></div>
-    <div>Netto vermogen: ${nw}</div>
-    ${Math.round(I.bedrag)>G.open?`<div style="color:var(--mut2)">Er staat maar ${euro0(G.open)} open, dus meer telt niet.</div>`:''}`;
+    ${G.rest>0?overschotGevolgRegel(l.naam||'', G.rest, K, vandaagYMD().slice(0,7)):''}
+    <div>Netto vermogen: ${nw}</div>`;
+  const knop=$('[data-contantbevestig]'); if(knop) knop.disabled = G.kies || !(G.b>0);
 }
-function loanContantBevestig(id){ const I=loanContantInvoer(); if(loanContantOntvangen(id, I.bedrag, I.geteld)) openLoan(id); }
+function loanContantBevestig(id){ const I=loanContantInvoer(); if(loanContantOntvangen(id, I.bedrag, I.geteld, window._ovK)) openLoan(id); }
+/* DE BANKROUTE (v343): een bijschrijving die hoger is dan wat er open staat. Het geld staat al op je
+   rekening, dus het gevolg is wat er ten opzichte van VOOR deze boeking verandert: de vordering gaat naar
+   nul en de rest is van jou, of een schuld. Hetzelfde overschot als bij contant, met txId in plaats van inId. */
+function loanBankGevolg(loanId, txId, K){
+  const l=loans().find(x=>x.id===loanId), t=TX.find(x=>x.id===txId); if(!l || !t) return null;
+  const open=Math.max(Math.round(+l.open||0),0), b=Math.max(Math.round(+t.amount||0),0), af=Math.min(b,open), rest=b-af;
+  const kies = rest>0 && !overschotKeuzeKlaar(K);
+  return {l, t, b, af, rest, open, naOpen:open-af, kies, delta: kies?null:(rest>0?overschotNetto(rest,K):0)};
+}
+function openLoanOverschotBank(loanId, txId){
+  const G=loanBankGevolg(loanId, txId, null); if(!G) return;
+  window._ovK=null; window._ovToon=()=>loanBankToon(loanId, txId);
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">Terugbetaling van ${esc(G.l.naam||'')}</div>
+    <div class="small muted" style="margin:2px 0 4px">${euro0(G.b)} binnen · nog open ${euro0(G.open)}</div>
+    <div id="ovKeuze"></div>
+    <div id="lbGevolg" data-bankgevolg class="small" style="margin-top:12px;line-height:1.6"></div>
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button class="btn" data-bankbevestig style="flex:1" onclick="loanBankBevestig('${loanId}','${txId}')">Bevestigen</button>
+      <button class="btn sec" onclick="openSheet('${txId}')">Terug</button></div>`;
+  showSheetBg();
+  loanBankToon(loanId, txId);
+}
+function loanBankToon(loanId, txId){
+  const K=window._ovK, G=loanBankGevolg(loanId, txId, K), el=$('#lbGevolg'); if(!el || !G) return;
+  overschotKeuzeToon(G.l.naam||'', G.rest);
+  const nw = G.kies ? 'hangt af van wat de rest is'
+    : G.delta>0 ? `${euro0(G.delta)} hoger dan voor deze boeking, want de ${euro0(G.rest)} is van jou`
+    : 'gelijk aan voor deze boeking';
+  el.innerHTML = `<div>Op je rekening: <b>${euro0(G.b)}</b>, die staat er al</div>
+    <div>Vordering ${esc(G.l.naam||'')}: ${euro0(G.open)} → <b>${euro0(G.naOpen)}</b></div>
+    ${G.rest>0?overschotGevolgRegel(G.l.naam||'', G.rest, K, G.t.date.slice(0,7)):''}
+    <div>Netto vermogen: ${nw}</div>
+    <div style="color:var(--mut2)">Telt niet als inkomen in je maand.</div>`;
+  const knop=$('[data-bankbevestig]'); if(knop) knop.disabled = G.kies;
+}
+function loanBankBevestig(loanId, txId){
+  const K=window._ovK, G=loanBankGevolg(loanId, txId, K); if(!G) return false;
+  if(G.kies){ toast(`Kies wat de ${euro0(G.rest)} is`); return false; }
+  const l=G.l;
+  l.open=G.naOpen;
+  OVR[txId]=LOAN_CAT[l.richting]; l.terugTx=(l.terugTx||[]).concat([txId]);
+  if(G.rest>0) overschotMaak({loanId:l.id, naam:l.naam||'', bedrag:G.rest, soort:K.soort, datum:G.t.date,
+    maand:K.soort==='terug'?K.maand:G.t.date.slice(0,7), cat:K.soort==='terug'?K.cat:'', txId, aflossing:G.af});
+  save(); closeSheet(); render();
+  toast(`${ICON('check')} Terugbetaald${G.rest>0?`, en ${euro0(G.rest)} als ${overschotLabel(overschotten().slice(-1)[0])}`:''}`);
+  return true;
+}
+/* Een bankontvangst terugdraaien zet de vordering terug, haalt de terugbetaling van de boeking en de rest weg. */
+function loanBankTerug(oid){
+  const o=overschotten().find(x=>x.id===oid); if(!o || !o.txId) return;
+  const l=loans().find(y=>y.id===o.loanId);
+  if(l){ l.open=Math.round((+l.open||0)+(+o.aflossing||0)); l.terugTx=(l.terugTx||[]).filter(x=>x!==o.txId); }
+  if(l && OVR[o.txId]===LOAN_CAT[l.richting]) delete OVR[o.txId];
+  overschotWeg(oid);
+  save(); render(); if(l) openLoan(l.id);
+}
+/* De ENE ingang terug, voor elke rest: bij contant de hele ontvangst, bij de bank de terugbetaling. */
+function overschotTerug(oid){
+  const o=overschotten().find(x=>x.id===oid); if(!o) return;
+  if(o.inId) loanContantTerug(o.inId); else loanBankTerug(oid);
+}
 // Zacht aanbod bij een herkende, terugkerende lease-betaling: wegklikbaar, en na afwijzen weg.
 function leaseBlokHTML(t){
   const o=leaseLinkOffer(t); if(!o) return '';
@@ -16870,7 +17084,7 @@ function bezitBlok(t){
 /* v342: de rij bij een bijschrijving. Herkend: wat het doet en waarom, met de weg terug. Niet herkend: de
    keuze, nooit vanzelf. */
 function contantStortBlok(t){
-  if(!(t.amount>0)) return '';
+  if(!(t.amount>0) || !t.acc) return '';     // v343: een boeking zonder bank is per constructie geen storting
   const S=contantStorting(t), K=(SET.contantStort||{})[t.id];
   if(S){
     const sub = S.bron==='keuze' ? 'jouw keuze bij deze boeking' : S.bron==='regel' ? `via je regel met "${esc(S.regel.waarde)}"` : 'herkend aan de omschrijving';

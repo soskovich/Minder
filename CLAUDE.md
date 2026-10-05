@@ -115,6 +115,32 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **MEER TERUG DAN ER OPEN STOND: DE VOLLE ONTVANGST TELT, EN DE SHEET VRAAGT WAT DE REST IS** (`v343`,
+  gevraagd door de gebruiker): GEMETEN OP `v342`: "Contant terugontvangen" klemde op wat er open stond, dus bij
+  Ma (€400 open, €495 ontvangen) kwam er €400 bij je contant en viel €95 weg terwijl het geld er was. Bij de
+  bank bood "Is dit een terugbetaling?" alleen "Ja, €400 terugbetaald". Nu telt de volle ontvangst (bij contant
+  in `contantVerwacht()`, bij de bank staat hij al op je rekening), gaat de vordering naar nul, en vraagt de
+  sheet ZONDER VOORKEUZE wat de rest is (`overschotKeuzeHTML()`, `[data-overschotsoort]`): een cadeau of een
+  rente/vergoeding (eenmalige inkomsten: `maandInkomen()` telt hem in `alles` EN `onregelmatig`, dus de norm en
+  `baseIncome()` blijven gelijk), een terugbetaling van iets wat je voor die persoon betaalde (een boeking
+  zonder bank met `vasteCat` in de gekozen maand en uitgavencategorie, die netto verlaagt zoals een
+  terugstorting, `v265`), of geld dat je bewaart (een schuld in `SET.loans`, richting `in`, soort `bewaar`,
+  met `bron` naar het overschot). Bevestigen is uit tot de keuze compleet is (`overschotKeuzeKlaar()`; bij
+  terug ook maand en categorie, ook zonder voorkeuze). EERST HET GEVOLG: contant, vordering, de regel van de
+  keuze en het netto vermogen (`loanContantGevolg()`, `loanBankGevolg()`); openen en kiezen schrijven niets.
+  `SET.leenOverschot` is de ENE plek (`overschotMaak()`, `overschotWeg()`), met `inId` (contant) of `txId`
+  (bank). De contante ontvangst draagt nu `aflossing` naast `bedrag`, en terugdraaien zet de vordering met de
+  aflossing terug en haalt de rest mee weg (`loanContantTerug()`, `loanBankTerug()`, `overschotTerug()`; een
+  bewaar-schuld draagt "Ontvangst terugdraaien" in plaats van "Markering ongedaan maken").
+  DE BANKROUTE (`openLoanOverschotBank()`, `[data-overschotaanbod]`) rekent het netto vermogen ten opzichte van
+  VOOR de boeking, want het geld staat al in je saldo: +de rest, of gelijk bij een schuld. Gelijk aan of onder
+  wat open staat houdt de knop van voor `v343`.
+  BIJVANGST, GEMETEN EN GEREPAREERD: een "Contant besteed" (`v258`) verloor bij elke herstart zijn categorie,
+  want `categorize()` vond de omschrijving in geen regel en maakte er Overig van. Een boeking zonder bank draagt
+  nu `vasteCat`, en een telling van voor `v343` wordt herkend aan haar vorm (geen rekening, `bankRef` is
+  `src|datum`). GEMETEN: Ma €495 tegen €400 als cadeau: contant +€495, netto vermogen +€95, maandinkomen
+  (norm en `baseIncome()`) gelijk; als schuld: netto vermogen gelijk. De contant-sheet met keuze is 664px op
+  360 EN 390px, de bank-sheet 602/565px, zonder overloop.
 - **CONTANT TERUGONTVANGEN GAAT NAAR DE CONTANTE STAND, EN EEN STORTING VAN CONTANT GELD GAAT ER WEER AF**
   (`v342`, gevraagd door de gebruiker): GEMETEN VOOR DEZE RONDE: "Nog open" lager zetten liet de vordering
   dalen zonder dat het geld ergens bij kwam (netto vermogen omlaag), en een storting van contant geld ging niet
@@ -124,7 +150,8 @@ genoemde versietag.)*
   loanId, naam}]` is de ENE plek; de lening draagt geen tweede lijst.
   "CONTANT TERUGONTVANGEN" (`openLoanContant()`, `[data-contantterug]`) staat bij een uitgeleend bedrag met iets
   open. Eerst het gevolg (`loanContantGevolg()`: vordering, contant, netto vermogen), dan Bevestigen
-  (`loanContantOntvangen()`); openen en annuleren schrijven niets. Het bedrag klemt op wat open staat. NOG
+  (`loanContantOntvangen()`); openen en annuleren schrijven niets. Het bedrag klemde op wat open stond; sinds
+  `v343` telt het hele bedrag en vraagt de sheet wat de rest is (zie de regel daarboven). NOG
   NOOIT GETELD: dezelfde sheet vraagt wat je nu hebt, met het bedrag ingevuld, en dat wordt je eerste telling;
   zegt hij meer, dan stijgt het netto vermogen met dat overige geld en staat dat er. DE GRENS IS EEN MOMENT
   (`contantInTelt()`): een ontvangst telt na je telling, op dezelfde dag op `op`, en telling en ontvangst zijn
@@ -5964,7 +5991,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v342` → `minder-v343`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v343` → `minder-v344`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -5983,7 +6010,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341` en `v342` naar `minder-v342`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` en `v343` naar `minder-v343`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
