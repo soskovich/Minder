@@ -138,6 +138,8 @@ test.describe('a - de buffer kijkt naar de richting, niet alleen naar de stand',
     });
     expect(uit.reeks).toEqual([-100, -100, -100]);
     expect(uit.status).toBe('tekort');
+    await page.evaluate(() => openBeleggenVoorwaarden());
+    expect(await page.evaluate(() => $('#sheet').innerText)).not.toContain('Hij groeit');
   });
 
   test('de gevolgzin noemt de stand, wat die betekent en de richting', async ({ page }) => {
@@ -333,9 +335,9 @@ test.describe('e - de beleggen-voorwaarde gaat niet mee', () => {
     expect(uit.klaar).toBe(false);
   });
 
-  /* v340: de kaart 'Voorwaarden voor beleggen' (maandBeleggenRegel) is vervallen, en daarmee de zin
-     'groeit, maar de drempel is nog niet gehaald' die het verschil tussen de amber bufferrij en die
-     kaart uitlegde. Beleggen is nu een tegel, en die draagt het oordeel NEUTRAAL (v314): grijs met
+  /* v340: de kaart 'Voorwaarden voor beleggen' (maandBeleggenRegel) is vervallen. De zin 'groeit, maar
+     de drempel is nog niet gehaald' (v226) staat sinds v340 in de sheet achter de tegel, waar de buffer
+     als niet gehaald staat terwijl zijn tegel amber is. Beleggen is nu een tegel, en die draagt het oordeel NEUTRAAL (v314): grijs met
      'wacht' en waar hij op wacht, nooit rood of amber. Wat deze test vasthoudt is dat de twee tegels
      niet hetzelfde oordeel in twee kleuren geven: de buffer amber, beleggen grijs. */
   test('de beleggen-tegel wacht op de buffer, neutraal naast de amber buffer', async ({ page }) => {
@@ -359,10 +361,11 @@ test.describe('e - de beleggen-voorwaarde gaat niet mee', () => {
     expect(uit.html).toContain('var(--bar)');
     expect(uit.html).not.toContain('var(--red)');
     expect(uit.html).not.toContain('var(--amber)');
+    await page.evaluate(() => openBeleggenVoorwaarden());
+    expect(await page.evaluate(() => $('#sheet').innerText)).toContain('Hij groeit, maar de drempel is nog niet gehaald.');
   });
 
-  /* v340: 'een blokkade die niet op tempo ligt krijgt die zin niet' is vervallen, want de zin bestaat
-     niet meer (zie de test hierboven). Wat blijft: zonder inleg is de buffer een tekort. */
+  /* Zonder inleg is de buffer een tekort, en dan staat de groei-zin niet in de sheet (v226). */
   test('een blokkade die niet op tempo ligt is een tekort', async ({ page }) => {
     await boot(page, { spaarPer: 0, set: { goals: [
       { id: 'g1', naam: 'Vakantie', doel: 4800, gespaard: 0, allocMode: 'fixed', perMaand: 50, streefdatum: vooruit(12) },

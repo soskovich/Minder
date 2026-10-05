@@ -176,6 +176,16 @@ genoemde versietag.)*
   `valtOpGripBlok`, `maandBeslisRij`, `belegVraagRij`.
   GEMETEN op de stand van 4 oktober met de afspraak van EUR 131: Grip 582px op 360 en 564px op 390 (tegels
   171, Deze maand 176/158, tijdlijn 129), tegen 966/945px op v339.
+  VIER DINGEN DIE DE MIGRATIE VAN DE SPECS VOND, en ze hadden gelijk: (1) de terugval "Er is nog te weinig
+  ingesteld" staat er alleen met dezelfde poort als `v188` (geen tegel en geen ander Let op-signaal dan een
+  potje boven zijn grens), en niet zodra er geen tegel is; (2) onbekend is geen wachten: een voorwaarde die
+  niet te beoordelen is geeft op de tegel Beleggen "onbekend" en "<bron> nog niet te beoordelen"
+  (`v59`/`v73`/`v173`); (3) de zin van `v226` ("Hij groeit, maar de drempel is nog niet gehaald.") staat in
+  de sheet `openBeleggenVoorwaarden()`, waar de buffer als niet gehaald staat terwijl zijn tegel amber is;
+  (4) de Let op-regel van een belegging zegt "nog niet gekozen of ze hiervoor gelden" bij een open keuze,
+  zoals de lijstregel van `v332`. En het woord "vooruitblik" staat op geen scherm (`v179`): de kaart zegt
+  "Komt uit rond" en "Waar je maand uitkomt". BIJVANGST, niet opgeruimd: `MAAND_DREMPEL.onbekendDeel` en
+  `onbekendMin` hebben sinds `maandOordeel()` weg is geen lezer meer.
 - **EEN OVERBOEKING TUSSEN JE EIGEN REKENINGEN HERKENT DE APP AAN DE NAMEN UIT JE BANKKOPPELING, EN JIJ
   BEVESTIGT PER NAAM** (`v339`, gevraagd door de gebruiker): `eigenNamenUitKoppeling()` leest de namen uit
   `SET.psd2Accounts` (het label zonder de laatste vier cijfers; de terugval `Rekening` telt niet), en

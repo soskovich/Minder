@@ -266,3 +266,13 @@ test('p. zonder Let op-signaal staat er geen Let op', async ({ page }) => {
   await page.evaluate(() => { closeSheet(); go('maand'); });
   expect(await page.evaluate(() => !!document.getElementById('gripLetOp'))).toBe(false);
 });
+
+test('q. een voorwaarde die niet te beoordelen is: de beleggen-tegel zegt onbekend en niet wacht', async ({ page }) => {
+  await stand(page, { reserveringen: [] });
+  await page.evaluate(() => { closeSheet(); go('maand'); });
+  const r = await page.evaluate(() => { const B = beleggenKlaar(maandRegels()); const e = document.querySelector('[data-tegel="beleggen"]');
+    return { volledig: B.volledig, tekst: e.innerText.replace(/\s+/g, ' '), kleur: e.dataset.kleur }; });
+  expect(r.volledig).toBe(false);
+  expect(r.tekst).toBe('Beleggen onbekend je reserveringen nog niet te beoordelen');
+  expect(r.kleur).toBe('grijs');
+});
