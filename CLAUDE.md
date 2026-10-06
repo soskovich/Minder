@@ -146,7 +146,8 @@ genoemde versietag.)*
   inleg wordt er niets gesplitst.
   HET SCHERM: de waterval op de Vermogensreis draagt boven de stappen "Opzij gezet" met zijn herkomst en
   "Blijft vlak staan" (`[data-opzij]`, 131px op 360 EN 390px, zonder overloop), en onder "Groeit mee vanaf nu"
-  de regel "Vanaf <maand>, als Plan vol is" met wat er dan groeit (`[data-groeitna]`). De klem "Je
+  de regel "Vanaf <maand>, als Plan vol is" met wat er dan groeit (`[data-groeitna]`); de maand is de maand waarin
+  het laatste doel vol raakt, dezelfde als `planKlaarMaand()` op Plan, en is hij onbekend dan staat de regel er niet. De klem "Je
   bestemmingen passen niet" kijkt alleen nog naar Plan: dat Plan alles opzij gezette neemt en er voor de
   reserveringen niets overblijft is geen klem op je doelen.
   GEMETEN OP DE FIXTURE VAN `lijn-en-band` (surplus 3.566, gemeten opzij 2.200, dus 1.366 vlak; Plan vol in

@@ -11026,7 +11026,10 @@ function fireModel(R, inputs){
   const _s=maandDeel(nowY,1,_rij0.map(r=>Object.assign({},r)),false);
   /* en wat er groeit als Plan niets meer vraagt: alle rijen vol of uitgegeven, met dezelfde maandDeel() */
   const _sNa=maandDeel(nowY,1,_rij0.filter(r=>r.houdt).map(r=>Object.assign({},r)),false);
-  const _planKlaarK=(_planLaatst!=null&&_planLaatst<HZ*12-1)?_planLaatst+1:null;
+  /* de maand waarin Plan vol is: de laatste maand waarin Plan nog iets verdeelde, en dat is de maand waarin het
+     laatste doel vol raakt (gelijk aan planVooruit(), zie M.sim.vol) of op zijn datum uitgaf. Verdeelt Plan tot het
+     eind van de horizon, dan is er geen maand (null) en noemt het scherm er ook geen. */
+  const _planKlaarK=(_planLaatst!=null&&_planLaatst>=1&&_planLaatst<HZ*12-1)?_planLaatst:null;
   if(_auto){ const nf=_rij0.find(r=>r.type==='noodfonds'&&r.rest>0); if(nf) volYear=(_vol[nf.id]!=null)?nowY+Math.floor((nowMo+_vol[nf.id])/12):nowY+HZ+1; else volYear=nowY; }
   const reach=t=>{ for(let y=0;y<=HZ;y++){ if(mid[y]>=t) return y; } return null; };
   // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Plan (via fireInputs.emergencyGoal)
@@ -11344,6 +11347,9 @@ function reisRestsaldo(M){
      Ze staan tussen het noodfonds en de schuld, want ze gaan er net als het noodfonds echt af;
      de schuldstap is informatief en sluit de rij. Neutrale tint: dit is geen aandacht (v78/v93). */
   const B=M.bestemming||{res:0,doel:0,doelItems:[]};
+  /* v348: de maand waarin Plan vol is. Is die onbekend (geen maand, of een die etaDatum() niet kan
+     plaatsen), dan staat de regel er niet, in plaats van "Vanaf , als Plan vol is" (v59/v73/v173). */
+  const groeitNaLbl=(B.planKlaarK!=null)?etaDatum(B.planKlaarK):'';
   const doelNamen=(B.doelItems||[]).map(x=>x.naam);
   /* v346: het bedrag is wat je terugkerende posten structureel per maand kosten (bedrag door
      interval), in elk jaar. Een eenmalige post zit daar niet in: die staat er met zijn maand bij,
@@ -11368,7 +11374,7 @@ function reisRestsaldo(M){
      M.bestemming.groeit is de momentopname van een gewone maand uit fireModel() (v348). */
   const groeitRegel=(B.res>0||B.doel>0)?`<div style="margin-top:8px;padding:10px 12px;background:var(--card2);border-radius:11px">
     <div class="row"><span class="small muted">Groeit mee vanaf nu</span><span style="font-weight:800;font-size:var(--fs-md);color:var(--teal)">${euro0(B.groeit)}/mnd</span></div>
-    ${(B.planKlaarK!=null&&B.groeitNa!==B.groeit)?`<div class="row" data-groeitna style="margin-top:4px"><span class="small muted">Vanaf ${etaDatum(B.planKlaarK)}, als Plan vol is</span><span style="font-weight:800;font-size:var(--fs-md);color:var(--teal)">${euro0(B.groeitNa)}/mnd</span></div>`:''}
+    ${(groeitNaLbl&&B.groeitNa!==B.groeit)?`<div class="row" data-groeitna style="margin-top:4px"><span class="small muted">Vanaf ${groeitNaLbl}, als Plan vol is</span><span style="font-weight:800;font-size:var(--fs-md);color:var(--teal)">${euro0(B.groeitNa)}/mnd</span></div>`:''}
     <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">${euro0((Oz.bron==='surplus')?surplus:Oz.bedrag)} ${Oz.bron==='surplus'?'restsaldo':'opzij'} min wat er hierboven af gaat. Dit is het bedrag waarmee de projectie rekent.</div></div>`:'';
   /* v212: klemt de per-bezitting inleg, dan moet je dat weten. Je hebt per bezitting meer
      ingesteld dan er van je restsaldo overblijft, en de app lost dat proportioneel op omdat een

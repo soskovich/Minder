@@ -199,6 +199,25 @@ test.describe('c · het scherm en het diagnoseblok', () => {
     expect(t).not.toContain('passen niet');
   });
 
+  test('"Vanaf <maand>" noemt de maand waarin Plan vol is, en valt weg als die onbekend is', async ({ page }) => {
+    await boot(page, { res: [PREMIE] });
+    // de maand is de laatste vol-maand van Plan plus een, en die staat ook in M.sim.vol
+    const r = await page.evaluate(() => {
+      const M = reisModel(), B = M.bestemming, k = B.planKlaarK;
+      const laatste = Math.max(...Object.values(M.sim.vol));
+      const html = (b) => { const d = document.createElement('div'); d.innerHTML = reisRestsaldo(Object.assign({}, M, { bestemming: Object.assign({}, B, b) })).inleg; return d; };
+      const regel = (d) => { const e = d.querySelector('[data-groeitna]'); return e ? e.textContent.replace(/\s+/g, ' ').trim() : null; };
+      return { k, laatste, plan: (planKlaarMaand().laatste || {}).maand, lbl: etaDatum(k), echt: regel(html({})),
+        leeg: [null, 0, -1, NaN, undefined].map((x) => { const d = html({ planKlaarK: x }); return { r: regel(d), komma: /Vanaf\s*,/.test(d.textContent) }; }) };
+    });
+    // de maand waarin het laatste doel vol raakt, in de projectie en op Plan zelf (planKlaarMaand)
+    expect(r.k).toBe(r.laatste);
+    expect(r.k).toBe(r.plan);
+    expect(r.lbl).toMatch(/^\w+ \d{4}$/);
+    expect(r.echt).toBe(`Vanaf ${r.lbl}, als Plan vol is€2.100/mnd`);   // textContent: label en bedrag zijn twee spans
+    for (const x of r.leeg) { expect(x.r).toBeNull(); expect(x.komma).toBe(false); }
+  });
+
   for (const w of [360, 390]) {
     test(`het blok past op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 800 });
