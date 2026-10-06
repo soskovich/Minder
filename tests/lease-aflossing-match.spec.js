@@ -31,6 +31,8 @@ async function boot(page, payload, debts = [DEBT_LEASE]) {
   await page.evaluate((ds) => { SET.debts = ds; SET.openSchuld = true; save(); render(); go('vermogen'); }, debts);
   await page.waitForTimeout(80);
 }
+/* v350: de detectie staat in de sheet achter de schuldregel (openSchuldDetail()), niet meer op de rij */
+const detail = (page, id) => page.evaluate((i) => { openSchuldDetail(i); const t = document.querySelector('#sheet').innerText; closeSheet(); return t; }, id);
 const status = (page, id) => page.evaluate((i) => debtInExpenses((SET.debts || []).find((d) => d.id === i)), id);
 
 test.describe('a · het gemelde geval', () => {
@@ -74,7 +76,7 @@ test.describe('a · het gemelde geval', () => {
     expect(det.status).toBe('in-uitgaven');                          // groen, zoals DUO
     expect(det.bedrag).toBe(537);                                    // de echte termijn (537,33 -> afgerond)
 
-    const scherm = await page.locator('#s-vermogen').innerText();
+    const scherm = await detail(page, 'dl');
     // v100: deze regel heette "aflossing herkend in je uitgaven" en las alsof de schuldstand was
     // bijgewerkt. Ze gaat over de MAANDBETALING in je uitgaven; de stand blijft handmatig.
     // Zie tests/restschuld-bijwerken.spec.js.
@@ -86,7 +88,7 @@ test.describe('a · het gemelde geval', () => {
     await boot(page, seedLease({ lease: false, intern: true }));
     const det = await status(page, 'dl');
     expect(det.status).toBe('intern');
-    expect(await page.locator('#s-vermogen').innerText()).toContain('loopt als interne overboeking');
+    expect(await detail(page, 'dl')).toContain('loopt als interne overboeking');
   });
 
   test('helemaal geen passende groep: niet-gevonden', async ({ page }) => {

@@ -28,6 +28,9 @@ async function boot(page, debts = [LEASE, LENING]) {
 }
 const debtOf = (page, id) => page.evaluate((i) => (SET.debts || []).find((d) => d.id === i), id);
 const rijTekst = (page) => page.locator('#s-vermogen').innerText();
+/* v350: de rij is een lijstregel; alles wat hij droeg (voortgang, detectie, "zelf bijwerken", de bijwerk-knop)
+   staat in de sheet erachter (openSchuldDetail()). */
+const detailTekst = (page, id) => page.evaluate((i) => { openSchuldDetail(i); const t = document.querySelector('#sheet').innerText; const k = document.querySelectorAll('#sheet [data-schuldbijwerken]').length; closeSheet(); return t + (k ? '\n[bijwerken]' : ''); }, id);
 
 test.describe('a · de melding gaat over je uitgaven, niet over je schuldstand', () => {
   test('de lease-incasso wordt herkend en heet "maandbetaling", niet "aflossing"', async ({ page }) => {
@@ -35,24 +38,29 @@ test.describe('a · de melding gaat over je uitgaven, niet over je schuldstand',
     const det = await page.evaluate(() => debtInExpenses((SET.debts || []).find((d) => d.id === 'dl')));
     expect(det.status).toBe('in-uitgaven');                       // de situatie uit de melding
 
-    const txt = await rijTekst(page);
+    const txt = await detailTekst(page, 'dl');
     expect(txt).toContain('maandbetaling');
     expect(txt).not.toMatch(/aflossing (herkend|lijkt) in je uitgaven/);   // de oude, verwarrende woorden
   });
 
   test('bij elke schuld met restschuld staat de hint dat je de stand zelf bijwerkt', async ({ page }) => {
     await boot(page);
-    const txt = await rijTekst(page);
-    expect(txt).toContain('restschuld werk je zelf bij');
-    expect(await page.locator('#s-vermogen .debt-upd').count()).toBe(2);   // "bijwerken ›" op beide rijen
+    const ids = await page.evaluate(() => SET.debts.map((d) => d.id));
+    expect(ids.length).toBe(2);
+    for (const id of ids) {
+      const txt = await detailTekst(page, id);
+      expect(txt).toContain('die stand werk je zelf bij');
+      expect(txt).toContain('[bijwerken]');                         // de knop naar de sheet Restschuld, in elke sheet
+    }
   });
 
   test('een afgeloste schuld toont geen hint en geen bijwerk-link', async ({ page }) => {
     await boot(page, [{ ...LENING, rest: 0 }]);
-    const txt = await rijTekst(page);
-    expect(txt).toContain('Afgelost');
-    expect(txt).not.toContain('restschuld werk je zelf bij');
-    expect(await page.locator('#s-vermogen .debt-upd').count()).toBe(0);
+    expect(await rijTekst(page)).toContain('afgelost');
+    const txt = await detailTekst(page, 'dk');
+    expect(txt).toContain('Afgelost.');
+    expect(txt).not.toContain('zelf bij');
+    expect(txt).not.toContain('[bijwerken]');
   });
 });
 
@@ -73,7 +81,7 @@ test.describe('b · de sheet werkt alleen de restschuld bij', () => {
     await boot(page);
     await page.evaluate(() => { openDebtUpdate('dl'); document.getElementById('duRest').value = '8000'; saveDebtRest('dl'); });
     await page.waitForTimeout(60);
-    expect(await rijTekst(page)).toContain('10.000 van');          // start 18.000 − rest 8.000
+    expect(await detailTekst(page, 'dl')).toContain('10.000 van');          // start 18.000 − rest 8.000
   });
 
   // Niet via page.reload(): de gedeelde fixture zet localStorage bij elke navigatie terug via
@@ -116,7 +124,7 @@ test.describe('c · maandaflossing afboeken stopt op de vloer', () => {
     await page.evaluate(() => { openDebtUpdate('dk'); debtAfboeken('dk'); debtAfboeken('dk'); });
     expect((await debtOf(page, 'dk')).rest).toBe(0);
     await page.evaluate(() => { closeSheet(); render(); });
-    expect(await rijTekst(page)).toContain('Afgelost');
+    expect(await rijTekst(page)).toContain('afgelost');
   });
 
   test('de sheet noemt de benadering en verzwijgt de rente niet', async ({ page }) => {
@@ -124,7 +132,7 @@ test.describe('c · maandaflossing afboeken stopt op de vloer', () => {
     await page.evaluate(() => openDebtUpdate('dl'));
     const s = await page.locator('#sheet').innerText();
     expect(s).toContain('rente is hier niet meegerekend');
-    expect(s).toContain('Slottermijn');                            // vloer wordt benoemd bij lease
+    expect(s).toContain('slottermijn van');                        // vloer wordt benoemd bij lease (v350: in gewone taal)
   });
 });
 
@@ -136,7 +144,7 @@ test.describe('d · een hogere stand trekt de oorspronkelijke schuld mee', () =>
     expect(d.rest).toBe(20000);
     expect(d.start).toBe(20000);                                   // meegetrokken, was 18.000
     // "eigen deel -€4.000" mag er wel staan (auto onder water) — het gaat om de voortgangsregel
-    expect(await rijTekst(page)).not.toMatch(/-€[\d.]+ van/);      // geen negatieve "afgelost"
+    expect(await detailTekst(page, 'dl')).not.toMatch(/-€[\d.]+ van/);      // geen negatieve "afgelost"
   });
 });
 
@@ -165,16 +173,18 @@ test.describe('e · de rekenlagen blijven ongemoeid', () => {
 test.describe('f · de wegen naar de sheet', () => {
   test('de bijwerk-link opent de lichte sheet, niet de volledige editor', async ({ page }) => {
     await boot(page);
-    await page.locator('#s-vermogen .debt-upd').first().click();
+    await page.locator('#s-vermogen [data-schuldrij]').first().click();
+    await page.locator('#sheet [data-schuldbijwerken]').click();
     await page.waitForTimeout(60);
     const s = await page.locator('#sheet').innerText();
     expect(s).toContain('Restschuld nu');
     expect(s).not.toContain('Wat voor schuld?');                   // dat is de volledige editor
   });
 
-  test('een tik elders op de rij houdt de volledige editor', async ({ page }) => {
+  test('vanuit de sheet achter de rij opent "Alle gegevens bewerken" de volledige editor', async ({ page }) => {
     await boot(page);
-    await page.locator('#s-vermogen .cz-pot .cp-nm').first().click();
+    await page.locator('#s-vermogen [data-schuldrij]').first().click();
+    await page.locator('#sheet button', { hasText: 'Alle gegevens bewerken' }).click();
     await page.waitForTimeout(60);
     expect(await page.locator('#sheet').innerText()).toContain('Wat voor schuld?');
   });

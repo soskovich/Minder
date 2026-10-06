@@ -22,12 +22,15 @@ async function start(page, o) {
   if (o.koppel !== false) await page.evaluate((id) => zetSchuldKoppel(id, 'lease'), ids.lease0914);
   return ids;
 }
+/* v350: de schuld is op Vermogen een lijstregel; de optelling, de vraag en de detectie staan in de sheet erachter
+   (openSchuldDetail(), die schuldStandBlok() draagt). */
 const vermogen = (page) => page.evaluate(() => {
   SET.openSchuld = true; go('vermogen'); renderVermogen();
-  const rij = (id) => [...document.querySelectorAll('#s-vermogen .cz-pot')].find((x) => x.querySelector(`[data-schuldstand="${id}"],[data-schuldvraag="${id}"]`) || x.innerText.includes(id === 'lease' ? 'Auto Lease' : 'Duo'));
-  const q = (s) => (document.querySelector(s) || {}).innerText || '';
-  return { stand: q('#s-vermogen [data-schuldstand="lease"]'), vraag: q('#s-vermogen [data-schuldvraag="lease"]'),
-    leaseRij: (rij('lease') || {}).innerText || '', duoRij: (rij('duo') || {}).innerText || '' };
+  const rij = (id) => (document.querySelector(`#s-vermogen [data-schuldrij="${id}"]`) || {}).innerText || '';
+  const det = (id) => { openSchuldDetail(id); const q = (s) => (document.querySelector(s) || {}).innerText || '';
+    const o = { t: document.querySelector('#sheet').innerText, stand: q(`#sheet [data-schuldstand="${id}"]`), vraag: q(`#sheet [data-schuldvraagblok="${id}"]`) }; closeSheet(); return o; };
+  const L = det('lease'), D = det('duo');
+  return { stand: L.stand, vraag: L.vraag, leaseRij: rij('lease'), duoRij: rij('duo'), leaseDet: L.t, duoDet: D.t };
 });
 
 test.describe('a · de restschuld daalt met de gekoppelde betaling', () => {
@@ -43,7 +46,7 @@ test.describe('a · de restschuld daalt met de gekoppelde betaling', () => {
     await start(page);
     const r = await vermogen(page);
     expect(r.stand).toBe('€12.756 op 1 sep − €426 afgelost sindsdien = €12.330 · bij benadering');
-    expect(r.leaseRij).toContain('Nog €12.330');
+    expect(r.leaseRij).toContain('€12.330');
     const n = await page.evaluate(() => ({ sch: netWorth().sch, reis: fireInputs().debts.find((d) => d.id === 'lease').rest, ruw: SET.debts.find((d) => d.id === 'lease').rest }));
     expect(n.reis).toBe(12330);
     expect(n.ruw, 'de ingevulde stand zelf blijft staan').toBe(12756);
@@ -52,9 +55,9 @@ test.describe('a · de restschuld daalt met de gekoppelde betaling', () => {
   test('"restschuld werk je zelf bij" en de detectie vervallen bij een gekoppelde schuld, en blijven bij een andere', async ({ page }) => {
     await start(page);
     const r = await vermogen(page);
-    expect(r.leaseRij).not.toContain('werk je zelf bij');
-    expect(r.leaseRij).not.toMatch(/maandbetaling (lijkt|herkend|loopt|valt|niet)/);
-    expect(r.duoRij, 'Duo heeft nog geen koppeling').toContain('werk je zelf bij');
+    expect(r.leaseDet).not.toContain('werk je zelf bij');
+    expect(r.leaseDet).not.toMatch(/maandbetaling (lijkt|is herkend|loopt|valt|is niet)/i);
+    expect(r.duoDet, 'Duo heeft nog geen koppeling').toContain('werk je zelf bij');
   });
   test('de categorie van de boeking verandert niet: hij blijft een vaste last in je maand', async ({ page }) => {
     const ids = await start(page, { koppel: false });
@@ -170,8 +173,8 @@ test.describe('c · opnieuw invullen, en een stand zonder datum', () => {
   test('zonder datum trekt Minder niets af en vraagt een keer, met twee even zware knoppen', async ({ page }) => {
     await start(page, { debts: [LEASE({ restOp: undefined }), DUO()] });
     const r = await vermogen(page);
-    expect(r.vraag).toContain('Zat de betaling van 14 sep al in de €12.756?');
-    expect(r.leaseRij).toContain('Nog €12.756');
+    expect(r.vraag).toContain('Zat de betaling van 14 sep (€537,33) al in de €12.756?');
+    expect(r.leaseRij).toContain('€12.756');
     const k = await page.evaluate(() => { openDebt('lease'); const b = [...document.querySelectorAll('#sheet [data-schuldvraagknop]')];
       return { labels: b.map((x) => x.innerText.trim()), st: b.map((x) => { const c = getComputedStyle(x); return [c.color, c.fontWeight, c.fontSize, c.borderColor].join('|'); }) }; });
     expect(k.labels).toEqual(['Ja, al meegeteld', 'Nee, trek af']);
@@ -212,14 +215,14 @@ test.describe('e · de spaarquote', () => {
 });
 
 for (const w of [360, 390]) {
-  test(`f · de schuldrij met de optelling op ${w}px, zonder overloop`, async ({ page }) => {
+  test(`f · de optelling in de sheet achter de schuldrij op ${w}px, zonder overloop`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await start(page);
     await vermogen(page);
-    const r = await page.evaluate(() => { const e = document.querySelector('#s-vermogen [data-schuldstand="lease"]'); const rij = e.closest('.cz-pot');
+    const r = await page.evaluate(() => { openSchuldDetail('lease'); const e = document.querySelector('#sheet [data-schuldstand="lease"]'); const rij = document.querySelector('#sheet');
       return { over: document.documentElement.scrollWidth > innerWidth, h: Math.round(rij.getBoundingClientRect().height), rechts: e.getBoundingClientRect().right, rand: rij.getBoundingClientRect().right }; });
     expect(r.over).toBe(false);
     expect(r.rechts).toBeLessThanOrEqual(r.rand + 0.5);
-    console.log(`schuldrij ${w}px: ${r.h}px`);
+    console.log(`schuldsheet ${w}px: ${r.h}px`);
   });
 }

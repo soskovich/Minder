@@ -120,6 +120,48 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN DATUM PER SCHULD, EEN TELLING DIE DE PAGINA VOLGT, EN EEN BLOK VOOR WAAR JE INLEG HEEN GAAT** (`v350`,
+  gevraagd door de gebruiker, de rest van de ronde Home, Vermogen en Vermogensreis; de inleg (`v348`) en kans en
+  koers (`v347`) stonden al en zijn uit de mockup NIET gebouwd). GEMETEN VOOR DE RONDE: (1) DUO zei "nov 2035"
+  op de rij en "2036" bij de mijlpalen en in de grafiek, met dezelfde stand, termijn en rente: `fireModel()` deed
+  `nowY + ceil(maanden/12)` (hele jaren vanaf vandaag) en de rij rekende op de kalender, en DE KALENDER KLOPT
+  (oktober plus 109 maanden is november 2035). (2) "3 bezittingen" op Home was `SET.assets.length`; Vermogen toont
+  onder Bezittingen vijf rijen (je rekeningen, drie bezittingen, de leaseauto) en twee uitgeleende bedragen.
+  D: `schuldVrij(d, extra)` IS DE ENE DATUM, met als lezers de rij, de sheet, de mijlpalen en de grafiek (via
+  `fireInputs()` als `vrijK`, en `fireModel()` doet `nowY + floor((nowMo + k)/12)` zoals de noodfonds-mijlpaal) en
+  het aflos-item op Plan (met `extra` = wat Plan erbovenop zet). EEN GEKOPPELDE SCHULD (`v334`) weet of de betaling
+  van deze maand al geweest is: staat de stand van voor deze maand en is er deze maand nog geen gekoppelde betaling,
+  dan valt de eerste termijn deze maand en is hij een maand eerder af. Zonder koppeling telt hij vanaf volgende maand.
+  G: DE SCHULD IS EEN LIJSTREGEL in de vorm van Grip (`schuldRijHTML()`): naam, "vrij in <maand jaar> · EUR X per
+  maand", rechts wat er nog staat, chevron naar `openSchuldDetail()`. GEEN TEKST VERDWEEN: voortgang, looptijd, de
+  schuldenvrij-zin, de optelling met gekoppelde betalingen, de detectie in je uitgaven en "zelf bijwerken" staan in
+  die sheet, met "Restschuld bijwerken" en "Alle gegevens bewerken". GEMETEN: de rij van 199/237px naar 55px op 360
+  en van 167/204 naar 55 op 390; Vermogen op de fixture van 1303 naar 903px op 360.
+  I: de sheet Restschuld heeft geen gedachtestreepjes meer, en de slottermijn zegt "Aan het eind betaal je nog een
+  slottermijn van EUR X." met "Lager dan dat bedrag zet de knop hieronder je restschuld niet." alleen als die knop er staat.
+  F: BOVENAAN VERMOGEN HET NETTO VERMOGEN MET EEN REGEL CONTEXT (`data-vermctx`): je grootste schuld en wat er is
+  opgebouwd (of afgenomen) in de maanden van de grafiek, een feit en geen geruststelling. DE OPBOUW IS EEN SOM met
+  twee lezers (de regel en de kop van de grafiek); tot v349 liet de kop de eerste maand weg. De zin boven de kaart
+  (`#vermSam`, v95) en "Wat je minder uitgeeft, blijft hier staan als vermogen." zijn weg; alleen de regel die om
+  je saldo vraagt blijft, want dan is er geen getal.
+  H: `vermogenTelling()` telt de rijen die Vermogen tekent ("5 bezittingen · 2 uitgeleend · 2 schulden", geleend
+  erbij als die er is), met `leaseAutoSchulden()` als gedeelde lijst. Recent op Home toont `txNaam()` (`cleanMerch()`
+  plus `titleCase()`); de bankomschrijving staat in de details van de boeking.
+  C: "RUIMTE DIE VRIJKOMT" EN DE REGEL VAN v348 ZIJN EEN BLOK (`data-inlegvrij`, `reisRestsaldo().vrij`, op de kaart
+  van de Vermogensreis): wat er nu naar Plan en je reserveringen gaat, wat er nu groeit, "Vanaf <maand>, als Plan vol
+  is" (`planKlaarK`), en pas daarna de vergelijking aflossen tegen beleggen (`fireVrijVergelijking()`) over het bedrag
+  dat dan vrijkomt (`groeitNa - groeit`), met de schuld vooruit gerekend tot die maand. ZOLANG PLAN TOT HET EIND
+  VERDEELT STAAT ER GEEN BEDRAG VRIJ. `fireFreedBlock()` en de zin "Zodra je noodfonds vol is, groeit je hele restsaldo
+  mee" zijn weg: sinds v348 waren ze onwaar. Het blok is 240px op 360 en 390.
+  E: de mijlpaal FIRE-getal zegt `fireFactorZin()` ("10x je uitgaven, dat is 10% opname per jaar") met
+  "aanpassen ›" naar `goFireAannames()`.
+  DE ONDERGRENS PER MAAND BIJ POTJE BIJSTELLEN (`potjeMaandVloer()`): het inleverende potje mag niet onder zijn gewone
+  maand (het gemiddelde ZONDER posten met een interval boven een maand) plus de kwartaal- en jaarposten die in die maand
+  vallen, over de twaalf maanden vanaf de bijstelling. GEMETEN met Verzekeringen (EUR 150 per maand) en DELA (EUR 160 per
+  kwartaal, volgende in december): het gemiddelde zei EUR 203, december vraagt EUR 310; een potje van EUR 300 stond op
+  het gemiddelde als kandidaat en staat er nu niet tussen. De rij en het gevolg noemen de maand en de post.
+  Nieuwe spec `vermogen-ronde.spec.js` met fixture `vermogen-stand.js`; acht bestaande specs aangepast (de schuldrij,
+  de samenvatting van v95, de telling op Home en de waterval lazen de oude vorm).
 - **"DEZE MAAND" OP GRIP TOONT DE OORZAKEN, DE SHEET DE OPBOUW** (`v349`, variant C van de mockup,
   gevraagd door de gebruiker): de kaart draagt EEN regel ("EUR 2.672 · EUR 703 onder budget"), een bridge en
   een zin. `dezeMaandBrug(V)` leest `maandVooruit()` en rekent niets zelf (`v104`): hij begint bij
@@ -6218,7 +6260,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v349` → `minder-v350`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v350` → `minder-v351`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6237,7 +6279,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348` en `v349` naar `minder-v349`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349` en `v350` naar `minder-v350`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

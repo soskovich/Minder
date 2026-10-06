@@ -13,50 +13,43 @@ async function boot(page, payload) {
   await page.waitForSelector('#s-vermogen .card');
 }
 const regel = (page) => page.locator('#vermSam').innerText();
+/* v350: de zin boven de kaart ("Je netto vermogen is ...", v95) is weg: hij noemde het getal dat de kaart
+   eronder groot toont nog een keer. In de kaart staat onder het getal EEN regel context, je grootste schuld en
+   wat er is opgebouwd (data-vermctx), uit dezelfde som als de kop van de grafiek. Alleen de regel die om je
+   saldo vraagt staat er nog boven, want dan is er geen getal. */
+const ctx = (page) => page.locator('[data-vermctx]').innerText();
 
-test.describe('a · de samenvatting', () => {
-  test('staat bovenaan en noemt het netto vermogen uit netWorth()', async ({ page }) => {
+test.describe('a · de contextregel', () => {
+  test('de kaart staat bovenaan, en er staat geen tweede zin met hetzelfde getal boven', async ({ page }) => {
     await boot(page);
-    await expect(page.locator('#vermSam')).toHaveCount(1);
-    const r = await page.evaluate(() => {
-      const el = document.getElementById('vermSam'), kaart = document.querySelector('#s-vermogen .card');
-      return { boven: el.getBoundingClientRect().top < kaart.getBoundingClientRect().top, netto: netWorth().netto };
-    });
-    expect(r.boven).toBe(true);
-    const t = await regel(page);
-    expect(t).toContain('Je netto vermogen is');
-    expect(t).toContain(await page.evaluate((n) => euro0(n), r.netto));
+    await expect(page.locator('#vermSam')).toHaveCount(0);
+    const t = await page.locator('#s-vermogen').innerText();
+    expect(t).not.toContain('Je netto vermogen is');
+    expect(t).not.toContain('Wat je minder uitgeeft');
   });
 
-  test('de opbouw komt uit dezelfde reeks als de grafiek eronder', async ({ page }) => {
+  test('de opbouw komt uit dezelfde som als de kop van de grafiek', async ({ page }) => {
     await boot(page);
-    const t = await regel(page);
-    const kaart = await page.locator('#s-vermogen .card').first().innerText();
-    const delta = (kaart.match(/Opbouw · (\d+) mnd\s*\n?\s*([+-]?€[\d.]+)/) || []);
-    expect(delta.length).toBeGreaterThan(0);                          // de kaart toont de opbouw
-    expect(t).toContain(`De laatste ${delta[1]} maanden`);
-    expect(t).toContain(delta[2].replace(/^[+-]/, ''));               // exact hetzelfde bedrag
-    expect(t).toMatch(/gemiddeld zo'n €\d/);
-    // het maandgemiddelde is die opbouw gedeeld door de maanden, niets nieuws
+    const t = await ctx(page);
     const r = await page.evaluate(() => {
       const win = months().slice(-12); let acc = 0;
-      const ser = win.map((mm) => { const x = totals(mm); acc += ((x.income || 0) - (x.spend || 0)); return acc; });
-      const d = Math.round(ser[ser.length - 1] - ser[0]);
-      return { mnd: win.length, perMnd: euro0(Math.round(Math.abs(d) / win.length)) };
+      for (const mm of win) { const x = totals(mm); acc += ((x.incomeAlles || 0) - (x.spend || 0)); }
+      return { mnd: win.length, som: Math.round(acc), kop: document.querySelector('[data-opbouwkop]').textContent };
     });
-    expect(t).toContain(r.perMnd);
+    expect(r.kop.replace(/^[+-]/, '')).toBe(await page.evaluate((n) => euro0(Math.abs(n)), r.som));
+    expect(t).toContain(`in ${r.mnd} maanden`);
+    expect(t).toContain(await page.evaluate((n) => euro0(Math.abs(n)), r.som));
   });
 
-  test('een dalend vermogen wordt eerlijk benoemd', async ({ page }) => {
-    // veel hogere uitgaven in de laatste maand -> de reeks daalt
+  test('een dalend vermogen heet afgenomen, zonder oordeel', async ({ page }) => {
     const p = seed(); const tx = JSON.parse(p.minder_tx);
     const cur = new Date(); const ym = cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0');
-    tx.push({ id: 'groot', date: `${ym}-11`, amount: -9000, acc: 'NL01MAIN0000001111', name: 'Verbouwing', desc: 'BEA, BETAALPAS VERBOUWING', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] });
+    tx.push({ id: 'groot', date: `${ym}-11`, amount: -90000, acc: 'NL01MAIN0000001111', name: 'Verbouwing', desc: 'BEA, BETAALPAS VERBOUWING', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] });
     p.minder_tx = JSON.stringify(tx);
     await boot(page, p);
-    const t = await regel(page);
-    expect(t).toMatch(/ging daar €[\d.]+ vanaf/);
-    expect(t).not.toContain('kwam daar');
+    const t = await ctx(page);
+    expect(t).toMatch(/€[\d.]+ afgenomen in \d+ maanden/);
+    expect(t).not.toContain('opgebouwd');
   });
 });
 
@@ -72,23 +65,20 @@ test.describe('b · randgevallen', () => {
     expect(await page.evaluate(() => window._setSheet)).toBe('income');
   });
 
-  test('met te weinig historie belooft hij niets', async ({ page }) => {
+  test('met te weinig historie noemt hij geen opbouw', async ({ page }) => {
     const p = seed(); const tx = JSON.parse(p.minder_tx);
     const cur = new Date(); const ym = cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0');
     p.minder_tx = JSON.stringify(tx.filter((t) => t.date.startsWith(ym)));
     await boot(page, p);
-    const t = await regel(page);
-    expect(t).toContain('Je netto vermogen is');
-    expect(t).toContain('Na een paar maanden');
-    expect(t).not.toContain('De laatste');
+    const t = await ctx(page);
+    expect(t).not.toMatch(/opgebouwd|afgenomen/);
   });
 
-  test('Rustig houdt het bij één zin', async ({ page }) => {
-    await boot(page, tweak((set) => { set.mode = 'rustig'; }));
-    const t = await regel(page);
-    expect(t).toContain('Je netto vermogen is');
-    expect(t).not.toContain('gemiddeld');
-    expect(t.trim()).toMatch(/^Je netto vermogen is -?€[\d.]+\.$/);   // precies één zin (de punt in €6.500 telt niet mee)
+  test('Rustig toont dezelfde regel: hij toont minder, maar rekent niet anders', async ({ page }) => {
+    await boot(page);
+    const b = await ctx(page);
+    await page.evaluate(() => { SET.mode = 'rustig'; save(); renderVermogen(); });
+    expect(await ctx(page)).toBe(b);
   });
 });
 

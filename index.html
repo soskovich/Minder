@@ -3870,7 +3870,7 @@ function renderDash(){
     const mm=String(x.date).slice(0,7);
     const kop=(i>0&&mm!==_vorigeM)?`<div class="hlabel" style="margin:13px 2px 5px">${esc(resMaandLabel(mm))}</div>`:'';
     _vorigeM=mm;
-    return kop+`<div class="txl" onclick="openSheet('${x.id}')"><div class="ava" style="background:var(--card2);color:var(--mut)">${c.icon}</div><div class="info"><div class="nm">${esc(x.name)}</div><div class="cat">${d} · ${c.name}</div></div><div class="amt ${x.amount>0?'pos':'neg'}">${x.amount>0?'+':''}${euro(x.amount)}</div></div>`;}).join('');
+    return kop+`<div class="txl" onclick="openSheet('${x.id}')"><div class="ava" style="background:var(--card2);color:var(--mut)">${c.icon}</div><div class="info"><div class="nm">${esc(txNaam(x))}</div><div class="cat">${d} · ${c.name}</div></div><div class="amt ${x.amount>0?'pos':'neg'}">${x.amount>0?'+':''}${euro(x.amount)}</div></div>`;}).join('');
   const recentBlock = recent.length?`<div class="homelist"><div class="hl-head"><span>Recent</span><span class="hl-all" onclick="go('tx')">Alle transacties ›</span></div>${txRows}</div>`:'';
   let modeTop='', modeBot='';
   try{
@@ -4082,6 +4082,9 @@ function cleanMerch(s){ return (s||'').replace(/\s+/g,' ')
   .replace(/\b(B\.?V\.?|N\.?V\.?|PURMEREND|PURME|AMSTERDAM|ZAANDAM|WEERWAL|KOOIMANPLEIN|HOUTEN|DE MEERN)\b/gi,'')
   .replace(/BCK\*|CCV\*|SUMUP ?\*|ZTL\*/gi,'')
   .replace(/[^A-Za-z0-9 &.\-]/g,'').replace(/\s+/g,' ').trim(); }
+/* v350: de naam in Recent op Home: opgeschoond met dezelfde cleanMerch() als elders, de bankomschrijving staat
+   ongewijzigd in de details van de boeking (openSheet()). Valt er na het opschonen niets over, dan de naam zoals hij binnenkwam. */
+function txNaam(t){ const c=titleCase(cleanMerch(t&&t.name)||''); return c||String((t&&t.name)||''); }
 function titleCase(s){ return s.replace(/\b([A-Z])([A-Z0-9]+)\b/g,(m,a,b)=>a+b.toLowerCase()); }
 function groupMerch(items){ const by={}; for(const x of items){ const disp=cleanMerch(x.name)||'Overig'; const key=disp.toUpperCase(); (by[key]=by[key]||{name:titleCase(disp),n:0,s:0}); if(x.amount<0) by[key].n++; by[key].s+=-x.amount; } return Object.values(by).sort((a,b)=>b.s-a.s); }   // n telt afschrijvingen; s is netto (terugstorting verrekend)
 
@@ -7992,9 +7995,32 @@ function grensRestZet(k){
    ondergrens van v238 (wat er al uit is) zou nul zijn, en dan maak je van het dekkende potje het
    volgende potje dat niet past. Een potje dat het hele bedrag niet kan dragen staat er niet tussen, en
    er wordt niets voorgekozen (MECHANISM_SPEC.defaultEffect). */
-function potjeGewoon(k, maanden){
-  let s=0; for(const m of (maanden||[])){ try{ s+=Math.max(+(catSpendMap(m)||{})[k]||0,0); }catch(_){} }
-  return (maanden&&maanden.length)?s/maanden.length:0;
+/* v350: DE ONDERGRENS PER MAAND. Een gemiddelde over drie maanden smeert een kwartaal- of jaarpost uit:
+   DELA (EUR 160 per kwartaal, in maart, juni en september) telt in juli tot en met september voor EUR 53 per
+   maand mee, terwijl hij in december in een keer EUR 160 vraagt. Een potje dat op dat gemiddelde wordt
+   verlaagd past dan in december niet. potjeMaandVloer() rekent het GEWONE deel (het gemiddelde zonder de
+   posten met een interval boven een maand, die het schema van recurringSchedule() kent) en zet daar per maand
+   in de twaalf maanden vanaf de bijstelling de posten bij die in die maand vallen. De ondergrens is het
+   hoogste daarvan, en de sheet noemt welke post in welke maand hem zet. */
+function potjeMaandVloer(k, maanden, vanaf){
+  let sched=[]; try{ sched=recurringSchedule().filter(s=>s.type==='fixed' && s.cat===k && (+s.intervalM||1)>1); }catch(_){}
+  const keys=new Set(sched.map(s=>s.key));
+  let som=0;
+  for(const m of (maanden||[])){
+    let c=0; try{ c=Math.max(+(catSpendMap(m)||{})[k]||0,0); }catch(_){}
+    let p=0; try{ for(const t of txOfMonth(m)) if(t.amount<0 && keys.has(recurKey(t))) p+=-t.amount; }catch(_){}
+    som+=Math.max(c-p,0);
+  }
+  const gewoon=(maanden&&maanden.length)?som/maanden.length:0;
+  const ymIdx=ym=>{ const [y,mo]=String(ym).split('-').map(Number); return y*12+mo-1; };
+  let best={bedrag:gewoon, maand:null, posten:[]};
+  for(let i=0;i<12;i++){
+    const ym=valtOpYmPlus(vanaf,i), idx=ymIdx(ym);
+    const ps=sched.filter(x=>{ const nd=x.nextDate instanceof Date?x.nextDate:new Date(x.nextDate); const n0=nd.getFullYear()*12+nd.getMonth(); return idx>=n0 && (idx-n0)%(+x.intervalM)===0; });
+    const b=gewoon+ps.reduce((t,x)=>t+(+x.amount||0),0);
+    if(ps.length && b>best.bedrag) best={bedrag:b, maand:ym, posten:ps.map(x=>({naam:titleCase(cleanMerch(x.name)||x.name||''), bedrag:Math.round(+x.amount||0)}))};
+  }
+  return {gewoon:Math.round(gewoon), vloer:Math.round(best.bedrag), maand:best.maand, posten:best.posten};
 }
 function potjeBijstelVoorstel(k){
   let V=null; try{ V=maandVooruit(); }catch(_){}
@@ -8002,8 +8028,8 @@ function potjeBijstelVoorstel(k){
   const B=plannedBudgets(), van=Math.round(+B[k]||h.bud), naar=ceil5(h.patroon), meer=naar-van;
   if(!(meer>0)) return null;
   const kand=Object.keys(B).filter(x=>x!==k && +B[x]>0 && CATS[x] && CATS[x].type==='expense' && !geenNorm(x))
-    .map(x=>{ const bud=Math.round(+B[x]), gew=Math.round(potjeGewoon(x, V.band.maanden));
-      return {k:x, naam:CATS[x].name, bud, gewoon:gew, ruimte:bud-gew}; })
+    .map(x=>{ const bud=Math.round(+B[x]), Vl=potjeMaandVloer(x, V.band.maanden, nextYM(SET.budgetMonth||thisYM()));
+      return {k:x, naam:CATS[x].name, bud, gewoon:Vl.gewoon, vloer:Vl.vloer, vloerMaand:Vl.maand, vloerPosten:Vl.posten, ruimte:bud-Vl.vloer}; })
     .filter(x=>x.ruimte>=meer)
     .sort((a,b)=>(b.ruimte-a.ruimte) || a.naam.localeCompare(b.naam,'nl'));
   return {k, naam:h.naam, patroon:h.patroon, bud:h.bud, van, naar, meer, kand, tot:Math.round(plannedTotalBudget()),
@@ -8016,13 +8042,13 @@ function openPotjeBijstel(k, dek){
   const D=P.kand.find(x=>x.k===window._bijstelDek)||null, Vn=ymFull(P.vanaf);
   const rij=x=>`<div class="tx" data-dekkies="${esc(x.k)}" style="cursor:pointer${D&&D.k===x.k?';outline:1px solid var(--teal);border-radius:8px':''}" onclick="openPotjeBijstel('${esc(k)}','${esc(x.k)}')">
       <div class="ava" style="background:var(--card2)">${CATS[x.k].icon||''}</div>
-      <div class="info"><div class="nm">${esc(x.naam)}</div><div class="cat">potje ${euro0(x.bud)}, gewoonlijk ${euro0(x.gewoon)} · ruimte ${euro0(x.ruimte)}</div></div>
+      <div class="info"><div class="nm">${esc(x.naam)}</div><div class="cat">potje ${euro0(x.bud)}, gewoonlijk ${euro0(x.gewoon)}${x.vloerMaand?`, in ${esc(ymFull(x.vloerMaand))} ${euro0(x.vloer)}`:''} · ruimte ${euro0(x.ruimte)}</div></div>
       <div class="amt" style="color:var(--teal)">${D&&D.k===x.k?'gekozen':'kies'}</div></div>`;
   const gevolg = D
-    ? `Vanaf ${esc(Vn)} gaat ${esc(P.naam)} van ${euro0(P.van)} naar ${euro0(P.naar)} en levert ${esc(D.naam)} ${euro0(P.meer)} in: van ${euro0(D.bud)} naar ${euro0(D.bud-P.meer)}. Deze maand blijven je potjes staan. Je maandbudget blijft ${euro0(P.tot)}.`
+    ? `Vanaf ${esc(Vn)} gaat ${esc(P.naam)} van ${euro0(P.van)} naar ${euro0(P.naar)} en levert ${esc(D.naam)} ${euro0(P.meer)} in: van ${euro0(D.bud)} naar ${euro0(D.bud-P.meer)}. ${D.vloerMaand?` In ${esc(ymFull(D.vloerMaand))} vraagt ${esc(D.naam)} ${euro0(D.vloer)}: gewoonlijk ${euro0(D.gewoon)} plus ${esc(opsomming(D.vloerPosten.map(x=>`${x.naam} ${euro0(x.bedrag)}`)))}. Dat past in ${euro0(D.bud-P.meer)}.`:''} Deze maand blijven je potjes staan. Je maandbudget blijft ${euro0(P.tot)}.`
     : (P.kand.length
       ? `Nog te dekken: ${euro0(P.meer)}. Wijs het potje aan dat inlevert; je maandbudget blijft dan ${euro0(P.tot)}.`
-      : `Geen ander potje heeft ${euro0(P.meer)} over boven wat je er gewoonlijk uitgeeft, dus er valt niets te verschuiven. Een grens zetten kan wel.`);
+      : `Geen ander potje heeft ${euro0(P.meer)} over boven wat je er gewoonlijk uitgeeft, ook in de maand waarin een kwartaal- of jaarpost valt, dus er valt niets te verschuiven. Een grens zetten kan wel.`);
   $('#sheet').innerHTML=`<div class="grab"></div><div id="potjeBijstel" data-cat="${esc(k)}" data-naar="${P.naar}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(P.naam)}-potje bijstellen</div>
     <div class="small" style="line-height:1.5;margin-top:6px">In ${esc(opsomming(P.maanden.map(x=>ymFull(x))))} gaf je gemiddeld ${euro0(P.patroon)} per maand uit aan ${esc(P.naam.toLowerCase())}, en je potje is ${euro0(P.bud)}. Met een potje van ${euro0(P.naar)} past je gewone maand erin; daarvoor levert een ander potje ${euro0(P.meer)} in.</div>
@@ -9122,7 +9148,7 @@ function allocatePlan(){
     p.status=p.alloc>0?'':'wacht op capaciteit';
     p.eta=null;
     if(p.alloc>0){
-      if(p.type==='aflossen'){ const mm=payoffMonths(p.rest,(p.debtPer||0)+p.alloc,p.rente); p.eta=isFinite(mm)&&mm>0?mm:null; }
+      if(p.type==='aflossen'){ const dd=(SET.debts||[]).find(x=>String(x.id)===String(p.debtId)); const V=dd?schuldVrij(dd,p.alloc):null; const mm=V?V.k:payoffMonths(p.rest,(p.debtPer||0)+p.alloc,p.rente); p.eta=(mm!=null&&isFinite(mm)&&mm>0)?mm:null; }   // v350: dezelfde datum als de rij op Vermogen, met wat Plan erbovenop zet
       /* v307: uit de projectie en niet uit ceil(rest/alloc). Zonder iets om door te zakken zijn die
          twee per constructie gelijk; met de terugval erin is de projectie een maand of meer eerder.
          Zegt de projectie het niet, dan staat er niets (v173) in plaats van een tempo dat niet klopt. */
@@ -10274,7 +10300,7 @@ function expectedReturnPct(){ const gs=(SET.assets||[]).filter(a=>a.grow&&(+a.re
 function dTypeChange(){ const t=((document.getElementById('dType')||{}).value)||'lening';
   const sw=document.getElementById('dslotwrap'); if(sw) sw.style.display=(t==='financiallease')?'block':'none';
   const aw=document.getElementById('dautowrap'); if(aw) aw.style.display=(t==='financiallease')?'block':'none';
-  const nt=document.getElementById('dtypenote'); if(nt) nt.innerHTML=(t==='studie')?'Studieschuld heeft vaak een lage rente en lange looptijd — versneld aflossen is dan lang niet altijd de slimste zet.':(t==='financiallease')?'Bij financial lease is de auto jouw bezitting en de lease een aflosbare schuld met een slottermijn.':'';
+  const nt=document.getElementById('dtypenote'); if(nt) nt.innerHTML=(t==='studie')?'Studieschuld heeft vaak een lage rente en een lange looptijd. Versneld aflossen is dan lang niet altijd de slimste zet.':(t==='financiallease')?'Bij financial lease is de auto jouw bezitting en de lease een aflosbare schuld met een slottermijn.':'';
 }
 function dEstimateDagwaarde(){
   const g=x=>(+((document.getElementById(x)||{}).value)||0);
@@ -10354,59 +10380,82 @@ function leaseLinkDismiss(txId){
   SET.leaseLinkOff=SET.leaseLinkOff||{}; SET.leaseLinkOff[o.key]=1; save();
   openSheet(txId);                                               // aanbod weg, de rest van de sheet blijft staan
 }
+/* v350: DE SCHULDEN IN DE LIJSTVORM VAN GRIP. Een regel per schuld: de naam, daaronder "vrij in <maand jaar>
+   · <termijn> per maand", rechts wat er nog staat en een chevron. GEMETEN voor deze ronde droeg een rij tot
+   zes regels tekst (voortgang, looptijd, de schuldenvrij-zin, de optelling met gekoppelde betalingen, de
+   detectie of de maandbetaling in je uitgaven zit en "restschuld werk je zelf bij"), plus een eigen
+   bijwerk-knop. GEEN TEKST VERDWIJNT, HIJ VERHUIST: alles staat in de sheet achter de regel
+   (schuldDetailHTML(), openSchuldDetail()), met de twee bestaande ingangen (bijwerken en bewerken).
+   De datum komt uit schuldVrij(), dezelfde als de mijlpalen en de grafiek. */
+function schuldRijSub(d, V){
+  if(V.af) return {tekst:'afgelost', warn:false};
+  if(!(+d.perMaand>0)) return {tekst:'nog geen maandaflossing ingevuld', warn:false};
+  if(V.mo===Infinity) return {tekst:`daalt niet op dit tempo · ${euro0(+d.perMaand)} per maand`, warn:true};
+  return {tekst:`vrij in ${V.label} · ${euro0(+d.perMaand)} per maand`, warn:false};
+}
+function schuldRijHTML(d){
+  const V=schuldVrij(d), sub=schuldRijSub(d, V);
+  return `<div class="row" data-schuldrij="${esc(d.id)}" style="gap:9px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openSchuldDetail('${d.id}')">
+    <div style="flex:1;min-width:0"><div class="small" style="font-weight:600">${esc(d.naam||'Schuld')}</div><div class="small" data-schuldsub="${esc(d.id)}" style="color:${sub.warn?'var(--red)':'var(--mut2)'};font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(sub.tekst)}</div></div>
+    <span class="small" style="font-weight:700;flex-shrink:0;margin-top:1px;color:${V.af?'var(--green)':'var(--txt)'}">${euro0(V.rest)}</span>
+    <span style="color:var(--teal);font-weight:700;flex-shrink:0">\u203a</span></div>`;
+}
+/* De sheet achter een schuldregel: precies wat de rij tot v349 droeg, in dezelfde formuleringen. */
+function schuldDetailHTML(d){
+  const S=schuldStand(d), V=schuldVrij(d), start=+d.start||0, rest=V.rest, per=+d.perMaand||0, jr=+d.rente||0;
+  const rentePerMnd=Math.round(rest*(jr/100/12)), L=[]; let warn='';
+  const regel=(t,attr)=>`<div class="small" ${attr||''} style="color:var(--mut2);margin-top:6px;line-height:1.45">${t}</div>`;
+  if(rest<=0) L.push(regel('Afgelost.'));
+  else {
+    if(start>rest) L.push(regel(`${euro0(start-rest)} van ${euro0(start)} afgelost.`));
+    if(per<=0) L.push(regel('Er is nog geen maandaflossing ingevuld, dus een datum is er niet.'));
+    else if(V.mo===Infinity){
+      warn = (per>=rentePerMnd)
+        ? `Je aflossing dekt precies de rente. De schuld blijft op ${euro0(rest)} staan.`
+        : `Je lost ${euro0(per)} per maand af, maar er komt ${euro0(rentePerMnd)} rente bij. Zo daalt ${esc(d.naam||'deze schuld')} niet: hij groeit met ongeveer ${euro0(rentePerMnd-per)} per maand.`;
+    } else {
+      L.push(regel(`Nog ${V.mo} ${V.mo===1?'maand':'maanden'} van ${euro0(per)}${jr>0?`, met ${numUit(jr)}% rente`:''}.`));
+      L.push(regel(`Op dit tempo ben je hier vanaf in <b data-schuldvrij="${esc(d.id)}">${esc(V.label)}</b>${jr>0?'':' (zonder rente gerekend)'}.${V.dezeMaandOpen?' De betaling van deze maand is nog niet langsgekomen, dus die telt mee als een van de termijnen.':''}`));
+    }
+  }
+  if(schuldMetAuto(d) && rest>0) L.push(regel(`De auto staat bij je bezittingen; je eigen deel is ${euro0((+d.dagwaarde||0)-rest)}.`));
+  const gek=S.gekoppeld>0;
+  let det='';
+  if(rest>0 && !gek){ const x=debtInExpenses(d);
+    const t=x.status==='in-uitgaven'?(x.conf==='hoog'?'De maandbetaling is herkend in je uitgaven.':'De maandbetaling lijkt in je uitgaven te zitten.')
+      : x.status==='intern'?'De maandbetaling loopt als interne overboeking en zit dus niet in je uitgaven.'
+      : x.status==='buiten-uitgaven'?'De maandbetaling valt buiten je uitgaven.'
+      : x.status==='niet-gevonden'?'De maandbetaling is niet teruggevonden in je uitgaven.':'';
+    if(t) det=regel(t,'data-schulddetectie');
+    det+=regel('De restschuld daalt niet vanzelf mee met je betalingen: die stand werk je zelf bij.','data-schuldzelf');
+  }
+  return `<div class="grab"></div>
+    <div class="row" style="margin-bottom:6px"><div style="font-weight:800;font-size:var(--fs-lg);flex:1">${esc(d.naam||'Schuld')}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
+    <div style="font-size:26px;font-weight:800">${euro0(rest)}</div><div class="small muted">nog te gaan</div>
+    ${warn?`<div class="small" data-schuldwarn style="color:var(--red);margin-top:8px;line-height:1.45">${warn}</div>`:''}
+    <div data-schulddetail="${esc(d.id)}">${L.join('')}${det}</div>
+    ${schuldStandBlok(d)}
+    ${rest>0?`<button class="btn sec" data-schuldbijwerken style="margin-top:14px;width:100%" onclick="openDebtUpdate('${d.id}')">Restschuld bijwerken</button>`:''}
+    <button class="btn sec" style="margin-top:8px;width:100%" onclick="openDebt('${d.id}')">Alle gegevens bewerken</button>
+    <div style="height:8px"></div>`;
+}
+function openSchuldDetail(id){
+  const d=(SET.debts||[]).find(x=>String(x.id)===String(id)); if(!d) return;
+  $('#sheet').innerHTML=schuldDetailHTML(d); showSheetBg();
+}
 function renderDebts(){
   const ds=SET.debts||[];
-  const _now=new Date();
-  const svDatum=n=>{ const d=new Date(_now.getFullYear(), _now.getMonth()+n, 1); return MNAMES[d.getMonth()]+' '+d.getFullYear(); };   // vandaag + n maanden → "mnd jaar"
-  let laatsteN=0, alleEindig=true; const nSchuld=ds.filter(d=>schuldRestNu(d)>0).length;
-  const rows=ds.map(d=>{ const S=schuldStand(d), start=+d.start||0, rest=Math.round(S.stand), per=+d.perMaand||0, jr=+d.rente||0;
-    const mnd=payoffMonths(rest,per,jr); const rentePerMnd=Math.round(rest*(jr/100/12));
-    let sub, fwd='', warn=false;
-    if(rest<=0){ sub='Afgelost'; }
-    else {
-      const prog=(start>rest)?`${euro0(start-rest)} van ${euro0(start)} afgelost`:'';   // voortgang op eigen invoer (start − rest)
-      if(per<=0){ sub=[prog,'nog geen maandaflossing ingevuld'].filter(Boolean).join(' · '); alleEindig=false; }
-      else if(mnd===Infinity){ warn=true; alleEindig=false;   // aflossing ≤ maandrente: schuld daalt niet
-        sub = (per>=rentePerMnd)
-          ? `Je aflossing dekt precies de rente. De schuld blijft op ${euro0(rest)} staan.`
-          : `Je lost ${euro0(per)} per maand af, maar er komt ${euro0(rentePerMnd)} rente bij. Zo daalt ${esc(d.naam||'deze schuld')} niet, hij groeit met ±${euro0(rentePerMnd-per)} per maand.`;
-      } else {
-        const p=[]; if(prog) p.push(prog); p.push(`~${mnd} mnd op ${euro0(per)}/mnd`); if(jr>0) p.push(`${jr}% rente`); sub=p.join(' · ');
-        fwd=`Op dit tempo schuldenvrij rond <b>${svDatum(mnd)}</b>${jr>0?'':' (zonder rente gerekend)'}.`;
-        if(mnd>laatsteN) laatsteN=mnd;
-      }
-    }
-    const coupled=schuldMetAuto(d);
-    if(coupled && rest>0){ sub+=(sub?' · ':'')+`eigen deel ${euro0((+d.dagwaarde||0)-rest)}`; }
-    const nmLabel=coupled?' <span style="color:var(--mut2);font-size:10.5px">· gekoppeld aan bezitting</span>':'';
-    // Detectie: zit de MAANDBETALING in je uitgaven? (v100) Die groene regel zei "aflossing …",
-    // wat las alsof de schuldstand was bijgewerkt. Dat gebeurt nergens: `rest` is en blijft je
-    // eigen invoer. Daarom expliciet "maandbetaling", plus de hint dat je de stand zelf bijwerkt.
-    let inExpTxt='',inExpCol='var(--mut2)';
-    /* v334: met gekoppelde betalingen daalt de restschuld mee, dus "werk je zelf bij" en de detectie of de
-       maandbetaling in je uitgaven lijkt te zitten vervallen: die stelden een vraag die de koppeling al
-       beantwoordt. In de plaats staat de optelling, of de vraag over een stand zonder datum. */
-    const gekoppeld=S.gekoppeld>0;
-    const standRegel = !gekoppeld ? ''
-      : S.vraag ? `<div class="cp-sub" data-schuldvraag="${esc(d.id)}" style="margin-top:2px">Zat de betaling van ${esc(bezitDatumLabel(S.vraag.datum))} al in de ${euro0(S.basis)}? <span style="color:var(--teal)">›</span></div>`
-      : S.op ? `<div class="cp-sub" data-schuldstand="${esc(d.id)}" style="margin-top:2px;color:var(--mut2)">${schuldStandRegel(S)}</div>` : '';
-    if(rest>0 && !gekoppeld){ const det=debtInExpenses(d);
-      if(det.status==='in-uitgaven'){ inExpTxt=(det.conf==='hoog'?'maandbetaling herkend in je uitgaven':'maandbetaling lijkt in je uitgaven te zitten'); inExpCol='var(--green)'; }
-      else if(det.status==='intern'){ inExpTxt='maandbetaling loopt als interne overboeking · niet in je uitgaven'; inExpCol='var(--amber)'; }
-      else if(det.status==='buiten-uitgaven'){ inExpTxt='maandbetaling valt buiten je uitgaven'; inExpCol='var(--amber)'; }
-      else if(det.status==='niet-gevonden'){ inExpTxt='maandbetaling niet teruggevonden in je uitgaven'; inExpCol='var(--mut2)'; }
-    }
-    const zelfHint=(rest>0&&!gekoppeld)?`<span class="debt-zelf" style="color:var(--mut2);cursor:pointer" onclick="event.stopPropagation();openDebtUpdate('${d.id}')">${inExpTxt?' · ':''}restschuld werk je zelf bij</span>`:'';
-    const bijwerk=rest>0?`<span class="small debt-upd" style="color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();openDebtUpdate('${d.id}')">bijwerken ›</span>`:'';
-    return `<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Schuld')}${nmLabel}</div><div class="cp-sub"${warn?' style="color:var(--red)"':''}>${sub}</div>${fwd?`<div class="cp-sub" style="color:var(--mut2);margin-top:2px">${fwd}</div>`:''}${standRegel}${(inExpTxt||zelfHint)?`<div class="cp-sub" style="color:${inExpCol};margin-top:2px;font-size:10.5px">${inExpTxt}${zelfHint}</div>`:''}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700;color:${rest<=0?'var(--green)':'var(--txt)'}">${rest<=0?euro0(0):'Nog '+euro0(rest)}</span>${bijwerk}<span class="muted">›</span></div></div>`;}).join('');
-  const totLine = (nSchuld>=2) ? (alleEindig ? `Op dit tempo ben je overal vanaf rond <b>${svDatum(laatsteN)}</b>.` : `Eén of meer schulden dalen op dit tempo niet, dus een schuldenvrij-datum is er nog niet.`) : '';
+  const rows=ds.map(schuldRijHTML).join('');
+  const VV=ds.filter(d=>schuldRestNu(d)>0).map(d=>schuldVrij(d));
+  const alleEindig=VV.every(V=>V.k!=null), laatste=VV.slice().sort((a,b)=>(b.k||0)-(a.k||0))[0];
+  const totLine = (VV.length>=2) ? (alleEindig ? `Op dit tempo ben je overal vanaf in <b>${esc(laatste.label)}</b>.` : `Een of meer schulden dalen op dit tempo niet, dus een schuldenvrij-datum is er nog niet.`) : '';
   const wr=ds.filter(d=>(+d.rente||0)>0 && schuldRestNu(d)>0).sort((a,b)=>(+b.rente||0)-(+a.rente||0));
   const prio = wr.length>=2 ? `<div class="card" style="margin-bottom:8px"><div class="hlabel" style="margin-bottom:6px">Wat eerst? · hoogste rente bespaart het meest</div>${wr.map((d,i)=>`<div class="row" style="justify-content:space-between;padding:6px 0${i<wr.length-1?';border-bottom:1px solid var(--line)':''}"><span><span style="font-size:10.5px;font-weight:700;color:var(--on-accent);background:var(--teal);border-radius:6px;padding:1px 7px;margin-right:7px">${i+1}</span>${esc(d.naam||'Schuld')}</span><span style="font-size:11.5px;font-weight:700;color:${(+d.rente>=5)?'var(--red)':'var(--green)'}">${d.rente}%</span></div>`).join('')}<div class="small muted" style="font-size:var(--fs-xs);margin-top:8px">Zet je extra euro op de bovenste. Liever motivatie? Kleinste schuld eerst kan ook. Jij kiest. Geen advies.</div></div>` : '';
   const totalSch=ds.reduce((s,d)=>s+schuldRestNu(d),0);
   const open=SET.openSchuld===true;
   return `<div style="margin-top:18px">
-    <div class="row" style="margin:0 2px 8px;cursor:pointer" onclick="toggleVerm('openSchuld')"><span class="hlabel" style="margin:0;flex:1">Schulden &amp; aflossing</span><span class="small muted">${euro0(totalSch)}</span><span class="muted" style="font-size:15px;margin-left:8px">${open?'▲':'›'}</span></div>
-    ${open?`${prio}<div class="cz-card" style="padding:2px 14px">${rows}${loanRowsHTML('in')}${totLine?`<div class="small muted" style="padding:9px 2px 3px">${totLine}</div>`:''}<button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div>`:''}
+    <div class="row" style="margin:0 2px 8px;cursor:pointer" onclick="toggleVerm('openSchuld')"><span class="hlabel" style="margin:0;flex:1">Schulden &amp; aflossing</span><span class="small muted">${euro0(totalSch)}</span><span class="muted" style="font-size:15px;margin-left:8px">${open?'\u25b2':'\u203a'}</span></div>
+    ${open?`${prio}<div class="cz-card" id="schuldLijst" style="padding:2px 14px">${rows}${loanRowsHTML('in')}${totLine?`<div class="small muted" style="padding:9px 2px 3px">${totLine}</div>`:''}<button class="cp-add" onclick="openDebt()">+ Schuld toevoegen</button></div>`:''}
   </div>`;
 }
 function toggleVerm(k){ SET[k]=(SET[k]!==true); save(); renderVermogen(); }
@@ -10416,7 +10465,7 @@ function openDebt(id,pre){
   const dtype=d.type || (/duo|studie/i.test(d.naam||'')?'studie':(/lease/i.test(d.naam||'')?'financiallease':'lening'));
   const rest=d0?schuldRestNu(d0):Math.max(+d.rest||0,0), per=+d.perMaand||0, jr=+d.rente||0; const baseM=payoffMonths(rest,per,jr); const expR=expectedReturnPct();
   const opt=(vv,l)=>`<option value="${vv}"${dtype===vv?' selected':''}>${l}</option>`;
-  const typeNote=(dtype==='studie')?'Studieschuld heeft vaak een lage rente en lange looptijd — versneld aflossen is dan lang niet altijd de slimste zet.':(dtype==='financiallease')?'Bij financial lease is de auto jouw bezitting en de lease een aflosbare schuld met een slottermijn.':'';
+  const typeNote=(dtype==='studie')?'Studieschuld heeft vaak een lage rente en een lange looptijd. Versneld aflossen is dan lang niet altijd de slimste zet.':(dtype==='financiallease')?'Bij financial lease is de auto jouw bezitting en de lease een aflosbare schuld met een slottermijn.':'';
   const extraTable=(rest>0&&per>0&&jr>0&&isFinite(baseM)&&baseM>1)?`
     <div class="hlabel" style="margin-top:16px;margin-bottom:2px">Wat levert extra aflossen op?</div>
     ${[25,50,100].map(x=>{const m2=payoffMonths(rest,per+x,jr);const sv=Math.max(baseM-m2,0);const iv=Math.max(Math.round((per*baseM-rest)-((per+x)*m2-rest)),0);return `<div class="row" style="justify-content:space-between;font-size:var(--fs-sm);padding:6px 0;border-bottom:1px solid var(--line)"><span style="font-weight:600">+${euro0(x)}/mnd</span><span class="muted">~${sv} mnd eerder · ± ${euro0(iv)} rente bespaard</span></div>`;}).join('')}`:'';
@@ -10475,13 +10524,13 @@ function openDebtUpdate(id){
   const rest=schuldRestNu(d), per=+d.perMaand||0, vloer=debtVloer(d), gek=schuldGekoppeld(d.id).length>0;
   const afboek=(per>0&&rest>vloer)?`
     <button class="btn sec" style="margin-top:12px;width:100%" onclick="debtAfboeken('${id}')">Boek maandaflossing af − ${euro0(per)}</button>
-    <div class="small muted" style="font-size:var(--fs-xs);margin-top:6px">Bij benadering — rente is hier niet meegerekend. Vul gerust de exacte stand van je bank in.</div>`:'';
+    <div class="small muted" style="font-size:var(--fs-xs);margin-top:6px">Bij benadering: de rente is hier niet meegerekend. Vul gerust de exacte stand van je bank in.</div>`:'';
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="row" style="margin-bottom:10px"><div style="font-weight:800;font-size:var(--fs-lg);flex:1">${esc(d.naam||'Schuld')}</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
     ${gek?`<div class="small muted" style="margin-bottom:12px">Je restschuld daalt mee met je gekoppelde betalingen. Vul je de stand van je bank in, dan is dat het nieuwe startpunt.</div>`
-         :isMode('rustig')?'':`<div class="small muted" style="margin-bottom:12px">Je restschuld daalt niet vanzelf mee met je betalingen — die stand houd je zelf bij.</div>`}
+         :isMode('rustig')?'':`<div class="small muted" style="margin-bottom:12px">Je restschuld daalt niet vanzelf mee met je betalingen. Die stand houd je zelf bij.</div>`}
     <label class="fld">Restschuld nu (€)</label><input id="duRest" type="number" inputmode="numeric" min="0" value="${rest||''}" placeholder="bv. 8000" style="width:100%">
-    ${vloer>0?`<div class="small muted" style="font-size:var(--fs-xs);margin-top:6px">Slottermijn ${euro0(vloer)} · daaronder boekt deze knop niet verder af.</div>`:''}
+    ${vloer>0?`<div class="small muted" data-slottermijn style="font-size:var(--fs-xs);margin-top:6px">Aan het eind betaal je nog een slottermijn van ${euro0(vloer)}.${(per>0&&rest>vloer)?' Lager dan dat bedrag zet de knop hieronder je restschuld niet.':''}</div>`:''}
     ${afboek}
     <button class="btn" style="margin-top:14px;width:100%" onclick="saveDebtRest('${id}')">${ICON('check')} Opslaan</button>
     <div class="small" style="margin-top:12px;text-align:center;color:var(--mut2);cursor:pointer" onclick="openDebt('${id}')">Alle gegevens bewerken</div>
@@ -10579,8 +10628,8 @@ function loanRowsHTML(richting){
 function renderAssets(){
   const liq=totalBalance().sum; const as=SET.assets||[];
   const rows=as.map(a=>`<div class="cz-pot" style="cursor:pointer" onclick="openAsset('${a.id}')"><div class="cp-info"><div class="cp-nm">${esc(a.naam||'Bezitting')}${a.grow?' <span style="color:var(--teal);font-size:10.5px">· groeit</span>':''}</div>${bezitInlegSub(a)}</div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700" data-bezittotaal="${esc(a.id)}">${euro0(bezitWaardeNu(a))}</span><span class="muted">›</span></div></div>`).join('');
-  const leaseRows=(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).map(d=>`<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Auto')} <span style="color:var(--mut2);font-size:10.5px">· via financial lease</span></div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+d.dagwaarde)}</span><span class="muted">›</span></div></div>`).join('');
-  const totalBez=(liq||0)+as.reduce((s,a)=>s+bezitWaardeNu(a),0)+(SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0).reduce((s,d)=>s+(+d.dagwaarde||0),0)+loanTotals().uit;
+  const leaseRows=leaseAutoSchulden().map(d=>`<div class="cz-pot" style="cursor:pointer" onclick="openDebt('${d.id}')"><div class="cp-info"><div class="cp-nm">${esc(d.naam||'Auto')} <span style="color:var(--mut2);font-size:10.5px">· via financial lease</span></div></div><div style="display:flex;align-items:center;gap:8px"><span class="small" style="font-weight:700">${euro0(+d.dagwaarde)}</span><span class="muted">›</span></div></div>`).join('');
+  const totalBez=(liq||0)+as.reduce((s,a)=>s+bezitWaardeNu(a),0)+leaseAutoSchulden().reduce((s,d)=>s+(+d.dagwaarde||0),0)+loanTotals().uit;
   const open=SET.openBez===true;
   return `<div style="margin-top:14px">
     <div class="row" style="margin:0 2px 8px;cursor:pointer" onclick="toggleVerm('openBez')"><span class="hlabel" style="margin:0;flex:1">Bezittingen</span><span class="small muted">${euro0(totalBez)}</span><span class="muted" style="font-size:15px;margin-left:8px">${open?'▲':'›'}</span></div>
@@ -10788,12 +10837,25 @@ function netWorthSeries(){
 function koopcheckRegel(){
   return `<div class="card" style="cursor:pointer;margin-top:4px" onclick="openBuy()"><div class="row"><span style="font-weight:600">${ICON('cart')} Ik wil iets kopen</span><span class="small" style="color:var(--teal);font-weight:700">check ›</span></div></div>`;
 }
+/* v350: DE TELLING OP HOME TELT WAT DE PAGINA ERACHTER TOONT. GEMETEN voor deze ronde: Home zei "3
+   bezittingen" en dat was SET.assets.length, terwijl Vermogen onder Bezittingen vijf rijen toonde (je
+   rekeningen, drie bezittingen en de auto van een financial lease) en daaronder twee uitgeleende bedragen.
+   vermogenTelling() telt de rijen die renderAssets() en renderDebts() tekenen, uit dezelfde lijsten
+   (leaseAutoSchulden(), loans() met iets open), dus de twee kunnen niet uiteenlopen. */
+function leaseAutoSchulden(){ return (SET.debts||[]).filter(d=>d.type==='financiallease'&&d.autoBezit&&(+d.dagwaarde||0)>0); }
+function vermogenTelling(){
+  const open=r=>loans().filter(l=>(l.richting==='in'?'in':'uit')===r && (+l.open||0)>0).length;
+  return {bez:1+(SET.assets||[]).length+leaseAutoSchulden().length, uit:open('uit'), sch:(SET.debts||[]).length, leen:open('in'), ingevuld:((SET.assets||[]).length+(SET.debts||[]).length+open('uit')+open('in'))>0};
+}
 function vermogenCard(){
-  const nA=(SET.assets||[]).length, nS=(SET.debts||[]).length;
-  const sub=(nA||nS)
-    ? `${nA} ${nA===1?'bezitting':'bezittingen'} · ${nS} ${nS===1?'schuld':'schulden'}`
-    : 'nog niets ingevuld';
-  return `<div class="card" style="cursor:pointer;margin-top:4px" onclick="go('vermogen')"><div class="row"><span style="font-weight:600">${ICON('chart')} Bezittingen &amp; schulden</span><span class="small" style="color:var(--teal);font-weight:700">${(nA||nS)?'bekijk':'voeg toe'} ›</span></div><div class="small muted" style="margin-top:4px">${sub}</div></div>`;
+  const T=vermogenTelling(), nS=T.sch;
+  const delen=[`${T.bez} ${T.bez===1?'bezitting':'bezittingen'}`];
+  if(T.uit) delen.push(`${T.uit} uitgeleend`);
+  delen.push(`${nS} ${nS===1?'schuld':'schulden'}`);
+  if(T.leen) delen.push(`${T.leen} geleend`);
+  const nA=T.ingevuld;
+  const sub=T.ingevuld ? delen.join(' · ') : 'nog niets ingevuld';
+  return `<div class="card" style="cursor:pointer;margin-top:4px" onclick="go('vermogen')"><div class="row"><span style="font-weight:600">${ICON('chart')} Bezittingen &amp; schulden</span><span class="small" style="color:var(--teal);font-weight:700">${nA?'bekijk':'voeg toe'} ›</span></div><div class="small muted" data-vermteller style="margin-top:4px">${sub}</div></div>`;
 }
 /* ===================== VERMOGENSREIS (projectie + milestones) ===================== */
 // ===== FIRE-laag =====
@@ -10843,7 +10905,7 @@ function fireInputs(){
   const emergencyGoal=nfDoel;   // FIRE-mijlpaal = restsaldo-waterval = Noodfonds-kaart
   let monthlySaving=0; try{ monthlySaving=Math.round(monthlySavingTarget()||0); }catch(_){}   // beoogde maandelijkse spaarinleg — het tempo waarop het noodfonds vult (zelfde bron als Plan)
   let missBal=false; try{ missBal=((totalBalance().missing||0)>0); }catch(_){}   // eerlijk over onbekende input (C2-noot)
-  const debtsEnriched=(SET.debts||[]).map(d=>Object.assign({},d,{inExp:debtInExpenses(d), rest:schuldRestNu(d)}));   // v334: de restschuld met de gekoppelde aflossing erin   // detectie: zit de aflossing in je uitgaven?
+  const debtsEnriched=(SET.debts||[]).map(d=>{ const V=schuldVrij(d); return Object.assign({},d,{inExp:debtInExpenses(d), rest:schuldRestNu(d), vrijK:V.k, vrijLabel:V.label}); });   // v350: de afloswaarde komt uit schuldVrij(), dezelfde datum als de rij op Vermogen   // v334: de restschuld met de gekoppelde aflossing erin   // detectie: zit de aflossing in je uitgaven?
   // Bezittingen splitsen: groeiende → belegd (groeit op FIRE-rendement), niet-groeiende → flat (vlak), lease-auto('s) → leaseItems (schrijven af)
   const _grow=(SET.assets||[]).filter(a=>a.grow), _flatA=(SET.assets||[]).filter(a=>!a.grow);
   const belegd=_grow.reduce((s,a)=>s+Math.max(bezitWaardeNu(a),0),0);
@@ -10993,6 +11055,7 @@ function reisListIcon(kind,col){ return `<svg width="17" height="17" viewBox="0 
 // Belasting-haak (spiegel, geen advies). Niveau 1 = vlakke jaarheffing op het vermogen.
 // Naad voor niveau 2 (Box 3): vervang alleen deze body door max(saldo-vrijstelling,0)*forfait;
 // de aanroepplekken in fireModel + reisMonteCarlo blijven letterlijk gelijk.
+function fireFactorZin(f){ const n=+f||0; if(!(n>0)) return ''; const pct=Math.round(1000/n)/10; return `${numUit(n)}× je uitgaven, dat is ${numUit(pct)}% opname per jaar`; }
 function fireBelasting(R, saldo){ const p=+R.taxPct||0; return (p>0&&saldo>0)? saldo*p/100 : 0; }
 // Schuld-afloscurve (Fase 1): totale resterende schuld per jaar [0..HZ]; elke schuld amortiseert maandelijks met rente tot 0.
 function fireDebtSeries(debts, HZ){
@@ -11022,7 +11085,7 @@ function fireModel(R, inputs){
      De noodfonds-stap zelf is niet aangeraakt - 'fill' is nog exact 'vrij'.
      v348: DIT IS GESCHIEDENIS. De vul-fase en 'vrij' rekenen niet meer: het noodfonds vult via de
      maandverdeling van Plan (maandDeel() hieronder), en volYear komt uit diezelfde projectie. 'vrij'
-     blijft alleen voor de vergelijking in fireFreedBlock(). */
+     blijft alleen voor de stippellijn "noodfonds vol" in de grafiek; de vergelijking leest sinds v350 wat er vrijkomt als Plan vol is. */
   const _res=(R.inlegMode==='auto')?Math.max(+inputs.resPerMaand||0,0):0;
   /* v346: een eenmalige post kost zijn volle bedrag in zijn eigen maand. k telt vanaf deze maand,
      en dat is ook de maand k van de lus hieronder (jaar y, maand m: k = 12y + m). */
@@ -11178,12 +11241,16 @@ function fireModel(R, inputs){
   const FIRE=(R.annualExp||0)*R.fireMult;
   // per-schuld aflossing: elk type een eigen aflosjaar (getoond in de afbouw-strook + mijlpaal-lijst)
   const DEBTCOL=['#fbbf24','#60a5fa','#f472b6','#a78bfa','#f87171','#38bdf8'];
-  let debtPay=[], debtYr=null;
+  let debtPay=[], debtYr=null, debtMaand='';
   try{ const ds=(inputs.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0);
+    /* v350: het jaar volgt de KALENDER, net als de noodfonds-mijlpaal hieronder: nowY + floor((nowMo + k)/12).
+       Tot v349 stond hier nowY + ceil(mo/12), en dat zette een schuld die in november 2035 af is op 2036.
+       k komt uit schuldVrij() via fireInputs() (laag A); een invoer zonder k rekent hier dezelfde maanden. */
     ds.forEach((d,i)=>{ const rest=Math.max(+d.rest||0,0), mo=payoffMonths(rest,+d.perMaand||0,+d.rente||0);
-      const yr=(mo===Infinity||mo<=0)?null:nowY+Math.ceil(mo/12);
-      debtPay.push({nm:d.naam||'Schuld',rest,per:+d.perMaand||0,rente:+d.rente||0,mo:(mo===Infinity?null:mo),yr,col:DEBTCOL[i%DEBTCOL.length],inExp:d.inExp}); });
-    const fin=debtPay.filter(x=>x.yr!=null); if(fin.length && fin.length===debtPay.length) debtYr=Math.max(...fin.map(x=>x.yr));
+      const k=(d.vrijK!=null)?d.vrijK:((mo===Infinity||mo<=0)?null:mo);
+      const yr=(k==null)?null:nowY+Math.floor((nowMo+k)/12);
+      debtPay.push({nm:d.naam||'Schuld',rest,per:+d.perMaand||0,rente:+d.rente||0,mo:(mo===Infinity?null:mo),yr,k,maand:d.vrijLabel||'',col:DEBTCOL[i%DEBTCOL.length],inExp:d.inExp}); });
+    const fin=debtPay.filter(x=>x.yr!=null); if(fin.length && fin.length===debtPay.length){ debtYr=Math.max(...fin.map(x=>x.yr)); debtMaand=(fin.slice().sort((a,b)=>b.k-a.k)[0]||{}).maand||''; }
   }catch(_){}
   const debtParts=_debtS.parts.map((p,i)=>({naam:p.naam, col:DEBTCOL[i%DEBTCOL.length], series:p.series}));   // per-schuld opbouw, kleur matcht de schuld-mijlpalen
   // Bezittingen-opbouw (mirror van debtParts): elke belegging met zijn eigen reeks, plus cash en nieuwe inleg. Som === assets[i].
@@ -11206,13 +11273,15 @@ function fireModel(R, inputs){
     return parts; })();
   const ms=[];
   if(noodDoel>0) ms.push({key:'nood',nm:'Noodfonds',target:Math.round(noodDoel),col:'#34d399',icon:'shield',sub:'buffer compleet'});
-  if(debtPay.length===1){ const d0=debtPay[0]; if(d0.yr) ms.push({key:'debt',nm:'Schuldenvrij',target:null,yr:d0.yr,col:d0.col,icon:'check',sub:'alle schulden af'}); }
-  else if(debtPay.length>1){ debtPay.forEach((d,i)=>ms.push({key:'debt'+i,nm:d.nm+' afgelost',target:null,yr:d.yr,col:d.col,icon:'check',sub:d.yr?'lening afgelost':'aflossing te laag',debtSub:true}));
-    if(debtYr) ms.push({key:'debt',nm:'Volledig schuldenvrij',target:null,yr:debtYr,col:'#60a5fa',icon:'check',sub:'alle schulden af'}); }
+  if(debtPay.length===1){ const d0=debtPay[0]; if(d0.yr) ms.push({key:'debt',nm:'Schuldenvrij',target:null,yr:d0.yr,maand:d0.maand,col:d0.col,icon:'check',sub:'alle schulden af'}); }
+  else if(debtPay.length>1){ debtPay.forEach((d,i)=>ms.push({key:'debt'+i,nm:d.nm+' afgelost',target:null,yr:d.yr,maand:d.maand,col:d.col,icon:'check',sub:d.yr?'lening afgelost':'aflossing te laag',debtSub:true}));
+    if(debtYr) ms.push({key:'debt',nm:'Volledig schuldenvrij',target:null,yr:debtYr,maand:debtMaand,col:'#60a5fa',icon:'check',sub:'alle schulden af'}); }
   // "Belegd geld werkt": vermogen groot genoeg dat het rendement (opnameregel = 1/factor) ~een kwart van je uitgaven dekt
   if(FIRE>0){ const werk=Math.round(FIRE*0.25); const pm=Math.round((R.annualExp||0)*0.25/12); ms.push({key:'werk',nm:'Belegd geld werkt',target:werk,col:'var(--accent)',icon:'flag',sub:`rendement dekt ~${euro0(pm)}/mnd · ¼ van je uitgaven`}); }
   R.customMs.forEach(c=>ms.push({key:c.id,nm:c.nm,target:+c.target,col:'#f472b6',icon:'star',sub:euro0(+c.target),custom:true}));
-  if(FIRE>0) ms.push({key:'fire',nm:'FIRE-getal',target:FIRE,col:'#a78bfa',icon:'flame',sub:R.fireMult+'× uitgaven = '+euro0(FIRE)});
+  /* v350: de factor zegt wat hij betekent: N keer je jaaruitgaven is 100/N procent per jaar opnemen. En de regel
+     opent de aanname zelf (goFireAannames()), want dat getal is een keuze en geen meting. */
+  if(FIRE>0) ms.push({key:'fire',nm:'FIRE-getal',target:FIRE,col:'#a78bfa',icon:'flame',sub:fireFactorZin(R.fireMult)+' · '+euro0(FIRE),route:'goFireAannames()'});
   ms.push({key:'pens',nm:'Pensioen',target:null,yr:targetYear,col:'var(--lab)',icon:'sun',sub:(R.override?'jouw streefjaar':(R.birth?'AOW · 67 jaar':'stel geboortejaar in'))});
   // De noodfonds-mijlpaal hoort bij het vullen-uit-je-restsaldo (stap 1 van de waterval), niet bij de vermogensgroei-lijn:
   // voortgang op spaargeld (nfCur), jaar op hoe snel je maandelijkse restsaldo het vult — zelfde bron als "nog ± X mnd" in de waterval.
@@ -11511,12 +11580,27 @@ function reisRestsaldo(M){
     : `${doelNamen.length?'naar '+opsomming(doelNamen.map(esc))+'; ':''}toegewezen op Plan, dus dit geld groeit niet mee ${(B.doelItems||[]).every(x=>x.k!=null)?'en gaat op de streefdatum de deur uit':((B.doelItems||[]).some(x=>x.k!=null)?'en gaat op een streefdatum de deur uit; zonder datum blijft het staan':'en blijft staan, want er is geen streefdatum')}`;
   const stepDoel= (B.doel>0)? stepWrap(rail(stapNr(),'var(--mut)','var(--bg)',false),
     `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Spaardoelen</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--mut)">${euro0(B.doel)}/mnd</span></div><div class="small mut2" style="font-size:11.5px">${doelSub}</div>${(!doelInVul&&(B.doelItems||[]).length>=3)?`<div class="plan-tab small mut2" style="font-size:11.5px;margin-top:3px">${B.doelItems.map(x=>`<span>${esc(x.naam)}</span><span class="v">${euro0(x.per)}</span>`).join('')}</div>`:''}`) : '';
-  /* Wat er dan pas mag groeien. Geen stap maar de uitkomst van de rij, en geen nieuwe berekening:
-     M.bestemming.groeit is de momentopname van een gewone maand uit fireModel() (v348). */
-  const groeitRegel=(B.res>0||B.doel>0)?`<div style="margin-top:8px;padding:10px 12px;background:var(--card2);border-radius:11px">
-    <div class="row"><span class="small muted">Groeit mee vanaf nu</span><span style="font-weight:800;font-size:var(--fs-md);color:var(--teal)">${euro0(B.groeit)}/mnd</span></div>
-    ${(groeitNaLbl&&B.groeitNa!==B.groeit)?`<div class="row" data-groeitna style="margin-top:4px"><span class="small muted">Vanaf ${groeitNaLbl}, als Plan vol is</span><span style="font-weight:800;font-size:var(--fs-md);color:var(--teal)">${euro0(B.groeitNa)}/mnd</span></div>`:''}
-    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">${euro0((Oz.bron==='surplus')?surplus:Oz.bedrag)} ${Oz.bron==='surplus'?'restsaldo':'opzij'} min wat er hierboven af gaat. Dit is het bedrag waarmee de projectie rekent.</div></div>`:'';
+  /* v350: WAAR JE INLEG HEEN GAAT EN WANNEER HIJ VRIJKOMT, IN EEN BLOK. Tot v349 stonden er twee
+     zinnen over hetzelfde feit: "Ruimte die vrijkomt" (fireFreedBlock(), op de kaart) zei dat er
+     "EUR X/mnd vrij" was zodra je noodfonds vol was, en de regel van v348 onder de waterval zei dat er
+     pas groei bijkomt als Plan vol is. Sinds v348 gaat je inleg na de buffer naar je doelen, dus die
+     eerste zin was onwaar zolang Plan nog verdeelt. Nu: wat er nu naar Plan en je reserveringen gaat,
+     wat er nu groeit, vanaf wanneer Plan niets meer vraagt (planKlaarK, dezelfde maand als
+     planKlaarMaand() op Plan), wat er dan groeit, en pas daarna de vergelijking aflossen tegen beleggen
+     over het bedrag dat dan vrijkomt. Zonder die maand staat er geen bedrag vrij. Alles komt uit
+     fireModel() (M.bestemming); hier wordt niets gerekend behalve de vergelijking zelf. */
+  const vrijNa=(groeitNaLbl && B.planKlaarK!=null) ? Math.max(B.groeitNa-B.groeit,0) : 0;
+  const vgl=vrijNa>0?fireVrijVergelijking(M, vrijNa, B.planKlaarK):[];
+  const toonBlok=(B.nu>0||B.res>0||B.doel>0||B.planKlaarK!=null);
+  const groeitRegel=toonBlok?`<div data-inlegvrij style="margin-top:12px;padding:11px 12px;background:var(--card2);border-radius:11px">
+    <div class="small" style="font-weight:700">${ICON('swap')} Waar je inleg heen gaat</div>
+    ${B.nu>0?`<div class="row" data-inlegnu style="margin-top:6px"><span class="small muted">Nu naar Plan en je reserveringen</span><span style="font-weight:800;font-size:var(--fs-md)">${euro0(B.nu)}/mnd</span></div>`:''}
+    <div class="row" style="margin-top:4px"><span class="small muted">Groeit mee vanaf nu</span><span style="font-weight:800;font-size:var(--fs-md);color:var(--teal)">${euro0(B.groeit)}/mnd</span></div>
+    ${(groeitNaLbl&&B.groeitNa!==B.groeit)?`<div class="row" data-groeitna style="margin-top:4px"><span class="small muted">Vanaf ${groeitNaLbl}, als Plan vol is</span><span style="font-weight:800;font-size:var(--fs-md);color:var(--teal)">${euro0(B.groeitNa)}/mnd</span></div>`
+      :(B.planKlaarK==null&&B.nu>0?`<div class="small mut2" data-plantothorizon style="font-size:var(--fs-xs);margin-top:4px">Plan verdeelt je inleg tot het eind van je horizon, dus er komt geen inleg vrij.</div>`:'')}
+    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">${euro0((Oz.bron==='surplus')?surplus:Oz.bedrag)} ${Oz.bron==='surplus'?'restsaldo':'opzij'} min wat er in de stappen van de inleg af gaat. Dit is het bedrag waarmee de projectie rekent.</div>
+    ${vgl.length?`<div data-vrijvgl style="margin-top:8px"><div class="small mut2" style="font-size:11.5px">Wat de ${euro0(vrijNa)}/mnd die dan vrijkomt zou doen:</div>${vgl.join('')}<div class="small mut2" style="font-size:10.5px;margin-top:6px">Twee mogelijkheden ter vergelijking, bij benadering. Jij kiest; dit is geen advies.</div></div>`:''}
+  </div>`:'';
   /* v212: klemt de per-bezitting inleg, dan moet je dat weten. Je hebt per bezitting meer
      ingesteld dan er van je restsaldo overblijft, en de app lost dat proportioneel op omdat een
      rangorde tussen je bezittingen nergens is ingesteld. Dat stil doen zou een voorrang claimen
@@ -11556,41 +11640,31 @@ function reisRestsaldo(M){
        <div class="row small" style="margin-top:5px"><span><span style="color:var(--green)">●</span> Sparen ${100-R.splitBeleg}%</span><span><span style="color:var(--purple)">●</span> Beleggen ${R.splitBeleg}%</span></div>
        <input type="range" min="0" max="100" step="10" value="${R.splitBeleg}" oninput="reisSplit(this.value)" style="width:100%;margin-top:6px;accent-color:var(--purple)"></div>`
     : '';
-  const note=`<div class="small mut2" style="font-size:10.5px;margin-top:8px">Zodra je noodfonds vol is${debts.length?' en je schuld is afgelost':''}, groeit je hele restsaldo mee. De groeikeuze stel je in bij "Rendement &amp; inflatie".</div>`;
-  return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}${opzijBlok}<div style="margin-top:6px">${stepBez}${step1}${stepRes}${stepDoel}${step2}</div>${groeitRegel}${bezitKlem}${bestKlem}${vlakRegel}${note}`, groei:`${growChips}${splitUI}` };
+  /* v350: hier stond "Zodra je noodfonds vol is, groeit je hele restsaldo mee." Sinds v348 is dat niet waar
+     (na de buffer gaan je doelen), en wat er wanneer vrijkomt staat nu in het blok Waar je inleg heen gaat. */
+  return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}${opzijBlok}<div style="margin-top:6px">${stepBez}${step1}${stepRes}${stepDoel}${step2}</div>${bezitKlem}${bestKlem}${vlakRegel}`, groei:`${growChips}${splitUI}`, vrij:groeitRegel };
 }
-// Spiegel (geen advies): toont dat er ruimte vrijkomt zodra het noodfonds vol is, en wat 'vrij'/mnd doet
-// bij twee bestemmingen (aflossen vs beleggen) — puur ter vergelijking, de keuze blijft bij de gebruiker.
-function fireFreedBlock(M){
-  const R=M.R, f=M.freed||{}; const vrij=+f.vrij||0;
-  if(vrij<=0 || !(M.restsaldo && M.restsaldo.nfDoel>0)) return '';
-  const nowY=M.nowY, volYear=f.volYear||nowY, future=volYear>nowY;
-  // beleggen: 'vrij'/mnd samengesteld van het vol-jaar tot pensioen, tegen je rendement
-  const Mmo=Math.max(M.targetYear-volYear,0)*12, rM=R.rend/100/12;
+/* v350: de vergelijking aflossen tegen beleggen, over het bedrag dat vrijkomt als Plan vol is en vanaf die
+   maand (k). Was fireFreedBlock(), dat dezelfde vergelijking deed over "vrij" vanaf het jaar waarin je noodfonds
+   vol was. De schuld wordt tot maand k vooruit gerekend met zijn eigen termijn, zodat de vergelijking begint bij
+   wat er dan nog staat. Bij benadering, en dat staat erbij. */
+function fireVrijVergelijking(M, vrij, k){
+  const R=M.R, rows=[];
+  const Mmo=Math.max((M.targetYear-M.nowY)*12-k,0), rM=R.rend/100/12;
   const belegFV = Mmo>0 ? (rM>0 ? vrij*((Math.pow(1+rM,Mmo)-1)/rM) : vrij*Mmo) : 0;
-  // aflossen: 'vrij'/mnd extra op je (gezamenlijke) schuld
-  const ds=(M.debtPay||[]).filter(d=>d.rest>0);
+  const ds=(M.debtPay||[]).filter(d=>d.rest>0).map(d=>{ let r=d.rest; const i=(+d.rente||0)/1200; for(let m=0;m<k&&r>0;m++){ r=Math.max(r*(1+i)-(+d.per||0),0); } return Object.assign({},d,{rest:r}); }).filter(d=>d.rest>0);
   const totRest=ds.reduce((s,d)=>s+d.rest,0), totPer=ds.reduce((s,d)=>s+(+d.per||0),0);
   const blendR = totRest>0 ? ds.reduce((s,d)=>s+d.rest*(+d.rente||0),0)/totRest : 0;
-  let aflosTxt='';
   if(totRest>0 && totPer>0){
     const baseMo=payoffMonths(totRest,totPer,blendR), fastMo=payoffMonths(totRest,totPer+vrij,blendR);
+    let t='je schuld daalt sneller';
     if(isFinite(baseMo)&&isFinite(fastMo)){ const moSaved=Math.max(baseMo-fastMo,0);
       const intSaved=Math.max(Math.round((totPer*baseMo-totRest)-((totPer+vrij)*fastMo-totRest)),0);
-      aflosTxt=`~${moSaved} mnd eerder schuldenvrij${intSaved>0?', ~'+euro0(intSaved)+' minder rente':''}`;
-    } else aflosTxt='je schuld daalt sneller';
+      t=`ongeveer ${moSaved} ${moSaved===1?'maand':'maanden'} eerder schuldenvrij${intSaved>0?', ongeveer '+euro0(intSaved)+' minder rente':''}`; }
+    rows.push(`<div class="row" data-vgl="aflossen" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="font-weight:600">Aflossen</span><span class="small mut2" style="text-align:right">${t}</span></div>`);
   }
-  const rows=[];
-  if(aflosTxt) rows.push(`<div class="row" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="font-weight:600">Aflossen</span><span class="small mut2" style="text-align:right">${aflosTxt}</span></div>`);
-  if(belegFV>0) rows.push(`<div class="row" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="font-weight:600">Beleggen</span><span class="small mut2" style="text-align:right">tegen ${(''+R.rend).replace('.',',')}% tot ${M.targetYear}: +${euro0(belegFV)}</span></div>`);
-  const lead = future
-    ? `Rond ${volYear} is je noodfonds vol. Vanaf dan komt <b>${euro0(vrij)}/mnd</b> vrij voor een volgende bestemming.`
-    : `Je noodfonds is vol, dus <b>${euro0(vrij)}/mnd</b> is vrij voor een volgende bestemming.`;
-  return `<div style="margin-top:12px;padding:11px 12px;background:var(--card2);border-radius:11px">
-    <div class="small" style="font-weight:700">${ICON('swap')} Ruimte die vrijkomt</div>
-    <div class="small mut2" style="font-size:11.5px;margin-top:3px">${lead}</div>
-    ${rows.length?`<div style="margin-top:6px">${rows.join('')}</div><div class="small mut2" style="font-size:10.5px;margin-top:6px">Twee mogelijkheden ter vergelijking, bij benadering. Jij kiest; dit is geen advies.</div>`:''}
-  </div>`;
+  if(belegFV>0) rows.push(`<div class="row" data-vgl="beleggen" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small" style="font-weight:600">Beleggen</span><span class="small mut2" style="text-align:right">tegen ${numUit(R.rend)}% tot ${M.targetYear}: +${euro0(belegFV)}</span></div>`);
+  return rows;
 }
 /* v185: deze regel stond in het instellingenpaneel Vermogensreis, als doorgerekende uitkomst
    onder het invoerveld 'Gewenst per maand'. Anders dan het FIRE-getal (dat als mijlpaal met bedrag
@@ -11611,10 +11685,10 @@ function renderFire(){
   // scherm-body (ongewijzigd t.o.v. de oude uitgeklapte kaart; alleen de inklap-laag is weg)
   const tg=(k,l)=>`<span onclick="reisToggle('${k}')" style="font-size:var(--fs-xs);font-weight:600;border:1px solid ${R[k]?'var(--teal)':'var(--line)'};background:${R[k]?'color-mix(in srgb,var(--accent) 12%,transparent)':'var(--card2)'};color:${R[k]?'var(--teal)':'var(--mut)'};border-radius:16px;padding:4px 11px;cursor:pointer">${l}</span>`;
   const zc=(v,l)=>`<span onclick="reisZoom('${v}')" style="font-size:var(--fs-xs);font-weight:600;border:1px solid ${R.chartZoom===v?'var(--teal)':'var(--line)'};background:${R.chartZoom===v?'color-mix(in srgb,var(--accent) 12%,transparent)':'var(--card2)'};color:${R.chartZoom===v?'var(--teal)':'var(--mut)'};border-radius:16px;padding:4px 11px;cursor:pointer">${l}</span>`;
-  const list=M.ms.map(m=>{ const yrtxt=m.reached?'<span style="color:var(--green)">behaald</span>':(m.yr!=null?m.yr:('na '+M.targetYear));
+  const list=M.ms.map(m=>{ const yrtxt=m.reached?'<span style="color:var(--green)">behaald</span>':(m.yr!=null?(m.maand?`<span data-msmaand="${esc(m.key)}">${esc(m.maand)}</span>`:m.yr):('na '+M.targetYear));   // v350: een schuld draagt zijn maand, dezelfde als op Vermogen
     const rm=m.custom?`<span onclick="reisRemoveCustom('${m.key}')" style="color:var(--mut2);cursor:pointer;font-weight:700;margin-left:8px">×</span>`:'';
     const have=(m.key==='nood'?(M.restsaldo.nfCur||0):curNW);   // noodfonds op spaargeld, rest op netto vermogen (zelfde teller als reached)
-    return `<div class="row" style="gap:10px;padding:9px 0;border-top:1px solid var(--line)">${reisListIcon(m.icon,m.col)}<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px">${esc(m.nm)}</div><div class="small" style="color:var(--mut2)">${m.sub}${(m.target!=null&&!m.reached&&m.target>have)?' · nog '+euro0(m.target-have):''}</div></div><div style="font-weight:800;font-size:var(--fs-sm);text-align:right;white-space:nowrap">${yrtxt}</div>${rm}</div>`; }).join('');
+    return `<div class="row" style="gap:10px;padding:9px 0;border-top:1px solid var(--line)">${reisListIcon(m.icon,m.col)}<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px">${esc(m.nm)}</div><div class="small" style="color:var(--mut2)"${m.route?` data-msroute="${esc(m.key)}"`:''}>${m.sub}${(m.target!=null&&!m.reached&&m.target>have)?' · nog '+euro0(m.target-have):''}${m.route?` · <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="${m.route}">aanpassen ›</span>`:''}</div></div><div style="font-weight:800;font-size:var(--fs-sm);text-align:right;white-space:nowrap">${yrtxt}</div>${rm}</div>`; }).join('');
   // mobiel-veilige invoerrij: label mag krimpen, invoerblok begrensd op 128px (past altijd binnen de kaart)
   const fl=(lab,attrs,suffix)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lab}</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;flex:0 0 128px;max-width:128px"><span class="small muted" style="flex-shrink:0;font-size:12px">€</span><input ${attrs} style="flex:1;min-width:0;width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;outline:none">${suffix?`<span class="small muted" style="flex-shrink:0;font-size:var(--fs-xs)">${suffix}</span>`:''}</div></div>`;
   const nl=(lab,attrs,suffix)=>`<div class="row" style="gap:8px;margin-top:8px"><label class="small muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lab}</label><div style="display:flex;align-items:center;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:4px 9px;flex:0 0 128px;max-width:128px"><input ${attrs} style="flex:1;min-width:0;width:100%;background:none;border:0;color:var(--txt);font-size:var(--fs-md);font-weight:700;text-align:right;outline:none">${suffix?`<span class="small muted" style="flex-shrink:0;font-size:var(--fs-xs)">${suffix}</span>`:''}</div></div>`;
@@ -11658,7 +11732,7 @@ function renderFire(){
     ${reisHaalbaarheid(M)}
     ${M.FIRE>0?`<div class="row" style="justify-content:space-between;align-items:center;margin:14px 2px 0;cursor:pointer" onclick="openOnttrekking()"><span class="hlabel" style="margin:0">Wat kost een onttrekking?</span><span style="color:var(--teal);font-size:16px">›</span></div>
     <div class="small mut2" style="font-size:var(--fs-xs);margin:2px 2px 0">Geld uit je belegde laag, uitgedrukt in maanden op je horizon.</div>`:''}
-    ${fireFreedBlock(M)}
+    ${rs.vrij||''}
     <div class="row" style="justify-content:space-between;align-items:center;margin:14px 2px 0;cursor:pointer" onclick="reisMsToggle()"><span class="hlabel" style="margin:0">Mijlpalen</span><span style="color:var(--mut2);font-size:16px">${msOpen?'▲':'›'}</span></div>
     ${msOpen?`${list}
     ${reisInkomensdoelRegel(M)}
@@ -11721,47 +11795,44 @@ function renderVermogen(){
   const _nwBar=(_nwBez<=0&&_nwSch<=0)?'' : (_nwUnder
     ? `<div style="height:16px;border-radius:9px;overflow:hidden;margin:12px 0 8px;background:var(--red)"></div><div class="small muted">${_dot('var(--red)')}Je schuld ${euro0(_nwSch)} is groter dan je bezit ${euro0(_nwBez)}. Aflossen brengt dit weer boven nul.</div>`
     : `<div style="height:16px;border-radius:9px;overflow:hidden;display:flex;margin:12px 0 8px;background:var(--card2)"><div style="width:${_nwEig}%;background:var(--teal)"></div><div style="width:${_nwSchP}%;background:var(--amber)"></div></div><div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><span>${_dot('var(--teal)')}Eigen deel <b>${euro0(w.netto)}</b>${_nwBez>0?' · '+_nwEig+'%':''}</span>${_nwSch>0?`<span>${_dot('var(--amber)')}Schuld <b>${euro0(_nwSch)}</b> · ${_nwSchP}%</span>`:''}</div>`);
-  // vermogensopbouw-verloop (optie 2): cumulatief overschto (inkomen − uitgaven), verankerd op huidig netto vermogen
+  /* v350: DE OPBOUW IS DE SOM VAN WAT ER PER MAAND BINNENKWAM MIN WAT ERUIT GING, over de laatste twaalf
+     maanden (of minder als je gegevens korter zijn), en die som is EEN getal met twee lezers: de contextregel
+     onder het netto vermogen en de kop van de grafiek. Tot v349 telde de kop het verschil tussen het eerste en
+     het laatste punt, en dat liet de eerste maand weg: twaalf maanden in het label, elf in het getal.
+     De lijn begint nu een punt eerder, bij de stand VOOR die maanden.
+     v259: incomeAlles en niet income. Deze lijn telt GELD en geen gedrag: een onregelmatige uitkering hoort er
+     volledig in, want hij zit ook in je vermogen. */
   let _nwTrend='', _tDelta=null, _tMnd=0;
   try{ const _win=months().slice(-12);
     if(_win.length>=3){
-      /* v259: incomeAlles en niet income. Deze lijn telt GELD en geen gedrag: hij is de cumulatieve
-         optelling van wat er binnenkwam min wat eruit ging, verankerd op je netto vermogen. Een
-         onregelmatige uitkering hoort daar volledig in, want hij zit ook in je vermogen. Las hij
-         income, dan zou de lijn precies het gevlagde bedrag zakken terwijl het geld er staat. Dit
-         is de enige lezer van de vier waar de vlag NIET doorwerkt. */
-      let _acc=0; const _ser=_win.map(mm=>{ const t=totals(mm); _acc+=((t.incomeAlles||0)-(t.spend||0)); return _acc; });
+      let _acc=0; const _ser=[0].concat(_win.map(mm=>{ const t=totals(mm); _acc+=((t.incomeAlles||0)-(t.spend||0)); return _acc; }));
       const _off=w.netto-_ser[_ser.length-1]; for(let i=0;i<_ser.length;i++) _ser[i]+=_off;
-      const _delta=Math.round(_ser[_ser.length-1]-_ser[0]); _tDelta=_delta; _tMnd=_win.length;
+      const _delta=Math.round(_acc); _tDelta=_delta; _tMnd=_win.length;
       const _W=320,_H=64,_x0=2,_x1=_W-2,_yT=8,_yB=_H-4; const _mn=Math.min(..._ser),_mx=Math.max(..._ser),_rng=(_mx-_mn)||1;
       const _X=i=>_x0+(i/(_ser.length-1))*(_x1-_x0), _Y=v=>_yB-((v-_mn)/_rng)*(_yB-_yT);
       const _P=_ser.map((v,i)=>_X(i).toFixed(1)+','+_Y(v).toFixed(1)).join(' ');
       const _col=_delta>=0?'var(--accent)':'#f87171';
-      _nwTrend=`<div style="margin-top:13px;padding-top:11px;border-top:1px solid var(--line)"><div class="row" style="margin-bottom:4px"><span class="small" style="font-weight:700">Opbouw · ${_win.length} mnd</span><span class="small" style="font-weight:700;color:${_col}">${_delta>=0?'+':''}${euro0(_delta)}</span></div><svg viewBox="0 0 ${_W} ${_H}" width="100%" height="${_H}"><defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${_delta>=0?'color-mix(in srgb,var(--accent) 28%,transparent)':'rgba(248,113,113,.28)'}"/><stop offset="1" stop-color="color-mix(in srgb,var(--accent) 0%,transparent)"/></linearGradient></defs><polygon points="${_X(0).toFixed(1)},${_yB} ${_P} ${_X(_ser.length-1).toFixed(1)},${_yB}" fill="url(#nwg)"/><polyline points="${_P}" fill="none" stroke="${_col}" stroke-width="2" stroke-linejoin="round"/><circle cx="${_X(_ser.length-1).toFixed(1)}" cy="${_Y(_ser[_ser.length-1]).toFixed(1)}" r="3" fill="${_col}"/></svg><div class="small" style="font-weight:600;margin-top:6px;color:${_col}">${_delta>=0?'Wat je minder uitgeeft, blijft hier staan als vermogen.':'De laatste maanden ging er meer uit dan er binnenkwam, dus je vermogen daalde.'}</div><div class="small mut2" style="font-size:10.5px;margin-top:2px">o.b.v. inkomen − uitgaven · koersen van beleggingen niet meegerekend</div></div>`;
+      _nwTrend=`<div style="margin-top:13px;padding-top:11px;border-top:1px solid var(--line)"><div class="row" style="margin-bottom:4px"><span class="small" style="font-weight:700">Opbouw · ${_win.length} mnd</span><span class="small" data-opbouwkop style="font-weight:700;color:${_col}">${_delta>=0?'+':''}${euro0(_delta)}</span></div><svg viewBox="0 0 ${_W} ${_H}" width="100%" height="${_H}"><defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${_delta>=0?'color-mix(in srgb,var(--accent) 28%,transparent)':'rgba(248,113,113,.28)'}"/><stop offset="1" stop-color="color-mix(in srgb,var(--accent) 0%,transparent)"/></linearGradient></defs><polygon points="${_X(0).toFixed(1)},${_yB} ${_P} ${_X(_ser.length-1).toFixed(1)},${_yB}" fill="url(#nwg)"/><polyline points="${_P}" fill="none" stroke="${_col}" stroke-width="2" stroke-linejoin="round"/><circle cx="${_X(_ser.length-1).toFixed(1)}" cy="${_Y(_ser[_ser.length-1]).toFixed(1)}" r="3" fill="${_col}"/></svg><div class="small mut2" style="font-size:10.5px;margin-top:2px">inkomen min uitgaven per maand, de lopende maand meegeteld · koersen van beleggingen niet meegerekend</div></div>`;
     }
   }catch(_){}
-  // Gewone taal bovenaan: dezelfde getallen als de kaart eronder, in één zin. Geen nieuw model —
-  // netto vermogen uit netWorth() en de opbouw uit precies de reeks die de grafiek al tekent.
+  /* v350: BOVENAAN HET NETTO VERMOGEN MET EEN REGEL CONTEXT: je grootste schuld en wat er in die maanden is
+     opgebouwd. Een feit, geen geruststelling. Tot v349 stond er een zin boven de kaart die hetzelfde getal
+     nog eens noemde ("Je netto vermogen is ...") en onder de grafiek "Wat je minder uitgeeft, blijft hier
+     staan als vermogen."; die twee zijn weg. Zonder saldo en zonder invoer blijft de regel die om je saldo
+     vraagt, want dan is er geen getal. */
   const samenvatting=(()=>{
-    const kort=isMode('rustig'); const bd=v=>`<b style="color:var(--txt)">${v}</b>`;
     let tb=null; try{ tb=totalBalance(); }catch(_){}
     const onbekend = tb && tb.known===0 && !(SET.assets||[]).length && !(SET.debts||[]).length;
-    if(onbekend) return `<div class="small muted" id="vermSam" style="margin:0 2px 12px;line-height:1.5">Je saldo staat er nog niet bij, dus je netto vermogen kennen we nog niet. <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openSaldoInvoer()">Saldo invullen ›</span></div>`;
-    let z=`Je netto vermogen is ${bd(euro0(w.netto))}.`;
-    if(!kort && _tDelta!=null && _tMnd>0){
-      const perMnd=Math.round(Math.abs(_tDelta)/_tMnd);
-      z += _tDelta>=0
-        ? ` De laatste ${_tMnd} maanden kwam daar ${bd(euro0(_tDelta))} bij, gemiddeld zo'n ${bd(euro0(perMnd))} per maand.`
-        : ` De laatste ${_tMnd} maanden ging daar ${bd(euro0(Math.abs(_tDelta)))} vanaf, gemiddeld zo'n ${bd(euro0(perMnd))} per maand.`;
-    } else if(!kort){
-      z += ` Na een paar maanden zie je hier ook of het groeit.`;
-    }
-    return `<div class="small muted" id="vermSam" style="margin:0 2px 12px;line-height:1.5">${z}</div>`;
+    return onbekend ? `<div class="small muted" id="vermSam" style="margin:0 2px 12px;line-height:1.5">Je saldo staat er nog niet bij, dus je netto vermogen kennen we nog niet. <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openSaldoInvoer()">Saldo invullen ›</span></div>` : '';
   })();
+  const _grootste=(SET.debts||[]).map(d=>({naam:d.naam||'Schuld', rest:schuldRestNu(d)})).filter(x=>x.rest>0).sort((a,b)=>b.rest-a.rest)[0]||null;
+  const _ctx=[];
+  _ctx.push(_grootste?`grootste schuld ${esc(_grootste.naam)} ${euro0(_grootste.rest)}`:'geen schulden');
+  if(_tDelta!=null) _ctx.push(_tDelta>=0?`${euro0(_tDelta)} opgebouwd in ${_tMnd} maanden`:`${euro0(-_tDelta)} afgenomen in ${_tMnd} maanden`);
   const nwCard=`<div class="card" style="background:linear-gradient(165deg,color-mix(in srgb,var(--accent) 6%,transparent),transparent)">
     <div class="row" style="justify-content:space-between"><span class="small muted">Netto vermogen</span>${_nwChip}</div>
     <div style="font-size:30px;font-weight:800;letter-spacing:-.5px;color:${_nwUnder?'var(--red)':'var(--teal)'};margin:2px 0 0">${euro0(w.netto)}</div>
-    ${(_nwBez>0)?`<div class="small muted" style="margin-top:2px">van ${euro0(_nwBez)} aan bezittingen</div>`:''}
+    <div class="small muted" data-vermctx style="margin-top:2px">${_ctx.join(' · ')}</div>
     ${_nwBar}
     ${_nwTrend}
   </div>`;
@@ -15348,6 +15419,30 @@ function schuldStand(d){
   return {basis, op, betalingen:bet, afgelost, rente, stand, vraag:null, zonderRente:!(jr>0), gekoppeld:tx.length};
 }
 function schuldRestNu(d){ try{ return Math.round(schuldStand(d).stand); }catch(_){ return Math.max(+(d&&d.rest)||0,0); } }
+/* v350: DE DATUM WAAROP EEN SCHULD AF IS, OP EEN PLEK. Gemeten voor deze ronde: de rij op Vermogen zei
+   "nov 2035" en de mijlpaal en de grafiek "2036", bij dezelfde restschuld, termijn en rente. Beide lazen
+   payoffMonths(), maar fireModel() maakte er nowY + ceil(maanden/12) van: hele jaren vanaf vandaag, en dan
+   valt elke datum na de huidige kalendermaand een jaar te laat (oktober plus 109 maanden is november 2035,
+   niet 2036). De kaart rekende op de kalender, en die klopt. Alles leest nu deze functie: de rij, de sheet,
+   de mijlpalen en de marker in de grafiek (via fireInputs()).
+   EEN GEKOPPELDE SCHULD WEET OF DE BETALING VAN DEZE MAAND AL GEWEEST IS (v334). Is de stand ingevuld voor
+   deze maand en staat er deze maand nog geen gekoppelde betaling, dan valt de eerste van de resterende
+   termijnen DEZE maand en de laatste een maand eerder dan de telling vanaf volgende maand. Zonder koppeling
+   weet de app dat niet en telt hij vanaf volgende maand, zoals tot nu.
+   `extra` is wat Plan er per maand bovenop zet (een aflos-item); de schuld zelf leest nul. */
+function schuldVrij(d, extra){
+  let S=null; try{ S=schuldStand(d); }catch(_){}
+  const rest=Math.round(S?S.stand:Math.max(+(d&&d.rest)||0,0)), per=(+(d&&d.perMaand)||0)+Math.max(+extra||0,0), jr=+(d&&d.rente)||0;
+  if(rest<=0) return {af:true, rest:0, per, jr, mo:0, k:null, ym:null, label:'', jaar:null};
+  const mo=payoffMonths(rest, per, jr);
+  if(!(per>0) || mo===Infinity) return {af:false, rest, per, jr, mo:(per>0?Infinity:null), k:null, ym:null, label:'', jaar:null};
+  const cur=thisYM();
+  const open=!!(S && S.gekoppeld>0 && S.op && String(S.op).slice(0,7)<cur && !S.betalingen.some(b=>String(b.datum).slice(0,7)===cur));
+  const k=Math.max(mo-(open?1:0),0);
+  const t=new Date(); const dt=new Date(t.getFullYear(), t.getMonth()+k, 1);
+  const ym=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
+  return {af:false, rest, per, jr, mo, k, ym, label:MNAMES[dt.getMonth()]+' '+dt.getFullYear(), jaar:dt.getFullYear(), dezeMaandOpen:open};
+}
 function schuldStandRegel(S){
   return `${euro0(S.basis)} op ${esc(bezitDatumLabel(S.op))} − ${euro0(S.afgelost)} afgelost sindsdien = ${euro0(S.stand)} · bij benadering${S.zonderRente?' · zonder rente gerekend':''}`;
 }

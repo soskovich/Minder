@@ -184,6 +184,8 @@ test.describe('b · A3: alleen wat opzij ging groeit, de rest staat vlak', () =>
 
 test.describe('c · het scherm en het diagnoseblok', () => {
   const tekst = (page) => page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = reisRestsaldo(reisModel()).inleg; return d.textContent.replace(/\s+/g, ' '); });
+  // v350: wat er groeit en vanaf wanneer staat in het blok "Waar je inleg heen gaat" (reisRestsaldo().vrij)
+  const blok = (page) => page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = reisRestsaldo(reisModel()).vrij || ''; return d.textContent.replace(/\s+/g, ' '); });
   test('de waterval zegt wat opzij ging en wat vlak blijft, met de maanden erbij', async ({ page }) => {
     await boot(page, { res: [PREMIE] });
     // invoer: Plan neemt in de eerste maanden alles wat opzij ging, dus voor de premie blijft niets over
@@ -193,8 +195,14 @@ test.describe('c · het scherm en het diagnoseblok', () => {
     expect(t).toMatch(/gemiddeld over \w+ t\/m \w+/);
     expect(t).toMatch(/Blijft vlak staan\s*€1\.366\/mnd/);
     // na de doelen groeit wat opzij ging, en de regel noemt de maand waarin Plan vol is
-    expect(t).toMatch(/Groeit mee vanaf nu\s*€0\/mnd\s*Vanaf \w+ \d{4}, als Plan vol is\s*€2\.100\/mnd/);
-    expect(t).toContain('€2.200 opzij min wat er hierboven af gaat');
+    const v = await blok(page);
+    expect(v).toMatch(/Nu naar Plan en je reserveringen\s*€2\.200\/mnd\s*Groeit mee vanaf nu\s*€0\/mnd\s*Vanaf \w+ \d{4}, als Plan vol is\s*€2\.100\/mnd/);
+    expect(v).toContain('€2.200 opzij min wat er in de stappen van de inleg af gaat');
+    // pas daarna de vergelijking, over wat er dan vrijkomt, en geen "vrij" zolang Plan verdeelt
+    expect(v).toMatch(/als Plan vol is.*Wat de €2\.100\/mnd die dan vrijkomt zou doen/);
+    expect(v).not.toContain('vrij voor een volgende bestemming');
+    // verplaatst, niet gekopieerd
+    expect(t).not.toContain('Groeit mee vanaf nu');
     // de reserveringen staan los van Plan (v128): dat Plan alles opzij gezette neemt is geen klem op je doelen
     expect(t).not.toContain('passen niet');
   });
@@ -205,17 +213,20 @@ test.describe('c · het scherm en het diagnoseblok', () => {
     const r = await page.evaluate(() => {
       const M = reisModel(), B = M.bestemming, k = B.planKlaarK;
       const laatste = Math.max(...Object.values(M.sim.vol));
-      const html = (b) => { const d = document.createElement('div'); d.innerHTML = reisRestsaldo(Object.assign({}, M, { bestemming: Object.assign({}, B, b) })).inleg; return d; };
+      const html = (b) => { const d = document.createElement('div'); d.innerHTML = reisRestsaldo(Object.assign({}, M, { bestemming: Object.assign({}, B, b) })).vrij || ''; return d; };
       const regel = (d) => { const e = d.querySelector('[data-groeitna]'); return e ? e.textContent.replace(/\s+/g, ' ').trim() : null; };
       return { k, laatste, plan: (planKlaarMaand().laatste || {}).maand, lbl: etaDatum(k), echt: regel(html({})),
-        leeg: [null, 0, -1, NaN, undefined].map((x) => { const d = html({ planKlaarK: x }); return { r: regel(d), komma: /Vanaf\s*,/.test(d.textContent) }; }) };
+        leeg: [null, 0, -1, NaN, undefined].map((x) => { const d = html({ planKlaarK: x }); return { r: regel(d), komma: /Vanaf\s*,/.test(d.textContent), vgl: !!d.querySelector('[data-vrijvgl]') }; }),
+        // v350: zolang Plan tot het eind verdeelt staat er geen bedrag vrij, en het blok zegt waarom
+        geenVrij: (() => { const d = html({ planKlaarK: null }); return { vgl: !!d.querySelector('[data-vrijvgl]'), uitleg: !!d.querySelector('[data-plantothorizon]'), vrijTekst: /vrijkomt/.test(d.textContent) }; })() };
     });
     // de maand waarin het laatste doel vol raakt, in de projectie en op Plan zelf (planKlaarMaand)
     expect(r.k).toBe(r.laatste);
     expect(r.k).toBe(r.plan);
     expect(r.lbl).toMatch(/^\w+ \d{4}$/);
     expect(r.echt).toBe(`Vanaf ${r.lbl}, als Plan vol is€2.100/mnd`);   // textContent: label en bedrag zijn twee spans
-    for (const x of r.leeg) { expect(x.r).toBeNull(); expect(x.komma).toBe(false); }
+    for (const x of r.leeg) { expect(x.r).toBeNull(); expect(x.komma).toBe(false); expect(x.vgl).toBe(false); }
+    expect(r.geenVrij).toEqual({ vgl: false, uitleg: true, vrijTekst: false });
   });
 
   for (const w of [360, 390]) {
@@ -229,6 +240,20 @@ test.describe('c · het scherm en het diagnoseblok', () => {
       expect(m.w).toBeLessThanOrEqual(m.cw);
       expect(m.r).toBeLessThanOrEqual(w);
       console.log(`opzij-blok ${w}px: ${m.h}px`);
+    });
+    test(`v350: het blok Waar je inleg heen gaat staat op de kaart en past op ${w}px`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: 800 });
+      await boot(page, { set: { reis: { birth: 1990 } } });
+      await page.evaluate(() => { go('fire'); });
+      const el = page.locator('#s-fire [data-inlegvrij]');
+      await expect(el).toHaveCount(1);
+      await el.scrollIntoViewIfNeeded();
+      const m = await el.evaluate((e) => ({ w: e.scrollWidth, cw: e.clientWidth, h: Math.round(e.getBoundingClientRect().height), r: e.getBoundingClientRect().right,
+        oud: document.querySelector('#s-fire').innerText.includes('Ruimte die vrijkomt') }));
+      expect(m.w).toBeLessThanOrEqual(m.cw);
+      expect(m.r).toBeLessThanOrEqual(w);
+      expect(m.oud).toBe(false);
+      console.log(`inleg-blok ${w}px: ${m.h}px`);
     });
   }
 

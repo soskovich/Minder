@@ -88,6 +88,13 @@ const waterval = (page) => page.evaluate(() => {
   return d.textContent.replace(/\s+/g, ' ').trim();
 });
 
+/* v350: de uitkomst (wat er groeit, en vanaf wanneer) staat niet meer onder de waterval maar in het blok
+   "Waar je inleg heen gaat" op de kaart (reisRestsaldo().vrij). */
+const vrijBlok = (page) => page.evaluate(() => {
+  const d = document.createElement('div'); d.innerHTML = reisRestsaldo(reisModel()).vrij || '';
+  return d.textContent.replace(/\s+/g, ' ').trim();
+});
+
 test.describe('a - de bedragen komen uit de bestaande bronnen', () => {
   // v346: niet meer de maandlast van dekking(), maar per post bedrag door interval (resPosten()).
   test('reserveringen zijn de som van bedrag door interval', async ({ page }) => {
@@ -225,9 +232,12 @@ test.describe('d - de waterval toont de stappen', () => {
     const m = await model(page);
     expect(t).toContain('Reserveringen');
     expect(t).toContain('Spaardoelen');
-    expect(t).toContain('Groeit mee vanaf nu');
     expect(t).toContain('Nieuwe auto');
-    expect(t).toContain(m.best.groeit.toLocaleString('nl-NL'));
+    // v350: de slotregel is verhuisd naar het blok, en staat niet meer onder de waterval
+    expect(t).not.toContain('Groeit mee vanaf nu');
+    const v = await vrijBlok(page);
+    expect(v).toContain('Groeit mee vanaf nu');
+    expect(v).toContain(m.best.groeit.toLocaleString('nl-NL'));
   });
 
   test('geen reserveringen en geen doelen: geen stap en geen slotregel', async ({ page }) => {
@@ -237,6 +247,7 @@ test.describe('d - de waterval toont de stappen', () => {
     expect(t).not.toContain('Spaardoelen');
     expect(t).not.toContain('Groeit mee vanaf nu');
     expect(t).toContain('Noodfonds');
+    expect(await vrijBlok(page)).not.toContain('Nu naar Plan en je reserveringen');
   });
 
   test('bij zelf invullen blijft de projectie ongemoeid', async ({ page }) => {
@@ -246,6 +257,7 @@ test.describe('d - de waterval toont de stappen', () => {
     expect(m.best.doel).toBe(0);
     expect(m.best.groeit).toBe(700);
     expect(await waterval(page)).not.toContain('Groeit mee vanaf nu');
+    expect(await vrijBlok(page)).toBe('');
   });
 });
 

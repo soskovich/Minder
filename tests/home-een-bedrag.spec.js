@@ -66,7 +66,8 @@ test.describe('a · één bedrag per vraag', () => {
       debts: [{ id: 'd1', naam: 'Lening', rest: 3000 }] }));
     const d = await page.evaluate(() => { const e = document.createElement('div');
       e.innerHTML = vermogenCard(); return e.innerText.replace(/\s+/g, ' '); });
-    expect(d).toContain('1 bezitting');
+    // v350: de telling is de rijen van Vermogen, en daar staan je rekeningen als eerste rij onder Bezittingen
+    expect(d).toContain('2 bezittingen');
     expect(d).toContain('1 schuld');
     expect(d).not.toMatch(/€/);
     // en het saldo op Home is nog steeds één keer het saldo, niet het vermogen
