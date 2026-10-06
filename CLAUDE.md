@@ -129,6 +129,8 @@ genoemde versietag.)*
   HET SCHERM: de stap "Reserveringen" in de restsaldo-waterval noemt het structurele bedrag per maand en
   daaronder de eenmalige posten met hun maand (`data-resproj`, hooguit twee bij naam), en hij staat er ook
   als er alleen een eenmalige post is. "Groeit mee vanaf nu" is de maand zonder eenmalige post.
+  GEMETEN: de stap is 70px zonder eenmalige post en 104px op 360 en 87px op 390 met de boete erbij, zonder
+  overloop.
   GEMETEN, ALLEEN OP EEN FIXTURE (de gegevens van het toestel staan alleen daar): met de boete van EUR 299
   eenmalig volgende maand, een inleg van EUR 2.200 en twee doelen ligt het vermogen in de projectie na een
   jaar EUR 31 hoger, na vijf jaar EUR 1.591, na tien EUR 7.245 en in 2057 EUR 97.968. Met een jaarpremie van
