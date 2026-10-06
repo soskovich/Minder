@@ -257,19 +257,14 @@ test.describe('e · het reserveringenblok', () => {
   test('de drie zinnen zijn weg, de feiten staan er nog', async ({ page }) => {
     await boot(page, { set: { resAcc: SPAAR, reserveringen: [
       { id: 'r1', naam: 'Waterschap', bedrag: 900, intervalM: 12, vervalmaand: overMnd(4) }] } });
-    const t = await page.evaluate(() => {
-      const d = document.createElement('div'); d.innerHTML = resDekkingCard();
-      return d.innerText.replace(/\s+/g, ' ');
-    });
+    // v344: de kaart op Plan is weg; de lijst staat in de sheet op Grip
+    const t = await page.evaluate(() => { openReserveringen(); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' '); });
     expect(t).not.toContain('staat los van je plan');
     expect(t).not.toContain('concurreert niet met je spaardoelen');
     expect(t).not.toContain('lees je op Grip');
     expect(t).not.toContain('Deze inleg');
     // en wat er blijft
-    expect(t).toContain('Kosten die niet elke maand vallen. Dit staat los van je spaarinleg.');
     expect(t).toContain('Waterschap');
-    expect(t).toMatch(/1 post/);
-    expect(t).toMatch(/gemeten op/);
-    expect(t).toMatch(/Blijft over|Tekort/);
+    expect(t).toMatch(/Staat er nu/);
   });
 });

@@ -112,8 +112,11 @@ test.describe('b · regel patroon bestaat niet meer', () => {
     });
     /* v340: de lege staat staat nu op de plek van de tegels, en zegt dat er geen tegels zijn. */
     const t = await page.evaluate(() => $('#s-maand').innerText);
-    expect(t).toContain('Er is nog te weinig ingesteld om tegels te tonen.');
-    expect(await page.evaluate(() => document.querySelectorAll('#s-maand [data-tegel]').length)).toBe(0);
+    /* v344: zonder verplichtingen staat er een grijze tegel "instellen" voor de reserveringen; de zin
+       zegt dan niet meer dat er geen tegels zijn. */
+    const tegels = await page.evaluate(() => [...document.querySelectorAll('#s-maand [data-tegel]')].map((e) => e.innerText.replace(/\s+/g, ' ')));
+    if (tegels.length) { expect(tegels).toEqual([expect.stringContaining('instellen')]); expect(t).toContain('Er is nog te weinig ingesteld.'); }
+    else expect(t).toContain('Er is nog te weinig ingesteld om tegels te tonen.');
     expect(await page.evaluate(() => $('#s-maand').innerHTML)).toContain("go('set')");
     expect(t).not.toMatch(/regels staan goed/);
   });

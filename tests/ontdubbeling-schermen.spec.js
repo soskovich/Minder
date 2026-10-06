@@ -258,23 +258,17 @@ test.describe('e · de over-budget-observatie heeft één detectie', () => {
 });
 
 test.describe('f · dekking wordt op één scherm beoordeeld', () => {
-  test('Maand oordeelt, Plan beheert', async ({ page }) => {
+  // v344: de kaart op Plan is weg; het oordeel staat op Grip, en Plan draagt geen reserveringen
+  test('Grip oordeelt, Plan draagt geen reserveringen', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => ({
       regel: (maandRegels() || []).find((x) => x.key === 'dekking'),
       zin: dekkingTekst(dekking(12)),
-      kaart: (function () { const d = document.createElement('div');
-        d.innerHTML = resDekkingCard(); return d.innerText.replace(/\s+/g, ' '); })(),
+      plan: (go('vooruit'), document.querySelector('#s-vooruit').innerText),
     }));
-    expect(r.regel.gevolg).toBe(r.zin);                  // het oordeel staat op Maand
-    expect(r.kaart).not.toContain(r.zin);                // en niet op Plan
-    expect(r.kaart).toMatch(/\d+ post/);                 // Plan houdt de feiten
-    /* v243: de verwijzende zin was één weergave van de ontdubbeling, niet de ontdubbeling zelf. Die
-       is dat het OORDEEL (dekkingTekst: gedekt tot, het gat, wat je per maand nodig hebt) op Grip
-       staat en niet op Plan, terwijl Plan de posten en het verschil draagt. Dat toetsen we nu
-       rechtstreeks in plaats van via een zin die de kaart sinds v242 niet meer nodig heeft. */
-    expect(r.kaart).not.toMatch(/gedekt tot|per maand nodig/);
-    expect(r.zin).toMatch(/gedekt tot|per maand nodig|nog geen verplichtingen|niets aan/i);
+    expect(r.regel.gevolg).toBe(r.zin);
+    expect(r.plan).not.toContain('Reserveringen');
+    expect(r.plan).not.toContain(r.zin);
   });
 });
 
@@ -349,19 +343,4 @@ test.describe('i · de terugval claimt geen leegte die er niet is', () => {
      nog dat er geen tegels zijn, en de structurele signalen staan los daarvan onder Let op. */
 });
 
-test.describe('j · het bedrag staat bij het oordeel, niet op twee schermen', () => {
-  test('de Plan-kaart noemt het bedrag per maand niet meer', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => ({
-      per: dekking(12).benodigdPerMaand,
-      kaart: (function () { const d = document.createElement('div');
-        d.innerHTML = resDekkingCard(); return d.innerText.replace(/\s+/g, ' '); })(),
-      regel: ((maandRegels() || []).find((x) => x.key === 'dekking') || {}).gevolg || '',
-    }));
-    test.skip(!(r.per > 0), 'deze fixture vraagt niets per maand');
-    const bedrag = String(r.per).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    expect(r.regel).toContain(bedrag);          // het oordeel op Maand noemt het
-    expect(r.kaart).not.toContain(bedrag);      // de kaart op Plan niet
-    expect(r.kaart).toMatch(/\d+ post/);        // die houdt de feiten over je lijst
-  });
-});
+/* v344: j toetste dat de kaart op Plan het bedrag per maand niet noemde; die kaart is weg. */

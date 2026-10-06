@@ -591,9 +591,10 @@ test.describe('g · de hoogte op het toestel', () => {
      DE REGEL STAAT ER OOK OP NUL, en dat is waarom hij in deze fixture meetelt: de klok staat op de
      1e en er is deze maand nog niets naar de spaarrekening gegaan, dus savedNet() is 0 en de regel
      zegt "deze maand EUR 0 van EUR 2.200 opzij". Een nul is daar een meting (v59/v73/v173). */
+  /* v344: de zone gaat van 833 naar 722px, want de kaart Reserveringen staat niet meer op Plan. */
   const PX = {
-    360: { vouw: 567, kaart: 524, nf: 76, wf: 282, tekst: 175, vatB: 146, tot: 564, zone: 833, v318kaart: 509 },
-    390: { vouw: 771, kaart: 524, nf: 76, wf: 282, tekst: 157, vatB: 161, tot: 564, zone: 833, v318kaart: 509 },
+    360: { vouw: 567, kaart: 524, nf: 76, wf: 282, tekst: 175, vatB: 146, tot: 564, zone: 722, v318kaart: 509 },
+    390: { vouw: 771, kaart: 524, nf: 76, wf: 282, tekst: 157, vatB: 161, tot: 564, zone: 722, v318kaart: 509 },
   };
 
   for (const w of [360, 390]) {

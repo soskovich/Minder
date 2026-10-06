@@ -630,21 +630,19 @@ test.describe('e · de bediening en de omgeving', () => {
     expect(await page.evaluate(() => planItems().map((x) => x.id))).toEqual(voor);
   });
 
-  test('de optelling staat onder de waterval en niet meer boven de reserveringen', async ({ page }) => {
+  test('de optelling staat onder de waterval', async ({ page }) => {
     await boot(page, drie);
     const r = await page.evaluate(() => {
       const el = document.querySelector('#s-vooruit');
       const alinea = [...el.querySelectorAll('.small.mut2')].find((x) => /te gaan|van je plan staat er nog niet/.test(x.textContent));
       const kaart = [...el.querySelectorAll('.card')].find((c) => /Te verdelen/.test(c.textContent));
-      const res = [...el.querySelectorAll('.card')].find((c) => /eservering/.test(c.textContent));
       return { inKaart: !!(alinea && kaart && kaart.contains(alinea)),
         naVrij: !!(alinea && document.querySelector('#planVrij') &&
-          (document.querySelector('#planVrij').compareDocumentPosition(alinea) & Node.DOCUMENT_POSITION_FOLLOWING) > 0),
-        voorRes: !!(alinea && res && (alinea.compareDocumentPosition(res) & Node.DOCUMENT_POSITION_FOLLOWING) > 0) };
+          (document.querySelector('#planVrij').compareDocumentPosition(alinea) & Node.DOCUMENT_POSITION_FOLLOWING) > 0) };
     });
     expect(r.inKaart).toBe(true);      // binnen de kaart van de waterval
     expect(r.naVrij).toBe(true);       // onder de sluitpost
-    expect(r.voorRes).toBe(true);      // en nog steeds vóór de reserveringen, maar niet meer ertegenaan
+    // v344: de reserveringenkaart eronder is weg
   });
 
   test('er staat geen tijdas langs de kolom', async ({ page }) => {

@@ -305,16 +305,15 @@ test.describe('e - een constatering, geen oordeel', () => {
 });
 
 test.describe('f - plaatsing en veilig-te-besteden', () => {
-  test('onder de doelenlijst en boven de reserveringenkaart', async ({ page }) => {
+  test('onder de doelenlijst, en Plan draagt geen reserveringen', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('vooruit'));
     const t = await page.locator('#s-vooruit').innerText();
     const lijst = t.indexOf('Kosten Koper');
     const totaal = t.indexOf('te gaan, en op deze verdeling');
-    const res = t.indexOf('Reserveringen');
     expect(lijst).toBeGreaterThanOrEqual(0);
     expect(totaal).toBeGreaterThan(lijst);
-    expect(res).toBeGreaterThan(totaal);
+    expect(t).not.toContain('Reserveringen');   // v344
   });
 
   test('hij blijft staan als je de doelenlijst inklapt', async ({ page }) => {

@@ -273,10 +273,8 @@ test.describe('d · reserveringen: stand, kosten, verschil', () => {
     { id: 'r1', naam: 'Gemeentelijke aanslag', bedrag: 480, vervalmaand: ym(new Date(now.getFullYear(), now.getMonth() + 3, 1)), intervalM: 12 },
     { id: 'r2', naam: 'Tandarts', bedrag: 300, vervalmaand: ym(new Date(now.getFullYear(), now.getMonth() + 6, 1)), intervalM: 12 },
   ];
-  const kaart = (page) => page.evaluate(() => {
-    const el = [...document.querySelectorAll('#s-vooruit .card')].find((c) => /Reserveringen/.test(c.innerText));
-    return el ? el.innerText.replace(/\s+/g, ' ') : '';
-  });
+  // v344: de kaart op Plan is weg; dezelfde feiten staan in de sheet op Grip
+  const kaart = (page) => page.evaluate(() => { openReserveringen(); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' '); });
 
   test('met dekking: het verschil leest als wat er overblijft', async ({ page }) => {
     await boot(page, Object.assign({ set: { resAcc: RES, reserveringen: POSTEN }, bal: { [RES]: 5000 } }, VOL));
@@ -285,12 +283,10 @@ test.describe('d · reserveringen: stand, kosten, verschil', () => {
     expect(D.tekort).toBe(0);
     const t = await kaart(page);
     expect(t).toContain('€5.000');
-    expect(t).toMatch(/Gemeentelijke aanslag ·/);
-    expect(t).toMatch(/Tandarts ·/);
-    expect(t).toMatch(/Blijft over/);
+    expect(t).toMatch(/Gemeentelijke aanslag/);
+    expect(t).toMatch(/Tandarts/);
     expect(t).not.toMatch(/Tekort/);
-    // de dekkingsgraad en gedektTot staan niet meer op dit blok
-    expect(t).not.toMatch(/gedekt tot|%/);
+    expect(t).not.toMatch(/%/);
   });
 
   test('zonder dekking: het verschil leest als tekort, zonder alarmkleur', async ({ page }) => {
@@ -299,19 +295,15 @@ test.describe('d · reserveringen: stand, kosten, verschil', () => {
     expect(D.tekort).toBeGreaterThan(0);
     const t = await kaart(page);
     expect(t).toMatch(/Tekort/);
-    expect(t).not.toMatch(/Blijft over/);
-    const rood = await page.evaluate(() => {
-      const el = [...document.querySelectorAll('#s-vooruit .card')].find((c) => /Reserveringen/.test(c.innerText));
-      return (el.innerHTML.match(/var\(--red\)|var\(--amber\)/g) || []).length;
-    });
+    const rood = await page.evaluate(() => (document.querySelector('#sheet').innerHTML.match(/var\(--red\)|var\(--amber\)/g) || []).length);
     expect(rood).toBe(0);
   });
 
   test('zonder rekening of zonder saldo staat er geen verschil', async ({ page }) => {
     await boot(page, Object.assign({ set: { reserveringen: POSTEN } }, VOL));
     const t = await kaart(page);
-    expect(t).toMatch(/nog geen rekening aangewezen/);
-    expect(t).not.toMatch(/Tekort|Blijft over/);
+    expect(t).toMatch(/Nog geen rekening aangewezen/);
+    expect(t).not.toMatch(/Tekort/);
   });
 
   test('een verstreken eenmalige post vervalt, een post met interval rolt door', async ({ page }) => {
@@ -331,7 +323,8 @@ test.describe('d · reserveringen: stand, kosten, verschil', () => {
     expect(r.namen).toEqual(['Jaarlijks verleden']);
     const t = await kaart(page);
     expect(t).toMatch(/Jaarlijks verleden/);
-    expect(t).not.toMatch(/Eenmalig verleden/);
+    // de sheet is de beheerlijst: de verstreken eenmalige post staat erin, met zijn reden
+    expect(t).toMatch(/Eenmalig verleden verstreken/);
   });
 });
 

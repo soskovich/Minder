@@ -32,10 +32,8 @@ test.describe('a · noodfonds-widget weg, verfijnen blijft bereikbaar', () => {
        terwijl er niets stuk was. Bind aan wat er moet staan en wat er weg moet zijn. */
     expect(await page.evaluate(() => /nogDezeMaand/.test(renderVooruit.toString()))).toBe(false);
     expect(await page.evaluate(() => /doelZone/.test(renderVooruit.toString()))).toBe(true);
-    expect(await page.evaluate(() => /resDekkingCard\(\)/.test(renderVooruit.toString()))).toBe(true);
-    // en de twee blokken staan in deze volgorde op het scherm
-    const iDoel = v.indexOf('Reserveringen');
-    expect(iDoel).toBeGreaterThanOrEqual(0);
+    // v344: de kaart Reserveringen staat niet meer op Plan; die lijst staat in de sheet op Grip
+    expect(v).not.toContain('Reserveringen');
   });
 
   /* v225: 'verfijnen ›' stond los in de rij en deed exact hetzelfde als een tik op de rij zelf -

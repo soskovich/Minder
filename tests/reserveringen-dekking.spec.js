@@ -234,7 +234,9 @@ test.describe('d · de zin', () => {
     await boot(page);
     const t = await page.evaluate(() => dekkingTekst(dekking(12)));
     expect(t).toMatch(/^Je bent gedekt tot en met \w+ \d{4}\./);
-    expect(t).toContain('€339 per maand nodig');
+    // v344: gedekt is gedekt, zonder maandbedrag (de bruto €339 negeerde de pot)
+    expect(t).toContain('Er is niets meer nodig tot de volgende post.');
+    expect(t).not.toContain('per maand nodig');
     expect(t).not.toMatch(/[!—]/);
     expect(t).not.toMatch(/goed bezig|knap|gefeliciteerd|prima/i);
   });
@@ -257,8 +259,8 @@ test.describe('d · de zin', () => {
   test('zonder verplichtingen: één rustige regel met een tik', async ({ page }) => {
     await boot(page, seedRes({ reserveringen: [] }));
     expect(await page.evaluate(() => dekkingTekst(dekking(12)))).toBe('Je hebt nog geen verplichtingen ingevoerd.');
-    await page.evaluate(() => go('vooruit'));
-    const h = await page.evaluate(() => resDekkingCard());
+    // v344: de kaart op Plan is weg; de ingang is een grijze tegel op Grip
+    const h = await page.evaluate(() => { go('maand'); return document.querySelector('[data-tegel="dekking"]').outerHTML; });
     expect(h).toContain('openReserveringen()');
     expect(h).not.toContain('per maand nodig');
   });
@@ -350,7 +352,7 @@ test.describe('f · de reservering is geen spaardoel en raakt de andere lagen ni
       liq: JSON.stringify(monthLiquidity()),
       saved: savedThisMonth(new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0')),
     }));
-    await page.evaluate(() => { dekking(12); verplichtingen(12); resDekkingCard(); });
+    await page.evaluate(() => { dekking(12); verplichtingen(12); renderResSheet(); });
     const na = await page.evaluate(() => ({
       rec: recurringSchedule().length,
       liq: JSON.stringify(monthLiquidity()),
@@ -374,11 +376,12 @@ test.describe('g · het controlemoment', () => {
   test('hooguit één keer per maand, en weg te tikken', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => resCheckDue())).toBe(true);
-    const h = await page.evaluate(() => resDekkingCard());
+    // v344: de vraag staat in de sheet van de lijst, niet meer op een kaart op Plan
+    const h = await page.evaluate(() => { openReserveringen(); return document.querySelector('#sheet').innerText; });
     expect(h).toContain('Klopt je lijst nog?');
     await page.evaluate(() => resCheckOk());
     expect(await page.evaluate(() => resCheckDue())).toBe(false);
-    expect(await page.evaluate(() => resDekkingCard())).not.toContain('Klopt je lijst nog?');
+    expect(await page.evaluate(() => document.querySelector('#sheet').innerText)).not.toContain('Klopt je lijst nog?');
   });
 
   test('zonder verplichtingen vraagt hij niets', async ({ page }) => {
@@ -399,17 +402,12 @@ test.describe('h · weergave', () => {
   /* v187: dekking is een structurele vraag, dus het oordeel staat op Maand. Deze kaart is de plek
      waar je de lijst beheert en houdt daarom de feiten over die lijst en de ingang ernaartoe, zonder
      de graad en zonder dekkingTekst. Twee schermen, één bron: het oordeel staat er nog maar één keer. */
-  test('de kaart staat op Plan met de feiten en de ingang, zonder het oordeel', async ({ page }) => {
+  // v344: de kaart op Plan is weg; de lijst en de opbouw staan in de sheet achter de tegel op Grip
+  test('Plan draagt geen reserveringen meer', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('vooruit'));
-    await page.waitForSelector('#s-vooruit');
     const t = await page.locator('#s-vooruit').innerText();
-    expect(t).toContain('Reserveringen');
-    expect(t).toMatch(/\d+ post/);
-    expect(t).not.toMatch(/gedekt tot en met/);
-    expect(t).not.toMatch(/\d+% van wat er/);
-    await page.locator('#s-vooruit >> text=Reserveringen').first().click();
-    await page.waitForSelector('#resHead');
+    expect(t).not.toContain('Reserveringen');
   });
 
   test('het oordeel staat op Maand, en daar maar één keer', async ({ page }) => {
@@ -431,11 +429,8 @@ test.describe('h · weergave', () => {
     expect(r.sheet).toContain('Dekking reserveringen');
     expect(r.sheet).toContain(r.zin.replace(/\s+/g, ' '));
     expect(r.scherm).not.toContain(r.zin.replace(/\s+/g, ' '));
-    /* En resDekkingCard roept die zin niet meer aan. Commentaar telt niet als aanroep: de functie
-       legt in een comment uit wat er stond en waarom (dezelfde meetfout als v164). */
-    const kaal = await kaalUit(page, 'resDekkingCard');
-    expect(kaal).not.toContain('dekkingTekst');
-    expect(kaal).not.toContain('D.graad');
+    // v344: de kaart op Plan die de lijst dubbelde bestaat niet meer
+    expect(await page.evaluate(() => typeof resDekkingCard)).toBe('undefined');
   });
 
   for (const w of [360, 390]) {

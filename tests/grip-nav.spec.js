@@ -74,7 +74,8 @@ test.describe('c - geen zichtbare tekst noemt het scherm nog Maand', () => {
        omdat de kaart het verschil sinds v242 zelf toont. De assertie is gesplitst: de kaart noemt
        het scherm niet meer, en waar de zin nog wél staat (de inleg-detailsheet) heet het scherm nog
        steeds Grip. Dat laatste is wat deze spec bewaakt. */
-    const kaart = await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = resDekkingCard(); return d.innerText.replace(/\s+/g, ' '); });
+    // v344: de kaart op Plan is weg; de lijst staat in de sheet op Grip
+    const kaart = await page.evaluate(() => { openReserveringen(); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' '); });
     expect(kaart).not.toContain('Maand');
     const detail = await page.evaluate((m) => { openKpiDetail('inleg', m); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' '); }, M1);
     expect(detail).toContain('lees je op Grip');

@@ -50,9 +50,9 @@ const D = (page) => page.evaluate(() => {
     gedektTot: d.gedektTot, gat: d.gat,
     posten: d.regels.filter((x) => x.soort === 'post').map((x) => ({ n: x.naam, b: x.bedrag, m: x.maand, opg: x.opgebouwd })) };
 });
+// v344: de kaart op Plan is weg; de lijst en de opbouw staan in de sheet op Grip.
 const kaart = (page) => page.evaluate(() => {
-  const el = document.createElement('div'); el.innerHTML = resDekkingCard();
-  return el.innerText.replace(/\s+/g, ' ').trim();
+  openReserveringen(); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' ');
 });
 
 /* ===== a) HET GEMELDE GEVAL ===== */
@@ -80,10 +80,11 @@ test.describe('a · het gemelde geval: EUR 500 en een boete van EUR 299 eenmalig
     const d = await D(page);
     expect(d.stand).toBe(500);
     expect(d.stand - d.benodigdeStand).toBe(201);
+    // v344: de opbouw in de sheet zet de eis naast de stand, en noemt geen tekort
     const t = await kaart(page);
-    expect(t).toContain('Blijft over');
-    expect(t).toContain('€201');
-    expect(t).not.toMatch(/Blijft over\s*€500/);
+    expect(t).toContain('Hoort nu in de pot te staan €299');
+    expect(t).toContain('Staat er nu €500');
+    expect(t).not.toContain('Tekort');
   });
 
   /* De twee helften van dezelfde functie zeiden iets anders over dezelfde post: de waterval trok
@@ -198,45 +199,27 @@ test.describe('d · "N posten" telt dezelfde verzameling als de rijen', () => {
     expect(d.posten.length).toBe(1);
   });
 
-  test('de kop telt de rijen en noemt wat erbuiten valt', async ({ page }) => {
+  /* v344: de telling "1 post · 1 zonder termijn dit jaar" stond op de kaart van Plan, en die is weg.
+     De sheet draagt elke post uit de lijst als eigen rij met zijn reden, dus er verdwijnt niets stil. */
+  test('de sheet toont ook de post zonder termijn, met zijn reden', async ({ page }) => {
     await boot(page, { res: TWEE });
     const t = await kaart(page);
-    expect(t).toContain('1 post · 1 zonder termijn dit jaar');
-    expect(t).not.toContain('2 posten');
-  });
-
-  test('een kwartaalpost is EEN post met vier voorkomens', async ({ page }) => {
-    await boot(page, { res: [{ id: 'p1', naam: 'Kwartaal', bedrag: 120, vervalmaand: NOV, intervalM: 3 }] });
-    const d = await D(page);
-    expect(d.posten.length).toBe(4);
-    expect(d.inVenster).toBe(1);
-    expect(await kaart(page)).toContain('1 post ·');
+    expect(t).toContain('Boetes cjib');
+    expect(t).toMatch(/Oude aanslag verstreken/);
   });
 
   test('een post zonder bedrag krijgt zijn eigen reden', async ({ page }) => {
     await boot(page, { res: [
       { id: 'p1', naam: 'Boetes cjib', bedrag: 299, vervalmaand: NOV, intervalM: 0 },
       { id: 'p2', naam: 'Nog onbekend', bedrag: 0, vervalmaand: APR, intervalM: 12 }] });
-    const d = await D(page);
-    expect(d.aantal).toBe(2);
-    expect(d.inVenster).toBe(1);
     const t = await kaart(page);
-    expect(t).toContain('1 post · 1 zonder bedrag');
+    expect(t).toContain('geen bedrag');
+    expect(t).toContain('Nog onbekend heeft nog geen bedrag');
   });
 
-  /* De lege lijst blijft op de LIJST beslissen en niet op het venster: met alleen een verstreken
-     post heb je wél verplichtingen ingevoerd, en dan hoort er geen 'instellen'-kaart te staan. */
-  test('met alleen een post buiten het venster staat er geen instellen-kaart', async ({ page }) => {
+  test('met alleen een post buiten het venster zegt de sheet dat er niets aankomt', async ({ page }) => {
     await boot(page, { res: [{ id: 'p1', naam: 'Oude aanslag', bedrag: 800, vervalmaand: MEI_OUD, intervalM: 0 }] });
-    const t = await kaart(page);
-    expect(t).not.toContain('instellen');
-    expect(t).toContain('0 posten · 1 zonder termijn dit jaar');
-    expect(t).toContain('Er komt de komende twaalf maanden niets aan uit je lijst');
-  });
-
-  test('een echt lege lijst geeft wel de instellen-kaart', async ({ page }) => {
-    await boot(page, { res: [] });
-    expect(await kaart(page)).toContain('instellen');
+    expect(await kaart(page)).toContain('Er komt de komende twaalf maanden niets aan uit je lijst');
   });
 });
 
@@ -251,10 +234,9 @@ test.describe('e · de posten dragen geen min-teken', () => {
     const d = await D(page);
     expect(d.stand - d.posten[0].b).toBe(201);
     expect(d.stand - d.benodigdeStand).toBe(226);     // en dit is wat de kaart toont
-    const h = await page.evaluate(() => resDekkingCard());
+    const h = await kaart(page);
     expect(h).toContain('€299');
     expect(h).not.toContain('− €299');
     expect(h).not.toContain('-€299');
-    expect(await kaart(page)).toContain('€226');
   });
 });

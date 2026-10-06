@@ -91,13 +91,13 @@ test.describe('a · het benodigde bedrag staat naast wat er te verdelen is', () 
 test.describe('b · de reserveringsinleg zegt dat hij losstaat van je plan', () => {
   test('de kaart benoemt het verband, zonder te herberekenen', async ({ page }) => {
     await boot(page);
-    const t = await page.evaluate(() => { const d = document.createElement('div');
-      d.innerHTML = resDekkingCard(); return d.innerText.replace(/\s+/g, ' '); });
+    // v344: de kaart op Plan is weg; de sheet op Grip draagt de zin
+    const t = await page.evaluate(() => { openReserveringen(); return document.querySelector('#sheet').innerText.replace(/\s+/g, ' '); });
     /* v243: 'staat los van je plan hierboven' en 'concurreert niet met je spaardoelen' zeiden
        hetzelfde twee keer, en de tweede stond naast een verwijzing naar Grip die de kaart sinds
        v242 niet meer nodig heeft. Eén zin over het losstaan is genoeg; welke woorden dat zijn is
        niet de eigenschap, dat het er staat wel. */
-    expect(t).toMatch(/los van je spaarinleg/);
+    expect(t).toMatch(/los van je spaardoelen/);
     // en het bedrag per maand staat er nog steeds niet (v188)
     const per = await page.evaluate(() => dekking(12).benodigdPerMaand);
     if (per > 0) expect(t).not.toContain(String(per).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
@@ -399,8 +399,8 @@ test.describe('j · een dekkingsgraad toont geen percentage boven de drempel', (
        niet meer, en de kolom toont sinds v190 een bedrag. graadTekst() is dus de enige plek. */
     const r = await page.evaluate(() => ({
       tekst: dekkingTekst(dekking(12)),
-      kaart: resDekkingCard(),
-      bronnen: [dekkingTekst.toString(), resDekkingCard.toString()],
+      kaart: (renderResSheet(), document.querySelector('#sheet').innerHTML),
+      bronnen: [dekkingTekst.toString(), renderResSheet.toString()],
     }));
     r.bronnen = r.bronnen.map(kaalBron);    // v309: strippen in Node, op een plek
     expect(r.tekst).not.toMatch(/\d+%/);

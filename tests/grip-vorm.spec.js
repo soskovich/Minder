@@ -250,7 +250,7 @@ test('e: de tegels dragen hun maatstaf uit hun eigen bron', async ({ page }) => 
     const R = maandRegels(); const by = {}; R.forEach(x => by[x.key] = x);
     const T = Object.fromEntries([...document.querySelectorAll('#gripTegels [data-tegel]')].map(e => [e.dataset.tegel, e.querySelector('.kt-maat').innerText]));
     return { subs: { buffer: by.buffer.sub, dekking: by.dekking.sub }, eenheden: { buffer: by.buffer.eenheid, dekking: by.dekking.eenheid, doel: by.doel.eenheid },
-      waarden: { dekking: by.dekking.waarde }, benodigdeStand: by.dekking.benodigdeStand, T, sg: document.getElementById('s-maand').innerText };
+      waarden: { dekking: by.dekking.waarde }, gedektTot: dekking(12).gedektTot, benodigdeStand: by.dekking.benodigdeStand, T, sg: document.getElementById('s-maand').innerText };
   });
   expect(r.subs.buffer).toBe(`je norm: ${NORM} maanden`);
   expect(r.T.buffer).toBe(`je norm: ${NORM} maanden`);
@@ -258,7 +258,8 @@ test('e: de tegels dragen hun maatstaf uit hun eigen bron', async ({ page }) => 
   expect(r.eenheden.buffer).toContain(`je richtbedrag is ${RICHT} maanden`);
   expect(r.eenheden.buffer).not.toMatch(/je richt staat/);   // v322: het woord is afgemaakt
   expect(r.subs.dekking).toBe(`verwacht: €${POST} in ${new Intl.DateTimeFormat('nl-NL', { month: 'long', year: 'numeric' }).format(new Date(PLUS(2) + '-01'))}`);
-  expect(r.T.dekking).toBe(`€${POST} nodig in ${new Intl.DateTimeFormat('nl-NL', { month: 'long' }).format(new Date(PLUS(2) + '-01'))}`);
+  // v344: zonder gat zegt de tegel tot wanneer je gedekt bent, en niet wat de eerste post kost
+  expect(r.T.dekking).toBe(`gedekt t/m ${new Intl.DateTimeFormat('nl-NL', { month: 'long' }).format(new Date(r.gedektTot + '-01'))}`);
   expect(r.waarden.dekking).toBe(`€${POTSTAND}`);
   expect(r.eenheden.dekking).toBe(`in je pot · €${BLIJFT} blijft over`);
   expect(r.benodigdeStand).not.toBe(POST);
