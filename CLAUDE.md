@@ -117,6 +117,25 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **NOG NODIG PER MAAND HEEFT EEN BRON, EN DE PROJECTIE LEEST HEM NIET** (`v345`, gevraagd door de
+  gebruiker): `resNodigPerMaand(V, stand)` is de netto som van `v344`, met twee lezers in `dekking()`: de
+  gemeten stand (`nodigPerMaand`) en een lege pot (`nodigZonderPot`). DRIE PLEKKEN LAZEN NOG DE BRUTO SOM
+  (`benodigdPerMaand`, per voorkomen bedrag door maanden tot, opgeteld), en per plek GEMETEN op vijf
+  standen: (1) DE TEKST ZONDER RESERVERINGSREKENING zei "EUR 299 per maand" bij een boete van EUR 299 over
+  een maand en "EUR 1.200 per maand" bij een jaarpremie van EUR 1.200; nu "Met een lege pot heb je ... EUR
+  150 per maand nodig, deze maand meegeteld" (EUR 600 bij de premie), en zonder post in het venster geen
+  bedrag. (2) DE COACH-SUGGESTIE (`maandSuggestie()`, alleen bij een tekort in de lopende maand) zei "de EUR
+  299 hierboven is het maandtempo dat daarnaast doorloopt", en sinds `v344` stond die EUR 299 nergens
+  hierboven. DE NETTO SOM KAN ER NIET VOOR IN DE PLAATS: hij rekent het tekort al mee, dus "daarnaast" zou
+  het twee keer tellen. De suggestie noemt nu alleen de achterstand; wat de rest van het jaar per maand
+  vraagt staat een keer, in de gevolgzin. (3) DE PROJECTIE (`fireInputs().resPerMaand`) LEEST NOG BRUTO, en
+  dat is een gemelde reden en geen vergetelheid: hij trekt het bedrag elke maand af tot je pensioen, en
+  daar is noch bruto noch netto het goede getal. GEMETEN: bruto trekt bij de boete EUR 299 per maand af,
+  ook in de jaren erna (een eenmalige post als eeuwige last), en bij de jaarpremie EUR 1.200 per maand;
+  netto geeft bij een gedekte premie NUL, ook in de jaren erna, terwijl die premie elk jaar terugkomt (te
+  gunstig, `v168`). Wat de projectie vraagt is het STRUCTURELE bedrag: per terugkerende post bedrag door
+  interval (de premie EUR 100 per maand, de boete nul). Dat is een andere vraag dan "nog nodig", en de
+  keuze ligt bij de gebruiker. Zes sabotages, alle zes rood.
 - **DE RESERVERINGEN STAAN ALLEEN OP GRIP, EN GEDEKT IS GEDEKT ZONDER MAANDBEDRAG** (`v344`, gevraagd
   door de gebruiker): DE KAART OP PLAN (`resDekkingCard()`, `resPostTelling()`) IS WEG. Hij dubbelde de
   tegel en de sheet op Grip, en Plan rekende er niet mee (`v128`). NAGEGAAN: de tegel en de dekkingsregel
@@ -6023,7 +6042,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v344` → `minder-v345`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v345` → `minder-v346`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6042,7 +6061,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343` en `v344` naar `minder-v344`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344` en `v345` naar `minder-v345`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

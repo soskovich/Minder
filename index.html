@@ -6118,12 +6118,11 @@ function maandSuggestie(r, m){
   const T=maandTekort(r); const t=T?T.bedrag:0;
   if(r.key==='dekking'){
     if(!(t>0)) return '';
-    let perM=0; try{ perM=Math.round(dekking(12).benodigdPerMaand||0); }catch(_){}
-    /* Twee grootheden in één regel, dus ze worden uit elkaar gehouden: t is de achterstand in je
-       pot, perM het tempo dat daarnaast doorloopt. */
-    return perM>0
-      ? `${euro0(t)} erbij brengt je pot op de stand die er nu bij hoort; de ${euro0(perM)} hierboven is het maandtempo dat daarnaast doorloopt.`
-      : `${euro0(t)} erbij brengt je pot op de stand die er nu bij hoort.`;
+    /* v345: hier stond "de EUR X hierboven is het maandtempo dat daarnaast doorloopt", met de bruto som.
+       GEMETEN dat die zin sinds v344 naar niets wees: de gevolgzin noemt dat bedrag niet meer. En de netto
+       som kan er niet voor in de plaats: die rekent het tekort al mee, dus "daarnaast" zou het twee keer
+       tellen. Wat de rest van het jaar per maand vraagt staat in de gevolgzin erboven (dekkingTekst). */
+    return `${euro0(t)} erbij brengt je pot op de stand die er nu bij hoort.`;
   }
   if(r.key==='buffer'){
     if(!(t>0)) return '';
@@ -8350,9 +8349,7 @@ function dekking(maanden){
        niets nodig; met een gat is hij minstens het bedrag van dekkingDichten(). Een post in de
        lopende maand heeft geen maand meer om bij te leggen en telt alleen mee via de som van de
        posten erna. Onbekend saldo geeft null en geen schatting (v59/v73). */
-    let som=0; nodigPerMaand=0;
-    for(const x of V){ som+=x.bedrag;
-      if(x.offset>=1) nodigPerMaand=Math.max(nodigPerMaand, Math.ceil(Math.max(som-stand,0)/(x.offset+1))); }
+    nodigPerMaand=resNodigPerMaand(V, stand);
     let run=stand, vorige=null;
     for(const x of V){
       if(run-x.bedrag<0){
@@ -8379,9 +8376,22 @@ function dekking(maanden){
      HET IS EEN TELLING VAN POSTEN EN NIET VAN RIJEN: een kwartaalpost levert vier voorkomens binnen
      twaalf maanden en is EEN post uit je lijst. */
   const inVenster=new Set(V.map(x=>x.id)).size;
-  return {benodigdPerMaand, nodigPerMaand, benodigdeStand, werkelijkeStand:stand, graad, gedektTot, gat, tekort,
+  /* v345: dezelfde som met een lege pot, voor de tak zonder reserveringsrekening. Daar is de stand
+     niet onbekend maar niet aangewezen, en de vraag is wat je lijst vraagt als er nog niets staat. */
+  const nodigZonderPot=resNodigPerMaand(V, 0);
+  return {benodigdPerMaand, nodigPerMaand, nodigZonderPot, benodigdeStand, werkelijkeStand:stand, graad, gedektTot, gat, tekort,
           regels, volledig, zonderBedrag:zonderBedrag.map(v=>v.naam||'Verplichting'),
           aantal:lijst.length, inVenster, horizon:H};
+}
+/* v345: NOG NODIG PER MAAND, DE ENE BRON. Per voorkomen (som tot en met die post min de stand) door de
+   maanden tot die post, de lopende maand meegeteld zoals dekkingDichten() (v323); het hoogste is de
+   eis. Een post in de lopende maand heeft geen maand meer en telt alleen mee via de som erna. Twee
+   lezers in dekking(): met de gemeten stand (nodigPerMaand) en met een lege pot (nodigZonderPot). */
+function resNodigPerMaand(V, stand){
+  let som=0, uit=0;
+  for(const x of (V||[])){ som+=x.bedrag;
+    if(x.offset>=1) uit=Math.max(uit, Math.ceil(Math.max(som-stand,0)/(x.offset+1))); }
+  return uit;
 }
 function resMaandLabel(ym){ const m=+String(ym||'').slice(5,7); return m?(MFULL[m-1]+' '+String(ym).slice(0,4)):''; }
 // De zin: spiegel, gevolg, keuze. Geen oordeel, geen felicitatie.
@@ -8389,7 +8399,14 @@ function dekkingTekst(D){
   if(!D) return '';
   if(!D.aantal) return 'Je hebt nog geen verplichtingen ingevoerd.';
   if(!D.volledig){
-    if(!resAccId()) return `Voor wat er dit jaar nog aankomt heb je ${euro0(D.benodigdPerMaand)} per maand nodig. Wijs een reserveringsrekening aan, dan zie je of je pot toereikend is.`;
+    /* v345: zonder rekening stond hier de bruto som (`benodigdPerMaand`, bedrag door maanden tot, per
+       voorkomen opgeteld). GEMETEN: een boete van EUR 299 over een maand gaf "EUR 299 per maand", een
+       jaarpremie van EUR 1.200 over een maand "EUR 1.200 per maand". Nu de netto som met een lege pot:
+       EUR 150 (oktober en november) en EUR 600. */
+    if(!resAccId()){
+      if(!D.regels.some(r=>r.soort==='post')) return 'Er komt de komende twaalf maanden niets aan uit je lijst. Wijs een reserveringsrekening aan, dan zie je wat er al opzij staat.';
+      return `Met een lege pot heb je voor wat er dit jaar nog aankomt ${euro0(D.nodigZonderPot)} per maand nodig, deze maand meegeteld. Wijs een reserveringsrekening aan, dan zie je hoeveel er al staat.`;
+    }
     if(D.werkelijkeStand==null) return 'Het saldo van je reserveringsrekening is nog onbekend, dus de dekking is niet te berekenen.';
     return `${D.zonderBedrag.join(' en ')} ${D.zonderBedrag.length===1?'heeft':'hebben'} nog geen bedrag, dus de dekking klopt nog niet.`;
   }

@@ -169,12 +169,20 @@ test.describe('b - het bedrag komt uit de regel en wordt nergens opnieuw bereken
     expect(g).toContain('per maand');
   });
 
-  test('dekking houdt de twee grootheden uit elkaar', async ({ page }) => {
+  /* v345: de suggestie zei "de EUR X hierboven is het maandtempo dat daarnaast doorloopt", met de bruto
+     som. Sinds v344 noemt de gevolgzin die som niet meer, dus de verwijzing wees naar niets; en de netto
+     som rekent het tekort al mee, dus "daarnaast" zou het twee keer tellen. De suggestie noemt nu alleen
+     de achterstand, en wat er per maand nodig is staat een keer: in de gevolgzin. */
+  test('dekking noemt de achterstand en verwijst niet naar een bedrag dat er niet staat', async ({ page }) => {
     await boot(page);
     const d = (await sug(page, 'dekking')).sug;
-    expect(d).toContain('€3.000');          // het lopende tempo uit de gevolgzin
-    expect(d).toContain('maandtempo');
-    expect(d.indexOf('€2.600')).toBeLessThan(d.indexOf('€3.000'));
+    const r = await page.evaluate(() => ({ g: (maandRegels().find((x) => x.key === 'dekking') || {}).gevolg || '',
+      bruto: dekking(12).benodigdPerMaand, netto: dekking(12).nodigPerMaand }));
+    expect(d).toContain('€2.600');
+    expect(d).not.toMatch(/hierboven|daarnaast|maandtempo/);
+    expect(r.bruto).toBeGreaterThan(0);   // invoer: er IS een bruto som die de oude zin zou noemen
+    expect(d).not.toContain('€' + r.bruto.toLocaleString('nl-NL'));
+    if (r.netto > 0) expect(r.g).toContain('€' + r.netto.toLocaleString('nl-NL') + ' per maand');
   });
 });
 

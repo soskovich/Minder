@@ -225,3 +225,44 @@ test.describe('3 · layout', () => {
     });
   }
 });
+
+/* v345: de tekst zonder reserveringsrekening en de coach-suggestie lezen de ene netto som
+   (resNodigPerMaand); de bruto som houdt alleen de projectie als lezer. */
+test.describe('4 · een bron voor nog nodig per maand', () => {
+  const zonderRek = (pot, res) => { const p = seed(pot, res); const S = JSON.parse(p.minder_set); delete S.resAcc; p.minder_set = JSON.stringify(S); return p; };
+  test('zonder rekening: de boete van 299 over een maand vraagt 150 en niet 299', async ({ page }) => {
+    await boot(page, zonderRek(299, BOETE));
+    const r = await page.evaluate(() => { const D = dekking(12); return { t: dekkingTekst(D), bruto: D.benodigdPerMaand, leeg: D.nodigZonderPot }; });
+    expect(r.bruto).toBe(299);                          // invoer: de oude som
+    expect(r.leeg).toBe(150);                           // ceil(299 / 2), deze maand meegeteld
+    expect(r.t).toContain('Met een lege pot heb je voor wat er dit jaar nog aankomt €150 per maand nodig');
+    expect(r.t).not.toContain('€299 per maand');
+  });
+  test('zonder rekening: een jaarpremie over een maand vraagt de helft, niet het hele bedrag per maand', async ({ page }) => {
+    await boot(page, zonderRek(0, [{ id: 'j', naam: 'Premie', bedrag: 1200, vervalmaand: over(1), intervalM: 12 }]));
+    const r = await page.evaluate(() => { const D = dekking(12); return { t: dekkingTekst(D), leeg: D.nodigZonderPot }; });
+    expect(r.leeg).toBe(600);
+    expect(r.t).toContain('€600 per maand');
+  });
+  test('zonder rekening en zonder post in het venster: geen bedrag', async ({ page }) => {
+    await boot(page, zonderRek(0, [{ id: 'v', naam: 'Ver', bedrag: 500, vervalmaand: over(14), intervalM: 0 }]));
+    const t = await page.evaluate(() => dekkingTekst(dekking(12)));
+    expect(t).toContain('Er komt de komende twaalf maanden niets aan');
+    expect(t).not.toMatch(/€\d/);
+  });
+  test('de twee netto sommen komen uit dezelfde functie, met de stand en met nul', async ({ page }) => {
+    await boot(page, seed(37, BOETE));
+    const r = await page.evaluate(() => { const D = dekking(12); const V = verplichtingen(12);
+      return { n: D.nodigPerMaand, z: D.nodigZonderPot, fn: resNodigPerMaand(V, 37), f0: resNodigPerMaand(V, 0) }; });
+    expect(r).toEqual({ n: 131, z: 150, fn: 131, f0: 150 });
+    const src = await kaalUit(page, 'dekking', 'maandSuggestie', 'dekkingTekst');
+    expect((src.match(/resNodigPerMaand\(/g) || []).length).toBe(2);   // de twee lezers in dekking()
+    expect(src).not.toMatch(/Math\.ceil\(Math\.max\(som/);              // geen tweede kopie van de som
+  });
+  test('de coach-suggestie noemt de bruto som niet meer', async ({ page }) => {
+    await boot(page, seed(100, [{ id: 'n', naam: 'Nu', bedrag: 299, vervalmaand: CUR, intervalM: 0 }]));
+    const r = await page.evaluate(() => { const R = maandRegels().find((x) => x.key === 'dekking'); return { st: R.status, s: maandSuggestie(R, thisYM()) }; });
+    expect(r.st).toBe('tekort');                        // invoer: alleen een tekort draagt een suggestie
+    expect(r.s).toBe('€199 erbij brengt je pot op de stand die er nu bij hoort.');
+  });
+});
