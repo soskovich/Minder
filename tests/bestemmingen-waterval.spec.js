@@ -12,6 +12,9 @@ const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '
 const CUR = ym(now);
 const M1 = ym(new Date(now.getFullYear(), now.getMonth() - 1, 1));
 const M2 = ym(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+// v348: een derde afgeronde maand, zodat wat er opzij ging GEMETEN is (opzijGemiddeld()) en niet van de
+// instellingen afhangt die deze tests juist veranderen: 500 naar de spaarrekening en 300 naar de reserveringen.
+const M3 = ym(new Date(now.getFullYear(), now.getMonth() - 3, 1));
 const MAIN = 'NL01MAIN0000001111';
 const SPAAR = 'NL01SAVE0000004323';
 const RES = 'NL01RESV0000009999';
@@ -25,7 +28,7 @@ function seed(o) {
   const tx = [];
   const add = (id, acc, m, day, amount, naam, desc) =>
     tx.push({ id, date: m + '-' + day, amount, acc, name: naam, desc, typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
-  for (const m of [M2, M1, CUR]) {
+  for (const m of [M3, M2, M1, CUR]) {
     add('i' + m, MAIN, m, '25', 4000, 'Werkgever', 'SALARIS LOON');
     add('h' + m, MAIN, m, '02', -1200, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
     add('a' + m, MAIN, m, '05', -500, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
@@ -74,7 +77,7 @@ const model = (page) => page.evaluate(() => {
   return {
     surplus: M.R.surplus, pmt: Math.round(M.R.pmt), nowY: M.nowY, HZ: M.HZ,
     res: i.resPerMaand, doel: i.doelPerMaand, doelItems: i.doelItems,
-    best: M.bestemming, volYear: M.freed.volYear, vrij: M.freed.vrij,
+    best: M.bestemming, volYear: M.freed.volYear, vrij: M.freed.vrij, opz: M.opzij, onv0: M.sim.onverdeeld0,
     eind: Math.round(M.mid[M.HZ]), assetsEind: Math.round(M.assets[M.HZ]),
     cashEind: Math.round(laag('cash')), inlegEind: Math.round(laag('inleg')),
     somParts: Math.round(M.assetParts.reduce((s, p) => s + (p.series[M.HZ] || 0), 0)),
@@ -126,7 +129,12 @@ test.describe('b - de euro landt vlak, niet in de compoundende laag', () => {
     await boot(page);
     const m = await model(page);
     expect(m.volYear).toBe(m.nowY);
-    expect(m.best.groeit).toBe(m.pmt - m.res - m.doel);
+    // v348: de waterval loopt over wat er werkelijk opzij ging (gemeten 800), en de rest van het restsaldo
+    // blijft vlak staan. Samen is dat het restsaldo.
+    expect(m.opz.bron).toBe('gemeten');
+    expect(m.opz.bedrag).toBe(800);
+    expect(m.opz.bedrag + m.opz.vlak).toBe(m.pmt);
+    expect(m.best.groeit).toBe(m.opz.bedrag - m.res - m.doel);
   });
 
   // v347: EEN AANNAME VOOR DE LIJN EN DE BAND. Wat naar een reservering gaat wordt op de termijn
@@ -140,8 +148,11 @@ test.describe('b - de euro landt vlak, niet in de compoundende laag', () => {
     const met = await model(page);
     await page.evaluate(() => { SET.reserveringen = []; SET.goals = []; save(); });
     const zonder = await model(page);
-    expect(zonder.best.groeit).toBe(zonder.pmt);
-    expect(met.cashEind - zonder.cashEind).toBe(20000 - 1000);
+    expect(zonder.best.groeit).toBe(zonder.opz.bedrag);   // v348: zonder bestemmingen groeit wat opzij ging, niet het hele restsaldo
+    expect(zonder.opz.vlak).toBe(met.opz.vlak);   // de meting hangt niet aan de instellingen
+    // v348: plus de lopende maand: wat Plan nu verdeelt telt niet mee voor een doel (v316) en staat vlak
+    expect(met.onv0).toBe(500);
+    expect(met.cashEind - zonder.cashEind).toBe(20000 - 1000 + met.onv0);
     const perMaand = met.res + met.doel;
     expect(met.cashEind - zonder.cashEind).toBeLessThan(perMaand * 12 * met.HZ);
     expect(zonder.inlegEind - met.inlegEind).toBeGreaterThan(0);
@@ -180,7 +191,7 @@ test.describe('c - in de vul-fase gaat er niets dubbel af', () => {
     // de deur uit); de stap op het scherm leest alleen wat er deze maand heen gaat.
     expect(m.best.doelItems).toEqual([]);
     expect(m.best.nu).toBe(m.res);
-    expect(m.best.groeit).toBe(m.pmt - m.vrij - m.res);
+    expect(m.best.groeit).toBe(m.opz.bedrag - m.vrij - m.res);   // v348: de buffer krijgt de inleg van Plan uit wat er opzij ging
   });
 
   test('en zodra de buffer vol is krijgen ze wel een toewijzing', async ({ page }) => {

@@ -96,7 +96,7 @@ const model = (page) => page.evaluate(() => {
     posten: M.assetParts.map((p) => p.naam),
     peaks5: post('Peaks pensioen', 5), peaksHZ: post('Peaks pensioen', M.HZ),
     kayani5: post('Peaks Kayani', 5),
-    cash5: laag('cash', 5), cashHZ: laag('cash', M.HZ),
+    cash5: laag('cash', 5), cashHZ: laag('cash', M.HZ), onv0: M.sim.onverdeeld0, opz: M.opzij,
     mid5: Math.round(M.mid[5]), midHZ: Math.round(M.mid[M.HZ]),
     assets5: Math.round(M.assets[5]), assetsHZ: Math.round(M.assets[M.HZ]),
     som5: Math.round(M.assetParts.reduce((s, p) => s + (p.series[5] || 0), 0)),
@@ -139,7 +139,14 @@ test.describe('a - KRITIEK: de inleg komt aan, ook als de bestemmingen het rests
     // de pot en niet, zoals tot v346, vijf jaar lang als vlakke cash erbij.
     expect(Math.abs(zonder.cash5 - met.cash5)).toBeLessThan(300);
     const start = 1579 + 8000 + 0;
-    expect(Math.abs(met.cash5 - (start + 15000 - 1000))).toBeLessThan(300);
+    // v348: plus wat Plan in de lopende maand verdeelt. Plan telt die maand niet mee voor een doel (v316),
+    // dus in de projectie staat dat bedrag vlak. De rest van de marge is de tandarts in de maanden dat Plan
+    // alles opzij gezette opmaakt: die wordt dan uit de vlakke laag betaald. Hier is niets vlak over:
+    // je instelling vraagt meer dan je restsaldo, dus alles gaat opzij.
+    expect(met.opz.bron).toBe('instelling');
+    expect(met.opz.vlak).toBe(0);
+    expect(met.onv0).toBeGreaterThan(0);
+    expect(Math.abs(met.cash5 - (start + 15000 - 1000 + met.onv0))).toBeLessThan(300);
   });
 });
 

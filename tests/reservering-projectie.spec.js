@@ -78,9 +78,13 @@ test.describe('a · resPosten() rekent per post', () => {
   });
 });
 
+// v348: de groep hieronder draait ZONDER doelen. De waterval loopt sinds v348 over wat er werkelijk opzij
+// ging (hier gemeten 2.200), en Plan neemt dat eerst; met de twee doelen van het toestel is er in de eerste
+// maanden niets meer over voor een post, en dan wordt hij uit de vlakke laag betaald (zie lijn-en-band).
+// Wat deze groep toetst is de maand en het jaar van een post, en daarvoor moet er ruimte zijn.
 test.describe('b · een eenmalige post telt alleen in zijn eigen maand', () => {
   test('de boete gaat er in het eerste jaar een keer af en daarna niet meer', async ({ page }) => {
-    await boot(page, [BOETE]);
+    await boot(page, [BOETE], { goals: [] });
     const zonder = await (async () => { await page.evaluate(() => { SET.reserveringen = []; save(); }); return cashStap(page); })();
     await page.evaluate((b) => { SET.reserveringen = [b]; save(); }, BOETE);
     const met = await cashStap(page);
@@ -91,7 +95,7 @@ test.describe('b · een eenmalige post telt alleen in zijn eigen maand', () => {
 
   // v347: de Monte Carlo leest dezelfde inleg per jaar (pmtFor) EN dezelfde vlakke laag (sim.cser) als de lijn
   test('de Monte Carlo ziet hem ook alleen in zijn eigen jaar', async ({ page }) => {
-    await boot(page, [BOETE]);
+    await boot(page, [BOETE], { goals: [] });
     const lees = () => page.evaluate(() => { const M = reisModel(); return { p0: M.pmtFor(M.nowY), p1: M.pmtFor(M.nowY + 1), c: M.sim.cser.map(Math.round) }; });
     const met = await lees();
     await page.evaluate(() => { SET.reserveringen = []; save(); });
@@ -114,7 +118,7 @@ test.describe('b · een eenmalige post telt alleen in zijn eigen maand', () => {
 
 test.describe('c · een terugkerende post telt in elk jaar hetzelfde', () => {
   test('een premie van EUR 1.200 per jaar is EUR 1.200 per projectiejaar, ook als hij nu gedekt is', async ({ page }) => {
-    await boot(page, [PREMIE], { manualBal: { [MAIN]: 2000, [SPAAR]: 9000, [RES]: 5000 } });
+    await boot(page, [PREMIE], { goals: [], manualBal: { [MAIN]: 2000, [SPAAR]: 9000, [RES]: 5000 } });   // v348: zonder doelen, zie groep b
     const met = await cashStap(page);
     await page.evaluate(() => { SET.reserveringen = []; save(); });
     const z = await cashStap(page);

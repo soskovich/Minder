@@ -10748,13 +10748,35 @@ function fireInputs(){
      inleg doet ook mee: wat er al voor staat gaat op zijn datum net zo goed de deur uit. Een doel
      zonder datum, of met een datum die al voorbij is, heeft geen moment van uitgeven en blijft
      staan. Een gepauzeerd doel krijgt niets bij, maar zijn geld gaat op zijn datum wel weg. */
-  let doelPerMaand=0, doelItems=[];
-  try{ doelItems=allocatePlan().filter(p=>p&&p.type==='goal').map(p=>{
+  /* v348: DE PROJECTIE VERDEELT ZOALS PLAN. Laag B krijgt de rijen van allocatePlan() (noodfonds, doelen
+     en aflos-items, in de volgorde van Plan, met hun verdeelmodus en hun rest) en de inleg van Plan
+     (planCapacity()), en herhaalt planVerdeelMaand() maand na maand zoals planVooruit() dat doet. Wat een
+     vol doel vrijmaakt gaat daarmee naar het volgende doel zoals op Plan, en pas als alles vol is gaat de
+     inleg naar de groei. Een doel draagt zijn streefdatum als maand vanaf nu (k): op die datum gaat zijn
+     geld de deur uit (v347). */
+  let doelPerMaand=0, doelItems=[], planRijen=[], planCap=0;
+  try{ planCap=planCapacity(); }catch(_){}
+  try{ const P=allocatePlan();
+       planRijen=P.map(p=>{ const k=(p.type==='goal'&&p.streefdatum)?doelMaandenTot(p.streefdatum):null;
+         return {id:p.id, type:p.type, naam:p.naam||'', mode:p.mode, perMaand:p.perMaand, pct:p.pct,
+           doel:Math.max(Math.round(+p.doel||0),0), rest:Math.max(Math.round(+p.rest||0),0), gespaard:Math.max(Math.round(+p.gespaard||0),0), nfOnbekend:!!p.nfOnbekend,
+           status:(p.status==='gepauzeerd')?'gepauzeerd':'', houdt:(p.type==='aflossen'), k:(k!=null&&k>=0)?k:null}; });
+       doelItems=P.filter(p=>p&&p.type==='goal').map(p=>{
          const k=p.streefdatum?doelMaandenTot(p.streefdatum):null;
          return {naam:p.naam||'Doel', per:Math.max(Math.round(+p.alloc||0),0), doel:Math.max(Math.round(+p.doel||0),0),
            gespaard:Math.max(Math.round(+p.gespaard||0),0), k:(k!=null&&k>=0)?k:null}; });
        doelPerMaand=doelItems.reduce((a,x)=>a+x.per,0); }catch(_){}
-  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, leaseItems, emergencyGoal, nfDoel, nfCur, resPerMaand, resEenmalig, resTerug, doelPerMaand, doelItems, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
+  /* v348: WAT ER WERKELIJK OPZIJ GING gaat de waterval in; de rest van je surplus blijft vlak staan.
+     Gemeten is het gemiddelde van de laatste drie afgeronde maanden (opzijGemiddeld()). Zonder die meting
+     rekent de projectie met je ingestelde inleg en zegt hij dat; zonder ingestelde inleg met je hele
+     surplus, zoals tot v348. */
+  let opzij=null;
+  try{ const G=opzijGemiddeld(); if(G) opzij={bedrag:Math.max(G.bedrag,0), bron:'gemeten', maanden:G.maanden}; }catch(_){}
+  /* Wat je hebt ingesteld is dezelfde verzameling als de meting: je spaarinleg, wat je reserveringen
+     structureel per maand kosten en je inleg per bezitting (spaar, res en bel in vermogensInleg()). */
+  if(!opzij && monthlySaving>0) opzij={bedrag:Math.round(monthlySaving+Math.max(+resPerMaand||0,0)+belegdItems.reduce((a,x)=>a+Math.max(+x.per||0,0),0)), bron:'instelling', maanden:[]};
+  if(!opzij) opzij={bedrag:null, bron:'surplus', maanden:[]};
+  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, leaseItems, emergencyGoal, nfDoel, nfCur, resPerMaand, resEenmalig, resTerug, doelPerMaand, doelItems, planRijen, planCap, opzij, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
 function fireState(inputs, cfg){
   const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
@@ -10856,7 +10878,10 @@ function fireModel(R, inputs){
      allocatePlan() over noodfonds en doelen verdeelt. Zonder die voorwaarde zou dezelfde euro in
      de vul-fase twee keer van je inleg af gaan. Beide landen in de vlakke laag (C), net als de
      noodfonds-vulling: geld dat je binnen een paar jaar uitgeeft hoort niet te compounderen.
-     De noodfonds-stap zelf is niet aangeraakt - 'fill' is nog exact 'vrij'. */
+     De noodfonds-stap zelf is niet aangeraakt - 'fill' is nog exact 'vrij'.
+     v348: DIT IS GESCHIEDENIS. De vul-fase en 'vrij' rekenen niet meer: het noodfonds vult via de
+     maandverdeling van Plan (maandDeel() hieronder), en volYear komt uit diezelfde projectie. 'vrij'
+     blijft alleen voor de vergelijking in fireFreedBlock(). */
   const _res=(R.inlegMode==='auto')?Math.max(+inputs.resPerMaand||0,0):0;
   /* v346: een eenmalige post kost zijn volle bedrag in zijn eigen maand. k telt vanaf deze maand,
      en dat is ook de maand k van de lus hieronder (jaar y, maand m: k = 12y + m). */
@@ -10873,14 +10898,25 @@ function fireModel(R, inputs){
      mee in de pot waar het landt (v212/v213). De Monte Carlo leest dezelfde vlakke reeks (cser) en
      dezelfde inleg per jaar, zodat lijn en band alleen nog in het rendement verschillen (v104). */
   const _auto=(R.inlegMode==='auto'), som0=a=>a.reduce((t,v)=>t+v,0);
-  const _doelen=_auto?(inputs.doelItems||[]).map(x=>({naam:x.naam, per:Math.max(+x.per||0,0), doel:Math.max(+x.doel||0,0),
-    gespaard:Math.max(+x.gespaard||0,0), k:(x.k!=null&&+x.k>=0)?Math.round(+x.k):null})):[];
   const _resTerug=_auto?(inputs.resTerug||[]).filter(x=>(+x.bedrag||0)>0&&(+x.iv||0)>0&&(+x.k>=0)):[];
-  /* wat de doelen in maand k vragen: elk doel dat nog niet is uitgegeven, voor zijn datum, en dat nog
-     niet vol is, vraagt zijn maandbedrag tot het vol is; in de vul-fase gaat dat geld al via 'vrij' */
-  const doelVraag=(year,k,acc,uit)=>_doelen.map((g,i)=>(year<volYear||uit[i]||(g.k!=null&&k>=g.k))?0:Math.max(Math.min(g.per, g.doel-acc[i]),0));
-  const _acc0=_doelen.map(g=>g.gespaard), _uit0=_doelen.map(()=>false);
-  const _doel=som0(doelVraag(nowY,0,_acc0,_uit0));
+  /* v348: DE MAANDVERDELING VAN PLAN, MAAND NA MAAND. Tot v347 kreeg elk doel een vast bedrag (zijn
+     toewijzing van deze maand) tot het vol was of tot zijn datum, en wat een vol doel vrijmaakte ging
+     naar de groei. Plan laat dat geld naar het volgende doel zakken (v307), dus de twee schermen
+     vertelden een ander verhaal over hetzelfde geld. Nu herhaalt de projectie planVerdeelMaand() op de
+     rijen van Plan, met de grendel per maand via planGrendelVan(), precies zoals planVooruit() (v104).
+     Pas als alles vol is, of uitgegeven op zijn datum, gaat de inleg naar de groei.
+     DE LOPENDE MAAND VERDEELT HIJ NIET, net als Plan (v316): planVooruit() begint bij de maand na deze.
+     Wat er deze maand naar Plan gaat staat vlak op je spaarrekening en is nog niet toegewezen.
+     EEN AFLOS-ITEM HOUDT ZIJN TOEWIJZING (v307), en dat geld blijft hier in de inleg: de afloscurve van
+     je schuld leest je maandtermijn en is niet aangeraakt, zoals tot v348. */
+  const _planCap=_auto?Math.max(Math.round(+inputs.planCap||0),0):0;
+  const _rij0=_auto?(inputs.planRijen||[]).map(r=>Object.assign({},r,{acc:Math.max(+r.gespaard||0,0), alloc:0})):[];
+  /* v348: DE INLEG IS GESPLITST. Wat er werkelijk opzij ging (inputs.opzij, het gemiddelde van drie
+     afgeronde maanden) gaat de waterval in; de rest van je surplus blijft vlak op je rekening staan en
+     groeit niet. Samen is dat per constructie het surplus, dus er verdwijnt geen geld en er komt er
+     geen bij. Bij zelf ingevulde inleg en zonder enige maat voor wat opzij ging is er niets te splitsen. */
+  const _opz=inputs.opzij||{bron:'surplus', bedrag:null};
+  const _splits=_auto && _opz.bron!=='surplus' && _opz.bedrag!=null;
   /* Elke groeiende bezitting krijgt een eigen reeks in plaats van een aandeel in één gedeelde pot.
      Dat is de prijs van inleg per bezitting, en tegelijk de voorwaarde voor een eigen rendement
      per bezitting later. Bij zelf-invullen blijft alles zoals het was: R.pmt is dan jouw eigen
@@ -10891,34 +10927,35 @@ function fireModel(R, inputs){
      rendement, geen groei' een uitspraak over jouw bezittingen en niet over je reis-instelling. */
   if((+R.een||0)>0) _potItems.push({naam:'Eenmalige inleg', waarde:+R.een||0, per:0, rend:+R.rend||0});
   const _aperWens=(R.inlegMode==='auto')?_potItems.reduce((a,x)=>a+x.per,0):0;
-  const pmtParts=(year,k,dw)=>{ if(dw==null) dw=som0(doelVraag(year,k||0,_acc0,_uit0)); let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY);
+  const _doel=_auto?Math.max(Math.round(+inputs.doelPerMaand||0),0):0;
+  const inlegJaar=year=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY); return a; };
+  /* Een maand van de waterval. rows wordt door planVerdeelMaand() gemuteerd (alloc en status), de rest
+     niet: die boekt de lus hieronder af, zodat een momentopname voor het scherm geen stand verschuift. */
+  const maandDeel=(year,k,rows,metEen)=>{ const a=inlegJaar(year);
+    const O=_splits?Math.max(Math.min(+_opz.bedrag||0,a),0):a;
+    const F=Math.max(a-O,0);   // blijft vlak staan
+    let o=O;
     /* v216: a.per gaat er als EERSTE af, vóór het noodfonds en vóór de bestemmingen. Een
        spaardoel is een voornemen; een periodieke inleg naar een bezitting is een feit, want dat
-       geld gaat maandelijks werkelijk die kant op. Een voornemen hoort een feit niet te
-       verdringen, en dat gebeurde: stond je plan meer toe te wijzen dan je restsaldo groot is,
-       dan bleef er nul over voor de inleg en groeide je pensioenpot alleen nog op rendement.
-       Tweede reden, en die is categorisch: fase A haalt reserveringen en doelen eraf omdat dat
-       geld NIET mag compounderen, het is vergeven aan consumptie. a.per gaat naar een belegging
-       en hoort juist wél te compounderen, alleen bij de pot waar hij landt. Hem achter de
-       bestemmingen zetten behandelde hem als consumptieve bestemming, en dat is een
-       categoriefout. */
-    const aper=Math.max(Math.min(_aperWens,a),0);
-    a=Math.max(a-aper,0);
-    /* De noodfonds-stap zelf is niet aangeraakt, maar hij vult nu uit wat er ná je inleg over is:
-       'vrij' is nog steeds het tempo, alleen kan er minder zijn dan dat. */
-    const fill=(vrij>0 && year<volYear)?Math.min(vrij,a):0;
-    a=Math.max(a-fill,0);   // vul-fase: wat er van 'vrij' past gaat naar het noodfonds
-    const wens=_res+((k!=null&&_resEen[k])||0)+dw;   // v346: zonder k is het de maand zonder eenmalige post; v347: dw is wat de doelen die maand vragen
-    const best=Math.max(Math.min(wens,a),0);   // nooit meer diverteren dan er dat jaar is
-    a=Math.max(a-best,0);
-    /* v212: a.per blijft compounderen, hij krijgt alleen de pot waar hij hoort in plaats van de
-       verzamelbak 'Nieuwe inleg'. Daarom gaat hij er hierboven af en komt hij via pInv weer in,
-       zodat het totaal per constructie gelijk blijft. Klemmen gebeurt PROPORTIONEEL en nooit op
-       volgorde: een rangorde tussen je bezittingen bestaat nergens, en die hier verzinnen zou een
-       voorrang claimen die je niet hebt ingesteld. Wanneer er geklemd wordt zegt het scherm dat.
-       v216: 'wens' gaat mee terug, want nu kunnen de BESTEMMINGEN geklemd worden in plaats van de
-       inleg, en dan hoort het scherm te zeggen dat je op Plan meer toewijst dan er overblijft. */
-    return {p:a, fill, best, aper, aperWens:_aperWens, bestWens:wens}; };
+       geld gaat maandelijks werkelijk die kant op. a.per gaat naar een belegging en hoort te
+       compounderen, alleen bij de pot waar hij landt. */
+    const aper=Math.max(Math.min(_aperWens,o),0); o=Math.max(o-aper,0);
+    /* v348: dan Plan, met de inleg van Plan als plafond en wat er opzij ging als grens: zet je minder
+       opzij dan Plan verdeelt, dan krijgen de doelen minder en zijn ze later vol. */
+    let plan=0, nfIn=0, doelIn=0, onverdeeld=0;
+    if(rows.length && _planCap>0){
+      /* in de lopende maand op een kopie: wat Plan nu verdeelt telt hier niet voor een doel (v316) en
+         staat vlak; vraagt Plan niets meer, dan gaat ook deze maand alles door naar wat erna komt */
+      const R0=(k>=1)?rows:rows.map(r=>Object.assign({},r)), cap=Math.min(_planCap,o);
+      planVerdeelMaand(R0, cap, planGrendelVan(R0.find(r=>r.type==='noodfonds'), cap));
+      for(const r of R0){ if(r.houdt) continue; const al=Math.max(Math.round(+r.alloc||0),0); plan+=al; if(k>=1){ if(r.type==='noodfonds') nfIn+=al; else doelIn+=al; } }
+      if(k<1) onverdeeld=plan;
+      o=Math.max(o-plan,0); }
+    /* Reserveringen staan los van je spaarinleg (v128) en komen na Plan. Betaald worden ze toch
+       (v347): de termijn gaat uit de vlakke laag, ook als de inleg hem niet dekte. */
+    const wens=_res+((metEen&&k!=null&&_resEen[k])||0);
+    const best=Math.max(Math.min(wens,o),0); o=Math.max(o-best,0);
+    return {p:o, F, O, a, aper, aperWens:_aperWens, plan, nfIn, doelIn, onverdeeld, best, bestWens:wens}; };
   /* v346: per jaar het gemiddelde van zijn twaalf maanden, zodat een eenmalige post ook in de
      Monte Carlo in zijn eigen jaar valt en daarna niet meer. v347: uit de lus hieronder, want wat de
      doelen vragen hangt af van wat er al in staat; de Monte Carlo leest zo exact de inleg van de lijn. */
@@ -10951,25 +10988,29 @@ function fireModel(R, inputs){
   const bserParts=_potItems.map(x=>[x.waarde]);
   const A0=liq0+belegd0+flat0+leaseSeries[0];
   const mid=[A0-debt[0]],low=[A0-debt[0]],high=[A0-debt[0]],koop=[A0-debt[0]],midGross=[A0-debt[0]],assets=[A0], cser=[liq0];   // cser: additief voor de bezittingen-opbouw
-  const _acc=_acc0.slice(), _uit=_uit0.slice();
+  const _rij=_rij0.map(r=>Object.assign({},r)), _vol={}; let _onv0=0, _planLaatst=null;
   for(let y=0;y<HZ;y++){ _pJaar[y]=0;
     /* p gaat naar de nieuwe-inleg-pot op het globale tarief; aper gaat per bezitting naar de pot
-       waar hij hoort, op het tarief van die bezitting. Samen is dat nog steeds p+aper per maand,
-       dus er komt geen euro bij en er valt er geen weg: alleen het tarief waarop hij groeit
-       verschilt nu per bestemming. */
-    for(let m=0;m<12;m++){ const k=12*y+m, _dv=doelVraag(nowY+y,k,_acc,_uit);
-      const _q=pmtParts(nowY+y,k,som0(_dv)), p=_q.p, fill=_q.fill, best=_q.best, aper=_q.aper;   // v346: per maand, want een eenmalige post valt in een maand
-      _pJaar[y]+=p;
-      /* v347: wat er opzij ging, ging naar rato van wat er gevraagd werd (dezelfde klem als best) */
-      const _fb=(_q.bestWens>0)?(best/_q.bestWens):0;
+       waar hij hoort, op het tarief van die bezitting. Wat Plan verdeelt, de reserveringen en wat niet
+       opzij ging (F) staan vlak (C). Samen is dat per maand het surplus: er komt geen euro bij en er
+       valt er geen weg (v348). */
+    for(let m=0;m<12;m++){ const k=12*y+m;
+      const _q=maandDeel(nowY+y,k,_rij,true), p=_q.p, aper=_q.aper;   // v346: per maand, want een eenmalige post valt in een maand
+      _pJaar[y]+=p; if(k===0) _onv0=_q.onverdeeld; if(k>=1&&_q.plan>0) _planLaatst=k;
       let _weg=0;
-      _doelen.forEach((g,i)=>{ _acc[i]+=_dv[i]*_fb; if(!_uit[i]&&g.k===k){ _weg+=_acc[i]; _uit[i]=true; } });
+      /* v348: Plan boekt af wat het verdeelde; een doel krijgt ook in de maand van zijn streefdatum
+         (zoals op Plan: vol in mei, moet in mei is op tijd) en geeft daarna uit wat erin staat (v347).
+         Een gepauzeerd doel krijgt niets bij, maar zijn geld gaat op zijn datum wel weg. */
+      for(const r of _rij){
+        if(k>=1 && !r.houdt && r.status!=='gepauzeerd'){ const al=Math.max(Math.round(+r.alloc||0),0);
+          if(al>0){ r.rest=Math.max(r.rest-al,0); r.acc+=al; if(r.rest<=0&&_vol[r.id]==null) _vol[r.id]=k; } }
+        if(r.type==='goal' && !r.uit && r.k!=null && r.k===k){ _weg+=r.acc; r.uit=true; r.rest=0; r.status='bereikt'; } }
       if(_auto){ _weg+=(_resEen[k]||0); for(const x of _resTerug) if(k>=x.k&&(k-x.k)%x.iv===0) _weg+=x.bedrag; }
       const _f=(_q.aperWens>0)?(aper/_q.aperWens):0;   // proportioneel klemmen: elke pot levert evenveel in
       Nm=Nm*(1+rM)+p; Nl=Nl*(1+rL)+p; Nh=Nh*(1+rH)+p; Ng=Ng*(1+rM)+p;
       for(let i=0;i<Ab.length;i++){ const inl=_potItems[i].per*_f;
         Ab[i]=Ab[i]*(1+rMi[i])+inl; AbL[i]=AbL[i]*(1+rLi[i])+inl; AbH[i]=AbH[i]*(1+rHi[i])+inl; AbG[i]=AbG[i]*(1+rMi[i])+inl; }
-      C+=fill+best-_weg; }   // cash blijft vlak; de noodfonds-vulling en de bestemmingen komen erbij, en wat wordt uitgegeven gaat eraf (v347)
+      C+=_q.F+_q.plan+_q.best-_weg; }   // cash blijft vlak: wat niet opzij ging, wat Plan verdeelt en de reserveringen komen erbij, wat wordt uitgegeven gaat eraf (v347, v348)
     Nm=Math.max(Nm-fireBelasting(R,Nm),0); Nl=Math.max(Nl-fireBelasting(R,Nl),0); Nh=Math.max(Nh-fireBelasting(R,Nh),0);   // belasting op de nieuwe inleg
     for(let i=0;i<Ab.length;i++){ if(!groeit_i[i]) continue;   // een vlakke stand wordt niet belast: zie de noot hierboven
       Ab[i]=Math.max(Ab[i]-fireBelasting(R,Ab[i]),0); AbL[i]=Math.max(AbL[i]-fireBelasting(R,AbL[i]),0); AbH[i]=Math.max(AbH[i]-fireBelasting(R,AbH[i]),0); }
@@ -10979,6 +11020,14 @@ function fireModel(R, inputs){
     bserParts.forEach((arr,i)=>arr.push(Ab[i]));
     koop.push((Ay-dy)/Math.pow(1+R.infl/100,y+1)); }
   const bserSom=assets.map((_,y)=>bserParts.reduce((a,arr)=>a+(arr[y]||0),0));   // wat er aan bestaande potten hangt, inleg inbegrepen
+  /* v348: een momentopname van een gewone maand (de eerste die Plan verdeelt, zonder eenmalige post),
+     op een kopie van de rijen, voor wat het scherm per maand noemt. En het jaar waarin het noodfonds vol
+     is komt uit dezelfde projectie, niet meer uit een eigen deling. */
+  const _s=maandDeel(nowY,1,_rij0.map(r=>Object.assign({},r)),false);
+  /* en wat er groeit als Plan niets meer vraagt: alle rijen vol of uitgegeven, met dezelfde maandDeel() */
+  const _sNa=maandDeel(nowY,1,_rij0.filter(r=>r.houdt).map(r=>Object.assign({},r)),false);
+  const _planKlaarK=(_planLaatst!=null&&_planLaatst<HZ*12-1)?_planLaatst+1:null;
+  if(_auto){ const nf=_rij0.find(r=>r.type==='noodfonds'&&r.rest>0); if(nf) volYear=(_vol[nf.id]!=null)?nowY+Math.floor((nowMo+_vol[nf.id])/12):nowY+HZ+1; else volYear=nowY; }
   const reach=t=>{ for(let y=0;y<=HZ;y++){ if(mid[y]>=t) return y; } return null; };
   // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Plan (via fireInputs.emergencyGoal)
   const noodDoel=inputs.emergencyGoal;
@@ -11030,12 +11079,12 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear,cser:cser.slice()},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),eenmalig:(R.inlegMode==='auto')?(inputs.resEenmalig||[]).filter(x=>(+x.k)<HZ*12):[],doel:Math.round(_doel),doelItems:(inputs.doelItems||[]).filter(x=>(+x.per||0)>0),nu:Math.round(pmtParts(nowY).best),groeit:Math.round(pmtParts(nowY).p+pmtParts(nowY).aper),
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear,cser:cser.slice(),vol:Object.assign({},_vol),onverdeeld0:Math.round(_onv0)},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),eenmalig:(R.inlegMode==='auto')?(inputs.resEenmalig||[]).filter(x=>(+x.k)<HZ*12):[],doel:Math.round(_doel),doelItems:(inputs.doelItems||[]).filter(x=>(+x.per||0)>0),nu:Math.round(_s.best+_s.doelIn),groeit:Math.round(_s.p+_s.aper),groeitNa:Math.round(_sNa.p+_sNa.aper),planKlaarK:_planKlaarK,
     /* v216: wat je bestemmingen dit jaar vragen en wat ervan past. Sinds a.per vóór de
        bestemmingen staat kan hier geklemd worden, en dan wijs je op Plan meer toe dan je
        restsaldo groot is. Dat is een echte bevinding over jouw plan en hoort dus op het scherm,
        niet stil in de rekenkern. */
-    wens:Math.round(pmtParts(nowY).bestWens),geklemd:(pmtParts(nowY).best<pmtParts(nowY).bestWens-0.5)},bezit:{wens:Math.round(_aperWens),eff:Math.round(pmtParts(nowY).aper),geklemd:(pmtParts(nowY).aper<_aperWens-0.5),items:_potItems.filter(x=>x.per>0).map(x=>({naam:x.naam,per:x.per})),
+    wens:Math.round(_res+_doel),geklemd:(_s.doelIn<_doel-0.5)},opzij:{bron:_splits?_opz.bron:'surplus',bedrag:Math.round(_s.O),vlak:Math.round(_s.F),gemeten:(_opz.bedrag!=null?Math.round(+_opz.bedrag):null),maanden:(_opz.maanden||[]).slice()},bezit:{wens:Math.round(_aperWens),eff:Math.round(_s.aper),geklemd:(_s.aper<_aperWens-0.5),items:_potItems.filter(x=>x.per>0).map(x=>({naam:x.naam,per:x.per})),
     /* v213: welke bezittingen vlak liggen omdat er geen rendement bij staat. Uit belegdItems en
        niet uit _potItems, want de eenmalige inleg is geen bezitting. Het scherm zegt dit, anders
        lijkt het of de app ze is vergeten. */
@@ -11227,6 +11276,23 @@ function reisRestsaldo(M){
     return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}
       <div style="margin-top:10px;padding:10px 12px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:11px;font-size:12px">Er blijft nu niets over om te laten werken. Breng eerst je uitgaven onder je inkomen. Daarna kan dit geld voor je gaan werken.</div>`, groei:'' };
   }
+  /* v348: DE INLEG IS GESPLITST, en dat staat er vóór de waterval: wat er werkelijk opzij ging gaat de
+     stappen hieronder in, de rest van je restsaldo blijft vlak op je rekening staan. Samen is het je
+     restsaldo. De bedragen komen uit fireModel() (M.opzij), en de herkomst staat erbij: gemeten over drie
+     afgeronde maanden, je ingestelde inleg zolang die meting er niet is, of je hele restsaldo als er
+     geen van beide is (v59/v73/v173). Neutraal, want dit stelt vast (v78/v93). */
+  const Oz=M.opzij||{bron:'surplus'};
+  const ozMnd=(Oz.maanden||[]).length?`${MNAMES[+Oz.maanden[0].slice(5,7)-1]} t/m ${MNAMES[+Oz.maanden[Oz.maanden.length-1].slice(5,7)-1]}`:'';
+  const ozSub = Oz.bron==='gemeten'
+    ? `gemiddeld over ${ozMnd}${(Oz.gemeten!=null&&Oz.gemeten>Oz.bedrag)?` (${euro0(Oz.gemeten)}, meer dan je restsaldo)`:''}; dit gaat de stappen hieronder in en groeit mee waar het belegd wordt`
+    : 'nog geen drie afgeronde maanden gemeten, dus gerekend met wat je instelde: spaarinleg, reserveringen en inleg per bezitting';
+  const opzijBlok = (Oz.bron==='surplus')
+    ? `<div class="small mut2" data-opzij="surplus" style="font-size:var(--fs-xs);margin-top:8px">Wat je opzij zet is nog niet te meten en je hebt geen inleg ingesteld, dus de projectie laat je hele restsaldo de stappen hieronder in gaan.</div>`
+    : `<div data-opzij="${Oz.bron}" style="margin-top:8px;padding:10px 12px;background:var(--card2);border-radius:11px">
+    <div class="row"><span class="small" style="font-weight:700">Opzij gezet</span><span style="font-weight:800;font-size:var(--fs-sm)">${euro0(Oz.bedrag)}/mnd</span></div>
+    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:2px">${ozSub}</div>
+    ${Oz.vlak>0?`<div class="row" style="margin-top:7px"><span class="small" style="font-weight:700">Blijft vlak staan</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--mut)">${euro0(Oz.vlak)}/mnd</span></div>
+    <div class="small mut2" data-opzijvlak style="font-size:var(--fs-xs);margin-top:2px">de rest van je restsaldo; dat staat op je rekening en groeit niet mee</div>`:''}</div>`;
   // stap 1 — noodfonds
   const nfDoel=M.restsaldo.nfDoel, nfCur=M.restsaldo.nfCur;   // via Laag B (fireInputs), niet meer direct uit Minder
   const nfToGo=Math.max(nfDoel-nfCur,0), nfFull=(nfDoel<=0)||nfToGo<=0, nfPct=nfDoel>0?Math.min(100,Math.round(nfCur/nfDoel*100)):0;
@@ -11299,10 +11365,11 @@ function reisRestsaldo(M){
   const stepDoel= (B.doel>0)? stepWrap(rail(stapNr(),'var(--mut)','var(--bg)',false),
     `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Spaardoelen</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--mut)">${euro0(B.doel)}/mnd</span></div><div class="small mut2" style="font-size:11.5px">${doelSub}</div>${(!doelInVul&&(B.doelItems||[]).length>=3)?`<div class="plan-tab small mut2" style="font-size:11.5px;margin-top:3px">${B.doelItems.map(x=>`<span>${esc(x.naam)}</span><span class="v">${euro0(x.per)}</span>`).join('')}</div>`:''}`) : '';
   /* Wat er dan pas mag groeien. Geen stap maar de uitkomst van de rij, en geen nieuwe berekening:
-     M.bestemming.groeit is pmtParts(nowY).p, precies het bedrag waarmee het model dit jaar rekent. */
+     M.bestemming.groeit is de momentopname van een gewone maand uit fireModel() (v348). */
   const groeitRegel=(B.res>0||B.doel>0)?`<div style="margin-top:8px;padding:10px 12px;background:var(--card2);border-radius:11px">
     <div class="row"><span class="small muted">Groeit mee vanaf nu</span><span style="font-weight:800;font-size:var(--fs-md);color:var(--teal)">${euro0(B.groeit)}/mnd</span></div>
-    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">${euro0(surplus)} restsaldo min wat er hierboven af gaat. Dit is het bedrag waarmee de projectie rekent.</div></div>`:'';
+    ${(B.planKlaarK!=null&&B.groeitNa!==B.groeit)?`<div class="row" data-groeitna style="margin-top:4px"><span class="small muted">Vanaf ${etaDatum(B.planKlaarK)}, als Plan vol is</span><span style="font-weight:800;font-size:var(--fs-md);color:var(--teal)">${euro0(B.groeitNa)}/mnd</span></div>`:''}
+    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">${euro0((Oz.bron==='surplus')?surplus:Oz.bedrag)} ${Oz.bron==='surplus'?'restsaldo':'opzij'} min wat er hierboven af gaat. Dit is het bedrag waarmee de projectie rekent.</div></div>`:'';
   /* v212: klemt de per-bezitting inleg, dan moet je dat weten. Je hebt per bezitting meer
      ingesteld dan er van je restsaldo overblijft, en de app lost dat proportioneel op omdat een
      rangorde tussen je bezittingen nergens is ingesteld. Dat stil doen zou een voorrang claimen
@@ -11330,7 +11397,7 @@ function reisRestsaldo(M){
   const B2=M.bestemming||{};
   const bestKlem = (B2.geklemd && B2.wens>0)? `<div style="margin-top:8px;padding:10px 12px;background:var(--card2);border:1px solid var(--line);border-radius:11px">
     <div class="row"><span class="small" style="font-weight:700;color:var(--amber)">Je bestemmingen passen niet in je restsaldo</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(B2.nu)} van ${euro0(B2.wens)}</span></div>
-    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">Je reserveringen en spaardoelen vragen samen ${euro0(B2.wens)}/mnd, en na ${Zb.eff>0?'je inleg per bezitting en ':''}je noodfonds is er ${euro0(B2.nu)} voor over. Op Plan is dus meer toegewezen dan er binnenkomt; daar pas je de verdeling aan.</div></div>` : '';
+    <div class="small mut2" style="font-size:var(--fs-xs);margin-top:3px">Je reserveringen en spaardoelen vragen samen ${euro0(B2.wens)}/mnd, en van wat er ${Oz.bron==='gemeten'?'werkelijk opzij gaat':'binnenkomt'} is er ${Zb.eff>0?'na je inleg per bezitting ':''}${euro0(B2.nu)} voor over. Op Plan is dus meer toegewezen dan er ${Oz.bron==='gemeten'?'opzij gaat':'binnenkomt'}; daar pas je de verdeling aan.</div></div>` : '';
   const step2= debts.length? stepWrap(rail(stapNr(),'var(--amber)','#2a1e00',true),
     `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Schuld loopt mee</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--amber)">${euro0(debtPer)}/mnd</span></div>${debtOpbouw}<div class="small mut2" style="font-size:11.5px${debtWarn?';color:var(--amber)':''}">${debtNote}</div>`) : '';
   // groeikeuze — los blokje (rs.groei) voor de groep "Rendement & inflatie"
@@ -11343,7 +11410,7 @@ function reisRestsaldo(M){
        <input type="range" min="0" max="100" step="10" value="${R.splitBeleg}" oninput="reisSplit(this.value)" style="width:100%;margin-top:6px;accent-color:var(--purple)"></div>`
     : '';
   const note=`<div class="small mut2" style="font-size:10.5px;margin-top:8px">Zodra je noodfonds vol is${debts.length?' en je schuld is afgelost':''}, groeit je hele restsaldo mee. De groeikeuze stel je in bij "Rendement &amp; inflatie".</div>`;
-  return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}<div style="margin-top:6px">${stepBez}${step1}${stepRes}${stepDoel}${step2}</div>${groeitRegel}${bezitKlem}${bestKlem}${vlakRegel}${note}`, groei:`${growChips}${splitUI}` };
+  return { inleg:`<div class="hlabel">Wat gebeurt er met wat overblijft?</div>${breakdown}${modeRow}${opzijBlok}<div style="margin-top:6px">${stepBez}${step1}${stepRes}${stepDoel}${step2}</div>${groeitRegel}${bezitKlem}${bestKlem}${vlakRegel}${note}`, groei:`${growChips}${splitUI}` };
 }
 // Spiegel (geen advies): toont dat er ruimte vrijkomt zodra het noodfonds vol is, en wat 'vrij'/mnd doet
 // bij twee bestemmingen (aflossen vs beleggen) — puur ter vergelijking, de keuze blijft bij de gebruiker.
@@ -15227,6 +15294,18 @@ function vermogensInleg(ym){
   ];
   const bekend=delen.some(d=>d.bedrag!=null);
   return {totaal: bekend?delen.reduce((a,d)=>a+(d.bedrag||0),0):null, delen};
+}
+/* v348: WAT ER WERKELIJK OPZIJ GING, GEMIDDELD OVER DE LAATSTE DRIE AFGERONDE MAANDEN. Dit is de ENE
+   bron (v104) voor de projectie op de Vermogensreis, en dezelfde teller als de spaarquote: vermogensInleg()
+   telt wat naar je spaarrekening, je reserveringen en je beleggingen ging. AFGERONDE maanden, want een
+   halve maand is geen maand (v194). Ontbreekt een van de drie, of is een maand niet te meten, dan is er
+   geen gemiddelde (v59/v73/v173): null, en de aanroeper zegt waarmee hij dan rekent. */
+function opzijGemiddeld(){
+  const ms=months().filter(m=>m<thisYM()).slice(-3);
+  if(ms.length<3) return null;
+  let som=0;
+  for(const m of ms){ let t=null; try{ t=vermogensInleg(m).totaal; }catch(_){} if(t==null) return null; som+=t; }
+  return {bedrag:Math.round(som/3), maanden:ms};
 }
 /* v193: kpiMinBedrag bestaat omdat een klein grondtal een percentage onbetrouwbaar maakt - een
    terugstorting in een categorie met nauwelijks kosten gaf zo een vaste-lastendruk van -1% (v161).
@@ -22334,6 +22413,15 @@ function diagReisReserveringen(){
   const C=(M.sim&&M.sim.cser)||[];
   const jaren=[1,5,10,M.HZ].filter((y,i,a)=>y<=M.HZ&&a.indexOf(y)===i);
   L.push(`vlakke laag (spaargeld, reserveringen en doelen): nu ${Math.round(C[0]||0)} · ${jaren.map(y=>(M.nowY+y)+' '+Math.round(C[y]||0)).join(' · ')}`);
+  /* v348: de splitsing van de inleg en de maandverdeling van Plan naast die van de projectie */
+  { const Z=M.opzij||{}; const herk=Z.bron==='gemeten'?`gemeten over ${(Z.maanden||[]).join(', ')}${Z.gemeten!=null?' ('+Z.gemeten+' gemiddeld)':''}`:(Z.bron==='instelling'?'niet gemeten: spaarinleg + reserveringen + inleg per bezitting zoals ingesteld':'niet gemeten en niets ingesteld: het hele surplus');
+    L.push(`inleg: surplus ${Math.round(+R.pmt||0)} = opzij ${Math.round(+Z.bedrag||0)} (${herk}) + blijft vlak ${Math.round(+Z.vlak||0)}`);
+    L.push(`lopende maand: ${Math.round(+(M.sim&&M.sim.onverdeeld0)||0)} naar Plan, telt niet mee voor een doel (zoals Plan) en staat vlak`);
+    let P={}; try{ P=planVooruit(allocatePlan()); }catch(_){}
+    const V=(M.sim&&M.sim.vol)||{}; const ids=[...new Set(Object.keys(P).concat(Object.keys(V)))];
+    let namen={}; try{ for(const p of allocatePlan()) namen[p.id]=p.naam||p.id; }catch(_){}
+    L.push(`vol volgens Plan en volgens de projectie (maanden vanaf nu): ${ids.length?'':'geen bestemming die vol raakt'}`);
+    for(const id of ids) L.push(`  ${namen[id]||id}: Plan ${P[id]!=null?P[id]:'-'} · projectie ${V[id]!=null?V[id]:'-'}${(P[id]!==V[id])?'  VERSCHIL':''}`); }
   let mc=null, mc0=null;
   try{ mc=fireMonteCarlo(M); }catch(_){}
   try{ mc0=fireMonteCarlo(Object.assign({},M,{R:Object.assign({},M.R,{sigma:0})})); }catch(_){}

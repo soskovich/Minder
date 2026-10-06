@@ -98,6 +98,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   doen (`openSpaarVerdeel()`). Plan rekent in **maandtempo**
   (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
   restant van déze maand. Beide kloppen; wat ze verbindt hoort op Plan te staan en nergens anders.
+  DE VERMOGENSREIS VERDEELT SINDS `v348` MET DEZELFDE MAANDVERDELING (`planVerdeelMaand()`), dus een doel
+  raakt daar in dezelfde maand vol als op Plan.
   SINDS `v344` DRAAGT PLAN GEEN RESERVERINGEN: de lijst en zijn dekking staan in de tegel en de
   sheet op Grip (`openReserveringen()`).
   Draagt sinds `v318` de VERTAKTE WATERVAL: de inlegbalk bovenaan, de vaten naast elkaar op schaal
@@ -117,6 +119,51 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE PROJECTIE VERDEELT ZOALS PLAN, EN ALLEEN WAT OPZIJ GING GROEIT MEE** (`v348`, gevraagd door de
+  gebruiker, A2 en A3 van de ronde Home, Vermogen en Vermogensreis): tot `v347` kreeg in `fireModel()` elk doel
+  een VAST bedrag (zijn toewijzing van deze maand) tot het vol was of tot zijn datum, en wat een vol doel
+  vrijmaakte ging naar de groei; GEMETEN op de fixture van `lijn-en-band` kreeg Inrichting daardoor nooit iets
+  (zijn toewijzing van nu is nul, want Kosten Koper neemt alles) en ging hij op zijn datum leeg de deur uit.
+  A2: `fireInputs()` geeft de rijen van `allocatePlan()` (`planRijen`, met verdeelmodus, rest, `gespaard` en
+  de streefdatum als `k`) en `planCapacity()` (`planCap`) mee, en `maandDeel()` in `fireModel()` herhaalt
+  `planVerdeelMaand()` maand na maand met de grendel via `planGrendelVan()`, zoals `planVooruit()` (`v104`):
+  de terugval zit erin, en pas als Plan niets meer vraagt gaat de inleg naar de groei. `M.sim.vol` geeft per
+  bestemming de maand waarin hij vol raakt, en die is GELIJK aan `planVooruit()` (getoetst, ook bij
+  percentages en bij een buffer die eerst vol moet). DE LOPENDE MAAND TELT NIET MEE VOOR EEN DOEL, net als op
+  Plan (`v316`): wat Plan nu verdeelt staat vlak (`sim.onverdeeld0`) en blijft staan. Een doel krijgt OOK in
+  de maand van zijn datum (vol in mei, moet in mei is op tijd) en geeft daarna uit wat erin staat (`v347`);
+  valt zijn datum vóór de maand waarin Plan hem vol heeft, dan gaat hij op de datum half gevuld de deur uit
+  en zegt blok 18 "VERSCHIL". Een aflos-item houdt zijn toewijzing (`v307`) en dat geld blijft in de inleg.
+  A3: wat er WERKELIJK opzij ging is `opzijGemiddeld()`, het gemiddelde van `vermogensInleg().totaal`
+  (spaarrekening, reserveringen, beleggingsinleg) over de laatste drie AFGERONDE maanden (`v194`), en dat gaat
+  de waterval in: eerst de inleg per bezitting (`v216`), dan Plan met `min(planCap, wat er over is)` als
+  plafond (zet je minder opzij dan Plan verdeelt, dan zijn de doelen later vol), dan de reserveringen (ze
+  staan los van je spaarinleg, `v128`; betaald worden ze toch, uit de vlakke laag), en de rest groeit. HET
+  SURPLUS MIN DAT BEDRAG BLIJFT VLAK (`M.opzij.vlak`, in `sim.cser`), zonder rendement; samen is het per
+  constructie het surplus (getoetst). Geklemd op het surplus. ZONDER DRIE GEMETEN MAANDEN rekent hij met wat
+  je INSTELDE (spaarinleg plus reserveringen per maand plus inleg per bezitting, dezelfde verzameling als de
+  meting) en zegt hij dat; zonder ingestelde inleg met het hele surplus zoals tot `v348`. Bij zelf ingevulde
+  inleg wordt er niets gesplitst.
+  HET SCHERM: de waterval op de Vermogensreis draagt boven de stappen "Opzij gezet" met zijn herkomst en
+  "Blijft vlak staan" (`[data-opzij]`, 131px op 360 EN 390px, zonder overloop), en onder "Groeit mee vanaf nu"
+  de regel "Vanaf <maand>, als Plan vol is" met wat er dan groeit (`[data-groeitna]`). De klem "Je
+  bestemmingen passen niet" kijkt alleen nog naar Plan: dat Plan alles opzij gezette neemt en er voor de
+  reserveringen niets overblijft is geen klem op je doelen.
+  GEMETEN OP DE FIXTURE VAN `lijn-en-band` (surplus 3.566, gemeten opzij 2.200, dus 1.366 vlak; Plan vol in
+  maand 6): VOOR deze ronde lijn FIRE 2036, mediaan band 2037, kans 100 procent, op koers; in 2057 lijn
+  2.410.749 en mediaan 2.123.879. ALLEEN A2: lijn 2037, mediaan 2037, kans 100; 2057 lijn 2.396.579, mediaan
+  2.110.079. A2 EN A3: lijn 2037, mediaan 2037, kans 100, op koers; 2057 lijn 1.947.964, mediaan 1.776.808. DE
+  LIJN VERANDERT VANAF HET BEGIN EN NIET PAS NA PLAN VOL: de 1.366 die niet opzij gaat groeide tot nu mee en
+  staat nu vlak (2027: 42.474 naar 39.255); na Plan vol groeit 2.100 per maand (2.200 min de premie) in plaats
+  van 3.466. Blok 18 (`diagReisReserveringen()`) zet de splitsing en per bestemming Plan naast de projectie.
+  ZEVENTIEN BESTAANDE TESTS IN ZES BESTANDEN VIELEN EROP en ze hadden gelijk: ze pinden dat het hele surplus
+  groeit, of de vaste doelinleg van `v347`. Vier fixtures kregen een derde afgeronde maand, zodat wat opzij ging
+  gemeten is en niet aan de instelling hangt die de test verandert.
+  VIJFTIEN SABOTAGES, DERTIEN ROOD. Twee zijn per constructie inert en dat is een eigenschap (meetles p): de
+  lopende maand verdeelt op een KOPIE en het afboeken begint bij maand 1, dus een van de twee loslaten
+  verandert niets; beide samen loslaten (de lopende maand telt mee voor de doelen) zet tien tests rood. "De
+  klem telt de reserveringen weer mee" bleef eerst groen omdat de fixture geen post droeg (meetles a); de
+  test draagt nu de premie en meet eerst dat de reserveringen niets krijgen.
 - **DE LIJN EN DE BAND REKENEN MET EEN AANNAME: WAT WORDT UITGEGEVEN GAAT ERUIT, WAT BLIJFT STAAT VLAK**
   (`v347`, gevraagd door de gebruiker): tot `v346` liet de lijn (`fireModel()`) alles wat naar reserveringen
   en doelen ging als vlak geld staan tot je pensioen (`C+=fill+best`), en telde de Monte Carlo het helemaal
@@ -129,7 +176,8 @@ genoemde versietag.)*
   `fireModel()` rekent per maand een vlakke reeks `sim.cser` (in: noodfonds-vulling en wat de bestemmingen
   krijgen; uit: elke termijn, elke eenmalige post en elk doel op zijn datum) en de Monte Carlo leest die reeks
   en dezelfde `pmtFor()`; alleen het rendement is daar stochastisch. Een doel vraagt zijn maandbedrag tot het
-  vol is of tot zijn datum (`doelVraag()`), dus een vol doel neemt niets meer. Een reservering wordt ook
+  vol is of tot zijn datum (`doelVraag()`, sinds `v348` vervangen door de maandverdeling van Plan; zie de regel
+  daarboven), dus een vol doel neemt niets meer. Een reservering wordt ook
   betaald als de inleg hem niet helemaal dekte (de betaling gebeurt toch). `fireInputs().doelItems` draagt
   elk doel met `k` (maanden tot de streefdatum) en `gespaard`, ook een doel dat nu niets krijgt; de stap op het
   scherm leest `M.bestemming.doelItems` (alleen wat er deze maand heen gaat). Bij zelf ingevulde inleg gaat er
@@ -6122,7 +6170,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v347` → `minder-v348`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v348` → `minder-v349`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6141,7 +6189,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346` en `v347` naar `minder-v347`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347` en `v348` naar `minder-v348`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

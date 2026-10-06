@@ -11,6 +11,11 @@ const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '
 const CUR = ym(now);
 const M1 = ym(new Date(now.getFullYear(), now.getMonth() - 1, 1));
 const M2 = ym(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+/* v348: een derde afgeronde maand, zodat wat er opzij ging GEMETEN is en niet aan de inleg per bezitting
+   hangt die deze tests aan- en uitzetten. 1.200 naar de spaarrekening en 300 naar de reserveringen is 1.500
+   per maand: genoeg voor de inleg per bezitting, Plan en de reserveringen samen, zodat de inleg per bezitting
+   een verschuiving binnen wat opzij ging is. De rest van het restsaldo (400) blijft vlak, met en zonder. */
+const M3 = ym(new Date(now.getFullYear(), now.getMonth() - 3, 1));
 const MAIN = 'NL01MAIN0000001111';
 const SPAAR = 'NL01SAVE0000004323';
 const RES = 'NL01RESV0000009999';
@@ -35,12 +40,12 @@ function seed(assets, extra) {
   const tx = [];
   const add = (id, acc, m, day, amount, naam, desc) =>
     tx.push({ id, date: m + '-' + day, amount, acc, name: naam, desc, typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
-  for (const m of [M2, M1, CUR]) {
+  for (const m of [M3, M2, M1, CUR]) {
     add('i' + m, MAIN, m, '25', 4000, 'Werkgever', 'SALARIS LOON');
     add('h' + m, MAIN, m, '02', -1200, 'Woningcorporatie', 'SEPA INCASSO HUURBETALING');
     add('a' + m, MAIN, m, '05', -500, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
     add('v' + m, MAIN, m, '08', -400, 'Diversen', 'BEA, BETAALPAS DIVERSEN');
-    add('s' + m, SPAAR, m, '26', 500, 'Spaarpot', 'NAAR SPAREN');
+    add('s' + m, SPAAR, m, '26', 1200, 'Spaarpot', 'NAAR SPAREN');
     add('r' + m, RES, m, '10', 300, 'Reserveringen', 'NAAR RESERVERINGEN');
   }
   const set = Object.assign({
