@@ -117,6 +117,39 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE PROJECTIE REKENT PER POST: TERUGKEREND BEDRAG DOOR INTERVAL IN ELK JAAR, EENMALIG IN ZIJN EIGEN MAAND**
+  (`v346`, gevraagd door de gebruiker): `resPosten()` is de lezer van de lijst voor `fireInputs()`, en geeft
+  `perMaand` (de som van bedrag door interval over de terugkerende posten, onafgerond) en `eenmalig` (per
+  post het bedrag en `k`, de maanden vanaf nu, uit `resVolgende()`, dus een betaalde of verstreken post valt
+  weg). Laag B (`fireModel()`) rekent sindsdien PER MAAND: `pmtParts(year, k)` met `k = 12y + m`, en een
+  eenmalige post zit alleen in de `wens` van zijn eigen maand. `pmtFor(year)` is het gemiddelde van de twaalf
+  maanden, zodat de Monte Carlo hem ook alleen in zijn eigen jaar ziet. Bij zelf ingevulde inleg trekt de
+  projectie niets af, in geen van beide vormen (zoals sinds `v211`). DAT LOST PUNT (3) VAN `v345` OP:
+  `fireInputs()` leest de maandlast van `dekking()` niet meer, bruto noch netto.
+  HET SCHERM: de stap "Reserveringen" in de restsaldo-waterval noemt het structurele bedrag per maand en
+  daaronder de eenmalige posten met hun maand (`data-resproj`, hooguit twee bij naam), en hij staat er ook
+  als er alleen een eenmalige post is. "Groeit mee vanaf nu" is de maand zonder eenmalige post.
+  GEMETEN, ALLEEN OP EEN FIXTURE (de gegevens van het toestel staan alleen daar): met de boete van EUR 299
+  eenmalig volgende maand, een inleg van EUR 2.200 en twee doelen ligt het vermogen in de projectie na een
+  jaar EUR 31 hoger, na vijf jaar EUR 1.591, na tien EUR 7.245 en in 2057 EUR 97.968. Met een jaarpremie van
+  EUR 1.200 erbij is dat +70, +3.246, +14.647 en +196.925; met een kwartaalpost van EUR 300 alleen +50,
+  +2.113, +9.451 en +126.335. BLOK 18 VAN `DIAG_BLOKKEN` (`diagReisReserveringen()`) zet dezelfde twee
+  projecties op het toestel naast elkaar: per post wat hij kost, en het vermogen na 1, 5 en 10 jaar en in je
+  doeljaar, nu tegen de bruto maandlast van tot `v345`. Alleen lezen (`v244`); de nieuwe kolom is
+  `reisModel()` zelf.
+  WAT HET VERSCHIL IS, EN DAT IS EEN BEVINDING OVER HET MODEL: wat naar je bestemmingen gaat landt in de
+  vlakke laag (`C+=fill+best`, `v211`) en wordt in de middelste lijn NOOIT UITGEGEVEN. Het verschil tussen de
+  twee vormen is dus alleen de groei die dat geld wel of niet mist, geen bedrag dat van je vermogen af gaat.
+  OPEN PUNT, GEMETEN EN NIET AANGERAAKT: DE MONTE CARLO DOET HET ANDERS. `fireMonteCarlo()` telt alleen
+  `vrij` bij de vlakke laag op en niet de bestemmingen, dus daar valt wat naar reserveringen en doelen gaat
+  helemaal uit je vermogen. De middelste lijn en de band rekenen dus met twee verschillende aannames over
+  hetzelfde geld (`v104`). Welke van de twee klopt hangt eraan of de betaling zelf al in je uitgaven zit
+  (`forecastModel()`), en dat is een eigen ronde.
+  OPEN PUNT: `benodigdPerMaand` HEEFT GEEN LEZER MEER IN DE APP; alleen `dekking()` rekent hem uit en tests
+  lezen hem. Opruimen is een eigen ronde (zeventien regels in zeven specs noemen hem).
+  DRIE BESTAANDE TESTS VIELEN EROP, twee terecht: `bestemmingen-waterval` eiste dat de reserveringen
+  `dekking(12).benodigdPerMaand` zijn, en `inleg-voor-bestemming` pinde EUR 2.600 (2.500 plus de bruto EUR
+  100 van een tandarts van EUR 300 per jaar; nu 2.525). Tien sabotages, alle tien rood.
 - **NOG NODIG PER MAAND HEEFT EEN BRON, EN DE PROJECTIE LEEST HEM NIET** (`v345`, gevraagd door de
   gebruiker): `resNodigPerMaand(V, stand)` is de netto som van `v344`, met twee lezers in `dekking()`: de
   gemeten stand (`nodigPerMaand`) en een lege pot (`nodigZonderPot`). DRIE PLEKKEN LAZEN NOG DE BRUTO SOM
@@ -135,7 +168,8 @@ genoemde versietag.)*
   netto geeft bij een gedekte premie NUL, ook in de jaren erna, terwijl die premie elk jaar terugkomt (te
   gunstig, `v168`). Wat de projectie vraagt is het STRUCTURELE bedrag: per terugkerende post bedrag door
   interval (de premie EUR 100 per maand, de boete nul). Dat is een andere vraag dan "nog nodig", en de
-  keuze ligt bij de gebruiker. Zes sabotages, alle zes rood.
+  keuze ligt bij de gebruiker. Zes sabotages, alle zes rood. BIJ `v346` GEBOUWD, met de eenmalige post in
+  zijn eigen maand; zie de regel daarboven.
 - **DE RESERVERINGEN STAAN ALLEEN OP GRIP, EN GEDEKT IS GEDEKT ZONDER MAANDBEDRAG** (`v344`, gevraagd
   door de gebruiker): DE KAART OP PLAN (`resDekkingCard()`, `resPostTelling()`) IS WEG. Hij dubbelde de
   tegel en de sheet op Grip, en Plan rekende er niet mee (`v128`). NAGEGAAN: de tegel en de dekkingsregel
@@ -157,8 +191,8 @@ genoemde versietag.)*
   de volgende post." zonder bedrag, de opbouwrij "Nog nodig per maand" (`[data-resnodig]`) zegt "niets
   tot de volgende post", en de tegel "gedekt t/m november". EEN GAT: `dekkingTekst()` draagt de zin van
   `dekkingDichtenZin()` zelf (de regel op Grip plakt hem niet meer aan), en noemt het jaarbedrag alleen
-  als de posten na het gat meer vragen. `benodigdPerMaand` blijft voor de tak zonder
-  reserveringsrekening, `fireInputs()` en `maandSuggestie()`.
+  als de posten na het gat meer vragen. `benodigdPerMaand` bleef voor de tak zonder
+  reserveringsrekening, `fireInputs()` en `maandSuggestie()`; sinds `v345` en `v346` leest geen van de drie hem.
   GEMETEN: Plan gaat op de stand van het toestel van 833 naar 722px (`plan-terugval-lijn`), en de sheet
   en de tegel lopen op 360 en 390px niet over. VEERTIEN SABOTAGES, ALLE VEERTIEN ROOD, twee pas nadat de
   spec het geval droeg (meetles a): "het laatste voorkomen in plaats van het hoogste" vraagt een vroege
@@ -6042,7 +6076,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v345` → `minder-v346`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v346` → `minder-v347`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6061,7 +6095,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344` en `v345` naar `minder-v345`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345` en `v346` naar `minder-v346`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

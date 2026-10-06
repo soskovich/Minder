@@ -86,12 +86,12 @@ const waterval = (page) => page.evaluate(() => {
 });
 
 test.describe('a - de bedragen komen uit de bestaande bronnen', () => {
-  test('reserveringen zijn exact dekking(12).benodigdPerMaand', async ({ page }) => {
+  // v346: niet meer de maandlast van dekking(), maar per post bedrag door interval (resPosten()).
+  test('reserveringen zijn de som van bedrag door interval', async ({ page }) => {
     await boot(page);
     const m = await model(page);
-    const d = await page.evaluate(() => Math.round(dekking(12).benodigdPerMaand || 0));
-    expect(m.res).toBe(d);
-    expect(m.res).toBeGreaterThan(0);
+    expect(m.res).toBe((300 + 900) / 12);
+    expect(await page.evaluate(() => resPosten().perMaand)).toBe(m.res);
   });
 
   test('doelen zijn de som van de alloc van alle goal-items uit allocatePlan', async ({ page }) => {

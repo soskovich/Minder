@@ -177,7 +177,9 @@ test.describe('c - de klem is omgedraaid en wordt gemeld', () => {
     await boot(page);
     const t = await waterval(page);
     expect(t).toContain('Je bestemmingen passen niet in je restsaldo');
-    expect(t).toContain('van €2.600');
+    // v346: de tandarts (EUR 300 per jaar) kost de projectie EUR 25 per maand en niet de EUR 100 van de
+    // bruto maandlast (300 over drie maanden), dus de bestemmingen vragen 2.500 + 25.
+    expect(t).toContain('van €2.525');
     expect(t).toContain('Op Plan is dus meer toegewezen dan er binnenkomt');
   });
 
