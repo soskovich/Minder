@@ -52,7 +52,9 @@ async function boot(page, o = {}) {
   await page.waitForFunction(() => typeof verseStart === 'function');
 }
 /* v340: Grip is een dashboard. De terugblikken staan als regel onder 'Let op' en openen hun kaart in
-   een sheet; deze helper leest Grip plus de kaart achter elke terugblik-regel, in die volgorde. */
+   een sheet; deze helper leest Grip plus de kaart achter elke terugblik-regel, in die volgorde.
+   v349: de uitnodiging (maandCoachIngang) staat in de pop-up van de maandafsluiting en niet meer op
+   Grip, dus de helper leest die pop-up erachter. */
 const maand = async (page) => { await page.evaluate(() => { closeSheet(); go('maand'); });
   await page.waitForSelector('#s-maand .card');
   return page.evaluate(() => {
@@ -60,6 +62,7 @@ const maand = async (page) => { await page.evaluate(() => { closeSheet(); go('ma
     for (const e of document.querySelectorAll('#gripLetOp [data-letop]')) {
       const k = e.dataset.letop; if (!['accept', 'afspraaklus', 'voornemen'].includes(k)) continue;
       openGripLetOp(k); t += ' ' + document.getElementById('gripLetOpSheet').innerText; closeSheet(); }
+    openAfsluiting(valtOpYmPlus(thisYM(), -1)); t += ' ' + $('#sheet').innerText; closeSheet();
     return t.replace(/\s+/g, ' '); }); };
 
 test.describe('a · de verse-startkaart bestaat niet meer', () => {
@@ -142,8 +145,11 @@ test.describe('b · het maandmoment hangt aan de datum, niet aan een vlag', () =
     expect(r.eerder).toBe(0);                    // geen enkele afgeronde maand
     expect(r.verse).toBe(true);                  // herzien 63: die eis sluit precies deze uit
     expect(r.src).not.toMatch(/months\(/);
+    /* v349: de uitnodiging staat in de pop-up van de maandafsluiting, en die is er alleen als de vorige
+       maand boekingen heeft. Zonder historie is er niets af te sluiten, dus dan staat het moment nergens.
+       Dat is de prijs van de verhuizing, en die staat hier vast in plaats van dat hij wordt weggerekend. */
     const t = await maand(page);
-    expect(t).toMatch(/Nieuwe maand\./);
+    expect(t).not.toMatch(/Nieuwe maand\./);
   });
 });
 

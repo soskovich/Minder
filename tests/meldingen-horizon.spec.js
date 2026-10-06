@@ -144,9 +144,11 @@ test.describe('c · structureel op het maandscherm', () => {
     await boot(page);
     /* v340: het oordeel is vervallen, en het verband staat in de sheet van een tekort-regel en leest daar
        die ene rij (maandVerband([r])). Wat blijft: de coach-ingang krijgt RO, via "Deze maand". */
+    /* v349: de ingang staat in de pop-up van de maandafsluiting, en leest daar dezelfde lijst als RO:
+       de regels met acceptatie en afspraak, plus de structurele signalen. */
     const src = await kaalUit(page, 'renderMaand');
-    expect(src).toContain('dezeMaandKaart(RO)');
-    expect(await kaalUit(page, 'dezeMaandKaart')).toContain('maandCoachIngang(RO');
+    expect(await kaalUit(page, 'dezeMaandKaart')).not.toContain('maandCoachIngang(');
+    expect(await kaalUit(page, 'renderAfsluitSheet')).toContain('maandCoachIngang(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel())))');
     expect(src).not.toMatch(/maandCoachIngang\(R\)/);
   });
 });

@@ -327,11 +327,14 @@ test.describe('f - de zin over niets te beslissen zegt wat de poort toetst', () 
       return { tekort: R.filter((r) => r.status === 'tekort').length,
         letop: R.filter((r) => r.status === 'let op').length,
         ok: R.filter((r) => r.status === 'ok').length,
-        scherm: document.querySelector('#s-maand').innerText }; });
+        scherm: document.querySelector('#s-maand').innerText,
+        pop: (openAfsluiting(valtOpYmPlus(thisYM(), -1)), document.querySelector('#sheet').innerText) }; });
     expect(d.tekort).toBe(0);
     expect(d.letop).toBe(0);
     expect(d.ok).toBeGreaterThan(0);
-    expect(d.scherm).toContain('niets te beslissen');
+    // v349: hij staat in de pop-up van de maandafsluiting en niet meer op Grip.
+    expect(d.pop).toContain('niets te beslissen');
+    expect(d.scherm).not.toContain('niets te beslissen');
   });
 
   test('een regel die aandacht vraagt houdt hem ook weg', async ({ page }) => {

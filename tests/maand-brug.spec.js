@@ -58,7 +58,7 @@ async function boot(page, o, breed) {
   await page.waitForSelector('#insSpendChart');
 }
 const tik = (page, m) => page.locator(`#insSpendChart rect[onclick*="${m}"]`).click();
-const stappen = (page) => page.$$eval('[data-brugstap]', (els) => els.map((e) => ({ soort: e.dataset.brugstap, w: +e.dataset.brugwaarde, label: e.innerText.replace(/\s+/g, ' ').trim() })));
+const stappen = (page) => page.$$eval('#insBrug [data-brugstap]', (els) => els.map((e) => ({ soort: e.dataset.brugstap, w: +e.dataset.brugwaarde, label: e.innerText.replace(/\s+/g, ' ').trim() })));
 
 test.describe('a - het september-geval', () => {
   test('de invoer draagt het geval: budget 3.421 bewaard, staaf 3.095', async ({ page }) => {
@@ -113,7 +113,7 @@ test.describe('a - het september-geval', () => {
   test('boven het budget in de kleur voor boven, onder gedempt', async ({ page }) => {
     await boot(page);
     await tik(page, '2026-09');
-    const k = await page.$$eval('[data-brugstap]', (els) => els.map((e) => ({ w: +e.dataset.brugwaarde, s: e.dataset.brugstap, bg: e.querySelector('i').style.background })));
+    const k = await page.$$eval('#insBrug [data-brugstap]', (els) => els.map((e) => ({ w: +e.dataset.brugwaarde, s: e.dataset.brugstap, bg: e.querySelector('i').style.background })));
     for (const x of k.filter((x) => x.s !== 'begin' && x.s !== 'eind')) expect(x.bg).toBe(x.w > 0 ? 'var(--red)' : 'var(--mut2)');
   });
 
@@ -309,7 +309,7 @@ for (const breed of [360, 390]) {
       console.log(`hoogte ${breed}: voor ${voor} na ${na} uitgesplitst ${open}`);
       const m = await page.evaluate(() => {
         const kaart = document.querySelector('#insSpendCard').getBoundingClientRect();
-        const vals = [...document.querySelectorAll('[data-brugval]')].map((e) => e.getBoundingClientRect());
+        const vals = [...document.querySelectorAll('#insBrug [data-brugval]')].map((e) => e.getBoundingClientRect());
         let overlap = 0;
         for (let i = 0; i < vals.length; i++) for (let j = i + 1; j < vals.length; j++) {
           const a = vals[i], b = vals[j];
@@ -329,11 +329,11 @@ for (const breed of [360, 390]) {
       await boot(page, { sep: Object.assign({}, SEP, { huur: 1250, vakantie: 60 }) }, breed);
       await page.evaluate(() => { for (const t of TX) if (/Winkel vakantie/.test(t.name)) OVR[t.id] = 'vakantie'; save(); window._brugMaand = null; renderIns(); });
       await tik(page, '2026-09');
-      expect(await page.locator('[data-brugstap]').count()).toBe(9);
+      expect(await page.locator('#insBrug [data-brugstap]').count()).toBe(9);
       const m = await page.evaluate(() => {
         const kaart = document.querySelector('#insSpendCard').getBoundingClientRect();
-        const vals = [...document.querySelectorAll('[data-brugval]')].map((e) => e.getBoundingClientRect());
-        const namen = [...document.querySelectorAll('[data-brugstap] > div:last-child')].map((e) => ({ r: e.getBoundingClientRect(), sw: e.scrollWidth, cw: e.clientWidth }));
+        const vals = [...document.querySelectorAll('#insBrug [data-brugval]')].map((e) => e.getBoundingClientRect());
+        const namen = [...document.querySelectorAll('#insBrug [data-brugstap] > div:last-child')].map((e) => ({ r: e.getBoundingClientRect(), sw: e.scrollWidth, cw: e.clientWidth }));
         let overlap = 0;
         for (let i = 0; i < vals.length; i++) for (let j = i + 1; j < vals.length; j++) {
           const a = vals[i], b = vals[j];

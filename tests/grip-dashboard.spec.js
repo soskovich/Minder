@@ -112,7 +112,8 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
   expect(r.V.band.min).toBeLessThanOrEqual(r.V.projectie);
   expect(r.V.band.max).toBeGreaterThanOrEqual(r.V.projectie);
   expect(r.V.band.maanden).toEqual(['2026-07', '2026-08', '2026-09']);
-  expect(r.tekst).toContain(`Komt uit rond €${r.V.projectie.toLocaleString('nl-NL')}`);
+  // v349: de kaart draagt de uitkomst met het verschil met je budget, en de bridge eronder (deze-maand-bridge.spec.js)
+  expect(r.tekst).toContain(`€${r.V.projectie.toLocaleString('nl-NL')} · €${(r.V.budget - r.V.projectie).toLocaleString('nl-NL')} onder budget`);
   expect(r.tekst).toContain('€131 per maand naar je reserveringen tot november');
   expect(r.afspraak).toBe(1);
   await page.evaluate(() => openGripVooruit());
@@ -207,12 +208,14 @@ for (const w of [360, 390]) test(`l. hoogte van Grip op ${w}px`, async ({ page }
     return { tegels: r('gripTegels'), deze: r('gripDezeMaand'), tijd: r('gripTijdlijn'), totaal: Math.round(s.scrollHeight), over: document.documentElement.scrollWidth > window.innerWidth }; });
   /* GEMETEN bij v340 op deze stand (met de afspraak van EUR 131): de tegels 171px, Deze maand 176px op 360
      en 158px op 390, de tijdlijn 129px, en Grip 582px op 360 en 564px op 390. Op v339 was Grip op dezelfde
-     stand 966px op 360 en 945px op 390. */
+     stand 966px op 360 en 945px op 390.
+     v349: Deze maand draagt de bridge van budget naar uitkomst en de oorzaakzin: 333px op 360 en 315px op
+     390, en Grip 739px en 721px. */
   expect(h.over).toBe(false);
   expect(h.tegels).toBe(171);
   expect(h.tijd).toBe(129);
-  expect(h.deze).toBe(w === 360 ? 176 : 158);
-  expect(h.totaal).toBe(w === 360 ? 582 : 564);
+  expect(h.deze).toBe(w === 360 ? 333 : 315);
+  expect(h.totaal).toBe(w === 360 ? 739 : 721);
 });
 
 /* De handelingen. Uit eten heeft een potje van 150; in juli, augustus en september ging er na dag 4
@@ -234,11 +237,13 @@ test('m. wat je deze maand kunt doen: een grens met zijn effect in euro, en de s
   const kaart = await page.evaluate(() => document.getElementById('gripDezeMaand').innerText.replace(/\s+/g, ' '));
   expect(kaart).toContain('Uit eten');
   expect(kaart).toContain('loopt voor');
-  expect(kaart).toContain(`Met een grens: rond €${(V.proj - 30).toLocaleString('nl-NL')}`);
+  // v349: de som met de grenzen staat in de sheet en niet meer op de kaart
+  expect(kaart).not.toContain('Met een grens');
   await page.evaluate(() => openGripVooruit());
   const w = await page.evaluate(() => ({ t: document.getElementById('gripVooruit').innerText.replace(/\s+/g, ' '), rood: [...document.querySelectorAll('[data-vstap="potje"]')].length }));
   expect(w.t).toContain('Uit eten & café: nog €50 tot 31 oktober −€30');
   expect(w.t).toContain('Grens op €50');
+  expect(w.t).toContain(`Met deze grens rond €${(V.proj - 30).toLocaleString('nl-NL')}`);
 });
 
 test('n. een grens zet niets vanzelf: openen schrijft niets, bevestigen maakt een afspraak onder Deze maand', async ({ page }) => {

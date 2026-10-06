@@ -7596,6 +7596,10 @@ function renderAfsluitSheet(M){
      dieper); na het afsluiten staat hij in het logboek. */
   let tegels=''; try{ tegels=`<div class="kt3">${afsluitTegels(M).map(t=>`<div class="kt kt-s" data-afsluittegel="${t.key}" onclick="${t.act}"><div class="kt-lab">${esc(t.label)}</div><div class="kt-val">${esc(t.waarde)}</div><div class="kt-maat">${esc(t.maat)}</div></div>`).join('')}</div>`; }catch(_){}
   let vraag=''; try{ const v=valtOpOpenVraag(); if(v) vraag=`<div class="hlabel" style="margin:12px 0 4px">Logboekvraag</div>${valtOpVraagKaart(v)}`; }catch(_){}
+  /* v349: het maandmoment (MECHANISM_SPEC.freshStart) staat hier en niet meer op de kaart Deze maand:
+     de pop-up is het moment waarop je de nieuwe maand begint. Dezelfde poort en dezelfde lagen als op
+     Grip (maandCoachIngang leest de rijen met acceptatie en afspraak). */
+  let ing=''; try{ ing=maandCoachIngang(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel()))); }catch(_){}
   $('#sheet').innerHTML=`<div class="grab"></div><div id="afsluitSheet" data-maand="${M}">
     <div class="row" style="gap:10px;align-items:baseline"><span style="flex:1;font-weight:800;font-size:var(--fs-lg)">${esc(Mn)} afsluiten</span><span class="small muted" data-afteller="${S.af}/${S.tot}" style="white-space:nowrap">${S.af} van ${S.tot} klaar</span></div>
     ${tegels}
@@ -7603,6 +7607,7 @@ function renderAfsluitSheet(M){
     ${S.P.map(afsluitPuntRij).join('')}
     ${vraag}
     ${S.A.length?`<div class="hlabel" style="margin:12px 0 0">Wat je afsprak</div>${S.A.map(x=>afspraakRij(x.a, x.S)).join('')}`:''}
+    ${ing}
     ${knop}
     <div class="small" data-afsluitlater style="text-align:center;margin-top:10px;color:var(--mut2);cursor:pointer" onclick="afsluitLater()">Later</div></div>`;
 }
@@ -7789,14 +7794,24 @@ function maandVooruit(){
   const potjes=[];
   for(const k in B){ const bud=+B[k]||0; if(!(bud>0) || rc.has(k) || !CATS[k] || geenNorm(k)) continue;
     const u=+S[k]||0, r=Math.max(+restCat[k]||0,0);
-    potjes.push({k, naam:CATS[k].name, bud:Math.round(bud), uit:Math.round(u), rest:Math.round(r), eind:Math.round(u+r), typisch:Math.round(Math.max(+tot0[k]||0,0))}); }
-  potjes.forEach(x=>x.over=x.eind-x.bud);
+    const typ=Math.max(+tot0[k]||0,0), patroon=typ+r;
+    potjes.push({k, naam:CATS[k].name, bud:Math.round(bud), uit:Math.round(u), rest:Math.round(r), eind:Math.round(u+r), typisch:Math.round(typ),
+      overR:u+r-bud, patroon:Math.round(patroon)}); }
+  /* v349: WAAROM EEN POTJE BOVEN ZIJN BEDRAG UITKOMT, en dat zijn twee verschillende dingen. "Past niet in
+     je potje" is je gewone maand: wat je in juli tot en met september gemiddeld in de hele maand uitgaf
+     (dezelfde dagen plus de rest) is meer dan het potje, ook als er deze maand nog niets uit is. "Loopt
+     voor" is je tempo: deze maand is er meer uit dan gemiddeld in dezelfde dagen. Past hij niet, dan is
+     dat het woord, want dan loopt hij ook boven zonder dat je harder gaat; anders loopt hij voor. Een
+     potje dat boven uitkomt zonder een van de twee bestaat per constructie niet: dan is eind = uit + rest
+     hooguit typisch + rest = patroon, en dat ligt dan niet boven het potje. */
+  potjes.forEach(x=>{ x.over=x.eind-x.bud; x.aard=x.patroon>x.bud?'pastniet':(x.uit>x.typisch?'voor':''); });
   const voor=potjes.filter(x=>x.over>0).sort((a,b)=>b.over-a.over || (a.naam<b.naam?-1:1));
   /* Wat je deze maand kunt doen: alleen voor een potje dat op zijn tempo boven zijn bedrag eindigt en
      waar nog iets in zit. Het voorstel is wat er nog in zit, en het effect is wat je dan minder
      uitgeeft dan je gemiddeld zou doen. Een potje dat al leeg is staat onder "Let op" (valtOpSignals). */
   const handelingen=voor.filter(x=>x.bud-x.uit>0).map(x=>{ const grens=Math.floor(x.bud-x.uit);
-    return {k:x.k, naam:x.naam, uit:x.uit, typisch:x.typisch, grens, effect:Math.round(x.eind-x.bud), perWeek:over>0?Math.round(grens/over*7):grens}; });
+    return {k:x.k, naam:x.naam, uit:x.uit, typisch:x.typisch, grens, effect:Math.round(x.eind-x.bud), perWeek:over>0?Math.round(grens/over*7):grens,
+      aard:x.aard, bud:x.bud, patroon:x.patroon}; });
   /* Verschuiven alleen vanaf een potje dat verwacht onder eindigt, en alleen als de route bestaat:
      een bestaand potje deze maand wijzigen kan alleen via de bijstelling van een signaal (v238). */
   let schuif=null;
@@ -7815,7 +7830,54 @@ function gripVerschil(bedrag, budget){
   const d=Math.round(bedrag-budget);
   return d>0 ? `${euro0(d)} boven je budget` : d<0 ? `${euro0(-d)} onder je budget` : 'precies je budget';
 }
-function dezeMaandKaart(RO){
+/* ===== DEZE MAAND ALS VARIANCE-BRIDGE (v349, variant C uit de mockup) =====
+   De kaart toont de OORZAKEN, de sheet de OPBOUW. Een regel met de uitkomst en het verschil met het
+   budget, daaronder een bridge van het maandbudget naar die uitkomst, en een zin met de oorzaak. Een tik
+   opent de waterval (renderGripVooruit), en die eindigt op hetzelfde getal: beide lezen maandVooruit().
+   DE STAPPEN: per potje de verwachte afwijking (verwacht eind min potje), hooguit DEZEMAAND_LOS potjes
+   los op de GROOTTE van die afwijking (boven en onder), en de rest als een stap: alle andere potjes, het
+   verschil op de vaste lasten en wat er zonder potje uitgaat. Die rest is per constructie het verschil
+   tussen de uitkomst en budget plus de losse stappen, dus de som klopt. De afronding is die van de
+   bridge op Inzichten (brugAfronden): de afgeronde stappen tellen exact op van budget naar uitkomst.
+   DE TEKENING IS brugGrafiek(), dezelfde als op Inzichten (v104): boven rood, onder gedempt. Begint de as
+   niet bij nul, dan staat de ondergrens op de as. */
+const DEZEMAAND_LOS=3;
+function dezeMaandBrug(V){
+  if(!V || V.onbekend || !(V.budget>0)) return null;
+  const diff=V.projectie-V.budget;
+  const los=V.potjes.filter(x=>Math.round(x.overR)!==0)
+    .sort((a,b)=>(Math.abs(b.overR)-Math.abs(a.overR)) || (a.naam<b.naam?-1:1)).slice(0,DEZEMAAND_LOS);
+  const rauw=los.map(x=>({k:x.k, v:x.overR}));
+  rauw.push({k:'~rest', v:diff-los.reduce((a,x)=>a+x.overR,0)});
+  const R=brugAfronden(rauw, diff);
+  const stappen=[{soort:'begin', label:'budget', waarde:V.budget}];
+  for(const x of los) stappen.push({soort:'potje', k:x.k, label:x.naam, waarde:R[x.k], aard:x.aard});
+  if(R['~rest']) stappen.push({soort:'rest', label:'rest', waarde:R['~rest']});
+  stappen.push({soort:'eind', label:ymFull(V.m).slice(0,3), waarde:V.projectie});
+  /* De ondergrens van de as: alleen als alle standen boven nul liggen en de stappen klein zijn tegen het
+     budget, anders zijn ze niet te zien. Een rond getal (een halve macht van tien) onder de laagste stand. */
+  let run=V.budget; const lv=[V.budget, V.projectie];
+  for(const st of stappen.slice(1,-1)){ run+=st.waarde; lv.push(run); }
+  const lo=Math.min(...lv), hi=Math.max(...lv);
+  let basis=0;
+  if(lo>0 && hi-lo<hi*0.5){ const stap=Math.pow(10,Math.floor(Math.log10(hi)))/2; basis=Math.max(Math.floor((lo-(hi-lo)*0.6)/stap)*stap,0); }
+  return {tegen:'budget', stappen, basis, los, rest:R['~rest']||0, diff};
+}
+/* De zin stelt vast en oordeelt niet (v78/v93): welk potje boven uitkomt en waarom (past niet, of loopt
+   voor), welk losse potje eronder blijft, en de rest. */
+function dezeMaandZin(Br){
+  const boven=Br.los.filter(x=>x.overR>0), onder=Br.los.filter(x=>x.overR<0);
+  const pn=boven.filter(x=>x.aard==='pastniet'), vr=boven.filter(x=>x.aard==='voor'), an=boven.filter(x=>x.aard!=='pastniet' && x.aard!=='voor');
+  const d=[];
+  if(!boven.length) d.push('Geen potje eindigt verwacht boven zijn bedrag');
+  if(pn.length) d.push(`${gripNamen(pn)} ${pn.length===1?'past niet in zijn potje':'passen niet in hun potje'}`);
+  if(vr.length) d.push(`${gripNamen(vr)} ${vr.length===1?'loopt voor':'lopen voor'}`);
+  if(an.length) d.push(`${gripNamen(an)} ${an.length===1?'eindigt verwacht boven zijn potje':'eindigen verwacht boven hun potje'}`);
+  if(onder.length) d.push(`${gripNamen(onder)} ${onder.length===1?'blijft':'blijven'} eronder`);
+  if(Br.rest) d.push(`de rest samen ${euro0(Math.abs(Br.rest))} ${Br.rest<0?'onder':'boven'}`);
+  return d.join('; ')+'.';
+}
+function dezeMaandKaart(){
   const m=thisYM(); let V=null; try{ V=maandVooruit(); }catch(_){ V=null; }
   /* De lopende afspraken staan hier, onder deze maand: wat je afsprak gaat over wat je nu doet.
      Een afspraak uit het coachgesprek (coachThisMonthAfspraak) staat er in dezelfde vorm bij. */
@@ -7828,15 +7890,14 @@ function dezeMaandKaart(RO){
     boven=`<div data-vooruit="onbekend"><div style="font-weight:700;font-size:var(--fs-md)">${euro0(Math.round(T.spendNorm||0))} uitgegeven${bud>0?` van ${euro0(bud)}`:''}</div>
       <div class="small muted" style="margin-top:3px;line-height:1.45">Waar je maand uitkomt rekent Minder met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div></div>`;
   } else {
-    const voor=V.voor.length?` · ${gripNamen(V.voor.slice(0,2))} ${V.voor.length===1?'loopt':'lopen'} voor`:'';
-    const vs=gripVerschil(V.projectie, V.budget);
-    const met=V.metGrenzen!=null?`<div class="small" data-metgrenzen style="margin-top:6px;color:var(--mut2)">Met ${V.handelingen.length===1?'een grens':V.handelingen.length+' grenzen'}: rond ${euro0(V.metGrenzen)}${V.budget>0?` · ${gripVerschil(V.metGrenzen,V.budget)}`:''}</div>`:'';
+    const d=V.projectie-V.budget;
+    const vs=V.budget>0?(d<0?`${euro0(-d)} onder budget`:(d>0?`${euro0(d)} boven budget`:'precies je budget')):'';
+    let Br=null; try{ Br=dezeMaandBrug(V); }catch(_){ Br=null; }
     boven=`<div data-vooruit="${V.projectie}" style="cursor:pointer" onclick="openGripVooruit()">
-      <div class="row" style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0;font-weight:700;font-size:var(--fs-lg)">Komt uit rond ${euro0(V.projectie)}</span><span style="color:var(--teal);font-weight:700">›</span></div>
-      ${(vs||voor)?`<div class="small muted" style="margin-top:2px;line-height:1.45">${esc((vs||'')+(vs?voor:voor.replace(/^ · /,'')))}</div>`:''}${met}</div>`;
+      <div class="row" data-dmregel style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0"><span style="font-weight:800;font-size:var(--fs-lg)">${euro0(V.projectie)}</span>${vs?`<span class="small muted"> · ${vs}</span>`:''}</span><span style="color:var(--teal);font-weight:700">›</span></div>
+      ${Br?`<div id="gripBrug">${brugGrafiek(Br)}</div><div class="small" data-dmzin style="line-height:1.45;margin-top:6px;color:var(--mut)">${esc(dezeMaandZin(Br))}</div>`:''}</div>`;
   }
-  let ing=''; try{ ing=maandCoachIngang(RO||[]); }catch(_){}
-  return `<div class="card" id="gripDezeMaand">${kop}${boven}${af?`<div style="margin-top:8px">${af}</div>`:''}${ing}</div>`;
+  return `<div class="card" id="gripDezeMaand">${kop}${boven}${af?`<div style="margin-top:8px">${af}</div>`:''}</div>`;
 }
 function openGripVooruit(){ renderGripVooruit(); showSheetBg(); }
 /* De waterval: donker wat er al uit is, de vaste lasten die nog komen, per potje wat er gemiddeld nog
@@ -7867,10 +7928,19 @@ function renderGripVooruit(){
   if(!V || V.onbekend){ if(document.getElementById('gripVooruit')) closeSheet(); return; }
   const Mn=valtOpHoofd(V.m), einde=`${V.dim} ${ymFull(V.m)}`;
   const banden=V.band.maanden.map(x=>ymFull(x)).join(', ');
-  const hand=V.handelingen.map(h=>`<div class="row" data-handeling="${esc(h.k)}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
+  /* v349: elke regel zegt waarom het potje boven uitkomt (maandVooruit, x.aard). Past hij niet in zijn
+     potje, dan staat "Potje bijstellen" naast de grens: een grens vraagt je een maand anders te doen dan
+     je gewoonlijk doet, bijstellen laat het potje passen bij wat je gewoonlijk doet. */
+  const dagen=`${V.el} ${V.el===1?'dag':'dagen'}`;
+  const hand=V.handelingen.map(h=>{
+    const waarom=h.aard==='pastniet'
+      ? `<b data-aard="pastniet">Past niet in je potje</b>: gewoonlijk ${euro0(h.patroon)} per maand, je potje is ${euro0(h.bud)}. ${euro0(h.uit)} in ${dagen}.`
+      : (h.aard==='voor' ? `<b data-aard="voor">Loopt voor</b>: ${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.` : `${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.`);
+    const bij=h.aard==='pastniet'?`<button class="btn sec" data-bijstellen="${esc(h.k)}" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px;margin-top:6px" onclick="openPotjeBijstel('${esc(h.k)}')">Potje bijstellen</button>`:'';
+    return `<div class="row" data-handeling="${esc(h.k)}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
       <span style="flex:1;min-width:0"><span style="font-size:13px">${esc(h.naam)}: nog ${euro0(h.grens)} tot ${esc(einde)} <b data-effect="${h.effect}">−${euro0(h.effect)}</b></span>
-      <div class="small muted" style="margin-top:2px;line-height:1.45">${euro0(h.uit)} in ${V.el} ${V.el===1?'dag':'dagen'}, gemiddeld ${euro0(h.typisch)}. Met ${euro0(h.grens)} voor de rest blijf je binnen je potje: ongeveer ${euro0(h.perWeek)} per week.</div></span>
-      <button class="btn sec" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px" onclick="openGrensRest('${esc(h.k)}')">Grens op ${euro0(h.grens)}</button></div>`).join('');
+      <div class="small muted" style="margin-top:2px;line-height:1.45">${waarom} Met ${euro0(h.grens)} voor de rest blijf je binnen je potje: ongeveer ${euro0(h.perWeek)} per week.</div></span>
+      <span style="display:flex;flex-direction:column;align-items:stretch;flex-shrink:0"><button class="btn sec" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px" onclick="openGrensRest('${esc(h.k)}')">Grens op ${euro0(h.grens)}</button>${bij}</span></div>`; }).join('');
   const sch=V.schuif?`<div class="row" data-schuif style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
       <span style="flex:1;min-width:0"><span style="font-size:13px">Of schuif ${euro0(V.schuif.bedrag)} van ${esc(V.schuif.vanNaam)} naar ${esc(V.schuif.naarNaam)} <b>${euro0(0)}</b></span>
       <div class="small muted" style="margin-top:2px;line-height:1.45">${esc(V.schuif.vanNaam)} eindigt verwacht onder zijn potje. Je potjes kloppen dan, maar je geeft niet minder uit.</div></span>
@@ -7904,6 +7974,32 @@ function grensRestZet(k){
   const m=thisYM();
   afspraakMaak({soort:'grens', cat:k, bedrag:h.uit+h.grens, van:m, tot:m, wat:`Grens ${CATS[k].name}: nog ${euro0(h.grens)} tot ${V.dim} ${ymFull(m)}`});
   save(); closeSheet(); render(); toast(`${ICON('check')} Afspraak: nog ${euro0(h.grens)} aan ${CATS[k].name.toLowerCase()}`);
+}
+
+/* v349: POTJE BIJSTELLEN, MET HET GEVOLG VOORAF. Alleen voor een potje dat niet past: je gewone maand
+   (juli tot en met september, dezelfde drie maanden als de vooruitblik) is meer dan het potje. Het voorstel
+   is dat patroon, op vijf euro naar boven. Openen schrijft niets (MECHANISM_SPEC.defaultEffect); pas
+   "Potje bijstellen" schrijft, via de bestaande route van een bestaand potje (savePotje(), dus vanaf
+   volgende maand, v235/v315), en die leest het voorstel opnieuw (v319). */
+function potjeBijstelVoorstel(k){
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  const h=V&&!V.onbekend?V.handelingen.find(x=>x.k===k && x.aard==='pastniet'):null; if(!h) return null;
+  const naar=ceil5(h.patroon), voor=Math.round(plannedTotalBudget()), van=Math.round(+(plannedBudgets()[k])||h.bud);
+  return {k, naam:h.naam, patroon:h.patroon, bud:h.bud, naar, totVan:voor, totNaar:voor-van+naar, vanaf:nextYM(SET.budgetMonth||thisYM()), maanden:V.band.maanden};
+}
+function openPotjeBijstel(k){
+  const P=potjeBijstelVoorstel(k); if(!P){ closeSheet(); return; }
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="potjeBijstel" data-cat="${esc(k)}" data-naar="${P.naar}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(P.naam)}-potje bijstellen</div>
+    <div class="small" style="line-height:1.5;margin-top:6px">In ${esc(opsomming(P.maanden.map(x=>ymFull(x))))} gaf je gemiddeld ${euro0(P.patroon)} per maand uit aan ${esc(P.naam.toLowerCase())}, en je potje is ${euro0(P.bud)}. Met een potje van ${euro0(P.naar)} past je gewone maand erin.</div>
+    <div class="small" data-bijstelgevolg style="color:var(--mut2);line-height:1.5;margin-top:6px">Dat geldt vanaf ${esc(ymFull(P.vanaf))}; deze maand blijft je potje ${euro0(P.bud)}. Je maandbudget gaat van ${euro0(P.totVan)} naar ${euro0(P.totNaar)}.</div>
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" style="flex:1" onclick="potjeBijstelZet('${esc(k)}')">Potje bijstellen</button><button class="btn sec" onclick="openGripVooruit()">Terug</button></div></div>`;
+  showSheetBg();
+}
+function potjeBijstelZet(k){
+  const P=potjeBijstelVoorstel(k); if(!P || !CATS[k]) return;   // opnieuw gelezen (v319)
+  window._potDraft={type:'vast', vast:P.naar}; window._potAfter=null;
+  savePotje(k);
 }
 
 /* ===== KOMENDE 3 MAANDEN (v340) =====
@@ -8021,7 +8117,7 @@ function renderMaand(){
      beleggen); een potje-signaal staat er ook dan bij, maar zegt niets over wat er is ingesteld. */
   const raster=T.length?`<div class="kt-raster" id="gripTegels">${T.map(gripTegelHtml).join('')}</div>`:'';
   const tegels=raster + (T.some(t=>!t.instel) || L.some(x=>x.soort!=='sig') ? '' : `<div class="card"><div class="small muted">Er is nog te weinig ingesteld${T.length?'':' om tegels te tonen'}. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`);
-  $('#s-maand').innerHTML=`${tegels}${gripLetOpKaart(L)}${dezeMaandKaart(RO)}${gripTijdlijn()}
+  $('#s-maand').innerHTML=`${tegels}${gripLetOpKaart(L)}${dezeMaandKaart()}${gripTijdlijn()}
     <div class="small" id="gripNaarLogboek" style="text-align:center;margin:14px 0 4px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek \u203a</div>
     <div style="height:12px"></div>`;
   /* Een terugblik sluit met "Gezien" via renderMaand() en niet via render(); de sheet erachter rekent
@@ -16046,11 +16142,16 @@ function brugGrafiek(Br){
     else { const van=run; run+=s.waarde; lo=Math.min(van,run); hi=Math.max(van,run); }
     lv.push(hi); return {s, lo, hi, na:run};
   });
-  const top=Math.max(...lv,1)*1.14;
-  const y=v=>PH-(v/top*PH);
+  /* v349: een as die niet bij nul begint (Br.basis). Een balk van begin of eind staat dan op die
+     ondergrens en niet op nul, en de ondergrens staat links op de as (data-asbasis), want een staaf
+     die bij EUR 2.000 begint leest anders als een staaf van nul. */
+  const basis=Math.max(+Br.basis||0,0);
+  const top=basis+(Math.max(...lv,1)-basis)*1.14;
+  const y=v=>PH-((Math.max(v,basis)-basis)/(top-basis)*PH);
   const kleur=s=>s.soort==='begin'?(Br.tegen==='vorige'?'var(--bar)':'var(--ref)'):(s.soort==='eind'?'var(--teal)':(s.waarde>0?'var(--red)':'var(--mut2)'));
   const n=kol.length;
-  return `<div class="brug" data-brug style="display:flex;gap:4px;margin-top:8px">${kol.map((c,i)=>{
+  const as=basis>0?`<div data-asbasis="${basis}" style="flex:0 0 auto;position:relative;height:${PH}px;border-right:1px solid var(--ref)"><span style="position:absolute;right:3px;bottom:-5px;font-size:9px;color:var(--lab);white-space:nowrap">${euro0(basis)}</span></div>`:'';
+  return `<div class="brug" data-brug style="display:flex;gap:4px;margin-top:8px">${as}${kol.map((c,i)=>{
     const yt=y(c.hi), h=Math.max(y(c.lo)-yt,2);
     const val=(c.s.soort==='begin'||c.s.soort==='eind')?euro0(c.s.waarde):brugTeken(c.s.waarde);
     const lijn=i<n-1?`<i style="position:absolute;left:88%;width:calc(24% + 4px);top:${y(c.na).toFixed(1)}px;border-top:1px dashed var(--ref)"></i>`:'';

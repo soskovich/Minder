@@ -81,9 +81,10 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   `maandRegels()` en Beleggen, 2x2, gesorteerd rood, amber, groen, grijs; een tik opent de bestaande
   sheet), met een kaart "Let op" eronder als er een signaal zonder eigen tegel is (`gripLetOpItems()`:
   een structureel signaal, een potje boven zijn grens, beleggen zonder voorwaarden, een uitgesloten
-  incasso, contant, en de terugblikken op vorige maand); "DEZE MAAND" (`dezeMaandKaart()`: de
-  vooruitblik `maandVooruit()` met de lopende afspraken, en een tik opent de waterval met "Wat je deze
-  maand kunt doen", `renderGripVooruit()`); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
+  incasso, contant, en de terugblikken op vorige maand); "DEZE MAAND" (`dezeMaandKaart()`: sinds `v349`
+  de uitkomst met het verschil met je budget, een bridge van budget naar uitkomst (`dezeMaandBrug()`) en
+  een oorzaakzin, met de lopende afspraken; een tik opent de waterval met "Wat je deze maand kunt doen",
+  `renderGripVooruit()`); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
   <maand>" is opgegaan). Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
   `renderAfsluitSheet()`), geen kaart. Het logboek (`logboek`, `renderLogboek()`) draagt sinds `v340` de
   afgesloten maanden als tijdlijn (`logTijdlijn()`), met per maand de bridge, de antwoorden en de
@@ -119,6 +120,41 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **"DEZE MAAND" OP GRIP TOONT DE OORZAKEN, DE SHEET DE OPBOUW** (`v349`, variant C van de mockup,
+  gevraagd door de gebruiker): de kaart draagt EEN regel ("EUR 2.672 · EUR 703 onder budget"), een bridge en
+  een zin. `dezeMaandBrug(V)` leest `maandVooruit()` en rekent niets zelf (`v104`): hij begint bij
+  `V.budget`, eindigt bij `V.projectie` (dezelfde uitkomst als `data-projectie` in de sheet), zet hooguit
+  `DEZEMAAND_LOS` (3) potjes los, gekozen op de absolute grootte van hun verwachte afwijking (`overR`, eind
+  min potje, onafgerond, naam als tiebreak), en de rest als EEN stap: de andere potjes, de vaste lasten en de
+  categorieen zonder potje. De stappen worden afgerond met `brugAfronden()` (grootste rest), dus begin plus
+  de stappen is exact de uitkomst; een geval met delen van euro staat in de spec, want op hele euro's is
+  per stap afronden niet te onderscheiden (meetles a). De kleuren zijn die van `brugGrafiek()`: boven
+  `--red`, onder `--mut2`. DE AS: liggen alle standen boven nul en is het bereik kleiner dan de helft van
+  het hoogste, dan begint de as bij een rond getal onder de laagste stand (`Br.basis`) en staat dat getal op
+  de as (`data-asbasis`); de bridge op Inzichten geeft geen `basis` mee en blijft bij nul. De zin
+  (`dezeMaandZin()`) stelt vast: welk potje boven uitkomt en waarom, welk losse potje eronder blijft, en de
+  rest. "Met N grenzen" staat alleen nog in de sheet.
+  TWEE OORZAKEN, EN ZE SLUITEN ELKAAR UIT (`maandVooruit()`, `x.aard`): "PAST NIET IN JE POTJE" als het
+  gewone patroon (gemiddeld in de eerste dagen plus gemiddeld in de rest, `x.patroon`) groter is dan het
+  potje, ook bij nul uitgegeven; anders "LOOPT VOOR" alleen als er meer uit is dan gemiddeld in dezelfde
+  dagen van de laatste drie afgeronde maanden (`x.uit > x.typisch`). Tot `v349` heette elk potje dat op tempo
+  boven uitkwam "loopt voor", en GEMELD stond Vices met EUR 0 in zes dagen daaronder. De sheet zegt per
+  handeling dezelfde oorzaak, en bij "past niet" staat "POTJE BIJSTELLEN" naast de grens
+  (`openPotjeBijstel()`): voorstel `ceil5(patroon)`, EERST HET GEVOLG (vanaf volgende maand, deze maand
+  blijft het potje, het maandbudget van X naar Y), openen schrijft niets, en bevestigen gaat via de
+  bestaande route `savePotje()` naar `SET.budgetsNext` (`v61`); het voorstel wordt opnieuw gelezen (`v319`).
+  DE COACHREGEL (`maandCoachIngang()`) STAAT IN DE POP-UP VAN DE MAANDAFSLUITING (`renderAfsluitSheet()`),
+  met dezelfde lijst als tot nu (regels met acceptatie en afspraak plus de structurele signalen). DE PRIJS,
+  en die staat vast in `voornemen-en-moment.spec.js`: zonder vorige maand met boekingen, of na het
+  afsluiten, is er geen pop-up en staat het maandmoment nergens.
+  GEMETEN op de stand van 6 oktober (`tests/deze-maand-stand.js`): stappen 3.375, +83 Vices, +61
+  Boodschappen, -847 rest, 2.672; de as begint bij EUR 2.000. De kaart gaat van 145 naar 271px op 360 en
+  van 127 naar 260px op 390, Grip van 400 naar 525px en van 382 naar 514px, zonder overloop. Op de stand van
+  `grip-dashboard` (met de afspraak van EUR 131) gaat de kaart van 176/158 naar 333/315px en Grip van
+  582/564 naar 739/721px. VIJFTIEN SABOTAGES, ALLE VIJFTIEN ROOD, een pas nadat de fixture delen van euro
+  droeg. ZEVENENTWINTIG BESTAANDE TESTS IN VIJF BESTANDEN VIELEN EROP: dertien in `maand-brug` lazen elke
+  `[data-brugstap]` op de pagina en lezen nu alleen `#insBrug`; de rest las de coachregel of de oude tekst op
+  de kaart, of een hoogte.
 - **DE PROJECTIE VERDEELT ZOALS PLAN, EN ALLEEN WAT OPZIJ GING GROEIT MEE** (`v348`, gevraagd door de
   gebruiker, A2 en A3 van de ronde Home, Vermogen en Vermogensreis): tot `v347` kreeg in `fireModel()` elk doel
   een VAST bedrag (zijn toewijzing van deze maand) tot het vol was of tot zijn datum, en wat een vol doel
@@ -6171,7 +6207,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v348` → `minder-v349`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v349` → `minder-v350`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6190,7 +6226,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347` en `v348` naar `minder-v348`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348` en `v349` naar `minder-v349`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
