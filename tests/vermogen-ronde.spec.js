@@ -210,3 +210,45 @@ test.describe('hoogtes op 360 en 390px', () => {
     });
   }
 });
+
+/* v350, na de ronde: Plan zet er extra bovenop, dus het aflos-vat noemt een andere datum dan de rij op
+   Vermogen. De regel noemt beide en waar het verschil vandaan komt. */
+test.describe('het aflos-vat noemt de datum zonder extra', () => {
+  test('met extra: beide datums uit schuldVrij, met de reden', async ({ page }) => {
+    await boot(page);
+    const r = await page.evaluate(() => {
+      const d = SET.debts.find((x) => x.id === 'duo');
+      const met = vatRegels({ type: 'aflossen', debtId: 'duo', alloc: 100, eta: schuldVrij(d, 100).k }, false);
+      const zonder = vatRegels({ type: 'aflossen', debtId: 'duo', alloc: 0, eta: schuldVrij(d, 0).k }, false);
+      return { met, zonder, l1: schuldVrij(d, 100).label, l0: schuldVrij(d, 0).label };
+    });
+    expect(r.l0).toBe('nov 2035');
+    expect(r.l1).not.toBe(r.l0);
+    expect(r.met.regels.join(' ')).toContain(`vrij in ${r.l1} met je extra aflossing uit Plan · zonder: nov 2035`);
+    expect(r.met.vol).toBeNull();
+    // zonder extra: geen regel, gewoon de datum
+    expect(r.zonder.regels).toEqual([]);
+    expect(r.zonder.vol.datum).toBeTruthy();
+  });
+  test('op Plan zelf, op 360 en 390px zonder overloop', async ({ page }) => {
+    for (const w of [360, 390]) {
+      await page.setViewportSize({ width: w, height: 800 });
+      await boot(page, { set: { nfToegewezenMigrated: true, extraSavings: 9000, planOrder: ['noodfonds', 'af:duo'], planAlloc: { 'af:duo': { mode: 'fixed', perMaand: 100 } } } });
+      const r = await page.evaluate(() => {
+        const p = allocatePlan().find((x) => x.type === 'aflossen');
+        go('vooruit'); renderVooruit();
+        const el = document.querySelector('[data-aflosverschil]');
+        return { alloc: p ? p.alloc : null, tekst: el ? el.textContent : null, h: el ? el.getBoundingClientRect().height : 0 };
+      });
+      expect(r.alloc, 'de fixture moet het aflos-item een toewijzing geven').toBeGreaterThan(0);
+      expect(r.tekst).toContain('met je extra aflossing uit Plan · zonder: nov 2035');
+      const uit = await page.evaluate(() => {
+        const w = document.documentElement.clientWidth; const o = [];
+        for (const e of document.querySelectorAll('#s-vooruit *')) { const b = e.getBoundingClientRect(); if (b.width && b.right > w + 1) o.push(e.className); }
+        return o;
+      });
+      expect(uit).toEqual([]);
+      console.log('aflos-regel', w, r.h);
+    }
+  });
+});

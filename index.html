@@ -9935,8 +9935,18 @@ function vatRegels(p,smal){
     return uit([planSub(p,true)],false);
   if(p.type!=='goal'){
     const et=p.eta?etaDatum(p.eta):'';
-    if(p.type==='aflossen')
+    if(p.type==='aflossen'){
+      /* v350: PLAN ZET ER EXTRA BOVENOP, DUS DE DATUM WIJKT AF VAN DE RIJ OP VERMOGEN. Zonder uitleg staan
+         er dan twee datums voor een schuld; de regel noemt beide en waar het verschil vandaan komt. Beide
+         komen uit schuldVrij() (v104): met de toewijzing van Plan en zonder. */
+      const dd=(SET.debts||[]).find(x=>String(x.id)===String(p.debtId));
+      if(dd && (+p.alloc||0)>0){
+        const V1=schuldVrij(dd,p.alloc), V0=schuldVrij(dd,0);
+        if(V1.label && V1.label!==V0.label)
+          return uit([`<span data-aflosverschil>vrij in ${esc(V1.label)} met je extra aflossing uit Plan · zonder: ${esc(V0.label||'nog niet te zeggen')}</span>`],false);
+      }
       return et?uit([],false,{woord:'schuldenvrij',datum:et}):uit(['nog niet te zeggen wanneer hij af is'],false);
+    }
     return et?uit([],false,{woord:'vol',datum:et}):uit(['nog niet te zeggen wanneer hij vol is'],false);
   }
   /* Een doel van vóór v242 zonder streefdatum. Er valt geen datumpaar te maken, dus hier blijft

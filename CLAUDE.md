@@ -129,7 +129,9 @@ genoemde versietag.)*
   onder Bezittingen vijf rijen (je rekeningen, drie bezittingen, de leaseauto) en twee uitgeleende bedragen.
   D: `schuldVrij(d, extra)` IS DE ENE DATUM, met als lezers de rij, de sheet, de mijlpalen en de grafiek (via
   `fireInputs()` als `vrijK`, en `fireModel()` doet `nowY + floor((nowMo + k)/12)` zoals de noodfonds-mijlpaal) en
-  het aflos-item op Plan (met `extra` = wat Plan erbovenop zet). EEN GEKOPPELDE SCHULD (`v334`) weet of de betaling
+  het aflos-item op Plan (met `extra` = wat Plan erbovenop zet). ZET PLAN EXTRA AF, DAN NOEMT HET VAT BEIDE DATUMS: "vrij in <maand> met je extra
+  aflossing uit Plan · zonder: <datum van Vermogen>" (`data-aflosverschil`, 32px op 360 en 390), zodat er geen twee
+  datums zonder uitleg staan. EEN GEKOPPELDE SCHULD (`v334`) weet of de betaling
   van deze maand al geweest is: staat de stand van voor deze maand en is er deze maand nog geen gekoppelde betaling,
   dan valt de eerste termijn deze maand en is hij een maand eerder af. Zonder koppeling telt hij vanaf volgende maand.
   G: DE SCHULD IS EEN LIJSTREGEL in de vorm van Grip (`schuldRijHTML()`): naam, "vrij in <maand jaar> · EUR X per
