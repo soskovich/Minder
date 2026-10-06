@@ -98,6 +98,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   doen (`openSpaarVerdeel()`). Plan rekent in **maandtempo**
   (`v218`): het verdeelt je maandbedrag, ongeacht waar je in de maand staat. Home gaat over het
   restant van déze maand. Beide kloppen; wat ze verbindt hoort op Plan te staan en nergens anders.
+  SINDS `v344` DRAAGT PLAN GEEN RESERVERINGEN: de lijst en zijn dekking staan in de tegel en de
+  sheet op Grip (`openReserveringen()`).
   Draagt sinds `v318` de VERTAKTE WATERVAL: de inlegbalk bovenaan, de vaten naast elkaar op schaal
   van het doelbedrag met hun tak erboven, en de terugval als gestippelde elleboog ONDER de kolommen.
   Een bestemming is daar EEN rastercel (`.wf-kol`) met het tekstblok (`.plan-item.wf-tekst`) erin,
@@ -115,6 +117,29 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE RESERVERINGEN STAAN ALLEEN OP GRIP, EN GEDEKT IS GEDEKT ZONDER MAANDBEDRAG** (`v344`, gevraagd
+  door de gebruiker): DE KAART OP PLAN (`resDekkingCard()`, `resPostTelling()`) IS WEG. Hij dubbelde de
+  tegel en de sheet op Grip, en Plan rekende er niet mee (`v128`). NAGEGAAN: de tegel en de dekkingsregel
+  lezen `dekking(12)` en niet de kaart, en elke ingang naar de lijst (de regel "Dekking reserveringen
+  aanpassen ›" in de sheet van de tegel, de tijdlijn, de melding, de opbouw van veilig te besteden, de
+  coach) opende al `openReserveringen()`; geen enkele ging naar Plan. Toevoegen en aanpassen gaan via
+  die sheet (`openReservering()`). WAT ALLEEN DE KAART DROEG IS MEEVERHUISD: de controlevraag "Klopt je
+  lijst nog?" met "klopt nog" (`resCheckLine()`, `[data-rescheck]`) staat in de sheet, en een LEGE lijst
+  heeft een grijze tegel "instellen" op Grip (`instel:true`), want zonder verplichtingen is er geen
+  dekkingsregel en dus geen tegel. Die tegel telt niet mee in de poort van de terugval "te weinig
+  ingesteld" (`v340`), en die zin zegt dan niet meer "om tegels te tonen".
+  GEMETEN WAAR DE EUR 299 VANDAAN KWAM: `benodigdPerMaand` telt per voorkomen `bedrag / maanden tot` op
+  en kijkt niet naar de pot, dus pot EUR 299 en een boete van EUR 299 in november (een maand weg) gaf
+  "gedekt tot en met november" EN "EUR 299 per maand nodig", en de tegel "EUR 299 nodig in november".
+  NU: `dekking().nodigPerMaand` loopt de voorkomens af en neemt per voorkomen (som tot en met die post
+  min de stand) door de maanden tot die post, de lopende maand meegeteld zoals `dekkingDichten()`
+  (`v323`); het hoogste is de eis. Zonder gat is hij per constructie nul, met een gat minstens het
+  bedrag van `dekkingDichten()`, en bij een onbekend saldo `null`. GEDEKT: "Er is niets meer nodig tot
+  de volgende post." zonder bedrag, de opbouwrij "Nog nodig per maand" (`[data-resnodig]`) zegt "niets
+  tot de volgende post", en de tegel "gedekt t/m november". EEN GAT: `dekkingTekst()` draagt de zin van
+  `dekkingDichtenZin()` zelf (de regel op Grip plakt hem niet meer aan), en noemt het jaarbedrag alleen
+  als de posten na het gat meer vragen. `benodigdPerMaand` blijft voor de tak zonder
+  reserveringsrekening, `fireInputs()` en `maandSuggestie()`.
 - **MEER TERUG DAN ER OPEN STOND: DE VOLLE ONTVANGST TELT, EN DE SHEET VRAAGT WAT DE REST IS** (`v343`,
   gevraagd door de gebruiker): GEMETEN OP `v342`: "Contant terugontvangen" klemde op wat er open stond, dus bij
   Ma (€400 open, €495 ontvangen) kwam er €400 bij je contant en viel €95 weg terwijl het geld er was. Bij de
@@ -5991,7 +6016,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v343` → `minder-v344`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v344` → `minder-v345`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6010,7 +6035,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` en `v343` naar `minder-v343`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343` en `v344` naar `minder-v344`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

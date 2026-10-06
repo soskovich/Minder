@@ -5527,13 +5527,19 @@ function maandRegels(){
         oorzaak: eerstePost?`${eerstePost.naam} van ${euro0(eerstePost.bedrag)} in ${resMaandLabel(eerstePost.maand)}`:'',
         /* v340: de maatstaf onder het getal op de KPI-tegel. Dezelfde eerstvolgende post als de oorzaak
            hierboven, in de kortste vorm die op een halve schermbreedte past. */
-        tegelMaat: !D.volledig ? 'niet te beoordelen' : eerstePost ? `${euro0(eerstePost.bedrag)} nodig in ${MFULL[+String(eerstePost.maand).slice(5,7)-1]}` : (komt ? 'er hoeft nu niets opzij' : 'niets aankomend dit jaar'),
+        tegelMaat: !D.volledig ? 'niet te beoordelen'
+          /* v344: zonder gat zegt de tegel tot wanneer je gedekt bent en niet wat de eerste post kost:
+             "EUR 299 nodig in november" boven een pot van EUR 299 las als een eis die er niet is. */
+          : (!D.gat && eerstePost && D.gedektTot) ? `gedekt t/m ${MFULL[+String(D.gedektTot).slice(5,7)-1]}`
+          : eerstePost ? `${euro0(eerstePost.bedrag)} nodig in ${MFULL[+String(eerstePost.maand).slice(5,7)-1]}` : (komt ? 'er hoeft nu niets opzij' : 'niets aankomend dit jaar'),
         benodigdeStand: D.volledig?D.benodigdeStand:null,
         maand: (st==='tekort'&&D.gedektTot)?D.gedektTot:null,
         // de zin komt uit dekkingTekst(): die kent alle takken al, inclusief een pot die de
         // eerstvolgende post nu al niet dekt en een lijst waar dit jaar niets uit valt. Hier een
         // eigen variant schrijven zou een tweede formulering van hetzelfde zijn.
-        gevolg: dekkingTekst(D) + (DD ? ' '+dekkingDichtenZin(DD, D) : ''),
+        // v344: de zin over wat het gat per maand vraagt staat sindsdien IN dekkingTekst(), zodat de
+        // sheet van de lijst en deze regel hetzelfde zeggen.
+        gevolg: dekkingTekst(D),
         perMaandTot: (DD && DD.perMaand!=null) ? {bedrag:DD.perMaand, maand:D.gat.maand} : null,
         /* v226: opTempo staat alleen op de rij als de norm óók niet gehaald wordt. Bij 'ok' zou het
            veld de suggestie en de gespreksingang onderdrukken die er toch al niet zijn, en dan
@@ -7665,6 +7671,12 @@ function gripTegels(RO, R){
     else { label=r.naam; waarde=r.waarde; maat=r.eenheid||''; }
     T.push({key:r.key, label, waarde, maat, kleur, act:`openMaandBeslis('${esc(r.key)}')`, v:volg(r.key)});
   }
+  /* v344: EEN LEGE LIJST HEEFT EEN TEGEL OM HEM IN TE STELLEN. Zonder verplichtingen is er geen
+     dekkingsregel en dus geen tegel, en sinds de kaart op Plan weg is was dat de enige plek met
+     "instellen". Grijs en zonder oordeel: er is niets gemeten (v59/v73). `instel` houdt hem buiten de
+     poort van de terugval in renderMaand(), want hij zegt niets over wat er is ingesteld. */
+  try{ if(!T.some(x=>x.key==='dekking') && !resLijst().length)
+    T.push({key:'dekking', label:'Reserveringen', waarde:'instellen', maat:'kosten die niet elke maand vallen', kleur:'grijs', act:'openReserveringen()', v:volg('dekking'), instel:true}); }catch(_){}
   /* Beleggen is een samenstelling van de drie: groen als alle drie gehaald zijn, anders grijs met
      waar het op wacht. Niet gehaald is geen fout (v314), dus nooit rood of amber. Hij leest de
      ONBEWERKTE R, zoals maandBeleggenRegel(): een geaccepteerd tekort is nog steeds een tekort. */
@@ -8008,8 +8020,8 @@ function renderMaand(){
   /* De terugval staat er alleen als er niets is om in te stellen: geen tegel en geen ander signaal dan een
      potje boven zijn grens. Dat is de poort van v188 (regels, structurele signalen, contant, uitgesloten,
      beleggen); een potje-signaal staat er ook dan bij, maar zegt niets over wat er is ingesteld. */
-  const tegels=T.length?`<div class="kt-raster" id="gripTegels">${T.map(gripTegelHtml).join('')}</div>`
-    : L.some(x=>x.soort!=='sig') ? '' : `<div class="card"><div class="small muted">Er is nog te weinig ingesteld om tegels te tonen. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`;
+  const raster=T.length?`<div class="kt-raster" id="gripTegels">${T.map(gripTegelHtml).join('')}</div>`:'';
+  const tegels=raster + (T.some(t=>!t.instel) || L.some(x=>x.soort!=='sig') ? '' : `<div class="card"><div class="small muted">Er is nog te weinig ingesteld${T.length?'':' om tegels te tonen'}. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`);
   $('#s-maand').innerHTML=`${tegels}${gripLetOpKaart(L)}${dezeMaandKaart(RO)}${gripTijdlijn()}
     <div class="small" id="gripNaarLogboek" style="text-align:center;margin:14px 0 4px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek \u203a</div>
     <div style="height:12px"></div>`;
@@ -8325,8 +8337,22 @@ function dekking(maanden){
                  intervalM:x.intervalM, cat:x.cat, perMaand:Math.round(perMaand), opgebouwd:Math.round(opgebouwd)});
   }
   benodigdPerMaand=Math.round(benodigdPerMaand); benodigdeStand=Math.round(benodigdeStand);
-  let gedektTot=null, gat=null, graad=null, tekort=0;
+  let gedektTot=null, gat=null, graad=null, tekort=0, nodigPerMaand=null;
   if(stand!=null){
+    /* v344: WAT ER NOG PER MAAND BIJ MOET, NA WAT ER AL IN DE POT STAAT. `benodigdPerMaand` hierboven
+       telt per voorkomen `bedrag / maanden tot` op en kijkt niet naar de pot. GEMELD: pot EUR 299 en
+       een boete van EUR 299 in november gaf "gedekt tot en met november" EN "EUR 299 per maand
+       nodig", want de boete ligt een maand weg. Dit getal loopt de voorkomens chronologisch af en
+       vraagt per voorkomen wat er tot die maand nog bij moet om alles tot en met die post te
+       betalen: (som tot en met die post - stand) door de maanden tot die post, de lopende maand
+       meegeteld, dezelfde telling als dekkingDichten() (v323). Het hoogste van die bedragen is wat
+       je hele jaar vraagt. Zonder gat is elk verschil nul of minder, dus dan is er per constructie
+       niets nodig; met een gat is hij minstens het bedrag van dekkingDichten(). Een post in de
+       lopende maand heeft geen maand meer om bij te leggen en telt alleen mee via de som van de
+       posten erna. Onbekend saldo geeft null en geen schatting (v59/v73). */
+    let som=0; nodigPerMaand=0;
+    for(const x of V){ som+=x.bedrag;
+      if(x.offset>=1) nodigPerMaand=Math.max(nodigPerMaand, Math.ceil(Math.max(som-stand,0)/(x.offset+1))); }
     let run=stand, vorige=null;
     for(const x of V){
       if(run-x.bedrag<0){
@@ -8353,7 +8379,7 @@ function dekking(maanden){
      HET IS EEN TELLING VAN POSTEN EN NIET VAN RIJEN: een kwartaalpost levert vier voorkomens binnen
      twaalf maanden en is EEN post uit je lijst. */
   const inVenster=new Set(V.map(x=>x.id)).size;
-  return {benodigdPerMaand, benodigdeStand, werkelijkeStand:stand, graad, gedektTot, gat, tekort,
+  return {benodigdPerMaand, nodigPerMaand, benodigdeStand, werkelijkeStand:stand, graad, gedektTot, gat, tekort,
           regels, volledig, zonderBedrag:zonderBedrag.map(v=>v.naam||'Verplichting'),
           aantal:lijst.length, inVenster, horizon:H};
 }
@@ -8368,10 +8394,17 @@ function dekkingTekst(D){
     return `${D.zonderBedrag.join(' en ')} ${D.zonderBedrag.length===1?'heeft':'hebben'} nog geen bedrag, dus de dekking klopt nog niet.`;
   }
   if(!D.regels.some(r=>r.soort==='post')) return 'Er komt de komende twaalf maanden niets aan uit je lijst.';
-  const perM=`Voor wat er dit jaar nog aankomt heb je ${euro0(D.benodigdPerMaand)} per maand nodig.`;
-  if(!D.gat) return `Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}. ${perM}`;
+  /* v344: GEDEKT IS GEDEKT, ZONDER MAANDBEDRAG. Tot v343 stond hier achter elke tak de bruto som
+     (`benodigdPerMaand`), die de pot negeert; bij een gedekte pot las dat als een eis die er niet is.
+     Bij een gat staat eerst wat het gat per maand vraagt (dekkingDichtenZin(), dezelfde zin als op
+     Grip), en alleen als de posten NA het gat meer vragen het bedrag voor het hele jaar, netto van
+     de pot (`nodigPerMaand`). Gelijk aan het gat-bedrag zou dezelfde eis twee keer zijn (v91). */
+  if(!D.gat) return `Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}. Er is niets meer nodig tot de volgende post.`;
   const tot=D.gedektTot?`Je bent gedekt tot en met ${resMaandLabel(D.gedektTot)}.`:'Je pot dekt de eerstvolgende post nu al niet.';
-  return `${tot} In ${resMaandLabel(D.gat.maand)} komt ${euro0(D.gat.bedrag)} en dan kom je ${euro0(D.gat.tekort)} tekort. ${perM}`;
+  const DD=dekkingDichten(D);
+  const jaar=(D.nodigPerMaand>0 && !(DD && DD.perMaand!=null && D.nodigPerMaand<=DD.perMaand))
+    ? ` Voor alles wat er dit jaar nog aankomt heb je ${euro0(D.nodigPerMaand)} per maand nodig.` : '';
+  return `${tot} In ${resMaandLabel(D.gat.maand)} komt ${euro0(D.gat.bedrag)} en dan kom je ${euro0(D.gat.tekort)} tekort. ${dekkingDichtenZin(DD, D)}${jaar}`;
 }
 /* v323: VALT HET GAT DEZE MAAND, OF IS ER NOG TIJD? Dit beslist of de dekkingsregel een beslissing
    vraagt (`tekort`) of aandacht (`let op`).
@@ -8402,100 +8435,20 @@ function dekkingDichtenZin(DD, D){
   const mnd=MFULL[+String(D.gat.maand).slice(5,7)-1];
   return `Dat is ${euro0(DD.perMaand)} per maand tot ${mnd}, deze maand meegeteld.`;
 }
-/* v317: DE TELLING BOVEN DE RIJEN TELT DEZELFDE VERZAMELING ALS DE RIJEN. Hij las `D.aantal`, de
-   LIJST, terwijl de rijen uit `verplichtingen()` komen en dus alleen de posten met een voorkomen
-   binnen de horizon dragen. Gemeten: "2 posten" boven EEN rij, met een verstreken eenmalige aanslag
-   als tweede post.
-   WAT ERBUITEN VALT WORDT GENOEMD EN NIET WEGGELATEN, want een post die je zelf hebt ingevoerd en
-   die van dit scherm verdwijnt zonder reden is dezelfde stille verdwijning die v281/v284 verbieden.
-   TWEE REDENEN, BEIDE UIT BESTAANDE VELDEN: `zonderBedrag` kent de posten die geen bedrag hebben
-   (die rollen niet uit, v131), en wat daarna overblijft heeft geen termijn binnen het venster
-   (verstreken en eenmalig, afgevinkt als betaald, of verder weg dan de horizon). Er wordt niets
-   opnieuw afgeleid (v104). */
-function resPostTelling(D){
-  const nV=Math.max(+D.inVenster||0,0);
-  const zb=(D.zonderBedrag||[]).length;
-  const gt=Math.max((+D.aantal||0)-nV-zb,0);
-  const delen=[`${nV} ${nV===1?'post':'posten'}`];
-  if(zb>0) delen.push(`${zb} zonder bedrag`);
-  if(gt>0) delen.push(`${gt} zonder termijn dit jaar`);
-  return delen.join(' · ');
-}
-function resDekkingCard(){
-  const D=dekking(12);
-  if(!D.aantal) return `<div class="card" style="cursor:pointer" onclick="openReserveringen()"><div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span><span class="small" style="color:var(--teal)">instellen \u203a</span></div>
-    <div class="small muted" style="margin-top:4px">Kosten die niet elke maand vallen, zoals aanslagen, premies en onderhoud.</div></div>`;
-  /* v187: hier stonden de dekkingsgraad en dekkingTekst(D), en dat is hetzelfde oordeel als de
-     regel 'Dekking reserveringen' op Maand - twee schermen, één bron (dekking(12)). Dekking is een
-     structurele vraag, dus dat oordeel staat op Maand. Deze kaart houdt wat hier hoort: het is de
-     plek waar je de lijst beheert, dus de feiten over die lijst en de ingang ernaartoe. Geen kale
-     verwijzing, want dan verlies je de beheercontext; geen tweede oordeel, want dat is de doublure.
-     resCheckLine() blijft: die gaat over je lijst, niet over je dekking. */
-  /* v188: hier stond ook nog wat je lijst per maand vraagt. Dat is hetzelfde getal als de noemer
-     van het oordeel op Maand, en hetzelfde getal op twee schermen kost de lezer een verificatie die
-     niets oplevert - dezelfde reden als bij totaal saldo tegenover netto vermogen (v171). Het bedrag
-     hoort bij het oordeel, en dat woont op Maand. */
-  /* v220: het saldo van je reserveringenpot stond hier niet, terwijl de twee blokken erboven wél
-     allebei een bedrag dragen. Uit resSaldo(), dus accBalance() via SET.resAcc; niets herrekend.
-     Alleen het bedrag: de dekkingsgraad en dekkingTekst() zijn in v187/v188 bewust van deze kaart
-     gehaald omdat dat oordeel op Maand woont, en die keuze staat. Dus geen percentage, geen balk
-     en geen 'op peil'. Een balk zou hier bovendien een eindpunt suggereren dat er niet is: een
-     reservering loopt door zolang je verplichtingen hebt.
-     resSaldo() geeft null in twee gevallen die hier verschillend horen te lopen - rekening
-     aangewezen maar saldo onbekend, en helemaal geen rekening - dus resAccId() scheidt ze. Het
-     onbekend-model is letterlijk dat van de plan-rij hierboven (nfOnbekend): het woord, gedempt,
-     nooit een nul die een bedrag claimt dat we niet kennen.
-     De teller en de ingang verhuizen naar een eigen regel eronder. Rechts in de kop staat bij de
-     blokken erboven precies één ding, de stand, en v203 gaf dat bedrag daar het gewicht; een
-     kolom met bedrag, teller én actie zou deze kaart anders opbouwen dan de kaart ernaast. */
-  /* v242: het blok is sober geworden. Drie dingen, en verder niets: de GEMETEN stand van de
-     rekening, de verwachte kosten met hun maand, en het verschil. De dekkingsgraad en gedektTot
-     stonden hier niet en komen hier ook niet: dat oordeel woont op Grip, en dat is sinds v187 zo.
-     Er wordt niets herrekend. Stand, kosten en verschil komen alle drie uit dekking(12):
-     werkelijkeStand is accBalance(SET.resAcc), de regels zijn verplichtingen() uitgerold over
-     twaalf maanden, en benodigdeStand is het opgebouwde deel dat er nu hoort te staan.
-     HET VERSCHIL IS EEN AFTREKKING EN GEEN OORDEEL: staat er meer dan er nu hoort te staan, dan
-     blijft er over; staat er minder, dan is dat een tekort. Geen alarmkleur, want er is niets fout
-     gedaan (v78/v93). Onbekend blijft onbekend: zonder rekening of zonder saldo staat er geen
-     verschil, want er valt niets af te trekken (v59/v73). */
-  const resAcc=resAccId();
-  const resSt=resAcc?resSaldo():null;
-  const standKop = !resAcc ? '' :
-    `<span class="small" style="white-space:nowrap;flex-shrink:0">${resSt==null?'<span class="muted">onbekend</span>':`<b style="font-weight:700">${euro0(resSt)}</b>`}</span>`;
-  const posten=D.regels.filter(r=>r.soort==='post');
-  const rij=(l,r,dik)=>`<div class="row" style="padding:6px 0;gap:10px"><span class="small" style="flex:1;min-width:0${dik?';font-weight:700':''}">${l}</span><span class="small" style="white-space:nowrap;font-weight:${dik?'800':'700'}">${r}</span></div>`;
-  const kosten = posten.length
-    ? `<div style="margin-top:9px;border-top:1px solid var(--line);padding-top:4px">${
-        posten.slice(0,6).map(x=>rij(`${esc(x.naam)} <span class="muted">· ${esc(resMaandLabel(x.maand))}</span>`, euro0(x.bedrag))).join('')}${
-        posten.length>6?`<div class="small muted" style="padding:4px 0">en nog ${posten.length-6} verder dit jaar</div>`:''}</div>`
-    : `<div class="small muted" style="margin-top:9px">Er komt de komende twaalf maanden niets aan uit je lijst.</div>`;
-  const verschil = (resSt==null||!posten.length) ? '' : (function(){
-    const v=Math.round(resSt-D.benodigdeStand);
-    return `<div style="margin-top:4px;border-top:1px solid var(--line);padding-top:5px">${
-      rij(v<0?'Tekort':'Blijft over', euro0(Math.abs(v)), true)}</div>`;
-  })();
-  return `<div class="card" style="cursor:pointer" onclick="openReserveringen()">
-    <div class="row"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Reserveringen</span>${standKop}</div>
-    <div class="small muted" style="margin-top:4px">${resPostTelling(D)} · ${resAcc?`gemeten op ${esc(acctNiceName(resAcc))}`:'nog geen rekening aangewezen'} · <span style="color:var(--teal)">bekijk ›</span></div>
-    ${kosten}${verschil}
-    <!-- v243: hier stonden drie zinnen die elkaar tegenspraken. 'Of je genoeg opzij hebt staan, lees
-         je op Grip' kwam uit v187, toen dit blok alleen het saldo droeg; sinds v242 staat het
-         verschil er een regel hoger, dus de kaart verwees naar elders voor iets wat ze zelf al zegt.
-         'Deze inleg' klopte ook niet meer: dit is een gemeten stand, geen inleg. Wat blijft is de
-         ene zin die voor iemand die dit blok voor het eerst ziet echte informatie draagt. De regel
-         'gemeten op <rekening>' erboven draagt de herkomst al. -->
-    <div class="small muted" style="margin-top:8px;line-height:1.5">Kosten die niet elke maand vallen. Dit staat los van je spaarinleg.</div>
-    ${resCheckLine()}</div>`;
-}
+/* v344: HIER STOND DE KAART "RESERVERINGEN" VAN PLAN (resDekkingCard() en resPostTelling()). Hij
+   dubbelde de tegel op Grip en de sheet erachter, en Plan rekende er niet mee: benodigdPerMaand zit
+   per v128 niet in planItems() of planCapacity(). Elke ingang naar de lijst opende al
+   openReserveringen(), dus geen link wees naar Plan. Wat alleen de kaart droeg is meeverhuisd: de
+   controlevraag "klopt je lijst nog" staat in de sheet, en een lege lijst heeft een grijze tegel op
+   Grip ("instellen"). */
 /* Eén controlemoment op de lijst zelf: handmatige invoer drijft weg zodra een premie verandert.
    Hooguit één keer per maand, en weg te tikken zonder iets te wijzigen. */
 function resCheckDue(){ return resLijst().length>0 && SET.resCheck!==thisYM(); }
-function resCheckOk(){ SET.resCheck=thisYM(); save(); render(); }
+function resCheckOk(){ SET.resCheck=thisYM(); save(); render(); if($('#resHead')) renderResSheet(); }
 function resCheckLine(){
   if(!resCheckDue()) return '';
-  return `<div class="small" style="margin-top:8px;color:var(--mut2);line-height:1.45">Klopt je lijst nog? Premies en aanslagen veranderen.
-    <span style="color:var(--teal);cursor:pointer" onclick="event.stopPropagation();openReserveringen()">nalopen \u203a</span>
-    <span style="color:var(--mut2);cursor:pointer;margin-left:8px" onclick="event.stopPropagation();resCheckOk()">klopt nog</span></div>`;
+  return `<div class="small" data-rescheck style="margin:4px 0 10px;color:var(--mut2);line-height:1.45">Klopt je lijst nog? Premies en aanslagen veranderen.
+    <span style="color:var(--teal);cursor:pointer;margin-left:6px" onclick="resCheckOk()">klopt nog</span></div>`;
 }
 /* ---- beheer ---- */
 function openReserveringen(){ renderResSheet(); showSheetBg(); }
@@ -8537,10 +8490,10 @@ function renderResSheet(){
     <div class="hlabel" style="margin:14px 2px 4px">Reserveringsrekening</div>
     ${accRij}${botsing}
     <div class="hlabel" style="margin:16px 2px 4px">Verplichtingen</div>
-    ${lijst.length?lijst.map(rij).join(''):'<div class="small muted" style="padding:8px 0">Nog niets ingevoerd.</div>'}
+    ${resCheckLine()}${lijst.length?lijst.map(rij).join(''):'<div class="small muted" style="padding:8px 0">Nog niets ingevoerd.</div>'}
     <button class="cp-add" style="margin-top:10px" onclick="openReservering()">+ Verplichting toevoegen</button>
     ${D.aantal?`<div class="hlabel" style="margin:18px 2px 4px">De opbouw</div>
-      <div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="small" style="flex:1">Nodig per maand</span><span class="small" style="font-weight:700">${euro0(D.benodigdPerMaand)}</span></div>
+      <div class="row" data-resnodig style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="small" style="flex:1">Nog nodig per maand</span><span class="small" style="font-weight:700">${D.nodigPerMaand==null?'onbekend':D.nodigPerMaand>0?euro0(D.nodigPerMaand):D.gat?`${euro0(D.gat.tekort)} deze maand`:'niets tot de volgende post'}</span></div>
       <div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="small" style="flex:1">Hoort nu in de pot te staan</span><span class="small" style="font-weight:700">${euro0(D.benodigdeStand)}</span></div>
       <div class="row" style="padding:7px 0"><span class="small" style="flex:1">Staat er nu</span><span class="small" style="font-weight:700">${D.werkelijkeStand==null?'onbekend':euro0(D.werkelijkeStand)}</span></div>
       ${D.volledig&&D.tekort>0?`<div class="row" style="padding:9px 0 0;border-top:1px solid var(--line)"><span class="small" style="flex:1;font-weight:700">Tekort</span><span class="small" style="font-weight:800">${euro0(D.tekort)}</span></div>`:''}`:''}
@@ -12245,7 +12198,7 @@ function renderVooruit(){
   /* v246: planTotaalRegel() stond hier, tussen de bestemmingen en de reserveringen, en las
      daardoor alsof de reserveringen erin zaten. Hij hoort bij de waterval en staat sindsdien in
      renderPlan(), binnen dezelfde kaart, onder de sluitpost. */
-  $('#s-vooruit').innerHTML = doelZone + resDekkingCard() + VOORUIT_FOOT;
+  $('#s-vooruit').innerHTML = doelZone + VOORUIT_FOOT;
 }
 /* v221: de optelling over je plan. Per doel zag je toegewezen tegen doelbedrag en wat het per
    maand krijgt, maar nergens het totaal: wat vraagt je plan bij elkaar, wat staat daar tegenover,
