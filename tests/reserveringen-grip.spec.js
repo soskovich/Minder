@@ -94,8 +94,11 @@ test.describe('1 · de kaart op Plan is weg', () => {
     await page.click('[data-tegel="dekking"]');
     await expect(page.locator('#resHead')).toBeVisible();
     // de terugval "te weinig ingesteld" zegt niet meer dat er geen tegels zijn terwijl er een staat
-    const g = await page.evaluate(() => { go('maand'); return document.querySelector('#s-maand').innerText; });
-    expect(g).not.toContain('om tegels te tonen');
+    const g = await page.evaluate(() => { go('maand'); return { t: document.querySelector('#s-maand').innerText,
+      n: document.querySelectorAll('#s-maand [data-tegel]').length }; });
+    expect(g.n).toBe(1);                                    // invoer: de instel-tegel is de enige
+    expect(g.t).not.toContain('om tegels te tonen');
+    expect(g.t).toContain('Er is nog te weinig ingesteld.'); // en de terugval staat er nog
   });
 
   test('met een lijst staat de grijze tegel er niet naast de echte', async ({ page }) => {
@@ -181,6 +184,13 @@ test.describe('2 · gedekt is gedekt, zonder maandbedrag', () => {
     const D = await page.evaluate(() => dekking(12));
     expect(D.nodigPerMaand).toBe(200);
     expect(D.gat.maand).toBe(over(3));
+  });
+
+  test('het hoogste voorkomen beslist, niet het laatste', async ({ page }) => {
+    // pot 0: 600 in maand +1 vraagt 300 per maand, 100 in maand +5 daarna (700/6) maar 117
+    await boot(page, seed(0, [{ id: 'x', naam: 'Groot', bedrag: 600, vervalmaand: over(1), intervalM: 0 },
+      { id: 'y', naam: 'Klein', bedrag: 100, vervalmaand: over(5), intervalM: 0 }]));
+    expect(await page.evaluate(() => dekking(12).nodigPerMaand)).toBe(300);
   });
 
   test('onbekend saldo: geen netto bedrag, en de rij zegt onbekend', async ({ page }) => {

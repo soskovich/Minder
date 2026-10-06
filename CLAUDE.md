@@ -140,6 +140,13 @@ genoemde versietag.)*
   `dekkingDichtenZin()` zelf (de regel op Grip plakt hem niet meer aan), en noemt het jaarbedrag alleen
   als de posten na het gat meer vragen. `benodigdPerMaand` blijft voor de tak zonder
   reserveringsrekening, `fireInputs()` en `maandSuggestie()`.
+  GEMETEN: Plan gaat op de stand van het toestel van 833 naar 722px (`plan-terugval-lijn`), en de sheet
+  en de tegel lopen op 360 en 390px niet over. VEERTIEN SABOTAGES, ALLE VEERTIEN ROOD, twee pas nadat de
+  spec het geval droeg (meetles a): "het laatste voorkomen in plaats van het hoogste" vraagt een vroege
+  grote post naast een late kleine, en "de instel-tegel telt mee in de poort" vraagt de eis dat de
+  terugval er dan nog staat. ACHTENVEERTIG BESTAANDE TESTS IN VIJFTIEN BESTANDEN VIELEN EROP en ze
+  hadden gelijk: ze lazen de kaart op Plan. Ze lezen nu de sheet, en `reserveringen-saldo.spec.js`, dat
+  alleen over die kaart ging, is weg.
 - **MEER TERUG DAN ER OPEN STOND: DE VOLLE ONTVANGST TELT, EN DE SHEET VRAAGT WAT DE REST IS** (`v343`,
   gevraagd door de gebruiker): GEMETEN OP `v342`: "Contant terugontvangen" klemde op wat er open stond, dus bij
   Ma (€400 open, €495 ontvangen) kwam er €400 bij je contant en viel €95 weg terwijl het geld er was. Bij de
