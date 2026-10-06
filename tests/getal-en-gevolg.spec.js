@@ -99,14 +99,17 @@ test.describe('b · de reserveringsinleg zegt dat hij losstaat van je plan', () 
        niet de eigenschap, dat het er staat wel. */
     expect(t).toMatch(/los van je spaardoelen/);
     // en het bedrag per maand staat er nog steeds niet (v188)
-    const per = await page.evaluate(() => dekking(12).benodigdPerMaand);
-    if (per > 0) expect(t).not.toContain(String(per).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
+    // v347: dekking() draagt geen bruto maandsom meer; het bedrag per maand is nodigZonderPot
+    const per = await page.evaluate(() => dekking(12).nodigZonderPot);
+    expect(per).toBeGreaterThan(0);   // invoer: er IS een bedrag dat er niet mag staan
+    expect(t).not.toContain(String(per).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
   });
 
   test('de reservering blijft buiten planCapacity', async ({ page }) => {
     await boot(page);
     const r = await page.evaluate(() => ({ cap: planCapacity(), doel: Math.round(monthlySavingTarget()),
-      res: dekking(12).benodigdPerMaand }));
+      res: Math.round(resPosten().perMaand) }));
+    expect(r.res).toBeGreaterThan(0);   // invoer: zonder reservering toetst de volgende regel niets
     expect(r.cap).toBe(r.doel);
     expect(r.cap).not.toBe(r.doel + r.res);
   });

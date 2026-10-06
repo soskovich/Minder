@@ -117,6 +117,50 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE LIJN EN DE BAND REKENEN MET EEN AANNAME: WAT WORDT UITGEGEVEN GAAT ERUIT, WAT BLIJFT STAAT VLAK**
+  (`v347`, gevraagd door de gebruiker): tot `v346` liet de lijn (`fireModel()`) alles wat naar reserveringen
+  en doelen ging als vlak geld staan tot je pensioen (`C+=fill+best`), en telde de Monte Carlo het helemaal
+  niet (`C+=vrij*12`). Twee aannames over hetzelfde geld (`v104`). DE AANNAME NU, en waarom: geld voor een
+  reservering wordt op zijn termijn BETAALD en een eenmalige post in zijn maand; geld voor een doel MET
+  streefdatum (Kosten Koper, Inrichting) gaat op die datum de deur uit, met wat er dan voor gespaard is; geld
+  dat BLIJFT (je noodfonds, een doel zonder datum) staat vlak op je spaarrekening en groeit niet mee; een
+  bezittingsinleg (`a.per`) groeit in zijn eigen pot op zijn eigen rendement (`v213`/`v216`). Waar het staat
+  beslist dus of het meegroeit, en wat wordt uitgegeven staat er na zijn moment niet meer.
+  `fireModel()` rekent per maand een vlakke reeks `sim.cser` (in: noodfonds-vulling en wat de bestemmingen
+  krijgen; uit: elke termijn, elke eenmalige post en elk doel op zijn datum) en de Monte Carlo leest die reeks
+  en dezelfde `pmtFor()`; alleen het rendement is daar stochastisch. Een doel vraagt zijn maandbedrag tot het
+  vol is of tot zijn datum (`doelVraag()`), dus een vol doel neemt niets meer. Een reservering wordt ook
+  betaald als de inleg hem niet helemaal dekte (de betaling gebeurt toch). `fireInputs().doelItems` draagt
+  elk doel met `k` (maanden tot de streefdatum) en `gespaard`, ook een doel dat nu niets krijgt; de stap op het
+  scherm leest `M.bestemming.doelItems` (alleen wat er deze maand heen gaat). Bij zelf ingevulde inleg gaat er
+  niets in en niets uit (zoals `v211`).
+  GEMETEN OP EEN FIXTURE MET DE VORM VAN HET TOESTEL (inleg 2.200, Kosten Koper 10.000 over tien maanden,
+  Inrichting 3.000 over zes, boete 299 volgende maand, FIRE 495.000, doeljaar 2057): VOOR deze ronde haalde de
+  lijn FIRE in 2037 (dus "op koers") en de mediaan van de band pas in 2048, kans 91 procent; in 2057 lijn
+  1.787.477 tegen mediaan 854.318, en de vlakke laag groeide 26.400 per jaar, voor altijd. NA: lijn 2036,
+  mediaan 2037, kans 100 procent; in 2057 lijn 2.480.934 tegen mediaan 2.185.845, vlakke laag 11.000. Bij een
+  beweeglijkheid van NUL ligt de band op 96 procent van de lijn in 2057 en haalt hij FIRE in hetzelfde jaar
+  plus een. WAT DAAR OVERBLIJFT IS DE REKENWIJZE en geen aanname: de band rent per jaar, de lijn per maand.
+  Niet gelijkgetrokken; het is een eigen ronde en hij gaat de voorzichtige kant op (`v168`).
+  BLOK 18 VAN `DIAG_BLOKKEN` (`diagReisReserveringen()`) toont het op het toestel: per post en per doel
+  wanneer het geld de deur uit gaat, de vlakke laag over de jaren, de lijn tegen de mediaan van de band en
+  tegen de band bij nul, en het FIRE-jaar van alle drie met de kans. Alleen lezen (`v244`).
+  BIJVANGST, GEMETEN EN GEREPAREERD: `fireOpKoers()` toetste `if(M.missing)`, en dat is een object
+  `{balances, assets}` en dus altijd waar (`v124`): hij gaf NOOIT een oordeel, en de briefing-export zweeg
+  daardoor altijd over je koers. Hij toetst nu `M.missing.balances`, zoals `coHorizonBron()`. De cache van de
+  Monte Carlo (`fireMCcached()`) draagt nu ook `cser` en `pmtFor()` per jaar in zijn sleutel.
+  `benodigdPerMaand` IS OPGERUIMD uit `dekking()`: hij had sinds `v346` geen lezer meer. Tests die hem als
+  meting van het oude getal gebruikten rekenen hem zelf na uit `verplichtingen()`.
+  NEGENTIEN BESTAANDE TESTS IN NEGEN BESTANDEN VIELEN EROP en ze hadden gelijk: ze pinden de oude aanname
+  (geld voor reserveringen en doelen blijft vlak staan) of lazen het opgeruimde veld; twee lazen dat veld zo
+  dat ze stil groen stonden op `undefined` (`getal-en-gevolg`), en die eisen nu eerst dat hun invoer er is.
+  DE STAP "SPAARDOELEN" ZEGT WAT ER MET HET GELD GEBEURT: "gaat op de streefdatum de deur uit", bij een doel
+  zonder datum "blijft staan", en gemengd "gaat op een streefdatum de deur uit; zonder datum blijft het staan".
+  GEMETEN: 70px op 360 en 390px, en gemengd 87px op 360 (een regel erbij) en 70 op 390, zonder overloop.
+  TIEN SABOTAGES, NEGEN ROOD. "Een doel vraagt ook in zijn eigen maand" bleef eerst groen: de vlakke reeks
+  is per jaar gelijk, want ook die extra maand gaat mee de deur uit; de eis staat nu op de inleg in de groei
+  per jaar (dertig maanden en niet eenendertig). De tiende ("bij zelf ingevulde inleg toch uitgeven") is per
+  constructie inert: dan zijn de lijsten van doelen en posten al leeg (meetles p); de guard blijft staan.
 - **DE PROJECTIE REKENT PER POST: TERUGKEREND BEDRAG DOOR INTERVAL IN ELK JAAR, EENMALIG IN ZIJN EIGEN MAAND**
   (`v346`, gevraagd door de gebruiker): `resPosten()` is de lezer van de lijst voor `fireInputs()`, en geeft
   `perMaand` (de som van bedrag door interval over de terugkerende posten, onafgerond) en `eenmalig` (per
@@ -139,15 +183,15 @@ genoemde versietag.)*
   projecties op het toestel naast elkaar: per post wat hij kost, en het vermogen na 1, 5 en 10 jaar en in je
   doeljaar, nu tegen de bruto maandlast van tot `v345`. Alleen lezen (`v244`); de nieuwe kolom is
   `reisModel()` zelf.
-  WAT HET VERSCHIL IS, EN DAT IS EEN BEVINDING OVER HET MODEL: wat naar je bestemmingen gaat landt in de
+  WAT HET VERSCHIL IS (dat was het tot `v347`; zie de regel daarboven): wat naar je bestemmingen gaat landt in de
   vlakke laag (`C+=fill+best`, `v211`) en wordt in de middelste lijn NOOIT UITGEGEVEN. Het verschil tussen de
   twee vormen is dus alleen de groei die dat geld wel of niet mist, geen bedrag dat van je vermogen af gaat.
-  OPEN PUNT, GEMETEN EN NIET AANGERAAKT: DE MONTE CARLO DOET HET ANDERS. `fireMonteCarlo()` telt alleen
+  OPEN PUNT, BIJ `v347` OPGELOST (een aanname voor beide): DE MONTE CARLO DOET HET ANDERS. `fireMonteCarlo()` telt alleen
   `vrij` bij de vlakke laag op en niet de bestemmingen, dus daar valt wat naar reserveringen en doelen gaat
   helemaal uit je vermogen. De middelste lijn en de band rekenen dus met twee verschillende aannames over
   hetzelfde geld (`v104`). Welke van de twee klopt hangt eraan of de betaling zelf al in je uitgaven zit
   (`forecastModel()`), en dat is een eigen ronde.
-  OPEN PUNT: `benodigdPerMaand` HEEFT GEEN LEZER MEER IN DE APP; alleen `dekking()` rekent hem uit en tests
+  OPEN PUNT, BIJ `v347` OPGERUIMD: `benodigdPerMaand` HEEFT GEEN LEZER MEER IN DE APP; alleen `dekking()` rekent hem uit en tests
   lezen hem. Opruimen is een eigen ronde (zeventien regels in zeven specs noemen hem).
   DRIE BESTAANDE TESTS VIELEN EROP, twee terecht: `bestemmingen-waterval` eiste dat de reserveringen
   `dekking(12).benodigdPerMaand` zijn, en `inleg-voor-bestemming` pinde EUR 2.600 (2.500 plus de bruto EUR
@@ -6078,7 +6122,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v346` → `minder-v347`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v347` → `minder-v348`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6097,7 +6141,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345` en `v346` naar `minder-v346`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346` en `v347` naar `minder-v347`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

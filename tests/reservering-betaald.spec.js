@@ -112,12 +112,12 @@ test.describe('a - een eenmalige post die betaald is, is geen verwachte kost mee
       resBetaaldZet('rA'); resBetaaldZet('rB');
       const D = dekking(12);
       return { posten: verplichtingen(12).length, zin: dekkingTekst(D), gat: D.gat,
-               benodigdPerMaand: D.benodigdPerMaand, benodigdeStand: D.benodigdeStand };
+               nodigPerMaand: D.nodigPerMaand, benodigdeStand: D.benodigdeStand };
     });
     expect(r.posten).toBe(0);
     expect(r.zin).toContain('niets aan uit je lijst');
     expect(r.gat).toBe(null);
-    expect(r.benodigdPerMaand).toBe(0);
+    expect(r.nodigPerMaand).toBe(0);
     expect(r.benodigdeStand).toBe(0);
   });
 });

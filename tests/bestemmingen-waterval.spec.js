@@ -111,12 +111,13 @@ test.describe('a - de bedragen komen uit de bestaande bronnen', () => {
     expect(m.doel).toBe(Math.round(alloc));
   });
 
-  test('allocatePlan, planCapacity en dekking zijn niet veranderd door deze ronde', async ({ page }) => {
+  // v347: de bruto maandlast (benodigdPerMaand) is opgeruimd; hij had sinds v346 geen lezer meer.
+  test('allocatePlan en planCapacity zijn niet veranderd door deze ronde', async ({ page }) => {
     await boot(page);
     const p = await page.evaluate(() => allocatePlan().map((x) => [x.id, x.alloc, x.status]));
     expect(p.length).toBeGreaterThan(0);
     expect(await page.evaluate(() => planCapacity())).toBe(500);
-    expect(await page.evaluate(() => Math.round(dekking(12).benodigdPerMaand))).toBe(400);
+    expect(await page.evaluate(() => 'benodigdPerMaand' in dekking(12))).toBe(false);
   });
 });
 
@@ -128,15 +129,22 @@ test.describe('b - de euro landt vlak, niet in de compoundende laag', () => {
     expect(m.best.groeit).toBe(m.pmt - m.res - m.doel);
   });
 
-  test('wat er af gaat komt er in de vlakke laag precies bij', async ({ page }) => {
+  // v347: EEN AANNAME VOOR DE LIJN EN DE BAND. Wat naar een reservering gaat wordt op de termijn
+  // betaald en een doel met een streefdatum gaat op die datum de deur uit; alleen een doel ZONDER
+  // datum blijft staan, vlak. Tot v346 bleef alles vlak staan, tot je pensioen. In deze fixture:
+  // Verbouwing (geen datum) groeit tot zijn doel van 20.000 en blijft, Nieuwe auto (wel een datum)
+  // neemt zijn gespaarde 1.000 mee de deur uit, en de tandarts en de gemeente heffen elkaar per
+  // jaar op (100 per maand erin, 1.200 eruit op de termijn).
+  test('wat blijft staan komt er in de vlakke laag bij, wat wordt uitgegeven niet', async ({ page }) => {
     await boot(page);
     const met = await model(page);
     await page.evaluate(() => { SET.reserveringen = []; SET.goals = []; save(); });
     const zonder = await model(page);
-    const perMaand = met.res + met.doel;
     expect(zonder.best.groeit).toBe(zonder.pmt);
-    expect(met.cashEind - zonder.cashEind).toBe(perMaand * 12 * met.HZ);
-    expect(zonder.inlegEind - met.inlegEind).toBeGreaterThan(perMaand * 12 * met.HZ);
+    expect(met.cashEind - zonder.cashEind).toBe(20000 - 1000);
+    const perMaand = met.res + met.doel;
+    expect(met.cashEind - zonder.cashEind).toBeLessThan(perMaand * 12 * met.HZ);
+    expect(zonder.inlegEind - met.inlegEind).toBeGreaterThan(0);
   });
 
   test('het totaal daalt, en precies met het rendement dat die euro niet meer maakt', async ({ page }) => {
@@ -168,7 +176,9 @@ test.describe('c - in de vul-fase gaat er niets dubbel af', () => {
     expect(m.volYear).toBeGreaterThan(m.nowY);
     expect(await page.evaluate(() => !!planGrendel())).toBe(true);
     expect(m.doel).toBe(0);
-    expect(m.doelItems).toEqual([]);
+    // v347: fireInputs() draagt elk doel mee (ook een doel dat nu niets krijgt gaat op zijn datum
+    // de deur uit); de stap op het scherm leest alleen wat er deze maand heen gaat.
+    expect(m.best.doelItems).toEqual([]);
     expect(m.best.nu).toBe(m.res);
     expect(m.best.groeit).toBe(m.pmt - m.vrij - m.res);
   });

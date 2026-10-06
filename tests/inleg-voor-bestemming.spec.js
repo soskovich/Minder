@@ -127,13 +127,19 @@ test.describe('a - KRITIEK: de inleg komt aan, ook als de bestemmingen het rests
     expect(met.kayani5).toBeGreaterThan(zonder.kayani5);
   });
 
-  test('en het restsaldo landt niet meer volledig op de vlakke cash', async ({ page }) => {
+  test('en de vlakke laag houdt alleen wat er blijft staan, niet de inleg', async ({ page }) => {
     await boot(page);
     const met = await model(page);
     await zet(page, zonderPer(OPSTELLING));
     const zonder = await model(page);
-    // precies de inleg minder in de vlakke laag, want die euro gaat nu naar een pot
-    expect(zonder.cash5 - met.cash5).toBe(250 * 12 * 5);
+    // v347: de vlakke laag houdt alleen wat er blijft staan. Nieuwe auto heeft geen streefdatum, dus
+    // hij vult zich tot zijn doel (15.000, met 1.000 al gespaard) en daarna gaat er niets meer heen;
+    // de tandarts wordt elk jaar betaald. Met of zonder de inleg eindigt de vlakke laag dus op
+    // hetzelfde doel, op hoogstens een jaarbetaling van de tandarts na: de 250 per maand gaat naar
+    // de pot en niet, zoals tot v346, vijf jaar lang als vlakke cash erbij.
+    expect(Math.abs(zonder.cash5 - met.cash5)).toBeLessThan(300);
+    const start = 1579 + 8000 + 0;
+    expect(Math.abs(met.cash5 - (start + 15000 - 1000))).toBeLessThan(300);
   });
 });
 

@@ -177,10 +177,10 @@ test.describe('b - het bedrag komt uit de regel en wordt nergens opnieuw bereken
     await boot(page);
     const d = (await sug(page, 'dekking')).sug;
     const r = await page.evaluate(() => ({ g: (maandRegels().find((x) => x.key === 'dekking') || {}).gevolg || '',
-      bruto: dekking(12).benodigdPerMaand, netto: dekking(12).nodigPerMaand }));
+      bruto: Math.round(verplichtingen(12).reduce((s, x) => s + x.bedrag / Math.max(x.offset, 1), 0)), netto: dekking(12).nodigPerMaand }));
     expect(d).toContain('€2.600');
     expect(d).not.toMatch(/hierboven|daarnaast|maandtempo/);
-    expect(r.bruto).toBeGreaterThan(0);   // invoer: er IS een bruto som die de oude zin zou noemen
+    expect(r.bruto).toBeGreaterThan(0);   // invoer: er IS een bruto som die de oude zin zou noemen (v347: in de test nagerekend, dekking() draagt hem niet meer)
     expect(d).not.toContain('€' + r.bruto.toLocaleString('nl-NL'));
     if (r.netto > 0) expect(r.g).toContain('€' + r.netto.toLocaleString('nl-NL') + ' per maand');
   });

@@ -8227,7 +8227,7 @@ function maandAfspraakLus(){
    (krijgt mijn saldo een dip), en daarom een los pad: recurringSchedule() en liquidityDaily()
    worden hier NIET aangeroepen en blijven ongewijzigd. Verplichtingen voer je zelf in; er wordt
    niets uit je transacties gedetecteerd.
-   De inleg is nadrukkelijk GEEN spaardoel: benodigdPerMaand komt niet in planItems(),
+   De inleg is nadrukkelijk GEEN spaardoel: wat de reserveringen vragen komt niet in planItems(),
    allocatePlan() of planCapacity(), anders concurreert de reservering met je spaardoelen en wordt
    hij dubbel geteld. */
 function resLijst(){ return Array.isArray(SET.reserveringen)?SET.reserveringen:[]; }
@@ -8286,8 +8286,6 @@ function verplichtingen(maanden){
   return uit.sort((a,b)=>a.offset-b.offset || String(a.naam).localeCompare(String(b.naam)));
 }
 /* De dekkingssom.
-   benodigdPerMaand : per voorkomen bedrag / maanden tot die maand. Valt de post deze maand, dan heb
-                      je hem nu in zijn geheel nodig, vandaar max(offset,1).
    benodigdeStand   : het OPGEBOUWDE deel van het eerstvolgende voorkomen per post:
                       bedrag x (interval - maanden tot vervaldag) / interval, geklemd op 0..bedrag.
                       Latere voorkomens binnen de horizon tellen niet mee - de kwartalen van volgend
@@ -8304,10 +8302,11 @@ function dekking(maanden){
   const zonderBedrag=lijst.filter(v=>v&&!(Math.round(+v.bedrag||0)>0));
   const acc=resAccId(); const stand=resSaldo();
   const eerste={}; for(const x of V) if(eerste[x.id]==null) eerste[x.id]=x.offset;
-  let benodigdPerMaand=0, benodigdeStand=0; const regels=[];
+  /* v347: de bruto som per voorkomen (bedrag door maanden tot, opgeteld) is weg. Hij negeerde de pot
+     (v344) en zijn laatste lezers zijn bij v345 en v346 overgestapt: de netto som hieronder voor wat
+     er nog bij moet, en resPosten() voor de projectie. */
+  let benodigdeStand=0; const regels=[];
   for(const x of V){
-    const perMaand=x.bedrag/Math.max(x.offset,1);
-    benodigdPerMaand+=perMaand;
     let opgebouwd=0;
     /* v317: EEN EENMALIGE POST BINNEN HET VENSTER DRAAGT ZIJN HELE BEDRAG. Tot v316 rekende deze
        lus `opgebouwd` alleen `if(x.intervalM>0)`, dus een eenmalige post droeg NUL in de opbouw-eis
@@ -8333,13 +8332,13 @@ function dekking(maanden){
       opgebouwd=x.bedrag*Math.min(Math.max(x.intervalM-x.offset,0),x.intervalM)/x.intervalM;
     benodigdeStand+=opgebouwd;
     regels.push({soort:'post', id:x.id, naam:x.naam, bedrag:x.bedrag, maand:x.maand, offset:x.offset,
-                 intervalM:x.intervalM, cat:x.cat, perMaand:Math.round(perMaand), opgebouwd:Math.round(opgebouwd)});
+                 intervalM:x.intervalM, cat:x.cat, opgebouwd:Math.round(opgebouwd)});
   }
-  benodigdPerMaand=Math.round(benodigdPerMaand); benodigdeStand=Math.round(benodigdeStand);
+  benodigdeStand=Math.round(benodigdeStand);
   let gedektTot=null, gat=null, graad=null, tekort=0, nodigPerMaand=null;
   if(stand!=null){
-    /* v344: WAT ER NOG PER MAAND BIJ MOET, NA WAT ER AL IN DE POT STAAT. `benodigdPerMaand` hierboven
-       telt per voorkomen `bedrag / maanden tot` op en kijkt niet naar de pot. GEMELD: pot EUR 299 en
+    /* v344: WAT ER NOG PER MAAND BIJ MOET, NA WAT ER AL IN DE POT STAAT. De bruto som die hier tot v347
+       stond telde per voorkomen `bedrag / maanden tot` op en keek niet naar de pot. GEMELD: pot EUR 299 en
        een boete van EUR 299 in november gaf "gedekt tot en met november" EN "EUR 299 per maand
        nodig", want de boete ligt een maand weg. Dit getal loopt de voorkomens chronologisch af en
        vraagt per voorkomen wat er tot die maand nog bij moet om alles tot en met die post te
@@ -8379,7 +8378,7 @@ function dekking(maanden){
   /* v345: dezelfde som met een lege pot, voor de tak zonder reserveringsrekening. Daar is de stand
      niet onbekend maar niet aangewezen, en de vraag is wat je lijst vraagt als er nog niets staat. */
   const nodigZonderPot=resNodigPerMaand(V, 0);
-  return {benodigdPerMaand, nodigPerMaand, nodigZonderPot, benodigdeStand, werkelijkeStand:stand, graad, gedektTot, gat, tekort,
+  return {nodigPerMaand, nodigZonderPot, benodigdeStand, werkelijkeStand:stand, graad, gedektTot, gat, tekort,
           regels, volledig, zonderBedrag:zonderBedrag.map(v=>v.naam||'Verplichting'),
           aantal:lijst.length, inVenster, horizon:H};
 }
@@ -10670,16 +10669,19 @@ const FIRE_VOICE=`Je bent de rustige, langetermijn-stem van de Vermogensreis in 
    alleen als hij nog een termijn heeft (resVolgende(), dus een betaalde of verstreken post valt
    weg), met `k` als het aantal maanden vanaf deze maand. Een post zonder bedrag telt niet. */
 function resPosten(){
-  let perMaand=0; const eenmalig=[];
+  let perMaand=0; const eenmalig=[], terugkerend=[];
   for(const v of resLijst()){
     if(!v||!v.id) continue;
     const bedrag=Math.round(+v.bedrag||0); if(!(bedrag>0)) continue;
     const iv=Math.max(Math.round(+v.intervalM||0),0);
-    if(iv>0){ perMaand+=bedrag/iv; continue; }
-    const o=resVolgende(v); if(o==null) continue;
+    const o=resVolgende(v);
+    /* v347: de terugkerende post draagt ook zijn eerste termijn (k), want de projectie GEEFT het
+       geld op die termijnen uit; perMaand blijft wat er elke maand opzij gaat. */
+    if(iv>0){ perMaand+=bedrag/iv; if(o!=null) terugkerend.push({naam:v.naam||'Verplichting', bedrag, iv, k:o}); continue; }
+    if(o==null) continue;
     eenmalig.push({naam:v.naam||'Verplichting', bedrag, k:o, maand:resYmPlus(o)});
   }
-  return {perMaand, eenmalig:eenmalig.sort((a,b)=>a.k-b.k)};
+  return {perMaand, eenmalig:eenmalig.sort((a,b)=>a.k-b.k), terugkerend};
 }
 function fireInputs(){
   let fm=null; try{ fm=forecastModel(); }catch(_){}
@@ -10734,17 +10736,25 @@ function fireInputs(){
      van EUR 299 elke maand tot je pensioen af, en de netto som gaf een gedekte jaarpremie nul in
      alle jaren. resPosten() is de enige lezer van de lijst hier; laag B krijgt platte getallen
      (v32): het structurele bedrag en de eenmalige posten met hun maand vanaf nu. */
-  let resPerMaand=0, resEenmalig=[]; try{ const RP=resPosten(); resPerMaand=RP.perMaand; resEenmalig=RP.eenmalig; }catch(_){}
+  let resPerMaand=0, resEenmalig=[], resTerug=[]; try{ const RP=resPosten(); resPerMaand=RP.perMaand; resEenmalig=RP.eenmalig; resTerug=RP.terugkerend; }catch(_){}
   /* Alle doelen met een toewijzing, niet alleen die met een streefdatum: allocatePlan() verdeelt
      dezelfde capaciteit over alle doelen, dus een deelverzameling laat de rest gewoon compounderen
      en dat is een halve correctie. Een streefdatum is bovendien optioneel en stuurt de waterfall
      niet (v123); hem hier beslissend maken zou dat veld een rekenkundig gevolg geven dat het nooit
      had. Een gepauzeerd of bereikt doel heeft per definitie alloc 0 en valt er dus vanzelf uit.
      Aflos-items blijven erbuiten: schuld is stap 2 van de waterval en die is niet aangeraakt. */
+  /* v347: elk doel draagt ook zijn doelbedrag, wat er al voor staat en zijn streefdatum als maand
+     vanaf nu (k), want laag B GEEFT het geld van een doel uit op zijn datum. Een doel zonder
+     inleg doet ook mee: wat er al voor staat gaat op zijn datum net zo goed de deur uit. Een doel
+     zonder datum, of met een datum die al voorbij is, heeft geen moment van uitgeven en blijft
+     staan. Een gepauzeerd doel krijgt niets bij, maar zijn geld gaat op zijn datum wel weg. */
   let doelPerMaand=0, doelItems=[];
-  try{ doelItems=allocatePlan().filter(p=>p&&p.type==='goal'&&(+p.alloc||0)>0).map(p=>({naam:p.naam||'Doel', per:Math.round(+p.alloc||0)}));
+  try{ doelItems=allocatePlan().filter(p=>p&&p.type==='goal').map(p=>{
+         const k=p.streefdatum?doelMaandenTot(p.streefdatum):null;
+         return {naam:p.naam||'Doel', per:Math.max(Math.round(+p.alloc||0),0), doel:Math.max(Math.round(+p.doel||0),0),
+           gespaard:Math.max(Math.round(+p.gespaard||0),0), k:(k!=null&&k>=0)?k:null}; });
        doelPerMaand=doelItems.reduce((a,x)=>a+x.per,0); }catch(_){}
-  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, leaseItems, emergencyGoal, nfDoel, nfCur, resPerMaand, resEenmalig, doelPerMaand, doelItems, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
+  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, leaseItems, emergencyGoal, nfDoel, nfCur, resPerMaand, resEenmalig, resTerug, doelPerMaand, doelItems, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
 function fireState(inputs, cfg){
   const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
@@ -10840,7 +10850,7 @@ function fireModel(R, inputs){
   let volYear=nowY;   // jaar waarin het noodfonds vol is (nowY = nu al vol → geen vul-fase)
   if(vrij>0 && _nfDoel>0 && _nfCur<_nfDoel && _msav>0){ const needM=Math.ceil((_nfDoel-_nfCur)/_msav); volYear=nowY+Math.floor((nowMo+needM)/12); }
   /* v211: bestemmingen uit je restsaldo die geen vermogen zijn. Reserveringen komen elk jaar
-     eraf: benodigdPerMaand zit per v128 bewust NIET in planCapacity, dus 'vrij' dekt hem niet en
+     eraf: wat de reserveringen vragen zit per v128 bewust NIET in planCapacity, dus 'vrij' dekt het niet en
      er kan hier niets dubbel af. Doelen komen er pas af VANAF volYear: tot dat jaar diverteert
      'vrij' al min(monthlySaving, pmt), en monthlySaving IS planCapacity, precies het bedrag dat
      allocatePlan() over noodfonds en doelen verdeelt. Zonder die voorwaarde zou dezelfde euro in
@@ -10851,7 +10861,26 @@ function fireModel(R, inputs){
   /* v346: een eenmalige post kost zijn volle bedrag in zijn eigen maand. k telt vanaf deze maand,
      en dat is ook de maand k van de lus hieronder (jaar y, maand m: k = 12y + m). */
   const _resEen={}; if(R.inlegMode==='auto') for(const x of (inputs.resEenmalig||[])){ const k=Math.round(+x.k); if(k>=0&&(+x.bedrag||0)>0) _resEen[k]=(_resEen[k]||0)+(+x.bedrag); }
-  const _doel=(R.inlegMode==='auto')?Math.max(+inputs.doelPerMaand||0,0):0;
+  /* v347: EEN AANNAME OVER GELD VOOR RESERVERINGEN EN DOELEN, voor de lijn EN de Monte Carlo. Tot
+     v346 bleef dat geld in de lijn voor altijd als vlak geld staan (C) en telde de Monte Carlo het
+     helemaal niet mee; gemeten op de stand van het toestel lag de lijn in het doeljaar daardoor
+     twee keer zo hoog als de mediaan van de band. Nu: geld dat wordt UITGEGEVEN gaat er op zijn
+     moment uit. Een reservering wordt opzij gezet (bedrag door interval per maand) en op elke
+     termijn betaald; een eenmalige post gaat in zijn maand opzij en meteen weer weg; een doel
+     spaart tot het vol is of tot zijn streefdatum, en op die datum gaat wat erin staat de deur uit.
+     Geld dat BLIJFT STAAN (een doel zonder datum, het noodfonds) blijft in de vlakke laag: het
+     staat op een spaarrekening en groeit hier niet mee. Wat naar een belegging gaat (a.per) groeit
+     mee in de pot waar het landt (v212/v213). De Monte Carlo leest dezelfde vlakke reeks (cser) en
+     dezelfde inleg per jaar, zodat lijn en band alleen nog in het rendement verschillen (v104). */
+  const _auto=(R.inlegMode==='auto'), som0=a=>a.reduce((t,v)=>t+v,0);
+  const _doelen=_auto?(inputs.doelItems||[]).map(x=>({naam:x.naam, per:Math.max(+x.per||0,0), doel:Math.max(+x.doel||0,0),
+    gespaard:Math.max(+x.gespaard||0,0), k:(x.k!=null&&+x.k>=0)?Math.round(+x.k):null})):[];
+  const _resTerug=_auto?(inputs.resTerug||[]).filter(x=>(+x.bedrag||0)>0&&(+x.iv||0)>0&&(+x.k>=0)):[];
+  /* wat de doelen in maand k vragen: elk doel dat nog niet is uitgegeven, voor zijn datum, en dat nog
+     niet vol is, vraagt zijn maandbedrag tot het vol is; in de vul-fase gaat dat geld al via 'vrij' */
+  const doelVraag=(year,k,acc,uit)=>_doelen.map((g,i)=>(year<volYear||uit[i]||(g.k!=null&&k>=g.k))?0:Math.max(Math.min(g.per, g.doel-acc[i]),0));
+  const _acc0=_doelen.map(g=>g.gespaard), _uit0=_doelen.map(()=>false);
+  const _doel=som0(doelVraag(nowY,0,_acc0,_uit0));
   /* Elke groeiende bezitting krijgt een eigen reeks in plaats van een aandeel in één gedeelde pot.
      Dat is de prijs van inleg per bezitting, en tegelijk de voorwaarde voor een eigen rendement
      per bezitting later. Bij zelf-invullen blijft alles zoals het was: R.pmt is dan jouw eigen
@@ -10862,7 +10891,7 @@ function fireModel(R, inputs){
      rendement, geen groei' een uitspraak over jouw bezittingen en niet over je reis-instelling. */
   if((+R.een||0)>0) _potItems.push({naam:'Eenmalige inleg', waarde:+R.een||0, per:0, rend:+R.rend||0});
   const _aperWens=(R.inlegMode==='auto')?_potItems.reduce((a,x)=>a+x.per,0):0;
-  const pmtParts=(year,k)=>{ let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY);
+  const pmtParts=(year,k,dw)=>{ if(dw==null) dw=som0(doelVraag(year,k||0,_acc0,_uit0)); let a=+R.pmt||0; R.steps.slice().sort((x,y)=>(+x.from)-(+y.from)).forEach(s=>{ if(year>=+s.from) a=+s.amt||0; }); if(R.grow) a=a*Math.pow(1+R.grow/100,year-nowY);
     /* v216: a.per gaat er als EERSTE af, vóór het noodfonds en vóór de bestemmingen. Een
        spaardoel is een voornemen; een periodieke inleg naar een bezitting is een feit, want dat
        geld gaat maandelijks werkelijk die kant op. Een voornemen hoort een feit niet te
@@ -10879,7 +10908,7 @@ function fireModel(R, inputs){
        'vrij' is nog steeds het tempo, alleen kan er minder zijn dan dat. */
     const fill=(vrij>0 && year<volYear)?Math.min(vrij,a):0;
     a=Math.max(a-fill,0);   // vul-fase: wat er van 'vrij' past gaat naar het noodfonds
-    const wens=_res+((k!=null&&_resEen[k])||0)+((year<volYear)?0:_doel);   // v346: zonder k is het de maand zonder eenmalige post
+    const wens=_res+((k!=null&&_resEen[k])||0)+dw;   // v346: zonder k is het de maand zonder eenmalige post; v347: dw is wat de doelen die maand vragen
     const best=Math.max(Math.min(wens,a),0);   // nooit meer diverteren dan er dat jaar is
     a=Math.max(a-best,0);
     /* v212: a.per blijft compounderen, hij krijgt alleen de pot waar hij hoort in plaats van de
@@ -10891,8 +10920,10 @@ function fireModel(R, inputs){
        inleg, en dan hoort het scherm te zeggen dat je op Plan meer toewijst dan er overblijft. */
     return {p:a, fill, best, aper, aperWens:_aperWens, bestWens:wens}; };
   /* v346: per jaar het gemiddelde van zijn twaalf maanden, zodat een eenmalige post ook in de
-     Monte Carlo in zijn eigen jaar valt en daarna niet meer. */
-  const pmtFor=year=>{ const y=year-nowY; let t=0; for(let m=0;m<12;m++) t+=pmtParts(year,12*y+m).p; return t/12; };
+     Monte Carlo in zijn eigen jaar valt en daarna niet meer. v347: uit de lus hieronder, want wat de
+     doelen vragen hangt af van wat er al in staat; de Monte Carlo leest zo exact de inleg van de lijn. */
+  const _pJaar=[];
+  const pmtFor=year=>(_pJaar[year-nowY]||0)/12;
   // Fase 1: bezittingen (cash vlak + belegd groeit op rendement) en schuld (afloscurve) apart; vermogen = bezittingen − schuld.
   const liq0=inputs.liq||0, belegd0=(inputs.belegd||0)+(+R.een||0), flat0=inputs.flat||0;   // eenmalige inleg telt als belegd; flat0 = niet-groeiende bezittingen (vlak)
   const _ds=(inputs.debts||[]).filter(d=>Math.max(+d.rest||0,0)>0).map(d=>({naam:d.naam||'Schuld',rest:Math.max(+d.rest||0,0),per:+d.perMaand||0,rente:+d.rente||0}));
@@ -10920,17 +10951,25 @@ function fireModel(R, inputs){
   const bserParts=_potItems.map(x=>[x.waarde]);
   const A0=liq0+belegd0+flat0+leaseSeries[0];
   const mid=[A0-debt[0]],low=[A0-debt[0]],high=[A0-debt[0]],koop=[A0-debt[0]],midGross=[A0-debt[0]],assets=[A0], cser=[liq0];   // cser: additief voor de bezittingen-opbouw
-  for(let y=0;y<HZ;y++){
+  const _acc=_acc0.slice(), _uit=_uit0.slice();
+  for(let y=0;y<HZ;y++){ _pJaar[y]=0;
     /* p gaat naar de nieuwe-inleg-pot op het globale tarief; aper gaat per bezitting naar de pot
        waar hij hoort, op het tarief van die bezitting. Samen is dat nog steeds p+aper per maand,
        dus er komt geen euro bij en er valt er geen weg: alleen het tarief waarop hij groeit
        verschilt nu per bestemming. */
-    for(let m=0;m<12;m++){ const _q=pmtParts(nowY+y,12*y+m), p=_q.p, fill=_q.fill, best=_q.best, aper=_q.aper;   // v346: per maand, want een eenmalige post valt in een maand
+    for(let m=0;m<12;m++){ const k=12*y+m, _dv=doelVraag(nowY+y,k,_acc,_uit);
+      const _q=pmtParts(nowY+y,k,som0(_dv)), p=_q.p, fill=_q.fill, best=_q.best, aper=_q.aper;   // v346: per maand, want een eenmalige post valt in een maand
+      _pJaar[y]+=p;
+      /* v347: wat er opzij ging, ging naar rato van wat er gevraagd werd (dezelfde klem als best) */
+      const _fb=(_q.bestWens>0)?(best/_q.bestWens):0;
+      let _weg=0;
+      _doelen.forEach((g,i)=>{ _acc[i]+=_dv[i]*_fb; if(!_uit[i]&&g.k===k){ _weg+=_acc[i]; _uit[i]=true; } });
+      if(_auto){ _weg+=(_resEen[k]||0); for(const x of _resTerug) if(k>=x.k&&(k-x.k)%x.iv===0) _weg+=x.bedrag; }
       const _f=(_q.aperWens>0)?(aper/_q.aperWens):0;   // proportioneel klemmen: elke pot levert evenveel in
       Nm=Nm*(1+rM)+p; Nl=Nl*(1+rL)+p; Nh=Nh*(1+rH)+p; Ng=Ng*(1+rM)+p;
       for(let i=0;i<Ab.length;i++){ const inl=_potItems[i].per*_f;
         Ab[i]=Ab[i]*(1+rMi[i])+inl; AbL[i]=AbL[i]*(1+rLi[i])+inl; AbH[i]=AbH[i]*(1+rHi[i])+inl; AbG[i]=AbG[i]*(1+rMi[i])+inl; }
-      C+=fill+best; }   // cash blijft vlak; de noodfonds-vulling en de bestemmingen komen erbij
+      C+=fill+best-_weg; }   // cash blijft vlak; de noodfonds-vulling en de bestemmingen komen erbij, en wat wordt uitgegeven gaat eraf (v347)
     Nm=Math.max(Nm-fireBelasting(R,Nm),0); Nl=Math.max(Nl-fireBelasting(R,Nl),0); Nh=Math.max(Nh-fireBelasting(R,Nh),0);   // belasting op de nieuwe inleg
     for(let i=0;i<Ab.length;i++){ if(!groeit_i[i]) continue;   // een vlakke stand wordt niet belast: zie de noot hierboven
       Ab[i]=Math.max(Ab[i]-fireBelasting(R,Ab[i]),0); AbL[i]=Math.max(AbL[i]-fireBelasting(R,AbL[i]),0); AbH[i]=Math.max(AbH[i]-fireBelasting(R,AbH[i]),0); }
@@ -10991,7 +11030,7 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),eenmalig:(R.inlegMode==='auto')?(inputs.resEenmalig||[]).filter(x=>(+x.k)<HZ*12):[],doel:Math.round(_doel),doelItems:(inputs.doelItems||[]),nu:Math.round(pmtParts(nowY).best),groeit:Math.round(pmtParts(nowY).p+pmtParts(nowY).aper),
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear,cser:cser.slice()},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),eenmalig:(R.inlegMode==='auto')?(inputs.resEenmalig||[]).filter(x=>(+x.k)<HZ*12):[],doel:Math.round(_doel),doelItems:(inputs.doelItems||[]).filter(x=>(+x.per||0)>0),nu:Math.round(pmtParts(nowY).best),groeit:Math.round(pmtParts(nowY).p+pmtParts(nowY).aper),
     /* v216: wat je bestemmingen dit jaar vragen en wat ervan past. Sinds a.per vóór de
        bestemmingen staat kan hier geklemd worden, en dan wijs je op Plan meer toe dan je
        restsaldo groot is. Dat is een echte bevinding over jouw plan en hoort dus op het scherm,
@@ -11065,13 +11104,18 @@ function reisRandn(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.ran
 let _fireMC=null;
 function fireMonteCarlo(M){
   const R=M.R, nowY=M.nowY, HZ=M.HZ; const goal=M.FIRE; if(!(goal>0)) return null;
-  const sim=M.sim||{}, liq0=sim.liq0||0, belegd0=sim.belegd0||0, flat0=sim.flat0||0, vrij=sim.vrij||0, volYear=(sim.volYear!=null?sim.volYear:nowY), debt=M.debt||[], lease=M.leaseSeries||[];
+  const sim=M.sim||{}, liq0=sim.liq0||0, belegd0=sim.belegd0||0, flat0=sim.flat0||0, debt=M.debt||[], lease=M.leaseSeries||[];
   const mu=R.rend/100, sigma=(R.sigma!=null?+R.sigma:13)/100, SIMS=2000, DELTA=150;
   const byY=Array.from({length:HZ+1},()=>new Float64Array(SIMS)); let succ=0, succPlus=0;
   // spiegelt het deterministische model: belegd potje stochastisch, schuld deterministisch aflossend, cash vlak (+noodfonds), vermogen = verschil
-  for(let s=0;s<SIMS;s++){ let I=belegd0, Ip=belegd0, C=liq0; let netEnd=(C+flat0+(lease[0]||0)+I)-(debt[0]||0), netPlusEnd=netEnd; byY[0][s]=netEnd;
+  /* v347: de vlakke laag is DEZELFDE reeks als in de lijn (cser): noodfonds-vulling, wat er opzij gaat
+     voor reserveringen en doelen, en wat daarvan op zijn moment wordt uitgegeven. Tot v346 telde de
+     band alleen de vulling en liet hij de bestemmingen helemaal weg, terwijl de lijn ze voor altijd
+     liet staan; twee aannames over hetzelfde geld (v104). Alleen het rendement is hier stochastisch. */
+  const cser=sim.cser||[];
+  for(let s=0;s<SIMS;s++){ let I=belegd0, Ip=belegd0, C=(cser[0]!=null?cser[0]:liq0); let netEnd=(C+flat0+(lease[0]||0)+I)-(debt[0]||0), netPlusEnd=netEnd; byY[0][s]=netEnd;
     for(let y=0;y<HZ;y++){ const pmt=M.pmtFor(nowY+y), r=mu+sigma*reisRandn();
-      if(nowY+y<volYear) C+=vrij*12;
+      C=(cser[y+1]!=null?cser[y+1]:C);
       I=Math.max(I*(1+r)+pmt*12,0); Ip=Math.max(Ip*(1+r)+(pmt+DELTA)*12,0);
       I=Math.max(I-fireBelasting(R,I),0); Ip=Math.max(Ip-fireBelasting(R,Ip),0);
       const dy=debt[y+1]||0, ls=lease[y+1]||0; netEnd=(C+flat0+ls+I)-dy; netPlusEnd=(C+flat0+ls+Ip)-dy; byY[y+1][s]=netEnd; }
@@ -11081,7 +11125,7 @@ function fireMonteCarlo(M){
   return {p10,p50,p90,succ:Math.round(succ/SIMS*100),succPlus:Math.round(succPlus/SIMS*100),goal};
 }
 function fireMCcached(M){
-  const R=M.R; const sig=[Math.round(M.curNW),R.een,R.pmt,R.grow,R.rend,R.sigma,R.fireMult,R.annualExp,R.taxPct,M.HZ,JSON.stringify(R.steps),Math.round(M.sim.liq0),Math.round(M.sim.belegd0),Math.round(M.sim.flat0),Math.round((M.leaseSeries||[])[0]||0),Math.round((M.leaseSeries||[])[M.HZ]||0),M.sim.volYear,JSON.stringify((M.debtPay||[]).map(d=>[d.rest,d.per,d.rente]))].join('|');
+  const R=M.R; const sig=[Math.round(M.curNW),R.een,R.pmt,R.grow,R.rend,R.sigma,R.fireMult,R.annualExp,R.taxPct,M.HZ,JSON.stringify(R.steps),Math.round(M.sim.liq0),Math.round(M.sim.belegd0),Math.round(M.sim.flat0),Math.round((M.leaseSeries||[])[0]||0),Math.round((M.leaseSeries||[])[M.HZ]||0),M.sim.volYear,JSON.stringify((M.sim.cser||[]).map(Math.round)),JSON.stringify(Array.from({length:M.HZ+1},(_,y)=>Math.round(M.pmtFor(M.nowY+y)))),JSON.stringify((M.debtPay||[]).map(d=>[d.rest,d.per,d.rente]))].join('|');
   if(_fireMC && _fireMC.sig===sig) return _fireMC.res;
   let res=null; try{ res=fireMonteCarlo(M); }catch(_){}
   _fireMC={sig,res}; return res;
@@ -11251,7 +11295,7 @@ function reisRestsaldo(M){
   const doelInVul=(M.freed.volYear>M.nowY);
   const doelSub=doelInVul
     ? 'zit nu nog in de noodfonds-vulling hierboven, dus hij gaat er niet nog een keer af'
-    : `${doelNamen.length?'naar '+opsomming(doelNamen.map(esc))+'; ':''}toegewezen op Plan, dus dit geld groeit niet mee`;
+    : `${doelNamen.length?'naar '+opsomming(doelNamen.map(esc))+'; ':''}toegewezen op Plan, dus dit geld groeit niet mee ${(B.doelItems||[]).every(x=>x.k!=null)?'en gaat op de streefdatum de deur uit':((B.doelItems||[]).some(x=>x.k!=null)?'en gaat op een streefdatum de deur uit; zonder datum blijft het staan':'en blijft staan, want er is geen streefdatum')}`;
   const stepDoel= (B.doel>0)? stepWrap(rail(stapNr(),'var(--mut)','var(--bg)',false),
     `<div class="row"><span style="font-weight:700;font-size:var(--fs-md)">Spaardoelen</span><span style="font-weight:800;font-size:var(--fs-sm);color:var(--mut)">${euro0(B.doel)}/mnd</span></div><div class="small mut2" style="font-size:11.5px">${doelSub}</div>${(!doelInVul&&(B.doelItems||[]).length>=3)?`<div class="plan-tab small mut2" style="font-size:11.5px;margin-top:3px">${B.doelItems.map(x=>`<span>${esc(x.naam)}</span><span class="v">${euro0(x.per)}</span>`).join('')}</div>`:''}`) : '';
   /* Wat er dan pas mag groeien. Geen stap maar de uitkomst van de rij, en geen nieuwe berekening:
@@ -13028,7 +13072,7 @@ async function coMaandBevestig(R, r, opt){
  * Elke optie leidt naar een BESTAANDE ingang; er is hier geen editor bijgebouwd. Twee dingen om te
  * weten:
  *  - bij dekking bestaat 'inleg verhogen' niet als instelling. Wat je naar je reserveringenpot
- *    overmaakt is gedrag, geen veld: benodigdPerMaand volgt uit SET.reserveringen (v128). Die optie
+ *    overmaakt is gedrag, geen veld: wat er nodig is volgt uit SET.reserveringen (v128). Die optie
  *    opent dus geen sheet en is puur de afspraak.
  *  - bij het aankoopdoel leiden meer inleggen, de streefdatum en het doelbedrag alle drie naar
  *    dezelfde sheet (openGoal). Drie labels, drie velden, één bestemming. De zin in het gesprek
@@ -22260,13 +22304,13 @@ function diagContantStorting(){
   }
   return L;
 }
-/* v346: de reserveringen in de lange-termijnprojectie. Tot v345 trok de projectie elke maand een
-   maandlast uit dekking() af (bruto: per voorkomen bedrag door maanden tot), en die is een vraag over
-   dit jaar en niet over je pensioen. Sinds v346 rekent hij per post: een terugkerende post bedrag
-   door interval in elk jaar, een eenmalige post zijn volle bedrag in zijn eigen maand. Dit blok zet
-   de twee projecties op DEZE gegevens naast elkaar, zodat het verschil op het toestel te zien is.
-   Alleen lezen (v244): de oude vorm wordt nagerekend op een kopie van de inputs, en niets gaat naar
-   SET. De nieuwe kolom komt uit reisModel() zelf, dus geen tweede berekening van wat het scherm toont. */
+/* v346/v347: de reserveringen en doelen in de lange-termijnprojectie. Sinds v346 rekent de projectie
+   per post (terugkerend bedrag door interval, eenmalig in zijn eigen maand); sinds v347 wordt geld
+   voor een reservering of een doel op zijn moment UITGEGEVEN, en lezen de lijn en de Monte Carlo
+   dezelfde vlakke reeks. Dit blok zet per post en per doel wat er gebeurt, en de lijn naast de band:
+   met jouw beweeglijkheid en met nul. Met nul is het verschil wat de twee rekenwijzen nog scheidt
+   (de band rent per jaar, de lijn per maand); met jouw beweeglijkheid komt de marktonzekerheid erbij.
+   Alleen lezen (v244): niets gaat naar SET, en de Monte Carlo draait hier zonder zijn cache. */
 function diagReisReserveringen(){
   const L=[];
   const lijst=resLijst();
@@ -22275,26 +22319,31 @@ function diagReisReserveringen(){
     if(!v) continue;
     const b=Math.round(+v.bedrag||0), iv=Math.max(Math.round(+v.intervalM||0),0);
     if(!(b>0)){ L.push(`  ${v.naam||'?'}: geen bedrag, telt niet`); continue; }
-    if(iv>0){ L.push(`  ${v.naam||'?'}: ${b} per ${iv} mnd -> ${(b/iv).toFixed(2)} per maand, in elk jaar`); continue; }
     const o=resVolgende(v);
+    if(iv>0){ L.push(`  ${v.naam||'?'}: ${b} per ${iv} mnd -> ${(b/iv).toFixed(2)} per maand opzij, betaald ${o!=null?'vanaf '+resYmPlus(o)+' elke '+iv+' mnd':'(geen termijn open)'}`); continue; }
     L.push(o==null ? `  ${v.naam||'?'}: ${b} eenmalig, geen termijn meer open (betaald of verstreken), telt niet`
-                   : `  ${v.naam||'?'}: ${b} eenmalig in ${resYmPlus(o)} (maand ${o} vanaf nu), alleen in die maand`);
+                   : `  ${v.naam||'?'}: ${b} eenmalig in ${resYmPlus(o)} (maand ${o} vanaf nu), opzij en uitgegeven in die maand`);
   }
   const inp=fireInputs(), R=fireState(inp, SET.reis||{});
-  L.push(`structureel per maand (v346): ${Math.round(inp.resPerMaand)}`);
-  L.push(`eenmalige posten in de projectie: ${(inp.resEenmalig||[]).length}`);
-  let D=null; try{ D=dekking(12); }catch(_){}
-  const bruto=D?Math.max(Math.round(D.benodigdPerMaand||0),0):0;
-  L.push(`ter vergelijking, de maandlast van dekking(): bruto ${D?D.benodigdPerMaand:'-'} (las de projectie tot v345), netto ${D&&D.nodigPerMaand!=null?D.nodigPerMaand:'onbekend'}`);
-  if(R.inlegMode!=='auto'){ L.push('je inleg staat op zelf ingevuld: dan trekt de projectie geen reserveringen af, in geen van beide vormen.'); return L; }
-  const Mn=fireModel(R, inp);
-  const oudInp=Object.assign({}, inp, {resPerMaand:bruto, resEenmalig:[]});
-  const Mo=fireModel(fireState(oudInp, SET.reis||{}), oudInp);
-  L.push(`vermogen in de projectie (midden), per post (nu) tegen de bruto maandlast (tot v345):`);
-  const jaren=[1,5,10,Mn.HZ].filter((y,i,a)=>y<=Mn.HZ&&a.indexOf(y)===i);
-  for(const y of jaren){ const n=Math.round(Mn.mid[y]||0), o=Math.round(Mo.mid[y]||0);
-    L.push(`  ${Mn.nowY+y}: nu ${n} · tot v345 ${o} · verschil ${n-o>=0?'+':''}${n-o}`); }
-  L.push('de reserveringen landen in de vlakke laag (cash) en worden in deze projectie niet uitgegeven: het verschil is dus alleen de groei die ze wel of niet missen.');
+  L.push(`structureel per maand: ${Math.round(inp.resPerMaand)}`);
+  L.push(`doelen: ${(inp.doelItems||[]).length}`);
+  for(const g of (inp.doelItems||[]))
+    L.push(`  ${g.naam}: doel ${g.doel}, staat ${g.gespaard}, ${g.per} per maand, ${g.k!=null?'uitgegeven in '+resYmPlus(g.k)+' (maand '+g.k+' vanaf nu)':'geen datum (of verstreken): blijft staan'}`);
+  if(R.inlegMode!=='auto'){ L.push('je inleg staat op zelf ingevuld: dan trekt de projectie niets af voor reserveringen en doelen, en geeft hij ook niets uit.'); return L; }
+  const M=fireModel(R, inp);
+  const C=(M.sim&&M.sim.cser)||[];
+  const jaren=[1,5,10,M.HZ].filter((y,i,a)=>y<=M.HZ&&a.indexOf(y)===i);
+  L.push(`vlakke laag (spaargeld, reserveringen en doelen): nu ${Math.round(C[0]||0)} · ${jaren.map(y=>(M.nowY+y)+' '+Math.round(C[y]||0)).join(' · ')}`);
+  let mc=null, mc0=null;
+  try{ mc=fireMonteCarlo(M); }catch(_){}
+  try{ mc0=fireMonteCarlo(Object.assign({},M,{R:Object.assign({},M.R,{sigma:0})})); }catch(_){}
+  if(!mc){ L.push('band: niet te rekenen (geen FIRE-getal)'); return L; }
+  L.push('vermogen, lijn tegen de mediaan van de band (en de band bij beweeglijkheid nul):');
+  for(const y of jaren){ const l=Math.round(M.mid[y]||0), b=Math.round(mc.p50[y]||0), b0=mc0?Math.round(mc0.p50[y]||0):null;
+    L.push(`  ${M.nowY+y}: lijn ${l} · band ${b} (${l?Math.round(b/l*100):'-'}%)${b0!=null?` · bij nul ${b0} (${l?Math.round(b0/l*100):'-'}%)`:''}`); }
+  const reikt=a=>{ for(let y=0;y<=M.HZ;y++) if((a[y]||0)>=M.FIRE) return M.nowY+y; return null; };
+  const f=(M.ms||[]).find(m=>m.key==='fire');
+  L.push(`FIRE ${Math.round(M.FIRE)}: lijn ${f&&f.yr!=null?f.yr:'niet gehaald'} · mediaan band ${reikt(mc.p50)||'niet gehaald'}${mc0?` · band bij nul ${reikt(mc0.p50)||'niet gehaald'}`:''} · doeljaar ${M.targetYear} · kans ${mc.succ}%`);
   return L;
 }
 const DIAG_BLOKKEN=[
@@ -22315,7 +22364,7 @@ const DIAG_BLOKKEN=[
   {titel:'de stand-kaart op Inzichten tegen zijn maandbudget, per categorie', lees:diagStandKaart},
   {titel:'boekingen naar een beleggingspartij en hun bezitting', lees:diagBezitKoppeling},
   {titel:'hoe een storting van contant geld er bij je banken uitziet', lees:diagContantStorting},
-  {titel:'de reserveringen in de lange-termijnprojectie, per post tegen de oude maandlast', lees:diagReisReserveringen},
+  {titel:'reserveringen en doelen in de lange-termijnprojectie, en de lijn naast de band', lees:diagReisReserveringen},
 ];
 
 async function diagTekst(){
@@ -22458,7 +22507,11 @@ function exportPotjesCSV(){ const B=SET.budgets||{}; const ks=Object.keys(B).fil
 function fireOpKoers(){
   let M; try{ M=reisModel(); }catch(_){ return undefined; }
   if(!M || !(M.FIRE>0)) return undefined;
-  if(M.missing) return undefined;
+  /* v347: hier stond `if(M.missing)`, en M.missing is een object {balances, assets} en dus altijd
+     truthy (v124): deze functie gaf daardoor NOOIT een oordeel en de briefing zweeg altijd over je
+     koers. Gemeten bij het naast elkaar leggen van op koers en de haalbaarheid. Dezelfde toets als
+     coHorizonBron(): een onbekend saldo diskwalificeert, geen bezittingen is een lege laag. */
+  if(M.missing && M.missing.balances) return undefined;
   const fire=(M.ms||[]).find(m=>m.key==='fire');
   if(!fire) return undefined;
   if(fire.yr==null) return false;

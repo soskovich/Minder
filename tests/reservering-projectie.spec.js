@@ -37,12 +37,16 @@ async function boot(page, res, extra) {
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof reisModel === 'function');
 }
-// De toename van de vlakke laag per jaar: daar landt wat er naar je bestemmingen gaat.
+// De toename van de vlakke laag per jaar. v347: wat naar een reservering gaat komt daar binnen en gaat
+// er op de termijn weer uit, dus een post laat de vlakke laag per saldo staan en haalt zijn bedrag uit
+// de GROEI. Tot v346 bleef hij in de vlakke laag staan, tot je pensioen.
 const cashStap = (page) => page.evaluate(() => {
   const M = reisModel(); const c = M.assetParts.find((p) => p.kind === 'cash');
   const s = c ? c.series : M.assets.map(() => 0);
   return { stap: s.slice(1, 6).map((v, i) => Math.round(v - s[i])), volYear: M.freed.volYear, nowY: M.nowY,
-           pmt0: M.pmtFor(M.nowY), pmt1: M.pmtFor(M.nowY + 1) };
+           pmt0: M.pmtFor(M.nowY), pmt1: M.pmtFor(M.nowY + 1),
+           // v347: de inleg in de groei per projectiejaar (jaarbedrag); daar gaat een post van af
+           groei: [0, 1, 2, 3, 4].map((y) => Math.round(M.pmtFor(M.nowY + y) * 12)) };
 });
 
 test.describe('a · resPosten() rekent per post', () => {
@@ -81,14 +85,20 @@ test.describe('b · een eenmalige post telt alleen in zijn eigen maand', () => {
     await page.evaluate((b) => { SET.reserveringen = [b]; save(); }, BOETE);
     const met = await cashStap(page);
     expect(met.volYear).toBe(met.nowY);                       // invoermeting: geen vul-fase die de jaren ongelijk maakt
-    expect(met.stap[0] - zonder.stap[0]).toBe(299);           // het jaar met de boete: precies het volle bedrag
-    expect(met.stap.slice(1)).toEqual(zonder.stap.slice(1));  // daarna niets meer
+    expect(zonder.groei.map((v, i) => v - met.groei[i])).toEqual([299, 0, 0, 0, 0]);   // uit de groei: een keer
+    expect(met.stap).toEqual(zonder.stap);                    // v347: opzij en in dezelfde maand uitgegeven
   });
 
+  // v347: de Monte Carlo leest dezelfde inleg per jaar (pmtFor) EN dezelfde vlakke laag (sim.cser) als de lijn
   test('de Monte Carlo ziet hem ook alleen in zijn eigen jaar', async ({ page }) => {
     await boot(page, [BOETE]);
-    const m = await cashStap(page);
-    expect(Math.round((m.pmt1 - m.pmt0) * 12)).toBe(299);
+    const lees = () => page.evaluate(() => { const M = reisModel(); return { p0: M.pmtFor(M.nowY), p1: M.pmtFor(M.nowY + 1), c: M.sim.cser.map(Math.round) }; });
+    const met = await lees();
+    await page.evaluate(() => { SET.reserveringen = []; save(); });
+    const z = await lees();
+    expect(Math.round((z.p0 - met.p0) * 12)).toBe(299);
+    expect(Math.round((z.p1 - met.p1) * 12)).toBe(0);
+    expect(met.c).toEqual(z.c);
   });
 
   test('een eenmalige post buiten het eerste jaar valt in zijn eigen jaar', async ({ page }) => {
@@ -97,7 +107,8 @@ test.describe('b · een eenmalige post telt alleen in zijn eigen maand', () => {
     const m = await cashStap(page);
     await page.evaluate(() => { SET.reserveringen = []; save(); });
     const z = await cashStap(page);
-    expect(m.stap.map((v, i) => v - z.stap[i])).toEqual([0, 600, 0, 0, 0]);
+    expect(z.groei.map((v, i) => v - m.groei[i])).toEqual([0, 600, 0, 0, 0]);
+    expect(m.stap).toEqual(z.stap);
   });
 });
 
@@ -107,12 +118,16 @@ test.describe('c · een terugkerende post telt in elk jaar hetzelfde', () => {
     const met = await cashStap(page);
     await page.evaluate(() => { SET.reserveringen = []; save(); });
     const z = await cashStap(page);
-    expect(met.stap.map((v, i) => v - z.stap[i])).toEqual([1200, 1200, 1200, 1200, 1200]);
+    expect(z.groei.map((v, i) => v - met.groei[i])).toEqual([1200, 1200, 1200, 1200, 1200]);
+    // v347: elk jaar 1.200 opzij en elk jaar 1.200 betaald, dus de vlakke laag groeit er niet van
+    expect(met.stap).toEqual(z.stap);
   });
 
   test('een kwartaalpost die deze maand valt is EUR 100 per maand, niet de achterstand van dit jaar', async ({ page }) => {
     await boot(page, [KWARTAAL]);
-    const r = await page.evaluate(() => ({ i: fireInputs().resPerMaand, bruto: dekking(12).benodigdPerMaand }));
+    // v347: de bruto som staat niet meer in dekking(), dus de test rekent hem zelf na
+    const r = await page.evaluate(() => ({ i: fireInputs().resPerMaand,
+      bruto: Math.round(verplichtingen(12).reduce((s, x) => s + x.bedrag / Math.max(x.offset, 1), 0)) }));
     expect(r.i).toBe(100);
     expect(r.bruto).toBeGreaterThan(r.i);   // invoermeting: de oude maandlast lag hier anders
   });
@@ -152,7 +167,10 @@ test.describe('e · het scherm en de uitlezing', () => {
     expect(sub).toContain('Eenmalig: €299 Boete');
   });
 
-  test('blok 18 zet de projectie naast de oude maandlast en schrijft niets', async ({ page }) => {
+  /* v347: blok 18 zet de lijn naast de band. Per post en per doel wanneer het geld de deur uit gaat,
+     de vlakke laag over de jaren, en per jaar de lijn tegen de mediaan van de band en tegen de band
+     bij een beweeglijkheid van nul. */
+  test('blok 18 zet de lijn naast de band en schrijft niets', async ({ page }) => {
     await boot(page, [BOETE, PREMIE]);
     const r = await page.evaluate(() => {
       const oud = localStorage.setItem; let schrijf = 0; localStorage.setItem = function () { schrijf++; return oud.apply(this, arguments); };
@@ -162,11 +180,9 @@ test.describe('e · het scherm en de uitlezing', () => {
     });
     expect(r.schrijf).toBe(0);
     const t = r.L.join('\n');
-    expect(t).toContain('Premie: 1200 per 12 mnd -> 100.00 per maand');
-    expect(t).toContain('Boete: 299 eenmalig in ' + NOV);
-    expect(t).toContain(`${r.jaar1}: nu ${r.mid1} · tot v345 `);
-    const m = t.match(new RegExp(`${r.jaar1}: nu (-?\\d+) · tot v345 (-?\\d+) · verschil ([+-]\\d+)`));
-    expect(m && +m[3]).toBe(+m[1] - +m[2]);
-    expect(+m[3]).toBeGreaterThan(0);   // de bruto maandlast hield meer geld uit de groei
+    expect(t).toContain('Premie: 1200 per 12 mnd -> 100.00 per maand opzij, betaald vanaf ');
+    expect(t).toContain('Boete: 299 eenmalig in ' + NOV + ' (maand 1 vanaf nu), opzij en uitgegeven in die maand');
+    expect(t).toContain(`${r.jaar1}: lijn ${r.mid1} · band `);
+    expect(t).toMatch(/FIRE \d+: lijn (\d{4}|niet gehaald) · mediaan band (\d{4}|niet gehaald) · band bij nul (\d{4}|niet gehaald)/);
   });
 });

@@ -122,8 +122,10 @@ test.describe('1 · de kaart op Plan is weg', () => {
 test.describe('2 · gedekt is gedekt, zonder maandbedrag', () => {
   test('meting: de oude EUR 299 is de bruto som, die de pot negeert', async ({ page }) => {
     await boot(page, seed(299, BOETE));
-    const D = await page.evaluate(() => dekking(12));
-    expect(D.benodigdPerMaand).toBe(299);   // 299 / max(offset 1, 1): de pot doet niet mee
+    const D = await page.evaluate(() => Object.assign({ bruto: Math.round(verplichtingen(12).reduce((s, x) => s + x.bedrag / Math.max(x.offset, 1), 0)) }, dekking(12)));
+    // v347: de bruto som staat niet meer in dekking(); de test rekent hem na als meting van het oude getal
+    expect(D.bruto).toBe(299);   // 299 / max(offset 1, 1): de pot doet niet mee
+    expect('benodigdPerMaand' in D).toBe(false);
     expect(D.gat).toBeNull();
     expect(D.nodigPerMaand).toBe(0);
   });
@@ -232,7 +234,7 @@ test.describe('4 · een bron voor nog nodig per maand', () => {
   const zonderRek = (pot, res) => { const p = seed(pot, res); const S = JSON.parse(p.minder_set); delete S.resAcc; p.minder_set = JSON.stringify(S); return p; };
   test('zonder rekening: de boete van 299 over een maand vraagt 150 en niet 299', async ({ page }) => {
     await boot(page, zonderRek(299, BOETE));
-    const r = await page.evaluate(() => { const D = dekking(12); return { t: dekkingTekst(D), bruto: D.benodigdPerMaand, leeg: D.nodigZonderPot }; });
+    const r = await page.evaluate(() => { const D = dekking(12); return { t: dekkingTekst(D), bruto: Math.round(verplichtingen(12).reduce((s, x) => s + x.bedrag / Math.max(x.offset, 1), 0)), leeg: D.nodigZonderPot }; });
     expect(r.bruto).toBe(299);                          // invoer: de oude som
     expect(r.leeg).toBe(150);                           // ceil(299 / 2), deze maand meegeteld
     expect(r.t).toContain('Met een lege pot heb je voor wat er dit jaar nog aankomt €150 per maand nodig');

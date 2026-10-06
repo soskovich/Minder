@@ -97,17 +97,18 @@ test.describe('a · uitrollen over de horizon', () => {
 });
 
 test.describe('b · de dekkingssom', () => {
-  test('benodigdPerMaand is bedrag gedeeld door de maanden tot die maand', async ({ page }) => {
+  /* v347: OPGERUIMD. De bruto som (bedrag gedeeld door de maanden tot die maand, opgeteld) had sinds
+     v346 geen lezer meer in de app; wat er per maand nodig is staat in nodigPerMaand (v344/v345). */
+  test('dekking draagt geen bruto maandsom meer', async ({ page }) => {
     await boot(page);
     const d = await D(page);
-    // 120/1 + 480/3 + 120/4 + 120/7 + 120/10 = 120 + 160 + 30 + 17,14 + 12 = 339,14 -> 339
-    expect(d.benodigdPerMaand).toBe(339);
+    expect('benodigdPerMaand' in d).toBe(false);
+    expect('nodigPerMaand' in d).toBe(true);
   });
 
   test('een post die deze maand valt heb je nu in zijn geheel nodig', async ({ page }) => {
     await boot(page, seedRes({ reserveringen: [{ id: 'a', naam: 'Nu', bedrag: 300, vervalmaand: CUR, intervalM: 12 }] }));
     const d = await D(page);
-    expect(d.benodigdPerMaand).toBe(300);                       // niet gedeeld door nul
     expect(d.benodigdeStand).toBe(300);                         // en hij hoort er nu helemaal te staan
   });
 
@@ -131,13 +132,11 @@ test.describe('b · de dekkingssom', () => {
      EUR 500 in de pot en een boete van EUR 299 eenmalig in november zei Plan "Blijft over EUR 500"
      terwijl die 299 volgende maand vertrekt, en de WATERVAL in dezelfde functie trok hem al voluit
      af. Een eenmalige post heeft geen volgende termijn om over te spreiden, dus hij is verschuldigd
-     en draagt zijn hele bedrag. `benodigdPerMaand` is ongemoeid: dat is wat je per maand opzij moet
-     zetten en dat blijft het bedrag gedeeld door de maanden tot de vervaldag. */
+     en draagt zijn hele bedrag. (De bruto maandsom die hier ook werd getoetst is bij v347 opgeruimd.) */
   test('een eenmalige post draagt zijn hele bedrag bij aan de stand', async ({ page }) => {
     await boot(page, seedRes({ reserveringen: [{ id: 'a', naam: 'Eenmalig', bedrag: 600, vervalmaand: over(6), intervalM: 0 }] }));
     const d = await D(page);
     expect(d.benodigdeStand).toBe(600);
-    expect(d.benodigdPerMaand).toBe(100);                       // 600 / 6, ongewijzigd
   });
 
   /* En de pro-rata vorm voor een post MET interval is niet aangeraakt: dat is het geval dat de twee
@@ -146,7 +145,6 @@ test.describe('b · de dekkingssom', () => {
     await boot(page, seedRes({ reserveringen: [{ id: 'a', naam: 'Jaarlijks', bedrag: 600, vervalmaand: over(6), intervalM: 12 }] }));
     const d = await D(page);
     expect(d.benodigdeStand).toBe(300);                         // 600 x (12-6)/12
-    expect(d.benodigdPerMaand).toBe(100);
   });
 
   test('gedektTot telt chronologisch af vanaf de huidige stand', async ({ page }) => {
@@ -195,7 +193,6 @@ test.describe('c · volledig, of eerlijk zwijgen', () => {
   test('zonder reserveringsrekening: wel de behoefte, geen stand', async ({ page }) => {
     await boot(page, seedRes({}, { geenAcc: true }));
     const d = await D(page);
-    expect(d.benodigdPerMaand).toBe(339);
     expect(d.benodigdeStand).toBe(440);
     expect(d.werkelijkeStand).toBeNull();
     expect(d.graad).toBeNull();
