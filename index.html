@@ -7861,15 +7861,17 @@ function dezeMaandBrug(V){
   const lo=Math.min(...lv), hi=Math.max(...lv);
   let basis=0;
   if(lo>0 && hi-lo<hi*0.5){ const stap=Math.pow(10,Math.floor(Math.log10(hi)))/2; basis=Math.max(Math.floor((lo-(hi-lo)*0.6)/stap)*stap,0); }
-  return {tegen:'budget', stappen, basis, los, rest:R['~rest']||0, diff};
+  return {tegen:'budget', stappen, basis, los, rest:R['~rest']||0, diff, boven:V.potjes.some(x=>Math.round(x.overR)>0)};
 }
 /* De zin stelt vast en oordeelt niet (v78/v93): welk potje boven uitkomt en waarom (past niet, of loopt
    voor), welk losse potje eronder blijft, en de rest. */
 function dezeMaandZin(Br){
   const boven=Br.los.filter(x=>x.overR>0), onder=Br.los.filter(x=>x.overR<0);
   const pn=boven.filter(x=>x.aard==='pastniet'), vr=boven.filter(x=>x.aard==='voor'), an=boven.filter(x=>x.aard!=='pastniet' && x.aard!=='voor');
+  /* Komt geen enkel potje boven uit (ook niet in de rest), dan is dat EEN zin en verder niets: de
+     bridge erboven toont al wat eronder blijft. */
+  if(!Br.boven) return 'Alle potjes blijven verwacht onder hun bedrag.';
   const d=[];
-  if(!boven.length) d.push('Geen potje eindigt verwacht boven zijn bedrag');
   if(pn.length) d.push(`${gripNamen(pn)} ${pn.length===1?'past niet in zijn potje':'passen niet in hun potje'}`);
   if(vr.length) d.push(`${gripNamen(vr)} ${vr.length===1?'loopt voor':'lopen voor'}`);
   if(an.length) d.push(`${gripNamen(an)} ${an.length===1?'eindigt verwacht boven zijn potje':'eindigen verwacht boven hun potje'}`);
@@ -7934,7 +7936,7 @@ function renderGripVooruit(){
   const dagen=`${V.el} ${V.el===1?'dag':'dagen'}`;
   const hand=V.handelingen.map(h=>{
     const waarom=h.aard==='pastniet'
-      ? `<b data-aard="pastniet">Past niet in je potje</b>: gewoonlijk ${euro0(h.patroon)} per maand, je potje is ${euro0(h.bud)}. ${euro0(h.uit)} in ${dagen}.`
+      ? `<b data-aard="pastniet">Past niet in je potje</b>: gewoonlijk ${euro0(h.patroon)} per maand, je potje is ${euro0(h.bud)}. ${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.`
       : (h.aard==='voor' ? `<b data-aard="voor">Loopt voor</b>: ${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.` : `${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.`);
     const bij=h.aard==='pastniet'?`<button class="btn sec" data-bijstellen="${esc(h.k)}" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px;margin-top:6px" onclick="openPotjeBijstel('${esc(h.k)}')">Potje bijstellen</button>`:'';
     return `<div class="row" data-handeling="${esc(h.k)}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
@@ -7981,25 +7983,68 @@ function grensRestZet(k){
    is dat patroon, op vijf euro naar boven. Openen schrijft niets (MECHANISM_SPEC.defaultEffect); pas
    "Potje bijstellen" schrijft, via de bestaande route van een bestaand potje (savePotje(), dus vanaf
    volgende maand, v235/v315), en die leest het voorstel opnieuw (v319). */
+/* POTJE BIJSTELLEN (v349) volgt de dekkingsregel van v238: het potje gaat omhoog naar je gewone maand
+   (ceil5 van het patroon), EEN ander potje levert hetzelfde bedrag in, en het maandtotaal blijft gelijk.
+   Opslaan kan pas als de dekking rond is. Het geldt vanaf volgende maand voor allebei (SET.budgetsNext),
+   want "past niet" is je gewone maand en geen eenmalige maand.
+   DE ONDERGRENS van het dekkende potje is wat je er gewoonlijk uitgeeft (het gemiddelde over dezelfde
+   drie afgeronde maanden als de vooruitblik): in de maand waarin het geldt is er nog niets uit, dus de
+   ondergrens van v238 (wat er al uit is) zou nul zijn, en dan maak je van het dekkende potje het
+   volgende potje dat niet past. Een potje dat het hele bedrag niet kan dragen staat er niet tussen, en
+   er wordt niets voorgekozen (MECHANISM_SPEC.defaultEffect). */
+function potjeGewoon(k, maanden){
+  let s=0; for(const m of (maanden||[])){ try{ s+=Math.max(+(catSpendMap(m)||{})[k]||0,0); }catch(_){} }
+  return (maanden&&maanden.length)?s/maanden.length:0;
+}
 function potjeBijstelVoorstel(k){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const h=V&&!V.onbekend?V.handelingen.find(x=>x.k===k && x.aard==='pastniet'):null; if(!h) return null;
-  const naar=ceil5(h.patroon), voor=Math.round(plannedTotalBudget()), van=Math.round(+(plannedBudgets()[k])||h.bud);
-  return {k, naam:h.naam, patroon:h.patroon, bud:h.bud, naar, totVan:voor, totNaar:voor-van+naar, vanaf:nextYM(SET.budgetMonth||thisYM()), maanden:V.band.maanden};
+  const B=plannedBudgets(), van=Math.round(+B[k]||h.bud), naar=ceil5(h.patroon), meer=naar-van;
+  if(!(meer>0)) return null;
+  const kand=Object.keys(B).filter(x=>x!==k && +B[x]>0 && CATS[x] && CATS[x].type==='expense' && !geenNorm(x))
+    .map(x=>{ const bud=Math.round(+B[x]), gew=Math.round(potjeGewoon(x, V.band.maanden));
+      return {k:x, naam:CATS[x].name, bud, gewoon:gew, ruimte:bud-gew}; })
+    .filter(x=>x.ruimte>=meer)
+    .sort((a,b)=>(b.ruimte-a.ruimte) || a.naam.localeCompare(b.naam,'nl'));
+  return {k, naam:h.naam, patroon:h.patroon, bud:h.bud, van, naar, meer, kand, tot:Math.round(plannedTotalBudget()),
+    vanaf:nextYM(SET.budgetMonth||thisYM()), maanden:V.band.maanden};
 }
-function openPotjeBijstel(k){
+function potjeBijstelDek(){ return window._bijstelDek||null; }
+function openPotjeBijstel(k, dek){
   const P=potjeBijstelVoorstel(k); if(!P){ closeSheet(); return; }
+  window._bijstelDek = (dek && P.kand.some(x=>x.k===dek)) ? dek : null;
+  const D=P.kand.find(x=>x.k===window._bijstelDek)||null, Vn=ymFull(P.vanaf);
+  const rij=x=>`<div class="tx" data-dekkies="${esc(x.k)}" style="cursor:pointer${D&&D.k===x.k?';outline:1px solid var(--teal);border-radius:8px':''}" onclick="openPotjeBijstel('${esc(k)}','${esc(x.k)}')">
+      <div class="ava" style="background:var(--card2)">${CATS[x.k].icon||''}</div>
+      <div class="info"><div class="nm">${esc(x.naam)}</div><div class="cat">potje ${euro0(x.bud)}, gewoonlijk ${euro0(x.gewoon)} · ruimte ${euro0(x.ruimte)}</div></div>
+      <div class="amt" style="color:var(--teal)">${D&&D.k===x.k?'gekozen':'kies'}</div></div>`;
+  const gevolg = D
+    ? `Vanaf ${esc(Vn)} gaat ${esc(P.naam)} van ${euro0(P.van)} naar ${euro0(P.naar)} en levert ${esc(D.naam)} ${euro0(P.meer)} in: van ${euro0(D.bud)} naar ${euro0(D.bud-P.meer)}. Deze maand blijven je potjes staan. Je maandbudget blijft ${euro0(P.tot)}.`
+    : (P.kand.length
+      ? `Nog te dekken: ${euro0(P.meer)}. Wijs het potje aan dat inlevert; je maandbudget blijft dan ${euro0(P.tot)}.`
+      : `Geen ander potje heeft ${euro0(P.meer)} over boven wat je er gewoonlijk uitgeeft, dus er valt niets te verschuiven. Een grens zetten kan wel.`);
   $('#sheet').innerHTML=`<div class="grab"></div><div id="potjeBijstel" data-cat="${esc(k)}" data-naar="${P.naar}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(P.naam)}-potje bijstellen</div>
-    <div class="small" style="line-height:1.5;margin-top:6px">In ${esc(opsomming(P.maanden.map(x=>ymFull(x))))} gaf je gemiddeld ${euro0(P.patroon)} per maand uit aan ${esc(P.naam.toLowerCase())}, en je potje is ${euro0(P.bud)}. Met een potje van ${euro0(P.naar)} past je gewone maand erin.</div>
-    <div class="small" data-bijstelgevolg style="color:var(--mut2);line-height:1.5;margin-top:6px">Dat geldt vanaf ${esc(ymFull(P.vanaf))}; deze maand blijft je potje ${euro0(P.bud)}. Je maandbudget gaat van ${euro0(P.totVan)} naar ${euro0(P.totNaar)}.</div>
-    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" style="flex:1" onclick="potjeBijstelZet('${esc(k)}')">Potje bijstellen</button><button class="btn sec" onclick="openGripVooruit()">Terug</button></div></div>`;
+    <div class="small" style="line-height:1.5;margin-top:6px">In ${esc(opsomming(P.maanden.map(x=>ymFull(x))))} gaf je gemiddeld ${euro0(P.patroon)} per maand uit aan ${esc(P.naam.toLowerCase())}, en je potje is ${euro0(P.bud)}. Met een potje van ${euro0(P.naar)} past je gewone maand erin; daarvoor levert een ander potje ${euro0(P.meer)} in.</div>
+    <div class="hlabel" style="margin:12px 0 4px">Waar komt het vandaan</div>
+    ${P.kand.map(rij).join('')}
+    <div class="small" data-bijstelgevolg style="color:var(--mut2);line-height:1.5;margin-top:8px">${gevolg}</div>
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-bijstelsave style="flex:1"${D?'':' disabled'} onclick="potjeBijstelZet('${esc(k)}')">Potje bijstellen</button><button class="btn sec" onclick="openGripVooruit()">Terug</button></div></div>`;
   showSheetBg();
 }
 function potjeBijstelZet(k){
   const P=potjeBijstelVoorstel(k); if(!P || !CATS[k]) return;   // opnieuw gelezen (v319)
-  window._potDraft={type:'vast', vast:P.naar}; window._potAfter=null;
-  savePotje(k);
+  const D=P.kand.find(x=>x.k===potjeBijstelDek()); if(!D) return;   // zonder dekking geen opslag (v238)
+  SET.budgetsNext=SET.budgetsNext||{}; SET.potMetaNext=SET.potMetaNext||{};
+  SET.budgetsNext[k]=P.naar; SET.potMetaNext[k]=null;
+  SET.budgetsNext[D.k]=D.bud-P.meer; SET.potMetaNext[D.k]=null;
+  save();
+  try{ valtOpPotjeGewijzigd(k, +(SET.budgets||{})[k]||0, P.naar, true); }catch(_){}
+  try{ valtOpPotjeGewijzigd(D.k, +(SET.budgets||{})[D.k]||0, D.bud-P.meer, true); }catch(_){}
+  try{ potjeAfspraak(D.k, D.bud-P.meer); }catch(_){}   // v337: een potje dat lager ligt vraagt gedrag
+  window._bijstelDek=null;
+  closeSheet(); render();
+  toast(`${ICON('check')} Vanaf ${ymFull(P.vanaf)}: ${P.naam} ${euro0(P.naar)}, ${D.naam} ${euro0(D.bud-P.meer)}`);
 }
 
 /* ===== KOMENDE 3 MAANDEN (v340) =====

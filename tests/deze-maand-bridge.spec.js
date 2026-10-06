@@ -21,7 +21,7 @@ test.describe('a. de bridge loopt van budget naar uitkomst', () => {
     expect(st).toEqual([
       { soort: 'begin', k: null, waarde: 3375, aard: null },
       { soort: 'potje', k: 'vices', waarde: 83, aard: 'pastniet' },
-      { soort: 'potje', k: 'boodschappen', waarde: 61, aard: 'voor' },
+      { soort: 'potje', k: 'boodschappen', waarde: 61, aard: 'pastniet' },
       { soort: 'rest', k: null, waarde: -847, aard: null },
       { soort: 'eind', k: null, waarde: 2672, aard: null },
     ]);
@@ -66,35 +66,65 @@ test.describe('b. de oorzaak: past niet in je potje tegen loopt voor', () => {
   test('de zin op de kaart, zonder oordeel', async ({ page }) => {
     await boot(page); await grip(page);
     const z = await page.locator('#gripDezeMaand [data-dmzin]').innerText();
-    expect(z).toBe('Vices past niet in zijn potje; Boodschappen loopt voor; de rest samen €847 onder.');
-    expect(z).not.toMatch(/Vices loopt voor/);
+    expect(z).toBe('Vices en Boodschappen passen niet in hun potje; de rest samen €847 onder.');
+    expect(z).not.toMatch(/loopt voor|lopen voor/);
   });
-  test('de invoer draagt beide gevallen: Vices niets uitgegeven, Boodschappen boven het normale tempo', async ({ page }) => {
+  test('de invoer draagt de gemelde gevallen: Vices niets uitgegeven, Boodschappen achter op zijn tempo', async ({ page }) => {
     await boot(page); await grip(page);
-    const P = await page.evaluate(() => Object.fromEntries(maandVooruit().potjes.map((x) => [x.k, { uit: x.uit, typisch: x.typisch, patroon: x.patroon, bud: x.bud }])));
-    expect(P.vices).toEqual({ uit: 0, typisch: 0, patroon: 133, bud: 50 });
-    expect(P.boodschappen.uit).toBeGreaterThan(P.boodschappen.typisch);
-    expect(P.boodschappen.patroon).toBeLessThanOrEqual(P.boodschappen.bud);
+    const P = await page.evaluate(() => Object.fromEntries(maandVooruit().potjes.map((x) => [x.k, { uit: x.uit, typisch: x.typisch, patroon: x.patroon, bud: x.bud, eind: x.eind, aard: x.aard }])));
+    expect(P.vices).toEqual({ uit: 0, typisch: 0, patroon: 133, bud: 50, eind: 133, aard: 'pastniet' });
+    // Boodschappen: EUR 49 in zes dagen tegen gemiddeld EUR 79, dus ACHTER, en toch boven zijn potje
+    expect(P.boodschappen).toEqual({ uit: 49, typisch: 79, patroon: 591, bud: 500, eind: 561, aard: 'pastniet' });
   });
-  test('de sheet noemt dezelfde oorzaak per potje', async ({ page }) => {
+  test('loopt voor alleen bij een hoger tempo dan normaal, met een patroon dat in het potje past', async ({ page }) => {
+    await boot(page, { set: { budgets: { huur: 1450, verzekering: 675, abonnement: 100, sport: 600, vices: 50, boodschappen: 600 } },
+      extraTx: [{ id: 'ahx', date: '2026-10-05', amount: -151, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
+    await grip(page);
+    const r = await page.evaluate(() => { const x = maandVooruit().potjes.find((p) => p.k === 'boodschappen');
+      return { uit: x.uit, typisch: x.typisch, patroon: x.patroon, eind: x.eind, aard: x.aard, zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }; });
+    expect(r.uit).toBeGreaterThan(r.typisch);
+    expect(r.patroon).toBeLessThanOrEqual(600);
+    expect(r.eind).toBeGreaterThan(600);
+    expect(r.aard).toBe('voor');
+    expect(r.zin).toContain('Boodschappen loopt voor');
+  });
+  test('voor en niet passend tegelijk: past niet wint, want dan komt hij ook zonder harder te gaan boven', async ({ page }) => {
+    await boot(page, { extraTx: [{ id: 'ahx', date: '2026-10-05', amount: -151, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
+    await grip(page);
+    const x = await page.evaluate(() => maandVooruit().potjes.find((p) => p.k === 'boodschappen'));
+    expect(x.uit).toBeGreaterThan(x.typisch);      // invoermeting: het tempo ligt hier wel hoger
+    expect(x.patroon).toBeGreaterThan(x.bud);
+    expect(x.aard).toBe('pastniet');
+  });
+  test('zonder hoger tempo en met een patroon dat past, geen oorzaak', async ({ page }) => {
+    await boot(page, { set: { budgets: { huur: 1450, verzekering: 675, abonnement: 100, sport: 600, vices: 50, boodschappen: 700 } } });
+    await grip(page);
+    const x = await page.evaluate(() => maandVooruit().potjes.find((p) => p.k === 'boodschappen'));
+    expect(x.uit).toBeLessThan(x.typisch);
+    expect(x.patroon).toBeLessThanOrEqual(x.bud);
+    expect(x.aard).toBe('');
+  });
+  test('de sheet noemt dezelfde oorzaak per potje, en bijstellen staat bij past niet', async ({ page }) => {
     await boot(page); await grip(page);
     const r = await page.evaluate(() => { openGripVooruit();
       const v = document.querySelector('[data-handeling="vices"]'), b = document.querySelector('[data-handeling="boodschappen"]');
       return { v: v.innerText, va: v.querySelector('[data-aard]').dataset.aard, b: b.innerText, ba: b.querySelector('[data-aard]').dataset.aard,
         bijV: !!v.querySelector('[data-bijstellen]'), bijB: !!b.querySelector('[data-bijstellen]') }; });
     expect(r.va).toBe('pastniet');
-    expect(r.v).toContain('Past niet in je potje');
-    expect(r.v).not.toMatch(/Loopt voor/i);
-    expect(r.ba).toBe('voor');
+    expect(r.ba).toBe('pastniet');
+    expect(r.b).toContain('Past niet in je potje');
+    expect(r.b).toContain('€49 in 6 dagen, gemiddeld €79');
+    expect(r.v + r.b).not.toMatch(/Loopt voor/i);
     expect(r.bijV).toBe(true);
-    expect(r.bijB).toBe(false);
+    expect(r.bijB).toBe(true);
   });
-  test('zonder hoger tempo geen "loopt voor": Boodschappen op zijn normale tempo', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => { const t = TX.find((x) => x.date === '2026-10-03' && x.amount === -200); t.amount = -100; save(); });
+  test('komt geen potje boven uit, dan is het een zin en verder niets', async ({ page }) => {
+    await boot(page, { set: { budgets: { huur: 1450, verzekering: 675, abonnement: 100, sport: 600, vices: 200, boodschappen: 700 } } });
     await grip(page);
-    const a = await page.evaluate(() => maandVooruit().potjes.find((x) => x.k === 'boodschappen').aard);
-    expect(a).toBe('');
+    const r = await page.evaluate(() => ({ boven: maandVooruit().potjes.filter((x) => Math.round(x.overR) > 0).length,
+      zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }));
+    expect(r.boven).toBe(0);
+    expect(r.zin).toBe('Alle potjes blijven verwacht onder hun bedrag.');
   });
 });
 
@@ -138,31 +168,63 @@ test.describe('d. hooguit drie potjes los, de rest samen', () => {
   });
 });
 
-test.describe('e. potje bijstellen: eerst het gevolg, dan schrijven', () => {
-  test('openen schrijft niets en toont het gevolg', async ({ page }) => {
+test.describe('e. potje bijstellen volgt de dekkingsregel: een ander potje levert in', () => {
+  const bijstel = (page) => page.evaluate(() => { openGripVooruit(); document.querySelector('[data-bijstellen="vices"]').click(); });
+  test('openen schrijft niets, niets is voorgekozen, en zonder dekking kan niet worden opgeslagen', async ({ page }) => {
     await boot(page); await grip(page);
-    const r = await page.evaluate(() => { const voor = localStorage.getItem('minder_set'); openGripVooruit();
-      document.querySelector('[data-bijstellen="vices"]').click();
-      const s = document.getElementById('potjeBijstel');
-      return { naar: +s.dataset.naar, gevolg: s.querySelector('[data-bijstelgevolg]').innerText, gelijk: localStorage.getItem('minder_set') === voor,
-        next: (SET.budgetsNext || {}).vices }; });
+    const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
+    await bijstel(page);
+    const r = await page.evaluate(() => { const s = document.getElementById('potjeBijstel');
+      return { naar: +s.dataset.naar, kand: [...s.querySelectorAll('[data-dekkies]')].map((e) => e.dataset.dekkies),
+        gevolg: s.querySelector('[data-bijstelgevolg]').innerText, uit: s.querySelector('[data-bijstelsave]').disabled }; });
     expect(r.naar).toBe(135);
-    expect(r.gevolg).toContain('vanaf november');
-    expect(r.gevolg).toContain('blijft je potje €50');
-    expect(r.gevolg).toContain('van €3.375 naar €3.460');
-    expect(r.gelijk).toBe(true);
-    expect(r.next).toBeUndefined();
+    // ruimte boven wat je er gewoonlijk uitgeeft: sport 600-73, verzekering 675-150; abonnement (70) kan 85 niet dragen
+    expect(r.kand).toEqual(['sport', 'verzekering']);
+    expect(r.gevolg).toContain('Nog te dekken: €85');
+    expect(r.gevolg).toContain('je maandbudget blijft dan €3.375');
+    expect(r.uit).toBe(true);
+    // de knop omzeilen schrijft ook niets: de schrijver eist zelf een dekking
+    await page.evaluate(() => potjeBijstelZet('vices'));
+    expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
   });
-  test('bevestigen zet het potje van volgende maand, deze maand blijft', async ({ page }) => {
+  test('het gevolg noemt welk potje inlevert, en het maandbudget blijft gelijk', async ({ page }) => {
     await boot(page); await grip(page);
-    const r = await page.evaluate(() => { openPotjeBijstel('vices');
-      [...document.querySelectorAll('#potjeBijstel button')].find((b) => b.innerText === 'Potje bijstellen').click();
-      return { next: SET.budgetsNext.vices, nu: SET.budgets.vices }; });
-    expect(r.next).toBe(135);
-    expect(r.nu).toBe(50);
+    await bijstel(page);
+    const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
+    await page.locator('[data-dekkies="verzekering"]').click();
+    const r = await page.evaluate(() => ({ gevolg: document.querySelector('[data-bijstelgevolg]').innerText,
+      uit: document.querySelector('[data-bijstelsave]').disabled, gelijk: localStorage.getItem('minder_set') }));
+    expect(r.gelijk).toBe(voor);
+    expect(r.uit).toBe(false);
+    expect(r.gevolg).toContain('Vanaf november gaat Vices van €50 naar €135');
+    expect(r.gevolg).toContain('Verzekeringen €85 in: van €675 naar €590');
+    expect(r.gevolg).toContain('Je maandbudget blijft €3.375');
+  });
+  test('bevestigen zet beide potjes voor volgende maand, deze maand blijft, het totaal blijft €3.375', async ({ page }) => {
+    await boot(page); await grip(page);
+    await bijstel(page);
+    await page.locator('[data-dekkies="verzekering"]').click();
+    await page.locator('[data-bijstelsave]').click();
+    const r = await page.evaluate(() => ({ next: SET.budgetsNext, nu: [SET.budgets.vices, SET.budgets.verzekering], tot: plannedTotalBudget() }));
+    expect(r.next.vices).toBe(135);
+    expect(r.next.verzekering).toBe(590);
+    expect(r.nu).toEqual([50, 675]);
+    expect(r.tot).toBe(3375);
+  });
+  test('zonder potje met genoeg ruimte is er geen kandidaat en blijft de knop uit', async ({ page }) => {
+    await boot(page, { set: { budgets: { huur: 1450, verzekering: 160, abonnement: 40, sport: 80, vices: 50, boodschappen: 500 } } });
+    await grip(page);
+    await bijstel(page);
+    const r = await page.evaluate(() => ({ kand: document.querySelectorAll('[data-dekkies]').length,
+      gevolg: document.querySelector('[data-bijstelgevolg]').innerText, uit: document.querySelector('[data-bijstelsave]').disabled }));
+    expect(r.kand).toBe(0);
+    expect(r.uit).toBe(true);
+    expect(r.gevolg).toContain('Geen ander potje heeft €85 over');
   });
   test('alleen een potje dat niet past heeft een voorstel', async ({ page }) => {
-    await boot(page); await grip(page);
+    await boot(page, { set: { budgets: { huur: 1450, verzekering: 675, abonnement: 100, sport: 600, vices: 50, boodschappen: 600 } },
+      extraTx: [{ id: 'ahx', date: '2026-10-05', amount: -151, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
+    await grip(page);
     expect(await page.evaluate(() => potjeBijstelVoorstel('boodschappen'))).toBeNull();
   });
 });

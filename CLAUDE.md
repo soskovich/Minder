@@ -133,26 +133,37 @@ genoemde versietag.)*
   het hoogste, dan begint de as bij een rond getal onder de laagste stand (`Br.basis`) en staat dat getal op
   de as (`data-asbasis`); de bridge op Inzichten geeft geen `basis` mee en blijft bij nul. De zin
   (`dezeMaandZin()`) stelt vast: welk potje boven uitkomt en waarom, welk losse potje eronder blijft, en de
-  rest. "Met N grenzen" staat alleen nog in de sheet.
+  rest; komt GEEN potje boven uit (ook niet in de rest), dan is het een zin en verder niets: "Alle potjes
+  blijven verwacht onder hun bedrag." "Met N grenzen" staat alleen nog in de sheet.
   TWEE OORZAKEN, EN ZE SLUITEN ELKAAR UIT (`maandVooruit()`, `x.aard`): "PAST NIET IN JE POTJE" als het
   gewone patroon (gemiddeld in de eerste dagen plus gemiddeld in de rest, `x.patroon`) groter is dan het
   potje, ook bij nul uitgegeven; anders "LOOPT VOOR" alleen als er meer uit is dan gemiddeld in dezelfde
   dagen van de laatste drie afgeronde maanden (`x.uit > x.typisch`). Tot `v349` heette elk potje dat op tempo
-  boven uitkwam "loopt voor", en GEMELD stond Vices met EUR 0 in zes dagen daaronder. De sheet zegt per
-  handeling dezelfde oorzaak, en bij "past niet" staat "POTJE BIJSTELLEN" naast de grens
-  (`openPotjeBijstel()`): voorstel `ceil5(patroon)`, EERST HET GEVOLG (vanaf volgende maand, deze maand
-  blijft het potje, het maandbudget van X naar Y), openen schrijft niets, en bevestigen gaat via de
-  bestaande route `savePotje()` naar `SET.budgetsNext` (`v61`); het voorstel wordt opnieuw gelezen (`v319`).
+  boven uitkwam "loopt voor", en GEMELD stonden Vices met EUR 0 in zes dagen en Boodschappen met EUR 49 tegen
+  gemiddeld EUR 79 daaronder: allebei achter op hun tempo, en allebei boven hun potje omdat hun gewone maand
+  er niet in past. Past hij niet, dan wint dat woord ook als hij voorloopt. De sheet zegt per handeling
+  dezelfde oorzaak, en bij "past niet" staat "POTJE BIJSTELLEN" naast de grens (`openPotjeBijstel()`).
+  BIJSTELLEN VOLGT DE DEKKINGSREGEL VAN `v238`: voorstel `ceil5(patroon)`, EEN ander potje levert het verschil
+  in, het maandtotaal blijft gelijk (op de stand EUR 3.375), en opslaan kan pas als de dekking gekozen is; de
+  schrijver eist dat zelf ook (`potjeBijstelZet()`). Niets is voorgekozen. Het geldt voor allebei vanaf
+  volgende maand (`SET.budgetsNext`), en de ONDERGRENS van het inleverende potje is wat je er gewoonlijk
+  uitgeeft (`potjeGewoon()`, dezelfde drie maanden): in de maand waarin het geldt is er nog niets uit, dus de
+  ondergrens van `v238` zou nul zijn en maak je het inleverende potje het volgende dat niet past. Een potje
+  dat het hele verschil niet kan dragen staat er niet tussen. Het gevolg vooraf noemt welk potje inlevert
+  en van hoeveel naar hoeveel; openen en kiezen schrijven niets, en het voorstel wordt opnieuw gelezen
+  (`v319`). Het lagere potje krijgt een afspraak (`potjeAfspraak()`, `v337`).
   DE COACHREGEL (`maandCoachIngang()`) STAAT IN DE POP-UP VAN DE MAANDAFSLUITING (`renderAfsluitSheet()`),
   met dezelfde lijst als tot nu (regels met acceptatie en afspraak plus de structurele signalen). DE PRIJS,
   en die staat vast in `voornemen-en-moment.spec.js`: zonder vorige maand met boekingen, of na het
   afsluiten, is er geen pop-up en staat het maandmoment nergens.
   GEMETEN op de stand van 6 oktober (`tests/deze-maand-stand.js`): stappen 3.375, +83 Vices, +61
-  Boodschappen, -847 rest, 2.672; de as begint bij EUR 2.000. De kaart gaat van 145 naar 271px op 360 en
+  Boodschappen, -847 rest, 2.672; de as begint bij EUR 2.000; Vices bijstellen is EUR 135 met Sport of
+  Verzekeringen als kandidaat (Abonnementen heeft EUR 70 ruimte en kan EUR 85 niet dragen). De kaart gaat van 145 naar 271px op 360 en
   van 127 naar 260px op 390, Grip van 400 naar 525px en van 382 naar 514px, zonder overloop. Op de stand van
-  `grip-dashboard` (met de afspraak van EUR 131) gaat de kaart van 176/158 naar 333/315px en Grip van
-  582/564 naar 739/721px. VIJFTIEN SABOTAGES, ALLE VIJFTIEN ROOD, een pas nadat de fixture delen van euro
-  droeg. ZEVENENTWINTIG BESTAANDE TESTS IN VIJF BESTANDEN VIELEN EROP: dertien in `maand-brug` lazen elke
+  `grip-dashboard` (met de afspraak van EUR 131, en geen potje boven) gaat de kaart van 176/158 naar 315/297px
+  en Grip van 582/564 naar 721/703px. VIJFENTWINTIG SABOTAGES, ALLE VIJFENTWINTIG ROOD, drie pas nadat de
+  spec het geval droeg (meetles a): delen van euro, een potje dat voorloopt EN niet past, en een potje zonder
+  oorzaak. ZEVENENTWINTIG BESTAANDE TESTS IN VIJF BESTANDEN VIELEN EROP: dertien in `maand-brug` lazen elke
   `[data-brugstap]` op de pagina en lezen nu alleen `#insBrug`; de rest las de coachregel of de oude tekst op
   de kaart, of een hoogte.
 - **DE PROJECTIE VERDEELT ZOALS PLAN, EN ALLEEN WAT OPZIJ GING GROEIT MEE** (`v348`, gevraagd door de

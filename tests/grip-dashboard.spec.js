@@ -209,13 +209,13 @@ for (const w of [360, 390]) test(`l. hoogte van Grip op ${w}px`, async ({ page }
   /* GEMETEN bij v340 op deze stand (met de afspraak van EUR 131): de tegels 171px, Deze maand 176px op 360
      en 158px op 390, de tijdlijn 129px, en Grip 582px op 360 en 564px op 390. Op v339 was Grip op dezelfde
      stand 966px op 360 en 945px op 390.
-     v349: Deze maand draagt de bridge van budget naar uitkomst en de oorzaakzin: 333px op 360 en 315px op
-     390, en Grip 739px en 721px. */
+     v349: Deze maand draagt de bridge van budget naar uitkomst en de oorzaakzin: 315px op 360 en 297px op
+     390, en Grip 721px en 703px (de zin is hier een regel: geen potje komt boven uit). */
   expect(h.over).toBe(false);
   expect(h.tegels).toBe(171);
   expect(h.tijd).toBe(129);
-  expect(h.deze).toBe(w === 360 ? 333 : 315);
-  expect(h.totaal).toBe(w === 360 ? 739 : 721);
+  expect(h.deze).toBe(w === 360 ? 315 : 297);
+  expect(h.totaal).toBe(w === 360 ? 721 : 703);
 });
 
 /* De handelingen. Uit eten heeft een potje van 150; in juli, augustus en september ging er na dag 4
