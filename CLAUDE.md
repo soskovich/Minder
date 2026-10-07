@@ -151,6 +151,19 @@ genoemde versietag.)*
   maanden die op een hint bij de naam passen (`CAT_HINTS`: kinderen, alimentatie) of op wat je zoekt, met niets
   aangevinkt; het gevolg per categorie staat er eerst, en pas "Verplaatsen" zet `OVR`, met een regel alleen als je dat
   aanvinkt. Nieuwe spec `potjes-beheer.spec.js`; elf sabotages, alle elf rood.
+  NOG NIET VASTGESTELD (aanvulling, gevraagd voor Alimentatie): een nieuw potje mag zonder bedrag bestaan
+  (`SET.potOpen[k]={op}`, chip "Bedrag nog niet vastgesteld", niet voorgekozen). Het staat NIET in `SET.budgets`, dus
+  het telt per constructie niet mee in het budget, veilig te besteden of de vooruitblik; het staat wel in de
+  verdeling (`openPotjesVerdeling()`), de budgeteditor en de sheet van het potje. `potIsOpen(k)` is de ENE lezer: elk
+  bedrag boven nul (deze maand, volgende of later, langs welke route ook) maakt het vastgesteld, en `potPlanZet()`
+  en `potArchiveer()` wissen de vlag. Komt er NA het aanmaken een boeking in die categorie (`potOpenTx()`, op datum
+  vanaf `op`, dus een verplaatste kandidaat van daarvoor niet), dan zegt Let op "<naam>: nog geen bedrag" naar
+  `openPotForm(k)`, en het bedrag gaat langs dezelfde dekkingsregel. DE SCHATTING ALS RESERVERING: in hetzelfde
+  formulier "Een geschat bedrag reserveren?" met Nee en "Ja, een schatting", geen standaard en geen opslag zonder
+  keuze; ja vraagt bedrag en eerste termijn en schrijft een gewone verplichting (maandelijks, `bron:'pot:'+k`). Komt
+  er later een bedrag, dan noemt het formulier die schatting met een route om hem weg te halen; er wordt niets stil
+  weggehaald. GEMETEN: het formulier is 596px zonder en 751/732px met schatting op 360/390, en elk formulier kreeg de
+  chip erbij (+50px). Tien sabotages, alle tien rood.
 - **EEN DATUM PER SCHULD, EEN TELLING DIE DE PAGINA VOLGT, EN EEN BLOK VOOR WAAR JE INLEG HEEN GAAT** (`v350`,
   gevraagd door de gebruiker, de rest van de ronde Home, Vermogen en Vermogensreis; de inleg (`v348`) en kans en
   koers (`v347`) stonden al en zijn uit de mockup NIET gebouwd). GEMETEN VOOR DE RONDE: (1) DUO zei "nov 2035"

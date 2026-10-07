@@ -3682,6 +3682,9 @@ function openPotjesVerdeling(m, deel){
       : (vast.length && vari.length)
         ? kop('Vast', som(vast))+vast.map(k=>rij(k,+B[k],sub(k))).join('')+kop('Variabel', som(vari))+vari.map(k=>rij(k,+B[k],sub(k))).join('')
         : ks.map(k=>rij(k,+B[k],sub(k))).join('');
+    if(isNow){ const O=potOpenLijst();   // v351: een potje zonder bedrag staat in de lijst en telt niet mee
+      if(O.length) lijst+=kop('Nog niet vastgesteld', 0).replace(/<span class="small muted">[^<]*<\/span>/,'<span class="small muted">telt niet mee</span>')+O.map(k=>{ const c=CATS[k]; return `<div class="tx" data-verdopen="${esc(k)}" style="cursor:pointer" onclick="openPotje('${k}')">
+        <div class="ava" style="background:var(--card2)">${c.icon||''}</div><div class="info"><div class="nm">${esc(c.name)}</div><div class="cat">nog geen bedrag</div></div><div class="amt muted">nog niet vastgesteld</div></div>`; }).join(''); }
     // potjes zijn een instelling van nu, geen momentopname per maand (v59/v73: niet beweren wat we niet weten)
     noot = isNow ? '' : `<div class="small muted" style="margin-top:14px">Je potjes zijn een instelling van nu, geen momentopname van ${esc(monthLabel(m))}.</div>`;
     voet = (isNow && anders) ? link(`Bekijk je potjes vanaf ${vanaf} · ${euro0(totP)}`, `openPotjesVerdeling('${m}','next')`) : '';
@@ -7718,6 +7721,8 @@ function gripLetOpItems(RO, SIG, BV){
   for(const v of (BV||[])) L.push({soort:'beleg', key:v.asset.id, naam:`Je belegde ${euro0(v.inleg)} in ${v.asset.naam||'Bezitting'}`, sub:v.open?'voorwaarden nog niet gehaald · nog niet gekozen of ze hiervoor gelden':'voorwaarden nog niet gehaald', dot:'let op', act:`openBelegVraag('${esc(v.asset.id)}')`});
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
+  try{ for(const k of potOpenLijst()){ const T=potOpenTx(k); if(!T.length) continue;
+    L.push({soort:'potopen', naam:`${CATS[k].name}: nog geen bedrag`, sub:`${T.length} boeking${T.length===1?'':'en'} binnen, ${euro0(Math.round(-T.reduce((s,t)=>s+t.amount,0)))} · stel een bedrag in`, dot:'let op', act:`openPotForm('${k}')`}); } }catch(_){}   // v351: een potje zonder bedrag krijgt een boeking
   try{ const A=potArchiefTx(); if(A.length) L.push({soort:'archief', naam:`${A.length} boeking${A.length===1?'':'en'} in een gearchiveerd potje`, sub:'kies waar ze horen', dot:'let op', act:'openPotArchiefWerk()'}); }catch(_){}   // v351
   /* DE BELANGRIJKSTE EERST: de status van de regel (tekort voor let op), en daarbinnen de volgorde
      waarin ze hierboven staan. Die volgorde is de bestaande rang van Grip: de terugblikken bovenaan
@@ -13864,7 +13869,8 @@ function potSheetExtra(k, exists){
   return `${pl.length?`<div class="small muted" data-potplan style="margin-top:10px">Gepland: ${esc(pl.map(x=>`${ymKort(x.ym)} ${euro0(x.bedrag)}`).join(', '))}</div>`:''}
     ${A?`<div class="small muted" data-potarch style="margin-top:10px">Gearchiveerd vanaf ${esc(ymKort(A.vanaf))}. <span style="color:var(--teal);cursor:pointer" onclick="potArchiefTerug('${esc(k)}');openPotje('${esc(k)}')">Terughalen</span></div>`:''}
     ${link('data-potvanaf',`openPotForm('${esc(k)}')`,'Ander bedrag vanaf een maand die je kiest')}
-    ${(exists||pl.length)&&!A?link('data-potarchief',`openPotArchief('${esc(k)}')`,'Archiveren'):''}
+    ${potIsOpen(k)?potOpenRegel(k):''}
+    ${(exists||pl.length||potIsOpen(k))&&!A?link('data-potarchief',`openPotArchief('${esc(k)}')`,'Archiveren'):''}
     ${c.eigen?link('data-potnaam',`openEigenCatNaam('${esc(k)}')`,'Naam wijzigen')+link('data-potkand',`openCatKandidaten('${esc(k)}')`,'Boekingen zoeken die hierbij horen'):''}`;
 }   // v351: een nieuw potje gaat langs dekking of een bewuste verhoging
 /* v337: een potje dat vanaf volgende maand LAGER ligt of stopt, vraagt gedrag, en dat is een
@@ -13982,6 +13988,7 @@ function budgetVoorMaand(ym){
 }
 function potPlanZet(k, ym, bedrag){
   const cur=potHuidigeMaand(), nx=nextYM(cur), v=Math.max(Math.round(+bedrag||0),0);
+  if(v>0 && SET.potOpen) delete SET.potOpen[k];   // een bedrag maakt het potje vastgesteld
   if(ym<=cur){
     SET.budgets=SET.budgets||{}; if(v>0) SET.budgets[k]=v; else delete SET.budgets[k];
     if(SET.potMeta) delete SET.potMeta[k];
@@ -14020,11 +14027,38 @@ function potGearchiveerd(k, ym){ const A=(SET.potArchief||{})[k]; return !!(A &&
 function potArchiveer(k, vanaf){
   if(!CATS[k] || !vanaf || vanaf<potHuidigeMaand()) return false;
   SET.potArchief=SET.potArchief||{}; SET.potArchief[k]={vanaf, op:vandaagYMD()};
+  if(SET.potOpen) delete SET.potOpen[k];
   potPlanZet(k, vanaf, 0);
   const P=SET.budgetPlan||{}; for(const p in P) if(p>vanaf && P[p][k]!=null) delete P[p][k];
   save(); return true;
 }
 function potArchiefTerug(k){ if(SET.potArchief) delete SET.potArchief[k]; save(); }
+
+/* ---- een potje zonder bedrag: nog niet vastgesteld (v351, aanvulling) ----
+   SET.potOpen[k]={op}. Het potje staat in de lijst maar NIET in SET.budgets, dus het telt per constructie
+   niet mee in je maandbudget, in veilig te besteden of in de vooruitblik. potIsOpen() is de ENE lezer: zodra
+   er ergens een bedrag boven nul voor staat (deze maand, volgende maand of later) is het vastgesteld, ook als
+   dat bedrag via een andere route kwam. Komt er na het aanmaken een boeking in die categorie binnen, dan
+   vraagt Grip om een bedrag; een boeking van daarvoor (bijvoorbeeld een kandidaat die je verplaatste) niet. */
+function potIsOpen(k){
+  const O=SET.potOpen||{}; if(!O[k] || !CATS[k] || potGearchiveerd(k)) return false;
+  if(+(SET.budgets||{})[k]>0 || +(SET.budgetsNext||{})[k]>0) return false;
+  const P=SET.budgetPlan||{}; for(const p in P) if(+((P[p]||{})[k])>0) return false;
+  return true;
+}
+function potOpenLijst(){ return Object.keys(SET.potOpen||{}).filter(potIsOpen); }
+function potOpenTx(k){
+  const O=(SET.potOpen||{})[k]; if(!O || !potIsOpen(k)) return [];
+  let L=[]; try{ L=telbareTx(); }catch(_){ L=TX; }
+  return L.filter(t=>catOf(t)===k && t.amount<0 && String(t.date)>=O.op);
+}
+/* De schatting die je bij het aanmaken als reservering zette. Het is een gewone verplichting; de bron
+   koppelt hem alleen aan het potje, zodat de app hem kan noemen zodra er een echt bedrag komt. */
+function potOpenRes(k){ return resLijst().find(v=>v && v.bron==='pot:'+k)||null; }
+function potOpenRegel(k){
+  const R=potOpenRes(k);
+  return `<div class="small muted" data-potopenstand style="margin-top:10px;line-height:1.45">Nog niet vastgesteld. Telt niet mee in je maandbudget; komt er een boeking in binnen, dan vraagt Minder om een bedrag.${R?` <span style="color:var(--teal);cursor:pointer" data-potopenres onclick="openReservering('${esc(R.id)}')">Je schatting van ${euro0(Math.round(+R.bedrag||0))} ${esc(resIntervalLabel(R.intervalM))} staat in je reserveringen \u203a</span>`:''}</div>`;
+}
 /* Boekingen die na het archiveren nog automatisch in de categorie landen. Een eigen keuze (OVR) voor die
    categorie is een keuze en vraagt niets. */
 function potArchiefTx(){
@@ -14083,6 +14117,11 @@ function potFormVoorstel(d){
   const bedrag=(d.bedrag===''||d.bedrag==null)?null:Math.max(Math.round(numIn(d.bedrag)),0);
   const vanaf=d.vanaf||null;
   const P={k, nieuweCat, naam, catKlaar, bedrag, vanaf, bron:d.bron||null, dek:d.dek||null, kand:[], klaar:false};
+  if(d.open && !d.vast){   // nog niet vastgesteld: geen bedrag en geen maand, wel de keuze over een schatting
+    P.open=true; P.res=d.res||null; P.resMaand=d.resMaand||null;
+    P.schat=(d.schat===''||d.schat==null)?null:Math.max(Math.round(numIn(d.schat)),0);
+    P.klaar=catKlaar && (P.res==='nee' || (P.res==='ja' && P.schat>0 && !!P.resMaand));
+    return P; }
   if(!vanaf || bedrag==null) return P;
   const B=budgetVoorMaand(vanaf); let tot=0; for(const x in B) tot+=+B[x]||0;
   P.tot0=Math.round(tot); P.van=k?Math.round(+B[k]||0):0; P.meer=bedrag-P.van;
@@ -14124,6 +14163,8 @@ function openPotForm(k){
 }
 function potFormZetVeld(f, v, her){ const d=window._potForm=window._potForm||{}; d[f]=v;
   if(f==='bron' && v!=='dek') d.dek=null;
+  if(f==='open'){ d.bedrag=null; d.vanaf=null; d.bron=null; d.dek=null; if(!v){ d.res=null; d.schat=null; d.resMaand=null; } }
+  if(f==='res' && v!=='ja'){ d.schat=null; d.resMaand=null; }
   if(her!==false) renderPotForm(); else { const g=document.getElementById('potFormGevolg'); if(g) g.outerHTML=potFormGevolgHTML(); const s=document.querySelector('[data-potformsave]'); if(s) s.disabled=!potFormVoorstel().klaar; const b=document.getElementById('potFormBron'); if(b) b.outerHTML=potFormBronHTML(); } }
 function potFormBronHTML(){
   const P=potFormVoorstel();
@@ -14153,9 +14194,27 @@ function potLagerGevolg(P){
   }catch(_){} }
   return uit;
 }
+/* Wat een schatting met je reserveringen doet, in het geheugen en zonder save(). */
+function potResGevolg(P){
+  const oud=SET.reserveringen; let a=null, b=null;
+  try{ a=dekking(12).nodigPerMaand;
+    SET.reserveringen=resLijst().concat([{id:'_potsim', naam:'schatting', bedrag:P.schat, vervalmaand:P.resMaand, intervalM:1, cat:''}]); _dataGen++;
+    b=dekking(12).nodigPerMaand; }catch(_){}
+  finally{ SET.reserveringen=oud; _dataGen++; }
+  return {a, b};
+}
 function potFormGevolgHTML(){
   const P=potFormVoorstel(); let t='';
-  if(!P.vanaf || P.bedrag==null) t='';
+  if(P.open){
+    const n=esc(P.naam||'Het nieuwe potje');
+    if(P.catKlaar){
+      t=`${n} komt in je potjes als nog niet vastgesteld. Het telt niet mee in je maandbudget, dat blijft ${euro0(totalBudget())}. Komt er een boeking in ${n} binnen, dan vraagt Minder om een bedrag.`;
+      if(P.res==='nee') t+=' Er komt geen reservering bij.';
+      else if(P.res==='ja' && P.schat>0 && P.resMaand){ const G=potResGevolg(P);
+        t+=` <span data-potresgevolg>In je reserveringen komt ${n} (schatting) ${euro0(P.schat)} per maand vanaf ${esc(ymKort(P.resMaand))}, los van je potjes en je spaarinleg.${G.a!=null&&G.b!=null&&G.a!==G.b?` Nog nodig per maand voor je reserveringen gaat van ${euro0(G.a)} naar ${euro0(G.b)}.`:''}</span>`; }
+    }
+  }
+  else if(!P.vanaf || P.bedrag==null) t='';
   else {
     const Vn=esc(ymKort(P.vanaf)), n=esc(P.naam||'Het nieuwe potje');
     if(P.meer<0) t=`Vanaf ${Vn} gaat ${n} van ${euro0(P.van)} naar ${euro0(P.bedrag)}. Je maandbudget gaat van ${euro0(P.tot0)} naar ${euro0(P.tot1)}. Eerdere maanden blijven zoals ze waren.`+potLagerGevolg(P);
@@ -14172,11 +14231,25 @@ function potFormGevolgHTML(){
         : '';
       t=`Je maandbudget gaat vanaf ${Vn} van ${euro0(P.tot0)} naar ${euro0(P.tot1)}. ${safe} ${plan}`; }
     else t=`Nog te dekken: ${euro0(P.meer)}. Kies of een ander potje inlevert of dat je maandbudget omhoog gaat.`;
+    const R=P.k && P.bedrag>0 && potIsOpen(P.k) ? potOpenRes(P.k) : null;
+    if(R) t+=` <span data-potresoud>Je schatting van ${euro0(Math.round(+R.bedrag||0))} staat nog in je reserveringen. Vervangt dit bedrag hem, <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openReservering('${esc(R.id)}')">haal hem daar weg \u203a</span></span>`;
   }
   return `<div class="small" id="potFormGevolg" data-potgevolg style="color:var(--mut2);line-height:1.5;margin-top:10px">${t}</div>`;
 }
 function potFormCatKeuzes(){
-  return Object.keys(CATS).filter(k=>CATS[k].type==='expense' && !geenNorm(k) && !potGearchiveerd(k) && !(+(SET.budgets||{})[k]>0) && !(+(plannedBudgets()||{})[k]>0));
+  return Object.keys(CATS).filter(k=>CATS[k].type==='expense' && !geenNorm(k) && !potGearchiveerd(k) && !potIsOpen(k) && !(+(SET.budgets||{})[k]>0) && !(+(plannedBudgets()||{})[k]>0));
+}
+/* Een schatting als reservering, alleen bij een potje zonder bedrag. Twee even zware keuzes en geen
+   standaard (MECHANISM_SPEC.defaultEffect): zonder keuze kan er niet worden opgeslagen. */
+function potFormResHTML(d, ms){
+  const chip=(v,l)=>`<span class="chip ${d.res===v?'on':''}" data-potres="${v}" onclick="potFormZetVeld('res','${v}')">${l}</span>`;
+  return `<label class="fld">Een geschat bedrag reserveren?</label>
+    <div class="small muted" style="margin-bottom:6px">Als gewone verplichting in je reserveringen, los van je potjes. Je kunt hem daar aanpassen of weghalen.</div>
+    <div class="chips">${chip('nee','Nee')}${chip('ja','Ja, een schatting')}</div>
+    ${d.res==='ja'?`<label class="fld">Geschat bedrag per maand (€)</label>
+    <input type="text" inputmode="decimal" id="potFormSchat" value="${esc(d.schat==null?'':String(d.schat))}" placeholder="bv. 350" oninput="potFormZetVeld('schat',this.value,false)" style="width:100%">
+    <label class="fld">Eerste termijn</label>
+    <select id="potFormResMaand" onchange="potFormZetVeld('resMaand',this.value||null)" style="width:100%"><option value="">Kies een maand</option>${ms.map(ym=>`<option value="${ym}"${d.resMaand===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>`:''}`;
 }
 function renderPotForm(){
   const d=window._potForm||{}, P=potFormVoorstel(d), ms=potMaandOpties();
@@ -14184,7 +14257,7 @@ function renderPotForm(){
   let catBlok='';
   if(vast){ const c=CATS[P.k];
     catBlok=`<div style="font-weight:800;font-size:var(--fs-lg)">${c.icon||''} ${esc(c.name)}: bedrag vanaf een maand</div>
-      <div class="small muted" style="margin:4px 0 10px">Nu ${euro0(+(SET.budgets||{})[P.k]||0)} per maand. Eerdere maanden veranderen niet.</div>`;
+      <div class="small muted" style="margin:4px 0 10px">${potIsOpen(P.k)?'Nu nog niet vastgesteld.':`Nu ${euro0(+(SET.budgets||{})[P.k]||0)} per maand.`} Eerdere maanden veranderen niet.</div>`;
   } else {
     const ks=potFormCatKeuzes();
     catBlok=`<div style="font-weight:800;font-size:var(--fs-lg)">Nieuw potje</div>
@@ -14197,16 +14270,27 @@ function renderPotForm(){
   $('#sheet').innerHTML=`<div class="grab"></div><div id="potForm">
     ${catBlok}
     <label class="fld">Bedrag per maand (€)</label>
-    <input type="text" inputmode="decimal" id="potFormBedrag" value="${esc(d.bedrag==null?'':String(d.bedrag))}" placeholder="0" oninput="potFormZetVeld('bedrag',this.value,false)" style="width:100%">
+    ${vast?'':`<div class="chips" style="margin-bottom:6px"><span class="chip ${d.open?'on':''}" data-potopen onclick="potFormZetVeld('open',${!d.open})">Bedrag nog niet vastgesteld</span></div>`}
+    ${d.open&&!vast?potFormResHTML(d, ms):`<input type="text" inputmode="decimal" id="potFormBedrag" value="${esc(d.bedrag==null?'':String(d.bedrag))}" placeholder="0" oninput="potFormZetVeld('bedrag',this.value,false)" style="width:100%">
     <label class="fld">Vanaf</label>
     <select id="potFormVanaf" onchange="potFormZetVeld('vanaf',this.value||null)" style="width:100%"><option value="">Kies een maand</option>${ms.map(ym=>`<option value="${ym}"${d.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>
-    ${potFormBronHTML()}
+    ${potFormBronHTML()}`}
     ${potFormGevolgHTML()}
     <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-potformsave style="flex:1"${P.klaar?'':' disabled'} onclick="potFormZet()">Vastzetten</button><button class="btn sec" onclick="${vast?`openPotje('${esc(P.k)}')`:'closeSheet()'}">Terug</button></div></div>`;
 }
 function potFormZet(){
   const P=potFormVoorstel(); if(!P.klaar) return;   // opnieuw gelezen (v319); zonder keuze geen opslag (v238)
   let k=P.k;
+  if(P.open){
+    if(P.nieuweCat){ k=eigenCatMaak(P.naam, (window._potForm||{}).aard); if(!k) return; }
+    SET.potOpen=SET.potOpen||{}; SET.potOpen[k]={op:vandaagYMD()};
+    if(P.res==='ja'){ SET.reserveringen=resLijst().slice();
+      SET.reserveringen.push({id:'r'+Date.now().toString(36), naam:`${CATS[k].name} (schatting)`, bedrag:P.schat, vervalmaand:P.resMaand, intervalM:1, cat:k, bron:'pot:'+k}); }
+    save(); window._potForm=null;
+    if(P.nieuweCat){ openCatKandidaten(k, true); render(); } else { closeSheet(); render(); }
+    toast(`${ICON('check')} ${CATS[k].name}: nog niet vastgesteld${P.res==='ja'?`, schatting ${euro0(P.schat)} gereserveerd`:''}`);
+    return;
+  }
   if(P.nieuweCat){ k=eigenCatMaak(P.naam, (window._potForm||{}).aard); if(!k) return; }
   const D=P.meer>0 && P.bron==='dek' ? P.kand.find(x=>x.k===P.dek) : null;
   if(P.meer>0 && P.bron==='dek' && !D) return;
@@ -18301,7 +18385,7 @@ function setBudget(){
     ${Object.entries(CATS).filter(([k,c])=>c.type==='expense'&&!c.geenNorm&&!potGearchiveerd(k)).map(([k,c])=>{   // v234: geen potje voor onvoorzien; v351: geen gearchiveerd potje
       const pend=(SET.budgetsNext&&SET.budgetsNext[k]!=null)?+SET.budgetsNext[k]:null;
       const shown=(pend!=null?pend:((SET.budgets&&SET.budgets[k])||''))||'';
-      const note=(pend!=null && pend!==((+(SET.budgets||{})[k])||0))?`<span class="small" style="color:var(--teal);margin-left:6px">vanaf vlg. mnd</span>`:'';
+      const note=(pend!=null && pend!==((+(SET.budgets||{})[k])||0))?`<span class="small" style="color:var(--teal);margin-left:6px">vanaf vlg. mnd</span>`:(potIsOpen(k)?`<span class="small" data-gridopen style="color:var(--mut2);margin-left:6px">nog niet vastgesteld</span>`:'');
       return `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:var(--fs-md);cursor:pointer" onclick="openPotje('${k}')">${c.icon} ${c.name}${note}</span>
         <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" min="0" step="5" value="${shown}" placeholder="0" style="width:80px;text-align:right;padding:6px 9px" oninput="setCatBudget('${k}',this.value)"></div></div>`;}).join('')}`;
   return `

@@ -185,6 +185,95 @@ test.describe('kandidaten verplaatsen', () => {
   });
 });
 
+test.describe('een potje zonder bedrag: nog niet vastgesteld', () => {
+  test('niets voorgekozen, het telt niet mee in het budget, en staat wel in de lijst', async ({ page }) => {
+    await boot(page, opt());
+    const m = await page.evaluate(() => ({ tot: totalBudget(), safe: Math.round(safeToSpend().safe), V: maandVooruit().budget }));
+    const voor = await opslag(page);
+    await page.evaluate(() => openPotForm());
+    await page.click('[data-potcat="_nieuw"]');
+    await page.fill('#potFormNaam', 'Alimentatie');
+    await page.click('[data-potaard="vast"]');
+    expect(await page.locator('[data-potopen].on').count()).toBe(0);
+    await page.click('[data-potopen]');
+    await expect(page.locator('#potFormBedrag')).toHaveCount(0);
+    await expect(page.locator('[data-potres]')).toHaveCount(2);
+    expect(await page.locator('[data-potres].on').count()).toBe(0);
+    await expect(page.locator('[data-potformsave]')).toBeDisabled();
+    await expect(page.locator('[data-potgevolg]')).toContainText('nog niet vastgesteld');
+    await expect(page.locator('[data-potgevolg]')).toContainText(`blijft €${m.tot.toLocaleString('nl-NL')}`);
+    expect(await opslag(page)).toBe(voor);
+    await page.click('[data-potres="nee"]');
+    await expect(page.locator('[data-potformsave]')).toBeEnabled();
+    await page.click('[data-potformsave]');
+    const r = await page.evaluate(() => { const k = Object.keys(SET.eigenCats)[0]; return { k, open: potIsOpen(k), lijst: potOpenLijst(), B: SET.budgets[k], N: (SET.budgetsNext || {})[k], tot: totalBudget(), safe: Math.round(safeToSpend().safe), V: maandVooruit().budget, res: resLijst().length, vast: isFixedCat(k) }; });
+    expect(r).toMatchObject({ open: true, lijst: [r.k], tot: m.tot, safe: m.safe, V: m.V, res: 0, vast: true });
+    expect(r.B).toBeUndefined();
+    expect(r.N).toBeUndefined();
+    // in de lijst: de verdeling, de budgeteditor en de sheet van het potje
+    const L = await page.evaluate((k) => { openPotjesVerdeling(thisYM()); const a = document.querySelector(`[data-verdopen="${k}"]`); const at = a ? a.innerText : '';
+      SET.budgetAdv = true; openBudgetEditor(); const g = document.querySelector('#sheet').innerText;
+      openPotje(k); const p = document.querySelector('[data-potopenstand]'); return { at, g, p: p ? p.innerText : '' }; }, r.k);
+    expect(L.at).toContain('nog niet vastgesteld');
+    expect(L.g).toMatch(/Alimentatie[^\n]*nog niet vastgesteld/);
+    expect(L.p).toContain('Nog niet vastgesteld');
+  });
+  test('een boeking die binnenkomt laat Grip om een bedrag vragen, en een bedrag sluit dat', async ({ page }) => {
+    await boot(page, opt());
+    const k = await page.evaluate(() => { const k = eigenCatMaak('Alimentatie', 'vast'); SET.potOpen = { [k]: { op: '2026-10-02' } }; save(); return k; });
+    expect(await page.evaluate(() => gripLetOpItems([], [], []).filter((x) => x.soort === 'potopen').length)).toBe(0);
+    // een oude boeking (voor het aanmaken) vraagt niets; een nieuwe wel
+    await page.evaluate((k) => { TX.push({ id: 'al0', acc: 'NL01', date: '2026-09-20', amount: -300, name: 'LBIO', desc: 'LBIO ALIMENTATIE SEP', src: 'mt940', autoCat: 'overig', ruleCat: 'overig' });
+      TX.push({ id: 'al1', acc: 'NL01', date: '2026-10-04', amount: -350, name: 'LBIO', desc: 'LBIO ALIMENTATIE OKT', src: 'mt940', autoCat: 'overig', ruleCat: 'overig' });
+      OVR.al0 = k; OVR.al1 = k; save(); }, k);
+    const it = await page.evaluate(() => gripLetOpItems([], [], []).filter((x) => x.soort === 'potopen'));
+    expect(it.length).toBe(1);
+    expect(it[0].sub).toContain('1 boeking binnen, €350');
+    expect(it[0].act).toBe(`openPotForm('${k}')`);
+    // het bedrag gaat langs dezelfde dekkingsregel; daarna is het potje vastgesteld en zwijgt de vraag
+    await page.evaluate((k) => { window._potForm = { cat: k, vast: true, bedrag: '350', vanaf: '2026-11', bron: 'dek', dek: 'sport' }; renderPotForm(); showSheetBg(); }, k);
+    await expect(page.locator('#potForm')).toContainText('Nu nog niet vastgesteld');
+    await page.click('[data-potformsave]');
+    const r = await page.evaluate((k) => ({ open: potIsOpen(k), n: budgetVoorMaand('2026-11')[k], sp: budgetVoorMaand('2026-11').sport, vraag: gripLetOpItems([], [], []).filter((x) => x.soort === 'potopen').length, flag: (SET.potOpen || {})[k] }), k);
+    expect(r).toMatchObject({ open: false, n: 350, sp: 250, vraag: 0 });
+    expect(r.flag).toBeUndefined();
+  });
+  test('de schatting als reservering: niets voorgekozen, een gewone verplichting met de gekozen maand', async ({ page }) => {
+    await boot(page, opt());
+    const tot = await page.evaluate(() => totalBudget());
+    await page.evaluate(() => openPotForm());
+    await page.click('[data-potcat="_nieuw"]');
+    await page.fill('#potFormNaam', 'Alimentatie');
+    await page.click('[data-potaard="vast"]');
+    await page.click('[data-potopen]');
+    await page.click('[data-potres="ja"]');
+    await expect(page.locator('[data-potformsave]')).toBeDisabled();
+    await page.fill('#potFormSchat', '350');
+    await expect(page.locator('[data-potformsave]')).toBeDisabled();
+    await page.selectOption('#potFormResMaand', '2026-11');
+    await expect(page.locator('[data-potresgevolg]')).toContainText('€350 per maand vanaf november 2026');
+    const voor = await page.evaluate(() => resLijst().length);
+    expect(voor).toBe(0);
+    await page.click('[data-potformsave]');
+    const r = await page.evaluate(() => { const k = Object.keys(SET.eigenCats)[0]; return { k, R: resLijst(), tot: totalBudget(), V: verplichtingen(12).filter((x) => x.naam && /Alimentatie/.test(x.naam)).length }; });
+    expect(r.R.length).toBe(1);
+    expect(r.R[0]).toMatchObject({ naam: 'Alimentatie (schatting)', bedrag: 350, vervalmaand: '2026-11', intervalM: 1, cat: r.k, bron: 'pot:' + r.k });
+    expect(r.tot).toBe(tot);
+    expect(r.V).toBeGreaterThan(0);
+    // komt er later een bedrag, dan noemt het formulier de schatting met een route om hem weg te halen
+    await page.evaluate((k) => { closeSheet(); window._potForm = { cat: k, vast: true, bedrag: '400', vanaf: '2026-11', bron: 'verhoog' }; renderPotForm(); showSheetBg(); }, r.k);
+    await expect(page.locator('[data-potresoud]')).toContainText('€350 staat nog in je reserveringen');
+  });
+  for (const w of [360, 390]) test(`het formulier met schatting loopt niet over op ${w}px`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await boot(page, opt());
+    await page.evaluate(() => { window._potForm = { cat: '_nieuw', naam: 'Alimentatie', aard: 'vast', open: true, res: 'ja', schat: '350', resMaand: '2026-11' }; renderPotForm(); showSheetBg(); });
+    const a = await page.evaluate(() => { const s = document.querySelector('#sheet'); return { o: s.scrollWidth - s.clientWidth, h: Math.round(document.querySelector('#potForm').getBoundingClientRect().height) }; });
+    expect(a.o).toBeLessThanOrEqual(0);
+    console.log(`potForm open ${w}px: ${a.h}px`);
+  });
+});
+
 test.describe('maat', () => {
   for (const w of [360, 390]) test(`het formulier en de kandidatenlijst lopen niet over op ${w}px`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
