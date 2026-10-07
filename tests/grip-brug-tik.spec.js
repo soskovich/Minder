@@ -1,5 +1,7 @@
 /* v353: EEN TIK OP EEN STAP IN DE BRIDGE OPENT DIE STAP. Op de stand van 6 oktober (deze-maand-stand.js):
-   budget 3.375, Vices +83, Boodschappen +61, rest -847, uitkomst 2.672. */
+   budget 3.375, Vices +83, Boodschappen +61, rest -847, uitkomst 2.672.
+   v354: de bridge gaat over de variabele potjes (550 naar 694); de rest-stap bestaat alleen bij meer dan drie
+   variabele potjes, dus de rest-tests dragen er vier. */
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./deze-maand-stand');
 
@@ -28,32 +30,28 @@ test('a. een tik op Vices toont alleen Vices, met waarom en zijn handelingen, en
   expect((await sheet(page)).id).toBe('gripVooruit');
 });
 
-test('b. een tik op rest toont de potjes in die stap met hun verschil, en die tellen op tot de stap', async ({ page }) => {
-  await boot(page); await grip(page);
+/* v354: de rest bevat alleen variabele potjes. Met vier variabele potjes (Vices, Boodschappen, Uit eten,
+   Online shopping) staan er drie los en valt Boodschappen in de rest. */
+const VIER = { set: { budgets: { huur: 1450, verzekering: 675, abonnement: 100, sport: 600, vices: 50, boodschappen: 500, uiteten: 100, shopping: 300 } } };
+test('b. een tik op rest toont de variabele potjes in die stap met hun verschil, en die tellen op tot de stap', async ({ page }) => {
+  await boot(page, VIER); await grip(page);
   await tik(page, '#gripBrug [data-brugstap="rest"]');
   const r = await page.evaluate(() => { const g = document.getElementById('gripRest'); const V = maandVooruit(), Br = dezeMaandBrug(V);
     const los = Br.los.map((x) => x.k);
     const rijen = [...g.querySelectorAll('[data-restpotje]')].map((e) => e.dataset.restpotje);
-    const verwacht = V.potjes.concat(V.vastePotjes).filter((x) => !los.includes(x.k) && Math.round(x.overR) !== 0).map((x) => x.k);
-    const terug = V.vastePotjes.map((x) => x.k);
-    const getallen = [...g.querySelectorAll('[data-restpotje],[data-restverder]')].map((e) => { const t = e.innerText.match(/([+−-])\s*€\s*([\d.]+)/); return t ? (t[1] === '+' ? 1 : -1) * +t[2].replace(/\./g, '') : NaN; });
-    return { rest: +g.dataset.rest, stap: Br.rest, rijen, verwacht, los, terug, som: getallen.reduce((a, b) => a + b, 0) }; });
-  expect(r.rest).toBe(-847);
-  expect(r.rijen.length).toBeGreaterThan(0);
+    const verwacht = V.potjes.filter((x) => !los.includes(x.k) && Math.round(x.overR) !== 0).map((x) => x.k);
+    const vast = V.vastePotjes.map((x) => x.k);
+    const getallen = [...g.querySelectorAll('[data-restpotje]')].map((e) => { const t = e.innerText.match(/([+−-])\s*€\s*([\d.]+)/); return t ? (t[1] === '+' ? 1 : -1) * +t[2].replace(/\./g, '') : NaN; });
+    return { rest: +g.dataset.rest, stap: Br.rest, rijen, verwacht, los, vast, som: getallen.reduce((a, b) => a + b, 0), verder: g.querySelectorAll('[data-restverder]').length }; });
+  expect(r.rest).toBe(61);
+  expect(r.rijen).toEqual(['boodschappen']);
   expect(r.rijen.slice().sort()).toEqual(r.verwacht.slice().sort());
   for (const k of r.los) expect(r.rijen).not.toContain(k);
+  for (const k of r.vast) expect(r.rijen).not.toContain(k);   // een vast potje staat nooit in de rest
   expect(r.som).toBe(r.stap);
-  // invoermeting: de rest draagt een terugkerend potje (huur, verzekeringen), dat geen eigen stap kan zijn
-  expect(r.rijen.some((k) => r.terug.includes(k))).toBe(true);
-  // een tik op een regel opent dat potje, ook een terugkerend
-  const kt = r.rijen.find((k) => r.terug.includes(k));
-  await page.click(`[data-restpotje="${kt}"]`);
-  const t = await page.evaluate(() => { const g = document.getElementById('gripPotje'); return g && { k: g.dataset.potje, terug: g.hasAttribute('data-terug'), aanp: !!g.querySelector('[data-potjeaanpassen]') }; });
-  expect(t).toEqual({ k: kt, terug: true, aanp: true });
-  await page.evaluate(() => openGripRest());
-  const k = r.rijen.find((x) => !r.terug.includes(x)) || r.rijen[0];
-  await page.click(`[data-restpotje="${k}"]`);
-  expect(await page.evaluate(() => document.getElementById('gripPotje') && document.getElementById('gripPotje').dataset.potje)).toBe(k);
+  expect(r.verder).toBe(0);
+  await page.click('[data-restpotje="boodschappen"]');
+  expect(await page.evaluate(() => document.getElementById('gripPotje') && document.getElementById('gripPotje').dataset.potje)).toBe('boodschappen');
 });
 
 test('c. een tik op de kop, op budget of op de uitkomst opent de volle lijst', async ({ page }) => {
@@ -92,7 +90,7 @@ test('e. de bridge op Inzichten krijgt geen tik', async ({ page }) => {
 for (const w of [360, 390]) {
   test(`f. op ${w}px lopen de potje- en de rest-sheet niet over`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: w === 360 ? 640 : 844 });
-    await boot(page); await grip(page);
+    await boot(page, VIER); await grip(page);
     const maat = async () => page.evaluate(() => { const s = $('#sheet'), g = s.querySelector('[id]'); return { id: g.id, h: Math.round(g.getBoundingClientRect().height), over: s.scrollWidth > s.clientWidth }; });
     await tik(page, '#gripBrug [data-brugstap="potje"][data-brugwaarde="83"]'); await page.waitForTimeout(250);
     const p = await maat();

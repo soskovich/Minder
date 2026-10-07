@@ -72,7 +72,8 @@ test('d. de as van de bridge op de kaart begint bij de ondergrens zonder bedrag 
   await bootBrug(page);
   const r = await page.evaluate(() => { closeSheet(); go('maand'); const a = document.querySelector('#gripBrug [data-asbasis]');
     return { basis: a ? +a.dataset.asbasis : null, label: a ? a.innerText : null, kaart: document.getElementById('gripBrug').innerText }; });
-  expect(r.basis).toBe(2000);
+  // v354: de bridge gaat over de variabele potjes (550 naar 694), dus de as begint bij 450
+  expect(r.basis).toBe(450);
   expect(r.label).toBe('');
-  expect(r.kaart).not.toContain('€2.000');
+  expect(r.kaart).not.toContain('€450');
 });

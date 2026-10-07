@@ -97,7 +97,7 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
   await stand(page, null, { extraTx: NETFLIX });
   await page.evaluate(() => { closeSheet(); openMaandBeslis('dekking'); afspraakDekkingZet(); go('maand'); });
   const r = await page.evaluate(() => { const V = maandVooruit(); const k = document.getElementById('gripDezeMaand');
-    return { V: { uit: V.uit, vast: V.vast, rest: V.rest, projectie: V.projectie, band: V.band, budget: V.budget, huur: V.restCat.huur || 0, ah: V.restCat.boodschappen || 0 }, tekst: k.innerText.replace(/\s+/g, ' '), afspraak: k.querySelectorAll('[data-afspraak]').length }; });
+    return { V: { uit: V.uit, vast: V.vast, rest: V.rest, projectie: V.projectie, band: V.band, budget: V.budget, variabel: V.variabel, huur: V.restCat.huur || 0, ah: V.restCat.boodschappen || 0 }, tekst: k.innerText.replace(/\s+/g, ' '), afspraak: k.querySelectorAll('[data-afspraak]').length }; });
   expect(r.V.projectie).toBe(r.V.uit + r.V.vast + r.V.rest);
   // de huur is een vaste last en staat al in "vast nog": hij telt niet nog eens mee in wat er gemiddeld bijkomt
   expect(r.V.vast).toBeGreaterThanOrEqual(900);
@@ -113,7 +113,9 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
   expect(r.V.band.max).toBeGreaterThanOrEqual(r.V.projectie);
   expect(r.V.band.maanden).toEqual(['2026-07', '2026-08', '2026-09']);
   // v349: de kaart draagt de uitkomst met het verschil met je budget, en de bridge eronder (deze-maand-bridge.spec.js)
-  expect(r.tekst).toContain(`€${r.V.projectie.toLocaleString('nl-NL')} · €${(r.V.budget - r.V.projectie).toLocaleString('nl-NL')} onder budget`);
+  // v354: de kaart draagt het stuurgetal, variabel tegen je potjes; de totale uitkomst staat in de sheet
+  expect(r.tekst).toContain(`Variabel: €${r.V.variabel.eind.toLocaleString('nl-NL')} verwacht`);
+  expect(r.tekst).not.toContain(`€${r.V.projectie.toLocaleString('nl-NL')} · `);
   expect(r.tekst).toContain('€131 per maand naar je reserveringen tot november');
   expect(r.afspraak).toBe(1);
   await page.evaluate(() => openGripVooruit());
@@ -215,8 +217,9 @@ for (const w of [360, 390]) test(`l. hoogte van Grip op ${w}px`, async ({ page }
   expect(h.over).toBe(false);
   expect(h.tegels).toBe(171);
   expect(h.tijd).toBe(129);
-  expect(h.deze).toBe(w === 360 ? 315 : 297);
-  expect(h.totaal).toBe(w === 360 ? 721 : 703);
+  // v354: de kop is het stuurgetal en de regel vaste lasten komt onder de bridge: 411px op 360 en 373 op 390
+  expect(h.deze).toBe(w === 360 ? 411 : 373);
+  expect(h.totaal).toBe(w === 360 ? 817 : 778);
 });
 
 /* De handelingen. Uit eten heeft een potje van 150; in juli, augustus en september ging er na dag 4

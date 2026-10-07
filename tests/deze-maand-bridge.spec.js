@@ -1,7 +1,10 @@
 /* v349: de kaart "Deze maand" op Grip is een variance-bridge van budget naar uitkomst, met de oorzaken op
    de kaart en de opbouw in de sheet. De stand is die van de gebruiker op 6 oktober 2026
    (tests/deze-maand-stand.js): budget EUR 3.375, uitkomst EUR 2.672, Vices +83, Boodschappen +61, de rest
-   -847. */
+   -847.
+   v354: de bridge gaat over de variabele potjes: van wat ze samen mogen (Vices 50 + Boodschappen 500 = 550) naar
+   wat er daar verwacht uitgaat (133 + 561 = 694). De vaste potjes (huur, verzekeringen, abonnementen, sport)
+   staan in de regel vaste lasten, en de totale uitkomst (2.672) in de sheet. */
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./deze-maand-stand');
 const { kaalUit } = require('./bron-kaal');
@@ -14,32 +17,31 @@ const stappenVan = (page) => page.evaluate(() => {
   return Br.stappen.map((s) => ({ soort: s.soort, k: s.k || null, waarde: s.waarde, aard: s.aard || null }));
 });
 
-test.describe('a. de bridge loopt van budget naar uitkomst', () => {
+test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwacht uitgaat', () => {
   test('de stappen van de stand van 6 oktober', async ({ page }) => {
     await boot(page); await grip(page);
     const st = await stappenVan(page);
     expect(st).toEqual([
-      { soort: 'begin', k: null, waarde: 3375, aard: null },
+      { soort: 'begin', k: null, waarde: 550, aard: null },
       { soort: 'potje', k: 'vices', waarde: 83, aard: 'pastniet' },
       { soort: 'potje', k: 'boodschappen', waarde: 61, aard: 'pastniet' },
-      { soort: 'rest', k: null, waarde: -847, aard: null },
-      { soort: 'eind', k: null, waarde: 2672, aard: null },
+      { soort: 'eind', k: null, waarde: 694, aard: null },
     ]);
   });
-  test('de afgeronde stappen tellen exact op tot de uitkomst, en die is die van de sheet', async ({ page }) => {
+  test('de afgeronde stappen tellen exact op tot het variabele eind, en de sheet draagt de totale uitkomst', async ({ page }) => {
     await boot(page); await grip(page);
     const r = await page.evaluate(() => {
       const kol = [...document.querySelectorAll('#gripDezeMaand [data-brugstap]')].map((e) => [e.dataset.brugstap, +e.dataset.brugwaarde]);
       openGripVooruit();
       return { kol, sheet: +document.getElementById('gripVooruit').dataset.projectie,
-        kaart: +document.querySelector('#gripDezeMaand [data-vooruit]').dataset.vooruit };
+        kaart: +document.querySelector('#gripDezeMaand [data-dmregel]').dataset.variabel };
     });
     const begin = r.kol[0][1], eind = r.kol[r.kol.length - 1][1];
     const som = r.kol.slice(1, -1).reduce((a, x) => a + x[1], begin);
     expect(som).toBe(eind);
-    expect(eind).toBe(2672);
-    expect(r.sheet).toBe(eind);
+    expect(eind).toBe(694);
     expect(r.kaart).toBe(eind);
+    expect(r.sheet).toBe(2672);
   });
   test('met delen van euro: afgeronde stappen tellen op tot de uitkomst (grootste rest)', async ({ page }) => {
     // invoermeting: een euro extra in september maakt het gemiddelde van Vices en Boodschappen een derde
@@ -48,17 +50,18 @@ test.describe('a. de bridge loopt van budget naar uitkomst', () => {
       { id: 'ax', date: '2026-09-22', amount: -1, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
     await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
-      return { over: V.potjes.map((x) => x.overR), st: Br.stappen.map((s) => s.waarde), proj: V.projectie, bud: V.budget }; });
+      return { over: V.potjes.map((x) => x.overR), st: Br.stappen.map((s) => s.waarde), proj: V.variabel.eind, bud: V.variabel.budget }; });
     expect(r.over.some((x) => Math.abs(x - Math.round(x)) > 0.3)).toBe(true);
     const som = r.st.slice(1, -1).reduce((a, x) => a + x, r.st[0]);
     expect(r.st[0]).toBe(r.bud);
     expect(som).toBe(r.proj);
     expect(r.st[r.st.length - 1]).toBe(r.proj);
   });
-  test('de regel boven de bridge: uitkomst en verschil met het budget', async ({ page }) => {
+  test('de regel boven de bridge: het stuurgetal, variabel tegen je potjes (v354)', async ({ page }) => {
     await boot(page); await grip(page);
     const t = await page.locator('#gripDezeMaand [data-dmregel]').innerText();
-    expect(t.replace(/\s+/g, ' ')).toContain('€2.672 · €703 onder budget');
+    expect(t.replace(/\s+/g, ' ')).toContain('Variabel: €694 verwacht · €144 boven je potjes');
+    expect(t).not.toContain('€2.672');
   });
 });
 
@@ -66,7 +69,7 @@ test.describe('b. de oorzaak: past niet in je potje tegen loopt voor', () => {
   test('de zin op de kaart, zonder oordeel', async ({ page }) => {
     await boot(page); await grip(page);
     const z = await page.locator('#gripDezeMaand [data-dmzin]').innerText();
-    expect(z).toBe('Vices en Boodschappen passen niet in hun potje; de rest samen €847 onder.');
+    expect(z).toBe('Vices en Boodschappen passen niet in hun potje.');
     expect(z).not.toMatch(/loopt voor|lopen voor/);
   });
   test('de invoer draagt de gemelde gevallen: Vices niets uitgegeven, Boodschappen achter op zijn tempo', async ({ page }) => {
@@ -132,13 +135,13 @@ test.describe('c. de as', () => {
   test('de as begint bij de ondergrens, zonder bedrag erbij (v352)', async ({ page }) => {
     await boot(page); await grip(page);
     const b = await page.locator('#gripDezeMaand [data-asbasis]').getAttribute('data-asbasis');
-    expect(+b).toBe(2000);
+    expect(+b).toBe(450);
     // v352: het bedrag staat niet meer bij de as; het stond op 360px half buiten de kaart
     expect(await page.locator('#gripDezeMaand [data-asbasis]').innerText()).toBe('');
-    expect(await page.locator('#gripBrug').innerText()).not.toContain('€2.000');
+    expect(await page.locator('#gripBrug').innerText()).not.toContain('€450');
   });
   test('bij grote stappen begint de as bij nul en staat er geen ondergrens', async ({ page }) => {
-    await boot(page, { extraTx: [{ id: 'groot', date: '2026-10-05', amount: -5000, name: 'Restaurant Lona', desc: 'BEA, BETAALPAS RESTAURANT LONA' }] });
+    await boot(page, { extraTx: [{ id: 'groot', date: '2026-10-05', amount: -5000, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
     await grip(page);
     const r = await page.evaluate(() => ({ basis: dezeMaandBrug(maandVooruit()).basis, as: document.querySelectorAll('#gripDezeMaand [data-asbasis]').length }));
     expect(r.basis).toBe(0);
@@ -152,7 +155,7 @@ test.describe('d. hooguit drie potjes los, de rest samen', () => {
     await boot(page, { set }); await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
       const kleur = [...document.querySelectorAll('#gripDezeMaand [data-brugstap="potje"] i')].map((i) => i.style.background).filter(Boolean);
-      return { st: Br.stappen.map((s) => [s.soort, s.k || '', s.waarde]), budget: V.budget, proj: V.projectie, kleur }; });
+      return { st: Br.stappen.map((s) => [s.soort, s.k || '', s.waarde]), budget: V.variabel.budget, proj: V.variabel.eind, kleur }; });
     expect(r.st.filter((s) => s[0] === 'potje').map((s) => s[1])).toEqual(['shopping', 'uiteten', 'vices']);
     expect(r.st.find((s) => s[1] === 'shopping')[2]).toBe(-300);
     expect(r.st.find((s) => s[1] === 'uiteten')[2]).toBe(175);
@@ -270,7 +273,9 @@ test.describe('g. dynamisch met elke boeking', () => {
 
 test.describe('h. hoogte op 360 en 390px', () => {
   // Voor v349: kaart 145/127px, Grip 400/382px. Na: de bridge kost de rest.
-  const NA = { 360: { kaart: 271, grip: 525 }, 390: { kaart: 260, grip: 514 } };
+  // v354: de kop is het stuurgetal (op 360px twee regels) en de regel vaste lasten komt eronder (68/50px):
+  // de kaart gaat van 271 naar 338px op 360 en van 260 naar 300px op 390, Grip van 525 naar 592 en van 514 naar 555 (gemeten).
+  const NA = { 360: { kaart: 338, grip: 592 }, 390: { kaart: 300, grip: 555 } };
   for (const w of [360, 390]) test('breedte ' + w, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await boot(page); await grip(page);
