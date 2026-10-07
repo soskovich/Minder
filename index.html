@@ -7832,8 +7832,15 @@ function maandVooruit(){
       const ov=(voor.find(x=>x.k===doel.k)||{}).over||0;
       const bedrag=van?Math.floor(Math.min(van.bud-van.eind, ov)/5)*5:0;
       if(van && bedrag>=5 && rec && !rec.actie) schuif={van:van.k, vanNaam:van.naam, naar:doel.k, naarNaam:doel.naam, bedrag, sig:rec.id||valtOpId(m,doel.k)}; } }catch(_){}
+  /* v353: de terugkerende potjes (huur, verzekeringen) staan niet in potjes, want daar is een grens geen
+     keuze. Ze dragen wel een deel van de rest-stap van de bridge, dus de sheet van die stap moet ze
+     kunnen noemen: wat er uit is en wat er aan incasso's nog komt komen uit terugPotjes() (v327, een
+     bron), plus wat er gewoonlijk los bijkomt. Het verschil is niet geklemd, want het telt op. */
+  const vastePotjes=[];
+  try{ for(const r of terugPotjes(m).rijen){ if(!CATS[r.k]) continue; const lo=Math.max(+restCat[r.k]||0,0), eind=r.uit+r.vast+lo;
+    vastePotjes.push({k:r.k, naam:CATS[r.k].name, bud:Math.round(r.bud), uit:Math.round(r.uit), vast:Math.round(r.vast), los:Math.round(lo), eind:Math.round(eind), overR:eind-r.bud, terug:true}); } }catch(_){}
   const effect=handelingen.reduce((a,h)=>a+h.effect,0);
-  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
+  return {m, el, dim:E.dim, over, uit, vast, rest, restCat, projectie, budget, band, potjes, vastePotjes, voor, handelingen, schuif, metGrenzen:handelingen.length?projectie-effect:null};
 }
 const gripNamen=L=>opsomming(L.map(x=>x.naam));
 function gripVerschil(bedrag, budget){
@@ -7896,7 +7903,7 @@ function dezeMaandKaart(){
      Een afspraak uit het coachgesprek (coachThisMonthAfspraak) staat er in dezelfde vorm bij. */
   let af=''; try{ af=afsprakenLopend().map(a=>afspraakRij(a)).join(''); }catch(_){}
   try{ const c=coachThisMonthAfspraak(); if(c) af+=`<div class="row" data-afspraak="coach" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('loopt')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(c.text||'')}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
-  const kop=`<div class="hlabel" style="margin:0 0 6px">Deze maand · ${esc(ymFull(m))}</div>`;
+  const kop=`<div class="hlabel" data-dmkop style="margin:0 0 6px${V&&!V.onbekend?';cursor:pointer':''}"${V&&!V.onbekend?' onclick="openGripVooruit()"':''}>Deze maand · ${esc(ymFull(m))}</div>`;
   let boven;
   if(!V || V.onbekend){
     const T=totals(m); const bud=Math.round(T.budget||0);
@@ -7906,16 +7913,101 @@ function dezeMaandKaart(){
     const d=V.projectie-V.budget;
     const vs=V.budget>0?(d<0?`${euro0(-d)} onder budget`:(d>0?`${euro0(d)} boven budget`:'precies je budget')):'';
     let Br=null; try{ Br=dezeMaandBrug(V); }catch(_){ Br=null; }
+    if(Br) Br.tik='gripBrugTik';
     boven=`<div data-vooruit="${V.projectie}" style="cursor:pointer" onclick="openGripVooruit()">
       <div class="row" data-dmregel style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0"><span style="font-weight:800;font-size:var(--fs-lg)">${euro0(V.projectie)}</span>${vs?`<span class="small muted"> · ${vs}</span>`:''}</span><span style="color:var(--teal);font-weight:700">›</span></div>
       ${Br?`<div id="gripBrug">${brugGrafiek(Br)}</div><div class="small" data-dmzin style="line-height:1.45;margin-top:6px;color:var(--mut)">${esc(dezeMaandZin(Br))}</div>`:''}</div>`;
   }
   return `<div class="card" id="gripDezeMaand">${kop}${boven}${af?`<div style="margin-top:8px">${af}</div>`:''}</div>`;
 }
+/* ===== v353: EEN TIK OP EEN STAP OPENT DIE STAP =====
+   De bridge op Grip draagt per kolom een tik (brugGrafiek met Br.tik). Een potje opent zijn eigen sheet
+   (renderGripPotje), de rest een lijst van de potjes in die stap (renderGripRest), en budget, de uitkomst
+   en de kop de volle lijst (renderGripVooruit). Elke sheet leest maandVooruit() en dezeMaandBrug()
+   opnieuw (v319) en rekent niets zelf (v104). De tik staat op de hele kolom, zodat een dunne balk op
+   een smal scherm raakbaar is. */
+function gripBrugTik(soort,k){
+  if(soort==='potje' && k){ openGripPotje(k); return; }
+  if(soort==='rest'){ openGripRest(); return; }
+  openGripVooruit();
+}
+function openGripPotje(k){ window._gripPotje=k; renderGripPotje(); showSheetBg(); }
+function openGripRest(){ renderGripRest(); showSheetBg(); }
+const gripAllesLink=`<div class="small" data-allepotjes style="color:var(--teal);cursor:pointer;font-weight:600;padding-top:10px;margin-top:10px;border-top:1px solid var(--line)" onclick="openGripVooruit()">Alle potjes ›</div>`;
+function gripVerschilTekst(d){ return d>0?`${euro0(d)} boven`:(d<0?`${euro0(-d)} onder`:'precies'); }
+function renderGripPotje(){
+  const k=window._gripPotje; let V=null; try{ V=maandVooruit(); }catch(_){}
+  const x=V&&!V.onbekend?(V.potjes.find(p=>p.k===k)||(V.vastePotjes||[]).find(p=>p.k===k)):null;
+  if(!x){ if(document.getElementById('gripPotje')) closeSheet(); return; }
+  const dagen=`${V.el} ${V.el===1?'dag':'dagen'}`, d=x.eind-x.bud;
+  if(x.terug){
+    $('#sheet').innerHTML=`<div class="grab"></div><div id="gripPotje" data-potje="${esc(k)}" data-verschil="${d}" data-terug>
+      <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}</div>
+      <div class="small" data-potjestand style="line-height:1.5;margin-top:6px">${euro0(x.uit)} uitgegeven in ${dagen} · nog te betalen ${euro0(x.vast)}${x.los?` · gewoonlijk nog ${euro0(x.los)} los`:''} · potje ${euro0(x.bud)}</div>
+      <div class="small" style="line-height:1.5;margin-top:4px">Verwacht eind ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>
+      <div class="small" data-potjewaarom style="line-height:1.5;margin-top:8px">Een potje voor terugkerende lasten: het verwachte eind is wat er al uit is plus de incasso's die deze maand nog komen. Een grens voor de rest van de maand past hier niet; het bedrag van het potje zelf kun je aanpassen.</div>
+      <div class="small" data-potjeaanpassen style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:10px" onclick="openPotForm('${esc(k)}')">Potje aanpassen ›</div>
+      ${gripAllesLink}</div>`;
+    return;
+  }
+  const waarom=d>0
+    ? (x.aard==='pastniet'
+      ? `<b data-aard="pastniet">Past niet in je potje</b>: gewoonlijk geef je hier ${euro0(x.patroon)} per maand aan uit, en je potje is ${euro0(x.bud)}.`
+      : `<b data-aard="voor">Loopt voor</b>: er is meer uit dan gemiddeld in dezelfde ${dagen}.`)
+    : `Dit potje eindigt verwacht onder zijn bedrag. Dit is alleen een observatie: er hoeft niets.`;
+  const h=V.handelingen.find(y=>y.k===k);
+  const sch=V.schuif&&(V.schuif.naar===k||V.schuif.van===k)?gripSchuifRij(V):'';
+  let doen='';
+  if(h||sch) doen=`<div class="hlabel" style="margin:14px 0 0">Wat je kunt doen</div>${h?gripHandRij(h,V):''}${sch}`;
+  else if(d>0){
+    const bij=x.aard==='pastniet'?`<button class="btn sec" data-bijstellen="${esc(k)}" style="width:auto;padding:8px 12px;font-size:13px;margin-top:8px" onclick="openPotjeBijstel('${esc(k)}')">Potje bijstellen</button>`:'';
+    doen=`<div class="small" data-potjeop style="line-height:1.5;margin-top:12px">Er zit niets meer in dit potje, dus een grens voor de rest van de maand kan niet.${x.aard==='pastniet'?' Bijstellen laat het potje vanaf volgende maand passen bij wat je gewoonlijk uitgeeft.':''}</div>${bij}`;
+  }
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripPotje" data-potje="${esc(k)}" data-verschil="${d}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}</div>
+    <div class="small" data-potjestand style="line-height:1.5;margin-top:6px">${euro0(x.uit)} uitgegeven in ${dagen} · gewoonlijk ${euro0(x.typisch)} in dezelfde dagen · potje ${euro0(x.bud)}</div>
+    <div class="small" style="line-height:1.5;margin-top:4px">Verwacht eind ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>
+    <div class="small" data-potjewaarom style="line-height:1.5;margin-top:8px">${waarom}</div>
+    ${doen}${gripAllesLink}</div>`;
+}
+/* De rest-stap: de potjes die niet los staan, elk met zijn verschil, en wat er verder in zit (vaste lasten
+   en uitgaven zonder potje) als een regel, zodat de regels optellen tot de stap. */
+function renderGripRest(){
+  let V=null, Br=null; try{ V=maandVooruit(); Br=dezeMaandBrug(V); }catch(_){}
+  if(!Br || !Br.rest){ if(document.getElementById('gripRest')) closeSheet(); return; }
+  const los=new Set(Br.los.map(x=>x.k));
+  const leden=V.potjes.concat(V.vastePotjes||[]).filter(x=>!los.has(x.k)).map(x=>({k:x.k, naam:x.naam, d:Math.round(x.overR)})).filter(x=>x.d!==0)
+    .sort((a,b)=>Math.abs(b.d)-Math.abs(a.d) || (a.naam<b.naam?-1:1));
+  const verder=Br.rest-leden.reduce((a,x)=>a+x.d,0);
+  const rij=x=>`<div class="row" data-restpotje="${esc(x.k)}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripPotje('${esc(x.k)}')">
+      <span style="flex:1;min-width:0;font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}</span><span class="small" style="font-weight:700;white-space:nowrap">${brugTeken(x.d)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
+  const verderRij=verder?`<div class="row" data-restverder style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
+      <span class="small muted" style="flex:1;min-width:0">Uitgaven en vaste lasten zonder potje</span><span class="small" style="font-weight:700;white-space:nowrap">${brugTeken(verder)}</span></div>`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripRest" data-rest="${Br.rest}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Rest · ${brugTeken(Br.rest)}</div>
+    <div class="small muted" style="line-height:1.5;margin-top:4px">Wat de andere potjes verwacht boven of onder hun bedrag eindigen, en wat er zonder potje uitgaat.</div>
+    <div style="margin-top:8px">${leden.map(rij).join('')}${verderRij}</div>${gripAllesLink}</div>`;
+}
 function openGripVooruit(){ renderGripVooruit(); showSheetBg(); }
 /* v352: de sheet achter Deze maand draagt geen tweede bridge meer (de waterval van uitgegeven, vast nog en
    per potje, vooruitGrafiek()). De kaart draagt de bridge al; de sheet houdt de band als een regel en "Wat je
    deze maand kunt doen". De sheet rekent opnieuw (v319). */
+/* v353: een handeling als rij, met twee lezers: de volle lijst (renderGripVooruit) en de sheet van een
+   potje (renderGripPotje). Dezelfde rij op twee plekken komt uit een bron (v104). */
+function gripHandRij(h,V){
+  const einde=`${V.dim} ${ymFull(V.m)}`, dagen=`${V.el} ${V.el===1?'dag':'dagen'}`;
+    const waarom=h.aard==='pastniet'
+      ? `<b data-aard="pastniet">Past niet in je potje</b>: gewoonlijk ${euro0(h.patroon)} per maand, je potje is ${euro0(h.bud)}. ${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.`
+      : (h.aard==='voor' ? `<b data-aard="voor">Loopt voor</b>: ${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.` : `${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.`);
+    const bij=h.aard==='pastniet'?`<button class="btn sec" data-bijstellen="${esc(h.k)}" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px;margin-top:6px" onclick="openPotjeBijstel('${esc(h.k)}')">Potje bijstellen</button>`:'';
+    return `<div class="row" data-handeling="${esc(h.k)}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
+      <span style="flex:1;min-width:0"><span style="font-size:13px">${esc(h.naam)}: nog ${euro0(h.grens)} tot ${esc(einde)} <b data-effect="${h.effect}">−${euro0(h.effect)}</b></span>
+      <div class="small muted" style="margin-top:2px;line-height:1.45">${waarom} Met ${euro0(h.grens)} voor de rest blijf je binnen je potje: ongeveer ${euro0(h.perWeek)} per week.</div></span>
+      <span style="display:flex;flex-direction:column;align-items:stretch;flex-shrink:0"><button class="btn sec" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px" onclick="openGrensRest('${esc(h.k)}')">Grens op ${euro0(h.grens)}</button>${bij}</span></div>`; }
+function gripSchuifRij(V){ return `<div class="row" data-schuif style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
+      <span style="flex:1;min-width:0"><span style="font-size:13px">Of schuif ${euro0(V.schuif.bedrag)} van ${esc(V.schuif.vanNaam)} naar ${esc(V.schuif.naarNaam)} <b>${euro0(0)}</b></span>
+      <div class="small muted" style="margin-top:2px;line-height:1.45">${esc(V.schuif.vanNaam)} eindigt verwacht onder zijn potje. Je potjes kloppen dan, maar je geeft niet minder uit.</div></span>
+      <button class="btn sec" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px" onclick="valtOpPotjeSheet('${esc(V.schuif.sig)}')">Potjes verschuiven</button></div>`; }
 function renderGripVooruit(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   if(!V || V.onbekend){ if(document.getElementById('gripVooruit')) closeSheet(); return; }
@@ -7924,20 +8016,8 @@ function renderGripVooruit(){
   /* v349: elke regel zegt waarom het potje boven uitkomt (maandVooruit, x.aard). Past hij niet in zijn
      potje, dan staat "Potje bijstellen" naast de grens: een grens vraagt je een maand anders te doen dan
      je gewoonlijk doet, bijstellen laat het potje passen bij wat je gewoonlijk doet. */
-  const dagen=`${V.el} ${V.el===1?'dag':'dagen'}`;
-  const hand=V.handelingen.map(h=>{
-    const waarom=h.aard==='pastniet'
-      ? `<b data-aard="pastniet">Past niet in je potje</b>: gewoonlijk ${euro0(h.patroon)} per maand, je potje is ${euro0(h.bud)}. ${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.`
-      : (h.aard==='voor' ? `<b data-aard="voor">Loopt voor</b>: ${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.` : `${euro0(h.uit)} in ${dagen}, gemiddeld ${euro0(h.typisch)}.`);
-    const bij=h.aard==='pastniet'?`<button class="btn sec" data-bijstellen="${esc(h.k)}" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px;margin-top:6px" onclick="openPotjeBijstel('${esc(h.k)}')">Potje bijstellen</button>`:'';
-    return `<div class="row" data-handeling="${esc(h.k)}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
-      <span style="flex:1;min-width:0"><span style="font-size:13px">${esc(h.naam)}: nog ${euro0(h.grens)} tot ${esc(einde)} <b data-effect="${h.effect}">−${euro0(h.effect)}</b></span>
-      <div class="small muted" style="margin-top:2px;line-height:1.45">${waarom} Met ${euro0(h.grens)} voor de rest blijf je binnen je potje: ongeveer ${euro0(h.perWeek)} per week.</div></span>
-      <span style="display:flex;flex-direction:column;align-items:stretch;flex-shrink:0"><button class="btn sec" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px" onclick="openGrensRest('${esc(h.k)}')">Grens op ${euro0(h.grens)}</button>${bij}</span></div>`; }).join('');
-  const sch=V.schuif?`<div class="row" data-schuif style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
-      <span style="flex:1;min-width:0"><span style="font-size:13px">Of schuif ${euro0(V.schuif.bedrag)} van ${esc(V.schuif.vanNaam)} naar ${esc(V.schuif.naarNaam)} <b>${euro0(0)}</b></span>
-      <div class="small muted" style="margin-top:2px;line-height:1.45">${esc(V.schuif.vanNaam)} eindigt verwacht onder zijn potje. Je potjes kloppen dan, maar je geeft niet minder uit.</div></span>
-      <button class="btn sec" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px" onclick="valtOpPotjeSheet('${esc(V.schuif.sig)}')">Potjes verschuiven</button></div>`:'';
+  const hand=V.handelingen.map(h=>gripHandRij(h,V)).join('');
+  const sch=V.schuif?gripSchuifRij(V):'';
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripVooruit" data-projectie="${V.projectie}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(Mn)} vooruit</div>
     <div class="small" data-bandregel style="color:var(--mut2);line-height:1.5;margin-top:4px">Rond ${euro0(V.projectie)}; de rest van de maand lag in ${esc(banden)} tussen <span data-bandtekst>${euro0(V.band.min)} en ${euro0(V.band.max)}</span>.</div>
@@ -16749,7 +16829,8 @@ function brugGrafiek(Br){
     const yt=y(c.hi), h=Math.max(y(c.lo)-yt,2);
     const val=(c.s.soort==='begin'||c.s.soort==='eind')?euro0(c.s.waarde):brugTeken(c.s.waarde);
     const lijn=i<n-1?`<i style="position:absolute;left:88%;width:calc(24% + 4px);top:${y(c.na).toFixed(1)}px;border-top:1px dashed var(--ref)"></i>`:'';
-    return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}" style="flex:1 1 0;min-width:0">
+    const tik=Br.tik?` data-brugtik role="button" onclick="event.stopPropagation();${Br.tik}('${c.s.soort}','${esc(c.s.k||'')}')"`:'';
+    return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}"${tik} style="flex:1 1 0;min-width:0${Br.tik?';cursor:pointer':''}">
       <div style="position:relative;height:${PH}px">
         <span data-brugval style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap;color:var(--txt)">${val}</span>
         <i style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${kleur(c.s)};border-radius:3px"></i>${lijn}
