@@ -25,16 +25,19 @@ const stappenVan = (page) => page.evaluate(() => {
 });
 
 test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwacht uitgaat', () => {
-  test('de stappen van de stand van 6 oktober (v355: de rest van een gemengd potje is variabel)', async ({ page }) => {
+  test('de stappen van de stand van 6 oktober (v356: los staan de potjes die boven eindigen, de rest is ruimte)', async ({ page }) => {
     await boot(page); await grip(page);
     expect(await stappenVan(page)).toEqual([
       { soort: 'begin', k: null, waarde: 1672, aard: null },
-      { soort: 'potje', k: 'sport', waarde: -527, aard: null },
-      { soort: 'potje', k: 'verzekering', waarde: -525, aard: null },
       { soort: 'potje', k: 'vices', waarde: 83, aard: 'pastniet' },
-      { soort: 'rest', k: null, waarde: -9, aard: null },
+      { soort: 'potje', k: 'boodschappen', waarde: 61, aard: 'pastniet' },
+      { soort: 'rest', k: null, waarde: -1122, aard: null },
       { soort: 'eind', k: null, waarde: 694, aard: null },
     ]);
+    const r = await page.evaluate(() => ({ label: dezeMaandBrug(maandVooruit()).stappen.find((s) => s.soort === 'rest').label,
+      zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }));
+    expect(r.label).toBe('ruimte');
+    expect(r.zin).toBe('Vices en Boodschappen passen niet in hun potje; je andere potjes houden samen €1.122 ruimte.');
   });
   test('met potjes gelijk aan hun incasso blijft de vorm van v354', async ({ page }) => {
     await boot(page, smal()); await grip(page);
@@ -167,27 +170,47 @@ test.describe('c. de as', () => {
   });
 });
 
-test.describe('d. hooguit drie potjes los, de rest samen', () => {
+test.describe('d. hooguit drie potjes los, alleen potjes die boven eindigen, de rest samen (v356)', () => {
   const set = smal({ uiteten: 100, shopping: 300 }).set;
-  test('gekozen op de grootte van de afwijking, onder gedempt en boven in de kleur voor boven', async ({ page }) => {
+  test('boven eindigende potjes los op grootte, een potje dat eronder blijft valt in de ruimte', async ({ page }) => {
     await boot(page, { set }); await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
       const kleur = [...document.querySelectorAll('#gripDezeMaand [data-brugstap="potje"] i')].map((i) => i.style.background).filter(Boolean);
-      return { st: Br.stappen.map((s) => [s.soort, s.k || '', s.waarde]), budget: V.variabel.budget, proj: V.variabel.eind, kleur }; });
-    expect(r.st.filter((s) => s[0] === 'potje').map((s) => s[1])).toEqual(['shopping', 'uiteten', 'vices']);
-    expect(r.st.find((s) => s[1] === 'shopping')[2]).toBe(-300);
+      return { st: Br.stappen.map((s) => [s.soort, s.k || '', s.waarde, s.label]), budget: V.variabel.budget, proj: V.variabel.eind, kleur,
+        shop: Math.round(V.potjes.find((x) => x.k === 'shopping').overR) }; });
+    // invoermeting: Online shopping eindigt onder zijn potje en is de grootste afwijking in absolute zin
+    expect(r.shop).toBe(-300);
+    expect(r.st.filter((s) => s[0] === 'potje').map((s) => s[1])).toEqual(['uiteten', 'vices', 'boodschappen']);
     expect(r.st.find((s) => s[1] === 'uiteten')[2]).toBe(175);
-    expect(r.kleur).toEqual(['var(--mut2)', 'var(--red)', 'var(--red)']);
-    // Boodschappen valt in de rest, en de stappen tellen nog steeds exact op.
+    expect(r.kleur).toEqual(['var(--red)', 'var(--red)', 'var(--red)']);
+    const rest = r.st.find((s) => s[0] === 'rest');
+    expect(rest[2]).toBe(-300);
+    expect(rest[3]).toBe('ruimte');
     const som = r.st.slice(1, -1).reduce((a, s) => a + s[2], r.st[0][2]);
     expect(r.st[0][2]).toBe(r.budget);
     expect(som).toBe(r.proj);
-    expect(r.st.find((s) => s[0] === 'rest')[2]).toBe(r.proj - r.budget + 300 - 175 - 83);
   });
-  test('de zin noemt wat eronder blijft', async ({ page }) => {
+  test('de zin noemt de potjes erboven en de ruimte, niet het potje eronder', async ({ page }) => {
     await boot(page, { set }); await grip(page);
     const z = await page.locator('#gripDezeMaand [data-dmzin]').innerText();
-    expect(z).toContain('Online shopping blijft eronder');
+    expect(z).toBe('Uit eten & café, Vices en Boodschappen passen niet in hun potje; je andere potjes houden samen €300 ruimte.');
+  });
+  test('een vierde potje erboven staat niet los, maar de zin noemt het wel en de rest heet geen ruimte', async ({ page }) => {
+    const tx = [];
+    for (const ym of ['2026-07', '2026-08', '2026-09', '2026-10']) tx.push({ id: 'bol' + ym, date: ym + '-03', amount: -60, name: 'Bol.com', desc: 'BEA, BETAALPAS BOL.COM' });
+    await boot(page, { set: smal({ uiteten: 100, shopping: 10 }).set, extraTx: tx }); await grip(page);
+    const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
+      return { boven: V.potjes.filter((x) => Math.round(x.overR) > 0).map((x) => x.k),
+        los: Br.los.map((x) => x.k), rest: Br.stappen.find((s) => s.soort === 'rest'),
+        zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }; });
+    expect(r.boven.length).toBe(4);   // invoermeting
+    expect(r.los.length).toBe(3);
+    expect(r.los).not.toContain('shopping');
+    expect(r.rest.waarde).toBeGreaterThan(0);
+    expect(r.rest.label).toBe('andere');
+    expect(r.zin).toContain('Online shopping');
+    expect(r.zin).toContain('je andere potjes samen');
+    expect(r.zin).not.toContain('ruimte');
   });
 });
 
@@ -295,7 +318,9 @@ test.describe('h. hoogte op 360 en 390px', () => {
   // de kaart gaat van 271 naar 338px op 360 en van 260 naar 300px op 390, Grip van 525 naar 592 en van 514 naar 555 (gemeten).
   // v355: Sport en Verzekeringen staan met hun variabele deel in de bridge, en de zin noemt ze: de kaart gaat
   // van 338 naar 348px op 360 en van 300 naar 309 op 390, Grip van 592 naar 602 en van 555 naar 564 (gemeten).
-  const NA = { 360: { kaart: 348, grip: 602 }, 390: { kaart: 309, grip: 564 } };
+  // v356: los staan alleen Vices en Boodschappen, de rest is EEN stap ruimte, en de zin noemt geen potje dat
+  // eronder blijft: de kaart gaat van 348 naar 330px op 360 en van 309 naar 299 op 390, Grip van 602 naar 584 en van 564 naar 553 (gemeten).
+  const NA = { 360: { kaart: 330, grip: 584 }, 390: { kaart: 299, grip: 553 } };
   for (const w of [360, 390]) test('breedte ' + w, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await boot(page); await grip(page);

@@ -57,7 +57,7 @@ test.describe('b. geen vaste lijst', () => {
     expect(r.V.vaste).toEqual({ budget: 1703, eind: 1703 });
     expect(r.V.variabel).toEqual({ budget: 1672, eind: 694 });
     expect(r.V.projectie).toBe(2672);                            // de uitkomst verandert niet, alleen de indeling
-    expect(r.stappen.filter((s) => s.soort === 'potje').map((s) => s.k)).toEqual(['sport', 'verzekering', 'vices']);
+    expect(r.stappen.filter((s) => s.soort === 'potje').map((s) => s.k)).toEqual(['vices', 'boodschappen']);   // v356: los alleen wat boven eindigt
   });
   test('Huur zonder herkende betaling en zonder keuze is variabel', async ({ page }) => {
     await boot(page); const r = await lees(page);

@@ -7801,10 +7801,11 @@ function maandVooruit(){
      op vast zette (potHeelVast: een eigen categorie met aard vast, of je keuze in SET.potAard) is helemaal vast
      en telt geen gemiddelde. */
   const heelVast=c=>potHeelVast(c);
-  const restCat={}, totP=[], tot0={};
-  for(const p of P){ let s=0;
+  const restCat={}, totP=[], tot0={}, perMaand=[];
+  for(const p of P){ let s=0; const pm={}; perMaand.push(pm);
     for(const t of txOfMonth(p)){ if(!piekInScope(t)) continue; const d=+String(t.date).slice(8,10), c=catOf(t), v=uitgaveNorm(t);
       if(heelVast(c)) continue;
+      pm[c]=(pm[c]||0)+v;
       if(d>el){ restCat[c]=(restCat[c]||0)+v/VOORUIT_MAANDEN; s+=v; } else tot0[c]=(tot0[c]||0)+v/VOORUIT_MAANDEN; }
     totP.push(s); }
   const T=totals(m), L=(function(){ try{ return monthLiquidity(); }catch(_){ return {fixDue:0, fixDueItems:[]}; } })();
@@ -7852,7 +7853,7 @@ function maandVooruit(){
     const typ=Math.max(+tot0[k]||0,0), patroon=typ+r;
     if(!(vBud>0) && Math.round(u+r)===0) continue;
     potjes.push({k, naam:CATS[k].name, bud:Math.round(vBud), potje:Math.round(bud), vastDeel:Math.round(fE), uit:Math.round(u), rest:Math.round(r), eind:Math.round(u+r), eindR:u+r, typisch:Math.round(typ),
-      overR:u+r-vBud, patroon:Math.round(patroon)}); }
+      overR:u+r-vBud, patroon:Math.round(patroon), maanden:perMaand.map(pm=>Math.round(+pm[k]||0))}); }
   /* v349: WAAROM EEN POTJE BOVEN ZIJN BEDRAG UITKOMT, en dat zijn twee verschillende dingen. "Past niet in
      je potje" is je gewone maand: wat je in juli tot en met september gemiddeld in de hele maand uitgaf
      (dezelfde dagen plus de rest) is meer dan het potje, ook als er deze maand nog niets uit is. "Loopt
@@ -7907,17 +7908,25 @@ function dezeMaandBrug(V){
   /* v354: DE BRIDGE GAAT OVER DE VARIABELE POTJES. Hij begint bij wat die samen mogen (V.variabel.budget) en
      eindigt bij wat er verwacht uitgaat (V.variabel.eind). De vaste potjes staan als een regel onder de
      bridge: een vaste last die verandert (een huur die niet meer betaald wordt) mag het getal waar je op
-     stuurt niet verbergen. */
+     stuurt niet verbergen.
+     v356: DE LOSSE STAPPEN ZIJN DE POTJES DIE BOVEN HUN BEDRAG EINDIGEN, hooguit DEZEMAAND_LOS, op grootte.
+     Alles wat eronder blijft is samen EEN stap, de ruimte in je andere potjes. Tot v356 stonden de grootste
+     afwijkingen los, boven en onder; GEMELD stonden Sport (-527) en Verzekeringen (-525) daardoor los en viel
+     Boodschappen (+61), dat niet in zijn potje past, in de rest. Een potje dat eronder blijft vraagt niets. */
   if(!V || V.onbekend || !V.variabel || !(V.variabel.budget>0)) return null;
   const diff=V.variabel.eind-V.variabel.budget;
-  const los=V.potjes.filter(x=>Math.round(x.overR)!==0)
-    .sort((a,b)=>(Math.abs(b.overR)-Math.abs(a.overR)) || (a.naam<b.naam?-1:1)).slice(0,DEZEMAAND_LOS);
+  const boven=V.potjes.filter(x=>Math.round(x.overR)>0)
+    .sort((a,b)=>(b.overR-a.overR) || (a.naam<b.naam?-1:1));
+  const los=boven.slice(0,DEZEMAAND_LOS);
   const rauw=los.map(x=>({k:x.k, v:x.overR}));
   rauw.push({k:'~rest', v:diff-los.reduce((a,x)=>a+x.overR,0)});
   const R=brugAfronden(rauw, diff);
+  const rest=R['~rest']||0;
   const stappen=[{soort:'begin', label:'potjes', waarde:V.variabel.budget}];
   for(const x of los) stappen.push({soort:'potje', k:x.k, label:x.naam, waarde:R[x.k], aard:x.aard});
-  if(R['~rest']) stappen.push({soort:'rest', label:'rest', waarde:R['~rest']});
+  /* De rest heet ruimte zolang hij onder nul blijft; staat er een vierde potje boven dat de rest boven nul
+     trekt, dan is het geen ruimte en heet hij "andere". */
+  if(rest) stappen.push({soort:'rest', label:rest<0?'ruimte':'andere', waarde:rest});
   stappen.push({soort:'eind', label:ymFull(V.m).slice(0,3), waarde:V.variabel.eind});
   /* De ondergrens van de as: alleen als alle standen boven nul liggen en de stappen klein zijn tegen het
      budget, anders zijn ze niet te zien. Een rond getal (een halve macht van tien) onder de laagste stand. */
@@ -7926,22 +7935,22 @@ function dezeMaandBrug(V){
   const lo=Math.min(...lv), hi=Math.max(...lv);
   let basis=0;
   if(lo>0 && hi-lo<hi*0.5){ const stap=Math.pow(10,Math.floor(Math.log10(hi)))/2; basis=Math.max(Math.floor((lo-(hi-lo)*0.6)/stap)*stap,0); }
-  return {tegen:'budget', stappen, basis, los, rest:R['~rest']||0, diff, boven:V.potjes.some(x=>Math.round(x.overR)>0)};
+  return {tegen:'budget', stappen, basis, los, bovenLijst:boven, rest, diff, boven:boven.length>0};
 }
-/* De zin stelt vast en oordeelt niet (v78/v93): welk potje boven uitkomt en waarom (past niet, of loopt
-   voor), welk losse potje eronder blijft, en de rest. */
+/* De zin stelt vast en oordeelt niet (v78/v93). v356: hij noemt ELK potje dat boven zijn bedrag eindigt bij
+   naam en oorzaak (past niet, of loopt voor), ook een vierde dat niet los in de bridge staat, en daarna de
+   ruimte in de andere potjes als een bedrag. */
 function dezeMaandZin(Br){
-  const boven=Br.los.filter(x=>x.overR>0), onder=Br.los.filter(x=>x.overR<0);
-  const pn=boven.filter(x=>x.aard==='pastniet'), vr=boven.filter(x=>x.aard==='voor'), an=boven.filter(x=>x.aard!=='pastniet' && x.aard!=='voor');
-  /* Komt geen enkel potje boven uit (ook niet in de rest), dan is dat EEN zin en verder niets: de
-     bridge erboven toont al wat eronder blijft. */
+  const boven=Br.bovenLijst||Br.los.filter(x=>x.overR>0);
   if(!Br.boven) return 'Alle potjes blijven verwacht onder hun bedrag.';
+  const pn=boven.filter(x=>x.aard==='pastniet'), vr=boven.filter(x=>x.aard==='voor'), an=boven.filter(x=>x.aard!=='pastniet' && x.aard!=='voor');
   const d=[];
   if(pn.length) d.push(`${gripNamen(pn)} ${pn.length===1?'past niet in zijn potje':'passen niet in hun potje'}`);
   if(vr.length) d.push(`${gripNamen(vr)} ${vr.length===1?'loopt voor':'lopen voor'}`);
   if(an.length) d.push(`${gripNamen(an)} ${an.length===1?'eindigt verwacht boven zijn potje':'eindigen verwacht boven hun potje'}`);
-  if(onder.length) d.push(`${gripNamen(onder)} ${onder.length===1?'blijft':'blijven'} eronder`);
-  if(Br.rest) d.push(`de rest samen ${euro0(Math.abs(Br.rest))} ${Br.rest<0?'onder':'boven'}`);
+  const ruimte=Br.rest<0 ? -Br.rest : 0;
+  if(ruimte) d.push(`je andere potjes houden samen ${euro0(ruimte)} ruimte`);
+  else if(Br.rest>0) d.push(`je andere potjes samen ${euro0(Br.rest)} boven`);
   return d.join('; ')+'.';
 }
 function dezeMaandKaart(){
@@ -8097,24 +8106,40 @@ function renderGripPotje(){
     <div class="small" data-potjewaarom style="line-height:1.5;margin-top:8px">${waarom}</div>
     ${doen}${x.vastDeel>0?'':`<div class="small" data-potaardvraag="vast" style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:10px" onclick="openPotAard('${esc(k)}')">Is dit een vaste last? ›</div>`}${gripAllesLink}</div>`;
 }
-/* De rest-stap: de potjes die niet los staan, elk met zijn verschil, en wat er verder in zit (vaste lasten
-   en uitgaven zonder potje) als een regel, zodat de regels optellen tot de stap. */
+/* v356: DE STAP "RUIMTE IN ANDERE POTJES": de potjes die niet los staan, elk met zijn verschil, zodat de regels
+   optellen tot de stap; de afronding is die van de bridge (brugAfronden). Bovenaan een regel voor de potjes
+   die STRUCTUREEL ruimer zijn dan wat je er gewoonlijk uitgeeft (potRuimer), met een ingang om ze bij te
+   stellen. Bijstellen is een bestaande route (openPotForm, openBudgetEditor), geen tweede editor (v61). */
+/* VOORSTEL, NIET GEKOZEN DOOR DE GEBRUIKER: structureel ruimer is een variabel potje waarvan de uitgave in ELK
+   van de laatste VOORUIT_MAANDEN afgeronde maanden hooguit de helft van het variabele bedrag was EN minstens
+   EUR 50 eronder bleef. De twee waarden staan hier en nergens anders. */
+const RUIMER_DREMPEL={deel:0.5, euro:50};
+function potRuimer(x){
+  if(!x || !(x.bud>0) || !Array.isArray(x.maanden) || !x.maanden.length) return false;
+  return x.maanden.every(u=>u<=x.bud*RUIMER_DREMPEL.deel && x.bud-u>=RUIMER_DREMPEL.euro);
+}
+function gripRuimerBijstel(ks){
+  if(ks.length===1){ openPotForm(ks[0]); return; }
+  openBudgetEditor(thisYM());
+}
 function renderGripRest(){
   let V=null, Br=null; try{ V=maandVooruit(); Br=dezeMaandBrug(V); }catch(_){}
   if(!Br || !Br.rest){ if(document.getElementById('gripRest')) closeSheet(); return; }
-  /* v354: de rest bevat alleen nog variabele potjes, dus de regels zijn die potjes en tellen per constructie
-     op tot de stap; de afronding is die van de bridge (brugAfronden), zodat ook de afgeronde regels dat doen. */
   const los=new Set(Br.los.map(x=>x.k));
   const ov=V.potjes.filter(x=>!los.has(x.k));
   const R=brugAfronden(ov.map(x=>({k:x.k, v:x.overR})), Br.rest);
   const leden=ov.map(x=>({k:x.k, naam:x.naam, d:R[x.k]})).filter(x=>x.d!==0)
     .sort((a,b)=>Math.abs(b.d)-Math.abs(a.d) || (a.naam<b.naam?-1:1));
+  const ruim=ov.filter(potRuimer).sort((a,b)=>(b.bud-Math.max(...b.maanden))-(a.bud-Math.max(...a.maanden)) || (a.naam<b.naam?-1:1));
+  const ruimRegel=ruim.length?`<div class="row" data-ruimer="${esc(ruim.map(x=>x.k).join(','))}" style="gap:8px;align-items:center;padding:9px 0;margin-top:8px;border-top:1px solid var(--line);cursor:pointer" onclick="gripRuimerBijstel(${esc(JSON.stringify(ruim.map(x=>x.k)))})">
+      <span class="small" style="flex:1;min-width:0;line-height:1.45">${esc(gripNamen(ruim))} ${ruim.length===1?'is':'zijn'} ruimer dan je gewoonlijk uitgeeft · <span style="color:var(--teal);font-weight:700">bijstellen ›</span></span></div>`:'';
   const rij=x=>`<div class="row" data-restpotje="${esc(x.k)}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripPotje('${esc(x.k)}')">
       <span style="flex:1;min-width:0;font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}</span><span class="small" style="font-weight:700;white-space:nowrap">${brugTeken(x.d)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
+  const ruimte=Br.rest<0;
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripRest" data-rest="${Br.rest}">
-    <div style="font-weight:800;font-size:var(--fs-lg)">Rest · ${brugTeken(Br.rest)}</div>
-    <div class="small muted" style="line-height:1.5;margin-top:4px">Wat je andere variabele potjes verwacht boven of onder hun bedrag eindigen.</div>
-    <div style="margin-top:8px">${leden.map(rij).join('')}</div>${gripAllesLink}</div>`;
+    <div style="font-weight:800;font-size:var(--fs-lg)">${ruimte?'Ruimte in andere potjes':'Andere potjes'} · ${brugTeken(Br.rest)}</div>
+    <div class="small muted" style="line-height:1.5;margin-top:4px">${ruimte?'Wat je andere variabele potjes verwacht onder hun bedrag eindigen.':'Wat je andere variabele potjes verwacht boven of onder hun bedrag eindigen.'}</div>
+    ${ruimRegel}<div style="margin-top:8px">${leden.map(rij).join('')}</div>${gripAllesLink}</div>`;
 }
 function openGripVooruit(){ renderGripVooruit(); showSheetBg(); }
 /* v352: de sheet achter Deze maand draagt geen tweede bridge meer (de waterval van uitgegeven, vast nog en

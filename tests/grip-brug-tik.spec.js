@@ -30,8 +30,8 @@ test('a. een tik op Vices toont alleen Vices, met waarom en zijn handelingen, en
   expect((await sheet(page)).id).toBe('gripVooruit');
 });
 
-/* v354: de rest bevat alleen variabele potjes. Met vier variabele potjes (Vices, Boodschappen, Uit eten,
-   Online shopping) staan er drie los en valt Boodschappen in de rest. */
+/* v354: de rest bevat alleen variabele potjes. v356: los staan alleen de potjes die boven eindigen (Uit eten,
+   Vices, Boodschappen); Online shopping blijft eronder en is de ruimte. */
 // v355: de vaste potjes staan op hun incasso (verzekering 150, abonnement 30, sport 73), anders zijn ze gemengd
 // en staat hun variabele rest in de bridge; dan zijn het geen vier variabele potjes meer.
 const VIER = { set: { budgets: { huur: 1450, verzekering: 150, abonnement: 30, sport: 73, vices: 50, boodschappen: 500, uiteten: 100, shopping: 300 } } };
@@ -45,15 +45,15 @@ test('b. een tik op rest toont de variabele potjes in die stap met hun verschil,
     const vast = V.vastePotjes.map((x) => x.k);
     const getallen = [...g.querySelectorAll('[data-restpotje]')].map((e) => { const t = e.innerText.match(/([+−-])\s*€\s*([\d.]+)/); return t ? (t[1] === '+' ? 1 : -1) * +t[2].replace(/\./g, '') : NaN; });
     return { rest: +g.dataset.rest, stap: Br.rest, rijen, verwacht, los, vast, som: getallen.reduce((a, b) => a + b, 0), verder: g.querySelectorAll('[data-restverder]').length }; });
-  expect(r.rest).toBe(61);
-  expect(r.rijen).toEqual(['boodschappen']);
+  expect(r.rest).toBe(-300);
+  expect(r.rijen).toEqual(['shopping']);
   expect(r.rijen.slice().sort()).toEqual(r.verwacht.slice().sort());
   for (const k of r.los) expect(r.rijen).not.toContain(k);
   for (const k of r.vast) expect(r.rijen).not.toContain(k);   // een vast potje staat nooit in de rest
   expect(r.som).toBe(r.stap);
   expect(r.verder).toBe(0);
-  await page.click('[data-restpotje="boodschappen"]');
-  expect(await page.evaluate(() => document.getElementById('gripPotje') && document.getElementById('gripPotje').dataset.potje)).toBe('boodschappen');
+  await page.click('[data-restpotje="shopping"]');
+  expect(await page.evaluate(() => document.getElementById('gripPotje') && document.getElementById('gripPotje').dataset.potje)).toBe('shopping');
 });
 
 test('c. een tik op de kop, op budget of op de uitkomst opent de volle lijst', async ({ page }) => {
