@@ -4,11 +4,18 @@
    -847.
    v354: de bridge gaat over de variabele potjes: van wat ze samen mogen (Vices 50 + Boodschappen 500 = 550) naar
    wat er daar verwacht uitgaat (133 + 561 = 694). De vaste potjes (huur, verzekeringen, abonnementen, sport)
-   staan in de regel vaste lasten, en de totale uitkomst (2.672) in de sheet. */
+   staan in de regel vaste lasten, en de totale uitkomst (2.672) in de sheet.
+   v355: een potje met een herkende incasso is gemengd: de incasso is vast, de rest van het potje variabel. Op de
+   stand van 6 oktober zijn Verzekeringen (675 tegen 150), Abonnementen (100 tegen 30) en Sport (600 tegen 73)
+   daardoor voor het grootste deel variabel, en die drie staan in de bridge. De tests over de mechaniek van de
+   bridge (de oorzaak, de as, de losse stappen) draaien op SMAL: dezelfde stand met potjes die gelijk zijn aan hun
+   incasso, zodat de bridge de vorm van v354 houdt (550 naar 694). */
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./deze-maand-stand');
 const { kaalUit } = require('./bron-kaal');
 
+const SMAL = { huur: 1450, verzekering: 150, abonnement: 30, sport: 73, vices: 50, boodschappen: 500 };
+const smal = (extra) => ({ set: { budgets: Object.assign({}, SMAL, extra || {}) } });
 async function grip(page) {
   await page.evaluate(() => { closeSheet(); go('maand'); });
 }
@@ -18,8 +25,19 @@ const stappenVan = (page) => page.evaluate(() => {
 });
 
 test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwacht uitgaat', () => {
-  test('de stappen van de stand van 6 oktober', async ({ page }) => {
+  test('de stappen van de stand van 6 oktober (v355: de rest van een gemengd potje is variabel)', async ({ page }) => {
     await boot(page); await grip(page);
+    expect(await stappenVan(page)).toEqual([
+      { soort: 'begin', k: null, waarde: 1672, aard: null },
+      { soort: 'potje', k: 'sport', waarde: -527, aard: null },
+      { soort: 'potje', k: 'verzekering', waarde: -525, aard: null },
+      { soort: 'potje', k: 'vices', waarde: 83, aard: 'pastniet' },
+      { soort: 'rest', k: null, waarde: -9, aard: null },
+      { soort: 'eind', k: null, waarde: 694, aard: null },
+    ]);
+  });
+  test('met potjes gelijk aan hun incasso blijft de vorm van v354', async ({ page }) => {
+    await boot(page, smal()); await grip(page);
     const st = await stappenVan(page);
     expect(st).toEqual([
       { soort: 'begin', k: null, waarde: 550, aard: null },
@@ -60,14 +78,14 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
   test('de regel boven de bridge: het stuurgetal, variabel tegen je potjes (v354)', async ({ page }) => {
     await boot(page); await grip(page);
     const t = await page.locator('#gripDezeMaand [data-dmregel]').innerText();
-    expect(t.replace(/\s+/g, ' ')).toContain('Variabel: €694 verwacht · €144 boven je potjes');
+    expect(t.replace(/\s+/g, ' ')).toContain('Variabel: €694 verwacht · €978 onder je potjes');
     expect(t).not.toContain('€2.672');
   });
 });
 
 test.describe('b. de oorzaak: past niet in je potje tegen loopt voor', () => {
   test('de zin op de kaart, zonder oordeel', async ({ page }) => {
-    await boot(page); await grip(page);
+    await boot(page, smal()); await grip(page);
     const z = await page.locator('#gripDezeMaand [data-dmzin]').innerText();
     expect(z).toBe('Vices en Boodschappen passen niet in hun potje.');
     expect(z).not.toMatch(/loopt voor|lopen voor/);
@@ -133,7 +151,7 @@ test.describe('b. de oorzaak: past niet in je potje tegen loopt voor', () => {
 
 test.describe('c. de as', () => {
   test('de as begint bij de ondergrens, zonder bedrag erbij (v352)', async ({ page }) => {
-    await boot(page); await grip(page);
+    await boot(page, smal()); await grip(page);
     const b = await page.locator('#gripDezeMaand [data-asbasis]').getAttribute('data-asbasis');
     expect(+b).toBe(450);
     // v352: het bedrag staat niet meer bij de as; het stond op 360px half buiten de kaart
@@ -141,7 +159,7 @@ test.describe('c. de as', () => {
     expect(await page.locator('#gripBrug').innerText()).not.toContain('€450');
   });
   test('bij grote stappen begint de as bij nul en staat er geen ondergrens', async ({ page }) => {
-    await boot(page, { extraTx: [{ id: 'groot', date: '2026-10-05', amount: -5000, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
+    await boot(page, { set: smal().set, extraTx: [{ id: 'groot', date: '2026-10-05', amount: -5000, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
     await grip(page);
     const r = await page.evaluate(() => ({ basis: dezeMaandBrug(maandVooruit()).basis, as: document.querySelectorAll('#gripDezeMaand [data-asbasis]').length }));
     expect(r.basis).toBe(0);
@@ -150,7 +168,7 @@ test.describe('c. de as', () => {
 });
 
 test.describe('d. hooguit drie potjes los, de rest samen', () => {
-  const set = { budgets: { huur: 1450, verzekering: 675, abonnement: 100, sport: 600, vices: 50, boodschappen: 500, uiteten: 100, shopping: 300 } };
+  const set = smal({ uiteten: 100, shopping: 300 }).set;
   test('gekozen op de grootte van de afwijking, onder gedempt en boven in de kleur voor boven', async ({ page }) => {
     await boot(page, { set }); await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
@@ -256,7 +274,7 @@ test.describe('f. de coachregel staat in de pop-up van de maandafsluiting', () =
 
 test.describe('g. dynamisch met elke boeking', () => {
   test('een boeking op Vices verandert de kaart en de sheet samen', async ({ page }) => {
-    await boot(page); await grip(page);
+    await boot(page, smal()); await grip(page);
     const r = await page.evaluate(() => {
       TX.push({ id: 'vic10', date: '2026-10-06', amount: -40, acc: 'NL01MAIN0000001111', name: 'Coffeeshop', desc: 'BEA, BETAALPAS COFFEESHOP DE DAMPKRING', typ: '', ref: '', src: 'csv', accName: '', refNums: [] });
       TX.forEach(categorize); save(); renderMaand();
@@ -275,7 +293,9 @@ test.describe('h. hoogte op 360 en 390px', () => {
   // Voor v349: kaart 145/127px, Grip 400/382px. Na: de bridge kost de rest.
   // v354: de kop is het stuurgetal (op 360px twee regels) en de regel vaste lasten komt eronder (68/50px):
   // de kaart gaat van 271 naar 338px op 360 en van 260 naar 300px op 390, Grip van 525 naar 592 en van 514 naar 555 (gemeten).
-  const NA = { 360: { kaart: 338, grip: 592 }, 390: { kaart: 300, grip: 555 } };
+  // v355: Sport en Verzekeringen staan met hun variabele deel in de bridge, en de zin noemt ze: de kaart gaat
+  // van 338 naar 348px op 360 en van 300 naar 309 op 390, Grip van 592 naar 602 en van 555 naar 564 (gemeten).
+  const NA = { 360: { kaart: 348, grip: 602 }, 390: { kaart: 309, grip: 564 } };
   for (const w of [360, 390]) test('breedte ' + w, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await boot(page); await grip(page);

@@ -32,7 +32,9 @@ test('a. een tik op Vices toont alleen Vices, met waarom en zijn handelingen, en
 
 /* v354: de rest bevat alleen variabele potjes. Met vier variabele potjes (Vices, Boodschappen, Uit eten,
    Online shopping) staan er drie los en valt Boodschappen in de rest. */
-const VIER = { set: { budgets: { huur: 1450, verzekering: 675, abonnement: 100, sport: 600, vices: 50, boodschappen: 500, uiteten: 100, shopping: 300 } } };
+// v355: de vaste potjes staan op hun incasso (verzekering 150, abonnement 30, sport 73), anders zijn ze gemengd
+// en staat hun variabele rest in de bridge; dan zijn het geen vier variabele potjes meer.
+const VIER = { set: { budgets: { huur: 1450, verzekering: 150, abonnement: 30, sport: 73, vices: 50, boodschappen: 500, uiteten: 100, shopping: 300 } } };
 test('b. een tik op rest toont de variabele potjes in die stap met hun verschil, en die tellen op tot de stap', async ({ page }) => {
   await boot(page, VIER); await grip(page);
   await tik(page, '#gripBrug [data-brugstap="rest"]');

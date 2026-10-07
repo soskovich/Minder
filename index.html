@@ -1726,6 +1726,10 @@ function potRoomLineHTML(potTotal, planned){ const b=potRoomBase();
   return `Samen al je potjes: <b>${euro0(potTotal)}</b>/mnd · dit is je maandbudget, <b style="color:var(--teal)">${euro0(free)}</b> onder je inkomen-limiet${nxt}`;
 }
 // is een categorie grotendeels een vaste last? (budget schaalt dan niet mee met inkomen)
+/* v355: EEN POTJE DAT HELEMAAL VAST IS. Een eigen categorie met aard vast (v351), of een potje dat jij bewust op
+   vast zette (SET.potAard[k], potAardZet()). Geen vaste lijst: wat de app als terugkerende betaling herkent is
+   per boeking vast (isFixed), en daarvoor is deze functie niet nodig. */
+function potHeelVast(k){ const a=(SET.potAard||{})[k]; if(a==='vast') return true; if(a==='wisselend') return false; return !!(CATS[k]&&CATS[k].aard==='vast'); }
 function isFixedCat(k){ return FIXED_CATS.has(k)||k==='vervoer'||k==='zorg'||!!(CATS[k]&&CATS[k].aard==='vast'); }   // v351: een eigen categorie draagt haar aard
 // per-categorie budget = je RAUWE potje (potjes leidend). Sinds het maandtotaal de potjes-som is,
 // verviel de oude neerwaartse scaling naar de inkomens-ruimte; effectief budget = precies wat je instelde.
@@ -7788,18 +7792,19 @@ function maandVooruit(){
   const m=thisYM(); const E=daysElapsed(m); const el=E.elapsed, over=Math.max(E.dim-el,0);
   const P=[]; for(let i=1;i<=VOORUIT_MAANDEN;i++) P.push(valtOpYmPlus(m,-i));
   if(P.some(p=>!txOfMonth(p).length)) return {onbekend:true, m, el, dim:E.dim};
-  /* v354: EEN VASTE LAST REKENT MET WAT VERWACHT IS, NIET MET HET GEMIDDELDE. Een categorie is vast als het
-     schema er een terugkerende betaling in ziet (recurringCats) of als ze van aard vast is (isFixedCat: huur,
-     verzekering, abonnement, een eigen categorie met aard vast). GEMELD op het toestel: Huur (EUR 750) staat
-     niet in recurringCats, dus hij stond als variabel potje in de bridge en zijn gemiddelde over drie maanden
-     maakte er "-EUR 726" van, het grootste deel van het verschil met het budget en geen gedrag. Zo'n categorie
-     telt nu wat er al uit is plus de incasso's die deze maand nog komen, en niets uit het gemiddelde. */
-  let rc=new Set(); try{ rc=recurringCats(); }catch(_){}
-  const vastCat=c=>rc.has(c) || isFixedCat(c);
+  /* v355: VAST IS WAT DE APP ALS TERUGKERENDE BETALING HERKENT, PLUS WAT JIJ BEWUST OP VAST ZETTE. Er is geen
+     vaste lijst meer van categorieen die "van aard vast" zijn (v354 las isFixedCat: huur, verzekering, sport,
+     abonnement); GEMELD stond Sport daardoor met EUR 600 als vaste last terwijl alleen Basic Fit (EUR 73) een
+     herkende incasso is. Een potje heeft nu twee delen: het VASTE deel zijn de herkende incasso's (isFixed, al
+     betaald, plus wat het schema deze maand nog verwacht), en de REST van het potje is variabel en loopt met
+     zijn gewone patroon mee in de bridge (piekInScope laat de herkende incasso's daar al uit). Een potje dat jij
+     op vast zette (potHeelVast: een eigen categorie met aard vast, of je keuze in SET.potAard) is helemaal vast
+     en telt geen gemiddelde. */
+  const heelVast=c=>potHeelVast(c);
   const restCat={}, totP=[], tot0={};
   for(const p of P){ let s=0;
     for(const t of txOfMonth(p)){ if(!piekInScope(t)) continue; const d=+String(t.date).slice(8,10), c=catOf(t), v=uitgaveNorm(t);
-      if(vastCat(c)) continue;
+      if(heelVast(c)) continue;
       if(d>el){ restCat[c]=(restCat[c]||0)+v/VOORUIT_MAANDEN; s+=v; } else tot0[c]=(tot0[c]||0)+v/VOORUIT_MAANDEN; }
     totP.push(s); }
   const T=totals(m), L=(function(){ try{ return monthLiquidity(); }catch(_){ return {fixDue:0, fixDueItems:[]}; } })();
@@ -7809,21 +7814,45 @@ function maandVooruit(){
      potje vast, dan telt hij hier, want het gemiddelde van dat potje telt niet meer. */
   const open={}; let vastExtra=0;
   for(const s of (L.fixDueItems||[])){ if(s.excl || !s.cat) continue; const a=+s.amount||0;
-    if(s.inPotje){ if(!vastCat(s.cat)) continue; vastExtra+=a; }
+    if(s.inPotje){ if(!heelVast(s.cat)) continue; vastExtra+=a; }
     open[s.cat]=(open[s.cat]||0)+a; }
-  const uit=Math.round(T.spendNorm||0), vast=Math.round((+L.fixDue||0)+vastExtra);
+  /* Het vaste deel dat al betaald is, per categorie: de herkende incasso's van deze maand. Het is de aanvulling
+     op de snede van piekInScope() binnen de uitgaven met een norm, dus geen tweede uitdrukking van die snede
+     (v285): wat daar uitvalt omdat het een herkende incasso is, telt hier, en samen is het de categorie. */
+  const fBet={};
+  for(const t of txOfMonth(m)){ const c=catOf(t); if(piekInScope(t) || !CATS[c] || CATS[c].type!=='expense' || geenNorm(c)) continue; fBet[c]=(fBet[c]||0)+uitgaveNorm(t); }
+  /* Een potje dat helemaal vast is en waar deze maand niets betaald is en niets meer verwacht wordt, telt met
+     zijn hele bedrag als verwachte vaste last: geen betaling is geen besparing (v354), dus de uitkomst mag er
+     niet van dalen. De kaart zegt dat er geen betaling verwacht wordt. */
+  let geenExtra=0;
+  for(const k in B){ const bud=+B[k]||0; if(!(bud>0) || !heelVast(k) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k)) continue;
+    if(Math.round((+S[k]||0)+(+open[k]||0))<=0) geenExtra+=bud; }
+  const uit=Math.round(T.spendNorm||0), vast=Math.round((+L.fixDue||0)+vastExtra+geenExtra);
   let restTot=0; for(const c in restCat) restTot+=restCat[c];
   const rest=Math.round(Math.max(restTot,0));
   const projectie=uit+vast+rest, budget=Math.round(T.budget||0);
   const band={min:uit+vast+Math.round(Math.min(...totP)), max:uit+vast+Math.round(Math.max(...totP)), maanden:P.slice().reverse()};
   /* Per potje: wat er al uit is, wat er gemiddeld nog bijkomt, en waar het eindigt. Alleen de potjes
      van varBudget() (een potje, geen terugkerende last), want daar is een grens een keuze. */
-  const potjes=[];
-  for(const k in B){ const bud=+B[k]||0; if(!(bud>0) || vastCat(k) || !CATS[k] || geenNorm(k)) continue;
-    const u=+S[k]||0, r=Math.max(+restCat[k]||0,0);
+  const potjes=[], vastePotjes=[];
+  for(const k in B){ const bud=+B[k]||0; if(!(bud>0) || !CATS[k] || geenNorm(k)) continue;
+    const isUit=CATS[k].type==='expense';
+    if(heelVast(k)){ if(!isUit) continue;
+      /* Een potje dat helemaal vast is: wat er al uit is plus de incasso's die nog komen, en zonder beide het
+         hele potje (geen). */
+      const u=+S[k]||0, o=+open[k]||0, e=u+o, geen=Math.round(e)<=0, eind=geen?bud:e;
+      vastePotjes.push({k, naam:CATS[k].name, bud:Math.round(bud), potje:Math.round(bud), uit:Math.round(u), vast:Math.round(o), eind:Math.round(eind), overR:eind-bud, terug:true, geen, keuze:true});
+      continue; }
+    /* Het vaste deel: herkende incasso's die al betaald zijn plus wat er deze maand nog komt. Het potje draagt
+       dat deel tot zijn bedrag; wat er overblijft is variabel en staat als potje in de bridge. */
+    const fU=Math.max(+fBet[k]||0,0), fO=isUit?(+open[k]||0):0, fE=fU+fO;
+    const vBud=Math.max(bud-fE,0), fBud=bud-vBud;
+    if(fE>0) vastePotjes.push({k, naam:CATS[k].name, bud:Math.round(fBud), potje:Math.round(bud), uit:Math.round(fU), vast:Math.round(fO), eind:Math.round(fE), overR:fE-fBud, terug:true, geen:false, gemengd:vBud>0});
+    const u=(+S[k]||0)-fU, r=Math.max(+restCat[k]||0,0);
     const typ=Math.max(+tot0[k]||0,0), patroon=typ+r;
-    potjes.push({k, naam:CATS[k].name, bud:Math.round(bud), uit:Math.round(u), rest:Math.round(r), eind:Math.round(u+r), eindR:u+r, typisch:Math.round(typ),
-      overR:u+r-bud, patroon:Math.round(patroon)}); }
+    if(!(vBud>0) && Math.round(u+r)===0) continue;
+    potjes.push({k, naam:CATS[k].name, bud:Math.round(vBud), potje:Math.round(bud), vastDeel:Math.round(fE), uit:Math.round(u), rest:Math.round(r), eind:Math.round(u+r), eindR:u+r, typisch:Math.round(typ),
+      overR:u+r-vBud, patroon:Math.round(patroon)}); }
   /* v349: WAAROM EEN POTJE BOVEN ZIJN BEDRAG UITKOMT, en dat zijn twee verschillende dingen. "Past niet in
      je potje" is je gewone maand: wat je in juli tot en met september gemiddeld in de hele maand uitgaf
      (dezelfde dagen plus de rest) is meer dan het potje, ook als er deze maand nog niets uit is. "Loopt
@@ -7838,7 +7867,7 @@ function maandVooruit(){
      uitgeeft dan je gemiddeld zou doen. Een potje dat al leeg is staat onder "Let op" (valtOpSignals). */
   const handelingen=voor.filter(x=>x.bud-x.uit>0).map(x=>{ const grens=Math.floor(x.bud-x.uit);
     return {k:x.k, naam:x.naam, uit:x.uit, typisch:x.typisch, grens, effect:Math.round(x.eind-x.bud), perWeek:over>0?Math.round(grens/over*7):grens,
-      aard:x.aard, bud:x.bud, patroon:x.patroon}; });
+      aard:x.aard, bud:x.bud, patroon:x.patroon, vastDeel:x.vastDeel||0}; });
   /* Verschuiven alleen vanaf een potje dat verwacht onder eindigt, en alleen als de route bestaat:
      een bestaand potje deze maand wijzigen kan alleen via de bijstelling van een signaal (v238). */
   let schuif=null;
@@ -7848,14 +7877,6 @@ function maandVooruit(){
       const ov=(voor.find(x=>x.k===doel.k)||{}).over||0;
       const bedrag=van?Math.floor(Math.min(van.bud-van.eind, ov)/5)*5:0;
       if(van && bedrag>=5 && rec && !rec.actie) schuif={van:van.k, vanNaam:van.naam, naar:doel.k, naarNaam:doel.naam, bedrag, sig:rec.id||valtOpId(m,doel.k)}; } }catch(_){}
-  /* v354: DE VASTE POTJES, elk met wat er al uit is en wat er deze maand nog aan incasso's komt (open). Het
-     verwachte eind is die som, zonder gemiddelde. Komt er niets (geen betaling deze maand en niets meer
-     verwacht), dan draagt het potje `geen`: dan is het potje geen onderschrijding maar een bedrag waar
-     deze maand geen betaling tegenover staat, en dat zegt de kaart in plaats van het als besparing te tonen. */
-  const vastePotjes=[];
-  for(const k in B){ const bud=+B[k]||0; if(!(bud>0) || !vastCat(k) || !CATS[k] || CATS[k].type!=='expense' || geenNorm(k)) continue;
-    const u=+S[k]||0, o=+open[k]||0, eind=u+o;
-    vastePotjes.push({k, naam:CATS[k].name, bud:Math.round(bud), uit:Math.round(u), vast:Math.round(o), eind:Math.round(eind), overR:eind-bud, terug:true, geen:Math.round(eind)<=0}); }
   /* De drie delen van de uitkomst: wat de variabele potjes samen mogen en wat er verwacht uitgaat, hetzelfde
      voor de vaste potjes, en wat er zonder potje uitgaat (het verschil, zodat de drie per constructie optellen
      tot de projectie). */
@@ -7953,12 +7974,14 @@ function dezeMaandKaart(){
    staat, met de grootste afwijking en de reden. Een potje waar deze maand geen betaling tegenover staat
    wordt genoemd als feit en niet als besparing; de sheet (renderGripVast) vraagt of het bedrag nog klopt. */
 function gripVastAfwijking(x){
-  if(x.geen) return `${x.naam}: geen betaling verwacht deze maand · ${euro0(x.bud)} in je budget`;
+  if(x.geen) return `${x.naam}: geen betaling verwacht deze maand · ${euro0(x.bud)} telt mee als vaste last`;
   return `${x.naam}: ${euro0(x.eind)} verwacht, ${euro0(x.bud)} in je budget`;
 }
 function gripVastRegel(V){
   const L=(V&&V.vastePotjes)||[]; if(!L.length) return '';
-  const g=L.filter(x=>Math.round(x.eind)!==x.bud).sort((a,b)=>Math.abs(b.overR)-Math.abs(a.overR) || (a.naam<b.naam?-1:1))[0];
+  /* v355: een potje zonder betaling telt met zijn hele bedrag (geen afwijking in het getal), en de regel noemt
+     het toch eerst: dat er geen betaling komt is het feit dat je moet zien. */
+  const g=L.filter(x=>x.geen || Math.round(x.eind)!==x.bud).sort((a,b)=>(b.geen-a.geen) || Math.abs(b.overR)-Math.abs(a.overR) || (a.naam<b.naam?-1:1))[0];
   return `<div class="row" data-vastregel style="gap:8px;align-items:center;padding:9px 0 0;margin-top:8px;border-top:1px solid var(--line);cursor:pointer" onclick="openGripVast()">
     <span style="flex:1;min-width:0"><span style="font-size:13px">Vaste lasten ${euro0(V.vaste.eind)} van ${euro0(V.vaste.budget)}</span>${g?`<span class="small muted" data-vastgrootste="${esc(g.k)}" style="display:block;margin-top:2px;line-height:1.4">${esc(gripVastAfwijking(g))}</span>`:''}</span>
     <span style="color:var(--teal);font-weight:700">›</span></div>`;
@@ -7968,15 +7991,15 @@ function renderGripVast(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   if(!V || V.onbekend || !(V.vastePotjes||[]).length){ if(document.getElementById('gripVast')) closeSheet(); return; }
   const L=V.vastePotjes.slice().sort((a,b)=>(b.geen-a.geen) || Math.abs(b.overR)-Math.abs(a.overR) || (a.naam<b.naam?-1:1));
-  const rij=x=>`<div class="row" data-vastpotje="${esc(x.k)}"${x.geen?' data-geen':''} style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripPotje('${esc(x.k)}')">
-      <span style="flex:1;min-width:0"><span style="font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}</span><span class="small muted" style="display:block;margin-top:2px;line-height:1.4">${x.geen?`${euro0(x.bud)} in je budget · geen betaling verwacht deze maand`:`${x.uit?`${euro0(x.uit)} betaald`:''}${x.uit&&x.vast?' · ':''}${x.vast?`nog ${euro0(x.vast)} verwacht`:''} · potje ${euro0(x.bud)}`}</span></span>
+  const rij=x=>`<div class="row" data-vastpotje="${esc(x.k)}"${x.geen?' data-geen':''} style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripPotje('${esc(x.k)}','vast')">
+      <span style="flex:1;min-width:0"><span style="font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}</span><span class="small muted" style="display:block;margin-top:2px;line-height:1.4">${x.geen?`geen betaling verwacht deze maand · het potje telt mee`:`${x.uit?`${euro0(x.uit)} betaald`:''}${x.uit&&x.vast?' · ':''}${x.vast?`nog ${euro0(x.vast)} verwacht`:''}${x.gemengd?` · van je potje van ${euro0(x.potje)}, de rest is variabel`:` · potje ${euro0(x.bud)}`}`}</span></span>
       <span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.eind)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
   const geen=L.filter(x=>x.geen);
   const vraag=geen.length?`<div class="small" data-vastvraag style="line-height:1.5;margin-top:10px">Voor ${esc(gripNamen(geen))} komt deze maand geen betaling. Is het bedrag veranderd, zet het potje dan op wat je nu betaalt, vanaf de maand dat het geldt; dan klopt je budget weer.</div>
       ${geen.map(x=>`<button class="btn sec" data-vastaanpassen="${esc(x.k)}" style="width:auto;padding:8px 12px;font-size:13px;margin-top:8px" onclick="openPotForm('${esc(x.k)}')">${esc(x.naam)} aanpassen</button>`).join(' ')}`:'';
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripVast" data-vasteind="${V.vaste.eind}" data-vastbudget="${V.vaste.budget}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Vaste lasten · ${esc(ymFull(V.m))}</div>
-    <div class="small muted" style="line-height:1.5;margin-top:4px">${euro0(V.vaste.eind)} van ${euro0(V.vaste.budget)}: wat er al betaald is plus de incasso's die deze maand nog komen, zonder gemiddelde.</div>
+    <div class="small muted" style="line-height:1.5;margin-top:4px">${euro0(V.vaste.eind)} van ${euro0(V.vaste.budget)}: de herkende incasso's die al betaald zijn plus die deze maand nog komen, zonder gemiddelde. Wat er verder in een potje zit, is variabel en staat in de bridge.</div>
     <div style="margin-top:8px">${L.map(rij).join('')}</div>${vraag}</div>`;
 }
 /* ===== v353: EEN TIK OP EEN STAP OPENT DIE STAP =====
@@ -7990,27 +8013,66 @@ function gripBrugTik(soort,k){
   if(soort==='rest'){ openGripRest(); return; }
   openGripVooruit();
 }
-function openGripPotje(k){ window._gripPotje=k; renderGripPotje(); showSheetBg(); }
+function openGripPotje(k, deel){ window._gripPotje=k; window._gripPotjeDeel=deel==='vast'?'vast':'var'; renderGripPotje(); showSheetBg(); }
 function openGripRest(){ renderGripRest(); showSheetBg(); }
+/* v355: EEN POTJE BEWUST OP VAST ZETTEN. Minder kent geen vaste lijst; een potje zonder herkende incasso (een
+   huur die je overmaakt, een potje waar deze maand niets komt) is variabel tot jij zegt dat het een vaste last
+   is. Eerst het gevolg voor deze maand, in het geheugen doorgerekend en zonder save(); pas de knop schrijft
+   SET.potAard (MECHANISM_SPEC.defaultEffect). Terugzetten gaat langs dezelfde sheet. */
+function potAardSimuleer(k, waarde, fn){
+  const oud=SET.potAard; let r;
+  try{ const n=Object.assign({}, oud||{}); if(waarde) n[k]=waarde; else delete n[k]; SET.potAard=n; _dataGen++; r=fn(); }
+  finally{ SET.potAard=oud; _dataGen++; }
+  return r;
+}
+function potAardDoel(k){ return potHeelVast(k)?(CATS[k]&&CATS[k].aard==='vast'?'wisselend':''):'vast'; }
+function openPotAard(k){ window._potAard=k; renderPotAard(); showSheetBg(); }
+function renderPotAard(){
+  const k=window._potAard; if(!k || !CATS[k]){ closeSheet(); return; }
+  const naarVast=!potHeelVast(k), doel=potAardDoel(k), naam=CATS[k].name, bud=Math.round(+(SET.budgets||{})[k]||0);
+  let V0=null, V1=null; try{ V0=maandVooruit(); V1=potAardSimuleer(k, doel, ()=>maandVooruit()); }catch(_){}
+  const ok=V0&&!V0.onbekend&&V1&&!V1.onbekend;
+  const wat=naarVast
+    ? `Dan telt ${esc(naam)} niet meer in de bridge met wat je er gewoonlijk uitgeeft, maar als vaste last: wat er betaald is plus de incasso's die nog komen. Komt er deze maand niets, dan telt het hele potje van ${euro0(bud)} mee, zodat geen betaling niet als besparing leest.`
+    : `Dan telt ${esc(naam)} weer als variabel potje in de bridge, met wat je er gewoonlijk uitgeeft. Herkende incasso's blijven het vaste deel.`;
+  const gev=ok?`Deze maand: variabel ${euro0(V0.variabel.eind)} van ${euro0(V0.variabel.budget)} wordt ${euro0(V1.variabel.eind)} van ${euro0(V1.variabel.budget)}, vaste lasten ${euro0(V0.vaste.eind)} wordt ${euro0(V1.vaste.eind)}, en de uitkomst ${V1.projectie===V0.projectie?`blijft rond ${euro0(V1.projectie)}`:`gaat van rond ${euro0(V0.projectie)} naar rond ${euro0(V1.projectie)}`}.`:'';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="potAard" data-cat="${esc(k)}" data-doel="${esc(doel||'leeg')}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(naam)}: ${naarVast?'als vaste last tellen':'niet meer als vaste last'}</div>
+    <div class="small" style="line-height:1.5;margin-top:6px">${wat}</div>
+    ${gev?`<div class="small" data-potaardgevolg style="color:var(--mut2);line-height:1.5;margin-top:6px">${gev}</div>`:''}
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-potaardzet style="flex:1" onclick="potAardZet('${esc(k)}')">${naarVast?'Als vaste last tellen':'Als variabel tellen'}</button><button class="btn sec" onclick="closeSheet()">Terug</button></div></div>`;
+}
+function potAardZet(k){
+  if(!CATS[k]) return;
+  const doel=potAardDoel(k);   // opnieuw gelezen (v319)
+  SET.potAard=Object.assign({}, SET.potAard||{}); if(doel) SET.potAard[k]=doel; else delete SET.potAard[k];
+  save(); window._potAard=null; closeSheet(); render();
+  toast(`${ICON('check')} ${CATS[k].name} telt ${potHeelVast(k)?'als vaste last':'als variabel potje'}`);
+}
 const gripAllesLink=`<div class="small" data-allepotjes style="color:var(--teal);cursor:pointer;font-weight:600;padding-top:10px;margin-top:10px;border-top:1px solid var(--line)" onclick="openGripVooruit()">Alle potjes ›</div>`;
 function gripVerschilTekst(d){ return d>0?`${euro0(d)} boven`:(d<0?`${euro0(-d)} onder`:'precies'); }
 function renderGripPotje(){
   const k=window._gripPotje; let V=null; try{ V=maandVooruit(); }catch(_){}
-  const x=V&&!V.onbekend?(V.potjes.find(p=>p.k===k)||(V.vastePotjes||[]).find(p=>p.k===k)):null;
+  /* v355: een gemengd potje staat twee keer in maandVooruit(): zijn variabele deel in de bridge en zijn vaste
+     deel in de vaste lasten. De ingang zegt welk deel de sheet toont. */
+  const vp=V&&!V.onbekend?(V.vastePotjes||[]).find(p=>p.k===k):null, pp=V&&!V.onbekend?V.potjes.find(p=>p.k===k):null;
+  const x=window._gripPotjeDeel==='vast'?(vp||pp):(pp||vp);
   if(!x){ if(document.getElementById('gripPotje')) closeSheet(); return; }
   const dagen=`${V.el} ${V.el===1?'dag':'dagen'}`, d=x.eind-x.bud;
   if(x.terug){
     /* v354: een vast potje rekent met wat er betaald is en wat er nog aan incasso's komt, zonder gemiddelde.
        Komt er niets, dan zegt de sheet dat, en het verschil is dan geen onderschrijding. */
     const stand=x.geen
-      ? `Er is deze maand niets betaald en er wordt geen incasso meer verwacht. ${euro0(x.bud)} staat in je budget.`
-      : `${euro0(x.uit)} betaald in ${dagen} · nog te betalen ${euro0(x.vast)} · potje ${euro0(x.bud)}`;
+      ? `Er is deze maand niets betaald en er wordt geen incasso meer verwacht. Het potje van ${euro0(x.bud)} telt mee als verwachte vaste last.`
+      : `${euro0(x.uit)} betaald in ${dagen} · nog te betalen ${euro0(x.vast)} · ${x.gemengd?`vast deel van je potje van ${euro0(x.potje)}`:`potje ${euro0(x.bud)}`}`;
     $('#sheet').innerHTML=`<div class="grab"></div><div id="gripPotje" data-potje="${esc(k)}" data-verschil="${d}" data-terug${x.geen?' data-geen':''}>
       <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}</div>
       <div class="small" data-potjestand style="line-height:1.5;margin-top:6px">${stand}</div>
-      ${x.geen?'':`<div class="small" style="line-height:1.5;margin-top:4px">Verwacht deze maand ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>`}
+      ${x.geen||x.gemengd?'':`<div class="small" style="line-height:1.5;margin-top:4px">Verwacht deze maand ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>`}
+      ${x.gemengd?`<div class="small" data-gemengd style="line-height:1.5;margin-top:4px">De herkende incasso's zijn het vaste deel. De andere ${euro0(x.potje-x.bud)} van je potje is variabel en staat in de bridge met wat je er gewoonlijk uitgeeft.</div>`:''}
       <div class="small" data-potjewaarom style="line-height:1.5;margin-top:8px">${x.geen?'Geen betaling is geen besparing: is het bedrag veranderd, zet het potje dan op wat je nu betaalt, vanaf de maand dat het geldt.':'Een vaste last: het verwachte bedrag is wat er al betaald is plus de incasso\'s die deze maand nog komen. Een grens voor de rest van de maand past hier niet; het bedrag van het potje zelf kun je aanpassen.'}</div>
       <div class="small" data-potjeaanpassen style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:10px" onclick="openPotForm('${esc(k)}')">Potje aanpassen ›</div>
+      ${x.keuze?`<div class="small" data-potaardvraag="wisselend" style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:8px" onclick="openPotAard('${esc(k)}')">Niet meer als vaste last tellen ›</div>`:''}
       <div class="small" data-allevast style="color:var(--teal);cursor:pointer;font-weight:600;padding-top:10px;margin-top:10px;border-top:1px solid var(--line)" onclick="openGripVast()">Alle vaste lasten ›</div></div>`;
     return;
   }
@@ -8031,8 +8093,9 @@ function renderGripPotje(){
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}</div>
     <div class="small" data-potjestand style="line-height:1.5;margin-top:6px">${euro0(x.uit)} uitgegeven in ${dagen} · gewoonlijk ${euro0(x.typisch)} in dezelfde dagen · potje ${euro0(x.bud)}</div>
     <div class="small" style="line-height:1.5;margin-top:4px">Verwacht eind ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>
+    ${x.vastDeel>0?`<div class="small" data-gemengd style="line-height:1.5;margin-top:4px">Van je potje van ${euro0(x.potje)} is ${euro0(x.vastDeel)} vaste last (herkende incasso's). Deze stap gaat over de ${euro0(x.bud)} daarnaast.</div>`:''}
     <div class="small" data-potjewaarom style="line-height:1.5;margin-top:8px">${waarom}</div>
-    ${doen}${gripAllesLink}</div>`;
+    ${doen}${x.vastDeel>0?'':`<div class="small" data-potaardvraag="vast" style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:10px" onclick="openPotAard('${esc(k)}')">Is dit een vaste last? ›</div>`}${gripAllesLink}</div>`;
 }
 /* De rest-stap: de potjes die niet los staan, elk met zijn verschil, en wat er verder in zit (vaste lasten
    en uitgaven zonder potje) als een regel, zodat de regels optellen tot de stap. */
@@ -8100,7 +8163,7 @@ function openGrensRest(k){
   const h=V&&!V.onbekend?V.handelingen.find(x=>x.k===k):null; if(!h){ closeSheet(); return; }
   $('#sheet').innerHTML=`<div class="grab"></div><div id="grensRest" data-cat="${esc(k)}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Grens op ${esc(h.naam)}</div>
-    <div class="small" style="line-height:1.5;margin-top:6px">Je gaf deze maand ${euro0(h.uit)} uit aan ${esc(h.naam.toLowerCase())}. Met nog ${euro0(h.grens)} tot ${V.dim} ${esc(ymFull(V.m))} blijf je binnen je potje van ${euro0(h.uit+h.grens)}: ongeveer ${euro0(h.perWeek)} per week.</div>
+    <div class="small" style="line-height:1.5;margin-top:6px">Je gaf deze maand ${euro0(h.uit)} uit aan ${esc(h.naam.toLowerCase())}. Met nog ${euro0(h.grens)} tot ${V.dim} ${esc(ymFull(V.m))} blijf je binnen je potje van ${euro0(h.uit+h.grens+(h.vastDeel||0))}: ongeveer ${euro0(h.perWeek)} per week.</div>
     <div class="small" style="color:var(--mut2);line-height:1.5;margin-top:6px">Dat scheelt rond ${euro0(h.effect)} tegen wat je in de rest van de maand gemiddeld uitgaf. De grens wordt een afspraak en staat onder Deze maand.</div>
     <div class="row" style="gap:8px;margin-top:12px"><button class="btn" style="flex:1" onclick="grensRestZet('${esc(k)}')">Grens zetten</button><button class="btn sec" onclick="openGripVooruit()">Terug</button></div></div>`;
   showSheetBg();
@@ -8109,7 +8172,7 @@ function grensRestZet(k){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const h=V&&!V.onbekend?V.handelingen.find(x=>x.k===k):null; if(!h || !CATS[k]) return;   // opnieuw gelezen (v319)
   const m=thisYM();
-  afspraakMaak({soort:'grens', cat:k, bedrag:h.uit+h.grens, van:m, tot:m, wat:`Grens ${CATS[k].name}: nog ${euro0(h.grens)} tot ${V.dim} ${ymFull(m)}`});
+  afspraakMaak({soort:'grens', cat:k, bedrag:h.uit+h.grens+(h.vastDeel||0), van:m, tot:m, wat:`Grens ${CATS[k].name}: nog ${euro0(h.grens)} tot ${V.dim} ${ymFull(m)}`});
   save(); closeSheet(); render(); toast(`${ICON('check')} Afspraak: nog ${euro0(h.grens)} aan ${CATS[k].name.toLowerCase()}`);
 }
 
@@ -8157,14 +8220,15 @@ function potjeMaandVloer(k, maanden, vanaf){
 function potjeBijstelVoorstel(k){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   const h=V&&!V.onbekend?V.handelingen.find(x=>x.k===k && x.aard==='pastniet'):null; if(!h) return null;
-  const B=plannedBudgets(), van=Math.round(+B[k]||h.bud), naar=ceil5(h.patroon), meer=naar-van;
+  /* v355: bij een gemengd potje is het voorstel het vaste deel plus je gewone variabele maand. */
+  const B=plannedBudgets(), van=Math.round(+B[k]||h.bud), naar=ceil5((h.vastDeel||0)+h.patroon), meer=naar-van;
   if(!(meer>0)) return null;
   const kand=Object.keys(B).filter(x=>x!==k && +B[x]>0 && CATS[x] && CATS[x].type==='expense' && !geenNorm(x))
     .map(x=>{ const bud=Math.round(+B[x]), Vl=potjeMaandVloer(x, V.band.maanden, nextYM(SET.budgetMonth||thisYM()));
       return {k:x, naam:CATS[x].name, bud, gewoon:Vl.gewoon, vloer:Vl.vloer, vloerMaand:Vl.maand, vloerPosten:Vl.posten, ruimte:bud-Vl.vloer}; })
     .filter(x=>x.ruimte>=meer)
     .sort((a,b)=>(b.ruimte-a.ruimte) || a.naam.localeCompare(b.naam,'nl'));
-  return {k, naam:h.naam, patroon:h.patroon, bud:h.bud, van, naar, meer, kand, tot:Math.round(plannedTotalBudget()),
+  return {k, naam:h.naam, patroon:h.patroon, bud:h.bud, vastDeel:h.vastDeel||0, van, naar, meer, kand, tot:Math.round(plannedTotalBudget()),
     vanaf:nextYM(SET.budgetMonth||thisYM()), maanden:V.band.maanden};
 }
 function potjeBijstelDek(){ return window._bijstelDek||null; }
@@ -8183,7 +8247,7 @@ function openPotjeBijstel(k, dek){
       : `Geen ander potje heeft ${euro0(P.meer)} over boven wat je er gewoonlijk uitgeeft, ook in de maand waarin een kwartaal- of jaarpost valt, dus er valt niets te verschuiven. Een grens zetten kan wel.`);
   $('#sheet').innerHTML=`<div class="grab"></div><div id="potjeBijstel" data-cat="${esc(k)}" data-naar="${P.naar}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(P.naam)}-potje bijstellen</div>
-    <div class="small" style="line-height:1.5;margin-top:6px">In ${esc(opsomming(P.maanden.map(x=>ymFull(x))))} gaf je gemiddeld ${euro0(P.patroon)} per maand uit aan ${esc(P.naam.toLowerCase())}, en je potje is ${euro0(P.bud)}. Met een potje van ${euro0(P.naar)} past je gewone maand erin; daarvoor levert een ander potje ${euro0(P.meer)} in.</div>
+    <div class="small" style="line-height:1.5;margin-top:6px">In ${esc(opsomming(P.maanden.map(x=>ymFull(x))))} gaf je gemiddeld ${euro0(P.patroon)} per maand uit aan ${esc(P.naam.toLowerCase())}${P.vastDeel?` naast ${euro0(P.vastDeel)} vaste last`:''}, en je potje is ${euro0(P.van)}. Met een potje van ${euro0(P.naar)} past je gewone maand erin; daarvoor levert een ander potje ${euro0(P.meer)} in.</div>
     <div class="hlabel" style="margin:12px 0 4px">Waar komt het vandaan</div>
     ${P.kand.map(rij).join('')}
     <div class="small" data-bijstelgevolg style="color:var(--mut2);line-height:1.5;margin-top:8px">${gevolg}</div>

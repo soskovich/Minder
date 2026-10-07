@@ -86,7 +86,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   een oorzaakzin, met de lopende afspraken; een tik op de kop, budget of de uitkomst opent de sheet met de band als een regel en "Wat je
   deze maand kunt doen", `renderGripVooruit()`, sinds `v352` zonder tweede bridge; sinds `v353` opent een tik
   op een potje-stap alleen dat potje en op de rest-stap de potjes daarin, `gripBrugTik()`; sinds `v354` gaat de bridge alleen over de variabele potjes, staat het stuurgetal in de kop en de
-  vaste lasten als een regel eronder, `gripVastRegel()`, `renderGripVast()`); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
+  vaste lasten als een regel eronder, `gripVastRegel()`, `renderGripVast()`; sinds `v355` is vast wat de app herkent plus wat je op vast zette, en een potje met een herkende incasso is gemengd); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
   <maand>" is opgegaan). Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
   `renderAfsluitSheet()`), geen kaart. Het logboek (`logboek`, `renderLogboek()`) draagt sinds `v340` de
   afgesloten maanden als tijdlijn (`logTijdlijn()`), met per maand de bridge, de antwoorden en de
@@ -122,6 +122,32 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **VAST IS WAT DE APP ALS TERUGKERENDE BETALING HERKENT, PLUS WAT JIJ BEWUST OP VAST ZETTE; EEN POTJE KAN GEMENGD
+  ZIJN** (`v355`, gevraagd door de gebruiker): de vaste lijst van `v354` (`isFixedCat()` in `maandVooruit()`) is weg.
+  HET VASTE DEEL van een potje is wat `isFixed()` deze maand per boeking herkent (al betaald, `fBet`) plus de
+  incasso's uit `fixDueItems` die nog komen (`open`); het potje draagt dat deel tot zijn bedrag, en DE REST IS
+  VARIABEL: hij staat als potje in de bridge met `bud` = potje min het vaste deel, `uit` = de uitgave zonder de
+  herkende incasso's, en het gewone patroon uit `piekInScope()` (dat de herkende incasso's al uitlaat, dus er telt
+  niets dubbel). Zo'n potje staat twee keer in `maandVooruit()`: in `potjes` met `vastDeel` en `potje`, en in
+  `vastePotjes` met `gemengd`. `openGripPotje(k, 'vast')` opent het vaste deel, zonder tweede argument het
+  variabele.
+  HELEMAAL VAST is een potje alleen als je het bewust zo zette: `potHeelVast(k)` leest `SET.potAard[k]` ('vast' of
+  'wisselend') en anders de aard van een eigen categorie (v351). Zo'n potje telt geen gemiddelde, en zonder
+  betaling en zonder verwachte incasso telt het met ZIJN HELE BEDRAG als verwachte vaste last (`geen`, `geenExtra` in
+  de uitkomst): geen betaling is geen besparing. De regel zegt dan "geen betaling verwacht deze maand · EUR 750 telt
+  mee als vaste last" en wordt eerst genoemd. DE KEUZE (`openPotAard()`, `potAardZet()`) staat in de sheet van een
+  variabel potje zonder herkende incasso ("Is dit een vaste last?") en in die van een vast potje ("Niet meer als
+  vaste last tellen"); eerst het gevolg voor deze maand (`potAardSimuleer()`, zonder `save()`), en pas de knop
+  schrijft. `isFixedCat()` ZELF IS NIET AANGERAAKT: de coachlaag leest hem voor andere vragen.
+  BIJSTELLEN EN EEN GRENS rekenen bij een gemengd potje met het vaste deel: het voorstel is
+  `ceil5(vastDeel + patroon)` en de grens (een afspraak op de hele categorie) is `uit + grens + vastDeel`.
+  GEMETEN op de stand van 6 oktober (`deze-maand-stand.js`): de uitkomst blijft EUR 2.672; variabel EUR 694 van
+  EUR 1.672 (was 694 van 550), vaste lasten EUR 1.703 van 1.703 (huur 1.450, verzekering 150, abonnement 30, sport
+  73); de bridge 1.672, Sport -527, Verzekeringen -525, Vices +83, rest -9, 694. Boodschappen (+61) valt daarmee in
+  de rest. Kaart 348/309px en Grip 602/564px op 360/390. Op de stand van het toestel (`vast-variabel-stand.js`):
+  Vervoer is EUR 537 vast (lease) en EUR 63 variabel (tanken, verwacht 145, past niet); Huur zonder keuze staat met
+  -750 in de bridge, met de keuze vast telt hij 750 in de vaste lasten en gaat de uitkomst van 1.723 naar 2.473. De
+  sheet vaste lasten is 449/413px.
 - **DEZE MAAND OP GRIP SCHEIDT VAST EN VARIABEL, EN EEN VAST POTJE REKENT MET WAT VERWACHT IS** (`v354`, gevraagd
   door de gebruiker, mockup "vast en variabel"): GEMETEN op het toestel kwam bijna het hele verschil met het budget van
   Huur (-EUR 726), een potje van EUR 750 zonder betaling. `maandVooruit()` noemt een categorie vast als
@@ -6365,7 +6391,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v354` → `minder-v355`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v355` → `minder-v356`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6384,7 +6410,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353` en `v354` naar `minder-v354`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354` en `v355` naar `minder-v355`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

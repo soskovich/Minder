@@ -69,7 +69,8 @@ for (const w of [360, 390]) {
 }
 
 test('d. de as van de bridge op de kaart begint bij de ondergrens zonder bedrag erbij', async ({ page }) => {
-  await bootBrug(page);
+  // v355: de vaste potjes op hun incasso, zodat de bridge alleen Vices en Boodschappen draagt (550 naar 694)
+  await bootBrug(page, { set: { budgets: { huur: 1450, verzekering: 150, abonnement: 30, sport: 73, vices: 50, boodschappen: 500 } } });
   const r = await page.evaluate(() => { closeSheet(); go('maand'); const a = document.querySelector('#gripBrug [data-asbasis]');
     return { basis: a ? +a.dataset.asbasis : null, label: a ? a.innerText : null, kaart: document.getElementById('gripBrug').innerText }; });
   // v354: de bridge gaat over de variabele potjes (550 naar 694), dus de as begint bij 450

@@ -4,7 +4,10 @@
    variabele potjes (boodschappen, vices, uit eten). De boekingen van juni tot en met september geven de
    vooruitblik zijn drie afgeronde maanden. GECONSTRUEERD in de vorm van het toestel, niet de getallen zelf:
    alleen het potje Huur van EUR 750 zonder betaling, de lease van EUR 537 en Zilveren Kruis van EUR 164 komen
-   uit de melding. */
+   uit de melding.
+   v355: VERVOER IS GEMENGD, zoals op het toestel: de lease is een herkende incasso (het vaste deel) en tanken
+   (Shell, EUR 45 op de 9e en de 23e, en EUR 55 op 2 oktober) is het variabele deel. HUUR heeft geen herkende
+   betaling en is dus variabel tot je hem bewust op vast zet (o.set.potAard). */
 const { pinDatum } = require('./vaste-dag');
 
 const MAIN = 'NL01MAIN0000001111', SPAAR = 'NL01SAVE0000004323';
@@ -24,8 +27,11 @@ function seed(o) {
     add('ah1' + m, m + '-03', -79, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
     add('ah2' + m, m + '-20', -480, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
     add('lon' + m, m + '-22', -140, 'Restaurant Lona', 'BEA, BETAALPAS RESTAURANT LONA');
+    add('sh1' + m, m + '-09', -45, 'Shell', 'BEA, BETAALPAS SHELL TANKSTATION');   // v355: tanken in hetzelfde potje als de lease
+    add('sh2' + m, m + '-23', -45, 'Shell', 'BEA, BETAALPAS SHELL TANKSTATION');
   }
   add('ah10', '2026-10-03', -49, 'Albert Heijn', 'BEA, BETAALPAS ALBERT HEIJN');
+  add('sh10', '2026-10-02', -55, 'Shell', 'BEA, BETAALPAS SHELL TANKSTATION');
   add('lon10', '2026-10-04', -75, 'Restaurant Lona', 'BEA, BETAALPAS RESTAURANT LONA');
   (o.extraTx || []).forEach((t) => add(t.id, t.date, t.amount, t.name, t.desc));
   const set = Object.assign({

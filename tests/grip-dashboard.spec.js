@@ -218,8 +218,10 @@ for (const w of [360, 390]) test(`l. hoogte van Grip op ${w}px`, async ({ page }
   expect(h.tegels).toBe(171);
   expect(h.tijd).toBe(129);
   // v354: de kop is het stuurgetal en de regel vaste lasten komt onder de bridge: 411px op 360 en 373 op 390
-  expect(h.deze).toBe(w === 360 ? 411 : 373);
-  expect(h.totaal).toBe(w === 360 ? 817 : 778);
+  // v355: Abonnementen heeft hier geen herkende incasso en is dus variabel; de regel vaste lasten heeft dan geen
+  // afwijking om te noemen (Huur EUR 900 van 900): 374px op 360 en 336 op 390 (gemeten)
+  expect(h.deze).toBe(w === 360 ? 374 : 336);
+  expect(h.totaal).toBe(w === 360 ? 780 : 741);
 });
 
 /* De handelingen. Uit eten heeft een potje van 150; in juli, augustus en september ging er na dag 4
