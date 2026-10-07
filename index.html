@@ -13926,7 +13926,7 @@ function savePotje(k,del){
    boekingen komen er via jouw keuze of een regel die je zelf maakt.
    EEN BEDRAG VANAF EEN MAAND: deze maand schrijft SET.budgets, volgende maand SET.budgetsNext, en elke
    latere maand SET.budgetPlan[ym]. rolloverBudgets() werkt die laatste af, ook over overgeslagen maanden.
-   Eerdere maanden veranderen niet: een afgesloten maand staat in SET.budgetHist (v309) en de bridge, het
+   Eerdere maanden veranderen niet: een afgesloten maand staat bewaard (v309, maandPotjes()) en de bridge, het
    logboek en de staaf lezen daar (maandPotjes()).
    NIETS GROEIT ZONDER KEUZE (v238): komt er een potje bij of gaat een potje omhoog, dan levert EEN ander
    potje in (ondergrens: potjeMaandVloer(), en in de lopende maand ook wat er al uit is) of je verhoogt je
@@ -14054,7 +14054,7 @@ function renderPotArchief(){
   const D=window._potArch||{}, k=D.k, c=CATS[k]; if(!c) return;
   const ms=potMaandOpties(), bud=D.vanaf?Math.round(+budgetVoorMaand(D.vanaf)[k]||0):0;
   let tot0=0, tot1=0; if(D.vanaf){ const B=budgetVoorMaand(D.vanaf); for(const x in B) tot0+=+B[x]||0; tot1=tot0-bud; }
-  const vorige=valtOpYmPlus(potHuidigeMaand(),-1), hist=(SET.budgetHist||{})[vorige];
+  const vorige=valtOpYmPlus(potHuidigeMaand(),-1), hist=maandPotjes(vorige).bron==='bewaard';   // de ene lezer van de bewaarde bedragen (v335)
   const gevolg=D.vanaf
     ? `Vanaf ${esc(ymKort(D.vanaf))} telt ${esc(c.name)} niet meer mee: je maandbudget gaat van ${euro0(tot0)} naar ${euro0(tot1)}. ${hist?`${esc(ymFull(vorige).charAt(0).toUpperCase()+ymFull(vorige).slice(1))} en eerdere maanden blijven zoals ze waren, in het logboek en de bridge.`:'Eerdere maanden zonder bewaarde potjebedragen tonen je huidige potjes.'} Komt er daarna nog een boeking in ${esc(c.name)}, dan vraagt Minder waar hij heen moet.`
     : 'Kies vanaf welke maand.';
