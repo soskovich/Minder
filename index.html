@@ -7783,7 +7783,7 @@ function renderGripLetOp(){
    per categorie kan de som erbuiten vallen.
    ONBEKEND BLIJFT ONBEKEND (v59/v73/v173): zonder drie afgeronde maanden met boekingen is er geen
    vooruitblik, en dan zegt de kaart dat in plaats van een getal te verzinnen. */
-const VOORUIT_MAANDEN=3, VOORUIT_LOS=4;
+const VOORUIT_MAANDEN=3;
 function maandVooruit(){
   const m=thisYM(); const E=daysElapsed(m); const el=E.elapsed, over=Math.max(E.dim-el,0);
   const P=[]; for(let i=1;i<=VOORUIT_MAANDEN;i++) P.push(valtOpYmPlus(m,-i));
@@ -7913,29 +7913,9 @@ function dezeMaandKaart(){
   return `<div class="card" id="gripDezeMaand">${kop}${boven}${af?`<div style="margin-top:8px">${af}</div>`:''}</div>`;
 }
 function openGripVooruit(){ renderGripVooruit(); showSheetBg(); }
-/* De waterval: donker wat er al uit is, de vaste lasten die nog komen, per potje wat er gemiddeld nog
-   bijkomt (rood als het potje daarmee boven zijn bedrag eindigt), en de rest. Rechts de band van je
-   laatste drie maanden. De sheet rekent opnieuw (v319). */
-function vooruitGrafiek(V){
-  const st=[{lab:'uitgegeven', w:V.uit, kl:'var(--ref)', soort:'uit'}, {lab:'vast nog', w:V.vast, kl:'var(--bar)', soort:'vast'}];
-  const los=V.potjes.slice().sort((a,b)=>b.rest-a.rest || (a.naam<b.naam?-1:1)).filter(x=>x.rest>0).slice(0,VOORUIT_LOS);
-  let losSom=0; for(const x of los){ st.push({lab:x.naam, w:x.rest, kl:x.over>0?'var(--red)':'var(--mut2)', soort:'potje', k:x.k}); losSom+=x.rest; }
-  const ov=V.rest-losSom; if(ov) st.push({lab:'overige', w:ov, kl:'var(--mut2)', soort:'overig'});
-  const PH=112; let run=0; const kol=st.map(s=>{ const van=run; run+=s.w; return {s, lo:Math.min(van,run), hi:Math.max(van,run), na:run}; });
-  kol.push({s:{lab:ymFull(V.m).slice(0,3), w:V.projectie, kl:'var(--teal)', soort:'eind'}, lo:0, hi:V.projectie, na:V.projectie});
-  const top=Math.max(V.projectie, V.budget, V.band.max, 1)*1.14, y=v=>PH-(v/top*PH);
-  const lijn=V.budget>0?`<i data-budgetlijn style="position:absolute;left:0;right:0;top:${y(V.budget).toFixed(1)}px;border-top:1px dashed var(--amber);opacity:.8"></i>`:'';
-  const n=kol.length;
-  return `<div style="position:relative;margin-top:10px">${lijn}<div style="display:flex;gap:4px">${kol.map((c,i)=>{
-    const yt=y(c.hi), h=Math.max(y(c.lo)-yt,2), eind=c.s.soort==='eind';
-    const val=(eind||c.s.soort==='uit')?euro0(c.s.w):`+${euro0(c.s.w)}`;
-    const band=eind?`<i data-band style="position:absolute;right:0;width:4px;top:${y(V.band.max).toFixed(1)}px;height:${Math.max(y(V.band.min)-y(V.band.max),2).toFixed(1)}px;background:var(--teal);opacity:.45;border-radius:2px"></i>`:'';
-    const verb=i<n-1?`<i style="position:absolute;left:88%;width:calc(24% + 4px);top:${y(c.na).toFixed(1)}px;border-top:1px dashed var(--ref)"></i>`:'';
-    return `<div data-vstap="${c.s.soort}" data-vwaarde="${c.s.w}" style="flex:1 1 0;min-width:0"><div style="position:relative;height:${PH}px">
-      <span style="position:absolute;left:50%;transform:translateX(-50%);bottom:${(PH-yt+2).toFixed(1)}px;font-size:9px;font-weight:700;white-space:nowrap">${val}</span>
-      <i style="position:absolute;left:12%;right:12%;top:${yt.toFixed(1)}px;height:${h.toFixed(1)}px;background:${c.s.kl};border-radius:3px"></i>${verb}${band}</div>
-      <div style="font-size:9px;line-height:1.2;color:var(--lab);text-align:center;margin-top:4px;overflow-wrap:anywhere">${esc(c.s.lab)}</div></div>`; }).join('')}</div></div>`;
-}
+/* v352: de sheet achter Deze maand draagt geen tweede bridge meer (de waterval van uitgegeven, vast nog en
+   per potje, vooruitGrafiek()). De kaart draagt de bridge al; de sheet houdt de band als een regel en "Wat je
+   deze maand kunt doen". De sheet rekent opnieuw (v319). */
 function renderGripVooruit(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   if(!V || V.onbekend){ if(document.getElementById('gripVooruit')) closeSheet(); return; }
@@ -7960,9 +7940,7 @@ function renderGripVooruit(){
       <button class="btn sec" style="width:auto;padding:8px 12px;white-space:nowrap;font-size:13px" onclick="valtOpPotjeSheet('${esc(V.schuif.sig)}')">Potjes verschuiven</button></div>`:'';
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripVooruit" data-projectie="${V.projectie}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(Mn)} vooruit</div>
-    <div class="small muted" style="margin-top:2px">rond ${euro0(V.projectie)}${V.budget>0?` · ${gripVerschil(V.projectie,V.budget)} · budget ${euro0(V.budget)}`:''}</div>
-    ${vooruitGrafiek(V)}
-    <div class="small" style="color:var(--mut2);line-height:1.5;margin-top:8px">Donker is wat er al uit is. Per potje wat je in de rest van de maand gemiddeld uitgaf in ${esc(banden)}; rood eindigt daarmee boven zijn potje. Rechts het laagste en het hoogste van die drie maanden voor dit deel van de maand: <span data-bandtekst>${euro0(V.band.min)} tot ${euro0(V.band.max)}</span>.</div>
+    <div class="small" data-bandregel style="color:var(--mut2);line-height:1.5;margin-top:4px">Rond ${euro0(V.projectie)}; de rest van de maand lag in ${esc(banden)} tussen <span data-bandtekst>${euro0(V.band.min)} en ${euro0(V.band.max)}</span>.</div>
     ${hand||sch?`<div class="hlabel" style="margin:14px 0 0">Wat je deze maand kunt doen</div>${hand}${sch}
       ${V.metGrenzen!=null?`<div class="small" data-metgrenzentot style="padding-top:9px;border-top:1px solid var(--line);font-weight:600">Met ${V.handelingen.length===1?'deze grens':(V.handelingen.length===2?'beide grenzen':'alle '+V.handelingen.length+' grenzen')} rond ${euro0(V.metGrenzen)}${V.budget>0?` · ${gripVerschil(V.metGrenzen,V.budget)}`:''}</div>`:''}
       <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);line-height:1.45;margin-top:6px">Niets wordt vanzelf ingesteld. Een grens die je kiest wordt een afspraak.</div>`
@@ -16758,14 +16736,15 @@ function brugGrafiek(Br){
     lv.push(hi); return {s, lo, hi, na:run};
   });
   /* v349: een as die niet bij nul begint (Br.basis). Een balk van begin of eind staat dan op die
-     ondergrens en niet op nul, en de ondergrens staat links op de as (data-asbasis), want een staaf
-     die bij EUR 2.000 begint leest anders als een staaf van nul. */
+     ondergrens en niet op nul, en de ondergrens staat links op de as (data-asbasis).
+     v352: zonder bedrag erbij, op keuze van de gebruiker: het label stond op 360px half buiten de kaart en
+     de uitkomst staat al als getal boven de bridge. De as zelf (de lijn) en het attribuut blijven. */
   const basis=Math.max(+Br.basis||0,0);
   const top=basis+(Math.max(...lv,1)-basis)*1.14;
   const y=v=>PH-((Math.max(v,basis)-basis)/(top-basis)*PH);
   const kleur=s=>s.soort==='begin'?(Br.tegen==='vorige'?'var(--bar)':'var(--ref)'):(s.soort==='eind'?'var(--teal)':(s.waarde>0?'var(--red)':'var(--mut2)'));
   const n=kol.length;
-  const as=basis>0?`<div data-asbasis="${basis}" style="flex:0 0 auto;position:relative;height:${PH}px;border-right:1px solid var(--ref)"><span style="position:absolute;right:3px;bottom:-5px;font-size:9px;color:var(--lab);white-space:nowrap">${euro0(basis)}</span></div>`:'';
+  const as=basis>0?`<div data-asbasis="${basis}" style="flex:0 0 auto;position:relative;height:${PH}px;border-right:1px solid var(--ref)"></div>`:'';
   return `<div class="brug" data-brug style="display:flex;gap:4px;margin-top:8px">${as}${kol.map((c,i)=>{
     const yt=y(c.hi), h=Math.max(y(c.lo)-yt,2);
     const val=(c.s.soort==='begin'||c.s.soort==='eind')?euro0(c.s.waarde):brugTeken(c.s.waarde);

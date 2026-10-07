@@ -117,11 +117,12 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
   expect(r.tekst).toContain('€131 per maand naar je reserveringen tot november');
   expect(r.afspraak).toBe(1);
   await page.evaluate(() => openGripVooruit());
+  // v352: de sheet draagt geen tweede bridge meer, alleen de band als regel (grip-deze-maand-sheet.spec.js)
   const w = await page.evaluate(() => { const g = document.getElementById('gripVooruit');
-    return { stappen: [...g.querySelectorAll('[data-vstap]')].map((e) => [e.dataset.vstap, +e.dataset.vwaarde]), band: g.querySelector('[data-bandtekst]').innerText }; });
-  const som = w.stappen.filter((s) => s[0] !== 'eind').reduce((a, s) => a + s[1], 0);
-  expect(som).toBe(r.V.projectie);                           // de waterval eindigt op het getal van de kaart
-  expect(w.stappen[w.stappen.length - 1]).toEqual(['eind', r.V.projectie]);
+    return { stappen: g.querySelectorAll('[data-vstap],[data-brugstap]').length, proj: +g.dataset.projectie, band: g.querySelector('[data-bandregel]').innerText }; });
+  expect(w.stappen).toBe(0);
+  expect(w.proj).toBe(r.V.projectie);
+  expect(w.band).toContain(`€${r.V.projectie.toLocaleString('nl-NL')}`);
 });
 
 test('f. zonder drie afgeronde maanden geen vooruitblik, en dat staat er', async ({ page }) => {
@@ -240,7 +241,7 @@ test('m. wat je deze maand kunt doen: een grens met zijn effect in euro, en de s
   // v349: de som met de grenzen staat in de sheet en niet meer op de kaart
   expect(kaart).not.toContain('Met een grens');
   await page.evaluate(() => openGripVooruit());
-  const w = await page.evaluate(() => ({ t: document.getElementById('gripVooruit').innerText.replace(/\s+/g, ' '), rood: [...document.querySelectorAll('[data-vstap="potje"]')].length }));
+  const w = await page.evaluate(() => ({ t: document.getElementById('gripVooruit').innerText.replace(/\s+/g, ' ') }));
   expect(w.t).toContain('Uit eten & café: nog €50 tot 31 oktober −€30');
   expect(w.t).toContain('Grens op €50');
   expect(w.t).toContain(`Met deze grens rond €${(V.proj - 30).toLocaleString('nl-NL')}`);

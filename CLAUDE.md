@@ -83,8 +83,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   een structureel signaal, een potje boven zijn grens, beleggen zonder voorwaarden, een uitgesloten
   incasso, contant, en de terugblikken op vorige maand); "DEZE MAAND" (`dezeMaandKaart()`: sinds `v349`
   de uitkomst met het verschil met je budget, een bridge van budget naar uitkomst (`dezeMaandBrug()`) en
-  een oorzaakzin, met de lopende afspraken; een tik opent de waterval met "Wat je deze maand kunt doen",
-  `renderGripVooruit()`); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
+  een oorzaakzin, met de lopende afspraken; een tik opent de sheet met de band als een regel en "Wat je
+  deze maand kunt doen", `renderGripVooruit()`, sinds `v352` zonder tweede bridge); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
   <maand>" is opgegaan). Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
   `renderAfsluitSheet()`), geen kaart. Het logboek (`logboek`, `renderLogboek()`) draagt sinds `v340` de
   afgesloten maanden als tijdlijn (`logTijdlijn()`), met per maand de bridge, de antwoorden en de
@@ -120,6 +120,24 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE SHEET ACHTER "DEZE MAAND" DRAAGT GEEN TWEEDE BRIDGE, EN DE AS NOEMT GEEN BEDRAG** (`v352`, gevraagd
+  door de gebruiker): het label bij de as van de bridge op de kaart (EUR 2.000 op de stand van 6 oktober) stond op
+  360px half buiten de kaart en zei niets wat de uitkomst boven de bridge niet al zegt; de as begint nog steeds bij
+  `Br.basis` en draagt `data-asbasis`, alleen het bedrag is weg. De sheet (`renderGripVooruit()`, `#gripVooruit`)
+  droeg een tweede bridge, de waterval van uitgegeven, vast nog en per potje (`vooruitGrafiek()`, `data-vstap`): die
+  is weg, samen met `VOORUIT_LOS`, dat alleen hem diende. VERPLAATSEN IS NIET KOPIEREN in de andere richting: de
+  kaart droeg dezelfde uitkomst al als bridge, dus de sheet herhaalde hem. Wat blijft: de band als EEN zin bovenaan
+  (`data-bandregel`: "Rond EUR X; de rest van de maand lag in <maanden> tussen EUR a en EUR b.") en "Wat je deze
+  maand kunt doen" met de handelingen, de schuif en de som met grenzen. `data-projectie` blijft op de sheet en is
+  dezelfde uitkomst als de kaart. GEMETEN op de stand met een handeling (Uit eten): de sheet van 517 naar 299px op
+  360 en van 464 naar 265px op 390; de bandregel is EEN zin over twee regels (38px) op beide breedtes, zonder
+  overloop. Nieuwe spec `grip-deze-maand-sheet.spec.js`; twee bestaande tests aangepast (de as in
+  `deze-maand-bridge` c, de waterval in `grip-dashboard` e en m).
+- **OPEN PUNT: DE BUDGETEDITOR IS MOEILIJK VINDBAAR** (`v352`, gemeld door de gebruiker, niet gebouwd): potjes
+  aanmaken, aanpassen en archiveren (`openBudgetEditor()`, `openPotForm()`, v351) gaat nu alleen via de regel "van
+  EUR X maandbudget" op Inzichten. Een ingang vanaf Grip of Plan onderzoeken. Let daarbij op de horizonnen: Grip
+  gaat over of je systeem standhoudt en Plan over je spaarinleg, dus een ingang is een extra route naar dezelfde
+  editor (`v61`) en geen tweede editor.
 - **EEN POTJE MAAK, VERANDER EN ARCHIVEER JE VANAF EEN MAAND DIE JE KIEST, EN HET TOTAAL GROEIT ALLEEN BEWUST**
   (`v351`, gevraagd door de gebruiker na een verandering in de woonsituatie). GEMETEN VOORAF: een potje was een
   categorie uit de vaste lijst `CATS`; er was geen eigen categorie, geen hernoemen, geen categorie voor alimentatie of
@@ -218,8 +236,8 @@ genoemde versietag.)*
   de stappen is exact de uitkomst; een geval met delen van euro staat in de spec, want op hele euro's is
   per stap afronden niet te onderscheiden (meetles a). De kleuren zijn die van `brugGrafiek()`: boven
   `--red`, onder `--mut2`. DE AS: liggen alle standen boven nul en is het bereik kleiner dan de helft van
-  het hoogste, dan begint de as bij een rond getal onder de laagste stand (`Br.basis`) en staat dat getal op
-  de as (`data-asbasis`); de bridge op Inzichten geeft geen `basis` mee en blijft bij nul. De zin
+  het hoogste, dan begint de as bij een rond getal onder de laagste stand (`Br.basis`, op de as als
+  `data-asbasis`; sinds `v352` ZONDER het bedrag erbij); de bridge op Inzichten geeft geen `basis` mee en blijft bij nul. De zin
   (`dezeMaandZin()`) stelt vast: welk potje boven uitkomt en waarom, welk losse potje eronder blijft, en de
   rest; komt GEEN potje boven uit (ook niet in de rest), dan is het een zin en verder niets: "Alle potjes
   blijven verwacht onder hun bedrag." "Met N grenzen" staat alleen nog in de sheet.
@@ -6306,7 +6324,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v351` → `minder-v352`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v352` → `minder-v353`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6325,7 +6343,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350` en `v351` naar `minder-v351`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351` en `v352` naar `minder-v352`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

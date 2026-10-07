@@ -129,11 +129,13 @@ test.describe('b. de oorzaak: past niet in je potje tegen loopt voor', () => {
 });
 
 test.describe('c. de as', () => {
-  test('de ondergrens staat op de as als hij niet bij nul begint', async ({ page }) => {
+  test('de as begint bij de ondergrens, zonder bedrag erbij (v352)', async ({ page }) => {
     await boot(page); await grip(page);
     const b = await page.locator('#gripDezeMaand [data-asbasis]').getAttribute('data-asbasis');
     expect(+b).toBe(2000);
-    expect(await page.locator('#gripDezeMaand [data-asbasis]').innerText()).toContain('€2.000');
+    // v352: het bedrag staat niet meer bij de as; het stond op 360px half buiten de kaart
+    expect(await page.locator('#gripDezeMaand [data-asbasis]').innerText()).toBe('');
+    expect(await page.locator('#gripBrug').innerText()).not.toContain('€2.000');
   });
   test('bij grote stappen begint de as bij nul en staat er geen ondergrens', async ({ page }) => {
     await boot(page, { extraTx: [{ id: 'groot', date: '2026-10-05', amount: -5000, name: 'Restaurant Lona', desc: 'BEA, BETAALPAS RESTAURANT LONA' }] });
