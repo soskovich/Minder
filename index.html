@@ -915,7 +915,7 @@ function load(){try{
   ACCMETA=JSON.parse(localStorage.getItem('minder_accmeta')||'{}');
   PLAN=JSON.parse(localStorage.getItem('minder_plan')||'{}');
   SET=Object.assign(SET,JSON.parse(localStorage.getItem('minder_set')||'{}'));
-}catch(e){TX=[];OVR={};OWN=[];} _dataGen++; }
+}catch(e){TX=[];OVR={};OWN=[];} try{ eigenCatsLaad(); }catch(_){} _dataGen++; }
 
 /* ---------- maand-gebonden potjes (licht) ----------
  * SET.budgets      = het vastgezette plan voor de LOPENDE kalendermaand (alle lezers gebruiken dit).
@@ -1001,7 +1001,9 @@ function rolloverBudgets(){
     for(const k in N){ const v=+N[k]; if(v>0) SET.budgets[k]=v; else delete SET.budgets[k]; } }
   if(Object.keys(NM).length){ SET.potMeta=SET.potMeta||{};
     for(const k in NM){ if(NM[k]) SET.potMeta[k]=NM[k]; else delete SET.potMeta[k]; } }
-  SET.budgetsNext={}; SET.potMetaNext={}; SET.budgetMonth=ym; save();
+  SET.budgetsNext={}; SET.potMetaNext={};
+  try{ potPlanDoorschuif(ym); }catch(_){}   // v351: geplande maanden tot en met nu, en de maand erna als budgetsNext
+  SET.budgetMonth=ym; save();
 }
 
 // Overboekingen tussen eigen rekeningen → 'intern' (tellen niet als inkomen/uitgave).
@@ -1724,7 +1726,7 @@ function potRoomLineHTML(potTotal, planned){ const b=potRoomBase();
   return `Samen al je potjes: <b>${euro0(potTotal)}</b>/mnd · dit is je maandbudget, <b style="color:var(--teal)">${euro0(free)}</b> onder je inkomen-limiet${nxt}`;
 }
 // is een categorie grotendeels een vaste last? (budget schaalt dan niet mee met inkomen)
-function isFixedCat(k){ return FIXED_CATS.has(k)||k==='vervoer'||k==='zorg'; }
+function isFixedCat(k){ return FIXED_CATS.has(k)||k==='vervoer'||k==='zorg'||!!(CATS[k]&&CATS[k].aard==='vast'); }   // v351: een eigen categorie draagt haar aard
 // per-categorie budget = je RAUWE potje (potjes leidend). Sinds het maandtotaal de potjes-som is,
 // verviel de oude neerwaartse scaling naar de inkomens-ruimte; effectief budget = precies wat je instelde.
 // varRoom = som van je variabele potjes (basis voor het dag-/weektempo).
@@ -7716,6 +7718,7 @@ function gripLetOpItems(RO, SIG, BV){
   for(const v of (BV||[])) L.push({soort:'beleg', key:v.asset.id, naam:`Je belegde ${euro0(v.inleg)} in ${v.asset.naam||'Bezitting'}`, sub:v.open?'voorwaarden nog niet gehaald · nog niet gekozen of ze hiervoor gelden':'voorwaarden nog niet gehaald', dot:'let op', act:`openBelegVraag('${esc(v.asset.id)}')`});
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
+  try{ const A=potArchiefTx(); if(A.length) L.push({soort:'archief', naam:`${A.length} boeking${A.length===1?'':'en'} in een gearchiveerd potje`, sub:'kies waar ze horen', dot:'let op', act:'openPotArchiefWerk()'}); }catch(_){}   // v351
   /* DE BELANGRIJKSTE EERST: de status van de regel (tekort voor let op), en daarbinnen de volgorde
      waarin ze hierboven staan. Die volgorde is de bestaande rang van Grip: de terugblikken bovenaan
      (v141/v314), dan de structurele signalen, de potjes op euro's boven hun grens (valtOpSignals()
@@ -13847,21 +13850,28 @@ function renderPotSheet(k){
     <div class="small muted" id="potRoomLine" style="margin-top:6px">${potRoomLineHTML((window._potOthers||0)+potDraftTotal())}</div>
     ${exists?`<div class="small muted" style="margin-top:8px">Deze maand blijft je potje op ${euro0(cur)}. De wijziging geldt vanaf <b style="color:var(--teal)">${vanaf}</b>.</div>`:''}
     <button class="btn" style="margin-top:14px;width:100%" onclick="savePotje('${k}')">${ICON('check')} ${exists?`Vastzetten vanaf ${vanaf}`:'Vastzetten'}</button>
-    ${exists?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="savePotje('${k}',true)">Potje stoppen vanaf ${vanaf}</div>`:''}`;
+    ${exists?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="savePotje('${k}',true)">Potje stoppen vanaf ${vanaf}</div>`:''}
+    ${potSheetExtra(k, exists)}`;
 }
 // kies een categorie om een nieuw potje voor te maken (categorieën zonder potje)
-function openPotjePick(){
-  const B=SET.budgets||{}; const ks=Object.keys(CATS).filter(k=>CATS[k].type==='expense'&&!isFixedCat(k)&&!geenNorm(k)&&!(+B[k]>0));   // v234
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px">Potje voor welke categorie?</div>
-    ${ks.length?ks.map(k=>`<div class="tx" style="cursor:pointer" onclick="openPotje('${k}')"><div class="ava" style="background:var(--card2)">${CATS[k].icon||''}</div><div class="info"><div class="nm">${CATS[k].name}</div></div><div class="amt" style="color:var(--teal)">+ potje</div></div>`).join(''):'<div class="small muted">Al je categorieën hebben een potje.</div>'}`;
-  showSheetBg();
-}
+function openPotjePick(){ openPotForm(); }
+/* v351: in de sheet van een potje staat wat er al gepland is, en de ingangen naar een bedrag vanaf een
+   maand die je kiest, archiveren, en bij een eigen categorie de naam en de boekingen. */
+function potSheetExtra(k, exists){
+  const c=CATS[k]; if(!c) return '';
+  const pl=potPlanRegels(k), A=(SET.potArchief||{})[k];
+  const link=(attr,act,t)=>`<div class="small" ${attr} style="margin-top:10px;text-align:center;cursor:pointer;color:var(--teal);font-weight:600" onclick="${act}">${t} \u203a</div>`;
+  return `${pl.length?`<div class="small muted" data-potplan style="margin-top:10px">Gepland: ${esc(pl.map(x=>`${ymKort(x.ym)} ${euro0(x.bedrag)}`).join(', '))}</div>`:''}
+    ${A?`<div class="small muted" data-potarch style="margin-top:10px">Gearchiveerd vanaf ${esc(ymKort(A.vanaf))}. <span style="color:var(--teal);cursor:pointer" onclick="potArchiefTerug('${esc(k)}');openPotje('${esc(k)}')">Terughalen</span></div>`:''}
+    ${link('data-potvanaf',`openPotForm('${esc(k)}')`,'Ander bedrag vanaf een maand die je kiest')}
+    ${(exists||pl.length)&&!A?link('data-potarchief',`openPotArchief('${esc(k)}')`,'Archiveren'):''}
+    ${c.eigen?link('data-potnaam',`openEigenCatNaam('${esc(k)}')`,'Naam wijzigen')+link('data-potkand',`openCatKandidaten('${esc(k)}')`,'Boekingen zoeken die hierbij horen'):''}`;
+}   // v351: een nieuw potje gaat langs dekking of een bewuste verhoging
 /* v337: een potje dat vanaf volgende maand LAGER ligt of stopt, vraagt gedrag, en dat is een
    afspraak. Komt de verlaging uit de kaart van een uitgesloten incasso, dan is wat de app kan meten
    of die AFSCHRIJVING wegblijft, en dan is het een incasso-afspraak. Hoger vraagt niets. */
-function potjeAfspraak(k, bedrag){
-  const van=nextYM(SET.budgetMonth||thisYM()), I=window._potIncasso;
+function potjeAfspraak(k, bedrag, vanaf){
+  const van=vanaf||nextYM(SET.budgetMonth||thisYM()), I=window._potIncasso;
   if(I && I.k===k){ const r=afspraakMaak({soort:'incasso', key:I.key, naam:I.naam, cat:k, bedrag:0, van, tot:van, wat:`${I.naam} blijft weg vanaf ${afMnd(van)}`}); save(); return r; }
   const cn=CATS[k]?CATS[k].name:k;
   const r=afspraakMaak({soort:'potje', cat:k, bedrag, van, tot:van, wat: bedrag>0?`Potje ${cn} ${euro0(bedrag)} vanaf ${afMnd(van)}`:`${cn} stopt vanaf ${afMnd(van)}`});
@@ -13907,6 +13917,377 @@ function savePotje(k,del){
   if(after){ try{ after(); }catch(_){ render(); } } else { render(); }
   toast(`${ICON('check')} ${msg}`);
 }
+/* ===== POTJES AANMAKEN, VANAF EEN MAAND, ARCHIVEREN (v351) =====
+   GEMETEN VOOR DEZE RONDE: een potje was een categorie uit CATS, en CATS was een vaste lijst. Er bestond
+   geen eigen categorie, geen hernoemen, en geen categorie voor alimentatie of kinderen. Een bestaand potje
+   kon alleen vanaf VOLGENDE maand anders (SET.budgetsNext) en weghalen heette "stoppen vanaf volgende maand".
+   EIGEN CATEGORIEEN staan in SET.eigenCats ({naam, aard, kleur, op}) en worden bij het laden in CATS gezet
+   met een sleutel e_<naam>. De aard is vast of wisselend; vast telt in isFixedCat(). Er zijn geen keywords:
+   boekingen komen er via jouw keuze of een regel die je zelf maakt.
+   EEN BEDRAG VANAF EEN MAAND: deze maand schrijft SET.budgets, volgende maand SET.budgetsNext, en elke
+   latere maand SET.budgetPlan[ym]. rolloverBudgets() werkt die laatste af, ook over overgeslagen maanden.
+   Eerdere maanden veranderen niet: een afgesloten maand staat in SET.budgetHist (v309) en de bridge, het
+   logboek en de staaf lezen daar (maandPotjes()).
+   NIETS GROEIT ZONDER KEUZE (v238): komt er een potje bij of gaat een potje omhoog, dan levert EEN ander
+   potje in (ondergrens: potjeMaandVloer(), en in de lopende maand ook wat er al uit is) of je verhoogt je
+   maandbudget bewust, en dan staat eerst het gevolg voor veilig te besteden en voor Plan. Er is niets
+   voorgekozen (MECHANISM_SPEC.defaultEffect). */
+const EIGEN_KLEUREN=['#e9a3c9','#9ad0c2','#c3b1e1','#f6c177','#8fb8de','#d4a373'];
+function eigenCatsLaad(){
+  for(const k of Object.keys(CATS)) if(CATS[k].eigen) delete CATS[k];
+  const E=SET.eigenCats||{};
+  for(const k in E){ const e=E[k]; if(!e||!e.naam) continue;
+    CATS[k]={name:e.naam, icon:ICON(e.aard==='vast'?'repeat':'folder'), color:e.kleur||EIGEN_KLEUREN[0], type:'expense', eigen:true, aard:e.aard==='vast'?'vast':'wisselend'}; }
+}
+function eigenCatSleutel(naam){
+  const s=String(naam||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'').slice(0,20)||'cat';
+  let k='e_'+s, i=2; while(CATS[k]) k='e_'+s+(i++);
+  return k;
+}
+function eigenCatNaamMag(naam, behalve){
+  const n=String(naam||'').trim(); if(!n) return false;
+  return !Object.keys(CATS).some(k=>k!==behalve && CATS[k].name.toLowerCase()===n.toLowerCase());
+}
+function eigenCatMaak(naam, aard){
+  const n=String(naam||'').trim(); if(!eigenCatNaamMag(n) || (aard!=='vast'&&aard!=='wisselend')) return null;
+  const k=eigenCatSleutel(n); SET.eigenCats=SET.eigenCats||{};
+  SET.eigenCats[k]={naam:n, aard, kleur:EIGEN_KLEUREN[Object.keys(SET.eigenCats).length%EIGEN_KLEUREN.length], op:vandaagYMD()};
+  eigenCatsLaad(); return k;
+}
+function eigenCatHernoem(k, naam){
+  const e=(SET.eigenCats||{})[k], n=String(naam||'').trim(); if(!e || !eigenCatNaamMag(n,k)) return false;
+  e.naam=n; eigenCatsLaad(); save(); return true;
+}
+function openEigenCatNaam(k){
+  const c=CATS[k]; if(!c||!c.eigen) return;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="eigenCatNaam" data-cat="${esc(k)}">
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:8px">Naam wijzigen</div>
+    <input type="text" id="eigenCatNaamIn" value="${esc(c.name)}" style="width:100%">
+    <div class="small muted" style="margin-top:6px">De boekingen en het potje blijven bij deze categorie; alleen de naam verandert.</div>
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" style="flex:1" onclick="if(eigenCatHernoem('${esc(k)}',document.getElementById('eigenCatNaamIn').value)){closeSheet();render();toast('Naam gewijzigd');}else toast('Die naam bestaat al of is leeg')">Opslaan</button><button class="btn sec" onclick="openPotje('${esc(k)}')">Terug</button></div></div>`;
+  showSheetBg();
+}
+
+/* ---- het bedrag per maand ---- */
+function potHuidigeMaand(){ return SET.budgetMonth||thisYM(); }
+/* De potjes zoals ze in maand ym gelden, voor ym vanaf de lopende maand. Een eerdere maand lees je met
+   maandPotjes() (v335), want die staat bewaard. */
+function budgetVoorMaand(ym){
+  const cur=potHuidigeMaand(), B=Object.assign({}, SET.budgets||{});
+  const zet=(M)=>{ for(const k in M){ const v=+M[k]; if(v>0) B[k]=v; else delete B[k]; } };
+  if(ym>cur) zet(SET.budgetsNext||{});
+  const P=SET.budgetPlan||{};
+  for(const p of Object.keys(P).sort()) if(p<=ym) zet(P[p]);
+  return B;
+}
+function potPlanZet(k, ym, bedrag){
+  const cur=potHuidigeMaand(), nx=nextYM(cur), v=Math.max(Math.round(+bedrag||0),0);
+  if(ym<=cur){
+    SET.budgets=SET.budgets||{}; if(v>0) SET.budgets[k]=v; else delete SET.budgets[k];
+    if(SET.potMeta) delete SET.potMeta[k];
+    if(SET.budgetsNext) delete SET.budgetsNext[k]; if(SET.potMetaNext) delete SET.potMetaNext[k];
+  } else if(ym===nx){
+    SET.budgetsNext=SET.budgetsNext||{}; SET.potMetaNext=SET.potMetaNext||{};
+    SET.budgetsNext[k]=v; SET.potMetaNext[k]=null;
+  } else {
+    SET.budgetPlan=SET.budgetPlan||{}; (SET.budgetPlan[ym]=SET.budgetPlan[ym]||{})[k]=v;
+  }
+}
+/* rolloverBudgets() roept dit aan NA de doorschuif van budgetsNext: elke geplande maand tot en met de
+   nieuwe lopende maand gaat in volgorde in SET.budgets, en de maand erna wordt budgetsNext. Zo houdt
+   budgetPlan alleen maanden vanaf twee maanden verder, en hoeven de bestaande lezers het niet te kennen. */
+function potPlanDoorschuif(ym){
+  const P=SET.budgetPlan||{}; SET.budgets=SET.budgets||{};
+  for(const p of Object.keys(P).sort()){ if(p>ym) continue;
+    for(const k in P[p]){ const v=+P[p][k]; if(v>0) SET.budgets[k]=v; else delete SET.budgets[k]; if(SET.potMeta) delete SET.potMeta[k]; }
+    delete P[p]; }
+  const nx=nextYM(ym);
+  if(P[nx]){ SET.budgetsNext=SET.budgetsNext||{}; SET.potMetaNext=SET.potMetaNext||{};
+    for(const k in P[nx]){ SET.budgetsNext[k]=+P[nx][k]||0; SET.potMetaNext[k]=null; } delete P[nx]; }
+}
+/* Wat er voor dit potje na deze maand al vastligt, voor de sheet van het potje. */
+function potPlanRegels(k){
+  const cur=potHuidigeMaand(), uit=[];
+  const N=SET.budgetsNext||{}; if(N[k]!=null && Math.round(+N[k])!==Math.round(+(SET.budgets||{})[k]||0)) uit.push({ym:nextYM(cur), bedrag:Math.round(+N[k]||0)});
+  const P=SET.budgetPlan||{}; for(const p of Object.keys(P).sort()) if(P[p][k]!=null) uit.push({ym:p, bedrag:Math.round(+P[p][k]||0)});
+  return uit;
+}
+function potMaandOpties(){ const cur=potHuidigeMaand(), r=[]; for(let i=0;i<13;i++) r.push(valtOpYmPlus(cur,i)); return r; }
+function ymKort(ym){ return `${MFULL[+String(ym).slice(5,7)-1]} ${String(ym).slice(0,4)}`; }
+
+/* ---- archief ---- */
+function potGearchiveerd(k, ym){ const A=(SET.potArchief||{})[k]; return !!(A && A.vanaf<=(ym||thisYM())); }
+function potArchiveer(k, vanaf){
+  if(!CATS[k] || !vanaf || vanaf<potHuidigeMaand()) return false;
+  SET.potArchief=SET.potArchief||{}; SET.potArchief[k]={vanaf, op:vandaagYMD()};
+  potPlanZet(k, vanaf, 0);
+  const P=SET.budgetPlan||{}; for(const p in P) if(p>vanaf && P[p][k]!=null) delete P[p][k];
+  save(); return true;
+}
+function potArchiefTerug(k){ if(SET.potArchief) delete SET.potArchief[k]; save(); }
+/* Boekingen die na het archiveren nog automatisch in de categorie landen. Een eigen keuze (OVR) voor die
+   categorie is een keuze en vraagt niets. */
+function potArchiefTx(){
+  const A=SET.potArchief||{}; if(!Object.keys(A).length) return [];
+  let L=[]; try{ L=telbareTx(); }catch(_){ L=TX; }
+  return L.filter(t=>{ const k=catOf(t), a=A[k]; return a && t.amount<0 && !OVR[t.id] && String(t.date).slice(0,7)>=a.vanaf; })
+    .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+}
+function openPotArchiefWerk(){
+  const L=potArchiefTx();
+  if(!L.length){ closeSheet(); render(); return; }
+  window._werklijst={archief:true};
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="potArchiefWerk">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Waar horen deze boekingen bij</div>
+    <div class="small muted" style="margin:4px 0 8px;line-height:1.45">Deze boekingen landen nog in een gearchiveerd potje. Kies per boeking een categorie; kies je de oude categorie toch, dan blijft hij daar.</div>
+    ${L.map(t=>`<div class="tx" data-archieftx="${esc(t.id)}" style="cursor:pointer" onclick="openSheet('${esc(t.id)}')"><div class="ava" style="background:var(--card2)">${CATS[catOf(t)].icon||''}</div>
+      <div class="info"><div class="nm">${esc(txNaam?txNaam(t):t.name)}</div><div class="cat">${esc(afDag(t.date))} · nu ${esc(CATS[catOf(t)].name)}</div></div><div class="amt">${euro(t.amount)}</div></div>`).join('')}</div>`;
+  showSheetBg();
+}
+function openPotArchief(k){
+  const c=CATS[k]; if(!c) return;
+  window._potArch={k, vanaf:(window._potArch&&window._potArch.k===k)?window._potArch.vanaf:null};
+  renderPotArchief(); showSheetBg();
+}
+function potArchKies(ym){ if(window._potArch) window._potArch.vanaf=ym; renderPotArchief(); }
+function renderPotArchief(){
+  const D=window._potArch||{}, k=D.k, c=CATS[k]; if(!c) return;
+  const ms=potMaandOpties(), bud=D.vanaf?Math.round(+budgetVoorMaand(D.vanaf)[k]||0):0;
+  let tot0=0, tot1=0; if(D.vanaf){ const B=budgetVoorMaand(D.vanaf); for(const x in B) tot0+=+B[x]||0; tot1=tot0-bud; }
+  const vorige=valtOpYmPlus(potHuidigeMaand(),-1), hist=(SET.budgetHist||{})[vorige];
+  const gevolg=D.vanaf
+    ? `Vanaf ${esc(ymKort(D.vanaf))} telt ${esc(c.name)} niet meer mee: je maandbudget gaat van ${euro0(tot0)} naar ${euro0(tot1)}. ${hist?`${esc(ymFull(vorige).charAt(0).toUpperCase()+ymFull(vorige).slice(1))} en eerdere maanden blijven zoals ze waren, in het logboek en de bridge.`:'Eerdere maanden zonder bewaarde potjebedragen tonen je huidige potjes.'} Komt er daarna nog een boeking in ${esc(c.name)}, dan vraagt Minder waar hij heen moet.`
+    : 'Kies vanaf welke maand.';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="potArchief" data-cat="${esc(k)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(c.name)} archiveren</div>
+    <div class="small muted" style="margin:4px 0 10px">Het potje stopt; de geschiedenis blijft.</div>
+    <label class="fld">Vanaf</label>
+    <div class="chips" data-archmaanden>${ms.slice(0,4).map(ym=>`<span class="chip ${D.vanaf===ym?'on':''}" data-archmaand="${ym}" onclick="potArchKies('${ym}')">${esc(ymKort(ym))}</span>`).join('')}</div>
+    <div class="small" data-archgevolg style="color:var(--mut2);line-height:1.5;margin-top:10px">${gevolg}</div>
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-archsave style="flex:1"${D.vanaf?'':' disabled'} onclick="potArchiefZet()">Archiveren</button><button class="btn sec" onclick="openPotje('${esc(k)}')">Terug</button></div></div>`;
+}
+function potArchiefZet(){
+  const D=window._potArch||{}; if(!D.k || !D.vanaf) return;
+  const n=CATS[D.k].name;
+  if(!potArchiveer(D.k, D.vanaf)) return;
+  window._potArch=null; closeSheet(); render(); toast(`${ICON('check')} ${n} gearchiveerd vanaf ${ymKort(D.vanaf)}`);
+}
+
+/* ---- het formulier: nieuw potje, of een bedrag vanaf een maand ---- */
+function potFormVoorstel(d){
+  d=d||window._potForm||{}; const cur=potHuidigeMaand();
+  const nieuweCat=d.cat==='_nieuw';
+  const k=nieuweCat?null:d.cat;
+  const naam=nieuweCat?String(d.naam||'').trim():(CATS[k]?CATS[k].name:'');
+  const catKlaar=nieuweCat ? (eigenCatNaamMag(naam) && (d.aard==='vast'||d.aard==='wisselend')) : !!(k && CATS[k]);
+  const bedrag=(d.bedrag===''||d.bedrag==null)?null:Math.max(Math.round(numIn(d.bedrag)),0);
+  const vanaf=d.vanaf||null;
+  const P={k, nieuweCat, naam, catKlaar, bedrag, vanaf, bron:d.bron||null, dek:d.dek||null, kand:[], klaar:false};
+  if(!vanaf || bedrag==null) return P;
+  const B=budgetVoorMaand(vanaf); let tot=0; for(const x in B) tot+=+B[x]||0;
+  P.tot0=Math.round(tot); P.van=k?Math.round(+B[k]||0):0; P.meer=bedrag-P.van;
+  if(P.meer>0){
+    const ref=[1,2,3].map(i=>valtOpYmPlus(thisYM(),-i));
+    const S=vanaf===thisYM()?(catSpendMap(thisYM())||{}):{};
+    P.kand=Object.keys(B).filter(x=>x!==k && +B[x]>0 && CATS[x] && CATS[x].type==='expense' && !geenNorm(x) && !potGearchiveerd(x,vanaf))
+      .map(x=>{ const bud=Math.round(+B[x]), Vl=potjeMaandVloer(x, ref, vanaf), al=Math.round(Math.max(+S[x]||0,0)), vloer=Math.max(Vl.vloer, al);
+        return {k:x, naam:CATS[x].name, bud, gewoon:Vl.gewoon, al, vloer, vloerMaand:Vl.vloer>=al?Vl.maand:null, ruimte:bud-vloer}; })
+      .filter(x=>x.ruimte>=P.meer).sort((a,b)=>(b.ruimte-a.ruimte)||a.naam.localeCompare(b.naam,'nl'));
+    if(P.bron==='dek' && !P.kand.some(x=>x.k===P.dek)) P.dek=null;
+    P.tot1 = P.bron==='verhoog' ? P.tot0+P.meer : P.tot0;
+    P.klaar = catKlaar && (P.bron==='verhoog' || (P.bron==='dek' && !!P.dek));
+  } else {
+    P.tot1=P.tot0+P.meer;
+    P.klaar = catKlaar && P.meer<0;
+  }
+  return P;
+}
+/* Rekent het gevolg van een verhoging uit op de potjes van die maand, in het geheugen en zonder save(). */
+function potSimuleer(Bnieuw, fn){
+  const oud=SET.budgets; let r;
+  try{ SET.budgets=Bnieuw; _dataGen++; r=fn(); }finally{ SET.budgets=oud; _dataGen++; }
+  return r;
+}
+function potVerhoogGevolg(P){
+  const B0=budgetVoorMaand(P.vanaf), B1=Object.assign({}, B0), kk=P.k||'_nieuw'; B1[kk]=P.bedrag;
+  const tijdelijk=!CATS[kk]; if(tijdelijk) CATS[kk]={name:P.naam||'Nieuw', icon:'', color:'#ccc', type:'expense'};
+  const meet=()=>{ let s=null, cap=null; try{ s=Math.round(safeToSpend().safe); }catch(_){} try{ cap=planCapacity(); }catch(_){} return {s, cap}; };
+  const nu=P.vanaf===thisYM();
+  const a=nu?potSimuleer(Object.assign({},SET.budgets||{}), meet):potSimuleer(B0, meet);
+  let b; try{ b=potSimuleer(B1, meet); }finally{ if(tijdelijk) delete CATS[kk]; }
+  let inc=0; try{ inc=Math.round(SET.autoIncome?baseIncome():(+SET.income||0)); }catch(_){}
+  return {nu, safe0:a.s, safe1:nu?b.s:a.s, cap0:a.cap, cap1:b.cap, inc};
+}
+function openPotForm(k){
+  window._potForm = k ? {cat:k, vast:true} : {cat:null};
+  renderPotForm(); showSheetBg();
+}
+function potFormZetVeld(f, v, her){ const d=window._potForm=window._potForm||{}; d[f]=v;
+  if(f==='bron' && v!=='dek') d.dek=null;
+  if(her!==false) renderPotForm(); else { const g=document.getElementById('potFormGevolg'); if(g) g.outerHTML=potFormGevolgHTML(); const s=document.querySelector('[data-potformsave]'); if(s) s.disabled=!potFormVoorstel().klaar; const b=document.getElementById('potFormBron'); if(b) b.outerHTML=potFormBronHTML(); } }
+function potFormBronHTML(){
+  const P=potFormVoorstel();
+  if(!(P.meer>0)) return '<div id="potFormBron"></div>';
+  const chip=(v,l)=>`<span class="chip ${P.bron===v?'on':''}" data-potbron="${v}" onclick="potFormZetVeld('bron','${v}')">${l}</span>`;
+  const rij=x=>`<div class="tx" data-potdek="${esc(x.k)}" style="cursor:pointer${P.dek===x.k?';outline:1px solid var(--teal);border-radius:8px':''}" onclick="potFormZetVeld('dek','${esc(x.k)}')">
+      <div class="ava" style="background:var(--card2)">${CATS[x.k].icon||''}</div>
+      <div class="info"><div class="nm">${esc(x.naam)}</div><div class="cat">potje ${euro0(x.bud)}, gewoonlijk ${euro0(x.gewoon)}${x.al?`, al ${euro0(x.al)} uit`:''} · ruimte ${euro0(x.ruimte)}</div></div>
+      <div class="amt" style="color:var(--teal)">${P.dek===x.k?'gekozen':'kies'}</div></div>`;
+  return `<div id="potFormBron"><label class="fld">Waar komen de ${euro0(P.meer)} vandaan</label>
+    <div class="chips">${chip('dek','Uit een ander potje')}${chip('verhoog','Maandbudget verhogen')}</div>
+    ${P.bron==='dek'?(P.kand.length?P.kand.map(rij).join(''):`<div class="small muted" style="margin-top:6px">Geen ander potje heeft ${euro0(P.meer)} over boven wat je er gewoonlijk uitgeeft.</div>`):''}</div>`;
+}
+/* v351: een lager potje vanaf een maand. Twee dingen die je anders niet ziet: een incasso die Minder in die
+   categorie nog verwacht (die blijft meetellen in "nog te betalen" en in de vooruitblik tot je hem op
+   opgezegd zet), en wat het met de vooruitblik van deze maand doet als het nu al ingaat. */
+function potLagerGevolg(P){
+  let uit='';
+  try{ const ex=SET.fixDueExcl||{}, L=recurringSchedule().filter(x=>x.type==='fixed' && x.cat===P.k && !ex[x.key]);
+    for(const x of L.slice(0,2)){ const nd=x.nextDate instanceof Date?x.nextDate:new Date(x.nextDate);
+      uit+=` <span data-potincasso="${esc(x.key)}">Minder verwacht nog ${esc(titleCase(cleanMerch(x.name)||x.name||''))} ${euro0(Math.round(+x.amount||0))} op ${esc(afDag(ymdVan(nd)))}. Is die opgezegd, <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="toggleFixDueExcl('${esc(x.key)}','vaste')">zet hem op opgezegd \u203a</span></span>`; } }catch(_){}
+  if(P.vanaf===thisYM()){ try{
+    const V0=maandVooruit(), B1=Object.assign({}, SET.budgets||{}); if(P.bedrag>0) B1[P.k]=P.bedrag; else delete B1[P.k];
+    const V1=potSimuleer(B1, ()=>maandVooruit());
+    if(V0 && !V0.onbekend && V1 && !V1.onbekend){ const d1=V1.projectie-V1.budget;
+      uit+=` <span data-potvooruit>Deze maand komt je uitgave uit rond ${euro0(V1.projectie)}${V1.projectie!==V0.projectie?` (was ${euro0(V0.projectie)})`:', zoals hij al deed'}; tegen een budget van ${euro0(V1.budget)} is dat ${euro0(Math.abs(d1))} ${d1>0?'boven':'onder'} budget.</span>`; }
+  }catch(_){} }
+  return uit;
+}
+function potFormGevolgHTML(){
+  const P=potFormVoorstel(); let t='';
+  if(!P.vanaf || P.bedrag==null) t='';
+  else {
+    const Vn=esc(ymKort(P.vanaf)), n=esc(P.naam||'Het nieuwe potje');
+    if(P.meer<0) t=`Vanaf ${Vn} gaat ${n} van ${euro0(P.van)} naar ${euro0(P.bedrag)}. Je maandbudget gaat van ${euro0(P.tot0)} naar ${euro0(P.tot1)}. Eerdere maanden blijven zoals ze waren.`+potLagerGevolg(P);
+    else if(P.meer===0) t=P.nieuweCat?'Een potje van nul is geen potje.':`${n} staat vanaf ${Vn} al op ${euro0(P.bedrag)}.`;
+    else if(P.bron==='dek' && P.dek){ const D=P.kand.find(x=>x.k===P.dek);
+      t=`Vanaf ${Vn} gaat ${n} van ${euro0(P.van)} naar ${euro0(P.bedrag)} en levert ${esc(D.naam)} ${euro0(P.meer)} in: van ${euro0(D.bud)} naar ${euro0(D.bud-P.meer)}. Je maandbudget blijft ${euro0(P.tot0)}.`; }
+    else if(P.bron==='verhoog'){ const G=potVerhoogGevolg(P);
+      const safe=G.nu
+        ? (G.safe0!=null&&G.safe1!=null?`Veilig te besteden gaat deze maand van ${euro0(G.safe0)} naar ${euro0(G.safe1)}.`:'Veilig te besteden is nu niet te zeggen, want een saldo ontbreekt.')
+        : `Veilig te besteden verandert deze maand niet; vanaf ${Vn} gaat er ${euro0(P.meer)} meer naar je potjes.`;
+      const som=P.tot1+(G.cap1||0);
+      const plan=G.cap1!=null
+        ? `Plan blijft ${euro0(G.cap1)} per maand inleggen${G.cap0!==G.cap1?` (was ${euro0(G.cap0)})`:''}. Je potjes en je inleg zijn samen ${euro0(som)}${G.inc>0?` tegen een inkomen van ${euro0(G.inc)}: ${som>G.inc?`${euro0(som-G.inc)} meer dan er binnenkomt`:`${euro0(G.inc-som)} daaronder`}`:''}.`
+        : '';
+      t=`Je maandbudget gaat vanaf ${Vn} van ${euro0(P.tot0)} naar ${euro0(P.tot1)}. ${safe} ${plan}`; }
+    else t=`Nog te dekken: ${euro0(P.meer)}. Kies of een ander potje inlevert of dat je maandbudget omhoog gaat.`;
+  }
+  return `<div class="small" id="potFormGevolg" data-potgevolg style="color:var(--mut2);line-height:1.5;margin-top:10px">${t}</div>`;
+}
+function potFormCatKeuzes(){
+  return Object.keys(CATS).filter(k=>CATS[k].type==='expense' && !geenNorm(k) && !potGearchiveerd(k) && !(+(SET.budgets||{})[k]>0) && !(+(plannedBudgets()||{})[k]>0));
+}
+function renderPotForm(){
+  const d=window._potForm||{}, P=potFormVoorstel(d), ms=potMaandOpties();
+  const vast=!!d.vast && P.k;
+  let catBlok='';
+  if(vast){ const c=CATS[P.k];
+    catBlok=`<div style="font-weight:800;font-size:var(--fs-lg)">${c.icon||''} ${esc(c.name)}: bedrag vanaf een maand</div>
+      <div class="small muted" style="margin:4px 0 10px">Nu ${euro0(+(SET.budgets||{})[P.k]||0)} per maand. Eerdere maanden veranderen niet.</div>`;
+  } else {
+    const ks=potFormCatKeuzes();
+    catBlok=`<div style="font-weight:800;font-size:var(--fs-lg)">Nieuw potje</div>
+      <label class="fld">Categorie</label>
+      <div class="chips" data-potcats>${ks.map(k=>`<span class="chip ${d.cat===k?'on':''}" data-potcat="${esc(k)}" onclick="potFormZetVeld('cat','${esc(k)}')">${esc(CATS[k].name)}</span>`).join('')}<span class="chip ${d.cat==='_nieuw'?'on':''}" data-potcat="_nieuw" onclick="potFormZetVeld('cat','_nieuw')">+ Nieuwe categorie</span></div>
+      ${d.cat==='_nieuw'?`<label class="fld">Naam</label><input type="text" id="potFormNaam" value="${esc(d.naam||'')}" placeholder="bv. Kinderen" oninput="potFormZetVeld('naam',this.value,false)" style="width:100%">
+        <label class="fld">Soort uitgave</label>
+        <div class="chips">${[['vast','Vaste last'],['wisselend','Wisselend']].map(([v,l])=>`<span class="chip ${d.aard===v?'on':''}" data-potaard="${v}" onclick="potFormZetVeld('aard','${v}')">${l}</span>`).join('')}</div>`:''}`;
+  }
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="potForm">
+    ${catBlok}
+    <label class="fld">Bedrag per maand (€)</label>
+    <input type="text" inputmode="decimal" id="potFormBedrag" value="${esc(d.bedrag==null?'':String(d.bedrag))}" placeholder="0" oninput="potFormZetVeld('bedrag',this.value,false)" style="width:100%">
+    <label class="fld">Vanaf</label>
+    <select id="potFormVanaf" onchange="potFormZetVeld('vanaf',this.value||null)" style="width:100%"><option value="">Kies een maand</option>${ms.map(ym=>`<option value="${ym}"${d.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>
+    ${potFormBronHTML()}
+    ${potFormGevolgHTML()}
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-potformsave style="flex:1"${P.klaar?'':' disabled'} onclick="potFormZet()">Vastzetten</button><button class="btn sec" onclick="${vast?`openPotje('${esc(P.k)}')`:'closeSheet()'}">Terug</button></div></div>`;
+}
+function potFormZet(){
+  const P=potFormVoorstel(); if(!P.klaar) return;   // opnieuw gelezen (v319); zonder keuze geen opslag (v238)
+  let k=P.k;
+  if(P.nieuweCat){ k=eigenCatMaak(P.naam, (window._potForm||{}).aard); if(!k) return; }
+  const D=P.meer>0 && P.bron==='dek' ? P.kand.find(x=>x.k===P.dek) : null;
+  if(P.meer>0 && P.bron==='dek' && !D) return;
+  const cur=potHuidigeMaand(), voor=+(SET.budgets||{})[k]||0;
+  potPlanZet(k, P.vanaf, P.bedrag);
+  if(D){ potPlanZet(D.k, P.vanaf, D.bud-P.meer); try{ potjeAfspraak(D.k, D.bud-P.meer, P.vanaf); }catch(_){} }
+  if(P.meer<0 && !P.nieuweCat){ try{ potjeAfspraak(k, P.bedrag, P.vanaf); }catch(_){} }
+  save();
+  if(P.vanaf<=nextYM(cur)) try{ valtOpPotjeGewijzigd(k, voor, P.bedrag, P.vanaf!==cur); }catch(_){}
+  window._potForm=null;
+  const naam=CATS[k].name;
+  if(P.nieuweCat){ openCatKandidaten(k, true); render(); }
+  else { closeSheet(); render(); }
+  toast(`${ICON('check')} ${naam} ${euro0(P.bedrag)} vanaf ${ymKort(P.vanaf)}`);
+}
+
+/* ---- boekingen die bij een nieuwe categorie horen ----
+   De app verplaatst niets vanzelf. Hij zoekt op hints die bij de naam passen en op wat je zelf typt,
+   toont per tegenpartij de boekingen, en pas na jouw vinkje en "Verplaatsen" gaan ze over (OVR). */
+const CAT_HINTS=[
+  {re:/kind|kids|speel|school/i, kw:['TOP 1 TOYS','TOP1TOYS','INTERTOYS','BART SMIT','SPEELGOED','TOYS','LEGO','KINDEROPVANG','KINDERDAGVERBLIJF','BSO','OUDERBIJDRAGE','SCHOOLREIS','PRENATAL','KINDERKLEDING']},
+  {re:/aliment/i, kw:['ALIMENTATIE','LBIO','KINDERALIMENTATIE']},
+];
+function catKandidaatGroepen(k, zoek){
+  const naam=CATS[k]?CATS[k].name:'';
+  const kw=[]; for(const h of CAT_HINTS) if(h.re.test(naam)) kw.push(...h.kw);
+  const z=String(zoek||'').trim().toUpperCase();
+  const grens=valtOpYmPlus(thisYM(),-12);
+  let L=[]; try{ L=telbareTx(); }catch(_){ L=TX; }
+  const G={};
+  for(const t of L){
+    if(!(t.amount<0) || String(t.date).slice(0,7)<grens) continue;
+    const c=catOf(t); if(c===k || !CATS[c] || CATS[c].type!=='expense') continue;
+    const tekst=(String(t.name||'')+' '+String(t.desc||'')).toUpperCase();
+    const hint=kw.find(w=>tekst.includes(w));
+    if(!hint && !(z.length>=3 && tekst.includes(z))) continue;
+    const g=(cleanMerch(t.name)||t.name||'').toUpperCase().trim()||'ONBEKEND';
+    (G[g]=G[g]||{naam:g, hint:hint||null, tx:[]}).tx.push(t);
+  }
+  return Object.values(G).map(x=>Object.assign(x,{som:Math.round(x.tx.reduce((s,t)=>s-t.amount,0))})).sort((a,b)=>b.som-a.som||a.naam.localeCompare(b.naam));
+}
+function openCatKandidaten(k, naAanmaken){
+  window._catKand={k, zoek:'', gekozen:{}, regel:false, na:!!naAanmaken};
+  renderCatKandidaten(); showSheetBg();
+}
+function catKandZet(f, v){ const D=window._catKand||{}; if(f==='kies'){ D.gekozen[v]=!D.gekozen[v]; } else D[f]=v; renderCatKandidaten(f==='zoek'); }
+function catKandKeuze(){
+  const D=window._catKand||{}; const G=catKandidaatGroepen(D.k, D.zoek);
+  const tx=[]; for(const g of G) if(D.gekozen[g.naam]) tx.push(...g.tx);
+  return {G, tx, groepen:G.filter(g=>D.gekozen[g.naam])};
+}
+function renderCatKandidaten(focus){
+  const D=window._catKand||{}, c=CATS[D.k]; if(!c) return;
+  const K=catKandKeuze(), per={};
+  for(const t of K.tx){ const x=catOf(t); per[x]=(per[x]||0)-t.amount; }
+  const gevolg=K.tx.length
+    ? `${K.tx.length} boeking${K.tx.length===1?'':'en'} (${euro0(Math.round(K.tx.reduce((s,t)=>s-t.amount,0)))}) gaan naar ${esc(c.name)}: ${esc(Object.keys(per).map(x=>`${CATS[x].name} -${euro0(Math.round(per[x]))}`).join(', '))}.${D.regel?' Nieuwe boekingen van deze tegenpartijen gaan er voortaan ook heen.':''}`
+    : 'Niets gekozen. Vink aan wat bij deze categorie hoort.';
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="catKandidaten" data-cat="${esc(D.k)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Boekingen voor ${esc(c.name)}</div>
+    <div class="small muted" style="margin:4px 0 8px;line-height:1.45">${D.na?'Je categorie staat. ':''}Hieronder staan boekingen van de afgelopen twaalf maanden die erbij kunnen horen. Er wordt niets verplaatst zonder jouw keuze.</div>
+    <input type="text" id="catKandZoek" value="${esc(D.zoek)}" placeholder="Zoek een tegenpartij (minstens 3 letters)" oninput="catKandZet('zoek',this.value)" style="width:100%">
+    ${K.G.length?K.G.map(g=>`<label class="row" data-kandgroep="${esc(g.naam)}" style="gap:9px;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer;align-items:flex-start"><input type="checkbox"${D.gekozen[g.naam]?' checked':''} onchange="catKandZet('kies',${esc(JSON.stringify(g.naam))})" style="margin-top:3px">
+      <span style="flex:1;min-width:0"><span class="small" style="display:block;font-weight:600;overflow-wrap:anywhere">${esc(titleCase(g.naam))}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">${g.tx.length} boeking${g.tx.length===1?'':'en'} · nu ${esc(opsomming([...new Set(g.tx.map(t=>CATS[catOf(t)].name))]))}${g.hint?` · herkend aan ${esc(g.hint)}`:''}</span></span>
+      <span class="small" style="font-weight:700;flex-shrink:0">${euro0(g.som)}</span></label>`).join(''):`<div class="small muted" data-kandleeg style="padding:10px 0">${D.zoek&&D.zoek.trim().length>=3?'Geen boekingen gevonden.':'Geen bekende kandidaten. Zoek op een tegenpartij.'}</div>`}
+    <label class="row" style="gap:8px;padding:10px 0;cursor:pointer"><input type="checkbox" id="catKandRegel"${D.regel?' checked':''} onchange="catKandZet('regel',this.checked)"><span class="small">Ook voortaan automatisch</span></label>
+    <div class="small" data-kandgevolg style="color:var(--mut2);line-height:1.5">${gevolg}</div>
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-kandsave style="flex:1"${K.tx.length?'':' disabled'} onclick="catKandVerplaats()">Verplaatsen</button><button class="btn sec" onclick="closeSheet()">${D.na?'Overslaan':'Sluiten'}</button></div></div>`;
+  if(focus){ const z=document.getElementById('catKandZoek'); if(z){ z.focus(); z.setSelectionRange(z.value.length,z.value.length); } }
+}
+function catKandVerplaats(){
+  const D=window._catKand||{}; if(!CATS[D.k]) return;
+  const K=catKandKeuze(); if(!K.tx.length) return;   // opnieuw gelezen
+  for(const t of K.tx){ if(t.autoCat===D.k) delete OVR[t.id]; else OVR[t.id]=D.k; }
+  if(D.regel){ SET.rules=SET.rules||[];
+    for(const g of K.groepen){ const kw=g.naam.slice(0,28); SET.rules=SET.rules.filter(r=>r.kw!==kw); SET.rules.unshift({kw, cat:D.k}); } }
+  save(); if(D.regel){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); }
+  const n=K.tx.length, naam=CATS[D.k].name; window._catKand=null;
+  closeSheet(); render(); toast(`${ICON('check')} ${n} boeking${n===1?'':'en'} naar ${naam}`);
+}
+
 // concrete, gekwantificeerde gedragsregels per signaal, elke regel draagt z'n eigen maand-besparing (cut) voor de forecast
 function coachRules(m,sig){
   const k=sig.catKey; const over=Math.round(sig.over||0); const r=(label,cut,heavy)=>({label,cut:Math.max(Math.round(cut||0),0),heavy:!!heavy});
@@ -17654,7 +18035,7 @@ function openSheet(id){
     ${onregelmatigBlok(t)}${uitReserveringBlok(t)}${bezitBlok(t)}${bezitKostenBlok(t)}${schuldBlok(t)}
     ${contantStortBlok(t)}${loanBlokHTML(t)}${leaseBlokHTML(t)}
     <div class="small muted" style="margin:6px 0 2px">Kies categorie:</div>
-    <div class="catgrid">${Object.entries(CATS).map(([k,c])=>`
+    <div class="catgrid">${Object.entries(CATS).filter(([k])=>k===cur||!potGearchiveerd(k)).map(([k,c])=>`
       <div class="catpick ${cur===k?'on':''}" onclick="setCat('${id}','${k}')">
         <span style="font-size:var(--fs-lg)">${c.icon}</span><span>${c.name}</span></div>`).join('')}</div>`;
   showSheetBg();
@@ -17664,7 +18045,7 @@ function setCat(id,k){
   const t=TX.find(x=>x.id===id); if(!t) return;
   /* v338: vanuit de werklijst is elke keuze een eigen keuze, ook Overig, en daarna keer je terug naar de lijst. */
   const wl=window._werklijst||null;
-  const terug=()=>{ if(wl){ if(k==='overig'){ OVR[id]='overig'; save(); render(); } openAfsluitOverig(wl); } };
+  const terug=()=>{ if(wl){ if(k==='overig'){ OVR[id]='overig'; save(); render(); } if(wl.archief) openPotArchiefWerk(); else openAfsluitOverig(wl); } };
   if(k!=='uitgeleend' && k!=='geleend' && unmarkLoan(id)) save();   // terug naar uitgave: post opruimen
   const mk=document.getElementById('mkrule');
   if(mk&&mk.checked){   // maak een blijvende regel van deze winkel
@@ -17916,11 +18297,12 @@ function setBudget(){
     <div class="small" id="potGridTotal" style="margin:2px 0 4px">${potRoomLineHTML(totalBudget(), plannedTotalBudget())}</div>
     <div class="small muted" style="margin:0 0 8px">Een wijziging aan een bestaand potje geldt vanaf ${ymFull(nextYM(SET.budgetMonth||thisYM()))}. De lopende maand ligt vast.</div>
     <button class="btn sec" style="margin:6px 0 10px" onclick="if(confirm('Budget per categorie voorstellen op basis van je historie? Bestaande potjes worden overschreven vanaf volgende maand; de lopende maand blijft staan.')){suggestBudgets();}">${ICON('trend')} Voorstel uit mijn historie</button>
-    ${Object.entries(CATS).filter(([k,c])=>c.type==='expense'&&!c.geenNorm).map(([k,c])=>{   // v234: geen potje voor onvoorzien
+    <div class="small" data-nieuwpotje style="margin:0 0 8px;color:var(--teal);font-weight:600;cursor:pointer" onclick="openPotForm()">${ICON('plus')} Nieuw potje \u203a</div>
+    ${Object.entries(CATS).filter(([k,c])=>c.type==='expense'&&!c.geenNorm&&!potGearchiveerd(k)).map(([k,c])=>{   // v234: geen potje voor onvoorzien; v351: geen gearchiveerd potje
       const pend=(SET.budgetsNext&&SET.budgetsNext[k]!=null)?+SET.budgetsNext[k]:null;
       const shown=(pend!=null?pend:((SET.budgets&&SET.budgets[k])||''))||'';
       const note=(pend!=null && pend!==((+(SET.budgets||{})[k])||0))?`<span class="small" style="color:var(--teal);margin-left:6px">vanaf vlg. mnd</span>`:'';
-      return `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:var(--fs-md)">${c.icon} ${c.name}${note}</span>
+      return `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:var(--fs-md);cursor:pointer" onclick="openPotje('${k}')">${c.icon} ${c.name}${note}</span>
         <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" min="0" step="5" value="${shown}" placeholder="0" style="width:80px;text-align:right;padding:6px 9px" oninput="setCatBudget('${k}',this.value)"></div></div>`;}).join('')}`;
   return `
     <label class="fld">Bestedingslimiet: <b style="color:var(--teal)">${SET.limit}%</b> van inkomen</label>
@@ -22830,6 +23212,7 @@ function restoreBackup(file){
     if(TX.length && !confirm(`Je huidige gegevens (${TX.length} transacties) worden vervangen door de back-up van ${d.ts?new Date(d.ts).toLocaleDateString('nl-NL'):'onbekende datum'}. Doorgaan?`)) return;
     TX=Array.isArray(d.tx)?d.tx:[]; OVR=d.ovr||{}; OWN=Array.isArray(d.own)?d.own:[]; ACCMETA=d.accmeta||{}; PLAN=d.plan||{};
     SET=Object.assign({limit:70,income:0,autoIncome:true,hideInternal:true}, d.set||{});
+    try{ eigenCatsLaad(); }catch(_){}   // v351
     save(); try{ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); }catch(_){}
     curMonth=null; render(); closeSheet&&closeSheet();
     toast(`${ICON('check')} Hersteld: ${TX.length} transacties`);

@@ -120,6 +120,37 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN POTJE MAAK, VERANDER EN ARCHIVEER JE VANAF EEN MAAND DIE JE KIEST, EN HET TOTAAL GROEIT ALLEEN BEWUST**
+  (`v351`, gevraagd door de gebruiker na een verandering in de woonsituatie). GEMETEN VOORAF: een potje was een
+  categorie uit de vaste lijst `CATS`; er was geen eigen categorie, geen hernoemen, geen categorie voor alimentatie of
+  kinderen, en een bestaand potje kon alleen vanaf volgende maand anders ("stoppen vanaf volgende maand").
+  EIGEN CATEGORIEEN: `SET.eigenCats[e_<naam>]={naam, aard, kleur, op}`, bij het laden in `CATS` gezet
+  (`eigenCatsLaad()`, ook na een back-up), met een aard vast of wisselend (vast telt in `isFixedCat()`) en zonder
+  keywords. Hernoemen kan (`eigenCatHernoem()`), een naam die al bestaat niet.
+  EEN BEDRAG VANAF EEN MAAND (`potPlanZet()`): deze maand schrijft `SET.budgets`, volgende maand `SET.budgetsNext`,
+  later `SET.budgetPlan[ym]`; `rolloverBudgets()` werkt dat af via `potPlanDoorschuif()`, ook over een overgeslagen
+  maand, en zet de maand erna in `budgetsNext`, dus `budgetPlan` draagt alleen maanden vanaf twee verder en geen
+  bestaande lezer hoeft hem te kennen. `budgetVoorMaand(ym)` is de stand van een maand vanaf nu. Eerdere maanden
+  veranderen niet: die staan in `SET.budgetHist` (`v309`) en de staaf, de bridge en het logboek lezen daar. "Deze
+  maand" is een bewuste uitzondering op `v235`, want de gebruiker kiest hem.
+  HET FORMULIER (`openPotForm(k?)`, ook achter `openPotjePick()`): categorie (bestaand of nieuw met naam en aard),
+  bedrag, vanaf, en bij een stijging de bron: EEN ander potje dat inlevert boven zijn ondergrens (`potjeMaandVloer()`,
+  in de lopende maand ook wat er al uit is), of een bewuste verhoging, en dan staat eerst het gevolg: veilig te besteden
+  (deze maand, in het geheugen doorgerekend met `potSimuleer()`, zonder `save()`) en Plan (de inleg, en potjes plus
+  inleg tegen je inkomen). Niets voorgekozen; openen en kiezen schrijven niets; `potFormZet()` leest het voorstel
+  opnieuw en eist de keuze zelf. Lager vraagt geen bron; het gevolg noemt een incasso die in die categorie nog verwacht
+  wordt (met een route naar opgezegd) en, als het deze maand ingaat, de vooruitblik voor en na.
+  GEMETEN op de stand van 6 oktober met Huur EUR 750: Huur vanaf oktober op nul geeft budget EUR 2.675 naar EUR 1.925
+  en een vooruitblik die op EUR 2.672 blijft (de huur van oktober is al uit), dus EUR 747 boven budget; september
+  blijft EUR 750. Huur kan geen dekking geven: zijn ondergrens is zijn incasso.
+  ARCHIVEREN (`SET.potArchief[k]={vanaf, op}`, `potArchiveer()`): het potje gaat op nul vanaf die maand, verdwijnt uit
+  de budgeteditor en de categoriekeuze, en elke boeking die daarna nog AUTOMATISCH in die categorie landt
+  (`potArchiefTx()`, een eigen keuze telt niet) staat als Let op-regel op Grip met een werklijst
+  (`openPotArchiefWerk()`). Terughalen haalt alleen het archief weg.
+  KANDIDATEN (`openCatKandidaten()`, na het aanmaken van een eigen categorie): per tegenpartij de boekingen van twaalf
+  maanden die op een hint bij de naam passen (`CAT_HINTS`: kinderen, alimentatie) of op wat je zoekt, met niets
+  aangevinkt; het gevolg per categorie staat er eerst, en pas "Verplaatsen" zet `OVR`, met een regel alleen als je dat
+  aanvinkt. Nieuwe spec `potjes-beheer.spec.js`; elf sabotages, alle elf rood.
 - **EEN DATUM PER SCHULD, EEN TELLING DIE DE PAGINA VOLGT, EN EEN BLOK VOOR WAAR JE INLEG HEEN GAAT** (`v350`,
   gevraagd door de gebruiker, de rest van de ronde Home, Vermogen en Vermogensreis; de inleg (`v348`) en kans en
   koers (`v347`) stonden al en zijn uit de mockup NIET gebouwd). GEMETEN VOOR DE RONDE: (1) DUO zei "nov 2035"
@@ -6262,7 +6293,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v350` → `minder-v351`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v351` → `minder-v352`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6281,7 +6312,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349` en `v350` naar `minder-v350`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350` en `v351` naar `minder-v351`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
