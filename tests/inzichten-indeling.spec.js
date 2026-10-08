@@ -170,7 +170,8 @@ test.describe('c · wat er nog komt', () => {
     expect(r.val).toBe('€0');
     expect(r.kleur).toContain('var(--mut)');          // gedempt, geen alarmkleur (v78/v93)
     expect(r.kleur).not.toContain('var(--red)');
-    expect(r.sub).toBe('alles is al afgeschreven');   // en niet meer de onware "niets herkend"
+    // v357: de sub noemt eerst waaruit het bedrag bestaat (vasteLastenStand()), dan de uitkomst
+    expect(r.sub).toBe('van €900 deze maand · alles is al afgeschreven');   // en niet meer de onware "niets herkend"
   });
 });
 

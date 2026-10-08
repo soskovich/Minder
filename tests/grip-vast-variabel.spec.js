@@ -5,6 +5,9 @@
 // variabel en staat in de bridge met zijn gewone patroon.
 // Fixtures: tests/vast-variabel-stand.js (Huur EUR 750 zonder betaling, Vervoer met lease en tanken) en
 // tests/deze-maand-stand.js (de stand van 6 oktober, Sport met Basic Fit).
+// v357: de vaste lasten staan weer in de bridge, als EEN stap "vaste lasten" (wat verwacht is tegen het budget),
+// en de regel eronder is vervallen; een tik op die stap opent dezelfde sheet. De kop is de uitkomst tegen het
+// budget, en de grootste afwijking bij de vaste lasten (Huur zonder betaling) staat in de zin.
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./vast-variabel-stand');
 const Zes = require('./deze-maand-stand');
@@ -105,16 +108,16 @@ test.describe('b. geen vaste lijst', () => {
 });
 
 test.describe('c. de kaart', () => {
-  test('de kop noemt het stuurgetal, Vervoer staat in de bridge en Huur in de regel vaste lasten', async ({ page }) => {
+  test('de kop is de uitkomst tegen het budget, Vervoer en de vaste lasten staan in de bridge en Huur in de zin', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
-    expect(await page.locator('#gripDezeMaand [data-dmregel]').innerText()).toMatch(/^Variabel: €1\.022 verwacht · €328 boven je potjes/);
+    expect(await page.locator('#gripDezeMaand [data-dmregel]').innerText()).toMatch(/^€2\.473 verwacht · €328 boven je budget/);
     const brug = await page.locator('#gripBrug').innerText();
     expect(brug).not.toContain('Huur');
     expect(brug).toContain('Vervoer');
-    const vr = await page.locator('#gripDezeMaand [data-vastregel]').innerText();
-    expect(vr).toContain('Vaste lasten €1.451 van €1.451');
-    expect(vr).toContain('Huur: geen betaling verwacht deze maand · €750 telt mee als vaste last');
-    expect(await page.locator('#gripDezeMaand [data-vastgrootste]').getAttribute('data-vastgrootste')).toBe('huur');
+    expect(await page.locator('#gripBrug [data-brugstap="vast"]').getAttribute('data-brugwaarde')).toBe('0');
+    expect(await page.locator('#gripDezeMaand [data-vastregel]').count()).toBe(0);
+    expect(await page.locator('#gripDezeMaand [data-dmzin]').innerText()).toContain('Huur: geen betaling verwacht deze maand · €750 telt mee als vaste last.');
+    expect(await page.evaluate(() => dezeMaandBrug(maandVooruit()).vastGrootste.k)).toBe('huur');
   });
   test('een potje zonder betaling gaat in de regel voor op een grotere afwijking', async ({ page }) => {
     // Vervoer EUR 500 tegen een lease van EUR 537: een vast deel dat EUR 37 boven zijn potje uitkomt
@@ -123,11 +126,11 @@ test.describe('c. de kaart', () => {
     expect(inv).toContainEqual(['vervoer', 37, false]);   // de invoer draagt een afwijking die groter is dan die van Huur (0)
     expect(inv).toContainEqual(['huur', 0, true]);
     await naarGrip(page);
-    expect(await page.locator('#gripDezeMaand [data-vastgrootste]').getAttribute('data-vastgrootste')).toBe('huur');
+    expect(await page.evaluate(() => dezeMaandBrug(maandVooruit()).vastGrootste.k)).toBe('huur');
   });
-  test('de totale uitkomst staat niet op de kaart, wel in de sheet', async ({ page }) => {
+  test('de totale uitkomst staat op de kaart en in de sheet, als hetzelfde getal (v357)', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
-    expect(await page.locator('#gripDezeMaand').innerText()).not.toContain('€2.473');
+    expect(await page.locator('#gripDezeMaand [data-dmregel]').getAttribute('data-uitkomst')).toBe('2473');
     await page.locator('#gripDezeMaand [data-dmkop]').click();
     await page.waitForSelector('#gripVooruit');
     expect(await page.locator('#gripVooruit [data-bandregel]').innerText()).toContain('Rond €2.473');
@@ -138,7 +141,7 @@ test.describe('c. de kaart', () => {
 test.describe('d. de sheets', () => {
   test('de vaste lasten per potje, met Huur als feit en Vervoer als vast deel van zijn potje', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
-    await page.locator('#gripDezeMaand [data-vastregel]').click();
+    await page.locator('#gripBrug [data-brugstap="vast"]').click();
     await page.waitForSelector('#gripVast');
     expect(await page.locator('#gripVast [data-vastpotje]').evaluateAll((e) => e.map((x) => x.dataset.vastpotje))).toEqual(['huur', 'vervoer', 'verzekering']);
     expect(await page.locator('#gripVast [data-vastpotje="huur"]').innerText()).toContain('geen betaling verwacht deze maand · het potje telt mee');
@@ -147,7 +150,7 @@ test.describe('d. de sheets', () => {
   });
   test('Vervoer vanuit de vaste lasten opent het vaste deel, vanuit de bridge het variabele deel', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
-    await page.locator('#gripDezeMaand [data-vastregel]').click();
+    await page.locator('#gripBrug [data-brugstap="vast"]').click();
     await page.locator('#gripVast [data-vastpotje="vervoer"]').click();
     await page.waitForSelector('#gripPotje[data-potje="vervoer"][data-terug]');
     expect(await page.locator('#gripPotje [data-gemengd]').innerText()).toContain('De andere €63 van je potje is variabel');
@@ -168,7 +171,7 @@ test.describe('d. de sheets', () => {
   test('openen schrijft niets', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
     const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
-    await page.locator('#gripDezeMaand [data-vastregel]').click(); await page.waitForSelector('#gripVast');
+    await page.locator('#gripBrug [data-brugstap="vast"]').click(); await page.waitForSelector('#gripVast');
     expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
   });
 });
@@ -212,16 +215,14 @@ for (const w of [360, 390]) {
     await page.setViewportSize({ width: w, height: 800 });
     await boot(page, HUURVAST); await naarGrip(page);
     const kaart = await page.locator('#gripDezeMaand').evaluate((e) => ({ h: Math.round(e.getBoundingClientRect().height), o: e.scrollWidth - e.clientWidth }));
-    const regel = await page.locator('#gripDezeMaand [data-vastregel]').evaluate((e) => Math.round(e.getBoundingClientRect().height));
-    await page.locator('#gripDezeMaand [data-vastregel]').click(); await page.waitForSelector('#gripVast');
+    await page.locator('#gripBrug [data-brugstap="vast"]').click(); await page.waitForSelector('#gripVast');
     const sheet = await page.locator('#gripVast').evaluate((e) => ({ h: Math.round(e.getBoundingClientRect().height), o: e.scrollWidth - e.clientWidth }));
     await page.evaluate(() => openPotAard('vices'));
     const aard = await page.locator('#potAard').evaluate((e) => ({ h: Math.round(e.getBoundingClientRect().height), o: e.scrollWidth - e.clientWidth }));
-    console.log(`v355 ${w}px: kaart ${kaart.h}, vaste-lastenregel ${regel}, sheet ${sheet.h}, keuze ${aard.h}`);
+    console.log(`v357 ${w}px: kaart ${kaart.h}, sheet ${sheet.h}, keuze ${aard.h}`);
     expect(kaart.o).toBe(0); expect(sheet.o).toBe(0); expect(aard.o).toBe(0);
-    expect(regel).toBeLessThanOrEqual(70);
     expect(kaart.h).toBeLessThan(420);
-    expect(sheet.h).toBeLessThan(460);   // gemeten 449 op 360 en 413 op 390
+    expect(sheet.h).toBeLessThan(500);   // v357: met de regel waaruit het bedrag bestaat 491 op 360 en 455 op 390 (gemeten; was 449/413)
     expect(aard.h).toBeLessThan(320);
   });
 }

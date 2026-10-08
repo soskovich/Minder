@@ -7903,7 +7903,7 @@ function gripVerschil(bedrag, budget){
    bridge op Inzichten (brugAfronden): de afgeronde stappen tellen exact op van budget naar uitkomst.
    DE TEKENING IS brugGrafiek(), dezelfde als op Inzichten (v104): boven rood, onder gedempt. Begint de as
    niet bij nul, dan staat de ondergrens op de as. */
-const DEZEMAAND_LOS=3;
+const DEZEMAAND_LOS=3, DEZEMAAND_KOL=7;
 function dezeMaandBrug(V){
   /* v354: DE BRIDGE GAAT OVER DE VARIABELE POTJES. Hij begint bij wat die samen mogen (V.variabel.budget) en
      eindigt bij wat er verwacht uitgaat (V.variabel.eind). De vaste potjes staan als een regel onder de
@@ -7913,36 +7913,63 @@ function dezeMaandBrug(V){
      Alles wat eronder blijft is samen EEN stap, de ruimte in je andere potjes. Tot v356 stonden de grootste
      afwijkingen los, boven en onder; GEMELD stonden Sport (-527) en Verzekeringen (-525) daardoor los en viel
      Boodschappen (+61), dat niet in zijn potje past, in de rest. Een potje dat eronder blijft vraagt niets. */
-  if(!V || V.onbekend || !V.variabel || !(V.variabel.budget>0)) return null;
-  const diff=V.variabel.eind-V.variabel.budget;
+  /* v357: DE BRIDGE LOOPT WEER VAN HET HELE BUDGET NAAR DE UITKOMST VAN DE MAAND (gevraagd door de gebruiker),
+     met de vaste lasten als EEN stap naast de variabele potjes. Tussen budget en uitkomst: de potjes die boven
+     eindigen, de ruimte in de andere potjes, de vaste lasten (wat verwacht is, V.vaste.eind tegen V.vaste.budget)
+     en wat er zonder potje uitgaat. Die laatste stap draagt ook een budget dat in geen van de twee potjessommen
+     zit, zodat de stappen per constructie optellen van V.budget tot V.projectie. De regel vaste lasten onder de
+     bridge is vervallen; een tik op de stap opent dezelfde sheet (renderGripVast). */
+  if(!V || V.onbekend || !V.variabel || !(V.budget>0)) return null;
+  const diff=V.projectie-V.budget;
+  const varDiff=V.variabel.eind-V.variabel.budget;
+  const vastDiff=V.vaste.eind-V.vaste.budget;
+  const heeftVast=(V.vastePotjes||[]).length>0;
   const boven=V.potjes.filter(x=>Math.round(x.overR)>0)
     .sort((a,b)=>(b.overR-a.overR) || (a.naam<b.naam?-1:1));
-  const los=boven.slice(0,DEZEMAAND_LOS);
-  const rauw=los.map(x=>({k:x.k, v:x.overR}));
-  rauw.push({k:'~rest', v:diff-los.reduce((a,x)=>a+x.overR,0)});
-  const R=brugAfronden(rauw, diff);
+  /* v357: HOOGUIT DEZEMAAND_KOL KOLOMMEN, want acht passen op 360px niet op 40px breed (gemeten 35px bij 2px gap).
+     Staan er een vaste en een zonder-stap, dan gaan er hooguit twee potjes los en valt het derde in de rest,
+     die dan "andere" heet; de zin noemt elk potje erboven toch bij naam (Br.bovenLijst). */
+  const maak=n=>{ const los=boven.slice(0,n);
+    const rauw=los.map(x=>({k:x.k, v:x.overR}));
+    rauw.push({k:'~rest', v:varDiff-los.reduce((a,x)=>a+x.overR,0)});
+    rauw.push({k:'~vast', v:vastDiff});
+    rauw.push({k:'~zonder', v:diff-varDiff-vastDiff});
+    const R=brugAfronden(rauw, diff);
+    const kol=2+los.length+(R['~rest']?1:0)+((heeftVast||R['~vast'])?1:0)+(R['~zonder']?1:0);
+    return {los, R, kol}; };
+  let M=maak(Math.min(DEZEMAAND_LOS, boven.length));
+  while(M.kol>DEZEMAAND_KOL && M.los.length) M=maak(M.los.length-1);
+  const {los, R}=M;
   const rest=R['~rest']||0;
-  const stappen=[{soort:'begin', label:'potjes', waarde:V.variabel.budget}];
+  const stappen=[{soort:'begin', label:'budget', waarde:V.budget}];
   for(const x of los) stappen.push({soort:'potje', k:x.k, label:x.naam, waarde:R[x.k], aard:x.aard});
   /* De rest heet ruimte zolang hij onder nul blijft; staat er een vierde potje boven dat de rest boven nul
      trekt, dan is het geen ruimte en heet hij "andere". */
   if(rest) stappen.push({soort:'rest', label:rest<0?'ruimte':'andere', waarde:rest});
-  stappen.push({soort:'eind', label:ymFull(V.m).slice(0,3), waarde:V.variabel.eind});
+  /* De stap vaste lasten staat er ook op nul zolang er vaste potjes zijn: hij is de enige ingang naar de sheet
+     vaste lasten op de kaart, nu de regel eronder weg is. */
+  if(heeftVast || R['~vast']) stappen.push({soort:'vast', label:'vaste lasten', waarde:R['~vast']||0});
+  if(R['~zonder']) stappen.push({soort:'zonder', label:'zonder potje', waarde:R['~zonder']});
+  stappen.push({soort:'eind', label:ymFull(V.m).slice(0,3), waarde:V.projectie});
   /* De ondergrens van de as: alleen als alle standen boven nul liggen en de stappen klein zijn tegen het
      budget, anders zijn ze niet te zien. Een rond getal (een halve macht van tien) onder de laagste stand. */
-  let run=V.variabel.budget; const lv=[V.variabel.budget, V.variabel.eind];
+  let run=V.budget; const lv=[V.budget, V.projectie];
   for(const st of stappen.slice(1,-1)){ run+=st.waarde; lv.push(run); }
   const lo=Math.min(...lv), hi=Math.max(...lv);
   let basis=0;
   if(lo>0 && hi-lo<hi*0.5){ const stap=Math.pow(10,Math.floor(Math.log10(hi)))/2; basis=Math.max(Math.floor((lo-(hi-lo)*0.6)/stap)*stap,0); }
-  return {tegen:'budget', stappen, basis, los, bovenLijst:boven, rest, diff, boven:boven.length>0};
+  /* De vaste last die het meest afwijkt, of een vast potje zonder betaling: de zin noemt hem, want dat feit
+     stond tot v357 in de regel onder de bridge (v355: geen betaling wordt eerst genoemd). */
+  const vg=(V.vastePotjes||[]).filter(x=>x.geen || Math.round(x.eind)!==x.bud).sort((a,b)=>(b.geen-a.geen) || Math.abs(b.overR)-Math.abs(a.overR) || (a.naam<b.naam?-1:1))[0]||null;
+  return {tegen:'budget', stappen, basis, los, bovenLijst:boven, rest, vast:R['~vast']||0, zonder:R['~zonder']||0, vastGrootste:vg, diff, boven:boven.length>0};
 }
 /* De zin stelt vast en oordeelt niet (v78/v93). v356: hij noemt ELK potje dat boven zijn bedrag eindigt bij
    naam en oorzaak (past niet, of loopt voor), ook een vierde dat niet los in de bridge staat, en daarna de
    ruimte in de andere potjes als een bedrag. */
 function dezeMaandZin(Br){
   const boven=Br.bovenLijst||Br.los.filter(x=>x.overR>0);
-  if(!Br.boven) return 'Alle potjes blijven verwacht onder hun bedrag.';
+  const vz=Br.vastGrootste?` ${gripVastAfwijking(Br.vastGrootste)}.`:'';
+  if(!Br.boven) return 'Alle potjes blijven verwacht onder hun bedrag.'+vz;
   const pn=boven.filter(x=>x.aard==='pastniet'), vr=boven.filter(x=>x.aard==='voor'), an=boven.filter(x=>x.aard!=='pastniet' && x.aard!=='voor');
   const d=[];
   if(pn.length) d.push(`${gripNamen(pn)} ${pn.length===1?'past niet in zijn potje':'passen niet in hun potje'}`);
@@ -7951,7 +7978,7 @@ function dezeMaandZin(Br){
   const ruimte=Br.rest<0 ? -Br.rest : 0;
   if(ruimte) d.push(`je andere potjes houden samen ${euro0(ruimte)} ruimte`);
   else if(Br.rest>0) d.push(`je andere potjes samen ${euro0(Br.rest)} boven`);
-  return d.join('; ')+'.';
+  return d.join('; ')+'.'+vz;
 }
 function dezeMaandKaart(){
   const m=thisYM(); let V=null; try{ V=maandVooruit(); }catch(_){ V=null; }
@@ -7966,34 +7993,44 @@ function dezeMaandKaart(){
     boven=`<div data-vooruit="onbekend"><div style="font-weight:700;font-size:var(--fs-md)">${euro0(Math.round(T.spendNorm||0))} uitgegeven${bud>0?` van ${euro0(bud)}`:''}</div>
       <div class="small muted" style="margin-top:3px;line-height:1.45">Waar je maand uitkomt rekent Minder met je laatste ${VOORUIT_MAANDEN} afgeronde maanden, en die zijn er nog niet allemaal.</div></div>`;
   } else {
-    /* v354: DE KOP NOEMT HET STUURGETAL: wat er in je variabele potjes verwacht uitgaat tegen wat ze samen
-       mogen. De totale uitkomst staat in de sheet (renderGripVooruit), want daarin zitten de vaste lasten en
-       wat er zonder potje uitgaat, en die stuur je niet deze maand bij. */
-    const Vv=V.variabel, d=Vv.eind-Vv.budget;
-    const vs=Vv.budget>0?(d<0?`${euro0(-d)} onder je potjes`:(d>0?`${euro0(d)} boven je potjes`:'precies je potjes')):'';
+    /* v357: DE KOP IS DE UITKOMST TEGEN HET BUDGET (gevraagd door de gebruiker), want de bridge loopt weer van
+       het hele budget naar die uitkomst. Het stuurgetal van v354 (variabel tegen je potjes) staat in de sheet. */
     let Br=null; try{ Br=dezeMaandBrug(V); }catch(_){ Br=null; }
-    if(Br) Br.tik='gripBrugTik';
+    if(Br){ Br.tik='gripBrugTik'; Br.gap=2; }
+    const vs=gripVerschil(V.projectie, V.budget);
     boven=`<div data-vooruit="${V.projectie}" style="cursor:pointer" onclick="openGripVooruit()">
-      <div class="row" data-dmregel data-variabel="${Vv.eind}" style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0"><span style="font-weight:800;font-size:var(--fs-lg)">Variabel: ${euro0(Vv.eind)}</span><span class="small muted"> verwacht${vs?` · ${vs}`:''}</span></span><span style="color:var(--teal);font-weight:700">›</span></div>
-      ${Br?`<div id="gripBrug">${brugGrafiek(Br)}</div><div class="small" data-dmzin style="line-height:1.45;margin-top:6px;color:var(--mut)">${esc(dezeMaandZin(Br))}</div>`:''}</div>${gripVastRegel(V)}`;
+      <div class="row" data-dmregel data-uitkomst="${V.projectie}" style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0"><span style="font-weight:800;font-size:var(--fs-lg)">${euro0(V.projectie)}</span><span class="small muted"> verwacht${vs?` · ${vs}`:''}</span></span><span style="color:var(--teal);font-weight:700">›</span></div>
+      ${Br?`<div id="gripBrug">${brugGrafiek(Br)}</div><div class="small" data-dmzin style="line-height:1.45;margin-top:6px;color:var(--mut)">${esc(dezeMaandZin(Br))}</div>`:''}</div>`;
   }
   return `<div class="card" id="gripDezeMaand">${kop}${boven}${af?`<div style="margin-top:8px">${af}</div>`:''}</div>`;
 }
-/* v354: DE VASTE LASTEN ALS EEN REGEL onder de bridge: wat de vaste potjes verwacht kosten tegen wat erin
-   staat, met de grootste afwijking en de reden. Een potje waar deze maand geen betaling tegenover staat
-   wordt genoemd als feit en niet als besparing; de sheet (renderGripVast) vraagt of het bedrag nog klopt. */
+/* De reden bij de vaste last die het meest afwijkt; sinds v357 in de zin onder de bridge (v355: een potje zonder
+   betaling telt met zijn hele bedrag en wordt eerst genoemd). */
 function gripVastAfwijking(x){
   if(x.geen) return `${x.naam}: geen betaling verwacht deze maand · ${euro0(x.bud)} telt mee als vaste last`;
   return `${x.naam}: ${euro0(x.eind)} verwacht, ${euro0(x.bud)} in je budget`;
 }
-function gripVastRegel(V){
-  const L=(V&&V.vastePotjes)||[]; if(!L.length) return '';
-  /* v355: een potje zonder betaling telt met zijn hele bedrag (geen afwijking in het getal), en de regel noemt
-     het toch eerst: dat er geen betaling komt is het feit dat je moet zien. */
-  const g=L.filter(x=>x.geen || Math.round(x.eind)!==x.bud).sort((a,b)=>(b.geen-a.geen) || Math.abs(b.overR)-Math.abs(a.overR) || (a.naam<b.naam?-1:1))[0];
-  return `<div class="row" data-vastregel style="gap:8px;align-items:center;padding:9px 0 0;margin-top:8px;border-top:1px solid var(--line);cursor:pointer" onclick="openGripVast()">
-    <span style="flex:1;min-width:0"><span style="font-size:13px">Vaste lasten ${euro0(V.vaste.eind)} van ${euro0(V.vaste.budget)}</span>${g?`<span class="small muted" data-vastgrootste="${esc(g.k)}" style="display:block;margin-top:2px;line-height:1.4">${esc(gripVastAfwijking(g))}</span>`:''}</span>
-    <span style="color:var(--teal);font-weight:700">›</span></div>`;
+/* v357: WAARUIT DE VASTE LASTEN VAN DEZE MAAND BESTAAN, EEN BRON MET TWEE LEZERS (gevraagd door de gebruiker): de
+   sheet vaste lasten op Grip en de post "Nog te betalen · vast" op Inzichten. Gemeld lazen die twee als
+   tegenstrijdig (EUR 919 op Grip, EUR 817 op Inzichten): het eerste is wat de vaste potjes deze maand kosten,
+   het tweede wat daarvan nog komt. totaal = betaald + nog + geen, per constructie, want een vast potje eindigt
+   op wat er betaald is plus de incasso's die nog komen, of zonder beide op zijn hele bedrag (geen, v355).
+   buiten is wat monthLiquidity() nog verwacht aan incasso's buiten de vaste potjes (geen potje, of geen
+   categorie): die tellen in "nog te betalen" en in de bridge bij zonder potje, en de post noemt ze apart. */
+function vasteLastenStand(){
+  let V=null, L=null; try{ V=maandVooruit(); L=monthLiquidity(); }catch(_){ return null; }
+  if(!V || V.onbekend || !L) return null;
+  const P=V.vastePotjes||[];
+  const betaald=Math.round(P.reduce((a,x)=>a+(x.geen?0:(+x.uit||0)),0));
+  const nog=Math.round(P.reduce((a,x)=>a+(x.geen?0:(+x.vast||0)),0));
+  const geen=Math.round(P.reduce((a,x)=>a+(x.geen?(+x.bud||0):0),0));
+  return {totaal:V.vaste.eind, budget:V.vaste.budget, betaald, nog, geen, buiten:Math.max(Math.round(+L.fixDue||0)-nog,0)};
+}
+function vasteLastenZin(S){
+  if(!S) return '';
+  const d=[`${euro0(S.betaald)} betaald`, `${euro0(S.nog)} komt nog`];
+  if(S.geen) d.push(`${euro0(S.geen)} zonder betaling`);
+  return `${euro0(S.totaal)} deze maand · ${d.join(', ')}`;
 }
 function openGripVast(){ renderGripVast(); showSheetBg(); }
 function renderGripVast(){
@@ -8008,7 +8045,8 @@ function renderGripVast(){
       ${geen.map(x=>`<button class="btn sec" data-vastaanpassen="${esc(x.k)}" style="width:auto;padding:8px 12px;font-size:13px;margin-top:8px" onclick="openPotForm('${esc(x.k)}')">${esc(x.naam)} aanpassen</button>`).join(' ')}`:'';
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripVast" data-vasteind="${V.vaste.eind}" data-vastbudget="${V.vaste.budget}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Vaste lasten · ${esc(ymFull(V.m))}</div>
-    <div class="small muted" style="line-height:1.5;margin-top:4px">${euro0(V.vaste.eind)} van ${euro0(V.vaste.budget)}: de herkende incasso's die al betaald zijn plus die deze maand nog komen, zonder gemiddelde. Wat er verder in een potje zit, is variabel en staat in de bridge.</div>
+    <div class="small" data-vastuitleg style="line-height:1.5;margin-top:4px">${esc(vasteLastenZin(vasteLastenStand()))}</div>
+    <div class="small muted" style="line-height:1.5;margin-top:4px">Tegen ${euro0(V.vaste.budget)} in je budget: de herkende incasso's die al betaald zijn plus die deze maand nog komen, zonder gemiddelde. Wat er verder in een potje zit, is variabel en staat in de bridge.</div>
     <div style="margin-top:8px">${L.map(rij).join('')}</div>${vraag}</div>`;
 }
 /* ===== v353: EEN TIK OP EEN STAP OPENT DIE STAP =====
@@ -8020,6 +8058,7 @@ function renderGripVast(){
 function gripBrugTik(soort,k){
   if(soort==='potje' && k){ openGripPotje(k); return; }
   if(soort==='rest'){ openGripRest(); return; }
+  if(soort==='vast'){ openGripVast(); return; }
   openGripVooruit();
 }
 function openGripPotje(k, deel){ window._gripPotje=k; window._gripPotjeDeel=deel==='vast'?'vast':'var'; renderGripPotje(); showSheetBg(); }
@@ -12176,7 +12215,14 @@ function nogDezeMaandPosten(){
      L.fixDueBetaald onderscheidt de twee. Nul EN niets betaald is leeg en valt weg; nul EN alles
      betaald is een UITKOMST en blijft staan, dezelfde vorm als 'gehaald' bij Nog te sparen. */
   const allesBetaald = !(L.fixDue>0) && (L.fixDueBetaald||0)>0;
-  const sub=`${L.fixDue>0?`herkende incasso's`:(allesBetaald?`alles is al afgeschreven`:'niets herkend')}${(L.fixDueExclCount>0)?` \u00b7 ${L.fixDueExclCount} uitgesloten`:''}`;
+  /* v357: de sub noemt waaruit het bedrag bestaat, uit dezelfde bron als de sheet vaste lasten op Grip
+     (vasteLastenStand()), zodat "EUR 817" hier en "EUR 919" op Grip niet als tegenspraak lezen. Zonder
+     vooruitblik (minder dan drie afgeronde maanden) blijft de oude herkomst staan. */
+  const VS=vasteLastenStand();
+  const herkomst=VS && VS.totaal>0
+    ? `van ${euro0(VS.totaal)} deze maand${VS.buiten?` \u00b7 ${euro0(VS.buiten)} zonder potje`:''}${VS.geen?` \u00b7 ${euro0(VS.geen)} zonder betaling telt niet mee`:''}${(!(L.fixDue>0)&&allesBetaald)?` \u00b7 alles is al afgeschreven`:''}`
+    : (L.fixDue>0?`herkende incasso's`:(allesBetaald?`alles is al afgeschreven`:'niets herkend'));
+  const sub=`${herkomst}${(L.fixDueExclCount>0)?` \u00b7 ${L.fixDueExclCount} uitgesloten`:''}`;
   // Nog te sparen: exact het bedrag dat 'veilig te besteden' al reserveert (saveReserved), zodat de twee
   // schermen nooit uiteen kunnen lopen. Niets herberekend; geen spaartarget = geen tegel.
   let S=null; try{ S=safeToSpend(); }catch(_){}
@@ -16979,11 +17025,14 @@ function brugGrafiek(Br){
   const y=v=>PH-((Math.max(v,basis)-basis)/(top-basis)*PH);
   const kleur=s=>s.soort==='begin'?(Br.tegen==='vorige'?'var(--bar)':'var(--ref)'):(s.soort==='eind'?'var(--teal)':(s.waarde>0?'var(--red)':'var(--mut2)'));
   const n=kol.length;
-  const as=basis>0?`<div data-asbasis="${basis}" style="flex:0 0 auto;position:relative;height:${PH}px;border-right:1px solid var(--ref)"></div>`:'';
-  return `<div class="brug" data-brug style="display:flex;gap:4px;margin-top:8px">${as}${kol.map((c,i)=>{
+  /* v357: de gap komt van de aanroeper (Grip geeft 2px, zodat zeven kolommen op 360px elk 40px breed zijn), en de
+     as is een lijn op de rand en geen eigen kolom: als flex-item kostte hij een gap en een pixel. */
+  const gap=Br.gap!=null?+Br.gap:4;
+  const as=basis>0?`<div data-asbasis="${basis}" style="position:absolute;left:0;top:0;height:${PH}px;border-left:1px solid var(--ref)"></div>`:'';
+  return `<div class="brug" data-brug style="display:flex;gap:${gap}px;margin-top:8px;position:relative">${as}${kol.map((c,i)=>{
     const yt=y(c.hi), h=Math.max(y(c.lo)-yt,2);
     const val=(c.s.soort==='begin'||c.s.soort==='eind')?euro0(c.s.waarde):brugTeken(c.s.waarde);
-    const lijn=i<n-1?`<i style="position:absolute;left:88%;width:calc(24% + 4px);top:${y(c.na).toFixed(1)}px;border-top:1px dashed var(--ref)"></i>`:'';
+    const lijn=i<n-1?`<i style="position:absolute;left:88%;width:calc(24% + ${gap}px);top:${y(c.na).toFixed(1)}px;border-top:1px dashed var(--ref)"></i>`:'';
     const tik=Br.tik?` data-brugtik role="button" onclick="event.stopPropagation();${Br.tik}('${c.s.soort}','${esc(c.s.k||'')}')"`:'';
     return `<div data-brugstap="${c.s.soort}" data-brugwaarde="${c.s.waarde}"${tik} style="flex:1 1 0;min-width:0${Br.tik?';cursor:pointer':''}">
       <div style="position:relative;height:${PH}px">

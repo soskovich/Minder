@@ -114,8 +114,9 @@ test('e. Deze maand: de vooruitblik met de lopende afspraak, en een tik opent de
   expect(r.V.band.maanden).toEqual(['2026-07', '2026-08', '2026-09']);
   // v349: de kaart draagt de uitkomst met het verschil met je budget, en de bridge eronder (deze-maand-bridge.spec.js)
   // v354: de kaart draagt het stuurgetal, variabel tegen je potjes; de totale uitkomst staat in de sheet
-  expect(r.tekst).toContain(`Variabel: €${r.V.variabel.eind.toLocaleString('nl-NL')} verwacht`);
-  expect(r.tekst).not.toContain(`€${r.V.projectie.toLocaleString('nl-NL')} · `);
+  // v357: de kop is weer de uitkomst tegen het budget, en de bridge loopt van het budget naar die uitkomst
+  expect(r.tekst).toContain(`€${r.V.projectie.toLocaleString('nl-NL')} verwacht · `);
+  expect(r.tekst).not.toContain('Variabel:');
   expect(r.tekst).toContain('€131 per maand naar je reserveringen tot november');
   expect(r.afspraak).toBe(1);
   await page.evaluate(() => openGripVooruit());
@@ -220,8 +221,10 @@ for (const w of [360, 390]) test(`l. hoogte van Grip op ${w}px`, async ({ page }
   // v354: de kop is het stuurgetal en de regel vaste lasten komt onder de bridge: 411px op 360 en 373 op 390
   // v355: Abonnementen heeft hier geen herkende incasso en is dus variabel; de regel vaste lasten heeft dan geen
   // afwijking om te noemen (Huur EUR 900 van 900): 374px op 360 en 336 op 390 (gemeten)
-  expect(h.deze).toBe(w === 360 ? 374 : 336);
-  expect(h.totaal).toBe(w === 360 ? 780 : 741);
+  // v357: de kop is de uitkomst tegen het budget en de regel vaste lasten is weg; de vaste lasten staan als stap in
+  // de bridge: 315px op 360 en 297 op 390, dezelfde hoogte als bij v349 (gemeten)
+  expect(h.deze).toBe(w === 360 ? 315 : 297);
+  expect(h.totaal).toBe(w === 360 ? 721 : 703);
 });
 
 /* De handelingen. Uit eten heeft een potje van 150; in juli, augustus en september ging er na dag 4
