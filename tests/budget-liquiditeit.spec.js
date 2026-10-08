@@ -60,13 +60,12 @@ test.describe('v53 potjes leidend, inkomen-limiet als spiegel', () => {
     await open(page);
     await page.evaluate(() => go('ins'));
     const t = await text(page, '#s-ins');
-    expect(t).toMatch(/maandbudget/i);   // v135: staat nu in de zin "van €2.400 maandbudget"
-    expect(t).toContain('€2.400');
+    /* v359: de stand-kaart is vervallen; het budget staat als label bij de budgetlijn van de maandgrafiek. */
+    expect(t).toContain('budget €2.400');
     /* v178: de limiet-spiegel was een oordeel over je plan en verhuisde naar Maand; v228 liet hem
        daar vervallen (tests/vaststellen-zonder-gevolg.spec.js). De limiet zelf blijft een meting. */
     expect(t).not.toContain('inkomen-limiet');
-    const kaart = await page.evaluate((m) => monthStatusCard(m), CUR);
-    expect(kaart).not.toContain('€2.100');   // de limiet staat nergens als maandbudget
+    expect(t).not.toContain('€2.100');   // de limiet staat nergens als maandbudget
   });
 
   test('Instellingen spiegelt dezelfde overschrijding, met de geplande som als noot', async ({ page }) => {
@@ -108,7 +107,7 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     await open(page);
     // v164: renderLiquidityKPI(), vooruitOpbouw() en vooruitDeep() waren al onbereikbaar en zijn
     // opgeruimd. Het label leeft nog in nogDezeMaandBody(), dus daar bewaken we het.
-    expect(await page.evaluate(() => nogDezeMaandCard())).not.toContain('Verwacht over einde maand');
+    /* v359: nogDezeMaandCard() is vervallen; de posten zijn tegels op Inzichten. */
     await page.evaluate(() => go('ins'));   // v144: de tegels wonen alleen nog in de Inzichten-hero
     /* v169: het variabele deel kwam uit L.varDue, een extrapolatie van je tempo. Dat is nu het
        plan (varPlanRemaining), en het staat als eigen regel onder de tegel in plaats van opgeteld
@@ -126,8 +125,10 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
        v309: de post is naar het HOOFDGETAL van de stand-kaart verhuisd en heet daar "nog in je
        potjes". Het bedrag staat nu VOOR het label in plaats van erachter, want het is het grote
        getal geworden; de bron is onveranderd varBudget() min varPotjeStand().gebruikt. */
-    if (potjes > 0) expect(t).toMatch(/€[\d.]+[\s\S]{0,40}(nog in je potjes|te veel uitgegeven)/i);
-    else expect(t).not.toMatch(/nog in je potjes|te veel uitgegeven/i);
+    /* v359: de tegel "Nog in potjes" staat er altijd; zonder potjes zegt hij dat. */
+    expect(t).not.toContain('Verwacht over einde maand');
+    if (potjes > 0) expect(t).toMatch(/Nog in potjes\s*-?€[\d.]+/);
+    else expect(t).toMatch(/Nog in potjes\s*€0\s*nog geen potjes/);
     expect(plan).toBeGreaterThanOrEqual(0);
   });
 
@@ -234,10 +235,11 @@ test.describe('v55 vast = herkende herhaling', () => {
 test('budgetrij "Uitgegeven" opent het maand-detail vanaf Inzichten', async ({ page }) => {
   await open(page);
   await page.evaluate(() => go('ins'));
-  // v135: de rij draagt twee ingangen (uitgegeven en maandbudget), dus mikken we op het woord
-  await page.locator('#s-ins >> text=uitgegeven').first().click();
+  /* v359: de tegel Uitgegeven opent zijn opbouw, en "Per categorie ›" daarin het maand-detail. */
+  await page.click('[data-instegel="uitgegeven"]');
   await page.waitForSelector('#sheetBg.show');
+  expect(await text(page, '#sheet')).toContain('€445');
+  await page.locator('#sheet >> text=Per categorie').click();
   const t = await text(page, '#sheet');
-  expect(t).toContain('€445');
   expect(t).toContain('Boodschappen');
 });

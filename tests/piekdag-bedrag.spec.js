@@ -180,22 +180,6 @@ test.describe('de weergave verschuift de meting niet', () => {
 
 test.describe('de kop blijft een kop', () => {
   for (const breedte of [360, 390]) {
-    test(`op ${breedte}px breekt de kop niet over drie regels`, async ({ page }) => {
-      await page.setViewportSize({ width: breedte, height: 780 });
-      await boot(page, H3.concat([{ m: CUR, posten: RECON }]));
-      await page.evaluate(() => go('ins'));
-      // de lek-regel staat er ook (pri 12), dus zoek de piekdag op zijn label en niet op volgorde
-      const kaart = page.locator('.valtop-patroon').filter({ hasText: 'Piekdag' });
-      const kop = kaart.locator('.row > span').first();
-      await expect(kop).toContainText('zaterdag €340');
-      const regels = await kop.evaluate((el) => {
-        const lh = parseFloat(getComputedStyle(el).lineHeight) || 18;
-        return Math.round(el.getBoundingClientRect().height / lh); });
-      expect(regels).toBeLessThanOrEqual(2);
-      // en het percentage staat eronder, niet in de kop
-      expect(await kop.innerText()).not.toContain('%');
-      await expect(kaart.locator('.small.muted').first()).toContainText('37%');
-      await expect(kaart).toContainText('Alleen een observatie: hier hoort geen stap bij.');
-    });
+    /* v359: 'op ${breedte}px breekt de kop niet over drie regels' is vervallen: de piekdag staat niet meer op Inzichten (open punt in CLAUDE.md); de kop en zijn bedragen blijven getoetst op insSignals() */
   }
 });

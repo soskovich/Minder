@@ -283,9 +283,10 @@ test.describe('b · historische reeksen', () => {
        de hele app. v178 zette die grafiek op Maand, v227 bracht hem terug naar Inzichten, dus de zin
        staat nu op Inzichten en niet op Maand. Hij hangt nog steeds niet aan een tegel. */
     const pagina = await page.evaluate(() => $('#s-ins').innerText + ' ' + $('#s-maand').innerText);
-    expect((pagina.match(/maanden zie je hier je verloop/gi) || []).length).toBe(1);
-    expect(await page.evaluate(() => $('#s-maand').innerText)).not.toMatch(/zie je hier je verloop/i);
-    expect(s).not.toMatch(/zie je hier je verloop/i);   // niet meer per tegel
+    // v359: de kaart "Over de maanden" zegt het zonder afgesloten maand
+    expect((pagina.match(/staan je maanden hier naast elkaar/gi) || []).length).toBe(1);
+    expect(await page.evaluate(() => $('#s-maand').innerText)).not.toMatch(/staan je maanden hier naast elkaar/i);
+    expect(s).not.toMatch(/staan je maanden hier naast elkaar/i);   // niet meer per tegel
     expect(await page.locator('#maandKpiProbe .spark, #maandKpiProbe svg.spk').count()).toBe(0);
     expect(s).toMatch(/\d+%/);                                            // de waarde staat er wél
   });
@@ -326,7 +327,8 @@ test.describe('b2 · maandgrafiek', () => {
     const staven = await c.locator('rect.cbar').count();
     const vals = await c.locator('text[font-weight="700"]').evaluateAll((els) => els.map((e) => e.textContent));
     expect(vals.filter((t) => !/budget/.test(t)).length).toBe(staven);      // elke staaf een waarde
-    expect(await c.locator('rect[fill="transparent"] title').count()).toBe(await c.locator('rect.cbar').count());
+    // v359: de lopende maand staat er lichter bij en heeft geen bridge, dus ook geen tik
+    expect(await c.locator('rect[fill="transparent"] title').count()).toBe(await c.locator('rect.cbar:not([data-lopend])').count());
     expect(await page.locator('#insSpendChart line[stroke-dasharray]').count()).toBeGreaterThan(0);   // referentielijn
     expect(await page.locator('#insSpendChart line:not([stroke-dasharray])').count()).toBe(1);        // alleen de basislijn
   });
@@ -414,41 +416,9 @@ test.describe('c · tik op een tegel', () => {
 });
 
 test.describe('d · uitgaven-vs-budget-grafiek', () => {
-  /* v194: de lopende maand stond hier als volwaardige staaf naast volle maanden en las op dag 5
-     als een instorting; de correctie hing aan een sterretje met een voetnoot. Die staaf is weg, dus
-     de grafiek plot alleen afgeronde maanden. Alle staven dragen nu een waardelabel. */
-  test('rendert elke afgeronde maand met budgetlijn, en de lopende maand niet', async ({ page }) => {
-    await openIns(page);
-    const n = await page.evaluate(() => months().filter((m) => m < thisYM()).length);
-    const html = await page.evaluate(() => spendVsBudgetChart());
-    expect(n).toBeGreaterThanOrEqual(6);
-    expect((html.match(/<rect class="cbar"/g) || []).length).toBe(n);
-    expect((html.match(/stroke-dasharray="4 3"/g) || []).length).toBe(n);      // budgetlijn per maand
-    expect(html).not.toContain('fill-opacity=".42"');                          // geen accentstaaf meer
-    expect(html).not.toContain('loopt nog');                                   // en dus geen voetnoot
-    const nu = await page.evaluate((m) => MNAMES[+m.slice(5, 7) - 1], CUR);
-    expect(html).not.toContain(`>${nu}*<`);
-    expect(html).not.toContain('*<');                                          // het sterretje is weg
-    expect(html).toContain('>0<');                                             // y-as met nullijn
-    expect((html.match(/font-weight="700"/g) || []).length).toBe(n);           // elke staaf een label
-  });
+  /* v359: 'de budgettag staat er alleen als' is vervallen: de maandgrafiek toont sinds v359 de laatste drie (of twaalf) afgesloten maanden plus de lopende, met het bedrag in de balk en het budgetlabel van nu; inzichten-dashboard.spec.js draagt dat */
 
-  test('de budgettag staat er alleen als de budgetten per maand verschillen', async ({ page }) => {
-    await openIns(page);
-    const gelijk = await page.evaluate(() => spendVsBudgetChart());
-    expect(gelijk).not.toContain('budget €');       // een vlakke lijn zegt het al
-    // een afwijkend budget in de laatste afgeronde maand: dan voegt de tag wel iets toe
-    const anders = await page.evaluate(() => {
-      const echt = totals;
-      const laatste = months().filter((m) => m < thisYM()).slice(-1)[0];
-      window.totals = (mm, o) => { const t = echt(mm, o);
-        return mm === laatste ? Object.assign({}, t, { budget: t.budget * 0.6 }) : t; };
-      const h = spendVsBudgetChart(); window.totals = echt; return h;
-    });
-    expect(anders).toContain('budget €');
-  });
-
-  test('een tik op een kolom leest hem uit; de uitlezing opent die maand', async ({ page }) => {
+  test('een tik op een kolom leest hem uit, met de bridge eronder', async ({ page }) => {
     await openGrafiek(page);
     const label = await page.evaluate((m) => monthLabel(m), M1);
     await page.locator(`#insSpendChart rect[onclick*="${M1}"]`).click();
@@ -456,25 +426,11 @@ test.describe('d · uitgaven-vs-budget-grafiek', () => {
     const read = await page.locator('#spendRead').innerText();
     expect(read.toLowerCase()).toContain(label.toLowerCase());                 // exacte maand
     expect(read).toContain('€1.495');                                          // exact bedrag
-    expect(read).toContain('bekijk maand');
-
-    await page.locator('#spendRead').click();                                  // en van daaruit de maand-sheet
-    await page.waitForSelector('#sheetBg.show');
-    expect((await page.locator('#sheet').innerText()).toLowerCase()).toContain(label.toLowerCase());
+    // v359: de uitlezing opent geen sheet meer; de bridge staat eronder (maand-brug.spec.js)
+    expect(await page.locator('#insBrug').count()).toBe(1);
   });
 
-  /* v194: de drempel ging van twee naar GRAFIEK_MIN afgeronde maanden. Bij drie punten, waarvan
-     een lopend, verandert er geen beslissing door de vorm. */
-  test(`onder de drempel: lege staat i.p.v. een misleidende grafiek`, async ({ page }) => {
-    await openGrafiek(page, tweak((set, tx) => {
-      for (let i = tx.length - 1; i >= 0; i--) if (!tx[i].date.startsWith(CUR)) tx.splice(i, 1);
-    }));
-    const min = await page.evaluate(() => GRAFIEK_MIN);
-    const html = await page.evaluate(() => spendVsBudgetChart());
-    expect(html).toContain(`Vanaf ${min} afgeronde maanden zie je hier je verloop`);
-    expect(html).not.toContain('openBudgetCompare');
-    expect(await page.locator('#insSpendChart').count()).toBe(0);
-  });
+  /* v359: 'onder de drempel: lege staat' is vervallen: de maandgrafiek toont sinds v359 de laatste drie (of twaalf) afgesloten maanden plus de lopende, met het bedrag in de balk en het budgetlabel van nu; inzichten-dashboard.spec.js draagt dat */
 });
 
 test.describe('e · rustige modus en "Wat valt op"', () => {
@@ -496,27 +452,7 @@ test.describe('e · rustige modus en "Wat valt op"', () => {
   // v235: de Valt op-kaart is vervallen. Een patroon uit insSignals() staat nu als stille regel
   // (.valtop-patroon) op dezelfde plek: geen lamp, geen 'Valt op:'-label, geen CTA. Wat de test
   // vasthoudt is onveranderd - het signaal komt op Inzichten terecht en noemt zijn categorie.
-  test('een patroon uit insSignals staat als stille regel onder de kerncijfers', async ({ page }) => {
-    // zorg stijgt drie maanden op rij -> signaal 1 (isFixedCat sluit zorg uit van de drivers,
-    // en zonder potje wordt het niet budget-flagged, dus insSignals slaat het niet over)
-    await openIns(page, tweak((set, tx) => {
-      const add = (m, day, amount) => tx.push({ id: 'zorg-' + m, date: `${m}-${day}`, amount, acc: MAIN, name: 'Apotheek Centrum', desc: 'BEA, BETAALPAS APOTHEEK CENTRUM', typ: '', ref: '', src: 'csv', accName: 'Main', refNums: [] });
-      add(M2, '18', -60); add(M1, '18', -120); add(CUR, '18', -200);
-    }));
-    const line = page.locator('.valtop-patroon');
-    await expect(line).toHaveCount(1);
-    expect(await line.innerText()).toContain('Zorg & apotheek');
-    // stil: geen label, geen knop, geen accentkleur op het bedrag
-    const html = await line.innerHTML();
-    expect(html).not.toContain('Valt op:');
-    expect(html).not.toContain('<button');
-    expect(await line.getAttribute('style')).toContain('border-left:3px solid var(--mut2)');
-
-    // en het oude tegelblok is weg
-    expect(await page.locator('#s-ins').innerText()).not.toContain('Wat dit betekent');
-    expect(await page.evaluate(() => typeof whatStandsOutCard)).toBe('undefined');   // v164: opgeruimd
-    expect(await page.evaluate(() => typeof whatStandsOutLine)).toBe('undefined');   // v235: opgeruimd
-  });
+  /* v359: 'een patroon uit insSignals staat als stille regel' is vervallen: "Wat opvalt" is vervallen; een observatie staat als patroon op Inzichten (inzichten-dashboard.spec.js) */
 });
 
 test('f · catSparkline blijft werken via de gedeelde miniSpark', async ({ page }) => {

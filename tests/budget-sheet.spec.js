@@ -15,52 +15,22 @@ const sheetTxt = (page) => page.locator('#sheet').innerText();
 async function openIns(page, payload) {
   await open(page, payload || seed());
   await page.evaluate(() => go('ins'));
-  await page.waitForSelector('#s-ins .card');
+  await page.waitForSelector('#insTegels');
 }
 
-// vanuit Inzichten naar de editor: Maandbudget -> verdeling -> voetlink
+/* v359: Inzichten draagt geen handeling meer, dus ook geen ingang naar de editor (de regel "Maandbudget" is met de
+   stand-kaart vervallen). De verdeling opent hier rechtstreeks; zij is nog bereikbaar via de maandafsluiting en de
+   tijdlijn op Grip. De tests a, a2 en f liepen langs Inzichten en zijn daarom vervallen. */
+async function openVerdeling(page) {
+  await page.evaluate(() => openPotjesVerdeling(curMonth));
+}
 async function openEditor(page, payload) {
   await openIns(page, payload);
-  await page.locator('#s-ins >> text=Maandbudget').first().click();
+  await openVerdeling(page);
   await page.waitForSelector(SHEET);
   await page.locator('#sheet >> text=Potjes en limiet instellen').click();
   await page.waitForSelector('#budgetSheetHead');
 }
-
-const actief = (page, id) => page.evaluate((s) => document.querySelector(s).classList.contains('active'), '#s-' + id);
-
-test('a · de weg vanuit Inzichten naar de editor navigeert niet naar Instellingen', async ({ page }) => {
-  await openIns(page);
-  expect(await page.evaluate(() => window._budgetSheet || null)).toBeNull();
-
-  await page.locator('#s-ins >> text=Maandbudget').first().click();
-  await page.waitForSelector(SHEET);
-  expect(await sheetTxt(page)).toContain('zo staat je plan verdeeld');      // eerst de verdeling
-  expect(await page.evaluate(() => window._budgetSheet || null)).toBeNull();
-
-  await page.locator('#sheet >> text=Potjes en limiet instellen').click();
-  await page.waitForSelector('#budgetSheetHead');
-
-  const s = await sheetTxt(page);
-  expect(s).toContain('Budget deze maand');
-  expect(s).toContain('Stel je maandbudget en potjes in.');
-  expect(s).toContain('Bestedingslimiet');                       // dit is echt de editor, niet de vergelijking
-  expect(s).not.toContain('Zo staat je budget ervoor');          // openBudgetCompare mag niet meeliften
-
-  expect(await actief(page, 'ins')).toBe(true);
-  expect(await actief(page, 'set')).toBe(false);                 // geen sprong naar het Instellingen-tabblad
-  expect(await page.evaluate(() => window._budgetSheet)).toBe(CUR);
-  expect(await page.evaluate(() => window._setSheet)).toBeFalsy();
-});
-
-test('a2 · ring en titel blijven de read-only vergelijking openen', async ({ page }) => {
-  await openIns(page);
-  // v135: de maandnaam is de ingang naar de read-only vergelijking
-  await page.locator('#s-ins .hlabel').first().click();
-  await page.waitForSelector(SHEET);
-  expect(await page.evaluate(() => window._budgetSheet || null)).toBeNull();   // niet de editor
-  expect(await sheetTxt(page)).not.toContain('Bestedingslimiet');
-});
 
 test('b · de limiet-slider werkt de sheet live bij', async ({ page }) => {
   await openEditor(page);
@@ -122,7 +92,7 @@ test('e · Klaar en de achtergrond sluiten de sheet en ruimen de vlag op', async
   expect(await page.evaluate(() => window._budgetSheet)).toBeNull();
 
   // opnieuw openen en via de achtergrond sluiten
-  await page.locator('#s-ins >> text=Maandbudget').first().click();
+  await openVerdeling(page);
   await page.waitForSelector(SHEET);
   await page.locator('#sheet >> text=Potjes en limiet instellen').click();
   await page.waitForSelector('#budgetSheetHead');
@@ -135,26 +105,11 @@ test('e · Klaar en de achtergrond sluiten de sheet en ruimen de vlag op', async
   expect(await page.evaluate(() => document.querySelector('#sheetBg').classList.contains('show'))).toBe(false);
 });
 
-test('f · lege staat (nog geen budget) opent dezelfde editor', async ({ page }) => {
-  const p = seed();
-  const set = JSON.parse(p.minder_set);
-  set.income = 0; set.budgets = {}; set.budgetsNext = {};
-  p.minder_set = JSON.stringify(set);
-  await openIns(page, p);
-
-  const ins = await page.locator('#s-ins').innerText();
-  expect(ins).toContain('stel in');
-  await page.locator('#s-ins >> text=stel in').first().click();
-  await page.waitForSelector(SHEET);
-  expect(await sheetTxt(page)).toContain('Budget deze maand');
-  expect(await sheetTxt(page)).toContain('Bestedingslimiet');
-});
-
 // De render-hook mag alleen de eigen sheet verversen; een andere sheet die daarna opent
 // (bv. de noodfonds-sheet) mag niet overschreven worden door een blijven-hangen vlag.
 test('g · de hook overschrijft geen andere sheet', async ({ page }) => {
   await openIns(page);
-  await page.locator('#s-ins >> text=Maandbudget').first().click();
+  await openVerdeling(page);
   await page.waitForSelector(SHEET);
 
   await page.evaluate(() => { openInkomenSheet(); });               // andere sheet, zonder tussentijds sluiten

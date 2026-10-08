@@ -92,7 +92,10 @@ test.describe('a · vaste lasten worden niet geëxtrapoleerd', () => {
   test('er is één tempo-bron, geen vier', async ({ page }) => {
     await boot(page);
     const src = await page.evaluate(() => ({
-      sig: scoreNotifs.toString(), coach: coachStatus.toString(), cmp: openBudgetCompare.toString() }));
+      sig: scoreNotifs.toString(), coach: coachStatus.toString() }));
+    /* v359: openBudgetCompare() is met de dagteller op Inzichten verdwenen. De tegel Uitgegeven rekent geen
+       projectie maar wat er tot vandaag mocht (insTempo: het variabele deel naar rato, vaste lasten op hun
+       datum), en dat is een andere vraag dan de projectie naar het eind van de maand. */
     for (const [naam, t] of Object.entries(src)) {
       expect(t, naam).toContain('tempoProjectie(');
     }
@@ -131,14 +134,7 @@ test.describe('b · geen tempo-oordeel in de eerste week door de huur', () => {
     expect(r.expected).toBeGreaterThanOrEqual(r.P.vast);
   });
 
-  test('openBudgetCompare noemt je niet te snel door een incasso', async ({ page }) => {
-    await boot(page);
-    await page.evaluate((m) => openBudgetCompare(m), CUR);
-    await page.waitForTimeout(90);
-    const t = await page.locator('#sheet').innerText();
-    expect(t).not.toMatch(/iets te snel/);
-    expect(t).toMatch(/op schema|ruim op schema/);
-  });
+  /* v359: 'openBudgetCompare noemt je niet te snel door een incasso' is vervallen: v359: openBudgetCompare() is vervallen; de tegel Uitgegeven telt vaste lasten op hun datum (inzichten-dashboard.spec.js, sectie tempo) */
 });
 
 test.describe('c · de dag van vandaag is een lokale dag', () => {

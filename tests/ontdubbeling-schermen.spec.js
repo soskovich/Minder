@@ -134,39 +134,7 @@ test.describe('b · constateren en kiezen staan elk op één scherm', () => {
     expect(await page.evaluate(() => typeof window.insLekVraag)).toBe('undefined');
   });
 
-  test('zonder signaal en zonder patroon rendert Inzichten niets', async ({ page }) => {
-    await boot(page, seed({ uitschieter: false }));
-    const html = await page.evaluate((m) => insSignalRows(m, true), CUR);
-    const r = await page.evaluate((m) => {
-      let pat = 0;
-      try { const mv = monthVsPrevInner(m);
-        const ex = new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
-        pat = insSignals(m, ex).length; } catch (_) {}
-      return { sig: valtOpSignals(m).length, pat };
-    }, CUR);
-    if (!r.sig && !r.pat) expect(html).toBe('');
-    else expect(html).not.toBe('');
-  });
-
-  test('op een afgesloten maand komen de budgetregels niet mee', async ({ page }) => {
-    await boot(page);
-    const ms = await page.evaluate(() => months());
-    test.skip(ms.length < 2, 'geen afgesloten maand');
-    const vorige = ms[ms.length - 2];
-    const html = await page.evaluate((m) => insSignalRows(m, false), vorige);
-    // de handelingen gelden deze maand, dus een budgetregel hoort niet onder een afgesloten maand
-    expect(html).not.toContain('valtop-rij');
-    expect(html).not.toContain('in Grip');
-    expect(html).not.toContain("coStart('lek'");
-  });
-
-  test('de patroonregel houdt de duiding en het dus-wat uit v174', async ({ page }) => {
-    await boot(page);
-    const src = await page.evaluate(() => insPatroonRij.toString());
-    expect(src).toContain('p.hyp');
-    expect(src).toContain('p.imp');
-    expect(src).toContain('Alleen een observatie');
-  });
+  /* v359: 'de patroonregel houdt de duiding en het dus-wat uit v174' is vervallen: v359: Inzichten draagt geen signaal- en patroonregels meer; de patronen staan in het blok Patronen */
 });
 
 test.describe('c · de keuze staat vast, zodat de tweede niet terugkomt', () => {
@@ -226,9 +194,7 @@ test.describe('e · de over-budget-observatie heeft één detectie', () => {
     await boot(page, p);
     const sig = await page.evaluate((m) => valtOpSignals(m), CUR);
     test.skip(!sig.length, 'deze fixture levert geen overschrijding');
-    await page.evaluate(() => go('ins'));
-    const ins = await page.locator('.valtop-rij').first().innerText();
-    expect(ins).toContain(sig[0].naam);
+    // v359: Inzichten draagt geen signaalrijen meer; Grip is de enige plek waar dit signaal staat
     // Grip leest dezelfde functie en doet geen eigen meting
     /* v340: gripSignalCards() en valtOpKaartDicht() bestaan niet meer. Het signaal staat als Let op-regel
        (gripLetOpItems, gevoed vanuit renderMaand) en de kaart in de sheet (renderGripLetOp, valtOpKaartOpen). */
@@ -247,8 +213,7 @@ test.describe('e · de over-budget-observatie heeft één detectie', () => {
     const sig = await page.evaluate((m) => valtOpSignals(m), CUR);
     test.skip(!sig.length, 'deze fixture levert geen overschrijding');
     await page.evaluate(() => go('ins'));
-    const rijen = await page.locator('.valtop-rij').allInnerTexts();
-    expect(rijen.filter((t) => t.includes(sig[0].naam)).length).toBe(1);
+    expect(await page.locator('#s-ins .valtop-rij').count()).toBe(0);   // v359: niet op Inzichten
     /* v340: op Grip staat het signaal als Let op-regel, en de kaart pas in de sheet erachter */
     await page.evaluate(() => { go('maand'); renderMaand(); });
     const regels = await page.locator('#s-maand [data-letop="sig"]').allInnerTexts();

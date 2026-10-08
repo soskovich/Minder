@@ -39,7 +39,7 @@ async function boot(page, scherm, payload) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, payload || seed());
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof nogDezeMaandBody === 'function');
+  await page.waitForFunction(() => typeof TX !== 'undefined' && typeof insTegelsNu === 'function');
   await page.evaluate((s) => go(s), scherm);
 }
 
@@ -47,7 +47,8 @@ test.describe('a · Vooruitblik toont de kaart niet meer', () => {
   test('geen kop en geen tegels', async ({ page }) => {
     await boot(page, 'vooruit');
     // de tegels hebben wel degelijk inhoud: dit is een keuze, geen lege staat
-    expect(await page.evaluate(() => nogDezeMaandBody())).not.toBe('');
+    // v359: de posten zijn tegels op Inzichten; ze hebben inhoud, dus dit is een keuze en geen lege staat
+    expect(await page.evaluate(() => insTegelsNu('alle').map((t) => t.key))).toContain('vast');
     const v = await page.locator('#s-vooruit').innerText();
     expect(v).not.toMatch(/nog deze maand/i);
     expect(await page.locator('#s-vooruit .wvo-tiles').count()).toBe(0);
@@ -65,53 +66,41 @@ test.describe('a · Vooruitblik toont de kaart niet meer', () => {
   });
 });
 
+/* v359: "Nog deze maand" als losse regels is verdwenen; de posten zijn tegels op het dashboard (#insTegels). Wat
+   deze spec vasthoudt is onveranderd: ze staan op precies een scherm, en daar precies een keer. */
 test.describe('b · Inzichten is de enige lezer', () => {
-  /* v241: de herokaart is gesplitst. De posten staan in de sectie 'Wat er nog komt' en niet meer
-     in een kaart; wat deze test vasthoudt is dat ze er precies één keer staan, en dat de
-     tegelvorm er niet daarnaast ook nog staat. */
-  test('Inzichten draagt de posten precies één keer, als lijst', async ({ page }) => {
+  test('Inzichten draagt de posten precies één keer, als tegels', async ({ page }) => {
     await boot(page, 'ins');
     const el = page.locator('#s-ins');
     const t = await el.innerText();
-    /* v260: de sectiekop heet 'Nog deze maand', net als de kaartvorm, want twee namen voor een
-       blok is wat v91 verbiedt. Een telling op de PAGINATEKST kan die twee daardoor niet meer
-       scheiden; het verschil is structureel, dus de test bindt aan de sectiekop en aan de
-       afwezigheid van de kaartvorm. */
-    expect(await el.locator('.inssec', { hasText: /nog deze maand/i }).count()).toBe(1);
-    expect(await el.locator('.card .hlabel', { hasText: /nog deze maand/i }).count()).toBe(0);
     expect((t.match(/Nog te betalen/gi) || []).length).toBe(1);
-    expect(await el.locator('#insNogLijst').count()).toBe(1);
-    expect(await el.locator('.wvo-tiles').count()).toBe(0);   // niet ook nog als tegels
+    expect(await el.locator('#insTegels [data-instegel="vast"]').count()).toBe(1);
+    expect(await el.locator('.wvo-tiles').count()).toBe(0);
+    expect(await el.locator('#insNogLijst').count()).toBe(0);
   });
 
-  test('openFixedDue blijft bereikbaar vanuit die kaart', async ({ page }) => {
+  test('de tegel opent de lijst van wat er nog komt', async ({ page }) => {
     await boot(page, 'ins');
-    const tegel = page.locator('#insNogLijst .ins-nog-rij[onclick*="openFixedDue"]');
-    await expect(tegel).toHaveCount(1);
+    await page.locator('#insTegels [data-instegel="vast"]').click();
+    await expect(page.locator('#insTegelSheet[data-instegelsheet="vast"]')).toHaveCount(1);
+    expect(await page.locator('#insTegelSheet').innerText()).toContain('Woningcorporatie');
   });
 });
 
-// de vorm van body en omhulsel wordt bewaakt in inzichten-herschikking.spec.js (v135);
-// hier gaat het alleen om wie ze nog aanroept.
 test.describe('c · de functies zijn niet aangeraakt', () => {
-  test('renderVooruit roept nogDezeMaand niet meer aan', async ({ page }) => {
+  test('renderVooruit en renderIns roepen nogDezeMaand niet aan', async ({ page }) => {
     await boot(page, 'vooruit');
     expect(await page.evaluate(() => /nogDezeMaand/.test(renderVooruit.toString()))).toBe(false);
-    // het omhulsel blijft de terugval van renderIns als er geen budget is
-    expect(await page.evaluate(() => /nogDezeMaandCard\(\)/.test(renderIns.toString()))).toBe(true);
+    expect(await page.evaluate(() => /nogDezeMaand/.test(renderIns.toString()))).toBe(false);
   });
 });
 
-test.describe('d · zonder budget valt Inzichten terug op de losse kaart', () => {
-  test('de kaart staat er één keer, onder de budget-prompt', async ({ page }) => {
+test.describe('d · zonder budget staan de tegels er ook', () => {
+  test('de posten staan er één keer, zonder losse kaart', async ({ page }) => {
     await boot(page, 'ins', seed({ income: 0, budgets: {} }));
     const t = await page.locator('#s-ins').innerText();
-    expect((t.match(/NOG DEZE MAAND/g) || []).length).toBe(1);
-    /* v241: insHeroKaart() bestaat niet meer. De terugval hangt nu aan insBudgetBlok(): die valt
-       leeg terug zonder budget, en dan toont renderIns() de budget-prompt met nogDezeMaandCard()
-       eronder. Dat is precies wat deze test bewaakt, alleen op de nieuwe naad. */
-    expect(await page.evaluate(() => insBudgetBlok(curMonth || months()[months().length - 1]))).toBe('');
-    expect(await page.locator('#s-ins .wvo-tiles').count()).toBe(1);
-    expect(await page.locator('#insNogLijst').count()).toBe(0);
+    expect((t.match(/Nog te betalen/gi) || []).length).toBe(1);
+    expect(await page.locator('#s-ins .wvo-tiles').count()).toBe(0);
+    expect(await page.locator('#insTegels').count()).toBe(1);
   });
 });

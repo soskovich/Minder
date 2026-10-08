@@ -62,65 +62,7 @@ const balk = (page) => page.evaluate(() => {
 });
 
 test.describe('a · de budgetbalk kent drie standen', () => {
-  test('ruim eronder: accent, geen drempelzin', async ({ page }) => {
-    await boot(page, { nu: 60 });                      // 960 van 1400 = 69%
-    const b = await balk(page);
-    expect(b.spend).toBeLessThan(b.budget);
-    expect(b.kleur).toContain('--accent');
-    expect(b.tekst).not.toMatch(/over je maandbudget|precies op/);
-  });
-
-  test('precies op de grens: een eigen stand, niet dezelfde als eronder', async ({ page }) => {
-    // huur 900 wordt ook deze maand geboekt, dus hij hoort in het budget: 900+300 uit, 1200 potje
-    await boot(page, { set: { budgets: { huur: 900, boodschappen: 300 } } });
-    const b = await balk(page);
-    expect(b.spend).toBe(b.budget);
-    expect(b.kleur).toContain('--amber');               // niet het accent van 'ruim eronder'
-    expect(b.kleur).not.toContain('--red');             // en niet het rood van 'eroverheen'
-    expect(b.breedte).toBe('100%');
-    /* v309: de zin noemt de noemer waarmee hij rekent. Hij zei "je potjes" en rekent met
-       totals().budget tegen totals().spendNorm, dus met alle potjes EN met uitgaven in categorieen
-       zonder potje; sinds v309 staat het potjes-restant als hoofdgetal boven deze zin en stond er
-       tweemaal "potjes" voor twee verschillende getallen (v91). */
-    expect(b.tekst).toMatch(/Je maandbudget is precies op, met nog \d+ dagen te gaan/);
-    expect(b.tekst).not.toMatch(/potjes zijn precies op/);
-  });
-
-  test('ruim eroverheen: de balk klemt, de drempelzin draagt het bedrag en de tijd', async ({ page }) => {
-    await boot(page, { nu: 876, set: { budgets: { huur: 900, boodschappen: 300 } } });   // 1776 van 1200 = 148%
-    const b = await balk(page);
-    expect(Math.round(b.spend / b.budget * 100)).toBe(148);
-    expect(b.spend).toBeGreaterThan(b.budget);
-    expect(b.kleur).toContain('--red');
-    expect(b.breedte).toBe('100%');                     // de norm blijft op 100, de as beweegt niet
-    const over = await page.evaluate((n) => euro0(n), b.spend - b.budget);
-    expect(b.tekst).toContain(`${over} over je maandbudget`);   // v309: zie hierboven
-    expect(b.tekst).not.toMatch(/over je potjes/);
-    expect(b.tekst).toMatch(/over je maandbudget, met nog \d+ dagen te gaan/);
-  });
-
-  test('de grens staat in de drempelconstante, niet inline', async ({ page }) => {
-    await boot(page, {});
-    const r = await page.evaluate(() => ({ grens: MAAND_DREMPEL.budgetVol }));
-    r.src = await kaalUit(page, 'insBudgetBlok');    // v309: strippen in Node, op een plek
-    expect(r.grens).toBe(100);
-    expect(r.src).toContain('MAAND_DREMPEL.budgetVol');
-  });
-
-  test('de dagstreep blijft, en staat buiten de vulling', async ({ page }) => {
-    for (const nu of [60, 444]) {                      // eronder en eroverheen
-      await boot(page, { nu, set: { budgets: { huur: 900, boodschappen: 300 } } });
-      const b = await balk(page);
-      const d = await page.evaluate((m) => daysElapsed(m), CUR);
-      expect(b.markBuiten, `bij ${nu}`).toBe(true);
-      expect(b.markLinks).toBe(Math.round(d.elapsed / d.dim * 100) + '%');
-      /* v309: de legenda onder de balk is vervallen. De streep draagt zijn eigen uitleg in zijn
-         title, en de dagteller staat sinds v241 al in de eyebrow boven de kaart; de zin eronder was
-         daarmee de tweede weergave geworden die v189 juist wegnam. */
-      expect(b.tekst).not.toMatch(/de streep staat waar de maand nu is/);
-      expect(b.streepTitle).toMatch(/de maand is \d+% voorbij/);
-    }
-  });
+  /* v359: 'de dagstreep blijft' is vervallen: de budgetbalk stond op de stand-kaart van Inzichten, en die is vervallen */
 });
 
 test.describe('b · de plan-balk: stilstand is grijs, beweging krijgt een segment', () => {
@@ -199,91 +141,14 @@ test.describe('c · de staafgrafiek plot alleen afgeronde maanden', () => {
   const opMaand = async (page, o) => { await boot(page, o);
     await page.evaluate(() => { SET.openSpendChart = true; save(); }); };
 
-  test('drie maanden: geen grafiek, wel een lege staat die zegt vanaf wanneer', async ({ page }) => {
-    await opMaand(page, { maanden: 3 });
-    const r = await page.evaluate(() => ({ min: GRAFIEK_MIN, html: spendVsBudgetChart(),
-      afgerond: months().filter((m) => m < thisYM()).length }));
-    expect(r.afgerond).toBe(2);
-    expect(r.html).not.toContain('id="insSpendChart"');   // het icoon in de kop is ook een <svg>
-    expect(r.html).toContain(`Vanaf ${r.min} afgeronde maanden`);
-    expect(r.html).toContain('Je hebt er nu 2');
-  });
-
-  test('zes afgeronde maanden: de grafiek verschijnt, zonder de lopende maand', async ({ page }) => {
-    await opMaand(page, { maanden: 7 });
-    const r = await page.evaluate(() => {
-      const html = spendVsBudgetChart();
-      return { afgerond: months().filter((m) => m < thisYM()).length, html,
-        staven: (html.match(/<rect class="cbar"/g) || []).length,
-        nuLabel: MNAMES[+thisYM().slice(5, 7) - 1] };
-    });
-    expect(r.afgerond).toBe(6);
-    expect(r.staven).toBe(6);
-    expect(r.html).not.toContain('*<');                // geen sterretje
-    expect(r.html).not.toContain('loopt nog');         // geen voetnoot
-    expect(r.html).not.toContain(`>${r.nuLabel}<`);    // de lopende maand staat er niet in
-  });
-
-  test('twaalf afgeronde maanden: elke staaf een waardelabel', async ({ page }) => {
-    await opMaand(page, { maanden: 14 });
-    const r = await page.evaluate(() => {
-      const html = spendVsBudgetChart();
-      const d = document.createElement('div'); d.innerHTML = html;
-      const svg = d.querySelector('#insSpendChart');       // niet het icoon in de kop
-      return { staven: svg.querySelectorAll('rect.cbar').length,
-        labels: [...svg.querySelectorAll('text[font-weight="700"]')].map((x) => x.textContent) };
-    });
-    expect(r.staven).toBe(12);                         // slice(-12)
-    expect(r.labels.filter((t) => !/budget/.test(t)).length).toBe(12);
-  });
-
-  test('de drempel is één constante, gedeeld met de sparklines', async ({ page }) => {
-    await boot(page, {});
-    const r = await page.evaluate(() => ({ min: GRAFIEK_MIN }));
-    r.chart = await kaalUit(page, 'spendVsBudgetChart');
-    r.tegel = await kaalUit(page, 'kpiTegels');
-    expect(r.min).toBe(6);
-    expect(r.chart).toContain('GRAFIEK_MIN');
-    expect(r.tegel).toContain('GRAFIEK_MIN');
-  });
+  /* v359: 'de drempel is één constante' is vervallen: de maandgrafiek toont sinds v359 de laatste drie (of twaalf) afgesloten maanden plus de lopende, lichter en met t/m <dag>, met het bedrag in de balk en een budgetlabel; inzichten-dashboard.spec.js draagt dat */
 });
 
 test.describe('d · de budgetlijn en de legenda', () => {
   const opMaand = async (page, o) => { await boot(page, o);
     await page.evaluate(() => { SET.openSpendChart = true; save(); }); };
 
-  test('gelijke budgetten: segmenten, geen tag erbovenop', async ({ page }) => {
-    await opMaand(page, { maanden: 8 });
-    const html = await page.evaluate(() => spendVsBudgetChart());
-    expect(html).toContain('stroke-dasharray="4 3"');     // de segmenten blijven
-    expect(html).not.toContain('budget €');          // de tag zegt niets extra's
-  });
-
-  test('de legenda telt de coderingen die er staan', async ({ page }) => {
-    await opMaand(page, { maanden: 8 });
-    const r = await page.evaluate(() => {
-      const d = document.createElement('div'); d.innerHTML = spendVsBudgetChart();
-      return { items: [...d.querySelectorAll('.gc-leg span')].map((x) => x.textContent),
-        lijnen: d.querySelectorAll('line[stroke-dasharray="4 3"]').length,
-        kleuren: new Set([...d.querySelectorAll('rect.cbar')].map((x) => x.getAttribute('fill'))).size };
-    });
-    expect(r.items).toEqual(['per maand', 'maandbudget']);   // geen 'deze maand' meer
-    expect(r.items.length).toBe(r.kleuren + (r.lijnen > 0 ? 1 : 0));
-  });
-
-  test('een maand zonder budget: geen lijn, en de legenda noemt hem niet', async ({ page }) => {
-    await opMaand(page, { maanden: 8, set: { budgets: {}, budgetsNext: {}, limit: 0, limitMode: 'pct' } });
-    const r = await page.evaluate(() => {
-      const html = spendVsBudgetChart();
-      const d = document.createElement('div'); d.innerHTML = html;
-      return { budget: months().filter((m) => m < thisYM()).map((m) => Math.round(totals(m).budget)),
-        lijnen: d.querySelectorAll('line[stroke-dasharray="4 3"]').length,
-        items: [...d.querySelectorAll('.gc-leg span')].map((x) => x.textContent) };
-    });
-    test.skip(r.budget.some((b) => b > 0), 'deze opzet houdt toch een budget');
-    expect(r.lijnen).toBe(0);
-    expect(r.items).toEqual(['per maand']);              // geen belofte over een vorm die er niet is
-  });
+  /* v359: 'een maand zonder budget: geen lijn' is vervallen: de maandgrafiek toont sinds v359 de laatste drie (of twaalf) afgesloten maanden plus de lopende, lichter en met t/m <dag>, met het bedrag in de balk en een budgetlabel; inzichten-dashboard.spec.js draagt dat */
 });
 
 test.describe('e · de sparkline onder de drempel', () => {

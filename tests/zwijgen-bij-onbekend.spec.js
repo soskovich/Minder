@@ -97,8 +97,9 @@ test.describe('2 · een afgeleide referentie heet niet mijn plan', () => {
   test('zonder potjes noemt de hero de inkomen-limiet bij naam', async ({ page }) => {
     await boot(page, seed({ geenBudget: true }));
     const t = await scherm(page, 'ins');
-    expect(t).toMatch(/je inkomen-limiet/);
-    expect(t).not.toMatch(/van €[\d.]+ maandbudget/);
+    // v359: de tegel Uitgegeven noemt zijn noemer
+    expect(t).toMatch(/van €[\d.]+ inkomen-limiet/);
+    expect(t).not.toMatch(/van €[\d.]+ budget/);
     // en het onderliggende getal blijft ongemoeid: dit is alleen de naam
     expect(await page.evaluate((m) => { const x = totals(m); return [x.budget, x.limit, x.potTotal]; }, CUR))
       .toEqual([2100, 2100, 0]);
@@ -107,8 +108,8 @@ test.describe('2 · een afgeleide referentie heet niet mijn plan', () => {
   test('met potjes heet het gewoon je maandbudget', async ({ page }) => {
     await boot(page);
     const t = await scherm(page, 'ins');
-    expect(t).toMatch(/maandbudget/);
-    expect(t).not.toMatch(/je inkomen-limiet/);
+    expect(t).toMatch(/van €[\d.]+ budget|tot vandaag mocht/);
+    expect(t).not.toMatch(/inkomen-limiet/);
   });
 });
 
@@ -126,15 +127,18 @@ test.describe('3 · nul uitgaven is niet hetzelfde als geen data', () => {
     expect(t).toMatch(/uitgegeven[^.]{0,30}onbekend|onbekend[^.]{0,30}uitgegeven/);
     expect(t).not.toMatch(/€0 uitgegeven/);
     expect(t).not.toMatch(/\b0%/);
-    expect(t).not.toMatch(/nog in je potjes/);                  // dat is het restant en dus een meting
-    expect(t).toMatch(/Nul uitgaven en geen data zijn niet hetzelfde/);
-    expect(t).toMatch(/Bestand toevoegen|Synchroniseer map/);   // dezelfde tik als de herinnering
+    expect(t).not.toMatch(/nog in potjes/i);                    // dat is het restant en dus een meting
+    expect(t).toMatch(/In je potjes/);
+    // v359: de reden en de stap om je gegevens bij te werken staan in de sheet achter de tegel
+    const sh = await page.evaluate(() => { openInsTegel('uitgegeven'); return $('#sheet').innerText.replace(/\s+/g, ' '); });
+    expect(sh).toMatch(/Nul uitgaven en geen data zijn niet hetzelfde/);
+    expect(sh).toMatch(/Bestand toevoegen|Synchroniseer map/);  // dezelfde tik als de herinnering
   });
 
   test('één detectie, geen tweede: beide lezen laatsteImport', async ({ page }) => {
     await boot(page, seed({ oudeImport: true }));
     const r = await page.evaluate(() => ({
-      rem: renderReminder.toString(), blok: insBudgetBlok.toString(),
+      rem: renderReminder.toString(), blok: insTegelsNu.toString() + renderInsTegel.toString(),
       L: laatsteImport(), cta: importCta() }));
     expect(r.rem).toContain('laatsteImport()');
     expect(r.blok).toContain('laatsteImport()');
@@ -146,7 +150,7 @@ test.describe('3 · nul uitgaven is niet hetzelfde als geen data', () => {
   test('verse data rekent gewoon door', async ({ page }) => {
     await boot(page);
     const t = await scherm(page, 'ins');
-    expect(t).toMatch(/€800 uitgegeven/);
+    expect(t).toMatch(/Uitgegeven €800/);
     expect(t).not.toMatch(/onbekend uitgegeven/);
   });
 });
@@ -188,7 +192,8 @@ test.describe('7 · één keer melden dat er te weinig historie is', () => {
     // v178: de maandgrafiek die de zin draagt staat op Maand; de tegels staan op Inzichten
     // v232: de tegel staat op Vermogen, en bij één maand (geen afgeronde) staat hij daar niet eens
     const t = (await scherm(page, 'ins')) + ' ' + (await scherm(page, 'maand')) + ' ' + (await scherm(page, 'vermogen'));
-    expect((t.match(/maanden zie je hier je verloop/gi) || []).length).toBe(1);
+    // v359: de grafiek op Inzichten zegt het in zijn eigen woorden; de eis blijft precies een keer
+    expect((t.match(/staan je maanden hier naast elkaar|maanden zie je hier je verloop/gi) || []).length).toBe(1);
     expect(await page.evaluate(() => document.querySelectorAll('#maandKpiBlok').length)).toBe(0);
   });
 });
@@ -197,8 +202,8 @@ test.describe('r · regressie op een volledige dataset', () => {
   test('niets zwijgt wat wel bekend is', async ({ page }) => {
     await boot(page, seed({ spaar: true }));
     const ins = await scherm(page, 'ins');
-    expect(ins).toMatch(/€800 uitgegeven/);
-    expect(ins).toMatch(/maandbudget/);
+    expect(ins).toMatch(/Uitgegeven €800/);
+    expect(ins).toMatch(/van €[\d.]+ budget|tot vandaag mocht/);
     expect(ins).not.toMatch(/onbekend uitgegeven/);
     expect(await plan(page)).toMatch(/toegewezen/);
     const dash = await scherm(page, 'dash');

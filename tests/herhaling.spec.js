@@ -353,20 +353,18 @@ test.describe('h · de ingang herhaalt niet wat er al staat', () => {
 });
 
 test.describe('i · het nulgeval van een kerncijfer', () => {
-  test('grondtal €0: hero en tegel zeggen allebei 0%', async ({ page }) => {
+  /* v359: de stand-kaart met zijn percentage is vervallen; Inzichten draagt geen percentage meer. De tegel blijft. */
+  test('grondtal €0: de tegel zegt 0%', async ({ page }) => {
     await boot(page, { geenUitgaven: true });
     const r = await page.evaluate(() => {
       const m = kijkMaand(); const t = totals(m);
       const b = insKpis(m).items.find((k) => k.key === 'budget');
-      const d = document.createElement('div'); d.innerHTML = insBudgetBlok(m);
-      return { spend: Math.round(t.spend), val: b.val, klein: b.klein, raw: b.raw,
-        hero: d.innerText.replace(/\s+/g, ' ') };
+      return { spend: Math.round(t.spend), val: b.val, klein: b.klein, raw: b.raw };
     });
     expect(r.spend).toBe(0);
     expect(r.raw).toBe(0);
     expect(r.klein).toBe(false);                 // nul is een meting, geen ondergrens
     expect(r.val).toBe('0%');
-    expect(r.hero).toContain('0%');
   });
 
   test('een klein maar niet-nul grondtal blijft het bedrag tonen', async ({ page }) => {

@@ -97,20 +97,22 @@ async function boot(page, o) {
 /* v309: de stand staat als hoofdgetal op de stand-kaart. `post` blijft, om te toetsen dat hij in
    de lijst NIET meer staat; `kop` is het grote getal, `label` het label en `achter` het
    achtervoegsel (het dagbedrag, of de tempo-krapte als die er is). */
+/* v359: de stand-kaart is vervallen; het restant en zijn dagbedrag staan in de tegel "Nog in potjes". De helper leest
+   die tegel en geeft dezelfde vorm terug: `kop` is het bedrag zonder teken, `label` zegt nog in je potjes of te veel
+   uitgegeven, en `achter` is het dagbedrag of de tempo-krapte (de rest van de regel onder het bedrag). */
 const potjesPost = (page) => page.evaluate(() => {
   const p = nogDezeMaandPosten().find((x) => /Nog uit je potjes|Te veel uitgegeven/.test(x.lab)) || null;
   const m = kijkMaand();
-  const kaart = document.getElementById('insStand');
-  const rij = kaart ? [...kaart.querySelectorAll('div.row')]
-    .find((e) => /nog in je potjes|te veel uitgegeven/.test(e.textContent)) : null;
-  const sp = rij ? [...rij.querySelectorAll('span')] : [];
-  const vol = sp.length > 1 ? sp[1].innerText.replace(/\s+/g, ' ').trim() : null;
+  const kaart = document.querySelector('[data-instegel="potjes"]');
+  const val = kaart ? kaart.querySelector('.vl').innerText.trim() : null;
+  const ms = kaart ? kaart.querySelector('.ms').innerText.trim() : '';
   const VP = varPotjeStand(m);
+  const over = /^te veel uitgegeven$/i.test(kaart ? kaart.querySelector('.lb').innerText.trim() : '');   // v359: het label van de tegel zegt het
   return { post: p, dagen: maandDagenOver(m), VP,
     vrijPerDagDagen: vrijPerDag().dagenResterend,
-    kop: sp.length ? sp[0].innerText.trim() : null,
-    label: vol ? vol.split(' \u00b7 ')[0] : null,
-    achter: vol && vol.includes(' \u00b7 ') ? vol.slice(vol.indexOf(' \u00b7 ') + 3) : '',
+    kop: val ? val.replace(/^-/, '') : null,
+    label: kaart ? (over ? 'te veel uitgegeven' : 'nog in je potjes') : null,
+    achter: (/per dag|tekort/.test(ms)) ? ms : '',
     gat: VP.rest - (VP.budget - VP.gebruikt),
     kaartTekst: kaart ? kaart.innerText.split(String.fromCharCode(10)).join(' | ') : '' };
 });
@@ -154,18 +156,8 @@ test.describe('a · de gemelde toestand', () => {
     }
   });
 
-  test('het getal, zijn label en zijn achtervoegsel staan in die volgorde op een regel', async ({ page }) => {
-    await boot(page);
-    const r = await potjesPost(page);
-    /* v309: tot v308 waren dit drie regels onder elkaar (de stand, zijn sub, en die stand per dag).
-       Het zijn er nu twee delen op EEN regel, en de sub is niet meegegaan: zie de kop van dit
-       bestand. De volgorde blijft de eigenschap. */
-    expect(r.kaartTekst.indexOf(r.kop)).toBeLessThan(r.kaartTekst.indexOf(r.label));
-    expect(r.kaartTekst.indexOf(r.label)).toBeLessThan(r.kaartTekst.indexOf(r.achter));
-    // en de potjes-noemer staat hier niet meer; de regel eronder noemt een andere noemer
-    expect(r.kaartTekst).not.toMatch(/van €1\.832/);
-    expect(r.kaartTekst).toMatch(/van €3\.421 maandbudget/);
-  });
+  /* v359: hier stond de volgorde van getal, label en achtervoegsel op een regel van de stand-kaart. Die kaart is
+     vervallen; de tegel draagt het bedrag en het dagbedrag op twee regels. */
 });
 
 test.describe('b · de noemer is die van de app', () => {
@@ -257,36 +249,24 @@ test.describe('d · de dagregel leest de potjes en niets anders', () => {
    BOVEN, want de stand-kaart staat boven "Wat opvalt". Wat blijft is dat de signalen binnen het
    eerste scherm vallen (de eis van v241, bewaakt door inzichten-indeling.spec.js met 567px op
    360x640 en 771px op 390x844); wat erbij komt is dat het dagbedrag dat nu ook doet. */
-test.describe('e · het dagbedrag staat boven de vouw, en boven de signalen', () => {
-  // shopping gaat 268 over zijn potje, dus er is een valt-op-signaal; er blijft 20 in de potjes
+/* v359: "Wat opvalt" is vervallen, dus er is geen signaal meer om boven te staan. Wat blijft is dat het dagbedrag
+   binnen het eerste scherm staat, nu in de tegel "Nog in potjes". */
+test.describe('e · het dagbedrag staat boven de vouw', () => {
+  // shopping gaat 268 over zijn potje; er blijft 20 in de potjes
   const MET_SIGNAAL = { extraTx: (add) => add('x4', CUR, '16', -500, 'Zalando', 'BEA, BETAALPAS ZALANDO') };
 
   for (const [w, h] of [[360, 640], [390, 844]]) {
-    test(`op ${w}x${h} staat het achtervoegsel boven het laatste signaal en binnen het eerste scherm`,
-      async ({ page }) => {
+    test(`op ${w}x${h} staat de tegel met het dagbedrag binnen het eerste scherm`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: h });
       await boot(page, MET_SIGNAAL);
       const r = await page.evaluate(() => {
-        const el = document.querySelector('#s-ins');
-        const sig = [...el.querySelectorAll('.valtop-rij,.valtop-patroon')];
-        const kaart = document.getElementById('insStand');
-        const rij = kaart ? [...kaart.querySelectorAll('div.row')]
-          .find((e) => /nog in je potjes|te veel uitgegeven/.test(e.textContent)) : null;
+        const el = document.querySelector('[data-instegel="potjes"]');
         const nav = document.querySelector('.nav') || document.querySelector('nav');
-        return { signalen: sig.length, kop: !!rij,
-          sigBodem: sig.length ? Math.round(sig[sig.length - 1].getBoundingClientRect().bottom + window.scrollY) : null,
-          kopBodem: rij ? Math.round(rij.getBoundingClientRect().bottom + window.scrollY) : null,
-          tekst: rij ? rij.innerText.split(String.fromCharCode(10)).join(' ') : '',
+        return { bodem: Math.round(el.getBoundingClientRect().bottom + window.scrollY), tekst: el.innerText,
           zichtbaar: window.innerHeight - (nav ? Math.round(nav.getBoundingClientRect().height) : 0) };
       });
-      // de invoer: zonder signaal en zonder kop meet deze test niets
-      expect(r.signalen, 'geen signaal in deze fixture').toBeGreaterThan(0);
-      expect(r.kop, 'geen potjes-kop in deze fixture').toBe(true);
       expect(r.tekst).toMatch(/per dag|bij je tempo/);
-      console.log(`### @${w}x${h}: kop tot ${r.kopBodem}px, laatste signaal tot ${r.sigBodem}px, zichtbaar ${r.zichtbaar}px`);
-      expect(r.kopBodem).toBeLessThan(r.sigBodem);
-      expect(r.kopBodem).toBeLessThanOrEqual(r.zichtbaar);
-      expect(r.sigBodem).toBeLessThanOrEqual(r.zichtbaar);
+      expect(r.bodem).toBeLessThanOrEqual(r.zichtbaar);
     });
   }
 
@@ -335,20 +315,14 @@ test.describe('f · de bron: één afleiding van de resterende dagen', () => {
   });
 
   test('het dagbedrag deelt varPotjeStand() en niet de aftrekking uit de hero', () => {
-    /* v309: deze afleiding stond in nogDezeMaandPosten() en staat nu in insBudgetBlok(), want daar
-       is de kop. De HARDE VOORWAARDE van het open punt van v257 is precies deze assertie: hij mag
-       daar niet de hero-meting gaan lezen omdat hij nu in de hero staat. */
-    const m = /function insBudgetBlok\(m\)\{([\s\S]*?)\n\}/.exec(CODE);
+    /* v309: deze afleiding stond in nogDezeMaandPosten(), daarna in insBudgetBlok(); sinds v359 staat ze in de tegel
+       "Nog in potjes" (insTegelsNu). De HARDE VOORWAARDE van het open punt van v257 blijft: hij deelt VP.nog. */
+    const m = /function insTegelsNu\(soort\)\{([\s\S]*?)\n\}/.exec(CODE);
     expect(m).toBeTruthy();
     const body = m[1];
-    expect(body).toMatch(/per dag/);
-    // de deler is inPotjes, en dat is VP.nog (v327: de variabele aftrekking plus de rest van de
-    // terugkerende potjes, beide uit varPotjeStand())
-    expect(body).toMatch(/const inPotjes = potjesKop \? VP\.nog/);
-    expect(body).toMatch(/inPotjes\/potjesDagen/);
-    // en het percentage naast de noemer eronder leest wel spendNorm, dus dat is de scherpte:
-    // het dagbedrag deelt inPotjes en niet bud-sp
-    expect(body).not.toMatch(/\(bud\s*-\s*sp\)\s*\/|sp\s*\/\s*potjesDagen/);
+    expect(body).toMatch(/const nog=VP\.nog/);
+    expect(body).toMatch(/Math\.round\(nog\/maandDagenOver\(m\)\)/);
+    expect(body).not.toMatch(/spendNorm[^;]*\/\s*maandDagenOver/);
     // en nogDezeMaandPosten() draagt hem niet meer
     const n = /function nogDezeMaandPosten\(\)\{([\s\S]*?)\n\}/.exec(CODE);
     expect(n[1]).not.toMatch(/dagRegel:/);

@@ -13,9 +13,12 @@ const sheetTxt = (page) => page.locator('#sheet').innerText();
 async function openUitgegeven(page, payload) {
   await open(page, payload || seed());
   await page.evaluate(() => go('ins'));
-  await page.waitForSelector('#s-ins .card');
-  await page.locator('#s-ins >> text=Uitgegeven').first().click();
+  /* v359: Uitgegeven is een tegel; zijn sheet zegt waaruit het bedrag bestaat en verwijst met "Per categorie"
+     naar dezelfde drill als voorheen. */
+  await page.locator('#insTegels [data-instegel="uitgegeven"]').click();
   await page.waitForSelector(SHEET);
+  await page.locator('#sheet >> text=Per categorie').click();
+  await page.waitForSelector('#sheet .chips .chip');
 }
 
 async function openFV(page, payload) {
@@ -68,7 +71,8 @@ test.describe('a · het derde segment', () => {
     await openFV(page);
     expect(await page.evaluate(() => SET.msDrill)).toBe('fv');
     await page.evaluate(() => closeSheet());
-    await page.locator('#s-ins >> text=Uitgegeven').first().click();
+    await page.locator('#insTegels [data-instegel="uitgegeven"]').click();
+    await page.locator('#sheet >> text=Per categorie').click();
     await page.waitForSelector('#sheet .fv-row');   // opent weer op vast/variabel
   });
 });

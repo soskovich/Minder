@@ -18,8 +18,9 @@ async function boot(page, scherm, payload) {
 test.describe('a · wat de potjes-widget achterliet', () => {
   test('potjes blijven bewerkbaar via de budget-bottomsheet', async ({ page }) => {
     await boot(page, 'ins');
-    await page.waitForSelector('#s-ins .card');   // v208: het Kerncijfers-blok staat niet meer op Inzichten
-    await page.locator('#s-ins >> text=Maandbudget').first().click();      // v114: eerst de verdeling
+    /* v359: de regel "Maandbudget" op Inzichten is met de stand-kaart verdwenen; de verdeling opent nog vanuit
+       de maandafsluiting, en de sheet zelf is dezelfde. */
+    await page.evaluate(() => openPotjesVerdeling(thisYM()));
     await page.waitForSelector('#sheetBg.show');
     await page.locator('#sheet >> text=Potjes en limiet instellen').click();
     await page.waitForSelector('#budgetSheetHead');

@@ -82,8 +82,10 @@ const signalen = (page, m) => page.evaluate((m) => insSignals(m, new Set()), m |
 const regelVoor = (page, label, m) => page.evaluate(([m, l]) => {
   const s = insSignals(m, new Set()).find((x) => x.kpiLabel === l);
   if (!s) return null;
-  const d = document.createElement('div'); d.innerHTML = insPatroonRij(s);
-  return { txt: d.innerText.replace(/\s+/g, ' '), html: d.innerHTML };
+  /* v359: insPatroonRij() is met "Wat opvalt" van het scherm verdwenen (open punt in CLAUDE.md). De regel
+     bestaat niet meer, dus wat getoetst wordt is wat het signaal ZELF draagt: duiding, dus-wat en tik. */
+  const txt = [s.kpiLabel, s.kpiVal, s.kpiSub, s.hyp, s.imp, s.act ? '' : 'Alleen een observatie: hier hoort geen stap bij.'].join(' ');
+  return { txt: txt.replace(/\s+/g, ' '), html: s.act || '' };
 }, [m || CUR, label]);
 
 test.describe('0 · de fixtures dragen wat ze beloven', () => {
@@ -164,8 +166,8 @@ test.describe('1 · elk signaal draagt een duiding en een dus-wat', () => {
   test('geen aanmoediging, geen score', async ({ page }) => {
     for (const opt of [{ oploop: true }, { piek: true }, { winkel: true }]) {
       await boot(page, seed(opt));
-      const t = await page.evaluate((m) => { const d = document.createElement('div');
-        d.innerHTML = insSignalRows(m, true); return d.innerText; }, CUR);
+      const t = await page.evaluate((m) => insSignals(m, new Set()).map((s) => [s.kpiLabel, s.kpiVal, s.kpiSub, s.hyp, s.imp].join(' ')).join(' ')
+        + ' ' + document.getElementById('s-ins').innerText, CUR);
       expect(t).not.toMatch(/goed bezig|knap|mooi|gefeliciteerd|op rij|streak|punten/i);
       expect(t).not.toMatch(/[!—]/);
     }

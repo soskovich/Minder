@@ -220,11 +220,13 @@ test.describe('2 - zichtbaar in de geenNorm-vorm', () => {
       .not.toBe(acc(r.mt[0]));
   });
 
-  test('de stand-kaart draagt beide regels', async ({ page }) => {
+  /* v359: de stand-kaart is vervallen; de regels staan in de sheet achter de tegel Uitgegeven, onder "Niet in
+     dit bedrag", ook voor een afgesloten maand. */
+  test('de sheet achter Uitgegeven draagt beide regels', async ({ page }) => {
     await boot(page);
     /* `renderIns()` en niet alleen `go('ins')`: een navigatie is geen hertekening, en met alleen de
        navigatie stond de kaart er nog zonder deze regels. Dat is de meetles van `v280`, hier gemeten. */
-    const t = await page.evaluate((m) => { curMonth = m; go('ins'); renderIns(); return document.body.innerText; }, M);
+    const t = await page.evaluate((m) => { curMonth = m; window._insPer = null; go('ins'); renderIns(); openInsTegel('uitgegeven'); return document.getElementById('sheet').innerText; }, M);
     expect((t.match(/ook via je bankkoppeling/g) || []).length, 'een regel per uitsluiting').toBe(2);
   });
 

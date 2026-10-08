@@ -46,7 +46,7 @@ async function boot(page, payload) {
   await page.goto('/index.html');
   await page.waitForFunction(() => typeof kijkMaand === 'function');
 }
-const kies = async (page, m) => { await page.evaluate((x) => zetKijkMaand(x), m);
+const kies = async (page, m) => { await page.evaluate((x) => ((m)=>{ curMonth=m; window._insPer=null; closeSheet(); render(); })(x), m);
   await page.waitForTimeout(120); };
 const tekst = async (page, scherm) => { await page.evaluate((n) => go(n), scherm);
   await page.waitForTimeout(120);
@@ -87,19 +87,21 @@ test.describe('a · de lopende maand is de standaard', () => {
 });
 
 test.describe('b · het bereik is months(), niet meer', () => {
-  test('geen toekomst en niets vóór je eerste boeking', async ({ page }) => {
+  /* v359: de maandkiezer is vervangen door het filter (periode en soort). Het bereik blijft months(): vorige
+     maand staat er alleen als er een vorige maand met boekingen is, en een toekomstige maand niet. */
+  test('het filter biedt alleen periodes die er zijn', async ({ page }) => {
     await boot(page);
-    const r = await page.evaluate(() => { openMaandKiezer();
-      return [...document.querySelectorAll('#sheet .chip')].map((e) => e.getAttribute('onclick')); });
-    const ms = await page.evaluate(() => months());
-    expect(r.length).toBe(ms.length);
-    for (const m of ms) expect(r.join(' ')).toContain(`zetKijkMaand('${m}')`);
-    expect(r.join(' ')).not.toContain(TOEKOMST);
+    const r = await page.evaluate(() => { openInsFilter();
+      return [...document.querySelectorAll('#insFilterSheet [data-insopt^="per:"]')]
+        .map((e) => ({ k: e.dataset.insopt, uit: e.classList.contains('off') })); });
+    expect(r.map((x) => x.k)).toEqual(['per:nu', 'per:vorige', 'per:3', 'per:12']);
+    expect(r.every((x) => !x.uit)).toBe(true);
+    expect(JSON.stringify(r)).not.toContain(TOEKOMST);
   });
 
   test('een maand zonder data wordt genegeerd', async ({ page }) => {
     await boot(page);
-    await page.evaluate((t) => zetKijkMaand(t), TOEKOMST);
+    await page.evaluate((t) => ((m)=>{ curMonth=m; window._insPer=null; closeSheet(); render(); })(t), TOEKOMST);
     await page.waitForTimeout(80);
     expect(await page.evaluate(() => kijkMaand())).toBe(await page.evaluate(() => thisYM()));
   });
@@ -108,7 +110,8 @@ test.describe('b · het bereik is months(), niet meer', () => {
     await boot(page);
     await kies(page, EERSTE);
     expect(await page.evaluate(() => kijkMaand())).toBe(EERSTE);
-    expect(await tekst(page, 'ins')).toContain('een afgesloten maand');
+    // v359: geen banner meer; het filter noemt de periode die je bekijkt
+    expect(await page.evaluate(() => { go('ins'); return $('#insFilter').dataset.insper; })).not.toBe('nu');
   });
 });
 
@@ -117,23 +120,18 @@ test.describe('b · het bereik is months(), niet meer', () => {
    gesprek) is vervallen, omdat er op Grip geen afgesloten maand meer bestaat. Wat ervoor in de
    plaats staat: de kiezer van Inzichten raakt Grip niet, en Grip noemt nergens een maand. */
 test.describe('c · zichtbaar dat je niet naar nu kijkt', () => {
-  for (const scherm of ['ins']) {
-    test(`${scherm}: de banner staat er bij een afgesloten maand, en niet bij nu`, async ({ page }) => {
-      await boot(page);
-      expect(await tekst(page, scherm)).not.toContain('een afgesloten maand');
-      await kies(page, VORIGE);
-      const t = await tekst(page, scherm);
-      expect(t).toContain('een afgesloten maand');
-      expect(t).toMatch(/Terug naar/);
-    });
-
-    test(`${scherm}: de kop is de kiezer`, async ({ page }) => {
-      await boot(page);
-      await page.evaluate((n) => go(n), scherm);
-      await page.waitForTimeout(110);
-      expect(await page.evaluate((n) => $('#s-' + n).innerHTML, scherm)).toContain('openMaandKiezer()');
-    });
-  }
+  /* v359: de banner en de kop-als-kiezer zijn vervangen door het filter bovenaan. Het filter zegt welke
+     periode je bekijkt, en dat is de plek waar je ziet dat je niet naar nu kijkt. */
+  test('ins: het filter zegt welke periode je bekijkt', async ({ page }) => {
+    await boot(page);
+    const nu = await page.evaluate(() => { go('ins'); return { k: $('#insFilter').dataset.insper, t: $('#insFilter').innerText }; });
+    expect(nu.k).toBe('nu');
+    await kies(page, VORIGE);
+    const daarna = await page.evaluate(() => { go('ins'); return { k: $('#insFilter').dataset.insper, t: $('#insFilter').innerText }; });
+    expect(daarna.k).not.toBe('nu');
+    expect(daarna.t).not.toBe(nu.t);
+    expect(await page.evaluate(() => $('#s-ins').innerHTML)).toContain('openInsFilter()');
+  });
 
   test('Grip heeft geen kiezer en geen banner, ook niet als Inzichten op een eerdere maand staat', async ({ page }) => {
     await boot(page);
@@ -145,10 +143,10 @@ test.describe('c · zichtbaar dat je niet naar nu kijkt', () => {
     expect(await page.evaluate(() => typeof maandKiezerChip)).toBe('undefined');
   });
 
-  test('terug naar nu werkt vanaf de banner', async ({ page }) => {
+  test('terug naar nu werkt vanuit het filter', async ({ page }) => {
     await boot(page);
     await kies(page, VORIGE);
-    await page.evaluate(() => naarLopendeMaand());
+    await page.evaluate(() => insFilterZet('nu', null));
     await page.waitForTimeout(110);
     expect(await page.evaluate(() => kijkMaand())).toBe(await page.evaluate(() => thisYM()));
   });
@@ -187,18 +185,20 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
     // v232: de spaarquote staat op Vermogen en niet meer op Maand, ook niet bij een andere maand.
     expect(maand).not.toMatch(/spaarquote/i);
     const ins = await tekst(page, 'ins');
-    expect(ins).toMatch(/uitgegeven/);                 // de budgetstand rekent door
-    expect(ins).toMatch(/hele maand/);                 // en niet meer "dag x van y"
+    expect(ins).toMatch(/uitgegeven/i);                // de budgetstand rekent door
+    // v359: een afgesloten maand draagt de uitkomst tegen je potjes, en geen tempo of dagteller
+    expect(ins).toMatch(/in je potjes/i);
+    expect(ins).not.toMatch(/tot vandaag/i);
   });
 
   test('wat over het nu gaat verdwijnt', async ({ page }) => {
     await boot(page);
-    // v241: de kop 'Nog deze maand' werd de sectiekop. v260: en heet weer 'Nog deze maand' (v91)
-    expect(await tekst(page, 'ins')).toMatch(/nog deze maand/i);
+    // v359: 'Nog deze maand' is opgegaan in de tegels; een afgesloten maand draagt alleen wat er uitkwam
+    expect(await tekst(page, 'ins')).toMatch(/nog te betalen/i);
     await kies(page, VORIGE);
     const t = await tekst(page, 'ins');
-    expect(t).not.toMatch(/nog deze maand/i);
     expect(t).not.toMatch(/nog te betalen/i);
+    expect(t).not.toMatch(/nog te ontvangen/i);
     expect(t).not.toMatch(/abonnementen/i);
     /* "loopt nog" mag nog wel in de meermaands-grafiek staan: dat is de legenda bij de ster van de
        huidige maand, en die grafiek gaat per definitie over alle maanden. In de herokaart hoort hij
@@ -250,7 +250,6 @@ test.describe('f · alleen kijken', () => {
     await boot(page, seed({ dun: true }));
     await kies(page, EERSTE);
     const t = await tekst(page, 'ins');
-    expect(t).toContain('een afgesloten maand');
     expect(t).not.toMatch(/NaN|Infinity|undefined/);
     const maand = await tekst(page, 'maand');
     expect(maand).not.toMatch(/NaN|Infinity|undefined/);

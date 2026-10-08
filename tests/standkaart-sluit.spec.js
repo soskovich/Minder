@@ -106,12 +106,13 @@ test('b4 de lijst achter "nog te betalen" zegt dat Shurgard in zijn potje telt',
   expect(t).toMatch(/IN EEN POTJE · TELT DAAR[\s\S]*Shurgard NL[\s\S]*uit je potje Huur/i);
 });
 
-test('c1 de stand-kaart toont €2.380 nog in je potjes, met €85 per dag', async ({page})=>{
+test('c1 de tegel toont €2.380 nog in potjes, met €85 per dag', async ({page})=>{
   await bootStand(page);
-  /* go() hertekent niet als het scherm al de bron is (v280): de render-functie zelf aanroepen */
-  const t=await page.evaluate(()=>{ go('ins'); renderIns(); return document.querySelector('#insStand').innerText; });
-  expect(t).toMatch(/€2\.380\s*nog in je potjes · €85 per dag/);
-  expect(t).toMatch(/€175 uitgegeven\s*van €3\.375 maandbudget/);
+  /* v359: de stand-kaart is de tegel "Nog in potjes"; go() hertekent niet als het scherm al de bron is (v280) */
+  const t=await page.evaluate(()=>{ go('ins'); renderIns(); const q=(k)=>document.querySelector(`#insTegels [data-instegel="${k}"]`).innerText.replace(/\s+/g,' ');
+    return {pot:q('potjes'), uit:q('uitgegeven')}; });
+  expect(t.pot).toMatch(/Nog in potjes €2\.380 €85 per dag/);
+  expect(t.uit).toMatch(/Uitgegeven €175/);
 });
 
 /* v340: de kaart staat niet meer op Grip maar achter de Let op-regel [data-letop="uit"], in de sheet
@@ -172,15 +173,16 @@ test('d5 meer dan er nog in het potje zit kan het niet vasthouden', async ({page
 });
 
 for (const w of [360, 390]) {
-  test(`f1 op ${w}px: de Grip-kaart loopt niet over, en de stand-kaart blijft onder 200px`, async ({page})=>{
+  test(`f1 op ${w}px: de Grip-kaart loopt niet over, en de tegels op Inzichten ook niet`, async ({page})=>{
     await page.setViewportSize({width:w, height:w===360?640:844});
     await bootStand(page);
     const r=await page.evaluate(()=>{ go('maand'); renderMaand(); const k=(()=>{ if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip'); const g=document.querySelector('#gripLetOp [data-letop="uit"]'); if(!g) return null; g.click(); return document.querySelector('#gripLetOpSheet #uitgeslotenKaart'); })();
       const kr=k.getBoundingClientRect(); const over=[...k.querySelectorAll('*')].some(e=>e.getBoundingClientRect().right>kr.right+0.5);
-      closeSheet(); go('ins'); renderIns(); const s=document.querySelector('#insStand').getBoundingClientRect();
-      return {kh:Math.round(kr.height), over, sh:Math.round(s.height), sw:document.documentElement.scrollWidth, vw:innerWidth}; });
+      closeSheet(); go('ins'); renderIns(); const g=document.querySelector('#insTegels'), gr=g.getBoundingClientRect();
+      const tover=[...g.querySelectorAll('*')].some(e=>e.getBoundingClientRect().right>gr.right+0.5);
+      return {kh:Math.round(kr.height), over, tover, sw:document.documentElement.scrollWidth, vw:innerWidth}; });
     expect(r.over).toBe(false);
+    expect(r.tover).toBe(false);
     expect(r.sw).toBeLessThanOrEqual(r.vw);
-    expect(r.sh).toBeLessThanOrEqual(200);
   });
 }

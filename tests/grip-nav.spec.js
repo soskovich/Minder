@@ -94,20 +94,21 @@ test.describe('d - Grip leest altijd nu; de kiezer blijft van Inzichten', () => 
     await open(page, seed({ maanden: 8 }));
     const h = await page.evaluate(() => { go('maand'); return document.querySelector('#s-maand').innerHTML; });
     expect(h).not.toContain('openMaandKiezer()');
+    expect(h).not.toContain('openInsFilter()');
     expect(h).not.toContain('afgesloten maand');
     expect(h).not.toMatch(/>Je maand</);
     const ins = await page.evaluate(() => { go('ins'); return document.querySelector('#s-ins').innerHTML; });
-    expect(ins).toContain('openMaandKiezer()');
+    expect(ins).toContain('openInsFilter()');   // v359: het filter is de kiezer van Inzichten
   });
 
   test('met Inzichten op een eerdere maand rendert Grip byte-identiek, en Inzichten zegt het zelf', async ({ page }) => {
     await open(page, seed({ maanden: 8 }));
     const nu = await page.evaluate(() => { go('maand'); return document.querySelector('#s-maand').innerHTML; });
-    await page.evaluate((m) => zetKijkMaand(m), M1);
+    await page.evaluate((m) => ((m)=>{ curMonth=m; window._insPer=null; closeSheet(); render(); })(m), M1);
     await page.waitForTimeout(120);
     const daarna = await page.evaluate(() => { go('maand'); return document.querySelector('#s-maand').innerHTML; });
     expect(daarna).toBe(nu);
-    expect(await tekst(page, 'ins')).toMatch(/een afgesloten maand/);
+    expect(await page.evaluate(() => document.getElementById('insFilter').dataset.insper)).not.toBe('nu');   // v359: het filter zegt het
     expect(await page.evaluate(() => kijkMaand())).toBe(M1);
   });
 });

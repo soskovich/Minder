@@ -37,7 +37,7 @@ test.describe('a - op Vermogen, niet op Maand', () => {
 
   test('ook bij een afgesloten maand op de kiezer staat hij niet op Maand', async ({ page }) => {
     await vermogen(page);
-    const t = await page.evaluate((m) => { zetKijkMaand(m); return document.querySelector('#s-maand').innerText.replace(/\s+/g, ' '); }, M1);
+    const t = await page.evaluate((m) => { ((m)=>{ curMonth=m; window._insPer=null; closeSheet(); render(); })(m); return document.querySelector('#s-maand').innerText.replace(/\s+/g, ' '); }, M1);
     expect(t).not.toMatch(/spaarquote/i);
   });
 

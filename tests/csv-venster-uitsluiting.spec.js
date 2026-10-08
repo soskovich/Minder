@@ -338,9 +338,11 @@ test.describe('3 · wat de gebruiker ervan ziet', () => {
     expect(r.som).toBeLessThan(r.norm + r.opname);
   });
 
-  test('de regel staat op de stand-kaart van Inzichten', async ({ page }) => {
+  /* v359: de stand-kaart is vervallen; de regel staat in de sheet achter de tegel Uitgegeven, ook bij een
+     afgesloten maand (hier via curMonth, zoals het filter dat zet). */
+  test('de regel staat in de sheet achter Uitgegeven op Inzichten', async ({ page }) => {
     await boot(page);
-    const t = await page.evaluate((m) => insBudgetBlok(m), M3);
+    const t = await page.evaluate((m) => { curMonth = m; go('ins'); openInsTegel('uitgegeven'); return document.getElementById('insTegelSheet').innerHTML; }, M3);
     expect(t).toMatch(/ook via je bankkoppeling/);
     expect(t).toMatch(/openCsvDubbel\('N26 Main','2026-03'\)/);
   });
@@ -382,35 +384,8 @@ test.describe('3 · wat de gebruiker ervan ziet', () => {
   });
 });
 
-/* GEMETEN IN DE LEVENDE KAART, niet in een kloon: een kloon meet een marge mee (v269). De regels worden
-   daarna uit de dom gehaald, zodat het verschil de regels zelf zijn en niets anders.
-   DIT IS HET WORST CASE VAN DEZE FIXTURE: vier gepaarde rekeningen, dus vier regels. Op het toestel zijn
-   dat er ook vier. v241 houdt de stand-kaart onder de 200px, en dat is de eis waar dit tegenaan loopt. */
-test.describe('3b · wat de regels de stand-kaart kosten, gemeten', () => {
-  const meet = `(() => { const m='2026-03'; curMonth=m; go('ins'); renderIns();
-    const k=[...document.querySelectorAll('.card')]
-      .filter(x=>x.offsetParent!==null && x.getBoundingClientRect().height>40)[0];
-    const h=e=>Math.round(e.getBoundingClientRect().height);
-    const hoogte=h(k);
-    const rijen=[...k.querySelectorAll('div')]
-      .filter(x=>/ook via je bankkoppeling/.test(x.textContent) && x.children.length===0);
-    const n=rijen.length; const tekst=k.innerText.split(String.fromCharCode(10)).join(' | ');
-    rijen.forEach(x=>x.remove());
-    const zonder=h(k);
-    return {hoogte, zonder, kost:hoogte-zonder, n, tekst}; })()`;
-  for (const w of [360, 390]) {
-    test(`de hoogte van de stand-kaart op ${w}px`, async ({ page }) => {
-      await page.setViewportSize({ width: w, height: 844 });
-      await boot(page);
-      const r = await page.evaluate(meet);
-      console.log(`### stand-kaart @${w}px: ${r.hoogte}px met ${r.n} regel(s), ${r.zonder}px zonder, dus ${r.kost}px`);
-      console.log(`###   ${r.tekst}`);
-      expect(r.n).toBe(4);
-      expect(r.kost).toBe(4 * 23);        // 18px tekst plus de 5px marge erboven, per regel
-    });
-  }
-});
-
+/* v359: hier stond 3b, de hoogte van de stand-kaart met vier regels. Die kaart is vervallen; de regels staan in de
+   sheet achter Uitgegeven, en daar geldt geen hoogte-eis. */
 test.describe('4 · een bron, en hij loopt mee met TX', () => {
   test('blok 11 leest dezelfde paring als de app en noemt de uitsluiting', async ({ page }) => {
     await boot(page);

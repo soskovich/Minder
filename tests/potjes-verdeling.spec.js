@@ -17,9 +17,10 @@ const rijSom = (page) => page.$$eval('#sheet .tx .amt', (els) =>
 
 async function openVerdeling(page, payload) {
   await open(page, payload || seed());
-  await page.evaluate(() => go('ins'));
-  await page.waitForSelector('#s-ins .card');
-  await page.locator('#s-ins >> text=Maandbudget').first().click();
+  /* v359: de regel "van EUR X maandbudget" op Inzichten is met de stand-kaart verdwenen; de lijst van deze
+     maand opent nog vanuit de maandafsluiting. De sheet zelf is onveranderd, dus deze helper opent hem
+     rechtstreeks. */
+  await page.evaluate(() => { go('ins'); openPotjesVerdeling(thisYM()); });
   await page.waitForSelector(SHEET);
 }
 
@@ -37,30 +38,7 @@ async function openVolgende(page, payload) {
 }
 
 test.describe('a · de ingang', () => {
-  test('tik op Maandbudget opent de verdeling, niet de editor', async ({ page }) => {
-    await openVerdeling(page);
-    const s = await sheetTxt(page);
-    expect(s).toContain('Maandbudget');
-    expect(s).toContain('zo staat je plan verdeeld');
-    expect(s).not.toContain('Bestedingslimiet');            // dit is niet de editor
-    expect(s).not.toContain('Voorstel uit mijn historie');
-    expect(await page.evaluate(() => window._budgetSheet || null)).toBeNull();
-  });
-
-  test('de ring en de titel blijven de vergelijking openen', async ({ page }) => {
-    await open(page);
-    await page.evaluate(() => go('ins'));
-    /* v135: de ring en de titel zijn op de lopende maand vervangen door de maandnaam als ingang.
-       v176: die maandnaam is de maandkiezer geworden, dus de vergelijking hangt nu aan de
-       dagteller ernaast. Eén ingang per vraag blijft staan, alleen op een ander element. */
-    /* v241: de dagteller staat in de eyebrow boven de kaart in plaats van erin. De ingang blijft
-       dezelfde, alleen het anker verhuist mee. */
-    await page.locator('#s-ins .ins-eyebrow span[onclick*="openBudgetCompare"]').first().click();
-    await page.waitForSelector(SHEET);
-    const s = await sheetTxt(page);
-    expect(s).toMatch(/hoe doe je het deze maand\?/i);      // de kop rendert uppercase
-    expect(s).not.toContain('zo staat je plan verdeeld');   // de drill-downs blijven gescheiden
-  });
+  /* v359: 'de ring en de titel blijven de vergelijking openen' is vervallen: v359: Inzichten draagt geen regel Maandbudget en geen dagteller-ingang meer; de lijst opent vanuit de maandafsluiting */
 
   test('de twee getallen openen elk hun eigen lijst, niet dezelfde', async ({ page }) => {
     await openVerdeling(page);

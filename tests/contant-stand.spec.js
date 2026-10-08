@@ -387,7 +387,9 @@ test.describe('de poort kan niet uit de pas lopen met RULES', () => {
   });
 });
 
-test.describe('de regels onder de stand-kaart op Inzichten', () => {
+/* v359: de stand-kaart is vervallen. De regels staan in de sheet achter de tegel Uitgegeven, onder "Niet in dit
+   bedrag", met dezelfde bron en dezelfde tik. De hoogte-eis van v241 hoorde bij die kaart en is mee vervallen. */
+test.describe('de regels onder Uitgegeven op Inzichten', () => {
   /* v258: één regel per geenNorm-categorie in plaats van één opgetelde regel met één tik.
      GEMETEN op 360x640 en 390x844: elke regel is 18px hoog, de stand-kaart gaat van 167 naar 190px
      met twee categorieën, en de pagina van 700 naar 723px. v241 houdt die kaart onder de 200px, dus
@@ -401,12 +403,11 @@ test.describe('de regels onder de stand-kaart op Inzichten', () => {
       await page.evaluate(() => { const t = TX.find((x) => /Sleepbedrijf/.test(x.name)); OVR[t.id] = 'onvoorzien'; save(); });
       await tel(page, 400);
       await tel(page, 150);
-      await page.evaluate(() => { render(); go('ins'); });
+      await page.evaluate(() => { render(); go('ins'); openInsTegel('uitgegeven'); });
       const r = await page.evaluate(() => {
-        const rij = [...document.querySelectorAll('#s-ins [onclick^="openCategory"]')].map((e) => ({
+        const rij = [...document.querySelectorAll('#insTegelSheet [onclick^="openCategory"]')].map((e) => ({
           tekst: e.innerText.trim(), tik: e.getAttribute('onclick'), h: Math.round(e.getBoundingClientRect().height) }));
-        const kaart = document.querySelector('#s-ins .card');
-        return { rij, buitenNorm: Math.round(totals(kijkMaand()).buitenNorm), kaartH: Math.round(kaart.getBoundingClientRect().height) };
+        return { rij, buitenNorm: Math.round(totals(kijkMaand()).buitenNorm) };
       });
       expect(r.rij.length).toBe(2);
       // de tik komt uit op het bedrag waarop je tikte (v254), en de maand gaat mee
@@ -418,14 +419,13 @@ test.describe('de regels onder de stand-kaart op Inzichten', () => {
       const som = r.rij.reduce((a, x) => a + +(x.tekst.match(/\d[\d.]*/)[0].replace(/\./g, '')), 0);
       expect(som).toBe(r.buitenNorm);
       for (const x of r.rij) expect(x.h).toBe(18);
-      expect(r.kaartH).toBeLessThan(200);   // v241 houdt de stand-kaart onder de 200px
     });
   }
 
   test('een categorie zonder uitgaven krijgt geen regel', async ({ page }) => {
     await boot(page, {});   // wel een opname, maar nog niets contant uitgegeven en geen onvoorzien
-    await page.evaluate(() => { render(); go('ins'); });
-    expect(await page.evaluate(() => document.querySelectorAll('#s-ins [onclick^="openCategory"]').length)).toBe(0);
+    await page.evaluate(() => { render(); go('ins'); openInsTegel('uitgegeven'); });
+    expect(await page.evaluate(() => document.querySelectorAll('#insTegelSheet [onclick^="openCategory"]').length)).toBe(0);
   });
 });
 

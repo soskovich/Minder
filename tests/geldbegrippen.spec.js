@@ -30,8 +30,8 @@ test.describe('a · tik-voor-uitleg op de kernbegrippen', () => {
   // v192: "Deze maand op eigen kracht" is vervallen; "Nog te sparen" is de term die er staat.
   test('"Nog te sparen" in de Inzichten-hero ook', async ({ page }) => {
     await boot(page, 'ins');
-    // v241: de posten staan niet meer in de herokaart maar in de sectie 'Wat er nog komt'
-    const kaart = page.locator('#insNogLijst');
+    // v359: de posten zijn tegels geworden; de term staat in het label van de tegel Nog te sparen
+    const kaart = page.locator('#insTegels');
     const termen = await kaart.locator('.jrg').evaluateAll((els) => els.map((e) => e.textContent));
     expect(termen).toContain('Nog te sparen');
     expect(termen).not.toContain('Deze maand op eigen kracht');

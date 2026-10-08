@@ -101,58 +101,29 @@ test.describe('a · de ingang op Grip', () => {
     expect(await page.locator('#s-maand').innerText()).not.toMatch(/kunt doen\?/);
   });
 
-  /* v237: "de enige ingang" klopt niet meer, en dat is de bedoeling. Inzichten en Grip kunnen er
-     allebei een dragen zolang ze over een ander geval gaan. Wat blijft staan is dat geen scherm er
-     twee draagt, en dat Home, Plan en Transacties er geen krijgen: daar valt over een lek niets te
-     beslissen. */
-  test('a4 · hooguit een ingang per scherm, en alleen op Inzichten en Grip', async ({ page }) => {
+  /* v359: Inzichten draagt geen handeling meer, dus ook de lek-ingang van v237 niet. Wat blijft is dat geen scherm
+     er twee draagt, dat alleen Grip er een draagt, en dat Home, Plan en Transacties er geen krijgen. */
+  test('a4 · hooguit een ingang, en alleen op Grip', async ({ page }) => {
     await ins(page, metLekEnSignaal());
-    for (const scherm of ['vooruit', 'dash', 'tx']) {
+    await page.evaluate(() => { go('ins'); go('maand'); });
+    for (const scherm of ['vooruit', 'dash', 'tx', 'ins']) {
       expect(await page.evaluate((s) => (document.querySelector('#s-' + s) || {}).innerHTML || '', scherm))
         .not.toContain("coStart('lek'");
     }
-    /* v340: de ingang van Grip zit in de sheet die de Let op-regel opent, dus Grip telt #s-maand plus
-       #gripLetOpSheet */
-    const per = async (s) => page.evaluate((x) => document.querySelectorAll('#s-' + x + " [onclick*=\"coStart('lek'\"]"
-      + (x === 'maand' ? ", #gripLetOpSheet [onclick*=\"coStart('lek'\"]" : '')).length, s);
-    expect(await per('ins')).toBeLessThanOrEqual(1);
-    expect(await per('maand')).toBeLessThanOrEqual(1);
-    // deze fixture draagt allebei de gevallen: een lek zonder overschrijding (shopping, geen potje)
-    // en een overschrijding met een kaart (boodschappen). Dat is precies de dekking die v237 wil.
-    expect(await per('ins') + await per('maand')).toBe(2);
+    const grip = await page.evaluate(() => document.querySelectorAll("#s-maand [onclick*=\"coStart('lek'\"], #gripLetOpSheet [onclick*=\"coStart('lek'\"]").length);
+    expect(grip).toBeLessThanOrEqual(1);
   });
 
-  /* a5 was in v235 een vastgelegde versmalling: zonder kaart geen ingang. v237 heft die op, dus
-     dit is nu een meting van de andere kant. Hetzelfde geval, hetzelfde lek, geen overschrijding:
-     de ingang hoort er te zijn, op Inzichten, en niet op Grip. Valt hij weg, dan is de dekking
-     stilletjes terug naar v235 en hoort die test rood te staan. */
-  test('a5 · een lek zonder overschrijding krijgt zijn ingang op Inzichten, niet op Grip', async ({ page }) => {
-    await ins(page, metLek());                                   // lek, maar geen potje-overschrijding
-    expect(await page.evaluate((m) => coachWeekRisk(m).tone, CUR)).toBe('warn');
+  /* v359: een lek ZONDER overschrijding had zijn enige ingang op Inzichten (v237), en die is met "Wat opvalt"
+     vervallen. Dit legt vast dat Inzichten hem niet meer draagt; dat er dan nergens een ingang is, is gemeld als
+     open punt (CLAUDE.md, v359). */
+  test('a5 · een lek zonder overschrijding krijgt op Inzichten geen ingang meer', async ({ page }) => {
+    await ins(page, metLek());
     expect(await page.evaluate((m) => !!coachLeak(m), CUR)).toBe(true);
     expect(await page.evaluate(() => valtOpSignals(thisYM()).length)).toBe(0);
-    await expect(chevron(page)).toHaveCount(0);                  // geen kaart, dus geen chevron
     await page.evaluate(() => go('ins'));
-    await expect(page.locator('.valtop-patroon')).toHaveCount(1);
-    const onclick = await page.locator('.valtop-patroon').getAttribute('onclick');
-    expect(onclick).toContain("coStart('lek'");
-    expect(onclick).toContain(CUR);
-    // de regel draagt de bevinding zelf, met bedrag en categorie
-    const t = await page.locator('.valtop-patroon').innerText();
-    expect(t).toMatch(/mediamarkt/i);
-    expect(t).toMatch(/€\s?220/);
-  });
-
-  /* Het gesprek achter de regel is hetzelfde gesprek als achter de chevron: coTopicLek(), met
-     dezelfde maand. Zonder deze toets kan de regel een dode tik worden. */
-  test('a6 · de regel op Inzichten opent hetzelfde gesprek', async ({ page }) => {
-    await ins(page, metLek());
-    await page.evaluate(() => go('ins'));
-    await page.locator('.valtop-patroon').click();
-    await wachtKeuze(page);
-    expect(await page.evaluate(() => window._coOnderwerp)).toBe('lek');
-    const draad = await page.locator('#coThr').innerText();
-    expect(draad).toMatch(/mediamarkt/i);
+    expect(await page.locator('#s-ins').innerHTML()).not.toContain('coStart(');
+    await expect(page.locator('.valtop-patroon')).toHaveCount(0);
   });
 });
 

@@ -53,7 +53,8 @@ async function boot(page, o, breed) {
       if (m) OVR[t.id] = m[1];
       if (t.name === 'Woningcorporatie') OVR[t.id] = 'huur';
     }
-    save(); window._brugMaand = null; go('ins'); renderIns();
+    save(); window._brugMaand = null; go('ins');
+    insFilterZet('12', null);   // v359: standaard staan er drie maanden; deze spec tikt ook oudere aan
   });
   await page.waitForSelector('#insSpendChart');
 }

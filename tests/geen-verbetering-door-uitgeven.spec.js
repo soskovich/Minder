@@ -48,30 +48,25 @@ async function boot(page, extra) {
   await page.route('**/sw.js', (r) => r.abort());
   await page.addInitScript((d) => { for (const k in d) localStorage.setItem(k, d[k]); }, seed(extra));
   await page.goto('/index.html');
-  await page.waitForFunction(() => typeof nogDezeMaandBody === 'function');
+  await page.waitForFunction(() => typeof renderIns === 'function' && typeof TX !== 'undefined');
 }
 
 // Elk bedrag in het blok, aan zijn eigen label gehangen. Geen enkele waarde wordt herrekend:
 // we lezen wat er staat.
+/* v359: de posten zijn tegels op Inzichten geworden (#insTegels), en het restant van je potjes is de tegel "Nog in
+   potjes". De eigenschap is dezelfde: geen getal op die tegels wordt gunstiger doordat je meer uitgeeft. */
 const meet = (page) => page.evaluate(() => {
-  const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
+  go('ins'); const d = document.getElementById('insTegels');
   const eur = (s) => { const m = String(s).match(/-?€\s?([\d.]+)/); if (!m) return null;
     return (/-€/.test(s) ? -1 : 1) * +m[1].replace(/\./g, ''); };
   const tegels = {};
-  for (const t of d.querySelectorAll('.wvo-tile')) {
-    const l = t.querySelector('.wvo-tl'), v = t.querySelector('.wvo-tv');
-    if (l && v) tegels[l.innerText.trim()] = eur(v.innerText);
+  for (const t of d.querySelectorAll('[data-instegel]')) {
+    const l = t.querySelector('.lb'), v = t.querySelector('.vl');
+    if (l && v && t.dataset.instegel !== 'potjes' && t.dataset.instegel !== 'uitgegeven') tegels[l.innerText.trim()] = eur(v.innerText);
   }
   const tekst = d.innerText.replace(/\s+/g, ' ');
-  /* v204: het variabele deel stond als voetregel onder de tegels ('plus EUR X variabel uit je
-     potjes') en werd een vierde tegel, 'Nog uit je potjes'. v309: die post is het HOOFDGETAL van de
-     stand-kaart geworden, dus hij komt daar vandaan; de bron is onveranderd varBudget() min
-     varPotjeStand().gebruikt. */
-  go('ins'); const k = document.getElementById('insStand');
-  const rij = k ? [...k.querySelectorAll('div.row')]
-    .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
-  const sp2 = rij ? [...rij.querySelectorAll('span')] : [];
-  const vp = sp2.length ? sp2[0].innerText.match(/€([\d.]+)/) : null;
+  const k = d.querySelector('[data-instegel="potjes"]');
+  const vp = k ? k.querySelector('.vl').innerText.match(/€([\d.]+)/) : null;
   return { tegels, varPlan: vp ? +vp[1].replace(/\./g, '') : 0, tekst,
     kaartTekst: k ? k.innerText.replace(/\s+/g, ' ') : '',
     uitgegeven: Math.round(catSpendMap(curMonth || months()[months().length - 1]).boodschappen || 0) };
@@ -139,15 +134,13 @@ const schermNoot = ({ noot }) => {
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
         const VP = varPotjeStand(m);
-        go('ins'); const k = document.getElementById('insStand');
-        const rij = k ? [...k.querySelectorAll('div.row')]
-          .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
-        const sp = rij ? [...rij.querySelectorAll('span')] : [];
-        const vol = sp.length > 1 ? sp[1].innerText.replace(/\s+/g, ' ').trim() : '';
-        const achter = vol.includes(' \u00b7 ') ? vol.slice(vol.indexOf(' \u00b7 ') + 3) : '';
+        /* v359: de stand-kaart is de tegel "Nog in potjes"; het restant is zijn waarde en de krapte zijn
+           maatregel ("bij je tempo EUR X tekort"). */
+        go('ins'); const k = document.querySelector('#insTegels [data-instegel="potjes"]');
+        const ms = k && k.querySelector('.ms') ? k.querySelector('.ms').innerText.replace(/\s+/g, ' ').trim() : '';
         const eur = (t) => { const x = String(t).match(/\u20ac([\d.]+)/); return x ? +x[1].replace(/\./g, '') : null; };
-        return { getoond: { noot: /tekort/.test(achter) ? achter : '', alles: k ? k.innerText : '' },
-          val: sp.length ? eur(sp[0].innerText) : null,
+        return { getoond: { noot: /tekort/.test(ms) ? ms : '', alles: k ? k.innerText : '' },
+          val: k ? eur(k.querySelector('.vl').innerText) : null,
           inPotjes: VP.budget - VP.gebruikt,
           bron: varPlanRemaining(m), gat: varPlanRemaining(m) - (VP.budget - VP.gebruikt) };
       });
@@ -189,17 +182,17 @@ const schermNoot = ({ noot }) => {
 });
 
 test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
-  test('geen chip die een waarneming bij een planrest optelt', async ({ page }) => {
+  test('geen tegel die een waarneming bij een planrest optelt', async ({ page }) => {
     await boot(page, 0);
+    /* v359: de posten zijn tegels (insTegelsNu); er is geen tegel en geen bron die netto, naSparen of
+       eigenkracht noemt. */
     const r = await page.evaluate(() => {
-      const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
-      return { chips: d.querySelectorAll('.wvo-chip').length, streep: d.querySelectorAll('.ndm-net').length,
-        src: nogDezeMaandBody.toString() };
+      go('ins'); const d = document.getElementById('insTegels');
+      return { keys: [...d.querySelectorAll('[data-instegel]')].map((t) => t.dataset.instegel),
+        src: insTegelsNu.toString() };
     });
-    r.src = kaalBron(r.src);        // v309: strippen in Node, op een plek
-    expect(r.chips).toBe(0);
-    expect(r.streep).toBe(0);
-    expect(r.src).not.toContain('netto');
+    r.src = kaalBron(r.src);
+    expect(r.keys.some((k) => /netto|kracht/.test(k))).toBe(false);
     expect(r.src).not.toContain('naSparen');
     expect(r.src).not.toContain('eigenkracht');
   });
@@ -214,16 +207,13 @@ test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
     const r = await page.evaluate(() => {
       const L = monthLiquidity(), S = safeToSpend();
       const m = curMonth || months()[months().length - 1];
-      const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
+      go('ins'); const d = document.getElementById('insTegels');
       const eur = (s) => { const x = String(s).match(/€\s?([\d.]+)/); return x ? +x[1].replace(/\./g, '') : null; };
       const tg = {};
-      for (const t of d.querySelectorAll('.wvo-tile')) tg[t.querySelector('.wvo-tl').innerText.trim()] = eur(t.querySelector('.wvo-tv').innerText);
-      // v309: het vierde feit staat als hoofdgetal op de stand-kaart en niet meer in deze lijst
-      go('ins'); const k = document.getElementById('insStand');
-      const rij = k ? [...k.querySelectorAll('div.row')]
-        .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
-      const sp = rij ? [...rij.querySelectorAll('span')] : [];
-      const vp = sp.length ? sp[0].innerText.match(/€([\d.]+)/) : null;
+      for (const t of d.querySelectorAll('[data-instegel]')) tg[t.querySelector('.lb').innerText.trim()] = eur(t.querySelector('.vl').innerText);
+      // v359: het vierde feit is de tegel "Nog in potjes"
+      const k = d.querySelector('[data-instegel="potjes"]');
+      const vp = k ? k.querySelector('.vl').innerText.match(/€([\d.]+)/) : null;
       const VP = varPotjeStand(m);
       return { tg, varPlan: vp ? +vp[1].replace(/\./g, '') : 0,
         fixDue: Math.round(L.fixDue), incDue: Math.round(L.incDue),

@@ -66,7 +66,9 @@ test.describe('b · de hele app volgt', () => {
       expect(html, naam).not.toMatch(/#2dd4bf|#56627d|#8a97ab|#0b1220/i);   // oude vaste kleuren
     }
     expect(uit.chart).toContain('var(--bar)');
-    expect(uit.chart).toMatch(/var\(--(accent|teal)\)/);              // het accent via een token
+    /* v359: teal is in de grafiek de gekozen maand (v335, een ingang), dus het accent verschijnt pas na een tik */
+    const gekozen = await page.evaluate(() => { brugKies(insAfgerond().slice(-1)[0]); return spendVsBudgetChart(); });
+    expect(gekozen).toMatch(/var\(--(accent|teal)\)/);              // het accent via een token
     expect(uit.avatar).toContain('var(--accent)');
   });
 

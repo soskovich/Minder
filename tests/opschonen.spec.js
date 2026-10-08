@@ -121,7 +121,9 @@ test.describe('b · eigen aantal buffer-maanden', () => {
 test.describe('c · maand-drill-down met segment-toggle', () => {
   test('opent op Categorieën en onthoudt de keuze', async ({ page }) => {
     await boot(page, 'ins');
-    await page.locator('#s-ins >> text=Uitgegeven').first().click();
+    // v359: de tegel Uitgegeven opent zijn sheet, en "Per categorie" daarin de drill-down
+    await page.locator('#insTegels [data-instegel="uitgegeven"]').click();
+    await page.locator('#sheet >> text=Per categorie').click();
     await page.waitForSelector('#msBody');
 
     let sheet = await page.locator('#sheet').innerText();
@@ -174,9 +176,9 @@ test.describe('d · dubbele widgets zijn weg uit Inzichten', () => {
        blok bevatte. Wat blijft is de hero met de budgetstand. */
     expect(ins).not.toMatch(/kerncijfers/i);
     expect(ins).not.toMatch(/verdieping/i);
-    expect(ins).toMatch(/maandbudget/i);
+    expect(ins).toMatch(/uitgegeven/i);   // v359: de tegel Uitgegeven
     // v178 zette de meermaands-grafiek op Maand, v227 bracht hem terug onder Deze maand
-    expect(ins).toMatch(/uitgaven vs budget/i);
+    expect(ins).toMatch(/over de maanden/i);   // v359
   });
 
   test('de renderers zelf blijven bestaan voor de drill-down', async ({ page }) => {

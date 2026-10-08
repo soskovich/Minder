@@ -56,7 +56,7 @@ test.describe('b · maandgrafiek ingeklapt in Rustig', () => {
     expect(await grafiek(page).count()).toBe(0);                    // geen 12-maands grafiek in beeld
     const kaart = page.locator('#insSpendCard');
     await expect(kaart).toHaveCount(1);
-    expect((await kaart.innerText()).toLowerCase()).toContain('uitgaven vs budget');
+    expect((await kaart.innerText()).toLowerCase()).toContain('over de maanden');   // v359
     expect(await kaart.innerText()).toContain('tik om te bekijken');
 
     await kaart.locator('.row').click();
@@ -133,9 +133,8 @@ test.describe('c · niets anders verandert', () => {
     /* v241: renderIns() zet de blokken als losse secties neer, dus de oude regel bestaat niet meer.
        De volgorde blijft dezelfde en staat als eigenschap in valt-op-signalen.spec.js; hier toetsen
        we alleen dat de signaalregels nog door renderIns() worden geschreven. */
-    expect(src).toContain('insSignalRows(m, nu)');
-    expect(src).toContain('insBudgetBlok(m)');
-    expect(await page.evaluate(() => renderIns.toString())).toContain('afgeslotenMaandBanner(m)');
+    // v359: renderIns() is het dashboard: filter, tegels, kop-inzicht, grafiek, keuzekaart en patronen
+    for (const f of ['insFilterKnop(', 'insTegelRaster(', 'insKopInzicht(', 'spendVsBudgetChart(', 'insKeuzeKaart(', 'insPatronenKaart(']) expect(src).toContain(f);
     expect(await page.evaluate(() => COLLAP_DEF.openSpendChart)).toEqual({ rustig: false, rest: true });
   });
 

@@ -83,18 +83,18 @@ test.describe('c - kaalUit leest de pagina en faalt luid', () => {
 
   test('hij geeft de bron van een app-functie zonder commentaar', async ({ page }) => {
     await boot(page);
-    const ruw = await page.evaluate(() => String(insBudgetBlok));
-    const kaal = await kaalUit(page, 'insBudgetBlok');
+    const ruw = await page.evaluate(() => String(monthLiquidity));
+    const kaal = await kaalUit(page, 'monthLiquidity');
     expect(ruw.length).toBeGreaterThan(kaal.length);       // er zat commentaar in
-    expect(kaal).toContain('varPotjeStand(');              // en de aanroep staat er nog
+    expect(kaal).toContain('txOfMonth(');                  // en de aanroep staat er nog (v359: monthLiquidity, insBudgetBlok is vervallen)
   });
 
   test('meer dan een naam geeft de bronnen achter elkaar', async ({ page }) => {
     await boot(page);
-    const een = await kaalUit(page, 'insBudgetBlok');
-    const twee = await kaalUit(page, 'insBudgetBlok', 'nogDezeMaandPosten');
+    const een = await kaalUit(page, 'monthLiquidity');
+    const twee = await kaalUit(page, 'monthLiquidity', 'nogDezeMaandPosten');
     expect(twee.length).toBeGreaterThan(een.length);
-    expect(twee).toContain('varPotjeStand(');
+    expect(twee).toContain('monthLiquidity(');
   });
 
   /* Een lege string laat elke `not.toContain` per constructie slagen, en dat is een test die niet
@@ -106,8 +106,8 @@ test.describe('c - kaalUit leest de pagina en faalt luid', () => {
 
   test('KAAL_JS levert in de pagina dezelfde uitkomst als in Node', async ({ page }) => {
     await boot(page);
-    const inPagina = await page.evaluate((kj) => eval(kj)(String(insBudgetBlok)), KAAL_JS);
-    expect(inPagina).toBe(await kaalUit(page, 'insBudgetBlok'));
+    const inPagina = await page.evaluate((kj) => eval(kj)(String(monthLiquidity)), KAAL_JS);
+    expect(inPagina).toBe(await kaalUit(page, 'monthLiquidity'));
   });
 });
 

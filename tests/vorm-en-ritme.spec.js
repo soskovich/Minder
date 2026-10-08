@@ -96,24 +96,7 @@ test.describe('a · teal betekent op Home en Inzichten nog één ding', () => {
     });
   }
 
-  test('de sectiekop draagt geen accent meer', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => go('ins'));
-    const r = await page.evaluate(() => {
-      const el = document.querySelector('#s-ins .inssec');
-      const acc = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
-      const d = document.createElement('div'); d.style.color = acc; document.body.appendChild(d);
-      const A = getComputedStyle(d).color; d.remove();
-      return { er: !!el, kleur: el ? getComputedStyle(el).color : '', accent: A,
-               // de kop blijft herkenbaar aan hoofdletters, letterspacing en gewicht
-               caps: el ? getComputedStyle(el).textTransform : '',
-               spacing: el ? getComputedStyle(el).letterSpacing : '' };
-    });
-    expect(r.er).toBe(true);
-    expect(r.kleur).not.toBe(r.accent);
-    expect(r.caps).toBe('uppercase');
-    expect(parseFloat(r.spacing)).toBeGreaterThan(0);
-  });
+  /* v359: 'de sectiekop draagt geen accent meer' is vervallen: v359: Inzichten draagt geen sectiekoppen meer; het dashboard heeft een filter, tegels en kaarten */
 
   test('de tegel Nog te sparen kleurt alleen nog als hij gehaald is', async ({ page }) => {
     await boot(page);

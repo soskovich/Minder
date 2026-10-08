@@ -20,7 +20,6 @@ async function boot(page, payload) {
 // terugval in renderIns(), en die vuurt alleen zonder budget. De budgetstand woont in de hero.
 /* v178: 'boven inkomen-limiet' is een oordeel over je plan en stond op Maand onder de streep.
    De budgetstand op Inzichten toont alleen nog hoe deze maand loopt. */
-const kaartHtml = (page) => page.evaluate((m) => insBudgetBlok(m), CUR);
 // v315: maandPlanRegels() is vervallen; de rij staat in maandVanafRegels()
 /* v340: maandVanafRegels() is ook vervallen. Wat 'Vanaf <maand>' droeg staat in de tijdlijn
    'Komende 3 maanden' op Grip (`[data-tlsoort="vanaf"]`), uit maandVanafData(). Beide worden
@@ -28,36 +27,11 @@ const kaartHtml = (page) => page.evaluate((m) => insBudgetBlok(m), CUR);
 const planHtml = (page) => page.evaluate(() => { go('maand'); renderMaand();
   return JSON.stringify(maandVanafData()) + [...document.querySelectorAll('#s-maand [data-tlsoort="vanaf"]')].map((x) => x.outerHTML).join(''); });
 
-test.describe('a · de budget-kaart', () => {
-  test('binnen budget kleurt nooit amber, ook niet als je sneller gaat dan de maand', async ({ page }) => {
-    // kies een budget dat een "sneller dan de maand"-stand oplevert, als de kalender dat toelaat:
-    // laat in de maand kan usedPct niet meer boven dayPct+8 komen zonder óók over budget te gaan.
-    await boot(page);
-    const info = await page.evaluate((m) => {
-      const t = totals(m), now = new Date();
-      const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-      const dayPct = Math.round(Math.min(now.getDate(), dim) / dim * 100);
-      return { spend: Math.round(t.spend), dayPct, kanAhead: dayPct + 20 <= 98 };
-    }, CUR);
-
-    const doel = info.kanAhead ? Math.round(info.spend / ((info.dayPct + 20) / 100)) : Math.round(info.spend * 3);
-    await boot(page, metBudget(doel));
-    const html = await kaartHtml(page);
-
-    expect(html).not.toMatch(AMBER);                                   // geen amber binnen budget
-    expect(html).toContain('var(--accent)');                           // de balk blijft rustig
-    expect(html).not.toContain('var(--red)');
-    // het tempo staat er als feit, zonder oordeel: geen kleur, geen woord als "te snel"
-    expect(html).toMatch(/de maand is \d+% voorbij/);
-  });
-
-  test('over budget blijft rood — dat is wél aandacht', async ({ page }) => {
-    await boot(page, metBudget(200));                                  // 445 uitgegeven van 200
-    const html = await kaartHtml(page);
-    expect(html).toContain('var(--red)');                              // over budget is rood
-    expect(html).not.toMatch(AMBER);                                   // rood, niet amber ernaast
-  });
-
+/* v359: hier stond describe 'a · de budget-kaart'. De stand-kaart van Inzichten is vervallen; zijn plek is de
+   tegel Uitgegeven, en die is op keuze van de gebruiker amber BOVEN HET TEMPO (een omkering van v93 voor deze ene
+   tegel: "sneller dan de maand" is daar wel een status, want het tempo telt vaste lasten op hun datum).
+   inzichten-dashboard.spec.js draagt groen en amber. */
+test.describe('a · wat er vanaf volgende maand staat', () => {
   /* v228: de rij 'Boven je inkomen-limiet' is vervallen (tests/vaststellen-zonder-gevolg.spec.js).
      Wat er in de vanaf-kaart overblijft draagt geen status en dus ook geen amber (v315: die rijen
      stonden tot dan onder een streep in de regelkaart). */

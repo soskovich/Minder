@@ -79,15 +79,13 @@ const schermNoot = ({ noot }) => {
   const m = String(noot || '').replace(/\s+/g, ' ').match(/\u20ac([\d.]+)/);
   return m ? +m[1].replace(/\./g, '') : null;
 };
-// de kop van de stand-kaart: het grote getal en het achtervoegsel, in de pagina zelf
-const KOP = `(() => { go('ins'); const k=document.getElementById('insStand');
-  const r=k?[...k.querySelectorAll('div.row')].find(x=>/nog in je potjes|te veel uitgegeven/.test(x.textContent)):null;
-  const sp=r?[...r.querySelectorAll('span')]:[];
-  const vol=sp.length>1?sp[1].innerText.replace(/\\s+/g,' ').trim():'';
-  const achter=vol.includes(' \u00b7 ')?vol.slice(vol.indexOf(' \u00b7 ')+3):'';
-  const eur=t=>{ const m=String(t).match(/\u20ac([\\d.]+)/); return m?+m[1].replace(/\\./g,''):null; };
-  return { val: sp.length?eur(sp[0].innerText):null, label: vol.split(' \u00b7 ')[0],
-    noot: /tekort/.test(achter)?achter:'', achter, alles: k?k.innerText:'' }; })()`;
+/* v359: de stand-kaart is vervallen; het restant staat in de tegel "Nog in potjes", met eronder het dagbedrag of de
+   tempo-krapte ("bij je tempo EUR X tekort"). Dezelfde vorm als de kop van v309: val, label, noot. */
+const KOP = `(() => { go('ins'); const k=document.querySelector('[data-instegel="potjes"]');
+  const val=k?k.querySelector('.vl').innerText:''; const ms=k?k.querySelector('.ms').innerText.replace(/\\s+/g,' ').trim():'';
+  const eur=t=>{ const m=String(t).match(/\u20ac([\\d.]+)/); return m?(String(t).trim().startsWith('-')?-1:1)*+m[1].replace(/\\./g,''):null; };
+  return { val: k?eur(val):null, label: ms==='te veel uitgegeven'?'te veel uitgegeven':'nog in je potjes',
+    noot: /tekort/.test(ms)?ms:'', achter: ms, alles: k?k.innerText:'' }; })()`;
 
 test.describe('a · elke plek leest dezelfde bron', () => {
   for (const [naam, opt] of SITUATIES) {
@@ -107,11 +105,8 @@ test.describe('a · elke plek leest dezelfde bron', () => {
              onder de tegels en werd een tegel. v250: en stond sindsdien in de regel eronder zodra
              hij van de aftrekking afweek. v309: het is het achtervoegsel van het hoofdgetal op de
              stand-kaart, met het GAT erin. */
-          scherm: (function(){ go('ins'); const k=document.getElementById('insStand');
-            const rr=k?[...k.querySelectorAll('div.row')].find(x=>/nog in je potjes|te veel uitgegeven/.test(x.textContent)):null;
-            const sp=rr?[...rr.querySelectorAll('span')]:[];
-            const vol=sp.length>1?sp[1].innerText.replace(/\s+/g,' ').trim():'';
-            const achter=vol.includes(' \u00b7 ')?vol.slice(vol.indexOf(' \u00b7 ')+3):'';
+          scherm: (function(){ go('ins'); const k=document.querySelector('[data-instegel="potjes"]');   // v359: de tegel
+            const achter=k?k.querySelector('.ms').innerText.replace(/\s+/g,' ').trim():'';
             return { noot: /tekort/.test(achter)?achter:'', alles: k?k.innerText:'' }; })(),
           // dezelfde som, met de hand: potjeRest per niet-recurring potje
           hand: (function () {
@@ -186,18 +181,14 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
       await boot(page, seed(opt));
       const r = await page.evaluate(() => {
         const m = curMonth || months()[months().length - 1];
-        const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
-        const t = d.innerText.replace(/\s+/g, ' ');
+        go('ins'); const t = document.getElementById('insTegels').innerText.replace(/\s+/g, ' ');   // v359: de tegels
         /* v309: het variabele deel staat op Inzichten in het ACHTERVOEGSEL van het hoofdgetal op de
            stand-kaart. Tot deze reparatie las deze test `.nog-noot` uit `nogDezeMaandBody()`, en die
            is sinds de verhuizing ALTIJD leeg: `op` was dus per constructie null en de assertie
            erachter onbereikbaar (meetles a). */
-        go('ins'); const k = document.getElementById('insStand');
-        const rij = k ? [...k.querySelectorAll('div.row')]
-          .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
-        const sp = rij ? [...rij.querySelectorAll('span')] : [];
-        const vol = sp.length > 1 ? sp[1].innerText.replace(/\s+/g, ' ').trim() : '';
-        const achter = vol.includes(' \u00b7 ') ? vol.slice(vol.indexOf(' \u00b7 ') + 3) : '';
+        const k = document.querySelector('[data-instegel="potjes"]');   // v359: de tegel Nog in potjes
+        const sp = k ? [k.querySelector('.vl')] : [];
+        const achter = k ? k.querySelector('.ms').innerText.replace(/\s+/g, ' ').trim() : '';
         const eur = (x) => { const y = String(x).match(/\u20ac([\d.]+)/); return y ? +y[1].replace(/\./g, '') : null; };
         /* DE BRON ZONDER COMMENTAAR. Deze assertie las `safeToSpend.toString()`, en dat is de LIVE
            functie MET haar comments; daar staat `varPlanRemaining()` nog in de uitleg terwijl de code
@@ -211,7 +202,7 @@ test.describe('b · het variabele deel komt op beide schermen uit dezelfde bron'
           kop: sp.length ? eur(sp[0].innerText) : null,
           inzichten: { noot: /tekort/.test(achter) ? achter : '' },
           tekst: t,
-          srcSafe: kaal(safeToSpend), srcKaart: kaal(insBudgetBlok), srcStand: kaal(varPotjeStand) };
+          srcSafe: kaal(safeToSpend), srcKaart: kaal(insTegelsNu), srcStand: kaal(varPotjeStand) };
       });
       for (const k of ['srcSafe', 'srcKaart', 'srcStand']) r[k] = kaalBron(r[k]);   // v309: in Node
       expect(r.home).toBe(r.reserve);   // v254: Home leest de reservering, Inzichten de tempo-som
@@ -280,7 +271,7 @@ test.describe('d · Nog te betalen mengt geen twee soorten zekerheid', () => {
     await boot(page);
     const r = await page.evaluate(() => {
       const m = curMonth || months()[months().length - 1];
-      const d = document.createElement('div'); d.innerHTML = nogDezeMaandBody();
+      go('ins'); const d = document.getElementById('insTegels');   // v359: de tegels
       const VP = varPotjeStand(m);
       return { txt: d.innerText.replace(/\s+/g, ' '), html: d.innerHTML,
         fix: Math.round(monthLiquidity().fixDue), plan: varPlanRemaining(m),
@@ -310,7 +301,7 @@ test.describe('d · Nog te betalen mengt geen twee soorten zekerheid', () => {
   test('kijken verandert niets', async ({ page }) => {
     await boot(page);
     const voor = await page.evaluate(() => ({ tx: TX.length, set: JSON.stringify(SET) }));
-    await page.evaluate(() => { nogDezeMaandBody(); safeToSpend(); varPlanRemaining(curMonth); });
+    await page.evaluate(() => { insTegelsNu('alle'); safeToSpend(); varPlanRemaining(curMonth); });
     expect(await page.evaluate(() => ({ tx: TX.length, set: JSON.stringify(SET) }))).toEqual(voor);
   });
 });

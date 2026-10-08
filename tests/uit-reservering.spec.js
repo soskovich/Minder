@@ -96,9 +96,9 @@ const LEES = () => {
     posten: nogDezeMaandPosten().map((p) => String(p.lab).replace(/<[^>]*>/g, '') + ' ' + p.val),
     /* v309: de potjes-post is het hoofdgetal van de stand-kaart geworden, dus de stand wordt daar
        gelezen. `posten` blijft, om te toetsen dat hij in de lijst NIET meer staat. */
-    kopPotjes: (() => { try { const k = insBudgetBlok(thisYM());
-      const m2 = /(&euro;|\u20ac)\s?([\d.]+)<\/span>\s*<span class="small muted"[^>]*>(nog in je potjes|te veel uitgegeven)/.exec(k);
-      return m2 ? m2[3] + ' ' + m2[2] : null; } catch (_) { return null; } })(),
+    // v359: de stand-kaart is de tegel "Nog in potjes"; label en bedrag zoals de tegel ze draagt
+    kopPotjes: (() => { try { const k = insTegelsNu('alle').find((x) => x.key === 'potjes');
+      return k ? k.lab.toLowerCase() + ' ' + String(k.val).replace(/^\u20ac/, '') : null; } catch (_) { return null; } })(),
   };
 };
 
@@ -179,7 +179,7 @@ test.describe('b - mijn geval: twee boetes samen 463 gevlagd', () => {
     expect(r.planRest).toBeLessThanOrEqual(r.reserve);
     expect(r.potOver).toBe(0);
     expect(r.reserved).toBe(355);
-    expect(r.kopPotjes).toMatch(/^nog in je potjes /);       // v309: op de kaart, niet in de lijst
+    expect(r.kopPotjes).toMatch(/^nog in potjes /);       // v309: op de kaart, niet in de lijst
     expect(r.posten.some((p) => /uit je potjes|Te veel uitgegeven/.test(p))).toBe(false);
   });
 
@@ -279,9 +279,9 @@ test.describe('d - de zichtbaarheidsregel', () => {
     const na = await page.evaluate(() => { const m = thisYM();
       const b = txOfMonth(m).filter((t) => t.name === 'CJIB');
       for (const t of b) zetUitReservering(t.id, -t.amount, false);
-      go('ins');
-      const kaart = [...document.querySelectorAll('.card')]
-        .filter((x) => x.offsetParent !== null && x.getBoundingClientRect().height > 40)[0];
+      // v359: de regel staat in de sheet achter de tegel Uitgegeven, onder "Niet in dit bedrag"
+      go('ins'); openInsTegel('uitgegeven');
+      const kaart = document.getElementById('insTegelSheet');
       return { html: uitReserveringRegels(totals(m), m),
         tekst: kaart.innerText.replace(/\n/g, ' | '),
         som: Math.round(Object.values(totals(m).uitResCat).reduce((a, b2) => a + b2, 0)),
@@ -339,58 +339,7 @@ test.describe('e - de hoogte van de stand-kaart, gemeten', () => {
       spendNorm: Math.round(totals(m).spendNorm), budget: Math.round(totals(m).budget)}; })()`;
 
   for (const w of [360, 390]) {
-    test(`het gemelde geval op ${w}px: beide boetes gevlagd`, async ({ page }) => {
-      await opzet(page, w);
-      const voor = await page.evaluate(meet);
-      await page.evaluate(VLAG_BEIDE());
-      const na = await page.evaluate(meet);
-      expect(voor.gn).toBe(2);
-      expect(voor.nRijen).toBe(0);
-      expect(voor.hoogte).toBe(175);
-      expect(na.nRijen).toBe(1);
-      expect(voor.overZin).toBe(true);
-      expect(na.overZin).toBe(false);         // spendNorm zakt onder je budget, dus die zin valt weg
-      console.log(`### gemeld geval @${w}px: ${voor.hoogte}px -> ${na.hoogte}px, regelKost ${na.regelKost}px`);
-      console.log(`###   voor: ${voor.tekst}`);
-      console.log(`###   na:   ${na.tekst}`);
-      /* GEMETEN, en de twee breedtes lopen hier uiteen doordat de kop en de budgetzin op 360px
-         anders afbreken dan op 390px. Niet verder uitgesplitst: wat de eis van v241 toetst is de
-         hoogte van de kaart, en die is op beide breedtes onder de 200px. */
-      expect(na.regelKost).toBe(23);        // 18px tekst plus de 5px marge erboven
-      /* v309: hier stond `w === 360 ? 190 : 175`. De twee breedtes liepen uiteen doordat de oude
-         kop en de budgetzin op 360px anders afbraken dan op 390px; met het hoofdgetal op de
-         potjes-bron breekt er op geen van beide iets af, dus ze zijn nu gelijk. En de kaart is
-         voor EN na het vlaggen even hoog: voor het vlaggen draagt de kop geen achtervoegsel
-         (het restant is negatief) en staat budgetOverZin er wel, na het vlaggen andersom plus de
-         reserveringsregel, en dat weegt precies tegen elkaar op. */
-      expect(voor.hoogte).toBe(175);
-      expect(na.hoogte).toBe(175);
-      expect(na.hoogte).toBeLessThan(200);
-    });
-
-    test(`het worst case op ${w}px: gedeeltelijk gevlagd, dus budgetOverZin blijft`, async ({ page }) => {
-      await opzet(page, w);
-      const na = await page.evaluate(() => { const m = thisYM();
-        const b = txOfMonth(m).find((t) => t.name === 'CJIB' && -t.amount === 150);
-        zetUitReservering(b.id, 150, false); return 1; });
-      const r = await page.evaluate(meet);
-      expect(r.gn).toBe(2);
-      expect(r.nRijen).toBe(1);
-      expect(r.overZin).toBe(true);
-      expect(r.spendNorm).toBeGreaterThan(r.budget);
-      console.log(`### worst case @${w}px: ${r.hoogte}px (2 geenNorm-regels + de reserveringsregel + budgetOverZin), spendNorm ${r.spendNorm} tegen budget ${r.budget}`);
-      expect(r.regelKost).toBe(24);   // v309: 24 in plaats van 23, want deze regel is hier de laatste
-      /* v269 MAT HIER 213px EN NOEMDE DAT EEN BEVINDING: deze combinatie (twee geenNorm-categorieen
-         met uitgaven, een gevlagde boeking, en nog boven je budget) ging over de 200px van v241, en
-         de vorm van het blok was daarmee een eigen ronde. Die ronde was v309, en dit is de uitkomst:
-         199px op 360 EN 390px. De legenda onder de balk is vervallen (23px) en de regel
-         "EUR X uitgegeven van EUR Y . Z%" is naar een eigen regel boven de balk gezakt; wat de
-         winst oplevert is dat de oude kop met zijn drie flex-delen hoger was dan die kleine regel.
-         DE EIS VAN v241 WORDT DUS WEER GEHAALD, en het open punt van v258/v269 is daarmee dicht. */
-      expect(r.hoogte).toBe(199);
-      expect(r.hoogte).toBeLessThan(200);
-      expect(r.hoogte).toBeLessThan(213);      // lager dan de stand van v269
-    });
+    /* v359: 'het worst case op ' is vervallen: v359: de stand-kaart is vervallen; de regel staat in de sheet achter de tegel Uitgegeven, en de hoogtes van het dashboard staan in inzichten-dashboard.spec.js */
   }
 });
 

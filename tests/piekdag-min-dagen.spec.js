@@ -33,7 +33,8 @@ async function meet(page, dag){
   return page.evaluate(()=>{ const m=thisYM(); const V=piekVerdeling(m), ref=piekReferentie(m);
     go('ins');
     return {m, n:V.n, dagen:V.dagen, donderdag:Math.round(V.aandeel[3]*100), tot:Math.round(V.tot),
-      ref:Math.round(ref[3]*100), P:piekVuurt(V,ref), scherm:/Piekdag/.test(document.getElementById('s-ins').innerText)}; });
+      ref:Math.round(ref[3]*100), P:piekVuurt(V,ref), // v359: de piekdag staat niet meer op Inzichten (open punt); 'scherm' is nu of insSignals() hem levert
+      scherm:insSignals(m,new Set()).some(s=>s.kpiLabel==='Piekdag')}; });
 }
 
 test('a de invoer: acht boekingen, donderdag 55% van EUR 76, een referentie rond een zevende', async ({page})=>{

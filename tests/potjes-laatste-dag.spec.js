@@ -76,10 +76,10 @@ const meet = (page) => page.evaluate(() => {
      daar NIET meer staat (verplaatsen is nooit kopieren). */
   const rij = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
     .find((x) => /uit je potjes|te veel uitgegeven/i.test(x.innerText));
-  const kaart = document.getElementById('insStand');
-  const kop = kaart ? [...kaart.querySelectorAll('div.row')]
-    .find((x) => /nog in je potjes|te veel uitgegeven/.test(x.textContent)) : null;
-  const sp2 = kop ? [...kop.querySelectorAll('span')] : [];
+  // v359: de stand-kaart is de tegel "Nog in potjes"; zijn waarde en de regel eronder
+  go('ins');
+  const kaart = document.querySelector('#insTegels [data-instegel="potjes"]');
+  const sp2 = kaart ? [kaart.querySelector('.vl'), kaart.querySelector('.ms')] : [];
   return { dim: d.dim, elapsed: d.elapsed, daysLeft,
     budget: VP.budget, gebruikt: VP.gebruikt, inPotjes: VP.budget - VP.gebruikt,
     plan: varPlanRemaining(m), reserve: varPotjesReserve(m),
@@ -120,7 +120,7 @@ test.describe('a · de gemelde regel op de laatste dag van de maand', () => {
     /* v309: dezelfde twee feiten, op hun nieuwe plek. Op de laatste dag klemt maandDagenOver() op
        1 (v257), dus het dagbedrag is het hele restant; dat is onveranderd gedrag. */
     expect(r.val).toBe('\u20ac319');
-    expect(r.achtervoegsel).toBe('nog in je potjes \u00b7 \u20ac319 per dag');
+    expect(r.achtervoegsel).toBe('\u20ac319 per dag');
     expect(r.postInLijst).toBe(false);          // en de post staat niet meer in de lijst
     expect(r.reserve).toBe(GEMELD.oudePlan);    // de reservering is onaangeroerd (v254)
   });

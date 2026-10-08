@@ -28,17 +28,17 @@ test.describe('a · de pagina', () => {
     const t = await page.locator('#s-ins').innerText();
     expect(t).not.toMatch(/verdieping/i);
     expect(t).not.toMatch(/kerncijfers/i);
-    // v178 haalde de meermaands-grafiek naar Maand, v227 zette hem terug onder Deze maand
-    expect(t).toMatch(/uitgaven vs budget/i);
+    // v178 haalde de meermaands-grafiek naar Maand, v227 zette hem terug; v359 noemt hem "Over de maanden"
+    expect(t).toMatch(/over de maanden/i);
     await page.evaluate(() => go('maand'));
-    expect(await page.locator('#s-maand').innerText()).not.toMatch(/uitgaven vs budget/i);
+    expect(await page.locator('#s-maand').innerText()).not.toMatch(/over de maanden/i);
   });
 });
 
 test.describe('b · de drill-down is de enige plek', () => {
   test('achter Uitgegeven staat de verdeling volledig open', async ({ page }) => {
     await boot(page);
-    await page.locator('#s-ins >> text=uitgegeven').first().click();
+    await page.click('[data-instegel="uitgegeven"]'); await page.locator('#sheet >> text=Per categorie').click();   // v359: de tegel, dan de verdeling
     await page.waitForSelector('#msBody');
     const body = await page.locator('#msBody').innerText();
     expect(body).toMatch(/^categorieën/im);

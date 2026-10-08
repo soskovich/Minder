@@ -79,8 +79,8 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
   test('de meermaands-grafiek staat op Inzichten en niet meer op Maand', async ({ page }) => {
     await boot(page, 'maand');
     const t = await beide(page);
-    expect(t.ins).toMatch(/uitgaven vs budget/i);
-    expect(t.maand).not.toMatch(/uitgaven vs budget/i);
+    expect(t.ins).toMatch(/over de maanden/i);           // v359: de kop heet "Over de maanden"
+    expect(t.maand).not.toMatch(/over de maanden/i);
     /* Zonder comments gemeten: renderMaand() noemt de functie nog in een comment dat vertelt dát
        hij verhuisd is, en een naam in een comment is geen aanroep. */
     expect(/spendVsBudgetChart/.test(await kaalUit(page, 'renderIns'))).toBe(true);
@@ -185,10 +185,10 @@ test.describe('d · de horizon van het scherm blijft kloppen', () => {
     const ms = await page.evaluate(() => months());
     test.skip(ms.length < 2, 'deze fixture heeft geen afgesloten maand');
     const nu = await page.evaluate(() => document.querySelector('#s-maand').innerHTML);
-    await page.evaluate((m) => zetKijkMaand(m), ms[ms.length - 2]);
+    await page.evaluate((m) => ((m)=>{ curMonth=m; window._insPer=null; closeSheet(); render(); })(m), ms[ms.length - 2]);
     await page.waitForTimeout(120);
     expect(await page.evaluate(() => document.querySelector('#s-maand').innerHTML)).toBe(nu);
-    expect(await tekst(page, 'ins')).toMatch(/afgesloten maand/i);   // Inzichten zegt het wel
+    expect(await tekst(page, 'ins')).toMatch(/vorige maand/i);   // Inzichten zegt het wel, in het filter (v359)
   });
 
   /* v187: de Gedrag-kaart ging op in de Valt-op-kaart, dus Verdieping hield er één over. v208: die

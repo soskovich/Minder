@@ -112,8 +112,7 @@ test.describe('valtOpSignals: de detectie', () => {
     await boot(page, DRIE);
     expect(await sigKeys(page)).not.toContain('sport');
     expect(await logVan(page)).not.toHaveProperty(`${CUR}|sport`);
-    await page.evaluate(() => go('ins'));
-    await expect(page.locator('#insSignalRows')).not.toContainText('Sport');
+    // v359: Inzichten draagt geen signaalrijen meer; het patroonblok leest de log van afgesloten maanden
     await page.evaluate(() => go('maand'));
     await expect(page.locator('#s-maand')).not.toContainText('Sport & gezondheid');
   });
@@ -130,7 +129,9 @@ test.describe('valtOpSignals: de detectie', () => {
   test('de drempel staat als losse constante bovenaan de functie', async ({ page }) => {
     await boot(page, DRIE);
     const src = await page.evaluate(() => valtOpSignals.toString());
-    expect(src).toMatch(/const DREMPEL_EUR\s*=\s*25/);
+    // v359: de drempel staat als losse constante boven de functie, want het patroonblok leest hem ook
+    expect(src).toMatch(/const DREMPEL_EUR\s*=\s*VALTOP_DREMPEL_EUR/);
+    expect(await page.evaluate(() => VALTOP_DREMPEL_EUR)).toBe(25);
     // één detectie: Grip rekent niet zelf
     const grip = await page.evaluate(() => renderGripLetOp.toString() + valtOpKaartOpen.toString());
     expect(grip).not.toMatch(/DREMPEL|effectiveBudgets|catSpendMap/);
@@ -139,48 +140,7 @@ test.describe('valtOpSignals: de detectie', () => {
 });
 
 test.describe('Inzichten: constateren, niet oplossen', () => {
-  test('drie potjes over: twee regels, geen patroonregel', async ({ page }) => {
-    await boot(page, DRIE);
-    await page.evaluate(() => go('ins'));
-    await expect(page.locator('.valtop-rij')).toHaveCount(2);
-    await expect(page.locator('.valtop-patroon')).toHaveCount(0);
-    const rijen = await page.locator('.valtop-rij').allInnerTexts();
-    expect(rijen[0]).toContain('Boodschappen');
-    expect(rijen[0]).toContain('in Grip');
-    expect(rijen[0]).toMatch(/€\s?300.*€\s?200/s);
-    expect(rijen[0]).toContain('boven je potje');
-    expect(rijen[1]).toContain('Uit eten');
-  });
-
-  /* v239: ZES leverde hiervoor een piekdag, maar die vraagt nu acht losse boekingen en drie
-     afgeronde maanden historie, en boot() seedt er twee. De patroonregel komt daarom van de
-     grootste uitgave: een dominante winkel in een categorie zonder potje, dus geen budgetsignaal. */
-  test('één potje over: die regel plus één patroonregel', async ({ page }) => {
-    await boot(page, { tx: ZES.concat([{ cat: 'shopping', bedrag: 400, naam: 'Zalando', dag: '09' }]),
-      set: { budgets: { boodschappen: 100 } } });
-    await page.evaluate(() => go('ins'));
-    await expect(page.locator('.valtop-rij')).toHaveCount(1);
-    await expect(page.locator('.valtop-patroon')).toHaveCount(1);
-  });
-
-  test('geen potje over: hooguit twee patroonregels, geen lege staat', async ({ page }) => {
-    await boot(page, {
-      tx: ZES.concat([{ cat: 'shopping', bedrag: 400, naam: 'Zalando', dag: '09' }]),
-      set: { budgets: { boodschappen: 400, shopping: 500 } },
-    });
-    await page.evaluate(() => go('ins'));
-    await expect(page.locator('.valtop-rij')).toHaveCount(0);
-    const n = await page.locator('.valtop-patroon').count();
-    expect(n).toBeGreaterThan(0);
-    expect(n).toBeLessThanOrEqual(2);
-  });
-
-  test('niets aan de hand: geen regels en geen lege staat', async ({ page }) => {
-    await boot(page, { tx: [{ cat: 'boodschappen', bedrag: 80, naam: 'Albert Heijn' }], set: { budgets: { boodschappen: 400 } } });
-    expect(await page.evaluate(() => insSignalRows(thisYM(), true))).toBe('');
-    await page.evaluate(() => go('ins'));
-    await expect(page.locator('#insSignalRows')).toHaveCount(0);
-  });
+  /* v359: 'niets aan de hand: geen regels en geen lege staat' is vervallen: v359: Inzichten draagt geen signaal- en patroonregels meer; de patronen staan in het blok Patronen */
 
   test('de kaart met de CTA is weg: geen lamp, geen uit-de-pas, geen vraag', async ({ page }) => {
     await boot(page, DRIE);
@@ -190,37 +150,10 @@ test.describe('Inzichten: constateren, niet oplossen', () => {
     expect(ins).not.toContain('uit de pas');
     expect(ins).not.toContain('Wil je kijken wat je hieraan kunt doen');
     expect(ins).not.toMatch(/coStart\(&quot;?'?lek/);
-    /* de rand is var(--mut2), geen nieuw token en geen accent op het bedrag.
-       v241: de kaart eromheen is weg, en daarmee de afgeronde hoeken die bij dat kader hoorden.
-       Wat het signaal draagt is de linkerrand, en die staat er nog. */
-    const rij = await page.locator('.valtop-rij').first().getAttribute('style');
-    expect(rij).toContain('border-left:3px solid var(--mut2)');
-    expect(rij).not.toContain('border-radius');
-    expect(await page.locator('.card .valtop-rij').count()).toBe(0);
+    // v359: de rijen zijn weg; wat blijft is dat Inzichten geen CTA en geen gespreksingang draagt
   });
 
-  /* v241: de samenstelling van renderIns() is herschreven, dus een grep op de oude regel bewijst
-     niets meer. De eigenschap is de volgorde op het scherm, en die meten we op de gerenderde pagina
-     en niet in de broncode.
-     v252: de volgorde is de stand, de signalen, wat er nog komt, en dan de grafiek. De regel die
-     deze test vasthoudt is onveranderd - de rij staat tussen de stand en de grafiek - maar de
-     assertie `sig > nog` legde de oude plek van de lijst vast en is daarom omgedraaid. De eis van
-     v241 was dat je de signalen ziet zonder te scrollen, en met de lijst ertussen werd die niet
-     gehaald (gemeten 651px tegen 567px zichtbaar op 360x640, nu 369px). */
-  test('de rij staat tussen de stand en de grafiek', async ({ page }) => {
-    await boot(page, DRIE);
-    await page.evaluate(() => go('ins'));
-    const uit = await page.evaluate(() => {
-      const el = document.querySelector('#s-ins');
-      const blok = [...el.children];
-      const idx = (sel) => { const n = el.querySelector(sel); return n ? blok.findIndex((c) => c.contains(n)) : -1; };
-      return { stand: idx('.card'), nog: idx('#insNogLijst'), sig: idx('.valtop-rij'), graf: idx('#insSpendCard') };
-    });
-    expect(uit.stand).toBeGreaterThanOrEqual(0);
-    expect(uit.sig).toBeGreaterThan(uit.stand);
-    if (uit.nog >= 0) expect(uit.nog).toBeGreaterThan(uit.sig);
-    if (uit.graf >= 0) expect(uit.sig).toBeLessThan(uit.graf);
-  });
+  /* v359: 'de rij staat tussen de stand en de grafiek' is vervallen: v359: Inzichten draagt geen signaal- en patroonregels meer; de patronen staan in het blok Patronen */
 });
 
 test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
@@ -242,16 +175,7 @@ test.describe('Grip: dezelfde lijst, de handelingen erbij', () => {
     expect(await page.locator('#gripLetOpSheet .valtop-open').getAttribute('data-sig')).toBe(`${CUR}|uiteten`);
   });
 
-  /* De rij op Inzichten belooft "in Grip". Tik je op de TWEEDE rij, dan hoort die kaart open te
-     staan en niet de eerste, anders leidt de ingang je naar het verkeerde signaal. */
-  test('de rij op Inzichten opent de kaart van dat signaal', async ({ page }) => {
-    await boot(page, DRIE);
-    await page.evaluate(() => go('ins'));
-    await page.locator('.valtop-rij').nth(1).click();
-    await expect(page.locator('#s-maand')).toHaveClass(/active/);
-    expect(await page.locator('#gripLetOpSheet .valtop-open').getAttribute('data-sig')).toBe(`${CUR}|uiteten`);
-    await expect(page.locator('#gripLetOpSheet .valtop-kaart')).toHaveCount(1);
-  });
+  /* v359: 'de rij op Inzichten opent de kaart van dat signaal' is vervallen: v359: Inzichten draagt geen signaal- en patroonregels meer; de patronen staan in het blok Patronen */
 
   test('de open kaart draagt het bedrag, de dagen, de historie en drie handelingen', async ({ page }) => {
     await boot(page, DRIE);
@@ -345,9 +269,6 @@ test.describe('de drie handelingen', () => {
     await dek(page, 'Online shopping', +(await page.locator('#valtOpBedrag').inputValue()) - 200);
     await page.locator('#valtOpSave').click();
     expect(await sigKeys(page)).toEqual(['uiteten', 'vervoer']);   // nummer drie schuift door
-    await page.evaluate(() => go('ins'));
-    await expect(page.locator('.valtop-rij')).toHaveCount(2);
-    await expect(page.locator('#insSignalRows')).not.toContainText('Boodschappen');
     await page.evaluate(() => go('maand'));
     expect(await page.locator('#gripLetOp').innerText()).not.toContain('Boodschappen');
     await page.reload();
@@ -606,7 +527,10 @@ test.describe('de lek-regel op Inzichten', () => {
   const ingang = (page, scherm) =>
     page.evaluate((x) => document.querySelectorAll('#s-' + x + " [onclick*=\"coStart('lek'\"]").length, scherm);
 
-  test('een lek zonder overschrijding: ingang op Inzichten, niet op Grip', async ({ page }) => {
+  /* v359: DIT PINT EEN LACUNE, en dat is bewust (zoals v270 de dode pending-tak pinde). Inzichten draagt geen
+     handeling meer, dus een lek zonder overschrijding heeft nergens een gespreksingang. Wordt die ingang
+     ergens gebouwd, dan valt deze test met opzet en werk je hem bij. */
+  test('een lek zonder overschrijding: geen ingang op Inzichten en niet op Grip (lacune, v359)', async ({ page }) => {
     await boot(page, {
       tx: [{ cat: 'shopping', bedrag: 220, naam: 'Zalando' }],
       set: { budgets: { boodschappen: 400 } },          // shopping heeft geen potje
@@ -614,8 +538,7 @@ test.describe('de lek-regel op Inzichten', () => {
     expect(await page.evaluate(() => coachLeak(thisYM()).kind)).toBe('impulse');
     expect(await sigKeys(page)).toEqual([]);            // geen enkele overschrijding
     await page.evaluate(() => go('ins'));
-    await expect(lekRij(page)).toHaveCount(1);
-    expect(await ingang(page, 'ins')).toBe(1);
+    expect(await ingang(page, 'ins')).toBe(0);
     await page.evaluate(() => go('maand'));
     await expect(page.locator('#gripLetOp [data-letop="sig"]')).toHaveCount(0);
     expect(await ingang(page, 'maand')).toBe(0);
@@ -630,99 +553,12 @@ test.describe('de lek-regel op Inzichten', () => {
     expect(await page.evaluate(() => coachLeak(thisYM()))).toMatchObject({ kind: 'over-budget', cat: 'boodschappen' });
     expect(await sigKeys(page)).toEqual(['boodschappen']);
     await page.evaluate(() => go('ins'));
-    await expect(lekRij(page)).toHaveCount(0);          // de budgetregel draagt hem al
-    await expect(page.locator('.valtop-rij')).toHaveCount(1);
-    expect(await ingang(page, 'ins')).toBe(0);
+    expect(await ingang(page, 'ins')).toBe(0);          // v359: geen handeling op Inzichten
     await kaart(page);   // v340: de chevron staat in de kaart achter de Let op-regel
     expect(await page.evaluate(() => document.querySelectorAll("#gripLetOpSheet [onclick*=\"coStart('lek'\"]").length)).toBe(1);
   });
 
-  test('een lek in een categorie die al als patroonregel staat: geen lek-regel', async ({ page }) => {
-    await boot(page, {
-      tx: [{ cat: 'zorg', bedrag: 60, naam: 'Apotheek Centrum', m: M2, dag: '18' },
-           { cat: 'zorg', bedrag: 120, naam: 'Apotheek Centrum', m: M1, dag: '18' },
-           { cat: 'zorg', bedrag: 200, naam: 'Apotheek Centrum', dag: '18' }],
-      set: { budgets: { boodschappen: 400 } },
-    });
-    expect(await page.evaluate(() => coachLeak(thisYM()).cat)).toBe('zorg');
-    await page.evaluate(() => go('ins'));
-    // zorg loopt drie maanden op: dat patroon heeft de plek, het lek valt weg
-    await expect(page.locator('.valtop-patroon')).toHaveCount(1);
-    await expect(lekRij(page)).toHaveCount(0);
-    await expect(page.locator('.valtop-patroon')).toContainText('Zorg');
-  });
-
-  test('twee budgetsignalen plus een lek: geen lek-regel, het maximum van twee wint', async ({ page }) => {
-    await boot(page, {
-      tx: [{ cat: 'boodschappen', bedrag: 300, naam: 'Albert Heijn' },
-           { cat: 'uiteten', bedrag: 150, naam: 'Restaurant De Kade' },
-           { cat: 'shopping', bedrag: 220, naam: 'Zalando' }],
-      set: { budgets: { boodschappen: 200, uiteten: 100 } },
-    });
-    expect(await page.evaluate(() => coachLeak(thisYM()).cat)).toBe('shopping');
-    await page.evaluate(() => go('ins'));
-    await expect(page.locator('.valtop-rij')).toHaveCount(2);
-    await expect(page.locator('.valtop-patroon')).toHaveCount(0);
-    expect(await ingang(page, 'ins')).toBe(0);
-  });
-
-  /* Het opgegeven geval was "een aandeel-signaal", maar dat is signaal 2 en dat vuurt niet op de
-     lopende maand (v230: een halve maand is geen maand), terwijl een budgetsignaal juist alleen
-     daar bestaat. De twee kunnen dus nooit samen voorkomen. Gemeten wordt daarom tegen de sterkste
-     patroonregel die er wel kan staan: signaal 1, drie maanden op rij, met pri 9. Wint het lek van
-     die, dan wint hij van alle vier. */
-  test('een budgetsignaal plus een lek plus een patroon: het lek staat er, het patroon niet', async ({ page }) => {
-    await boot(page, {
-      tx: [{ cat: 'boodschappen', bedrag: 300, naam: 'Albert Heijn' },
-           { cat: 'shopping', bedrag: 220, naam: 'Zalando' },
-           { cat: 'zorg', bedrag: 60, naam: 'Apotheek Centrum', m: M2, dag: '18' },
-           { cat: 'zorg', bedrag: 120, naam: 'Apotheek Centrum', m: M1, dag: '18' },
-           { cat: 'zorg', bedrag: 200, naam: 'Apotheek Centrum', dag: '18' }],
-      set: { budgets: { boodschappen: 200 } },
-    });
-    const pri = await page.evaluate(() => {
-      const m = thisYM(); const mv = monthVsPrevInner(m);
-      const ex = new Set([...mv.drivers, ...budgetFlaggedCats(m)]);
-      return { lek: lekSignaal(m, budgetFlaggedCats(m)).pri, pat: insSignals(m, ex).map((x) => x.pri) };
-    });
-    expect(pri.lek).toBeGreaterThan(9);
-    expect(pri.pat).toContain(9);
-    await page.evaluate(() => go('ins'));
-    await expect(page.locator('.valtop-rij')).toHaveCount(1);     // het budgetsignaal blijft staan
-    await expect(page.locator('.valtop-patroon')).toHaveCount(1); // en er is nog een plek
-    await expect(lekRij(page)).toHaveCount(1);                    // die gaat naar het lek
-    await expect(page.locator('.valtop-patroon')).not.toContainText('Zorg');
-  });
-
-  test('de lek-regel draagt de vaststelling en het gevolg, zonder gebiedende wijs', async ({ page }) => {
-    await boot(page, {
-      tx: [{ cat: 'shopping', bedrag: 220, naam: 'Zalando' }],
-      set: { budgets: { boodschappen: 400 } },
-    });
-    await page.evaluate(() => go('ins'));
-    const r = lekRij(page);
-    const t = await r.innerText();
-    expect(t).toContain('Zalando');
-    expect(t).toMatch(/€\s?220/);
-    expect(t).toContain('Online shopping');
-    expect(t).toContain('zat deze maand in geen enkel potje');
-    // v222: geen handeling op een regel die vaststelt. De zin van coachWeekRisk blijft in het gesprek.
-    expect(t).not.toMatch(/\bGeef\b|\bZet\b|\bStop\b|\bKijk\b/);
-    expect(t).not.toMatch(/[!—]/);
-    // zelfde stille vorm als de andere patroonregels
-    const st = await r.getAttribute('style');
-    expect(st).toContain('border-left:3px solid var(--mut2)');
-    expect(await r.locator('button').count()).toBe(0);
-  });
-
-  test('op een afgesloten maand komt de lek-regel niet mee', async ({ page }) => {
-    await boot(page, {
-      tx: [{ cat: 'shopping', bedrag: 220, naam: 'Zalando' }],
-      set: { budgets: { boodschappen: 400 } },
-    });
-    const html = await page.evaluate((m) => insSignalRows(m, false), M1);
-    expect(html).not.toContain("coStart('lek'");
-  });
+  /* v359: 'op een afgesloten maand komt de lek-regel niet mee' is vervallen: v359: Inzichten draagt geen signaal- en patroonregels meer; de patronen staan in het blok Patronen */
 });
 
 /* v237: de log ging liegen. De knop op Grip verzet de LOPENDE maand, setCatBudget() de volgende.
@@ -752,8 +588,6 @@ test.describe('terugtypen na de knop op Grip', () => {
     expect(await page.evaluate(() => SET.budgets.boodschappen)).toBe(450);
     // en het signaal komt niet terug, want er is deze maand geen overschrijding meer
     expect(await sigKeys(page)).not.toContain('boodschappen');
-    await page.evaluate(() => go('ins'));
-    await expect(page.locator('#insSignalRows')).not.toContainText('Boodschappen');
   });
 
   test('zonder de Grip-route blijft het typen per toetsaanslag werken', async ({ page }) => {

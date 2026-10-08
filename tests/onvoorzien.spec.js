@@ -34,7 +34,10 @@ const meet = (page, m) => page.evaluate((mm) => {
   const t = totals(mm);
   const sp = catSpendMap(mm);
   const mv = monthVsPrevInner(mm); const ex = new Set([...mv.drivers, ...budgetFlaggedCats(mm)]);
-  const d = document.createElement('div'); d.innerHTML = insBudgetBlok(mm);
+  /* v359: de stand-kaart is vervallen; wat buiten je potjes valt staat in de sheet achter de tegel Uitgegeven,
+     onder "Niet in dit bedrag". Die sheet gaat over de lopende maand. */
+  const d = document.createElement('div');
+  if (mm === thisYM()) { go('ins'); openInsTegel('uitgegeven'); d.innerHTML = $('#insTegelSheet').innerHTML; closeSheet(); }
   return { spend: Math.round(t.spend), spendNorm: Math.round(t.spendNorm), buiten: Math.round(t.buitenNorm), budget: Math.round(t.budget),
     onv: Math.round(sp.onvoorzien || 0), netSpend: Math.round(netSpend(txOfMonth(mm))),
     varRest: varPlanRemaining(mm), potjes: Object.keys(SET.budgets || {}),
@@ -109,22 +112,19 @@ test.describe('b - dezelfde maand met en zonder de wegsleep', () => {
     expect(met.split.vari - zonder.split.vari).toBe(500);  // wel variabel in de splitsing (v55): niet vast, want geen herhaling
   });
 
-  test('budgetnaleving op Inzichten: hetzelfde percentage, met de som erbij', async ({ page }) => {
+  test('Uitgegeven op Inzichten: hetzelfde bedrag, met de som in de sheet', async ({ page }) => {
     await boot(page);
     const zonder = await meet(page, CUR);
     await boot(page, metWegsleep());
     await zetCat(page, 'onvoorzien');
     const met = await meet(page, CUR);
-    const pct = (b) => (b.match(/(\d+)%/) || [])[1];
-    expect(pct(met.blok)).toBe(pct(zonder.blok));
+    // v359: het bedrag op de tegel is spendNorm, met en zonder de wegsleep hetzelfde; de som staat in de sheet
+    expect(met.spendNorm).toBe(zonder.spendNorm);
     expect(met.blok).toContain('+ €500 onvoorzien, buiten je potjes');
     expect(zonder.blok).not.toContain('onvoorzien');
-    expect(met.blok).toContain(`€${met.spendNorm.toLocaleString('nl-NL')} uitgegeven`);
-    /* v258: de tik draagt sinds deze ronde ook de maand mee, want het bedrag ernaast komt uit die
-       maand en de sheet las anders periodTx(). Deze test bond aan de letterlijke aanroep zonder
-       maand en legde daarmee de implementatie vast in plaats van de eigenschap. Wat hij bedoelt te
-       toetsen is dat de regel doortikt naar déze categorie, en dat staat er nu zo. */
-    expect(await page.evaluate(() => insBudgetBlok(thisYM()))).toMatch(/openCategory\('onvoorzien'(,'\d{4}-\d{2}')?\)/);
+    expect(met.blok).toContain(`€${met.spendNorm.toLocaleString('nl-NL')}`);
+    expect(await page.evaluate(() => { go('ins'); openInsTegel('uitgegeven'); return $('#insTegelSheet').innerHTML; }))
+      .toMatch(/openCategory\('onvoorzien'(,'\d{4}-\d{2}')?\)/);
   });
 
   test('in het vervoerpotje was het wél overbesteding', async ({ page }) => {

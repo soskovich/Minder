@@ -52,7 +52,10 @@ const meet = (page, m) => page.evaluate(([m, nu]) => {
   const alle = insSignals(m, ex).sort((a, b) => b.pri - a.pri);
   // v235: was whatStandsOutLine(m, nu). Die kaart is vervallen; insSignalRows() rendert de regels
   // op dezelfde plek op Inzichten, met dezelfde signalen uit insSignals().
-  const d = document.createElement('div'); d.innerHTML = insSignalRows(m, nu);
+  /* v359: insSignalRows() is met "Wat opvalt" van het scherm verdwenen; insSignals() bestaat nog (open punt in
+     CLAUDE.md). De regel wordt hier in dezelfde vorm opgebouwd, zodat de eigenschap (het signaal noemt de maat
+     waarop het vuurt) vastligt voor de ronde die hem een plek geeft. */
+  const d = { innerText: alle.slice(0, 2).map((s) => `${s.kpiLabel} · ${s.kpiVal} (${s.kpiSub}) ${s.hyp}`).join(' ') };
   const cur = catSpendMap(m); const tot = Object.values(cur).reduce((a, b) => a + b, 0);
   return { s: alle[0] || null, pris: alle.map((s) => s.pri), kaart: d.innerText.replace(/\s+/g, ' ').trim(),
     huur: cur.huur, aandeel: Math.round(cur.huur / tot * 100), flagged: [...budgetFlaggedCats(m)] };

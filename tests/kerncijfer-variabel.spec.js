@@ -129,7 +129,7 @@ test.describe('d · opgeruimd en de rest ongewijzigd', () => {
   test('het absolute uitgaven-niveau blijft zichtbaar in de maandgrafiek', async ({ page }) => {
     await openIns(page);
     const chart = await page.evaluate(() => spendVsBudgetChart());
-    expect(chart).toContain('Uitgaven vs budget');
+    expect(chart).toContain('Over de maanden');   // v359: de kop heet zo
     expect(chart).toMatch(/€/);                                       // de euro's staan daar nog
   });
 });

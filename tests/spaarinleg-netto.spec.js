@@ -63,9 +63,9 @@ async function boot(page, payload) {
 
 const spaarRij = (page) => page.evaluate(() => {
   go('ins');
-  const rij = document.querySelector('#insNogLijst');
-  const rijen = rij ? [...rij.querySelectorAll('.ins-nog-rij')].map((r) => r.textContent.replace(/\s+/g, ' ').trim()) : [];
-  return rijen.find((r) => /Nog te sparen/.test(r)) || '(geen)';
+  // v359: de post is de tegel "Nog te sparen" (#insTegels [data-instegel="sparen"])
+  const t = document.querySelector('#insTegels [data-instegel="sparen"]');
+  return t ? t.innerText.replace(/\s+/g, ' ').trim() : '(geen)';
 });
 const cijfers = (page) => page.evaluate(() => {
   const S = safeToSpend();
@@ -110,8 +110,8 @@ test.describe('b - de vijf gevallen', () => {
     expect(c.opzij).toBe(1000);
     expect(c.nog).toBe(2000);
     const rij = await spaarRij(page);
-    expect(rij).toContain('van €3.000');
-    expect(rij).toContain('€1.000 opzij');
+    expect(rij).toContain('€3.000');
+    expect(rij).toContain('€1.000 al opzij');
     expect(rij).not.toContain('gehaald');
   });
 
@@ -129,8 +129,8 @@ test.describe('b - de vijf gevallen', () => {
     expect(c.opzij).toBe(-1500);
     expect(c.nog).toBe(4500);          // je maandbedrag plus wat je eruit haalde
     const rij = await spaarRij(page);
-    expect(rij).toContain('van €3.000');
-    expect(rij).toContain('€1.500 eruit gehaald');
+    expect(rij).toContain('€3.000');
+    expect(rij).toContain('€1.500 dat je eruit haalde');   // v359: de woorden van de tegel
     expect(rij).not.toContain('gehaald ·');
     expect(rij).not.toContain('opzij');
   });
@@ -141,7 +141,7 @@ test.describe('b - de vijf gevallen', () => {
     expect(c.opzij).toBe(0);
     expect(c.nog).toBe(3000);
     const rij = await spaarRij(page);
-    expect(rij).toContain('van €3.000');
+    expect(rij).toContain('je spaarinleg van €3.000');
     expect(rij).not.toContain('opzij');
     expect(rij).not.toContain('eruit gehaald');
     // en dat is letterlijk dezelfde regel als een maand waarin je niets deed
@@ -262,13 +262,16 @@ test.describe('f - layout', () => {
       await boot(page, seed([naarSpaar(1000), uitSpaar(2500)]));
       await page.evaluate(() => go('ins'));
       const r = await page.evaluate(() => {
-        const rij = [...document.querySelectorAll('#insNogLijst .ins-nog-rij')]
-          .find((x) => /Nog te sparen/.test(x.textContent));
+        const rij = document.querySelector('#insTegels [data-instegel="sparen"]');
+        /* v359: de tegel staat in een raster en is zo hoog als zijn buur; wat de zin kost is de regel onder het
+           bedrag, en die mag hooguit twee regels zijn (GEMETEN 36px op 360 en 390) en niet over de tegel heen. */
+        const ms = rij.querySelector('.ms'), b = ms.getBoundingClientRect(), k = rij.getBoundingClientRect();
         return { over: document.body.scrollWidth - document.body.clientWidth,
-                 hoogte: Math.round(rij.getBoundingClientRect().height) };
+                 hoogte: Math.round(b.height), binnen: b.right <= k.right + 0.5 && b.bottom <= k.bottom + 0.5 };
       });
       expect(r.over).toBeLessThanOrEqual(1);
-      expect(r.hoogte).toBeLessThanOrEqual(80);
+      expect(r.hoogte).toBeLessThanOrEqual(36);
+      expect(r.binnen).toBe(true);
     });
   }
 });

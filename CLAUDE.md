@@ -60,20 +60,18 @@ geen editor bij om een optie te kunnen tonen. Niets in deze laag mag aanmoedigen
 Elk scherm beantwoordt precies één vraag, en een element staat op precies één scherm. De nav loopt
 op in horizon (`v233`): Home, Inzichten, Plan, Grip.
 - **Home** (`dash`) — waar sta ik nu.
-- **Inzichten** (`ins`) — hoe loopt deze maand (operationeel). Sinds `v241` vier blokken onder
-  elkaar, elk met een kop die zijn vraag noemt: een eyebrow met de maandkiezer en de dagteller, de
-  stand-kaart, "Wat opvalt", "Nog deze maand" (tot `v260` "Wat er nog komt") en "Over de maanden
-  heen". Sinds `v309` draagt de stand-kaart als HOOFDGETAL wat er nog in je potjes zit, met het
-  dagbedrag op dezelfde regel, en staat `€X uitgegeven van €Y · Z%` als eigen regel boven de balk;
-  "Nog deze maand" houdt drie posten in plaats van vier. De post "Nog te
-  ontvangen" noemt sinds `v321` zijn noemer (`van EUR X per maand` of `EUR Y al binnen van EUR X`). Die middelste twee staan
-  sinds `v252` in die volgorde en niet meer andersom (zie de vouw-regel). Draagt sinds `v227` ook de
-  meermaands-grafiek "Uitgaven vs budget". Dat is een omkering van `v178`, dat hem juist naar Maand
-  haalde omdat hij maanden naast elkaar zet; het argument van `v178` staat nog en `BESLISSINGEN.md`
-  draagt beide kanten. Hij toont uitsluitend afgeronde maanden (`v194`); tot `v240` stond hij
-  daardoor onder een kop die "Deze maand" zei zonder deze maand te tonen, en sinds `v241` onder
-  "Over de maanden heen". Hij rendert alleen op de lopende maand. Sinds `v335` toont een tik op
-  een staaf daaronder de BRIDGE van die maand (`brugBlok()`, `maandBrug()`); zie de staande regel.
+- **Inzichten** (`ins`) — hoe loopt deze maand (operationeel). SINDS `v359` EEN DASHBOARD DAT
+  OBSERVEERT; Grip stuurt. Er staat geen handeling op: een tik opent een sheet met waaruit een getal
+  bestaat, of verwijst naar Grip ("bijsturen op Grip ›"). Van boven naar beneden: EEN FILTER (periode:
+  deze maand, vorige maand, laatste 3 of 12 maanden; soort: alle, variabel, vast; `insPeriode()`,
+  `insSoort()`, `openInsFilter()`), de KPI-TEGELS (`insTegelsNu()`, `insTegelsAf()`, een sheet per tegel
+  via `openInsTegel()`), het KOP-INZICHT met de teller naar de patronen (`insKopZin()`), "OVER DE
+  MAANDEN" (`spendVsBudgetChart()`: drie of twaalf afgesloten maanden plus de lopende, met de bridge van
+  `v335` onder een tik), de KEUZEKAART (`insKeuzeKaart()`: tegen je potje of tegen vorige maanden) en de
+  PATRONEN (`insPatronen()`). De maandkiezer, de stand-kaart, "Wat opvalt" en "Nog deze maand" zijn
+  vervallen; zie de staande regel van `v359` voor waar hun inhoud heen ging. Tot `v358` stonden hier de
+  eyebrow met de kiezer, de stand-kaart (`v241`/`v309`), "Wat opvalt", "Nog deze maand" en de grafiek
+  "Uitgaven vs budget" (`v227`, alleen afgeronde maanden volgens `v194`).
 - **Grip** (`maand`, sinds `v233`; heette Maand) — houdt mijn systeem stand (structureel). Leest
   altijd de lopende maand en heeft geen maandkiezer; de kiezer (`curMonth`, `kijkMaand()`) is van
   Inzichten. Alles wat vanaf Grip een maand meegeeft leest `thisYM()`. SINDS `v340` EEN DASHBOARD MET
@@ -94,7 +92,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   Vraagt aandacht, Staat goed, Voorwaarden voor beleggen, Vanaf <maand>, de afsluitregel en de
   logboekkaart; zie de staande regel van `v340` voor waar elk ervan heen ging. De lek-ingang
   (`coStart('lek')`) hangt aan de chevron van de open valt-op-kaart, en die staat sinds `v340` in de
-  sheet achter de Let op-regel. `coachLeak()` levert daarnaast een patroonregel op Inzichten (`v237`).
+  sheet achter de Let op-regel. `coachLeak()` leverde daarnaast een patroonregel op Inzichten (`v237`); die regel is bij `v359` met "Wat opvalt" vervallen.
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Draagt sinds `v319` onder de
   inleg-kop wat er deze maand werkelijk opzij ging (`planInlegRegel()`, uit `savedNet()`) en op de
   vrij-regel een tweede knop die het niet-toegewezen spaargeld verdeelt zoals de waterval het zou
@@ -122,6 +120,83 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **INZICHTEN OBSERVEERT, GRIP STUURT: EEN DASHBOARD ZONDER HANDELING** (`v359`, gevraagd door de gebruiker, mockup
+  "Inzichten als dashboard" v8): `renderIns()` tekent een FILTER, de KPI-TEGELS, het KOP-INZICHT, de MAANDEN, de
+  KEUZEKAART en de PATRONEN. Op Inzichten staat geen enkele handeling: een tik opent een sheet die laat zien waaruit
+  een getal bestaat (`openInsTegel()`, rijen met `data-insrij` die optellen tot de tegel), wisselt een weergave, of
+  verwijst naar Grip (`insNaarGrip(k)`: Grip, en het potje erbij als het een variabel potje is). Een spec leest elke
+  `onclick` op het scherm en in de sheets tegen een lijst, en eist dat openen niets schrijft.
+  HET FILTER (`openInsFilter()`, `insFilterZet()`) is een weergave en wordt niet bewaard (`v176`): periode in
+  `curMonth` (vorige maand) of `window._insPer` (3 of 12), soort in `window._insSoort`. De maandkiezer van `v176` is
+  vervallen. SOORT PER BOEKING: vast is `isFixed(t)` of een potje dat je op vast zette (`potHeelVast`, `v355`),
+  variabel de rest (`insVastTx()`, `insSoortUit()`); samen per constructie `spendNorm`, en dat staat als assertie vast.
+  Een budget van een afgesloten maand is niet per soort te splitsen: bij variabel of vast staan er geen budgetlijn, geen
+  bridge en geen "tegen je potje", en de kaart zegt dat.
+  DE TEGELS (`insTegelsNu()`): Uitgegeven, Nog in potjes (`varPotjeStand().nog` en per dag), Nog te betalen · vast
+  (`monthLiquidity().fixDue`, "van EUR X deze maand" uit `vasteLastenStand()`), Nog te ontvangen (het bedrag niet twee
+  keer: "<bron> · nog niets binnen", "<bron> · EUR X al binnen" of "alles is binnen", met de bron uit
+  `insInkomenBron()`), Nog te sparen (`safeToSpend().saveReserved`, "EUR 2.200 + EUR 231 dat je eruit haalde") en
+  Contant (`contantVerwacht()`). KLEUR ALLEEN BIJ EEN STATUS: Uitgegeven (boven het tempo amber) en Nog in potjes
+  (negatief of krap bij je tempo amber) groen of amber, de rest grijs. HET TEMPO (`insTempo()`) IS NIET HET BUDGET
+  NAAR RATO: het variabele deel van je potjes naar rato (`maandVooruit().variabel.budget`) plus de vaste lasten die tot
+  vandaag vielen, op hun datum (al betaald, of een verwachte incasso waarvan de dag voorbij is). Zonder drie afgeronde
+  maanden geen tempo. GEMETEN op 7 oktober: budget naar rato EUR 762, tempo EUR 578, uitgegeven EUR 406.
+  WELKE TEGELS (`insTegelKeuze()`): Uitgegeven en Nog in potjes altijd; vast met herkende incasso's of vaste potjes;
+  ontvangen als er inkomen verwacht wordt; sparen met een spaarinleg in Plan; contant bij een opname, telling of
+  ontvangst in de laatste drie maanden. DE REGEL WORDT BIJ DE START VAN EEN MAAND BEKEKEN en een tegel verdwijnt niet
+  midden in een maand (`insTegelsAan()`, `SET.insTegels={maand, aan}`: wat er later bij komt, komt erbij). Een
+  afgesloten periode (`insTegelsAf()`) draagt Uitgegeven en "Over in je potjes" (of "Boven je potjes").
+  HET KOP-INZICHT (`insKopZin()`): EEN zin in euro's, geen percentage. Op de lopende maand het eerste patroon, met
+  "N patronen ›" naar het blok (`insNaarPatronen()`); zonder patroon je potjes tegen dezelfde dagen van je laatste
+  drie maanden; zonder drie afgeronde maanden "Nog geen patronen: na drie maanden boekingen ziet de app wat bij jou
+  gewoon is." Op een afgesloten periode het verschil met het budget en het potje dat het meest droeg.
+  OVER DE MAANDEN (`spendVsBudgetChart()`, `#insSpendCard`): drie afgesloten maanden en de lopende, of twaalf bij dat
+  filter, met het bedrag in de balk. DE LOPENDE MAAND STAAT ER WEER BIJ, een omkering van `v194` op keuze van de
+  gebruiker: lichter, met een gestippelde omtrek tot zijn budget en "t/m <dag>". Een tik op een afgesloten maand opent
+  de bridge van `v335`, met "Tegen budget" en "Tegen <maand ervoor>".
+  DE KEUZEKAART (`insKeuzeKaart()`, `SET.insKeuze`, standaard en onthouden "tegen je potje"): per variabel potje wat er
+  uit is tegen het potje, met een streep "normaal op dag N" (`maandVooruit()`: `x.uit`, `x.bud`, `x.typisch`, dezelfde
+  bron als de bridge op Grip) en de legenda in de kaart; of per potje meer of minder dan dezelfde dagen in de laatste
+  drie afgesloten maanden, links van een nullijn minder en rechts meer.
+  DE PATRONEN (`insPatronen()`, alleen op de lopende maand en met drie afgeronde maanden; per potje hooguit een, in de
+  volgorde herhaalt, structureel, nieuw, herstelt): STRUCTUREEL (het gewone bedrag, het gemiddelde van `x.maanden`,
+  ligt ver boven het potje), HERHAALT ZICH (vorige maand boven het potje, uit het logboek of uit de uitgaven, of eerder
+  een uitzondering genoemd, en deze maand loopt hij weer voor), NIEUW DEZE MAAND (een tegenpartij die in twaalf
+  maanden niet voorkwam, of in "de N maanden die de app van je heeft") en HERSTELT ZICH (vorige maand boven het potje,
+  nu achter op het gewone tempo). Per patroon wat er gebeurt, "gezien in" met de bron, en "bijsturen op Grip ›"
+  (niet bij herstelt). Labels rustig, kleur alleen als stip (`--red`, `--amber`, `--blue`, `--green`).
+  DE DREMPELS ZIJN EEN VOORSTEL EN GEEN KEUZE (`INS_PATROON`): structureel bij minstens anderhalf keer het potje EN
+  minstens EUR 50 erboven, loopt voor bij minstens EUR 10 meer dan gewoonlijk in dezelfde dagen, nieuw vanaf EUR 50, en
+  boven het potje in de vorige maand vanaf `VALTOP_DREMPEL_EUR` (25, dezelfde lat als het logboek, nu buiten
+  `valtOpSignals()` zodat er een bron is).
+  WAT VERDWEEN: de stand-kaart (`insBudgetBlok()`; de regels "buiten je potjes", "uit een reservering" en "ook via je
+  bankkoppeling" staan nu in de sheet van Uitgegeven onder "Niet in dit bedrag"), "Nog deze maand" (`insNogLijst()`,
+  `nogDezeMaandCard()`; `nogDezeMaandPosten()` houdt een andere lezer), "Wat opvalt" (`insSignalRows()`, `valtOpRij()`,
+  `insPatroonRij()`, met de jaarregel van `v313`), de eyebrow met de kiezer en de dagteller, `openBudgetCompare()` en
+  `monthStatusCard()`. DE TEGEL UITGEGEVEN IS AMBER BOVEN HET TEMPO, een omkering van `v93` ("sneller dan de maand" is
+  geen aandacht) voor deze ene tegel, op keuze van de gebruiker; het tempo telt vaste lasten op hun datum. OPEN PUNT: de detectie achter "Wat opvalt" (`insSignals()` met de piekdag en de grootste
+  uitgave, `lekSignaal()`, `monthVsPrevInner()`) heeft geen lezer op het scherm meer en staat er tot de gebruiker
+  beslist of ze een patroon wordt of weg kan. OPEN PUNT, EEN LACUNE: een lek ZONDER potje-overschrijding had zijn
+  enige coach-ingang op Inzichten (`v237`, `coStart('lek')`), en die is als handeling vervallen; met een overschrijding
+  blijft de ingang op Grip in de Let op-sheet. OPEN PUNT `v352` IS SCHERPER: de budgeteditor heeft op Inzichten geen
+  ingang meer (de regel "van EUR X maandbudget" was er een); hij is nog bereikbaar via Instellingen, de maandafsluiting
+  en de tijdlijn op Grip.
+  DRIE DINGEN DIE DE MIGRATIE VAN DE SPECS VOND, en ze hadden gelijk: (1) ONDER NUL heet de tegel "Te veel uitgegeven"
+  met het bedrag zonder minteken (`v250`), en zijn sheet ook; de eerste vorm zette "-EUR 70" naast "te veel uitgegeven".
+  (2) NUL UITGAVEN EN GEEN DATA ZIJN NIET HETZELFDE (`v173`/`v311`): ligt je laatste boeking voor deze maand, dan zegt
+  Uitgegeven "onbekend", heet de potjestegel "In je potjes" (het budget, geen restant), en staan de reden en de stap om
+  bij te werken (`importCta()`) in de sheet. Gegevens ophalen is geen handeling op je geld, dus die ene tik mag. (3) TEAL
+  IS OP INZICHTEN EEN INGANG (`v203`): het kop-inzicht, de legenda en de balk "minder" van de keuzekaart droegen accent
+  zonder tik en zijn neutraal (`--card`, `--bar`); teal in de grafiek is de gekozen maand.
+  GEMETEN op de stand van 7 oktober (`tests/inzichten-stand.js`): op 360x640 de tegels van 123 tot 411px, het
+  kop-inzicht tot 511px (de vouw ligt op 567), de maanden 216px, de keuzekaart 358px en de patronen 606px; op 390x844
+  de tegels 274px, het kop-inzicht tot 497px, de patronen 556px. Geen horizontale overloop.
+  Nieuwe spec `inzichten-dashboard.spec.js` met fixture `inzichten-stand.js`. ZEVENTIEN SABOTAGES, ALLE ZEVENTIEN ROOD,
+  een pas nadat de stand het geval droeg (meetles a): "herstelt zonder een vorige maand erboven" bleef groen tot de
+  fixture een potje kreeg dat achterloopt zonder dat het in september boven zijn potje kwam (`sepNormaal`). NEGEN SPECS
+  ZIJN WEG (ze gingen alleen over de stand-kaart, "Nog deze maand" of "Wat opvalt") en ZEVENENVEERTIG AANGEPAST: ze
+  lazen de stand-kaart, de lijst of de signaalrijen, en lezen nu de tegels en hun sheets; wat alleen over de
+  verdwenen vorm ging is per test weggehaald met de reden erbij.
 - **"BIJSTELLEN ›" BIJ TE RUIME POTJES OPENT EEN EIGEN SHEET, EN HET VRIJE GELD KRIJGT EEN BESTEMMING** (`v358`, gevraagd
   door de gebruiker, mockup "te ruime potjes bijstellen"): `gripRuimerBijstel()` opent `openRuimBijstel()` (`#ruimBijstel`,
   "Te ruime potjes bijstellen") en NOOIT de budgeteditor. De potjes komen uit `gripRuimLijst(V, Br)`, de ENE lijst met
@@ -6478,7 +6553,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v358` → `minder-v359`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v359` → `minder-v360`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6497,7 +6572,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357` en `v358` naar `minder-v358`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358` en `v359` naar `minder-v359`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
