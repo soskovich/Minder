@@ -1003,6 +1003,7 @@ function rolloverBudgets(){
     for(const k in NM){ if(NM[k]) SET.potMeta[k]=NM[k]; else delete SET.potMeta[k]; } }
   SET.budgetsNext={}; SET.potMetaNext={};
   try{ potPlanDoorschuif(ym); }catch(_){}   // v351: geplande maanden tot en met nu, en de maand erna als budgetsNext
+  try{ spaarPlanDoorschuif(ym); }catch(_){}   // v358: een spaarverhoging vanaf een gekozen maand
   SET.budgetMonth=ym; save();
 }
 
@@ -8148,7 +8149,8 @@ function renderGripPotje(){
 /* v356: DE STAP "RUIMTE IN ANDERE POTJES": de potjes die niet los staan, elk met zijn verschil, zodat de regels
    optellen tot de stap; de afronding is die van de bridge (brugAfronden). Bovenaan een regel voor de potjes
    die STRUCTUREEL ruimer zijn dan wat je er gewoonlijk uitgeeft (potRuimer), met een ingang om ze bij te
-   stellen. Bijstellen is een bestaande route (openPotForm, openBudgetEditor), geen tweede editor (v61). */
+   stellen. Sinds v358 opent die ingang de sheet "Te ruime potjes bijstellen" (openRuimBijstel()), en niet meer
+   openPotForm of de budgeteditor. */
 /* KEUZE VAN DE GEBRUIKER (v356 voorgesteld, v357 bevestigd): structureel ruimer is een variabel potje waarvan de uitgave in ELK
    van de laatste VOORUIT_MAANDEN afgeronde maanden hooguit de helft van het variabele bedrag was EN minstens
    EUR 50 eronder bleef. De twee waarden staan hier en nergens anders. */
@@ -8157,10 +8159,19 @@ function potRuimer(x){
   if(!x || !(x.bud>0) || !Array.isArray(x.maanden) || !x.maanden.length) return false;
   return x.maanden.every(u=>u<=x.bud*RUIMER_DREMPEL.deel && x.bud-u>=RUIMER_DREMPEL.euro);
 }
-function gripRuimerBijstel(ks){
-  if(ks.length===1){ openPotForm(ks[0]); return; }
-  openBudgetEditor(thisYM());
+/* v358: de potjes van de hint, op EEN plek, met twee lezers: de hint in renderGripRest() en de sheet
+   "Te ruime potjes bijstellen". Een tweede uitdrukking zou een potje in de sheet kunnen zetten dat de hint niet
+   noemt (v104). */
+function gripRuimLijst(V, Br){
+  if(!V || V.onbekend || !Br || !Br.rest) return [];
+  const los=new Set(Br.los.map(x=>x.k));
+  return V.potjes.filter(x=>!los.has(x.k)).filter(potRuimer)
+    .sort((a,b)=>(b.bud-Math.max(...b.maanden))-(a.bud-Math.max(...a.maanden)) || (a.naam<b.naam?-1:1));
 }
+/* v358: "bijstellen ›" opent de sheet "Te ruime potjes bijstellen" en nooit de budgeteditor: je kwam voor
+   deze potjes, en de editor zet eerst je bestedingslimiet, je spaarbedrag en je meevallers voor je neus. De
+   editor blijft bestaan voor wie zijn budget als geheel instelt, via de ingangen die hij al had. */
+function gripRuimerBijstel(){ openRuimBijstel(); }
 function renderGripRest(){
   let V=null, Br=null; try{ V=maandVooruit(); Br=dezeMaandBrug(V); }catch(_){}
   if(!Br || !Br.rest){ if(document.getElementById('gripRest')) closeSheet(); return; }
@@ -8169,8 +8180,8 @@ function renderGripRest(){
   const R=brugAfronden(ov.map(x=>({k:x.k, v:x.overR})), Br.rest);
   const leden=ov.map(x=>({k:x.k, naam:x.naam, d:R[x.k]})).filter(x=>x.d!==0)
     .sort((a,b)=>Math.abs(b.d)-Math.abs(a.d) || (a.naam<b.naam?-1:1));
-  const ruim=ov.filter(potRuimer).sort((a,b)=>(b.bud-Math.max(...b.maanden))-(a.bud-Math.max(...a.maanden)) || (a.naam<b.naam?-1:1));
-  const ruimRegel=ruim.length?`<div class="row" data-ruimer="${esc(ruim.map(x=>x.k).join(','))}" style="gap:8px;align-items:center;padding:9px 0;margin-top:8px;border-top:1px solid var(--line);cursor:pointer" onclick="gripRuimerBijstel(${esc(JSON.stringify(ruim.map(x=>x.k)))})">
+  const ruim=gripRuimLijst(V, Br);
+  const ruimRegel=ruim.length?`<div class="row" data-ruimer="${esc(ruim.map(x=>x.k).join(','))}" style="gap:8px;align-items:center;padding:9px 0;margin-top:8px;border-top:1px solid var(--line);cursor:pointer" onclick="gripRuimerBijstel()">
       <span class="small" style="flex:1;min-width:0;line-height:1.45">${esc(gripNamen(ruim))} ${ruim.length===1?'is':'zijn'} ruimer dan je gewoonlijk uitgeeft · <span style="color:var(--teal);font-weight:700">bijstellen ›</span></span></div>`:'';
   const rij=x=>`<div class="row" data-restpotje="${esc(x.k)}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripPotje('${esc(x.k)}')">
       <span style="flex:1;min-width:0;font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}</span><span class="small" style="font-weight:700;white-space:nowrap">${brugTeken(x.d)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
@@ -8261,9 +8272,12 @@ function grensRestZet(k){
    posten met een interval boven een maand, die het schema van recurringSchedule() kent) en zet daar per maand
    in de twaalf maanden vanaf de bijstelling de posten bij die in die maand vallen. De ondergrens is het
    hoogste daarvan, en de sheet noemt welke post in welke maand hem zet. */
-function potjeMaandVloer(k, maanden, vanaf){
+function potjeMaandVloer(k, maanden, vanaf, zonder){
   let sched=[]; try{ sched=recurringSchedule().filter(s=>s.type==='fixed' && s.cat===k && (+s.intervalM||1)>1); }catch(_){}
   const keys=new Set(sched.map(s=>s.key));
+  /* v358: een post die al in je reserveringen staat hoeft het potje niet te dragen; hij telt niet in het
+     gewone deel (hij komt niet elke maand) en zet ook geen maand meer. */
+  if(zonder) sched=sched.filter(s=>!zonder.has(s.key));
   let som=0;
   for(const m of (maanden||[])){
     let c=0; try{ c=Math.max(+(catSpendMap(m)||{})[k]||0,0); }catch(_){}
@@ -8331,6 +8345,212 @@ function potjeBijstelZet(k){
   window._bijstelDek=null;
   closeSheet(); render();
   toast(`${ICON('check')} Vanaf ${ymFull(P.vanaf)}: ${P.naam} ${euro0(P.naar)}, ${D.naam} ${euro0(D.bud-P.meer)}`);
+}
+
+/* ===== TE RUIME POTJES BIJSTELLEN (v358) =====
+   De sheet achter "bijstellen ›" in de hint van "Ruimte in andere potjes". Alleen de potjes die de hint noemt
+   (gripRuimLijst(), de drempel van v356/v357). Per potje: het bedrag, wat je er gewoonlijk per maand aan uitgeeft,
+   en een voorstel. Niets is voorgekozen (MECHANISM_SPEC.defaultEffect), en openen en kiezen schrijven niets.
+   HET VOORSTEL is de gewone maand op tien euro naar boven (RUIM_MARGE), en nooit onder de duurste maand van de
+   twaalf vanaf de bijstelling: de ondergrens per maand van v350 (potjeMaandVloer(), je gewone maand plus de
+   kwartaal- en jaarposten op hun maand). In de lopende maand ook nooit onder wat er al uit is. Zo dekt het
+   voorstel december, ook als DELA dan in een keer EUR 160 vraagt.
+   EEN POST DIE NIET ELKE MAAND KOMT KAN NAAR JE RESERVERINGEN: als verplichting met bedrag, interval en de
+   eerstvolgende termijn vanaf de gekozen maand (de vorm van uitgeslotenNaarRes(), bron = de incassosleutel), en
+   hij telt dan niet meer in "nog te betalen" (SET.fixDueExcl), want anders vraagt hij dubbel: in je potje en op
+   je reserveringsrekening. Dan kan het potje naar de gewone maand.
+   EEN POTJE ZONDER BETALING (geen gewone maand, geen post, geen herkende incasso, of een vast potje met "geen
+   betaling verwacht") is geen gewoonte die je bijstelt maar een bedrag dat veranderde. Het krijgt geen voorstel
+   maar twee bestaande ingangen: een nieuw potje (waarin dit potje kan inleveren) en "Ander bedrag vanaf een
+   maand" (openPotForm). Er is geen aparte splits-route; er wordt er hier ook geen gebouwd (v61).
+   HET VRIJE BEDRAG KRIJGT EEN BESTEMMING, in deze volgorde: de potjes die niet passen (aard 'pastniet' van
+   maandVooruit()), sparen bovenop je spaarinleg, of je maandbudget verlagen. Opslaan kan pas als alles een plek
+   heeft, en de schrijver eist dat zelf ook (v238). Hij leest alles opnieuw (v319).
+   VANAF EEN MAAND (potPlanZet(), v351): deze maand tot twaalf maanden vooruit. Eerdere maanden veranderen niet.
+   Sparen heeft geen maanddimensie; een verhoging vanaf een latere maand staat in SET.spaarPlan[ym] en
+   rolloverBudgets() zet hem in die maand (spaarPlanDoorschuif()). Een potje dat lager gaat wordt een afspraak
+   (potjeAfspraak(), v337). */
+const RUIM_MARGE=10;
+function ruimAfrond(x){ return Math.ceil((+x||0)/RUIM_MARGE)*RUIM_MARGE; }
+function ruimPostNaam(x){ return titleCase(cleanMerch(x.name)||x.name||''); }
+/* De posten met een interval boven een maand in deze categorie, die nog niet in je reserveringen staan. */
+function ruimPosten(k){
+  const al=new Set(resLijst().filter(r=>r&&r.bron).map(r=>r.bron));
+  let L=[]; try{ L=recurringSchedule().filter(s=>s.type==='fixed' && s.cat===k && (+s.intervalM||1)>1 && !al.has(s.key)); }catch(_){}
+  return L.map(s=>({key:s.key, naam:ruimPostNaam(s), bedrag:Math.round(+s.amount||0), intervalM:Math.round(+s.intervalM),
+    next:s.nextDate instanceof Date?s.nextDate:new Date(s.nextDate)}));
+}
+/* De eerste termijn op of na ym, en het interval zoals RES_INTERVAL het kent (de vorm van uitgeslotenResVoorstel). */
+function ruimPostTermijn(p, ym){
+  const idx=x=>{ const [y,mo]=String(x).split('-').map(Number); return y*12+mo-1; };
+  const n0=p.next.getFullYear()*12+p.next.getMonth(), doel=idx(ym), iv=Math.max(p.intervalM,1);
+  let i=n0; while(i<doel) i+=iv;
+  return `${Math.floor(i/12)}-${String(i%12+1).padStart(2,'0')}`;
+}
+function ruimResInterval(iv){ const ivs=RES_INTERVAL.map(x=>x[0]).filter(x=>x>0); return ivs.reduce((a,x)=>Math.abs(x-iv)<Math.abs(a-iv)?x:a, ivs[0]); }
+function ruimMaandNamen(k){
+  let L=[]; try{ L=recurringSchedule().filter(s=>s.type==='fixed' && s.cat===k && (+s.intervalM||1)===1); }catch(_){}
+  return L.slice(0,2).map(ruimPostNaam);
+}
+function ruimBijstelData(d){
+  d=d||window._ruim||{};
+  let V=null, Br=null; try{ V=maandVooruit(); Br=dezeMaandBrug(V); }catch(_){}
+  const lijst=gripRuimLijst(V, Br); if(!lijst.length) return null;
+  const cur=potHuidigeMaand(), ms=potMaandOpties(), vanaf=ms.includes(d.vanaf)?d.vanaf:null, ref=vanaf||nextYM(cur);
+  const B0=budgetVoorMaand(ref); let tot0=0; for(const x in B0) tot0+=+B0[x]||0;
+  const S=ref===thisYM()?(catSpendMap(thisYM())||{}):{};
+  const skip=new Set(resLijst().filter(r=>r&&r.bron).map(r=>r.bron));
+  const pots=lijst.map(x=>{
+    const k=x.k, bud=Math.round(+B0[k]||0), al=Math.round(Math.max(+S[k]||0,0)), ps=ruimPosten(k);
+    const Vl=potjeMaandVloer(k, V.band.maanden, ref, skip), vloer=Math.max(Vl.vloer, al);
+    const vp=(V.vastePotjes||[]).find(y=>y.k===k);
+    const geen=(Vl.gewoon===0 && !ps.length && !(x.vastDeel>0)) || !!(vp&&vp.geen);
+    const gewoonM=Math.max(ruimAfrond(Vl.gewoon), al), voorstel=Math.max(gewoonM, vloer);
+    const opties={};
+    if(!geen && voorstel<bud) opties.voorstel=voorstel;
+    if(!geen && ps.length && gewoonM<bud && gewoonM<voorstel) opties.res=gewoonM;
+    const keuze=geen?null:((d.keuze||{})[k]||null);
+    let naar=bud;
+    if(keuze==='voorstel' && opties.voorstel!=null) naar=opties.voorstel;
+    else if(keuze==='res' && opties.res!=null) naar=opties.res;
+    else if(keuze==='eigen'){ const e=(d.eigen||{})[k]; naar=(e===''||e==null)?null:Math.max(Math.round(numIn(e)),0); }
+    const ok=geen || keuze==='laten' || (keuze==='voorstel'&&opties.voorstel!=null) || (keuze==='res'&&opties.res!=null) || (keuze==='eigen'&&naar!=null&&naar<=bud);
+    return {k, naam:CATS[k].name, bud, al, gewoon:Vl.gewoon, gewoonM, vloer, vloerMaand:Vl.maand, vloerPosten:Vl.posten, posten:ps,
+      maandNamen:ruimMaandNamen(k), geen, opties, keuze, naar:ok&&!geen?naar:bud, ok, vrij:ok&&!geen?bud-naar:0,
+      onderVloer: keuze==='eigen' && naar!=null && naar<vloer && !!Vl.maand};
+  });
+  const vrij=pots.reduce((a,p)=>a+Math.max(p.vrij,0),0);
+  const ruimK=new Set(pots.map(p=>p.k));
+  const best=d.best||{}, bedrag=id=>{ const v=best[id]; return (v===''||v==null)?0:Math.max(Math.round(numIn(v)),0); };
+  const dests=V.potjes.filter(x=>x.aard==='pastniet' && !ruimK.has(x.k)).sort((a,b)=>a.naam.localeCompare(b.naam,'nl'))
+    .map(x=>({id:'pot:'+x.k, soort:'pot', k:x.k, naam:x.naam, bud:Math.round(+B0[x.k]||x.potje||0), gewoon:Math.round((x.vastDeel||0)+x.patroon)}));
+  dests.push({id:'sparen', soort:'sparen'}, {id:'verlagen', soort:'verlagen'});
+  dests.forEach(x=>{ x.bedrag=bedrag(x.id); });
+  const toegewezen=dests.reduce((a,x)=>a+x.bedrag,0);
+  let spaar0=0; try{ spaar0=Math.round(monthlySavingTarget()); }catch(_){}
+  const sp=dests.find(x=>x.id==='sparen').bedrag, verl=dests.find(x=>x.id==='verlagen').bedrag;
+  const klaar=!!vanaf && pots.every(p=>p.ok) && vrij>0 && toegewezen===vrij;
+  return {vanaf, ref, cur, ms, pots, vrij, dests, toegewezen, open:vrij-toegewezen, klaar, tot0:Math.round(tot0), tot1:Math.round(tot0)-sp-verl,
+    spaar0, spaar1:spaar0+sp, spaarVast:(SET.savingMode||'auto')==='amount', maanden:V.band.maanden};
+}
+function openRuimBijstel(){ window._ruim={keuze:{}, eigen:{}, best:{}, vanaf:null}; renderRuimBijstel(); showSheetBg(); }
+function ruimZet(f, a, b){
+  const d=window._ruim=window._ruim||{keuze:{}, eigen:{}, best:{}, vanaf:null};
+  if(f==='keuze'){ d.keuze[a]=b; }
+  else if(f==='vanaf') d.vanaf=a||null;
+  else if(f==='eigen'){ d.eigen[a]=b; return ruimDeel(); }
+  else if(f==='best'){ d.best[a]=b; return ruimDeel(); }
+  else if(f==='rest'){ const P=ruimBijstelData(); if(!P) return; const nu=(P.dests.find(x=>x.id===a)||{}).bedrag||0; d.best[a]=String(Math.max(nu+P.open,0)); }
+  renderRuimBijstel();
+}
+/* Bij het typen alleen wat ervan afhangt, zodat het veld zijn focus houdt. */
+function ruimDeel(){
+  const P=ruimBijstelData(); if(!P) return;
+  for(const id of ['ruimGevolg','ruimOpen','ruimVrij']){ const e=document.getElementById(id); if(e) e.outerHTML=ruimBlok(id,P); }
+  for(const p of P.pots){ const w=document.querySelector(`[data-ruimonder="${p.k}"]`); if(w) w.outerHTML=ruimOnderHTML(p,P); }
+  const s=document.querySelector('[data-ruimsave]'); if(s) s.disabled=!P.klaar;
+  if((P.vrij>0)!==!!document.getElementById('ruimBest')) renderRuimBijstel();
+}
+function ruimOnderHTML(p,P){
+  return `<div class="small" data-ruimonder="${esc(p.k)}" style="color:var(--mut2);line-height:1.45;margin-top:4px">${p.onderVloer?`Lager dan ${euro0(p.vloer)}: in ${esc(ymFull(p.vloerMaand))} is het potje dan niet gedekt.`:''}</div>`;
+}
+function ruimBlok(id, P){
+  if(id==='ruimVrij') return `<div id="ruimVrij" style="font-weight:700;font-size:var(--fs-md);margin-top:14px">${P.vrij>0?`${euro0(P.vrij)} komt vrij. Waar gaat het heen?`:''}</div>`;
+  if(id==='ruimOpen') return `<div class="small" id="ruimOpen" data-ruimopen="${P.open}" style="margin-top:6px;font-weight:600;${P.open===0?'color:var(--mut2)':''}">${P.vrij>0?(P.open===0?'Alles heeft een plek.':(P.open>0?`Nog te verdelen: ${euro0(P.open)}`:`${euro0(-P.open)} meer verdeeld dan er vrijkomt`)):''}</div>`;
+  /* het gevolg vooraf */
+  const L=[];
+  if(P.vanaf){
+    for(const p of P.pots) if(!p.geen && p.ok && p.naar!==p.bud) L.push(`${esc(p.naam)} ${euro0(p.bud)} → ${euro0(p.naar)}`);
+    for(const p of P.pots) if(p.keuze==='res' && p.ok) for(const x of p.posten) L.push(`${esc(x.naam)} ${euro0(x.bedrag)} ${esc(resIntervalLabel(ruimResInterval(x.intervalM)))} in je reserveringen, eerste termijn ${esc(ymKort(ruimPostTermijn(x,P.vanaf)))}; telt niet meer in nog te betalen`);
+    for(const x of P.dests) if(x.soort==='pot' && x.bedrag>0) L.push(`${esc(x.naam)} ${euro0(x.bud)} → ${euro0(x.bud+x.bedrag)}`);
+    const sp=P.dests.find(x=>x.id==='sparen').bedrag;
+    if(sp>0) L.push(`Sparen ${euro0(P.spaar0)} → ${euro0(P.spaar1)} per maand${P.spaarVast?'':', als vast bedrag'}`);
+  }
+  const t=L.length
+    ? `<div style="font-weight:600;margin-bottom:3px">Vanaf ${esc(ymKort(P.vanaf))}:</div>${L.map(x=>`<div>${x}</div>`).join('')}<div style="margin-top:3px">Je maandbudget ${P.tot1!==P.tot0?`gaat van ${euro0(P.tot0)} naar ${euro0(P.tot1)}`:`blijft ${euro0(P.tot0)}`}. Eerdere maanden veranderen niet. Een potje dat lager gaat wordt een afspraak.</div>`
+    : (P.vanaf?'':'Kies vanaf welke maand.');
+  return `<div class="small" id="ruimGevolg" data-ruimgevolg style="line-height:1.5;margin-top:12px;color:var(--mut2)">${t}</div>`;
+}
+function renderRuimBijstel(){
+  const P=ruimBijstelData(); if(!P){ if(document.getElementById('ruimBijstel')) closeSheet(); return; }
+  const d=window._ruim||{};
+  const chip=(k,v,l)=>`<span class="chip ${d.keuze&&d.keuze[k]===v?'on':''}" data-ruimkeuze="${v}" style="white-space:normal;flex-shrink:1;max-width:100%" onclick="ruimZet('keuze','${esc(k)}','${v}')">${l}</span>`;
+  const mn=opsomming(P.maanden.map(x=>ymFull(x)));
+  const rij=p=>{
+    if(p.geen) return `<div data-ruimpot="${esc(p.k)}" data-ruimgeen style="padding:10px 0;border-top:1px solid var(--line);opacity:.85">
+      <div class="row" style="gap:8px"><span style="flex:1;font-weight:700;font-size:var(--fs-md)">${esc(p.naam)}</span><span style="font-weight:700">${euro0(p.bud)}</span></div>
+      <div class="small muted" style="line-height:1.45;margin-top:2px">Geen betaling in ${esc(mn)}, en er wordt er geen verwacht. Dat is geen gewoonte die je bijstelt maar een bedrag dat veranderde.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px"><span class="small" data-ruimsplits style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openPotForm()">Splitsen in een nieuw potje ›</span><span class="small" data-ruimander style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openPotForm('${esc(p.k)}')">Ander bedrag vanaf een maand ›</span></div></div>`;
+    const post=p.vloerMaand && p.vloerPosten.length && p.gewoonM<p.vloer
+      ? `<div class="small" data-ruimpost style="line-height:1.45;margin-top:4px">In ${esc(ymFull(p.vloerMaand))} komt ${esc(opsomming(p.vloerPosten.map(x=>{ const q=p.posten.find(y=>y.naam===x.naam); return `${x.naam}, ${euro0(x.bedrag)} ${q?resIntervalLabel(ruimResInterval(q.intervalM)):''}`.trim(); })))}. Verlaag je het potje naar ${euro0(p.gewoonM)}, dan is ${esc(ymFull(p.vloerMaand))} niet gedekt.</div>` : '';
+    const ch=[];
+    if(p.opties.res!=null) ch.push(chip(p.k,'res',`${esc(opsomming(p.posten.map(x=>x.naam)))} naar reserveringen, potje ${euro0(p.opties.res)}`));
+    if(p.opties.voorstel!=null) ch.push(chip(p.k,'voorstel',`Potje ${euro0(p.opties.voorstel)}`));
+    ch.push(chip(p.k,'eigen','Zelf een bedrag'), chip(p.k,'laten','Laten'));
+    const e=(d.eigen||{})[p.k];
+    return `<div data-ruimpot="${esc(p.k)}" style="padding:10px 0;border-top:1px solid var(--line)">
+      <div class="row" style="gap:8px"><span style="flex:1;font-weight:700;font-size:var(--fs-md)">${esc(p.naam)}</span><span style="font-weight:700">${euro0(p.bud)}</span></div>
+      <div class="small muted" style="line-height:1.45;margin-top:2px">gewoonlijk ${euro0(p.gewoon)} per maand${p.maandNamen.length?` (${esc(opsomming(p.maandNamen))})`:''}${p.al?` · deze maand al ${euro0(p.al)} uit`:''}</div>
+      ${post}<div class="chips wrap" style="margin-top:6px">${ch.join('')}</div>
+      ${d.keuze&&d.keuze[p.k]==='eigen'?`<input type="text" inputmode="decimal" data-ruimeigen="${esc(p.k)}" value="${esc(e==null?'':String(e))}" placeholder="bedrag per maand" oninput="ruimZet('eigen','${esc(p.k)}',this.value)" style="width:100%;margin-top:6px;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 10px;font-size:var(--fs-md)">`:''}
+      ${ruimOnderHTML(p,P)}</div>`; };
+  const dRij=x=>{
+    const t = x.soort==='pot' ? [esc(x.naam), `past niet in je potje: ${euro0(x.bud)}, gewoonlijk ${euro0(x.gewoon)}`]
+      : x.soort==='sparen' ? ['Naar sparen', `bovenop je ${euro0(P.spaar0)} per maand`] : ['Maandbudget verlagen', 'blijft op je rekening, buiten je potjes'];
+    const v=(d.best||{})[x.id];
+    return `<div class="row" data-ruimbest="${esc(x.id)}" style="gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
+      <span style="flex:1;min-width:0"><span style="font-size:var(--fs-md);display:block">${t[0]}</span><span class="small muted" style="display:block;line-height:1.4">${t[1]}</span></span>
+      <span class="small" style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="ruimZet('rest','${esc(x.id)}')">de rest</span>
+      <input type="text" inputmode="decimal" value="${esc(v==null?'':String(v))}" placeholder="0" oninput="ruimZet('best','${esc(x.id)}',this.value)" style="width:76px;text-align:right;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 10px;font-size:var(--fs-md)"></div>`; };
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="ruimBijstel">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Te ruime potjes bijstellen</div>
+    <div class="small muted" style="line-height:1.5;margin-top:4px">Potjes waarvan je in ${esc(mn)} elke maand hooguit de helft gebruikte. Niets verandert tot je bijstelt.</div>
+    <div style="margin-top:8px">${P.pots.map(rij).join('')}</div>
+    <label class="fld">Vanaf</label>
+    <select data-ruimvanaf onchange="ruimZet('vanaf',this.value)" style="width:100%"><option value="">Kies een maand</option>${P.ms.map(ym=>`<option value="${ym}"${P.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>
+    ${ruimBlok('ruimVrij',P)}
+    ${P.vrij>0?`<div id="ruimBest">${P.dests.map(dRij).join('')}</div>`:''}
+    ${ruimBlok('ruimOpen',P)}
+    ${ruimBlok('ruimGevolg',P)}
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-ruimsave style="flex:1"${P.klaar?'':' disabled'} onclick="ruimBijstelZet()">Bijstellen</button><button class="btn sec" onclick="openGripRest()">Terug</button></div></div>`;
+}
+function ruimBijstelZet(){
+  const P=ruimBijstelData(); if(!P || !P.klaar) return;   // opnieuw gelezen (v319); alles moet een plek hebben (v238)
+  const vanaf=P.vanaf, cur=P.cur, nx=nextYM(cur);
+  window._potIncasso=null;
+  SET.reserveringen=resLijst().slice(); SET.fixDueExcl=SET.fixDueExcl||{};
+  let i=0;
+  for(const p of P.pots){
+    if(p.geen || p.naar===p.bud) continue;
+    potPlanZet(p.k, vanaf, p.naar);
+    if(p.keuze==='res') for(const x of p.posten){
+      if(!SET.reserveringen.some(r=>r&&r.bron===x.key))
+        SET.reserveringen.push({id:'r'+Date.now().toString(36)+(i++), naam:x.naam, bedrag:x.bedrag, vervalmaand:ruimPostTermijn(x,vanaf), intervalM:ruimResInterval(x.intervalM), cat:p.k, bron:x.key});
+      if(!SET.fixDueExcl[x.key]) SET.fixDueExcl[x.key]={sinds:vandaagYMD()};
+    }
+  }
+  for(const x of P.dests) if(x.soort==='pot' && x.bedrag>0) potPlanZet(x.k, vanaf, x.bud+x.bedrag);
+  const sp=P.dests.find(x=>x.id==='sparen').bedrag;
+  if(sp>0){
+    if(vanaf<=cur){ SET.savingMode='amount'; SET.savingAmount=P.spaar0+sp; }
+    else { SET.spaarPlan=SET.spaarPlan||{}; SET.spaarPlan[vanaf]=(+SET.spaarPlan[vanaf]||0)+sp; }
+  }
+  save();
+  for(const p of P.pots) if(!p.geen && p.naar<p.bud){
+    if(vanaf<=nx) try{ valtOpPotjeGewijzigd(p.k, p.bud, p.naar, vanaf!==cur); }catch(_){}
+    try{ potjeAfspraak(p.k, p.naar, vanaf); }catch(_){}
+  }
+  for(const x of P.dests) if(x.soort==='pot' && x.bedrag>0 && vanaf<=nx) try{ valtOpPotjeGewijzigd(x.k, x.bud, x.bud+x.bedrag, vanaf!==cur); }catch(_){}
+  window._ruim=null;
+  closeSheet(); render();
+  toast(`${ICON('check')} Bijgesteld vanaf ${ymKort(vanaf)}: ${euro0(P.vrij)} heeft een plek`);
+}
+/* De spaarverhoging uit de sheet hierboven, in de maand die je koos. rolloverBudgets() roept hem aan bij de
+   maandwissel; hij telt op bij je spaarinleg van dat moment, dus een eigen wijziging tussendoor blijft staan. */
+function spaarPlanDoorschuif(ym){
+  const P=SET.spaarPlan||{}; let plus=0;
+  for(const p of Object.keys(P)) if(p<=ym){ plus+=+P[p]||0; delete P[p]; }
+  if(plus>0){ let cur=0; try{ cur=Math.round(monthlySavingTarget()); }catch(_){} SET.savingMode='amount'; SET.savingAmount=cur+plus; }
 }
 
 /* ===== KOMENDE 3 MAANDEN (v340) =====

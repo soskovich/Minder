@@ -41,23 +41,28 @@ test('b. de drempel: elke maand hooguit de helft van het variabele bedrag EN min
   expect(r).toEqual([true, false, false, true, false, false, { deel: 0.5, euro: 50 }]);
 });
 
-test('c. openen schrijft niets; bij meer potjes opent bijstellen de budgeteditor', async ({ page }) => {
+/* v358: bijstellen opent de sheet "Te ruime potjes bijstellen", met precies de potjes van de hint, en nooit de
+   budgeteditor (grip-ruim-bijstel.spec.js draagt de sheet zelf). */
+test('c. openen schrijft niets; bijstellen opent de sheet met de potjes van de hint', async ({ page }) => {
   await boot(page); await grip(page);
   const voor = await page.evaluate(() => localStorage.getItem('minder_set'));
   await page.evaluate(() => openGripRest());
   expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
+  const hint = await page.evaluate(() => document.querySelector('[data-ruimer]').dataset.ruimer);
   await page.click('[data-ruimer]');
-  expect(await page.evaluate(() => !!document.getElementById('budgetSheetHead'))).toBe(true);
+  const r = await page.evaluate(() => ({ editor: !!document.getElementById('budgetSheetHead'), sheet: !!document.getElementById('ruimBijstel'),
+    pots: [...document.querySelectorAll('[data-ruimpot]')].map((e) => e.dataset.ruimpot).join(',') }));
+  expect(r).toEqual({ editor: false, sheet: true, pots: hint });
   expect(await page.evaluate(() => localStorage.getItem('minder_set'))).toBe(voor);
 });
 
-test('d. bij een potje opent bijstellen dat potje', async ({ page }) => {
+test('d. bij een potje opent bijstellen de sheet met dat potje', async ({ page }) => {
   await boot(page, VIER); await grip(page);
   await page.evaluate(() => openGripRest());
   const r = await page.evaluate(() => document.querySelector('[data-ruimer]').dataset.ruimer);
   expect(r).toBe('shopping');
   await page.click('[data-ruimer]');
-  expect(await page.evaluate(() => { const f = document.getElementById('potForm'); return f ? f.innerText : null; })).toContain('Online shopping');
+  expect(await page.evaluate(() => [...document.querySelectorAll('#ruimBijstel [data-ruimpot]')].map((e) => e.dataset.ruimpot))).toEqual(['shopping']);
 });
 
 test('e. geen ruimer potje, geen regel', async ({ page }) => {

@@ -86,7 +86,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   een oorzaakzin, met de lopende afspraken; een tik op de kop, budget of de uitkomst opent de sheet met de band als een regel en "Wat je
   deze maand kunt doen", `renderGripVooruit()`, sinds `v352` zonder tweede bridge; sinds `v353` opent een tik
   op een potje-stap alleen dat potje en op de rest-stap de potjes daarin, `gripBrugTik()`; sinds `v354` gaat de bridge alleen over de variabele potjes, staat het stuurgetal in de kop en de
-  vaste lasten als een regel eronder, `gripVastRegel()`, `renderGripVast()`; sinds `v355` is vast wat de app herkent plus wat je op vast zette, en een potje met een herkende incasso is gemengd; sinds `v356` staan alleen de potjes die boven eindigen los en is de rest EEN stap ruimte, met de ruimere potjes bovenaan zijn sheet; sinds `v357` loopt de bridge weer van het hele budget naar de uitkomst, met de vaste lasten als EEN stap (een tik opent `renderGripVast()`), is de regel eronder vervallen en is de kop de uitkomst tegen het budget); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
+  vaste lasten als een regel eronder, `gripVastRegel()`, `renderGripVast()`; sinds `v355` is vast wat de app herkent plus wat je op vast zette, en een potje met een herkende incasso is gemengd; sinds `v356` staan alleen de potjes die boven eindigen los en is de rest EEN stap ruimte, met de ruimere potjes bovenaan zijn sheet en sinds `v358` hun eigen sheet om ze bij te stellen, `openRuimBijstel()`; sinds `v357` loopt de bridge weer van het hele budget naar de uitkomst, met de vaste lasten als EEN stap (een tik opent `renderGripVast()`), is de regel eronder vervallen en is de kop de uitkomst tegen het budget); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
   <maand>" is opgegaan). Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
   `renderAfsluitSheet()`), geen kaart. Het logboek (`logboek`, `renderLogboek()`) draagt sinds `v340` de
   afgesloten maanden als tijdlijn (`logTijdlijn()`), met per maand de bridge, de antwoorden en de
@@ -122,6 +122,43 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **"BIJSTELLEN ›" BIJ TE RUIME POTJES OPENT EEN EIGEN SHEET, EN HET VRIJE GELD KRIJGT EEN BESTEMMING** (`v358`, gevraagd
+  door de gebruiker, mockup "te ruime potjes bijstellen"): `gripRuimerBijstel()` opent `openRuimBijstel()` (`#ruimBijstel`,
+  "Te ruime potjes bijstellen") en NOOIT de budgeteditor. De potjes komen uit `gripRuimLijst(V, Br)`, de ENE lijst met
+  twee lezers (de hint in `renderGripRest()` en `ruimBijstelData()`), dus precies wat de hint noemt (`RUIMER_DREMPEL`).
+  PER POTJE: het bedrag, "gewoonlijk EUR X per maand" (`potjeMaandVloer().gewoon`, met de namen van de maandelijkse
+  incasso's), en vier keuzes zonder voorkeuze: het voorstel, de posten naar de reserveringen, zelf een bedrag, laten.
+  HET VOORSTEL is `max(ruimAfrond(gewoon), vloer, al uit)`: de gewone maand op tien euro naar boven (`RUIM_MARGE`) en
+  nooit onder de duurste maand van de twaalf vanaf de bijstelling (`v350`). Zakt de gewone maand onder die vloer, dan
+  noemt de rij de post en de maand (`data-ruimpost`: "In december komt DELA, EUR 160 per kwartaal. Verlaag je het
+  potje naar EUR 170, dan is december niet gedekt."). DE POSTEN NAAR DE RESERVERINGEN (`ruimPosten()`: de posten met
+  een interval boven een maand die nog niet gereserveerd zijn) worden een verplichting met bedrag, interval
+  (`ruimResInterval()`) en de eerste termijn op of na de gekozen maand (`ruimPostTermijn()`), bron de incassosleutel
+  zoals `uitgeslotenNaarRes()`, EN ze gaan in `SET.fixDueExcl`, want anders vragen ze dubbel: in "nog te betalen" en op
+  je reserveringsrekening. Het potje gaat dan naar de gewone maand plus marge. `potjeMaandVloer()` kreeg daarvoor een
+  vierde argument: een post die al gereserveerd is zet geen maand meer. EEN POTJE ZONDER BETALING (geen gewone maand,
+  geen post, geen herkende incasso, of een vast potje met `geen`) krijgt geen voorstel maar twee bestaande ingangen:
+  "Splitsen in een nieuw potje ›" (`openPotForm()`, waarin dit potje kan inleveren) en "Ander bedrag vanaf een maand ›"
+  (`openPotForm(k)`). ER BESTAAT GEEN SPLITS-ROUTE, en er is er geen gebouwd (`v61`): de mockup noemde hem.
+  HET VRIJE BEDRAG KRIJGT EEN BESTEMMING, in deze volgorde: de potjes die niet passen (aard `pastniet`, met potje en
+  gewone maand), sparen bovenop je spaarinleg, of het maandbudget verlagen. Elk een veld met "de rest"; niets
+  voorgekozen. OPSLAAN KAN PAS als er een maand is, elk potje een keuze heeft en het toegewezen bedrag precies het vrije
+  bedrag is, en `ruimBijstelZet()` eist dat zelf ook en leest alles opnieuw (`v319`). Sparen EN verlagen halen het
+  geld uit je potjes, dus allebei verlagen ze je maandbudget; sparen zet daarbij je spaarinleg op een vast bedrag.
+  VANAF EEN MAAND (`potPlanZet()`, deze maand tot twaalf vooruit). Sparen heeft geen maanddimensie: vanaf een latere maand
+  staat de verhoging in `SET.spaarPlan[ym]`, en `rolloverBudgets()` telt hem in die maand op bij je spaarinleg van dat
+  moment (`spaarPlanDoorschuif()`). Een potje dat lager gaat wordt een afspraak (`potjeAfspraak()`). Het gevolg staat er
+  vooraf (`data-ruimgevolg`): de potjes oud en nieuw, de post in je reserveringen, sparen en het maandbudget.
+  GEMETEN op de stand van de gebruiker (`ruim-bijstel-stand.js`): Verzekeringen EUR 335, gewoonlijk 164, december 324;
+  het voorstel is 324 en met DELA naar de reserveringen 170. Met Vices +100 en sparen +65 vanaf november gaat het
+  maandbudget van 2.355 naar 2.290 en sparen van 2.200 naar 2.265. De sheet is 615px op 360 en 560 op 390 bij openen, en
+  1028/918px met alles ingevuld; hij scrollt, zonder overloop. DE ANDERE INGANGEN NAAR DE HELE BUDGETEDITOR, nagegaan
+  en niet omgezet: "Potjes en limiet instellen" onder de verdeling van je potjes (alle potjes), de coach-optie "Mijn
+  maandbedrag verhogen" bij de buffer (een instelling, de spaarinleg), "Budget deze maand · stel in" zonder budget, en
+  "Budget & doelen" in Instellingen. Geen van vier gaat over een potje. Nieuwe spec `grip-ruim-bijstel.spec.js`;
+  `grip-ruimte` c en d aangepast (ze openden het potje of de editor). VEERTIEN SABOTAGES, ALLE VEERTIEN ROOD, de laatste
+  (de eerste termijn negeert de gekozen maand) pas nadat de spec vanaf januari droeg: daarvoor viel DELA in elke test
+  in december, na de gekozen maand (meetles a).
 - **DE VASTE LASTEN ZIJN EEN STAP IN DE BRIDGE, EN GRIP EN INZICHTEN NOEMEN WAARUIT HET BEDRAG BESTAAT** (`v357`,
   gevraagd door de gebruiker): `dezeMaandBrug()` loopt weer van `V.budget` naar `V.projectie`. Tussen die twee: de
   potjes die boven eindigen (`v356`), de rest ("ruimte" of "andere"), EEN stap "vaste lasten" (`V.vaste.eind` tegen
@@ -160,7 +197,8 @@ genoemde versietag.)*
   DE SHEET ACHTER DE STAP (`renderGripRest()`, kop "Ruimte in andere potjes") draagt bovenaan EEN regel voor de
   potjes die STRUCTUREEL RUIMER zijn dan je gewoonlijk uitgeeft (`potRuimer()`, `data-ruimer`): "<namen> zijn ruimer
   dan je gewoonlijk uitgeeft · bijstellen ›". Een potje opent `openPotForm(k)`, meer potjes `openBudgetEditor()`
-  (`gripRuimerBijstel()`); bestaande routes, geen tweede editor (`v61`). De maanden komen uit `maandVooruit()` zelf
+  (`gripRuimerBijstel()`); bestaande routes, geen tweede editor (`v61`). SINDS `v358` opent die ingang de sheet
+  "Te ruime potjes bijstellen"; zie de regel daarover bovenaan. De maanden komen uit `maandVooruit()` zelf
   (`x.maanden`: de variabele uitgave per potje in elk van de `VOORUIT_MAANDEN` afgeronde maanden, in de snede van
   `piekInScope()`, dus zonder herkende incasso's), en worden afgezet tegen het variabele bedrag van NU (`x.bud`).
   DE DREMPEL IS DE KEUZE VAN DE GEBRUIKER (bij `v356` voorgesteld, bij `v357` bevestigd): `RUIMER_DREMPEL={deel:0.5,
@@ -6439,7 +6477,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v357` → `minder-v358`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v358` → `minder-v359`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6458,7 +6496,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356` en `v357` naar `minder-v357`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357` en `v358` naar `minder-v358`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
