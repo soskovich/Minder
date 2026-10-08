@@ -92,7 +92,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   Vraagt aandacht, Staat goed, Voorwaarden voor beleggen, Vanaf <maand>, de afsluitregel en de
   logboekkaart; zie de staande regel van `v340` voor waar elk ervan heen ging. De lek-ingang
   (`coStart('lek')`) hangt aan de chevron van de open valt-op-kaart, en die staat sinds `v340` in de
-  sheet achter de Let op-regel. `coachLeak()` leverde daarnaast een patroonregel op Inzichten (`v237`); die regel is bij `v359` met "Wat opvalt" vervallen.
+  sheet achter de Let op-regel. `coachLeak()` leverde daarnaast een patroonregel op Inzichten (`v237`); die staat sinds `v359` als regel onder Let op (`gripLekKaart()`).
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Draagt sinds `v319` onder de
   inleg-kop wat er deze maand werkelijk opzij ging (`planInlegRegel()`, uit `savedNet()`) en op de
   vrij-regel een tweede knop die het niet-toegewezen spaargeld verdeelt zoals de waterval het zou
@@ -165,20 +165,24 @@ genoemde versietag.)*
   maanden niet voorkwam, of in "de N maanden die de app van je heeft") en HERSTELT ZICH (vorige maand boven het potje,
   nu achter op het gewone tempo). Per patroon wat er gebeurt, "gezien in" met de bron, en "bijsturen op Grip ›"
   (niet bij herstelt). Labels rustig, kleur alleen als stip (`--red`, `--amber`, `--blue`, `--green`).
-  DE DREMPELS ZIJN EEN VOORSTEL EN GEEN KEUZE (`INS_PATROON`): structureel bij minstens anderhalf keer het potje EN
-  minstens EUR 50 erboven, loopt voor bij minstens EUR 10 meer dan gewoonlijk in dezelfde dagen, nieuw vanaf EUR 50, en
+  DE DREMPELS ZIJN DE KEUZE VAN DE GEBRUIKER (`INS_PATROON`, voorgesteld en daarna bevestigd): structureel bij minstens
+  anderhalf keer het potje EN minstens EUR 50 erboven, loopt (weer) voor bij minstens EUR 10 EN minstens 25 procent meer
+  dan gewoonlijk in dezelfde dagen (`insLooptVoor()`, de ENE plek; zonder gewoon bedrag telt alleen de EUR 10), nieuw vanaf EUR 50, en
   boven het potje in de vorige maand vanaf `VALTOP_DREMPEL_EUR` (25, dezelfde lat als het logboek, nu buiten
   `valtOpSignals()` zodat er een bron is).
   WAT VERDWEEN: de stand-kaart (`insBudgetBlok()`; de regels "buiten je potjes", "uit een reservering" en "ook via je
   bankkoppeling" staan nu in de sheet van Uitgegeven onder "Niet in dit bedrag"), "Nog deze maand" (`insNogLijst()`,
   `nogDezeMaandCard()`; `nogDezeMaandPosten()` houdt een andere lezer), "Wat opvalt" (`insSignalRows()`, `valtOpRij()`,
-  `insPatroonRij()`, met de jaarregel van `v313`), de eyebrow met de kiezer en de dagteller, `openBudgetCompare()` en
+  `insPatroonRij()`; de jaarregel van `v313` staat nu in de sheet van dat potje op Grip, `gripJaarRegel()`), de eyebrow met de kiezer en de dagteller, `openBudgetCompare()` en
   `monthStatusCard()`. DE TEGEL UITGEGEVEN IS AMBER BOVEN HET TEMPO, een omkering van `v93` ("sneller dan de maand" is
-  geen aandacht) voor deze ene tegel, op keuze van de gebruiker; het tempo telt vaste lasten op hun datum. OPEN PUNT: de detectie achter "Wat opvalt" (`insSignals()` met de piekdag en de grootste
+  geen aandacht) voor deze ene tegel, op keuze van de gebruiker; het tempo telt vaste lasten op hun datum. AMBER NOOIT
+  ZONDER REDEN: elke tak die Uitgegeven amber maakt zet het bedrag erbij ("EUR X boven je tempo", zonder tempo of op een
+  afgesloten periode "EUR X boven je budget"), en een spec loopt alle periodes en soorten af. OPEN PUNT: de detectie achter "Wat opvalt" (`insSignals()` met de piekdag en de grootste
   uitgave, `lekSignaal()`, `monthVsPrevInner()`) heeft geen lezer op het scherm meer en staat er tot de gebruiker
-  beslist of ze een patroon wordt of weg kan. OPEN PUNT, EEN LACUNE: een lek ZONDER potje-overschrijding had zijn
-  enige coach-ingang op Inzichten (`v237`, `coStart('lek')`), en die is als handeling vervallen; met een overschrijding
-  blijft de ingang op Grip in de Let op-sheet. OPEN PUNT `v352` IS SCHERPER: de budgeteditor heeft op Inzichten geen
+  beslist of ze een patroon wordt of weg kan. DE LEK-REGEL STAAT OP GRIP ONDER LET OP (keuze van de gebruiker):
+  `lekSignaal()` met de exclude-set van toen (`budgetFlaggedCats`), "<naam>: EUR X zonder potje", en de sheet erachter
+  (`gripLekKaart()`) draagt spiegel, gevolg en de bestaande route naar het gesprek (`coStart('lek')`); met een
+  overschrijding blijft de ingang aan de chevron in de valt-op-sheet en staat er geen tweede lek-regel. OPEN PUNT `v352` IS SCHERPER: de budgeteditor heeft op Inzichten geen
   ingang meer (de regel "van EUR X maandbudget" was er een); hij is nog bereikbaar via Instellingen, de maandafsluiting
   en de tijdlijn op Grip.
   DRIE DINGEN DIE DE MIGRATIE VAN DE SPECS VOND, en ze hadden gelijk: (1) ONDER NUL heet de tegel "Te veel uitgegeven"

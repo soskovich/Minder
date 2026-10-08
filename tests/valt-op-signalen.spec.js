@@ -527,10 +527,10 @@ test.describe('de lek-regel op Inzichten', () => {
   const ingang = (page, scherm) =>
     page.evaluate((x) => document.querySelectorAll('#s-' + x + " [onclick*=\"coStart('lek'\"]").length, scherm);
 
-  /* v359: DIT PINT EEN LACUNE, en dat is bewust (zoals v270 de dode pending-tak pinde). Inzichten draagt geen
-     handeling meer, dus een lek zonder overschrijding heeft nergens een gespreksingang. Wordt die ingang
-     ergens gebouwd, dan valt deze test met opzet en werk je hem bij. */
-  test('een lek zonder overschrijding: geen ingang op Inzichten en niet op Grip (lacune, v359)', async ({ page }) => {
+  /* v359: tot de lek-regel naar Grip ging pinde deze test een LACUNE (geen ingang op Inzichten en niet op Grip).
+     Op keuze van de gebruiker staat een lek zonder overschrijding nu als regel onder Let op, met de bestaande
+     route naar het gesprek in de sheet erachter. Inzichten draagt nog steeds geen handeling. */
+  test('een lek zonder overschrijding: een Let op-regel op Grip met de route naar het gesprek, niets op Inzichten', async ({ page }) => {
     await boot(page, {
       tx: [{ cat: 'shopping', bedrag: 220, naam: 'Zalando' }],
       set: { budgets: { boodschappen: 400 } },          // shopping heeft geen potje
@@ -541,7 +541,29 @@ test.describe('de lek-regel op Inzichten', () => {
     expect(await ingang(page, 'ins')).toBe(0);
     await page.evaluate(() => go('maand'));
     await expect(page.locator('#gripLetOp [data-letop="sig"]')).toHaveCount(0);
+    const rij = page.locator('#gripLetOp [data-letop="lek"]');
+    await expect(rij).toHaveCount(1);
+    await expect(rij).toContainText('Zalando');
+    await expect(rij).toContainText('zonder potje');
+    // de regel zelf start het gesprek niet: hij opent de sheet, en pas daar staat de route (spiegel, gevolg, keuze)
     expect(await ingang(page, 'maand')).toBe(0);
+    await rij.click();
+    const sh = page.locator('#gripLetOpSheet[data-soort="lek"]');
+    await expect(sh).toBeVisible();
+    await expect(sh).toContainText('zat deze maand in geen enkel potje');
+    expect(await page.evaluate(() => document.querySelectorAll("#gripLetOpSheet [onclick*=\"coStart('lek'\"]").length)).toBe(1);
+    // openen schrijft niets naar de coachlog
+    expect(await page.evaluate(() => (SET.coachLog || []).length)).toBe(0);
+  });
+
+  test('zonder lek staat er geen lek-regel op Grip', async ({ page }) => {
+    await boot(page, {
+      tx: [{ cat: 'boodschappen', bedrag: 100, naam: 'Albert Heijn' }],
+      set: { budgets: { boodschappen: 400 } },
+    });
+    expect(await page.evaluate(() => coachLeak(thisYM()))).toBeNull();
+    await page.evaluate(() => go('maand'));
+    await expect(page.locator('[data-letop="lek"]')).toHaveCount(0);
   });
 
   test('een lek met een overschrijding in dezelfde categorie: ingang op Grip, geen lek-regel', async ({ page }) => {
@@ -556,6 +578,8 @@ test.describe('de lek-regel op Inzichten', () => {
     expect(await ingang(page, 'ins')).toBe(0);          // v359: geen handeling op Inzichten
     await kaart(page);   // v340: de chevron staat in de kaart achter de Let op-regel
     expect(await page.evaluate(() => document.querySelectorAll("#gripLetOpSheet [onclick*=\"coStart('lek'\"]").length)).toBe(1);
+    // de overschrijding staat al als eigen regel: geen tweede lek-regel op dezelfde categorie
+    expect(await page.evaluate(() => document.querySelectorAll('#gripLetOp [data-letop="lek"]').length)).toBe(0);
   });
 
   /* v359: 'op een afgesloten maand komt de lek-regel niet mee' is vervallen: v359: Inzichten draagt geen signaal- en patroonregels meer; de patronen staan in het blok Patronen */

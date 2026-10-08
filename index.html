@@ -7674,6 +7674,11 @@ function gripLetOpItems(RO, SIG, BV){
     L.push({soort:'str', key:r.key, naam:r.naam, sub:B.oorzaak||'', dot:r.status, act:`openMaandBeslis('${esc(r.key)}')`}); }
   for(const s of (SIG||[])) L.push({soort:'sig', key:s.id, naam:s.naam, sub:`${euro0(s.over)} boven je potje`, dot:'let op', act:`openGripLetOp('sig','${esc(s.id)}')`});
   for(const v of (BV||[])) L.push({soort:'beleg', key:v.asset.id, naam:`Je belegde ${euro0(v.inleg)} in ${v.asset.naam||'Bezitting'}`, sub:v.open?'voorwaarden nog niet gehaald · nog niet gekozen of ze hiervoor gelden':'voorwaarden nog niet gehaald', dot:'let op', act:`openBelegVraag('${esc(v.asset.id)}')`});
+  /* v359: DE LEK-REGEL STAAT HIER (keuze van de gebruiker). Tot v358 stond hij op Inzichten, met de coach als
+     tik; Inzichten draagt sinds v359 geen handeling, en zonder deze regel had een doorlopende uitgave ZONDER
+     potje-overschrijding geen ingang meer naar coStart('lek'). De detectie is lekSignaal() met dezelfde
+     exclude-set als toen (budgetFlaggedCats): een overschrijding staat al als eigen regel hierboven. */
+  try{ const m=thisYM(), Lk=lekSignaal(m, budgetFlaggedCats(m)); if(Lk) L.push({soort:'lek', key:Lk.cat, naam:`${Lk.kpiLabel}: ${Lk.kpiVal} zonder potje`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); }catch(_){}
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   try{ for(const k of potOpenLijst()){ const T=potOpenTx(k); if(!T.length) continue;
@@ -7710,11 +7715,22 @@ function renderGripLetOpLijst(){
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripLetOpLijst"><div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:6px">Let op</div>${rest.map(gripLetOpRij).join('')}</div>`;
 }
 function openGripLetOp(soort, key){ window._gripLetOp={soort, key:key||''}; renderGripLetOp(); showSheetBg(); }
+/* v359: de sheet achter de lek-regel: wat er is (spiegel), wat het betekent (gevolg), en de bestaande route
+   naar het gesprek (keuze). Hij rekent opnieuw en is leeg als het lek weg is. */
+function gripLekKaart(){
+  const m=thisYM(), Lk=lekSignaal(m, budgetFlaggedCats(m)); if(!Lk) return '';
+  return `<div data-lek="${esc(Lk.cat)}"><div style="font-weight:800;font-size:var(--fs-lg)">${esc(Lk.kpiLabel)} · ${Lk.kpiVal}</div>
+    ${Lk.kpiSub?`<div class="small muted" style="margin-top:2px">${esc(Lk.kpiSub)}</div>`:''}
+    <div class="small" style="line-height:1.5;margin-top:8px">${esc(Lk.hyp)}</div>
+    <div class="small" style="line-height:1.5;margin-top:4px;color:var(--mut2)">${esc(Lk.imp)}</div>
+    <button class="btn" data-lekcoach style="margin-top:12px" onclick="closeSheet();${Lk.act}">Bespreek het in het gesprek</button></div>`;
+}
 /* De sheet zoekt zijn inhoud opnieuw op (v319/v320) en sluit als het signaal weg is. */
 function renderGripLetOp(){
   const G=window._gripLetOp||{}; let html='';
   try{
     if(G.soort==='sig'){ const s=(valtOpSignals(thisYM())||[]).find(x=>x.id===G.key); html=s?valtOpKaartOpen(s):''; }
+    else if(G.soort==='lek') html=gripLekKaart();
     else if(G.soort==='uit') html=uitgeslotenKaart();
     else if(G.soort==='contant') html=contantKaart();
     else if(G.soort==='accept') html=maandAcceptLus();
@@ -8050,6 +8066,14 @@ function potAardZet(k){
 }
 const gripAllesLink=`<div class="small" data-allepotjes style="color:var(--teal);cursor:pointer;font-weight:600;padding-top:10px;margin-top:10px;border-top:1px solid var(--line)" onclick="openGripVooruit()">Alle potjes ›</div>`;
 function gripVerschilTekst(d){ return d>0?`${euro0(d)} boven`:(d<0?`${euro0(-d)} onder`:'precies'); }
+/* v359: HET JAARBEDRAG ONDER EEN OVERSCHRIJDING STAAT IN DE SHEET VAN DAT POTJE OP GRIP (keuze van de
+   gebruiker). Tot v358 stond hij onder de regel op Inzichten; die regel is vervallen. Het getal is s.over maal
+   twaalf, het bedrag dat de Let op-regel van hetzelfde potje noemt (v313: geen tempo, geen "ongeveer"). */
+function gripJaarRegel(k){
+  let s=null; try{ s=(valtOpSignals(thisYM())||[]).find(x=>x.potjeId===k); }catch(_){}
+  if(!s || !(s.over>0)) return '';
+  return `<div class="small" data-jaarbedrag style="line-height:1.5;margin-top:4px;color:var(--mut2)">${euro0(s.over)} boven je potje. Als dit elke maand gebeurt, is dat ${euro0(s.over*12)} per jaar.</div>`;
+}
 function renderGripPotje(){
   const k=window._gripPotje; let V=null; try{ V=maandVooruit(); }catch(_){}
   /* v355: een gemengd potje staat twee keer in maandVooruit(): zijn variabele deel in de bridge en zijn vaste
@@ -8067,7 +8091,7 @@ function renderGripPotje(){
     $('#sheet').innerHTML=`<div class="grab"></div><div id="gripPotje" data-potje="${esc(k)}" data-verschil="${d}" data-terug${x.geen?' data-geen':''}>
       <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}</div>
       <div class="small" data-potjestand style="line-height:1.5;margin-top:6px">${stand}</div>
-      ${x.geen||x.gemengd?'':`<div class="small" style="line-height:1.5;margin-top:4px">Verwacht deze maand ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>`}
+      ${x.geen||x.gemengd?'':`<div class="small" style="line-height:1.5;margin-top:4px">Verwacht deze maand ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>`}${gripJaarRegel(k)}
       ${x.gemengd?`<div class="small" data-gemengd style="line-height:1.5;margin-top:4px">De herkende incasso's zijn het vaste deel. De andere ${euro0(x.potje-x.bud)} van je potje is variabel en staat in de bridge met wat je er gewoonlijk uitgeeft.</div>`:''}
       <div class="small" data-potjewaarom style="line-height:1.5;margin-top:8px">${x.geen?'Geen betaling is geen besparing: is het bedrag veranderd, zet het potje dan op wat je nu betaalt, vanaf de maand dat het geldt.':'Een vaste last: het verwachte bedrag is wat er al betaald is plus de incasso\'s die deze maand nog komen. Een grens voor de rest van de maand past hier niet; het bedrag van het potje zelf kun je aanpassen.'}</div>
       <div class="small" data-potjeaanpassen style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:10px" onclick="openPotForm('${esc(k)}')">Potje aanpassen ›</div>
@@ -8091,7 +8115,7 @@ function renderGripPotje(){
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripPotje" data-potje="${esc(k)}" data-verschil="${d}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}</div>
     <div class="small" data-potjestand style="line-height:1.5;margin-top:6px">${euro0(x.uit)} uitgegeven in ${dagen} · gewoonlijk ${euro0(x.typisch)} in dezelfde dagen · potje ${euro0(x.bud)}</div>
-    <div class="small" style="line-height:1.5;margin-top:4px">Verwacht eind ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>
+    <div class="small" style="line-height:1.5;margin-top:4px">Verwacht eind ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>${gripJaarRegel(k)}
     ${x.vastDeel>0?`<div class="small" data-gemengd style="line-height:1.5;margin-top:4px">Van je potje van ${euro0(x.potje)} is ${euro0(x.vastDeel)} vaste last (herkende incasso's). Deze stap gaat over de ${euro0(x.bud)} daarnaast.</div>`:''}
     <div class="small" data-potjewaarom style="line-height:1.5;margin-top:8px">${waarom}</div>
     ${doen}${x.vastDeel>0?'':`<div class="small" data-potaardvraag="vast" style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:10px" onclick="openPotAard('${esc(k)}')">Is dit een vaste last? ›</div>`}${gripAllesLink}</div>`;
@@ -17330,15 +17354,20 @@ function kijkMaand(){
    (SET.insKeuze), op verzoek van de gebruiker. */
 const INS_PERIODES=[{k:'nu',l:'Deze maand'},{k:'vorige',l:'Vorige maand'},{k:'3',l:'Laatste 3 maanden'},{k:'12',l:'Laatste 12 maanden'}];
 const INS_SOORTEN=[{k:'alle',l:'alle uitgaven'},{k:'var',l:'variabel'},{k:'vast',l:'vast'}];
-/* DE DREMPELS VAN DE PATRONEN ZIJN EEN VOORSTEL en geen keuze (v359, zoals RUIMER_DREMPEL bij v356):
+/* DE DREMPELS VAN DE PATRONEN ZIJN DE KEUZE VAN DE GEBRUIKER (v359, voorgesteld en daarna bevestigd):
    - structureel: het gewone bedrag (gemiddeld over de drie afgeronde maanden van maandVooruit()) is
      minstens structFactor keer het potje EN minstens structEuro erboven;
-   - loopt voor (herhaalt zich): deze maand minstens voorEuro meer uit dan gewoonlijk in dezelfde dagen;
+   - loopt voor (herhaalt zich): deze maand minstens voorEuro EN minstens voorDeel (25 procent) meer uit
+     dan gewoonlijk in dezelfde dagen; het percentage houdt een klein verschil op een groot potje stil;
    - boven het potje in de vorige maand: minstens VALTOP_DREMPEL_EUR erboven, dezelfde lat als het
      logboek (valtOpSignals);
    - nieuw deze maand: een tegenpartij die in nieuwMaanden niet voorkwam, met minstens nieuwEuro. */
-const INS_PATROON={structFactor:1.5, structEuro:50, voorEuro:10, nieuwEuro:50, nieuwMaanden:12};
+const INS_PATROON={structFactor:1.5, structEuro:50, voorEuro:10, voorDeel:0.25, nieuwEuro:50, nieuwMaanden:12};
 
+/* "Loopt voor" op een plek: minstens voorEuro EN minstens voorDeel meer dan gewoonlijk in dezelfde
+   dagen. Zonder gewoon bedrag (typisch nul) is elk euro oneindig veel procent, dus dan telt alleen het bedrag. */
+function insLooptVoor(x){ const d=x.uit-x.typisch;
+  return d>=INS_PATROON.voorEuro && (x.typisch<=0 || d>=x.typisch*INS_PATROON.voorDeel); }
 function insAfgerond(){ const nu=thisYM(); return months().filter(x=>x<nu); }
 function insSoort(){ const s=window._insSoort; return (s==='var'||s==='vast')?s:'alle'; }
 function insPeriode(){
@@ -17471,9 +17500,9 @@ function insTegelsNu(soort){
     const mocht=tp?(soort==='var'?tp.varNaar:(soort==='vast'?tp.vastTot:tp.mocht)):null;
     if(mocht!=null){ const d=uit-mocht;
       T.push({key:'uitgegeven', lab:'Uitgegeven', val:euro0(uit), waarde:uit, mocht,
-        ms:`tot vandaag ${soort==='vast'?'verwacht':'mocht'} ${euro0(mocht)} · ${d<0?`je zit ${euro0(-d)} eronder`:(d>0?`${euro0(d)} erboven`:'precies op je tempo')}`, st:d>0?'amb':'grn'});
+        ms:`tot vandaag ${soort==='vast'?'verwacht':'mocht'} ${euro0(mocht)} · ${d<0?`je zit ${euro0(-d)} eronder`:(d>0?`${euro0(d)} boven je tempo`:'precies op je tempo')}`, st:d>0?'amb':'grn'});
     } else { const bud=soort==='alle'?Math.round(T0.budget||0):0;
-      T.push({key:'uitgegeven', lab:'Uitgegeven', val:euro0(uit), waarde:uit, ms:bud>0?`van ${euro0(bud)} ${T0.potTotal>0?'budget':'inkomen-limiet'}`:'een tempo rekent Minder vanaf drie afgeronde maanden', st:bud>0?(uit>bud?'amb':'grn'):'gry'}); }
+      T.push({key:'uitgegeven', lab:'Uitgegeven', val:euro0(uit), waarde:uit, ms:bud>0?`van ${euro0(bud)} ${T0.potTotal>0?'budget':'inkomen-limiet'}${uit>bud?` · ${euro0(uit-bud)} boven je ${T0.potTotal>0?'budget':'inkomen-limiet'}`:''}`:'een tempo rekent Minder vanaf drie afgeronde maanden', st:bud>0?(uit>bud?'amb':'grn'):'gry'}); }
   }
   // Nog in potjes
   let VP=null; try{ VP=varPotjeStand(m); }catch(_){}
@@ -17519,7 +17548,8 @@ function insTegelsAf(P, soort){
   uit=Math.round(uit); bud=Math.round(bud);
   const wie=n===1?'':` in ${n} maanden`;
   T.push({key:'uitgegeven', lab:'Uitgegeven', val:euro0(uit), waarde:uit,
-    ms: n>1 ? `gemiddeld ${euro0(Math.round(uit/n))} per maand` : (bud>0?`van ${euro0(bud)} budget`:(soort==='alle'?'geen budget':`alleen ${INS_SOORTEN.find(x=>x.k===soort).l}`)),
+    /* v359: AMBER ALLEEN MET DE REDEN IN DE TEKST (keuze van de gebruiker): nooit kleur alleen. */
+    ms: (n>1 ? `gemiddeld ${euro0(Math.round(uit/n))} per maand` : (bud>0?`van ${euro0(bud)} budget`:(soort==='alle'?'geen budget':`alleen ${INS_SOORTEN.find(x=>x.k===soort).l}`)))+(bud>0&&uit>bud?` · ${euro0(uit-bud)} boven je budget`:''),
     st: bud>0 ? (uit>bud?'amb':'grn') : 'gry'});
   if(soort==='alle' && bud>0){ const d=bud-uit;
     T.push({key:'potjes', lab:d>=0?'Over in je potjes':'Boven je potjes', val:euro0(Math.abs(d)), waarde:d,
@@ -17661,7 +17691,7 @@ function insPatronen(soort){
   if(soort!=='vast') for(const x of V.potjes){ if(!(x.bud>0)) continue;
     const gew=Math.round((x.maanden||[]).reduce((a,v)=>a+v,0)/Math.max((x.maanden||[]).length,1));
     const vb=insVorigeBoven(x.k, prev), uz=insUitzondering(x.k, m);
-    const voor=x.uit-x.typisch>=INS_PATROON.voorEuro, achter=x.uit<x.typisch;
+    const voor=insLooptVoor(x), achter=x.uit<x.typisch;
     const potWoord=x.vastDeel>0?'het variabele deel van je potje':'je potje';
     const bron=[]; const logBron=vb&&vb.log?`het logboek van ${Pn}`:(vb?`je uitgaven van ${Pn}`:'');
     const verwacht=Math.round(x.overR);

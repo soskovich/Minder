@@ -34,7 +34,7 @@ test.describe('a · de tegels van 7 oktober', () => {
   test('boven het tempo is uitgegeven amber, en een potje boven zijn bedrag maakt potjes amber', async ({ page }) => {
     await open(page, { extraTx: [{ id: 'x1', date: '2026-10-06', amount: -800, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
     const T = await tegels(page);
-    expect(T[0].st).toBe('amb'); expect(T[0].ms).toMatch(/erboven$/);
+    expect(T[0].st).toBe('amb'); expect(T[0].ms).toMatch(/· €[\d.]+ boven je tempo$/);
     expect(T[1].st).toBe('amb');
   });
   test('het budget is uitgegeven plus nog in potjes plus nog te betalen (v327)', async ({ page }) => {
@@ -374,4 +374,64 @@ test.describe('k · hoogtes op 360 en 390px', () => {
       expect(r.kop.top + r.kop.h).toBeLessThanOrEqual(r.vouw);
     });
   }
+});
+
+/* v359, keuze van de gebruiker: AMBER OP UITGEGEVEN ALLEEN MET DE REDEN IN DE TEKST, nooit kleur alleen. Drie takken
+   kunnen amber geven (boven het tempo, zonder tempo boven het budget, en een afgesloten periode boven het budget), en
+   elk ervan staat hier in een stand die hem werkelijk amber maakt. */
+test.describe('l · amber op uitgegeven draagt zijn reden', () => {
+  const reden = /€[\d.]+ boven je (tempo|budget|inkomen-limiet)/;
+  test('boven het tempo: het bedrag boven je tempo staat in de tekst', async ({ page }) => {
+    await open(page, { extraTx: [{ id: 'x1', date: '2026-10-06', amount: -800, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
+    const t = await tegel(page, 'uitgegeven');
+    expect(t.st).toBe('amb'); expect(t.ms).toMatch(reden);
+    const r = await page.evaluate(() => { const T = insTegelsNu('alle').find((x) => x.key === 'uitgegeven'); return T.waarde - T.mocht; });
+    expect(t.ms).toContain(`€${r.toLocaleString('nl-NL')} boven je tempo`);
+  });
+  test('zonder tempo (minder dan drie afgeronde maanden): het bedrag boven je budget staat in de tekst', async ({ page }) => {
+    await open(page, { vanaf: '2026-08-01', extraTx: [{ id: 'x2', date: '2026-10-06', amount: -4000, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
+    const r = await page.evaluate(() => ({ tp: (() => { try { return insTempo(); } catch (_) { return null; } })(), b: Math.round(totals(thisYM()).budget) }));
+    expect(r.tp, 'deze stand heeft werkelijk geen tempo').toBeNull();
+    const t = await tegel(page, 'uitgegeven');
+    expect(t.st).toBe('amb'); expect(t.ms).toMatch(/^van €[\d.]+ budget · €[\d.]+ boven je budget$/);
+  });
+  test('een afgesloten maand boven zijn budget: het bedrag boven je budget staat in de tekst', async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => { SET.budgetHist = Object.assign({}, SET.budgetHist, { '2026-09': { boodschappen: 500 } }); save(); insFilterZet('vorige', null); });
+    const t = await tegel(page, 'uitgegeven');
+    expect(t.st).toBe('amb'); expect(t.ms).toBe('van €500 budget · €1.366 boven je budget');
+  });
+  test('geen enkele amber tegel uitgegeven zonder reden, in elke periode', async ({ page }) => {
+    await open(page, { extraTx: [{ id: 'x1', date: '2026-10-06', amount: -800, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
+    for (const per of ['nu', 'vorige', '3', '12']) for (const so of ['alle', 'var', 'vast']) {
+      await page.evaluate(([p, s]) => insFilterZet(p, s), [per, so]);
+      const t = await tegel(page, 'uitgegeven');
+      if (t.st === 'amb') expect(t.ms, per + '/' + so).toMatch(reden);
+    }
+  });
+});
+
+/* v359, keuze van de gebruiker: "loopt (weer) voor" is minstens EUR 10 EN minstens 25 procent meer dan gewoonlijk in
+   dezelfde dagen. */
+test.describe('m · loopt voor: tien euro en een kwart', () => {
+  test('de regel op een plek, met beide eisen en zonder gewoon bedrag alleen het bedrag', async ({ page }) => {
+    await open(page);
+    const r = await page.evaluate(() => [[110, 100], [124, 100], [125, 100], [19, 10], [20, 10], [10, 0], [9, 0]].map(([uit, typisch]) => insLooptVoor({ uit, typisch })));
+    expect(r).toEqual([false, false, true, false, true, true, false]);
+    expect(await page.evaluate(() => INS_PATROON.voorDeel)).toBe(0.25);
+  });
+  test('herhaalt zich valt weg als het verschil boven de tien euro maar onder een kwart ligt', async ({ page }) => {
+    await open(page);
+    const x = await page.evaluate(() => { const p = maandVooruit().potjes.find((y) => y.k === 'uiteten'); return { uit: p.uit, typisch: p.typisch, el: maandVooruit().el }; });
+    expect(await page.evaluate(() => insPatronen('alle').map((p) => p.soort + ':' + p.k))).toContain('herhaalt:uiteten');
+    // het gewone bedrag in dezelfde dagen ophogen tot uit/1,2: het verschil is dan een zesde, ruim boven EUR 10
+    const E = Math.ceil(x.uit / 1.2 - x.typisch);
+    expect(E).toBeGreaterThan(0);
+    const extra = ['2026-07', '2026-08', '2026-09'].map((m) => ({ id: 'ue' + m, date: m + '-02', amount: -E, name: 'Cafe De Zwaan', desc: 'BEA, BETAALPAS CAFE DE ZWAAN' }));
+    await open(page, { extraTx: extra });
+    const y = await page.evaluate(() => { const p = maandVooruit().potjes.find((q) => q.k === 'uiteten'); return { uit: p.uit, typisch: p.typisch, pat: insPatronen('alle').map((q) => q.soort + ':' + q.k) }; });
+    expect(y.uit - y.typisch, 'het verschil haalt de tien euro nog').toBeGreaterThanOrEqual(10);
+    expect(y.uit - y.typisch, 'maar niet het kwart').toBeLessThan(y.typisch * 0.25);
+    expect(y.pat).not.toContain('herhaalt:uiteten');
+  });
 });
