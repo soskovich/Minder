@@ -182,7 +182,10 @@ genoemde versietag.)*
   beslist of ze een patroon wordt of weg kan. DE LEK-REGEL STAAT OP GRIP ONDER LET OP (keuze van de gebruiker):
   `lekSignaal()` met de exclude-set van toen (`budgetFlaggedCats`), "<naam>: EUR X zonder potje", en de sheet erachter
   (`gripLekKaart()`) draagt spiegel, gevolg en de bestaande route naar het gesprek (`coStart('lek')`); met een
-  overschrijding blijft de ingang aan de chevron in de valt-op-sheet en staat er geen tweede lek-regel. OPEN PUNT `v352` IS SCHERPER: de budgeteditor heeft op Inzichten geen
+  overschrijding blijft de ingang aan de chevron in de valt-op-sheet en staat er geen tweede lek-regel. DE TERUGVAL "te weinig
+  ingesteld" (`v340`) telt de lek-regel net als een potje-signaal NIET mee in zijn poort, want een uitgave zonder potje
+  zegt niets over wat er is ingesteld; GEMETEN op de stand van 6 oktober gaat Grip daardoor van 525 naar 649px op 360
+  en 634 op 390 (de Let op-kaart met Uit eten zonder potje komt erbij, de terugval blijft). OPEN PUNT `v352` IS SCHERPER: de budgeteditor heeft op Inzichten geen
   ingang meer (de regel "van EUR X maandbudget" was er een); hij is nog bereikbaar via Instellingen, de maandafsluiting
   en de tijdlijn op Grip.
   DRIE DINGEN DIE DE MIGRATIE VAN DE SPECS VOND, en ze hadden gelijk: (1) ONDER NUL heet de tegel "Te veel uitgegeven"

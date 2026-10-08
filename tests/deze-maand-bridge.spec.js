@@ -330,7 +330,10 @@ test.describe('h. hoogte op 360 en 390px', () => {
   // eronder blijft: de kaart gaat van 348 naar 330px op 360 en van 309 naar 299 op 390, Grip van 602 naar 584 en van 564 naar 553 (gemeten).
   // v357: de kop is een regel (de uitkomst tegen het budget), de regel vaste lasten is weg en de bridge draagt zeven
   // kolommen: de kaart gaat van 330 naar 271px op 360 en van 299 naar 271 op 390, Grip van 584 en 553 naar 525 op beide (gemeten).
-  const NA = { 360: { kaart: 271, grip: 525 }, 390: { kaart: 271, grip: 525 } };
+  // v359: de lek-regel staat onder Let op (Uit eten zonder potje op deze stand), dus Grip krijgt die kaart erbij: de
+  // kaart Deze maand blijft 271px en Grip gaat van 525 naar 649 op 360 en naar 634 op 390 (gemeten; de terugval
+  // "te weinig ingesteld" blijft staan, want de lek-regel zegt niets over wat er is ingesteld).
+  const NA = { 360: { kaart: 271, grip: 649 }, 390: { kaart: 271, grip: 634 } };
   for (const w of [360, 390]) test('breedte ' + w, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await boot(page); await grip(page);

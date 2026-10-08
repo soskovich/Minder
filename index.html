@@ -8639,9 +8639,10 @@ function renderMaand(){
   const L=(function(){ try{ return gripLetOpItems(RO, SIG, BV); }catch(_){ return []; } })();
   /* De terugval staat er alleen als er niets is om in te stellen: geen tegel en geen ander signaal dan een
      potje boven zijn grens. Dat is de poort van v188 (regels, structurele signalen, contant, uitgesloten,
-     beleggen); een potje-signaal staat er ook dan bij, maar zegt niets over wat er is ingesteld. */
+     beleggen); een potje-signaal staat er ook dan bij, maar zegt niets over wat er is ingesteld. De lek-regel
+     (v359) ook niet: een uitgave zonder potje is eerder een teken dat er te weinig is ingesteld. */
   const raster=T.length?`<div class="kt-raster" id="gripTegels">${T.map(gripTegelHtml).join('')}</div>`:'';
-  const tegels=raster + (T.some(t=>!t.instel) || L.some(x=>x.soort!=='sig') ? '' : `<div class="card"><div class="small muted">Er is nog te weinig ingesteld${T.length?'':' om tegels te tonen'}. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`);
+  const tegels=raster + (T.some(t=>!t.instel) || L.some(x=>x.soort!=='sig'&&x.soort!=='lek') ? '' : `<div class="card"><div class="small muted">Er is nog te weinig ingesteld${T.length?'':' om tegels te tonen'}. <span style="color:var(--teal);cursor:pointer" onclick="go('set')">Naar Instellingen \u203a</span></div></div>`);
   $('#s-maand').innerHTML=`${tegels}${gripLetOpKaart(L)}${dezeMaandKaart()}${gripTijdlijn()}
     <div class="small" id="gripNaarLogboek" style="text-align:center;margin:14px 0 4px;color:var(--teal);cursor:pointer;font-weight:600" onclick="go('logboek')">Logboek \u203a</div>
     <div style="height:12px"></div>`;
