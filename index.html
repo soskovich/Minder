@@ -8361,8 +8361,8 @@ function potjeBijstelZet(k){
    je reserveringsrekening. Dan kan het potje naar de gewone maand.
    EEN POTJE ZONDER BETALING (geen gewone maand, geen post, geen herkende incasso, of een vast potje met "geen
    betaling verwacht") is geen gewoonte die je bijstelt maar een bedrag dat veranderde. Het krijgt geen voorstel
-   maar twee bestaande ingangen: een nieuw potje (waarin dit potje kan inleveren) en "Ander bedrag vanaf een
-   maand" (openPotForm). Er is geen aparte splits-route; er wordt er hier ook geen gebouwd (v61).
+   maar de bestaande ingang "Ander bedrag vanaf een maand" (openPotForm(k)). "Splitsen ›" komt hier bij zodra die
+   handeling bestaat; tot dan staat er geen knop zonder bestemming en wordt hier geen eigen splitsing gebouwd.
    HET VRIJE BEDRAG KRIJGT EEN BESTEMMING, in deze volgorde: de potjes die niet passen (aard 'pastniet' van
    maandVooruit()), sparen bovenop je spaarinleg, of je maandbudget verlagen. Opslaan kan pas als alles een plek
    heeft, en de schrijver eist dat zelf ook (v238). Hij leest alles opnieuw (v319).
@@ -8480,7 +8480,7 @@ function renderRuimBijstel(){
     if(p.geen) return `<div data-ruimpot="${esc(p.k)}" data-ruimgeen style="padding:10px 0;border-top:1px solid var(--line);opacity:.85">
       <div class="row" style="gap:8px"><span style="flex:1;font-weight:700;font-size:var(--fs-md)">${esc(p.naam)}</span><span style="font-weight:700">${euro0(p.bud)}</span></div>
       <div class="small muted" style="line-height:1.45;margin-top:2px">Geen betaling in ${esc(mn)}, en er wordt er geen verwacht. Dat is geen gewoonte die je bijstelt maar een bedrag dat veranderde.</div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px"><span class="small" data-ruimsplits style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openPotForm()">Splitsen in een nieuw potje ›</span><span class="small" data-ruimander style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openPotForm('${esc(p.k)}')">Ander bedrag vanaf een maand ›</span></div></div>`;
+      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px"><span class="small" data-ruimander style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openPotForm('${esc(p.k)}')">Ander bedrag vanaf een maand ›</span></div></div>`;
     const post=p.vloerMaand && p.vloerPosten.length && p.gewoonM<p.vloer
       ? `<div class="small" data-ruimpost style="line-height:1.45;margin-top:4px">In ${esc(ymFull(p.vloerMaand))} komt ${esc(opsomming(p.vloerPosten.map(x=>{ const q=p.posten.find(y=>y.naam===x.naam); return `${x.naam}, ${euro0(x.bedrag)} ${q?resIntervalLabel(ruimResInterval(q.intervalM)):''}`.trim(); })))}. Verlaag je het potje naar ${euro0(p.gewoonM)}, dan is ${esc(ymFull(p.vloerMaand))} niet gedekt.</div>` : '';
     const ch=[];

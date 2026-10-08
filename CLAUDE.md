@@ -137,9 +137,10 @@ genoemde versietag.)*
   zoals `uitgeslotenNaarRes()`, EN ze gaan in `SET.fixDueExcl`, want anders vragen ze dubbel: in "nog te betalen" en op
   je reserveringsrekening. Het potje gaat dan naar de gewone maand plus marge. `potjeMaandVloer()` kreeg daarvoor een
   vierde argument: een post die al gereserveerd is zet geen maand meer. EEN POTJE ZONDER BETALING (geen gewone maand,
-  geen post, geen herkende incasso, of een vast potje met `geen`) krijgt geen voorstel maar twee bestaande ingangen:
-  "Splitsen in een nieuw potje ›" (`openPotForm()`, waarin dit potje kan inleveren) en "Ander bedrag vanaf een maand ›"
-  (`openPotForm(k)`). ER BESTAAT GEEN SPLITS-ROUTE, en er is er geen gebouwd (`v61`): de mockup noemde hem.
+  geen post, geen herkende incasso, of een vast potje met `geen`) krijgt geen voorstel maar alleen de bestaande ingang
+  "Ander bedrag vanaf een maand ›" (`openPotForm(k)`). "SPLITSEN ›" KOMT HIER BIJ ZODRA DIE HANDELING ER IS (gevraagd
+  door de gebruiker, de volgende ronde): de mockup noemde hem, maar er bestaat nog geen splits-route, en tot dan staat er
+  geen knop zonder bestemming en geen eigen splitsing in deze sheet.
   HET VRIJE BEDRAG KRIJGT EEN BESTEMMING, in deze volgorde: de potjes die niet passen (aard `pastniet`, met potje en
   gewone maand), sparen bovenop je spaarinleg, of het maandbudget verlagen. Elk een veld met "de rest"; niets
   voorgekozen. OPSLAAN KAN PAS als er een maand is, elk potje een keuze heeft en het toegewezen bedrag precies het vrije
@@ -151,8 +152,8 @@ genoemde versietag.)*
   vooraf (`data-ruimgevolg`): de potjes oud en nieuw, de post in je reserveringen, sparen en het maandbudget.
   GEMETEN op de stand van de gebruiker (`ruim-bijstel-stand.js`): Verzekeringen EUR 335, gewoonlijk 164, december 324;
   het voorstel is 324 en met DELA naar de reserveringen 170. Met Vices +100 en sparen +65 vanaf november gaat het
-  maandbudget van 2.355 naar 2.290 en sparen van 2.200 naar 2.265. De sheet is 615px op 360 en 560 op 390 bij openen, en
-  1028/918px met alles ingevuld; hij scrollt, zonder overloop. DE ANDERE INGANGEN NAAR DE HELE BUDGETEDITOR, nagegaan
+  maandbudget van 2.355 naar 2.290 en sparen van 2.200 naar 2.265. De sheet is 593px op 360 en 538 op 390 bij openen, en
+  1006/896px met alles ingevuld; hij scrollt, zonder overloop. DE ANDERE INGANGEN NAAR DE HELE BUDGETEDITOR, nagegaan
   en niet omgezet: "Potjes en limiet instellen" onder de verdeling van je potjes (alle potjes), de coach-optie "Mijn
   maandbedrag verhogen" bij de buffer (een instelling, de spaarinleg), "Budget deze maand · stel in" zonder budget, en
   "Budget & doelen" in Instellingen. Geen van vier gaat over een potje. Nieuwe spec `grip-ruim-bijstel.spec.js`;

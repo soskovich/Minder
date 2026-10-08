@@ -68,15 +68,17 @@ test('d. niets is voorgekozen en opslaan staat uit', async ({ page }) => {
   expect(r).toEqual({ on: 0, vanaf: '', uit: true, best: false });
 });
 
-test('e. Huur zonder betaling krijgt geen voorstel maar de verwijzing naar splitsen en ander bedrag', async ({ page }) => {
+test('e. Huur zonder betaling krijgt geen voorstel, alleen Ander bedrag vanaf een maand (Splitsen bestaat nog niet)', async ({ page }) => {
   await boot(page); await open(page);
   const r = await page.evaluate(() => { const e = document.querySelector('[data-ruimpot="huur"]');
     return { geen: e.hasAttribute('data-ruimgeen'), keuzes: e.querySelectorAll('[data-ruimkeuze]').length,
-      splits: e.querySelector('[data-ruimsplits]').getAttribute('onclick'), ander: e.querySelector('[data-ruimander]').getAttribute('onclick'),
+      splits: !!e.querySelector('[data-ruimsplits]'), links: [...e.querySelectorAll('[onclick]')].length, ander: e.querySelector('[data-ruimander]').getAttribute('onclick'),
       t: e.innerText.replace(/\s+/g, ' ') }; });
   expect(r.geen).toBe(true);
   expect(r.keuzes).toBe(0);
-  expect(r.splits).toBe('openPotForm()');
+  expect(r.splits).toBe(false);   // geen knop zonder bestemming
+  expect(r.links).toBe(1);
+  expect(r.t).not.toContain('Splitsen');
   expect(r.ander).toBe("openPotForm('huur')");
   expect(r.t).toContain('Geen betaling in juli, augustus en september');
   await page.click('[data-ruimpot="huur"] [data-ruimander]');
