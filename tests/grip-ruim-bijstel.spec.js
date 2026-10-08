@@ -68,22 +68,30 @@ test('d. niets is voorgekozen en opslaan staat uit', async ({ page }) => {
   expect(r).toEqual({ on: 0, vanaf: '', uit: true, best: false });
 });
 
-// OMDRAAIEN ZODRA SPLITSEN BESTAAT (keuze van de gebruiker, zie de v358-regel in CLAUDE.md): dan eist deze test
-// precies twee ingangen bij een potje zonder betaling, "Splitsen ›" en "Ander bedrag vanaf een maand ›", en dat
-// "Splitsen ›" de nieuwe handeling opent met het bronpotje al gekozen.
-test('e. Huur zonder betaling krijgt geen voorstel, alleen Ander bedrag vanaf een maand (Splitsen bestaat nog niet)', async ({ page }) => {
+/* v360: OMGEDRAAID, zoals CLAUDE.md bij v358 vastlegde: Splitsen bestaat, dus een potje zonder betaling draagt
+   precies twee ingangen, "Splitsen ›" en "Ander bedrag vanaf een maand ›", en "Splitsen ›" opent de handeling
+   met het bronpotje al gekozen. */
+test('e. Huur zonder betaling krijgt geen voorstel, maar precies twee ingangen: Splitsen en Ander bedrag vanaf een maand', async ({ page }) => {
   await boot(page); await open(page);
   const r = await page.evaluate(() => { const e = document.querySelector('[data-ruimpot="huur"]');
     return { geen: e.hasAttribute('data-ruimgeen'), keuzes: e.querySelectorAll('[data-ruimkeuze]').length,
-      splits: !!e.querySelector('[data-ruimsplits]'), links: [...e.querySelectorAll('[onclick]')].length, ander: e.querySelector('[data-ruimander]').getAttribute('onclick'),
-      t: e.innerText.replace(/\s+/g, ' ') }; });
+      links: [...e.querySelectorAll('[onclick]')].map(x => x.innerText.trim()), ander: e.querySelector('[data-ruimander]').getAttribute('onclick'),
+      splits: e.querySelector('[data-ruimsplits]')?.getAttribute('onclick') || null, t: e.innerText.replace(/\s+/g, ' ') }; });
   expect(r.geen).toBe(true);
   expect(r.keuzes).toBe(0);
-  expect(r.splits).toBe(false);   // geen knop zonder bestemming
-  expect(r.links).toBe(1);
-  expect(r.t).not.toContain('Splitsen');
+  expect(r.links).toEqual(['Splitsen ›', 'Ander bedrag vanaf een maand ›']);
+  expect(r.splits).toBe("openSplits('huur')");
   expect(r.ander).toBe("openPotForm('huur')");
   expect(r.t).toContain('Geen betaling in juli, augustus en september');
+  /* Splitsen opent de handeling met Huur als bronpotje, en schrijft niets */
+  const voor = await page.evaluate(() => JSON.stringify([SET.budgets, SET.budgetsNext || {}, SET.budgetPlan || {}]));
+  await page.click('[data-ruimpot="huur"] [data-ruimsplits]');
+  const s = await page.evaluate(() => ({ bron: document.getElementById('splits')?.dataset.bron, kop: document.querySelector('#splits').innerText.split('\n')[0],
+    blijft: +document.getElementById('splitBlijft').dataset.splitblijft }));
+  expect(s).toEqual({ bron: 'huur', kop: 'Huur splitsen', blijft: 750 });
+  expect(await page.evaluate(() => JSON.stringify([SET.budgets, SET.budgetsNext || {}, SET.budgetPlan || {}]))).toBe(voor);
+  /* en de tweede ingang blijft het bestaande formulier */
+  await page.evaluate(() => openRuimBijstel());
   await page.click('[data-ruimpot="huur"] [data-ruimander]');
   expect(await tekst(page, '#potForm')).toContain('Huur: bedrag vanaf een maand');
 });
@@ -128,6 +136,7 @@ test('h. het gevolg vooraf, en na bijstellen: potjes vanaf november, DELA in de 
   await vul(page, 'pot:vices', 100); await vul(page, 'sparen', 65);
   expect(await tekst(page, '#ruimGevolg')).toBe('Vanaf november 2026: Verzekeringen €335 → €170 '
     + 'Dela Natura- en levensv €160 per kwartaal in je reserveringen, eerste termijn december 2026; telt niet meer in nog te betalen '
+    + 'Verzekeringen draagt Dela Natura- en levensv dan niet meer: €170 is je gewone maand zonder die post, die alleen nog in je reserveringen staat '   // v360
     + 'Vices €20 → €120 Sparen €2.200 → €2.265 per maand '
     + 'Je maandbudget gaat van €2.355 naar €2.290. Eerdere maanden veranderen niet. Een potje dat lager gaat wordt een afspraak.');
   await page.click('[data-ruimsave]');

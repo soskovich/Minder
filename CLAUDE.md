@@ -120,6 +120,59 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN POTJE SPLITS JE VANAF EEN MAAND, EEN BEDRAG KAN EEN SCHATTING ZIJN, EN EEN RESERVERING NEEMT HAAR BEDRAG PER
+  MAAND UIT HET POTJE** (`v360`, gevraagd door de gebruiker, mockup "potje splitsen"). GEMETEN VOORAF: een potje kon
+  alleen een ander bedrag krijgen of gearchiveerd worden, dus wie een deel van Huur naar Alimentatie zag gaan verlaagde
+  Huur en liet het verschil nergens hangen; en Alimentatie "nog niet vastgesteld" (`v351`) telt niet mee en kon niets
+  overnemen.
+  SPLITSEN (`openSplits(k)`, `splitVoorstel()`, `splitZet()`, `#splits`): per doel een regel met potje (elk bestaand
+  potje, ook een dat nog niet is vastgesteld, of "+ Nieuw" met naam en aard), bedrag, en "Vastgesteld" of "Een
+  schatting"; "+ nog een potje"; onderaan "Blijft voor <bron>" (`data-splitblijft`), dat niet onder nul kan (nul mag);
+  vanaf deze maand tot twaalf verder (`potMaandOpties()`). NIETS VOORGEKOZEN, openen en kiezen schrijven niets, en de
+  schrijver leest alles opnieuw en eist het zelf (`v319`/`v238`). Het maandbudget blijft per constructie gelijk: wat
+  er bij de doelen komt gaat van de bron af, via `potPlanZet()`, dus eerdere maanden veranderen niet (`SET.budgetHist`,
+  `v309`). Een doel met een bedrag krijgt `potPlanZet()` en is daarmee niet meer "nog niet vastgesteld"; het
+  bronpotje dat lager gaat wordt een afspraak (`potjeAfspraak()`, `v337`). INGANGEN: de sheet van het potje
+  (`data-potsplits`, boven "Ander bedrag"), een potje zonder betaling in Te ruime potjes (`data-ruimsplits`), de
+  sheet vaste lasten (`data-vastsplits`) en de sheet van een vast potje zonder betaling (`data-potjesplits`).
+  HET GEVOLG VOORAF (`splitGevolgHTML()`): de betrokken potjes oud en nieuw en het maandbudget; in de lopende maand
+  ook de bridge van Deze maand (`data-splitbrug`: een variabel potje met zijn verwachte verschil, een vaste last met
+  wat er verwacht wordt) en veilig te besteden (`data-splitsafe`), in het geheugen doorgerekend zonder `save()`
+  (`splitSimuleer()` op `potSimuleer()`); en is er in het bronpotje al meer uit dan het nieuwe bedrag, dan zegt
+  `data-splital` dat.
+  DE STAND "SCHATTING" (`SET.potSchat[k]={vanaf, op, bedrag, bron}`, `potSchat(k, ym)`, `potSchatTag()`): het bedrag
+  staat gewoon in `SET.budgets`, dus het telt mee in budget, veilig te besteden en vooruitblik, en waar het potje bij
+  naam staat staat "schatting" erbij (`.sch-tag`, een label en geen kleur): de verdeling, de budgeteditor, de sheet
+  van het potje, de sheets op Grip (potje, vaste lasten, ruimte) en het formulier. Komt er na het splitsen een boeking
+  in (`potSchatTx()`: datum vanaf `op`, maand vanaf `vanaf`), dan zegt Let op "<naam>: eerste betaling €X" met "je
+  schatting was €Y · bevestigen of aanpassen" (`soort:'schat'`, `potSchatKaart()`). BEVESTIGEN (`potSchatBevestig()`)
+  haalt de vlag weg en houdt het bedrag. AANPASSEN is het formulier van `v351` met `aanpas` en volgt de dekkingsregel:
+  hoger vraagt een ander potje of een bewuste verhoging (`v238`), LAGER VRAAGT WAAR HET VERSCHIL HEEN GAAT, naar een
+  potje (het bronpotje van de splitsing bovenaan) of het maandbudget omlaag, zonder voorkeuze. Elk bedrag uit dat
+  formulier maakt het potje vastgesteld. Archiveren wist de vlag.
+  "WORDT EEN RESERVERING" (`v330`) VERLAAGT MET WAT DE POST PER MAAND VRAAGT, VANAF EEN MAAND DIE JE KIEST:
+  `uitgeslotenPotjes()` draagt `perMaand` (bedrag door het interval van het schema, `uitgeslotenInterval()`) en het
+  voorstel is het potje min dat bedrag; `houdt` blijft wat de post deze maand vasthoudt, voor de kaart. GEMETEN waarom:
+  DELA EUR 160 per kwartaal is EUR 53 per maand, en een potje dat met de hele 160 omlaag gaat mist elke maand 107 die de
+  reservering niet opvangt. De sheet (`renderUitRes()`, `#uitRes`) draagt het vinkje (aan, en uit te zetten), een
+  maandkeuze zonder voorkeuze (`data-uitresvanaf`), en het gevolg met "samen €X, niet meer"; bevestigen kan pas met een
+  maand zolang het vinkje aan staat, en `uitgeslotenNaarRes(key, verlaag, vanaf)` verlaagt zonder maand niets. Tot de
+  gekozen maand staat het bedrag in het potje en de reservering, en dat staat erbij. DEZELFDE REGEL IN TE RUIME
+  POTJES: met de posten naar de reserveringen is het potje de gewone maand zonder die posten
+  (`potjeMaandVloer().gewoon`), en het gevolg zegt nu met zoveel woorden dat het potje de post niet meer draagt.
+  GEMETEN op de stand van de gebruiker (`ruim-bijstel-stand.js`, 6 oktober): Huur EUR 750 vanaf oktober in Huur 350,
+  Alimentatie 300 (schatting, vaste last) en Kinderen 100: maandbudget blijft EUR 2.355, Huur in de bridge van -750
+  naar -350, Alimentatie EUR 300 als vaste last, de uitkomst van rond EUR 1.028 naar rond EUR 1.328 (de alimentatie die
+  nu verwacht wordt), veilig te besteden blijft EUR 3.569, september onveranderd. Op de stand van `standkaart-sluit`
+  in december: Verzekeringen gaat met EUR 53 omlaag en potje plus reservering is het oude potje. De splitssheet is
+  623px leeg en 1111/1093px ingevuld op 360/390 (hij scrollt), de reserveringssheet 429px, zonder overloop; de sheet
+  vaste lasten blijft 491/455px, want "<naam> splitsen" staat naast "<naam> aanpassen" op een regel. Nieuwe specs
+  `potje-splitsen.spec.js` en `uitgesloten-reservering-maand.spec.js`; aangepast: `uitgesloten-reservering-bevestig`
+  (de maandkeuze), `grip-ruim-bijstel` e en h, en `standkaart-sluit` d5 (het voorstel bij Parkeergelden is het potje
+  min EUR 19 per maand en niet min de EUR 13 die het deze maand nog kon vasthouden: 696 in plaats van 702).
+  ZEVENTIEN SABOTAGES, ALLE ZEVENTIEN ROOD, een pas nadat de spec het geval droeg (meetles a): "een doel dat als
+  vastgesteld wordt gekozen wist zijn schatting niet" bleef groen tot test l een tweede splitsing naar een potje
+  deed dat al een schatting was.
 - **INZICHTEN OBSERVEERT, GRIP STUURT: EEN DASHBOARD ZONDER HANDELING** (`v359`, gevraagd door de gebruiker, mockup
   "Inzichten als dashboard" v8): `renderIns()` tekent een FILTER, de KPI-TEGELS, het KOP-INZICHT, de MAANDEN, de
   KEUZEKAART en de PATRONEN. Op Inzichten staat geen enkele handeling: een tik opent een sheet die laat zien waaruit
@@ -220,12 +273,9 @@ genoemde versietag.)*
   je reserveringsrekening. Het potje gaat dan naar de gewone maand plus marge. `potjeMaandVloer()` kreeg daarvoor een
   vierde argument: een post die al gereserveerd is zet geen maand meer. EEN POTJE ZONDER BETALING (geen gewone maand,
   geen post, geen herkende incasso, of een vast potje met `geen`) krijgt geen voorstel maar alleen de bestaande ingang
-  "Ander bedrag vanaf een maand ›" (`openPotForm(k)`). "SPLITSEN ›" KOMT HIER BIJ ZODRA DIE HANDELING ER IS (gevraagd
-  door de gebruiker, de volgende ronde): de mockup noemde hem, maar er bestaat nog geen splits-route, en tot dan staat er
-  geen knop zonder bestemming en geen eigen splitsing in deze sheet. DE RONDE DIE SPLITSEN BOUWT DRAAIT TEST e VAN
-  `grip-ruim-bijstel.spec.js` OM (keuze van de gebruiker): die eist nu dat er bij Huur geen "Splitsen" staat, en eist
-  daarna dat een potje zonder betaling PRECIES TWEE ingangen draagt, "Splitsen ›" en "Ander bedrag vanaf een maand ›",
-  en dat "Splitsen ›" de nieuwe handeling opent met het bronpotje al gekozen.
+  "Ander bedrag vanaf een maand ›" (`openPotForm(k)`). SINDS `v360` DRAAGT ZO'N POTJE PRECIES TWEE INGANGEN, "Splitsen ›"
+  (`openSplits(k)`, met het bronpotje al gekozen) en "Ander bedrag vanaf een maand ›"; test e van
+  `grip-ruim-bijstel.spec.js` is daarvoor omgedraaid, zoals de gebruiker bij `v358` vastlegde.
   HET VRIJE BEDRAG KRIJGT EEN BESTEMMING, in deze volgorde: de potjes die niet passen (aard `pastniet`, met potje en
   gewone maand), sparen bovenop je spaarinleg, of het maandbudget verlagen. Elk een veld met "de rest"; niets
   voorgekozen. OPSLAAN KAN PAS als er een maand is, elk potje een keuze heeft en het toegewezen bedrag precies het vrije
@@ -1126,7 +1176,7 @@ genoemde versietag.)*
   telregel, de lopende maand, de patroonkaart of de vraag op Grip. Twaalf sabotages, elf rood; de
   twaalfde was de poort hierboven, en die is daarom weggehaald.
 - **"WORDT EEN RESERVERING" TOONT BEIDE GEVOLGEN EN SCHRIJFT ZE MET EEN BEVESTIGING** (`v330`, keuze
-  van de gebruiker): de tik schrijft niets meer en opent een sheet (`uitgeslotenResSheet()`) met de post
+  van de gebruiker; SINDS `v360` vanaf een maand die je kiest en met het bedrag per maand, zie de regel bovenaan): de tik schrijft niets meer en opent een sheet (`uitgeslotenResSheet()`) met de post
   in je reserveringen (bedrag, interval, eerste termijn) EN het potje van volgende maand, verlaagd met
   wat deze post vasthoudt. "Bevestigen" schrijft allebei (`uitgeslotenNaarRes(key, verlaag)`).
   HET VERLAGEN STAAT AAN EN IS IN HETZELFDE SCHERM UIT TE ZETTEN; uit zegt de sheet dat het bedrag dan
@@ -6563,7 +6613,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v359` → `minder-v360`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v360` → `minder-v361`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6582,7 +6632,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358` en `v359` naar `minder-v359`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359` en `v360` naar `minder-v360`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

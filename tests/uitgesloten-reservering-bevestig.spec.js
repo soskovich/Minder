@@ -1,4 +1,6 @@
 // v330: 'Wordt een reservering' toont beide gevolgen voor de bevestiging, en schrijft ze samen.
+// v360: het verlagen geldt vanaf een maand die je kiest (niets voorgekozen), en het potje gaat omlaag met wat de
+// post per maand vraagt. Parkeergelden komt elke maand, dus dat is hier zijn hele bedrag (EUR 19).
 const { test, expect } = require('@playwright/test');
 const { bootStand } = require('./standkaart-sluit.fixture');
 
@@ -14,8 +16,10 @@ const openVervoer = page => page.evaluate(()=>{ go('maand'); renderMaand();
   const sh=document.getElementById('sheet');
   return {key:r.dataset.sleutel, P, tekst:sh.innerText,
     res:sh.querySelector('[data-gevolg="reservering"]')?.innerText||'', pot:sh.querySelector('[data-gevolg="potje"]')?.innerText||'',
-    vink:document.getElementById('uitResVerlaag')?.checked, dubbelZichtbaar:getComputedStyle(document.getElementById('uitResDubbel')).display!=='none'}; });
-const bevestig = page => page.evaluate(()=>[...document.querySelectorAll('#sheet button')].find(b=>b.innerText.trim()==='Bevestigen').click());
+    vink:document.getElementById('uitResVerlaag')?.checked, vanaf:sh.querySelector('[data-uitresvanaf]')?.value, save:sh.querySelector('[data-uitressave]').disabled}; });
+const kiesMaand = (page, ym) => page.evaluate(ym=>{ const e=document.querySelector('[data-uitresvanaf]'); e.value=ym||nextYM(thisYM()); e.dispatchEvent(new Event('change')); }, ym||null);
+const bevestig = async page => { if(await page.evaluate(()=>!!document.querySelector('[data-uitresvanaf]') && !document.querySelector('[data-uitresvanaf]').value)) await kiesMaand(page);
+  await page.evaluate(()=>[...document.querySelectorAll('#sheet button')].find(b=>b.innerText.trim()==='Bevestigen').click()); };
 
 test('a de tik opent een sheet met beide gevolgen, en schrijft niets', async ({page})=>{
   await bootStand(page);
@@ -25,15 +29,17 @@ test('a de tik opent een sheet met beide gevolgen, en schrijft niets', async ({p
   expect(s.res).toContain('€19');
   expect(s.res).toContain('maandelijks');
   expect(s.res).toContain('eerste termijn oktober 2026');
-  expect(s.pot).toContain('vanaf november');
-  expect(s.pot).toContain(`€${s.P.bud.toLocaleString('nl-NL')} naar €${s.P.voorstel.toLocaleString('nl-NL')}`);
-  expect(s.pot).toContain('€19 die deze post vasthoudt');
   expect(s.vink).toBe(true);
-  expect(s.dubbelZichtbaar).toBe(false);
+  expect(s.vanaf).toBe('');       // v360: geen maand voorgekozen, dus nog niet te bevestigen
+  expect(s.save).toBe(true);
+  expect(s.pot).toContain('€19 per maand die deze post vasthoudt');
+  await kiesMaand(page, '2026-11');
+  const pot=await page.evaluate(()=>document.querySelector('[data-gevolg="potje"]').innerText);
+  expect(pot).toContain('vanaf november');
+  expect(pot).toContain(`€${s.P.bud.toLocaleString('nl-NL')} naar €${s.P.voorstel.toLocaleString('nl-NL')}`);
   /* het vinkje omzetten schrijft ook niets, en toont wat er dan dubbel staat */
-  const uit=await page.evaluate(()=>{ const cb=document.getElementById('uitResVerlaag'); cb.click();
-    return {zicht:getComputedStyle(document.getElementById('uitResDubbel')).display!=='none', t:document.getElementById('uitResDubbel').innerText}; });
-  expect(uit.zicht).toBe(true);
+  const uit=await page.evaluate(()=>{ document.getElementById('uitResVerlaag').click();
+    return {t:document.querySelector('[data-uitresgevolg]').innerText}; });
   expect(uit.t).toContain('in je potje én in je reserveringen');
   expect(await page.evaluate(VELDEN)).toBe(voor);
   /* annuleren laat ook niets achter, en de regel staat er nog */
@@ -61,7 +67,7 @@ test('b een bevestiging schrijft de reservering en het lagere potje van volgende
   expect(r.plan).toBe(budVoor - 19);
   /* de regel zwijgt, en een tweede bevestiging maakt geen tweede reservering en verlaagt niet nog eens */
   expect(await page.evaluate(()=>uitgeslotenPotjes().some(x=>x.k==='vervoer'))).toBe(false);
-  const twee=await page.evaluate(k=>{ uitgeslotenNaarRes(k, true); return {n:resLijst().filter(x=>x.bron===k).length, next:SET.budgetsNext.vervoer}; }, s.key);
+  const twee=await page.evaluate(k=>{ uitgeslotenNaarRes(k, true, nextYM(thisYM())); return {n:resLijst().filter(x=>x.bron===k).length, next:SET.budgetsNext.vervoer}; }, s.key);
   expect(twee).toEqual({n:1, next:s.P.voorstel});
 });
 

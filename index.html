@@ -624,6 +624,8 @@ input[type=search],input[type=number]{width:100%;background:var(--card2);border:
 /* v317: een plek die de regel nu niet toelaat. Zichtbaar en niet aantikbaar, zoals een geblokkeerd
    pijltje dat was (v245): een plek weglaten zou de lijst korter maken en de reden verbergen. */
 .chip.off{opacity:.3;cursor:default}
+/* v360: de stand "schatting" van een potjebedrag. Een label en geen kleur: het is geen aandacht (v78/v93). */
+.sch-tag{display:inline-block;font-size:var(--fs-xs);font-weight:700;border-radius:var(--r-pill);padding:1px 7px;background:var(--card2);border:1px solid var(--line);color:var(--mut);vertical-align:1px;white-space:nowrap}
 .btn{display:block;width:100%;background:var(--teal);color:var(--on-accent);border:none;border-radius:var(--r-inner);padding:13px;font-size:var(--fs-md);font-weight:700;cursor:pointer;text-align:center}
 .btn:active{filter:brightness(1.1)}
 .btn.sec{background:transparent;border:1px solid var(--ln2);color:var(--txt);font-weight:600}
@@ -3605,7 +3607,7 @@ function openPotjesVerdeling(m, deel){
   const next = deel==='next' && isNow;   // de volgende-maand-lijst bestaat alleen naast de lopende maand
   const rij=(k,bedrag,sub)=>{ const c=CATS[k]||CATS.overig; return `<div class="tx" style="cursor:pointer" onclick="openPotje('${k}')">
     <div class="ava" style="background:var(--card2)">${c.icon||''}</div>
-    <div class="info"><div class="nm">${c.name}</div><div class="cat">${sub}</div></div>
+    <div class="info"><div class="nm">${c.name}${potSchatTag(k, next?nextYM(SET.budgetMonth||thisYM()):m)}</div><div class="cat">${sub}</div></div>
     <div class="amt" style="font-weight:700">${euro0(bedrag)}</div></div>`; };
   const kop=(l,v)=>`<div class="row" style="margin:16px 2px 4px"><span class="hlabel" style="margin:0;flex:1">${l}</span><span class="small muted">${euro0(v)}</span></div>`;
   const link=(txt,act)=>`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="${act}">${txt} ›</div>`;
@@ -6496,6 +6498,16 @@ function valtOpDagenRest(){ const d=daysElapsed(thisYM()); return Math.max(d.dim
    DE REGEL ZWIJGT na elk van de drie, en elk om een reden die in de gegevens staat en niet in een
    vlag van deze kaart: de uitsluiting is weg, het potje van volgende maand ligt lager, of er is een
    reservering met deze bron. Een reservering verwijderen brengt de regel dus terug. */
+/* v360: HET POTJE GAAT OMLAAG MET WAT DE POST PER MAAND VRAAGT, en niet met wat hij deze maand vasthoudt. Een
+   reservering spaart bedrag door interval per maand op (DELA EUR 160 per kwartaal is EUR 53 per maand); een potje
+   dat met de hele EUR 160 omlaag gaat, mist elke maand EUR 107 die de reservering niet opvangt. Met het bedrag
+   per maand tellen potje en reservering samen precies het oude potje. `houdt` blijft wat de post deze maand in
+   het potje vasthoudt, voor de zin op de kaart. */
+function uitgeslotenInterval(key, x){
+  let sc=null; try{ sc=recurringSchedule().find(s=>s.key===key&&s.type==='fixed'); }catch(_){}
+  const ivs=RES_INTERVAL.map(y=>y[0]).filter(y=>y>0), ivRuw=Math.max(Math.round(+((sc||x||{}).intervalM)||1),1);
+  return ivs.reduce((a,y)=>Math.abs(y-ivRuw)<Math.abs(a-ivRuw)?y:a, ivs[0]);
+}
 function uitgeslotenPotjes(){
   const ym=thisYM(); const BN=SET.budgetsNext||{}; const out=[];
   const bronnen=new Set(resLijst().map(x=>x&&x.bron).filter(Boolean));
@@ -6507,7 +6519,8 @@ function uitgeslotenPotjes(){
       const houdt=Math.round(Math.min(+x.amount||0, rest)); if(houdt<=0) continue;
       rest-=houdt;
       if(bronnen.has(x.key)) continue;
-      out.push({key:x.key, k:r.k, bud:r.bud, houdt, naam:x.name, voorstel:Math.max(r.bud-houdt,0)});
+      const iv=uitgeslotenInterval(x.key, x), perMaand=Math.round((+x.amount||0)/iv);
+      out.push({key:x.key, k:r.k, bud:r.bud, houdt, intervalM:iv, bedrag:Math.round(+x.amount||0), perMaand, naam:x.name, voorstel:Math.max(r.bud-perMaand,0)});
     }
   }
   return out;
@@ -6540,48 +6553,67 @@ function uitgeslotenTeltMee(key){
    reserveringen blijft staan. Openen en het vinkje omzetten schrijven niets (MECHANISM_SPEC.defaultEffect). */
 function uitgeslotenResSheet(key){
   const v=uitgeslotenResVoorstel(key); if(!v) return;
-  const P=uitgeslotenPotjes().find(x=>x.key===key)||null;
-  const kk=esc(String(key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
-  const vanaf=ymFull(nextYM(SET.budgetMonth||thisYM()));
+  const U=window._uitRes;
+  window._uitRes={key, verlaag:U&&U.key===key?U.verlaag:true, vanaf:U&&U.key===key?U.vanaf:null};
+  renderUitRes(); showSheetBg();
+}
+/* v360: het verlagen geldt vanaf een maand die je kiest (deze maand tot twaalf verder), en niets is voorgekozen:
+   zolang het verlagen aan staat en er geen maand is, kan er niet worden bevestigd. */
+function uitResZet(f, v){ const U=window._uitRes; if(!U) return; U[f]=v; renderUitRes(); }
+function uitResVoorstel(){
+  const U=window._uitRes||{}; const v=uitgeslotenResVoorstel(U.key); if(!v) return null;
+  const P=uitgeslotenPotjes().find(x=>x.key===U.key)||null, ms=potMaandOpties(), vanaf=ms.includes(U.vanaf)?U.vanaf:null;
+  const bud=P&&vanaf?Math.round(+budgetVoorMaand(vanaf)[P.k]||0):(P?P.bud:0);
+  const na=P?Math.max(bud-P.perMaand,0):0;
+  return {v, P, ms, vanaf, verlaag:!!(P&&U.verlaag), bud, na, klaar:!(P&&U.verlaag) || !!vanaf};
+}
+function renderUitRes(){
+  const U=window._uitRes||{}, R=uitResVoorstel(); if(!R){ closeSheet(); return; }
+  const {v, P}=R; const kk=esc(String(U.key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
   const c=P?(CATS[P.k]||{}):{}; const pn=P?esc(c.name||P.k):'';
   const term=`${ymFull(v.vervalmaand)} ${String(v.vervalmaand).slice(0,4)}`;
-  $('#sheet').innerHTML=`<div class="grab"></div>
+  const iv=resIntervalLabel(v.intervalM);
+  const perTekst=P&&P.intervalM>1?`${euro0(P.perMaand)} per maand (${euro0(P.bedrag)} ${iv})`:(P?`${euro0(P.perMaand)} per maand`:'');
+  const gev=!P?'':R.verlaag
+    ? (R.vanaf
+      ? `${euro0(R.bud)} naar ${euro0(R.na)} vanaf ${esc(ymKort(R.vanaf))}: min de ${perTekst} die deze post vasthoudt. Je potje en je reservering tellen samen ${euro0(R.na+P.perMaand)}, niet meer.${R.vanaf>thisYM()?` Tot ${esc(ymKort(R.vanaf))} blijft het potje ${euro0(P.bud)}.`:''}`
+      : `Min de ${perTekst} die deze post vasthoudt. Kies vanaf welke maand.`)
+    : `Het potje blijft ${euro0(P.bud)}. Dan staat ${perTekst} in je potje én in je reserveringen.`;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="uitRes" data-sleutel="${esc(U.key)}">
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:4px">${esc(v.naam)} wordt een reservering</div>
     <div class="small muted" style="margin-bottom:12px">Dit verandert er als je bevestigt.</div>
     <div data-gevolg="reservering" style="border-top:1px solid var(--line);padding:10px 0">
       <div style="font-weight:600;font-size:var(--fs-md)">In je reserveringen</div>
-      <div class="small" style="line-height:1.5;margin-top:3px">${esc(v.naam)} · ${euro0(v.bedrag)} · ${resIntervalLabel(v.intervalM)} · eerste termijn ${term}</div>
+      <div class="small" style="line-height:1.5;margin-top:3px">${esc(v.naam)} · ${euro0(v.bedrag)} · ${iv} · eerste termijn ${term}</div>
     </div>
-    ${P?`<label data-gevolg="potje" class="row" style="gap:9px;cursor:pointer;border-top:1px solid var(--line);padding:10px 0;align-items:flex-start"><input type="checkbox" id="uitResVerlaag" checked onchange="uitgeslotenResVerlaagToon()"><span style="flex:1"><span style="font-weight:600;font-size:var(--fs-md);display:block">Potje ${pn} verlagen vanaf ${vanaf}</span><span class="small" style="display:block;line-height:1.5;margin-top:3px">${euro0(P.bud)} naar ${euro0(P.voorstel)}, min de ${euro0(P.houdt)} die deze post vasthoudt. Deze maand blijft het potje ${euro0(P.bud)}.</span></span></label>
-    <div id="uitResDubbel" class="small" style="display:none;color:var(--mut2);line-height:1.5;padding:0 0 10px">Het potje blijft ${euro0(P.bud)}. Dan staat ${euro0(P.houdt)} volgende maand in je potje én in je reserveringen.</div>`:''}
-    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" style="flex:1" onclick="uitgeslotenNaarRes('${kk}')">Bevestigen</button><button class="btn sec" onclick="closeSheet()">Annuleren</button></div>`;
-  showSheetBg();
+    ${P?`<div data-gevolg="potje" style="border-top:1px solid var(--line);padding:10px 0">
+      <label class="row" style="gap:9px;cursor:pointer;align-items:flex-start"><input type="checkbox" id="uitResVerlaag"${R.verlaag?' checked':''} onchange="uitResZet('verlaag',this.checked)"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Potje ${pn} verlagen</span></label>
+      ${R.verlaag?`<select data-uitresvanaf onchange="uitResZet('vanaf',this.value||null)" style="width:100%;margin-top:8px"><option value="">Kies vanaf welke maand</option>${R.ms.map(ym=>`<option value="${ym}"${R.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>`:''}
+      <div class="small" id="uitResGevolg" data-uitresgevolg style="line-height:1.5;margin-top:6px;${R.verlaag?'':'color:var(--mut2)'}">${gev}</div></div>`:''}
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-uitressave style="flex:1"${R.klaar?'':' disabled'} onclick="uitgeslotenNaarRes('${kk}')">Bevestigen</button><button class="btn sec" onclick="window._uitRes=null;closeSheet()">Annuleren</button></div></div>`;
 }
-function uitgeslotenResVerlaagToon(){
-  const cb=document.getElementById('uitResVerlaag'), d=document.getElementById('uitResDubbel');
-  if(cb&&d) d.style.display=cb.checked?'none':'block';
-}
-/* De schrijver. Hij leest het voorstel en het potje OPNIEUW in plaats van wat de sheet toonde
-   (v319): tussen openen en bevestigen kan er een import binnenkomen. Het verlagen loopt via
-   dezelfde laag als savePotje() bij een bestaand potje (SET.budgetsNext, met potMetaNext op vast)
-   en voedt valtOpPotjeGewijzigd() net zo, dus de log ziet het als 'volgende maand anders'.
-   `verlaag` komt van het vinkje; zonder sheet (een rechtstreekse aanroep) verlaagt hij niets. */
-function uitgeslotenNaarRes(key, verlaag){
-  if(verlaag===undefined){ const cb=document.getElementById('uitResVerlaag'); verlaag=!!(cb&&cb.checked); }
-  if(resLijst().some(x=>x&&x.bron===key)){ try{ closeSheet(); }catch(_){}; return; }
+/* De schrijver. Hij leest het voorstel en het potje OPNIEUW in plaats van wat de sheet toonde (v319): tussen
+   openen en bevestigen kan er een import binnenkomen. Het verlagen loopt via potPlanZet() (v351), dus volgende
+   maand is SET.budgetsNext zoals bij savePotje() en voedt valtOpPotjeGewijzigd() net zo: de log ziet het als
+   'volgende maand anders'. `verlaag` en `vanaf` komen uit de sheet; een rechtstreekse aanroep zonder maand
+   verlaagt niets. */
+function uitgeslotenNaarRes(key, verlaag, vanaf){
+  const U=window._uitRes&&window._uitRes.key===key?window._uitRes:null;
+  if(verlaag===undefined){ verlaag=!!(U&&U.verlaag); if(vanaf===undefined) vanaf=U?U.vanaf:null; }
+  if(resLijst().some(x=>x&&x.bron===key)){ window._uitRes=null; try{ closeSheet(); }catch(_){}; return; }
   const v=uitgeslotenResVoorstel(key); if(!v) return;
   const P=verlaag ? uitgeslotenPotjes().find(x=>x.key===key) : null;
+  if(P && !potMaandOpties().includes(vanaf)) return;   // verlagen zonder maand: niets schrijven
+  const cur=potHuidigeMaand(), bud=P?Math.round(+budgetVoorMaand(vanaf)[P.k]||0):0, na=P?Math.max(bud-P.perMaand,0):0;
   const g=Object.assign({id:'r'+Date.now().toString(36)}, v);
   SET.reserveringen=resLijst().slice(); SET.reserveringen.push(g);
-  if(P){
-    SET.budgetsNext=SET.budgetsNext||{}; SET.budgetsNext[P.k]=P.voorstel;
-    SET.potMetaNext=SET.potMetaNext||{}; SET.potMetaNext[P.k]=null;
-  }
+  if(P) potPlanZet(P.k, vanaf, na);
   save();
-  if(P){ try{ valtOpPotjeGewijzigd(P.k, P.bud, P.voorstel, true); }catch(_){} }
+  if(P && vanaf<=nextYM(cur)){ try{ valtOpPotjeGewijzigd(P.k, bud, na, vanaf!==cur); }catch(_){} }
+  window._uitRes=null;
   try{ closeSheet(); }catch(_){}
   try{ render(); }catch(_){}; try{ renderMaand(); }catch(_){}
-  toast(`${ICON('check')} ${esc(v.naam)} staat in je reserveringen${P?`, potje ${esc((CATS[P.k]||{}).name||P.k)} ${euro0(P.voorstel)} vanaf ${ymFull(nextYM(SET.budgetMonth||thisYM()))}`:''}`);
+  toast(`${ICON('check')} ${esc(v.naam)} staat in je reserveringen${P?`, potje ${esc((CATS[P.k]||{}).name||P.k)} ${euro0(na)} vanaf ${ymKort(vanaf)}`:''}`);
 }
 function uitgeslotenPotjeVerlaag(k, key){
   const P=uitgeslotenPotjes().find(x=>x.k===k && (!key || x.key===key)); openPotje(k);
@@ -7683,6 +7715,8 @@ function gripLetOpItems(RO, SIG, BV){
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   try{ for(const k of potOpenLijst()){ const T=potOpenTx(k); if(!T.length) continue;
     L.push({soort:'potopen', naam:`${CATS[k].name}: nog geen bedrag`, sub:`${T.length} boeking${T.length===1?'':'en'} binnen, ${euro0(Math.round(-T.reduce((s,t)=>s+t.amount,0)))} · stel een bedrag in`, dot:'let op', act:`openPotForm('${k}')`}); } }catch(_){}   // v351: een potje zonder bedrag krijgt een boeking
+  try{ for(const k of potSchatLijst()){ const T=potSchatTx(k);   // v360: een schatting krijgt een boeking
+    L.push({soort:'schat', key:k, naam:`${CATS[k].name}: eerste betaling ${euro0(-Math.round(T[0].amount))}`, sub:`je schatting was ${euro0(potSchatBedrag(k))} · bevestigen of aanpassen`, dot:'let op', act:`openGripLetOp('schat','${esc(k)}')`}); } }catch(_){}
   try{ const A=potArchiefTx(); if(A.length) L.push({soort:'archief', naam:`${A.length} boeking${A.length===1?'':'en'} in een gearchiveerd potje`, sub:'kies waar ze horen', dot:'let op', act:'openPotArchiefWerk()'}); }catch(_){}   // v351
   /* DE BELANGRIJKSTE EERST: de status van de regel (tekort voor let op), en daarbinnen de volgorde
      waarin ze hierboven staan. Die volgorde is de bestaande rang van Grip: de terugblikken bovenaan
@@ -7731,6 +7765,7 @@ function renderGripLetOp(){
   try{
     if(G.soort==='sig'){ const s=(valtOpSignals(thisYM())||[]).find(x=>x.id===G.key); html=s?valtOpKaartOpen(s):''; }
     else if(G.soort==='lek') html=gripLekKaart();
+    else if(G.soort==='schat') html=potSchatKaart(G.key);
     else if(G.soort==='uit') html=uitgeslotenKaart();
     else if(G.soort==='contant') html=contantKaart();
     else if(G.soort==='accept') html=maandAcceptLus();
@@ -8005,11 +8040,11 @@ function renderGripVast(){
   if(!V || V.onbekend || !(V.vastePotjes||[]).length){ if(document.getElementById('gripVast')) closeSheet(); return; }
   const L=V.vastePotjes.slice().sort((a,b)=>(b.geen-a.geen) || Math.abs(b.overR)-Math.abs(a.overR) || (a.naam<b.naam?-1:1));
   const rij=x=>`<div class="row" data-vastpotje="${esc(x.k)}"${x.geen?' data-geen':''} style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripPotje('${esc(x.k)}','vast')">
-      <span style="flex:1;min-width:0"><span style="font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}</span><span class="small muted" style="display:block;margin-top:2px;line-height:1.4">${x.geen?`geen betaling verwacht deze maand · het potje telt mee`:`${x.uit?`${euro0(x.uit)} betaald`:''}${x.uit&&x.vast?' · ':''}${x.vast?`nog ${euro0(x.vast)} verwacht`:''}${x.gemengd?` · van je potje van ${euro0(x.potje)}, de rest is variabel`:` · potje ${euro0(x.bud)}`}`}</span></span>
+      <span style="flex:1;min-width:0"><span style="font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}${potSchatTag(x.k)}</span><span class="small muted" style="display:block;margin-top:2px;line-height:1.4">${x.geen?`geen betaling verwacht deze maand · het potje telt mee`:`${x.uit?`${euro0(x.uit)} betaald`:''}${x.uit&&x.vast?' · ':''}${x.vast?`nog ${euro0(x.vast)} verwacht`:''}${x.gemengd?` · van je potje van ${euro0(x.potje)}, de rest is variabel`:` · potje ${euro0(x.bud)}`}`}</span></span>
       <span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.eind)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
   const geen=L.filter(x=>x.geen);
   const vraag=geen.length?`<div class="small" data-vastvraag style="line-height:1.5;margin-top:10px">Voor ${esc(gripNamen(geen))} komt deze maand geen betaling. Is het bedrag veranderd, zet het potje dan op wat je nu betaalt, vanaf de maand dat het geldt; dan klopt je budget weer.</div>
-      ${geen.map(x=>`<button class="btn sec" data-vastaanpassen="${esc(x.k)}" style="width:auto;padding:8px 12px;font-size:13px;margin-top:8px" onclick="openPotForm('${esc(x.k)}')">${esc(x.naam)} aanpassen</button>`).join(' ')}`:'';
+      ${geen.map(x=>`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"><button class="btn sec" data-vastaanpassen="${esc(x.k)}" style="width:auto;padding:8px 12px;font-size:13px" onclick="openPotForm('${esc(x.k)}')">${esc(x.naam)} aanpassen</button>${splitMag(x.k)?`<button class="btn sec" data-vastsplits="${esc(x.k)}" style="width:auto;padding:8px 12px;font-size:13px" onclick="openSplits('${esc(x.k)}')">${esc(x.naam)} splitsen</button>`:''}</div>`).join('')}`:'';
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripVast" data-vasteind="${V.vaste.eind}" data-vastbudget="${V.vaste.budget}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Vaste lasten · ${esc(ymFull(V.m))}</div>
     <div class="small" data-vastuitleg style="line-height:1.5;margin-top:4px">${esc(vasteLastenZin(vasteLastenStand()))}</div>
@@ -8089,12 +8124,13 @@ function renderGripPotje(){
       ? `Er is deze maand niets betaald en er wordt geen incasso meer verwacht. Het potje van ${euro0(x.bud)} telt mee als verwachte vaste last.`
       : `${euro0(x.uit)} betaald in ${dagen} · nog te betalen ${euro0(x.vast)} · ${x.gemengd?`vast deel van je potje van ${euro0(x.potje)}`:`potje ${euro0(x.bud)}`}`;
     $('#sheet').innerHTML=`<div class="grab"></div><div id="gripPotje" data-potje="${esc(k)}" data-verschil="${d}" data-terug${x.geen?' data-geen':''}>
-      <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}</div>
+      <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}${potSchatTag(k)}</div>
       <div class="small" data-potjestand style="line-height:1.5;margin-top:6px">${stand}</div>
       ${x.geen||x.gemengd?'':`<div class="small" style="line-height:1.5;margin-top:4px">Verwacht deze maand ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>`}${gripJaarRegel(k)}
       ${x.gemengd?`<div class="small" data-gemengd style="line-height:1.5;margin-top:4px">De herkende incasso's zijn het vaste deel. De andere ${euro0(x.potje-x.bud)} van je potje is variabel en staat in de bridge met wat je er gewoonlijk uitgeeft.</div>`:''}
       <div class="small" data-potjewaarom style="line-height:1.5;margin-top:8px">${x.geen?'Geen betaling is geen besparing: is het bedrag veranderd, zet het potje dan op wat je nu betaalt, vanaf de maand dat het geldt.':'Een vaste last: het verwachte bedrag is wat er al betaald is plus de incasso\'s die deze maand nog komen. Een grens voor de rest van de maand past hier niet; het bedrag van het potje zelf kun je aanpassen.'}</div>
       <div class="small" data-potjeaanpassen style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:10px" onclick="openPotForm('${esc(k)}')">Potje aanpassen ›</div>
+      ${x.geen&&splitMag(k)?`<div class="small" data-potjesplits style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:8px" onclick="openSplits('${esc(k)}')">Splitsen ›</div>`:''}
       ${x.keuze?`<div class="small" data-potaardvraag="wisselend" style="color:var(--teal);cursor:pointer;font-weight:600;margin-top:8px" onclick="openPotAard('${esc(k)}')">Niet meer als vaste last tellen ›</div>`:''}
       <div class="small" data-allevast style="color:var(--teal);cursor:pointer;font-weight:600;padding-top:10px;margin-top:10px;border-top:1px solid var(--line)" onclick="openGripVast()">Alle vaste lasten ›</div></div>`;
     return;
@@ -8113,7 +8149,7 @@ function renderGripPotje(){
     doen=`<div class="small" data-potjeop style="line-height:1.5;margin-top:12px">Er zit niets meer in dit potje, dus een grens voor de rest van de maand kan niet.${x.aard==='pastniet'?' Bijstellen laat het potje vanaf volgende maand passen bij wat je gewoonlijk uitgeeft.':''}</div>${bij}`;
   }
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripPotje" data-potje="${esc(k)}" data-verschil="${d}">
-    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}</div>
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(x.naam)}${potSchatTag(k)}</div>
     <div class="small" data-potjestand style="line-height:1.5;margin-top:6px">${euro0(x.uit)} uitgegeven in ${dagen} · gewoonlijk ${euro0(x.typisch)} in dezelfde dagen · potje ${euro0(x.bud)}</div>
     <div class="small" style="line-height:1.5;margin-top:4px">Verwacht eind ${euro0(x.eind)}: ${gripVerschilTekst(d)} je potje.</div>${gripJaarRegel(k)}
     ${x.vastDeel>0?`<div class="small" data-gemengd style="line-height:1.5;margin-top:4px">Van je potje van ${euro0(x.potje)} is ${euro0(x.vastDeel)} vaste last (herkende incasso's). Deze stap gaat over de ${euro0(x.bud)} daarnaast.</div>`:''}
@@ -8158,7 +8194,7 @@ function renderGripRest(){
   const ruimRegel=ruim.length?`<div class="row" data-ruimer="${esc(ruim.map(x=>x.k).join(','))}" style="gap:8px;align-items:center;padding:9px 0;margin-top:8px;border-top:1px solid var(--line);cursor:pointer" onclick="gripRuimerBijstel()">
       <span class="small" style="flex:1;min-width:0;line-height:1.45">${esc(gripNamen(ruim))} ${ruim.length===1?'is':'zijn'} ruimer dan je gewoonlijk uitgeeft · <span style="color:var(--teal);font-weight:700">bijstellen ›</span></span></div>`:'';
   const rij=x=>`<div class="row" data-restpotje="${esc(x.k)}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripPotje('${esc(x.k)}')">
-      <span style="flex:1;min-width:0;font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}</span><span class="small" style="font-weight:700;white-space:nowrap">${brugTeken(x.d)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
+      <span style="flex:1;min-width:0;font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}${potSchatTag(x.k)}</span><span class="small" style="font-weight:700;white-space:nowrap">${brugTeken(x.d)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
   const ruimte=Br.rest<0;
   $('#sheet').innerHTML=`<div class="grab"></div><div id="gripRest" data-rest="${Br.rest}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${ruimte?'Ruimte in andere potjes':'Andere potjes'} · ${brugTeken(Br.rest)}</div>
@@ -8436,6 +8472,9 @@ function ruimBlok(id, P){
   if(P.vanaf){
     for(const p of P.pots) if(!p.geen && p.ok && p.naar!==p.bud) L.push(`${esc(p.naam)} ${euro0(p.bud)} → ${euro0(p.naar)}`);
     for(const p of P.pots) if(p.keuze==='res' && p.ok) for(const x of p.posten) L.push(`${esc(x.naam)} ${euro0(x.bedrag)} ${esc(resIntervalLabel(ruimResInterval(x.intervalM)))} in je reserveringen, eerste termijn ${esc(ymKort(ruimPostTermijn(x,P.vanaf)))}; telt niet meer in nog te betalen`);
+    /* v360: dezelfde regel als "Wordt een reservering": een post telt daarna niet in het potje en in de reservering
+       tegelijk. Het potje is je gewone maand zonder die post (potjeMaandVloer().gewoon), en dat staat erbij. */
+    for(const p of P.pots) if(p.keuze==='res' && p.ok && p.posten.length) L.push(`${esc(p.naam)} draagt ${esc(opsomming(p.posten.map(x=>x.naam)))} dan niet meer: ${euro0(p.naar)} is je gewone maand zonder ${p.posten.length===1?'die post':'die posten'}, die alleen nog in je reserveringen staa${p.posten.length===1?'t':'n'}`);
     for(const x of P.dests) if(x.soort==='pot' && x.bedrag>0) L.push(`${esc(x.naam)} ${euro0(x.bud)} → ${euro0(x.bud+x.bedrag)}`);
     const sp=P.dests.find(x=>x.id==='sparen').bedrag;
     if(sp>0) L.push(`Sparen ${euro0(P.spaar0)} → ${euro0(P.spaar1)} per maand${P.spaarVast?'':', als vast bedrag'}`);
@@ -8454,7 +8493,7 @@ function renderRuimBijstel(){
     if(p.geen) return `<div data-ruimpot="${esc(p.k)}" data-ruimgeen style="padding:10px 0;border-top:1px solid var(--line);opacity:.85">
       <div class="row" style="gap:8px"><span style="flex:1;font-weight:700;font-size:var(--fs-md)">${esc(p.naam)}</span><span style="font-weight:700">${euro0(p.bud)}</span></div>
       <div class="small muted" style="line-height:1.45;margin-top:2px">Geen betaling in ${esc(mn)}, en er wordt er geen verwacht. Dat is geen gewoonte die je bijstelt maar een bedrag dat veranderde.</div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px"><span class="small" data-ruimander style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openPotForm('${esc(p.k)}')">Ander bedrag vanaf een maand ›</span></div></div>`;
+      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px">${splitMag(p.k)?`<span class="small" data-ruimsplits style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openSplits('${esc(p.k)}')">Splitsen ›</span>`:''}<span class="small" data-ruimander style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openPotForm('${esc(p.k)}')">Ander bedrag vanaf een maand ›</span></div></div>`;
     const post=p.vloerMaand && p.vloerPosten.length && p.gewoonM<p.vloer
       ? `<div class="small" data-ruimpost style="line-height:1.45;margin-top:4px">In ${esc(ymFull(p.vloerMaand))} komt ${esc(opsomming(p.vloerPosten.map(x=>{ const q=p.posten.find(y=>y.naam===x.naam); return `${x.naam}, ${euro0(x.bedrag)} ${q?resIntervalLabel(ruimResInterval(q.intervalM)):''}`.trim(); })))}. Verlaag je het potje naar ${euro0(p.gewoonM)}, dan is ${esc(ymFull(p.vloerMaand))} niet gedekt.</div>` : '';
     const ch=[];
@@ -14250,7 +14289,7 @@ function renderPotSheet(k){
   else if(d.type==='week') fields=`<label class="fld">Bedrag per week (€)</label><input type="number" min="0" inputmode="numeric" value="${d.per??''}" oninput="potDraftSet('per',this.value)" style="width:100%">`;
   else fields=`<label class="fld">Maandbudget (€)</label><input type="number" min="0" inputmode="numeric" value="${d.vast??''}" oninput="potDraftSet('vast',this.value)" style="width:100%">`;
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">${c.icon||''} ${c.name}-potje</div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">${c.icon||''} ${c.name}-potje${potSchatTag(k)}</div>
     <div class="small muted" style="margin-bottom:12px">${sp>0?`Deze maand al ${euro0(sp)} besteed. `:''}Waarop baseer je dit potje?</div>
     <div class="chips" style="margin:0 0 12px">${chip('freq','Aantal keer')}${chip('week','Per week')}${chip('vast','Vast bedrag')}</div>
     ${fields}
@@ -14271,6 +14310,8 @@ function potSheetExtra(k, exists){
   const link=(attr,act,t)=>`<div class="small" ${attr} style="margin-top:10px;text-align:center;cursor:pointer;color:var(--teal);font-weight:600" onclick="${act}">${t} \u203a</div>`;
   return `${pl.length?`<div class="small muted" data-potplan style="margin-top:10px">Gepland: ${esc(pl.map(x=>`${ymKort(x.ym)} ${euro0(x.bedrag)}`).join(', '))}</div>`:''}
     ${A?`<div class="small muted" data-potarch style="margin-top:10px">Gearchiveerd vanaf ${esc(ymKort(A.vanaf))}. <span style="color:var(--teal);cursor:pointer" onclick="potArchiefTerug('${esc(k)}');openPotje('${esc(k)}')">Terughalen</span></div>`:''}
+    ${potSchat(k)?`<div class="small muted" data-potschatstand style="margin-top:10px;line-height:1.45">Een schatting: telt mee in je budget. Komt er een boeking in binnen, dan vraagt Minder om te bevestigen of aan te passen. <span style="color:var(--teal);cursor:pointer" onclick="potSchatBevestig('${esc(k)}')">Nu bevestigen</span></div>`:''}
+    ${splitMag(k)&&!A?link('data-potsplits',`openSplits('${esc(k)}')`,'Splitsen'):''}
     ${link('data-potvanaf',`openPotForm('${esc(k)}')`,'Ander bedrag vanaf een maand die je kiest')}
     ${potIsOpen(k)?potOpenRegel(k):''}
     ${(exists||pl.length||potIsOpen(k))&&!A?link('data-potarchief',`openPotArchief('${esc(k)}')`,'Archiveren'):''}
@@ -14431,6 +14472,7 @@ function potArchiveer(k, vanaf){
   if(!CATS[k] || !vanaf || vanaf<potHuidigeMaand()) return false;
   SET.potArchief=SET.potArchief||{}; SET.potArchief[k]={vanaf, op:vandaagYMD()};
   if(SET.potOpen) delete SET.potOpen[k];
+  if(SET.potSchat) delete SET.potSchat[k];   // v360
   potPlanZet(k, vanaf, 0);
   const P=SET.budgetPlan||{}; for(const p in P) if(p>vanaf && P[p][k]!=null) delete P[p][k];
   save(); return true;
@@ -14538,9 +14580,20 @@ function potFormVoorstel(d){
     if(P.bron==='dek' && !P.kand.some(x=>x.k===P.dek)) P.dek=null;
     P.tot1 = P.bron==='verhoog' ? P.tot0+P.meer : P.tot0;
     P.klaar = catKlaar && (P.bron==='verhoog' || (P.bron==='dek' && !!P.dek));
+  } else if(d.aanpas && P.meer<0){
+    /* v360: een schatting aanpassen volgt de dekkingsregel ook naar beneden: het verschil gaat terug naar een
+       potje (het bronpotje van de splitsing bovenaan) of je maandbudget omlaag. Niets voorgekozen. */
+    const bron=((SET.potSchat||{})[k]||{}).bron;
+    P.aanpas=true;
+    P.terug=Object.keys(B).filter(x=>x!==k && +B[x]>0 && CATS[x] && CATS[x].type==='expense' && !geenNorm(x) && !potGearchiveerd(x,vanaf))
+      .map(x=>({k:x, naam:CATS[x].name, bud:Math.round(+B[x])}))
+      .sort((a,b)=>((b.k===bron)-(a.k===bron)) || a.naam.localeCompare(b.naam,'nl'));
+    if(P.bron==='naar' && !P.terug.some(x=>x.k===P.dek)) P.dek=null;
+    P.tot1 = P.bron==='naar' ? P.tot0 : P.tot0+P.meer;
+    P.klaar = catKlaar && (P.bron==='verlaag' || (P.bron==='naar' && !!P.dek));
   } else {
     P.tot1=P.tot0+P.meer;
-    P.klaar = catKlaar && P.meer<0;
+    P.klaar = catKlaar && (P.meer<0 || (!!d.aanpas && P.meer===0));
   }
   return P;
 }
@@ -14565,12 +14618,22 @@ function openPotForm(k){
   renderPotForm(); showSheetBg();
 }
 function potFormZetVeld(f, v, her){ const d=window._potForm=window._potForm||{}; d[f]=v;
-  if(f==='bron' && v!=='dek') d.dek=null;
+  if(f==='bron') d.dek=null;
   if(f==='open'){ d.bedrag=null; d.vanaf=null; d.bron=null; d.dek=null; if(!v){ d.res=null; d.schat=null; d.resMaand=null; } }
   if(f==='res' && v!=='ja'){ d.schat=null; d.resMaand=null; }
   if(her!==false) renderPotForm(); else { const g=document.getElementById('potFormGevolg'); if(g) g.outerHTML=potFormGevolgHTML(); const s=document.querySelector('[data-potformsave]'); if(s) s.disabled=!potFormVoorstel().klaar; const b=document.getElementById('potFormBron'); if(b) b.outerHTML=potFormBronHTML(); } }
 function potFormBronHTML(){
   const P=potFormVoorstel();
+  if(P.aanpas && P.meer<0){
+    const chipT=(v,l)=>`<span class="chip ${P.bron===v?'on':''}" data-potbron="${v}" onclick="potFormZetVeld('bron','${v}')">${l}</span>`;
+    const rijT=x=>`<div class="tx" data-potterug="${esc(x.k)}" style="cursor:pointer${P.dek===x.k?';outline:1px solid var(--teal);border-radius:8px':''}" onclick="potFormZetVeld('dek','${esc(x.k)}')">
+      <div class="ava" style="background:var(--card2)">${CATS[x.k].icon||''}</div>
+      <div class="info"><div class="nm">${esc(x.naam)}${potSchatTag(x.k, P.vanaf)}</div><div class="cat">potje ${euro0(x.bud)} wordt ${euro0(x.bud-P.meer)}</div></div>
+      <div class="amt" style="color:var(--teal)">${P.dek===x.k?'gekozen':'kies'}</div></div>`;
+    return `<div id="potFormBron"><label class="fld">Waar gaan de ${euro0(-P.meer)} heen</label>
+      <div class="chips wrap">${chipT('naar','Naar een ander potje')}${chipT('verlaag','Maandbudget verlagen')}</div>
+      ${P.bron==='naar'?P.terug.map(rijT).join(''):''}</div>`;
+  }
   if(!(P.meer>0)) return '<div id="potFormBron"></div>';
   const chip=(v,l)=>`<span class="chip ${P.bron===v?'on':''}" data-potbron="${v}" onclick="potFormZetVeld('bron','${v}')">${l}</span>`;
   const rij=x=>`<div class="tx" data-potdek="${esc(x.k)}" style="cursor:pointer${P.dek===x.k?';outline:1px solid var(--teal);border-radius:8px':''}" onclick="potFormZetVeld('dek','${esc(x.k)}')">
@@ -14620,7 +14683,11 @@ function potFormGevolgHTML(){
   else if(!P.vanaf || P.bedrag==null) t='';
   else {
     const Vn=esc(ymKort(P.vanaf)), n=esc(P.naam||'Het nieuwe potje');
-    if(P.meer<0) t=`Vanaf ${Vn} gaat ${n} van ${euro0(P.van)} naar ${euro0(P.bedrag)}. Je maandbudget gaat van ${euro0(P.tot0)} naar ${euro0(P.tot1)}. Eerdere maanden blijven zoals ze waren.`+potLagerGevolg(P);
+    if(P.meer<0 && P.aanpas && P.bron==='naar' && P.dek){ const D=P.terug.find(x=>x.k===P.dek);
+      t=`Vanaf ${Vn} gaat ${n} van ${euro0(P.van)} naar ${euro0(P.bedrag)}, vastgesteld, en gaat ${esc(D.naam)} van ${euro0(D.bud)} naar ${euro0(D.bud-P.meer)}. Je maandbudget blijft ${euro0(P.tot0)}. Eerdere maanden blijven zoals ze waren.`; }
+    else if(P.meer<0 && P.aanpas && P.bron!=='verlaag') t=`Nog een plek kiezen voor ${euro0(-P.meer)}: terug naar een potje of je maandbudget omlaag.`;
+    else if(P.meer<0) t=`Vanaf ${Vn} gaat ${n} van ${euro0(P.van)} naar ${euro0(P.bedrag)}${P.aanpas?', vastgesteld':''}. Je maandbudget gaat van ${euro0(P.tot0)} naar ${euro0(P.tot1)}. Eerdere maanden blijven zoals ze waren.`+potLagerGevolg(P);
+    else if(P.meer===0 && P.aanpas) t=`${n} blijft vanaf ${Vn} ${euro0(P.bedrag)}, nu vastgesteld.`;
     else if(P.meer===0) t=P.nieuweCat?'Een potje van nul is geen potje.':`${n} staat vanaf ${Vn} al op ${euro0(P.bedrag)}.`;
     else if(P.bron==='dek' && P.dek){ const D=P.kand.find(x=>x.k===P.dek);
       t=`Vanaf ${Vn} gaat ${n} van ${euro0(P.van)} naar ${euro0(P.bedrag)} en levert ${esc(D.naam)} ${euro0(P.meer)} in: van ${euro0(D.bud)} naar ${euro0(D.bud-P.meer)}. Je maandbudget blijft ${euro0(P.tot0)}.`; }
@@ -14660,7 +14727,7 @@ function renderPotForm(){
   let catBlok='';
   if(vast){ const c=CATS[P.k];
     catBlok=`<div style="font-weight:800;font-size:var(--fs-lg)">${c.icon||''} ${esc(c.name)}: bedrag vanaf een maand</div>
-      <div class="small muted" style="margin:4px 0 10px">${potIsOpen(P.k)?'Nu nog niet vastgesteld.':`Nu ${euro0(+(SET.budgets||{})[P.k]||0)} per maand.`} Eerdere maanden veranderen niet.</div>`;
+      <div class="small muted" style="margin:4px 0 10px">${potIsOpen(P.k)?'Nu nog niet vastgesteld.':`Nu ${euro0(+(SET.budgets||{})[P.k]||0)} per maand${potSchat(P.k)?', een schatting':''}.`} Eerdere maanden veranderen niet.${P.aanpas?(()=>{ const T=potSchatTx(P.k); return T.length?` De eerste betaling was ${euro0(-Math.round(T[0].amount))}.`:''; })():''}</div>`;
   } else {
     const ks=potFormCatKeuzes();
     catBlok=`<div style="font-weight:800;font-size:var(--fs-lg)">Nieuw potje</div>
@@ -14697,8 +14764,12 @@ function potFormZet(){
   if(P.nieuweCat){ k=eigenCatMaak(P.naam, (window._potForm||{}).aard); if(!k) return; }
   const D=P.meer>0 && P.bron==='dek' ? P.kand.find(x=>x.k===P.dek) : null;
   if(P.meer>0 && P.bron==='dek' && !D) return;
+  const T=P.aanpas && P.meer<0 && P.bron==='naar' ? P.terug.find(x=>x.k===P.dek) : null;
+  if(P.aanpas && P.meer<0 && P.bron==='naar' && !T) return;
   const cur=potHuidigeMaand(), voor=+(SET.budgets||{})[k]||0;
   potPlanZet(k, P.vanaf, P.bedrag);
+  if(SET.potSchat && SET.potSchat[k]) delete SET.potSchat[k];   // v360: een bedrag uit dit formulier is vastgesteld
+  if(T) potPlanZet(T.k, P.vanaf, T.bud-P.meer);
   if(D){ potPlanZet(D.k, P.vanaf, D.bud-P.meer); try{ potjeAfspraak(D.k, D.bud-P.meer, P.vanaf); }catch(_){} }
   if(P.meer<0 && !P.nieuweCat){ try{ potjeAfspraak(k, P.bedrag, P.vanaf); }catch(_){} }
   save();
@@ -14708,6 +14779,209 @@ function potFormZet(){
   if(P.nieuweCat){ openCatKandidaten(k, true); render(); }
   else { closeSheet(); render(); }
   toast(`${ICON('check')} ${naam} ${euro0(P.bedrag)} vanaf ${ymKort(P.vanaf)}`);
+}
+
+/* ===== EEN POTJE SPLITSEN, EN DE STAND "SCHATTING" (v360) =====
+   Gevraagd door de gebruiker, mockup "potje splitsen". GEMETEN VOOR DEZE RONDE: een potje kon alleen een ander
+   bedrag krijgen of gearchiveerd worden. Wie een deel van zijn huur naar alimentatie zag gaan, verlaagde Huur en
+   dan hing het verschil nergens: het maandbudget leek ruimer dan het was, en een potje "nog niet vastgesteld"
+   (v351) telt niet mee, dus het kon niets uit Huur overnemen.
+   SPLITSEN VERDEELT EEN DEEL VAN EEN BRONPOTJE OVER EEN OF MEER DOELEN, vanaf een maand die je kiest (deze
+   maand tot twaalf verder, potMaandOpties()). Per doel: welk potje (elk bestaand potje, een potje dat nog niet
+   is vastgesteld, of een nieuw), het bedrag, en of dat bedrag vastgesteld is of een schatting. Wat het bronpotje
+   overhoudt staat onderaan en kan niet onder nul. Het maandbudget blijft per constructie gelijk: wat er bij de
+   doelen bijkomt gaat van de bron af. Niets is voorgekozen; openen en kiezen schrijven niets
+   (MECHANISM_SPEC.defaultEffect). De schrijver leest alles opnieuw (v319) en eist zelf dat het klopt (v238).
+   Eerdere maanden veranderen niet: die staan bewaard (v309, maandPotjes()) en potPlanZet() raakt alleen vanaf.
+   DE STAND "SCHATTING" is de derde stand van een potjebedrag, naast vastgesteld en nog niet vastgesteld (v351).
+   SET.potSchat[k]={vanaf, op, bedrag, bron}. Een schatting staat in SET.budgets en telt dus mee in je budget, in
+   veilig te besteden en in de vooruitblik; potSchatTag() zet er overal waar het potje met naam staat "schatting"
+   bij. Komt er na het splitsen (op of na `op`, in een maand vanaf `vanaf`) een boeking in die categorie, dan
+   vraagt Grip onder Let op om te bevestigen of aan te passen (potSchatTx()). Bevestigen maakt het bedrag
+   vastgesteld. Aanpassen is het formulier van v351 (openPotForm), en dat volgt de dekkingsregel: hoger vraagt een
+   ander potje dat inlevert of een bewuste verhoging (v238); lager vraagt waar het verschil heen gaat, terug naar
+   een potje of het maandbudget omlaag, met het bronpotje van de splitsing bovenaan. */
+function potSchatMaand(ym){ return ym||thisYM(); }
+function potSchat(k, ym){
+  const S=(SET.potSchat||{})[k]; if(!S || !CATS[k] || potGearchiveerd(k, ym)) return false;
+  return String(S.vanaf||'')<=potSchatMaand(ym);
+}
+function potSchatTag(k, ym){
+  return potSchat(k, ym)?` <span class="sch-tag" data-schatting="${esc(k)}">schatting</span>`:'';
+}
+/* De boekingen die de schatting toetsen: in die categorie, na het moment van splitsen en in een maand waarin de
+   schatting geldt. Een eigen keuze voor die categorie telt ook, want dat is precies hoe een alimentatie-
+   overboeking erin komt. */
+function potSchatTx(k){
+  const S=(SET.potSchat||{})[k]; if(!S || !potSchat(k)) return [];
+  let L=[]; try{ L=telbareTx(); }catch(_){ L=TX; }
+  return L.filter(t=>catOf(t)===k && t.amount<0 && String(t.date)>=S.op && String(t.date).slice(0,7)>=S.vanaf)
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+}
+function potSchatLijst(){ return Object.keys(SET.potSchat||{}).filter(k=>potSchat(k) && potSchatTx(k).length); }
+function potSchatBedrag(k){ const v=Math.round(+(budgetVoorMaand(thisYM())[k])||0); return v>0?v:Math.round(+((SET.potSchat||{})[k]||{}).bedrag||0); }
+function potSchatKaart(k){
+  const T=potSchatTx(k); if(!T.length || !CATS[k]) return '';
+  const t=T[0], b=-Math.round(t.amount), sch=potSchatBedrag(k), n=esc(CATS[k].name);
+  const dag=(()=>{ try{ return new Date(t.date+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'long'}); }catch(_){ return t.date; } })();
+  return `<div data-schatkaart="${esc(k)}"><div style="font-weight:800;font-size:var(--fs-lg)">${n}: eerste betaling ${euro0(b)}</div>
+    <div class="small" style="line-height:1.5;margin-top:6px">Je schatting was ${euro0(sch)} per maand. De eerste betaling was ${euro0(b)} op ${esc(dag)}${T.length>1?`, en daarna kwamen er nog ${T.length-1}`:''}.</div>
+    <div class="small" style="line-height:1.5;margin-top:4px;color:var(--mut2)">Bevestigen houdt ${euro0(sch)} en maakt het een vastgesteld bedrag. Aanpassen zet het potje op wat je nu betaalt; wat er vrijkomt of bij moet volgt de dekkingsregel.</div>
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-schatbevestig style="flex:1" onclick="potSchatBevestig('${esc(k)}')">${euro0(sch)} bevestigen</button><button class="btn sec" data-schataanpas style="flex:1" onclick="potSchatAanpas('${esc(k)}')">Aanpassen</button></div></div>`;
+}
+function potSchatBevestig(k){
+  if(!(SET.potSchat||{})[k]) return;
+  delete SET.potSchat[k]; save();
+  try{ closeSheet(); }catch(_){}; render();
+  toast(`${ICON('check')} ${CATS[k].name}: vastgesteld`);
+}
+function potSchatAanpas(k){
+  window._potForm={cat:k, vast:true, aanpas:true};
+  renderPotForm(); showSheetBg();
+}
+
+/* ---- het formulier ---- */
+function splitMag(k){ return !!(CATS[k] && CATS[k].type==='expense' && !geenNorm(k) && !potGearchiveerd(k) && Math.round(+budgetVoorMaand(potHuidigeMaand())[k]||0)>0); }
+function openSplits(k){
+  if(!splitMag(k)) return;
+  window._split={bron:k, vanaf:null, regels:[{doel:null, naam:'', aard:null, bedrag:'', stand:null}]};
+  renderSplits(); showSheetBg();
+}
+function splitDoelOpties(bron, ref){
+  const B=budgetVoorMaand(ref);
+  const ks=Object.keys(CATS).filter(k=>k!==bron && CATS[k].type==='expense' && !geenNorm(k) && !potGearchiveerd(k, ref) && (+B[k]>0 || potIsOpen(k)));
+  return ks.sort((a,b)=>CATS[a].name.localeCompare(CATS[b].name,'nl'));
+}
+function splitVoorstel(d){
+  d=d||window._split||{}; const k=d.bron; if(!CATS[k]) return null;
+  const cur=potHuidigeMaand(), ms=potMaandOpties(), vanaf=ms.includes(d.vanaf)?d.vanaf:null, ref=vanaf||cur;
+  const B0=budgetVoorMaand(ref); let tot0=0; for(const x in B0) tot0+=+B0[x]||0;
+  const opties=splitDoelOpties(k, ref), bud=Math.round(+B0[k]||0);
+  const gezien=new Set(), nieuwNamen=new Set();
+  const regels=(d.regels||[]).map(r=>{
+    const nieuw=r.doel==='_nieuw', naam=nieuw?String(r.naam||'').trim():(CATS[r.doel]?CATS[r.doel].name:'');
+    let doelOk=false;
+    if(nieuw) doelOk=eigenCatNaamMag(naam) && !nieuwNamen.has(naam.toLowerCase()) && (r.aard==='vast'||r.aard==='wisselend');
+    else doelOk=opties.includes(r.doel) && !gezien.has(r.doel);
+    if(nieuw && naam) nieuwNamen.add(naam.toLowerCase()); else if(r.doel) gezien.add(r.doel);
+    const bedrag=(r.bedrag===''||r.bedrag==null)?null:Math.max(Math.round(numIn(r.bedrag)),0);
+    const van=nieuw||!r.doel?0:Math.round(+B0[r.doel]||0);
+    const ok=doelOk && bedrag>0 && (r.stand==='vast'||r.stand==='schat');
+    return {doel:r.doel, nieuw, naam, aard:r.aard, bedrag, stand:r.stand, van, naar:van+(bedrag||0), open:!nieuw&&!!r.doel&&potIsOpen(r.doel), ok};
+  });
+  const som=regels.reduce((a,r)=>a+(r.bedrag||0),0), blijft=bud-som;
+  const S=ref===thisYM()?(catSpendMap(thisYM())||{}):{}, al=Math.round(Math.max(+S[k]||0,0));
+  const klaar=!!vanaf && regels.length>0 && regels.every(r=>r.ok) && blijft>=0;
+  return {bron:k, naam:CATS[k].name, vanaf, ref, cur, ms, bud, regels, som, blijft, al, opties, tot0:Math.round(tot0), klaar};
+}
+/* Het gevolg in de lopende maand, in het geheugen doorgerekend en zonder save(): de bridge van Deze maand en
+   veilig te besteden. Een nieuw potje bestaat alleen voor de duur van de som (de vorm van potVerhoogGevolg()). */
+function splitSimuleer(P, fn){
+  const B1=Object.assign({}, SET.budgets||{}), tijd=[];
+  B1[P.bron]=P.blijft; if(!(P.blijft>0)) delete B1[P.bron];
+  P.regels.forEach((r,i)=>{ let kk=r.doel;
+    if(r.nieuw){ kk='_splitnieuw'+i; CATS[kk]={name:r.naam||'Nieuw', icon:'', color:'#ccc', type:'expense', eigen:true, aard:r.aard==='vast'?'vast':'wisselend'}; tijd.push(kk); }
+    r._k=kk; B1[kk]=r.naar; });
+  try{ return potSimuleer(B1, fn); } finally{ for(const kk of tijd) delete CATS[kk]; }
+}
+/* Hoe een potje in de bridge van deze maand staat: een variabel potje met zijn verwachte verschil (de rest-stap),
+   een vaste last met wat er verwacht wordt (de stap vaste lasten; zonder betaling telt het hele potje, v355). */
+function splitBrugPost(V, k){
+  const x=(V.potjes||[]).find(y=>y.k===k), y=(V.vastePotjes||[]).find(z=>z.k===k);
+  if(x) return {d:Math.round(x.eind-x.bud)};
+  if(y) return {vast:true, eind:Math.round(y.eind)};
+  return null;
+}
+function splitBrugTekst(p){ return p.vast?`${euro0(p.eind)} als vaste last`:brugTeken(p.d); }
+function splitGevolgHTML(P){
+  if(!P || !P.vanaf) return `<div class="small" id="splitGevolg" data-splitgevolg style="color:var(--mut2);line-height:1.5;margin-top:12px">Kies vanaf welke maand.</div>`;
+  const L=[], Vn=esc(ymKort(P.vanaf));
+  L.push(`${esc(P.naam)} ${euro0(P.bud)} → <b>${euro0(Math.max(P.blijft,0))}</b>${potSchatTag(P.bron, P.vanaf)}`);
+  for(const r of P.regels) if(r.bedrag>0 && (r.nieuw?r.naam:r.doel))
+    L.push(`${esc(r.naam)} ${r.nieuw?'nieuw':(r.open?'nog niet vastgesteld':euro0(r.van))} → <b>${euro0(r.naar)}</b>${r.stand==='schat'?' <span class="sch-tag">schatting</span>':''}`);
+  let t=`<div style="font-weight:600;margin-bottom:3px">Vanaf ${Vn}:</div>${L.map(x=>`<div>${x}</div>`).join('')}<div style="margin-top:3px">Je maandbudget blijft ${euro0(P.tot0)}. Eerdere maanden veranderen niet.</div>`;
+  if(P.vanaf===thisYM() && P.blijft>=0){
+    try{
+      const meet=()=>{ const V=maandVooruit(); let s=null; try{ s=Math.round(safeToSpend().safe); }catch(_){} return {V, s}; };
+      const A=meet(), Bm=splitSimuleer(P, ()=>{ const V=maandVooruit(); let s=null; try{ s=Math.round(safeToSpend().safe); }catch(_){}
+        return {V, s, post:P.regels.map(r=>r._k?splitBrugPost(V, r._k):null), bron:splitBrugPost(V, P.bron)}; });
+      if(A.V && !A.V.onbekend && Bm.V && !Bm.V.onbekend){
+        const d0=splitBrugPost(A.V, P.bron), br=[];
+        if(d0) br.push(`${esc(P.naam)} ${splitBrugTekst(d0)} wordt ${Bm.bron?splitBrugTekst(Bm.bron):brugTeken(0)}`);
+        P.regels.forEach((r,i)=>{ const v=Bm.post[i]; if(v && r.bedrag>0) br.push(`${esc(r.naam)} ${splitBrugTekst(v)}`); });
+        const uit=Bm.V.projectie===A.V.projectie?`de uitkomst blijft rond ${euro0(Bm.V.projectie)}`:`de uitkomst gaat van rond ${euro0(A.V.projectie)} naar rond ${euro0(Bm.V.projectie)}`;
+        t+=`<div data-splitbrug style="margin-top:6px">In de bridge van ${esc(ymFull(thisYM()))}: ${br.join(', ')}; ${uit}.</div>`;
+      }
+      if(A.s!=null && Bm.s!=null) t+=`<div data-splitsafe style="margin-top:3px">Veilig te besteden ${A.s===Bm.s?`blijft ${euro0(A.s)}`:`gaat van ${euro0(A.s)} naar ${euro0(Bm.s)}`}.</div>`;
+    }catch(_){}
+    if(P.al>P.blijft) t+=`<div data-splital style="margin-top:3px">In ${esc(P.naam)} is deze maand al ${euro0(P.al)} uitgegeven, ${euro0(P.al-P.blijft)} meer dan het nieuwe bedrag van ${euro0(P.blijft)}.</div>`;
+  }
+  return `<div class="small" id="splitGevolg" data-splitgevolg style="color:var(--mut2);line-height:1.5;margin-top:12px">${t}</div>`;
+}
+function splitBlijftHTML(P){
+  const neg=P.blijft<0;
+  return `<div id="splitBlijft" data-splitblijft="${P.blijft}" style="padding:10px 0 2px;border-top:1px solid var(--line);margin-top:8px">
+    <div class="row" style="gap:8px"><span style="flex:1;font-weight:600">Blijft voor ${esc(P.naam)}</span><b${neg?' style="color:var(--red)"':''}>${euro0(P.blijft)}</b></div>
+    ${neg?`<div class="small" data-splitonder style="color:var(--red);line-height:1.45;margin-top:2px">Je verdeelt ${euro0(-P.blijft)} meer dan er in ${esc(P.naam)} zit. Het potje kan niet onder nul.</div>`:''}</div>`;
+}
+function splitZetVeld(i, f, v, her){
+  const d=window._split; if(!d) return;
+  if(i==null){ d[f]=v; }
+  else { const r=d.regels[i]; if(!r) return; r[f]=v; if(f==='doel' && v!=='_nieuw'){ r.naam=''; r.aard=null; } }
+  if(her===false){ const P=splitVoorstel(); if(!P) return;   // bij het typen alleen wat ervan afhangt, zodat het veld zijn focus houdt
+    const g=document.getElementById('splitGevolg'); if(g) g.outerHTML=splitGevolgHTML(P);
+    const b=document.getElementById('splitBlijft'); if(b) b.outerHTML=splitBlijftHTML(P);
+    const s=document.querySelector('[data-splitsave]'); if(s) s.disabled=!P.klaar; return; }
+  renderSplits();
+}
+function splitErbij(){ const d=window._split; if(!d) return; d.regels.push({doel:null, naam:'', aard:null, bedrag:'', stand:null}); renderSplits(); }
+function splitWeg(i){ const d=window._split; if(!d || d.regels.length<2) return; d.regels.splice(i,1); renderSplits(); }
+function renderSplits(){
+  const d=window._split||{}, P=splitVoorstel(d); if(!P){ closeSheet(); return; }
+  const inp='background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 10px;font-size:var(--fs-md)';
+  const regel=(r,i)=>{ const raw=d.regels[i];
+    const chip=(v,l,extra)=>`<span class="chip ${raw.doel===v?'on':''}" data-splitdoel="${esc(v)}" onclick="splitZetVeld(${i},'doel','${esc(v)}')">${l}${extra||''}</span>`;
+    const anders=new Set(d.regels.filter((x,j)=>j!==i).map(x=>x.doel));
+    const doelen=P.opties.filter(k=>!anders.has(k)).map(k=>chip(k, esc(CATS[k].name), potIsOpen(k)?' <span style="opacity:.75">· nog niet vastgesteld</span>':'')).join('')+chip('_nieuw','+ Nieuw');
+    const st=(v,l)=>`<span class="chip ${raw.stand===v?'on':''}" data-splitstand="${v}" onclick="splitZetVeld(${i},'stand','${v}')">${l}</span>`;
+    return `<div data-splitregel="${i}" style="padding:10px 0;border-top:1px solid var(--line)">
+      <div class="row" style="gap:8px"><span class="hlabel" style="margin:0;flex:1">Naar welk potje</span>${d.regels.length>1?`<span class="small" data-splitweg style="color:var(--teal);cursor:pointer" onclick="splitWeg(${i})">weghalen</span>`:''}</div>
+      <div class="chips wrap" style="margin-top:4px">${doelen}</div>
+      ${raw.doel==='_nieuw'?`<input type="text" data-splitnaam="${i}" value="${esc(raw.naam||'')}" placeholder="naam, bv. Kinderen" oninput="splitZetVeld(${i},'naam',this.value,false)" style="width:100%;margin-top:4px;${inp}">
+        <div class="chips wrap" style="margin-top:4px">${[['vast','Vaste last'],['wisselend','Wisselend']].map(([v,l])=>`<span class="chip ${raw.aard===v?'on':''}" data-splitaard="${v}" onclick="splitZetVeld(${i},'aard','${v}')">${l}</span>`).join('')}</div>`:''}
+      <div class="row" style="gap:8px;margin-top:6px;align-items:center"><span class="small" style="flex:1">Bedrag per maand</span>
+        <input type="text" inputmode="decimal" data-splitbedrag="${i}" value="${esc(raw.bedrag==null?'':String(raw.bedrag))}" placeholder="0" oninput="splitZetVeld(${i},'bedrag',this.value,false)" style="width:96px;text-align:right;${inp}"></div>
+      <div class="chips wrap" style="margin-top:6px">${st('vast','Vastgesteld')}${st('schat','Een schatting')}</div></div>`; };
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="splits" data-bron="${esc(P.bron)}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">${esc(P.naam)} splitsen</div>
+    <div class="small muted" style="line-height:1.5;margin-top:4px">Verdeel een deel van ${esc(P.naam)} (${euro0(P.bud)}${P.vanaf?` in ${esc(ymKort(P.vanaf))}`:''}) over andere potjes. Je maandbudget blijft gelijk. Een schatting telt mee in je budget en staat overal met "schatting" erbij.</div>
+    <div style="margin-top:6px">${P.regels.map(regel).join('')}</div>
+    <div class="small" data-spliterbij style="color:var(--teal);cursor:pointer;font-weight:600;padding:8px 0" onclick="splitErbij()">+ nog een potje</div>
+    ${splitBlijftHTML(P)}
+    <label class="fld">Vanaf</label>
+    <select data-splitvanaf onchange="splitZetVeld(null,'vanaf',this.value||null)" style="width:100%"><option value="">Kies een maand</option>${P.ms.map(ym=>`<option value="${ym}"${P.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>
+    ${splitGevolgHTML(P)}
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-splitsave style="flex:1"${P.klaar?'':' disabled'} onclick="splitZet()">Splitsen</button><button class="btn sec" onclick="closeSheet()">Terug</button></div></div>`;
+}
+function splitZet(){
+  const d=window._split, P=splitVoorstel(d); if(!P || !P.klaar) return;   // opnieuw gelezen (v319), en zonder alle keuzes geen opslag (v238)
+  const cur=P.cur, nx=nextYM(cur), vanaf=P.vanaf;
+  SET.potSchat=SET.potSchat||{};
+  const doelen=[];
+  for(const r of P.regels){
+    let k=r.doel; if(r.nieuw){ k=eigenCatMaak(r.naam, r.aard); if(!k) return; }
+    potPlanZet(k, vanaf, r.naar);
+    if(r.stand==='schat') SET.potSchat[k]={vanaf, op:vandaagYMD(), bedrag:r.naar, bron:P.bron};
+    else delete SET.potSchat[k];
+    doelen.push({k, r});
+  }
+  potPlanZet(P.bron, vanaf, P.blijft);
+  save();
+  if(vanaf<=nx){ try{ valtOpPotjeGewijzigd(P.bron, P.bud, P.blijft, vanaf!==cur); }catch(_){}
+    for(const x of doelen) try{ valtOpPotjeGewijzigd(x.k, x.r.van, x.r.naar, vanaf!==cur); }catch(_){} }
+  try{ potjeAfspraak(P.bron, P.blijft, vanaf); }catch(_){}   // v337: een potje dat lager ligt vraagt gedrag
+  window._split=null; closeSheet(); render();
+  toast(`${ICON('check')} ${P.naam} gesplitst vanaf ${ymKort(vanaf)}: ${doelen.map(x=>`${CATS[x.k].name} ${euro0(x.r.naar)}`).join(', ')}`);
 }
 
 /* ---- boekingen die bij een nieuwe categorie horen ----
@@ -18826,7 +19100,7 @@ function setBudget(){
     ${Object.entries(CATS).filter(([k,c])=>c.type==='expense'&&!c.geenNorm&&!potGearchiveerd(k)).map(([k,c])=>{   // v234: geen potje voor onvoorzien; v351: geen gearchiveerd potje
       const pend=(SET.budgetsNext&&SET.budgetsNext[k]!=null)?+SET.budgetsNext[k]:null;
       const shown=(pend!=null?pend:((SET.budgets&&SET.budgets[k])||''))||'';
-      const note=(pend!=null && pend!==((+(SET.budgets||{})[k])||0))?`<span class="small" style="color:var(--teal);margin-left:6px">vanaf vlg. mnd</span>`:(potIsOpen(k)?`<span class="small" data-gridopen style="color:var(--mut2);margin-left:6px">nog niet vastgesteld</span>`:'');
+      const note=(pend!=null && pend!==((+(SET.budgets||{})[k])||0))?`<span class="small" style="color:var(--teal);margin-left:6px">vanaf vlg. mnd</span>`:(potIsOpen(k)?`<span class="small" data-gridopen style="color:var(--mut2);margin-left:6px">nog niet vastgesteld</span>`:'')+potSchatTag(k);
       return `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:var(--fs-md);cursor:pointer" onclick="openPotje('${k}')">${c.icon} ${c.name}${note}</span>
         <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" min="0" step="5" value="${shown}" placeholder="0" style="width:80px;text-align:right;padding:6px 9px" oninput="setCatBudget('${k}',this.value)"></div></div>`;}).join('')}`;
   return `

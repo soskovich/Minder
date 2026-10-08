@@ -169,7 +169,10 @@ test('d5 meer dan er nog in het potje zit kan het niet vasthouden', async ({page
     go('maand'); renderMaand(); const k=(()=>{ if(document.querySelector('#s-maand #uitgeslotenKaart')) throw new Error('de kaart staat nog op Grip'); const g=document.querySelector('#gripLetOp [data-letop="uit"]'); if(!g) return null; g.click(); return document.querySelector('#gripLetOpSheet #uitgeslotenKaart'); })(); return {rest:rij.rest, t:k?k.innerText:''}; });
   expect(r.rest).toBe(13);
   expect(r.t).toContain('Potje Vervoer & auto houdt €13 vast voor Stparkeergelden via Rive');
-  expect(r.t).toContain('Potje verlagen naar €702');
+  /* v360: het voorstel is het potje min wat de post PER MAAND vraagt (Parkeergelden komt elke maand: EUR 19), en
+     niet min wat hij deze maand nog kan vasthouden (EUR 13); anders tellen potje en reservering samen minder dan het
+     oude potje. Tot v360 stond hier EUR 702. */
+  expect(r.t).toContain('Potje verlagen naar €696');
 });
 
 for (const w of [360, 390]) {
