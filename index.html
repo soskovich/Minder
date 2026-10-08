@@ -659,6 +659,10 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
 /* sheet */
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:90;display:none}   /* boven de toast (80): een open sheet mag nooit afgedekt worden */
 .sheet-bg.show{display:block}
+.sheet-voet{position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom));z-index:3;background:var(--surface);box-shadow:-16px 0 0 var(--surface),16px 0 0 var(--surface);padding-bottom:calc(20px + env(safe-area-inset-bottom));margin-bottom:calc(-20px - env(safe-area-inset-bottom))}   /* v361: de handelingen blijven onderaan een lange sheet; marge en padding heffen elkaar op, dus de hoogte verandert niet, en de schaduw trekt de achtergrond tot de rand zonder breedte te nemen */
+.sheet-voet::before{content:'';position:absolute;left:0;right:0;top:-10px;height:10px;background:var(--surface);box-shadow:-16px 0 0 var(--surface),16px 0 0 var(--surface);pointer-events:none}
+#sheet.lang .sheet-voet::before{border-top:1px solid var(--line)}
+.voet-reden{color:var(--mut);line-height:1.4;margin-bottom:6px}
 .sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:520px;background:var(--surface);border-radius:20px 20px 0 0;border:1px solid var(--line);padding:18px 16px calc(20px + env(safe-area-inset-bottom));max-height:80vh;overflow:auto;animation:up .25s ease}
 @keyframes up{from{transform:translate(-50%,100%)}to{transform:translate(-50%,0)}}
 .grab{width:40px;height:4px;background:var(--line);border-radius:3px;margin:0 auto 14px}
@@ -2490,6 +2494,12 @@ function overschotInkomen(m){
   return s;
 }
 /* De keuze is pas compleet met alles wat de soort nodig heeft; terug vraagt een maand en een categorie. */
+/* v361: waarom Bevestigen uit staat bij meer terug dan er open stond. */
+function overschotReden(K, rest){
+  if(!K || !OVERSCHOT_SOORTEN.some(x=>x.k===K.soort)) return `Kies eerst wat de ${euro0(rest)} extra is`;
+  if(K.soort==='terug'){ if(!K.maand) return 'Kies de maand'; if(!(K.cat && CATS[K.cat])) return 'Kies de categorie'; }
+  return '';
+}
 function overschotKeuzeKlaar(K){
   if(!K || !OVERSCHOT_SOORTEN.some(x=>x.k===K.soort)) return false;
   if(K.soort==='terug') return !!(K.maand && K.cat && CATS[K.cat] && CATS[K.cat].type==='expense');
@@ -4707,9 +4717,8 @@ function renderGoalSheet(id, g, modeOverride){
       ? `<div id="gModes">${planModeChips(mode,'goalMode')}</div>${bedrag}`
       : `<div class="small muted" style="margin-top:8px;line-height:1.5">Wat je buffer overhoudt, zolang hij niet vol is. Een eigen maandbedrag kan zodra dat zo is${(function(){ const dt=planGrendelDatum(); return dt?`, op dit tempo rond ${dt}`:''; })()}.</div>`}
     <label class="fld" style="margin-top:10px">Al gespaard (€)</label><input id="gNu" type="number" inputmode="numeric" value="${d.gespaard||''}" placeholder="0" style="width:100%">
-    <button class="btn" style="margin-top:14px;width:100%" onclick="saveGoal('${id||''}')">${ICON('check')} Opslaan</button>
     ${g?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteGoal('${id}')">Doel verwijderen</div>`:''}
-    <div style="height:8px"></div>`;
+    ${sheetVoet(`<button class="btn" style="width:100%" onclick="saveGoal('${id||''}')">${ICON('check')} Opslaan</button>`, '', '14px')}`;
 }
 function saveGoal(id){
   const v=x=>(document.getElementById(x)||{}).value;
@@ -6590,7 +6599,7 @@ function renderUitRes(){
       <label class="row" style="gap:9px;cursor:pointer;align-items:flex-start"><input type="checkbox" id="uitResVerlaag"${R.verlaag?' checked':''} onchange="uitResZet('verlaag',this.checked)"><span style="flex:1;font-weight:600;font-size:var(--fs-md)">Potje ${pn} verlagen</span></label>
       ${R.verlaag?`<select data-uitresvanaf onchange="uitResZet('vanaf',this.value||null)" style="width:100%;margin-top:8px"><option value="">Kies vanaf welke maand</option>${R.ms.map(ym=>`<option value="${ym}"${R.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>`:''}
       <div class="small" id="uitResGevolg" data-uitresgevolg style="line-height:1.5;margin-top:6px;${R.verlaag?'':'color:var(--mut2)'}">${gev}</div></div>`:''}
-    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-uitressave style="flex:1"${R.klaar?'':' disabled'} onclick="uitgeslotenNaarRes('${kk}')">Bevestigen</button><button class="btn sec" onclick="window._uitRes=null;closeSheet()">Annuleren</button></div></div>`;
+    ${sheetVoet(`<button class="btn" data-uitressave style="flex:1"${R.klaar?'':' disabled'} onclick="uitgeslotenNaarRes('${kk}')">Bevestigen</button><button class="btn sec" onclick="window._uitRes=null;closeSheet()">Annuleren</button>`, R.klaar?'':'Kies vanaf welke maand het potje lager wordt')}</div>`;
 }
 /* De schrijver. Hij leest het voorstel en het potje OPNIEUW in plaats van wat de sheet toonde (v319): tussen
    openen en bevestigen kan er een import binnenkomen. Het verlagen loopt via potPlanZet() (v351), dus volgende
@@ -8339,7 +8348,7 @@ function openPotjeBijstel(k, dek){
     <div class="hlabel" style="margin:12px 0 4px">Waar komt het vandaan</div>
     ${P.kand.map(rij).join('')}
     <div class="small" data-bijstelgevolg style="color:var(--mut2);line-height:1.5;margin-top:8px">${gevolg}</div>
-    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-bijstelsave style="flex:1"${D?'':' disabled'} onclick="potjeBijstelZet('${esc(k)}')">Potje bijstellen</button><button class="btn sec" onclick="openGripVooruit()">Terug</button></div></div>`;
+    ${sheetVoet(`<button class="btn" data-bijstelsave style="flex:1"${D?'':' disabled'} onclick="potjeBijstelZet('${esc(k)}')">Potje bijstellen</button><button class="btn sec" onclick="openGripVooruit()">Terug</button>`, D||!P.kand.length?'':'Kies eerst welk potje inlevert')}</div>`;
   showSheetBg();
 }
 function potjeBijstelZet(k){
@@ -8402,6 +8411,19 @@ function ruimMaandNamen(k){
   let L=[]; try{ L=recurringSchedule().filter(s=>s.type==='fixed' && s.cat===k && (+s.intervalM||1)===1); }catch(_){}
   return L.slice(0,2).map(ruimPostNaam);
 }
+/* v361: waarom Bijstellen uit staat: eerst een keuze per potje, dan waar het vrije geld heen gaat, dan de maand. */
+function ruimReden(P){
+  if(!P || P.klaar) return '';
+  const p=P.pots.find(x=>!x.ok);
+  if(p){ if(p.keuze==='eigen'){ const e=((window._ruim||{}).eigen||{})[p.k];
+      return (e===''||e==null)?`Vul een bedrag in voor ${esc(p.naam)}`:`${esc(p.naam)} kan niet boven ${euro0(p.bud)}`; }
+    return `Kies eerst wat je met ${esc(p.naam)} doet`; }
+  if(!(P.vrij>0)) return 'Er komt nog niets vrij: kies bij een potje een lager bedrag';
+  if(P.open>0) return `Kies eerst waar de ${euro0(P.open)} heen gaat`;
+  if(P.open<0) return `Je verdeelt ${euro0(-P.open)} meer dan er vrijkomt`;
+  if(!P.vanaf) return 'Kies vanaf welke maand';
+  return '';
+}
 function ruimBijstelData(d){
   d=d||window._ruim||{};
   let V=null, Br=null; try{ V=maandVooruit(); Br=dezeMaandBrug(V); }catch(_){}
@@ -8458,7 +8480,7 @@ function ruimDeel(){
   const P=ruimBijstelData(); if(!P) return;
   for(const id of ['ruimGevolg','ruimOpen','ruimVrij']){ const e=document.getElementById(id); if(e) e.outerHTML=ruimBlok(id,P); }
   for(const p of P.pots){ const w=document.querySelector(`[data-ruimonder="${p.k}"]`); if(w) w.outerHTML=ruimOnderHTML(p,P); }
-  const s=document.querySelector('[data-ruimsave]'); if(s) s.disabled=!P.klaar;
+  const s=document.querySelector('[data-ruimsave]'); if(s) s.disabled=!P.klaar; voetRedenZet(ruimReden(P));
   if((P.vrij>0)!==!!document.getElementById('ruimBest')) renderRuimBijstel();
 }
 function ruimOnderHTML(p,P){
@@ -8525,7 +8547,7 @@ function renderRuimBijstel(){
     ${P.vrij>0?`<div id="ruimBest">${P.dests.map(dRij).join('')}</div>`:''}
     ${ruimBlok('ruimOpen',P)}
     ${ruimBlok('ruimGevolg',P)}
-    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-ruimsave style="flex:1"${P.klaar?'':' disabled'} onclick="ruimBijstelZet()">Bijstellen</button><button class="btn sec" onclick="openGripRest()">Terug</button></div></div>`;
+    ${sheetVoet(`<button class="btn" data-ruimsave style="flex:1"${P.klaar?'':' disabled'} onclick="ruimBijstelZet()">Bijstellen</button><button class="btn sec" onclick="openGripRest()">Terug</button>`, ruimReden(P))}</div>`;
 }
 function ruimBijstelZet(){
   const P=ruimBijstelData(); if(!P || !P.klaar) return;   // opnieuw gelezen (v319); alles moet een plek hebben (v238)
@@ -9206,11 +9228,11 @@ function openReservering(id){
     <div class="chips" id="rModes">${chips}</div>
     <label class="fld" style="margin-top:12px">Categorie (optioneel)</label>
     <select id="rCat" style="width:100%"><option value="">geen</option>${cats.map(([k,c])=>`<option value="${k}"${d.cat===k?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
-    <button class="btn" style="margin-top:14px;width:100%" onclick="saveReservering('${esc(String(id||'').replace(/'/g,"\\'"))}')">${ICON('check')} Opslaan</button>
     ${v?resBetaaldRegel(v):''}
     ${v?`<div class="small" style="margin-top:14px;text-align:center"><span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openResNaarDoel('${esc(String(id).replace(/'/g,"\\'"))}')">Dit is geen kost maar een spaardoel \u203a</span></div>`:''}
     ${v?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteReservering('${esc(String(id).replace(/'/g,"\\'"))}')">Verwijderen</div>`:''}
-    <div class="small muted" style="margin-top:12px;text-align:center;cursor:pointer" onclick="openReserveringen()">\u2039 Terug</div>`;
+    <div class="small muted" style="margin-top:12px;text-align:center;cursor:pointer" onclick="openReserveringen()">\u2039 Terug</div>
+    ${sheetVoet(`<button class="btn" style="width:100%" onclick="saveReservering('${esc(String(id||'').replace(/'/g,"\\'"))}')">${ICON('check')} Opslaan</button>`, '', '14px')}`;
   showSheetBg();
   window._resIv=iv;
 }
@@ -11005,9 +11027,8 @@ function openDebt(id,pre){
       </details>
     </div>
     ${extraTable}${vsBel}${d0?schuldRegelsBlok(d0):''}
-    <button class="btn" style="margin-top:14px;width:100%" onclick="saveDebt('${id||''}')">${ICON('check')} Opslaan</button>
     ${d0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteDebt('${id}')">Schuld verwijderen</div>`:''}
-    <div style="height:8px"></div>`;
+    ${sheetVoet(`<button class="btn" style="width:100%" onclick="saveDebt('${id||''}')">${ICON('check')} Opslaan</button>`, '', '14px')}`;
   showSheetBg();
 }
 /* ----- Restschuld snel zelf bijwerken (v100) -----
@@ -11283,9 +11304,8 @@ function openAsset(id, naamVoorstel){
       <div class="small mut2" style="font-size:var(--fs-xs);margin-top:6px">Laat je het rendement leeg, dan groeit deze bezitting niet in de Vermogensreis: de stand blijft staan op wat jij invult. Dat is de bedoeling bij een saldo dat je zelf bijwerkt.</div>
     </div>
     ${a0?bezitEditorBlok(a0):''}
-    <button class="btn" style="margin-top:14px;width:100%" onclick="saveAsset('${id||''}')">${ICON('check')} Opslaan</button>
     ${a0?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteAsset('${id}')">Bezitting verwijderen</div>`:''}
-    <div style="height:8px"></div>`;
+    ${sheetVoet(`<button class="btn" style="width:100%" onclick="saveAsset('${id||''}')">${ICON('check')} Opslaan</button>`, '', '14px')}`;
   showSheetBg();
 }
 function saveAsset(id){
@@ -14296,9 +14316,9 @@ function renderPotSheet(k){
     <div class="small" style="margin-top:12px">Maandbudget: <b style="color:var(--teal)" id="potTotal">${euro0(potDraftTotal())}</b>${d.type==='week'?' (per week × 4,3)':''}</div>
     <div class="small muted" id="potRoomLine" style="margin-top:6px">${potRoomLineHTML((window._potOthers||0)+potDraftTotal())}</div>
     ${exists?`<div class="small muted" style="margin-top:8px">Deze maand blijft je potje op ${euro0(cur)}. De wijziging geldt vanaf <b style="color:var(--teal)">${vanaf}</b>.</div>`:''}
-    <button class="btn" style="margin-top:14px;width:100%" onclick="savePotje('${k}')">${ICON('check')} ${exists?`Vastzetten vanaf ${vanaf}`:'Vastzetten'}</button>
     ${exists?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="savePotje('${k}',true)">Potje stoppen vanaf ${vanaf}</div>`:''}
-    ${potSheetExtra(k, exists)}`;
+    ${potSheetExtra(k, exists)}
+    ${sheetVoet(`<button class="btn" style="width:100%" onclick="savePotje('${k}')">${ICON('check')} ${exists?`Vastzetten vanaf ${vanaf}`:'Vastzetten'}</button>`, '', '14px')}`;
 }
 // kies een categorie om een nieuw potje voor te maken (categorieën zonder potje)
 function openPotjePick(){ openPotForm(); }
@@ -14543,7 +14563,7 @@ function renderPotArchief(){
     <label class="fld">Vanaf</label>
     <div class="chips" data-archmaanden>${ms.slice(0,4).map(ym=>`<span class="chip ${D.vanaf===ym?'on':''}" data-archmaand="${ym}" onclick="potArchKies('${ym}')">${esc(ymKort(ym))}</span>`).join('')}</div>
     <div class="small" data-archgevolg style="color:var(--mut2);line-height:1.5;margin-top:10px">${gevolg}</div>
-    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-archsave style="flex:1"${D.vanaf?'':' disabled'} onclick="potArchiefZet()">Archiveren</button><button class="btn sec" onclick="openPotje('${esc(k)}')">Terug</button></div></div>`;
+    ${sheetVoet(`<button class="btn" data-archsave style="flex:1"${D.vanaf?'':' disabled'} onclick="potArchiefZet()">Archiveren</button><button class="btn sec" onclick="openPotje('${esc(k)}')">Terug</button>`, D.vanaf?'':'Kies vanaf welke maand')}</div>`;
 }
 function potArchiefZet(){
   const D=window._potArch||{}; if(!D.k || !D.vanaf) return;
@@ -14553,6 +14573,29 @@ function potArchiefZet(){
 }
 
 /* ---- het formulier: nieuw potje, of een bedrag vanaf een maand ---- */
+/* v361: waarom Vastzetten uit staat, in de volgorde van het formulier. */
+function potFormReden(P, d){
+  if(!P || P.klaar) return '';
+  d=d||{};
+  if(!d.cat) return 'Kies eerst een categorie';
+  if(P.nieuweCat){ if(!P.naam) return 'Geef het potje een naam';
+    if(!eigenCatNaamMag(P.naam)) return `Er is al een potje dat ${esc(P.naam)} heet`;
+    if(!(d.aard==='vast'||d.aard==='wisselend')) return 'Kies of het een vaste last is of wisselend'; }
+  if(P.open){ if(!P.res) return 'Kies of je een geschat bedrag reserveert';
+    if(P.res==='ja' && !(P.schat>0)) return 'Vul de schatting in';
+    if(P.res==='ja' && !P.resMaand) return 'Kies de eerste termijn';
+    return ''; }
+  if(P.bedrag==null) return 'Vul een bedrag in';
+  if(!P.vanaf) return 'Kies vanaf welke maand';
+  if(P.meer>0){ if(!P.bron) return `Kies waar de ${euro0(P.meer)} extra vandaan komt`;
+    if(P.bron==='dek' && !P.dek) return P.kand.length?`Kies welk potje ${euro0(P.meer)} inlevert`:`Geen potje heeft ${euro0(P.meer)} over`;
+    return ''; }
+  if(P.aanpas && P.meer<0){ if(!P.bron) return `Kies waar de ${euro0(-P.meer)} heen gaat`;
+    if(P.bron==='naar' && !P.dek) return `Kies naar welk potje de ${euro0(-P.meer)} gaat`;
+    return ''; }
+  if(P.meer===0) return `${esc(P.naam)} staat al op ${euro0(P.bedrag)}`;
+  return '';
+}
 function potFormVoorstel(d){
   d=d||window._potForm||{}; const cur=potHuidigeMaand();
   const nieuweCat=d.cat==='_nieuw';
@@ -14621,7 +14664,7 @@ function potFormZetVeld(f, v, her){ const d=window._potForm=window._potForm||{};
   if(f==='bron') d.dek=null;
   if(f==='open'){ d.bedrag=null; d.vanaf=null; d.bron=null; d.dek=null; if(!v){ d.res=null; d.schat=null; d.resMaand=null; } }
   if(f==='res' && v!=='ja'){ d.schat=null; d.resMaand=null; }
-  if(her!==false) renderPotForm(); else { const g=document.getElementById('potFormGevolg'); if(g) g.outerHTML=potFormGevolgHTML(); const s=document.querySelector('[data-potformsave]'); if(s) s.disabled=!potFormVoorstel().klaar; const b=document.getElementById('potFormBron'); if(b) b.outerHTML=potFormBronHTML(); } }
+  if(her!==false) renderPotForm(); else { const g=document.getElementById('potFormGevolg'); if(g) g.outerHTML=potFormGevolgHTML(); const P2=potFormVoorstel(), s=document.querySelector('[data-potformsave]'); if(s) s.disabled=!P2.klaar; voetRedenZet(potFormReden(P2, d)); const b=document.getElementById('potFormBron'); if(b) b.outerHTML=potFormBronHTML(); } }
 function potFormBronHTML(){
   const P=potFormVoorstel();
   if(P.aanpas && P.meer<0){
@@ -14746,7 +14789,7 @@ function renderPotForm(){
     <select id="potFormVanaf" onchange="potFormZetVeld('vanaf',this.value||null)" style="width:100%"><option value="">Kies een maand</option>${ms.map(ym=>`<option value="${ym}"${d.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>
     ${potFormBronHTML()}`}
     ${potFormGevolgHTML()}
-    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-potformsave style="flex:1"${P.klaar?'':' disabled'} onclick="potFormZet()">Vastzetten</button><button class="btn sec" onclick="${vast?`openPotje('${esc(P.k)}')`:'closeSheet()'}">Terug</button></div></div>`;
+    ${sheetVoet(`<button class="btn" data-potformsave style="flex:1"${P.klaar?'':' disabled'} onclick="potFormZet()">Vastzetten</button><button class="btn sec" onclick="${vast?`openPotje('${esc(P.k)}')`:'closeSheet()'}">Terug</button>`, potFormReden(P, d))}</div>`;
 }
 function potFormZet(){
   const P=potFormVoorstel(); if(!P.klaar) return;   // opnieuw gelezen (v319); zonder keuze geen opslag (v238)
@@ -14852,6 +14895,21 @@ function splitDoelOpties(bron, ref){
   const ks=Object.keys(CATS).filter(k=>k!==bron && CATS[k].type==='expense' && !geenNorm(k) && !potGearchiveerd(k, ref) && (+B[k]>0 || potIsOpen(k)));
   return ks.sort((a,b)=>CATS[a].name.localeCompare(CATS[b].name,'nl'));
 }
+/* v361: waarom Splitsen uit staat, in de balk onderaan (de eerste open keuze, van boven naar beneden). */
+function splitReden(P){
+  if(!P || P.klaar) return '';
+  for(const r of P.regels){ const n=r.nieuw?(r.naam?esc(r.naam):'het nieuwe potje'):(r.doel&&CATS[r.doel]?esc(CATS[r.doel].name):'');
+    if(!r.doel) return 'Kies eerst naar welk potje het gaat';
+    if(r.nieuw && !r.naam) return 'Geef het nieuwe potje een naam';
+    if(r.nieuw && !eigenCatNaamMag(r.naam)) return `Er is al een potje dat ${n} heet`;
+    if(r.nieuw && !(r.aard==='vast'||r.aard==='wisselend')) return `Kies of ${n} een vaste last is of wisselend`;
+    if(!(r.bedrag>0)) return `Vul het bedrag voor ${n} in`;
+    if(!(r.stand==='vast'||r.stand==='schat')) return `Kies of ${n} vastgesteld is of een schatting`;
+    if(!r.ok) return `${n} staat er twee keer`; }
+  if(P.blijft<0) return `Je verdeelt ${euro0(-P.blijft)} meer dan er in ${esc(P.naam)} zit`;
+  if(!P.vanaf) return 'Kies vanaf welke maand';
+  return '';
+}
 function splitVoorstel(d){
   d=d||window._split||{}; const k=d.bron; if(!CATS[k]) return null;
   const cur=potHuidigeMaand(), ms=potMaandOpties(), vanaf=ms.includes(d.vanaf)?d.vanaf:null, ref=vanaf||cur;
@@ -14931,7 +14989,7 @@ function splitZetVeld(i, f, v, her){
   if(her===false){ const P=splitVoorstel(); if(!P) return;   // bij het typen alleen wat ervan afhangt, zodat het veld zijn focus houdt
     const g=document.getElementById('splitGevolg'); if(g) g.outerHTML=splitGevolgHTML(P);
     const b=document.getElementById('splitBlijft'); if(b) b.outerHTML=splitBlijftHTML(P);
-    const s=document.querySelector('[data-splitsave]'); if(s) s.disabled=!P.klaar; return; }
+    const s=document.querySelector('[data-splitsave]'); if(s) s.disabled=!P.klaar; voetRedenZet(splitReden(P)); return; }
   renderSplits();
 }
 function splitErbij(){ const d=window._split; if(!d) return; d.regels.push({doel:null, naam:'', aard:null, bedrag:'', stand:null}); renderSplits(); }
@@ -14961,7 +15019,7 @@ function renderSplits(){
     <label class="fld">Vanaf</label>
     <select data-splitvanaf onchange="splitZetVeld(null,'vanaf',this.value||null)" style="width:100%"><option value="">Kies een maand</option>${P.ms.map(ym=>`<option value="${ym}"${P.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>
     ${splitGevolgHTML(P)}
-    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-splitsave style="flex:1"${P.klaar?'':' disabled'} onclick="splitZet()">Splitsen</button><button class="btn sec" onclick="closeSheet()">Terug</button></div></div>`;
+    ${sheetVoet(`<button class="btn" data-splitsave style="flex:1"${P.klaar?'':' disabled'} onclick="splitZet()">Splitsen</button><button class="btn sec" onclick="closeSheet()">Terug</button>`, splitReden(P))}</div>`;
 }
 function splitZet(){
   const d=window._split, P=splitVoorstel(d); if(!P || !P.klaar) return;   // opnieuw gelezen (v319), en zonder alle keuzes geen opslag (v238)
@@ -15035,7 +15093,7 @@ function renderCatKandidaten(focus){
       <span class="small" style="font-weight:700;flex-shrink:0">${euro0(g.som)}</span></label>`).join(''):`<div class="small muted" data-kandleeg style="padding:10px 0">${D.zoek&&D.zoek.trim().length>=3?'Geen boekingen gevonden.':'Geen bekende kandidaten. Zoek op een tegenpartij.'}</div>`}
     <label class="row" style="gap:8px;padding:10px 0;cursor:pointer"><input type="checkbox" id="catKandRegel"${D.regel?' checked':''} onchange="catKandZet('regel',this.checked)"><span class="small">Ook voortaan automatisch</span></label>
     <div class="small" data-kandgevolg style="color:var(--mut2);line-height:1.5">${gevolg}</div>
-    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" data-kandsave style="flex:1"${K.tx.length?'':' disabled'} onclick="catKandVerplaats()">Verplaatsen</button><button class="btn sec" onclick="closeSheet()">${D.na?'Overslaan':'Sluiten'}</button></div></div>`;
+    ${sheetVoet(`<button class="btn" data-kandsave style="flex:1"${K.tx.length?'':' disabled'} onclick="catKandVerplaats()">Verplaatsen</button><button class="btn sec" onclick="closeSheet()">${D.na?'Overslaan':'Sluiten'}</button>`, K.tx.length?'':'Vink eerst aan wat bij deze categorie hoort')}</div>`;
   if(focus){ const z=document.getElementById('catKandZoek'); if(z){ z.focus(); z.setSelectionRange(z.value.length,z.value.length); } }
 }
 function catKandVerplaats(){
@@ -15418,9 +15476,9 @@ function openTxFilter(){
   const acc = OWN.length>1?`<div class="fsec">Rekening</div><div class="chips wrap"><span class="chip ${accFilter==='all'?'on':''}" onclick="setAcc('all')">Alle</span>${OWN.map(a=>`<span class="chip ${accFilter===a?'on':''}" onclick="setAcc('${a}')">${esc(accLabel(a))}</span>`).join('')}</div>`:'';
   const bedrag=`<div class="fsec">Bedrag</div>
     <div style="display:flex;gap:8px;align-items:center">
-      <input type="text" inputmode="decimal" placeholder="min" value="${txMin!=null?numUit(txMin):''}" oninput="setTxAmount('min',this.value)" style="flex:1">
+      <input type="text" inputmode="decimal" placeholder="min" value="${txMin!=null?numUit(txMin):''}" oninput="setTxAmount('min',this.value)" style="flex:1;min-width:0">
       <span class="small" style="color:var(--mut2)">tot</span>
-      <input type="text" inputmode="decimal" placeholder="max" value="${txMax!=null?numUit(txMax):''}" oninput="setTxAmount('max',this.value)" style="flex:1">
+      <input type="text" inputmode="decimal" placeholder="max" value="${txMax!=null?numUit(txMax):''}" oninput="setTxAmount('max',this.value)" style="flex:1;min-width:0">
     </div>`;
   const zoek=`<div class="fsec">Zoek</div><input type="search" placeholder="Naam of omschrijving…" value="${esc(txSearch)}" oninput="txSearch=this.value.toLowerCase();txLimit=TXPAGE;renderTxList();txPatchBar()">`;
   const n=txFiltered().length;
@@ -15428,7 +15486,7 @@ function openTxFilter(){
     <div class="row" style="margin-bottom:2px"><div id="txFilterHead" style="font-weight:800;font-size:var(--fs-lg)">Filter</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
     <div class="small" style="color:var(--mut2);margin-bottom:6px">${n} ${n===1?'transactie':'transacties'} in je selectie</div>
     ${periode}${type}${cats}${acc}${bedrag}${zoek}
-    <button class="btn sec" style="margin-top:16px" onclick="clearTxFilter();closeSheet()">Filters wissen</button>`;
+    ${sheetVoet(`<button class="btn sec" style="width:100%" onclick="clearTxFilter();closeSheet()">Filters wissen</button>`, '', '16px')}`;
   showSheetBg();
 }
 function refreshTxFilter(){ txLimit=TXPAGE; renderTx(); if(window._txFilterSheet) openTxFilter(); }
@@ -18452,9 +18510,9 @@ function openLoanContant(id){
     <div class="small" style="color:var(--mut2);margin-top:6px;line-height:1.5">Je hebt nog nooit geteld. Dit wordt je eerste telling, zodat de app weet waar dit geld is.</div>`:''}
     <div id="ovKeuze"></div>
     <div id="lcGevolg" data-contantgevolg class="small" style="margin-top:12px;line-height:1.6"></div>
-    <div class="row" style="gap:8px;margin-top:14px">
+    <div class="sheet-voet" data-voet style="margin-top:14px"><div class="row" style="gap:8px">
       <button class="btn" data-contantbevestig style="flex:1" onclick="loanContantBevestig('${l.id}')">Bevestigen</button>
-      <button class="btn sec" onclick="openLoan('${l.id}')">Terug</button></div>`;
+      <button class="btn sec" onclick="openLoan('${l.id}')">Terug</button></div></div>`;
   showSheetBg();
   loanContantToon(l.id);
 }
@@ -18515,6 +18573,7 @@ function loanContantToon(id){
     ${G.rest>0?overschotGevolgRegel(l.naam||'', G.rest, K, vandaagYMD().slice(0,7)):''}
     <div>Netto vermogen: ${nw}</div>`;
   const knop=$('[data-contantbevestig]'); if(knop) knop.disabled = G.kies || !(G.b>0);
+  voetRedenZet(!(G.b>0)?'Vul het bedrag in':(G.kies?overschotReden(K, G.rest):''));
 }
 function loanContantBevestig(id){ const I=loanContantInvoer(); if(loanContantOntvangen(id, I.bedrag, I.geteld, window._ovK)) openLoan(id); }
 /* DE BANKROUTE (v343): een bijschrijving die hoger is dan wat er open staat. Het geld staat al op je
@@ -18534,9 +18593,9 @@ function openLoanOverschotBank(loanId, txId){
     <div class="small muted" style="margin:2px 0 4px">${euro0(G.b)} binnen · nog open ${euro0(G.open)}</div>
     <div id="ovKeuze"></div>
     <div id="lbGevolg" data-bankgevolg class="small" style="margin-top:12px;line-height:1.6"></div>
-    <div class="row" style="gap:8px;margin-top:14px">
+    <div class="sheet-voet" data-voet style="margin-top:14px"><div class="row" style="gap:8px">
       <button class="btn" data-bankbevestig style="flex:1" onclick="loanBankBevestig('${loanId}','${txId}')">Bevestigen</button>
-      <button class="btn sec" onclick="openSheet('${txId}')">Terug</button></div>`;
+      <button class="btn sec" onclick="openSheet('${txId}')">Terug</button></div></div>`;
   showSheetBg();
   loanBankToon(loanId, txId);
 }
@@ -18552,6 +18611,7 @@ function loanBankToon(loanId, txId){
     <div>Netto vermogen: ${nw}</div>
     <div style="color:var(--mut2)">Telt niet als inkomen in je maand.</div>`;
   const knop=$('[data-bankbevestig]'); if(knop) knop.disabled = G.kies;
+  voetRedenZet(G.kies?overschotReden(K, G.rest):'');
 }
 function loanBankBevestig(loanId, txId){
   const K=window._ovK, G=loanBankGevolg(loanId, txId, K); if(!G) return false;
@@ -24213,7 +24273,30 @@ function migrateAcctNames(){
   SET.acctNameMigrated=1; save();
 }
 // Eén ingang voor "sheet openen": zet de sheet zichtbaar en ruimt de toast op, die anders over de invoervelden bleef liggen.
-function showSheetBg(){ $('#sheetBg').classList.add('show'); try{ const _t=document.getElementById('toast'); if(_t){ _t.className=''; clearTimeout(window._tt); } }catch(_){} hideTip(); }
+function showSheetBg(){ $('#sheetBg').classList.add('show'); try{ const _t=document.getElementById('toast'); if(_t){ _t.className=''; clearTimeout(window._tt); } }catch(_){} hideTip(); sheetLangMeet(); }
+/* v361: knoppen vast onderaan lange sheets. De handelingen van een sheet staan in een balk (.sheet-voet) die met
+   position:sticky onderaan blijft staan zolang de sheet hoger is dan het scherm; de inhoud scrollt erachter en
+   aan het eind staat de laatste regel erboven. De balk verandert de hoogte van de sheet niet: zijn negatieve
+   marge en zijn padding heffen elkaar op, en de lijn erboven is een pseudo-element (alleen bij #sheet.lang).
+   sheetVoet() is de vorm voor een sheet die zijn reden zelf kent; een sheet die zijn knoppenrij als laatste
+   element draagt krijgt de balk vanzelf (voetKandidaat()), zodat elke lange sheet hem heeft. Een knop die uit
+   staat zegt in de balk waarom (data-voetreden), zodat je de reden niet onderin hoeft te zoeken. */
+function voetRedenHTML(r){ return r?`<div class="small voet-reden" data-voetreden>${r}</div>`:''; }
+function sheetVoet(knoppen, reden, marge){ return `<div class="sheet-voet" data-voet style="margin-top:${marge||'12px'}">${voetRedenHTML(reden)}<div class="row" style="gap:8px">${knoppen}</div></div>`; }
+function voetRedenZet(r){ const v=document.querySelector('#sheet [data-voet]'); if(!v) return; const o=v.querySelector('[data-voetreden]'); if(o) o.remove(); if(r) v.insertAdjacentHTML('afterbegin', voetRedenHTML(r)); }
+function voetKandidaat(s){
+  let el=s.lastElementChild;
+  while(el){ const c=[...el.children];
+    if(c.length && c.every(x=>x.tagName==='BUTTON') && c.some(x=>x.classList.contains('btn'))) return el;
+    el=el.lastElementChild; }
+  return null;
+}
+function sheetLangMeet(){
+  const s=document.getElementById('sheet'); if(!s) return;
+  if(!s.querySelector('.sheet-voet')){ const r=voetKandidaat(s); if(r) r.classList.add('sheet-voet'); }
+  s.classList.toggle('lang', s.scrollHeight>s.clientHeight+1);
+}
+try{ new MutationObserver(()=>sheetLangMeet()).observe(document.getElementById('sheet'), {childList:true, subtree:true}); window.addEventListener('resize', sheetLangMeet); }catch(_){}
 /* v197: _txFilterSheet stond hier niet bij, en werd nergens anders op false gezet. Zijn drie lezers
    doen `if(window._txFilterSheet) openTxFilter()` - dat leest als "staat de sheet open, ververs hem
    dan" - maar de vlag betekende "is ooit geopend". Een filterwijziging liet de sheet daardoor de

@@ -222,7 +222,9 @@ for (const w of [360, 390]) {
     console.log(`v357 ${w}px: kaart ${kaart.h}, sheet ${sheet.h}, keuze ${aard.h}`);
     expect(kaart.o).toBe(0); expect(sheet.o).toBe(0); expect(aard.o).toBe(0);
     expect(kaart.h).toBeLessThan(420);
-    expect(sheet.h).toBeLessThan(500);   // v357: met de regel waaruit het bedrag bestaat 491 op 360 en 455 op 390 (gemeten; was 449/413)
+    expect(sheet.h).toBeLessThan(520);   // v357: met de regel waaruit het bedrag bestaat 491 op 360 en 455 op 390 (gemeten; was 449/413).
+    // v361: de knoppenrij is de vaste balk, en #gripVast draagt nu zijn 20px padding onderaan (511/475); de negatieve marge
+    // eronder valt in de padding van de sheet, dus de sheet zelf is niet hoger (sheet-voet.spec.js meet dat).
     expect(aard.h).toBeLessThan(320);
   });
 }

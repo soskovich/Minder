@@ -120,6 +120,34 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE HANDELINGEN VAN EEN LANGE SHEET STAAN IN EEN VASTE BALK ONDERAAN, EN EEN KNOP DIE UIT STAAT ZEGT DAAR WAAROM**
+  (`v361`, gevraagd door de gebruiker): `.sheet-voet` is `position:sticky` met de achtergrond van de sheet; de lijn
+  erboven is een `::before` en staat er alleen als de sheet scrollt (`#sheet.lang`, gezet door `sheetLangMeet()`, die
+  een `MutationObserver` op `#sheet` en `showSheetBg()` aanroepen). DE BALK IS HOOGTENEUTRAAL: zijn negatieve marge
+  onder en zijn padding heffen elkaar op, dus geen enkele sheet wordt hoger, en opzij trekt een `box-shadow` de
+  achtergrond tot de rand: een negatieve marge daar telde in twee bestaande specs als overloop van de omhullende div.
+  Een omhullende div (`#gripVast`) draagt wel de 20px padding van de balk; `grip-vast-variabel` g gaat van 491 naar 511 (de spec haalt de klasse weg en
+  eist dezelfde `scrollHeight`). Dat werkt alleen als de balk het LAATSTE element is: inhoud erna zou eronder vallen.
+  `sheetVoet(knoppen, reden, marge)` is de vorm voor een sheet die zijn reden kent (`data-voet`, de reden in
+  `data-voetreden` BOVEN de knoppenrij, want `flex-wrap` in de rij liet Terug naar een tweede regel zakken);
+  `voetRedenZet()` werkt hem bij als het formulier bij het typen alleen een deel hertekent. Een sheet waarvan de
+  knoppenrij (alleen knoppen, minstens een `.btn`) het laatste element is, krijgt de balk vanzelf (`voetKandidaat()`).
+  DE REDENEN: `splitReden()`, `ruimReden()` ("Kies eerst waar de EUR X heen gaat"), `potFormReden()`,
+  `overschotReden()` (contant en bank), en een vaste zin bij Wordt een reservering, Potje bijstellen, Archiveren en
+  Boekingen zoeken. Altijd de eerste open keuze, van boven naar beneden; een knop die aan staat heeft geen reden.
+  DE EDITORS van spaardoel, schuld, bezitting, verplichting en potje zetten Opslaan nu als laatste, met de links
+  (verwijderen, terug, Splitsen, Ander bedrag, Archiveren) erboven; het filter op Transacties ook ("Filters wissen"),
+  en zijn min/max-velden liepen op 360px 57px over (`min-width:0`). GEEN BALK: sheets zonder handeling (lijsten, de
+  boekingssheet), de editors die meteen opslaan met Klaar bovenaan (budgeteditor, Inkomen & rekeningen) en Oktober
+  vooruit, dat zijn handelingen per potje draagt.
+  GEMETEN op 360x640 (de sheet is 510px): Splitsen 647px leeg en 1111 ingevuld, Te ruime potjes 673/1118, Nieuw potje
+  410 leeg en 802 met dekking, Wordt een reservering 413/427 (past), Contant terugontvangen 286 leeg, 661 met een rest
+  en 657 ingevuld (nog nooit geteld 385/760/776), de bank 626/602, Potje bijstellen 461, spaardoel 518, schuld 528,
+  potje 525, filter 584; in elk de primaire knop zichtbaar zonder scrollen en geen horizontale overloop. Splitsen leeg
+  is 24px hoger dan bij `v360` (623): dat is de reden in de balk. Nieuwe spec `sheet-voet.spec.js`.
+  VIJFTIEN SABOTAGES, VEERTIEN ROOD. De vijftiende (`splitReden()` zonder zijn vroege terugkeer bij een knop die aan
+  staat) is per constructie inert: dan gaat elke regel van de lus op en geeft hij ook geen reden (meetles p). "De reden in
+  de rij" bleef groen tot de spec eiste dat Splitsen en Terug op een regel staan (meetles a).
 - **EEN POTJE SPLITS JE VANAF EEN MAAND, EEN BEDRAG KAN EEN SCHATTING ZIJN, EN EEN RESERVERING NEEMT HAAR BEDRAG PER
   MAAND UIT HET POTJE** (`v360`, gevraagd door de gebruiker, mockup "potje splitsen"). GEMETEN VOORAF: een potje kon
   alleen een ander bedrag krijgen of gearchiveerd worden, dus wie een deel van Huur naar Alimentatie zag gaan verlaagde
@@ -6613,7 +6641,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v360` → `minder-v361`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v361` → `minder-v362`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6632,7 +6660,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359` en `v360` naar `minder-v360`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360` en `v361` naar `minder-v361`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
