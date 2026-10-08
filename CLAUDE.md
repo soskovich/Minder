@@ -163,10 +163,10 @@ genoemde versietag.)*
   (`gripRuimerBijstel()`); bestaande routes, geen tweede editor (`v61`). De maanden komen uit `maandVooruit()` zelf
   (`x.maanden`: de variabele uitgave per potje in elk van de `VOORUIT_MAANDEN` afgeronde maanden, in de snede van
   `piekInScope()`, dus zonder herkende incasso's), en worden afgezet tegen het variabele bedrag van NU (`x.bud`).
-  DE DREMPEL IS EEN VOORSTEL EN NIET GEKOZEN DOOR DE GEBRUIKER: `RUIMER_DREMPEL={deel:0.5, euro:50}`, dus in ELKE
-  maand hooguit de helft van het variabele bedrag EN minstens EUR 50 eronder. GEMETEN op de stand van 6 oktober: Sport
-  (527), Verzekeringen (525) en Abonnementen (70) geven drie maanden nul uit en zijn alle drie ruimer; met `euro:100`
-  valt Abonnementen eruit. De keuze ligt bij de gebruiker.
+  DE DREMPEL IS DE KEUZE VAN DE GEBRUIKER (bij `v356` voorgesteld, bij `v357` bevestigd): `RUIMER_DREMPEL={deel:0.5,
+  euro:50}`, dus in ELKE maand hooguit de helft van het variabele bedrag EN minstens EUR 50 eronder. GEMETEN op de stand
+  van 6 oktober: Sport (527), Verzekeringen (525) en Abonnementen (70) geven drie maanden nul uit en zijn alle drie
+  ruimer; met `euro:100` zou Abonnementen eruit vallen, en dat alternatief is niet gekozen.
   GEMETEN: de stappen 1.672, Vices +83, Boodschappen +61, ruimte -1.122, 694; de kaart van 348 naar 330px op 360 en
   van 309 naar 299 op 390, Grip van 602 naar 584 en van 564 naar 553; de sheet 294px op 360 en 390, de regel 55px.
   Nieuwe spec `grip-ruimte.spec.js`; `deze-maand-bridge`, `grip-brug-tik` en `grip-vast-variabel` aangepast.

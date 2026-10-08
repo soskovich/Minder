@@ -1,7 +1,7 @@
 /* v356: DE STAP "RUIMTE IN ANDERE POTJES". Op de stand van 6 oktober (deze-maand-stand.js) staan alleen de potjes
    die boven eindigen los (Vices +83, Boodschappen +61), en de rest is de ruimte in de andere potjes (-1.122).
    De sheet achter die stap noemt bovenaan de potjes die structureel ruimer zijn dan je gewoonlijk uitgeeft
-   (potRuimer, RUIMER_DREMPEL: een voorstel, niet gekozen door de gebruiker). */
+   (potRuimer, RUIMER_DREMPEL: de keuze van de gebruiker, bevestigd bij v357). */
 const { test, expect } = require('@playwright/test');
 const { boot } = require('./deze-maand-stand');
 
