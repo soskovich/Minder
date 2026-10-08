@@ -222,7 +222,10 @@ genoemde versietag.)*
   geen post, geen herkende incasso, of een vast potje met `geen`) krijgt geen voorstel maar alleen de bestaande ingang
   "Ander bedrag vanaf een maand ›" (`openPotForm(k)`). "SPLITSEN ›" KOMT HIER BIJ ZODRA DIE HANDELING ER IS (gevraagd
   door de gebruiker, de volgende ronde): de mockup noemde hem, maar er bestaat nog geen splits-route, en tot dan staat er
-  geen knop zonder bestemming en geen eigen splitsing in deze sheet.
+  geen knop zonder bestemming en geen eigen splitsing in deze sheet. DE RONDE DIE SPLITSEN BOUWT DRAAIT TEST e VAN
+  `grip-ruim-bijstel.spec.js` OM (keuze van de gebruiker): die eist nu dat er bij Huur geen "Splitsen" staat, en eist
+  daarna dat een potje zonder betaling PRECIES TWEE ingangen draagt, "Splitsen ›" en "Ander bedrag vanaf een maand ›",
+  en dat "Splitsen ›" de nieuwe handeling opent met het bronpotje al gekozen.
   HET VRIJE BEDRAG KRIJGT EEN BESTEMMING, in deze volgorde: de potjes die niet passen (aard `pastniet`, met potje en
   gewone maand), sparen bovenop je spaarinleg, of het maandbudget verlagen. Elk een veld met "de rest"; niets
   voorgekozen. OPSLAAN KAN PAS als er een maand is, elk potje een keuze heeft en het toegewezen bedrag precies het vrije

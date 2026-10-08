@@ -68,6 +68,9 @@ test('d. niets is voorgekozen en opslaan staat uit', async ({ page }) => {
   expect(r).toEqual({ on: 0, vanaf: '', uit: true, best: false });
 });
 
+// OMDRAAIEN ZODRA SPLITSEN BESTAAT (keuze van de gebruiker, zie de v358-regel in CLAUDE.md): dan eist deze test
+// precies twee ingangen bij een potje zonder betaling, "Splitsen ›" en "Ander bedrag vanaf een maand ›", en dat
+// "Splitsen ›" de nieuwe handeling opent met het bronpotje al gekozen.
 test('e. Huur zonder betaling krijgt geen voorstel, alleen Ander bedrag vanaf een maand (Splitsen bestaat nog niet)', async ({ page }) => {
   await boot(page); await open(page);
   const r = await page.evaluate(() => { const e = document.querySelector('[data-ruimpot="huur"]');
