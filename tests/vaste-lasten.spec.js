@@ -99,7 +99,10 @@ test.describe('b - één vlag, met datum, en de term is opgezegd', () => {
     expect(r.vlag).toEqual({ sinds: ymd(now) });
     expect(r.cancel).toBeNull();
     expect(r.sheet).toContain('Opgezegd op ' + now.getDate() + ' ');
-    expect(r.sheet).toMatch(/Opgezegd · telt niet mee/i);   // de kop staat in kapitalen via CSS
+    /* v369: de kop heet "Opgezegd" en niet meer "Opgezegd · telt niet mee": een post met een laatste afschrijving telt
+       tot die datum nog mee (verwachtInMaand()), dus die belofte klopt niet meer voor elke post eronder. */
+    expect(r.sheet).toMatch(/ Opgezegd /i);   // de kop staat in kapitalen via CSS
+    expect(r.sheet).not.toMatch(/telt niet mee/i);
     expect(r.sheet).toContain('Toch niet');
   });
 
