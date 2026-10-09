@@ -65,6 +65,7 @@ test.describe('b · einddatum per doel', () => {
     expect(gA.eta).toBeGreaterThan(0);
     expect(gA.eta).toBeLessThan(await page.evaluate(() => ETA_DATUM_VANAF));
 
+    await page.evaluate(() => { window._planRij = 'gA'; render(); });   // v367: het datumpaar staat in de geopende rij
     const rij = await page.locator('#s-vooruit .plan-item[data-id="gA"]').innerText();
     expect(rij).toContain(`~${gA.eta}`);
     expect(rij).not.toMatch(/rond [a-z]{3,4} \d{4}/i);
@@ -78,6 +79,7 @@ test.describe('b · einddatum per doel', () => {
     const gA = (await page.evaluate(() => allocatePlan())).find((x) => x.id === 'gA');
     expect(gA.eta).toBeGreaterThanOrEqual(await page.evaluate(() => ETA_DATUM_VANAF));
 
+    await page.evaluate(() => { window._planRij = 'gA'; render(); });   // v367: het datumpaar staat in de geopende rij
     const rij = await page.locator('#s-vooruit .plan-item[data-id="gA"]').innerText();
     expect(rij).toContain(`rond ${await datumOver(page, gA.eta)}`);
     expect(rij).toMatch(/rond [a-z]{3,4} \d{4}/i);
@@ -120,6 +122,7 @@ test.describe('b · einddatum per doel', () => {
     const gX = await page.evaluate(() => allocatePlan().find((x) => x.id === 'gX'));
     expect(gX.alloc).toBe(0);
     expect(gX.status).toBe('wacht op capaciteit');
+    await page.evaluate(() => { window._planRij = 'gX'; render(); });   // v367
     const rij = await page.locator('#s-vooruit .plan-item[data-id="gX"]').innerText();
     expect(rij).toMatch(/wacht op capaciteit/i);
     expect(rij).not.toMatch(/rond /);

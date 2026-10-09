@@ -112,7 +112,7 @@ test.describe('c · de signatuur per thema', () => {
     const glow = await page.evaluate(() => getComputedStyle(document.body, '::before').backgroundImage);
     expect(glow).toContain('radial-gradient');
     const hero = await page.evaluate(() => {
-      const h = document.querySelector('.homehero .hh-big.grad');
+      const h = document.querySelector('.homehero .hh-big');   // v367: het saldo is het herogetal
       return h ? { img: getComputedStyle(h).backgroundImage, kleur: getComputedStyle(h).color } : null;
     });
     expect(hero, 'het hero-bedrag draagt het verloop').not.toBeNull();

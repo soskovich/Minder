@@ -51,7 +51,7 @@ test.describe('geen bekend saldo', () => {
     expect(await heroBig(page)).not.toMatch(/\d/);              // nergens een cijfer als hoofdgetal
 
     const hero = await page.locator('#s-dash .homehero').innerText();
-    expect(hero).toContain('totaal saldo');
+    expect(hero.toLowerCase()).toContain('totaal saldo');   // v367: het saldo is het hoofdgetal, met een hoofdletter
     expect(hero).toContain('onbekend');
     expect(hero).toContain('vul je saldo aan');
     expect(hero).not.toMatch(/€\s?-?\d/);                       // ook geen bedrag in de subregels
@@ -71,13 +71,13 @@ test.describe('geen bekend saldo', () => {
     await page.evaluate(() => openSafeToSpend());
     await page.waitForSelector('#sheetBg.show');
     const sheet = await page.locator('#sheet').innerText();
-    expect(sheet).toContain('Veilig te besteden');
+    expect(sheet).toContain('Vrij te besteden');   // v367: de opbouw heet "Zo kom je op" en eindigt op vrij te besteden
     expect(sheet).toContain('onbekend');
     expect(sheet).toContain('Vul je saldo aan');
     // het rode "je komt tekort"-blok hoort hier niet: we weten het simpelweg niet
     expect(sheet).not.toContain('is samen groter dan je saldo');
     // en de totaalregel toont geen bedrag
-    expect(sheet).not.toMatch(/Veilig te besteden\s*\n?\s*€/);
+    expect(sheet).not.toMatch(/Vrij te besteden\s*\n?\s*€/);
   });
 });
 
@@ -86,11 +86,13 @@ test.describe('wél een bekend saldo', () => {
     await open(page, 2500);
     // v171: hele euro's waar het bedrag een samenvatting is. Centen blijven waar het bedrag exact
     // en waargenomen is: de transactielijst, en de saldo-drill-down per rekening.
-    const s = await page.evaluate(() => ({ known: safeToSpend().known, safe: safeToSpend().safe, txt: euro0(safeToSpend().safe) }));
+    const s = await page.evaluate(() => ({ known: safeToSpend().known, safe: safeToSpend().safe, txt: euro0(safeToSpend().saldo), vrij: euro0(safeToSpend().safe) }));
     expect(s.known).toBe(1);
+    /* v367: het hoofdgetal is het saldo; vrij te besteden staat in de groene regel eronder */
     expect((await heroBig(page)).trim()).toBe(s.txt);
-    const hero = await page.locator('#s-dash .homehero').innerText();
-    expect(hero).toContain('totaal saldo €2.500');
+    expect(await page.locator('#s-dash [data-vrij]').innerText()).toContain(s.vrij);
+    const hero = (await page.locator('#s-dash .homehero').innerText()).replace(/\s+/g, ' ');
+    expect(hero).toContain('Totaal saldo €2.500');
     expect(hero).not.toContain('€2.500,00');
     expect(hero).not.toContain('onbekend');
   });

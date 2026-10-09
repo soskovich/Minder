@@ -71,40 +71,27 @@ async function boot(page, o, breed) {
   await page.waitForFunction(() => typeof doelStreepje === 'function');
   await page.evaluate(() => go('vooruit'));
 }
-/* v318: DE BESTEMMINGEN STAAN NAAST ELKAAR. Een bestemming is nu twee elementen: `.wf-kol` met de
-   tak en het vat, en `.wf-tekst` met de naam, de stand en het datumpaar. Het streepje ligt dwars op
-   het vat en staat in de box eromheen, want het vat heeft overflow:hidden. De hoogte van een vat is
-   sinds v318 zijn DOELBEDRAG en niet meer voor elke bestemming gelijk; wat dat precies moet zijn
-   staat in plan-vaten-naast-elkaar.spec.js en niet hier. */
-const balken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-vat')].map((v) => {
-  const box = v.parentElement, id = v.dataset.vat;
-  const tk = document.querySelector(`#s-vooruit .wf-tekst[data-id="${id}"]`);
-  const r = v.getBoundingClientRect();
-  const st = box.querySelector('.wf-streep');
-  return { id, h: Math.round(r.height), w: Math.round(r.width),
-    vulling: [...v.querySelectorAll('i')].map((f) => parseFloat(f.style.height)),
-    streep: st ? parseFloat(st.dataset.pct) : null,
-    sr: st ? st.textContent.replace(/\s+/g, ' ').trim() : null,
-    laat: tk ? tk.dataset.laat === '1' : false,
-    /* `vol` en `dat` zijn sinds v318 TWEE velden en geen één string. Het ontwerp zet "vol" met zijn
-       datum apart boven het datumpaar (besluit 2), dus een assertie over de streefdatum mag niet
-       meer per ongeluk op de vol-datum slagen en omgekeerd. */
-    vol: tk && tk.querySelector('[data-vol]')
-      ? tk.querySelector('[data-vol]').innerText.replace(/\s+/g, ' ').trim() : '',
-    dat: tk && tk.querySelector('.vat-dat')
-      ? tk.querySelector('.vat-dat').innerText.replace(/\s+/g, ' ').trim() : '' };
-}));
-/* v318: de tak is verticaal en zijn DIKTE is het maandbedrag. De terugval staat niet meer in de tak
-   maar als stippellijn in de strook eronder, met de gever en de ontvanger op dezelfde `.wf-lijn`. */
-const takken = (page) => page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-kol')]
-  .map((k) => {
-    const vol = k.querySelector('.wf-tak i[data-takkleur]');
-    return { id: k.dataset.id, w: vol ? +vol.getBoundingClientRect().width.toFixed(1) : null,
-      erf: [...document.querySelectorAll(`#s-vooruit .wf-lijn[data-erf-naar="${k.dataset.id}"]`)]
-        .map((e) => e.dataset.erfVan) };
-  }));
-/* alleen de bestemmingen met een eigen, gevulde tak */
-const gevuld = async (page) => (await takken(page)).filter((t) => t.w != null);
+/* v367: DE VATEN ZIJN RIJEN GEWORDEN. Een bestemming is een `.plan-item[data-id]` met een dunne balk (de vulling
+   is de voortgang, het streepje staat erop), rechts het maandbedrag met de vol-datum, en het datumpaar van v307/v318
+   (vatRegels()) onder de rij zodra je hem opent. De helper opent elke rij om dat paar te lezen. */
+const balken = (page) => page.evaluate(() => {
+  const ids = [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')].map((e) => e.dataset.id);
+  const uit = ids.map((id) => {
+    window._planRij = id; render();
+    const tk = document.querySelector(`#s-vooruit .plan-item[data-id="${id}"]`);
+    const st = tk.querySelector('[data-streep]'), re = (tk.querySelector('[data-planrechts]') || {}).innerText || '';
+    const v = re.match(/(?:vol|schuldenvrij) \w+ \d{4}/);
+    return { id, vulling: [...tk.querySelectorAll('.plan-rijbalk > .bar-fill')].map((f) => parseFloat(f.style.width)),
+      streep: st ? parseFloat(st.dataset.pct) : null, sr: st ? st.textContent.replace(/\s+/g, ' ').trim() : null,
+      laat: tk.dataset.laat === '1', status: tk.dataset.status, vol: v ? v[0] : '',
+      dat: tk.querySelector('[data-plandetail]') ? tk.querySelector('[data-plandetail]').innerText.replace(/\s+/g, ' ').trim() : '' };
+  });
+  window._planRij = null; render();
+  return uit;
+});
+/* de bestemmingen met een eigen segment in de inlegbalk, dus met een maandbedrag */
+const gevuld = (page) => page.evaluate(() => [...document.querySelectorAll('.inleg-balk > .bar-fill')]
+  .filter((x) => x.dataset.seg !== 'vrij').map((x) => ({ id: x.dataset.seg, w: parseFloat(x.style.width) })));
 /* De echte ids van het toestel. Ze dragen hun aanmaakmoment in base36 ('gmrsd1piu' is 19 juli
    2026), en dat is wat de terugval leest; ID_KK zou naar 1970 decoderen en dus geen streepje geven.
    Een spec die het beginmoment toetst moet daarom met plausibele ids werken. */
@@ -138,30 +125,8 @@ test.describe('a · de grendel in beeld', () => {
     expect(await page.evaluate(() => planGrendel())).toMatchObject({ dicht: true, rest: 4201 });
     const T = await gevuld(page);
     expect(T.map((x) => x.id)).toEqual(['noodfonds']);      // de andere twee krijgen niets
-    /* v318: de tak is geen segment van de balk meer maar een verticale tak, en zijn maat is dus
-       een DIKTE in pixels en geen percentage. Hij komt uit planTakDikte() en wordt hier niet
-       opnieuw uitgedrukt (v104). */
-    expect(T[0].w).toBeCloseTo(await page.evaluate(() => planTakDikte(allocatePlan()
-      .find((p) => p.id === 'noodfonds').alloc)), 1);
-    /* v317 zette de ruimte van de buffer als GESTIPPELD blok in de tak van het doel erachter. v318
-       maakt er een stippellijn van, in de strook onder de vaten, met de gever en de ontvanger op
-       dezelfde `.wf-lijn`. De overdrachten komen uit planTerugval() en worden hier niet opnieuw
-       uitgedrukt (v104, besluit v318).
-       HET ZIJN ER TWEE EN NIET ÉÉN, en dat is gemeten en niet verwacht: de projectie ketent door.
-       De buffer geeft zijn ruimte aan Kosten Koper, en Kosten Koper die van hém aan Inrichting.
-       Een assertie op één overdracht zou de tweede stil laten vallen. */
-    const erf = (await takken(page)).filter((t) => t.erf.length);
-    const TV = await page.evaluate(() => planTerugval(allocatePlan(), planCapacity())
-      .map((e) => [e.naar, e.van]));
-    expect(TV.length).toBeGreaterThan(1);
-    expect(erf.map((t) => [t.id, t.erf])).toEqual(TV.map(([naar, van]) => [naar, [van]]));
-    expect(erf.every((t) => t.w == null), 'geen ontvanger krijgt vandaag zelf al iets').toBe(true);
-    /* En het bedrag staat één keer bij die tak. Met drie vaten is de kolom SMAL, dus het zakt naar
-       de eerste tekstregel onder het vat; staat er ruimte naast de tak, dan staat het daar. Eén
-       bron (planBedragDeel), twee plekken naar gelang de breedte (v318). */
-    expect(await page.locator('#s-vooruit .plan-item[data-id="noodfonds"]').innerText())
-      .toContain('€3.000/mnd');
-    expect(await page.locator('#s-vooruit .wf-taklabel').count()).toBe(0);
+    /* v367: de terugval staat in de tijdlijn (openPlanTijdlijn()) en niet meer als stippellijn onder de vaten. */
+    expect(await page.locator('#s-vooruit .plan-item[data-id="noodfonds"]').innerText()).toContain('€3.000/mnd');
   });
 
   test('het noodfonds noemt de maand waarin hij vol is, en de twee doelen wachten', async ({ page }) => {
@@ -181,35 +146,22 @@ test.describe('a · de grendel in beeld', () => {
       const lbl = await page.evaluate((i) =>
         doelDatumLabel(((SET.goals || []).find((g) => g.id === i) || {}).streefdatum, true), id);
       expect(lbl, id + ' heeft een korte streefdatum').toMatch(/^\w+ \d{4}$/);
-      expect(v.dat, id).toContain(`streef ${lbl}`);
-      expect(v.dat, id).not.toContain('moet in');
+      /* v367: de rij draagt de korte streefdatum rechts, het geopende datumpaar de lange vorm */
+      expect(await page.locator(`#s-vooruit .plan-item[data-id="${id}"] [data-planrechts]`).innerText(), id).toContain(`streef ${lbl}`);
+      expect(v.dat, id).toContain('moet in');
       expect(v.dat, id).toContain(`verdelen gaat open rond ${dat}`);
       expect(v.laat, id).toBe(false);          // wachten is geen achterstand
     }
   });
 
-  test('de wachtende vaten staan doffer en de dofheid hangt aan de status', async ({ page }) => {
+  /* v367: "de wachtende vaten staan doffer" en "het noodfonds krimpt tot een regel" zijn vervallen met de vaten; de
+     status staat nu in woorden op de rij ("wacht tot <maand>"), zie vrij-uitschieters.spec.js d. */
+  test('de status van de wachtende doelen zegt dat ze wachten', async ({ page }) => {
     await boot(page, dicht);
-    const r = await page.evaluate(() => [...document.querySelectorAll('#s-vooruit .wf-tekst')]
-      .map((v) => ({ id: v.dataset.id, dof: v.classList.contains('wf-dof') })));
-    expect(r.find((x) => x.id === 'noodfonds').dof).toBe(false);
-    expect(r.filter((x) => x.id !== 'noodfonds').every((x) => x.dof)).toBe(true);
+    const V = await balken(page);
+    expect(V.find((x) => x.id === 'noodfonds').status).toBe('actief');
+    expect(V.filter((x) => x.id !== 'noodfonds').every((x) => x.status === 'wacht')).toBe(true);
   });
-
-  test('zodra de buffer vol is krimpt het noodfonds tot één regel, want het draagt geen tak meer',
-    async ({ page }) => {
-      await boot(page, Object.assign({}, dicht, VOL));
-      expect(await page.evaluate(() => planGrendel())).toBe(null);
-      const r = await page.evaluate(() => {
-        const it = document.querySelector('#s-vooruit .plan-item[data-id="noodfonds"]');
-        return { vol: it.classList.contains('vat-vol'), vat: !!it.querySelector('.wf-vat'),
-          h: Math.round(it.getBoundingClientRect().height) };
-      });
-      expect(r.vol).toBe(true);
-      expect(r.vat).toBe(false);
-      expect(r.h).toBeLessThan(80);
-      expect((await takken(page)).some((t) => t.id === 'noodfonds')).toBe(false);
-    });
 });
 
 test.describe('b · het datumpaar', () => {
@@ -317,19 +269,6 @@ test.describe('b · het datumpaar', () => {
 test.describe('c · de balken staan op schaal, de vulling is de voortgang', () => {
   const drie = { goals: [KK({ streefdatum: KK_STREEF }), IW({ streefdatum: IW_STREEF })],
     planOrder: ['noodfonds', ID_KK, ID_IW] };
-
-  test('drie vaten van gelijke breedte, en de hoogtes lopen uiteen', async ({ page }) => {
-    await boot(page, drie);
-    const B = await balken(page);
-    expect(B.length).toBe(3);
-    expect(new Set(B.map((x) => x.w)).size, 'breedtes: ' + B.map((x) => x.w).join(',')).toBe(1);
-    /* De drie doelbedragen van het toestel lopen uiteen (noodfonds, 10.000, 3.000), dus de hoogtes
-       horen dat ook te doen. Zonder die meting op de INVOER is "ze lopen uiteen" niet van "ze zijn
-       toevallig gelijk" te onderscheiden (v299/v300). */
-    const D = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, p.doel])));
-    expect(new Set(B.map((x) => D[x.id])).size, 'doelen: ' + B.map((x) => D[x.id]).join(',')).toBe(3);
-    expect(new Set(B.map((x) => x.h)).size, 'hoogtes: ' + B.map((x) => x.h).join(',')).toBeGreaterThan(1);
-  });
 
   test('de vulling is gespaard gedeeld door doel, in procenten', async ({ page }) => {
     await boot(page, Object.assign({
@@ -542,71 +481,24 @@ test.describe('d · de balk en de takken', () => {
     expect(vrij).toBeCloseTo(P.vrij / P.cap * 100, 1);
   });
 
-  test('elk segment en zijn tak dragen dezelfde kleur', async ({ page }) => {
+  /* v367: de takken zijn vervallen met de vaten; het segment en de balk van zijn rij delen de tint. */
+  test('elk segment en de balk van zijn rij dragen dezelfde kleur', async ({ page }) => {
     await boot(page, twee);
-    const r = await page.evaluate(() => {
-      const uit = [];
-      for (const seg of document.querySelectorAll('.inleg-balk > .bar-fill')) {
-        const id = seg.dataset.seg; if (id === 'vrij') continue;
-        const tak = document.querySelector(`.wf-kol[data-id="${id}"] .wf-tak i[data-takkleur]`);
-        uit.push({ id, seg: getComputedStyle(seg).backgroundColor,
-          tak: tak ? getComputedStyle(tak).backgroundColor : null });
-      }
-      return uit;
-    });
+    const r = await page.evaluate(() => [...document.querySelectorAll('.inleg-balk > .bar-fill')].filter((x) => x.dataset.seg !== 'vrij').map((seg) => {
+      const id = seg.dataset.seg, f = document.querySelector(`#s-vooruit .plan-item[data-id="${id}"] .plan-rijbalk > .bar-fill`);
+      return { id, seg: getComputedStyle(seg).backgroundColor, rij: f ? getComputedStyle(f).backgroundColor : null }; }));
     expect(r.length).toBeGreaterThan(1);
-    for (const x of r) {
-      expect(x.tak, x.id + ' heeft een tak').not.toBe(null);
-      expect(x.seg, x.id).toBe(x.tak);
-    }
-    // en twee bestemmingen delen niet dezelfde tint, anders zegt de kleur niets
+    for (const x of r) expect(x.seg, x.id).toBe(x.rij);
     expect(new Set(r.map((x) => x.seg)).size).toBe(r.length);
   });
 
-  test('de dikte van een tak volgt zijn maandbedrag, en een doel zonder inleg heeft geen tak',
-    async ({ page }) => {
-      await boot(page, Object.assign({}, twee, { goals: [
-        KK({ streefdatum: overMnd(40), allocMode: 'fixed', perMaand: 2000 }),
-        IW({ streefdatum: overMnd(40), allocMode: 'fixed', perMaand: 0 })] }));
-      const r = await page.evaluate(() => ({
-        takken: [...document.querySelectorAll('#s-vooruit .wf-kol')].map((t) => {
-          const vol = t.querySelector('.wf-tak i[data-takkleur]');
-          return { id: t.dataset.id, w: vol ? parseFloat(vol.style.width) : null };
-        }),
-        alloc: Object.fromEntries(allocatePlan().map((p) => [p.id, p.alloc])),
-        dik: Object.fromEntries(allocatePlan().map((p) => [p.id, planTakDikte(p.alloc)])) }));
-      const g = r.takken.filter((t) => t.w != null);
-      expect(g.map((t) => t.id)).toEqual([ID_KK]);      // de tweede krijgt niets, dus geen gevuld blok
-      /* v318: de maat is een DIKTE in px, uit planTakDikte(), en die rekent de spec niet na
-         (v104). Wat hij vasthoudt is dat de dikte uit het MAANDBEDRAG komt. */
-      expect(g[0].w).toBeCloseTo(r.dik[ID_KK], 1);
-      expect(r.dik[ID_KK]).toBeGreaterThan(r.dik[ID_IW]);
-      expect(r.alloc[ID_KK]).toBeGreaterThan(r.alloc[ID_IW]);
-    });
-
-  /* v246b legde vast dat de tak zelf GEEN label draagt, want de kop erboven noemde het bedrag al.
-     v318 draait dat om: de tak staat verticaal en zijn DIKTE is het maandbedrag, dus het label hoort
-     ernaast. Wat de eigenschap blijft is dat het bedrag ER ÉÉN KEER staat, nooit op beide plekken.
-     DE PLEK HANGT AAN HET AANTAL KOLOMMEN, en dat is gemeten: het label staat absoluut vanaf de
-     middenlijn en breekt niet af, dus bij twee kolommen liep het over de buurkolom heen. Met twee
-     vaten zakt het daarom naar het tekstblok; met één staat het naast de tak. */
-  test('het maandbedrag staat één keer, en de plek volgt het aantal kolommen', async ({ page }) => {
+  test('het maandbedrag staat een keer per rij', async ({ page }) => {
     await boot(page, twee);
     const alloc = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, euro0(p.alloc)])));
-    expect(await page.locator('#s-vooruit .wf-kol').count()).toBe(2);
-    expect(await page.locator('#s-vooruit .wf-taklabel').count()).toBe(0);
-    for (const t of await gevuld(page)) {
-      const tk = await page.locator(`#s-vooruit .plan-item[data-id="${t.id}"]`).innerText();
-      expect(tk, t.id).toContain(alloc[t.id] + '/mnd');
+    for (const id of [ID_KK, ID_IW]) {
+      const tk = await page.locator(`#s-vooruit .plan-item[data-id="${id}"]`).innerText();
+      expect(tk.split(alloc[id] + '/mnd').length - 1, id).toBe(1);
     }
-    // en met één bestemming staat hij er wel naast, en dan NIET in het tekstblok
-    await boot(page, Object.assign({ goals: [KK({ doel: 1500, streefdatum: overMnd(40),
-      allocMode: 'fixed', perMaand: 1500 })], planOrder: ['noodfonds', ID_KK] }, VOL));
-    expect(await page.locator('#s-vooruit .wf-kol').count()).toBe(1);
-    const a1 = await page.evaluate((id) => euro0(allocatePlan().find((x) => x.id === id).alloc), ID_KK);
-    expect(await page.locator('#s-vooruit .wf-taklabel').innerText()).toContain(a1 + '/mnd');
-    expect(await page.locator(`#s-vooruit .plan-item[data-id="${ID_KK}"]`).innerText())
-      .not.toContain(a1 + '/mnd');
   });
 });
 

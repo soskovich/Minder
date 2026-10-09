@@ -44,6 +44,9 @@ const alloc = (page) => page.evaluate(() => allocatePlan().map((x) => ({
   eta: x.eta, status: x.status, blok: x.blokkeerder ? x.blokkeerder.id : null,
 })));
 const vrij = (page) => page.evaluate(() => planVrij());
+/* v367: Plan toont rijen; de uitleg van een rij (doorgezakt, wacht op, rond <maand>) staat in de geopende rij. */
+const rijTekst = async (page, id) => { await page.evaluate((i) => { window._planRij = i; render(); }, id);
+  return page.locator(`#s-vooruit .plan-item[data-id="${id}"]`).innerText(); };
 
 test.describe('a · het restant zakt door', () => {
   test('twee vaste doelen van samen €250: de overige €250 gaat naar het bovenste lopende doel', async ({ page }) => {
@@ -62,7 +65,7 @@ test.describe('a · het restant zakt door', () => {
     expect(await vrij(page)).toBe(0);       // niets blijft liggen
 
     await openPlanZone(page);
-    expect(await page.locator('.plan-item[data-id="gA"]').innerText()).toContain('waarvan €250 doorgezakt');
+    expect(await rijTekst(page, 'gA')).toContain('waarvan €250 doorgezakt');
     // v225: de sluitpost staat er ook als er niets overblijft, en zegt dan €0
     expect(await page.locator('#planVrij').innerText()).toMatch(/Blijft over\s*€0/);
     expect(await page.locator('#planVrij').innerText()).not.toMatch(/voeg een doel toe/i);
@@ -203,7 +206,7 @@ test.describe('c · ETA volgt de definitieve toewijzing', () => {
     // v193: boven een jaar toont de regel de datum in plaats van het aantal maanden; de eta zelf
     // (hierboven getoetst) is onveranderd de bron van allebei.
     const eDat = await page.evaluate((n) => etaDatum(n), P[0].eta);
-    expect(await page.locator('.plan-item[data-id="gA"]').innerText()).toContain(`rond ${eDat}`);
+    expect(await rijTekst(page, 'gA')).toContain(`rond ${eDat}`);
   });
 
   test('een aflos-item rekent zijn looptijd via payoffMonths op de bijgevulde inleg', async ({ page }) => {
@@ -239,9 +242,10 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
        rij direct erboven: dat is de ingang geworden. */
     expect(await page.locator('#planWacht').count()).toBe(0);
     expect(await page.locator('.plan-hint').count()).toBe(0);
-    const rij = page.locator('#s-vooruit .plan-item[data-id="gB"]');
-    expect(await rij.innerText()).toMatch(/Wacht op .Vakantie./);
-    expect(await rij.innerText()).not.toMatch(/maandbedrag instellen/i);
+    const rijB = await rijTekst(page, 'gB');
+    expect(rijB).toMatch(/Wacht op .Vakantie./);
+    expect(rijB).not.toMatch(/maandbedrag instellen/i);
+    await page.evaluate(() => { window._planRij = null; render(); });
 
     // en die blokkeerder is vanaf zijn eigen rij te openen
     await page.locator('#s-vooruit .plan-item[data-id="gA"] >> text=Vakantie').click();
@@ -304,8 +308,7 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
     expect(P[1].status).toBe('wacht op capaciteit');
     expect(P[1].blok).toBeNull();
     await openPlanZone(page);
-    const rij = page.locator('.plan-item[data-id="gB"]');
-    expect(await rij.innerText()).toMatch(/wacht op capaciteit/i);
+    expect(await rijTekst(page, 'gB')).toMatch(/wacht op capaciteit/i);
     expect(await page.locator('#planWacht').count()).toBe(0);   // geen blokkeerder, dus geen regel
   });
 });

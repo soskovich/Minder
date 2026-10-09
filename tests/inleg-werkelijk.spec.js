@@ -131,12 +131,12 @@ test.describe('b · de werkelijke inleg naast de ingestelde', () => {
 
   /* EEN NEGATIEF NETTO HEEFT ZIJN EIGEN VORM (v262): wat je eruit haalde, zonder minteken en zonder
      alarm. Zonder dit geval is "drie vormen" niet van "twee vormen" te onderscheiden. */
-  /* v365: met een bak om naar terug te zetten is "eruit gehaald" een keuze geworden (terugzetKaart); de losse
-     regel staat er alleen nog zonder bak. */
+  /* v365: met een bak om naar terug te zetten is "eruit gehaald" een keuze geworden; de losse regel staat er
+     alleen nog zonder bak. v367: die keuze is een compacte regel (#terugzetRegel) met "kies ›" naar een sheet. */
   test('meer eruit dan erin: de kaart zegt wat je eruit haalde, en de losse regel staat er niet', async ({ page }) => {
     await boot(page, { okt: -500, saldo: 8100 });
     const r = await page.evaluate(() => ({ regel: !!document.querySelector('#planInleg'), net: savedNet(thisYM()),
-      k: (document.querySelector('#terugzetKaart') || {}).dataset, t: (document.querySelector('#terugzetKaart') || {}).innerText || '' }));
+      k: (document.querySelector('#terugzetRegel') || {}).dataset, t: (document.querySelector('#terugzetRegel') || {}).innerText || '' }));
     expect(r.net).toBe(-500);
     expect(r.regel).toBe(false);
     expect(+r.k.terugzet).toBe(500);
@@ -220,8 +220,9 @@ test.describe('c · het vrije spaargeld verdelen', () => {
       goals: (SET.goals || []).map((g) => [g.naam, g.gespaard]),
       nf: SET.nfToegewezen, vrij: spaarVrij().vrij,
       eta: allocatePlan().filter((p) => p.type === 'goal').map((p) => p.eta),
-      vol: [...document.querySelectorAll('#s-vooruit [data-vol]')]
-        .map((e) => e.innerText.replace(/\s+/g, ' ').trim()),
+      /* v367: de rij draagt rechts "€X/mnd · vol Y" (data-planrechts) */
+      vol: [...document.querySelectorAll('#s-vooruit [data-planrechts]')]
+        .map((e) => (e.innerText.match(/vol \w+ \d{4}/) || [''])[0]).filter(Boolean),
     }));
     expect(na.goals).toEqual([['Kosten Koper', 8100], ['Inrichting woning', 900]]);
     expect(na.nf, 'de buffer stond al vol en krijgt niets').toBe(4000);
@@ -461,9 +462,11 @@ test.describe('e · de prijs in pixels', () => {
       expect(zonder.balkMt, 'en zonder regel zijn eigen 9px tot de kop').toBe('9px');
       expect(vol.kaart - zonder.kaart, 'netto: 18 plus 2 marge min de 5 van de balk').toBe(15);
       // v365: de tekst staat onder de vaten (punt 13), en dat maakt de kaart hoger: 684px op 360 en 666 op 390 (gemeten)
-      expect(zonder.kaart, 'zonder de regel').toBe(w === 360 ? 684 : 666);
+      /* v367: rijen in plaats van vaten; gemeten 506px op 360 en 433 op 390 (de rijen breken op 360 vaker af) */
+      expect(zonder.kaart, 'zonder de regel').toBe(w === 360 ? 506 : 433);
       expect(metKnop.vrij - zonder.vrij, 'de tweede knop').toBe(w === 360 ? 18 : 0);
-      expect(vol.zone - zonder.zone).toBe(w === 360 ? 33 : 15);
+      // v367: de zone wordt per stand afgerond, dus het verschil mag een pixel schuiven (33 of 34 op 360)
+      expect(Math.abs(vol.zone - zonder.zone - (w === 360 ? 33 : 15))).toBeLessThanOrEqual(1);
       expect(vol.overflow, 'niets steekt buiten de breedte').toBeLessThanOrEqual(1);
     });
   }

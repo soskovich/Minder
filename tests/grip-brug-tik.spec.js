@@ -45,8 +45,8 @@ test('b. een tik op rest toont de variabele potjes in die stap met hun verschil,
     const vast = V.vastePotjes.map((x) => x.k);
     const getallen = [...g.querySelectorAll('[data-restpotje]')].map((e) => { const t = e.innerText.match(/([+−-])\s*€\s*([\d.]+)/); return t ? (t[1] === '+' ? 1 : -1) * +t[2].replace(/\./g, '') : NaN; });
     return { rest: +g.dataset.rest, stap: Br.rest, rijen, verwacht, los, vast, som: getallen.reduce((a, b) => a + b, 0), verder: g.querySelectorAll('[data-restverder]').length }; });
-  expect(r.rest).toBe(-300);
-  expect(r.rijen).toEqual(['shopping']);
+  expect(r.rest).toBe(-239);
+  expect(r.rijen).toEqual(['shopping', 'boodschappen']);   // v367: Boodschappen +61 is geen uitschieter en valt in de rest
   expect(r.rijen.slice().sort()).toEqual(r.verwacht.slice().sort());
   for (const k of r.los) expect(r.rijen).not.toContain(k);
   for (const k of r.vast) expect(r.rijen).not.toContain(k);   // een vast potje staat nooit in de rest

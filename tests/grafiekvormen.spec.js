@@ -79,8 +79,9 @@ test.describe('b · de plan-balk: stilstand is grijs, beweging krijgt een segmen
   const rijen = (page) => page.evaluate(() => {
     const P = allocatePlan();
     const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-    return [...d.querySelectorAll('.wf-kol')].map((el) => {
-      const f = el.querySelectorAll('.wf-vat i');
+    /* v367: een rij per bestemming; de vulling en het groei-segment staan in zijn dunne balk */
+    return [...d.querySelectorAll('.plan-item[data-id]')].map((el) => {
+      const f = el.querySelectorAll('.plan-rijbalk > .bar-fill');
       const p = P.find((x) => x.id === el.dataset.id) || {};
       return { id: el.dataset.id, status: p.status, alloc: p.alloc,
         kleur: f[0] ? f[0].style.background : null, segmenten: f.length };
@@ -127,9 +128,9 @@ test.describe('b · de plan-balk: stilstand is grijs, beweging krijgt een segmen
          maakte het weer de breedte; v318 zet de vaten naast elkaar en dan is het opnieuw de hoogte.
          De eigenschap is door alle drie onveranderd: het segment is alloc plus je bestaande termijn,
          hetzelfde bedrag dat de regel eronder noemt. */
-      const f = d.querySelector('.wf-kol[data-id="af:d1"] .wf-vat i:nth-child(2)');
+      const f = d.querySelector('.plan-item[data-id="af:d1"] .plan-rijbalk > .bar-fill[data-groei]');   // v367: de rij
       return { alloc: p.alloc, debtPer: p.debtPer, doel: p.doel, gespaard: p.gespaard,
-        breedte: f ? parseFloat(f.style.height) : null };
+        breedte: f ? parseFloat(f.style.width) : null };
     });
     const verwacht = Math.min((r.alloc + r.debtPer) / r.doel * 100,
       100 - Math.min(Math.round(r.gespaard / r.doel * 100), 100));

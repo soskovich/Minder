@@ -26,7 +26,7 @@ test.describe('a · Home', () => {
         saldo: Math.round(safeToSpend().saldo), tekst: el.innerText }; });
     expect(r.contant).toBe(Math.round(r.bron)); expect(r.contant).toBe(Math.round(r.tb)); expect(r.contant).toBe(80);
     expect(r.bank + r.contant).toBe(r.saldo);
-    expect(r.tekst).toBe('€12.000 op de bank · €80 contant');
+    expect(r.tekst).toBe('€12.000 op de bank · €80 contant ›');   // v367: de regel opent je rekeningen
   });
   test('zonder telling is er niets te splitsen en staat de regel er niet', async ({ page }) => {
     await I.boot(page, { zonderContant: true }); await page.evaluate(() => go('dash'));
@@ -190,11 +190,14 @@ test.describe('d · Inzichten', () => {
     expect(zelfde).toBe(true);
   });
   test('tegen je potje: de EUR 0-groep is dicht, bevat alleen nul, en klapt op dezelfde plek uit', async ({ page }) => {
+    /* v367: de nulgroep staat in de drilldown "Alle N potjes", niet meer op de kaart */
     await I.boot(page); await page.evaluate(() => { SET.insKeuze = 'potje'; go('ins'); });
+    expect(await page.locator('#insKeuze [data-insnulgroep]').count()).toBe(0);
+    await page.click('[data-insalleknop="potje"]');
     const g = page.locator('[data-insnulgroep="potje"]');
     expect(await g.getAttribute('data-open')).toBe('0');
     expect(await page.locator('[data-insnulgroep="potje"] [data-inspotrij]').count()).toBe(0);
-    const buiten = await page.evaluate(() => [...document.querySelectorAll('#insKeuze [data-inspotrij]')].map((e) => +e.dataset.uit));
+    const buiten = await page.evaluate(() => [...document.querySelectorAll('#insAlle > [data-inspotrij]')].map((e) => +e.dataset.uit));
     expect(buiten.every((u) => u !== 0)).toBe(true);
     const kop = await g.innerText();
     await g.locator('[role=button]').click();
@@ -204,14 +207,14 @@ test.describe('d · Inzichten', () => {
     expect(r.open).toBe('1'); expect(r.uit.length).toBeGreaterThan(1); expect(r.uit.every((u) => u === 0)).toBe(true);
     expect(kop).toContain(`${r.uit.length} potjes nog niets uitgegeven`);
     expect(kop).toContain('€' + r.pot.reduce((a, b) => a + b, 0).toLocaleString('nl-NL'));
-    await page.evaluate(() => { go('dash'); go('ins'); });
+    await page.evaluate(() => { closeSheet(); go('dash'); go('ins'); openInsAlle('potje'); });
     expect(await page.locator('[data-insnulgroep="potje"]').getAttribute('data-open')).toBe('0');
   });
   test('tegen vorige maanden: alleen precies EUR 0 verschil staat in de groep', async ({ page }) => {
-    await I.boot(page); await page.evaluate(() => { go('ins'); insKeuzeZet('vorige'); });
+    await I.boot(page); await page.evaluate(() => { go('ins'); insKeuzeZet('vorige'); openInsAlle('vorige'); });   // v367: in de drilldown
     const g = page.locator('[data-insnulgroep="vorige"]');
     expect(await g.getAttribute('data-open')).toBe('0');
-    const buiten = await page.evaluate(() => [...document.querySelectorAll('#insKeuze [data-insvorigrij]')].map((e) => +e.dataset.verschil));
+    const buiten = await page.evaluate(() => [...document.querySelectorAll('#insAlle > [data-insvorigrij]')].map((e) => +e.dataset.verschil));
     expect(buiten.every((d) => d !== 0)).toBe(true);
     await g.locator('[role=button]').click();
     const binnen = await page.evaluate(() => [...document.querySelectorAll('[data-insnulgroep="vorige"] [data-insvorigrij]')].map((e) => +e.dataset.verschil));
@@ -229,7 +232,10 @@ test.describe('e · Plan', () => {
   test('zonder keuze blijft de inleg EUR 2.200, staat de kaart er zonder voorkeuze, en schrijft openen niets', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => go('vooruit'));
     const r = await kop(page);
-    expect(r.bedrag).toBe('€2.200/mnd'); expect(r.kaart).toBe(true); expect(r.save).toBe(2431);
+    /* v367: op Plan staat een compacte regel; de kaart met de drie keuzes opent erachter (openTerugzetSheet()) */
+    expect(r.bedrag).toBe('€2.200/mnd'); expect(r.kaart).toBe(false); expect(r.save).toBe(2431);
+    expect(await page.locator('#terugzetRegel').innerText()).toMatch(/€231 eruit gehaald in oktober\s*kies ›/);
+    await page.click('#terugzetRegel');
     expect(await page.evaluate(() => SET.terugzet)).toBeUndefined();
     const t = await page.locator('#terugzetKaart').innerText();
     expect(t).toContain('€231 eruit gehaald in oktober · uit Noodfonds');
@@ -259,7 +265,7 @@ test.describe('e · Plan', () => {
     expect(r.bedrag).toBe('€2.200'); expect(r.terug).toEqual([]); expect(r.nf).toBe(3407); expect(r.save).toBe(2200);
     expect(await page.evaluate((e) => [etaDatum(e.noodfonds), etaDatum(e.kk)], r.eta)).toEqual(['nov 2026', 'jun 2027']);
     await page.evaluate(() => { terugzetWijzig(); });
-    expect(await page.locator('#terugzetKaart').count()).toBe(1);
+    expect(await page.locator('#terugzetRegel').count()).toBe(1);
     await page.evaluate(() => terugzetKies('alles'));
     expect((await kop(page)).nf).toBe(3638);
   });
@@ -274,14 +280,5 @@ test.describe('e · Plan', () => {
     await page.evaluate((r) => { SET.terugzet = r; save(); render(); }, rec('alles'));
     expect((await kop(page)).bedrag).toBe('€2.200/mnd');
   });
-  for (const w of [360, 390]) {
-    test(`geen tekst over een bak heen op ${w}px`, async ({ page }) => {
-      await P.boot(page, { vp: { width: w, height: 900 } }); await page.evaluate(() => { go('vooruit'); terugzetKies('alles'); });
-      const r = await page.evaluate(() => [...document.querySelectorAll('.wf-kol')].map((k) => { const v = k.querySelector('.wf-vatbox').getBoundingClientRect(), t = k.querySelector('.wf-tekst').getBoundingClientRect();
-        return { id: k.dataset.id, vb: v.bottom, tt: t.top }; }));
-      expect(r.length).toBeGreaterThan(1);
-      for (const x of r) expect(x.tt).toBeGreaterThanOrEqual(x.vb - 0.5);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    });
-  }
+  /* v367: "geen tekst over een bak heen" is vervallen met de bakken; Plan is een rij per doel (vrij-uitschieters.spec.js d). */
 });

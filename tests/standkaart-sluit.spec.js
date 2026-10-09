@@ -106,12 +106,12 @@ test('b4 de lijst achter "nog te betalen" zegt dat Shurgard in zijn potje telt',
   expect(t).toMatch(/IN EEN POTJE · TELT DAAR[\s\S]*Shurgard NL[\s\S]*uit je potje Huur/i);
 });
 
-test('c1 de tegel toont €2.380 nog in potjes, met €85 per dag', async ({page})=>{
+test('c1 de tegel toont €2.380 nog in potjes, zonder dagbedrag (v367)', async ({page})=>{
   await bootStand(page);
   /* v359: de stand-kaart is de tegel "Nog in potjes"; go() hertekent niet als het scherm al de bron is (v280) */
   const t=await page.evaluate(()=>{ go('ins'); renderIns(); const q=(k)=>document.querySelector(`#insTegels [data-instegel="${k}"]`).innerText.replace(/\s+/g,' ');
     return {pot:q('potjes'), uit:q('uitgegeven')}; });
-  expect(t.pot).toMatch(/Nog in potjes €2\.380 €85 per dag/);
+  expect(t.pot).toMatch(/Nog in potjes €2\.380 al bestemd, verdeeld over je potjes/);
   expect(t.uit).toMatch(/Uitgegeven €175/);
 });
 
@@ -158,7 +158,7 @@ test('e1 Home toont het lagere veilig te besteden, met het bedrag per dag', asyn
   await bootStand(page);
   const t=await page.evaluate(()=>{ go('dash'); renderDash(); return document.querySelector('#s-dash').innerText; });
   expect(t).toContain('€524');
-  expect(t).toContain('Nog 28 dagen deze maand, dus €19 per dag.');
+  expect(t).toContain('€19 per dag · nog 28 dagen');   // v367: onder vrij te besteden
 });
 
 test('d5 meer dan er nog in het potje zit kan het niet vasthouden', async ({page})=>{

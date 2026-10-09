@@ -94,6 +94,7 @@ test.describe('a · het gemelde geval', () => {
     await boot(page);
     const r = await page.evaluate(() => {
       const G = planGrendel();
+      window._planRij = (allocatePlan().find((p) => p.type === 'goal') || {}).id;   // v367: het datumpaar staat in de geopende rij
       const d = document.createElement('div'); d.innerHTML = renderPlan(true);
       return { label: planGrendelDatum(G), maanden: G.maanden,
         rij: d.innerText.replace(/\s+/g, ' '),

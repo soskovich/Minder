@@ -104,7 +104,7 @@ h1,h2,h3{margin:0}
 /* koppen en grote bedragen volgen het thema-lettertype (Privé = serif) */
 h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-ctr .p,.wvo-tv{font-family:var(--font-head)}
 /* Aurora geeft het hero-bedrag een verloop; alleen als het niet zijn eigen (alarm)kleur draagt */
-.hh-big.grad{color:var(--accent)}
+.hh-big.grad{color:var(--accent)}.hh-big.grad[data-totaalsaldo]{color:var(--txt)}
 [data-theme="aurora"] .homehero .hh-big.grad{background:var(--hero-gradient);-webkit-background-clip:text;background-clip:text;color:transparent}
 .muted{color:var(--mut)}
 /* ===== v10 systeem, home pilot: geen dozen, ruimte + typografie ===== */
@@ -405,7 +405,7 @@ h1,h2,h3,.hlabel,.inssec,.homehero .hh-big,.hero2 .hbig,.gc-bighead,.hdj-kn,.gr-
 .vat-stand{display:block;margin-top:2px}
 .vat-dat{display:block;margin-top:3px;color:var(--mut2);line-height:1.45}
 .vat-vol{padding:2px 0}
-.inleg-balk{position:relative;height:11px}
+.inleg-balk{position:relative;height:11px}.plan-rijbalk{display:flex}.plan-rijbalk>.bar-fill{flex-shrink:0;border-radius:0}
 .inleg-balk .bar-fill{position:absolute;top:0;bottom:0;height:auto;transition:none}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .plan-tab{display:grid;grid-template-columns:1fr auto;gap:3px 12px;line-height:1.4;margin-top:1px}
@@ -687,7 +687,7 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
 .spark .b{flex:1;background:var(--teal-d);border-radius:5px 5px 0 0;position:relative;min-height:3px;transition:height .4s}
 .spark .b .lab{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:var(--fs-xs);color:var(--mut)}
 .spark .b .val{position:absolute;top:-15px;left:0;right:0;text-align:center;font-size:var(--fs-xs);color:var(--mut)}
-.bchip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap}.bchip.ok{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}.bchip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.bchip.lo{background:rgba(248,113,113,.14);color:var(--red)}.inssec{font-size:var(--fs-xs);letter-spacing:.12em;text-transform:uppercase;color:var(--mut2);font-weight:800;margin:14px 4px 7px}.inssec:first-child{margin-top:4px}.home-hook{display:flex;align-items:center;gap:9px;background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:12px;padding:11px 13px;margin-bottom:11px;cursor:pointer}.home-hook .hh-ic{color:var(--teal);display:flex}.home-hook .hh-tx{flex:1;font-size:13px}.home-hook .hh-tx b{color:var(--txt)}.home-hook .hh-go{color:var(--teal);font-weight:700}.gc-coach{display:flex;gap:8px;align-items:flex-start;background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:9px;padding:9px 11px;font-size:var(--fs-sm);color:var(--mut);margin-bottom:10px}.gc-coach b{color:var(--txt)}.gc-coach svg{color:var(--teal);flex-shrink:0;margin-top:1px}.gc-out{font-size:13px;font-weight:600;margin-bottom:10px}.gc-tip{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:8px;cursor:pointer}.gc-tip.on{border-color:var(--teal);background:color-mix(in srgb,var(--accent) 6%,transparent)}.gc-tip .gc-ic{font-size:16px;flex-shrink:0}.gc-bd{flex:1}.gc-how{font-size:var(--fs-sm);color:var(--mut);line-height:1.45}.gc-how b{color:var(--txt)}.gc-act{font-size:var(--fs-sm);color:var(--txt);font-weight:600;margin-top:5px;line-height:1.45}.gc-save{font-size:12px;color:var(--teal);font-weight:700;margin-top:4px}.gc-eff{color:var(--mut);font-weight:500}.gc-verg{font-size:11.5px;color:var(--mut2);margin-top:3px;line-height:1.45}.gc-tip .gc-sw{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--on-accent);font-weight:900;font-size:13px}.gc-tip.on .gc-sw{background:var(--teal);border-color:var(--teal)}.gc-commit{width:100%;margin:4px 0 2px;background:var(--teal);color:var(--on-accent);border:0;border-radius:9px;padding:11px;font-weight:800;font-size:13px;cursor:pointer}.gc-commit.done{background:var(--green)}.wvo-tiles{display:grid;gap:var(--s2);margin-top:14px}.wvo-tile{background:transparent;border:0;border-radius:var(--r-inner);padding:0;display:flex;flex-direction:column}.spk-in{position:relative;line-height:0}.spk-in i{position:absolute;border-radius:50%;transform:translate(-50%,-50%)}.spk-nu{width:4px;height:4px;border:1.6px solid var(--teal);background:var(--card)}.spk-eind{width:4.5px;height:4.5px;background:var(--bar)}.spk-wrap,.spk-na{margin-top:9px}.wvo-tile .spk-wrap,.wvo-tile .spk-na{margin-top:auto;padding-top:9px}.wvo-tl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);font-weight:700;line-height:1.3}.wvo-tv{font-size:18px;font-weight:800;margin-top:5px;letter-spacing:-.3px}.wvo-ts{font-size:11.5px;color:var(--mut);margin-top:3px;line-height:1.5}.wvo-chip{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;margin-top:7px}.wvo-chip.up{background:rgba(248,113,113,.16);color:var(--red)}.wvo-chip.dn{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}.wvo-chip.n{background:rgba(96,165,250,.14);color:var(--blue)}.wvo-chip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.wvo-insight{background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:12px;padding:12px 14px;margin-top:14px;font-size:13px;color:var(--mut)}.wvo-insight b{color:var(--txt)}.wvo-insight .h{color:var(--teal);font-weight:800;font-size:var(--fs-xs);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px}.wk-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.wk-row:last-of-type{border-bottom:0}.wk-row .ic{width:26px;height:26px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center}.wk-row .nm{flex:1;font-size:13.5px}.hdj{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--ln2);border-radius:13px;padding:13px 14px;cursor:pointer}.hdj-top{display:flex;align-items:center;gap:8px}.hdj-lab{flex:1;font-size:13.5px;font-weight:600}.hdj-go{color:var(--teal);font-weight:700}.hdj-kn{font-size:18px;font-weight:800;letter-spacing:-.3px;margin-top:8px}.hdj-kn .u{font-size:12px;color:var(--mut);font-weight:500}.hdj-bar{height:7px;border-radius:6px;background:var(--card2);margin-top:9px;position:relative;overflow:hidden}.hdj-bar .f{height:100%;border-radius:6px}.hdj-bar .now{position:absolute;top:-2px;width:2px;height:11px;background:#fff;opacity:.65}.hdj-lbl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut2);margin-top:6px}.goalring{display:flex;align-items:center;gap:18px;margin-top:12px}.gr-ring{position:relative;width:108px;height:108px;flex-shrink:0}.gr-ring svg{display:block}.gr-ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}.gr-ctr .p{font-size:24px;font-weight:800;letter-spacing:-.5px;color:var(--teal)}.gr-ctr .l{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut2);font-weight:700;margin-top:1px}.gr-info{min-width:0}.gr-a{font-size:18px;font-weight:800;letter-spacing:-.3px}.gr-a .u{font-size:13px;color:var(--mut);font-weight:500}.gr-e{font-size:13.5px;color:var(--teal);font-weight:600;margin-top:7px}.gr-p{font-size:12px;color:var(--mut);margin-top:3px}.gr-f{font-size:10.5px;color:var(--mut2);margin-top:8px}.gc-bighead{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-top:4px}.gc-chipd{display:inline-block;font-size:var(--fs-xs);font-weight:800;color:var(--teal);background:color-mix(in srgb,var(--accent) 14%,transparent);padding:3px 9px;border-radius:20px;margin-left:8px;vertical-align:middle}.gc-dual{margin-top:12px}.gc-dual svg{display:block}.gc-leg{display:flex;gap:14px;margin-top:4px;font-size:10.5px;color:var(--mut)}.gc-leg span{display:flex;align-items:center;gap:5px}.gc-leg i{width:16px;height:3px;border-radius:2px;display:inline-block}.gc-leg i.d{height:0;border-top:2px dashed var(--ref);background:none}.ins-filt{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-size:13px;margin:4px 0 10px;cursor:pointer}.ins-kpi{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:10px}.ins-kt{--kc:var(--mut2);background:var(--card);border-radius:14px;padding:10px 11px;box-shadow:inset 3px 0 0 var(--kc),var(--shadow);cursor:pointer;min-width:0}.ins-kt.grn{--kc:var(--green)}.ins-kt.amb{--kc:var(--amber)}.ins-kt .lb{font-size:10.5px;color:var(--mut);font-weight:700;display:flex;align-items:center;gap:6px}.ins-kt .lb i{width:7px;height:7px;border-radius:50%;background:var(--kc);flex-shrink:0}.ins-kt .vl{font-size:18px;font-weight:800;margin-top:3px;letter-spacing:-.3px}.ins-kt.gry .vl{color:var(--mut)}.ins-kt .ms{font-size:10.5px;color:var(--mut);margin-top:2px;line-height:1.4;overflow-wrap:anywhere}.mb-blok{--mb-uit:var(--green);--mb-vast:color-mix(in srgb,var(--green) 35%,var(--mut2));--mb-pot:color-mix(in srgb,var(--green) 55%,var(--card2))}.mb-balk{position:relative;height:14px;border-radius:7px;background:var(--card2);overflow:visible}.mb-balk i{position:absolute;top:0;bottom:0;display:block}.mb-balk i:first-child{border-radius:7px 0 0 7px}.mb-balk em{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--txt)}.mb-tlab{position:absolute;top:17px;transform:translateX(-50%);font-size:10px;color:var(--mut);white-space:nowrap}.mb-kt.amb .vl{color:var(--amber)}.ins-kop{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 13px;font-size:13px;line-height:1.45;margin-bottom:10px}.ins-chip{display:inline-block;margin-top:6px;font-size:11.5px;font-weight:700;color:var(--teal);background:color-mix(in srgb,var(--accent) 14%,transparent);border-radius:999px;padding:3px 10px;cursor:pointer}.ins-optg{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--mut2);margin:10px 0 4px}.ins-opt{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:13.5px;cursor:pointer}.ins-opt.on{font-weight:800;color:var(--teal)}.ins-opt.off{color:var(--mut2);cursor:default}.ins-tog{display:flex;gap:6px;margin:0 0 10px}.ins-tog span{flex:1;text-align:center;border-radius:10px;padding:8px 4px;font-size:12px;font-weight:700;background:var(--card2);color:var(--txt);cursor:pointer}.ins-tog span.on{background:var(--teal);color:var(--on-accent)}.ins-leg{display:flex;gap:12px;font-size:10.5px;color:var(--mut);margin:0 0 4px}.ins-leg u{display:inline-block;width:14px;height:8px;border-radius:4px;background:var(--bar);margin-right:4px;vertical-align:0}.ins-leg i{display:inline-block;width:2px;height:10px;background:var(--txt);margin-right:4px;vertical-align:-1px}.ins-bul{display:grid;grid-template-columns:84px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:12px;padding:7px 0;border-top:1px solid var(--line)}.ins-bnm{min-width:0;overflow-wrap:anywhere}.ins-tr{height:12px;border-radius:6px;background:var(--card2);position:relative}.ins-tr i{position:absolute;left:0;top:0;bottom:0;border-radius:6px}.ins-tr em{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--txt)}.ins-bul b,.ins-div b{text-align:right;font-size:11.5px;white-space:nowrap}.ins-div{display:grid;grid-template-columns:84px minmax(0,1fr) minmax(0,1fr) 52px;align-items:center;font-size:12px;padding:6px 0}.ins-div .l,.ins-div .r{height:11px;position:relative}.ins-div .l i{position:absolute;right:0;top:0;bottom:0;background:var(--bar);border-radius:5px 0 0 5px}.ins-div .r{border-left:1.5px solid var(--txt)}.ins-div .r i{position:absolute;left:0;top:0;bottom:0;background:var(--red);border-radius:0 5px 5px 0}.ins-pat{border-top:1px solid var(--line);padding:10px 0}.ins-pat-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13.5px;font-weight:800}.ins-pat-tg{font-size:10.5px;font-weight:700;color:var(--mut);white-space:nowrap}.ins-pat-tg i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}.ins-naargrip{color:var(--teal);font-weight:600;margin-top:3px;cursor:pointer}</style>
+.bchip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap}.bchip.ok{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}.bchip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.bchip.lo{background:rgba(248,113,113,.14);color:var(--red)}.inssec{font-size:var(--fs-xs);letter-spacing:.12em;text-transform:uppercase;color:var(--mut2);font-weight:800;margin:14px 4px 7px}.inssec:first-child{margin-top:4px}.home-hook{display:flex;align-items:center;gap:9px;background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:12px;padding:11px 13px;margin-bottom:11px;cursor:pointer}.home-hook .hh-ic{color:var(--teal);display:flex}.home-hook .hh-tx{flex:1;font-size:13px}.home-hook .hh-tx b{color:var(--txt)}.home-hook .hh-go{color:var(--teal);font-weight:700}.gc-coach{display:flex;gap:8px;align-items:flex-start;background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:9px;padding:9px 11px;font-size:var(--fs-sm);color:var(--mut);margin-bottom:10px}.gc-coach b{color:var(--txt)}.gc-coach svg{color:var(--teal);flex-shrink:0;margin-top:1px}.gc-out{font-size:13px;font-weight:600;margin-bottom:10px}.gc-tip{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:8px;cursor:pointer}.gc-tip.on{border-color:var(--teal);background:color-mix(in srgb,var(--accent) 6%,transparent)}.gc-tip .gc-ic{font-size:16px;flex-shrink:0}.gc-bd{flex:1}.gc-how{font-size:var(--fs-sm);color:var(--mut);line-height:1.45}.gc-how b{color:var(--txt)}.gc-act{font-size:var(--fs-sm);color:var(--txt);font-weight:600;margin-top:5px;line-height:1.45}.gc-save{font-size:12px;color:var(--teal);font-weight:700;margin-top:4px}.gc-eff{color:var(--mut);font-weight:500}.gc-verg{font-size:11.5px;color:var(--mut2);margin-top:3px;line-height:1.45}.gc-tip .gc-sw{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--on-accent);font-weight:900;font-size:13px}.gc-tip.on .gc-sw{background:var(--teal);border-color:var(--teal)}.gc-commit{width:100%;margin:4px 0 2px;background:var(--teal);color:var(--on-accent);border:0;border-radius:9px;padding:11px;font-weight:800;font-size:13px;cursor:pointer}.gc-commit.done{background:var(--green)}.wvo-tiles{display:grid;gap:var(--s2);margin-top:14px}.wvo-tile{background:transparent;border:0;border-radius:var(--r-inner);padding:0;display:flex;flex-direction:column}.spk-in{position:relative;line-height:0}.spk-in i{position:absolute;border-radius:50%;transform:translate(-50%,-50%)}.spk-nu{width:4px;height:4px;border:1.6px solid var(--teal);background:var(--card)}.spk-eind{width:4.5px;height:4.5px;background:var(--bar)}.spk-wrap,.spk-na{margin-top:9px}.wvo-tile .spk-wrap,.wvo-tile .spk-na{margin-top:auto;padding-top:9px}.wvo-tl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);font-weight:700;line-height:1.3}.wvo-tv{font-size:18px;font-weight:800;margin-top:5px;letter-spacing:-.3px}.wvo-ts{font-size:11.5px;color:var(--mut);margin-top:3px;line-height:1.5}.wvo-chip{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;margin-top:7px}.wvo-chip.up{background:rgba(248,113,113,.16);color:var(--red)}.wvo-chip.dn{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}.wvo-chip.n{background:rgba(96,165,250,.14);color:var(--blue)}.wvo-chip.hi{background:rgba(251,191,36,.16);color:var(--amber)}.wvo-insight{background:color-mix(in srgb,var(--accent) 7%,transparent);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:12px;padding:12px 14px;margin-top:14px;font-size:13px;color:var(--mut)}.wvo-insight b{color:var(--txt)}.wvo-insight .h{color:var(--teal);font-weight:800;font-size:var(--fs-xs);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px}.wk-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.wk-row:last-of-type{border-bottom:0}.wk-row .ic{width:26px;height:26px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center}.wk-row .nm{flex:1;font-size:13.5px}.hdj{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--ln2);border-radius:13px;padding:13px 14px;cursor:pointer}.hdj-top{display:flex;align-items:center;gap:8px}.hdj-lab{flex:1;font-size:13.5px;font-weight:600}.hdj-go{color:var(--teal);font-weight:700}.hdj-kn{font-size:18px;font-weight:800;letter-spacing:-.3px;margin-top:8px}.hdj-kn .u{font-size:12px;color:var(--mut);font-weight:500}.hdj-bar{height:7px;border-radius:6px;background:var(--card2);margin-top:9px;position:relative;overflow:hidden}.hdj-bar .f{height:100%;border-radius:6px}.hdj-bar .now{position:absolute;top:-2px;width:2px;height:11px;background:#fff;opacity:.65}.hdj-lbl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut2);margin-top:6px}.goalring{display:flex;align-items:center;gap:18px;margin-top:12px}.gr-ring{position:relative;width:108px;height:108px;flex-shrink:0}.gr-ring svg{display:block}.gr-ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}.gr-ctr .p{font-size:24px;font-weight:800;letter-spacing:-.5px;color:var(--teal)}.gr-ctr .l{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut2);font-weight:700;margin-top:1px}.gr-info{min-width:0}.gr-a{font-size:18px;font-weight:800;letter-spacing:-.3px}.gr-a .u{font-size:13px;color:var(--mut);font-weight:500}.gr-e{font-size:13.5px;color:var(--teal);font-weight:600;margin-top:7px}.gr-p{font-size:12px;color:var(--mut);margin-top:3px}.gr-f{font-size:10.5px;color:var(--mut2);margin-top:8px}.gc-bighead{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-top:4px}.gc-chipd{display:inline-block;font-size:var(--fs-xs);font-weight:800;color:var(--teal);background:color-mix(in srgb,var(--accent) 14%,transparent);padding:3px 9px;border-radius:20px;margin-left:8px;vertical-align:middle}.gc-dual{margin-top:12px}.gc-dual svg{display:block}.gc-leg{display:flex;gap:14px;margin-top:4px;font-size:10.5px;color:var(--mut)}.gc-leg span{display:flex;align-items:center;gap:5px}.gc-leg i{width:16px;height:3px;border-radius:2px;display:inline-block}.gc-leg i.d{height:0;border-top:2px dashed var(--ref);background:none}.ins-filt{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-size:13px;margin:4px 0 10px;cursor:pointer}.ins-kpi{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:10px}.ins-kt{--kc:var(--mut2);background:var(--card);border-radius:14px;padding:10px 11px;box-shadow:inset 3px 0 0 var(--kc),var(--shadow);cursor:pointer;min-width:0}.ins-kt.grn{--kc:var(--green)}.ins-kt.amb{--kc:var(--amber)}.ins-kt .lb{font-size:10.5px;color:var(--mut);font-weight:700;display:flex;align-items:center;gap:6px}.ins-kt .lb i{width:7px;height:7px;border-radius:50%;background:var(--kc);flex-shrink:0}.ins-kt .vl{font-size:18px;font-weight:800;margin-top:3px;letter-spacing:-.3px}.ins-kt.gry .vl{color:var(--mut)}.ins-kt .ms{font-size:10.5px;color:var(--mut);margin-top:2px;line-height:1.4;overflow-wrap:anywhere}.mb-blok{--mb-uit:var(--green);--mb-vast:color-mix(in srgb,var(--green) 35%,var(--mut2));--mb-pot:color-mix(in srgb,var(--green) 55%,var(--card2))}.mb-balk{position:relative;height:14px;border-radius:7px;background:var(--card2);overflow:visible}.mb-balk i{position:absolute;top:0;bottom:0;display:block}.mb-balk i:first-child{border-radius:7px 0 0 7px}.mb-balk em{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--txt)}.mb-tlab{position:absolute;top:17px;transform:translateX(-50%);font-size:10px;color:var(--mut);white-space:nowrap}.mb-kt.amb .vl{color:var(--amber)}.ins-kop{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 13px;font-size:13px;line-height:1.45;margin-bottom:10px}.ins-chip{display:inline-block;margin-top:6px;font-size:11.5px;font-weight:700;color:var(--teal);background:color-mix(in srgb,var(--accent) 14%,transparent);border-radius:999px;padding:3px 10px;cursor:pointer}.ins-optg{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--mut2);margin:10px 0 4px}.ins-opt{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:13.5px;cursor:pointer}.ins-opt.on{font-weight:800;color:var(--teal)}.ins-opt.off{color:var(--mut2);cursor:default}.ins-tog{display:flex;gap:6px;margin:0 0 10px}.ins-tog span{flex:1;text-align:center;border-radius:10px;padding:8px 4px;font-size:12px;font-weight:700;background:var(--card2);color:var(--txt);cursor:pointer}.ins-tog span.on{background:var(--teal);color:var(--on-accent)}.ins-leg{display:flex;gap:12px;font-size:10.5px;color:var(--mut);margin:0 0 4px}.ins-leg u{display:inline-block;width:14px;height:8px;border-radius:4px;background:var(--bar);margin-right:4px;vertical-align:0}.ins-leg i{display:inline-block;width:2px;height:10px;background:var(--txt);margin-right:4px;vertical-align:-1px}.ins-bul{display:grid;grid-template-columns:84px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:12px;padding:7px 0;border-top:1px solid var(--line)}.ins-bnm{min-width:0;overflow-wrap:anywhere}.ins-tr{height:12px;border-radius:6px;background:var(--card2);position:relative}.ins-tr i{position:absolute;left:0;top:0;bottom:0;border-radius:6px}.ins-tr em{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--txt)}.ins-bul b,.ins-div b{text-align:right;font-size:11.5px;white-space:nowrap}.ins-div{display:grid;grid-template-columns:84px minmax(0,1fr) minmax(0,1fr) 52px;align-items:center;font-size:12px;padding:6px 0}.ins-div .l,.ins-div .r{height:11px;position:relative}.ins-div .l i{position:absolute;right:0;top:0;bottom:0;background:var(--bar);border-radius:5px 0 0 5px}.ins-div .r{border-left:1.5px solid var(--txt)}.ins-div .r i{position:absolute;left:0;top:0;bottom:0;background:var(--red);border-radius:0 5px 5px 0}.ins-pat{border-top:1px solid var(--line);padding:10px 0}.ins-pat-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13.5px;font-weight:800}.ins-pat-tg{font-size:10.5px;font-weight:700;color:var(--mut);white-space:nowrap}.ins-pat-tg i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}.ins-naargrip{color:var(--teal);font-weight:600;margin-top:3px;cursor:pointer}.ptl-r{display:grid;gap:1px;align-items:center;margin:2px 0}.ptl-m{font-size:9px;color:var(--mut2);text-align:center;overflow:hidden}.ptl-n{font-size:var(--fs-xs);min-width:0;overflow-wrap:anywhere;line-height:1.2;padding-right:4px}.ptl-c{position:relative;height:14px;background:var(--card2)}.ptl-c i{position:absolute;inset:0}.ptl-c b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--txt)}</style>
 </head>
 <body>
 
@@ -3460,9 +3460,28 @@ function vrijPerDagLine(){
     if(!V.known) return '';
     return `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px"><span style="cursor:pointer" onclick="openBalances()">Geen bedrag per dag: een deel van je saldo is nog onbekend <span style="color:var(--teal)">›</span></span></div>`;
   }
-  const dag=V.dagenResterend===1?'dag':'dagen';
   if(V.ruimte<=0) return safeKrapRegel();   // v321: geen dagentelling onder een maandgetal; zie safeKrapRegel()
-  return `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px">Nog ${V.dagenResterend} ${dag} deze maand, dus ${euro0(V.perDag)} per dag.</div>`;
+  /* v367: DE ZIN "Nog N dagen deze maand, dus EUR X per dag." IS VERVALLEN. Het dagbedrag staat als sub in de groene
+     regel "waarvan vrij te besteden" (vrijRegel()), in de vorm "EUR X per dag · nog N dagen", en is het enige
+     dagbedrag van de app: Inzichten draagt er geen meer. */
+  return `<div class="small" data-vrijdag="${V.perDag}" style="color:var(--mut);margin-top:1px">${vrijDagTekst(V)}</div>`;
+}
+function vrijDagTekst(V){ return `${euro0(V.perDag)} per dag \u00b7 nog ${V.dagenResterend} ${V.dagenResterend===1?'dag':'dagen'}`; }
+/* v367: VRIJ TE BESTEDEN IS EEN REGEL ONDER HET SALDO, EN HET SALDO IS HET HOOFDGETAL (gevraagd door de gebruiker,
+   mockup "vrij geld"). Een groot saldo als eerste getal leest als besteedbaar geld; de groene regel eronder houdt het
+   anker eerlijk. Het bedrag is safeToSpend().safe, dezelfde bron als de opbouw-sheet erachter en de aankoopcheck op
+   Grip, en het dagbedrag is datzelfde getal gedeeld door maandDagenOver(): een bron, een noemer. Een tik opent de
+   opbouw (openSafeToSpend()). Onder nul geen dagbedrag maar de regel van v321 (safeKrapRegel()), onder de regel; bij
+   een onvolledig saldo de reden van v206. */
+function vrijRegel(S){
+  let V=null; try{ V=vrijPerDag(); }catch(_){}
+  const safe=Math.round(S.safe), krapRustig=isMode('rustig') && safe<0;
+  const col=safe<0?(krapRustig?'var(--amber)':'var(--red)'):'var(--green)';
+  const binnen=V && V.volledig && V.ruimte>0;
+  const onder=binnen?'':vrijPerDagLine();
+  return `<div data-vrij="${safe}" role="button" onclick="openSafeToSpend()" style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border-radius:12px;cursor:pointer;background:color-mix(in srgb,${col} 10%,transparent);border:1px solid color-mix(in srgb,${col} 28%,transparent)">
+    <div style="flex:1;min-width:0"><div style="font-size:13px;color:${col};font-weight:600">${safe<0?'':'waarvan '}${jrg('veiligtebesteden','vrij te besteden')}</div>${binnen?vrijPerDagLine():''}</div>
+    <div style="font-weight:800;font-size:20px;color:${col};white-space:nowrap;font-variant-numeric:tabular-nums">${euro0(safe)} <span style="font-size:15px">\u203a</span></div></div>${onder}`;
 }
 // drill-down: welke vaste lasten moeten nog betaald worden, en wanneer
 function openFixedDue(){
@@ -3821,18 +3840,17 @@ function renderDash(){
   // het hoofdgetal gaat mee in de onbekend-staat, met de saldo-invoer als volgende stap. De berekening blijft ongemoeid.
   const hero = balKnown
     ? `<div class="homehero">
-    <div class="hh-lbl">${jrg('veiligtebesteden','Veilig te besteden')}</div>
-    <div class="hh-big${safeCol==='var(--teal)'?' grad':''}" style="${safeCol==='var(--teal)'?'':`color:${safeCol};`}cursor:pointer" onclick="openSafeToSpend()">${euro0(S2.safe)}</div>
-    <div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openBalances()">totaal saldo ${euro0(S2.saldo)} <span style="color:var(--teal)">\u203a</span></div>
+    <div class="hh-lbl">Totaal saldo</div>
+    <div class="hh-big${S2.saldo<0?'':' grad'}" data-totaalsaldo="${Math.round(S2.saldo)}" style="cursor:pointer;margin-bottom:6px${S2.saldo<0?';color:var(--red)':''}" onclick="openBalances()">${euro0(S2.saldo)}</div>
     ${saldoSplitRegel(S2.saldo)}
     ${saldoAchterHero()}
-    ${vrijPerDagLine()}
+    ${vrijRegel(S2)}
     ${krapNote}
   </div>`
     : `<div class="homehero" style="cursor:default">
-    <div class="hh-lbl">${jrg('veiligtebesteden','Veilig te besteden')}</div>
+    <div class="hh-lbl">Totaal saldo</div>
     <div class="hh-big" style="color:var(--mut);font-size:26px;letter-spacing:-.4px">onbekend</div>
-    <div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openSaldoInvoer()">totaal saldo <b style="color:var(--mut)">onbekend</b> <span style="color:var(--teal);font-weight:600">vul je saldo aan \u203a</span></div>
+    <div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px;cursor:pointer;display:inline-block" onclick="openSaldoInvoer()">vrij te besteden <b style="color:var(--mut)">onbekend</b> <span style="color:var(--teal);font-weight:600">vul je saldo aan \u203a</span></div>
     <div style="font-size:var(--fs-sm);color:var(--mut);margin-top:8px;max-width:34em">Je transacties zijn binnen, je saldo nog niet: een bestand bevat dat niet. Zolang we niet weten wat er op je rekening staat, kunnen we ook niet zeggen wat er vrij is. Je uitgaven en potjes werken gewoon.</div>
   </div>`;
   // ---- recente transacties: kale lijst ----
@@ -3875,7 +3893,7 @@ function saldoSplit(saldo){
 }
 function saldoSplitRegel(saldo){
   const D=saldoSplit(saldo); if(!D) return '';
-  return `<div class="small" data-saldosplit data-bank="${D.bank}" data-contant="${D.contant}" style="color:var(--mut);margin-top:2px">${euro0(D.bank)} op de bank · <span style="cursor:pointer" onclick="openInsTegel('cash')">${euro0(D.contant)} contant</span></div>`;
+  return `<div class="small" data-saldosplit data-bank="${D.bank}" data-contant="${D.contant}" style="color:var(--mut);margin-top:2px;cursor:pointer" onclick="openBalances()">${euro0(D.bank)} op de bank · <span style="cursor:pointer" onclick="event.stopPropagation();openInsTegel('cash')">${euro0(D.contant)} contant</span> <span style="color:var(--teal)">\u203a</span></div>`;
 }
 /* NOG TE ONTVANGEN, verhuisd van Inzichten (v359) naar Home: hij verklaart waarom veilig te besteden ruim
    is terwijl je salaris nog moet komen, en dat is de vraag van Home. VERPLAATST, NIET GEKOPIEERD: de tegel
@@ -3938,24 +3956,24 @@ function onregelmatigOpbouwRegel(){
 function openSafeToSpend(){
   const S=safeToSpend();
   let incDue=0; try{ incDue=Math.round(monthLiquidity().incDue||0); }catch(_){}
-  const line=(label,val,col,act,note)=>`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)${act?';cursor:pointer':''}" ${act?`onclick="${act}"`:''}>
+  /* v367: elke regel draagt zijn term (data-term, onafgerond) en zijn richting, zodat de opbouw na te tellen is tot de eindregel */
+  const line=(label,val,col,act,note,soort)=>`<div class="row" data-term="${+val||0}" data-termsoort="${soort||'min'}" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)${act?';cursor:pointer':''}" ${act?`onclick="${act}"`:''}>
       <div style="flex:1"><div style="font-size:var(--fs-md)">${label}</div>${note?`<div class="small muted">${note}</div>`:''}</div>
       <div style="font-weight:700;white-space:nowrap;color:${col||'var(--txt)'}">${euro0(val)}</div>${act?'<span style="color:var(--teal);font-weight:700;margin-left:4px">\u203a</span>':'<span style="width:8px"></span>'}</div>`;
   const aftrek=(S.savedBal||0)+(S.resBal||0)+S.fixDue+S.reserved+S.saveReserved;
   const balUnknown=!(S.known>0);   // geen enkel bekend saldo: dezelfde onbekend-staat als op Home, nooit het één stellig en het ander onbekend
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="center" style="margin-bottom:14px">
-      <div class="muted small">Veilig te besteden</div>
-      <div style="font-size:${balUnknown?'26px':'30px'};font-weight:800;color:${balUnknown?'var(--mut)':(S.safe<0?'var(--red)':'var(--teal)')}">${balUnknown?'onbekend':euro(S.safe)}</div>
-      <div class="muted small">${balUnknown?'we missen je saldo':'zo is dit opgebouwd'}</div></div>
+    <div style="margin-bottom:14px" data-vrijkop>
+      <div style="font-weight:800;font-size:var(--fs-lg)">${balUnknown?'Vrij te besteden: onbekend':`Zo kom je op ${euro0(S.safe)}`}</div>
+      <div class="muted small">${balUnknown?'we missen je saldo':'van je totale saldo naar wat er vrij te besteden is'}</div></div>
     ${balUnknown?`<div style="background:rgba(159,176,199,.07);border-radius:10px;padding:11px 13px;margin-bottom:12px;font-size:var(--fs-sm);color:var(--mut)">Een bankbestand bevat geen saldo, dus we weten niet wat er op je rekening staat. De posten hieronder kloppen wel; alleen het startpunt ontbreekt. <span style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="openSaldoInvoer()">Vul je saldo aan ›</span></div>`:''}
     ${balUnknown
       ? `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openSaldoInvoer()"><div style="flex:1"><div style="font-size:var(--fs-md)">Totaal saldo</div><div class="small muted">nog geen enkel saldo bekend</div></div><div style="font-weight:700;white-space:nowrap;color:var(--mut)">onbekend</div><span style="color:var(--teal);font-weight:700;margin-left:4px">›</span></div>`
-      : line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':(contantVerwacht()!=null?'je rekeningen en je contante geld':'al je gekoppelde rekeningen'))}
+      : line('Totaal saldo', S.saldo, 'var(--teal)', 'openBalances()', S.missing>0?'een deel is nog onbekend':(contantVerwacht()!=null?'je rekeningen en je contante geld':'al je gekoppelde rekeningen'), 'saldo')}
     ${balUnknown?'':saldoAchterRegel()}
     ${balUnknown?'':contantOpbouwRegel()}
     ${balUnknown?'':onregelmatigOpbouwRegel()}
-    ${S.incDue>0?`<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:var(--fs-md)">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
+    ${S.incDue>0?`<div class="row" data-term="${S.incDue}" data-termsoort="plus" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:var(--fs-md)">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
     ${S.savedBal>0?line(safeClaim('savedBal').label, S.savedBal, 'var(--mut)', safeClaim('savedBal').act, 'staat apart om te sparen, niet vrij besteedbaar'):''}
     ${S.resBal>0?line(safeClaim('resBal').label, S.resBal, 'var(--mut)', safeClaim('resBal').act, 'al vergeven aan posten die nog moeten komen'):''}
@@ -3989,8 +4007,12 @@ function openSafeToSpend(){
       return '';
     })()}
     <div class="row" style="gap:10px;padding:13px 0;margin-top:4px;border-top:2px solid var(--line)">
-      <div style="flex:1;font-weight:800;font-size:15px">Veilig te besteden</div>
-      <div style="font-weight:800;font-size:16px;color:${balUnknown?'var(--mut)':(S.safe<0?'var(--red)':'var(--teal)')}">${balUnknown?'onbekend':euro0(S.safe)}</div></div>
+      <div style="flex:1;font-weight:800;font-size:15px">Vrij te besteden</div>
+      <div data-vrijeind="${balUnknown?'':Math.round(S.safe)}" style="font-weight:800;font-size:16px;color:${balUnknown?'var(--mut)':(S.safe<0?'var(--red)':'var(--green)')}">${balUnknown?'onbekend':euro0(S.safe)}</div></div>
+    ${(function(){ let V=null; try{ V=vrijPerDag(); }catch(_){}
+      /* v367: het dagbedrag van Home, als rekensom uit hetzelfde getal en dezelfde noemer (maandDagenOver()). */
+      if(balUnknown || !V || !V.volledig || !(V.ruimte>0)) return '';
+      return `<div class="small" data-vrijdeling style="margin-top:6px;color:var(--mut)">${euro0(V.ruimte)} \u00f7 ${V.dagenResterend} ${V.dagenResterend===1?'dag':'dagen'} = ${euro0(V.perDag)} per dag. De aankoopcheck op Grip rekent met hetzelfde bedrag.</div>`; })()}
     ${(!balUnknown && S.safe<0)?`<div style="background:rgba(248,113,113,.10);border-radius:10px;padding:11px 13px;margin-top:12px;font-size:var(--fs-sm);color:var(--mut)">Wat er deze maand nog vanaf moet, is samen groter dan je saldo plus het inkomen dat nog komt. Vrij besteedbaar is er dan even niet, want elke uitgave gaat nu ten koste van een potje of van wat je opzij wilde zetten. Waar je aan schuift, is aan jou. Je kunt een potje verlagen, je spaardoel deze maand versoepelen, of het zo laten en er bewust rekening mee houden.</div>`:(incDue>0?`<div class="small muted" style="margin-top:12px">Inclusief ${euro0(incDue)} verwacht inkomen dat deze maand nog binnenkomt.</div>`:'')}
     <div class="small muted" style="margin-top:12px">Je totale saldo plus het inkomen dat nog binnenkomt, min wat al op je spaarrekening staat, de vaste lasten die nog komen, je variabele potjes en wat je deze maand nog wilt sparen. Wat overblijft kun je vrij uitgeven. Geld naar je spaarrekening overmaken verandert dit bedrag dus niet.</div>`;
   showSheetBg();
@@ -7473,6 +7495,11 @@ function afspraakStand(a){
     }
     if(sp>g) return {status:'nietgezien', feit:`${euro0(sp-g)} boven het nieuwe potje van ${euro0(g)}`, af:false};
     if(klaar) return {status:'gezien', feit:`binnen ${euro0(g)} gebleven`, af:true};
+    /* v367: IN DE MAAND ZELF ZEGT DE REGEL WAT DE BRIDGE ZEGT (gemeld: Huur "tot nu EUR 0 van EUR 700" naast "EUR 137
+       verwacht" in de bridge). Het verwachte eind komt uit maandVooruit(), dezelfde bron als de stappen op Grip:
+       wat er uit is plus wat er nog verwacht wordt, voor het vaste en het variabele deel samen (potjeVerwacht()). */
+    if(a.van===nu){ const W=potjeVerwacht(a.cat);
+      if(W) return {status:'loopt', feit:W.eind>g?`${euro0(W.eind)} verwacht \u00b7 ${euro0(W.eind-g)} boven het nieuwe potje`:`${euro0(W.eind)} verwacht \u00b7 ${euro0(g-W.eind)} ruimte`, af:false, verwacht:W.eind}; }
     return {status:'loopt', feit:`tot nu ${euro0(sp)} van ${euro0(g)}`, af:false};
   }
   if(a.soort==='pauze'){
@@ -7494,6 +7521,15 @@ function afsprakenVoor(M){
     if(H) return String(H.op).slice(0,7)>=M && String(a.sinds)<=nextYM(M);
     return true;
   }).sort((x,y)=>(x.ts||0)-(y.ts||0));
+}
+/* v367: het verwachte eind van een potje deze maand, uit maandVooruit(): het vaste deel (vastePotjes) en het variabele
+   deel (potjes) samen. Geen vooruitblik (minder dan drie afgeronde maanden), dan null. */
+function potjeVerwacht(k){
+  let V=null; try{ V=maandVooruit(); }catch(_){}
+  if(!V || V.onbekend) return null;
+  const R=[...(V.vastePotjes||[]).filter(x=>x.k===k), ...(V.potjes||[]).filter(x=>x.k===k)];
+  if(!R.length) return null;
+  return {eind:Math.round(R.reduce((t,x)=>t+(x.eindR!=null?x.eindR:x.eind),0))};
 }
 function afspraakBox(status){
   const on=status==='gezien'||status==='herzien', half=status==='deels'||status==='nietgezien';
@@ -7664,7 +7700,10 @@ function openAfsluiting(M){ renderAfsluitSheet(M); showSheetBg(); }
 /* De sheet rekent opnieuw (v319/v320): tussen tekenen en tikken kan er een import binnenkomen. */
 function renderAfsluitSheet(M){
   M=M||afsluitMaand();
-  if((SET.maandAfsluiting||{})[M] || !afsluitNodig(M)){ closeSheet(); return; }
+  let MB=null; try{ MB=maandBeginData(); }catch(_){}
+  if((SET.maandAfsluiting||{})[M] || !afsluitNodig(M)){
+    if(MB){ $('#sheet').innerHTML=`<div class="grab"></div><div id="afsluitSheet" data-maand="${M}">${maandBeginBlok(MB)}<div class="small" data-afsluitlater style="text-align:center;margin-top:10px;color:var(--mut2);cursor:pointer" onclick="afsluitLater()">Later</div></div>`; return; }
+    closeSheet(); return; }
   const S=afsluitStand(M), Mn=valtOpHoofd(M);
   const pct=S.tot?Math.round(S.af/S.tot*100):0;
   const knop = S.klaar
@@ -7679,7 +7718,7 @@ function renderAfsluitSheet(M){
      de pop-up is het moment waarop je de nieuwe maand begint. Dezelfde poort en dezelfde lagen als op
      Grip (maandCoachIngang leest de rijen met acceptatie en afspraak). */
   let ing=''; try{ ing=maandCoachIngang(maandMetAfspraak(maandMetAccept(maandRegels()).concat(maandStructureel()))); }catch(_){}
-  $('#sheet').innerHTML=`<div class="grab"></div><div id="afsluitSheet" data-maand="${M}">
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="afsluitSheet" data-maand="${M}">${MB?maandBeginBlok(MB):''}
     <div class="row" style="gap:10px;align-items:baseline"><span style="flex:1;font-weight:800;font-size:var(--fs-lg)">${esc(Mn)} afsluiten</span><span class="small muted" data-afteller="${S.af}/${S.tot}" style="white-space:nowrap">${S.af} van ${S.tot} klaar</span></div>
     ${tegels}
     <div style="height:6px;border-radius:3px;background:var(--card2);margin:10px 0 2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--teal)"></div></div>
@@ -8014,8 +8053,11 @@ function dezeMaandBrug(V){
   const varDiff=V.variabel.eind-V.variabel.budget;
   const vastDiff=V.vaste.eind-V.vaste.budget;
   const heeftVast=(V.vastePotjes||[]).length>0;
-  const boven=V.potjes.filter(x=>Math.round(x.overR)>0)
-    .sort((a,b)=>(b.overR-a.overR) || (a.naam<b.naam?-1:1));
+  /* v367: DE LOSSE STAPPEN ZIJN DE UITSCHIETERS (uitschieters(V)), DEZELFDE LIJST IN DEZELFDE VOLGORDE ALS "TEGEN JE
+     POTJE" OP INZICHTEN (gevraagd door de gebruiker): verwacht minstens EUR 10 EN minstens 25 procent boven het potje,
+     op de verwachte afwijking aan het eind van de maand. Een potje dat er net boven komt valt in de rest. */
+  const alleBoven=V.potjes.filter(x=>Math.round(x.overR)>0);
+  const boven=uitschieters(V);
   /* v357: HOOGUIT DEZEMAAND_KOL KOLOMMEN, want acht passen op 360px niet op 40px breed (gemeten 35px bij 2px gap).
      Staan er een vaste en een zonder-stap, dan gaan er hooguit twee potjes los en valt het derde in de rest,
      die dan "andere" heet; de zin noemt elk potje erboven toch bij naam (Br.bovenLijst). */
@@ -8051,15 +8093,25 @@ function dezeMaandBrug(V){
   /* De vaste last die het meest afwijkt, of een vast potje zonder betaling: de zin noemt hem, want dat feit
      stond tot v357 in de regel onder de bridge (v355: geen betaling wordt eerst genoemd). */
   const vg=(V.vastePotjes||[]).filter(x=>x.geen || Math.round(x.eind)!==x.bud).sort((a,b)=>(b.geen-a.geen) || Math.abs(b.overR)-Math.abs(a.overR) || (a.naam<b.naam?-1:1))[0]||null;
-  return {tegen:'budget', stappen, basis, los, bovenLijst:boven, rest, vast:R['~vast']||0, zonder:R['~zonder']||0, vastGrootste:vg, diff, boven:boven.length>0};
+  return {tegen:'budget', stappen, basis, los, bovenLijst:boven, rest, vast:R['~vast']||0, zonder:R['~zonder']||0, vastGrootste:vg, diff, boven:alleBoven.length>0};
 }
+/* v367: EEN UITSCHIETER IS EEN POTJE DAT VERWACHT MINSTENS EUR 10 EN MINSTENS 25 PROCENT BOVEN ZIJN BEDRAG EINDIGT (de
+   drempels van INS_PATROON, voorEuro en voorDeel), gesorteerd op die verwachte afwijking (x.overR uit maandVooruit()).
+   EEN BRON MET DRIE LEZERS: de rode stappen in de bridge op Grip, de zin eronder en "Tegen je potje" op Inzichten. */
+function potjeUitschieter(x){ const d=+x.overR||0; return d>=INS_PATROON.voorEuro && (!(x.bud>0) || d>=x.bud*INS_PATROON.voorDeel); }
+function uitschieters(V){ return ((V&&V.potjes)||[]).filter(potjeUitschieter).sort((a,b)=>(b.overR-a.overR) || (a.naam<b.naam?-1:1)); }
 /* De zin stelt vast en oordeelt niet (v78/v93). v356: hij noemt ELK potje dat boven zijn bedrag eindigt bij
    naam en oorzaak (past niet, of loopt voor), ook een vierde dat niet los in de bridge staat, en daarna de
    ruimte in de andere potjes als een bedrag. */
+/* v367: DE ZIN NOEMT PRECIES DE RODE STAPPEN VAN DE BRIDGE (Br.los), niet meer elk potje erboven. GEMELD noemde hij
+   Boodschappen "past niet" terwijl de bridge en de patronen zeiden dat Boodschappen achterloopt: Boodschappen kwam
+   EUR 12 boven een potje van EUR 400 uit en viel in de rest. Wat in de rest valt staat in het bedrag van de rest. */
 function dezeMaandZin(Br){
-  const boven=Br.bovenLijst||Br.los.filter(x=>x.overR>0);
+  const boven=Br.los||[];
   const vz=Br.vastGrootste?` ${gripVastAfwijking(Br.vastGrootste)}.`:'';
   if(!Br.boven) return 'Alle potjes blijven verwacht onder hun bedrag.'+vz;
+  if(!boven.length){ return (Br.rest<0?`Geen potje komt ver boven zijn bedrag uit; je potjes houden samen ${euro0(-Br.rest)} ruimte.`
+    :`Geen potje komt ver boven zijn bedrag uit; je potjes samen ${euro0(Br.rest)} boven.`)+vz; }
   const pn=boven.filter(x=>x.aard==='pastniet'), vr=boven.filter(x=>x.aard==='voor'), an=boven.filter(x=>x.aard!=='pastniet' && x.aard!=='voor');
   const d=[];
   if(pn.length) d.push(`${gripNamen(pn)} ${pn.length===1?'past niet in zijn potje':'passen niet in hun potje'}`);
@@ -8083,20 +8135,30 @@ function potjeOmhoogRegels(){
     for(let i=1;i<R.length;i++) if(R[i].bedrag>R[i-1].bedrag) uit.push({k, ym:R[i].van, bedrag:R[i].bedrag, voor:R[i-1].bedrag, voorNu:R[i-1].van===R[0].van && i===1}); }
   return uit.sort((a,b)=>a.ym.localeCompare(b.ym) || CATS[a.k].name.localeCompare(CATS[b.k].name));
 }
-function potjeOmhoogRij(x){
-  const cn=CATS[x.k].name;
-  const feit=`${x.voorNu?'nu':'daarvoor'} ${x.voor>0?euro0(x.voor):'geen potje'} · geldt vanaf ${afMnd(x.ym)}`;
-  return `<div class="row" data-potomhoog="${esc(x.k)}|${esc(x.ym)}" data-afstatus="loopt" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openPotje('${esc(x.k)}')">
-    ${afspraakBox('loopt')}<span style="flex:1;min-width:0"><span class="small" style="display:block">Potje ${esc(cn)} ${euro0(x.bedrag)} vanaf ${esc(afMnd(x.ym))} <span data-omhoog aria-label="hoger">\u2191</span></span>
-      <span class="small" data-affeit style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(feit)}</span></span>
-    <span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`;
+/* v367: de afvinkregel per hoger potje (potjeOmhoogRij, v366) is vervallen; zo'n potje telt mee in de regel
+   "N afspraken voor ..." (afsprakenLaterRegel()). */
+function afsprakenDezeMaand(){
+  const nu=thisYM(), L=afsprakenLopend();
+  const later=L.filter(a=>a.van && String(a.van)>nu), omhoog=potjeOmhoogRegels();
+  return {nu:L.filter(a=>!(a.van && String(a.van)>nu)), later, omhoog, n:later.length+omhoog.length,
+    maanden:[...later.map(a=>String(a.van)), ...omhoog.map(x=>x.ym)].sort()};
+}
+function afsprakenLaterRegel(D){
+  if(!D.n) return '';
+  const a=D.maanden[0], b=D.maanden[D.maanden.length-1];
+  const per=a===b?afMnd(a):`${MNAMES[+a.slice(5,7)-1]}\u2013${MNAMES[+b.slice(5,7)-1]}`;
+  return `<div class="row" data-afsprakenlater="${D.n}" style="gap:10px;align-items:center;padding:7px 0 2px;border-top:1px solid var(--line);cursor:pointer" onclick="go('logboek')">
+    <span class="small" style="flex:1;min-width:0">${D.n} ${D.n===1?'afspraak':'afspraken'} voor ${esc(per)}</span><span class="small" style="color:var(--teal);font-weight:700;white-space:nowrap">Logboek \u203a</span></div>`;
 }
 function dezeMaandKaart(){
   const m=thisYM(); let V=null; try{ V=maandVooruit(); }catch(_){ V=null; }
   /* De lopende afspraken staan hier, onder deze maand: wat je afsprak gaat over wat je nu doet.
      Een afspraak uit het coachgesprek (coachThisMonthAfspraak) staat er in dezelfde vorm bij. */
-  let af=''; try{ af=afsprakenLopend().map(a=>afspraakRij(a)).join(''); }catch(_){}
-  try{ af+=potjeOmhoogRegels().map(potjeOmhoogRij).join(''); }catch(_){}   // v366
+  /* v367: ALLEEN WAT DEZE MAAND GELDT STAAT HIER ALS AFVINKREGEL (gevraagd door de gebruiker). Een afspraak die pas in
+     een latere maand ingaat en een potje dat later hoger gaat (v366) tellen samen in EEN regel "N afspraken voor
+     nov–dec › Logboek", naar het schema per potje in het logboek; afvinken van een maand die nog moet komen betekent
+     niets. Op de 1e van die maand staan ze een keer in de pop-up (maandBeginData()). */
+  let af=''; try{ const D=afsprakenDezeMaand(); af=D.nu.map(a=>afspraakRij(a)).join('')+afsprakenLaterRegel(D); }catch(_){}
   try{ const c=coachThisMonthAfspraak(); if(c) af+=`<div class="row" data-afspraak="coach" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('loopt')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(c.text||'')}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
   /* v364: DE BUDGETEDITOR HEEFT EEN INGANG OP GRIP, EN ALLEEN DAAR (keuze a van de gebruiker, het open punt van
      v352/v359). "Budget aanpassen ›" staat rechts in de kop van Deze maand en opent dezelfde editor (v61) op de
@@ -8779,8 +8841,36 @@ function spaarPlanDoorschuif(ym){
    sluit hem; hij komt hooguit een keer per dag terug tot de maand is afgesloten. SET.afsluitPopup
    draagt de dag waarop hij het laatst verscheen. De eerste keer dat Grip ooit opent telt als gezien,
    want dan is er geen maandwissel geweest (SET.maandGelezen bestaat nog niet). */
+/* v367: OP DE 1E VAN DE MAAND STAAT IN DE POP-UP WAT ER VANAF VANDAAG GELDT (gevraagd door de gebruiker): per potje
+   het bedrag van vorige maand (de bewaarde potjes via maandPotjes(), v309) en dat van nu, en het nieuwe maandbudget. Dan
+   doen de afspraken en de hogere potjes ertoe; daarvoor staan ze als een regel op Grip. Een keer: "Klopt" of "Aanpassen"
+   legt de maand vast (SET.maandBegin), en de pop-up zelf opent hooguit een keer per dag (SET.afsluitPopup.dag). Zonder
+   bewaarde potjes van vorige maand weet de app het oude bedrag niet, en dan staat er niets (v59/v73/v173). */
+function maandBeginData(){
+  const nu=thisYM(); if(vandaagYMD().slice(8,10)!=='01') return null;
+  if((SET.maandBegin||{}).maand===nu) return null;
+  const P=maandPotjes(valtOpYmPlus(nu,-1)); if(P.bron!=='bewaard') return null;
+  const oud=P.B||{}, nieuw=SET.budgets||{};
+  const rows=[...new Set([...Object.keys(oud), ...Object.keys(nieuw)])].filter(k=>CATS[k])
+    .map(k=>({k, naam:CATS[k].name, oud:Math.round(+oud[k]||0), nieuw:Math.round(+nieuw[k]||0)}))
+    .filter(r=>r.oud!==r.nieuw).sort((a,b)=>a.naam.localeCompare(b.naam));
+  if(!rows.length) return null;
+  return {maand:nu, rows, budget:Math.round(totalBudget())};
+}
+function maandBeginBlok(B){
+  return `<div data-maandbegin="${B.maand}" style="border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin:0 0 12px">
+    <div style="font-weight:800">${esc(ymFull(B.maand).replace(/^./,c=>c.toUpperCase()))} begint</div><div class="small muted" style="margin-bottom:4px">vanaf vandaag gelden</div>
+    ${B.rows.map(r=>`<div class="row" data-maandbeginrij="${esc(r.k)}" data-oud="${r.oud}" data-nieuw="${r.nieuw}" style="gap:8px;padding:5px 0;border-top:1px solid var(--line);font-size:13px"><span style="flex:1;min-width:0">${esc(r.naam)}</span><span style="white-space:nowrap">${euro0(r.oud)} \u2192 ${euro0(r.nieuw)}${r.nieuw>r.oud?' \u2191':''}</span></div>`).join('')}
+    <div class="row" data-maandbeginbudget="${B.budget}" style="gap:8px;padding:6px 0 0;border-top:1px solid var(--line);font-weight:700;font-size:13px"><span style="flex:1">Budget ${esc(MFULL[+B.maand.slice(5,7)-1])}</span><span>${euro0(B.budget)}</span></div>
+    <div class="row" style="gap:8px;margin-top:10px"><button class="btn" data-maandbeginklopt style="flex:1" onclick="maandBeginKlopt(false)">Klopt</button><button class="btn sec" data-maandbeginaanpassen style="flex:1" onclick="maandBeginKlopt(true)">Aanpassen</button></div></div>`;
+}
+function maandBeginKlopt(aanpassen){
+  SET.maandBegin={maand:thisYM(), op:vandaagYMD()}; save();
+  if(aanpassen){ closeSheet(); openBudgetEditor(thisYM()); return; }
+  const M=afsluitMaand(); if(afsluitNodig(M) && !(SET.maandAfsluiting||{})[M]) renderAfsluitSheet(M); else closeSheet();
+}
 function afsluitPopupMag(){
-  const M=afsluitMaand(); if(!afsluitNodig(M)) return false;
+  const M=afsluitMaand(); if(!afsluitNodig(M) && !maandBeginData()) return false;
   return (SET.afsluitPopup||{}).dag!==vandaagYMD();
 }
 function afsluitPopupMisschien(){
@@ -9787,7 +9877,7 @@ function terugzetKies(k){
     for(const b of r.bron){ if(b.type==='noodfonds'){ const nu=Math.max(Math.round(+SET.nfToegewezen||0),0); r.voor[b.id]=nu; SET.nfToegewezen=Math.max(nu-b.af,0); }
       else { const g=(SET.goals||[]).find(x=>x.id===b.id); if(g){ const nu=Math.max(Math.round(+g.gespaard||0),0); r.voor[b.id]=nu; g.gespaard=Math.max(nu-b.af,0); } } } }
   SET.terugzet=Object.assign({}, terugzetRecs(), {[ym]:r}); window._terugzetWijzig=false;
-  save(); render();
+  save(); try{ if(document.getElementById('terugzetKaart')) closeSheet(); }catch(_){} render();
 }
 /* Wijzigen zet een eerdere 'niet' terug, zodat een nieuwe keuze op de toewijzing van voor de keuze begint. */
 function terugzetHerstel(ym){
@@ -9796,6 +9886,7 @@ function terugzetHerstel(ym){
     if(id===PLAN_NF) SET.nfToegewezen=v; else { const g=(SET.goals||[]).find(x=>x.id===id); if(g) g.gespaard=v; } }
   const R=Object.assign({}, terugzetRecs()); delete R[ym]; SET.terugzet=R;
 }
+function openTerugzetSheet(){ const D=terugzetData(); if(!D){ render(); return; } $('#sheet').innerHTML=`<div class="grab"></div>${terugzetKaart(D)}`; showSheetBg(); }
 function terugzetWijzig(){ window._terugzetWijzig=true; render(); }
 /* Het logboek: de keuzes die je maakte, nieuwste eerst. */
 function terugzetLog(){ const R=terugzetRecs(); return Object.keys(R).filter(m=>R[m]&&R[m].keuze).sort().reverse().map(m=>Object.assign({M:m}, R[m])); }
@@ -9930,7 +10021,10 @@ const PLAN_VOORUIT_MAX = 600;
    ruimte krijgt. Daarmee is er geen aparte toets nodig op "is er nog een rij met rest", en die zou
    hier ook onjuist zijn: de rest van de rijen onder de gever is op dat punt in de lus nog niet
    afgeboekt. */
-function planVooruit(P, cap, G, terug, tz){
+/* v367: `reeks` (optioneel) krijgt per bestemming wat hij in elke maand van de projectie krijgt (index = maand vanaf nu,
+   1 is volgende maand), voor de tijdlijn op Plan (planTijdlijnData()). Dezelfde verdeling als elke vol-datum, dus de
+   balken en de datums kunnen niet uiteenlopen. */
+function planVooruit(P, cap, G, terug, tz, reeks){
   const uit={};
   P=P||allocatePlan();
   if(cap==null){ try{ cap=planCapacity(); }catch(_){ cap=0; } }
@@ -9958,6 +10052,7 @@ function planVooruit(P, cap, G, terug, tz){
   for(let m=1;m<=PLAN_VOORUIT_MAX;m++){
     if(tzBij[m]) for(const r of rows){ const b=Math.round(+tzBij[m][r.id]||0); if(b>0){ r.rest=Math.max(r.rest-b,0); if(r.rest<=0&&uit[r.id]==null) uit[r.id]=m; } }
     planVerdeelMaand(rows, cap, planGrendelVan(rows.find(r=>r.type==='noodfonds'), cap));
+    if(reeks) for(const r of rows){ (reeks[r.id]=reeks[r.id]||[])[m]=(r.status==='gepauzeerd')?0:Math.max(Math.round(+r.alloc||0),0); }
     let nu=null;
     if(terug){
       nu={}; for(const r of rows) nu[r.id]=Math.max(Math.round(+r.alloc||0),0);
@@ -10934,197 +11029,140 @@ function planVatHoogten(items){
    ondergrens van 2px is dezelfde keuze als SEG_MIN_PCT in planSegmenten(): een bestemming die iets
    krijgt moet zichtbaar iets krijgen. */
 function planTakDikte(alloc){ return Math.max(Math.round(Math.max(+alloc||0,0)*TAK_PER_EURO),2); }
+/* ===== PLAN: RIJEN EN EEN TIJDLIJN (v367) =====
+   Per bestemming wat hij nu krijgt, per maand wat hij in de projectie krijgt (planVooruit() met de reeks), wanneer hij
+   voor het eerst geld krijgt, wanneer hij vol is, en zijn streefdatum. EEN BRON VOOR DE RIJ, DE WAARSCHUWING EN DE
+   TIJDLIJN, en de maanden zijn die van etaDatum() en doelMaandenTot(): maand 0 is deze maand, 1 de volgende.
+   DE WAARSCHUWING: een doel met een streefdatum dat in deze volgorde niet op of voor die maand vol raakt (ook niet als
+   het pas na de datum geld krijgt). Dezelfde lat als het datumpaar (v307: vol in mei, moet in mei is op tijd). Zonder
+   bekende inleg is er geen projectie en dus geen waarschuwing (v59/v73/v173); een gepauzeerd of bereikt doel ook niet. */
+const PLAN_TIJDLIJN_MAX=36;
+function planTijdlijnData(P,cap){
+  P=P||allocatePlan(); if(cap==null){ try{ cap=planCapacity(); }catch(_){ cap=0; } }
+  const reeks={}; let VOL={}; try{ VOL=planVooruit(P,cap,null,null,undefined,reeks)||{}; }catch(_){}
+  const per={}; let maxM=0, onb=P.some(x=>x&&x.nfOnbekend);   // een onbekende bufferstand: geen vol-datum is dan geen te laat
+  for(const p of P){
+    const a0=(p.status==='gepauzeerd'||p.nfOnbekend)?0:Math.max(Math.round(+p.alloc||0),0);
+    const R=reeks[p.id]||[], maanden=[a0]; let eerste=a0>0?0:null;
+    for(let m=1;m<R.length;m++){ const a=+R[m]||0; maanden[m]=a; if(eerste==null&&a>0) eerste=m; }
+    const vol=p.status==='bereikt'?0:(VOL[p.id]!=null?VOL[p.id]:null);
+    const K=(p.type==='goal'&&p.streefdatum)?doelMaandenTot(p.streefdatum):null;
+    const loopt=!(p.status==='bereikt'||p.status==='gepauzeerd'||p.nfOnbekend);
+    const warn=cap>0 && loopt && p.type==='goal' && K!=null && (vol==null ? !onb : vol>K);
+    per[p.id]={maanden, eerste, vol, K, warn};
+    if(vol!=null) maxM=Math.max(maxM,vol); if(K!=null&&K>0) maxM=Math.max(maxM,K);
+  }
+  return {per, maxM:Math.min(maxM,PLAN_TIJDLIJN_MAX), cap};
+}
+function planRijStatus(p,t){
+  if(p.nfOnbekend) return {k:'onbekend', tekst:'stand onbekend'};
+  if(p.status==='bereikt') return {k:'vol', tekst:'vol'};
+  if(p.status==='gepauzeerd') return {k:'gepauzeerd', tekst:'gepauzeerd \u00b7 krijgt nu niets'};
+  if(Math.round(+p.alloc||0)>0) return {k:'actief', tekst:'nu actief'};
+  if(t && t.eerste!=null) return {k:'wacht', tekst:`wacht tot ${etaDatum(t.eerste)}`};
+  return {k:'wacht', tekst:'wacht'};
+}
+function planRijRechts(p,t){
+  const D=planBedragDeel(p), bed=`${D.mod}<b style="font-weight:800;color:var(--txt)">${D.bedrag}</b>/mnd`;   // v203: het bedrag draagt het gewicht
+  if(p.status==='bereikt') return 'bereikt';
+  const vol=t&&t.vol>0?etaDatum(t.vol):'';
+  if(p.type==='aflossen') return vol?`${bed} · schuldenvrij ${vol}`:bed;
+  if(Math.round(+p.alloc||0)>0 && vol) return `${bed} · vol ${vol}`;
+  if(p.type==='goal') return p.streefdatum?`${bed} · streef ${doelDatumLabel(p.streefdatum,true)}`:`${bed} · geen streefdatum`;
+  return vol?`${bed} · vol ${vol}`:bed;
+}
+function tlMaand(m){ const t=new Date(); const d=new Date(t.getFullYear(), t.getMonth()+m, 1); return {k:MNAMES[d.getMonth()], j:d.getFullYear()}; }
+function openPlanTijdlijn(){
+  let P=[], cap=0; try{ P=allocatePlan(); cap=planCapacity(); }catch(_){}
+  const T=planTijdlijnData(P,cap), N=T.maxM+1;
+  const tints={}; P.forEach((p,i)=>{ tints[p.id]=planTint(p,i); });
+  const kol=`grid-template-columns:96px repeat(${N},minmax(0,1fr))`;
+  const kop=`<div class="ptl-r" style="${kol}"><span></span>${Array.from({length:N},(_,m)=>`<span class="ptl-m" data-tlkop="${m}">${N>14&&m%3?'':tlMaand(m).k}</span>`).join('')}</div>`;
+  const rijen=P.map((p,i)=>{ const t=T.per[p.id]||{maanden:[]};
+    const cel=m=>{ const a=+t.maanden[m]||0, vol=cap>0&&a>=cap, ruit=t.K!=null&&t.K===m;
+      return `<span class="ptl-c" data-tlm="${m}" data-a="${a}" data-tlsoort="${a<=0?'leeg':(vol?'vol':'deel')}">${a>0?`<i style="background:${vol?tints[p.id]:`color-mix(in srgb,${tints[p.id]} 40%,transparent)`}"></i>`:''}${ruit?'<b data-ruit>◆</b>':''}</span>`; };
+    return `<div class="ptl-r" data-tlrij="${p.id}" style="${kol}"><span class="ptl-n">${i+1} ${esc(p.naam)}</span>${Array.from({length:N},(_,m)=>cel(m)).join('')}</div>`; }).join('');
+  const naam=id=>{ const x=P.find(y=>y.id===id); return x?spaarOverNaam(x):''; };   // v317: het noodfonds heet "je noodfonds"
+  const wat=P.filter(p=>(T.per[p.id]||{}).warn).map(p=>{ const t=T.per[p.id], i=P.indexOf(p), vorige=P.slice(0,i).reverse().find(x=>x.type==='goal'&&x.status!=='bereikt');
+    const lbl=doelDatumLabel(p.streefdatum,true);
+    const feit=(t.eerste!=null&&t.eerste>t.K)?`streef ${lbl}, start pas ${etaDatum(t.eerste)||'deze maand'}`:`streef ${lbl}, vol ${t.vol!=null?etaDatum(t.vol):'nog niet te zeggen'}`;
+    const opt=(tk,fn)=>`<div class="small" data-tloptie style="padding:5px 0;color:var(--teal);cursor:pointer" onclick="closeSheet();${fn}">• ${esc(tk)} ›</div>`;
+    return `<div data-tlwaarschuwing="${p.id}" style="border-top:1px solid var(--line);padding:9px 0 4px">
+      <div class="small" style="color:var(--amber);font-weight:700">${esc(p.naam)}: ${esc(feit)}</div>
+      <div class="small" style="font-weight:700;margin:6px 0 1px">Wat kun je doen?</div>
+      ${opt(t.vol!=null?`streefdatum verschuiven naar ${etaDatum(t.vol)}`:'streefdatum verschuiven', `openGoal('${esc(p.id)}')`)}
+      ${opt(vorige?`${p.naam} vóór ${vorige.naam} zetten`:'volgorde wijzigen', `openGoal('${esc(p.id)}')`)}
+      ${opt('een deel van de inleg ernaast laten lopen', planAllocOpen(p))}</div>`; }).join('');
+  let TV=[]; try{ TV=planTerugval(P,cap); }catch(_){}
+  const tv=TV.map(e=>{ const nv=naam(e.van), nn=naam(e.naar), dt=etaDatum(e.vanaf); return (nv&&nn&&dt)?`<div class="small muted" data-erfregel="${e.van}" data-erfnaar="${e.naar}">vanaf ${dt} gaat de ruimte van ${esc(nv)} naar ${esc(nn)}</div>`:''; }).join('');
+  const a=tlMaand(0), b=tlMaand(T.maxM);
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="planTijdlijn">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Tijdlijn spaardoelen</div>
+    <div class="small muted" style="margin:2px 0 10px">${a.k} ${a.j} – ${b.k} ${b.j} · licht = deel van de inleg, donker = volle inleg</div>
+    ${cap>0?`${kop}${rijen}<div class="small muted" style="margin:6px 0 4px">◆ streefdatum</div>`:'<div class="small muted">Zonder spaarinleg is er geen tijdlijn: er valt niets te verdelen.</div>'}
+    ${tv}${wat}</div>`;
+  showSheetBg();
+}
 function renderPlan(bare){
   const P=allocatePlan(); const cap=planCapacity(); const n=P.length;
   const G=planGrendel();
-  /* Punt 10: zodra de grendel open is draagt een vol noodfonds geen tak meer, en dan is een vat
-     ter hoogte van zijn doelbedrag een blok dat niets meer zegt. Het krimpt tot één regel. Zolang
-     de grendel dicht zit blijft het een vat, want dan gaat juist alles daarheen. */
-  const klein=new Set(P.filter(p=>p.type==='noodfonds'&&!G&&p.rest<=0).map(p=>p.id));
   const SEG=planSegmenten(P,cap);
   const tints={}; P.forEach((p,i)=>{ tints[p.id]=planTint(p,i); });
-  /* v318: DE VERTAKTE WATERVAL. De bestemmingen die een vat krijgen staan naast elkaar; een vol
-     noodfonds is zijn eigen regel erboven en doet in het raster niet mee (het draagt geen tak, dus
-     ook geen vat). */
-  const vaten=P.filter(p=>!klein.has(p.id));
-  /* DE VOLGORDE VAN DE WATERVAL BLIJFT DE VOLGORDE VAN `P`, en dat is de hele reden dat dit scherm
-     bestaat: wie eerst aan de beurt is staat bovenaan. Een vol noodfonds is een eigen regel en geen
-     vat, dus hij staat op ZIJN plek tussen de rasterblokken en niet bovenaan.
-     DE BLOKKEN VOLGEN DAARUIT: elke aaneengesloten reeks vaten wordt een raster van ten hoogste
-     KOL kolommen, en een regel ertussen breekt die reeks af. */
-  const KOL=planVatKolommen(vaten.length);
-  const HG=planVatHoogten(vaten);
-  /* In een smalle kolom de korte vormen, in een brede de lange (besluit v318). De AANROEPER weet
-     hoeveel kolommen er staan; vatRegels() kiest op dat ene argument welke woorden erbij horen. */
-  const smal=KOL>=3;
-  /* HET LABEL STAAT ALLEEN NAAST DE TAK BIJ EEN KOLOM, en dat is gemeten en geen voorzichtigheid:
-     het staat absoluut vanaf de middenlijn van de kolom en mag niet afbreken (het is één getal), dus
-     het is ~95px breed vanaf dat midden. Een kolom is 120px op 360px en 133 op 390 zodra er twee
-     staan, dus het label liep dan over de buurkolom heen. Bij EEN kolom is er 318 respectievelijk
-     348px en past het ruim.
-     DIT IS EEN ANDERE VRAAG DAN `smal`, en daarom een eigen naam: `smal` kiest de WOORDEN (kort of
-     lang) en dit kiest de PLEK van het bedrag. Ze vallen bij drie kolommen samen en bij twee niet. */
-  const labelNaast=KOL===1;
+  /* v367: DE VATEN ZIJN VERVALLEN IN DE STANDAARDWEERGAVE; PER BESTEMMING EEN RIJ (gevraagd door de gebruiker, mockup
+     "spaardoelen compact"). Nummer, naam en status ("nu actief", "wacht tot <maand>", "wacht"), een dunne voortgangsbalk,
+     links toegewezen tegen het doel en rechts het maandbedrag met de vol-datum of de streefdatum. Vier doelen kostten
+     ongeveer anderhalf scherm; de volgorde staat nu in de nummering en de status, en de tijdlijn (openPlanTijdlijn())
+     laat zien wie wanneer geld krijgt. ALLES KOMT UIT DEZELFDE PROJECTIE ALS ELKE VOL-DATUM (planTijdlijnData(), die
+     planVooruit() leest), dus de status, de datum en de waarschuwing kunnen niet uiteenlopen. `.plan-item[data-id]`
+     blijft de naam van een bestemming (v225). */
+  const TL=planTijdlijnData(P,cap);
   const act=(kl,tk,fn)=>`<span class="small" style="color:var(--${kl});cursor:pointer" onclick="event.stopPropagation();${fn}">${tk}</span>`;
-  const acties=p=>window._planRij===p.id?`<div class="row" data-acties="${p.id}" style="grid-column:1/-1;margin:9px 2px 2px;gap:14px;flex-wrap:wrap">
+  const acties=p=>window._planRij===p.id?`<div class="row" data-acties="${p.id}" style="margin:6px 2px 2px;gap:14px;flex-wrap:wrap">
       ${act('teal', p.type==='noodfonds'?'verfijnen ›':'openen ›', planOpen(p))}
       ${p.type==='aflossen'?act('teal','maandbedrag ›',planAllocOpen(p)):''}
       ${act('mut2', planPaused(p.id)?'hervatten':'pauzeren', `planTogglePause('${p.id}')`)}
       ${p.type==='aflossen'?act('mut2','uit plan halen',`planRemove('${p.id}')`):''}
     </div>`:'';
   const nrVan=p=>{ const i=P.indexOf(p); return `<span class="plan-1${i===0?'':' n'}">${i+1}</span>`; };
-  /* De volle noodfonds-regel, ongewijzigd van vorm: één regel met de naam, zijn status en de stand
-     rechts, op de plek waar een vat zijn maandbedrag heeft. Dat bedrag is hier nul, want een vol
-     noodfonds krijgt niets meer. */
-  const kleinRij=p=>
-    `<div class="plan-item plan-rij vat-vol" data-id="${p.id}">
-      <div class="vat-in" style="align-items:center;padding:7px 11px">
-        <div class="row" style="flex:1;min-width:0;cursor:pointer" onclick="planRij('${p.id}')">
-          <span class="vat-naam">${nrVan(p)} ${esc(p.naam)}<span class="muted" style="font-weight:400"> · ${planSub(p,true)}</span></span>
-          <span class="small vat-stand" style="margin:0;white-space:nowrap;flex-shrink:0">${planStand(p)}</span></div>
-        </div>${acties(p)}</div>`;
-
-  /* De terugval, uit planTerugval() en dus uit dezelfde projectie als elke vol-datum (v307). De
-     RICHTING komt daar vandaan en ligt niet vast in de vorm: op de ene stand geeft het kleine doel
-     zijn ruimte aan het grote, op de andere andersom. */
-  let TV=[]; try{ TV=planTerugval(P,cap); }catch(_){ TV=[]; }
-  const naamVan=id=>{ const x=P.find(y=>y.id===id); return x?spaarOverNaam(x):''; };
-  /* De blokken in de volgorde van `P`: een regel voor een vol noodfonds, en een raster per reeks
-     vaten. `plek` zegt per vat in welk raster en in welke kolom hij staat, en dat is wat de
-     terugval-lijn nodig heeft: twee vaten in HETZELFDE raster kunnen een lijn dragen, twee in
-     verschillende rasters niet (daar zou de plek na het renderen opgemeten moeten worden). */
-  const delen=[]; let run=[];
-  const flush=()=>{ for(let i=0;i<run.length;i+=KOL) delen.push({groep:run.slice(i,i+KOL)}); run=[]; };
-  for(const p of P){ if(klein.has(p.id)){ flush(); delen.push({regel:p}); } else run.push(p); }
-  flush();
-  const plek={}; delen.forEach((d,r)=>{ if(d.groep) d.groep.forEach((p,k)=>{ plek[p.id]={rij:r, kol:k}; }); });
-
-  /* DE TEKST VAN EEN BESTEMMING, in de volgorde van het ontwerp: naam, bedrag, stand, vol met
-     datum, en de streefdatum met de marge of het te-laat. Hij staat IN de vatbox en stroomt vanaf de
-     bovenkant van het vat naar beneden, dus wat binnen de hoogte van dat vat past staat erin en de
-     rest loopt eronder door. Er wordt niets geteld en niets opgemeten: de tekststroom beslist. */
   /* v365: wat er deze maand terug gaat naar een bak (alles of het deel van deze maand bij spreiden), per bron. */
   const tzBak={}; try{ const T0=terugzetVoor(thisYM()); if(T0 && T0.r.keuze!=='niet'){ const d=Math.round(+(T0.r.delen||[])[T0.i]||0), br=T0.r.bron||[], tot=br.reduce((a,b)=>a+b.af,0)||1; let rest=d;
     br.forEach((b,k)=>{ const v=k===br.length-1?rest:Math.round(d*b.af/tot); if(v>0) tzBak[b.id]=v; rest-=v; }); } }catch(_){}
-  const vatTekst=p=>{
-    const R=vatRegels(p,smal);
-    const D=planBedragDeel(p);
-    const tb=tzBak[p.id]||0;
-    const dzB=(+p.extra>0&&p.mode!=='auto'&&!p.grendelDoorzak)?Math.round(+p.extra):0;   // v255: zie planSub()
-    const dzR=dzB>0?`<span class="muted"> · ${euro0(dzB)} doorgezakt</span>`:'';
-    const dof=(p.status==='wacht op de buffer')?' wf-dof':'';
-    const laat=R.laat?' wf-laat':'';
-    return `<div class="plan-item wf-tekst${laat}${dof}" data-id="${p.id}" data-laat="${R.laat?1:0}">
-      <div class="wf-naam">${nrVan(p)} ${esc(p.naam)}</div>
-      ${labelNaast?'':`<div class="small">${D.mod?`<span class="muted">${D.mod}</span>`:''}<b style="font-weight:700">${tb?euro0(Math.round(+p.alloc||0)+tb):D.bedrag}</b><span class="muted">${tb?' deze maand':'/mnd'}</span></div>`}
-      ${tb?`<div class="small muted" data-terugbak="${p.id}" data-terug="${tb}">${euro0(Math.round(+p.alloc||0))} + ${euro0(tb)} terug</div>`:''}
-      ${p.nfOnbekend?'':`<div class="small vat-stand">${planStand(p)}${dzR}</div>`}
-      ${R.vol?`<span class="wf-vol small" data-vol="${p.id}">${R.vol.woord} <b>${R.vol.datum}</b></span>`:''}
-      ${R.regels.length?`<div class="small vat-dat">${R.regels.join('<br>')}</div>`:''}
-    </div>`;
+  const rij=p=>{
+    const t=TL.per[p.id]||{}, st=planRijStatus(p,t), R=planRijRechts(p,t), tint=tints[p.id];
+    const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
+    const ST=p.nfOnbekend?null:doelStreepje(p), tb=tzBak[p.id]||0;
+    const tbPct=(tb>0&&p.doel>0)?Math.max(Math.min(tb/p.doel*100,pct),0):0;
+    /* v194: stilstand is grijs, beweging krijgt een tweede segment: wat er deze maand bij komt (bij een aflos-item met je
+       termijn erbij), zoals het vat het droeg. */
+    const perMnd=Math.max(Math.round(+p.alloc||0),0)+(p.type==='aflossen'?Math.max(Math.round(+p.debtPer||0),0):0);
+    const groei=(!p.nfOnbekend&&p.status!=='gepauzeerd'&&p.doel>0&&perMnd>0)?Math.max(Math.min(perMnd/p.doel*100,100-pct),0):0;
+    const balk=p.nfOnbekend?'':`<div class="bar-track plan-rijbalk" style="height:5px;margin:6px 0 5px;position:relative">
+        <div class="bar-fill" style="width:${pct}%;background:${tint}"></div>${groei>0?`<div class="bar-fill" data-groei style="width:${groei.toFixed(1)}%;background:color-mix(in srgb,${tint} 38%,transparent)"></div>`:''}${tbPct>0?`<i data-terugvat="${p.id}" style="position:absolute;top:0;bottom:0;left:${(pct-tbPct).toFixed(1)}%;width:${tbPct.toFixed(1)}%;background:repeating-linear-gradient(135deg,transparent 0 3px,var(--card) 3px 5px)"></i>`:''}
+        ${ST?`<span class="wf-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="position:absolute;top:-3px;bottom:-3px;left:${ST.pct.toFixed(2)}%;width:2px;background:var(--txt)"><span class="sr-only">${doelStreepjeTekst(p,ST)}</span></span>`:''}</div>`;
+    return `<div class="plan-item plan-rij2${t.warn?' wf-laat':''}" data-id="${p.id}" data-status="${esc(st.k)}" data-laat="${t.warn?1:0}" style="border-top:1px solid var(--line);padding:9px 0 8px;cursor:pointer" onclick="planRij('${p.id}')">
+      <div class="row" style="gap:8px;align-items:baseline"><span class="wf-naam" style="flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere">${nrVan(p)} ${esc(p.naam)}</span><span class="small" data-planstatus style="white-space:nowrap;color:${st.k==='actief'?'var(--green)':'var(--mut2)'}">${esc(st.tekst)}</span></div>
+      ${balk}
+      <div class="row small" style="gap:8px;align-items:baseline"><span class="vat-stand" style="flex:1;min-width:0">${p.nfOnbekend?'<span class="muted">onbekend</span>':planStand(p)}</span><span data-planrechts style="white-space:nowrap;color:var(--mut)">${R}</span></div>
+      ${tb?`<div class="small muted" data-terugbak="${p.id}" data-terug="${tb}">${euro0(Math.round(+p.alloc||0))} + ${euro0(tb)} terug deze maand</div>`:''}
+      ${t.warn?`<div class="small" data-planwaarschuwing="${p.id}" style="color:var(--amber);margin-top:3px" onclick="event.stopPropagation();openPlanTijdlijn()">⚠ streefdatum niet haalbaar in deze volgorde: ${t.vol!=null?`vol ${etaDatum(t.vol)}`:'geen vol-datum'}</div>`:''}
+      ${window._planRij===p.id?planRijDetail(p):planDatumRegel(p)}${acties(p)}</div>`;
   };
-
-  const blok=(groep,rij)=>{
-    const K=KOL;
-    const xMid=k=>((k+0.5)/K*100);
-    /* EEN RASTERCEL PER BESTEMMING: de tak, het vat en de tekst zitten in dezelfde kolom, en de
-       tekst stroomt door het vat heen. Daarmee is de kolom `tak + max(vathoogte, teksthoogte)` hoog
-       in plaats van `tak + hoogste vat + hoogste tekst`, en maakt een lang tekstblok onder het ENE
-       vat de andere kolommen niet langer hoger. */
-    const kolommen=groep.map(p=>{
-      const h=HG[p.id].h, klem=HG[p.id].geklemd;
-      const dik=planTakDikte(p.alloc);
-      const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
-      const perMnd=Math.max(Math.round(+p.alloc||0),0)+(p.type==='aflossen'?Math.max(Math.round(+p.debtPer||0),0):0);
-      const groei=(p.doel>0&&perMnd>0)?Math.max(Math.min(perMnd/p.doel*100,100-pct),0):0;
-      const tint=tints[p.id];
-      const ST=p.nfOnbekend?null:doelStreepje(p);
-      /* Het streepje staat in de box en niet in het vat: het vat heeft overflow:hidden, en een
-         markering op 0 of 100 procent zou daarbinnen half wegvallen. De afstand tot de onderkant
-         van de BOX is de lege ruimte onder dit vat plus zijn eigen percentage, allebei in px die we
-         hier al kennen; er wordt niets opgemeten. */
-      const streep=ST?`<span class="wf-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="top:${(h-h*ST.pct/100).toFixed(1)}px"><span class="sr-only">${doelStreepjeTekst(p,ST)}</span></span>`:'';
-      const tb=tzBak[p.id]||0;
-      /* v365: het deel van de toewijzing dat nog terug moet naar de rekening, gearceerd bovenin de vulling: het staat
-         al toegewezen, en deze maand gaat het er weer naartoe. */
-      const tbPct=(tb>0&&p.doel>0)?Math.max(Math.min(tb/p.doel*100,pct),0):0;
-      const vul=p.nfOnbekend?''
-        :`<i class="wf-vul" style="bottom:0;height:${pct}%;background:${tint}"></i>`
-         +(groei>0?`<i class="wf-groei" style="bottom:${pct}%;height:${groei.toFixed(1)}%;background:color-mix(in srgb,${tint} 38%,transparent)"></i>`:'')
-         +(tbPct>0?`<i class="wf-terug" data-terugvat="${p.id}" style="bottom:${(pct-tbPct).toFixed(1)}%;height:${tbPct.toFixed(1)}%;background:repeating-linear-gradient(135deg,transparent 0 3px,var(--card) 3px 5px)"></i>`:'');
-      const klemUit=klem?`<span class="sr-only">Dit vat staat op de bodem en dus niet op schaal: het doelbedrag is kleiner dan de hoogte laat zien.</span>`:'';
-      /* Het maandbedrag staat NAAST de tak zodra er ruimte is, precies als in het ontwerp: de tak
-         IS dat bedrag (zijn dikte), dus het label hoort ernaast en niet vier regels lager. In een
-         smalle kolom past het er niet naast en zakt het naar de eerste tekstregel. Eén bron
-         (planBedragDeel), twee plekken naar gelang de breedte. */
-      const BD=planBedragDeel(p);
-      /* HET BEDRAG STAAT ER OOK OP NUL, en dat is geen detail: een bestemming die wacht krijgt
-         vandaag niets, en die nul is een meting (v59/v73/v173). Zonder hem zegt alleen de
-         statusregel dat er niets heen gaat, en dan moet je uit de afwezigheid van een getal
-         afleiden dat het getal nul is. */
-      /* DEZELFDE WOORDORDE ALS IN HET TEKSTBLOK, en dat is `v91` en geen smaak: `planBedrag()` zet
-         de modus VOOR het bedrag ("30% · €660/mnd"), en twee spellingen van hetzelfde label lopen bij
-         de eerste herziening uiteen. */
-      const takLabel=!labelNaast?'':`<span class="wf-taklabel">${BD.mod?`<span class="muted">${BD.mod}</span>`:''}<b>${BD.bedrag}</b>/mnd</span>`;
-      return `<div class="wf-kol" data-id="${p.id}" style="cursor:pointer" onclick="planRij('${p.id}')">
-        <div class="wf-tak" style="height:${VAT_TAK_H}px">${p.alloc>0?`<i data-takkleur style="width:${dik}px;background:${tint}"></i>`:''}${takLabel}</div>
-        <div class="wf-vatbox" style="height:${h}px">
-          <div class="wf-vat${klem?' wf-klem':''}" data-vat="${p.id}" data-h="${h}" style="height:${h}px">${vul}</div>${streep}${klemUit}
-        </div>${vatTekst(p)}</div>`;
-    }).join('');
-    /* DE TERUGVAL-STROOK. Alleen de overdrachten waarvan gever en ontvanger in DEZELFDE rasterrij
-       staan krijgen een lijn: een lijn tussen twee rijen zou de posities na het renderen moeten
-       opmeten, en dat doet niets in dit bestand. De REGEL eronder staat er in beide gevallen, dus
-       er gaat geen feit verloren. */
-    const eigen=TV.filter(e=>plek[e.van]&&plek[e.naar]&&plek[e.van].rij===rij&&plek[e.naar].rij===rij);
-    const strook=eigen.map((e,k)=>{
-      const Y=ERF_TOP+k*ERF_STAP, xG=xMid(plek[e.van].kol), xR=xMid(plek[e.naar].kol);
-      const l=Math.min(xG,xR), w=Math.abs(xR-xG);
-      /* Eén lijn per overdracht, in een eigen omhulsel met de gever EN de ontvanger erop. Zonder dat
-         omhulsel zijn de vier stukken alleen op volgorde aan elkaar te koppelen, en dan leest een
-         tweede overdracht als een deel van de eerste.
-         DE ELLEBOOG LIGT VOLLEDIG IN DE STROOK: een stompje omlaag bij de gever, de horizontale lijn,
-         en bij de ontvanger een stompje omhoog met de pijl erop. Hij reikt niet tot een vatbodem,
-         want de kolommen zijn verschillend hoog en zo'n stomp zou door de tekst van een andere
-         kolom lopen. */
-      return `<span class="wf-lijn" data-erf-van="${e.van}" data-erf-naar="${e.naar}">`
-        +`<i class="v" style="left:${xG.toFixed(2)}%;top:0;height:${Y}px"></i>`
-        +`<i class="h" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%;top:${Y}px"></i>`
-        +`<i class="v" style="left:${xR.toFixed(2)}%;top:6px;height:${(Y-6).toFixed(1)}px"></i>`
-        +`<i class="p" style="left:calc(${xR.toFixed(2)}% - 4px);top:0"></i></span>`;
-    }).join('');
-    const erf=`<div class="wf-erf" style="height:${eigen.length?ERF_TOP+(eigen.length-1)*ERF_STAP+4:0}px">${strook}</div>`;
-    /* De regel bij de lijn. Hij noemt de maand, de gever en de ontvanger, en GEEN bedrag: de dikte
-       van de tak van de gever draagt de maat al, en een bedrag erbij zou een tweede bron voor
-       datzelfde getal zijn (v104). */
-    const regels=TV.filter(e=>plek[e.naar]&&plek[e.naar].rij===rij).map(e=>{
-      const nv=naamVan(e.van), nn=naamVan(e.naar), dt=etaDatum(e.vanaf);
-      return (nv&&nn&&dt)?`<div class="small vat-dat" data-erfregel="${e.van}" data-erfnaar="${e.naar}" style="grid-column:1/-1;margin-top:7px">vanaf ${dt} gaat de ruimte van ${nv} naar ${nn}</div>`:'';
-    }).join('');
-    /* `plan-item` ZIT OP HET TEKSTBLOK EN NIET OP DIT RASTER, en dat is de keuze die de rest van de
-       app overeind houdt: `.plan-item[data-id]` is sinds v225 de naam waaronder een bestemming te
-       vinden is, en dat is de helft met de naam, het bedrag, de stand en het datumpaar. Het raster
-       is een omhulsel van rasterrijen en geen bestemming, dus een telling over `.plan-item`
-       blijft een telling van bestemmingen. Twee namen voor dezelfde bestemming zou zijn wat v91
-       verbiedt, dus er komt geen tweede attribuut naast `data-id`. */
-    return `<div class="wf" style="grid-template-columns:repeat(${K},minmax(0,1fr))">${kolommen}${erf}${regels}${groep.map(acties).join('')}</div>`;
-  };
-  const rows=delen.map((d,r)=>d.regel?kleinRij(d.regel):blok(d.groep,r)).join('');
+  /* Een tik op een rij opent hem: het datumpaar van v307/v318 (vatRegels(): streefdatum, speling of achterstand, waarop
+     hij wacht) staat dan onder de rij, met de handelingen. Verplaatst van het vat naar de open rij, niet weggegooid. */
+  const planRijDetail=p=>{ const R=vatRegels(p,false); return R.regels.length?`<div class="small vat-dat" data-plandetail="${p.id}" style="color:var(--mut);margin-top:5px;line-height:1.45">${R.regels.join('<br>')}</div>`:''; };
+  const volg=P.length>1?`<div class="row small" data-planvolgorde style="gap:8px;border-top:1px solid var(--line);padding:8px 0 2px;color:var(--mut2)"><span style="flex:1;min-width:0">Volgorde: ${P.map((_,i)=>i+1).join(' → ')}, de ruimte schuift door</span><span style="color:var(--teal);font-weight:700;cursor:pointer;white-space:nowrap" data-plantijdlijn onclick="openPlanTijdlijn()">tijdlijn ›</span></div>`
+    :(P.length?`<div class="row small" data-planvolgorde style="justify-content:flex-end;padding:8px 0 2px"><span style="color:var(--teal);font-weight:700;cursor:pointer" data-plantijdlijn onclick="openPlanTijdlijn()">tijdlijn ›</span></div>`:'');
+  const rows=P.length?P.map(rij).join('')+volg:'';
 
   // Wat het scherm eerst in zinnen zei staat nu achter het uitlegteken bovenin de kaart.
   NOTES.planUitleg=[
     planCapTerugval()
       ? 'Je hebt nog geen spaarinleg ingesteld, dus dit plan verdeelt je comfortabele ruimte: wat er na je vaste lasten en je gewone uitgaven overblijft.'
       : 'Je spaarinleg gaat van boven naar beneden: elke bestemming krijgt wat hij nodig heeft, en wat overblijft zakt door naar de volgende. Je plek in de rij zet je bij de bestemming zelf.',
-    /* v318: de vaten staan weer op schaal, nu naast elkaar. De uitleg zegt dat, en noemt de bodem
-       en de markering erbij: zonder die zin is een gestippelde bovenrand een streepje waarvan je de
-       betekenis moet raden. De tekst is hier de ENIGE plek waar de schaal wordt uitgelegd (besluit
-       v318: de uitleg hoort achter de i). */
-    'De hoogte van een vat is het doelbedrag, dus een doel dat twee keer zo groot is staat twee keer zo hoog. De vulling is wat je er al aan hebt toegewezen.',
-    'Een doel dat te klein is om leesbaar te blijven krijgt een minimumhoogte. Dat vat staat dan niet op schaal en zegt dat met een gestippelde bovenrand.',
-    'De dikte van de tak boven een vat is wat die bestemming per maand krijgt; samen zijn dat de segmenten van de balk bovenin.',
-    'Het streepje dwars op een vat is waar je zou moeten staan om je streefdatum te halen. Je noodfonds heeft er geen, want dat heeft geen streefdatum.',
-    'Raakt een bestemming vol, dan gaat zijn maandbedrag naar de volgende. De stippellijn met de pijl laat zien waarheen, en vanaf welke maand.',
+    /* v367: de vaten zijn rijen geworden; de uitleg zegt wat een rij draagt en waar de tijdlijn staat. */
+    'Per bestemming een rij: de balk is wat je er al aan hebt toegewezen tegen het doel, rechts staat wat er per maand heen gaat en wanneer hij vol is.',
+    'Het streepje op een balk is waar je zou moeten staan om je streefdatum te halen. Je noodfonds heeft er geen, want dat heeft geen streefdatum.',
+    'Raakt een bestemming vol, dan gaat zijn maandbedrag naar de volgende. De tijdlijn laat per maand zien wie geld krijgt.',
     planMaandTekst()
   ].filter(Boolean).map(t=>`<div style="margin-bottom:7px">${t}</div>`).join('');
   /* Punt 5: de inlegbalk is verdeeld in segmenten per bestemming, naar wat ze deze maand krijgen.
@@ -11151,7 +11189,8 @@ function renderPlan(bare){
      "Te verdelen deze maand" met de vaste inleg plus wat er terug gaat. Volgende maand staat de kop weer op je
      maandbedrag, of op het volgende deel als je spreidde. */
   let TZ=null, tzKaart=''; try{ TZ=terugzetVoor(thisYM()); }catch(_){}
-  try{ const D0=(!TZ || (window._terugzetWijzig && TZ.i===0))?terugzetData():null; if(D0 && (!D0.rec || window._terugzetWijzig)) tzKaart=terugzetKaart(D0); }catch(_){}
+  /* v367: de keuze is een compacte regel met de kaart van v365 in een sheet erachter (openTerugzetSheet()). */
+  try{ const D0=(!TZ || (window._terugzetWijzig && TZ.i===0))?terugzetData():null; if(D0 && (!D0.rec || window._terugzetWijzig)) tzKaart=`<div class="row small" id="terugzetRegel" data-terugzet="${D0.B}" role="button" style="gap:8px;margin:6px 0 4px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="openTerugzetSheet()"><span style="flex:1;min-width:0;font-weight:600">${euro0(D0.B)} eruit gehaald in ${esc(MFULL[+D0.ym.slice(5,7)-1])}</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">kies \u203a</span></div>`; }catch(_){}
   const tzDeel=TZ?Math.round(+(TZ.r.delen||[])[TZ.i]||0):0;
   const kopTekst=TZ&&!tzKaart ? `Te verdelen deze maand ${noteIcon('planUitleg','hoe dit plan verdeelt')}` : `Te verdelen uit je ${planCapTerugval()?'comfortabele ruimte':jrg('spaarinleg','spaarinleg')} ${noteIcon('planUitleg','hoe dit plan verdeelt')}`;
   const kopBedrag=TZ&&!tzKaart ? euro0(cap+tzDeel) : (cap>0?`${euro0(cap)}/mnd`:'nog niet bekend');
@@ -14654,6 +14693,11 @@ async function buyFlow(cat,amt,item,verder){
   }
   if(!has) await coSay(`${CATS[cat].name} heeft nog geen potje. Geen budget, geen aankoop.`);
   else await coSay(`Hier is geen budget meer voor. ${CATS[cat].name} staat op ${euro0(Math.max(rest,0))}.`);
+  /* v367: DE AANKOOPCHECK REKENT MET HETZELFDE VRIJE BEDRAG ALS HOME (safeToSpend().safe, via vrijPerDag()). Past
+     het niet in een potje, dan gaat het van je vrije geld af, en dat staat er met het bedrag ervoor en erna. Bij een
+     onvolledig saldo geen bedrag (v206). */
+  try{ const V=vrijPerDag(); if(V && V.volledig){ const na=V.ruimte-amt;
+    await coSay(`Uit je vrije geld: je hebt nu ${euro0(V.ruimte)} vrij te besteden, daarna ${na<0?`${euro0(-na)} te kort`:euro0(na)}.`); } }catch(_){}
   await coSay(`Wil je dit echt, of wil je het nú?`);
   // 3) vertakking, regie bij gebruiker, nooit een verbod
   const opts=[
@@ -18119,6 +18163,10 @@ const INS_SOORTEN=[{k:'alle',l:'alle uitgaven'},{k:'var',l:'variabel'},{k:'vast'
    - boven het potje in de vorige maand: minstens VALTOP_DREMPEL_EUR erboven, dezelfde lat als het
      logboek (valtOpSignals);
    - nieuw deze maand: een tegenpartij die in nieuwMaanden niet voorkwam, met minstens nieuwEuro. */
+/* v367: DE POTJESTEGEL OP INZICHTEN DRAAGT GEEN DAGBEDRAG MEER (gevraagd door de gebruiker). "EUR 97 per dag" stond naast
+   de EUR 36 per dag op Home en was niet uit te leggen: het eerste deelt wat er in je potjes zit, het tweede wat er vrij is.
+   De app heeft EEN dagbedrag, op Home (vrijRegel()); de tegel zegt wat het geld is. */
+const INS_POTJES_SUB='al bestemd, verdeeld over je potjes';
 const INS_PATROON={structFactor:1.5, structEuro:50, voorEuro:10, voorDeel:0.25, nieuwEuro:50, nieuwMaanden:12};
 
 /* "Loopt voor" op een plek: minstens voorEuro EN minstens voorDeel meer dan gewoonlijk in dezelfde
@@ -18272,11 +18320,11 @@ function insTegelsNu(soort){
        potjes" zou dan een meting claimen. Het woord zegt dat het je budget is, en uitgegeven is onbekend. */
     T.push({key:'potjes', lab:'In je potjes', val:euro0(VP.nog), waarde:VP.nog, ms:'deze maand · uitgegeven nog onbekend', st:'gry'});
   } else if(VP && (VP.budget>0 || VP.terug>0)){
-    const nog=VP.nog, gat=VP.rest-nog, perDag=nog>0?Math.round(nog/maandDagenOver(m)):0;
+    const nog=VP.nog, gat=VP.rest-nog;
     /* v250: onder nul heet de tegel "Te veel uitgegeven", met het bedrag zonder minteken: het woord zegt de
        richting, en een minteken erbij zou hetzelfde twee keer zeggen. */
     T.push({key:'potjes', lab:nog<0?'Te veel uitgegeven':'Nog in potjes', val:euro0(Math.abs(nog)), waarde:nog,
-      ms: nog<0?'meer dan er in je potjes zat':(nog===0?'je potjes zijn op':(gat>0?`bij je tempo ${euro0(gat)} tekort`:`${euro0(perDag)} per dag`)),
+      ms: nog<0?'meer dan er in je potjes zat':(nog===0?'je potjes zijn op':(gat>0?`bij je tempo ${euro0(gat)} tekort`:INS_POTJES_SUB)),   // v367: geen tweede dagbedrag naast Home
       st:(nog<0||gat>0)?'amb':'grn'});
   } else T.push({key:'potjes', lab:'Nog in potjes', val:euro0(0), waarde:0, ms:'nog geen potjes', st:'gry'});
   let L=null; try{ L=monthLiquidity(); }catch(_){}
@@ -18355,7 +18403,7 @@ function insMaandBudget(P, soort){
   const sub=D.nu?`zo is het nu verdeeld · dag ${D.el.elapsed} van ${D.el.dim}`:'afgesloten';
   const lab={uitgegeven:'Uitgegeven', vast:'Nog te betalen · vast', potjes:D.delen[2]&&D.delen[2].v<0?'Te veel uitgegeven':'Nog in potjes', over:'Over', erboven:'Erboven'};
   const kaart=(d,vol)=>{ const t=tile(d.key==='over'||d.key==='erboven'?'potjes':d.key);
-    const ms = d.key==='over' ? 'onder budget' : d.key==='erboven' ? 'boven budget' : (d.key==='uitgegeven'&&!D.nu ? ((D.ms.length>1||t.st==='amb')?(t.ms||''):'incl. vaste lasten') : (d.key==='potjes' ? (d.v>0?(/tekort/.test(t.ms||'')?t.ms:`${euro0(Math.round(d.v/maandDagenOver(D.m)))} per dag`):(d.v===0?'je potjes zijn op':'meer dan er in je potjes zat')) : (t.ms||'')));
+    const ms = d.key==='over' ? 'onder budget' : d.key==='erboven' ? 'boven budget' : (d.key==='uitgegeven'&&!D.nu ? ((D.ms.length>1||t.st==='amb')?(t.ms||''):'incl. vaste lasten') : (d.key==='potjes' ? (d.v>0?(/tekort/.test(t.ms||'')?t.ms:INS_POTJES_SUB):(d.v===0?'je potjes zijn op':'meer dan er in je potjes zat')) : (t.ms||'')));
     const st=(d.key==='uitgegeven'&&t.st==='amb')||d.key==='erboven'||(d.key==='potjes'&&d.v<0)?' amb':'';
     const tik=D.nu||d.key==='uitgegeven'?` role="button" onclick="openInsTegel('${D.nu?d.key:(d.key==='uitgegeven'?'uitgegeven':'potjes')}')"`:` role="button" onclick="openInsTegel('potjes')"`;
     const kl=st?'amb':(t.st||'gry');
@@ -18436,7 +18484,7 @@ function renderInsTegel(){
     rows.sort((a,b)=>b.r-a.r || ((CATS[a.c]||{}).name<(CATS[b.c]||{}).name?-1:1));
     h=`<div id="insTegelSheet" data-instegelsheet="potjes" data-inswaarde="${VP.nog}">${insSheetKop((VP.nog<0?'Te veel uitgegeven · ':'Nog in potjes · ')+esc(ymFull(m)), 'wat er nog in elk potje zit', euro0(Math.abs(VP.nog)))}
       ${rows.map(r=>insRij(esc((CATS[r.c]||{name:r.c}).name), `${euro0(r.u)} van ${euro0(r.b)} uitgegeven${r.terug&&r.vast>0?` · ${euro0(r.vast)} incasso nog te gaan`:''}`, euro0(r.r), ` data-insrij="${r.r}"`)).join('')}
-      ${VP.nog>0?`<div class="small muted" style="margin-top:8px">${euro0(Math.round(VP.nog/maandDagenOver(m)))} per dag over de ${maandDagenOver(m)} dagen die nog komen.</div>`:''}
+      ${VP.nog>0?`<div class="small muted" style="margin-top:8px">${INS_POTJES_SUB}. Wat er vrij is naast je potjes staat op Home.</div>`:''}
       ${insNaarGripLink('')}</div>`;
   } else if(k==='vast'){
     const L=monthLiquidity(), VS=vasteLastenStand();
@@ -18621,11 +18669,13 @@ function insKeuzeData(){
       return {rows, potjeKan:soort!=='vast', potjeReden:'Welke lasten vast zijn, weet Minder na drie afgeronde maanden.', vorigeKan:false, vorigeReden:'Tegen vorige maanden kan vanaf drie afgeronde maanden.', normaalLab:'', nu:true};
     }
     if(soort==='vast'){
-      const rows=(V.vastePotjes||[]).map(x=>({k:x.k, naam:x.naam, uit:x.uit, potje:x.bud, normaal:null}));
+      const rows=(V.vastePotjes||[]).map(x=>({k:x.k, naam:x.naam, uit:x.uit, potje:x.bud, normaal:null, overR:x.overR}));
       return {rows, potjeKan:true, vorigeKan:false, vorigeReden:'Vaste lasten vallen op hun eigen datum; die vergelijk je niet op dagen.', normaalLab:'', nu:true, uitLab:'betaald'};
     }
     const rows=V.potjes.filter(x=>x.bud>0||x.uit>0).map(x=>({k:x.k, naam:x.naam, uit:x.uit, potje:x.bud, normaal:x.typisch, overR:x.overR}));
-    return {rows, potjeKan:true, vorigeKan:true, normaalLab:`normaal op dag ${el}`, vorigeLab:`dezelfde eerste ${el} dagen in ${insMaandNamen(V.band.maanden)}`, nu:true};
+    /* v367: de uitschieters van de lopende maand zijn uitschieters(V), de lijst van de rode stappen op Grip. */
+    const uitsch=uitschieters(V).map(x=>rows.find(r=>r.k===x.k)).filter(Boolean);
+    return {rows, uitschieters:uitsch, potjeKan:true, vorigeKan:true, normaalLab:`normaal op dag ${el}`, vorigeLab:`dezelfde eerste ${el} dagen in ${insMaandNamen(V.band.maanden)}`, nu:true};
   }
   const ms=P.maanden, n=ms.length;
   if(!n) return {rows:[], leeg:'Er is nog geen afgeronde maand.'};
@@ -18649,44 +18699,95 @@ function insNulGroep(soort, kop, bedrag, sub, rijen){
     ${open?`<div data-insnulrijen>${rijen}</div>`:''}</div>`;
 }
 function insNulToggle(soort){ window._insNulOpen=Object.assign({}, window._insNulOpen||{}); window._insNulOpen[soort]=!window._insNulOpen[soort];
-  const el=document.getElementById('insKeuze'); if(el) el.outerHTML=insKeuzeKaart(); }
+  const el=document.getElementById('insKeuze'); if(el) el.outerHTML=insKeuzeKaart();
+  const al=document.getElementById('insAlle'); if(al) al.outerHTML=insAlleHTML(al.getAttribute('data-insalle')); }
+/* v367: DE KEUZEKAART TOONT ALLEEN DE UITSCHIETERS, EN DE VOLLE LIJST STAAT EEN TIK DIEPER (gevraagd door de gebruiker,
+   mockup "uitschieters"). TEGEN JE POTJE: de potjes die verwacht minstens EUR 10 EN minstens 25 procent boven hun bedrag
+   eindigen, gesorteerd op die verwachte afwijking, hooguit drie. Op de lopende maand is dat uitschieters(V), dezelfde lijst
+   in dezelfde volgorde als de rode stappen in de bridge op Grip; op een afgesloten periode is de afwijking wat er uitging
+   tegen het potje, met dezelfde drempel (potjeUitschieter()). Sorteren op uitgegeven bedrag zette Sport bovenaan door zijn
+   abonnementen en niet door je gedrag. TEGEN VORIGE MAANDEN: de drie grootste verschillen, plus of min, met dezelfde
+   drempel tegen het gewone bedrag: dit scherm is om te kijken, dus minder uitgeven telt ook. Zijn er minder dan drie, dan
+   staan er minder en zegt de kaart dat. "Alle N potjes ›" opent de volle lijst met de groepen van v365 (insNulGroep). */
+const INS_TOP=3;
+function insDrempelTekst(){ return `drempel ≥ ${euro0(INS_PATROON.voorEuro)} én ≥ ${Math.round(INS_PATROON.voorDeel*100)}%`; }
+function insAfwijking(r){ return r.overR!=null ? r.overR : r.uit-r.potje; }
+function insUitschieters(D){
+  if(D.uitschieters) return D.uitschieters;
+  return D.rows.filter(r=>r.potje>0 && potjeUitschieter({overR:insAfwijking(r), bud:r.potje}))
+    .sort((a,b)=>(insAfwijking(b)-insAfwijking(a)) || (a.naam<b.naam?-1:1));
+}
+function insVorigeRijen(D){ return D.rows.map(r=>Object.assign({d:r.uit-(r.normaal||0)},r)); }
+function insVorigeTop(D){
+  return insVorigeRijen(D).filter(r=>Math.abs(r.d)>=INS_PATROON.voorEuro && (!((r.normaal||0)>0) || Math.abs(r.d)>=(r.normaal||0)*INS_PATROON.voorDeel))
+    .sort((a,b)=>(Math.abs(b.d)-Math.abs(a.d)) || (a.naam<b.naam?-1:1));
+}
+function insKeuzeRijen(D){
+  const naamKol=r=>`<span class="ins-bnm">${esc(r.naam)}</span>`;
+  const kleur=r=>r.uit>r.potje?'var(--red)':((r.overR||0)>0?'var(--amber)':'var(--accent)');
+  const rij=r=>`<div class="ins-bul" data-inspotrij="${esc(r.k)}" data-uit="${r.uit}" data-potje="${r.potje}"${r.normaal!=null?` data-normaal="${r.normaal}"`:''}>${naamKol(r)}
+      <div class="ins-tr"><i style="width:${Math.min(r.uit/r.potje,1)*100}%;background:${kleur(r)}"></i>${r.normaal!=null?`<em style="left:${(Math.min(r.normaal/r.potje,1)*100).toFixed(1)}%"></em>`:''}</div>
+      <b>${euro0(r.uit)} van ${euro0(r.potje)}</b></div>`;
+  const vrij=(r,max)=>`<div class="ins-div" data-insvorigrij="${esc(r.k)}" data-verschil="${r.d}">${naamKol(r)}
+      <div class="l">${r.d<0?`<i style="width:${(-r.d/max*100).toFixed(1)}%"></i>`:''}</div><div class="r">${r.d>0?`<i style="width:${(r.d/max*100).toFixed(1)}%"></i>`:''}</div>
+      <b style="color:${r.d>0?'var(--red)':(r.d<0?'var(--accent)':'var(--mut)')}">${r.d>0?'+':(r.d<0?'−':'')}${euro0(Math.abs(r.d))}</b></div>`;
+  return {rij, vrij, kleur};
+}
 function insKeuzeKaart(){
   const D=insKeuzeData(), k=insKeuze();
   const tog=`<div class="ins-tog"><span data-inskeuze="potje" class="${k==='potje'?'on':''}" role="button" onclick="insKeuzeZet('potje')">Tegen je potje</span><span data-inskeuze="vorige" class="${k==='vorige'?'on':''}" role="button" onclick="insKeuzeZet('vorige')">Tegen vorige maanden</span></div>`;
-  const naamKol=r=>`<span class="ins-bnm">${esc(r.naam)}</span>`;
+  const F=insKeuzeRijen(D);
+  const alle=(soort,n,sub)=>`<div class="row" data-insalleknop="${soort}" role="button" style="gap:8px;cursor:pointer;border-top:1px solid var(--line);padding:9px 0 0;margin-top:4px" onclick="openInsAlle('${soort}')"><span style="flex:1;min-width:0"><span style="font-weight:700;font-size:13px">Alle ${n} potjes</span>${sub?`<span class="small" data-insallesub style="display:block;color:var(--mut2);font-size:var(--fs-xs);margin-top:2px">${esc(sub)}</span>`:''}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
   let body='';
   if(D.leeg) body=`<div class="small muted">${esc(D.leeg)}</div>`;
   else if(!D.rows.length) body=`<div class="small muted">Er is hier nog niets uitgegeven.</div>`;
   else if(k==='potje'){
     if(!D.potjeKan) body=`<div class="small muted" data-inskeuzereden>${esc(D.potjeReden)}</div>`;
-    else { const R0=D.rows.filter(r=>r.potje>0).sort((a,b)=>b.uit-a.uit || (a.naam<b.naam?-1:1));
-      const kleur=r=>r.uit>r.potje?'var(--red)':((r.overR||0)>0?'var(--amber)':'var(--accent)');
-      const rij=r=>`<div class="ins-bul" data-inspotrij="${esc(r.k)}" data-uit="${r.uit}" data-potje="${r.potje}"${r.normaal!=null?` data-normaal="${r.normaal}"`:''}>${naamKol(r)}
-          <div class="ins-tr"><i style="width:${Math.min(r.uit/r.potje,1)*100}%;background:${kleur(r)}"></i>${r.normaal!=null?`<em style="left:${(Math.min(r.normaal/r.potje,1)*100).toFixed(1)}%"></em>`:''}</div>
-          <b>${euro0(r.uit)} van ${euro0(r.potje)}</b></div>`;
-      /* v365: potjes met EUR 0 uitgegeven staan samen in een regel, dicht bij het openen en op dezelfde plek uit te
-         klappen. Alleen precies nul hoort erin. De subregel houdt het enige signaal uit die nulregels vast: bij
-         welke je gewoonlijk rond deze dag al iets uitgaf. */
-      const R=R0.filter(r=>r.uit!==0), N=R0.filter(r=>r.uit===0);
-      const nulSom=N.reduce((a,r)=>a+r.potje,0), wel=N.filter(r=>(r.normaal||0)>0);
-      const nul=N.length>1?insNulGroep('potje', `${N.length} potjes nog niets uitgegeven`, euro0(nulSom), wel.length&&D.nu?`bij ${wel.length} normaal wel al iets rond dag ${daysElapsed(thisYM()).elapsed}: ${wel.map(r=>r.naam).join(', ')}`:'', N.map(rij).join('')):N.map(rij).join('');
-      body=`<div class="ins-leg"><span><u></u>${D.uitLab||'uitgegeven'}</span>${D.normaalLab?`<span><i></i>${D.normaalLab}</span>`:''}</div>
-        ${R.map(rij).join('')}${nul}`; }
+    else { const U=insUitschieters(D), top=U.slice(0,INS_TOP), nAlle=D.rows.filter(r=>r.potje>0).length;
+      const urij=r=>{ const a=Math.round(insAfwijking(r));
+        return `<div class="ins-uit" data-insuitschieter="${esc(r.k)}" data-afwijking="${a}" style="border-top:1px solid var(--line);padding:7px 0">
+          <div class="row" style="gap:8px;align-items:baseline"><span style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow-wrap:anywhere">${esc(r.naam)}</span><b style="color:var(--red);font-size:13px;white-space:nowrap">+${euro0(a)}</b></div>
+          <div class="ins-tr" style="margin:5px 0 3px"><i style="width:${Math.min(r.uit/r.potje,1)*100}%;background:${F.kleur(r)}"></i>${r.normaal!=null?`<em style="left:${(Math.min(r.normaal/r.potje,1)*100).toFixed(1)}%"></em>`:''}</div>
+          <div class="small" style="color:var(--mut2);font-size:var(--fs-xs)">${euro0(r.uit)} van ${euro0(r.potje)}${D.nu?' · verwacht einde maand':''}</div></div>`; };
+      body=`<div class="small muted" style="margin:0 0 4px">uitschieters · ${D.nu?'verwacht einde maand t.o.v. je potje':'t.o.v. je potje'}</div>
+        ${top.map(urij).join('')}
+        ${top.length<INS_TOP?`<div class="small" data-insgeenander style="color:var(--mut2);font-size:var(--fs-xs);border-top:1px solid var(--line);padding:7px 0">${top.length?'geen andere uitschieters':'geen uitschieters'} (${insDrempelTekst()})</div>`:''}
+        ${alle('potje', nAlle, '')}`; }
   } else {
     if(!D.vorigeKan) body=`<div class="small muted" data-inskeuzereden>${esc(D.vorigeReden)}</div>`;
-    else { const R=D.rows.map(r=>Object.assign({d:r.uit-(r.normaal||0)},r)).sort((a,b)=>b.d-a.d || (a.naam<b.naam?-1:1));
-      const max=Math.max(...R.map(r=>Math.abs(r.d)),1);
-      const vrij=r=>`<div class="ins-div" data-insvorigrij="${esc(r.k)}" data-verschil="${r.d}">${naamKol(r)}
-          <div class="l">${r.d<0?`<i style="width:${(-r.d/max*100).toFixed(1)}%"></i>`:''}</div><div class="r">${r.d>0?`<i style="width:${(r.d/max*100).toFixed(1)}%"></i>`:''}</div>
-          <b style="color:${r.d>0?'var(--red)':(r.d<0?'var(--accent)':'var(--mut)')}">${r.d>0?'+':(r.d<0?'−':'')}${euro0(Math.abs(r.d))}</b></div>`;
-      /* v365: precies EUR 0 verschil staat samen onder de lijst; een klein verschil (-EUR 1) blijft los. */
-      const Z=R.filter(r=>r.d===0), NZ=R.filter(r=>r.d!==0);
+    else { const T=insVorigeTop(D), top=T.slice(0,INS_TOP);
+      const rest=insVorigeRijen(D).filter(r=>r.d!==0 && !top.some(x=>x.k===r.k)).sort((a,b)=>(Math.abs(b.d)-Math.abs(a.d)) || (a.naam<b.naam?-1:1));
+      const ook=rest.slice(0,3).map(r=>`${r.naam} ${r.d>0?'+':'−'}${euro0(Math.abs(r.d))}`).join(' · ');
+      const max=Math.max(...top.map(r=>Math.abs(r.d)),1);
       body=`<div class="small muted" style="margin:0 0 6px">${esc(D.vorigeLab)}</div>
-        ${NZ.map(vrij).join('')}${Z.length>1?insNulGroep('vorige', `${Z.length} potjes gelijk aan normaal`, '', Z.map(r=>r.naam).join(' \u00b7 '), Z.map(vrij).join('')):Z.map(vrij).join('')}
+        <div class="small" style="color:var(--mut2);font-size:var(--fs-xs);margin:0 0 2px">${top.length===1?'grootste verschil':`${top.length} grootste verschillen`}</div>
+        ${top.map(r=>F.vrij(r,max)).join('')}
+        ${top.length<INS_TOP?`<div class="small" data-insgeenander style="color:var(--mut2);font-size:var(--fs-xs);padding:4px 0">${top.length?'geen andere grote verschillen':'geen grote verschillen'} (${insDrempelTekst()})</div>`:''}
+        ${alle('vorige', D.rows.length, ook?`ook ${ook}${rest.length>3?' …':''}`:'')}
         <div class="ins-leg" style="margin-top:6px"><span>← minder dan normaal</span><span style="margin-left:auto">meer dan normaal →</span></div>`; }
   }
   return `<div class="card" id="insKeuze" data-inskeuzestand="${k}">${tog}${body}</div>`;
 }
+/* De volle lijst achter "Alle N potjes ›": wat de kaart tot v366 zelf droeg, met de groepen van v365. */
+function insAlleHTML(soort){
+  const D=insKeuzeData(), F=insKeuzeRijen(D);
+  if(soort==='vorige'){
+    const R=insVorigeRijen(D).sort((a,b)=>b.d-a.d || (a.naam<b.naam?-1:1));
+    const max=Math.max(...R.map(r=>Math.abs(r.d)),1);
+    const Z=R.filter(r=>r.d===0), NZ=R.filter(r=>r.d!==0);
+    return `<div id="insAlle" data-insalle="vorige"><div style="font-weight:800;font-size:var(--fs-lg)">Alle ${R.length} potjes · tegen vorige maanden</div><div class="small muted" style="margin:2px 0 8px">${esc(D.vorigeLab||'')}</div>
+      ${NZ.map(r=>F.vrij(r,max)).join('')}${Z.length>1?insNulGroep('vorige', `${Z.length} potjes gelijk aan normaal`, '', Z.map(r=>r.naam).join(' · '), Z.map(r=>F.vrij(r,max)).join('')):Z.map(r=>F.vrij(r,max)).join('')}
+      <div class="ins-leg" style="margin-top:6px"><span>← minder dan normaal</span><span style="margin-left:auto">meer dan normaal →</span></div></div>`;
+  }
+  const R0=D.rows.filter(r=>r.potje>0).sort((a,b)=>b.uit-a.uit || (a.naam<b.naam?-1:1));
+  const R=R0.filter(r=>r.uit!==0), N=R0.filter(r=>r.uit===0);
+  const nulSom=N.reduce((a,r)=>a+r.potje,0), wel=N.filter(r=>(r.normaal||0)>0);
+  const nul=N.length>1?insNulGroep('potje', `${N.length} potjes nog niets uitgegeven`, euro0(nulSom), wel.length&&D.nu?`bij ${wel.length} normaal wel al iets rond dag ${daysElapsed(thisYM()).elapsed}: ${wel.map(r=>r.naam).join(', ')}`:'', N.map(F.rij).join('')):N.map(F.rij).join('');
+  return `<div id="insAlle" data-insalle="potje"><div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:6px">Alle ${R0.length} potjes · tegen je potje</div>
+    <div class="ins-leg"><span><u></u>${D.uitLab||'uitgegeven'}</span>${D.normaalLab?`<span><i></i>${D.normaalLab}</span>`:''}</div>
+    ${R.map(F.rij).join('')}${nul}</div>`;
+}
+function openInsAlle(soort){ window._insNulOpen={}; $('#sheet').innerHTML=`<div class="grab"></div>${insAlleHTML(soort==='vorige'?'vorige':'potje')}`; showSheetBg(); }
 
 /* ===== OVER DE MAANDEN (v359) =====
    De laatste drie afgesloten maanden en de lopende maand, of twaalf als het filter dat zegt, met het

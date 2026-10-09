@@ -221,6 +221,7 @@ test.describe('d · opslaan en tonen', () => {
        vertakte waterval vervallen; het vat noemt hetzelfde bedrag uit dezelfde bron (doelTempo().
        benodigd) in zijn datumpaar, als het bedrag dat de datum wel zou halen. De editor houdt zijn
        eigen zin onveranderd. */
+    await page.evaluate(() => { window._planRij = 'g1'; render(); });   // v367: het datumpaar staat in de geopende rij
     expect(await page.locator('.plan-item[data-id="g1"]').innerText()).toMatch(/per maand haalt het/);
 
     await page.evaluate(() => openGoal('g1'));
@@ -232,6 +233,7 @@ test.describe('d · opslaan en tonen', () => {
     await boot(page, seedDoel([G()]));
     await page.evaluate(() => { go('vooruit'); });
     await page.waitForSelector('.plan-item');
+    await page.evaluate(() => { window._planRij = 'g1'; render(); });   // v367
     const t = await page.locator('.plan-item[data-id="g1"]').innerText();
     expect(t).not.toContain('per maand nodig');
     expect(t).toContain('op dit tempo');                              // de bestaande eta-regel blijft

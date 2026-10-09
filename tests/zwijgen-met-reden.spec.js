@@ -15,7 +15,7 @@ const { pinDag } = require('./vaste-dag');
 const bootVast = async (page, payload) => { await pinDag(page); await open(page, payload); };
 
 const REDEN = 'Geen bedrag per dag: een deel van je saldo is nog onbekend';
-const DAGBEDRAG = /Nog \d+ dagen deze maand, dus /;
+const DAGBEDRAG = /per dag · nog \d+ dagen/;   // v367: de sub onder vrij te besteden
 
 // een rekening MET boekingen en ZONDER saldo: die komt in OWN en maakt totalBalance() onvolledig
 function deelOnbekend() {
@@ -100,7 +100,7 @@ test.describe('b - geen tweede vorm, en geen benadering', () => {
     const i = regels.findIndex((x) => x.indexOf(REDEN) >= 0);
     expect(i).toBeGreaterThan(-1);
     expect(regels[i]).toMatch(/^Geen bedrag per dag/);   // niets ervoor op dezelfde regel
-    expect(regels[i - 1]).toContain('totaal saldo');
+    expect(regels[i - 1]).toMatch(/vrij te besteden|€[\d.]+ ›/);   // v367: direct onder de groene regel vrij te besteden
   });
 
   for (const w of [360, 390]) {

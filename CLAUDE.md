@@ -85,7 +85,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   deze maand kunt doen", `renderGripVooruit()`, sinds `v352` zonder tweede bridge; sinds `v353` opent een tik
   op een potje-stap alleen dat potje en op de rest-stap de potjes daarin, `gripBrugTik()`; sinds `v354` gaat de bridge alleen over de variabele potjes, staat het stuurgetal in de kop en de
   vaste lasten als een regel eronder, `gripVastRegel()`, `renderGripVast()`; sinds `v355` is vast wat de app herkent plus wat je op vast zette, en een potje met een herkende incasso is gemengd; sinds `v356` staan alleen de potjes die boven eindigen los en is de rest EEN stap ruimte, met de ruimere potjes bovenaan zijn sheet en sinds `v358` hun eigen sheet om ze bij te stellen, `openRuimBijstel()`; sinds `v357` loopt de bridge weer van het hele budget naar de uitkomst, met de vaste lasten als EEN stap (een tik opent `renderGripVast()`), is de regel eronder vervallen en is de kop de uitkomst tegen het budget); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
-  <maand>" is opgegaan; VERVALLEN BIJ `v365`). Sinds `v365` staat "Ik wil iets kopen" bovenaan Grip (`gripKoopcheck()`). Sinds `v366` staat een potje dat later hoger gaat als afvinkregel in Deze maand en de wissel van de buffer voor beleggen in Let op. Sinds `v364` staat rechts in de kop van Deze maand "Budget aanpassen ›", de enige ingang naar de budgeteditor buiten Instellingen, de afsluiting en de tijdlijn. Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
+  <maand>" is opgegaan; VERVALLEN BIJ `v365`). Sinds `v365` staat "Ik wil iets kopen" bovenaan Grip (`gripKoopcheck()`). Sinds `v366` staat de wissel van de buffer voor beleggen in Let op; een potje dat later hoger gaat staat sinds `v367` niet meer als regel in Deze maand maar telt in "N afspraken voor <maanden> › Logboek" (`afsprakenLaterRegel()`). Sinds `v364` staat rechts in de kop van Deze maand "Budget aanpassen ›", de enige ingang naar de budgeteditor buiten Instellingen, de afsluiting en de tijdlijn. Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
   `renderAfsluitSheet()`), geen kaart. Het logboek (`logboek`, `renderLogboek()`) draagt sinds `v340` de
   afgesloten maanden als tijdlijn (`logTijdlijn()`), met per maand de bridge, de antwoorden en de
   afspraken (`openLogMaand()`). Tot `v339` stonden op Grip de samenvatting, Vraagt een beslissing,
@@ -103,10 +103,13 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   raakt daar in dezelfde maand vol als op Plan.
   SINDS `v344` DRAAGT PLAN GEEN RESERVERINGEN: de lijst en zijn dekking staan in de tegel en de
   sheet op Grip (`openReserveringen()`).
-  Draagt sinds `v318` de VERTAKTE WATERVAL: de inlegbalk bovenaan, de vaten naast elkaar op schaal
-  van het doelbedrag met hun tak erboven, en de terugval als gestippelde elleboog ONDER de kolommen.
-  Een bestemming is daar EEN rastercel (`.wf-kol`) met het tekstblok (`.plan-item.wf-tekst`) erin,
-  dus bind op `.plan-item[data-id]` en niet op de kolom of op een omhullende rij.
+  Droeg van `v318` tot `v366` de VERTAKTE WATERVAL met vaten naast elkaar. SINDS `v367` IS ELKE BESTEMMING
+  EEN RIJ (`.plan-item.plan-rij2[data-id]`): nummer, naam, status ("nu actief", "wacht tot X", "wacht"), een
+  dunne balk, links toegewezen tegen doel en rechts "EUR X/mnd · vol Y" of "streef Y"; de uitleg (datumpaar,
+  doorgezakt, wacht op) staat in de geopende rij (`window._planRij`). Onder de rijen "Volgorde 1 → 2 → 3, de
+  ruimte schuift door" met "tijdlijn ›" naar de Gantt-sheet (`openPlanTijdlijn()`, `planTijdlijnData()`), en een
+  doel waarvan de streefdatum in deze volgorde niet haalbaar is draagt een waarschuwing (`data-planwaarschuwing`).
+  Bind op `.plan-item[data-id]`.
 
 Daarnaast bestaan `tx` (Transacties), `vermogen` en `set` (Instellingen). Die dragen geen
 horizon en zijn alleen via knoppen bereikbaar, dus zet er niets op wat een van de vier hoort
@@ -120,6 +123,39 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **VRIJ TE BESTEDEN STAAT OP HOME EN NERGENS ANDERS, UITSCHIETERS ZIJN EEN LIJST, EN PLAN IS EEN RIJ PER BESTEMMING**
+  (`v367`, gevraagd door de gebruiker, mockup "vrij geld, uitschieters, spaardoelen"). HOME: het grote getal is
+  "Totaal saldo" (`data-totaalsaldo`), daaronder "EUR X op de bank · EUR Y contant ›" en de groene regel "waarvan vrij
+  te besteden EUR X ›" (`vrijRegel()`, `data-vrij`, exact `safeToSpend().safe`) met "EUR X per dag · nog N dagen"
+  (`vrijDagTekst()`, uit `vrijPerDag()`). De sheet heet "Zo kom je op EUR X", eindigt op "Vrij te besteden"
+  (`data-vrijeind`) met de deling eronder (`data-vrijdeling`), en elke regel draagt zijn term (`data-term`,
+  `data-termsoort` saldo/plus/min): saldo plus inkomen min de rest IS de eindregel. De aankoopcheck rekent met
+  hetzelfde bedrag. Inzichten krijgt het niet: de potjestegel zegt "al bestemd, verdeeld over je potjes"
+  (`INS_POTJES_SUB`), zonder dagbedrag.
+  UITSCHIETERS (`uitschieters(V)`, `potjeUitschieter()`): een potje dat verwacht minstens EUR 10 EN 25 procent boven
+  zijn bedrag eindigt (`INS_PATROON.voorEuro`/`voorDeel`, dezelfde drempel als "loopt voor"), gesorteerd op die
+  verwachte afwijking (`overR`, naam als tiebreak). EEN LIJST, DRIE LEZERS: de losse rode stappen van de bridge op Grip
+  (`dezeMaandBrug()`), de zin eronder (`dezeMaandZin()` noemt alleen `Br.los`) en "Tegen je potje" op Inzichten
+  (hooguit drie, `INS_TOP`, met "geen andere uitschieters" eronder en "Alle N potjes ›" naar `openInsAlle()`). Tot
+  `v367` sorteerde Inzichten op uitgegeven en stond elk potje met een euro erboven los in de bridge. GEVOLG,
+  GEMELD: een potje dat er net boven komt (Boodschappen +61 op 500 op de stand van 6 oktober) staat in de rest en
+  niet in de zin. "Tegen vorige maanden" toont de drie grootste verschillen naar boven of beneden met dezelfde
+  drempel, en de rest in dezelfde sheet.
+  GRIP: Deze maand toont alleen afspraken die in de lopende maand gelden (`afsprakenDezeMaand()`); afspraken voor
+  later en potjes die later hoger gaan zijn EEN regel "N afspraken voor nov–dec › Logboek" (`afsprakenLaterRegel()`).
+  Een potje-afspraak van deze maand zegt "EUR X verwacht · EUR Y ruimte" uit dezelfde `maandVooruit()` als de bridge
+  (`potjeVerwacht()`). Op de 1e van de maand staat bovenaan de pop-up "<Maand> begint: vanaf vandaag gelden" met per
+  potje oud en nieuw en het maandbudget (`maandBeginData()`, `maandBeginBlok()`, oud uit `maandPotjes()` van de maand
+  ervoor, alleen met bewaarde bedragen), en Klopt of Aanpassen schrijft `SET.maandBegin={maand}`: een keer.
+  PLAN: zie de horizon hierboven. De tijdlijn rekent met dezelfde `planVooruit()` (zesde argument `reeks`, de
+  toewijzing per maand, hooguit `PLAN_TIJDLIJN_MAX` 36 maanden): licht is een deel van de inleg, donker de volle
+  inleg, de ruit de streefdatum. De waarschuwing staat er alleen als het doel loopt, een streefdatum heeft en vol
+  ligt na die datum (of geen vol-datum heeft terwijl de stand bekend is); "Wat kun je doen?" heeft drie opties naar
+  bestaande ingangen. De terugzetkeuze van `v365` is een regel "EUR B eruit gehaald in <maand> · kies ›"
+  (`#terugzetRegel`) met de keuze in een sheet (`openTerugzetSheet()`). GEMETEN op `opschonen-stand`: de kaart is
+  474px op 360 en 456 op 390, en het laatste doel eindigt op 484 van 567 en 466 van 771: alle doelen boven de vouw.
+  Op Home: de hero 204/162px op `oud-saldo-melden`. Grip op `deze-maand-stand` 716px op 390.
+  Spec `vrij-uitschieters.spec.js`; `plan-vaten-naast-elkaar.spec.js` is weg (hij ging alleen over de vaten).
 - **AFSPRAKEN PER POTJE ZIJN EEN SCHEMA PER MAAND** (`v366`, gevraagd door de gebruiker): een afspraak is pas
   "aangepast" als een LATERE afspraak over hetzelfde (`afspraakSleutel()`) DEZELFDE MAAND(EN) overschrijft
   (`afspraakOverlap()`, `afspraakOverschrijver()`); afspraken voor verschillende maanden staan naast elkaar, zoals
@@ -6769,7 +6805,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v366` → `minder-v367`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v367` → `minder-v368`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -6805,7 +6841,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365` en `v366` naar `minder-v366`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366` en `v367` naar `minder-v367`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

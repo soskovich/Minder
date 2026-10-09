@@ -120,7 +120,7 @@ test.describe('a · de gemelde regel op de laatste dag van de maand', () => {
     /* v309: dezelfde twee feiten, op hun nieuwe plek. Op de laatste dag klemt maandDagenOver() op
        1 (v257), dus het dagbedrag is het hele restant; dat is onveranderd gedrag. */
     expect(r.val).toBe('\u20ac319');
-    expect(r.achtervoegsel).toBe('\u20ac319 per dag');
+    expect(r.achtervoegsel).toBe('al bestemd, verdeeld over je potjes');   // v367: het dagbedrag staat op Home, niet op de tegel
     expect(r.postInLijst).toBe(false);          // en de post staat niet meer in de lijst
     expect(r.reserve).toBe(GEMELD.oudePlan);    // de reservering is onaangeroerd (v254)
   });

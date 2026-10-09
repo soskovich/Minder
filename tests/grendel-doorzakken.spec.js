@@ -216,10 +216,10 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
       /* v318: een bestemming is twee elementen in twee rasterrijen. De DOFHEID zit op het
          tekstblok (`.plan-item[data-id]`) en de TAK in de kolom ernaast, dus ze zijn elk op hun
          eigen helft te lezen en niet in één omhullende rij. */
+      /* v367: een rij; de status staat erop, en wat hij per maand krijgt is zijn segment in de inlegbalk */
       const tk = document.querySelector('#s-vooruit .plan-item[data-id="kk"]');
-      const kol = document.querySelector('#s-vooruit .wf-kol[data-id="kk"]');
-      return { dof: tk.classList.contains('wf-dof'),
-        tak: !!kol.querySelector('.wf-tak i[data-takkleur]'),
+      return { dof: tk.dataset.status === 'wacht',
+        tak: !!document.querySelector('.inleg-balk [data-seg="kk"]'),
         tint: planTint(allocatePlan().find((p) => p.id === 'kk'), 1) };
     });
     expect(r.dof).toBe(false);
@@ -257,13 +257,17 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
      regels staan er voluit, er wordt niets afgekapt en er is geen ellipsis.
      DE HOOGTE STAAT ALS GEMETEN GETAL ERBIJ, zodat een volgende ronde ziet wat het afbreken kost
      in plaats van dat hij het opnieuw moet meten. Hij VERSCHILT per breedte (127 tegen 109), en dat
-     is de meting zelf: op 360px breekt er een regel meer af dan op 390. */
+     is de meting zelf: op 360px breekt er een regel meer af dan op 390.
+     v367: rijen in plaats van vaten. Het datumpaar staat in de geopende rij over de volle breedte, en dan past
+     elke regel weer op een regel: GEMETEN 54px op 360 en 390, dus drie regels van 18px. De eigenschap blijft
+     dat er niets wegvalt; de hoogte zegt nu dat er niets hoeft af te breken. */
   test('de drie regels staan voluit en breken af in plaats van te worden ingekort', async ({ page }) => {
-    const PX = { 360: 127, 390: 109 };
+    const PX = { 360: 54, 390: 54 };
     for (const w of [360, 390]) {
       await page.setViewportSize({ width: w, height: 800 });
       await boot(page);
       const r = await page.evaluate(() => {
+        window._planRij = 'kk'; render();   // v367: het datumpaar staat in de geopende rij
         const dat = document.querySelector('#s-vooruit .plan-item[data-id="kk"] .vat-dat');
         const c = getComputedStyle(dat);
         return { h: Math.round(dat.getBoundingClientRect().height),
@@ -273,8 +277,7 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
           /* DE VORM VOLGT DE BREEDTE, en de spec leest dat uit het SCHERM in plaats van het aan te
              nemen: met drie kolommen staan de korte vormen er en met minder de lange (besluit
              v318). Een hardgecodeerde `false` zou hier een vorm toetsen die het scherm niet draagt. */
-          regels: vatRegels(allocatePlan().find((p) => p.id === 'kk'),
-            document.querySelectorAll('#s-vooruit .wf .wf-kol').length >= 3).regels };
+          regels: vatRegels(allocatePlan().find((p) => p.id === 'kk'), false).regels };   // v367: de rij is breed, dus de lange vorm
       });
       expect(r.regels.length, `${w}px`).toBe(3);
       // elke regel staat voluit in de tekst van het vat
@@ -282,9 +285,8 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
       expect(r.ws, `${w}px`).not.toBe('nowrap');
       expect(r.ov, `${w}px`).not.toBe('ellipsis');
       expect(r.klem, `${w}px: er valt niets buiten`).toBeLessThanOrEqual(1);
-      // en het afbreken kost regels: meer dan drie regelhoogtes
       expect(r.h, `${w}px: ${r.h}px op 3 regels van ${r.lh}px`).toBe(PX[w]);
-      expect(r.h).toBeGreaterThan(3 * r.lh);
+      expect(r.h).toBe(3 * r.lh);   // v367: op de volle breedte breekt geen regel af
     }
   });
 
@@ -295,9 +297,8 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
   test('het doorgezakte bedrag staat er niet een tweede keer bij', async ({ page }) => {
     await boot(page, { kkMode: 'fixed', kkPer: 250 });
     const t = await page.evaluate(() => {
-      const kol = document.querySelector('#s-vooruit .wf-kol[data-id="kk"]');
       const tk = document.querySelector('#s-vooruit .plan-item[data-id="kk"]');
-      return (kol.innerText + ' ' + tk.innerText).replace(/\s+/g, ' ');
+      return tk.innerText.replace(/\s+/g, ' ');
     });
     expect(t).toContain('€466');
     expect(t).not.toMatch(/doorgezakt/);

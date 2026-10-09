@@ -112,7 +112,7 @@ const potjesPost = (page) => page.evaluate(() => {
     vrijPerDagDagen: vrijPerDag().dagenResterend,
     kop: val ? val.replace(/^-/, '') : null,
     label: kaart ? (over ? 'te veel uitgegeven' : 'nog in je potjes') : null,
-    achter: (/per dag|tekort/.test(ms)) ? ms : '',
+    achter: (/per dag|tekort|al bestemd/.test(ms)) ? ms : '',   // v367: zonder tempo-krapte zegt de tegel wat het geld is
     gat: VP.rest - (VP.budget - VP.gebruikt),
     kaartTekst: kaart ? kaart.innerText.split(String.fromCharCode(10)).join(' | ') : '' };
 });
@@ -136,7 +136,10 @@ test.describe('a · de gemelde toestand', () => {
        dezelfde: dit restant wordt over de resterende dagen verdeeld, met maandDagenOver() als
        noemer. Zonder tempo-krapte draagt het achtervoegsel dat dagbedrag. */
     expect(r.gat).toBeLessThanOrEqual(0);
-    expect(r.achter).toBe(`€${Math.round(520 / r.dagen).toLocaleString('nl-NL')} per dag`);
+    /* v367: DE TEGEL DRAAGT GEEN DAGBEDRAG MEER (gevraagd door de gebruiker): het enige dagbedrag van de app staat op Home,
+       onder vrij te besteden. De tegel zegt wat het geld is. */
+    expect(r.achter).toBe('al bestemd, verdeeld over je potjes');
+    expect(r.kaartTekst).not.toMatch(/per dag/);
   });
 
   /* Op de meetdag van deze ronde (dag 23 van een maand van 30) zijn dat 7 dagen. Het getal zelf
@@ -152,7 +155,7 @@ test.describe('a · de gemelde toestand', () => {
     if (DIM === 30) {
       expect(r.dagen).toBe(7);
       expect(r.kop).toBe('€520');
-      expect(r.achter).toBe('€74 per dag');
+      expect(r.achter).toBe('al bestemd, verdeeld over je potjes');   // v367: geen tweede dagbedrag naast Home
     }
   });
 
@@ -176,10 +179,8 @@ test.describe('b · de noemer is die van de app', () => {
     // v263/v309: het anker schoof twee keer mee; de klem op 1 en het hele restant zijn dezelfde
     // eigenschap als in v257
     expect(r.gat).toBeLessThanOrEqual(0);
-    expect(r.achter).toMatch(/^€[\d.]+ per dag$/);
-    const bedrag = Number((r.achter.match(/^€([\d.]+) per dag$/)[1]).replace(/\./g, ''));
-    expect(Number.isFinite(bedrag)).toBe(true);
-    expect(bedrag).toBe(Math.abs(r.VP.budget - r.VP.gebruikt));   // één dag, dus het hele restant
+    expect(r.achter).toBe('al bestemd, verdeeld over je potjes');   // v367
+    expect(await page.evaluate(() => vrijPerDag().dagenResterend)).toBe(1);   // het dagbedrag van Home deelt door dezelfde 1
   });
 });
 
@@ -321,7 +322,9 @@ test.describe('f · de bron: één afleiding van de resterende dagen', () => {
     expect(m).toBeTruthy();
     const body = m[1];
     expect(body).toMatch(/const nog=VP\.nog/);
-    expect(body).toMatch(/Math\.round\(nog\/maandDagenOver\(m\)\)/);
+    // v367: de tegel deelt niets meer; hij draagt INS_POTJES_SUB in plaats van een dagbedrag
+    expect(body).toMatch(/INS_POTJES_SUB/);
+    expect(body).not.toMatch(/maandDagenOver/);
     expect(body).not.toMatch(/spendNorm[^;]*\/\s*maandDagenOver/);
     // en nogDezeMaandPosten() draagt hem niet meer
     const n = /function nogDezeMaandPosten\(\)\{([\s\S]*?)\n\}/.exec(CODE);

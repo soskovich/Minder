@@ -429,15 +429,17 @@ test.describe('5 · de regel staat in de hero, bij de getallen waarop je beslist
         const hero = document.querySelector('.homehero');
         const kids = [...hero.children].map((x) => (x.innerText || '').trim());
         const i = kids.findIndex((x) => /niet bijgewerkt bij de laatste synchronisatie/.test(x));
-        const j = kids.findIndex((x) => /^totaal saldo/.test(x));
-        const k = kids.findIndex((x) => /per dag\.|ruimte voor deze maand is op/.test(x));
+        /* v367: het saldo is het hoofdgetal met de regel bank · contant eronder, en vrij te besteden (met het dagbedrag)
+           is een eigen regel daaronder */
+        const j = [...hero.children].findIndex((x) => x.hasAttribute('data-saldosplit') || x.hasAttribute('data-totaalsaldo') && !hero.querySelector('[data-saldosplit]'));
+        const k = [...hero.children].findIndex((x) => x.hasAttribute('data-vrij'));
         return { i, j, k, h: Math.round(hero.getBoundingClientRect().height), kaders: hero.querySelectorAll('.card').length };
       });
       expect(r.i).toBeGreaterThan(-1);
       expect(r.i).toBe(r.j + 1);               // direct onder het saldo dat hij kwalificeert
       if (r.k > -1) expect(r.k).toBeGreaterThan(r.i);
       expect(r.kaders).toBe(0);                // geen eigen kaart erbij
-      expect(r.h).toBeLessThanOrEqual(200);    // gemeten 188px op beide breedtes
+      expect(r.h).toBe(204);                   // gemeten 188px op beide breedtes; v367: met de groene regel vrij te besteden 204
     });
   }
 
@@ -450,7 +452,7 @@ test.describe('5 · de regel staat in de hero, bij de getallen waarop je beslist
       return { t: hero.innerText, h: Math.round(hero.getBoundingClientRect().height) };
     });
     expect(r.t).not.toMatch(/niet bijgewerkt/);
-    expect(r.h).toBeLessThan(160);             // gemeten 147px zonder de regel
+    expect(r.h).toBe(162);                     // gemeten 147px zonder de regel; v367: met de groene regel vrij te besteden 162
   });
 
   test('bij een onbekend saldo staat hij er niet: dan draagt de hero al een eigen reden', async ({ page }) => {

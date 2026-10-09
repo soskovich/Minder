@@ -23,14 +23,14 @@ test.describe('a. de bridge loopt van het budget naar de uitkomst, met de vaste 
       return { st: Br.stappen.map((s) => [s.soort, s.label, s.waarde]), budget: V.budget, proj: V.projectie,
         vast: Math.round(V.vaste.eind - V.vaste.budget), varDiff: Math.round(V.variabel.eind - V.variabel.budget) }; });
     expect(r.st).toEqual([
-      ['begin', 'budget', 3375], ['potje', 'Vices', 83], ['potje', 'Boodschappen', 61], ['rest', 'ruimte', -1122],
+      ['begin', 'budget', 3375], ['potje', 'Vices', 83], ['rest', 'ruimte', -1061],   // v367: Boodschappen +61 is geen uitschieter
       ['vast', 'vaste lasten', 0], ['zonder', 'zonder potje', 275], ['eind', 'okt', 2672]]);
     expect(r.st[0][2]).toBe(r.budget);
     expect(r.st[r.st.length - 1][2]).toBe(r.proj);
     expect(r.st.slice(1, -1).reduce((a, s) => a + s[2], r.st[0][2])).toBe(r.proj);
     expect(r.st.find((s) => s[0] === 'vast')[2]).toBe(r.vast);
     // de potjes en de ruimte samen zijn de variabele afwijking: de vaste lasten zitten er niet nog eens in
-    expect(83 + 61 - 1122).toBe(r.varDiff);
+    expect(83 - 1061).toBe(r.varDiff);
   });
   test('de kop is de uitkomst tegen het budget, en de regel vaste lasten is weg', async ({ page }) => {
     await Zes.boot(page); await grip(page);
@@ -108,14 +108,14 @@ test.describe('c. Grip en Inzichten noemen waaruit het bedrag bestaat, uit dezel
 });
 
 test.describe('d. hooguit zeven kolommen, elk minstens 40px breed op 360px', () => {
-  // drie potjes boven (Uit eten, Vices, Boodschappen) EN een uitgave zonder potje (Bol.com op Online shopping)
-  const DRIE = { set: { budgets: Object.assign({}, Zes.BUDGETS, { uiteten: 100 }) },
+  // drie uitschieters (Uit eten, Boodschappen op een potje van 400, Vices) EN een uitgave zonder potje (Bol.com op Online shopping)
+  const DRIE = { set: { budgets: Object.assign({}, Zes.BUDGETS, { uiteten: 100, boodschappen: 400 }) },
     extraTx: [{ id: 'bolx', date: '2026-10-03', amount: -90, name: 'Bol.com', desc: 'BEA, BETAALPAS BOL.COM' }] };
-  test('met een stap zonder potje gaan er twee potjes los, en de zin noemt het derde toch', async ({ page }) => {
+  test('met een stap zonder potje gaan er twee potjes los, en de zin noemt alleen die twee (v367)', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     await Zes.boot(page, DRIE); await grip(page);
     const r = await page.evaluate(() => { const V = maandVooruit(), Br = dezeMaandBrug(V);
-      return { boven: V.potjes.filter((x) => Math.round(x.overR) > 0).map((x) => x.k), st: Br.stappen.map((s) => s.soort),
+      return { boven: uitschieters(V).map((x) => x.k), st: Br.stappen.map((s) => s.soort),
         som: Br.stappen.slice(1, -1).reduce((a, s) => a + s.waarde, V.budget), proj: V.projectie,
         kol: [...document.querySelectorAll('#gripBrug [data-brugstap]')].map((k) => k.getBoundingClientRect().width),
         as: document.querySelectorAll('#gripBrug [data-asbasis]').length,
@@ -128,6 +128,8 @@ test.describe('d. hooguit zeven kolommen, elk minstens 40px breed op 360px', () 
     expect(r.as).toBe(1);   // invoermeting: de as staat er
     for (const w of r.kol) expect(w).toBeGreaterThanOrEqual(40);
     expect(r.zin).toContain('Boodschappen');
+    expect(r.zin).toContain('Uit eten');
+    expect(r.zin).not.toContain('Vices');   // de derde uitschieter staat in de rest, en de zin noemt alleen de rode stappen
   });
   test('zonder stap zonder potje staan er drie los', async ({ page }) => {
     await Zes.boot(page, { set: DRIE.set }); await grip(page);
@@ -154,7 +156,7 @@ for (const w of [360, 390]) {
         over: document.getElementById('sheet').scrollWidth > document.getElementById('sheet').clientWidth }; });
     console.log(`v357 ${w}px: kaart ${k.h}, kop ${k.kop}, sheet ${s.h}, uitleg ${s.uitleg}`);
     expect(k.over).toBe(0);
-    expect(k.h).toBe(w === 360 ? 289 : 271);   // v364: de link in de kop kost 18px op 360
+    expect(k.h).toBe(w === 360 ? 289 : 260);   // v364: de link in de kop kost 18px op 360; v367: de zin is op 390 een regel korter
     expect(s.over).toBe(false);
   });
 }

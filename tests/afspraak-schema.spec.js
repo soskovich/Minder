@@ -100,32 +100,33 @@ test.describe('b · het schema per potje op de logboekpagina', () => {
   });
 });
 
-test.describe('c · een potje dat later hoger gaat staat als afvinkregel in Deze maand', () => {
-  test('hoger vanaf volgende maand en vanaf een latere maand, met ↑; lager niet', async ({ page }) => {
+/* v367: EEN POTJE DAT LATER HOGER GAAT STAAT NIET MEER ALS AFVINKREGEL IN DEZE MAAND; het telt in de regel "N afspraken
+   voor <maand>–<maand> › Logboek", net als een lager potje vanaf een latere maand. Het schema staat in het logboek. */
+test.describe('c · een potje dat later hoger gaat telt in de regel naar het logboek', () => {
+  test('hoger vanaf volgende maand en vanaf een latere maand, uit hetzelfde schema; lager niet', async ({ page }) => {
     await I.boot(page, { set: { budgetsNext: { vices: 50, boodschappen: 350 }, budgetPlan: { '2027-01': { uiteten: 200 } } } });
     await page.evaluate(() => go('maand'));
-    const r = await page.evaluate(() => [...document.querySelectorAll('#gripDezeMaand [data-potomhoog]')].map((e) => ({ k: e.dataset.potomhoog, t: e.innerText.replace(/\s+/g, ' '), pijl: !!e.querySelector('[data-omhoog]') })));
-    expect(r.map((x) => x.k)).toEqual(['vices|2026-11', 'uiteten|2027-01']);
-    expect(r[0].t).toContain('Potje Vices €50 vanaf november ↑'); expect(r[0].t).toContain('nu €20');
-    expect(r[1].t).toContain('Potje Uit eten & café €200 vanaf januari'); expect(r[1].t).toContain('nu €150');
-    expect(r.every((x) => x.pijl)).toBe(true);
-    // de regel komt uit dezelfde bron als het budget
+    const r = await page.evaluate(() => ({ o: potjeOmhoogRegels().map((x) => x.k + '|' + x.ym), rij: document.querySelectorAll('#gripDezeMaand [data-potomhoog]').length,
+      later: (document.querySelector('#gripDezeMaand [data-afsprakenlater]') || {}).innerText || '' }));
+    expect(r.o).toEqual(['vices|2026-11', 'uiteten|2027-01']);
+    expect(r.rij).toBe(0);
+    expect(r.later).toContain('2 afspraken voor nov–jan');
     const b = await page.evaluate(() => ({ v: budgetVoorMaand('2026-11').vices, u: budgetVoorMaand('2027-01').uiteten }));
     expect(b).toEqual({ v: 50, u: 200 });
   });
-  test('de hoger-regel staat naast de lager-regel, en een tik opent het potje', async ({ page }) => {
+  test('hoger en lager tellen samen, en een tik opent het logboek', async ({ page }) => {
     await I.boot(page, { set: { budgetsNext: { vices: 50 } } });
     await page.evaluate(() => { potPlanZet('boodschappen', '2026-11', 350); potjeAfspraak('boodschappen', 350, '2026-11'); go('maand'); });
-    const r = await page.evaluate(() => ({ af: document.querySelectorAll('#gripDezeMaand [data-afspraak]').length, op: document.querySelectorAll('#gripDezeMaand [data-potomhoog]').length,
-      box: document.querySelector('#gripDezeMaand [data-potomhoog] [data-box]').dataset.box }));
-    expect(r).toEqual({ af: 1, op: 1, box: 'uit' });
-    await page.click('#gripDezeMaand [data-potomhoog]');
-    await expect(page.locator('#sheet')).toContainText('Vices');
+    const r = await page.evaluate(() => ({ af: document.querySelectorAll('#gripDezeMaand [data-afspraak]').length,
+      later: document.querySelector('#gripDezeMaand [data-afsprakenlater]').dataset.afsprakenlater }));
+    expect(r).toEqual({ af: 0, later: '2' });
+    await page.click('#gripDezeMaand [data-afsprakenlater]');
+    await expect(page.locator('#s-logboek')).toBeVisible();
   });
-  test('zonder geplande verhoging staat er geen hoger-regel', async ({ page }) => {
+  test('zonder geplande wijziging staat er geen regel', async ({ page }) => {
     await I.boot(page);
     await page.evaluate(() => go('maand'));
-    expect(await page.locator('#gripDezeMaand [data-potomhoog]').count()).toBe(0);
+    expect(await page.locator('#gripDezeMaand [data-afsprakenlater]').count()).toBe(0);
   });
 });
 

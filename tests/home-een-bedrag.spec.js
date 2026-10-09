@@ -90,7 +90,7 @@ test.describe('b · hele euro\'s waar het een samenvatting is', () => {
   test('de hero en de saldo-regel tonen geen centen', async ({ page }) => {
     await boot(page);
     const hero = await page.evaluate(() => $('#s-dash .homehero').innerText.replace(/\s+/g, ' '));
-    expect(hero).toContain('totaal saldo €2.700');
+    expect(hero).toContain('Totaal saldo €2.700');   // v367: het saldo is het hoofdgetal
     expect(hero).not.toMatch(/€[\d.]+,\d\d/);
   });
 

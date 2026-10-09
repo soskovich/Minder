@@ -253,8 +253,10 @@ test('m. wat je deze maand kunt doen: een grens met zijn effect in euro, en de s
   expect(V.h).toEqual([expect.objectContaining({ k: 'uiteten', grens: 50, effect: 30 })]);
   expect(V.met).toBe(V.proj - 30);
   const kaart = await page.evaluate(() => document.getElementById('gripDezeMaand').innerText.replace(/\s+/g, ' '));
-  expect(kaart).toContain('Uit eten');
-  expect(kaart).toContain('loopt voor');
+  /* v367: Uit eten eindigt EUR 30 boven een potje van EUR 150 (20 procent) en is geen uitschieter, dus de kaart noemt hem
+     niet; de handeling staat wel in de sheet. */
+  expect(kaart).toContain('Geen potje komt ver boven zijn bedrag uit');
+  expect(kaart).not.toContain('loopt voor');
   // v349: de som met de grenzen staat in de sheet en niet meer op de kaart
   expect(kaart).not.toContain('Met een grens');
   await page.evaluate(() => openGripVooruit());

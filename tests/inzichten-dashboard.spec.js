@@ -23,7 +23,7 @@ test.describe('a · de tegels van 7 oktober', () => {
     expect(T.map((t) => t.val)).toEqual(['€406', '€817', '€2.153']);
     expect(T[0].ms).toBe('tot vandaag mocht €578 · je zit €172 eronder');
     expect(T[1].ms).toBe('van €817 deze maand');
-    expect(T[2].ms).toBe('€90 per dag');
+    expect(T[2].ms).toBe('al bestemd, verdeeld over je potjes');   // v367: geen tweede dagbedrag naast Home
   });
   test('de status blijft: uitgegeven en potjes groen, vast grijs', async ({ page }) => {
     await open(page);
@@ -124,14 +124,16 @@ test.describe('d · de keuzekaart', () => {
   test('staat standaard op tegen je potje, met de legenda in de kaart', async ({ page }) => {
     await open(page);
     const r = await page.evaluate(() => { const k = document.getElementById('insKeuze');
-      return { stand: k.dataset.inskeuzestand, on: k.querySelector('.ins-tog .on').dataset.inskeuze, leg: k.querySelector('.ins-leg').innerText, set: SET.insKeuze };
+      openInsAlle('potje');   // v367: de legenda staat bij de volle lijst; de kaart draagt de uitschieters
+      return { stand: k.dataset.inskeuzestand, on: k.querySelector('.ins-tog .on').dataset.inskeuze, leg: document.querySelector('#insAlle .ins-leg').innerText, set: SET.insKeuze };
     });
     expect(r.stand).toBe('potje'); expect(r.on).toBe('potje'); expect(r.set).toBeUndefined();
     expect(r.leg).toContain('normaal op dag 7');
   });
   test('per potje wat er uit is tegen het potje, met de streep op wat normaal is in dezelfde dagen', async ({ page }) => {
     await open(page);
-    const r = await page.evaluate(() => [...document.querySelectorAll('[data-inspotrij]')].map((e) => [e.dataset.inspotrij, +e.dataset.uit, +e.dataset.potje, e.dataset.normaal == null ? null : +e.dataset.normaal, e.querySelector('em') ? e.querySelector('em').style.left : null]));
+    await page.evaluate(() => openInsAlle('potje'));   // v367: de volle lijst staat in de drilldown
+    const r = await page.evaluate(() => [...document.querySelectorAll('#insAlle [data-inspotrij]')].map((e) => [e.dataset.inspotrij, +e.dataset.uit, +e.dataset.potje, e.dataset.normaal == null ? null : +e.dataset.normaal, e.querySelector('em') ? e.querySelector('em').style.left : null]));
     const u = r.find((x) => x[0] === 'uiteten');
     expect(u.slice(0, 4)).toEqual(['uiteten', 110, 150, 40]);
     expect(u[4]).toBe((40 / 150 * 100).toFixed(1) + '%');
@@ -149,17 +151,18 @@ test.describe('d · de keuzekaart', () => {
   test('tegen vorige maanden: het verschil met dezelfde dagen, links minder en rechts meer', async ({ page }) => {
     await open(page);
     await page.click('[data-inskeuze="vorige"]');
-    const r = await page.evaluate(() => [...document.querySelectorAll('[data-insvorigrij]')].map((e) => [e.dataset.insvorigrij, +e.dataset.verschil, !!e.querySelector('.l i'), !!e.querySelector('.r i')]));
+    expect(await page.innerText('#insKeuze')).toContain('dezelfde eerste 7 dagen in juli, augustus en september');
+    await page.evaluate(() => openInsAlle('vorige'));   // v367: de volle lijst staat in de drilldown
+    const r = await page.evaluate(() => [...document.querySelectorAll('#insAlle [data-insvorigrij]')].map((e) => [e.dataset.insvorigrij, +e.dataset.verschil, !!e.querySelector('.l i'), !!e.querySelector('.r i')]));
     expect(r.find((x) => x[0] === 'uiteten').slice(0, 2)).toEqual(['uiteten', 70]);
     expect(r.find((x) => x[0] === 'boodschappen').slice(0, 4)).toEqual(['boodschappen', -30, true, false]);
     expect(r.find((x) => x[0] === 'vervoer').slice(0, 4)).toEqual(['vervoer', 99, false, true]);
     expect(r.map((x) => x[1])).toEqual([...r.map((x) => x[1])].sort((a, b) => b - a));
-    expect(await page.innerText('#insKeuze')).toContain('dezelfde eerste 7 dagen in juli, augustus en september');
   });
 });
 
 test.describe('e · geen handeling op Inzichten', () => {
-  const MAG = ['openInsFilter', 'openInsTegel', 'insNaarPatronen', 'insNulToggle', 'brugKies', 'brugTegen', 'brugRest', 'insKeuzeZet', 'insNaarGrip', 'toggleCollap', 'showTip', 'event.stopPropagation'];
+  const MAG = ['openInsFilter', 'openInsTegel', 'insNaarPatronen', 'insNulToggle', 'brugKies', 'brugTegen', 'brugRest', 'insKeuzeZet', 'insNaarGrip', 'toggleCollap', 'showTip', 'event.stopPropagation', 'openInsAlle'];
   const MAG_SHEET = MAG.concat(['closeSheet', 'openMonthSpend', 'openCategory', 'openCsvDubbel', 'openMt940Dubbel', 'insFilterZet']);
   const aanroepen = (root) => [...root.querySelectorAll('[onclick]')].flatMap((e) => e.getAttribute('onclick').split(';').map((x) => x.trim().split('(')[0]).filter(Boolean));
   test('het scherm draagt alleen tikken die iets openen of naar Grip verwijzen', async ({ page }) => {

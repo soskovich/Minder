@@ -98,7 +98,7 @@ test.describe('b · de regel', () => {
        positieve ruimte, en als dat ooit verandert valt de test in plaats van over te slaan. */
     expect(v.ruimte).toBeGreaterThan(0);
     const t = await regel(page);
-    expect(t).toContain(`Nog ${v.dagenResterend}`);
+    expect(t).toContain(`nog ${v.dagenResterend} dagen`);   // v367: "EUR X per dag · nog N dagen" onder vrij te besteden
     expect(t).toMatch(/per dag/);
     expect(t).toContain(String(v.perDag.toLocaleString('nl-NL')));
   });

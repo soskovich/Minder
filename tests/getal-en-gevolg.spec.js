@@ -156,8 +156,9 @@ test.describe('e · al opgelost in de eenheden-ronde', () => {
     expect(t).not.toMatch(/totaal saldo €[\d.]+,\d\d/);
     // en de bron is euro0, niet euro
     const src = await page.evaluate(() => renderDash.toString());
-    expect(src).toContain('euro0(S2.safe)');
     expect(src).toContain('euro0(S2.saldo)');
+    // v367: vrij te besteden staat in de groene regel (vrijRegel), ook in hele euro's
+    expect(await page.evaluate(() => vrijRegel.toString())).toContain('euro0(safe)');
   });
 });
 

@@ -87,8 +87,14 @@ test.describe('a · de grendel', () => {
     /* En de rij zegt wanneer verdelen opengaat. v246: dat stond in planSub() als "Wacht op je
        buffer · verdelen gaat open rond X"; sinds de vertakte waterval staat het in het datumpaar
        van het vat, onder de streefdatum. Dezelfde bron (planGrendelDatum), andere plek. */
-    const t = await page.evaluate(() => document.querySelector('#s-vooruit').innerText);
-    expect(t).toMatch(/verdelen gaat open rond \w+ \d{4}/);
+    /* v367: rijen in plaats van vaten. De status zegt "wacht tot X" met dezelfde maand, en het datumpaar
+       staat in de geopende rij. */
+    const r = await page.evaluate(() => { window._planRij = 'g1'; render();
+      const e = document.querySelector('#s-vooruit .plan-item[data-id="g1"]');
+      return { t: e.innerText, status: e.querySelector('[data-planstatus]').innerText, dat: planGrendelDatum() }; });
+    expect(r.t).toMatch(/verdelen gaat open rond \w+ \d{4}/);
+    expect(r.t).toContain(`verdelen gaat open rond ${r.dat}`);
+    expect(r.status).toBe(`wacht tot ${r.dat}`);
   });
 
   test('het noodfonds is niet te verslepen en niet op een vast bedrag te zetten', async ({ page }) => {

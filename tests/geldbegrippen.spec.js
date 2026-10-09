@@ -11,11 +11,11 @@ async function boot(page, scherm) {
 }
 
 test.describe('a · tik-voor-uitleg op de kernbegrippen', () => {
-  test('"Veilig te besteden" op Home legt zichzelf uit', async ({ page }) => {
+  test('"vrij te besteden" op Home legt zichzelf uit (v367)', async ({ page }) => {
     await boot(page, 'dash');
     const term = page.locator('#s-dash .homehero .jrg');
     await expect(term).toHaveCount(1);
-    expect(await term.innerText()).toBe('Veilig te besteden');
+    expect(await term.innerText()).toBe('vrij te besteden');
     expect(await term.evaluate((e) => getComputedStyle(e).borderBottomStyle)).toBe('dotted');
 
     await term.click();

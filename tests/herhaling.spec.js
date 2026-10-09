@@ -65,7 +65,11 @@ test.describe('a · de wachtuitleg is vervallen; de rij noemt zijn blokkeerder',
       const r = await page.evaluate(() => {
         const P = allocatePlan();
         const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-        const rijen = [...d.querySelectorAll('.plan-item')].map((x) => x.innerText.replace(/\s+/g, ' '));
+        /* v367: de uitleg van een rij staat in de geopende rij; elke rij wordt dus apart geopend. */
+        const rijen = P.map((p) => { window._planRij = p.id; const e = document.createElement('div');
+          e.innerHTML = renderPlan(true); const x = e.querySelector(`.plan-item[data-id="${p.id}"]`);
+          return x ? x.innerText.replace(/\s+/g, ' ') : ''; });
+        window._planRij = null;
         return { wachtend: P.filter((p) => p.status === 'wacht op capaciteit').length,
           regels: d.querySelectorAll('#planWacht').length,
           hints: d.querySelectorAll('.plan-hint').length,
@@ -90,11 +94,12 @@ test.describe('a · de wachtuitleg is vervallen; de rij noemt zijn blokkeerder',
        projectie die elk vat sinds v307 al leest. De assertie leest daarom het datumpaar en de
        statusregel, en niet de hele rij. */
     const wacht = await page.evaluate(() => {
-      const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-      return [...d.querySelectorAll('.plan-item')]
-        .filter((x) => /Wacht op/.test(x.innerText))
+      const uit = allocatePlan().map((p) => { window._planRij = p.id; const d = document.createElement('div');
+        d.innerHTML = renderPlan(true); const x = d.querySelector(`.plan-item[data-id="${p.id}"]`);
+        return x; }).filter((x) => x && /Wacht op/.test(x.innerText))
         .map((x) => [...x.querySelectorAll('.vat-dat:not([data-erfregel]), .vat-stand')]
           .map((e) => e.innerText).join(' '));
+      window._planRij = null; return uit;
     });
     expect(wacht.length).toBe(2);
     for (const w of wacht) expect(w).not.toMatch(/rond \w+ \d{4}|20\d\d/);

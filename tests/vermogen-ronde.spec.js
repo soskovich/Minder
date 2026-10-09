@@ -236,7 +236,8 @@ test.describe('het aflos-vat noemt de datum zonder extra', () => {
       await boot(page, { set: { nfToegewezenMigrated: true, extraSavings: 9000, planOrder: ['noodfonds', 'af:duo'], planAlloc: { 'af:duo': { mode: 'fixed', perMaand: 100 } } } });
       const r = await page.evaluate(() => {
         const p = allocatePlan().find((x) => x.type === 'aflossen');
-        go('vooruit'); renderVooruit();
+        /* v367: de regel staat in de geopende rij */
+        window._planRij = p ? p.id : null; go('vooruit'); renderVooruit();
         const el = document.querySelector('[data-aflosverschil]');
         return { alloc: p ? p.alloc : null, tekst: el ? el.textContent : null, h: el ? el.getBoundingClientRect().height : 0 };
       });

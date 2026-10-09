@@ -106,15 +106,20 @@ test.describe('a · teal betekent op Home en Inzichten nog één ding', () => {
     expect(src).not.toMatch(/gehaald\?'var\(--green\)':'var\(--teal\)'/);
   });
 
-  test('het herogetal op Home houdt teal, want het is zelf de ingang', async ({ page }) => {
+  /* v367: het herogetal is het saldo en draagt geen accent; de groene regel vrij te besteden is de ingang naar de opbouw,
+     met een chevron. Groen is daar een stand (er is vrij geld), geen teal. */
+  test('het herogetal op Home is het saldo, en de ingang naar de opbouw is de groene regel', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => go('dash'));
     const r = await page.evaluate(() => {
-      const el = document.querySelector('#s-dash .hh-big');
-      return { grad: el.classList.contains('grad'), tik: !!el.getAttribute('onclick') };
+      const el = document.querySelector('#s-dash .hh-big'), v = document.querySelector('#s-dash [data-vrij]');
+      return { grad: el.classList.contains('grad'), tik: !!el.getAttribute('onclick'), vrij: v.getAttribute('onclick'), pijl: v.innerText.includes('›') };
     });
-    expect(r.grad).toBe(true);
+    expect(r.grad).toBe(true);    // de klasse draagt het verloop van Aurora; in het standaardthema is het saldo de tekstkleur
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('#s-dash .hh-big')).color)).toBe(await page.evaluate(() => getComputedStyle(document.body).color));
     expect(r.tik).toBe(true);
+    expect(r.vrij).toBe('openSafeToSpend()');
+    expect(r.pijl).toBe(true);
   });
 
   test('Maand en Plan zijn niet aangeraakt', async ({ page }) => {
@@ -216,10 +221,10 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
          v318: zo'n bestemming is `.wf-tekst`, met de naam in `.wf-naam` en het maandbedrag bij de
          tak of in de eerste tekstregel. De verhouding die hier vastligt is dezelfde: het BEDRAG
          draagt het gewicht en de NAAM stapt terug. */
-      const item = document.querySelector('#s-vooruit .wf-tekst');
+      /* v367: een rij per bestemming; het maandbedrag staat rechts (`[data-planrechts]`) */
+      const item = document.querySelector('#s-vooruit .plan-item[data-status="actief"]');
       const naam = item.querySelector('.wf-naam');
-      const kol = document.querySelector(`#s-vooruit .wf-kol[data-id="${item.dataset.id}"]`);
-      const bedrag = kol.querySelector('.wf-taklabel') || item.querySelector('.small');
+      const bedrag = item.querySelector('[data-planrechts]');
       const b = bedrag.querySelector('b');
       const sub = item.querySelector('.vat-stand');
       return { naamGewicht: +getComputedStyle(naam).fontWeight,
@@ -248,48 +253,7 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
     if (t) expect(t).toMatch(/onbekend|€/);
   });
 
-  /* DEZE TEST IS VOOR DE DERDE KEER OMGEDRAAID, en dat is precies waarom hij hier staat.
-     Oorspronkelijk: "de rij wordt er niet hoger van", elke rij onder 150px. Bij v246 werd dat "de
-     vaten staan op schaal, met een bodem en een budget", want de hoogte droeg toen het doelbedrag.
-     Bij v248 was de hoogte geen drager meer: elke bestemming kreeg dezelfde liggende balk.
-     BIJ v318 STAAN DE VATEN NAAST ELKAAR, en dan kost de hoogte geen stapel meer en draagt hij weer
-     het doelbedrag. De BREEDTE blijft gelijk, want elke kolom is `minmax(0,1fr)`: de leesbaarheid
-     van een naam mag niet aan het bedrag ernaast hangen. Daarmee splitst deze test in de twee helften
-     die nu echt verschillende dingen beweren, en de reeks hierboven staat erbij zodat een volgende
-     ronde niet denkt dat hij iets nieuws ontdekt.
-     DE TWEEDE HELFT IS BINNEN v318 NOG EEN KEER OMGEDRAAID: eerst stonden de tekstblokken in een
-     eigen rasterrij en waren ze per constructie even hoog; sinds de tekst IN het vat staat is elke
-     kolom zo hoog als zijn eigen vat plus zijn eigen tekst. Wat hier vastligt is dus niet een grens
-     in pixels maar de FORMULE, en de invoermeting ernaast zegt dat het geval er is (meetles a). */
-  test('de vaten staan op schaal, de kolommen zijn even breed', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => { SET.vooruitDoelOpen = true; save(); render(); go('vooruit'); });
-    const r = await page.evaluate(() => ({
-      balken: [...document.querySelectorAll('#s-vooruit .wf-vat')].map((v) => ({
-        id: v.dataset.vat,
-        doel: (allocatePlan().find((p) => p.id === v.dataset.vat) || {}).doel,
-        h: Math.round(v.getBoundingClientRect().height),
-        w: Math.round(v.getBoundingClientRect().width) })),
-      teksten: [...document.querySelectorAll('#s-vooruit .wf-tekst')].map((x) => x.offsetHeight),
-      boxen: [...document.querySelectorAll('#s-vooruit .wf-vatbox')]
-        .map((x) => Math.round(x.getBoundingClientRect().height)) }));
-    expect(r.balken.length).toBeGreaterThan(1);
-    expect(new Set(r.balken.map((x) => x.w)).size, 'breedtes: ' + r.balken.map((x) => x.w).join(',')).toBe(1);
-    // de hoogte volgt het doelbedrag: een groter doel staat nooit lager
-    const op = [...r.balken].sort((a, b) => a.doel - b.doel);
-    for (let i = 1; i < op.length; i++) expect(op[i].h, op[i].id).toBeGreaterThanOrEqual(op[i - 1].h);
-    /* v318 (tweede helft): ELKE KOLOM IS ZO HOOG ALS ZIJN EIGEN VAT PLUS ZIJN EIGEN TEKST. De tekst
-       staat IN het vat en loopt eronder door, dus de box is `max(vathoogte, teksthoogte)` en niet de
-       hoogste van de rij. Tot deze wissel stonden de teksten in een EIGEN rasterrij en zette de
-       langste de hoogte van alle kolommen; dat was de prijs die deze ronde weghaalt.
-       DE INVOER WORDT EERST GEMETEN, anders is `max(vat,tekst)` niet van `vat` te onderscheiden
-       (meetles a): er moet een kolom zijn waar de tekst ONDER het vat door loopt. */
-    expect(r.teksten.length).toBe(r.balken.length);
-    /* v365: DE TEKST STAAT ONDER HET VAT (punt 13: hij liep door de bakken heen), dus de box is precies het vat. */
-    r.balken.forEach((b, i) => {
-      expect(r.boxen[i], b.id + ': box is het vat').toBe(b.h);
-    });
-  });
+  /* v367: "de vaten staan op schaal, de kolommen zijn even breed" is vervallen met de vaten (zie vrij-uitschieters.spec.js d). */
 });
 
 test.describe('d · Recent scheidt op maand', () => {
@@ -354,12 +318,11 @@ test.describe('f · een gepauzeerd doel blijft grijs en stil (v194, regressie)',
          onveranderd: grijs, en geen tweede laag, want er komt niets bij. */
       const rij = [...document.querySelectorAll('#s-vooruit .plan-item')]
         .find((x) => /Keuken/.test(x.innerText));
-      const kol = document.querySelector(`#s-vooruit .wf-kol[data-id="${rij.dataset.id}"]`);
-      const fills = [...(kol || rij).querySelectorAll('.wf-vat i, .bar-fill')]
+      const fills = [...rij.querySelectorAll('.bar-fill')]
         .map((x) => x.getAttribute('style') || '');
       return { tekst: rij.innerText.replace(/\s+/g, ' '), fills };
     });
-    expect(r.tekst).toMatch(/Gepauzeerd . krijgt nu niets/);
+    expect(r.tekst).toMatch(/gepauzeerd . krijgt nu niets/i);
     expect(r.fills.some((x) => /--mut/.test(x))).toBe(true);
     expect(r.fills.some((x) => /--teal|--accent/.test(x))).toBe(false);
     expect(r.fills.length).toBe(1);            // geen groei-segment

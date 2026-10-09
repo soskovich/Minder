@@ -221,7 +221,7 @@ test.describe('v55 vast = herkende herhaling', () => {
   test('opbouw-sheet toont dezelfde posten, zonder de vervallen budget-post', async ({ page }) => {
     await open(page);
     const t = await sheet(page, () => openSafeToSpend());
-    expect(t).toContain('Veilig te besteden');
+    expect(t).toContain('Vrij te besteden');   // v367: de opbouw eindigt op vrij te besteden
     expect(t).toContain('€1.945');
     expect(t).toContain('Vaste lasten die nog komen');
     expect(t).toContain('€900');

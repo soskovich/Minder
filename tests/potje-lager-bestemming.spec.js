@@ -52,7 +52,7 @@ test.describe('b · elke bestemming boekt door', () => {
   test('naar een potje dat niet past: maandbudget gelijk, veilig te besteden gelijk, de stap Vices verdwijnt uit de bridge', async ({ page }) => {
     await boot(page, OPT);
     const a = await meet(page);
-    expect(a.brug).toBe('budget:3375 Vices:83 Boodschappen:61 ruimte:-1122 vaste lasten:0 zonder potje:275 okt:2672');
+    expect(a.brug).toBe('budget:3375 Vices:83 ruimte:-1061 vaste lasten:0 zonder potje:275 okt:2672');   // v367: Boodschappen +61 is geen uitschieter
     await open(page);
     await vul(page, 'pot:vices', '200');
     await expect(page.locator('#potFormGevolg')).toContainText('Vices €50 → €250');
@@ -63,7 +63,7 @@ test.describe('b · elke bestemming boekt door', () => {
     expect(b.tot).toBe(3375);
     expect(b.safe).toBe(a.safe);
     expect(b.cap).toBe(a.cap);
-    expect(b.brug).toBe('budget:3375 Boodschappen:61 ruimte:-1039 vaste lasten:0 zonder potje:275 okt:2672');
+    expect(b.brug).toBe('budget:3375 ruimte:-978 vaste lasten:0 zonder potje:275 okt:2672');
   });
   test('naar sparen: maandbudget omlaag, spaarinleg omhoog, Plan sneller, veilig te besteden gelijk', async ({ page }) => {
     await boot(page, OPT);
@@ -90,7 +90,7 @@ test.describe('b · elke bestemming boekt door', () => {
     expect(b.tot).toBe(3175);
     expect(b.safe).toBe(a.safe + 200);
     expect([b.cap, b.eta]).toEqual([a.cap, a.eta]);
-    expect(b.brug).toBe('budget:3175 Vices:83 Boodschappen:61 ruimte:-922 vaste lasten:0 zonder potje:275 okt:2672');
+    expect(b.brug).toBe('budget:3175 Vices:83 ruimte:-861 vaste lasten:0 zonder potje:275 okt:2672');
   });
   test('verdeeld over twee, en het logboek noemt de bestemming', async ({ page }) => {
     await boot(page, OPT);

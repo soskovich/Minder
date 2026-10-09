@@ -20,12 +20,12 @@ test('a. de sheet heet ruimte, noemt bovenaan de ruimere potjes, en de regels te
   expect(r.maanden.sport).toEqual([0, 0, 0]);
   expect(r.maanden.verzekering).toEqual([0, 0, 0]);
   expect(r.maanden.vices).toEqual([133, 133, 133]);
-  expect(r.rest).toBe(-1122);
-  expect(r.titel).toBe('Ruimte in andere potjes · -€1.122');
+  expect(r.rest).toBe(-1061);   // v367: Boodschappen +61 staat in de rest
+  expect(r.titel).toBe('Ruimte in andere potjes · -€1.061');
   expect(r.ruimer).toBe('sport,verzekering,abonnement');
   expect(r.regel).toBe('Sport & gezondheid, Verzekeringen en Abonnementen zijn ruimer dan je gewoonlijk uitgeeft · bijstellen ›');
   expect(r.kinderen[0]).toBe('ruimer');   // bovenaan
-  expect(r.kinderen.slice(1)).toEqual(['sport', 'verzekering', 'abonnement']);
+  expect(r.kinderen.slice(1)).toEqual(['sport', 'verzekering', 'abonnement', 'boodschappen']);
 });
 
 test('b. de drempel: elke maand hooguit de helft van het variabele bedrag EN minstens EUR 50 eronder', async ({ page }) => {
