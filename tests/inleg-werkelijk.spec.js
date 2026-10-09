@@ -467,7 +467,8 @@ test.describe('e · de prijs in pixels', () => {
       // v365: de tekst staat onder de vaten (punt 13), en dat maakt de kaart hoger: 684px op 360 en 666 op 390 (gemeten)
       /* v367: rijen in plaats van vaten; gemeten 506px op 360 en 433 op 390 (de rijen breken op 360 vaker af) */
       /* v370: de lopende maand telt mee, dus de rijen dragen andere datums en breken minder vaak af: 466 en 412 (gemeten) */
-      expect(zonder.kaart, 'zonder de regel').toBe(w === 360 ? 466 : 412);
+      /* v372: de regel "Verdeling: op volgorde · aanpassen ›" staat onder de kop: 25px op 360 en 24 op 390 (gemeten) */
+      expect(zonder.kaart, 'zonder de regel').toBe(w === 360 ? 491 : 436);
       expect(metKnop.vrij - zonder.vrij, 'de tweede knop').toBe(w === 360 ? 18 : 0);
       // v367: de zone wordt per stand afgerond, dus het verschil mag een pixel schuiven (33 of 34 op 360)
       expect(Math.abs(vol.zone - zonder.zone - (w === 360 ? 33 : 15))).toBeLessThanOrEqual(1);

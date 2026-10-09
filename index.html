@@ -7893,6 +7893,8 @@ function gripLetOpItems(RO, SIG, BV){
   try{ const m=thisYM(), Lk=lekSignaal(m, budgetFlaggedCats(m)); if(Lk) L.push({soort:'lek', key:Lk.cat, naam:`${Lk.catNaam}: ${Lk.catVal} zonder potje`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); }catch(_){}
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
+  /* v371: "dan vraag ik het opnieuw": een doel is vol en zijn bedrag ligt stil tot je opnieuw verdeelt. */
+  try{ const VQ=planVerdelingVraag(); if(VQ) L.push({soort:'verdeling', naam:`${euro0(VQ.vrij)} van je inleg ligt stil`, sub:`${VQ.vol.length?`${opsomming(VQ.vol)} is vol`:'een doel is vol'} · verdeel opnieuw`, dot:'let op', act:'openVerdeling()'}); }catch(_){}
   try{ for(const k of potOpenLijst()){ const T=potOpenTx(k); if(!T.length) continue;
     L.push({soort:'potopen', naam:`${CATS[k].name}: nog geen bedrag`, sub:`${T.length} boeking${T.length===1?'':'en'} binnen, ${euro0(Math.round(-T.reduce((s,t)=>s+t.amount,0)))} · stel een bedrag in`, dot:'let op', act:`openPotForm('${k}')`}); } }catch(_){}   // v351: een potje zonder bedrag krijgt een boeking
   try{ for(const k of potSchatLijst()){ const T=potSchatTx(k);   // v360: een schatting krijgt een boeking
@@ -9040,8 +9042,8 @@ function logAfspraakRij(a, oud){
 /* v366: OVERSCHREVEN AFSPRAKEN STAAN INGEKLAPT ONDER DE GELDENDE. Openklappen is een weergave en wordt niet bewaard. */
 function logOuderToggle(k){ window._logOuder=window._logOuder||{}; window._logOuder[k]=!window._logOuder[k]; renderLogboek(); }
 function logAfsprakenBlok(){
-  const G=logAfspraakGroepen(); const T=terugzetLog();
-  if(!G.length && !T.length) return '';
+  const G=logAfspraakGroepen(); const T=terugzetLog(); let VL=[]; try{ VL=verdelingLog(); }catch(_){}
+  if(!G.length && !T.length && !VL.length) return '';
   const O=window._logOuder||{};
   const groep=g=>{ const pot=g.geldend[0].soort==='potje' && CATS[g.geldend[0].cat];
     const sch=pot?potjeSchemaTekst(g.geldend[0].cat):'';
@@ -9054,6 +9056,7 @@ function logAfsprakenBlok(){
   return `<div class="card" id="logAfspraken"><div class="hlabel" style="margin:0 0 4px">Wat je afsprak</div>
     ${G.map(groep).join('')}
     ${T.map(terugzetLogRij).join('')}
+    ${VL.map(verdelingLogRij).join('')}
     <div class="small" style="color:var(--mut2);margin-top:8px">Per potje het schema zoals je budget het per maand rekent; een afspraak die een latere voor dezelfde maand overschreef staat ingeklapt.</div></div>`;
 }
 function openLogMaand(m){ window._logMaand=m; renderLogMaand(); showSheetBg(); }
@@ -10057,8 +10060,17 @@ function planVerdeelMaand(rows, cap, G){
   /* ronde 2: het restant vult de lopende doelen bij, in dezelfde prioriteitsvolgorde. Zie
      planBufferKlaar() voor waarom dat ook langs een DICHTE grendel mag (v255). */
   const bufferKlaar=planBufferKlaar(rows,G);
+  /* v371: ZELF VERDELEN ACHTER EEN DICHTE GRENDEL (keuze a van de gebruiker). De buffer gaat eerst, tot vol; heeft hij
+     deze maand zijn hele rest gekregen, dan krijgt elk doel met een eigen bedrag dat bedrag, voordat er iets doorzakt.
+     De grendel blijft verder wat hij was: zonder eigen verdeling zakt de rest op volgorde door (v255). */
+  if(G && bufferKlaar) for(const r of rows){
+    if(!r.zelf || r.type==='noodfonds' || r.status==='gepauzeerd' || r.status==='bereikt') continue;
+    const a=Math.max(Math.min(Math.min(Math.max(Math.round(+r.perMaand||0),0), r.rest), left),0);
+    if(a>0){ r.alloc+=a; r.base+=a; left-=a; }
+  }
   for(const r of rows){
     if(left<=0) break;
+    if(r.zelf && r.vraag && r.type!=='noodfonds') continue;      // v371: "dan vraag ik het opnieuw": niets zakt vanzelf door
     if(G && !bufferKlaar && r.type!=='noodfonds') continue;      // v242/v255: zie planBufferKlaar()
     if(r.status==='gepauzeerd'||r.rest<=0) continue;            // gepauzeerd en bereikt slaan we over
     const ruimte=r.rest-r.alloc; if(ruimte<=0) continue;        // dit doel heeft al wat het nodig heeft
@@ -10162,9 +10174,12 @@ function planVooruit(P, cap, G, terug, tz, reeks, extraToe){   // v370: extraToe
   /* v365: een gespreide terugzetting (terugzetProjectie()) staat in de projectie: wat er nog terug moet komt bij
      de rest van de bron, en elke maand gaat het deel van die maand er rechtstreeks af, bovenop je inleg. Een
      aanroeper die een scenario doorrekent geeft zijn eigen `tz` mee; zonder geldt de keuze die je maakte. */
-  if(tz===undefined){ try{ tz=terugzetProjectie(); }catch(_){ tz=null; } }
-  const tzRest=(tz&&tz.rest)||{}, tzBij=(tz&&tz.bij)||{};
-  const rows=P.map(p=>({id:p.id, type:p.type, mode:p.mode, perMaand:p.perMaand, pct:p.pct,
+  let tzEigen=false; if(tz===undefined){ tzEigen=true; try{ tz=terugzetProjectie(); }catch(_){ tz=null; } }
+  const tzRest=(tz&&tz.rest)||{}, tzBij=Object.assign({}, (tz&&tz.bij)||{});
+  /* v371: wat de bron niet kon dragen schoof deze maand door (terugzetNaarDoel()); dat geld komt in maand 1 bij zijn
+     ontvanger. Alleen zonder eigen scenario van de aanroeper, want die rekent zijn eigen terugzetting. */
+  if(tzEigen){ try{ const TD=terugzetNaarDoel(P); for(const id in TD.door){ const som=TD.door[id].reduce((x,d)=>x+d.bedrag,0); if(som>0){ tzBij[1]=Object.assign({}, tzBij[1]||{}); tzBij[1][id]=(tzBij[1][id]||0)+som; } } }catch(_){} }
+  const rows=P.map(p=>({id:p.id, type:p.type, mode:p.mode, perMaand:p.perMaand, pct:p.pct, zelf:!!p.zelf, vraag:!!p.vraag,
     doel:Math.max(Math.round(+p.doel||0),0), rest:Math.min(Math.max(Math.round(+p.rest||0),0)+Math.max(Math.round(+tzRest[p.id]||0),0), Math.max(Math.round(+p.doel||0),0)),
     nfOnbekend:!!p.nfOnbekend, status:(p.status==='gepauzeerd')?'gepauzeerd':'',
     houdt:(p.type==='aflossen')}));
@@ -10234,6 +10249,7 @@ function allocatePlan(){
     else if(rest<=0) status='bereikt';
     return Object.assign({},it,{rest,alloc:0,base:0,extra:0,status});
   });
+  planZelfToepassen(P);
   planVerdeelMaand(P,cap,G);
   /* v255 DRAAIDE DE v242-REGEL IN RONDE 2 TERUG, en die rondes staan sinds v307 in
      planVerdeelMaand(). Tot v254 stond daar "dicht is dicht, ook in ronde 2", en daarmee bleef liggen
@@ -10634,7 +10650,9 @@ function openSpaarOver(){ window._zgKeuze=null; renderSpaarOver(); showSheetBg()
 function renderSpaarOver(){
   const D=spaarOverData(); if(!D){ closeSheet(); render(); return; }
   const V=D.V, gek=window._zgKeuze&&D.opts.some(o=>o.k===window._zgKeuze)?window._zgKeuze:null;
-  const dekt=V.dekt>0?` Je zet ${euroC(V.dekt)} terug met een keuze die al loopt; dat deel staat hier niet in.`:'';
+  /* v371: de opbouw, gevraagd door de gebruiker: het kale verschil min wat je keuze dekt is wat hier staat. */
+  const kaal=Math.round((V.toegewezen-V.savedExact)*100)/100;
+  const dekt=V.dekt>0?`<div class="small" data-zgopbouw style="margin-top:6px;line-height:1.5">Kaal verschil ${euroC(kaal)} − ${euroC(V.dekt)} gedekt door je keuze = <b>${euroC(V.zonder)}</b></div>`:'';
   const ott=D.ms.length?`<div class="small" style="font-weight:700;margin:10px 0 2px">Eruit gehaald, per maand</div>
     ${D.ms.map(x=>`<div class="row small" data-onttrekking="${x.m}" style="gap:8px;padding:3px 0"><span style="flex:1;min-width:0">${esc(afMnd(x.m))} · ${x.eruit.length} ${x.eruit.length===1?'boeking':'boekingen'}</span><span style="white-space:nowrap">${euroC(x.som)}</span></div>`).join('')}
     <div class="small muted" style="margin-top:2px">Een toewijzing blijft staan waar hij stond, en je saldo beweegt: zo ontstaat het verschil, zonder dat je iets verkeerd invulde.</div>`
@@ -10643,7 +10661,7 @@ function renderSpaarOver(){
   const reden=gek?'':`Kies eerst wat je met de ${euroC(V.zonder)} doet`;
   $('#sheet').innerHTML=`<div class="grab"></div><div id="spaarOverSheet" data-zondergeld="${V.zonder}">
     <div style="font-weight:800;font-size:var(--fs-lg)">${euroC(V.zonder)} meer toegewezen dan er op je spaarrekening staat</div>
-    <div class="small muted" style="margin:3px 0 0;line-height:1.5">Je plan heeft samen ${euro0(V.toegewezen)} toegewezen, terwijl er ${euroC(V.savedExact)} op je spaarrekening staat.${dekt}</div>
+    <div class="small muted" style="margin:3px 0 0;line-height:1.5">Je plan heeft samen ${euro0(V.toegewezen)} toegewezen, terwijl er ${euroC(V.savedExact)} op je spaarrekening staat.</div>${dekt}
     ${ott}
     <div class="small" style="font-weight:700;margin:12px 0 2px">Wat doe je ermee?</div>
     <div class="small muted" style="margin-bottom:4px">Niets is voorgekozen, en er verandert niets tot je bevestigt.${spaarOverWaar(D)}</div>
@@ -11018,8 +11036,14 @@ function doelStreepje(p){
 }
 /* De schermlezertekst. Hij zegt hetzelfde als het beeld: voor, achter of op koers, met het bedrag.
    Op koers is het afgeronde verschil nul, en niet een zelfbedachte marge eromheen. */
-function doelStreepjeTekst(p,S){
+/* v371: EEN UITSPRAAK PER RIJ. Op Plan stond "Je ligt op koers voor je streefdatum" naast "streefdatum niet haalbaar in
+   deze volgorde": het streepje mat de stand tegen een rechte lijn, de waarschuwing de projectie. Draagt de rij de
+   waarschuwing (warn), dan zegt deze tekst hetzelfde als de waarschuwing; en een doel dat op de buffer wacht heeft geen
+   koers, want er wordt nog niets van verwacht. */
+function doelStreepjeTekst(p,S,warn){
   S=S||doelStreepje(p); if(!S) return '';
+  if(warn) return `Je streefdatum is in deze volgorde niet haalbaar: ${warn}.`;
+  if(S.wacht) return 'Er wordt nog niets van dit doel verwacht zolang je buffer voorgaat.';
   const d=S.verschil;
   if(d>0) return `Je loopt ${euro0(d)} voor op wat je streefdatum vraagt.`;
   if(d<0) return `Je loopt ${euro0(-d)} achter op wat je streefdatum vraagt.`;
@@ -11259,6 +11283,45 @@ function planRijStatus(p,t){
   if(t && t.eerste!=null) return {k:'wacht', tekst:`wacht tot ${etaDatum(t.eerste+1)}`};   // v370: eerste is een kolom, etaDatum() een aantal inleggen
   return {k:'wacht', tekst:'wacht'};
 }
+/* v371: WAT ER IN EEN BRON NOG NIET IN GELD STAAT, per bestemming. tzNog: wat er met een lopende keuze nog terug moet
+   (deze maand en later). zgAf: wat er zonder keuze zonder geld staat, uit spaarOverRaakt() (dezelfde volgorde als de
+   melding); de laatste die inlevert draagt de centen, zodat de rij hetzelfde bedrag noemt als de melding. */
+function planTerugNog(){
+  const tzNog={}; try{ for(const T0 of terugzetActief(thisYM())){ if(T0.r.keuze==='niet') continue; const D0=(T0.r.delen||[]).map(x=>+x||0), n=Math.round(D0.slice(T0.i).reduce((a,x)=>a+x,0)), br=T0.r.bron||[], tot=br.reduce((a,b)=>a+b.af,0)||1; let rest=n;
+    br.forEach((b,k)=>{ const v=k===br.length-1?rest:Math.round(n*b.af/tot); if(v>0) tzNog[b.id]=(tzNog[b.id]||0)+v; rest-=v; }); } }catch(_){}
+  return tzNog;
+}
+function planZonderAf(P){
+  const zgAf={}; try{ const RK=spaarOverRaakt(P), V0=spaarOver(), cent=zonderHeel(V0)-(+V0.zonder||0);
+    RK.forEach((x,k)=>{ zgAf[x.id]=(zgAf[x.id]||0)+Math.round(+x.af||0)-(k===RK.length-1?cent:0); }); }catch(_){}
+  return zgAf;
+}
+/* v371 (punt 2): WAAR HET TERUGZETBEDRAG VAN DEZE MAAND HEEN GAAT. Eerst terug naar de bron waar het uit kwam, tot aan
+   het doelbedrag: ruimte is het doel min het geld dat er staat min de inleg van deze maand. Kan de bron het niet meer
+   dragen, dan schuift de rest door naar de volgende bestemming in de volgorde met ruimte, en blijft er daarna nog iets
+   over, dan staat dat als niet verdeeld. Op de stand van het toestel draagt het Noodfonds de EUR 231 zelf (EUR 3.407 in
+   geld + 231 + 362 = 4.000), dus schuift er niets; doorschuiven gebeurt alleen als de toewijzing van de bron boven zijn
+   doel uitkomt (een verlaagd doelbedrag). EEN BRON, DRIE LEZERS: de rijen op Plan, de regel "Toegewezen deze maand" en
+   de projectie (planVooruit(), het doorgeschoven deel komt in maand 1 bij zijn ontvanger). */
+function terugzetNaarDoel(P){
+  P=P||allocatePlan(); const per={}, door={}, ruw={};
+  try{ for(const T0 of terugzetActief(thisYM())){ if(T0.r.keuze==='niet') continue; const d=Math.round(tzDeelVan(T0)), br=T0.r.bron||[], tot=br.reduce((a,b)=>a+b.af,0)||1; let rest=d;
+    br.forEach((b,k)=>{ const v=k===br.length-1?rest:Math.round(d*b.af/tot); if(v>0) ruw[b.id]=(ruw[b.id]||0)+v; rest-=v; }); } }catch(_){}
+  if(!Object.keys(ruw).length) return {per, door, onverdeeld:0};
+  const nog=planTerugNog(), zg=planZonderAf(P), ruimte={};
+  for(const p of P){ const g=Math.round(+p.gespaard||0), a=Math.max(Math.round(+p.alloc||0),0), dl=Math.round(+p.doel||0);
+    ruimte[p.id]=(p.type==='aflossen'||p.status==='gepauzeerd'||p.nfOnbekend)?0:Math.max(Math.round(dl-Math.max(g-(nog[p.id]||0)-(zg[p.id]||0),0)-a),0); }
+  let onverdeeld=0;
+  P.forEach((p,i)=>{ const t=ruw[p.id]||0; if(!(t>0)) return;
+    const keep=Math.min(t, ruimte[p.id]||0); if(keep>0){ per[p.id]=(per[p.id]||0)+keep; ruimte[p.id]-=keep; }
+    let ex=t-keep;
+    for(let j=i+1;j<P.length && ex>0;j++){ const x=P[j]; const take=Math.min(ex, ruimte[x.id]||0); if(take<=0) continue;
+      per[x.id]=(per[x.id]||0)+take; ruimte[x.id]-=take; ex-=take; (door[x.id]=door[x.id]||[]).push({van:p.id, naam:p.type==='noodfonds'?'Noodfonds':(p.naam||'doel'), bedrag:take, waarom:p.status==='gepauzeerd'?'staat op pauze':'is vol'}); }
+    onverdeeld+=ex; });
+  /* een bron zonder rij in P (een doel dat uit het plan ging) houdt zijn bedrag als niet verdeeld */
+  for(const id in ruw) if(!P.some(p=>p.id===id)) onverdeeld+=ruw[id];
+  return {per, door, onverdeeld};
+}
 /* v371: de regel van een bron met geld dat nog terug moet: "EUR 3.407 in geld + EUR 231 terug + EUR 362 inleg = EUR 4.000
    · vol okt 2026". De som is per constructie geld + de termen, en dat is de verwachte stand na deze maand: het
    doelbedrag als hij vol raakt. data-terugbak blijft op deze regel, want dat is wat er deze maand terug gaat (v365). */
@@ -11269,6 +11332,10 @@ function planGeldRegel(p,t,x){
   if(x.tb>0) delen.push(`${euro0(x.tb)} terug`);
   if(x.inleg>0) delen.push(`${euro0(x.inleg)} inleg`);
   const staart=vol?` · vol ${vol}`:(p.type==='goal'&&p.streefdatum?` · streef ${doelDatumLabel(p.streefdatum,true)}`:'');
+  const doorTxt=(x.door&&x.door.length)?`<div class="small muted" data-doorvan="${esc(x.door.map(d=>d.van).join(','))}">${euro0(x.inleg)} + ${euro0(x.tb)} terug (${esc(x.door.map(d=>`${d.naam} ${d.waarom}`).join(', '))})</div>`:'';
+  return doorTxt?`<div data-doorwrap="${p.id}">${planGeldRegelKaal(p,x,som,delen,staart)}${doorTxt}</div>`:planGeldRegelKaal(p,x,som,delen,staart);
+}
+function planGeldRegelKaal(p,x,som,delen,staart){
   return `<div class="small vat-stand" data-geldregel="${p.id}" data-geld="${x.geld}" data-zg="${x.zg}" ${x.tb>0?`data-terugbak="${p.id}" data-terug="${x.tb}"`:''} data-inleg="${x.inleg}" data-som="${som}" data-doel="${Math.round(+p.doel||0)}" style="line-height:1.45">${delen.join(' + ')} = <b style="font-weight:700">${euroC(som)}</b><span data-planrechts style="color:var(--mut)">${staart}</span></div>`;
 }
 function planRijRechts(p,t){
@@ -11312,6 +11379,203 @@ function openPlanTijdlijn(){
     ${tv}${wat}</div>`;
   showSheetBg();
 }
+/* ===== v371: DE VERDELING VAN JE INLEG: OP VOLGORDE OF ZELF (gevraagd door de gebruiker, mockup "spaarinleg verdelen") =====
+   SET.planVerdeling={modus:'volgorde'|'zelf', bedragen:{id:bedrag}, bijVol:'volgende'|'vraag', op}; zonder is het op
+   volgorde, zoals tot v370. ZELF VERDELEN ZET ELK DOEL OP EEN VAST BEDRAG (planZelfToepassen(), in allocatePlan() en dus
+   in elke projectie): dezelfde ronde 1 die een vast maandbedrag al kende, en achter een dichte grendel krijgt een doel zijn
+   bedrag zodra de buffer zijn hele rest kreeg (planVerdeelMaand()). Raakt een doel vol, dan zakt zijn bedrag bij
+   'volgende' door op volgorde (ronde 2) en blijft het bij 'vraag' staan tot je opnieuw verdeelt; Grip vraagt dat dan
+   (Let op, planVerdelingVraag()). Een aflos-item houdt zijn eigen maandbedrag (v307) en staat in de sheet als regel. */
+function planZelf(){ const v=SET.planVerdeling; return (v&&v.modus==='zelf'&&v.bedragen&&typeof v.bedragen==='object')?v:null; }
+function planZelfToepassen(P){
+  const Z=planZelf(); if(!Z) return P;
+  for(const p of P){ if(p.type!=='goal') continue;
+    p.mode='fixed'; p.perMaand=Math.max(Math.round(+Z.bedragen[p.id]||0),0); p.zelf=true; p.vraag=(Z.bijVol==='vraag'); }
+  return P;
+}
+/* "dan vraag ik het opnieuw": er blijft deze maand inleg liggen omdat een doel vol is. */
+function planVerdelingVraag(){
+  const Z=planZelf(); if(!Z || Z.bijVol!=='vraag') return null;
+  let P=[], cap=0; try{ P=allocatePlan(); cap=planCapacity(); }catch(_){ return null; }
+  if(!(cap>0)) return null;
+  const vrij=planVrij(P); if(!(vrij>0)) return null;
+  const vol=P.filter(p=>p.type==='goal' && p.status==='bereikt' && (+Z.bedragen[p.id]||0)>0).map(p=>p.naam||'doel');
+  return {vrij, vol};
+}
+const VD_BIJVOL={volgende:'het volgende doel in de volgorde', vraag:'dan vraag ik het opnieuw'};
+function planVerdelingRegel(){
+  let cap=0; try{ cap=planCapacity(); }catch(_){} if(!(cap>0)) return '';
+  let n=0; try{ n=allocatePlan().filter(p=>p.type==='goal').length; }catch(_){} if(!n) return '';
+  return `<div class="row small" data-verdelingregel="${planZelf()?'zelf':'volgorde'}" role="button" style="gap:8px;margin:6px 0 2px;cursor:pointer" onclick="openVerdeling()"><span style="flex:1;min-width:0;color:var(--mut)">Verdeling: <b style="color:var(--txt)">${planZelf()?'zelf verdeeld':'op volgorde'}</b></span><span style="color:var(--teal);font-weight:700;white-space:nowrap">aanpassen ›</span></div>`;
+}
+/* De sheet. window._vd is een WEERGAVE: wisselen, slepen en typen schrijven niets tot je bevestigt. */
+function openVerdeling(){
+  const Z=planZelf(); const ids=planItems().map(x=>x.id);
+  window._vd={modus:Z?'zelf':'volgorde', orde:ids, ordeVoor:ids.slice(), modusVoor:Z?'zelf':'volgorde',
+    bedragen:Z?Object.assign({},Z.bedragen):{}, bijVol:Z?(Z.bijVol||null):null, max:{}};
+  renderVerdeling(); showSheetBg();
+}
+/* Doorrekenen in het geheugen, zonder save(): de stand van de sheet geldt even, en wordt daarna teruggezet. */
+function verdelingSimuleer(st){
+  const oudV=SET.planVerdeling, oudO=SET.planOrder;
+  try{
+    SET.planVerdeling=st.modus==='zelf'?{modus:'zelf', bedragen:Object.assign({},st.bedragen), bijVol:st.bijVol||'vraag'}:{modus:'volgorde'};
+    /* de volgorde van de sheet is al door planOrdeMag() gegaan (verdelingVerplaats()); toch nooit een volgorde doorrekenen
+       die de grendel niet toelaat */
+    if(planOrdeMag(st.orde)) SET.planOrder=st.orde.slice();
+    const P=allocatePlan(), cap=planCapacity(), reeks={}; let vol={};
+    try{ vol=planVooruit(P, cap, undefined, undefined, undefined, reeks); }catch(_){}
+    /* de vol-datum uit de projectie (planVooruit(), v307): ook voor een doel dat deze maand nog niets krijgt */
+    for(const p of P) p.eta=(p.status==='bereikt'||p.status==='gepauzeerd'||p.type==='aflossen')?p.eta:(vol[p.id]!=null?vol[p.id]:null);
+    return {P, reeks};
+  } finally { SET.planVerdeling=oudV; SET.planOrder=oudO; }
+}
+function verdelingData(){
+  const st=window._vd; if(!st) return null;
+  let cap=0; try{ cap=planCapacity(); }catch(_){}
+  const nu=allocatePlan(), G=planGrendel();
+  const sim=verdelingSimuleer(st);
+  const P=sim.P;
+  const nf=P.find(p=>p.type==='noodfonds');
+  /* de buffer gaat eerst zolang hij niet vol is: een vaste regel, geen keuze en dus geen vak */
+  const buf=(G && nf && nf.status!=='gepauzeerd' && !nf.nfOnbekend)?Math.max(Math.round(+nf.alloc||0),0):0;
+  const aflos=P.filter(p=>p.type==='aflossen'&&p.status!=='gepauzeerd').map(p=>({id:p.id, naam:p.naam, bedrag:Math.max(Math.round(+p.alloc||0),0)}));
+  const doelen=P.filter(p=>p.type==='goal'&&p.status!=='bereikt');
+  const teVerdelen=Math.max(cap-buf-aflos.reduce((x,a)=>x+a.bedrag,0),0);
+  const som=doelen.reduce((x,p)=>x+Math.max(Math.round(+st.bedragen[p.id]||0),0),0);
+  let nuVol={}; try{ nuVol=planVooruit(nu, cap); }catch(_){}
+  const nuEta=Object.fromEntries(nu.map(p=>[p.id,p.type==='aflossen'?p.eta:(nuVol[p.id]!=null?nuVol[p.id]:null)]));
+  const eerste=id=>{ const r=sim.reeks[id]||[]; for(let m=1;m<r.length;m++) if((+r[m]||0)>0) return m; return null; };
+  return {st, cap, G, P, nf, buf, aflos, doelen, teVerdelen, som, rest:teVerdelen-som, nuEta, eerste};
+}
+function verdelingAllesVol(P){
+  const D=P.filter(p=>(p.type==='goal'||p.type==='noodfonds')&&p.status!=='bereikt'&&p.status!=='gepauzeerd');
+  if(!D.length) return null; if(D.some(p=>p.eta==null)) return 'nog niet te zeggen';
+  return etaDatum(Math.max(...D.map(p=>p.eta)));
+}
+/* De reden waarom bevestigen nog niet kan; een knop die aan staat heeft geen reden (v361). */
+function verdelingReden(D){
+  const st=D.st;
+  if(st.modus==='zelf'){
+    if(D.rest>0) return `Verdeel eerst de laatste ${euro0(D.rest)}`;
+    if(D.rest<0) return `Je verdeelt ${euro0(-D.rest)} meer dan er is`;
+    if(!st.bijVol) return 'Kies wat er gebeurt als een doel vol is';
+    return '';
+  }
+  const zelfde=st.modusVoor==='volgorde' && st.orde.join('|')===st.ordeVoor.join('|');
+  return zelfde?'Er is nog niets veranderd':'';
+}
+function verdelingTerugRegel(){
+  let T=0; try{ T=Math.round(terugzetDeel(thisYM())||0); }catch(_){} if(!(T>0)) return '';
+  let TND={per:{}, door:{}}; try{ TND=terugzetNaarDoel(); }catch(_){}
+  const A=terugzetActief(thisYM()).filter(x=>x.r.keuze!=='niet'), bron=[];
+  for(const x of A) for(const b of (x.r.bron||[])) if(!bron.some(y=>y.id===b.id)) bron.push(b);
+  const naam=b=>b.type==='noodfonds'?'Noodfonds':(b.naam||'doel');
+  const door=Object.keys(TND.door).map(id=>{ const p=(planItems().find(q=>q.id===id)||{}); return p.type==='noodfonds'?'Noodfonds':(p.naam||'doel'); });
+  return `<div class="small" data-vdterug="${T}" style="background:var(--card2);border-radius:10px;padding:8px 10px;margin-top:10px;line-height:1.45"><b>+ ${euro0(T)} terugzetten</b> · deze maand<br><span style="color:var(--mut)">gaat terug naar ${esc(opsomming(bron.map(naam)))}${door.length?`; die is vol, dus naar ${esc(opsomming(door))}`:'; is die vol, dan naar het volgende doel'}. Het hoort niet bij de ${euro0(planCapacity())} die je verdeelt.</span></div>`;
+}
+function renderVerdeling(){
+  const D=verdelingData(); if(!D){ closeSheet(); return; }
+  const st=D.st, zelf=st.modus==='zelf';
+  const seg=k=>`<span data-vdmodus="${k}" data-aan="${st.modus===k?1:0}" role="button" style="flex:1;text-align:center;padding:7px 4px;border-radius:10px;font-weight:700;font-size:var(--fs-sm);cursor:pointer;${st.modus===k?'background:var(--teal);color:var(--bg)':'background:var(--card2)'}" onclick="verdelingModus('${k}')">${k==='zelf'?'Zelf verdelen':'Op volgorde'}</span>`;
+  const vol=p=>p.eta!=null?etaDatum(p.eta):null;
+  const was=p=>{ const a=D.nuEta[p.id]; return (a!==p.eta && a!=null)?` <span style="color:var(--mut2)">(was ${etaDatum(a)})</span>`:''; };
+  let body='';
+  if(!zelf){
+    const rij=(p,i)=>{ const e=D.eerste(p.id), v=vol(p);
+      const sub=p.status==='gepauzeerd'?'gepauzeerd':((Math.round(+p.alloc||0)<=0&&e)?`start ${etaDatum(e)} · `:'')+(v?`vol ${v}`:'nog geen vol-datum');
+      return `<div class="row" data-vdrij="${esc(p.id)}" style="gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line);touch-action:none">
+        <span data-vdgreep="${esc(p.id)}" style="color:var(--mut2);cursor:grab;font-size:18px;padding:0 4px" onpointerdown="verdelingSleepStart(event,'${esc(p.id)}')">≡</span>
+        <span style="flex:1;min-width:0"><b class="small" style="display:block">${i+1} ${esc(p.type==='noodfonds'?'Noodfonds':p.naam)}</b><span class="small" style="color:var(--mut)">${sub}</span></span>
+        <b class="small" data-vdbedrag="${Math.round(+p.alloc||0)}" style="white-space:nowrap">${euro0(Math.round(+p.alloc||0))}</b></div>`; };
+    body=`<div class="small muted" style="margin-bottom:4px">Het eerste doel krijgt wat het nodig heeft, de rest schuift door. Je stuurt met de volgorde.</div>
+      <div id="vdLijst">${D.P.map(rij).join('')}</div>
+      <div class="small muted" style="margin-top:4px">≡ sleep om de volgorde te wijzigen${D.G?'; je noodfonds blijft bovenaan tot hij vol is':''}</div>`;
+  } else {
+    const bufRij=D.buf>0?`<div class="row" data-vdbuffer="${D.buf}" style="gap:8px;padding:9px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b class="small" style="display:block">Noodfonds ${euro0(D.buf)}</b><span class="small" style="color:var(--mut)">gaat eerst, tot vol</span></span></div>`:'';
+    const afRij=D.aflos.map(a=>`<div class="row" data-vdaflos="${esc(a.id)}" style="gap:8px;padding:9px 0;border-top:1px solid var(--line)"><span style="flex:1;min-width:0"><b class="small" style="display:block">${esc(a.naam)} ${euro0(a.bedrag)}</b><span class="small" style="color:var(--mut)">aflossen, eigen maandbedrag</span></span></div>`).join('');
+    const vak=p=>{ const max=Math.max(Math.round(+p.rest||0),0), v=st.bedragen[p.id];
+      return `<div class="row" data-vddoel="${esc(p.id)}" style="gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
+        <span style="flex:1;min-width:0"><b class="small" style="display:block">${esc(p.naam)}</b><span class="small" style="color:var(--mut)">nog ${euro0(max)} tot vol${st.max[p.id]?` · <span data-vdmax style="color:var(--amber)">max ${euro0(max)}</span>`:''}</span></span>
+        <input data-vdvak="${esc(p.id)}" type="text" inputmode="numeric" placeholder="€ …" value="${v!=null&&v!==''?esc(String(v)):''}" style="width:92px;text-align:right;font-weight:700" oninput="verdelingBedrag('${esc(p.id)}',this.value)" onblur="renderVerdeling()"></div>`; };
+    const tel=D.rest===0?`<div class="row small" data-vdteller="0" style="justify-content:space-between;border-radius:10px;padding:8px 10px;margin:8px 0;background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)"><span>Nog te verdelen</span><b>${euro0(0)} ✓</b></div>`
+      :`<div class="row small" data-vdteller="${D.rest}" style="justify-content:space-between;border-radius:10px;padding:8px 10px;margin:8px 0;background:color-mix(in srgb,var(--amber) 18%,transparent)"><span>${D.rest>0?'Nog te verdelen':'Te veel verdeeld'}</span><b>${euro0(Math.abs(D.rest))}</b></div>`;
+    const pill=k=>`<span data-vdbijvol="${k}" data-gekozen="${st.bijVol===k?1:0}" role="button" class="small" style="display:inline-block;border:1.5px solid ${st.bijVol===k?'var(--teal)':'var(--bar)'};${st.bijVol===k?'background:var(--teal);color:var(--bg);':''}border-radius:16px;padding:4px 10px;margin:4px 4px 0 0;cursor:pointer" onclick="verdelingBijVol('${k}')">${VD_BIJVOL[k]}</span>`;
+    const gev=D.doelen.map(p=>`<div data-vdgevolg="${esc(p.id)}" data-eta="${p.eta==null?'':p.eta}">${esc(p.naam)}: ${vol(p)?`vol ${vol(p)}`:'nog geen vol-datum'}${was(p)}</div>`).join('');
+    const nfG=D.nf&&D.nf.status!=='bereikt'?`<div data-vdgevolg="${esc(D.nf.id)}" data-eta="${D.nf.eta==null?'':D.nf.eta}">Noodfonds: ${vol(D.nf)?`vol ${vol(D.nf)}`:'nog geen vol-datum'}${was(D.nf)}</div>`:'';
+    body=`${bufRij}${afRij}${D.doelen.map(vak).join('')}${tel}
+      <div class="small" style="font-weight:700;margin-top:4px">Als een doel vol is, gaat zijn bedrag naar:</div>
+      <div>${pill('volgende')}${pill('vraag')}</div>${st.bijVol?'':'<div class="small" style="color:var(--mut2);margin-top:2px">nog niet gekozen</div>'}
+      <div class="small" data-vdgevolgblok style="margin-top:10px;line-height:1.5"><b>Gevolg</b>${nfG}${gev}<div data-vdallesvol style="font-weight:700">Alles vol: ${verdelingAllesVol(D.P)||'nog niet te zeggen'}</div></div>`;
+  }
+  const reden=verdelingReden(D);
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="verdelingSheet" data-modus="${st.modus}">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Verdeling van je inleg</div>
+    <div class="small muted" style="margin:2px 0 8px">${euro0(D.cap)} per maand</div>
+    <div class="row" style="gap:6px;margin-bottom:8px">${seg('volgorde')}${seg('zelf')}</div>
+    ${body}${verdelingTerugRegel()}
+    ${sheetVoet(`<button class="btn" data-vdbevestig ${reden?'disabled':''} onclick="verdelingZet()">Verdeling bevestigen</button><button class="btn sec" onclick="closeSheet()">Terug</button>`, reden)}</div>`;
+}
+function verdelingModus(k){ if(!window._vd||(k!=='zelf'&&k!=='volgorde')) return; window._vd.modus=k; renderVerdeling(); }
+function verdelingBijVol(k){ if(!window._vd||!VD_BIJVOL[k]) return; window._vd.bijVol=k; renderVerdeling(); }
+/* Een bedrag boven wat het doel nog nodig heeft kan niet: het vak zet het op het maximum en zegt dat. Typen hertekent
+   alleen de teller en het gevolg, niet het vak waarin je typt. */
+function verdelingBedrag(id, val){
+  const st=window._vd; if(!st) return;
+  const p=allocatePlan().find(x=>x.id===id); if(!p) return;
+  const max=Math.max(Math.round(+p.rest||0),0);
+  let v=String(val||'').replace(/[^\d]/g,'');
+  if(v===''){ delete st.bedragen[id]; st.max[id]=false; }
+  else { let n=Math.round(+v); if(n>max){ n=max; st.max[id]=true; } else st.max[id]=false; st.bedragen[id]=n; }
+  const vak=document.querySelector(`[data-vdvak="${id}"]`), had=document.activeElement===vak, pos=vak?vak.selectionStart:null;
+  renderVerdeling();
+  if(had){ const n=document.querySelector(`[data-vdvak="${id}"]`); if(n){ n.focus(); try{ const l=n.value.length; n.setSelectionRange(Math.min(pos??l,l),Math.min(pos??l,l)); }catch(_){} } }
+}
+/* Slepen: de rij volgt je vinger en valt op de plek waar je loslaat. Een plek die de grendel niet toelaat (het noodfonds
+   van boven af zolang hij niet vol is, planOrdeMag()) wordt niet aangenomen. */
+function verdelingVerplaats(id, naar){
+  const st=window._vd; if(!st) return false;
+  const ids=st.orde.slice(), i=ids.indexOf(id); if(i<0||naar<0||naar>=ids.length) return false;
+  ids.splice(naar,0,ids.splice(i,1)[0]);
+  if(!planOrdeMag(ids)){ toast(GRENDEL_TOAST); renderVerdeling(); return false; }
+  st.orde=ids; renderVerdeling(); return true;
+}
+function verdelingSleepStart(ev, id){
+  const lijst=document.getElementById('vdLijst'); if(!lijst) return;
+  const rij=lijst.querySelector(`[data-vdrij="${id}"]`); if(!rij) return;
+  ev.preventDefault(); const y0=ev.clientY; rij.style.position='relative'; rij.style.zIndex='2'; rij.style.background='var(--card)';
+  const mv=e=>{ rij.style.transform=`translateY(${e.clientY-y0}px)`; };
+  const op=e=>{ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',op);
+    rij.style.transform='';
+    const rijen=[...lijst.querySelectorAll('[data-vdrij]')].filter(r=>r!==rij);
+    let naar=rijen.length; for(let k=0;k<rijen.length;k++){ const b=rijen[k].getBoundingClientRect(); if(e.clientY<b.top+b.height/2){ naar=k; break; } }
+    const huidig=window._vd.orde.indexOf(id); if(naar!==huidig) verdelingVerplaats(id, naar); else renderVerdeling(); };
+  document.addEventListener('pointermove',mv); document.addEventListener('pointerup',op);
+}
+/* De schrijver leest de stand opnieuw (v319) en eist zelf wat de knop eist. */
+function verdelingZet(){
+  const D=verdelingData(); if(!D) return;
+  if(verdelingReden(D)) return;
+  const st=D.st, M=thisYM();
+  if(st.orde.join('|')!==st.ordeVoor.join('|')){ if(!planOrdeMag(st.orde)){ toast(GRENDEL_TOAST); return; } SET.planOrder=st.orde.slice(); }
+  const bedragen={}; if(st.modus==='zelf') for(const p of D.doelen){ const n=Math.max(Math.round(+st.bedragen[p.id]||0),0); bedragen[p.id]=n; }
+  SET.planVerdeling=st.modus==='zelf'?{modus:'zelf', bedragen, bijVol:st.bijVol, op:vandaagYMD()}:{modus:'volgorde', op:vandaagYMD()};
+  const log=Array.isArray(SET.planVerdelingLog)?SET.planVerdelingLog:[];
+  log.push({M, op:vandaagYMD(), modus:st.modus, bedragen:st.modus==='zelf'?bedragen:null, bijVol:st.modus==='zelf'?st.bijVol:null,
+    orde:st.orde.slice(), namen:Object.fromEntries(D.P.map(p=>[p.id, p.type==='noodfonds'?'Noodfonds':(p.naam||'doel')]))});
+  SET.planVerdelingLog=log; window._vd=null;
+  save(); closeSheet(); render(); toast(`${ICON('check')} Verdeling bevestigd`);
+}
+/* Het logboek: elke wijziging van de verdeling, nieuwste eerst. */
+function verdelingLogRij(x){
+  let d=''; try{ d=new Date(String(x.op)+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}); }catch(_){}
+  const N=x.namen||{};
+  const wat=x.modus==='zelf'
+    ? `Zelf verdeeld: ${Object.keys(x.bedragen||{}).map(id=>`${N[id]||'doel'} ${euro0(x.bedragen[id])}`).join(', ')} · vol: ${VD_BIJVOL[x.bijVol]||''}`
+    : `Op volgorde: ${(x.orde||[]).map(id=>N[id]||id).join(' → ')}`;
+  return `<div class="row" data-logverdeling="${esc(x.M)}" style="gap:10px;align-items:baseline;padding:8px 0 4px;border-top:1px solid var(--line)"><span style="flex:1;min-width:0;font-weight:700">${esc(wat)}</span><span class="small" style="white-space:nowrap;color:var(--mut2)">${esc(afMnd(x.M))} · ${d}</span></div>`;
+}
+function verdelingLog(){ return (Array.isArray(SET.planVerdelingLog)?SET.planVerdelingLog:[]).slice().reverse(); }
 function renderPlan(bare){
   const P=allocatePlan(); const cap=planCapacity(); const n=P.length;
   const G=planGrendel();
@@ -11334,18 +11598,11 @@ function renderPlan(bare){
     </div>`:'';
   const nrVan=p=>{ const i=P.indexOf(p); return `<span class="plan-1${i===0?'':' n'}">${i+1}</span>`; };
   /* v365: wat er deze maand terug gaat naar een bak (alles of het deel van deze maand bij spreiden), per bron. */
-  /* v371: elke lopende keuze telt (terugzetActief()), dus ook een keuze over toegewezen zonder geld. */
-  const tzBak={}; try{ for(const T0 of terugzetActief(thisYM())){ if(T0.r.keuze==='niet') continue; const d=Math.round(tzDeelVan(T0)), br=T0.r.bron||[], tot=br.reduce((a,b)=>a+b.af,0)||1; let rest=d;
-    br.forEach((b,k)=>{ const v=k===br.length-1?rest:Math.round(d*b.af/tot); if(v>0) tzBak[b.id]=(tzBak[b.id]||0)+v; rest-=v; }); } }catch(_){}
-  /* v371: WAT ER IN EEN BRON NOG NIET IN GELD STAAT. Per bron: wat er met een lopende keuze nog terug moet (deze
-     maand en later, tzNog) en wat er zonder keuze zonder geld staat (zgAf, uit spaarOverRaakt(), dezelfde volgorde als
-     de melding). Het verschil met de toewijzing is het geld dat er is. */
-  const tzNog={}; try{ for(const T0 of terugzetActief(thisYM())){ if(T0.r.keuze==='niet') continue; const D0=(T0.r.delen||[]).map(x=>+x||0), n=Math.round(D0.slice(T0.i).reduce((a,x)=>a+x,0)), br=T0.r.bron||[], tot=br.reduce((a,b)=>a+b.af,0)||1; let rest=n;
-    br.forEach((b,k)=>{ const v=k===br.length-1?rest:Math.round(n*b.af/tot); if(v>0) tzNog[b.id]=(tzNog[b.id]||0)+v; rest-=v; }); } }catch(_){}
-  /* De laatste die inlevert draagt de centen (spaarOverRaakt() werkt in hele euro's), zodat de rij hetzelfde bedrag noemt
-     als de melding: EUR 406,80 en niet EUR 407. */
-  const zgAf={}; try{ const RK=spaarOverRaakt(P), V0=spaarOver(), cent=zonderHeel(V0)-(+V0.zonder||0);
-    RK.forEach((x,k)=>{ zgAf[x.id]=(zgAf[x.id]||0)+Math.round(+x.af||0)-(k===RK.length-1?cent:0); }); }catch(_){}
+  /* v371: elke lopende keuze telt (terugzetActief()), dus ook een keuze over toegewezen zonder geld; en wat de bron niet
+     meer kan dragen schuift door (terugzetNaarDoel()). */
+  let TND={per:{}, door:{}, onverdeeld:0}; try{ TND=terugzetNaarDoel(P); }catch(_){}
+  const tzBak=TND.per;
+  const tzNog=planTerugNog(), zgAf=planZonderAf(P);
   const rij=p=>{
     const t=TL.per[p.id]||{}, st=planRijStatus(p,t), R=planRijRechts(p,t), tint=tints[p.id];
     const pct=p.doel>0?Math.min(Math.round(p.gespaard/p.doel*100),100):0;
@@ -11359,11 +11616,12 @@ function renderPlan(bare){
        de regel eronder telt op: geld + zonder geld + terug + inleg = het doelbedrag of de verwachte stand. De toewijzing
        zelf ("EUR 3.638 toegewezen") staat er dan niet, want die beweert geld dat er niet is. */
     const nog=Math.max((tzNog[p.id]||0),0), zg=Math.max(zgAf[p.id]||0,0);
-    const gesplitst=!p.nfOnbekend && p.type!=='aflossen' && p.doel>0 && (nog>0 || zg>0);
+    const dr=TND.door[p.id]||null;
+    const gesplitst=!p.nfOnbekend && p.type!=='aflossen' && p.doel>0 && (nog>0 || zg>0 || !!dr);
     const geld=gesplitst?Math.max(Math.round((Math.round(+p.gespaard||0)-nog-zg)*100)/100,0):0;
     const pctG=(gesplitst&&p.doel>0)?Math.min(geld/p.doel*100,100):pct;
     const tbPct=(tb>0&&p.doel>0)?Math.max(Math.min(tb/p.doel*100,gesplitst?100-pctG:pct),0):0;
-    const streep=ST?`<span class="wf-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="position:absolute;top:-3px;bottom:-3px;left:${ST.pct.toFixed(2)}%;width:2px;background:var(--txt)"><span class="sr-only">${doelStreepjeTekst(p,ST)}</span></span>`:'';
+    const streep=ST?`<span class="wf-streep" data-streep="${p.id}" data-pct="${ST.pct.toFixed(2)}" style="position:absolute;top:-3px;bottom:-3px;left:${ST.pct.toFixed(2)}%;width:2px;background:var(--txt)"><span class="sr-only">${doelStreepjeTekst(p,ST,t.warn?(t.vol!=null?`vol ${etaDatum(t.vol)}`:'geen vol-datum'):'')}</span></span>`:'';
     const arc=(c)=>`repeating-linear-gradient(135deg,color-mix(in srgb,${c} 55%,transparent) 0 3px,transparent 3px 5px)`;
     const groeiG=gesplitst&&perMnd>0&&p.status!=='gepauzeerd'?Math.max(Math.min(perMnd/p.doel*100,100-pctG-tbPct),0):0;
     const balk=p.nfOnbekend?'':gesplitst?`<div class="bar-track plan-rijbalk" data-geldbalk="${p.id}" style="height:5px;margin:6px 0 5px;position:relative">
@@ -11374,7 +11632,7 @@ function renderPlan(bare){
     return `<div class="plan-item plan-rij2${t.warn?' wf-laat':''}" data-id="${p.id}" data-status="${esc(st.k)}" data-laat="${t.warn?1:0}" style="border-top:1px solid var(--line);padding:9px 0 8px;cursor:pointer" onclick="planRij('${p.id}')">
       <div class="row" style="gap:8px;align-items:baseline"><span class="wf-naam" style="flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere">${nrVan(p)} ${esc(p.naam)}</span><span class="small" data-planstatus style="white-space:nowrap;color:${st.k==='actief'?'var(--green)':'var(--mut2)'}">${esc(st.tekst)}</span></div>
       ${balk}
-      ${gesplitst?planGeldRegel(p,t,{geld,zg,tb,inleg:p.status==='gepauzeerd'?0:perMnd}):`<div class="row small" style="gap:8px;align-items:baseline"><span class="vat-stand" style="flex:1;min-width:0">${p.nfOnbekend?'<span class="muted">onbekend</span>':planStand(p)}</span><span data-planrechts style="white-space:nowrap;color:var(--mut)">${R}</span></div>`}
+      ${gesplitst?planGeldRegel(p,t,{geld,zg,tb,inleg:p.status==='gepauzeerd'?0:perMnd,door:dr}):`<div class="row small" style="gap:8px;align-items:baseline"><span class="vat-stand" style="flex:1;min-width:0">${p.nfOnbekend?'<span class="muted">onbekend</span>':planStand(p)}</span><span data-planrechts style="white-space:nowrap;color:var(--mut)">${R}</span></div>`}
       ${t.warn?`<div class="small" data-planwaarschuwing="${p.id}" style="color:var(--amber);margin-top:3px" onclick="event.stopPropagation();openPlanTijdlijn()">⚠ streefdatum niet haalbaar in deze volgorde: ${t.vol!=null?`vol ${etaDatum(t.vol)}`:'geen vol-datum'}</div>`:''}
       ${window._planRij===p.id?planRijDetail(p):planDatumRegel(p)}${acties(p)}</div>`;
   };
@@ -11431,12 +11689,18 @@ function renderPlan(bare){
   const tzSub=tzKop ? `<div class="small" id="terugzetGekozen" data-terugzetkeuze-gekozen="${TZ&&!tzKaart?TZ.r.keuze:''}" data-inlegmaand="${cap+tzDeel}" style="color:var(--mut);margin:2px 0 0">${euro0(cap)} vaste inleg${tzDeel>0?` + ${euro0(tzDeel)} terugzetten`:''}${TZ&&!tzKaart?` · gekozen: ${esc(TERUGZET_LAB[TZ.r.keuze].toLowerCase())}${TZ.i===0?` · <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="terugzetWijzig()">wijzig</span>`:''}`:''}</div>` : '';
   /* v371: de melding over toegewezen zonder geld staat bij de kop, onder de keuze over een opname. */
   let zgRegel=''; try{ zgRegel=spaarOverLine(P); }catch(_){}
-  const kopBalk=`<div class="row"><span style="font-weight:600;font-size:var(--fs-md)">${kopTekst}</span><span id="planKopBedrag" style="font-weight:800;font-size:var(--fs-md);color:${cap>0?'var(--teal)':'var(--mut)'}">${kopBedrag}</span></div>${tzSub}${tzKaart}${zgRegel}${inlegRegel}${balk}`;
+  let vdRegel=''; try{ vdRegel=planVerdelingRegel(); }catch(_){}
+  const kopBalk=`<div class="row"><span style="font-weight:600;font-size:var(--fs-md)">${kopTekst}</span><span id="planKopBedrag" style="font-weight:800;font-size:var(--fs-md);color:${cap>0?'var(--teal)':'var(--mut)'}">${kopBedrag}</span></div>${tzSub}${tzKaart}${zgRegel}${vdRegel}${inlegRegel}${balk}`;
   /* Niets blijft liggen, en het staat er ook wanneer er niets overblijft: dat is de sluitpost van
      de waterval, en een sluitpost die alleen bij een positief bedrag verschijnt laat je raden of
      hij er niet was of dat hij nul was. Een keuze staat er alleen als er iets te kiezen valt. */
-  const vrij=planVrij(P);
+  const vrij=planVrij(P)+Math.max(Math.round(TND.onverdeeld||0),0);   // v371: terugzetgeld dat nergens past blijft over
   const rest=`<div id="planVrij" class="small" style="border-top:1px solid var(--ln2);margin-top:2px;padding-top:9px;display:flex;justify-content:space-between;gap:12px;color:var(--mut2)"><span>Blijft over${(vrij>0&&!isMode('rustig'))?' - al je bestemmingen krijgen wat ze nodig hebben':''}</span><span style="white-space:nowrap"><b style="font-weight:700;color:${vrij>0?'var(--txt)':'var(--mut)'}">${euro0(vrij)}</b>/mnd${vrij>0?` · <span style="color:var(--teal);cursor:pointer" onclick="openGoal()">voeg een doel toe ›</span>`:''}</span></div>`;
+  /* v371 (punt 2): DE CONTROLE. Met geld dat terug gaat is "te verdelen deze maand" de inleg plus dat bedrag, en wat er aan
+     de bestemmingen is toegewezen hoort daar op de euro mee te sluiten: de inleg via allocatePlan(), het terugzetbedrag via
+     terugzetNaarDoel(). Sluit het niet, dan staat het verschil eronder bij "Blijft over". */
+  const toeMaand=Math.round(P.reduce((x,p)=>x+Math.max(Math.round(+p.alloc||0),0),0)+Object.values(tzBak).reduce((x,v)=>x+v,0));
+  const toeRegel=(cap>0&&tzDeel>0)?`<div class="small" id="planToeMaand" data-toegewezen="${toeMaand}" data-teverdelen="${cap+tzDeel}" style="border-top:1px solid var(--ln2);margin-top:2px;padding-top:9px;display:flex;justify-content:space-between;gap:12px;color:var(--mut2)"><span>Toegewezen deze maand</span><b style="font-weight:700;color:var(--txt);white-space:nowrap">${euro0(toeMaand)} van ${euro0(cap+tzDeel)}</b></div>`:'';
   const leeg=`<div class="small muted" style="border-top:1px solid var(--ln2);margin-top:2px;padding:11px 0 3px">Nog geen bestemmingen. Alles wat je opzij zet blijft op je spaarrekening staan.</div>`;
   /* Punt 12: de optelling stond tussen de bestemmingen en de reserveringen, en las daardoor alsof
      de reserveringen erin zaten. Hij hoort bij de waterval, dus hij staat er nu onder, binnen
@@ -11445,7 +11709,7 @@ function renderPlan(bare){
      het deel dat die keuze niet dekt. Hij staat nu bij de kop en leest spaarOver().zonder: wat een keuze terugzet
      staat er niet in, de rest wel. Zonder keuze over de opname (tzKaart) dekt er nog niets, dus dan telt die mee. */
   return planWachtRegel()+spaarVrijLine(P)
-    +`<div class="card" style="padding:12px 13px">${kopBalk}${rows||leeg}${rest}${planTotaalRegel(P)}</div>`
+    +`<div class="card" style="padding:12px 13px">${kopBalk}${rows||leeg}${toeRegel}${rest}${planTotaalRegel(P)}</div>`
     +`<button class="cp-add" onclick="openGoal()">+ Doel toevoegen</button>`;
 }
 

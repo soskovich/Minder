@@ -56,7 +56,8 @@ test.describe('b · de sheet: de onttrekkingen en een keuze zonder voorkeuze', (
     await P.boot(page, TOESTEL); await page.evaluate(() => terugzetKies('alles'));
     const t = await sheet(page);
     expect(t).toContain('€406,80 meer toegewezen dan er op je spaarrekening staat');
-    expect(t).toContain('Je plan heeft samen €3.638 toegewezen, terwijl er €3.000,20 op je spaarrekening staat. Je zet €231 terug');
+    expect(t).toContain('Je plan heeft samen €3.638 toegewezen, terwijl er €3.000,20 op je spaarrekening staat.');
+    expect(t).toContain('Kaal verschil €637,80 − €231 gedekt door je keuze = €406,80');
     expect(await page.locator('[data-onttrekking="2026-10"]').innerText()).toMatch(/oktober · 1 boeking\s*€231/);
     expect(t).toContain('Verlaag de toewijzing van je noodfonds');
     expect(t).toContain('Noodfonds €3.638 → €3.231 · Kosten Koper vol mei 2027 (was apr 2027)');

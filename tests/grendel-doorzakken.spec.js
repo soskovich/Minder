@@ -555,8 +555,10 @@ test.describe('h · de bron: ronde 2 komt niet langs de grendel zonder de poort'
     const b = rondesBody();
     const v = /(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*planBufferKlaar\(/.exec(b);
     expect(v, 'geen variabele uit planBufferKlaar()').toBeTruthy();
+    /* v371: "dan vraag ik het opnieuw" (r.vraag) is een tweede reden om in ronde 2 over te slaan, en die gaat niet
+       over de grendel: een doel met een eigen bedrag krijgt dan niets van een vol doel, ook bij een open grendel. */
     const regels = b.split('\n').filter((ln) => /type!==\s*'noodfonds'/.test(ln) && /continue/.test(ln)
-      && !/status='wacht op de buffer'/.test(ln));
+      && !/status='wacht op de buffer'/.test(ln) && !/\br\.vraag\b/.test(ln));
     expect(regels.length, 'geen enkele guard gevonden: de zoekvorm klopt niet meer').toBeGreaterThan(0);
     const ongedekt = regels.filter((ln) => !new RegExp(`\\b${v[1]}\\b`).test(ln));
     expect(ongedekt.map((x) => x.trim())).toEqual([]);
@@ -576,7 +578,10 @@ test.describe('h · de bron: ronde 2 komt niet langs de grendel zonder de poort'
      het al meetelde. */
   test('ronde 2 leest geen verdeelmodus', () => {
     const b = rondesBody();
-    const ronde2 = lusNa(b, 'planBufferKlaar(');
+    /* v371: tussen planBufferKlaar() en ronde 2 staat de lus van zelf verdelen (een vast bedrag achter een dichte
+       grendel), en die leest perMaand met opzet. Ronde 2 is de lus die doorzakt (.extra +=). */
+    let ronde2 = null; { let i = b.indexOf('planBufferKlaar(');
+      while (i >= 0) { const l = lusNa(b.slice(i), 'for('); if (!l) break; if (/\.extra\s*\+=/.test(l)) { ronde2 = l; break; } i = b.indexOf('for(', i) + 4; } }
     expect(ronde2, 'de lus van ronde 2 is niet af te bakenen').toBeTruthy();
     expect(ronde2).toMatch(/\.extra\s*\+=/);           // dit is werkelijk de doorzak-lus
     expect(ronde2).not.toMatch(/\bmode\b/);
