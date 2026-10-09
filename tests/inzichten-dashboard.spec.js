@@ -10,32 +10,30 @@ async function open(page, o, vp) {
   await page.evaluate(() => go('ins'));
 }
 const tegels = (page) => page.evaluate(() => [...document.querySelectorAll('#insTegels [data-instegel]')].map((el) => ({
-  key: el.dataset.instegel, st: el.className.replace('ins-kt', '').trim(),
+  key: el.dataset.instegel, st: el.className.replace('ins-kt', '').replace('mb-kt', '').trim(),
   lab: el.querySelector('.lb').innerText, val: el.querySelector('.vl').innerText, ms: el.querySelector('.ms').innerText })));
 const tegel = async (page, k) => (await tegels(page)).find((t) => t.key === k);
 
 test.describe('a · de tegels van 7 oktober', () => {
-  test('de zes tegels met hun bedragen, in de volgorde van de mockup', async ({ page }) => {
+  /* v365: drie tegels als delen van het maandbudget; ontvangen staat op Home, sparen op Plan en contant in het saldo. */
+  test('de drie tegels met hun bedragen, in de volgorde van de balk', async ({ page }) => {
     await open(page);
     const T = await tegels(page);
-    expect(T.map((t) => t.key)).toEqual(['uitgegeven', 'potjes', 'vast', 'ontvangen', 'sparen', 'cash']);
-    expect(T.map((t) => t.val)).toEqual(['€406', '€2.153', '€817', '€5.216', '€2.431', '€80']);
+    expect(T.map((t) => t.key)).toEqual(['uitgegeven', 'vast', 'potjes']);
+    expect(T.map((t) => t.val)).toEqual(['€406', '€817', '€2.153']);
     expect(T[0].ms).toBe('tot vandaag mocht €578 · je zit €172 eronder');
-    expect(T[1].ms).toBe('€90 per dag');
-    expect(T[2].ms).toBe('van €817 deze maand');
-    expect(T[3].ms).toBe('Werkgever · nog niets binnen');
-    expect(T[4].ms).toBe('€2.200 + €231 dat je eruit haalde');
-    expect(T[5].ms).toBe('buiten je potjes');
+    expect(T[1].ms).toBe('van €817 deze maand');
+    expect(T[2].ms).toBe('€90 per dag');
   });
-  test('kleur alleen bij een status: uitgegeven en potjes groen, de rest grijs', async ({ page }) => {
+  test('de status blijft: uitgegeven en potjes groen, vast grijs', async ({ page }) => {
     await open(page);
-    expect((await tegels(page)).map((t) => t.st)).toEqual(['grn', 'grn', 'gry', 'gry', 'gry', 'gry']);
+    expect((await tegels(page)).map((t) => t.st)).toEqual(['grn', 'gry', 'grn']);
   });
   test('boven het tempo is uitgegeven amber, en een potje boven zijn bedrag maakt potjes amber', async ({ page }) => {
     await open(page, { extraTx: [{ id: 'x1', date: '2026-10-06', amount: -800, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] });
     const T = await tegels(page);
     expect(T[0].st).toBe('amb'); expect(T[0].ms).toMatch(/· €[\d.]+ boven je tempo$/);
-    expect(T[1].st).toBe('amb');
+    expect(T.find((t) => t.key === 'potjes').st).toBe('amb');
   });
   test('het budget is uitgegeven plus nog in potjes plus nog te betalen (v327)', async ({ page }) => {
     await open(page);
@@ -48,10 +46,12 @@ test.describe('a · de tegels van 7 oktober', () => {
     const t = await tegel(page, 'uitgegeven');
     expect(t.val).toBe('onbekend'); expect(t.ms).toBe('nog geen boekingen van deze maand'); expect(t.st).toBe('gry');
   });
-  test('nog te ontvangen noemt het bedrag niet twee keer, en staat op nul met "alles is binnen" na de betaling', async ({ page }) => {
+  // v365: nog te ontvangen staat op Home
+  test('nog te ontvangen staat op Home op nul met "alles is binnen" na de betaling', async ({ page }) => {
     await open(page, { extraTx: [{ id: 'sal10', date: '2026-10-06', amount: 5216, name: 'Werkgever', desc: 'SALARIS LOON' }] });
-    const t = await tegel(page, 'ontvangen');
-    expect(t.val).toBe('€0'); expect(t.ms).toBe('alles is binnen');
+    await page.evaluate(() => go('dash'));
+    const t = await page.locator('#homeOntvangen').innerText();
+    expect(t).toContain('€0'); expect(t).toContain('alles is binnen');
   });
 });
 
@@ -91,25 +91,27 @@ test.describe('b · het tempo telt een vaste last op zijn datum', () => {
 });
 
 test.describe('c · de tegels passen zich aan', () => {
-  test('zonder sparen en contant: vier tegels', async ({ page }) => {
+  /* v365: bij alle uitgaven met een budget zijn het altijd de drie delen van het maandbudget. */
+  test('zonder sparen en contant: dezelfde drie delen', async ({ page }) => {
     await open(page, { zonderSparen: true, zonderContant: true });
-    expect((await tegels(page)).map((t) => t.key)).toEqual(['uitgegeven', 'potjes', 'vast', 'ontvangen']);
+    expect((await tegels(page)).map((t) => t.key)).toEqual(['uitgegeven', 'vast', 'potjes']);
   });
-  test('zonder herkende incasso en zonder inkomen: geen vast en geen ontvangen', async ({ page }) => {
+  test('zonder herkende incasso en zonder inkomen: nog steeds drie delen, vast op nul', async ({ page }) => {
     await open(page, { zonderVast: true, zonderInkomen: true, zonderSparen: true, set: { income: 0 } });
-    expect((await tegels(page)).map((t) => t.key)).toEqual(['uitgegeven', 'potjes', 'cash']);
+    const T = await tegels(page);
+    expect(T.map((t) => t.key)).toEqual(['uitgegeven', 'vast', 'potjes']);
+    expect(T[1].val).toBe('€0');
   });
-  test('een opname in de laatste drie maanden zet contant aan, ook zonder telling', async ({ page }) => {
+  test('een opname zonder telling geeft geen contanttegel en geen splitsing op Home', async ({ page }) => {
     await open(page, { zonderContant: true, extraTx: [{ id: 'gea', date: '2026-08-12', amount: -50, name: 'Geldmaat', desc: 'GEA, BETAALPAS GELDMAAT' }] });
-    const t = await tegel(page, 'cash');
-    expect(t.val).toBe('niet geteld');
+    expect((await tegels(page)).map((t) => t.key)).not.toContain('cash');
+    await page.evaluate(() => go('dash'));
+    expect(await page.locator('[data-saldosplit]').count()).toBe(0);
   });
-  test('een tegel verdwijnt niet midden in een maand', async ({ page }) => {
+  test('de tegelkeuze onthoudt alleen nog vast', async ({ page }) => {
     await open(page);
     await page.evaluate(() => { delete SET.contant; SET.savingAmount = 0; save(); renderIns(); });
-    const keys = (await tegels(page)).map((t) => t.key);
-    expect(keys).toContain('cash'); expect(keys).toContain('sparen');
-    expect(await page.evaluate(() => SET.insTegels)).toEqual({ maand: '2026-10', aan: ['vast', 'ontvangen', 'sparen', 'cash'] });
+    expect(await page.evaluate(() => SET.insTegels)).toEqual({ maand: '2026-10', aan: ['vast'] });
   });
   test('een nieuwe maand begint opnieuw', async ({ page }) => {
     await open(page, { dag: '2026-11-03', zonderContant: true, set: { insTegels: { maand: '2026-10', aan: ['vast', 'ontvangen', 'sparen', 'cash'] }, budgetMonth: '2026-10' } });
@@ -157,7 +159,7 @@ test.describe('d · de keuzekaart', () => {
 });
 
 test.describe('e · geen handeling op Inzichten', () => {
-  const MAG = ['openInsFilter', 'openInsTegel', 'insNaarPatronen', 'brugKies', 'brugTegen', 'brugRest', 'insKeuzeZet', 'insNaarGrip', 'toggleCollap', 'showTip', 'event.stopPropagation'];
+  const MAG = ['openInsFilter', 'openInsTegel', 'insNaarPatronen', 'insNulToggle', 'brugKies', 'brugTegen', 'brugRest', 'insKeuzeZet', 'insNaarGrip', 'toggleCollap', 'showTip', 'event.stopPropagation'];
   const MAG_SHEET = MAG.concat(['closeSheet', 'openMonthSpend', 'openCategory', 'openCsvDubbel', 'openMt940Dubbel', 'insFilterZet']);
   const aanroepen = (root) => [...root.querySelectorAll('[onclick]')].flatMap((e) => e.getAttribute('onclick').split(';').map((x) => x.trim().split('(')[0]).filter(Boolean));
   test('het scherm draagt alleen tikken die iets openen of naar Grip verwijzen', async ({ page }) => {
@@ -200,7 +202,7 @@ test.describe('f · het kop-inzicht', () => {
     expect(r.zin).not.toContain('%');
     expect(r.chip).toBe('4 patronen ›');
     await page.click('[data-patronenteller]');
-    await page.waitForFunction(() => { const b = document.getElementById('insPatronen').getBoundingClientRect(); return b.top >= 0 && b.top < 200; });
+    await page.waitForSelector('#insPatronenSheet #insPatronen');   // v365: de teller opent een sheet
   });
   test('zonder drie afgeronde maanden zegt hij dat eerlijk, zonder teller', async ({ page }) => {
     await open(page, { vanaf: '2026-08-01' });
@@ -211,8 +213,9 @@ test.describe('f · het kop-inzicht', () => {
 });
 
 test.describe('g · de vier patronen', () => {
+  // v365: de patronen staan in een sheet achter "N patronen ›"
   test('elk patroon met wat er gebeurt, gezien in, en de verwijzing naar Grip', async ({ page }) => {
-    await open(page);
+    await open(page); await page.click('[data-patronenteller]');
     const P = await page.evaluate(() => [...document.querySelectorAll('[data-patroon]')].map((e) => ({ s: e.dataset.patroon, k: e.dataset.patk,
       h: e.querySelector('.ins-pat-h').innerText, t: e.querySelector('.ins-pat-h').nextElementSibling.innerText, b: e.querySelector('[data-patbron]').innerText, g: !!e.querySelector('[data-insgrip]'),
       dot: e.querySelector('.ins-pat-tg i').style.background })));
@@ -229,12 +232,12 @@ test.describe('g · de vier patronen', () => {
     expect(P.map((p) => p.dot)).toEqual(['var(--red)', 'var(--amber)', 'var(--blue)', 'var(--green)']);
   });
   test('de labels zijn rustig: geen hoofdletters en geen gekleurd vlak', async ({ page }) => {
-    await open(page);
+    await open(page); await page.click('[data-patronenteller]');
     const r = await page.evaluate(() => { const e = document.querySelector('.ins-pat-tg'); const cs = getComputedStyle(e); return { tt: cs.textTransform, bg: cs.backgroundColor, txt: e.innerText }; });
     expect(r.tt).toBe('none'); expect(r.bg).toBe('rgba(0, 0, 0, 0)'); expect(r.txt).toBe('herhaalt zich');
   });
   test('bijsturen op Grip opent Grip, met het potje erbij', async ({ page }) => {
-    await open(page);
+    await open(page); await page.click('[data-patronenteller]');
     await page.click('[data-patroon="herhaalt"] [data-insgrip]');
     expect(await page.evaluate(() => ({ s: document.querySelector('.screen.active').id, p: window._gripPotje, open: document.getElementById('sheetBg').classList.contains('show') })))
       .toEqual({ s: 's-maand', p: 'uiteten', open: true });
@@ -322,7 +325,8 @@ test.describe('i · het filter stuurt de pagina', () => {
     await open(page);
     await page.evaluate(() => insFilterZet('vorige', null));
     const T = await tegels(page);
-    expect(T.map((t) => [t.key, t.lab, t.val])).toEqual([['uitgegeven', 'Uitgegeven', '€1.866'], ['potjes', 'Over in je potjes', '€1.510']]);
+    // v365: het maandbudget van september in twee delen
+    expect(T.map((t) => [t.key, t.lab, t.val])).toEqual([['uitgegeven', 'Uitgegeven', '€1.866'], ['over', 'Over', '€1.510']]);
     expect(await page.innerText('#insFilter')).toContain('Vorige maand');
     expect(await page.innerText('#insKop')).toBe('In september gaf je €1.866 uit, €1.510 onder je budget; Uit eten & café droeg het meest erboven (+€194).');
   });
@@ -344,7 +348,7 @@ test.describe('j · de sheets tellen op tot hun tegel', () => {
   for (const k of ['potjes', 'vast', 'cash']) {
     test(k, async ({ page }) => {
       await open(page);
-      await page.click(`[data-instegel="${k}"]`);
+      await page.evaluate((x) => openInsTegel(x), k);   // v365: cash opent vanaf Home
       const r = await page.evaluate(() => { const s = document.getElementById('insTegelSheet'); return { w: +s.dataset.inswaarde, d: [...s.querySelectorAll('[data-insrij]')].map((e) => +e.dataset.insrij) }; });
       expect(r.d.length).toBeGreaterThan(0);
       expect(Math.round(r.d.reduce((a, b) => a + b, 0))).toBe(r.w);
@@ -352,7 +356,7 @@ test.describe('j · de sheets tellen op tot hun tegel', () => {
   }
   test('ontvangen en sparen', async ({ page }) => {
     await open(page);
-    await page.click('[data-instegel="ontvangen"]');
+    await page.evaluate(() => openInsTegel('ontvangen'));   // v365: vanaf Home
     let r = await page.evaluate(() => { const s = document.getElementById('insTegelSheet'); return [+s.dataset.inswaarde, +s.querySelector('[data-insnorm]').dataset.insnorm, +s.querySelector('[data-insbinnen]').dataset.insbinnen]; });
     expect(r).toEqual([5216, 5216, 0]);
     await page.evaluate(() => { closeSheet(); openInsTegel('sparen'); });
@@ -368,7 +372,7 @@ test.describe('k · hoogtes op 360 en 390px', () => {
       await open(page, null, { width: w, height: h });
       const r = await page.evaluate(() => { const s = document.getElementById('s-ins'); const b = (id) => { const e = document.getElementById(id); const q = e.getBoundingClientRect(); return { top: Math.round(q.top + scrollY), h: Math.round(q.height) }; };
         const over = [...s.querySelectorAll('*')].filter((e) => { const q = e.getBoundingClientRect(); return q.width > 0 && (q.right > innerWidth + 0.5 || q.left < -0.5); }).length;
-        const nav = document.querySelector('.nav'); return { over, sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, tegels: b('insTegels'), kop: b('insKop'), maanden: b('insSpendCard'), keuze: b('insKeuze'), patronen: b('insPatronen'), vouw: innerHeight - (nav ? nav.getBoundingClientRect().height : 0) }; });
+        const nav = document.querySelector('.nav'); return { over, sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, tegels: b('insTegels'), kop: b('insKop'), maanden: b('insSpendCard'), keuze: b('insKeuze'), budget: b('insMaandBudget'), vouw: innerHeight - (nav ? nav.getBoundingClientRect().height : 0) }; });
       console.log(w, JSON.stringify(r));
       expect(r.over).toBe(0); expect(r.sw).toBeLessThanOrEqual(r.cw);
       expect(r.kop.top + r.kop.h).toBeLessThanOrEqual(r.vouw);

@@ -114,13 +114,13 @@ test.describe('1 - Boven je inkomen-limiet is weg', () => {
   /* v340: 'de streep staat er precies een keer' is vervallen, want de streep was de vanaf-kaart en die
      bestaat niet meer; Grip scheidt nu elke afspraakregel met dezelfde lijn. Wat overblijft is dat de
      ene rij precies een keer in de tijdlijn staat. */
-  test('met die rij staat er precies een vanaf-punt in de tijdlijn', async ({ page }) => {
+  // v365: de tijdlijn is vervallen; de rij staat in maandVanafData() en niet meer als punt op Grip
+  test('met die rij is er een vanaf-rij in de bron en geen punt op Grip', async ({ page }) => {
     await open(page, seed());
     await page.evaluate(() => go('maand'));
-    const r = await page.evaluate(() => ({ n: document.querySelectorAll('#gripTijdlijn [data-tlsoort="vanaf"]').length,
-      tekst: (document.querySelector('#gripTijdlijn [data-tlsoort="vanaf"]') || {}).textContent, kort: maandVanafData()[0].kort }));
-    expect(r.n).toBe(1);
-    expect(r.tekst).toBe(r.kort);
+    const r = await page.evaluate(() => ({ n: document.querySelectorAll('#s-maand [data-tlsoort="vanaf"]').length, d: maandVanafData().length }));
+    expect(r.d).toBe(1);
+    expect(r.n).toBe(0);
   });
 });
 

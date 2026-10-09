@@ -1,229 +1,285 @@
-// Inzichten & Vooruitblik opschonen (v66): noodfonds-widget weg, eigen buffer-maanden,
-// maand-drill-down met Categorieën/Top-uitgaven-toggle, dubbele widgets weg, KPI-detail per KPI.
-// De service worker staat globaal uit via playwright.config.js.
+/* v365: HOME, GRIP, LOGBOEK, INZICHTEN EN PLAN OPGESCHOOND (mockup "opschonen").
+   Elk getal op een plek: Nog te ontvangen staat op Home, Nog te sparen op Plan en contant in het saldo op Home.
+   De afsluiting telt alleen afsluittaken. Terugzetten na een opname uit je spaargeld is een keuze. */
 const { test, expect } = require('@playwright/test');
-const { seed, open, CUR, M1 } = require('./budget-fixture');
+const I = require('./inzichten-stand');
+const P = require('./opschonen-stand');
 
-async function boot(page, scherm) {
-  await open(page, seed());
-  await page.evaluate((s) => go(s), scherm);
-  await page.waitForSelector(`#s-${scherm} .card`);
-}
-async function openPlanZone(page) {
-  if (await page.locator('#s-vooruit .plan-item').count() === 0) {
-    await page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]').click();
+/* ===== HOME ===== */
+test.describe('a · Home', () => {
+  test('drie recente boekingen, de nieuwste eerst, en "Alle transacties" blijft', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => go('dash'));
+    const r = await page.evaluate(() => ({ n: document.querySelectorAll('#s-dash .txl').length,
+      nw: TX.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3).map((t) => txNaam(t)),
+      rij: [...document.querySelectorAll('#s-dash .txl .nm')].map((e) => e.innerText),
+      alle: !!document.querySelector('#s-dash .hl-all') }));
+    expect(r.n).toBe(3); expect(r.rij).toEqual(r.nw); expect(r.alle).toBe(true);
+  });
+  test('de koopcheck staat niet meer op Home', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => go('dash'));
+    expect(await page.locator('#s-dash').innerText()).not.toContain('Ik wil iets kopen');
+  });
+  test('bank en contant tellen op tot het totaal saldo, en contant is dezelfde bron', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => go('dash'));
+    const r = await page.evaluate(() => { const el = document.querySelector('[data-saldosplit]');
+      return { bank: +el.dataset.bank, contant: +el.dataset.contant, bron: contantVerwacht(), tb: totalBalance().contant,
+        saldo: Math.round(safeToSpend().saldo), tekst: el.innerText }; });
+    expect(r.contant).toBe(Math.round(r.bron)); expect(r.contant).toBe(Math.round(r.tb)); expect(r.contant).toBe(80);
+    expect(r.bank + r.contant).toBe(r.saldo);
+    expect(r.tekst).toBe('€12.000 op de bank · €80 contant');
+  });
+  test('zonder telling is er niets te splitsen en staat de regel er niet', async ({ page }) => {
+    await I.boot(page, { zonderContant: true }); await page.evaluate(() => go('dash'));
+    expect(await page.locator('[data-saldosplit]').count()).toBe(0);
+  });
+  test('Nog te ontvangen is de berekening van de oude tegel, met een nette naam', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => go('dash'));
+    const r = await page.evaluate(() => ({ v: +document.getElementById('homeOntvangen').dataset.ontvangen, due: Math.round(monthLiquidity().incDue),
+      t: document.getElementById('homeOntvangen').innerText }));
+    expect(r.v).toBe(r.due); expect(r.v).toBe(5216);
+    expect(r.t).toContain('nog niets binnen');
+  });
+  test('"Skf ." heet "Skf": een losse punt achter de naam valt weg', async ({ page }) => {
+    await P.boot(page); await page.evaluate(() => go('dash'));
+    const t = await page.locator('[data-ontvangenwie]').innerText();
+    expect(t).toContain('(Skf)'); expect(t).not.toMatch(/Skf \./);
+  });
+  test('verplaatst en niet gekopieerd: de tegels ontvangen, sparen en contant staan niet meer op Inzichten', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => go('ins'));
+    const keys = await page.evaluate(() => [...document.querySelectorAll('#s-ins [data-instegel]')].map((e) => e.dataset.instegel));
+    for (const k of ['ontvangen', 'sparen', 'cash']) expect(keys).not.toContain(k);
+    await page.evaluate(() => go('dash'));
+    expect(await page.locator('#homeOntvangen').count()).toBe(1);
+  });
+  for (const vp of [{ width: 360, height: 800 }, { width: 390, height: 844 }]) {
+    test(`Home past op een scherm op ${vp.width}x${vp.height}`, async ({ page }) => {
+      await I.boot(page); await page.setViewportSize(vp); await page.evaluate(() => go('dash'));
+      const r = await page.evaluate(() => { const els = [...document.querySelectorAll('#s-dash > *')];
+        const bodem = Math.max(...els.map((e) => e.getBoundingClientRect().bottom));
+        const nav = document.querySelector('nav, .nav, #nav'); const navTop = nav ? nav.getBoundingClientRect().top : innerHeight;
+        return { bodem: Math.round(bodem), navTop: Math.round(navTop), scroll: document.documentElement.scrollHeight - innerHeight }; });
+      console.log('home', vp.width, vp.height, JSON.stringify(r));
+      expect(r.scroll).toBeLessThanOrEqual(0);
+      expect(r.bodem).toBeLessThanOrEqual(r.navTop);
+    });
   }
-  await page.waitForSelector('#s-vooruit .plan-item');
-}
+});
 
-test.describe('a · noodfonds-widget weg, verfijnen blijft bereikbaar', () => {
-  test('de kaart staat niet meer op Vooruitblik', async ({ page }) => {
-    await boot(page, 'vooruit');
-    expect(await page.locator('#nfCard').count()).toBe(0);
-    const v = await page.locator('#s-vooruit').innerText();
-    expect(v).not.toMatch(/essentiële crisis-last/i);
-    expect(v).not.toMatch(/bezuinigingsruimte/i);
-    // v103: de functie bleef eerst staan omdat ze alleen niet meer werd samengesteld. Ze is nu
-    // opgeruimd; de sheet (openNoodfondsPanel) is de enige plek waar het noodfonds nog rendert.
-    expect(await page.evaluate(() => typeof noodfondsCard)).toBe('undefined');
-    /* De samenstelling zelf: sinds v80 zonder hero, sinds v144 zonder "Nog deze maand". Hier stond
-       een regex op de letterlijke regel `innerHTML = doelZone + resDekkingCard()`. Dat legde de
-       implementatie vast en niet de eigenschap: v221 zette er een blok tussen en de test viel om
-       terwijl er niets stuk was. Bind aan wat er moet staan en wat er weg moet zijn. */
-    expect(await page.evaluate(() => /nogDezeMaand/.test(renderVooruit.toString()))).toBe(false);
-    expect(await page.evaluate(() => /doelZone/.test(renderVooruit.toString()))).toBe(true);
-    // v344: de kaart Reserveringen staat niet meer op Plan; die lijst staat in de sheet op Grip
-    expect(v).not.toContain('Reserveringen');
+/* ===== LOGBOEK ===== */
+const HUUR = [
+  { id: 'h1', soort: 'potje', cat: 'huur', bedrag: 530, voor: 700, van: '2026-12', tot: '2026-12', op: '2026-10-08', ts: 1, sinds: '2026-10', wat: 'Potje Huur €530 vanaf december', herzien: { op: '2026-10-08', hoe: 'aangepast' } },
+  { id: 'h2', soort: 'potje', cat: 'huur', bedrag: 700, voor: 750, van: '2026-10', tot: '2026-10', op: '2026-10-08', ts: 2, sinds: '2026-10', wat: 'Potje Huur €700 vanaf oktober', herzien: { op: '2026-10-08', hoe: 'aangepast' } },
+  { id: 'h3', soort: 'potje', cat: 'huur', bedrag: 600, voor: 700, van: '2026-11', tot: '2026-11', op: '2026-10-08', ts: 3, sinds: '2026-10', wat: 'Potje Huur €600 vanaf november' },
+];
+test.describe('b · Logboek', () => {
+  test('de afsluitteller telt alleen de afsluittaken, ook met afspraken', async ({ page }) => {
+    await I.boot(page, { set: { maandAfsluiting: {}, afspraken: HUUR } });
+    const r = await page.evaluate(() => { openAfsluiting('2026-09'); const S = afsluitStand('2026-09');
+      return { teller: document.querySelector('[data-afteller]').dataset.afteller, P: afsluitPunten('2026-09').length, af: afsluitPunten('2026-09').filter((p) => p.af).length,
+        A: S.A.length, rijen: document.querySelectorAll('#afsluitSheet [data-afspraak]').length, tekst: document.getElementById('afsluitSheet').innerText }; });
+    expect(r.A).toBeGreaterThan(0);
+    expect(r.teller).toBe(`${r.af}/${r.P}`);
+    expect(r.rijen).toBe(0);
+    expect(r.tekst).not.toContain('Wat je afsprak');
   });
-
-  /* v225: 'verfijnen ›' stond los in de rij en deed exact hetzelfde als een tik op de rij zelf -
-     planOpen(noodfonds) is woordelijk openNoodfondsPanel(). De knoppen staan nu achter die tik,
-     zodat de rij zelf rustig blijft en de volgorde-knoppen de enige zichtbare handeling zijn. De
-     eis blijft dezelfde: vanaf het noodfonds-item kom je bij het verfijnen-paneel. */
-  test('het noodfonds-plan-item is de ingang naar verfijnen', async ({ page }) => {
-    await boot(page, 'vooruit');
-    await openPlanZone(page);
-    const nf = page.locator('#s-vooruit .plan-item[data-id="noodfonds"]');
-    await expect(nf).toHaveCount(1);
-    expect(await nf.innerText()).not.toContain('verfijnen');   // pas na de tik
-
-    await nf.locator('text=Noodfonds').click();
-    await page.waitForSelector('#s-vooruit .plan-item[data-id="noodfonds"] >> text=verfijnen');
-    await page.locator('#s-vooruit .plan-item[data-id="noodfonds"] >> text=verfijnen').click();
-    await page.waitForSelector('#sheetBg.show');
-    const sheet = await page.locator('#sheet').innerText();
-    expect(sheet).toContain('Noodfonds verfijnen');
-    expect(sheet).toContain('Minimaal nodig in crisis');
+  test('afsluiten met open punten bewaart geen afspraak als open punt', async ({ page }) => {
+    await I.boot(page, { set: { maandAfsluiting: {}, afspraken: HUUR } });
+    const open = await page.evaluate(() => { maandAfsluiten('2026-09', true); return SET.maandAfsluiting['2026-09'].open; });
+    expect(open.some((o) => o.afspraak)).toBe(false);
   });
-
-  test('de tik op de rij is wat de knoppen tevoorschijn haalt', async ({ page }) => {
-    await boot(page, 'vooruit');
-    await openPlanZone(page);
-    expect(await page.evaluate(() => planItems().find((x) => x.id === 'noodfonds') && planOpen(planItems()[0]) !== null)).toBeTruthy();
-    const nf = page.locator('#s-vooruit .plan-item[data-id="noodfonds"]');
-    expect(await nf.innerText()).not.toMatch(/pauzeren|hervatten/);
-    await nf.locator('text=Noodfonds').click();
-    await page.waitForSelector('#s-vooruit .plan-item[data-id="noodfonds"] >> text=pauzeren');
-    // en nog een tik legt hem weer dicht
-    await page.locator('#s-vooruit .plan-item[data-id="noodfonds"] >> text=Noodfonds').click();
-    await page.waitForFunction(() => !/pauzeren/.test(
-      (document.querySelector('#s-vooruit .plan-item[data-id="noodfonds"]') || {}).innerText || ''));
+  test('het blok "Wat je afsprak" staat op de logboekpagina, met per potje de geldende afspraak bovenaan', async ({ page }) => {
+    await I.boot(page, { set: { afspraken: HUUR } });
+    await page.evaluate(() => go('logboek'));
+    const r = await page.evaluate(() => [...document.querySelectorAll('#logAfspraken [data-afspraakgroep="potje|huur"] [data-logafspraak]')].map((e) => ({ id: e.dataset.logafspraak, g: e.dataset.geldend, t: e.innerText.replace(/\s+/g, ' ') })));
+    expect(r.map((x) => x.id)).toEqual(['h3', 'h2', 'h1']);
+    expect(r.map((x) => x.g)).toEqual(['1', '0', '0']);
+    expect(r[0].t).toContain('Huur €700 → €600'); expect(r[0].t).toContain('vanaf november');
+    expect(r[2].t).toContain('Huur €700 → €530');
+    // het blok staat onder Afgesloten maanden
+    const volg = await page.evaluate(() => { const a = document.getElementById('logTijdlijn'), b = document.getElementById('logAfspraken'); return a && b ? a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING : -1; });
+    expect(volg).toBeTruthy();
+  });
+  test('een nieuwe potje-afspraak bewaart het bedrag ervoor', async ({ page }) => {
+    await I.boot(page);
+    const a = await page.evaluate(() => { potPlanZet('vices', '2026-12', 15); return potjeAfspraak('vices', 15, '2026-12'); });
+    expect(a.voor).toBe(20);
   });
 });
 
-test.describe('b · eigen aantal buffer-maanden', () => {
-  const openNf = async (page) => {
-    await boot(page, 'vooruit');
-    await page.evaluate(() => openNoodfondsPanel());
-    await page.waitForSelector('#nfEigen');
-  };
-
-  test('een eigen waarde zet SET.nfMaanden en herberekent het doel', async ({ page }) => {
-    await openNf(page);
-    expect(await page.evaluate(() => nfMaanden())).toBe(4);
-    const ess = await page.evaluate(() => Math.round(noodfondsModel().essCrisis));
-
-    await page.locator('#nfEigen').fill('9');
-    await page.locator('#nfEigen').press('Tab');
-    await page.waitForFunction(() => nfMaanden() === 9);
-
-    expect(await page.evaluate(() => SET.nfMaanden)).toBe(9);
-    expect(await page.evaluate(() => Math.round(noodfondsModel().doel))).toBe(ess * 9);
-    const sheet = await page.locator('#sheet').innerText();
-    expect(sheet).toMatch(/doel · 9 mnd/i);          // de kop staat op uppercase
-    // geen chip actief bij een eigen waarde
-    expect(await page.locator('#nfMaandChips .chip.on:not(:has(#nfEigen))').count()).toBe(0);
-    expect(await page.locator('#nfMaandChips .chip.on:has(#nfEigen)').count()).toBe(1);
+/* ===== GRIP ===== */
+test.describe('c · Grip', () => {
+  test('de koopcheck staat bovenaan, met zijn subregel, en opent dezelfde check', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => go('maand'));
+    const r = await page.evaluate(() => { const f = document.getElementById('s-maand').firstElementChild; return { id: f.id, t: f.innerText, oc: f.getAttribute('onclick') }; });
+    expect(r.id).toBe('gripKoopcheck');
+    expect(r.t).toContain('Ik wil iets kopen'); expect(r.t).toContain('Past het in een potje, of gaat het van je ruimte af?');
+    expect(r.oc).toBe('openBuy()');
   });
-
-  test('de chips blijven werken en zetten het veld mee', async ({ page }) => {
-    await openNf(page);
-    await page.evaluate(() => { SET.nfMaanden = 9; save(); renderNfSheet(); });
-    await page.locator('#sheet .chip', { hasText: '6 mnd' }).click();
-    await page.waitForFunction(() => nfMaanden() === 6);
-    expect(await page.locator('#nfEigen').inputValue()).toBe('6');
-    expect(await page.locator('#sheet .chip.on').first().innerText()).toContain('6 mnd');
-  });
-
-  test('ongeldige invoer valt terug op de laatste geldige waarde', async ({ page }) => {
-    await openNf(page);
-    await page.evaluate(() => { SET.nfMaanden = 5; save(); renderNfSheet(); });
-    for (const bad of ['0', '99', '']) {
-      await page.locator('#nfEigen').fill(bad);
-      await page.locator('#nfEigen').press('Tab');
-      expect(await page.evaluate(() => SET.nfMaanden), bad).toBe(5);
-      await page.waitForSelector('#nfEigen');
-      expect(await page.locator('#nfEigen').inputValue(), bad).toBe('5');   // veld springt terug
-    }
+  test('"Komende 3 maanden" bestaat niet meer', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => go('maand'));
+    expect(await page.locator('#gripTijdlijn').count()).toBe(0);
+    expect(await page.locator('#s-maand').innerText()).not.toMatch(/komende 3 maanden/i);
+    expect(await page.evaluate(() => typeof gripTijdlijn)).toBe('undefined');
   });
 });
 
-test.describe('c · maand-drill-down met segment-toggle', () => {
-  test('opent op Categorieën en onthoudt de keuze', async ({ page }) => {
-    await boot(page, 'ins');
-    // v359: de tegel Uitgegeven opent zijn sheet, en "Per categorie" daarin de drill-down
-    await page.locator('#insTegels [data-instegel="uitgegeven"]').click();
-    await page.locator('#sheet >> text=Per categorie').click();
-    await page.waitForSelector('#msBody');
-
-    let sheet = await page.locator('#sheet').innerText();
-    expect(sheet).toContain('Uitgegeven deze maand');
-    expect(sheet).toContain('Categorieën');
-    expect(sheet).toContain('Top uitgaven');
-    expect(await page.locator('#msBody').innerText()).toContain('Boodschappen');   // categorie-inhoud
-
-    await page.locator('#sheet .chip', { hasText: 'Top uitgaven' }).click();
-    await page.waitForFunction(() => SET.msDrill === 'top');
-    expect(await page.locator('#msBody').innerText()).toContain('Albert Heijn');   // winkel-inhoud
-    expect(await page.locator('#msBody').innerText()).not.toContain('Boodschappen');
-
-    // keuze blijft na opnieuw openen
-    await page.evaluate(() => { closeSheet(); openMonthSpend(); });
-    await page.waitForSelector('#msBody');
-    expect(await page.evaluate(() => msDrill())).toBe('top');
-    expect(await page.locator('#msBody').innerText()).toContain('Albert Heijn');
+/* ===== INZICHTEN ===== */
+const AFR = { extraTx: [{ id: 'r1', date: '2026-10-06', amount: -10.4, name: 'Albert Heijn', desc: 'BEA, BETAALPAS ALBERT HEIJN' }] };
+const mb = (page) => page.evaluate(() => { const el = document.getElementById('insMaandBudget'); if (!el) return null;
+  return { budget: +el.dataset.budget, som: (el.querySelector('[data-somregel]') || {}).dataset ? el.querySelector('[data-somregel]').dataset.somregel : null,
+    segs: [...el.querySelectorAll('[data-mbseg]')].map((s) => s.dataset.mbseg), tempo: !!el.querySelector('[data-mbtempo]'),
+    tegels: [...el.querySelectorAll('[data-mbtegel]')].map((t) => ({ k: t.dataset.mbtegel, v: +t.dataset.waarde, vl: t.querySelector('.vl').innerText })) }; });
+test.describe('d · Inzichten', () => {
+  test('de som van de delen is exact het budget, ook als per tegel afronden er een euro naast zit', async ({ page }) => {
+    await I.boot(page, AFR); await page.evaluate(() => go('ins'));
+    // de fixture draagt het geval: per tegel afronden geeft EUR 1 minder dan het budget
+    const oud = await page.evaluate(() => { const m = thisYM(); return Math.round(insSoortUit(m, 'alle')) + Math.round(monthLiquidity().fixDue) + varPotjeStand(m).nog; });
+    const D = await mb(page);
+    expect(oud).toBe(D.budget - 1);
+    const delen = D.tegels.map((t) => t.v);
+    expect(delen.reduce((a, b) => a + b, 0)).toBe(D.budget);
+    expect(D.som).toBe(`${delen.join('+')}=${D.budget}`);
+    expect(await page.locator('[data-somregel]').innerText()).toBe(`${D.tegels.map((t) => t.vl).join(' + ')} = €3.376`);
   });
-
-  test('de inklap-vlaggen van de renderers blijven ongemoeid', async ({ page }) => {
-    await boot(page, 'ins');
-    const voor = await page.evaluate(() => ({ cat: SET.openCatBreak, merch: SET.openMerch }));
-    await page.evaluate(() => openMonthSpend());
-    await page.waitForSelector('#msBody');
-    expect(await page.evaluate(() => ({ cat: SET.openCatBreak, merch: SET.openMerch }))).toEqual(voor);
+  test('een uitgave buiten je potjes is geen afronding: Nog in potjes blijft wat erin zit, en het verschil staat in de som', async ({ page }) => {
+    await I.boot(page, { extraTx: [{ id: 'k1', date: '2026-10-06', amount: -200, name: 'Kapper Knip', desc: 'BEA, BETAALPAS KAPPER KNIP' }] });
+    await page.evaluate(() => go('ins'));
+    const D = await mb(page);
+    const r = await page.evaluate(() => ({ nog: varPotjeStand(thisYM()).nog, som: document.querySelector('[data-somregel]').innerText }));
+    expect(D.tegels[2].v).toBe(r.nog);
+    const gat = D.budget - D.tegels.reduce((a, t) => a + t.v, 0);
+    expect(Math.abs(gat)).toBeGreaterThan(1);
+    expect(r.som).toContain('buiten je potjes'); expect(r.som).toContain('= €3.376');
+    expect(await page.evaluate(() => document.querySelector('[data-somregel]').dataset.somregel)).toBe(`${D.tegels.map((t) => t.v).join('+')}${gat}=${D.budget}`);
   });
-
-  test('lege maand geeft een nette lege staat', async ({ page }) => {
-    await boot(page, 'ins');
-    await page.evaluate(() => { window._msMonth = null; openMonthSpend('2019-01'); });
-    await page.waitForSelector('#msBody');
-    expect(await page.locator('#msBody').innerText()).toMatch(/geen uitgaven deze maand/i);
+  test('drie delen in vaste volgorde met een tempostreepje op wat je tot vandaag mocht', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => go('ins'));
+    const D = await mb(page);
+    expect(D.segs).toEqual(['uitgegeven', 'vast', 'potjes']);
+    expect(D.tegels.map((t) => t.v)).toEqual([406, 817, 2153]);
+    const t = await page.evaluate(() => ({ s: +document.querySelector('[data-mbtempo]').dataset.mbtempo, m: insTempo().mocht, lab: document.querySelector('.mb-tlab').innerText }));
+    expect(t.s).toBe(t.m); expect(t.lab).toBe('tempo €578');
+  });
+  test('de kleur van elke tegel is de kleur van zijn stuk in de balk', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => go('ins'));
+    const r = await page.evaluate(() => [...document.querySelectorAll('[data-mbtegel]')].map((t) => {
+      const seg = document.querySelector(`[data-mbseg="${t.dataset.mbtegel}"]`);
+      return { k: t.dataset.mbtegel, dot: getComputedStyle(t.querySelector('.lb i')).backgroundColor, seg: getComputedStyle(seg).backgroundColor }; }));
+    for (const x of r) expect(x.dot).toBe(x.seg);
+    expect(new Set(r.map((x) => x.seg)).size).toBe(3);
+  });
+  test('een afgesloten maand toont twee delen en geen tempostreepje', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => { go('ins'); insFilterZet('vorige', null); });
+    const D = await mb(page);
+    expect(D.segs.length).toBe(2); expect(D.segs[0]).toBe('uitgegeven'); expect(['over', 'erboven']).toContain(D.segs[1]);
+    expect(D.tempo).toBe(false);
+    const st = await page.evaluate(() => maandStaaf('2026-09'));
+    expect(D.tegels[0].v).toBe(Math.round(st.spend)); expect(D.budget).toBe(Math.round(st.budget));
+  });
+  test('de patronen staan niet op de pagina en openen als sheet met dezelfde inhoud', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => go('ins'));
+    expect(await page.locator('#s-ins #insPatronen').count()).toBe(0);
+    const verwacht = await page.evaluate(() => insPatronen('alle').map((p) => p.soort + '|' + p.k));
+    expect(verwacht.length).toBeGreaterThan(0);
+    await page.locator('[data-patronenteller]').click();
+    const r = await page.evaluate(() => [...document.querySelectorAll('#insPatronenSheet [data-patroon]')].map((e) => e.dataset.patroon + '|' + e.dataset.patk));
+    expect(r).toEqual(verwacht);
+    const zelfde = await page.evaluate(() => document.querySelector('#insPatronenSheet #insPatronen').innerHTML === (() => { const d = document.createElement('div'); d.innerHTML = insPatronenKaart(insPatronen('alle')); return d.firstElementChild.innerHTML; })());
+    expect(zelfde).toBe(true);
+  });
+  test('tegen je potje: de EUR 0-groep is dicht, bevat alleen nul, en klapt op dezelfde plek uit', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => { SET.insKeuze = 'potje'; go('ins'); });
+    const g = page.locator('[data-insnulgroep="potje"]');
+    expect(await g.getAttribute('data-open')).toBe('0');
+    expect(await page.locator('[data-insnulgroep="potje"] [data-inspotrij]').count()).toBe(0);
+    const buiten = await page.evaluate(() => [...document.querySelectorAll('#insKeuze [data-inspotrij]')].map((e) => +e.dataset.uit));
+    expect(buiten.every((u) => u !== 0)).toBe(true);
+    const kop = await g.innerText();
+    await g.locator('[role=button]').click();
+    const r = await page.evaluate(() => ({ open: document.querySelector('[data-insnulgroep="potje"]').dataset.open,
+      uit: [...document.querySelectorAll('[data-insnulgroep="potje"] [data-inspotrij]')].map((e) => +e.dataset.uit),
+      pot: [...document.querySelectorAll('[data-insnulgroep="potje"] [data-inspotrij]')].map((e) => +e.dataset.potje) }));
+    expect(r.open).toBe('1'); expect(r.uit.length).toBeGreaterThan(1); expect(r.uit.every((u) => u === 0)).toBe(true);
+    expect(kop).toContain(`${r.uit.length} potjes nog niets uitgegeven`);
+    expect(kop).toContain('€' + r.pot.reduce((a, b) => a + b, 0).toLocaleString('nl-NL'));
+    await page.evaluate(() => { go('dash'); go('ins'); });
+    expect(await page.locator('[data-insnulgroep="potje"]').getAttribute('data-open')).toBe('0');
+  });
+  test('tegen vorige maanden: alleen precies EUR 0 verschil staat in de groep', async ({ page }) => {
+    await I.boot(page); await page.evaluate(() => { go('ins'); insKeuzeZet('vorige'); });
+    const g = page.locator('[data-insnulgroep="vorige"]');
+    expect(await g.getAttribute('data-open')).toBe('0');
+    const buiten = await page.evaluate(() => [...document.querySelectorAll('#insKeuze [data-insvorigrij]')].map((e) => +e.dataset.verschil));
+    expect(buiten.every((d) => d !== 0)).toBe(true);
+    await g.locator('[role=button]').click();
+    const binnen = await page.evaluate(() => [...document.querySelectorAll('[data-insnulgroep="vorige"] [data-insvorigrij]')].map((e) => +e.dataset.verschil));
+    expect(binnen.length).toBeGreaterThan(1); expect(binnen.every((d) => d === 0)).toBe(true);
+    expect(await g.innerText()).toContain(`${binnen.length} potjes gelijk aan normaal`);
   });
 });
 
-test.describe('d · dubbele widgets zijn weg uit Inzichten', () => {
-  test('geen verdeling-blok en geen standalone "Waar gaat je geld heen"', async ({ page }) => {
-    await boot(page, 'ins');
-    const ins = await page.locator('#s-ins').innerText();
-    expect(ins).not.toMatch(/hoe gezond is jouw verdeling/i);
-    expect(ins).not.toMatch(/waar gaat je geld heen/i);
-    expect(ins).not.toMatch(/tik een balkdeel/i);          // het verdeling-blok zelf, niet de norm-naam
-    expect(ins).not.toMatch(/wat betekent 50\/30\/20/i);
-    expect(ins).not.toMatch(/bekijk meer/i);
-    // v161: de norm stuurt de kerncijfers niet meer, dus de norm-regel staat hier ook niet meer.
-    expect(ins).not.toMatch(/gemeten tegen: 50\/30\/20/i);
-    /* v208: het Kerncijfers-blok is van Inzichten af (budgetnaleving stond al in de hero, de
-       variabele-lastendruk stuurde niets), en daarmee verviel de sectie Verdieping die alleen dat
-       blok bevatte. Wat blijft is de hero met de budgetstand. */
-    expect(ins).not.toMatch(/kerncijfers/i);
-    expect(ins).not.toMatch(/verdieping/i);
-    expect(ins).toMatch(/uitgegeven/i);   // v359: de tegel Uitgegeven
-    // v178 zette de meermaands-grafiek op Maand, v227 bracht hem terug onder Deze maand
-    expect(ins).toMatch(/over de maanden/i);   // v359
+/* ===== PLAN ===== */
+const kop = (page) => page.evaluate(() => ({ bedrag: document.getElementById('planKopBedrag').innerText, kaart: !!document.getElementById('terugzetKaart'),
+  gekozen: (document.getElementById('terugzetGekozen') || {}).innerText || '', save: safeToSpend().saveReserved, nf: SET.nfToegewezen,
+  terug: [...document.querySelectorAll('[data-terugbak]')].map((e) => e.dataset.terugbak + ':' + e.dataset.terug),
+  eta: Object.fromEntries(allocatePlan().map((p) => [p.id, p.eta])) }));
+test.describe('e · Plan', () => {
+  test('zonder keuze blijft de inleg EUR 2.200, staat de kaart er zonder voorkeuze, en schrijft openen niets', async ({ page }) => {
+    await P.boot(page); await page.evaluate(() => go('vooruit'));
+    const r = await kop(page);
+    expect(r.bedrag).toBe('€2.200/mnd'); expect(r.kaart).toBe(true); expect(r.save).toBe(2431);
+    expect(await page.evaluate(() => SET.terugzet)).toBeUndefined();
+    const t = await page.locator('#terugzetKaart').innerText();
+    expect(t).toContain('€231 eruit gehaald in oktober · uit Noodfonds');
+    expect(t).toContain('inleg okt €2.431 · Noodfonds vol nov 2026');
+    expect(t).toContain('€77 extra per maand t/m dec · Noodfonds vol nov 2026 · Kosten Koper vol jun 2027');
+    expect(t).toContain('inleg blijft €2.200 · Noodfonds vol nov 2026 · Kosten Koper vol jun 2027');
+    expect(await page.locator('#terugzetGekozen').count()).toBe(0);
+    expect(await page.locator('#planInleg').count()).toBe(0);
   });
-
-  test('de renderers zelf blijven bestaan voor de drill-down', async ({ page }) => {
-    await boot(page, 'ins');
-    const r = await page.evaluate(() => ({
-      cat: typeof renderCatBreak, merch: typeof renderMerchants, thumb: typeof ruleOfThumbCard,
-      catOut: renderCatBreak(txOfMonth(curMonth)).length > 0,
-    }));
-    expect(r.cat).toBe('function');
-    expect(r.merch).toBe('function');
-    // v165: ruleOfThumbCard had zelf al geen aanroeper meer en is met de norm-laag opgeruimd
-    expect(r.thumb).toBe('undefined');
-    expect(r.catOut).toBe(true);
+  test('alles deze maand: EUR 2.431, het geld gaat gearceerd naar het Noodfonds, de toewijzing blijft', async ({ page }) => {
+    await P.boot(page); await page.evaluate(() => { go('vooruit'); terugzetKies('alles'); });
+    const r = await kop(page);
+    expect(r.bedrag).toBe('€2.431'); expect(r.gekozen).toContain('€2.200 vaste inleg + €231 terugzetten · gekozen: alles deze maand · wijzig');
+    expect(r.terug).toEqual(['noodfonds:231']); expect(r.nf).toBe(3638); expect(r.save).toBe(2431);
+    expect(r.eta).toEqual({ noodfonds: 1, kk: 7, iw: null });
+    expect(await page.locator('[data-terugvat="noodfonds"]').count()).toBe(1);
   });
-});
-
-test.describe('e · KPI-detail is per KPI verschillend', () => {
-  // v161: de vier kerncijfers staan op twee schermen. De tegels zelf openen nog steeds elk hun
-  // eigen uitleg; de restsaldo-quote is vervallen.
-  test('elke tegel opent zijn eigen uitleg en eigen reeks', async ({ page }) => {
-    const gezien = {};
-    /* v208: budgetnaleving en de variabele-lastendruk hebben geen tegel meer. De twee die
-       overblijven openen elk nog hun eigen uitleg en eigen reeks. */
-    // v232: de spaarquote-tegel staat op Vermogen
-    for (const [scr, blok, key] of [['vermogen', '#s-vermogen #maandKpiBlok', 'inleg']]) {
-      await boot(page, scr);
-      await page.locator(`${blok} .wvo-tile[data-kpi="${key}"]`).click();
-      await page.waitForSelector('#kpiDetailHead');
-      gezien[key] = await page.locator('#sheet').innerText();
-      await page.evaluate(() => closeSheet());
-    }
-    expect(gezien.inleg).toContain('Spaarquote');
-    // v209: de vaste-lastendruk heeft geen tegel meer, dus er is nog één sheet te openen
-    expect(new Set(Object.values(gezien)).size).toBe(1);
+  test('over drie maanden: EUR 2.277 deze maand, EUR 77 naar het Noodfonds, Kosten Koper juni 2027', async ({ page }) => {
+    await P.boot(page); await page.evaluate(() => { go('vooruit'); terugzetKies('drie'); });
+    const r = await kop(page);
+    expect(r.bedrag).toBe('€2.277'); expect(r.terug).toEqual(['noodfonds:77']); expect(r.save).toBe(2277);
+    expect(r.eta.noodfonds).toBe(1); expect(await page.evaluate((e) => etaDatum(e), r.eta.kk)).toBe('jun 2027');
   });
-
-  test('de getoonde reeks hoort bij díe KPI', async ({ page }) => {
-    await boot(page, 'ins');
-    const r = await page.evaluate((m) => {
-      const K = insKpis(m, 0);
-      return { inleg: K.inleg.series, vari: K.vari.series, vast: K.vast.series, budget: K.budget.series };
-    }, CUR);
-    expect(r.inleg).not.toEqual(r.vari);
-    expect(r.vari).not.toEqual(r.vast);
-    expect(r.budget).not.toEqual(r.vast);
-    expect(r.vari.every((v) => v >= 0 && v <= 100)).toBe(true);
+  test('niet terugzetten: inleg EUR 2.200, het Noodfonds levert EUR 231 in, en wijzigen zet dat terug', async ({ page }) => {
+    await P.boot(page); await page.evaluate(() => { go('vooruit'); terugzetKies('niet'); });
+    const r = await kop(page);
+    expect(r.bedrag).toBe('€2.200'); expect(r.terug).toEqual([]); expect(r.nf).toBe(3407); expect(r.save).toBe(2200);
+    expect(await page.evaluate((e) => [etaDatum(e.noodfonds), etaDatum(e.kk)], r.eta)).toEqual(['nov 2026', 'jun 2027']);
+    await page.evaluate(() => { terugzetWijzig(); });
+    expect(await page.locator('#terugzetKaart').count()).toBe(1);
+    await page.evaluate(() => terugzetKies('alles'));
+    expect((await kop(page)).nf).toBe(3638);
   });
+  test('de keuze staat in het logboek', async ({ page }) => {
+    await P.boot(page); await page.evaluate(() => { terugzetKies('drie'); go('logboek'); });
+    expect(await page.locator('[data-logterugzet="2026-10"]').innerText()).toContain('€231 uit Noodfonds: over 3 maanden');
+  });
+  test('volgende maand: weer het maandbedrag, of het volgende deel bij spreiden', async ({ page }) => {
+    const rec = (k) => ({ '2026-10': { bedrag: 231, keuze: k, bron: [{ id: 'noodfonds', type: 'noodfonds', naam: 'Noodfonds', af: 231 }], delen: k === 'drie' ? [77, 77, 77] : [231], op: '2026-10-09' } });
+    await P.boot(page, { dag: '2026-11-09', zonderOpname: true, set: { terugzet: rec('drie') } }); await page.evaluate(() => go('vooruit'));
+    expect((await kop(page)).bedrag).toBe('€2.277');
+    await page.evaluate((r) => { SET.terugzet = r; save(); render(); }, rec('alles'));
+    expect((await kop(page)).bedrag).toBe('€2.200/mnd');
+  });
+  for (const w of [360, 390]) {
+    test(`geen tekst over een bak heen op ${w}px`, async ({ page }) => {
+      await P.boot(page, { vp: { width: w, height: 900 } }); await page.evaluate(() => { go('vooruit'); terugzetKies('alles'); });
+      const r = await page.evaluate(() => [...document.querySelectorAll('.wf-kol')].map((k) => { const v = k.querySelector('.wf-vatbox').getBoundingClientRect(), t = k.querySelector('.wf-tekst').getBoundingClientRect();
+        return { id: k.dataset.id, vb: v.bottom, tt: t.top }; }));
+      expect(r.length).toBeGreaterThan(1);
+      for (const x of r) expect(x.tt).toBeGreaterThanOrEqual(x.vb - 0.5);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    });
+  }
 });

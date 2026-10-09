@@ -406,12 +406,13 @@ test.describe('i · wat deze vorm kost', () => {
           kop: h('.row'), noodfonds: h('.vat-vol'), wf: h('.wf'),
           kolom: h('.wf-kol'), tekst: h('.wf-tekst') };
       });
-      // de kolom is de tak plus het hoogste vat, en dat is de prijs van de schaal
-      expect(r.kolom).toBe(44 + 180);
+      console.log('plan-vaten i', JSON.stringify(r));
+      /* v365: DE TEKST STAAT ONDER HET VAT (punt 13: teksten liepen door de bakken heen). De kolom is de tak plus
+         het hoogste vat plus zijn eigen tekst; dat is de prijs, en de kaart wordt daarmee hoger dan bij v318. */
+      expect(r.kolom).toBe(44 + 180 + r.tekst);
       expect(r.kop).toBeLessThan(30);
-      // de kaart blijft onder een halve meter aan pixels; het getal zelf staat in CLAUDE.md
       expect(r.kaart).toBeGreaterThan(500);
-      expect(r.kaart).toBeLessThan(720);
+      expect(r.kaart).toBeLessThan(900);
     });
   }
 });
@@ -434,26 +435,21 @@ test.describe('j · de tekst in het vat', () => {
         tekstTop: Math.round(t.top), tekstBot: Math.round(t.bottom),
         vat: Math.round(v.height), tekst: Math.round(t.height), box: Math.round(b.height) }; }));
 
-  test('de tekst begint op de bovenkant van zijn eigen vat', async ({ page }) => {
+  /* v365: OMGEDRAAID OP VERZOEK VAN DE GEBRUIKER (punt 13): de tekst liep door het vat heen, en "EUR 362/mnd"
+     las als doorgestreept door het streepje, terwijl "krijgt wat je buffer" onder de vulling viel. De tekst staat
+     nu ONDER zijn eigen vat, en de box is precies het vat. */
+  test('de tekst begint onder zijn eigen vat', async ({ page }) => {
     await boot(page, Object.assign({ breedte: 360 }, TOESTEL));
     const r = await posities(page);
     expect(r.length).toBe(2);
-    for (const k of r) expect(k.tekstTop, k.id).toBe(k.vatTop);
+    for (const k of r) expect(k.tekstTop, k.id).toBeGreaterThanOrEqual(k.vatBot);
   });
-
-  /* HET HOGE VAT DRAAGT ZIJN TEKST BINNENIN EN HET GEKLEMDE NIET, en dat paar is de meting: met
-     alleen het hoge vat is "de tekst staat in het vat" niet te onderscheiden van "de tekst staat
-     boven het vat", en met alleen het geklemde niet van "de tekst staat eronder" (meetles a). */
-  test('bij het hoge vat past alles erin, bij het geklemde loopt hij eronder door', async ({ page }) => {
+  test('de box is het vat, bij het hoge en bij het geklemde vat', async ({ page }) => {
     await boot(page, Object.assign({ breedte: 360 }, TOESTEL));
     const r = await posities(page);
-    const hoog = r.find((k) => k.vat === 180), klem = r.find((k) => k.vat === 40);
-    expect(hoog, JSON.stringify(r)).toBeTruthy();
-    expect(klem, JSON.stringify(r)).toBeTruthy();
-    expect(hoog.tekstBot, 'het hoge vat draagt zijn tekst binnenin').toBeLessThanOrEqual(hoog.vatBot);
-    expect(klem.tekstBot, 'het geklemde vat niet').toBeGreaterThan(klem.vatBot);
-    // en de box is per kolom `max(vat, tekst)`
-    for (const k of r) expect(k.box, k.id).toBe(Math.max(k.vat, k.tekst));
+    expect(r.find((k) => k.vat === 180), JSON.stringify(r)).toBeTruthy();
+    expect(r.find((k) => k.vat === 40), JSON.stringify(r)).toBeTruthy();
+    for (const k of r) expect(k.box, k.id).toBe(k.vat);
   });
 
   /* DE TWEEDE EIS VAN DEZE RONDE: een lang tekstblok onder het ENE vat maakt de ANDERE kolommen niet

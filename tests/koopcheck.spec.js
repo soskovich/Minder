@@ -36,10 +36,11 @@ async function vulCheck(page, amt, cat, item) {
 }
 
 test.describe('a - de drie ingangen leiden tot een zichtbare uitkomst', () => {
-  test('vanaf Home: de regel opent de check en de check antwoordt', async ({ page }) => {
+  // v365: de regel staat bovenaan Grip
+  test('vanaf Grip: de regel opent de check en de check antwoordt', async ({ page }) => {
     await open(page, seed());
-    await page.evaluate(() => go('dash'));
-    const regel = page.locator('#s-dash [onclick*="openBuy"]');
+    await page.evaluate(() => go('maand'));
+    const regel = page.locator('#s-maand [onclick*="openBuy"]');
     await expect(regel).toHaveCount(1);
     await regel.click();
     await vulCheck(page, BINNEN);

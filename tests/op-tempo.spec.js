@@ -456,18 +456,15 @@ test.describe('g - de spaarquote staat niet meer op Maand', () => {
      (`[data-tlsoort="vanaf"]`), uit maandVanafData(). */
   test('de kaart met de plan-rij draagt de spaarquote niet', async ({ page }) => {
     await boot(page, { set: { budgetsNext: { boodschappen: 1100 } } });
+    /* v365: de tijdlijn is vervallen; de rij bestaat nog in maandVanafData() en Grip draagt geen spaarquote. */
     const uit = await page.evaluate(() => {
       renderMaand();
-      const c = document.querySelector('#gripTijdlijn');
-      return { kop: ((c.querySelector('.hlabel') || {}).textContent || '').trim(),
-        vanaf: [...c.querySelectorAll('[data-tlsoort="vanaf"]')].map((x) => x.innerText),
-        data: maandVanafData().map((x) => x.lab),
-        spaarquote: /Spaarquote/.test(c.textContent) };
+      return { tl: !!document.querySelector('#gripTijdlijn'), data: maandVanafData().map((x) => x.lab),
+        spaarquote: /Spaarquote/.test(document.querySelector('#s-maand').textContent) };
     });
     expect(uit.data).toContain('Je potjes');
-    expect(uit.vanaf.length).toBeGreaterThan(0);
+    expect(uit.tl).toBe(false);
     expect(uit.spaarquote).toBe(false);
-    expect(uit.kop).toBe('Komende 3 maanden');
   });
 });
 

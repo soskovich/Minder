@@ -178,13 +178,11 @@ test.describe('c - de voet is vervallen, de rij staat in de tijdlijn', () => {
     const k = await kaarten(page);
     expect(k.filter((x) => x.voet).length, 'geen kaart draagt de rij voluit').toBe(0);
     expect(k.filter((x) => /^Vanaf /.test(x.kop)).length).toBe(0);
-    const r = await page.evaluate(() => ({ n: document.querySelectorAll('#gripTijdlijn [data-tlsoort="vanaf"]').length,
-      tekst: (document.querySelector('#gripTijdlijn [data-tlsoort="vanaf"]') || {}).textContent,
-      onclick: (document.querySelector('#gripTijdlijn [data-tlsoort="vanaf"]') || { getAttribute: () => '' }).getAttribute('onclick'),
-      kort: maandVanafData()[0].kort }));
-    expect(r.n).toBe(1);
-    expect(r.tekst).toBe(r.kort);
-    expect(r.onclick).toContain('openPotjesVerdeling');
+    // v365: de tijdlijn is vervallen; de rij staat nergens meer op Grip, ook niet als punt
+    const r = await page.evaluate(() => ({ n: document.querySelectorAll('#s-maand [data-tlsoort="vanaf"]').length, kort: maandVanafData()[0].kort,
+      t: document.getElementById('s-maand').innerText }));
+    expect(r.n).toBe(0);
+    expect(r.t).not.toContain(r.kort);
   });
 
   test('zonder volgende-maand-laag is er geen rij en geen punt', async ({ page }) => {
@@ -219,10 +217,10 @@ test.describe('d - de rest van het scherm blijft staan', () => {
 
   /* v340: 'geen tweede sectiekop binnen de kaart' en 'de rijen in de vanaf-kaart dragen geen statusdot'
      zijn vervallen, want de vanaf-kaart bestaat niet meer. De tijdlijn draagt een kop: */
-  test('de tijdlijn draagt een kop', async ({ page }) => {
+  // v365: de tijdlijn is vervallen
+  test('de tijdlijn staat er niet meer', async ({ page }) => {
     await boot(page, { set: NEXT });
-    const koppen = await page.evaluate(() => document.querySelectorAll('#gripTijdlijn .hlabel').length);
-    expect(koppen).toBe(1);
+    expect(await page.locator('#gripTijdlijn').count()).toBe(0);
   });
 });
 

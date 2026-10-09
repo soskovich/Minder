@@ -131,16 +131,16 @@ test.describe('b · de werkelijke inleg naast de ingestelde', () => {
 
   /* EEN NEGATIEF NETTO HEEFT ZIJN EIGEN VORM (v262): wat je eruit haalde, zonder minteken en zonder
      alarm. Zonder dit geval is "drie vormen" niet van "twee vormen" te onderscheiden. */
-  test('meer eruit dan erin: de regel zegt wat je eruit haalde', async ({ page }) => {
+  /* v365: met een bak om naar terug te zetten is "eruit gehaald" een keuze geworden (terugzetKaart); de losse
+     regel staat er alleen nog zonder bak. */
+  test('meer eruit dan erin: de kaart zegt wat je eruit haalde, en de losse regel staat er niet', async ({ page }) => {
     await boot(page, { okt: -500, saldo: 8100 });
-    const r = await page.evaluate(() => {
-      const e = document.querySelector('#planInleg');
-      return { tekst: e.innerText.replace(/\s+/g, ' ').trim(), inleg: +e.dataset.inleg,
-        net: savedNet(thisYM()) };
-    });
+    const r = await page.evaluate(() => ({ regel: !!document.querySelector('#planInleg'), net: savedNet(thisYM()),
+      k: (document.querySelector('#terugzetKaart') || {}).dataset, t: (document.querySelector('#terugzetKaart') || {}).innerText || '' }));
     expect(r.net).toBe(-500);
-    expect(r.inleg).toBe(-500);
-    expect(r.tekst).toBe('deze maand €500 eruit gehaald');
+    expect(r.regel).toBe(false);
+    expect(+r.k.terugzet).toBe(500);
+    expect(r.t).toContain('€500 eruit gehaald in oktober');
   });
 
   /* ONBEKEND BLIJFT ONBEKEND (v59/v73/v173): zonder aangewezen spaarrekening EN zonder boeking op de
@@ -460,7 +460,8 @@ test.describe('e · de prijs in pixels', () => {
       expect(vol.balkMt, 'met de regel ertussen houdt de balk 4px').toBe('4px');
       expect(zonder.balkMt, 'en zonder regel zijn eigen 9px tot de kop').toBe('9px');
       expect(vol.kaart - zonder.kaart, 'netto: 18 plus 2 marge min de 5 van de balk').toBe(15);
-      expect(zonder.kaart, 'en stond op 509 zonder').toBe(509);
+      // v365: de tekst staat onder de vaten (punt 13), en dat maakt de kaart hoger: 684px op 360 en 666 op 390 (gemeten)
+      expect(zonder.kaart, 'zonder de regel').toBe(w === 360 ? 684 : 666);
       expect(metKnop.vrij - zonder.vrij, 'de tweede knop').toBe(w === 360 ? 18 : 0);
       expect(vol.zone - zonder.zone).toBe(w === 360 ? 33 : 15);
       expect(vol.overflow, 'niets steekt buiten de breedte').toBeLessThanOrEqual(1);

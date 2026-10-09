@@ -53,7 +53,8 @@ test('b. drie blokken en een link: wat van Grip verdween staat er niet meer', as
   await stand(page);
   await page.evaluate(() => { closeSheet(); go('maand'); });
   const g = await grip(page);
-  expect(g.blokken).toEqual(['gripTegels', 'gripDezeMaand', 'gripTijdlijn', 'gripNaarLogboek']);
+  // v365: de koopcheck staat bovenaan en de tijdlijn is vervallen
+  expect(g.blokken).toEqual(['gripKoopcheck', 'gripTegels', 'gripDezeMaand', 'gripNaarLogboek']);
   for (const weg of ['Vraagt een beslissing', 'Vraagt aandacht', 'Staat goed', 'Voorwaarden voor beleggen', 'afsluiten', 'Wat je met overschrijdingen deed', 'Er is niets dat vastloopt', 'Vanaf november'])
     expect(g.tekst.toUpperCase()).not.toContain(weg.toUpperCase());
   const ids = await page.evaluate(() => ['afsluitKaart', 'afgeslotenRegel', 'valtOpGrip', 'afsprakenKaart'].filter((i) => document.querySelector('#s-maand #' + i)));
@@ -137,12 +138,16 @@ test('f. zonder drie afgeronde maanden geen vooruitblik, en dat staat er', async
   expect(r.t).not.toContain('Komt uit rond');
 });
 
-test('g. de tijdlijn draagt de boete in november en wat er vanaf november verandert', async ({ page }) => {
+/* v365: de tijdlijn is vervallen. Wat hij droeg staat er nog: de boete in de lijst reserveringen (de tegel op Grip)
+   en het potje dat stopt in de lijst potjes van volgende maand (de voetlink van de lijst van deze maand). */
+test('g. zonder tijdlijn staan de boete en het potje dat stopt nog in hun eigen lijst', async ({ page }) => {
   await stand(page, { budgetsNext: { abonnement: 0 } });
   await page.evaluate(() => { closeSheet(); go('maand'); });
-  const t = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#gripTijdlijn [data-tlmaand]')].map((e) => [e.dataset.tlmaand, [...e.querySelectorAll('.tl3-e')].map((x) => x.innerText)])));
-  expect(Object.keys(t)).toEqual(['2026-10', '2026-11', '2026-12']);
-  expect(t['2026-11']).toEqual(expect.arrayContaining(['Boetes cjib €299', 'Abonnementen stopt']));
+  expect(await page.locator('#gripTijdlijn').count()).toBe(0);
+  await page.evaluate(() => openReserveringen());
+  expect(await page.locator('#sheet').innerText()).toMatch(/Boetes cjib/i);
+  await page.evaluate(() => { closeSheet(); openPotjesVerdeling(thisYM(), 'next'); });
+  expect(await page.locator('#sheet').innerText()).toMatch(/Abonnementen[\s\S]*stopt/);
 });
 
 test('h. de pop-up verschijnt op 1 november, niet opnieuw na Later op dezelfde dag, wel de dag erna', async ({ page }) => {
@@ -209,7 +214,8 @@ for (const w of [360, 390]) test(`l. hoogte van Grip op ${w}px`, async ({ page }
   await stand(page);
   await page.evaluate(() => { closeSheet(); openMaandBeslis('dekking'); afspraakDekkingZet(); go('maand'); });
   const h = await page.evaluate(() => { const s = document.getElementById('s-maand'); const r = (id) => { const e = document.getElementById(id); return e ? Math.round(e.getBoundingClientRect().height) : 0; };
-    return { tegels: r('gripTegels'), deze: r('gripDezeMaand'), tijd: r('gripTijdlijn'), totaal: Math.round(s.scrollHeight), over: document.documentElement.scrollWidth > window.innerWidth }; });
+    return { tegels: r('gripTegels'), deze: r('gripDezeMaand'), tijd: r('gripTijdlijn'), koop: r('gripKoopcheck'), totaal: Math.round(s.scrollHeight), over: document.documentElement.scrollWidth > window.innerWidth }; });
+  console.log('grip-dashboard', w, JSON.stringify(h));
   /* GEMETEN bij v340 op deze stand (met de afspraak van EUR 131): de tegels 171px, Deze maand 176px op 360
      en 158px op 390, de tijdlijn 129px, en Grip 582px op 360 en 564px op 390. Op v339 was Grip op dezelfde
      stand 966px op 360 en 945px op 390.
@@ -217,7 +223,7 @@ for (const w of [360, 390]) test(`l. hoogte van Grip op ${w}px`, async ({ page }
      390, en Grip 721px en 703px (de zin is hier een regel: geen potje komt boven uit). */
   expect(h.over).toBe(false);
   expect(h.tegels).toBe(171);
-  expect(h.tijd).toBe(129);
+  expect(h.tijd).toBe(0);   // v365: de tijdlijn is vervallen
   // v354: de kop is het stuurgetal en de regel vaste lasten komt onder de bridge: 411px op 360 en 373 op 390
   // v355: Abonnementen heeft hier geen herkende incasso en is dus variabel; de regel vaste lasten heeft dan geen
   // afwijking om te noemen (Huur EUR 900 van 900): 374px op 360 en 336 op 390 (gemeten)
@@ -225,7 +231,9 @@ for (const w of [360, 390]) test(`l. hoogte van Grip op ${w}px`, async ({ page }
   // de bridge: 315px op 360 en 297 op 390, dezelfde hoogte als bij v349 (gemeten)
   // v364: "Budget aanpassen ›" in de kop: op 360px breekt de kop over twee regels (+18px), op 390 niet (gemeten)
   expect(h.deze).toBe(w === 360 ? 333 : 297);
-  expect(h.totaal).toBe(w === 360 ? 739 : 703);
+  // v365: de koopcheck erbij (76px) en de tijdlijn eraf (129px plus zijn marge): 686px op 360 en 650 op 390 (gemeten)
+  expect(h.koop).toBe(76);
+  expect(h.totaal).toBe(w === 360 ? 686 : 650);
 });
 
 /* De handelingen. Uit eten heeft een potje van 150; in juli, augustus en september ging er na dag 4

@@ -62,7 +62,7 @@ test.describe('1 · de kaart op Plan is weg', () => {
 
   test('elke ingang naar de lijst opent de sheet en geen enkele gaat naar Plan', async ({ page }) => {
     await boot(page, seed(37, BOETE));
-    const src = await kaalUit(page, 'maandRegels', 'gripTegels', 'gripTijdlijn', 'renderVooruit');
+    const src = await kaalUit(page, 'maandRegels', 'gripTegels', 'renderVooruit');   // v365: gripTijdlijn is vervallen
     expect(src).not.toMatch(/resDekkingCard/);
     // de link "Dekking reserveringen aanpassen" in de sheet van de regel opent de lijst
     await page.evaluate(() => { go('maand'); });

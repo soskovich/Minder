@@ -173,7 +173,7 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
     /* v315: maandPlanRegels() is vervallen. v340: maandVanafRegels() ook; wat vanaf volgende maand
        verandert leest de tijdlijn uit maandVanafData(). Alle bouwstenen van Grip worden gelezen. */
     const src = await kaalUit(page, 'renderMaand', 'maandIngang', 'maandCoachIngang', 'maandVanafData',
-      'gripTegels', 'gripLetOpItems', 'dezeMaandKaart', 'gripTijdlijnData', 'renderMaandBeslisSheet');
+      'gripTegels', 'gripLetOpItems', 'dezeMaandKaart', 'gripKoopcheck', 'renderMaandBeslisSheet');   // v365: gripTijdlijnData is vervallen
     expect(src).not.toMatch(/kijkMaand\(\)|curMonth/);
   });
 
@@ -187,7 +187,8 @@ test.describe('d · Grip leest altijd nu, de kiezer van Inzichten raakt hem niet
     const ins = await tekst(page, 'ins');
     expect(ins).toMatch(/uitgegeven/i);                // de budgetstand rekent door
     // v359: een afgesloten maand draagt de uitkomst tegen je potjes, en geen tempo of dagteller
-    expect(ins).toMatch(/in je potjes/i);
+    // v365: het maandbudget van een afgesloten maand heeft twee delen, Uitgegeven en Over (of Erboven)
+    expect(ins).toMatch(/ Over €[\d.]+ onder budget| Erboven €[\d.]+ boven budget/);
     expect(ins).not.toMatch(/tot vandaag/i);
   });
 

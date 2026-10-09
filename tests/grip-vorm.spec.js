@@ -433,20 +433,21 @@ test('h: de potjes-wijziging noemt het potje dat verandert', async ({ page }) =>
   expect(r.B.sport).toBe(undefined);
   expect(r.data[0].lab).toBe('Je potjes');
   expect(r.data[0].sub).toBe('Sport & gezondheid erbij voor €50, de rest ongewijzigd');
-  expect(r.tl).toEqual([[PLUS(1), 'Sport & gezondheid erbij']]);
+  expect(r.data[0].kort).toBe('Sport & gezondheid erbij');
+  expect(r.tl).toEqual([]);   // v365: de tijdlijn op Grip is vervallen
 });
 
 
 test('h: bij meer dan één wijziging noemt de rij het aantal', async ({ page }) => {
   await boot(page, { set: { budgetsNext: { huur: 950, boodschappen: 450, sport: 50 } } });
-  const r = await page.evaluate(() => document.getElementById('gripTijdlijn').innerText);
+  const r = await page.evaluate(() => maandVanafData()[0].kort);   // v365: zonder tijdlijn de bron zelf
   expect(r).toContain('3 potjes veranderen');
 });
 
 test('h: een potje dat terugzakt heet terug en niet omhoog', async ({ page }) => {
   await boot(page, { set: { budgets: { huur: 900, boodschappen: POTJE, sport: 96 },
     budgetsNext: { huur: 900, boodschappen: POTJE, sport: 50 } } });
-  const r = await page.evaluate(() => ({ sub: maandVanafData()[0].sub, tl: document.getElementById('gripTijdlijn').innerText }));
+  const r = await page.evaluate(() => ({ sub: maandVanafData()[0].sub, tl: maandVanafData()[0].kort }));   // v365: zonder tijdlijn
   expect(r.sub).toBe('Sport & gezondheid terug van €96 naar €50, de rest ongewijzigd');
   expect(r.tl).toContain('Sport & gezondheid naar €50');
 });

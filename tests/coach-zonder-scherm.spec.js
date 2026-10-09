@@ -192,11 +192,12 @@ test.describe('c · toon en avatar blijven instelbaar', () => {
 });
 
 test.describe('d · de koopcheck houdt een ingang', () => {
-  test('een regel op Home opent de check', async ({ page }) => {
+  // v365: de koopcheck staat bovenaan Grip en niet meer op Home (sturen hoort op Grip)
+  test('een regel op Grip opent de check', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => go('dash'));
-    await page.waitForSelector('#s-dash .homehero');
-    const regel = page.locator('#s-dash [onclick="openBuy()"]');
+    await page.evaluate(() => go('maand'));
+    await expect(page.locator('#s-dash [onclick="openBuy()"]')).toHaveCount(0);
+    const regel = page.locator('#s-maand [onclick="openBuy()"]');
     await expect(regel).toHaveCount(1);
     expect((await regel.innerText()).toLowerCase()).toContain('ik wil iets kopen');
     await regel.click();

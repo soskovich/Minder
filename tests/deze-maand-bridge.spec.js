@@ -334,7 +334,8 @@ test.describe('h. hoogte op 360 en 390px', () => {
   // kaart Deze maand blijft 271px en Grip gaat van 525 naar 649 op 360 en naar 634 op 390 (gemeten; de terugval
   // "te weinig ingesteld" blijft staan, want de lek-regel zegt niets over wat er is ingesteld).
   // v364: "Budget aanpassen ›" in de kop laat hem op 360px over twee regels breken: kaart en Grip +18px, 390 gelijk.
-  const NA = { 360: { kaart: 289, grip: 667 }, 390: { kaart: 271, grip: 634 } };
+  // v365: de koopcheck staat bovenaan Grip (76px plus zijn marge): Grip 760 op 360 en 727 op 390 (gemeten)
+  const NA = { 360: { kaart: 289, grip: 760 }, 390: { kaart: 271, grip: 727 } };
   for (const w of [360, 390]) test('breedte ' + w, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await boot(page); await grip(page);

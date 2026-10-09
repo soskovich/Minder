@@ -40,7 +40,11 @@ const kaart = async (page) => {
     return {
       tekst: t(k), teller: k.querySelector('[data-afteller]').dataset.afteller, sheetTeller: k.querySelector('[data-afteller]').dataset.afteller,
       punten: [...k.querySelectorAll('[data-afpunt]')].map((e) => ({ punt: e.dataset.afpunt, af: e.dataset.af === '1', tekst: t(e) })),
-      afspraken: [...k.querySelectorAll('[data-afspraak]')].map((e) => ({ status: e.dataset.afstatus, tekst: t(e), box: e.querySelector('[data-box]').dataset.box })),
+      /* v365: de afspraken staan niet meer in de afsluiting (die telt alleen afsluittaken). Hun stand is dezelfde
+         rij (afspraakRij) voor dezelfde lijst (afsprakenVoor), hier los getekend. */
+      inSheet: k.querySelectorAll('[data-afspraak]').length,
+      afspraken: (() => { const d = document.createElement('div'); d.innerHTML = afsprakenVoor(afsluitMaand()).map((a) => afspraakRij(a)).join('');
+        return [...d.querySelectorAll('[data-afspraak]')].map((e) => ({ status: e.dataset.afstatus, tekst: t(e) || e.textContent.replace(/\s+/g, ' ').trim(), box: e.querySelector('[data-box]').dataset.box })); })(),
       knop: k.querySelector('[data-afsluit]') ? k.querySelector('[data-afsluit]').dataset.afsluit : null,
       grip: !!document.querySelector('#s-maand #afsluitKaart, #s-maand [data-afteller]'),
     };
@@ -89,7 +93,9 @@ test('b. de stand op 4 oktober: logboek afgevinkt, dekking open, Abonnementen op
   expect(k.knop).toBe('open');                               // met open punten alleen via die knop
   // v340: de lopende afspraken staan onder Deze maand op Grip; de pop-up toont ze ook, want hij is een terugblik
   expect(await page.evaluate(() => document.querySelectorAll('#gripDezeMaand [data-afspraak]').length)).toBe(2);
-  expect(k.teller).toBe('4/7');
+  // v365: de teller telt alleen de vijf afsluittaken, en de afspraken staan niet in de sheet
+  expect(k.teller).toBe('4/5');
+  expect(k.inSheet).toBe(0);
 });
 
 test('c. een storting naar de reserveringsrekening vinkt de afspraak af', async ({ page }) => {
@@ -120,13 +126,14 @@ test('d. afsluiten met open punten bewaart ze bij september, en de kaart wordt e
   await maakAfspraken(page);
   await page.evaluate(() => openAfsluitOpen('2026-09'));
   const open = await page.$$eval('[data-afopen]', (L) => L.map((e) => e.innerText.replace(/\s+/g, ' ')));
-  expect(open.some((t) => t.includes('storting in oktober nog niet gezien'))).toBe(true);
+  // v365: een afspraak is geen open afsluitpunt
+  expect(open.some((t) => t.includes('storting in oktober nog niet gezien'))).toBe(false);
   // openen schrijft niets
   expect(await page.evaluate(() => !!(SET.maandAfsluiting || {})['2026-09'])).toBe(false);
   await page.evaluate(() => maandAfsluiten('2026-09', true));
   const rec = await page.evaluate(() => SET.maandAfsluiting['2026-09']);
   expect(rec.op).toBe('2026-10-04');
-  expect(rec.open.map((o) => o.feit)).toEqual(expect.arrayContaining(['storting in oktober nog niet gezien', 'gemeten in november']));
+  expect(rec.open.map((o) => o.feit)).not.toEqual(expect.arrayContaining(['storting in oktober nog niet gezien']));
   expect(rec.afspraken.length).toBe(2);
   // v340: de maand staat in het logboek, met wat er bij het afsluiten werd bewaard
   const r = await afgesloten(page, '2026-09');
@@ -177,7 +184,7 @@ test('g. herzien telt als afgerond: stoppen vinkt af met "gestopt"', async ({ pa
   expect(dek.status).toBe('herzien');
   expect(dek.box).toBe('aan');
   expect(dek.tekst).toContain('gestopt op 4 oktober');
-  expect((await kaart(page)).teller).toBe('5/7');            // herzien telt als af
+  expect((await kaart(page)).teller).toBe('4/5');            // v365: een afspraak telt niet in de afsluiting
 });
 
 test('h. aanpassen herziet de oude afspraak en maakt een nieuwe', async ({ page }) => {

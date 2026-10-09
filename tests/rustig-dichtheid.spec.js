@@ -134,7 +134,9 @@ test.describe('c · niets anders verandert', () => {
        De volgorde blijft dezelfde en staat als eigenschap in valt-op-signalen.spec.js; hier toetsen
        we alleen dat de signaalregels nog door renderIns() worden geschreven. */
     // v359: renderIns() is het dashboard: filter, tegels, kop-inzicht, grafiek, keuzekaart en patronen
-    for (const f of ['insFilterKnop(', 'insTegelRaster(', 'insKopInzicht(', 'spendVsBudgetChart(', 'insKeuzeKaart(', 'insPatronenKaart(']) expect(src).toContain(f);
+    // v365: het maandbudget als geheel (insMaandBudget) met de tegels als terugval, en de patronen in een sheet
+    for (const f of ['insFilterKnop(', 'insMaandBudget(', 'insTegelRaster(', 'insKopInzicht(', 'spendVsBudgetChart(', 'insKeuzeKaart(']) expect(src).toContain(f);
+    expect(src).not.toContain('insPatronenKaart(');
     expect(await page.evaluate(() => COLLAP_DEF.openSpendChart)).toEqual({ rustig: false, rest: true });
   });
 

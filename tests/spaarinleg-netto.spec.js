@@ -61,11 +61,13 @@ async function boot(page, payload) {
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof safeToSpend === 'function');
 }
 
+/* v365: de tegel "Nog te sparen" op Inzichten is weg (sparen staat op Plan). Dezelfde post met dezelfde bron
+   (safeToSpend().saveReserved) staat in de opbouw van veilig te besteden, en die rij leest deze helper. */
 const spaarRij = (page) => page.evaluate(() => {
-  go('ins');
-  // v359: de post is de tegel "Nog te sparen" (#insTegels [data-instegel="sparen"])
-  const t = document.querySelector('#insTegels [data-instegel="sparen"]');
-  return t ? t.innerText.replace(/\s+/g, ' ').trim() : '(geen)';
+  go('dash'); openSafeToSpend();
+  const lab = safeClaim('saveReserved').label;
+  const t = [...document.querySelectorAll('#sheet .row')].find((r) => r.innerText.startsWith(lab));
+  const tekst = t ? t.innerText.replace(/\s+/g, ' ').trim() : '(geen)'; closeSheet(); return tekst;
 });
 const cijfers = (page) => page.evaluate(() => {
   const S = safeToSpend();
@@ -111,7 +113,7 @@ test.describe('b - de vijf gevallen', () => {
     expect(c.nog).toBe(2000);
     const rij = await spaarRij(page);
     expect(rij).toContain('€3.000');
-    expect(rij).toContain('€1.000 al opzij');
+    expect(rij).toContain('min €1.000 deze maand al gespaard');
     expect(rij).not.toContain('gehaald');
   });
 
@@ -120,7 +122,7 @@ test.describe('b - de vijf gevallen', () => {
     const c = await cijfers(page);
     expect(c.opzij).toBe(3000);
     expect(c.nog).toBe(0);
-    expect(await spaarRij(page)).toContain('gehaald · €3.000 opzij');
+    expect(await spaarRij(page)).toContain('je maandbedrag van €3.000 heb je deze maand al gespaard');
   });
 
   test('netto onder nul: eruit gehaald, geen gehaald en geen opzij', async ({ page }) => {
@@ -130,7 +132,7 @@ test.describe('b - de vijf gevallen', () => {
     expect(c.nog).toBe(4500);          // je maandbedrag plus wat je eruit haalde
     const rij = await spaarRij(page);
     expect(rij).toContain('€3.000');
-    expect(rij).toContain('€1.500 dat je eruit haalde');   // v359: de woorden van de tegel
+    expect(rij).toContain('plus €1.500 die je eruit haalde');   // v365: de woorden van de opbouw-sheet
     expect(rij).not.toContain('gehaald ·');
     expect(rij).not.toContain('opzij');
   });
@@ -141,7 +143,7 @@ test.describe('b - de vijf gevallen', () => {
     expect(c.opzij).toBe(0);
     expect(c.nog).toBe(3000);
     const rij = await spaarRij(page);
-    expect(rij).toContain('je spaarinleg van €3.000');
+    expect(rij).toContain('je maandbedrag €3.000');
     expect(rij).not.toContain('opzij');
     expect(rij).not.toContain('eruit gehaald');
     // en dat is letterlijk dezelfde regel als een maand waarin je niets deed
@@ -260,12 +262,11 @@ test.describe('f - layout', () => {
     test(`de regel met 'eruit gehaald' past op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 820 });
       await boot(page, seed([naarSpaar(1000), uitSpaar(2500)]));
-      await page.evaluate(() => go('ins'));
+      await page.evaluate(() => { go('dash'); openSafeToSpend(); });
       const r = await page.evaluate(() => {
-        const rij = document.querySelector('#insTegels [data-instegel="sparen"]');
-        /* v359: de tegel staat in een raster en is zo hoog als zijn buur; wat de zin kost is de regel onder het
-           bedrag, en die mag hooguit twee regels zijn (GEMETEN 36px op 360 en 390) en niet over de tegel heen. */
-        const ms = rij.querySelector('.ms'), b = ms.getBoundingClientRect(), k = rij.getBoundingClientRect();
+        /* v365: de regel in de opbouw van veilig te besteden; hooguit twee regels en niet over de rij heen. */
+        const rij = [...document.querySelectorAll('#sheet .row')].find((x) => x.innerText.startsWith(safeClaim('saveReserved').label));
+        const ms = rij.querySelector('.small'), b = ms.getBoundingClientRect(), k = rij.getBoundingClientRect();
         return { over: document.body.scrollWidth - document.body.clientWidth,
                  hoogte: Math.round(b.height), binnen: b.right <= k.right + 0.5 && b.bottom <= k.bottom + 0.5 };
       });

@@ -48,19 +48,16 @@ test.describe('a · elk verplaatst element staat op precies één scherm', () =>
     /* v340: de kaart 'Vanaf <maand>' is opgegaan in de tijdlijn op Grip. Het element is nu het punt
        met de korte vorm uit maandVanafData(), in de kolom van volgende maand; die korte vorm noemt
        het potje en het nieuwe bedrag, en is daarmee net zo uniek als de kop was. */
-    const r = await page.evaluate(() => {
-      const v = maandVanafData()[0];
-      const el = document.querySelector('#s-maand #gripTijdlijn [data-tlmaand="' + nextYM(SET.budgetMonth || thisYM()) + '"] [data-tlsoort="vanaf"]');
-      return { v, tekst: el ? el.textContent : null, onclick: el ? el.getAttribute('onclick') : '' };
-    });
+    /* v365: de tijdlijn op Grip is vervallen. De rij staat op geen van beide schermen meer, en de lijst van
+       volgende maand is bereikbaar via de voetlink van de lijst van deze maand (openPotjesVerdeling). */
+    const r = await page.evaluate(() => { const v = maandVanafData()[0]; openPotjesVerdeling(thisYM());
+      const voet = [...document.querySelectorAll('#sheet [onclick]')].map((e) => e.getAttribute('onclick')).find((o) => o.includes("'next'"));
+      closeSheet(); return { v, voet }; });
     expect(r.v.lab).toBe('Je potjes');
-    expect(r.tekst).toBe(r.v.kort);
-    expect(t.maand).toContain(r.v.kort);
+    expect(t.maand).not.toContain(r.v.kort);
     expect(t.ins).not.toContain(r.v.kort);
-    // en het is dezelfde sheet als voorheen: de volgende-maand-laag van openPotjesVerdeling
     expect(r.v.act).toContain('openPotjesVerdeling');
-    expect(r.v.act).toContain("'next'");
-    expect(r.onclick).toBe(r.v.act);
+    expect(r.voet).toBe(r.v.act);
   });
 
   /* v228: 'boven je inkomen-limiet' verhuisde in v178 naar Maand en is daar vervallen. De regel

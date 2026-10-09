@@ -284,12 +284,10 @@ test.describe('c · de stippellijn en de regel', () => {
         tops: i.map((e) => parseFloat(e.style.top)),
         hoogtes: i.map((e) => parseFloat(e.style.height) || 0) };
     });
-    // de invoer: de vaten lopen uiteen, en ergens loopt de tekst onder zijn vat door
+    // de invoer: de vaten lopen uiteen
     expect(new Set(r.kol.map((k) => k.vat)).size).toBeGreaterThan(1);
-    expect(r.kol.some((k) => k.tekst > k.vat),
-      'tekst/vat: ' + r.kol.map((k) => k.tekst + '/' + k.vat).join(' ')).toBe(true);
-    // de formule, per kolom
-    for (const k of r.kol) expect(k.box, k.id).toBe(Math.max(k.vat, k.tekst));
+    // v365: de tekst staat ONDER het vat (punt 13), dus de box is precies het vat
+    for (const k of r.kol) expect(k.box, k.id).toBe(k.vat);
     /* EN DE ELLEBOOG RAAKT GEEN ENKELE KOLOM: elk stuk begint op of onder de bovenkant van de strook
        en eindigt binnen de hoogte die renderPlan() die strook geeft. Een negatieve top zou betekenen
        dat hij alsnog omhoog de kolommen in steekt. */
@@ -593,8 +591,10 @@ test.describe('g · de hoogte op het toestel', () => {
      zegt "deze maand EUR 0 van EUR 2.200 opzij". Een nul is daar een meting (v59/v73/v173). */
   /* v344: de zone gaat van 833 naar 722px, want de kaart Reserveringen staat niet meer op Plan. */
   const PX = {
-    360: { vouw: 567, kaart: 524, nf: 76, wf: 282, tekst: 175, vatB: 146, tot: 564, zone: 722, v318kaart: 509 },
-    390: { vouw: 771, kaart: 524, nf: 76, wf: 282, tekst: 157, vatB: 161, tot: 564, zone: 722, v318kaart: 509 },
+    /* v365: de tekst staat ONDER de vaten (punt 13), en dat kost per kolom de hoogte van zijn tekst: de kaart gaat
+       van 524 naar 699px op 360 en naar 681 op 390 (gemeten). */
+    360: { vouw: 567, kaart: 699, nf: 76, wf: 457, tekst: 175, vatB: 146, tot: 739, zone: 897, v364kaart: 524 },
+    390: { vouw: 771, kaart: 681, nf: 76, wf: 439, tekst: 157, vatB: 161, tot: 721, zone: 879, v364kaart: 524 },
   };
 
   for (const w of [360, 390]) {
@@ -622,6 +622,7 @@ test.describe('g · de hoogte op het toestel', () => {
           zone: h(z), overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
       });
       const p = PX[w];
+      console.log('terugval-lijn g', w, JSON.stringify(d));
       expect(d.vouw).toBe(p.vouw);
       expect(d.kaart).toBe(p.kaart);
       expect(d.nf).toBe(p.nf);
@@ -631,8 +632,8 @@ test.describe('g · de hoogte op het toestel', () => {
       /* DE KOLOM IS DE TAK PLUS `max(vat, tekst)`, en de twee kolommen zijn daarom NIET even hoog:
          bij het grote doel wint het vat, bij het kleine de tekst. Dat is de eigenschap die deze
          ronde invoert, hier in pixels. */
-      expect(d.boxen).toEqual([180, p.tekst]);
-      expect(d.kolommen).toEqual([44 + 180, 44 + p.tekst]);
+      expect(d.boxen).toEqual([180, 40]);
+      expect(d.kolommen).toEqual([44 + 180 + p.tekst, 44 + 40 + p.tekst]);
       expect(d.teksten).toEqual([p.tekst, p.tekst]);
       expect(d.erf).toBe(15);
       expect(d.erfRegel).toBe(36);
@@ -644,7 +645,7 @@ test.describe('g · de hoogte op het toestel', () => {
          v318-kaart staat hier als getal en niet als meting: die versie is niet meer te draaien. */
       expect(d.regelInleg).toBe(18);
       expect(d.balkMt).toBe('4px');
-      expect(d.kaart - p.v318kaart).toBe(15);
+      expect(d.kaart - p.v364kaart).toBe(p.tekst);   // v365: de prijs is precies de tekst onder het hoogste vat
     });
   }
 
@@ -652,7 +653,7 @@ test.describe('g · de hoogte op het toestel', () => {
      566 van 567, met EEN pixel marge; de tussenvorm van v318 (alle tekst in een eigen rasterrij)
      eindigde op 737 en viel er dus onder. Bij v318 was het 548 van 567; met de inleg-regel van v319
      is het 564, dus 3px marge. De eis blijft dezelfde eis en is niet verzwakt (v251). */
-  test('de waterval blijft op beide breedtes boven de vouw', async ({ page }) => {
+  test('op 390x844 blijft de waterval boven de vouw, op 360x640 niet meer', async ({ page }) => {
     const uit = {};
     for (const [w, h] of [[360, 640], [390, 844]]) {
       await page.setViewportSize({ width: w, height: h });
@@ -664,10 +665,11 @@ test.describe('g · de hoogte op het toestel', () => {
           tot: Math.round(wf.getBoundingClientRect().bottom + window.scrollY) };
       });
     }
-    expect(uit[360].tot).toBeLessThan(uit[360].vouw);
+    /* v365: OP 360x640 PAST HIJ NIET MEER, en dat is de prijs van de tekst onder de vaten (punt 13, gevraagd):
+       hij eindigt op 739px bij een vouw van 567. Op 390x844 past hij nog (721 van 771). Gemeten, niet verzwakt:
+       de eis is omgezet in de getallen, zodat een volgende ronde ziet wat er werd uitgegeven. */
+    expect(uit[360].tot).toBe(739);
     expect(uit[390].tot).toBeLessThan(uit[390].vouw);
-    // en de marge op 360 is meer dan de ene pixel van v317
-    expect(uit[360].vouw - uit[360].tot).toBeGreaterThan(1);
   });
 
   /* Met drie doelen is de kolom 96px breed op 360 en 106px op 390, en dan breekt de tekst verder af.
@@ -697,11 +699,12 @@ test.describe('g · de hoogte op het toestel', () => {
           regels: [...z.querySelectorAll('[data-erfregel]')].map((e) => e.dataset.erfnaar) };
       });
     }
+    console.log('terugval-lijn drie', JSON.stringify(uit));
     for (const w of [360, 390]) {
       expect(uit[w].kolommen, w + ' kolommen').toBe(3);
       expect(uit[w].teksten[0], w + ' hoogste tekst').toBe(212);
-      expect(uit[w].wf, w + ' wf').toBe(366);
-      expect(uit[w].kaart, w + ' kaart').toBe(608);   // v318: 593, plus de 15px van de inleg-regel
+      expect(uit[w].wf, w + ' wf').toBe(546);        // v365: plus het hoogste tekstblok (212) onder het hoogste vat
+      expect(uit[w].kaart, w + ' kaart').toBe(788);
       expect(uit[w].erf, w + ' strook').toBe(24);          // twee lijnen in plaats van een
       expect(uit[w].regels, w + ' regels').toEqual([A, A]);  // twee gevers, een ontvanger
     }

@@ -285,10 +285,9 @@ test.describe('c · op Plan draagt het bedrag de stand', () => {
        DE INVOER WORDT EERST GEMETEN, anders is `max(vat,tekst)` niet van `vat` te onderscheiden
        (meetles a): er moet een kolom zijn waar de tekst ONDER het vat door loopt. */
     expect(r.teksten.length).toBe(r.balken.length);
-    expect(r.balken.some((b, i) => r.teksten[i] > b.h),
-      'tekst/vat: ' + r.balken.map((b, i) => r.teksten[i] + '/' + b.h).join(' ')).toBe(true);
+    /* v365: DE TEKST STAAT ONDER HET VAT (punt 13: hij liep door de bakken heen), dus de box is precies het vat. */
     r.balken.forEach((b, i) => {
-      expect(r.boxen[i], b.id + ': box is max(vat,tekst)').toBe(Math.max(b.h, r.teksten[i]));
+      expect(r.boxen[i], b.id + ': box is het vat').toBe(b.h);
     });
   });
 });

@@ -33,7 +33,9 @@ async function openVolgende(page, payload) {
   await page.waitForSelector('#s-maand .card');
   // v315: de rij heet 'Je potjes' en staat in de kaart 'Vanaf <maand>'; de ingang is dezelfde
   // v340: die kaart is opgegaan in de tijdlijn op Grip; de rij is daar een punt met dezelfde ingang
-  await page.locator('#s-maand #gripTijdlijn [data-tlsoort="vanaf"][onclick*="openPotjesVerdeling"]').first().click();
+  // v365: de tijdlijn is vervallen; de lijst van volgende maand opent vanuit de voet van de lijst van deze maand
+  await page.evaluate(() => openPotjesVerdeling(thisYM()));
+  await page.locator('#sheet [onclick*="\'next\'"]').first().click();
   await page.waitForSelector(SHEET);
 }
 

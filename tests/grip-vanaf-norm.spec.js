@@ -465,22 +465,18 @@ test('9b drie rijen, elk alleen als er iets verandert', async ({page})=>{
   expect(r.n).toBe(3);                        // norm en drempel komen erbij
   expect(r.D.map(v=>v.lab)).toEqual(['Je potjes','Ondergrens voor je buffer','Buffer die je wilt voor beleggen']);
   expect(r.D[2].sub).toContain('volgt je ondergrens');
-  // op Grip: drie punten in de kolom van volgende maand, met de korte vorm en dezelfde ingang
-  expect(r.punten.map(x=>x.maand)).toEqual([r.vol,r.vol,r.vol]);
-  expect(r.punten.map(x=>x.tekst)).toEqual(r.D.map(v=>v.kort));
-  expect(r.punten.map(x=>x.act)).toEqual(r.D.map(v=>v.act));
+  // v365: de tijdlijn op Grip is vervallen; de rijen bestaan nog (maandVanafData) maar staan er niet meer als punt
+  expect(r.punten).toEqual([]);
 });
 
 test('9c met een eigen beleggingsdrempel blijft die rij weg', async ({page})=>{
   await boot(page, {set:{beleggenDrempel:8}});
   const r=await page.evaluate(()=>{
     normChipZet(6); normVastzetten(); closeSheet(); go('maand');
-    return {D:maandVanafData(), txt:document.getElementById('gripTijdlijn').innerText};
+    return {D:maandVanafData()};
   });
   expect(r.D.length).toBe(1);
   expect(r.D[0].lab).toBe('Ondergrens voor je buffer');
-  expect(r.txt).toContain(r.D[0].kort);
-  expect(r.txt).not.toContain('buffer voor beleggen');
 });
 
 test('9d de potjes-rij is VERHUISD en staat precies een keer op Grip', async ({page})=>{
@@ -492,8 +488,9 @@ test('9d de potjes-rij is VERHUISD en staat precies een keer op Grip', async ({p
     return {kort, n:t.split(kort).length-1, kaarten, vanafKop:/^VANAF /im.test(t),
       voet:typeof window.maandVoetBlok, plan:typeof window.maandPlanRegels, kaart:typeof window.maandVanafKaart};
   });
-  expect(r.n).toBe(1);
-  expect(r.kaarten).toEqual(['gripTijdlijn']);   // in de tijdlijn en in geen andere kaart
+  // v365: de tijdlijn is vervallen, dus de korte vorm staat nergens meer op Grip (gemeld in BESLISSINGEN.md)
+  expect(r.n).toBe(0);
+  expect(r.kaarten).toEqual([]);
   expect(r.vanafKop).toBe(false);                // de eigen kaart 'Vanaf <maand>' bestaat niet meer
   expect(r.voet).toBe('undefined');           // de voet is met de verhuizing vervallen
   expect(r.plan).toBe('undefined');

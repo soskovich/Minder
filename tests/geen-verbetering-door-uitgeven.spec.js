@@ -67,6 +67,8 @@ const meet = (page) => page.evaluate(() => {
   const tekst = d.innerText.replace(/\s+/g, ' ');
   const k = d.querySelector('[data-instegel="potjes"]');
   const vp = k ? k.querySelector('.vl').innerText.match(/€([\d.]+)/) : null;
+  // v365: Nog te ontvangen staat op Home (dezelfde bron, monthLiquidity().incDue)
+  tegels['Nog te ontvangen'] = Math.round(monthLiquidity().incDue);
   return { tegels, varPlan: vp ? +vp[1].replace(/\./g, '') : 0, tekst,
     kaartTekst: k ? k.innerText.replace(/\s+/g, ' ') : '',
     uitgegeven: Math.round(catSpendMap(curMonth || months()[months().length - 1]).boodschappen || 0) };
@@ -221,8 +223,8 @@ test.describe('b · het samengestelde getal is weg en komt niet terug', () => {
         inPotjes: VP.budget - VP.gebruikt };
     });
     expect(r.tg['Nog te betalen · vast']).toBe(r.fixDue);
-    expect(r.tg['Nog te ontvangen']).toBe(r.incDue);
-    expect(r.tg['Nog te sparen']).toBe(r.saveReserved);
+    // v365: ontvangen staat op Home, sparen op Plan
+    expect(await page.evaluate(() => { go('dash'); return +document.getElementById('homeOntvangen').dataset.ontvangen; })).toBe(r.incDue);
     /* v308: hier stond r.bron, de tempo-som. Het getal op die regel is sinds v250 de AFTREKKING,
        en die twee waren hetzelfde zolang een potje met ruimte zijn hele onbestede deel in de
        tempo-som droeg. De vierde tegel leest dus varBudget min gebruikt. */
