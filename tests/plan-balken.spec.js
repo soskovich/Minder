@@ -273,7 +273,7 @@ test.describe('c · de balken staan op schaal, de vulling is de voortgang', () =
   test('de vulling is gespaard gedeeld door doel, in procenten', async ({ page }) => {
     await boot(page, Object.assign({
       goals: [KK({ gespaard: 2500, streefdatum: KK_STREEF }), IW({ gespaard: 300, streefdatum: IW_STREEF })],
-      planOrder: ['noodfonds', ID_KK, ID_IW] }, VOL));
+      planOrder: ['noodfonds', ID_KK, ID_IW] }, VOL, { spaar: 5301 + 2500 + 300 }));   // v371: de balk toont geld, dus het staat er
     const B = await balken(page);
     const P = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, { g: p.gespaard, d: p.doel }])));
     for (const b of B) {
@@ -355,7 +355,7 @@ test.describe('d · het streepje', () => {
 
   test('een doel dat voorloopt: de vulling staat voorbij het streepje', async ({ page }) => {
     await boot(page, Object.assign({ goals: [KK({ gespaard: 9000, streefdatum: overMnd(12),
-      startDatum: na(-12), startStand: 0 })], planOrder: ['noodfonds', ID_KK] }, VOL));
+      startDatum: na(-12), startStand: 0 })], planOrder: ['noodfonds', ID_KK] }, VOL, { spaar: 5301 + 9000 }));   // v371: geld achter de toewijzing
     const b = (await balken(page)).find((x) => x.id === ID_KK);
     expect(b.vulling[0]).toBeGreaterThan(b.streep);
     expect(b.sr).toMatch(/voor/);
@@ -366,7 +366,8 @@ test.describe('d · het streepje', () => {
       startDatum: na(-12), startStand: 0 })], planOrder: ['noodfonds', ID_KK] }, VOL));
     // de stand die de app zelf verwacht, uit dezelfde bron; geen nagerekend getal
     const verwacht = await page.evaluate((id) => doelStreepje(allocatePlan().find((x) => x.id === id)).verwacht, ID_KK);
-    await page.evaluate((v) => { SET.goals[0].gespaard = v; save(); render(); go('vooruit'); }, verwacht);
+    /* v371: de balk toont geld, dus het saldo draagt de toewijzing (anders staat hij als 'zonder geld'). */
+    await page.evaluate((v) => { SET.goals[0].gespaard = v; for (const a in SET.manualBal) if (/SAVE/.test(a)) SET.manualBal[a] = 5301 + v; save(); render(); go('vooruit'); }, verwacht);
     /* De vulling rendert als heel percentage en het streepje als kommagetal, dus ze kunnen tot een
        half procent schelen zonder dat er iets mis is. Wat hier geldt is dat ze samenvallen binnen
        dat ene procent, en dat de tekst het zegt. */

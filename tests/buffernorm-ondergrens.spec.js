@@ -204,12 +204,26 @@ test.describe('2 - de controle is het saldo', () => {
       .not.toContain('je noodfonds');
   });
 
+  /* v371: een lopende keuze om terug te zetten dekt haar eigen bedrag; de bufferregel noemt dat deel en de rest apart. */
+  test('een terugzetkeuze dekt haar eigen bedrag, en de rij noemt welk deel zonder geld staat', async ({ page }) => {
+    await boot(page, { norm: 2, gespaard: 1500 });
+    const r = await page.evaluate(() => {
+      SET.terugzetGat = [{ id: 'zg1', M: thisYM(), bedrag: 300, keuze: 'drie', delen: [100, 100, 100], op: vandaagYMD(),
+        bron: [{ id: 'g1', type: 'goal', naam: 'Kosten Koper', af: 300 }] }]; save();
+      return { O: spaarOver(), TB: toewijzingBovenSaldo(), gevolg: (maandRegels().find((x) => x.key === 'buffer') || {}).gevolg };
+    });
+    expect(r.O.over, 'het kale verschil blijft 500').toBe(500);
+    expect(r.O.dekt).toBe(300); expect(r.TB.verschil).toBe(200);
+    expect(r.gevolg).toContain('€300 daarvan zet je terug, de andere €200 staat zonder geld');
+  });
+
   test('de volgorde komt uit spaarOverRaakt(), en Plan leest dezelfde lijst', async ({ page }) => {
     await boot(page, { norm: 2, gespaard: 3000 });
     const r = await page.evaluate(() => {
       const raakt = spaarOverRaakt();
       const plan = (function(){ const d = document.createElement('div');
-        d.innerHTML = spaarOverLine(allocatePlan()); return d.textContent.replace(/\s+/g, ' ').trim(); })();
+        if (!d || !spaarOverLine(allocatePlan())) return ''; openSpaarOver();
+        const t = document.getElementById('spaarOverSheet').textContent.replace(/\s+/g, ' ').trim(); closeSheet(); return t; })();
       const rij = maandRegels().find((x) => x.key === 'buffer');
       return { raakt, plan, gevolg: rij.gevolg, over: spaarOver() };
     });
@@ -217,7 +231,7 @@ test.describe('2 - de controle is het saldo', () => {
     expect(r.raakt.map((x) => x.naam), 'het doel eerst, want het noodfonds levert als laatste in')
       .toEqual(['Kosten Koper']);
     expect(r.raakt[0].af, 'en het doel kan het hele verschil dragen').toBe(2000);
-    expect(r.plan, 'Plan draagt de regel met de handeling').toContain('haal €2.000 weg bij Kosten Koper');
+    expect(r.plan, 'Plan draagt de keuze in de sheet achter de regel (v371)').toContain('Verlaag de toewijzing van Kosten Koper');
     expect(r.gevolg, 'Grip noemt hetzelfde doel').toContain('Kosten Koper');
   });
 

@@ -51,10 +51,15 @@ const GEMETEN = { set: { nfToegewezen: 3050, nfToegewezenMigrated: 1 }, saldo: 2
 
 const over = (page) => page.evaluate(() => spaarOver());
 const vrij = (page) => page.evaluate(() => spaarVrij());
+/* v371: de melding is een regel bij de kop, en de uitleg staat in de sheet erachter (openSpaarOver()). Deze helper
+   leest beide: leeg als er geen regel is, anders de sheet. */
 const regel = (page) => page.evaluate(() => {
-  const d = document.createElement('div'); d.innerHTML = spaarOverLine(allocatePlan());
-  return d.textContent.replace(/\s+/g, ' ').trim();
+  if (!spaarOverLine(allocatePlan())) return '';
+  openSpaarOver(); const t = document.getElementById('spaarOverSheet').textContent.replace(/\s+/g, ' ').trim(); closeSheet(); return t;
 });
+/* v371: de correctie is een keuze in de sheet. Van onder naar boven ('v:*') als die er is, anders de ene bestemming. */
+const corrigeer = (page) => page.evaluate(() => { const D = spaarOverData(); if (!D) return;
+  const o = D.opts.find((x) => x.k === 'v:*') || D.opts.find((x) => x.soort === 'verlaag'); window._zgKeuze = o.k; spaarOverZet(); });
 const stand = (page) => page.evaluate(() => ({
   nf: Math.max(Math.round(+SET.nfToegewezen || 0), 0),
   goals: (SET.goals || []).map((g) => ({ naam: g.naam, gespaard: g.gespaard })),
@@ -139,7 +144,7 @@ test.describe('c - de volgorde is van onder naar boven, het noodfonds als laatst
   test('doelen leveren eerst in en het noodfonds blijft ongemoeid als het past', async ({ page }) => {
     await boot(page, METDOELEN);
     expect((await over(page)).over).toBe(700);
-    await page.evaluate(() => spaarOverAf());
+    await corrigeer(page);
     const na = await stand(page);
     expect(na.nf).toBe(2000);                                    // niet aangeraakt
     expect(na.goals.find((g) => g.naam === 'Vakantie').gespaard).toBe(0);      // helemaal
@@ -164,7 +169,7 @@ test.describe('c - de volgorde is van onder naar boven, het noodfonds als laatst
 test.describe('d - de correctie kan het noodfonds verlagen, want anders doet de knop niets', () => {
   test('staan de doelen op nul, dan gaat het van het noodfonds af', async ({ page }) => {
     await boot(page, GEMETEN);
-    await page.evaluate(() => spaarOverAf());
+    await corrigeer(page);
     const na = await stand(page);
     expect(na.nf).toBe(2500);
     expect((await over(page)).over).toBe(0);
@@ -195,7 +200,7 @@ test.describe('d - de correctie kan het noodfonds verlagen, want anders doet de 
   test('na de correctie is de melding weg', async ({ page }) => {
     await boot(page, GEMETEN);
     expect(await regel(page)).not.toBe('');
-    await page.evaluate(() => spaarOverAf());
+    await corrigeer(page);
     expect(await regel(page)).toBe('');
   });
 
@@ -222,8 +227,7 @@ test.describe('e - de melding is een correctie en geen alarm', () => {
     await boot(page, GEMETEN);
     await page.evaluate(() => go('vooruit'));
     const t = await page.locator('#s-vooruit').innerText();
-    expect(t).toContain('op je spaarrekening staat');
-    expect(t).toContain('€550');
+    expect(t).toContain('€550 toegewezen zonder geld');   // v371: een regel bij de kop, de uitleg in de sheet
   });
 
   test('ook met een gepauzeerd noodfonds blijft de melding staan', async ({ page }) => {

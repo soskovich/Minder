@@ -123,6 +123,29 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **TOEGEWEZEN ≤ SALDO: HET VERSCHIL BLIJFT ZICHTBAAR TOT DE GEBRUIKER HET RECHTTREKT, EN DE RIJ LAAT GELD EN PLAN APART
+  ZIEN** (`v371`, gevraagd door de gebruiker). `spaarOver()` draagt naast het kale verschil (`over`) `dekt` (wat lopende
+  terugzetkeuzes nog dekken, `terugzetDekt()`) en `zonder` (toegewezen min `dekt` min het ONAFGERONDE saldo, in centen;
+  onder EUR 0,50 nul). Een keuze dekt alleen haar EIGEN bedrag en alleen tot het geld binnen is; een storting deze maand
+  telt eerst als terugzetten (de strenge kant). GEMETEN op het toestel (EUR 3.638 toegewezen, EUR 3.000,20 saldo, EUR 231
+  eruit): EUR 637,80 zonder keuze, EUR 406,80 met de keuze voor de EUR 231. Tot `v370` verdween de melding bij elke keuze.
+  DE MELDING is een regel bij de kop van Plan (`spaarOverLine()`, `#spaarOverRegel`, `data-zondergeld`: "EUR 406,80
+  toegewezen zonder geld · bekijk ›"); de uitleg staat in de sheet (`openSpaarOver()`, `#spaarOverSheet`): de zin over plan
+  en saldo, de onttrekkingen per maand (`spaarOnttrekkingen()`, een bron met blok 14, `data-onttrekking`) en de keuzes
+  zonder voorkeuze (`data-zgkeuze`): "Verlaag de toewijzing van X" per bestemming die het hele bedrag kan dragen, `v:*` van
+  onder naar boven als de volgorde er meer raakt, en "Zet het terug" alles of over drie maanden; elk met het gevolg voor de
+  vol-datums (`terugzetScenario()`). Bevestigen (`data-zgbevestig`) pas na een keuze; `spaarOverZet()` leest opnieuw en
+  eist de keuze. De keuze staat in `SET.terugzetGat=[{id, M, bedrag, exact, keuze, bron, delen|voor, op}]` en in het
+  logboek (`data-loggat`). `terugzetActief(ym)` is de ENE lijst van lopende keuzes (opname en gat), met vier lezers: de kop
+  van Plan (`terugzetDeel()`), veilig te besteden (`terugzetSpaar()`), de projectie (`terugzetProjectie()`) en
+  `terugzetDekt()`. Grip leest `zonder` via `toewijzingBovenSaldo()`; `spaarOverAf()` is vervallen.
+  DE RIJ (`planGeldRegel()`, `data-geldregel` met `data-geld/zg/terug/inleg/som/doel`): staat er in een bron iets dat nog
+  terug moet (`tzNog`) of zonder geld is toegewezen (`zgAf`, uit `spaarOverRaakt()`, de laatste draagt de centen), dan is
+  de balk het GELD dicht (`data-geldvat`) met terug en inleg gearceerd, en de regel "EUR 3.407 in geld + EUR 231 terug +
+  EUR 362 inleg = EUR 4.000 · vol okt 2026"; de som is het doelbedrag of de verwachte stand na deze maand. "EUR 3.638
+  toegewezen" staat er dan niet. De rekensom (het terugzetbedrag blijft bij de bron) is niet veranderd. GEMETEN: de regel
+  34px, de rij 36px, de sheet 614/595px op 360/390. Spec `toegewezen-zonder-geld.spec.js`.
+  OPEN: DE SHEET "OP VOLGORDE / ZELF VERDELEN" is niet gebouwd; de prompt en de mockup daarvoor staan niet in deze sessie.
 - **DE INLEG VAN DE LOPENDE MAAND TELT MEE IN ELKE VOL-DATUM, EEN KEER** (`v370`, gevraagd door de gebruiker; sluit het
   open punt van `v316`). Maand 1 van `planVooruit()` is DEZE maand: een eta is het AANTAL inleggen met deze maand als
   eerste, en `etaDatum(n)` is de maand van de n-de inleg (`etaDatum(1)` is deze maand). `doelTempo()` telt de inleggen
@@ -6835,7 +6858,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v370` → `minder-v371`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v371` → `minder-v372`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -6871,7 +6894,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369` en `v370` naar `minder-v370`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370` en `v371` naar `minder-v371`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
