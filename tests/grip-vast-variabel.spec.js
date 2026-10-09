@@ -143,14 +143,20 @@ test.describe('d. de sheets', () => {
     await boot(page, HUURVAST); await naarGrip(page);
     await page.locator('#gripBrug [data-brugstap="vast"]').click();
     await page.waitForSelector('#gripVast');
+    /* v362: regels zonder verschil staan samen onder "N vaste lasten volgens budget"; Huur zonder betaling blijft
+       los staan, want de vraag eronder gaat erover. */
+    expect(await page.locator('#gripVast [data-vastpotje]').evaluateAll((e) => e.map((x) => x.dataset.vastpotje))).toEqual(['huur']);
+    await expect(page.locator('#gripVast [data-vastnul]')).toContainText('2 vaste lasten volgens budget');
+    await page.locator('#gripVast [data-vastnul]').click();
     expect(await page.locator('#gripVast [data-vastpotje]').evaluateAll((e) => e.map((x) => x.dataset.vastpotje))).toEqual(['huur', 'vervoer', 'verzekering']);
     expect(await page.locator('#gripVast [data-vastpotje="huur"]').innerText()).toContain('geen betaling verwacht deze maand · het potje telt mee');
-    expect(await page.locator('#gripVast [data-vastpotje="vervoer"]').innerText()).toContain('nog €537 verwacht · van je potje van €600, de rest is variabel');
+    expect(await page.locator('#gripVast [data-vastpotje="vervoer"]').innerText()).toContain('€537 komt nog) · van je potje van €600, de rest is variabel');
     expect(await page.locator('#gripVast [data-vastaanpassen]').getAttribute('onclick')).toBe("openPotForm('huur')");
   });
   test('Vervoer vanuit de vaste lasten opent het vaste deel, vanuit de bridge het variabele deel', async ({ page }) => {
     await boot(page, HUURVAST); await naarGrip(page);
     await page.locator('#gripBrug [data-brugstap="vast"]').click();
+    await page.locator('#gripVast [data-vastnul]').click();   // v362: Vervoer staat volgens budget, onder de samengevoegde regel
     await page.locator('#gripVast [data-vastpotje="vervoer"]').click();
     await page.waitForSelector('#gripPotje[data-potje="vervoer"][data-terug]');
     expect(await page.locator('#gripPotje [data-gemengd]').innerText()).toContain('De andere €63 van je potje is variabel');

@@ -8045,22 +8045,44 @@ function vasteLastenZin(S){
   if(S.geen) d.push(`${euro0(S.geen)} zonder betaling`);
   return `${euro0(S.totaal)} deze maand · ${d.join(', ')}`;
 }
-function openGripVast(){ renderGripVast(); showSheetBg(); }
+function openGripVast(){ window._gripVastNul=false; renderGripVast(); showSheetBg(); }
+/* v362: DE SHEET VERKLAART DE STAP. Tot v362 toonde hij per vaste last de uitkomst (samen EUR 1.045) terwijl de
+   bridge het verschil met het budget toont (-EUR 563), en de stap was niet na te rekenen. De kop is nu dezelfde
+   rekensom als de stap: budget min verwacht is het verschil, uit V.vaste en de stap van dezeMaandBrug() (een bron,
+   v104). Per regel is het hoofdbedrag het verschil (verwacht min het vaste deel van het budget), met eronder wat in
+   het budget staat en wat verwacht wordt (betaald plus wat nog komt). Gesorteerd op het absolute verschil; regels
+   zonder verschil staan samen onder "N vaste lasten volgens budget", uitklapbaar. Een potje zonder betaling telt met
+   zijn hele bedrag (v354/v355) en heeft dus nul verschil, maar blijft los staan: de vraag eronder gaat erover.
+   Per constructie tellen de verschillen op tot de stap: x.eind en x.bud zijn hele euro's, en V.vaste is hun som. */
+function gripVastVerschil(x){ return Math.round(x.eind)-Math.round(x.bud); }
+function gripVastToggle(){ window._gripVastNul=!window._gripVastNul; renderGripVast(); }
 function renderGripVast(){
   let V=null; try{ V=maandVooruit(); }catch(_){}
   if(!V || V.onbekend || !(V.vastePotjes||[]).length){ if(document.getElementById('gripVast')) closeSheet(); return; }
-  const L=V.vastePotjes.slice().sort((a,b)=>(b.geen-a.geen) || Math.abs(b.overR)-Math.abs(a.overR) || (a.naam<b.naam?-1:1));
-  const rij=x=>`<div class="row" data-vastpotje="${esc(x.k)}"${x.geen?' data-geen':''} style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripPotje('${esc(x.k)}','vast')">
-      <span style="flex:1;min-width:0"><span style="font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}${potSchatTag(x.k)}</span><span class="small muted" style="display:block;margin-top:2px;line-height:1.4">${x.geen?`geen betaling verwacht deze maand · het potje telt mee`:`${x.uit?`${euro0(x.uit)} betaald`:''}${x.uit&&x.vast?' · ':''}${x.vast?`nog ${euro0(x.vast)} verwacht`:''}${x.gemengd?` · van je potje van ${euro0(x.potje)}, de rest is variabel`:` · potje ${euro0(x.bud)}`}`}</span></span>
-      <span class="small" style="font-weight:700;white-space:nowrap">${euro0(x.eind)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`;
-  const geen=L.filter(x=>x.geen);
+  let stap=V.vaste.eind-V.vaste.budget;
+  try{ const Br=dezeMaandBrug(V), st=Br&&Br.stappen.find(y=>y.soort==='vast'); if(st) stap=st.waarde; }catch(_){}
+  const L=V.vastePotjes.slice().sort((a,b)=>Math.abs(gripVastVerschil(b))-Math.abs(gripVastVerschil(a)) || (a.naam<b.naam?-1:1));
+  const af=L.filter(x=>gripVastVerschil(x)!==0), geen=L.filter(x=>x.geen && gripVastVerschil(x)===0), nul=L.filter(x=>!x.geen && gripVastVerschil(x)===0);
+  const plus=d=>d>0?`+${euro0(d)}`:d<0?`-${euro0(-d)}`:euro0(0);
+  const rij=x=>{ const d=gripVastVerschil(x);
+    const sub=x.geen
+      ? `${euro0(x.bud)} in budget · geen betaling verwacht deze maand · het potje telt mee`
+      : `${euro0(x.bud)} in budget · ${euro0(x.eind)} verwacht (${euro0(x.uit)} betaald, ${euro0(x.vast)} komt nog)${x.gemengd?` · van je potje van ${euro0(x.potje)}, de rest is variabel`:''}`;
+    return `<div class="row" data-vastpotje="${esc(x.k)}" data-vastverschil="${d}"${x.geen?' data-geen':''} style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripPotje('${esc(x.k)}','vast')">
+      <span style="flex:1;min-width:0"><span style="font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}${potSchatTag(x.k)}</span><span class="small muted" style="display:block;margin-top:2px;line-height:1.4">${sub}</span></span>
+      <span class="small" style="font-weight:700;white-space:nowrap">${plus(d)}</span><span style="color:var(--teal);font-weight:700">›</span></div>`; };
+  const open=!!window._gripVastNul;
+  const nulBlok=nul.length?`<div class="row" data-vastnul="${nul.length}" style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="gripVastToggle()">
+      <span class="small" style="flex:1;min-width:0">${nul.length} vaste ${nul.length===1?'last':'lasten'} volgens budget</span><span style="color:var(--teal);font-weight:700">${open?'⌄':'›'}</span></div>
+      ${open?`<div data-vastnullijst>${nul.map(rij).join('')}</div>`:''}`:'';
+  const kop=`${euro0(V.vaste.budget)} budget − ${euro0(V.vaste.eind)} verwacht = ${stap===0?`${euro0(0)}, volgens budget`:`${euro0(Math.abs(stap))} ${stap<0?'onder':'boven'} budget`}`;
   const vraag=geen.length?`<div class="small" data-vastvraag style="line-height:1.5;margin-top:10px">Voor ${esc(gripNamen(geen))} komt deze maand geen betaling. Is het bedrag veranderd, zet het potje dan op wat je nu betaalt, vanaf de maand dat het geldt; dan klopt je budget weer.</div>
       ${geen.map(x=>`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"><button class="btn sec" data-vastaanpassen="${esc(x.k)}" style="width:auto;padding:8px 12px;font-size:13px" onclick="openPotForm('${esc(x.k)}')">${esc(x.naam)} aanpassen</button>${splitMag(x.k)?`<button class="btn sec" data-vastsplits="${esc(x.k)}" style="width:auto;padding:8px 12px;font-size:13px" onclick="openSplits('${esc(x.k)}')">${esc(x.naam)} splitsen</button>`:''}</div>`).join('')}`:'';
-  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripVast" data-vasteind="${V.vaste.eind}" data-vastbudget="${V.vaste.budget}">
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="gripVast" data-vasteind="${V.vaste.eind}" data-vastbudget="${V.vaste.budget}" data-vaststap="${stap}">
     <div style="font-weight:800;font-size:var(--fs-lg)">Vaste lasten · ${esc(ymFull(V.m))}</div>
-    <div class="small" data-vastuitleg style="line-height:1.5;margin-top:4px">${esc(vasteLastenZin(vasteLastenStand()))}</div>
-    <div class="small muted" style="line-height:1.5;margin-top:4px">Tegen ${euro0(V.vaste.budget)} in je budget: de herkende incasso's die al betaald zijn plus die deze maand nog komen, zonder gemiddelde. Wat er verder in een potje zit, is variabel en staat in de bridge.</div>
-    <div style="margin-top:8px">${L.map(rij).join('')}</div>${vraag}</div>`;
+    <div data-vastkop style="font-weight:700;font-size:var(--fs-md);margin-top:4px;line-height:1.4">${kop}</div>
+    <div class="small muted" data-vastuitleg style="line-height:1.5;margin-top:4px">${esc(vasteLastenZin(vasteLastenStand()))}</div>
+    <div style="margin-top:8px">${af.map(rij).join('')}${geen.map(rij).join('')}${nulBlok}</div>${vraag}</div>`;
 }
 /* ===== v353: EEN TIK OP EEN STAP OPENT DIE STAP =====
    De bridge op Grip draagt per kolom een tik (brugGrafiek met Br.tik). Een potje opent zijn eigen sheet

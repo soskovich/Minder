@@ -81,7 +81,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   een structureel signaal, een potje boven zijn grens, beleggen zonder voorwaarden, een uitgesloten
   incasso, contant, en de terugblikken op vorige maand); "DEZE MAAND" (`dezeMaandKaart()`: sinds `v349`
   de uitkomst met het verschil met je budget, een bridge van budget naar uitkomst (`dezeMaandBrug()`) en
-  een oorzaakzin, met de lopende afspraken; een tik op de kop, budget of de uitkomst opent de sheet met de band als een regel en "Wat je
+  een oorzaakzin, met de lopende afspraken; een tik op de kop, budget of de uitkomst opent de sheet met de band als een regel (de stap vaste lasten opent sinds `v363` een sheet die de stap narekent: budget min verwacht, en per regel het verschil) en "Wat je
   deze maand kunt doen", `renderGripVooruit()`, sinds `v352` zonder tweede bridge; sinds `v353` opent een tik
   op een potje-stap alleen dat potje en op de rest-stap de potjes daarin, `gripBrugTik()`; sinds `v354` gaat de bridge alleen over de variabele potjes, staat het stuurgetal in de kop en de
   vaste lasten als een regel eronder, `gripVastRegel()`, `renderGripVast()`; sinds `v355` is vast wat de app herkent plus wat je op vast zette, en een potje met een herkende incasso is gemengd; sinds `v356` staan alleen de potjes die boven eindigen los en is de rest EEN stap ruimte, met de ruimere potjes bovenaan zijn sheet en sinds `v358` hun eigen sheet om ze bij te stellen, `openRuimBijstel()`; sinds `v357` loopt de bridge weer van het hele budget naar de uitkomst, met de vaste lasten als EEN stap (een tik opent `renderGripVast()`), is de regel eronder vervallen en is de kop de uitkomst tegen het budget); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
@@ -120,6 +120,21 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE SHEET VASTE LASTEN VERKLAART DE STAP IN DE BRIDGE** (`v363`, punt 4 van de ronde van `v362`, gevraagd door de
+  gebruiker): `renderGripVast()` toonde per regel de uitkomst (samen EUR 1.045) terwijl de bridge het verschil toont
+  (-EUR 563), en de stap was niet na te rekenen. DE KOP (`data-vastkop`) is dezelfde rekensom: "EUR 953 budget − EUR 390
+  verwacht = EUR 563 onder budget", uit `V.vaste` en de stap van `dezeMaandBrug()` (`data-vaststap`, een bron). PER
+  REGEL is het hoofdbedrag het verschil (`gripVastVerschil(x)`: `x.eind` min `x.bud`, het vaste deel van het budget,
+  beide hele euro's, dus de som is per constructie de stap; `data-vastverschil`), met eronder "EUR X in budget · EUR Y
+  verwacht (EUR A betaald, EUR B komt nog)", bij een gemengd potje met "van je potje van EUR Z, de rest is variabel".
+  Gesorteerd op het absolute verschil; regels met EUR 0 staan samen onder "N vaste lasten volgens budget"
+  (`data-vastnul`, uitklapbaar via `gripVastToggle()`, dicht bij elk openen). EEN POTJE ZONDER BETALING (`geen`, v354)
+  heeft per constructie EUR 0 verschil maar blijft LOS staan, want de vraag en "<naam> aanpassen" eronder gaan erover;
+  dat is een keuze binnen deze ronde en geen eis uit de opdracht. GEMETEN op `deze-maand-stand` met Huur op vast, potje
+  700 en EUR 137 betaald: Huur -563, drie regels volgens budget, stap -563. Op de stand van het toestel
+  (`vast-variabel-stand`) gaat de sheet van 511/475 naar 361/341px op 360/390. Nieuwe spec
+  `grip-vast-verklaring.spec.js`; `grip-vast-variabel` d aangepast (Vervoer en Verzekeringen staan nu onder de
+  samengevoegde regel).
 - **EEN POTJE VERLAGEN HEEFT EEN ROUTE: WAT VRIJKOMT KRIJGT EERST EEN BESTEMMING** (`v362`, gevraagd door de gebruiker):
   "Ander bedrag vanaf een maand" (`openPotForm()`) verlaagde bij een lager bedrag meteen het maandbudget, terwijl Te
   ruime potjes (`v358`) en een schatting aanpassen (`v360`) eerst vroegen waar het geld heen gaat. Nu is er EEN
@@ -6666,7 +6681,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v362` → `minder-v363`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v363` → `minder-v364`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6685,7 +6700,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361` en `v362` naar `minder-v362`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362` en `v363` naar `minder-v363`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
