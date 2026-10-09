@@ -123,6 +123,18 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN VERWACHTE BONUS VRAAGT BIJ BINNENKOMST, EN OPGEZEGD KAN EEN LAATSTE BETALING HEBBEN** (`v369`, gevraagd door de
+  gebruiker). BONUS: een post uit `SET.irregularIncome` telt pas mee als hij binnen is; de opbouw van vrij te besteden
+  noemt hem als regel ZONDER `data-term` ("bonus verwacht EUR 2.500 · telt mee zodra binnen", `irrOpbouwRegels()`). Een
+  inkomensboeking in zijn maand binnen `IRR_MARGE` (0,2) van het bedrag, niet gemarkeerd en geen gewone salarisbetaling
+  (`irrGewoonInkomen()`) is een kandidaat (`irrKandidaten()`, alleen lezen), en dan staat de vraag "Is dit je bonus van
+  EUR 2.500? · ontvangen EUR X" in de opbouw en als melding (`irrvraag-`). Ja (`irrJa()`) zet `SET.onregelmatig` op het
+  ONTVANGEN bedrag en opent `openMeevaller()`; nee (`irrNee()`) laat de boeking gewoon inkomen en de post open
+  (`SET.irrAntw`). Niets voorgekozen, niets vanzelf gemarkeerd. OPZEGGEN: `SET.fixDueExcl[key].tot` (leeg = meteen), te
+  zetten via "laatste afschrijving ›" (`openOpzegTot()`, `zetOpzegTot()`). `verwachtInMaand(key, ym)` is de ENE lezer
+  (monthLiquidity, liquidityDaily, accountShortfalls, potLagerGevolg); `SET.fixDueExcl` staat verder alleen in de
+  schrijvers en `scoreNotifs()` (die de grens uit `opzegGrens()` leest). Na de laatste afschrijving houdt het potje het
+  bedrag vast tot je het verlaagt (`v327`). Spec `bonus-en-opzeggen.spec.js`.
 - **VRIJ TE BESTEDEN STAAT OP HOME EN NERGENS ANDERS, UITSCHIETERS ZIJN EEN LIJST, EN PLAN IS EEN RIJ PER BESTEMMING**
   (`v367`, gevraagd door de gebruiker, mockup "vrij geld, uitschieters, spaardoelen"). HOME: het grote getal is
   "Totaal saldo" (`data-totaalsaldo`), daaronder "EUR X op de bank · EUR Y contant ›" en de groene regel "waarvan vrij
@@ -6807,7 +6819,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v368` → `minder-v369`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v369` → `minder-v370`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -6843,7 +6855,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367` en `v368` naar `minder-v368`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368` en `v369` naar `minder-v369`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

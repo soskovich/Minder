@@ -2953,7 +2953,7 @@ function accountShortfalls(){
     let incT=null;
     for(const r of sched){ if(r.type==='income' && r.acc===acc){ const d=new Date(r.nextDate).setHours(0,0,0,0); if(d>today && (incT==null||d<incT)) incT=d; } }
     const horizon = incT!=null ? incT : today+MAXH;
-    const debits=sched.filter(r=>r.type==='fixed' && r.acc===acc && r.amount>0 && !(SET.fixDueExcl||{})[r.key])
+    const debits=sched.filter(r=>r.type==='fixed' && r.acc===acc && r.amount>0 && verwachtInMaand(r.key, ymdVan(new Date(r.nextDate)).slice(0,7)))
       .map(r=>({name:r.name,amt:r.amount,t:new Date(r.nextDate).setHours(0,0,0,0),cat:r.cat}))
       .filter(e=>e.t>=today && e.t<horizon).sort((a,b)=>a.t-b.t);
     if(!debits.length) continue;
@@ -2969,10 +2969,11 @@ function liquidityDaily(days){
   const end=new Date(start); end.setDate(start.getDate()+days);
   const {sum}=totalBalance();
   const events=[];
-  for(const s of sched){ if(s.type==='fixed' && (!s.incasso || (SET.fixDueExcl||{})[s.key])) continue;   // alleen automatische incasso's; door de gebruiker uitgesloten vaste lasten tellen niet mee
+  for(const s of sched){ if(s.type==='fixed' && !s.incasso) continue;   // alleen automatische incasso's
     let d=new Date(s.nextDate); d.setHours(0,0,0,0); let g=0;
     while(d.getTime()<end.getTime() && g<60){
-      if(d.getTime()>=start.getTime()){ const ed=shiftWeekendToMonday(d); events.push({date:new Date(ed),name:s.name,amt:s.type==='income'?s.amount:-s.amount,type:s.type,cat:s.cat}); }
+      /* v369: een opgezegde post telt per voorkomen, tot en met de maand van zijn laatste afschrijving (verwachtInMaand). */
+      if(d.getTime()>=start.getTime() && (s.type!=='fixed' || verwachtInMaand(s.key, ymdVan(d).slice(0,7)))){ const ed=shiftWeekendToMonday(d); events.push({date:new Date(ed),name:s.name,amt:s.type==='income'?s.amount:-s.amount,type:s.type,cat:s.cat}); }
       d.setMonth(d.getMonth()+s.intervalM); g++; } }
   events.sort((a,b)=>a.date-b.date);
   const dailyVar=f?f.fVar/30:0; let b=sum; const dates=[],bal=[];
@@ -3232,8 +3233,9 @@ function monthLiquidity(){
     for(let i=fixDueItems.length-1;i>=0;i--){ if(_match(fixDueItems[i].name)) fixDueItems.splice(i,1); }
   }catch(_){}
   // door de gebruiker uitgesloten posten (opgezegd/niet meer terugkerend) — onthouden per incasso-sleutel
-  const _fdExcl=SET.fixDueExcl||{};
-  fixDueItems.forEach(s=>{ s.excl=!!_fdExcl[s.key]; });
+  /* v369: niet meer het aan/uit van de vlag maar verwachtInMaand(): een opgezegde post met een laatste afschrijving
+     later dan deze maand telt gewoon mee in "nog te betalen", in de bridge en in vrij te besteden. */
+  fixDueItems.forEach(s=>{ s.excl=!verwachtInMaand(s.key, ym); });
   /* v327: EEN POST WAARVAN DE CATEGORIE AL IN "NOG IN JE POTJES" VALT, TELT DAAR EN NIET NOG EENS
      HIER. Dat kan alleen een post uit de terugval op vorige maand zijn: een post uit het schema
      draagt een categorie die recurringCats() per constructie terugkerend noemt, en een terugkerend
@@ -3491,12 +3493,16 @@ function openFixedDue(){
   const now=new Date(); const mo=now.getMonth(); const dim=new Date(now.getFullYear(),mo+1,0).getDate();
   const fmt=day=>Math.min(day,dim)+' '+MNAMES[mo];
   const sw=(isExcl)=>`<div style="width:40px;height:24px;border-radius:13px;flex-shrink:0;position:relative;cursor:pointer;background:${isExcl?'var(--card2)':'color-mix(in srgb,var(--accent) 30%,transparent)'};border:1px solid ${isExcl?'var(--line)':'var(--teal)'}"><i style="position:absolute;top:2px;width:18px;height:18px;border-radius:50%;${isExcl?'left:2px;background:var(--mut2)':'left:19px;background:var(--teal)'}"></i></div>`;
+  /* v369: de schakelaar toont of de post OPGEZEGD is; of hij deze maand meetelt zegt de lijst waarin hij staat
+     (verwachtInMaand). Een opgezegde post met een laatste afschrijving later staat dus bij wat meetelt, met die dag erbij. */
   const row=(s,isExcl)=>{const c=CATS[s.cat]||CATS.overig; const kk=(s.key||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const opg=opgezegdSinds(s.key)!==null;
     return `<div class="tx" style="cursor:default${isExcl?';opacity:.55':''}">
       <div class="ava" style="background:var(--card2)">${c.icon}</div>
-      <div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">${isExcl?opgezegdLabel(s.key):fmt(s.day)+' · '+c.name}</div></div>
+      <div class="info"><div class="nm">${esc(s.name)}</div><div class="cat">${isExcl?opgezegdLabel(s.key):fmt(s.day)+' · '+c.name+(opg?' · '+opgezegdLabel(s.key):'')}</div>
+        ${opg?`<div class="small" data-opzeglink style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openOpzegTot('${kk}','due')">laatste afschrijving ›</div>`:''}</div>
       <div class="amt neg" style="margin-right:10px${isExcl?';text-decoration:line-through;color:var(--mut2)':''}">−${euro(s.amount)}</div>
-      <div onclick="toggleFixDueExcl('${kk}')" title="${isExcl?'Weer meetellen':'Uitsluiten'}">${sw(isExcl)}</div></div>`;};
+      <div onclick="toggleFixDueExcl('${kk}')" title="${opg?'Weer meetellen':'Uitsluiten'}">${sw(opg)}</div></div>`;};
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('lock')}</div><div style="font-weight:800;font-size:var(--fs-lg)">Nog te betalen vaste lasten</div>
       <div class="muted small">rest van ${MFULL[mo]} · ${active.length} post${active.length===1?'':'en'} die meetell${active.length===1?'t':'en'}</div>
@@ -3515,7 +3521,42 @@ function openFixedDue(){
    buiten zijn eigen sheet en betekende een voornemen, geen feit; hij wordt niet meer geschreven
    en niet gemigreerd (v214: geen stille schrijfactie op je data). */
 function opgezegdSinds(key){ const f=(SET.fixDueExcl||{})[key]; if(!f) return null; return (typeof f==='object'&&f.sinds)?String(f.sinds):''; }
-function opgezegdLabel(key){ const s=opgezegdSinds(key); return s===null?'':(s?`Opgezegd op ${dagKort(s)}`:'Opgezegd'); }
+function opgezegdLabel(key){ const s=opgezegdSinds(key); if(s===null) return ''; const t=opzegTot(key);
+  return (s?`Opgezegd op ${dagKort(s)}`:'Opgezegd')+(t?` \u00b7 laatste afschrijving ${dagKort(t)}`:''); }
+/* v369: OPZEGGEN MET EEN LAATSTE BETALING. SET.fixDueExcl[key] draagt naast `sinds` een optionele `tot`, de dag van
+   de laatste afschrijving (jjjj-mm-dd). Leeg is de standaard en betekent meteen, zoals tot v368. Tot en met de MAAND
+   van die dag blijft de post verwacht; daarna niet meer. verwachtInMaand() is de ENE lezer van die vraag: monthLiquidity()
+   (en daarmee nog te betalen, de bridge van maandVooruit() en vrij te besteden), liquidityDaily(), accountShortfalls()
+   en potLagerGevolg() lezen hem, en geen van hen leest de vlag nog als aan/uit. */
+function opzegTot(key){ const f=(SET.fixDueExcl||{})[key]; return (f && typeof f==='object' && /^\d{4}-\d{2}-\d{2}$/.test(String(f.tot||'')))?String(f.tot):''; }
+function verwachtInMaand(key, ym){
+  const f=(SET.fixDueExcl||{})[key]; if(!f) return true;
+  const t=opzegTot(key); return !!t && String(ym||'')<=t.slice(0,7);
+}
+/* De afschrijving die na het opzeggen nog mag komen: tot en met `tot`, anders tot en met de dag van opzeggen. */
+function opzegGrens(key){ return opzegTot(key) || opgezegdSinds(key) || ''; }
+function zetOpzegTot(key, ymd, terug){
+  const f=(SET.fixDueExcl||{})[key]; if(!f) return;
+  const v=String(ymd||'').trim();
+  const o=(typeof f==='object')?Object.assign({},f):{};
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v)) o.tot=v; else delete o.tot;
+  SET.fixDueExcl[key]=o; save(); try{render();}catch(_){}
+  if(terug==='vaste') openVasteLasten(); else if(terug==='due') openFixedDue();
+  toast(o.tot?`${ICON('check')} Laatste afschrijving ${dagKort(o.tot)}`:`${ICON('check')} Telt meteen niet meer mee`);
+}
+function openOpzegTot(key, terug){
+  const f=(SET.fixDueExcl||{})[key]; if(!f) return;
+  let nm=key; try{ const s=recurringSchedule().find(x=>x.key===key); if(s) nm=s.name; }catch(_){}
+  const kk=String(key).replace(/\\/g,'\\\\').replace(/'/g,"\\'"), tt=String(terug||'').replace(/'/g,'');
+  $('#sheet').innerHTML=`<div class="grab"></div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">Laatste afschrijving</div>
+    <div class="small muted" style="margin-bottom:12px;line-height:1.5">${esc(nm)}. Komt er na het opzeggen nog een betaling? Tot en met die maand blijft hij verwacht in nog te betalen, Deze maand en vrij te besteden; daarna niet meer. Leeg betekent meteen.</div>
+    <label class="fld">Datum laatste afschrijving</label>
+    <input id="opzegTot" type="date" value="${esc(opzegTot(key))}" style="width:100%" data-opzegtot>
+    <div class="row" style="gap:8px;margin-top:14px"><button class="btn sec" onclick="zetOpzegTot('${kk}','','${tt}')">Geen, meteen</button>
+      <button class="btn" onclick="zetOpzegTot('${kk}',document.getElementById('opzegTot').value,'${tt}')">${ICON('check')} Opslaan</button></div>`;
+  showSheetBg();
+}
 function dagKort(ymd){ const d=String(ymd||''); return d.length>=10?`${+d.slice(8,10)} ${MNAMES[+d.slice(5,7)-1]||''}`:d; }
 function toggleFixDueExcl(key, terug){ if(!key) return; SET.fixDueExcl=SET.fixDueExcl||{}; if(SET.fixDueExcl[key]) delete SET.fixDueExcl[key]; else SET.fixDueExcl[key]={sinds:vandaagYMD()}; save(); try{render();}catch(_){}; if(terug==='vaste') openVasteLasten(); else openFixedDue(); toast(SET.fixDueExcl[key]?`${ICON('check')} Opgezegd · onthouden`:'Post telt weer mee'); }
 // drill-down: verwachte variabele uitgaven onderverdeeld per categoriebudget
@@ -3973,6 +4014,7 @@ function openSafeToSpend(){
     ${balUnknown?'':saldoAchterRegel()}
     ${balUnknown?'':contantOpbouwRegel()}
     ${balUnknown?'':onregelmatigOpbouwRegel()}
+    ${irrOpbouwRegels()}
     ${S.incDue>0?`<div class="row" data-term="${S.incDue}" data-termsoort="plus" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-size:var(--fs-md)">Verwacht inkomen deze maand</div><div class="small muted">salaris dat nog binnenkomt</div></div><div style="font-weight:700;white-space:nowrap;color:var(--green)">+${euro0(S.incDue)}</div><span style="width:8px"></span></div>`:''}
     ${aftrek>0?`<div class="hlabel" style="margin:14px 2px 2px">Hier gaat nog vanaf</div>`:''}
     ${S.savedBal>0?line(safeClaim('savedBal').label, S.savedBal, 'var(--mut)', safeClaim('savedBal').act, 'staat apart om te sparen, niet vrij besteedbaar'):''}
@@ -4288,6 +4330,13 @@ function scoreNotifs(opts){
         l1:'Je markeerde inkomen als onregelmatig.',
         l2:'Bekijk de verdeling volgens je regel',
         act:`openMeevaller(${mvB},'vlag')`}); } }catch(_){}
+  /* v369: de vraag bij een bijschrijving die op een verwachte onregelmatige post lijkt. De sleutel hangt aan post en
+     boeking, dus een keer per kandidaat; beantwoorden haalt hem weg. */
+  try{ for(const k of irrKandidaten(thisYM()).slice(0,1)){
+    push({key:'irrvraag-'+String(k.post.id).replace(/[^A-Za-z0-9]/g,'').slice(0,12)+'-'+String(k.tx.id).replace(/[^A-Za-z0-9]/g,'').slice(0,12), h:'direct', score:60, t:'info', ic:ICON('coins'),
+      l1:`Is dit je ${irrNaamKlein(k.post)} van ${euro0(Math.round(+k.post.amount))}?`,
+      l2:`Ontvangen ${euro0(Math.round(k.tx.amount))} \u00b7 bekijk`,
+      act:`openIrrVraag('${String(k.post.id).replace(/'/g,"")}','${String(k.tx.id).replace(/'/g,"")}')`}); } }catch(_){}
   // save-risk krijgt dezelfde chronic-ack als tempo: pas opnieuw als het tekort merkbaar groeit.
   let saveRiskPushed=false;
   if(isNow){ try{ const L=monthLiquidity(), tgt=monthlySavingTarget();
@@ -4371,10 +4420,11 @@ function scoreNotifs(opts){
      afschrijving zijn open en vragen bedragen per voorkomen. Horizon direct: het gaat over één
      boeking van nu, niet over een patroon. Buiten de coachOff-guard, om dezelfde reden als park-:
      je hebt hier zelf om gevraagd. Een oude vlag zonder datum krijgt geen melding. */
-  try{ const F=SET.fixDueExcl||{}; const met=Object.keys(F).filter(k=>F[k]&&typeof F[k]==='object'&&F[k].sinds);
+  try{ const met=Object.keys(SET.fixDueExcl||{}).filter(k=>opgezegdSinds(k));
+    /* v369: de grens is de laatste afschrijving als je die opgaf (opzegGrens), anders de dag van opzeggen. */
     if(met.length){ const ks=new Set(met); const laatst={};
       for(const t of TX){ if(!(t.amount<0)||t.pending) continue; if(!(isIncasso(t)||isPeriodicTransfer(t))) continue;
-        const k=recurKey(t); if(!ks.has(k) || !(t.date>String(F[k].sinds))) continue;
+        const k=recurKey(t); if(!ks.has(k) || !(t.date>opzegGrens(k))) continue;
         if(!laatst[k]||t.date>laatst[k].date) laatst[k]=t; }
       for(const k in laatst){ const t=laatst[k];
         push({key:'opgezegd-'+k.replace(/[^A-Z0-9]/g,'').slice(0,16), h:'direct', score:64, t:'warn', ic:ICON('repeat'),
@@ -15153,7 +15203,7 @@ function potFormBronHTML(){
    opgezegd zet), en wat het met de vooruitblik van deze maand doet als het nu al ingaat. */
 function potLagerGevolg(P){
   let uit='';
-  try{ const ex=SET.fixDueExcl||{}, L=recurringSchedule().filter(x=>x.type==='fixed' && x.cat===P.k && !ex[x.key]);
+  try{ const L=recurringSchedule().filter(x=>x.type==='fixed' && x.cat===P.k && verwachtInMaand(x.key, ymdVan(x.nextDate instanceof Date?x.nextDate:new Date(x.nextDate)).slice(0,7)));
     for(const x of L.slice(0,2)){ const nd=x.nextDate instanceof Date?x.nextDate:new Date(x.nextDate);
       uit+=` <span data-potincasso="${esc(x.key)}">Minder verwacht nog ${esc(titleCase(cleanMerch(x.name)||x.name||''))} ${euro0(Math.round(+x.amount||0))} op ${esc(afDag(ymdVan(nd)))}. Is die opgezegd, <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="toggleFixDueExcl('${esc(x.key)}','vaste')">zet hem op opgezegd \u203a</span></span>`; } }catch(_){}
   if(P.vanaf===thisYM()){ try{
@@ -19803,6 +19853,84 @@ function setBudget(){
    per editor). Drie velden naast elkaar passen niet op 360px. */
 function irrLijst(){ return Array.isArray(SET.irregularIncome)?SET.irregularIncome:[]; }
 function irrGeldig(){ return irrLijst().filter(x=>x&&x.ym&&+x.amount); }   // dezelfde filter als financeModel()
+/* v369: EEN VERWACHTE POST IS OPEN TOT JIJ ZEGT DAT HIJ BINNEN IS. Hij telt niet mee in "nog te ontvangen" of in vrij
+   te besteden (dat was al zo: alleen financeModel() leest SET.irregularIncome, voor latere maanden), en de opbouw van
+   vrij te besteden noemt hem als eigen regel zonder term in de som. Komt er in zijn maand een bijschrijving binnen die
+   erop lijkt (een inkomensboeking binnen IRR_MARGE van het bedrag, nog niet als onregelmatig gemarkeerd, en geen gewone
+   salarisbetaling), dan VRAAGT de app het: "Is dit je bonus van EUR 2.500? · ontvangen EUR X". Niets voorgekozen en
+   niets vanzelf gemarkeerd (MECHANISM_SPEC.defaultEffect): irrKandidaten() leest alleen.
+   SET.irrAntw: {postId: {keuze:'ja', tx, bedrag, op}} en {postId|txId: {keuze:'nee', op}}. Ja markeert de boeking als
+   onregelmatig met het ONTVANGEN bedrag (dus "nog te ontvangen" blijft het maandinkomen) en opent het meevallervoorstel;
+   nee laat de boeking gewoon inkomen en de post open. */
+const IRR_MARGE=0.2;
+function irrAntw(){ return SET.irrAntw||{}; }
+function irrPostOntvangen(v){ const a=irrAntw()[v&&v.id]; return (a && a.keuze==='ja' && TX.some(t=>t.id===a.tx)) ? a : null; }
+function irrVerwachtOpen(ym){ return irrGeldig().filter(v=>v.id && v.ym===ym && !irrPostOntvangen(v)); }
+/* Een gewone salarisbetaling: dezelfde naam betaalde in minstens twee van de drie maanden ervoor een bedrag binnen
+   dezelfde marge. Een bonus van je werkgever met een ander bedrag valt daar niet onder. */
+function irrGewoonInkomen(t){
+  const nm=cleanMerch(t.name||'').toUpperCase(); if(!nm) return false;
+  const ms=months().filter(m=>m<String(t.date).slice(0,7)).slice(-3); let n=0;
+  for(const m of ms){ if(txOfMonth(m).some(x=>x.amount>0 && CATS[catOf(x)] && CATS[catOf(x)].type==='income' && cleanMerch(x.name||'').toUpperCase()===nm && Math.abs(x.amount-t.amount)<=t.amount*IRR_MARGE)) n++; }
+  return n>=2;
+}
+function irrKandidaten(ym){
+  ym=ym||thisYM(); const A=irrAntw(), out=[], bezet=new Set(Object.values(A).filter(a=>a&&a.keuze==='ja').map(a=>a.tx));
+  for(const v of irrVerwachtOpen(ym)){
+    const amt=+v.amount; let best=null;
+    for(const t of txOfMonth(ym)){
+      if(!(t.amount>0) || t.pending) continue;
+      const c=catOf(t); if(!(CATS[c] && CATS[c].type==='income')) continue;
+      if(onregelmatigBedrag(t)>0 || bezet.has(t.id) || A[v.id+'|'+t.id]) continue;
+      if(Math.abs(t.amount-amt)>amt*IRR_MARGE) continue;
+      if(irrGewoonInkomen(t)) continue;
+      if(!best || Math.abs(t.amount-amt)<Math.abs(best.amount-amt)) best=t;
+    }
+    if(best) out.push({post:v, tx:best});
+  }
+  return out;
+}
+function irrNaamKlein(v){ const n=String((v&&v.naam)||'onregelmatig inkomen').trim(); return n.charAt(0).toLowerCase()+n.slice(1); }
+function irrVraagHTML(k, terug){
+  const v=k.post, t=k.tx, pid=esc(String(v.id).replace(/'/g,"\\'")), tid=esc(String(t.id).replace(/'/g,"\\'")), tr=String(terug||'');
+  const ontv=Math.round(t.amount*100)/100, verw=Math.round(+v.amount);
+  return `<div data-irrvraag="${esc(v.id)}" data-irrtx="${esc(t.id)}" style="background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin:8px 0">
+    <div style="font-weight:600;font-size:var(--fs-md)">Is dit je ${esc(irrNaamKlein(v))} van ${euro0(verw)}?</div>
+    <div class="small muted" style="margin-top:2px">ontvangen ${euro(ontv)} op ${esc(dagKort(t.date))} \u00b7 ${esc(cleanMerch(t.name)||t.name||'')}${Math.round(ontv)!==verw?` \u00b7 je verwachtte ${euro0(verw)}; bij ja geldt ${euro(ontv)}`:''}</div>
+    <div class="row" style="gap:8px;margin-top:9px"><button class="btn sec" data-irrja onclick="irrJa('${pid}','${tid}')">Ja</button>
+      <button class="btn sec" data-irrnee onclick="irrNee('${pid}','${tid}','${tr}')">Nee, gewoon inkomen</button></div></div>`;
+}
+function openIrrVraag(pid, tid){
+  const k=irrKandidaten().find(x=>x.post.id===pid && x.tx.id===tid);
+  $('#sheet').innerHTML=`<div class="grab"></div><div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:6px">Onregelmatig inkomen</div>
+    ${k?irrVraagHTML(k,'sheet'):'<div class="small muted">Deze vraag is al beantwoord.</div>'}`;
+  showSheetBg();
+}
+/* Ja: het ontvangen bedrag wordt onregelmatig (geklemd zoals zetOnregelmatig), de post is binnen, en daarna het
+   bestaande meevallervoorstel, waar je per post bevestigt. De schrijver leest de kandidaat opnieuw (v319). */
+function irrJa(pid, tid){
+  const k=irrKandidaten().find(x=>x.post.id===pid && x.tx.id===tid); if(!k) return;
+  const t=k.tx, b=Math.round(t.amount*100)/100;
+  SET.irrAntw=Object.assign({}, irrAntw(), {[pid]:{keuze:'ja', tx:tid, bedrag:b, op:vandaagYMD()}});
+  SET.onregelmatig=SET.onregelmatig||{}; SET.onregelmatig[tid]=b;
+  save(); try{render();}catch(_){}
+  openMeevaller(b,'vlag');
+}
+function irrNee(pid, tid, terug){
+  if(!irrKandidaten().some(x=>x.post.id===pid && x.tx.id===tid)) return;
+  SET.irrAntw=Object.assign({}, irrAntw(), {[pid+'|'+tid]:{keuze:'nee', op:vandaagYMD()}});
+  save(); try{render();}catch(_){}
+  if(terug==='safe') openSafeToSpend(); else closeSheet();
+  toast('Telt als gewoon inkomen');
+}
+/* De regel in de opbouw van vrij te besteden: per open post van deze maand, ZONDER data-term, want hij telt niet mee.
+   Is er een boeking die erop lijkt, dan staat de vraag op zijn plek. */
+function irrOpbouwRegels(){
+  let L=[], K=[]; try{ L=irrVerwachtOpen(thisYM()); K=irrKandidaten(thisYM()); }catch(_){ return ''; }
+  return L.map(v=>{ const k=K.find(x=>x.post.id===v.id); if(k) return irrVraagHTML(k,'safe');
+    return `<div class="row" data-irrverwacht="${esc(v.id)}" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1"><div style="font-size:var(--fs-md)">${esc(irrNaamKlein(v))} verwacht ${euro0(Math.round(+v.amount))}</div><div class="small muted">telt mee zodra binnen</div></div><span style="width:8px"></span></div>`; }).join('');
+}
 function irrSorted(){ return irrGeldig().slice().sort((a,b)=>String(a.ym).localeCompare(String(b.ym))); }
 function irrRijen(){
   const L=irrSorted();
@@ -26083,13 +26211,13 @@ function openVasteLasten(){
     return `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);gap:10px;align-items:flex-start${s.opgezegd?';opacity:.55':''}">
       <div style="min-width:0;flex:1"><div style="font-weight:600;font-size:var(--fs-md)">${c.icon||''} ${esc(s.name)}</div>
         <div class="small muted">${euro0(s.amount)} ${INTERVAL_TXT[s.intervalM]||''}${s.intervalM!==1?` · ${euro0(s.monthlyEq)} per maand`:''} · ${esc(c.name)}</div>
-        ${s.opgezegd?`<div class="small" style="color:var(--mut2)">${opgezegdLabel(s.key)}</div>`:''}</div>
+        ${s.opgezegd?`<div class="small" style="color:var(--mut2)">${opgezegdLabel(s.key)} <span data-opzeglink style="color:var(--teal);cursor:pointer;font-weight:600" onclick="openOpzegTot('${kk}','vaste')">laatste afschrijving \u203a</span></div>`:''}</div>
       <button class="chip ${s.opgezegd?'on':''}" style="flex-shrink:0" onclick="toggleFixDueExcl('${kk}','vaste')">${s.opgezegd?'Toch niet':'Opgezegd'}</button></div>`; };
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="row" style="margin-bottom:4px"><div style="font-weight:800;font-size:var(--fs-lg)">${ICON('repeat')} Vaste lasten</div><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="closeSheet()">Klaar</span></div>
     <div class="small muted" style="margin-bottom:10px;line-height:1.5">${actief.length} ${actief.length===1?'post':'posten'} · samen ${euro0(tot)} per maand. Incasso's en periodieke overboekingen die Minder in je afschrijvingen herkent. Heb je iets opgezegd, leg dat hier vast: dan telt het niet meer mee in je prognose, en meldt Minder het als het toch wordt afgeschreven.</div>
     ${actief.map(row).join('')||'<div class="small muted">Nog geen vaste lasten herkend.</div>'}
-    ${weg.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Opgezegd · telt niet mee</div>${weg.map(row).join('')}`:''}
+    ${weg.length?`<div style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:16px 2px 4px">Opgezegd</div>${weg.map(row).join('')}`:''}
     <div style="height:8px"></div>`;
   showSheetBg();
 }
