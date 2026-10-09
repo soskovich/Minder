@@ -87,13 +87,15 @@ test.describe('b · Logboek', () => {
     const open = await page.evaluate(() => { maandAfsluiten('2026-09', true); return SET.maandAfsluiting['2026-09'].open; });
     expect(open.some((o) => o.afspraak)).toBe(false);
   });
-  test('het blok "Wat je afsprak" staat op de logboekpagina, met per potje de geldende afspraak bovenaan', async ({ page }) => {
+  /* v366: afspraken voor verschillende maanden staan naast elkaar (afspraak-schema.spec.js), dus alle drie gelden en
+     staan in de volgorde van hun maand. De "aangepast" die de regel van v365 opsloeg leest niet meer als aangepast. */
+  test('het blok "Wat je afsprak" staat op de logboekpagina, met per potje de geldende afspraken', async ({ page }) => {
     await I.boot(page, { set: { afspraken: HUUR } });
     await page.evaluate(() => go('logboek'));
     const r = await page.evaluate(() => [...document.querySelectorAll('#logAfspraken [data-afspraakgroep="potje|huur"] [data-logafspraak]')].map((e) => ({ id: e.dataset.logafspraak, g: e.dataset.geldend, t: e.innerText.replace(/\s+/g, ' ') })));
-    expect(r.map((x) => x.id)).toEqual(['h3', 'h2', 'h1']);
-    expect(r.map((x) => x.g)).toEqual(['1', '0', '0']);
-    expect(r[0].t).toContain('Huur €700 → €600'); expect(r[0].t).toContain('vanaf november');
+    expect(r.map((x) => x.id)).toEqual(['h2', 'h3', 'h1']);
+    expect(r.map((x) => x.g)).toEqual(['1', '1', '1']);
+    expect(r[1].t).toContain('Huur €700 → €600'); expect(r[1].t).toContain('vanaf november');
     expect(r[2].t).toContain('Huur €700 → €530');
     // het blok staat onder Afgesloten maanden
     const volg = await page.evaluate(() => { const a = document.getElementById('logTijdlijn'), b = document.getElementById('logAfspraken'); return a && b ? a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING : -1; });

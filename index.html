@@ -5174,6 +5174,15 @@ function beleggenDrempelNext(){
   const v=SET.beleggenDrempel; const n=(v==null||v==='')?NaN:Math.round(+v);
   return (isFinite(n)&&n>0)?n:bufferNormNext();
 }
+/* v366: DE WISSEL VAN DE BUFFER DIE JE WILT VOOR BELEGGEN, EEN BRON MET DRIE LEZERS: maandVanafData(), de regel in
+   Let op (in de maand ervoor, dus deze maand: de wissel geldt vanaf volgende maand) en de sheet achter de tegel
+   Beleggen, waar hij altijd staat zolang er een wissel is. Tot v365 stond hij alleen in "Komende 3 maanden". */
+function beleggenWissel(){
+  let nu=null, vlg=null; try{ nu=beleggenDrempel(); vlg=beleggenDrempelNext(); }catch(_){ return null; }
+  if(nu==null || vlg==null || vlg===nu) return null;
+  return {nu, vlg, ym:nextYM(thisYM())};
+}
+function beleggenWisselZin(W){ return `Vanaf ${afMnd(W.ym)} toetst de bufferrij tegen ${W.vlg} ${W.vlg===1?'maand':'maanden'}, nu ${W.nu}: hij volgt je ondergrens.`; }
 /* v194: een verloop is pas een verloop bij genoeg punten. Onder deze drempel verandert er geen
    beslissing door de vórm van een lijn of een reeks staven - je leest een richting en verder niets -
    en is een getal met zijn vorige waarde sterker. Eén constante voor de maandgrafiek en de
@@ -5846,6 +5855,7 @@ function openBeleggenVoorwaarden(){
     <div class="small muted" style="margin-top:12px;line-height:1.5">${B.volledig
       ? (B.klaar ? 'Alle drie gehaald.' : `Eerst ${esc(B.blokkade.naam)}.`+((B.blokkade.key==='buffer' && ((maandRegels().find(x=>x.key==='buffer')||{}).opTempo))?' Hij groeit, maar de drempel is nog niet gehaald.':''))
       : 'Zolang een van de drie niet te beoordelen is, staat er geen uitkomst.'}</div>
+    ${(()=>{ const W=beleggenWissel(); return W?`<div class="small" data-belegwissel="${W.vlg}" style="margin-top:10px;line-height:1.5">${esc(beleggenWisselZin(W))}</div>`:''; })()}
     ${beleggenDrempelRij()}`;
   showSheetBg();
 }
@@ -6492,8 +6502,8 @@ function maandVanafData(){
       uit.push({lab:'Ondergrens voor je buffer', sub:`nu ${nu} ${nu===1?'maand':'maanden'}, daarna ${vlg}`, waarde:`${vlg} mnd`, act:'openNoodfondsPanel()', kort:`ondergrens buffer ${vlg} mnd`});
   }catch(_){}
   try{
-    const nu=beleggenDrempel(), vlg=beleggenDrempelNext();
-    if(nu!=null && vlg!=null && vlg!==nu)
+    const W=beleggenWissel(); const nu=W&&W.nu, vlg=W&&W.vlg;
+    if(W)
       uit.push({lab:'Buffer die je wilt voor beleggen', sub:`volgt je ondergrens, dus nu ${nu} ${nu===1?'maand':'maanden'} en daarna ${vlg}`, waarde:`${vlg} mnd`, act:'openBeleggenVoorwaarden()', kort:`buffer voor beleggen ${vlg} mnd`});
   }catch(_){}
   return uit;
@@ -7377,17 +7387,37 @@ const STAND_MAX_DAGEN = 90;   // een handmatige stand die ouder is dan dit vraag
 function afsprakenLijst(){ return Array.isArray(SET.afspraken)?SET.afspraken:[]; }
 function afspraakSleutel(a){ return String(a.soort)+'|'+String(a.cat||a.assetId||a.key||''); }
 function afspraakMaanden(van, tot){ const u=[]; if(!van||!tot) return u; for(let m=van; m<=tot && u.length<36; m=nextYM(m)) u.push(m); return u; }
-/* De schrijver. Een nieuwe keuze over HETZELFDE (zelfde soort, zelfde categorie, bezitting of
-   incasso) herziet de lopende afspraak: dat is aanpassen, en het telt als afgerond. */
+/* v366: EEN AFSPRAAK IS EEN SCHEMA PER MAAND. Tot v366 herzag een nieuwe keuze over HETZELFDE (zelfde soort, zelfde
+   categorie, bezitting of incasso) elke lopende afspraak, terwijl het budget ze allebei toepaste: Huur EUR 700 in
+   oktober, EUR 600 in november en EUR 530 in december gaf een budget van 700/600/530 en een logboek waarin de
+   EUR 530 "aangepast" heette. NU IS EEN AFSPRAAK PAS AANGEPAST ALS EEN LATERE AFSPRAAK OVER HETZELFDE DEZELFDE
+   MAAND(EN) OVERSCHRIJFT (afspraakOverschrijver(): de termijnen van..tot overlappen). Afspraken voor verschillende
+   maanden staan naast elkaar. Dat wordt BIJ HET LEZEN afgeleid en niet weggeschreven: een "aangepast" dat een
+   eerdere versie opsloeg zonder overlap leest daarmee als geldend, zonder dat er iets aan je gegevens verandert.
+   Gestopt is een keuze die je zelf maakte en blijft staan zoals hij is opgeslagen. */
+function afspraakOverlap(a, b){ return String(a.van)<=String(b.tot) && String(b.van)<=String(a.tot); }
+function afspraakOverschrijver(a){
+  const L=afsprakenLijst(), sl=afspraakSleutel(a), ia=L.indexOf(a), ta=+a.ts||0; let best=null, bi=-1;
+  L.forEach((b,ib)=>{ if(b===a || afspraakSleutel(b)!==sl || !afspraakOverlap(a,b)) return;
+    const tb=+b.ts||0; if(!(tb>ta || (tb===ta && ib>ia))) return;
+    if(!best || tb<(+best.ts||0) || (tb===(+best.ts||0) && ib<bi)){ best=b; bi=ib; } });
+  return best;
+}
+function afspraakHerzienVan(a){
+  if(!a) return null;
+  if(a.herzien && a.herzien.hoe==='gestopt') return a.herzien;
+  const b=afspraakOverschrijver(a); return b?{op:b.op||vandaagYMD(), hoe:'aangepast', door:b.id}:null;
+}
+/* De schrijver. Hij schrijft geen "aangepast" weg: dat volgt uit de overlap (afspraakHerzienVan()). */
 function afspraakMaak(a){
-  const L=afsprakenLijst().slice(), sl=afspraakSleutel(a), op=vandaagYMD();
-  for(const x of L) if(!x.herzien && afspraakSleutel(x)===sl && String(x.tot)>=thisYM()) x.herzien={op, hoe:'aangepast'};
+  const L=afsprakenLijst().slice(), op=vandaagYMD();
   const nw=Object.assign({id:'af'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:Date.now(), op, sinds:thisYM()}, a);
   L.push(nw); SET.afspraken=L; return nw;
 }
 function afspraakHerzien(id, hoe){
-  const a=afsprakenLijst().find(x=>x.id===id); if(!a||a.herzien) return null;
-  a.herzien={op:vandaagYMD(), hoe:hoe==='gestopt'?'gestopt':'aangepast'}; return a;
+  /* v366: alleen stoppen wordt opgeslagen; aangepast volgt uit een latere afspraak die dezelfde maand overschrijft. */
+  const a=afsprakenLijst().find(x=>x.id===id); if(!a||afspraakHerzienVan(a)||hoe!=='gestopt') return null;
+  a.herzien={op:vandaagYMD(), hoe:'gestopt'}; return a;
 }
 const afMnd=ym=>ymFull(ym)||String(ym||'');
 const afDag=d=>{ try{ return new Date(String(d)+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'long'}); }catch(_){ return String(d||''); } };
@@ -7404,7 +7434,8 @@ function afspraakMeetZin(a){
 /* De stand van een afspraak. Leest alleen boekingen en instellingen. */
 function afspraakStand(a){
   if(!a) return null;
-  if(a.herzien) return {status:'herzien', feit:a.herzien.hoe==='gestopt'?`gestopt op ${afDag(a.herzien.op)}`:`aangepast op ${afDag(a.herzien.op)}`, af:true};
+  const H=afspraakHerzienVan(a);
+  if(H) return {status:'herzien', feit:H.hoe==='gestopt'?`gestopt op ${afDag(H.op)}`:`aangepast op ${afDag(H.op)}`, af:true};
   const nu=thisYM();
   const klaar=String(a.tot)<nu;   // de termijn is voorbij
   const c=CATS[a.cat]; const cn=c?c.name:'';
@@ -7453,13 +7484,14 @@ function afspraakStand(a){
   return null;
 }
 /* Wat er nog loopt: niet herzien en de termijn niet voorbij. */
-function afsprakenLopend(){ const nu=thisYM(); return afsprakenLijst().filter(a=>!a.herzien && String(a.tot)>=nu); }
+function afsprakenLopend(){ const nu=thisYM(); return afsprakenLijst().filter(a=>!afspraakHerzienVan(a) && String(a.tot)>=nu); }
 /* De afspraken die bij de afsluiting van maand M horen: wat er nog loopt, wat in M of daarna
    afliep, en wat je na het begin van M herzag. */
 function afsprakenVoor(M){
   return afsprakenLijst().filter(a=>{
     if(String(a.tot)<M) return false;
-    if(a.herzien) return String(a.herzien.op).slice(0,7)>=M && String(a.sinds)<=nextYM(M);
+    const H=afspraakHerzienVan(a);
+    if(H) return String(H.op).slice(0,7)>=M && String(a.sinds)<=nextYM(M);
     return true;
   }).sort((x,y)=>(x.ts||0)-(y.ts||0));
 }
@@ -7482,7 +7514,7 @@ function renderAfspraakSheet(id){
   const S=afspraakStand(a)||{};
   const termijn = a.van===a.tot ? afMnd(a.van) : `${afMnd(a.van)} tot en met ${afMnd(a.tot)}`;
   const per=(S.per||[]).map(x=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-top:1px solid var(--line)"><span class="small">${esc(afMnd(x.m))}</span><span class="small" style="font-weight:700">${euro0(x.g)} van ${euro0(a.bedrag)}</span></div>`).join('');
-  const kan=!a.herzien;
+  const kan=!afspraakHerzienVan(a);
   const aanpas = !kan ? '' : a.soort==='storting'
     ? `<div style="margin-top:12px" data-afaanpas><label class="fld">Per maand (€)</label><input id="afBedrag" type="number" min="0" inputmode="numeric" value="${Math.round(+a.bedrag||0)}" style="width:100%">
        <label class="fld" style="margin-top:8px">Tot en met</label><input id="afTot" type="month" value="${esc(String(a.tot))}" style="width:100%">
@@ -7500,7 +7532,7 @@ function renderAfspraakSheet(id){
 }
 function afspraakStop(id){ if(!afspraakHerzien(id,'gestopt')) return; save(); closeSheet(); render(); toast('Afspraak gestopt'); }
 function afspraakAanpassen(id){
-  const a=afsprakenLijst().find(x=>x.id===id); if(!a||a.herzien||a.soort!=='storting') return;
+  const a=afsprakenLijst().find(x=>x.id===id); if(!a||afspraakHerzienVan(a)||a.soort!=='storting') return;
   const b=Math.round(+((document.getElementById('afBedrag')||{}).value)||0);
   const tot=String((document.getElementById('afTot')||{}).value||a.tot);
   if(!(b>0) || !/^\d{4}-\d{2}$/.test(tot) || tot<thisYM()) return;
@@ -7756,6 +7788,9 @@ function gripLetOpItems(RO, SIG, BV){
   for(const r of (RO||[])) if(r && r.structureel){ let B={}; try{ B=maandBeslisDeel(r)||{}; }catch(_){}
     L.push({soort:'str', key:r.key, naam:r.naam, sub:B.oorzaak||'', dot:r.status, act:`openMaandBeslis('${esc(r.key)}')`}); }
   for(const s of (SIG||[])) L.push({soort:'sig', key:s.id, naam:s.naam, sub:`${euro0(s.over)} boven je potje`, dot:'let op', act:`openGripLetOp('sig','${esc(s.id)}')`});
+  /* v366: de wissel van de buffer voor beleggen, op de plek van beleggen in de rang, en zonder amber: een wissel is
+     geen probleem (v78/v93), hij staat er omdat hij volgende maand je uitkomst verschuift. */
+  try{ const W=beleggenWissel(); if(W) L.push({soort:'belegwissel', naam:`Buffer voor beleggen: ${W.vlg} ${W.vlg===1?'maand':'maanden'} vanaf ${afMnd(W.ym)}`, sub:`nu ${W.nu}, volgt je ondergrens`, dot:'neutraal', act:'openBeleggenVoorwaarden()'}); }catch(_){}
   for(const v of (BV||[])) L.push({soort:'beleg', key:v.asset.id, naam:`Je belegde ${euro0(v.inleg)} in ${v.asset.naam||'Bezitting'}`, sub:v.open?'voorwaarden nog niet gehaald · nog niet gekozen of ze hiervoor gelden':'voorwaarden nog niet gehaald', dot:'let op', act:`openBelegVraag('${esc(v.asset.id)}')`});
   /* v359: DE LEK-REGEL STAAT HIER (keuze van de gebruiker). Tot v358 stond hij op Inzichten, met de coach als
      tik; Inzichten draagt sinds v359 geen handeling, en zonder deze regel had een doorlopende uitgave ZONDER
@@ -8035,11 +8070,33 @@ function dezeMaandZin(Br){
   else if(Br.rest>0) d.push(`je andere potjes samen ${euro0(Br.rest)} boven`);
   return d.join('; ')+'.'+vz;
 }
+/* v366: EEN POTJE DAT VANAF EEN LATERE MAAND HOGER GAAT, STAAT ALS AFVINKREGEL IN DEZE MAAND, net als een potje dat
+   lager gaat. Tot v365 stond dat in "Komende 3 maanden", en met die tijdlijn verdween het van Grip. Een lager potje
+   is een afspraak (v337: het vraagt gedrag); hoger vraagt geen gedrag en wordt GEEN afspraak, dus deze regel komt
+   uit het schema van het potje (potjeSchema(), dus uit budgetVoorMaand()) en niet uit SET.afspraken. Hij staat er
+   zolang de maand nog moet komen; in die maand is het gewoon je potje en verdwijnt de regel. Een tik opent het potje. */
+function potjeOmhoogRegels(){
+  const keys={}; const add=M=>{ for(const k in (M||{})) if(CATS[k]) keys[k]=1; };
+  add(SET.budgets); add(SET.budgetsNext); for(const p in (SET.budgetPlan||{})) add(SET.budgetPlan[p]);
+  const uit=[];
+  for(const k of Object.keys(keys)){ const R=potjeSchema(k);
+    for(let i=1;i<R.length;i++) if(R[i].bedrag>R[i-1].bedrag) uit.push({k, ym:R[i].van, bedrag:R[i].bedrag, voor:R[i-1].bedrag, voorNu:R[i-1].van===R[0].van && i===1}); }
+  return uit.sort((a,b)=>a.ym.localeCompare(b.ym) || CATS[a.k].name.localeCompare(CATS[b.k].name));
+}
+function potjeOmhoogRij(x){
+  const cn=CATS[x.k].name;
+  const feit=`${x.voorNu?'nu':'daarvoor'} ${x.voor>0?euro0(x.voor):'geen potje'} · geldt vanaf ${afMnd(x.ym)}`;
+  return `<div class="row" data-potomhoog="${esc(x.k)}|${esc(x.ym)}" data-afstatus="loopt" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openPotje('${esc(x.k)}')">
+    ${afspraakBox('loopt')}<span style="flex:1;min-width:0"><span class="small" style="display:block">Potje ${esc(cn)} ${euro0(x.bedrag)} vanaf ${esc(afMnd(x.ym))} <span data-omhoog aria-label="hoger">\u2191</span></span>
+      <span class="small" data-affeit style="display:block;color:var(--mut2);font-size:var(--fs-xs);line-height:1.35;margin-top:1px">${esc(feit)}</span></span>
+    <span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`;
+}
 function dezeMaandKaart(){
   const m=thisYM(); let V=null; try{ V=maandVooruit(); }catch(_){ V=null; }
   /* De lopende afspraken staan hier, onder deze maand: wat je afsprak gaat over wat je nu doet.
      Een afspraak uit het coachgesprek (coachThisMonthAfspraak) staat er in dezelfde vorm bij. */
   let af=''; try{ af=afsprakenLopend().map(a=>afspraakRij(a)).join(''); }catch(_){}
+  try{ af+=potjeOmhoogRegels().map(potjeOmhoogRij).join(''); }catch(_){}   // v366
   try{ const c=coachThisMonthAfspraak(); if(c) af+=`<div class="row" data-afspraak="coach" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('loopt')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(c.text||'')}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
   /* v364: DE BUDGETEDITOR HEEFT EEN INGANG OP GRIP, EN ALLEEN DAAR (keuze a van de gebruiker, het open punt van
      v352/v359). "Budget aanpassen ›" staat rechts in de kop van Deze maand en opent dezelfde editor (v61) op de
@@ -8782,16 +8839,40 @@ function logTijdlijn(){
    Tot v364 stonden de afspraken in de maandafsluiting, en daar telden ze mee in "N van M klaar". Een afspraak
    gaat vaak over een LATERE maand, dus hij hoort niet bij het controleren van de vorige. Hier staan ze los van
    een maand, per onderwerp (afspraakSleutel(): soort en potje, bezitting of incasso). DE GELDENDE BOVENAAN:
-   de afspraak die niet is herzien (afspraakMaak() herziet de vorige over hetzelfde), anders de nieuwste.
-   Oudere eronder, gedempt. Een tik opent de bestaande sheet (openAfspraak()). Niets wordt hier beslist of
+   sinds v366 elke afspraak die niet door een latere voor dezelfde maand is overschreven (afspraakHerzienVan()),
+   bij een potje met het schema per maand erboven (potjeSchema()). Overschreven en gestopte afspraken staan
+   ingeklapt eronder. Een tik opent de bestaande sheet (openAfspraak()). Niets wordt hier beslist of
    rechtgezet: spreken twee afspraken elkaar tegen, dan zie je dat aan de rijen. De keuze na een opname uit
    je spaargeld (v365, Plan) staat er ook, want het is een keuze die je maakte. */
 function logAfspraakGroepen(){
-  const G={};
-  for(const a of afsprakenLijst()){ const k=afspraakSleutel(a); (G[k]=G[k]||[]).push(a); }
-  return Object.keys(G).map(k=>{ const L=G[k].slice().sort((x,y)=>(y.ts||0)-(x.ts||0));
-    const gi=L.findIndex(a=>!a.herzien); const geldend=gi>=0?L[gi]:L[0];
-    return {k, geldend, ouder:L.filter(a=>a!==geldend), ts:geldend.ts||0}; }).sort((a,b)=>b.ts-a.ts);
+  const G={}, L0=afsprakenLijst();
+  for(const a of L0){ const k=afspraakSleutel(a); (G[k]=G[k]||[]).push(a); }
+  return Object.keys(G).map(k=>{ const L=G[k].slice().sort((x,y)=>((y.ts||0)-(x.ts||0)) || (L0.indexOf(y)-L0.indexOf(x)));
+    let geldend=L.filter(a=>!afspraakHerzienVan(a)), ouder=L.filter(a=>afspraakHerzienVan(a));
+    if(!geldend.length){ geldend=[L[0]]; ouder=L.slice(1); }
+    /* een potje: in de volgorde van de maand waarin hij ingaat, want zo leest het schema */
+    if(geldend[0].soort==='potje') geldend=geldend.slice().sort((x,y)=>String(x.van).localeCompare(String(y.van)));
+    return {k, geldend, ouder, ts:Math.max(...L.map(a=>+a.ts||0))}; }).sort((a,b)=>b.ts-a.ts);
+}
+/* v366: HET SCHEMA VAN EEN POTJE, UIT DE ENE BRON (budgetVoorMaand()). Van de lopende maand tot de laatste maand
+   waarvoor er voor dit potje iets gepland staat, per maand het bedrag dat het budget rekent; gelijke maanden achter
+   elkaar zijn een blok, en het laatste blok loopt door ("dec+"). Het logboek rekent dus niets zelf: het leest wat
+   het budget per maand toepast, en kan daarmee niet iets anders zeggen dan de berekening. */
+function potjeSchema(k){
+  const start=potHuidigeMaand(); let eind=nextYM(start);
+  const P=SET.budgetPlan||{}; for(const p of Object.keys(P)) if(P[p] && P[p][k]!=null && p>eind) eind=p;
+  const runs=[];
+  for(let m=start; m<=eind && runs.length<40; m=nextYM(m)){ const v=Math.round(+(budgetVoorMaand(m)[k])||0), r=runs[runs.length-1];
+    if(r && r.bedrag===v) r.tot=m; else runs.push({van:m, tot:m, bedrag:v}); }
+  return runs;
+}
+function schemaMnd(ym){ const nu=String(thisYM()).slice(0,4), j=String(ym).slice(0,4); const n=MNAMES[+String(ym).slice(5,7)-1]; return j===nu?n:`${n} ${j}`; }
+function potjeSchemaTekst(k){
+  const R=potjeSchema(k); if(!R.length) return '';
+  const cn=CATS[k]?CATS[k].name:k;
+  return [cn].concat(R.map((r,i)=>{ const laatste=i===R.length-1;
+    const m = laatste ? `${schemaMnd(r.van)}+` : r.van===r.tot ? schemaMnd(r.van) : `${schemaMnd(r.van)} t/m ${schemaMnd(r.tot)}`;
+    return `${m} ${r.bedrag>0?euro0(r.bedrag):'geen potje'}`; })).join(' · ');
 }
 function logAfspraakKop(a){
   if(a.soort==='potje'){ const cn=CATS[a.cat]?CATS[a.cat].name:(a.cat||'potje');
@@ -8802,17 +8883,29 @@ function logAfspraakKop(a){
 function logAfspraakRij(a, oud){
   const K=logAfspraakKop(a);
   let d=''; try{ d=new Date(String(a.op)+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}); }catch(_){}
-  return `<div class="row" data-logafspraak="${esc(a.id)}" data-geldend="${oud?0:1}" style="gap:10px;align-items:baseline;padding:${oud?'4px 0 4px 12px':'8px 0 4px'};${oud?'':'border-top:1px solid var(--line);'}cursor:pointer${oud?';color:var(--mut2)':''}" onclick="openAfspraak('${esc(a.id)}')">
-    <span style="flex:1;min-width:0;${oud?'font-size:var(--fs-sm)':'font-weight:700'}">${K.kop}</span>
-    <span class="small" style="white-space:nowrap;color:var(--mut2)">${[K.sub,d].filter(Boolean).join(' · ')}</span></div>`;
+  const H=oud?afspraakHerzienVan(a):null, hz=H?(H.hoe==='gestopt'?'gestopt':'overschreven'):'';
+  return `<div class="row" data-logafspraak="${esc(a.id)}" data-geldend="${oud?0:1}" style="gap:10px;align-items:baseline;padding:${oud?'4px 0 4px 12px':'6px 0 2px'};cursor:pointer${oud?';color:var(--mut2)':''}" onclick="openAfspraak('${esc(a.id)}')">
+    <span style="flex:1;min-width:0;${oud?'font-size:var(--fs-sm)':'font-size:var(--fs-sm);font-weight:600'}">${K.kop}</span>
+    <span class="small" style="white-space:nowrap;color:var(--mut2)">${[K.sub,d,hz].filter(Boolean).join(' · ')}</span></div>`;
 }
+/* v366: OVERSCHREVEN AFSPRAKEN STAAN INGEKLAPT ONDER DE GELDENDE. Openklappen is een weergave en wordt niet bewaard. */
+function logOuderToggle(k){ window._logOuder=window._logOuder||{}; window._logOuder[k]=!window._logOuder[k]; renderLogboek(); }
 function logAfsprakenBlok(){
   const G=logAfspraakGroepen(); const T=terugzetLog();
   if(!G.length && !T.length) return '';
+  const O=window._logOuder||{};
+  const groep=g=>{ const pot=g.geldend[0].soort==='potje' && CATS[g.geldend[0].cat];
+    const sch=pot?potjeSchemaTekst(g.geldend[0].cat):'';
+    const nG=g.ouder.filter(a=>(afspraakHerzienVan(a)||{}).hoe==='gestopt').length;
+    const lab=nG===g.ouder.length?`${g.ouder.length} gestopt`:nG?`${g.ouder.length} overschreven of gestopt`:`${g.ouder.length} overschreven`;
+    return `<div data-afspraakgroep="${esc(g.k)}" style="border-top:1px solid var(--line);padding-top:6px;margin-top:4px">
+      ${sch?`<div data-potschema="${esc(g.geldend[0].cat)}" style="font-weight:700">${esc(sch)}</div>`:''}
+      ${g.geldend.map(a=>logAfspraakRij(a,false)).join('')}
+      ${g.ouder.length?`<div class="small" data-ouder="${g.ouder.length}" data-ouderopen="${O[g.k]?1:0}" style="color:var(--teal);cursor:pointer;padding:3px 0 2px" onclick="logOuderToggle('${esc(g.k)}')">${lab} ${O[g.k]?'\u2039':'\u203a'}</div>${O[g.k]?g.ouder.map(a=>logAfspraakRij(a,true)).join(''):''}`:''}</div>`; };
   return `<div class="card" id="logAfspraken"><div class="hlabel" style="margin:0 0 4px">Wat je afsprak</div>
-    ${G.map(g=>`<div data-afspraakgroep="${esc(g.k)}">${logAfspraakRij(g.geldend,false)}${g.ouder.map(a=>logAfspraakRij(a,true)).join('')}</div>`).join('')}
+    ${G.map(groep).join('')}
     ${T.map(terugzetLogRij).join('')}
-    <div class="small" style="color:var(--mut2);margin-top:8px">Per onderwerp de afspraak die geldt bovenaan; oudere eronder.</div></div>`;
+    <div class="small" style="color:var(--mut2);margin-top:8px">Per potje het schema zoals je budget het per maand rekent; een afspraak die een latere voor dezelfde maand overschreef staat ingeklapt.</div></div>`;
 }
 function openLogMaand(m){ window._logMaand=m; renderLogMaand(); showSheetBg(); }
 function renderLogMaand(){

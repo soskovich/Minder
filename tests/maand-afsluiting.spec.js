@@ -194,7 +194,8 @@ test('h. aanpassen herziet de oude afspraak en maakt een nieuwe', async ({ page 
   await page.evaluate((i) => openAfspraak(i), id);
   await page.fill('#afBedrag', '150');
   await page.click('[data-afaanpas] button');
-  const L = await page.evaluate(() => afsprakenLijst().filter((a) => a.soort === 'storting').map((a) => ({ b: a.bedrag, h: a.herzien ? a.herzien.hoe : null })));
+  // v366: aangepast volgt uit de overlap van maanden (afspraakHerzienVan()) en wordt niet weggeschreven
+  const L = await page.evaluate(() => afsprakenLijst().filter((a) => a.soort === 'storting').map((a) => { const H = afspraakHerzienVan(a); return { b: a.bedrag, h: H ? H.hoe : null }; }));
   expect(L).toEqual([{ b: 131, h: 'aangepast' }, { b: 150, h: null }]);
 });
 

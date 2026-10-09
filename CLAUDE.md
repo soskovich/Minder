@@ -85,7 +85,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   deze maand kunt doen", `renderGripVooruit()`, sinds `v352` zonder tweede bridge; sinds `v353` opent een tik
   op een potje-stap alleen dat potje en op de rest-stap de potjes daarin, `gripBrugTik()`; sinds `v354` gaat de bridge alleen over de variabele potjes, staat het stuurgetal in de kop en de
   vaste lasten als een regel eronder, `gripVastRegel()`, `renderGripVast()`; sinds `v355` is vast wat de app herkent plus wat je op vast zette, en een potje met een herkende incasso is gemengd; sinds `v356` staan alleen de potjes die boven eindigen los en is de rest EEN stap ruimte, met de ruimere potjes bovenaan zijn sheet en sinds `v358` hun eigen sheet om ze bij te stellen, `openRuimBijstel()`; sinds `v357` loopt de bridge weer van het hele budget naar de uitkomst, met de vaste lasten als EEN stap (een tik opent `renderGripVast()`), is de regel eronder vervallen en is de kop de uitkomst tegen het budget); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
-  <maand>" is opgegaan; VERVALLEN BIJ `v365`). Sinds `v365` staat "Ik wil iets kopen" bovenaan Grip (`gripKoopcheck()`). Sinds `v364` staat rechts in de kop van Deze maand "Budget aanpassen ›", de enige ingang naar de budgeteditor buiten Instellingen, de afsluiting en de tijdlijn. Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
+  <maand>" is opgegaan; VERVALLEN BIJ `v365`). Sinds `v365` staat "Ik wil iets kopen" bovenaan Grip (`gripKoopcheck()`). Sinds `v366` staat een potje dat later hoger gaat als afvinkregel in Deze maand en de wissel van de buffer voor beleggen in Let op. Sinds `v364` staat rechts in de kop van Deze maand "Budget aanpassen ›", de enige ingang naar de budgeteditor buiten Instellingen, de afsluiting en de tijdlijn. Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
   `renderAfsluitSheet()`), geen kaart. Het logboek (`logboek`, `renderLogboek()`) draagt sinds `v340` de
   afgesloten maanden als tijdlijn (`logTijdlijn()`), met per maand de bridge, de antwoorden en de
   afspraken (`openLogMaand()`). Tot `v339` stonden op Grip de samenvatting, Vraagt een beslissing,
@@ -120,6 +120,20 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **AFSPRAKEN PER POTJE ZIJN EEN SCHEMA PER MAAND** (`v366`, gevraagd door de gebruiker): een afspraak is pas
+  "aangepast" als een LATERE afspraak over hetzelfde (`afspraakSleutel()`) DEZELFDE MAAND(EN) overschrijft
+  (`afspraakOverlap()`, `afspraakOverschrijver()`); afspraken voor verschillende maanden staan naast elkaar, zoals
+  `budgetVoorMaand()` ze toepast. AFGELEID BIJ HET LEZEN (`afspraakHerzienVan()`, de ENE lezer, ook voor
+  `afspraakStand()`, `afsprakenLopend()`, `afsprakenVoor()` en de sheet): `afspraakMaak()` schrijft geen "aangepast"
+  meer, en een "aangepast" dat `v365` opsloeg zonder overlap leest als geldend. Alleen gestopt wordt opgeslagen. GEEN
+  DATA GEWIJZIGD. Het logboek ("Wat je afsprak") toont per potje het schema uit het budget (`potjeSchema()`,
+  `potjeSchemaTekst()`: "Huur · okt €700 · nov €600 · dec+ €530", `data-potschema`), de geldende afspraken eronder in
+  de volgorde van hun maand, en overschreven of gestopte afspraken ingeklapt (`data-ouder`, `logOuderToggle()`).
+  EEN POTJE DAT LATER HOGER GAAT is een afvinkregel in Deze maand ("Potje X €Y vanaf <maand> ↑", `potjeOmhoogRegels()`,
+  `data-potomhoog`), uit hetzelfde schema en GEEN afspraak (`v337`). DE WISSEL VAN DE BUFFER VOOR BELEGGEN
+  (`beleggenWissel()`, drie lezers: `maandVanafData()`, Let op en `openBeleggenVoorwaarden()` met `data-belegwissel`)
+  staat de maand ervoor in Let op (`soort:'belegwissel'`, neutrale stip, op de plek van beleggen in de rang, binnen
+  `GRIP_LETOP_MAX`) en altijd in de sheet. Spec `afspraak-schema.spec.js`.
 - **ELK GETAL OP EEN PLEK: ONTVANGEN OP HOME, SPAREN OP PLAN, CONTANT IN HET SALDO** (`v365`, gevraagd door de gebruiker,
   mockup "opschonen"). HOME: Recent toont drie boekingen (`HOME_RECENT`); de koopcheck is weg van Home; onder "totaal
   saldo" staat "EUR X op de bank · EUR Y contant" (`saldoSplitRegel()`), en het bankdeel is het totaal min contant, want
@@ -132,8 +146,8 @@ genoemde versietag.)*
   af?"); "Komende 3 maanden" (`gripTijdlijn()`) is vervallen. NAGEGAAN: de posten (CJIB, DELA) staan in de tegel
   Reserveringen en zijn sheet op Grip, NIET op Plan (dat is sinds `v344` zo); een potje dat lager gaat staat als
   afvinkregel in Deze maand; de lijst potjes van volgende maand opent vanuit de voet van de lijst van deze maand.
-  WAT NERGENS MEER STAAT: de wissel van de buffer die je wilt voor beleggen (`beleggenDrempelNext()`) en een potje dat
-  vanaf volgende maand HOGER gaat staan niet meer op Grip; `maandVanafData()` heeft geen lezer op het scherm meer.
+  WAT NERGENS MEER STOND (sinds `v366` weer op Grip, zie de regel bovenaan): de wissel van de buffer die je wilt voor
+  beleggen en een potje dat vanaf een latere maand HOGER gaat; `maandVanafData()` heeft geen lezer op het scherm meer.
   Grip op `grip-dashboard` 686/650px, op `deze-maand-stand` 760/727px. INZICHTEN: Nog te sparen, Nog te ontvangen en
   Contant zijn als tegel weg; bovenaan staat "Maandbudget <maand>" (`insMaandBudget()`, `insMaandBudgetData()`) met
   een gestapelde balk (Uitgegeven, Nog te betalen · vast, Nog in potjes; `--mb-uit/--mb-vast/--mb-pot` op `.mb-blok`),
@@ -146,7 +160,8 @@ genoemde versietag.)*
   `go('ins')`). PLAN: een opname uit je spaargeld is een keuze (zie de regel hieronder); de tekst staat ONDER de vaten
   (punt 13), en dat kost de hoogte van de tekst: de kaart gaat van 524 naar 699px op 360 en 681 op 390, en de waterval
   past op 360x640 niet meer boven de vouw (739 tegen 567). LOGBOEK: zie de regel over de afsluiting.
-- **DE AFSLUITING TELT ALLEEN AFSLUITTAKEN, EN DE AFSPRAKEN STAAN OP DE LOGBOEKPAGINA** (`v365`): `afsluitStand()` telt
+- **DE AFSLUITING TELT ALLEEN AFSLUITTAKEN, EN DE AFSPRAKEN STAAN OP DE LOGBOEKPAGINA** (`v365`; het gemelde punt
+  hieronder is bij `v366` opgelost, zie de regel daarboven): `afsluitStand()` telt
   `afsluitPunten()` en niet meer de afspraken; de sheet "<maand> afsluiten" toont ze niet, en een afspraak is geen open
   punt bij afsluiten. `maandAfsluiten()` bewaart ze wel als momentopname (`v337`). Op de logboekpagina staat onder
   "Afgesloten maanden" het blok "Wat je afsprak" (`logAfsprakenBlok()`): per onderwerp (`afspraakSleutel()`) de
@@ -6754,7 +6769,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v365` → `minder-v366`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v366` → `minder-v367`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -6790,7 +6805,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364` en `v365` naar `minder-v365`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365` en `v366` naar `minder-v366`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
