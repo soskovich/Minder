@@ -17,3 +17,6 @@ docs/Minder_Strategie_TweeEdities.html
 
 # Landingspagina: nog concept (placeholder-knop). Weghalen zodra hij af is.
 Minder_Landing_OffGrid.html
+
+# v364: het slot van een lopende sabotagerun (tools/sabotage.py)
+.sabotage-actief

@@ -70,3 +70,32 @@ test('d. de bridge-stap opent deze sheet, en op 360 en 390px geen overloop', asy
     expect(m.ox).toBeLessThanOrEqual(0);
   }
 });
+
+/* v364: een potje zonder betaling deze maand staat los, met de subregel "geen betaling deze maand · telt volledig
+   mee", in de kleur van elke andere regel: geen rood en geen groen. Fixture: vast-variabel-stand.js met Huur op vast
+   (EUR 750, geen betaling) naast Vervoer en Verzekeringen, die wel een betaling verwachten. */
+test('e. een potje zonder betaling: eigen subregel, EUR 0, en neutraal van kleur', async ({ page }) => {
+  const VV = require('./vast-variabel-stand');
+  await VV.boot(page, { set: { potAard: { huur: 'vast' } } });
+  await page.evaluate(() => openGripVast());
+  const r = await page.evaluate(() => {
+    const kleur = (n) => { const e = document.createElement('span'); e.style.color = `var(${n})`; document.body.appendChild(e); const c = getComputedStyle(e).color; e.remove(); return c; };
+    const rij = (k) => document.querySelector(`#gripVast [data-vastpotje="${k}"]`);
+    const h = rij('huur'), sub = h.querySelector('.muted'), bedrag = h.children[1];
+    const ander = document.querySelector('#gripVast [data-vastpotje]:not([data-geen])') || document.querySelector('#gripVast [data-vastnul]');
+    return { geen: h.hasAttribute('data-geen'), verschil: +h.dataset.vastverschil, tekst: h.innerText, bedrag: bedrag.innerText,
+      subKleur: getComputedStyle(sub).color, bedragKleur: getComputedStyle(bedrag).color, tekstKleur: getComputedStyle(h).color,
+      mutKleur: kleur('--mut'), rood: kleur('--red'), groen: kleur('--green'), amber: kleur('--amber'), anderBestaat: !!ander,
+      los: !document.querySelector('#gripVast [data-vastnullijst] [data-vastpotje="huur"]') };
+  });
+  expect(r.geen).toBe(true);
+  expect(r.verschil).toBe(0);
+  expect(r.los).toBe(true);   // hij staat los en niet onder "volgens budget"
+  expect(r.tekst).toContain('€750 in budget · geen betaling deze maand · telt volledig mee');
+  expect(r.tekst).not.toContain('het potje telt mee');
+  expect(r.bedrag).toBe('€0');
+  expect(r.subKleur).toBe(r.mutKleur);
+  expect(r.bedragKleur).toBe(r.tekstKleur);
+  for (const c of [r.subKleur, r.bedragKleur]) { expect(c).not.toBe(r.rood); expect(c).not.toBe(r.groen); expect(c).not.toBe(r.amber); }
+  expect([r.rood, r.groen].includes(r.tekstKleur)).toBe(false);
+});

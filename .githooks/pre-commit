@@ -1,0 +1,3 @@
+#!/bin/sh
+# v364: weigert een commit met een sabotage in index.html. Aanzetten: git config core.hooksPath .githooks
+exec python3 "$(git rev-parse --show-toplevel)/tools/sabotage.py" --controle

@@ -223,8 +223,9 @@ for (const w of [360, 390]) test(`l. hoogte van Grip op ${w}px`, async ({ page }
   // afwijking om te noemen (Huur EUR 900 van 900): 374px op 360 en 336 op 390 (gemeten)
   // v357: de kop is de uitkomst tegen het budget en de regel vaste lasten is weg; de vaste lasten staan als stap in
   // de bridge: 315px op 360 en 297 op 390, dezelfde hoogte als bij v349 (gemeten)
-  expect(h.deze).toBe(w === 360 ? 315 : 297);
-  expect(h.totaal).toBe(w === 360 ? 721 : 703);
+  // v364: "Budget aanpassen ›" in de kop: op 360px breekt de kop over twee regels (+18px), op 390 niet (gemeten)
+  expect(h.deze).toBe(w === 360 ? 333 : 297);
+  expect(h.totaal).toBe(w === 360 ? 739 : 703);
 });
 
 /* De handelingen. Uit eten heeft een potje van 150; in juli, augustus en september ging er na dag 4

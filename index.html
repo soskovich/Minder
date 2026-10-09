@@ -7999,7 +7999,11 @@ function dezeMaandKaart(){
      Een afspraak uit het coachgesprek (coachThisMonthAfspraak) staat er in dezelfde vorm bij. */
   let af=''; try{ af=afsprakenLopend().map(a=>afspraakRij(a)).join(''); }catch(_){}
   try{ const c=coachThisMonthAfspraak(); if(c) af+=`<div class="row" data-afspraak="coach" style="gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);cursor:pointer" onclick="coStart('maand','${esc(m)}')">${afspraakBox('loopt')}<span style="flex:1;min-width:0"><span class="small" style="display:block">${esc(c.text||'')}</span><span class="small" style="display:block;color:var(--mut2);font-size:var(--fs-xs)">Je afspraak deze maand · aanpassen</span></span><span style="color:var(--teal);font-weight:700;flex-shrink:0">›</span></div>`; }catch(_){}
-  const kop=`<div class="hlabel" data-dmkop style="margin:0 0 6px${V&&!V.onbekend?';cursor:pointer':''}"${V&&!V.onbekend?' onclick="openGripVooruit()"':''}>Deze maand · ${esc(ymFull(m))}</div>`;
+  /* v364: DE BUDGETEDITOR HEEFT EEN INGANG OP GRIP, EN ALLEEN DAAR (keuze a van de gebruiker, het open punt van
+     v352/v359). "Budget aanpassen ›" staat rechts in de kop van Deze maand en opent dezelfde editor (v61) op de
+     lopende maand, want Grip leest altijd thisYM() en heeft geen maandkiezer. Hij staat buiten de hoofdletterkop
+     en stopt de tik, zodat de kop zelf zijn eigen sheet blijft openen. Plan krijgt geen ingang. */
+  const kop=`<div style="display:flex;align-items:baseline;gap:10px;margin:0 0 6px"><div class="hlabel" data-dmkop style="margin:0;flex:1;min-width:0${V&&!V.onbekend?';cursor:pointer':''}"${V&&!V.onbekend?' onclick="openGripVooruit()"':''}>Deze maand · ${esc(ymFull(m))}</div><span data-budgetlink style="font-size:var(--fs-sm);font-weight:700;color:var(--teal);cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();openBudgetEditor(thisYM())">Budget aanpassen ›</span></div>`;
   let boven;
   if(!V || V.onbekend){
     const T=totals(m); const bud=Math.round(T.budget||0);
@@ -8053,7 +8057,9 @@ function openGripVast(){ window._gripVastNul=false; renderGripVast(); showSheetB
    het budget staat en wat verwacht wordt (betaald plus wat nog komt). Gesorteerd op het absolute verschil; regels
    zonder verschil staan samen onder "N vaste lasten volgens budget", uitklapbaar. Een potje zonder betaling telt met
    zijn hele bedrag (v354/v355) en heeft dus nul verschil, maar blijft los staan: de vraag eronder gaat erover.
-   Per constructie tellen de verschillen op tot de stap: x.eind en x.bud zijn hele euro's, en V.vaste is hun som. */
+   Per constructie tellen de verschillen op tot de stap: x.eind en x.bud zijn hele euro's, en V.vaste is hun som.
+   v364: de subregel van zo'n potje zegt "geen betaling deze maand · telt volledig mee", in de kleur van elke andere
+   subregel: geen betaling is geen besparing en ook geen fout, dus geen rood en geen groen (v78/v93). */
 function gripVastVerschil(x){ return Math.round(x.eind)-Math.round(x.bud); }
 function gripVastToggle(){ window._gripVastNul=!window._gripVastNul; renderGripVast(); }
 function renderGripVast(){
@@ -8066,7 +8072,7 @@ function renderGripVast(){
   const plus=d=>d>0?`+${euro0(d)}`:d<0?`-${euro0(-d)}`:euro0(0);
   const rij=x=>{ const d=gripVastVerschil(x);
     const sub=x.geen
-      ? `${euro0(x.bud)} in budget · geen betaling verwacht deze maand · het potje telt mee`
+      ? `${euro0(x.bud)} in budget · geen betaling deze maand · telt volledig mee`
       : `${euro0(x.bud)} in budget · ${euro0(x.eind)} verwacht (${euro0(x.uit)} betaald, ${euro0(x.vast)} komt nog)${x.gemengd?` · van je potje van ${euro0(x.potje)}, de rest is variabel`:''}`;
     return `<div class="row" data-vastpotje="${esc(x.k)}" data-vastverschil="${d}"${x.geen?' data-geen':''} style="gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openGripPotje('${esc(x.k)}','vast')">
       <span style="flex:1;min-width:0"><span style="font-size:13px;overflow-wrap:anywhere">${esc(x.naam)}${potSchatTag(x.k)}</span><span class="small muted" style="display:block;margin-top:2px;line-height:1.4">${sub}</span></span>

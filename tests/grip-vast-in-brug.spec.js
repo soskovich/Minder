@@ -154,7 +154,7 @@ for (const w of [360, 390]) {
         over: document.getElementById('sheet').scrollWidth > document.getElementById('sheet').clientWidth }; });
     console.log(`v357 ${w}px: kaart ${k.h}, kop ${k.kop}, sheet ${s.h}, uitleg ${s.uitleg}`);
     expect(k.over).toBe(0);
-    expect(k.h).toBe(271);
+    expect(k.h).toBe(w === 360 ? 289 : 271);   // v364: de link in de kop kost 18px op 360
     expect(s.over).toBe(false);
   });
 }

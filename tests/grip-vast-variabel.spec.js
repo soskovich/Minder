@@ -149,7 +149,7 @@ test.describe('d. de sheets', () => {
     await expect(page.locator('#gripVast [data-vastnul]')).toContainText('2 vaste lasten volgens budget');
     await page.locator('#gripVast [data-vastnul]').click();
     expect(await page.locator('#gripVast [data-vastpotje]').evaluateAll((e) => e.map((x) => x.dataset.vastpotje))).toEqual(['huur', 'vervoer', 'verzekering']);
-    expect(await page.locator('#gripVast [data-vastpotje="huur"]').innerText()).toContain('geen betaling verwacht deze maand · het potje telt mee');
+    expect(await page.locator('#gripVast [data-vastpotje="huur"]').innerText()).toContain('geen betaling deze maand · telt volledig mee');
     expect(await page.locator('#gripVast [data-vastpotje="vervoer"]').innerText()).toContain('€537 komt nog) · van je potje van €600, de rest is variabel');
     expect(await page.locator('#gripVast [data-vastaanpassen]').getAttribute('onclick')).toBe("openPotForm('huur')");
   });

@@ -266,7 +266,7 @@ test.describe('e · het overschrijfpad', () => {
     await maand(page, metAfspraak());
     expect(await page.locator('#s-maand').innerText()).toContain('oude afspraak');
 
-    await page.locator('#s-maand >> text=Aanpassen').click();
+    await page.locator('#s-maand').getByText('Je afspraak deze maand · aanpassen').click();   // v364: niet de link "Budget aanpassen ›"
     await kies(page, 'Afspraak aanpassen');                    // hier wiste de oude code al
     await page.waitForTimeout(400);
     expect((await afspraken(page)).map((l) => l.text)).toEqual(['oude afspraak']);

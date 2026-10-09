@@ -85,7 +85,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   deze maand kunt doen", `renderGripVooruit()`, sinds `v352` zonder tweede bridge; sinds `v353` opent een tik
   op een potje-stap alleen dat potje en op de rest-stap de potjes daarin, `gripBrugTik()`; sinds `v354` gaat de bridge alleen over de variabele potjes, staat het stuurgetal in de kop en de
   vaste lasten als een regel eronder, `gripVastRegel()`, `renderGripVast()`; sinds `v355` is vast wat de app herkent plus wat je op vast zette, en een potje met een herkende incasso is gemengd; sinds `v356` staan alleen de potjes die boven eindigen los en is de rest EEN stap ruimte, met de ruimere potjes bovenaan zijn sheet en sinds `v358` hun eigen sheet om ze bij te stellen, `openRuimBijstel()`; sinds `v357` loopt de bridge weer van het hele budget naar de uitkomst, met de vaste lasten als EEN stap (een tik opent `renderGripVast()`), is de regel eronder vervallen en is de kop de uitkomst tegen het budget); en "KOMENDE 3 MAANDEN" (`gripTijdlijn()`, waarin "Vanaf
-  <maand>" is opgegaan). Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
+  <maand>" is opgegaan). Sinds `v364` staat rechts in de kop van Deze maand "Budget aanpassen ›", de enige ingang naar de budgeteditor buiten Instellingen, de afsluiting en de tijdlijn. Onderaan "Logboek ›". DE MAANDAFSLUITING IS EEN POP-UP (`afsluitPopupMisschien()`,
   `renderAfsluitSheet()`), geen kaart. Het logboek (`logboek`, `renderLogboek()`) draagt sinds `v340` de
   afgesloten maanden als tijdlijn (`logTijdlijn()`), met per maand de bridge, de antwoorden en de
   afspraken (`openLogMaand()`). Tot `v339` stonden op Grip de samenvatting, Vraagt een beslissing,
@@ -120,6 +120,27 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE BUDGETEDITOR HEEFT EEN INGANG OP GRIP, EN ALLEEN DAAR** (`v364`, keuze a van de gebruiker, sluit het open punt
+  van `v352` en `v359`): "Budget aanpassen ›" (`data-budgetlink`) staat rechts in de kop van "Deze maand" en opent
+  `openBudgetEditor(thisYM())`, dezelfde editor (`v61`) op de LOPENDE maand, ook als Inzichten op een andere maand staat
+  (`curMonth`), want Grip leest altijd `thisYM()`. De link staat buiten de hoofdletterkop en stopt de tik, dus de kop zelf
+  blijft `openGripVooruit()` openen. DE `stopPropagation` IS EEN GUARD EN PER CONSTRUCTIE INERT (meetles p): de link staat
+  naast de kop en niet erin, en de kaart zelf draagt geen tik, dus zijn sabotage bleef groen; hij staat er voor een ronde
+  die de link in de kop zet. Vijf andere sabotages, alle vijf rood. PLAN KRIJGT GEEN INGANG, en dat is de keuze en geen omissie: Plan gaat over je
+  spaarinleg, en de potjes horen bij de vraag of je systeem standhoudt. De andere ingangen (Instellingen, de
+  maandafsluiting, de tijdlijn op Grip) blijven. GEMETEN op `deze-maand-stand`: de kaart gaat op 360px van 271 naar 289px,
+  want de kop breekt naast de link over twee regels; op 390px blijft hij 271. De link is 116px breed, zonder overloop.
+  Spec `grip-budget-link.spec.js`.
+  EEN POTJE ZONDER BETALING IN DE SHEET VASTE LASTEN (`v364`): de subregel is "geen betaling deze maand · telt volledig
+  mee", in de kleur van elke andere subregel en met "€0" in de gewone tekstkleur: geen betaling is geen besparing en ook
+  geen fout (`v78`/`v93`). Hij blijft los staan (`v363`). Spec `grip-vast-verklaring.spec.js` e.
+  GEMELD EN GEMETEN, GEEN FOUT (`v364`, punt 1): "€953 budget − €390 verwacht" zijn de getallen van de FIXTURE
+  (`deze-maand-stand` met Huur op vast, 700/137, plus verzekering 150, abonnement 30 en sport 73), zoals ze in het verslag
+  en hier bij `v363` stonden; "€1.608 / €1.045" zijn die van het toestel, met Vervoer en de andere vaste lasten erbij.
+  Beide zeggen -€563 omdat Huur 700/137 het geval van het toestel is. `maandVooruit()` is door `v362`/`v363` niet geraakt:
+  op `vast-variabel-stand` zijn `V.vaste` en elk vast potje op `v361` en op `v363` karakter voor karakter gelijk, en een
+  betaalde lease (ook met een ander bedrag) blijft vast. Een getal uit een fixture en een getal van het toestel horen niet
+  in dezelfde zin (`v287`); het verslag van `v363` zei niet welke van de twee het was.
 - **DE SHEET VASTE LASTEN VERKLAART DE STAP IN DE BRIDGE** (`v363`, punt 4 van de ronde van `v362`, gevraagd door de
   gebruiker): `renderGripVast()` toonde per regel de uitkomst (samen EUR 1.045) terwijl de bridge het verschil toont
   (-EUR 563), en de stap was niet na te rekenen. DE KOP (`data-vastkop`) is dezelfde rekensom: "EUR 953 budget − EUR 390
@@ -306,7 +327,7 @@ genoemde versietag.)*
   overschrijding blijft de ingang aan de chevron in de valt-op-sheet en staat er geen tweede lek-regel. DE TERUGVAL "te weinig
   ingesteld" (`v340`) telt de lek-regel net als een potje-signaal NIET mee in zijn poort, want een uitgave zonder potje
   zegt niets over wat er is ingesteld; GEMETEN op de stand van 6 oktober gaat Grip daardoor van 525 naar 649px op 360
-  en 634 op 390 (de Let op-kaart met Uit eten zonder potje komt erbij, de terugval blijft). OPEN PUNT `v352` IS SCHERPER: de budgeteditor heeft op Inzichten geen
+  en 634 op 390 (de Let op-kaart met Uit eten zonder potje komt erbij, de terugval blijft). OPEN PUNT `v352` WAS SCHERPER (gesloten bij `v364`, de link op Grip): de budgeteditor heeft op Inzichten geen
   ingang meer (de regel "van EUR X maandbudget" was er een); hij is nog bereikbaar via Instellingen, de maandafsluiting
   en de tijdlijn op Grip.
   DRIE DINGEN DIE DE MIGRATIE VAN DE SPECS VOND, en ze hadden gelijk: (1) ONDER NUL heet de tegel "Te veel uitgegeven"
@@ -490,7 +511,8 @@ genoemde versietag.)*
   360 en van 464 naar 265px op 390; de bandregel is EEN zin over twee regels (38px) op beide breedtes, zonder
   overloop. Nieuwe spec `grip-deze-maand-sheet.spec.js`; twee bestaande tests aangepast (de as in
   `deze-maand-bridge` c, de waterval in `grip-dashboard` e en m).
-- **OPEN PUNT: DE BUDGETEDITOR IS MOEILIJK VINDBAAR** (`v352`, gemeld door de gebruiker, niet gebouwd): potjes
+- **GESLOTEN BIJ `v364`: DE BUDGETEDITOR IS MOEILIJK VINDBAAR** (`v352`, gemeld door de gebruiker; sinds `v364` staat
+  "Budget aanpassen ›" in de kop van Deze maand op Grip, en nergens op Plan; zie de regel bovenaan): potjes
   aanmaken, aanpassen en archiveren (`openBudgetEditor()`, `openPotForm()`, v351) gaat nu alleen via de regel "van
   EUR X maandbudget" op Inzichten. Een ingang vanaf Grip of Plan onderzoeken. Let daarbij op de horizonnen: Grip
   gaat over of je systeem standhoudt en Plan over je spaarinleg, dus een ingang is een extra route naar dezelfde
@@ -6681,7 +6703,24 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v363` → `minder-v364`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v364` → `minder-v365`, en zo verder). Dit is de enige plek waar die regel staat.
+
+**SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
+vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
+(`{"specs", "timeout", "sabotages": [{"naam", "zoek", "vervang"}]}`), eist dat elke zoektekst precies een keer voorkomt,
+en zet `index.html` terug in een `finally`, bij SIGTERM/SIGINT/SIGHUP en bij `atexit`. Een SIGKILL is niet te vangen,
+dus er ligt tijdens de run een slot (`.sabotage-actief`, met pid, backup in `.git/sabotage/schoon.html` en zijn sha):
+de volgende start herstelt een slot van een proces dat niet meer leeft, en `--herstel` doet dat met de hand. Elke
+gesaboteerde versie draagt aan het eind `SABOTAGE_MARKER`. Elke spec-run heeft een eigen timeout die de hele
+procesgroep stopt; zet er GEEN `timeout` omheen, want dat was precies hoe `v363` een sabotage liet staan.
+HET PRE-COMMIT-HAAKJE (`.githooks/pre-commit`, aanzetten met `git config core.hooksPath .githooks`, per clone) roept
+`tools/sabotage.py --controle` aan en weigert de commit bij een slot, bij de marker in de werkbron of de staged bron,
+of als een van de sabotages van de laatste run er nog in staat. Dat laatste is de vergelijking met de laatst schone
+versie: per sabotage bewaart de runner zijn HANDTEKENING (de vervangende tekst met veertig tekens context aan beide
+kanten, dus ook een sabotage die alleen iets weghaalt laat een naad achter), en die mag niet in de bron staan als hij
+niet in de schone versie stond. Een bedoelde wijziging na de run raakt die toets niet. Daarna draait hij `node check.js`.
+GEMETEN bij `v364`: een run die met SIGKILL wordt gestopt laat de sabotage en het slot achter, de commit wordt geweigerd,
+en de volgende start of `--herstel` zet de bron terug; een SIGTERM zet hem meteen terug.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6700,7 +6739,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362` en `v363` naar `minder-v363`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363` en `v364` naar `minder-v364`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is
