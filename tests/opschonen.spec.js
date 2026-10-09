@@ -239,9 +239,9 @@ test.describe('e · Plan', () => {
     expect(await page.evaluate(() => SET.terugzet)).toBeUndefined();
     const t = await page.locator('#terugzetKaart').innerText();
     expect(t).toContain('€231 eruit gehaald in oktober · uit Noodfonds');
-    expect(t).toContain('inleg okt €2.431 · Noodfonds vol nov 2026');
-    expect(t).toContain('€77 extra per maand t/m dec · Noodfonds vol nov 2026 · Kosten Koper vol jun 2027');
-    expect(t).toContain('inleg blijft €2.200 · Noodfonds vol nov 2026 · Kosten Koper vol jun 2027');
+    expect(t).toContain('inleg okt €2.431 · Noodfonds vol okt 2026');
+    expect(t).toContain('€77 extra per maand t/m dec · Noodfonds vol okt 2026 · Kosten Koper vol mei 2027');
+    expect(t).toContain('inleg blijft €2.200 · Noodfonds vol okt 2026 · Kosten Koper vol mei 2027');
     expect(await page.locator('#terugzetGekozen').count()).toBe(0);
     expect(await page.locator('#planInleg').count()).toBe(0);
   });
@@ -253,17 +253,17 @@ test.describe('e · Plan', () => {
     expect(r.eta).toEqual({ noodfonds: 1, kk: 7, iw: null });
     expect(await page.locator('[data-terugvat="noodfonds"]').count()).toBe(1);
   });
-  test('over drie maanden: EUR 2.277 deze maand, EUR 77 naar het Noodfonds, Kosten Koper juni 2027', async ({ page }) => {
+  test('over drie maanden: EUR 2.277 deze maand, EUR 77 naar het Noodfonds, Kosten Koper mei 2027 (v370: oktober telt mee)', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => { go('vooruit'); terugzetKies('drie'); });
     const r = await kop(page);
     expect(r.bedrag).toBe('€2.277'); expect(r.terug).toEqual(['noodfonds:77']); expect(r.save).toBe(2277);
-    expect(r.eta.noodfonds).toBe(1); expect(await page.evaluate((e) => etaDatum(e), r.eta.kk)).toBe('jun 2027');
+    expect(r.eta.noodfonds).toBe(1); expect(await page.evaluate((e) => etaDatum(e), r.eta.kk)).toBe('mei 2027');
   });
   test('niet terugzetten: inleg EUR 2.200, het Noodfonds levert EUR 231 in, en wijzigen zet dat terug', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => { go('vooruit'); terugzetKies('niet'); });
     const r = await kop(page);
     expect(r.bedrag).toBe('€2.200'); expect(r.terug).toEqual([]); expect(r.nf).toBe(3407); expect(r.save).toBe(2200);
-    expect(await page.evaluate((e) => [etaDatum(e.noodfonds), etaDatum(e.kk)], r.eta)).toEqual(['nov 2026', 'jun 2027']);
+    expect(await page.evaluate((e) => [etaDatum(e.noodfonds), etaDatum(e.kk)], r.eta)).toEqual(['okt 2026', 'mei 2027']);
     await page.evaluate(() => { terugzetWijzig(); });
     expect(await page.locator('#terugzetRegel').count()).toBe(1);
     await page.evaluate(() => terugzetKies('alles'));

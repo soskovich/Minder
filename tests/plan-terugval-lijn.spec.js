@@ -186,7 +186,7 @@ test.describe('b · de ontvanger wordt gemeten en niet uit de volgorde geraden',
     const r = await regels(page);
     expect(r.length).toBe(1);
     expect(r[0].naar).toBe(B);
-    expect(r[0].tekst).toBe('vanaf jun 2027 gaat de ruimte van Kosten Koper naar Inrichting woning');
+    expect(r[0].tekst).toBe('vanaf mei 2027 gaat de ruimte van Kosten Koper naar Inrichting woning');   // v370: de achtste inleg, oktober meegeteld
   });
 
   test('bij een gelijke stijging wint de eerste op volgorde, dus de uitkomst is bepaald', async ({ page }) => {
@@ -286,7 +286,7 @@ test.describe('d · de marge komt uit dezelfde sp als "net op tijd"', () => {
 
   test('bij nul of minder speling blijft "net op tijd" staan en komt er geen getal', async ({ page }) => {
     await boot(page, { cap: 2500, order: ['noodfonds', A], goals: [
-      { id: A, naam: 'Precies', doel: 7500, gespaard: 0, streefdatum: '2027-01', allocMode: 'auto' }] });
+      { id: A, naam: 'Precies', doel: 7500, gespaard: 0, streefdatum: '2026-12', allocMode: 'auto' }] });   // v370: drie inleggen, oktober meegeteld
     const r = await page.evaluate((id) => {
       const p = allocatePlan().find((x) => x.id === id);
       const T = doelTempo(p, p.alloc);

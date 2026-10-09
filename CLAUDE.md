@@ -123,6 +123,22 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **DE INLEG VAN DE LOPENDE MAAND TELT MEE IN ELKE VOL-DATUM, EEN KEER** (`v370`, gevraagd door de gebruiker; sluit het
+  open punt van `v316`). Maand 1 van `planVooruit()` is DEZE maand: een eta is het AANTAL inleggen met deze maand als
+  eerste, en `etaDatum(n)` is de maand van de n-de inleg (`etaDatum(1)` is deze maand). `doelTempo()` telt de inleggen
+  tot en met de streefmaand (`doelMaandenTot()+1`; `doelMaandenTot()` zelf blijft het kalenderverschil), en een
+  streefdatum in deze maand is niet verstreken. GEMETEN op de stand van het toestel: Noodfonds EUR 3.638 van 4.000
+  krijgt in oktober 362 en heet nu "vol okt 2026" (was nov), Inrichting 1.838 in oktober en vol in november.
+  EEN KEER: wat je deze maand toewees (de knop "toewijzen aan", "Verdeel volgens je plan", een hogere stand in de
+  doel-editor) legt `toewijzingNoteer()` vast in `SET.toewijzingMaand={ym, bedrag}`, en `planInlegLopend(cap)` haalt
+  daarvan hooguit wat er netto opzij ging (`savedNet()`) van de eerste maand af. NIET UIT SALDO MIN TOEWIJZING: die
+  eerste vorm las bij meer toegewezen dan er staat (3.638 tegen 3.000) elke nieuwe storting als al toegewezen.
+  DE ANDERE LEZERS: de tijdlijn (kolom 0 is deze maand en leest `R[1]`), de terugzetdelen (`bij[k+2]`), een aflos-item
+  (eta is `schuldVrij().k+1`, dus het label blijft de datum van Vermogen) en de Vermogensreis (`fireModel()` verdeelt en
+  boekt ook maand 0, `sim.vol` is gelijk aan `planVooruit()`; `sim.onverdeeld0` is weg, want er staat niets meer vlak).
+  `dekkingDichten()` telde deze maand al mee (`v323`) en is niet aangeraakt. Bestaande tests in achttien specs pinden de oude
+  telling en zijn bijgewerkt (de afstanden een maand korter of de labels een maand eerder). Spec `lopende-maand-telt.spec.js`; dertien sabotages, alle dertien rood (drie pas nadat de spec de tijdlijn na een
+  toewijzing en de maanden van de terugzetdelen zelf las; die delen staan sindsdien op een plek, `terugzetBijVan()`).
 - **EEN VERWACHTE BONUS VRAAGT BIJ BINNENKOMST, EN OPGEZEGD KAN EEN LAATSTE BETALING HEBBEN** (`v369`, gevraagd door de
   gebruiker). BONUS: een post uit `SET.irregularIncome` telt pas mee als hij binnen is; de opbouw van vrij te besteden
   noemt hem als regel ZONDER `data-term` ("bonus verwacht EUR 2.500 · telt mee zodra binnen", `irrOpbouwRegels()`). Een
@@ -777,8 +793,8 @@ genoemde versietag.)*
   `planVerdeelMaand()` maand na maand met de grendel via `planGrendelVan()`, zoals `planVooruit()` (`v104`):
   de terugval zit erin, en pas als Plan niets meer vraagt gaat de inleg naar de groei. `M.sim.vol` geeft per
   bestemming de maand waarin hij vol raakt, en die is GELIJK aan `planVooruit()` (getoetst, ook bij
-  percentages en bij een buffer die eerst vol moet). DE LOPENDE MAAND TELT NIET MEE VOOR EEN DOEL, net als op
-  Plan (`v316`): wat Plan nu verdeelt staat vlak (`sim.onverdeeld0`) en blijft staan. Een doel krijgt OOK in
+  percentages en bij een buffer die eerst vol moet). DE LOPENDE MAAND TELDE TOT `v370` NIET MEE VOOR EEN DOEL, net als op
+  Plan (`v316`): wat Plan nu verdeelde stond vlak (`sim.onverdeeld0`); sinds `v370` telt hij mee, zie de regel bovenaan. Een doel krijgt OOK in
   de maand van zijn datum (vol in mei, moet in mei is op tijd) en geeft daarna uit wat erin staat (`v347`);
   valt zijn datum vóór de maand waarin Plan hem vol heeft, dan gaat hij op de datum half gevuld de deur uit
   en zegt blok 18 "VERSCHIL". Een aflos-item houdt zijn toewijzing (`v307`) en dat geld blijft in de inleg.
@@ -2313,7 +2329,7 @@ genoemde versietag.)*
   vlakke eis er juist te staan.
   TWAALF SABOTAGES, ELF ROOD, en GEEN ENKELE BESTAANDE TEST VIEL EROP: 357 tests in vijftien bestanden die
   de doel-rij raken bleven groen, want geen spec legde het oordeel van Grip naast dat van Plan.
-- **OPEN PUNT, GEMETEN EN NIET VERANDERD: DE LOPENDE MAAND TELT BIJ GEEN VAN DE TWEE MEE** (`v316`): de
+- **GESLOTEN BIJ `v370` (de lopende maand telt mee, zie de regel bovenaan): DE LOPENDE MAAND TELT BIJ GEEN VAN DE TWEE MEE** (`v316`): de
   vraag was of de inleg van oktober meetelt op 1 oktober. GEMETEN: nee, en op BEIDE schermen niet.
   `doelMaandenTot()` is het kalenderverschil in maanden en sluit de lopende maand uit (van oktober 2026 naar
   mei 2027 is 7), en `planVooruit()` begint bij `m=1` terwijl `etaDatum(1)` op NOVEMBER landt, dus de eerste
@@ -6819,7 +6835,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v369` → `minder-v370`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v370` → `minder-v371`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -6855,7 +6871,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368` en `v369` naar `minder-v369`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369` en `v370` naar `minder-v370`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

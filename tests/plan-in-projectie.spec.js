@@ -90,7 +90,10 @@ test.describe('a · A2: de projectie verdeelt zoals Plan', () => {
     // in de eerste zes maanden neemt Plan alles wat opzij ging; daarna gaat het, min de premie, naar de groei
     expect(r.o.bedrag).toBe(2200);
     expect(r.g[1]).toBe(12 * (2200 - 100));
-    expect(r.g[0]).toBeLessThan(6 * (2200 - 100) + 1);
+    /* v370: de lopende maand telt mee voor Plan, dus Plan is een maand eerder vol en er groeit in het eerste jaar iets
+       meer dan zes maanden; hooguit zeven. */
+    expect(r.g[0]).toBeGreaterThan(6 * (2200 - 100));
+    expect(r.g[0]).toBeLessThan(7 * (2200 - 100) + 1);
   });
 
   test('fireModel() leent de verdeling van Plan en drukt hem niet opnieuw uit', async ({ page }) => {

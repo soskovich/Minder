@@ -68,7 +68,7 @@ function seed(o = {}) {
        Het tekort blijft EUR 262, want een eenmalige post draagt zijn hele bedrag in de eis (v317). */
     reserveringen: [{ id: 'r1', naam: POSTNAAM, bedrag: POST, vervalmaand: PLUS(0), intervalM: 0, cat: 'belasting' }],
     goals: [
-      { id: 'g1', naam: 'Kosten Koper', doel: KK, gespaard: 0, streefdatum: PLUS(7), allocMode: 'pct', pct: 90 },
+      { id: 'g1', naam: 'Kosten Koper', doel: KK, gespaard: 0, streefdatum: PLUS(6), allocMode: 'pct', pct: 90 },   // v370: zeven inleggen, deze maand meegeteld
       { id: 'g2', naam: 'Inrichting', doel: INR, gespaard: 0, streefdatum: PLUS(18), allocMode: 'pct', pct: 10 },
     ],
   }, o.set || {});

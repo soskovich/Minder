@@ -219,7 +219,7 @@ test.describe('c · ETA volgt de definitieve toewijzing', () => {
     const P = await alloc(page);
     const af = P.find((x) => x.id === 'af:d1');
     expect(af.alloc).toBe(400);                          // auto: pakt wat er na gA over is
-    expect(af.eta).toBe(await page.evaluate(() => payoffMonths(2000, 50 + 400, 14)));
+    expect(af.eta).toBe(await page.evaluate(() => payoffMonths(2000, 50 + 400, 14) + 1));   // v370: een eta telt deze maand mee, payoffMonths() begint volgende maand; het label blijft de datum van schuldVrij()
     // de onderliggende schuld blijft onaangeroerd
     expect(await page.evaluate(() => SET.debts[0])).toMatchObject({ id: 'd1', rest: 2000, perMaand: 50 });
   });

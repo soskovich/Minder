@@ -4870,6 +4870,7 @@ function saveGoal(id){
   if(id){ if(oud.startDatum) g.startDatum=oud.startDatum; if(oud.startStand!=null) g.startStand=+oud.startStand||0; }
   else  { g.startDatum=vandaagYMD(); g.startStand=Math.max(Math.round(+g.gespaard||0),0); }
   SET.goals=SET.goals||[]; const i=SET.goals.findIndex(x=>x.id===id);
+  toewijzingNoteer(g.gespaard-(i>=0?Math.max(Math.round(+SET.goals[i].gespaard||0),0):0));   // v370: een hogere stand is een toewijzing van nu
   if(i>=0) SET.goals[i]=g; else SET.goals.push(g);
   save(); closeSheet(); render(); toast(`${ICON('check')} Doel opgeslagen`);
 }
@@ -5076,8 +5077,12 @@ function doelDatumLabel(ym,kort){
                 zeggen heeft. Daarvoor draagt hij `knelt`, en dat is wat de tellers lezen. */
 function doelTempo(goal, alloc){
   const g=goal||{};
-  const maandenTot=doelMaandenTot(g.streefdatum);
-  if(maandenTot==null || maandenTot<=0) return null;             // geen datum, of verstreken
+  /* v370: het AANTAL inleggen tot en met de streefmaand, deze maand meegeteld: dezelfde telling als een eta (zie
+     planInlegLopend()). Oktober tot en met mei is acht inleggen en geen zeven. Een streefdatum in deze maand heeft nog
+     een inleg en is niet verstreken. */
+  const k0=doelMaandenTot(g.streefdatum);
+  if(k0==null || k0<0) return null;                               // geen datum, of verstreken
+  const maandenTot=k0+1;
   const rest=(g.rest!=null)?Math.max(Math.round(+g.rest||0),0)
                            :Math.max(Math.round((+g.doel||0)-(+g.gespaard||0)),0);
   if(rest<=0) return null;                                        // al bereikt: niets terug te rekenen
@@ -5128,7 +5133,7 @@ function doelTempoLine(p){
   if(rest<=0) return '';                                          // bereikt: geen tempo-regel
   const n=doelMaandenTot(p.streefdatum);
   const wrap=t=>`<div class="doel-tempo small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${t}</div>`;
-  if(n<=0) return wrap(`Je streefdatum ${lbl} is verstreken. Er wordt hier niets meer teruggerekend.`);
+  if(n<0) return wrap(`Je streefdatum ${lbl} is verstreken. Er wordt hier niets meer teruggerekend.`);   // v370: deze maand telt nog mee
   const T=doelTempo(p, p.alloc); if(!T) return '';
   const bedrag=(rest===Math.round(+p.doel||0))?euro0(p.doel):`de resterende ${euro0(rest)}`;
   /* v189: het benodigde bedrag stond er zonder dat het ooit tegen de capaciteit werd gelegd. Op een
@@ -9876,9 +9881,12 @@ function terugzetProjectie(ym){
   const nog=D.slice(T.i+1).reduce((a,x)=>a+x,0); if(!(nog>0)) return null;
   const verdeel=(som)=>{ const u={}; let rest=som; const tot=bron.reduce((a,b)=>a+b.af,0)||1;
     bron.forEach((b,k)=>{ const v=k===bron.length-1?rest:Math.round(som*b.af/tot); u[b.id]=v; rest-=v; }); return u; };
-  const bij={}; D.slice(T.i+1).forEach((d,k)=>{ bij[k+1]=verdeel(d); });
+  const bij=terugzetBijVan(D.slice(T.i+1), verdeel);
   return {rest:verdeel(nog), bij};
 }
+/* v370: de delen die nog komen, per maand van planVooruit(). Maand 1 is deze maand, dus het eerste deel dat nog komt
+   (volgende maand) staat op 2. Een plek, met twee lezers (de keuze die je maakte en de scenario's). */
+function terugzetBijVan(delen, verdeel){ const bij={}; delen.forEach((d,k)=>{ bij[k+2]=verdeel(d); }); return bij; }
 /* De vol-datum per keuze, uit dezelfde projectie als elke andere vol-datum (planVooruit, v307). */
 function terugzetScenario(P, cap, B, bron, keuze){
   const D=terugzetDelen(B, keuze);
@@ -9886,7 +9894,7 @@ function terugzetScenario(P, cap, B, bron, keuze){
   const tot=bron.reduce((a,b)=>a+b.af,0)||1;
   const Q=P.map(p=>{ const b=bron.find(x=>x.id===p.id); if(!b||!(nog>0)) return p;
     const extra=Math.round(nog*b.af/tot); return Object.assign({}, p, {rest:Math.min(Math.round(+p.rest||0)+extra, Math.round(+p.doel||0))}); });
-  const bij={}; if(keuze==='drie'){ D.slice(1).forEach((d,k)=>{ const u={}; bron.forEach(b=>{ u[b.id]=Math.round(d*b.af/tot); }); bij[k+1]=u; }); }
+  const bij=(keuze==='drie')?terugzetBijVan(D.slice(1), d=>{ const u={}; bron.forEach(b=>{ u[b.id]=Math.round(d*b.af/tot); }); return u; }):{};
   const rest={}; for(const q of Q) rest[q.id]=Math.max(Math.round(+q.rest||0),0);
   return {delen:D, eta:planVooruit(Q, cap, undefined, undefined, {bij}), rest};
 }
@@ -10039,6 +10047,32 @@ function planVerdeelMaand(rows, cap, G){
    met rest nul vraagt in ronde 1 nul en valt in ronde 2 af op zijn rest) en is eruit, want dood
    gewicht in een lus is precies wat een volgende ronde verkeerd leest. */
 const PLAN_VOORUIT_MAX = 600;
+/* v370: DE LOPENDE MAAND TELT MEE (gevraagd door de gebruiker; het open punt van v316). Maand 1 van de projectie is
+   DEZE maand en niet de volgende, dus een eta is het AANTAL inleggen inclusief die van deze maand, en etaDatum(n) is
+   de maand van de n-de inleg (n=1 is deze maand). GEMETEN op de stand van het toestel: Noodfonds EUR 3.638 van 4.000
+   krijgt deze maand 362 en was "vol nov 2026"; hij is vol in oktober. Elke vol-datum en het totaal schoven een maand.
+   DE INLEG VAN DEZE MAAND TELT ZOLANG HIJ NOG NIET IN EEN TOEWIJZING STAAT: nog niet binnen, of binnen en nog niet
+   toegewezen (dan staat hij als vrij geld op je spaarrekening). Is hij al binnen EN heb je hem toegewezen, dan zit hij
+   al in de stand van je doelen, en hem hier nog eens verdelen zou deze maand twee keer tellen (te vroeg vol, de
+   gevaarlijke kant, v168). Wat je deze maand toewees legt de app vast op het moment dat je het doet
+   (toewijzingNoteer(): de knop "toewijzen aan", "Verdeel volgens je plan" en een hogere stand in de doel-editor), en
+   daarvan telt hooguit wat er deze maand netto opzij ging (savedNet()) als al verwerkte inleg.
+   NIET AFGELEID UIT SALDO MIN TOEWIJZING: dat was de eerste vorm, en die viel op de stand van het toestel om. Staat er
+   al meer toegewezen dan er op de rekening staat (EUR 3.638 tegen EUR 3.000), dan las elke nieuwe storting als al
+   toegewezen terwijl je niets toewees. */
+function toegewezenDezeMaand(){ const T=SET.toewijzingMaand; return (T && T.ym===thisYM())?Math.max(Math.round(+T.bedrag||0),0):0; }
+function toewijzingNoteer(b){
+  b=Math.round(+b||0); if(!(b>0)) return;
+  const ym=thisYM(), T=SET.toewijzingMaand;
+  SET.toewijzingMaand={ym, bedrag:((T && T.ym===ym)?Math.max(Math.round(+T.bedrag||0),0):0)+b};
+}
+function planInlegLopend(cap, extra){
+  cap=Math.max(Math.round(+cap||0),0);
+  const a=toegewezenDezeMaand()+Math.max(Math.round(+extra||0),0); if(!(a>0)) return cap;
+  let n=null; try{ n=savedNet(thisYM()); }catch(_){}
+  if(!(n>0)) return cap;
+  return Math.max(cap-Math.min(a, Math.round(n)),0);
+}
 /* v317: DE OVERDRACHTEN KOMEN UIT DEZELFDE PROJECTIE, VIA EEN COLLECTOR VAN DE AANROEPER. De
    terugval bestond sinds v307 alleen in de REKENSOM: `p.eta` werd er een maand of meer eerder van,
    en niets op het scherm zei dat de ruimte van een vol doel naar een ander doel gaat.
@@ -10078,7 +10112,7 @@ const PLAN_VOORUIT_MAX = 600;
 /* v367: `reeks` (optioneel) krijgt per bestemming wat hij in elke maand van de projectie krijgt (index = maand vanaf nu,
    1 is volgende maand), voor de tijdlijn op Plan (planTijdlijnData()). Dezelfde verdeling als elke vol-datum, dus de
    balken en de datums kunnen niet uiteenlopen. */
-function planVooruit(P, cap, G, terug, tz, reeks){
+function planVooruit(P, cap, G, terug, tz, reeks, extraToe){   // v370: extraToe = een toewijzing die de aanroeper doorrekent (spaarVerdeelVoorstel())
   const uit={};
   P=P||allocatePlan();
   if(cap==null){ try{ cap=planCapacity(); }catch(_){ cap=0; } }
@@ -10103,9 +10137,11 @@ function planVooruit(P, cap, G, terug, tz, reeks){
     }
     return best;
   };
+  const cap1=planInlegLopend(cap, extraToe);
   for(let m=1;m<=PLAN_VOORUIT_MAX;m++){
     if(tzBij[m]) for(const r of rows){ const b=Math.round(+tzBij[m][r.id]||0); if(b>0){ r.rest=Math.max(r.rest-b,0); if(r.rest<=0&&uit[r.id]==null) uit[r.id]=m; } }
-    planVerdeelMaand(rows, cap, planGrendelVan(rows.find(r=>r.type==='noodfonds'), cap));
+    const capM=(m===1)?cap1:cap;
+    planVerdeelMaand(rows, capM, planGrendelVan(rows.find(r=>r.type==='noodfonds'), capM));
     if(reeks) for(const r of rows){ (reeks[r.id]=reeks[r.id]||[])[m]=(r.status==='gepauzeerd')?0:Math.max(Math.round(+r.alloc||0),0); }
     let nu=null;
     if(terug){
@@ -10131,7 +10167,7 @@ function planVooruit(P, cap, G, terug, tz, reeks){
       if(b){ e.naar=b.id; e.vanaf=m; }
     }
     if(terug) vorig=nu;
-    if(!bewoog) break;
+    if(!bewoog && !(m===1 && cap1<cap)) break;   // v370: een lopende maand die al is toegewezen beweegt niets, en dat is geen stilstand
   }
   return uit;
 }
@@ -10189,7 +10225,7 @@ function allocatePlan(){
     p.status=p.alloc>0?'':'wacht op capaciteit';
     p.eta=null;
     if(p.alloc>0){
-      if(p.type==='aflossen'){ const dd=(SET.debts||[]).find(x=>String(x.id)===String(p.debtId)); const V=dd?schuldVrij(dd,p.alloc):null; const mm=V?V.k:payoffMonths(p.rest,(p.debtPer||0)+p.alloc,p.rente); p.eta=(mm!=null&&isFinite(mm)&&mm>0)?mm:null; }   // v350: dezelfde datum als de rij op Vermogen, met wat Plan erbovenop zet
+      if(p.type==='aflossen'){ const dd=(SET.debts||[]).find(x=>String(x.id)===String(p.debtId)); const V=dd?schuldVrij(dd,p.alloc):null; const mm=V?(V.k!=null?V.k+1:null):payoffMonths(p.rest,(p.debtPer||0)+p.alloc,p.rente)+1; p.eta=(mm!=null&&isFinite(mm)&&mm>0)?mm:null; }   // v370: een eta is een aantal inleggen met deze maand als eerste; schuldVrij().k is de maand vanaf nu, dus +1, en payoffMonths() begint volgende maand   // v350: dezelfde datum als de rij op Vermogen, met wat Plan erbovenop zet
       /* v307: uit de projectie en niet uit ceil(rest/alloc). Zonder iets om door te zakken zijn die
          twee per constructie gelijk; met de terugval erin is de projectie een maand of meer eerder.
          Zegt de projectie het niet, dan staat er niets (v173) in plaats van een tempo dat niet klopt. */
@@ -10307,7 +10343,7 @@ function planModeLabel(p){
    de maandindex zelf, dus er is ook geen jaargrens om apart te behandelen. */
 function etaDatum(maanden){
   const n=Math.round(+maanden||0); if(n<=0) return '';
-  const t=new Date(); const d=new Date(t.getFullYear(), t.getMonth()+n, 1);
+  const t=new Date(); const d=new Date(t.getFullYear(), t.getMonth()+n-1, 1);
   return d.toLocaleDateString('nl-NL',{month:'short',year:'numeric'}).replace('.','');
 }
 /* v193: "~7 maanden" en "rond apr 2027" stonden allebei op de regel, en dat is hetzelfde feit
@@ -10576,14 +10612,14 @@ function spaarVrijToe(id){
     const nu=Math.max(Math.round(+SET.nfToegewezen||0),0);
     const rest=Math.max(V.doel-nu,0); if(rest<=0) return;
     const bij=Math.min(V.vrij,rest);
-    SET.nfToegewezen=nu+bij; save(); render();
+    SET.nfToegewezen=nu+bij; toewijzingNoteer(bij); save(); render();
     toast(`${ICON('check')} ${euro0(bij)} toegewezen aan je noodfonds`);
     return;
   }
   const g=(SET.goals||[]).find(x=>x.id===id); if(!g) return;
   const rest=Math.max(Math.round((+g.doel||0)-(+g.gespaard||0)),0); if(rest<=0) return;
   const bij=Math.min(V.vrij,rest);
-  g.gespaard=Math.round((+g.gespaard||0)+bij);
+  g.gespaard=Math.round((+g.gespaard||0)+bij); toewijzingNoteer(bij);
   save(); render();
   toast(`${ICON('check')} ${euro0(bij)} toegewezen aan ${g.naam||'je doel'}`);
 }
@@ -10629,7 +10665,7 @@ function spaarVerdeelVoorstel(P){
       rest:Math.max(Math.round((+p.rest||0)-b),0)}); });
   let voorV={}, naV={};
   try{ voorV=planVooruit(P,cap)||{}; }catch(_){}
-  try{ naV=planVooruit(na,cap)||{}; }catch(_){}
+  try{ naV=planVooruit(na,cap,undefined,undefined,undefined,undefined,som)||{}; }catch(_){}   // v370: na de toewijzing telt die deze maand niet nog eens
   const regels=[];
   for(const p of mee){
     const b=bij[p.id]; if(!b) continue;
@@ -10684,6 +10720,7 @@ function spaarVerdeelDoen(){
     const g=(SET.goals||[]).find(x=>x.id===r.id); if(!g) continue;
     g.gespaard=Math.round((+g.gespaard||0)+r.bij);
   }
+  toewijzingNoteer(V.som);   // v370: zie planInlegLopend()
   save(); closeSheet(); render();
   toast(`${ICON('check')} ${euro0(V.som)} verdeeld over ${V.regels.length} bestemmingen`);
 }
@@ -11097,14 +11134,16 @@ function planTijdlijnData(P,cap){
   const per={}; let maxM=0, onb=P.some(x=>x&&x.nfOnbekend);   // een onbekende bufferstand: geen vol-datum is dan geen te laat
   for(const p of P){
     const a0=(p.status==='gepauzeerd'||p.nfOnbekend)?0:Math.max(Math.round(+p.alloc||0),0);
-    const R=reeks[p.id]||[], maanden=[a0]; let eerste=a0>0?0:null;
-    for(let m=1;m<R.length;m++){ const a=+R[m]||0; maanden[m]=a; if(eerste==null&&a>0) eerste=m; }
+    /* v370: maand 1 van de projectie is deze maand, dus kolom m (0 is deze maand) leest R[m+1]. Zonder projectie (geen
+       inleg) blijft kolom 0 de verdeling van nu. `vol` blijft een aantal inleggen; zijn kolom is vol-1. */
+    const R=reeks[p.id]||[], maanden=[R.length>1?(+R[1]||0):a0]; let eerste=maanden[0]>0?0:null;
+    for(let m=2;m<R.length;m++){ const a=+R[m]||0; maanden[m-1]=a; if(eerste==null&&a>0) eerste=m-1; }
     const vol=p.status==='bereikt'?0:(VOL[p.id]!=null?VOL[p.id]:null);
     const K=(p.type==='goal'&&p.streefdatum)?doelMaandenTot(p.streefdatum):null;
     const loopt=!(p.status==='bereikt'||p.status==='gepauzeerd'||p.nfOnbekend);
-    const warn=cap>0 && loopt && p.type==='goal' && K!=null && (vol==null ? !onb : vol>K);
+    const warn=cap>0 && loopt && p.type==='goal' && K!=null && (vol==null ? !onb : vol-1>K);
     per[p.id]={maanden, eerste, vol, K, warn};
-    if(vol!=null) maxM=Math.max(maxM,vol); if(K!=null&&K>0) maxM=Math.max(maxM,K);
+    if(vol!=null) maxM=Math.max(maxM,vol-1); if(K!=null&&K>0) maxM=Math.max(maxM,K);
   }
   return {per, maxM:Math.min(maxM,PLAN_TIJDLIJN_MAX), cap};
 }
@@ -11113,7 +11152,7 @@ function planRijStatus(p,t){
   if(p.status==='bereikt') return {k:'vol', tekst:'vol'};
   if(p.status==='gepauzeerd') return {k:'gepauzeerd', tekst:'gepauzeerd \u00b7 krijgt nu niets'};
   if(Math.round(+p.alloc||0)>0) return {k:'actief', tekst:'nu actief'};
-  if(t && t.eerste!=null) return {k:'wacht', tekst:`wacht tot ${etaDatum(t.eerste)}`};
+  if(t && t.eerste!=null) return {k:'wacht', tekst:`wacht tot ${etaDatum(t.eerste+1)}`};   // v370: eerste is een kolom, etaDatum() een aantal inleggen
   return {k:'wacht', tekst:'wacht'};
 }
 function planRijRechts(p,t){
@@ -11139,7 +11178,7 @@ function openPlanTijdlijn(){
   const naam=id=>{ const x=P.find(y=>y.id===id); return x?spaarOverNaam(x):''; };   // v317: het noodfonds heet "je noodfonds"
   const wat=P.filter(p=>(T.per[p.id]||{}).warn).map(p=>{ const t=T.per[p.id], i=P.indexOf(p), vorige=P.slice(0,i).reverse().find(x=>x.type==='goal'&&x.status!=='bereikt');
     const lbl=doelDatumLabel(p.streefdatum,true);
-    const feit=(t.eerste!=null&&t.eerste>t.K)?`streef ${lbl}, start pas ${etaDatum(t.eerste)||'deze maand'}`:`streef ${lbl}, vol ${t.vol!=null?etaDatum(t.vol):'nog niet te zeggen'}`;
+    const feit=(t.eerste!=null&&t.eerste>t.K)?`streef ${lbl}, start pas ${etaDatum(t.eerste+1)}`:`streef ${lbl}, vol ${t.vol!=null?etaDatum(t.vol):'nog niet te zeggen'}`;
     const opt=(tk,fn)=>`<div class="small" data-tloptie style="padding:5px 0;color:var(--teal);cursor:pointer" onclick="closeSheet();${fn}">• ${esc(tk)} ›</div>`;
     return `<div data-tlwaarschuwing="${p.id}" style="border-top:1px solid var(--line);padding:9px 0 4px">
       <div class="small" style="color:var(--amber);font-weight:700">${esc(p.naam)}: ${esc(feit)}</div>
@@ -11997,7 +12036,7 @@ function fireInputs(){
      structureel per maand kosten en je inleg per bezitting (spaar, res en bel in vermogensInleg()). */
   if(!opzij && monthlySaving>0) opzij={bedrag:Math.round(monthlySaving+Math.max(+resPerMaand||0,0)+belegdItems.reduce((a,x)=>a+Math.max(+x.per||0,0),0)), bron:'instelling', maanden:[]};
   if(!opzij) opzij={bedrag:null, bron:'surplus', maanden:[]};
-  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, leaseItems, emergencyGoal, nfDoel, nfCur, resPerMaand, resEenmalig, resTerug, doelPerMaand, doelItems, planRijen, planCap, opzij, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
+  return { autoAnnualExp, surplus, monthlySaving, fInc, fExp, netWorth:netWorthNow, liq:_w.liq, belegd, flat, belegdItems, flatItems, leaseItems, emergencyGoal, nfDoel, nfCur, resPerMaand, resEenmalig, resTerug, doelPerMaand, doelItems, planRijen, planCap, planCap0:(function(){ try{ return planInlegLopend(planCap); }catch(_){ return planCap; } })(), opzij, debts:debtsEnriched, missing:{balances:missBal, assets:((SET.assets||[]).length===0)} };
 }
 function fireState(inputs, cfg){
   const r=cfg||{}; const defExp=inputs.autoAnnualExp, defPmt=inputs.surplus;
@@ -12127,11 +12166,12 @@ function fireModel(R, inputs){
      vertelden een ander verhaal over hetzelfde geld. Nu herhaalt de projectie planVerdeelMaand() op de
      rijen van Plan, met de grendel per maand via planGrendelVan(), precies zoals planVooruit() (v104).
      Pas als alles vol is, of uitgegeven op zijn datum, gaat de inleg naar de groei.
-     DE LOPENDE MAAND VERDEELT HIJ NIET, net als Plan (v316): planVooruit() begint bij de maand na deze.
-     Wat er deze maand naar Plan gaat staat vlak op je spaarrekening en is nog niet toegewezen.
+     DE LOPENDE MAAND VERDEELT HIJ SINDS v370 WEL, net als Plan: planVooruit() begint bij deze maand (planInlegLopend()).
+     Tot v370 stond wat er deze maand naar Plan ging vlak en telde het niet voor een doel.
      EEN AFLOS-ITEM HOUDT ZIJN TOEWIJZING (v307), en dat geld blijft hier in de inleg: de afloscurve van
      je schuld leest je maandtermijn en is niet aangeraakt, zoals tot v348. */
   const _planCap=_auto?Math.max(Math.round(+inputs.planCap||0),0):0;
+  const _planCap0=_auto?Math.max(Math.round(+(inputs.planCap0!=null?inputs.planCap0:inputs.planCap)||0),0):0;
   const _rij0=_auto?(inputs.planRijen||[]).map(r=>Object.assign({},r,{acc:Math.max(+r.gespaard||0,0), alloc:0})):[];
   /* v348: DE INLEG IS GESPLITST. Wat er werkelijk opzij ging (inputs.opzij, het gemiddelde van drie
      afgeronde maanden) gaat de waterval in; de rest van je surplus blijft vlak op je rekening staan en
@@ -12164,20 +12204,21 @@ function fireModel(R, inputs){
     const aper=Math.max(Math.min(_aperWens,o),0); o=Math.max(o-aper,0);
     /* v348: dan Plan, met de inleg van Plan als plafond en wat er opzij ging als grens: zet je minder
        opzij dan Plan verdeelt, dan krijgen de doelen minder en zijn ze later vol. */
-    let plan=0, nfIn=0, doelIn=0, onverdeeld=0;
+    let plan=0, nfIn=0, doelIn=0;
     if(rows.length && _planCap>0){
       /* in de lopende maand op een kopie: wat Plan nu verdeelt telt hier niet voor een doel (v316) en
          staat vlak; vraagt Plan niets meer, dan gaat ook deze maand alles door naar wat erna komt */
-      const R0=(k>=1)?rows:rows.map(r=>Object.assign({},r)), cap=Math.min(_planCap,o);
+      /* v370: ook de lopende maand verdeelt hij, zoals Plan (planVooruit(), planInlegLopend()): wat er van deze maand
+         al is toegewezen telt niet nog eens (_planCap0). */
+      const R0=rows, cap=Math.min(k===0?_planCap0:_planCap,o);
       planVerdeelMaand(R0, cap, planGrendelVan(R0.find(r=>r.type==='noodfonds'), cap));
-      for(const r of R0){ if(r.houdt) continue; const al=Math.max(Math.round(+r.alloc||0),0); plan+=al; if(k>=1){ if(r.type==='noodfonds') nfIn+=al; else doelIn+=al; } }
-      if(k<1) onverdeeld=plan;
+      for(const r of R0){ if(r.houdt) continue; const al=Math.max(Math.round(+r.alloc||0),0); plan+=al; if(r.type==='noodfonds') nfIn+=al; else doelIn+=al; }
       o=Math.max(o-plan,0); }
     /* Reserveringen staan los van je spaarinleg (v128) en komen na Plan. Betaald worden ze toch
        (v347): de termijn gaat uit de vlakke laag, ook als de inleg hem niet dekte. */
     const wens=_res+((metEen&&k!=null&&_resEen[k])||0);
     const best=Math.max(Math.min(wens,o),0); o=Math.max(o-best,0);
-    return {p:o, F, O, a, aper, aperWens:_aperWens, plan, nfIn, doelIn, onverdeeld, best, bestWens:wens}; };
+    return {p:o, F, O, a, aper, aperWens:_aperWens, plan, nfIn, doelIn, best, bestWens:wens}; };
   /* v346: per jaar het gemiddelde van zijn twaalf maanden, zodat een eenmalige post ook in de
      Monte Carlo in zijn eigen jaar valt en daarna niet meer. v347: uit de lus hieronder, want wat de
      doelen vragen hangt af van wat er al in staat; de Monte Carlo leest zo exact de inleg van de lijn. */
@@ -12210,7 +12251,7 @@ function fireModel(R, inputs){
   const bserParts=_potItems.map(x=>[x.waarde]);
   const A0=liq0+belegd0+flat0+leaseSeries[0];
   const mid=[A0-debt[0]],low=[A0-debt[0]],high=[A0-debt[0]],koop=[A0-debt[0]],midGross=[A0-debt[0]],assets=[A0], cser=[liq0];   // cser: additief voor de bezittingen-opbouw
-  const _rij=_rij0.map(r=>Object.assign({},r)), _vol={}; let _onv0=0, _planLaatst=null;
+  const _rij=_rij0.map(r=>Object.assign({},r)), _vol={}; let _planLaatst=null;
   for(let y=0;y<HZ;y++){ _pJaar[y]=0;
     /* p gaat naar de nieuwe-inleg-pot op het globale tarief; aper gaat per bezitting naar de pot
        waar hij hoort, op het tarief van die bezitting. Wat Plan verdeelt, de reserveringen en wat niet
@@ -12218,14 +12259,14 @@ function fireModel(R, inputs){
        valt er geen weg (v348). */
     for(let m=0;m<12;m++){ const k=12*y+m;
       const _q=maandDeel(nowY+y,k,_rij,true), p=_q.p, aper=_q.aper;   // v346: per maand, want een eenmalige post valt in een maand
-      _pJaar[y]+=p; if(k===0) _onv0=_q.onverdeeld; if(k>=1&&_q.plan>0) _planLaatst=k;
+      _pJaar[y]+=p; if(_q.plan>0) _planLaatst=k+1;   // v370: een aantal inleggen, zoals een eta
       let _weg=0;
       /* v348: Plan boekt af wat het verdeelde; een doel krijgt ook in de maand van zijn streefdatum
          (zoals op Plan: vol in mei, moet in mei is op tijd) en geeft daarna uit wat erin staat (v347).
          Een gepauzeerd doel krijgt niets bij, maar zijn geld gaat op zijn datum wel weg. */
       for(const r of _rij){
-        if(k>=1 && !r.houdt && r.status!=='gepauzeerd'){ const al=Math.max(Math.round(+r.alloc||0),0);
-          if(al>0){ r.rest=Math.max(r.rest-al,0); r.acc+=al; if(r.rest<=0&&_vol[r.id]==null) _vol[r.id]=k; } }
+        if(!r.houdt && r.status!=='gepauzeerd'){ const al=Math.max(Math.round(+r.alloc||0),0);
+          if(al>0){ r.rest=Math.max(r.rest-al,0); r.acc+=al; if(r.rest<=0&&_vol[r.id]==null) _vol[r.id]=k+1; } }   // v370: gelijk aan planVooruit()
         if(r.type==='goal' && !r.uit && r.k!=null && r.k===k){ _weg+=r.acc; r.uit=true; r.rest=0; r.status='bereikt'; } }
       if(_auto){ _weg+=(_resEen[k]||0); for(const x of _resTerug) if(k>=x.k&&(k-x.k)%x.iv===0) _weg+=x.bedrag; }
       const _f=(_q.aperWens>0)?(aper/_q.aperWens):0;   // proportioneel klemmen: elke pot levert evenveel in
@@ -12252,7 +12293,7 @@ function fireModel(R, inputs){
      laatste doel vol raakt (gelijk aan planVooruit(), zie M.sim.vol) of op zijn datum uitgaf. Verdeelt Plan tot het
      eind van de horizon, dan is er geen maand (null) en noemt het scherm er ook geen. */
   const _planKlaarK=(_planLaatst!=null&&_planLaatst>=1&&_planLaatst<HZ*12-1)?_planLaatst:null;
-  if(_auto){ const nf=_rij0.find(r=>r.type==='noodfonds'&&r.rest>0); if(nf) volYear=(_vol[nf.id]!=null)?nowY+Math.floor((nowMo+_vol[nf.id])/12):nowY+HZ+1; else volYear=nowY; }
+  if(_auto){ const nf=_rij0.find(r=>r.type==='noodfonds'&&r.rest>0); if(nf) volYear=(_vol[nf.id]!=null)?nowY+Math.floor((nowMo+_vol[nf.id]-1)/12):nowY+HZ+1; else volYear=nowY; }
   const reach=t=>{ for(let y=0;y<=HZ;y++){ if(mid[y]>=t) return y; } return null; };
   // noodfonds-mijlpaal = exact hetzelfde getal als de Noodfonds-kaart op Plan (via fireInputs.emergencyGoal)
   const noodDoel=inputs.emergencyGoal;
@@ -12310,7 +12351,7 @@ function fireModel(R, inputs){
     else if(m.target!=null){ const t=reach(m.target); m.tIdx=t; m.yr=(t!=null?nowY+t:null); m.reached=(curNW>=m.target); }
     else { m.tIdx=(m.yr!=null?m.yr-nowY:null); m.reached=false; }
   });
-  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear,cser:cser.slice(),vol:Object.assign({},_vol),onverdeeld0:Math.round(_onv0)},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),eenmalig:(R.inlegMode==='auto')?(inputs.resEenmalig||[]).filter(x=>(+x.k)<HZ*12):[],doel:Math.round(_doel),doelItems:(inputs.doelItems||[]).filter(x=>(+x.per||0)>0),nu:Math.round(_s.best+_s.doelIn),groeit:Math.round(_s.p+_s.aper),groeitNa:Math.round(_sNa.p+_sNa.aper),planKlaarK:_planKlaarK,
+  return {R,nowY,curNW,aowYear,targetYear,HZ,mid,low,high,koop,midGross,assets,debt,debtParts,assetParts,leaseSeries,reach,ms,FIRE,pmtFor,debtPay,sim:{liq0,belegd0,flat0,vrij,volYear,cser:cser.slice(),vol:Object.assign({},_vol),},restsaldo:{nfDoel:inputs.nfDoel,nfCur:inputs.nfCur,monthlySaving:inputs.monthlySaving},freed:{vrij:Math.round(vrij),volYear},bestemming:{res:Math.round(_res),eenmalig:(R.inlegMode==='auto')?(inputs.resEenmalig||[]).filter(x=>(+x.k)<HZ*12):[],doel:Math.round(_doel),doelItems:(inputs.doelItems||[]).filter(x=>(+x.per||0)>0),nu:Math.round(_s.best+_s.doelIn),groeit:Math.round(_s.p+_s.aper),groeitNa:Math.round(_sNa.p+_sNa.aper),planKlaarK:_planKlaarK,
     /* v216: wat je bestemmingen dit jaar vragen en wat ervan past. Sinds a.per vóór de
        bestemmingen staat kan hier geklemd worden, en dan wijs je op Plan meer toe dan je
        restsaldo groot is. Dat is een echte bevinding over jouw plan en hoort dus op het scherm,
@@ -12608,7 +12649,7 @@ function reisRestsaldo(M){
      over het bedrag dat dan vrijkomt. Zonder die maand staat er geen bedrag vrij. Alles komt uit
      fireModel() (M.bestemming); hier wordt niets gerekend behalve de vergelijking zelf. */
   const vrijNa=(groeitNaLbl && B.planKlaarK!=null) ? Math.max(B.groeitNa-B.groeit,0) : 0;
-  const vgl=vrijNa>0?fireVrijVergelijking(M, vrijNa, B.planKlaarK):[];
+  const vgl=vrijNa>0?fireVrijVergelijking(M, vrijNa, B.planKlaarK-1):[];   // v370: planKlaarK is een aantal inleggen, de vergelijking rekent in maanden vanaf nu
   const toonBlok=(B.nu>0||B.res>0||B.doel>0||B.planKlaarK!=null);
   const groeitRegel=toonBlok?`<div data-inlegvrij style="margin-top:12px;padding:11px 12px;background:var(--card2);border-radius:11px">
     <div class="small" style="font-weight:700">${ICON('swap')} Waar je inleg heen gaat</div>
@@ -24659,7 +24700,7 @@ function diagReisReserveringen(){
   /* v348: de splitsing van de inleg en de maandverdeling van Plan naast die van de projectie */
   { const Z=M.opzij||{}; const herk=Z.bron==='gemeten'?`gemeten over ${(Z.maanden||[]).join(', ')}${Z.gemeten!=null?' ('+Z.gemeten+' gemiddeld)':''}`:(Z.bron==='instelling'?'niet gemeten: spaarinleg + reserveringen + inleg per bezitting zoals ingesteld':'niet gemeten en niets ingesteld: het hele surplus');
     L.push(`inleg: surplus ${Math.round(+R.pmt||0)} = opzij ${Math.round(+Z.bedrag||0)} (${herk}) + blijft vlak ${Math.round(+Z.vlak||0)}`);
-    L.push(`lopende maand: ${Math.round(+(M.sim&&M.sim.onverdeeld0)||0)} naar Plan, telt niet mee voor een doel (zoals Plan) en staat vlak`);
+    L.push(`lopende maand: telt mee voor de doelen, zoals Plan (v370); niet nog eens wat er deze maand al is toegewezen`);
     let P={}; try{ P=planVooruit(allocatePlan()); }catch(_){}
     const V=(M.sim&&M.sim.vol)||{}; const ids=[...new Set(Object.keys(P).concat(Object.keys(V)))];
     let namen={}; try{ for(const p of allocatePlan()) namen[p.id]=p.naam||p.id; }catch(_){}

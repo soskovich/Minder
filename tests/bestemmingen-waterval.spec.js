@@ -77,7 +77,7 @@ const model = (page) => page.evaluate(() => {
   return {
     surplus: M.R.surplus, pmt: Math.round(M.R.pmt), nowY: M.nowY, HZ: M.HZ,
     res: i.resPerMaand, doel: i.doelPerMaand, doelItems: i.doelItems,
-    best: M.bestemming, volYear: M.freed.volYear, vrij: M.freed.vrij, opz: M.opzij, onv0: M.sim.onverdeeld0,
+    best: M.bestemming, volYear: M.freed.volYear, vrij: M.freed.vrij, opz: M.opzij,
     eind: Math.round(M.mid[M.HZ]), assetsEind: Math.round(M.assets[M.HZ]),
     cashEind: Math.round(laag('cash')), inlegEind: Math.round(laag('inleg')),
     somParts: Math.round(M.assetParts.reduce((s, p) => s + (p.series[M.HZ] || 0), 0)),
@@ -157,9 +157,9 @@ test.describe('b - de euro landt vlak, niet in de compoundende laag', () => {
     const zonder = await model(page);
     expect(zonder.best.groeit).toBe(zonder.opz.bedrag);   // v348: zonder bestemmingen groeit wat opzij ging, niet het hele restsaldo
     expect(zonder.opz.vlak).toBe(met.opz.vlak);   // de meting hangt niet aan de instellingen
-    // v348: plus de lopende maand: wat Plan nu verdeelt telt niet mee voor een doel (v316) en staat vlak
-    expect(met.onv0).toBe(500);
-    expect(met.cashEind - zonder.cashEind).toBe(20000 - 1000 + met.onv0);
+    /* v370: de lopende maand telt mee voor de doelen, zoals op Plan, dus er staat niets meer vlak bovenop (tot v370
+       stond de inleg van deze maand, hier 500, vlak). */
+    expect(met.cashEind - zonder.cashEind).toBe(20000 - 1000);
     const perMaand = met.res + met.doel;
     expect(met.cashEind - zonder.cashEind).toBeLessThan(perMaand * 12 * met.HZ);
     expect(zonder.inlegEind - met.inlegEind).toBeGreaterThan(0);

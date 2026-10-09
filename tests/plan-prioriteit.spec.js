@@ -236,7 +236,7 @@ test.describe('d/e · dure-schuld-advies bij een nieuw doel', () => {
     expect(P[0].doel).toBe(2000);
     expect(P[0].alloc).toBe(CAP);
     // ETA via payoffMonths over de eigen aflossing + de allocatie
-    expect(P[0].eta).toBe(await page.evaluate(() => payoffMonths(2000, 50 + 300, 14)));
+    expect(P[0].eta).toBe(await page.evaluate(() => payoffMonths(2000, 50 + 300, 14) + 1));   // v370: zie plan-doorzakken
 
     // de onderliggende schuld is niet aangeraakt
     expect(await page.evaluate(() => SET.debts[0])).toMatchObject({ id: 'd1', rest: 2000, perMaand: 50, rente: 14 });

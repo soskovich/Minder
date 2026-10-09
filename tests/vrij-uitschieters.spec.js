@@ -226,7 +226,7 @@ test.describe('d · Plan: een rij per doel en een tijdlijn', () => {
       rij: [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')].map((e) => [e.dataset.id, e.querySelector('[data-planstatus]').innerText]),
       volg: (document.querySelector('[data-planvolgorde]') || {}).innerText || '', regel: !!document.getElementById('terugzetRegel'), kaart: !!document.getElementById('terugzetKaart') }));
     expect(r.vat).toBe(0);
-    expect(r.rij).toEqual([['noodfonds', 'nu actief'], ['kk', 'nu actief'], ['iw', 'wacht tot mei 2027']]);
+    expect(r.rij).toEqual([['noodfonds', 'nu actief'], ['kk', 'nu actief'], ['iw', 'wacht tot apr 2027']]);   // v370: oktober telt mee
     expect(r.volg).toContain('Volgorde: 1 → 2 → 3, de ruimte schuift door');
     expect(r.regel).toBe(true);
     expect(r.kaart).toBe(false);
@@ -250,7 +250,7 @@ test.describe('d · Plan: een rij per doel en een tijdlijn', () => {
         wat: (document.querySelector('[data-tlwaarschuwing]') || {}).innerText || '', opties: document.querySelectorAll('[data-tloptie]').length }; });
     expect(t.iwEerste).toBe(t.d);
     expect(t.ruit).toBe(t.K);
-    expect(t.wat).toContain('Inrichting: streef mrt 2027, start pas mei 2027');
+    expect(t.wat).toContain('Inrichting: streef mrt 2027, start pas apr 2027');   // v370
     expect(t.wat).toContain('Wat kun je doen?');
     expect(t.opties).toBe(3);
   });

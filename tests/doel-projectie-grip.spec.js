@@ -19,8 +19,10 @@ const { kaalUit } = require('./bron-kaal');
 const MAIN='NL01MAIN0000001111', SAV='NL01SAVE0000004323';
 const MS=['2026-05','2026-06','2026-07','2026-08','2026-09'];
 const CAP=2500, KK_DOEL=15000, KK_ALLOC=1980, IW_DOEL=1560;
-const HAALT='2027-05';        // 7 maanden vanaf oktober 2026, en de projectie haalt hem
-const HAALT_NIET='2027-01';   // 3 maanden, en die haalt hij ook met de doorzak niet
+/* v370: de lopende maand telt mee, dus zeven inleggen vanaf oktober 2026 landen in april en niet meer in mei. De
+   streefdata zijn een maand naar voren gezet zodat de stand dezelfde blijft: zeven inleggen, een doorzak, net op tijd. */
+const HAALT='2027-04';        // 7 inleggen vanaf oktober 2026 (okt t/m apr), en de projectie haalt hem
+const HAALT_NIET='2026-12';   // 3 inleggen, en die haalt hij ook met de doorzak niet
 
 function seed(o={}){
   const tx=[]; let i=0;
@@ -84,7 +86,7 @@ test('a de projectie haalt de datum terwijl de vlakke som een gat houdt', async 
   const r=await meet(page);
   expect(r.alloc).toBe(KK_ALLOC);
   expect(r.rest).toBe(KK_DOEL);
-  expect(r.maandenTot).toBe(7);                       // 1 okt 2026 -> mei 2027
+  expect(r.maandenTot).toBe(7);                       // okt 2026 t/m apr 2027
   expect(r.eta).toBe(7);                              // met de doorzak, niet ceil(15000/1980)=8
   expect(Math.ceil(KK_DOEL/KK_ALLOC)).toBe(8);        // de vlakke telling zou 8 zeggen
   expect(r.benodigd).toBe(2143);
@@ -120,12 +122,12 @@ test('c het gevolg zegt WAAROM de datum uitkomt, en noemt de vlakke eis als cont
 test('d Plan en Grip vellen hetzelfde oordeel over dezelfde datum', async ({page})=>{
   await boot(page);
   const r=await meet(page);
-  expect(r.plan).toContain('vol in mei 2027');
+  expect(r.plan).toContain('vol in apr 2027');
   expect(r.plan).toContain('net op tijd');
   expect(r.plan).not.toContain('te laat');
   /* De vol-datum van Plan en de maandenTot van Grip zijn dezelfde telling: etaDatum(eta) landt op
      precies de streefmaand, en dat is wat "beide schermen gebruiken dezelfde" betekent. */
-  expect(r.volDatum).toBe('mei 2027');
+  expect(r.volDatum).toBe('apr 2027');
   expect(r.eta).toBe(r.maandenTot);
 });
 
@@ -196,7 +198,7 @@ test('e4 op bereikbare standen impliceert knelt een gat boven nul', async ({page
   await boot(page);
   const r=await page.evaluate(()=>{
     const REST=15000, TOT=7;
-    const rij=(alloc,eta)=>{ const g={doel:REST, gespaard:0, rest:REST, streefdatum:'2027-05'};
+    const rij=(alloc,eta)=>{ const g={doel:REST, gespaard:0, rest:REST, streefdatum:'2027-04'};
       if(eta!=null) g.eta=eta; const T=doelTempo(g, alloc);
       return {alloc, eta, gat:T.gat, knelt:T.knelt}; };
     const bereikbaar=[], onbereikbaar=[];
@@ -224,23 +226,24 @@ test('e4 op bereikbare standen impliceert knelt een gat boven nul', async ({page
 });
 
 /* ===== f) DE TELLING OP DE EERSTE VAN DE MAAND =====
-   De gebruiker vroeg of de inleg van oktober meetelt. GEMETEN: nee, en op BEIDE schermen niet.
-   `doelMaandenTot()` is het kalenderverschil en sluit de lopende maand uit, en `etaDatum(1)` landt
-   op de volgende maand, dus de eerste inleg van de projectie valt in november. De twee tellingen
-   zijn daarmee gelijk; dat ze de lopende maand overslaan is een eigen vraag en staat als meting in
-   CLAUDE.md. */
-test('f beide tellingen slaan de lopende maand over, ook op de 1e', async ({page})=>{
+   v316 mat dat de inleg van oktober op GEEN van beide schermen meetelde. Sinds v370 telt hij op BEIDE mee: de
+   eerste inleg van de projectie is deze maand (etaDatum(1)), en doelTempo() telt de inleggen tot en met de
+   streefmaand met deze maand erbij. De twee tellingen blijven daarmee gelijk. doelMaandenTot() zelf blijft het
+   kalenderverschil. */
+test('f beide tellingen tellen de lopende maand mee, ook op de 1e', async ({page})=>{
   await boot(page);
   const r=await page.evaluate(()=>({
     vandaag: vandaagYMD(),
-    tot: doelMaandenTot('2027-05'),
+    tot: doelMaandenTot('2027-04'),
+    inleggen: doelTempo({doel:15000, gespaard:0, streefdatum:'2027-04'}, 1980).maandenTot,
     eerste: etaDatum(1),
     zeven: etaDatum(7),
   }));
   expect(r.vandaag).toBe('2026-10-01');
-  expect(r.tot).toBe(7);                              // nov t/m mei, oktober telt niet mee
-  expect(r.eerste).toBe('nov 2026');                  // de eerste inleg van de projectie
-  expect(r.zeven).toBe('mei 2027');                   // en de zevende landt op de streefmaand
+  expect(r.tot).toBe(6);                              // het kalenderverschil
+  expect(r.inleggen).toBe(7);                         // okt t/m apr, oktober telt mee
+  expect(r.eerste).toBe('okt 2026');                  // de eerste inleg van de projectie
+  expect(r.zeven).toBe('apr 2027');                   // en de zevende landt op de streefmaand
 });
 
 /* DE DAG MAG HET OORDEEL NIET VERZETTEN: `doelMaandenTot()` is een kalenderverschil in MAANDEN, dus
@@ -259,7 +262,7 @@ test('g op dag 15 van dezelfde maand staat er hetzelfde', async ({page})=>{
 test('h zonder eta beslist het vlakke gat, net als voor deze ronde', async ({page})=>{
   await boot(page);
   const r=await page.evaluate(()=>{
-    const g={doel:15000, gespaard:0, rest:15000, streefdatum:'2027-05'};
+    const g={doel:15000, gespaard:0, rest:15000, streefdatum:'2027-04'};
     const krap=doelTempo(g, 1980);                 // geen eta: de vlakke som beslist
     const ruim=doelTempo(g, 3000);
     return {krap:{gat:krap.gat, knelt:krap.knelt, haalbaar:krap.haalbaar},

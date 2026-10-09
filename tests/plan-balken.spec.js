@@ -182,8 +182,8 @@ test.describe('b · het datumpaar', () => {
   test('twee doelen die het geen van beide halen: achterstand en het bedrag dat het wel haalt',
     async ({ page }) => {
       await boot(page, Object.assign({
-        goals: [KK({ streefdatum: overMnd(4), allocMode: 'fixed', perMaand: 1500 }),
-                IW({ streefdatum: overMnd(1), allocMode: 'fixed', perMaand: 1500 })],
+        goals: [KK({ streefdatum: overMnd(3), allocMode: 'fixed', perMaand: 1500 }),   // v370: vier inleggen, deze maand meegeteld
+                IW({ streefdatum: overMnd(0), allocMode: 'fixed', perMaand: 1500 })],   // v370: een inleg, deze maand
         planOrder: ['noodfonds', ID_KK, ID_IW] }, VOL));
       const V = await balken(page);
       for (const id of [ID_KK, ID_IW]) {
@@ -201,9 +201,9 @@ test.describe('b · het datumpaar', () => {
     });
 
   test('een verdeling die net haalt zegt dat het net op tijd is', async ({ page }) => {
-    // doel 3.000 bij 3.000 per maand: over één maand vol, en de streefdatum is over één maand
+    // doel 3.000 bij 3.000 per maand: met de inleg van deze maand vol (v370), en de streefdatum is deze maand
     await boot(page, Object.assign({
-      goals: [IW({ streefdatum: overMnd(1), allocMode: 'auto' })], planOrder: ['noodfonds', ID_IW] }, VOL));
+      goals: [IW({ streefdatum: overMnd(0), allocMode: 'auto' })], planOrder: ['noodfonds', ID_IW] }, VOL));
     const v = (await balken(page)).find((x) => x.id === ID_IW);
     expect(v.dat).toContain('net op tijd');
     expect(v.laat).toBe(false);

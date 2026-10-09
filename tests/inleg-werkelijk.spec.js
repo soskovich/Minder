@@ -210,7 +210,9 @@ test.describe('c · het vrije spaargeld verdelen', () => {
     ]);
     // en de datums die er NU staan, zodat het gevolg leesbaar is
     expect(V.regels.map((r) => r.etaVoor)).toEqual([8, 9]);
-    expect(V.regels.map((r) => r.eta)).toEqual([4, 5]);
+    /* v370: een eta telt de inleg van deze maand mee. Na de toewijzing is de inleg van oktober al verwerkt (hij zit in de
+       9.000 die je toewijst), dus de vijfde inleg is februari: dezelfde datums als voor v370. */
+    expect(V.regels.map((r) => r.eta)).toEqual([5, 6]);
   });
 
   test('na het bevestigen staat het op de doelen en zijn de vaten het eens', async ({ page }) => {
@@ -227,7 +229,7 @@ test.describe('c · het vrije spaargeld verdelen', () => {
     expect(na.goals).toEqual([['Kosten Koper', 8100], ['Inrichting woning', 900]]);
     expect(na.nf, 'de buffer stond al vol en krijgt niets').toBe(4000);
     expect(na.vrij, 'er blijft niets vrij').toBe(0);
-    expect(na.eta).toEqual([4, 5]);
+    expect(na.eta).toEqual([5, 6]);   // v370: zie hierboven
     /* DE VATEN LEZEN DEZELFDE PROJECTIE als het voorstel, en dat is de aansluiting: het sheet beloofde
        feb en mrt 2027 en dat is wat er na de tik op het scherm staat. */
     expect(na.vol).toEqual(['vol feb 2027', 'vol mrt 2027']);
@@ -396,7 +398,7 @@ test.describe('d · blok 5 zegt waar het getal vandaan komt', () => {
     const t = await blok(page);
     expect(t).toMatch(/knop 1, spaarVrijToe\(\) -> alles naar het bovenste lopende doel: Kosten Koper/);
     expect(t).toMatch(/knop 2, Verdeel volgens je plan - planVerdeelMaand\(\) met 9000 als cap/);
-    expect(t).toMatch(/Kosten Koper\s+\+8100\s+vol in feb 2027\s+\(nu jun 2027\)/);
+    expect(t).toMatch(/Kosten Koper\s+\+8100\s+vol in feb 2027\s+\(nu mei 2027\)/);   // v370: voor de toewijzing telt oktober mee
     expect(t).toMatch(/Inrichting woning\s+\+900\s+vol in mrt 2027/);
     expect(t).toMatch(/verdeeld: 9000\s+blijft vrij: 0/);
   });
@@ -460,10 +462,12 @@ test.describe('e · de prijs in pixels', () => {
       expect(vol.inleg, 'de regel is één regel tekst').toBe(18);
       expect(vol.balkMt, 'met de regel ertussen houdt de balk 4px').toBe('4px');
       expect(zonder.balkMt, 'en zonder regel zijn eigen 9px tot de kop').toBe('9px');
-      expect(vol.kaart - zonder.kaart, 'netto: 18 plus 2 marge min de 5 van de balk').toBe(15);
+      /* v370: op 360 rondt de kaart een pixel anders af (16), dus een pixel speling, zoals bij de zone hieronder */
+      expect(Math.abs(vol.kaart - zonder.kaart - 15), 'netto: 18 plus 2 marge min de 5 van de balk').toBeLessThanOrEqual(1);
       // v365: de tekst staat onder de vaten (punt 13), en dat maakt de kaart hoger: 684px op 360 en 666 op 390 (gemeten)
       /* v367: rijen in plaats van vaten; gemeten 506px op 360 en 433 op 390 (de rijen breken op 360 vaker af) */
-      expect(zonder.kaart, 'zonder de regel').toBe(w === 360 ? 506 : 433);
+      /* v370: de lopende maand telt mee, dus de rijen dragen andere datums en breken minder vaak af: 466 en 412 (gemeten) */
+      expect(zonder.kaart, 'zonder de regel').toBe(w === 360 ? 466 : 412);
       expect(metKnop.vrij - zonder.vrij, 'de tweede knop').toBe(w === 360 ? 18 : 0);
       // v367: de zone wordt per stand afgerond, dus het verschil mag een pixel schuiven (33 of 34 op 360)
       expect(Math.abs(vol.zone - zonder.zone - (w === 360 ? 33 : 15))).toBeLessThanOrEqual(1);

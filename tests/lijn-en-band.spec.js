@@ -47,13 +47,12 @@ const cashLijn = (page) => page.evaluate(() => { const M = reisModel(); const c 
 test.describe('a · wat wordt uitgegeven gaat eruit, wat blijft staat', () => {
   test('een doel met een streefdatum laat de vlakke laag niet groeien: het gaat op zijn datum de deur uit', async ({ page }) => {
     await boot(page, []);
-    const met = await cser(page), onv = await page.evaluate(() => reisModel().sim.onverdeeld0);
+    const met = await cser(page);
     await page.evaluate(() => { SET.goals = []; save(); });
     const zonder = await cser(page);
-    // v348: wat Plan in de lopende maand verdeelt telt niet mee voor een doel (v316) en staat vlak; verder
-    // gaat al het doelgeld op de datum de deur uit
-    expect(onv).toBe(2200);
-    expect(met.slice(1, 11).map((v, i) => v - zonder[i + 1])).toEqual(Array(10).fill(onv));
+    /* v370: de lopende maand telt mee voor de doelen, zoals op Plan, dus al het doelgeld gaat op de datum de deur uit
+       en er blijft niets vlak staan (tot v370 bleef de inleg van deze maand, 2.200, staan). */
+    expect(met.slice(1, 11).map((v, i) => v - zonder[i + 1])).toEqual(Array(10).fill(0));
     expect(met[0]).toBe(zonder[0]);
   });
 
@@ -66,24 +65,23 @@ test.describe('a · wat wordt uitgegeven gaat eruit, wat blijft staat', () => {
     const z = await page.evaluate(() => { const M = reisModel(); return [0, 1, 2, 3].map((y) => M.pmtFor(M.nowY + y) * 12); });
     const zc = await page.evaluate(() => reisModel().sim.cser.map(Math.round));
     expect(r.per).toBeGreaterThan(0);
-    // v348: de lopende maand staat vlak (v316) en blijft staan; vanaf volgende maand krijgt het doel de inleg
-    // van Plan, ook in de maand van zijn datum (vol in mei, moet in mei is op tijd), en daarna gaat het eruit
+    // v370: vanaf DEZE maand krijgt het doel de inleg van Plan, ook in de maand van zijn datum (vol in mei, moet in
+    // mei is op tijd), en daarna gaat het eruit; er blijft niets van de lopende maand vlak staan
     expect(r.c[1] - zc[1]).toBe(12 * r.per);
     expect(r.c[2] - zc[2]).toBe(24 * r.per);
-    expect(r.c[3] - zc[3]).toBe(r.per);
+    expect(r.c[3] - zc[3]).toBe(0);
     // de groei mist de lopende maand en de dertig maanden tot en met de datum
     expect(z.map((v, i) => Math.round(v - r.g[i]))).toEqual([12 * r.per, 12 * r.per, 7 * r.per, 0]);
   });
 
   test('een doel zonder datum blijft staan, tot zijn doelbedrag en niet verder', async ({ page }) => {
     await boot(page, [], { goals: [{ id: 'g1', naam: 'Buffer extra', doel: 5000, gespaard: 0 }] });
-    const met = await cser(page), onv = await page.evaluate(() => reisModel().sim.onverdeeld0);
+    const met = await cser(page);
     await page.evaluate(() => { SET.goals = []; save(); });
     const zonder = await cser(page);
-    // v348: plus de lopende maand, die Plan niet meetelt en die dus vlak staat
-    expect(onv).toBe(2200);
-    expect(met[met.length - 1] - zonder[zonder.length - 1]).toBe(5000 + onv);
-    expect(met[5] - zonder[5]).toBe(5000 + onv);
+    // v370: de lopende maand telt mee voor het doel, dus er staat precies het doelbedrag vlak en niets erbovenop
+    expect(met[met.length - 1] - zonder[zonder.length - 1]).toBe(5000);
+    expect(met[5] - zonder[5]).toBe(5000);
   });
 
   test('een reservering komt binnen en gaat op de termijn weer uit', async ({ page }) => {

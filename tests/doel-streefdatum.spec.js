@@ -62,7 +62,8 @@ test.describe('a · de rekenregel', () => {
   });
 
   test('benodigd, gat en haalbaar volgen rest en inleg', async ({ page }) => {
-    await boot(page, seedDoel([G({ streefdatum: overMnd(28) })]));
+    /* v370: maandenTot is het AANTAL inleggen tot en met de streefmaand, deze maand meegeteld: 27 maanden verder is 28. */
+    await boot(page, seedDoel([G({ streefdatum: overMnd(27) })]));
     const T = await page.evaluate(() => doelTempo(allocatePlan().find((p) => p.id === 'g1'), 200));
     expect(T.maandenTot).toBe(28);
     expect(T.benodigd).toBe(Math.ceil(8000 / 28));    // 286, naar boven afgerond
@@ -72,9 +73,9 @@ test.describe('a · de rekenregel', () => {
 
   test('rondt nooit naar iets optimistischers af', async ({ page }) => {
     // 1001 in 10 maanden = 100,1 -> 101, niet 100
-    await boot(page, seedDoel([G({ doel: 1001, streefdatum: overMnd(10) })]));
+    await boot(page, seedDoel([G({ doel: 1001, streefdatum: overMnd(9) })]));
     const T = await page.evaluate(() => doelTempo({ doel: 1001, gespaard: 0, streefdatum: document.title && null }, 0) || null);
-    const T2 = await page.evaluate((d) => doelTempo({ doel: 1001, gespaard: 0, streefdatum: d }, 100), overMnd(10));
+    const T2 = await page.evaluate((d) => doelTempo({ doel: 1001, gespaard: 0, streefdatum: d }, 100), overMnd(9));   // v370: tien inleggen
     expect(T).toBeNull();                              // zonder geldige datum: niets beweren
     /* v243: doelTempo() draagt er velden bij (soort, start, startLabel, venster, knelt) voor de
        grendel. Dit object is handgemaakt en heeft geen grendel, dus het rekent onveranderd vanaf
@@ -91,11 +92,13 @@ test.describe('a · de rekenregel', () => {
       verstreken: doelTempo({ doel: 500, gespaard: 0, streefdatum: m.terug }, 50),
       dezeMaand: doelTempo({ doel: 500, gespaard: 0, streefdatum: m.cur }, 50),
     }), { later: overMnd(6), terug: overMnd(-2), cur: CUR });
-    expect(uit).toEqual({ geen: null, bereikt: null, verstreken: null, dezeMaand: null });
+    expect({ geen: uit.geen, bereikt: uit.bereikt, verstreken: uit.verstreken }).toEqual({ geen: null, bereikt: null, verstreken: null });
+    /* v370: een streefdatum in deze maand is niet verstreken, want de inleg van deze maand telt nog mee: een inleg. */
+    expect(uit.dezeMaand.maandenTot).toBe(1); expect(uit.dezeMaand.benodigd).toBe(500);
   });
 
   test('gebruikt de resterende behoefte, niet het hele doelbedrag', async ({ page }) => {
-    await boot(page, seedDoel([G({ gespaard: 6000, streefdatum: overMnd(10) })]));
+    await boot(page, seedDoel([G({ gespaard: 6000, streefdatum: overMnd(9) })]));   // v370: tien inleggen
     const T = await page.evaluate(() => doelTempo(allocatePlan().find((p) => p.id === 'g1'), 200));
     expect(T.benodigd).toBe(200);                      // 2000 rest / 10 maanden
     expect(T.haalbaar).toBe(true);
@@ -104,26 +107,26 @@ test.describe('a · de rekenregel', () => {
 
 test.describe('b · de zin', () => {
   test('tekort: spiegel, gevolg, verschil', async ({ page }) => {
-    await boot(page, seedDoel([G({ streefdatum: overMnd(28) })]));
+    await boot(page, seedDoel([G({ streefdatum: overMnd(27) })]));   // v370: 28 inleggen
     const p = await item(page);
     expect(p.alloc).toBe(200);
     const t = await regel(page);
     /* v189: het benodigde bedrag stond er zonder dat het ooit tegen de capaciteit werd gelegd,
        dus de zin sluit nu af met wat er te verdelen is. Dezelfde bron als de kop van het plan. */
     const cap = await page.evaluate(() => euro0(planCapacity()));
-    expect(t).toBe(`Je legt nu €200 per maand in. Voor €8.000 in ${await page.evaluate((d) => doelDatumLabel(d), overMnd(28))} heb je €286 per maand nodig. Je komt €86 per maand tekort. Je hele plan heeft ${cap} per maand te verdelen.`);
+    expect(t).toBe(`Je legt nu €200 per maand in. Voor €8.000 in ${await page.evaluate((d) => doelDatumLabel(d), overMnd(27))} heb je €286 per maand nodig. Je komt €86 per maand tekort. Je hele plan heeft ${cap} per maand te verdelen.`);
     expect(t).not.toMatch(/[!—]/);                     // geen uitroeptekens, geen em-dashes
   });
 
   test('haalbaar: de datum wordt gehaald, met de speling erbij', async ({ page }) => {
-    await boot(page, seedDoel([G({ doel: 1000, streefdatum: overMnd(6) })]));
+    await boot(page, seedDoel([G({ doel: 1000, streefdatum: overMnd(5) })]));   // v370: zes inleggen tegen vijf nodig
     const p = await item(page);
     expect(p.eta).toBe(5);                             // 1000 / 200
     expect(await regel(page)).toBe('Je huidige inleg haalt de datum, met 1 maand speling.');
   });
 
   test('precies op de datum krijgt geen speling toegedicht', async ({ page }) => {
-    await boot(page, seedDoel([G({ doel: 1000, streefdatum: overMnd(5) })]));
+    await boot(page, seedDoel([G({ doel: 1000, streefdatum: overMnd(4) })]));   // v370: vijf inleggen, deze maand meegeteld
     expect(await regel(page)).toBe('Je huidige inleg haalt de datum, precies op de datum.');
   });
 
@@ -143,7 +146,7 @@ test.describe('b · de zin', () => {
     // twee doelen, capaciteit 200 gaat volledig naar het eerste
     await boot(page, seedDoel([
       G({ id: 'g0', naam: 'Eerst', doel: 5000, allocMode: 'fixed', perMaand: 200 }),
-      G({ id: 'g1', naam: 'Later', doel: 2400, allocMode: 'fixed', perMaand: 100, streefdatum: overMnd(12) }),
+      G({ id: 'g1', naam: 'Later', doel: 2400, allocMode: 'fixed', perMaand: 100, streefdatum: overMnd(11) }),   // v370: twaalf inleggen
     ]));
     const p = await item(page, 'g1');
     expect(p.alloc).toBe(0);

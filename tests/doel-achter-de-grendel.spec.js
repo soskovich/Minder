@@ -1,4 +1,6 @@
 // v243: doelTempo() wist niet dat de grendel bestaat.
+// v370: de lopende maand telt mee, dus een streefdatum 20 maanden verder is 21 inleggen; de afstanden in deze spec
+// staan een maand korter dan voor v370 en de getallen (21, 11, 10, 300) zijn dezelfde.
 //
 // Een doel dat op de buffer wacht krijgt tot die vol is per definitie niets, maar doelTempo()
 // rekende het benodigde bedrag onverkort vanaf vandaag. Gemeten: een buffer met nog €31.000 te gaan
@@ -47,7 +49,7 @@ function seed(o) {
     nfToegewezen: o.nfToe != null ? o.nfToe : 9000,
     nfToegewezenMigrated: o.migrated === false ? false : true,
     goals: o.goals || [{ id: 'g1', naam: 'Vakantie', doel: 3000, gespaard: 0,
-      allocMode: 'fixed', perMaand: 500, streefdatum: o.sd || overMnd(21) }],
+      allocMode: 'fixed', perMaand: 500, streefdatum: o.sd || overMnd(20) }],   // v370: 21 inleggen, deze maand meegeteld
     planOrder: ['noodfonds', 'g1'],
   }, o.set || {});
   return {
@@ -127,7 +129,7 @@ test.describe('b · wat er niet verandert', () => {
     const r = await page.evaluate((sd) => {
       const T = doelTempo({ doel: 3000, gespaard: 0, streefdatum: sd }, 0);
       return { T, grendelDicht: !!planGrendel() };
-    }, overMnd(21));
+    }, overMnd(20));   // v370: 21 inleggen
     expect(r.grendelDicht).toBe(true);               // de grendel zit dicht, maar dit object weet dat niet
     expect(r.T.start).toBe(0);
     expect(r.T.venster).toBe(21);
@@ -161,7 +163,7 @@ test.describe('c · de twee randgevallen zonder bedrag', () => {
   });
 
   test('openingsmaand na de streefdatum: te laat, en het telt wel mee', async ({ page }) => {
-    await boot(page, { sd: overMnd(5) });            // grendel opent over 11 maanden
+    await boot(page, { sd: overMnd(4) });            // grendel opent na 11 inleggen; v370: 5 inleggen tot de streefdatum
     const r = await meet(page);
     expect(r.T.soort).toBe('telaat');
     expect(r.T.venster).toBe(-6);
@@ -174,7 +176,7 @@ test.describe('c · de twee randgevallen zonder bedrag', () => {
   });
 
   test('openingsmaand precies op de streefdatum: te laat, geen deling door nul', async ({ page }) => {
-    await boot(page, { sd: overMnd(11) });           // exact de openingsmaand
+    await boot(page, { sd: overMnd(10) });           // exact de openingsmaand (v370: 11 inleggen)
     const r = await meet(page);
     expect(r.T.start).toBe(11);
     expect(r.T.maandenTot).toBe(11);
@@ -185,7 +187,7 @@ test.describe('c · de twee randgevallen zonder bedrag', () => {
   });
 
   test('een venster van precies één maand is normaal, met het volle bedrag', async ({ page }) => {
-    await boot(page, { sd: overMnd(12) });           // openingsmaand 11, dus één maand over
+    await boot(page, { sd: overMnd(11) });           // openingsmaand 11, dus één maand over (v370: 12 inleggen)
     const r = await meet(page);
     expect(r.T.soort).toBe('normaal');
     expect(r.T.venster).toBe(1);

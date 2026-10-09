@@ -128,10 +128,12 @@ test.describe('b · einddatum per doel', () => {
     expect(rij).not.toMatch(/rond /);
   });
 
-  test('etaDatum rekent vanaf vandaag en zwijgt bij nul', async ({ page }) => {
+  /* v370: etaDatum(n) is de maand van de n-de inleg, en de eerste is deze maand: acht inleggen landen zeven maanden
+     verder. */
+  test('etaDatum rekent vanaf deze maand en zwijgt bij nul', async ({ page }) => {
     await openV(page, tweak((s) => { s.goals = []; }));
     const r = await page.evaluate(() => {
-      const d = new Date(); d.setMonth(d.getMonth() + 8);
+      const t = new Date(), d = new Date(t.getFullYear(), t.getMonth() + 7, 1);
       return { acht: etaDatum(8), verwacht: d.toLocaleDateString('nl-NL', { month: 'short', year: 'numeric' }).replace('.', ''),
                nul: etaDatum(0), leeg: etaDatum(null) };
     });

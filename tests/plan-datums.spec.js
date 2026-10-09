@@ -35,18 +35,18 @@ const bron = () => fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'ut
      alles een maand".
    - 2026-04-15: dezelfde tegenproef midden in de maand. */
 const TABEL = [
-  ['2026-01-31', ['feb 2026', 'mrt 2026', 'apr 2026', 'mei 2026', 'jun 2026', 'jul 2026', 'aug 2026',
-    'sep 2026', 'okt 2026', 'nov 2026', 'dec 2026', 'jan 2027', 'feb 2027', 'mrt 2027']],
-  ['2026-03-31', ['apr 2026', 'mei 2026', 'jun 2026', 'jul 2026', 'aug 2026', 'sep 2026', 'okt 2026',
-    'nov 2026', 'dec 2026', 'jan 2027', 'feb 2027', 'mrt 2027', 'apr 2027', 'mei 2027']],
-  ['2026-09-30', ['okt 2026', 'nov 2026', 'dec 2026', 'jan 2027', 'feb 2027', 'mrt 2027', 'apr 2027',
-    'mei 2027', 'jun 2027', 'jul 2027', 'aug 2027', 'sep 2027', 'okt 2027', 'nov 2027']],
-  ['2024-02-29', ['mrt 2024', 'apr 2024', 'mei 2024', 'jun 2024', 'jul 2024', 'aug 2024', 'sep 2024',
-    'okt 2024', 'nov 2024', 'dec 2024', 'jan 2025', 'feb 2025', 'mrt 2025', 'apr 2025']],
-  ['2026-02-28', ['mrt 2026', 'apr 2026', 'mei 2026', 'jun 2026', 'jul 2026', 'aug 2026', 'sep 2026',
+  ['2026-01-31', ['jan 2026', 'feb 2026', 'mrt 2026', 'apr 2026', 'mei 2026', 'jun 2026', 'jul 2026',
+    'aug 2026', 'sep 2026', 'okt 2026', 'nov 2026', 'dec 2026', 'jan 2027', 'feb 2027']],
+  ['2026-03-31', ['mrt 2026', 'apr 2026', 'mei 2026', 'jun 2026', 'jul 2026', 'aug 2026', 'sep 2026',
     'okt 2026', 'nov 2026', 'dec 2026', 'jan 2027', 'feb 2027', 'mrt 2027', 'apr 2027']],
-  ['2026-04-15', ['mei 2026', 'jun 2026', 'jul 2026', 'aug 2026', 'sep 2026', 'okt 2026', 'nov 2026',
-    'dec 2026', 'jan 2027', 'feb 2027', 'mrt 2027', 'apr 2027', 'mei 2027', 'jun 2027']],
+  ['2026-09-30', ['sep 2026', 'okt 2026', 'nov 2026', 'dec 2026', 'jan 2027', 'feb 2027', 'mrt 2027',
+    'apr 2027', 'mei 2027', 'jun 2027', 'jul 2027', 'aug 2027', 'sep 2027', 'okt 2027']],
+  ['2024-02-29', ['feb 2024', 'mrt 2024', 'apr 2024', 'mei 2024', 'jun 2024', 'jul 2024', 'aug 2024',
+    'sep 2024', 'okt 2024', 'nov 2024', 'dec 2024', 'jan 2025', 'feb 2025', 'mrt 2025']],
+  ['2026-02-28', ['feb 2026', 'mrt 2026', 'apr 2026', 'mei 2026', 'jun 2026', 'jul 2026', 'aug 2026',
+    'sep 2026', 'okt 2026', 'nov 2026', 'dec 2026', 'jan 2027', 'feb 2027', 'mrt 2027']],
+  ['2026-04-15', ['apr 2026', 'mei 2026', 'jun 2026', 'jul 2026', 'aug 2026', 'sep 2026', 'okt 2026',
+    'nov 2026', 'dec 2026', 'jan 2027', 'feb 2027', 'mrt 2027', 'apr 2027', 'mei 2027']],
 ];
 
 const MAIN = 'NL01MAIN0000001111';
@@ -81,9 +81,8 @@ test.describe('a - etaDatum slaat geen maand over', () => {
 
   /* ZONDER DEZE TWEE ASSERTIES IS DE TABEL NIET MEER DAN ZESTIG LOSSE STRINGS. Wat de reparatie
      vasthoudt is dat er GEEN twee opeenvolgende waarden gelijk zijn: een overgeslagen maand laat
-     zich precies zo zien. En de eerste waarde is de maand NA de gepinde maand, want een eta van
-     één maand is volgende maand; dat onderscheidt de reparatie van een vorm die een maand te vroeg
-     begint. */
+     zich precies zo zien. En de eerste waarde is de GEPINDE maand zelf, want sinds v370 is een eta
+     een aantal inleggen met deze maand als eerste (de lopende maand telt mee). */
   test('geen twee opeenvolgende waarden zijn gelijk, in geen van de zes dagen', () => {
     for (const [dag, v] of TABEL) {
       const dubbel = v.filter((x, i) => i > 0 && x === v[i - 1]);
@@ -180,7 +179,7 @@ test.describe('b - de terugval: wat een vol doel niet meer nodig heeft gaat naar
     expect(r.find((x) => x.id === ID_IW).rest).toBe(3000);
   });
 
-  test('Inrichting is vol in februari 2027 en Kosten Koper in juni 2027', async ({ page }) => {
+  test('Inrichting is vol in januari 2027 en Kosten Koper in mei 2027 (v370: de lopende maand telt mee)', async ({ page }) => {
     await pinDatum(page, '2026-09-30');
     await boot(page);
     const r = await plan(page);
@@ -188,7 +187,7 @@ test.describe('b - de terugval: wat een vol doel niet meer nodig heeft gaat naar
     expect(iw.eta).toBe(5);
     expect(kk.eta).toBe(9);
     const d = await page.evaluate(() => [etaDatum(5), etaDatum(9)]);
-    expect(d).toEqual(['feb 2027', 'jun 2027']);
+    expect(d).toEqual(['jan 2027', 'mei 2027']);
   });
 
   /* HET GEVAL DAT DE TERUGVAL VAN DE OUDE VORM ONDERSCHEIDT, en het staat als eigen assertie
@@ -303,7 +302,7 @@ test.describe('b - de terugval: wat een vol doel niet meer nodig heeft gaat naar
     }
     expect(src.split('function planVerdeelMaand(').length - 1).toBe(1);
     expect(sectieVan(src, 'function allocatePlan(')).toContain('planVerdeelMaand(P,cap,G)');
-    expect(sectieVan(src, 'function planVooruit(')).toContain('planVerdeelMaand(rows, cap,');
+    expect(sectieVan(src, 'function planVooruit(')).toContain('planVerdeelMaand(rows, capM,');   // v370: de eerste maand met planInlegLopend()
     // en de oude eigen berekening is weg
     expect(src).not.toContain('Math.ceil(p.rest/p.alloc)');
   });
@@ -332,7 +331,7 @@ test.describe('b - de terugval: wat een vol doel niet meer nodig heeft gaat naar
     expect(d, 'de fixture moet werkelijk een aflos-item dragen').toBeTruthy();
     expect(d.alloc).toBeGreaterThan(0);
     const mm = await page.evaluate((x) => payoffMonths(x.rest, x.alloc, 6), { rest: d.rest, alloc: d.alloc });
-    expect(d.eta).toBe(mm);
+    expect(d.eta).toBe(mm + 1);   // v370: een eta is een aantal inleggen met deze maand als eerste; payoffMonths() begint volgende maand
     /* DE EIGENSCHAP ZELF, EXACT GETOETST: de schuld valt in de projectie NOOIT vrij, dus zijn rest
        bereikt daar nooit nul en zijn id komt niet in de uitkomst voor. Mijn eerste vorm zette hier
        een ondergrens op de eta van de doelen eronder, en die stond te ruim: de sabotage die de

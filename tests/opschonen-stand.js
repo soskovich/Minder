@@ -3,7 +3,8 @@
    EUR 3.000 (streef maart 2027), en op 5 oktober EUR 231 van de spaarrekening gehaald (saldo 3.407).
    GECONSTRUEERD EN NIET GEMETEN: de boekingen van het toestel staan alleen daar. GEMETEN OP DEZE STAND (v365, punt
    C): Noodfonds is in alle drie de keuzes vol in november 2026; niet terugzetten schuift Kosten Koper van mei naar
-   juni 2027. */
+   juni 2027. SINDS v370 TELT OKTOBER MEE: Noodfonds vol in oktober 2026, en niet terugzetten schuift Kosten Koper van
+   april naar mei 2027. */
 const { pinDatum } = require('./vaste-dag');
 const MAIN = 'NL01MAIN0000001111', SAV = 'NL01SAVE0000004323';
 const DAG = '2026-10-09';

@@ -108,9 +108,11 @@ test.describe('a - elke regel met een tekort draagt een suggestie', () => {
     const r = await sug(page, 'doel');
     expect(r.status).toBe('tekort');
     /* v243: met een open grendel krijgt het doel de €300 die naar de buffer ging, dus het tekort is
-       €1.325 en niet €1.625. Het anker is de regel zelf, niet het getal. */
+       €1.200 en niet €1.500. Het anker is de regel zelf, niet het getal.
+       v370: €19.500 over 13 inleggen (deze maand meegeteld) is €1.500 per maand, min de €300; tot v370 was het 12
+       inleggen en €1.325. */
     const t = await page.evaluate(() => euro0(maandRegels().find((x) => x.key === 'doel').tekortPerMaand));
-    expect(t).toBe('€1.325');
+    expect(t).toBe('€1.200');
     expect(r.sug).toContain(t);
     expect(r.sug).toContain('houdt die streefdatum haalbaar');
   });
