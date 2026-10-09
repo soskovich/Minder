@@ -32,9 +32,10 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
     expect(await stappenVan(page)).toEqual([
       { soort: 'begin', k: null, waarde: 3375, aard: null },
       { soort: 'potje', k: 'vices', waarde: 83, aard: 'pastniet' },
-      /* v367: Boodschappen eindigt EUR 61 boven een potje van EUR 500 (12 procent) en is geen uitschieter, dus hij
-         valt in de rest: de losse stappen zijn uitschieters(V), dezelfde lijst als Tegen je potje op Inzichten. */
-      { soort: 'rest', k: null, waarde: -1061, aard: null },
+      /* v368: Boodschappen eindigt EUR 61 boven een potje van EUR 500 (12 procent). Onder de 25 procent, maar boven de
+         EUR 50 (INS_PATROON.uitEuro), dus een uitschieter en een losse stap. v367 liet hem in de rest vallen. */
+      { soort: 'potje', k: 'boodschappen', waarde: 61, aard: 'pastniet' },
+      { soort: 'rest', k: null, waarde: -1122, aard: null },
       { soort: 'vast', k: null, waarde: 0, aard: null },
       { soort: 'zonder', k: null, waarde: 275, aard: null },
       { soort: 'eind', k: null, waarde: 2672, aard: null },
@@ -42,7 +43,7 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
     const r = await page.evaluate(() => ({ label: dezeMaandBrug(maandVooruit()).stappen.find((s) => s.soort === 'rest').label,
       zin: document.querySelector('#gripDezeMaand [data-dmzin]').innerText }));
     expect(r.label).toBe('ruimte');
-    expect(r.zin).toBe('Vices past niet in zijn potje; je andere potjes houden samen €1.061 ruimte.');
+    expect(r.zin).toBe('Vices en Boodschappen passen niet in hun potje; je andere potjes houden samen €1.122 ruimte.');
   });
   test('met potjes gelijk aan hun incasso staan alleen de losse potjes, de vaste lasten en zonder potje ertussen', async ({ page }) => {
     await boot(page, smal()); await grip(page);
@@ -50,7 +51,7 @@ test.describe('a. de bridge loopt van de variabele potjes naar wat er daar verwa
     expect(st).toEqual([
       { soort: 'begin', k: null, waarde: 2253, aard: null },
       { soort: 'potje', k: 'vices', waarde: 83, aard: 'pastniet' },
-      { soort: 'rest', k: null, waarde: 61, aard: null },        // v367: Boodschappen +61 is geen uitschieter
+      { soort: 'potje', k: 'boodschappen', waarde: 61, aard: 'pastniet' },   // v368: +61 haalt de EUR 50
       { soort: 'vast', k: null, waarde: 0, aard: null },
       { soort: 'zonder', k: null, waarde: 275, aard: null },
       { soort: 'eind', k: null, waarde: 2672, aard: null },
@@ -99,7 +100,7 @@ test.describe('b. de oorzaak: past niet in je potje tegen loopt voor', () => {
   test('de zin op de kaart, zonder oordeel', async ({ page }) => {
     await boot(page, smal()); await grip(page);
     const z = await page.locator('#gripDezeMaand [data-dmzin]').innerText();
-    expect(z).toBe('Vices past niet in zijn potje; je andere potjes samen €61 boven.');   // v367: alleen de rode stappen bij naam
+    expect(z).toBe('Vices en Boodschappen passen niet in hun potje.');   // v368: Boodschappen +61 is weer een rode stap
     expect(z).not.toMatch(/loopt voor|lopen voor/);
   });
   test('de invoer draagt de gemelde gevallen: Vices niets uitgegeven, Boodschappen achter op zijn tempo', async ({ page }) => {
@@ -190,11 +191,11 @@ test.describe('d. hooguit drie potjes los, alleen potjes die boven eindigen, de 
         shop: Math.round(V.potjes.find((x) => x.k === 'shopping').overR) }; });
     // invoermeting: Online shopping eindigt onder zijn potje en is de grootste afwijking in absolute zin
     expect(r.shop).toBe(-300);
-    expect(r.st.filter((s) => s[0] === 'potje').map((s) => s[1])).toEqual(['uiteten', 'vices']);   // v367: Boodschappen +61 is geen uitschieter
+    expect(r.st.filter((s) => s[0] === 'potje').map((s) => s[1])).toEqual(['uiteten', 'vices', 'boodschappen']);   // v368: Boodschappen +61 haalt de EUR 50
     expect(r.st.find((s) => s[1] === 'uiteten')[2]).toBe(175);
-    expect(r.kleur).toEqual(['var(--red)', 'var(--red)']);
+    expect(r.kleur).toEqual(['var(--red)', 'var(--red)', 'var(--red)']);
     const rest = r.st.find((s) => s[0] === 'rest');
-    expect(rest[2]).toBe(-239);
+    expect(rest[2]).toBe(-300);
     expect(rest[3]).toBe('ruimte');
     const som = r.st.slice(1, -1).reduce((a, s) => a + s[2], r.st[0][2]);
     expect(r.st[0][2]).toBe(r.budget);
@@ -203,7 +204,7 @@ test.describe('d. hooguit drie potjes los, alleen potjes die boven eindigen, de 
   test('de zin noemt de potjes erboven en de ruimte, niet het potje eronder', async ({ page }) => {
     await boot(page, { set }); await grip(page);
     const z = await page.locator('#gripDezeMaand [data-dmzin]').innerText();
-    expect(z).toBe('Uit eten & café en Vices passen niet in hun potje; je andere potjes houden samen €239 ruimte.');
+    expect(z).toBe('Uit eten & café, Vices en Boodschappen passen niet in hun potje; je andere potjes houden samen €300 ruimte.');
   });
   /* v367: DE ZIN NOEMT ALLEEN DE RODE STAPPEN. Tot v366 noemde hij een vierde potje erboven ook als het niet los stond;
      dat potje staat nu in het bedrag van de rest, en de rest heet dan "andere". */
@@ -339,8 +340,9 @@ test.describe('h. hoogte op 360 en 390px', () => {
   // "te weinig ingesteld" blijft staan, want de lek-regel zegt niets over wat er is ingesteld).
   // v364: "Budget aanpassen ›" in de kop laat hem op 360px over twee regels breken: kaart en Grip +18px, 390 gelijk.
   // v365: de koopcheck staat bovenaan Grip (76px plus zijn marge): Grip 760 op 360 en 727 op 390 (gemeten)
-  // v367: de zin noemt alleen de rode stappen (Vices), dus hij is op 390px een regel korter: kaart 271 naar 260 (gemeten)
-  const NA = { 360: { kaart: 289, grip: 760 }, 390: { kaart: 260, grip: 716 } };
+  // v367: de zin noemde alleen Vices en was op 390px een regel korter (260/716); v368 zet Boodschappen +61 terug in de
+  // zin, dus weer 271/727 (gemeten)
+  const NA = { 360: { kaart: 289, grip: 760 }, 390: { kaart: 271, grip: 727 } };
   for (const w of [360, 390]) test('breedte ' + w, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 });
     await boot(page); await grip(page);

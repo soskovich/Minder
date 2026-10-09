@@ -133,13 +133,15 @@ genoemde versietag.)*
   hetzelfde bedrag. Inzichten krijgt het niet: de potjestegel zegt "al bestemd, verdeeld over je potjes"
   (`INS_POTJES_SUB`), zonder dagbedrag.
   UITSCHIETERS (`uitschieters(V)`, `potjeUitschieter()`): een potje dat verwacht minstens EUR 10 EN 25 procent boven
-  zijn bedrag eindigt (`INS_PATROON.voorEuro`/`voorDeel`, dezelfde drempel als "loopt voor"), gesorteerd op die
+  zijn bedrag eindigt (`INS_PATROON.voorEuro`/`voorDeel`, dezelfde drempel als "loopt voor"), OF SINDS `v368` minstens
+  EUR 50 (`INS_PATROON.uitEuro`, keuze van de gebruiker; `uitschieterAfw()` is de ENE toets, ook voor "Tegen vorige
+  maanden" op de absolute afwijking), gesorteerd op die
   verwachte afwijking (`overR`, naam als tiebreak). EEN LIJST, DRIE LEZERS: de losse rode stappen van de bridge op Grip
   (`dezeMaandBrug()`), de zin eronder (`dezeMaandZin()` noemt alleen `Br.los`) en "Tegen je potje" op Inzichten
   (hooguit drie, `INS_TOP`, met "geen andere uitschieters" eronder en "Alle N potjes ›" naar `openInsAlle()`). Tot
-  `v367` sorteerde Inzichten op uitgegeven en stond elk potje met een euro erboven los in de bridge. GEVOLG,
-  GEMELD: een potje dat er net boven komt (Boodschappen +61 op 500 op de stand van 6 oktober) staat in de rest en
-  niet in de zin. "Tegen vorige maanden" toont de drie grootste verschillen naar boven of beneden met dezelfde
+  `v367` sorteerde Inzichten op uitgegeven en stond elk potje met een euro erboven los in de bridge. DE
+  EUR 50 IS ER OMDAT v367 Boodschappen +61 op 500 (12 procent) in de rest liet vallen; sinds `v368` staat hij weer los
+  en in de zin, en Vices +8 op 20 niet (onder de EUR 10). "Tegen vorige maanden" toont de drie grootste verschillen naar boven of beneden met dezelfde
   drempel, en de rest in dezelfde sheet.
   GRIP: Deze maand toont alleen afspraken die in de lopende maand gelden (`afsprakenDezeMaand()`); afspraken voor
   later en potjes die later hoger gaan zijn EEN regel "N afspraken voor nov–dec › Logboek" (`afsprakenLaterRegel()`).
@@ -6805,7 +6807,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v367` → `minder-v368`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v368` → `minder-v369`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -6841,7 +6843,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366` en `v367` naar `minder-v367`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367` en `v368` naar `minder-v368`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

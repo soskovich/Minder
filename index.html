@@ -8098,7 +8098,11 @@ function dezeMaandBrug(V){
 /* v367: EEN UITSCHIETER IS EEN POTJE DAT VERWACHT MINSTENS EUR 10 EN MINSTENS 25 PROCENT BOVEN ZIJN BEDRAG EINDIGT (de
    drempels van INS_PATROON, voorEuro en voorDeel), gesorteerd op die verwachte afwijking (x.overR uit maandVooruit()).
    EEN BRON MET DRIE LEZERS: de rode stappen in de bridge op Grip, de zin eronder en "Tegen je potje" op Inzichten. */
-function potjeUitschieter(x){ const d=+x.overR||0; return d>=INS_PATROON.voorEuro && (!(x.bud>0) || d>=x.bud*INS_PATROON.voorDeel); }
+/* v368 (keuze van de gebruiker): OF minstens uitEuro (50) verwachte afwijking, ongeacht het percentage. Boodschappen +61
+   op 500 is 12 procent en dus onder de 25, maar 61 euro is genoeg om bij naam te staan. uitschieterAfw() is de ENE toets,
+   ook voor de grote verschillen tegen vorige maanden (daar op de absolute afwijking). */
+function uitschieterAfw(d, basis){ return (d>=INS_PATROON.voorEuro && (!(basis>0) || d>=basis*INS_PATROON.voorDeel)) || d>=INS_PATROON.uitEuro; }
+function potjeUitschieter(x){ return uitschieterAfw(+x.overR||0, x.bud); }
 function uitschieters(V){ return ((V&&V.potjes)||[]).filter(potjeUitschieter).sort((a,b)=>(b.overR-a.overR) || (a.naam<b.naam?-1:1)); }
 /* De zin stelt vast en oordeelt niet (v78/v93). v356: hij noemt ELK potje dat boven zijn bedrag eindigt bij
    naam en oorzaak (past niet, of loopt voor), ook een vierde dat niet los in de bridge staat, en daarna de
@@ -18167,7 +18171,7 @@ const INS_SOORTEN=[{k:'alle',l:'alle uitgaven'},{k:'var',l:'variabel'},{k:'vast'
    de EUR 36 per dag op Home en was niet uit te leggen: het eerste deelt wat er in je potjes zit, het tweede wat er vrij is.
    De app heeft EEN dagbedrag, op Home (vrijRegel()); de tegel zegt wat het geld is. */
 const INS_POTJES_SUB='al bestemd, verdeeld over je potjes';
-const INS_PATROON={structFactor:1.5, structEuro:50, voorEuro:10, voorDeel:0.25, nieuwEuro:50, nieuwMaanden:12};
+const INS_PATROON={structFactor:1.5, structEuro:50, voorEuro:10, voorDeel:0.25, uitEuro:50, nieuwEuro:50, nieuwMaanden:12};
 
 /* "Loopt voor" op een plek: minstens voorEuro EN minstens voorDeel meer dan gewoonlijk in dezelfde
    dagen. Zonder gewoon bedrag (typisch nul) is elk euro oneindig veel procent, dus dan telt alleen het bedrag. */
@@ -18710,7 +18714,7 @@ function insNulToggle(soort){ window._insNulOpen=Object.assign({}, window._insNu
    drempel tegen het gewone bedrag: dit scherm is om te kijken, dus minder uitgeven telt ook. Zijn er minder dan drie, dan
    staan er minder en zegt de kaart dat. "Alle N potjes ›" opent de volle lijst met de groepen van v365 (insNulGroep). */
 const INS_TOP=3;
-function insDrempelTekst(){ return `drempel ≥ ${euro0(INS_PATROON.voorEuro)} én ≥ ${Math.round(INS_PATROON.voorDeel*100)}%`; }
+function insDrempelTekst(){ return `drempel ≥ ${euro0(INS_PATROON.voorEuro)} én ≥ ${Math.round(INS_PATROON.voorDeel*100)}%, of ≥ ${euro0(INS_PATROON.uitEuro)}`; }
 function insAfwijking(r){ return r.overR!=null ? r.overR : r.uit-r.potje; }
 function insUitschieters(D){
   if(D.uitschieters) return D.uitschieters;
@@ -18719,7 +18723,7 @@ function insUitschieters(D){
 }
 function insVorigeRijen(D){ return D.rows.map(r=>Object.assign({d:r.uit-(r.normaal||0)},r)); }
 function insVorigeTop(D){
-  return insVorigeRijen(D).filter(r=>Math.abs(r.d)>=INS_PATROON.voorEuro && (!((r.normaal||0)>0) || Math.abs(r.d)>=(r.normaal||0)*INS_PATROON.voorDeel))
+  return insVorigeRijen(D).filter(r=>uitschieterAfw(Math.abs(r.d), r.normaal||0))
     .sort((a,b)=>(Math.abs(b.d)-Math.abs(a.d)) || (a.naam<b.naam?-1:1));
 }
 function insKeuzeRijen(D){

@@ -23,14 +23,14 @@ test.describe('a. de bridge loopt van het budget naar de uitkomst, met de vaste 
       return { st: Br.stappen.map((s) => [s.soort, s.label, s.waarde]), budget: V.budget, proj: V.projectie,
         vast: Math.round(V.vaste.eind - V.vaste.budget), varDiff: Math.round(V.variabel.eind - V.variabel.budget) }; });
     expect(r.st).toEqual([
-      ['begin', 'budget', 3375], ['potje', 'Vices', 83], ['rest', 'ruimte', -1061],   // v367: Boodschappen +61 is geen uitschieter
+      ['begin', 'budget', 3375], ['potje', 'Vices', 83], ['potje', 'Boodschappen', 61], ['rest', 'ruimte', -1122],   // v368: +61 haalt de EUR 50
       ['vast', 'vaste lasten', 0], ['zonder', 'zonder potje', 275], ['eind', 'okt', 2672]]);
     expect(r.st[0][2]).toBe(r.budget);
     expect(r.st[r.st.length - 1][2]).toBe(r.proj);
     expect(r.st.slice(1, -1).reduce((a, s) => a + s[2], r.st[0][2])).toBe(r.proj);
     expect(r.st.find((s) => s[0] === 'vast')[2]).toBe(r.vast);
     // de potjes en de ruimte samen zijn de variabele afwijking: de vaste lasten zitten er niet nog eens in
-    expect(83 - 1061).toBe(r.varDiff);
+    expect(83 + 61 - 1122).toBe(r.varDiff);
   });
   test('de kop is de uitkomst tegen het budget, en de regel vaste lasten is weg', async ({ page }) => {
     await Zes.boot(page); await grip(page);
@@ -156,7 +156,7 @@ for (const w of [360, 390]) {
         over: document.getElementById('sheet').scrollWidth > document.getElementById('sheet').clientWidth }; });
     console.log(`v357 ${w}px: kaart ${k.h}, kop ${k.kop}, sheet ${s.h}, uitleg ${s.uitleg}`);
     expect(k.over).toBe(0);
-    expect(k.h).toBe(w === 360 ? 289 : 260);   // v364: de link in de kop kost 18px op 360; v367: de zin is op 390 een regel korter
+    expect(k.h).toBe(w === 360 ? 289 : 271);   // v364: de link in de kop kost 18px op 360; v368: Boodschappen weer in de zin
     expect(s.over).toBe(false);
   });
 }

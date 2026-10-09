@@ -114,7 +114,7 @@ test.describe('b · Inzichten: geen tweede dagbedrag, en de uitschieters zijn de
     const r = await page.evaluate(() => ({ n: document.querySelectorAll('[data-insuitschieter]').length,
       geen: (document.querySelector('[data-insgeenander]') || {}).innerText || '' }));
     expect(r.n).toBe(1);
-    expect(r.geen).toContain('geen andere uitschieters (drempel ≥ €10 én ≥ 25%)');
+    expect(r.geen).toContain('geen andere uitschieters (drempel ≥ €10 én ≥ 25%, of ≥ €50)');
   });
   test('de drempel: een potje dat er net boven komt is geen uitschieter, ook niet in de bridge of de zin', async ({ page }) => {
     await I.boot(page);
@@ -124,6 +124,7 @@ test.describe('b · Inzichten: geen tweede dagbedrag, en de uitschieters zijn de
         los: Br.los.map((x) => x.k), zin: dezeMaandZin(Br) }; });
     expect(r.over).toBeGreaterThan(0);              // invoer: Boodschappen eindigt verwacht boven zijn potje
     expect(r.over).toBeLessThan(380 * 0.25);         // maar onder de drempel
+    expect(r.over).toBeLessThan(50);                // en onder de EUR 50 van v368
     expect(r.uit).toBeLessThan(r.typ);               // en loopt achter op het gewone tempo
     expect(r.ins).not.toContain('boodschappen');
     expect(r.los).not.toContain('boodschappen');
@@ -274,4 +275,36 @@ test.describe('d · Plan: een rij per doel en een tijdlijn', () => {
       if (vp.width === 390) expect(r.onder).toBeLessThanOrEqual(r.vouw);
     });
   }
+});
+
+/* v368 (keuze van de gebruiker): een uitschieter is (minstens EUR 10 EN 25 procent) OF minstens EUR 50 verwachte
+   afwijking, in uitschieterAfw(), de ENE toets voor Inzichten, de bridge en de zin. */
+const Z = require('./deze-maand-stand');
+test.describe('e · de drempel van v368: of minstens EUR 50', () => {
+  test('Boodschappen +61 op EUR 500 is een uitschieter: los in de bridge, in de zin en op Inzichten', async ({ page }) => {
+    await Z.boot(page);
+    const r = await page.evaluate(() => { const V = maandVooruit(), b = V.potjes.find((x) => x.k === 'boodschappen'), Br = dezeMaandBrug(V);
+      return { over: Math.round(b.overR), bud: b.bud, uit: uitschieters(V).map((x) => x.k), los: Br.los.map((x) => x.k), zin: dezeMaandZin(Br),
+        ins: insUitschieters(insKeuzeData(thisYM())).map((x) => x.k) }; });
+    expect(r.over).toBe(61);                          // invoer: EUR 61 erboven
+    expect(r.over).toBeLessThan(r.bud * 0.25);        // invoer: onder de 25 procent, dus alleen de EUR 50 draagt hem
+    expect(r.uit).toContain('boodschappen');
+    expect(r.los).toContain('boodschappen');
+    expect(r.zin).toContain('Boodschappen');
+    expect(r.ins).toContain('boodschappen');
+  });
+  test('Vices +8 op EUR 20 is geen uitschieter: onder de EUR 10 en onder de EUR 50', async ({ page }) => {
+    await I.boot(page);
+    const r = await page.evaluate(() => ({ vices: potjeUitschieter({ overR: 8, bud: 20 }), bood: potjeUitschieter({ overR: 61, bud: 500 }),
+      rand: [potjeUitschieter({ overR: 49, bud: 500 }), potjeUitschieter({ overR: 50, bud: 500 })] }));
+    expect(r.vices).toBe(false);
+    expect(r.bood).toBe(true);
+    expect(r.rand).toEqual([false, true]);
+  });
+  test('tegen vorige maanden leest dezelfde toets, op de absolute afwijking', async ({ page }) => {
+    await I.boot(page);
+    const r = await page.evaluate(() => insVorigeTop({ rows: [{ k: 'a', naam: 'A', uit: 340, normaal: 400 }, { k: 'b', naam: 'B', uit: 470, normaal: 400 },
+      { k: 'c', naam: 'C', uit: 430, normaal: 400 }] }).map((x) => x.k));
+    expect(r).toEqual(['b', 'a']);   // -60 haalt de EUR 50, +70 ook, +30 niet (en 30 is onder 25 procent van 400)
+  });
 });
