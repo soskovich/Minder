@@ -145,9 +145,13 @@ test.describe('huur omlaag vanaf een gekozen maand', () => {
     await page.selectOption('#potFormVanaf', '2026-10');
     const g = await page.locator('[data-potgevolg]').innerText();
     expect(g).toContain('van €750 naar €0');
+    expect(await page.locator('[data-potbron]').count()).toBe(0);   // lager vraagt geen dekking
+    /* v362: wat vrijkomt krijgt eerst een bestemming; zonder keuze blijft Vastzetten uit. */
+    await expect(page.locator('#pfVrij')).toHaveText('€750 per maand komt vrij vanaf oktober 2026. Waar gaat het heen?');
+    await expect(page.locator('[data-potformsave]')).toBeDisabled();
+    await page.click('[data-pfbest="verlagen"] span[onclick]');   // "de rest"
     await expect(page.locator('[data-potvooruit]')).toContainText('boven budget');
     await expect(page.locator('[data-potincasso]')).toContainText('1.450');
-    expect(await page.locator('[data-potbron]').count()).toBe(0);   // lager vraagt geen dekking
     await page.click('[data-potformsave]');
     const r = await page.evaluate(() => ({ h: SET.budgets.huur, sep: maandPotjes('2026-09').B.huur, V: maandVooruit() }));
     expect(r.h).toBeUndefined();

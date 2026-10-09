@@ -159,15 +159,19 @@ test('g. aanpassen naar EUR 280 vraagt waar de EUR 20 heen gaat, met Huur bovena
   await tik(page, '[data-schataanpas]');
   await veld(page, '#potFormBedrag', '280');
   await veld(page, '#potFormVanaf', '2026-11');
-  const s = await page.evaluate(() => ({ save: document.querySelector('[data-potformsave]').disabled, bron: [...document.querySelectorAll('[data-potbron]')].map(e => e.dataset.potbron) }));
+  /* v362: een lager bedrag gaat langs dezelfde component als Te ruime potjes (bestemData()): het bronpotje van de
+     splitsing staat bovenaan, dan de potjes die niet passen, sparen en verlagen. Niets voorgekozen. */
+  const s = await page.evaluate(() => ({ save: document.querySelector('[data-potformsave]').disabled,
+    rijen: [...document.querySelectorAll('[data-pfbest]')].map(e => e.dataset.pfbest), vrij: document.getElementById('pfVrij').innerText,
+    reden: (document.querySelector('[data-voetreden]') || {}).innerText }));
   expect(s.save).toBe(true);   // eerst een plek voor het verschil
-  expect(s.bron).toEqual(['naar', 'verlaag']);
-  await tik(page, '[data-potbron="naar"]');
-  const eerste = await page.evaluate(() => document.querySelector('[data-potterug]').dataset.potterug);
-  expect(eerste).toBe('huur');
-  await tik(page, '[data-potterug="huur"]');
+  expect(s.rijen[0]).toBe('pot:huur');
+  expect(s.rijen.slice(-2)).toEqual(['sparen', 'verlagen']);
+  expect(s.vrij).toBe('€20 per maand komt vrij vanaf november 2026. Waar gaat het heen?');
+  expect(s.reden).toBe('Kies eerst waar de €20 heen gaat');
+  await page.evaluate(() => { const e = document.querySelector('[data-pfbest="pot:huur"] input'); e.value = '20'; e.dispatchEvent(new Event('input')); });
   const g = await page.evaluate(() => document.getElementById('potFormGevolg').innerText);
-  expect(g).toContain('Huur van €350 naar €370');
+  expect(g).toContain('Huur €350 → €370');
   expect(g).toContain('Je maandbudget blijft');
   const tot0 = await page.evaluate(() => totalBudget());
   await tik(page, '[data-potformsave]');

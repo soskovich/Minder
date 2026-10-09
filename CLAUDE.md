@@ -92,7 +92,7 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   Vraagt aandacht, Staat goed, Voorwaarden voor beleggen, Vanaf <maand>, de afsluitregel en de
   logboekkaart; zie de staande regel van `v340` voor waar elk ervan heen ging. De lek-ingang
   (`coStart('lek')`) hangt aan de chevron van de open valt-op-kaart, en die staat sinds `v340` in de
-  sheet achter de Let op-regel. `coachLeak()` leverde daarnaast een patroonregel op Inzichten (`v237`); die staat sinds `v359` als regel onder Let op (`gripLekKaart()`).
+  sheet achter de Let op-regel. `coachLeak()` leverde daarnaast een patroonregel op Inzichten (`v237`); die staat sinds `v359` als regel onder Let op (`gripLekKaart()`), sinds `v362` met de categorie en niet de winkel.
 - **Plan** (`vooruit`) — waar gaat mijn spaarinleg als eerste heen. Draagt sinds `v319` onder de
   inleg-kop wat er deze maand werkelijk opzij ging (`planInlegRegel()`, uit `savedNet()`) en op de
   vrij-regel een tweede knop die het niet-toegewezen spaargeld verdeelt zoals de waterval het zou
@@ -120,6 +120,31 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **EEN POTJE VERLAGEN HEEFT EEN ROUTE: WAT VRIJKOMT KRIJGT EERST EEN BESTEMMING** (`v362`, gevraagd door de gebruiker):
+  "Ander bedrag vanaf een maand" (`openPotForm()`) verlaagde bij een lager bedrag meteen het maandbudget, terwijl Te
+  ruime potjes (`v358`) en een schatting aanpassen (`v360`) eerst vroegen waar het geld heen gaat. Nu is er EEN
+  component met drie lezers: `bestemData({vrij, best, B0, uit, extra, V})` (de bestemmingen: een meegegeven potje, bij
+  een schatting het bronpotje van de splitsing; de potjes met aard `pastniet` uit `maandVooruit()`; sparen; verlagen),
+  `bestemBlok(pre, wat, B, fn)` (de regel "komt vrij", de rijen met "de rest", de regel "nog te verdelen"; het
+  voorvoegsel houdt de ids per sheet: `ruimVrij`/`data-ruimbest` en `pfVrij`/`data-pfbest`), `bestemGevolgRegels()`,
+  `bestemSchrijf()` (potjes via `potPlanZet()`, sparen nu als vast bedrag of later in `SET.spaarPlan`; verlagen schrijft
+  niets), `bestemNaSave()` en `bestemTekst()` (de bestemming in de afspraak van `potjeAfspraak(k, bedrag, vanaf, bestem)`,
+  en daarmee in het logboek). In het formulier staat "EUR X per maand komt vrij vanaf <maand>" boven de rijen; niets
+  voorgekozen; Vastzetten (in de vaste balk, `v361`) pas als alles een plek heeft, met de reden ("Kies eerst waar de
+  EUR 200 heen gaat", "Je verdeelt EUR 50 meer dan er vrijkomt"), en `potFormZet()` eist dat zelf ook na opnieuw lezen.
+  Verhogen is ONGEWIJZIGD (een ander potje levert in of een bewuste verhoging, `v238`). Een schatting aanpassen kon tot
+  `v362` naar elk potje; nu naar het bronpotje of een potje dat niet past. GEMETEN op `deze-maand-stand` (Sport EUR 600
+  naar 400 vanaf oktober): naar Vices laat budget (3.375) en veilig te besteden (4.724) gelijk en haalt Vices uit de
+  bridge; naar sparen gaat het budget naar 3.175, de inleg van 400 naar 600 en het noodfonds van 14 naar 9 maanden,
+  veilig te besteden gelijk; verlagen geeft 4.924. De sheet is leeg 705/687px en ingevuld 794/758px op 360/390, de knop
+  zichtbaar zonder scrollen en zonder overloop. Nieuwe spec `potje-lager-bestemming.spec.js`.
+  DE LEK-REGEL NOEMT DE CATEGORIE (`v362`, controle van de gebruiker): onder Let op stond de winkel ("Restaurant Lona:
+  EUR 75 zonder potje"); nu "Uit eten & café: EUR 75 zonder potje", met het bedrag van de categorie uit `catSpendMap()`
+  (`lekSignaal().catNaam`/`catVal`), en de sheet (`gripLekKaart()`) opent met dezelfde kop en "waarvan <winkel> EUR X"
+  eronder. Het label en het bedrag horen bij elkaar: met de categorie als label is het bedrag de categorie, ook met meer
+  winkels erin. De stap "zonder potje" in de bridge is ongewijzigd. Spec `lek-categorie.spec.js`.
+  BLOK 16 TOONT EEN KENMERK DAT EEN KEER VOORKOMT (`v362`): "1× gezien op <dag> (<bedrag>): ..." per boeking, onder de
+  terugkerende (die houden "(Nx)", nu alleen bij twee of meer). Spec `blok16-eenmalig.spec.js`.
 - **DE HANDELINGEN VAN EEN LANGE SHEET STAAN IN EEN VASTE BALK ONDERAAN, EN EEN KNOP DIE UIT STAAT ZEGT DAAR WAAROM**
   (`v361`, gevraagd door de gebruiker): `.sheet-voet` is `position:sticky` met de achtergrond van de sheet; de lijn
   erboven is een `::before` en staat er alleen als de sheet scrollt (`#sheet.lang`, gezet door `sheetLangMeet()`, die
@@ -6641,7 +6666,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v361` → `minder-v362`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v362` → `minder-v363`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **DE CACHEVERSIE VOLGT DE VERSIETAG, NIET HET AANTAL DEPLOYS** (`v257`). Raakt een ronde geen
 app-code, dan bumpt hij niet, en dan slaat het cachenummer die tag over: `v256` raakte alleen
@@ -6660,7 +6685,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360` en `v361` naar `minder-v361`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361` en `v362` naar `minder-v362`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

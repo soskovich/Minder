@@ -165,7 +165,10 @@ test.describe('d · een regel onthoudt het kenmerk of het bedrag', () => {
     const L = (await page.evaluate(() => diagBezitKoppeling())).join('\n');
     expect(L).toContain('partij "stichting beheer derdengelden": 3 afschrijving(en)');
     expect(L).toMatch(/KAYANI \(2x\)/);
-    expect(L).toMatch(/PENSIOEN \(1x\)/);
+    /* v362: een kenmerk dat een keer voorkomt staat niet meer als "(1x)" tussen de terugkerende, maar op een
+       eigen regel eronder met de dag en het bedrag. Zie blok16-eenmalig.spec.js. */
+    expect(L).not.toMatch(/PENSIOEN \(1x\)/);
+    expect(L).toMatch(/1× gezien op 2026-09-30 \(€100,00\): [^\n]*PENSIOEN/);
     expect(L).toContain('voorwaarden open');
   });
 });

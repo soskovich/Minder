@@ -7719,7 +7719,7 @@ function gripLetOpItems(RO, SIG, BV){
      tik; Inzichten draagt sinds v359 geen handeling, en zonder deze regel had een doorlopende uitgave ZONDER
      potje-overschrijding geen ingang meer naar coStart('lek'). De detectie is lekSignaal() met dezelfde
      exclude-set als toen (budgetFlaggedCats): een overschrijding staat al als eigen regel hierboven. */
-  try{ const m=thisYM(), Lk=lekSignaal(m, budgetFlaggedCats(m)); if(Lk) L.push({soort:'lek', key:Lk.cat, naam:`${Lk.kpiLabel}: ${Lk.kpiVal} zonder potje`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); }catch(_){}
+  try{ const m=thisYM(), Lk=lekSignaal(m, budgetFlaggedCats(m)); if(Lk) L.push({soort:'lek', key:Lk.cat, naam:`${Lk.catNaam}: ${Lk.catVal} zonder potje`, sub:Lk.hyp, dot:'let op', act:"openGripLetOp('lek')"}); }catch(_){}
   try{ const U=uitgeslotenPotjes(); if(U.length) L.push(terug('uit', U.length===1?'Uitgesloten incasso in een potje':`${U.length} uitgesloten incasso's in een potje`, U.map(u=>u.naam).join(', '))); }catch(_){}
   try{ if(contantVraagt()) L.push(terug('contant','Contant','tel wat je in je zak hebt')); }catch(_){}
   try{ for(const k of potOpenLijst()){ const T=potOpenTx(k); if(!T.length) continue;
@@ -7762,8 +7762,10 @@ function openGripLetOp(soort, key){ window._gripLetOp={soort, key:key||''}; rend
    naar het gesprek (keuze). Hij rekent opnieuw en is leeg als het lek weg is. */
 function gripLekKaart(){
   const m=thisYM(), Lk=lekSignaal(m, budgetFlaggedCats(m)); if(!Lk) return '';
-  return `<div data-lek="${esc(Lk.cat)}"><div style="font-weight:800;font-size:var(--fs-lg)">${esc(Lk.kpiLabel)} · ${Lk.kpiVal}</div>
-    ${Lk.kpiSub?`<div class="small muted" style="margin-top:2px">${esc(Lk.kpiSub)}</div>`:''}
+  /* v362: de kop is dezelfde als de regel waarop je tikte (categorie en bedrag), de winkel staat eronder. */
+  const sub=Lk.kpiLabel!==Lk.catNaam ? `waarvan ${Lk.kpiLabel} ${Lk.kpiVal}` : '';
+  return `<div data-lek="${esc(Lk.cat)}"><div style="font-weight:800;font-size:var(--fs-lg)">${esc(Lk.catNaam)} · ${Lk.catVal} zonder potje</div>
+    ${sub?`<div class="small muted" style="margin-top:2px" data-lekwinkel>${esc(sub)}</div>`:''}
     <div class="small" style="line-height:1.5;margin-top:8px">${esc(Lk.hyp)}</div>
     <div class="small" style="line-height:1.5;margin-top:4px;color:var(--mut2)">${esc(Lk.imp)}</div>
     <button class="btn" data-lekcoach style="margin-top:12px" onclick="closeSheet();${Lk.act}">Bespreek het in het gesprek</button></div>`;
@@ -8452,18 +8454,11 @@ function ruimBijstelData(d){
       onderVloer: keuze==='eigen' && naar!=null && naar<vloer && !!Vl.maand};
   });
   const vrij=pots.reduce((a,p)=>a+Math.max(p.vrij,0),0);
-  const ruimK=new Set(pots.map(p=>p.k));
-  const best=d.best||{}, bedrag=id=>{ const v=best[id]; return (v===''||v==null)?0:Math.max(Math.round(numIn(v)),0); };
-  const dests=V.potjes.filter(x=>x.aard==='pastniet' && !ruimK.has(x.k)).sort((a,b)=>a.naam.localeCompare(b.naam,'nl'))
-    .map(x=>({id:'pot:'+x.k, soort:'pot', k:x.k, naam:x.naam, bud:Math.round(+B0[x.k]||x.potje||0), gewoon:Math.round((x.vastDeel||0)+x.patroon)}));
-  dests.push({id:'sparen', soort:'sparen'}, {id:'verlagen', soort:'verlagen'});
-  dests.forEach(x=>{ x.bedrag=bedrag(x.id); });
-  const toegewezen=dests.reduce((a,x)=>a+x.bedrag,0);
-  let spaar0=0; try{ spaar0=Math.round(monthlySavingTarget()); }catch(_){}
-  const sp=dests.find(x=>x.id==='sparen').bedrag, verl=dests.find(x=>x.id==='verlagen').bedrag;
-  const klaar=!!vanaf && pots.every(p=>p.ok) && vrij>0 && toegewezen===vrij;
-  return {vanaf, ref, cur, ms, pots, vrij, dests, toegewezen, open:vrij-toegewezen, klaar, tot0:Math.round(tot0), tot1:Math.round(tot0)-sp-verl,
-    spaar0, spaar1:spaar0+sp, spaarVast:(SET.savingMode||'auto')==='amount', maanden:V.band.maanden};
+  /* v362: waar het vrije geld heen gaat is de ENE component bestemData(), met "Ander bedrag vanaf een maand" als
+     tweede lezer. */
+  const BD=bestemData({vrij, best:d.best, B0, uit:new Set(pots.map(p=>p.k)), V});
+  const klaar=!!vanaf && pots.every(p=>p.ok) && vrij>0 && BD.open===0;
+  return Object.assign(BD, {vanaf, ref, cur, ms, pots, vrij, klaar, tot0:Math.round(tot0), tot1:Math.round(tot0)-BD.sp-BD.verl, maanden:V.band.maanden});
 }
 function openRuimBijstel(){ window._ruim={keuze:{}, eigen:{}, best:{}, vanaf:null}; renderRuimBijstel(); showSheetBg(); }
 function ruimZet(f, a, b){
@@ -8472,13 +8467,13 @@ function ruimZet(f, a, b){
   else if(f==='vanaf') d.vanaf=a||null;
   else if(f==='eigen'){ d.eigen[a]=b; return ruimDeel(); }
   else if(f==='best'){ d.best[a]=b; return ruimDeel(); }
-  else if(f==='rest'){ const P=ruimBijstelData(); if(!P) return; const nu=(P.dests.find(x=>x.id===a)||{}).bedrag||0; d.best[a]=String(Math.max(nu+P.open,0)); }
+  else if(f==='rest'){ const P=ruimBijstelData(); if(!P) return; d.best[a]=bestemRest(P, a); }
   renderRuimBijstel();
 }
 /* Bij het typen alleen wat ervan afhangt, zodat het veld zijn focus houdt. */
 function ruimDeel(){
   const P=ruimBijstelData(); if(!P) return;
-  for(const id of ['ruimGevolg','ruimOpen','ruimVrij']){ const e=document.getElementById(id); if(e) e.outerHTML=ruimBlok(id,P); }
+  for(const id of ['ruimGevolg','ruimOpen','ruimVrij']){ const e=document.getElementById(id); if(e) e.outerHTML=id==='ruimGevolg'?ruimBlok(id,P):bestemBlok('ruim', id.slice(4).toLowerCase(), P); }
   for(const p of P.pots){ const w=document.querySelector(`[data-ruimonder="${p.k}"]`); if(w) w.outerHTML=ruimOnderHTML(p,P); }
   const s=document.querySelector('[data-ruimsave]'); if(s) s.disabled=!P.klaar; voetRedenZet(ruimReden(P));
   if((P.vrij>0)!==!!document.getElementById('ruimBest')) renderRuimBijstel();
@@ -8487,8 +8482,8 @@ function ruimOnderHTML(p,P){
   return `<div class="small" data-ruimonder="${esc(p.k)}" style="color:var(--mut2);line-height:1.45;margin-top:4px">${p.onderVloer?`Lager dan ${euro0(p.vloer)}: in ${esc(ymFull(p.vloerMaand))} is het potje dan niet gedekt.`:''}</div>`;
 }
 function ruimBlok(id, P){
-  if(id==='ruimVrij') return `<div id="ruimVrij" style="font-weight:700;font-size:var(--fs-md);margin-top:14px">${P.vrij>0?`${euro0(P.vrij)} komt vrij. Waar gaat het heen?`:''}</div>`;
-  if(id==='ruimOpen') return `<div class="small" id="ruimOpen" data-ruimopen="${P.open}" style="margin-top:6px;font-weight:600;${P.open===0?'color:var(--mut2)':''}">${P.vrij>0?(P.open===0?'Alles heeft een plek.':(P.open>0?`Nog te verdelen: ${euro0(P.open)}`:`${euro0(-P.open)} meer verdeeld dan er vrijkomt`)):''}</div>`;
+  if(id==='ruimVrij') return bestemBlok('ruim','vrij',P);
+  if(id==='ruimOpen') return bestemBlok('ruim','open',P);
   /* het gevolg vooraf */
   const L=[];
   if(P.vanaf){
@@ -8497,9 +8492,7 @@ function ruimBlok(id, P){
     /* v360: dezelfde regel als "Wordt een reservering": een post telt daarna niet in het potje en in de reservering
        tegelijk. Het potje is je gewone maand zonder die post (potjeMaandVloer().gewoon), en dat staat erbij. */
     for(const p of P.pots) if(p.keuze==='res' && p.ok && p.posten.length) L.push(`${esc(p.naam)} draagt ${esc(opsomming(p.posten.map(x=>x.naam)))} dan niet meer: ${euro0(p.naar)} is je gewone maand zonder ${p.posten.length===1?'die post':'die posten'}, die alleen nog in je reserveringen staa${p.posten.length===1?'t':'n'}`);
-    for(const x of P.dests) if(x.soort==='pot' && x.bedrag>0) L.push(`${esc(x.naam)} ${euro0(x.bud)} → ${euro0(x.bud+x.bedrag)}`);
-    const sp=P.dests.find(x=>x.id==='sparen').bedrag;
-    if(sp>0) L.push(`Sparen ${euro0(P.spaar0)} → ${euro0(P.spaar1)} per maand${P.spaarVast?'':', als vast bedrag'}`);
+    L.push(...bestemGevolgRegels(P));
   }
   const t=L.length
     ? `<div style="font-weight:600;margin-bottom:3px">Vanaf ${esc(ymKort(P.vanaf))}:</div>${L.map(x=>`<div>${x}</div>`).join('')}<div style="margin-top:3px">Je maandbudget ${P.tot1!==P.tot0?`gaat van ${euro0(P.tot0)} naar ${euro0(P.tot1)}`:`blijft ${euro0(P.tot0)}`}. Eerdere maanden veranderen niet. Een potje dat lager gaat wordt een afspraak.</div>`
@@ -8529,23 +8522,15 @@ function renderRuimBijstel(){
       ${post}<div class="chips wrap" style="margin-top:6px">${ch.join('')}</div>
       ${d.keuze&&d.keuze[p.k]==='eigen'?`<input type="text" inputmode="decimal" data-ruimeigen="${esc(p.k)}" value="${esc(e==null?'':String(e))}" placeholder="bedrag per maand" oninput="ruimZet('eigen','${esc(p.k)}',this.value)" style="width:100%;margin-top:6px;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 10px;font-size:var(--fs-md)">`:''}
       ${ruimOnderHTML(p,P)}</div>`; };
-  const dRij=x=>{
-    const t = x.soort==='pot' ? [esc(x.naam), `past niet in je potje: ${euro0(x.bud)}, gewoonlijk ${euro0(x.gewoon)}`]
-      : x.soort==='sparen' ? ['Naar sparen', `bovenop je ${euro0(P.spaar0)} per maand`] : ['Maandbudget verlagen', 'blijft op je rekening, buiten je potjes'];
-    const v=(d.best||{})[x.id];
-    return `<div class="row" data-ruimbest="${esc(x.id)}" style="gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
-      <span style="flex:1;min-width:0"><span style="font-size:var(--fs-md);display:block">${t[0]}</span><span class="small muted" style="display:block;line-height:1.4">${t[1]}</span></span>
-      <span class="small" style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="ruimZet('rest','${esc(x.id)}')">de rest</span>
-      <input type="text" inputmode="decimal" value="${esc(v==null?'':String(v))}" placeholder="0" oninput="ruimZet('best','${esc(x.id)}',this.value)" style="width:76px;text-align:right;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 10px;font-size:var(--fs-md)"></div>`; };
   $('#sheet').innerHTML=`<div class="grab"></div><div id="ruimBijstel">
     <div style="font-weight:800;font-size:var(--fs-lg)">Te ruime potjes bijstellen</div>
     <div class="small muted" style="line-height:1.5;margin-top:4px">Potjes waarvan je in ${esc(mn)} elke maand hooguit de helft gebruikte. Niets verandert tot je bijstelt.</div>
     <div style="margin-top:8px">${P.pots.map(rij).join('')}</div>
     <label class="fld">Vanaf</label>
     <select data-ruimvanaf onchange="ruimZet('vanaf',this.value)" style="width:100%"><option value="">Kies een maand</option>${P.ms.map(ym=>`<option value="${ym}"${P.vanaf===ym?' selected':''}>${esc(ymKort(ym))}${ym===thisYM()?' (deze maand)':''}</option>`).join('')}</select>
-    ${ruimBlok('ruimVrij',P)}
-    ${P.vrij>0?`<div id="ruimBest">${P.dests.map(dRij).join('')}</div>`:''}
-    ${ruimBlok('ruimOpen',P)}
+    ${bestemBlok('ruim','vrij',P)}
+    ${bestemBlok('ruim','lijst',P,'ruimZet')}
+    ${bestemBlok('ruim','open',P)}
     ${ruimBlok('ruimGevolg',P)}
     ${sheetVoet(`<button class="btn" data-ruimsave style="flex:1"${P.klaar?'':' disabled'} onclick="ruimBijstelZet()">Bijstellen</button><button class="btn sec" onclick="openGripRest()">Terug</button>`, ruimReden(P))}</div>`;
 }
@@ -8564,21 +8549,91 @@ function ruimBijstelZet(){
       if(!SET.fixDueExcl[x.key]) SET.fixDueExcl[x.key]={sinds:vandaagYMD()};
     }
   }
-  for(const x of P.dests) if(x.soort==='pot' && x.bedrag>0) potPlanZet(x.k, vanaf, x.bud+x.bedrag);
-  const sp=P.dests.find(x=>x.id==='sparen').bedrag;
-  if(sp>0){
-    if(vanaf<=cur){ SET.savingMode='amount'; SET.savingAmount=P.spaar0+sp; }
-    else { SET.spaarPlan=SET.spaarPlan||{}; SET.spaarPlan[vanaf]=(+SET.spaarPlan[vanaf]||0)+sp; }
-  }
+  bestemSchrijf(P, vanaf, cur);
   save();
+  const bt=bestemTekst(P);
   for(const p of P.pots) if(!p.geen && p.naar<p.bud){
     if(vanaf<=nx) try{ valtOpPotjeGewijzigd(p.k, p.bud, p.naar, vanaf!==cur); }catch(_){}
-    try{ potjeAfspraak(p.k, p.naar, vanaf); }catch(_){}
+    try{ potjeAfspraak(p.k, p.naar, vanaf, bt); }catch(_){}
   }
-  for(const x of P.dests) if(x.soort==='pot' && x.bedrag>0 && vanaf<=nx) try{ valtOpPotjeGewijzigd(x.k, x.bud, x.bud+x.bedrag, vanaf!==cur); }catch(_){}
+  bestemNaSave(P, vanaf, cur);
   window._ruim=null;
   closeSheet(); render();
   toast(`${ICON('check')} Bijgesteld vanaf ${ymKort(vanaf)}: ${euro0(P.vrij)} heeft een plek`);
+}
+/* ===== WAAR VRIJGEKOMEN GELD HEEN GAAT: EEN COMPONENT (v362) =====
+   Gevraagd door de gebruiker: "Ander bedrag vanaf een maand" verlaagde bij een lager bedrag meteen je maandbudget,
+   terwijl Te ruime potjes (v358) en een schatting aanpassen (v360) eerst vroegen waar het vrije geld heen gaat.
+   Twee routes voor hetzelfde, met ander gedrag. Nu is er EEN component, met twee lezers (ruimBijstelData() en
+   potFormVoorstel()): de bestemmingen, de rijen met hun veld en "de rest", de regels "komt vrij" en "nog te
+   verdelen", het gevolg, de schrijver en de tekst voor het logboek.
+   DE BESTEMMINGEN, in deze volgorde: een potje dat de aanroeper meegeeft (bij een schatting het bronpotje van de
+   splitsing, v360), de potjes die niet passen (aard 'pastniet' van maandVooruit(), met potje en gewone maand),
+   sparen bovenop je spaarinleg, en je maandbudget verlagen. Niets voorgekozen; verdelen over meer mag. Een potje
+   dat zelf lager gaat staat er niet tussen (`uit`). Sparen en verlagen halen het geld allebei uit je potjes, dus
+   allebei verlagen ze je maandbudget; sparen zet daarbij je spaarinleg op een vast bedrag (v358). */
+function bestemData(o){
+  o=o||{}; const uit=o.uit||new Set(), best=o.best||{}, B0=o.B0||{};
+  let V=o.V; if(V===undefined){ V=null; try{ V=maandVooruit(); }catch(_){} }
+  const bedrag=id=>{ const v=best[id]; return (v===''||v==null)?0:Math.max(Math.round(numIn(v)),0); };
+  const dests=[];
+  for(const e of (o.extra||[])) if(e && CATS[e.k] && !uit.has(e.k))
+    dests.push({id:'pot:'+e.k, soort:'pot', k:e.k, naam:CATS[e.k].name, bud:Math.round(+B0[e.k]||0), sub:e.sub||''});
+  const pn=((V&&V.potjes)||[]).filter(x=>x.aard==='pastniet' && !uit.has(x.k) && !dests.some(y=>y.k===x.k))
+    .sort((a,b)=>a.naam.localeCompare(b.naam,'nl'))
+    .map(x=>({id:'pot:'+x.k, soort:'pot', k:x.k, naam:x.naam, bud:Math.round(+B0[x.k]||x.potje||0), gewoon:Math.round((x.vastDeel||0)+x.patroon)}));
+  dests.push(...pn, {id:'sparen', soort:'sparen'}, {id:'verlagen', soort:'verlagen'});
+  dests.forEach(x=>{ x.bedrag=bedrag(x.id); });
+  const toegewezen=dests.reduce((a,x)=>a+x.bedrag,0);
+  let spaar0=0; try{ spaar0=Math.round(monthlySavingTarget()); }catch(_){}
+  const sp=dests.find(x=>x.id==='sparen').bedrag, verl=dests.find(x=>x.id==='verlagen').bedrag;
+  const vrij=Math.max(Math.round(+o.vrij||0),0);
+  return {vrij, best, dests, toegewezen, open:vrij-toegewezen, sp, verl, spaar0, spaar1:spaar0+sp, spaarVast:(SET.savingMode||'auto')==='amount'};
+}
+/* "de rest": wat er nog open staat erbij, nooit onder nul. */
+function bestemRest(B, id){ const nu=(B.dests.find(x=>x.id===id)||{}).bedrag||0; return String(Math.max(nu+B.open,0)); }
+/* De blokken, met een voorvoegsel per sheet zodat hun ids en attributen blijven wat ze waren (ruimVrij,
+   data-ruimbest; pfVrij, data-pfbest). fn is de functie die ('best'|'rest', id, waarde) ontvangt. */
+function bestemBlok(pre, wat, B, fn){
+  if(wat==='vrij') return `<div id="${pre}Vrij" style="font-weight:700;font-size:var(--fs-md);margin-top:14px">${B.vrij>0?(B.vrijVanaf?`${euro0(B.vrij)} per maand komt vrij vanaf ${esc(ymKort(B.vrijVanaf))}. Waar gaat het heen?`:`${euro0(B.vrij)} komt vrij. Waar gaat het heen?`):''}</div>`;
+  if(wat==='open') return `<div class="small" id="${pre}Open" data-${pre}open="${B.open}" style="margin-top:6px;font-weight:600;${B.open===0?'color:var(--mut2)':''}">${B.vrij>0?(B.open===0?'Alles heeft een plek.':(B.open>0?`Nog te verdelen: ${euro0(B.open)}`:`${euro0(-B.open)} meer verdeeld dan er vrijkomt`)):''}</div>`;
+  if(!(B.vrij>0)) return '';
+  const rij=x=>{
+    const t = x.soort==='pot' ? [esc(x.naam), x.sub?esc(x.sub):`past niet in je potje: ${euro0(x.bud)}, gewoonlijk ${euro0(x.gewoon)}`]
+      : x.soort==='sparen' ? ['Naar sparen', `bovenop je ${euro0(B.spaar0)} per maand`] : ['Maandbudget verlagen', 'blijft op je rekening, buiten je potjes'];
+    const v=(B.best||{})[x.id];
+    return `<div class="row" data-${pre}best="${esc(x.id)}" style="gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
+      <span style="flex:1;min-width:0"><span style="font-size:var(--fs-md);display:block">${t[0]}</span><span class="small muted" style="display:block;line-height:1.4">${t[1]}</span></span>
+      <span class="small" style="color:var(--teal);cursor:pointer;font-weight:600;white-space:nowrap" onclick="${fn}('rest','${esc(x.id)}')">de rest</span>
+      <input type="text" inputmode="decimal" value="${esc(v==null?'':String(v))}" placeholder="0" oninput="${fn}('best','${esc(x.id)}',this.value)" style="width:76px;text-align:right;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 10px;font-size:var(--fs-md)"></div>`; };
+  return `<div id="${pre}Best">${B.dests.map(rij).join('')}</div>`;
+}
+/* De regels van het gevolg voor de bestemmingen; de aanroeper zet er zijn eigen potjes en het maandbudget bij. */
+function bestemGevolgRegels(B){
+  const L=[];
+  for(const x of B.dests) if(x.soort==='pot' && x.bedrag>0) L.push(`${esc(x.naam)} ${euro0(x.bud)} → ${euro0(x.bud+x.bedrag)}`);
+  if(B.sp>0) L.push(`Sparen ${euro0(B.spaar0)} → ${euro0(B.spaar1)} per maand${B.spaarVast?'':', als vast bedrag'}`);
+  return L;
+}
+/* Wat het logboek bij de afspraak zet: waar het geld heen ging. */
+function bestemTekst(B){
+  const L=[];
+  for(const x of B.dests) if(x.bedrag>0) L.push(x.soort==='pot'?`${x.naam} ${euro0(x.bedrag)}`:x.soort==='sparen'?`sparen ${euro0(x.bedrag)}`:`maandbudget ${euro0(x.bedrag)} lager`);
+  return L.length?`${euro0(B.toegewezen)} naar ${opsomming(L)}`:'';
+}
+/* De schrijver, voor save(): de potjes die erbij krijgen (potPlanZet, vanaf de maand) en sparen. Verlagen schrijft
+   niets: het geld blijft uit je potjes en dus uit je maandbudget. */
+function bestemSchrijf(B, vanaf, cur){
+  for(const x of B.dests) if(x.soort==='pot' && x.bedrag>0) potPlanZet(x.k, vanaf, x.bud+x.bedrag);
+  if(B.sp>0){
+    if(vanaf<=cur){ SET.savingMode='amount'; SET.savingAmount=B.spaar0+B.sp; }
+    else { SET.spaarPlan=SET.spaarPlan||{}; SET.spaarPlan[vanaf]=(+SET.spaarPlan[vanaf]||0)+B.sp; }
+  }
+}
+/* Na save(): de log van de potjes die erbij kregen (v235/v315). */
+function bestemNaSave(B, vanaf, cur){
+  const nx=nextYM(cur);
+  for(const x of B.dests) if(x.soort==='pot' && x.bedrag>0 && vanaf<=nx) try{ valtOpPotjeGewijzigd(x.k, x.bud, x.bud+x.bedrag, vanaf!==cur); }catch(_){}
 }
 /* De spaarverhoging uit de sheet hierboven, in de maand die je koos. rolloverBudgets() roept hem aan bij de
    maandwissel; hij telt op bij je spaarinleg van dat moment, dus een eigen wijziging tussendoor blijft staan. */
@@ -14340,11 +14395,12 @@ function potSheetExtra(k, exists){
 /* v337: een potje dat vanaf volgende maand LAGER ligt of stopt, vraagt gedrag, en dat is een
    afspraak. Komt de verlaging uit de kaart van een uitgesloten incasso, dan is wat de app kan meten
    of die AFSCHRIJVING wegblijft, en dan is het een incasso-afspraak. Hoger vraagt niets. */
-function potjeAfspraak(k, bedrag, vanaf){
+function potjeAfspraak(k, bedrag, vanaf, bestem){
   const van=vanaf||nextYM(SET.budgetMonth||thisYM()), I=window._potIncasso;
   if(I && I.k===k){ const r=afspraakMaak({soort:'incasso', key:I.key, naam:I.naam, cat:k, bedrag:0, van, tot:van, wat:`${I.naam} blijft weg vanaf ${afMnd(van)}`}); save(); return r; }
   const cn=CATS[k]?CATS[k].name:k;
-  const r=afspraakMaak({soort:'potje', cat:k, bedrag, van, tot:van, wat: bedrag>0?`Potje ${cn} ${euro0(bedrag)} vanaf ${afMnd(van)}`:`${cn} stopt vanaf ${afMnd(van)}`});
+  /* v362: waar het vrijgekomen geld heen ging staat in de afspraak, en daarmee in het logboek. */
+  const r=afspraakMaak(Object.assign({soort:'potje', cat:k, bedrag, van, tot:van, wat:(bedrag>0?`Potje ${cn} ${euro0(bedrag)} vanaf ${afMnd(van)}`:`${cn} stopt vanaf ${afMnd(van)}`)+(bestem?`; ${bestem}`:'')}, bestem?{bestemming:bestem}:{}));
   save(); return r;
 }
 function savePotje(k,del){
@@ -14590,8 +14646,8 @@ function potFormReden(P, d){
   if(P.meer>0){ if(!P.bron) return `Kies waar de ${euro0(P.meer)} extra vandaan komt`;
     if(P.bron==='dek' && !P.dek) return P.kand.length?`Kies welk potje ${euro0(P.meer)} inlevert`:`Geen potje heeft ${euro0(P.meer)} over`;
     return ''; }
-  if(P.aanpas && P.meer<0){ if(!P.bron) return `Kies waar de ${euro0(-P.meer)} heen gaat`;
-    if(P.bron==='naar' && !P.dek) return `Kies naar welk potje de ${euro0(-P.meer)} gaat`;
+  if(P.meer<0 && P.B){ if(P.B.open>0) return `Kies eerst waar de ${euro0(P.B.open)} heen gaat`;
+    if(P.B.open<0) return `Je verdeelt ${euro0(-P.B.open)} meer dan er vrijkomt`;
     return ''; }
   if(P.meer===0) return `${esc(P.naam)} staat al op ${euro0(P.bedrag)}`;
   return '';
@@ -14623,20 +14679,22 @@ function potFormVoorstel(d){
     if(P.bron==='dek' && !P.kand.some(x=>x.k===P.dek)) P.dek=null;
     P.tot1 = P.bron==='verhoog' ? P.tot0+P.meer : P.tot0;
     P.klaar = catKlaar && (P.bron==='verhoog' || (P.bron==='dek' && !!P.dek));
-  } else if(d.aanpas && P.meer<0){
-    /* v360: een schatting aanpassen volgt de dekkingsregel ook naar beneden: het verschil gaat terug naar een
-       potje (het bronpotje van de splitsing bovenaan) of je maandbudget omlaag. Niets voorgekozen. */
-    const bron=((SET.potSchat||{})[k]||{}).bron;
-    P.aanpas=true;
-    P.terug=Object.keys(B).filter(x=>x!==k && +B[x]>0 && CATS[x] && CATS[x].type==='expense' && !geenNorm(x) && !potGearchiveerd(x,vanaf))
-      .map(x=>({k:x, naam:CATS[x].name, bud:Math.round(+B[x])}))
-      .sort((a,b)=>((b.k===bron)-(a.k===bron)) || a.naam.localeCompare(b.naam,'nl'));
-    if(P.bron==='naar' && !P.terug.some(x=>x.k===P.dek)) P.dek=null;
-    P.tot1 = P.bron==='naar' ? P.tot0 : P.tot0+P.meer;
-    P.klaar = catKlaar && (P.bron==='verlaag' || (P.bron==='naar' && !!P.dek));
+  } else if(P.meer<0){
+    /* v362: EEN ROUTE VOOR EEN LAGER POTJE. Wat vrijkomt krijgt een bestemming via de component van Te ruime
+       potjes (bestemData()): een potje dat niet past, sparen, of je maandbudget verlagen, ook verdeeld, niets
+       voorgekozen. Tot v362 verlaagde een lager bedrag hier meteen je maandbudget, en vroeg alleen een schatting
+       aanpassen (v360) waar het verschil heen ging. Bij een schatting staat het bronpotje van de splitsing
+       bovenaan, zoals bij v360. */
+    if(d.aanpas) P.aanpas=true;
+    const bron=d.aanpas?((SET.potSchat||{})[k]||{}).bron:null;
+    P.B=bestemData({vrij:-P.meer, best:d.best, B0:B, uit:new Set([k]),
+      extra:(bron && CATS[bron] && !potGearchiveerd(bron,vanaf))?[{k:bron, sub:`het potje waaruit je splitste: ${euro0(Math.round(+B[bron]||0))}`}]:[]});
+    P.B.vrijVanaf=vanaf;
+    P.tot1=P.tot0-P.B.sp-P.B.verl;
+    P.klaar = catKlaar && P.B.open===0;
   } else {
     P.tot1=P.tot0+P.meer;
-    P.klaar = catKlaar && (P.meer<0 || (!!d.aanpas && P.meer===0));
+    P.klaar = catKlaar && !!d.aanpas && P.meer===0;
   }
   return P;
 }
@@ -14665,18 +14723,21 @@ function potFormZetVeld(f, v, her){ const d=window._potForm=window._potForm||{};
   if(f==='open'){ d.bedrag=null; d.vanaf=null; d.bron=null; d.dek=null; if(!v){ d.res=null; d.schat=null; d.resMaand=null; } }
   if(f==='res' && v!=='ja'){ d.schat=null; d.resMaand=null; }
   if(her!==false) renderPotForm(); else { const g=document.getElementById('potFormGevolg'); if(g) g.outerHTML=potFormGevolgHTML(); const P2=potFormVoorstel(), s=document.querySelector('[data-potformsave]'); if(s) s.disabled=!P2.klaar; voetRedenZet(potFormReden(P2, d)); const b=document.getElementById('potFormBron'); if(b) b.outerHTML=potFormBronHTML(); } }
+/* v362: de bestemming bij een lager potje: dezelfde component als Te ruime potjes. */
+function potFormBestem(f, id, v){
+  const d=window._potForm=window._potForm||{}; d.best=d.best||{};
+  if(f==='best'){ d.best[id]=v; return potFormDeel(); }
+  const P=potFormVoorstel(); if(!P.B) return; d.best[id]=bestemRest(P.B, id); renderPotForm();
+}
+function potFormDeel(){
+  const P=potFormVoorstel(), d=window._potForm||{};
+  if(P.B){ const e=document.getElementById('pfOpen'); if(e) e.outerHTML=bestemBlok('pf','open',P.B); }
+  const g=document.getElementById('potFormGevolg'); if(g) g.outerHTML=potFormGevolgHTML();
+  const s=document.querySelector('[data-potformsave]'); if(s) s.disabled=!P.klaar; voetRedenZet(potFormReden(P, d));
+}
 function potFormBronHTML(){
   const P=potFormVoorstel();
-  if(P.aanpas && P.meer<0){
-    const chipT=(v,l)=>`<span class="chip ${P.bron===v?'on':''}" data-potbron="${v}" onclick="potFormZetVeld('bron','${v}')">${l}</span>`;
-    const rijT=x=>`<div class="tx" data-potterug="${esc(x.k)}" style="cursor:pointer${P.dek===x.k?';outline:1px solid var(--teal);border-radius:8px':''}" onclick="potFormZetVeld('dek','${esc(x.k)}')">
-      <div class="ava" style="background:var(--card2)">${CATS[x.k].icon||''}</div>
-      <div class="info"><div class="nm">${esc(x.naam)}${potSchatTag(x.k, P.vanaf)}</div><div class="cat">potje ${euro0(x.bud)} wordt ${euro0(x.bud-P.meer)}</div></div>
-      <div class="amt" style="color:var(--teal)">${P.dek===x.k?'gekozen':'kies'}</div></div>`;
-    return `<div id="potFormBron"><label class="fld">Waar gaan de ${euro0(-P.meer)} heen</label>
-      <div class="chips wrap">${chipT('naar','Naar een ander potje')}${chipT('verlaag','Maandbudget verlagen')}</div>
-      ${P.bron==='naar'?P.terug.map(rijT).join(''):''}</div>`;
-  }
+  if(P.meer<0 && P.B) return `<div id="potFormBron">${bestemBlok('pf','vrij',P.B)}${bestemBlok('pf','lijst',P.B,'potFormBestem')}${bestemBlok('pf','open',P.B)}</div>`;
   if(!(P.meer>0)) return '<div id="potFormBron"></div>';
   const chip=(v,l)=>`<span class="chip ${P.bron===v?'on':''}" data-potbron="${v}" onclick="potFormZetVeld('bron','${v}')">${l}</span>`;
   const rij=x=>`<div class="tx" data-potdek="${esc(x.k)}" style="cursor:pointer${P.dek===x.k?';outline:1px solid var(--teal);border-radius:8px':''}" onclick="potFormZetVeld('dek','${esc(x.k)}')">
@@ -14697,6 +14758,7 @@ function potLagerGevolg(P){
       uit+=` <span data-potincasso="${esc(x.key)}">Minder verwacht nog ${esc(titleCase(cleanMerch(x.name)||x.name||''))} ${euro0(Math.round(+x.amount||0))} op ${esc(afDag(ymdVan(nd)))}. Is die opgezegd, <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="toggleFixDueExcl('${esc(x.key)}','vaste')">zet hem op opgezegd \u203a</span></span>`; } }catch(_){}
   if(P.vanaf===thisYM()){ try{
     const V0=maandVooruit(), B1=Object.assign({}, SET.budgets||{}); if(P.bedrag>0) B1[P.k]=P.bedrag; else delete B1[P.k];
+    if(P.B) for(const x of P.B.dests) if(x.soort==='pot' && x.bedrag>0) B1[x.k]=x.bud+x.bedrag;   // v362: met de bestemming erbij
     const V1=potSimuleer(B1, ()=>maandVooruit());
     if(V0 && !V0.onbekend && V1 && !V1.onbekend){ const d1=V1.projectie-V1.budget;
       uit+=` <span data-potvooruit>Deze maand komt je uitgave uit rond ${euro0(V1.projectie)}${V1.projectie!==V0.projectie?` (was ${euro0(V0.projectie)})`:', zoals hij al deed'}; tegen een budget van ${euro0(V1.budget)} is dat ${euro0(Math.abs(d1))} ${d1>0?'boven':'onder'} budget.</span>`; }
@@ -14726,10 +14788,11 @@ function potFormGevolgHTML(){
   else if(!P.vanaf || P.bedrag==null) t='';
   else {
     const Vn=esc(ymKort(P.vanaf)), n=esc(P.naam||'Het nieuwe potje');
-    if(P.meer<0 && P.aanpas && P.bron==='naar' && P.dek){ const D=P.terug.find(x=>x.k===P.dek);
-      t=`Vanaf ${Vn} gaat ${n} van ${euro0(P.van)} naar ${euro0(P.bedrag)}, vastgesteld, en gaat ${esc(D.naam)} van ${euro0(D.bud)} naar ${euro0(D.bud-P.meer)}. Je maandbudget blijft ${euro0(P.tot0)}. Eerdere maanden blijven zoals ze waren.`; }
-    else if(P.meer<0 && P.aanpas && P.bron!=='verlaag') t=`Nog een plek kiezen voor ${euro0(-P.meer)}: terug naar een potje of je maandbudget omlaag.`;
-    else if(P.meer<0) t=`Vanaf ${Vn} gaat ${n} van ${euro0(P.van)} naar ${euro0(P.bedrag)}${P.aanpas?', vastgesteld':''}. Je maandbudget gaat van ${euro0(P.tot0)} naar ${euro0(P.tot1)}. Eerdere maanden blijven zoals ze waren.`+potLagerGevolg(P);
+    if(P.meer<0){ const B=P.B, R=bestemGevolgRegels(B);
+      t=`Vanaf ${Vn} gaat ${n} van ${euro0(P.van)} naar ${euro0(P.bedrag)}${P.aanpas?', vastgesteld':''}.`+(R.length?` Daarbij: ${R.join('; ')}.`:'');
+      t+= B.open===0
+        ? ` Je maandbudget ${P.tot1!==P.tot0?`gaat van ${euro0(P.tot0)} naar ${euro0(P.tot1)}`:`blijft ${euro0(P.tot0)}`}. Eerdere maanden blijven zoals ze waren.`+potLagerGevolg(P)
+        : ` Nog een plek kiezen voor ${euro0(Math.abs(B.open))}${B.open<0?' te veel':''}.`; }
     else if(P.meer===0 && P.aanpas) t=`${n} blijft vanaf ${Vn} ${euro0(P.bedrag)}, nu vastgesteld.`;
     else if(P.meer===0) t=P.nieuweCat?'Een potje van nul is geen potje.':`${n} staat vanaf ${Vn} al op ${euro0(P.bedrag)}.`;
     else if(P.bron==='dek' && P.dek){ const D=P.kand.find(x=>x.k===P.dek);
@@ -14807,16 +14870,18 @@ function potFormZet(){
   if(P.nieuweCat){ k=eigenCatMaak(P.naam, (window._potForm||{}).aard); if(!k) return; }
   const D=P.meer>0 && P.bron==='dek' ? P.kand.find(x=>x.k===P.dek) : null;
   if(P.meer>0 && P.bron==='dek' && !D) return;
-  const T=P.aanpas && P.meer<0 && P.bron==='naar' ? P.terug.find(x=>x.k===P.dek) : null;
-  if(P.aanpas && P.meer<0 && P.bron==='naar' && !T) return;
+  /* v362: een lager bedrag schrijft pas met een bestemming voor alles wat vrijkomt; de schrijver eist dat zelf
+     ook, na het opnieuw lezen (v238/v319). */
+  if(P.meer<0 && !(P.B && P.B.vrij>0 && P.B.open===0)) return;
   const cur=potHuidigeMaand(), voor=+(SET.budgets||{})[k]||0;
   potPlanZet(k, P.vanaf, P.bedrag);
   if(SET.potSchat && SET.potSchat[k]) delete SET.potSchat[k];   // v360: een bedrag uit dit formulier is vastgesteld
-  if(T) potPlanZet(T.k, P.vanaf, T.bud-P.meer);
+  if(P.meer<0) bestemSchrijf(P.B, P.vanaf, cur);
   if(D){ potPlanZet(D.k, P.vanaf, D.bud-P.meer); try{ potjeAfspraak(D.k, D.bud-P.meer, P.vanaf); }catch(_){} }
-  if(P.meer<0 && !P.nieuweCat){ try{ potjeAfspraak(k, P.bedrag, P.vanaf); }catch(_){} }
+  if(P.meer<0 && !P.nieuweCat){ try{ potjeAfspraak(k, P.bedrag, P.vanaf, bestemTekst(P.B)); }catch(_){} }
   save();
   if(P.vanaf<=nextYM(cur)) try{ valtOpPotjeGewijzigd(k, voor, P.bedrag, P.vanaf!==cur); }catch(_){}
+  if(P.meer<0) bestemNaSave(P.B, P.vanaf, cur);
   window._potForm=null;
   const naam=CATS[k].name;
   if(P.nieuweCat){ openCatKandidaten(k, true); render(); }
@@ -17529,8 +17594,15 @@ function lekSignaal(m, exclude){
   /* pri boven de 9 van het hoogste patroon: een lek is een doorlopende kost die je kunt opzeggen,
      de andere vier zijn observaties. Is er maar een plek, dan hoort de opzegbare daar te staan.
      Dat loopt via dezelfde sortering, dus nergens een uitzondering. */
+  /* v362: de regel op Grip noemt de CATEGORIE met wat er deze maand in die categorie uitging
+     (catSpendMap(), de norm-bron, v269), en niet de winkel. Tot v362 zei hij "Restaurant Lona: EUR 75
+     zonder potje": een winkelnaam op een regel over een categorie zonder potje, terwijl het potje dat je
+     zou maken over de categorie gaat. De winkel blijft in de zin eronder (hyp) en in de sheet. Het bedrag
+     hoort bij het label: met de categorie als label is het de categorie, ook als er meer winkels in zitten. */
+  let catBedrag=bedrag; try{ const v=Math.round(+catSpendMap(m)[L.cat]||0); if(v>0) catBedrag=v; }catch(_){}
   return {pri:12, cat:L.cat, act:`coStart('lek','${esc(m)}')`,
     kpiLabel:L.name, kpiVal:euro0(bedrag), kpiSub:(cat===L.name?'':cat),
+    catNaam:cat, catVal:euro0(catBedrag),
     hyp:T.hyp, imp:T.imp};
 }
    // v340: het signaal staat onder 'Let op' en opent in een sheet
@@ -23809,10 +23881,18 @@ function diagBezitKoppeling(){
     const tok=t=>new Set(String(t.desc||'').toUpperCase().match(/[A-Z0-9]{4,}/g)||[]);
     const sets=lijst.map(tok), tel=new Map();
     sets.forEach(S=>S.forEach(x=>tel.set(x,(tel.get(x)||0)+1)));
-    const ken=[...tel].filter(([,n])=>n<lijst.length).map(([x,n])=>`${x} (${n}x)`);
+    /* v362: een kenmerk dat precies EEN keer voorkomt staat apart, onder de terugkerende, met de dag en het
+       bedrag van die ene boeking. Tot v362 stond hij als "(1x)" tussen de terugkerende, zonder dag, en kon de
+       grens van twaalf hem afknippen; bij een partij met een boeking stond er geen enkel kenmerk. Een nieuwe
+       machtiging is dan pas na de tweede afschrijving te zien. Gegroepeerd per boeking, zodat dag en bedrag
+       er een keer staan en de lijst niet langer wordt dan het aantal boekingen. */
+    const ken=[...tel].filter(([,n])=>n>=2 && n<lijst.length).map(([x,n])=>`${x} (${n}x)`);
+    const eens=lijst.map((t,k)=>({t, w:[...sets[k]].filter(x=>tel.get(x)===1)})).filter(e=>e.w.length);
     L.push(lijst.length<2 ? '  kenmerken: een boeking, dus niets te vergelijken'
       : ken.length ? '  kenmerken die niet in elke omschrijving staan: '+ken.slice(0,12).join(', ')+'   (een datum of bedrag kan hier ook tussen staan)'
+      : eens.length ? '  kenmerken die terugkomen maar niet in elke omschrijving staan: geen'
       : '  kenmerken: GEEN; de omschrijving scheidt deze boekingen niet');
+    for(const e of eens) L.push(`  1× gezien op ${e.t.date} (${euro(-e.t.amount)}): `+e.w.slice(0,12).join(', ')+(e.w.length>12?` en ${e.w.length-12} meer`:''));
     /* v341: per kenmerk de bedragen van de boekingen waarin hij staat. Dat beantwoordt of een kostenpost
        een eigen woord draagt: staat een woord alleen bij de kleine bedragen en een ander alleen bij de
        inleg, dan scheidt de omschrijving ze. Alleen cijfers staan er niet, want een datum of volgnummer
