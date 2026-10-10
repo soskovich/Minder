@@ -274,7 +274,12 @@ test.describe('b - de terugval: wat een vol doel niet meer nodig heeft gaat naar
      dus vanaf dan gaat er 1.540 heen plus wat Inrichting overhoudt: de projectie zegt 9.
      Zou de projectie de grendel van NU vasthouden, dan bleef hij op 1.400 rekenen en dus op 11. */
   test('een doel dat doorgezakt geld krijgt rekent met de buffer die volgende maand vol is', async ({ page }) => {
-    await boot(page, { set: { nfDoelVast: 5800, nfToegewezen: 5000 } });
+    /* v373: de fixture stond op 70/30. Een doel heeft geen eigen modus meer, en de overgang neemt het bedrag van DEZE
+       maand over; met de grendel dicht krijgt Inrichting deze maand nul, en dan zou de verdeling na de overgang
+       {Kosten Koper 1.400, Inrichting 0} zijn. Deze test gaat over de grendel in de projectie, dus de verdeling staat
+       hier expliciet op 1.540 / 660, wat 70/30 van 2.200 was. */
+    await boot(page, { set: { nfDoelVast: 5800, nfToegewezen: 5000, planVerdelingV373: 1,
+      planVerdeling: { modus: 'zelf', bedragen: { [ID_KK]: 1540, [ID_IW]: 660 }, bijVol: 'volgende' } } });
     const r = await plan(page);
     const nf = r.find((x) => x.type === 'noodfonds'), kk = r.find((x) => x.id === ID_KK);
     expect(nf.rest).toBe(800);

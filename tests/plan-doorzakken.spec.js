@@ -21,8 +21,18 @@ function tweak(fn) {
 
 // het noodfonds is standaard 'auto' en zou als enige lopende item alles opslokken; in de
 // scenario's hieronder zetten we het stil zodat we de doorzak-werking tussen de doelen meten.
+/* v373: een doel heeft geen eigen verdeelmodus meer; het bedrag per doel staat in de verdeling (SET.planVerdeling). Deze
+   spec meet de doorzak-werking van ronde 1 en 2, dus een fixture met alleen vaste bedragen of percentages zet die bedragen
+   rechtstreeks in de verdeling (een percentage als euro's van de inleg). Dat is wat het doel ermee bedoelde; de overgang
+   zou het bedrag van deze maand nemen, inclusief wat er doorzakte, en dan valt ronde 2 niet meer te meten. */
+const alsVerdeling = (s) => {
+  const G = s.goals || [];
+  if (!G.length || G.some((g) => !g.allocMode || g.allocMode === 'auto')) return;
+  const bedragen = {}; for (const g of G) bedragen[g.id] = g.allocMode === 'pct' ? Math.round(CAP * g.pct / 100) : g.perMaand;
+  s.planVerdeling = { modus: 'zelf', bedragen, bijVol: null }; s.planVerdelingV373 = 1;
+};
 const metDoelen = (goals, extra) => tweak((s) => {
-  s.goals = goals;
+  s.goals = goals; alsVerdeling(s);
   s.planOrder = goals.map((g) => g.id).concat(['noodfonds']);
   s.planPaused = { noodfonds: true };
   if (extra) extra(s);
@@ -252,14 +262,14 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
     /* v318: de knoppen staan als eigen rasterregel onder de bestemming die je aantikte, want ze
        lopen over de volle breedte van het raster. Ze dragen hun eigen id. */
     await page.locator('#s-vooruit [data-acties="gA"] >> text=openen').click();
-    await page.waitForSelector('#gModes');
+    await page.waitForSelector('[data-goalkrijgt]');
     expect(await page.locator('#gNaam').inputValue()).toBe('Vakantie');
 
-    // en een maandbedrag daarop zet de doorzak-werking aan
-    await page.locator('#gModes .chip', { hasText: 'Vast bedrag' }).click();
-    await page.locator('#gMnd').fill('200');
-    await page.locator('#gDatum').fill('2030-01');       // v242: de streefdatum is verplicht
-    await page.locator('#sheet >> text=Opslaan').click();
+    /* v373: een maandbedrag zet je in de verdeling, niet meer in de doel-editor; de regel in de editor is de ingang */
+    await page.locator('[data-goalkrijgt] >> text=verdeling aanpassen').click();
+    await page.click('[data-vdmodus="zelf"]');
+    await page.fill('[data-vdvak="gA"]', '200'); await page.fill('[data-vdvak="gB"]', '300');
+    await page.click('[data-vdbijvol="volgende"]'); await page.click('[data-vdbevestig]');
     await page.waitForSelector('#sheetBg.show', { state: 'detached' });
     const Q = await alloc(page);
     expect(Q[0].alloc).toBe(200);

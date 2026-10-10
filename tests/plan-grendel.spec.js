@@ -170,13 +170,13 @@ test.describe('b · de streefdatum', () => {
       document.getElementById('gNaam').value = 'Vakantie';
       document.getElementById('gDoel').value = '3000';
       document.getElementById('gDatum').value = '2029-06';
-      document.getElementById('gMnd').value = '250';
       saveGoal('');
       return { labels, goals: (SET.goals || []).map((g) => ({ naam: g.naam, sd: g.streefdatum, mode: g.allocMode, per: g.perMaand })) };
     });
     expect(r.labels.some((l) => /Streefdatum$/.test(l))).toBe(true);
     expect(r.labels.some((l) => /optioneel/i.test(l))).toBe(false);
-    expect(r.goals).toEqual([{ naam: 'Vakantie', sd: '2029-06', mode: 'fixed', per: 250 }]);
+    /* v373: de editor heeft geen maandbedrag meer, dus een nieuw doel draagt geen modus en geen bedrag */
+    expect(r.goals).toEqual([{ naam: 'Vakantie', sd: '2029-06', mode: undefined, per: undefined }]);
   });
 
   test('een bestaand doel zonder datum telt mee, leest als onvolledig en heeft een ingang', async ({ page }) => {
@@ -212,8 +212,12 @@ test.describe('b · de streefdatum', () => {
 });
 
 test.describe('c · het maandbedrag en de harde grens', () => {
+  /* v373: een doel draagt geen eigen maandbedrag meer; het bedrag per doel staat in de verdeling (SET.planVerdeling,
+     zelf verdeeld). De harde grens zit sinds v372 in de verdeel-sheet: Bevestigen staat uit zolang je meer verdeelt
+     dan er is. Deze tests leggen dezelfde eigenschappen vast op die ene plek. */
+  const ZELF = (bedragen) => ({ planVerdeling: { modus: 'zelf', bedragen, bijVol: 'volgende' }, planVerdelingV373: 1 });
   test('drie doelen onder de inleg: de verdeling klopt en het restant is zichtbaar', async ({ page }) => {
-    await boot(page, Object.assign({ goals: DRIE }, VOL));
+    await boot(page, Object.assign({ goals: DRIE, set: ZELF({ g1: 500, g2: 800, g3: 400 }) }, VOL));
     const P = await plan(page);
     const byId = Object.fromEntries(P.map((p) => [p.id, p]));
     expect(byId.g1.base).toBe(500);
@@ -223,43 +227,39 @@ test.describe('c · het maandbedrag en de harde grens', () => {
     const verdeeld = P.reduce((a, p) => a + p.alloc, 0);
     expect(verdeeld).toBe(3000);
     expect(byId.g1.extra + byId.g2.extra + byId.g3.extra).toBe(1300);
-    expect(await page.evaluate(() => planVastRuimte().over)).toBe(1300);
   });
 
-  test('boven de inleg: opslaan kan niet, en de sheet toont het verschil', async ({ page }) => {
-    await boot(page, Object.assign({ goals: DRIE }, VOL));
+  test('boven de inleg: bevestigen kan niet, en de sheet zegt het verschil', async ({ page }) => {
+    await boot(page, Object.assign({ goals: DRIE, set: { planVerdelingV373: 1 } }, VOL));
     const r = await page.evaluate(() => {
-      openGoal('g3');
-      document.getElementById('gMnd').value = '2000';   // 500 + 800 + 2000 = 3300 > 3000
-      saveGoal('g3');
-      const bewaard = (SET.goals || []).find((x) => x.id === 'g3').perMaand;
-      openGoal('g3');
-      return { bewaard, sheet: document.querySelector('#sheet').innerText };
+      openVerdeling(); verdelingModus('zelf'); verdelingBijVol('volgende');
+      verdelingBedrag('g1', '500'); verdelingBedrag('g2', '800'); verdelingBedrag('g3', '2000');   // 3300 > 3000
+      const reden = verdelingReden(verdelingData());
+      verdelingZet();
+      return { reden, bewaard: SET.planVerdeling || null };
     });
-    expect(r.bewaard).toBe(400);                        // niets opgeslagen
-    expect(await page.evaluate(() => document.body.innerText)).toMatch(/te veel verdeeld/);
-    expect(r.sheet).toMatch(/Er is €1\.700 per maand te verdelen/);
+    expect(r.reden).toBe('Je verdeelt €300 meer dan er is');
+    expect(r.bewaard).toBeNull();                        // niets opgeslagen
   });
 
   test('precies op de inleg mag wel', async ({ page }) => {
-    await boot(page, Object.assign({ goals: DRIE }, VOL));
+    await boot(page, Object.assign({ goals: DRIE, set: { planVerdelingV373: 1 } }, VOL));
     const r = await page.evaluate(() => {
-      openGoal('g3');
-      document.getElementById('gMnd').value = '1700';   // 500 + 800 + 1700 = 3000
-      saveGoal('g3');
-      return (SET.goals || []).find((x) => x.id === 'g3').perMaand;
+      openVerdeling(); verdelingModus('zelf'); verdelingBijVol('volgende');
+      verdelingBedrag('g1', '500'); verdelingBedrag('g2', '800'); verdelingBedrag('g3', '1700');   // 3000
+      verdelingZet();
+      return SET.planVerdeling && SET.planVerdeling.bedragen;
     });
-    expect(r).toBe(1700);
-    expect(await page.evaluate(() => planVastRuimte().over)).toBe(0);
+    expect(r).toEqual({ g1: 500, g2: 800, g3: 1700 });
   });
 
   test('een doel dat vol raakt geeft zijn restant aan het volgende op volgorde', async ({ page }) => {
     // Vakantie heeft nog 200 nodig maar krijgt 500 toegewezen: 300 zakt door naar Auto
     const G = [
-      { id: 'g1', naam: 'Vakantie', doel: 3000, gespaard: 2800, allocMode: 'fixed', perMaand: 500, streefdatum: '2028-06' },
-      { id: 'g2', naam: 'Auto', doel: 16000, gespaard: 0, allocMode: 'fixed', perMaand: 800, streefdatum: '2029-01' },
+      { id: 'g1', naam: 'Vakantie', doel: 3000, gespaard: 2800, streefdatum: '2028-06' },
+      { id: 'g2', naam: 'Auto', doel: 16000, gespaard: 0, streefdatum: '2029-01' },
     ];
-    await boot(page, Object.assign({ goals: G }, VOL));
+    await boot(page, Object.assign({ goals: G, set: ZELF({ g1: 500, g2: 800 }) }, VOL));
     const P = await plan(page);
     const byId = Object.fromEntries(P.map((p) => [p.id, p]));
     expect(byId.g1.alloc).toBe(200);                    // nooit meer dan wat het nodig heeft

@@ -4777,44 +4777,27 @@ function planModeChips(mode, handler){
   return `<div class="chips" style="margin:2px 0 0">${PLAN_MODES.map(([k,l])=>
     `<span class="chip ${mode===k?'on':''}" style="flex:1;text-align:center" onclick="${handler}('${k}')">${l}</span>`).join('')}</div>`;
 }
-function goalMode(v){ window._goalMode=v; const g=(SET.goals||[]).find(x=>x.id===window._goalEdit)||null; renderGoalSheet(window._goalEdit, g, v); }
 function openGoal(id){
   const g=id?(SET.goals||[]).find(x=>x.id===id):null;
   window._goalEdit=id||''; window._goalMode=null;
   renderGoalSheet(id, g, null);
   showSheetBg();
 }
+/* v373: de leesregel in de doel-editor. X is wat het doel deze maand krijgt, uit dezelfde allocatePlan() als Plan en de
+   verdeling, dus de regel en de verdeling kunnen niet uiteenlopen. */
+function goalKrijgtRegel(id){
+  const zelf=!!planZelf(); let X=null;
+  try{ const p=id?allocatePlan().find(x=>x.id===id):null; if(p) X=Math.max(Math.round(+p.alloc||0),0); }catch(_){}
+  const wijze=zelf?'zelf verdeeld':'op volgorde';
+  const link=`<span style="color:var(--teal);font-weight:700;cursor:pointer;white-space:nowrap" onclick="closeSheet();openVerdeling()">verdeling aanpassen ›</span>`;
+  return `<div class="small" data-goalkrijgt="${X==null?'':X}" style="margin-top:12px;line-height:1.5">${X==null?`Een nieuw doel krijgt geld ${zelf?'zodra je het in je verdeling een bedrag geeft':'op zijn plek in de volgorde'}`:`Krijgt <b>${euro0(X)}/mnd</b>`} · ${wijze} · ${link}</div>`;
+}
 function renderGoalSheet(id, g, modeOverride){
-  const isNew=!g; const d=g||{naam:'',doel:'',perMaand:'',gespaard:'',pct:''};
-  /* v242: een vast maandbedrag is de gewone manier van verdelen geworden, dus een nieuw doel opent
-     daarop. 'auto' bestaat nog voor wie het kiest en voor bestaande doelen; planAllocOf() houdt
-     zijn terugval, zodat een oud doel zich blijft gedragen zoals het deed. */
-  /* v255: met een dichte grendel valt er niets te kiezen, dus staan de chips er niet en blijft de
-     modus staan zoals hij is (bij een nieuw doel: 'auto'). Dezelfde vorm als renderNfSheet(), dat
-     dit voor de buffer al deed: de regel zegt waarom en wanneer hij opengaat. Een knop die er
-     bruikbaar uitziet en het niet hoort te zijn is erger dan geen knop (v245). */
-  const vastMag=planVastMag();
-  const A=planAllocOf(d);
-  const mode=vastMag ? (modeOverride||window._goalMode||(isNew?'fixed':A.mode)) : (isNew?'auto':A.mode);
-  window._goalMode=mode;
-  /* v242: wat er nog te verdelen is, naast het veld waarin je het verdeelt. planVastRuimte() laat
-     dit doel zelf buiten de som, anders zou je je eigen bedrag niet opnieuw kunnen opslaan. Boven
-     de ruimte kun je niet opslaan; de regel zegt hoeveel dat scheelt. */
-  const R=planVastRuimte(id||null);
-  const eigen=Math.max(Math.round(+d.perMaand||0),0);
-  const teVeel=(R.cap>0&&mode==='fixed')?Math.max(eigen-R.over,0):0;
-  const ruimteRegel = (R.cap>0&&mode==='fixed')
-    ? `<div class="small" style="margin-top:6px;color:var(--mut2);line-height:1.45">${
-        teVeel>0
-          ? `Je verdeelt ${euro0(teVeel)} meer dan je ${planCapLabel()} van ${euro0(R.cap)} per maand. Opslaan kan zodra het verschil weg is.`
-          : `Er is ${euro0(R.over)} per maand te verdelen${R.anderen>0?`, want ${euro0(R.anderen)} gaat al naar je andere bestemmingen`:''}.`}</div>`
-    : '';
-  const bedrag = mode==='fixed'
-    ? `<label class="fld" style="margin-top:10px">Per maand opzij (€)</label><input id="gMnd" type="number" inputmode="numeric" value="${d.perMaand||''}" placeholder="bv. 150" style="width:100%">${ruimteRegel}`
-    : mode==='pct'
-    ? `<label class="fld" style="margin-top:10px">Deel van je spaarinleg (%)</label><input id="gPct" type="number" inputmode="numeric" min="0" max="100" value="${d.pct||''}" placeholder="bv. 30" style="width:100%">
-       <div class="small muted" style="margin-top:6px">${planCapacity()>0?`${euro0(planCapacity())}/mnd ${planCapLabel()} te verdelen · dit doel krijgt ${euro0(Math.round(planCapacity()*(+d.pct||0)/100))}`:'Nog geen spaarinleg bekend.'}</div>`
-    : `<div class="small muted" style="margin-top:8px">Dit doel krijgt wat er op zijn plek in de rij nog over is.</div>`;
+  const isNew=!g; const d=g||{naam:'',doel:'',gespaard:''};
+  /* v373: DE VERDEELMODUS IS UIT DE DOEL-EDITOR (gevraagd door de gebruiker). Het bedrag per doel staat op een plek, de
+     verdeling (openVerdeling()); hier staat het als regel die je alleen kunt lezen, met de ingang erheen. De editor houdt
+     naam, doelbedrag, streefdatum, stand en pauze. */
+  const krijgt=goalKrijgtRegel(id);
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:12px">${isNew?'Nieuw spaardoel':'Spaardoel bewerken'}</div>
     ${isNew?debtNudgeCard():''}
@@ -4824,11 +4807,9 @@ function renderGoalSheet(id, g, modeOverride){
     <div class="small muted" style="margin-top:6px">${(!isNew&&!d.streefdatum)?'Dit doel komt van vóór deze versie en heeft er nog geen. Zonder datum valt er niets terug te rekenen. ':''}Elk doel heeft er een; alleen je noodfonds niet, want dat is geen doel met een einddatum maar de bodem eronder.</div>
     ${(function(){ try{ const pi=id?allocatePlan().find(x=>x.id===id):null; return pi?doelTempoLine(pi):''; }catch(_){ return ''; } })()}
     ${id?(function(){ try{ return planOrdeVeld(id); }catch(_){ return ''; } })():''}
-    <label class="fld" style="margin-top:12px">Hoeveel gaat hier maandelijks heen?</label>
-    ${vastMag
-      ? `<div id="gModes">${planModeChips(mode,'goalMode')}</div>${bedrag}`
-      : `<div class="small muted" style="margin-top:8px;line-height:1.5">Wat je buffer overhoudt, zolang hij niet vol is. Een eigen maandbedrag kan zodra dat zo is${(function(){ const dt=planGrendelDatum(); return dt?`, op dit tempo rond ${dt}`:''; })()}.</div>`}
+    ${krijgt}
     <label class="fld" style="margin-top:10px">Al gespaard (€)</label><input id="gNu" type="number" inputmode="numeric" value="${d.gespaard||''}" placeholder="0" style="width:100%">
+    ${g?`<div class="small" data-goalpauze style="margin-top:12px;text-align:center;color:var(--mut2);cursor:pointer" onclick="planTogglePause('${id}');renderGoalSheet('${id}',(SET.goals||[]).find(x=>x.id==='${id}'),null)">${planPaused(id)?'Pauze opheffen':'Pauzeren'}</div>`:''}
     ${g?`<div class="small" style="margin-top:12px;text-align:center;color:var(--red);cursor:pointer" onclick="deleteGoal('${id}')">Doel verwijderen</div>`:''}
     ${sheetVoet(`<button class="btn" style="width:100%" onclick="saveGoal('${id||''}')">${ICON('check')} Opslaan</button>`, '', '14px')}`;
 }
@@ -4837,32 +4818,16 @@ function saveGoal(id){
   const naam=(v('gNaam')||'').trim(); const doel=Math.round(numIn(v('gDoel'))||0);
   if(!naam || doel<=0){ toast('Vul een naam en doelbedrag in'); return; }
   const oud=(SET.goals||[]).find(x=>x.id===id)||{};
-  /* v255: met een dichte grendel kun je geen eigen maandbedrag zetten (planVastMag()), maar
-     WEIGEREN MAG DEZE OPSLAG NIET: dan kun je de naam of de streefdatum van een bestaand doel niet
-     meer wijzigen, en juist die datum dwingt v242 hier af. Dus houdt hij de verdeling vast zoals
-     hij was en slaat hij de rest gewoon op. Een NIEUW doel heeft geen oude verdeling en komt dan
-     op 'auto' met nul: dat is wat resNaarDoel() al doet, om dezelfde reden (een vast bedrag zou
-     een verdeling voor je kiezen terwijl daar niets te verdelen valt).
-     De modus komt hier dus uit de opslag en niet uit het blad, want het blad toont de chips bij
-     een dichte grendel helemaal niet. */
-  const vastMag=planVastMag();
-  const mode=vastMag ? (window._goalMode||'fixed') : (oud.allocMode||'auto');   // v242, v255
   const sd=String(v('gDatum')||'').trim();
   /* v242: de streefdatum is verplicht voor elk doel. Alleen het noodfonds heeft er geen, en dat is
      geen item uit SET.goals. Afgedwongen bij aanmaken EN bij wijzigen, zodat er nooit een tweede
      doel zonder datum kan ontstaan; een bestaand doel zonder datum krijgt er dus een zodra je hem
      voor iets anders opent, en dat is de enige weg naar binnen. */
   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(sd)){ toast('Kies een streefdatum'); return; }
-  const per = (vastMag&&mode==='fixed') ? Math.round(numIn(v('gMnd'))||0) : (+oud.perMaand||0);
-  /* v242: de harde grens. Meer verdelen dan je spaarinleg kun je niet opslaan; zie planVastRuimte.
-     Zonder bekende inleg is er niets om tegen af te zetten en blijft de grens weg (v59/v73). */
-  if(vastMag&&mode==='fixed'){
-    const R=planVastRuimte(id||null);
-    if(R.cap>0 && per>R.over){ toast(`${euro0(per-R.over)} te veel verdeeld; er is ${euro0(R.over)} per maand over`); return; }
-  }
-  const g={id:id||('g'+Date.now().toString(36)), naam, doel, gespaard:Math.round(numIn(v('gNu'))||0), allocMode:mode,
-    perMaand: per,      // bewaren, niet wissen bij een moduswissel
-    pct:      (vastMag&&mode==='pct') ? Math.max(0,Math.min(100,Math.round(numIn(v('gPct'))||0))) : (+oud.pct||0) };
+  /* v373: geen verdeelmodus meer in de editor; het bedrag per doel staat in de verdeling. Wat een oud doel nog aan
+     allocMode/perMaand/pct draagt blijft als data staan (planDoelModus() leest het na de overgang niet meer). */
+  const g={id:id||('g'+Date.now().toString(36)), naam, doel, gespaard:Math.round(numIn(v('gNu'))||0)};
+  for(const k of ['allocMode','perMaand','pct']) if(oud[k]!=null) g[k]=oud[k];
   g.streefdatum=sd;
   /* v248: het beginmoment van de lijn waar het streepje op rust. ALLEEN BIJ AANMAKEN. Wijzig je
      later je stand of je bedrag, dan blijft de oorsprong staan waar hij stond: hij is historie en
@@ -4981,6 +4946,34 @@ function planAllocOf(o){
   if(mode==='fixed'||mode==='pct'||mode==='auto') return {mode,perMaand:per,pct};
   return {mode:per>0?'fixed':'auto', perMaand:per, pct};
 }
+/* v373: EEN PLEK VOOR HET BEDRAG PER DOEL. Na de overgang (planVerdelingOvergang(), SET.planVerdelingV373) leest de motor
+   geen verdeelmodus van een doel meer: op volgorde krijgt een doel wat er op zijn plek nog over is, en zelf verdeeld zet
+   planZelfToepassen() het bedrag uit de verdeling. Daarvoor gold de modus van het doel (v123), en die leest alleen de
+   overgang zelf nog, om vast te leggen wat elk doel die maand kreeg. allocMode/perMaand/pct blijven als data staan en
+   worden niet meer geschreven. */
+function planDoelModus(g){ return SET.planVerdelingV373 ? {mode:'auto', perMaand:0, pct:0} : planAllocOf(g); }
+/* De overgang, een keer (keuze 1 en 2 van de gebruiker). Staat er minstens een doel op vast of percentage, dan wordt de
+   verdeling zelf verdeeld met per doel het bedrag dat het DEZE MAAND krijgt (ook een automatisch doel; een percentage telt
+   als het bedrag van deze maand), zodat er deze maand per doel niets verandert. De vol-keuze blijft open: zonder keuze
+   schuift het geld door zoals altijd (planZelfToepassen() leest alleen 'vraag'). Alles automatisch is op volgorde, zonder
+   melding. Een verdeling die er al is (v372) wint en wordt niet overschreven. */
+function planVerdelingOvergang(){
+  if(SET.planVerdelingV373) return false;
+  const doelen=(SET.goals||[]).filter(g=>g&&g.id);
+  const metModus=doelen.filter(g=>planAllocOf(g).mode!=='auto');
+  if(metModus.length && !SET.planVerdeling){
+    let P=[]; try{ P=allocatePlan(); }catch(_){ return false; }
+    const bedragen={}; for(const p of P) if(p.type==='goal') bedragen[p.id]=Math.max(Math.round(+p.alloc||0),0);
+    SET.planVerdeling={modus:'zelf', bedragen, bijVol:null, op:vandaagYMD(), overgang:true};
+    SET.planVerdelingOud=Object.fromEntries(metModus.map(g=>[g.id, planAllocOf(g)]));
+    SET.planVerdelingMelding=1;
+    const log=Array.isArray(SET.planVerdelingLog)?SET.planVerdelingLog:[];
+    log.push({M:thisYM(), op:vandaagYMD(), modus:'zelf', bedragen, bijVol:null, overgang:true, orde:planItems().map(x=>x.id),
+      namen:Object.fromEntries(P.map(p=>[p.id, p.type==='noodfonds'?'Noodfonds':(p.naam||'doel')]))});
+    SET.planVerdelingLog=log;
+  }
+  SET.planVerdelingV373=1; save(); return true;
+}
 function planAllocCfg(id){ return ((SET.planAlloc||{})[id])||{}; }
 function setPlanAlloc(id,patch){
   SET.planAlloc=SET.planAlloc||{}; SET.planAlloc[id]=Object.assign({},SET.planAlloc[id]||{},patch);
@@ -5019,7 +5012,7 @@ function planMap(){
     by[g.id]=Object.assign({id:g.id,type:'goal',naam:g.naam||'Doel',doel:+g.doel||0,gespaard:+g.gespaard||0,
              streefdatum:g.streefdatum||'',
              // v248: doorgeven, niet herrekenen. doelStreepje() leest ze hier en nergens anders.
-             startDatum:g.startDatum||'', startStand:+g.startStand||0}, planAllocOf(g));   // v123: leeg = gedraagt zich als voorheen
+             startDatum:g.startDatum||'', startStand:+g.startStand||0}, planDoelModus(g));   // v373: na de overgang geen eigen modus meer
   // aflos-items bestaan alleen als ze in de volgorde staan; de schuld zelf blijft onaangeroerd
   for(const key of planOrderList()){
     if(key.slice(0,3)!=='af:') continue;
@@ -10291,7 +10284,7 @@ function allocatePlan(){
     }
     // een auto-doel erboven pakt alles wat er nog was — dát is waarom dit item niets krijgt
     if(p.status==='wacht op capaciteit'&&auto1) p.blokkeerder={id:auto1.id,naam:auto1.naam,type:auto1.type};
-    if(p.mode==='auto'&&p.alloc>0) auto1=p;
+    if(p.mode==='auto'&&!p.zelf&&p.alloc>0) auto1=p;   // v373: in een zelf verdeelde verdeling is het bedrag je keuze, dus niemand slokt op
   }
   return P;
 }
@@ -10379,6 +10372,8 @@ function planOpen(it){
 }
 const PLAN_MODES=[['auto','Auto'],['fixed','Vast bedrag'],['pct','Percentage']];
 function planModeLabel(p){
+  /* v373: een doel heeft geen eigen modus meer; zijn bedrag staat in de verdeling */
+  if(p.type==='goal') return p.zelf?`${euro0(p.perMaand)} in je verdeling`:'op volgorde';
   if(p.mode==='fixed') return `vast ${euro0(p.perMaand)}`;
   if(p.mode==='pct')   return `${(''+p.pct).replace('.',',')}% van je ${planCapLabel()}`;
   // v204: dit was 'auto, pakt wat er nog is'. Die staart legt uit wat auto doet, en dat staat
@@ -10423,6 +10418,7 @@ function etaTekst(eta){
    en er wordt niets bij berekend. */
 function planBedragDeel(p){
   const per=(p.type==='aflossen')?Math.max(Math.round(+p.debtPer||0),0):0;
+  if(p.type==='goal') return {mod:'', bedrag:euro0(Math.max(Math.round(+p.alloc||0),0))};   // v373: een doel heeft geen eigen modus meer
   return {mod:p.mode==='pct'?`${(''+p.pct).replace('.',',')}% · `:(p.mode==='fixed'?'vast · ':''),
           bedrag:euro0(Math.max(Math.round(+p.alloc||0),0)+per)};
 }
@@ -10850,7 +10846,7 @@ function spaarVerdeelDoen(){
 function planAllocOpen(it){
   if(it.type==='noodfonds') return 'openNoodfondsPanel()';
   if(it.type==='aflossen')  return `openPlanAlloc('${it.id}')`;
-  return `openGoal('${it.id}')`;
+  return 'openVerdeling()';   // v373: het bedrag van een doel staat in de verdeling
 }
 // Aflos-items hebben geen eigen record en dus geen editor voor hun maandbedrag; deze kleine sheet
 // geeft ze dezelfde keuze als een spaardoel, zodat de hint hierboven altijd ergens op uitkomt.
@@ -10896,7 +10892,9 @@ function setPlanAllocVeld(veld,v){
 function planAllocWarning(){
   const cap=planCapacity();
   let vast=0, pct=0;
-  for(const it of planItems()){
+  /* v373: de bedragen van een zelf verdeelde verdeling tellen mee (planZelfToepassen()): daalt je inleg na het verdelen,
+     dan claimt de verdeling meer dan er is, en dat hoort hier te staan. */
+  for(const it of planZelfToepassen(planItems().map(x=>Object.assign({},x)))){
     if(planPaused(it.id)) continue;
     if(it.mode==='fixed') vast+=Math.max(it.perMaand,0);
     else if(it.mode==='pct') pct+=Math.max(it.pct,0);
@@ -11403,6 +11401,13 @@ function planVerdelingVraag(){
   return {vrij, vol};
 }
 const VD_BIJVOL={volgende:'het volgende doel in de volgorde', vraag:'dan vraag ik het opnieuw'};
+/* v373: na de overgang een keer: "Je verdeling staat nu op een plek · bekijk ›". Bekijken opent de sheet met de vol-keuze
+   open en haalt de regel weg. */
+function planVerdelingMeldingRegel(){
+  if(!SET.planVerdelingMelding) return '';
+  return `<div class="row small" data-verdelingmelding role="button" style="gap:8px;margin:6px 0 2px;padding:8px 10px;border-radius:10px;background:var(--card2);cursor:pointer" onclick="planVerdelingMeldingOpen()"><span style="flex:1;min-width:0;font-weight:600">Je verdeling staat nu op één plek</span><span style="color:var(--teal);font-weight:700;white-space:nowrap">bekijk ›</span></div>`;
+}
+function planVerdelingMeldingOpen(){ delete SET.planVerdelingMelding; save(); render(); openVerdeling(); }
 function planVerdelingRegel(){
   let cap=0; try{ cap=planCapacity(); }catch(_){} if(!(cap>0)) return '';
   let n=0; try{ n=allocatePlan().filter(p=>p.type==='goal').length; }catch(_){} if(!n) return '';
@@ -11497,7 +11502,7 @@ function renderVerdeling(){
     const vak=p=>{ const max=Math.max(Math.round(+p.rest||0),0), v=st.bedragen[p.id];
       return `<div class="row" data-vddoel="${esc(p.id)}" style="gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)">
         <span style="flex:1;min-width:0"><b class="small" style="display:block">${esc(p.naam)}</b><span class="small" style="color:var(--mut)">nog ${euro0(max)} tot vol${st.max[p.id]?` · <span data-vdmax style="color:var(--amber)">max ${euro0(max)}</span>`:''}</span></span>
-        <input data-vdvak="${esc(p.id)}" type="text" inputmode="numeric" placeholder="€ …" value="${v!=null&&v!==''?esc(String(v)):''}" style="width:92px;text-align:right;font-weight:700" oninput="verdelingBedrag('${esc(p.id)}',this.value)" onblur="renderVerdeling()"></div>`; };
+        <input data-vdvak="${esc(p.id)}" type="text" inputmode="numeric" placeholder="€ …" value="${v!=null&&v!==''?esc(String(v)):''}" style="width:92px;text-align:right;font-weight:700" oninput="verdelingBedrag('${esc(p.id)}',this.value)"></div>`; };
     const tel=D.rest===0?`<div class="row small" data-vdteller="0" style="justify-content:space-between;border-radius:10px;padding:8px 10px;margin:8px 0;background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)"><span>Nog te verdelen</span><b>${euro0(0)} ✓</b></div>`
       :`<div class="row small" data-vdteller="${D.rest}" style="justify-content:space-between;border-radius:10px;padding:8px 10px;margin:8px 0;background:color-mix(in srgb,var(--amber) 18%,transparent)"><span>${D.rest>0?'Nog te verdelen':'Te veel verdeeld'}</span><b>${euro0(Math.abs(D.rest))}</b></div>`;
     const pill=k=>`<span data-vdbijvol="${k}" data-gekozen="${st.bijVol===k?1:0}" role="button" class="small" style="display:inline-block;border:1.5px solid ${st.bijVol===k?'var(--teal)':'var(--bar)'};${st.bijVol===k?'background:var(--teal);color:var(--bg);':''}border-radius:16px;padding:4px 10px;margin:4px 4px 0 0;cursor:pointer" onclick="verdelingBijVol('${k}')">${VD_BIJVOL[k]}</span>`;
@@ -11570,7 +11575,9 @@ function verdelingZet(){
 function verdelingLogRij(x){
   let d=''; try{ d=new Date(String(x.op)+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}); }catch(_){}
   const N=x.namen||{};
-  const wat=x.modus==='zelf'
+  const wat=x.overgang
+    ? `Je verdeling staat op een plek: ${Object.keys(x.bedragen||{}).map(id=>`${N[id]||'doel'} ${euro0(x.bedragen[id])}`).join(', ')}`
+    : x.modus==='zelf'
     ? `Zelf verdeeld: ${Object.keys(x.bedragen||{}).map(id=>`${N[id]||'doel'} ${euro0(x.bedragen[id])}`).join(', ')} · vol: ${VD_BIJVOL[x.bijVol]||''}`
     : `Op volgorde: ${(x.orde||[]).map(id=>N[id]||id).join(' → ')}`;
   return `<div class="row" data-logverdeling="${esc(x.M)}" style="gap:10px;align-items:baseline;padding:8px 0 4px;border-top:1px solid var(--line)"><span style="flex:1;min-width:0;font-weight:700">${esc(wat)}</span><span class="small" style="white-space:nowrap;color:var(--mut2)">${esc(afMnd(x.M))} · ${d}</span></div>`;
@@ -11689,7 +11696,7 @@ function renderPlan(bare){
   const tzSub=tzKop ? `<div class="small" id="terugzetGekozen" data-terugzetkeuze-gekozen="${TZ&&!tzKaart?TZ.r.keuze:''}" data-inlegmaand="${cap+tzDeel}" style="color:var(--mut);margin:2px 0 0">${euro0(cap)} vaste inleg${tzDeel>0?` + ${euro0(tzDeel)} terugzetten`:''}${TZ&&!tzKaart?` · gekozen: ${esc(TERUGZET_LAB[TZ.r.keuze].toLowerCase())}${TZ.i===0?` · <span style="color:var(--teal);cursor:pointer;font-weight:600" onclick="terugzetWijzig()">wijzig</span>`:''}`:''}</div>` : '';
   /* v371: de melding over toegewezen zonder geld staat bij de kop, onder de keuze over een opname. */
   let zgRegel=''; try{ zgRegel=spaarOverLine(P); }catch(_){}
-  let vdRegel=''; try{ vdRegel=planVerdelingRegel(); }catch(_){}
+  let vdRegel=''; try{ vdRegel=planVerdelingMeldingRegel()+planVerdelingRegel(); }catch(_){}
   const kopBalk=`<div class="row"><span style="font-weight:600;font-size:var(--fs-md)">${kopTekst}</span><span id="planKopBedrag" style="font-weight:800;font-size:var(--fs-md);color:${cap>0?'var(--teal)':'var(--mut)'}">${kopBedrag}</span></div>${tzSub}${tzKaart}${zgRegel}${vdRegel}${inlegRegel}${balk}`;
   /* Niets blijft liggen, en het staat er ook wanneer er niets overblijft: dat is de sluitpost van
      de waterval, en een sluitpost die alleen bij een positief bedrag verschijnt laat je raden of
@@ -26697,7 +26704,7 @@ document.addEventListener('drop',async e=>{
 });
 
 /* ---------- start ---------- */
-load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
+load(); try{applyTheme();}catch(_){} try{requestPersist();}catch(_){} rolloverBudgets(); if(TX.length){ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); } try{migrateSavingsAcc();}catch(_){} try{migrateAcctNames();}catch(_){} try{migrateNfToegewezen();}catch(_){} try{planVerdelingOvergang();}catch(_){} try{grendelStartVastleggen();}catch(_){} try{valtOpAfsluiten();}catch(_){} render(); // hercategoriseer met actuele regels
 // blijf na een refresh op de actieve pagina (niet terug naar Home), behalve bij terugkeer van de bank-consent
 try{ const _v=localStorage.getItem('minder_view'); if(_v && TX.length && document.getElementById('s-'+_v) && !new URLSearchParams(location.search).get('code')) go(_v); }catch(_){}
 // v340: de maandafsluiting als pop-up bij het openen, hooguit een keer per dag (go('maand') doet het zelf)

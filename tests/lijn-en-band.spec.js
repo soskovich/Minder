@@ -102,7 +102,10 @@ test.describe('a · wat wordt uitgegeven gaat eruit, wat blijft staat', () => {
     const sub = () => page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = reisRestsaldo(reisModel()).inleg; return d.textContent.replace(/\s+/g, ' '); });
     await boot(page, []);
     expect(await sub()).toContain('groeit niet mee en gaat op de streefdatum de deur uit');
-    await page.evaluate(() => { SET.goals = SET.goals.map((g, i) => Object.assign({}, g, { mode: 'fixed', perMaand: 1000 }, i === 1 ? { streefdatum: '' } : {})); save(); });
+    /* v373: een doel draagt geen eigen bedrag meer; beide doelen krijgen inleg via een zelf verdeelde verdeling */
+    await page.evaluate(() => { const ids = SET.goals.map((g) => g.id);
+      SET.planVerdeling = { modus: 'zelf', bedragen: { [ids[0]]: 1000, [ids[1]]: 1000 }, bijVol: 'volgende' }; SET.planVerdelingV373 = 1;
+      SET.goals = SET.goals.map((g, i) => Object.assign({}, g, i === 1 ? { streefdatum: '' } : {})); save(); });
     expect(await page.evaluate(() => reisModel().bestemming.doelItems.length)).toBe(2);   // invoer: beide doelen krijgen inleg
     expect(await sub()).toContain('gaat op een streefdatum de deur uit; zonder datum blijft het staan');
     await page.evaluate(() => { SET.goals = SET.goals.map((g) => Object.assign({}, g, { streefdatum: '' })); save(); });

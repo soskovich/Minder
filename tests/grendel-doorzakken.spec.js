@@ -380,18 +380,20 @@ test.describe('f · splitsen blijft dicht: een eigen maandbedrag', () => {
   test('de chips staan er niet, in de doel-editor en op het aflos-blad', async ({ page }) => {
     await boot(page, { debts: [{ id: 'd1', naam: 'Lening', start: 8000, rest: 6000, perMaand: 200, rente: 6 }],
       set: { planOrder: ['noodfonds', 'kk', 'iw', 'af:d1'] } });
-    const g = await page.evaluate(() => { openGoal('kk'); return { chips: document.querySelectorAll('#gModes .chip').length, t: document.getElementById('sheet').innerText }; });
-    expect(g.chips).toBe(0);
-    expect(g.t).toContain('Een eigen maandbedrag kan zodra');
+    /* v373: de doel-editor heeft geen chips meer, met of zonder grendel; hij noemt wat het doel krijgt en verwijst naar de
+       verdeling, waar de buffer eerst gaat als vaste regel. */
+    const g = await page.evaluate(() => { openGoal('kk'); return { chips: document.querySelectorAll('#gModes .chip').length, krijgt: !!document.querySelector('[data-goalkrijgt]') }; });
+    expect(g.chips).toBe(0); expect(g.krijgt).toBe(true);
     const a = await page.evaluate(() => { openPlanAlloc('af:d1'); return { chips: document.querySelectorAll('#paModes .chip').length, t: document.getElementById('sheet').innerText }; });
     expect(a.chips).toBe(0);
     expect(a.t).toContain('Een eigen maandbedrag kan zodra');
   });
 
-  test('met een open grendel staan ze er weer', async ({ page }) => {
+  /* v373: ook met een open grendel heeft de doel-editor geen chips; het bedrag per doel staat in de verdeling. */
+  test('met een open grendel staan ze er in de doel-editor ook niet: het bedrag staat in de verdeling', async ({ page }) => {
     await boot(page, { nfToe: NF_DOEL });
     const g = await page.evaluate(() => { openGoal('kk'); return document.querySelectorAll('#gModes .chip').length; });
-    expect(g).toBe(3);
+    expect(g).toBe(0);
   });
 });
 
@@ -433,22 +435,19 @@ test.describe('g · saveGoal slaat op, en laat de verdeling staan', () => {
       return L[L.length - 1];
     }, sd);
     expect(g.naam).toBe('Nieuwe fiets');
-    expect(g.allocMode).toBe('auto');
-    expect(g.perMaand).toBe(0);
-    expect(g.pct).toBe(0);
+    /* v373: een nieuw doel draagt geen modus en geen bedrag meer; planDoelModus() leest het als op volgorde */
+    expect(g.allocMode).toBeUndefined(); expect(g.perMaand).toBeUndefined(); expect(g.pct).toBeUndefined();
+    expect(await page.evaluate(() => allocatePlan().find((p) => p.naam === 'Nieuwe fiets').mode)).toBe('auto');
   });
 
-  test('met een open grendel doet de editor gewoon wat hij deed', async ({ page }) => {
+  /* v373: de editor zet geen bedrag meer (goalMode() en #gMnd zijn weg); een vast bedrag zet je in de verdeling. */
+  test('met een open grendel zet je een bedrag in de verdeling en niet in de editor', async ({ page }) => {
     await boot(page, { nfToe: NF_DOEL });
-    const g = await page.evaluate(() => {
-      openGoal('kk'); goalMode('fixed');
-      document.getElementById('gMnd').value = '400';
-      saveGoal('kk');
-      return (JSON.parse(localStorage.getItem('minder_set')).goals || []).find((x) => x.id === 'kk');
-    });
-    expect(g.allocMode).toBe('fixed');
-    expect(g.perMaand).toBe(400);
+    expect(await page.evaluate(() => typeof window.goalMode)).toBe('undefined');
+    await page.evaluate(() => { openVerdeling(); verdelingModus('zelf'); });
+    expect(await page.locator('[data-vdvak="kk"]').count()).toBe(1);
   });
+
 });
 
 /* Blok 5 van het diagnosescherm zegt of ronde 2 mag doorzakken, en of een doel dat geld krijgt

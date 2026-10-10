@@ -45,8 +45,10 @@ async function boot(page, o) {
 // Een auto-doel bovenaan slokt de hele capaciteit op; de doelen eronder wachten dan.
 const metWachtenden = (aantal) => {
   const goals = [{ id: 'top', naam: 'Vakantie', doel: 9000, gespaard: 0, allocMode: 'auto' }];
+  /* v373: de doelen eronder staan niet meer op een vast bedrag; een doel heeft geen eigen modus. Op volgorde
+     slokt Vakantie de hele inleg op, en dat is het geval waarin de rij een blokkeerder noemt. */
   for (let k = 0; k < aantal; k++) goals.push({ id: 'w' + k, naam: 'Doel ' + (k + 1), doel: 900,
-    gespaard: 0, allocMode: 'fixed', perMaand: 100 });
+    gespaard: 0 });
   return { set: { goals, planOrder: goals.map((g) => g.id).concat(['noodfonds']),
     planPaused: { noodfonds: true } } };
 };
@@ -108,9 +110,11 @@ test.describe('a · de wachtuitleg is vervallen; de rij noemt zijn blokkeerder',
 
 test.describe('b · waarschuwing en wachtuitleg zijn één regel', () => {
   test('overtoewijzing zonder blokkeerder: amber, en maar één regel', async ({ page }) => {
+    /* v373: een doel heeft geen eigen modus meer; een overtoewijzing ontstaat nu als een zelf verdeelde verdeling meer
+       claimt dan de inleg (een verdeling van 250 + 180 terwijl je inleg 300 is, bijvoorbeeld omdat hij daalde). */
     await boot(page, { set: {
-      goals: [{ id: 'a', naam: 'A', doel: 9000, gespaard: 0, allocMode: 'fixed', perMaand: 250 },
-              { id: 'b', naam: 'B', doel: 9000, gespaard: 0, allocMode: 'pct', pct: 60 }],
+      goals: [{ id: 'a', naam: 'A', doel: 9000, gespaard: 0 }, { id: 'b', naam: 'B', doel: 9000, gespaard: 0 }],
+      planVerdeling: { modus: 'zelf', bedragen: { a: 250, b: 180 }, bijVol: null }, planVerdelingV373: 1,
       planOrder: ['a', 'b', 'noodfonds'], planPaused: { noodfonds: true } } });
     const r = await page.evaluate(() => {
       const d = document.createElement('div'); d.innerHTML = renderPlan(true);

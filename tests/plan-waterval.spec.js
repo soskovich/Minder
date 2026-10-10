@@ -128,7 +128,8 @@ test.describe('b · de sluitpost staat er ook op nul', () => {
 test.describe('c · een wachtende bestemming noemt waarop, en nooit wanneer', () => {
   const metBlokkeerder = () => metDoelen([
     { id: 'gA', naam: 'Vakantie', doel: 90000, gespaard: 0, allocMode: 'auto' },
-    { id: 'gB', naam: 'Nieuwe fiets', doel: 900, gespaard: 0, allocMode: 'fixed', perMaand: 100 },
+    /* v373: geen eigen modus meer; op volgorde pakt Vakantie de hele inleg en wacht de fiets daarop */
+    { id: 'gB', naam: 'Nieuwe fiets', doel: 900, gespaard: 0 },
   ]);
 
   test('de rij noemt de bestemming die het geld pakt', async ({ page }) => {
@@ -206,10 +207,11 @@ test.describe('d · de uitleg staat achter het uitlegteken, de melding niet', ()
   /* Een amber-melding achter een uitlegteken is geen melding meer: die blijft staan waar hij stond
      (v78/v93). De neutrale uitleg eromheen is wél vervallen. */
   test('de overtoewijzing blijft zichtbaar, zonder tik', async ({ page }) => {
+    /* v373: een overtoewijzing ontstaat nu als een zelf verdeelde verdeling meer claimt dan de inleg */
     await openV(page, metDoelen([
-      { id: 'gA', naam: 'A', doel: 9000, gespaard: 0, allocMode: 'fixed', perMaand: 400 },
-      { id: 'gB', naam: 'B', doel: 9000, gespaard: 0, allocMode: 'fixed', perMaand: 400 },
-    ]));
+      { id: 'gA', naam: 'A', doel: 9000, gespaard: 0 },
+      { id: 'gB', naam: 'B', doel: 9000, gespaard: 0 },
+    ], (s) => { s.planVerdeling = { modus: 'zelf', bedragen: { gA: 400, gB: 400 }, bijVol: 'volgende' }; s.planVerdelingV373 = 1; }));
     expect(await page.evaluate(() => !!planAllocWarning())).toBe(true);
     const w = page.locator('#planWacht');
     await expect(w).toHaveCount(1);

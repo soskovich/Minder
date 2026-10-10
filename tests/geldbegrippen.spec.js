@@ -73,13 +73,10 @@ test.describe('b · één term per begrip', () => {
     const goal = await page.evaluate(() => { openGoal(); return document.getElementById('sheet').innerText; });
     expect(goal.toLowerCase()).not.toContain('spaarruimte');
 
-    const pct = await page.evaluate(() => {
-      const g = (SET.goals || [])[0] || { id: 'g1', naam: 'Test', bedrag: 1000, allocMode: 'pct', pct: 30 };
-      SET.goals = [Object.assign({}, g, { allocMode: 'pct', pct: 30 })]; save();
-      openGoal(SET.goals[0].id); return document.getElementById('sheet').innerText;
-    });
-    expect(pct).toContain('Deel van je spaarinleg');
-    expect(pct.toLowerCase()).not.toContain('spaarruimte');
+    /* v373: de doel-editor heeft geen verdeelmodus meer; het bedrag per doel staat in de verdeling, en die sheet gebruikt
+       dezelfde term. */
+    const vd = await page.evaluate(() => { closeSheet(); openVerdeling(); verdelingModus('zelf'); return document.getElementById('sheet').innerText; });
+    expect(vd.toLowerCase()).not.toContain('spaarruimte');
 
     const nf = await page.evaluate(() => { closeSheet(); setNfAlloc('mode', 'pct'); openNoodfondsPanel(); return document.getElementById('sheet').innerText; });
     expect(nf.toLowerCase()).not.toContain('spaarruimte');

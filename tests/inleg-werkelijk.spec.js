@@ -44,9 +44,14 @@ function seed(o) {
     savingMode: 'amount', savingAmount: 2200,
     nfDoelVast: 4000, nfToegewezen: o.nf == null ? 4000 : o.nf, nfToegewezenMigrated: 1,
     planOrder: ['noodfonds', KK, IW],
+    /* v373: een doel heeft geen eigen modus meer. De fixture stond op 90/10; de overgang zet dat om naar de bedragen
+       van deze maand, 1.980 en 220, en dat is de verdeling die hier staat (zonder de eenmalige melding, die meet de
+       prijs-test niet). Een bedrag in euro's schaalt niet mee met het vrije geld: wat Kosten Koper boven zijn 1.980
+       krijgt, zakt door op volgorde. */
+    planVerdelingV373: 1, planVerdeling: { modus: 'zelf', bedragen: { [KK]: 1980, [IW]: 220 }, bijVol: null },
     goals: [
-      { id: KK, naam: 'Kosten Koper', doel: 15000, gespaard: o.kk || 0, streefdatum: '2027-05', allocMode: 'pct', pct: 90 },
-      { id: IW, naam: 'Inrichting woning', doel: 3000, gespaard: o.iw || 0, streefdatum: '2027-03', allocMode: 'pct', pct: 10 }],
+      { id: KK, naam: 'Kosten Koper', doel: 15000, gespaard: o.kk || 0, streefdatum: '2027-05' },
+      { id: IW, naam: 'Inrichting woning', doel: 3000, gespaard: o.iw || 0, streefdatum: '2027-03' }],
   }, o.set || {});
   return { minder_tx: JSON.stringify(tx), minder_ovr: '{}', minder_set: JSON.stringify(set),
     minder_own: JSON.stringify([MAIN, SAV]), minder_accmeta: '{}', minder_plan: '{}' };
@@ -198,15 +203,17 @@ test.describe('c · het vrije spaargeld verdelen', () => {
      bedragen is "hij verdeelt volgens je plan" niet van "hij zet alles op het bovenste doel" te
      onderscheiden (meetles a). Dat de datums samenvallen is een eigenschap van DEZE stand en geen
      eigenschap van de twee routes. */
-  test('op de gemeten stand: 8.100 / 900, en vol in feb 2027 en mrt 2027', async ({ page }) => {
+  test('op de gemeten stand: 8.780 / 220, en vol in feb 2027 en mrt 2027', async ({ page }) => {
     await boot(page, { okt: 2200, saldo: 13000 });
     const V = await page.evaluate(() => spaarVerdeelVoorstel());
     expect(V.vrij).toBe(9000);
     expect(V.som).toBe(9000);
     expect(V.rest).toBe(0);
     expect(V.regels.map((r) => [r.naam, r.bij, r.datum])).toEqual([
-      ['Kosten Koper', 8100, 'feb 2027'],
-      ['Inrichting woning', 900, 'mrt 2027'],
+      /* v373: de verdeling staat in euro's (1.980 / 220), niet meer in procenten; elk doel krijgt zijn bedrag en
+         de rest zakt op volgorde door naar Kosten Koper. Tot v372 was dit 8.100 / 900 (90/10 van het vrije geld). */
+      ['Kosten Koper', 8780, 'feb 2027'],
+      ['Inrichting woning', 220, 'mrt 2027'],
     ]);
     // en de datums die er NU staan, zodat het gevolg leesbaar is
     expect(V.regels.map((r) => r.etaVoor)).toEqual([8, 9]);
@@ -226,7 +233,7 @@ test.describe('c · het vrije spaargeld verdelen', () => {
       vol: [...document.querySelectorAll('#s-vooruit [data-planrechts]')]
         .map((e) => (e.innerText.match(/vol \w+ \d{4}/) || [''])[0]).filter(Boolean),
     }));
-    expect(na.goals).toEqual([['Kosten Koper', 8100], ['Inrichting woning', 900]]);
+    expect(na.goals).toEqual([['Kosten Koper', 8780], ['Inrichting woning', 220]]);   // v373: zie hierboven
     expect(na.nf, 'de buffer stond al vol en krijgt niets').toBe(4000);
     expect(na.vrij, 'er blijft niets vrij').toBe(0);
     expect(na.eta).toEqual([5, 6]);   // v370: zie hierboven
@@ -311,7 +318,10 @@ test.describe('c · het vrije spaargeld verdelen', () => {
       regels: spaarVerdeelVoorstel().regels.map((x) => x.id) }));
     expect(r.plan, 'de invoer: het aflos-item staat bovenaan in het plan').toContain('af:d1');
     expect(r.plan[0]).toBe('af:d1');
-    expect(r.regels, 'en komt niet in het voorstel voor').toEqual([KK, IW]);
+    /* v373: Inrichting krijgt zijn 220 alleen als het aflos-item het niet al opnam; hier blijft voor de doelen alleen
+       Kosten Koper over. Wat deze test vasthoudt is dat het aflos-item er niet in staat. */
+    expect(r.regels, 'en komt niet in het voorstel voor').not.toContain('af:d1');
+    expect(r.regels.length).toBeGreaterThan(0);
   });
 
   /* HET VOORSTEL SCHRIJFT NIETS. Zonder deze assertie kan het openen van de sheet ongemerkt een
@@ -341,7 +351,7 @@ test.describe('c · het vrije spaargeld verdelen', () => {
       spaarVerdeelDoen();
       return (SET.goals || []).map((g) => g.gespaard);
     });
-    expect(na, 'saldo 8.000 min 4.000 buffer = 4.000 vrij, in 90/10').toEqual([3600, 400]);
+    expect(na, 'saldo 8.000 min 4.000 buffer = 4.000 vrij: 220 naar Inrichting, de rest naar Kosten Koper').toEqual([3780, 220]);
   });
 
   /* ÉÉN VERDELING, GEEN TWEEDE: het voorstel leent planVerdeelMaand() en de projectie planVooruit(),
@@ -398,8 +408,8 @@ test.describe('d · blok 5 zegt waar het getal vandaan komt', () => {
     const t = await blok(page);
     expect(t).toMatch(/knop 1, spaarVrijToe\(\) -> alles naar het bovenste lopende doel: Kosten Koper/);
     expect(t).toMatch(/knop 2, Verdeel volgens je plan - planVerdeelMaand\(\) met 9000 als cap/);
-    expect(t).toMatch(/Kosten Koper\s+\+8100\s+vol in feb 2027\s+\(nu mei 2027\)/);   // v370: voor de toewijzing telt oktober mee
-    expect(t).toMatch(/Inrichting woning\s+\+900\s+vol in mrt 2027/);
+    expect(t).toMatch(/Kosten Koper\s+\+8780\s+vol in feb 2027\s+\(nu mei 2027\)/);   // v373: euro's in plaats van 90/10   // v370: voor de toewijzing telt oktober mee
+    expect(t).toMatch(/Inrichting woning\s+\+220\s+vol in mrt 2027/);
     expect(t).toMatch(/verdeeld: 9000\s+blijft vrij: 0/);
   });
   /* DE DIAGNOSE LEEST ALLEEN (v244), en dat is hier geen formaliteit: het blok roept
@@ -468,7 +478,8 @@ test.describe('e · de prijs in pixels', () => {
       /* v367: rijen in plaats van vaten; gemeten 506px op 360 en 433 op 390 (de rijen breken op 360 vaker af) */
       /* v370: de lopende maand telt mee, dus de rijen dragen andere datums en breken minder vaak af: 466 en 412 (gemeten) */
       /* v372: de regel "Verdeling: op volgorde · aanpassen ›" staat onder de kop: 25px op 360 en 24 op 390 (gemeten) */
-      expect(zonder.kaart, 'zonder de regel').toBe(w === 360 ? 491 : 436);
+      /* v373: de rijen dragen "€1.980/mnd · vol feb 2027" uit de verdeling en breken op 360 een regel minder af: 454 (gemeten) */
+      expect(zonder.kaart, 'zonder de regel').toBe(w === 360 ? 454 : 436);
       expect(metKnop.vrij - zonder.vrij, 'de tweede knop').toBe(w === 360 ? 18 : 0);
       // v367: de zone wordt per stand afgerond, dus het verschil mag een pixel schuiven (33 of 34 op 360)
       expect(Math.abs(vol.zone - zonder.zone - (w === 360 ? 33 : 15))).toBeLessThanOrEqual(1);

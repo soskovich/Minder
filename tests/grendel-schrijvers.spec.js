@@ -341,10 +341,15 @@ test.describe('d · de bron: elke schrijver gaat door de grens', () => {
     expect(ongedekt.map((x) => `${x.fn} (regel ${x.regel}): ${x.tekst}`)).toEqual([]);
   });
 
-  test('en saveGoal(), de andere opslagroute, gaat er ook doorheen', () => {
+  /* v373: saveGoal() IS GEEN OPSLAGROUTE VOOR EEN BEDRAG MEER. De doel-editor heeft geen verdeelmodus; het bedrag per doel
+     staat in de verdeling, en verdelingZet() eist zijn eigen grens (niets te veel verdeeld, verdelingReden()). De test
+     houdt nu vast dat saveGoal() geen bedrag of modus uit het blad leest; leest hij dat weer, dan valt hij om. */
+  test('saveGoal() schrijft geen bedrag en geen modus meer; de verdeling eist haar eigen grens', () => {
     const f = functieRond(CODE.indexOf('\nfunction saveGoal('));
     expect(f.naam).toBe('saveGoal');
-    expect(f.body).toMatch(/planVastRuimte\(/);
+    expect(f.body).not.toMatch(/gMnd|gPct|_goalMode/);
+    const z = functieRond(CODE.indexOf('\nfunction verdelingZet('));
+    expect(z.body).toMatch(/verdelingReden\(/);
   });
 
   /* v255: DEZELFDE VORM, DE ANDERE GRENS. planVastRuimte() hierboven is de harde grens op de SOM
@@ -368,10 +373,11 @@ test.describe('d · de bron: elke schrijver gaat door de grens', () => {
     expect(ongedekt.map((x) => `${x.fn} (regel ${x.regel}): ${x.tekst}`)).toEqual([]);
   });
 
-  test('en saveGoal(), de andere opslagroute, leest hem ook', () => {
-    const f = functieRond(CODE.indexOf('\nfunction saveGoal('));
-    expect(f.naam).toBe('saveGoal');
-    expect(f.body).toMatch(/planVastMag\(/);
+  /* v373: zie hierboven; de grendel staat in de verdeling als vaste regel voor de buffer (verdelingData()) en in ronde 1b
+     van planVerdeelMaand(), die een eigen bedrag pas geeft als de buffer zijn rest kreeg. */
+  test('de verdeling leest de grendel: de buffer gaat eerst, als vaste regel', () => {
+    const f = functieRond(CODE.indexOf('\nfunction verdelingData('));
+    expect(f.body).toMatch(/planGrendel\(/);
   });
 
   /* planVastMag() is de enige toets. Een tweede planGrendel() naast hem in dezelfde functie zou
