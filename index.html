@@ -2738,21 +2738,8 @@ function saldoAchterRegel(){
   const z=saldoAchterZinnen(); if(!z.length) return '';
   return `<div class="small" style="color:var(--mut2);line-height:1.5;margin:8px 0 2px;padding:9px 11px;background:rgba(159,176,199,.07);border-radius:10px">${z.join(' ')}</div>`;
 }
-/* v280: DEZELFDE ZIN IN DE HERO, en dat is waar de vraag van deze ronde over ging. De opbouw-sheet is
-   een drill-down die je opent; het herogetal, het totale saldo en het bedrag per dag lees je zonder te
-   tikken, en dat zijn de getallen waarop je beslist. GEMETEN op het toestel stond daar niets: 81 procent
-   van het saldo was niet bijgewerkt en de hero zei alleen "totaal saldo €6.226".
-   GEEN EIGEN KADER EN GEEN EIGEN TIK. Hij krijgt de vorm van vrijPerDagLine() ernaast, en de regel
-   boven hem tikt al naar openBalances(), waar de rekeningen per stuk staan. Een tweede tik ernaast zou
-   op hetzelfde uitkomen (v254).
-   GEEN AMBER. Deze regel stelt vast en vraagt geen aandacht (v78/v93); de handeling zit in Instellingen
-   en dáár staat de amber.
-   GEMETEN: de hero gaat van 147px naar 188px op 360 én 390px, de onderkant van de regel ligt op 248px
-   van de 568px die op 360x640 zichtbaar is, en er staat geen enkele hoogte-eis op .homehero. */
-function saldoAchterHero(){
-  const z=saldoAchterZinnen(); if(!z.length) return '';
-  return `<div style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px">${z.join(' ')}</div>`;
-}
+/* v280 zette dezelfde zin als regel in de hero (saldoAchterHero()). SINDS v378 is dat een label "bijgewerkt <datum>" met de
+   zin achter de i (saldoBlok()): de zin blijft een bron (saldoAchterZinnen()), alleen de weergave op Home is korter. */
 
 // N26-spaarpotjes: alle N26-Spaces behalve de betaalrekening (Main) en het potje eindigend op 4840
 // rekening matchen op laatste cijfers (PSD2-acc = IBAN-cijfers, of via opgeslagen IBAN)
@@ -2877,16 +2864,39 @@ function openSpaarrekening(){ closeSheet(); openSetSub('bank'); }
 // saldo-nudge: tik = naar de invoer én deze maand niet meer vragen
 function balNudgeGo(){ try{ const ms=months(); SET.balNudge={ym:ms[ms.length-1]||''}; save(); }catch(_){} openSaldoInvoer(); }
 // drill-down: rekeningen waaruit je saldo bestaat
+/* ===== SALDO NU (v378) =====
+   WAT JE ZIET TELT OP TOT HET TOTAAL. Tot v378 stond contant in de kop (totalBalance() telt contantVerwacht() mee) en
+   niet in de rijen, en een rekening met precies EUR 0 viel uit de lijst; de rijen telden dan niet op tot de kop.
+   Nu twee blokken met elk een subtotaal: Bank (elke actieve rekening met een bekend saldo, ook EUR 0) en Contant, en
+   onderaan Totaal, dezelfde totalBalance().sum als "Totaal saldo" op Home. Een tik op een rekening opent die
+   rekening (acctRenameOpen()); "naam aanpassen" per rij is weg. Een rekening met een oud saldo zegt dat bij zichzelf. */
 function openBalances(){
-  const rows=OWN.filter(rekActief).map(a=>({a,b:accBalance(a)})).filter(r=>r.b!=null && r.b!==0).sort((x,y)=>y.b-x.b);
-  const tb=totalBalance();
+  const tb=totalBalance(); const contant=tb.contant;
+  const rows=OWN.filter(rekActief).map(a=>({a,b:accBalance(a)})).filter(r=>r.b!=null).sort((x,y)=>y.b-x.b);
+  const bank=rows.reduce((s,r)=>s+r.b,0);
+  let ach={}; try{ for(const x of saldoAchter()) ach[x.acc]=x; }catch(_){}
+  const rij=r=>{ const x=ach[r.a]; const bnk=(ACCMETA[r.a]&&ACCMETA[r.a].bank)||'';
+    const sub=[bnk, isSavingsAcc(r.a)?'spaarrekening':''].filter(Boolean).join(' \u00b7 ');
+    const oud=x?(x.reden==='sync'?`saldo ${esc(dagKort(x.saldoDatum))} \u00b7 niet bijgewerkt bij de laatste synchronisatie`:`saldo ${esc(dagKort(x.saldoDatum))} \u00b7 boekingen tot ${esc(dagKort(x.txDatum))}`):'';
+    return `<div class="tx" data-saldorij="${Math.round(r.b*100)}" data-rek="${esc(r.a)}" style="cursor:pointer" onclick="acctRenameOpen('${esc(String(r.a).replace(/'/g,"\\'"))}')"><div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
+      <div class="info"><div class="nm">${esc(acctNiceName(r.a))}</div>${sub?`<div class="cat">${esc(sub)}</div>`:''}${oud?`<div class="cat" data-saldooud>${oud}</div>`:''}</div>
+      <div class="amt ${r.b<0?'neg':'pos'}">${euro(r.b)}</div></div>`; };
+  const kop=(lab,bedrag,attr)=>`<div class="row" ${attr} style="font-size:var(--fs-xs);font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut2);margin:14px 2px 4px"><span style="flex:1">${lab}</span><span>${euro(bedrag)}</span></div>`;
+  let cRij='';
+  if(contant!=null){
+    const oud=contantOuderdom();
+    const wanneer=oud==null?'':(oud===0?'geteld vandaag':(oud===1?'geteld gisteren':`geteld ${oud} dagen geleden`));
+    cRij=kop('Contant',contant,'data-saldokop="kas"')+`<div class="tx" data-saldorij="${Math.round(contant*100)}" data-contantrij style="cursor:pointer" onclick="closeSheet();contantTellen()"><div class="ava" style="background:var(--card2)">${ICON('coins')}</div>
+      <div class="info"><div class="nm">Contant</div><div class="cat">${wanneer?wanneer+' \u00b7 ':''}<span style="color:var(--teal);font-weight:600">bijwerken \u203a</span></div></div>
+      <div class="amt ${contant<0?'neg':'pos'}">${euro(contant)}</div></div>`;
+  }
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('coins')}</div><div style="font-weight:800;font-size:var(--fs-lg)">Saldo nu</div>
-      <div class="muted small">${rows.length} rekening${rows.length===1?'':'en'}${tb.missing>0?` · ${tb.missing} zonder saldo`:''}</div>
-      <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0">${euro(tb.sum)}</div></div>
-    ${rows.length?rows.map(r=>`<div class="tx" style="cursor:pointer" onclick="acctRenameOpen('${esc(String(r.a).replace(/'/g,"\\'"))}')"><div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
-      <div class="info"><div class="nm">${esc(acctNiceName(r.a))}</div><div class="cat">${esc((ACCMETA[r.a]&&ACCMETA[r.a].bank)||'')} \u00b7 naam aanpassen \u203a</div></div>
-      <div class="amt ${r.b<0?'neg':'pos'}">${euro(r.b)}</div></div>`).join(''):'<div class="muted small center" style="padding:16px">Nog geen saldo bekend. Koppel je bank of vul saldo handmatig in bij Instellingen.</div>'}
+      <div style="font-size:var(--fs-xl);font-weight:800;margin:5px 0" data-saldonukop="${Math.round(tb.sum*100)}">${euro(tb.sum)}</div>
+      <div class="muted small">${contant!=null?`${euro(bank)} bank + ${euro(contant)} contant`:`${rows.length} rekening${rows.length===1?'':'en'}`}${tb.missing>0?` \u00b7 ${tb.missing} zonder saldo`:''}</div></div>
+    ${rows.length?kop(`Bank \u00b7 ${rows.length} rekening${rows.length===1?'':'en'}`,bank,'data-saldokop="bank"')+rows.map(rij).join(''):'<div class="muted small center" style="padding:16px">Nog geen saldo bekend. Koppel je bank of vul saldo handmatig in bij Instellingen.</div>'}
+    ${cRij}
+    <div class="row" data-saldototaal="${Math.round(tb.sum*100)}" style="font-weight:800;padding:12px 2px 0;border-top:1px solid var(--line);margin-top:8px"><span style="flex:1">Totaal</span><span>${euro(tb.sum)}</span></div>
     ${tb.missing>0?`<div class="small muted" style="margin-top:10px">${tb.missing} rekening(en) zonder bekend saldo tellen niet mee.</div>`:''}`;
   showSheetBg();
 }
@@ -2983,25 +2993,39 @@ function accountShortfalls(){
   return out.sort((a,b)=>a.t-b.t);
 }
 // dag-voor-dag liquiditeitscurve: vaste lasten/inkomen op hun datum + variabele burn
+/* v378 (keuze c van de gebruiker): DE DAGEN VAN DE LOPENDE MAAND KOMEN UIT maandVerloop(), en alleen de dagen na het
+   einde van de maand uit de eigen rekensom (de meldingen kijken 45 dagen vooruit, en daar heeft de dagreeks van de
+   maand geen gegevens). Zo kunnen "te weinig saldo" en de laagste stand in de sheet Verwacht eind elkaar niet
+   tegenspreken: in deze maand staan ze op dezelfde reeks en dezelfde posten. Na de maand loopt de oude rekensom door
+   vanaf de eindstand van maandVerloop(), met de terugkerende posten na de maandgrens en het historische gemiddelde
+   per dag. */
 function liquidityDaily(days){
   const sched=recurringSchedule(), f=forecastModel();
   const start=new Date(); start.setHours(0,0,0,0);
   const end=new Date(start); end.setDate(start.getDate()+days);
-  const {sum}=totalBalance();
+  const maandEind=new Date(start.getFullYear(), start.getMonth()+1, 1);   // eerste dag na deze maand
+  let V=null; try{ V=maandVerloop(); }catch(_){ V=null; }
   const events=[];
+  if(V){ for(const x of V.dagen){ const d=new Date(x.ymd+'T00:00:00'); if(d.getTime()>=end.getTime()) break;
+      for(const p of x.posten) events.push({date:d, name:p.name, amt:p.amt, type:'fixed', cat:p.cat});
+      if(x.bij>0) events.push({date:d, name:'inkomen', amt:x.bij, type:'income', cat:null}); } }
   for(const s of sched){ if(s.type==='fixed' && !s.incasso) continue;   // alleen automatische incasso's
     let d=new Date(s.nextDate); d.setHours(0,0,0,0); let g=0;
     while(d.getTime()<end.getTime() && g<60){
       /* v369: een opgezegde post telt per voorkomen, tot en met de maand van zijn laatste afschrijving (verwachtInMaand). */
-      if(d.getTime()>=start.getTime() && (s.type!=='fixed' || verwachtInMaand(s.key, ymdVan(d).slice(0,7)))){ const ed=shiftWeekendToMonday(d); events.push({date:new Date(ed),name:s.name,amt:s.type==='income'?s.amount:-s.amount,type:s.type,cat:s.cat}); }
+      if(d.getTime()>=start.getTime() && (s.type!=='fixed' || verwachtInMaand(s.key, ymdVan(d).slice(0,7)))){ const ed=shiftWeekendToMonday(d);
+        if(!V || ed.getTime()>=maandEind.getTime()) events.push({date:new Date(ed),name:s.name,amt:s.type==='income'?s.amount:-s.amount,type:s.type,cat:s.cat}); }
       d.setMonth(d.getMonth()+s.intervalM); g++; } }
   events.sort((a,b)=>a.date-b.date);
-  const dailyVar=f?f.fVar/30:0; let b=sum; const dates=[],bal=[];
+  const dailyVar=f?f.fVar/30:0; let b=V?V.eind:totalBalance().sum; const dates=[],bal=[];
+  const opDag=(e,d)=>e.date.getFullYear()===d.getFullYear()&&e.date.getMonth()===d.getMonth()&&e.date.getDate()===d.getDate();
   for(let i=0;i<days;i++){ const d=new Date(start); d.setDate(start.getDate()+i);
-    for(const e of events){ if(e.date.getFullYear()===d.getFullYear()&&e.date.getMonth()===d.getMonth()&&e.date.getDate()===d.getDate()) b+=e.amt; }
-    b-=dailyVar; dates.push(new Date(d)); bal.push(b); }
+    if(V && d.getTime()<maandEind.getTime()){ const x=V.dagen[i]; dates.push(new Date(d)); bal.push(x?x.stand:V.eind); continue; }
+    for(const e of events){ if(opDag(e,d)) b+=e.amt; }
+    b-=dailyVar;
+    dates.push(new Date(d)); bal.push(b); }
   let ti=0; for(let i=1;i<bal.length;i++) if(bal[i]<bal[ti]) ti=i;
-  return {dates,bal,events,trough:{date:dates[ti],bal:bal[ti],i:ti}, net:f?f.fNet:0};
+  return {dates,bal,events,trough:{date:dates[ti],bal:bal[ti],i:ti}, net:f?f.fNet:0, maand:V};
 }
 // dagen verstreken in maand m (volledige maand voor verleden, t/m vandaag voor lopende maand)
 function daysElapsed(m){ const [y,mo]=m.split('-').map(Number); const dim=new Date(y,mo,0).getDate();
@@ -3149,11 +3173,11 @@ function varPotjeStand(ym){
    POTJEREST() BLIJFT ZOALS HIJ IS. Hij heeft nog twee lezers die de prognose juist nodig hebben:
    varPlanRemaining() voor de tweede regel op Inzichten, en de prognoseregel onder deze sheet.
    IDENTITEIT: deze som is varBudget() min varPotjeStand().gebruikt, plus safeToSpend().potOver. */
-function varPotjesReserve(ym){
+function varPotjesReserve(ym, L){
   const sp=catSpendMap(ym), B=SET.budgets||{}; let v=0;
   const rc=recurringCats();
   for(const k in B){ const bud=+B[k]||0; if(bud<=0||rc.has(k)) continue; v+=Math.max(bud-(sp[k]||0),0); }
-  v+=terugPotjes(ym).rest;   // v327: de rest van een terugkerend potje zit er ook nog in
+  v+=terugPotjes(ym, L).rest;   // v327: de rest van een terugkerend potje zit er ook nog in
   return Math.round(v);
 }
 /* v327: WAT ER IN EEN TERUGKEREND POTJE ZIT BOVEN DE INCASSO'S DIE NOG KOMEN. Een potje van een
@@ -3173,12 +3197,12 @@ function varPotjesReserve(ym){
    (monthLiquidity()), en van een afgeronde maand valt niets meer te verwachten (v194).
    EEN BRON MET DRIE LEZERS (v104): varPotjeStand() voor de stand-kaart, varPotjesReserve() voor
    veilig te besteden en de sheet "Gereserveerd in je potjes". */
-function terugPotjes(ym){
+function terugPotjes(ym, Lb){
   const out={rijen:[], rest:0};
   if(!ym || ym!==thisYM()) return out;
   const B=SET.budgets||{}; let rc=new Set(); try{ rc=recurringCats(); }catch(_){ return out; }
   if(![...rc].some(k=>(+B[k]||0)>0)) return out;
-  let L=null; try{ L=monthLiquidity(); }catch(_){ return out; }
+  let L=Lb||null; if(!L){ try{ L=maandLiqBasis(); }catch(_){ return out; } }   // v378: de basis, niet monthLiquidity() (die leest via maandVerloop() deze functie)
   const sp=catSpendMap(ym);
   const open={}, excl={};
   for(const s of (L&&L.fixDueItems)||[]){ if(!s.cat) continue;
@@ -3209,7 +3233,19 @@ function varTempoMirror(plan, tempo, kind){
   if(kind==='safe') return `<div style="font-size:11.5px;line-height:1.45;color:#e8c372;background:rgba(232,195,114,.08);border:1px solid rgba(232,195,114,.28);border-radius:9px;padding:8px 10px;margin:8px 0 2px">Je variabele potjes hebben nog ${euro0(plan)}; op je tempo geef je deze maand naar verwachting ~${euro0(tempo)} uit (${euro0(gap)} meer).</div>`;
   return `<div style="font-size:11.5px;line-height:1.45;color:var(--teal);background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:9px;padding:8px 10px;margin-top:8px">Je plan (variabele potjes) reserveert hiervan ${euro0(plan)}; het verschil van ${euro0(gap)} is je tempo boven je plan.</div>`;
 }
+/* ===== DE DAGREEKS VAN DE MAAND (v378) =====
+   maandLiqBasis() is wat monthLiquidity() tot v377 was, zonder `projected`. Die eindstand komt sinds v378 uit
+   maandVerloop(), de ENE vooruitrekening van de lopende maand (keuze b van de gebruiker): tot v378 trok
+   `projected` een gemeten tempo af (varDue) en liquidityDaily() een historisch gemiddelde, en dat waren twee
+   andere eindstanden dan wat er in je potjes zit. De splitsing is nodig omdat varPotjesReserve() via
+   terugPotjes() de vaste lasten van deze maand leest: die leest de basis en niet monthLiquidity(), anders roept
+   de een de ander aan. */
 function monthLiquidity(){
+  const L=maandLiqBasis();
+  try{ L.projected=maandVerloop(L).eind; }catch(_){ L.projected=null; }
+  return L;
+}
+function maandLiqBasis(){
   const sched=recurringSchedule(), f=forecastModel();
   const now=new Date(); const dom=now.getDate(); const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
   const daysLeft=Math.max(dim-dom,0);
@@ -3290,10 +3326,63 @@ function monthLiquidity(){
   const dailyVar=(elapsedM>=3)?(wPace*actualDaily+(1-wPace)*histDaily):histDaily;
   const varDue=Math.round(dailyVar*daysLeft);
   const {sum,missing}=totalBalance();   // v374: SET.buffer en zijn shortfall zijn weg; geen lezer las ze
-  const projected=Math.round(sum+incDue-fixDue-varDue);   // forecast blijft de eerlijke voorspelling (Optie B)
+  /* v378: `projected` staat hier niet meer. Hij was sum+incDue-fixDue-varDue, met varDue een mengsel van je tempo
+     en je historische gemiddelde; monthLiquidity() zet hem nu uit maandVerloop(). varDue blijft voor de lezers die
+     het tempo zelf willen. */
   // v170: varPlan is hier weg. Hij voedde de spiegel op de liquiditeitskaart en die verviel; sindsdien
   // las niemand hem. Wie het variabele plan nodig heeft roept varPlanRemaining() aan, de enige bron.
-  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),incNorm:Math.round(incNorm),incBinnen:Math.round(incomeThisMonth),varDue,daysLeft,projected,fixDueItems,fixDueExclCount,fixDueBetaald};
+  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),incNorm:Math.round(incNorm),incBinnen:Math.round(incomeThisMonth),varDue,daysLeft,fixDueItems,fixDueExclCount,fixDueBetaald};
+}
+/* DE VOORUITREKENING VAN DE LOPENDE MAAND, PER DAG (v378). Een bron voor de eindstand (Home "Verwacht eind", de sheet
+   erachter, monthLiquidity().projected) en voor de dagen van deze maand in liquidityDaily() (de melding "te weinig
+   saldo"). Dezelfde termen als vrij te besteden, zonder de spaarposten: sparen verlaagt dit getal niet, het geld
+   blijft van jou.
+   - start: totalBalance().sum, dus "Totaal saldo" op Home (v376), afgerond op hele euro's;
+   - inkomen: monthLiquidity().incDue, op de verwachte datum van je salaris uit het schema, en zonder datum op de
+     laatste dag. Een verwachte bonus telt NIET (v369: pas als hij binnen is);
+   - vaste lasten: de posten die meetellen in fixDue, elk op zijn eigen dag (een dag die al voorbij is: vandaag);
+   - potjes: varPotjesReserve(), wat er nog in zit, GELIJK verdeeld over de dagen na vandaag (keuze a van de
+     gebruiker): dezelfde noemer als het dagbedrag bij vrij te besteden, maandDagenOver(). Op de laatste dag is er
+     geen dag na vandaag, en dan valt het op vandaag.
+   PER DAG EERST WAT ERAF GAAT, DAN WAT ERBIJ KOMT. Voor de laagste stand is dat de voorzichtige kant (v168): op de
+   dag van je salaris telt de stand van voor het salaris. De laagste stand is het minimum van de start, elke stand
+   na de uitgaven van een dag, en de eindstand. */
+function maandVerloop(L){
+  L=L||maandLiqBasis();
+  const now=new Date(); now.setHours(0,0,0,0);
+  const j=now.getFullYear(), mo=now.getMonth(), vandaag=now.getDate(), dim=new Date(j,mo+1,0).getDate();
+  const ym=j+'-'+String(mo+1).padStart(2,'0');
+  const ymdDag=d=>ym+'-'+String(d).padStart(2,'0');
+  const start=Math.round(+L.sum||0), inc=Math.round(+L.incDue||0), fix=Math.round(+L.fixDue||0);
+  let pot=0; try{ pot=varPotjesReserve(ym, L); }catch(_){ pot=0; }
+  const eind=start+inc-fix-pot;
+  const dagen=[]; for(let d=vandaag; d<=dim; d++) dagen.push({dag:d, ymd:ymdDag(d), uit:0, bij:0, posten:[]});
+  const opDag=d=>dagen[Math.max(0,Math.min(dim,d)-vandaag)];
+  // vaste lasten op hun dag
+  const vast=[];
+  for(const s of (L.fixDueItems||[])){ if(s.excl || s.inPotje) continue;
+    let d=+s.day||vandaag;
+    try{ const nd=s.nextDate?new Date(s.nextDate):null; if(nd && nd.getFullYear()===j && nd.getMonth()===mo) d=nd.getDate(); }catch(_){}
+    const R=opDag(Math.max(d,vandaag)); const amt=Math.round(+s.amount||0);
+    R.uit+=amt; R.posten.push({name:s.name, amt:-amt, cat:s.cat}); vast.push({name:s.name, amt, ymd:R.ymd, cat:s.cat}); }
+  // inkomen op de verwachte dag van je salaris
+  let incDag=null;
+  if(inc>0){
+    try{ for(const r of recurringSchedule()){ if(r.type!=='income') continue; const nd=new Date(r.nextDate); nd.setHours(0,0,0,0);
+      if(nd.getFullYear()===j && nd.getMonth()===mo && nd.getDate()>=vandaag && (incDag==null || nd.getDate()<incDag)) incDag=nd.getDate(); } }catch(_){}
+    if(incDag==null) incDag=dim;
+    opDag(incDag).bij+=inc;
+  }
+  // potjes gelijk over de dagen na vandaag
+  const na=dagen.filter(x=>x.dag>vandaag), potDagen=na.length?na:[dagen[0]];
+  const perDag=pot/potDagen.length; potDagen.forEach(x=>{ x.uit+=perDag; });
+  // de reeks
+  let b=start, laag={bedrag:start, ymd:dagen[0].ymd};
+  for(const x of dagen){ b-=x.uit; if(b<laag.bedrag) laag={bedrag:b, ymd:x.ymd}; b+=x.bij; x.stand=b; }
+  if(eind<laag.bedrag) laag={bedrag:eind, ymd:dagen[dagen.length-1].ymd};
+  laag={bedrag:Math.round(laag.bedrag), ymd:laag.ymd};
+  return {ym, start, inc, fix, pot, eind, incDag:incDag==null?null:ymdDag(incDag), laagste:laag, perDag, vast,
+    dagen:dagen.map(x=>({ymd:x.ymd, stand:x.stand, uit:x.uit, bij:x.bij, posten:x.posten})), missing:+L.missing||0};
 }
 // Veilig te besteden = saldo - nog-niet-betaalde vaste lasten deze maand - nog gereserveerde potjes (budget minus al uitgegeven)
 function safeToSpend(){
@@ -3307,7 +3396,7 @@ function safeToSpend(){
      Een leeg potje reserveert nul in plaats van zijn resterende dagtempo; gemeten steeg safe
      daarmee van 2.937 naar 3.090 op drie lege potjes van samen 153. varPlanRemaining() blijft
      bestaan voor de tweede regel op Inzichten, die de tempo-som stelt. */
-  const reservedVar=varPotjesReserve(ym);
+  const reservedVar=varPotjesReserve(ym, L);
   let potOver=0; const _rc=recurringCats();
   for(const k in B){ const bud=+B[k]||0; if(bud<=0||_rc.has(k)) continue;
     potOver+=Math.max((sp[k]||0)-bud,0);                       // hoeveel je al over je potjes ging
@@ -3500,6 +3589,8 @@ function vrijRegel(S){
   const col=safe<0?(krapRustig?'var(--amber)':'var(--red)'):'var(--green)';
   const binnen=V && V.volledig && V.ruimte>0;
   const onder=binnen?'':vrijPerDagLine();
+  /* v378: de i noemt dezelfde posten als de opbouw-sheet, en eindigt op de route ernaartoe. */
+  NOTES.veiligtebesteden=`${esc(JARGON.veiligtebesteden)} <span style="color:var(--teal);font-weight:600;cursor:pointer;white-space:nowrap" onclick="hideTip();openSafeToSpend()">Zo kom je op ${euro0(safe)} \u203a</span>`;
   return `<div data-vrij="${safe}" role="button" onclick="openSafeToSpend()" style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border-radius:12px;cursor:pointer;background:color-mix(in srgb,${col} 10%,transparent);border:1px solid color-mix(in srgb,${col} 28%,transparent)">
     <div style="flex:1;min-width:0"><div style="font-size:13px;color:${col};font-weight:600">${safe<0?'':'waarvan '}${jrg('veiligtebesteden','vrij te besteden')}</div>${binnen?vrijPerDagLine():''}</div>
     <div style="font-weight:800;font-size:20px;color:${col};white-space:nowrap;font-variant-numeric:tabular-nums">${euro0(safe)} <span style="font-size:15px">\u203a</span></div></div>${onder}`;
@@ -3899,14 +3990,13 @@ function renderDash(){
   // Zonder \u00e9\u00e9n bekend saldo rekent safeToSpend met 0. Dat getal dan groot tonen is even onwaar als "totaal saldo \u20ac0,00":
   // het hoofdgetal gaat mee in de onbekend-staat, met de saldo-invoer als volgende stap. De berekening blijft ongemoeid.
   const hero = balKnown
-    ? `<div class="homehero">
-    <div class="hh-lbl">Totaal saldo</div>
-    <div class="hh-big${S2.saldo<0?'':' grad'}" data-totaalsaldo="${Math.round(S2.saldo)}" style="cursor:pointer;margin-bottom:6px${S2.saldo<0?';color:var(--red)':''}" onclick="openBalances()">${euro0(S2.saldo)}</div>
-    ${saldoSplitRegel(S2.saldo)}
-    ${saldoAchterHero()}
+    ? `<div class="homehero" style="cursor:default">
+    ${saldoBlok(S2.saldo)}
     ${bankVervalHero()}
+    ${homeOntvangenRij()}
     ${vrijRegel(S2)}
     ${krapNote}
+    ${verwachtEindRij()}
   </div>`
     : `<div class="homehero" style="cursor:default">
     <div class="hh-lbl">Totaal saldo</div>
@@ -3935,7 +4025,7 @@ function renderDash(){
   }catch(_){ }
   // v195: hier stonden freshStartReflection() en freshStartCard(). De kaart is opgeheven en de
   // terugblik staat nu op Maand, bij de afspraaklus die dezelfde vraag stelt.
-  $('#s-dash').innerHTML = renderReminder() + modeTop + hero + homeOntvangenKaart() + vermogenCard() + recentBlock + modeBot;   // v365: de koopcheck staat op Grip
+  $('#s-dash').innerHTML = renderReminder() + modeTop + hero + vermogenCard() + recentBlock + modeBot;   // v365: de koopcheck staat op Grip; v378: Nog te ontvangen staat in de hero, tussen het saldo en vrij te besteden
 }
 /* ===== HOME (v365) =====
    DRIE BOEKINGEN EN NIET ZES: met zes paste Home niet op een scherm, en "Alle transacties ›" blijft de
@@ -3952,25 +4042,94 @@ function saldoSplit(saldo){
   const contant=Math.round(c), totaal=Math.round(+saldo||0);
   return {bank:totaal-contant, contant, totaal};
 }
-function saldoSplitRegel(saldo){
-  const D=saldoSplit(saldo); if(!D) return '';
-  return `<div class="small" data-saldosplit data-bank="${D.bank}" data-contant="${D.contant}" style="color:var(--mut);margin-top:2px;cursor:pointer" onclick="openBalances()">${euro0(D.bank)} op de bank · <span style="cursor:pointer" onclick="event.stopPropagation();openInsTegel('cash')">${euro0(D.contant)} contant</span> <span style="color:var(--teal)">\u203a</span></div>`;
+/* ===== HOME LEEST ALS EEN SOM (v378, gevraagd door de gebruiker, mockup "Home saldo") =====
+   Van boven naar beneden: het saldo, wat er nog binnenkomt, wat daarvan vrij is, en waar je eind van de maand uitkomt.
+   DE REGEL "EUR X op de bank · EUR Y contant" IS WEG VAN HOME: de splitsing staat in de kop van Saldo nu, en drie
+   tikplekken (het getal, het bankdeel en contant) die op dezelfde sheet uitkwamen werden er een.
+   HET SALDOBLOK IS EEN TIKPLEK (`data-saldoblok`): het label, het getal en de enige chevron openen openBalances().
+   Het label "bijgewerkt <datum>" staat er alleen als een saldo ouder is dan de nieuwste boeking erop of niet is
+   bijgewerkt bij de laatste synchronisatie (saldoAchter(), v280); de lange uitleg staat achter de i, in de popover van
+   vrij te besteden (#tipPop), en NIET meer als regel onder het getal. De i opent alleen die uitleg en navigeert niet. */
+function saldoBijgewerkt(){
+  let r=[]; try{ r=saldoAchter(); }catch(_){ return null; }
+  if(!r.length) return null;
+  const oudste=r.map(x=>x.saldoDatum).filter(Boolean).sort()[0]||null;
+  return {datum:oudste, zinnen:saldoAchterZinnen()};
 }
-/* NOG TE ONTVANGEN, verhuisd van Inzichten (v359) naar Home: hij verklaart waarom veilig te besteden ruim
-   is terwijl je salaris nog moet komen, en dat is de vraag van Home. VERPLAATST, NIET GEKOPIEERD: de tegel
-   op Inzichten is weg. Dezelfde berekening (monthLiquidity().incDue, incBinnen) en dezelfde sheet achter de
-   tik (openInsTegel('ontvangen')). Hij staat er zolang er inkomen verwacht wordt, en zegt "alles is binnen"
-   zodra dat zo is: tot het eind van de maand verdwijnt hij niet, net als de tegel deed (v359). */
+function saldoBlok(saldo){
+  const B=saldoBijgewerkt();
+  let chip='';
+  if(B){
+    NOTES.saldoachter=`${B.zinnen.join(' ')}<div style="color:var(--mut);margin-top:4px">Het label verdwijnt zodra er een nieuwer saldo is.</div>`;
+    chip=` <span class="small" data-bijgewerkt="${esc(B.datum||'')}" style="display:inline-block;padding:1px 7px;border-radius:9px;background:var(--card2);color:var(--mut);font-size:var(--fs-xs);margin-left:4px">bijgewerkt ${esc(dagKort(B.datum))} ${noteIcon('saldoachter','Waarom staat hier bijgewerkt')}</span>`;
+  }
+  const neg=(+saldo||0)<0;
+  return `<div data-saldoblok role="button" onclick="openBalances()" style="cursor:pointer">
+    <div class="hh-lbl">Totaal saldo${chip}</div>
+    <div class="row" style="align-items:center;gap:10px"><div class="hh-big${neg?'':' grad'}" data-totaalsaldo="${Math.round(+saldo||0)}" style="margin-bottom:6px${neg?';color:var(--red)':''}">${euro0(saldo)}</div><span style="color:var(--teal);font-size:var(--fs-xl);font-weight:700;margin-left:auto">\u203a</span></div>
+  </div>`;
+}
+/* NOG TE ONTVANGEN (v365, sinds v378 een smalle regel in de hero, in de vorm van "Verwacht eind"). Dezelfde berekening
+   (monthLiquidity().incDue) en dezelfde sheet achter de tik (openInsTegel('ontvangen')). Het bedrag staat EEN keer;
+   "nog niets binnen" is weg, want het bedrag zegt dat al. Een gedeeltelijk binnengekomen salaris verlaagt het bedrag.
+   EEN VERWACHTE BONUS (SET.irregularIncome, irrVerwachtOpen()) staat als grijze regel eronder en telt niet mee, niet in
+   dit bedrag en niet in vrij te besteden (v369). Is alles binnen en geen bonus verwacht, dan is er geen regel. */
 function homeOntvangen(){
   let L=null; try{ L=monthLiquidity(); }catch(_){}
   if(!L || !((+L.incNorm||0)>0)) return null;
   const due=Math.round(L.incDue||0), bin=Math.round(L.incBinnen||0), B=inkomenBron();
   const wie=B.cat?`${B.cat}${B.namen?` (${B.namen})`:''}`:(B.namen||'inkomen');
-  return {due, bin, wie, sub: due<=0 ? 'alles is binnen' : (bin>0 ? `${euro0(bin)} al binnen` : 'nog niets binnen')};
+  return {due, bin, wie};
 }
-function homeOntvangenKaart(){
-  const D=homeOntvangen(); if(!D) return '';
-  return `<div class="card" id="homeOntvangen" data-ontvangen="${D.due}" style="cursor:pointer;margin-top:4px" onclick="openInsTegel('ontvangen')"><div class="row" style="align-items:baseline;gap:10px"><span style="font-weight:600">Nog te ontvangen</span><span style="font-weight:800;margin-left:auto">${euro0(D.due)}</span></div><div class="row small" style="color:var(--mut);margin-top:3px;gap:8px"><span style="flex:1;min-width:0;overflow-wrap:anywhere" data-ontvangenwie>${esc(D.wie)}</span><span style="white-space:nowrap">${D.sub} <span style="color:var(--teal);font-weight:700">›</span></span></div></div>`;
+function homeBonusVerwacht(){
+  let V=[]; try{ V=irrVerwachtOpen(thisYM()); }catch(_){ return null; }
+  if(!V.length) return null;
+  const bedrag=Math.round(V.reduce((s,v)=>s+(+v.amount||0),0));
+  return {bedrag, naam: V.length===1?irrNaamKlein(V[0]):'onregelmatig inkomen'};
+}
+const HOME_RIJ='display:flex;align-items:flex-start;gap:10px;border-radius:10px;padding:8px 10px;margin:8px 0 0;background:var(--card);cursor:pointer';
+function homeOntvangenRij(){
+  const D=homeOntvangen(), Bo=homeBonusVerwacht();
+  if(!D || (D.due<=0 && !Bo)) return '';
+  return `<div id="homeOntvangen" data-ontvangen="${D.due}" role="button" style="${HOME_RIJ}" onclick="openInsTegel('ontvangen')">
+    <div style="flex:1;min-width:0"><div style="font-size:var(--fs-md)">Nog te ontvangen</div><div class="small muted" data-ontvangenwie style="overflow-wrap:anywhere">${esc(D.wie)}</div>${Bo?`<div class="small" data-bonusverwacht="${Bo.bedrag}" style="color:var(--mut2)">+ ${euro0(Bo.bedrag)} ${esc(Bo.naam)} \u00b7 telt mee zodra binnen</div>`:''}</div>
+    <div style="white-space:nowrap;font-weight:700">${euro0(D.due)} <span style="color:var(--teal)">\u203a</span></div></div>`;
+}
+/* VERWACHT EIND VAN DE MAAND (v378). Het bedrag is maandVerloop().eind, dezelfde bron als monthLiquidity().projected
+   en de dagen van deze maand in liquidityDaily(): er is EEN eindstand van de maand. Bij een saldo dat deels onbekend
+   is staat er "onvolledig" bij, en de sheet noemt welke rekening ontbreekt. */
+function verwachtEindRij(){
+  let V=null; try{ V=maandVerloop(); }catch(_){ return ''; }
+  const mnd=MFULL[+V.ym.slice(5,7)-1].toLowerCase();
+  return `<div data-verwachteind="${V.eind}" role="button" style="${HOME_RIJ};align-items:center" onclick="openVerwachtEind()">
+    <div style="flex:1;min-width:0;font-size:var(--fs-md)">Verwacht eind ${esc(mnd)}</div>
+    <div style="white-space:nowrap;font-weight:700">\u2248 ${euro0(V.eind)}${V.missing>0?' <span class="small muted" style="font-weight:400">\u00b7 onvolledig</span>':''} <span style="color:var(--teal)">\u203a</span></div></div>`;
+}
+function openVerwachtEind(){
+  let V=null, S=null; try{ V=maandVerloop(); S=safeToSpend(); }catch(_){ return; }
+  const mi=+V.ym.slice(5,7)-1, mnd=MFULL[mi].toLowerCase(), dim=new Date(+V.ym.slice(0,4), mi+1, 0).getDate();
+  const D=homeOntvangen(), Bo=homeBonusVerwacht(), Bw=saldoBijgewerkt();
+  const rij=(term,bedrag,lab,sub,act)=>`<div class="row" data-veterm="${term}" data-bedrag="${bedrag}" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}>
+      <div style="flex:1;min-width:0"><div style="font-size:var(--fs-md)">${lab}</div><div class="small muted">${sub}</div></div>
+      <div style="font-weight:700;white-space:nowrap">${term==='start'?'':(bedrag<0?'\u2212 ':'+ ')}${euro0(Math.abs(bedrag))}</div>${act?'<span style="color:var(--teal);font-weight:700">\u203a</span>':''}</div>`;
+  const ontbreekt=V.missing>0 ? OWN.filter(a=>rekActief(a) && accBalance(a)==null).map(a=>acctNiceName(a)) : [];
+  const spaarNu=Math.round(S.savedBal||0), inleg=Math.round(S.saveReserved||0);
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="verwachtEindSheet">
+    <div style="font-weight:800;font-size:var(--fs-lg)">Verwacht eind ${esc(mnd)}</div>
+    <div class="small muted" style="margin-bottom:6px">totaal saldo op ${dim} ${esc(MNAMES[mi])}, als alles gaat zoals gepland</div>
+    ${rij('start', V.start, 'Totaal saldo nu', `${totalBalance().contant!=null?'bank + contant':'je rekeningen'}${Bw&&Bw.datum?`, bijgewerkt ${esc(dagKort(Bw.datum))}`:''}`, 'openBalances()')}
+    ${rij('inkomen', V.inc, 'Inkomen dat nog komt', esc(D?D.wie:'inkomen'), "openInsTegel('ontvangen')")}
+    ${rij('vast', -V.fix, 'Vaste lasten die nog komen', `incasso's en vaste betalingen t/m ${dim} ${esc(MNAMES[mi])}`, 'openFixedDue()')}
+    ${rij('potjes', -V.pot, 'Verwachte uitgaven uit je potjes', 'wat er nog in je potjes zit', 'openReservedPotjes()')}
+    <div class="row" data-veeind="${V.eind}" style="gap:10px;padding:11px 0 4px;font-weight:800"><div style="flex:1">Verwacht eind ${esc(mnd)}</div><div style="white-space:nowrap">\u2248 ${euro0(V.eind)}${V.missing>0?' \u00b7 onvolledig':''}</div></div>
+    ${ontbreekt.length?`<div class="small" data-veontbreekt style="color:var(--mut);margin-top:2px">Zonder bekend saldo: ${ontbreekt.map(esc).join(', ')}. ${ontbreekt.length===1?'Die rekening telt':'Die rekeningen tellen'} hier niet mee.</div>`:''}
+    <div class="small muted" data-vespaar="${spaarNu+inleg}" style="margin-top:4px">waarvan op je spaarrekening \u2248 ${euro0(spaarNu+inleg)} (${euro0(spaarNu)} nu + ${euro0(inleg)} inleg deze maand)</div>
+    ${Bo?`<div data-vebonus="${V.eind+Bo.bedrag}" style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--card2)"><div class="row small" style="color:var(--mut2)"><span style="flex:1">met de ${esc(Bo.naam)} erbij</span><span>\u2248 ${euro0(V.eind+Bo.bedrag)}</span></div><div class="small" style="color:var(--mut2)">telt pas mee als hij binnen is</div></div>`:''}
+    <div class="row" data-velaagste="${V.laagste.bedrag}" data-velaagstedag="${V.laagste.ymd}" style="gap:10px;margin-top:12px;font-weight:700"><span style="flex:1">Laagste stand deze maand</span><span style="white-space:nowrap">\u2248 ${euro0(V.laagste.bedrag)} \u00b7 ${esc(dagKort(V.laagste.ymd))}</span></div>
+    <div class="small muted">vaste lasten op hun dag, wat er in je potjes zit gelijk verdeeld over de dagen die nog komen${V.incDag?`, je salaris op ${esc(dagKort(V.incDag))}`:''}</div>
+    <div class="small muted" style="margin-top:8px">Sparen verlaagt dit getal niet: het geld blijft van jou, alleen op een andere rekening.</div>
+  </div>`;
+  showSheetBg();
 }
 function adjustSaveTarget(d){
   const cur=Math.round(monthlySavingTarget());
@@ -4130,7 +4289,7 @@ function toast(msg){ let el=document.getElementById('toast'); if(!el){ el=docume
 const JARGON={
   onvoorzien:'Een kost die je niet kon voorzien, zoals een wegsleep of een kapotte wasmachine. Geen potje, telt niet mee tegen je budget. Weet je niet waar een boeking hoort, dan is dat Overig.',
   contant:'Wat je contant hebt uitgegeven sinds je voor het laatst telde. Dit is een verschil en geen boeking per aankoop, dus de app weet het bedrag wel en de bestemming niet. Geen potje, telt niet mee tegen je budget.',
-  veiligtebesteden:'Wat er van je saldo vrij is voor de rest van de maand: je saldo min je vaste lasten die nog komen, min wat er in je potjes gereserveerd staat, min je spaarinleg.',
+  veiligtebesteden:'Je saldo plus het salaris dat nog komt, min wat al op je spaarrekening en je reserveringsrekening staat, de vaste lasten die nog komen, wat er in je potjes zit en wat je deze maand nog spaart.',   // v378: dezelfde posten als de opbouw-sheet
   nogtesparen:'Het deel van je spaarinleg voor deze maand dat je nog opzij moet zetten: je maandbedrag min wat er deze maand netto naar je spaarrekening ging. Netto, dus wat je er in dezelfde maand weer af haalde gaat eraf.',
   spaarinleg:'Wat je per maand opzij wilt zetten. Dit is het bedrag dat je doelen verdeelt, niet alles wat er aan het eind van de maand overblijft.',
   restsaldo:'Je inkomen min je uitgaven in een maand. Je spaarinleg komt hieruit; wat er daarnaast overblijft kan ergens anders heen.',
@@ -4462,8 +4621,13 @@ function scoreNotifs(opts){
     const dueAmt=due.reduce((s2,e)=>s2-e.amt,0); const tb=totalBalance();
     // Reken met wat je wél weet: tb.sum telt alleen rekeningen met een bekend saldo. Eerder vuurde
     // dit alarm alleen bij álle saldi bekend, waardoor de sterkste bescherming een live koppeling eiste.
-    if(dueAmt>0 && tb.known>0 && tb.sum<dueAmt){
-      const topUp=Math.max(Math.ceil((dueAmt-tb.sum)/5)*5,5); const first=due[0];
+    /* v378 (keuze c): het alarm leest de STAND van de dagreeks en niet meer het saldo min de posten. Tot v378 was het
+       tb.sum < de posten van de komende twee dagen, met andere posten dan maandVerloop() en zonder het salaris of de
+       potjes; nu vuurt het als de stand van de dagreeks in die drie dagen onder nul komt, en dat is dezelfde reeks als
+       de laagste stand in de sheet Verwacht eind. */
+    let minStand=Infinity; for(let i=0;i<Math.min(3,(Lq.bal||[]).length);i++) minStand=Math.min(minStand, Lq.bal[i]);
+    if(dueAmt>0 && tb.known>0 && minStand<0){
+      const topUp=Math.max(Math.ceil((-minStand)/5)*5,5); const first=due[0];
       const dd=Math.round((new Date(first.date).setHours(0,0,0,0)-t0.getTime())/86400000); const when=dd<=0?'vandaag':dd===1?'morgen':'overmorgen';
       out.push({key:'lowbal-'+today, h:'direct',score:96,t:'bad',ic:ICON('alert'),
         l1: due.length>1?`Te weinig saldo voor ${due.length} vaste lasten ${when}.`:`Te weinig saldo: ${when} wordt ${esc(String(first.name||'').slice(0,20))} ${euro(-first.amt)} afgeschreven.`,

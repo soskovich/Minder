@@ -421,38 +421,36 @@ test.describe('4 · de regel bij het saldo, met twee redenen', () => {
 });
 
 test.describe('5 · de regel staat in de hero, bij de getallen waarop je beslist', () => {
+  /* v378: GEEN ZIN MEER ONDER HET SALDO MAAR EEN LABEL ERNAAST ("bijgewerkt <datum> i"), in het saldoblok. De zin
+     staat achter de i, in de popover, en de hero draagt hem niet meer. Hoogtes gemeten op deze stand. */
   for (const w of [360, 390]) {
-    test('op ' + w + 'px staat hij in de hero, onder het totale saldo', async ({ page }) => {
+    test('op ' + w + 'px staat het label in het saldoblok, en de zin achter de i', async ({ page }) => {
       await boot(page, deviceSeed(), w);
       const r = await page.evaluate(() => {
-        go('dash');
-        const hero = document.querySelector('.homehero');
-        const kids = [...hero.children].map((x) => (x.innerText || '').trim());
-        const i = kids.findIndex((x) => /niet bijgewerkt bij de laatste synchronisatie/.test(x));
-        /* v367: het saldo is het hoofdgetal met de regel bank · contant eronder, en vrij te besteden (met het dagbedrag)
-           is een eigen regel daaronder */
-        const j = [...hero.children].findIndex((x) => x.hasAttribute('data-saldosplit') || x.hasAttribute('data-totaalsaldo') && !hero.querySelector('[data-saldosplit]'));
-        const k = [...hero.children].findIndex((x) => x.hasAttribute('data-vrij'));
-        return { i, j, k, h: Math.round(hero.getBoundingClientRect().height), kaders: hero.querySelectorAll('.card').length };
+        go('dash'); renderDash();
+        const hero = document.querySelector('.homehero'), blok = hero.querySelector('[data-saldoblok]');
+        const lab = blok.querySelector('[data-bijgewerkt]');
+        return { lab: lab && lab.innerText, hero: hero.innerText, h: Math.round(hero.getBoundingClientRect().height), kaders: hero.querySelectorAll('.card').length,
+          note: NOTES.saldoachter || '' };
       });
-      expect(r.i).toBeGreaterThan(-1);
-      expect(r.i).toBe(r.j + 1);               // direct onder het saldo dat hij kwalificeert
-      if (r.k > -1) expect(r.k).toBeGreaterThan(r.i);
-      expect(r.kaders).toBe(0);                // geen eigen kaart erbij
-      expect(r.h).toBe(204);                   // gemeten 188px op beide breedtes; v367: met de groene regel vrij te besteden 204
+      expect(r.lab).toMatch(/^bijgewerkt \d+ \w+/);
+      expect(r.hero).not.toMatch(/niet bijgewerkt bij de laatste synchronisatie/);
+      expect(r.note).toMatch(/niet bijgewerkt bij de laatste synchronisatie/);
+      expect(r.kaders).toBe(0);
+      expect(r.h).toBeLessThan(330);
     });
   }
 
-  test('zonder mislukking staat er niets extra in de hero', async ({ page }) => {
+  test('zonder mislukking staat er geen label in de hero', async ({ page }) => {
     await boot(page, deviceSeed());
     const r = await page.evaluate(() => {
       for (const a of Object.keys(SET.psd2Diag)) SET.psd2Diag[a].balGeland = true;
       renderDash();
       const hero = document.querySelector('.homehero');
-      return { t: hero.innerText, h: Math.round(hero.getBoundingClientRect().height) };
+      return { t: hero.innerText, lab: hero.querySelectorAll('[data-bijgewerkt]').length };
     });
-    expect(r.t).not.toMatch(/niet bijgewerkt/);
-    expect(r.h).toBe(162);                     // gemeten 147px zonder de regel; v367: met de groene regel vrij te besteden 162
+    expect(r.t).not.toMatch(/bijgewerkt/);
+    expect(r.lab).toBe(0);
   });
 
   test('bij een onbekend saldo staat hij er niet: dan draagt de hero al een eigen reden', async ({ page }) => {
@@ -495,14 +493,14 @@ test.describe('6 · herstel: een geslaagde sync haalt de rekening eruit', () => 
       expect(s.achter).toBe(over);
       if (over > 0) {
         expect(s.zin).toMatch(/niet bijgewerkt bij de laatste synchronisatie/);
-        expect(s.hero).toMatch(/niet bijgewerkt/);
+        expect(s.hero).toMatch(/bijgewerkt \d+ \w+/);   // v378: een label; de zin staat achter de i
         expect(s.col).toBe('var(--amber)');
         // de naam van een herstelde rekening staat er niet meer in
         const naam = await page.evaluate((a) => acctNiceName(a), FALEND[i]);
         if (over === 1) expect(s.zin).not.toContain(naam);
       } else {
         expect(s.zin).toBe('');
-        expect(s.hero).not.toMatch(/niet bijgewerkt/);
+        expect(s.hero).not.toMatch(/bijgewerkt/);
         expect(s.col).toBe('');
         expect(s.sub).toBe('Je bank is gekoppeld');
       }
@@ -645,7 +643,7 @@ test.describe('8 · kijken verandert niets (v244)', () => {
       localStorage.setItem = (k, v) => { schrijvers.push(k); return echt(k, v); };
       try {
         for (const b of DIAG_BLOKKEN) { const L = b.lees(); if (L && L.then) await L; }
-        saldoAchter(); saldoAchterZinnen(); saldoAchterRegel(); saldoAchterHero(); psd2Falend(); bankStand();
+        saldoAchter(); saldoAchterZinnen(); saldoAchterRegel(); saldoBijgewerkt(); saldoBlok(1); psd2Falend(); bankStand();   // v378: saldoBlok() draagt het label
       } finally { localStorage.setItem = echt; }
       return schrijvers;
     });

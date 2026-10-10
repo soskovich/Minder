@@ -47,11 +47,12 @@ test.describe('a · de tegels van 7 oktober', () => {
     expect(t.val).toBe('onbekend'); expect(t.ms).toBe('nog geen boekingen van deze maand'); expect(t.st).toBe('gry');
   });
   // v365: nog te ontvangen staat op Home
-  test('nog te ontvangen staat op Home op nul met "alles is binnen" na de betaling', async ({ page }) => {
+  /* v378: is alles binnen en geen bonus verwacht, dan staat er geen regel meer (keuze van de gebruiker). */
+  test('nog te ontvangen verdwijnt van Home zodra alles binnen is', async ({ page }) => {
     await open(page, { extraTx: [{ id: 'sal10', date: '2026-10-06', amount: 5216, name: 'Werkgever', desc: 'SALARIS LOON' }] });
-    await page.evaluate(() => go('dash'));
-    const t = await page.locator('#homeOntvangen').innerText();
-    expect(t).toContain('€0'); expect(t).toContain('alles is binnen');
+    await page.evaluate(() => { go('dash'); renderDash(); });
+    expect(await page.locator('#homeOntvangen').count()).toBe(0);
+    expect(await page.evaluate(() => monthLiquidity().incDue)).toBe(0);
   });
 });
 

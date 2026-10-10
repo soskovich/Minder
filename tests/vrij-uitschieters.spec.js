@@ -27,10 +27,14 @@ test.describe('a · Home: het saldo is het hoofdgetal, vrij te besteden staat er
   test('op de bank plus contant is het totaal', async ({ page }) => {
     await I.boot(page);
     await page.evaluate(() => go('dash'));
-    const r = await page.evaluate(() => { const el = document.querySelector('[data-saldosplit]');
-      return { bank: +el.dataset.bank, contant: +el.dataset.contant, totaal: +document.querySelector('[data-totaalsaldo]').dataset.totaalsaldo }; });
+    /* v378: de splitsing staat in Saldo nu: het blok Bank plus het blok Contant is het getal op Home. */
+    const totaal = +(await page.locator('[data-totaalsaldo]').getAttribute('data-totaalsaldo'));
+    await page.click('[data-saldoblok]');
+    const r = await page.evaluate(() => { const rij = [...document.querySelectorAll('#sheet [data-saldorij]')];
+      return { contant: +document.querySelector('#sheet [data-contantrij]').dataset.saldorij / 100,
+        bank: rij.filter((e) => !e.hasAttribute('data-contantrij')).reduce((a, e) => a + +e.dataset.saldorij, 0) / 100 }; });
     expect(r.contant).toBe(80);
-    expect(r.bank + r.contant).toBe(r.totaal);
+    expect(Math.round(r.bank + r.contant)).toBe(totaal);
   });
   test('een tik opent de opbouw, en de laatste regel is exact safeToSpend()', async ({ page }) => {
     await I.boot(page);

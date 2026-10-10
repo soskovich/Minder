@@ -83,8 +83,8 @@ test.describe('c - kaalUit leest de pagina en faalt luid', () => {
 
   test('hij geeft de bron van een app-functie zonder commentaar', async ({ page }) => {
     await boot(page);
-    const ruw = await page.evaluate(() => String(monthLiquidity));
-    const kaal = await kaalUit(page, 'monthLiquidity');
+    const ruw = await page.evaluate(() => String(maandLiqBasis));
+    const kaal = await kaalUit(page, 'maandLiqBasis');   // v378: het lichaam van monthLiquidity() staat hier
     expect(ruw.length).toBeGreaterThan(kaal.length);       // er zat commentaar in
     expect(kaal).toContain('txOfMonth(');                  // en de aanroep staat er nog (v359: monthLiquidity, insBudgetBlok is vervallen)
   });

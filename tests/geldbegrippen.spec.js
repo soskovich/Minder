@@ -21,8 +21,10 @@ test.describe('a · tik-voor-uitleg op de kernbegrippen', () => {
     await term.click();
     await page.waitForSelector('#tipPop.show');
     const tip = await page.locator('#tipPop').innerText();
-    expect(tip).toContain('vrij is voor de rest van de maand');
-    expect(tip).toContain('spaarinleg');
+    /* v378: de uitleg noemt dezelfde posten als de opbouw-sheet, en eindigt op de route ernaartoe */
+    expect(tip).toContain('salaris dat nog komt');
+    expect(tip).toContain('wat je deze maand nog spaart');
+    expect(tip).toContain('Zo kom je op');
     expect(await page.locator('#sheetBg.show').count()).toBe(0);      // geen sheet mee-geopend
   });
 

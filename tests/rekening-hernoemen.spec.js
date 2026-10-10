@@ -114,7 +114,8 @@ test.describe('b · de ingangen', () => {
   test('via het saldo-overzicht, waar de app al naar verwees', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => openBalances());
-    expect(await page.locator('#sheet').innerText()).toContain('naam aanpassen');
+    /* v378: "naam aanpassen" per rij is weg; een tik op de rij opent de rekening */
+    expect(await page.locator('#sheet').innerText()).not.toContain('naam aanpassen');
     await page.locator('#sheet .tx', { hasText: 'Buffer Rust' }).first().click();
     await page.waitForSelector('#renInp');
   });

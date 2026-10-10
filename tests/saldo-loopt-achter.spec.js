@@ -173,7 +173,7 @@ test.describe('c · de regel noemt geen bedrag en geen richting', () => {
      functie", dus hij loopt nu over alle drie. */
   test('geen enkele drager van de tekst rekent met een bedrag', async ({ page }) => {
     await boot(page, {});
-    const src = await kaalUit(page, 'saldoAchterZinnen', 'saldoAchterRegel', 'saldoAchterHero');
+    const src = await kaalUit(page, 'saldoAchterZinnen', 'saldoAchterRegel', 'saldoBijgewerkt');   // v378: saldoBijgewerkt() draagt de zin naar het label
     expect(src).not.toMatch(/euro0|euro\(|accBalance\(/);   // ze lezen alleen datums en namen
   });
 });
@@ -265,26 +265,29 @@ test.describe('f · de regel staat in de opbouw-sheet, bij het saldo', () => {
     const r = await page.evaluate(() => {
       const zin = saldoAchterZinnen().join(' ').replace(/<[^>]*>/g, '');
       const d = document.createElement('div');
-      d.innerHTML = saldoAchterHero(); const hero = d.innerText.trim();
+      renderDash();
+      /* v378: op Home staat de zin achter de i van het label "bijgewerkt", niet meer als regel */
+      d.innerHTML = NOTES.saldoachter || ''; const hero = (d.firstChild && d.firstChild.textContent || '').trim();
       d.innerHTML = saldoAchterRegel(); const sheet = d.innerText.trim();
-      return { zin, hero, sheet, opHome: (document.getElementById('s-dash').innerText.match(/nieuwste boeking erop/g) || []).length };
+      return { zin, hero, sheet, opHome: (document.getElementById('s-dash').innerText.match(/nieuwste boeking erop/g) || []).length,
+        label: !!document.querySelector('#s-dash [data-bijgewerkt]') };
     });
-    expect(r.hero).toBe(r.zin);        // de hero verzint niets
+    expect(r.hero).toBe(r.zin);        // de popover verzint niets
     expect(r.sheet).toBe(r.zin);       // de sheet ook niet
-    expect(r.hero).toBe(r.sheet);      // en dus zijn ze gelijk
-    expect(r.opHome).toBe(1);          // precies één keer op Home, geen tweede mededeling ernaast
+    expect(r.opHome).toBe(0);          // v378: op Home alleen het label, de zin staat in de popover
+    expect(r.label).toBe(true);
   });
 
   /* v280: de regel in de hero draagt geen eigen kader, geen eigen tik en geen amber. De tik bestaat al
      één regel hoger (totaal saldo -> openBalances), dus een tweede zou op hetzelfde uitkomen (v254),
      en amber is voor echte aandacht (v78/v93) - die zit in Instellingen, bij de handeling. */
-  test('de hero-regel heeft geen kader, geen tik en geen kleur', async ({ page }) => {
+  /* v378: het label heeft geen eigen navigatie (alleen de i, die de uitleg toont) en geen amber. */
+  test('het label heeft geen eigen tik en geen kleur', async ({ page }) => {
     await boot(page, { accmeta: { [MAIN]: { balance: 4000, date: dagenGeleden(9) } },
       set: { manualBal: {} }, laatsteTx: 3 });
-    const h = await page.evaluate(() => saldoAchterHero());
-    expect(h).not.toMatch(/onclick|cursor:pointer/);
+    const h = await page.evaluate(() => { renderDash(); return document.querySelector('#s-dash [data-bijgewerkt]').outerHTML; });
+    expect((h.match(/onclick="([^"]*)"/g) || []).every((x) => /showTip/.test(x))).toBe(true);
     expect(h).not.toMatch(/--amber|--red|--green/);
-    expect(h).not.toMatch(/border|background/);
     expect(h).toContain('var(--mut)');
   });
 

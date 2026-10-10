@@ -98,8 +98,9 @@ test.describe('v54 liquiditeit: plan naast forecast', () => {
     expect(r.plan).toBeLessThanOrEqual(r.reserve);
     expect(L.fixDue).toBe(FIXDUE);
     expect(L.sum).toBe(SALDO);
-    // forecast-formule ongewijzigd: saldo + inkomen - vast - variabel-op-tempo
-    expect(L.projected).toBe(Math.round(L.sum + L.incDue - L.fixDue - L.varDue));
+    /* v378: de eindstand is de dagreeks van maandVerloop(): saldo + inkomen - vast - wat er in je potjes zit.
+       Het tempo (varDue) blijft bestaan, maar telt niet meer in de eindstand. */
+    expect(L.projected).toBe(Math.round(L.sum) + L.incDue - L.fixDue - r.reserve);
     expect(L.varDue).not.toBe(r.plan);                     // twee modellen, bewust niet gelijkgetrokken
   });
 

@@ -113,7 +113,7 @@ test.describe('a · teal betekent op Home en Inzichten nog één ding', () => {
     await page.evaluate(() => go('dash'));
     const r = await page.evaluate(() => {
       const el = document.querySelector('#s-dash .hh-big'), v = document.querySelector('#s-dash [data-vrij]');
-      return { grad: el.classList.contains('grad'), tik: !!el.getAttribute('onclick'), vrij: v.getAttribute('onclick'), pijl: v.innerText.includes('›') };
+      return { grad: el.classList.contains('grad'), tik: el.closest('[data-saldoblok]').getAttribute('onclick') === 'openBalances()', vrij: v.getAttribute('onclick'), pijl: v.innerText.includes('›') };   // v378: de tik staat op het saldoblok
     });
     expect(r.grad).toBe(true);    // de klasse draagt het verloop van Aurora; in het standaardthema is het saldo de tekstkleur
     expect(await page.evaluate(() => getComputedStyle(document.querySelector('#s-dash .hh-big')).color)).toBe(await page.evaluate(() => getComputedStyle(document.body).color));

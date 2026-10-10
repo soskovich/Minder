@@ -19,25 +19,30 @@ test.describe('a · Home', () => {
     await I.boot(page); await page.evaluate(() => go('dash'));
     expect(await page.locator('#s-dash').innerText()).not.toContain('Ik wil iets kopen');
   });
+  /* v378: de splitsing in bank en contant staat in de kop van Saldo nu, niet meer op Home. */
   test('bank en contant tellen op tot het totaal saldo, en contant is dezelfde bron', async ({ page }) => {
-    await I.boot(page); await page.evaluate(() => go('dash'));
-    const r = await page.evaluate(() => { const el = document.querySelector('[data-saldosplit]');
-      return { bank: +el.dataset.bank, contant: +el.dataset.contant, bron: contantVerwacht(), tb: totalBalance().contant,
-        saldo: Math.round(safeToSpend().saldo), tekst: el.innerText }; });
-    expect(r.contant).toBe(Math.round(r.bron)); expect(r.contant).toBe(Math.round(r.tb)); expect(r.contant).toBe(80);
-    expect(r.bank + r.contant).toBe(r.saldo);
-    expect(r.tekst).toBe('€12.000 op de bank · €80 contant ›');   // v367: de regel opent je rekeningen
+    await I.boot(page); await page.evaluate(() => { go('dash'); renderDash(); });
+    expect(await page.locator('#s-dash [data-saldosplit]').count()).toBe(0);
+    await page.evaluate(() => openBalances());
+    const r = await page.evaluate(() => { const c = document.querySelector('#sheet [data-contantrij]');
+      return { contant: +c.dataset.saldorij / 100, bron: contantVerwacht(), tb: totalBalance().contant,
+        som: [...document.querySelectorAll('#sheet [data-saldorij]')].reduce((a, e) => a + +e.dataset.saldorij, 0) / 100,
+        saldo: Math.round(safeToSpend().saldo), tekst: document.getElementById('sheet').innerText }; });
+    expect(r.contant).toBe(r.bron); expect(r.contant).toBe(r.tb); expect(r.contant).toBe(80);
+    expect(Math.round(r.som)).toBe(r.saldo);
+    expect(r.tekst).toContain('€12.000,00 bank + €80,00 contant');
   });
-  test('zonder telling is er niets te splitsen en staat de regel er niet', async ({ page }) => {
-    await I.boot(page, { zonderContant: true }); await page.evaluate(() => go('dash'));
-    expect(await page.locator('[data-saldosplit]').count()).toBe(0);
+  test('zonder telling is er niets te splitsen en staat er geen blok contant', async ({ page }) => {
+    await I.boot(page, { zonderContant: true }); await page.evaluate(() => openBalances());
+    expect(await page.locator('#sheet [data-contantrij]').count()).toBe(0);
+    expect(await page.locator('#sheet').innerText()).not.toContain('contant');
   });
   test('Nog te ontvangen is de berekening van de oude tegel, met een nette naam', async ({ page }) => {
     await I.boot(page); await page.evaluate(() => go('dash'));
     const r = await page.evaluate(() => ({ v: +document.getElementById('homeOntvangen').dataset.ontvangen, due: Math.round(monthLiquidity().incDue),
       t: document.getElementById('homeOntvangen').innerText }));
     expect(r.v).toBe(r.due); expect(r.v).toBe(5216);
-    expect(r.t).toContain('nog niets binnen');
+    expect(r.t).not.toContain('nog niets binnen');   // v378: het bedrag staat er een keer, en zegt dat al
   });
   test('"Skf ." heet "Skf": een losse punt achter de naam valt weg', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => go('dash'));
