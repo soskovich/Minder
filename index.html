@@ -11945,7 +11945,8 @@ function renderPlanDoel(){
   let som='';
   if(p.type!=='aflossen' && !p.nfOnbekend){
     som+=op('geld','Staat nu op je spaarrekening',x.geld);
-    if(x.tb>0) som+=op('terug',`+ Terug naar ${naar}`,x.tb);
+    /* v372: doorgeschoven terugzetgeld draagt zijn reden (data-doorvan), nu in de terugregel van de detailsheet */
+    if(x.tb>0) som+=op('terug',`+ Terug naar ${naar}${x.door&&x.door.length?`<span class="small muted" data-doorvan="${esc(x.door.map(d=>d.van).join(','))}" style="display:block">${esc(x.door.map(d=>`${euro0(d.bedrag)} van ${d.naam}, ${d.naam} ${d.waarom}`).join('; '))}</span>`:''}`,x.tb);
     if(x.nogLater>0) som+=`<div class="row small" data-op="later" data-bedrag="${x.nogLater}" style="gap:8px;padding:5px 0;border-bottom:1px solid var(--line);color:var(--mut)"><span style="flex:1;min-width:0">+ nog terug na ${esc(mn)} ${euro0(x.nogLater)} (${x.later.map(l=>`${tlMaand(l.m-1).k} ${euro0(l.bedrag)}`).join(', ')})</span></div>`;
     som+=op('inleg','+ Inleg deze maand',p.status==='gepauzeerd'?0:x.inleg);
     som+=`<div class="row" data-op="eind" data-bedrag="${S}" data-vol="${vol?1:0}" style="gap:8px;padding:7px 0;border-bottom:2px solid var(--txt);font-weight:800"><span style="flex:1;min-width:0">Eind ${esc(mn)}</span><span style="white-space:nowrap">${euro0(S)}${vol?' · vol':''}</span></div>`;
@@ -11965,7 +11966,7 @@ function renderPlanDoel(){
     <div class="small muted" style="margin:2px 0 8px">doel ${euro0(doel)} · ${plek} in de volgorde</div>
     <div class="bar-track" style="height:10px;margin:0 0 6px;position:relative"><div class="bar-fill" style="width:${pct.toFixed(2)}%;background:${tint}"></div>${bijPct>0?`<div class="bar-fill" style="width:${bijPct.toFixed(2)}%;background:${arc}"></div>`:''}${streep}</div>
     ${som}${dat}
-    <div class="small" style="margin-top:12px;display:flex;gap:14px;flex-wrap:wrap">${act(p.type==='aflossen'?'Schuld aanpassen':'Doel aanpassen', `closeSheet();${planOpen(p)}`,'data-doelaanpassen')}${act(planPaused(p.id)?'Hervatten':'Pauzeren', `planTogglePause('${p.id}');renderPlanDoel()`,'data-doelpauze')}${p.type==='aflossen'?act('Uit plan halen',`closeSheet();planRemove('${p.id}')`,''):''}</div></div>`;
+    <div class="small" style="margin-top:12px;display:flex;gap:14px;flex-wrap:wrap">${act(p.type==='aflossen'?'Schuld aanpassen':'Doel aanpassen', `closeSheet();${planOpen(p)}`,'data-doelaanpassen')}${act(planPaused(p.id)?'Hervatten':'Pauzeren', `planTogglePause('${p.id}');renderPlanDoel()`,'data-doelpauze')}${p.type==='aflossen'?act('Maandbedrag ›',`closeSheet();${planAllocOpen(p)}`,'data-doelmaandbedrag'):''}${p.type==='aflossen'?act('Uit plan halen',`closeSheet();planRemove('${p.id}')`,''):''}</div></div>`;
 }
 /* v380: WAAR DE "TERUG" VAN DEZE MAAND VANDAAN KOMT: per lopende keuze het deel van deze maand (dezelfde terugzetActief()
    als de kop en de rij), de onttrekkingen van deze maand (spaarOnttrekkingen(), blok 14) en waar het heen gaat
