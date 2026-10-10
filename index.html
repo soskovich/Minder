@@ -21477,6 +21477,7 @@ function setBank(){
       <div class="small muted" style="margin-top:2px">bijgewerkt ${g.bij?dagKort(g.bij):'nog niet'}${g.binnenkort?` · nog ${g.dagen} dag${g.dagen===1?'':'en'}`:''}${g.verlopen&&g.bij?` · je gegevens lopen tot ${dagKort(g.bij)}`:''}</div>
       ${fal.length?`<div class="small" style="margin-top:6px;color:var(--amber)">${fal.length===1?'1 rekening':fal.length+' rekeningen'}${falendPredikaat(fal.length)}: ${fal.map(f=>esc(acctNiceName(f.acc))).join(', ')}${fouten?' · '+esc(fouten):''}</div>`:''}
       ${rood||fal.length?`<button class="btn" style="margin-top:10px" onclick="psd2Connect()">${ICON('bank')} ${rood?'Toestemming vernieuwen':'Opnieuw verbinden'}</button>
+        <div class="small muted" data-vernieuwuitleg style="margin-top:8px">Na je akkoord bij de bank kom je terug in je browser. Gebruik dezelfde browser als waarmee je Minder installeerde.</div>
         <div class="small" data-backuptip style="margin-top:8px;color:var(--teal);cursor:pointer" onclick="exportBackup()">Tip: maak eerst een back-up ›</div>`:''}
     </div>`; };
   const koppelingen=`<div class="hlabel" style="margin:0 0 8px">Koppelingen</div>
@@ -22418,6 +22419,26 @@ function diagRekeningen(){
        (SET.manualBal), dus rechtstreeks uit ACCMETA lezen zou een ander getal geven dan de som. */
     L.push('  som van die rekeningen: '+Math.round(oud.reduce((x,a)=>x+(+accBalance(a)||0),0))
       +' van '+Math.round(totalBalance().sum||0)+' in totalBalance()');
+  }
+  L.push('');
+  /* v377: WELKE TOESTEMMING DEZE KOPIE GEBRUIKT. Een andere kopie van Minder (een andere browser) kan een
+     nieuwere toestemming hebben opgeslagen; hier staat per bank de sessie-id die DEZE opslag draagt, met de
+     vervaldatum. De id is ingekort: genoeg om twee kopieën te vergelijken, niet om hem over te nemen. */
+  L.push('PER BANK: DE TOESTEMMING VAN DEZE KOPIE (v377)');
+  { const pb={};
+    for(const a of Object.keys(ps)){ const pm=ps[a]||{}; const b=pm.bank||'?';
+      const r=(pb[b]=pb[b]||{sessies:new Set(), exps:new Set()});
+      r.sessies.add(pm.sessie||''); r.exps.add(pm.exp?String(pm.exp).slice(0,10):''); }
+    const kort=id=>id.length>14?id.slice(0,8)+'\u2026'+id.slice(-4):id;
+    const bk=Object.keys(pb);
+    if(!bk.length) L.push('  geen gekoppelde bank');
+    for(const b of bk){ const r=pb[b];
+      const ids=[...r.sessies].map(x=>x?kort(x):'niet bewaard (gekoppeld voor v377)');
+      const ex=[...r.exps].map(x=>x||'-');
+      L.push('  '+b+'   consent-id '+ids.join(' / ')+'   vervalt '+ex.join(' / '));
+    }
+    L.push('  browser van deze kopie: '+_dV(()=>PSD2_BROWSER_NAAM[psd2BrowserCode()]||'onbekend')
+      +'   lopende koppelpogingen: '+_dV(()=>Object.keys(psd2Pogingen()).length));
   }
   L.push('');
   L.push('PER VERBINDING (afgeleid uit bank + consent-vervaldatum; nergens opgeslagen)');
@@ -25823,9 +25844,14 @@ function psd2SetCountry(c){ SET.psd2Country=c; save(); psd2Connect(); }
 async function psd2StartAuth(idx){
   const b=(window._psd2Banks||[])[idx]; if(!b) return;
   const aspsp={ name:b.name, country:b.country||'NL' };
-  const state='mind_'+Math.random().toString(36).slice(2)+Date.now().toString(36);
+  /* v377: DE POGING STAAT IN localStorage EN NIET ALLEEN IN sessionStorage. Die tweede is per tabblad, en
+     de bank stuurt je terug naar een NIEUW tabblad of zelfs naar een andere browser (gemeld: gestart in de
+     geïnstalleerde app, terug in Edge). localStorage deelt de app met de tabbladen van zijn eigen browser,
+     dus een terugkeer daar vindt de poging wel; een andere browser heeft een eigen opslag en vindt hem niet.
+     De browser staat in de state, zodat de verkeerde kopie kan zeggen waar je de link moet openen. */
+  const state='mind_'+psd2BrowserCode()+'_'+Math.random().toString(36).slice(2)+Date.now().toString(36);
   const redirect=location.origin+location.pathname;
-  sessionStorage.setItem('psd2_state', state); closeSheet();
+  psd2PogingZet(state, b.name); closeSheet();
   toast('Doorsturen naar '+b.name+'…');
   try{
     const d=await psd2Api('/auth',{ method:'POST', body:JSON.stringify({ aspsp, state, redirect_url:redirect, valid_days:90 }) });
@@ -25834,13 +25860,74 @@ async function psd2StartAuth(idx){
 }
 // 2) terug van de bank: ?code=&state=
 
+/* ===== v377: DE TERUGKEER VAN DE BANK HOORT BIJ EEN POGING IN DEZE OPSLAG =====
+   Tot v377 wees de callback alleen een state af die NIET overeenkwam met een bewaarde state; was er geen
+   bewaarde state (een ander tabblad, een andere browser), dan wisselde hij de code gewoon in en sloeg hij de
+   toestemming op. GEMELD: vernieuwen gestart in de geïnstalleerde app, de bank stuurde terug naar Edge, en
+   die kopie (met oude gegevens) sloeg de nieuwe toestemming op terwijl de app "verloopt over 3 dagen" bleef
+   zeggen. Nu eist de callback een poging met PRECIES deze state in deze opslag; zonder poging wordt er niets
+   ingewisseld en niets opgeslagen, en zegt een sheet waar je hem wel opent. */
+const PSD2_POGING_KEY='minder_psd2_poging', PSD2_POGING_MAX_UUR=24;
+function psd2BrowserCode(ua){
+  ua=ua==null?(navigator.userAgent||''):ua;
+  if(/Edg(e|A|iOS)?\//.test(ua)) return 'edge';
+  if(/SamsungBrowser\//.test(ua)) return 'samsung';
+  if(/(Firefox|FxiOS)\//.test(ua)) return 'firefox';
+  if(/(OPR|Opera)\//.test(ua)) return 'opera';
+  if(/(Chrome|CriOS)\//.test(ua)) return 'chrome';
+  if(/Safari\//.test(ua)) return 'safari';
+  return 'onbekend';
+}
+const PSD2_BROWSER_NAAM={edge:'Microsoft Edge', samsung:'Samsung Internet', firefox:'Firefox', opera:'Opera', chrome:'Chrome', safari:'Safari'};
+function psd2BrowserUitState(state){ const m=/^mind_([a-z]+)_/.exec(state||''); return m&&PSD2_BROWSER_NAAM[m[1]]||''; }
+function psd2Pogingen(){
+  let P={}; try{ P=JSON.parse(localStorage.getItem(PSD2_POGING_KEY)||'{}')||{}; }catch(_){ P={}; }
+  const grens=Date.now()-PSD2_POGING_MAX_UUR*3600e3;
+  for(const k in P){ if(!P[k]||!(P[k].op>grens)) delete P[k]; }
+  return P;
+}
+function psd2PogingZet(state, bank){
+  const P=psd2Pogingen(); P[state]={bank:bank||'', op:Date.now()};
+  try{ localStorage.setItem(PSD2_POGING_KEY, JSON.stringify(P)); }catch(_){}
+  try{ sessionStorage.setItem('psd2_state', state); }catch(_){}
+}
+function psd2PogingVan(state){
+  if(!state) return null;
+  const P=psd2Pogingen(); if(P[state]) return P[state];
+  let ss=null; try{ ss=sessionStorage.getItem('psd2_state'); }catch(_){}
+  return ss && ss===state ? {bank:'', op:Date.now()} : null;
+}
+function psd2PogingWeg(state){
+  const P=psd2Pogingen(); delete P[state];
+  try{ localStorage.setItem(PSD2_POGING_KEY, JSON.stringify(P)); }catch(_){}
+  try{ if(sessionStorage.getItem('psd2_state')===state) sessionStorage.removeItem('psd2_state'); }catch(_){}
+}
+/* De link staat alleen in het geheugen van deze sheet: hij komt uit de adresbalk die al is leeggemaakt, en
+   wordt nergens opgeslagen. Hij draagt de eenmalige code van de bank en verder niets. */
+function psd2AndereKopieSheet(link, state){
+  window._psd2AnderLink=link;
+  const br=psd2BrowserUitState(state);
+  const waar=br||'de browser waarin je Minder installeerde';
+  $('#sheet').innerHTML=`<div class="grab"></div><div data-anderekopie>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:8px">Koppeling niet afgerond</div>
+    <div class="small" style="line-height:1.5">Deze koppeling is gestart in een andere kopie van Minder. Open Minder via het app-icoon en kies daar 'vernieuwen'. Lukt dat niet, open deze link dan in <b data-anderebrowser>${esc(waar)}</b>.</div>
+    <div class="small muted" style="margin-top:8px">Er is hier niets opgeslagen: deze kopie heeft je gegevens en je toestemming niet aangeraakt.</div>
+    <div class="small" data-anderelink style="margin-top:10px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-inner);word-break:break-all;font-family:monospace">${esc(link)}</div>
+    <div class="row" style="gap:8px;margin-top:12px"><button class="btn" onclick="psd2AnderKopieer()">Link kopiëren</button><button class="btn sec" onclick="window._psd2AnderLink=null;closeSheet()">Sluiten</button></div>
+  </div>`; showSheetBg();
+}
+function psd2AnderKopieer(){
+  const l=window._psd2AnderLink||''; if(!l) return;
+  try{ navigator.clipboard.writeText(l).then(()=>toast('Link gekopieerd'),()=>toast('Kopiëren lukte niet')); }catch(_){ toast('Kopiëren lukte niet'); }
+}
 async function psd2HandleCallback(){
   const q=new URLSearchParams(location.search);
   const code=q.get('code'), state=q.get('state');
   if(!code) return;
-  const expect=sessionStorage.getItem('psd2_state');
+  const link=location.href;
   history.replaceState(null,'',location.origin+location.pathname);
-  if(expect && state && state!==expect){ toast('Sessie kwam niet overeen, probeer opnieuw'); return; }
+  if(!psd2PogingVan(state)){ psd2AndereKopieSheet(link, state); return; }
+  psd2PogingWeg(state);
   toast('Bankkoppeling afronden…');
   try{ const s=await psd2Api('/sessions',{ method:'POST', body:JSON.stringify({ code }) }); await psd2IngestSession(s); }
   catch(e){ toast('Fout bij afronden: '+e.message); }
@@ -25870,7 +25957,7 @@ async function psd2IngestSession(s){
     if(hash) for(const k in meta){ if(meta[k] && meta[k].hash===hash){ bekend=k; break; } }
     const accId = bekend || ibanNum(iban) || (hash?'psd2h_'+String(hash).slice(0,16):'psd2_'+String(uid).slice(0,8));
     const label = (a.name||a.product||'Rekening')+(iban?' ··'+iban.slice(-4):'');
-    meta[accId]={ uid, iban, hash, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'' };
+    meta[accId]={ uid, iban, hash, label, bank:aspspName, exp:(s.access&&s.access.valid_until)||'', sessie:s.session_id||'' };
     let cont=null, guard=0, txN=0, txFout='';
     do{
       const qs='?date_from='+fromStr+(cont?'&continuation_key='+encodeURIComponent(cont):'');
