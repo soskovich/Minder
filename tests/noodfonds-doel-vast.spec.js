@@ -134,22 +134,23 @@ test.describe('d · het staat er eerlijk bij', () => {
 
   test('Instellingen spreekt de maandkeuze niet tegen', async ({ page }) => {
     await boot(page);
-    // "Bufferdoel" zit in de sub-sheet Budget & doelen, niet op #s-set zelf
-    await page.evaluate(() => { setNfDoelVast(12000); openBudgetEditor(); });
+    // v374: het noodfondsdoel staat bij Spelregels onder Buffer, als een rij met zijn herkomst
+    await page.evaluate(() => { setNfDoelVast(12000); openSetSub('spelregels'); });
     await page.waitForTimeout(80);
-    const s = await page.locator('#sheet').innerText();
-    expect(s).toContain('Bufferdoel');
-    expect(s).toContain('de maandkeuze hierboven stuurt het niet');
-    expect(s).not.toMatch(/Doel nu: .* · \d+ mnd essentiële crisis-last/);
+    const s = await page.locator('#s-set [data-spelnoodfonds]').innerText();
+    expect(s).toContain('Noodfonds');
+    expect(s).toContain('door jou vastgezet');
+    expect(s).toContain('€12.000');
+    expect(s).not.toMatch(/maanden essentiële crisislast/);
   });
 
   test('zonder vast doel houdt Instellingen de oude formulering', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => openBudgetEditor());
+    await page.evaluate(() => openSetSub('spelregels'));
     await page.waitForTimeout(80);
-    const s = await page.locator('#sheet').innerText();
-    expect(s).toMatch(/mnd essentiële crisis-last/);
-    expect(s).not.toContain('de maandkeuze hierboven stuurt het niet');
+    const s = await page.locator('#s-set [data-spelnoodfonds]').innerText();
+    expect(s).toMatch(/maanden essentiële crisislast/);
+    expect(s).not.toContain('door jou vastgezet');
   });
 });
 

@@ -59,7 +59,7 @@ test.describe('c - geen zichtbare tekst noemt het scherm nog Maand', () => {
 
   test('in Instellingen, met de coachschakelaar open', async ({ page }) => {
     await open(page, seed());
-    const t = await page.evaluate(() => { go('set'); toggleSet('coach'); return document.querySelector('#s-set').innerText.replace(/\s+/g, ' '); });
+    const t = await page.evaluate(() => { go('set'); openSetSub('coach'); return document.querySelector('#s-set').innerText.replace(/\s+/g, ' '); });
     expect(t).toContain('in je meldingen en op Grip');
     expect(t).toContain('vanaf Inzichten, Plan en Grip');
     expect(t).not.toMatch(/\b(op|vanaf) Maand\b/);

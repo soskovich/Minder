@@ -90,7 +90,7 @@ test.describe('a · regressie: zonder override verandert er niets', () => {
 
   test('de bestaande aanroepplekken roepen zonder argument aan', async ({ page }) => {
     await boot(page);
-    const bronnen = await page.evaluate(() => [renderFire, fireOpKoers].map((f) => String(f)));
+    const bronnen = await page.evaluate(() => [renderFire].map((f) => String(f)));   // v374: fireOpKoers() is met de briefingexport verwijderd
     for (const src of bronnen) expect(src).toContain('reisModel()');
   });
 });

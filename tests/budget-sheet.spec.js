@@ -32,25 +32,15 @@ async function openEditor(page, payload) {
   await page.waitForSelector('#budgetSheetHead');
 }
 
-test('b · de limiet-slider werkt de sheet live bij', async ({ page }) => {
+test('b · de editor ververst live mee na een render', async ({ page }) => {
+  /* v374: de limiet-slider staat bij Spelregels; de editor draagt alleen de potjes. Wat deze test vasthoudt is de
+     hook: na een render() staat de sheet er nog en toont hij de nieuwe stand. */
   await openEditor(page);
-
-  expect(await sheetTxt(page)).toContain('Bestedingslimiet: 70%');
-
-  // de echte oninput-handler van de slider afvuren (SET.limit=..;save();render();)
-  await page.evaluate(() => {
-    const el = document.querySelector('#sheet input[type="range"].slider');
-    el.value = '50';
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-
-  // self-refresh via de hook in render(): de sheet blijft staan en toont de nieuwe waarden
+  expect(await sheetTxt(page)).not.toContain('Bestedingslimiet');
+  await page.evaluate(() => { SET.limit = 50; save(); render(); });
   const s = await sheetTxt(page);
-  expect(s).toContain('Bestedingslimiet: 50%');
-  expect(s).toContain('€1.500');                                               // Nu: 50% van 3000 besteden
-  expect(await page.evaluate(() => SET.limit)).toBe(50);
+  expect(s).toContain('€1.500');   // 50% van 3000, in de regel van je potjes tegen je limiet
   expect(await page.evaluate(() => document.querySelector('#sheetBg').classList.contains('show'))).toBe(true);
-  // de limiet blijft een meting: totals() leest hem nog
   expect(await page.evaluate(() => totals(kijkMaand()).limit)).toBe(1500);
 });
 
@@ -69,19 +59,16 @@ test('c · een categorie-potje behoudt focus tijdens typen', async ({ page }) =>
   expect(await page.evaluate(() => SET.budgets.shopping)).toBe(255);
 });
 
-test('d · Instellingen ▸ Budget & doelen opent dezelfde sheet, niet de accordeon', async ({ page }) => {
+test('d · Spelregels ▸ Budget aanpassen opent dezelfde sheet, en Spelregels draagt geen potjes', async ({ page }) => {
   await open(page, seed());
-  await page.evaluate(() => go('set'));
-  await page.locator('#s-set >> text=Budget & doelen').first().click();
+  await page.evaluate(() => openSetSub('spelregels'));
+  expect(await page.locator('#s-set').innerText()).not.toContain('Maandbudget per categorie');
+  await page.locator('#s-set >> text=Budget aanpassen ›').first().click();
   await page.waitForSelector(SHEET);
-
   const s = await sheetTxt(page);
   expect(s).toContain('Budget deze maand');
-  expect(s).toContain('Bestedingslimiet');
-  expect(await page.evaluate(() => window._budgetSheet)).toBeTruthy();
-  // de subtekst blijft op de rij staan, maar de editor klapt niet meer inline uit
-  expect(await page.locator('#s-set').innerText()).toContain('Je spaart');
-  expect(await page.locator('#s-set').innerText()).not.toContain('Bestedingslimiet');
+  expect(s).toContain('Maandbudget per categorie');
+  expect(await page.evaluate(() => window._budgetSheet)).toBe(await page.evaluate(() => thisYM()));
 });
 
 test('e · Klaar en de achtergrond sluiten de sheet en ruimen de vlag op', async ({ page }) => {
@@ -112,9 +99,9 @@ test('g · de hook overschrijft geen andere sheet', async ({ page }) => {
   await openVerdeling(page);
   await page.waitForSelector(SHEET);
 
-  await page.evaluate(() => { openInkomenSheet(); });               // andere sheet, zonder tussentijds sluiten
+  await page.evaluate(() => { openThema(); });                      // andere sheet, zonder tussentijds sluiten
   await page.evaluate(() => render());
   const s = await sheetTxt(page);
-  expect(s).toContain('Inkomen');
-  expect(s).not.toContain('Bestedingslimiet');
+  expect(s).toContain('Thema');
+  expect(s).not.toContain('Maandbudget per categorie');
 });

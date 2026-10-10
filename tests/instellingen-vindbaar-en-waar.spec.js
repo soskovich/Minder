@@ -24,42 +24,32 @@ function zonder(veranderingen) {
 }
 async function boot(page, payload) {
   await open(page, payload || seed());
-  await page.evaluate(() => { go('set'); toggleSet('bank'); });
+  await page.evaluate(() => { go('set'); openSetSub('bank'); });
   await page.waitForTimeout(60);
 }
 const setTekst = (page) => page.evaluate(() => $('#s-set').innerText.replace(/\s+/g, ' '));
 const bankPaneel = (page) => page.evaluate(() => setBank());
 
-test.describe('a · het bestandspad is vindbaar zonder easter egg', () => {
-  test('de drie ingangen staan in beeld zonder bankAdvTap', async ({ page }) => {
+/* v374: PSD2 IS DE BRON. Het bestandspad staat niet meer bij de bank maar onder Gegevens & privacy, bij Historie,
+   want een bestand is alleen nog voor de historie van gesloten rekeningen. Het blijft vindbaar zonder easter egg;
+   de map-koppeling heeft geen ingang meer in Instellingen (de tests over "Synchroniseer map" zijn daarmee weg). */
+test.describe('a · het bestandspad is vindbaar zonder easter egg, bij Historie', () => {
+  test('Oude transacties importeren staat onder Gegevens & privacy, niet bij de bank', async ({ page }) => {
     await boot(page);
-    expect(await page.evaluate(() => !!SET.advBank)).toBe(false);   // geavanceerd staat uit
-    const t = await setTekst(page);
-    expect(t).toContain('Bestand toevoegen');
-    expect(t).toMatch(/Of voeg een bestand toe/);
-    // Map koppelen verschijnt alleen waar de browser de File System Access API heeft
-    const fsa = await page.evaluate(() => FSA);
-    if (fsa) expect(t).toContain('Map koppelen');
-  });
-
-  test('met een gekoppelde map staat Synchroniseer map er ook zonder geavanceerd', async ({ page }) => {
-    await boot(page, zonder({ folderName: 'Bank-export' }));
     expect(await page.evaluate(() => !!SET.advBank)).toBe(false);
+    expect(await setTekst(page)).not.toMatch(/Bestand toevoegen|Map koppelen|Of voeg een bestand toe/);
+    await page.evaluate(() => openSetSub('gegevens'));
     const t = await setTekst(page);
-    expect(t).toContain('Synchroniseer map');
-    expect(t).toContain('Bank-export');
+    expect(t).toContain('Oude transacties importeren');
+    expect(t).toContain('MT940 (ABN) of CSV (N26) · voor gesloten rekeningen');
+    expect(await page.evaluate(() => document.querySelector('[data-historie]').getAttribute('onclick'))).toContain("getElementById('file').click()");
   });
 
-  test('de koppeling houdt de plek bovenaan en als enige het accent', async ({ page }) => {
+  test('de koppeling houdt het accent bij de bank', async ({ page }) => {
     await boot(page);
     const html = await bankPaneel(page);
-    const koppel = html.indexOf('Koppel je bank');
-    const bestand = html.indexOf('Of voeg een bestand toe');
-    expect(koppel).toBeGreaterThan(-1);
-    expect(bestand).toBeGreaterThan(koppel);          // tweede optie, niet de eerste
-    // de enige btn zonder sec is de koppelknop; het bestandspad is helemaal btn sec
-    const naBestand = html.slice(bestand);
-    expect(naBestand).not.toMatch(/class="btn"/);
+    expect(html).toContain('Bank toevoegen');
+    expect(html).not.toMatch(/Bestand toevoegen/);
   });
 
   test('backend-URL en app-token blijven achter Geavanceerd', async ({ page }) => {
@@ -97,33 +87,30 @@ test.describe('b · de koppelknop faalt niet stil zonder backend', () => {
 });
 
 test.describe('c · de bankstatus telt de vervaldatum mee', () => {
-  test('gekoppeld en geldig: groen paneel, geen aandachtskleur', async ({ page }) => {
+  test('gekoppeld en geldig: een kaart zonder aandachtskleur, en geen statusbalk', async ({ page }) => {
     await boot(page, metBank());
     const B = await page.evaluate(() => bankStand());
     expect(B).toMatchObject({ verlopen: false, sub: 'Je bank is gekoppeld', col: '' });
-    expect(await bankPaneel(page)).toContain('Bank gekoppeld');
+    expect(await bankPaneel(page)).toContain('data-rood="0"');
+    expect(await page.evaluate(() => { openSetSub(null); return !!document.getElementById('setStatus'); })).toBe(false);
   });
 
-  test('gekoppeld en verlopen: de subregel volgt het paneel, en krijgt de aandachtskleur', async ({ page }) => {
+  test('gekoppeld en verlopen: de kaart en de statusbalk zeggen het, niet "gekoppeld"', async ({ page }) => {
     await boot(page, metBank({ exp: Date.now() - DAG }));
     const B = await page.evaluate(() => bankStand());
     expect(B).toMatchObject({ verlopen: true, sub: 'Verbinding verlopen', col: 'var(--amber)' });
-    const t = await setTekst(page);
-    expect(t).toContain('Verbinding verlopen');
+    expect(await bankPaneel(page)).toContain('data-rood="1"');
+    expect(await bankPaneel(page)).toContain('Toestemming vernieuwen');
+    const t = await page.evaluate(() => { openSetSub(null); return $('#s-set').innerText.replace(/\s+/g, ' '); });
+    expect(t).toMatch(/Gegevens van ABN tot/);
     expect(t).not.toContain('Je bank is gekoppeld');
-    expect(await bankPaneel(page)).toContain('Verbinding verlopen');
   });
 
-  test('nog geen bank: grijs, niet amber', async ({ page }) => {
+  test('nog geen bank: geen kaart en geen balk', async ({ page }) => {
     await boot(page);
     const B = await page.evaluate(() => bankStand());
     expect(B).toMatchObject({ n: 0, verlopen: false, sub: 'Nog geen bank gekoppeld', col: '' });
-    // de staat waarin je iets moet doen is nu luider dan de staat waarin niets aan de hand is
-    const stil = await page.evaluate(() => bankStand().col);
-    await page.evaluate(() => {
-      SET.psd2Accounts = { a: { bank: 'X', label: 'Y', exp: new Date(Date.now() - 86400000).toISOString() } };
-    });
-    expect(await page.evaluate(() => bankStand().col)).not.toBe(stil);
+    expect(await page.evaluate(() => { openSetSub(null); return !!document.getElementById('setStatus'); })).toBe(false);
   });
 });
 
@@ -131,7 +118,7 @@ test.describe('d · de privacyregel volgt beide koppelingen', () => {
   test('niets aan: alles blijft op dit toestel', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => privacySub())).toBe('Alles blijft op dit toestel');
-    expect(await page.evaluate(() => setPrivacy())).toContain('geen van beide aan');
+    expect(await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = setPrivacy(); return d.innerText; })).toMatch(/^Waar staat je data[^\n]*\s*lokaal ·/);
   });
 
   test('alleen de bankkoppeling', async ({ page }) => {
@@ -155,26 +142,26 @@ test.describe('d · de privacyregel volgt beide koppelingen', () => {
     expect(t).not.toContain('Alles blijft op dit toestel');
   });
 
-  test('de paneeltekst noemt allebei als uitzondering', async ({ page }) => {
+  test('de uitleg achter de ⓘ noemt allebei als uitzondering', async ({ page }) => {
     await boot(page);
-    const t = await page.evaluate(() => setPrivacy());
-    expect(t).toContain('live bankkoppeling');
+    const t = await page.evaluate(() => NOTES.datalokaal);
+    expect(t).toContain('bankkoppeling');
     expect(t).toContain('AI-coach');
-    expect(t).not.toContain('Niets gaat naar een server (behalve');
+    expect(await page.evaluate(() => setPrivacy())).toContain("showTip(event,'datalokaal')");
   });
 });
 
 test.describe('e · de AI-coach zegt wat er verandert, niet hoe je het bouwt', () => {
-  /* v182: de schakelaar is naar Bankkoppeling verhuisd, bij de backend-URL waarop hij draait.
-     Wat deze test bewaakt is onveranderd: hij zegt wat er verandert, niet hoe je het bouwt. */
-  test('de schakelaar staat bij zijn configuratie, zonder bouwinstructie', async ({ page }) => {
+  /* v374: de schakelaar staat een keer, bij Coach & weergave; de uitleg zit achter de ⓘ. De bouwinstructie en het
+     modelveld blijven bij de backend-URL onder Geavanceerd. */
+  test('de schakelaar staat bij de coach, zonder bouwinstructie', async ({ page }) => {
     await open(page, zonder({ aiCoach: true }));
-    const t = await page.evaluate(() => setBank());
+    const t = await page.evaluate(() => setCoachWeergave() + NOTES.aicoach);
     expect(t).toContain('AI-coach');
     expect(t).toMatch(/coach-tekst gaat naar je eigen backend/);
     expect(t).not.toContain('/coach');
     expect(t).not.toMatch(/LLM-key|secret/);
-    expect(t).not.toContain('claude-3-5-haiku-latest');   // het modelveld staat bij de backend
+    expect(t).not.toContain('claude-3-5-haiku-latest');
   });
 
   test('de instructie en het modelveld staan bij de backend-URL', async ({ page }) => {
@@ -183,14 +170,7 @@ test.describe('e · de AI-coach zegt wat er verandert, niet hoe je het bouwt', (
     expect(t).toContain('Backend-URL');
     expect(t).toContain('/coach');
     expect(t).toMatch(/LLM-key/);
-    expect(t).toContain('Model (optioneel)');
-  });
-
-  test('aan zonder backend zegt de app dat de lokale coach aan het woord blijft', async ({ page }) => {
-    await open(page, zonder({ aiCoach: true, psd2Url: '', psd2Token: '' }));
-    expect(await page.evaluate(() => setBank())).toContain('nog niet ingesteld');
-    await open(page, zonder({ aiCoach: true, psd2Url: 'https://x.workers.dev', psd2Token: 't' }));
-    expect(await page.evaluate(() => setBank())).toContain('Die staat ingesteld');
+    expect(t).toContain('AI-model (optioneel)');
   });
 });
 
@@ -207,25 +187,25 @@ test.describe('f · onbekend blijft onbekend in de subregels', () => {
     await page.evaluate(() => go('set'));
     await page.waitForTimeout(80);
     const t = await setTekst(page);
-    expect(t).not.toContain('Je spaart €0 per maand');
-    expect(t).not.toContain('Je ontvangt €0 per maand');
-    expect(t).toContain('Je spaarinleg is nog onbekend');
-    expect(t).toContain('Je inkomen is nog onbekend');
+    expect(t).not.toContain('sparen €0');
+    expect(t).not.toContain('€0 per maand');
+    expect(t).toContain('sparen nog onbekend');
+    expect(t).toContain('je inkomen is nog onbekend');
   });
 
   test('met inkomen staan de bedragen er gewoon', async ({ page }) => {
     await open(page, seed());
     await page.evaluate(() => go('set'));
     const t = await setTekst(page);
-    expect(t).toMatch(/Je ontvangt €3\.000 per maand/);
-    expect(t).toMatch(/Je spaart €\d/);
+    expect(t).toMatch(/€3\.000 per maand/);
+    expect(t).toMatch(/sparen €\d/);
   });
 
   test('rekeningen zonder bekend saldo: saldo onbekend, geen €0,00 totaal', async ({ page }) => {
     await boot(page, zonder({ manualBal: {} }));
     expect(await page.evaluate(() => totalBalance().known)).toBe(0);
-    const t = await page.evaluate(() => setIncome());
-    expect(t).toContain('saldo onbekend');
-    expect(t).not.toContain('€0,00 totaal');
+    const t = await page.evaluate(() => setBank());
+    expect(t).not.toContain('data-rektotaal');   // geen totaal van €0,00 zonder een bekend saldo
+    expect(t).not.toContain('€0,00');
   });
 });

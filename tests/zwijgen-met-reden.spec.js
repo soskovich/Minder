@@ -152,18 +152,9 @@ test.describe('d - de verbergen-instelling is niet de oorzaak', () => {
     expect(aan).toBe(uit);
   });
 
-  test('hij filtert alleen de weergave van de rekeningenlijst', async ({ page }) => {
-    await bootVast(page, deelOnbekend());
-    const r = await page.evaluate(() => {
-      const a = { own: OWN.length, alle: allAccounts().length, zicht: zichtbareRek().length };
-      SET.toonLegeRek = true; save();
-      const b = { own: OWN.length, alle: allAccounts().length, zicht: zichtbareRek().length };
-      return { a, b };
-    });
-    expect(r.a.own).toBe(r.b.own);
-    expect(r.a.alle).toBe(r.b.alle);
-    expect(r.b.zicht).toBe(r.a.zicht + 1);   // alleen de lijst wordt langer
-  });
+  /* v374: SET.toonLegeRek heeft geen lezer meer (de verberg-schakelaar is opgegaan in gesloten rekeningen), dus de
+     test die meet dat hij alleen de lijst langer maakt is weg; de test hierboven houdt vast dat een achtergebleven
+     waarde niets verandert. */
 });
 
 test.describe('e - een rekening zonder boekingen raakt dit niet', () => {

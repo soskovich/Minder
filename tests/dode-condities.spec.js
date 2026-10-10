@@ -158,7 +158,7 @@ test.describe('e · posten zonder invoerkanaal', () => {
     expect(await page.evaluate(() => financeModel().projection.setAside)).toBe(0);
   });
 
-  test('stsBuffer staat niet meer in de briefingexport', async ({ page }) => {
+  test('stsBuffer staat nergens meer, ook niet in een export', async ({ page }) => {
     await boot(page);
     const treffers = await page.evaluate((kj) => {
       const kaal = eval(kj);   // v309: de gedeelde strip, geinjecteerd (een sweep kent geen namen)
@@ -172,8 +172,8 @@ test.describe('e · posten zonder invoerkanaal', () => {
       return uit;
     }, KAAL_JS);
     expect(treffers).toEqual([]);
-    // de lezer rekent nu rechtstreeks met nul, met dezelfde uitkomst als altijd
-    expect(await bron(page, '_signaalSafeToSpend')).toMatch(/rest>0/);
+    // v374: de briefingexport is verwijderd, dus _signaalSafeToSpend() bestaat niet meer
+    expect(await page.evaluate(() => typeof window._signaalSafeToSpend)).toBe('undefined');
   });
 
   /* irregularIncome blijft bewust staan: vakantiegeld en de dertiende maand zijn concrete bedragen

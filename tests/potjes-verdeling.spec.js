@@ -159,13 +159,13 @@ test.describe('d · bewerken blijft waar het was', () => {
     await openVerdeling(page);
     await page.locator('#sheet >> text=Potjes en limiet instellen').click();
     await page.waitForSelector('#budgetSheetHead');
-    expect(await sheetTxt(page)).toContain('Bestedingslimiet');
+    expect(await sheetTxt(page)).toContain('Maandbudget per categorie');   // v374: de editor draagt de potjes
     expect(await page.evaluate(() => window._budgetSheet)).toBe(CUR);
 
     await openVolgende(page);
     await page.locator('#sheet >> text=Potjes en limiet instellen').click();
     await page.waitForSelector('#budgetSheetHead');
-    expect(await sheetTxt(page)).toContain('Bestedingslimiet');
+    expect(await sheetTxt(page)).toContain('Maandbudget per categorie');
   });
 });
 

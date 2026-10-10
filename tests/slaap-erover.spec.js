@@ -206,12 +206,12 @@ test.describe('f - de vraag komt precies een keer per aankoop', () => {
   });
 });
 
-test.describe('g - de instelling staat bij Budget & doelen', () => {
+test.describe('g - de instelling staat bij Spelregels', () => {
   test('een veld met een regel die zegt wat het doet', async ({ page }) => {
     await open(page, metDrempel(null));
-    // v180: Budget & doelen opent als sheet via openBudgetEditor()
-    await page.evaluate(() => { go('set'); openBudgetEditor(); });
-    const paneel = await page.locator('#sheet').innerText();
+    // v374: de instelling staat bij Spelregels
+    await page.evaluate(() => { openSetSub('spelregels'); });
+    const paneel = await page.locator('#s-set').innerText();
     expect(paneel).toContain('Nachtje over slapen vanaf');
     expect(paneel).toContain('Boven dit bedrag stelt de koopcheck voor om er een nacht over te slapen');
     expect(paneel).toContain('parkeren tot morgen');
@@ -219,8 +219,8 @@ test.describe('g - de instelling staat bij Budget & doelen', () => {
 
   test('het veld schrijft SET.slaapDrempel en de check volgt', async ({ page }) => {
     await open(page, metDrempel(null));
-    await page.evaluate(() => { go('set'); openBudgetEditor(); });
-    const inp = page.locator('#sheet input[oninput*="slaapDrempel"]');
+    await page.evaluate(() => { openSetSub('spelregels'); });
+    const inp = page.locator('#s-set input[oninput*="slaapDrempel"]');
     await expect(inp).toHaveCount(1);
     await inp.fill('40');
     expect(await page.evaluate(() => [SET.slaapDrempel, slaapDrempel(), slaapVoorstel(45)])).toEqual([40, 40, true]);
@@ -232,8 +232,8 @@ test.describe('g - de instelling staat bij Budget & doelen', () => {
     test(`het veld past op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 800 });
       await open(page, metDrempel(null));
-      await page.evaluate(() => { go('set'); openBudgetEditor(); });
-      await page.waitForSelector('#sheet input[oninput*="slaapDrempel"]');
+      await page.evaluate(() => { openSetSub('spelregels'); });
+      await page.waitForSelector('#s-set input[oninput*="slaapDrempel"]');
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
   }

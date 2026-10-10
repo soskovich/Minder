@@ -152,14 +152,14 @@ test.describe('d · het Uiterlijk-scherm', () => {
      onbereikbaar: openSet() kent alleen 'income' en 'bank'. Zelfde paneel, ander omhulsel. */
   test('toont de thema-kaarten met preview en markeert de actieve', async ({ page }) => {
     await boot(page, 'set');
-    await page.evaluate(() => toggleSet('look'));
+    await page.evaluate(() => openThema());   // v374: het thema kies je in een sheet vanuit Coach & weergave
     await page.waitForSelector('[data-theme-card]');
     const kaarten = page.locator('[data-theme-card]');
     expect(await kaarten.count()).toBe(3);
     for (const k of ['prive', 'aurora', 'standaard']) {
       await expect(page.locator(`[data-theme-card="${k}"]`)).toHaveCount(1);
     }
-    const sheet = await page.locator('#s-set').innerText();
+    const sheet = await page.locator('#sheet').innerText();
     expect(sheet).toContain('Privé');
     expect(sheet).toContain('Neo-Dark Aurora');
     expect((sheet.match(/actief/g) || []).length).toBe(1);             // precies één actief
@@ -167,14 +167,15 @@ test.describe('d · het Uiterlijk-scherm', () => {
     // tik = live wisselen, en de sheet toont de nieuwe keuze
     await page.locator('[data-theme-card="prive"]').click();
     expect(await attr(page)).toBe('prive');
-    await page.waitForFunction(() => /Privé[\s\S]*actief/.test(document.getElementById('s-set').innerText));
-    expect((await page.locator('#s-set').innerText()).match(/actief/g).length).toBe(1);
+    await page.waitForFunction(() => /Privé[\s\S]*actief/.test(document.getElementById('sheet').innerText));
+    expect((await page.locator('#sheet').innerText()).match(/actief/g).length).toBe(1);
   });
 
-  test('Uiterlijk staat als eigen rij in Instellingen', async ({ page }) => {
+  test('het thema staat als rij in Coach & weergave, en in de stand op het hoofdscherm', async ({ page }) => {
     await boot(page, 'set');
-    const t = await page.locator('#s-set').innerText();
-    expect(t).toContain('Uiterlijk');
-    expect(t).toContain('Standaard');                                  // de huidige keuze als subregel
+    const t = await page.evaluate(() => { openSetSub(null); return $('#s-set').innerText; });
+    expect(t).toMatch(/Coach & weergave\s*.*Standaard/);              // de huidige keuze in de grijze stand
+    await page.evaluate(() => openSetSub('coach'));
+    expect(await page.locator('#s-set [data-thema]').innerText()).toContain('Standaard');
   });
 });

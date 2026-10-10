@@ -82,7 +82,7 @@ test.describe('a - één lijst uit één bron', () => {
     await boot(page);
     const maand = await page.evaluate(() => { go('maand'); return document.querySelector('#s-maand').innerText.replace(/\s+/g, ' '); });
     expect(maand).not.toMatch(/abonnement/i);
-    const set = await page.evaluate(() => { go('set'); toggleSet('trans'); return document.querySelector('#s-set').innerText.replace(/\s+/g, ' '); });
+    const set = await page.evaluate(() => { go('set'); openSetSub('herkenning'); return document.querySelector('#s-set').innerText.replace(/\s+/g, ' '); });
     expect(set).toContain('Vaste lasten');
     expect(set).toContain('4 herkend');
     expect(/subsCard/.test(await kaalUit(page, 'renderMaand'))).toBe(false);

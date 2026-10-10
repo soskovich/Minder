@@ -90,7 +90,7 @@ test.describe('b · de melding', () => {
     const h = await page.evaluate(() => rekOverlapRegel());   // v183: de regel staat los van de lijst
     expect(h).toContain('dezelfde boekingen');
     expect(h).toContain('openRekOverlap()');
-    await page.evaluate(() => { go('set'); toggleSet('bank'); });   // v183: de overlapregel blijft hier
+    await page.evaluate(() => { go('set'); openSetSub('bank'); });   // v183: de overlapregel blijft hier
     await page.locator('#s-set >> text=dezelfde boekingen').first().click();
     await page.waitForSelector('#sheetBg.show');
     const sheet = await page.locator('#sheet').innerText();
@@ -102,7 +102,7 @@ test.describe('b · de melding', () => {
   test('geen overlap: geen regel', async ({ page }) => {
     await boot(page, seed({ zelfde: false }));
     expect(await page.evaluate(() => rekOverlapRegel())).toBe('');
-    const t = await page.evaluate(() => { go('set'); toggleSet('bank'); return document.getElementById('s-set').innerText; });
+    const t = await page.evaluate(() => { go('set'); openSetSub('bank'); return document.getElementById('s-set').innerText; });
     expect(t).not.toContain('dezelfde boekingen');
   });
 

@@ -61,7 +61,9 @@ function seed(opt) {
         [IBANID]: { uid: 'uid-iban', iban: 'DE89370400449876543210', label: 'Spaarpot ··3210', bank: 'N26', exp: '2027-03-01' },
       },
       psd2LastSync: Date.now() - 3 * 86400000, psd2Url: 'https://x.workers.dev', psd2Token: 't' }),
-    minder_own: '[]', minder_accmeta: '{}', minder_plan: '{}' };
+    // v374: PSD2 is de bron; de saldo's van gekoppelde rekeningen staan daarom ook in ACCMETA, waar de koppeling
+    // ze neerzet. SET.manualBal blijft staan voor wat niet gekoppeld is, en telt bij een gekoppelde rekening niet.
+    minder_own: '[]', minder_accmeta: JSON.stringify({ [N26M]: { balance: 300, date: '2026-09-30' } }), minder_plan: '{}' };
 }
 async function boot(page, opt) {
   await page.route('**/sw.js', (r) => r.abort());
@@ -105,7 +107,7 @@ test.describe('a - een rekening met boekingen maar zonder saldo valt uit de lijs
         zonderSaldo: OWN.filter((x) => accBalance(x) == null),
         tb: (function () { const b = totalBalance(); return { sum: Math.round(b.sum), known: b.known, missing: b.missing }; })() }; });
     expect(r.inOWN).toBe(true);
-    expect(r.zichtbaar).toBe(false);
+    expect(r.zichtbaar).toBe(true);   // v374: een actieve rekening zonder saldo staat in de lijst; alleen gesloten valt eruit
     /* v281: de fixture kreeg er een rekening bij voor de hash-resolutie, en die draagt een saldo van 0.
        De eigenschap die hier telt is dat de Space als `missing` uit de SOM valt terwijl hij in OWN zit,
        en die staat los van hoeveel rekeningen er verder zijn. Vandaar de identiteit in plaats van drie
@@ -127,28 +129,22 @@ test.describe('a - een rekening met boekingen maar zonder saldo valt uit de lijs
     expect(regel('in OWN:')).toBe('in OWN:             ja');
     expect(regel('in totalBalance():')).toBe('in totalBalance():  telt als missing, NIET in de som');
     expect(regel('in safeToSpend():')).toBe('in safeToSpend():   telt als missing, NIET in de som');
-    expect(regel('in de lijst:')).toBe('in de lijst:        NEE, verborgen door zichtbareRek()');
+    expect(regel('in de lijst:')).toBe('in de lijst:        ja');
     expect(regel('saldo:')).toContain('ONBEKEND');
   });
 
-  test('met SET.toonLegeRek aan staat hij wel in de lijst, en geen enkel cijfer beweegt', async ({ page }) => {
+  /* v374: SET.toonLegeRek is vervallen; wat een rekening uit de lijst haalt is dat hij gesloten is. Zonder saldo
+     beweegt er dan geen cijfer, en het blok zegt het per rekening. */
+  test('als gesloten gemarkeerd valt hij uit de lijst, en zonder saldo beweegt er geen cijfer', async ({ page }) => {
     await boot(page);
-    const uit = await page.evaluate(() => ({ zicht: zichtbareRek().length, lijst: zichtbareRek().slice(),
-      sum: Math.round(totalBalance().sum), safe: Math.round(safeToSpend().safe || 0) }));
-    await boot(page, { toonLege: true });
-    const aan = await page.evaluate((v) => ({ zicht: zichtbareRek().length,
-      erbij: zichtbareRek().filter((x) => v.indexOf(x) < 0),
-      zonderSaldo: OWN.filter((x) => accBalance(x) == null),
-      sum: Math.round(totalBalance().sum),
-      safe: Math.round(safeToSpend().safe || 0), tekst: REGELS_() }), uit.lijst);
-    /* v281: bind op het VERSCHIL en op WELKE rekening erbij komt, niet op twee absolute tellingen. Die
-       twee schuiven mee met elke rij die de fixture erbij krijgt, terwijl de eigenschap is dat de
-       schakelaar precies de rekeningen zonder saldo toevoegt en geen enkel cijfer beweegt. */
-    expect(aan.zicht - uit.zicht).toBe(aan.zonderSaldo.length);
-    expect(aan.erbij).toContain('psd2h_ab12cd34ef56');
-    expect(aan.sum).toBe(uit.sum);      // de schakelaar is weergave, geen berekening (v146)
+    const uit = await page.evaluate(() => ({ lijst: zichtbareRek().slice(), sum: Math.round(totalBalance().sum), safe: Math.round(safeToSpend().safe || 0) }));
+    const aan = await page.evaluate(() => { SET.rekGesloten = { psd2h_ab12cd34ef56: { op: vandaagYMD() } };
+      return { lijst: zichtbareRek().slice(), sum: Math.round(totalBalance().sum), safe: Math.round(safeToSpend().safe || 0), tekst: REGELS_() }; });
+    expect(uit.lijst).toContain('psd2h_ab12cd34ef56');
+    expect(aan.lijst).not.toContain('psd2h_ab12cd34ef56');
+    expect(aan.sum).toBe(uit.sum);
     expect(aan.safe).toBe(uit.safe);
-    expect(aan.tekst).toContain('in de lijst:        ja');
+    expect(aan.tekst).toContain('in de lijst:        NEE, gesloten (alleen historie)');
   });
 
   test('een gekoppelde rekening zonder boekingen valt buiten OWN en staat er als zodanig', async ({ page }) => {

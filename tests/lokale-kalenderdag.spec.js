@@ -62,11 +62,13 @@ test.describe('a · elke toISOString gaat naar buiten', () => {
     expect(fout.map((v) => `regel ${v.nr}: ${v.regel.slice(0, 90)}`)).toEqual([]);
   });
 
-  test('beide bestemmingen komen echt voor', async () => {
-    // een bestemming die nergens voorkomt dekt niets af; dan is de test stiller dan hij lijkt
+  test('de bestemming komt echt voor', async () => {
+    // een bestemming die nergens voorkomt dekt niets af; dan is de test stiller dan hij lijkt.
+    // v374: de briefingexport (gegenereerd_op) is verwijderd, dus het uitwisselingsformaat komt niet meer voor;
+    // de herkenning ervan blijft in bestemming() staan voor een volgende export.
     const naar = voorkomens().map((v) => v.naar);
     expect(naar).toContain('api-parameter');
-    expect(naar).toContain('uitwisselingsformaat');
+    expect(naar).not.toContain('uitwisselingsformaat');
   });
 
   /* Het gat waardoor de v177-correctie onvolledig bleef: daar is alleen gezocht op de vorm zonder

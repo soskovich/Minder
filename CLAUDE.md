@@ -6,7 +6,8 @@
 
 ## Wat dit is
 **Minder** is een single-file PWA voor het bijhouden van uitgaven, budgetten en liquiditeit.
-Je importeert **MT940 (ABN AMRO)** en **N26 CSV**; alles wordt **lokaal in de browser** geparsed en opgeslagen. **Niets verlaat het apparaat** — dat privacymodel is de kern.
+Saldo's en boekingen komen uit de **bankkoppeling (PSD2)**; **MT940 (ABN AMRO)** en **N26 CSV** zijn sinds `v374`
+alleen nog voor de historie van gesloten rekeningen. Alles wordt **lokaal in de browser** verwerkt en opgeslagen. **Niets verlaat het apparaat** — dat privacymodel is de kern.
 
 Naast Minder bestaan de zusterprojecten **Worden** (mentale gezondheid) en **Dragen** (lichamelijke gezondheid). Die horen in hun eigen mappen; verwar hun concepten niet met deze code.
 
@@ -19,8 +20,8 @@ iconen) laat `ls` je zien. Twee dingen die je daar niet aan afleest:
   en hoort niet in `index.html`; de app kan zonder. Een losse variant hiervan voor de grendel heeft
   kort bestaan en is bij `v244` weer verdwenen: op een telefoon is er geen console, dus die meting
   zit nu in de app zelf (`DIAG_BLOKKEN`). Twee kopieën van dezelfde uitlezing zouden uiteenlopen.
-- `Open-banking-koppeling-plan.md` is een **referentieplan**, geen gebouwde koppeling. De
-  MT940/CSV-import blijft de basis; lees het niet als beschrijving van werkende code.
+- `Open-banking-koppeling-plan.md` is een **referentieplan**. De koppeling zelf is inmiddels gebouwd en sinds `v374`
+  de bron; lees het plan niet als beschrijving van de werkende code.
 - `ACCMETA[acc]` draagt naast `balance` ook `date`: de dag waarop dat saldo gold (`v198`). Dat veld
   bestond lang zonder lezer. Ga er niet van uit dat een saldo en de transacties eromheen uit
   hetzelfde moment komen: bij een koppeling wel, bij handmatige invoer of een import niet.
@@ -111,7 +112,8 @@ op in horizon (`v233`): Home, Inzichten, Plan, Grip.
   doel waarvan de streefdatum in deze volgorde niet haalbaar is draagt een waarschuwing (`data-planwaarschuwing`).
   Bind op `.plan-item[data-id]`.
 
-Daarnaast bestaan `tx` (Transacties), `vermogen` en `set` (Instellingen). Die dragen geen
+Daarnaast bestaan `tx` (Transacties), `vermogen` en `set` (Instellingen; sinds `v374` zes subpagina's voor wat je
+zelden wijzigt, het maandwerk staat op Grip). Die dragen geen
 horizon en zijn alleen via knoppen bereikbaar, dus zet er niets op wat een van de vier hoort
 te beantwoorden. Vermogen draagt sinds `v232` wel de spaarquote (`maandKpiBlok()`, op de laatste
 afgeronde maand): dat is de instroom van de vermogenslaag, geen oordeel over de maand.
@@ -123,6 +125,45 @@ ene staat en op het andere niet.
 ## Staande regels
 *(De redenering, de gemeten aanleiding en de valkuil per regel staan in `BESLISSINGEN.md` onder de
 genoemde versietag.)*
+- **PSD2 IS DE BRON, BESTANDEN ZIJN HISTORIE, EN INSTELLINGEN ZIJN ZES SUBPAGINA'S** (`v374`, gevraagd door de
+  gebruiker, mockup "Minder instellingen"). HOOFDSCHERM (`renderSet()`, `SET_SUBS`, `openSetSub(id)`, `setTerug()`,
+  `window._setSub`): Inkomen, Bank & rekeningen, Spelregels, Herkenning, Coach & weergave, Gegevens & privacy
+  (`data-setrij`), elk met de huidige stand in grijs; geen uitklapblokken meer (`toggleSet()` en `SET.setOpen` zijn weg).
+  DE STATUSBALK (`setStatusbalk()`, `setMeldingen()`, `#setStatus`) staat er ALLEEN bij een melding: een koppeling die
+  binnen `BANK_VERVAL_DAGEN` (14) verloopt of verlopen is (rood, "ABN-toestemming verloopt over N dagen · vernieuwen ›"
+  of "Gegevens van ABN tot <datum> · opnieuw koppelen ›") en open paren uit `dubbelParen()` (amber, "N mogelijke
+  dubbele boekingen · bekijk ›"). `bankVerval()` is de ENE bron (statusbalk, bankkaart, Home `bankVervalHero()`,
+  `data-bankverval`). De voetregel leest de versie uit de naam van de actieve cache (`setVersie()`), dus `CACHE` in
+  `sw.js` blijft de enige versiestring.
+  PSD2 ALS BRON: `psd2Rek(acc)` is de toets; `accBalance()` en `accBalanceDatum()` slaan `SET.manualBal` over voor een
+  gekoppelde rekening (de waarde blijft bewaard), `setBal()` schrijft er niets, en de rekeningenlijst
+  (`accountsCard()`) toont dat saldo alleen-lezen. Alleen Contant voer je zelf in (`data-contantrij`, `contantTellen()`).
+  De kop "Rekeningen · EUR X" (`data-rektotaal`) is `totalBalance().sum`, dezelfde bron als "Totaal saldo" op Home.
+  Spaarrekening is een label met een schakelaar in de sheet van de rekening (`acctRenameOpen()`, `data-spaartoggle`).
+  GESLOTEN REKENINGEN (`SET.rekGesloten`, `rekGesloten()`, `rekActief()`): niet in `totalBalance()`, `n26SavingsAccounts()`
+  (spaarsaldo), `accountShortfalls()` (prognose), `saldoAchter()` en `openBalances()`; wel in alles wat TX leest. De app
+  stelt voor (`rekGeslotenKandidaten()`: geen boeking in `REK_GESLOTEN_DAGEN` 90 dagen, niet via PSD2, niet op
+  `SET.rekOpen`), de sheet (`openRekGesloten()`) heeft niets aangevinkt, "Alle N als gesloten markeren" en het gevolg
+  vooraf (`rekGeslotenGevolg()`, in het geheugen); "niet gesloten" (`rekNietGesloten()`) zet terug.
+  IMPORT (`importVoorstel()`, `importToepassen()`, `openImportVoorstel()`): slaat over wat `csvDubbel()` of `mt940Dubbel()`
+  op een tijdelijke stand gedekt noemt, met "X boekingen nieuw · Y overgeslagen (al via de bank)" voor het bevestigen;
+  een saldo uit een bestand voor een gekoppelde rekening wordt niet overgenomen. De ingang staat bij Gegevens & privacy
+  onder Historie; "Map koppelen" en "Bestand toevoegen" staan niet meer bij de bank.
+  SPELREGELS (`setSpelregels()`): limiet "70% · EUR X" met "je budget EUR Y · EUR Z ruimte" (`spelLimietRegel()`, uit
+  `monthBudget(baseIncome())` en `totalBudget()`), limietmodel, nachtje over slapen; sparen, meevallers, rente; buffer als
+  drie rijen (noodfondsdoel, ondergrens `bufferNorm()`, buffer voor beleggen `beleggenDrempel()`); onderaan "Budget
+  aanpassen ›". De budgeteditor (`setBudget()`) draagt alleen nog de potjes. `SET.buffer` is VERVALLEN: `noodbuffer()`
+  (de coach-grens voor stilstaand spaargeld) leest `noodfondsModel().doel`, en `monthLiquidity()` draagt geen `buffer`
+  en `shortfall` meer.
+  VERHUISD: de Vermogensreis-aannames openen als sheet op het Vermogensreis-scherm (`goFireAannames()`,
+  `renderFireAannamesSheet()`); dubbele paren en reserveringen met een vrijgave zijn afsluittaken op Grip
+  (`afsluitPunten()`, punten `dubbel` en `voraut`) en staan om te herzien in Herkenning. VERWIJDERD: de knop "Dubbele
+  transacties opruimen" (`cleanupDuplicates()`, `confirmCleanupDuplicates()`; `findDuplicateIds()` blijft voor de
+  diagnose), de briefingexport naar een CommandCenter-map (`minderBriefingState()`, `fireOpKoers()`, vier `_signaal*`,
+  `bouwMinderBriefingPayload()`, `kiesMinderExportMap()`, `exporteerMinderSignalen()`, de export bij openen),
+  "Interne overboekingen verbergen" (`SET.hideInternal`, zonder lezer, `v257`), de dubbele AI-coachblokken (de AI-coach
+  staat een keer, in Coach & weergave, `data-aicoach`) en de verberg-schakelaar voor rekeningen zonder saldo (`v146`;
+  dat zijn nu gesloten rekeningen). Spec `instellingen-psd2.spec.js`.
 - **EEN PLEK VOOR HET BEDRAG PER DOEL: DE MODUS IS UIT DE DOEL-EDITOR** (`v373`, gevraagd door de gebruiker). De editor houdt
   naam, doelbedrag, streefdatum, stand en pauze (`data-goalpauze`), en draagt een regel die je alleen leest: "Krijgt EUR X/mnd
   · op volgorde | zelf verdeeld · verdeling aanpassen ›" (`goalKrijgtRegel()`, `data-goalkrijgt`, uit `allocatePlan()`), die
@@ -6886,7 +6927,7 @@ sweep die geen namen kan meegeven. Nooit `fn.toString()` rechtstreeks in een `to
 assertie groen te houden. `bron-kaal.spec.js` verbiedt een tweede strip.
 
 Elke wijziging: `check.js` groen, de Playwright-harness in `tests/` groen, en een nieuwe `tests/<onderwerp>.spec.js` voor elke nieuwe regel of invariant. Meet layout op 360 en 390px. Raakt de wijziging de cache of de SW-`ASSETS`, hoog dan `CACHE` in `sw.js` op
-(`minder-v373` → `minder-v374`, en zo verder). Dit is de enige plek waar die regel staat.
+(`minder-v374` → `minder-v375`, en zo verder). Dit is de enige plek waar die regel staat.
 
 **SABOTEER MET `tools/sabotage.py`, EN DE COMMIT CONTROLEERT DE BRON** (`v364`, gevraagd door de gebruiker na de
 vierde keer dat een afgebroken runner een sabotage liet staan: `v300`, `v315`, `v337`, `v363`). De runner leest een plan
@@ -6922,7 +6963,7 @@ de lege stand) en bumpt door naar `minder-v311`. `v312` raakt alleen `CLAUDE.md`
 `minder-v311` rechtstreeks naar `minder-v313`. `v314` raakt app-code en bumpt gewoon door naar
 `minder-v314`, `v315` net zo naar `minder-v315`, `v316` naar `minder-v316`, `v317` naar
 `minder-v317`, `v318` naar `minder-v318`, `v319` naar `minder-v319`, `v320` naar `minder-v320`, `v321` naar
-`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372` en `v373` naar `minder-v373`.
+`minder-v321`, `v322` naar `minder-v322`, `v323` naar `minder-v323`, `v324` naar `minder-v324`, `v325` naar `minder-v325`, `v326` naar `minder-v326`, `v327` naar `minder-v327`, `v328` naar `minder-v328`, `v329` naar `minder-v329`, `v330` naar `minder-v330`, `v331` naar `minder-v331`, `v332` naar `minder-v332`, `v333` naar `minder-v333`, `v334` naar `minder-v334`, `v335` naar `minder-v335`, `v336` naar `minder-v336`, `v337` naar `minder-v337`, `v338` naar `minder-v338`, `v339` naar `minder-v339`, `v340` naar `minder-v340`, `v341` naar `minder-v341`, `v342` naar `minder-v342` `v343` naar `minder-v343`, `v344` naar `minder-v344`, `v345` naar `minder-v345`, `v346` naar `minder-v346`, `v347` naar `minder-v347`, `v348` naar `minder-v348`, `v349` naar `minder-v349`, `v350` naar `minder-v350`, `v351` naar `minder-v351`, `v352` naar `minder-v352`, `v353` naar `minder-v353`, `v354` naar `minder-v354`, `v355` naar `minder-v355`, `v356` naar `minder-v356`, `v357` naar `minder-v357`, `v358` naar `minder-v358`, `v359` naar `minder-v359`, `v360` naar `minder-v360`, `v361` naar `minder-v361`, `v362` naar `minder-v362`, `v363` naar `minder-v363`, `v364` naar `minder-v364`, `v365` naar `minder-v365`, `v366` naar `minder-v366`, `v367` naar `minder-v367`, `v368` naar `minder-v368`, `v369` naar `minder-v369`, `v370` naar `minder-v370`, `v371` naar `minder-v371`, `v372` naar `minder-v372`, `v373` naar `minder-v373` en `v374` naar `minder-v374`.
 Dat gat is geen fout maar de regel zelf. Doortellen op deploys (`v255` → `v256` bij de eerstvolgende
 bump) zou goedkoper lijken en is het niet: dan moet je onthouden welke ronde geen app-code raakte
 om het nummer nog te kunnen plaatsen, en dat weet niemand na drie maanden. Met de tag als bron is

@@ -160,7 +160,7 @@ test.describe('E · het FIRE-getal met de betekenis van de factor', () => {
     const r = await page.evaluate(() => { go('fire'); renderFire(); const e = document.querySelector('[data-msroute="fire"]'); return e ? e.textContent : null; });
     expect(r).toMatch(/^10× je uitgaven, dat is 10% opname per jaar · €[\d.]+.* · aanpassen ›$/);
     await page.locator('[data-msroute="fire"] span').click();
-    await expect(page.locator('#s-set')).toBeVisible();
+    await expect(page.locator('#sheet #fireAannames')).toBeVisible();   // v374: de aannames openen als sheet op het Vermogensreis-scherm
     expect(await page.evaluate(() => fireFactorZin(25))).toBe('25× je uitgaven, dat is 4% opname per jaar');
     expect(await page.evaluate(() => fireFactorZin(30))).toBe('30× je uitgaven, dat is 3,3% opname per jaar');
   });

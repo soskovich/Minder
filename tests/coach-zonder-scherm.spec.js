@@ -175,10 +175,10 @@ test.describe('c · toon en avatar blijven instelbaar', () => {
     await boot(page);
     await page.evaluate(() => go('set'));
     const t = await page.locator('#s-set').innerText();
-    expect(t).toMatch(/Signalen uit je patronen staan (aan|uit)/);   // v202
+    expect(t).toMatch(/Coach & weergave\s*.*· (directe|zachte|zakelijke) toon/);   // v374: de grijze stand noemt de coach
     expect(await page.evaluate(() => typeof openCoachAvatar)).toBe('function');
     // de regel klapt inline uit en verwijst dan naar de sheet; hij stelt zelf niets in (v182)
-    await page.evaluate(() => toggleSet('coach'));
+    await page.evaluate(() => openSetSub('coach'));
     expect(await page.locator('#s-set').innerHTML()).toContain('openCoachAvatar()');
   });
 

@@ -41,12 +41,12 @@ function seed(set = {}, opt = {}) {
     minder_tx: JSON.stringify(tx), minder_ovr: '{}',
     minder_set: JSON.stringify(Object.assign({
       limit: 70, hideInternal: true, mode: 'begeleid', autoIncome: false, income: 3000,
-      manualBal: { [MAIN]: 4000, [SPAAR]: 900, [LEEG]: 2500 },
       acctName: { [MAIN]: 'Betaalrekening', [SPAAR]: 'Potje', [LEEG]: 'Buffer Rust' },
       savingsAcc: { [MAIN]: false, [SPAAR]: false, [LEEG]: false },
       psd2Accounts: ps,
     }, set)),
-    minder_own: '[]', minder_accmeta: '{}', minder_plan: '{}',
+    // v374: PSD2 is de bron, dus het saldo van een gekoppelde rekening staat in ACCMETA en niet in SET.manualBal
+    minder_own: '[]', minder_accmeta: JSON.stringify({ [MAIN]: { balance: 4000, date: '2026-09-30' }, [SPAAR]: { balance: 900, date: '2026-09-30' }, [LEEG]: { balance: 2500, date: '2026-09-30' } }), minder_plan: '{}',
   };
 }
 

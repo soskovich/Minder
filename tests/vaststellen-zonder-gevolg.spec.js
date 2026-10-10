@@ -163,7 +163,7 @@ test.describe('2 - Meer binnen, meer uitgegeven is weg', () => {
     await bootPatroon(page);
     const keys = await page.evaluate(() => Object.keys(PATROONSIGNALEN).sort());
     expect(keys).toEqual(['meevaller', 'overstreak', 'savrules']);
-    const t = await page.evaluate(() => { go('set'); toggleSet('coach'); return $('#s-set').innerText; });
+    const t = await page.evaluate(() => { go('set'); openSetSub('coach'); return $('#s-set').innerText; });
     expect(t).not.toContain('meestijgen');
     expect(t).toContain('spaarstortingen die als uitgave staan, een meevaller in je inkomen en maanden op rij boven je budget');
   });

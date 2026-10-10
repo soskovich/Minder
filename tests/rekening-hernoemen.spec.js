@@ -102,12 +102,12 @@ test.describe('a · hernoemen', () => {
 test.describe('b · de ingangen', () => {
   test('via de rekeningenlijst in Instellingen', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { go('set'); openInkomenSheet(); });   // v183: de lijst woont onder Inkomen
+    await page.evaluate(() => openSetSub('bank'));   // v374: de lijst woont onder Bank & rekeningen
     // v183: de rij draagt zijn rekening-id, dus er hoeft niet op opmaak gemikt te worden
-    const rij = page.locator(`#sheet [data-acc="${POT1}"]`);
+    const rij = page.locator(`#s-set [data-acc="${POT1}"]`);
     await rij.locator('div[onclick^="acctRenameOpen"]').click();
     await page.waitForSelector('#renInp');
-    expect(await page.locator('#sheet').innerText()).toContain('Naam van deze rekening');
+    expect(await page.locator('#sheet').innerText()).toContain('Deze rekening');
     expect(await page.locator('#renInp').getAttribute('placeholder')).toBe('Buffer Rust');
   });
 
@@ -182,7 +182,7 @@ test.describe('d · bron en layout', () => {
     await boot(page);
     expect(await page.evaluate(() => typeof bankDiagRows)).toBe('undefined');
     expect(await page.evaluate(() => typeof bankDiagHTML)).toBe('undefined');
-    await page.evaluate(() => { go('set'); toggleSet('income'); });   // v183: de lijst woont onder Inkomen
+    await page.evaluate(() => { go('set'); openSetSub('inkomen'); });   // v183: de lijst woont onder Inkomen
     expect(await page.locator('#s-set').innerText()).not.toMatch(/waarom heet een rekening zo/i);
   });
 

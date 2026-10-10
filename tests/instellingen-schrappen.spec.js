@@ -6,8 +6,8 @@
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
 
-// v182/v183: 'coachlook' ging op in 'coach', en 'trans' kwam erbij als eigen sectie.
-const REGELS = ['income', 'bank', 'trans', 'budget', 'fire', 'coach', 'modus', 'look', 'privacy'];
+// v374: zes subpagina's in plaats van negen uitklapblokken.
+const REGELS = ['inkomen', 'bank', 'spelregels', 'herkenning', 'coach', 'gegevens'];
 
 async function boot(page, payload) {
   await open(page, payload || seed());
@@ -19,12 +19,12 @@ const setTekst = (page) => page.evaluate(() => $('#s-set').innerText.replace(/\s
 test.describe('a · schakelaars beloven alleen wat bestaat', () => {
   test('de streak-schakelaar is weg, en een achtergebleven waarde doet niets', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => toggleSet('coach'));
+    await page.evaluate(() => openSetSub('coach'));
     const t = await setTekst(page);
     expect(t).not.toMatch(/streak/i);
     expect(t).not.toMatch(/dagen op rij/i);
     // de streak zelf is in v159 verdwenen; SET.hideStreak werd sindsdien geschreven en nooit gelezen
-    expect(await page.evaluate(() => /hideStreak/.test(setCoach.toString()))).toBe(false);
+    expect(await page.evaluate(() => /hideStreak/.test(setCoachWeergave.toString()))).toBe(false);
     const voor = await page.evaluate(() => $('#s-set').innerHTML);
     await page.evaluate(() => { SET.hideStreak = true; save(); render(); });
     expect(await page.evaluate(() => $('#s-set').innerHTML)).toBe(voor);
@@ -32,7 +32,7 @@ test.describe('a · schakelaars beloven alleen wat bestaat', () => {
 
   test('de demo-schakelaar is weg, met alles wat er alleen aan hing', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => toggleSet('coach'));
+    await page.evaluate(() => openSetSub('coach'));
     expect(await setTekst(page)).not.toMatch(/demo/i);
     const r = await page.evaluate(() => ({
       fn: typeof window.demoNotifs,
@@ -59,18 +59,19 @@ test.describe('b · een mapping bestaat alleen met een aanroeper', () => {
     await boot(page);
     expect(await page.evaluate(() => typeof window.SET_SHEETS)).toBe('undefined');
     expect(await page.evaluate(() => typeof window.openSet)).toBe('undefined');
+    // v374: beide ingangen openen de subpagina Bank & rekeningen, waar de saldo's en de spaarrekening staan
     const src = await page.evaluate(() => openSaldoInvoer.toString() + openSpaarrekening.toString());
-    expect(src).toContain('openInkomenSheet()');
+    expect(src.match(/openSetSub\('bank'\)/g).length).toBe(2);
     expect(await page.evaluate(() => typeof openInkomenSheet)).toBe('function');
   });
 
-  test('de zes onbereikbare panelen werken nog, inline in Instellingen', async ({ page }) => {
+  test('de panelen werken nog, als subpagina', async ({ page }) => {
     await boot(page);
-    for (const [id, woord] of [['look', 'Uiterlijk'], ['fire', 'rendement'], ['modus', 'Rustig'],
-      ['coach', 'Signalen uit je patronen'], ['trans', 'Interne overboekingen'], ['privacy', 'Waar staat mijn data']]) {
-      await page.evaluate((x) => toggleSet(x), id);
+    // v374: Uiterlijk, Weergave en Coach zijn een pagina; Vermogensreis staat op zijn eigen scherm
+    for (const [id, woord] of [['coach', 'Thema'], ['coach', 'Rustig'],
+      ['coach', 'Signalen uit je patronen'], ['herkenning', 'Vaste lasten'], ['gegevens', 'Waar staat je data']]) {
+      await page.evaluate((x) => openSetSub(x), id);
       expect(await setTekst(page), id).toContain(woord);
-      await page.evaluate((x) => toggleSet(x), id);
     }
     // budget heeft geen inline paneel maar een eigen sheet, en geeft daarom null door als fn
     await page.evaluate(() => openBudgetEditor());
@@ -78,12 +79,11 @@ test.describe('b · een mapping bestaat alleen met een aanroeper', () => {
     expect(await page.locator('#sheet').innerText()).toMatch(/budget/i);
   });
 
-  test('de budget-regel klapt niets uit', async ({ page }) => {
+  test('het hoofdscherm klapt niets uit', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { SET.setOpen = 'budget'; save(); renderSet(); });
-    // fn is null: stond hij er nog, dan zou deze render op setBudget() klappen
+    await page.evaluate(() => openSetSub(null));
     expect(await setTekst(page)).not.toMatch(/limiet-model/i);
-    expect(await page.evaluate(() => $('#s-set').innerText.match(/▲/g))).toBe(null);
+    expect(await page.evaluate(() => $('#s-set').innerText.match(/▲|▼/g))).toBe(null);
   });
 });
 
@@ -97,8 +97,8 @@ test.describe('c · geen belofte zonder inhoud, geen verzonnen cijfer', () => {
 
   test('het thema-voorbeeld toont je eigen bedrag, niet een verzonnen bedrag', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => toggleSet('look'));
-    const t = await setTekst(page);
+    await page.evaluate(() => openThema());   // v374: het thema kies je in een sheet vanuit Coach & weergave
+    const t = await page.evaluate(() => $('#sheet').innerText.replace(/\s+/g, ' '));
     expect(t).not.toContain('1.240');
     const r = await page.evaluate(() => ({ hero: themeHeroTekst(), safe: euro0(safeToSpend().safe) }));
     expect(r.hero).toBe(r.safe);          // hetzelfde getal als de hero op Home, niet een eigen som
@@ -109,7 +109,7 @@ test.describe('c · geen belofte zonder inhoud, geen verzonnen cijfer', () => {
     const p = seed();
     const set = JSON.parse(p.minder_set); set.manualBal = {}; p.minder_set = JSON.stringify(set);
     await boot(page, p);
-    await page.evaluate(() => toggleSet('look'));
+    await page.evaluate(() => openSetSub('coach'));
     expect(await page.evaluate(() => totalBalance().known)).toBe(0);
     expect(await page.evaluate(() => themeHeroTekst())).toBe('onbekend');
     await page.evaluate(() => go('dash'));
@@ -117,25 +117,24 @@ test.describe('c · geen belofte zonder inhoud, geen verzonnen cijfer', () => {
   });
 });
 
-test.describe('d · de negen regels openen en sluiten zonder fout', () => {
-  test('elke regel klapt open en weer dicht, geen console-fout', async ({ page }) => {
+test.describe('d · de zes regels openen en sluiten zonder fout', () => {
+  test('elke regel opent zijn subpagina en gaat terug, geen console-fout', async ({ page }) => {
     const fouten = [];
     page.on('pageerror', (e) => fouten.push(String(e)));
     page.on('console', (m) => { if (m.type() === 'error') fouten.push(m.text()); });
     await boot(page);
     for (const id of REGELS) {
-      await page.evaluate((x) => toggleSet(x), id);
+      await page.evaluate((x) => openSetSub(x), id);
       await page.waitForTimeout(30);
       expect(await page.evaluate(() => $('#s-set').innerHTML.length), id).toBeGreaterThan(200);
-      await page.evaluate((x) => toggleSet(x), id);
+      await page.evaluate(() => setTerug());
       await page.waitForTimeout(30);
     }
     expect(fouten).toEqual([]);
-    // en alle negen staan er nog als regel
+    // en alle zes staan er nog als regel
     const t = await setTekst(page);
-    for (const w of ['Budget & doelen', 'Vermogensreis', 'Uiterlijk', 'Weergave & modus',
-      'Inkomen & rekeningen', 'Bank & koppelingen', 'Transacties & categorieën', 'Coach',
-      'Privacy & gegevens']) {
+    for (const w of ['Inkomen', 'Bank & rekeningen', 'Spelregels', 'Herkenning', 'Coach & weergave',
+      'Gegevens & privacy']) {
       expect(t, w).toContain(w);
     }
   });

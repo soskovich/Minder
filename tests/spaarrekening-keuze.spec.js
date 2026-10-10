@@ -86,16 +86,18 @@ test.describe('a · de schakelaar werkt nu voor elk potje', () => {
     expect(Object.keys(na.keuze)).toEqual([CSVPOT]);       // de sleutel is de rekening zelf
   });
 
-  test('de schakelaar in de rekeningenlijst blijft staan waar je hem zet', async ({ page }) => {
+  test('de schakelaar achter een rekening blijft staan waar je hem zet', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => { go('set'); openInkomenSheet(); });   // v183: de spaarvlag staat in de samengevoegde lijst
+    // v374: de rekeningenlijst staat in Bank & rekeningen; de spaarvlag is een schakelaar in de sheet van de rekening
+    await page.evaluate(() => openSetSub('bank'));
     // exact op de rekening selecteren: 'Buffer Rust' (CSV) en 'Buffer rust' (PSD2 ··1123) staan
     // allebei in de lijst, en hasText is hoofdletterongevoelig
     // v183: de rij draagt zijn rekening-id, dus er hoeft niet op opmaak gemikt te worden
-    const rij = page.locator(`#sheet [data-acc="${CSVPOT}"]`);
+    const rij = page.locator(`#s-set [data-acc="${CSVPOT}"]`);
     await expect(rij).toContainText('Buffer Rust');        // v120: de naam uit de bestandsimport
+    await rij.locator('div[onclick^="acctRenameOpen"]').click();
     // de checkbox zelf is visueel verborgen achter de schuif; je klikt het label (.sw)
-    await rij.locator('label.sw').click();
+    await page.locator('#sheet [data-spaartoggle] label.sw').click();
     await page.waitForFunction((a) => isSavingsAcc(a), CSVPOT);
     // opnieuw renderen: de schakelaar mag niet terugspringen
     await page.evaluate(() => { renderSet(); });

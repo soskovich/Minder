@@ -25,72 +25,25 @@ const paneel = (page, fn) => page.evaluate((f) => {
 }, fn);
 const fireScherm = (page) => page.evaluate(() => { go('fire'); return $('#s-fire').innerText.replace(/\s+/g, ' '); });
 
-test.describe('a · de driehoek vouwt, de chevron gaat ergens heen', () => {
-  test('een regel die inline uitklapt draagt een driehoek', async ({ page }) => {
-    await boot(page);
-    const tekens = (page) => page.evaluate(() => [...document.querySelectorAll('#s-set div[style*="min-width:0"]')]
-      .map((e) => ({ naam: e.querySelector('div').textContent.trim(),
-        teken: (e.nextElementSibling || {}).textContent || '' })));
-    const voor = await tekens(page);
-    for (const r of voor) {
-      if (r.naam === 'Budget & doelen') expect(r.teken.trim(), r.naam).toBe('›');   // eigen sheet
-      else expect(r.teken.trim(), r.naam).toBe('▼');                                 // klapt uit
-    }
-    // open een regel: de driehoek draait om, hij wordt geen chevron
-    await page.evaluate(() => toggleSet('coach'));
-    const na = await tekens(page);
-    expect(na.find((r) => r.naam === 'Coach').teken.trim()).toBe('▲');
-    expect(na.find((r) => r.naam === 'Budget & doelen').teken.trim()).toBe('›');
-  });
-
-  test('het gedrag zelf is onveranderd: sheet blijft sheet, inline blijft inline', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => { SET.setOpen = 'budget'; save(); renderSet(); });
-    expect(await page.evaluate(() => $('#s-set').innerText)).not.toMatch(/limiet-model/i);
-    await page.evaluate(() => toggleSet('look'));
-    expect(await page.evaluate(() => $('#s-set').innerText)).toContain('Uiterlijk');
-    expect(await page.evaluate(() => $('#sheetBg').classList.contains('show'))).toBe(false);
-  });
-});
-
-test.describe('b · SET_SHEETS is opgeheven', () => {
+/* v374: blok a (de driehoek tegen de chevron) en blok b (SET_SHEETS en de inkomen-sheet) gingen over de
+   uitklapblokken. Die bestaan niet meer: elke regel is een subpagina met een chevron, en dat staat in
+   instellingen-psd2.spec.js. Wat van b blijft is dat er geen tweede labelbron is en dat de oude ingangen werken. */
+test.describe('b · geen tweede labelbron, en de oude ingangen werken', () => {
   test('er is geen tabel en geen tweede labelbron meer', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => typeof window.SET_SHEETS)).toBe('undefined');
     expect(await page.evaluate(() => typeof window.openSet)).toBe('undefined');
     expect(await page.evaluate(() => typeof window.renderSetSheet)).toBe('undefined');
-    // de sheet heette 'Bankkoppeling & import' naast een regel 'Bank & koppelingen'
     expect(await page.evaluate(() => $('#s-set').innerText)).not.toContain('Bankkoppeling & import');
   });
 
-  test('de enige sheet-ingang opent dezelfde sectie, met dezelfde naam als de regel', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => openInkomenSheet());
-    await page.waitForSelector('#sheetBg.show');
-    const t = await page.locator('#sheet').innerText();
-    expect(t).toContain('Inkomen & rekeningen');       // exact de regelnaam
-    expect(t).toContain('Klaar');
-    expect(t).toContain('spaar');                       // de rekeningenlijst uit v183
-  });
-
-  test('beide oude aanroepers werken nog', async ({ page }) => {
-    for (const fn of ['openSaldoInvoer', 'openSpaarrekening']) {
+  test('de oude aanroepers openen de subpagina met dezelfde naam als de regel', async ({ page }) => {
+    for (const [fn, sub, naam] of [['openSaldoInvoer', 'bank', 'Bank & rekeningen'], ['openSpaarrekening', 'bank', 'Bank & rekeningen'], ['openInkomenSheet', 'inkomen', 'Inkomen']]) {
       await boot(page);
       await page.evaluate((f) => window[f](), fn);
-      await page.waitForSelector('#sheetBg.show');
-      expect(await page.locator('#sheet').innerText(), fn).toContain('Inkomen & rekeningen');
+      expect(await page.evaluate(() => window._setSub), fn).toBe(sub);
+      expect(await page.evaluate(() => $('#s-set [data-setsub]').textContent), fn).toContain(naam);
     }
-  });
-
-  test('de sheet ververst mee en laat zich overnemen door een andere sheet', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => openInkomenSheet());
-    await page.waitForSelector('#sheetBg.show');
-    await page.evaluate(() => { SET.income = 4321; save(); render(); });
-    expect(await page.locator('#sheet').innerHTML()).toContain('4321');
-    await page.evaluate(() => openCoachAvatar());
-    expect(await page.evaluate(() => window._setSheet)).toBeNull();
-    expect(await page.locator('#sheet').innerText()).toContain('Kies je coach');
   });
 });
 

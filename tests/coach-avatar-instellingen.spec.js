@@ -19,7 +19,7 @@ async function boot(page, scherm) {
 test.describe('a · de regel bij Instellingen', () => {
   test('staat er, als rij binnen het coach-paneel', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => toggleSet('coach'));
+    await page.evaluate(() => openSetSub('coach'));
     const rij = page.locator('#s-set div[onclick="openCoachAvatar()"]').first();
     const t = await rij.innerText();
     expect(t).toContain('Avatar & toon');
@@ -28,12 +28,13 @@ test.describe('a · de regel bij Instellingen', () => {
     // en de regel in de lijst zelf noemt de gekozen coach in zijn subregel
     // v202: 'Je coach staat aan' is 'Je coachsignalen staan aan' geworden; de schakelaar zet
     // vijf signalen uit en niet het gesprek
-    expect(await page.evaluate(() => $('#s-set').innerText)).toMatch(/Signalen uit je patronen staan aan · Sara/);
+    // v374: de regel Coach & weergave op het hoofdscherm noemt de gekozen coach in zijn grijze stand
+    expect(await page.evaluate(() => { openSetSub(null); return $('#s-set').innerText; })).toMatch(/Coach & weergave\s*Sara · directe toon/);
   });
 
   test('de samenvatting volgt de gekozen avatar en toon', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => toggleSet('coach'));
+    await page.evaluate(() => openSetSub('coach'));
     expect(await page.evaluate(() => coachSamenvatting())).toBe('Sara · directe toon');
     await page.evaluate(() => { SET.coachAvatar = 'm'; SET.coachTone = 'zacht'; save(); renderSet(); });
     expect(await page.evaluate(() => coachSamenvatting())).toBe('Daan · zachte toon');
@@ -49,7 +50,7 @@ test.describe('a · de regel bij Instellingen', () => {
 
   test('tikken opent de sheet, niet een uitklap', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => toggleSet('coach'));
+    await page.evaluate(() => openSetSub('coach'));
     await page.locator(RIJ).first().click();
     await page.waitForSelector('#sheetBg.show');
     const s = await page.locator('#sheet').innerText();
@@ -62,7 +63,7 @@ test.describe('a · de regel bij Instellingen', () => {
 test.describe('b · wisselen werkt vanaf beide plekken', () => {
   test('toon wisselen vanuit Instellingen wordt opgeslagen en teruggelezen', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => toggleSet('coach'));
+    await page.evaluate(() => openSetSub('coach'));
     await page.locator(RIJ).first().click();
     await page.waitForSelector('#sheetBg.show');
     await page.locator('#coachToneChips .chip', { hasText: 'Zacht' }).click();
@@ -81,7 +82,7 @@ test.describe('b · wisselen werkt vanaf beide plekken', () => {
 
   test('avatar wisselen vanuit Instellingen sluit de sheet en werkt de regel bij', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => toggleSet('coach'));
+    await page.evaluate(() => openSetSub('coach'));
     await page.locator(RIJ).first().click();
     await page.waitForSelector('#sheetBg.show');
     await page.evaluate(() => setCoachAvatar('m'));
@@ -131,7 +132,7 @@ test.describe('c · plaatsonafhankelijk', () => {
 
   test('de sheet neemt het oppervlak over van een eerder geopende instellingen-sheet', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => openInkomenSheet());   // v185: de enige sheet-ingang in Instellingen
+    await page.evaluate(() => openThema());   // v374: een sheet vanuit Instellingen (het thema)
     await page.waitForSelector('#sheetBg.show');
     await page.evaluate(() => openCoachAvatar());
     expect(await page.evaluate(() => window._setSheet)).toBeNull();
@@ -145,7 +146,7 @@ test.describe('d · layout', () => {
     test(`geen horizontale overflow op ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 780 });
       await boot(page);
-      await page.evaluate(() => toggleSet('coach'));
+      await page.evaluate(() => openSetSub('coach'));
       await page.locator(RIJ).first().click();
       await page.waitForSelector('#sheetBg.show');
       const over = await page.evaluate(() => ({

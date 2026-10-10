@@ -123,12 +123,12 @@ test.describe('b · de lijn en de band', () => {
     for (const q of r) { expect(q).toBeGreaterThan(0.93); expect(q).toBeLessThanOrEqual(1.0001); }
   });
 
-  test('op koers en de haalbaarheid zeggen hetzelfde op de stand van het toestel', async ({ page }) => {
+  test('de lijn en de band halen FIRE in hetzelfde venster op de stand van het toestel', async ({ page }) => {
+    // v374: fireOpKoers() is met de briefingexport verwijderd; de lijn en de band zelf blijven getoetst
     await boot(page, [BOETE, PREMIE]);
     const r = await page.evaluate((v) => { eval(v)(); const M = reisModel(); const mc = fireMonteCarlo(M);
       const f = M.ms.find((m) => m.key === 'fire'); let reikt = null; for (let y = 0; y <= M.HZ; y++) if (mc.p50[y] >= M.FIRE) { reikt = M.nowY + y; break; }
-      return { opKoers: fireOpKoers(), lijn: f && f.yr, reikt, succ: mc.succ, doel: M.targetYear }; }, vast.toString());
-    expect(r.opKoers).toBe(true);
+      return { lijn: f && f.yr, reikt, succ: mc.succ, doel: M.targetYear }; }, vast.toString());
     expect(r.lijn).toBeLessThanOrEqual(r.doel);
     expect(r.reikt).not.toBeNull();
     expect(r.reikt).toBeLessThanOrEqual(r.doel);
@@ -145,18 +145,8 @@ test.describe('b · de lijn en de band', () => {
 });
 
 test.describe('c · wat niet verandert, en wat weg is', () => {
-  /* v347, bijvangst: fireOpKoers() toetste `if(M.missing)` en dat is een object, dus hij gaf nooit een
-     oordeel. Een onbekend saldo blijft wel geen oordeel (v59/v73/v173). */
-  test('fireOpKoers geeft een oordeel, behalve bij een onbekend saldo', async ({ page }) => {
-    await boot(page, [BOETE, PREMIE]);
-    const r = await page.evaluate(() => { const M = reisModel(); return { miss: M.missing, ok: fireOpKoers() }; });
-    expect(typeof r.miss).toBe('object');           // invoer: het object dat de oude toets altijd waar maakte
-    expect(r.miss.balances).toBeFalsy();
-    expect(r.ok).toBe(true);
-    const bron = await kaalUit(page, 'fireOpKoers');
-    expect(bron).toContain('M.missing.balances');
-  });
-
+  /* v374: de test op fireOpKoers() (v347, bijvangst) is weg met de functie: zijn enige lezer was de
+     briefingexport, en die is op keuze van de gebruiker volledig verwijderd. */
   test('bij zelf ingevulde inleg gaat er niets in en niets uit', async ({ page }) => {
     await boot(page, [BOETE, PREMIE], { reis: { birth: 1990, inlegMode: 'manual', pmt: 1500 } });
     const met = await cser(page);

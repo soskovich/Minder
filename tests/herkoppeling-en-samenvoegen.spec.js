@@ -401,7 +401,7 @@ test.describe('6 · blok 8 wijst de wees aan en meet zijn tegenhangers', () => {
        Zonder deze assertie blijft een drempel op het aantal boekingen onopgemerkt. */
     expect(regel, 'een rekening met twee boekingen hoort er net zo goed bij').toContain(KLEIN);
     const wz = t.split(String.fromCharCode(10)).find((x) => /^WEZEN /.test(x)) || '';
-    expect(wz, 'geen van beide staat volledig elders, dus geen van beide is een wees').toBe('WEZEN (losgekoppeld EN elke boeking staat met dezelfde t.id op een andere rekening): geen   <-- hieraan hangt de samenvoeg-ingang in Instellingen (Bank & koppelingen)');
+    expect(wz, 'geen van beide staat volledig elders, dus geen van beide is een wees').toBe('WEZEN (losgekoppeld EN elke boeking staat met dezelfde t.id op een andere rekening): geen   <-- hieraan hangt de samenvoeg-ingang in Instellingen (Bank & rekeningen)');
     const ov = t.split(String.fromCharCode(10)).find((x) => /^rekeningen met dezelfde boekingen:/.test(x)) || '';
     expect(ov, 'de overlap-check kan hem niet zien, dus hij mag daar niet staan').not.toContain(KLEIN);
     expect(t).toMatch(/een wees met een of twee boekingen komt daar per constructie nooit in voor/);

@@ -56,7 +56,7 @@ test.describe('a - de guard dekt precies drie signalen', () => {
         guard: raakt.filter((l) => l.indexOf('if(!SET.coachOff){') >= 0).length,
         // buiten de guard mag hij alleen in weergave staan: de sectieregel en de schakelaar zelf
         anders: raakt.filter((l) => l.indexOf('if(!SET.coachOff){') < 0)
-          .map((l) => (l.indexOf('PATROONSIGNALEN_NAAM} staan') >= 0 ? 'sectieregel'
+          .map((l) => (l.indexOf("PATROONSIGNALEN_NAAM.toLowerCase()+' uit'") >= 0 ? 'sectieregel'
             : l.indexOf('type="checkbox"') >= 0 ? 'schakelaar' : l.trim().slice(0, 60))),
       };
     });
@@ -78,7 +78,7 @@ test.describe('a2 - de tekst komt uit dezelfde drie', () => {
 
   test('de schakelaar noemt de drie en zegt wat er blijft staan', async ({ page }) => {
     await open(page, seed());
-    const t = await page.evaluate(() => { go('set'); toggleSet('coach'); return $('#s-set').innerText; });
+    const t = await page.evaluate(() => { go('set'); openSetSub('coach'); return $('#s-set').innerText; });
     expect(t).toContain('Signalen uit je patronen');
     expect(t).toContain('Wat Minder over meerdere maanden uit je cijfers afleidt');
     for (const w of await page.evaluate(() => Object.values(PATROONSIGNALEN))) expect(t).toContain(w);
@@ -92,12 +92,15 @@ test.describe('a2 - de tekst komt uit dezelfde drie', () => {
     const r = await page.evaluate(() => {
       go('set');
       const naam = PATROONSIGNALEN_NAAM;
-      const dicht = $('#s-set').innerText;
-      toggleSet('coach');
-      return { naam, sectie: dicht.indexOf(naam + ' staan aan') >= 0, paneel: $('#s-set').innerText.split(naam).length - 1 };
+      // v374: de regel op het hoofdscherm noemt de signalen alleen als ze uit staan (de mockup), met hetzelfde woord
+      openSetSub(null); const aan = $('#s-set').innerText;
+      SET.coachOff = true; renderSet(); const uit = $('#s-set').innerText; SET.coachOff = false;
+      openSetSub('coach');
+      return { naam, aan: aan.indexOf(naam.toLowerCase() + ' uit') >= 0, uit: uit.indexOf(naam.toLowerCase() + ' uit') >= 0, paneel: $('#s-set').innerText.split(naam).length - 1 };
     });
-    expect(r.sectie).toBe(true);
-    expect(r.paneel).toBeGreaterThanOrEqual(2);   // de sectieregel en de kop van de schakelaar
+    expect(r.aan).toBe(false);
+    expect(r.uit).toBe(true);
+    expect(r.paneel).toBeGreaterThanOrEqual(1);   // de kop van de schakelaar
   });
 });
 

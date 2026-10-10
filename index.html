@@ -696,7 +696,7 @@ label.fld{display:block;font-size:var(--fs-sm);color:var(--mut);margin:14px 0 6p
   <div class="head-right" style="display:flex;align-items:center;gap:5px">
     <button class="head-ic" onclick="headerSearch()" aria-label="Zoeken"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
     <button class="head-ic" onclick="openNotifs()" aria-label="Meldingen"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0c0 4.5 1.8 5.8 1.8 5.8H4.2S6 13.5 6 9Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="badge" id="notifBadge" style="display:none">0</span></button>
-    <button class="head-gear" id="headGear" onclick="go('set')" aria-label="Instellingen"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.4 3H9.6l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4.8l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/></svg></button>
+    <button class="head-gear" id="headGear" onclick="openSetSub(null)" aria-label="Instellingen"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.4 3H9.6l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4.8l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/></svg></button>
   </div>
 </div>
 
@@ -889,7 +889,7 @@ let OWN=[];                // eigen rekeningnummers (uit :25:)
 let ACCMETA={};            // {acc:{name,balance,date,role}}
 let PLAN={};               // {catKey:{status:'done'|'snoozed',saving,ts}}, voortgang bespaaracties
 let deferredPrompt=null;   // PWA install-prompt
-let SET={limit:70, income:0, autoIncome:true, hideInternal:true};
+let SET={limit:70, income:0, autoIncome:true};
 let accFilter='all';
 let curMonth=null;         // 'YYYY-MM'
 let txSearch='';
@@ -2608,14 +2608,32 @@ function contantVraagt(){
      telt is hij weg. */
   return (T && verseStart() && T.datum < thisYM()+'-01') ? 'maand' : '';
 }
-function accBalance(acc){ const mb=(SET.manualBal||{})[acc]; if(mb!=null && mb!=='') return +mb; const a=ACCMETA[acc]; return a&&a.balance!=null?a.balance:null; }
+/* v374: PSD2 IS DE BRON. Een rekening die via de bankkoppeling binnenkomt draagt het saldo van de bank, en een
+   handmatig saldo erop telt niet mee. Het blijft wel opgeslagen (keuze van de gebruiker): niets wordt gewist, en
+   wie de koppeling ooit opheft ziet zijn eigen getal terug. psd2Rek() is de ENE toets, met de saldo-lezers, de
+   datum-lezer, setBal() en de rekeningenlijst als lezers. */
+function psd2Rek(acc){ return !!(SET.psd2Accounts||{})[acc]; }
+function accBalance(acc){ const mb=(SET.manualBal||{})[acc]; if(mb!=null && mb!=='' && !psd2Rek(acc)) return +mb; const a=ACCMETA[acc]; return a&&a.balance!=null?a.balance:null; }
+/* v374: GESLOTEN REKENINGEN. Een rekening die je als gesloten markeert telt niet mee in je saldo, je spaarsaldo
+   of de prognose, en wel in alles wat over boekingen gaat (patronen, vergelijkingen met vorige maanden): die lezen
+   TX, en daar verandert niets. SET.rekGesloten={acc:{op}}. De app STELT VOOR (geen boeking in REK_GESLOTEN_DAGEN
+   dagen en niet gekoppeld via PSD2) en de gebruiker bevestigt; "niet gesloten" (SET.rekOpen) houdt een rekening
+   uit het voorstel. */
+const REK_GESLOTEN_DAGEN=90;
+function rekGesloten(acc){ return !!(SET.rekGesloten||{})[acc]; }
+function rekActief(acc){ return !rekGesloten(acc); }
+function rekGeslotenLijst(){ return OWN.filter(rekGesloten); }
+function rekGeslotenKandidaten(){
+  const grens=ymdVan(new Date(Date.now()-REK_GESLOTEN_DAGEN*86400000)), open=SET.rekOpen||{};
+  return OWN.filter(a=>!rekGesloten(a) && !psd2Rek(a) && !open[a]).filter(a=>{ const d=nieuwsteTxDatum(a); return d && d<grens; });
+}
 // known = rekeningen mét een bekend saldo. Nul bekende saldi (bv. direct na een CSV-import) betekent onbekend, niet €0.
 /* v258: contant geld is een term in dit saldo en geen rekening. Het staat dus NIET in OWN (dat komt
    uit TX en een zak geld boekt niets) en het telt NIET mee in missing/known: die twee gaan over
    rekeningen waarvan de app het saldo niet weet, en een ongetelde zak is iets anders dan een
    rekening zonder saldo. Niet geteld betekent hier: geen term, en dan staat alles precies zoals
    het vóór v258 stond. Zo is het verschil dat de telling maakt ook meteen wat de telling waard is. */
-function totalBalance(){ let sum=0, missing=0, known=0; for(const acc of OWN){ const b=accBalance(acc); if(b==null) missing++; else { sum+=b; known++; } } 
+function totalBalance(){ let sum=0, missing=0, known=0; for(const acc of OWN){ if(rekGesloten(acc)) continue; const b=accBalance(acc); if(b==null) missing++; else { sum+=b; known++; } } 
   const c=contantVerwacht(); if(c!=null) sum+=c;
   return {sum,missing,known,contant:(c==null?null:c)}; }
 /* v198: een saldo en een transactiereeks komen niet altijd uit hetzelfde moment. Bij een
@@ -2627,7 +2645,8 @@ function totalBalance(){ let sum=0, missing=0, known=0; for(const acc of OWN){ c
    Dit legt hem vast en maakt hem leesbaar. Er verandert GEEN ENKELE berekening: safeToSpend(),
    totalBalance(), netWorth() en de liquiditeitslaag lezen onverkort accBalance(). Wat er bijkomt is
    dat de opbouw-sheet kan zeggen dat het saldo ouder is dan je nieuwste boeking. */
-function setBal(acc,val){ SET.manualBal=SET.manualBal||{}; SET.manualBalDatum=SET.manualBalDatum||{};
+function setBal(acc,val){ if(psd2Rek(acc)) return;   // v374: een PSD2-saldo is alleen-lezen
+  SET.manualBal=SET.manualBal||{}; SET.manualBalDatum=SET.manualBalDatum||{};
   if(val===''||val==null){ delete SET.manualBal[acc]; delete SET.manualBalDatum[acc]; }
   else { SET.manualBal[acc]=numIn(val); SET.manualBalDatum[acc]=vandaagYMD(); }   // v177: een lokale dag, net als de datums in TX
   save(); renderDash(); } // settings niet herrenderen (focus behouden)
@@ -2638,7 +2657,7 @@ function setBal(acc,val){ SET.manualBal=SET.manualBal||{}; SET.manualBalDatum=SE
    bedrag dat je ziet. */
 function accBalanceDatum(acc){
   const mb=(SET.manualBal||{})[acc];
-  if(mb!=null && mb!=='') return ((SET.manualBalDatum||{})[acc])||null;
+  if(mb!=null && mb!=='' && !psd2Rek(acc)) return ((SET.manualBalDatum||{})[acc])||null;
   const a=ACCMETA[acc];
   return (a && a.balance!=null && a.date) ? a.date : null;
 }
@@ -2668,7 +2687,7 @@ function saldoAchter(){
   const uit=[];
   let fal={}; try{ for(const f of psd2Falend()) fal[f.acc]=f; }catch(_){ fal={}; }
   for(const a of (OWN||[])){
-    if(accBalance(a)==null) continue;
+    if(rekGesloten(a) || accBalance(a)==null) continue;
     const bd=accBalanceDatum(a); if(!bd) continue;
     if(fal[a]){ uit.push({acc:a, saldoDatum:bd, txDatum:null, reden:'sync'}); continue; }
     const td=nieuwsteTxDatum(a); if(!td) continue;
@@ -2759,7 +2778,7 @@ function isSavingsAcc(a){
   if(Object.prototype.hasOwnProperty.call(m,a)) return !!m[a];   // eigen keuze wint
   return acctEndsWith(a, SAV_DEFAULT_ENDS);
 }
-function n26SavingsAccounts(){ return allAccounts().filter(isSavingsAcc); }
+function n26SavingsAccounts(){ return allAccounts().filter(a=>isSavingsAcc(a) && rekActief(a)); }   // v374: gesloten telt niet in je spaarsaldo
 /* Eenmalige migratie van savingsEnds naar keuzes per rekening. Alleen waar jouw lijstje iets
    anders zei dan de standaard wordt een expliciete keuze weggeschreven; de rest blijft aan de
    default hangen. savingsEnds blijft staan, ongebruikt, zodat er niets onherstelbaar verdwijnt. */
@@ -2849,17 +2868,17 @@ function spaarDekking(m){
 
 // Saldo-invoer: Instellingen ▸ Inkomen & rekeningen, waar je per rekening een saldo invult.
 // Eén bestemming voor elke "vul je saldo aan"-CTA, zodat de onbekend-staat nooit doodloopt.
-function openSaldoInvoer(){ closeSheet(); go('set'); openInkomenSheet(); }
+function openSaldoInvoer(){ closeSheet(); openSetSub('bank'); }
 // zelfde vorm, voor het onbekende buffersaldo: daar wijs je een spaarrekening aan (v168)
 /* v183: de spaarrekening-vlag staat sinds de samenvoeging in de rekeningenlijst onder Inkomen &
    rekeningen, dus deze tik wijst daarheen. v185: SET_SHEETS is opgeheven en dit is nog de enige
    sheet-ingang in Instellingen; hij opent die sectie rechtstreeks. */
-function openSpaarrekening(){ closeSheet(); go('set'); openInkomenSheet(); }
+function openSpaarrekening(){ closeSheet(); openSetSub('bank'); }
 // saldo-nudge: tik = naar de invoer én deze maand niet meer vragen
 function balNudgeGo(){ try{ const ms=months(); SET.balNudge={ym:ms[ms.length-1]||''}; save(); }catch(_){} openSaldoInvoer(); }
 // drill-down: rekeningen waaruit je saldo bestaat
 function openBalances(){
-  const rows=OWN.map(a=>({a,b:accBalance(a)})).filter(r=>r.b!=null && r.b!==0).sort((x,y)=>y.b-x.b);
+  const rows=OWN.filter(rekActief).map(a=>({a,b:accBalance(a)})).filter(r=>r.b!=null && r.b!==0).sort((x,y)=>y.b-x.b);
   const tb=totalBalance();
   $('#sheet').innerHTML=`<div class="grab"></div>
     <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('coins')}</div><div style="font-weight:800;font-size:var(--fs-lg)">Saldo nu</div>
@@ -2949,6 +2968,7 @@ function accountShortfalls(){
   const MAXH=35*86400000;
   const out=[];
   for(const acc of OWN){
+    if(rekGesloten(acc)) continue;   // v374: gesloten telt niet in de prognose
     const bal=accBalance(acc); if(bal==null) continue;
     let incT=null;
     for(const r of sched){ if(r.type==='income' && r.acc===acc){ const d=new Date(r.nextDate).setHours(0,0,0,0); if(d>today && (incT==null||d<incT)) incT=d; } }
@@ -2998,7 +3018,6 @@ function render(){
   const ms=months(); if(!curMonth||!ms.includes(curMonth)) curMonth=ms[ms.length-1];
   renderDash(); renderTx(); renderIns(); renderVooruit(); renderMaand(); renderLogboek(); renderVermogen(); renderFire(); renderSet();
   try{const _nb=document.getElementById('notifBadge'); if(_nb){const _c=notifCount(); _nb.textContent=_c>9?'9+':_c; _nb.style.display=_c>0?'flex':'none';}}catch(_){}
-  if(window._setSheet && $('#sheetBg').classList.contains('show')) renderInkomenSheet(); // open instellingen-sheet meeverversen
   if(window._nfSheet && $('#sheetBg').classList.contains('show')) renderNfSheet();
   if(window._budgetSheet && $('#sheetBg').classList.contains('show')) renderBudgetSheet();
   /* v340: een open sheet van Grip rekent mee na een handeling erin (de pop-up, een Let op-kaart, de
@@ -3270,11 +3289,11 @@ function monthLiquidity(){
   const wPace=Math.min(elapsedM/dim,1);            // later in de maand telt je eigen tempo zwaarder
   const dailyVar=(elapsedM>=3)?(wPace*actualDaily+(1-wPace)*histDaily):histDaily;
   const varDue=Math.round(dailyVar*daysLeft);
-  const {sum,missing}=totalBalance(); const buffer=+SET.buffer||0;
+  const {sum,missing}=totalBalance();   // v374: SET.buffer en zijn shortfall zijn weg; geen lezer las ze
   const projected=Math.round(sum+incDue-fixDue-varDue);   // forecast blijft de eerlijke voorspelling (Optie B)
   // v170: varPlan is hier weg. Hij voedde de spiegel op de liquiditeitskaart en die verviel; sindsdien
   // las niemand hem. Wie het variabele plan nodig heeft roept varPlanRemaining() aan, de enige bron.
-  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),incNorm:Math.round(incNorm),incBinnen:Math.round(incomeThisMonth),varDue,daysLeft,projected,buffer,shortfall:Math.round(buffer-projected),fixDueItems,fixDueExclCount,fixDueBetaald};
+  return {sum,missing,fixDue:Math.round(fixDue),incDue:Math.round(incDue),incNorm:Math.round(incNorm),incBinnen:Math.round(incomeThisMonth),varDue,daysLeft,projected,fixDueItems,fixDueExclCount,fixDueBetaald};
 }
 // Veilig te besteden = saldo - nog-niet-betaalde vaste lasten deze maand - nog gereserveerde potjes (budget minus al uitgegeven)
 function safeToSpend(){
@@ -3885,6 +3904,7 @@ function renderDash(){
     <div class="hh-big${S2.saldo<0?'':' grad'}" data-totaalsaldo="${Math.round(S2.saldo)}" style="cursor:pointer;margin-bottom:6px${S2.saldo<0?';color:var(--red)':''}" onclick="openBalances()">${euro0(S2.saldo)}</div>
     ${saldoSplitRegel(S2.saldo)}
     ${saldoAchterHero()}
+    ${bankVervalHero()}
     ${vrijRegel(S2)}
     ${krapNote}
   </div>`
@@ -4235,11 +4255,12 @@ function noteLossSeen(key){ if(!isLossFrame(key)) return; const d=vandaagYMD(); 
   if(!lf||lf.ymd!==d){ lf=SET.lossFrames={ymd:d,n:0,keys:{}}; } lf.keys=lf.keys||{};
   if(!lf.keys[key]){ lf.keys[key]=1; lf.n=(+lf.n||0)+1; } }
 /* ---- Mental accounting: stilstaand surplus boven de heilige buffer vs. dure schuld (MECHANISM_SPEC.mentalAccounting) ----
- * De noodbuffer = SET.buffer (de liquiditeitsondergrens, de rode lijn). Die is HEILIG: alleen het
+ * De noodbuffer is het noodfondsdoel (noodfondsModel().doel; v374: tot dan was het SET.buffer, een los veld dat
+ * naast het noodfonds een tweede buffergetal droeg en is vervallen). Die is HEILIG: alleen het
  * bedrag dat BOVEN de buffer stilstaat telt mee, en de app stelt nooit voor de buffer leeg te halen.
  * Goedkope schuld (lage rente) vuurt niet; alleen wanneer de rente de spaaropbrengst met
  * minRenteVerschil overstijgt en er minstens minBedrag stilstaat boven de buffer. */
-function noodbuffer(){ return Math.max(+SET.buffer||0,0); }
+function noodbuffer(){ try{ return Math.max(+noodfondsModel().doel||0,0); }catch(_){ return 0; } }
 function stilstaandSurplus(){ try{ const s=totalSaved(); if(s.missing) return null; return Math.max(Math.round(s.sum - noodbuffer()),0); }catch(_){ return null; } }
 function duursteSchuld(){ const ds=(SET.debts||[]).filter(d=>(schuldRestNu(d)>0)&&(+d.rente>0)); if(!ds.length) return null; ds.sort((a,b)=>(+b.rente)-(+a.rente)); return ds[0]; }
 function mentalAccountingSignal(){
@@ -7678,6 +7699,14 @@ function afsluitPunten(M, R){
     if(had || tb>0) P.push({punt:'potjes', naam:`Potjes voor ${afMnd(nu)} staan`, feit:tb>0?`samen ${euro0(tb)}`:`nog geen potjes voor ${afMnd(nu)}`, af:tb>0, act:`openPotjesVerdeling('${nu}')`}); }catch(_){}
   try{ const tx=afsluitOverigTx(M);
     P.push({punt:'categorie', naam:'Boekingen zonder categorie', feit:tx.length?`${tx.length} ${tx.length===1?'boeking staat':'boekingen staan'} nog op Overig`:'geen', af:!tx.length, act:tx.length?`openAfsluitOverig('${M}')`:''}); }catch(_){}
+  /* v374: DE VRAGEN OVER BOEKINGEN DIE JE ZELF BEOORDEELT ZIJN EEN AFSLUITTAAK, net als boekingen zonder categorie:
+     dubbele paren (dubbelParen(), v288) en reserveringen met een vrijgave (vorautKandidaten(), v293). Onderhoud
+     en geen voorkeur, dus niet in Instellingen. Een taak staat er zodra er een geval is, en is af als niets meer
+     openstaat; de tik opent de bestaande sheet, ook om een keuze te herzien. */
+  try{ const pr=dubbelParen(), open=pr.filter(p=>!p.keuze).length;
+    if(pr.length) P.push({punt:'dubbel', naam:'Mogelijke dubbele boekingen', feit:open?`${open} ${open===1?'paar staat':'paren staan'} open`:'alles beoordeeld', af:!open, act:'openDubbelParen()'}); }catch(_){}
+  try{ const K=vorautKandidaten(), open=K.filter(x=>!x.keuze).length;
+    if(K.length) P.push({punt:'voraut', naam:'Reserveringen met een vrijgave', feit:open?`${open} ${open===1?'betaling staat':'betalingen staan'} open`:'alles beoordeeld', af:!open, act:'openVoraut()'}); }catch(_){}
   try{ const D=dekking(12); if(D.aantal && resAccId()){ const r=(R||maandRegels()).find(x=>x.key==='dekking');
     if(r) P.push({punt:'dekking', naam:'Dekking van je reserveringen', feit:r.status==='tekort'?`${afMnd(nu)} niet rond`:`${afMnd(nu)} rond`, af:r.status!=='tekort', act:"openMaandBeslis('dekking')"}); } }catch(_){}
   try{ const St=afsluitStanden(); if((SET.assets||[]).some(a=>(+a.waarde||0)>0) || (SET.debts||[]).some(d=>(+d.rest||0)>0)){
@@ -12481,7 +12510,7 @@ function fireState(inputs, cfg){
     inlegMode, surplus, fInc, fExp, growMode, splitBeleg, rendFromGrow };
 }
 function reisState(){ return fireState(fireInputs(), SET.reis||{}); }   // alias, ongewijzigde uitkomst
-function reisSet(k,v){ SET.reis=SET.reis||{}; if(v===''||v==null) delete SET.reis[k]; else SET.reis[k]=v; save(); renderFire(); renderSet(); }   // renderSet: velden staan deels in Instellingen
+function reisSet(k,v){ SET.reis=SET.reis||{}; if(v===''||v==null) delete SET.reis[k]; else SET.reis[k]=v; save(); renderFire(); renderFireAannamesSheet(); }   // v374: de aannames staan in een sheet op het Vermogensreis-scherm
 function reisToggle(k){ SET.reis=SET.reis||{}; const cur=reisState(); SET.reis[k]=!cur[k];
   if(SET.reis[k] && k==='compose') SET.reis.band=false;   // samenstelling en bandbreedte sluiten elkaar uit (nooit 4 lagen)
   if(SET.reis[k] && k==='band') SET.reis.compose=false;
@@ -12504,8 +12533,8 @@ function reisScrubTo(i){ const s=window._reisScrub; if(!s) return; i=Math.max(0,
     if(s.hasDebt && s.debtParts && s.debtParts.length>=2) html += brk('Schuld', s.debtParts);   // waaruit je schuld op dit jaar bestaat
     out.innerHTML = html; }
 }
-function reisFire(m){ SET.reis=SET.reis||{}; SET.reis.fireCustom=(m==='eigen'); if(m!=='eigen') SET.reis.fireMult=m; save(); renderFire(); renderSet(); }
-function reisExpMode(m){ SET.reis=SET.reis||{}; SET.reis.expMode=(m==='eigen')?'eigen':'auto'; save(); renderFire(); renderSet(); }
+function reisFire(m){ SET.reis=SET.reis||{}; SET.reis.fireCustom=(m==='eigen'); if(m!=='eigen') SET.reis.fireMult=m; save(); renderFire(); renderFireAannamesSheet(); }
+function reisExpMode(m){ SET.reis=SET.reis||{}; SET.reis.expMode=(m==='eigen')?'eigen':'auto'; save(); renderFire(); renderFireAannamesSheet(); }
 function reisInlegMode(m){ SET.reis=SET.reis||{}; SET.reis.inlegMode=(m==='manual')?'manual':'auto'; save(); renderFire(); }
 function reisGrow(mode){ SET.reis=SET.reis||{}; if(['cash','sparen','beleggen','verdelen'].includes(mode)) SET.reis.growMode=mode; save(); renderFire(); renderSet(); }
 function reisSplit(v){ SET.reis=SET.reis||{}; SET.reis.splitBeleg=Math.max(0,Math.min(100,Math.round(numIn(v)))); save(); renderFire(); }
@@ -13184,7 +13213,7 @@ function renderFire(){
     ${gOpen(k)?`<div style="padding:2px 12px 13px">${inhoud}</div>`:''}</div>`;
   const aannames = `<div class="row" style="margin:16px 2px 2px"><span class="hlabel" style="margin:0">Inleg</span></div>
     ${groep('inleg','Inleg',`${euro0(R.pmt)}/mnd · ${R.inlegMode==='auto'?'uit restsaldo':'zelf ingevuld'}`,inlegContent)}
-    <div class="row" style="margin-top:12px;padding:12px;background:var(--card2);border:1px solid var(--line);border-radius:11px;cursor:pointer;justify-content:space-between" onclick="goFireAannames()"><span class="small" style="font-weight:600">Aannames aanpassen <span class="mut2" style="font-weight:400">· rendement, belasting, factor, pensioen…</span></span><span style="color:var(--teal);font-size:15px">›</span></div>`;
+    <div class="row" style="margin-top:12px;padding:12px;background:var(--card2);border:1px solid var(--line);border-radius:11px;cursor:pointer;justify-content:space-between" onclick="goFireAannames()" data-aannames><span class="small" style="font-weight:600">Aannames<span class="mut2" style="font-weight:400"> · rendement, belasting, factor, pensioen</span></span><span style="color:var(--teal);font-size:15px">›</span></div>`;
   const msOpen=!(SET.reis&&SET.reis.msClosed);   // mijlpalen standaard open, onthoudt inklap-keuze
   const VHui = R.chartZoom==='full' ? M.HZ : Math.min(+R.chartZoom||3, M.HZ);   // venster voor de scrub-schuifbalk
   const compose0 = R.compose && (M.debt[0]||0)>0;
@@ -20075,66 +20104,135 @@ function setFireAannames(){
     ${sub('Jaaruitgaven')}${uitgavenContent}
     ${sub('Inkomen bij pensioen')}${inkomenContent}`;
 }
-function goFireAannames(){ SET.setOpen='fire'; save(); renderSet(); go('set'); }   // rustige link vanaf het Vermogensreis-scherm naar de aannames
-function renderSet(){
-  const open=SET.setOpen||'';
-  const _bank=bankStand();
+/* v374: DE VERMOGENSREIS-AANNAMES STAAN OP HET VERMOGENSREIS-SCHERM, achter "aannames ›", in een sheet. De inhoud is
+   dezelfde setFireAannames(); alleen de plek verhuisde. Ze raken alleen dat scherm, dus Instellingen draagt ze niet. */
+function goFireAannames(){ window._setSheet=null; window._nfSheet=null; window._budgetSheet=null; renderFireAannamesSheet(true); showSheetBg(); }
+function renderFireAannamesSheet(nieuw){
+  const el=document.getElementById('sheet'); if(!el) return;
+  if(!nieuw && !el.querySelector('#fireAannames')) return;   // er staat een andere sheet open
+  const sc=el.scrollTop;
+  el.innerHTML=`<div class="grab"></div><div id="fireAannames"><div class="row" style="margin-bottom:8px"><div style="font-weight:800;font-size:var(--fs-lg)">Aannames</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>${setFireAannames()}</div>`;
+  if(!nieuw) el.scrollTop=sc;
+}
+
+/* ===== v374: INSTELLINGEN ZIJN ZES SUBPAGINA'S =====
+   Gevraagd door de gebruiker, mockup "Minder instellingen". Tot v373 negen uitklapblokken in een lijst, opengeklapt
+   zes schermlengtes, met de AI-coach drie keer, de briefing twee keer en de potjeslijst ertussen. Instellingen is
+   wat je zelden wijzigt; het maandwerk (potjes, dubbele boekingen) staat op Grip.
+   HET HOOFDSCHERM: zes regels met de huidige stand in grijs, elk een subpagina met "‹" terug (window._setSub, een
+   weergave en geen opslag). Bovenaan een statusbalk ALLEEN als er een melding is (setMeldingen()): een
+   bankkoppeling die binnen BANK_VERVAL_DAGEN verloopt of verlopen is (rood), en open paren mogelijke dubbele
+   boekingen (amber). Geen melding, geen balk. Onderaan de versie, gelezen uit de naam van de actieve cache
+   (setVersie(), EEN bron: CACHE in sw.js). */
+const SET_SUBS=[
+  {id:'inkomen',    ic:'euro',  naam:'Inkomen',            sub:()=>setSubInkomenStand(),   inh:()=>setIncome()},
+  {id:'bank',       ic:'bank',  naam:'Bank & rekeningen',  sub:()=>setSubBankStand(),      inh:()=>setBank()},
+  {id:'spelregels', ic:'target',naam:'Spelregels',         sub:()=>setSubSpelStand(),      inh:()=>setSpelregels()},
+  {id:'herkenning', ic:'swap',  naam:'Herkenning',         sub:()=>setSubHerkStand(),      inh:()=>setTransacties()},
+  {id:'coach',      ic:'robot', naam:'Coach & weergave',   sub:()=>setSubCoachStand(),     inh:()=>setCoachWeergave()},
+  {id:'gegevens',   ic:'lock',  naam:'Gegevens & privacy', sub:()=>setSubGegevensStand(),  inh:()=>setPrivacy()},
+];
+function openSetSub(id){ window._setSub=id||null; go('set'); renderSet(); try{ window.scrollTo(0,0); }catch(_){} }
+function setTerug(){ window._setSub=null; renderSet(); try{ window.scrollTo(0,0); }catch(_){} }
+function setSubInkomenStand(){
   const inc=SET.autoIncome?baseIncome():(+SET.income||0);
-  let _fr=null; try{ _fr=reisState(); }catch(_){}
-  const _frSub=_fr?`${(''+_fr.rend).replace('.',',')}% rendement · factor ${_fr.fireMult} · pensioen ${_fr.override||(_fr.birth?(+_fr.birth+67):'—')}`:'aannames voor je vermogensreis';
-  /* v182: de volgorde volgde de code, niet het onderwerp: Uiterlijk en Weergave stonden boven
-     Inkomen en Bankkoppeling, dus cosmetica boven data. De lijn loopt nu van binnenkomende data
-     (inkomen, koppeling) naar wat je ermee van plan bent (budget, vermogensreis) naar hoe het
-     verteld wordt (coach, weergave, uiterlijk) naar je gegevens zelf (privacy, met het wissen
-     onderaan). 'Coach-avatar & toon' is opgegaan in Coach: één onderwerp, één regel. */
-  const cats=[
-    ['income',ICON('euro'),'Inkomen & rekeningen',inkomenBekend()?`Je ontvangt ${euro0(inc)} per maand`:'Je inkomen is nog onbekend',setIncome,''],
-    ['bank',ICON('bank'),'Bank & koppelingen',_bank.sub,setBank,_bank.col],
-    ['trans',ICON('swap'),'Transacties & categorieën',SET.hideInternal?'Interne overboekingen verborgen':'Interne overboekingen tellen mee',setTransacties,''],
-    ['budget',ICON('target'),'Budget & doelen',spaardoelBekend()?`Je spaart ${euro0(monthlySavingTarget())} per maand`:'Je spaarinleg is nog onbekend',null,'','openBudgetEditor()'],
-    ['fire',ICON('trend'),'Vermogensreis · aannames',_frSub,setFireAannames,''],
-    /* v202: hier stond 'Je coach staat uit/aan' en de schakelaar heette 'Coaching', met als
-       subregel 'Coach-tips op je Home & Actieplan'. Alle drie onwaar. SET.coachOff wordt op precies
-       een functionele plek gelezen: de guard in scoreNotifs(), die VIER signalen uitzet - savrules
-       (correctie) plus meevaller, inflatie en overstreak (structureel), samen precies wat
-       maandStructureel() teruggeeft. Het geparkeerde-aankoopsignaal stond hier eerder ten onrechte
-       bij: park- wordt boven de guard gepusht en blijft staan. coStart() leest hem niet,
-       dus met de coach 'uit' kon je vanaf Maand, Inzichten en Plan nog gewoon een gesprek beginnen;
-       gemeten start het gesprek in beide standen identiek. En 'Actieplan' is het scherm dat in v196
-       is opgeheven, terwijl de signalen niet op Home staan maar in je meldingen en op Maand.
-       Gekozen voor de tekst aanpassen, niet het gedrag (v181, zoals bij 'Read-only' en de
-       privacyclaim): het gedrag aanpassen zou vier gespreksingangen op drie schermen tot een dode
-       knop maken, en dat is de vraag of het gesprek optioneel is - een eigen ronde waard. De sectie
-       blijft Coach heten, want het gesprek is de coach en dat woont daar.
-       v205: 'je coachsignalen' was nog steeds te ruim - het klonk als alle signalen, en het zijn er
-       vier van de ruim veertig. De naam komt nu uit PATROONSIGNALEN_NAAM en zegt wat de schakelaar
-       werkelijk uitzet: wat Minder uit je patronen AFLEIDT, niet de meldingen over wat er nu speelt.
-       Daarmee is park- buiten de guard geen inconsistentie meer maar de regel zelf: een geparkeerde
-       aankoop is geen afgeleid patroon maar iets waar je zelf om hebt gevraagd. */
-    ['coach',ICON('robot'),'Coach',`${PATROONSIGNALEN_NAAM} staan ${SET.coachOff?'uit':'aan'} · ${coachSamenvatting()}`,setCoach,''],
-    ['modus',ICON('filter'),'Weergave & modus',({rustig:'Rustig',begeleid:'Begeleid',expert:'Expert'})[SET.mode||'begeleid'],setModus,''],
-    ['look',ICON('palet'),'Uiterlijk',THEMES[themeKey()].naam,setLook,''],
-    ['privacy',ICON('lock'),'Privacy & gegevens',privacySub(),setPrivacy,''],
-  ];
-  const list=cats.map(([id,ic,label,sub,fn,col,sheet])=>{
-    /* Twee soorten regels. De meeste klappen inline uit met fn(). Een regel met een eigen sheet
-       klapt nooit uit: die sheet is namelijk ook ergens anders de ingang, en dan hoort er één
-       oppervlak te zijn. Budget komt ook vanuit Inzichten, de coach-avatar ook vanuit de coachkop.
-       v185: aan de regel zag je dat verschil niet, want allebei droegen ze dezelfde chevron. Beide
-       patronen zijn met opzet gekozen, dus het gedrag blijft; alleen het teken zegt nu welk van de
-       twee je krijgt. De driehoek vouwt hier open, de chevron gaat ergens heen - precies wat de
-       chevron overal elders in de app al betekent. */
-    const act = sheet || `toggleSet('${id}')`;
-    const op  = !sheet && open===id;
-    return `
-    <div onclick="${act}" style="display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line);cursor:pointer">
-      <div style="font-size:var(--fs-xl)">${ic}</div>
-      <div style="flex:1;min-width:0"><div style="font-weight:600">${label}</div><div class="small ${col?'':'muted'}"${col?` style="color:${col}"`:''}>${sub}</div></div>
-      <div class="muted" style="font-size:var(--fs-lg)">${sheet?'›':(op?'▲':'▼')}</div>
-    </div>
-    ${op?`<div style="padding:10px 4px 16px;border-bottom:1px solid var(--line)">${fn()}</div>`:''}`;}).join('');
-  $('#s-set').innerHTML = `<div class="row" style="margin:2px 2px 18px"><span class="hlabel" style="margin:0;flex:1">Instellingen</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="terug()">Klaar</span></div><div class="card" style="padding:6px 12px">${list}</div>
-    <div class="center small muted" id="setVoet" style="padding:8px 0 20px;cursor:default;-webkit-user-select:none;user-select:none" onclick="bankAdvTap()" onpointerdown="diagDruk(1)" onpointerup="diagDruk(0)" onpointercancel="diagDruk(0)" onpointerleave="diagDruk(0)" oncontextmenu="return false">Minder · veilig &amp; lokaal</div>`;
+  const n=irrGeldig().filter(v=>v.ym>=thisYM()).length;
+  return (inkomenBekend()?`${euro0(inc)} per maand`:'je inkomen is nog onbekend')+(n?` · ${n===1?'1 bonus':n+' posten'} gepland`:'');
+}
+function setSubBankStand(){
+  let B=null; try{ B=bankStand(); }catch(_){}
+  if(B && B.stuk && !B.verlopen) return `<span style="color:${B.col}">${esc(B.sub)}</span>`;   // v280: een rekening die niets ophaalt
+  const V=bankVerval(), n=OWN.filter(rekActief).length;
+  const kop=V.map(g=>`${esc(bankKort(g.bank))} ${g.verlopen?'verlopen':(g.exp?'tot '+dagKort(g.exp):'gekoppeld')}`);
+  if(!V.length) kop.push('nog geen bank gekoppeld');
+  return kop.join(' · ')+(n?` · ${n} rekening${n===1?'':'en'}`:'');
+}
+function setSubSpelStand(){
+  let nf=null; try{ nf=noodfondsModel().doel; }catch(_){}
+  return `limiet ${SET.limit}%`+(spaardoelBekend()?` · sparen ${euro0(monthlySavingTarget())}`:' · sparen nog onbekend')+(nf>0?` · buffer ${euro0(nf)}`:'');
+}
+function setSubHerkStand(){ let vl=[]; try{ vl=vasteLasten(); }catch(_){} return vl.length?`${vl.length} vaste last${vl.length===1?'':'en'}`:'nog geen vaste lasten herkend'; }
+function setSubCoachStand(){
+  return [SET.coachOff?PATROONSIGNALEN_NAAM.toLowerCase()+' uit':null, (SET.name||'').trim()||null, coachSamenvatting(), ({rustig:'Rustig',begeleid:'Begeleid',expert:'Expert'})[SET.mode||'begeleid'], THEMES[themeKey()].naam].filter(Boolean).join(' · ');
+}
+function setSubGegevensStand(){
+  const u=privacyUitzonderingen();
+  return (u.length?'lokaal, behalve '+u.join(' en '):'lokaal')+' · laatste back-up: '+(SET.laatsteBackup?dagKort(SET.laatsteBackup):'nooit');
+}
+/* DE STATUSBALK. Rood alleen voor de koppeling (die laat je cijfers stilstaan), amber voor de dubbele boekingen
+   (een vraag die openstaat). Elk item gaat naar de bestaande ingang. */
+const BANK_VERVAL_DAGEN=14;
+function bankKort(b){ return String(b||'Je bank').replace(/ AMRO$/i,''); }
+function _dagenTot(a,b){ return Math.round((new Date(String(b).slice(0,10)+'T00:00')-new Date(String(a).slice(0,10)+'T00:00'))/864e5); }
+/* Per bank de vroegste vervaldatum van de toestemming (exp, valid_until van de consent) en tot wanneer er gegevens
+   zijn: het nieuwste saldo of de nieuwste boeking op een rekening van die bank. EEN bron voor de statusbalk, de
+   kaart in Bank & rekeningen en de regel op Home. */
+function bankVerval(){
+  const ps=SET.psd2Accounts||{}, per={}, vd=vandaagYMD();
+  for(const [acc,v] of Object.entries(ps)){
+    const b=v.bank||'Je bank', g=per[b]||(per[b]={bank:b, accs:[], exp:null, bij:null});
+    g.accs.push(acc);
+    if(v.exp){ const e=ymdVan(new Date(v.exp)); if(!g.exp || e<g.exp) g.exp=e; }
+    const d1=(ACCMETA[acc]&&ACCMETA[acc].date)||null, d2=nieuwsteTxDatum(acc);
+    for(const d of [d1,d2]) if(d && (!g.bij || String(d).slice(0,10)>g.bij)) g.bij=String(d).slice(0,10);
+  }
+  return Object.values(per).map(g=>{ const dagen=g.exp?_dagenTot(vd,g.exp):null;
+    return Object.assign(g,{dagen, verlopen:dagen!=null && dagen<0, binnenkort:dagen!=null && dagen>=0 && dagen<=BANK_VERVAL_DAGEN}); })
+    .sort((a,b)=>String(a.exp||'9').localeCompare(String(b.exp||'9')));
+}
+/* Twee vormen van dezelfde zin: de statusbalk zegt "ABN-toestemming verloopt ...", Home "ABN: toestemming verloopt
+   ..." (de mockup); na het verlopen zeggen beide tot wanneer je gegevens lopen. */
+function bankVervalZin(g, balk){
+  if(g.verlopen) return `Gegevens van ${bankKort(g.bank)} tot ${g.bij?dagKort(g.bij):'onbekend'}`;
+  return `${bankKort(g.bank)}${balk?'-t':': t'}oestemming verloopt ${g.dagen===0?'vandaag':'over '+g.dagen+' dag'+(g.dagen===1?'':'en')}`;
+}
+function setMeldingen(){
+  const M=[];
+  try{ for(const g of bankVerval()) if(g.verlopen||g.binnenkort) M.push({soort:'bank', kleur:'var(--red)', tekst:bankVervalZin(g,true), link:g.verlopen?'opnieuw koppelen':'vernieuwen', act:'psd2Connect()'}); }catch(_){}
+  try{ const n=dubbelParen().filter(p=>!p.keuze).length;
+    if(n) M.push({soort:'dubbel', kleur:'var(--amber)', tekst:`${n} mogelijke dubbele boeking${n===1?'':'en'}`, link:'bekijk', act:'openDubbelParen()'}); }catch(_){}
+  return M;
+}
+function setStatusbalk(){
+  const M=setMeldingen(); if(!M.length) return '';
+  return `<div class="card" id="setStatus" style="padding:4px 12px;margin-bottom:12px">${M.map(m=>`<div class="row" data-setmelding="${m.soort}" style="gap:10px;padding:9px 0;cursor:pointer;border-bottom:1px solid var(--line)" onclick="${m.act}">
+    <span style="width:8px;height:8px;border-radius:50%;background:${m.kleur};flex-shrink:0"></span>
+    <span class="small" style="flex:1;min-width:0">${esc(m.tekst)} <span style="color:var(--teal);font-weight:600;white-space:nowrap">· ${m.link} ›</span></span></div>`).join('')}</div>`;
+}
+/* De regel op Home: dezelfde bron, alleen de koppeling. Je getallen blijven staan; de regel zegt tot wanneer ze
+   bijgewerkt zijn. */
+function bankVervalHero(){
+  let V=[]; try{ V=bankVerval().filter(g=>g.verlopen||g.binnenkort); }catch(_){ return ''; }
+  return V.map(g=>`<div data-bankverval="${g.verlopen?'verlopen':'binnenkort'}" style="font-size:var(--fs-sm);color:var(--mut);margin-top:4px;cursor:pointer" onclick="psd2Connect()">${esc(bankVervalZin(g))} <span style="color:var(--teal);font-weight:600;white-space:nowrap">· ${g.verlopen?'opnieuw koppelen':'vernieuwen'} ›</span></div>`).join('');
+}
+/* DE VERSIE komt uit de naam van de actieve cache (minder-vN, gezet in sw.js). Zonder cache (een eerste bezoek,
+   of een browser zonder service worker) staat er geen versie: een tweede versiestring in index.html zou naast
+   CACHE gaan lopen. */
+function setVersie(){
+  try{ if(!('caches' in window)) return;
+    caches.keys().then(ks=>{ const k=ks.filter(x=>/^minder-v\d+$/.test(x)).sort((a,b)=>(+b.slice(8))-(+a.slice(8)))[0];
+      const el=document.getElementById('setVersie'); if(el) el.textContent=k?' · v'+k.slice(8):''; window._setVersie=k||''; }).catch(()=>{});
+  }catch(_){}
+}
+function renderSet(){
+  const el=$('#s-set'); if(!el) return;
+  const sub=SET_SUBS.find(x=>x.id===window._setSub);
+  const voet=`<div class="center small muted" id="setVoet" style="padding:8px 0 20px;cursor:default;-webkit-user-select:none;user-select:none" onclick="bankAdvTap()" onpointerdown="diagDruk(1)" onpointerup="diagDruk(0)" onpointercancel="diagDruk(0)" onpointerleave="diagDruk(0)" oncontextmenu="return false">Minder · veilig &amp; lokaal<span id="setVersie">${window._setVersie?' · v'+esc(window._setVersie.slice(8)):''}</span></div>`;
+  if(sub){
+    let inh=''; try{ inh=sub.inh(); }catch(e){ inh='<div class="small muted">Kon deze pagina niet tonen.</div>'; }
+    el.innerHTML=`<div class="row" data-setsub="${sub.id}" style="margin:2px 2px 14px;gap:8px"><span style="color:var(--teal);cursor:pointer;font-weight:700;font-size:var(--fs-lg)" onclick="setTerug()">‹</span><span class="hlabel" style="margin:0;flex:1">${esc(sub.naam)}</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="terug()">Klaar</span></div>
+      <div class="card" style="padding:12px 14px">${inh}</div>${voet}`;
+  } else {
+    const list=SET_SUBS.map(x=>{ let s=''; try{ s=x.sub(); }catch(_){}
+      return `<div data-setrij="${x.id}" onclick="openSetSub('${x.id}')" style="display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line);cursor:pointer">
+      <div style="font-size:var(--fs-xl)">${ICON(x.ic)}</div>
+      <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(x.naam)}</div><div class="small muted">${s}</div></div>
+      <div class="muted" style="font-size:var(--fs-lg)">›</div></div>`; }).join('');
+    el.innerHTML=`<div class="row" style="margin:2px 2px 18px"><span class="hlabel" style="margin:0;flex:1">Instellingen</span><span class="small" style="color:var(--teal);cursor:pointer;font-weight:600" onclick="terug()">Klaar</span></div>
+      ${setStatusbalk()}<div class="card" style="padding:6px 12px">${list}</div>${voet}`;
+  }
+  if(!window._setVersie) setVersie();
+  try{ renderFireAannamesSheet(); }catch(_){}
 }
 
 /* ---------- Uiterlijk: thema's ----------
@@ -20154,6 +20252,7 @@ function applyTheme(){
 function setTheme(k){
   if(!THEMES[k]) return;
   SET.theme=k; save(); applyTheme(); render();
+  if(document.getElementById('themaSheet')) openThema();
   toast(`${ICON('check')} Thema: ${THEMES[k].naam}`);
 }
 /* Het hero-bedrag in het voorbeeld komt uit je eigen cijfers, precies zoals Home het toont: het
@@ -20205,23 +20304,15 @@ function setLook(){
    geen voorraad maar ballast (v165), en komt er ooit een ingang bij, dan is dit vijf regels werk.
    window._setSheet blijft bestaan als markering van het oppervlak: openCoachAvatar(),
    openBudgetEditor() en het coachgesprek zetten hem op null om de sheet over te nemen. */
-function openInkomenSheet(){
-  window._setSheet='income'; window._nfSheet=null; window._budgetSheet=null;
-  renderInkomenSheet(); showSheetBg();
-}
-function renderInkomenSheet(){
-  if(window._setSheet!=='income') return;
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="row" style="margin-bottom:12px"><div style="font-weight:800;font-size:var(--fs-lg)">${ICON('euro')} Inkomen &amp; rekeningen</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    ${setIncome()}<div style="height:8px"></div>`;
-}
+/* v374: Inkomen is een subpagina; openInkomenSheet() blijft de ingang voor wie terugkeert uit een post-editor. */
+function openInkomenSheet(){ closeSheet(); openSetSub('inkomen'); }
 
 /* Budget in-context invullen: dezelfde editor (setBudget) als bottomsheet, direct vanuit Inzichten.
    Geen tweede editor — één budget-systeem. De sheet ververst zichzelf via de hook in render(). */
 function budgetSheetHTML(){
   return `<div class="grab"></div>
     <div class="row" id="budgetSheetHead" style="margin-bottom:2px"><div style="font-weight:800;font-size:var(--fs-lg)">${ICON('target')} Budget deze maand</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>
-    <div class="small muted" style="margin-bottom:12px">Stel je maandbudget en potjes in.</div>
+    <div class="small muted" style="margin-bottom:12px">Je potjes. Hoe Minder rekent (limiet, sparen, buffer) staat in Instellingen bij Spelregels.</div>
     ${setBudget()}<div style="height:8px"></div>`;
 }
 function openBudgetEditor(m){
@@ -20241,62 +20332,78 @@ function renderBudgetSheet(){
 }
 
 
+/* v374: DE BUDGETEDITOR DRAAGT DE POTJES, SPELREGELS DE REST. Tot v373 was setBudget() allebei: de limiet, sparen en
+   meevallers bovenaan, en de potjes achter "Geavanceerd". Potjesbedragen zijn maandwerk en horen op Grip ("Budget
+   aanpassen ›", v364); hoe Minder rekent zet je een keer en daarna zelden, en dat is Spelregels. */
 function setBudget(){
-  const adv=!!SET.budgetAdv;
-  const advBlock = `
-    <label class="fld">Limiet-model</label>
-    <div class="small muted" style="margin-bottom:6px">Hóe je bovengrens meebeweegt met je inkomen.</div>
-    <div class="chips">${[['pct','% van inkomen'],['cap','Vast plafond'],['baseline','Vorig niveau'],['damper','Rem op groei']].map(([k,l])=>`<span class="chip ${(SET.limitMode||'pct')===k?'on':''}" onclick="SET.limitMode='${k}';save();render();">${l}</span>`).join('')}</div>
-    ${(SET.limitMode||'pct')==='cap'
-      ? `<input type="number" min="0" value="${SET.spendCap||''}" placeholder="bv. 2500" oninput="SET.spendCap=numIn(this.value)||0;save();render();"><div class="small muted" style="margin-top:6px">Vast maandplafond. Alles boven dit bedrag gaat naar sparen. Een loonsverhoging verhoogt je limiet niet.</div>`
-      : (SET.limitMode||'pct')==='damper'
-      ? `<input type="number" min="0" max="100" value="${SET.damperPct||30}" placeholder="30" oninput="SET.damperPct=numIn(this.value)||0;save();render();"><div class="small muted" style="margin-top:6px">Van elke euro die je méér verdient dan je basisinkomen (${euro0(baseIncome())}) gaat ${SET.damperPct||30}% naar je limiet, de rest naar sparen.</div>`
-      : (SET.limitMode||'pct')==='baseline'
-      ? `<div class="small muted" style="margin-top:6px">Je limiet ankert op je typische uitgaven (≈ ${euro0(baselineSpend())}/mnd) en groeit niet mee met je inkomen. Meer verdienen → meer sparen.</div>`
-      : `<div class="small muted" style="margin-top:6px">Klassiek: limiet = ${SET.limit}% van je inkomen. Meer inkomen = meer ruimte.</div>`}
-    <label class="fld">Bufferdoel</label>
-    <div class="small muted" style="margin-bottom:6px">Je buffer volgt je noodfonds: essentiële crisis-last × het aantal maanden. Verfijnen doe je op Plan ▸ Noodfonds.</div>
-    <div class="chips">${[3,4,6].map(x=>`<span class="chip ${nfMaanden()===x?'on':''}" onclick="SET.nfMaanden=${x};save();render();">${x} mnd</span>`).join('')}</div>
-    <div class="small muted" style="margin-top:6px">${(function(){try{const M=noodfondsModel();
-      return M.doelVast!=null
-        ? `Doel nu: <b>${euro0(M.doel)}</b> · door jou vastgezet, dus de maandkeuze hierboven stuurt het niet. De schatting zou ${euro0(M.doelAuto)} zeggen.`
-        : `Doel nu: <b>${euro0(M.doel)}</b> · ${M.maanden} mnd essentiële crisis-last.`;
-    }catch(_){return '';}})()}</div>
-    <label class="fld" style="margin-top:14px">Rente op je spaargeld</label>
-    <div class="row" style="gap:8px"><input type="text" inputmode="decimal" value="${SET.spaarRente!=null&&SET.spaarRente!==''?numUit(SET.spaarRente):''}" placeholder="0" style="flex:1" oninput="SET.spaarRente=this.value===''?'':Math.min(20,Math.max(0,numIn(this.value)));save();render();"><span class="muted" style="align-self:center">%/jr</span></div>
-    <div class="small muted" style="margin-top:6px">Minder gebruikt dit om te bepalen of een schuld duur genoeg is om voor te gaan op sparen. Laat je hem leeg, dan rekent hij met 0% en gaat een schuld dus eerder voor.</div>
-    <label class="fld" style="margin-top:14px">${ICON('chart')} Maandbudget per categorie</label>
-    <div class="small muted" style="margin:0 0 6px">Dit zijn dezelfde <b>potjes</b> als bij je Coach, wijzig ze hier of daar, het is één systeem.</div>
+  return `<label class="fld" style="margin-top:0">${ICON('chart')} Maandbudget per categorie</label>
     <div class="small" id="potGridTotal" style="margin:2px 0 4px">${potRoomLineHTML(totalBudget(), plannedTotalBudget())}</div>
     <div class="small muted" style="margin:0 0 8px">Een wijziging aan een bestaand potje geldt vanaf ${ymFull(nextYM(SET.budgetMonth||thisYM()))}. De lopende maand ligt vast.</div>
     <button class="btn sec" style="margin:6px 0 10px" onclick="if(confirm('Budget per categorie voorstellen op basis van je historie? Bestaande potjes worden overschreven vanaf volgende maand; de lopende maand blijft staan.')){suggestBudgets();}">${ICON('trend')} Voorstel uit mijn historie</button>
-    <div class="small" data-nieuwpotje style="margin:0 0 8px;color:var(--teal);font-weight:600;cursor:pointer" onclick="openPotForm()">${ICON('plus')} Nieuw potje \u203a</div>
+    <div class="small" data-nieuwpotje style="margin:0 0 8px;color:var(--teal);font-weight:600;cursor:pointer" onclick="openPotForm()">${ICON('plus')} Nieuw potje ›</div>
     ${Object.entries(CATS).filter(([k,c])=>c.type==='expense'&&!c.geenNorm&&!potGearchiveerd(k)).map(([k,c])=>{   // v234: geen potje voor onvoorzien; v351: geen gearchiveerd potje
       const pend=(SET.budgetsNext&&SET.budgetsNext[k]!=null)?+SET.budgetsNext[k]:null;
       const shown=(pend!=null?pend:((SET.budgets&&SET.budgets[k])||''))||'';
       const note=(pend!=null && pend!==((+(SET.budgets||{})[k])||0))?`<span class="small" style="color:var(--teal);margin-left:6px">vanaf vlg. mnd</span>`:(potIsOpen(k)?`<span class="small" data-gridopen style="color:var(--mut2);margin-left:6px">nog niet vastgesteld</span>`:'')+potSchatTag(k);
       return `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:var(--fs-md);cursor:pointer" onclick="openPotje('${k}')">${c.icon} ${c.name}${note}</span>
         <div style="display:flex;align-items:center;gap:4px"><span class="muted">€</span><input type="number" min="0" step="5" value="${shown}" placeholder="0" style="width:80px;text-align:right;padding:6px 9px" oninput="setCatBudget('${k}',this.value)"></div></div>`;}).join('')}`;
-  return `
-    <label class="fld">Bestedingslimiet: <b style="color:var(--teal)">${SET.limit}%</b> van inkomen</label>
+}
+/* De bestedingslimiet staat met zijn bedrag en ernaast je budget en het verschil: "Nu: EUR X besteden" heette een
+   limiet "besteden", en dat is hij niet. Het bedrag is monthBudget(baseIncome()), de bron die die regel las. */
+function spelLimietRegel(){
+  let lim=null, bud=null; try{ lim=Math.round(monthBudget(baseIncome())); }catch(_){} try{ bud=Math.round(totalBudget()); }catch(_){}
+  if(!(lim>0)) return `<div class="small muted" data-spellimiet style="margin-top:6px">${SET.limit}% · je inkomen is nog onbekend, dus er is nog geen bedrag.</div>`;
+  const r=lim-(bud||0);
+  return `<div data-spellimiet="${lim}" style="margin-top:6px"><div style="font-weight:700">${SET.limit}% · ${euro0(lim)}</div>
+    <div class="small muted" data-spelbudget="${bud||0}">je budget ${euro0(bud||0)} · ${r>=0?euro0(r)+' ruimte':euro0(-r)+' boven je limiet'}</div></div>`;
+}
+function spelRij(lab, sub, waarde, act, data){
+  return `<div class="row" ${data||''} style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)${act?';cursor:pointer':''}"${act?` onclick="${act}"`:''}>
+    <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${lab}</div><div class="small muted">${sub}</div></div>
+    <span style="font-weight:700;white-space:nowrap">${waarde}</span>${act?'<span class="muted">›</span>':''}</div>`;
+}
+function setSpelregels(){
+  const lm=SET.limitMode||'pct';
+  let M=null; try{ M=noodfondsModel(); }catch(_){}
+  const norm=bufferNorm(), bd=beleggenDrempel(), bdEigen=SET.beleggenDrempel!=null&&SET.beleggenDrempel!=='';
+  const kop=t=>`<div class="hlabel" style="margin:16px 0 4px">${t}</div>`;
+  return `<div class="small muted" style="margin-bottom:4px">Hoe Minder rekent. Stel je een keer in, daarna zelden.</div>
+    ${kop('Uitgeven')}
+    <label class="fld" style="margin-top:4px">Bestedingslimiet</label>
     <input type="range" class="slider" min="40" max="100" step="5" value="${SET.limit}" oninput="SET.limit=numIn(this.value);save();render();">
-    <div class="small muted">De ${SET.limit}%-regel is je bovengrens voor uitgeven.</div>
-    <label class="fld">Hoeveel je per maand wilt sparen</label>
+    ${spelLimietRegel()}
+    <div class="small muted" style="margin:10px 0 6px">Hoe je limiet meebeweegt met je inkomen.</div>
+    <div class="chips">${[['pct','% van inkomen'],['cap','Vast plafond'],['baseline','Vorig niveau'],['damper','Rem op groei']].map(([k,l])=>`<span class="chip ${lm===k?'on':''}" onclick="SET.limitMode='${k}';save();render();">${l}</span>`).join('')}</div>
+    ${lm==='cap'
+      ? `<input type="number" min="0" value="${SET.spendCap||''}" placeholder="bv. 2500" oninput="SET.spendCap=numIn(this.value)||0;save();render();"><div class="small muted" style="margin-top:6px">Vast maandplafond. Alles boven dit bedrag gaat naar sparen. Een loonsverhoging verhoogt je limiet niet.</div>`
+      : lm==='damper'
+      ? `<input type="number" min="0" max="100" value="${SET.damperPct||30}" placeholder="30" oninput="SET.damperPct=numIn(this.value)||0;save();render();"><div class="small muted" style="margin-top:6px">Van elke euro die je meer verdient dan je basisinkomen (${euro0(baseIncome())}) gaat ${SET.damperPct||30}% naar je limiet, de rest naar sparen.</div>`
+      : lm==='baseline'
+      ? `<div class="small muted" style="margin-top:6px">Je limiet ankert op je typische uitgaven (≈ ${euro0(baselineSpend())}/mnd) en groeit niet mee met je inkomen.</div>`
+      : `<div class="small muted" style="margin-top:6px">Je limiet is ${SET.limit}% van je inkomen. Meer inkomen is meer ruimte.</div>`}
+    <label class="fld">Nachtje over slapen vanaf (€)</label>
+    <input type="number" min="0" step="5" value="${SET.slaapDrempel!=null&&SET.slaapDrempel!==''?SET.slaapDrempel:''}" placeholder="${SLAAP_DREMPEL_DEFAULT}" oninput="SET.slaapDrempel=this.value===''?'':Math.max(0,numIn(this.value)||0);save();">
+    <div class="small muted" style="margin-top:6px">Boven dit bedrag stelt de koopcheck voor om er een nacht over te slapen. Je kiest zelf: parkeren tot morgen, of meteen de uitkomst zien. Op ${euro0(0)} staat de stap uit.</div>
+    ${kop('Sparen')}
+    <label class="fld" style="margin-top:4px">Sparen per maand</label>
     <div class="chips">${[['auto','Automatisch'],['amount','Vast bedrag'],['percent','% van inkomen']].map(([k,l])=>`<span class="chip ${(SET.savingMode||'auto')===k?'on':''}" onclick="SET.savingMode='${k}';save();render();">${l}</span>`).join('')}</div>
     ${(SET.savingMode||'auto')==='amount'
       ? `<input type="number" min="0" value="${SET.savingAmount||''}" placeholder="bv. 750" oninput="SET.savingAmount=numIn(this.value)||0;save();render();">`
       : (SET.savingMode||'auto')==='percent'
       ? `<input type="number" min="0" max="100" value="${SET.savingPercent||''}" placeholder="bv. 20" oninput="SET.savingPercent=numIn(this.value)||0;save();render();">`
-      : `<div class="small muted">Automatisch = je inkomen minus je bestedingslimiet.</div>`}
-    <div class="small" style="margin-top:8px">Nu: <b>${euro0(monthBudget(baseIncome()))}</b> besteden · <b style="color:var(--teal)">${euro0(monthlySavingTarget())}</b> sparen per maand.</div>
+      : `<div class="small muted">Automatisch is je inkomen min je bestedingslimiet.</div>`}
+    <div class="small" data-spelsparen style="margin-top:8px">Je spaart <b style="color:var(--teal)">${euro0(monthlySavingTarget())}</b> per maand.</div>
     <label class="fld">Meevallers: deel dat vrij blijft (%)</label>
     <input type="number" min="0" max="100" value="${SET.meevallerVrijPct!=null&&SET.meevallerVrijPct!==''?SET.meevallerVrijPct:''}" placeholder="${MEEVALLER_VRIJ_DEFAULT}" oninput="SET.meevallerVrijPct=this.value===''?'':numIn(this.value);save();">
-    <div class="small muted" style="margin-top:6px">Bij bonus, vakantiegeld of een nabetaling blijft <b>${meevallerVrijPct()}%</b> vrij besteedbaar. De rest gaat naar de eerste voorwaarde die nog niet gehaald is: eerst je reserveringen tot ze gedekt zijn, dan je buffer tot je eigen ondergrens${bufferNorm()!=null?` van ${bufferNorm()} maanden`:', zodra je die hebt gekozen'}, dan je aankoopdoel. Je legt de regel nu vast; bij binnenkomst zie je het voorstel en bevestig je zelf per post. <span style="color:var(--teal);cursor:pointer" onclick="openMeevaller(0,'handmatig')">Nu doorrekenen ›</span></div>
-    <label class="fld">Nachtje over slapen vanaf (€)</label>
-    <input type="number" min="0" step="5" value="${SET.slaapDrempel!=null&&SET.slaapDrempel!==''?SET.slaapDrempel:''}" placeholder="${SLAAP_DREMPEL_DEFAULT}" oninput="SET.slaapDrempel=this.value===''?'':Math.max(0,numIn(this.value)||0);save();">
-    <div class="small muted" style="margin-top:6px">Boven dit bedrag stelt de koopcheck voor om er een nacht over te slapen. Je kiest zelf: parkeren tot morgen, of meteen de uitkomst zien. Op ${euro0(0)} staat de stap uit.</div>
-    <button class="snz" style="margin-top:14px" onclick="SET.budgetAdv=${!adv};save();render();">${adv?'Minder opties ▲':'Geavanceerd: limiet-model, bufferdoel & categorie-budgetten ▼'}</button>
-    ${adv?advBlock:''}`;
+    <div class="small muted" style="margin-top:6px">Bij bonus, vakantiegeld of een nabetaling blijft <b>${meevallerVrijPct()}%</b> vrij besteedbaar. De rest gaat naar de eerste voorwaarde die nog niet gehaald is: eerst je reserveringen, dan je buffer${norm!=null?` tot ${norm} maanden`:''}, dan je aankoopdoel. Bij binnenkomst zie je het voorstel en bevestig je zelf. <span style="color:var(--teal);cursor:pointer" onclick="openMeevaller(0,'handmatig')">Nu doorrekenen ›</span></div>
+    <label class="fld" style="margin-top:14px">Rente op je spaargeld</label>
+    <div class="row" style="gap:8px"><input type="text" inputmode="decimal" value="${SET.spaarRente!=null&&SET.spaarRente!==''?numUit(SET.spaarRente):''}" placeholder="0" style="flex:1" oninput="SET.spaarRente=this.value===''?'':Math.min(20,Math.max(0,numIn(this.value)));save();render();"><span class="muted" style="align-self:center">%/jr</span></div>
+    <div class="small muted" style="margin-top:6px">Hiermee bepaalt Minder of een schuld duur genoeg is om voor te gaan op sparen. Laat je hem leeg, dan rekent hij met 0% en gaat een schuld dus eerder voor.</div>
+    ${kop('Buffer')}
+    ${spelRij('Noodfonds', M?(M.doelVast!=null?`door jou vastgezet · de schatting zou ${euro0(M.doelAuto)} zijn`:`schatting: ${M.maanden} maanden essentiële crisislast`)+' · de coach noemt geld stilstaand pas boven dit bedrag':'nog niet te bepalen', M?euro0(M.doel):'onbekend', 'openNoodfondsPanel()', 'data-spelnoodfonds')}
+    ${spelRij('Ondergrens', norm!=null?'onder dit aantal maanden noemt Grip je buffer te klein':'nog niet gekozen · zonder ondergrens oordeelt Grip niet over je buffer', norm!=null?norm+' mnd':'kies', 'openNoodfondsPanel()', 'data-spelnorm')}
+    ${spelRij('Buffer voor beleggen', bd!=null?(bdEigen?'je eigen keuze · pas daarboven telt je buffer als klaar om te beleggen':'gelijk aan je ondergrens · pas daarboven telt je buffer als klaar om te beleggen'):'nog geen grens, want je hebt nog geen ondergrens gekozen', bd!=null?bd+' mnd':'geen', 'openBeleggenVoorwaarden()', 'data-spelbeleggen')}
+    <div class="row" data-spelpotjes style="gap:10px;margin-top:16px;padding-top:12px;border-top:1px solid var(--line)"><span class="small muted" style="flex:1">Potjesbedragen pas je aan op Grip</span><span class="small" style="color:var(--teal);font-weight:600;cursor:pointer;white-space:nowrap" onclick="openBudgetEditor(thisYM())">Budget aanpassen ›</span></div>`;
 }
 
 /* v202: SET.irregularIncome wordt door financeModel() gelezen (vakantiegeld, dertiende maand,
@@ -20443,42 +20550,86 @@ function setIncome(){
     <div class="small muted" style="margin-bottom:2px">Deze bedragen tellen in hun eigen maand mee in je prognose, boven op je maandinkomen.</div>
     ${irrRijen()}
     <button class="btn sec" style="margin-top:10px" onclick="openIrregular('')">${ICON('plus')} Post toevoegen</button>`;
-  if(OWN.length){ h+=`
-    <label class="fld" style="margin-top:14px">Je rekeningen & saldo <span class="small muted">· ${totalBalance().known>0?euro(totalBalance().sum)+' totaal':'saldo onbekend'}</span></label>
-    <div class="small muted" style="margin-bottom:8px">Saldo's uit MT940/PSD2 zijn vooraf ingevuld.</div>
-    ${accountsCard()}
-    <label class="fld">Minimale buffer (waarschuwing)</label>
-    <input type="number" value="${SET.buffer||''}" placeholder="bv. 1000" oninput="SET.buffer=numIn(this.value)||0;save();render();">
-    <div class="small muted" style="margin-top:6px">De prognose waarschuwt als je saldo hieronder dreigt te komen.</div>
-    <label class="fld">Extra spaargeld (potjes buiten PSD2)</label>
-    <input type="number" value="${SET.extraSavings||''}" placeholder="bv. 5000" oninput="SET.extraSavings=numIn(this.value)||0;save();render();">
-    <div class="small muted" style="margin-top:6px">Saldo van potjes die niet via PSD2 binnenkomen (bv. N26 Spaces). Telt mee voor je bufferdoel, niet voor je vrij besteedbare ruimte.</div>`; }
+  /* v374: de rekeningen en hun saldo staan in Bank & rekeningen. "Minimale buffer (waarschuwing)" (SET.buffer) is
+     vervallen: het was een tweede buffergetal naast het noodfonds, en de coach-grens leest nu het noodfondsdoel. */
   return h;
 }
 
 function toggleSavingsAcct(a){
   SET.savingsAcc=SET.savingsAcc||{};
   SET.savingsAcc[a]=!isSavingsAcc(a);
-  save(); SET.setOpen='bank'; renderSet(); try{renderInkomenSheet();}catch(_){} try{renderDash();}catch(_){}
+  save(); renderSet(); try{renderDash();}catch(_){} if(document.getElementById('renHead')) acctRenameOpen(a);
 }
-/* v146: rekeningen zonder bekend saldo staan standaard niet in Instellingen. Het zijn in de praktijk
-   rekeningen die je niet meer gebruikt, en ze vulden allebei de lijsten met regels waar niets aan te
-   doen valt. Bewust verbergen en niet verwijderen: een rekening bestaat zolang er boekingen met die
-   id zijn (v122), dus wegnemen zou transacties moeten wissen en dat is een heel andere ingreep.
-   Eén tik zet ze terug (defaultEffect), en er verandert niets aan enige berekening - totalBalance(),
-   accBalance() en de onbekend-staten (v59/v73) lezen onverkort OWN.
-   Guard: is er geen enkel bekend saldo, dan valt er niets te verbergen zonder de lijst leeg te
-   maken, en juist daar moet je je eerste saldo kunnen invullen. Dan tonen we alles. */
-function rekMetSaldo(){ return OWN.filter(a=>accBalance(a)!=null); }
-function rekZonderSaldo(){ return OWN.filter(a=>accBalance(a)==null); }
-function toonAlleRek(){ return !!SET.toonLegeRek || !rekMetSaldo().length; }
-function zichtbareRek(){ return toonAlleRek()?OWN.slice():rekMetSaldo(); }
-function toggleLegeRek(){ SET.toonLegeRek=!SET.toonLegeRek; save(); renderSet(); try{renderInkomenSheet();}catch(_){} }
-function legeRekRegel(){
-  const n=rekZonderSaldo().length; if(!n || !rekMetSaldo().length) return '';
-  return `<div class="small muted" style="margin-top:9px;cursor:pointer" onclick="toggleLegeRek()">${SET.toonLegeRek
-    ? `▲ ${n} rekening${n===1?'':'en'} zonder saldo verbergen`
-    : `› ${n} rekening${n===1?'':'en'} zonder saldo tonen`}</div>`;
+/* v146 verborg rekeningen zonder saldo achter een schakelaar. v374: dat waren in de praktijk gesloten rekeningen,
+   en die heten nu wat ze zijn (rekGesloten()). De lijst toont de actieve rekeningen, ook een zonder saldo, want
+   dat is een feit over een rekening die je gebruikt. SET.toonLegeRek heeft geen lezer meer. */
+function zichtbareRek(){ return OWN.filter(rekActief); }
+/* ===== v374: GESLOTEN REKENINGEN, VOORGESTELD EN BEVESTIGD =====
+   Keuze van de gebruiker: de app stelt voor (geen boeking in REK_GESLOTEN_DAGEN dagen en niet gekoppeld via
+   PSD2), de gebruiker bevestigt. In de sheet staat per rekening een schakelaar (niets aangevinkt) en "Alle N als
+   gesloten markeren", en VOOR het bevestigen het gevolg: je saldo, je spaarsaldo en wat je zonder geld hebt
+   toegewezen (spaarOver().zonder), in het geheugen doorgerekend zonder save(). "Niet gesloten" (SET.rekOpen)
+   haalt een rekening uit het voorstel; een nieuwe kandidaat later krijgt dezelfde vraag. */
+function rekGeslotenGevolg(sel){
+  const voor={tb:totalBalance().sum, sp:null, zg:null}, na={};
+  try{ voor.sp=spaarSaldo().cur; }catch(_){} try{ voor.zg=spaarOver().zonder; }catch(_){}
+  const oud=SET.rekGesloten; SET.rekGesloten=Object.assign({}, oud||{}); for(const a of sel) SET.rekGesloten[a]={op:vandaagYMD()};
+  try{ na.tb=totalBalance().sum; try{ na.sp=spaarSaldo().cur; }catch(_){ na.sp=null; } try{ na.zg=spaarOver().zonder; }catch(_){ na.zg=null; } }
+  finally{ if(oud===undefined) delete SET.rekGesloten; else SET.rekGesloten=oud; }
+  return {voor, na, saldo:Math.round((voor.tb-na.tb)*100)/100, spaar:(voor.sp!=null&&na.sp!=null)?Math.round((voor.sp-na.sp)*100)/100:null,
+    zonder:(voor.zg!=null&&na.zg!=null)?Math.round((na.zg-voor.zg)*100)/100:null};
+}
+function rekGeslotenGevolgZin(sel){
+  if(!sel.length) return 'Kies eerst welke rekeningen gesloten zijn.';
+  const G=rekGeslotenGevolg(sel), d=[];
+  d.push(G.saldo>0?`je saldo daalt met ${euro(G.saldo)}`:G.saldo<0?`je saldo stijgt met ${euro(-G.saldo)}`:'je saldo blijft gelijk');
+  if(G.spaar) d.push(`je spaarsaldo ${G.spaar>0?'daalt':'stijgt'} met ${euro(Math.abs(G.spaar))}`);
+  if(G.zonder) d.push(`toegewezen zonder geld ${G.zonder>0?'stijgt':'daalt'} met ${euro(Math.abs(G.zonder))}`);
+  return d.join(', ').replace(/^./,c=>c.toUpperCase())+'. Je boekingen blijven meetellen in je patronen en vergelijkingen met vorige maanden.';
+}
+function openRekGesloten(){
+  window._rgSel=window._rgSel||{};
+  const K=rekGeslotenKandidaten(), sel=K.filter(a=>window._rgSel[a]);
+  const rij=a=>{ const b=accBalance(a), d=nieuwsteTxDatum(a);
+    return `<div class="row" data-rgkand="${esc(a)}" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(acctNiceName(a))}</div>
+        <div class="small muted">${esc((ACCMETA[a]&&ACCMETA[a].bank)||'')}${acctLast4(a)?' ··'+esc(acctLast4(a)):''} · laatste boeking ${d?dagKort(d)+' '+d.slice(0,4):'onbekend'} · saldo ${b==null?'onbekend':euro(b)}</div></div>
+      <label class="sw"><input type="checkbox" ${window._rgSel[a]?'checked':''} onchange="rekGeslotenKies('${esc(String(a).replace(/'/g,"\\'"))}',this.checked)"><span class="sl"></span></label></div>`; };
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="rekGesloten">
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">${K.length} rekening${K.length===1?'':'en'} lijk${K.length===1?'t':'en'} gesloten</div>
+    <div class="small muted" style="margin-bottom:10px">Geen boeking in ${REK_GESLOTEN_DAGEN} dagen en niet gekoppeld via je bank. Een gesloten rekening telt niet in je saldo of je prognose, en wel in je patronen.</div>
+    ${K.map(rij).join('')||'<div class="small muted">Er is geen rekening die gesloten lijkt.</div>'}
+    ${K.length?`<div class="small" data-rgalle style="margin-top:10px;color:var(--teal);font-weight:600;cursor:pointer" onclick="rekGeslotenAlle()">Alle ${K.length} als gesloten markeren</div>
+    <div class="small" data-rggevolg style="margin-top:10px;color:var(--mut)">${esc(rekGeslotenGevolgZin(sel))}</div>
+    <div class="row sheet-voet" style="gap:8px;margin-top:12px"><button class="btn" data-rgbevestig ${sel.length?'':'disabled'} onclick="rekGeslotenZet()">${sel.length?`Markeer ${sel.length} als gesloten`:'Markeer als gesloten'}</button>
+      <button class="btn sec" onclick="window._rgSel={};closeSheet()">Annuleren</button></div>`:''}</div>`;
+  showSheetBg();
+}
+function rekGeslotenKies(a,aan){ window._rgSel=window._rgSel||{}; if(aan) window._rgSel[a]=true; else delete window._rgSel[a]; openRekGesloten(); }
+function rekGeslotenAlle(){ window._rgSel={}; for(const a of rekGeslotenKandidaten()) window._rgSel[a]=true; openRekGesloten(); }
+/* De schrijver leest het voorstel opnieuw (v319) en markeert alleen wat er dan nog kandidaat is. */
+function rekGeslotenZet(){
+  const K=new Set(rekGeslotenKandidaten()), sel=Object.keys(window._rgSel||{}).filter(a=>K.has(a));
+  if(!sel.length) return;
+  SET.rekGesloten=Object.assign({}, SET.rekGesloten||{}); for(const a of sel) SET.rekGesloten[a]={op:vandaagYMD()};
+  window._rgSel={}; save(); closeSheet(); render();
+  toast(`${ICON('check')} ${sel.length} rekening${sel.length===1?'':'en'} gesloten · alleen historie`);
+}
+function rekNietGesloten(a){
+  SET.rekGesloten=Object.assign({}, SET.rekGesloten||{}); delete SET.rekGesloten[a];
+  SET.rekOpen=Object.assign({}, SET.rekOpen||{}, {[a]:{op:vandaagYMD()}});
+  save(); render(); openRekGeslotenLijst();
+}
+function openRekGeslotenLijst(){
+  const L=rekGeslotenLijst();
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="rekGeslotenLijst">
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px">Gesloten rekeningen</div>
+    <div class="small muted" style="margin-bottom:10px">Alleen historie: ze tellen mee in je patronen en vergelijkingen met vorige maanden, niet in je saldo of je prognose.</div>
+    ${L.map(a=>{ const b=accBalance(a), d=nieuwsteTxDatum(a); return `<div class="row" data-rggesloten="${esc(a)}" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${esc(acctNiceName(a))}</div>
+        <div class="small muted">${esc((ACCMETA[a]&&ACCMETA[a].bank)||'')}${acctLast4(a)?' ··'+esc(acctLast4(a)):''} · laatste boeking ${d?dagKort(d)+' '+d.slice(0,4):'onbekend'} · laatst bekend saldo ${b==null?'onbekend':euro(b)}</div></div>
+      <span class="small" data-rgnietgesloten style="color:var(--teal);font-weight:600;cursor:pointer;white-space:nowrap" onclick="rekNietGesloten('${esc(String(a).replace(/'/g,"\\'"))}')">niet gesloten</span></div>`; }).join('')||'<div class="small muted">Geen gesloten rekeningen.</div>'}</div>`;
+  showSheetBg();
 }
 /* ===== Twee ids, dezelfde boekingen (v149) =====
  * Gemeld werd: twee rekeningen in Instellingen met hetzelfde saldo en hetzelfde aantal transacties.
@@ -21225,30 +21376,32 @@ function openRekOverlap(){
    sectie gaat over wat er op je rekeningen staat; Bank & koppelingen gaat over hoe de data
    binnenkomt en houdt daarom rekOverlapRegel(), een koppelingsprobleem.
    legeRekRegel() stond eerder in allebei de lijsten en staat nu dus ook maar één keer. */
+/* v374: DE REKENINGENLIJST IN BANK & REKENINGEN. Per rekening naam, bank en de laatste vier, en het saldo. PSD2 IS DE
+   BRON: een gekoppelde rekening draagt het saldo van de bank en dat is hier alleen-lezen (psd2Rek()). Alleen
+   Contant voer je zelf in (contantTellen()). Een rekening die niet gekoppeld is en niet gesloten houdt zijn veld,
+   want daar is geen andere bron. Spaarrekening is een label achter een tik (acctRenameOpen()), geen schakelaar per
+   rij. DE KOP DRAAGT HET TOTAAL UIT totalBalance(), dezelfde bron als "Totaal saldo" op Home (v104), en de rijen
+   tellen er per constructie tot op: de rekeningen die meetellen plus contant. */
 function accountsCard(){
-  if(!OWN.length) return '<div class="small muted">Nog geen rekeningen. Koppel je bank of voeg een bestand toe.</div>';
+  if(!OWN.length) return '<div class="small muted">Nog geen rekeningen. Koppel je bank.</div>';
   const sav=new Set(n26SavingsAccounts());
   const rows=zichtbareRek().map(a=>{ const b=accBalance(a); const m=ACCMETA[a]||{};
-    const cnt=m.count||TX.filter(t=>t.acc===a).length;
-    return {a,b,m,cnt,l4:acctLast4(a),isSav:sav.has(a),name:acctNiceName(a),bank:m.bank||''}; })
+    return {a,b,l4:acctLast4(a),isSav:sav.has(a),name:acctNiceName(a),bank:m.bank||((SET.psd2Accounts||{})[a]||{}).bank||'',psd2:psd2Rek(a)}; })
     .sort((x,y)=>(y.b||0)-(x.b||0));
   const q=v=>String(v).replace(/'/g,"\\'");
-  return rows.map(r=>`<div data-acc="${esc(r.a)}" style="padding:10px 0;border-bottom:1px solid var(--line)">
-      <div style="cursor:pointer" onclick="acctRenameOpen('${esc(q(r.a))}')">
-        <div style="font-weight:600;font-size:var(--fs-md)">${esc(r.name)} <span style="color:var(--teal);font-weight:600;font-size:var(--fs-xs)">bewerk</span></div>
-        <div class="small muted">${esc(r.bank||'')}${r.bank?' · ':''}${r.cnt} transactie${r.cnt===1?'':'s'}${r.l4?' · ··'+esc(r.l4):''}</div></div>
-      <div class="row" style="justify-content:space-between;gap:10px;margin-top:8px">
-        <div style="display:flex;align-items:center;gap:5px">
-          <span class="small muted">${r.b==null?'saldo onbekend':'Saldo'}</span><span class="muted">€</span>
-          <input type="text" inputmode="decimal" value="${r.b!=null?numUit(r.b):''}" placeholder="0,00" style="width:88px;text-align:right;padding:7px 9px" oninput="setBal('${esc(q(r.a))}',this.value)">
-          </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span class="small muted">spaar&shy;rekening</span>
-          <label class="sw"><input type="checkbox" ${r.isSav?'checked':''} onchange="toggleSavingsAcct('${esc(q(r.a))}')"><span class="sl"></span></label></div>
-      </div>
-    </div>`).join('') +
-    `<div class="small muted" style="margin-top:9px">Vul ontbrekende saldo's bij voor een kloppende prognose. Zet de schakelaar aan bij je <b>spaarrekening(en)</b>: daaraan ziet Minder hoeveel je deze maand al spaarde. Tik op een naam om die zelf aan te passen.</div>`
-    + legeRekRegel();
+  const C=contantTelling(), cv=contantVerwacht();
+  const rij=r=>`<div class="row" data-acc="${esc(r.a)}" data-psd2="${r.psd2?1:0}" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="acctRenameOpen('${esc(q(r.a))}')">
+        <div style="font-weight:600;font-size:var(--fs-md)">${esc(r.name)}</div>
+        <div class="small muted">${esc(bankKort(r.bank)||'')}${r.l4?' ··'+esc(r.l4):''}${r.isSav?' · <span data-spaarlabel style="color:var(--teal)">spaarrekening</span>':''}</div></div>
+      ${r.psd2
+        ? `<span data-saldo style="font-weight:700;white-space:nowrap">${r.b==null?'<span class="muted small">saldo onbekend</span>':euro(r.b)}</span>`
+        : `<div style="display:flex;align-items:center;gap:5px"><span class="muted">€</span><input type="text" inputmode="decimal" data-saldoveld value="${r.b!=null?numUit(r.b):''}" placeholder="0,00" style="width:88px;text-align:right;padding:7px 9px" oninput="setBal('${esc(q(r.a))}',this.value)"></div>`}
+    </div>`;
+  const contant=`<div class="row" data-contantrij style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="contantTellen()">
+      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">Contant</div><div class="small muted">handmatig · tik om bij te werken</div></div>
+      <span data-saldo style="font-weight:700;white-space:nowrap">${C?euro(cv!=null?cv:C.stand):'<span class="muted small">niet geteld</span>'}</span></div>`;
+  return rows.map(rij).join('') + contant;
 }
 /* v181: de subregel in Instellingen keek alleen naar het AANTAL rekeningen en meldde daarom "Je
    bank is gekoppeld" terwijl het paneel eronder "Verbinding verlopen" toonde. Eén bron voor
@@ -21298,45 +21451,39 @@ function spaardoelBekend(){
   return (SET.savingMode||'auto')==='amount' ? (+SET.savingAmount||0)>0 : inkomenBekend();
 }
 function setBank(){
-  const B=bankStand(); const ps=SET.psd2Accounts||{}; const psd2=B.n; const adv=!!SET.advBank;
-  const dot=c=>`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:9px;vertical-align:middle"></span>`;
-  let head;
-  if(psd2){
-    const banks=B.banks;
-    const expired=B.verlopen;
-    const last=SET.psd2LastSync?new Date(SET.psd2LastSync).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):'';
-    if(expired){
-      head=`<div style="display:flex;align-items:center;font-weight:600">${dot('var(--amber)')}Verbinding verlopen</div>
-        <div class="small muted" style="margin:3px 0 14px 17px">Je bank vroeg om opnieuw in te loggen.</div>
-        <button class="btn" onclick="psd2Connect()">${ICON('bank')} Opnieuw verbinden</button>
-        <button class="btn sec" style="margin-top:8px" onclick="psd2Connect()">${ICON('bank')} Nog een bank toevoegen</button>`;
-    } else if(B.stuk){
-      /* v280: DE DERDE TAK. Tot v279 waren er twee: over datum, of groen. Een consent die nog geldt
-         terwijl de bank de sessie weigert viel in de groene tak, en dat is precies de toestand die op
-         het toestel is gemeten. Hier staan de rekeningen bij NAAM, want "een rekening haalt niets op"
-         zonder te zeggen welke laat je zoeken in een lijst die dit scherm niet toont.
-         DE FOUT VAN DE BANK STAAT ERBIJ EN WORDT NIET VERTAALD: een eigen woord voor EXPIRED_SESSION
-         zou een tweede term zijn (v91), en wat de bank zegt is wat er te melden valt.
-         DE EERSTE KNOP IS OPNIEUW VERBINDEN EN NIET VERNIEUWEN. Vernieuwen is precies wat net niets
-         opleverde, dus die als eerste aanbieden stuurt je naar de handeling die al faalde. */
-      const fnamen=B.falend.map(f=>esc(acctNiceName(f.acc))).join(', ');
-      const fouten=[...new Set(B.falend.map(f=>f.fout).filter(Boolean))].join(' · ');
-      head=`<div style="display:flex;align-items:center;font-weight:600">${dot('var(--amber)')}${B.sub}</div>
-        <div class="small muted" style="margin:3px 0 2px 17px">${fnamen}</div>
-        <div class="small muted" style="margin:0 0 14px 17px">${fouten?esc(fouten)+' · h':'H'}un saldo staat stil en telt wel mee in je totaal.</div>
-        <button class="btn" onclick="psd2Connect()">${ICON('bank')} Opnieuw verbinden</button>
-        <button class="btn sec" style="margin-top:8px" onclick="psd2Refresh(false)">${ICON('sync')} Toch vernieuwen</button>`;
-    } else {
-      head=`<div style="display:flex;align-items:center;font-weight:600">${dot('var(--green)')}Bank gekoppeld</div>
-        <div class="small muted" style="margin:3px 0 14px 17px">${esc(banks)}${last?' · '+last+' bijgewerkt':' · nog niet bijgewerkt'}</div>
-        <button class="btn" onclick="psd2Refresh(false)">${ICON('sync')} Verbinding vernieuwen</button>
-        <button class="btn sec" style="margin-top:8px" onclick="psd2Connect()">${ICON('bank')} Nog een bank toevoegen</button>`;
-    }
-  } else {
-    head=`<div style="display:flex;align-items:center;font-weight:600">${dot('var(--mut)')}Nog geen bank gekoppeld</div>
-      <div class="small muted" style="margin:3px 0 14px 17px">Daarna komen je transacties automatisch binnen.</div>
-      <button class="btn" onclick="psd2Connect()">${ICON('bank')} Koppel je bank</button>`;
-  }
+  const B=bankStand(); const ps=SET.psd2Accounts||{}; const adv=!!SET.advBank;
+  /* v374: EEN KAART PER BANK, met tot wanneer je toestemming geldt en tot wanneer er gegevens zijn (bankVerval(),
+     dezelfde bron als de statusbalk en Home). Binnen BANK_VERVAL_DAGEN of verlopen is de kaart rood, met
+     "Toestemming vernieuwen" en de tip om eerst een back-up te maken. Haalt een rekening van een bank niets op
+     terwijl de toestemming nog geldt (v280), dan staat dat bij die bank, met de fout van de bank erbij. */
+  const V=bankVerval();
+  const kaart=g=>{
+    const rood=g.verlopen||g.binnenkort;
+    const fal=(B.falend||[]).filter(f=>g.accs.includes(f.acc));
+    const fouten=[...new Set(fal.map(f=>f.fout).filter(Boolean))].join(' · ');
+    return `<div data-bankkaart="${esc(g.bank)}" data-rood="${rood?1:0}" style="border:1px solid ${rood?'var(--red)':'var(--line)'};border-radius:var(--r-inner);padding:11px 12px;margin-bottom:10px">
+      <div class="row" style="gap:8px"><span style="font-weight:700;flex:1">${esc(g.bank)}</span><span class="small" style="color:${rood?'var(--red)':'var(--mut)'};font-weight:600;white-space:nowrap">${g.verlopen?'verlopen':(g.exp?(rood?'verloopt ':'tot ')+dagKort(g.exp):'')}</span></div>
+      <div class="small muted" style="margin-top:2px">bijgewerkt ${g.bij?dagKort(g.bij):'nog niet'}${g.binnenkort?` · nog ${g.dagen} dag${g.dagen===1?'':'en'}`:''}${g.verlopen&&g.bij?` · je gegevens lopen tot ${dagKort(g.bij)}`:''}</div>
+      ${fal.length?`<div class="small" style="margin-top:6px;color:var(--amber)">${fal.length===1?'1 rekening':fal.length+' rekeningen'}${falendPredikaat(fal.length)}: ${fal.map(f=>esc(acctNiceName(f.acc))).join(', ')}${fouten?' · '+esc(fouten):''}</div>`:''}
+      ${rood||fal.length?`<button class="btn" style="margin-top:10px" onclick="psd2Connect()">${ICON('bank')} ${rood?'Toestemming vernieuwen':'Opnieuw verbinden'}</button>
+        <div class="small" data-backuptip style="margin-top:8px;color:var(--teal);cursor:pointer" onclick="exportBackup()">Tip: maak eerst een back-up ›</div>`:''}
+    </div>`; };
+  const koppelingen=`<div class="hlabel" style="margin:0 0 8px">Koppelingen</div>
+    ${V.map(kaart).join('')||'<div class="small muted" style="margin-bottom:8px">Nog geen bank gekoppeld. Daarna komen je saldo’s en boekingen automatisch binnen.</div>'}
+    <div class="small" data-banktoevoegen style="color:var(--teal);font-weight:600;cursor:pointer;margin:2px 0 4px" onclick="psd2Connect()">+ Bank toevoegen</div>
+    ${V.length&&!V.some(g=>g.verlopen)?`<div class="small" style="color:var(--teal);cursor:pointer;margin-top:6px" onclick="psd2Refresh(false)">${ICON('sync')} Nu bijwerken</div>`:''}`;
+  let tb=null; try{ tb=totalBalance(); }catch(_){}
+  const kand=rekGeslotenKandidaten(), gesl=rekGeslotenLijst();
+  const rekeningen = OWN.length || contantTelling() ? `
+    <div class="hlabel" style="margin:18px 0 6px">Rekeningen${tb&&(tb.known>0||tb.contant!=null)?` <span data-rektotaal="${Math.round(tb.sum*100)/100}">· ${euro(tb.sum)}</span>`:''}</div>
+    ${kand.length?`<div class="small" data-rgvraag style="margin:0 0 6px;color:var(--teal);cursor:pointer;font-weight:600" onclick="window._rgSel={};openRekGesloten()">${kand.length} rekening${kand.length===1?' lijkt':'en lijken'} gesloten · bekijk ›</div>`:''}
+    ${accountsCard()}
+    ${gesl.length?`<div class="row" data-rglijst style="gap:10px;padding:10px 0;cursor:pointer" onclick="openRekGeslotenLijst()"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:var(--fs-md)">${gesl.length} gesloten rekening${gesl.length===1?'':'en'} · alleen historie</div><div class="small muted">tellen mee in patronen, niet in je saldo</div></div><span class="muted">›</span></div>`:''}
+    <div class="small muted" style="margin-top:8px">Tik op een rekening om de naam aan te passen of hem als spaarrekening te markeren.</div>
+    ${rekOverlapRegel()}
+    <label class="fld" style="margin-top:14px">Extra spaargeld buiten je koppeling</label>
+    <input type="number" value="${SET.extraSavings||''}" placeholder="0" oninput="SET.extraSavings=numIn(this.value)||0;save();">
+    <div class="small muted" style="margin-top:6px">Spaargeld dat niet via je bank binnenkomt. Telt mee in je spaarsaldo, niet in je vrij te besteden ruimte.</div>` : '';
   const advHtml = adv ? `
     <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
     <div class="small muted" style="margin-bottom:8px;font-weight:600">Geavanceerd</div>
@@ -21344,61 +21491,13 @@ function setBank(){
     <input type="text" inputmode="url" placeholder="https://…workers.dev" value="${esc(SET.psd2Url||'')}" oninput="SET.psd2Url=this.value.trim();save();">
     <label class="fld">App-token</label>
     <input type="password" placeholder="geheim uit je backend" value="${esc(SET.psd2Token||'')}" oninput="SET.psd2Token=this.value.trim();save();">
-    ${psd2?`<div class="small muted" style="margin:10px 0 4px;font-weight:600">Rekeningen</div>
-      ${Object.entries(ps).map(([k,v])=>`<div class="row" style="padding:4px 0"><span class="small">${ICON('bank')} ${esc(v.bank)} · ${esc(v.label)}</span><span class="small muted">${v.exp?'tot '+new Date(v.exp).toLocaleDateString('nl-NL',{day:'numeric',month:'short'}):''}</span></div>`).join('')}
-      <button class="btn sec" style="margin-top:8px" onclick="psd2Disconnect()">Bank ontkoppelen</button>`:''}
-    <div style="border-top:1px solid var(--line);margin:14px 0 10px"></div>
-    <div class="small muted" style="margin-bottom:8px;font-weight:600">AI-coach</div>
-    <label class="fld">Model (optioneel)</label>
+    <label class="fld">AI-model (optioneel)</label>
     <input type="text" value="${esc(SET.aiModel||'')}" placeholder="bv. claude-3-5-haiku-latest" oninput="SET.aiModel=this.value;save();">
-    <div class="small muted" style="margin-top:6px">De AI-coach gebruikt dezelfde backend als proxy. Voeg daar het <b>/coach</b>-endpoint toe en zet je LLM-key als secret. Aanzetten doe je hierboven.</div>` : '';
-  /* v181: dit blok zat achter bankAdvTap, vijf tikken op de voetregel van Instellingen. Voor wie
-     geen backend heeft is het de enige manier om data in de app te krijgen, dus het staat nu
-     gewoon in beeld. Bewust als tweede optie: de koppeling houdt de plek bovenaan en houdt als
-     enige het accent (btn), alles hieronder is btn sec. */
-  const bestandHtml = `
-    <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
-    <div class="small muted" style="margin-bottom:4px;font-weight:600">Of voeg een bestand toe</div>
-    <div class="small muted" style="margin-bottom:10px">Een MT940-bestand van ABN AMRO of een CSV van N26. Het bestand wordt op dit toestel gelezen.</div>
-    ${SET.folderName
-      ? `<div class="small muted" style="margin-bottom:10px">Map <b>${esc(SET.folderName)}</b> gekoppeld.</div>
-         <button class="btn sec" onclick="syncFolder(true)">${ICON('sync')} Synchroniseer map</button>
-         <div class="toggle" style="margin-top:8px"><div><div style="font-weight:600">Automatisch bij openen</div><div class="small muted">Map scannen zodra je de app opent</div></div>
-           <label class="sw"><input type="checkbox" ${SET.autoSync?'checked':''} onchange="SET.autoSync=this.checked;save();"><span class="sl"></span></label></div>
-         <button class="btn sec" style="margin-top:8px" onclick="forgetFolder()">Map ontkoppelen</button>`
-      : (FSA?`<button class="btn sec" onclick="connectFolder()">${ICON('folder')} Map koppelen</button>`:'')}
-    <button class="btn sec" style="margin-top:8px" onclick="document.getElementById('file').click()">${ICON('folder')} Bestand toevoegen</button>`;
-  /* v182: de AI-coachschakelaar stond onder Coach terwijl zijn configuratie hier staat: hij draait
-     op dezelfde backend-URL als de bankkoppeling. Hij hoort bij wat hij nodig heeft. Zichtbaar,
-     niet in het geavanceerde blok: dat is een gebruikersknop, en die verstoppen is precies wat
-     v181 ophief. Alleen het modelveld en de bouwinstructie blijven onder Geavanceerd. */
-  /* v183: de briefingexport stond onder Privacy, maar dat gaat over waar je data staat en dit is
-     een uitgaande koppeling met een andere app. Hij verlaat je toestel niet (het is een map op
-     ditzelfde apparaat), dus hij staat bewust NIET in privacyUitzonderingen(): die functie
-     beantwoordt wat er van je toestel af gaat. Privacy noemt hem nog wel als feit. */
-  const briefHtml = `
-    <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
-    <div class="small muted" style="margin-bottom:4px;font-weight:600">Briefing naar je CommandCenter-map</div>
-    <div class="small muted" style="margin-bottom:10px">Schrijf je financiële signalen (safe-to-spend, afwijkende uitgave, aankomende verplichting, Vermogensreis) naar een map op dit toestel. Je dagelijkse briefing leest ze daar in. Kies de map één keer; daarna exporteert Minder ook automatisch bij openen.</div>
-    <button class="btn sec" onclick="kiesMinderExportMap()">${ICON('folder')} Kies exportmap (eenmalig)${SET.briefingFolder?` · ${esc(SET.briefingFolder)}`:''}</button>
-    <button class="btn sec" style="margin-top:8px" onclick="exporteerMinderSignalen(false)">${ICON('check')} Exporteer signalen naar briefing</button>`;
-  const aiHtml = `
-    <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
-    <div class="toggle"><div><div style="font-weight:600">AI-coach</div><div class="small muted">Een taalmodel verwoordt de coach-zinnen. Je cijfers blijven uit de lokale motor, maar de coach-tekst gaat naar je eigen backend. Standaard uit.</div></div>
-      <label class="sw"><input type="checkbox" ${SET.aiCoach?'checked':''} onchange="SET.aiCoach=this.checked;save();render();"><span class="sl"></span></label></div>
-    ${SET.aiCoach?`<div class="small muted" style="margin-top:6px">Hij loopt via dezelfde backend als je bankkoppeling. ${psd2Ready()?'Die staat ingesteld.':'Die staat nog niet ingesteld, dus voorlopig blijft de lokale coach aan het woord.'} Het model kies je onder Geavanceerd.</div>`:''}`;
-  /* v183: de rekeningenlijst staat nu onder Inkomen & rekeningen (één lijst, v183). Wat hier
-     blijft is het koppelingsprobleem: twee ids met dezelfde boekingen, of een gekoppelde rekening
-     zonder boekingen. Dat gaat over de koppeling, niet over wat er op je rekening staat. */
-  const accHtml = OWN.length ? `
-    <div style="border-top:1px solid var(--line);margin:18px 0 10px"></div>
-    <div class="small muted" style="margin-bottom:8px;font-weight:600">Je rekeningen</div>
-    <div class="small muted">${zichtbareRek().length} rekening${zichtbareRek().length===1?'':'en'} in beeld. Saldo's en je spaarrekening stel je in bij <b>Inkomen &amp; rekeningen</b>.</div>
-    ${rekOverlapRegel()}
-    ${dubbelParenRegel()}
-    ${vorautRegel()}
-    ${eigenNaamRegel()}` : '';
-  return head + bestandHtml + aiHtml + briefHtml + accHtml + advHtml;
+    <div class="small muted" style="margin-top:6px">De AI-coach gebruikt dezelfde backend als proxy. Voeg daar het <b>/coach</b>-endpoint toe en zet je LLM-key als secret. Aanzetten doe je bij Coach &amp; weergave.</div>
+    ${B.n?`<div class="small muted" style="margin:10px 0 4px;font-weight:600">Gekoppelde rekeningen</div>
+      ${Object.entries(ps).map(([k,v])=>`<div class="row" style="padding:4px 0"><span class="small">${ICON('bank')} ${esc(v.bank)} · ${esc(v.label)}</span><span class="small muted">${v.exp?'tot '+dagKort(ymdVan(new Date(v.exp))):''}</span></div>`).join('')}
+      <button class="btn sec" style="margin-top:8px" onclick="psd2Disconnect()">Bank ontkoppelen</button>`:''}` : '';
+  return koppelingen + rekeningen + advHtml;
 }
 function bankAdvTap(){
   /* v244: de voetregel draagt nu ook de lange druk naar het diagnosescherm. Een lange druk eindigt
@@ -21410,7 +21509,7 @@ function bankAdvTap(){
   if(window._diagLang && Date.now()-window._diagLang < 1200){ window._diagLang=0; return; }
   window._advTaps=(window._advTaps||0)+1; clearTimeout(window._advTapT);
   window._advTapT=setTimeout(()=>{window._advTaps=0;},1500);
-  if(window._advTaps>=5){ window._advTaps=0; SET.advBank=!SET.advBank; SET.setOpen='bank'; save(); toast(SET.advBank?'Geavanceerd zichtbaar':'Geavanceerd verborgen'); renderSet(); }
+  if(window._advTaps>=5){ window._advTaps=0; SET.advBank=!SET.advBank; window._setSub='bank'; save(); toast(SET.advBank?'Geavanceerd zichtbaar':'Geavanceerd verborgen'); renderSet(); }
 }
 
 /* ===== Diagnose (v244) =====
@@ -22101,8 +22200,8 @@ function diagRekeningen(){
   const st=_dT(()=>safeToSpend(),null);
   L.push('rekeningen in OWN (uit TX):        '+own.length);
   L.push('rekeningen in allAccounts():       '+alle.length+'  (OWN plus de gekoppelde zonder boekingen)');
-  L.push('rekeningen in de getoonde lijst:   '+zicht.length+'  (zichtbareRek, verbergt zonder saldo tenzij SET.toonLegeRek)');
-  L.push('SET.toonLegeRek:                   '+_dV(()=>!!SET.toonLegeRek));
+  L.push('rekeningen in de getoonde lijst:   '+zicht.length+'  (zichtbareRek, verbergt gesloten rekeningen, v374)');
+  L.push('gesloten (SET.rekGesloten):         '+_dV(()=>Object.keys(SET.rekGesloten||{})));
   /* v280: deze regel gaf de som zonder te zeggen waaruit hij bestaat, en op het toestel telden de
      per-rekening-saldi op tot 5.827 terwijl hier 6.226 stond. Het verschil is contantVerwacht() (v258),
      de enige andere term in totalBalance(), en die stond bij geen enkele rekening. Een getal dat de lezer
@@ -22127,7 +22226,7 @@ function diagRekeningen(){
     L.push('    saldo:              '+(bal==null?'ONBEKEND':Math.round(bal))+(meta.date?('   gestempeld '+meta.date):'   (geen saldodatum)'));
     L.push('    in totalBalance():  '+(own.indexOf(a)<0?'nee, zit niet in OWN':(bal==null?'telt als missing, NIET in de som':'ja, in de som')));
     L.push('    in safeToSpend():   '+(own.indexOf(a)<0?'nee, zit niet in OWN':(bal==null?'telt als missing, NIET in de som':'ja, via totalBalance()')));
-    L.push('    in de lijst:        '+(zicht.indexOf(a)>=0?'ja':'NEE, verborgen door zichtbareRek()'));
+    L.push('    in de lijst:        '+(zicht.indexOf(a)>=0?'ja':'NEE, gesloten (alleen historie)'));
     /* v281: WAT ER AAN DE BOEKINGEN VAN DEZE REKENING HANGT. Dat is de vraag vóór een herkoppeling of een
        samenvoeging: elke vlag hangt aan `t.id`, en die hasht over de REKENING, dus een rekening die een
        andere id krijgt neemt al zijn vlaggen mee in de val (v270). Vier maps, uit dezelfde lijst die
@@ -22353,7 +22452,7 @@ function diagRekeningen(){
   L.push('LOSGEKOPPELD (boekingen uit psd2, rekening niet meer gekoppeld): '+(wees.length?wees.join(', '):'geen'));
   L.push('WEZEN (losgekoppeld EN elke boeking staat met dezelfde t.id op een andere rekening): '
     +(wz.length?wz.map(w=>w.acc+' -> '+w.doelen.join(' of ')).join(', '):'geen')
-    +'   <-- hieraan hangt de samenvoeg-ingang in Instellingen (Bank & koppelingen)');
+    +'   <-- hieraan hangt de samenvoeg-ingang in Instellingen (Bank & rekeningen)');
   for(const w of wees){
     const lj=_dT(()=>TX.filter(t=>t.acc===w),[])||[];
     const bal=_dT(()=>accBalance(w),null);
@@ -25203,59 +25302,83 @@ function diagDruk(aan){
   window._diagT=setTimeout(()=>{ window._diagLang=Date.now(); diagOpen(); }, 700);
 }
 
-function setModus(){
-  return `
-    <div class="small muted" style="margin-bottom:10px">Bepaalt hoe Minder zich toont op Home, Inzichten, Coach en Plan.</div>
-    <div class="chips">${[['rustig','Rustig'],['begeleid','Begeleid'],['expert','Expert']].map(([k,l])=>`<span class="chip ${(SET.mode||'begeleid')===k?'on':''}" onclick="SET.mode='${k}';save();render();">${l}</span>`).join('')}</div>
-    <div class="small muted" style="margin-top:10px;line-height:1.7"><b>Rustig:</b> minder cijfers, zachtere toon, fijn als geld stress geeft.<br><b>Begeleid:</b> uitleg, tips &amp; benchmarks (standaard).<br><b>Expert:</b> compact, cijfers eerst, extra detail.</div>`;
-}
-function setCoach(){
-  return `
-    <label class="fld">Je naam <span class="small muted">· je coach spreekt je hiermee aan</span></label>
+/* v374: COACH & WEERGAVE. Coach, Weergave & modus en Uiterlijk waren drie blokken; nu een pagina. De AI-coach staat
+   er EEN keer (tot v373 ook bij Bank en bij Privacy), met de uitleg achter de ⓘ. Het thema opent een sheet met de
+   bestaande keuze (setLook()). */
+NOTES.aicoach='Een taalmodel verwoordt de coach-zinnen. Je cijfers komen uit de lokale motor; de coach-tekst gaat naar je eigen backend, dezelfde als je bankkoppeling. Standaard uit. Het model kies je onder Geavanceerd bij Bank & rekeningen.';
+NOTES.datalokaal='Alles staat lokaal in je browser op dit toestel. Twee dingen kunnen data van dit toestel af sturen, allebei alleen als je ze zelf aanzet en allebei naar je eigen backend: de bankkoppeling en de AI-coach.';
+function openThema(){ window._setSheet=null; window._nfSheet=null; window._budgetSheet=null;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="themaSheet"><div class="row" style="margin-bottom:8px"><div style="font-weight:800;font-size:var(--fs-lg)">Thema</div><span class="small" style="cursor:pointer;color:var(--teal);font-weight:600" onclick="closeSheet()">Klaar</span></div>${setLook()}</div>`;
+  showSheetBg(); }
+function setCoachWeergave(){
+  const kop=t=>`<div class="hlabel" style="margin:14px 0 4px">${t}</div>`;
+  return `${kop('Coach')}
+    <label class="fld" style="margin-top:4px">Je naam <span class="small muted">· je coach spreekt je hiermee aan</span></label>
     <input type="text" value="${esc(SET.name||'')}" placeholder="bv. Vincent" oninput="SET.name=this.value;save();" onchange="render();">
     <div class="toggle" style="margin-top:14px"><div><div style="font-weight:600">${PATROONSIGNALEN_NAAM}</div><div class="small muted">Wat Minder over meerdere maanden uit je cijfers afleidt: ${opsomming(Object.values(PATROONSIGNALEN))}. Die staan in je meldingen en op Grip. Meldingen over wat er nu speelt blijven staan, en je gesprek blijft bereikbaar vanaf Inzichten, Plan en Grip.</div></div>
       <label class="sw"><input type="checkbox" ${!SET.coachOff?'checked':''} onchange="SET.coachOff=!this.checked;save();render();"><span class="sl"></span></label></div>
-    <div class="row" style="justify-content:space-between;margin-top:8px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openCoachAvatar()">
-      <div><div style="font-weight:600">Avatar & toon</div><div class="small muted">${coachSamenvatting()}</div></div>
+    <div class="toggle" data-aicoach><div><div style="font-weight:600">AI-coach ${noteIcon('aicoach','AI-coach')}</div><div class="small muted">tekst via je eigen backend, cijfers lokaal${SET.aiCoach&&!psd2Ready()?' · je backend staat nog niet ingesteld, dus de lokale coach blijft aan het woord':''}</div></div>
+      <label class="sw"><input type="checkbox" ${SET.aiCoach?'checked':''} onchange="SET.aiCoach=this.checked;save();render();"><span class="sl"></span></label></div>
+    <div class="row" style="justify-content:space-between;padding:10px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openCoachAvatar()">
+      <div><div style="font-weight:600">Avatar &amp; toon</div><div class="small muted">${coachSamenvatting()}</div></div>
       <span class="muted" style="font-size:var(--fs-lg)">›</span></div>
-    <div style="height:10px"></div>
-    <div class="small muted" style="margin-top:10px">${ICON('info')} ${SET.aiCoach?`<b>AI-coach staat aan.</b> Een taalmodel verwoordt de zinnen via je eigen Worker. De bedragen komen nog steeds uit de lokale motor. Zet uit voor 100% lokaal.`:`<b>Hoe werkt de coach?</b> Geen AI in de cloud. Alle tips worden op je eigen toestel berekend uit je transacties. Er gaat niets naar een server.`}</div>`;
+    ${kop('Weergave')}
+    <div class="chips" style="margin-top:4px">${[['rustig','Rustig'],['begeleid','Begeleid'],['expert','Expert']].map(([k,l])=>`<span class="chip ${(SET.mode||'begeleid')===k?'on':''}" onclick="SET.mode='${k}';save();render();">${l}</span>`).join('')}</div>
+    <div class="small muted" style="margin-top:8px;line-height:1.7"><b>Rustig:</b> minder cijfers, zachtere toon.<br><b>Begeleid:</b> uitleg, tips en benchmarks (standaard).<br><b>Expert:</b> compact, cijfers eerst.</div>
+    <div class="row" data-thema style="justify-content:space-between;margin-top:10px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer" onclick="openThema()">
+      <div><div style="font-weight:600">Thema</div><div class="small muted">${THEMES[themeKey()].naam}</div></div>
+      <span class="muted" style="font-size:var(--fs-lg)">›</span></div>`;
 }
-
-/* v183: 'Interne overboekingen verbergen' stond onder Coach, terwijl het een categorisatieregel
-   is: het bepaalt of een boeking als uitgave telt. Er was geen sectie over hoe transacties geboekt
-   worden, en dat is zelf de bevinding - de automatiseringsregels (SET.rules) zijn alleen vanuit
-   het transactiedetail te maken en staan nergens in Instellingen. Deze sectie is daarvoor de
-   plek. Nog open: de regel-editor zelf; die is een eigen ronde en wordt hier niet gebouwd. */
+/* v374: HERKENNING. Hoe Minder je boekingen herkent: vaste lasten (herkend en opgezegd), je eigen regels, en de
+   vragen over boekingen die je zelf beoordeelt (dubbele paren, reserveringen met vrijgave, overboekingen tussen je
+   eigen rekeningen). Openstaande vragen zijn een taak in de maandafsluiting op Grip; hier staan ze om te herzien
+   (v293: een regel die de enige ingang draagt, draagt ook de weg terug). "Interne overboekingen verbergen"
+   (SET.hideInternal) is weg: de schakelaar had geen lezer (v257). */
 function setTransacties(){
   let vl=[]; try{ vl=vasteLasten(); }catch(_){}
-  const vlWeg=vl.filter(s=>s.opgezegd).length;
+  const vlWeg=vl.filter(s=>s.opgezegd).length, R=Array.isArray(SET.rules)?SET.rules:[];
   return `
     <div class="small muted" style="margin-bottom:10px">Hoe Minder je boekingen indeelt.</div>
     <div class="toggle" style="cursor:pointer" onclick="openVasteLasten()"><div><div style="font-weight:600">${ICON('repeat')} Vaste lasten</div><div class="small muted">${vl.length?`${vl.length} herkend${vlWeg?`, ${vlWeg} opgezegd`:''} · incasso's en periodieke overboekingen`:'nog niets herkend'}</div></div><span style="color:var(--teal);font-weight:700">›</span></div>
-    <div class="toggle"><div><div style="font-weight:600">Interne overboekingen verbergen</div><div class="small muted">Eigen rekeningen & sparen tellen niet als uitgave</div></div>
-      <label class="sw"><input type="checkbox" ${SET.hideInternal?'checked':''} onchange="SET.hideInternal=this.checked;save();render();"><span class="sl"></span></label></div>
-    <div class="small muted" style="margin-top:10px">${ICON('info')} Een losse boeking indelen doe je in de transactie zelf: tik hem aan en kies een categorie. Wil je dat voortaan automatisch, dan maak je daar ook de regel aan.</div>`;
+    <div style="padding:10px 0;border-bottom:1px solid var(--line)" data-regels="${R.length}"><div style="font-weight:600">Je regels</div>
+      ${R.length?R.map(r=>`<div class="small muted" style="margin-top:3px">${esc(r.kw)} → ${CATS[r.cat]?esc(CATS[r.cat].name):esc(r.cat)}</div>`).join(''):'<div class="small muted">Nog geen eigen regels.</div>'}
+      <div class="small muted" style="margin-top:6px">Een regel maak je in een boeking zelf: tik hem aan, kies een categorie en vink "voortaan" aan.</div></div>
+    ${dubbelParenRegel()}
+    ${vorautRegel()}
+    ${eigenNaamRegel()}`;
 }
+/* v374: GEGEVENS & PRIVACY. Waar je data staat (met de uitleg achter de ⓘ), back-up met de dag van je laatste
+   back-up (SET.laatsteBackup, gezet door exportBackup()), exporteren, Historie (oude transacties importeren, voor
+   gesloten rekeningen: PSD2 is de bron, bestanden zijn alleen nog voor historie), Geavanceerd ingeklapt
+   (Peaks-audit, diagnose) en de gevarenzone in een eigen kader. De briefing naar een CommandCenter-map en de knop
+   "Dubbele transacties opruimen" zijn weg. */
 function setPrivacy(){
   const standalone = (window.matchMedia&&matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
-  return `
-    <div class="small muted" style="margin-bottom:10px"><b>Waar staat mijn data?</b> Alles staat lokaal in je browser op dit toestel. ${TX.length} transacties, ${months().length} maanden. Twee dingen kunnen data van dit toestel af sturen, allebei alleen als je ze zelf aanzet en allebei naar je eigen backend: de live bankkoppeling en de AI-coach. ${(function(){const u=privacyUitzonderingen(); return u.length?`Nu staat aan: <b>${u.join(' en ')}</b>.`:'Op dit moment staat geen van beide aan.';})()}</div>
-    ${standalone?`<div class="small muted" style="margin-bottom:10px">${ICON('check')} Geïnstalleerd als app, werkt offline.</div>`
-      :(deferredPrompt?`<button class="btn sec" style="margin-bottom:8px" onclick="installApp()">${ICON('install')} Installeer als app</button>`
-        :`<div class="small muted" style="margin-bottom:10px">Installeren via browsermenu: ⋮ → "App installeren" (Chrome/Edge) of Deel → "Zet op beginscherm" (iPhone).</div>`)}
-    <div class="small muted" style="margin:8px 0 6px"><b>Exporteren (lokaal):</b> een CSV-bestand, gemaakt op dit toestel.</div>
-    <button class="btn sec" style="margin-bottom:8px" onclick="exportTxCSV()">${ICON('folder')} Exporteer transacties (CSV)</button>
-    <button class="btn sec" style="margin-bottom:8px" onclick="exportPotjesCSV()">${ICON('target')} Exporteer potjes/budgetten (CSV)</button>
-    <div class="small muted" style="margin:14px 0 6px"><b>Briefing:</b> Minder kan je signalen naar een map op dit toestel schrijven, waar je dagelijkse briefing ze inleest. Instellen doe je bij <b>Bank &amp; koppelingen</b>.${SET.briefingFolder?` Nu ingesteld op <b>${esc(SET.briefingFolder)}</b>, en Minder schrijft er automatisch naartoe zodra je de app opent.`:''}</div>
-    <div class="small muted" style="margin:14px 0 6px"><b>Back-up &amp; herstel:</b> één bestand met al je gegevens (transacties, potjes, doelen, schulden, instellingen). Handig vóór je browsergegevens wist of een nieuw toestel.</div>
+  const u=privacyUitzonderingen(); const kop=t=>`<div class="hlabel" style="margin:16px 0 4px">${t}</div>`;
+  let peaks=0; try{ peaks=peaksHerkenning().treffers; }catch(_){}
+  const adv=!!window._gegAdv;
+  return `<div style="padding:4px 0 10px;border-bottom:1px solid var(--line)"><div style="font-weight:600">Waar staat je data ${noteIcon('datalokaal','Waar staat je data')}</div>
+      <div class="small muted">${u.length?'lokaal, behalve '+u.join(' en '):'lokaal'} · ${TX.length} transacties · ${months().length} maanden</div></div>
+    ${standalone?`<div class="small muted" style="margin-top:10px">${ICON('check')} Geïnstalleerd als app, werkt offline.</div>`
+      :(deferredPrompt?`<button class="btn sec" style="margin-top:10px" onclick="installApp()">${ICON('install')} Installeer als app</button>`
+        :`<div class="small muted" style="margin-top:10px">Installeren via het browsermenu: ⋮, App installeren (Chrome, Edge) of Deel, Zet op beginscherm (iPhone).</div>`)}
+    ${kop('Back-up')}
+    <div class="row" data-laatstebackup style="margin:4px 0 8px"><span class="small muted" style="flex:1">Laatste back-up</span><span class="small" style="font-weight:600">${SET.laatsteBackup?dagKort(SET.laatsteBackup)+' '+String(SET.laatsteBackup).slice(0,4):'nooit'}</span></div>
     <button class="btn sec" style="margin-bottom:8px" onclick="exportBackup()">${ICON('doc')} Volledige back-up maken</button>
     <button class="btn sec" style="margin-bottom:8px" onclick="restoreBackupPick()">${ICON('sync')} Herstel uit back-up</button>
-    <div class="small muted" style="margin:14px 0 6px"><b>Bescherm tegen automatisch wissen:</b> vraag de browser je gegevens te bewaren. Werkt het best als Minder als app is geïnstalleerd.</div>
-    <button class="btn sec" style="margin-bottom:8px" onclick="requestPersistUI()">${ICON('shield')} Bescherm mijn gegevens</button>
-    ${(function(){try{return findDuplicateIds().size;}catch(_){return 0;}})()? `<button class="btn sec" style="margin-bottom:8px" onclick="cleanupDuplicates()">${ICON('filter')} Dubbele transacties opruimen (${(function(){try{return findDuplicateIds().size;}catch(_){return 0;}})()})</button>`:''}
-    ${(function(){try{return peaksHerkenning().treffers;}catch(_){return 0;}})()? `<button class="btn sec" style="margin-bottom:8px" onclick="openPeaksAudit()">${ICON('trend')} Peaks-audit bekijken (${(function(){try{return peaksHerkenning().treffers;}catch(_){return 0;}})()})</button>`:''}
-    <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (${TX.length} transacties op dit toestel.)')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">${ICON('trash')} Alle gegevens wissen</button>`;
+    <button class="btn sec" style="margin-bottom:4px" onclick="requestPersistUI()">${ICON('shield')} Bescherm tegen automatisch wissen</button>
+    ${kop('Exporteren')}
+    <button class="btn sec" style="margin-bottom:8px" onclick="exportTxCSV()">${ICON('folder')} Transacties (CSV)</button>
+    <button class="btn sec" style="margin-bottom:4px" onclick="exportPotjesCSV()">${ICON('target')} Potjes (CSV)</button>
+    ${kop('Historie')}
+    <div class="row" data-historie style="gap:10px;padding:8px 0;cursor:pointer" onclick="document.getElementById('file').click()"><div style="flex:1;min-width:0"><div style="font-weight:600">Oude transacties importeren</div><div class="small muted">MT940 (ABN) of CSV (N26) · voor gesloten rekeningen</div></div><span class="muted">›</span></div>
+    <div class="row" data-gegadv style="gap:10px;padding:10px 0;margin-top:6px;border-top:1px solid var(--line);cursor:pointer" onclick="window._gegAdv=!window._gegAdv;renderSet()"><span style="flex:1;font-weight:600">Geavanceerd <span class="small muted" style="font-weight:400">(Peaks-audit, diagnose)</span></span><span class="muted">${adv?'▲':'›'}</span></div>
+    ${adv?`<div data-gegadvinh>${peaks?`<button class="btn sec" style="margin-bottom:8px" onclick="openPeaksAudit()">${ICON('trend')} Peaks-audit bekijken (${peaks})</button>`:'<div class="small muted" style="margin-bottom:8px">Geen Peaks-boekingen om te controleren.</div>'}
+      <button class="btn sec" style="margin-bottom:8px" onclick="diagOpen()">${ICON('info')} Diagnose</button></div>`:''}
+    <div data-gevarenzone style="margin-top:14px;border:1px solid var(--red);border-radius:var(--r-inner);padding:11px 12px">
+      <div style="font-weight:700;color:var(--red)">Gevarenzone</div>
+      <div class="small muted" style="margin:3px 0 10px">Wist alles op dit toestel. Maak eerst een back-up.</div>
+      <button class="btn danger" onclick="if(confirm('Alle lokale gegevens wissen? (${TX.length} transacties op dit toestel.) Dit is niet terug te draaien zonder back-up.')){TX=[];OVR={};OWN=[];ACCMETA={};PLAN={};accFilter='all';save();render();}">${ICON('trash')} Alle gegevens wissen…</button></div>`;
 }
 function csvDownload(name,rows){ const csv=rows.map(r=>r.map(c=>{ c=(c==null?'':String(c)); return /[";\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c; }).join(';')).join('\r\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
 async function requestPersist(){ try{ if(navigator.storage && navigator.storage.persist){ if(!(await navigator.storage.persisted())) return await navigator.storage.persist(); return true; } }catch(_){} return false; }
@@ -25266,6 +25389,7 @@ function exportBackup(){
   // v199: hier stond de formule van vandaagYMD() woordelijk opnieuw. Hij was goed, maar een tweede
   // exemplaar is hoe de vorm zich verspreidt; er is er nu één.
   a.href=url; a.download='minder-backup-'+vandaagYMD()+'.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+  SET.laatsteBackup=vandaagYMD(); save(); try{ renderSet(); }catch(_){}   // v374: "Laatste back-up" in Gegevens & privacy
   toast(`${ICON('check')} Back-up gemaakt (${TX.length} transacties)`);
 }
 function restoreBackupPick(){ const el=document.getElementById('backupFile'); if(el){ el.value=''; el.click(); } }
@@ -25276,7 +25400,7 @@ function restoreBackup(file){
     if(!d || d.app!=='minder' || !Array.isArray(d.tx)){ toast('Geen geldig Minder-back-upbestand'); return; }
     if(TX.length && !confirm(`Je huidige gegevens (${TX.length} transacties) worden vervangen door de back-up van ${d.ts?new Date(d.ts).toLocaleDateString('nl-NL'):'onbekende datum'}. Doorgaan?`)) return;
     TX=Array.isArray(d.tx)?d.tx:[]; OVR=d.ovr||{}; OWN=Array.isArray(d.own)?d.own:[]; ACCMETA=d.accmeta||{}; PLAN=d.plan||{};
-    SET=Object.assign({limit:70,income:0,autoIncome:true,hideInternal:true}, d.set||{});
+    SET=Object.assign({limit:70,income:0,autoIncome:true}, d.set||{});
     try{ eigenCatsLaad(); }catch(_){}   // v351
     save(); try{ TX.forEach(categorize); applyOwnAccounts(); buildAccMeta(); }catch(_){}
     curMonth=null; render(); closeSheet&&closeSheet();
@@ -25287,118 +25411,10 @@ function restoreBackup(file){
 function exportTxCSV(){ if(!TX.length){ toast('Geen transacties'); return; } const rows=[['datum','bedrag','categorie','omschrijving','rekening']]; TX.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>rows.push([t.date,(+t.amount).toFixed(2).replace('.',','),(CATS[catOf(t)]?CATS[catOf(t)].name:catOf(t)),(t.name||t.desc||''),(t.acc||'')])); csvDownload('minder-transacties.csv',rows); toast(`${ICON('check')} ${TX.length} transacties geexporteerd`); }
 function exportPotjesCSV(){ const B=SET.budgets||{}; const ks=Object.keys(B).filter(k=>+B[k]>0); if(!ks.length){ toast('Nog geen potjes'); return; } const rows=[['categorie','maandbudget']]; ks.forEach(k=>rows.push([(CATS[k]?CATS[k].name:k),(+B[k]).toFixed(2).replace('.',',')])); csvDownload('minder-potjes.csv',rows); toast(`${ICON('check')} potjes geexporteerd`); }
 
-/* ============================================================================
-   BRIEFING-EXPORT: financiële signalen naar de dagelijkse briefing.
-   Schrijft minder-signalen.json in het blokformaat van briefing-spec.md naar
-   je CommandCenter-map. Geporteerd uit minderBriefingExport.js (de spec/referentie)
-   en aangesloten op de echte app-functies. Zie minder-signalen-export.md.
-   ========================================================================== */
-
-// Vermogensreis op koers? Spiegel van je eigen cijfers, geen advies.
-// true = FIRE-getal wordt gehaald op of vóór je streefjaar, false = niet/te laat,
-// undefined = geen oordeel (geen FIRE-getal ingesteld of saldo onvolledig).
-function fireOpKoers(){
-  let M; try{ M=reisModel(); }catch(_){ return undefined; }
-  if(!M || !(M.FIRE>0)) return undefined;
-  /* v347: hier stond `if(M.missing)`, en M.missing is een object {balances, assets} en dus altijd
-     truthy (v124): deze functie gaf daardoor NOOIT een oordeel en de briefing zweeg altijd over je
-     koers. Gemeten bij het naast elkaar leggen van op koers en de haalbaarheid. Dezelfde toets als
-     coHorizonBron(): een onbekend saldo diskwalificeert, geen bezittingen is een lege laag. */
-  if(M.missing && M.missing.balances) return undefined;
-  const fire=(M.ms||[]).find(m=>m.key==='fire');
-  if(!fire) return undefined;
-  if(fire.yr==null) return false;
-  return fire.yr <= M.targetYear;
-}
-
-// Adapter: echte Minder-data → het platte blokformaat dat de signalen verwachten.
-function minderBriefingState(){
-  const now=new Date(); const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const num=fn=>{ try{ const v=fn(); return (typeof v==='number'&&isFinite(v))?v:NaN; }catch(_){ return NaN; } };
-  let verpl=[];
-  try{ const today=new Date(); today.setHours(0,0,0,0);
-    verpl=(liquidityDaily(10).events||[])
-      .filter(e=>e.type==='fixed' && e.amt<0)
-      .map(e=>({naam:e.name, bedrag:-e.amt, dagenTotVervaldag:Math.round((e.date-today)/86400000)}))
-      .filter(v=>v.dagenTotVervaldag>=0);
-  }catch(_){}
-  return {
-    safeToSpend: num(()=>safeToSpend().safe),
-    // v177: dit extrapoleerde je hele maanduitgave, dus met de vaste lasten erin
-    netSpendPeriode: num(()=>{ const de=daysElapsed(ym); if(!de.elapsed||de.elapsed<7) return NaN; return tempoProjectie(ym).proj; }),   // lopende uitgave -> verwachte volledige maand (pas vanaf dag 7)
-    netSpendPatroon: num(()=>baselineSpend()),
-    verplichtingen: verpl,
-    fireOpKoers: fireOpKoers()
-  };
-}
-
-/* v197: hier stond `const buffer=state.safeToSpendBuffer??0`. Dat veld kwam uit SET.stsBuffer, dat
-   nergens werd geschreven, dus de marge was altijd 0 en de vergelijking altijd `rest>0`. Het veld is
-   met de dode conditie uit de export gehaald en deze lezer rekent nu rechtstreeks met nul. */
-function _signaalSafeToSpend(state){
-  const rest=state.safeToSpend;
-  if(!isFinite(rest)) return null;
-  if(rest>0) return null;
-  return { sectie:'financien', prioriteit:rest<0?'hoog':'midden',
-    samenvatting:rest<0?`Je zit deze periode ${Math.abs(Math.round(rest))} euro over je safe-to-spend.`:`Je safe-to-spend is nog ${Math.round(rest)} euro, dat begint te knellen.`,
-    actie:'Houd de rest van de periode kort.', detail:null };
-}
-function _signaalAfwijkendeUitgave(state){
-  const nu=state.netSpendPeriode, patroon=state.netSpendPatroon;
-  if(!isFinite(nu)||!isFinite(patroon)||patroon<=0) return null;
-  const ratio=nu/patroon; if(ratio<1.15) return null;
-  const procent=Math.round((ratio-1)*100);
-  return { sectie:'financien', prioriteit:ratio>=1.4?'hoog':'midden',
-    samenvatting:`In dit tempo kom je deze maand ${procent} procent boven je patroon uit.`,
-    actie:'Bekijk of dit bewust is.', detail:`verwachte maanduitgave ${Math.round(nu)} versus patroon ${Math.round(patroon)}` };
-}
-function _signaalVerplichting(state){
-  const dagen=5;
-  const komende=(state.verplichtingen||[]).filter(v=>v.dagenTotVervaldag<=dagen).sort((a,b)=>a.dagenTotVervaldag-b.dagenTotVervaldag);
-  if(!komende.length) return null;
-  const e=komende[0];
-  return { sectie:'financien', prioriteit:'midden',
-    samenvatting:`${e.naam} van ${Math.round(e.bedrag)} euro vervalt over ${e.dagenTotVervaldag} dagen.`,
-    actie:'Zorg dat er dekking is.', detail:komende.length>1?`${komende.length} verplichtingen in de komende ${dagen} dagen`:null };
-}
-function _signaalVermogensreis(state){
-  const opKoers=state.fireOpKoers; if(opKoers===undefined) return null;
-  if(opKoers) return { sectie:'financien', prioriteit:'laag', samenvatting:'Je Vermogensreis ligt op koers.', actie:null, detail:null };
-  return { sectie:'financien', prioriteit:'midden', samenvatting:'Je Vermogensreis raakt uit koers ten opzichte van je plan.', actie:'Kijk of dit tijdelijk is of om bijsturen vraagt.', detail:null };
-}
-function bouwMinderBriefingPayload(){
-  const state=minderBriefingState();
-  const blokken=[_signaalSafeToSpend(state),_signaalAfwijkendeUitgave(state),_signaalVerplichting(state),_signaalVermogensreis(state)].filter(Boolean);
-  return { bron:'minder', versie:1, gegenereerd_op:new Date().toISOString(), blokken };
-}
-
-// Eenmalig: kies de CommandCenter-map. Vereist een klik (browserregel).
-async function kiesMinderExportMap(){
-  if(!FSA){ alert('Exporteren naar een map werkt in Chrome of Edge. Anders kun je het bestand niet automatisch wegschrijven.'); return; }
-  try{
-    const h=await window.showDirectoryPicker({id:'minder-briefing',mode:'readwrite'});
-    await idbSet('briefingDir',h);
-    SET.briefingFolder=h.name; save();
-    toast(`${ICON('check')} Exportmap gekozen: ${h.name}`);
-    await exporteerMinderSignalen(false);
-  }catch(e){ if(e&&e.name!=='AbortError') alert('Kon de map niet kiezen: '+e.message); }
-}
-// Schrijf de actuele signalen weg. silent=true bij automatische export (geen toasts, geen permissieprompt).
-async function exporteerMinderSignalen(silent){
-  try{
-    const h=await idbGet('briefingDir');
-    if(!h){ if(!silent) toast('Kies eerst een exportmap'); return; }
-    let p=await h.queryPermission({mode:'readwrite'});
-    if(p!=='granted'){ if(silent) return; p=await h.requestPermission({mode:'readwrite'}); }
-    if(p!=='granted'){ if(!silent) toast('Geen schrijftoegang tot de map'); return; }
-    const payload=bouwMinderBriefingPayload();
-    const fh=await h.getFileHandle('minder-signalen.json',{create:true});
-    const w=await fh.createWritable(); await w.write(JSON.stringify(payload,null,2)); await w.close();
-    if(!silent) toast(`${ICON('check')} ${payload.blokken.length} ${payload.blokken.length===1?'signaal':'signalen'} geëxporteerd`);
-  }catch(e){ if(!silent) toast('Export mislukt'); }
-}
-// Automatische export bij openen van de app: alleen als er data is en de map al toestemming heeft.
-window.addEventListener('load',()=>{ try{ if(typeof TX!=='undefined' && TX && TX.length) exporteerMinderSignalen(true); }catch(_){} });
+/* v374: hier stond de BRIEFING-EXPORT naar een CommandCenter-map (minderBriefingState(), fireOpKoers(), vier
+   _signaal*-functies, bouwMinderBriefingPayload(), kiesMinderExportMap(), exporteerMinderSignalen() en een
+   automatische export bij het openen van de app). Niet meer in gebruik, op keuze van de gebruiker volledig
+   verwijderd: de knoppen in Bank en Privacy, de uitleg en de code. Er las niets anders van. */
 
 function setAcc(a){accFilter=a;renderTx();}
 
@@ -25448,11 +25464,13 @@ function acctRenameOpen(a){
   const bank=meta.bank||(pm&&pm.bank)||'';
   const opgeslagen=(pm&&pm.label)||meta.label||'';
   $('#sheet').innerHTML=`<div class="grab"></div>
-    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="renHead">Naam van deze rekening</div>
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:2px" id="renHead">Deze rekening</div>
     <div class="small muted" style="margin-bottom:12px">Nu: <b>${esc(N.naam)}</b> · ${esc(N.bron)}${bank?' · '+esc(bank):''}</div>
     <label class="fld">Eigen naam</label>
     <input type="text" id="renInp" maxlength="28" value="${esc(eigen)}" placeholder="${esc(N.naam)}" style="width:100%">
     ${(opgeslagen && opgeslagen!==N.naam)?`<div class="small muted" style="margin-top:8px">${pm?'Je bank noemt deze rekening':'In je import heet deze rekening'} <b>${esc(opgeslagen)}</b>.</div>`:''}
+    <div class="toggle" data-spaartoggle style="margin-top:12px"><div><div style="font-weight:600">Spaarrekening</div><div class="small muted">Wat hierheen gaat telt als gespaard, en het saldo telt in je spaarsaldo.</div></div>
+      <label class="sw"><input type="checkbox" ${isSavingsAcc(a)?'checked':''} onchange="toggleSavingsAcct('${esc(String(a).replace(/'/g,"\\'"))}')"><span class="sl"></span></label></div>
     <button class="btn" style="margin-top:14px;width:100%" onclick="acctRenameSave()">${ICON('check')} Opslaan</button>
     ${eigen?`<div class="small muted" style="margin-top:14px;text-align:center;cursor:pointer" onclick="acctRenameSave(true)">Terug naar de automatische naam</div>`:''}`;
   showSheetBg();
@@ -25567,24 +25585,68 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') hideTip(); });
 window.addEventListener('scroll',()=>{ if(Date.now()-(window._tipTs||0)>400) hideTip(); },true);   // niet sluiten door de focus-scroll van de tik zelf
 // gedeelde inlees-routine: items = [{name,text}]
 
-function ingest(items){
-  let added=0;
-  const existing=new Set(TX.map(t=>t.id));
+/* v374: PSD2 IS DE BRON, EEN BESTAND IS HISTORIE. Een import slaat standaard de boekingen over waarvan de datum al
+   door je bankkoppeling wordt gedekt op dezelfde rekening. DE TOETS IS DIE VAN DE SOMMEN: csvDubbel() (een
+   csv-rekening gepaard aan een psd2-rekening, binnen het venster van de psd2-kant, v284) en mt940Dubbel() (een
+   rekening die zelf ook psd2 draagt, binnen dat venster, v304). importVoorstel() rekent ze op een tijdelijke stand
+   (de nieuwe boekingen erbij, daarna alles terug, zonder save()), dus er staat geen tweede uitdrukking van
+   "gedekt" naast. Een saldo uit het bestand voor een gekoppelde rekening wordt niet overgenomen: daar is de bank
+   de bron. Voor het importeren staat de telling er ("X nieuw · Y overgeslagen (al via de bank)"); niets
+   voorgekozen, jij bevestigt. */
+function importParse(items){
+  const existing=new Set(TX.map(t=>t.id)), nieuw=[], balances={}; let al=0;
   for(const {name,text} of items){
     const isCSV = /\.csv$/i.test(name) || /booking date|partner name|account name/i.test(text.slice(0,200));
     let res; try{ res = isCSV ? parseCSV(text) : parseMT940(text); }catch(e){ continue; }
-    for(const t of res.txns){ if(!existing.has(t.id)){ TX.push(t); existing.add(t.id); added++; } }
-    for(const a in res.balances){ ACCMETA[a]=Object.assign(ACCMETA[a]||{},res.balances[a]); }
+    for(const t of res.txns){ if(existing.has(t.id)){ al++; continue; } nieuw.push(t); existing.add(t.id); }
+    for(const a in res.balances) balances[a]=Object.assign(balances[a]||{}, res.balances[a]);
   }
+  return {nieuw, balances, al};
+}
+function importVoorstel(items){
+  const P=importParse(items), oudTX=TX, oudOWN=OWN, oudMeta=ACCMETA;
+  let over=new Set();
+  try{
+    ACCMETA=Object.assign({}, oudMeta);
+    TX=oudTX.concat(P.nieuw).sort((a,b)=>a.date.localeCompare(b.date));
+    try{ applyOwnAccounts(); }catch(_){} buildAccMeta();
+    for(const t of P.nieuw){ try{ if(csvDubbel(t)||mt940Dubbel(t)) over.add(t.id); }catch(_){} }
+  } finally {
+    TX=oudTX; OWN=oudOWN; try{ applyOwnAccounts(); }catch(_){} buildAccMeta(); ACCMETA=oudMeta;
+  }
+  return {nieuw:P.nieuw.filter(t=>!over.has(t.id)), over:P.nieuw.filter(t=>over.has(t.id)), al:P.al, balances:P.balances};
+}
+function importToepassen(V){
+  for(const t of V.nieuw) TX.push(t);
+  for(const a in V.balances){ if(psd2Rek(a)) continue; ACCMETA[a]=Object.assign(ACCMETA[a]||{},V.balances[a]); }
   TX.sort((a,b)=>a.date.localeCompare(b.date));
   applyOwnAccounts(); buildAccMeta(); save();
-  return added;
+  return V.nieuw.length;
+}
+function ingest(items){ return importToepassen(importVoorstel(items)); }
+function importTellingZin(V){ return `${V.nieuw.length} boeking${V.nieuw.length===1?'':'en'} nieuw \u00b7 ${V.over.length} overgeslagen (al via de bank)`; }
+function openImportVoorstel(V){
+  window._importV=V;
+  $('#sheet').innerHTML=`<div class="grab"></div><div id="importVoorstel">
+    <div style="font-weight:800;font-size:var(--fs-lg);margin-bottom:4px">Oude transacties importeren</div>
+    <div data-importtelling style="font-weight:600;margin-bottom:6px">${importTellingZin(V)}</div>
+    <div class="small muted" style="margin-bottom:8px">${V.over.length?'Overgeslagen zijn de boekingen op dagen die je bankkoppeling al dekt voor dezelfde rekening. Die komen al via de bank binnen.':'Geen van deze boekingen valt in een periode die je bankkoppeling al dekt.'}${V.al?` ${V.al} stond${V.al===1?'':'en'} er al in.`:''}</div>
+    <div class="row sheet-voet" style="gap:8px;margin-top:10px"><button class="btn" data-importbevestig ${V.nieuw.length?'':'disabled'} onclick="importBevestig()">${V.nieuw.length?`${V.nieuw.length} importeren`:'Niets te importeren'}</button>
+      <button class="btn sec" onclick="window._importV=null;closeSheet()">Annuleren</button></div></div>`;
+  showSheetBg();
+}
+function importBevestig(){
+  const V=window._importV; if(!V) return; window._importV=null;
+  const added=importToepassen(V); curMonth=null; closeSheet(); render();
+  toast(`${ICON('check')} ${added} transacties ingelezen \u00b7 alles blijft op dit toestel`);
 }
 $('#file').onchange=async e=>{
   const files=[...e.target.files]; if(!files.length)return;
   const items=await Promise.all(files.map(async f=>({name:f.name,text:await f.text()})));
-  const added=ingest(items); curMonth=null; render(); e.target.value='';
-  toast(added? `${ICON('check')} ${added} transacties ingelezen · alles blijft op dit toestel` : 'Geen nieuwe transacties (al ingelezen)');
+  e.target.value='';
+  if(geenData()){ const added=ingest(items); curMonth=null; render();
+    toast(added? `${ICON('check')} ${added} transacties ingelezen \u00b7 alles blijft op dit toestel` : 'Geen nieuwe transacties (al ingelezen)'); return; }
+  openImportVoorstel(importVoorstel(items));
 };
 
 /* ---------- automatische map-import (File System Access API) ---------- */
@@ -25725,7 +25787,7 @@ function psd2GeenBackend(){
     <button class="btn sec" style="margin-top:8px" onclick="closeSheet()">Sluiten</button>`;
   showSheetBg();
 }
-function psd2ToonGeavanceerd(){ SET.advBank=true; SET.setOpen='bank'; save(); closeSheet(); go('set'); renderSet(); }
+function psd2ToonGeavanceerd(){ SET.advBank=true; save(); closeSheet(); openSetSub('bank'); }
 async function psd2Connect(){
   if(!psd2Ready()){ psd2GeenBackend(); return; }
   const country=SET.psd2Country||'NL';
@@ -26594,27 +26656,11 @@ function openPeaksAudit(){
     <div class="small muted" style="margin-top:6px">Kopieren zet het op je klembord. Het verlaat je toestel pas als je het zelf ergens plakt.</div>`:''}`;
   showSheetBg();
 }
-function cleanupDuplicates(){   // toon een controlelijst i.p.v. blind verwijderen
-  const rm=findDuplicateIds();
-  if(!rm.size){ toast('Geen dubbele transacties gevonden'); return; }
-  const rows=TX.filter(t=>rm.has(t.id)).sort((a,b)=>b.date.localeCompare(a.date));
-  $('#sheet').innerHTML=`<div class="grab"></div>
-    <div class="center" style="margin-bottom:8px"><div style="font-size:var(--fs-xl)">${ICON('filter')}</div>
-      <div style="font-weight:800;font-size:var(--fs-lg)">Mogelijke dubbele transacties</div>
-      <div class="muted small">${rows.length} gevonden · zelfde datum, bedrag en winkel</div></div>
-    <div class="small muted" style="margin-bottom:10px">Hieronder staat wat er verwijderd wordt; van elk paar blijft één exemplaar staan. Loop het even na of er geen echte losse aankoop tussen zit.</div>
-    ${rows.map(t=>`<div class="tx" style="cursor:default"><div class="ava" style="background:var(--card2)">${ICON('bank')}</div>
-      <div class="info"><div class="nm">${esc(t.name||t.desc||'Transactie')}</div><div class="cat">${new Date(t.date).toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}${t.acc?' · '+esc(accShort(t.acc)):''}${t.pending?' · in afwachting':''}</div></div>
-      <div class="amt ${t.amount<0?'neg':'pos'}">${euro(t.amount)}</div></div>`).join('')}
-    <button class="btn" style="margin-top:14px" onclick="confirmCleanupDuplicates()">${ICON('trash')} Verwijder deze ${rows.length}</button>
-    <button class="btn sec" style="margin-top:8px" onclick="closeSheet()">Annuleren</button>`;
-  showSheetBg();
-}
-function confirmCleanupDuplicates(){
-  const rm=findDuplicateIds(); if(!rm.size){ closeSheet(); return; }
-  const n=rm.size; TX=TX.filter(t=>!rm.has(t.id)); applyOwnAccounts(); buildAccMeta(); save(); curMonth=null; closeSheet(); render();
-  toast(`${ICON('check')} ${n} dubbele transactie(s) verwijderd`);
-}
+/* v374: cleanupDuplicates() en confirmCleanupDuplicates() zijn weg, met de knop "Dubbele transacties opruimen"
+   (keuze van de gebruiker). Die knop haalde op findDuplicateIds() blind een kant weg, en die sleutel valt samen bij
+   echte, verschillende boekingen (v272/v286). Dubbele boekingen zijn sinds v288 een vraag per paar
+   (dubbelParen()), en die staat in de maandafsluiting en de statusbalk. findDuplicateIds() blijft: diagnoseblok 10
+   en 11 lezen hem. */
 
 function psd2Disconnect(){
   if(!confirm('Live koppeling vergeten? (Reeds ingelezen transacties blijven staan.)')) return;
@@ -26685,7 +26731,6 @@ function openVasteLasten(){
 
 /* ----- INSTELLINGEN ----- */
 
-function toggleSet(id){ SET.setOpen = SET.setOpen===id?'':id; save(); renderSet(); }
 
 async function readEntry(entry,items){
   if(!entry) return;

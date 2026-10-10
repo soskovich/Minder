@@ -62,7 +62,7 @@ test.describe('b · randgevallen', () => {
     expect(t).not.toMatch(/€0/);                                      // geen stellige nul
     await page.locator('#vermSam span[onclick]').click();
     await page.waitForTimeout(200);
-    expect(await page.evaluate(() => window._setSheet)).toBe('income');
+    expect(await page.evaluate(() => window._setSub)).toBe('bank');   // v374: de saldo's staan in Bank & rekeningen
   });
 
   test('met te weinig historie noemt hij geen opbouw', async ({ page }) => {

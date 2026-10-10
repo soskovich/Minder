@@ -1,15 +1,11 @@
-// v182: oorzaak 3 uit de Instellingen-audit. De sectie-indeling volgde de code en niet het
-// onderwerp: de AI-coach stond onder Coach terwijl zijn configuratie onder Bankkoppeling staat, de
-// coach had twee losse regels met verschillend gedrag, en Uiterlijk en Weergave stonden boven
-// Inkomen en Bankkoppeling. Dit is verplaatsen: elk paneel houdt zijn inhoud en zijn gedrag.
-// De service worker staat globaal uit via playwright.config.js.
+// v182: oorzaak 3 uit de Instellingen-audit, de sectie-indeling volgde de code en niet het onderwerp.
+// v374: de indeling is opnieuw gemaakt (zes subpagina's, mockup "Minder instellingen"). Wat deze spec over de
+// oude volgorde van negen uitklapblokken pinde is weg, want die blokken bestaan niet meer; de nieuwe volgorde en
+// de statusbalk staan in instellingen-psd2.spec.js. Wat hier blijft zijn de invarianten die de herindeling
+// overleven: de AI-coach staat bij de coach en een keer, de avatar-sheet is de enige editor voor toon en avatar,
+// je naam staat bij de coach, er komt geen regel-editor, en er is een rekeningenlijst.
 const { test, expect } = require('@playwright/test');
 const { seed, open } = require('./budget-fixture');
-
-// De volgorde loopt van binnenkomende data naar wat je ermee doet naar hoe het verteld wordt.
-const VOLGORDE = ['Inkomen & rekeningen', 'Bank & koppelingen', 'Transacties & categorieën',
-  'Budget & doelen', 'Vermogensreis · aannames', 'Coach', 'Weergave & modus', 'Uiterlijk',
-  'Privacy & gegevens'];
 
 function metSet(v) {
   const p = seed();
@@ -25,247 +21,114 @@ const paneel = (page, fn) => page.evaluate((f) => {
   const d = document.createElement('div'); d.innerHTML = window[f](); return d.innerText.replace(/\s+/g, ' ');
 }, fn);
 
-test.describe('a · de AI-coach staat bij wat hij nodig heeft', () => {
-  test('de schakelaar staat onder Bankkoppeling en niet meer onder Coach', async ({ page }) => {
+test.describe('a · de AI-coach staat een keer, bij de coach', () => {
+  test('de schakelaar staat onder Coach & weergave en niet onder Bank of Gegevens', async ({ page }) => {
     await boot(page);
-    const bank = await paneel(page, 'setBank');
-    const coach = await paneel(page, 'setCoach');
-    expect(bank).toContain('AI-coach');
-    expect(bank).toMatch(/coach-tekst gaat naar je eigen backend/);
-    expect(coach).not.toMatch(/coach-tekst gaat naar je eigen backend/);
+    expect(await paneel(page, 'setCoachWeergave')).toContain('AI-coach');
+    expect(await paneel(page, 'setBank')).not.toContain('AI-coach');
+    expect(await paneel(page, 'setPrivacy')).not.toMatch(/AI-coach staat aan|Hoe werkt de coach/);
   });
 
-  test('de schakelaar werkt en staat zichtbaar, niet achter Geavanceerd', async ({ page }) => {
+  test('aan zonder backend zegt de app dat de lokale coach blijft', async ({ page }) => {
+    await boot(page, metSet({ aiCoach: true, psd2Url: '', psd2Token: '' }));
+    expect(await paneel(page, 'setCoachWeergave')).toContain('lokale coach blijft aan het woord');
+    await boot(page, metSet({ aiCoach: true, psd2Url: 'https://x.workers.dev', psd2Token: 't' }));
+    expect(await paneel(page, 'setCoachWeergave')).not.toContain('lokale coach blijft aan het woord');
+  });
+
+  test('de configuratie blijft achter Geavanceerd bij de bank', async ({ page }) => {
     await boot(page);
     expect(await page.evaluate(() => !!SET.advBank)).toBe(false);
-    await page.evaluate(() => toggleSet('bank'));
-    const t = await page.evaluate(() => $('#s-set').innerText.replace(/\s+/g, ' '));
-    expect(t).toContain('AI-coach');
-    expect(t).not.toContain('Backend-URL');          // de configuratie blijft wel verborgen
+    await page.evaluate(() => openSetSub('bank'));
+    expect(await page.evaluate(() => $('#s-set').innerText)).not.toContain('Backend-URL');
   });
 
-  test('aan zonder backend zegt de app nog steeds dat de lokale coach blijft', async ({ page }) => {
-    await boot(page, metSet({ aiCoach: true, psd2Url: '', psd2Token: '' }));
-    expect(await paneel(page, 'setBank')).toContain('nog niet ingesteld');
-    await boot(page, metSet({ aiCoach: true, psd2Url: 'https://x.workers.dev', psd2Token: 't' }));
-    expect(await paneel(page, 'setBank')).toContain('Die staat ingesteld');
-  });
-
-  test('de privacyregel blijft de AI-coach meetellen na de verhuizing', async ({ page }) => {
+  test('de privacyregel telt de AI-coach mee', async ({ page }) => {
     await boot(page, metSet({ aiCoach: true }));
     expect(await page.evaluate(() => privacySub())).toBe('Lokaal, behalve de AI-coach');
   });
 });
 
-test.describe('b · de coach is één regel met één gedrag', () => {
-  test('er is geen aparte regel Coach-avatar & toon meer', async ({ page }) => {
+test.describe('b · de avatar-sheet is de enige editor voor toon en avatar', () => {
+  test('bereikbaar vanuit Coach & weergave en vanaf de coachkop', async ({ page }) => {
     await boot(page);
-    const t = await page.evaluate(() => $('#s-set').innerText.replace(/\s+/g, ' '));
-    expect(t).not.toContain('Coach-avatar & toon');
-    expect((t.match(/Coach/g) || []).length).toBeGreaterThan(0);
-    // de subregel van de ene regel noemt allebei: de stand en de gekozen coach
-    expect(t).toMatch(/Signalen uit je patronen staan aan · .+ toon/);   // v202
-  });
-
-  test('de regel klapt inline uit, zoals elke regel zonder eigen sheet', async ({ page }) => {
-    await boot(page);
-    await page.evaluate(() => toggleSet('coach'));
-    const t = await page.evaluate(() => $('#s-set').innerText.replace(/\s+/g, ' '));
-    expect(t).toContain('Signalen uit je patronen');   // v202
-    expect(t).toContain('Avatar & toon');
-    expect(await page.evaluate(() => !$('#sheetBg').classList.contains('show'))).toBe(true);
-  });
-
-  test('de avatar-sheet blijft bereikbaar vanaf al zijn ingangen', async ({ page }) => {
-    await boot(page);
-    // 1) vanuit het coach-paneel in Instellingen
-    await page.evaluate(() => { toggleSet('coach'); });
-    await page.waitForTimeout(50);
+    await page.evaluate(() => openSetSub('coach'));
     await page.locator('#s-set >> text=Avatar & toon').click();
     await page.waitForSelector('#sheetBg.show');
     expect(await page.locator('#sheet').innerText()).toContain('Kies je coach');
     await page.evaluate(() => closeSheet());
-
-    // 2) vanaf de coachkop op het coachscherm
-    await page.evaluate(() => go('dash'));
-    await page.waitForTimeout(80);
-    // de kop animeert bij binnenkomst, dus we klikken hem in de pagina zelf aan
-    expect(await page.evaluate(() => 'openCoachAvatar()'))
-      .toContain('openCoachAvatar()');
     await page.evaluate(() => openCoachAvatar());
     await page.waitForSelector('#sheetBg.show');
     expect(await page.locator('#sheet').innerText()).toContain('Kies je coach');
-
-    // 3) setCoachTone heropent hem, zodat je je keuze meteen terugziet
     await page.evaluate(() => setCoachTone('zacht'));
-    await page.waitForTimeout(80);
-    expect(await page.locator('#sheet').innerText()).toContain('Kies je coach');
     expect(await page.evaluate(() => coachTone())).toBe('zacht');
   });
 
-  test('de sheet blijft de enige plek waar toon en avatar instelbaar zijn', async ({ page }) => {
+  test('de pagina verwijst ernaar en bouwt geen tweede editor (v61)', async ({ page }) => {
     await boot(page);
-    await page.evaluate(() => toggleSet('coach'));
+    await page.evaluate(() => openSetSub('coach'));
     const t = await page.evaluate(() => $('#s-set').innerText.replace(/\s+/g, ' '));
-    // het paneel verwijst ernaar, het bouwt geen tweede editor (v61)
     expect(t).not.toContain('Zacht');
     expect(t).not.toContain('Zakelijk');
-    expect(await paneel(page, 'setCoach')).not.toContain('setCoachTone');
+    expect(await page.evaluate(() => setCoachWeergave())).not.toContain('setCoachTone');
   });
 });
 
-test.describe('c · data en koppelingen boven vormgeving', () => {
-  test('de negen regels staan in de nieuwe volgorde', async ({ page }) => {
+test.describe('d · je naam staat bij de coach die hem gebruikt', () => {
+  test('het veld staat onder Coach & weergave en niet onder Inkomen', async ({ page }) => {
     await boot(page);
-    const namen = await page.evaluate(() => [...document.querySelectorAll('#s-set div[style*="min-width:0"] > div')]
-      .filter((e) => (e.getAttribute('style') || '').includes('font-weight:600'))
-      .map((e) => e.textContent.trim()));
-    expect(namen).toEqual(VOLGORDE);
-  });
-
-  test('Uiterlijk en Weergave staan onder Inkomen en Bankkoppeling', async ({ page }) => {
-    await boot(page);
-    const t = await page.evaluate(() => $('#s-set').innerText);
-    const p = (w) => t.indexOf(w);
-    expect(p('Inkomen & rekeningen')).toBeLessThan(p('Uiterlijk'));
-    expect(p('Bank & koppelingen')).toBeLessThan(p('Uiterlijk'));
-    expect(p('Bank & koppelingen')).toBeLessThan(p('Weergave & modus'));
-    expect(p('Privacy & gegevens')).toBeGreaterThan(p('Uiterlijk'));   // beheer onderaan
-  });
-
-  test('elke regel klapt open en dicht zonder console-fout', async ({ page }) => {
-    const fouten = [];
-    page.on('pageerror', (e) => fouten.push(String(e)));
-    page.on('console', (m) => { if (m.type() === 'error') fouten.push(m.text()); });
-    await boot(page);
-    for (const id of ['income', 'bank', 'trans', 'budget', 'fire', 'coach', 'modus', 'look', 'privacy']) {
-      await page.evaluate((x) => toggleSet(x), id);
-      await page.waitForTimeout(30);
-      await page.evaluate((x) => toggleSet(x), id);
-      await page.waitForTimeout(30);
-    }
-    expect(fouten).toEqual([]);
-    expect(await page.evaluate(() => $('#s-set').innerText)).toContain('Privacy & gegevens');
-  });
-});
-
-test.describe('d · Je naam staat bij de coach die hem gebruikt', () => {
-  test('het veld staat onder Coach en niet meer onder Inkomen', async ({ page }) => {
-    await boot(page);
-    expect(await paneel(page, 'setCoach')).toContain('Je naam');
+    expect(await paneel(page, 'setCoachWeergave')).toContain('Je naam');
     expect(await paneel(page, 'setIncome')).not.toContain('Je naam');
-    // de enige lezers van SET.name zijn de coach zelf
     expect(await page.evaluate(() => /SET\.name/.test(coVoornaam.toString()))).toBe(true);
   });
 
-  test('invullen werkt nog en komt terug in het gesprek', async ({ page }) => {
+  test('invullen werkt en komt terug in het gesprek', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => { SET.name = 'Vincent'; save(); renderSet(); });
     expect(await page.evaluate(() => coVoornaam())).toBe('Vincent');
-    // innerText leest de waarde van een invoerveld niet, dus we kijken naar de opmaak zelf
-    expect(await page.evaluate(() => setCoach())).toContain('value="Vincent"');
+    expect(await page.evaluate(() => setCoachWeergave())).toContain('value="Vincent"');
   });
 });
 
-test.describe('e · Transacties & categorieën is een eigen sectie', () => {
-  test('de schakelaar staat er en niet meer onder Coach', async ({ page }) => {
-    await boot(page);
-    expect(await paneel(page, 'setTransacties')).toContain('Interne overboekingen verbergen');
-    expect(await paneel(page, 'setCoach')).not.toContain('Interne overboekingen');
-    expect(await paneel(page, 'setIncome')).not.toContain('Interne overboekingen');
-  });
-
-  test('de subregel volgt de stand en de schakelaar werkt', async ({ page }) => {
-    await boot(page);
-    const t = () => page.evaluate(() => $('#s-set').innerText);
-    expect(await t()).toContain('Interne overboekingen verborgen');
-    await page.evaluate(() => { SET.hideInternal = false; save(); renderSet(); });
-    expect(await t()).toContain('Interne overboekingen tellen mee');
-  });
-
-  test('er wordt geen regel-editor gebouwd, alleen benoemd waar hij zit', async ({ page }) => {
+test.describe('e · Herkenning bouwt geen regel-editor', () => {
+  test('hij zegt waar je een regel maakt', async ({ page }) => {
     await boot(page);
     const t = await paneel(page, 'setTransacties');
-    expect(t).toMatch(/in de transactie zelf/);
+    expect(t).toMatch(/in een boeking zelf/);
     expect(t).not.toContain('SET.rules');
   });
 });
 
-test.describe('f · de briefingexport woont bij de koppelingen', () => {
-  test('de knoppen staan onder Bank & koppelingen', async ({ page }) => {
-    await boot(page);
-    const bank = await paneel(page, 'setBank');
-    expect(bank).toContain('Kies exportmap');
-    expect(bank).toContain('Exporteer signalen naar briefing');
-    const priv = await paneel(page, 'setPrivacy');
-    expect(priv).not.toContain('Kies exportmap');
-    expect(priv).not.toContain('Exporteer signalen naar briefing');
-  });
-
-  test('Privacy noemt hem nog wel als feit, met de plek erbij', async ({ page }) => {
-    await boot(page, metSet({ briefingFolder: 'CommandCenter' }));
-    const priv = await paneel(page, 'setPrivacy');
-    expect(priv).toContain('Briefing');
-    expect(priv).toContain('Bank & koppelingen');
-    expect(priv).toContain('CommandCenter');
-    expect(priv).toMatch(/automatisch naartoe zodra je de app opent/);
-  });
-
-  test('hij telt niet mee als uitzondering: hij verlaat je toestel niet', async ({ page }) => {
-    await boot(page, metSet({ briefingFolder: 'CommandCenter' }));
-    expect(await page.evaluate(() => privacyUitzonderingen())).toEqual([]);
-    expect(await page.evaluate(() => privacySub())).toBe('Alles blijft op dit toestel');
-    expect(await page.evaluate(() => /briefing/i.test(privacyUitzonderingen.toString()))).toBe(false);
-  });
-});
-
-test.describe('g · één rekeningenlijst', () => {
-  test('saldo en spaarvlag staan in dezelfde rij', async ({ page }) => {
+test.describe('g · een rekeningenlijst', () => {
+  test('de lijst staat onder Bank & rekeningen en niet onder Inkomen', async ({ page }) => {
     await boot(page);
     const acc = await page.evaluate(() => OWN[0]);
-    const html = await page.evaluate(() => accountsCard());
-    expect(html).toContain(`data-acc="${acc}"`);
-    expect(html).toContain('setBal(');
-    expect(html).toContain('toggleSavingsAcct(');
-    expect(html).toContain('acctRenameOpen(');
+    expect(await page.evaluate(() => accountsCard())).toContain(`data-acc="${acc}"`);
+    expect(await page.evaluate(() => setIncome())).not.toContain('data-acc=');
+    expect(await page.evaluate(() => setBank())).toContain('data-acc=');
   });
 
-  test('de lijst staat onder Inkomen en niet meer onder Bank & koppelingen', async ({ page }) => {
-    await boot(page);
-    expect(await paneel(page, 'setIncome')).toContain('spaar');
-    const bank = await paneel(page, 'setBank');
-    expect(bank).not.toContain('setBal');
-    expect(bank).toMatch(/stel je in bij Inkomen & rekeningen/);
-  });
-
-  test('legeRekRegel staat er nog maar één keer', async ({ page }) => {
-    await boot(page);
-    const r = await page.evaluate(() => { go('set'); toggleSet('income'); toggleSet('bank');
-      return ($('#s-set').innerText.match(/zonder saldo (tonen|verbergen)/g) || []).length; });
-    expect(r).toBeLessThanOrEqual(1);
-  });
-
-  test('de tik naar je spaarrekening opent de sectie waar die vlag staat', async ({ page }) => {
+  test('de tik naar je spaarrekening opent Bank & rekeningen', async ({ page }) => {
     await boot(page);
     await page.evaluate(() => openSpaarrekening());
-    await page.waitForSelector('#sheetBg.show');
-    const t = await page.locator('#sheet').innerText();
-    expect(t).toContain('Inkomen & rekeningen');
-    expect(t).toContain('spaar');
+    expect(await page.evaluate(() => window._setSub)).toBe('bank');
+    expect(await page.evaluate(() => $('#s-set').innerText)).toContain('spaarrekening');
   });
 
   for (const w of [360, 390]) {
-    test(`de rij past op ${w}px zonder horizontale overflow`, async ({ page }) => {
+    test(`elke subpagina past op ${w}px zonder horizontale overflow`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: 780 });
       await boot(page);
-      await page.evaluate(() => toggleSet('income'));
-      await page.waitForTimeout(60);
-      const over = await page.evaluate(() => ({
-        set: $('#s-set').scrollWidth - $('#s-set').clientWidth,
-        body: document.body.scrollWidth - document.body.clientWidth,
-      }));
-      expect(over.set).toBeLessThanOrEqual(1);
-      expect(over.body).toBeLessThanOrEqual(1);
+      for (const id of [null, 'inkomen', 'bank', 'spelregels', 'herkenning', 'coach', 'gegevens']) {
+        await page.evaluate((x) => openSetSub(x), id);
+        await page.waitForTimeout(40);
+        const over = await page.evaluate(() => ({
+          set: $('#s-set').scrollWidth - $('#s-set').clientWidth,
+          body: document.body.scrollWidth - document.body.clientWidth,
+        }));
+        expect(over.set, String(id)).toBeLessThanOrEqual(1);
+        expect(over.body, String(id)).toBeLessThanOrEqual(1);
+      }
     });
   }
 });

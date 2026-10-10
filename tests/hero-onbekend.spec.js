@@ -60,10 +60,10 @@ test.describe('geen bekend saldo', () => {
   test('de CTA opent de saldo-invoer in plaats van dood te lopen', async ({ page }) => {
     await open(page, null);
     await page.locator('#s-dash .homehero >> text=vul je saldo aan').click();
-    await page.waitForSelector('#sheetBg.show');
-    const sheet = await page.locator('#sheet').innerText();
-    expect(sheet).toContain('Je rekeningen & saldo');
-    expect(await page.locator('#sheet input[type="number"]').count()).toBeGreaterThan(0);
+    // v374: de saldo-invoer is de pagina Bank & rekeningen; een rekening zonder koppeling houdt zijn veld
+    expect(await page.evaluate(() => window._setSub)).toBe('bank');
+    expect(await page.locator('#s-set').textContent()).toContain('Rekeningen');
+    expect(await page.locator('#s-set [data-saldoveld]').count()).toBeGreaterThan(0);
   });
 
   test('de opbouw-sheet spreekt de hero niet tegen', async ({ page }) => {

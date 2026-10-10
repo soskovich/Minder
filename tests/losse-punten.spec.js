@@ -87,7 +87,7 @@ test.describe('c · de coachschakelaar zegt wat hij doet', () => {
      vijf signalen uit en verder niets; het gesprek blijft in beide standen bereikbaar. De tekst is
      daarom aangepast aan het gedrag, niet andersom (v181). */
   const paneel = (page) => page.evaluate(() => {
-    const d = document.createElement('div'); d.innerHTML = setCoach();
+    const d = document.createElement('div'); d.innerHTML = setCoachWeergave();
     return d.innerText.replace(/\s+/g, ' ');
   });
 
@@ -102,11 +102,12 @@ test.describe('c · de coachschakelaar zegt wat hij doet', () => {
     expect(t).not.toMatch(/Coach-tips op je Home/);
   });
 
-  test('de sectieregel spreekt over signalen, niet over de coach als geheel', async ({ page }) => {
+  test('de regel op het hoofdscherm spreekt over signalen, niet over de coach als geheel', async ({ page }) => {
+    // v374: de grijze stand noemt de signalen alleen als ze uit staan
     for (const off of [false, true]) {
       await boot(page, seed({ coachOff: off }));
-      const r = await page.evaluate(() => { renderSet(); return $('#s-set').innerText.replace(/\s+/g, ' '); });
-      expect(r).toContain('Signalen uit je patronen staan ' + (off ? 'uit' : 'aan'));
+      const r = await page.evaluate(() => { openSetSub(null); return $('#s-set').innerText.replace(/\s+/g, ' '); });
+      if (off) expect(r).toContain('signalen uit je patronen uit'); else expect(r).not.toContain('signalen uit je patronen uit');
       expect(r).not.toMatch(/Je coach staat (aan|uit)/);
     }
   });
@@ -231,10 +232,10 @@ test.describe('d · onregelmatig inkomen heeft een invoerkanaal', () => {
 });
 
 test.describe('e · de spaarrente heeft een invoerveld', () => {
-  test('het veld staat bij Budget & doelen, met wat het doet', async ({ page }) => {
+  test('het veld staat bij Spelregels, met wat het doet', async ({ page }) => {
     await boot(page, seed({ budgetAdv: true }));
     const t = await page.evaluate(() => {
-      const d = document.createElement('div'); d.innerHTML = setBudget();
+      const d = document.createElement('div'); d.innerHTML = setSpelregels();
       return d.innerText.replace(/\s+/g, ' ');
     });
     expect(t).toContain('Rente op je spaargeld');
@@ -254,7 +255,7 @@ test.describe('e · de spaarrente heeft een invoerveld', () => {
     await boot(page, seed({ budgetAdv: true }));
     const uit = await page.evaluate(() => {
       const veld = () => {
-        const d = document.createElement('div'); d.innerHTML = setBudget();
+        const d = document.createElement('div'); d.innerHTML = setSpelregels();
         return [...d.querySelectorAll('input')].find((x) => /spaarRente/.test(x.getAttribute('oninput') || ''));
       };
       const tik = (v) => { const i = veld(); const f = new Function('event', i.getAttribute('oninput')); f.call({ value: v }); return SET.spaarRente; };
@@ -271,7 +272,7 @@ test.describe('e · de spaarrente heeft een invoerveld', () => {
     await boot(page, seed({ budgetAdv: true }));
     const val = await page.evaluate(() => {
       SET.spaarRente = 3.5; save();
-      const d = document.createElement('div'); d.innerHTML = setBudget();
+      const d = document.createElement('div'); d.innerHTML = setSpelregels();
       const i = [...d.querySelectorAll('input')].find((x) => /spaarRente/.test(x.getAttribute('oninput') || ''));
       return i ? i.getAttribute('value') : null;
     });
@@ -322,9 +323,9 @@ test.describe('f · layout', () => {
       await page.setViewportSize({ width: w, height: 780 });
       await boot(page, seed({ budgetAdv: true,
         irregularIncome: [{ id: 'ir1', naam: 'Vakantiegeld van mijn werkgever', ym: '2027-05', amount: 2400 }] }));
-      await page.evaluate(() => { go('set'); openInkomenSheet(); });
+      await page.evaluate(() => { openSetSub('inkomen'); });
       const a = await page.evaluate(() => {
-        const s = document.getElementById('sheet');
+        const s = document.getElementById('s-set');
         return { over: s.scrollWidth - s.clientWidth, tekst: s.innerText.includes('Vakantiegeld') };
       });
       expect(a.over).toBeLessThanOrEqual(1);
@@ -337,9 +338,9 @@ test.describe('f · layout', () => {
       });
       expect(b).toBeLessThanOrEqual(1);
 
-      await page.evaluate(() => { openBudgetEditor(); });
+      await page.evaluate(() => { closeSheet(); openSetSub('spelregels'); });   // v374: de rente staat bij Spelregels
       const c = await page.evaluate(() => {
-        const s = document.getElementById('sheet');
+        const s = document.getElementById('s-set');
         return { over: s.scrollWidth - s.clientWidth, rente: s.innerText.includes('Rente op je spaargeld') };
       });
       expect(c.over).toBeLessThanOrEqual(1);

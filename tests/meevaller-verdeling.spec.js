@@ -96,9 +96,9 @@ test.describe('a · de regel staat vooraf vast', () => {
     await boot(page);
     expect(await page.evaluate(() => meevallerVrijPct())).toBe(10);
     expect(await page.evaluate(() => meevallerBedrag())).toBe(0);   // niets gemarkeerd, dus niets te verdelen
-    // de regel woont in Budget & doelen, dezelfde sheet als het dagbudget
-    await page.evaluate(() => { go('set'); openBudgetEditor(); });
-    const t = await page.locator('#sheet').innerText();
+    // v374: de regel woont bij Spelregels, met hoe Minder rekent
+    await page.evaluate(() => { openSetSub('spelregels'); });
+    const t = await page.locator('#s-set').innerText();
     expect(t).toMatch(/deel dat vrij blijft/i);
     expect(t).toMatch(/eerst je reserveringen/i);
   });
