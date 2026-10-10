@@ -20167,14 +20167,23 @@ function _dagenTot(a,b){ return Math.round((new Date(String(b).slice(0,10)+'T00:
 /* Per bank de vroegste vervaldatum van de toestemming (exp, valid_until van de consent) en tot wanneer er gegevens
    zijn: het nieuwste saldo of de nieuwste boeking op een rekening van die bank. EEN bron voor de statusbalk, de
    kaart in Bank & rekeningen en de regel op Home. */
+/* v375: een datum voor "tot wanneer" is altijd jjjj-mm-dd of null. Een saldo- of boekingsdatum in een andere vorm
+   (een tijdstempel, een Date) gaat door ymdVan(); wat daar geen dag uit oplevert telt niet, zodat de zin "onbekend"
+   zegt in plaats van een lege plek of een halve datum. */
+function bankBijYMD(d){
+  if(d==null || d==='') return null;
+  const s=String(d); if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  const x=(d instanceof Date)?d:new Date(typeof d==='number'?d:s);
+  return isNaN(x.getTime())?null:ymdVan(x);
+}
 function bankVerval(){
   const ps=SET.psd2Accounts||{}, per={}, vd=vandaagYMD();
   for(const [acc,v] of Object.entries(ps)){
     const b=v.bank||'Je bank', g=per[b]||(per[b]={bank:b, accs:[], exp:null, bij:null});
     g.accs.push(acc);
     if(v.exp){ const e=ymdVan(new Date(v.exp)); if(!g.exp || e<g.exp) g.exp=e; }
-    const d1=(ACCMETA[acc]&&ACCMETA[acc].date)||null, d2=nieuwsteTxDatum(acc);
-    for(const d of [d1,d2]) if(d && (!g.bij || String(d).slice(0,10)>g.bij)) g.bij=String(d).slice(0,10);
+    const d1=bankBijYMD(ACCMETA[acc]&&ACCMETA[acc].date), d2=bankBijYMD(nieuwsteTxDatum(acc));
+    for(const d of [d1,d2]) if(d && (!g.bij || d>g.bij)) g.bij=d;
   }
   return Object.values(per).map(g=>{ const dagen=g.exp?_dagenTot(vd,g.exp):null;
     return Object.assign(g,{dagen, verlopen:dagen!=null && dagen<0, binnenkort:dagen!=null && dagen>=0 && dagen<=BANK_VERVAL_DAGEN}); })

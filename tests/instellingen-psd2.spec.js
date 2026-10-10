@@ -279,6 +279,40 @@ test.describe('h · de vervalregel op Home', () => {
   });
 });
 
+// v375: de melding na het verlopen draagt altijd een datum. De gemelde regel "Gegevens van ABN tot  · opnieuw koppelen"
+// kwam uit het verslag (de placeholder <datum> viel daar als HTML-tag weg); deze tests eisen de VOLLEDIGE tekst, op
+// Home en in de statusbalk, ook als de saldodatum een tijdstempel of een getal is, en "onbekend" als er geen dag is.
+test.describe('h2 · de vervalregel draagt de datum, volledig', () => {
+  const lees = (page) => page.evaluate(() => { go('dash'); renderDash();
+    const home = (document.querySelector('[data-bankverval]') || {}).innerText || '';
+    openSetSub(null); const balk = (document.querySelector('[data-setmelding="bank"]') || {}).innerText || '';
+    return { home: home.replace(/\s+/g, ' ').trim(), balk: balk.replace(/\s+/g, ' ').trim() }; });
+  const metMeta = (meta, zonderTx) => { const p = fixture({ expDagen: -2 });
+    p.minder_accmeta = JSON.stringify(meta);
+    if (zonderTx) p.minder_tx = JSON.stringify(JSON.parse(p.minder_tx).filter(t => t.acc !== MAIN && t.acc !== ABN));
+    return p; };
+  const VOL = 'Gegevens van ABN tot 9 okt · opnieuw koppelen ›';
+  test('saldodatum als dag: de volledige tekst met datum', async ({ page }) => {
+    await boot(page, fixture({ expDagen: -2 }));
+    const r = await lees(page);
+    expect(r.home).toBe(VOL);
+    expect(r.balk).toBe(VOL);
+  });
+  test('saldodatum als tijdstempel of getal: dezelfde tekst', async ({ page }) => {
+    const ts = new Date('2026-10-09T14:30:00').getTime();
+    await boot(page, metMeta({ [MAIN]: { balance: 3800, date: '2026-10-09T14:30:00' }, [ABN]: { balance: 120, date: ts } }, true));
+    const r = await lees(page);
+    expect(r.home).toBe(VOL);
+    expect(r.balk).toBe(VOL);
+  });
+  test('zonder saldodatum en zonder boeking staat er onbekend, nooit een lege plek', async ({ page }) => {
+    await boot(page, metMeta({ [MAIN]: { balance: 3800, date: 'geen datum' }, [ABN]: { balance: 120 } }, true));
+    const r = await lees(page);
+    expect(r.home).toBe('Gegevens van ABN tot onbekend · opnieuw koppelen ›');
+    expect(r.home).not.toMatch(/tot\s+·/);
+  });
+});
+
 test.describe('i · verhuisd', () => {
   test('de Vermogensreis-aannames openen op het Vermogensreis-scherm en staan niet in Instellingen', async ({ page }) => {
     await boot(page, fixture());
