@@ -174,13 +174,17 @@ test.describe('b · de werkelijke inleg naast de ingestelde', () => {
     const r = await page.evaluate(() => ({ terugval: planCapTerugval(), cap: planCapacity(),
       tgt: monthlySavingTarget(), net: savedNet(thisYM()),
       regel: document.querySelector('#planInleg'),
-      kop: [...document.querySelectorAll('#s-vooruit .card')]
-        .find((c) => c.querySelector('.inleg-balk')).innerText.split('\n')[0] }));
+      /* v380: de kop "Te verdelen uit je comfortabele ruimte" en de inlegbalk zijn vervallen. De herkomst van de cap staat
+         nu in de uitleg van Plan (NOTES.planUitleg), en het bedrag in de tegel "Deze maand opzij" van de kop. */
+      uitleg: NOTES.planUitleg, opzij: +(document.querySelector('#planKpi [data-kpiopzij]') || { dataset: {} }).dataset.kpiopzij,
+      balk: document.querySelectorAll('#s-vooruit .inleg-balk').length }));
     expect(r.tgt, 'de invoer: geen spaarinleg ingesteld').toBe(0);
     expect(r.net, 'maar er ging wel geld opzij, dus het zwijgen komt niet van een onbekende meting').toBe(900);
     expect(r.terugval, 'de invoer: de cap komt uit comfortTot').toBe(true);
     expect(r.cap).toBeGreaterThan(0);
-    expect(r.kop).toMatch(/comfortabele ruimte/);
+    expect(r.uitleg).toMatch(/comfortabele ruimte/);
+    expect(r.opzij, 'de kop verdeelt de terugval-capaciteit').toBe(r.cap);
+    expect(r.balk).toBe(0);
     expect(r.regel).toBe(null);
   });
 
@@ -229,8 +233,8 @@ test.describe('c · het vrije spaargeld verdelen', () => {
       goals: (SET.goals || []).map((g) => [g.naam, g.gespaard]),
       nf: SET.nfToegewezen, vrij: spaarVrij().vrij,
       eta: allocatePlan().filter((p) => p.type === 'goal').map((p) => p.eta),
-      /* v367: de rij draagt rechts "€X/mnd · vol Y" (data-planrechts) */
-      vol: [...document.querySelectorAll('#s-vooruit [data-planrechts]')]
+      /* v380: de rij draagt de vol-datum in [data-rijvol] ("vol feb 2027 ›"); [data-planrechts] is vervallen */
+      vol: [...document.querySelectorAll('#s-vooruit [data-rijvol]')]
         .map((e) => (e.innerText.match(/vol \w+ \d{4}/) || [''])[0]).filter(Boolean),
     }));
     expect(na.goals).toEqual([['Kosten Koper', 8780], ['Inrichting woning', 220]]);   // v373: zie hierboven
@@ -437,29 +441,22 @@ test.describe('d · blok 5 zegt waar het getal vandaan komt', () => {
 
 /* ===== e) WAT DEZE RONDE KOST ===== */
 test.describe('e · de prijs in pixels', () => {
-  /* GEMETEN APART, want de twee toevoegingen kosten niet hetzelfde en niet op beide breedtes evenveel.
-     DE REGEL IS 18px TEKST PLUS 2px MARGE, EN 5px DAARVAN KOMT TERUG: de balk had 9px marge om hem
-     van de KOP te scheiden, en met een regel ertussen doet die regel dat al. NETTO 15px, op beide
-     breedtes, en de waterval-kaart gaat van 509 naar 524px.
-     DIE 5px IS NIET COSMETISCH MAAR DE REDEN DAT DE WATERVAL BOVEN DE VOUW BLIJFT: met de volle 20px
-     eindigde hij op 569px bij een vouw van 567 op 360x640, en met 15px op 564. Dat staat als eigen
-     assertie in plan-terugval-lijn.spec.js, waar de vouw-eis van v318 woont.
-     TWEE ANDERE PLEKKEN ZIJN GEMETEN EN VERWORPEN, en dat hoort hier omdat de opdracht "naast de
-     €2.200 per maand" zei: als achtervoegsel ACHTER het bedrag in dezelfde rij breekt die rij over
-     twee regels (20 -> 41px) en kost het dus exact dezelfde 20px, en als tweede regel in de
-     linkerkolom wordt de rij 102px en de kaart 590. Het is dus geen keuze tussen 20px en nul.
-     DE TWEEDE KNOP kost 18px op 360px (de twee knoppen breken daar over twee regels) en NUL op
-     390px (ze passen naast elkaar). */
+  /* v380: DE INLEGBALK EN DE KAART MET DE KOP "TE VERDELEN" ZIJN VERVALLEN. De regel staat nu in het meldingenblok onder de
+     kop van Plan ([data-planmeldingen]) en niet meer in de kaart, dus hij raakt de lijst niet: #planLijst is met en zonder
+     regel even hoog. Wat hij kost is zijn eigen regel tekst (18px) plus de 8px marge van het meldingenblok, dat er zonder
+     melding niet staat: GEMETEN 26px op 390 en 27 op 360 (de zone rondt daar een pixel anders af). Tot v379 was het netto
+     15px, omdat de inlegbalk 5px van zijn marge teruggaf; die balk is er niet meer.
+     DE TWEEDE KNOP kost onveranderd 18px op 360px (de twee knoppen breken daar over twee regels) en NUL op 390px. */
   for (const [w, h] of [[360, 640], [390, 844]]) {
-    test(`${w}px: de regel kost 15px netto, de knop ${w === 360 ? 18 : 0}px`, async ({ page }) => {
+    test(`${w}px: de regel kost 26px buiten de lijst, de knop ${w === 360 ? 18 : 0}px`, async ({ page }) => {
       await boot(page, { okt: 900, saldo: 11700, breedte: w, hoogte: h });
       const meet = () => page.evaluate(() => {
         const z = document.querySelector('#s-vooruit');
         const H = (e) => (e ? Math.round(e.getBoundingClientRect().height) : 0);
-        const kaart = [...z.querySelectorAll('.card')].find((c) => c.querySelector('.inleg-balk'));
+        const m = z.querySelector('[data-planmeldingen]');
         return { vrij: H(z.querySelector('.spaar-vrij')), inleg: H(document.querySelector('#planInleg')),
-          balkMt: getComputedStyle(z.querySelector('.inleg-balk')).marginTop,
-          kaart: H(kaart), zone: H(z),
+          inMeld: !!(m && m.querySelector('#planInleg')), meldMb: m ? getComputedStyle(m).marginBottom : null,
+          lijst: H(z.querySelector('#planLijst')), balk: z.querySelectorAll('.inleg-balk').length, zone: H(z),
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
       });
       const vol = await meet();
@@ -470,19 +467,14 @@ test.describe('e · de prijs in pixels', () => {
       await page.evaluate(() => { window.spaarVerdeelMag = window._mag; render(); go('vooruit'); });
       const metKnop = await meet();
       expect(vol.inleg, 'de regel is één regel tekst').toBe(18);
-      expect(vol.balkMt, 'met de regel ertussen houdt de balk 4px').toBe('4px');
-      expect(zonder.balkMt, 'en zonder regel zijn eigen 9px tot de kop').toBe('9px');
-      /* v370: op 360 rondt de kaart een pixel anders af (16), dus een pixel speling, zoals bij de zone hieronder */
-      expect(Math.abs(vol.kaart - zonder.kaart - 15), 'netto: 18 plus 2 marge min de 5 van de balk').toBeLessThanOrEqual(1);
-      // v365: de tekst staat onder de vaten (punt 13), en dat maakt de kaart hoger: 684px op 360 en 666 op 390 (gemeten)
-      /* v367: rijen in plaats van vaten; gemeten 506px op 360 en 433 op 390 (de rijen breken op 360 vaker af) */
-      /* v370: de lopende maand telt mee, dus de rijen dragen andere datums en breken minder vaak af: 466 en 412 (gemeten) */
-      /* v372: de regel "Verdeling: op volgorde · aanpassen ›" staat onder de kop: 25px op 360 en 24 op 390 (gemeten) */
-      /* v373: de rijen dragen "€1.980/mnd · vol feb 2027" uit de verdeling en breken op 360 een regel minder af: 454 (gemeten) */
-      expect(zonder.kaart, 'zonder de regel').toBe(w === 360 ? 454 : 436);
+      expect(vol.inMeld, 'en staat in het meldingenblok onder de kop').toBe(true);
+      expect(vol.meldMb).toBe('8px');
+      expect(vol.balk, 'de inlegbalk is vervallen').toBe(0);
+      expect(zonder.lijst, 'de lijst staat er zonder de regel').toBeGreaterThan(0);
+      expect(vol.lijst, 'de regel staat buiten de lijst en raakt hem niet').toBe(zonder.lijst);
+      expect(Math.abs(metKnop.zone - zonder.zone - (w === 360 ? 18 : 0)), 'de tweede knop').toBeLessThanOrEqual(1);
       expect(metKnop.vrij - zonder.vrij, 'de tweede knop').toBe(w === 360 ? 18 : 0);
-      // v367: de zone wordt per stand afgerond, dus het verschil mag een pixel schuiven (33 of 34 op 360)
-      expect(Math.abs(vol.zone - zonder.zone - (w === 360 ? 33 : 15))).toBeLessThanOrEqual(1);
+      expect(Math.abs(vol.zone - metKnop.zone - 26), 'de regel: 18 tekst plus 8 marge').toBeLessThanOrEqual(1);
       expect(vol.overflow, 'niets steekt buiten de breedte').toBeLessThanOrEqual(1);
     });
   }

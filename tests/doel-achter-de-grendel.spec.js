@@ -96,10 +96,12 @@ test.describe('a · het gemelde geval', () => {
     await boot(page);
     const r = await page.evaluate(() => {
       const G = planGrendel();
-      window._planRij = (allocatePlan().find((p) => p.type === 'goal') || {}).id;   // v367: het datumpaar staat in de geopende rij
-      const d = document.createElement('div'); d.innerHTML = renderPlan(true);
+      /* v380: het datumpaar staat in de detailsheet ([data-plandetail]) en niet meer in een geopende rij */
+      openPlanDoel((allocatePlan().find((p) => p.type === 'goal') || {}).id);
+      const e = document.querySelector('#planDoelSheet [data-plandetail]');
+      const rij = e ? e.innerText.replace(/\s+/g, ' ') : ''; closeSheet();
       return { label: planGrendelDatum(G), maanden: G.maanden,
-        rij: d.innerText.replace(/\s+/g, ' '),
+        rij,
         uitEta: etaDatum(G.maanden) };
     });
     expect(r.label).toBe(r.uitEta);                  // planGrendelDatum is etaDatum(G.maanden)

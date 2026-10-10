@@ -147,7 +147,13 @@ test.describe('a - KRITIEK: de inleg komt aan, ook als de bestemmingen het rests
     expect(met.opz.vlak).toBe(0);
     /* v370: de lopende maand telt mee voor de doelen, dus het bedrag dat Plan deze maand verdeelt staat niet meer vlak
        bovenop. */
-    expect(Math.abs(met.cash5 - (start + 15000 - 1000))).toBeLessThan(300);
+    /* v380: de 1.000 die bij Nieuwe auto als gespaard staat is toegewezen zonder geld: op de spaarrekening staat 8.000
+       en het noodfonds heeft er 8.000 van (spaarOver().zonder is 1.000, zonder keuze). Sinds v380 volgt fireModel() de
+       regel van Plan: dat geld is er niet, dus de inleg vult het doel vanaf 0 (planStandEind: geld 0, zg 1.000). De
+       vlakke laag eindigt dan op 1.579 + 8.000 + 15.000 = 24.579 in plaats van 23.579; gemeten 24.354, de 225 eronder
+       is de tandarts (binnen de marge van een jaarbetaling, zoals hierboven). */
+    expect(await page.evaluate(() => spaarOver().zonder)).toBe(1000);
+    expect(Math.abs(met.cash5 - (start + 15000))).toBeLessThan(300);
   });
 });
 

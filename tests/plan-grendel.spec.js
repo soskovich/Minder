@@ -89,12 +89,19 @@ test.describe('a · de grendel', () => {
        van het vat, onder de streefdatum. Dezelfde bron (planGrendelDatum), andere plek. */
     /* v367: rijen in plaats van vaten. De status zegt "wacht tot X" met dezelfde maand, en het datumpaar
        staat in de geopende rij. */
-    const r = await page.evaluate(() => { window._planRij = 'g1'; render();
-      const e = document.querySelector('#s-vooruit .plan-item[data-id="g1"]');
-      return { t: e.innerText, status: e.querySelector('[data-planstatus]').innerText, dat: planGrendelDatum() }; });
+    /* v380: het datumpaar staat in de detailsheet ([data-plandetail]); de status in de rij zegt "vanaf <maand>", de
+       eerste maand waarin het doel in de projectie iets krijgt. Dat is de maand van de laatste buffer-inleg, want wat
+       de buffer dan niet meer nodig heeft zakt door (v255), dus dezelfde maand als planGrendelDatum(). */
+    const r = await page.evaluate(() => { const e = document.querySelector('#s-vooruit .plan-item[data-id="g1"]');
+      const status = e.querySelector('[data-planstatus]').innerText.trim();
+      openPlanDoel('g1'); const t = document.querySelector('#planDoelSheet [data-plandetail]').innerText; closeSheet();
+      const G = planGrendel(), eerste = planTijdlijnData().per.g1.eerste;
+      return { t, status, dat: planGrendelDatum(), eerste, maanden: G.maanden, kort: tlMaand(eerste).k, uitEta: etaDatum(eerste + 1) }; });
     expect(r.t).toMatch(/verdelen gaat open rond \w+ \d{4}/);
     expect(r.t).toContain(`verdelen gaat open rond ${r.dat}`);
-    expect(r.status).toBe(`wacht tot ${r.dat}`);
+    expect(r.eerste + 1).toBe(r.maanden);                // de eerste maand met geld is de openingsmaand
+    expect(r.uitEta).toBe(r.dat);
+    expect(r.status).toBe(`vanaf ${r.kort}`);
   });
 
   test('het noodfonds is niet te verslepen en niet op een vast bedrag te zetten', async ({ page }) => {
@@ -185,9 +192,15 @@ test.describe('b · de streefdatum', () => {
     const g = P.find((x) => x.id === 'oud');
     expect(g).toBeTruthy();
     expect(g.alloc).toBeGreaterThan(0);                // telt gewoon mee in de verdeling
-    const t = await page.evaluate(() => document.querySelector('#s-vooruit').innerText);
-    expect(t).toMatch(/Streefdatum ontbreekt/);
-    expect(t).toMatch(/datum zetten/);
+    /* v380: de zin en de ingang staan in het datumpaar van de detailsheet. De kleine regel van de rij noemt bij een doel
+       dat deze maand iets krijgt eerst wat erbij komt ("+EUR 3.000 deze maand"); "geen streefdatum" staat daar alleen
+       bij een doel dat niets krijgt (planDoelRij()). */
+    const lees = () => page.evaluate(() => { const sub = document.querySelector('#s-vooruit .plan-item[data-id="oud"] [data-rijsub]').innerText.trim();
+      openPlanDoel('oud'); const t = document.querySelector('#planDoelSheet [data-plandetail]').innerText; closeSheet(); return { sub, t }; });
+    const v = await lees();
+    expect(v.sub).toBe('+€3.000 deze maand');
+    expect(v.t).toMatch(/Streefdatum ontbreekt/);
+    expect(v.t).toMatch(/datum zetten/);
     // en die ingang zet de datum alsnog
     const na = await page.evaluate(() => {
       openGoal('oud');
@@ -196,7 +209,8 @@ test.describe('b · de streefdatum', () => {
       return (SET.goals || []).find((x) => x.id === 'oud').streefdatum;
     });
     expect(na).toBe('2029-03');
-    expect(await page.evaluate(() => document.querySelector('#s-vooruit').innerText)).not.toMatch(/Streefdatum ontbreekt/);
+    const w = await lees();
+    expect(w.t).not.toMatch(/Streefdatum ontbreekt/);
   });
 
   test('wijzigen zonder datum kan ook niet, dus er ontstaat er nooit een tweede', async ({ page }) => {

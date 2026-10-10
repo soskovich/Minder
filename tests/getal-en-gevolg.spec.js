@@ -213,7 +213,8 @@ test.describe('g · de kop zegt wat er werkelijk wordt verdeeld', () => {
     /* v225: de kop was een zin boven de lijst; hij is een label bij het te verdelen bedrag
        geworden en de uitleg staat achter het uitlegteken. De eigenschap die deze test bewaakt is
        onveranderd: het scherm noemt de bron van het bedrag dat het verdeelt, en noemt hem juist. */
-    expect(r.kop).toMatch(/Te verdelen uit je spaarinleg/);
+    /* v380: de kop "Te verdelen" is vervallen; de tegel "Deze maand opzij" in de kop van Plan noemt de bron */
+    expect(r.kop).toMatch(/Deze maand opzij.*uit je spaarinleg/);
     expect(r.kop).not.toMatch(/comfortabele ruimte/);
     expect(await page.evaluate(() => NOTES.planUitleg)).toMatch(/spaarinleg gaat van boven naar beneden/);
   });
@@ -229,7 +230,7 @@ test.describe('g · de kop zegt wat er werkelijk wordt verdeeld', () => {
     test.skip(!(r.doel === 0 && r.cap > 0), 'deze opzet valt niet terug');
     expect(r.terugval).toBe(true);
     expect(r.label).toBe('comfortabele ruimte');
-    expect(r.kop).toMatch(/Te verdelen uit je comfortabele ruimte/);
+    expect(r.kop).toMatch(/Deze maand opzij.*uit je comfortabele ruimte/);
     // de reden staat er nog steeds bij, sinds v225 achter het uitlegteken
     expect(await page.evaluate(() => NOTES.planUitleg)).toMatch(/nog geen spaarinleg ingesteld/);
   });

@@ -1,7 +1,7 @@
 // Vooruitblik (v80): de spaardoel-hero is weg en elk doel met een looptijd noemt zijn einddatum.
 // Alleen weergave — de looptijd zelf komt onveranderd uit allocatePlan()/renderGoals().
 const { test, expect } = require('@playwright/test');
-const { seed, open } = require('./budget-fixture');
+const { seed, open, SPAAR_SALDO } = require('./budget-fixture');
 
 function tweak(fn) {
   const p = seed();
@@ -10,6 +10,10 @@ function tweak(fn) {
      niets te verdelen. Deze spec gaat over de verdeling zelf, dus de buffer staat hier vol en de
      grendel open. Dat is de voorwaarde die er altijd al impliciet was; nu staat hij er. */
   set.nfToegewezen = 9e7; set.nfToegewezenMigrated = true;   // planMap klemt op het doel
+  /* v380: toegewezen zonder geld telt. De klem zette de buffer op zijn doel van 4.880 bij 2.500 op de spaarrekening,
+     en dan vult de inleg vanaf volgende maand eerst die 2.380 aan: een laptop van 1.000 kwam daardoor op 12 inleggen in
+     plaats van 4. Een volle buffer is hier een buffer op het geld dat er staat. */
+  set.nfDoelVast = SPAAR_SALDO;
   fn(set);
   p.minder_set = JSON.stringify(set);
   return p;
@@ -19,11 +23,13 @@ async function openV(page, payload) {
   await open(page, payload);
   await page.evaluate(() => go('vooruit'));
   await page.waitForSelector('#s-vooruit .card');
-  if (await page.locator('#s-vooruit .plan-item').count() === 0) {
-    await page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]').click();
-    await page.waitForSelector('#s-vooruit .plan-item');
-  }
+  await page.waitForSelector('#s-vooruit .plan-item');   // v380: de zonebalk is vervallen, de rijen staan er meteen
 }
+/* v380: de open rij is vervallen; het datumpaar (vatRegels(p,false), met de eta-regel van planSub()) staat in de
+   detailsheet als [data-plandetail]. */
+const detail = (page, id) => page.evaluate((i) => { openPlanDoel(i);
+  const e = document.querySelector(`#planDoelSheet[data-doel="${i}"] [data-plandetail]`);
+  const t = e ? e.innerText.replace(/\s+/g, ' ') : ''; closeSheet(); return t; }, id);
 
 // de app rekent de datum zelf uit; de test vraagt hem op dezelfde manier op
 const datumOver = (page, mnd) => page.evaluate((n) => etaDatum(n), mnd);
@@ -65,8 +71,7 @@ test.describe('b · einddatum per doel', () => {
     expect(gA.eta).toBeGreaterThan(0);
     expect(gA.eta).toBeLessThan(await page.evaluate(() => ETA_DATUM_VANAF));
 
-    await page.evaluate(() => { window._planRij = 'gA'; render(); });   // v367: het datumpaar staat in de geopende rij
-    const rij = await page.locator('#s-vooruit .plan-item[data-id="gA"]').innerText();
+    const rij = await detail(page, 'gA');
     expect(rij).toContain(`~${gA.eta}`);
     expect(rij).not.toMatch(/rond [a-z]{3,4} \d{4}/i);
   });
@@ -79,8 +84,7 @@ test.describe('b · einddatum per doel', () => {
     const gA = (await page.evaluate(() => allocatePlan())).find((x) => x.id === 'gA');
     expect(gA.eta).toBeGreaterThanOrEqual(await page.evaluate(() => ETA_DATUM_VANAF));
 
-    await page.evaluate(() => { window._planRij = 'gA'; render(); });   // v367: het datumpaar staat in de geopende rij
-    const rij = await page.locator('#s-vooruit .plan-item[data-id="gA"]').innerText();
+    const rij = await detail(page, 'gA');
     expect(rij).toContain(`rond ${await datumOver(page, gA.eta)}`);
     expect(rij).toMatch(/rond [a-z]{3,4} \d{4}/i);
     expect(rij).not.toContain(`~${gA.eta} maanden`);
@@ -122,8 +126,7 @@ test.describe('b · einddatum per doel', () => {
     const gX = await page.evaluate(() => allocatePlan().find((x) => x.id === 'gX'));
     expect(gX.alloc).toBe(0);
     expect(gX.status).toBe('wacht op capaciteit');
-    await page.evaluate(() => { window._planRij = 'gX'; render(); });   // v367
-    const rij = await page.locator('#s-vooruit .plan-item[data-id="gX"]').innerText();
+    const rij = await detail(page, 'gX');
     expect(rij).toMatch(/wacht op capaciteit/i);
     expect(rij).not.toMatch(/rond /);
   });

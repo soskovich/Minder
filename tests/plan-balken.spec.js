@@ -71,27 +71,34 @@ async function boot(page, o, breed) {
   await page.waitForFunction(() => typeof doelStreepje === 'function');
   await page.evaluate(() => go('vooruit'));
 }
-/* v367: DE VATEN ZIJN RIJEN GEWORDEN. Een bestemming is een `.plan-item[data-id]` met een dunne balk (de vulling
-   is de voortgang, het streepje staat erop), rechts het maandbedrag met de vol-datum, en het datumpaar van v307/v318
-   (vatRegels()) onder de rij zodra je hem opent. De helper opent elke rij om dat paar te lezen. */
+/* v367: DE VATEN ZIJN RIJEN GEWORDEN.
+   v380: PLAN IS EEN DASHBOARD. Een bestemming is een `.plan-item.plan-rij2[data-id]` in #planLijst met een dunne balk
+   ([data-rijbalk]: het geld dicht, wat er deze maand bijkomt gearceerd), de vol-datum in [data-rijvol] en een grijze
+   regel [data-rijsub]. Het streepje (v248) en het datumpaar van v307/v318 (vatRegels(p,false), [data-plandetail])
+   staan in de detailsheet (openPlanDoel(id), #planDoelSheet). De helper leest per rij de rij en daarna zijn sheet. */
 const balken = (page) => page.evaluate(() => {
   const ids = [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')].map((e) => e.dataset.id);
   const uit = ids.map((id) => {
-    window._planRij = id; render();
     const tk = document.querySelector(`#s-vooruit .plan-item[data-id="${id}"]`);
-    const st = tk.querySelector('[data-streep]'), re = (tk.querySelector('[data-planrechts]') || {}).innerText || '';
-    const v = re.match(/(?:vol|schuldenvrij) \w+ \d{4}/);
-    return { id, vulling: [...tk.querySelectorAll('.plan-rijbalk > .bar-fill')].map((f) => parseFloat(f.style.width)),
-      streep: st ? parseFloat(st.dataset.pct) : null, sr: st ? st.textContent.replace(/\s+/g, ' ').trim() : null,
+    const rv = (tk.querySelector('[data-rijvol]') || {}).innerText || '';
+    const v = rv.match(/(?:vol|schuldenvrij) \w+ \d{4}/);
+    const r = { id, vulling: [...tk.querySelectorAll('[data-rijbalk] > .bar-fill')].map((f) => parseFloat(f.style.width)),
       laat: tk.dataset.laat === '1', status: tk.dataset.status, vol: v ? v[0] : '',
-      dat: tk.querySelector('[data-plandetail]') ? tk.querySelector('[data-plandetail]').innerText.replace(/\s+/g, ' ').trim() : '' };
+      sub: ((tk.querySelector('[data-rijsub]') || {}).innerText || '').trim() };
+    openPlanDoel(id);
+    const sh = document.getElementById('planDoelSheet');
+    const st = sh.querySelector('[data-streep]'), d = sh.querySelector('[data-plandetail]');
+    r.streep = st ? parseFloat(st.dataset.pct) : null;
+    r.sr = st ? st.textContent.replace(/\s+/g, ' ').trim() : null;
+    r.dat = d ? d.innerText.replace(/\s+/g, ' ').trim() : '';
+    closeSheet();
+    return r;
   });
-  window._planRij = null; render();
   return uit;
 });
-/* de bestemmingen met een eigen segment in de inlegbalk, dus met een maandbedrag */
-const gevuld = (page) => page.evaluate(() => [...document.querySelectorAll('.inleg-balk > .bar-fill')]
-  .filter((x) => x.dataset.seg !== 'vrij').map((x) => ({ id: x.dataset.seg, w: parseFloat(x.style.width) })));
+/* v380: de inlegbalk met een segment per bestemming is vervallen (planSegmenten() bestaat niet meer). Wat er deze
+   maand per bestemming bij komt leest nu planStandEind(): de inleg per rij, dezelfde bron als de rij en de kop. */
+const inleg = (page) => page.evaluate(() => Object.fromEntries(Object.entries(planStandEind().per).map(([k, x]) => [k, x.inleg])));
 /* De echte ids van het toestel. Ze dragen hun aanmaakmoment in base36 ('gmrsd1piu' is 19 juli
    2026), en dat is wat de terugval leest; ID_KK zou naar 1970 decoderen en dus geen streepje geven.
    Een spec die het beginmoment toetst moet daarom met plausibele ids werken. */
@@ -120,13 +127,15 @@ test.describe('a · de grendel in beeld', () => {
   const dicht = { goals: [KK({ streefdatum: KK_STREEF }), IW({ streefdatum: IW_STREEF })],
     planOrder: ['noodfonds', ID_KK, ID_IW] };
 
-  test('dichte grendel op de gemeten toestand: één gevulde tak, en die gaat naar de buffer', async ({ page }) => {
+  test('dichte grendel op de gemeten toestand: alleen de buffer krijgt deze maand iets', async ({ page }) => {
     await boot(page, dicht);
     expect(await page.evaluate(() => planGrendel())).toMatchObject({ dicht: true, rest: 4201 });
-    const T = await gevuld(page);
-    expect(T.map((x) => x.id)).toEqual(['noodfonds']);      // de andere twee krijgen niets
-    /* v367: de terugval staat in de tijdlijn (openPlanTijdlijn()) en niet meer als stippellijn onder de vaten. */
-    expect(await page.locator('#s-vooruit .plan-item[data-id="noodfonds"]').innerText()).toContain('€3.000/mnd');
+    /* v380: de inlegbalk is vervallen; wat er deze maand heen gaat leest planStandEind(), en de rij zegt het */
+    expect(await inleg(page)).toEqual({ noodfonds: 3000, [ID_KK]: 0, [ID_IW]: 0 });   // de andere twee krijgen niets
+    expect(await page.locator('#s-vooruit .plan-item[data-id="noodfonds"] [data-rijsub]').innerText()).toBe('+€3.000 deze maand');
+    for (const id of [ID_KK, ID_IW])
+      expect(await page.locator(`#s-vooruit .plan-item[data-id="${id}"] [data-bijvat]`).count(), id).toBe(0);
+    expect(await page.locator('#s-vooruit .inleg-balk, #s-vooruit [data-seg]').count()).toBe(0);
   });
 
   test('het noodfonds noemt de maand waarin hij vol is, en de twee doelen wachten', async ({ page }) => {
@@ -146,8 +155,8 @@ test.describe('a · de grendel in beeld', () => {
       const lbl = await page.evaluate((i) =>
         doelDatumLabel(((SET.goals || []).find((g) => g.id === i) || {}).streefdatum, true), id);
       expect(lbl, id + ' heeft een korte streefdatum').toMatch(/^\w+ \d{4}$/);
-      /* v367: de rij draagt de korte streefdatum rechts, het geopende datumpaar de lange vorm */
-      expect(await page.locator(`#s-vooruit .plan-item[data-id="${id}"] [data-planrechts]`).innerText(), id).toContain(`streef ${lbl}`);
+      /* v380: de rij draagt de korte streefdatum in de grijze regel, het datumpaar in de detailsheet de lange vorm */
+      expect(v.sub, id).toContain(`streef ${lbl}`);
       expect(v.dat, id).toContain('moet in');
       expect(v.dat, id).toContain(`verdelen gaat open rond ${dat}`);
       expect(v.laat, id).toBe(false);          // wachten is geen achterstand
@@ -226,7 +235,9 @@ test.describe('b · het datumpaar', () => {
       const p = allocatePlan().find((x) => x.id === id);
       return doelTempo(p, p.alloc).soort;
     }, ID_KK);
-    test.skip(soort !== 'onbekend', 'deze opzet levert geen onbekende openingsmaand');
+    /* v380: was een test.skip; de invoer wordt nu gemeten (werkafspraak v312), zodat een fixture die het geval niet
+       meer draagt rood wordt in plaats van over te slaan */
+    expect(soort, 'de opzet levert een onbekende openingsmaand').toBe('onbekend');
     const v = (await balken(page)).find((x) => x.id === ID_KK);
     expect(v.dat).toContain('wanneer je buffer vol is is nog niet bekend');
     expect(v.dat).not.toMatch(/per maand/);
@@ -249,7 +260,7 @@ test.describe('b · het datumpaar', () => {
     await boot(page, { set: { nfToegewezenMigrated: false, savingsAcc: {}, savingsEnds: [], extraSavings: 0 },
       goals: [], planOrder: ['noodfonds'] });
     const onb = await page.evaluate(() => (planMap().noodfonds || {}).nfOnbekend);
-    test.skip(!onb, 'deze opzet levert geen onbekende stand');
+    expect(onb, 'de opzet levert een onbekende stand').toBe(true);   // v380: was een test.skip (werkafspraak v312)
     const t = await page.locator('#s-vooruit .plan-item[data-id="noodfonds"]').innerText();
     expect(t).toContain('onbekend');
     expect(t).not.toMatch(/€0 toegewezen/);
@@ -459,46 +470,54 @@ test.describe('d · de balk en de takken', () => {
             IW({ doel: 1000, streefdatum: overMnd(40), allocMode: 'fixed', perMaand: 1000 })],
     planOrder: ['noodfonds', ID_KK, ID_IW] }, VOL);
 
-  test('de inlegbalk is verdeeld per bestemming en telt op tot honderd procent', async ({ page }) => {
+  /* v380: de inlegbalk is vervallen. De eigenschap (elke bestemming krijgt zijn eigen aandeel van de inleg, en wat
+     verdeeld wordt plus wat overblijft is de hele inleg) leest nu planStandEind() en planVrij(). */
+  test('de inleg is verdeeld per bestemming en telt met de rest op tot de hele inleg', async ({ page }) => {
     await boot(page, twee);
-    const segs = await page.evaluate(() => [...document.querySelectorAll('.inleg-balk > .bar-fill')]
-      .map((x) => ({ id: x.dataset.seg, w: parseFloat(x.style.width) })));
-    expect(segs.map((s) => s.id)).toEqual([ID_KK, ID_IW, 'vrij']);
-    expect(segs.reduce((a, s) => a + s.w, 0)).toBeCloseTo(100, 1);
-    // en elk segment is zijn eigen aandeel van de inleg, niet een gelijk deel
-    const P = await page.evaluate(() => ({ cap: planCapacity(),
+    const P = await page.evaluate(() => ({ cap: planCapacity(), vrij: planVrij(),
       alloc: Object.fromEntries(allocatePlan().map((p) => [p.id, p.alloc])) }));
-    for (const s of segs.filter((x) => x.id !== 'vrij'))
-      expect(s.w, s.id).toBeCloseTo(P.alloc[s.id] / P.cap * 100, 1);
+    const I = await inleg(page);
+    expect(I[ID_KK]).toBe(1500);
+    expect(I[ID_IW]).toBe(1000);
+    // en elk deel is zijn eigen aandeel van de inleg, niet een gelijk deel
+    for (const id of Object.keys(I)) expect(I[id], id).toBe(P.alloc[id]);
+    expect(Object.values(I).reduce((a, x) => a + x, 0) + P.vrij).toBe(P.cap);
+    expect(await page.locator('#s-vooruit .inleg-balk, #s-vooruit [data-seg]').count()).toBe(0);
   });
 
-  test('wat onverdeeld blijft is een eigen leeg segment en geen weggelaten rest', async ({ page }) => {
+  /* v380: geen leeg segment meer; wat onverdeeld blijft staat als regel #planVrij onder de lijst, met het bedrag */
+  test('wat onverdeeld blijft staat als eigen regel en is geen weggelaten rest', async ({ page }) => {
     await boot(page, twee);
-    const vrij = await page.evaluate(() => {
-      const el = document.querySelector('.inleg-balk > [data-seg="vrij"]');
-      return el ? parseFloat(el.style.width) : null;
-    });
-    const P = await page.evaluate(() => ({ cap: planCapacity(), vrij: planVrij() }));
-    expect(vrij).toBeCloseTo(P.vrij / P.cap * 100, 1);
+    const vrij = await page.evaluate(() => planVrij());
+    expect(vrij).toBe(500);                          // 3.000 inleg - 1.500 - 1.000
+    expect(await page.locator('#planVrij').innerText()).toContain(await page.evaluate((v) => euro0(v), vrij));
   });
 
-  /* v367: de takken zijn vervallen met de vaten; het segment en de balk van zijn rij delen de tint. */
-  test('elk segment en de balk van zijn rij dragen dezelfde kleur', async ({ page }) => {
+  /* v367: de takken zijn vervallen met de vaten. v380: het segment is ook weg; de balk van een rij en de balk in zijn
+     detailsheet dragen dezelfde tint, en elke rij een eigen tint. */
+  test('de balk van een rij en die in zijn detailsheet dragen dezelfde kleur', async ({ page }) => {
     await boot(page, twee);
-    const r = await page.evaluate(() => [...document.querySelectorAll('.inleg-balk > .bar-fill')].filter((x) => x.dataset.seg !== 'vrij').map((seg) => {
-      const id = seg.dataset.seg, f = document.querySelector(`#s-vooruit .plan-item[data-id="${id}"] .plan-rijbalk > .bar-fill`);
-      return { id, seg: getComputedStyle(seg).backgroundColor, rij: f ? getComputedStyle(f).backgroundColor : null }; }));
-    expect(r.length).toBeGreaterThan(1);
-    for (const x of r) expect(x.seg, x.id).toBe(x.rij);
-    expect(new Set(r.map((x) => x.seg)).size).toBe(r.length);
+    const r = await page.evaluate((ids) => ids.map((id) => {
+      const f = document.querySelector(`#s-vooruit .plan-item[data-id="${id}"] [data-geldvat]`);
+      const rij = getComputedStyle(f).backgroundColor;
+      openPlanDoel(id);
+      const sf = document.querySelector('#planDoelSheet .bar-track > .bar-fill');
+      const sheet = sf ? getComputedStyle(sf).backgroundColor : null;
+      closeSheet();
+      return { id, rij, sheet };
+    }), [ID_KK, ID_IW]);
+    for (const x of r) expect(x.sheet, x.id).toBe(x.rij);
+    expect(new Set(r.map((x) => x.rij)).size).toBe(r.length);
   });
 
-  test('het maandbedrag staat een keer per rij', async ({ page }) => {
+  /* v380: geen "/mnd" meer op de rij; wat er deze maand bijkomt staat een keer, in de grijze regel */
+  test('het bedrag van deze maand staat een keer per rij', async ({ page }) => {
     await boot(page, twee);
     const alloc = await page.evaluate(() => Object.fromEntries(allocatePlan().map((p) => [p.id, euro0(p.alloc)])));
     for (const id of [ID_KK, ID_IW]) {
       const tk = await page.locator(`#s-vooruit .plan-item[data-id="${id}"]`).innerText();
-      expect(tk.split(alloc[id] + '/mnd').length - 1, id).toBe(1);
+      expect(tk.split('+' + alloc[id] + ' deze maand').length - 1, id).toBe(1);
+      expect(tk, id).not.toMatch(/\/mnd/);
     }
   });
 });
@@ -523,19 +542,15 @@ test.describe('e · de bediening en de omgeving', () => {
     expect(await page.evaluate(() => planItems().map((x) => x.id))).toEqual(voor);
   });
 
-  test('de optelling staat onder de waterval', async ({ page }) => {
+  /* v380: de regel "Nog EUR X te gaan" onder de lijst is vervallen (planTotaalRegel() bestaat niet meer). Het getal
+     staat als data-nogtegaan op de kop en komt uit planStandEind(); zie ook plan-dashboard.spec.js a. */
+  test('de optelling staat niet meer onder de lijst, maar als attribuut op de kop', async ({ page }) => {
     await boot(page, drie);
-    const r = await page.evaluate(() => {
-      const el = document.querySelector('#s-vooruit');
-      const alinea = [...el.querySelectorAll('.small.mut2')].find((x) => /te gaan|van je plan staat er nog niet/.test(x.textContent));
-      const kaart = [...el.querySelectorAll('.card')].find((c) => /Te verdelen/.test(c.textContent));
-      return { inKaart: !!(alinea && kaart && kaart.contains(alinea)),
-        naVrij: !!(alinea && document.querySelector('#planVrij') &&
-          (document.querySelector('#planVrij').compareDocumentPosition(alinea) & Node.DOCUMENT_POSITION_FOLLOWING) > 0) };
-    });
-    expect(r.inKaart).toBe(true);      // binnen de kaart van de waterval
-    expect(r.naVrij).toBe(true);       // onder de sluitpost
-    // v344: de reserveringenkaart eronder is weg
+    const r = await page.evaluate(() => ({ t: document.getElementById('s-vooruit').innerText,
+      attr: +document.getElementById('planKpi').dataset.nogtegaan, se: planStandEind().nogTeGaan }));
+    expect(r.t).not.toMatch(/te gaan|van je plan staat er nog niet/);
+    expect(r.attr).toBe(r.se);
+    expect(r.se).toBeGreaterThan(0);
   });
 
   test('er staat geen tijdas langs de kolom', async ({ page }) => {

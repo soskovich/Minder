@@ -67,11 +67,9 @@ test.describe('a · de wachtuitleg is vervallen; de rij noemt zijn blokkeerder',
       const r = await page.evaluate(() => {
         const P = allocatePlan();
         const d = document.createElement('div'); d.innerHTML = renderPlan(true);
-        /* v367: de uitleg van een rij staat in de geopende rij; elke rij wordt dus apart geopend. */
-        const rijen = P.map((p) => { window._planRij = p.id; const e = document.createElement('div');
-          e.innerHTML = renderPlan(true); const x = e.querySelector(`.plan-item[data-id="${p.id}"]`);
-          return x ? x.innerText.replace(/\s+/g, ' ') : ''; });
-        window._planRij = null;
+        /* v380: de uitleg van een rij staat in het datumpaar van de detailsheet; elke rij wordt dus apart geopend. */
+        const rijen = P.map((p) => { openPlanDoel(p.id); const x = document.querySelector(`#planDoelSheet[data-doel="${p.id}"] [data-plandetail]`);
+          const t = x ? x.innerText.replace(/\s+/g, ' ') : ''; closeSheet(); return t; });
         return { wachtend: P.filter((p) => p.status === 'wacht op capaciteit').length,
           regels: d.querySelectorAll('#planWacht').length,
           hints: d.querySelectorAll('.plan-hint').length,
@@ -95,14 +93,11 @@ test.describe('a · de wachtuitleg is vervallen; de rij noemt zijn blokkeerder',
        want vanaf wanneer de RUIMTE van een ander doel hierheen komt is een gemeten uitkomst van de
        projectie die elk vat sinds v307 al leest. De assertie leest daarom het datumpaar en de
        statusregel, en niet de hele rij. */
-    const wacht = await page.evaluate(() => {
-      const uit = allocatePlan().map((p) => { window._planRij = p.id; const d = document.createElement('div');
-        d.innerHTML = renderPlan(true); const x = d.querySelector(`.plan-item[data-id="${p.id}"]`);
-        return x; }).filter((x) => x && /Wacht op/.test(x.innerText))
-        .map((x) => [...x.querySelectorAll('.vat-dat:not([data-erfregel]), .vat-stand')]
-          .map((e) => e.innerText).join(' '));
-      window._planRij = null; return uit;
-    });
+    /* v380: het datumpaar staat in de detailsheet ([data-plandetail]). De status in de rij mag "vanaf <maand>" zeggen:
+       dat is een gemeten uitkomst van de projectie (planTijdlijnData()), net als de terugval-regel van v317. */
+    const wacht = await page.evaluate(() => allocatePlan().map((p) => { openPlanDoel(p.id);
+      const x = document.querySelector(`#planDoelSheet[data-doel="${p.id}"] [data-plandetail]`);
+      const t = x ? x.innerText : ''; closeSheet(); return t; }).filter((t) => /Wacht op/.test(t)));
     expect(wacht.length).toBe(2);
     for (const w of wacht) expect(w).not.toMatch(/rond \w+ \d{4}|20\d\d/);
   });
@@ -205,23 +200,26 @@ test.describe('d · de plan-zone en het voorbehoud', () => {
   /* v225: de zonebalk droeg een samenvatting van de lijst ('#1 Vakantie · +3 meer'). De kaart
      eronder toont die volgorde nu zelf, genummerd, dus de balk zou hem herhalen. Wat blijft: de
      balk draagt niet de naam van de tab, en de nummering staat ergens op het scherm. */
-  test('de zone heet Bestemmingen en herhaalt de lijst niet', async ({ page }) => {
+  /* v380: de zonebalk "Bestemmingen" is vervallen (vooruitZone(), [data-zone]); de kop van Plan is #planKpi. Wat
+     blijft: geen samenvatting van de lijst boven de lijst, en de nummering staat in de rij. */
+  test('er is geen zonebalk meer, en de kop herhaalt de lijst niet', async ({ page }) => {
     await boot(page, metWachtenden(2));
     await page.evaluate(() => go('vooruit'));
-    const t = await page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]').innerText();
-    expect(t).not.toMatch(/mijn plan/i);
-    expect(t).toContain('Bestemmingen');
+    expect(await page.locator('#s-vooruit [data-zone]').count()).toBe(0);
+    const t = await page.locator('#planKpi').innerText();
+    expect(t).not.toMatch(/mijn plan|Bestemmingen/i);
     expect(t).not.toContain('Vakantie');
     expect(t).not.toMatch(/\+\d+ meer/);
-    const rij = await page.locator('#s-vooruit .plan-item').first().innerText();
-    expect(rij).toMatch(/^1\s/);
-    expect(rij).toContain('Vakantie');
+    const rij = page.locator('#s-vooruit .plan-item').first();
+    expect((await rij.locator('[data-rijnr]').innerText()).trim()).toBe('1');
+    expect((await rij.locator('[data-rijnaam]').innerText()).trim()).toBe('Vakantie');
   });
 
-  test('zonder doelen zegt de kop dat', async ({ page }) => {
+  test('zonder doelen staat er geen zonebalk, en de kop zegt er iets', async ({ page }) => {
     await boot(page, { set: { goals: [], planOrder: [], planPaused: { noodfonds: true } } });
     await page.evaluate(() => go('vooruit'));
-    const t = await page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]').innerText();
+    expect(await page.locator('#s-vooruit [data-zone]').count()).toBe(0);
+    const t = await page.locator('#planKpi').innerText();
     expect(t).not.toMatch(/mijn plan/i);
     expect(t.length).toBeGreaterThan(0);
   });

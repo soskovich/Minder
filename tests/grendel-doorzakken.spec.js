@@ -117,9 +117,13 @@ test.describe('a · het gemelde geval', () => {
     expect(P.vrij).toBe(0);                             // en er blijft dus niets meer over
   });
 
-  test('"Blijft over" staat op nul op het scherm zelf', async ({ page }) => {
+  /* v380: "Blijft over €0" is van het scherm; de regel staat er alleen als er iets overblijft. Op nul staat er dus
+     niets, en planVrij() is nul (zie de test hierboven). */
+  test('"Blijft over" staat niet op het scherm als er niets overblijft', async ({ page }) => {
     await boot(page);
-    expect(await page.locator('#planVrij').innerText()).toMatch(/Blijft over\s*€0/);
+    expect(await page.evaluate(() => planVrij())).toBe(0);
+    expect(await page.locator('#planVrij').count()).toBe(0);
+    expect(await page.locator('#s-vooruit').innerText()).not.toMatch(/Blijft over/);
   });
 
   test('het tweede doel krijgt niets, want het eerste nam het restant', async ({ page }) => {
@@ -216,14 +220,18 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
       /* v318: een bestemming is twee elementen in twee rasterrijen. De DOFHEID zit op het
          tekstblok (`.plan-item[data-id]`) en de TAK in de kolom ernaast, dus ze zijn elk op hun
          eigen helft te lezen en niet in één omhullende rij. */
-      /* v367: een rij; de status staat erop, en wat hij per maand krijgt is zijn segment in de inlegbalk */
+      /* v380: de inlegbalk met een segment per bestemming is vervallen. Wat de rij nu draagt: de status "nu actief" en,
+         gearceerd in zijn eigen balk, wat er deze maand bijkomt (de 466). */
       const tk = document.querySelector('#s-vooruit .plan-item[data-id="kk"]');
-      return { dof: tk.dataset.status === 'wacht',
-        tak: !!document.querySelector('.inleg-balk [data-seg="kk"]'),
+      const bij = tk.querySelector('[data-bijvat="kk"]');
+      return { dof: tk.dataset.status === 'wacht', status: tk.dataset.status,
+        tak: !!bij, bijPct: bij ? +bij.dataset.pct : null,
         tint: planTint(allocatePlan().find((p) => p.id === 'kk'), 1) };
     });
     expect(r.dof).toBe(false);
+    expect(r.status).toBe('actief');
     expect(r.tak).toBe(true);
+    expect(r.bijPct).toBeCloseTo(OVER / 10000 * 100, 1);   // 466 van 10.000
     expect(r.tint).not.toBe('var(--mut)');
   });
 
@@ -267,8 +275,8 @@ test.describe('d · een doel dat doorgezakt geld krijgt, wacht niet meer', () =>
       await page.setViewportSize({ width: w, height: 800 });
       await boot(page);
       const r = await page.evaluate(() => {
-        window._planRij = 'kk'; render();   // v367: het datumpaar staat in de geopende rij
-        const dat = document.querySelector('#s-vooruit .plan-item[data-id="kk"] .vat-dat');
+        openPlanDoel('kk');   // v380: het datumpaar staat in de detailsheet
+        const dat = document.querySelector('#planDoelSheet .vat-dat[data-plandetail="kk"]');
         const c = getComputedStyle(dat);
         return { h: Math.round(dat.getBoundingClientRect().height),
           lh: Math.round(parseFloat(c.lineHeight)), ws: c.whiteSpace, ov: c.textOverflow,

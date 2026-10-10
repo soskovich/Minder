@@ -228,33 +228,47 @@ test.describe('d · Plan: een rij per doel en een tijdlijn', () => {
     await page.evaluate(() => go('vooruit'));
     const r = await page.evaluate(() => ({ vat: document.querySelectorAll('#s-vooruit [data-vat], #s-vooruit .wf-kol').length,
       rij: [...document.querySelectorAll('#s-vooruit .plan-item[data-id]')].map((e) => [e.dataset.id, e.querySelector('[data-planstatus]').innerText]),
-      volg: (document.querySelector('[data-planvolgorde]') || {}).innerText || '', regel: !!document.getElementById('terugzetRegel'), kaart: !!document.getElementById('terugzetKaart') }));
+      volg: !!document.querySelector('[data-planvolgorde]'), regel: !!document.getElementById('terugzetRegel'), kaart: !!document.getElementById('terugzetKaart') }));
     expect(r.vat).toBe(0);
-    expect(r.rij).toEqual([['noodfonds', 'nu actief'], ['kk', 'nu actief'], ['iw', 'wacht tot apr 2027']]);   // v370: oktober telt mee
-    expect(r.volg).toContain('Volgorde: 1 → 2 → 3, de ruimte schuift door');
+    /* v380: de status heet "vanaf <maand>" in plaats van "wacht tot <maand jaar>", en de maand schuift een op. De fixture
+       draagt EUR 231 eruit zonder keuze, dus het Noodfonds (3.407 + 362 = 3.769 van 4.000) is deze maand niet vol en
+       vult in november met 231. Kosten Koper: okt 1.838, nov 2.200 - 231 = 1.969, dec t/m apr 5 x 2.200, samen 14.807,
+       dus vol in mei (193) en Inrichting begint in mei (was apr: toen was het Noodfonds in oktober vol). */
+    expect(r.rij).toEqual([['noodfonds', 'nu actief'], ['kk', 'nu actief'], ['iw', 'vanaf mei']]);
+    // v380: de zin "Volgorde: 1 → 2 → 3, de ruimte schuift door" is vervallen; de nummers staan in de rij (plan-dashboard.spec.js)
+    expect(r.volg).toBe(false);
     expect(r.regel).toBe(true);
     expect(r.kaart).toBe(false);
   });
   test('de datums in de rijen en de tijdlijn komen uit planVooruit() en etaDatum()', async ({ page }) => {
     await O.boot(page);
     await page.evaluate(() => go('vooruit'));
+    /* v380: de vol-datum staat in [data-rijvol] (was [data-planrechts]), de streefdatum in [data-rijsub], en de zin van de
+       waarschuwing in de detailsheet (de rij draagt alleen data-planwaarschuwing). */
     const r = await page.evaluate(() => { const P = allocatePlan(), VOL = planVooruit(P, planCapacity());
+      const el = (id) => document.querySelector(`#s-vooruit .plan-item[data-id="${id}"]`);
       return { verwacht: Object.fromEntries(P.map((p) => [p.id, etaDatum(VOL[p.id])])),
-        rechts: Object.fromEntries([...document.querySelectorAll('#s-vooruit .plan-item[data-id]')].map((e) => [e.dataset.id, e.querySelector('[data-planrechts]').innerText])),
-        warn: (document.querySelector('[data-planwaarschuwing]') || {}).innerText || '' }; });
+        rechts: Object.fromEntries(P.map((p) => [p.id, el(p.id).querySelector('[data-rijvol]').innerText])),
+        sub: el('iw').querySelector('[data-rijsub]').innerText,
+        rijWarn: [...document.querySelectorAll('#s-vooruit .plan-item[data-planwaarschuwing]')].map((e) => e.dataset.planwaarschuwing) }; });
     expect(r.rechts.noodfonds).toContain(`vol ${r.verwacht.noodfonds}`);
     expect(r.rechts.kk).toContain(`vol ${r.verwacht.kk}`);
-    expect(r.rechts.iw).toContain('streef mrt 2027');
-    expect(r.warn).toContain(`streefdatum niet haalbaar in deze volgorde: vol ${r.verwacht.iw}`);
-    await page.click('[data-plantijdlijn]');
+    expect(r.rechts.iw).toContain(`vol ${r.verwacht.iw}`);
+    expect(r.sub).toContain('streef mrt 2027 · niet haalbaar');
+    expect(r.rijWarn).toEqual(['iw']);
+    await page.click('#s-vooruit .plan-item[data-id="iw"]');
+    const warn = await page.evaluate(() => document.querySelector('#planDoelSheet [data-planwaarschuwing]').innerText);
+    expect(warn).toContain(`streefdatum niet haalbaar in deze volgorde: vol ${r.verwacht.iw}`);
+    await page.evaluate(() => closeSheet());
+    // v380: de knop [data-plantijdlijn] is vervallen; de tijdlijn staat achter de schakelaar, met dezelfde planTijdlijnHTML()
+    await page.click('[data-planweergave="tijdlijn"]');
     const t = await page.evaluate(() => { const P = allocatePlan(), D = planTijdlijnData(P, planCapacity());
-      const rij = (id) => [...document.querySelectorAll(`[data-tlrij="${id}"] [data-tlm]`)];
+      const rij = (id) => [...document.querySelectorAll(`#planTijdlijnInline [data-tlrij="${id}"] [data-tlm]`)];
       return { iwEerste: rij('iw').findIndex((c) => +c.dataset.a > 0), d: D.per.iw.eerste, ruit: rij('iw').findIndex((c) => c.querySelector('[data-ruit]')), K: doelMaandenTot('2027-03'),
-        nfVol: rij('noodfonds').filter((c) => c.dataset.tlsoort !== 'leeg').length, nfMnd: D.per.noodfonds.vol,
-        wat: (document.querySelector('[data-tlwaarschuwing]') || {}).innerText || '', opties: document.querySelectorAll('[data-tloptie]').length }; });
+        wat: (document.querySelector('#planTijdlijnInline [data-tlwaarschuwing]') || {}).innerText || '', opties: document.querySelectorAll('#planTijdlijnInline [data-tloptie]').length }; });
     expect(t.iwEerste).toBe(t.d);
     expect(t.ruit).toBe(t.K);
-    expect(t.wat).toContain('Inrichting: streef mrt 2027, start pas apr 2027');   // v370
+    expect(t.wat).toContain('Inrichting: streef mrt 2027, start pas mei 2027');   // v380: was apr, zie de som in de test hierboven
     expect(t.wat).toContain('Wat kun je doen?');
     expect(t.opties).toBe(3);
   });

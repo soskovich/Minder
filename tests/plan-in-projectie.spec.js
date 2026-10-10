@@ -218,12 +218,13 @@ test.describe('c · het scherm en het diagnoseblok', () => {
       const laatste = Math.max(...Object.values(M.sim.vol));
       const html = (b) => { const d = document.createElement('div'); d.innerHTML = reisRestsaldo(Object.assign({}, M, { bestemming: Object.assign({}, B, b) })).vrij || ''; return d; };
       const regel = (d) => { const e = d.querySelector('[data-groeitna]'); return e ? e.textContent.replace(/\s+/g, ' ').trim() : null; };
-      return { k, laatste, plan: (planKlaarMaand().laatste || {}).maand, lbl: etaDatum(k), echt: regel(html({})),
+      return { k, laatste, plan: planKpiData().allesVol, lbl: etaDatum(k), echt: regel(html({})),
         leeg: [null, 0, -1, NaN, undefined].map((x) => { const d = html({ planKlaarK: x }); return { r: regel(d), komma: /Vanaf\s*,/.test(d.textContent), vgl: !!d.querySelector('[data-vrijvgl]') }; }),
         // v350: zolang Plan tot het eind verdeelt staat er geen bedrag vrij, en het blok zegt waarom
         geenVrij: (() => { const d = html({ planKlaarK: null }); return { vgl: !!d.querySelector('[data-vrijvgl]'), uitleg: !!d.querySelector('[data-plantothorizon]'), vrijTekst: /vrijkomt/.test(d.textContent) }; })() };
     });
-    // de maand waarin het laatste doel vol raakt, in de projectie en op Plan zelf (planKlaarMaand)
+    /* de maand waarin het laatste doel vol raakt, in de projectie en op Plan zelf. v380: planKlaarMaand() is vervallen;
+       op Plan is dat nu de tegel "Alles vol" van de kop, planKpiData().allesVol (dezelfde planVooruit()) */
     expect(r.k).toBe(r.laatste);
     expect(r.k).toBe(r.plan);
     expect(r.lbl).toMatch(/^\w+ \d{4}$/);

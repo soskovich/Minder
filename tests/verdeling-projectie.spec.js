@@ -10,6 +10,12 @@ const CAP = 300;
 function tweak(fn) {
   const p = seed(); const set = JSON.parse(p.minder_set);
   set.nfToegewezen = 9e7; set.nfToegewezenMigrated = true;   // grendel open: deze spec gaat over de verdeling zelf
+  /* v380: de toewijzing van 9e7 wordt op het doel van het Noodfonds geklemd (4.880), en op een spaarsaldo van 2.500
+     stond daarmee 2.380 toegewezen zonder geld. Sinds v380 vult de inleg dat vanaf volgende maand aan (300 per maand,
+     acht maanden), en dan schoof elke vol-datum hieronder acht maanden op (Vakantie 14 naar 22, de 9.000 van 30 naar
+     38). Deze spec gaat over de verdeling zelf, dus het saldo draagt de toewijzing; test a meet dat er niets zonder
+     geld staat. Dat de inleg zonder geld aanvult staat in lopende-maand-telt.spec.js en toegewezen-zonder-geld.spec.js. */
+  set.manualBal = Object.assign({}, set.manualBal, { NL01SAVE0000004323: 1e6 });
   fn(set); p.minder_set = JSON.stringify(set); return p;
 }
 const zelf = (goals, bedragen, extra) => tweak((s) => {
@@ -24,6 +30,7 @@ const alloc = (page) => page.evaluate(() => allocatePlan().map((x) => ({ id: x.i
 test.describe('a · een bedrag per doel in de verdeling', () => {
   test('exact het bedrag, en wat vrijkomt zakt door: Vakantie is in maand 14 vol en niet in 17', async ({ page }) => {
     await openV(page, zelf([D('gA', 'Vakantie', 2000), D('gB', 'Laptop', 2000)], { gA: 120, gB: 180 }));
+    expect(await page.evaluate(() => spaarOver().zonder)).toBe(0);
     const P = await alloc(page);
     expect(P.map((x) => x.id)).toEqual(['gA', 'gB', 'noodfonds']);
     expect(P[0].alloc).toBe(120); expect(P[1].alloc).toBe(180);
@@ -95,11 +102,13 @@ test.describe('b · het noodfonds', () => {
 });
 
 test.describe('c · Vooruitblik opent met het plan', () => {
-  test('de plan-zone is de eerste kaart, zonder "Nog deze maand"', async ({ page }) => {
+  /* v380: de zonebalk "Bestemmingen" (data-zone="vooruitDoelOpen") is vervallen; Plan opent op de kop (#planKpi). De
+     eigenschap blijft: het plan staat bovenaan, er staat geen hero en geen "Nog deze maand". */
+  test('de kop van het plan is het eerste blok, zonder "Nog deze maand"', async ({ page }) => {
     await openV(page, seed());
     expect(await page.locator('#s-vooruit').innerText()).not.toMatch(/nog deze maand/i);
     const idx = await page.evaluate(() => { const kids = [...document.getElementById('s-vooruit').children];
-      return { plan: kids.findIndex((k) => k.getAttribute('data-zone') === 'vooruitDoelOpen'), hero: kids.filter((k) => k.classList.contains('vooruit')).length }; });
-    expect(idx.plan).toBe(0); expect(idx.hero).toBe(0);
+      return { kpi: kids.findIndex((k) => k.id === 'planKpi'), zone: document.querySelectorAll('#s-vooruit [data-zone]').length, hero: kids.filter((k) => k.classList.contains('vooruit')).length }; });
+    expect(idx.kpi).toBe(0); expect(idx.zone).toBe(0); expect(idx.hero).toBe(0);
   });
 });

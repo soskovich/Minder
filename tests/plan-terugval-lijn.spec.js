@@ -325,62 +325,35 @@ test.describe('d · de marge komt uit dezelfde sp als "net op tijd"', () => {
    dus in de data, de balk staat absoluut zodat de som boven 100 procent geen enkel segment laat
    krimpen, en een segment van nul blijft nul. Zonder die helft zou een bestemming die bijna niets
    krijgt uit de balk verdwijnen. */
-test.describe('e · de minimumbreedte van een segment', () => {
-  const MINI = { cap: 2200, order: ['noodfonds', A, B], goals: [
-    { id: A, naam: 'Groot', doel: 50000, gespaard: 0, streefdatum: '2029-01', allocMode: 'pct', pct: 99.5 },
-    { id: B, naam: 'Mini', doel: 600, gespaard: 0, streefdatum: '2027-06', allocMode: 'pct', pct: 0.5 }] };
-
-  for (const w of [360, 390]) {
-    test(`op ${w}px blijft een segment onder 1 procent zichtbaar en krimpt er niets`, async ({ page }) => {
-      await page.setViewportSize({ width: w, height: w === 360 ? 640 : 844 });
-      await boot(page, MINI);
-      // de invoer: er IS een aandeel onder de minimumbreedte
-      expect(await page.evaluate((id) => {
-        const P = allocatePlan(); return P.find((p) => p.id === id).alloc / planCapacity() * 100; }, B))
-        .toBeLessThan(1);
-      const r = await page.evaluate(() => {
-        const balk = document.querySelector('#s-vooruit .inleg-balk');
-        const bb = balk.getBoundingClientRect();
-        const seg = {}; for (const e of balk.querySelectorAll('.bar-fill'))
-          seg[e.dataset.seg] = Math.round(e.getBoundingClientRect().width * 100) / 100;
-        return { seg, balk: Math.round(bb.width),
-          pos: getComputedStyle(balk.querySelector('.bar-fill')).position,
-          disp: getComputedStyle(balk).display };
-      });
-      expect(r.seg[B]).toBeCloseTo(r.balk / 100, 1);     // precies de minimumbreedte van 1 procent
-      /* ABSOLUUT EN GEEN FLEX, en dat is de meting van v317 die hier staande blijft: met de
-         minimumbreedte erin kan de som boven 100 procent uitkomen, en flex zou dan ALLE segmenten
-         proportioneel laten krimpen. Dan is het kleine segment opeens 2,98px in plaats van 3px. */
-      expect(r.pos).toBe('absolute');
-      expect(r.disp).not.toBe('flex');
-    });
-  }
-
-  test('de minimumbreedte staat in de segmenten en niet in de CSS van een lezer', async ({ page }) => {
-    await boot(page, MINI);
-    const src = await kaalUit(page, 'planSegmenten');
-    expect(src).toContain('SEG_MIN_PCT');
-    const rp = await kaalUit(page, 'renderPlan');
-    expect(rp).not.toContain('min-width:3px');
-    /* En de tak-CSS draagt geen eigen minimum. Sinds v318 heet die klasse `.wf-tak i` en is zijn
-       maat een dikte in px; een `min-width` daar zou een tweede ondergrens zijn naast de 2px die
-       planTakDikte() al klemt (v104). */
-    const css = await page.evaluate(() => [...document.styleSheets]
-      .flatMap((s) => { try { return [...s.cssRules]; } catch (_) { return []; } })
-      .filter((r) => r.selectorText && /\.(plan-tak|wf-tak) i$/.test(r.selectorText))
-      .map((r) => r.style.minWidth));
-    expect(css.every((x) => !x)).toBe(true);
+/* v380: DE INLEGBALK IS VERVALLEN, en daarmee de minimumbreedte van zijn segmenten (planSegmenten(), SEG_MIN_PCT,
+   [data-seg]). Een segment per bestemming bestaat niet meer; elke rij draagt zijn eigen balk, met het geld dicht en
+   wat er deze maand bijkomt gearceerd ([data-bijvat], plan-dashboard.spec.js c). Wat van deze groep overblijft: de
+   balk en zijn helpers zijn echt weg, en een bestemming die niets krijgt draagt geen gearceerd deel (zoals een
+   segment van nul nul bleef). */
+test.describe('e · de inlegbalk is weg; een rij die niets krijgt draagt niets erbij', () => {
+  test('geen inlegbalk, geen segmenten en geen minimumbreedte meer', async ({ page }) => {
+    await boot(page, { cap: 2200, order: ['noodfonds', A, B], goals: [
+      { id: A, naam: 'Groot', doel: 50000, gespaard: 0, streefdatum: '2029-01', allocMode: 'pct', pct: 99.5 },
+      { id: B, naam: 'Mini', doel: 600, gespaard: 0, streefdatum: '2027-06', allocMode: 'pct', pct: 0.5 }] });
+    const r = await page.evaluate(() => ({ balk: document.querySelectorAll('#s-vooruit .inleg-balk').length,
+      seg: document.querySelectorAll('#s-vooruit [data-seg]').length, rijen: document.querySelectorAll('#planLijst .plan-item[data-id]').length,
+      fn: typeof planSegmenten, min: typeof SEG_MIN_PCT === 'undefined' ? 'undefined' : 'bestaat' }));
+    expect(r).toEqual({ balk: 0, seg: 0, rijen: 3, fn: 'undefined', min: 'undefined' });
   });
 
-  test('een segment van nul blijft nul: de minimumbreedte geldt alleen voor wat iets krijgt', async ({ page }) => {
+  test('een bestemming die niets krijgt heeft geen gearceerd deel in zijn balk', async ({ page }) => {
     await boot(page, { cap: 2500, order: ['noodfonds', A, B], goals: [
       { id: A, naam: 'Alles', doel: 50000, gespaard: 0, streefdatum: '2029-01', allocMode: 'auto' },
       { id: B, naam: 'Niets', doel: 600, gespaard: 0, streefdatum: '2027-06', allocMode: 'vast', perMaand: 0 }] });
-    const seg = await page.evaluate(() => planSegmenten(allocatePlan(), planCapacity()).segs);
-    const sB = seg.find((x) => x.id === B);
-    expect(sB.alloc).toBe(0);
-    expect(sB.breed).toBe(0);
-    expect(await page.locator('#s-vooruit .inleg-balk .bar-fill[data-seg="' + B + '"]').count()).toBe(0);
+    const r = await page.evaluate((ids) => { const P = allocatePlan(); const SE = planStandEind(P);
+      const bij = (id) => document.querySelectorAll(`#planLijst .plan-item[data-id="${id}"] [data-bijvat]`).length;
+      return { aA: P.find((p) => p.id === ids[0]).alloc, aB: P.find((p) => p.id === ids[1]).alloc,
+        bijB: SE.per[ids[1]].tb + SE.per[ids[1]].inleg, rijA: bij(ids[0]), rijB: bij(ids[1]) }; }, [A, B]);
+    expect(r.aA).toBeGreaterThan(0);
+    expect(r.aB).toBe(0);
+    expect(r.bijB).toBe(0);
+    expect(r.rijA).toBe(1);                              // wat iets krijgt draagt het gearceerde deel
+    expect(r.rijB).toBe(0);                              // wat niets krijgt niet
   });
 });
 
@@ -392,11 +365,15 @@ test.describe('f · de uitleg achter het info-icoon', () => {
     const el = document.createElement('div'); el.innerHTML = (NOTES.planUitleg || '');
     return el.innerText;
   });
-  test('de uitleg noemt de rij, het streepje en de tijdlijn, en geen vat of tak', async ({ page }) => {
+  /* v380: het streepje staat in de balk van de detailsheet en niet meer in de rij, dus de rij-uitleg noemt het niet; de
+     tijdlijn is een schakelaar boven de lijst. De uitleg zegt wat er in de rij staat en dat de rekensom achter een tik
+     zit. */
+  test('de uitleg noemt de rij en de rekensom, en geen vat, tak of streepje', async ({ page }) => {
     await boot(page, DOORZAK);
     const t = await uitleg(page);
-    expect(t).toContain('streepje');
-    expect(t).toMatch(/tijdlijn/i);
-    expect(t).not.toMatch(/\bvat\b|dikte van de tak|stippellijn|pijltje|tijdas/i);
+    expect(t).toMatch(/Per doel een rij/);
+    expect(t).toMatch(/gearceerd/);
+    expect(t).toMatch(/rekensom/);
+    expect(t).not.toMatch(/\bvat\b|dikte van de tak|stippellijn|pijltje|tijdas|streepje/i);
   });
 });

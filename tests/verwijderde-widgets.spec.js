@@ -55,7 +55,10 @@ test.describe('b · Vooruitblik zonder komende-uitgaven-lijsten', () => {
     expect(v).not.toContain('Komende lasten');
     expect(v).not.toContain('Volgende uitgaven');
     // v225: de samenvatting in de zonekop is vervallen; de kaart eronder nummert de lijst zelf
-    expect(v).toContain('Bestemmingen');                         // wat er hoort te blijven
+    /* v380: de zonebalk "Bestemmingen" is vervallen (vooruitZone()); wat er hoort te blijven is de kop van het
+       dashboard en de rijen */
+    expect(v).not.toContain('Bestemmingen');
+    expect(await page.locator('#s-vooruit #planKpi').count()).toBe(1);
     expect(await page.locator('#s-vooruit .plan-item').count()).toBeGreaterThan(0);
   });
 
@@ -63,7 +66,10 @@ test.describe('b · Vooruitblik zonder komende-uitgaven-lijsten', () => {
     await boot(page, 'vooruit');
     const v = await page.locator('#s-vooruit').innerText();
     expect(v).not.toMatch(/nog deze maand/i);                    // v144: alleen nog op Inzichten
-    expect(v).toContain('Te verdelen');                          // de prioriteitenlijst, als waterval
+    /* v380: de kop "Te verdelen" is vervallen; de prioriteitenlijst draagt nu de kop van het dashboard
+       ("Gespaard voor je doelen", #planKpi) met de rijen eronder */
+    expect(v).not.toContain('Te verdelen');
+    expect(v).toMatch(/gespaard voor je doelen/i);                // de kop staat in hoofdletters (CSS)
     expect(await page.locator('#s-vooruit .plan-item').count()).toBeGreaterThan(0);
   });
 

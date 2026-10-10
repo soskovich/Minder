@@ -11872,12 +11872,12 @@ function planKpi(P,cap,TL,SE){
   const p1=K.laat[0];
   const vol=K.allesVol!=null?etaDatum(K.allesVol):(K.loopt?'nog niet te zeggen':'alles is vol');
   const sub2=p1?`${esc(p1.naam)} haalt ${esc(doelDatumLabel(p1.streefdatum,true))} niet${K.laat.length>1?` (en ${K.laat.length-1} ander${K.laat.length>2?'e':''})`:''}`:'op schema';
-  return `<div id="planKpi" data-kpigeld="${K.geld}" data-kpidoel="${K.doel}" data-kpipct="${K.pct}" data-nogtegaan="${K.nogTeGaan}" style="background:var(--kpi-bg);color:var(--kpi-txt);border-radius:16px;padding:13px 14px;margin-bottom:9px">
-    <div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0;font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;font-weight:700">Gespaard voor je doelen</span><span role="button" data-planinstel onclick="openPlanInstel()" style="font-size:var(--fs-sm);font-weight:700;cursor:pointer;white-space:nowrap">verdeling ⚙</span></div>
+  return `<div id="planKpi" data-kpigeld="${K.geld}" data-kpidoel="${K.doel}" data-kpipct="${K.pct}" data-nogtegaan="${K.nogTeGaan}" style="background:var(--kpi-bg);color:var(--kpi-txt);border-radius:16px;padding:13px 14px;margin-bottom:9px"><style>#planKpi .jrg{color:var(--kpi-txt)!important;border-bottom-color:color-mix(in srgb,var(--kpi-txt) 60%,transparent)}</style>
+    <div class="row" style="gap:8px;align-items:center"><span style="flex:1;min-width:0;font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;font-weight:700">Gespaard voor je doelen</span><span style="font-size:var(--fs-sm)">${noteIcon('planUitleg','hoe dit plan verdeelt')}</span><span role="button" data-planinstel onclick="openPlanInstel()" style="font-size:var(--fs-sm);font-weight:700;cursor:pointer;white-space:nowrap">verdeling ⚙</span></div>
     <div style="font-family:var(--font-head);font-size:28px;font-weight:800;line-height:1.15;margin-top:3px"><span data-kpigeldtekst>${euro0(K.geld)}</span> <span style="font-size:var(--fs-md);font-weight:600">van ${euro0(K.doel)}</span></div>
     <div data-kpibalk style="height:8px;background:color-mix(in srgb,var(--kpi-txt) 25%,transparent);border-radius:5px;margin:8px 0 10px;overflow:hidden"><i style="display:block;height:8px;width:${K.pct}%;background:var(--kpi-txt);border-radius:5px"></i></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      ${tegel('Deze maand opzij', euro0(K.opzij), K.terug>0?chip(`incl. ${euro0(K.terug)} terug ›`,'openTerugOpbouw()','data-kpiterug="'+K.terug+'"'):'', `data-kpiopzij="${K.opzij}"`)}
+      ${tegel('Deze maand opzij', euro0(K.opzij), `<span data-kpibron style="display:block">uit je ${planCapTerugval()?'comfortabele ruimte':jrg('spaarinleg','spaarinleg')}</span>`+(K.terug>0?chip(`incl. ${euro0(K.terug)} terug ›`,'openTerugOpbouw()','data-kpiterug="'+K.terug+'"'):''), `data-kpiopzij="${K.opzij}"`)}
       ${tegel('Alles vol', vol, chip(sub2,p1?'openPlanTijdlijn()':'', `data-kpischema="${p1?'laat':'ok'}"`), `data-kpivol="${K.allesVol!=null?K.allesVol:''}"`)}
     </div></div>`;
 }
@@ -11899,11 +11899,12 @@ function planDoelRij(p,i,TL,SE,tints){
   const doel=Math.max(Math.round(+p.doel||0),0);
   const geld=p.type==='aflossen'?Math.max(Math.round(+p.gespaard||0),0):x.geld;
   const pct=doel>0?Math.min(geld/doel*100,100):0;
-  const bij=p.status==='gepauzeerd'?0:(x.tb+x.inleg);
+  /* bij een schuld draagt de balk ook je bestaande termijn (v189): wat er deze maand van de schuld afgaat */
+  const bij=p.status==='gepauzeerd'?0:(x.tb+x.inleg+(p.type==='aflossen'?Math.max(Math.round(+p.debtPer||0),0):0));
   const bijPct=doel>0?Math.max(Math.min(bij/doel*100,100-pct),0):0;
   const arc=`repeating-linear-gradient(135deg,${tint} 0 3px,color-mix(in srgb,${tint} 30%,transparent) 3px 6px)`;
   const balk=`<div class="bar-track plan-rijbalk" data-rijbalk style="height:7px;margin:6px 0 5px;position:relative">${p.nfOnbekend?'':`<div class="bar-fill" data-geldvat="${p.id}" data-pct="${pct.toFixed(2)}" style="width:${pct.toFixed(2)}%;background:${tint}"></div>${bijPct>0?`<div class="bar-fill" data-groei data-bijvat="${p.id}" data-pct="${bijPct.toFixed(2)}" style="width:${bijPct.toFixed(2)}%;background:${arc}"></div>`:''}`}</div>`;
-  const vol=p.status==='bereikt'?'vol':(t.vol>0?(p.type==='aflossen'?`schuldenvrij ${etaDatum(t.vol)}`:`vol ${etaDatum(t.vol)}`):(p.nfOnbekend?'stand onbekend':'geen vol-datum'));
+  const vol=p.nfOnbekend?'stand onbekend':p.status==='bereikt'?'vol':(t.vol>0?(p.type==='aflossen'?`schuldenvrij ${etaDatum(t.vol)}`:`vol ${etaDatum(t.vol)}`):(p.nfOnbekend?'stand onbekend':'geen vol-datum'));
   const streef=(p.type==='goal'&&p.streefdatum)?doelDatumLabel(p.streefdatum,true):'';
   const sub=st.k==='bijnavol'?`vol ${t.vol>0?etaDatum(t.vol):'nog niet te zeggen'} · ${euro0(x.nogLater)} komt nog terug`
     :st.k==='gepauzeerd'?'krijgt nu niets'
@@ -11917,7 +11918,7 @@ function planDoelRij(p,i,TL,SE,tints){
   return `<div class="plan-item plan-rij2" data-id="${p.id}" data-status="${esc(st.k)}" data-laat="${t.warn?1:0}"${t.warn?` data-planwaarschuwing="${p.id}"`:''} role="button" style="${i?'border-top:1px solid var(--line);':''}padding:9px 0 8px;cursor:pointer" onclick="openPlanDoel('${p.id}')">
     <div class="row" style="gap:8px;align-items:baseline">${nr}<span class="wf-naam" data-rijnaam style="flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere">${esc(p.naam)}</span><span class="small" data-planstatus style="white-space:nowrap;font-weight:700;color:${(st.k==='actief'||st.k==='volin'||st.k==='vol')?'var(--green)':'var(--mut2)'}">${esc(st.tekst)}</span></div>
     ${balk}
-    <div class="row small" style="gap:8px;align-items:baseline"><span data-rijgeld style="flex:1;min-width:0"><b style="font-weight:700">${euro0(geld)}</b> <span style="color:var(--mut)">/ ${euro0(doel)}</span></span><span data-rijvol style="white-space:nowrap;color:var(--mut)">${esc(vol)} ›</span></div>
+    <div class="row small" style="gap:8px;align-items:baseline"><span data-rijgeld style="flex:1;min-width:0"><b style="font-weight:700">${p.nfOnbekend?'onbekend':euro0(geld)}</b> <span style="color:var(--mut)">/ ${euro0(doel)}</span></span><span data-rijvol style="white-space:nowrap;color:var(--mut)">${esc(vol)} ›</span></div>
     <div class="small" data-rijsub style="color:${t.warn?'var(--amber)':'var(--mut2)'};margin-top:1px">${esc(sub)}</div></div>`;
 }
 /* v380: DE DETAILSHEET. De rekensom van een doel: wat er nu op je spaarrekening staat, plus wat er deze maand terug gaat,

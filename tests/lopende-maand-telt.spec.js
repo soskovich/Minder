@@ -5,12 +5,25 @@
 const { test, expect } = require('@playwright/test');
 const P = require('./opschonen-stand');
 const ORDE = { planOrder: ['noodfonds', 'iw', 'kk'] };
-const rijTekst = (page, id) => page.evaluate((i) => { go('vooruit'); const r = document.querySelector(`.plan-item[data-id="${i}"] [data-planrechts]`); return r ? r.innerText : null; }, id);
+/* v380: de rij draagt geen rechterkolom met maandbedrag meer; de vol-datum staat in [data-rijvol] */
+const rijTekst = (page, id) => page.evaluate((i) => { go('vooruit'); const r = document.querySelector(`.plan-item[data-id="${i}"] [data-rijvol]`); return r ? r.innerText : null; }, id);
 
 test.describe('a · de lopende maand telt mee', () => {
-  test('EUR 3.638 van 4.000 plus 362 in oktober is vol okt 2026', async ({ page }) => {
+  /* v380: de fixture draagt de opname van EUR 231 ZONDER keuze, dus spaarOver().zonder is 231 (3.638 toegewezen, 3.407
+     saldo). Die 231 staat zonder geld en de inleg vult hem pas vanaf volgende maand aan: oktober 362 (rest), november
+     231, dus vol in november (eta 2). Zonder de opname blijft de regel van v370 staan: 3.638 + 362 is vol in oktober. */
+  test('EUR 3.638 van 4.000 plus 362 in oktober, met 231 zonder geld: vol nov 2026', async ({ page }) => {
     await P.boot(page, { set: ORDE });
-    const r = await page.evaluate(() => { const nf = allocatePlan().find((x) => x.id === 'noodfonds'); return { rest: nf.rest, alloc: nf.alloc, eta: nf.eta, lbl: etaDatum(nf.eta) }; });
+    const r = await page.evaluate(() => { const nf = allocatePlan().find((x) => x.id === 'noodfonds'); return { rest: nf.rest, alloc: nf.alloc, eta: nf.eta, lbl: etaDatum(nf.eta), zonder: spaarOver().zonder }; });
+    expect(r.zonder).toBe(231);
+    expect(r.rest).toBe(362); expect(r.alloc).toBe(362);
+    expect(r.eta).toBe(2); expect(r.lbl).toBe('nov 2026');
+    expect(await rijTekst(page, 'noodfonds')).toContain('vol nov 2026');
+  });
+  test('zonder de opname: EUR 3.638 van 4.000 plus 362 in oktober is vol okt 2026', async ({ page }) => {
+    await P.boot(page, { zonderOpname: true, set: ORDE });
+    const r = await page.evaluate(() => { const nf = allocatePlan().find((x) => x.id === 'noodfonds'); return { rest: nf.rest, alloc: nf.alloc, eta: nf.eta, lbl: etaDatum(nf.eta), zonder: spaarOver().zonder }; });
+    expect(r.zonder).toBe(0);
     expect(r.rest).toBe(362); expect(r.alloc).toBe(362);
     expect(r.eta).toBe(1); expect(r.lbl).toBe('okt 2026');
     expect(await rijTekst(page, 'noodfonds')).toContain('vol okt 2026');
@@ -35,16 +48,27 @@ test.describe('a · de lopende maand telt mee', () => {
   test('de tijdlijn zet kolom 0 op deze maand met de verdeling van nu, en de rij zegt dezelfde maand', async ({ page }) => {
     await P.boot(page, { set: ORDE });
     const r = await page.evaluate(() => { const T = planTijdlijnData(); return { nf: T.per.noodfonds.maanden.slice(0, 2), iw: T.per.iw.maanden.slice(0, 3), volNf: T.per.noodfonds.vol, eerste: T.per.kk.eerste }; });
-    expect(r.nf).toEqual([362, 0]); expect(r.iw).toEqual([1838, 1162, 0]);
-    expect(r.volNf).toBe(1);
+    /* v380: november vult de 231 zonder geld van het Noodfonds aan (inleg 2.200 = 231 + 1.162 Inrichting + 807 Kosten
+       Koper), dus het Noodfonds krijgt in kolom 1 nog 231 en is vol in november (2). Inrichting blijft gelijk. */
+    expect(r.nf).toEqual([362, 231]); expect(r.iw).toEqual([1838, 1162, 0]);
+    expect(r.volNf).toBe(2);
     expect(r.eerste).toBe(1);   // Kosten Koper begint in november (kolom 1)
-    const st = await page.evaluate(() => { go('vooruit'); return document.querySelector('.plan-item[data-id="kk"] [data-planstatus]').innerText; });
-    expect(st).toContain('nov 2026');
+    /* v380: de status van een wachtend doel zegt "vanaf <maand>" uit dezelfde kolom (tlMaand(eerste)) */
+    const st = await page.evaluate(() => { go('vooruit'); return { st: document.querySelector('.plan-item[data-id="kk"] [data-planstatus]').innerText, k: tlMaand(planTijdlijnData().per.kk.eerste).k }; });
+    expect(st.k).toBe('nov');
+    expect(st.st).toBe('vanaf ' + st.k);
   });
-  test('het totaal onder de waterval schuift mee', async ({ page }) => {
+  /* v380: de regel onder de waterval (planTotaalRegel()) is vervallen; "Alles vol" in de kop van Plan draagt de laatste
+     vol-datum, en die schuift met dezelfde projectie mee. Kosten Koper wacht deze maand op de buffer (eta null), dus de
+     maand komt uit planTijdlijnData(), dezelfde bron als de kop. */
+  test('Alles vol in de kop schuift mee', async ({ page }) => {
     await P.boot(page, { set: ORDE });
-    const r = await page.evaluate(() => { const P2 = allocatePlan(); return { kk: etaDatum(P2.find((x) => x.id === 'kk').eta), tot: planTotaalRegel(P2).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ') }; });
-    expect(r.tot).toContain('vol in ' + r.kk);
+    const r = await page.evaluate(() => { go('vooruit'); const vol = planTijdlijnData().per.kk.vol; const el = document.querySelector('#planKpi [data-kpivol]');
+      return { eta: vol, kk: etaDatum(vol), attr: el.dataset.kpivol, tekst: el.innerText, weg: typeof planTotaalRegel }; });
+    expect(r.weg).toBe('undefined');
+    expect(r.attr).toBe(String(r.eta));
+    expect(r.kk).toBe('jun 2027');   // Kosten Koper is het laatste doel: vol in maand 9 van de projectie
+    expect(r.tekst).toContain(r.kk);
   });
 });
 
@@ -108,7 +132,8 @@ test.describe('c · de Vermogensreis telt dezelfde maand', () => {
     const r = await page.evaluate(() => { const M = reisModel(); return { sim: M.sim.vol, plan: planVooruit(allocatePlan(), planCapacity()) }; });
     /* Kosten Koper geeft op zijn streefdatum uit wat erin staat voordat hij vol is (v347/v348), dus alleen de twee die vol raken. */
     expect(r.sim.noodfonds).toBe(r.plan.noodfonds); expect(r.sim.iw).toBe(r.plan.iw);
-    expect(r.plan.noodfonds).toBe(1); expect(r.plan.iw).toBe(2);
+    /* v380: de 231 zonder geld wordt pas in november aangevuld, dus het Noodfonds is vol in maand 2 (was 1) */
+    expect(r.plan.noodfonds).toBe(2); expect(r.plan.iw).toBe(2);
   });
 });
 

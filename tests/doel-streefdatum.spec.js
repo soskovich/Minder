@@ -44,6 +44,10 @@ async function boot(page, payload) {
   await page.waitForFunction(() => typeof TX !== 'undefined' && typeof doelTempo === 'function');
 }
 
+/* v380: de open rij is vervallen; het datumpaar (vatRegels(p,false)) staat in de detailsheet als [data-plandetail]. */
+const detail = (page, id) => page.evaluate((i) => { openPlanDoel(i);
+  const e = document.querySelector(`#planDoelSheet[data-doel="${i}"] [data-plandetail]`);
+  const t = e ? e.innerText.replace(/\s+/g, ' ') : ''; closeSheet(); return t; }, id);
 const G = (over) => Object.assign({ id: 'g1', naam: 'Vakantie', doel: 8000, gespaard: 0, allocMode: 'fixed', perMaand: 200 }, over);
 const item = (page, id) => page.evaluate((x) => allocatePlan().find((p) => p.id === x), id || 'g1');
 const regel = (page, id) => page.evaluate((x) => {
@@ -98,7 +102,12 @@ test.describe('a · de rekenregel', () => {
   });
 
   test('gebruikt de resterende behoefte, niet het hele doelbedrag', async ({ page }) => {
-    await boot(page, seedDoel([G({ gespaard: 6000, streefdatum: overMnd(9) })]));   // v370: tien inleggen
+    /* v380: toegewezen zonder geld telt. Met 6.000 gespaard op een spaarsaldo van 1 is er 6.000 toegewezen zonder geld,
+       en dan is het doel deze maand niet vol en vult de inleg vanaf volgende maand eerst dat gat aan: de projectie haalt
+       de datum dan niet. Deze test gaat over de resterende behoefte, dus het geld staat er: saldo 6.001 (6.000 voor het
+       doel en 1 voor het noodfonds). */
+    await boot(page, seedDoel([G({ gespaard: 6000, streefdatum: overMnd(9) })], { manualBal: { [MAIN]: 2000, [SAV]: 6001 } }));   // v370: tien inleggen
+    expect(await page.evaluate(() => spaarOver().zonder)).toBe(0);   // de invoer: niets toegewezen zonder geld
     const T = await page.evaluate(() => doelTempo(allocatePlan().find((p) => p.id === 'g1'), 200));
     expect(T.benodigd).toBe(200);                      // 2000 rest / 10 maanden
     expect(T.haalbaar).toBe(true);
@@ -224,8 +233,7 @@ test.describe('d · opslaan en tonen', () => {
        vertakte waterval vervallen; het vat noemt hetzelfde bedrag uit dezelfde bron (doelTempo().
        benodigd) in zijn datumpaar, als het bedrag dat de datum wel zou halen. De editor houdt zijn
        eigen zin onveranderd. */
-    await page.evaluate(() => { window._planRij = 'g1'; render(); });   // v367: het datumpaar staat in de geopende rij
-    expect(await page.locator('.plan-item[data-id="g1"]').innerText()).toMatch(/per maand haalt het/);
+    expect(await detail(page, 'g1')).toMatch(/per maand haalt het/);   // v380: het datumpaar staat in de detailsheet
 
     await page.evaluate(() => openGoal('g1'));
     await page.waitForSelector('#gDatum');
@@ -236,8 +244,7 @@ test.describe('d · opslaan en tonen', () => {
     await boot(page, seedDoel([G()]));
     await page.evaluate(() => { go('vooruit'); });
     await page.waitForSelector('.plan-item');
-    await page.evaluate(() => { window._planRij = 'g1'; render(); });   // v367
-    const t = await page.locator('.plan-item[data-id="g1"]').innerText();
+    const t = await detail(page, 'g1');   // v380: het datumpaar staat in de detailsheet
     expect(t).not.toContain('per maand nodig');
     expect(t).toContain('op dit tempo');                              // de bestaande eta-regel blijft
     // v242: en de rij zegt dat de datum ontbreekt, met de ingang ernaar toe

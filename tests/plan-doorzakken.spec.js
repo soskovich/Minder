@@ -2,7 +2,7 @@
 // lopende doel (echte waterval), plus uitleg bij "wacht op capaciteit".
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
-const { seed, open } = require('./budget-fixture');
+const { seed, open, SPAAR_SALDO } = require('./budget-fixture');
 
 const CAP = 500;   // savingMode 'amount' -> monthlySavingTarget()
 
@@ -14,6 +14,11 @@ function tweak(fn) {
      niets te verdelen. Deze spec gaat over de verdeling zelf, dus de buffer staat hier vol en de
      grendel open. Dat is de voorwaarde die er altijd al impliciet was; nu staat hij er. */
   set.nfToegewezen = 9e7; set.nfToegewezenMigrated = true;   // planMap klemt op het doel
+  /* v380: toegewezen zonder geld telt (spaarOver().zonder). De klem zette de buffer op zijn doel van 4.880 terwijl er
+     2.500 op de spaarrekening staat, en dan vult de inleg vanaf volgende maand eerst die 2.380 aan: elke eta hieronder
+     schoof daardoor ongeveer acht maanden op. Een volle buffer is hier een buffer op het geld dat er staat, dus het doel
+     is het spaarsaldo van de fixture. */
+  set.nfDoelVast = SPAAR_SALDO;
   fn(set);
   p.minder_set = JSON.stringify(set);
   return p;
@@ -43,10 +48,8 @@ async function openV(page, payload) {
   await page.evaluate(() => go('vooruit'));
   await page.waitForSelector('#s-vooruit .card');
 }
+/* v380: de zonebalk "Bestemmingen" is vervallen; de rijen staan er meteen */
 async function openPlanZone(page) {
-  if (await page.locator('#s-vooruit .plan-item').count() === 0) {
-    await page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]').click();
-  }
   await page.waitForSelector('#s-vooruit .plan-item');
 }
 const alloc = (page) => page.evaluate(() => allocatePlan().map((x) => ({
@@ -54,9 +57,11 @@ const alloc = (page) => page.evaluate(() => allocatePlan().map((x) => ({
   eta: x.eta, status: x.status, blok: x.blokkeerder ? x.blokkeerder.id : null,
 })));
 const vrij = (page) => page.evaluate(() => planVrij());
-/* v367: Plan toont rijen; de uitleg van een rij (doorgezakt, wacht op, rond <maand>) staat in de geopende rij. */
-const rijTekst = async (page, id) => { await page.evaluate((i) => { window._planRij = i; render(); }, id);
-  return page.locator(`#s-vooruit .plan-item[data-id="${id}"]`).innerText(); };
+/* v380: de open rij is vervallen; de uitleg van een rij (doorgezakt, wacht op, rond <maand>) staat in het datumpaar van
+   de detailsheet ([data-plandetail], vatRegels(p,false)). */
+const rijTekst = (page, id) => page.evaluate((i) => { openPlanDoel(i);
+  const e = document.querySelector(`#planDoelSheet[data-doel="${i}"] [data-plandetail]`);
+  const t = e ? e.innerText.replace(/\s+/g, ' ') : ''; closeSheet(); return t; }, id);
 
 test.describe('a · het restant zakt door', () => {
   test('twee vaste doelen van samen €250: de overige €250 gaat naar het bovenste lopende doel', async ({ page }) => {
@@ -76,9 +81,10 @@ test.describe('a · het restant zakt door', () => {
 
     await openPlanZone(page);
     expect(await rijTekst(page, 'gA')).toContain('waarvan €250 doorgezakt');
-    // v225: de sluitpost staat er ook als er niets overblijft, en zegt dan €0
-    expect(await page.locator('#planVrij').innerText()).toMatch(/Blijft over\s*€0/);
-    expect(await page.locator('#planVrij').innerText()).not.toMatch(/voeg een doel toe/i);
+    /* v380: "Blijft over €0" is vervallen; de regel staat er alleen als er iets overblijft. Dat er niets blijft liggen
+       toetst planVrij() hierboven. */
+    expect(await page.locator('#planVrij').count()).toBe(0);
+    expect(await page.locator('#s-vooruit').innerText()).not.toMatch(/Blijft over/);
   });
 
   test('top-doel vast €100 + een lopend auto-doel: het auto-doel krijgt €400', async ({ page }) => {
@@ -190,9 +196,9 @@ test.describe('b · vrije ruimte i.p.v. verdwijnen', () => {
     expect(P.every((x) => ['wacht op capaciteit', 'wacht op de buffer', 'bereikt'].includes(x.status))).toBe(true);
     expect(await vrij(page)).toBe(0);
     await openPlanZone(page);
-    // v225: wel de sluitpost, maar zonder bedrag om te verdelen en dus zonder keuze
-    expect(await page.locator('#planVrij').innerText()).toMatch(/Blijft over\s*€0/);
-    expect(await page.locator('#planVrij').innerText()).not.toMatch(/voeg een doel toe/i);
+    /* v380: zonder bedrag om te verdelen staat er geen sluitpost meer, en dus ook geen keuze om een doel toe te voegen */
+    expect(await page.locator('#planVrij').count()).toBe(0);
+    expect(await page.locator('#s-vooruit').innerText()).not.toMatch(/Blijft over/);
   });
 });
 
@@ -255,13 +261,11 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
     const rijB = await rijTekst(page, 'gB');
     expect(rijB).toMatch(/Wacht op .Vakantie./);
     expect(rijB).not.toMatch(/maandbedrag instellen/i);
-    await page.evaluate(() => { window._planRij = null; render(); });
 
     // en die blokkeerder is vanaf zijn eigen rij te openen
+    /* v380: een tik op de rij opent de detailsheet, en daar staat "Doel aanpassen" naar de bestaande editor */
     await page.locator('#s-vooruit .plan-item[data-id="gA"] >> text=Vakantie').click();
-    /* v318: de knoppen staan als eigen rasterregel onder de bestemming die je aantikte, want ze
-       lopen over de volle breedte van het raster. Ze dragen hun eigen id. */
-    await page.locator('#s-vooruit [data-acties="gA"] >> text=openen').click();
+    await page.locator('#planDoelSheet[data-doel="gA"] [data-doelaanpassen]').click();
     await page.waitForSelector('[data-goalkrijgt]');
     expect(await page.locator('#gNaam').inputValue()).toBe('Vakantie');
 
@@ -292,8 +296,10 @@ test.describe('d · uitleg bij "wacht op capaciteit"', () => {
     /* v225: een aflos-item heeft geen eigen record en dus geen editor voor zijn maandbedrag; die
        kleine sheet was alleen via de wachthint bereikbaar. Nu staat hij achter de tik op de rij,
        waar hij hoort. */
+    /* v380: de rij opent de detailsheet; de ingang naar het maandbedrag van een aflos-item hoort daar te staan, want
+       de open rij met [data-acties] is vervallen. */
     await page.locator('#s-vooruit .plan-item[data-id="af:d1"] >> text=Creditcard').click();
-    await page.locator('#s-vooruit [data-acties="af:d1"] >> text=maandbedrag').click();
+    await page.locator('#planDoelSheet[data-doel="af:d1"] >> text=maandbedrag').click();
     await page.waitForSelector('#paModes');
     expect(await page.locator('#paModes .chip').count()).toBe(3);
     await page.locator('#paModes .chip', { hasText: 'Vast bedrag' }).click();
@@ -335,6 +341,7 @@ test.describe('e · buffer blijft heilig', () => {
       s.planOrder = ['noodfonds', 'gA'];
       s.planAlloc = { noodfonds: { allocMode: 'fixed', perMaand: 80 } };
       s.nfMaanden = 12;                                   // houdt het noodfonds ruim onvol
+      delete s.nfDoelVast;                                // v380: zonder vast doel, anders telt nfMaanden niet
       s.nfToegewezen = 0;                                 // en dus de grendel dicht
     }));
     expect(await page.evaluate(() => !!planGrendel())).toBe(true);

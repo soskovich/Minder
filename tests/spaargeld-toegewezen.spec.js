@@ -67,7 +67,14 @@ test.describe('a · één betekenis in de kolom', () => {
 
   test('de rij zegt dat het een toewijzing is', async ({ page }) => {
     await boot(page, seed({ nfToegewezen: 900 }));
-    expect(await planTekst(page)).toContain('€900 toegewezen / €1.500');
+    /* v380: het woord "toegewezen" staat niet meer in de rij; [data-rijgeld] toont "€X / €Y" uit planStandEind(). De
+       eigenschap blijft: de rij toont de toewijzing (900) en niet het saldo (2.000, geklemd 1.500). */
+    const r = await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = renderPlan(true);
+      const nf = d.querySelector('.plan-item[data-id="noodfonds"]');
+      return { geld: nf.querySelector('[data-rijgeld]').innerText.replace(/\s+/g, ' '), rij: nf.innerText };
+    });
+    expect(r.geld).toBe('€900 / €1.500');
+    expect(r.rij).not.toContain('toegewezen');
   });
 });
 

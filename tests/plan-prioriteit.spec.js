@@ -2,7 +2,7 @@
 // en het optionele dure-schuld-advies bij een nieuw doel.
 // De service worker staat globaal uit via playwright.config.js.
 const { test, expect } = require('@playwright/test');
-const { seed, open } = require('./budget-fixture');
+const { seed, open, SPAAR_SALDO } = require('./budget-fixture');
 
 // spaarruimte in de fixture: savingMode 'amount', savingAmount 300 -> monthlySavingTarget() = 300
 const CAP = 300;
@@ -15,6 +15,11 @@ function tweak(fn) {
      de grendel open; dat was de voorwaarde die er altijd al impliciet was. De tests die juist over
      de gesloten grendel gaan zetten nfToegewezen zelf terug. */
   set.nfToegewezen = 9e7; set.nfToegewezenMigrated = true;   // planMap klemt op het doel
+  /* v380: toegewezen zonder geld telt. De klem zette de buffer op zijn doel van 4.880 bij 2.500 op de spaarrekening,
+     en dan vult de inleg vanaf volgende maand eerst die 2.380 aan (gemeten: gA van 5 naar 13 maanden, gB van 3 naar
+     11). Een volle buffer is hier een buffer op het geld dat er staat, dus het doel is het spaarsaldo van de fixture.
+     De tests die de echte toewijzing willen (echt() hieronder) halen dit weer weg. */
+  set.nfDoelVast = SPAAR_SALDO;
   fn(set);
   p.minder_set = JSON.stringify(set);
   return p;
@@ -32,10 +37,8 @@ async function openV(page, payload) {
 }
 
 // de planlijst zit achter de zone "Mijn plan"; expert-modus klapt hem standaard open
+// v380: de zonebalk is vervallen; de rijen staan er meteen
 async function openPlanZone(page) {
-  if (await page.locator('#s-vooruit .plan-item').count() === 0) {
-    await page.locator('#s-vooruit [data-zone="vooruitDoelOpen"]').click();
-  }
   await page.waitForSelector('#s-vooruit .plan-item');
 }
 
@@ -170,11 +173,12 @@ test.describe('c · het noodfonds', () => {
     await openPlanZone(page);
     const nf = page.locator('#s-vooruit .plan-item[data-id="noodfonds"]');
     await expect(nf).toHaveCount(1);
-    // v225: de knoppen staan achter een tik op de rij; wat er dan staat is onveranderd
+    /* v380: de knoppen staan achter een tik op de rij, in de detailsheet; wat er dan staat is onveranderd */
     await nf.locator('text=Noodfonds').click();
-    await page.waitForSelector('#s-vooruit .plan-item[data-id="noodfonds"] >> text=pauzeren');
-    expect(await nf.innerText()).not.toContain('uit plan halen');   // geen verwijder-affordance
-    expect(await nf.innerText()).toContain('pauzeren');             // pauzeren mag wel
+    const sh = page.locator('#planDoelSheet[data-doel="noodfonds"]');
+    await expect(sh.locator('[data-doelpauze]')).toHaveText('Pauzeren');   // pauzeren mag wel
+    expect(await sh.innerText()).not.toMatch(/uit plan halen/i);         // geen verwijder-affordance
+    await page.evaluate(() => closeSheet());
 
     // ook programmatisch blijft hij staan
     await page.evaluate(() => planRemove('noodfonds'));
@@ -300,7 +304,7 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
 
   // v242: deze drie vergelijken de voortgang van het plan-item met je spaarsaldo, dus daar hoort
   // de echte toewijzing te staan en niet de volle buffer die tweak() standaard zet.
-  const echt = (fn) => tweak((s) => { delete s.nfToegewezen; delete s.nfToegewezenMigrated; if (fn) fn(s); });
+  const echt = (fn) => tweak((s) => { delete s.nfToegewezen; delete s.nfToegewezenMigrated; delete s.nfDoelVast; if (fn) fn(s); });
 
   test('met een gemarkeerde spaarrekening', async ({ page }) => {
     await openV(page, echt());
@@ -331,10 +335,15 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
       const d = document.createElement('div'); d.innerHTML = renderPlan(true);
       return d.innerText.replace(/\s+/g, ' ');
     });
-    // v172: de rij toont een toewijzing (jouw getal); het onbekende zit in de vergelijking ertegen
+    // v172: het onbekende zit in de vergelijking ertegen, met de volgende stap erbij
     expect(rij).toContain('We weten niet wat er op je spaarrekening staat');
     expect(rij).toContain('wijs je spaarrekening aan');
-    expect(rij).toContain('toegewezen');
+    /* v380: de rij zegt geen "toegewezen" meer (geen rekensom in de rij). Wat de rij nu draagt is dat de stand
+       onbekend is, in de status en in de kleine regel (v173). */
+    const nf = await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = renderPlan(true);
+      const e = d.querySelector('.plan-item[data-id="noodfonds"]');
+      return { st: e.querySelector('[data-planstatus]').textContent.trim(), sub: e.querySelector('[data-rijsub]').textContent.trim(), status: e.dataset.status }; });
+    expect(nf).toEqual({ st: 'stand onbekend', sub: 'wat er al staat is niet bekend', status: 'onbekend' });
   });
 
   test('extra spaargeld telt aan beide kanten mee', async ({ page }) => {
@@ -367,7 +376,7 @@ test.describe('f · noodfonds-voortgang: hero en plan-item zijn het eens', () =>
      onbekend, en daar hangt de hele keten aan: bufferMaanden() geeft null, de bufferregel valt weg
      van het maandscherm, en beleggenKlaar() komt daardoor op volledig:false uit. */
   test('zonder gemarkeerde spaarrekening geeft het model null, en de keten zwijgt', async ({ page }) => {
-    await openV(page, tweak((s) => { s.savingsEnds = []; s.nfMaanden = 12; s.goals = doelen(); }));
+    await openV(page, tweak((s) => { s.savingsEnds = []; s.nfMaanden = 12; delete s.nfDoelVast; s.goals = doelen(); }));   // v380: zonder vast doel, anders telt nfMaanden niet
     const r = await page.evaluate(() => {
       const R = maandRegels(), B = beleggenKlaar(R);
       return { model: noodfondsModel().spaar, pct: noodfondsModel().pct, bank: totalBalance().sum,

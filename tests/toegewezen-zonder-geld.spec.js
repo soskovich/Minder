@@ -8,7 +8,11 @@ const P = require('./opschonen-stand');
 const TOESTEL = { set: { manualBal: { [P.MAIN]: 3000, [P.SAV]: 3000.20 } } };
 const stand = (page) => page.evaluate(() => { go('vooruit'); const r = document.getElementById('spaarOverRegel');
   const O = spaarOver(); return { regel: r ? r.innerText.replace(/\s+/g, ' ').trim() : '', zonder: O.zonder, dekt: O.dekt, over: O.over,
-    nf: SET.nfToegewezen, gat: (SET.terugzetGat || []).length, kop: document.getElementById('planKopBedrag').innerText }; });
+    nf: SET.nfToegewezen, gat: (SET.terugzetGat || []).length,
+    /* v380: de kop "Te verdelen" (#planKopBedrag) is vervallen; het bedrag staat als functie (planToeMaand().teVerdelen)
+       en als tegel "Deze maand opzij" in de kop van Plan ([data-kpiopzij]) */
+    kop: planToeMaand().teVerdelen, opzij: +document.querySelector('#planKpi [data-kpiopzij]').dataset.kpiopzij,
+    kopWeg: !document.getElementById('planKopBedrag') }; });
 const sheet = (page) => page.evaluate(() => { openSpaarOver(); return document.getElementById('spaarOverSheet').innerText.replace(/\s+/g, ' '); });
 
 test.describe('a · de melding blijft staan naast een terugzetkeuze', () => {
@@ -60,11 +64,18 @@ test.describe('b · de sheet: de onttrekkingen en een keuze zonder voorkeuze', (
     expect(t).toContain('Kaal verschil €637,80 − €231 gedekt door je keuze = €406,80');
     expect(await page.locator('[data-onttrekking="2026-10"]').innerText()).toMatch(/oktober · 1 boeking\s*€231/);
     expect(t).toContain('Verlaag de toewijzing van je noodfonds');
-    expect(t).toContain('Noodfonds €3.638 → €3.231 · Kosten Koper vol mei 2027 (was apr 2027)');
+    /* v380: zonder keuze vult de inleg de EUR 406,80 pas in november aan, dus het Noodfonds is nu vol in november
+       (oktober 362 rest, november 407). Verlagen haalt dat weg: rest 769, en oktober draagt 231 terug plus 769 inleg, dus
+       vol okt; Kosten Koper krijgt in oktober 407 minder en in november 407 meer, dus zijn datum blijft. Alles terugzetten
+       zet de 407 er deze maand bij: Noodfonds vol okt en Kosten Koper 407 eerder (4.038 + 2.200 per maand haalt 15.000 in
+       april, tegen 3.631 + 2.200 per maand in mei). Over drie maanden: het laatste deel valt in december (de vol-datum is
+       de maand van het laatste terugzetdeel), en Kosten Koper krijgt dezelfde 407 voorsprong. */
+    expect(t).toContain('Noodfonds €3.638 → €3.231 · Noodfonds vol okt 2026 (was nov 2026)');
+    expect(t).not.toContain('Kosten Koper vol mei 2027 (was apr 2027)');
     expect(t).toContain('Zet het terug · alles deze maand');
-    expect(t).toContain('€407 extra deze maand, je toewijzingen blijven staan · je vol-datums veranderen niet');
+    expect(t).toContain('€407 extra deze maand, je toewijzingen blijven staan · Noodfonds vol okt 2026 (was nov 2026) · Kosten Koper vol apr 2027 (was mei 2027)');
     expect(t).toContain('Zet het terug · over 3 maanden');
-    expect(t).toContain('€136 extra per maand t/m dec');
+    expect(t).toContain('€136 extra per maand t/m dec · Noodfonds vol dec 2026 (was nov 2026) · Kosten Koper vol apr 2027 (was mei 2027)');
   });
   test('niets voorgekozen: openen en kiezen schrijven niets, en bevestigen kan pas na een keuze', async ({ page }) => {
     await P.boot(page, TOESTEL); await page.evaluate(() => terugzetKies('alles'));
@@ -98,9 +109,16 @@ test.describe('c · gelijktrekken laat de melding verdwijnen', () => {
     await page.evaluate(() => { openSpaarOver(); spaarOverKies('alles'); spaarOverZet(); });
     const r = await stand(page);
     expect(r.nf).toBe(3638); expect(r.zonder).toBe(0); expect(r.regel).toBe('');
-    expect(r.kop).toBe('€2.838');                                   // 2.200 + 231 + 407
+    expect(r.kop).toBe(2838);                                       // 2.200 + 231 + 407
+    expect(r.opzij).toBe(2838); expect(r.kopWeg).toBe(true);
     expect(await page.evaluate(() => safeToSpend().saveReserved)).toBe(2838);
-    expect(await page.locator('#terugzetGekozen').innerText()).toContain('€2.200 vaste inleg + €638 terugzetten · gekozen: alles deze maand');
+    /* v380: de regel "gekozen: ... · wijzig" (#terugzetGekozen) is vervallen. Het terugzetdeel staat als chip in de kop
+       (231 + 407 = 638), en de keuzes staan gemarkeerd in "verdeling ⚙" (openPlanInstel()). */
+    expect(await page.locator('#terugzetGekozen').count()).toBe(0);
+    expect(await page.locator('#planKpi [data-kpiterug]').getAttribute('data-kpiterug')).toBe('638');
+    await page.evaluate(() => openPlanInstel());
+    expect(await page.locator('[data-instelterug="alles"]').getAttribute('data-gekozen')).toBe('1');
+    expect(await page.locator('[data-instelgat="alles"]').innerText()).toContain('€407 · alles deze maand · gekozen');
   });
   test('over drie maanden: EUR 136 deze maand, en de projectie ziet de rest', async ({ page }) => {
     await P.boot(page, TOESTEL); await page.evaluate(() => terugzetKies('alles'));
@@ -128,36 +146,63 @@ test.describe('c · gelijktrekken laat de melding verdwijnen', () => {
   });
 });
 
+/* v380: DE REKENSOM STAAT NIET MEER IN DE RIJ ([data-geldregel] is vervallen) MAAR IN DE DETAILSHEET (openPlanDoel(),
+   [data-op]). De eigenschap blijft: de balk van de rij is het GELD dicht ([data-geldvat]) met wat er deze maand bijkomt
+   gearceerd ([data-bijvat], terug en inleg samen), links "geld / doel" en niet de toewijzing, en de rekensom telt geld plus
+   terug plus inleg op tot de stand eind deze maand. Zonder geld telt sinds v380 NIET in die stand (planStandEind()): het
+   staat er als eigen regel ([data-op="zg"]) onder de som. */
 test.describe('d · de rij laat geld en plan apart zien', () => {
-  const rij = (page, id) => page.evaluate((i) => { go('vooruit'); const e = document.querySelector(`.plan-item[data-id="${i}"]`), g = e.querySelector('[data-geldregel]');
-    const vat = e.querySelector('[data-geldvat]');
-    return { tekst: g ? g.innerText.replace(/\s+/g, ' ').trim() : null, d: g ? Object.assign({}, g.dataset) : null, stand: !!e.querySelector('.vat-stand b') && e.innerText.includes('toegewezen /'),
-      geldPct: vat ? +vat.dataset.pct : null, terugPct: (e.querySelector('[data-terugvat]') || { dataset: {} }).dataset.pct }; }, id);
+  const rij = (page, id) => page.evaluate((i) => { go('vooruit'); const e = document.querySelector(`.plan-item[data-id="${i}"]`);
+    const vat = e.querySelector('[data-geldvat]'), bij = e.querySelector('[data-bijvat]');
+    const r = { status: e.dataset.status, geld: e.querySelector('[data-rijgeld]').innerText.replace(/\s+/g, ' ').trim(), vol: e.querySelector('[data-rijvol]').innerText,
+      tekst: e.innerText, geldPct: vat ? +vat.dataset.pct : null, bijPct: bij ? +bij.dataset.pct : null, geldregel: e.querySelectorAll('[data-geldregel]').length };
+    openPlanDoel(i);
+    r.op = Object.fromEntries([...document.querySelectorAll('#planDoelSheet [data-op]')].map((o) => [o.dataset.op, o.dataset.bedrag == null ? o.innerText.replace(/\s+/g, ' ').trim() : +o.dataset.bedrag]));
+    r.eindVol = (document.querySelector('#planDoelSheet [data-op="eind"]') || { dataset: {} }).dataset.vol;
+    r.eindvol = (document.querySelector('#planDoelSheet [data-eindvol]') || {}).innerText || null;
+    r.nog = (document.querySelector('#planDoelSheet [data-nognodig]') || { dataset: {} }).dataset.nognodig;
+    closeSheet(); return r; }, id);
   test('alles terugzetten: EUR 3.407 in geld + EUR 231 terug + EUR 362 inleg = EUR 4.000', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => terugzetKies('alles'));
     const r = await rij(page, 'noodfonds');
-    expect(r.tekst).toBe('€3.407 in geld + €231 terug + €362 inleg = €4.000 · vol okt 2026');
-    expect(+r.d.geld + +r.d.terug + +r.d.inleg).toBe(+r.d.som); expect(+r.d.som).toBe(+r.d.doel);
-    expect(r.stand, 'de oude "EUR 3.638 toegewezen" staat er niet').toBe(false);
+    expect(r.geldregel, 'de rekensom staat niet meer in de rij').toBe(0);
+    expect(r.op).toEqual({ geld: 3407, terug: 231, inleg: 362, eind: 4000 });
+    expect(r.op.geld + r.op.terug + r.op.inleg).toBe(r.op.eind); expect(r.eindVol).toBe('1');
+    expect(r.vol).toBe('vol okt 2026 ›'); expect(r.status).toBe('volin');
+    expect(r.geld).toBe('€3.407 / €4.000');
+    expect(r.tekst, 'de oude "EUR 3.638 toegewezen" staat er niet').not.toContain('3.638');
     expect(r.geldPct, 'de balk toont het geld (3.407) en niet de toewijzing (3.638)').toBeCloseTo(3407 / 4000 * 100, 1);
-    expect(+r.terugPct).toBeCloseTo(231 / 4000 * 100, 1);
+    expect(r.bijPct, 'terug en inleg samen gearceerd').toBeCloseTo((231 + 362) / 4000 * 100, 1);
   });
-  test('spreiden: de som is de verwachte stand na deze maand', async ({ page }) => {
+  /* v380: wat er na deze maand nog terugkomt (2 x 77) is pending en wordt niet door inleg gevuld; vol is de maand van het
+     laatste deel. 3.407 + 77 + 362 = 3.846 eind oktober, plus 77 in november en 77 in december: vol dec 2026 (was okt). */
+  test('spreiden: de som is de verwachte stand na deze maand, en vol valt op het laatste deel', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => terugzetKies('drie'));
     const r = await rij(page, 'noodfonds');
-    expect(r.tekst).toBe('€3.407 in geld + €77 terug + €362 inleg = €3.846 · vol okt 2026');
-    expect(+r.d.geld + +r.d.terug + +r.d.inleg).toBe(3846);
+    expect(r.op.geld + r.op.terug + r.op.inleg).toBe(3846); expect(r.op.eind).toBe(3846); expect(r.eindVol).toBe('0');
+    expect(r.op.later).toBe(154);
+    expect(r.eindvol).toBe('vol dec 2026 (met het laatste terugzetdeel)');
+    expect(r.vol).toBe('vol dec 2026 ›'); expect(r.status).toBe('bijnavol');
   });
-  test('op het toestel staat het verschil zonder geld als eigen term, met dezelfde centen als de melding', async ({ page }) => {
+  /* v380: zonder geld telt niet in de stand eind oktober: 3.000,20 + 231 + 362 = 3.593,20, en de EUR 406,80 staat apart,
+     met dezelfde centen als de melding. De inleg vult hem in november aan, dus vol nov 2026 (was okt, toen de som het
+     zonder-geld-deel meetelde tot 4.000). */
+  test('op het toestel staat het verschil zonder geld als eigen regel, met dezelfde centen als de melding', async ({ page }) => {
     await P.boot(page, TOESTEL); await page.evaluate(() => terugzetKies('alles'));
     const r = await rij(page, 'noodfonds');
-    expect(r.tekst).toBe('€3.000,20 in geld + €406,80 zonder geld + €231 terug + €362 inleg = €4.000 · vol okt 2026');
-    expect(Math.round((+r.d.geld + +r.d.zg + +r.d.terug + +r.d.inleg) * 100) / 100).toBe(4000);
+    expect(r.op.geld).toBe(3000.2); expect(r.op.terug).toBe(231); expect(r.op.inleg).toBe(362);
+    expect(r.op.eind).toBe(3593.2); expect(r.eindVol).toBe('0');
+    expect(r.op.zg).toBe('€406,80 is toegewezen zonder geld en telt hier niet mee.');
+    expect(+r.nog).toBe(406.8);
+    expect((await stand(page)).regel).toBe('€406,80 toegewezen zonder geld bekijk ›');
+    expect(r.vol).toBe('vol nov 2026 ›');
   });
-  test('zonder iets dat terug moet of zonder geld staat, blijft de gewone rij', async ({ page }) => {
+  test('zonder iets dat terug moet of zonder geld staat, blijft de gewone som', async ({ page }) => {
     await P.boot(page, { zonderOpname: true });
     const r = await rij(page, 'noodfonds');
-    expect(r.tekst).toBe(null); expect(r.stand).toBe(true);
+    expect(Object.keys(r.op)).toEqual(['geld', 'inleg', 'eind']);
+    expect(r.op.geld).toBe(3638); expect(r.geld).toBe('€3.638 / €4.000');
+    expect(await page.evaluate(() => planStandEind().per.noodfonds.gesplitst)).toBe(false);
   });
 });
 
@@ -168,7 +213,7 @@ test.describe('e · layout', () => {
       await page.evaluate(() => { terugzetKies('alles'); go('vooruit'); });
       const m = await page.evaluate(() => ({ over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         regel: document.getElementById('spaarOverRegel').getBoundingClientRect().height,
-        rij: document.querySelector('[data-geldregel="noodfonds"]').getBoundingClientRect().height }));
+        rij: document.querySelector('.plan-item[data-id="noodfonds"]').getBoundingClientRect().height }));   // v380: de rij zelf, [data-geldregel] is vervallen
       await page.evaluate(() => openSpaarOver());
       const s = await page.evaluate(() => { const e = document.getElementById('sheet'); return { h: document.getElementById('spaarOverSheet').getBoundingClientRect().height, over: e.scrollWidth - e.clientWidth }; });
       console.log(`v371 ${w}px: regel ${Math.round(m.regel)}, rij ${Math.round(m.rij)}, sheet ${Math.round(s.h)}`);

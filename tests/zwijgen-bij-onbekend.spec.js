@@ -72,11 +72,19 @@ test.describe('1 · Vooruitblik zwijgt bij een onbekende bron', () => {
     expect(rij).not.toMatch(/op dit tempo/);
     expect(rij).not.toMatch(/rond \w+ \d{4}/);
     // en geen voortgangsbalk in die rij (de rij van het spaardoel houdt de zijne)
-    const h = await page.evaluate(() => renderPlan(true));
-    const i = h.indexOf('data-id="noodfonds"');
-    const nfHtml = h.slice(i, h.indexOf('plan-item', i + 10));
-    expect(i).toBeGreaterThan(-1);
-    expect(nfHtml).not.toContain('bar-track');
+    /* v380: de rij heeft een vaste vorm met een lege balk-baan ([data-rijbalk]); wat er niet mag staan is een vulling
+       ([data-geldvat] of een bar-fill). En de datum heet nu "vol <maand jaar>" in [data-rijvol], en de stand "€X / €Y"
+       in [data-rijgeld]: beide horen op een onbekende stand niet te staan (v173). */
+    const r = await page.evaluate(() => { const d = document.createElement('div'); d.innerHTML = renderPlan(true);
+      const nf = d.querySelector('.plan-item[data-id="noodfonds"]'), reis = d.querySelector('.plan-item[data-id="g1"]');
+      return { nf: !!nf, vulling: nf ? nf.querySelectorAll('.bar-fill, [data-geldvat]').length : -1,
+        vol: nf ? nf.querySelector('[data-rijvol]').innerText : '', geld: nf ? nf.querySelector('[data-rijgeld]').innerText : '',
+        reisBalk: reis ? reis.querySelectorAll('[data-rijbalk]').length : 0 }; });
+    expect(r.nf).toBe(true);
+    expect(r.vulling).toBe(0);
+    expect(r.reisBalk).toBe(1);
+    expect(r.vol).not.toMatch(/\b\w{3} \d{4}/);
+    expect(r.geld).not.toMatch(/€0\s*\//);
   });
 
   test('Home en Vooruitblik zeggen op hetzelfde moment hetzelfde', async ({ page }) => {

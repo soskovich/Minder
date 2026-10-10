@@ -236,20 +236,22 @@ test.describe('het aflos-vat noemt de datum zonder extra', () => {
       await boot(page, { set: { nfToegewezenMigrated: true, extraSavings: 9000, planOrder: ['noodfonds', 'af:duo'], planAlloc: { 'af:duo': { mode: 'fixed', perMaand: 100 } } } });
       const r = await page.evaluate(() => {
         const p = allocatePlan().find((x) => x.type === 'aflossen');
-        /* v367: de regel staat in de geopende rij */
-        window._planRij = p ? p.id : null; go('vooruit'); renderVooruit();
-        const el = document.querySelector('[data-aflosverschil]');
+        /* v367: de regel staat in de geopende rij. v380: de open rij is vervallen; het datumpaar (vatRegels) staat in
+           de detailsheet van het doel, openPlanDoel() */
+        go('vooruit'); renderVooruit(); if (p) openPlanDoel(p.id);
+        const el = document.querySelector('#planDoelSheet [data-aflosverschil]');
         return { alloc: p ? p.alloc : null, tekst: el ? el.textContent : null, h: el ? el.getBoundingClientRect().height : 0 };
       });
       expect(r.alloc, 'de fixture moet het aflos-item een toewijzing geven').toBeGreaterThan(0);
       expect(r.tekst).toContain('met je extra aflossing uit Plan · zonder: nov 2035');
       const uit = await page.evaluate(() => {
         const w = document.documentElement.clientWidth; const o = [];
-        for (const e of document.querySelectorAll('#s-vooruit *')) { const b = e.getBoundingClientRect(); if (b.width && b.right > w + 1) o.push(e.className); }
+        for (const e of document.querySelectorAll('#s-vooruit *, #sheet *')) { const b = e.getBoundingClientRect(); if (b.width && b.right > w + 1) o.push(e.className); }
         return o;
       });
       expect(uit).toEqual([]);
       console.log('aflos-regel', w, r.h);
+      await page.evaluate(() => closeSheet());
     }
   });
 });

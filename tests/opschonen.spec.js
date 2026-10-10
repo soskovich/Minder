@@ -229,23 +229,38 @@ test.describe('d · Inzichten', () => {
 });
 
 /* ===== PLAN ===== */
-const kop = (page) => page.evaluate(() => ({ bedrag: document.getElementById('planKopBedrag').innerText, kaart: !!document.getElementById('terugzetKaart'),
-  gekozen: (document.getElementById('terugzetGekozen') || {}).innerText || '', save: safeToSpend().saveReserved, nf: SET.nfToegewezen,
-  terug: [...document.querySelectorAll('[data-terugbak]')].map((e) => e.dataset.terugbak + ':' + e.dataset.terug),
-  eta: Object.fromEntries(allocatePlan().map((p) => [p.id, p.eta])) }));
+/* v380: de kop "Te verdelen" (#planKopBedrag), de regel "gekozen: ... · wijzig" (#terugzetGekozen) en de gearceerde bak
+   ([data-terugbak]) zijn vervallen. Het bedrag staat als functie (planToeMaand().teVerdelen) en als tegel "Deze maand opzij"
+   in de kop van Plan, het terugzetdeel als chip in die kop ([data-kpiterug]), de gekozen stand gemarkeerd in "verdeling ⚙"
+   (openPlanInstel()), en wat er per bron terug gaat in planStandEind().per[id].tb (de rij arceert terug en inleg samen). */
+const kop = (page) => page.evaluate(() => { go('vooruit'); const SE = planStandEind();
+  const r = { bedrag: planToeMaand().teVerdelen, opzij: +document.querySelector('#planKpi [data-kpiopzij]').dataset.kpiopzij,
+    kpiterug: (document.querySelector('#planKpi [data-kpiterug]') || { dataset: {} }).dataset.kpiterug || null,
+    kaart: !!document.getElementById('terugzetKaart'), kopWeg: !document.getElementById('planKopBedrag'),
+    save: safeToSpend().saveReserved, nf: SET.nfToegewezen,
+    terug: Object.keys(SE.per).filter((id) => SE.per[id].tb > 0).map((id) => id + ':' + SE.per[id].tb),
+    eta: Object.fromEntries(allocatePlan().map((p) => [p.id, p.eta])) };
+  openPlanInstel(); r.gekozen = (document.querySelector('[data-instelterug][data-gekozen="1"]') || { dataset: {} }).dataset.instelterug || null; closeSheet();
+  return r; });
 test.describe('e · Plan', () => {
   test('zonder keuze blijft de inleg EUR 2.200, staat de kaart er zonder voorkeuze, en schrijft openen niets', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => go('vooruit'));
     const r = await kop(page);
     /* v367: op Plan staat een compacte regel; de kaart met de drie keuzes opent erachter (openTerugzetSheet()) */
-    expect(r.bedrag).toBe('€2.200/mnd'); expect(r.kaart).toBe(false); expect(r.save).toBe(2431);
+    expect(r.bedrag).toBe(2200); expect(r.opzij).toBe(2200); expect(r.kpiterug).toBe(null); expect(r.gekozen).toBe(null);
+    expect(r.kopWeg).toBe(true); expect(r.kaart).toBe(false); expect(r.save).toBe(2431);
     expect(await page.locator('#terugzetRegel').innerText()).toMatch(/€231 eruit gehaald in oktober\s*kies ›/);
     await page.click('#terugzetRegel');
     expect(await page.evaluate(() => SET.terugzet)).toBeUndefined();
     const t = await page.locator('#terugzetKaart').innerText();
     expect(t).toContain('€231 eruit gehaald in oktober · uit Noodfonds');
     expect(t).toContain('inleg okt €2.431 · Noodfonds vol okt 2026');
-    expect(t).toContain('€77 extra per maand t/m dec · Noodfonds vol okt 2026 · Kosten Koper vol mei 2027');
+    /* v380: wat er na deze maand nog terugkomt (2 x 77) is pending en de inleg vult het niet; het Noodfonds is vol in de
+       maand van het laatste deel (december), en Kosten Koper krijgt vanaf november de hele inleg, net als bij alles deze
+       maand (1.838 + 2.200 per maand haalt 15.000 in april), dus zijn datum staat er niet bij. Was: Noodfonds okt, Kosten
+       Koper mei 2027. */
+    expect(t).toContain('€77 extra per maand t/m dec · Noodfonds vol dec 2026');
+    expect(t).not.toMatch(/t\/m dec · Noodfonds vol dec 2026 · Kosten Koper/);
     expect(t).toContain('inleg blijft €2.200 · Noodfonds vol okt 2026 · Kosten Koper vol mei 2027');
     expect(await page.locator('#terugzetGekozen').count()).toBe(0);
     expect(await page.locator('#planInleg').count()).toBe(0);
@@ -253,21 +268,27 @@ test.describe('e · Plan', () => {
   test('alles deze maand: EUR 2.431, het geld gaat gearceerd naar het Noodfonds, de toewijzing blijft', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => { go('vooruit'); terugzetKies('alles'); });
     const r = await kop(page);
-    expect(r.bedrag).toBe('€2.431'); expect(r.gekozen).toContain('€2.200 vaste inleg + €231 terugzetten · gekozen: alles deze maand · wijzig');
+    expect(r.bedrag).toBe(2431); expect(r.opzij).toBe(2431); expect(r.kpiterug).toBe('231'); expect(r.gekozen).toBe('alles');
     expect(r.terug).toEqual(['noodfonds:231']); expect(r.nf).toBe(3638); expect(r.save).toBe(2431);
     expect(r.eta).toEqual({ noodfonds: 1, kk: 7, iw: null });
-    expect(await page.locator('[data-terugvat="noodfonds"]').count()).toBe(1);
+    /* v380: terug en inleg staan samen gearceerd in de rij (231 + 362 = 593 van 4.000) */
+    expect(+(await page.locator('[data-bijvat="noodfonds"]').getAttribute('data-pct'))).toBeCloseTo((231 + 362) / 4000 * 100, 1);
   });
-  test('over drie maanden: EUR 2.277 deze maand, EUR 77 naar het Noodfonds, Kosten Koper mei 2027 (v370: oktober telt mee)', async ({ page }) => {
+  /* v380: de twee delen die nog komen (nov 77, dec 77) zijn pending: het Noodfonds is vol in december (eta 3, was 1), en
+     de inleg gaat vanaf november helemaal naar Kosten Koper (1.838 + 2.200 x 6 = 15.038 in april, eta 7; was mei 2027). */
+  test('over drie maanden: EUR 2.277 deze maand, EUR 77 naar het Noodfonds, Noodfonds dec 2026 en Kosten Koper apr 2027 (v380)', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => { go('vooruit'); terugzetKies('drie'); });
     const r = await kop(page);
-    expect(r.bedrag).toBe('€2.277'); expect(r.terug).toEqual(['noodfonds:77']); expect(r.save).toBe(2277);
-    expect(r.eta.noodfonds).toBe(1); expect(await page.evaluate((e) => etaDatum(e), r.eta.kk)).toBe('mei 2027');
+    expect(r.bedrag).toBe(2277); expect(r.opzij).toBe(2277); expect(r.kpiterug).toBe('77'); expect(r.gekozen).toBe('drie');
+    expect(r.terug).toEqual(['noodfonds:77']); expect(r.save).toBe(2277);
+    expect(await page.evaluate((e) => [etaDatum(e.noodfonds), etaDatum(e.kk)], r.eta)).toEqual(['dec 2026', 'apr 2027']);
+    expect(r.eta.noodfonds).toBe(3); expect(r.eta.kk).toBe(7);
   });
   test('niet terugzetten: inleg EUR 2.200, het Noodfonds levert EUR 231 in, en wijzigen zet dat terug', async ({ page }) => {
     await P.boot(page); await page.evaluate(() => { go('vooruit'); terugzetKies('niet'); });
     const r = await kop(page);
-    expect(r.bedrag).toBe('€2.200'); expect(r.terug).toEqual([]); expect(r.nf).toBe(3407); expect(r.save).toBe(2200);
+    expect(r.bedrag).toBe(2200); expect(r.gekozen).toBe('niet'); expect(r.kpiterug).toBe(null);
+    expect(r.terug).toEqual([]); expect(r.nf).toBe(3407); expect(r.save).toBe(2200);
     expect(await page.evaluate((e) => [etaDatum(e.noodfonds), etaDatum(e.kk)], r.eta)).toEqual(['okt 2026', 'mei 2027']);
     await page.evaluate(() => { terugzetWijzig(); });
     expect(await page.locator('#terugzetRegel').count()).toBe(1);
@@ -281,9 +302,10 @@ test.describe('e · Plan', () => {
   test('volgende maand: weer het maandbedrag, of het volgende deel bij spreiden', async ({ page }) => {
     const rec = (k) => ({ '2026-10': { bedrag: 231, keuze: k, bron: [{ id: 'noodfonds', type: 'noodfonds', naam: 'Noodfonds', af: 231 }], delen: k === 'drie' ? [77, 77, 77] : [231], op: '2026-10-09' } });
     await P.boot(page, { dag: '2026-11-09', zonderOpname: true, set: { terugzet: rec('drie') } }); await page.evaluate(() => go('vooruit'));
-    expect((await kop(page)).bedrag).toBe('€2.277');
+    expect((await kop(page)).bedrag).toBe(2277);   // v380: 2.200 + het deel van november, uit planToeMaand()
+    expect((await kop(page)).kpiterug).toBe('77');
     await page.evaluate((r) => { SET.terugzet = r; save(); render(); }, rec('alles'));
-    expect((await kop(page)).bedrag).toBe('€2.200/mnd');
+    expect((await kop(page)).bedrag).toBe(2200); expect((await kop(page)).kpiterug).toBe(null);
   });
   /* v367: "geen tekst over een bak heen" is vervallen met de bakken; Plan is een rij per doel (vrij-uitschieters.spec.js d). */
 });
